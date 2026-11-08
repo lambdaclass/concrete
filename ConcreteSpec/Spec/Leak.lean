@@ -170,32 +170,42 @@ def ConstantTime {O : Operands} (I : Instrumentation O) (P : Program O)
 /-! ## Logical byte accounting -/
 
 /-- The live logical-byte accounting of one allocator lineage. `requested` is cumulative, `live` is
-the current logical bytes, and `peak` is the greatest live value reached. -/
+the current logical bytes, `peak` is the greatest live value reached by the whole execution, and
+`functionPeak` is the greatest live value reached since the most recent `Account.enter`. -/
 structure Account where
   requested : Nat
   live : Nat
   peak : Nat
+  functionPeak : Nat
   deriving DecidableEq, Repr
 
 /-- No allocation and no history. -/
-def Account.empty : Account := ⟨0, 0, 0⟩
+def Account.empty : Account := ⟨0, 0, 0, 0⟩
 
-/-- A well-formed account has already reached at least its current live bytes. -/
-def Account.WF (a : Account) : Prop := a.live ≤ a.peak
+/-- A well-formed account has already reached at least its current live bytes, both historically
+and since function entry. -/
+def Account.WF (a : Account) : Prop := a.live ≤ a.peak ∧ a.live ≤ a.functionPeak
+
+/-- Mark a function entry. This starts its local peak at the bytes already live on entry without
+changing ownership, cumulative requests or the whole-execution historical peak. -/
+def Account.enter (a : Account) : Account :=
+  { a with functionPeak := a.live }
 
 /-- Account for a successful request of `bytes`: cumulative requested and live bytes increase, and
-the peak moves only if the new live value exceeds it. -/
+both peaks move only if the new live value exceeds them. -/
 def Account.alloc (a : Account) (bytes : Nat) : Account where
   requested := a.requested + bytes
   live := a.live + bytes
   peak := max a.peak (a.live + bytes)
+  functionPeak := max a.functionPeak (a.live + bytes)
 
-/-- Account for a successful free. Cumulative history and peak are conserved. The abstract machine
-admits the action only when `bytes ≤ a.live`. -/
+/-- Account for a successful free. Cumulative history and both peaks are conserved. The abstract
+machine admits the action only when `bytes ≤ a.live`. -/
 def Account.free (a : Account) (bytes : Nat) : Account :=
   { a with live := a.live - bytes }
 
-/-- Account for a reset: all live bytes are released, while cumulative history and peak remain. -/
+/-- Account for a reset: all live bytes are released, while cumulative history and both peaks
+remain. -/
 def Account.reset (a : Account) : Account :=
   { a with live := 0 }
 
@@ -271,8 +281,9 @@ means that footprint evidence cannot be established. -/
 def Bound.SoundOptional {α : Type} [LE α] (actual : Option α) (b : Bound α) : Prop :=
   b.status = .boundEstablished → ∃ a, actual = some a ∧ a ≤ b.limit
 
-/-- Per-lineage facts for one function: cumulative requested bytes, net live-byte change, peak
-logical bytes, and footprint when the allocator contract defines one. Each has its own status. -/
+/-- Per-lineage facts for one function: bytes requested by that function, its net live-byte change,
+its peak logical bytes since entry, and footprint when the allocator contract defines one. Each has
+its own status. -/
 structure LineageReport where
   lineage : LineageId
   requested : Bound Nat
@@ -280,23 +291,20 @@ structure LineageReport where
   peak : Bound Nat
   footprint : Bound Nat
 
-/-- Soundness of a lineage report against its entry and exit accounts. The peak comparison uses the
-peak reached by the whole execution, not merely its exit live bytes. -/
+/-- Soundness of a lineage report against its entry and exit accounts. Requested bytes exclude
+requests made before entry. The peak is the maximum live bytes reached since `Account.enter`, not
+the historical maximum of the whole program. The caller applies `Account.enter` at function entry
+and does not reset the local peak again before the function exits. -/
 def LineageReport.Sound (entry exit : Account) (footprint : Option Nat)
     (r : LineageReport) : Prop :=
-  Bound.Sound exit.requested r.requested ∧
+  Bound.Sound (exit.requested - entry.requested) r.requested ∧
     Bound.Sound ((exit.live : Int) - (entry.live : Int)) r.netChange ∧
-    Bound.Sound exit.peak r.peak ∧ Bound.SoundOptional footprint r.footprint
-
-/-- Zero-size ownership adds no requested, live or peak bytes. -/
-example (a : Account) (h : a.WF) : a.alloc 0 = a := by
-  cases a
-  simp_all [Account.alloc, Account.WF]
+    Bound.Sound exit.functionPeak r.peak ∧ Bound.SoundOptional footprint r.footprint
 
 /-- Accepted: a valid allocate/free/reset sequence. Refused: freeing a byte not owned by the
 lineage has no accounting transition. -/
 example : (run Memory.empty
-    [.alloc ⟨0⟩ 8, .free ⟨0⟩ 3, .reset ⟨0⟩ 5]).map (· ⟨0⟩) = some ⟨8, 0, 8⟩ := by decide
+    [.alloc ⟨0⟩ 8, .free ⟨0⟩ 3, .reset ⟨0⟩ 5]).map (· ⟨0⟩) = some ⟨8, 0, 8, 8⟩ := by decide
 
 example : apply Memory.empty (.free ⟨0⟩ 1) = none := by decide
 

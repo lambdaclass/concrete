@@ -354,11 +354,14 @@ theorem Memory.set_same (m : Memory) (lineage : LineageId) :
   funext l
   by_cases h : l = lineage <;> simp [Memory.set, h]
 
+theorem Account.enter_wf (a : Account) (h : a.WF) : a.enter.WF := by
+  exact ⟨h.1, Nat.le_refl _⟩
+
 theorem Account.alloc_wf (a : Account) (bytes : Nat) (_h : a.WF) : (a.alloc bytes).WF := by
-  exact Nat.le_max_right _ _
+  exact ⟨Nat.le_max_right _ _, Nat.le_max_right _ _⟩
 
 theorem Account.free_wf (a : Account) (bytes : Nat) (h : a.WF) : (a.free bytes).WF := by
-  exact Nat.le_trans (Nat.sub_le _ _) h
+  exact ⟨Nat.le_trans (Nat.sub_le _ _) h.1, Nat.le_trans (Nat.sub_le _ _) h.2⟩
 
 theorem Account.reset_wf (a : Account) : a.reset.WF := by
   simp [Account.WF, Account.reset]
@@ -534,6 +537,23 @@ theorem run_peak_monotone {m m' : Memory} {actions : List Action}
     | some m₁ =>
       have hr : run m₁ rest = some m' := by simpa [run, ha] using h
       exact Nat.le_trans (apply_peak_monotone ha lineage) (ih hr)
+
+/-- Exact function-local requested, net-change and peak limits establish a sound report. With no
+allocator-defined footprint, its footprint status remains unestablished. -/
+theorem established_report_sound (lineage : LineageId) (entry exit : Account) :
+    LineageReport.Sound entry exit none
+      ⟨lineage, ⟨exit.requested - entry.requested, .boundEstablished⟩,
+        ⟨(exit.live : Int) - (entry.live : Int), .boundEstablished⟩,
+        ⟨exit.functionPeak, .boundEstablished⟩, ⟨0, .notEstablished⟩⟩ := by
+  simp [LineageReport.Sound, Bound.Sound, Bound.SoundOptional]
+
+/-- A function that allocates nothing establishes a zero request bound even when earlier execution
+requested 100 bytes; its local peak likewise excludes that earlier history. -/
+theorem empty_function_report_sound :
+    LineageReport.Sound (Account.enter ⟨100, 0, 100, 0⟩) (Account.enter ⟨100, 0, 100, 0⟩) none
+      ⟨⟨0⟩, ⟨0, .boundEstablished⟩, ⟨0, .boundEstablished⟩,
+        ⟨0, .boundEstablished⟩, ⟨0, .notEstablished⟩⟩ := by
+  simp [LineageReport.Sound, Bound.Sound, Bound.SoundOptional, Account.enter]
 
 /-- A report whose fields are all explicitly unestablished is sound whatever the actual accounting
 is; no numeric placeholder becomes a claim. -/
