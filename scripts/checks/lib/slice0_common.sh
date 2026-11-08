@@ -61,7 +61,7 @@ esac
 # The time bounds of the emit step (the Lean emitter) and the native step (slice0_native.sh).
 emit_secs=120
 native_secs=300
-emitter=(bounded "$emit_secs" lake env lean --run scripts/checks/slice0_bir.lean)
+emitter=(bounded "$emit_secs" lake env lean --run scripts/checks/compiler/slice0_bir.lean)
 
 # expected_timeout CMD...: run CMD (a function or command) with its bounded runs logged apart, for
 # a control whose expected observation IS a timeout (the diverging body): its INCOMPLETE runs are

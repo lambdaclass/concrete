@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Slice-0 trusted-base golden (PROVISIONAL, Concrete/README.md gate 9). The trusted base, printed
-# by scripts/checks/slice0_trusted_base.lean (until `concrete facts` exists): the premise registry
+# by scripts/checks/compiler/slice0_trusted_base.lean (until `concrete facts` exists): the premise registry
 # Concrete/Premises.lean (the one list of open premises), each headline theorem's axioms and each
 # axiom's type, followed by the Lean toolchain and every Lake pin, must equal
 # tests/golden/slice0_trusted_base.txt byte for byte. A premise added, removed or reworded (id,
 # trust class, what retires it, statement), a headline theorem gaining an axiom (sorryAx
 # included), an axiom restated, or a toolchain or pin change fails until the golden is updated.
 # The README's open-premise table is a generated view: it must equal the registry's rendering
-# (scripts/checks/slice0_premise_table.lean).
+# (scripts/checks/compiler/slice0_premise_table.lean).
 #
 # Controls: the comparison must reject the golden with a premise line removed, reworded, or with an
 # extra axiom; the printer must fail on a Lean file that prints and then errors; the report must
@@ -36,7 +36,7 @@ print_lean() {
 
 # current OUT: the whole trusted base into OUT; fails if any step fails.
 current() {
-  print_lean scripts/checks/slice0_trusted_base.lean "$1.lean" || return 1
+  print_lean scripts/checks/compiler/slice0_trusted_base.lean "$1.lean" || return 1
   [ -s "$1.lean" ] || { echo "slice0_trusted_base: the printer printed nothing" >&2; return 1; }
   { cat "$1.lean"; printf 'lean-toolchain %s\n' "$(head -c 200 lean-toolchain)"; } >"$1" || return 1
   python3 -I -c 'import json,sys
@@ -74,7 +74,7 @@ readme_rows() {
        h==3{exit}
        END{if (n == 0) exit 1}' "$1"
 }
-if ! print_lean scripts/checks/slice0_premise_table.lean "$work/rows"; then
+if ! print_lean scripts/checks/compiler/slice0_premise_table.lean "$work/rows"; then
   echo "FAIL printing the registry's table rows"; fail=1
 elif readme_rows Concrete/README.md >"$work/readme_rows" && cmp -s "$work/rows" "$work/readme_rows"; then
   echo "ok   README's open-premise table equals the registry"

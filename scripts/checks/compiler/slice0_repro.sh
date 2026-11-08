@@ -11,7 +11,7 @@
 # MANIFEST gets the build identity and one hash per artifact; CI compares the manifests of two
 # independent runners of the same target.
 set -euo pipefail
-root=$(cd "$(dirname "$0")/../.." && pwd)
+root=$(cd "$(dirname "$0")/../../.." && pwd)
 cd "$root"
 # shellcheck source=scripts/checks/lib/limits.sh
 source scripts/checks/lib/limits.sh
@@ -47,7 +47,7 @@ compare=(python3 "$root/scripts/checks/lib/repro_compare.py")
 # Materialize the dependency checkouts (no build): they must be the manifest's clean revisions,
 # which build_identity.sh checks before anything is built.
 bounded 600 lake env true
-bash scripts/checks/build_identity.sh > "$work/identity"
+bash scripts/checks/compiler/build_identity.sh > "$work/identity"
 target=$(bash scripts/checks/lib/slice0_native.sh target)
 # Working source edits are included (the identity records their digest); no build product is.
 for side in first second; do
@@ -70,10 +70,10 @@ for side in first second; do
     bounded 3000 lake build Concrete lean-compiler-backend/lcb >"$work/$side/build.log" 2>&1 ||
       { tail -50 "$work/$side/build.log" >&2; echo "slice0_repro: $side: build failed" >&2; exit 1; }
     lcb="$d/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
-    bounded 120 lake env lean --run scripts/checks/slice0_bir.lean list > names
+    bounded 120 lake env lean --run scripts/checks/compiler/slice0_bir.lean list > names
     [ -s names ] || { echo 'slice0_repro: no examples' >&2; exit 1; }
     while read -r name; do
-      bounded 120 lake env lean --run scripts/checks/slice0_bir.lean emit "$name" "$d/out/$name" "$target"
+      bounded 120 lake env lean --run scripts/checks/compiler/slice0_bir.lean emit "$name" "$d/out/$name" "$target"
       bounded 120 bash scripts/checks/lib/slice0_native.sh "$d/out/$name" "$lcb"
     done < names
   )

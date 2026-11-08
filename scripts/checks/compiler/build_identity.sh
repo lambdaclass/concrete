@@ -7,7 +7,7 @@
 # build directory aside); otherwise this script fails. slice0_repro.sh copies only a dependency's
 # tracked files and its `.git`, so ignored files never reach the compared builds.
 set -euo pipefail
-cd "$(dirname "$0")/../.."
+cd "$(dirname "$0")/../../.."
 : "${CONCRETE_SLICE0_CLANG:?run inside nix develop}"
 # shellcheck source=scripts/checks/lib/slice0_sources.sh
 source scripts/checks/lib/slice0_sources.sh

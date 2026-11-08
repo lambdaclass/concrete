@@ -648,7 +648,7 @@ example : ¬ WF unreachableParam := by decide
 example : ¬ WF crossBlockUse := by decide
 example : ¬ WF useBeforeDef := by decide
 
-/-- The examples, by name, with the outcome each must show (`scripts/checks/slice0_backends.sh`). -/
+/-- The examples, by name, with the outcome each must show (`scripts/checks/compiler/slice0_backends.sh`). -/
 def all : List (String × Program × Outcome) :=
   [("answer", answer, .exited 42), ("boundary", boundary, .exited 255),
    ("overflow", overflow, .trapped 0), ("answer_discharged", answerDischarged, .exited 42),

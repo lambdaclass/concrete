@@ -5,7 +5,7 @@ closure the trusted-base golden records (Concrete/README.md gate 9).
 This is the premise REGISTRY, the one list of the open premises: each entry has its trust class,
 what retires it, and its statement. The statements are text until the structures that state them
 as Lean propositions (`FrontendPremises`, `NativePremises`, whose design is in Concrete/README.md)
-land with the front end; each entry then names its field instead. `scripts/checks/slice0_trusted_base.sh` prints
+land with the front end; each entry then names its field instead. `scripts/checks/compiler/slice0_trusted_base.sh` prints
 this registry and the axioms of `theorems` and compares them with `tests/golden/slice0_trusted_base.txt`,
 so a premise added, removed or reworded fails until the golden is updated with it.
 -/

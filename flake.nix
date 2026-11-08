@@ -125,7 +125,7 @@
             # Slice-0 native builds name their compiler explicitly (scripts/checks/lib/slice0_native.sh),
             # pinned here so the shell's general clang can move without changing their identity.
             CONCRETE_SLICE0_CLANG = "${pkgs.llvmPackages_21.clang}/bin/clang";
-            # The artifact gates (scripts/checks/slice0_artifacts.sh) read the linked executables
+            # The artifact gates (scripts/checks/compiler/slice0_artifacts.sh) read the linked executables
             # with the same LLVM release's llvm-objdump and llvm-size, and measure a run under gdb
             # (Linux, pinned) or LLDB (macOS: Apple's /usr/bin/lldb, whose signed debugserver is
             # the only one allowed to attach; not pinned, its identity is recorded in the report).

@@ -1,9 +1,9 @@
 import Concrete
 
 /-!
-Emitter for the slice-0 backend gate (`scripts/checks/slice0_backends.sh`). PROVISIONAL.
+Emitter for the slice-0 backend gate (`scripts/checks/compiler/slice0_backends.sh`). PROVISIONAL.
 
-`lake env lean --run scripts/checks/slice0_bir.lean list` prints the hand-written BIR examples;
+`lake env lean --run scripts/checks/compiler/slice0_bir.lean list` prints the hand-written BIR examples;
 `... emit NAME DIR TARGET` checks the example in Lean (well formed; its BIR run gives the expected
 outcome; LCB's own evaluator on the adapted body returns the same result word) and writes
 `DIR/llvm.ll` (body + runtime entry), `DIR/lcb_body.s` (the adapted body, assembled by LCB in
