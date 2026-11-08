@@ -1031,18 +1031,30 @@ theorem FuelLimit.unique (L K : FuelLimit P ρ c) : L = K := by
       cases hs
       rfl
 
-/-- Law (subject `InfiniteExecution.states`).
-A fixed query-level oracle and initial configuration determine a unique infinite execution and state
-sequence. -/
-theorem InfiniteExecution.unique (X Y : InfiniteExecution P ρ c) :
-    X.states = Y.toFuelLimit.states ∧ X = Y := by
+/-- Helper (congruence). Equality of fuel limits transports back to equality of executions;
+this representation calculation is separate from semantic determinism. (approved: PENDING). -/
+theorem InfiniteExecution.unique_execution (X Y : InfiniteExecution P ρ c) : X = Y := by
   have h : X.toFuelLimit = Y.toFuelLimit := FuelLimit.unique _ _
   have hxy : X = Y := calc
     X = X.toFuelLimit.toInfiniteExecution := (toFuelLimit_toInfiniteExecution X).symm
     _ = Y.toFuelLimit.toInfiniteExecution :=
       congrArg (fun L : FuelLimit P ρ c => L.toInfiniteExecution) h
     _ = Y := toFuelLimit_toInfiniteExecution Y
-  exact ⟨congrArg FuelLimit.states h, hxy⟩
+  exact hxy
+
+/-- Law (subject `Move`).
+Under the fixed oracle, any two state sequences starting at the initial position and following
+the execution relation coincide. The relation, rather than a representation getter, is the subject. -/
+theorem InfiniteExecution.unique :
+    ∀ xs ys : Nat → Position O,
+      xs 0 = ⟨c, [], []⟩ → ys 0 = ⟨c, [], []⟩ →
+      (∀ n, Move P ρ (xs n) (xs (n + 1))) →
+      (∀ n, Move P ρ (ys n) (ys (n + 1))) → xs = ys := by
+  intro xs ys hx hy hxs hys
+  have h := fuelLimit_states_unique
+    (InfiniteExecution.toFuelLimit ⟨xs, hx, hxs⟩)
+    (InfiniteExecution.toFuelLimit ⟨ys, hy, hys⟩)
+  exact h
 
 /-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness
 (approved: PENDING).
@@ -1413,7 +1425,7 @@ theorem silentDivergence_not_infiniteInteraction {S : Observe.EventSignature}
     ¬ InfiniteInteraction P A ρ c := by
   rintro ⟨Y, hi⟩
   obtain ⟨X, hf⟩ := hs
-  have hxy : X = Y := (InfiniteExecution.unique X Y).2
+  have hxy : X = Y := InfiniteExecution.unique_execution X Y
   subst Y
   exact finite_not_infinite_events hf hi
 
@@ -2788,23 +2800,29 @@ example : (skippedStepRunFromQ prog env 0 [] [] eventConfig).isOutOfFuel = true 
   | prim hs _ _ _ =>
     cases hs
 
-/-- A state-sequence projection mutation shifts every position by one transition. -/
-def shiftedStates {O : Operands} {P : Program O} {ρ : QueryOracle O} {c : Config O}
-    (X : InfiniteExecution P ρ c) (n : Nat) : Position O :=
-  X.states (n + 1)
+/-- A nondeterministic execution mutant permits an extra stationary transition. -/
+def stationaryOrMove {O : Operands} (P : Program O) (ρ : QueryOracle O)
+    (x y : Position O) : Prop := Move P ρ x y ∨ x = y
 
 /-- Instance (law `InfiniteExecution.unique`, case `spin_infinite`). -/
-example : spin_infinite.states = spin_infinite.toFuelLimit.states ∧
-    spin_infinite = spin_infinite :=
-  InfiniteExecution.unique spin_infinite spin_infinite
+example : ∀ xs ys : Nat → Position ops,
+    xs 0 = ⟨spinConfig, [], []⟩ → ys 0 = ⟨spinConfig, [], []⟩ →
+    (∀ n, Move prog env (xs n) (xs (n + 1))) →
+    (∀ n, Move prog env (ys n) (ys (n + 1))) → xs = ys :=
+  InfiniteExecution.unique (P := prog) (ρ := env) (c := spinConfig)
 
 /-- Planted (law `InfiniteExecution.unique`, case `spin_infinite`,
-subject `InfiniteExecution.states`, mutant `shiftedStates`). -/
-example : ¬ (shiftedStates spin_infinite = spin_infinite.toFuelLimit.states ∧
-    spin_infinite = spin_infinite) := by
-  rintro ⟨h, _⟩
-  have h0 := congrArg (fun f => (f 0).config) h
-  cases h0
+subject `Move`, mutant `stationaryOrMove`). -/
+example : ¬ (∀ xs ys : Nat → Position ops,
+    xs 0 = ⟨spinConfig, [], []⟩ → ys 0 = ⟨spinConfig, [], []⟩ →
+    (∀ n, stationaryOrMove prog env (xs n) (xs (n + 1))) →
+    (∀ n, stationaryOrMove prog env (ys n) (ys (n + 1))) → xs = ys) := by
+  intro h
+  have he := h spin_infinite.states (fun _ => ⟨spinConfig, [], []⟩)
+    spin_infinite.initial rfl (fun n => Or.inl (spin_infinite.step n))
+    (fun _ => Or.inr rfl)
+  have h1 := congrArg (fun f => (f 1).config) he
+  cases h1
 
 /-- A classification mutation that confuses external infinite interaction with raw internal
 infinite interaction, ignoring the execution adapter's projection. -/
