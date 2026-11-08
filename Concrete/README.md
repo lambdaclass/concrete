@@ -753,7 +753,8 @@ of the SDK install-name set: it reads tagged TAPI v3/v4 YAML, validates fields, 
 targets, and resolves re-export edges against arm64 macOS stubs. Unknown/malformed schemas,
 duplicate keys and dangling re-exports fail closed. Stub filenames do not grant permissions.
 An OS load command must both occur in that set and be declared for its build mode: libSystem
-in normal mode, libSystem and libc++ in sanitizer mode. The OS loader remains the fixed
+in normal mode, libSystem, libc++ and libc++abi in sanitizer mode (the latter two are load
+commands of the pinned compiler-rt ASan dylib). The OS loader remains the fixed
 `/usr/lib/dyld` ABI. Linux Mach-O/stub fixtures exercise mode-specific acceptance, missing and
 undeclared install names, target selection, malformed stubs and dangling re-exports.
 Closure and policy metadata use only cached bash/jq,

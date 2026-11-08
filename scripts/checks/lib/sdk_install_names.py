@@ -40,10 +40,6 @@ def install_names(sdk, check_path=lambda path: None):
            'swift-version', 'objc-constraint', 'flags', 'parent-umbrella',
            'exports', 'reexports', 'undefineds', 'reexported-libraries',
            'allowable-clients', 'uuids'}
-    section = {'targets', 'archs', 'symbols', 'weak-symbols', 'weak-def-symbols',
-               'weak-ref-symbols', 'thread-local-symbols', 'objc-classes',
-               'objc-eh-types', 'objc-ivars', 're-exports', 'libraries',
-               'allowable-clients', 'clients', 'umbrella'}
 
     def strings(value):
         if not isinstance(value, list) or not all(isinstance(x, str) and x for x in value):
@@ -55,8 +51,8 @@ def install_names(sdk, check_path=lambda path: None):
             raise ValueError('invalid install name')
         return value
 
-    def applicable(fields, fallback=None):
-        selectors = fields.get('targets', fields.get('archs', fallback))
+    def applicable(fields):
+        selectors = fields.get('targets', fields.get('archs'))
         selectors = strings(selectors)
         if not selectors:
             raise ValueError('missing targets')
@@ -79,9 +75,9 @@ def install_names(sdk, check_path=lambda path: None):
                 if not isinstance(doc, Stub) or set(doc) - top:
                     raise ValueError('unsupported stub fields')
                 if doc.version == 4:
-                    if type(doc.get('tbd-version')) is not int or doc['tbd-version'] != 4 or 'targets' not in doc or 'archs' in doc or 'platform' in doc:
+                    if type(doc.get('tbd-version')) is not int or doc['tbd-version'] != 4 or 'targets' not in doc or set(doc) & {'archs', 'platform', 'swift-version', 'objc-constraint'}:
                         raise ValueError('invalid TAPI v4 header')
-                elif 'tbd-version' in doc or 'targets' in doc or 'archs' not in doc:
+                elif set(doc) & {'tbd-version', 'targets', 'reexports', 'reexported-libraries', 'allowable-clients'} or 'archs' not in doc:
                     raise ValueError('invalid TAPI v3 header')
                 identity = name(doc['install-name'])
                 active = applicable(doc)
@@ -114,17 +110,27 @@ def install_names(sdk, check_path=lambda path: None):
                     if not isinstance(groups, list):
                         raise ValueError('expected section array')
                     for group in groups:
+                        if doc.version == 4:
+                            symbols = {'targets', 'symbols', 'weak-symbols', 'thread-local-symbols',
+                                       'objc-classes', 'objc-eh-types', 'objc-ivars'}
+                        elif field == 'undefineds':
+                            symbols = {'archs', 'symbols', 'objc-classes', 'objc-eh-types',
+                                       'objc-ivars', 'weak-ref-symbols'}
+                        else:
+                            symbols = {'archs', 'symbols', 'weak-def-symbols', 'thread-local-symbols',
+                                       'objc-classes', 'objc-eh-types', 'objc-ivars',
+                                       'allowable-clients', 're-exports'}
                         permitted = {
                             'reexported-libraries': {'targets', 'libraries'},
                             'allowable-clients': {'targets', 'clients'},
                             'parent-umbrella': {'targets', 'umbrella'},
-                        }.get(field, section - {'libraries', 'clients', 'umbrella'})
+                        }.get(field, symbols)
                         if not isinstance(group, dict) or set(group) - permitted:
                             raise ValueError('unsupported section fields')
                         selector = 'targets' if doc.version == 4 else 'archs'
                         if selector not in group or ('archs' if selector == 'targets' else 'targets') in group:
                             raise ValueError('missing or conflicting section targets')
-                        group_active = applicable(group, doc.get('targets', doc.get('archs')))
+                        group_active = applicable(group)
                         for key, values in group.items():
                             if key == 'umbrella':
                                 if not isinstance(values, str) or not values:

@@ -109,33 +109,37 @@ install-name: /usr/lib/libc++.1.dylib
 exports:
   - archs: [ arm64 ]
     symbols: [ _fixture ]
+    re-exports: [ /usr/lib/libc++abi.dylib ]
+--- !tapi-tbd
+tbd-version: 4
+targets: [ arm64-macos ]
+install-name: /usr/lib/libc++abi.dylib
 ...
 """)
     fixture_policy = copy.deepcopy(policy)
-    fixture_policy['sdkInstallNames'] = {
-        'normal': ['/usr/lib/libSystem.B.dylib'],
-        'sanitize': ['/usr/lib/libSystem.B.dylib', '/usr/lib/libc++.1.dylib']}
     def macho(commands, sanitize=False):
         with patch.dict(os.environ, {'CONCRETE_SLICE0_SYSROOT': str(sdk), 'CONCRETE_SLICE0_LINK_CLOSURE': str(sdk_closure)}), patch('link_policy.verify_policy', return_value=fixture_policy), patch.object(sys, 'platform', 'darwin'), patch.object(sys, 'argv', ['link_purity.py', 'image', 'trace'] + (['--sanitize'] if sanitize else []) + ['control.o']), patch('subprocess.check_output', return_value=header(commands)):
             runpy.run_path(str(root / 'link_purity.py'), run_name='__main__')
     macho(loader)
     macho(loader + [('LC_LOAD_DYLIB', '/usr/lib/libSystem.B.dylib')])
     macho(loader + [('LC_LOAD_DYLIB', '/usr/lib/libSystem.B.dylib'),
-                    ('LC_LOAD_DYLIB', '/usr/lib/libc++.1.dylib')], sanitize=True)
+                    ('LC_LOAD_DYLIB', '/usr/lib/libc++.1.dylib'),
+                    ('LC_LOAD_DYLIB', '/usr/lib/libc++abi.dylib')], sanitize=True)
     refuse('SDK present but undeclared for normal mode',
            lambda: macho(loader + [('LC_LOAD_DYLIB', '/usr/lib/libc++.1.dylib')]),
            'link purity: install name not declared for mode:')
-    from sdk_install_names import install_names
     original_stub = stub.read_text()
     for label, text in [
         ('duplicate key', original_stub.replace('tbd-version: 4', 'tbd-version: 4\ntbd-version: 4')),
         ('unknown field', original_stub.replace('tbd-version: 4', 'tbd-version: 4\nunrecognized: true')),
         ('invalid version', original_stub.replace('1351.0.0', 'broken')),
         ('dangling reexport', original_stub.replace('libraries: [ /usr/lib/libc++.1.dylib ]', 'libraries: [ /usr/lib/missing.dylib ]')),
+        ('dangling transitive reexport', original_stub.replace('re-exports: [ /usr/lib/libc++abi.dylib ]', 're-exports: [ /usr/lib/missing-transitive.dylib ]')),
         ('invalid YAML', '[ malformed'),
         ('unknown YAML tag', original_stub.replace('!tapi-tbd\n', '!unknown\n', 1)),
         ('untagged stub', original_stub.replace('!tapi-tbd\n', '\n', 1)),
         ('missing targets', original_stub.replace('targets: [ arm64-macos ]', 'targets: []', 1)),
+        ('invalid export field', original_stub.replace('symbols: [ _fixture ]', 'libraries: [ /usr/lib/libSystem.B.dylib ]')),
         ('invalid section type', original_stub.replace('symbols: [ _fixture ]', 'symbols: _fixture')),
         ('missing section targets', original_stub.replace('  - archs: [ arm64 ]', '  - symbols: [ _other ]')),
     ]:

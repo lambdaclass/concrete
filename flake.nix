@@ -201,7 +201,7 @@
             # add-hardening.sh (the driver wrapper's default hardening).
             sdkInstallNames = {
               normal = [ "/usr/lib/libSystem.B.dylib" ];
-              sanitize = [ "/usr/lib/libSystem.B.dylib" "/usr/lib/libc++.1.dylib" ];
+              sanitize = [ "/usr/lib/libSystem.B.dylib" "/usr/lib/libc++.1.dylib" "/usr/lib/libc++abi.dylib" ];
             };
             sanitize = [ "-fsanitize=address" "-fno-sanitize-recover=all" ];
             sanitizeLink = if pkgs.stdenv.isDarwin then [
