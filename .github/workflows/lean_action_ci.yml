@@ -416,22 +416,26 @@ jobs:
         shell: bash
     # Heavy scaling runs only on provisioned concrete-ci-2 self-hosted runners (ISS-0029 / X4),
     # never on GitHub-hosted VMs or macOS shared VMs, and never executes pull_request code on
-    # concrete-ci-2. On pull_request it selects ubuntu-24.04 and fails before checkout.
+    # concrete-ci-2. Pull requests run deterministic family coverage on a hosted runner.
     runs-on: ${{ github.event_name != 'pull_request' && fromJSON('["self-hosted","linux","x64","concrete","concrete-ci-2"]') || 'ubuntu-24.04' }}
     timeout-minutes: 15
     permissions:
       contents: read
     steps:
       - name: Refuse a substitute for concrete-ci-2
-        if: runner.environment != 'self-hosted'
+        if: github.event_name != 'pull_request' && runner.environment != 'self-hosted'
         run: |
-          echo "::error::Scaling (x86-64) requires self-hosted concrete-ci-2; pull_request cannot use it, so this job is intentionally red"
+          echo "::error::Scaling (x86-64) requires self-hosted concrete-ci-2; heavy qualification cannot use a hosted substitute"
           exit 1
       - uses: actions/checkout@v4
       - name: Install Nix (GitHub-hosted only)
         if: runner.environment != 'self-hosted'
         uses: cachix/install-nix-action@v31
+      - name: Small deterministic family coverage (PR; no timing qualification)
+        if: github.event_name == 'pull_request'
+        run: nix develop --command bash scripts/checks/lib/bounded.sh 120 lake env lean --run scripts/checks/compiler/scaling.lean check-small
       - name: Interleaved 1x, 10x and 100x backend scaling
+        if: github.event_name != 'pull_request'
         env:
           CONCRETE_SCALING_GITHUB_REPOSITORY: ${{ github.repository }}
           CONCRETE_SCALING_RUNNER_ENVIRONMENT: ${{ runner.environment }}
@@ -441,7 +445,7 @@ jobs:
         if: always() && runner.environment == 'self-hosted'
         with:
           name: scaling-x86-64
-          path: scaling-report/scaling.tsv
+          path: scaling-report
           if-no-files-found: error
 
   artifacts:

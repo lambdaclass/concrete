@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Scaling gate (x86-64 Linux only): one machine, one job. Generated BIR at k0, 10*k0 and 100*k0 is
 # checked by the Lean evaluator, then every in-process backend stage and the native step are timed.
-# Repetitions are interleaved across sizes and the minimum is used. The 10x->100x exponent must be
+# Nine repetitions alternate size order; in-process samples batch >=20 ms. Minima and a
+# conservative low-quantile noise envelope must both satisfy the unchanged exponent bound. The 10x->100x exponent must be
 # at most SCALING_MAX_EXPONENT (default 1.35); 100x in-process stages must be at least
 # SCALING_MIN_STAGE_NS (default 10 ms), and native at least SCALING_MIN_NATIVE_NS (default 100 ms).
 # After ISS-0030 made LCB.emit and LLVM.module linear, concrete-ci-2 measured lcb_emit = 3.7 ms and
@@ -54,7 +55,7 @@ if [ "$#" -gt 0 ]; then
   plant=$3
 fi
 k0=${SCALING_K0:-6}
-repetitions=${SCALING_REPETITIONS:-5}
+repetitions=${SCALING_REPETITIONS:-9}
 max_exponent=${SCALING_MAX_EXPONENT:-1.35}
 min_stage_ns=${SCALING_MIN_STAGE_NS:-10000000}
 min_native_ns=${SCALING_MIN_NATIVE_NS:-100000000}
@@ -65,7 +66,10 @@ case "$(uname -s)-$(uname -m)" in
   *) echo "scaling: runs only on x86-64 Linux (one machine, one job)" >&2; exit 2 ;;
 esac
 case "$in_process_only" in 0|1) ;; *) echo "scaling: SCALING_IN_PROCESS_ONLY must be 0 or 1" >&2; exit 2 ;; esac
+tier=${SCALING_TIER:-qualification}
+case "$tier" in qualification|daily) ;; *) echo "scaling: invalid SCALING_TIER" >&2; exit 2 ;; esac
 mkdir -p "$report"
+printf 'sha=%s\ntier=%s\n' "$(git rev-parse HEAD)" "$tier" >"$report/identity.txt"
 
 check_ci2_runner() { # check_ci2_runner REPOSITORY ENVIRONMENT RUNNER_NAME INVENTORY_PATH
   python3 -I - "$1" "$2" "$3" "$4" <<'PY'
@@ -156,7 +160,9 @@ if [ "$clean_rc" = 0 ] && [ "$in_process_only" = 0 ]; then
   now_ns() { python3 -I -c 'import time; print(time.monotonic_ns())'; }
   if [ "$clean_rc" = 0 ]; then
     for ((rep = 0; rep < repetitions; rep++)); do
-      for k in "$k0" "$((10 * k0))" "$((100 * k0))"; do
+      sizes=("$k0" "$((10 * k0))" "$((100 * k0))")
+      if ((rep % 2)); then sizes=("$((100 * k0))" "$((10 * k0))" "$k0"); fi
+      for k in "${sizes[@]}"; do
         run=$work/native-runs/$rep/$k
         mkdir -p "$(dirname "$run")"
         cp -R "$work/native-inputs/$k" "$run"
@@ -176,6 +182,7 @@ if [ "$clean_rc" = 0 ] && [ "$in_process_only" = 0 ]; then
   fi
 fi
 if [ "$clean_rc" = 0 ]; then
+  cp "$work/clean.tsv" "$report/samples.tsv"
   analyze "$work/clean.tsv" "$report/scaling.tsv" "$mode" || clean_rc=$?
 else
   echo "FAIL scaling: clean measurement failed with status $clean_rc; running controls" >&2
@@ -267,6 +274,25 @@ control_ci2_provenance() {
   done
   echo 'ok scaling control ci2-provenance: eligible runners accepted and substitutes refused'
 }
+
+# One policy/analyzer for all backend families. Large families and depth probes
+# belong to the scheduled tier; no second backend-specific scaling workflow.
+if [ "$tier" = daily ]; then
+  family_k0=${SCALING_FAMILY_K0:-100}
+  for family in wide_phi sparse_registers dense_registers many_blocks; do
+    rc=0
+    bounded 600 "${driver[@]}" measure-family "$family" "$family_k0" "$repetitions" "$target" \
+      >"$report/$family.samples.tsv" || rc=$?
+    if [ "$rc" = 0 ]; then
+      bounded 60 python3 -I "$root/scripts/checks/lib/scaling_report.py" \
+        "$report/$family.samples.tsv" "$report/$family.tsv" --k0 "$family_k0" \
+        --repetitions "$repetitions" --max-exponent "$max_exponent" \
+        --min-stage-ns "$min_stage_ns" --min-native-ns "$min_native_ns" --mode in-process || rc=$?
+    fi
+    [ "$rc" = 0 ] || clean_rc=$rc
+  done
+  bounded 600 "${driver[@]}" check-depth >"$report/depth.txt" || clean_rc=$?
+fi
 
 controls_rc=0
 control_linear || controls_rc=1

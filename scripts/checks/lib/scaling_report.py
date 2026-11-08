@@ -89,7 +89,7 @@ def main():
         f"# mode={args.mode}; k0={args.k0}; sizes={sizes[0]},{sizes[1]},{sizes[2]}; repetitions={args.repetitions}",
         f"# minimum per size; max_exponent={args.max_exponent:.3f}; "
         f"min_100x_stage_ns={args.min_stage_ns}; min_100x_native_ns={args.min_native_ns}",
-        "stage\t1x_ms\t10x_ms\t100x_ms\texponent_1x_10x\texponent_10x_100x",
+        "stage\t1x_ms\t10x_ms\t100x_ms\texponent_1x_10x\texponent_10x_100x\tupper_low_quantile_exponent",
     ]
     for stage in sorted(expected_inventory):
         if stage not in samples:
@@ -108,8 +108,17 @@ def main():
         except ValueError as error:
             failures.append(f"FAIL scaling: stage {stage}: {error}")
             continue
-        lines.append("{}\t{:.3f}\t{:.3f}\t{:.3f}\t{:.3f}\t{:.3f}".format(
-            stage, *(nanos / 1_000_000 for nanos in minima), *exponents))
+        # Conservative low-quantile envelope: large-size lower third versus the
+        # fastest observed small size. Unlike minima alone this detects a lucky
+        # isolated fast large sample hiding noisy measurements near the threshold.
+        large_low = sorted(values[(rep, sizes[2])] for rep in range(args.repetitions))[
+            args.repetitions // 3]
+        upper = exponent(minima[1], large_low)
+        lines.append("{}\t{:.3f}\t{:.3f}\t{:.3f}\t{:.3f}\t{:.3f}\t{:.3f}".format(
+            stage, *(nanos / 1_000_000 for nanos in minima), *exponents, upper))
+        if args.mode in ("normal", "in-process") and upper > args.max_exponent and exponents[1] <= args.max_exponent:
+            failures.append(f"FAIL scaling: stage {stage} noise envelope exponent = {upper:.3f} "
+                            f"exceeds {args.max_exponent:.3f}; measurement is not noise-robust")
         floor = args.min_native_ns if stage == "native" else args.min_stage_ns
         if minima[2] < floor:
             failures.append(

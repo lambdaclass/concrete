@@ -48,6 +48,29 @@ def scaled (k rep : Nat) : Program :=
       [{ params := [(6 * k, .int .u8)], insts := [], term := .ret (.reg (6 * k)) }]
     sites := (List.range k).map (site rep) }
 
+/-- Register magnitude varies independently of program size. -/
+private def registers (n rep stride : Nat) : Program :=
+  { blocks := [{ params := [], insts := (List.range n).map (fun i => .bin .add .u8 (stride * (i + 1)) (.imm .u8 (Int.ofNat (rep % 128))) (.imm .u8 1)), term := .ret (.reg (stride * n)) }], sites := [] }
+
+private def widePhi (n rep : Nat) : Program :=
+  { blocks := [
+    { params := [], insts := [.binOvf .add .u8 (n + 1) (n + 2) (.imm .u8 0) (.imm .u8 0)],
+      term := .condbr (n + 2) 1 [] 2 [] },
+    { params := [], insts := [], term := .br 3
+        ((List.range n).map fun i => .imm .u8 (Int.ofNat ((i + rep) % 256))) },
+    { params := [], insts := [], term := .br 3
+        ((List.range n).map fun i => .imm .u8 (Int.ofNat ((i + rep + 1) % 256))) },
+    { params := (List.range n).map (fun i => (i, .int .u8)), insts := [],
+      term := .ret (.imm .u8 0) }], sites := [] }
+
+private def manyBlocks (n rep : Nat) : Program :=
+  { blocks := (List.range n).map (fun _ =>
+      { params := [], insts := [], term := .ret (.imm .u8 (Int.ofNat (rep % 256))) }), sites := [] }
+
+private def backendFamilies : List (String × (Nat → Nat → Program)) :=
+  [("wide_phi", widePhi), ("sparse_registers", fun n rep => registers n rep 1000000000000),
+   ("dense_registers", fun n rep => registers n rep 1), ("many_blocks", manyBlocks)]
+
 private def instructions (p : Program) : List Inst := p.blocks.flatMap (·.insts)
 
 private def scan (is : List Inst) (salt : UInt64) : UInt64 :=
@@ -92,16 +115,19 @@ private def forceAssemble : Except String String → UInt64
 /-- Evaluate `force result` in a branch BEFORE reading the second clock, so laziness cannot move the
 stage's work past the measurement. Returning the result lets the next measured stage consume it. -/
 private def timedPure (value : Unit → α) (force : α → UInt64) : IO (α × Nat × UInt64) := do
+  -- A sample covers at least 20 ms, reducing timer/startup granularity at small sizes.
+  -- lazyPure executes the stage on every iteration; forcing stays before the clock read.
   let start ← IO.monoNanosNow
-  let result := value ()
-  let digest := force result
-  match digest &&& 1 with
-  | 0 =>
-    let stop ← IO.monoNanosNow
-    return (result, stop - start, digest)
-  | _ =>
-    let stop ← IO.monoNanosNow
-    return (result, stop - start, digest)
+  let mut count := 0
+  repeat
+    let result ← IO.lazyPure value
+    let digest := force result
+    let stop ← match digest &&& 1 with
+      | 0 => IO.monoNanosNow
+      | _ => IO.monoNanosNow
+    count := count + 1
+    if stop - start ≥ 20000000 then
+      return (result, (stop - start) / count, digest)
 
 private def sample (rep k : Nat) (stage : String) (measurement : α × Nat × UInt64) : IO Unit :=
   IO.println s!"sample\t{rep}\t{k}\t{stage}\t{measurement.2.1}\t{measurement.2.2}"
@@ -148,8 +174,56 @@ private def runMeasurement (k0 repetitions : Nat) (targetName : String) (plant :
       unless ← validate k (scaled k rep) do return 1
   IO.println s!"family\tk0={k0}\trepetitions={repetitions}\ttarget={targetName}\texpected=exit-1"
   for rep in List.range repetitions do
-    for k in sizes do
+    for k in (if rep % 2 == 0 then sizes else sizes.reverse) do
       unless ← measureOne rep k target (scaled k rep) plant do return 1
+  return 0
+
+/-- PR coverage is deterministic correctness/shape coverage, not a timing qualification or a
+claim about algorithmic work. The production stages execute twice and must agree exactly. -/
+private def checkFamilies (depth : Nat) : IO UInt32 := do
+  let some target := LCB.Target.ofName "x86_64-linux" | return 2
+  for k in [1, 10, 100] do
+    unless ← validate k (scaled k 0) do return 1
+  for (family, make) in backendFamilies do
+    for n in [1, 10, 100] do
+      let p := make n 0
+      let first := LCB.emit p
+      match first with
+      | .error msg => IO.eprintln s!"FAIL scaling PR: {family} {n}: {msg}"; return 1
+      | .ok (f, _) =>
+        let expected := if family == "sparse_registers" || family == "dense_registers" then 1 else 0
+        unless run p (n + 2) == .exited expected do
+          IO.eprintln s!"FAIL scaling PR: {family}: wrong evaluator result"; return 1
+        unless f.blocks.size == p.blocks.length do
+          IO.eprintln s!"FAIL scaling PR: {family}: block count"; return 1
+        unless reprStr first == reprStr (LCB.emit (opaqueIdentity p)) &&
+            LLVM.module p == LLVM.module (opaqueIdentity p) do
+          IO.eprintln s!"FAIL scaling PR: {family}: repeated output differs"; return 1
+        match LCB.assemble target f with
+        | .error msg => IO.eprintln s!"FAIL scaling PR: {family}: assembly: {msg}"; return 1
+        | .ok asm =>
+          unless !asm.isEmpty do IO.eprintln s!"FAIL scaling PR: {family}: empty assembly"; return 1
+        IO.println s!"coverage\t{family}\t{n}\tblocks={f.blocks.size}\tdigest={forceEmit first}"
+  for (family, p) in [("deep_instructions", registers depth 0 1000000000000),
+                      ("deep_blocks", manyBlocks depth 0)] do
+    match LCB.emit p with
+    | .error msg => IO.eprintln s!"FAIL scaling depth: {family}: {msg}"; return 1
+    | .ok result =>
+      IO.println s!"depth\t{family}\t{depth}\tdigest={forceEmit (.ok result)}\tllvm={forceString (LLVM.module p)}"
+  IO.println "PASS scaling deterministic family coverage (no wall-clock qualification)"
+  return 0
+
+private def measureFamily (family : String) (k0 repetitions : Nat) (targetName : String) : IO UInt32 := do
+  let some (_, make) := backendFamilies.find? (·.1 == family)
+    | IO.eprintln s!"unknown scaling family {family}"; return 2
+  let some target := LCB.Target.ofName targetName
+    | IO.eprintln s!"unknown target {targetName}"; return 2
+  if k0 == 0 || repetitions == 0 then return 2
+  for rep in List.range repetitions do
+    -- Rotate and reverse the size order to avoid a fixed correlation with warmup/drift.
+    let sizes := if rep % 2 == 0 then [k0, 10*k0, 100*k0] else [100*k0, 10*k0, k0]
+    for k in sizes do
+      unless ← measureOne rep k target (make k rep) none do return 1
   return 0
 
 private def emitInputs (k : Nat) (dir : System.FilePath) (targetName : String) : IO UInt32 := do
@@ -177,6 +251,12 @@ private def parsePlant : List String → Option (Option String)
 
 def main (args : List String) : IO UInt32 := do
   match args with
+  | ["check-small"] => checkFamilies 1000
+  | ["check-depth"] => checkFamilies 100000
+  | ["measure-family", family, k, reps, target] =>
+    match k.toNat?, reps.toNat? with
+    | some n, some r => measureFamily family n r target
+    | _, _ => IO.eprintln "measure-family: sizes must be naturals"; return 2
   | ["emit", k, dir, target] => match k.toNat? with
     | some n => emitInputs n dir target
     | none => IO.eprintln "emit: K must be a natural"; return 2

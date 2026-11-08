@@ -139,18 +139,25 @@ def check(workflow_path):
         ("self-hosted concrete-ci-2", "self-hosted", False),
         ("GitHub-hosted substitute", "github-hosted", True),
     ):
-        enabled = evaluate_condition(condition, {"runner": {"environment": env_name}})
+        enabled = evaluate_condition(condition, {"runner": {"environment": env_name}, "github": {"event_name": "workflow_dispatch"}})
         require(enabled == should_refuse, f"{label}: guard enabled={enabled}, expected {should_refuse}")
         if enabled:
             res = execute_guard(body)
             require(res.returncode != 0, f"{label}: substitute guard exited 0")
             output = res.stdout + res.stderr
-            require(all(t in output for t in ("concrete-ci-2", "self-hosted", "pull_request")),
-                    f"{label}: refusal does not explain concrete-ci-2/self-hosted/pull_request")
+            require(all(t in output for t in ("concrete-ci-2", "self-hosted", "qualification")),
+                    f"{label}: refusal does not explain concrete-ci-2/self-hosted/qualification")
+    require(not evaluate_condition(condition, {"runner": {"environment": "github-hosted"},
+                "github": {"event_name": "pull_request"}}), "PR coverage is intentionally refused")
+    pr = [st for st in steps if "check-small" in st.get("run", "")]
+    require(len(pr) == 1 and pr[0].get("if") == "github.event_name == 'pull_request'",
+            "missing deterministic PR family coverage")
     nix = [step for step in steps if step.get("uses") == "cachix/install-nix-action@v31"]
     require(len(nix) == 1 and nix[0].get("if") == "runner.environment != 'self-hosted'",
             "scaling Nix installation is not GitHub-hosted-only")
     run_step = next(step for step in steps if "scaling.sh" in step.get("run", ""))
+    require(run_step.get("if") == "github.event_name != 'pull_request'",
+            "heavy scaling executes pull_request code")
     env = run_step.get("env") or {}
     require(env.get("CONCRETE_SCALING_GITHUB_REPOSITORY") == "${{ github.repository }}",
             "scaling does not record github.repository")
