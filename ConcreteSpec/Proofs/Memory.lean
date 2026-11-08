@@ -197,6 +197,15 @@ theorem alloc_wellFormed (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
       (Memory.mk ((z, x) :: m.blocks) (m.next + 1)).block c =
         if z = c then some x else m.block c := rfl
   constructor
+  · intro e he
+    cases he with
+    | head => simp [Memory.block, AList.lookup]
+    | tail _ he =>
+      rw [lookup]
+      have hh := hw.canonical e he
+      have hfresh := hw.fresh e.1 e.2 hh
+      have hn : z ≠ e.1 := by intro hz; rw [← hz] at hfresh; simp [z] at hfresh
+      simp [hn, hh]
   · intro c y hy
     rw [lookup] at hy
     split at hy
@@ -245,5 +254,36 @@ theorem candidate_contains_unique (tgt : Target) (m : Memory) (hw : m.WellFormed
   simp only [Block.Candidate, Bool.and_eq_true, decide_eq_true_eq] at hxc hyc
   apply hw.disjoint b x c y hx hy hn hxc.1.1.1 hyc.1.1.1
   refine ⟨hxc.2.trans hyc.2.symm, hxc.1.2, hyc.1.2, ?_, ?_⟩ <;> omega
+
+/-- Reconstruction chooses an eligible containing block, or a one-past block only when no
+eligible block contains the address. -/
+theorem fromExposed_sound (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
+    (s : AddrSpace) (addr : Nat) (b : MemBlockId)
+    (h : (m.fromExposed s addr).prov = some b) :
+    ∃ x, m.block b = some x ∧ x.Candidate s = true ∧
+      ((x.base ≤ addr ∧ addr < x.base + x.size) ∨
+       (addr = x.base + x.size ∧ ∀ e ∈ m.blocks, e.2.Candidate s = true →
+         ¬ (e.2.base ≤ addr ∧ addr < e.2.base + e.2.size))) := by
+  unfold Memory.fromExposed at h
+  dsimp only at h
+  split at h
+  next e he =>
+    cases h
+    have hm := List.mem_of_find?_eq_some he
+    have hc := List.mem_filter.mp hm
+    exact ⟨e.2, hw.canonical e hc.1, hc.2,
+      .inl (by have hh := List.find?_some he; simpa using hh)⟩
+  next he =>
+    split at h
+    next e hp =>
+      cases h
+      have hc := List.mem_filter.mp (List.mem_of_find?_eq_some hp)
+      refine ⟨e.2, hw.canonical e hc.1, hc.2, .inr ⟨?_, ?_⟩⟩
+      · have hh := List.find?_some hp
+        simpa using hh
+      · intro e hm hc'
+        have hh := List.find?_eq_none.mp he e (List.mem_filter.mpr ⟨hm, hc'⟩)
+        simpa using hh
+    next => cases h
 
 end ConcreteSpec.Core.Mem

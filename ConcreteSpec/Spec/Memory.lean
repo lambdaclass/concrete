@@ -110,6 +110,8 @@ instance (x y : Block) : Decidable (x.Overlaps y) := by unfold Block.Overlaps; i
 bytes as many as its size, its one-past address an address of the target, its base aligned, and no
 two live blocks overlapping. -/
 structure Memory.WellFormed (tgt : Target) (m : Memory) : Prop where
+  /-- Every stored entry agrees with lookup; shadowed contradictory blocks are forbidden. -/
+  canonical : ∀ e ∈ m.blocks, m.block e.1 = some e.2
   fresh : ∀ b x, m.block b = some x → b.id < m.next
   sized : ∀ b x, m.block b = some x → x.bytes.length = x.size
   fits : ∀ b x, m.block b = some x → x.base + x.size ≤ 2 ^ tgt.addrBits - 1
