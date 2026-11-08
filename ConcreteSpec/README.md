@@ -99,13 +99,17 @@ Open obligations, by name:
   storage can use C4's hybrid state; C5 must still supply ownership instrumentation. Lifecycle
   instrumentation may refuse an event (`Option.none`), making execution stuck, including initial
   activation and primitive result binding (owner decision 2026-11-08, 15:08 UTC, item 21).
-  C1 characterizes lifecycle blockage over actual transitions after successful predecessor checks;
-  its primitive-refusal laws cover the driver and event history. Successful first-boundary cleanup
-  executions select exactly the independently computed plan and perform its state updates
-  (`raw_cleanup_runs_plan`, `cleanup_runs_exact_plan`), with planted extra/missing calls,
-  an unexpected resume path, and a skipped-drop update. Raw-path coverage is proved from the
+  C1 characterizes lifecycle blockage over actual transitions (`Step`) and top-level/driver entry
+  (`runFn`, `runFrom`) after successful predecessor checks, with relational primitive-bind refusal
+  (`prim_bind_step`) alongside the driver laws (`continuation_refused`, `prim_bind_refused`).
+  First-boundary cleanup executions are equivalent to executing `planWith`, restoring locals to
+  `unwindLocals`, and performing every planned call and drop in order (`raw_cleanup_runs_plan`,
+  `cleanup_runs_exact_plan`), with planted mutants for extra/missing calls, unexpected resume
+  paths, skipped `dropOut`, and skipped local `restrict`. Raw-path coverage is proved from the
   machine stack rules; callers do not supply cleanup segmentation.
-  Function-backed determinism and destruction-interface projections are helpers, not independent
-  contract laws; the demo destruction protocol discharges its admission obligations by cases. C2
+  Relational step determinism (`step_silent_deterministic`, `step_deterministic`) and executable
+  destruction-protocol validation (`validDestroyFn` / `destroy_not_copy`,
+  `checkedDestroyCall` / `destroyCall_sig`) are proved as bidirectional contract laws alongside
+  positive and negative planted-mutant witnesses. C2
   leaves floats (slice 26), and two owner questions: whether a failing operation may appear in a constant
   initializer, and whether the source may name a constant written later in the file.

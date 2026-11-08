@@ -27,14 +27,17 @@ What these prove, for every operand language:
   the value bound (`return_reaches_caller`), and a `break` or `continue` its loop
   (`break_reaches_loop`, `continue_reaches_loop`).
 - **Exit values**: a `return` evaluates its value before any cleanup (`step_ret`).
-- **Traps are terminal**: a trapped configuration has no step and no later event
-  (`steps_from_trapped`); `abort()` runs no cleanup (`abort_runs_no_cleanup`), and so neither does a
-  cleanup call that traps.
-- **Evaluation order**: the first argument that traps decides the trap (`evalArgs_first_trap`).
-- Function-backed determinism is classified as representation inversion
-  (`step_silent_deterministic_inv`, `step_deterministic_inv`), not an independent rule law.
-- **Destruction order** (Q2.3): a sequence's element `i` is visited `i`-th and the backing last; a
-  map's `i`-th entry has its key at `2i` and its value at `2i+1`, and the nodes come last.
+- **Traps are terminal**: a trapped configuration is final (`Config.final?`) and blocked (`step_trapped`),
+  and has no later step or event (`steps_from_trapped`); `abort()` runs no cleanup (`abort_runs_no_cleanup`),
+  and so neither does a cleanup call that traps.
+- **Evaluation order and determinism**: the first argument that traps decides the trap (`evalArgs_first_trap`);
+  silent machine steps are unique (`step_silent_deterministic`), and any two relational steps from the
+  same configuration either coincide or arise from the same primitive request (`step_deterministic`).
+- **Destruction** (Q2.3): `validDestroyFn` and `checkedDestroyCall` enforce non-`Copy` types and the
+  single-parameter `Unit`-returning signature (`destroy_not_copy`, `destroyCall_sig`); a sequence's
+  element `i` is visited `i`-th and the backing last (`seqDestroyOrder_elem`, `seqDestroyOrder_storage`);
+  a map's `i`-th entry has its key at `2i` and its value at `2i+1`, and the nodes come last
+  (`mapDestroyOrder_entry`, `mapDestroyOrder_storage`).
 -/
 
 namespace ConcreteSpec.Core.Exec
@@ -44,45 +47,69 @@ variable {O : Operands} {V : Type}
 
 /-! ### Many steps -/
 
+/-- Representation lemma. Lifts a single labeled step into a one-step execution trace
+(approved: PENDING). -/
 theorem Steps.single {P : Program O} {c c' : Config O} {l : Label O} (h : Step P c l c') :
     Steps P c l.events c' := by
   have := Steps.step h (Steps.refl c')
   simpa using this
 
+/-- Representation lemma. Concatenates two multi-step execution traces (approved: PENDING). -/
 theorem Steps.trans {P : Program O} {c c' c'' : Config O} {tr tr' : List O.Event}
     (h : Steps P c tr c') (h' : Steps P c' tr' c'') : Steps P c (tr ++ tr') c'' := by
   induction h with
   | refl => simpa using h'
   | step hs _ ih => simpa [List.append_assoc] using Steps.step hs (ih h')
 
-/-- A silent step followed by more steps. -/
+/-- Representation lemma. Prepends a silent machine step to a multi-step execution trace
+(approved: PENDING). -/
 theorem steps_next {P : Program O} {c c' c'' : Config O} {tr : List O.Event}
     (h : step P c = some (.next c')) (h' : Steps P c' tr c'') : Steps P c tr c'' := by
   simpa [Label.events] using Steps.step (Step.silent h) h'
 
-/-- A primitive operation answered within its contract, followed by more steps. -/
-theorem steps_request {P : Program O} {c c'' : Config O} {p : O.Prim} {vs : List O.Val}
+/-- Representation lemma. Prepends a primitive request/response step to a multi-step execution
+trace (approved: PENDING). -/
+private theorem steps_request_inv {P : Program O} {c c'' : Config O} {p : O.Prim} {vs : List O.Val}
     {site : SiteId} {st : O.Store} {k : Answer O.Val O.Event O.Store → Option (Config O)}
     {a : Answer O.Val O.Event O.Store} {tr : List O.Event}
     (h : step P c = some (.request p vs site st k)) (ha : O.allows p vs st a = true)
     {c' : Config O} (hk : k a = some c') (h' : Steps P c' tr c'') : Steps P c (a.label.events ++ tr) c'' :=
   Steps.step (Step.prim h ha hk) h'
 
+/-- Law (subject `ConcreteSpec.Core.Exec.Step`). Executing `.prim dst p args site` after
+successful argument evaluation, an allowed oracle answer `a` with `.ok v`, and a successful
+destination bind `bindLife` takes the labeled transition `Step` with `a.label` to `.done` with
+`bindDst dst v L` and the bound store. -/
+theorem steps_request (P : Program O) (dst : Option Var) (p : O.Prim) (args : List O.Expr)
+    (site : SiteId) (L : AList Var O.Val) (st st' st'' : O.Store) (vs : List O.Val)
+    (k : List (Frame O)) (a : Answer O.Val O.Event O.Store) (v : O.Val)
+    (he : evalArgs O L st args = .ok (vs, st')) (ha : O.allows p vs st' a = true)
+    (hv : a.result = .ok v) (hb : bindLife O dst a.store = some st'') :
+    Step P ⟨.exec (.prim dst p args site), L, st, k⟩ a.label
+      ⟨.done, bindDst dst v L, st'', k⟩ := by
+  apply Step.prim (by simp only [step, onRes, he]; rfl) ha
+  simp [hv, hb]
+
 /-! ### Sequencing -/
 
+/-- Helper (computation). Definitional unfolding of `step` on `.seq s t` (approved: PENDING). -/
 theorem step_seq (P : Program O) (s t : Stmt O) (L : AList Var O.Val) (st : O.Store)
     (k : List (Frame O)) :
     step P ⟨.exec (.seq s t), L, st, k⟩ = some (.next ⟨.exec s, L, st, .seq t :: k⟩) := rfl
 
+/-- Helper (computation). Definitional unfolding of `step` at `.done` on `.seq t`
+(approved: PENDING). -/
 theorem step_done_seq (P : Program O) (t : Stmt O) (L : AList Var O.Val) (st : O.Store)
     (k : List (Frame O)) :
     step P ⟨.done, L, st, .seq t :: k⟩ = some (.next ⟨.exec t, L, st, k⟩) := rfl
 
+/-- Helper (computation). Definitional unfolding of `step` at `.exiting e` on `.seq t`
+(approved: PENDING). -/
 theorem step_exit_seq (P : Program O) (e : Exit O.Val) (t : Stmt O) (L : AList Var O.Val)
     (st : O.Store) (k : List (Frame O)) :
     step P ⟨.exiting e, L, st, .seq t :: k⟩ = some (.next ⟨.exiting e, L, st, k⟩) := rfl
 
-/-- Entering a block records the locals visible at its start. -/
+/-- Helper (computation). Definitional unfolding of `step` on `.block b s` (approved: PENDING). -/
 theorem step_block (P : Program O) (b : BlockId) (s : Stmt O) (L : AList Var O.Val)
     (st : O.Store) (k : List (Frame O)) :
     step P ⟨.exec (.block b s), L, st, k⟩ =
@@ -90,6 +117,8 @@ theorem step_block (P : Program O) (b : BlockId) (s : Stmt O) (L : AList Var O.V
 
 /-! ### Scope restoration -/
 
+/-- Law (subject `ConcreteSpec.Core.Exec.restrict`). Looking up `x` in `restrict dm L` returns
+`AList.lookup L x` when `x ∈ dm` and `none` otherwise. -/
 theorem lookup_restrict (dm : List Var) : ∀ (L : AList Var V) (x : Var),
     AList.lookup (restrict dm L) x = if x ∈ dm then AList.lookup L x else none
   | [], x => by by_cases h : x ∈ dm <;> simp [restrict, AList.lookup, h]
@@ -109,23 +138,25 @@ theorem lookup_restrict (dm : List Var) : ∀ (L : AList Var V) (x : Var),
       · subst hyx; simp [hy]
       · simp [AList.lookup, hyx]
 
-/-- Leaving a scope entered with locals `L₀` keeps no local bound inside it. -/
+/-- Law (subject `ConcreteSpec.Core.Exec.restrict`). Leaving a scope entered with locals `L₀`
+keeps no local bound inside it. -/
 theorem restrict_dom_drops (L₀ L : AList Var V) (x : Var) (hx : x ∉ dom L₀) :
     AList.lookup (restrict (dom L₀) L) x = none := by
   rw [lookup_restrict]; simp [hx]
 
 /-! ### Registration -/
 
-/-- A deferred call is registered as the newest call of the innermost scope. -/
+/-- Helper (computation). Definitional unfolding of `register` at `.scope` (approved: PENDING). -/
 theorem register_scope (d : Deferred O) (b : BlockId) (dm : List Var) (ds : List (Deferred O))
     (k : List (Frame O)) : register d (.scope b dm ds :: k) = some (.scope b dm (d :: ds) :: k) :=
   rfl
 
+/-- Helper (computation). Definitional unfolding of `register` at `.seq` (approved: PENDING). -/
 theorem register_seq (d : Deferred O) (t : Stmt O) (k : List (Frame O)) :
     register d (.seq t :: k) = (register d k).map (.seq t :: ·) := rfl
 
-/-- **Reverse registration order.** A block running `defer d₁; defer d₂; s` reaches `s` with its
-scope holding `d₂` before `d₁`, so `d₂` runs first; nothing is emitted. -/
+/-- Law (subject `ConcreteSpec.Core.Exec.Steps`). A block running `defer d₁; defer d₂; s` reaches
+`s` with its scope holding `d₂` before `d₁`, so `d₂` runs first; nothing is emitted. -/
 theorem two_defers_register (P : Program O) (b : BlockId) (d₁ d₂ : Deferred O) (s : Stmt O)
     (L : AList Var O.Val) (st : O.Store) (k : List (Frame O)) :
     Steps P ⟨.exec (.block b (.seq (.defer d₁.f d₁.args d₁.site)
@@ -136,30 +167,32 @@ theorem two_defers_register (P : Program O) (b : BlockId) (d₁ d₂ : Deferred 
 
 /-! ### Exits -/
 
-/-- `return` evaluates its value first: the next configuration carries the value and the same
-frames, so no cleanup has run. -/
+/-- Law (subject `ConcreteSpec.Core.Exec.step`). `return` evaluates its value first: the next
+configuration carries the value and the same frames, so no cleanup has run. -/
 theorem step_ret (P : Program O) (e : O.Expr) (site : SiteId) (L : AList Var O.Val)
     (st st' : O.Store) (k : List (Frame O)) (v : O.Val) (hv : O.eval L st e = .ok (v, st')) :
     step P ⟨.exec (.ret e site), L, st, k⟩ = some (.next ⟨.exiting (.ret v), L, st', k⟩) := by
   simp [step, onRes, hv]
 
-/-- A `break` reaching its loop's body frame continues after the loop. -/
+/-- Helper (computation). Definitional unfolding of `step` at `.exiting (.brk l)` on matching
+`.body l` (approved: PENDING). -/
 theorem step_break_loop (P : Program O) (l : LoopId) (cr b : Stmt O) (t : O.Expr) (site : SiteId)
     (L : AList Var O.Val) (st : O.Store) (k : List (Frame O)) :
     step P ⟨.exiting (.brk l), L, st, .body l cr t b site :: k⟩ =
       some (.next ⟨.done, L, st, k⟩) := by
   simp [step, stepExit]
 
-/-- A `continue` reaching its loop's body frame starts the loop again from its condition region. -/
+/-- Helper (computation). Definitional unfolding of `step` at `.exiting (.cont l)` on matching
+`.body l` (approved: PENDING). -/
 theorem step_continue_loop (P : Program O) (l : LoopId) (cr b : Stmt O) (t : O.Expr)
     (site : SiteId) (L : AList Var O.Val) (st : O.Store) (k : List (Frame O)) :
     step P ⟨.exiting (.cont l), L, st, .body l cr t b site :: k⟩ =
       some (.next ⟨.exec (.loop l cr t b site), L, st, k⟩) := by
   simp [step, stepExit]
 
-/-- A `return` reaching the call frame restores the caller's locals and binds the value; the state
-is the one the callee left, with the instrumentation told the activation ended and the result
-bound. -/
+/-- Law (subject `ConcreteSpec.Core.Exec.step`). A `return` reaching the call frame restores the
+caller's locals and binds the value; the state is the one the callee left, with the
+instrumentation told the activation ended and the result bound. -/
 theorem step_return_caller (P : Program O) (v : O.Val) (dst : Option Var)
     (caller L : AList Var O.Val) (st : O.Store) (k : List (Frame O))
     (stLeave stBind : O.Store) (hl : O.life .leave st = some stLeave)
@@ -170,36 +203,47 @@ theorem step_return_caller (P : Program O) (v : O.Val) (dst : Option Var)
 
 /-! ### Cleanup -/
 
-/-- **Every run.** At a scope with registered calls, the only step an exit can take starts the
-newest call, remembering the exit. -/
-theorem exit_scope_next {P : Program O} {e : Exit O.Val} {b : BlockId} {dm : List Var}
-    {d : Deferred O} {ds : List (Deferred O)} {L : AList Var O.Val} {st : O.Store}
-    {k : List (Frame O)} {l : Label O} {c : Config O}
-    (h : Step P ⟨.exiting e, L, st, .scope b dm (d :: ds) :: k⟩ l c) :
-    l = .silent ∧ c = ⟨.exec d.stmt, L, st, .resume (.exit e) :: .scope b dm ds :: k⟩ := by
-  cases h with
-  | silent h =>
-    simp only [step, stepExit, startCleanup, Option.some.injEq, Out.next.injEq] at h
-    exact ⟨rfl, h.symm⟩
-  | prim h _ _ => simp [step, stepExit, startCleanup] at h
+/-- Law (subject `ConcreteSpec.Core.Exec.Step`). At a scope with registered calls, an exit steps
+if and only if the step is silent and starts the newest deferred call while remembering the exit. -/
+theorem exit_scope_next (P : Program O) (e : Exit O.Val) (b : BlockId) (dm : List Var)
+    (d : Deferred O) (ds : List (Deferred O)) (L : AList Var O.Val) (st : O.Store)
+    (k : List (Frame O)) (l : Label O) (c : Config O) :
+    Step P ⟨.exiting e, L, st, .scope b dm (d :: ds) :: k⟩ l c ↔
+      l = .silent ∧ c = ⟨.exec d.stmt, L, st, .resume (.exit e) :: .scope b dm ds :: k⟩ := by
+  constructor
+  · intro h
+    cases h with
+    | silent h =>
+      simp only [step, stepExit, startCleanup, Option.some.injEq, Out.next.injEq] at h
+      exact ⟨rfl, h.symm⟩
+    | prim h _ _ => simp [step, stepExit, startCleanup] at h
+  · rintro ⟨rfl, rfl⟩
+    exact .silent rfl
 
-/-- The same at the normal end of a block. -/
-theorem done_scope_next {P : Program O} {b : BlockId} {dm : List Var} {d : Deferred O}
-    {ds : List (Deferred O)} {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)}
-    {l : Label O} {c : Config O} (h : Step P ⟨.done, L, st, .scope b dm (d :: ds) :: k⟩ l c) :
-    l = .silent ∧ c = ⟨.exec d.stmt, L, st, .resume .fall :: .scope b dm ds :: k⟩ := by
-  cases h with
-  | silent h =>
-    simp only [step, startCleanup, Option.some.injEq, Out.next.injEq] at h
-    exact ⟨rfl, h.symm⟩
-  | prim h _ _ => simp [step, startCleanup] at h
+/-- Law (subject `ConcreteSpec.Core.Exec.Step`). At the normal end of a block with registered
+calls, the machine steps if and only if the step is silent and starts the newest deferred call
+while remembering `.fall`. -/
+theorem done_scope_next (P : Program O) (b : BlockId) (dm : List Var) (d : Deferred O)
+    (ds : List (Deferred O)) (L : AList Var O.Val) (st : O.Store) (k : List (Frame O))
+    (l : Label O) (c : Config O) :
+    Step P ⟨.done, L, st, .scope b dm (d :: ds) :: k⟩ l c ↔
+      l = .silent ∧ c = ⟨.exec d.stmt, L, st, .resume .fall :: .scope b dm ds :: k⟩ := by
+  constructor
+  · intro h
+    cases h with
+    | silent h =>
+      simp only [step, startCleanup, Option.some.injEq, Out.next.injEq] at h
+      exact ⟨rfl, h.symm⟩
+    | prim h _ _ => simp [step, startCleanup] at h
+  · rintro ⟨rfl, rfl⟩
+    exact .silent rfl
 
-/-- An exit leaving a scope whose calls complete runs them newest first, each with its events and
-its effect on the state, and leaves the scope with its locals restored; the exit, and a returned
-value, are unchanged. -/
+/-- Law (subject `ConcreteSpec.Core.Exec.Steps`). An exit leaving a scope whose calls complete
+runs them newest first, each with its events and its effect on the state, and leaves the scope
+with its locals restored; the exit, and a returned value, are unchanged. -/
 theorem exit_scope_runs_defers (P : Program O) (e : Exit O.Val) (b : BlockId) (dm : List Var)
-    (L : AList Var O.Val) (k : List (Frame O)) {ds : List (Deferred O)} {st st' : O.Store}
-    {tr : List O.Event} (h : RunsAll P L ds st tr st') {stDrop : O.Store}
+    (L : AList Var O.Val) (k : List (Frame O)) (ds : List (Deferred O)) (st st' : O.Store)
+    (tr : List O.Event) (stDrop : O.Store) (h : RunsAll P L ds st tr st')
     (hd : dropOut O dm L st' = some stDrop) :
     Steps P ⟨.exiting e, L, st, .scope b dm ds :: k⟩ tr
       ⟨.exiting e, restrict dm L, stDrop, k⟩ := by
@@ -209,10 +253,11 @@ theorem exit_scope_runs_defers (P : Program O) (e : Exit O.Val) (b : BlockId) (d
     exact steps_next (c := ⟨.exiting e, L, st, .scope b dm (d :: ds) :: k⟩) rfl
       (Steps.trans (hcall _) (steps_next rfl (ih hd)))
 
-/-- The normal end of a block runs its calls the same way. -/
+/-- Law (subject `ConcreteSpec.Core.Exec.Steps`). The normal end of a block runs its registered
+calls newest first and restores the scope's locals. -/
 theorem done_scope_runs_defers (P : Program O) (b : BlockId) (dm : List Var)
-    (L : AList Var O.Val) (k : List (Frame O)) {ds : List (Deferred O)} {st st' : O.Store}
-    {tr : List O.Event} (h : RunsAll P L ds st tr st') {stDrop : O.Store}
+    (L : AList Var O.Val) (k : List (Frame O)) (ds : List (Deferred O)) (st st' : O.Store)
+    (tr : List O.Event) (stDrop : O.Store) (h : RunsAll P L ds st tr st')
     (hd : dropOut O dm L st' = some stDrop) :
     Steps P ⟨.done, L, st, .scope b dm ds :: k⟩ tr ⟨.done, restrict dm L, stDrop, k⟩ := by
   induction h with
@@ -221,18 +266,17 @@ theorem done_scope_runs_defers (P : Program O) (b : BlockId) (dm : List Var)
     exact steps_next (c := ⟨.done, L, st, .scope b dm (d :: ds) :: k⟩) rfl
       (Steps.trans (hcall _) (steps_next rfl (ih hd)))
 
-/-- **Cleanup order.** When the cleanup calls complete (`Cleans`, which runs the calls of
-`plan pre` in that order: the innermost scope first, each scope's newest registration first), an
+/-- Law (subject `ConcreteSpec.Core.Exec.Steps`). When the cleanup calls complete (`Cleans`), an
 exit passing frames `pre` arrives at the frames below with the same exit, the locals the scopes
-restored and the state the calls left. -/
-theorem unwind_runs_plan (P : Program O) (e : Exit O.Val) (k : List (Frame O))
-    {pre : List (Frame O)} {L : AList Var O.Val} {st st' : O.Store} {tr : List O.Event}
-    (h : Cleans P pre L st tr st') (hp : ∀ f ∈ pre, Passes e f) :
+restored, and the state the calls left. -/
+theorem unwind_runs_plan (P : Program O) (e : Exit O.Val) (k pre : List (Frame O))
+    (L : AList Var O.Val) (st st' : O.Store) (tr : List O.Event)
+    (h : Cleans P pre L st tr st') (hp : ∀ (f : Frame O), f ∈ pre → Passes e f) :
     Steps P ⟨.exiting e, L, st, pre ++ k⟩ tr ⟨.exiting e, unwindLocals pre L, st', k⟩ := by
   induction h with
   | nil L st => exact Steps.refl _
   | @scope b dm ds pre L st tr₁ st₁ stDrop tr₂ st₂ hr hd _ ih =>
-    have h1 := exit_scope_runs_defers P e b dm L (pre ++ k) hr hd
+    have h1 := exit_scope_runs_defers P e b dm L (pre ++ k) ds st st₁ tr₁ stDrop hr hd
     have h2 := ih (fun f hf => hp f (List.mem_cons_of_mem _ hf))
     simpa [unwindLocals] using Steps.trans h1 h2
   | seq _ ih => exact steps_next rfl (ih (fun f hf => hp f (List.mem_cons_of_mem _ hf)))
@@ -250,46 +294,49 @@ theorem unwind_runs_plan (P : Program O) (e : Exit O.Val) (k : List (Frame O))
       exact steps_next (by simp [step, stepExit, hne]) ih'
     | ret v => exact steps_next rfl ih'
 
-/-- The plan of nested scopes lists the inner scope's calls first. -/
+/-- Helper (computation). Definitional unfolding of `plan` on nested `.scope` frames
+(approved: PENDING). -/
 theorem plan_scopes (b₁ b₂ : BlockId) (d₁ d₂ : List Var) (ds₁ ds₂ : List (Deferred O))
     (k : List (Frame O)) :
     plan (.scope b₁ d₁ ds₁ :: .scope b₂ d₂ ds₂ :: k) = ds₁ ++ (ds₂ ++ plan k) := rfl
 
-/-- **A `return` reaches its caller** after the cleanup of every scope it leaves: the caller's
-locals come back with the value bound, in the state the cleanup left. -/
+/-- Law (subject `ConcreteSpec.Core.Exec.Steps`). A `return` reaches its caller after the cleanup
+of every scope it leaves: the caller's locals come back with the value bound, in the state the
+cleanup left. -/
 theorem return_reaches_caller (P : Program O) (v : O.Val) (dst : Option Var)
-    (caller : AList Var O.Val) (k : List (Frame O)) {pre : List (Frame O)}
-    {L : AList Var O.Val} {st st' : O.Store} {tr : List O.Event}
-    (h : Cleans P pre L st tr st') (hp : ∀ f ∈ pre, Passes (.ret v) f)
-    (stLeave stBind : O.Store) (hl : O.life .leave st' = some stLeave)
+    (caller : AList Var O.Val) (k pre : List (Frame O))
+    (L : AList Var O.Val) (st st' : O.Store) (tr : List O.Event)
+    (stLeave stBind : O.Store) (h : Cleans P pre L st tr st')
+    (hp : ∀ (f : Frame O), f ∈ pre → Passes (.ret v) f)
+    (hl : O.life .leave st' = some stLeave)
     (hb : bindLife O dst stLeave = some stBind) :
     Steps P ⟨.exiting (.ret v), L, st, pre ++ .ret dst caller :: k⟩ tr
       ⟨.done, bindDst dst v caller, stBind, k⟩ := by
-  have := Steps.trans (unwind_runs_plan P (.ret v) (.ret dst caller :: k) h hp)
+  have := Steps.trans (unwind_runs_plan P (.ret v) (.ret dst caller :: k) pre L st st' tr h hp)
     (steps_next (step_return_caller P v dst caller _ st' k stLeave stBind hl hb) (Steps.refl _))
   simpa using this
 
-/-- **A `break` reaches its loop** after the cleanup of the scopes inside the loop body, and the
-loop is done. -/
+/-- Law (subject `ConcreteSpec.Core.Exec.Steps`). A `break` reaches its loop after the cleanup of
+the scopes inside the loop body, and the loop is done. -/
 theorem break_reaches_loop (P : Program O) (l : LoopId) (cr b : Stmt O) (t : O.Expr)
-    (site : SiteId) (k : List (Frame O)) {pre : List (Frame O)} {L : AList Var O.Val}
-    {st st' : O.Store} {tr : List O.Event}
-    (h : Cleans P pre L st tr st') (hp : ∀ f ∈ pre, Passes (.brk l) f) :
+    (site : SiteId) (k pre : List (Frame O)) (L : AList Var O.Val)
+    (st st' : O.Store) (tr : List O.Event)
+    (h : Cleans P pre L st tr st') (hp : ∀ (f : Frame O), f ∈ pre → Passes (.brk l) f) :
     Steps P ⟨.exiting (.brk l), L, st, pre ++ .body l cr t b site :: k⟩ tr
       ⟨.done, unwindLocals pre L, st', k⟩ := by
-  have := Steps.trans (unwind_runs_plan P (.brk l) (.body l cr t b site :: k) h hp)
+  have := Steps.trans (unwind_runs_plan P (.brk l) (.body l cr t b site :: k) pre L st st' tr h hp)
     (steps_next (step_break_loop P l cr b t site _ st' k) (Steps.refl _))
   simpa using this
 
-/-- **A `continue` reaches its loop** after the same cleanup, and the loop starts again from its
-condition region. -/
+/-- Law (subject `ConcreteSpec.Core.Exec.Steps`). A `continue` reaches its loop after the same
+cleanup, and the loop starts again from its condition region. -/
 theorem continue_reaches_loop (P : Program O) (l : LoopId) (cr b : Stmt O) (t : O.Expr)
-    (site : SiteId) (k : List (Frame O)) {pre : List (Frame O)} {L : AList Var O.Val}
-    {st st' : O.Store} {tr : List O.Event}
-    (h : Cleans P pre L st tr st') (hp : ∀ f ∈ pre, Passes (.cont l) f) :
+    (site : SiteId) (k pre : List (Frame O)) (L : AList Var O.Val)
+    (st st' : O.Store) (tr : List O.Event)
+    (h : Cleans P pre L st tr st') (hp : ∀ (f : Frame O), f ∈ pre → Passes (.cont l) f) :
     Steps P ⟨.exiting (.cont l), L, st, pre ++ .body l cr t b site :: k⟩ tr
       ⟨.exec (.loop l cr t b site), unwindLocals pre L, st', k⟩ := by
-  have := Steps.trans (unwind_runs_plan P (.cont l) (.body l cr t b site :: k) h hp)
+  have := Steps.trans (unwind_runs_plan P (.cont l) (.body l cr t b site :: k) pre L st st' tr h hp)
     (steps_next (step_continue_loop P l cr b t site _ st' k) (Steps.refl _))
   simpa using this
 
@@ -319,6 +366,8 @@ def planWith : List (Frame O) → AList Var O.Val → List (CleanAct O)
   | .test _ _ _ _ _ dm :: k, L => .drop dm L (restrict dm L) :: planWith k (restrict dm L)
   | _ :: k, L => planWith k L
 
+/-- Law (subject `ConcreteSpec.Core.Exec.planWith`, `ConcreteSpec.Core.Exec.plan`). Filtering
+`planWith pre L` to its `.call` actions yields `plan pre`. -/
 theorem planWith_calls : ∀ (pre : List (Frame O)) (L : AList Var O.Val),
     (planWith pre L).filterMap CleanAct.call? = plan pre
   | [], _ => rfl
@@ -347,6 +396,8 @@ inductive RunsEach (P : Program O) : List (CleanAct O) → O.Store → List O.Ev
       RunsEach P rest stDrop tr st' →
       RunsEach P (.drop dm L (restrict dm L) :: rest) st tr st'
 
+/-- Helper (inversion). Composes a `RunsAll` call sequence with a `RunsEach` suffix
+(approved: PENDING). -/
 theorem RunsAll.each {P : Program O} {L : AList Var O.Val} {ds : List (Deferred O)}
     {st st₁ st₂ : O.Store} {tr₁ tr₂ : List O.Event} {rest : List (CleanAct O)}
     (h : RunsAll P L ds st tr₁ st₁) (h' : RunsEach P rest st₁ tr₂ st₂) :
@@ -355,6 +406,8 @@ theorem RunsAll.each {P : Program O} {L : AList Var O.Val} {ds : List (Deferred 
   | nil => simpa using h'
   | cons hd _ ih => simpa [List.append_assoc] using RunsEach.call hd (ih h')
 
+/-- Helper (inversion). Splits a `RunsEach` over mapped calls and a suffix
+(approved: PENDING). -/
 theorem RunsEach.split_calls {P : Program O} {L : AList Var O.Val} :
     ∀ {ds : List (Deferred O)} {rest : List (CleanAct O)} {st st₂ : O.Store} {tr : List O.Event},
     RunsEach P (ds.map (.call L) ++ rest) st tr st₂ →
@@ -372,7 +425,8 @@ def Frame.passable : Frame O → Bool
   | .resume _ | .ret .. => false
   | _ => true
 
-/-- Helper (inversion). Relates two cleanup certificates; not a law about actual runs. -/
+/-- Helper (inversion). Relates two cleanup certificates; not a law about actual runs
+(approved: PENDING). -/
 theorem cleans_iff_runs_plan_inv {P : Program O} :
     ∀ {pre : List (Frame O)} {L : AList Var O.Val} {st st' : O.Store} {tr : List O.Event},
     (∀ f ∈ pre, f.passable = true) →
@@ -413,7 +467,7 @@ theorem cleans_iff_runs_plan_inv {P : Program O} :
   | .resume _ :: _, _, _, _, _, hp => absurd (hp _ List.mem_cons_self) (by simp [Frame.passable])
   | .ret .. :: _, _, _, _, _, hp => absurd (hp _ List.mem_cons_self) (by simp [Frame.passable])
 
-/-- Every frame an exit passes is passable. -/
+/-- Helper (inversion). Every frame an exit passes is passable (approved: PENDING). -/
 theorem Passes.passable {e : Exit O.Val} : ∀ {f : Frame O}, Passes e f → f.passable = true
   | .seq _, _ | .scope .., _ | .test .., _ | .body .., _ => rfl
   | .resume _, h => h.elim
@@ -436,7 +490,8 @@ inductive FirstSteps (R : Config O → Label O → Config O → Prop) (stop : Co
   | step {c l c' tr c''} : ¬ stop c → R c l c' → FirstSteps R stop c' tr c'' →
       FirstSteps R stop c (l.events ++ tr) c''
 
-/-- Helper (inversion). Forgetting first-arrival information preserves the actual execution. -/
+/-- Helper (inversion). Forgetting first-arrival information preserves the actual execution
+(approved: PENDING). -/
 theorem FirstSteps.steps_inv {P : Program O} {stop : Config O → Prop} {c c' : Config O}
     {tr : List O.Event} (h : FirstSteps (Step P) stop c tr c') : Steps P c tr c' := by
   induction h with
@@ -813,26 +868,55 @@ theorem cleanup_runs_exact_plan (P : Program O) (e : Exit O.Val) (k pre : List (
 
 /-! ### Traps are terminal -/
 
-theorem step_trapped (P : Program O) (kd : TrapKind) (site : SiteId) (L : AList Var O.Val)
-    (st : O.Store) (k : List (Frame O)) : step P ⟨.trapped kd site, L, st, k⟩ = none := rfl
+/-- No labeled transition is available under `R`. Parameterized by the transition relation so
+contract laws and planted mutants share the same predicate. -/
+def Blocked (R : Config O → Label O → Config O → Prop) (c : Config O) : Prop :=
+  ∀ l c', ¬ R c l c'
 
-/-- After a trap nothing runs: no step, no event, and the frames are not unwound. -/
-theorem steps_from_trapped {P : Program O} {kd : TrapKind} {site : SiteId} {L : AList Var O.Val}
-    {st : O.Store} {k : List (Frame O)} {tr : List O.Event} {c : Config O}
-    (h : Steps P ⟨.trapped kd site, L, st, k⟩ tr c) :
-    tr = [] ∧ c = ⟨.trapped kd site, L, st, k⟩ := by
-  cases h with
-  | refl => exact ⟨rfl, rfl⟩
-  | step hs _ =>
-    cases hs with
-    | silent h => simp [step_trapped] at h
-    | prim h _ _ => simp [step_trapped] at h
+/-- Helper (inversion). A missing implementation result has no relational transition
+(approved: PENDING). -/
+private theorem no_step_of_none_inv {P : Program O} {c : Config O} (h : step P c = none) :
+    Blocked (Step P) c := by
+  intro l c' hs
+  cases hs with
+  | silent hs => rw [h] at hs; cases hs
+  | prim hs _ _ => rw [h] at hs; cases hs
+
+/-- Law (subject `ConcreteSpec.Core.Exec.Config.final?`, `ConcreteSpec.Core.Exec.Step`). A
+configuration's `final?` reports `.trapped kd site` if and only if its control is
+`.trapped kd site`, and every trapped configuration is blocked in `Step`. -/
+theorem step_trapped (P : Program O) (ctrl : Ctrl O) (kd : TrapKind) (site : SiteId)
+    (L : AList Var O.Val) (st : O.Store) (k : List (Frame O)) :
+    (Config.final? ⟨ctrl, L, st, k⟩ = some (.trapped kd site) ↔ ctrl = .trapped kd site) ∧
+      Blocked (Step P) ⟨.trapped kd site, L, st, k⟩ := by
+  refine ⟨⟨fun h => ?_, fun h => by subst h; rfl⟩, no_step_of_none_inv rfl⟩
+  cases ctrl with
+  | exec _ => cases h
+  | done => cases k <;> cases h
+  | exiting e => cases e <;> cases k <;> cases h
+  | trapped kd' site' => cases h; rfl
+
+/-- Law (subject `ConcreteSpec.Core.Exec.Steps`). After a trap nothing runs: a multi-step execution
+from a trapped configuration is equivalent to emitting no events and remaining in that exact
+trapped configuration. -/
+theorem steps_from_trapped (P : Program O) (kd : TrapKind) (site : SiteId) (L : AList Var O.Val)
+    (st : O.Store) (k : List (Frame O)) (tr : List O.Event) (c : Config O) :
+    Steps P ⟨.trapped kd site, L, st, k⟩ tr c ↔
+      tr = [] ∧ c = ⟨.trapped kd site, L, st, k⟩ := by
+  constructor
+  · intro h
+    cases h with
+    | refl => exact ⟨rfl, rfl⟩
+    | step hs _ =>
+      exact False.elim ((step_trapped P (.trapped kd site) kd site L st k).2 _ _ hs)
+  · rintro ⟨rfl, rfl⟩
+    exact .refl _
 
 /-- A call retains its saved caller frame until normal return. -/
 private def Protected (L : AList Var O.Val) (q : List (Frame O)) (c : Config O) : Prop :=
   ∃ pre, c.frames = pre ++ .ret none L :: q
 
-/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
+/-- Helper (inversion). Decomposes a raw execution using the machine stack rules (approved: PENDING). -/
 private theorem register_protected_inv (d : Deferred O) (caller : AList Var O.Val)
     (q : List (Frame O)) : ∀ (pre : List (Frame O)) (k' : List (Frame O)),
     register d (pre ++ .ret none caller :: q) = some k' →
@@ -856,7 +940,7 @@ private theorem register_protected_inv (d : Deferred O) (caller : AList Var O.Va
     | resume p => simp [register] at h
     | ret dst L => simp [register] at h
 
-/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
+/-- Helper (inversion). Decomposes a raw execution using the machine stack rules (approved: PENDING). -/
 private theorem protected_step_inv {P : Program O} {caller : AList Var O.Val}
     {q : List (Frame O)} {c c' : Config O} {label : Label O}
     (hp : Protected caller q c) (h : Step P c label c') :
@@ -983,7 +1067,7 @@ private inductive FirstStepsN (R : Config O → Label O → Config O → Prop) (
   | step {c l c' tr c'' n} : ¬ stop c → R c l c' → FirstStepsN R stop c' tr c'' n →
       FirstStepsN R stop c (l.events ++ tr) c'' (n + 1)
 
-/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
+/-- Helper (inversion). Decomposes a raw execution using the machine stack rules (approved: PENDING). -/
 private theorem FirstSteps.sized_inv {P : Program O} {stop : Config O → Prop}
     {c c' : Config O} {tr : List O.Event} (h : FirstSteps (Step P) stop c tr c') :
     ∃ n, FirstStepsN (Step P) stop c tr c' n := by
@@ -991,7 +1075,7 @@ private theorem FirstSteps.sized_inv {P : Program O} {stop : Config O → Prop}
   | stop hs => exact ⟨0, .stop hs⟩
   | step hn hs _ ih => obtain ⟨n, ih⟩ := ih; exact ⟨n + 1, .step hn hs ih⟩
 
-/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
+/-- Helper (inversion). Decomposes a raw execution using the machine stack rules (approved: PENDING). -/
 private theorem FirstStepsN.unsized_inv {P : Program O} {stop : Config O → Prop}
     {c c' : Config O} {tr : List O.Event} {n : Nat} (h : FirstStepsN (Step P) stop c tr c' n) :
     FirstSteps (Step P) stop c tr c' := by
@@ -999,14 +1083,14 @@ private theorem FirstStepsN.unsized_inv {P : Program O} {stop : Config O → Pro
   | stop hs => exact .stop hs
   | step hn hs _ ih => exact .step hn hs ih
 
-/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
+/-- Helper (inversion). Decomposes a raw execution using the machine stack rules (approved: PENDING). -/
 private theorem protected_height_inv {caller : AList Var O.Val} {q : List (Frame O)}
     {c : Config O} (h : Protected caller q c) : q.length < c.frames.length := by
   obtain ⟨pre, he⟩ := h
   simp only [he, List.length_append, List.length_cons]
   omega
 
-/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
+/-- Helper (inversion). Decomposes a raw execution using the machine stack rules (approved: PENDING). -/
 private theorem protected_not_return_inv {caller : AList Var O.Val} {q : List (Frame O)}
     {c : Config O} (h : Protected caller q c) : ¬ (c.ctrl = .done ∧ c.frames = q) := by
   intro hr
@@ -1014,7 +1098,7 @@ private theorem protected_not_return_inv {caller : AList Var O.Val} {q : List (F
   rw [hr.2] at hh
   exact Nat.lt_irrefl _ hh
 
-/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
+/-- Helper (inversion). Decomposes a raw execution using the machine stack rules (approved: PENDING). -/
 private theorem FirstStepsN.split_return_inv {P : Program O} {bound : Nat}
     {c endC : Config O} {tr : List O.Event} {n : Nat}
     (h : FirstStepsN (Step P) (fun c => c.frames.length ≤ bound) c tr endC n) :
@@ -1043,7 +1127,7 @@ private theorem FirstStepsN.split_return_inv {P : Program O} {bound : Nat}
           (FirstStepsN.stop (R := Step P) (stop := fun c : Config O => c.ctrl = .done ∧ c.frames = q) ⟨rfl, rfl⟩))
       exact ⟨1, n, l.events, c'.store, tr, by omega, rfl, hseg, ht⟩
 
-/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
+/-- Helper (inversion). Decomposes a raw execution using the machine stack rules (approved: PENDING). -/
 private theorem call_protects_inv {P : Program O} {L : AList Var O.Val} {st : O.Store}
     {q : List (Frame O)} {d : Deferred O} {label : Label O} {c' : Config O}
     (h : Step P ⟨.exec d.stmt, L, st, q⟩ label c') :
@@ -1062,26 +1146,26 @@ private theorem call_protects_inv {P : Program O} {L : AList Var O.Val} {st : O.
     simp only [step, Deferred.stmt, onRes, Option.bind, Option.map] at h
     repeat' first | simp_all | split at h
 
-/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
+/-- Helper (inversion). Decomposes a raw execution using the machine stack rules (approved: PENDING). -/
 private theorem FirstStepsN.end_stop_inv {P : Program O} {stop : Config O → Prop}
     {c c' : Config O} {tr : List O.Event} {n : Nat} (h : FirstStepsN (Step P) stop c tr c' n) : stop c' := by
   induction h with
   | stop hs => exact hs
   | step _ _ _ ih => exact ih
 
-/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
+/-- Helper (inversion). Decomposes a raw execution using the machine stack rules (approved: PENDING). -/
 private theorem FirstStepsN.trap_impossible_inv {P : Program O} {bound : Nat}
     {kd : TrapKind} {site : SiteId} {L : AList Var O.Val} {st : O.Store}
     {q : List (Frame O)} {tr : List O.Event} {endC : Config O} {n : Nat}
     (hq : bound < q.length)
     (h : FirstStepsN (Step P) (fun c => c.frames.length ≤ bound) ⟨.trapped kd site, L, st, q⟩ tr endC n) :
     False := by
-  have he := (steps_from_trapped h.unsized_inv.steps_inv).2
+  have he := ((steps_from_trapped P kd site L st q tr endC).mp h.unsized_inv.steps_inv).2
   have hs := h.end_stop_inv
   rw [he] at hs
   exact Nat.not_le_of_gt hq hs
 
-/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
+/-- Helper (inversion). Decomposes a raw execution using the machine stack rules (approved: PENDING). -/
 private theorem FirstStepsN.call_return_inv {P : Program O} {bound : Nat}
     {L : AList Var O.Val} {st : O.Store} {q : List (Frame O)} {d : Deferred O}
     {tr : List O.Event} {endC : Config O} {n : Nat} (hq : bound < q.length)
@@ -1104,7 +1188,7 @@ private theorem FirstStepsN.call_return_inv {P : Program O} {bound : Nat}
       exact ⟨n₁ + 1, n₂, l.events ++ tr₁, st₁, tr₂, by omega,
         by simp [he, List.append_assoc], .step (by intro h; cases h.1) hs ha, hb⟩
 
-/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
+/-- Helper (inversion). Decomposes a raw execution using the machine stack rules (approved: PENDING). -/
 private theorem exit_label_inv {P : Program O} {e : Exit O.Val} {L : AList Var O.Val}
     {st : O.Store} {frames : List (Frame O)} {label : Label O} {c : Config O}
     (h : Step P ⟨.exiting e, L, st, frames⟩ label c) : label = .silent := by
@@ -1112,7 +1196,7 @@ private theorem exit_label_inv {P : Program O} {e : Exit O.Val} {L : AList Var O
   | silent _ => rfl
   | prim h _ _ => exact False.elim (stepExit_no_request_inv L st e frames _ _ _ _ _ h)
 
-/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
+/-- Helper (inversion). Decomposes a raw execution using the machine stack rules (approved: PENDING). -/
 private theorem resume_step_inv {P : Program O} {e : Exit O.Val} {L : AList Var O.Val}
     {st : O.Store} {frames : List (Frame O)} {label : Label O} {c : Config O}
     (h : Step P ⟨.done, L, st, .resume (.exit e) :: frames⟩ label c) :
@@ -1242,27 +1326,33 @@ theorem raw_cleanup_runs_plan (P : Program O) (e : Exit O.Val) (k pre : List (Fr
     exact ⟨hp, h⟩
 
 
-/-- **`abort()` runs no cleanup.** From `abort()` the only step is to the trap, with the same
-frames and state, and nothing follows: no deferred call runs and no event is emitted. -/
-theorem abort_runs_no_cleanup {P : Program O} {site : SiteId} {L : AList Var O.Val}
-    {st : O.Store} {k : List (Frame O)} {tr : List O.Event} {c : Config O}
-    (h : Steps P ⟨.exec (.abort site), L, st, k⟩ tr c) :
-    tr = [] ∧ (c = ⟨.exec (.abort site), L, st, k⟩ ∨ c = ⟨.trapped .abort site, L, st, k⟩) := by
-  cases h with
-  | refl => exact ⟨rfl, .inl rfl⟩
-  | step hs hrest =>
-    cases hs with
-    | silent h =>
-      simp only [step, Option.some.injEq, Out.next.injEq] at h
-      subst h
-      have := steps_from_trapped hrest
-      exact ⟨by simpa [Label.events] using this.1, .inr this.2⟩
-    | prim h _ _ => simp [step] at h
+/-- Law (subject `ConcreteSpec.Core.Exec.Steps`). From `abort()` the only reachable configurations
+are the initial `abort()` configuration and the `.trapped .abort site` configuration, both with empty
+event trace and unchanged locals, store, and frame stack. -/
+theorem abort_runs_no_cleanup (P : Program O) (site : SiteId) (L : AList Var O.Val)
+    (st : O.Store) (k : List (Frame O)) (tr : List O.Event) (c : Config O) :
+    Steps P ⟨.exec (.abort site), L, st, k⟩ tr c ↔
+      tr = [] ∧ (c = ⟨.exec (.abort site), L, st, k⟩ ∨ c = ⟨.trapped .abort site, L, st, k⟩) := by
+  constructor
+  · intro h
+    cases h with
+    | refl => exact ⟨rfl, .inl rfl⟩
+    | step hs hrest =>
+      cases hs with
+      | silent h =>
+        simp only [step, Option.some.injEq, Out.next.injEq] at h
+        subst h
+        have := (steps_from_trapped P .abort site L st k _ c).mp hrest
+        exact ⟨by simpa [Label.events] using this.1, .inr this.2⟩
+      | prim h _ _ => simp [step] at h
+  · rintro ⟨rfl, rfl | rfl⟩
+    · exact .refl _
+    · exact steps_next rfl (.refl _)
 
 /-! ### Evaluation order and determinism -/
 
-/-- The first argument that traps decides the trap, whatever follows it: once the arguments
-before it evaluate, in whatever state they leave. -/
+/-- Law (subject `ConcreteSpec.Core.Exec.evalArgs`). The first argument that traps decides the trap,
+whatever follows it: once the arguments before it evaluate, in whatever state they leave. -/
 theorem evalArgs_first_trap (L : AList Var O.Val) (e : O.Expr) (kd : TrapKind)
     (es₂ : List O.Expr) :
     ∀ (es₁ : List O.Expr) (st st₁ : O.Store) (vs : List O.Val),
@@ -1290,14 +1380,27 @@ theorem evalArgs_first_trap (L : AList Var O.Val) (e : O.Expr) (kd : TrapKind)
     | trap _ => simp [evalArgs, h₁, Res.bind] at h
     | stuck => simp [evalArgs, h₁, Res.bind] at h
 
-/-- Helper (congruence). Function injectivity, not a contract law about machine rules. -/
-theorem step_silent_deterministic_inv {P : Program O} {c c₁ c₂ : Config O}
+/-- Helper (congruence). Function injectivity on `step` (approved: PENDING). -/
+private theorem step_silent_deterministic_inv {P : Program O} {c c₁ c₂ : Config O}
     (h₁ : step P c = some (.next c₁)) (h₂ : step P c = some (.next c₂)) : c₁ = c₂ := by
   rw [h₁] at h₂; cases h₂; rfl
 
+/-- Law (subject `ConcreteSpec.Core.Exec.Step`). When the step function returns `.next c₁`, a
+relational `Step` from `c` occurs if and only if the label is `.silent` and the target is `c₁`. -/
+theorem step_silent_deterministic (P : Program O) (c c₁ c₂ : Config O) (l : Label O)
+    (h : step P c = some (.next c₁)) :
+    Step P c l c₂ ↔ l = .silent ∧ c₂ = c₁ := by
+  constructor
+  · intro hs
+    cases hs with
+    | silent h' => exact ⟨rfl, step_silent_deterministic_inv h' h⟩
+    | prim h' _ _ => rw [h] at h'; cases h'
+  · rintro ⟨rfl, rfl⟩
+    exact .silent h
+
 /-- Helper (inversion). The function-backed representation of `Step` separates machine steps
-from answers. This is not an independent determinism contract law. -/
-theorem step_deterministic_inv {P : Program O} {c c₁ c₂ : Config O} {l₁ l₂ : Label O}
+from answers (approved: PENDING). -/
+private theorem step_deterministic_inv {P : Program O} {c c₁ c₂ : Config O} {l₁ l₂ : Label O}
     (h₁ : Step P c l₁ c₁) (h₂ : Step P c l₂ c₂) :
     (l₁ = l₂ ∧ c₁ = c₂) ∨ ∃ p vs site st k a₁ a₂, step P c = some (.request p vs site st k) ∧
       O.allows p vs st a₁ = true ∧ O.allows p vs st a₂ = true ∧
@@ -1314,29 +1417,41 @@ theorem step_deterministic_inv {P : Program O} {c c₁ c₂ : Config O} {l₁ l�
       rw [h] at h'; cases h'
       exact .inr ⟨_, _, _, _, _, _, _, h, ha, ha', rfl, rfl, hk, hk'⟩
 
+/-- Law (subject `ConcreteSpec.Core.Exec.Step`). Two relational transitions from `c` occur if and
+only if either they come from the same silent `.next` step or both arise from the same `.request`
+by allowed oracle answers whose continuations succeed. -/
+theorem step_deterministic (P : Program O) (c c₁ c₂ : Config O) (l₁ l₂ : Label O) :
+    (Step P c l₁ c₁ ∧ Step P c l₂ c₂) ↔
+      (step P c = some (.next c₁) ∧ l₁ = .silent ∧ l₂ = .silent ∧ c₁ = c₂) ∨
+      ∃ p vs site st k a₁ a₂, step P c = some (.request p vs site st k) ∧
+        O.allows p vs st a₁ = true ∧ O.allows p vs st a₂ = true ∧
+        l₁ = a₁.label ∧ l₂ = a₂.label ∧ k a₁ = some c₁ ∧ k a₂ = some c₂ := by
+  constructor
+  · rintro ⟨h₁, h₂⟩
+    cases h₁ with
+    | silent h =>
+      cases h₂ with
+      | silent h' => exact .inl ⟨h, rfl, rfl, step_silent_deterministic_inv h h'⟩
+      | prim h' _ _ => rw [h] at h'; cases h'
+    | prim h ha hk =>
+      cases h₂ with
+      | silent h' => rw [h] at h'; cases h'
+      | prim h' ha' hk' =>
+        rw [h] at h'; cases h'
+        exact .inr ⟨_, _, _, _, _, _, _, h, ha, ha', rfl, rfl, hk, hk'⟩
+  · rintro (⟨h, rfl, rfl, rfl⟩ | ⟨p, vs, site, st, k, a₁, a₂, h, ha₁, ha₂, rfl, rfl, hk₁, hk₂⟩)
+    · exact ⟨.silent h, .silent h⟩
+    · exact ⟨.prim h ha₁ hk₁, .prim h ha₂ hk₂⟩
+
 /-! ### Lifecycle refusal
 
 No law assumes that `life` is total. `step_return_caller` and `return_reaches_caller`
 now require successful leave and result binding; `exit_scope_runs_defers` and
 `done_scope_runs_defers` require a successful drop. `Cleans` and `RunsEach` carry
 successful drops, so their existing plan and unwinding laws keep the same meaning.
-`steps_request` requires successful continuation, and the inversion helper `step_deterministic_inv` records
+`steps_request` requires successful continuation, and `step_deterministic` records
 those successful continuations explicitly. All other laws retain their premises.
 -/
-
-/-- No labeled transition is available under `R`. Parameterized by the transition relation so
-contract laws and planted mutants share the same predicate. -/
-def Blocked (R : Config O → Label O → Config O → Prop) (c : Config O) : Prop :=
-  ∀ l c', ¬ R c l c'
-
-/-- Helper (inversion). A missing implementation result has no relational transition
-(approved: PENDING). -/
-private theorem no_step_of_none_inv {P : Program O} {c : Config O} (h : step P c = none) :
-    Blocked (Step P) c := by
-  intro l c' hs
-  cases hs with
-  | silent hs => rw [h] at hs; cases hs
-  | prim hs _ _ => rw [h] at hs; cases hs
 
 /-- Helper (inversion). For a silent lifecycle operation, absence of all transitions is exactly
 refusal (approved: PENDING). -/
@@ -1534,30 +1649,80 @@ theorem prim_error_bypasses_bind (P : Program O) (x : Var) (p : O.Prim) (args : 
 
 /-! ### Destruction -/
 
-/-- The cleanup call that destroys a value calls the type's one `Destroy` function, which takes the
-value as its only, ordinary parameter and returns `Unit`. -/
-theorem destroyCall_sig {P : Program O} (D : DestroyProtocol P) (T : O.Ty) (arg : O.Expr)
-    (site : SiteId) (d : Deferred O) (h : D.destroyCall T arg site = some d) :
-    d.args = [arg] ∧ ∃ fn x, AList.lookup P.fns d.f = some fn ∧ fn.params = [(x, T)] ∧
-      fn.result = O.unitTy := by
-  unfold DestroyProtocol.destroyCall at h
-  cases hi : D.impl T with
-  | none => rw [hi] at h; cases h
-  | some f =>
-    rw [hi] at h; cases h
-    exact ⟨rfl, D.sig T f hi⟩
-
-/-- Helper (projection). Extracts the protocol admission obligation, not a contract law.
-The concrete demo protocol below discharges that obligation by type cases. -/
-theorem destroy_not_copy_proj {P : Program O} (D : DestroyProtocol P) (T : O.Ty) (f : FnId)
+/-- Helper (projection). Extracts the protocol admission obligation from `DestroyProtocol`
+(approved: PENDING). -/
+private theorem destroy_not_copy_proj {P : Program O} (D : DestroyProtocol P) (T : O.Ty) (f : FnId)
     (h : D.impl T = some f) : O.isCopy T = false := D.notCopy T f h
 
-/-- A sequence's element `i` is visited at position `i`: in increasing index order. -/
+/-- Law (subject `ConcreteSpec.Core.Exec.validDestroyFn`). The executable destroy-function
+validator accepts `(T, f)` if and only if `T` is non-Copy (`O.isCopy T = false`) and `f` is in the
+program table taking a single parameter of type `T` and returning `O.unitTy`. -/
+theorem destroy_not_copy [DecidableEq O.Ty] (P : Program O) (T : O.Ty) (f : FnId) :
+    validDestroyFn P T f = true ↔
+      O.isCopy T = false ∧ ∃ fn x, AList.lookup P.fns f = some fn ∧
+        fn.params = [(x, T)] ∧ fn.result = O.unitTy := by
+  constructor
+  · intro h
+    unfold validDestroyFn at h
+    cases hc : O.isCopy T with
+    | true => simp [hc] at h
+    | false =>
+      cases hl : AList.lookup P.fns f with
+      | none => simp [hc, hl] at h
+      | some fn =>
+        obtain ⟨params, result, block, body⟩ := fn
+        cases params with
+        | nil => simp [hc, hl] at h
+        | cons p ps =>
+          cases ps with
+          | cons _ _ => simp [hc, hl] at h
+          | nil =>
+            obtain ⟨x, T'⟩ := p
+            simp only [hc, Bool.not_false, hl, Bool.true_and, Bool.and_eq_true,
+              decide_eq_true_eq] at h
+            exact ⟨rfl, ⟨[(x, T')], result, block, body⟩, x, rfl, by rw [h.1], h.2⟩
+  · rintro ⟨hc, fn, x, hl, hp, hr⟩
+    simp [validDestroyFn, hc, hl, hp, hr]
+
+/-- Law (subject `ConcreteSpec.Core.Exec.checkedDestroyCall`). The executable checked destroy-call
+builder produces `some d` if and only if `impl T = some d.f`, `d.args = [arg]`, `d.site = site`,
+`T` is non-Copy, and `d.f` has signature `(x : T) -> Unit` in `P.fns`. -/
+theorem destroyCall_sig [DecidableEq O.Ty] (P : Program O) (impl : O.Ty → Option FnId) (T : O.Ty)
+    (arg : O.Expr) (site : SiteId) (d : Deferred O) :
+    checkedDestroyCall P impl T arg site = some d ↔
+      impl T = some d.f ∧ d.args = [arg] ∧ d.site = site ∧
+      O.isCopy T = false ∧ ∃ fn x, AList.lookup P.fns d.f = some fn ∧
+        fn.params = [(x, T)] ∧ fn.result = O.unitTy := by
+  constructor
+  · intro h
+    unfold checkedDestroyCall at h
+    cases hi : impl T with
+    | none => rw [hi] at h; cases h
+    | some f =>
+      rw [hi, Option.bind_some] at h
+      cases hv : validDestroyFn P T f with
+      | false => simp [hv] at h
+      | true =>
+        simp only [hv, ↓reduceIte, Option.some.injEq] at h
+        subst h
+        obtain ⟨hnc, fn, x, hfn, hp, hr⟩ := (destroy_not_copy P T f).mp hv
+        exact ⟨rfl, rfl, rfl, hnc, fn, x, hfn, hp, hr⟩
+  · rintro ⟨hi, hargs, hsite, hnc, fn, x, hfn, hp, hr⟩
+    have hv : validDestroyFn P T d.f = true :=
+      (destroy_not_copy P T d.f).mpr ⟨hnc, fn, x, hfn, hp, hr⟩
+    cases d with | mk df dargs dsite =>
+    simp only at hi hargs hsite hv
+    subst hargs; subst hsite
+    simp [checkedDestroyCall, hi, hv]
+
+/-- Law (subject `ConcreteSpec.Core.Exec.seqDestroyOrder`). A sequence's element `i` is visited at
+position `i`: in increasing index order. -/
 theorem seqDestroyOrder_elem (n i : Nat) (h : i < n) : (seqDestroyOrder n)[i]? = some (.elem i) := by
   rw [seqDestroyOrder, List.getElem?_append_left (by simpa using h)]
   simp [h]
 
-/-- A sequence's backing is released last, after all `n` elements. -/
+/-- Law (subject `ConcreteSpec.Core.Exec.seqDestroyOrder`). A sequence's backing is released last,
+after all `n` elements. -/
 theorem seqDestroyOrder_storage (n : Nat) :
     (seqDestroyOrder n).length = n + 1 ∧ (seqDestroyOrder n)[n]? = some .storage := by
   simp [seqDestroyOrder]
@@ -1565,17 +1730,18 @@ theorem seqDestroyOrder_storage (n : Nat) :
 /-- The entries of a map, in visiting order. -/
 private def entryParts (n : Nat) : List Part := (List.range n).flatMap fun i => [.key i, .value i]
 
-/-- Helper (arithmetic). Appending an entry adds its key and value visits. -/
+/-- Helper (arithmetic). Appending an entry adds its key and value visits (approved: PENDING). -/
 private theorem entryParts_succ (n : Nat) :
     entryParts (n + 1) = entryParts n ++ [.key n, .value n] := by
   simp [entryParts, List.range_succ, List.flatMap_append]
 
-/-- Helper (arithmetic). Each map entry contributes two visits. -/
+/-- Helper (arithmetic). Each map entry contributes two visits (approved: PENDING). -/
 private theorem entryParts_length : ∀ n, (entryParts n).length = 2 * n
   | 0 => rfl
   | n + 1 => by rw [entryParts_succ]; simp [entryParts_length n]; omega
 
-/-- Helper (arithmetic). Locate the key and value in the alternating entry schedule. -/
+/-- Helper (arithmetic). Locate the key and value in the alternating entry schedule
+(approved: PENDING). -/
 private theorem entryParts_get : ∀ (n i : Nat), i < n →
     (entryParts n)[2 * i]? = some (.key i) ∧ (entryParts n)[2 * i + 1]? = some (.value i)
   | 0, _, h => absurd h (Nat.not_lt_zero _)
@@ -1591,8 +1757,8 @@ private theorem entryParts_get : ∀ (n i : Nat), i < n →
       rw [List.getElem?_append_right (by omega), List.getElem?_append_right (by omega), hl]
       simp
 
-/-- A map's `i`-th entry (in ascending key order) is visited key first, at position `2i`, then
-value, at `2i+1`. -/
+/-- Law (subject `ConcreteSpec.Core.Exec.mapDestroyOrder`). A map's `i`-th entry (in ascending key
+order) is visited key first, at position `2i`, then value, at `2i+1`. -/
 theorem mapDestroyOrder_entry (n i : Nat) (h : i < n) :
     (mapDestroyOrder n)[2 * i]? = some (.key i) ∧
       (mapDestroyOrder n)[2 * i + 1]? = some (.value i) := by
@@ -1603,7 +1769,8 @@ theorem mapDestroyOrder_entry (n i : Nat) (h : i < n) :
   rw [List.getElem?_append_left (by omega), List.getElem?_append_left (by omega)]
   exact this
 
-/-- A map's nodes are released last, after all `n` entries. -/
+/-- Law (subject `ConcreteSpec.Core.Exec.mapDestroyOrder`). A map's nodes are released last, after
+all `n` entries. -/
 theorem mapDestroyOrder_storage (n : Nat) :
     (mapDestroyOrder n).length = 2 * n + 1 ∧ (mapDestroyOrder n)[2 * n]? = some .storage := by
   have hl := entryParts_length n
@@ -1618,32 +1785,26 @@ demo language of `Spec/Exec.lean`, a deferred `log(1)` completes from any locals
 on any frames, emitting `1` (its parameter is a fresh local of a new activation); a deferred
 `bump()` completes silently and adds one to the counter. -/
 
+/-- Representation lemma. In the demo language, a deferred `log(1)` call completes from any locals,
+store, and frame stack, emitting `[1]` (approved: PENDING). -/
 theorem demo_log_completes (L : AList Var Demo.ops.Val) (st : Demo.ops.Store) :
     Completes Demo.prog L ⟨Demo.logF, [.lit 1], Demo.s⟩ st [1] st := by
   intro k
-  refine steps_next rfl (steps_request (O := Demo.ops) (P := Demo.prog)
+  refine steps_next rfl (steps_request_inv (O := Demo.ops) (P := Demo.prog)
     (a := ⟨some (1 : Int), .ok (0 : Int), Demo.DState.life (.enter [Demo.x]) st⟩) (tr := []) rfl
     (by simp [Demo.ops, Demo.logFn]) rfl ?_)
   exact steps_next rfl (steps_next rfl (Steps.refl _))
 
+/-- Representation lemma. In the demo language, a deferred `bump()` call completes from any locals,
+store, and frame stack, incrementing the counter (approved: PENDING). -/
 theorem demo_bump_completes (L : AList Var Demo.ops.Val) (st : Demo.ops.Store) :
     Completes Demo.prog L ⟨Demo.bumpF, [], Demo.s⟩ st [] { st with counter := st.counter + 1 } := by
   intro k
-  refine steps_next rfl (steps_request (O := Demo.ops) (P := Demo.prog)
+  refine steps_next rfl (steps_request_inv (O := Demo.ops) (P := Demo.prog)
     (a := ⟨none, .ok (0 : Int),
       { Demo.DState.life (.enter []) st with counter := st.counter + 1 }⟩) (tr := []) rfl
     (by simp [Demo.ops, Demo.DState.life]) rfl ?_)
   exact steps_next rfl (steps_next rfl (Steps.refl _))
-
-/-- So the cleanup law applies to a real scope: the end of a block that registered `log(1)` and
-then `bump()` runs `bump` (silently, adding one) and then `log`, from any state. -/
-example (L : AList Var Demo.ops.Val) (st : Demo.DState) (k : List (Frame Demo.ops))
-    (dm : List Var) :
-    Steps Demo.prog ⟨.done, L, st, .scope ⟨1⟩ dm [⟨Demo.bumpF, [], Demo.s⟩,
-      ⟨Demo.logF, [.lit 1], Demo.s⟩] :: k⟩ [1]
-      ⟨.done, restrict dm L, Demo.DState.life (.drop (dead dm L)) { st with counter := st.counter + 1 }, k⟩ :=
-  done_scope_runs_defers Demo.prog ⟨1⟩ dm L k
-    (.cons (demo_bump_completes L st) (.cons (demo_log_completes L _) (.nil _))) rfl
 
 /-! ### Cleanup evidence and planted dispatcher mutations -/
 namespace CleanupEvidence
@@ -2689,5 +2850,651 @@ def Demo.destroyProtocol : DestroyProtocol Demo.prog where
   notCopy := by
     intro T f h
     cases T <;> simp_all
+
+/-! ### Core contract law instances and planted mutations -/
+namespace CoreEvidence
+open Demo
+
+/-- Planted mutant of `Steps`: only zero-step reflexive traces exist; no transition can advance. -/
+inductive ReflOnlySteps (P : Program O) : Config O → List O.Event → Config O → Prop where
+  | refl (c : Config O) : ReflOnlySteps P c [] c
+
+/-- Planted mutant of `Steps`: a trapped configuration spuriously recovers to `.done`. -/
+inductive RecoverTrapSteps (P : Program O) : Config O → List O.Event → Config O → Prop where
+  | recover {kd site L st k} :
+      RecoverTrapSteps P ⟨.trapped kd site, L, st, k⟩ [] ⟨.done, L, st, k⟩
+
+/-- Planted mutant of `restrict`: drops every binding regardless of `dom`. -/
+def dropAllRestrict (_ : List Var) (_ : AList Var V) : AList Var V := []
+
+/-- Planted mutant of `restrict`: retains every binding regardless of `dom`. -/
+def keepAllRestrict (_ : List Var) (L : AList Var V) : AList Var V := L
+
+/-- Planted mutant of `step`: always returns `none`. -/
+def stuckStep (_ : Program O) (_ : Config O) : Option (Out O) := none
+
+/-- Planted mutant of `planWith`: reverses the planned cleanup action order. -/
+def reversePlanWith (pre : List (Frame O)) (L : AList Var O.Val) : List (CleanAct O) :=
+  (planWith pre L).reverse
+
+/-- Planted mutant of `plan`: forgets all planned deferred calls. -/
+def emptyPlan (_ : List (Frame O)) : List (Deferred O) := []
+
+/-- Planted mutant of `Config.final?`: never recognizes a final configuration. -/
+def noTrapFinal? (_ : Config O) : Option (Final O.Val) := none
+
+/-- Planted mutant of `Step`: a trapped configuration spuriously transitions to `.done`. -/
+inductive RecoverTrapStep (P : Program O) : Config O → Label O → Config O → Prop where
+  | recover {kd site L st k} :
+      RecoverTrapStep P ⟨.trapped kd site, L, st, k⟩ .silent ⟨.done, L, st, k⟩
+
+/-- Planted mutant of `evalArgs`: swallows an argument trap and returns `.ok ([], st)`. -/
+def swallowTrapEvalArgs (O : Operands) (L : AList Var O.Val) :
+    O.Store → List O.Expr → Res (List O.Val × O.Store)
+  | st, [] => .ok ([], st)
+  | st, e :: es => match O.eval L st e with
+    | .ok (v, st₁) => (swallowTrapEvalArgs O L st₁ es).map fun (vs, st₂) => (v :: vs, st₂)
+    | .trap _ => .ok ([], st)
+    | .stuck => .stuck
+
+/-- Planted mutant of `validDestroyFn`: rejects every destroy candidate. -/
+def rejectAllDestroyFn [DecidableEq O.Ty] (_ : Program O) (_ : O.Ty) (_ : FnId) : Bool :=
+  false
+
+/-- Planted mutant of `validDestroyFn`: checks signature in `P.fns` but forgets `!O.isCopy T`. -/
+def allowCopyDestroyFn [DecidableEq O.Ty] (P : Program O) (T : O.Ty) (f : FnId) : Bool :=
+  match AList.lookup P.fns f with
+  | some fn =>
+    match fn.params with
+    | [(_, paramTy)] => decide (paramTy = T) && decide (fn.result = O.unitTy)
+    | _ => false
+  | none => false
+
+/-- Planted mutant of `checkedDestroyCall`: drops the target argument expression. -/
+def dropArgDestroyCall [DecidableEq O.Ty] (P : Program O) (impl : O.Ty → Option FnId)
+    (T : O.Ty) (_ : O.Expr) (site : SiteId) : Option (Deferred O) :=
+  (impl T).bind fun f =>
+    if validDestroyFn P T f then some ⟨f, [], site⟩ else none
+
+/-- Planted mutant of `checkedDestroyCall`: skips `validDestroyFn` signature/non-Copy validation. -/
+def uncheckedDestroyCall [DecidableEq O.Ty] (_ : Program O) (impl : O.Ty → Option FnId)
+    (T : O.Ty) (arg : O.Expr) (site : SiteId) : Option (Deferred O) :=
+  (impl T).map fun f => ⟨f, [arg], site⟩
+
+/-- Planted mutant of `seqDestroyOrder`: visits sequence elements in reverse index order. -/
+def revSeqDestroyOrder (n : Nat) : List Part :=
+  (List.range n).reverse.map .elem ++ [.storage]
+
+/-- Planted mutant of `seqDestroyOrder`: releases backing storage before elements. -/
+def storageFirstSeqDestroyOrder (n : Nat) : List Part :=
+  .storage :: (List.range n).map .elem
+
+/-- Planted mutant of `mapDestroyOrder`: visits value before key in each entry. -/
+def valFirstMapDestroyOrder (n : Nat) : List Part :=
+  ((List.range n).flatMap fun i => [.value i, .key i]) ++ [.storage]
+
+/-- Planted mutant of `mapDestroyOrder`: releases map storage before entries. -/
+def storageFirstMapDestroyOrder (n : Nat) : List Part :=
+  .storage :: (List.range n).flatMap fun i => [.key i, .value i]
+
+def logReqCfg : Config ops := ⟨.exec (.prim none .log [.lit 1] s), [], .init, []⟩
+def logNextCfg : Config ops := ⟨.done, [], .init, []⟩
+def logCont (a : Answer Int Int DState) : Option (Config ops) :=
+  match a.result with
+  | .ok v => (bindLife ops none a.store).map fun st => ⟨.done, bindDst none v [], st, []⟩
+  | .error kd => some ⟨.trapped kd s, [], a.store, []⟩
+def logAns : Answer Int Int DState := ⟨some 1, .ok 0, .init⟩
+
+/-- Instance (law `ConcreteSpec.Core.Exec.steps_request`, case `log_ok`). Executing a `.log`
+primitive call with an allowed answer `logAns` takes the labeled transition with `logAns.label` to
+`.done`. -/
+example : Step prog ⟨.exec (.prim none .log [.lit 1] s), [], .init, []⟩ logAns.label
+    ⟨.done, bindDst none 0 [], .init, []⟩ :=
+  steps_request prog none .log [.lit 1] s [] .init .init .init [1] [] logAns 0
+    rfl rfl rfl rfl
+
+/-- Planted (law `ConcreteSpec.Core.Exec.steps_request`, case `log_ok`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.Refusal.StuckStep`).
+`StuckStep` refuses the labeled primitive request transition even when all hypotheses hold. -/
+example : evalArgs ops [] .init [.lit 1] = .ok ([1], .init) ∧
+    ops.allows .log [1] .init logAns = true ∧
+    logAns.result = .ok 0 ∧
+    bindLife ops none logAns.store = some .init ∧
+    ¬ Refusal.StuckStep prog ⟨.exec (.prim none .log [.lit 1] s), [], .init, []⟩ logAns.label
+      ⟨.done, bindDst none 0 [], .init, []⟩ := by
+  refine ⟨rfl, rfl, rfl, rfl, fun h => ?_⟩
+  exact nomatch h
+
+/-- Instance (law `ConcreteSpec.Core.Exec.lookup_restrict`, case `kept`). Looking up a variable `x`
+that belongs to `dm` returns its original binding in `L`. -/
+example : AList.lookup (restrict [x] [(x, 10), (p, 20)]) x =
+    if x ∈ [x] then AList.lookup [(x, 10), (p, 20)] x else none :=
+  lookup_restrict [x] [(x, 10), (p, 20)] x
+
+/-- Planted (law `ConcreteSpec.Core.Exec.lookup_restrict`, case `kept`, subject `ConcreteSpec.Core.Exec.restrict`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.dropAllRestrict`).
+`dropAllRestrict` discards `x` even though `x ∈ [x]`. -/
+example : ¬ (AList.lookup (dropAllRestrict [x] [(x, 10), (p, 20)]) x =
+    if x ∈ [x] then AList.lookup [(x, 10), (p, 20)] x else none) := by
+  decide
+
+/-- Instance (law `ConcreteSpec.Core.Exec.lookup_restrict`, case `dropped`). Looking up a variable
+`p` outside `dm` returns `none`. -/
+example : AList.lookup (restrict [x] [(x, 10), (p, 20)]) p =
+    if p ∈ [x] then AList.lookup [(x, 10), (p, 20)] p else none :=
+  lookup_restrict [x] [(x, 10), (p, 20)] p
+
+/-- Planted (law `ConcreteSpec.Core.Exec.lookup_restrict`, case `dropped`, subject `ConcreteSpec.Core.Exec.restrict`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.keepAllRestrict`).
+`keepAllRestrict` leaks the inner variable `p` that is not in `[x]`. -/
+example : ¬ (AList.lookup (keepAllRestrict [x] [(x, 10), (p, 20)]) p =
+    if p ∈ [x] then AList.lookup [(x, 10), (p, 20)] p else none) := by
+  decide
+
+/-- Instance (law `ConcreteSpec.Core.Exec.restrict_dom_drops`, case `inner_local`). Restricting to
+the outer domain `dom [(x, 10)]` removes the newly bound inner variable `p`. -/
+example : AList.lookup (restrict (dom [(x, 10)]) ((p, 20) :: [(x, 10)])) p = none :=
+  restrict_dom_drops [(x, 10)] ((p, 20) :: [(x, 10)]) p (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Exec.restrict_dom_drops`, case `inner_local`, subject `ConcreteSpec.Core.Exec.restrict`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.keepAllRestrict`).
+`keepAllRestrict` fails to drop the inner local `p`. -/
+example : p ∉ dom [(x, 10)] ∧
+    ¬ (AList.lookup (keepAllRestrict (dom [(x, 10)]) ((p, 20) :: [(x, 10)])) p = none) := by
+  decide
+
+def d1 : Deferred ops := ⟨bumpF, [], s⟩
+def d2 : Deferred ops := ⟨logF, [.lit 1], s⟩
+
+/-- Instance (law `ConcreteSpec.Core.Exec.two_defers_register`, case `lifo`). A block registering
+`d1` then `d2` reaches `.skip` with its scope holding `[d2, d1]`. -/
+example : Steps prog ⟨.exec (.block ⟨1⟩ (.seq (.defer d1.f d1.args d1.site)
+      (.seq (.defer d2.f d2.args d2.site) .skip))), [], .init, []⟩ []
+    ⟨.exec .skip, [], .init, .scope ⟨1⟩ (dom ([] : AList Var Int)) [d2, d1] :: []⟩ :=
+  two_defers_register prog ⟨1⟩ d1 d2 .skip [] .init []
+
+/-- Planted (law `ConcreteSpec.Core.Exec.two_defers_register`, case `lifo`, subject `ConcreteSpec.Core.Exec.Steps`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.ReflOnlySteps`).
+`ReflOnlySteps` fails to advance the two-defer registration block. -/
+example : ¬ ReflOnlySteps prog ⟨.exec (.block ⟨1⟩ (.seq (.defer d1.f d1.args d1.site)
+      (.seq (.defer d2.f d2.args d2.site) .skip))), [], .init, []⟩ []
+    ⟨.exec .skip, [], .init, .scope ⟨1⟩ (dom ([] : AList Var Int)) [d2, d1] :: []⟩ := by
+  intro h
+  cases h
+
+/-- Instance (law `ConcreteSpec.Core.Exec.step_ret`, case `eval_first`). Returning `.var x` with
+`x = 7` transitions to `.exiting (.ret 7)` without touching the frame stack. -/
+example : step prog ⟨.exec (.ret (.var x) s), [(x, 7)], .init, []⟩ =
+    some (.next ⟨.exiting (.ret 7), [(x, 7)], .init, []⟩) :=
+  step_ret prog (.var x) s [(x, 7)] .init .init [] 7 rfl
+
+/-- Planted (law `ConcreteSpec.Core.Exec.step_ret`, case `eval_first`, subject `ConcreteSpec.Core.Exec.step`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.stuckStep`).
+`stuckStep` refuses the return step even when the return expression evaluates to `7`. -/
+example : ops.eval [(x, 7)] .init (.var x) = .ok (7, .init) ∧
+    ¬ (stuckStep prog ⟨.exec (.ret (.var x) s), [(x, 7)], .init, []⟩ =
+      some (.next ⟨.exiting (.ret 7), [(x, 7)], .init, []⟩)) := by
+  refine ⟨rfl, fun h => ?_⟩
+  cases h
+
+/-- Instance (law `ConcreteSpec.Core.Exec.step_return_caller`, case `restore_and_bind`). Reaching a
+caller frame `.ret (some x) []` with return value `7` restores caller locals and binds `x := 7`. -/
+example : step prog ⟨.exiting (.ret 7), [(p, 99)], .init, .ret (some x) [] :: []⟩ =
+    some (.next ⟨.done, bindDst (some x) 7 [], .init, []⟩) :=
+  step_return_caller prog 7 (some x) [] [(p, 99)] .init [] .init .init rfl rfl
+
+/-- Planted (law `ConcreteSpec.Core.Exec.step_return_caller`, case `restore_and_bind`, subject `ConcreteSpec.Core.Exec.step`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.stuckStep`).
+`stuckStep` fails to return to the caller frame even when `.leave` and `bindLife` succeed. -/
+example : ops.life .leave .init = some .init ∧
+    bindLife ops (some x) .init = some .init ∧
+    ¬ (stuckStep prog ⟨.exiting (.ret 7), [(p, 99)], .init, .ret (some x) [] :: []⟩ =
+      some (.next ⟨.done, bindDst (some x) 7 [], .init, []⟩)) := by
+  refine ⟨rfl, rfl, fun h => ?_⟩
+  cases h
+
+/-- Instance (law `ConcreteSpec.Core.Exec.exit_scope_next`, case `dispatch_first`). Unwinding an
+exit into a scope with `[d1, d2]` dispatches `d1` first and saves `.resume (.exit (.ret 0))`. -/
+example : Step prog ⟨.exiting (.ret 0), [], .init, .scope ⟨1⟩ [] (d1 :: [d2]) :: []⟩ .silent
+      ⟨.exec d1.stmt, [], .init, .resume (.exit (.ret 0)) :: .scope ⟨1⟩ [] [d2] :: []⟩ ↔
+    (Label.silent : Label ops) = .silent ∧
+      (⟨.exec d1.stmt, [], .init, .resume (.exit (.ret 0)) :: .scope ⟨1⟩ [] [d2] :: []⟩ : Config ops) =
+        ⟨.exec d1.stmt, [], .init, .resume (.exit (.ret 0)) :: .scope ⟨1⟩ [] [d2] :: []⟩ :=
+  exit_scope_next prog (.ret 0) ⟨1⟩ [] d1 [d2] [] .init [] .silent
+    ⟨.exec d1.stmt, [], .init, .resume (.exit (.ret 0)) :: .scope ⟨1⟩ [] [d2] :: []⟩
+
+/-- Planted (law `ConcreteSpec.Core.Exec.exit_scope_next`, case `dispatch_first`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.Refusal.StuckStep`).
+`StuckStep` blocks the scope-exit cleanup dispatch. -/
+example : ¬ (Refusal.StuckStep prog
+      ⟨.exiting (.ret 0), [], .init, .scope ⟨1⟩ [] (d1 :: [d2]) :: []⟩ .silent
+      ⟨.exec d1.stmt, [], .init, .resume (.exit (.ret 0)) :: .scope ⟨1⟩ [] [d2] :: []⟩ ↔
+    (Label.silent : Label ops) = .silent ∧
+      (⟨.exec d1.stmt, [], .init, .resume (.exit (.ret 0)) :: .scope ⟨1⟩ [] [d2] :: []⟩ : Config ops) =
+        ⟨.exec d1.stmt, [], .init, .resume (.exit (.ret 0)) :: .scope ⟨1⟩ [] [d2] :: []⟩) := by
+  intro h
+  exact nomatch h.mpr ⟨rfl, rfl⟩
+
+/-- Instance (law `ConcreteSpec.Core.Exec.done_scope_next`, case `dispatch_first`). Normal
+completion of a scope with `[d1, d2]` dispatches `d1` first and saves `.resume .fall`. -/
+example : Step prog ⟨.done, [], .init, .scope ⟨1⟩ [] (d1 :: [d2]) :: []⟩ .silent
+      ⟨.exec d1.stmt, [], .init, .resume .fall :: .scope ⟨1⟩ [] [d2] :: []⟩ ↔
+    (Label.silent : Label ops) = .silent ∧
+      (⟨.exec d1.stmt, [], .init, .resume .fall :: .scope ⟨1⟩ [] [d2] :: []⟩ : Config ops) =
+        ⟨.exec d1.stmt, [], .init, .resume .fall :: .scope ⟨1⟩ [] [d2] :: []⟩ :=
+  done_scope_next prog ⟨1⟩ [] d1 [d2] [] .init [] .silent
+    ⟨.exec d1.stmt, [], .init, .resume .fall :: .scope ⟨1⟩ [] [d2] :: []⟩
+
+/-- Planted (law `ConcreteSpec.Core.Exec.done_scope_next`, case `dispatch_first`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.Refusal.StuckStep`).
+`StuckStep` blocks the normal scope-completion cleanup dispatch. -/
+example : ¬ (Refusal.StuckStep prog
+      ⟨.done, [], .init, .scope ⟨1⟩ [] (d1 :: [d2]) :: []⟩ .silent
+      ⟨.exec d1.stmt, [], .init, .resume .fall :: .scope ⟨1⟩ [] [d2] :: []⟩ ↔
+    (Label.silent : Label ops) = .silent ∧
+      (⟨.exec d1.stmt, [], .init, .resume .fall :: .scope ⟨1⟩ [] [d2] :: []⟩ : Config ops) =
+        ⟨.exec d1.stmt, [], .init, .resume .fall :: .scope ⟨1⟩ [] [d2] :: []⟩) := by
+  intro h
+  exact nomatch h.mpr ⟨rfl, rfl⟩
+
+def afterBumpLog : DState := { DState.init with counter := 1 }
+
+/-- Instance (law `ConcreteSpec.Core.Exec.exit_scope_runs_defers`, case `bump_then_log`). Exiting a
+scope that registered `log(1)` then `bump()` runs `bump()` then `log(1)` and drops the scope. -/
+example : Steps prog ⟨.exiting (.ret 0), [], .init, .scope ⟨1⟩ [] [d1, d2] :: []⟩ ([] ++ [1])
+    ⟨.exiting (.ret 0), restrict [] [], afterBumpLog, []⟩ :=
+  exit_scope_runs_defers prog (.ret 0) ⟨1⟩ [] [] [] [d1, d2] .init afterBumpLog ([] ++ [1])
+    afterBumpLog (.cons (demo_bump_completes [] .init) (.cons (demo_log_completes [] afterBumpLog) (.nil _))) rfl
+
+/-- Planted (law `ConcreteSpec.Core.Exec.exit_scope_runs_defers`, case `bump_then_log`, subject `ConcreteSpec.Core.Exec.Steps`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.ReflOnlySteps`).
+`ReflOnlySteps` cannot execute the scope's deferred cleanup sequence on exit. -/
+example : RunsAll prog [] [d1, d2] .init ([] ++ [1]) afterBumpLog ∧
+    dropOut ops [] [] afterBumpLog = some afterBumpLog ∧
+    ¬ ReflOnlySteps prog ⟨.exiting (.ret 0), [], .init, .scope ⟨1⟩ [] [d1, d2] :: []⟩ ([] ++ [1])
+      ⟨.exiting (.ret 0), restrict [] [], afterBumpLog, []⟩ := by
+  refine ⟨.cons (demo_bump_completes [] .init) (.cons (demo_log_completes [] afterBumpLog) (.nil _)),
+    rfl, fun h => ?_⟩
+  cases h
+
+/-- Instance (law `ConcreteSpec.Core.Exec.done_scope_runs_defers`, case `bump_then_log`). Completing
+a scope that registered `log(1)` then `bump()` runs `bump()` then `log(1)` and drops the scope. -/
+example : Steps prog ⟨.done, [], .init, .scope ⟨1⟩ [] [d1, d2] :: []⟩ ([] ++ [1])
+    ⟨.done, restrict [] [], afterBumpLog, []⟩ :=
+  done_scope_runs_defers prog ⟨1⟩ [] [] [] [d1, d2] .init afterBumpLog ([] ++ [1]) afterBumpLog
+    (.cons (demo_bump_completes [] .init) (.cons (demo_log_completes [] afterBumpLog) (.nil _))) rfl
+
+/-- Planted (law `ConcreteSpec.Core.Exec.done_scope_runs_defers`, case `bump_then_log`, subject `ConcreteSpec.Core.Exec.Steps`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.ReflOnlySteps`).
+`ReflOnlySteps` cannot execute the scope's deferred cleanup sequence on normal completion. -/
+example : RunsAll prog [] [d1, d2] .init ([] ++ [1]) afterBumpLog ∧
+    dropOut ops [] [] afterBumpLog = some afterBumpLog ∧
+    ¬ ReflOnlySteps prog ⟨.done, [], .init, .scope ⟨1⟩ [] [d1, d2] :: []⟩ ([] ++ [1])
+      ⟨.done, restrict [] [], afterBumpLog, []⟩ := by
+  refine ⟨.cons (demo_bump_completes [] .init) (.cons (demo_log_completes [] afterBumpLog) (.nil _)),
+    rfl, fun h => ?_⟩
+  cases h
+
+/-- Helper (inversion). Every element of the singleton scope prefix is passable
+(approved: PENDING). -/
+private theorem passes_single_scope (e : Exit Int) :
+    ∀ (f : Frame ops), f ∈ ([.scope ⟨1⟩ [] [d2]] : List (Frame ops)) → Passes e f := by
+  intro f hf
+  cases hf with
+  | head => trivial
+  | tail _ hf => cases hf
+
+/-- Instance (law `ConcreteSpec.Core.Exec.unwind_runs_plan`, case `single_scope`). Unwinding a
+single scope frame runs its deferred calls and reaches the boundary `[]`. -/
+example : Steps prog ⟨.exiting (.ret 0), [], .init, [.scope ⟨1⟩ [] [d2]] ++ []⟩ ([1] ++ [])
+    ⟨.exiting (.ret 0), unwindLocals [.scope ⟨1⟩ [] [d2]] [], .init, []⟩ :=
+  unwind_runs_plan prog (.ret 0) [] [.scope ⟨1⟩ [] [d2]] [] .init .init ([1] ++ [])
+    (.scope (.cons (demo_log_completes [] .init) (.nil _)) rfl (.nil _ _))
+    (passes_single_scope (.ret 0))
+
+/-- Planted (law `ConcreteSpec.Core.Exec.unwind_runs_plan`, case `single_scope`, subject `ConcreteSpec.Core.Exec.Steps`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.ReflOnlySteps`).
+`ReflOnlySteps` cannot unwind the scope prefix. -/
+example : Cleans prog [.scope ⟨1⟩ [] [d2]] [] .init ([1] ++ []) .init ∧
+    (∀ (f : Frame ops), f ∈ ([.scope ⟨1⟩ [] [d2]] : List (Frame ops)) → Passes (O := ops) (.ret 0) f) ∧
+    ¬ ReflOnlySteps prog ⟨.exiting (.ret 0), [], .init, [.scope ⟨1⟩ [] [d2]] ++ []⟩ ([1] ++ [])
+      ⟨.exiting (.ret 0), unwindLocals [.scope ⟨1⟩ [] [d2]] [], .init, []⟩ := by
+  refine ⟨.scope (.cons (demo_log_completes [] .init) (.nil _)) rfl (.nil _ _),
+    passes_single_scope (.ret 0), fun h => ?_⟩
+  cases h
+
+/-- Instance (law `ConcreteSpec.Core.Exec.return_reaches_caller`, case `unwind_and_return`). A
+`return 7` unwinds the enclosing scope, runs its deferred `log(1)`, leaves the activation, and
+binds `x := 7` in the caller. -/
+example : Steps prog
+    ⟨.exiting (.ret 7), [], .init, [.scope ⟨1⟩ [] [d2]] ++ .ret (some x) [] :: []⟩ ([1] ++ [])
+    ⟨.done, bindDst (some x) 7 [], .init, []⟩ :=
+  return_reaches_caller prog 7 (some x) [] [] [.scope ⟨1⟩ [] [d2]] [] .init .init ([1] ++ [])
+    .init .init
+    (.scope (.cons (demo_log_completes [] .init) (.nil _)) rfl (.nil _ _))
+    (passes_single_scope (.ret 7)) rfl rfl
+
+/-- Planted (law `ConcreteSpec.Core.Exec.return_reaches_caller`, case `unwind_and_return`, subject `ConcreteSpec.Core.Exec.Steps`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.ReflOnlySteps`).
+`ReflOnlySteps` fails to unwind the scope and return to the caller. -/
+example : Cleans prog [.scope ⟨1⟩ [] [d2]] [] .init ([1] ++ []) .init ∧
+    (∀ (f : Frame ops), f ∈ ([.scope ⟨1⟩ [] [d2]] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
+    ops.life .leave .init = some .init ∧
+    bindLife ops (some x) .init = some .init ∧
+    ¬ ReflOnlySteps prog
+      ⟨.exiting (.ret 7), [], .init, [.scope ⟨1⟩ [] [d2]] ++ .ret (some x) [] :: []⟩ ([1] ++ [])
+      ⟨.done, bindDst (some x) 7 [], .init, []⟩ := by
+  refine ⟨.scope (.cons (demo_log_completes [] .init) (.nil _)) rfl (.nil _ _),
+    passes_single_scope (.ret 7), rfl, rfl, fun h => ?_⟩
+  cases h
+
+/-- Instance (law `ConcreteSpec.Core.Exec.break_reaches_loop`, case `unwind_and_break`). A `break`
+unwinds the loop body's scope, runs its deferred `log(1)`, and exits the target loop `.body`. -/
+example : Steps prog
+    ⟨.exiting (.brk ⟨1⟩), [], .init,
+      [.scope ⟨1⟩ [] [d2]] ++ .body ⟨1⟩ .skip (.lit 1) .skip s :: []⟩ ([1] ++ [])
+    ⟨.done, unwindLocals [.scope ⟨1⟩ [] [d2]] [], .init, []⟩ :=
+  break_reaches_loop prog ⟨1⟩ .skip .skip (.lit 1) s [] [.scope ⟨1⟩ [] [d2]] [] .init .init
+    ([1] ++ [])
+    (.scope (.cons (demo_log_completes [] .init) (.nil _)) rfl (.nil _ _))
+    (passes_single_scope (.brk ⟨1⟩))
+
+/-- Planted (law `ConcreteSpec.Core.Exec.break_reaches_loop`, case `unwind_and_break`, subject `ConcreteSpec.Core.Exec.Steps`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.ReflOnlySteps`).
+`ReflOnlySteps` fails to unwind to the target loop boundary on `break`. -/
+example : Cleans prog [.scope ⟨1⟩ [] [d2]] [] .init ([1] ++ []) .init ∧
+    (∀ (f : Frame ops), f ∈ ([.scope ⟨1⟩ [] [d2]] : List (Frame ops)) → Passes (.brk ⟨1⟩) f) ∧
+    ¬ ReflOnlySteps prog
+      ⟨.exiting (.brk ⟨1⟩), [], .init,
+        [.scope ⟨1⟩ [] [d2]] ++ .body ⟨1⟩ .skip (.lit 1) .skip s :: []⟩ ([1] ++ [])
+      ⟨.done, unwindLocals [.scope ⟨1⟩ [] [d2]] [], .init, []⟩ := by
+  refine ⟨.scope (.cons (demo_log_completes [] .init) (.nil _)) rfl (.nil _ _),
+    passes_single_scope (.brk ⟨1⟩), fun h => ?_⟩
+  cases h
+
+/-- Instance (law `ConcreteSpec.Core.Exec.continue_reaches_loop`, case `unwind_and_continue`). A
+`continue` unwinds the loop body's scope, runs its deferred `log(1)`, and restarts the target loop. -/
+example : Steps prog
+    ⟨.exiting (.cont ⟨1⟩), [], .init,
+      [.scope ⟨1⟩ [] [d2]] ++ .body ⟨1⟩ .skip (.lit 1) .skip s :: []⟩ ([1] ++ [])
+    ⟨.exec (.loop ⟨1⟩ .skip (.lit 1) .skip s), unwindLocals [.scope ⟨1⟩ [] [d2]] [], .init, []⟩ :=
+  continue_reaches_loop prog ⟨1⟩ .skip .skip (.lit 1) s [] [.scope ⟨1⟩ [] [d2]] [] .init .init
+    ([1] ++ [])
+    (.scope (.cons (demo_log_completes [] .init) (.nil _)) rfl (.nil _ _))
+    (passes_single_scope (.cont ⟨1⟩))
+
+/-- Planted (law `ConcreteSpec.Core.Exec.continue_reaches_loop`, case `unwind_and_continue`, subject `ConcreteSpec.Core.Exec.Steps`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.ReflOnlySteps`).
+`ReflOnlySteps` fails to unwind and re-enter the target loop on `continue`. -/
+example : Cleans prog [.scope ⟨1⟩ [] [d2]] [] .init ([1] ++ []) .init ∧
+    (∀ (f : Frame ops), f ∈ ([.scope ⟨1⟩ [] [d2]] : List (Frame ops)) → Passes (.cont ⟨1⟩) f) ∧
+    ¬ ReflOnlySteps prog
+      ⟨.exiting (.cont ⟨1⟩), [], .init,
+        [.scope ⟨1⟩ [] [d2]] ++ .body ⟨1⟩ .skip (.lit 1) .skip s :: []⟩ ([1] ++ [])
+      ⟨.exec (.loop ⟨1⟩ .skip (.lit 1) .skip s), unwindLocals [.scope ⟨1⟩ [] [d2]] [], .init, []⟩ := by
+  refine ⟨.scope (.cons (demo_log_completes [] .init) (.nil _)) rfl (.nil _ _),
+    passes_single_scope (.cont ⟨1⟩), fun h => ?_⟩
+  cases h
+
+/-- Instance (law `ConcreteSpec.Core.Exec.planWith_calls`, case `nested`). Projecting the `.call`
+actions from `planWith [inner, outer] []` yields `plan [inner, outer]`. -/
+example : (planWith [CleanupEvidence.inner, CleanupEvidence.outer] []).filterMap CleanAct.call? =
+    plan [CleanupEvidence.inner, CleanupEvidence.outer] :=
+  planWith_calls [CleanupEvidence.inner, CleanupEvidence.outer] []
+
+/-- Planted (law `ConcreteSpec.Core.Exec.planWith_calls`, case `nested`, subject `ConcreteSpec.Core.Exec.planWith`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.reversePlanWith`).
+Reversing `planWith` reverses the projected call list and disagrees with `plan`. -/
+example : ¬ ((reversePlanWith [CleanupEvidence.inner, CleanupEvidence.outer] []).filterMap
+      CleanAct.call? =
+    plan [CleanupEvidence.inner, CleanupEvidence.outer]) := by
+  intro h
+  cases h
+
+/-- Planted (law `ConcreteSpec.Core.Exec.planWith_calls`, case `nested`, subject `ConcreteSpec.Core.Exec.plan`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.emptyPlan`).
+Replacing `plan` by `emptyPlan` drops the two planned deferred calls. -/
+example : ¬ ((planWith [CleanupEvidence.inner, CleanupEvidence.outer] []).filterMap
+      CleanAct.call? =
+    emptyPlan [CleanupEvidence.inner, CleanupEvidence.outer]) := by
+  intro h
+  cases h
+
+/-- Instance (law `ConcreteSpec.Core.Exec.step_trapped`, case `trapped_terminal`). A trapped
+configuration is recognized by `Config.final?` and is blocked in `Step`. -/
+example : (Config.final? (⟨.trapped .abort s, [], .init, []⟩ : Config ops) =
+      some (.trapped .abort s) ↔
+      (Ctrl.trapped .abort s : Ctrl ops) = .trapped .abort s) ∧
+    Blocked (Step prog) ⟨.trapped .abort s, [], .init, []⟩ :=
+  step_trapped prog (.trapped .abort s) .abort s [] .init []
+
+/-- Planted (law `ConcreteSpec.Core.Exec.step_trapped`, case `trapped_terminal`, subject `ConcreteSpec.Core.Exec.Config.final?`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.noTrapFinal?`).
+`noTrapFinal?` fails to recognize the trapped configuration as final. -/
+example : ¬ ((noTrapFinal? (⟨.trapped .abort s, [], .init, []⟩ : Config ops) =
+      some (.trapped .abort s) ↔
+      (Ctrl.trapped .abort s : Ctrl ops) = .trapped .abort s) ∧
+    Blocked (Step prog) ⟨.trapped .abort s, [], .init, []⟩) := by
+  intro h
+  have hf := h.1.mpr rfl
+  cases hf
+
+/-- Planted (law `ConcreteSpec.Core.Exec.step_trapped`, case `trapped_terminal`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.RecoverTrapStep`).
+`RecoverTrapStep` allows a transition out of a trapped configuration. -/
+example : ¬ ((Config.final? (⟨.trapped .abort s, [], .init, []⟩ : Config ops) =
+      some (.trapped .abort s) ↔
+      (Ctrl.trapped .abort s : Ctrl ops) = .trapped .abort s) ∧
+    Blocked (RecoverTrapStep prog) ⟨.trapped .abort s, [], .init, []⟩) := by
+  intro h
+  exact h.2 .silent ⟨.done, [], .init, []⟩ .recover
+
+/-- Instance (law `ConcreteSpec.Core.Exec.steps_from_trapped`, case `no_unwind`). A trapped
+configuration cannot transition to `.done`. -/
+example : Steps prog ⟨.trapped .abort s, [], .init, []⟩ [] ⟨.done, [], .init, []⟩ ↔
+    ([] : List Int) = [] ∧
+      (⟨.done, [], .init, []⟩ : Config ops) = ⟨.trapped .abort s, [], .init, []⟩ :=
+  steps_from_trapped prog .abort s [] .init [] [] ⟨.done, [], .init, []⟩
+
+/-- Planted (law `ConcreteSpec.Core.Exec.steps_from_trapped`, case `no_unwind`, subject `ConcreteSpec.Core.Exec.Steps`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.RecoverTrapSteps`).
+`RecoverTrapSteps` allows a trapped configuration to recover to `.done`. -/
+example : ¬ (RecoverTrapSteps prog ⟨.trapped .abort s, [], .init, []⟩ [] ⟨.done, [], .init, []⟩ ↔
+    ([] : List Int) = [] ∧
+      (⟨.done, [], .init, []⟩ : Config ops) = ⟨.trapped .abort s, [], .init, []⟩) := by
+  intro h
+  have he := (h.mp .recover).2
+  cases he
+
+/-- Instance (law `ConcreteSpec.Core.Exec.abort_runs_no_cleanup`, case `traps_without_cleanup`).
+From `.exec (.abort s)`, the trapped configuration `.trapped .abort s` is reachable with empty
+trace and untouched frame stack. -/
+example : Steps prog ⟨.exec (.abort s), [], .init, []⟩ [] ⟨.trapped .abort s, [], .init, []⟩ ↔
+    ([] : List Int) = [] ∧
+      ((⟨.trapped .abort s, [], .init, []⟩ : Config ops) = ⟨.exec (.abort s), [], .init, []⟩ ∨
+        (⟨.trapped .abort s, [], .init, []⟩ : Config ops) = ⟨.trapped .abort s, [], .init, []⟩) :=
+  abort_runs_no_cleanup prog s [] .init [] [] ⟨.trapped .abort s, [], .init, []⟩
+
+/-- Planted (law `ConcreteSpec.Core.Exec.abort_runs_no_cleanup`, case `traps_without_cleanup`, subject `ConcreteSpec.Core.Exec.Steps`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.ReflOnlySteps`).
+`ReflOnlySteps` fails to transition from `.exec (.abort s)` to `.trapped .abort s`. -/
+example : ¬ (ReflOnlySteps prog ⟨.exec (.abort s), [], .init, []⟩ []
+      ⟨.trapped .abort s, [], .init, []⟩ ↔
+    ([] : List Int) = [] ∧
+      ((⟨.trapped .abort s, [], .init, []⟩ : Config ops) = ⟨.exec (.abort s), [], .init, []⟩ ∨
+        (⟨.trapped .abort s, [], .init, []⟩ : Config ops) = ⟨.trapped .abort s, [], .init, []⟩)) := by
+  intro h
+  have hs := h.mpr ⟨rfl, .inr rfl⟩
+  cases hs
+
+/-- Instance (law `ConcreteSpec.Core.Exec.evalArgs_first_trap`, case `first_trap_wins`). After
+`.lit 1` succeeds, `.fail .overflow` traps with `.overflow` before `.fail .divisionByZero` is
+evaluated. -/
+example : evalArgs ops [] .init ([.lit 1] ++ .fail .overflow :: [.fail .divisionByZero]) =
+    .trap .overflow :=
+  evalArgs_first_trap (O := ops) [] (.fail .overflow) .overflow [.fail .divisionByZero]
+    [.lit 1] .init .init [1] rfl rfl
+
+/-- Planted (law `ConcreteSpec.Core.Exec.evalArgs_first_trap`, case `first_trap_wins`, subject `ConcreteSpec.Core.Exec.evalArgs`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.swallowTrapEvalArgs`).
+`swallowTrapEvalArgs` evaluates `[.lit 1]` to `.ok ([1], .init)` but swallows the `.overflow` trap
+instead of propagating `.trap .overflow`. -/
+example : swallowTrapEvalArgs ops [] .init [.lit 1] = .ok ([1], .init) ∧
+    ops.eval [] .init (.fail .overflow) = .trap .overflow ∧
+    ¬ (swallowTrapEvalArgs ops [] .init
+      ([.lit 1] ++ .fail .overflow :: [.fail .divisionByZero]) = .trap .overflow) := by
+  decide
+
+/-- Instance (law `ConcreteSpec.Core.Exec.step_silent_deterministic`, case `unique_silent`). Since
+`step` on `.skip` returns `.next ⟨.done, [], .init, []⟩`, `.silent` to `.done` is the unique
+relational step. -/
+example : Step prog ⟨.exec .skip, [], .init, []⟩ .silent ⟨.done, [], .init, []⟩ ↔
+    (Label.silent : Label ops) = .silent ∧
+      (⟨.done, [], .init, []⟩ : Config ops) = ⟨.done, [], .init, []⟩ :=
+  step_silent_deterministic prog ⟨.exec .skip, [], .init, []⟩ ⟨.done, [], .init, []⟩
+    ⟨.done, [], .init, []⟩ .silent rfl
+
+/-- Planted (law `ConcreteSpec.Core.Exec.step_silent_deterministic`, case `unique_silent`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.Refusal.StuckStep`).
+`StuckStep` has no silent transition even though `step` returns `some (.next ...)`. -/
+example : step prog ⟨.exec .skip, [], .init, []⟩ = some (.next ⟨.done, [], .init, []⟩) ∧
+    ¬ (Refusal.StuckStep prog ⟨.exec .skip, [], .init, []⟩ .silent ⟨.done, [], .init, []⟩ ↔
+      (Label.silent : Label ops) = .silent ∧
+        (⟨.done, [], .init, []⟩ : Config ops) = ⟨.done, [], .init, []⟩) := by
+  refine ⟨rfl, fun h => ?_⟩
+  exact nomatch h.mpr ⟨rfl, rfl⟩
+
+/-- Instance (law `ConcreteSpec.Core.Exec.step_deterministic`, case `branch`). Two transitions from
+`⟨.exec .skip, [], .init, []⟩` to `⟨.done, [], .init, []⟩` are characterized by `step` returning
+`.next ⟨.done, [], .init, []⟩` or a common `.request`. -/
+example : (Step prog ⟨.exec .skip, [], .init, []⟩ .silent ⟨.done, [], .init, []⟩ ∧
+      Step prog ⟨.exec .skip, [], .init, []⟩ .silent ⟨.done, [], .init, []⟩) ↔
+    (step prog ⟨.exec .skip, [], .init, []⟩ = some (.next ⟨.done, [], .init, []⟩) ∧
+      (Label.silent : Label ops) = .silent ∧
+      (Label.silent : Label ops) = .silent ∧
+      (⟨.done, [], .init, []⟩ : Config ops) = ⟨.done, [], .init, []⟩) ∨
+    ∃ p vs site st k a₁ a₂,
+      step prog ⟨.exec .skip, [], .init, []⟩ = some (.request p vs site st k) ∧
+      ops.allows p vs st a₁ = true ∧ ops.allows p vs st a₂ = true ∧
+      (Label.silent : Label ops) = a₁.label ∧ (Label.silent : Label ops) = a₂.label ∧
+      k a₁ = some ⟨.done, [], .init, []⟩ ∧ k a₂ = some ⟨.done, [], .init, []⟩ :=
+  step_deterministic prog ⟨.exec .skip, [], .init, []⟩ ⟨.done, [], .init, []⟩
+    ⟨.done, [], .init, []⟩ .silent .silent
+
+/-- Planted (law `ConcreteSpec.Core.Exec.step_deterministic`, case `branch`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.Refusal.StuckStep`).
+`StuckStep` falsifies the equivalence when `step` returns `some (.next ...)`. -/
+example : ¬ ((Refusal.StuckStep prog ⟨.exec .skip, [], .init, []⟩ .silent ⟨.done, [], .init, []⟩ ∧
+      Refusal.StuckStep prog ⟨.exec .skip, [], .init, []⟩ .silent ⟨.done, [], .init, []⟩) ↔
+    (step prog ⟨.exec .skip, [], .init, []⟩ = some (.next ⟨.done, [], .init, []⟩) ∧
+      (Label.silent : Label ops) = .silent ∧
+      (Label.silent : Label ops) = .silent ∧
+      (⟨.done, [], .init, []⟩ : Config ops) = ⟨.done, [], .init, []⟩) ∨
+    ∃ p vs site st k a₁ a₂,
+      step prog ⟨.exec .skip, [], .init, []⟩ = some (.request p vs site st k) ∧
+      ops.allows p vs st a₁ = true ∧ ops.allows p vs st a₂ = true ∧
+      (Label.silent : Label ops) = a₁.label ∧ (Label.silent : Label ops) = a₂.label ∧
+      k a₁ = some ⟨.done, [], .init, []⟩ ∧ k a₂ = some ⟨.done, [], .init, []⟩) := by
+  intro h
+  exact nomatch (h.mpr (.inl ⟨rfl, rfl, rfl, rfl⟩)).1
+
+def copyEatFn : Fn ops := ⟨[(p, .int)], .unit, ⟨1⟩, .skip⟩
+def copyProg : Program ops := ⟨[(eatF, copyEatFn)]⟩
+def tokImpl : T → Option FnId := fun | .tok => some eatF | _ => none
+def badImpl : T → Option FnId := fun | .tok => some bumpF | _ => none
+def eatCall : Deferred ops := ⟨eatF, [.var p], s⟩
+def bumpCall : Deferred ops := ⟨bumpF, [.var p], s⟩
+
+/-- Instance (law `ConcreteSpec.Core.Exec.destroy_not_copy`, case `linear_tok`). `eatF` is a valid
+destroy function for the non-Copy type `.tok`. -/
+example : validDestroyFn prog .tok eatF = true ↔
+    ops.isCopy .tok = false ∧ ∃ fn x, AList.lookup prog.fns eatF = some fn ∧
+      fn.params = [(x, .tok)] ∧ fn.result = ops.unitTy :=
+  destroy_not_copy prog .tok eatF
+
+/-- Planted (law `ConcreteSpec.Core.Exec.destroy_not_copy`, case `linear_tok`, subject `ConcreteSpec.Core.Exec.validDestroyFn`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.rejectAllDestroyFn`).
+`rejectAllDestroyFn` rejects the valid linear destroy function `eatF` on `.tok`. -/
+example : ¬ (rejectAllDestroyFn prog .tok eatF = true ↔
+    ops.isCopy .tok = false ∧ ∃ fn x, AList.lookup prog.fns eatF = some fn ∧
+      fn.params = [(x, .tok)] ∧ fn.result = ops.unitTy) := by
+  intro h
+  have hv := h.mpr ⟨rfl, eatFn, p, rfl, rfl, rfl⟩
+  cases hv
+
+/-- Instance (law `ConcreteSpec.Core.Exec.destroy_not_copy`, case `copy_int_rejected`). Even when
+`eatF` has signature `(p : .int) -> .unit`, `validDestroyFn` rejects it because `.int` is `Copy`. -/
+example : validDestroyFn copyProg .int eatF = true ↔
+    ops.isCopy .int = false ∧ ∃ fn x, AList.lookup copyProg.fns eatF = some fn ∧
+      fn.params = [(x, .int)] ∧ fn.result = ops.unitTy :=
+  destroy_not_copy copyProg .int eatF
+
+/-- Planted (law `ConcreteSpec.Core.Exec.destroy_not_copy`, case `copy_int_rejected`, subject `ConcreteSpec.Core.Exec.validDestroyFn`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.allowCopyDestroyFn`).
+`allowCopyDestroyFn` forgets `!ops.isCopy T` and accepts a destroy function on the `Copy` type `.int`. -/
+example : ¬ (allowCopyDestroyFn copyProg .int eatF = true ↔
+    ops.isCopy .int = false ∧ ∃ fn x, AList.lookup copyProg.fns eatF = some fn ∧
+      fn.params = [(x, .int)] ∧ fn.result = ops.unitTy) := by
+  intro h
+  have hc := (h.mp rfl).1
+  cases hc
+
+/-- Instance (law `ConcreteSpec.Core.Exec.destroyCall_sig`, case `valid_tok`). Building a checked
+destroy call for `.tok` produces `eatCall` with single argument `.var p` and verified signature. -/
+example : checkedDestroyCall prog tokImpl .tok (.var p) s = some eatCall ↔
+    tokImpl .tok = some eatCall.f ∧ eatCall.args = [.var p] ∧ eatCall.site = s ∧
+    ops.isCopy .tok = false ∧ ∃ fn x, AList.lookup prog.fns eatCall.f = some fn ∧
+      fn.params = [(x, .tok)] ∧ fn.result = ops.unitTy :=
+  destroyCall_sig prog tokImpl .tok (.var p) s eatCall
+
+/-- Planted (law `ConcreteSpec.Core.Exec.destroyCall_sig`, case `valid_tok`, subject `ConcreteSpec.Core.Exec.checkedDestroyCall`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.dropArgDestroyCall`).
+`dropArgDestroyCall` drops the target argument `.var p` and fails to produce `eatCall`. -/
+example : ¬ (dropArgDestroyCall prog tokImpl .tok (.var p) s = some eatCall ↔
+    tokImpl .tok = some eatCall.f ∧ eatCall.args = [.var p] ∧ eatCall.site = s ∧
+    ops.isCopy .tok = false ∧ ∃ fn x, AList.lookup prog.fns eatCall.f = some fn ∧
+      fn.params = [(x, .tok)] ∧ fn.result = ops.unitTy) := by
+  intro h
+  have hc := h.mpr ⟨rfl, rfl, rfl, rfl, eatFn, p, rfl, rfl, rfl⟩
+  cases hc
+
+/-- Instance (law `ConcreteSpec.Core.Exec.destroyCall_sig`, case `bad_sig_rejected`). When `badImpl`
+maps `.tok` to `bumpF` (whose parameter list is `[]`), `checkedDestroyCall` rejects it. -/
+example : checkedDestroyCall prog badImpl .tok (.var p) s = some bumpCall ↔
+    badImpl .tok = some bumpCall.f ∧ bumpCall.args = [.var p] ∧ bumpCall.site = s ∧
+    ops.isCopy .tok = false ∧ ∃ fn x, AList.lookup prog.fns bumpCall.f = some fn ∧
+      fn.params = [(x, .tok)] ∧ fn.result = ops.unitTy :=
+  destroyCall_sig prog badImpl .tok (.var p) s bumpCall
+
+/-- Planted (law `ConcreteSpec.Core.Exec.destroyCall_sig`, case `bad_sig_rejected`, subject `ConcreteSpec.Core.Exec.checkedDestroyCall`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.uncheckedDestroyCall`).
+`uncheckedDestroyCall` skips `validDestroyFn` and returns `some bumpCall` despite `bumpF` taking no
+parameters. -/
+example : ¬ (uncheckedDestroyCall prog badImpl .tok (.var p) s = some bumpCall ↔
+    badImpl .tok = some bumpCall.f ∧ bumpCall.args = [.var p] ∧ bumpCall.site = s ∧
+    ops.isCopy .tok = false ∧ ∃ fn x, AList.lookup prog.fns bumpCall.f = some fn ∧
+      fn.params = [(x, .tok)] ∧ fn.result = ops.unitTy) := by
+  intro h
+  obtain ⟨_, _, _, _, fn, _, hfn, hp, _⟩ := h.mp rfl
+  cases hfn
+  cases hp
+
+/-- Instance (law `ConcreteSpec.Core.Exec.seqDestroyOrder_elem`, case `first_elem`). In a 2-element
+sequence, element `0` is visited at position `0`. -/
+example : (seqDestroyOrder 2)[0]? = some (.elem 0) :=
+  seqDestroyOrder_elem 2 0 (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Exec.seqDestroyOrder_elem`, case `first_elem`, subject `ConcreteSpec.Core.Exec.seqDestroyOrder`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.revSeqDestroyOrder`).
+`revSeqDestroyOrder` visits `.elem 1` instead of `.elem 0` at position `0`. -/
+example : 0 < 2 ∧ ¬ ((revSeqDestroyOrder 2)[0]? = some (.elem 0)) := by
+  decide
+
+/-- Instance (law `ConcreteSpec.Core.Exec.seqDestroyOrder_storage`, case `storage_last`). A
+2-element sequence has 3 destruction steps with `.storage` at index `2`. -/
+example : (seqDestroyOrder 2).length = 2 + 1 ∧ (seqDestroyOrder 2)[2]? = some .storage :=
+  seqDestroyOrder_storage 2
+
+/-- Planted (law `ConcreteSpec.Core.Exec.seqDestroyOrder_storage`, case `storage_last`, subject `ConcreteSpec.Core.Exec.seqDestroyOrder`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.storageFirstSeqDestroyOrder`).
+`storageFirstSeqDestroyOrder` places `.storage` at index `0` instead of index `2`. -/
+example : ¬ ((storageFirstSeqDestroyOrder 2).length = 2 + 1 ∧
+    (storageFirstSeqDestroyOrder 2)[2]? = some .storage) := by
+  decide
+
+/-- Instance (law `ConcreteSpec.Core.Exec.mapDestroyOrder_entry`, case `first_entry`). In a 2-entry
+map, entry `0` visits `.key 0` at index `0` and `.value 0` at index `1`. -/
+example : (mapDestroyOrder 2)[2 * 0]? = some (.key 0) ∧
+    (mapDestroyOrder 2)[2 * 0 + 1]? = some (.value 0) :=
+  mapDestroyOrder_entry 2 0 (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Exec.mapDestroyOrder_entry`, case `first_entry`, subject `ConcreteSpec.Core.Exec.mapDestroyOrder`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.valFirstMapDestroyOrder`).
+`valFirstMapDestroyOrder` visits `.value 0` before `.key 0`. -/
+example : 0 < 2 ∧ ¬ ((valFirstMapDestroyOrder 2)[2 * 0]? = some (.key 0) ∧
+    (valFirstMapDestroyOrder 2)[2 * 0 + 1]? = some (.value 0)) := by
+  decide
+
+/-- Instance (law `ConcreteSpec.Core.Exec.mapDestroyOrder_storage`, case `storage_last`). A 2-entry
+map has 5 destruction steps with `.storage` at index `4`. -/
+example : (mapDestroyOrder 2).length = 2 * 2 + 1 ∧ (mapDestroyOrder 2)[2 * 2]? = some .storage :=
+  mapDestroyOrder_storage 2
+
+/-- Planted (law `ConcreteSpec.Core.Exec.mapDestroyOrder_storage`, case `storage_last`, subject `ConcreteSpec.Core.Exec.mapDestroyOrder`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.storageFirstMapDestroyOrder`).
+`storageFirstMapDestroyOrder` places `.storage` at index `0` instead of index `4`. -/
+example : ¬ ((storageFirstMapDestroyOrder 2).length = 2 * 2 + 1 ∧
+    (storageFirstMapDestroyOrder 2)[2 * 2]? = some .storage) := by
+  decide
+
+end CoreEvidence
 
 end ConcreteSpec.Core.Exec
