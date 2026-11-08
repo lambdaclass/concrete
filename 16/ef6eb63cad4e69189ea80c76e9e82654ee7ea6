@@ -1,0 +1,2 @@
+[piece 3 of 4: scripts]
+- scripts/checks/compiler/tests.sh:54: The controls copy only the manifest into `$work/ctl`, but the reader resolves every `con:` source relative to the manifest’s parent directory. A valid manifest containing source tests therefore fails with “file does not exist” before reaching the planted expectation or inventory defect, causing these controls to fail for the wrong reason. Copy the test directory as the root manifest gate does.
