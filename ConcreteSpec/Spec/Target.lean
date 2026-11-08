@@ -74,9 +74,10 @@ structure Target where
 - A stored length has between 1 and 64 bits, since its meaning is a `u64` (Q3.5).
 - The data space is one of the target's spaces.
 - The null address is an address.
-- An object, and the address one past its end, fit in the address range: `maxObject` is below
-  `2 ^ addrBits`, the analogue of row Q3.10's one-past bound `base + size ≤ 2^64 − 1` that every
-  profile needs (question 3). -/
+- No object is as large as the address range: `maxObject` is below `2 ^ addrBits`. This is only
+  the profile's size bound; that a placed object's one-past address is an address, row Q3.10's
+  `base + size ≤ 2^64 − 1` generalized to `2 ^ addrBits − 1` (question 3), is an obligation on each
+  block's base and size, stated with memory (C4), not here. -/
 def Target.WellFormed (t : Target) : Prop :=
   0 < t.addrBits ∧ t.addrBits ≤ 8 * t.ptrSize ∧ IsPow2 t.ptrAlign ∧ t.ptrSize % t.ptrAlign = 0 ∧
   t.ptrSize ≤ t.maxObject ∧
@@ -121,8 +122,7 @@ example : ¬ ({ linuxX8664 with ptrAlign := 16 } : Target).WellFormed := by deci
 /-- Nor one whose objects are too small to hold a pointer. -/
 example : ¬ ({ linuxX8664 with maxObject := 4 } : Target).WellFormed := by decide
 
-/-- Nor one whose objects can reach the end of the address range, so that one past the end would
-not be an address. -/
+/-- Nor one whose objects may be as large as the whole address range. -/
 example : ¬ ({ linuxX8664 with maxObject := 2 ^ 64 } : Target).WellFormed := by decide
 
 /-- A small target with 16-bit addresses and 16-bit stored lengths is well formed: nothing assumes
