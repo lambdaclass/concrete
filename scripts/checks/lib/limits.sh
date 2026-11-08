@@ -16,6 +16,19 @@
 #     raise them.
 #
 # Per-command time bounds are separate: bounded_run (lib/bounded.sh).
+# Lean otherwise uses hardware concurrency (hundreds of stacks on large hosts). Four
+# workers fit the smallest Lean gate envelope (16 GiB / 512 tasks); callers may request
+# fewer, but cannot escape this common ceiling. Apply on sourcing as well as to gates
+# calling gate_limits, so proof checks and lake invocations inherit the same policy.
+LEAN_NUM_THREADS="${LEAN_NUM_THREADS:-4}"
+if [[ ! "$LEAN_NUM_THREADS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "limits.sh: LEAN_NUM_THREADS must be a positive integer" >&2
+  return 2
+fi
+# Pattern matching also bounds arbitrarily large decimal requests without shell overflow.
+case "$LEAN_NUM_THREADS" in 1|2|3|4) ;; *) LEAN_NUM_THREADS=4 ;; esac
+export LEAN_NUM_THREADS
+
 gate_limits() {
   local mem_kb=$(($1 * 1024 * 1024)) nproc=$2 cur
   if [ "$(uname -s)" = Linux ] && [ "$mem_kb" -gt 0 ]; then
