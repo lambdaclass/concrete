@@ -9,12 +9,13 @@
 #   signoff.sh verify <commit> --base BASE
 #
 # THE RECORD is the ref refs/owner-signoff/<full sha>, a commit whose tree holds record.txt and the
-# three reviewers' verdict outputs, copied in byte for byte (codex.txt, kimi.txt, agy.txt), so any
+# three reviewers' transcripts (the request each was given and its output, which names the commit
+# reviewed), copied in byte for byte (codex.txt, kimi.txt, agy.txt), so any
 # clone that fetches the ref can check them. record.txt is `key: value` lines, each key once:
 #   signoff: owner
 #   commit: <the 40-hex SHA approved>
 #   date: YYYY-MM-DD
-#   quote: <the owner's words, verbatim; they name the commit by a prefix of at least 7 hex digits>
+#   quote: <the owner's words, verbatim; they name the commit by an unambiguous prefix of 7+ hex digits>
 #   rounds-at: <the 40-hex SHA of the commit whose scripts/review/review.sh note records the rounds used>
 #   verdict-codex: codex.txt <sha256>
 #   verdict-kimi: kimi.txt <sha256>
@@ -27,13 +28,14 @@
 # the highest class present winning: docs and roadmap 2, scripts 3, compiler and spec 5; a path in no
 # class counts as compiler and spec. A sign-off qualifies only when the review rounds recorded on the
 # member's own commits reach that cap: `rounds-at` must be the commit itself or one of its ancestors
-# not on BASE, and carry a review.sh note whose `rounds` is at least the cap, whatever its verdict
+# not on BASE, and carry a well-formed review.sh note (scripts/review/verify.sh: clean, findings or
+# blocked) whose round is at least the cap, whatever its verdict
 # (the cap counts rounds used: the other reviewers' rejections are why a branch reaches it).
 #
 # `verify` accepts the record only if the ref exists, the tree holds exactly those four files, every
 # key is present once and well formed, `commit` is the commit asked about, the quote names it, the
-# cap was reached, each file's sha256 is the recorded one, and each output's last VERDICT line is
-# `VERDICT: ACCEPT` (all three reviewed the signed commit and accepted it). It judges the exact
+# cap was reached, each file's sha256 is the recorded one, each transcript names the commit, and each
+# output's last VERDICT line is `VERDICT: ACCEPT` (all three reviewed the signed commit and accepted it). It judges the exact
 # commit: a sign-off says nothing about any other commit.
 #
 # Exit codes: 0 a valid sign-off; 1 a sign-off that does not qualify (the reason is printed);
@@ -42,6 +44,7 @@ set -euo pipefail
 PREFIX=refs/owner-signoff
 NOTES_REF=refs/notes/concrete-review
 REVIEWERS="codex kimi agy"
+VERIFY="$(cd "$(dirname "${BASH_SOURCE[0]}")/../review" && pwd)/verify.sh"
 
 usage() { awk 'NR > 1 { if (!/^#/) exit; sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}"; }
 die() { echo "signoff: $*" >&2; exit 2; }
@@ -54,6 +57,15 @@ path_class() {
     scripts/*|.githooks/*|.github/*|.claude/*|required-checks.txt|required-checks-transition.tsv) echo scripts ;;
     *) echo compiler ;;
   esac
+}
+# names SHA → reads text on stdin; succeeds when a hex word of at least 7 digits in it is an
+# unambiguous name of SHA in this repository (git refuses an ambiguous prefix)
+names() {
+  local w
+  for w in $(tr -c '0-9a-f' ' '); do
+    [ "${#w}" -ge 7 ] && [ "${1#"$w"}" != "$1" ] && [ "$(git rev-parse -q --verify "$w^{commit}" 2>/dev/null)" = "$1" ] && return 0
+  done
+  return 1
 }
 class_cap() { case "$1" in docs) echo 2 ;; scripts) echo 3 ;; *) echo 5 ;; esac; }
 # diff_class SHA BASE → the highest class among the paths SHA changes against its merge base with BASE
@@ -127,11 +139,8 @@ check() {
   [ "$F_signoff" = owner ] || bad "signoff is '$F_signoff', not owner"
   [ "$F_commit" = "$sha" ] || bad "the record is for $F_commit, not $sha"
   [[ "$F_date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || bad "date '$F_date' is not YYYY-MM-DD"
-  local named=0 w
-  for w in $(printf '%s' "$F_quote" | tr -c '0-9a-f' ' '); do
-    [ "${#w}" -ge 7 ] && [ "${sha#"$w"}" != "$sha" ] && named=1
-  done
-  [ "$named" = 1 ] || bad "the quote does not name ${sha:0:10} (a prefix of at least 7 hex digits): '$F_quote'"
+  printf '%s' "$F_quote" | names "$sha" \
+    || bad "the quote does not name ${sha:0:10} (an unambiguous prefix of at least 7 hex digits): '$F_quote'"
   # The cap: the class of the member's diff, and the rounds review.sh recorded on its own commits.
   local cls cap at rounds
   cls="$(diff_class "$sha" "$base")" || bad "no merge base of ${sha:0:10} and ${base:0:10}"
@@ -140,8 +149,13 @@ check() {
   [[ "$at" =~ ^[0-9a-f]{40}$ ]] || bad "rounds-at '$at' is not a full commit SHA"
   { git merge-base --is-ancestor "$at" "$sha" 2>/dev/null && ! git merge-base --is-ancestor "$at" "$base" 2>/dev/null; } \
     || bad "rounds-at ${at:0:10} is not one of ${sha:0:10}'s own commits (an ancestor or itself, not on ${base:0:10})"
-  rounds="$(git notes --ref="$NOTES_REF" show "$at" 2>/dev/null | sed -n 's/^rounds: \([1-9][0-9]*\)$/\1/p' | head -1)" || true
-  [ -n "$rounds" ] || bad "rounds-at ${at:0:10} carries no review.sh note with a round count"
+  # verify.sh judges the note as review.sh wrote it: 0 clean, 1 findings or blocked (both well formed,
+  # and both count: the cap is rounds used); 2 is no note or a malformed one.
+  local vout vrc=0
+  vout="$(bash "$VERIFY" "$at" 2>&1)" || vrc=$?
+  [ "$vrc" = 0 ] || [ "$vrc" = 1 ] || bad "rounds-at ${at:0:10} carries no well-formed review.sh note: ${vout//$'\n'/ }"
+  rounds="$(printf '%s\n' "$vout" | sed -n 's/.*(round \([1-9][0-9]*\), reviewer .*/\1/p' | head -1)"
+  [ -n "$rounds" ] || bad "rounds-at ${at:0:10}: no round count in '$vout'"
   [ "$rounds" -ge "$cap" ] \
     || bad "the review cap was not reached: a $cls change has cap $cap, and ${at:0:10} records $rounds round(s)"
   local r n entry file hash got verdict
@@ -156,6 +170,7 @@ check() {
     [ "$(git cat-file -t "$obj:$file" 2>/dev/null)" = blob ] || bad "$file is not a file"
     got="$(git cat-file blob "$obj:$file" | sha256)"
     [ "$got" = "$hash" ] || bad "the sha256 of $file is $got, not the recorded $hash"
+    git cat-file blob "$obj:$file" | names "$sha" || bad "the $r transcript does not name ${sha:0:10}: it is the review of another commit"
     verdict="$(git cat-file blob "$obj:$file" | grep -E '^[[:space:]]*VERDICT: (ACCEPT|REJECT)[[:space:]]*$' | tail -1 | tr -d '[:space:]')" || true
     [ "$verdict" = "VERDICT:ACCEPT" ] || bad "the $r output's last verdict is '${verdict:-none}', not VERDICT: ACCEPT"
   done

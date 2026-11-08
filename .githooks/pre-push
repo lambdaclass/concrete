@@ -48,10 +48,11 @@ while read -r _localref localsha remoteref _remotesha; do
       esac ;;
     refs/owner-signoff/*)
       # Only a record takes the notes tier: a parentless commit, under its subject's 40-hex name, whose
-      # tree is exactly the sign-off's four files (scripts/land/signoff.sh). Anything else pushed here,
+      # tree is exactly the sign-off's four plain files (scripts/land/signoff.sh), no directory among them. Anything else pushed here,
       # a source commit included, takes the full tier, as does a deletion.
       if [[ "${remoteref#refs/owner-signoff/}" =~ ^[0-9a-f]{40}$ ]] && [ "$(git rev-list --parents -n 1 "$localsha" 2>/dev/null)" = "$localsha" ] \
-         && [ "$(git ls-tree --name-only "$localsha" 2>/dev/null | LC_ALL=C sort | tr '\n' ' ')" = "agy.txt codex.txt kimi.txt record.txt " ]; then
+         && [ "$(git ls-tree --format='%(objectmode) %(objecttype) %(path)' "$localsha" 2>/dev/null | LC_ALL=C sort | tr '\n' ' ')" \
+              = "100644 blob agy.txt 100644 blob codex.txt 100644 blob kimi.txt 100644 blob record.txt " ]; then
         note_refs=$((note_refs+1))
       else
         other_refs=$((other_refs+1))

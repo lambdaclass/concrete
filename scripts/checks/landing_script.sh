@@ -1136,8 +1136,9 @@ inv_leg tin3 binv-legacy 5456
 
 # An owner sign-off record (scripts/land/signoff.sh), published to origin. put-signoff <sha> <mode>
 # [<other sha>]: valid; none removes it; othersha records <other sha> and files it under <sha>;
-# tampered changes kimi.txt after recording; noagy drops agy's verdict; reject ends agy's output
-# with VERDICT: REJECT; unnamed has a quote that names no commit.
+# tampered changes kimi.txt after recording; otherreview replaces kimi.txt (and its hash) with the
+# review of <other sha>; noagy drops agy's verdict; reject ends agy's output with VERDICT: REJECT;
+# unnamed has a quote that names no commit.
 printf '#!/usr/bin/env bash\nSIGNOFF=%q\n' "$ROOT_DIR/scripts/land/signoff.sh" > "$TMP/put-signoff"
 cat >> "$TMP/put-signoff" <<'SIGNOFF_EOF'
 set -e
@@ -1149,7 +1150,7 @@ CONCRETE_SKIP_GATES=1 git push -q origin ":$R/$sha" 2>/dev/null || true
 # The member's own review.sh note: the rounds it used (any verdict), which the cap is judged against.
 bash "$(dirname "$0")/put-review" "$sha" "findings@$rounds"
 d="$(mktemp -d)"
-for r in codex kimi agy; do printf 'review by %s\n  VERDICT: ACCEPT\n' "$r" > "$d/$r"; done
+for r in codex kimi agy; do printf 'review of %s by %s\n  VERDICT: ACCEPT\n' "$sha" "$r" > "$d/$r"; done
 bash "$SIGNOFF" record "$sha" --base "$base" --rounds-at "$sha" --date 2026-11-08 --quote "sign off ${sha:0:8}, yes" \
   --codex "$d/codex" --kimi "$d/kimi" --agy "$d/agy" >/dev/null
 c="$(git rev-parse "$R/$sha")"
@@ -1171,9 +1172,12 @@ case "$mode" in
   valid) ;;
   othersha) variant "s/^commit: .*/commit: $(git rev-parse "$3")/" ;;
   unnamed) variant "s/^quote: .*/quote: sign off the branch/" ;;
-  tampered) variant "" "set:kimi.txt:$(printf 'review by kimi, edited\n  VERDICT: ACCEPT\n' | git hash-object -w --stdin)" ;;
+  tampered) variant "" "set:kimi.txt:$(printf 'review of %s by kimi, edited\n  VERDICT: ACCEPT\n' "$sha" | git hash-object -w --stdin)" ;;
+  otherreview) printf 'review of %s by kimi\nVERDICT: ACCEPT\n' "$(git rev-parse "$3")" > "$d/kimi-o"
+    variant "s/^verdict-kimi: .*/verdict-kimi: kimi.txt $(sha256sum < "$d/kimi-o" | cut -d' ' -f1)/" \
+      "set:kimi.txt:$(git hash-object -w "$d/kimi-o")" ;;
   noagy) variant "/^verdict-agy:/d" "drop:agy.txt" ;;
-  reject) printf 'review by agy\nVERDICT: REJECT\n' > "$d/agy-r"
+  reject) printf 'review of %s by agy\nVERDICT: REJECT\n' "$sha" > "$d/agy-r"
     variant "s/^verdict-agy: .*/verdict-agy: agy.txt $(sha256sum < "$d/agy-r" | cut -d' ' -f1)/" \
       "set:agy.txt:$(git hash-object -w "$d/agy-r")" ;;
   *) echo "put-signoff: unknown mode $mode" >&2; exit 2 ;;
@@ -1242,6 +1246,7 @@ so_leg(){ # label mode expect(refuse|pass) text
 so_leg "a member with a valid owner sign-off and a clean merge" valid pass "owner sign-off (1) at its exact SHA, and the head is their clean merge"
 so_leg "a sign-off recorded for another commit" othersha refuse "the record is for $R1, not $R2"
 so_leg "a sign-off whose verdict file was changed after recording" tampered refuse "the sha256 of kimi.txt is"
+so_leg "a sign-off carrying kimi's review of another commit" otherreview refuse "the kimi transcript does not name ${R2:0:10}"
 so_leg "a sign-off without agy's verdict" noagy refuse "the record has no agy verdict"
 so_leg "a sign-off whose agy output ends in REJECT" reject refuse "the agy output's last verdict is 'VERDICT:REJECT'"
 so_leg "a sign-off whose quote names no commit" unnamed refuse "the quote does not name ${R2:0:10}"
@@ -1264,6 +1269,13 @@ for c in "SS scripts 3" "SM compiler 5"; do
     && ok "verify refuses a $cls member's sign-off after 2 rounds" || { no "verify of a $cls member after 2 rounds (exit $r)"; echo "$o" | sed 's/^/      /'; }
   bash "$TMP/put-signoff" "$s" none
 done
+# The cap evidence is a well-formed review.sh note: a bare `rounds: 5` note does not count.
+bash "$TMP/put-signoff" "$R2" valid
+git notes --ref=refs/notes/concrete-review add -f -m "rounds: 5" "$R2"
+o="$(bash "$ROOT_DIR/scripts/land/signoff.sh" verify "$R2" --base "$MR" 2>&1)"; r=$?
+[ "$r" = 1 ] && has "$o" "rounds-at ${R2:0:10} carries no well-formed review.sh note" \
+  && ok "verify refuses cap evidence that is not a well-formed review.sh note" || { no "malformed cap note (exit $r)"; echo "$o" | sed 's/^/      /'; }
+bash "$TMP/put-review" "$R2" none; bash "$TMP/put-signoff" "$R2" none
 bash "$TMP/put-signoff" "$SD" none
 git checkout -q train/trv
 # The same valid sign-off, but a head beyond the clean merge of its members. train.sh already refuses
