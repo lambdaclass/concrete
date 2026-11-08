@@ -1136,9 +1136,11 @@ inv_leg tin3 binv-legacy 5456
 
 # An owner sign-off record (scripts/land/signoff.sh), published to origin. put-signoff <sha> <mode>
 # [<other sha>]: valid; none removes it; othersha records <other sha> and files it under <sha>;
-# tampered changes kimi.txt after recording; otherreview replaces kimi.txt (and its hash) with the
-# review of <other sha>; noagy drops agy's verdict; reject ends agy's output with VERDICT: REJECT;
-# unnamed has a quote that names no commit.
+# tampered changes kimi.txt after recording; otherreview makes kimi's request body name <other sha>;
+# otherreviewed gives that request a reviewed line for <other sha> while its body and output name
+# <sha>; noreviewed removes its reviewed line; requestverdict puts ACCEPT only in agy's request;
+# unnamedbody gives kimi's request no commit name; noagy drops agy's verdict; reject ends agy's output
+# with VERDICT: REJECT; unnamed has a quote that names no commit.
 printf '#!/usr/bin/env bash\nSIGNOFF=%q\n' "$ROOT_DIR/scripts/land/signoff.sh" > "$TMP/put-signoff"
 cat >> "$TMP/put-signoff" <<'SIGNOFF_EOF'
 set -e
@@ -1150,34 +1152,56 @@ CONCRETE_SKIP_GATES=1 git push -q origin ":$R/$sha" 2>/dev/null || true
 # The member's own review.sh note: the rounds it used (any verdict), which the cap is judged against.
 bash "$(dirname "$0")/put-review" "$sha" "findings@$rounds"
 d="$(mktemp -d)"
-for r in codex kimi agy; do printf 'review of %s by %s\n  VERDICT: ACCEPT\n' "$sha" "$r" > "$d/$r"; done
+for r in codex kimi agy; do
+  printf 'review of %s by %s\n' "$sha" "$r" > "$d/$r-request"
+  printf '  VERDICT: ACCEPT\n' > "$d/$r"
+done
 bash "$SIGNOFF" record "$sha" --base "$base" --rounds-at "$sha" --date 2026-11-08 --quote "sign off ${sha:0:8}, yes" \
-  --codex "$d/codex" --kimi "$d/kimi" --agy "$d/agy" >/dev/null
+  --codex-request "$d/codex-request" --codex "$d/codex" \
+  --kimi-request "$d/kimi-request" --kimi "$d/kimi" \
+  --agy-request "$d/agy-request" --agy "$d/agy" >/dev/null
 c="$(git rev-parse "$R/$sha")"
-# variant SED [drop:FILE | set:FILE:BLOB]: the valid record with record.txt edited by SED and one file
+# variant SED [drop:FILE | set:FILE:BLOB]...: the valid record with record.txt edited by SED and files
 # dropped or replaced (record writes only valid records, so every refused variant is built from one).
 variant() {
-  local rec entries t f b
+  local rec entries t f b change
   rec="$(git cat-file blob "$c:record.txt" | sed "$1" | git hash-object -w --stdin)"
   entries="$(git ls-tree "$c" | grep -v "${tab}record.txt\$")"
-  case "${2:-}" in
-    drop:*) entries="$(printf '%s\n' "$entries" | grep -v "${tab}${2#drop:}\$")" ;;
-    set:*) f="${2#set:}"; f="${f%%:*}"; b="${2##*:}"
-      entries="$(printf '%s\n' "$entries" | sed "s/blob [0-9a-f]*${tab}${f}\$/blob ${b}${tab}${f}/")" ;;
-  esac
+  shift
+  for change in "$@"; do
+    case "$change" in
+      drop:*) entries="$(printf '%s\n' "$entries" | grep -v "${tab}${change#drop:}\$")" ;;
+      set:*) f="${change#set:}"; f="${f%%:*}"; b="${change##*:}"
+        entries="$(printf '%s\n' "$entries" | sed "s/blob [0-9a-f]*${tab}${f}\$/blob ${b}${tab}${f}/")" ;;
+    esac
+  done
   t="$(printf '%s\n100644 blob %s\trecord.txt\n' "$entries" "$rec" | git mktree)"
   git update-ref "$R/$sha" "$(git commit-tree "$t" -m variant)"
+}
+set_request() { # reviewer stored-request-file
+  local r="$1" q="$2"
+  variant "s/^request-$r: .*/request-$r: $r-request.txt $(sha256sum < "$q" | cut -d' ' -f1)/" \
+    "set:$r-request.txt:$(git hash-object -w "$q")"
 }
 case "$mode" in
   valid) ;;
   othersha) variant "s/^commit: .*/commit: $(git rev-parse "$3")/" ;;
   unnamed) variant "s/^quote: .*/quote: sign off the branch/" ;;
-  tampered) variant "" "set:kimi.txt:$(printf 'review of %s by kimi, edited\n  VERDICT: ACCEPT\n' "$sha" | git hash-object -w --stdin)" ;;
-  otherreview) printf 'review of %s by kimi\nVERDICT: ACCEPT\n' "$(git rev-parse "$3")" > "$d/kimi-o"
-    variant "s/^verdict-kimi: .*/verdict-kimi: kimi.txt $(sha256sum < "$d/kimi-o" | cut -d' ' -f1)/" \
-      "set:kimi.txt:$(git hash-object -w "$d/kimi-o")" ;;
+  tampered) variant "" "set:kimi.txt:$(printf 'edited output\n  VERDICT: ACCEPT\n' | git hash-object -w --stdin)" ;;
+  otherreview) printf 'reviewed: %s\nreview of %s by kimi\n' "$sha" "$(git rev-parse "$3")" > "$d/kimi-o"
+    set_request kimi "$d/kimi-o" ;;
+  otherreviewed) printf 'reviewed: %s\nreview of %s by kimi\n' "$(git rev-parse "$3")" "$sha" > "$d/kimi-q"
+    printf 'review of %s by kimi\nVERDICT: ACCEPT\n' "$sha" > "$d/kimi-o"
+    variant "s/^request-kimi: .*/request-kimi: kimi-request.txt $(sha256sum < "$d/kimi-q" | cut -d' ' -f1)/;s/^verdict-kimi: .*/verdict-kimi: kimi.txt $(sha256sum < "$d/kimi-o" | cut -d' ' -f1)/" \
+      "set:kimi-request.txt:$(git hash-object -w "$d/kimi-q")" "set:kimi.txt:$(git hash-object -w "$d/kimi-o")" ;;
+  noreviewed) printf 'review of %s by kimi\n' "$sha" > "$d/kimi-q"; set_request kimi "$d/kimi-q" ;;
+  unnamedbody) printf 'reviewed: %s\nreview the branch\n' "$sha" > "$d/kimi-q"; set_request kimi "$d/kimi-q" ;;
+  requestverdict) printf 'reviewed: %s\nreview of %s by agy\nVERDICT: ACCEPT\n' "$sha" "$sha" > "$d/agy-q"
+    printf 'agy output without a verdict\n' > "$d/agy-o"
+    variant "s/^request-agy: .*/request-agy: agy-request.txt $(sha256sum < "$d/agy-q" | cut -d' ' -f1)/;s/^verdict-agy: .*/verdict-agy: agy.txt $(sha256sum < "$d/agy-o" | cut -d' ' -f1)/" \
+      "set:agy-request.txt:$(git hash-object -w "$d/agy-q")" "set:agy.txt:$(git hash-object -w "$d/agy-o")" ;;
   noagy) variant "/^verdict-agy:/d" "drop:agy.txt" ;;
-  reject) printf 'review of %s by agy\nVERDICT: REJECT\n' "$sha" > "$d/agy-r"
+  reject) printf 'VERDICT: REJECT\n' > "$d/agy-r"
     variant "s/^verdict-agy: .*/verdict-agy: agy.txt $(sha256sum < "$d/agy-r" | cut -d' ' -f1)/" \
       "set:agy.txt:$(git hash-object -w "$d/agy-r")" ;;
   *) echo "put-signoff: unknown mode $mode" >&2; exit 2 ;;
@@ -1246,7 +1270,11 @@ so_leg(){ # label mode expect(refuse|pass) text
 so_leg "a member with a valid owner sign-off and a clean merge" valid pass "owner sign-off (1) at its exact SHA, and the head is their clean merge"
 so_leg "a sign-off recorded for another commit" othersha refuse "the record is for $R1, not $R2"
 so_leg "a sign-off whose verdict file was changed after recording" tampered refuse "the sha256 of kimi.txt is"
-so_leg "a sign-off carrying kimi's review of another commit" otherreview refuse "the kimi transcript does not name ${R2:0:10}"
+so_leg "a sign-off whose kimi request body names another commit" otherreview refuse "the kimi request body does not name ${R2:0:10}"
+so_leg "F1: a reviewed line for another commit despite body and output naming the signed SHA" otherreviewed refuse "the kimi request's reviewed line is '$R1', not $R2"
+so_leg "F1b: a request without a reviewed first line" noreviewed refuse "the kimi request's first line is not a 'reviewed: <full 40-hex SHA>' line"
+so_leg "F2: ACCEPT in agy's request but no verdict in its output" requestverdict refuse "the agy output has no verdict"
+so_leg "a request body that names no commit" unnamedbody refuse "the kimi request body does not name ${R2:0:10}"
 so_leg "a sign-off without agy's verdict" noagy refuse "the record has no agy verdict"
 so_leg "a sign-off whose agy output ends in REJECT" reject refuse "the agy output's last verdict is 'VERDICT:REJECT'"
 so_leg "a sign-off whose quote names no commit" unnamed refuse "the quote does not name ${R2:0:10}"
