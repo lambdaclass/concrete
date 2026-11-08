@@ -26,41 +26,48 @@ ROW = re.compile(r"\b(Q\d+(?:\.\d+)+|OD\d+|P\d+[a-z]?|R-\d{4})\b")
 NAME = r"((?:«[^»\n]*»|[^`«\n])+)"
 CITE_START = re.compile(r"\(rule `")
 CITE = re.compile(r"\(rule `" + NAME + r"`\)")
-VERDICT = re.compile(r"\b(Accepted|Refused) \(rule `" + NAME + r"`\)")
+VERDICT_BEFORE = re.compile(r"\b(Accepted|Refused) \Z")
 MODIFIERS = re.compile(r"(?:(?:noncomputable|private|protected|unsafe|partial)\s+)*example(?![\w'!?])")
 # A declared decision row: a list item that starts with the row in bold (`- **Q9.1** …`), or a table
 # row whose first cell is the row (`| OD101 | …`, `| R-0607 | …`). A mention in prose is not one.
 DECLARED = re.compile(r"^\s*(?:- \*\*(\S+?)\*\*|\| *(\S+?) *\|)", re.M)
 
 
-def skip_attribute(src, i):
-    """`src[i:]` starts with `@[`: the index after its closing `]`, or None. Brackets nest, and a
-    string literal (with its escapes) is skipped whole, so a `]` inside one ends nothing."""
-    depth, i = 0, i + 1
-    while i < len(src):
-        c = src[i]
-        if c == '"':
-            i += 1
-            while i < len(src) and src[i] != '"':
-                i += 2 if src[i] == "\\" else 1
-            if i >= len(src): return None
-        elif c == "[": depth += 1
-        elif c == "]":
-            depth -= 1
-            if depth == 0: return i + 1
-        i += 1
-    return None
-
-
-def example_follows(src, i):
-    """What stands between a doc comment ending at `i` and the `example` it documents: whitespace,
-    attributes and modifiers, nothing else (no comment, no other command)."""
+def example_follows(code, i):
+    """What stands between a doc comment ending at `i` and the `example` it documents: attributes
+    and modifiers. `code` is the source with every comment and literal blanked (`lean_lex`, at the
+    same offsets), so no string, raw string, quoted name or comment can close an attribute or
+    supply the `example`."""
     while True:
-        while i < len(src) and src[i].isspace(): i += 1
-        if not src.startswith("@[", i): break
-        i = skip_attribute(src, i)
-        if i is None: return False
-    return MODIFIERS.match(src, i) is not None
+        while i < len(code) and code[i].isspace(): i += 1
+        if not code.startswith("@[", i): break
+        depth, i = 0, i + 1
+        while i < len(code):
+            if code[i] == "[": depth += 1
+            elif code[i] == "]":
+                depth -= 1
+                if depth == 0: break
+            i += 1
+        if i >= len(code): return False
+        i += 1
+    return MODIFIERS.match(code, i) is not None
+
+
+def citations(src):
+    """Every rule citation in `src`, left to right, as (start, end, name, verdict-or-None), and the
+    offsets of every malformed one. A complete citation is consumed whole, so the text of a quoted
+    name inside it is never read as another citation; a citation is a verdict when `Accepted ` or
+    `Refused ` stands directly before it."""
+    found, bad, i = [], [], 0
+    while True:
+        m = CITE_START.search(src, i)
+        if not m: return found, bad
+        c = CITE.match(src, m.start())
+        if not c:
+            bad.append(m.start()); i = m.end(); continue
+        v = VERDICT_BEFORE.search(src[max(0, m.start() - 10):m.start()])
+        found.append((m.start(), c.end(), c.group(1), v.group(1) if v else None))
+        i = c.end()
 
 
 def declared_rows(inventories):
@@ -110,28 +117,25 @@ def main(rules_path, src_dir, row_paths):
             try:
                 src = open(path, encoding="utf-8").read(); spans = []
                 lean_lex.lex(src, spans)
+                code = lean_lex.lex(src, literals=False)
             except (OSError, UnicodeDecodeError, lean_lex.LexError) as e:
                 print(f"error: {path}: {e}", file=sys.stderr); return 3
             scanned += 1
             # citations anywhere in the file (comments of both kinds, and literals: fail closed)
-            for m in CITE_START.finditer(src):
-                if not CITE.match(src, m.start()):
-                    line = src.count("\n", 0, m.start()) + 1
-                    fails.append(f"{path}:{line}: a malformed rule citation")
-            for m in CITE.finditer(src):
-                if m.group(1) not in seen:
-                    line = src.count("\n", 0, m.start()) + 1
-                    fails.append(f"{path}:{line}: cites unregistered rule {m.group(1)}")
-            # a verdict anywhere outside a doc comment (code, a string literal) is stray too
-            for m in VERDICT.finditer(src):
-                if not any(a <= m.start() < b and src.startswith("/--", a) for a, b in spans):
-                    line = src.count("\n", 0, m.start()) + 1
+            cites, bad = citations(src)
+            for k in bad:
+                fails.append(f"{path}:{src.count(chr(10), 0, k) + 1}: a malformed rule citation")
+            for k, _, n, v in cites:
+                line = src.count("\n", 0, k) + 1
+                if n not in seen: fails.append(f"{path}:{line}: cites unregistered rule {n}")
+                # a verdict anywhere outside a doc comment (code, a string literal) is stray too
+                if v and not any(a <= k < b and src.startswith("/--", a) for a, b in spans):
                     fails.append(f"{path}:{line}: a verdict citation outside an example's doc comment")
             for a, b in spans:
                 text, line = src[a:b], src.count("\n", 0, a) + 1
-                verdicts = VERDICT.findall(text)
+                verdicts = [(v, n) for k, _, n, v in cites if v and a <= k < b]
                 if not verdicts: continue
-                if not (text.startswith("/--") and example_follows(src, b)):
+                if not (text.startswith("/--") and example_follows(code, b)):
                     fails.append(f"{path}:{line}: a verdict citation outside an example's doc comment")
                     continue
                 if "/-" in text[3:]:

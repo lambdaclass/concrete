@@ -179,6 +179,33 @@ $END" "$EXA
 -- see (rule \`R.ok"
 [ "$RC" = 1 ] && [[ "$OUT" == *"malformed rule citation"* ]] && ok "control: a malformed citation fails" \
   || no "control: malformed citation not reported: $OUT"
+fixture rawattr "$GOOD
+$END" '/-- Accepted (rule `R.ok`). -/
+@[deprecated r#"a " ] example"#]
+def a : True := trivial
+
+/-- Refused (rule `R.ok`). -/
+@[deprecated «x ] example»]
+def b : True := trivial'
+[ "$RC" = 1 ] && [[ "$OUT" == *"outside an example"* ]] \
+  && ok "control: a raw string or quoted name in an attribute cannot stand in for an example" || no "control: raw-string attribute example not reported: $OUT"
+fixture cmtattr "$GOOD
+$END" '/-- Accepted (rule `R.ok`). -/
+@[simp /- ] example -/]
+def a : True := trivial
+
+/-- Refused (rule `R.ok`). -/
+example : True := trivial'
+[ "$RC" = 1 ] && [[ "$OUT" == *"outside an example"* ]] \
+  && ok "control: a comment in an attribute cannot stand in for an example" || no "control: comment attribute example not reported: $OUT"
+QN='{"name":"R.«a (rule ` b` c»","rev":1,"exists":true,"doc":"The rule (Q9.1)."}'
+fixture qname "$QN
+$END" '/-- Accepted (rule `R.«a (rule ` b` c»`). -/
+example : True := trivial
+
+/-- Refused (rule `R.«a (rule ` b` c»`). -/
+example : True := trivial'
+[ "$RC" = 0 ] && ok "control: a quoted name holding citation-like text is one citation" || no "control: quoted citation-like name refused: $OUT"
 OUT=$(check 60 "$TMP/good.jsonl" "$TMP/no-such-dir" "$TMP/rows.md"); RC=$?
 [ "$RC" = 3 ] && ok "control: a missing source directory is an error" || no "control: missing source dir gave rc=$RC: $OUT"
 mkdir -p "$TMP/empty"
