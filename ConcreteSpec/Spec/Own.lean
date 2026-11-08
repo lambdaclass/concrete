@@ -429,6 +429,14 @@ abbrev instrumentOperands (O : Exec.Operands) (types : Var → Option Descriptor
   test := O.test
   allows := instrumentAllows O
 
+/-- Execute one C1 machine step on the ownership-instrumented operand instance. -/
+def stepInstrumented (O : Exec.Operands) (types : Var → Option Descriptor)
+    (permit : AList Var O.Val → O.Expr → State → Option State)
+    (P : Exec.Program (instrumentOperands O types permit))
+    (c : Exec.Config (instrumentOperands O types permit)) :
+    Option (Exec.Out (instrumentOperands O types permit)) :=
+  Exec.step P c
+
 section
 variable {O : Exec.Operands} {types : Var → Option Descriptor}
   {permit : AList Var O.Val → O.Expr → State → Option State}

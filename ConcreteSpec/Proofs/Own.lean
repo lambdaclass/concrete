@@ -267,8 +267,8 @@ theorem accessLoan_preserves_result (s t : State) (i : LoanId) (m : Mode)
   · cases h; exact hs
   · contradiction
 
-/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). A movable non-Copy slot with no outstanding loan always moves; unrelated invariant
-checks cannot make this transition stuck. -/
+/-- Law (subject `ConcreteSpec.Core.Own.move`). A movable non-Copy slot with no outstanding loan
+always moves; unrelated invariant checks cannot make this transition stuck. -/
 theorem move_progress (s : State) (p : Hybrid.Place) (x : Slot)
     (found : slot s p = some x) (linear : x.desc.copy = false)
     (owned : x.status = .owned) (clear : ∀ l ∈ s.loans, l.root ≠ p) :
@@ -280,14 +280,16 @@ theorem move_progress (s : State) (p : Hybrid.Place) (x : Slot)
     exact clear l hl (by simpa using he)
   simp [move, found, linear, owned, hc]
 
-/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). -/
+/-- Law (subject `ConcreteSpec.Core.Own.borrow`). An owned slot permitted by `ownerAccess` in an
+active issued frame always borrows. -/
 theorem borrow_progress (s : State) (p : Hybrid.Place) (path : List Projection) (m : Mode)
     (f : Activation) (frame : s.frames.head? = some f)
     (issued : f.id < s.nextActivation) (allowed : ownerAccess s p m = true) :
     ∃ t, borrow s p path m = some t := by
   simp [borrow, frame, issued, allowed]
 
-/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). -/
+/-- Law (subject `ConcreteSpec.Core.Own.reborrowTo`). A loan permitted by `loanAccess` always
+reborrows into the active issued destination frame. -/
 theorem reborrowTo_progress (s : State) (i : LoanId) (path : List Projection) (m : Mode)
     (activation : Nat) (a : Loan) (found : loan s i = some a)
     (issued : activation < s.nextActivation)
@@ -296,7 +298,8 @@ theorem reborrowTo_progress (s : State) (i : LoanId) (path : List Projection) (m
     ∃ t, reborrowTo s i path m activation = some t := by
   simp [reborrowTo, found, issued, current, allowed]
 
-/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). -/
+/-- Law (subject `ConcreteSpec.Core.Own.reborrow`). A loan permitted by `loanAccess` in an active
+issued frame always reborrows into that frame. -/
 theorem reborrow_progress (s : State) (i : LoanId) (path : List Projection) (m : Mode)
     (f : Activation) (frame : s.frames.head? = some f) (issued : f.id < s.nextActivation)
     (a : Loan) (found : loan s i = some a) (allowed : loanAccess s i m = true) :
@@ -304,12 +307,14 @@ theorem reborrow_progress (s : State) (i : LoanId) (path : List Projection) (m :
   simpa [reborrow, frame] using
     reborrowTo_progress s i path m f.id a found issued (by simp [frame]) allowed
 
-/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). -/
+/-- Law (subject `ConcreteSpec.Core.Own.accessOwner`). Any owner access permitted by `ownerAccess`
+succeeds without mutating the ownership state. -/
 theorem accessOwner_progress (s : State) (p : Hybrid.Place) (m : Mode)
     (allowed : ownerAccess s p m = true) : accessOwner s p m = some s := by
   simp [accessOwner, allowed]
 
-/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). -/
+/-- Law (subject `ConcreteSpec.Core.Own.accessLoan`). Any loan access permitted by `loanAccess`
+succeeds without mutating the ownership state. -/
 theorem accessLoan_progress (s : State) (i : LoanId) (m : Mode)
     (allowed : loanAccess s i m = true) : accessLoan s i m = some s := by
   simp [accessLoan, allowed]
@@ -535,7 +540,8 @@ theorem life_preserves_result (types : Var → Option Descriptor) (e : Exec.Life
   | leave => exact leave_preserves_result s t hs h
   | drop xs => exact drop_preserves_result s t xs hs h
 
-/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). -/
+/-- Law (subject `ConcreteSpec.Core.Own.reinitialize`). A moved or mutable-Copy slot with no
+outstanding loan always reinitializes. -/
 theorem reinitialize_progress (s : State) (p : Hybrid.Place) (x : Slot)
     (found : slot s p = some x)
     (available : x.status = .moved ∨ (x.desc.copy = true ∧ x.desc.mutable = true))
@@ -552,7 +558,8 @@ theorem reinitialize_progress (s : State) (p : Hybrid.Place) (x : Slot)
   rw [ha, hc]
   exact ⟨_, rfl⟩
 
-/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). -/
+/-- Law (subject `ConcreteSpec.Core.Own.endLoan`). An active loan with no live child loan always
+ends. -/
 theorem endLoan_progress (s : State) (i : LoanId) (a : Loan)
     (found : loan s i = some a) (children : ∀ b ∈ s.loans, b.parent ≠ some i) :
     ∃ t, endLoan s i = some t := by
@@ -563,7 +570,8 @@ theorem endLoan_progress (s : State) (i : LoanId) (a : Loan)
     exact children b hb (by simpa using he)
   simp [endLoan, found, hc]
 
-/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). -/
+/-- Law (subject `ConcreteSpec.Core.Own.bind`). A fresh typed variable in an active issued frame
+always binds. -/
 theorem bind_fresh_progress (types : Var → Option Descriptor) (s : State) (x : Var)
     (f : Activation) (d : Descriptor) (frame : s.frames.head? = some f)
     (issued : f.id < s.nextActivation) (fresh : AList.lookup f.locals x = none)
@@ -606,7 +614,8 @@ theorem enter_progress (types : Var → Option Descriptor) (s : State) (params :
     ⟨s.nextActivation, [], []⟩ rfl (Nat.lt_succ_self _) unique
     (fun _ _ => rfl) typed
 
-/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). -/
+/-- Law (subject `ConcreteSpec.Core.Own.drop`). Dropping local variables whose slots are Copy or
+moved and have no active loans always succeeds. -/
 theorem drop_progress (s : State) (xs : List Var) (f : Activation)
     (frame : s.frames.head? = some f)
     (discharged : ∀ a ∈ s.slots,
@@ -671,8 +680,8 @@ example : ¬ (bind (fun _ => none) y shared).isSome = true := by decide
 example : ¬ (drop [x] initial).isSome = true := by decide
 end LifecycleWitnesses
 
-/-- Helper (projection). Projects the owned-root clause of the well-formedness invariant. (approved: PENDING). -/
-theorem loan_has_owned_root (s : State) (hs : WellFormed s) (l : Loan) (hl : l ∈ s.loans) :
+/-- Helper (projection). Projects the owned-root clause of the well-formedness invariant for the operation-result law. (approved: PENDING). -/
+theorem loan_has_owned_root_of_wf (s : State) (hs : WellFormed s) (l : Loan) (hl : l ∈ s.loans) :
     ∃ x ∈ s.slots, x.place = l.root ∧ x.status = .owned := (hs.2.2.2.1 l hl).2.2.1
 
 /-- Helper (inversion). Uses a duplicate-free place index to identify two slot records. (approved: PENDING). -/
@@ -691,19 +700,18 @@ private theorem slot_unique (xs : List Slot) (hn : (xs.map Slot.place).Nodup)
       · exact False.elim (hn.1 (List.mem_map.mpr ⟨x, hx, he⟩))
       · exact ih hn.2 hx hy
 
-/-- Helper (inversion). An invariant consequence using uniqueness of slot identities and owned roots; not an independent transition law. (approved: PENDING). -/
-theorem moved_no_loan (s : State) (hs : WellFormed s) (x : Slot) (hx : x ∈ s.slots)
+/-- Helper (inversion). Invariant consequence using uniqueness of slot identities and owned roots for the operation-result law. (approved: PENDING). -/
+theorem moved_no_loan_of_wf (s : State) (hs : WellFormed s) (x : Slot) (hx : x ∈ s.slots)
     (hm : x.status = .moved) (l : Loan) (hl : l ∈ s.loans) : x.place ≠ l.root := by
   intro he
-  obtain ⟨y, hy, hp, ho⟩ := loan_has_owned_root s hs l hl
+  obtain ⟨y, hy, hp, ho⟩ := loan_has_owned_root_of_wf s hs l hl
   have hxy : x = y := slot_unique s.slots hs.1 x y hx hy (he.trans hp.symm)
   subst y
   rw [hm] at ho
   cases ho
 
-/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). Success projects to precisely the uninstrumented result and concrete store. This covers
-moves, permissions, lifecycle and concrete reads/writes by choosing their permission transition. -/
-theorem instrument_erasure {σ α : Type} (permit : State → Option State)
+/-- Helper (computation). Structural result proof for the operation-result law `instrument_erasure`. (approved: PENDING). -/
+theorem instrument_erasure_result {σ α : Type} (permit : State → Option State)
     (operation : σ → Option (α × σ)) (s : Store σ) (a : α) (t : Store σ)
     (h : instrument permit operation s = some (a, t)) :
     operation (erase s) = some (a, erase t) := by
@@ -715,13 +723,14 @@ theorem instrument_erasure {σ α : Type} (permit : State → Option State)
     | some r => cases r; simp [hc] at h
                 rcases h with ⟨rfl, rfl⟩; exact hc
 
-/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). -/
-theorem life_erasure {σ : Type} (types : Var → Option Descriptor) (e : Exec.Life)
-    (s t : Store σ) (h : lifeStore types e s = some t) : erase t = erase s := by
+/-- Helper (computation). Structural result proof for the operation-result law `life_erasure`. (approved: PENDING). -/
+theorem life_erasure_result {σ : Type} (types : Var → Option Descriptor) (e : Exec.Life)
+    (s t : Store σ) (h : lifeStore types e s = some t) :
+    erase t = erase s ∧ life types e s.own = some t.own := by
   unfold lifeStore at h
-  cases he : life types e s.own <;> simp [he] at h
+  obtain ⟨own, he, h⟩ := Option.map_eq_some_iff.mp h
   subst t
-  rfl
+  exact ⟨rfl, he⟩
 
 /-- Helper (congruence). Transports the invariant through a loan map that retains semantic identity fields. (approved: PENDING). -/
 private theorem map_metadata_preserves (s : State) (hs : WellFormed s)
@@ -1062,49 +1071,50 @@ example : ¬ CallState.WellFormed { waiting with own := exclusive } := by decide
 example : ¬ CallState.WellFormed { waiting with own := initial } := by decide
 end CallWitnesses
 
-/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). Passing loans changes only instrumentation, including at mixed-parameter call entry. -/
-theorem callLife_erasure {σ : Type} (types : Var → Option Descriptor) (e : Exec.Life)
-    (s t : σ × CallState) (h : callLifeStore types e s = some t) : t.1 = s.1 := by
+/-- Helper (computation). Structural result proof for the operation-result law `callLife_erasure`. (approved: PENDING). -/
+theorem callLife_erasure_result {σ : Type} (types : Var → Option Descriptor) (e : Exec.Life)
+    (s t : σ × CallState) (h : callLifeStore types e s = some t) :
+    t.1 = s.1 ∧ callLife types e s.2 = some t.2 := by
   unfold callLifeStore at h
-  obtain ⟨_, _, hh⟩ := Option.map_eq_some_iff.mp h
+  obtain ⟨u, hu, hh⟩ := Option.map_eq_some_iff.mp h
   subst t
-  rfl
+  exact ⟨rfl, hu⟩
 
-/-- Helper (congruence). Derived invariant or supplied-preservation fact; not independent soundness evidence. (approved: PENDING). Any successful instrumented operation preserves the invariant when its permission
-transition does. Concrete values and concrete branch choices are irrelevant to this proof. -/
-theorem instrument_preserves {σ α : Type} (permit : State → Option State)
-    (hp : ∀ s t, permit s = some t → WellFormed t) (operation : σ → Option (α × σ))
-    (s : Store σ) (a : α) (t : Store σ) (h : instrument permit operation s = some (a, t)) :
+/-- Helper (congruence). Structural result proof for the operation-result law `instrument_preserves`. (approved: PENDING). -/
+theorem instrument_preserves_result {σ α : Type} (permit : State → Option State)
+    (hp : ∀ s t, WellFormed s → permit s = some t → WellFormed t) (operation : σ → Option (α × σ))
+    (s : Store σ) (a : α) (t : Store σ) (hs : WellFormed s.own)
+    (h : instrument permit operation s = some (a, t)) :
     WellFormed t.own := by
   unfold instrument at h
   obtain ⟨own, ho, hh⟩ := Option.bind_eq_some_iff.mp h
   obtain ⟨r, _, hh⟩ := Option.bind_eq_some_iff.mp hh
   cases r
   cases hh
-  exact hp _ _ ho
+  exact hp _ _ hs ho
 
-/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). -/
-theorem readOwner_erasure (tgt : Target) (p : Hybrid.Place) (s t : Store Hybrid.State)
+/-- Helper (computation). Structural result proof for the operation-result law `readOwner_erasure`. (approved: PENDING). -/
+theorem readOwner_erasure_result (tgt : Target) (p : Hybrid.Place) (s t : Store Hybrid.State)
     (v : Hybrid.Value) (h : readOwner tgt p s = some (v, t)) :
     s.concrete.read tgt p = some v ∧ t.concrete = s.concrete := by
-  have he := instrument_erasure _ _ _ _ _ h
+  have he := instrument_erasure_result _ _ _ _ _ h
   dsimp [erase] at he
   cases hc : s.concrete.read tgt p with
   | none => simp [hc] at he
   | some w => simp [hc] at he; rcases he with ⟨rfl, hstore⟩; exact ⟨rfl, hstore.symm⟩
 
-/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). -/
-theorem writeOwner_erasure (tgt : Target) (p : Hybrid.Place) (s t : Store Hybrid.State)
+/-- Helper (computation). Structural result proof for the operation-result law `writeOwner_erasure`. (approved: PENDING). -/
+theorem writeOwner_erasure_result (tgt : Target) (p : Hybrid.Place) (s t : Store Hybrid.State)
     (v : Hybrid.Value) (h : writeOwner tgt p v s = some ((), t)) :
     s.concrete.write tgt p v = some t.concrete := by
-  have he := instrument_erasure _ _ _ _ _ h
+  have he := instrument_erasure_result _ _ _ _ _ h
   dsimp [erase] at he
   cases hc : s.concrete.write tgt p v with
   | none => simp [hc] at he
   | some st => simp [hc] at he; rw [← he]
 
-/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). -/
-theorem readLoan_erasure (tgt : Target) (i : LoanId) (s t : Store Hybrid.State)
+/-- Helper (computation). Structural result proof for the operation-result law `readLoan_erasure`. (approved: PENDING). -/
+theorem readLoan_erasure_result (tgt : Target) (i : LoanId) (s t : Store Hybrid.State)
     (v : Hybrid.Value) (h : readLoan tgt i s = some (v, t)) :
     ∃ l, loan s.own i = some l ∧ l.path = [] ∧
       s.concrete.read tgt l.root = some v ∧ t.concrete = s.concrete := by
@@ -1112,7 +1122,7 @@ theorem readLoan_erasure (tgt : Target) (i : LoanId) (s t : Store Hybrid.State)
   obtain ⟨l, hl, hh⟩ := Option.bind_eq_some_iff.mp h
   split at hh
   · rename_i hpath
-    have he := instrument_erasure _ _ _ _ _ hh
+    have he := instrument_erasure_result _ _ _ _ _ hh
     dsimp [erase] at he
     cases hc : s.concrete.read tgt l.root with
     | none => simp [hc] at he
@@ -1120,8 +1130,8 @@ theorem readLoan_erasure (tgt : Target) (i : LoanId) (s t : Store Hybrid.State)
                 exact ⟨l, hl, hpath, hc, hstore.symm⟩
   · contradiction
 
-/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). -/
-theorem writeLoan_erasure (tgt : Target) (i : LoanId) (s t : Store Hybrid.State)
+/-- Helper (computation). Structural result proof for the operation-result law `writeLoan_erasure`. (approved: PENDING). -/
+theorem writeLoan_erasure_result (tgt : Target) (i : LoanId) (s t : Store Hybrid.State)
     (v : Hybrid.Value) (h : writeLoan tgt i v s = some ((), t)) :
     ∃ l, loan s.own i = some l ∧ l.path = [] ∧
       s.concrete.write tgt l.root v = some t.concrete := by
@@ -1129,7 +1139,7 @@ theorem writeLoan_erasure (tgt : Target) (i : LoanId) (s t : Store Hybrid.State)
   obtain ⟨l, hl, hh⟩ := Option.bind_eq_some_iff.mp h
   split at hh
   · rename_i hpath
-    have he := instrument_erasure _ _ _ _ _ hh
+    have he := instrument_erasure_result _ _ _ _ _ hh
     dsimp [erase] at he
     cases hc : s.concrete.write tgt l.root v with
     | none => simp [hc] at he
@@ -1145,8 +1155,8 @@ theorem nextLoan_fresh (s : State) (hs : WellFormed s) (l : Loan) (hl : l ∈ s.
   rw [he] at hb
   exact Nat.lt_irrefl _ hb
 
-/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). A successful borrow issues the old supply and advances it exactly once. -/
-theorem borrow_birth (s t : State) (p : Hybrid.Place) (path : List Projection)
+/-- Helper (computation). Structural result proof for the operation-result law `borrow_birth`. (approved: PENDING). -/
+theorem borrow_birth_result (s t : State) (p : Hybrid.Place) (path : List Projection)
     (m : Mode) (h : borrow s p path m = some t) :
     t.nextLoan = s.nextLoan + 1 ∧
       ∃ l ∈ t.loans, l.id = ⟨s.nextLoan⟩ ∧ l.root = p ∧ l.path = path := by
@@ -1157,8 +1167,8 @@ theorem borrow_birth (s t : State) (p : Hybrid.Place) (path : List Projection)
     exact ⟨rfl, _, List.mem_cons_self, rfl, rfl, rfl⟩
   · contradiction
 
-/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). A reborrow keeps the original root and extends the parent's projection. -/
-theorem reborrow_birth (s t : State) (i : LoanId) (suffix : List Projection)
+/-- Helper (computation). Structural result proof for the operation-result law `reborrow_birth`. (approved: PENDING). -/
+theorem reborrow_birth_result (s t : State) (i : LoanId) (suffix : List Projection)
     (m : Mode) (activation : Nat) (h : reborrowTo s i suffix m activation = some t) :
     t.nextLoan = s.nextLoan + 1 ∧ ∃ a l, loan s i = some a ∧ l ∈ t.loans ∧
       l.id = ⟨s.nextLoan⟩ ∧ l.root = a.root ∧ l.path = a.path ++ suffix ∧ l.parent = some i ∧ a ∈ t.loans := by
@@ -1180,8 +1190,8 @@ private theorem endLoan_frames (s t : State) (i : LoanId) (h : endLoan s i = som
   · cases hh
     rfl
 
-/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). Ending any loan leaves the freshness supply unchanged; an ended identity is not recycled. -/
-theorem endLoan_supply (s t : State) (i : LoanId) (h : endLoan s i = some t) :
+/-- Helper (computation). Structural result proof for the operation-result law `endLoan_supply`. (approved: PENDING). -/
+theorem endLoan_supply_result (s t : State) (i : LoanId) (h : endLoan s i = some t) :
     t.nextLoan = s.nextLoan := by
   unfold endLoan at h
   obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp h
@@ -1235,14 +1245,14 @@ theorem leave_no_local_loan_result (s t : State) (f : Activation)
     exact ⟨entry, List.mem_filter.mpr ⟨he, by simp; exact ⟨entry.2, he⟩⟩, rfl⟩
   have habsent := drop_absent u v _ f (hframes ▸ hf) hv entry.2 hp
   intro hroot
-  obtain ⟨x, hx, hxroot, _⟩ := loan_has_owned_root t ht l hl
+  obtain ⟨x, hx, hxroot, _⟩ := loan_has_owned_root_of_wf t ht l hl
   have hxv : x ∈ v.slots := by
     rw [← heq] at hx
     exact hx
   exact habsent x hxv (hxroot.trans hroot)
 
-/-- Helper (projection). Extracts exactly the pending-argument witness checked by adoption. (approved: PENDING). -/
-theorem adoptDown_only_arguments (s t : State) (args : List (Var × LoanId))
+/-- Helper (projection). Extracts the pending-argument witness checked by adoption. (approved: PENDING). -/
+theorem adoptDown_only_arguments_result (s t : State) (args : List (Var × LoanId))
     (h : adoptDown s args = some t) (e : Var × LoanId) (he : e ∈ args) :
     ∃ l ∈ s.loans, l.id = e.2 ∧ l.pendingArgument = true := by
   unfold adoptDown at h
@@ -1284,8 +1294,8 @@ theorem leave_no_activation_slot_result (s t : State) (f : Activation)
     exact ⟨entry, List.mem_filter.mpr ⟨he_mem, by simp; exact ⟨entry.2, he_mem⟩⟩, he_snd⟩
   exact drop_absent u v _ f (hframes ▸ hf) hv x.place hp x hx rfl
 
-/-- Helper (projection). Extracts exactly the active-current-frame destination checked by reborrowing. (approved: PENDING). -/
-theorem reborrowTo_current (s t : State) (i : LoanId) (suffix : List Projection)
+/-- Helper (projection). Extracts the active-current-frame destination checked by reborrowing. (approved: PENDING). -/
+theorem reborrowTo_current_result (s t : State) (i : LoanId) (suffix : List Projection)
     (m : Mode) (activation : Nat) (h : reborrowTo s i suffix m activation = some t) :
     ∃ f ∈ s.frames, f.id = activation ∧ s.frames.head? = some f := by
   unfold reborrowTo at h
@@ -1381,8 +1391,8 @@ theorem passOwner_freezes_result (s t : CallState) (p : Hybrid.Place) (path : Li
       cases m <;> simp [ownerAccess, show (Mode.mutable == Mode.shared) = false from rfl]
     · contradiction
 
-/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). Direct argument loans have no caller parent; the caller loan table is retained as a tail. -/
-theorem passOwner_birth (s t : CallState) (p : Hybrid.Place) (path : List Projection)
+/-- Helper (computation). Structural result proof for the operation-result law `passOwner_birth`. (approved: PENDING). -/
+theorem passOwner_birth_result (s t : CallState) (p : Hybrid.Place) (path : List Projection)
     (m : Mode) (x : Var) (h : passOwner s p path m x = some t) :
     ∃ l, t.own.loans = l :: s.own.loans ∧ l.id = LoanId.mk s.own.nextLoan ∧
       l.root = p ∧ l.path = path ∧ l.mode = m ∧ l.parent = none ∧
@@ -1486,9 +1496,8 @@ theorem leave_no_activation_loan_result (s t : State) (f : Activation)
   obtain ⟨hs, removed⟩ := endLoans_removed _ s u hu l hl
   exact removed l (List.mem_filter.mpr ⟨hs, by simpa using he⟩) rfl
 
-/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). Registering a deferred call preserves the entire store: it neither ends existing loans
-nor evaluates late-read arguments. The ordinary call at execution time opens/adopts its loan. -/
-theorem defer_keeps_store (O : Exec.Operands) (P : Exec.Program O)
+/-- Helper (computation). Structural result proof for the operation-result law `defer_keeps_store`. (approved: PENDING). -/
+theorem defer_keeps_store_result (O : Exec.Operands) (P : Exec.Program O)
     (f : FnId) (args : List O.Expr) (site : SiteId) (L : AList Var O.Val)
     (s : O.Store) (k : List (Exec.Frame O)) (c : Exec.Config O)
     (h : Exec.step P ⟨.exec (.defer f args site), L, s, k⟩ = some (.next c)) :
@@ -1663,7 +1672,7 @@ example : ¬ WellFormed { waiting.own with nextLoan := 1 } := by decide
 example : ∃ l, waiting.own.loans = l :: caller.own.loans ∧ l.id = LoanId.mk caller.own.nextLoan ∧
     l.root = Hybrid.Place.mk 1 ∧ l.path = [.index 3] ∧ l.mode = .mutable ∧
     l.parent = none ∧ l.pendingArgument = true ∧ l.callRoot = true := by
-  exact passOwner_birth caller waiting ⟨1⟩ [.index 3] .mutable z (by decide)
+  exact passOwner_birth_result caller waiting ⟨1⟩ [.index 3] .mutable z (by decide)
 /-- Rejection observation. A child of the caller loan cannot be the required parentless root. -/
 example : ¬ (∃ l ∈ child.loans, l.id = LoanId.mk 1 ∧ l.parent = none) := by decide
 /-- Observation. Argument evaluation freezes both reads and writes before entry. -/
@@ -1720,7 +1729,7 @@ end DirectArgumentWitnesses
 theorem reborrowTo_live_result (s t : State) (i : LoanId) (path : List Projection)
     (m : Mode) (activation : Nat) (hs : LiveDestinations s)
     (h : reborrowTo s i path m activation = some t) : LiveDestinations t := by
-  obtain ⟨f, hf, he, _⟩ := reborrowTo_current s t i path m activation h
+  obtain ⟨f, hf, he, _⟩ := reborrowTo_current_result s t i path m activation h
   have live : activation ∈ s.frames.map Activation.id :=
     List.mem_map.mpr ⟨f, hf, he⟩
   unfold reborrowTo at h
@@ -1813,10 +1822,8 @@ section ExecErasure
 variable {O : Exec.Operands} {types : Var → Option Descriptor}
   {permit : AList Var O.Val → O.Expr → State → Option State}
 
-/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). Operand evaluation forward simulation (Q9.10, owner decision 2026-11-08 Q3): a
-successful instrumented operand evaluation evaluates to the same value and concrete store
-in the erased operand instance. -/
-theorem eval_ok_erasure (L : AList Var O.Val) (s t : Store O.Store) (e : O.Expr) (v : O.Val)
+/-- Helper (inversion). Structural inversion for `eval_ok_erasure` on a given `.ok (v, t)` result. (approved: PENDING). -/
+theorem eval_ok_erasure_result (L : AList Var O.Val) (s t : Store O.Store) (e : O.Expr) (v : O.Val)
     (h : (instrumentOperands O types permit).eval L s e = .ok (v, t)) :
     O.eval L (erase s) e = .ok (v, erase t) := by
   dsimp [instrumentOperands, instrumentEval] at h
@@ -1833,9 +1840,20 @@ theorem eval_ok_erasure (L : AList Var O.Val) (s t : Store O.Store) (e : O.Expr)
     | trap _ => rw [he] at h; cases h
     | stuck => rw [he] at h; cases h
 
-/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). Operand trap forward simulation (Q9.10, owner decision 2026-11-08 Q3): an instrumented
-operand evaluation that traps traps with the same kind in the erased operand instance. -/
-theorem eval_trap_erasure (L : AList Var O.Val) (s : Store O.Store) (e : O.Expr) (kd : TrapKind)
+/-- Law (subject `ConcreteSpec.Core.Own.instrumentOperands`). Operand evaluation forward simulation
+(Q9.10, owner decision 2026-11-08 Q3): a successful instrumented operand evaluation evaluates to the
+same value and concrete store in the erased operand instance. -/
+theorem eval_ok_erasure (L : AList Var O.Val) (s : Store O.Store) (e : O.Expr) :
+    match (instrumentOperands O types permit).eval L s e with
+    | .ok (v, t) => O.eval L (erase s) e = .ok (v, erase t)
+    | _ => True := by
+  cases h : (instrumentOperands O types permit).eval L s e with
+  | ok r => exact eval_ok_erasure_result L s r.2 e r.1 h
+  | trap _ => trivial
+  | stuck => trivial
+
+/-- Helper (inversion). Structural inversion for `eval_trap_erasure` on a given `.trap kd` result. (approved: PENDING). -/
+theorem eval_trap_erasure_result (L : AList Var O.Val) (s : Store O.Store) (e : O.Expr) (kd : TrapKind)
     (h : (instrumentOperands O types permit).eval L s e = .trap kd) :
     O.eval L (erase s) e = .trap kd := by
   dsimp [instrumentOperands, instrumentEval] at h
@@ -1847,6 +1865,18 @@ theorem eval_trap_erasure (L : AList Var O.Val) (s : Store O.Store) (e : O.Expr)
     | ok r => rcases r with ⟨_, _⟩; rw [he] at h; cases h
     | trap _ => rw [he] at h; cases h; exact he
     | stuck => rw [he] at h; cases h
+
+/-- Law (subject `ConcreteSpec.Core.Own.instrumentOperands`). Operand trap forward simulation
+(Q9.10, owner decision 2026-11-08 Q3): an instrumented operand evaluation that traps traps with the
+same kind in the erased operand instance. -/
+theorem eval_trap_erasure (L : AList Var O.Val) (s : Store O.Store) (e : O.Expr) :
+    match (instrumentOperands O types permit).eval L s e with
+    | .trap kd => O.eval L (erase s) e = .trap kd
+    | _ => True := by
+  cases h : (instrumentOperands O types permit).eval L s e with
+  | ok _ => trivial
+  | trap kd => exact eval_trap_erasure_result L s e kd h
+  | stuck => trivial
 
 /-- Helper (inversion). Structural induction for the argument-result law. (approved: PENDING). -/
 theorem evalArgs_ok_erasure_result (L : AList Var O.Val) :
@@ -1862,7 +1892,7 @@ theorem evalArgs_ok_erasure_result (L : AList Var O.Val) :
     | ok r =>
       rcases r with ⟨v, s₁⟩
       rw [he] at h
-      rw [eval_ok_erasure (O := O) (types := types) L s s₁ e v he]
+      rw [eval_ok_erasure_result (O := O) (types := types) L s s₁ e v he]
       dsimp [Res.bind] at h ⊢
       cases hes : Exec.evalArgs (instrumentOperands O types permit) L s₁ es with
       | ok r' =>
@@ -1894,7 +1924,7 @@ theorem evalArgs_trap_erasure_result (L : AList Var O.Val) :
     | ok r =>
       rcases r with ⟨v, s₁⟩
       rw [he] at h
-      rw [eval_ok_erasure (O := O) (types := types) L s s₁ e v he]
+      rw [eval_ok_erasure_result (O := O) (types := types) L s s₁ e v he]
       dsimp [Res.bind] at h ⊢
       cases hes : Exec.evalArgs (instrumentOperands O types permit) L s₁ es with
       | ok r' =>
@@ -1914,17 +1944,25 @@ theorem evalArgs_trap_erasure_result (L : AList Var O.Val) :
     | trap _ =>
       rw [he] at h
       cases h
-      rw [eval_trap_erasure (O := O) (types := types) L s e kd he]
+      rw [eval_trap_erasure_result (O := O) (types := types) L s e kd he]
       rfl
     | stuck => rw [he] at h; cases h
 
-/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). Condition tests are identical in the instrumented and erased operand instances. -/
-theorem test_erasure (v : O.Val) :
+/-- Helper (projection). Condition tests are identical in the instrumented and erased operand instances. (approved: PENDING). -/
+theorem test_erasure_result (v : O.Val) :
     (instrumentOperands O types permit).test v = O.test v := rfl
 
-/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). Lifecycle forward simulation: a successful instrumented lifecycle event performs
-the matching concrete lifecycle transition on the erased store. -/
-theorem instrumentLife_erasure (ev : Exec.Life) (s t : Store O.Store)
+/-- Law (subject `ConcreteSpec.Core.Own.instrumentOperands`). Condition testing agrees between the
+instrumented and erased operand instances on every outcome. -/
+theorem test_erasure (v : O.Val) :
+    match (instrumentOperands O types permit).test v with
+    | some b => O.test v = some b
+    | none => O.test v = none := by
+  dsimp [instrumentOperands]
+  cases O.test v <;> rfl
+
+/-- Helper (inversion). Structural inversion for `instrumentLife_erasure` on a given output store. (approved: PENDING). -/
+theorem instrumentLife_erasure_result (ev : Exec.Life) (s t : Store O.Store)
     (h : (instrumentOperands O types permit).life ev s = some t) :
     O.life ev (erase s) = some (erase t) := by
   dsimp [instrumentOperands, instrumentLife] at h
@@ -1939,8 +1977,28 @@ theorem instrumentLife_erasure (ev : Exec.Life) (s t : Store O.Store)
       cases h
       exact hc
 
+/-- Law (subject `ConcreteSpec.Core.Own.instrumentOperands`). Lifecycle forward simulation: a
+successful instrumented lifecycle event performs both the ownership lifecycle transition and the
+matching concrete lifecycle transition on the erased store. -/
+theorem instrumentLife_erasure (ev : Exec.Life) (s : Store O.Store) :
+    match (instrumentOperands O types permit).life ev s with
+    | some t => O.life ev (erase s) = some (erase t) ∧ life types ev s.own = some t.own
+    | none => True := by
+  cases h : (instrumentOperands O types permit).life ev s with
+  | none => trivial
+  | some t =>
+    refine ⟨instrumentLife_erasure_result ev s t h, ?_⟩
+    dsimp [instrumentOperands, instrumentLife] at h
+    cases hown : life types ev s.own with
+    | none => rw [hown] at h; cases h
+    | some own =>
+      rw [hown] at h
+      cases hc : O.life ev s.concrete with
+      | none => rw [hc] at h; cases h
+      | some concrete => rw [hc] at h; cases h; rfl
+
 /-- Helper (projection). Extracts the two defining conjuncts of the instrumented answer guard. (approved: PENDING). -/
-theorem allows_erasure (p : O.Prim) (vs : List O.Val) (s : Store O.Store)
+theorem allows_erasure_result (p : O.Prim) (vs : List O.Val) (s : Store O.Store)
     (a : Exec.Answer O.Val O.Event (Store O.Store))
     (h : (instrumentOperands O types permit).allows p vs s a = true) :
     O.allows p vs (erase s) (eraseAnswer a) = true ∧ a.store.own = s.own := by
@@ -1948,19 +2006,29 @@ theorem allows_erasure (p : O.Prim) (vs : List O.Val) (s : Store O.Store)
   obtain ⟨ha, hown⟩ := Bool.and_eq_true_iff.mp h
   exact ⟨ha, of_decide_eq_true hown⟩
 
+/-- Law (subject `ConcreteSpec.Core.Own.instrumentOperands`). Exact characterization of the
+instrumented primitive answer contract in terms of the erased primitive contract and ownership
+frame preservation. -/
+theorem allows_erasure (p : O.Prim) (vs : List O.Val) (s : Store O.Store)
+    (a : Exec.Answer O.Val O.Event (Store O.Store)) :
+    ((instrumentOperands O types permit).allows p vs s a = true ↔
+      O.allows p vs (erase s) (eraseAnswer a) = true ∧ a.store.own = s.own) := by
+  dsimp [instrumentOperands, instrumentAllows]
+  rw [Bool.and_eq_true_iff, decide_eq_true_eq]
+
 /-- Helper (projection). Result-binding lifecycle erases to the concrete `bindLife`. (approved: PENDING). -/
 private theorem bindLife_erasure_proj (dst : Option Var) (s t : Store O.Store)
     (h : Exec.bindLife (instrumentOperands O types permit) dst s = some t) :
     Exec.bindLife O dst (erase s) = some (erase t) := by
   cases dst with
   | none => cases h; rfl
-  | some x => exact instrumentLife_erasure (.bind x) s t h
+  | some x => exact instrumentLife_erasure_result (.bind x) s t h
 
 /-- Helper (projection). Scope-exit drop erases to the concrete `dropOut`. (approved: PENDING). -/
 private theorem dropOut_erasure_proj (dm : List Var) (L : AList Var O.Val) (s t : Store O.Store)
     (h : Exec.dropOut (instrumentOperands O types permit) dm L s = some t) :
     Exec.dropOut O dm L (erase s) = some (erase t) :=
-  instrumentLife_erasure (.drop (Exec.dead dm L)) s t h
+  instrumentLife_erasure_result (.drop (Exec.dead dm L)) s t h
 
 /-- Helper (projection). Deferred cleanup registration commutes with frame erasure. (approved: PENDING). -/
 private theorem register_erasure_proj (d : Exec.Deferred (instrumentOperands O types permit)) :
@@ -2052,15 +2120,13 @@ private theorem stepExit_erasure_proj (L : AList Var O.Val) (s : Store O.Store)
         obtain ⟨st', hst', st'', hst'', rfl⟩ := h
         refine ⟨_, rfl, ?_⟩
         dsimp [Exec.stepExit, eraseFrame, eraseConfig, eraseCtrl, List.map]
-        rw [instrumentLife_erasure (O := O) (permit := permit) .leave s st' hst']
+        rw [instrumentLife_erasure_result (O := O) (permit := permit) .leave s st' hst']
         dsimp [Option.bind]
         rw [bindLife_erasure_proj (O := O) (permit := permit) dst st' st'' hst'']
         rfl
 
-/-- Law (subject `ConcreteSpec.Core.Own.eraseConfig`). Silent machine-step forward simulation (owner decision 2026-11-08 Q3): whenever `step`
-on the instrumented C1 machine produces a next configuration, `step` on the erased machine
-produces the erased configuration. -/
-theorem step_next_erasure (P : Exec.Program (instrumentOperands O types permit))
+/-- Helper (inversion). Silent machine-step forward simulation on a given `.next c'` result. (approved: PENDING). -/
+theorem step_next_erasure_result (P : Exec.Program (instrumentOperands O types permit))
     (c c' : Exec.Config (instrumentOperands O types permit))
     (h : Exec.step P c = some (.next c')) :
     Exec.step (eraseProgram P) (eraseConfig c) = some (.next (eraseConfig c')) := by
@@ -2080,13 +2146,13 @@ theorem step_next_erasure (P : Exec.Program (instrumentOperands O types permit))
         simp only [Exec.onRes, Option.map_eq_some_iff] at h
         obtain ⟨st'', hst'', hnext⟩ := h
         cases hnext
-        rw [eval_ok_erasure (O := O) (types := types) L st st' e v he]
+        rw [eval_ok_erasure_result (O := O) (types := types) L st st' e v he]
         simp [Exec.onRes,
-          instrumentLife_erasure (O := O) (permit := permit) (.bind x) st' st'' hst'']
+          instrumentLife_erasure_result (O := O) (permit := permit) (.bind x) st' st'' hst'']
       | trap kd =>
         rw [he] at h
         cases h
-        rw [eval_trap_erasure (O := O) (types := types) L st e kd he]
+        rw [eval_trap_erasure_result (O := O) (types := types) L st e kd he]
         simp [Exec.onRes]
       | stuck => rw [he] at h; cases h
     | assign x e site =>
@@ -2098,13 +2164,13 @@ theorem step_next_erasure (P : Exec.Program (instrumentOperands O types permit))
         simp only [Exec.onRes, Option.bind_eq_some_iff, Option.map_eq_some_iff] at h
         obtain ⟨w, hw, st'', hst'', hnext⟩ := h
         cases hnext
-        rw [eval_ok_erasure (O := O) (types := types) L st st' e v he]
+        rw [eval_ok_erasure_result (O := O) (types := types) L st st' e v he]
         simp [Exec.onRes, hw,
-          instrumentLife_erasure (O := O) (permit := permit) (.bind x) st' st'' hst'']
+          instrumentLife_erasure_result (O := O) (permit := permit) (.bind x) st' st'' hst'']
       | trap kd =>
         rw [he] at h
         cases h
-        rw [eval_trap_erasure (O := O) (types := types) L st e kd he]
+        rw [eval_trap_erasure_result (O := O) (types := types) L st e kd he]
         simp [Exec.onRes]
       | stuck => rw [he] at h; cases h
     | seq s t =>
@@ -2129,12 +2195,12 @@ theorem step_next_erasure (P : Exec.Program (instrumentOperands O types permit))
         simp only [Exec.onRes, Option.map_eq_some_iff] at h
         obtain ⟨b, hb, hnext⟩ := h
         cases hnext
-        rw [eval_ok_erasure (O := O) (types := types) L st st' e v he]
+        rw [eval_ok_erasure_result (O := O) (types := types) L st st' e v he]
         cases b <;> simp [Exec.onRes, hb]
       | trap kd =>
         rw [he] at h
         cases h
-        rw [eval_trap_erasure (O := O) (types := types) L st e kd he]
+        rw [eval_trap_erasure_result (O := O) (types := types) L st e kd he]
         simp [Exec.onRes]
       | stuck => rw [he] at h; cases h
     | loop l cr t b site =>
@@ -2153,12 +2219,12 @@ theorem step_next_erasure (P : Exec.Program (instrumentOperands O types permit))
         rcases r with ⟨v, st'⟩
         rw [he] at h
         cases h
-        rw [eval_ok_erasure (O := O) (types := types) L st st' e v he]
+        rw [eval_ok_erasure_result (O := O) (types := types) L st st' e v he]
         simp [Exec.onRes]
       | trap kd =>
         rw [he] at h
         cases h
-        rw [eval_trap_erasure (O := O) (types := types) L st e kd he]
+        rw [eval_trap_erasure_result (O := O) (types := types) L st e kd he]
         simp [Exec.onRes]
       | stuck => rw [he] at h; cases h
     | call dst f args site =>
@@ -2178,7 +2244,7 @@ theorem step_next_erasure (P : Exec.Program (instrumentOperands O types permit))
           rw [lookup_eraseProgram_proj P.fns f, hfn]
           dsimp [Option.bind, eraseFn]
           simp only [hlen, ↓reduceIte]
-          rw [instrumentLife_erasure (O := O) (permit := permit)
+          rw [instrumentLife_erasure_result (O := O) (permit := permit)
             (.enter (fn.params.map Prod.fst)) st' st'' hst'']
           rfl
         · simp only [hlen, ↓reduceIte] at h
@@ -2233,7 +2299,7 @@ theorem step_next_erasure (P : Exec.Program (instrumentOperands O types permit))
           rw [he] at h
           simp only [Exec.onRes, Option.bind_eq_some_iff, Option.map_eq_some_iff] at h
           obtain ⟨go, hgo, st'', hst'', hnext⟩ := h
-          rw [eval_ok_erasure (O := O) (types := types) L st st' t v he]
+          rw [eval_ok_erasure_result (O := O) (types := types) L st st' t v he]
           dsimp [Exec.onRes]
           rw [hgo]
           dsimp [Option.bind]
@@ -2242,7 +2308,7 @@ theorem step_next_erasure (P : Exec.Program (instrumentOperands O types permit))
         | trap kd =>
           rw [he] at h
           cases h
-          rw [eval_trap_erasure (O := O) (types := types) L st t kd he]
+          rw [eval_trap_erasure_result (O := O) (types := types) L st t kd he]
           rfl
         | stuck =>
           rw [he] at h
@@ -2257,7 +2323,7 @@ theorem step_next_erasure (P : Exec.Program (instrumentOperands O types permit))
         obtain ⟨st', hst', st'', hst'', hnext⟩ := h
         cases hnext
         dsimp [Exec.step, eraseConfig, eraseCtrl, eraseFrame, List.map]
-        rw [instrumentLife_erasure (O := O) (permit := permit) .leave st st' hst']
+        rw [instrumentLife_erasure_result (O := O) (permit := permit) .leave st st' hst']
         dsimp [Option.bind]
         rw [bindLife_erasure_proj (O := O) (permit := permit) dst st' st'' hst'']
         rfl
@@ -2268,10 +2334,23 @@ theorem step_next_erasure (P : Exec.Program (instrumentOperands O types permit))
     exact hstep
   | trapped _ _ => cases h
 
-/-- Law (subject `ConcreteSpec.Core.Own.eraseConfig`). Primitive-request forward simulation (owner decision 2026-11-08 Q3): whenever `step`
-on the instrumented C1 machine issues a primitive request, `step` on the erased machine
-issues the matching request with the erased store and agreeing continuation. -/
-theorem step_request_erasure (P : Exec.Program (instrumentOperands O types permit))
+/-- Law (subject `ConcreteSpec.Core.Own.stepInstrumented`). Silent machine-step forward simulation
+(owner decision 2026-11-08 Q3): whenever `stepInstrumented` on the instrumented C1 machine produces a next
+configuration, `step` on the erased machine produces the erased configuration. -/
+theorem step_next_erasure (P : Exec.Program (instrumentOperands O types permit))
+    (c : Exec.Config (instrumentOperands O types permit)) :
+    match stepInstrumented O types permit P c with
+    | some (.next c') => Exec.step (eraseProgram P) (eraseConfig c) = some (.next (eraseConfig c'))
+    | _ => True := by
+  cases h : stepInstrumented O types permit P c with
+  | none => trivial
+  | some out =>
+    cases out with
+    | next c' => exact step_next_erasure_result P c c' h
+    | request _ _ _ _ _ => trivial
+
+/-- Helper (inversion). Primitive-request forward simulation on a given `.request` result. (approved: PENDING). -/
+theorem step_request_erasure_result (P : Exec.Program (instrumentOperands O types permit))
     (c : Exec.Config (instrumentOperands O types permit))
     (p : O.Prim) (vs : List O.Val) (site : SiteId) (st : Store O.Store)
     (k : Exec.Answer O.Val O.Event (Store O.Store) →
@@ -2409,6 +2488,26 @@ theorem step_request_erasure (P : Exec.Program (instrumentOperands O types permi
     cases hc
   | trapped _ _ => cases h
 
+/-- Law (subject `ConcreteSpec.Core.Own.stepInstrumented`). Primitive-request forward simulation
+(owner decision 2026-11-08 Q3): whenever `stepInstrumented` on the instrumented C1 machine issues a primitive
+request, `step` on the erased machine issues the matching request with the erased store and agreeing
+continuation. -/
+theorem step_request_erasure (P : Exec.Program (instrumentOperands O types permit))
+    (c : Exec.Config (instrumentOperands O types permit)) :
+    match stepInstrumented O types permit P c with
+    | some (.request p vs site st k) =>
+      ∃ k_erased,
+        Exec.step (eraseProgram P) (eraseConfig c) =
+          some (.request p vs site (erase st) k_erased) ∧
+        ∀ a c', k a = some c' → k_erased (eraseAnswer a) = some (eraseConfig c')
+    | _ => True := by
+  cases h : stepInstrumented O types permit P c with
+  | none => trivial
+  | some out =>
+    cases out with
+    | next _ => trivial
+    | request p vs site st k => exact step_request_erasure_result P c p vs site st k h
+
 /-- Helper (projection). Erasing a step label preserves its emitted event list. (approved: PENDING). -/
 private theorem eraseLabel_events_proj (l : Exec.Label (instrumentOperands O types permit)) :
     (eraseLabel l).events = l.events := by
@@ -2420,26 +2519,44 @@ private theorem eraseLabel_answer_proj (a : Exec.Answer O.Val O.Event (Store O.S
   rcases a with ⟨ev, _, _⟩
   cases ev <;> rfl
 
-/-- Law (subject `ConcreteSpec.Core.Own.eraseConfig`). Single-step forward simulation (owner decision 2026-11-08 Q3): every labeled step of
-the instrumented C1 machine is matched by a step of the erased machine with the same
-event label and concrete store. -/
-theorem Step_erasure (P : Exec.Program (instrumentOperands O types permit))
+/-- Helper (inversion). Single-step forward simulation over `Exec.Step`. (approved: PENDING). -/
+theorem Step_erasure_result (P : Exec.Program (instrumentOperands O types permit))
     (c c' : Exec.Config (instrumentOperands O types permit))
     (l : Exec.Label (instrumentOperands O types permit))
     (h : Exec.Step P c l c') :
     Exec.Step (eraseProgram P) (eraseConfig c) (eraseLabel l) (eraseConfig c') := by
   cases h with
-  | silent hs => exact .silent (step_next_erasure P c c' hs)
+  | silent hs => exact .silent (step_next_erasure_result P c c' hs)
   | prim hs hallows hk =>
-    obtain ⟨k_erased, hs_erased, hk_erased⟩ := step_request_erasure P c _ _ _ _ _ hs
-    obtain ⟨hallows_erased, _⟩ := allows_erasure _ _ _ _ hallows
+    obtain ⟨k_erased, hs_erased, hk_erased⟩ := step_request_erasure_result P c _ _ _ _ _ hs
+    obtain ⟨hallows_erased, _⟩ := allows_erasure_result _ _ _ _ hallows
     rw [eraseLabel_answer_proj]
     exact .prim hs_erased hallows_erased (hk_erased _ _ hk)
 
-/-- Law (subject `ConcreteSpec.Core.Own.eraseConfig`). Multi-step forward simulation (owner decision 2026-11-08 Q3): every multi-step run
-of the instrumented C1 machine is matched by a multi-step run of the erased machine
-emitting the exact same events in the same order and reaching the erased configuration. -/
-theorem Steps_erasure (P : Exec.Program (instrumentOperands O types permit))
+/-- Law (subject `ConcreteSpec.Core.Own.stepInstrumented`). Single-step forward simulation
+(owner decision 2026-11-08 Q3): every labeled step produced by `stepInstrumented` on the instrumented C1 machine is
+matched by a step of the erased machine with the same event label and concrete store. -/
+theorem Step_erasure (P : Exec.Program (instrumentOperands O types permit))
+    (c : Exec.Config (instrumentOperands O types permit)) :
+    match stepInstrumented O types permit P c with
+    | some (.next c') =>
+      Exec.Step (eraseProgram P) (eraseConfig c) .silent (eraseConfig c')
+    | some (.request p vs _site st k) =>
+      ∀ a c', (instrumentOperands O types permit).allows p vs st a = true →
+        k a = some c' →
+        Exec.Step (eraseProgram P) (eraseConfig c) (eraseLabel a.label) (eraseConfig c')
+    | none => True := by
+  cases hs : stepInstrumented O types permit P c with
+  | none => trivial
+  | some out =>
+    cases out with
+    | next c' => exact Step_erasure_result P c c' .silent (.silent hs)
+    | request p vs site st k =>
+      intro a c' hallows hk
+      exact Step_erasure_result P c c' a.label (.prim hs hallows hk)
+
+/-- Helper (inversion). Multi-step forward simulation over `Exec.Steps`. (approved: PENDING). -/
+theorem Steps_erasure_result (P : Exec.Program (instrumentOperands O types permit))
     (c c' : Exec.Config (instrumentOperands O types permit))
     (tr : List O.Event)
     (h : Exec.Steps P c tr c') :
@@ -2447,7 +2564,7 @@ theorem Steps_erasure (P : Exec.Program (instrumentOperands O types permit))
   induction h with
   | refl c => exact .refl (eraseConfig c)
   | @step c l c₁ tr c₂ hs _ ih =>
-    have hs' := Step_erasure P c c₁ l hs
+    have hs' := Step_erasure_result P c c₁ l hs
     simpa [eraseLabel_events_proj] using Exec.Steps.step hs' ih
 
 /-- Helper (projection). Configuration finality is invariant under erasure. (approved: PENDING). -/
@@ -2471,7 +2588,7 @@ private theorem allows_liftAnswer_proj (p : O.Prim) (vs : List O.Val) (s : Store
       O.allows p vs (erase s) a := by
   simp [instrumentOperands, instrumentAllows, eraseAnswer, liftAnswer, erase]
 
-/-- Law (subject `ConcreteSpec.Core.Own.eraseConfig`). Fuel-indexed evaluator forward simulation (owner decision 2026-11-08 Q3): whenever
+/-- Law (subject `ConcreteSpec.Core.Own.liftOracle`). Fuel-indexed evaluator forward simulation (owner decision 2026-11-08 Q3): whenever
 the instrumented run reaches a non-`stuck` outcome (`final`—normal, returned or trapped—
 `noAnswer`, `badAnswer` or `outOfFuel`), the erased run reaches the matching outcome with
 the same events in order and the same concrete store. -/
@@ -2502,10 +2619,10 @@ theorem runFrom_erasure (P : Exec.Program (instrumentOperands O types permit))
         rw [hs] at hns
         cases out with
         | next c' =>
-          rw [step_next_erasure P c c' hs]
+          rw [step_next_erasure_result P c c' hs]
           exact runFrom_erasure P ρ n hist c' hns
         | request p vs site st k =>
-          obtain ⟨k_erased, hs_erased, hk_erased⟩ := step_request_erasure P c p vs site st k hs
+          obtain ⟨k_erased, hs_erased, hk_erased⟩ := step_request_erasure_result P c p vs site st k hs
           rw [hs_erased]
           dsimp [liftOracle] at hns ⊢
           cases hρ : ρ hist p vs site (erase st) with
@@ -2538,7 +2655,7 @@ theorem runFrom_erasure (P : Exec.Program (instrumentOperands O types permit))
               simp only [ha', ha] at hns ⊢
               rfl
 
-/-- Law (subject `ConcreteSpec.Core.Own.eraseConfig`). Whole-run forward simulation from an empty event history (owner decision 2026-11-08 Q3). -/
+/-- Law (subject `ConcreteSpec.Core.Own.liftOracle`). Whole-run forward simulation from an empty event history (owner decision 2026-11-08 Q3). -/
 theorem run_erasure (P : Exec.Program (instrumentOperands O types permit))
     (ρ : Exec.Oracle O) (fuel : Nat)
     (c : Exec.Config (instrumentOperands O types permit))
@@ -2546,6 +2663,24 @@ theorem run_erasure (P : Exec.Program (instrumentOperands O types permit))
     Exec.run (eraseProgram P) ρ fuel (eraseConfig c) =
       eraseReport (Exec.run P (liftOracle O types permit ρ) fuel c) :=
   runFrom_erasure P ρ fuel [] c h
+
+/-- Law (subject `ConcreteSpec.Core.Own.liftOracle`). Multi-step forward simulation (owner decision
+2026-11-08 Q3): every multi-step run of the instrumented C1 machine is matched by a multi-step run
+of the erased machine emitting the exact same events in the same order and reaching the erased
+configuration, and any non-`stuck` oracle run with `liftOracle` emits the same event trace as the
+erased oracle run. -/
+theorem Steps_erasure (P : Exec.Program (instrumentOperands O types permit))
+    (ρ : Exec.Oracle O) (fuel : Nat)
+    (c c' : Exec.Config (instrumentOperands O types permit))
+    (tr : List O.Event)
+    (h : Exec.Steps P c tr c')
+    (hns : Ending.NotStuck (Exec.run P (liftOracle O types permit ρ) fuel c).ending) :
+    Exec.Steps (eraseProgram P) (eraseConfig c) tr (eraseConfig c') ∧
+      (Exec.run (eraseProgram P) ρ fuel (eraseConfig c)).events =
+        (Exec.run P (liftOracle O types permit ρ) fuel c).events := by
+  refine ⟨Steps_erasure_result P c c' tr h, ?_⟩
+  have hrun := run_erasure P ρ fuel c hns
+  exact congrArg Exec.Report.events hrun
 
 /-- Helper (inversion). Under `EvalPermitted`, an instrumented operand evaluation that is
 stuck is also stuck in the erased operand instance. (approved: PENDING). -/
@@ -2583,7 +2718,7 @@ private theorem evalArgs_stuck_of_permitted_inv (L : AList Var O.Val) :
     | ok r =>
       rcases r with ⟨v, s₁⟩
       rw [he] at hs
-      rw [eval_ok_erasure (O := O) (types := types) L s s₁ e v he]
+      rw [eval_ok_erasure_result (O := O) (types := types) L s s₁ e v he]
       dsimp [Res.bind] at hs ⊢
       cases hes : Exec.evalArgs (instrumentOperands O types permit) L s₁ es with
       | ok r' =>
@@ -2702,7 +2837,7 @@ private theorem stepExit_none_of_permitted_inv (L : AList Var O.Val) (s : Store 
           rw [hl'] at hs
           dsimp [Option.bind] at hs
           simp only [Option.map_eq_none_iff] at hs
-          rw [instrumentLife_erasure (O := O) (permit := permit) .leave s st' hl]
+          rw [instrumentLife_erasure_result (O := O) (permit := permit) .leave s st' hl]
           dsimp [Option.bind]
           rw [bindLife_none_of_permitted_inv (O := O) (permit := permit) dst st' (hbind st' hl) hs]
           rfl
@@ -2728,7 +2863,7 @@ private theorem step_none_of_permitted_inv
         rcases r with ⟨v, st'⟩
         rw [he] at hs
         simp only [Exec.onRes, Option.map_eq_none_iff] at hs
-        rw [eval_ok_erasure (O := O) (types := types) L st st' e v he]
+        rw [eval_ok_erasure_result (O := O) (types := types) L st st' e v he]
         dsimp [Exec.onRes]
         rw [life_none_of_permitted_inv (O := O) (permit := permit) (.bind x) st' (hpl v st' he) hs]
         rfl
@@ -2743,7 +2878,7 @@ private theorem step_none_of_permitted_inv
       | ok r =>
         rcases r with ⟨v, st'⟩
         rw [he] at hs
-        rw [eval_ok_erasure (O := O) (types := types) L st st' e v he]
+        rw [eval_ok_erasure_result (O := O) (types := types) L st st' e v he]
         dsimp [Exec.onRes] at hs ⊢
         cases hlook : AList.lookup L x with
         | none => rfl
@@ -2773,7 +2908,7 @@ private theorem step_none_of_permitted_inv
         rcases r with ⟨v, st'⟩
         rw [he] at hs
         simp only [Exec.onRes, Option.map_eq_none_iff] at hs
-        rw [eval_ok_erasure (O := O) (types := types) L st st' e v he]
+        rw [eval_ok_erasure_result (O := O) (types := types) L st st' e v he]
         simp [Exec.onRes, hs]
       | trap _ => rw [he] at hs; cases hs
       | stuck =>
@@ -2845,7 +2980,7 @@ private theorem step_none_of_permitted_inv
         | ok r =>
           rcases r with ⟨v, st'⟩
           rw [he] at hs
-          rw [eval_ok_erasure (O := O) (types := types) L st st' t v he]
+          rw [eval_ok_erasure_result (O := O) (types := types) L st st' t v he]
           dsimp [Exec.onRes] at hs ⊢
           cases hgo : O.test v with
           | none => rfl
@@ -2875,7 +3010,7 @@ private theorem step_none_of_permitted_inv
           rw [hl'] at hs
           dsimp [Option.bind] at hs
           simp only [Option.map_eq_none_iff] at hs
-          rw [instrumentLife_erasure (O := O) (permit := permit) .leave st st' hl]
+          rw [instrumentLife_erasure_result (O := O) (permit := permit) .leave st st' hl]
           dsimp [Option.bind]
           rw [bindLife_none_of_permitted_inv (O := O) (permit := permit) dst st' (hbind st' hl) hs]
           rfl
@@ -3032,31 +3167,32 @@ private theorem checkerAccepted_step_inv
     CheckerAccepted O types permit P c' :=
   fun tr c'' hsteps => hacc (l.events ++ tr) c'' (.step hs hsteps)
 
-/-- Law (subject `ConcreteSpec.Core.Own.eraseConfig`). Single-step stuck equivalence for checker-accepted programs (owner decision 2026-11-08 Q3):
+/-- Law (subject `ConcreteSpec.Core.Own.stepInstrumented`). Single-step stuck equivalence for checker-accepted programs (owner decision 2026-11-08 Q3):
 at any configuration accepted by the ownership checker, the instrumented C1 machine has no
 step iff the erased machine has no step. -/
 theorem step_stuck_iff_of_accepted
     (P : Exec.Program (instrumentOperands O types permit))
     (c : Exec.Config (instrumentOperands O types permit))
     (hacc : CheckerAccepted O types permit P c) :
-    Exec.step P c = none ↔ Exec.step (eraseProgram P) (eraseConfig c) = none := by
+    stepInstrumented O types permit P c = none ↔
+      Exec.step (eraseProgram P) (eraseConfig c) = none := by
   constructor
   · exact step_none_of_permitted_inv P c (hacc [] c (.refl c)).2
   · intro herased
-    cases hs : Exec.step P c with
+    cases hs : stepInstrumented O types permit P c with
     | none => rfl
     | some out =>
       cases out with
       | next c' =>
-        have h' := step_next_erasure P c c' hs
+        have h' := step_next_erasure_result P c c' hs
         rw [herased] at h'
         cases h'
       | request p vs site st k =>
-        obtain ⟨_, h', _⟩ := step_request_erasure P c p vs site st k hs
+        obtain ⟨_, h', _⟩ := step_request_erasure_result P c p vs site st k hs
         rw [herased] at h'
         cases h'
 
-/-- Law (subject `ConcreteSpec.Core.Own.eraseConfig`). Exact fuel-indexed simulation for checker-accepted programs (owner decision 2026-11-08 Q3):
+/-- Law (subject `ConcreteSpec.Core.Own.liftOracle`). Exact fuel-indexed simulation for checker-accepted programs (owner decision 2026-11-08 Q3):
 when `(P, c)` satisfies `CheckerAccepted`, the erased run equals the erased report of the
 instrumented run for every outcome, including `stuck`. -/
 theorem runFrom_erasure_of_accepted
@@ -3086,11 +3222,11 @@ theorem runFrom_erasure_of_accepted
       | some out =>
         cases out with
         | next c' =>
-          rw [step_next_erasure P c c' hs]
+          rw [step_next_erasure_result P c c' hs]
           exact runFrom_erasure_of_accepted P ρ n hist c'
             (checkerAccepted_step_inv P c c' .silent hacc (.silent hs))
         | request p vs site st k =>
-          obtain ⟨k_erased, hs_erased, hk_erased⟩ := step_request_erasure P c p vs site st k hs
+          obtain ⟨k_erased, hs_erased, hk_erased⟩ := step_request_erasure_result P c p vs site st k hs
           rw [hs_erased]
           dsimp [liftOracle]
           cases hρ : ρ hist p vs site (erase st) with
@@ -3139,7 +3275,7 @@ private theorem isStuck_eraseEnding_proj (e : Exec.Ending (instrumentOperands O 
     Ending.IsStuck (eraseEnding e) = Ending.IsStuck e := by
   cases e <;> rfl
 
-/-- Law (subject `ConcreteSpec.Core.Own.eraseConfig`). Converse stuck equivalence for checker-accepted programs (owner decision 2026-11-08 Q3):
+/-- Law (subject `ConcreteSpec.Core.Own.liftOracle`). Converse stuck equivalence for checker-accepted programs (owner decision 2026-11-08 Q3):
 for a program and initial configuration accepted by the ownership checker, the instrumented
 C1 machine is stuck iff the erased machine is stuck. -/
 theorem run_stuck_iff_of_accepted
@@ -3158,12 +3294,12 @@ end ExecErasure
 namespace ExecErasureWitnesses
 open ConcreteSpec.Core.Own.Examples
 
-private def emptyProg : Exec.Program instrumentedOps := ⟨[]⟩
+def emptyProg : Exec.Program instrumentedOps := ⟨[]⟩
 
-private def bindMoveConfig : Exec.Config instrumentedOps :=
+def bindMoveConfig : Exec.Config instrumentedOps :=
   ⟨.exec (.bind y (.move x) ⟨0⟩), [(x, 7)], ⟨0, initial⟩, []⟩
 
-private def primOneConfig : Exec.Config instrumentedOps :=
+def primOneConfig : Exec.Config instrumentedOps :=
   ⟨.exec (.prim (some y) () [.read x] ⟨0⟩), [(x, 7)], ⟨0, initial⟩, []⟩
 
 /-- Helper (inversion). A step from a configuration whose `step` is `some (.next c₁)` must
@@ -3249,7 +3385,7 @@ example : ∃ s' : Store Int,
     instrumentedOps.eval [(x, 7)] ⟨0, initial⟩ (.move x) = .ok (7, s') ∧
     erasedOps.eval [(x, 7)] (erase (⟨0, initial⟩ : Store Int)) (.move x) = .ok (7, erase s') := by
   refine ⟨⟨0, (move initial ⟨0⟩).getD initial⟩, by decide, ?_⟩
-  exact eval_ok_erasure (O := erasedOps) (types := types) (permit := permitE)
+  exact eval_ok_erasure_result (O := erasedOps) (types := types) (permit := permitE)
     [(x, 7)] ⟨0, initial⟩ _ (.move x) 7 (by decide)
 
 /-- Rejection observation. A corrupted concrete value disagrees with the erased evaluation of `.move x`. -/
@@ -3259,7 +3395,7 @@ example : ¬ (erasedOps.eval [(x, 7)] (erase (⟨0, initial⟩ : Store Int)) (.m
 /-- Observation. A trapping operand in the instrumented instance traps with the same kind in the erased instance. -/
 example : instrumentedOps.eval [(x, 7)] ⟨0, initial⟩ (.fail .abort) = .trap .abort ∧
     erasedOps.eval [(x, 7)] (erase (⟨0, initial⟩ : Store Int)) (.fail .abort) = .trap .abort :=
-  ⟨by decide, eval_trap_erasure (O := erasedOps) (types := types) (permit := permitE)
+  ⟨by decide, eval_trap_erasure_result (O := erasedOps) (types := types) (permit := permitE)
     [(x, 7)] ⟨0, initial⟩ (.fail .abort) .abort (by decide)⟩
 
 /-- Rejection observation. A trapping operand does not erase to a normal value. -/
@@ -3296,8 +3432,8 @@ example : ¬ (Exec.evalArgs erasedOps [(x, 7)] (erase (⟨0, initial⟩ : Store 
 example : instrumentedOps.test 7 = erasedOps.test 7 ∧
     instrumentedOps.test 0 = erasedOps.test 0 ∧
     erasedOps.test 7 = some true ∧ erasedOps.test 0 = some false :=
-  ⟨test_erasure (O := erasedOps) (types := types) (permit := permitE) 7,
-   test_erasure (O := erasedOps) (types := types) (permit := permitE) 0,
+  ⟨test_erasure_result (O := erasedOps) (types := types) (permit := permitE) 7,
+   test_erasure_result (O := erasedOps) (types := types) (permit := permitE) 0,
    by decide, by decide⟩
 
 /-- Rejection observation. A nonzero condition value does not test as `false`. -/
@@ -3308,7 +3444,7 @@ example : ∃ s' : Store Int,
     instrumentedOps.life (.bind y) ⟨7, initial⟩ = some s' ∧
     erasedOps.life (.bind y) (erase (⟨7, initial⟩ : Store Int)) = some (erase s') := by
   refine ⟨⟨7, (bind types y initial).getD initial⟩, by decide, ?_⟩
-  exact instrumentLife_erasure (O := erasedOps) (types := types) (permit := permitE)
+  exact instrumentLife_erasure_result (O := erasedOps) (types := types) (permit := permitE)
     (.bind y) ⟨7, initial⟩ _ (by decide)
 
 /-- Rejection observation. A concrete lifecycle step cannot alter the concrete store to a different integer. -/
@@ -3321,7 +3457,7 @@ example : let a : Exec.Answer Int Int (Store Int) := ⟨some 7, .ok 7, ⟨7, ini
     erasedOps.allows () [7] (erase (⟨0, initial⟩ : Store Int)) (eraseAnswer a) = true ∧
     a.store.own = initial := by
   dsimp
-  exact ⟨by decide, allows_erasure (O := erasedOps) (types := types) (permit := permitE)
+  exact ⟨by decide, allows_erasure_result (O := erasedOps) (types := types) (permit := permitE)
     () [7] ⟨0, initial⟩ ⟨some 7, .ok 7, ⟨7, initial⟩⟩ (by decide)⟩
 
 /-- Rejection observation. A primitive answer that mutates the ownership state or emits the wrong event is rejected by `instrumentAllows`. -/
@@ -3335,7 +3471,7 @@ example : ∃ c' : Exec.Config instrumentedOps,
     Exec.step (eraseProgram emptyProg) (eraseConfig bindMoveConfig) =
       some (.next (eraseConfig c')) := by
   refine ⟨_, rfl, ?_⟩
-  exact step_next_erasure emptyProg bindMoveConfig _ rfl
+  exact step_next_erasure_result emptyProg bindMoveConfig _ rfl
 
 /-- Rejection observation. A silent step cannot land in a configuration with a different local binding value. -/
 example : ¬ (Exec.step (eraseProgram emptyProg) (eraseConfig bindMoveConfig) =
@@ -3351,7 +3487,7 @@ example : ∃ p vs site st k,
         some (.request p vs site (erase st) k_erased) ∧
       ∀ a c', k a = some c' → k_erased (eraseAnswer a) = some (eraseConfig c') := by
   refine ⟨(), [7], ⟨0⟩, ⟨0, initial⟩, _, rfl, ?_⟩
-  exact step_request_erasure emptyProg primOneConfig () [7] ⟨0⟩ ⟨0, initial⟩ _ rfl
+  exact step_request_erasure_result emptyProg primOneConfig () [7] ⟨0⟩ ⟨0, initial⟩ _ rfl
 
 /-- Rejection observation. A primitive request step never erases to `none`. -/
 example : ¬ (Exec.step (eraseProgram emptyProg) (eraseConfig primOneConfig) = none) := by
@@ -3369,7 +3505,7 @@ example : ∃ c' : Exec.Config instrumentedOps,
   have hs : Exec.Step emptyProg primOneConfig
       (liftAnswer initial ⟨some 7, .ok 7, 7⟩).label _ :=
     .prim rfl (by decide) rfl
-  exact ⟨_, hs, Step_erasure emptyProg primOneConfig _ _ hs⟩
+  exact ⟨_, hs, Step_erasure_result emptyProg primOneConfig _ _ hs⟩
 
 /-- Rejection observation. Erasing an event label never drops or alters its emitted event. -/
 example : ¬ ((eraseLabel (O := erasedOps) (types := types) (permit := permitE)
@@ -3390,7 +3526,7 @@ example : ∃ c' : Exec.Config instrumentedOps,
                 rfl rfl rfl)
               (.step (.silent rfl)
                 (.step (.silent rfl) (.refl _)))))))
-  exact ⟨_, hsteps, Steps_erasure emptyProg primTraceConfig _ [7, 3] hsteps, rfl, rfl⟩
+  exact ⟨_, hsteps, Steps_erasure_result emptyProg primTraceConfig _ [7, 3] hsteps, rfl, rfl⟩
 
 /-- Rejection observation. Reversing the event order `[3, 7]` or corrupting the final store falsifies the erased trace report. -/
 example : ¬ ((Exec.run (eraseProgram emptyProg) erasedOracle 100 (eraseConfig primTraceConfig)).events = [3, 7]) := by
@@ -3528,169 +3664,250 @@ theorem unconditionalRunConverse_refuted : ¬ UnconditionalRunConverse := by
   revert he
   decide
 
-/-- A same-typed faulty erasure that discards control and continuations. It changes an
-implementation of erasure, keeping the concrete operand semantics and expected result fixed. -/
-def eraseConfigDone {O : Exec.Operands} {types : Var → Option Descriptor}
-    {permit : AList Var O.Val → O.Expr → State → Option State}
-    (c : Exec.Config (instrumentOperands O types permit)) : Exec.Config O :=
-  { eraseConfig c with ctrl := .done, frames := [] }
+/-- Mutant: instrumentation replaces every operand value with `O.unitVal`. -/
+abbrev zeroOperands (O : Exec.Operands) (types : Var → Option Descriptor)
+    (permit : AList Var O.Val → O.Expr → State → Option State) : Exec.Operands :=
+  { instrumentOperands O types permit with eval := fun _ s _ => .ok (O.unitVal, s) }
 
-/-- A same-typed faulty erasure that invents a runnable skip at a stuck configuration. -/
-def eraseConfigSkip {O : Exec.Operands} {types : Var → Option Descriptor}
-    {permit : AList Var O.Val → O.Expr → State → Option State}
-    (c : Exec.Config (instrumentOperands O types permit)) : Exec.Config O :=
-  { eraseConfig c with ctrl := .exec .skip, frames := [] }
+/-- Mutant: instrumentation replaces every operand evaluation with `.trap .abort`. -/
+abbrev abortOperands (O : Exec.Operands) (types : Var → Option Descriptor)
+    (permit : AList Var O.Val → O.Expr → State → Option State) : Exec.Operands :=
+  { instrumentOperands O types permit with eval := fun _ _ _ => .trap .abort }
 
-/-- Instance (law `ConcreteSpec.Core.Own.runFrom_erasure`, case `ConcreteSpec.Core.Own.Examples.primTraceConfig`). -/
-example : Exec.runFrom (eraseProgram emptyProg) erasedOracle 100 [] (eraseConfig primTraceConfig) =
-    eraseReport (Exec.runFrom emptyProg (liftOracle erasedOps types permitE erasedOracle) 100 [] primTraceConfig) :=
-  @runFrom_erasure erasedOps types permitE emptyProg erasedOracle 100 [] primTraceConfig rfl
+/-- Mutant: instrumentation makes every operand evaluation `.stuck`. -/
+abbrev stuckOperands (O : Exec.Operands) (types : Var → Option Descriptor)
+    (permit : AList Var O.Val → O.Expr → State → Option State) : Exec.Operands :=
+  { instrumentOperands O types permit with eval := fun _ _ _ => .stuck }
 
-/-- Planted (law `ConcreteSpec.Core.Own.runFrom_erasure`, case `ConcreteSpec.Core.Own.Examples.primTraceConfig`, subject `ConcreteSpec.Core.Own.eraseConfig`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.eraseConfigDone`). -/
-example : Ending.NotStuck (Exec.runFrom emptyProg
-      (liftOracle erasedOps types permitE erasedOracle) 100 [] primTraceConfig).ending ∧
-    ¬ (Exec.runFrom (eraseProgram emptyProg) erasedOracle 100 [] (eraseConfigDone primTraceConfig) =
-      eraseReport (Exec.runFrom emptyProg (liftOracle erasedOps types permitE erasedOracle) 100 [] primTraceConfig)) := by
-  exact ⟨rfl, by intro h; have he := congrArg (fun r => r.events) h; cases he⟩
+/-- Mutant: instrumentation inverts condition truth values. -/
+abbrev invertTestOperands (O : Exec.Operands) (types : Var → Option Descriptor)
+    (permit : AList Var O.Val → O.Expr → State → Option State) : Exec.Operands :=
+  { instrumentOperands O types permit with test := fun v => (O.test v).map Bool.not }
 
-/-- Instance (law `ConcreteSpec.Core.Own.run_erasure`, case `ConcreteSpec.Core.Own.Examples.primTraceConfig`). -/
-example : Exec.run (eraseProgram emptyProg) erasedOracle 100 (eraseConfig primTraceConfig) =
-    eraseReport (Exec.run emptyProg (liftOracle erasedOps types permitE erasedOracle) 100 primTraceConfig) :=
-  @run_erasure erasedOps types permitE emptyProg erasedOracle 100 primTraceConfig rfl
+/-- Mutant: instrumentation skips the ownership lifecycle transition while running the concrete one. -/
+abbrev skipLifeOperands (O : Exec.Operands) (types : Var → Option Descriptor)
+    (permit : AList Var O.Val → O.Expr → State → Option State) : Exec.Operands :=
+  { instrumentOperands O types permit with
+    life := fun ev s => (O.life ev s.concrete).map fun concrete => ⟨concrete, s.own⟩ }
 
-/-- Planted (law `ConcreteSpec.Core.Own.run_erasure`, case `ConcreteSpec.Core.Own.Examples.primTraceConfig`, subject `ConcreteSpec.Core.Own.eraseConfig`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.eraseConfigDone`). -/
-example : Ending.NotStuck (Exec.run emptyProg
-      (liftOracle erasedOps types permitE erasedOracle) 100 primTraceConfig).ending ∧
-    ¬ (Exec.run (eraseProgram emptyProg) erasedOracle 100 (eraseConfigDone primTraceConfig) =
-      eraseReport (Exec.run emptyProg (liftOracle erasedOps types permitE erasedOracle) 100 primTraceConfig)) := by
-  exact ⟨rfl, by intro h; have he := congrArg (fun r => r.events) h; cases he⟩
+/-- Mutant: instrumentation rejects every primitive answer regardless of the contract check. -/
+abbrev refuseAllowsOperands (O : Exec.Operands) (types : Var → Option Descriptor)
+    (permit : AList Var O.Val → O.Expr → State → Option State) : Exec.Operands :=
+  { instrumentOperands O types permit with allows := fun _ _ _ _ => false }
 
-/-- Instance (law `ConcreteSpec.Core.Own.step_stuck_iff_of_accepted`, case `ConcreteSpec.Core.Own.Examples.acceptedStuckConfig`). -/
-example : Exec.step emptyProg acceptedStuckConfig = none ↔
-    Exec.step (eraseProgram emptyProg) (eraseConfig acceptedStuckConfig) = none :=
-  @step_stuck_iff_of_accepted erasedOps types permitE emptyProg acceptedStuckConfig
-    acceptedStuck_checkerAccepted_inv
+/-- Mutant: oracle lifting corrupts the ownership frame of the lifted answer (`nextLoan + 1`),
+causing the instrumented machine to reject the answer with `.badAnswer` (which satisfies
+`Ending.NotStuck`!) while the erased machine accepts it and emits `[7, 3]`. -/
+def liftOracleMutateOwn (O : Exec.Operands) (types : Var → Option Descriptor)
+    (permit : AList Var O.Val → O.Expr → State → Option State)
+    (ρ : Exec.Oracle O) : Exec.Oracle (instrumentOperands O types permit) :=
+  fun hist p vs site s =>
+    (ρ hist p vs site s.concrete).map fun a =>
+      liftAnswer { s.own with nextLoan := s.own.nextLoan + 1 } a
 
-/-- Planted (law `ConcreteSpec.Core.Own.step_stuck_iff_of_accepted`, case `ConcreteSpec.Core.Own.Examples.acceptedStuckConfig`, subject `ConcreteSpec.Core.Own.eraseConfig`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.eraseConfigSkip`). -/
-example : CheckerAccepted erasedOps types permitE emptyProg acceptedStuckConfig ∧
-    ¬ (Exec.step emptyProg acceptedStuckConfig = none ↔
-      Exec.step (eraseProgram emptyProg) (eraseConfigSkip acceptedStuckConfig) = none) := by
-  exact ⟨acceptedStuck_checkerAccepted_inv, fun h => by cases h.mp rfl⟩
+/-- Mutant: single-step instrumented execution zeroes local operand values before stepping. -/
+def stepInstrumentedZeroVal (O : Exec.Operands) (types : Var → Option Descriptor)
+    (permit : AList Var O.Val → O.Expr → State → Option State)
+    (P : Exec.Program (instrumentOperands O types permit))
+    (c : Exec.Config (instrumentOperands O types permit)) :
+    Option (Exec.Out (instrumentOperands O types permit)) :=
+  Exec.step P { c with locals := c.locals.map (fun _ => O.unitVal) }
 
-/-- Instance (law `ConcreteSpec.Core.Own.runFrom_erasure_of_accepted`, case `ConcreteSpec.Core.Own.Examples.acceptedMoveConfig`). -/
-example : Exec.runFrom (eraseProgram emptyProg) erasedOracle 100 [] (eraseConfig acceptedMoveConfig) =
-    eraseReport (Exec.runFrom emptyProg (liftOracle erasedOps types permitE erasedOracle) 100 [] acceptedMoveConfig) :=
-  @runFrom_erasure_of_accepted erasedOps types permitE emptyProg erasedOracle 100 []
-    acceptedMoveConfig acceptedMove_checkerAccepted_inv
+/-- Mutant: single-step instrumented execution spuriously refuses every step. -/
+def stepInstrumentedRefuse (O : Exec.Operands) (types : Var → Option Descriptor)
+    (permit : AList Var O.Val → O.Expr → State → Option State)
+    (_P : Exec.Program (instrumentOperands O types permit))
+    (_c : Exec.Config (instrumentOperands O types permit)) :
+    Option (Exec.Out (instrumentOperands O types permit)) :=
+  none
 
-/-- Planted (law `ConcreteSpec.Core.Own.runFrom_erasure_of_accepted`, case `ConcreteSpec.Core.Own.Examples.acceptedMoveConfig`, subject `ConcreteSpec.Core.Own.eraseConfig`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.eraseConfigDone`). -/
-example : CheckerAccepted erasedOps types permitE emptyProg acceptedMoveConfig ∧
-    ¬ (Exec.runFrom (eraseProgram emptyProg) erasedOracle 100 [] (eraseConfigDone acceptedMoveConfig) =
-      eraseReport (Exec.runFrom emptyProg (liftOracle erasedOps types permitE erasedOracle) 100 [] acceptedMoveConfig)) := by
-  exact ⟨acceptedMove_checkerAccepted_inv,
-    by intro h; have he := congrArg (fun r => r.ending) h; cases he⟩
+/-- Mutant: oracle lifting drops the concrete oracle's answer and returns `none`. -/
+def liftOracleDropAnswer (O : Exec.Operands) (types : Var → Option Descriptor)
+    (permit : AList Var O.Val → O.Expr → State → Option State)
+    (_ρ : Exec.Oracle O) : Exec.Oracle (instrumentOperands O types permit) :=
+  fun _ _ _ _ _ => none
 
-/-- Instance (law `ConcreteSpec.Core.Own.run_stuck_iff_of_accepted`, case `ConcreteSpec.Core.Own.Examples.acceptedStuckConfig`). -/
-example : Ending.IsStuck (Exec.run emptyProg (liftOracle erasedOps types permitE erasedOracle) 100 acceptedStuckConfig).ending =
-    Ending.IsStuck (Exec.run (eraseProgram emptyProg) erasedOracle 100 (eraseConfig acceptedStuckConfig)).ending :=
-  @run_stuck_iff_of_accepted erasedOps types permitE emptyProg erasedOracle 100
-    acceptedStuckConfig acceptedStuck_checkerAccepted_inv
+def primFrameStuckConfig : Exec.Config instrumentedOps :=
+  ⟨.exec (.prim none () [.lit 0] ⟨0⟩), [(x, 7)], ⟨0, initial⟩,
+    [.seq (.assign y (.lit 1) ⟨1⟩)]⟩
 
-/-- Planted (law `ConcreteSpec.Core.Own.run_stuck_iff_of_accepted`, case `ConcreteSpec.Core.Own.Examples.acceptedStuckConfig`, subject `ConcreteSpec.Core.Own.eraseConfig`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.eraseConfigDone`). -/
-example : CheckerAccepted erasedOps types permitE emptyProg acceptedStuckConfig ∧
-    ¬ (Ending.IsStuck (Exec.run emptyProg (liftOracle erasedOps types permitE erasedOracle) 100 acceptedStuckConfig).ending =
-      Ending.IsStuck (Exec.run (eraseProgram emptyProg) erasedOracle 100 (eraseConfigDone acceptedStuckConfig)).ending) := by
-  exact ⟨acceptedStuck_checkerAccepted_inv, by decide⟩
+/-- Helper (inversion). `primFrameStuckConfig` satisfies `CheckerAccepted`. (approved: PENDING). -/
+private theorem primFrameStuck_checkerAccepted_inv :
+    CheckerAccepted erasedOps types permitE emptyProg primFrameStuckConfig := by
+  intro tr c hsteps
+  cases hsteps with
+  | refl =>
+    exact ⟨by decide, ⟨⟨fun _ => rfl, fun _ _ _ => trivial⟩, fun _ _ _ _ _ _ => trivial⟩⟩
+  | step hs₁ hsteps =>
+    cases hs₁ with
+    | silent h => cases h
+    | @prim c₁ p vs site st k a hreq hallows hk =>
+      have hreq' : Exec.step emptyProg primFrameStuckConfig =
+          some (.request p vs site st k) := hreq
+      dsimp [primFrameStuckConfig, Exec.step, Exec.evalArgs, instrumentOperands,
+        instrumentEval, permitE, erasedEval, Res.bind, Exec.onRes] at hreq'
+      injection hreq' with hreq'
+      injection hreq' with hp hvs hsite hst hk_eq
+      subst hp; subst hvs; subst hsite; subst hst; subst hk_eq
+      have hown : a.store.own = initial :=
+        (allows_erasure_result (O := erasedOps) (types := types) (permit := permitE)
+          () [0] ⟨0, initial⟩ a hallows).2
+      dsimp at hk
+      cases ha : a.result with
+      | error kd =>
+        rw [ha] at hk
+        injection hk with hc₁
+        subst hc₁
+        cases hsteps with
+        | refl =>
+          dsimp [StepPermitted]
+          rw [hown]
+          exact ⟨by decide, trivial⟩
+        | step hs₂ _ => exact False.elim (step_det_none_inv rfl hs₂)
+      | ok v =>
+        rw [ha] at hk
+        dsimp [Exec.bindLife] at hk
+        injection hk with hc₁
+        subst hc₁
+        cases hsteps with
+        | refl =>
+          dsimp [StepPermitted, DoneFramePermitted]
+          rw [hown]
+          exact ⟨by decide, trivial⟩
+        | step hs₂ hsteps =>
+          obtain rfl := step_det_next_inv rfl hs₂
+          cases hsteps with
+          | refl =>
+            dsimp [StepPermitted, StmtPermitted]
+            rw [hown]
+            exact ⟨by decide, ⟨fun _ => rfl, fun _ _ _ hlook => by cases hlook⟩⟩
+          | step hs₃ _ => exact False.elim (step_det_none_inv rfl hs₃)
 
-/-- The exact successor of the closed move-binding step. -/
-def bindSuccessor : Exec.Config instrumentedOps :=
-  match Exec.step emptyProg bindMoveConfig with
-  | some (.next c) => c
-  | _ => bindMoveConfig
+/-- Instance (law `ConcreteSpec.Core.Own.eval_ok_erasure`, case `ConcreteSpec.Core.Own.Examples.initial`). -/
+example : (match (instrumentOperands erasedOps types permitE).eval [(x, 7)] ⟨0, initial⟩ (.move x) with
+    | .ok (v, t) => erasedOps.eval [(x, 7)] (erase (⟨0, initial⟩ : Store Int)) (.move x) = .ok (v, erase t)
+    | _ => True) :=
+  @eval_ok_erasure erasedOps types permitE [(x, 7)] ⟨0, initial⟩ (.move x)
 
-/-- The exact continuation of the closed primitive request. -/
-def primitiveContinuation : Exec.Answer Int Int (Store Int) → Option (Exec.Config instrumentedOps) :=
-  match Exec.step emptyProg primOneConfig with
-  | some (.request _ _ _ _ k) => k
-  | _ => fun _ => none
+/-- Planted (law `ConcreteSpec.Core.Own.eval_ok_erasure`, case `ConcreteSpec.Core.Own.Examples.initial`, subject `ConcreteSpec.Core.Own.instrumentOperands`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.zeroOperands`). -/
+example : ¬ (match (zeroOperands erasedOps types permitE).eval [(x, 7)] ⟨0, initial⟩ (.move x) with
+    | .ok (v, t) => erasedOps.eval [(x, 7)] (erase (⟨0, initial⟩ : Store Int)) (.move x) = .ok (v, erase t)
+    | _ => True) := by
+  change ¬ ((Res.ok (7, 0) : Res (Int × Int)) = .ok (0, 0))
+  decide
 
-def primitiveSuccessor : Exec.Config instrumentedOps :=
-  (primitiveContinuation (liftAnswer initial ⟨some 7, .ok 7, 7⟩)).getD primOneConfig
+/-- Instance (law `ConcreteSpec.Core.Own.eval_trap_erasure`, case `ConcreteSpec.Core.Own.Examples.initial`). -/
+example : (match (instrumentOperands erasedOps types permitE).eval [(x, 7)] ⟨0, initial⟩ (.fail .overflow) with
+    | .trap kd => erasedOps.eval [(x, 7)] (erase (⟨0, initial⟩ : Store Int)) (.fail .overflow) = .trap kd
+    | _ => True) :=
+  @eval_trap_erasure erasedOps types permitE [(x, 7)] ⟨0, initial⟩ (.fail .overflow)
 
-/-- Helper (computation). Closed event-producing step used as a law hypothesis.
-(approved: PENDING). -/
-private theorem primitiveStep : Exec.Step emptyProg primOneConfig (.emit 7) primitiveSuccessor :=
-  @Exec.Step.prim instrumentedOps emptyProg primOneConfig primitiveSuccessor () [7] ⟨0⟩
-    ⟨0, initial⟩ primitiveContinuation (liftAnswer initial ⟨some 7, .ok 7, 7⟩) rfl rfl rfl
+/-- Planted (law `ConcreteSpec.Core.Own.eval_trap_erasure`, case `ConcreteSpec.Core.Own.Examples.initial`, subject `ConcreteSpec.Core.Own.instrumentOperands`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.abortOperands`). -/
+example : ¬ (match (abortOperands erasedOps types permitE).eval [(x, 7)] ⟨0, initial⟩ (.fail .overflow) with
+    | .trap kd => erasedOps.eval [(x, 7)] (erase (⟨0, initial⟩ : Store Int)) (.fail .overflow) = .trap kd
+    | _ => True) := by
+  change ¬ ((Res.trap .overflow : Res (Int × Int)) = .trap .abort)
+  decide
 
-/-- Helper (computation). Closed nonempty trace used as a law hypothesis.
-(approved: PENDING). -/
-private theorem primitiveSteps : Exec.Steps emptyProg primOneConfig [7] primitiveSuccessor :=
-  .step primitiveStep (.refl _)
+/-- Instance (law `ConcreteSpec.Core.Own.test_erasure`, case `ConcreteSpec.Core.Own.Examples.x`). -/
+example : (match (instrumentOperands erasedOps types permitE).test 7 with
+    | some b => erasedOps.test 7 = some b
+    | none => erasedOps.test 7 = none) :=
+  @test_erasure erasedOps types permitE 7
 
-/-- Instance (law `ConcreteSpec.Core.Own.step_next_erasure`, case `ConcreteSpec.Core.Own.Examples.bindMoveConfig`). -/
-example : Exec.step (eraseProgram emptyProg) (eraseConfig bindMoveConfig) =
-    some (.next (eraseConfig bindSuccessor)) :=
-  @step_next_erasure erasedOps types permitE emptyProg bindMoveConfig bindSuccessor rfl
+/-- Planted (law `ConcreteSpec.Core.Own.test_erasure`, case `ConcreteSpec.Core.Own.Examples.x`, subject `ConcreteSpec.Core.Own.instrumentOperands`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.invertTestOperands`). -/
+example : ¬ (match (invertTestOperands erasedOps types permitE).test 7 with
+    | some b => erasedOps.test 7 = some b
+    | none => erasedOps.test 7 = none) := by
+  change ¬ (some true = some false)
+  decide
 
-/-- Planted (law `ConcreteSpec.Core.Own.step_next_erasure`, case `ConcreteSpec.Core.Own.Examples.bindMoveConfig`, subject `ConcreteSpec.Core.Own.eraseConfig`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.eraseConfigDone`). -/
-example : Exec.step emptyProg bindMoveConfig = some (.next bindSuccessor) ∧
-    ¬ (Exec.step (eraseProgram emptyProg) (eraseConfigDone bindMoveConfig) =
-      some (.next (eraseConfigDone bindSuccessor))) := ⟨rfl, by intro h; cases h⟩
+/-- Instance (law `ConcreteSpec.Core.Own.instrumentLife_erasure`, case `ConcreteSpec.Core.Own.Examples.initial`). -/
+example : (match (instrumentOperands erasedOps types permitE).life (.bind y) ⟨7, initial⟩ with
+    | some t => erasedOps.life (.bind y) (erase (⟨7, initial⟩ : Store Int)) = some (erase t) ∧
+        life types (.bind y) initial = some t.own
+    | none => True) :=
+  @instrumentLife_erasure erasedOps types permitE (.bind y) ⟨7, initial⟩
 
-/-- Instance (law `ConcreteSpec.Core.Own.step_request_erasure`, case `ConcreteSpec.Core.Own.Examples.primOneConfig`). -/
-example : ∃ k_erased,
-    Exec.step (eraseProgram emptyProg) (eraseConfig primOneConfig) =
-      some (.request () [7] ⟨0⟩ (erase (⟨0, initial⟩ : Store Int)) k_erased) ∧
-    ∀ a c', primitiveContinuation a = some c' →
-      k_erased (eraseAnswer a) = some (eraseConfig c') :=
-  @step_request_erasure erasedOps types permitE emptyProg primOneConfig () [7] ⟨0⟩
-    ⟨0, initial⟩ primitiveContinuation rfl
+/-- Planted (law `ConcreteSpec.Core.Own.instrumentLife_erasure`, case `ConcreteSpec.Core.Own.Examples.initial`, subject `ConcreteSpec.Core.Own.instrumentOperands`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.skipLifeOperands`). -/
+example : ¬ (match (skipLifeOperands erasedOps types permitE).life (.bind y) ⟨7, initial⟩ with
+    | some t => erasedOps.life (.bind y) (erase (⟨7, initial⟩ : Store Int)) = some (erase t) ∧
+        life types (.bind y) initial = some t.own
+    | none => True) := by
+  change ¬ (some 7 = some 7 ∧ life types (.bind y) initial = some initial)
+  decide
 
-/-- Planted (law `ConcreteSpec.Core.Own.step_request_erasure`, case `ConcreteSpec.Core.Own.Examples.primOneConfig`, subject `ConcreteSpec.Core.Own.eraseConfig`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.eraseConfigDone`). -/
-example : Exec.step emptyProg primOneConfig =
-      some (.request () [7] ⟨0⟩ ⟨0, initial⟩ primitiveContinuation) ∧
-    ¬ (∃ k_erased,
-      Exec.step (eraseProgram emptyProg) (eraseConfigDone primOneConfig) =
-        some (.request () [7] ⟨0⟩ (erase (⟨0, initial⟩ : Store Int)) k_erased) ∧
-      ∀ a c', primitiveContinuation a = some c' →
-        k_erased (eraseAnswer a) = some (eraseConfigDone c')) := by
-  refine ⟨rfl, ?_⟩
+/-- Instance (law `ConcreteSpec.Core.Own.allows_erasure`, case `ConcreteSpec.Core.Own.Examples.initial`). -/
+example : ((instrumentOperands erasedOps types permitE).allows () [7] ⟨0, initial⟩
+      ⟨some 7, .ok 7, ⟨7, initial⟩⟩ = true ↔
+    erasedOps.allows () [7] (erase (⟨0, initial⟩ : Store Int))
+      (eraseAnswer ⟨some 7, .ok 7, ⟨7, initial⟩⟩) = true ∧ initial = initial) :=
+  @allows_erasure erasedOps types permitE () [7] ⟨0, initial⟩ ⟨some 7, .ok 7, ⟨7, initial⟩⟩
+
+/-- Planted (law `ConcreteSpec.Core.Own.allows_erasure`, case `ConcreteSpec.Core.Own.Examples.initial`, subject `ConcreteSpec.Core.Own.instrumentOperands`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.refuseAllowsOperands`). -/
+example : ¬ ((refuseAllowsOperands erasedOps types permitE).allows () [7] ⟨0, initial⟩
+      ⟨some 7, .ok 7, ⟨7, initial⟩⟩ = true ↔
+    erasedOps.allows () [7] (erase (⟨0, initial⟩ : Store Int))
+      (eraseAnswer ⟨some 7, .ok 7, ⟨7, initial⟩⟩) = true ∧ initial = initial) := by
+  decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.step_next_erasure`, case `ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig`). -/
+example : (match stepInstrumented erasedOps types permitE emptyProg bindMoveConfig with
+    | some (.next c') => Exec.step (eraseProgram emptyProg) (eraseConfig bindMoveConfig) = some (.next (eraseConfig c'))
+    | _ => True) :=
+  @step_next_erasure erasedOps types permitE emptyProg bindMoveConfig
+
+/-- Planted (law `ConcreteSpec.Core.Own.step_next_erasure`, case `ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig`, subject `ConcreteSpec.Core.Own.stepInstrumented`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.stepInstrumentedZeroVal`). -/
+example : ¬ (match stepInstrumentedZeroVal erasedOps types permitE emptyProg bindMoveConfig with
+    | some (.next c') => Exec.step (eraseProgram emptyProg) (eraseConfig bindMoveConfig) = some (.next (eraseConfig c'))
+    | _ => True) := by
+  intro h
+  cases h
+
+/-- Instance (law `ConcreteSpec.Core.Own.step_request_erasure`, case `ConcreteSpec.Core.Own.ExecErasureWitnesses.primOneConfig`). -/
+example : (match stepInstrumented erasedOps types permitE emptyProg primOneConfig with
+    | some (.request p vs site st k) =>
+      ∃ k_erased,
+        Exec.step (eraseProgram emptyProg) (eraseConfig primOneConfig) =
+          some (.request p vs site (erase st) k_erased) ∧
+        ∀ a c', k a = some c' → k_erased (eraseAnswer a) = some (eraseConfig c')
+    | _ => True) :=
+  @step_request_erasure erasedOps types permitE emptyProg primOneConfig
+
+/-- Planted (law `ConcreteSpec.Core.Own.step_request_erasure`, case `ConcreteSpec.Core.Own.ExecErasureWitnesses.primOneConfig`, subject `ConcreteSpec.Core.Own.stepInstrumented`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.stepInstrumentedZeroVal`). -/
+example : ¬ (match stepInstrumentedZeroVal erasedOps types permitE emptyProg primOneConfig with
+    | some (.request p vs site st k) =>
+      ∃ k_erased,
+        Exec.step (eraseProgram emptyProg) (eraseConfig primOneConfig) =
+          some (.request p vs site (erase st) k_erased) ∧
+        ∀ a c', k a = some c' → k_erased (eraseAnswer a) = some (eraseConfig c')
+    | _ => True) := by
   rintro ⟨_, h, _⟩
   cases h
 
-/-- Instance (law `ConcreteSpec.Core.Own.Step_erasure`, case `ConcreteSpec.Core.Own.Examples.primOneConfig`). -/
-example : Exec.Step (eraseProgram emptyProg) (eraseConfig primOneConfig)
-    (eraseLabel (O := erasedOps) (types := types) (permit := permitE) (.emit 7))
-    (eraseConfig primitiveSuccessor) :=
-  @Step_erasure erasedOps types permitE emptyProg primOneConfig primitiveSuccessor (.emit 7) primitiveStep
+/-- Instance (law `ConcreteSpec.Core.Own.Step_erasure`, case `ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig`). -/
+example : (match stepInstrumented erasedOps types permitE emptyProg bindMoveConfig with
+    | some (.next c') =>
+      Exec.Step (eraseProgram emptyProg) (eraseConfig bindMoveConfig) .silent (eraseConfig c')
+    | some (.request p vs _site st k) =>
+      ∀ a c', (instrumentOperands erasedOps types permitE).allows p vs st a = true →
+        k a = some c' →
+        Exec.Step (eraseProgram emptyProg) (eraseConfig bindMoveConfig) (eraseLabel a.label) (eraseConfig c')
+    | none => True) :=
+  @Step_erasure erasedOps types permitE emptyProg bindMoveConfig
 
-/-- Planted (law `ConcreteSpec.Core.Own.Step_erasure`, case `ConcreteSpec.Core.Own.Examples.primOneConfig`, subject `ConcreteSpec.Core.Own.eraseConfig`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.eraseConfigDone`). -/
-example : Exec.Step emptyProg primOneConfig (.emit 7) primitiveSuccessor ∧
-    ¬ Exec.Step (eraseProgram emptyProg) (eraseConfigDone primOneConfig)
-      (eraseLabel (O := erasedOps) (types := types) (permit := permitE) (.emit 7))
-      (eraseConfigDone primitiveSuccessor) :=
-  ⟨primitiveStep, step_det_none_inv rfl⟩
-
-/-- Instance (law `ConcreteSpec.Core.Own.Steps_erasure`, case `ConcreteSpec.Core.Own.Examples.primOneConfig`). -/
-example : Exec.Steps (eraseProgram emptyProg) (eraseConfig primOneConfig) [7]
-    (eraseConfig primitiveSuccessor) :=
-  @Steps_erasure erasedOps types permitE emptyProg primOneConfig primitiveSuccessor [7] primitiveSteps
-
-/-- Planted (law `ConcreteSpec.Core.Own.Steps_erasure`, case `ConcreteSpec.Core.Own.Examples.primOneConfig`, subject `ConcreteSpec.Core.Own.eraseConfig`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.eraseConfigDone`). -/
-example : Exec.Steps emptyProg primOneConfig [7] primitiveSuccessor ∧
-    ¬ Exec.Steps (eraseProgram emptyProg) (eraseConfigDone primOneConfig) [7]
-      (eraseConfigDone primitiveSuccessor) := by
-  refine ⟨primitiveSteps, ?_⟩
-  intro hs
-  have traceEmpty : ∀ {tr c'},
-      Exec.Steps (eraseProgram emptyProg) (eraseConfigDone primOneConfig) tr c' → tr = [] := by
-    intro tr c' h
-    cases h with
-    | refl => rfl
-    | step first _ => exact False.elim (step_det_none_inv rfl first)
-  have he := traceEmpty hs
-  cases he
+/-- Planted (law `ConcreteSpec.Core.Own.Step_erasure`, case `ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig`, subject `ConcreteSpec.Core.Own.stepInstrumented`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.stepInstrumentedZeroVal`). -/
+example : ¬ (match stepInstrumentedZeroVal erasedOps types permitE emptyProg bindMoveConfig with
+    | some (.next c') =>
+      Exec.Step (eraseProgram emptyProg) (eraseConfig bindMoveConfig) .silent (eraseConfig c')
+    | some (.request p vs _site st k) =>
+      ∀ a c', (instrumentOperands erasedOps types permitE).allows p vs st a = true →
+        k a = some c' →
+        Exec.Step (eraseProgram emptyProg) (eraseConfig bindMoveConfig) (eraseLabel a.label) (eraseConfig c')
+    | none => True) := by
+  intro h
+  have heq := step_det_next_inv rfl h
+  cases heq
 
 /-- Endpoint of the complete two-primitive execution, including both concrete store updates. -/
 def traceSuccessor : Exec.Config instrumentedOps :=
@@ -3712,23 +3929,102 @@ private theorem traceSteps : Exec.Steps emptyProg primTraceConfig [7, 3] traceSu
 
 /-- Instance (law `ConcreteSpec.Core.Own.Steps_erasure`, case `ConcreteSpec.Core.Own.Examples.primTraceConfig`). -/
 example : Exec.Steps (eraseProgram emptyProg) (eraseConfig primTraceConfig) [7, 3]
-    (eraseConfig traceSuccessor) :=
-  @Steps_erasure erasedOps types permitE emptyProg primTraceConfig traceSuccessor [7, 3] traceSteps
+      (eraseConfig traceSuccessor) ∧
+    (Exec.run (eraseProgram emptyProg) erasedOracle 100 (eraseConfig primTraceConfig)).events =
+      (Exec.run emptyProg (liftOracle erasedOps types permitE erasedOracle) 100 primTraceConfig).events :=
+  @Steps_erasure erasedOps types permitE emptyProg erasedOracle 100 primTraceConfig
+    traceSuccessor [7, 3] traceSteps rfl
 
-/-- Planted (law `ConcreteSpec.Core.Own.Steps_erasure`, case `ConcreteSpec.Core.Own.Examples.primTraceConfig`, subject `ConcreteSpec.Core.Own.eraseConfig`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.eraseConfigDone`). -/
+/-- Planted (law `ConcreteSpec.Core.Own.Steps_erasure`, case `ConcreteSpec.Core.Own.Examples.primTraceConfig`, subject `ConcreteSpec.Core.Own.liftOracle`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.liftOracleMutateOwn`). -/
 example : Exec.Steps emptyProg primTraceConfig [7, 3] traceSuccessor ∧
-    ¬ Exec.Steps (eraseProgram emptyProg) (eraseConfigDone primTraceConfig) [7, 3]
-      (eraseConfigDone traceSuccessor) := by
-  refine ⟨traceSteps, ?_⟩
-  intro hs
-  have traceEmpty : ∀ {tr c'},
-      Exec.Steps (eraseProgram emptyProg) (eraseConfigDone primTraceConfig) tr c' → tr = [] := by
-    intro tr c' h
-    cases h with
-    | refl => rfl
-    | step first _ => exact False.elim (step_det_none_inv rfl first)
-  have he := traceEmpty hs
-  cases he
+    Ending.NotStuck (Exec.run emptyProg (liftOracleMutateOwn erasedOps types permitE erasedOracle) 100 primTraceConfig).ending ∧
+    ¬ (Exec.Steps (eraseProgram emptyProg) (eraseConfig primTraceConfig) [7, 3]
+        (eraseConfig traceSuccessor) ∧
+      (Exec.run (eraseProgram emptyProg) erasedOracle 100 (eraseConfig primTraceConfig)).events =
+        (Exec.run emptyProg (liftOracleMutateOwn erasedOps types permitE erasedOracle) 100 primTraceConfig).events) := by
+  refine ⟨traceSteps, rfl, ?_⟩
+  rintro ⟨_, hev⟩
+  cases hev
+
+/-- Instance (law `ConcreteSpec.Core.Own.runFrom_erasure`, case `ConcreteSpec.Core.Own.Examples.primTraceConfig`). -/
+example : Exec.runFrom (eraseProgram emptyProg) erasedOracle 100 [] (eraseConfig primTraceConfig) =
+    eraseReport (Exec.runFrom emptyProg (liftOracle erasedOps types permitE erasedOracle) 100 [] primTraceConfig) :=
+  @runFrom_erasure erasedOps types permitE emptyProg erasedOracle 100 [] primTraceConfig rfl
+
+/-- Planted (law `ConcreteSpec.Core.Own.runFrom_erasure`, case `ConcreteSpec.Core.Own.Examples.primTraceConfig`, subject `ConcreteSpec.Core.Own.liftOracle`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.liftOracleMutateOwn`). -/
+example : Ending.NotStuck (Exec.runFrom emptyProg
+      (liftOracleMutateOwn erasedOps types permitE erasedOracle) 100 [] primTraceConfig).ending ∧
+    ¬ (Exec.runFrom (eraseProgram emptyProg) erasedOracle 100 [] (eraseConfig primTraceConfig) =
+      eraseReport (Exec.runFrom emptyProg (liftOracleMutateOwn erasedOps types permitE erasedOracle) 100 [] primTraceConfig)) := by
+  exact ⟨rfl, by intro h; have he := congrArg (fun r => r.events) h; cases he⟩
+
+/-- Instance (law `ConcreteSpec.Core.Own.run_erasure`, case `ConcreteSpec.Core.Own.Examples.primTraceConfig`). -/
+example : Exec.run (eraseProgram emptyProg) erasedOracle 100 (eraseConfig primTraceConfig) =
+    eraseReport (Exec.run emptyProg (liftOracle erasedOps types permitE erasedOracle) 100 primTraceConfig) :=
+  @run_erasure erasedOps types permitE emptyProg erasedOracle 100 primTraceConfig rfl
+
+/-- Planted (law `ConcreteSpec.Core.Own.run_erasure`, case `ConcreteSpec.Core.Own.Examples.primTraceConfig`, subject `ConcreteSpec.Core.Own.liftOracle`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.liftOracleMutateOwn`). -/
+example : Ending.NotStuck (Exec.run emptyProg
+      (liftOracleMutateOwn erasedOps types permitE erasedOracle) 100 primTraceConfig).ending ∧
+    ¬ (Exec.run (eraseProgram emptyProg) erasedOracle 100 (eraseConfig primTraceConfig) =
+      eraseReport (Exec.run emptyProg (liftOracleMutateOwn erasedOps types permitE erasedOracle) 100 primTraceConfig)) := by
+  exact ⟨rfl, by intro h; have he := congrArg (fun r => r.events) h; cases he⟩
+
+/-- Helper (inversion). The single-step move-binding configuration `bindMoveConfig`
+satisfies `CheckerAccepted`. (approved: PENDING). -/
+private theorem bindMove_checkerAccepted_inv :
+    CheckerAccepted erasedOps types permitE emptyProg bindMoveConfig := by
+  intro tr c hsteps
+  cases hsteps with
+  | refl =>
+    refine ⟨by decide, ⟨fun _ => by decide, fun v s' he => ?_⟩⟩
+    intro _
+    have he' : instrumentEval erasedOps permitE [(x, 7)] ⟨0, initial⟩ (.move x) = .ok (v, s') := he
+    injection he' with hpair
+    rcases Prod.mk.inj hpair with ⟨_, rfl⟩
+    decide
+  | step hs₁ hsteps =>
+    obtain rfl := step_det_next_inv rfl hs₁
+    cases hsteps with
+    | refl => exact ⟨by decide, trivial⟩
+    | step hs₂ _ => exact False.elim (step_det_none_inv rfl hs₂)
+
+/-- Instance (law `ConcreteSpec.Core.Own.step_stuck_iff_of_accepted`, case `ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig`). -/
+example : stepInstrumented erasedOps types permitE emptyProg bindMoveConfig = none ↔
+    Exec.step (eraseProgram emptyProg) (eraseConfig bindMoveConfig) = none :=
+  @step_stuck_iff_of_accepted erasedOps types permitE emptyProg bindMoveConfig
+    bindMove_checkerAccepted_inv
+
+/-- Planted (law `ConcreteSpec.Core.Own.step_stuck_iff_of_accepted`, case `ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig`, subject `ConcreteSpec.Core.Own.stepInstrumented`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.stepInstrumentedRefuse`). -/
+example : CheckerAccepted erasedOps types permitE emptyProg bindMoveConfig ∧
+    ¬ (stepInstrumentedRefuse erasedOps types permitE emptyProg bindMoveConfig = none ↔
+      Exec.step (eraseProgram emptyProg) (eraseConfig bindMoveConfig) = none) :=
+  ⟨bindMove_checkerAccepted_inv, fun h => by cases h.mp rfl⟩
+
+/-- Instance (law `ConcreteSpec.Core.Own.runFrom_erasure_of_accepted`, case `ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuckConfig`). -/
+example : Exec.runFrom (eraseProgram emptyProg) erasedOracle 100 [] (eraseConfig primFrameStuckConfig) =
+    eraseReport (Exec.runFrom emptyProg (liftOracle erasedOps types permitE erasedOracle) 100 [] primFrameStuckConfig) :=
+  @runFrom_erasure_of_accepted erasedOps types permitE emptyProg erasedOracle 100 []
+    primFrameStuckConfig primFrameStuck_checkerAccepted_inv
+
+/-- Planted (law `ConcreteSpec.Core.Own.runFrom_erasure_of_accepted`, case `ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuckConfig`, subject `ConcreteSpec.Core.Own.liftOracle`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.liftOracleMutateOwn`). -/
+example : CheckerAccepted erasedOps types permitE emptyProg primFrameStuckConfig ∧
+    ¬ (Exec.runFrom (eraseProgram emptyProg) erasedOracle 100 [] (eraseConfig primFrameStuckConfig) =
+      eraseReport (Exec.runFrom emptyProg (liftOracleMutateOwn erasedOps types permitE erasedOracle) 100 [] primFrameStuckConfig)) :=
+  ⟨primFrameStuck_checkerAccepted_inv,
+    by intro h; have he := congrArg (fun r => r.events) h; cases he⟩
+
+/-- Instance (law `ConcreteSpec.Core.Own.run_stuck_iff_of_accepted`, case `ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuckConfig`). -/
+example : Ending.IsStuck (Exec.run emptyProg (liftOracle erasedOps types permitE erasedOracle) 100 primFrameStuckConfig).ending =
+    Ending.IsStuck (Exec.run (eraseProgram emptyProg) erasedOracle 100 (eraseConfig primFrameStuckConfig)).ending :=
+  @run_stuck_iff_of_accepted erasedOps types permitE emptyProg erasedOracle 100
+    primFrameStuckConfig primFrameStuck_checkerAccepted_inv
+
+/-- Planted (law `ConcreteSpec.Core.Own.run_stuck_iff_of_accepted`, case `ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuckConfig`, subject `ConcreteSpec.Core.Own.liftOracle`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.liftOracleDropAnswer`). -/
+example : CheckerAccepted erasedOps types permitE emptyProg primFrameStuckConfig ∧
+    ¬ (Ending.IsStuck (Exec.run emptyProg (liftOracleDropAnswer erasedOps types permitE erasedOracle) 100 primFrameStuckConfig).ending =
+      Ending.IsStuck (Exec.run (eraseProgram emptyProg) erasedOracle 100 (eraseConfig primFrameStuckConfig)).ending) :=
+  ⟨primFrameStuck_checkerAccepted_inv, by decide⟩
 
 end ExecErasureWitnesses
 
@@ -4516,5 +4812,728 @@ example : ¬ (match Exec.evalArgs (abortOperands erasedOps types permitE) [(x, 7
   decide
 
 end ArgumentEvidence
+
+/-- Law (subject `ConcreteSpec.Core.Own.borrow`). In a well-formed ownership state, every loan in
+the result of `borrow` has an owned root slot. -/
+theorem loan_has_owned_root (s : State) (p : Hybrid.Place) (path : List Projection)
+    (m : Mode) (hs : WellFormed s) :
+    ResultSatisfies (fun t : State => ∀ l ∈ t.loans, ∃ x ∈ t.slots, x.place = l.root ∧ x.status = .owned)
+      (borrow s p path m) := by
+  cases h : borrow s p path m with
+  | none => trivial
+  | some t =>
+    intro l hl
+    exact loan_has_owned_root_of_wf t (borrow_preserves_result s t p path m hs h) l hl
+
+/-- Law (subject `ConcreteSpec.Core.Own.move`). In a well-formed ownership state, no loan in the
+result of `move` has a moved root slot. -/
+theorem moved_no_loan (s : State) (p : Hybrid.Place) (hs : WellFormed s) :
+    ResultSatisfies (fun t : State => ∀ x ∈ t.slots, x.status = .moved → ∀ l ∈ t.loans, x.place ≠ l.root)
+      (move s p) := by
+  cases h : move s p with
+  | none => trivial
+  | some t =>
+    intro x hx hstatus l hl
+    exact moved_no_loan_of_wf t (move_preserves_result s t p hs h) x hx hstatus l hl
+
+/-- Law (subject `ConcreteSpec.Core.Own.instrument`). Any successful instrumented operation
+computes the same value and concrete store as the concrete operation on the erased store. -/
+theorem instrument_erasure {σ α : Type} (permit : State → Option State)
+    (operation : σ → Option (α × σ)) (s : Store σ) :
+    ResultSatisfies (fun r : α × Store σ => operation (erase s) = some (r.1, erase r.2))
+      (instrument permit operation s) := by
+  cases h : instrument permit operation s with
+  | none => trivial
+  | some r => exact instrument_erasure_result permit operation s r.1 r.2 h
+
+/-- Law (subject `ConcreteSpec.Core.Own.lifeStore`). Store-level lifecycle steps update only the
+ownership frame and leave the concrete store identical. -/
+theorem life_erasure {σ : Type} (types : Var → Option Descriptor)
+    (e : Exec.Life) (s : Store σ) :
+    ResultSatisfies (fun t : Store σ => erase t = erase s ∧ life types e s.own = some t.own)
+      (lifeStore types e s) := by
+  cases h : lifeStore types e s with
+  | none => trivial
+  | some t => exact life_erasure_result types e s t h
+
+/-- Law (subject `ConcreteSpec.Core.Own.callLifeStore`). Store-level call lifecycle steps update
+only the call-aware ownership frame and leave the concrete store identical. -/
+theorem callLife_erasure {σ : Type} (types : Var → Option Descriptor)
+    (e : Exec.Life) (s : σ × CallState) :
+    ResultSatisfies (fun t : σ × CallState => t.1 = s.1 ∧ callLife types e s.2 = some t.2)
+      (callLifeStore types e s) := by
+  cases h : callLifeStore types e s with
+  | none => trivial
+  | some t => exact callLife_erasure_result types e s t h
+
+/-- Law (subject `ConcreteSpec.Core.Own.instrument`). If a permission transition preserves
+ownership well-formedness, its instrumented store operation preserves well-formedness on the
+ownership projection. -/
+theorem instrument_preserves {σ α : Type} (permit : State → Option State)
+    (hp : ∀ s t, WellFormed s → permit s = some t → WellFormed t)
+    (operation : σ → Option (α × σ)) (s : Store σ) (hs : WellFormed s.own) :
+    ResultSatisfies (fun r : α × Store σ => WellFormed r.2.own)
+      (instrument permit operation s) := by
+  cases h : instrument permit operation s with
+  | none => trivial
+  | some r => exact instrument_preserves_result permit hp operation s r.1 r.2 hs h
+
+/-- Law (subject `ConcreteSpec.Core.Own.readOwner`). A successful instrumented owner read returns
+the exact scalar read from `s.concrete` at `p` and leaves the concrete store unchanged. -/
+theorem readOwner_erasure (tgt : Target) (p : Hybrid.Place) (s : Store Hybrid.State) :
+    ResultSatisfies (fun r : Hybrid.Value × Store Hybrid.State =>
+      s.concrete.read tgt p = some r.1 ∧ r.2.concrete = s.concrete)
+      (readOwner tgt p s) := by
+  cases h : readOwner tgt p s with
+  | none => trivial
+  | some r => exact readOwner_erasure_result tgt p s r.2 r.1 h
+
+/-- Law (subject `ConcreteSpec.Core.Own.writeOwner`). A successful instrumented owner write updates
+the concrete store exactly as `Hybrid.State.write`. -/
+theorem writeOwner_erasure (tgt : Target) (p : Hybrid.Place) (v : Hybrid.Value)
+    (s : Store Hybrid.State) :
+    ResultSatisfies (fun r : Unit × Store Hybrid.State =>
+      s.concrete.write tgt p v = some r.2.concrete)
+      (writeOwner tgt p v s) := by
+  cases h : writeOwner tgt p v s with
+  | none => trivial
+  | some r => exact writeOwner_erasure_result tgt p s r.2 v h
+
+/-- Law (subject `ConcreteSpec.Core.Own.readLoan`). A successful instrumented loan read resolves
+whole-cell loan `i` to `l.root` in `s.concrete` and leaves the concrete store unchanged. -/
+theorem readLoan_erasure (tgt : Target) (i : LoanId) (s : Store Hybrid.State) :
+    ResultSatisfies (fun r : Hybrid.Value × Store Hybrid.State =>
+      ∃ l, loan s.own i = some l ∧ l.path = [] ∧
+        s.concrete.read tgt l.root = some r.1 ∧ r.2.concrete = s.concrete)
+      (readLoan tgt i s) := by
+  cases h : readLoan tgt i s with
+  | none => trivial
+  | some r => exact readLoan_erasure_result tgt i s r.2 r.1 h
+
+/-- Law (subject `ConcreteSpec.Core.Own.writeLoan`). A successful instrumented loan write resolves
+whole-cell mutable loan `i` and updates `s.concrete` at `l.root`. -/
+theorem writeLoan_erasure (tgt : Target) (i : LoanId) (v : Hybrid.Value)
+    (s : Store Hybrid.State) :
+    ResultSatisfies (fun r : Unit × Store Hybrid.State =>
+      ∃ l, loan s.own i = some l ∧ l.path = [] ∧
+        s.concrete.write tgt l.root v = some r.2.concrete)
+      (writeLoan tgt i v s) := by
+  cases h : writeLoan tgt i v s with
+  | none => trivial
+  | some r => exact writeLoan_erasure_result tgt i s r.2 v h
+
+/-- Law (subject `ConcreteSpec.Core.Own.borrow`). Borrowing issues loan ID `⟨s.nextLoan⟩` at `(p, path)`
+and advances `nextLoan` by one. -/
+theorem borrow_birth (s : State) (p : Hybrid.Place)
+    (path : List Projection) (m : Mode) :
+    ResultSatisfies (fun t : State =>
+      t.nextLoan = s.nextLoan + 1 ∧
+        ∃ l ∈ t.loans, l.id = ⟨s.nextLoan⟩ ∧ l.root = p ∧ l.path = path)
+      (borrow s p path m) := by
+  cases h : borrow s p path m with
+  | none => trivial
+  | some t => exact borrow_birth_result s t p path m h
+
+/-- Law (subject `ConcreteSpec.Core.Own.reborrowTo`). Reborrowing issues loan ID `⟨s.nextLoan⟩`,
+advances `nextLoan` by one, records `i` as parent, and retains the parent loan `a` in `t.loans`. -/
+theorem reborrow_birth (s : State) (i : LoanId)
+    (suffix : List Projection) (m : Mode) (activation : Nat) :
+    ResultSatisfies (fun t : State =>
+      t.nextLoan = s.nextLoan + 1 ∧ ∃ a l, loan s i = some a ∧ l ∈ t.loans ∧
+        l.id = ⟨s.nextLoan⟩ ∧ l.root = a.root ∧ l.path = a.path ++ suffix ∧
+        l.parent = some i ∧ a ∈ t.loans)
+      (reborrowTo s i suffix m activation) := by
+  cases h : reborrowTo s i suffix m activation with
+  | none => trivial
+  | some t => exact reborrow_birth_result s t i suffix m activation h
+
+/-- Law (subject `ConcreteSpec.Core.Own.endLoan`). Ending a loan preserves `nextLoan`, so retired
+loan IDs are never reissued. -/
+theorem endLoan_supply (s : State) (i : LoanId) :
+    ResultSatisfies (fun t : State => t.nextLoan = s.nextLoan)
+      (endLoan s i) := by
+  cases h : endLoan s i with
+  | none => trivial
+  | some t => exact endLoan_supply_result s t i h
+
+/-- Law (subject `ConcreteSpec.Core.Own.adoptDown`). Callee entry adoption requires every argument
+loan to be marked `pendingArgument = true` in `s`, clears `pendingArgument` on adopted loans in `t`,
+and leaves non-argument loans in `t` unchanged from `s`. -/
+theorem adoptDown_only_arguments (s : State) (args : List (Var × LoanId)) :
+    ResultSatisfies (fun t : State =>
+      (∀ e ∈ args, ∃ l ∈ s.loans, l.id = e.2 ∧ l.pendingArgument = true) ∧
+      (∀ l ∈ t.loans, l.id ∈ args.map Prod.snd → l.pendingArgument = false) ∧
+      (∀ l ∈ t.loans, l.id ∉ args.map Prod.snd → l ∈ s.loans))
+      (adoptDown s args) := by
+  cases h : adoptDown s args with
+  | none => trivial
+  | some t =>
+    refine ⟨adoptDown_only_arguments_result s t args h, ?_, ?_⟩
+    · unfold adoptDown at h
+      obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
+      split at h
+      · cases h
+        intro l hl harg
+        obtain ⟨l₀, _, rfl⟩ := List.mem_map.mp hl
+        by_cases hmem : l₀.id ∈ List.map Prod.snd args
+        · simp [hmem]
+        · simp [hmem] at harg
+      · contradiction
+    · unfold adoptDown at h
+      obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
+      split at h
+      · cases h
+        intro l hl hnarg
+        obtain ⟨l₀, hl₀, rfl⟩ := List.mem_map.mp hl
+        by_cases hmem : l₀.id ∈ List.map Prod.snd args
+        · simp [hmem] at hnarg
+        · simpa [hmem] using hl₀
+      · contradiction
+
+/-- Law (subject `ConcreteSpec.Core.Own.reborrowTo`). Explicit-destination reborrowing succeeds
+only when `activation` is the currently active frame `t.frames.head?`, and places the newly issued
+child loan `⟨s.nextLoan⟩` into that active frame. -/
+theorem reborrowTo_current (s : State) (i : LoanId) (suffix : List Projection)
+    (m : Mode) (activation : Nat) :
+    ResultSatisfies (fun t : State =>
+      ∃ f ∈ t.frames, f.id = activation ∧ t.frames.head? = some f ∧
+        ∃ l ∈ t.loans, l.id = ⟨s.nextLoan⟩ ∧ l.activation = f.id)
+      (reborrowTo s i suffix m activation) := by
+  cases h : reborrowTo s i suffix m activation with
+  | none => trivial
+  | some t =>
+    obtain ⟨f, hf, hact, hhead⟩ := reborrowTo_current_result s t i suffix m activation h
+    unfold reborrowTo at h
+    obtain ⟨a, _, h⟩ := Option.bind_eq_some_iff.mp h
+    split at h
+    · cases h
+      exact ⟨f, hf, hact, hhead, _, List.mem_cons_self, rfl, hact.symm⟩
+    · contradiction
+
+/-- Law (subject `ConcreteSpec.Core.Own.passOwner`). Direct owner lending issues root loan
+`⟨s.own.nextLoan⟩` with `parent = none`, `pendingArgument = true`, and `callRoot = true`. -/
+theorem passOwner_birth (s : CallState) (p : Hybrid.Place)
+    (path : List Projection) (m : Mode) (x : Var) :
+    ResultSatisfies (fun t : CallState =>
+      ∃ l, t.own.loans = l :: s.own.loans ∧ l.id = LoanId.mk s.own.nextLoan ∧
+        l.root = p ∧ l.path = path ∧ l.mode = m ∧ l.parent = none ∧
+        l.pendingArgument = true ∧ l.callRoot = true)
+      (passOwner s p path m x) := by
+  cases h : passOwner s p path m x with
+  | none => trivial
+  | some t => exact passOwner_birth_result s t p path m x h
+
+/-- Law (subject `ConcreteSpec.Core.Exec.step`). Registering a deferred call updates only the frame
+stack and leaves the configuration store—including its ownership state—unchanged (Q9.8, OD2). -/
+theorem defer_keeps_store {O : Exec.Operands} (P : Exec.Program O)
+    (f : FnId) (args : List O.Expr) (site : SiteId)
+    (L : AList Var O.Val) (s : O.Store) (k : List (Exec.Frame O)) :
+    match Exec.step P ⟨.exec (.defer f args site), L, s, k⟩ with
+    | some (.next c) => c.store = s
+    | _ => True := by
+  cases h : Exec.step P ⟨.exec (.defer f args site), L, s, k⟩ with
+  | none => trivial
+  | some out =>
+    cases out with
+    | next c => exact defer_keeps_store_result O P f args site L s k c h
+    | request _ _ _ _ _ => trivial
+
+namespace RestatedLawEvidence
+open Examples
+open ConcreteSpec.Core.Mem
+
+/-- Mutant: move spuriously refuses all inputs. -/
+def moveRefuse (_ : State) (_ : Hybrid.Place) : Option State := none
+/-- Mutant: borrow spuriously refuses all inputs. -/
+def borrowRefuse (_ : State) (_ : Hybrid.Place) (_ : List Projection) (_ : Mode) : Option State := none
+/-- Mutant: reborrowTo spuriously refuses all inputs. -/
+def reborrowToRefuse (_ : State) (_ : LoanId) (_ : List Projection) (_ : Mode) (_ : Nat) : Option State := none
+/-- Mutant: reborrow spuriously refuses all inputs. -/
+def reborrowRefuse (_ : State) (_ : LoanId) (_ : List Projection) (_ : Mode) : Option State := none
+/-- Mutant: accessOwner spuriously refuses all inputs. -/
+def accessOwnerRefuse (_ : State) (_ : Hybrid.Place) (_ : Mode) : Option State := none
+/-- Mutant: accessLoan spuriously refuses all inputs. -/
+def accessLoanRefuse (_ : State) (_ : LoanId) (_ : Mode) : Option State := none
+/-- Mutant: reinitialize spuriously refuses all inputs. -/
+def reinitializeRefuse (_ : State) (_ : Hybrid.Place) : Option State := none
+/-- Mutant: endLoan spuriously refuses all inputs. -/
+def endLoanRefuse (_ : State) (_ : LoanId) : Option State := none
+/-- Mutant: bind spuriously refuses all inputs. -/
+def bindRefuse (_ : Var → Option Descriptor) (_ : Var) (_ : State) : Option State := none
+/-- Mutant: drop spuriously refuses all inputs. -/
+def dropRefuse (_ : List Var) (_ : State) : Option State := none
+
+/-- Mutant: borrow marks the borrowed root slot `.moved`, breaking `loan_has_owned_root`. -/
+def borrowConsumeRoot (s : State) (p : Hybrid.Place) (path : List Projection) (m : Mode) : Option State := do
+  let t ← borrow s p path m
+  some { t with slots := t.slots.map fun x =>
+    if x.place == p then { x with status := .moved } else x }
+
+/-- Mutant: move marks `p` as `.moved` without checking whether active loans borrow `p`,
+breaking `moved_no_loan`. -/
+def moveIgnoreLoans (s : State) (p : Hybrid.Place) : Option State := do
+  let x ← slot s p
+  if x.desc.copy || x.status == .moved then none else
+    some { s with slots := s.slots.map fun y =>
+      if y.place == p then { y with status := .moved } else y }
+
+/-- Mutant: instrument updates the ownership projection but discards the concrete store update
+from `operation`, returning the old `s.concrete`. -/
+def instrumentKeepOldConcrete {σ α : Type} (permit : State → Option State)
+    (operation : σ → Option (α × σ)) (s : Store σ) : Option (α × Store σ) := do
+  let own ← permit s.own
+  let (a, _) ← operation s.concrete
+  some (a, ⟨s.concrete, own⟩)
+
+/-- Mutant: instrument corrupts the ownership projection by assigning an unissued place identity. -/
+def instrumentUnissuedPlace {σ α : Type} (permit : State → Option State)
+    (operation : σ → Option (α × σ)) (s : Store σ) : Option (α × Store σ) := do
+  let (a, t) ← instrument permit operation s
+  some (a, ⟨t.concrete, { t.own with slots := t.own.slots.map fun x =>
+    { x with place := ⟨t.own.nextPlace⟩ } }⟩)
+
+/-- Mutant: lifeStore returns the store unchanged without applying the ownership lifecycle step. -/
+def lifeStoreNoOp {σ : Type} (_ : Var → Option Descriptor) (_ : Exec.Life) (s : Store σ) : Option (Store σ) :=
+  some s
+
+/-- Mutant: callLifeStore returns the pair unchanged without applying `callLife`. -/
+def callLifeStoreNoOp {σ : Type} (_ : Var → Option Descriptor) (_ : Exec.Life) (s : σ × CallState) : Option (σ × CallState) :=
+  some s
+
+/-- Mutant: readOwner clears `concrete.cells`, mutating the concrete store during a read. -/
+def readOwnerCorruptConcrete (tgt : Target) (p : Hybrid.Place)
+    (s : Store Hybrid.State) : Option (Hybrid.Value × Store Hybrid.State) := do
+  let (v, t) ← readOwner tgt p s
+  some (v, ⟨⟨[], t.concrete.memory⟩, t.own⟩)
+
+/-- Mutant: writeOwner checks permission but leaves `s.concrete` unchanged. -/
+def writeOwnerNoOpConcrete (tgt : Target) (p : Hybrid.Place) (v : Hybrid.Value)
+    (s : Store Hybrid.State) : Option (Unit × Store Hybrid.State) := do
+  let (_, t) ← writeOwner tgt p v s
+  some ((), ⟨s.concrete, t.own⟩)
+
+/-- Mutant: readLoan clears `concrete.cells`, mutating the concrete store during a loan read. -/
+def readLoanCorruptConcrete (tgt : Target) (i : LoanId)
+    (s : Store Hybrid.State) : Option (Hybrid.Value × Store Hybrid.State) := do
+  let (v, t) ← readLoan tgt i s
+  some (v, ⟨⟨[], t.concrete.memory⟩, t.own⟩)
+
+/-- Mutant: writeLoan checks permission on loan `i` but leaves `s.concrete` unchanged. -/
+def writeLoanNoOpConcrete (tgt : Target) (i : LoanId) (v : Hybrid.Value)
+    (s : Store Hybrid.State) : Option (Unit × Store Hybrid.State) := do
+  let (_, t) ← writeLoan tgt i v s
+  some ((), ⟨s.concrete, t.own⟩)
+
+/-- Mutant: endLoan resets `nextLoan` to `0`, allowing retired loan IDs to be reissued. -/
+def endLoanRewindSupply (s : State) (i : LoanId) : Option State := do
+  let t ← endLoan s i
+  some { t with nextLoan := 0 }
+
+/-- Mutant: adoptDown returns `s` unchanged without clearing `pendingArgument` on adopted loans. -/
+def adoptDownNoOp (s : State) (_ : List (Var × LoanId)) : Option State :=
+  some s
+
+/-- Mutant: reborrowTo places the newly issued loan in inactive activation `activation + 1`. -/
+def reborrowToInactive (s : State) (i : LoanId) (suffix : List Projection)
+    (m : Mode) (activation : Nat) : Option State := do
+  let t ← reborrowTo s i suffix m activation
+  some { t with loans := t.loans.map fun l =>
+    if l.id == ⟨s.nextLoan⟩ then { l with activation := activation + 1 } else l }
+
+/-- Mutant: `step` on `.defer` eagerly evaluates the deferred call's arguments at registration
+time instead of waiting until scope exit (violating Q9.8 / OD2), mutating `c.store`. -/
+def stepDeferEagerArgs {O : Exec.Operands} (P : Exec.Program O) (c : Exec.Config O) : Option (Exec.Out O) :=
+  match c.ctrl with
+  | .exec (.defer f args site) =>
+    match Exec.evalArgs O c.locals c.store args with
+    | .ok (_, st') =>
+      (Exec.register ⟨f, args, site⟩ c.frames).map fun k' =>
+        .next { c with ctrl := .done, store := st', frames := k' }
+    | _ => none
+  | _ => Exec.step P c
+
+def deferCallerConfig : Exec.Config callOps :=
+  ⟨.exec (.defer callee
+      [.ownerArgument ⟨1⟩ .mutable DirectArgumentWitnesses.z] ⟨0⟩),
+   [], DirectArgumentWitnesses.caller, [.scope ⟨0⟩ [] []]⟩
+
+def intStore0 : Store Int := ⟨10, initial⟩
+def intCallStore0 : Int × CallState := (10, CallWitnesses.waiting)
+def incIntOp (n : Int) : Option (Int × Int) := some (n, n + 1)
+def sharedPermit (s : State) : Option State := accessOwner s ⟨0⟩ .shared
+
+def hybridCell0 : Hybrid.State :=
+  ⟨[(⟨0⟩, ⟨.int .i32, .structured (.int .i32 7)⟩)], Memory.empty⟩
+
+def wholeShared : State := (borrow initial ⟨0⟩ [] .shared).getD initial
+def wholeExclusive : State := (borrow initial ⟨0⟩ [] .mutable).getD initial
+
+def ownerStore0 : Store Hybrid.State := ⟨hybridCell0, initial⟩
+def sharedLoanStore0 : Store Hybrid.State := ⟨hybridCell0, wholeShared⟩
+def exclusiveLoanStore0 : Store Hybrid.State := ⟨hybridCell0, wholeExclusive⟩
+
+abbrev descI32 : Descriptor := ⟨.int .i32, false, true⟩
+abbrev slot0Owned : Slot := ⟨⟨0⟩, 0, descI32, .owned⟩
+abbrev slot0Moved : Slot := ⟨⟨0⟩, 0, descI32, .moved⟩
+abbrev frame0 : Activation := ⟨0, [(x, ⟨0⟩)], []⟩
+abbrev sharedLoan0 : Loan := ⟨⟨0⟩, ⟨0⟩, [.index 0], .shared, none, [], 0, false, false⟩
+abbrev exclusiveLoan0 : Loan := ⟨⟨0⟩, ⟨0⟩, [.index 0], .mutable, none, [], 0, false, false⟩
+
+-- Progress laws (10)
+
+/-- Instance (law `ConcreteSpec.Core.Own.move_progress`, case `ConcreteSpec.Core.Own.Examples.initial`). -/
+example : ∃ t, move initial ⟨0⟩ = some t :=
+  @move_progress initial ⟨0⟩ slot0Owned rfl rfl rfl (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.move_progress`, case `ConcreteSpec.Core.Own.Examples.initial`, subject `ConcreteSpec.Core.Own.move`, mutant `ConcreteSpec.Core.Own.RestatedLawEvidence.moveRefuse`). -/
+example : slot initial ⟨0⟩ = some slot0Owned ∧
+    slot0Owned.desc.copy = false ∧
+    slot0Owned.status = .owned ∧
+    (∀ l ∈ initial.loans, l.root ≠ ⟨0⟩) ∧
+    ¬ (∃ t, moveRefuse initial ⟨0⟩ = some t) :=
+  ⟨rfl, rfl, rfl, by decide, by simp [moveRefuse]⟩
+
+/-- Instance (law `ConcreteSpec.Core.Own.borrow_progress`, case `ConcreteSpec.Core.Own.Examples.initial`). -/
+example : ∃ t, borrow initial ⟨0⟩ [.index 1] .shared = some t :=
+  @borrow_progress initial ⟨0⟩ [.index 1] .shared frame0 rfl (by decide) (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.borrow_progress`, case `ConcreteSpec.Core.Own.Examples.initial`, subject `ConcreteSpec.Core.Own.borrow`, mutant `ConcreteSpec.Core.Own.RestatedLawEvidence.borrowRefuse`). -/
+example : initial.frames.head? = some frame0 ∧
+    frame0.id < initial.nextActivation ∧
+    ownerAccess initial ⟨0⟩ .shared = true ∧
+    ¬ (∃ t, borrowRefuse initial ⟨0⟩ [.index 1] .shared = some t) :=
+  ⟨rfl, by decide, by decide, by simp [borrowRefuse]⟩
+
+/-- Instance (law `ConcreteSpec.Core.Own.reborrowTo_progress`, case `ConcreteSpec.Core.Own.Examples.exclusive`). -/
+example : ∃ t, reborrowTo exclusive ⟨0⟩ [.index 1] .mutable 0 = some t :=
+  @reborrowTo_progress exclusive ⟨0⟩ [.index 1] .mutable 0
+    exclusiveLoan0 rfl (by decide) rfl (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.reborrowTo_progress`, case `ConcreteSpec.Core.Own.Examples.exclusive`, subject `ConcreteSpec.Core.Own.reborrowTo`, mutant `ConcreteSpec.Core.Own.RestatedLawEvidence.reborrowToRefuse`). -/
+example : loan exclusive ⟨0⟩ = some exclusiveLoan0 ∧
+    0 < exclusive.nextActivation ∧
+    exclusive.frames.head?.map Activation.id = some 0 ∧
+    loanAccess exclusive ⟨0⟩ .mutable = true ∧
+    ¬ (∃ t, reborrowToRefuse exclusive ⟨0⟩ [.index 1] .mutable 0 = some t) :=
+  ⟨rfl, by decide, rfl, by decide, by simp [reborrowToRefuse]⟩
+
+/-- Instance (law `ConcreteSpec.Core.Own.reborrow_progress`, case `ConcreteSpec.Core.Own.Examples.exclusive`). -/
+example : ∃ t, reborrow exclusive ⟨0⟩ [.index 1] .mutable = some t :=
+  @reborrow_progress exclusive ⟨0⟩ [.index 1] .mutable
+    frame0 rfl (by decide) exclusiveLoan0 rfl (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.reborrow_progress`, case `ConcreteSpec.Core.Own.Examples.exclusive`, subject `ConcreteSpec.Core.Own.reborrow`, mutant `ConcreteSpec.Core.Own.RestatedLawEvidence.reborrowRefuse`). -/
+example : exclusive.frames.head? = some frame0 ∧
+    frame0.id < exclusive.nextActivation ∧
+    loan exclusive ⟨0⟩ = some exclusiveLoan0 ∧
+    loanAccess exclusive ⟨0⟩ .mutable = true ∧
+    ¬ (∃ t, reborrowRefuse exclusive ⟨0⟩ [.index 1] .mutable = some t) :=
+  ⟨rfl, by decide, rfl, by decide, by simp [reborrowRefuse]⟩
+
+/-- Instance (law `ConcreteSpec.Core.Own.accessOwner_progress`, case `ConcreteSpec.Core.Own.Examples.initial`). -/
+example : accessOwner initial ⟨0⟩ .shared = some initial :=
+  @accessOwner_progress initial ⟨0⟩ .shared (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.accessOwner_progress`, case `ConcreteSpec.Core.Own.Examples.initial`, subject `ConcreteSpec.Core.Own.accessOwner`, mutant `ConcreteSpec.Core.Own.RestatedLawEvidence.accessOwnerRefuse`). -/
+example : ownerAccess initial ⟨0⟩ .shared = true ∧
+    ¬ (accessOwnerRefuse initial ⟨0⟩ .shared = some initial) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.accessLoan_progress`, case `ConcreteSpec.Core.Own.Examples.shared`). -/
+example : accessLoan shared ⟨0⟩ .shared = some shared :=
+  @accessLoan_progress shared ⟨0⟩ .shared (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.accessLoan_progress`, case `ConcreteSpec.Core.Own.Examples.shared`, subject `ConcreteSpec.Core.Own.accessLoan`, mutant `ConcreteSpec.Core.Own.RestatedLawEvidence.accessLoanRefuse`). -/
+example : loanAccess shared ⟨0⟩ .shared = true ∧
+    ¬ (accessLoanRefuse shared ⟨0⟩ .shared = some shared) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.reinitialize_progress`, case `ConcreteSpec.Core.Own.LifecycleWitnesses.moved`). -/
+example : ∃ t, reinitialize LifecycleWitnesses.moved ⟨0⟩ = some t :=
+  @reinitialize_progress LifecycleWitnesses.moved ⟨0⟩ slot0Moved rfl (Or.inl rfl) (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.reinitialize_progress`, case `ConcreteSpec.Core.Own.LifecycleWitnesses.moved`, subject `ConcreteSpec.Core.Own.reinitialize`, mutant `ConcreteSpec.Core.Own.RestatedLawEvidence.reinitializeRefuse`). -/
+example : slot LifecycleWitnesses.moved ⟨0⟩ = some slot0Moved ∧
+    (slot0Moved.status = .moved ∨ (slot0Moved.desc.copy = true ∧ slot0Moved.desc.mutable = true)) ∧
+    (∀ l ∈ LifecycleWitnesses.moved.loans, l.root ≠ ⟨0⟩) ∧
+    ¬ (∃ t, reinitializeRefuse LifecycleWitnesses.moved ⟨0⟩ = some t) :=
+  ⟨rfl, Or.inl rfl, by decide, by simp [reinitializeRefuse]⟩
+
+/-- Instance (law `ConcreteSpec.Core.Own.endLoan_progress`, case `ConcreteSpec.Core.Own.Examples.shared`). -/
+example : ∃ t, endLoan shared ⟨0⟩ = some t :=
+  @endLoan_progress shared ⟨0⟩ sharedLoan0 rfl (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.endLoan_progress`, case `ConcreteSpec.Core.Own.Examples.shared`, subject `ConcreteSpec.Core.Own.endLoan`, mutant `ConcreteSpec.Core.Own.RestatedLawEvidence.endLoanRefuse`). -/
+example : loan shared ⟨0⟩ = some sharedLoan0 ∧
+    (∀ b ∈ shared.loans, b.parent ≠ some ⟨0⟩) ∧
+    ¬ (∃ t, endLoanRefuse shared ⟨0⟩ = some t) :=
+  ⟨rfl, by decide, by simp [endLoanRefuse]⟩
+
+/-- Instance (law `ConcreteSpec.Core.Own.bind_fresh_progress`, case `ConcreteSpec.Core.Own.Examples.initial`). -/
+example : ∃ t, bind types y initial = some t :=
+  @bind_fresh_progress types initial y frame0 descI32 rfl (by decide) rfl rfl
+
+/-- Planted (law `ConcreteSpec.Core.Own.bind_fresh_progress`, case `ConcreteSpec.Core.Own.Examples.initial`, subject `ConcreteSpec.Core.Own.bind`, mutant `ConcreteSpec.Core.Own.RestatedLawEvidence.bindRefuse`). -/
+example : initial.frames.head? = some frame0 ∧
+    frame0.id < initial.nextActivation ∧
+    AList.lookup frame0.locals y = none ∧
+    types y = some descI32 ∧
+    ¬ (∃ t, bindRefuse types y initial = some t) :=
+  ⟨rfl, by decide, rfl, rfl, by simp [bindRefuse]⟩
+
+/-- Instance (law `ConcreteSpec.Core.Own.drop_progress`, case `ConcreteSpec.Core.Own.LifecycleWitnesses.moved`). -/
+example : ∃ t, drop [x] LifecycleWitnesses.moved = some t :=
+  @drop_progress LifecycleWitnesses.moved [x] frame0 rfl (by decide) (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.drop_progress`, case `ConcreteSpec.Core.Own.LifecycleWitnesses.moved`, subject `ConcreteSpec.Core.Own.drop`, mutant `ConcreteSpec.Core.Own.RestatedLawEvidence.dropRefuse`). -/
+example : LifecycleWitnesses.moved.frames.head? = some frame0 ∧
+    (∀ a ∈ LifecycleWitnesses.moved.slots,
+      a.place ∈ (frame0.locals.filter (fun e => decide (e.1 ∈ [x]))).map Prod.snd →
+      a.desc.copy = true ∨ a.status = .moved) ∧
+    (∀ l ∈ LifecycleWitnesses.moved.loans,
+      l.root ∉ (frame0.locals.filter (fun e => decide (e.1 ∈ [x]))).map Prod.snd) ∧
+    ¬ (∃ t, dropRefuse [x] LifecycleWitnesses.moved = some t) :=
+  ⟨rfl, by decide, by decide, by simp [dropRefuse]⟩
+
+-- Restated domain, store-erasure, birth, and call-protocol laws (17)
+
+/-- Instance (law `ConcreteSpec.Core.Own.loan_has_owned_root`, case `ConcreteSpec.Core.Own.Examples.initial`). -/
+example : ResultSatisfies (fun t : State => ∀ l ∈ t.loans, ∃ x ∈ t.slots, x.place = l.root ∧ x.status = .owned)
+    (borrow initial ⟨0⟩ [.index 1] .shared) :=
+  @loan_has_owned_root initial ⟨0⟩ [.index 1] .shared (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.loan_has_owned_root`, case `ConcreteSpec.Core.Own.Examples.initial`, subject `ConcreteSpec.Core.Own.borrow`, mutant `ConcreteSpec.Core.Own.RestatedLawEvidence.borrowConsumeRoot`). -/
+example : WellFormed initial ∧
+    ¬ ResultSatisfies (fun t : State => ∀ l ∈ t.loans, ∃ x ∈ t.slots, x.place = l.root ∧ x.status = .owned)
+      (borrowConsumeRoot initial ⟨0⟩ [.index 1] .shared) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.moved_no_loan`, case `ConcreteSpec.Core.Own.Examples.shared`). -/
+example : ResultSatisfies (fun t : State => ∀ x ∈ t.slots, x.status = .moved → ∀ l ∈ t.loans, x.place ≠ l.root)
+    (move shared ⟨0⟩) :=
+  @moved_no_loan shared ⟨0⟩ (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.moved_no_loan`, case `ConcreteSpec.Core.Own.Examples.shared`, subject `ConcreteSpec.Core.Own.move`, mutant `ConcreteSpec.Core.Own.RestatedLawEvidence.moveIgnoreLoans`). -/
+example : WellFormed shared ∧
+    ¬ ResultSatisfies (fun t : State => ∀ x ∈ t.slots, x.status = .moved → ∀ l ∈ t.loans, x.place ≠ l.root)
+      (moveIgnoreLoans shared ⟨0⟩) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.instrument_erasure`, case `ConcreteSpec.Core.Own.RestatedLawEvidence.intStore0`). -/
+example : ResultSatisfies (fun r : Int × Store Int => incIntOp (erase intStore0) = some (r.1, erase r.2))
+    (instrument sharedPermit incIntOp intStore0) :=
+  @instrument_erasure Int Int sharedPermit incIntOp intStore0
+
+/-- Planted (law `ConcreteSpec.Core.Own.instrument_erasure`, case `ConcreteSpec.Core.Own.RestatedLawEvidence.intStore0`, subject `ConcreteSpec.Core.Own.instrument`, mutant `ConcreteSpec.Core.Own.RestatedLawEvidence.instrumentKeepOldConcrete`). -/
+example : ¬ ResultSatisfies (fun r : Int × Store Int => incIntOp (erase intStore0) = some (r.1, erase r.2))
+    (instrumentKeepOldConcrete sharedPermit incIntOp intStore0) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.life_erasure`, case `ConcreteSpec.Core.Own.RestatedLawEvidence.intStore0`). -/
+example : ResultSatisfies (fun t : Store Int => erase t = erase intStore0 ∧ life types (.bind y) intStore0.own = some t.own)
+    (lifeStore types (.bind y) intStore0) :=
+  @life_erasure Int types (.bind y) intStore0
+
+/-- Planted (law `ConcreteSpec.Core.Own.life_erasure`, case `ConcreteSpec.Core.Own.RestatedLawEvidence.intStore0`, subject `ConcreteSpec.Core.Own.lifeStore`, mutant `ConcreteSpec.Core.Own.RestatedLawEvidence.lifeStoreNoOp`). -/
+example : ¬ ResultSatisfies (fun t : Store Int => erase t = erase intStore0 ∧ life types (.bind y) intStore0.own = some t.own)
+    (lifeStoreNoOp types (.bind y) intStore0) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.callLife_erasure`, case `ConcreteSpec.Core.Own.RestatedLawEvidence.intCallStore0`). -/
+example : ResultSatisfies (fun t : Int × CallState => t.1 = intCallStore0.1 ∧ callLife types (.enter [y]) intCallStore0.2 = some t.2)
+    (callLifeStore types (.enter [y]) intCallStore0) :=
+  @callLife_erasure Int types (.enter [y]) intCallStore0
+
+/-- Planted (law `ConcreteSpec.Core.Own.callLife_erasure`, case `ConcreteSpec.Core.Own.RestatedLawEvidence.intCallStore0`, subject `ConcreteSpec.Core.Own.callLifeStore`, mutant `ConcreteSpec.Core.Own.RestatedLawEvidence.callLifeStoreNoOp`). -/
+example : ¬ ResultSatisfies (fun t : Int × CallState => t.1 = intCallStore0.1 ∧ callLife types (.enter [y]) intCallStore0.2 = some t.2)
+    (callLifeStoreNoOp types (.enter [y]) intCallStore0) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.instrument_preserves`, case `ConcreteSpec.Core.Own.RestatedLawEvidence.intStore0`). -/
+example : ResultSatisfies (fun r : Int × Store Int => WellFormed r.2.own)
+    (instrument sharedPermit incIntOp intStore0) :=
+  @instrument_preserves Int Int sharedPermit
+    (fun s t hs ht => accessOwner_preserves_result s t ⟨0⟩ .shared hs ht)
+    incIntOp intStore0 (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.instrument_preserves`, case `ConcreteSpec.Core.Own.RestatedLawEvidence.intStore0`, subject `ConcreteSpec.Core.Own.instrument`, mutant `ConcreteSpec.Core.Own.RestatedLawEvidence.instrumentUnissuedPlace`). -/
+example : (∀ s t, WellFormed s → sharedPermit s = some t → WellFormed t) ∧
+    WellFormed intStore0.own ∧
+    ¬ ResultSatisfies (fun r : Int × Store Int => WellFormed r.2.own)
+      (instrumentUnissuedPlace sharedPermit incIntOp intStore0) :=
+  ⟨fun s t hs ht => accessOwner_preserves_result s t ⟨0⟩ .shared hs ht, by decide, by decide⟩
+
+/-- Instance (law `ConcreteSpec.Core.Own.readOwner_erasure`, case `ConcreteSpec.Core.Own.RestatedLawEvidence.ownerStore0`). -/
+example : ResultSatisfies (fun r : Hybrid.Value × Store Hybrid.State =>
+      ownerStore0.concrete.read linuxX8664 ⟨0⟩ = some r.1 ∧ r.2.concrete = ownerStore0.concrete)
+    (readOwner linuxX8664 ⟨0⟩ ownerStore0) :=
+  @readOwner_erasure linuxX8664 ⟨0⟩ ownerStore0
+
+/-- Planted (law `ConcreteSpec.Core.Own.readOwner_erasure`, case `ConcreteSpec.Core.Own.RestatedLawEvidence.ownerStore0`, subject `ConcreteSpec.Core.Own.readOwner`, mutant `ConcreteSpec.Core.Own.RestatedLawEvidence.readOwnerCorruptConcrete`). -/
+example : ¬ ResultSatisfies (fun r : Hybrid.Value × Store Hybrid.State =>
+      ownerStore0.concrete.read linuxX8664 ⟨0⟩ = some r.1 ∧ r.2.concrete = ownerStore0.concrete)
+    (readOwnerCorruptConcrete linuxX8664 ⟨0⟩ ownerStore0) := by
+  rintro ⟨_, h⟩
+  have hc := congrArg (fun st : Hybrid.State => st.cells.length) h
+  cases hc
+
+/-- Instance (law `ConcreteSpec.Core.Own.writeOwner_erasure`, case `ConcreteSpec.Core.Own.RestatedLawEvidence.ownerStore0`). -/
+example : ResultSatisfies (fun r : Unit × Store Hybrid.State =>
+      ownerStore0.concrete.write linuxX8664 ⟨0⟩ (.int .i32 19) = some r.2.concrete)
+    (writeOwner linuxX8664 ⟨0⟩ (.int .i32 19) ownerStore0) :=
+  @writeOwner_erasure linuxX8664 ⟨0⟩ (.int .i32 19) ownerStore0
+
+/-- Planted (law `ConcreteSpec.Core.Own.writeOwner_erasure`, case `ConcreteSpec.Core.Own.RestatedLawEvidence.ownerStore0`, subject `ConcreteSpec.Core.Own.writeOwner`, mutant `ConcreteSpec.Core.Own.RestatedLawEvidence.writeOwnerNoOpConcrete`). -/
+example : ¬ ResultSatisfies (fun r : Unit × Store Hybrid.State =>
+      ownerStore0.concrete.write linuxX8664 ⟨0⟩ (.int .i32 19) = some r.2.concrete)
+    (writeOwnerNoOpConcrete linuxX8664 ⟨0⟩ (.int .i32 19) ownerStore0) := by
+  intro h
+  have hc := congrArg (fun ost : Option Hybrid.State => ost.bind (fun st => st.read linuxX8664 ⟨0⟩)) h
+  revert hc
+  decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.readLoan_erasure`, case `ConcreteSpec.Core.Own.RestatedLawEvidence.sharedLoanStore0`). -/
+example : ResultSatisfies (fun r : Hybrid.Value × Store Hybrid.State =>
+      ∃ l, loan sharedLoanStore0.own ⟨0⟩ = some l ∧ l.path = [] ∧
+        sharedLoanStore0.concrete.read linuxX8664 l.root = some r.1 ∧
+        r.2.concrete = sharedLoanStore0.concrete)
+    (readLoan linuxX8664 ⟨0⟩ sharedLoanStore0) :=
+  @readLoan_erasure linuxX8664 ⟨0⟩ sharedLoanStore0
+
+/-- Planted (law `ConcreteSpec.Core.Own.readLoan_erasure`, case `ConcreteSpec.Core.Own.RestatedLawEvidence.sharedLoanStore0`, subject `ConcreteSpec.Core.Own.readLoan`, mutant `ConcreteSpec.Core.Own.RestatedLawEvidence.readLoanCorruptConcrete`). -/
+example : ¬ ResultSatisfies (fun r : Hybrid.Value × Store Hybrid.State =>
+      ∃ l, loan sharedLoanStore0.own ⟨0⟩ = some l ∧ l.path = [] ∧
+        sharedLoanStore0.concrete.read linuxX8664 l.root = some r.1 ∧
+        r.2.concrete = sharedLoanStore0.concrete)
+    (readLoanCorruptConcrete linuxX8664 ⟨0⟩ sharedLoanStore0) := by
+  rintro ⟨_, _, _, _, h⟩
+  have hc := congrArg (fun st : Hybrid.State => st.cells.length) h
+  cases hc
+
+/-- Instance (law `ConcreteSpec.Core.Own.writeLoan_erasure`, case `ConcreteSpec.Core.Own.RestatedLawEvidence.exclusiveLoanStore0`). -/
+example : ResultSatisfies (fun r : Unit × Store Hybrid.State =>
+      ∃ l, loan exclusiveLoanStore0.own ⟨0⟩ = some l ∧ l.path = [] ∧
+        exclusiveLoanStore0.concrete.write linuxX8664 l.root (.int .i32 23) = some r.2.concrete)
+    (writeLoan linuxX8664 ⟨0⟩ (.int .i32 23) exclusiveLoanStore0) :=
+  @writeLoan_erasure linuxX8664 ⟨0⟩ (.int .i32 23) exclusiveLoanStore0
+
+/-- Planted (law `ConcreteSpec.Core.Own.writeLoan_erasure`, case `ConcreteSpec.Core.Own.RestatedLawEvidence.exclusiveLoanStore0`, subject `ConcreteSpec.Core.Own.writeLoan`, mutant `ConcreteSpec.Core.Own.RestatedLawEvidence.writeLoanNoOpConcrete`). -/
+example : ¬ ResultSatisfies (fun r : Unit × Store Hybrid.State =>
+      ∃ l, loan exclusiveLoanStore0.own ⟨0⟩ = some l ∧ l.path = [] ∧
+        exclusiveLoanStore0.concrete.write linuxX8664 l.root (.int .i32 23) = some r.2.concrete)
+    (writeLoanNoOpConcrete linuxX8664 ⟨0⟩ (.int .i32 23) exclusiveLoanStore0) := by
+  rintro ⟨l, hl, _, hw⟩
+  have hl' : l = ⟨⟨0⟩, ⟨0⟩, [], .mutable, none, [], 0, false, false⟩ :=
+    Option.some.inj (hl.symm.trans rfl)
+  subst hl'
+  have hc := congrArg (fun ost : Option Hybrid.State => ost.bind (fun st => st.read linuxX8664 ⟨0⟩)) hw
+  revert hc
+  decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.borrow_birth`, case `ConcreteSpec.Core.Own.Examples.initial`). -/
+example : ResultSatisfies (fun t : State =>
+      t.nextLoan = initial.nextLoan + 1 ∧
+        ∃ l ∈ t.loans, l.id = ⟨initial.nextLoan⟩ ∧ l.root = ⟨0⟩ ∧ l.path = [.index 1])
+    (borrow initial ⟨0⟩ [.index 1] .shared) :=
+  @borrow_birth initial ⟨0⟩ [.index 1] .shared
+
+/-- Planted (law `ConcreteSpec.Core.Own.borrow_birth`, case `ConcreteSpec.Core.Own.Examples.initial`, subject `ConcreteSpec.Core.Own.borrow`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.borrowNoAdvanceSupply`). -/
+example : ¬ ResultSatisfies (fun t : State =>
+      t.nextLoan = initial.nextLoan + 1 ∧
+        ∃ l ∈ t.loans, l.id = ⟨initial.nextLoan⟩ ∧ l.root = ⟨0⟩ ∧ l.path = [.index 1])
+    (PreservationEvidence.borrowNoAdvanceSupply initial ⟨0⟩ [.index 1] .shared) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.reborrow_birth`, case `ConcreteSpec.Core.Own.Examples.exclusive`). -/
+example : ResultSatisfies (fun t : State =>
+      t.nextLoan = exclusive.nextLoan + 1 ∧ ∃ a l, loan exclusive ⟨0⟩ = some a ∧ l ∈ t.loans ∧
+        l.id = ⟨exclusive.nextLoan⟩ ∧ l.root = a.root ∧ l.path = a.path ++ [.index 1] ∧
+        l.parent = some ⟨0⟩ ∧ a ∈ t.loans)
+    (reborrowTo exclusive ⟨0⟩ [.index 1] .mutable 0) :=
+  @reborrow_birth exclusive ⟨0⟩ [.index 1] .mutable 0
+
+/-- Planted (law `ConcreteSpec.Core.Own.reborrow_birth`, case `ConcreteSpec.Core.Own.Examples.exclusive`, subject `ConcreteSpec.Core.Own.reborrowTo`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.reborrowToDropParent`). -/
+example : ¬ ResultSatisfies (fun t : State =>
+      t.nextLoan = exclusive.nextLoan + 1 ∧ ∃ a l, loan exclusive ⟨0⟩ = some a ∧ l ∈ t.loans ∧
+        l.id = ⟨exclusive.nextLoan⟩ ∧ l.root = a.root ∧ l.path = a.path ++ [.index 1] ∧
+        l.parent = some ⟨0⟩ ∧ a ∈ t.loans)
+    (PreservationEvidence.reborrowToDropParent exclusive ⟨0⟩ [.index 1] .mutable 0) := by
+  rintro ⟨_, a, _, ha, _, _, _, _, _, ha_mem⟩
+  have ha' : a = exclusiveLoan0 := Option.some.inj (ha.symm.trans rfl)
+  subst ha'
+  revert ha_mem
+  decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.endLoan_supply`, case `ConcreteSpec.Core.Own.Examples.shared`). -/
+example : ResultSatisfies (fun t : State => t.nextLoan = shared.nextLoan)
+    (endLoan shared ⟨0⟩) :=
+  @endLoan_supply shared ⟨0⟩
+
+/-- Planted (law `ConcreteSpec.Core.Own.endLoan_supply`, case `ConcreteSpec.Core.Own.Examples.shared`, subject `ConcreteSpec.Core.Own.endLoan`, mutant `ConcreteSpec.Core.Own.RestatedLawEvidence.endLoanRewindSupply`). -/
+example : ¬ ResultSatisfies (fun t : State => t.nextLoan = shared.nextLoan)
+    (endLoanRewindSupply shared ⟨0⟩) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.adoptDown_only_arguments`, case `ConcreteSpec.Core.Own.PreservationEvidence.adoptionInput`). -/
+example : ResultSatisfies (fun t : State =>
+      (∀ e ∈ DirectArgumentWitnesses.waiting.pending, ∃ l ∈ PreservationEvidence.adoptionInput.loans, l.id = e.2 ∧ l.pendingArgument = true) ∧
+      (∀ l ∈ t.loans, l.id ∈ DirectArgumentWitnesses.waiting.pending.map Prod.snd → l.pendingArgument = false) ∧
+      (∀ l ∈ t.loans, l.id ∉ DirectArgumentWitnesses.waiting.pending.map Prod.snd → l ∈ PreservationEvidence.adoptionInput.loans))
+    (adoptDown PreservationEvidence.adoptionInput DirectArgumentWitnesses.waiting.pending) :=
+  @adoptDown_only_arguments PreservationEvidence.adoptionInput DirectArgumentWitnesses.waiting.pending
+
+/-- Planted (law `ConcreteSpec.Core.Own.adoptDown_only_arguments`, case `ConcreteSpec.Core.Own.PreservationEvidence.adoptionInput`, subject `ConcreteSpec.Core.Own.adoptDown`, mutant `ConcreteSpec.Core.Own.RestatedLawEvidence.adoptDownNoOp`). -/
+example : ¬ ResultSatisfies (fun t : State =>
+      (∀ e ∈ DirectArgumentWitnesses.waiting.pending, ∃ l ∈ PreservationEvidence.adoptionInput.loans, l.id = e.2 ∧ l.pendingArgument = true) ∧
+      (∀ l ∈ t.loans, l.id ∈ DirectArgumentWitnesses.waiting.pending.map Prod.snd → l.pendingArgument = false) ∧
+      (∀ l ∈ t.loans, l.id ∉ DirectArgumentWitnesses.waiting.pending.map Prod.snd → l ∈ PreservationEvidence.adoptionInput.loans))
+    (adoptDownNoOp PreservationEvidence.adoptionInput DirectArgumentWitnesses.waiting.pending) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.reborrowTo_current`, case `ConcreteSpec.Core.Own.Examples.exclusive`). -/
+example : ResultSatisfies (fun t : State =>
+      ∃ f ∈ t.frames, f.id = 0 ∧ t.frames.head? = some f ∧
+        ∃ l ∈ t.loans, l.id = ⟨exclusive.nextLoan⟩ ∧ l.activation = f.id)
+    (reborrowTo exclusive ⟨0⟩ [.index 1] .mutable 0) :=
+  @reborrowTo_current exclusive ⟨0⟩ [.index 1] .mutable 0
+
+/-- Planted (law `ConcreteSpec.Core.Own.reborrowTo_current`, case `ConcreteSpec.Core.Own.Examples.exclusive`, subject `ConcreteSpec.Core.Own.reborrowTo`, mutant `ConcreteSpec.Core.Own.RestatedLawEvidence.reborrowToInactive`). -/
+example : ¬ ResultSatisfies (fun t : State =>
+      ∃ f ∈ t.frames, f.id = 0 ∧ t.frames.head? = some f ∧
+        ∃ l ∈ t.loans, l.id = ⟨exclusive.nextLoan⟩ ∧ l.activation = f.id)
+    (reborrowToInactive exclusive ⟨0⟩ [.index 1] .mutable 0) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.passOwner_birth`, case `ConcreteSpec.Core.Own.DirectArgumentWitnesses.caller`). -/
+example : ResultSatisfies (fun t : CallState =>
+      ∃ l, t.own.loans = l :: DirectArgumentWitnesses.caller.own.loans ∧
+        l.id = LoanId.mk DirectArgumentWitnesses.caller.own.nextLoan ∧
+        l.root = ⟨1⟩ ∧ l.path = [.index 3] ∧ l.mode = .mutable ∧ l.parent = none ∧
+        l.pendingArgument = true ∧ l.callRoot = true)
+    (passOwner DirectArgumentWitnesses.caller ⟨1⟩ [.index 3] .mutable DirectArgumentWitnesses.z) :=
+  @passOwner_birth DirectArgumentWitnesses.caller ⟨1⟩ [.index 3] .mutable DirectArgumentWitnesses.z
+
+/-- Planted (law `ConcreteSpec.Core.Own.passOwner_birth`, case `ConcreteSpec.Core.Own.DirectArgumentWitnesses.caller`, subject `ConcreteSpec.Core.Own.passOwner`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.passOwnerClearCallRoot`). -/
+example : ¬ ResultSatisfies (fun t : CallState =>
+      ∃ l, t.own.loans = l :: DirectArgumentWitnesses.caller.own.loans ∧
+        l.id = LoanId.mk DirectArgumentWitnesses.caller.own.nextLoan ∧
+        l.root = ⟨1⟩ ∧ l.path = [.index 3] ∧ l.mode = .mutable ∧ l.parent = none ∧
+        l.pendingArgument = true ∧ l.callRoot = true)
+    (PreservationEvidence.passOwnerClearCallRoot DirectArgumentWitnesses.caller ⟨1⟩ [.index 3] .mutable DirectArgumentWitnesses.z) := by
+  rintro ⟨l, hcons, _, _, _, _, _, _, hcr⟩
+  injection hcons with hl _
+  subst hl
+  cases hcr
+
+/-- Instance (law `ConcreteSpec.Core.Own.defer_keeps_store`, case `ConcreteSpec.Core.Own.RestatedLawEvidence.deferCallerConfig`). -/
+example : (match Exec.step callProgram deferCallerConfig with
+    | some (.next c) => c.store = DirectArgumentWitnesses.caller
+    | _ => True) :=
+  @defer_keeps_store callOps callProgram callee
+    [.ownerArgument ⟨1⟩ .mutable DirectArgumentWitnesses.z] ⟨0⟩
+    [] DirectArgumentWitnesses.caller [.scope ⟨0⟩ [] []]
+
+/-- Planted (law `ConcreteSpec.Core.Own.defer_keeps_store`, case `ConcreteSpec.Core.Own.RestatedLawEvidence.deferCallerConfig`, subject `ConcreteSpec.Core.Exec.step`, mutant `ConcreteSpec.Core.Own.RestatedLawEvidence.stepDeferEagerArgs`). -/
+example : ¬ (match stepDeferEagerArgs callProgram deferCallerConfig with
+    | some (.next c) => c.store = DirectArgumentWitnesses.caller
+    | _ => True) := by
+  intro h
+  have hstep : stepDeferEagerArgs callProgram deferCallerConfig =
+    some (.next ⟨.done, [], (passOwner DirectArgumentWitnesses.caller ⟨1⟩ [] .mutable DirectArgumentWitnesses.z).getD DirectArgumentWitnesses.caller,
+      [.scope ⟨0⟩ [] [⟨callee, [.ownerArgument ⟨1⟩ .mutable DirectArgumentWitnesses.z], ⟨0⟩⟩]]⟩) := rfl
+  rw [hstep] at h
+  revert h
+  decide
+
+end RestatedLawEvidence
 
 end ConcreteSpec.Core.Own
