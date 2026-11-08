@@ -463,6 +463,26 @@ else
     && ok "the launcher extracts exactly \$SNAPSHOT" || no "the launcher does not extract \$SNAPSHOT"
 fi
 
+echo "=== the launcher rebuilds an incomplete cached snapshot ==="
+# The launcher's cache step (install-bot.sh, from `complete=1` to its `fi`), run as the launcher would
+# (install-time $SNAPSHOT expanded, \$ unescaped) against this checkout's HEAD: a cached snapshot that
+# lacks one file (scripts/land/bot.sh) is rebuilt, and a complete one is kept.
+step="$(awk '/^complete=1$/ {on=1} on {print} on && /^fi$/ {exit}' "$ROOT_DIR/scripts/land/install-bot.sh" \
+  | sed -e "s|\$SNAPSHOT|$SNAP_LIST|g" -e 's/\\\$/$/g')"
+if [ -z "$step" ] || ! grep -q 'git archive' <<<"$step"; then no "the launcher's cache step was not found in install-bot.sh"
+else
+  snaps="$TMP/snaps"; sha="$(git -C "$ROOT_DIR" rev-parse HEAD)"; snap="$snaps/$sha"
+  run_step() { (cd "$ROOT_DIR" && snaps="$snaps" sha="$sha" snap="$snap" bash -c "set -euo pipefail; $step") >/dev/null 2>&1; }
+  rm -rf "${snaps:?}"; mkdir -p "$snaps"
+  run_step && [ -f "$snap/scripts/land/bot.sh" ] && [ -f "$snap/scripts/review/verify.sh" ] \
+    && ok "a missing snapshot is built with every listed file" || no "the cache step did not build the snapshot"
+  rm -f "$snap/scripts/land/bot.sh"; touch "$snap/marker"
+  run_step && [ -f "$snap/scripts/land/bot.sh" ] && [ ! -e "$snap/marker" ] \
+    && ok "a cached snapshot without scripts/land/bot.sh is rebuilt" || no "an incomplete cached snapshot was kept"
+  touch "$snap/marker"
+  run_step && [ -e "$snap/marker" ] && ok "a complete cached snapshot is kept" || no "a complete snapshot was rebuilt"
+fi
+
 echo
 echo "check_landing_bot: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
