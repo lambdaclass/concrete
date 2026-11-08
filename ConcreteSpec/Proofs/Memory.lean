@@ -176,4 +176,74 @@ theorem access_after_free (tgt : Target) (m m' : Memory) (b : MemBlockId)
 theorem eqAddr_provenance (s : AddrSpace) (a : Nat) (b c : Option MemBlockId) :
     Ptr.eqAddr ⟨s, a, b⟩ ⟨s, a, c⟩ = true := by simp [Ptr.eqAddr]
 
+/-- Any later allocation differs from every identity still present, including released blocks. -/
+theorem alloc_ne_existing (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
+    (s : AddrSpace) (base size align : Nat) (b c : MemBlockId) (m' : Memory) (x : Block)
+    (h : m.alloc tgt s base size align = .ok (b, m')) (hc : m.block c = some x) : b ≠ c := by
+  obtain ⟨hb, _⟩ := alloc_fresh tgt m hw s base size align b m' h
+  have := hw.fresh c x hc
+  intro he; subst c; omega
+
+private theorem overlaps_symm (x y : Block) (h : x.Overlaps y) : y.Overlaps x :=
+  ⟨h.1.symm, h.2.2.1, h.2.1, h.2.2.2.2, h.2.2.2.1⟩
+
+theorem alloc_wellFormed (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
+    (s : AddrSpace) (base size align : Nat) (b : MemBlockId) (m' : Memory)
+    (h : m.alloc tgt s base size align = .ok (b, m')) : m'.WellFormed tgt := by
+  obtain ⟨rfl, rfl, hf⟩ := alloc_result tgt m s base size align b m' h
+  let z : MemBlockId := ⟨m.next⟩
+  let x := candidate s base size align
+  have lookup (c : MemBlockId) :
+      (Memory.mk ((z, x) :: m.blocks) (m.next + 1)).block c =
+        if z = c then some x else m.block c := rfl
+  constructor
+  · intro c y hy
+    rw [lookup] at hy
+    split at hy
+    next he => subst c; simp [z]
+    next => have hh := hw.fresh c y hy; exact Nat.lt_trans hh (Nat.lt_succ_self _)
+  · intro c y hy
+    rw [lookup] at hy
+    split at hy
+    next => cases hy; simp [x, candidate]
+    next => exact hw.sized c y hy
+  · intro c y hy
+    rw [lookup] at hy
+    split at hy
+    next => cases hy; exact hf.2.2.1
+    next => exact hw.fits c y hy
+  · intro c y hy
+    rw [lookup] at hy
+    split at hy
+    next => cases hy; exact ⟨hf.1, hf.2.1⟩
+    next => exact hw.aligned c y hy
+  · intro c y d w hy hw' hne hyl hwl
+    rw [lookup] at hy hw'
+    split at hy
+    next hc =>
+      cases hy
+      split at hw'
+      next hd => exact False.elim (hne (hc.symm.trans hd))
+      next =>
+        intro hov
+        exact hf.2.2.2.2.2 _ (AList.lookup_mem hw') hwl (overlaps_symm _ _ hov)
+    next =>
+      split at hw'
+      next => cases hw'; exact hf.2.2.2.2.2 _ (AList.lookup_mem hy) hyl
+      next => exact hw.disjoint c y d w hy hw' hne hyl hwl
+
+/-- Non-overlap makes the in-bounds provenance unique; no order on identities is used. -/
+theorem candidate_contains_unique (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
+    (s : AddrSpace) (addr : Nat) (b c : MemBlockId) (x y : Block)
+    (hx : m.block b = some x) (hy : m.block c = some y)
+    (hxc : x.Candidate s = true) (hyc : y.Candidate s = true)
+    (hxi : x.base ≤ addr ∧ addr < x.base + x.size)
+    (hyi : y.base ≤ addr ∧ addr < y.base + y.size) : b = c := by
+  by_cases hn : b = c
+  · exact hn
+  apply False.elim
+  simp only [Block.Candidate, Bool.and_eq_true, decide_eq_true_eq] at hxc hyc
+  apply hw.disjoint b x c y hx hy hn hxc.1.1.1 hyc.1.1.1
+  refine ⟨hxc.2.trans hyc.2.symm, hxc.1.2, hyc.1.2, ?_, ?_⟩ <;> omega
+
 end ConcreteSpec.Core.Mem
