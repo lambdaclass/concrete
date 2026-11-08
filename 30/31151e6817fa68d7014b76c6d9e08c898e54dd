@@ -1,0 +1,2 @@
+[piece 2 of 2: docs]
+- docs/archive/roadmap-2026-11/README.md:15: The new CANDIDATES row sits between the table header and its delimiter row. Markdown therefore no longer recognizes the archive index as a table, breaking its rendered navigation. Move the new row below `|---|---|`.
