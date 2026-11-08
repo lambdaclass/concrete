@@ -145,4 +145,273 @@ example {O : Exec.Operands} (dst : Option Var) (caller callee : AList Var O.Val)
     (st : O.Store) (l : LoopId) (k : List (Exec.Frame O)) :
     Exec.stepExit callee st (.brk l) (.ret dst caller :: k) = none := rfl
 
+/-! ## ABI signature interface -/
+
+namespace ABI
+
+/-- A machine word location for one typed value: a register or a logical stack slot. A value may
+use several locations, in the order given by its binding. -/
+inductive Location (Reg : Type) where
+  | register (r : Reg)
+  | stack (slot : Nat)
+  deriving DecidableEq, Repr
+
+/-- The machine state visible to the ABI interface. Stack slots below `stackPointer` are the
+caller's preserved stack; argument and result areas at or above it need not be preserved. -/
+structure Machine (Reg Word : Type) where
+  regs : Reg → Word
+  slots : Nat → Word
+  stackPointer : Nat
+
+/-- Read one location in a machine state. -/
+def Location.read {Reg Word : Type} (st : Machine Reg Word) : Location Reg → Word
+  | .register r => st.regs r
+  | .stack slot => st.slots slot
+
+/-- The ABI locations and logical type of one argument or result. -/
+structure Binding (Ty Reg : Type) where
+  ty : Ty
+  locations : List (Location Reg)
+
+/-- The encoded words of a typed value are exactly the words in its locations. -/
+def Binding.Holds {Ty Val Reg Word : Type} (encode : Ty → Val → List Word)
+    (b : Binding Ty Reg) (v : Val) (st : Machine Reg Word) : Prop :=
+  encode b.ty v = b.locations.map (Location.read st)
+
+/-- Every argument has its declared type and location binding; too few or too many arguments do not
+satisfy the relation. -/
+def ArgumentsHold {Ty Val Reg Word : Type} (encode : Ty → Val → List Word) :
+    List (Binding Ty Reg) → List Val → Machine Reg Word → Prop
+  | [], [], _ => True
+  | b :: bs, v :: vs, st => b.Holds encode v st ∧ ArgumentsHold encode bs vs st
+  | _, _, _ => False
+
+/-- An explicit target convention. `stackBound` is the complete callee contribution from final
+artifact evidence, including its frame, spills, cleanup and nested calls; it is not a source-local
+estimate. `result` is the return convention. -/
+structure Signature (Ty Val Reg Word : Type) where
+  encode : Ty → Val → List Word
+  arguments : List (Binding Ty Reg)
+  result : Binding Ty Reg
+  frameSize : Nat
+  frameAlign : Nat
+  calleeSaved : List Reg
+  clobbers : List Reg
+  stackBound : Nat
+
+/-- The callee-saved registers, the caller's stack below its stack pointer, and the stack pointer
+itself are exactly restored. -/
+def Machine.Preserved {Reg Word : Type} (before after : Machine Reg Word) (saved : List Reg) : Prop :=
+  (∀ r ∈ saved, after.regs r = before.regs r) ∧
+  (∀ slot, slot < before.stackPointer → after.slots slot = before.slots slot) ∧
+  after.stackPointer = before.stackPointer
+
+/-- Every register outside the clobber set has the same value after return. -/
+def Machine.RegisterFrame {Reg Word : Type} (before after : Machine Reg Word)
+    (clobbers : List Reg) : Prop :=
+  ∀ r, r ∉ clobbers → after.regs r = before.regs r
+
+/-- A signature's structural laws: positive power-of-two alignment, frame size rounded to it, the
+frame included in the callee stack bound, and callee-saved registers disjoint from clobbers. -/
+def Signature.WellFormed {Ty Val Reg Word : Type} (sig : Signature Ty Val Reg Word) : Prop :=
+  IsPow2 sig.frameAlign ∧ sig.frameSize % sig.frameAlign = 0 ∧
+    sig.frameSize ≤ sig.stackBound ∧ ∀ r, r ∈ sig.calleeSaved → r ∉ sig.clobbers
+
+/-- A returning ABI call: typed arguments occupy their entry locations, the typed result occupies
+its return locations, preserved machine state is restored exactly, and only clobbers may change
+registers. -/
+structure Signature.Call {Ty Val Reg Word : Type} (sig : Signature Ty Val Reg Word)
+    (before after : Machine Reg Word) (args : List Val) (result : Val) : Prop where
+  arguments : ArgumentsHold sig.encode sig.arguments args before
+  result : sig.result.Holds sig.encode result after
+  preserved : Machine.Preserved before after sig.calleeSaved
+  clobbers : Machine.RegisterFrame before after sig.clobbers
+
+/-- The stack-accounting handoff of one call: the caller's frame plus the callee's final-artifact
+bound. Heap accounting is separate. -/
+def callStack {Ty Val Reg Word : Type} (callerFrame : Nat) (sig : Signature Ty Val Reg Word) : Nat :=
+  callerFrame + sig.stackBound
+
+/-- Whole-artifact stack accounting adds the launcher/runtime contribution to the call handoff. -/
+def artifactStack {Ty Val Reg Word : Type} (launcherRuntime callerFrame : Nat)
+    (sig : Signature Ty Val Reg Word) : Nat :=
+  launcherRuntime + callStack callerFrame sig
+
+/-! ### Foreign validity and retention (Q3.12) -/
+
+/-- Types with a direct foreign representation: integers, floats, bool, Unit, raw pointers to values,
+and C-layout structs of such values. There is no reference or enum constructor, so neither can be
+smuggled behind a raw pointer or inside a C struct. -/
+inductive FFIType where
+  | int
+  | float
+  | bool
+  | unit
+  | rawPointer (pointee : FFIType)
+  | cStruct (fields : List FFIType)
+  deriving Repr
+
+/-- The logical types at an extern boundary. Owned `H` and its receipt are retention interface
+values, not direct C representations. `enum` is present only so the validity rule can refuse it. -/
+inductive ExternType (H : Type) where
+  | ffi (t : FFIType)
+  | owned (h : H)
+  | receipt (h : H)
+  | enum
+
+/-- Extern retention: call-only by default, or `kept` for an owned allocation. -/
+inductive Retention where
+  | callOnly
+  | kept
+  deriving DecidableEq, Repr
+
+/-- One extern parameter's logical type and retention marker. -/
+structure ExternParam (H : Type) where
+  ty : ExternType H
+  retention : Retention
+
+/-- Valid ordinary extern parameters are call-only direct FFI values, or `kept` owned allocations.
+Enums, kept raw pointers, receipts as fresh inputs, and unmarked owned allocations are refused. A
+receipt accepted by the paired completion is checked separately by `KeptPair.WellFormed`. -/
+def ExternParam.Valid {H : Type} : ExternParam H → Prop
+  | ⟨.ffi _, .callOnly⟩ => True
+  | ⟨.owned _, .kept⟩ => True
+  | _ => False
+
+instance {H : Type} (p : ExternParam H) : Decidable p.Valid := by
+  cases p with
+  | mk ty retention =>
+    cases ty <;> cases retention <;> unfold ExternParam.Valid <;> infer_instance
+
+/-- Valid extern results are direct FFI values, an owned allocation returned by completion, or its
+linear receipt returned by submission. An enum result is refused. -/
+def ExternResult.Valid {H : Type} : ExternType H → Prop
+  | .enum => False
+  | _ => True
+
+instance {H : Type} (t : ExternType H) : Decidable (ExternResult.Valid t) := by
+  cases t <;> unfold ExternResult.Valid <;> infer_instance
+
+/-- The two typed extern identities paired for one kept handle `H`. -/
+structure KeptPair (F H : Type) where
+  submit : F
+  complete : F
+  handle : H
+
+/-- The signature-pairing law of Q3.12: submission takes `kept h: H` and returns `Kept<H>`;
+completion takes exactly that receipt and returns `H`. The four descriptors are the declaration's
+actual parameter/result types, so this is an interface validity check, not just a naming convention. -/
+def KeptPair.WellFormed {F H : Type} (pair : KeptPair F H)
+    (submitParam : ExternParam H) (submitResult completeParam completeResult : ExternType H) : Prop :=
+  submitParam = ⟨.owned pair.handle, .kept⟩ ∧ submitResult = .receipt pair.handle ∧
+    completeParam = .receipt pair.handle ∧ completeResult = .owned pair.handle
+
+/-- The ownership state of one handle: the Concrete owner has it, or foreign code retains it and
+Concrete has only the linear `Kept<H>` receipt. There is no discard transition for a receipt. -/
+inductive RetentionState (H : Type) where
+  | owned (h : H)
+  | kept (h : H)
+
+/-- A foreign call, carrying the handle whose retention it changes. -/
+inductive ForeignEvent (F H : Type) where
+  | call (f : F) (h : H)
+
+/-- The complete retention transition relation. Submission consumes `H` and returns `Kept<H>`;
+only the paired completion consumes that receipt and returns the same `H`. No other call changes
+retention. The receipt keeps the allocator dependency in `H` and has no operations of its own. -/
+def KeptStep {F H : Type} (pair : KeptPair F H) :
+    RetentionState H → ForeignEvent F H → RetentionState H → Prop
+  | .owned h, .call f h', .kept h'' =>
+    f = pair.submit ∧ h = pair.handle ∧ h' = h ∧ h'' = h
+  | .kept h, .call f h', .owned h'' =>
+    f = pair.complete ∧ h = pair.handle ∧ h' = h ∧ h'' = h
+  | _, _, _ => False
+
+instance {F H : Type} [DecidableEq F] [DecidableEq H] (pair : KeptPair F H)
+    (before : RetentionState H) (event : ForeignEvent F H) (after : RetentionState H) :
+    Decidable (KeptStep pair before event after) := by
+  cases before <;> cases event <;> cases after <;> unfold KeptStep <;> infer_instance
+
+/-! ### Launcher entry and exit (Q8.5–Q8.6) -/
+
+/-- The launcher contract binds an exact retained artifact closure, entry inputs, exit observations
+and the final artifact's stack bound. These are relations, not a concrete launcher implementation. -/
+structure Launcher (Artifact Input Result Observation : Type) where
+  retainedClosure : Artifact → Prop
+  entry : Artifact → Input → Prop
+  exit : Artifact → Result → Observation → Prop
+  stackBound : Artifact → Nat
+
+/-- Startup either refuses an inadequate reservation with status 125 or admits the input. -/
+inductive Startup (Input : Type) where
+  | refused125
+  | entered (input : Input)
+  deriving DecidableEq, Repr
+
+/-- The decided stack-budget admission rule. -/
+def stackAdmission {Input : Type} (bound reserved : Nat) (input : Input) : Startup Input :=
+  if reserved < bound then .refused125 else .entered input
+
+/-- A launched run carries the exact artifact closure and entry/exit relations, with a reservation
+at least the final artifact bound. -/
+structure Launcher.Run {Artifact Input Result Observation : Type}
+    (l : Launcher Artifact Input Result Observation) (artifact : Artifact) (reserved : Nat)
+    (input : Input) (result : Result) (observation : Observation) : Prop where
+  closure : l.retainedClosure artifact
+  entry : l.entry artifact input
+  exit : l.exit artifact result observation
+  adequateStack : l.stackBound artifact ≤ reserved
+
+/-! ### ABI examples -/
+
+/-- Accepted: two typed arguments are read from register 0 and stack slot 0 respectively. -/
+example : ArgumentsHold (fun (_ : Nat) (v : Nat) => [v])
+    [⟨0, [.register 0]⟩, ⟨1, [.stack 0]⟩] [11, 12]
+    ⟨fun _ => 11, fun _ => 12, 1⟩ := by
+  exact ⟨rfl, rfl, trivial⟩
+
+/-- Refused: a value different from the word in its bound stack slot does not satisfy the argument
+relation. -/
+example : ¬ ArgumentsHold (fun (_ : Nat) (v : Nat) => [v])
+    [⟨0, [.register 0]⟩, ⟨1, [.stack 0]⟩] [11, 99]
+    ⟨fun _ => 11, fun _ => 12, 1⟩ := by
+  intro h
+  have h' := h.2.1
+  simp [Binding.Holds, Location.read] at h'
+
+/-- Accepted: a call-only C pointer and a kept owned allocation are valid extern parameters. -/
+example : (⟨.ffi (.rawPointer .int), .callOnly⟩ : ExternParam Nat).Valid ∧
+    (⟨.owned 7, .kept⟩ : ExternParam Nat).Valid := by decide
+
+/-- Refused: enums never cross an extern boundary, and a raw pointer cannot be marked `kept`. -/
+example : ¬ (⟨.enum, .callOnly⟩ : ExternParam Nat).Valid ∧
+    ¬ (⟨.ffi (.rawPointer .int), .kept⟩ : ExternParam Nat).Valid ∧
+    ¬ (ExternResult.Valid (.enum : ExternType Nat)) := by decide
+
+/-- Accepted: the paired declarations have exactly the owned/receipt types of the same handle. -/
+example : (⟨0, 1, 7⟩ : KeptPair Nat Nat).WellFormed
+    ⟨.owned 7, .kept⟩ (.receipt 7) (.receipt 7) (.owned 7) := by
+  exact ⟨rfl, rfl, rfl, rfl⟩
+
+/-- Refused: a completion for a different handle's receipt does not satisfy the pairing law. -/
+example : ¬ (⟨0, 1, 7⟩ : KeptPair Nat Nat).WellFormed
+    ⟨.owned 7, .kept⟩ (.receipt 7) (.receipt 8) (.owned 7) := by
+  intro h
+  have hc := h.2.2.1
+  cases hc
+
+/-- Accepted: submitting handle 7 to the paired extern turns ownership into its receipt. -/
+example : KeptStep ⟨0, 1, 7⟩ (.owned 7) (.call 0 7) (.kept 7) := by decide
+
+/-- Refused: the submitting extern cannot consume its own receipt; only completion can. -/
+example : ¬ KeptStep ⟨0, 1, 7⟩ (.kept 7) (.call 0 7) (.owned 7) := by decide
+
+/-- Accepted: an adequate reservation admits startup. -/
+example : stackAdmission 64 64 7 = .entered 7 := by decide
+
+/-- Refused: a smaller reservation refuses startup with status 125. -/
+example : stackAdmission 64 32 7 = .refused125 := by decide
+
+end ABI
+
 end ConcreteSpec.Core.Frame

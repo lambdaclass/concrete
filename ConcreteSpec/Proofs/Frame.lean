@@ -198,4 +198,141 @@ theorem c1_call_frame {O : Exec.Operands} {f : FnId} {P : Exec.Program O}
     contract.footprint.Preserves (project entry.store) (project exit.store) :=
   contract.frame h
 
+namespace ABI
+
+/-- A returning ABI call restores every callee-saved register exactly. -/
+theorem callee_saved_registers_equal {Ty Val Reg Word : Type} {sig : Signature Ty Val Reg Word}
+    {before after : Machine Reg Word} {args : List Val} {result : Val}
+    (h : sig.Call before after args result) :
+    ∀ r ∈ sig.calleeSaved, after.regs r = before.regs r :=
+  h.preserved.1
+
+/-- Registers outside the clobber set are unchanged; equivalently, clobbers are the only registers
+permitted to differ after return. -/
+theorem clobbers_only_changed_registers {Ty Val Reg Word : Type} {sig : Signature Ty Val Reg Word}
+    {before after : Machine Reg Word} {args : List Val} {result : Val}
+    (h : sig.Call before after args result) :
+    ∀ r, r ∉ sig.clobbers → after.regs r = before.regs r :=
+  h.clobbers
+
+/-- The caller's stack slots below its stack pointer are restored exactly. -/
+theorem caller_stack_slots_equal {Ty Val Reg Word : Type} {sig : Signature Ty Val Reg Word}
+    {before after : Machine Reg Word} {args : List Val} {result : Val}
+    (h : sig.Call before after args result) :
+    ∀ slot, slot < before.stackPointer → after.slots slot = before.slots slot :=
+  h.preserved.2.1
+
+/-- Returning restores the caller's stack pointer exactly. -/
+theorem stack_pointer_restored {Ty Val Reg Word : Type} {sig : Signature Ty Val Reg Word}
+    {before after : Machine Reg Word} {args : List Val} {result : Val}
+    (h : sig.Call before after args result) : after.stackPointer = before.stackPointer :=
+  h.preserved.2.2
+
+/-- Typed arguments occupy their signature locations at entry. -/
+theorem typed_arguments_at_entry {Ty Val Reg Word : Type} {sig : Signature Ty Val Reg Word}
+    {before after : Machine Reg Word} {args : List Val} {result : Val}
+    (h : sig.Call before after args result) : ArgumentsHold sig.encode sig.arguments args before :=
+  h.arguments
+
+/-- The typed result occupies its return-convention locations after return. -/
+theorem typed_result_at_return {Ty Val Reg Word : Type} {sig : Signature Ty Val Reg Word}
+    {before after : Machine Reg Word} {args : List Val} {result : Val}
+    (h : sig.Call before after args result) : sig.result.Holds sig.encode result after :=
+  h.result
+
+/-- A well-formed signature's frame size is a multiple of its positive power-of-two alignment. -/
+theorem frame_size_aligned {Ty Val Reg Word : Type} {sig : Signature Ty Val Reg Word}
+    (h : sig.WellFormed) : IsPow2 sig.frameAlign ∧ sig.frameSize % sig.frameAlign = 0 :=
+  ⟨h.1, h.2.1⟩
+
+/-- The callee's own frame is included in its final-artifact stack bound. -/
+theorem frame_within_stack_bound {Ty Val Reg Word : Type} {sig : Signature Ty Val Reg Word}
+    (h : sig.WellFormed) : sig.frameSize ≤ sig.stackBound :=
+  h.2.2.1
+
+/-- Stack accounting of a call is exactly caller frame plus callee bound. -/
+theorem call_stack_account {Ty Val Reg Word : Type} (callerFrame : Nat)
+    (sig : Signature Ty Val Reg Word) : callStack callerFrame sig = callerFrame + sig.stackBound :=
+  rfl
+
+/-- Whole-artifact accounting adds launcher/runtime bytes to that same handoff. -/
+theorem artifact_stack_account {Ty Val Reg Word : Type} (launcherRuntime callerFrame : Nat)
+    (sig : Signature Ty Val Reg Word) :
+    artifactStack launcherRuntime callerFrame sig =
+      launcherRuntime + callerFrame + sig.stackBound := by
+  simp [artifactStack, callStack, Nat.add_assoc]
+
+/-- A kept receipt has exactly one retention transition: the paired completion returns the same
+handle to Concrete ownership. -/
+theorem kept_only_paired_completion {F H : Type} (pair : KeptPair F H) (h : H)
+    (event : ForeignEvent F H) (after : RetentionState H)
+    (hs : KeptStep pair (.kept h) event after) :
+    event = .call pair.complete h ∧ after = .owned pair.handle := by
+  cases event with
+  | call f h' =>
+    cases after with
+    | owned h'' =>
+      obtain ⟨hf, hh, hh', hh''⟩ := hs
+      cases hf
+      cases hh
+      cases hh'
+      cases hh''
+      exact ⟨rfl, rfl⟩
+    | kept h'' => cases hs
+
+/-- Submission of an owned handle calls the paired submitting extern and produces a receipt for the
+same handle. -/
+theorem submit_produces_paired_receipt {F H : Type} (pair : KeptPair F H) (h : H)
+    (event : ForeignEvent F H) (after : RetentionState H)
+    (hs : KeptStep pair (.owned h) event after) :
+    event = .call pair.submit h ∧ after = .kept pair.handle := by
+  cases event with
+  | call f h' =>
+    cases after with
+    | owned h'' => cases hs
+    | kept h'' =>
+      obtain ⟨hf, hh, hh', hh''⟩ := hs
+      cases hf
+      cases hh
+      cases hh'
+      cases hh''
+      exact ⟨rfl, rfl⟩
+
+/-- No other extern can consume a kept receipt. -/
+theorem kept_receipt_rejects_other_extern {F H : Type} (pair : KeptPair F H) (h h' : H)
+    (f : F) (after : RetentionState H) (hf : f ≠ pair.complete) :
+    ¬ KeptStep pair (.kept h) (.call f h') after := by
+  intro hs
+  have he := (kept_only_paired_completion pair h (.call f h') after hs).1
+  cases he
+  exact hf rfl
+
+/-- A reservation below the final artifact bound refuses startup with status 125. -/
+theorem stack_under_reservation {Input : Type} (bound reserved : Nat) (input : Input)
+    (h : reserved < bound) : stackAdmission bound reserved input = .refused125 := by
+  simp [stackAdmission, h]
+
+/-- A reservation at least the bound admits the same launcher input. -/
+theorem stack_adequate {Input : Type} (bound reserved : Nat) (input : Input)
+    (h : bound ≤ reserved) : stackAdmission bound reserved input = .entered input := by
+  simp [stackAdmission, Nat.not_lt_of_ge h]
+
+/-- A launcher run relates its exact retained closure to the stated entry and exit observations. -/
+theorem launcher_entry_exit {Artifact Input Result Observation : Type}
+    {l : Launcher Artifact Input Result Observation} {artifact : Artifact} {reserved : Nat}
+    {input : Input} {result : Result} {observation : Observation}
+    (run : l.Run artifact reserved input result observation) :
+    l.retainedClosure artifact ∧ l.entry artifact input ∧ l.exit artifact result observation :=
+  ⟨run.closure, run.entry, run.exit⟩
+
+/-- Every launched run passes stack admission with its recorded reservation. -/
+theorem launcher_run_admitted {Artifact Input Result Observation : Type}
+    {l : Launcher Artifact Input Result Observation} {artifact : Artifact} {reserved : Nat}
+    {input : Input} {result : Result} {observation : Observation}
+    (run : l.Run artifact reserved input result observation) :
+    stackAdmission (l.stackBound artifact) reserved input = .entered input :=
+  stack_adequate _ _ _ run.adequateStack
+
+end ABI
+
 end ConcreteSpec.Core.Frame
