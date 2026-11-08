@@ -20,8 +20,9 @@ class Orchestration(unittest.TestCase):
             functions = '\n'.join(function(n) for n in (
                 'parse_replay', 'replay_command', 'persist_candidate_bundle',
                 'record_candidate_failure', 'report_mismatch', 'judge_evaluator',
-                'native_one', 'absorb_native_result', 'collect_available',
-                'finish_diff', 'run_control'))
+                'judge_available', 'reset_observations', 'control_candidate', 'native_one', 'absorb_native_result', 'collect_available',
+                'finish_diff', 'run_control', 'run_replay', 'first_outcome_index',
+                'control_drop_overflow', 'control_lcb_off_by_one', 'control_spec_oracle'))
             setup = f'''set -euo pipefail
 work={work}
 seed=test
@@ -62,6 +63,115 @@ record_judged() {{ :; }}
         self.assertTrue(replay_sh.startswith('SPEC_DIFF_REPLAY='), replay_sh)
         for art in artifacts:
             self.assertTrue((bundle / art).exists(), f'missing {art} in {bundle}')
+
+    def test_mismatch_timeout_lifecycle(self):
+        for path in ('candidate', 'wrong-result', 'off-by-one', 'spec-oracle',
+                     'wrong-result-mutated', 'off-by-one-mutated'):
+            for reverse in (False, True):
+                with self.subTest(path=path, reverse=reverse):
+                    bad = 'lcb' if reverse else 'llvm'
+                    diag = f'FAIL bir seed test index 0 [{bad}]: observation mismatch'
+                    def check(work, regressions):
+                        self.assertFalse(work.exists())
+                        self.assert_bundle(regressions, 'bir', 'test', 0, 'mismatch',
+                                           (diag,), (f'observed-{bad}/status', 'replay.sh'))
+                        bundle = regressions / 'bir/test-0'
+                        # Execute the saved command through the real replay parser,
+                        # verifying shell quoting and the exact candidate identity.
+                        parsed = subprocess.run(['bash', '-c', function('parse_replay') +
+                            '\nbash() { parse_replay "$SPEC_DIFF_REPLAY"; '
+                            '[ "$replay_leg:$replay_seed:$replay_index" = bir:test:0 ]; }; '
+                            'source "$1"', 'replay', str(bundle / 'replay.sh')],
+                            capture_output=True, text=True, timeout=5)
+                        self.assertEqual(parsed.returncode, 0, parsed.stderr)
+                        self.run_shell(f'''
+trap 'finish_diff $?' EXIT
+require_bounded() {{
+ mkdir -p "$work/replay"
+ cp -R "{bundle}/." "$work/replay/"
+ rm -f "$work/replay"/*.judged "$work/replay/failure-kinds.txt" \
+       "$work/replay/failure-record.tsv" "$work/replay/diagnostics.txt"
+}}
+native_build() {{ return 0; }}
+driver=(stub); target=stub
+observe_remaining() {{
+ case "$1" in
+ */{bad}.exe) echo 9 >"$2.status"; return 0 ;;
+ *) echo incomplete >"$2.status"; return 3 ;;
+ esac
+}}
+bash() {{ replay=$SPEC_DIFF_REPLAY; run_replay; }}
+source "{bundle}/replay.sh"
+''', 1, diag)
+                    invocation = ('native_one bir test 0 "$d"' if path == 'candidate'
+                                  else {'wrong-result': 'control_drop_overflow',
+                                        'off-by-one': 'control_lcb_off_by_one',
+                                        'spec-oracle': 'control_spec_oracle',
+                                        'wrong-result-mutated': 'control_drop_overflow',
+                                        'off-by-one-mutated': 'control_lcb_off_by_one'}[path])
+                    self.run_shell('''
+trap 'finish_diff $?' EXIT
+mkdir -p "$work/bir/p0"
+d="$work/bir/p0"
+''' + ('' if path == 'candidate' else
+                        'd="$work/control-fixture"; mkdir -p "$d"\n') + '''
+echo 0 >"$d/status"
+: >"$d/stderr"
+echo 0 >"$d/lcb_eval.status"
+echo term >"$d/program.lean.txt"
+echo original >"$d/llvm.ll"
+echo original >"$d/lcb_body.s"
+native_build() { return 0; }
+target=stub; driver=(stub); fixture=$d
+first_outcome_index() { echo 0; }
+control_bounded() {
+ local dest
+ case "$2" in
+  replay) dest=$5 ;;
+  control-spec-oracle) dest=$3 ;;
+  control-emit) dest=$7 ;;
+  *) echo 'unexpected control stage' >&2; return 8 ;;
+ esac
+ cp -R "$fixture" "$dest"
+ d=$dest
+ if [ "$2" = control-emit ]; then
+  echo mutated >"$d/llvm.ll"
+  echo mutated >"$d/lcb_body.s"
+ fi
+ mkdir -p "$d/spec-expected"
+ cp "$d/status" "$d/spec-expected/status"
+ cp "$d/stderr" "$d/spec-expected/stderr"
+}
+observe_remaining() {
+ case "$1" in
+''' + (' */*original/*.exe) echo 0 >"$2.status"; return 0 ;;\n'
+       if path.endswith('-mutated') else '') + f' */{bad}.exe) echo 9 >"$2.status"; return 0 ;;\n' + '''
+ *) echo incomplete >"$2.status"; echo 'INCOMPLETE: planted later leg'; return 3 ;;
+ esac
+}
+rc=0
+''' + invocation + ''' || rc=$?
+[ "$rc" -eq 1 ] && [ "$native_failed" -eq 1 ] && [ "$native_incomplete" -eq 1 ] || exit 9
+exit "$rc"
+''', 1, (diag, 'INCOMPLETE: planted later leg'), check)
+
+    def test_exit_collector_judges_uncommitted_native_observation(self):
+        diag = 'FAIL bir seed test index 0 [llvm]: observation mismatch'
+        def check(work, regressions):
+            self.assertFalse(work.exists())
+            self.assert_bundle(regressions, 'bir', 'test', 0, 'mismatch', (diag,),
+                               ('observed-llvm/status',))
+        self.run_shell('''
+trap 'finish_diff $?' EXIT
+mkdir -p "$work/control-interrupted"
+d="$work/control-interrupted"
+echo bir >"$d/leg"; echo test >"$d/seed"; echo 0 >"$d/index"
+echo 0 >"$d/status"; echo 9 >"$d/llvm.status"
+echo term >"$d/program.lean.txt"
+printf '%s\\n' "$d" >"$work/lifecycle-dirs"
+# Simulate an exit between observer completion and normal judgment.
+exit 3
+''', 1, diag, check)
 
     def test_build_failure_both_loops(self):
         start = SOURCE.index('bir_accepted=$(summary_value')

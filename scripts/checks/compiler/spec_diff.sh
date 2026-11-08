@@ -331,6 +331,10 @@ persist_candidate_bundle() { # persist_candidate_bundle LEG CAND_SEED INDEX DIR
   printf '%s\n' "$cand_seed" >"$d/seed"
   printf '%s\n' "$index" >"$d/index"
   replay_text=$(replay_command "$leg" "$cand_seed" "$index")
+  if [ -f "$d/control-replay" ]; then
+    replay_text=$(printf 'SPEC_DIFF_REPLAY=%q SPEC_DIFF_REPLAY_CONTROL=%q bash scripts/checks/compiler/spec_diff.sh' \
+      "$leg:$cand_seed:$index" "$(cat "$d/control-replay")")
+  fi
   printf '%s\n' "$replay_text" >"$d/replay.sh"
   bundle="$regressions/$leg/${cand_safe_seed}-$index"
   mkdir -p "$bundle"
@@ -445,23 +449,38 @@ report_mismatch() { # report_mismatch LEG CAND_SEED INDEX DIR BACKEND: persist b
 
 judge_evaluator() { # judge_evaluator LEG CAND_SEED INDEX DIR: judge in-process evaluator before native build/runs
   local leg=$1 cand_seed=$2 index=$3 d=$4 name=$1-$3
-  : >"$d/lcb_eval.judged"
   if [ ! -f "$d/lcb_eval.status" ]; then
     record_candidate_failure "$leg" "$cand_seed" "$index" "$d" native_setup lcb_eval \
       "FAIL $name [lcb_eval]: missing evaluator observation"
     return 4
   fi
-  if [ "$(cat "$d/lcb_eval.status")" = incomplete ]; then
-    echo "INCOMPLETE: evaluator timed out/exhausted fuel for $name" >&2
-    return 3
-  fi
-  if judge "$d" "$d/lcb_eval"; then
-    echo "ok   $name [lcb-eval]: status $(cat "$d/lcb_eval.status")"
-    return 0
+  judge_available "$leg" "$cand_seed" "$index" "$d" lcb_eval
+}
+
+# One judge for live execution and exit collection. A completed observation is never
+# deferred until a later backend finishes. Mark only after its verdict is durable.
+judge_available() { # LEG SEED INDEX DIR BACKEND
+  local leg=$1 cand_seed=$2 index=$3 d=$4 backend=$5 rc=0
+  [ -f "$d/$backend.status" ] || return 0
+  [ ! -f "$d/$backend.judged" ] || return "$(cat "$d/$backend.judged")"
+  if [ "$(cat "$d/$backend.status")" = incomplete ]; then return 3; fi
+  if judge "$d" "$d/$backend"; then
+    echo "ok   $leg-$index [$backend]: status $(cat "$d/$backend.status")"
   else
-    report_mismatch "$leg" "$cand_seed" "$index" "$d" lcb_eval
-    return 1
+    report_mismatch "$leg" "$cand_seed" "$index" "$d" "$backend"
+    rc=1
   fi
+  printf '%s\n' "$rc" >"$d/$backend.judged"
+  return "$rc"
+}
+
+reset_observations() { # DIR: retain generated evaluator result, discard prior run state
+  local d=$1 backend
+  for backend in llvm lcb; do
+    rm -f "$d/$backend.status" "$d/$backend.stderr" "$d/$backend.stdout"
+  done
+  rm -f "$d"/*.judged "$d/failure-kinds.txt" "$d/failure-record.tsv" \
+    "$d/diagnostics.txt" "$d/backends" "$d/bundle-reported" "$d/control-verified"
 }
 
 native_build() { bounded_remaining bash "$root/scripts/checks/lib/slice0_native.sh" "$1" "$lcb"; }
@@ -474,7 +493,14 @@ native_one() { # Result axes: native_failed (sticky), native_incomplete, native_
   cand_seed=$2
   index=$3
   d=$4
+  printf '%s\n' "$leg" >"$d/leg"
+  printf '%s\n' "$cand_seed" >"$d/seed"
+  printf '%s\n' "$index" >"$d/index"
+  printf '%s\n' "$d" >>"$work/lifecycle-dirs"
+  if [ -n "${control_registry:-}" ]; then printf '%s\n' "$d" >>"$control_registry"; fi
+  rm -f "$d/control-verified"
   native_failed=0
+  if [ -f "$d/failure-kinds.txt" ]; then native_failed=1; bad=1; fi
   native_incomplete=0
   native_complete=0
   name=$leg-$index
@@ -509,6 +535,7 @@ native_one() { # Result axes: native_failed (sticky), native_incomplete, native_
     return 4
   fi
   for backend in llvm lcb; do
+    rm -f "$d/$backend.judged" "$d/$backend.status" "$d/$backend.stderr" "$d/$backend.stdout"
     obs_rc=0
     observe_remaining "$d/$backend.exe" "$d/$backend" >"$d/$backend.obs.log" 2>&1 || obs_rc=$?
     if [ "$obs_rc" -ne 0 ]; then
@@ -525,13 +552,9 @@ native_one() { # Result axes: native_failed (sticky), native_incomplete, native_
       fi
       continue
     fi
-    if judge "$d" "$d/$backend"; then
-      echo "ok   $name [$backend]: status $(cat "$d/$backend.status")"
-    else
-      report_mismatch "$leg" "$cand_seed" "$index" "$d" "$backend"
-      bad=1
-      native_failed=1
-    fi
+    obs_rc=0
+    judge_available "$leg" "$cand_seed" "$index" "$d" "$backend" || obs_rc=$?
+    if [ "$obs_rc" -ne 0 ]; then bad=1; native_failed=1; fi
   done
   if [ "$incomplete" -ne 0 ]; then
     native_incomplete=1
@@ -551,10 +574,11 @@ absorb_native_result() {
 }
 
 collect_available() {
-  local leg cand_leg d index rc cand_seed cand_safe_seed bundle replay_text
+  local leg cand_leg d index rc cand_seed cand_safe_seed bundle replay_text backend
   for leg in bir spec; do
-    for d in "$work/$leg"/p* "$work/replay"; do
+    while IFS= read -r d; do
       [ -d "$d" ] || continue
+      [ ! -f "$d/control-verified" ] || continue
       cand_leg=$leg
       cand_seed=$seed
       index=${d##*/p}
@@ -566,11 +590,11 @@ collect_available() {
       if [ -f "$d/leg" ]; then cand_leg=$(cat "$d/leg"); fi
       if [ -f "$d/seed" ]; then cand_seed=$(cat "$d/seed"); fi
       if [ -f "$d/index" ]; then index=$(cat "$d/index"); fi
-      if [ -f "$d/lcb_eval.status" ] && [ ! -f "$d/lcb_eval.judged" ]; then
+      for backend in lcb_eval llvm lcb; do
         rc=0
-        judge_evaluator "$cand_leg" "$cand_seed" "$index" "$d" || rc=$?
+        judge_available "$cand_leg" "$cand_seed" "$index" "$d" "$backend" || rc=$?
         case "$rc" in 0) ;; 3) deadline_stopped=1 ;; *) fail=1 ;; esac
-      fi
+      done
       if [ -f "$d/failure-kinds.txt" ]; then
         persist_candidate_bundle "$cand_leg" "$cand_seed" "$index" "$d"
         cand_safe_seed=$(cat "$d/safe-seed.txt")
@@ -591,7 +615,7 @@ collect_available() {
         fi
         fail=1
       fi
-    done
+    done < <(printf '%s\n' "$work/$leg"/p* "$work/replay"; cat "$work/lifecycle-dirs" 2>/dev/null)
   done
 }
 
@@ -614,11 +638,13 @@ finish_diff() {
 trap 'finish_diff $?' EXIT
 
 run_control() { # fn runs under set -euo pipefail and must return PLANTED_FAIL_RC (99) + match expected regex
-  local label expected_regex fn log rc
+  local label expected_regex fn log rc d control_registry
   label=$1
   expected_regex=$2
   fn=$3
   log="$work/ctl-$label.log"
+  control_registry="$log.dirs"
+  : >"$control_registry"
   rc=0
   set +e
   ( set -euo pipefail; "$fn" ) >"$log" 2>&1
@@ -628,6 +654,10 @@ run_control() { # fn runs under set -euo pipefail and must return PLANTED_FAIL_R
      ! grep -q '^control setup:' "$log" &&
      ! grep -q 'INCOMPLETE:' "$log" &&
      grep -qE -- "$expected_regex" "$log"; then
+    # Only a fully verified planted effect is exempt from the outer failure verdict.
+    while IFS= read -r d; do
+      [ ! -d "$d" ] || : >"$d/control-verified"
+    done <"$control_registry"
     echo "ok   control $label: failed for the planted reason"
   elif [ "$rc" -eq 3 ]; then
     cat "$log" >&2
@@ -650,25 +680,17 @@ control_bounded() {
   return 1
 }
 
-control_build() { # control_build NAME DIR
-  local rc=0
-  [ "$(remaining)" -ge "$min_candidate_secs" ] ||
-    { echo "INCOMPLETE: deadline before control build $1" >&2; return 3; }
-  native_build "$2" >"$2/build.log" 2>&1 || rc=$?
+control_candidate() { # DIR [expected mismatch]
+  local d=$1 rc=0
+  native_one "$(cat "$d/leg" 2>/dev/null || echo bir)" "$(cat "$d/seed" 2>/dev/null || printf '%s' "$seed")" \
+    "$(cat "$d/index" 2>/dev/null || echo 0)" "$d" || rc=$?
   [ "$rc" -eq 0 ] && return 0
-  cat "$2/build.log" >&2
-  [ "$rc" -ne 3 ] || return 3
-  echo "control setup: native build failed for $1" >&2
-  return 1
-}
-
-control_observe() { # control_observe EXE OUT
-  local rc=0
-  observe_remaining "$1" "$2" || rc=$?
-  [ "$rc" -eq 0 ] && return 0
-  [ "$rc" -ne 3 ] || return 3
-  echo "control setup: observation failed for $1" >&2
-  return 1
+  # A planted mismatch is accepted only after every leg completed. Incomplete
+  # planted runs remain FAIL when any observation already proved a mismatch.
+  if [ "${2:-}" = mismatch ] && [ "$rc" -eq 1 ] && [ "$native_complete" -eq 1 ] &&
+     grep -qxF mismatch "$d/failure-kinds.txt" &&
+     ! grep -qvxF mismatch "$d/failure-kinds.txt"; then return 0; fi
+  return "$rc"
 }
 
 control_match() { # control_match EXPECTED OBS DESCRIPTION
@@ -692,12 +714,25 @@ first_outcome_index() { # first_outcome_index SUMMARY exit|trap [below-255]
 run_replay() {
   parse_replay "$replay"
   local d="$work/replay" rc=0
-  if [ "$replay_leg" = spec ]; then
+  case "${SPEC_DIFF_REPLAY_CONTROL:-}" in
+    ""|spec-oracle) ;;
+    drop-overflow-llvm|lcb-off-by-one)
+      driver_extra_args=(--mutate "$SPEC_DIFF_REPLAY_CONTROL" --control SPEC_DIFF_PLANTED_CONTROL) ;;
+    *) echo "FAIL unknown replay control: $SPEC_DIFF_REPLAY_CONTROL" >&2; exit 1 ;;
+  esac
+  if [ "${SPEC_DIFF_REPLAY_CONTROL:-}" = spec-oracle ]; then
+    require_bounded "${driver[@]}" control-spec-oracle "$d" "$target" --control SPEC_DIFF_PLANTED_CONTROL
+    cp "$d/spec-expected/status" "$d/status"
+    cp "$d/spec-expected/stderr" "$d/stderr"
+  elif [ "$replay_leg" = spec ]; then
     require_bounded "${driver[@]}" replay-spec "$replay_seed" "$replay_index" "$d" "$target" \
       ${driver_extra_args[@]+"${driver_extra_args[@]}"}
   else
     require_bounded "${driver[@]}" replay "$replay_seed" "$replay_index" "$d" "$target" \
       ${driver_extra_args[@]+"${driver_extra_args[@]}"}
+  fi
+  if [ -n "${SPEC_DIFF_REPLAY_CONTROL:-}" ]; then
+    printf '%s\n' "$SPEC_DIFF_REPLAY_CONTROL" >"$d/control-replay"
   fi
   native_one "$replay_leg" "$replay_seed" "$replay_index" "$d" || rc=$?
   absorb_native_result "$rc"
@@ -861,21 +896,15 @@ control_drop_overflow() {
   original="$work/control-drop-original"
   mutated="$work/control-drop-mutated"
   control_bounded "${driver[@]}" replay "$seed" "$index" "$original" "$target" || return $?
-  control_build control-drop-original "$original" || return $?
-  control_observe "$original/llvm.exe" "$original/llvm" || return $?
-  control_observe "$original/lcb.exe" "$original/lcb" || return $?
-  control_match "$original" "$original/llvm" "unmutated LLVM candidate mismatch" || return 1
-  control_match "$original" "$original/lcb" "unmutated LCB candidate mismatch" || return 1
-  control_match "$original" "$original/lcb_eval" "unmutated evaluator mismatch" || return 1
+  control_candidate "$original" || return $?
   control_bounded "${driver[@]}" control-emit --mutate drop-overflow-llvm "$seed" "$index" "$mutated" "$target" \
     --control SPEC_DIFF_PLANTED_CONTROL || return $?
   if cmp -s "$original/llvm.ll" "$mutated/llvm.ll"; then
     echo "control setup: drop-overflow-llvm artifact did not differ" >&2
     return 1
   fi
-  control_build control-drop-mutated "$mutated" || return $?
-  control_observe "$mutated/llvm.exe" "$mutated/llvm" || return $?
-  control_observe "$mutated/lcb.exe" "$mutated/lcb" || return $?
+  echo drop-overflow-llvm >"$mutated/control-replay"
+  control_candidate "$mutated" mismatch || return $?
   if judge "$original" "$mutated/llvm"; then
     echo "control setup: judge accepted mutated drop-overflow-llvm against original trap expectation" >&2
     return 1
@@ -922,6 +951,7 @@ control_drop_overflow() {
     local regressions="$work/mismatch-timeout-regressions"
     rm -rf "$sub" "$regressions"
     cp -R "$mutated" "$sub"
+    reset_observations "$sub"
     native_build() { return 0; }
     printf '#!/usr/bin/env bash\nexec sleep 30\n' >"$sub/lcb.exe"
     chmod +x "$sub/lcb.exe"
@@ -949,21 +979,15 @@ control_lcb_off_by_one() {
   original="$work/control-lcb-original"
   mutated="$work/control-lcb-mutated"
   control_bounded "${driver[@]}" replay "$seed" "$index" "$original" "$target" || return $?
-  control_build control-lcb-original "$original" || return $?
-  control_observe "$original/llvm.exe" "$original/llvm" || return $?
-  control_observe "$original/lcb.exe" "$original/lcb" || return $?
-  control_match "$original" "$original/llvm" "unmutated LLVM candidate mismatch" || return 1
-  control_match "$original" "$original/lcb" "unmutated LCB candidate mismatch" || return 1
-  control_match "$original" "$original/lcb_eval" "unmutated evaluator mismatch" || return 1
+  control_candidate "$original" || return $?
   control_bounded "${driver[@]}" control-emit --mutate lcb-off-by-one "$seed" "$index" "$mutated" "$target" \
     --control SPEC_DIFF_PLANTED_CONTROL || return $?
   if cmp -s "$original/lcb_body.s" "$mutated/lcb_body.s"; then
     echo "control setup: lcb-off-by-one artifact did not differ" >&2
     return 1
   fi
-  control_build control-lcb-mutated "$mutated" || return $?
-  control_observe "$mutated/llvm.exe" "$mutated/llvm" || return $?
-  control_observe "$mutated/lcb.exe" "$mutated/lcb" || return $?
+  echo lcb-off-by-one >"$mutated/control-replay"
+  control_candidate "$mutated" mismatch || return $?
   control_match "$original" "$mutated/llvm" "LLVM did not retain the original exit" || return 1
   if judge "$original" "$mutated/lcb"; then
     echo "control setup: judge accepted mutated native LCB off-by-one against original expectation" >&2
@@ -986,6 +1010,7 @@ control_lcb_off_by_one() {
     local sub="$work/control-lcb-llvm-timeout"
     rm -rf "$sub" "$regressions"
     cp -R "$mutated" "$sub"
+    reset_observations "$sub"
     native_build() { return 0; }
     printf '#!/usr/bin/env bash\nexec sleep 30\n' >"$sub/llvm.exe"
     chmod +x "$sub/llvm.exe"
@@ -1015,6 +1040,7 @@ control_lcb_off_by_one() {
     local sub="$work/control-lcb-lcb-timeout"
     rm -rf "$sub" "$regressions"
     cp -R "$mutated" "$sub"
+    reset_observations "$sub"
     native_build() { return 0; }
     printf '#!/usr/bin/env bash\nexec sleep 30\n' >"$sub/lcb.exe"
     chmod +x "$sub/lcb.exe"
@@ -1042,9 +1068,10 @@ control_lcb_off_by_one() {
 control_spec_oracle() {
   local d="$work/control-spec-oracle" leg_obs
   control_bounded "${driver[@]}" control-spec-oracle "$d" "$target" --control SPEC_DIFF_PLANTED_CONTROL || return $?
-  control_build control-spec-oracle "$d" || return $?
-  control_observe "$d/llvm.exe" "$d/llvm" || return $?
-  control_observe "$d/lcb.exe" "$d/lcb" || return $?
+  cp "$d/spec-expected/status" "$d/status"
+  cp "$d/spec-expected/stderr" "$d/stderr"
+  echo spec-oracle >"$d/control-replay"
+  control_candidate "$d" || return $?
   control_match "$d/spec-expected" "$d/llvm" "stand-in LLVM does not match the spec" || return 1
   control_match "$d/spec-expected" "$d/lcb" "stand-in LCB does not match the spec" || return 1
   control_match "$d/spec-expected" "$d/lcb_eval" "stand-in evaluator does not match the spec" || return 1
