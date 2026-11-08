@@ -844,10 +844,11 @@ theorem InfiniteExecution.not_final (X : InfiniteExecution P ρ c) (n : Nat) :
     (X.states n).config.final? = none :=
   (X.step n).not_final
 
-/-- Every infinite execution has exactly the fuel-indexed prefixes obtained by truncating it. -/
-def InfiniteExecution.toFuelLimit (X : InfiniteExecution P ρ c) : FuelLimit P ρ c := by
-  refine ⟨X.states, ?_⟩
-  intro n
+/-- Law (subject `runQ`). Every position of a genuine infinite execution is exactly the
+corresponding evaluator prefix, including its events, queries, and residual configuration. -/
+theorem InfiniteExecution.evaluator_prefix (X : InfiniteExecution P ρ c) (n : Nat) :
+    runQ P ρ n c =
+      ⟨(X.states n).events, (X.states n).queries, .outOfFuel (X.states n).config⟩ := by
   induction n with
   | zero =>
     have hn := X.not_final 0
@@ -858,6 +859,11 @@ def InfiniteExecution.toFuelLimit (X : InfiniteExecution P ρ c) : FuelLimit P �
     change runFromQ P ρ (n + 1) [] [] c = _
     rw [hadd]
     exact (X.step n).runFromQ_one (X.not_final n) (X.not_final (n + 1))
+
+/-- Package pointwise evaluator adequacy as a compatible fuel limit. The proof of
+`InfiniteExecution.evaluator_prefix`, rather than the representation round trip, is the evidence. -/
+def InfiniteExecution.toFuelLimit (X : InfiniteExecution P ρ c) : FuelLimit P ρ c :=
+  ⟨X.states, X.evaluator_prefix⟩
 
 /-- Compatible fuel prefixes correspond to an infinite maximal execution. -/
 def FuelLimit.toInfiniteExecution (L : FuelLimit P ρ c) : InfiniteExecution P ρ c := by
@@ -2084,6 +2090,76 @@ example : QueryHistoryValid ([] : List (Query ops)) ∧ 0 ≤ 2 ∧
       occurrenceAt (((sharedSiteRun ops prog env 7 [] [] threeRequestConfig).queries.drop 0).take
         (2 - 0)) interleavedQuery0.site := by
   exact ⟨QueryHistoryValid.nil, by decide, rfl, rfl, rfl, by decide⟩
+
+/-- An evaluator mutation discards all supplied answers. -/
+def droppedAnswerRun (O : Operands) (P : Program O) (_ : QueryOracle O) (fuel : Nat)
+    (events : List O.Event) (issued : List (Query O)) (c : Config O) : QueryReport O :=
+  runFromQ P (fun _ => none) fuel events issued c
+
+/-- Instance (law `runFromQ_toReport`, case `terminalConfig`). -/
+example : (runFromQ prog env.toQueryOracle 1 [] [] terminalConfig).toReport =
+    runFrom prog env 1 [] terminalConfig :=
+  runFromQ_toReport (O := ops) (P := prog) (ρ₀ := env) 1 [] [] terminalConfig
+
+/-- Planted (law `runFromQ_toReport`, case `terminalConfig`,
+subject `runFromQ`, mutant `droppedAnswerRun`). -/
+example : (droppedAnswerRun ops prog env.toQueryOracle 1 [] [] terminalConfig).toReport ≠
+    runFrom prog env 1 [] terminalConfig := by
+  intro h
+  have he := congrArg Report.events h
+  cases he
+
+/-- The successful primitive request's one-step endpoint. -/
+def terminalFinished : Position ops := ⟨⟨.done, [], .init, []⟩, [1], [terminalQuery]⟩
+
+/-- Helper (computation). A real path includes the oracle's event and its recorded query
+(approved: PENDING). -/
+theorem terminalPath : Moves prog env 1 ⟨terminalConfig, [], []⟩ terminalFinished :=
+  .step (.prim (k := terminalK) (a := ⟨some 1, .ok 0, .init⟩)
+    terminalRequest rfl rfl rfl) (.refl _)
+
+/-- Instance (law `runFromQ_complete`, case `terminalConfig`). -/
+example : runFromQ prog env.toQueryOracle 1 [] [] terminalConfig =
+    ⟨terminalFinished.events, terminalFinished.queries, .final .normal⟩ :=
+  runFromQ_complete (O := ops) (P := prog) (ρ := env.toQueryOracle) (n := 1)
+    (pos := ⟨terminalConfig, [], []⟩) (pos' := terminalFinished) terminalPath
+    (f := .normal) rfl
+
+/-- Planted (law `runFromQ_complete`, case `terminalConfig`,
+subject `runFromQ`, mutant `droppedAnswerRun`). -/
+example : Moves prog env 1 ⟨terminalConfig, [], []⟩ terminalFinished ∧
+    terminalFinished.config.final? = some (.normal : Final Int) ∧
+    droppedAnswerRun ops prog env.toQueryOracle 1 [] [] terminalConfig ≠
+      ⟨terminalFinished.events, terminalFinished.queries, .final .normal⟩ := by
+  exact ⟨terminalPath, rfl, by intro h; cases h⟩
+
+/-- Instance (law `runFromQ_sound`, case `terminalConfig`). -/
+example : ∃ n pos, Moves prog noAnswerOracle n ⟨terminalConfig, [], []⟩ pos ∧
+    (runFromQ prog noAnswerOracle 1 [] [] terminalConfig).events = pos.events ∧
+    ∃ hc : Conclusion prog noAnswerOracle (runFromQ prog noAnswerOracle 1 [] [] terminalConfig).ending pos,
+      ReportedQueries prog noAnswerOracle hc (runFromQ prog noAnswerOracle 1 [] [] terminalConfig).queries :=
+  runFromQ_sound (O := ops) (P := prog) (ρ := noAnswerOracle) 1 [] [] terminalConfig
+
+/-- Helper (inversion). No successful move answers this unanswered request (approved: PENDING). -/
+theorem unanswered_no_move {pos : Position ops} :
+    ¬ Move prog noAnswerOracle ⟨terminalConfig, [], []⟩ pos := by
+  intro h
+  cases h with
+  | silent hs => rw [terminalRequest] at hs; cases hs
+  | prim _ ha _ _ => simp [answer, noAnswerOracle] at ha
+
+/-- Planted (law `runFromQ_sound`, case `terminalConfig`,
+subject `runFromQ`, mutant `substitutedAnswerRun`). -/
+example : ¬ (∃ n pos, Moves prog noAnswerOracle n ⟨terminalConfig, [], []⟩ pos ∧
+    (substitutedAnswerRun ops prog noAnswerOracle 1 [] [] terminalConfig).events = pos.events ∧
+    ∃ hc : Conclusion prog noAnswerOracle
+        (substitutedAnswerRun ops prog noAnswerOracle 1 [] [] terminalConfig).ending pos,
+      ReportedQueries prog noAnswerOracle hc
+        (substitutedAnswerRun ops prog noAnswerOracle 1 [] [] terminalConfig).queries) := by
+  rintro ⟨n, pos, path, _, hc, _⟩
+  cases path with
+  | refl => cases hc with | final hf => cases hf
+  | step hm _ => exact unanswered_no_move hm
 
 end Demo
 
