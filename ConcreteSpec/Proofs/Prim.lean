@@ -554,6 +554,42 @@ def failureAnswer : Exec.Answer Int Int Int := ⟨none, .ok 1, 7⟩
 def undeclaredAnswer : Exec.Answer Int Int Int := ⟨none, .ok 2, 7⟩
 def trapAnswer : Exec.Answer Int Int Int := ⟨none, .error .abort, 7⟩
 
+/-- A two-type contract: `true` is its result type, while its only failure alternative is wrongly
+labeled with the distinct type `false`. -/
+def twoTypeContract : PrimContract Int Bool Int Int where
+  id := ⟨⟨0⟩, 1⟩
+  parameters := []
+  result := true
+  authority := []
+  ownership := fun _ before after => after = before
+  dependencies := fun _ _ _ => True
+  requires := fun _ _ => True
+  ensures := fun v _ => v = 0
+  footprint := fun _ _ => []
+  initialized := fun _ => True
+  valid := fun _ => True
+  failures := [⟨false, fun v => v = 1⟩]
+  events := fun ev => ev = none
+  eventTags := fun _ => []
+  leakageTags := fun _ => []
+  resources := fun _ before after => after = before
+  termination := fun _ _ => True
+  answerOk := fun args st a => match a.result with
+    | .ok v => decide (args = [] ∧ a.event = none ∧ v = 0 ∧ a.store = st)
+    | .error _ => false
+
+/-- Non-trivial two-type instance: the ordinary success remains accepted. -/
+example : twoTypeContract.Allowed [] 7 successAnswer := by
+  simp [twoTypeContract, PrimContract.Allowed, successAnswer]
+
+/-- Refused: the failure value `1` has the undeclared error type `false`, not result type `true`. -/
+example : ¬ twoTypeContract.Allowed [] 7 failureAnswer := by
+  simp [twoTypeContract, PrimContract.Allowed, failureAnswer]
+
+/-- Planted counter-example: a matcher that removes `f.errorTy = c.result` accepts that same failure. -/
+example : ∃ f ∈ twoTypeContract.failures, f.holds 1 := by
+  exact ⟨⟨false, fun v => v = 1⟩, by simp [twoTypeContract], rfl⟩
+
 /-- Non-trivial instance for `PrimRegistry.answerOk_iff`: the declared failure passes both sides. -/
 example : PrimDemo.unitContract.answerOk [] 7 failureAnswer = true ↔
     PrimDemo.unitContract.Allowed [] 7 failureAnswer := by
