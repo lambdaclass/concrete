@@ -24,6 +24,32 @@ boundary responsible, and the compiler reports recursion depth, stack use, alloc
 blocking and foreign calls per function, SPARK-style. Each guarantee holds as its evidence lands
 ([decision](docs/decisions.md#decided-project-no-hidden-traps)).
 
+## Why Concrete?
+
+Producing an implementation is becoming cheaper. Establishing what it must do,
+what resources it may use, and why we should trust it remains difficult.
+
+Concrete's direction is to make those obligations explicit: state the behavioral
+contract, constrain ownership and authority, and attach evidence to the exact
+implementation being checked. An implementation can change; the obligations it
+must satisfy remain the basis for acceptance.
+
+That requires more than matching return values. Failure, mutation, external
+actions and resource behavior can matter too. The scope of each claim and its
+remaining assumptions must be visible. Understanding the specification and
+checking that it captures the intended task remain engineering responsibilities.
+
+| Question | Concrete's approach |
+| --- | --- |
+| Who owns this resource? | Linear ownership and scoped borrowing. |
+| What authority does this operation require? | Capabilities declared in signatures. |
+| What behavior must this implementation preserve? | Explicit contracts and semantic obligations. |
+| Why should I accept this claim? | Distinct proof, test, runtime-check and assumption evidence. |
+
+The long-term goal is verified compilation from source to native execution,
+with evidence that can be composed and independently replayed. This is a target,
+not a current guarantee.
+
 **Status: restarting.** A new compiler is being built from a Lean specification. Nothing at this
 root compiles Concrete programs yet.
 
