@@ -556,7 +556,8 @@ private theorem performed_append_inv {P : Program O} {as bs : List (CleanAct O)}
   | call hc _ ih => simpa [List.append_assoc] using Performed.call hc (ih hb)
   | drop hd _ ih => exact .drop hd (ih hb)
 
-/-- Helper (inversion). Unwinding a frame never itself makes a primitive request (approved: PENDING). -/
+/-- Helper (inversion). Internal dispatcher decomposition supporting the observable silence
+law `exit_label`; not an independent soundness claim (approved: PENDING). -/
 private theorem stepExit_no_request_inv (L : AList Var O.Val) (st : O.Store) (e : Exit O.Val)
     (frames : List (Frame O)) (p : O.Prim) (vs : List O.Val) (site : SiteId) (st' : O.Store)
     (cont : Answer O.Val O.Event O.Store → Option (Config O)) :
@@ -913,11 +914,11 @@ theorem steps_from_trapped (P : Program O) (kd : TrapKind) (site : SiteId) (L : 
     exact .refl _
 
 /-- A call retains its saved caller frame until normal return. -/
-private def Protected (L : AList Var O.Val) (q : List (Frame O)) (c : Config O) : Prop :=
+def Protected (L : AList Var O.Val) (q : List (Frame O)) (c : Config O) : Prop :=
   ∃ pre, c.frames = pre ++ .ret none L :: q
 
-/-- Helper (inversion). Decomposes a raw execution using the machine stack rules (approved: PENDING). -/
-private theorem register_protected_inv (d : Deferred O) (caller : AList Var O.Val)
+/-- Law (subject `ConcreteSpec.Core.Exec.register`). Defer registration preserves the saved caller boundary. -/
+theorem register_protected (d : Deferred O) (caller : AList Var O.Val)
     (q : List (Frame O)) : ∀ (pre : List (Frame O)) (k' : List (Frame O)),
     register d (pre ++ .ret none caller :: q) = some k' →
     ∃ pre', k' = pre' ++ .ret none caller :: q
@@ -930,7 +931,7 @@ private theorem register_protected_inv (d : Deferred O) (caller : AList Var O.Va
       | none => simp [hr] at h
       | some rest =>
         simp only [hr, Option.map_some, Option.some.injEq] at h
-        obtain ⟨pre', rfl⟩ := register_protected_inv d caller q pre rest hr
+        obtain ⟨pre', rfl⟩ := register_protected d caller q pre rest hr
         exact ⟨.seq t :: pre', h.symm⟩
     | scope b dm ds =>
       simp only [List.cons_append, register, Option.some.injEq] at h
@@ -940,11 +941,12 @@ private theorem register_protected_inv (d : Deferred O) (caller : AList Var O.Va
     | resume p => simp [register] at h
     | ret dst L => simp [register] at h
 
-/-- Helper (inversion). Decomposes a raw execution using the machine stack rules (approved: PENDING). -/
-private theorem protected_step_inv {P : Program O} {caller : AList Var O.Val}
-    {q : List (Frame O)} {c c' : Config O} {label : Label O}
-    (hp : Protected caller q c) (h : Step P c label c') :
-    Protected caller q c' ∨ (c'.ctrl = .done ∧ c'.locals = caller ∧ c'.frames = q) := by
+/-- Law (subject `ConcreteSpec.Core.Exec.Step`). Each transition preserves the saved caller boundary or returns to it with caller locals restored. -/
+theorem protected_step {P : Program O} {caller : AList Var O.Val}
+    {q : List (Frame O)} {c : Config O} (hp : Protected caller q c) :
+    ∀ label c', Step P c label c' →
+      Protected caller q c' ∨ (c'.ctrl = .done ∧ c'.locals = caller ∧ c'.frames = q) := by
+  intro label c' h
   cases c with | mk ctrl locals st frames =>
     obtain ⟨pre, rfl⟩ := hp
     cases h with
@@ -960,7 +962,7 @@ private theorem protected_step_inv {P : Program O} {caller : AList Var O.Val}
           all_goals try subst c'
           all_goals try contradiction
           all_goals repeat' first | simp_all [Protected] | split at h
-          all_goals try grind [Protected, register_protected_inv]
+          all_goals try grind [Protected, register_protected]
           all_goals try first
             | rfl
             | exact ⟨[], rfl⟩
@@ -997,14 +999,14 @@ private theorem protected_step_inv {P : Program O} {caller : AList Var O.Val}
           all_goals try subst c'
           all_goals try contradiction
           all_goals repeat' first | simp_all [Protected] | split at h
-          all_goals try grind [Protected, register_protected_inv]
+          all_goals try grind [Protected, register_protected]
           all_goals try first
             | rfl
             | exact ⟨f :: pre, rfl⟩
             | exact ⟨_ :: f :: pre, rfl⟩
             | exact ⟨_ :: _ :: f :: pre, rfl⟩
             | exact .inl ⟨f :: pre, rfl⟩
-            | exact .inl (register_protected_inv _ caller q (f :: pre) _ (by assumption))
+            | exact .inl (register_protected _ caller q (f :: pre) _ (by assumption))
             | exact .inl ⟨_ :: f :: pre, rfl⟩
             | exact .inl ⟨_ :: _ :: f :: pre, rfl⟩
         | done =>
@@ -1014,7 +1016,7 @@ private theorem protected_step_inv {P : Program O} {caller : AList Var O.Val}
           all_goals try subst c'
           all_goals try contradiction
           all_goals repeat' first | simp_all [Protected, bindDst] | split at h
-          all_goals try grind [Protected, register_protected_inv]
+          all_goals try grind [Protected, register_protected]
           all_goals try first
             | rfl
             | exact ⟨pre, rfl⟩
@@ -1031,7 +1033,7 @@ private theorem protected_step_inv {P : Program O} {caller : AList Var O.Val}
           all_goals try subst c'
           all_goals try contradiction
           all_goals repeat' first | simp_all [Protected, bindDst] | split at h
-          all_goals try grind [Protected, register_protected_inv]
+          all_goals try grind [Protected, register_protected]
           all_goals try first
             | rfl
             | exact ⟨pre, rfl⟩
@@ -1113,7 +1115,7 @@ private theorem FirstStepsN.split_return_inv {P : Program O} {bound : Nat}
     omega
   | @step c l c' tr endC n hn hs ht ih =>
     intro caller q hq hp
-    cases protected_step_inv hp hs with
+    cases protected_step hp _ _ hs with
     | inl hp' =>
       obtain ⟨n₁, n₂, tr₁, st₁, tr₂, hc, he, ha, hb⟩ := ih hq hp'
       exact ⟨n₁ + 1, n₂, l.events ++ tr₁, st₁, tr₂, by omega,
@@ -1127,11 +1129,12 @@ private theorem FirstStepsN.split_return_inv {P : Program O} {bound : Nat}
           (FirstStepsN.stop (R := Step P) (stop := fun c : Config O => c.ctrl = .done ∧ c.frames = q) ⟨rfl, rfl⟩))
       exact ⟨1, n, l.events, c'.store, tr, by omega, rfl, hseg, ht⟩
 
-/-- Helper (inversion). Decomposes a raw execution using the machine stack rules (approved: PENDING). -/
-private theorem call_protects_inv {P : Program O} {L : AList Var O.Val} {st : O.Store}
-    {q : List (Frame O)} {d : Deferred O} {label : Label O} {c' : Config O}
-    (h : Step P ⟨.exec d.stmt, L, st, q⟩ label c') :
-    (∃ kd site, c'.ctrl = .trapped kd site ∧ c'.frames = q) ∨ Protected L q c' := by
+/-- Law (subject `ConcreteSpec.Core.Exec.Step`). A call either traps without changing its continuation, or saves the caller boundary. -/
+theorem call_protects {P : Program O} {L : AList Var O.Val} {st : O.Store}
+    {q : List (Frame O)} {d : Deferred O} :
+    ∀ label c', Step P ⟨.exec d.stmt, L, st, q⟩ label c' →
+      (∃ kd site, c'.ctrl = .trapped kd site ∧ c'.frames = q) ∨ Protected L q c' := by
+  intro label c' h
   cases h with
   | silent h =>
     simp only [step, Deferred.stmt, onRes, Option.bind, Option.map] at h
@@ -1177,7 +1180,7 @@ private theorem FirstStepsN.call_return_inv {P : Program O} {bound : Nat}
   cases h with
   | stop hs => exact False.elim (Nat.not_le_of_gt hq hs)
   | @step _ l c' tr endC n hn hs ht =>
-    cases call_protects_inv hs with
+    cases call_protects _ _ hs with
     | inl hp =>
       obtain ⟨kd, site, hc, hf⟩ := hp
       have he : c' = ⟨.trapped kd site, c'.locals, c'.store, q⟩ := by cases c'; simp_all
@@ -1188,10 +1191,11 @@ private theorem FirstStepsN.call_return_inv {P : Program O} {bound : Nat}
       exact ⟨n₁ + 1, n₂, l.events ++ tr₁, st₁, tr₂, by omega,
         by simp [he, List.append_assoc], .step (by intro h; cases h.1) hs ha, hb⟩
 
-/-- Helper (inversion). Decomposes a raw execution using the machine stack rules (approved: PENDING). -/
-private theorem exit_label_inv {P : Program O} {e : Exit O.Val} {L : AList Var O.Val}
-    {st : O.Store} {frames : List (Frame O)} {label : Label O} {c : Config O}
-    (h : Step P ⟨.exiting e, L, st, frames⟩ label c) : label = .silent := by
+/-- Law (subject `ConcreteSpec.Core.Exec.Step`). Unwinding itself emits no event; effects belong to dispatched calls. -/
+theorem exit_label {P : Program O} {e : Exit O.Val} {L : AList Var O.Val}
+    {st : O.Store} {frames : List (Frame O)} :
+    ∀ label c, Step P ⟨.exiting e, L, st, frames⟩ label c → label = .silent := by
+  intro label c h
   cases h with
   | silent _ => rfl
   | prim h _ _ => exact False.elim (stepExit_no_request_inv L st e frames _ _ _ _ _ h)
@@ -1232,7 +1236,7 @@ private theorem boundary_complete_inv {P : Program O} {e : Exit O.Val} {k pre : 
       cases h with
       | stop hs => simp at hs; omega
       | @step _ label c' tr₀ _ m hn hs ht =>
-        have hl := exit_label_inv hs
+        have hl := exit_label _ _ hs
         subst label
         have hnext := exit_step_next_inv hs
         change step P ⟨.exiting e, L, st, f :: (pre ++ k)⟩ = _ at hnext
@@ -3354,6 +3358,61 @@ example : Demo.destroyProtocol.impl .tok = some eatF ∧
   refine ⟨rfl, rfl, rfl, rfl, rfl, ?_⟩
   rintro ⟨_, _, _, _, hs⟩
   cases hs
+
+/-- Mutant registration loses the continuation instead of saving the deferred call. -/
+def forgetRegister (_d : Deferred O) (_k : List (Frame O)) : Option (List (Frame O)) := some []
+/-- Mutant transitions admit arbitrary outcomes. -/
+def arbitraryStep (_P : Program O) (_c : Config O) (_l : Label O) (_c' : Config O) : Prop := True
+/-- Instance (law `ConcreteSpec.Core.Exec.register_protected`, case `saved_caller`). -/
+example : ∀ (pre k' : List (Frame ops)),
+    register d2 (pre ++ .ret none [(x, 7)] :: []) = some k' →
+    ∃ pre', k' = pre' ++ .ret none [(x, 7)] :: [] :=
+  register_protected d2 [(x, 7)] []
+/-- Planted (law `ConcreteSpec.Core.Exec.register_protected`, case `saved_caller`, subject `ConcreteSpec.Core.Exec.register`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.forgetRegister`). -/
+example : ¬ (∀ (pre k' : List (Frame ops)),
+    forgetRegister d2 (pre ++ .ret none [(x, 7)] :: []) = some k' →
+    ∃ pre', k' = pre' ++ .ret none [(x, 7)] :: []) := by
+  intro h
+  obtain ⟨pre, hp⟩ := h [.scope ⟨1⟩ [] []] [] rfl
+  have hh := congrArg List.length hp
+  simp at hh
+
+/-- Instance (law `ConcreteSpec.Core.Exec.protected_step`, case `saved_caller`). -/
+example : ∀ label c', Step prog ⟨.exec .skip, [], .init, [.ret none [(x, 7)]]⟩ label c' →
+    Protected (O := ops) [(x, 7)] [] c' ∨ (c'.ctrl = .done ∧ c'.locals = [(x, 7)] ∧ c'.frames = []) :=
+  protected_step (P := prog) (c := ⟨.exec .skip, [], .init, [.ret none [(x, 7)]]⟩) ⟨[], rfl⟩
+/-- Planted (law `ConcreteSpec.Core.Exec.protected_step`, case `saved_caller`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.arbitraryStep`). -/
+example : Protected (O := ops) [(x, 7)] [] (⟨.exec .skip, [], .init, [.ret none [(x, 7)]]⟩ : Config ops) ∧
+    ¬ (∀ label c', arbitraryStep prog ⟨.exec .skip, [], .init, [.ret none [(x, 7)]]⟩ label c' →
+      Protected (O := ops) [(x, 7)] [] c' ∨ (c'.ctrl = .done ∧ c'.locals = [(x, 7)] ∧ c'.frames = [])) := by
+  refine ⟨⟨[], rfl⟩, fun h => ?_⟩
+  cases h .silent ⟨.trapped .abort s, [], .init, []⟩ True.intro with
+  | inl hp => have hh := protected_height_inv hp; simp at hh
+  | inr hr => cases hr.1
+
+/-- Instance (law `ConcreteSpec.Core.Exec.call_protects`, case `callee_entry`). -/
+example : ∀ label c', Step prog ⟨.exec d2.stmt, [(x, 7)], .init, []⟩ label c' →
+    (∃ kd site, c'.ctrl = .trapped kd site ∧ c'.frames = []) ∨ Protected (O := ops) [(x, 7)] [] c' :=
+  call_protects (P := prog) (L := [(x, 7)]) (st := .init) (q := []) (d := d2)
+/-- Planted (law `ConcreteSpec.Core.Exec.call_protects`, case `callee_entry`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.arbitraryStep`). -/
+example : ¬ (∀ label c', arbitraryStep prog ⟨.exec d2.stmt, [(x, 7)], .init, []⟩ label c' →
+    (∃ kd site, c'.ctrl = .trapped kd site ∧ c'.frames = []) ∨ Protected (O := ops) [(x, 7)] [] c') := by
+  intro h
+  cases h .silent ⟨.done, [], .init, []⟩ True.intro with
+  | inl hp => obtain ⟨_, _, hh, _⟩ := hp; cases hh
+  | inr hp => have hh := protected_height_inv hp; simp at hh
+
+/-- Instance (law `ConcreteSpec.Core.Exec.exit_label`, case `dispatch`). -/
+example : ∀ label c, Step prog ⟨.exiting (.ret 7), [], .init, [CleanupEvidence.inner]⟩ label c →
+    label = .silent :=
+  exit_label (P := prog) (e := .ret 7) (L := []) (st := .init) (frames := [CleanupEvidence.inner])
+/-- Planted (law `ConcreteSpec.Core.Exec.exit_label`, case `dispatch`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.arbitraryStep`). -/
+example : ¬ (∀ label c, arbitraryStep prog ⟨.exiting (.ret 7), [], .init, [CleanupEvidence.inner]⟩ label c →
+    label = .silent) := by
+  intro h
+  have hh := h (.emit 1) ⟨.done, [], .init, []⟩ True.intro
+  cases hh
+
 
 def copyEatFn : Fn ops := ⟨[(p, .int)], .unit, ⟨1⟩, .skip⟩
 def copyProg : Program ops := ⟨[(eatF, copyEatFn)]⟩
