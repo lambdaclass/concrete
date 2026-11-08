@@ -12,9 +12,11 @@ import ConcreteSpec.Proofs.Observe2
   completed reports are fuel-monotone (`runFrom_mono`), and event traces are prefix-monotone
   (`runFrom_trace_prefix_le`).
 - Infinite maximal executions and compatible fuel limits are definitionally round-trip equivalent
-  and unique for each initial run (`InfiniteExecution.unique`). Silent divergence and infinite
-  interaction are mutually exclusive; `Demo.spin_infinite` witnesses the former. A blocked request
-  keeps its `noAnswer` classification and excludes infinite execution
+  and unique for each initial run (`InfiniteExecution.unique`). External silent divergence and
+  infinite interaction use adapter-projected histories, are mutually exclusive, and agree with C6
+  (`finite_projected_observation`, `infinite_projected_observation`). `Demo.event_infinite` shows
+  that raw interaction can erase to silent divergence. A blocked request keeps its `noAnswer`
+  classification and excludes infinite execution
   (`endlesslyBlocked_of_noAnswer`, `not_infinite_of_noAnswer`).
 - Per-function termination evidence quantifies over every entry run admitted by its named premises
   and excludes infinite execution (`TerminationEvidence.excludes_infinite`).
@@ -25,26 +27,113 @@ open ConcreteSpec.Core
 
 variable {O : Operands} {P : Program O} {ρ : QueryOracle O} {c : Config O}
 
-/-- A query's occurrence is exactly the number of earlier requests at its site. -/
+/-- Helper for constructing a query; this definitional equality is not execution-level contract
+evidence. -/
 theorem issue_occurrence (events : List O.Event) (p : O.Prim) (args : List O.Val) (site : SiteId)
     (st : O.Store) (issued : List (Query O)) :
     (Query.issue events p args site st issued).occurrence = occurrenceAt issued site := rfl
 
-/-- The next request at `site` has the next occurrence number; requests at other sites do not change
-that number. -/
+/-- Helper for reasoning about a history append; this is not execution-level contract evidence. -/
 theorem issue_next_occurrence (issued : List (Query O)) (site : SiteId) (q : Query O) :
     occurrenceAt (issued ++ [q]) site =
       occurrenceAt issued site + if q.site = site then 1 else 0 := by
   simp [occurrenceAt, List.filter_append]
   split <;> simp_all
 
-/-- A fixed query-level oracle is a function of the complete query alone. -/
+/-- Helper for rewriting an oracle answer under query equality; this congruence is not
+execution-level contract evidence. -/
 theorem answer_deterministic (ρ : QueryOracle O) {q₁ q₂ : Query O} (h : q₁ = q₂) :
     answer ρ q₁ = answer ρ q₂ := congrArg (answer ρ) h
 
-/-- C1's oracle answers exactly the corresponding query-level oracle that ignores `occurrence`. -/
+/-- Helper for unfolding the adapter; this definitional equality is not execution-level contract
+evidence. -/
 theorem answer_toQueryOracle (ρ₀ : Oracle O) (q : Query O) :
     answer ρ₀.toQueryOracle q = ρ₀ q.events q.prim q.args q.site q.store := rfl
+
+/-- Appending the authenticated next query preserves the per-site occurrence invariant. -/
+theorem QueryHistoryValid.append {issued : List (Query O)} {q : Query O}
+    (valid : QueryHistoryValid issued) (occurrence : q.occurrence = occurrenceAt issued q.site) :
+    QueryHistoryValid (issued ++ [q]) := by
+  intro i q' hq'
+  by_cases hi : i < issued.length
+  · rw [List.getElem?_append_left hi] at hq'
+    rw [valid i q' hq', List.take_append_of_le_length (Nat.le_of_lt hi)]
+  · have hge : issued.length ≤ i := Nat.le_of_not_gt hi
+    have hlt : i < (issued ++ [q]).length := by
+      rw [List.getElem?_eq_some_iff] at hq'
+      exact hq'.1
+    have heq : i = issued.length := by simp at hlt; omega
+    subst i
+    rw [List.getElem?_append_right (Nat.le_refl _)] at hq'
+    simp at hq'
+    subst q'
+    simpa [List.take_append, List.take_of_length_le] using occurrence
+
+/-- **Execution-level occurrence invariant.** Every query reported by an actual instrumented run
+counts exactly the earlier queries at its own site, including terminal unanswered queries. -/
+theorem runFromQ_queryHistoryValid : ∀ (fuel : Nat) (events : List O.Event)
+    (issued : List (Query O)) (c : Config O), QueryHistoryValid issued →
+      QueryHistoryValid (runFromQ P ρ fuel events issued c).queries := by
+  intro fuel
+  induction fuel with
+  | zero =>
+    intro events issued c valid
+    cases hf : c.final? <;> simpa [runFromQ, hf] using valid
+  | succ n ih =>
+    intro events issued c valid
+    cases hf : c.final? with
+    | some f => simpa [runFromQ, hf] using valid
+    | none =>
+      cases hs : step P c with
+      | none => simpa [runFromQ, hf, hs] using valid
+      | some out =>
+        cases out with
+        | next c' => simpa [runFromQ, hf, hs] using ih events issued c' valid
+        | request p vs site st k =>
+          let q := Query.issue events p vs site st issued
+          have nextValid : QueryHistoryValid (issued ++ [q]) := valid.append rfl
+          cases ha : answer ρ q with
+          | none => simpa [runFromQ, hf, hs, q, ha] using nextValid
+          | some a =>
+            cases hallow : O.allows p vs st a with
+            | false => simpa [runFromQ, hf, hs, q, ha, hallow] using nextValid
+            | true =>
+              cases hk : k a with
+              | none => simpa [runFromQ, hf, hs, q, ha, hallow, hk] using nextValid
+              | some c' =>
+                simpa [runFromQ, hf, hs, q, ha, hallow, hk] using
+                  ih (events ++ a.event.toList) (issued ++ [q]) c' nextValid
+
+/-- **Repeated requests at one site advance their occurrences.** These are consecutive queries in
+the actual run history; arbitrarily many silent machine transitions may separate the requests. -/
+theorem runFromQ_consecutive_same_site (fuel : Nat) (events : List O.Event)
+    (issued : List (Query O)) (c : Config O) (valid : QueryHistoryValid issued)
+    {i : Nat} {q q' : Query O}
+    (hq : (runFromQ P ρ fuel events issued c).queries[i]? = some q)
+    (hq' : (runFromQ P ρ fuel events issued c).queries[i + 1]? = some q')
+    (site : q.site = q'.site) : q'.occurrence = q.occurrence + 1 := by
+  have history := runFromQ_queryHistoryValid (P := P) (ρ := ρ) fuel events issued c valid
+  have before := history i q hq
+  have after := history (i + 1) q' hq'
+  rw [after, List.take_add_one, hq]
+  simp only [Option.toList_some]
+  rw [issue_next_occurrence, before, site]
+  simp
+
+/-- **Interleaved sites keep separate counters.** A query at another site does not advance the
+current query's occurrence count, even when the requests are consecutive in an actual run. -/
+theorem runFromQ_consecutive_other_site (fuel : Nat) (events : List O.Event)
+    (issued : List (Query O)) (c : Config O) (valid : QueryHistoryValid issued)
+    {i : Nat} {q q' : Query O}
+    (hq : (runFromQ P ρ fuel events issued c).queries[i]? = some q)
+    (hq' : (runFromQ P ρ fuel events issued c).queries[i + 1]? = some q')
+    (site : q.site ≠ q'.site) : q'.occurrence = occurrenceAt
+      ((runFromQ P ρ fuel events issued c).queries.take i) q'.site := by
+  have history := runFromQ_queryHistoryValid (P := P) (ρ := ρ) fuel events issued c valid
+  rw [history (i + 1) q' hq', List.take_add_one, hq]
+  simp only [Option.toList_some]
+  rw [issue_next_occurrence]
+  simp [site]
 
 /-- Erasing query instrumentation gives C1's original driver when the query-level oracle is C1's
 oracle lifted to ignore occurrence numbers. -/
@@ -85,6 +174,24 @@ theorem runFromQ_toReport {ρ₀ : Oracle O} :
                 simpa [runFromQ, runFrom, hf, hs, answer, Oracle.toQueryOracle, Query.issue, ha,
                   hallow, hk] using
                   ih (events ++ a.event.toList) (issued ++ [Query.issue events p vs site st issued]) c'
+
+/-- **Lifting an oracle preserves an actual run's answers.** Every primitive move under the lifted
+oracle uses the ordinary oracle's answer at that execution position, with the same contract check,
+successful continuation and event contribution. -/
+theorem Move.toQueryOracle_answer {ρ₀ : Oracle O} {pos pos' : Position O}
+    (move : Move P ρ₀.toQueryOracle pos pos') {p : O.Prim} {vs : List O.Val} {site : SiteId}
+    {st : O.Store} {k : Answer O.Val O.Event O.Store → Option (Config O)}
+    (request : step P pos.config = some (.request p vs site st k)) :
+    ∃ a, ρ₀ pos.events p vs site st = some a ∧ O.allows p vs st a = true ∧
+      k a = some pos'.config ∧ pos'.events = pos.events ++ a.event.toList := by
+  cases move with
+  | silent silentStep =>
+    rw [request] at silentStep
+    cases silentStep
+  | @prim c c' events issued p' vs' site' st' k' a primStep answer allows continued =>
+    rw [request] at primStep
+    cases primStep
+    exact ⟨a, answer, allows, continued, rfl⟩
 
 /-- Every instrumented run extends the query history with which it started. -/
 theorem runFromQ_queries_from : ∀ (fuel : Nat) (events : List O.Event) (issued : List (Query O))
@@ -1240,6 +1347,106 @@ example : ¬ MatchesProjectedHistory erasingAdapter event_infinite
   intro matched
   obtain ⟨n, rest, history⟩ := matched.2 1
   simp [erasing_project, Observe.visiblePrefix_succ, Observe.Step.event?] at history
+
+/-! ### Execution-level occurrence and oracle witnesses -/
+
+/-- Two consecutive silent requests at one site. -/
+def silentRequestConfig : Config ops := ⟨.exec (.seq
+  (.prim none .bump [] s) (.prim none .bump [] s)), [], .init, []⟩
+
+/-- The same requests, but at two distinct logical sites. -/
+def otherSite : SiteId := ⟨1⟩
+def interleavedRequestConfig : Config ops := ⟨.exec (.seq
+  (.prim none .bump [] s) (.prim none .bump [] otherSite)), [], .init, []⟩
+
+def silentRequests : QueryReport ops := runQ prog env 4 silentRequestConfig
+def interleavedRequests : QueryReport ops := runQ prog env 4 interleavedRequestConfig
+
+/-- The authenticated queries of those actual runs. -/
+def silentQuery0 : Query ops := Query.issue [] .bump [] s .init []
+def silentQuery1 : Query ops := Query.issue [] .bump [] s ⟨1, []⟩ [silentQuery0]
+def interleavedQuery0 : Query ops := Query.issue [] .bump [] s .init []
+def interleavedQuery1 : Query ops := Query.issue [] .bump [] otherSite ⟨1, []⟩ [interleavedQuery0]
+
+/-- Non-vacuity: both runs really issue two requests and emit no raw event. -/
+example : silentRequests.events = [] ∧ silentRequests.queries = [silentQuery0, silentQuery1] :=
+  ⟨rfl, rfl⟩
+example : interleavedRequests.events = [] ∧
+    interleavedRequests.queries = [interleavedQuery0, interleavedQuery1] := ⟨rfl, rfl⟩
+
+/-- Non-vacuity for `runFromQ_consecutive_same_site`: the second actual query has occurrence one. -/
+example : silentQuery1.occurrence = silentQuery0.occurrence + 1 := by
+  apply runFromQ_consecutive_same_site (P := prog) (ρ := env) 4 [] [] silentRequestConfig
+    (i := 0) (q := silentQuery0) (q' := silentQuery1)
+  · intro i q h
+    simp at h
+  · rfl
+  · rfl
+  · rfl
+
+/-- Non-vacuity for `runFromQ_consecutive_other_site`: the second site's first occurrence is zero. -/
+example : interleavedQuery1.occurrence = 0 := by
+  have h := runFromQ_consecutive_other_site (P := prog) (ρ := env) 4 [] []
+    interleavedRequestConfig (i := 0) (q := interleavedQuery0) (q' := interleavedQuery1)
+    (by intro i q h; simp at h) (by rfl) (by rfl) (by decide)
+  simpa [occurrenceAt] using h
+
+/-- A planted counter that never advances. -/
+def frozenQueries : List (Query ops) := [silentQuery0, { silentQuery1 with occurrence := 0 }]
+
+/-- Planted counter-example for the same-site law: the frozen second occurrence is not the number
+of earlier queries at that site. -/
+example : ¬ QueryHistoryValid frozenQueries := by
+  intro valid
+  have second := valid 1 frozenQueries[1] (by rfl)
+  change 0 = 1 at second
+  contradiction
+
+/-- A planted counter shared across sites, which wrongly advances the second site's occurrence. -/
+def sharedQueries : List (Query ops) :=
+  [interleavedQuery0, { interleavedQuery1 with occurrence := 1 }]
+
+/-- Planted counter-example for the interleaved-site law. -/
+example : ¬ QueryHistoryValid sharedQueries := by
+  intro valid
+  have second := valid 1 sharedQueries[1] (by rfl)
+  change 1 = 0 at second
+  contradiction
+
+/-- One direct silent request and the successful configuration produced by its ordinary answer. -/
+def bumpConfig : Config ops := ⟨.exec (.prim none .bump [] s), [], .init, []⟩
+def bumpContinued : Config ops := ⟨.done, [], ⟨1, []⟩, []⟩
+def bumpQuery : Query ops := Query.issue [] .bump [] s .init []
+def bumpK : Answer ops.Val ops.Event ops.Store → Option (Config ops) := fun a =>
+  match a.result with
+  | .ok v => (bindLife ops none a.store).map fun st' => ⟨.done, bindDst none v [], st', []⟩
+  | .error kd => some ⟨.trapped kd s, [], a.store, []⟩
+
+/-- A real transition under the lifted ordinary demo oracle. -/
+theorem bumpedMove : Move prog env ⟨bumpConfig, [], []⟩ ⟨bumpContinued, [], [bumpQuery]⟩ :=
+  Move.prim (P := prog) (ρ := env) (c := bumpConfig) (c' := bumpContinued) (events := [])
+    (issued := []) (p := .bump) (vs := []) (site := s) (st := .init)
+    (a := ⟨none, .ok 0, ⟨1, []⟩⟩) rfl rfl rfl rfl
+
+/-- Non-vacuity for `Move.toQueryOracle_answer`: the actual transition uses exactly `env`'s answer. -/
+example : ∃ a, env [] .bump [] s .init = some a ∧ ops.allows .bump [] .init a = true ∧
+    bumpK a = some bumpContinued ∧ [] = [] ++ a.event.toList := by
+  exact Move.toQueryOracle_answer (ρ₀ := env) bumpedMove (p := .bump) (vs := []) (site := s)
+    (st := .init) (k := bumpK) (by
+      simp [bumpConfig, step, evalArgs, onRes]
+      funext a
+      cases hr : a.result <;> simp [bumpK, hr])
+
+/-- An occurrence-sensitive mutation answers only the first request at each site. -/
+def occurrenceSensitiveOracle : QueryOracle ops := fun q =>
+  if q.occurrence = 0 then answer env.toQueryOracle q else none
+
+/-- Planted counter-example for lifted-oracle preservation: unlike `env.toQueryOracle`, this oracle
+refuses the actual second request and therefore produces a different run. -/
+example : (runQ prog occurrenceSensitiveOracle 4 silentRequestConfig).toReport ≠
+    run prog env 4 silentRequestConfig := by
+  intro h
+  cases h
 
 /-! ### Exact terminal-query witnesses -/
 

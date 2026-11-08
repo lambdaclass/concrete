@@ -38,6 +38,10 @@ def Query.issue (events : List O.Event) (p : O.Prim) (args : List O.Val) (site :
     (store : O.Store) (issued : List (Query O)) : Query O :=
   ⟨events, p, args, site, store, occurrenceAt issued site⟩
 
+/-- Every query in a history carries the number of earlier queries at the same logical site. -/
+def QueryHistoryValid (issued : List (Query O)) : Prop :=
+  ∀ i q, issued[i]? = some q → q.occurrence = occurrenceAt (issued.take i) q.site
+
 /-- An oracle at the query level. Its answer is a pure function of the complete query, including the
 per-site occurrence number; fuel is not an input. -/
 def QueryOracle (O : Operands) : Type :=
