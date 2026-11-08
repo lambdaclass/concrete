@@ -10,10 +10,11 @@ import ConcreteSpec.Proofs.Exec
   final finite executions are obtained with every sufficient fuel budget (`runFrom_complete_le`),
   completed reports are fuel-monotone (`runFrom_mono`), and event traces are prefix-monotone
   (`runFrom_trace_prefix_le`).
-- Infinite maximal executions and compatible fuel limits are interconvertible
-  (`infinite_iff_fuelLimit`). Silent divergence and infinite interaction are distinct event
-  classifications; `Demo.spin_infinite` witnesses the former. A blocked request keeps its `noAnswer`
-  classification (`endlesslyBlocked_of_noAnswer`).
+- Infinite maximal executions and compatible fuel limits are definitionally round-trip equivalent
+  and unique for each initial run (`InfiniteExecution.unique`). Silent divergence and infinite
+  interaction are mutually exclusive; `Demo.spin_infinite` witnesses the former. A blocked request
+  keeps its `noAnswer` classification and excludes infinite execution
+  (`endlesslyBlocked_of_noAnswer`, `not_infinite_of_noAnswer`).
 - Per-function termination evidence quantifies over every entry run admitted by its named premises
   and excludes infinite execution (`TerminationEvidence.excludes_infinite`).
 -/
@@ -633,6 +634,53 @@ def FuelLimit.toInfiniteExecution (L : FuelLimit P ρ c) : InfiniteExecution P �
 theorem infinite_iff_fuelLimit : Nonempty (InfiniteExecution P ρ c) ↔ Nonempty (FuelLimit P ρ c) :=
   ⟨fun ⟨X⟩ => ⟨X.toFuelLimit⟩, fun ⟨L⟩ => ⟨L.toInfiniteExecution⟩⟩
 
+/-- Truncating an infinite execution and reconstructing it returns the original execution. -/
+theorem InfiniteExecution.toFuelLimit_toInfiniteExecution (X : InfiniteExecution P ρ c) :
+    X.toFuelLimit.toInfiniteExecution = X := rfl
+
+/-- Reconstructing a fuel limit and truncating it returns the original limit. -/
+theorem FuelLimit.toInfiniteExecution_toFuelLimit (L : FuelLimit P ρ c) :
+    L.toInfiniteExecution.toFuelLimit = L := rfl
+
+/-- Compatible fuel limits from one initial configuration have the same positions. -/
+theorem fuelLimit_states_unique (L K : FuelLimit P ρ c) : L.states = K.states := by
+  funext n
+  have h := (L.prefixes n).symm.trans (K.prefixes n)
+  have he := congrArg QueryReport.events h
+  have hq := congrArg QueryReport.queries h
+  have hc : (L.states n).config = (K.states n).config := by
+    have hend := congrArg QueryReport.ending h
+    injection hend
+  cases hl : L.states n with
+  | mk lc le lq =>
+    cases hk : K.states n with
+    | mk kc ke kq =>
+      simp only [hl, hk] at hc he hq
+      cases hc
+      cases he
+      cases hq
+      rfl
+
+/-- There is at most one compatible fuel limit for a fixed query-level oracle and initial
+configuration. -/
+theorem FuelLimit.unique (L K : FuelLimit P ρ c) : L = K := by
+  cases L with
+  | mk ls lp =>
+    cases K with
+    | mk ks kp =>
+      have hs : ls = ks := fuelLimit_states_unique ⟨ls, lp⟩ ⟨ks, kp⟩
+      cases hs
+      rfl
+
+/-- A fixed query-level oracle and initial configuration determine a unique infinite execution. -/
+theorem InfiniteExecution.unique (X Y : InfiniteExecution P ρ c) : X = Y := by
+  have h : X.toFuelLimit = Y.toFuelLimit := FuelLimit.unique _ _
+  calc
+    X = X.toFuelLimit.toInfiniteExecution := (toFuelLimit_toInfiniteExecution X).symm
+    _ = Y.toFuelLimit.toInfiniteExecution :=
+      congrArg (fun L : FuelLimit P ρ c => L.toInfiniteExecution) h
+    _ = Y := toFuelLimit_toInfiniteExecution Y
+
 /-- Every infinite execution has either finitely many events or infinitely many; these are the two
 distinct classes `SilentDivergence` and `InfiniteInteraction`. -/
 theorem finite_or_infinite_events (X : InfiniteExecution P ρ c) :
@@ -647,12 +695,21 @@ theorem finite_or_infinite_events (X : InfiniteExecution P ρ c) :
     refine ⟨bound, fun n => ?_⟩
     exact Nat.le_of_not_gt (fun hlt => hn ⟨n, hlt⟩)
 
-/-- Silent divergence cannot also be infinite interaction. -/
+/-- One infinite execution cannot have both finitely many and infinitely many events. -/
 theorem finite_not_infinite_events {X : InfiniteExecution P ρ c}
     (hf : FiniteEvents X) (hi : InfiniteEvents X) : False := by
   obtain ⟨bound, hb⟩ := hf
   obtain ⟨n, hn⟩ := hi bound
   exact Nat.not_lt_of_ge (hb n) hn
+
+/-- Silent divergence and infinite interaction are mutually exclusive classifications of the same
+initial run. -/
+theorem silentDivergence_not_infiniteInteraction :
+    SilentDivergence P ρ c → InfiniteInteraction P ρ c → False := by
+  rintro ⟨X, hf⟩ ⟨Y, hi⟩
+  have hxy : X = Y := InfiniteExecution.unique X Y
+  subst Y
+  exact finite_not_infinite_events hf hi
 
 /-- A final report excludes an infinite execution from the same initial configuration. -/
 theorem not_infinite_of_final {ρ₀ : Oracle O} {fuel : Nat} {c : Config O} {f : Final O.Val}
@@ -663,6 +720,20 @@ theorem not_infinite_of_final {ρ₀ : Oracle O} {fuel : Nat} {c : Config O} {f 
   have hr := runFromQ_toReport (P := P) (ρ₀ := ρ₀) fuel [] [] c
   rw [hp] at hr
   change (runFrom P ρ₀ fuel [] c).ending = .final f at h
+  simp [QueryReport.toReport] at hr
+  rw [← hr] at h
+  cases h
+
+/-- An endlessly blocked `noAnswer` report excludes an infinite execution from the same initial
+configuration. -/
+theorem not_infinite_of_noAnswer {ρ₀ : Oracle O} {fuel : Nat} {c blocked : Config O}
+    (h : (run P ρ₀ fuel c).ending = .noAnswer blocked)
+    (X : InfiniteExecution P ρ₀.toQueryOracle c) : False := by
+  have hp := X.toFuelLimit.prefixes fuel
+  change runFromQ P ρ₀.toQueryOracle fuel [] [] c = _ at hp
+  have hr := runFromQ_toReport (P := P) (ρ₀ := ρ₀) fuel [] [] c
+  rw [hp] at hr
+  change (runFrom P ρ₀ fuel [] c).ending = .noAnswer blocked at h
   simp [QueryReport.toReport] at hr
   rw [← hr] at h
   cases h
