@@ -162,6 +162,25 @@ def folded_changelog(root):
         sys.path.pop(0)
 
 
+def swept_files(root):
+    """legacy/ paths not in the frozen tree that scripts/checks/legacy.lock records (its `tree` line):
+    the files sweeps moved there. Empty without a lock or a git repository."""
+    lock = root / "scripts" / "checks" / "legacy.lock"
+    if not lock.is_file():
+        return set()
+    tree = next((l.split()[1] for l in lock.read_text().splitlines() if l.startswith("tree ")), None)
+    if not tree:
+        return set()
+    def ls(spec):
+        r = subprocess.run(["git", "-C", str(root), "ls-tree", "-r", "-z", "--name-only", spec],
+                           capture_output=True)
+        return {n for n in r.stdout.decode(errors="surrogateescape").split("\0") if n} if r.returncode == 0 else None
+    frozen, now = ls(tree), ls("HEAD:legacy")
+    if frozen is None or now is None:
+        return set()
+    return {"legacy/" + n for n in now - frozen}
+
+
 def markdown_files(root):
     if (root / ".git").exists():
         r = subprocess.run(["git", "-C", str(root), "ls-files", "-z", "--cached", "--others",
@@ -169,7 +188,11 @@ def markdown_files(root):
         if r.returncode == 0:
             names = [n for n in r.stdout.decode().split("\0") if n]
             # legacy/ is frozen and was checked at the tag; its root-relative links point at the old root.
-            return sorted(root / n for n in names if (root / n).is_file() and not n.startswith("legacy/"))
+            # A file a sweep moved into legacy/ later (one not in the lock's frozen tree) is read where it
+            # now is, so its links must resolve from there.
+            swept = swept_files(root)
+            return sorted(root / n for n in names if (root / n).is_file()
+                          and (not n.startswith("legacy/") or n in swept))
     return sorted(p for p in root.rglob("*.md")
                   if not any(part in SKIP_PARTS for part in p.relative_to(root).parts))
 

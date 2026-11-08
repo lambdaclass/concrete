@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # legacy/ IS FROZEN (ROADMAP R-0558, R-0562).
 #
-# legacy/ is a byte-for-byte copy of main's tree at the move's base commit. scripts/checks/legacy.lock
-# records that commit and its tree. This check holds three things:
+# legacy/ is a byte-for-byte copy of main's tree at the move's base commit, plus the files later
+# sweeps moved into it byte for byte. scripts/checks/legacy.lock records that commit and its tree, and
+# each sweep. This check holds five things:
 #   1. the recorded tree is the recorded commit's tree (legacy/ is that snapshot, nothing else);
 #   2. HEAD:legacy differs from it only by deletions and by sweeps: a modified path is refused, and an
 #      added path is refused unless a sweep moved it (below);
@@ -17,6 +18,17 @@
 #      and P no longer exists at the root of HEAD; the last step, to HEAD:legacy, adds nothing. Every
 #      step refuses an edit of a legacy/ file and admits only the deletions RETENTION.tsv allows, so
 #      a swept file, once in a sweep tree, is protected like a frozen one.
+#   5. TRUSTED HISTORY. The steps above judge the lock this commit carries, so on their own a rewritten
+#      lock line, or a file deleted by one sweep and re-added with other bytes by the next, would pass.
+#      History settles both. The trusted history is main's landed states: the first-parent chain of
+#      the merge base of HEAD and LEGACY_TRUSTED_REF (default origin/main), each commit read against
+#      its first parent, or HEAD's own first-parent chain when that ref is absent (on main, the
+#      same thing). A train's member commits are second parents: a line a branch wrote and then
+#      corrected before it landed is not trusted history. (a) Every base, tree and sweep line of every trusted version of
+#      the lock is still in the lock: lines are only ever added. (b) Every version a legacy/ path ever
+#      had in trusted history is the version it has now, if it still exists: a frozen or swept file
+#      is never rewritten, by an edit or by deletion and re-addition. A candidate's own commits are
+#      not trusted history; they are what the review and this gate judge.
 # Negative controls run the same judgment on synthetic trees first, so a judge that accepts
 # everything fails here before the real check.
 set -uo pipefail
@@ -95,6 +107,66 @@ chain() { # LOCK FROZEN CUR RETENTION HEAD-COMMIT: judges frozen -> each sweep t
   [ -z "$step" ] || printf 'since the last sweep:\n%s\n' "$step"
 }
 
+# trusted_base HEAD-COMMIT: the newest commit whose history is trusted (see 5 above).
+trusted_base() {
+  local ref="${LEGACY_TRUSTED_REF:-origin/main}" mb
+  if git rev-parse -q --verify "$ref^{commit}" >/dev/null && mb="$(git merge-base "$1" "$ref" 2>/dev/null)"; then
+    echo "$mb"
+  else
+    git rev-parse "$1^{commit}"
+  fi
+}
+
+# lock_history LOCK-FILE LOCK-PATH TRUSTED: every base/tree/sweep line of every version of LOCK-PATH in
+# TRUSTED's history is still a line of LOCK-FILE. Prints one refusal per missing line, naming the
+# newest trusted commit that has it. A last line without a newline is a line.
+lock_history() {
+  local lock="$1" lpath="$2" trusted="$3" c l
+  for c in $(git log --first-parent --diff-merges=first-parent --no-patch --format=%H "$trusted" -- "$lpath"); do
+    git cat-file -e "$c:$lpath" 2>/dev/null || continue
+    while IFS= read -r l || [ -n "$l" ]; do
+      case "$l" in base\ *|tree\ *|sweep\ *) ;; *) continue ;; esac
+      grep -qxF -- "$l" "$lock" || printf '%s\t%s\n' "$l" "$c"
+    done < <(git show "$c:$lpath")
+  done | awk -F'\t' '!seen[$1]++ { printf "lock: '"'"'%s'"'"' (in %s, trusted history) is not in the lock: recorded lines are only ever added, never rewritten or removed\n", $1, substr($2, 1, 10) }'
+}
+
+# history_identity PREFIX HEAD-COMMIT TRUSTED: every version PREFIX/<path> had in TRUSTED's history is
+# the version it has at HEAD-COMMIT, for each path HEAD-COMMIT still has. Prints one refusal per path.
+history_identity() {
+  local prefix="$1" head="$2" trusted="$3"
+  python3 -I - "$prefix" \
+    3< <(git log --first-parent --diff-merges=first-parent -z --raw --no-renames --no-abbrev --format= "$trusted" -- "$prefix/") \
+    4< <(git ls-tree -r -z --full-tree "$head" -- "$prefix/") <<'PY'
+import os, sys
+prefix = sys.argv[1] + "/"
+def tokens(fd):
+    with os.fdopen(fd, "rb") as f:
+        return [t for t in f.read().split(b"\0")]
+seen = {}
+t = tokens(3); i = 0
+while i < len(t):
+    tok = t[i].lstrip(b"\n")
+    if tok.startswith(b":") and i + 1 < len(t):
+        _, newmode, _, newsha, st = tok[1:].decode().split(" ")
+        path = t[i + 1].decode("utf-8", "surrogateescape")
+        if not st.startswith("D"):
+            seen.setdefault(path, set()).add((newmode, newsha))
+        i += 2
+    else:
+        i += 1
+for ent in tokens(4):
+    if not ent:
+        continue
+    meta, path = ent.split(b"\t", 1)
+    mode, _, sha = meta.decode().split(" ")
+    path = path.decode("utf-8", "surrogateescape")
+    other = sorted(v for v in seen.get(path, ()) if v != (mode, sha))
+    if other:
+        print(f"{path}: was {other[0][1][:10]} (mode {other[0][0]}) in trusted history and is {sha[:10]} (mode {mode}) now: a frozen or swept file is never rewritten, by an edit or by deletion and re-addition")
+PY
+}
+
 echo "=== negative controls ==="
 # The controls build a throwaway repository: none of git's repository variables may reach it (ISS-0015).
 source "$ROOT_DIR/scripts/checks/lib/git_sandbox.sh" || exit 2
@@ -157,14 +229,17 @@ printf 'path\tstatus\np\topen\n' > "$TMP/r_popen.tsv"; printf 'path\tstatus\np\t
 [ -n "$(judge "$SW1" "$(tree_with 'mkdir -p p; echo m > p/moved; echo q > p/other')" "$TMP/r_ok.tsv" "$R0")" ] && ok "control: an addition after the last sweep, with no new sweep line, is refused" || no "control: post-sweep addition accepted"
 # Lock-chain controls: H is a commit with S in its history; X is a commit outside it.
 H="$(git commit-tree "$R0" -p "$S" -m head)"
-X="$(git commit-tree "$R0" -m unrelated)"
+# X has the would-be moved file (tree RS), so only its ancestry can refuse it.
+X="$(git commit-tree "$RS" -m unrelated)"
 [ -n "$H" ] && [ -n "$X" ] || { echo "FATAL: chain control commits"; exit 2; }
 printf 'sweep %s %s\n' "$S" "$SW1" > "$TMP/l_ok"
 [ -z "$(chain "$TMP/l_ok" "$F" "$SW1" "$TMP/r_ok.tsv" "$H")" ] && ok "control: a lock chaining the frozen tree through a sweep to HEAD:legacy passes" || no "control: valid chain refused: $(chain "$TMP/l_ok" "$F" "$SW1" "$TMP/r_ok.tsv" "$H")"
 printf 'sweep %s %s\n' "$X" "$SW1" > "$TMP/l_x"
-[ -n "$(chain "$TMP/l_x" "$F" "$SW1" "$TMP/r_ok.tsv" "$H")" ] && ok "control: a sweep commit outside HEAD's history is refused" || no "control: non-ancestor sweep accepted"
+o="$(chain "$TMP/l_x" "$F" "$SW1" "$TMP/r_ok.tsv" "$H")"
+case "$o" in "sweep line 1: needs a commit of HEAD's history and a tree: $X $SW1 "*) ok "control: a sweep commit outside HEAD's history is refused, as such" ;; *) no "control: non-ancestor sweep: '$o'" ;; esac
 printf 'sweep %s\n' "$S" > "$TMP/l_short"
-[ -n "$(chain "$TMP/l_short" "$F" "$SW1" "$TMP/r_ok.tsv" "$H")" ] && ok "control: a sweep line without its tree is refused" || no "control: tree-less sweep line accepted"
+o="$(chain "$TMP/l_short" "$F" "$SW1" "$TMP/r_ok.tsv" "$H")"
+case "$o" in "sweep line 1: needs a commit of HEAD's history and a tree: $S "*) ok "control: a sweep line without its tree is refused, as such" ;; *) no "control: tree-less sweep line: '$o'" ;; esac
 [ -n "$(chain "$TMP/l_ok" "$F" "$F" "$TMP/r_popen.tsv" "$H")" ] && ok "control: deleting a swept file after its sweep, under an open row, is refused" || no "control: post-sweep deletion accepted"
 S2="$(git commit-tree "$(tree_with 'mkdir -p p; echo m2 > p/moved')" -p "$S" -m sweep-2)"
 H2="$(git commit-tree "$R0" -p "$S2" -m head2)"
@@ -178,6 +253,62 @@ T="$(tree_with 'mkdir -p p; printf m > "p/odd\\name"')"
 # would resolve to p/moved, match the sweep commit and pass.
 T="$(tree_with 'mkdir -p p ":(literal)p"; echo m > p/moved; echo m > ":(literal)p/moved"')"
 [ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$R0" "$S")" ] && ok "control: an added path spelled as pathspec magic is refused" || no "control: pathspec-magic path accepted"
+# Trusted-history controls: real commits with legacy/ and the lock. M1 freezes legacy/ = F; M2 sweeps
+# p/moved (m) into it. Both are trusted (main's). The candidate commits after them are not.
+commit_of() { # parent tree-of-legacy root-file-content lock-text -> commit
+  local idx="$TMP/idx.$$" t
+  rm -f "$idx"; GIT_INDEX_FILE="$idx" git read-tree --prefix=legacy/ "$2"
+  printf '%s' "$3" > "$TMP/rootf"; printf '%s' "$4" > "$TMP/lockf"
+  GIT_INDEX_FILE="$idx" git update-index --add --cacheinfo "100644,$(git hash-object -w "$TMP/rootf"),rootfile" \
+    --cacheinfo "100644,$(git hash-object -w "$TMP/lockf"),L"
+  t="$(GIT_INDEX_FILE="$idx" git write-tree)"; rm -f "$idx"
+  if [ -n "$1" ]; then git commit-tree "$t" -p "$1" -m c; else git commit-tree "$t" -m c; fi
+}
+LK1="$(printf 'base %s\ntree %s\n' "$S" "$F")"
+M1="$(commit_of "" "$F" r "$LK1")"
+M2="$(commit_of "$M1" "$SW1" r "$LK1"$'\n'"sweep $S $SW1")"
+[ -n "$M1" ] && [ -n "$M2" ] || { echo "FATAL: trusted-history control commits"; exit 2; }
+git show "$M2:L" > "$TMP/lock_same"
+[ -z "$(lock_history "$TMP/lock_same" L "$M2")" ] && ok "control: a lock that keeps every trusted line passes" || no "control: unchanged lock refused: $(lock_history "$TMP/lock_same" L "$M2")"
+printf '%s\nsweep %s %s\n' "$LK1" "$S2" "$SW2" > "$TMP/lock_rewritten"   # the M2 row replaced
+o="$(lock_history "$TMP/lock_rewritten" L "$M2")"
+[ "$o" = "lock: 'sweep $S $SW1' (in ${M2:0:10}, trusted history) is not in the lock: recorded lines are only ever added, never rewritten or removed" ] \
+  && ok "control: rewriting a trusted sweep line is refused, naming the line" || no "control: rewritten sweep line: '$o'"
+printf '%s\n' "$LK1" > "$TMP/lock_dropped"
+o="$(lock_history "$TMP/lock_dropped" L "$M2")"
+[ "$o" = "lock: 'sweep $S $SW1' (in ${M2:0:10}, trusted history) is not in the lock: recorded lines are only ever added, never rewritten or removed" ] \
+  && ok "control: removing a trusted sweep line is refused, naming the line" || no "control: removed sweep line: '$o'"
+printf 'base %s\ntree %s\nsweep %s %s\n' "$S2" "$F" "$S" "$SW1" > "$TMP/lock_rebased"
+o="$(lock_history "$TMP/lock_rebased" L "$M2")"
+[ "$o" = "lock: 'base $S' (in ${M2:0:10}, trusted history) is not in the lock: recorded lines are only ever added, never rewritten or removed" ] \
+  && ok "control: changing the trusted base line is refused, naming the line" || no "control: changed base line: '$o'"
+[ -z "$(history_identity legacy "$M2" "$M2")" ] && ok "control: a legacy/ that kept every trusted version passes" || no "control: unchanged history refused: $(history_identity legacy "$M2" "$M2")"
+# The attacks. (1) the row rewrite: the candidate replaces M2's row and p/moved's bytes together.
+C1="$(commit_of "$M2" "$SW2" r "$LK1"$'\n'"sweep $S2 $SW2")"
+o="$(history_identity legacy "$C1" "$M2")"
+[ "$o" = "legacy/p/moved: was $(git rev-parse "$SW1:p/moved" | cut -c1-10) (mode 100644) in trusted history and is $(git rev-parse "$SW2:p/moved" | cut -c1-10) (mode 100644) now: a frozen or swept file is never rewritten, by an edit or by deletion and re-addition" ] \
+  && ok "control: a swept file rewritten with its lock row is refused by trusted history" || no "control: row-rewrite attack: '$o'"
+# (2) delete then re-add: a trusted commit deletes p/moved (a resolved deletion); the candidate re-adds
+# it with other bytes under a new sweep line. Each chain step passes; history refuses.
+M3="$(commit_of "$M2" "$F" r "$LK1"$'\n'"sweep $S $SW1")"
+C2="$(commit_of "$M3" "$SW2" r "$LK1"$'\n'"sweep $S $SW1"$'\n'"sweep $S2 $SW2")"
+o="$(history_identity legacy "$C2" "$M3")"
+case "$o" in "legacy/p/moved: was $(git rev-parse "$SW1:p/moved" | cut -c1-10) (mode 100644) in trusted history and is $(git rev-parse "$SW2:p/moved" | cut -c1-10) (mode 100644) now: "*)
+  ok "control: a frozen file deleted and re-added with other bytes is refused by trusted history" ;; *) no "control: delete-then-re-add attack: '$o'" ;; esac
+# The same re-addition with the same bytes is no rewrite.
+C3="$(commit_of "$M3" "$SW1" r "$LK1"$'\n'"sweep $S $SW1")"
+[ -z "$(history_identity legacy "$C3" "$M3")" ] && ok "control: re-adding a file with its trusted bytes passes" || no "control: identical re-addition refused"
+# A branch that rewrote its own lock line and corrected it before landing: its commits are the merge's
+# second parent, so the corrected line is no trusted line and the landed lock passes.
+B1="$(commit_of "$M2" "$SW1" r "$LK1"$'\n'"sweep $S2 $SW2")"
+B2="$(commit_of "$B1" "$SW1" r "$LK1"$'\n'"sweep $S $SW1")"
+MM="$(git commit-tree "$(git rev-parse "$B2^{tree}")" -p "$M2" -p "$B2" -m landed)"
+[ -n "$MM" ] || { echo "FATAL: merge control commit"; exit 2; }
+[ -z "$(lock_history "$TMP/lock_same" L "$MM")" ] && [ -z "$(history_identity legacy "$MM" "$MM")" ] \
+  && ok "control: a member branch's corrected intermediate lock is not trusted history (first parents only)" || no "control: second-parent history trusted: $(lock_history "$TMP/lock_same" L "$MM")"
+# trusted_base: the merge base with the trusted ref; HEAD itself when the ref is absent.
+[ "$(LEGACY_TRUSTED_REF="$M2" trusted_base "$C1")" = "$M2" ] && [ "$(LEGACY_TRUSTED_REF=refs/heads/no-such trusted_base "$C1")" = "$C1" ] \
+  && ok "control: the trusted base is the merge base with the trusted ref, else HEAD (everything trusted)" || no "control: trusted_base"
 cd "$ROOT_DIR"
 
 echo "=== legacy/ against $LOCK ==="
@@ -198,6 +329,10 @@ else
   else
     [ -f RETENTION.tsv ] || { no "RETENTION.tsv is missing"; }
     out="$(chain "$LOCK" "$frozen" "$cur" "${RETENTION:-RETENTION.tsv}" HEAD)"
+    tb="$(trusted_base HEAD)"
+    hist="$(lock_history "$LOCK" "$LOCK" "$tb"; history_identity legacy HEAD "$tb")"
+    [ -z "$hist" ] && ok "trusted history (through ${tb:0:10}): every lock line kept, no legacy/ file rewritten" \
+      || { no "legacy/ or its lock rewrote trusted history (through ${tb:0:10}):"; echo "$hist" | sed 's/^/      /'; }
     nsw="$(grep -c '^sweep ' "$LOCK")"
     [ "$nsw" = 0 ] || [ -n "$out" ] || ok "the lock's $nsw sweep line(s) name commits of HEAD's history and chain to HEAD:legacy"
     if [ -z "$out" ]; then
