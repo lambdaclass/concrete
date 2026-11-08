@@ -94,13 +94,17 @@ LAND_CANONICAL_REPO=lambdaclass/concrete
 # and prints "<host> <owner/name>", both lowercased, the host without user, port or trailing dot and
 # resolved through the ssh config for ssh transports; "? ?" for a scheme other than
 # http(s)/ssh/git/git+ssh/ssh+git or a host that is not a plain name.
-land_ssh_host() { # host -> the HostName the ssh config gives it (itself without one, or without ssh)
-  local h
-  h="$(ssh -G "$1" 2>/dev/null | awk '$1 == "hostname" { print $2; exit }')" || h=""
+land_ssh_host() { # host [user] [port] -> the HostName the ssh config gives it (itself without one,
+  # or without ssh). The URL's user and port are passed as git's ssh would, so a `Match user` or
+  # `Match` on the port resolves as it does for the real connection.
+  local h args=()
+  [ -z "${2:-}" ] || args+=(-l "$2")
+  [ -z "${3:-}" ] || args+=(-p "$3")
+  h="$(ssh -G ${args[@]+"${args[@]}"} "$1" 2>/dev/null | awk '$1 == "hostname" { print $2; exit }')" || h=""
   printf '%s\n' "${h:-$1}"
 }
 land_url_target() {
-  local u="$1" scheme="" auth p h
+  local u="$1" scheme="" auth p h user="" port=""
   case "$u" in
     [Ff][Ii][Ll][Ee]://*) return 1 ;;
     *://*) scheme="$(printf '%s' "${u%%://*}" | tr 'A-Z' 'a-z')"; p="${u#*://}"
@@ -110,11 +114,14 @@ land_url_target() {
     *) return 1 ;;
   esac
   h="${auth##*@}"
-  case "$scheme" in scp) ;; *) h="${h%%:*}" ;; esac
+  case "$auth" in *@*) user="${auth%@*}"; user="${user%%:*}" ;; esac
+  case "$scheme" in scp) ;; *) case "$h" in *:*) port="${h#*:}"; h="${h%%:*}" ;; esac ;; esac
   h="$(printf '%s' "$h" | tr 'A-Z' 'a-z')"
   case "$h" in ""|-*|*[!a-z0-9.-]*) echo "? ?"; return 0 ;; esac
+  case "$user" in -*|*[!A-Za-z0-9._-]*) echo "? ?"; return 0 ;; esac
+  case "$port" in *[!0-9]*) echo "? ?"; return 0 ;; esac
   case "$scheme" in
-    scp|ssh|git+ssh|ssh+git) h="$(land_ssh_host "$h" | tr 'A-Z' 'a-z')" ;;
+    scp|ssh|git+ssh|ssh+git) h="$(land_ssh_host "$h" "$user" "$port" | tr 'A-Z' 'a-z')" ;;
     https|http|git) ;;
     *) echo "? ?"; return 0 ;;
   esac

@@ -638,7 +638,8 @@ mkdir -p "$TMP/sshstub"
 cat > "$TMP/sshstub/ssh" <<'SSH'
 #!/bin/sh
 [ "$1" = -G ] || { echo "ssh stub: only -G" >&2; exit 255; }
-case "$2" in github-lambdaclass) echo "hostname github.com" ;; *) echo "hostname $2" ;; esac
+for host; do :; done
+case "$host" in github-lambdaclass) echo "hostname github.com" ;; *) echo "hostname $host" ;; esac
 SSH
 chmod +x "$TMP/sshstub/ssh"
 url_ok=1
