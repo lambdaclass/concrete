@@ -1,0 +1,8 @@
+reviewed: fb097fa4e5ae0e58e400ce577c62c55df880c700
+VERIFICATION PASS for the owner's sign-off of exact SHA fb097fa4e5ae0e58e400ce577c62c55df880c700 (Concrete repository, branch wip/owner-signoff, base 86c31477d3c4f3569138eb20b4d4cf0836912136). The current directory is a git-archive copy of fb097fa4 (no .git); REVIEW.diff is `git diff 86c31477..fb097fa4`. Read any file you need.
+
+What the commit does: the landing train (scripts/land/train.sh) gains a second form of review provenance, an owner sign-off (scripts/land/signoff.sh, R-0618): a parentless commit under refs/owner-signoff/<full sha> whose tree holds record.txt and the reviewers' files; `verify` checks the record, the quote naming the commit, the review cap by diff class (docs 2, scripts 3, compiler/spec 5; highest wins) reached on a review.sh-noted commit, file hashes, that each transcript names the commit, and the verdicts; train.sh accepts a signed member only when the train is the pure merge of its members; the pre-push hook routes a well-formed record to its notes tier; controls in scripts/checks/landing_script.sh and scripts/checks/review_tool.sh.
+
+Questions: Can a sign-off be accepted for any commit other than the one approved (wrong ref, stale local ref, prefix collision in the quote check, a forged tree)? Can a train with a signed-off member land anything the owner did not approve? Can the hook's notes tier accept a non-record? Are the controls meaningful? Do not re-raise points that are documented limitations in the code comments unless they are wrong.
+
+Report findings as `file:line: problem` with a concrete failure scenario, and end with exactly one line `VERDICT: ACCEPT` or `VERDICT: REJECT`.

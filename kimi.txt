@@ -1,0 +1,776 @@
+kimi version 2.4.1
+• I need review branch commit exact read-only no writes. Do inspect repo files diff controls etc. Should have rigorous security shell review and findings format file:line problem scenario then exactly verdict. I must not edit/run writes. Should comply read-only. Can use Read, Grep, Bash read-only commands git diff/show etc. Should understand base branch. Should inspect status? git status read only mostly optional locks can write index? User says do not run anything writes, set GIT_OPTIONAL_LOCKS=0 for git. Read tool safe. Start inspect relevant files via Read and git diff perhaps Bash read-only env. Also, a check is in order. Perhaps scripts nested AGENTS? Glob for AGENTS relevant? root provided; check scripts/AGENTS via Glob.
+
+• I’ll trace the sign-off format, verification path, merge proof, and hook routing together, then check the controls against concrete bypass and failure cases. All inspection will be read-only.
+
+• I got huge files. Should inspect hook relevant and remaining controls. Also diff base to head identify changes and exact lines. Use git diff --stat/name-only and show specific diff. Read hook. Remaining landing lines. .githooks/pre-push                      |  17 ++-
+ changelog.d/2026-11-08-owner-signoff.md |  14 +++
+ docs/LANDING.md                         |   7 +-
+ docs/REVIEW.md                          |  12 ++
+ scripts/checks/landing_script.sh        | 116 ++++++++++++++++++-
+ scripts/checks/review_tool.sh           |  23 ++++
+ scripts/land/signoff.sh                 | 198 ++++++++++++++++++++++++++++++++
+ scripts/land/train.sh                   |  50 +++++++-
+ 8 files changed, 428 insertions(+), 9 deletions(-)
+.githooks/pre-push
+changelog.d/2026-11-08-owner-signoff.md
+docs/LANDING.md
+docs/REVIEW.md
+scripts/checks/landing_script.sh
+scripts/checks/review_tool.sh
+scripts/land/signoff.sh
+scripts/land/train.sh
+fb097fa4e5ae0e58e400ce577c62c55df880c700 ce2803ec0a6f8b05dffe7081a158eaabe8896567 signoff: transcripts must name the signed commit; cap evidence is a well-formed review.sh note; prefixes must be unambiguous; the hook checks entry modes (review round 2)
+ce2803ec0a6f8b05dffe7081a158eaabe8896567 2441a0e318b1408bc7c1febdb547ffd0393a6fd5 signoff: the cap comes from the class of the member's diff (docs 2, scripts 3, compiler/spec 5); the hook takes only real records in the notes tier (review round 1)
+2441a0e318b1408bc7c1febdb547ffd0393a6fd5 86c31477d3c4f3569138eb20b4d4cf0836912136 train: an owner sign-off at a member's exact SHA is its review provenance (R-0618), with a pure-merge check of the train head
+Should identify vulnerabilities. I'll systematically analyze.
+
+  Signoff:
+  record uses hash-object -w (writes by intended record; I won't run). verify reads ref after fetch prune. Wrong ref? verify resolves arg to commit, F_commit match. ref exact full sha. stale local after remote deletion fetch --prune should delete unless remote config? `git fetch --prune "$REMOTE" "+refs/owner-signoff/*:refs/owner-signoff/*"` prunes yes. Potential local ref deletion does not happen if remote ref absent? --prune with explicit refspec yes. Good.
+
+  names: `for w in $(tr -c '0-9a-f' ' ')` translates all non lowercase hex including newlines to spaces, then splits. It finds hex runs >=7, requires prefix of sha `[ "${1#"$w"}" != "$1" ]`. If w longer than sha no prefix. rev-parse "$w^{commit}" unambiguous. quote one line no newline but carriage returns allowed; regex captures. Transcript names commit anywhere including request and output, as User says request and output must name it? Comment line 12 says transcripts (request each given and its output, which names commit) copied, file includes both. check just anywhere. Potential forge reviewer file with prompt naming SHA but output for other commit? If output no name but prompt does, names accepts; verdict in output could be accept for something else. Requirements each transcript request and output must name it? User says "(request and output) must name it by an unambiguous prefix" implies each transcript includes both and at least names? Round 2 fix likely intended file overall. Should assess true security issue: output can be review of another commit while request names signed commit and output doesn't name other. Could craft transcript "Review <sha>" + "VERDICT: ACCEPT" passes. But normal reviewer output usually verdict only, so they necessarily rely request to bind. Fine.
+
+  names uses rev-parse "$w^{commit}" no `--end-of-options`; w only lowercase hex, safe. `git rev-parse -q --verify "$w^{commit}"` can resolve abbreviation unique among all objects? Git disambiguation includes refs and objects. A 7 hex prefix could be ambiguous with non-commit blob but `^{commit}` might select commit? Should check git rev-parse behavior: disambiguation uses object names then peels; short SHA ambiguity considers all objects. They added control. Good.
+
+  Date only format not real calendar perhaps malformed record accepted e.g. 2026-99-99. Question "malformed record" likely expected strict? signoff date regex only; verify.sh utc similarly format. Could be finding but security low. signoff value fixed owner; no owner authentication beyond refs publication. Threat model not malicious ref writer? Forged tree validation.
+
+  Record exactly four file names but doesn't check entry mode in verify! `have=git ls-tree --name-only`, `cat-file -t "$obj:$file" = blob` will tree fail, symlink mode 120000 is blob and hash, transcript names and verdict; User expects plain files? Hook requires 100644. Verify could accept symlink blobs for transcript and record? record.txt path symlink tree entry still `cat-file blob` content. Tree "forged" with 120000 symlink names but content actual transcript accepted. Does that let anything beyond? Not substantive because symlink blobs contain contents, no source tree. Requirement "tree is record.txt plus ..." plain? User explicitly Round2 hook four 100644. Verify docs "tree holds exactly those four files"; symlink not regular. But signoff verifier can accept forged tree with symlink entries if manually ref updated bypass hook, then train provenance accepts. Is that a blocker? Perhaps malformed record requirement. Should examine all potential serious.
+
+  Cap evidence: verify.sh only well formed note but not necessarily written by review.sh; arbitrary note with six fields can be forged. This was earlier finding "any note rounds line" fixed to well formed. But still anyone can forge a well-formed note; threat likely Git provenance not cryptographic. Owner signoff same. Could use `carried-from` notes at ancestor with arbitrary base not tied to signed member's base or diff. Cap `rounds-at` can be any ancestor not on base, and note could be from review with arbitrary base; requirement cap branch reached review cap. If rounds-at ancestor earlier commit, at least cap rounds on ancestor but subsequent commits after it may be unreviewed; however all three reviewers must accept exact signed head so fine. Cap branch reached at some point, likely okay.
+
+  Critical possible logic: review_provenance falls back signoff when member note not clean including malformed or findings; allowed per design "without a clean note" yes.
+
+  pure_merge reverse parent structure exact. For each current head, requires 2 parents second exact member and clean merge-tree of first and member. Then cur first. Base exact. Reordered/missing fails. Extra merge fails. Regenerated commit fails. Could malicious git merge-tree output with info lines? On conflict `git merge-tree --write-tree` exit 1, output tree plus conflict messages, conditional `if ! t=... || ! regex` short circuit properly. If success tree regex. Good. Does merge-tree clean tree computation honor working tree .gitattributes/config vs committed? `git merge-tree --write-tree` performs real merge using repo config and attributes maybe working tree .gitattributes? It uses commits; merge drivers configured in .git/config could make "clean" auto resolution not standard? train build also uses local config. If signed-off member pure merge can land conflict resolution via custom merge driver that resolves conflicts while `git merge-tree` same tree and exit 0. But definition clean merge using merge-tree; not threat probably.
+
+  Potential pure_merge command failure handling: `read -r -a p <<< "$(git rev-list ...)"`; with set -e in train script, failure in command substitution inside read? read returns 0 due here-string even empty, p array maybe retains prior values! Important. `local ... p ...` array not declared but read -a unsets all elements before assigning per Bash. If rev-list fails (invalid cur) then p empty length fail. For valid no issue. `pure_merge` is called within command substitution assignment `impure="$(pure_merge ...)"`; set -e disabled in function? errors handled via output mostly. `want="$(git rev-parse ...)"` failure could cause empty but t mismatch. okay.
+
+  review_provenance `for m in $(state_get_soft ... | tr ',' ' ')` word splitting refs cannot spaces by git ref format; good. `shas` exact from state. n counts. State file potentially editable by attacker but local trust.
+
+  Hook:
+  Mixed signoff refs and wip refs: wip branch condition first if other=0 and wip count>0, runs conflict scan then exits, note refs included. okay no source except signoff records and wip already allowed. Signoff commit parentless and four blobs but content not verified. Could push source code as parentless commit with four blob names to skip gates. This is a source-carrying push? Any commit tree exactly four names can contain arbitrary source text inside codex.txt etc. But refs/owner-signoff namespace not source tree on main. Question explicitly "Does the hook tier let a source-carrying push skip gates?" User added structural checks but any parentless four blobs can carry source in blob. Could then later push same SHA to refs/heads/main? Hook would full gates, unless current checkout issues. No direct skip to main. Mixed push refs/owner-signoff/x and refs/heads/main: other_refs >0 full. Could source commit later be signed off record? verify checks record contents/transcripts. So arbitrary source in record impossible valid. No vulnerability if namespace not built. Hook cannot fully verify signoff because needs base. Parentless exact blobs is reasonable tier.
+
+  However deletion handling signoff: localsha all zeros; git rev-list fails, goes other_refs full_shas doesn't include deletion, full gate runs against checkout. Intended. Wrong ref name uppercase SHA full tier. Good.
+
+  Shell bugs:
+  - signoff `set -euo pipefail`, `check` defines `bad` uses exit inside command substitution. Important record: `out="$( check "$sha" "$commit" "$base" )" || {...}` runs check in subshell; bad exit 1 only subshell, handled. verify calls check directly. Good.
+  - `names` in pipeline under pipefail, loops command substitution; potential `set -e` behavior? Function called in `||` contexts immune. `git rev-parse` in test command substitution with `[ ... ]` safe. tr etc.
+  - `diff_class` while process substitution: failure of `git diff` is not captured. If git diff fails, outputs no paths and returns best=docs -> lower cap 2. Could be exploited by malformed base/tree? mb and sha valid commits so diff should succeed normally. External diff? `git diff --name-only` doesn't run external by default unless config? No. object corruption could. not concern.
+  - `mb="$(git merge-base "$2" "$1")" || return 1`: with multiple merge bases default one arbitrary. Cap class based on merge-base same as review, okay.
+  - cap classification renamed paths no renames: delete old path/add new path highest both. unknown compiler good.
+  - `.envrc` unknown compiler highest.
+  - signoff `date` no real date. quote allows carriage returns, tabs, control characters but record read line by line only newline matters. CR part quote okay. `record` allows quote ending \r maybe parser F_quote strips? read -r line retains \r. Fine.
+  - keys regex allows empty values for quote? check names fails. verdict fields missing empty checks. rounds-at syntax.
+  - exactly keys present once? seen logic substring collision? Keys include e.g. commit and commit-x? unknown key refused. seen matching with spaces robust.
+  - record rec variable may strip trailing newlines in command substitution; no issue.
+  - hash-object writes blobs before validation despite message "not recorded (nothing written)" at line117: actually writes objects to object db before check and commit-tree, though ref not written. Comment line 23 "record builds record, verifies it, only then writes ref locally", failure message "nothing written" false because objects are written. Not security acceptance. User says read-only so cannot test record.
+  - `git update-ref "$PREFIX/$sha" "$commit"` no old-value lease; concurrent record could overwrite another valid record for same sha. Both signoffs same exact commit and valid base cap maybe different base; not big. verify fetch remote authoritative.
+  - cmd_record base not resolved to full commit unlike verify; `check` uses base rev string. `diff_class` merge-base resolves. Error formatting `${base:0:10}`. Ancestor check uses base. Could pass ambiguous base? git commands fail. `check` succeeds maybe base is weird ref starting dash? base supplied as `--base --foo` then git merge-base "$2" "$1" sees --foo option, potential option injection; quoted doesn't prevent option. Similar commit args rev-parse "$1^{commit}" if `--help` etc. Not security local tool. Base should use `--` but git merge-base no `--`? yes. train base full sha safe. verify base full resolved. record should resolve base but not critical to landing.
+  - record file paths starting dash protected `--`.
+  - `sha256` if file changes between hash-object and sha256 then record hash mismatch caught. If file changes after both before commit? hashed blob v from old content, rec sha from old maybe race could differ and caught if mismatch. If changed after both, tree old blob consistent. Fine.
+  - Reviewer verdict parser `grep ... | tail -1 | tr -d` captures last verdict line from entire transcript, including prompt/request. If request itself contains example "VERDICT: REJECT" after actual output? Last is output likely. Could output include no verdict but prompt has VERDICT: ACCEPT at end? Then accepts even though reviewer output missing. They don't delineate request and output at all. The requirement says each transcript (request and output) and output's last VERDICT line. They simply grep whole file. This is likely real finding: a transcript consisting solely of request text containing signed sha and `VERDICT: ACCEPT` passes with no reviewer output. A record can include same fabricated file for all reviewers; there is no proof separate request/output or reviewer identity. But all provenance text records forgeable by someone who can push; threat model maybe manual forgery not considered? Question specifically "Can verify accept a missing or REJECT verdict, a tampered file, or a malformed record?" Missing verdict: If transcript includes request template with `VERDICT: ACCEPT` instruction, even missing actual output accepted. This directly matches. Should see docs expected transcript format maybe details. Read docs diff.
+
+• The exact-SHA ref lookup, pruned fetch, and reverse parent-by-parent merge check are sound on their main paths. I’m now probing the transcript/verdict parsing and failure behavior, where a structurally valid record could still carry incomplete review evidence.diff --git a/changelog.d/2026-11-08-owner-signoff.md b/changelog.d/2026-11-08-owner-signoff.md
+new file mode 100644
+index 00000000..296bf7c4
+--- /dev/null
++++ b/changelog.d/2026-11-08-owner-signoff.md
+@@ -0,0 +1,14 @@
++### The train accepts an owner sign-off at a member's exact SHA (2026-11-08)
++
++When a branch reaches its review-round cap, the owner may approve one exact commit after Codex, Kimi
++and agy have all reviewed it (R-0618). `scripts/land/signoff.sh record` stores the approval as
++`refs/owner-signoff/<sha>`: the owner's verbatim words, the date, the SHA and the three reviewers'
++transcripts (each naming that commit) with their sha256. `train.sh`'s review provenance accepts, for a member with no clean
++review note, a sign-off that `signoff.sh verify` finds valid for that exact SHA (the member used the
++review cap of its diff's class: docs 2 rounds, scripts 3, compiler and spec 5), and then requires the
++train head to be exactly the clean merge of its members onto its base. A sign-off for another commit,
++a changed verdict file, the review of another commit, cap evidence that is not a
++well-formed review.sh note, a missing reviewer, a reviewer output ending in REJECT, a quote that names no
++commit, a scripts or mixed docs-and-compiler member after 2 rounds, and a head beyond the clean merge
++are each refused (`scripts/checks/landing_script.sh`). The
++pre-push hook takes a sign-off push in its no-source-tree tier only when the object is a record.
+diff --git a/docs/LANDING.md b/docs/LANDING.md
+index 63cfa3bf..f827f085 100644
+--- a/docs/LANDING.md
++++ b/docs/LANDING.md
+@@ -90,7 +90,12 @@ verdict; any failing leg fails the check (see [Pipelining](#pipelining)).
+   provenance**: a clean review note at its head or, when the head has no note, a clean note on every
+   member at its exact recorded SHA (each member was reviewed at its own head). Each note is judged by
+   `scripts/review/verify.sh` on origin's notes; an absent, malformed, blocked or findings note
+-  qualifies nothing, and a head note that is not clean is not overridden by the members. Otherwise
++  qualifies nothing, and a head note that is not clean is not overridden by the members. A member
++  without a clean note qualifies instead by an **owner sign-off** at its exact SHA (R-0618: a branch
++  at the review-round cap of its diff's class, approved by the owner after Codex, Kimi and agy all
++  reviewed that commit; `scripts/land/signoff.sh verify --base`, on origin's `refs/owner-signoff/*`). A sign-off approves that
++  commit only, so a train with a signed-off member must be exactly the clean merge of its members
++  onto its base: one conflict-free merge per member and nothing else. Otherwise
+   the leg runs `LAND_REVIEW_CMD`, else `scripts/review/review.sh`, with `--base --head`, and then
+   requires provenance: a non-zero exit fails, and so does a zero exit that leaves no clean note at the
+   head. With no review command at all, `check` fails; it never disables the leg silently.
+diff --git a/docs/REVIEW.md b/docs/REVIEW.md
+index 4f98a6cf..0f86186c 100644
+--- a/docs/REVIEW.md
++++ b/docs/REVIEW.md
+@@ -176,6 +176,18 @@ findings, and exits 3. Asking for another round exits 3 without calling the
+ reviewer. Do not work around the cap: split the branch into smaller branches or
+ escalate to a human reviewer, and pass on the open findings.
+ 
++The owner may then approve one exact commit (R-0618), after Codex, Kimi and agy have all reviewed
++that commit. The cap is the class of the branch's diff against its base, by path, the highest class
++present winning: docs and roadmap 2 rounds, scripts 3, compiler and spec 5 (an unclassified path
++counts as compiler and spec); it counts the rounds used, whatever their verdicts. The approval is
++recorded, from the owner's own words only, with `scripts/land/signoff.sh record <sha> --base <base>
++--rounds-at <the review.sh-noted commit> --date --quote --codex --kimi --agy` (each reviewer's
++transcript: the request naming that commit and the output, ending in `VERDICT: ACCEPT`), which
++refuses a record that does not qualify, and
++pushed to both remotes as `refs/owner-signoff/<sha>`. The
++landing train accepts it as that commit's review provenance ([LANDING.md](LANDING.md)); it approves no
++other commit.
++
+ ## verify.sh
+ 
+ ```sh
+diff --git a/.githooks/pre-push b/.githooks/pre-push
+index d7eb97c3..4f135ca4 100755
+--- a/.githooks/pre-push
++++ b/.githooks/pre-push
+@@ -10,7 +10,8 @@
+ #   - only refs/heads/wip/* updates or deletions: a backup of unfinished work, which can never become
+ #     main. Conflict markers are refused; nothing else runs.
+ #   - only the review-note refs (refs/notes/concrete-review, refs/notes/concrete-review-findings,
+-#     written by scripts/review/review.sh): no source tree, nothing to check.
++#     written by scripts/review/review.sh) and owner sign-off records (refs/owner-signoff/<sha>,
++#     written by scripts/land/signoff.sh): no source tree, nothing to check.
+ #   - anything else, including a by-hand run with no stdin: the full root set, and only from a full
+ #     clone (a linked worktree is refused; ISS-0015).
+ #
+@@ -45,6 +46,18 @@ while read -r _localref localsha remoteref _remotesha; do
+         *[!0]*) wip_refs=$((wip_refs+1)); wip_shas="$wip_shas $localsha" ;;
+         *) wip_dels=$((wip_dels+1)) ;;
+       esac ;;
++    refs/owner-signoff/*)
++      # Only a record takes the notes tier: a parentless commit, under its subject's 40-hex name, whose
++      # tree is exactly the sign-off's four plain files (scripts/land/signoff.sh), no directory among them. Anything else pushed here,
++      # a source commit included, takes the full tier, as does a deletion.
++      if [[ "${remoteref#refs/owner-signoff/}" =~ ^[0-9a-f]{40}$ ]] && [ "$(git rev-list --parents -n 1 "$localsha" 2>/dev/null)" = "$localsha" ] \
++         && [ "$(git ls-tree --format='%(objectmode) %(objecttype) %(path)' "$localsha" 2>/dev/null | LC_ALL=C sort | tr '\n' ' ')" \
++              = "100644 blob agy.txt 100644 blob codex.txt 100644 blob kimi.txt 100644 blob record.txt " ]; then
++        note_refs=$((note_refs+1))
++      else
++        other_refs=$((other_refs+1))
++        case "$localsha" in *[!0]*) full_shas="$full_shas $localsha" ;; esac
++      fi ;;
+     refs/notes/concrete-review|refs/notes/concrete-review-findings)
+       case "$localsha" in
+         *[!0]*) note_refs=$((note_refs+1)) ;;
+@@ -70,7 +83,7 @@ if [ "$other_refs" -eq 0 ] && [ $((wip_refs + wip_dels)) -gt 0 ]; then
+   exit 0
+ fi
+ if [ "$other_refs" -eq 0 ] && [ "$note_refs" -gt 0 ]; then
+-  echo "pre-push: review-notes push — no source tree, no gates"
++  echo "pre-push: review-notes push (review notes, owner sign-offs) — no source tree, no gates"
+   exit 0
+ fi
+ 
+diff --git a/scripts/land/signoff.sh b/scripts/land/signoff.sh
+new file mode 100644
+index 00000000..3dd3e0a6
+--- /dev/null
++++ b/scripts/land/signoff.sh
+@@ -0,0 +1,198 @@
++#!/usr/bin/env bash
++# OWNER SIGN-OFF RECORDS (ROADMAP R-0618; owner, 2026-11-08: "when a branch reaches its review-round
++# cap, the owner may approve one exact commit SHA after Codex, Kimi and agy have all reviewed it; the
++# approval is recorded"). A sign-off is review provenance for that one commit, as a clean
++# refs/notes/concrete-review note is (scripts/review/verify.sh); train.sh accepts either for a member.
++#
++#   signoff.sh record <commit> --base BASE --rounds-at NOTED --date YYYY-MM-DD --quote TEXT
++#                     --codex FILE --kimi FILE --agy FILE
++#   signoff.sh verify <commit> --base BASE
++#
++# THE RECORD is the ref refs/owner-signoff/<full sha>, a commit whose tree holds record.txt and the
++# three reviewers' transcripts (the request each was given and its output, which names the commit
++# reviewed), copied in byte for byte (codex.txt, kimi.txt, agy.txt), so any
++# clone that fetches the ref can check them. record.txt is `key: value` lines, each key once:
++#   signoff: owner
++#   commit: <the 40-hex SHA approved>
++#   date: YYYY-MM-DD
++#   quote: <the owner's words, verbatim; they name the commit by an unambiguous prefix of 7+ hex digits>
++#   rounds-at: <the 40-hex SHA of the commit whose scripts/review/review.sh note records the rounds used>
++#   verdict-codex: codex.txt <sha256>
++#   verdict-kimi: kimi.txt <sha256>
++#   verdict-agy: agy.txt <sha256>
++# `record` builds the record, verifies it, and only then writes the ref locally; it pushes nothing
++# (push the ref to both remotes: the pre-push hook takes refs/owner-signoff/* in its no-source-tree
++# tier). Only the owner's recorded words go in a quote.
++#
++# THE CAP (R-0618) comes from the class of the member's diff against its base, classified by path,
++# the highest class present winning: docs and roadmap 2, scripts 3, compiler and spec 5; a path in no
++# class counts as compiler and spec. A sign-off qualifies only when the review rounds recorded on the
++# member's own commits reach that cap: `rounds-at` must be the commit itself or one of its ancestors
++# not on BASE, and carry a well-formed review.sh note (scripts/review/verify.sh: clean, findings or
++# blocked) whose round is at least the cap, whatever its verdict
++# (the cap counts rounds used: the other reviewers' rejections are why a branch reaches it).
++#
++# `verify` accepts the record only if the ref exists, the tree holds exactly those four files, every
++# key is present once and well formed, `commit` is the commit asked about, the quote names it, the
++# cap was reached, each file's sha256 is the recorded one, each transcript names the commit, and each
++# output's last VERDICT line is `VERDICT: ACCEPT` (all three reviewed the signed commit and accepted it). It judges the exact
++# commit: a sign-off says nothing about any other commit.
++#
++# Exit codes: 0 a valid sign-off; 1 a sign-off that does not qualify (the reason is printed);
++#             2 no sign-off, or a usage error.
++set -euo pipefail
++PREFIX=refs/owner-signoff
++NOTES_REF=refs/notes/concrete-review
++REVIEWERS="codex kimi agy"
++VERIFY="$(cd "$(dirname "${BASH_SOURCE[0]}")/../review" && pwd)/verify.sh"
++
++usage() { awk 'NR > 1 { if (!/^#/) exit; sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}"; }
++die() { echo "signoff: $*" >&2; exit 2; }
++sha256() { if command -v sha256sum >/dev/null 2>&1; then sha256sum | cut -d' ' -f1; else shasum -a 256 | cut -d' ' -f1; fi; }
++
++# path_class PATH → docs | scripts | compiler (anything unlisted is compiler: the highest class)
++path_class() {
++  case "$1" in
++    docs/*|changelog.d/*|ROADMAP.md|CHANGELOG.md|README.md|AGENTS.md|CLAUDE.md) echo docs ;;
++    scripts/*|.githooks/*|.github/*|.claude/*|required-checks.txt|required-checks-transition.tsv) echo scripts ;;
++    *) echo compiler ;;
++  esac
++}
++# names SHA → reads text on stdin; succeeds when a hex word of at least 7 digits in it is an
++# unambiguous name of SHA in this repository (git refuses an ambiguous prefix)
++names() {
++  local w
++  for w in $(tr -c '0-9a-f' ' '); do
++    [ "${#w}" -ge 7 ] && [ "${1#"$w"}" != "$1" ] && [ "$(git rev-parse -q --verify "$w^{commit}" 2>/dev/null)" = "$1" ] && return 0
++  done
++  return 1
++}
++class_cap() { case "$1" in docs) echo 2 ;; scripts) echo 3 ;; *) echo 5 ;; esac; }
++# diff_class SHA BASE → the highest class among the paths SHA changes against its merge base with BASE
++diff_class() {
++  local mb p c best=docs
++  mb="$(git merge-base "$2" "$1")" || return 1
++  while IFS= read -r p; do
++    [ -n "$p" ] || continue
++    c="$(path_class "$p")"
++    case "$c" in compiler) best=compiler ;; scripts) [ "$best" = compiler ] || best=scripts ;; esac
++  done < <(git diff --no-renames --name-only "$mb" "$1")
++  echo "$best"
++}
++
++cmd_record() {
++  [ $# -ge 1 ] || die "record: name the commit"
++  local sha date="" quote="" base="" at="" r f v; sha="$(git rev-parse -q --verify "$1^{commit}")" || die "record: not a commit: $1"; shift
++  local codex="" kimi="" agy=""
++  while [ $# -gt 0 ]; do
++    [ $# -ge 2 ] || die "record: $1 needs a value"
++    case "$1" in
++      --date) date="$2" ;; --quote) quote="$2" ;; --base) base="$2" ;; --rounds-at) at="$2" ;;
++      --codex) codex="$2" ;; --kimi) kimi="$2" ;; --agy) agy="$2" ;;
++      *) die "record: unknown option $1" ;;
++    esac; shift 2
++  done
++  [[ "$date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || die "record: --date YYYY-MM-DD is required"
++  [ -n "$quote" ] && [[ "$quote" != *$'\n'* ]] || die "record: --quote is required, on one line"
++  [ -n "$base" ] || die "record: --base BASE is required"
++  at="$(git rev-parse -q --verify "$at^{commit}")" || die "record: --rounds-at must name the noted commit"
++  local rec="signoff: owner
++commit: $sha
++date: $date
++quote: $quote
++rounds-at: $at" entries=""
++  for r in $REVIEWERS; do
++    f="${!r}"; [ -f "$f" ] || die "record: --$r FILE is required (the reviewer's verdict output)"
++    v="$(git hash-object -w --no-filters -- "$f")"
++    rec="$rec
++verdict-$r: $r.txt $(sha256 < "$f")"
++    entries="${entries}100644 blob $v	$r.txt
++"
++  done
++  v="$(printf '%s\n' "$rec" | git hash-object -w --no-filters --stdin)"
++  local tree commit
++  tree="$(printf '%s100644 blob %s\trecord.txt\n' "$entries" "$v" | git mktree)"
++  commit="$(git commit-tree "$tree" -m "owner sign-off of $sha ($date)")"
++  local out
++  out="$( check "$sha" "$commit" "$base" )" || { printf '%s\nsignoff: not recorded (nothing written)\n' "$out" >&2; exit 1; }
++  git update-ref "$PREFIX/$sha" "$commit"
++  echo "$out"
++  echo "signoff: recorded $PREFIX/$sha -> ${commit:0:10}; push it to both remotes"
++}
++
++# check SHA RECORD BASE: judge the record commit RECORD as a sign-off of SHA (exit 1 with the reason)
++check() {
++  local sha="$1" obj="$2" base="$3"
++  bad() { echo "$sha owner sign-off does not qualify: $*"; exit 1; }
++  [ "$(git cat-file -t "$obj:record.txt" 2>/dev/null)" = blob ] || bad "the record holds no record.txt"
++  local rec line k v seen=" " F_signoff="" F_commit="" F_date="" F_quote="" F_rounds_at="" F_verdict_codex="" F_verdict_kimi="" F_verdict_agy=""
++  rec="$(git cat-file blob "$obj:record.txt")"
++  while IFS= read -r line; do
++    [[ "$line" =~ ^([a-z-]+):\ (.*)$ ]] || bad "record.txt line is not key: value: '$line'"
++    k="${BASH_REMATCH[1]}" v="${BASH_REMATCH[2]}"
++    case "$seen" in *" $k "*) bad "record.txt repeats $k" ;; esac
++    seen="$seen$k "
++    case "$k" in signoff|commit|date|quote|rounds-at|verdict-codex|verdict-kimi|verdict-agy) ;; *) bad "record.txt has the unknown key $k" ;; esac
++    printf -v "F_${k//-/_}" '%s' "$v"
++  done <<< "$rec"
++  for k in signoff commit date quote rounds-at; do case "$seen" in *" $k "*) ;; *) bad "record.txt has no $k" ;; esac; done
++  [ "$F_signoff" = owner ] || bad "signoff is '$F_signoff', not owner"
++  [ "$F_commit" = "$sha" ] || bad "the record is for $F_commit, not $sha"
++  [[ "$F_date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || bad "date '$F_date' is not YYYY-MM-DD"
++  printf '%s' "$F_quote" | names "$sha" \
++    || bad "the quote does not name ${sha:0:10} (an unambiguous prefix of at least 7 hex digits): '$F_quote'"
++  # The cap: the class of the member's diff, and the rounds review.sh recorded on its own commits.
++  local cls cap at rounds
++  cls="$(diff_class "$sha" "$base")" || bad "no merge base of ${sha:0:10} and ${base:0:10}"
++  cap="$(class_cap "$cls")"
++  at="$F_rounds_at"
++  [[ "$at" =~ ^[0-9a-f]{40}$ ]] || bad "rounds-at '$at' is not a full commit SHA"
++  { git merge-base --is-ancestor "$at" "$sha" 2>/dev/null && ! git merge-base --is-ancestor "$at" "$base" 2>/dev/null; } \
++    || bad "rounds-at ${at:0:10} is not one of ${sha:0:10}'s own commits (an ancestor or itself, not on ${base:0:10})"
++  # verify.sh judges the note as review.sh wrote it: 0 clean, 1 findings or blocked (both well formed,
++  # and both count: the cap is rounds used); 2 is no note or a malformed one.
++  local vout vrc=0
++  vout="$(bash "$VERIFY" "$at" 2>&1)" || vrc=$?
++  [ "$vrc" = 0 ] || [ "$vrc" = 1 ] || bad "rounds-at ${at:0:10} carries no well-formed review.sh note: ${vout//$'\n'/ }"
++  rounds="$(printf '%s\n' "$vout" | sed -n 's/.*(round \([1-9][0-9]*\), reviewer .*/\1/p' | head -1)"
++  [ -n "$rounds" ] || bad "rounds-at ${at:0:10}: no round count in '$vout'"
++  [ "$rounds" -ge "$cap" ] \
++    || bad "the review cap was not reached: a $cls change has cap $cap, and ${at:0:10} records $rounds round(s)"
++  local r n entry file hash got verdict
++  for r in $REVIEWERS; do n="F_verdict_$r"; [ -n "${!n}" ] || bad "the record has no $r verdict"; done
++  local want="agy.txt codex.txt kimi.txt record.txt" have
++  have="$(git ls-tree --name-only "$obj" | sort | tr '\n' ' ')"
++  [ "$have" = "$want " ] || bad "the record holds [${have% }], not exactly [$want]"
++  for r in $REVIEWERS; do
++    n="F_verdict_$r"; entry="${!n}"
++    file="${entry%% *}" hash="${entry#* }"
++    [ "$file" = "$r.txt" ] && [[ "$hash" =~ ^[0-9a-f]{64}$ ]] || bad "verdict-$r is '$entry', not '$r.txt <sha256>'"
++    [ "$(git cat-file -t "$obj:$file" 2>/dev/null)" = blob ] || bad "$file is not a file"
++    got="$(git cat-file blob "$obj:$file" | sha256)"
++    [ "$got" = "$hash" ] || bad "the sha256 of $file is $got, not the recorded $hash"
++    git cat-file blob "$obj:$file" | names "$sha" || bad "the $r transcript does not name ${sha:0:10}: it is the review of another commit"
++    verdict="$(git cat-file blob "$obj:$file" | grep -E '^[[:space:]]*VERDICT: (ACCEPT|REJECT)[[:space:]]*$' | tail -1 | tr -d '[:space:]')" || true
++    [ "$verdict" = "VERDICT:ACCEPT" ] || bad "the $r output's last verdict is '${verdict:-none}', not VERDICT: ACCEPT"
++  done
++  echo "$sha signed off by the owner ($F_date; $cls change, cap $cap reached at ${at:0:10} with $rounds round(s); codex, kimi and agy accepted): \"$F_quote\""
++}
++
++cmd_verify() {
++  local sha base=""
++  [ $# -ge 1 ] || die "usage: signoff.sh verify <commit> --base BASE"
++  sha="$(git rev-parse -q --verify "$1^{commit}")" || die "verify: not a commit: $1"; shift
++  while [ $# -gt 0 ]; do
++    case "$1" in --base) [ $# -ge 2 ] || die "verify: --base needs a value"; base="$2"; shift 2 ;; *) die "verify: unknown option $1" ;; esac
++  done
++  [ -n "$base" ] || die "verify: --base BASE is required (the cap is the class of the diff against it)"
++  base="$(git rev-parse -q --verify "$base^{commit}")" || die "verify: --base is not a commit"
++  git rev-parse -q --verify "$PREFIX/$sha^{commit}" >/dev/null || { echo "$sha has no owner sign-off ($PREFIX/$sha)"; exit 2; }
++  check "$sha" "$(git rev-parse "$PREFIX/$sha^{commit}")" "$base"
++}
++
++case "${1:-}" in
++  record) shift; cmd_record "$@" ;;
++  verify) shift; cmd_verify "$@" ;;
++  -h|--help) usage ;;
++  *) usage >&2; exit 2 ;;
++esac
+diff --git a/scripts/land/train.sh b/scripts/land/train.sh
+index 59d79cd2..087245c1 100755
+--- a/scripts/land/train.sh
++++ b/scripts/land/train.sh
+@@ -470,7 +470,40 @@ review_cmd() {
+ # $REMOTE's notes (fetched first, replacing the local copy, as verify.sh --fetch does): an absent,
+ # malformed, blocked or findings note qualifies nothing, and a head note that is not clean is not
+ # overridden by its members. Prints what qualified; on failure prints why and returns 1.
++#
++# OWNER SIGN-OFF (R-0618). A member without a clean note qualifies instead by a valid owner sign-off
++# at its exact SHA (scripts/land/signoff.sh verify --base <the train's base>, on $REMOTE's
++# refs/owner-signoff/*, fetched first): the member reached the review cap of its diff's class and all
++# three reviewers accepted that commit.
++# A sign-off approves that commit only, never what the train did with it, so a train with a signed-off
++# member must be exactly the clean merge of its members onto its base: one --no-ff merge per member,
++# in order, each merge's tree the conflict-free `git merge-tree --write-tree` of its two parents, and
++# nothing else (no resolved conflict, no regenerated view, no extra commit).
+ VERIFY="$SELF_DIR/../review/verify.sh"
++SIGNOFF="$SELF_DIR/signoff.sh"
++
++# pure_merge BASE HEAD SHA... → empty when HEAD is BASE plus exactly one clean merge of each SHA, in
++# order; otherwise prints why.
++pure_merge() {
++  local base="$1" head="$2" cur="$2" i p t want; shift 2
++  local shas=("$@")
++  for ((i = ${#shas[@]} - 1; i >= 0; i--)); do
++    read -r -a p <<< "$(git rev-list --parents -n 1 "$cur")"
++    if [ "${#p[@]}" != 3 ] || [ "${p[2]}" != "${shas[i]}" ]; then
++      echo "${head:0:10} is not the clean merge of its members onto ${base:0:10}: ${cur:0:10} is not the merge of ${shas[i]:0:10}"; return 0
++    fi
++    # No pipe: a conflicted merge-tree exits 1 (after printing a tree), whether or not pipefail is set.
++    if ! t="$(git merge-tree --write-tree "${p[1]}" "${shas[i]}" 2>/dev/null)" || ! [[ "$t" =~ ^[0-9a-f]{40}$ ]]; then
++      echo "${head:0:10} is not the clean merge of its members onto ${base:0:10}: merging ${shas[i]:0:10} conflicts"; return 0
++    fi
++    want="$(git rev-parse "$cur^{tree}")"
++    if [ "$t" != "$want" ]; then
++      echo "${head:0:10} is not the clean merge of its members onto ${base:0:10}: ${cur:0:10} differs from the clean merge of ${shas[i]:0:10}"; return 0
++    fi
++    cur="${p[1]}"
++  done
++  [ "$cur" = "$base" ] || echo "${head:0:10} is not the clean merge of its members onto ${base:0:10}: the merges start at ${cur:0:10}"
++}
+ review_provenance() { # name head
+   local name="$1" head="$2" out m n=0 bad=""
+   [ -f "$VERIFY" ] || { echo "no review verifier ($VERIFY is missing)"; return 1; }
+@@ -480,12 +513,23 @@ review_provenance() { # name head
+   if git notes --ref=refs/notes/concrete-review show "$head" >/dev/null 2>&1; then
+     echo "the head's review note does not qualify: ${out//$'\n'/ }"; return 1
+   fi
++  local signed=0 shas=() so impure
++  git fetch -q --prune "$REMOTE" "+refs/owner-signoff/*:refs/owner-signoff/*" 2>/dev/null \
++    || { echo "could not fetch refs/owner-signoff/* from $REMOTE"; return 1; }
+   for m in $(state_get_soft "$name" members | tr ',' ' '); do
+-    n=$((n + 1))
+-    out="$(bash "$VERIFY" "${m##*@}" 2>&1)" || bad="$bad; member ${m%@*}: ${out//$'\n'/ }"
++    n=$((n + 1)); shas+=("${m##*@}")
++    out="$(bash "$VERIFY" "${m##*@}" 2>&1)" && continue
++    if so="$(bash "$SIGNOFF" verify "${m##*@}" --base "$(state_get_soft "$name" base)" 2>&1)"; then signed=$((signed + 1)); continue; fi
++    bad="$bad; member ${m%@*}: ${out//$'\n'/ }; ${so//$'\n'/ }"
+   done
+   [ "$n" -gt 0 ] || { echo "the head ${head:0:10} has no review note and the train records no members"; return 1; }
+-  [ -z "$bad" ] || { echo "the head ${head:0:10} has no review note, and not every member has a clean one$bad"; return 1; }
++  [ -z "$bad" ] || { echo "the head ${head:0:10} has no review note, and not every member has a clean one or an owner sign-off$bad"; return 1; }
++  if [ "$signed" -gt 0 ]; then
++    impure="$(pure_merge "$(state_get_soft "$name" base)" "$head" "${shas[@]}")"
++    [ -z "$impure" ] || { echo "$signed member(s) signed off by the owner, but $impure"; return 1; }
++    echo "the head has no review note; every member ($n) carries a clean one or an owner sign-off ($signed) at its exact SHA, and the head is their clean merge"
++    return 0
++  fi
+   echo "the head has no review note; every member ($n) carries a clean one at its exact SHA"
+ }
+ 
+
+
+• Should not overfocus forged records since if malicious writer can construct arbitrary owner quote anyway. Review code correctness trust inputs as authentic. Missing verdict parsing request could occur accidentally if transcript concatenation puts prompt's required `VERDICT: ACCEPT` after output? Usually prompt before output, so if output REJECT last reject. Missing output leaves prompt's ACCEPT accepted. User explicitly asks missing verdict; likely expected finding.
+
+  More potential severe: stale local ref after remote deletion handled only when head has no note. review_provenance fetches signoffs after head no note. prune correct. But if remote signoff ref changed/deleted between fetch and land push, TOCTOU same as notes. Land fetches immediately before push, remote main lock doesn't lock signoff refs. A remote deletion after provenance check before main push could land using stale signoff. User asks stale local ref after remote deletion probably static fetch prune, not race. Could mention race? Any provenance system has TOCTOU; not expected.
+
+  Wrong ref collision: `refs/owner-signoff/$sha^{commit}` parsing ambiguity with ref names? exact full path. `git rev-parse "$PREFIX/$sha^{commit}"` if ref points tag? ref expected commit; peel. Hook requires localsha parentless commit. Could ref point annotated tag whose object peeled parentless? Hook receives tag object localsha, rev-list --parents -n1 tag? `git rev-list` on tag peels commit outputs commit sha not local tag sha so fail. verify accepts tag ref maybe pushed full tier, still possible by hand. No security.
+
+  Names prefix check `tr -c '0-9a-f' ' '` under locale: `tr` ranges okay. Word extraction can concatenate? All nonhex separators, good. Uppercase full SHA not recognized, record generates lowercase. Prefix unambiguity depends currently present objects. A 7-digit prefix unambiguous when record created could become ambiguous later when new colliding object fetched. Then verify rejects valid signoff (availability), intended requirement unambiguous. A different prefix length could resolve to signed commit in quote; if any one works accepted. Good.
+
+  Potential full SHA embedded in longer hex string: names word length >40 cannot prefix sha so no. substring with 40+ trailing nonhex splits. good.
+
+  Verdict line whitespace: grep `[[:space:]]` includes newline? grep line no. `tr -d '[:space:]'` strips all. Last ACCEPT after REJECT accepted by design last verdict. User says output ends in ACCEPT. If file has ACCEPT then non-verdict trailing arbitrary output, code accepts because last verdict accept though output does not "end in VERDICT: ACCEPT" literally. Docs says output ending in `VERDICT: ACCEPT`; header says output's last VERDICT line, so allows trailing. Question missing or REJECT likely last verdict. Could put "VERDICT: ACCEPT" in reviewer request after actual REJECT? Request before output normally no. Tampered file hash stops unless record adjusted (forged tree). If attacker can update both, no authentication. Should distinguish.
+
+  Control ability to fail:
+  landing_script uses set -uo pipefail no -e, manually records. Tests use `ok/no`. `put-signoff` uses `set -e` not pipefail. Variant `rec="$(... | sed | git hash-object)"` if sed fails hash-object succeeds empty record; later checks fail perhaps test still. `entries="$(git ls-tree "$c" | grep -v ... )"` grep returns etc. Not major.
+  Controls tests only pure_merge function extracted via sed eval. They test extra commit and changed tree but not conflict resolution/reordered/missing/regenerated. Implementation clearly covers. Controls for stale deletion not explicit. Should inspect no self-vacuity issues. `so_leg` valid pass may pass via clean note accidentally? prov_leg sets head none, R1 clean, R2 findings@5. valid signoff needed. pure merge exercised. Other variants put-signoff starts by deleting and pushing then creates signoff; put-review R2 findings. Fine.
+  Potential so_leg none passes mode expression: `$( [ "$2" = none ] && echo none || echo findings@5)` okay.
+  Landing_script valid cap tests `o="$(SO_ROUNDS=2 bash put-signoff ... && bash verify)"`; put-signoff pushes signoff and note. fine.
+  Hook controls use linked worktree to detect full tier, but `CONCRETE_GATES_SHELL=` ensures reentry if full clone? linked refusal before. Good.
+  Hook record tree SO_SUBJ = current HEAD full 40? `g rev-parse HEAD` yes.
+  Hook record commit message "record" parentless. local ref remoteref subject actual source SHA but SO_REC parentless. okay.
+  No control for mixed source+valid signoff? existing mixed notes+wip only. Code other_refs covers.
+
+  Shell macOS bash3.2:
+  signoff uses `[[ =~ ]]`, local vars, indirect expansion, arrays? signoff no arrays. `${!r}` supported. `printf -v` supported. `<<<` supported. Process substitution supported. `git ls-tree --format` version git not bash.
+  train existing arrays requires Bash3 okay; `for ((i = ${#shas[@]} - 1; i >= 0; i--))` when zero array? pure_merge always n>0. Bash 3.2 empty array with set -u issues? `${#shas[@]}` on declared empty local shas=() under bash3.2 maybe unbound variable? n>0 and append before. Fine.
+  `read -r -a p` with `local ... p` scalar then -a converts. Bash3 okay.
+  `[[ "$t" =~ ^[0-9a-f]{40}$ ]]` Bash3 regex supports interval? yes.
+  Hook `[[ regex ]]`.
+  One shell issue: `set -e` and arithmetic `signed=$((signed + 1))` assignment returns 0, okay; `n=$((n+1))` assignment.
+  `((i--))` in for no set-e issue.
+  `sha256` fallback command -v and pipelines okay.
+
+  Potential shell `names` with huge transcripts: for word splitting removes empty; no glob? Hex words only no glob chars. Fine.
+  Whitespace in `record.txt` parse `read` here-string adds newline; empty record: rec="" then while gets one empty line -> bad. trailing blank lines stripped by command substitution, so extra blank lines at end accepted. "every key once and well formed exactly" blank trailing lines might be malformed but innocuous. Embedded blank lines rejected. No final newline accepted. fine.
+  NUL in git blobs: shell command substitution strips NUL with warning, could cause hash checked original but parsed stripped content. Could exploit to hide malformed lines or verdict? Important. `rec="$(git cat-file blob ...)"` Bash ignores null bytes. Transcript piping directly to grep handles NUL maybe grep considers binary and outputs "binary file matches" rather than lines, causing verdict fail. record can include NUL to transform? If rec contains `commit: wrong\0...` shell strips, perhaps accepted malformed record. But forged arbitrary anyway. Date invalid etc. Not likely expected.
+
+  Record tree exactly files names but paths with newline? `git ls-tree --name-only` quotes unusual paths by default, have mismatch. good.
+  `git ls-tree --name-only "$obj"` recursive? By default only root entries. exact.
+  Mode not checked verify as noted. Tree entries could be gitlinks? cat-file type commit not blob fails. Symlinks accepted. record regular expected? Could be finding with malformed tree. But if verifier accepts symlink transcript with content, still evidence same; no risk. Yet question forged tree likely expects mode validation. Round2 hook specifically fixed directories; verify tree still no mode check. They might be testing reviewer ability to spot discrepancy. Hook won't allow symlink ref push in no-gate tier; it takes full tier but can still be pushed after gates. Train verify would accept. "a forged tree" perhaps wrong file hash and exact names. Symlink tree forged could be considered malformed record but no impact beyond formal contract. Review should focus blocker severity. Could report along with verdict parsing if REJECT.
+
+  More severe possible: `verify` accepts a signoff record commit with parents. It does not require parentless. Hook requires parentless, but verify doesn't. A forged record commit could have arbitrary parents including source commits; ref fetch would fetch entire source history, but tree exact four. Train accepts. Requirement record as commit whose tree etc no parentless specified in signoff header? Hook says parentless. `record` commit-tree no parents. Verify malformed record should reject extra parents? It doesn't. Again provenance semantics unaffected but structural contract. Could hide source? Refs signoff fetch pulls parents into local clone but not land tree. no acceptance wrong commit.
+
+  Cap evidence crucial vulnerability: `review_provenance` fetches notes with forced update but no prune needed single ref. signoff verify calls `VERIFY` path from current working tree (train head) not member's signed commit. Good.
+
+  Could cap note be clean and member qualify via note before signoff, meaning signed=0 and pure_merge not enforced. Scenario signed-off member has a clean note at exact member SHA. Then it qualifies as normal clean reviewed member; no need pure merge. Fine because clean note reviews exact code but not integration. Existing behavior allows regenerated views. Correct.
+
+  Could head review note absence check be tricked by notes malformed? `verify` out fails; then `git notes show` presence blocks signoff at head. intended.
+
+  Member signoff fallback with `out` from verify: if verify script missing? initial [ -f VERIFY ] only, SIGNOFF existence not checked. If missing, bash returns 127 captured `so`, bad, fail closed. Good.
+  Fetch signoffs before member loop even if all clean; if remote doesn't support wildcard/prune? fail closed. Fine.
+  Remote deletion after fetch: prune removes. `--prune` with explicit refspec and force yes. Should confirm if fetch refspec with wildcard when no matching remote refs and local refs exist: Does git fetch return 0 and prune? likely yes. Could read docs or test impossible no writes. I can reason.
+
+  Date rounds number enormous could bash test integer expression expected error. `[ "$rounds" -ge "$cap" ]` with 100000000000000000000 returns "integer expression expected", status 2, `|| bad` rejects. Negative not regex. leading zeros? rounds regex [1-9][0-9]*, test with 09 bash test decimal maybe okay. no.
+  Record F_commit full equality no regex but equality enforces full sha resolved. good.
+  Signoff verify sha arg could be prefix and ref uses resolved full; exact approved commit resolved. fine.
+  `cmd_record` duplicates options last wins. malformed invocation but no issue.
+  Missing option value e.g. --base --quote consumes --quote as base then next text unknown -> die. okay.
+
+  Record cap `rounds-at` could point to descendant? ancestor check prevents. Could point to base commit not ancestor due base moved? `! is-ancestor at base` ensures own. If base is unrelated no merge base diff fails. If signed member merge commit includes another branch commits, any second-parent ancestor not on base qualifies rounds-at, even not first-parent "member's own commits". Member diff includes all so fine.
+  Class path only diff final tree vs merge-base. Branch could have scripts changes reverted before head, earlier rounds cap 5 unnecessary but final docs 2 okay. correct.
+  Review note `base` not checked against actual merge base or signed base. A forged/miswritten note with rounds cap from reviewing some unrelated base counts. But review.sh writes actual base; well-formed not authentic. More subtle: rounds-at may carry clean note produced via landing bot `carried-from` after conflict-free rebase. `rounds` from old branch counts. fine.
+
+  Transcript binding serious: `names` accepts commit mention in owner's request; no requirement output names commit. Docs only request naming commit and output ending accept. So intended. Missing verdict in output but prompt contains literal `VERDICT: ACCEPT` would violate "output ending". Does typical request tell reviewers to end exactly `VERDICT: ACCEPT` or `VERDICT: REJECT`, so prompt has both lines. If output missing entirely, last in request might be REJECT (depending template) and fail. Could choose request template only ACCEPT. I can concrete scenario manually valid file "Review abcdefg... End with VERDICT: ACCEPT\n" and no output. check passes. All three could be same. Yes.
+
+  Tampered file: hash uses SHA256, strong. If tamper file and record hash not changed rejects. If change both it's new forged record; owner quote not cryptographically authenticated. No code can prevent owner record creation by user. Not report generic forgery.
+
+  Could `sha256` pipeline hide failure and compute empty? `git cat-file blob "$obj:$file" | sha256`, sha256 runs `sha256sum | cut`. If git cat-file fails after type check race object removed, pipefail returns nonzero in assignment `got=...` under check direct with set-e => exits 1? In record check in `||` context set-e disabled, assignment returns nonzero but no `|| bad`, then continues got empty and mismatch -> bad. fail closed. If `sha256sum` missing and `shasum` missing pipe returns command not found -> got empty mismatch. good.
+  `names` pipeline: git cat-file failure produces no input, names return1 -> bad. good.
+  Verdict pipeline `... || true`, missing output leads empty -> bad except prompt case.
+
+  Control false pass due `set -e` interaction: `check` is called in `out="$( check ... )" || ...`, entire function executes in context where -e ignored. They manually `bad` most commands, but some unguarded failures could default accept. I'll inspect every command in check under -e disabled:
+  - rec="$(git cat-file blob ...)" unguarded. Type check ensures exists at that moment. If failure rec empty then parse bad.
+  - `printf -v` could fail variable invalid? k allowed keys all valid transformed. safe.
+  - names etc guarded.
+  - cls diff guarded.
+  - cap class always.
+  - merge-base guarded.
+  - vout captured.
+  - rounds pipeline with pipefail and head potential SIGPIPE: only one line output verify, no.
+  - `[ rounds -ge] || bad`.
+  - `have="$(git ls-tree ... | sort | tr)"` unguarded. If ls-tree fails, have empty mismatch bad.
+  - got hash mismatch.
+  - verdict handled.
+  - final echo could fail broken pipe; record out captured so no. verify output terminal. not acceptance.
+  So fail closed.
+
+  But when check invoked directly via `cmd_verify` with set-e, `bad` exit 1 works. When `[ "$vrc" =0 ] || [ "$vrc" =1 ] || bad` safe.
+  `cmd_verify` `check` returns echo status. good.
+
+  `pure_merge` under train set-e but called in command substitution assignment not conditional? `impure="$(pure_merge ...)"` simple assignment returns function status. Last command `[ "$cur" = "$base" ] || echo` returns 0 if matches, echo 0 if not. Function always 0 except unexpected error with set-e maybe abort entire train, fail closed. In context next `[ -z "$impure" ] ||` no issue. Good.
+
+  Merge-tree version requirement: `git merge-tree --write-tree` introduced Git2.38, macOS may older. It fails, pure_merge rejects signed off train; availability not security. Project likely current. No fallback.
+
+  One major train logic: For signed-off member, pure_merge is only run after all members valid. It compares head to recorded member list. `state_get_soft "$name" members` is local mutable train.env. Could state member order/ref list tampered after CI/check to match alternate head? require_train_checkout binds head state; attacker local can modify all anyway. No.
+
+  CI verifies head tree exact, so pure_merge plus member reviews good.
+
+  Hook: note refs no validation at all existing. Signoff records parentless and 4 blobs. If push includes only owner-signoff refs and a deletion of refs/heads/wip, wip tier takes precedence and scans wip_shas empty, no gates. Already wip deletion allowed. If push includes owner signoff + notes, notes tier. If source ref deletion (main) other_refs and full_shas empty then full gates run on current HEAD. No skip. fine.
+
+  Could remoteref contain newline to inject multiple parsed lines? Git ref names cannot newline. by-hand input weird could full gate.
+  Localsha not validated 40 hex; if source localsha crafted equal parentless output? by-hand only. Git push valid.
+  `git rev-list --parents -n1 "$localsha"` localsha starts dash? Git SHA from push valid. okay.
+  `git ls-tree --format` paths quoted if special; names exact no.
+  Parentless record commit may have submodule? modes not match. good.
+
+  Controls ability to fail: All 11 root checks pass claimed. I cannot run due writes. Could use `bash -n` read-only? Bash -n doesn't write, safe. Shellcheck if installed read-only. I can run `bash -n scripts/land/signoff.sh scripts/land/train.sh .githooks/pre-push scripts/checks/landing_script.sh scripts/checks/review_tool.sh`; no writes. `git diff --check` done. Perhaps static analyze with shellcheck command if available. `command -v shellcheck` read-only. Could run `bash -n`, `command -v shellcheck`.
+
+• One concrete parser gap remains: verification searches the entire transcript, not the reviewer’s output, so a request containing an `ACCEPT` line can satisfy the check even when no reviewer verdict exists. I’m checking whether this is isolated or compounded by record-shape and control gaps before giving the verdict.git version 2.53.0
+GNU bash, version 5.3.9(1)-release (x86_64-pc-linux-gnu)
+commit fb097fa4e5ae0e58e400ce577c62c55df880c700
+Author:     Federico Carrone <mail@fcarrone.com>
+AuthorDate: Sun Nov 8 06:20:45 2026 +0000
+Commit:     Federico Carrone <mail@fcarrone.com>
+CommitDate: Sun Nov 8 06:20:45 2026 +0000
+
+    signoff: transcripts must name the signed commit; cap evidence is a well-formed review.sh note; prefixes must be unambiguous; the hook checks entry modes (review round 2)
+    
+    Codex and Kimi: the cap check read `rounds:` from any note; it now takes the round from
+    scripts/review/verify.sh (clean, findings or blocked; a missing or malformed note refuses).
+    Kimi: (1) the reviewer files were not bound to the signed commit: each transcript (request and output)
+    must now name it by an unambiguous prefix (control: kimi's review of another commit is refused);
+    (2) a 7-digit quote prefix could be ambiguous: names resolve through git, which refuses ambiguity;
+    (3) the hook compared entry names only: it now requires four 100644 blobs (control: four directories
+    with those names take the full tier).
+    Fixed by Claude directly (pinpointed findings, as agreed).
+
+
+• No shellcheck. Should decide findings count. User expects exactly verdict last. Could simply report parser gap and reject. But must thorough all questions perhaps only findings. Should find other concrete bugs to ensure round3 quality. I'll dig deeper into semantics of "request and output must name it" commit message says each transcript (request and output) must now name it by unambiguous prefix, which check overall. Fine.
+
+  Could exploit prefix names to bind wrong commit through hex in content: If transcript review of another commit B includes signed commit A's prefix in diff because A's hash appears in review request for B? Example code under review includes A full SHA as data. `names` finds A anywhere in transcript and accepts, even if actual reviewed head B. This is fundamental: transcript only textual mention not structured binding. User specifically requires transcript names it, not robust authenticated. If reviewing B whose diff contains A (common when commit IDs are in changelog, notes, generated BuildIdentity), the request might name B and output B, but A appears in code/diff, so record for A accepts transcript of B as long as A appears anywhere. Their control otherreview uses unrelated R1 with no R2 string; misses collision. Concrete failure: review transcript of commit B includes a diff line adding `A` (e.g. commit tracking file) and ends ACCEPT; when used for signed commit A, `names "$A"` passes due added content, though request and output both name B. This violates exact commit binding. Even if request must name A per docs, check does not distinguish request vs diff. More direct: `kimi.txt` request "Review B" plus output includes patch context containing A, ACCEPT. verify A accepts. This is stronger than missing output. Round2 intended fix insufficient because any occurrence accepted. Should report at lines 63-67 and 173. Could be considered expected semantic "transcript names commit" anywhere; but code cannot infer actual reviewed commit from arbitrary occurrence. The user question "wrong ref, prefix collision in quote check, forged tree" suggests adversarial cases. Prefix collision addressed ambiguous object names, but content collision not. A transcript for another commit can contain signed SHA. This is likely valid blocker.
+
+  Could quote check similarly wrong commit? Owner quote for B may contain A's prefix accidentally in another hex word e.g. "sign off B, fixing deadbeef..." where deadbeef prefix resolves A. `names` any hex word. Then accepts owner quote not naming A intentionally. Owner quote itself freeform; could include full SHA of A in unrelated context. Semantic impossible to parse, requirement just names commit. Not report as bug beyond structured format absent.
+
+  Signoff record has no signature; authenticity entirely social. Expected.
+
+  Check `git rev-parse -q --verify "$w^{commit}"` with abbreviated 7 prefix and replacement refs/grafts could resolve to different full SHA than original object. `rev-parse` outputs sha before replacement? Git replace may affect rev-list etc. Security local config not.
+
+  Could use refs with names of hex prefix to resolve wrong? `git rev-parse "$w^{commit}"`: if w 7-40 hex and also ref name, Git disambiguation warning? Refs typically need refs/heads/w to be named w; revision resolution rules: if refs/w etc exists, ref takes precedence over object abbreviation? For 40 hex, object name takes priority? Git rev-parse docs: `<sha1>` full/abbrev; refs. A hex word of 7+ could match branch/tag named `deadbeef` pointing signed commit A while actual object prefix deadbeef ambiguous/nonexistent. `names` checks output A and prefix of A `deadbeef`, so if branch named deadbeef points A, accepts even though no object with prefix deadbeef? Requirement commit named by unambiguous prefix of hex digits; if A starts deadbeef anyway object prefix exists. If ref points A, A starts w by prefix check, so okay. Ambiguity ref vs object could rev-parse outputs warning and one result? `--verify` requires one; could choose ref A while object prefix ambiguous with B, so "git refuses ambiguous prefix" not necessarily if ref disambiguates. Should investigate Git behavior. `git rev-parse -q --verify deadbeef^{commit}` when refs/heads/deadbeef exists and object prefix ambiguous: revision parser perhaps ref takes precedence and no ambiguity. Then quote prefix could be ambiguous as object but ref unique. Still exact A output and prefix matches, so no wrong commit. Requirement unambiguous prefix arguably not.
+
+  Wrong ref via replace ref? If git replace A B, rev-parse A returns A but cat-file content B perhaps? Train could verify member A but merge-tree uses replacement? `git rev-list` perhaps replacement. Local repo config trust.
+
+  Cap note parsing `sed ... head -1` uses reviewer output line perhaps includes `(round N, reviewer` in error message? vout from verify only one line well formed. good.
+
+  Record date invalid calendar could report finding malformed record. Is that worth blocker? Usually date YYYY-MM-DD implies actual date. But review round caps security, invalid date provenance could matter auditing. Could include as minor if reject already. User wants findings probably not noise. Focus high-impact.
+
+  Potential symlink mode verifier and parentfulness are formal validation gaps. Could report combined `scripts/land/signoff.sh:163-175: verify checks names and blob types but not 100644 modes or parentless record; a hand-built refs/owner-signoff/<sha> commit with symlink blobs or arbitrary parents passes ...`. Does that enable signoff accepted other commit? no if transcripts/quote valid. It accepts malformed record, explicitly question. Hook only structural tier not verifier. If forged tree with symlinks still same bytes, review evidence okay. But record contract says plain files, and malformed should reject. This could be valid P2, but round 3 verdict reject based parser enough. I should avoid dubious findings.
+
+  More serious malformed record acceptance due unknown duplicates? seen robust. Hash entry parsing:
+  `file="${entry%% *}" hash="${entry#* }"`.
+  If entry `kimi.txt <64> extra` hash regex fails.
+  If multiple spaces fails.
+  If verdict key repeated detected.
+  Missing verdict with `F_verdict` nonempty but no file fails names exactly.
+  Date invalid as above.
+  Commit record object can be non-parentless. Signoff spec not explicitly parentless except hook. `record` output parentless, verify needn't enforce for evidence. Could be okay.
+
+  Transcript hash `sha256` record uses no filters yes. verify cat-file no filters. Good.
+
+  Output last verdict `grep -E` binary files issue fails closed.
+
+  Pure_merge and git merge-tree:
+  Does `git merge-tree --write-tree p1 member` use *only* two commits with no explicit merge base; it finds merge base. For train actual `git merge` uses same. Tree matches.
+  Potential `git merge-tree` exit status 0 but output tree plus informational messages on success? Docs output only tree on clean. regex exact. okay.
+  Missing member: reverse eventually cur not base or second parent mismatch. Reordered: second parent mismatch. Extra commits: mismatch. Conflict resolution: merge-tree conflict status or tree diff. Regenerated views extra commit or amended tree diff. all good.
+  Octopus merge 4 parents fails.
+  No-ff single member merge has 2 parents even if member ancestor? build skips contained base, merge no-ff yes.
+  If member itself equals cur first parent? weird repeated same member twice: second merge second parent same member already ancestor; git merge --no-ff says already up to date no commit, so pure merge fails. good.
+  Head base with zero members n=0 fail.
+
+  Fetch stale:
+  `git fetch -q --prune "$REMOTE" "+refs/owner-signoff/*:refs/owner-signoff/*"` forced update but when local ref is checked out? not normal branch, okay.
+  Prune can delete local signoff while `verify` running sequential after fetch complete.
+  Remote deletion no matching ref wildcard behavior should be okay. Should confirm from docs perhaps no test due read-only. Fine.
+
+  Hook source carrying:
+  A push to refs/owner-signoff/<40hex> with parentless four 100644 blobs arbitrary source content skips. The comment says "no source tree" based names. The user likely expects adversarial question: "Does the hook tier let a source-carrying push skip the gates?" User added checks for source commit and directories but not content. Could construct parentless commit with record.txt containing Lean source and codex/kimi/agy arbitrary files; hook skips. Is that a finding? The ref is specifically data namespace. A record itself necessarily arbitrary text; cannot distinguish source text. The goal is not prevent arbitrary bytes under non-source refs, but ensure no source tree used by build. User explicitly tests source commit (normal tree) takes full. If same source commit tree has exactly 4 files named those, it would skip. Later source push full. So no privilege escalation. Don't report.
+
+  Could push valid signoff plus a *deletion* of source ref, other_refs triggers full but full_shas empty. Hook checks current worktree gates then permits deletion. That's existing policy for other refs. no skip relevant.
+
+  Control "all 11 root checks pass" cannot rerun read-only because gates write temp dirs and repo objects. I should state in response? User wants findings only and verdict. No need mention not run unless no findings. I ran syntax. Response should not claim tests run. Could mention static review no writes perhaps not necessary.
+
+  Perhaps inspect review.sh prompt format to understand transcript request outputs, not needed but could ground missing verdict. Search REVIEW prompt line.
+
+• The binding check has the same whole-file weakness: a review of commit B can be reused for commit A if A’s hex ID occurs anywhere in B’s request, diff, or output. I’m doing one final pass over the record invariants and the existing controls so the findings stay concrete and non-duplicative.  return 0
+}
+
+# The review command: LAND_REVIEW_CMD, else scripts/review/review.sh, called with --base --head.
+# Empty when there is neither, which `check` refuses (it never skips the leg silently).
+review_cmd() {
+  if [ -n "${LAND_REVIEW_CMD:-}" ]; then echo "$LAND_REVIEW_CMD"
+  elif [ -f scripts/review/review.sh ]; then echo "bash scripts/review/review.sh"; fi
+  return 0
+}
+
+# REVIEW PROVENANCE (fail closed; docs/LANDING.md, "check" and "land"). A train is reviewed when its
+# head carries a clean review note, or when its head carries no review note and every member carries
+# one at its exact recorded SHA (each member was reviewed at its own head: the landing bot's trains,
+# and a train rebuilt from reviewed branches). Every note is judged by scripts/review/verify.sh, on
+# $REMOTE's notes (fetched first, replacing the local copy, as verify.sh --fetch does): an absent,
+# malformed, blocked or findings note qualifies nothing, and a head note that is not clean is not
+# overridden by its members. Prints what qualified; on failure prints why and returns 1.
+VERIFY="$SELF_DIR/../review/verify.sh"
+review_provenance() { # name head
+  local name="$1" head="$2" out m n=0 bad=""
+  [ -f "$VERIFY" ] || { echo "no review verifier ($VERIFY is missing)"; return 1; }
+  git fetch -q "$REMOTE" "+refs/notes/concrete-review:refs/notes/concrete-review" 2>/dev/null \
+    || { echo "could not fetch refs/notes/concrete-review from $REMOTE"; return 1; }
+  if out="$(bash "$VERIFY" "$head" 2>&1)"; then echo "the head ${head:0:10} carries a clean review note"; return 0; fi
+  if git notes --ref=refs/notes/concrete-review show "$head" >/dev/null 2>&1; then
+    echo "the head's review note does not qualify: ${out//$'\n'/ }"; return 1
+  fi
+  for m in $(state_get_soft "$name" members | tr ',' ' '); do
+    n=$((n + 1))
+    out="$(bash "$VERIFY" "${m##*@}" 2>&1)" || bad="$bad; member ${m%@*}: ${out//$'\n'/ }"
+  done
+  [ "$n" -gt 0 ] || { echo "the head ${head:0:10} has no review note and the train records no members"; return 1; }
+  [ -z "$bad" ] || { echo "the head ${head:0:10} has no review note, and not every member has a clean one$bad"; return 1; }
+  echo "the head has no review note; every member ($n) carries a clean one at its exact SHA"
+}
+
+# Codex review leg. It passes without running the reviewer when the train already has review
+# provenance. Otherwise it runs the review command; a non-zero exit fails, and so does a zero exit
+# that leaves no provenance (no note, or a malformed, blocked or findings note at the head).
+review_leg() { # name base head
+  local why
+  if why="$(review_provenance "$1" "$3")"; then echo "review: $why; not reviewed again"; return 0; fi
+  echo "review: $why; running the reviewer"
+  bash -c "$(review_cmd) --base $2 --head $3" || return $?
+  why="$(review_provenance "$1" "$3")" || { echo "review: the reviewer exited 0, but $why"; return 1; }
+  echo "review: $why"
+}
+
+cmd_check() {
+  local name="" remote=1 review=1 local_gates=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --no-remote) remote=0 ;;
+      --no-review) review=0 ;;
+      --local-gates) local_gates=1 ;;
+58581a050b116613c5e6322196bc6f661280c32d664a35f0eaf280141e1f5cd0  -
+58581a050b116613c5e6322196bc6f661280c32d664a35f0eaf280141e1f5cd0  scripts/land/signoff.sh
+
+
+• Grep run.sh no matches? Perhaps root uses list file. Read run.sh? Controls ability to fail also inclusion. User says all 11 root checks pass. Should confirm new controls run by root. `scripts/checks/run.sh` may discover.Fine.
+
+  Perhaps exact issue: `names` rev-parse accepts *any hex word at least 7*, but prefix condition logic `[ "${1#"$w"}" != "$1" ]` is case-sensitive. Good.
+
+  Can wrong ref be accepted via ref ambiguity from `$PREFIX/$sha^{commit}` and `git rev-parse` output multiple lines if ambiguous? command substitution in check obj includes newline -> cat-file fails. no.
+  `git rev-parse -q --verify` stale local if remote deleted and prune fails returns failure, review_provenance stops. good.
+
+  Could verify accept REJECT if last verdict line ACCEPT in request appended after output? Typical concatenation could request and output ordering unspecified. Record accepts arbitrary files. Concrete scenario: transcript:
+  ```
+  request: review A
+  output:
+  VERDICT: REJECT
+  request template instruction (appended): VERDICT: ACCEPT
+  ```
+  Last accept accepted though actual output reject. But easier no output. Report line174.
+
+  Potential REJECT uppercase only exactly. `VERDICT: REJECT ` recognized. Lowercase reject not recognized; if earlier ACCEPT then lowercase reject later isn't considered, accepts. Contract exact uppercase verdict so malformed output should fail rather than accept earlier accept. Any trailing non-verdict text after last ACCEPT also accepted. Docs says ending exactly. Example output:
+  ```
+  VERDICT: ACCEPT
+  VERDICT: REJECT (lowercase?) 
+  ```
+  Not contract. More realistic reviewer outputs ACCEPT then later "Actually, VERDICT: REJECT" not line exact; malformed should fail, but no.
+
+  The tool only judges last recognized verdict; standard review.sh requires verdict be last nonempty line. Signoff should likely same strictness. Header explicitly "output's last VERDICT line", not last line. docs "output, ending in". I can phrase missing verdict only undeniable.
+
+  Control missing: current noagy removes entire agy, reject valid output; no case request-only ACCEPT. Could include in same finding that controls don't cover. User asks controls able fail; no need separate test gap unless bug. Could line reference scripts/checks/landing_script.sh:1153 because fixture blends request and output without labels, making parser unable. But primary finding code enough.
+
+  Second finding exact-commit binding with incidental SHA. Is it distinct from first? Yes one is provenance for wrong commit, other missing output. Both root cause whole-file unstructured parse. Could combine to avoid duplicate:
+  `scripts/land/signoff.sh:63-67,173-175: both commit binding and verdict are searched over entire unstructured transcript. A request-only file ...; likewise review B with A in diff...`. One finding with two scenarios. User format file:line singular perhaps line 173. I can have two findings lines.
+
+  Could there be a more direct severe wrong-commit acceptance through `names` even without incidental A in B review: use transcript request for A and reviewer output for B. This is a mixed file, not authentic transcript. But incidental A is authentic review of B. Strong.
+
+  Could authentic review of B contain A's full hash commonly? Review request includes base commit and from commit. Suppose B is a later delta review, its prompt includes `change since commit A`, where A is previous reviewed commit. Then signoff for A can reuse B's transcript: prompt names B head perhaps and A delta start, output ACCEPT B. Exactly common! review.sh `SCOPE_DELTA` includes FROM A. So a transcript of round 2 reviewing delta B includes A previous commit; it can be accepted as review of A. This is very concrete and likely intended catch. Even if output B accept, A may have prior findings unresolved; owner signoff for A requires all reviewers reviewed A (they did previous round perhaps reject) but provided transcript is accept of B delta. `names A` passes due "change since commit A". Excellent. Cite review.sh:235 if needed but finding location signoff line173. Scenario:
+  - A = prior commit/round cap, B = child.
+  - Kimi round2 request: "change since commit A..." and reviews only delta A..B, output ACCEPT.
+  - use this transcript in signoff for A; names finds A, verdict accept, hash matches, verify passes even though transcript's acceptance is for B's delta not A. Codex/agy similarly.
+  This directly defeats exact commit proof and cap. Great. This should be primary reject.
+
+  Missing verdict:
+  - Request for A includes line `VERDICT: ACCEPT`, reviewer times out/no output. File with request only passes names and last verdict. All three reviewer files can be request-only. signoff record cap valid etc. verify accepts. Definite.
+
+  Could record cap notes arbitrary no auth not report.
+
+  Do I need run any tests? User explicitly read-only, can't create fixtures. I can say static concrete scenarios. Respond with two findings and verdict reject. But before responding perhaps consider whether finding 1 and 2 are accepted design because transcript request naming A is all required and output accept pertains request by definition. In missing output case no output violates but parser cannot know. Yes bug. For B delta prompt naming A and B, transcript still request for B, accept output pertains B. names A incidental. Strong.
+
+  What fix would be needed? Structured transcript markers and verify request's reviewed SHA and output separately. I can include concise scenario and expected actual. No need recommendations but could say parse output separately. User asks report findings file:line problem. Format exact. Respond two bullet lines? User wants `file:line: problem` and exactly one verdict line. Use plain lines no heading maybe:
+  `scripts/land/signoff.sh:173: ...`
+  `scripts/land/signoff.sh:174: ...`
+  `VERDICT: REJECT`
+  Ensure response no extra line after verdict. Perhaps mention no other issues? Not necessary.
+
+  Before responding re-read user asks round3 last allowed, report all questions. I should include pure_merge no findings? Findings only standard. Verdict reject enough. Could include tests not run? No.
+
+  Could report control gap as part:
+  - `scripts/checks/landing_script.sh:1176: otherreview control uses review of other SHA that contains no signed SHA, so cannot detect incidental mention bypass.` This is distinct test deficiency but root bug enough. User asks controls able fail; I can note within finding "the otherreview control misses this because..." Might be overkill. I can include second line for control but not necessary; code bug indicates controls insufficient. To satisfy, perhaps three findings:
+  1 binding.
+  2 missing verdict.
+  3 verifier accepts malformed mode/parent? Avoid.
+  No need every category has finding.
+
+  Could pure_merge shell `read -a p` on macOS bash3.2 with `set -u`: referencing `${p[2]}` in `||` RHS only if length==3 due short-circuit. fine.
+  `local shas=("$@")` bash3 yes.
+  No new shell issues found.
+  Syntax bash-n pass, no shellcheck available, but not in response.
+
+  One subtle issue with `set -e` and `names` loops: called pipeline `printf | names || bad`, because function in pipeline runs subshell; return 0 inside function only subshell but pipeline status 0. good.
+
+  `check` bad exit within command substitution prints out captured. okay.
+
+  Could missing reviewer output with request containing ACCEPT be considered file has a verdict (request) but requirement output no. Exactly.
+
+  Respond with two findings and reject.
+
+• scripts/land/signoff.sh:173: commit binding accepts the signed SHA anywhere in the transcript. A round-2 review of commit B whose request says “change since commit A” and whose output accepts only B’s delta can be supplied as A’s reviewer transcript: `names A` succeeds on that incidental mention, so verification can accept a review that did not approve A.
+
+  scripts/land/signoff.sh:174: the verdict is extracted from the entire transcript rather than the reviewer’s output. A request for A containing the instruction line `VERDICT: ACCEPT`, followed by no reviewer output or an output with no verdict, passes as an acceptance. The existing controls cover a missing reviewer file and an explicit final REJECT, but not this missing-output case.
+
+  VERDICT: REJECT
+
+To resume this session: kimi -r session_1584fba7-42d0-49a3-853a-72d370149855
+kimi rc=0
