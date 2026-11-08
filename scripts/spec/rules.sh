@@ -52,7 +52,7 @@ fixture() {
   mkdir -p "$TMP/$1"; printf '%s\n' "$2" > "$TMP/$1.jsonl"; printf '%s\n' "$3" > "$TMP/$1/A.lean"
   OUT=$(check 60 "$TMP/$1.jsonl" "$TMP/$1" "$TMP/rows.md"); RC=$?
 }
-printf 'Q9.1 is a decided row.\n' > "$TMP/rows.md"
+printf -- '- **Q9.1** A decided row.\nR-0001 is only mentioned here.\n' > "$TMP/rows.md"
 END='{"end":true}'
 GOOD='{"name":"R.ok","rev":1,"exists":true,"doc":"The rule (Q9.1)."}'
 EXA='/-- Accepted (rule `R.ok`). -/
@@ -148,6 +148,37 @@ $END" '/-- Accepted (rule `R.ok`). -/
 /-- Refused (rule `R.ok`). -/
 example : True := trivial'
 [ "$RC" = 0 ] && ok "control: an attribute with brackets inside counts" || no "control: bracketed attribute refused: $OUT"
+fixture mention '{"name":"R.ok","rev":1,"exists":true,"doc":"The rule (R-0001)."}
+'"$END" "$EXA"
+[ "$RC" = 1 ] && [[ "$OUT" == *"no existing decision row"* ]] && ok "control: a row an inventory only mentions does not count" \
+  || no "control: mention-only decision row not reported: $OUT"
+fixture fakeattr "$GOOD
+$END" '/-- Accepted (rule `R.ok`). -/
+@[deprecated "] example" (since := "2026-11-08")]
+def a : True := trivial
+
+/-- Refused (rule `R.ok`). -/
+@[deprecated "] example" (since := "2026-11-08")]
+def b : True := trivial'
+[ "$RC" = 1 ] && [[ "$OUT" == *"no example marked"* || "$OUT" == *"outside an example"* ]] \
+  && ok "control: an attribute string cannot stand in for an example" || no "control: attribute-string example not reported: $OUT"
+fixture strattr "$GOOD
+$END" '/-- Accepted (rule `R.ok`). -/
+@[deprecated "a ] b" (since := "2026-11-08")] example : True := trivial
+
+/-- Refused (rule `R.ok`). -/
+example : True := trivial'
+[ "$RC" = 0 ] && ok "control: an attribute holding a string with a bracket counts" || no "control: string attribute refused: $OUT"
+fixture backtick "$GOOD
+$END" "$EXA
+-- see (rule \`R.«missing\`rule»\`)"
+[ "$RC" = 1 ] && [[ "$OUT" == *"cites unregistered rule R.«missing\`rule»"* ]] && ok "control: a quoted name holding a backtick is checked" \
+  || no "control: backtick quoted citation not reported: $OUT"
+fixture malformed "$GOOD
+$END" "$EXA
+-- see (rule \`R.ok"
+[ "$RC" = 1 ] && [[ "$OUT" == *"malformed rule citation"* ]] && ok "control: a malformed citation fails" \
+  || no "control: malformed citation not reported: $OUT"
 OUT=$(check 60 "$TMP/good.jsonl" "$TMP/no-such-dir" "$TMP/rows.md"); RC=$?
 [ "$RC" = 3 ] && ok "control: a missing source directory is an error" || no "control: missing source dir gave rc=$RC: $OUT"
 mkdir -p "$TMP/empty"

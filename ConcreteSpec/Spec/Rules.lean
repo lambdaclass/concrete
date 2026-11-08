@@ -9,7 +9,7 @@ names). A rule is a definition of the specification. The rule gate (`scripts/spe
 by CI) requires of each registered rule:
 
 - its definition carries a doc comment that cites the decision row it implements (`Q9.1`,
-  `OD101`, `R-0496`, …);
+  `OD101`, `R-0496`, …), a row that `docs/decisions.md` or `ROADMAP.md` declares;
 - at least one example says in its doc comment that the rule accepts it, and at least one that the
   rule refuses it: the comment holds the word `Accepted` (or `Refused`), then `(rule`, then the
   rule's full Lean name between backticks, then `)`;

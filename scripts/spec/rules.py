@@ -7,7 +7,8 @@
       (docs/decisions.md, ROADMAP.md) in which a cited decision row must appear.
 
 Prints `ok`/`FAIL` lines; exits 1 on any failure, 3 when an input cannot be read or lexed.
-A rule's doc comment must cite a decision row that exists in an inventory; each rule needs one
+A rule's doc comment must cite a decision row that an inventory declares (a list item starting
+with the row in bold, or a table row whose first cell is it; a mention in prose does not count); each rule needs one
 example whose doc comment says ``Accepted (rule `Name`)`` and a different one whose doc comment
 says ``Refused (rule `Name`)``; a verdict doc comment holds no nested comment and no rule's two
 verdicts at once; every ``(rule `Name`)`` anywhere in a source (either kind of comment, or a
@@ -20,18 +21,50 @@ import lean_lex  # noqa: E402
 
 ROW = re.compile(r"\b(Q\d+(?:\.\d+)+|OD\d+|P\d+[a-z]?|R-\d{4})\b")
 # A rule name is a Lean name as `toString` prints it: dotted components, a component that needs
-# quoting written «…» (which may hold spaces). Anything up to the closing backtick is the name.
-CITE = re.compile(r"\(rule `([^`\n]+)`\)")
-VERDICT = re.compile(r"\b(Accepted|Refused) \(rule `([^`\n]+)`\)")
-# What may stand between a doc comment and the `example` it documents: attributes and modifiers.
-EXAMPLE_AFTER = re.compile(
-    r"\s*(?:@\[(?:[^\[\]]|\[[^\[\]]*\])*\]\s*)*(?:(?:noncomputable|private|protected|unsafe|partial)\s+)*"
-    r"example(?![\w'!?])")
+# quoting written «…» (which may hold spaces and backticks). The name runs to the first backtick
+# outside a «…» component.
+NAME = r"((?:«[^»\n]*»|[^`«\n])+)"
+CITE_START = re.compile(r"\(rule `")
+CITE = re.compile(r"\(rule `" + NAME + r"`\)")
+VERDICT = re.compile(r"\b(Accepted|Refused) \(rule `" + NAME + r"`\)")
+MODIFIERS = re.compile(r"(?:(?:noncomputable|private|protected|unsafe|partial)\s+)*example(?![\w'!?])")
+# A declared decision row: a list item that starts with the row in bold (`- **Q9.1** …`), or a table
+# row whose first cell is the row (`| OD101 | …`, `| R-0607 | …`). A mention in prose is not one.
+DECLARED = re.compile(r"^\s*(?:- \*\*(\S+?)\*\*|\| *(\S+?) *\|)", re.M)
 
 
-def row_exists(row, inventories):
-    pat = re.compile(r"(?<![\w.-])" + re.escape(row) + r"(?![\w-]|\.\d)")
-    return any(pat.search(t) for t in inventories)
+def skip_attribute(src, i):
+    """`src[i:]` starts with `@[`: the index after its closing `]`, or None. Brackets nest, and a
+    string literal (with its escapes) is skipped whole, so a `]` inside one ends nothing."""
+    depth, i = 0, i + 1
+    while i < len(src):
+        c = src[i]
+        if c == '"':
+            i += 1
+            while i < len(src) and src[i] != '"':
+                i += 2 if src[i] == "\\" else 1
+            if i >= len(src): return None
+        elif c == "[": depth += 1
+        elif c == "]":
+            depth -= 1
+            if depth == 0: return i + 1
+        i += 1
+    return None
+
+
+def example_follows(src, i):
+    """What stands between a doc comment ending at `i` and the `example` it documents: whitespace,
+    attributes and modifiers, nothing else (no comment, no other command)."""
+    while True:
+        while i < len(src) and src[i].isspace(): i += 1
+        if not src.startswith("@[", i): break
+        i = skip_attribute(src, i)
+        if i is None: return False
+    return MODIFIERS.match(src, i) is not None
+
+
+def declared_rows(inventories):
+    return {a or b for t in inventories for a, b in DECLARED.findall(t)}
 
 
 def main(rules_path, src_dir, row_paths):
@@ -48,6 +81,7 @@ def main(rules_path, src_dir, row_paths):
     if not os.path.isdir(src_dir):
         print(f"error: {src_dir}: not a directory", file=sys.stderr); return 3
     rules = rules[:-1]
+    declared = declared_rows(inventories)
     names = [r["name"] for r in rules]
     for n in sorted({n for n in names if names.count(n) > 1}):
         fails.append(f"rule {n} is registered more than once")
@@ -58,7 +92,7 @@ def main(rules_path, src_dir, row_paths):
         else:
             rows = [m.group(1) for m in ROW.finditer(r["doc"])]
             if not rows: fails.append(f"rule {r['name']}'s doc comment cites no decision row")
-            elif not any(row_exists(x, inventories) for x in rows):
+            elif not any(x in declared for x in rows):
                 fails.append(f"rule {r['name']}'s doc comment cites no existing decision row ({', '.join(rows)})")
     seen = {n: set() for n in names}
     scanned = 0
@@ -80,6 +114,10 @@ def main(rules_path, src_dir, row_paths):
                 print(f"error: {path}: {e}", file=sys.stderr); return 3
             scanned += 1
             # citations anywhere in the file (comments of both kinds, and literals: fail closed)
+            for m in CITE_START.finditer(src):
+                if not CITE.match(src, m.start()):
+                    line = src.count("\n", 0, m.start()) + 1
+                    fails.append(f"{path}:{line}: a malformed rule citation")
             for m in CITE.finditer(src):
                 if m.group(1) not in seen:
                     line = src.count("\n", 0, m.start()) + 1
@@ -93,7 +131,7 @@ def main(rules_path, src_dir, row_paths):
                 text, line = src[a:b], src.count("\n", 0, a) + 1
                 verdicts = VERDICT.findall(text)
                 if not verdicts: continue
-                if not (text.startswith("/--") and EXAMPLE_AFTER.match(src, b)):
+                if not (text.startswith("/--") and example_follows(src, b)):
                     fails.append(f"{path}:{line}: a verdict citation outside an example's doc comment")
                     continue
                 if "/-" in text[3:]:
