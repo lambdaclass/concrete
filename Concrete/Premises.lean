@@ -109,7 +109,7 @@ def components : List Component := [
     what := "the Lean compiler, runtime and interpreter executing Concrete via lake env lean --run and the compiled lean binary"
     why := "the compiler's executable behaviour is produced by Lean code outside its kernel proofs"
     removal := "not planned; per-compilation certificates attest the emitted output" },
-  { id := "lake", kind := .buildTool, slice := "slice0", premises := [], «matches» := ["lake", "git", "git-remote-https", "ar"]
+  { id := "lake", kind := .buildTool, slice := "slice0", premises := [], «matches» := ["lake", "git", "ar"]
     what := "Lake dependency resolution and builds, including the pinned lean-compiler-backend revision"
     why := "Lake selects and builds the code that the compiler and gates execute"
     removal := "not planned; replace with another pinned, reproducible dependency and build mechanism" },
@@ -180,9 +180,9 @@ def components : List Component := [
     why := "they select targets, construct the reduced environment, manage scratch files and resolve wrapper paths"
     removal := "replace the shell helper and Nix shell wrappers with a pinned, attested driver using direct filesystem APIs" },
   { id := "gate-analysis-tools", kind := .gateTool, slice := "slice0", premises := []
-    «matches» := ["gdb", "lldb", "llvm-objdump", "llvm-size", "python3", "strace", "ssh-keygen"]
-    what := "analysis tools, strace and the pinned ssh-keygen owner-signature verifier used only by gates"
-    why := "trusted only for gate analyses, trace evidence and approval-signature verification, not compilation"
+    «matches» := ["gdb", "lldb", "llvm-objdump", "llvm-size", "python3", "strace"]
+    what := "gdb, lldb, llvm-objdump, llvm-size, python3 and strace used only by gates"
+    why := "trusted only for the gates' analyses and verdicts, not as compilation-pipeline components"
     removal := "remove or replace the corresponding gate analyses; these tools are not needed to compile a program" }
 ]
 
@@ -292,7 +292,8 @@ def trustedDeclarationKinds (env : Environment) (n : Name) (ci : ConstantInfo) :
     if ci matches .opaqueInfo _ then
       kinds := kinds ++ [if (env.find? (Compiler.mkUnsafeRecName n)).any (·.isPartial)
         then "partial" else "opaque"]
-  if ci.value?.any (fun v => (v.find? (·.isConstOf ``Lean.Loop.forIn)).isSome) then
+  if ci.value?.any (fun v => (v.find? (fun e =>
+      e.isConstOf ``Lean.Loop.forIn || e.isConstOf ``Lean.Loop)).isSome) then
     kinds := kinds ++ ["partial-loop"]
   return kinds
 
@@ -304,16 +305,24 @@ def trustedDeclarations (env : Environment) (localPrefix : Option Name := none) 
     unless kinds.isEmpty do out := out.push (n, kinds)
   return out
 
-def declarationOwners (n : Name) (cs : List Component) : List Component :=
+def declarationOwners (n : Name) (cs : List Component) (env : Option Environment := none) : List Component :=
   let user := (privateToUserName? n).getD n
-  cs.filter fun c => c.declarations.contains n.toString || c.declarations.contains user.toString
+  let direct := cs.filter fun c => c.declarations.contains n.toString || c.declarations.contains user.toString
+  if !direct.isEmpty then direct
+  else match env, Compiler.isUnsafeRecName? n with
+    | some e, some parent =>
+        if (e.find? n).any (·.isPartial) && (e.find? parent).isSome then
+          let pUser := (privateToUserName? parent).getD parent
+          cs.filter fun c => c.declarations.contains parent.toString || c.declarations.contains pUser.toString
+        else []
+    | _, _ => []
 
 /-- Every compiled escape hatch must have exactly one owner, and not a non-trusted component. -/
 def trustedDeclarationErrors (env : Environment) (localPrefix : Option Name := none)
     (cs : List Component := components) : List String := Id.run do
   let mut errors := []
   for (n, kinds) in trustedDeclarations env localPrefix do
-    match declarationOwners n cs with
+    match declarationOwners n cs (some env) with
     | [] => errors := errors ++ [s!"unlisted trusted declaration {n} [{", ".intercalate kinds}]"]
     | [owner] =>
         if !(#[ComponentKind.implementation, .backend, .runtime].contains owner.kind) then

@@ -169,17 +169,21 @@ concrete_modules() {
   concrete_source_files | sed -E 's#\.lean$##; s#/#.#g' | sort -u
 }
 
-# check_examples ROOT OUT: Lean parses/retains example commands in their own header context;
+# check_examples ROOT OUT [REL...]: Lean parses/retains example commands in their own header context;
 # both their axiom closures and generated trusted declarations must be registered.
 check_examples() {
   local source_root=$1 out=$2 rel
+  shift 2
   local sources=()
-  while IFS= read -r rel; do sources+=("$source_root/$rel"); done < <(concrete_source_files)
+  if [ "$#" -gt 0 ]; then
+    for rel in "$@"; do sources+=("$source_root/$rel"); done
+  else
+    while IFS= read -r rel; do sources+=("$source_root/$rel"); done < <(concrete_source_files)
+  fi
   mkdir -p "$out"
   bounded 600 lake env lean --run "$root/scripts/checks/compiler/slice0_examples.lean" "${sources[@]}" |
     cap_out >"$out/examples" || { cat "$out/examples"; return 1; }
   bounded 30 python3 -I "$root/scripts/checks/lib/example_rows.py" "$out/examples"
-
 }
 
 bounded 30 python3 -I "$root/scripts/checks/tests/test_execve_names.py"
@@ -364,9 +368,8 @@ else
   echo "FAIL control: the population check did not name the unimported module: '$missing'"; fail=1
 fi
 
-mkdir -p "$work/ctl/native-example"
-cp Concrete.lean "$work/ctl/native-example/Concrete.lean"
-cp -r Concrete "$work/ctl/native-example/Concrete"
+mkdir -p "$work/ctl/native-example/Concrete"
+cp Concrete/BIR.lean "$work/ctl/native-example/Concrete/BIR.lean"
 python3 -I -c 'import sys
 p = sys.argv[1]
 s = open(p, encoding="utf-8").read()
@@ -374,7 +377,7 @@ old = "by decide +kernel"
 assert old in s
 open(p, "w", encoding="utf-8").write(s.replace(old, "by decide +native", 1))' \
   "$work/ctl/native-example/Concrete/BIR.lean"
-if check_examples "$work/ctl/native-example" "$work/ctl/native-example-out" \
+if check_examples "$work/ctl/native-example" "$work/ctl/native-example-out" Concrete/BIR.lean \
      >"$work/ctl/native-example.log" 2>&1; then
   echo "FAIL control: the example audit accepts decide +native"; fail=1
 elif grep -q 'FAIL unlisted example axiom .* in .*Concrete/BIR.lean:542' "$work/ctl/native-example.log"; then

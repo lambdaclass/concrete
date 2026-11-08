@@ -5,9 +5,11 @@ import subprocess
 import tempfile
 
 DRIVER = "scripts/checks/compiler/slice0_examples.lean"
-def lean(path, driver=False):
+def lean(path, driver=False, extra_env=None):
+    env = {**os.environ, "LEAN_NUM_THREADS": "2"}
+    if extra_env: env.update(extra_env)
     return subprocess.run(["lake", "env", "lean", *(["--run", DRIVER] if driver else []), str(path)],
-        env={**os.environ, "LEAN_NUM_THREADS": "2"}, text=True, stdout=subprocess.PIPE,
+        env=env, text=True, stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT, timeout=60)
 
 def require(result, ok, diagnostic):
@@ -15,6 +17,11 @@ def require(result, ok, diagnostic):
 
 with tempfile.TemporaryDirectory() as d:
     d = Path(d)
+    empty = d / "empty.rows"
+    empty.write_text("no json rows\n")
+    r_empty = subprocess.run(["python3", "-I", "scripts/checks/lib/example_rows.py", str(empty)],
+        text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=15)
+    require(r_empty, False, "FAIL examples: no example-json rows observed")
     p = d / "examples.lean"
     p.write_text('import Lean\nexample : 1 = 1 := by rfl\n')
     require(lean(p, True), True, '"axioms":[]')
@@ -22,8 +29,13 @@ with tempfile.TemporaryDirectory() as d:
     require(lean(p, True), False, f'._native.decide.ax_1 in {p}:2')
     p.write_text('import Lean\n#eval (dbg_trace "{-- \"\n() }" ())\nexample : 2 + 2 = 4 := by decide +native\n-- "\n')
     require(lean(p, True), False, f'._native.decide.ax_1 in {p}:4')
-    p.write_text('import Lean\npartial def loops : IO Unit := do while true do pure ()\n')
+    p.write_text('import Lean\nexample : IO Unit := do while true do pure ()\n')
+    require(lean(p, True), False, 'FAIL unlisted example trusted declaration ')
+    p.write_text('import Lean\npartial def loops : IO Unit := do while true do pure ()\npartial def nonrec : Nat := 0\n')
     require(lean(p, True), False, 'FAIL unlisted partial declaration loops')
+    require(lean(p, True, {"CONCRETE_TRUSTED_DECLARATIONS": "lexer:loops,nonrec"}), True, '"name":"loops"')
+    require(lean(p, True, {"CONCRETE_TRUSTED_DECLARATIONS": "bir-lcb-adapter:loops,nonrec"}), False,
+        'FAIL trusted declaration loops belongs to non-code component bir-lcb-adapter')
     p = d / "declarations.lean"
     p.write_text('''import Concrete.Premises
 import Lean.Elab.Command
