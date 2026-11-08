@@ -65,6 +65,27 @@ def dropBlockedHistory {O : Exec.Operands} {S : EventSignature}
   | some (.blocked _ q) => some (.blocked [] q)
   | other => other
 
+/-- Helper (inversion). A trap returned by a well-formed adapter resolves to a span whose
+path meets the site-table obligation. This inverts the terminal projection and uses the adapter's
+explicit semantic premise; it is not independent elaboration correctness. (approved: PENDING) -/
+theorem terminal_trap_path_inv {O : Exec.Operands} {S : EventSignature}
+    (A : ExecAdapter O S) (C : OperationContract S) (input : C.Input) (ρ : Exec.Oracle O)
+    (wellFormed : ExecAdapter.WellFormed A C input ρ)
+    {final : Exec.Final O.Val} {kind : TrapKind} {site : SiteId} {sp : Span} {line : String}
+    (observed : A.terminal? final = some (.trapped kind site sp line)) : sp.PathOk := by
+  cases final with
+  | normal => cases observed
+  | returned value =>
+    cases status : A.status value <;> simp [ExecAdapter.terminal?, status] at observed
+  | trapped k s =>
+    cases resolved : AList.lookup A.sites s with
+    | none => simp [ExecAdapter.terminal?, trapTerminal, resolved] at observed
+    | some actual =>
+      simp only [ExecAdapter.terminal?, trapTerminal, resolved, Option.map_some,
+        Option.some.injEq, Terminal.trapped.injEq] at observed
+      obtain ⟨rfl, rfl, rfl, rfl⟩ := observed
+      exact wellFormed.sites_valid s actual resolved
+
 namespace ReportDemo
 open AdapterDemo
 
@@ -98,6 +119,27 @@ example : ExecAdapter.WellFormed adapter permittingContract () blockingOracle �
   generalize empty : ([] : List (Event signature)) = events at pending
   cases pending with
   | request previous => simp at empty
+
+/-- An adapter fault resolves a trap to an absolute host path. -/
+def absolutePathAdapter : ExecAdapter ops signature :=
+  { adapter with sites := [(⟨7⟩, ⟨"/tmp/main.con", 1, 1, by decide, by decide⟩)] }
+
+/-- Refused: a blocking policy cannot authorize an invalid trap-site path. This example tests
+site-table validity directly, without relying on an unrelated answer or continuation failure. -/
+example : ¬ ExecAdapter.WellFormed absolutePathAdapter permittingContract () blockingOracle := by
+  intro formed
+  have path := formed.sites_valid ⟨7⟩ ⟨"/tmp/main.con", 1, 1, by decide, by decide⟩ rfl
+  exact (by decide : ¬ (⟨"/tmp/main.con", 1, 1, by decide, by decide⟩ : Span).PathOk) path
+
+/-- An adapter fault uses host-specific backslashes in a relative path. -/
+def backslashPathAdapter : ExecAdapter ops signature :=
+  { adapter with sites := [(⟨7⟩, ⟨"src\\main.con", 1, 1, by decide, by decide⟩)] }
+
+/-- Refused: relative spelling alone does not satisfy the forward-slash path requirement. -/
+example : ¬ ExecAdapter.WellFormed backslashPathAdapter permittingContract () blockingOracle := by
+  intro formed
+  have path := formed.sites_valid ⟨7⟩ ⟨"src\\main.con", 1, 1, by decide, by decide⟩ rfl
+  exact (by decide : ¬ (⟨"src\\main.con", 1, 1, by decide, by decide⟩ : Span).PathOk) path
 
 end ReportDemo
 end ConcreteSpec.Core.Observe
