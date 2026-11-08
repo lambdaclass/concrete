@@ -1,4 +1,4 @@
-import ConcreteSpec.Spec.Ident
+import ConcreteSpec.Spec.Const
 
 /-!
 # The rule registry
@@ -19,13 +19,14 @@ Every citation of that form (`(rule`, a backticked name, `)`) written anywhere i
 specification must name a registered rule. A rule's entry is written with a double-backtick name,
 so Lean refuses an entry for a name that does not exist; the gate also checks that each registered
 name is a declaration of the built environment, which catches an entry written with a single
-backtick. The registry is empty until the first
-rules are ported (phase A, step 3 onward); each step registers the rules it adds.
+backtick. Each step registers the rules it adds, and this module imports the modules that state
+them.
 -/
 
 namespace ConcreteSpec.Core
 
 /-- The registered rules, in the order the specification introduces them. -/
-def registeredRules : List RuleId := []
+def registeredRules : List RuleId :=
+  [⟨``ConstsAdmitted, 1⟩]
 
 end ConcreteSpec.Core

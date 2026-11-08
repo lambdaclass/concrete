@@ -7,7 +7,7 @@ PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). Part of `Con
 see `ConcreteSpec/README.md`.
 
 Core names everything by a typed identity, never by a bare string or number: a local, a
-declaration, a field, a function, a module, an instance, a loop label, a brand, an allocator
+declaration, a constant, a field, a function, a module, an instance, a loop label, a brand, an allocator
 lineage, a loan, a grant, a block, a capability variable and a theorem each have their own type,
 so one can never stand for another, and two declarations with the same source name in different
 modules are different declarations (the facts decision: no bare-name collisions). A declaration,
@@ -72,6 +72,12 @@ structure FieldId where
 
 /-- A function: its module and its name there. -/
 structure FnId where
+  module : ModuleId
+  name : String
+  deriving DecidableEq, Repr
+
+/-- A module constant (`const N: T = e;`): its module and its name there. -/
+structure ConstId where
   module : ModuleId
   name : String
   deriving DecidableEq, Repr

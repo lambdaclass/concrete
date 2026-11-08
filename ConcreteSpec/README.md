@@ -81,3 +81,9 @@ Open obligations, by name:
   compiled code performs the same range check is a compiler-slice obligation (O5).
 - **O10 Part 5** abstracts the condition of `while`: loop test number `k` takes the outcome
   `σ k`, and the results hold for every `σ`.
+- **O11 Foundation contracts** (owner decision 2026-11-08, C1–C10): written so far are C3
+  (`Target`), C1 (`Exec`: the machine, its step, cleanup order, traps; parametric in the operand
+  language) and C2 (`Scalar`, `Const`). C4–C10 remain. C1 leaves to later slices the source-level
+  evaluation orders (elaboration, O1), counted loops (slice 4), and ownership of moved values
+  (C5); C2 leaves floats (slice 26) and whether a failing operation may appear in a constant
+  initializer (an owner question).
