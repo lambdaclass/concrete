@@ -1,0 +1,18 @@
+reviewed: 02a43ab2035a70bfd7a8df44e37c7aa78ab53149
+
+Read-only review. Do not modify, create or delete any file in this directory, do not push, and do not contact any git remote or network service. You may read files, run read-only git commands, and run the repository's own checks and controls (they build temporary git repositories outside this directory) under timeout and memory bounds (scripts/checks/lib/bounded.sh); temporary files only outside this directory. Say which controls you ran and their results.
+
+The current directory is a plain copy (git archive) of the Concrete repository at commit 02a43ab2035a70bfd7a8df44e37c7aa78ab53149. REVIEW.diff holds the change under review (3bd7bc41511e0a0ba247b53231b5dc8589533d2f..02a43ab2035a70bfd7a8df44e37c7aa78ab53149). Review it against the repository as a whole: read the files it touches and the code, docs, checks and decisions (docs/decisions.md, ROADMAP.md) it relies on.
+
+OWNER RULE (2026-11-08, verbatim: "ALWAYS tell the reviewrs to do the best long term thing rather than cuitting corners"): judge and fix by the best long-term design. Never cut corners for speed, a smaller diff or fewer rounds. As a reviewer, report any shortcut, containment patch or corner cut as a real finding and say what the long-term fix is. As a writer, implement the structural fix, not a containment patch; if staging is truly unavoidable, record the long-term design and name its roadmap row.
+
+Review exact commit 02a43ab2035a70bfd7a8df44e37c7aa78ab53149 (head of wip/legacy-sweep-2) for an owner sign-off. Its writers were Codex (35b489e49, c95d572ff, 02a43ab20 and earlier rounds) and Kimi (8acb9622b), so agy is the reviewer. REVIEW.diff holds its full change against main's merge base 3bd7bc415: the legacy/ freeze machinery (scripts/checks/legacy_frozen.sh, the single strict legacy lock parser scripts/checks/lib/legacy_lock.py, doc_links reading swept files where they now are), the legacy sweep itself and the restored dated archive.
+
+Disclosure: Codex REJECTED an earlier head of this branch, 903fd3dab, in a full-access review; later commits 123f03aa8 ("Fail closed on malformed legacy locks and failed freeze checks") and 35b489e49 were meant to address that REJECT. The owner signed off on 35b489e49 only; this review is for 02a43ab20, which adds 8acb9622b (doc_links fails closed on Markdown discovery errors), c95d572ff (legacy lock: re-author canonical reader and reconcile sweep rules) and 02a43ab20 (legacy sweep: own reviewed content and restore dated archive).
+
+Judge the whole change at 02a43ab20, not only the last commits: does legacy/ stay frozen against every edit, delete, re-add and history rewrite (judged against main's trusted first-parent history); is there exactly one lock reader and does it fail closed on every malformed input; do doc_links and the root checks behave correctly on swept files; are the controls load-bearing; is anything a containment patch rather than the structural fix. Run scripts/checks/legacy_frozen.sh, doc_links.sh and the root runner bounded where the archive allows (legacy_frozen needs git history: build a temporary clone-like repository if you need one, never touch a remote), and say what you could not run.
+
+
+Report findings with file:line, severity and the long-term fix. Start your answer by stating whether you could read the repository, then list every file you read, one per line, each as `READ: <path relative to the repository root>`. End with exactly two lines:
+REPOSITORY: readable   (or REPOSITORY: unreadable)
+VERDICT: ACCEPT   (or VERDICT: REJECT)
