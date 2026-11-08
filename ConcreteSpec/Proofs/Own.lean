@@ -5305,15 +5305,20 @@ example : WellFormed initial ∧
     ¬ ResultSatisfies (fun t : State => ∀ l ∈ t.loans, ∃ x ∈ t.slots, x.place = l.root ∧ x.status = .owned)
       (borrowConsumeRoot initial ⟨0⟩ [.index 1] .shared) := by decide
 
-/-- Instance (law `ConcreteSpec.Core.Own.moved_no_loan`, case `ConcreteSpec.Core.Own.Examples.shared`). -/
-example : ResultSatisfies (fun t : State => ∀ x ∈ t.slots, x.status = .moved → ∀ l ∈ t.loans, x.place ≠ l.root)
-    (move shared ⟨0⟩) :=
-  @moved_no_loan shared ⟨0⟩ (by decide)
+/-- Mutant: moving creates a loan of the moved root. -/
+def moveLeak (s : State) (p : Hybrid.Place) : Option State :=
+  (move s p).map fun t => { t with loans :=
+    ⟨⟨s.nextLoan⟩, p, [], .shared, none, [], 0, false, false⟩ :: t.loans }
 
-/-- Planted (law `ConcreteSpec.Core.Own.moved_no_loan`, case `ConcreteSpec.Core.Own.Examples.shared`, subject `ConcreteSpec.Core.Own.move`, mutant `ConcreteSpec.Core.Own.RestatedLawEvidence.moveIgnoreLoans`). -/
-example : WellFormed shared ∧
+/-- Instance (law `ConcreteSpec.Core.Own.moved_no_loan`, case `ConcreteSpec.Core.Own.Examples.initial`). -/
+example : ResultSatisfies (fun t : State => ∀ x ∈ t.slots, x.status = .moved → ∀ l ∈ t.loans, x.place ≠ l.root)
+    (move initial ⟨0⟩) :=
+  @moved_no_loan initial ⟨0⟩ (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.moved_no_loan`, case `ConcreteSpec.Core.Own.Examples.initial`, subject `ConcreteSpec.Core.Own.move`, mutant `ConcreteSpec.Core.Own.RestatedLawEvidence.moveLeak`). -/
+example : WellFormed initial ∧
     ¬ ResultSatisfies (fun t : State => ∀ x ∈ t.slots, x.status = .moved → ∀ l ∈ t.loans, x.place ≠ l.root)
-      (moveIgnoreLoans shared ⟨0⟩) := by decide
+      (moveLeak initial ⟨0⟩) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.Own.instrument_erasure`, case `ConcreteSpec.Core.Own.RestatedLawEvidence.intStore0`). -/
 example : ResultSatisfies (fun r : Int × Store Int => incIntOp (erase intStore0) = some (r.1, erase r.2))

@@ -464,6 +464,25 @@ def outside : Dependency := ⟨⟨3⟩, [⟨1⟩], []⟩
 def departing : State := ((depend outer outside).bind fun s => release s ⟨0⟩).getD {}
 def departed : State := (endScope departing ⟨0⟩).getD {}
 def releasedWithPhantom : State := { released with dependencies := [phantom] }
+/-- Two independent allocators; only the outside allocator has a live allocation. -/
+def releaseInput : State := { outer with
+  dependencies := [⟨⟨4⟩, [⟨1⟩], [⟨1⟩]⟩] }
+
+/-- Mutant: a successful release also invalidates the unrelated live allocator. -/
+def releaseAll (s : State) (i : BrandId) : Option State :=
+  (release s i).map fun t => { t with binders := t.binders.map fun b =>
+    { b with allocatorLive := false } }
+
+/-- Mutant: successful scope exit lets a dependent value retain the departed brand. -/
+def endScopeLeak (s : State) (scope : BlockId) : Option State :=
+  (endScope s scope).map fun t => { t with dependencies := s.dependencies ++
+    (s.binders.filterMap (fun b => if b.scope = scope then
+      some ⟨⟨s.nextBrand + b.brand.id⟩, [b.brand], []⟩ else none)) }
+
+/-- The successful witnesses retain an unrelated dependency. -/
+example : (release releaseInput ⟨0⟩).isSome = true ∧
+    (endScope departing ⟨0⟩).isSome = true := by decide
+
 abbrev binder0 : Binder := ⟨⟨0⟩, ⟨0⟩, ⟨0⟩, true⟩
 
 /-- Mutant: fresh binder allocation fails to advance `nextBrand`. -/
@@ -530,13 +549,13 @@ example : ResultSatisfies WellFormed (consume dependent ⟨0⟩) :=
 example : WellFormed dependent ∧
     ¬ ResultSatisfies WellFormed (consumeDropBinders dependent ⟨0⟩) := by decide
 
-/-- Instance (law `ConcreteSpec.Core.Generative.release_preserves`, case `ConcreteSpec.Core.Generative.PreservationWitnesses.dependent`). -/
-example : ResultSatisfies WellFormed (release dependent ⟨0⟩) :=
-  @release_preserves dependent ⟨0⟩ (by decide)
+/-- Instance (law `ConcreteSpec.Core.Generative.release_preserves`, case `ConcreteSpec.Core.Generative.PreservationWitnesses.releaseInput`). -/
+example : ResultSatisfies WellFormed (release releaseInput ⟨0⟩) :=
+  @release_preserves releaseInput ⟨0⟩ (by decide)
 
-/-- Planted (law `ConcreteSpec.Core.Generative.release_preserves`, case `ConcreteSpec.Core.Generative.PreservationWitnesses.dependent`, subject `ConcreteSpec.Core.Generative.release`, mutant `ConcreteSpec.Core.Generative.PreservationWitnesses.releaseIgnoreLiveDeps`). -/
-example : WellFormed dependent ∧
-    ¬ ResultSatisfies WellFormed (releaseIgnoreLiveDeps dependent ⟨0⟩) := by decide
+/-- Planted (law `ConcreteSpec.Core.Generative.release_preserves`, case `ConcreteSpec.Core.Generative.PreservationWitnesses.releaseInput`, subject `ConcreteSpec.Core.Generative.release`, mutant `ConcreteSpec.Core.Generative.PreservationWitnesses.releaseAll`). -/
+example : WellFormed releaseInput ∧
+    ¬ ResultSatisfies WellFormed (releaseAll releaseInput ⟨0⟩) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.Generative.reset_preserves`, case `ConcreteSpec.Core.Generative.Examples.initial`). -/
 example : ResultSatisfies WellFormed (reset initial ⟨0⟩) :=
@@ -639,30 +658,30 @@ example : ¬ ResultSatisfies (fun t : State =>
       t.nextBrand = initial.nextBrand + 1 ∧ ∃ b ∈ t.binders, b.brand = ⟨initial.nextBrand⟩)
     (resetNoAdvance initial ⟨0⟩) := by decide
 
-/-- Instance (law `ConcreteSpec.Core.Generative.endScope_non_escape`, case `ConcreteSpec.Core.Generative.PreservationWitnesses.releasedWithPhantom`). -/
+/-- Instance (law `ConcreteSpec.Core.Generative.endScope_non_escape`, case `ConcreteSpec.Core.Generative.PreservationWitnesses.departing`). -/
 example : ResultSatisfies (fun t : State =>
-      ∀ b ∈ releasedWithPhantom.binders, b.scope = ⟨0⟩ → ∀ d ∈ t.dependencies, b.brand ∉ d.brands)
-    (endScope releasedWithPhantom ⟨0⟩) :=
-  @endScope_non_escape releasedWithPhantom ⟨0⟩
+      ∀ b ∈ departing.binders, b.scope = ⟨0⟩ → ∀ d ∈ t.dependencies, b.brand ∉ d.brands)
+    (endScope departing ⟨0⟩) :=
+  @endScope_non_escape departing ⟨0⟩
 
-/-- Planted (law `ConcreteSpec.Core.Generative.endScope_non_escape`, case `ConcreteSpec.Core.Generative.PreservationWitnesses.releasedWithPhantom`, subject `ConcreteSpec.Core.Generative.endScope`, mutant `ConcreteSpec.Core.Generative.PreservationWitnesses.endScopeIgnoreDeps`). -/
+/-- Planted (law `ConcreteSpec.Core.Generative.endScope_non_escape`, case `ConcreteSpec.Core.Generative.PreservationWitnesses.departing`, subject `ConcreteSpec.Core.Generative.endScope`, mutant `ConcreteSpec.Core.Generative.PreservationWitnesses.endScopeLeak`). -/
 example : ¬ ResultSatisfies (fun t : State =>
-      ∀ b ∈ releasedWithPhantom.binders, b.scope = ⟨0⟩ → ∀ d ∈ t.dependencies, b.brand ∉ d.brands)
-    (endScopeIgnoreDeps releasedWithPhantom ⟨0⟩) := by decide
+      ∀ b ∈ departing.binders, b.scope = ⟨0⟩ → ∀ d ∈ t.dependencies, b.brand ∉ d.brands)
+    (endScopeLeak departing ⟨0⟩) := by decide
 
-/-- Instance (law `ConcreteSpec.Core.Generative.allocations_have_live_allocator`, case `ConcreteSpec.Core.Generative.PreservationWitnesses.dependent`). -/
+/-- Instance (law `ConcreteSpec.Core.Generative.allocations_have_live_allocator`, case `ConcreteSpec.Core.Generative.PreservationWitnesses.releaseInput`). -/
 example : ResultSatisfies (fun t : State =>
       ∀ d ∈ t.dependencies, ∀ j ∈ d.allocations,
         ∃ b ∈ t.binders, b.brand = j ∧ b.allocatorLive = true)
-    (release dependent ⟨0⟩) :=
-  @allocations_have_live_allocator dependent ⟨0⟩ (by decide)
+    (release releaseInput ⟨0⟩) :=
+  @allocations_have_live_allocator releaseInput ⟨0⟩ (by decide)
 
-/-- Planted (law `ConcreteSpec.Core.Generative.allocations_have_live_allocator`, case `ConcreteSpec.Core.Generative.PreservationWitnesses.dependent`, subject `ConcreteSpec.Core.Generative.release`, mutant `ConcreteSpec.Core.Generative.PreservationWitnesses.releaseIgnoreLiveDeps`). -/
-example : WellFormed dependent ∧
+/-- Planted (law `ConcreteSpec.Core.Generative.allocations_have_live_allocator`, case `ConcreteSpec.Core.Generative.PreservationWitnesses.releaseInput`, subject `ConcreteSpec.Core.Generative.release`, mutant `ConcreteSpec.Core.Generative.PreservationWitnesses.releaseAll`). -/
+example : WellFormed releaseInput ∧
     ¬ ResultSatisfies (fun t : State =>
       ∀ d ∈ t.dependencies, ∀ j ∈ d.allocations,
         ∃ b ∈ t.binders, b.brand = j ∧ b.allocatorLive = true)
-      (releaseIgnoreLiveDeps dependent ⟨0⟩) := by decide
+      (releaseAll releaseInput ⟨0⟩) := by decide
 
 end PreservationWitnesses
 
@@ -1210,6 +1229,13 @@ def runOpsRevive {H : Type} (s : State H) (ops : List (Op H)) : Option (State H)
   (runOps s ops).map fun t =>
     { t with resources := t.resources.map fun r => { r with live := true } }
 
+/-- Mutant: successful acquisition inserts an ungranted right into its child. -/
+def acquireEscalate {H : Type} (s : State H) (i : GrantId) (requested selected : List Nat)
+    (permissions : List Cap) (allowed : Bool) (handle : H) : Option (State H) :=
+  (acquire s i requested selected permissions allowed handle).map fun t =>
+    { t with resources := (AList.update t.resources ⟨s.next⟩
+      (fun r => { r with rights := 99 :: r.rights })) }
+
 -- Grant laws (13)
 
 /-- Instance (law `ConcreteSpec.Core.Grants.narrow_bounded`, case `ConcreteSpec.Core.Grants.Examples.initial`). -/
@@ -1221,13 +1247,13 @@ example : Bounded launchBudget initial ∧
     ¬ ResultSatisfies (Bounded launchBudget) (narrowTakeRequested initial ⟨0⟩ [1, 2]) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.Grants.acquire_bounded`, case `ConcreteSpec.Core.Grants.Examples.initial`). -/
-example : ResultSatisfies (Bounded launchBudget) (acquire initial ⟨0⟩ [1, 2] [2] [.fs] true 99) :=
-  @acquire_bounded Nat launchBudget initial ⟨0⟩ [1, 2] [2] [.fs] true 99 (by decide)
+example : ResultSatisfies (Bounded launchBudget) (acquire initial ⟨0⟩ [1, 2] [1] [.fs] true 99) :=
+  @acquire_bounded Nat launchBudget initial ⟨0⟩ [1, 2] [1] [.fs] true 99 (by decide)
 
-/-- Planted (law `ConcreteSpec.Core.Grants.acquire_bounded`, case `ConcreteSpec.Core.Grants.Examples.initial`, subject `ConcreteSpec.Core.Grants.acquire`, mutant `ConcreteSpec.Core.Grants.GrantWitnesses.acquireUncheckedSelected`). -/
+/-- Planted (law `ConcreteSpec.Core.Grants.acquire_bounded`, case `ConcreteSpec.Core.Grants.Examples.initial`, subject `ConcreteSpec.Core.Grants.acquire`, mutant `ConcreteSpec.Core.Grants.GrantWitnesses.acquireEscalate`). -/
 example : Bounded launchBudget initial ∧
     ¬ ResultSatisfies (Bounded launchBudget)
-      (acquireUncheckedSelected initial ⟨0⟩ [1, 2] [2] [.fs] true 99) := by decide
+      (acquireEscalate initial ⟨0⟩ [1, 2] [1] [.fs] true 99) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.Grants.close_bounded`, case `ConcreteSpec.Core.Grants.Examples.initial`). -/
 example : ResultSatisfies (fun r : CloseResult × State Nat => Bounded launchBudget r.2)
