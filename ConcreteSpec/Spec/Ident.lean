@@ -143,7 +143,8 @@ structure Span where
 
 /-- A span's path is relative to the project root and uses forward slashes: it is not empty,
 does not start with `/`, and holds no `\`. This is the minimal syntactic check; that the path is
-the one normalized path of its file (no `.` or `..` segment, no empty segment) is part of
+the one normalized path of its file (no drive prefix such as `C:`, no `.` or `..` segment, no
+empty segment) is part of
 elaboration's site-table obligation (README obligation O1). -/
 def Span.PathOk (sp : Span) : Prop :=
   sp.path.toList ≠ [] ∧ sp.path.toList.head? ≠ some '/' ∧ '\\' ∉ sp.path.toList
@@ -200,8 +201,8 @@ example : ¬ (Span.mk "src\\main.con" 3 5 (by decide) (by decide)).PathOk := by 
 different locals. -/
 example : Var.mk "x" 0 ≠ Var.mk "x" 1 := by decide
 
-/-- The hint is part of the identity too; elaboration never gives two locals one number, so this
-pair never arises from a program. -/
+/-- The hint is part of the identity too; elaboration never gives two locals of one function one
+number, so this pair never arises within one function. -/
 example : Var.mk "x" 0 ≠ Var.mk "y" 0 := by decide
 
 /-- A revised rule is a different rule identity. -/
