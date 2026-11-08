@@ -22,8 +22,8 @@ theorem source_trap_column (path : String) (line : Nat) (linePositive : 0 < line
       trapLine kind site ⟨path, line, column, linePositive, columnPositive⟩ := by
   intro equal
   obtain ⟨_, _, spanEqual⟩ := trapLine_injective equal
-  have columnEqual := congrArg Span.col spanEqual
-  exact wrong columnEqual.symm
+  cases spanEqual
+  exact wrong rfl
 
 /-- A planted source-position producer counts Unicode scalars instead of UTF-8 bytes. -/
 def scalarColumnSpan (path : String) (line : Nat) (linePositive : 0 < line)
