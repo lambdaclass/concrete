@@ -72,7 +72,7 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 - Language and process decisions: no method calls or receivers, no `as`, always-qualified imports, no `char`, trap names, review sign-off ([row](#decided-2026-11-08-language)).
 - Owner sign-offs of slice 0, record-language and one repository ([row](#decided-2026-11-08-signoffs)).
 - The landing protection redesign: server-side protection of `main` ([row](#decided-2026-11-08-landing-redesign)).
-- Commit and push everything all the time ([row](#decided-2026-11-08-commit-push)).
+- Commit each validated piece and push it at once to the push remotes in force ([row](#decided-2026-11-08-commit-push)).
 - Codex, Kimi and agy write; Claude reviews ([row](#decided-2026-11-08-writers)).
 - Byte-for-byte sweeps into `legacy/`, and `docs/archive/` moves there ([sweep](#decided-2026-11-08-legacy-sweep), [archive](#decided-2026-11-08-archive-move)).
 - Every branch gets an agy review too ([row](#decided-project-review)).
@@ -297,7 +297,7 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 - **P2** Priority order when principles conflict — Soundness and provability > transparency (with auditability, honest trust boundaries and compiler-owned identity) > one authoritative definition (checked derived views allowed) > explicitness at the use site > brevity. The philosophy guides open choices and never silently reopens decided rules.
 - **P3** Lean is the spec: confirm the amendment — Lean is the specification: confirmed together with Q9.15 (revision below).
 - **P4** Duplicate enum variants or methods (bug 313) — Refuse duplicate variant names in one enum and duplicate method names in one impl, with a new rule and diagnostic, the same as duplicate fields.
-- **P5** legacy/ is a byte-frozen snapshot, never patched or run — legacy/ is main's tree at the move commit, byte-frozen. A root check compares its tree hash, allowing only deletions a satisfied RETENTION.tsv entry authorizes. No legacy gate ever runs. The oracle is the tag-built artifact (P13), not the legacy/ copy. *Revised 2026-11-08 (owner, "ok to 1"): legacy/ also grows by byte-for-byte sweeps recorded in scripts/checks/legacy.lock; no file, once frozen or swept, is ever rewritten ([sweep row](#decided-2026-11-08-legacy-sweep)).*
+- <a id="decided-2026-11-05-p5"></a>**P5** legacy/ is a byte-frozen snapshot, never patched or run — legacy/ is main's tree at the move commit, byte-frozen. A root check compares its tree hash, allowing only deletions a satisfied RETENTION.tsv entry authorizes. No legacy gate ever runs. The oracle is the tag-built artifact (P13), not the legacy/ copy. *Revised 2026-11-08 (owner, "ok to 1"): legacy/ also grows by byte-for-byte sweeps recorded in scripts/checks/legacy.lock; no file, once frozen or swept, is ever rewritten ([sweep row](#decided-2026-11-08-legacy-sweep)).*
 - **P6** Retention manifest gates deleting legacy/ — RETENTION.tsv at the root gives every legacy asset (corpus, regressions, examples, std, bug ledger, site, docs, research) a destination and deletion criterion. Revised 2026-11-06 ([restart row](#decided-project-restart)): nothing is deleted at B3; legacy/, the old pipeline included, is deleted way later (LD: once the new compiler implements a full real program such as RocksDB, ethrex or similar), when RETENTION.tsv has no live entry, a final ideas sweep has dispositioned every idea and the owner explicitly approves.
 - **P7** Prove the new landing path before moving — T0: land beside the old tree the new root CI, required-checks.txt (enforced by train watch and land), RETENTION.tsv, the task disposition table, ORACLE.lock with the oracle artifact, and ISSUES.tsv. T1: rehearse the move on a throwaway branch: fresh clone, build, hook, exact-SHA CI, train --dry-run land; a broken build, a failing gate and a missing required check must each be refused. T2: the move in one train.
 - **P8** Server services under scripts/ — Keep only landing services: train, review, hook, landing bot. The status page, work queue, fuzz farm, perf tracking and nightly campaign all stop and are recorded as archived in RETENTION.tsv; each returns only with a roadmap task.
@@ -1126,7 +1126,9 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
      review leg, the gates and the `legacy/` protection; drop the landing bot, notify, install-bot,
      the systemd units and duplicate helpers; the old copies move to `legacy/` (R-0617).
   4. <a id="decided-2026-11-08-quota"></a>*Claude's quota goes to the critical path:* the spec, slice 0
-     and the front end. Mechanical work goes to Codex and Kimi as writers.
+     and the front end. Mechanical work goes to Codex and Kimi as writers. Revised 2026-11-08
+     ([writers](#decided-2026-11-08-writers)): agy writes too; Claude briefs, reviews, runs the gates
+     and lands.
   5. <a id="decided-2026-11-08-front-end"></a>*The front end starts now.* The lexer and the LL(1)
      parser are written now, in parallel with the foundation (R-0620); since the later answer "ok do
      the written grammar", the parser waits for the owner-approved written grammar and its Lean
@@ -1376,28 +1378,21 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   land.
 - <a id="decided-2026-11-08-commit-push"></a>**Commit and push everything all the time** (owner,
   2026-11-08: "commit and push everything all the time"). Every piece is committed as soon as it
-  builds and its checks pass, and pushed to `origin` and `lambdaclass` at once: on `wip/` branches,
-  from a full clone, with the hook on, and never force-pushed. `main` changes only through the train.
+  builds and its checks pass, then pushed at once to the push remotes in force. Today those are
+  `origin` and `lambdaclass`. Once one repository lands, only `lambdaclass/concrete` remains
+  ([landing redesign](#decided-2026-11-08-landing-redesign), step 2). Pushes use `wip/` branches,
+  from a full clone, with the hook on, and are never force-pushed. `main` changes only through the train.
   A candidate under review stays fixed; new work goes in new commits or branches.
 - <a id="decided-2026-11-08-writers"></a>**Codex, Kimi and agy write; Claude reviews** (owner,
-  2026-11-08: "can you have kimi, codex and agy implement things and we just review it"). This extends
-  [Claude's quota on the critical path](#decided-2026-11-08-quota), which named only Codex and Kimi as
-  writers. Codex, Kimi and agy implement. Each works in its own fresh full clone on its own `wip/`
-  branch. Codex uses `codex exec -s danger-full-access`; Kimi uses `kimi -p`, never `--yolo` or
-  `--auto`; agy uses `agy -p` with its inputs inline because it cannot read files. Runs are bounded by
-  `systemd-run` with `TasksMax` and `MemoryMax`, under `timeout`, with at most two heavy runs per
-  machine. Claude briefs, reviews the diff, runs the gates and lands. The two models that did not write
-  the diff cross-review it. A writer never reviews its own work, and findings go back to the writer.
-  Claude writes a fix itself only when a reviewer pinpointed a small change, and says so. For decision
-  records, Kimi or Codex drafts the text, Claude checks it against the quotes and the others review.
-  The one decisions writer still owns `docs/decisions.md` and `ROADMAP.md`.
+  2026-11-08: "can you have kimi, codex and agy implement things and we just review it"). Codex, Kimi
+  and agy implement. Claude briefs, reviews, runs the gates and lands.
 - <a id="decided-2026-11-08-legacy-sweep"></a>**Byte-for-byte sweeps into `legacy/`** (owner,
   2026-11-08: "ok to 1", answering legacy sweep question 1). `legacy_frozen.sh` may accept an addition
   under `legacy/` only if it is byte-identical to the same root path at a named commit, and the file
   is gone from the root. Every other addition or edit stays refused, and the rule has negative
   controls. The sweeps are recorded in `scripts/checks/legacy.lock`. The check judges the history
   that landed on `main`: no lock line is rewritten or removed, and no `legacy/` file changes from a
-  version it once had there. No file, once frozen or swept, is ever rewritten ([P5](#decided-project-restart)).
+  version it once had there. No file, once frozen or swept, is ever rewritten ([P5](#decided-2026-11-05-p5)).
 - <a id="decided-2026-11-08-archive-move"></a>**All of `docs/archive/` moves under `legacy/`** (owner,
   2026-11-08: "ok to 2", answering legacy sweep question 2). This includes the decision sources and the
   reconciliation and restructure records that P21 kept at the root. It is done by the byte-for-byte
