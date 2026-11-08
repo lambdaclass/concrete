@@ -9,6 +9,7 @@ gives the order of work once they hold.
 - The lexer (`wip/slice0-lexer`) is on main.
 - The spelling dependencies in §4 are clear: every row marked *pending* or *open question* has the
   owner's answer.
+- The owner has answered the scope question in §1.
 - The foundation is written and frozen ([foundation first](../decisions.md#decided-2026-11-07-foundation-first):
   "Before slice 1 builds on it, the shared foundation is fully written in the Lean spec and
   frozen"). ROADMAP orders A2c, the Core freeze, before B1.
@@ -60,14 +61,17 @@ slice 0. LP0 (R-0572) follows it.
 - declared-`Copy` structs;
 - field-wise known values.
 
-Before launch the coordinator decides between two options, each needing its own proof:
+This is a spec design question for the owner, and the answer is a launch condition. The two
+options, each needing its own proof:
 - **(a) A compiler-subset predicate.** The compiler admits a subset defined by an explicit predicate
   over that Core, the way slice 0 is embedded by `toCore`. A proof shows that the predicate is
   closed under the passes.
 - **(b) Narrowing the spec.** The spec is narrowed to the slice. This is a spec change with its own
   review.
 
-This brief does not choose between them.
+Recommendation: (a). It follows the pattern slice 0 already uses (`toCore`). It also keeps the
+rules that slices 2, 3 and 9 need, which (b) would delete and later re-add. The spec stays the one
+source, and the compiler's subset is stated in it rather than being a second, narrower copy.
 
 ## 2. The programs it must build
 
@@ -91,11 +95,12 @@ and on both native builds.
    holds; `checked_exits` no longer holds as stated (§3.2).
 6. **The predictable policy.** With `[policy]` turned on in `Concrete.toml`:
    - program 1 is accepted;
-   - a refusal control is refused, naming the function, the fact and its source (R-0576).
+   - two refusal controls are refused, each naming the function, the fact and its source: a planted
+     violation and a planted unknown fact (R-0576 requires both).
 
    Every slice-1 program establishes the policy's facts (no allocation, no blocking, no foreign
-   calls, no loops), so no slice-1 source program can violate the policy. The refusal control
-   therefore plants an unknown policy fact, as R-0576's control does. The fact must be one the
+   calls, no loops), so no slice-1 source program can violate the policy. Both controls are
+   therefore planted, as R-0576's controls are. The fact must be one the
    policy alone refuses, not a stack bound, because an unknown stack bound is refused from slice 0
    regardless of policy ([stack bounds](../decisions.md#decided-2026-11-07-stack-randomness)).
 7. **Assumptions.** A change to `[assumptions]` without a matching record fails the
@@ -151,7 +156,10 @@ spec change (cap 5) must:
 - **Already in the lexer** (`Concrete/Lex.lean` and `Spec/Surface0.lean` at `7e8c926c`): UTF-8
   decoding and source checking, with soundness and completeness; identifier start and continue;
   `//` line comments.
-- **Still open in the lexer:** the first-error-offset property (a TODO).
+- **Still open in the lexer:**
+  - whitespace (space, tab, LF and CR, item 30, decided): `7e8c926c` introduces no whitespace
+    rules yet;
+  - the first-error-offset property (a TODO).
 - **New tokens:** the struct-declaration keyword, and however `abort` lexes, as a reserved word or
   as an identifier resolved against the builtin table. Both depend on §4.
 - **The grammar:** the parser waits for the written grammar (R-0622), its Lean `Grammar` judgment
@@ -180,22 +188,25 @@ This brief chooses none of them.
 
 | # | form | used by | status | source |
 |---|---|---|---|---|
-| 1 | `fn main() -> u8 { … }` | every program | decided by the slice-0 surface, and also covered by R-0625 | the slice-0 surface ([row](../decisions.md#decided-slice0-surface-2026-11-06)), implemented at `ea5181b5`. Item 18's result arrow is among items 6–29, so the spelling round may revisit it, and slice 0 would then change with it |
-| 2 | `let x: u8 = e;` | every program | decided by the slice-0 surface, and also covered by R-0625 | as row 1; the item is 18 (written types) |
+| 1 | `fn main() -> u8 { … }` | every program | pending (R-0625) | item 18's result arrow is among items 6–29, whose spellings are illustrative. Slice 0 implements this text at `ea5181b5`, and would change with the round's answer |
+| 2 | `let x: u8 = e;` | every program | pending (R-0625) | item 18 (written types), as row 1 |
+| 2a | a `let` of struct type: `let t: Token = Token {};` and `let u: Token = t;` in the spec | programs 1–3 | pending (R-0625) | item 18; the type is a struct name |
 | 3 | reads of `u8` (Copy) locals as a plain name | programs 1 and 4 | decided by the slice-0 surface | slice 0 implements them; Core's `copy x` is the elaborated form (Q9.1) |
 | 4 | decimal literals, leading zero refused | every program | decided | slice-0 surface row; typed suffixes are not needed (item 41, pending) |
 | 5 | checked `a + b`, parentheses, `return a;` | every program | decided | slice 0; ARITH-3 |
-| 6 | `//` comments, ASCII case-sensitive identifiers | every program | decided | items 30 and 31 (grammar items, decided as written) |
+| 6 | `//` comments; whitespace (space, tab, LF, CR); ASCII case-sensitive identifiers | every program | decided | items 30 and 31 (grammar items, decided as written). The lexer does not implement whitespace yet (§3.3) |
 | 7 | struct declaration: the keyword and the empty field list (`struct Token {}` in the spec) | programs 1–3, 5 and 6 | pending (R-0625) | empty structs are kept (item 50, which is among items 40–53, so its text is illustrative). The declaration text comes with R-0622, after R-0625 |
 | 8 | empty struct literal (`Token {}` in the spec) | programs 1–3, 5 and 6 | pending (R-0625) | item 8 (constructors write `field: value`) is illustrative. The empty case's text is in the round |
 | 9 | empty destructuring pattern (`let Token {} = u;` in the spec) | programs 1 and 2 | pending (R-0625) | item 9 (patterns write `field: binder`) is illustrative |
 | 10 | the type written on a destructuring `let` | programs 1 and 2 | pending (R-0625) | item 18 requires a written type on every local; item 55 leaves the destructuring typing rule to the round |
 | 11 | surface read of a linear local (a plain `t` in the spec's examples, `move t` in Core) | programs 1 and 2 | open question | Q9.1 fixes Core's reads, not the source text. Item 12 is the heap move-out, a different form. The owner decides whether this goes into R-0625 |
 | 12 | `abort()` as written | program 5 | decided | Q8.2's revision and the slice table write `abort()`; the trap kind `abort` is item 4 |
-| 13 | `abort`'s place in the closed builtin inventory and its signature (result type) | program 5 | pending (R-0625) | item 59 (OPEN-4: the closed builtin inventory and exhaustive signatures) |
+| 13 | `abort`'s place in the closed builtin inventory | program 5 | pending (R-0625) | item 59 (OPEN-4, the closed builtin inventory) |
+| 13a | `abort`'s signature (its result type) | program 5 | open question | item 59 promises exhaustive signatures only for the view, constant-time, text, container and branded APIs; `abort` is not named there |
 | 14 | where `abort()` may stand in a slice-1 body: as a statement, or as a value under `return` | program 5 | open question | slice-1 bodies are `let`s followed by `return`, and the Unit statement rule (OD29) arrives at slice 3 |
 | 15 | the struct keyword and slice 1's other words in the reserved-word table | lexer | pending (R-0625) | item 40 fixes some reservations, and the revision of OD90 keeps `Copy` reserved. The full table is part of R-0622, after R-0625 |
-| 16 | `Concrete.toml` `[policy]` and `[assumptions]`: key names, the version field, and how the predictable policy is turned on | programs 6 and 7 | open question | the tables are decided as typed and versioned, with unknown keys and versions refused ([row](../decisions.md#decided-project-concrete-toml)); their text is not. This is project configuration, not R-0625 language syntax, so it goes to the owner separately |
+| 16 | `Concrete.toml` table names `[policy]` and `[assumptions]` | programs 6 and 7 | decided | typed and versioned tables, with unknown keys and versions refused ([row](../decisions.md#decided-project-concrete-toml)) |
+| 16a | their key names and values, the version field, and how the predictable policy is turned on | programs 6 and 7 | open question | not decided. This is project configuration, not R-0625 language syntax, so it goes to the owner separately |
 | 17 | rule IDs in diagnostics and facts (for example `StmtOk.let_.admitted@2`) | all | decided | derived from the Lean rule's name and its revision ([row](../decisions.md#decided-project-diagnostics-2026-11-06)) |
 
 ## 5. Gates (the definition of done)
@@ -241,8 +252,19 @@ whole-compiler `decide`. A planted wrong witness at any edge is rejected.
 **Provenance (R-0521).** Minimal provenance and the canonical verification task accompany slice 1's
 authoritative claims: compiler, source, theorem and executable digest.
 
-**Policy and assumptions (R-0576, R-0589).** Program 6's controls pass, the policy refusal coming
-from a policy-only fact. The assumption-diff check fails on an unrecorded change.
+**Identity, payload and artifact controls.**
+- R-0492: alias, symbol, binding and forgery controls.
+- R-0514: substituting a different Core payload is refused.
+- R-0497: forgery, mutation and bypass compile-fail controls.
+- R-0504: substitutions and wrong artifacts are rejected.
+- R-0528: each input class has a limit and a hostile fixture.
+- R-0479: diagnostics name the valid next action.
+- R-0118: a missing coverage row or a synthetic constructor fails the gate.
+
+These are B1 obligations, not existing slice-0 legs.
+
+**Policy and assumptions (R-0576, R-0589).** Program 6's planted violation and planted unknown fact
+are both refused, each from a policy-only fact. The assumption-diff check fails on an unrecorded change.
 
 **Launcher (Q8.5).** The pinned launcher ABI and trap mapping match the Lean observation for
 program 5.
@@ -274,8 +296,8 @@ AGENTS.md's "Who works on what" (Claude on the spec, slice 0 and the front end) 
 The decisions writer reconciles the two texts.
 
 **Order once the launch conditions hold:**
-1. The spec change for `abort()` and the revised exit theorems (§3.2), and the coordinator's
-   choice in §1 between a compiler-subset predicate and a narrowed spec.
+1. The spec change for `abort()` and the revised exit theorems (§3.2), shaped by the owner's answer
+   to §1.
 2. Lowering and backend extensions from Core abstract syntax: struct values, moves, destructuring
    and the explicit trap.
 3. Facts, diagnostics, policy, assumptions and the launcher.
