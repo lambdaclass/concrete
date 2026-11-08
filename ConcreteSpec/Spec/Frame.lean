@@ -167,11 +167,16 @@ example : ¬ (⟨⟨0⟩, 4, 4⟩ : ByteRange).Disjoint ⟨⟨0⟩, 7, 2⟩ ∧
 /-- Accepted: a zero-extent range is disjoint from every range, including itself. -/
 example : (⟨⟨0⟩, 4, 0⟩ : ByteRange).Disjoint ⟨⟨0⟩, 4, 0⟩ := by decide
 
-/-- Accepted: a nonempty byte footprint still leaves the written block's metadata framed. -/
-example : (Footprint.byte ⟨⟨0⟩, 4, 4⟩).BlockOutside ⟨0⟩ := by decide
+/-- Accepted: a nonempty byte footprint still leaves the written block's metadata framed; a
+lifecycle footprint frames other blocks, and a union frames a block absent from both components. -/
+example : (Footprint.byte ⟨⟨0⟩, 4, 4⟩).BlockOutside ⟨0⟩ ∧
+    (Footprint.block ⟨0⟩).BlockOutside ⟨1⟩ ∧
+    (Footprint.union (.byte ⟨⟨0⟩, 4, 4⟩) (.block ⟨1⟩)).BlockOutside ⟨0⟩ := by decide
 
-/-- Refused: a lifecycle footprint claims its block's metadata even though it writes no bytes. -/
-example : ¬ (Footprint.block ⟨0⟩).BlockOutside ⟨0⟩ := by decide
+/-- Refused: a lifecycle footprint claims its block's metadata even though it writes no bytes, and
+a union cannot frame metadata claimed by either component. -/
+example : ¬ (Footprint.block ⟨0⟩).BlockOutside ⟨0⟩ ∧
+    ¬ (Footprint.union (.block ⟨0⟩) .empty).BlockOutside ⟨0⟩ := by decide
 
 /-- Accepted: returning without a destination restores exactly the caller's association list. -/
 example {V : Type} (v : V) (caller : AList Var V) : Exec.bindDst none v caller = caller := rfl
