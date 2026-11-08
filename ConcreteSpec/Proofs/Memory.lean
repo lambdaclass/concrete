@@ -286,4 +286,106 @@ theorem fromExposed_sound (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
         simpa using hh
     next => cases h
 
+/-- A valid nonempty access identifies a live block and an in-bounds offset. -/
+theorem access_some (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat) (b : MemBlockId)
+    (off : Nat) (h : m.access tgt p n a = some (some (b, off))) :
+    ∃ x, p.prov = some b ∧ m.block b = some x ∧ n ≠ 0 ∧ x.live = true ∧
+      x.space = p.space ∧ x.base ≤ p.addr ∧ p.addr + n ≤ x.base + x.size ∧
+      p.addr % a = 0 ∧ off = p.addr - x.base := by
+  unfold Memory.access at h
+  split at h
+  next => split at h <;> cases h
+  next hn =>
+    cases hp : p.prov with
+    | none => simp [hp] at h
+    | some c =>
+      simp only [hp] at h
+      cases hx : m.block c with
+      | none => simp [hx] at h
+      | some x =>
+        simp only [hx] at h
+        split at h
+        next hv => cases h; exact ⟨x, rfl, hx, hn, hv.1, hv.2.1, hv.2.2.1,
+          hv.2.2.2.1, hv.2.2.2.2, rfl⟩
+        next => cases h
+
+/-- Replacing a range reads back exactly that range. -/
+theorem splice_read (xs bs : List MByte) (off : Nat) (h : off ≤ xs.length) :
+    ((xs.take off ++ bs ++ xs.drop (off + bs.length)).drop off).take bs.length = bs := by
+  rw [List.append_assoc, List.drop_append_of_le_length (by simp [List.length_take, Nat.min_eq_left h])]
+  simp
+
+/-- The bytes before and after a splice are unchanged, including uninitialized bytes and fragments. -/
+theorem splice_frame (xs bs : List MByte) (off i : Nat)
+    (hb : off + bs.length ≤ xs.length) (hi : i < off ∨ off + bs.length ≤ i) :
+    (xs.take off ++ bs ++ xs.drop (off + bs.length))[i]? = xs[i]? := by
+  have ho : off ≤ xs.length := by omega
+  have hl : (xs.take off).length = off := by simp [List.length_take, Nat.min_eq_left ho]
+  rcases hi with hi | hi
+  · rw [List.getElem?_append_left (by simp [hl]; omega)]
+    rw [List.getElem?_append_left (by omega)]
+    exact List.getElem?_take_of_lt hi
+  · rw [List.getElem?_append_right (by simp [hl]; omega)]
+    simp only [List.length_append, hl, List.getElem?_drop]
+    congr 1
+    omega
+
+theorem store_load (tgt : Target) (m m' : Memory) (hw : m.WellFormed tgt)
+    (p : Ptr) (bs : List MByte) (a : Nat) (h : m.store tgt p bs a = some m') :
+    m'.load tgt p bs.length a = some bs := by
+  unfold Memory.store at h
+  cases ha : m.access tgt p bs.length a with
+  | none => simp [ha] at h
+  | some v =>
+    rw [ha] at h
+    cases v with
+    | none =>
+      cases h
+      have hz : bs.length = 0 := by
+        unfold Memory.access at ha
+        split at ha
+        next hn => exact hn
+        next => split at ha <;> (try split at ha) <;> (try split at ha) <;> cases ha
+      have he : bs = [] := List.eq_nil_of_length_eq_zero hz
+      subst bs
+      simp only [Memory.load, ha]
+    | some v =>
+      obtain ⟨b, off⟩ := v
+      cases h
+      obtain ⟨x, hp, hx, hn, hv, hs, hlo, hhi, hal, hoff⟩ := access_some tgt m p bs.length a b off ha
+      have hsize := hw.sized b x hx
+      have hbound : off + bs.length ≤ x.bytes.length := by omega
+      have ha' : (m.modify b (fun x => { x with bytes := x.bytes.take off ++ bs ++ x.bytes.drop (off + bs.length) })).access tgt p bs.length a = some (some (b, off)) := by
+        simp [Memory.access, hn, hp, hx, hv, hs, hlo, hhi, hal, hoff]
+      simp only [Memory.load, ha', block_modify, ↓reduceIte, hx, Option.map_some]
+      congr 1
+      exact splice_read _ _ _ (by omega)
+
+/-- A store frames every block except its access block. -/
+theorem store_other_block (tgt : Target) (m m' : Memory) (p : Ptr) (bs : List MByte)
+    (a : Nat) (b : MemBlockId) (off : Nat) (c : MemBlockId)
+    (ha : m.access tgt p bs.length a = some (some (b, off)))
+    (h : m.store tgt p bs a = some m') (hc : c ≠ b) : m'.block c = m.block c := by
+  simp only [Memory.store, ha, Option.some.injEq] at h
+  subst m'
+  simp [hc]
+
+/-- A store also frames each byte outside its range in the accessed block. -/
+theorem store_same_block_frame (tgt : Target) (m m' : Memory) (hw : m.WellFormed tgt)
+    (p : Ptr) (bs : List MByte) (a : Nat) (b : MemBlockId) (off i : Nat) (x : Block)
+    (ha : m.access tgt p bs.length a = some (some (b, off)))
+    (hx : m.block b = some x) (h : m.store tgt p bs a = some m')
+    (hi : i < off ∨ off + bs.length ≤ i) :
+    (m'.block b).map (fun y => y.bytes[i]?) = some (x.bytes[i]?) := by
+  simp only [Memory.store, ha, Option.some.injEq] at h
+  subst m'
+  simp only [block_modify, ↓reduceIte, hx, Option.map_some]
+  congr 1
+  obtain ⟨y, _, hy, _, _, _, hlo, hhi, _, hoff⟩ := access_some tgt m p bs.length a b off ha
+  rw [hx] at hy
+  cases hy
+  apply splice_frame _ _ _ _ _ hi
+  have := hw.sized b x hx
+  omega
+
 end ConcreteSpec.Core.Mem
