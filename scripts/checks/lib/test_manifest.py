@@ -73,8 +73,10 @@ def validate_source(path, line, program, seen_sources):
             or pure.is_absolute() or "\\" in relative
             or any(part in ("", ".", "..") for part in parts)):
         fail(path, line, f"con: path {relative!r} must be a normalized tests/*.con path")
+    if len(parts) > 1 and parts[1] == "golden":
+        fail(path, line, f"con: path {relative!r} must not be under tests/golden/")
     tests_dir = path.parent.resolve()
-    source = path.parent.parent / pure
+    source = tests_dir.joinpath(*parts[1:])
     try:
         resolved = source.resolve(strict=True)
     except OSError:
@@ -93,6 +95,7 @@ def validate_source(path, line, program, seen_sources):
 def parse(path, text):
     rows = []
     ids = {}
+    seen_bir = {}
     seen_sources = {}
     header_line = None
     for line_number, line in enumerate(text.splitlines(), 1):
@@ -113,13 +116,19 @@ def parse(path, text):
             fail(path, line_number, f"duplicate id {ident!r} (first at line {ids[ident]})")
         ids[ident] = line_number
         if program.startswith("bir:"):
-            if not ID_RE.fullmatch(program[4:]):
-                fail(path, line_number, f"invalid BIR example name {program[4:]!r}")
+            name = program[4:]
+            if not ID_RE.fullmatch(name):
+                fail(path, line_number, f"invalid BIR example name {name!r}")
+            if name in seen_bir:
+                fail(path, line_number, f"duplicate bir program {name!r} (first at line {seen_bir[name]})")
+            seen_bir[name] = line_number
         elif program.startswith("con:"):
             validate_source(path, line_number, program, seen_sources)
         else:
             fail(path, line_number, f"invalid program {program!r}; expected bir: or con:")
         validate_expect(path, line_number, expect)
+        if program.startswith("bir:") and expect.startswith("refuse "):
+            fail(path, line_number, f"bir: row {ident!r} cannot use refuse; expected exit or trap")
         if not SLICE_RE.fullmatch(slice_name):
             fail(path, line_number, f"invalid slice {slice_name!r}; expected [a-z0-9_]+")
         rows.append(Row(ident, program, expect, slice_name))
@@ -155,6 +164,8 @@ def self_test():
             valid + "c\tbir:other\texit 256\tslice0\n",
             valid + "c\tbir:other\ttrap foo\tslice0\n",
             valid + "c\tbir:other\ttrap arithmeticOverflow site 0\n",
+            valid + "c\tbir:answer\texit 0\tslice0\n",
+            valid + "c\tbir:other\trefuse SYN-5\tslice0\n",
             valid + "c\tcon:tests/slice0/missing.con\texit 0\tslice0\n",
         ]
         for text in bad:

@@ -8,8 +8,9 @@
 # the exact bytes on descriptor 2, and descriptor 1, which must be empty. All three must equal the
 # manifest expectation checked by the emitter (which writes the expected status and stderr bytes).
 #
-# Controls: a wrong expectation must fail in the emitter; a missing row and a nonexistent program
-# must fail inventory (these child runs are emit-only, never native). A body that never returns must
+# Controls: wrong exit and trap expectations must fail in the emitter; a missing row and a
+# nonexistent program must fail opposite inventory directions (these child runs are emit-only,
+# never native). A body that never returns must
 # be observed as incomplete on both backends; a body returning a word that encodes nothing must reach
 # the runtime's refusal; and the comparison itself must reject a missing or extra newline, a wrong
 # status with the right stderr, and stray stdout. Run inside the nix devshell, from the repo root.
@@ -39,21 +40,16 @@ check() {
 }
 
 rows=$(manifest_rows bir)
-printf '%s\n' "$rows" | awk -F '\t' '{sub(/^bir:/, "", $2); print $2}' | LC_ALL=C sort >"$work/manifest-programs"
-emitter_names=$("${emitter[@]}" list | cap_out) || { echo "tests: listing emitter programs failed" >&2; exit 1; }
-printf '%s\n' "$emitter_names" | LC_ALL=C sort >"$work/emitter-programs"
-if ! cmp -s "$work/manifest-programs" "$work/emitter-programs"; then
-  echo "tests: test manifest inventory differs from emitter" >&2
-  diff -u "$work/emitter-programs" "$work/manifest-programs" >&2 || true
-  exit 1
-fi
 
 wrong_expectation() { awk -F '\t' -v OFS='\t' '$1 == "answer" {$3 = "exit 41"} {print}' "$1" >"$1.new"; mv "$1.new" "$1"; }
+wrong_trap_expectation() { awk -F '\t' -v OFS='\t' '$1 == "overflow" {$3 = "trap arithmeticOverflow site 1"} {print}' "$1" >"$1.new"; mv "$1.new" "$1"; }
 missing_row() { awk -F '\t' '$1 != "answer"' "$1" >"$1.new"; mv "$1.new" "$1"; }
-nonexistent_program() { awk -F '\t' -v OFS='\t' '$1 == "answer" {$2 = "bir:no_such_program"} {print}' "$1" >"$1.new"; mv "$1.new" "$1"; }
+nonexistent_program() { printf 'no_such_program\tbir:no_such_program\texit 0\tslice0\n' >>"$1"; }
 manifest_control() { # manifest_control LABEL EXPECTED-MESSAGE MUTATION-FUNCTION
-  local label=$1 expected=$2 mutation=$3 copy="$work/ctl/$1.tsv" rc=0
-  cp "$test_manifest" "$copy"
+  local label=$1 expected=$2 mutation=$3 dir="$work/ctl/$1" copy rc=0
+  mkdir -p "$dir"
+  cp -R "$(dirname "$test_manifest")" "$dir/tests"
+  copy="$dir/tests/$(basename "$test_manifest")"
   "$mutation" "$copy"
   if cmp -s "$test_manifest" "$copy"; then
     echo "FAIL manifest control $label: mutation changed nothing" >&2; fail=1; return
@@ -71,20 +67,22 @@ manifest_control() { # manifest_control LABEL EXPECTED-MESSAGE MUTATION-FUNCTION
 mkdir -p "$work/ctl"
 if [ "${CONCRETE_TEST_MANIFEST_SKIP_CONTROLS:-0}" != 1 ]; then
   manifest_control wrong-expectation "answer: expectation mismatch: BIR run gives" wrong_expectation
-  manifest_control missing-row "tests: test manifest inventory differs from emitter" missing_row
-  manifest_control nonexistent-program "tests: test manifest inventory differs from emitter" nonexistent_program
+  manifest_control wrong-trap-expectation "overflow: expectation mismatch: BIR run gives" wrong_trap_expectation
+  manifest_control missing-row "program without a manifest row: answer" missing_row
+  manifest_control nonexistent-program "manifest row names no program: no_such_program" nonexistent_program
 fi
 
 while IFS=$'\t' read -r name program expect; do
   d="$work/ex/$name"
   read -r -a expectation <<<"$expect"
   "${emitter[@]}" emit "${program#bir:}" "$d" "$target" "${expectation[@]}"
-  # A child running a planted manifest control never reaches a native build, even if its planted
-  # defect is accidentally accepted: the control then fails because the child returned zero.
-  if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" = 1 ]; then exit 0; fi
+  # Emit-only controls cover every row and never reach a native build, even if a planted defect is
+  # accidentally accepted: the control then fails because the child returns zero after the loop.
+  if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" = 1 ]; then continue; fi
   check "$name" "$d" 10 20
   examples=$((examples + 1))
 done <<<"$rows"
+if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" = 1 ]; then exit 0; fi
 "${emitter[@]}" loop "$work/ctl/loop" "$target"
 expected_timeout check control-loop "$work/ctl/loop" 1 1
 "${emitter[@]}" invalid "$work/ctl/invalid" "$target"
