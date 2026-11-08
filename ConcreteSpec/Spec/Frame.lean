@@ -136,4 +136,13 @@ example : ¬ (⟨⟨0⟩, 4, 4⟩ : ByteRange).Disjoint ⟨⟨0⟩, 7, 2⟩ ∧
 /-- Accepted: a zero-extent range is disjoint from every range, including itself. -/
 example : (⟨⟨0⟩, 4, 0⟩ : ByteRange).Disjoint ⟨⟨0⟩, 4, 0⟩ := by decide
 
+/-- Accepted: returning without a destination restores exactly the caller's association list. -/
+example {V : Type} (v : V) (caller : AList Var V) : Exec.bindDst none v caller = caller := rfl
+
+/-- Refused: a loop exit cannot cross a call's `.ret` frame; only a returned value restores its
+caller. -/
+example {O : Exec.Operands} (dst : Option Var) (caller callee : AList Var O.Val)
+    (st : O.Store) (l : LoopId) (k : List (Exec.Frame O)) :
+    Exec.stepExit callee st (.brk l) (.ret dst caller :: k) = none := rfl
+
 end ConcreteSpec.Core.Frame

@@ -1,5 +1,6 @@
 import ConcreteSpec.Spec.Frame
 import ConcreteSpec.Proofs.Memory
+import ConcreteSpec.Proofs.Exec
 
 /-!
 # Laws of logical footprints and frames (foundation C10)
@@ -147,6 +148,48 @@ theorem alloc_fresh_disjoint (tgt : Target) (st : State) (hw : st.memory.WellFor
     (r : ByteRange) (x : Block) (hx : st.memory.block r.block = some x) :
     (fullBlock b size).Disjoint r :=
   .inl (alloc_ne_existing tgt st.memory hw space base size align b r.block m' x h hx)
+
+/-- Entering a C1 call saves the caller's locals in a `.ret` frame, binds the evaluated arguments to
+callee parameters, and preserves the caller's continuation below that frame. -/
+theorem step_call_saves_caller {O : Exec.Operands} (P : Exec.Program O) (dst : Option Var)
+    (f : FnId) (args : List O.Expr) (site : SiteId) (caller : AList Var O.Val)
+    (st stArgs stEnter : O.Store) (k : List (Exec.Frame O)) (vs : List O.Val) (fn : Exec.Fn O)
+    (hv : Exec.evalArgs O caller st args = .ok (vs, stArgs))
+    (hf : AList.lookup P.fns f = some fn) (hlen : fn.params.length = vs.length)
+    (hl : O.life (.enter (fn.params.map Prod.fst)) stArgs = some stEnter) :
+    Exec.step P ⟨.exec (.call dst f args site), caller, st, k⟩ =
+      some (.next ⟨.exec fn.body, (fn.params.map Prod.fst).zip vs, stEnter,
+        .scope fn.block (fn.params.map Prod.fst) [] :: .ret dst caller :: k⟩) := by
+  simp [Exec.step, Exec.onRes, hv, hf, hlen, hl]
+
+/-- A returned value reaching a `.ret` frame with no result destination restores the caller's locals
+and continuation exactly. Only the lifecycle-transformed shared state is threaded through. -/
+theorem step_return_restores_caller {O : Exec.Operands} (P : Exec.Program O) (v : O.Val)
+    (caller callee : AList Var O.Val) (st st' : O.Store) (k : List (Exec.Frame O))
+    (hl : O.life .leave st = some st') :
+    Exec.step P ⟨.exiting (.ret v), callee, st, .ret none caller :: k⟩ =
+      some (.next ⟨.done, caller, st', k⟩) := by
+  simpa [Exec.bindDst] using Exec.step_return_caller P v none caller callee st k st' st' hl rfl
+
+/-- Successful cleanup does not disturb call-frame ownership: after every exited scope has run its
+deferred calls, a return with no destination restores exactly the caller's locals and continuation. -/
+theorem return_cleanup_restores_caller {O : Exec.Operands} (P : Exec.Program O) (v : O.Val)
+    (caller : AList Var O.Val) (k pre : List (Exec.Frame O)) {L : AList Var O.Val}
+    {st stClean stLeave : O.Store} {tr : List O.Event}
+    (h : Exec.Cleans P pre L st tr stClean) (hp : ∀ f ∈ pre, Exec.Passes (.ret v) f)
+    (hl : O.life .leave stClean = some stLeave) :
+    Exec.Steps P ⟨.exiting (.ret v), L, st, pre ++ .ret none caller :: k⟩ tr
+      ⟨.done, caller, stLeave, k⟩ := by
+  simpa [Exec.bindDst] using Exec.return_reaches_caller P v none caller k h hp stLeave stLeave hl rfl
+
+/-- Every complete `C1Call` ends with the result bound into the saved caller locals at the saved
+continuation. With `dst = none`, this is literal equality with the caller locals. -/
+theorem c1Call_restores_caller {O : Exec.Operands} {f : FnId} {P : Exec.Program O}
+    {entry exit : Exec.Config O} (h : C1Call O f P entry exit) :
+    ∃ (dst : Option Var) (result : O.Val) (caller : AList Var O.Val) (k : List (Exec.Frame O)),
+      exit.locals = Exec.bindDst dst result caller ∧ exit.frames = k := by
+  obtain ⟨fn, dst, caller, k, tr, result, hf, hec, hef, hxc, hxl, hxf, hs⟩ := h
+  exact ⟨dst, result, caller, k, hxl, hxf⟩
 
 /-- A complete C1 call has exactly the frame law supplied by its callee contract. -/
 theorem c1_call_frame {O : Exec.Operands} {f : FnId} {P : Exec.Program O}
