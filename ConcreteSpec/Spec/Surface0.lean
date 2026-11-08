@@ -1,13 +1,17 @@
+import ConcreteSpec.Spec.Slice1Syntax
+
 /-!
 # Settled pieces of the slice-0 surface
 
 UTF-8 source validity, NUL/BOM refusal, ASCII identifiers, the four settled whitespace scalars,
 line comments and maximal trivia runs are specified here. String bodies have only the six decided
-escapes and take the undecided treatment of other raw scalars as a parameter. Longest match is
-parametric in an arbitrary table, and decimal integer lexemes refuse leading zeroes. Keywords,
-reserved words, builtins, concrete punctuation and operators, suffixes, other literals, grammar,
-diagnostics and CLI spellings are not defined. There is no shebang or block-comment rule; no other
-Unicode whitespace is included.
+escapes and refuse every raw Unicode general-category-Cc scalar. Byte literals have printable-ASCII
+raw scalars, a parameterized escape relation and the six escapes already decided by SYN-6; labels
+are quote followed by an identifier. Longest match is parametric in an arbitrary table. Integers
+have the decided bases and optional integer-type suffixes, refuse leading zeroes only in decimal,
+and never split an invalid suffix into another token. Keywords, reserved words, builtins, concrete
+punctuation and operators, float literals, grammar, diagnostics and CLI spellings are not defined.
+There is no shebang or block-comment rule; no other Unicode whitespace is included.
 -/
 
 namespace ConcreteSpec.Surface0
@@ -119,21 +123,52 @@ def StringEscape (escaped decoded : Nat) : Prop :=
   (escaped = 114 ∧ decoded = 13) ∨ (escaped = 92 ∧ decoded = 92) ∨
   (escaped = 34 ∧ decoded = 34) ∨ (escaped = 48 ∧ decoded = 0)
 
-/-- A string body after its opening quote. Raw scalars other than quote, backslash, LF and CR
-are governed by `rawOk`; this parameter chooses no rule for them. EOF and raw line breaks cannot
-end a body, and only `StringEscape` permits a backslash. -/
-inductive StringBody (rawOk : Nat → Prop) : List Nat → (List Nat × List Nat) → Prop
-  | close (rest : List Nat) : StringBody rawOk (34 :: rest) ([], rest)
+/-- Unicode general category Cc: C0, DEL and C1. Owner item 4 of 2026-11-08 says "control
+character" without naming a smaller set, so this is the full Cc set. -/
+def Control (c : Nat) : Prop := c ≤ 0x1F ∨ (0x7F ≤ c ∧ c ≤ 0x9F)
+
+/-- A raw string scalar is anything except its delimiters and a control scalar. -/
+def StringRaw (c : Nat) : Prop := c ≠ 34 ∧ c ≠ 92 ∧ ¬ Control c
+
+/-- A string body after its opening quote. EOF cannot end a body, raw Cc scalars are refused,
+and only `StringEscape` permits a backslash. -/
+inductive StringBody : List Nat → (List Nat × List Nat) → Prop
+  | close (rest : List Nat) : StringBody (34 :: rest) ([], rest)
   | raw {c : Nat} {input decoded rest : List Nat} :
-      c ≠ 34 → c ≠ 92 → c ≠ 10 → c ≠ 13 → rawOk c → StringBody rawOk input (decoded, rest) →
-      StringBody rawOk (c :: input) (c :: decoded, rest)
+      StringRaw c → StringBody input (decoded, rest) → StringBody (c :: input) (c :: decoded, rest)
   | escape {escaped decodedScalar : Nat} {input decoded rest : List Nat} :
-      StringEscape escaped decodedScalar → StringBody rawOk input (decoded, rest) →
-      StringBody rawOk (92 :: escaped :: input) (decodedScalar :: decoded, rest)
+      StringEscape escaped decodedScalar → StringBody input (decoded, rest) →
+      StringBody (92 :: escaped :: input) (decodedScalar :: decoded, rest)
+
+/-- A raw byte scalar is printable ASCII (U+0020 through U+007E), except the quote delimiter and
+backslash, which must use escapes. -/
+def ByteRaw (c : Nat) : Prop := 32 ≤ c ∧ c ≤ 126 ∧ c ≠ 39 ∧ c ≠ 92
+
+/-- The byte escapes decided by SYN-6@3: `\n`, `\t`, `\r`, `\0`, `\\` and `\'`.
+The literal judgments below remain parameterized by this relation. -/
+def ByteEscape (escaped decoded : Nat) : Prop :=
+  (escaped = 110 ∧ decoded = 10) ∨ (escaped = 116 ∧ decoded = 9) ∨
+  (escaped = 114 ∧ decoded = 13) ∨ (escaped = 92 ∧ decoded = 92) ∨
+  (escaped = 39 ∧ decoded = 39) ∨ (escaped = 48 ∧ decoded = 0)
+
+/-- An ASCII byte literal and its `u8` mathematical value. A closing quote after one raw scalar
+or one escape distinguishes it from a label; escaped values must fit in eight bits. -/
+inductive ByteLiteral (escape : Nat → Nat → Prop) :
+    List Nat → (List Nat × Nat × List Nat) → Prop
+  | raw {c : Nat} {rest : List Nat} : ByteRaw c →
+      ByteLiteral escape (39 :: c :: 39 :: rest) ([39, c, 39], c, rest)
+  | escaped {escaped decoded : Nat} {rest : List Nat} : escape escaped decoded → decoded < 256 →
+      ByteLiteral escape (39 :: 92 :: escaped :: 39 :: rest)
+        ([39, 92, escaped, 39], decoded, rest)
+
+/-- A label is a single quote followed by an ASCII identifier (SYN-6). -/
+inductive Label : List Nat → (List Nat × List Nat) → Prop
+  | intro {input name rest : List Nat} : Identifier input (name, rest) →
+      Label (39 :: input) (39 :: name, rest)
 
 /-- Longest match over an arbitrary table. Empty entries are not tokens. A successful result
 is a nonempty table entry and its unconsumed suffix, and no matching entry is longer. `none`
-says exactly that no nonempty entry is a prefix. This defines no Concrete token table. -/
+says exactly that no nonempty entry is a basePrefix. This defines no Concrete token table. -/
 inductive LongestMatch (table : List (List Nat)) :
     List Nat → Option (List Nat × List Nat) → Prop
   | some {input token rest : List Nat} : token ∈ table → token ≠ [] → input = token ++ rest →
@@ -143,31 +178,77 @@ inductive LongestMatch (table : List (List Nat)) :
       (∀ token ∈ table, token ≠ [] → ∀ rest, input ≠ token ++ rest) →
       LongestMatch table input none
 
-/-- Exactly ASCII digits zero through nine. -/
-def DecimalDigit (c : Nat) : Prop := 48 ≤ c ∧ c ≤ 57
+/-- The four decided integer bases. Only the lowercase basePrefix spellings are included. -/
+inductive Radix where
+  | decimal | binary | octal | hexadecimal
+  deriving DecidableEq, Repr
 
-/-- The maximal decimal-digit run at the front of an input. -/
-inductive DigitRun : List Nat → List Nat → List Nat → Prop
-  | stop (rest : List Nat) : (∀ c cs, rest = c :: cs → ¬ DecimalDigit c) → DigitRun rest [] rest
-  | cons {c : Nat} {input digits rest : List Nat} : DecimalDigit c → DigitRun input digits rest →
-      DigitRun (c :: input) (c :: digits) rest
+namespace Radix
 
-/-- A nonempty digit run is accepted exactly for `0` alone or a nonzero first digit. -/
-def DigitsAccepted : List Nat → Prop
+/-- The positional base. -/
+def base : Radix → Nat
+  | .decimal => 10 | .binary => 2 | .octal => 8 | .hexadecimal => 16
+
+/-- The exact basePrefix; decimal has none. -/
+def basePrefix : Radix → List Nat
+  | .decimal => [] | .binary => [48, 98] | .octal => [48, 111] | .hexadecimal => [48, 120]
+
+end Radix
+
+/-- Digits valid for a base. Both hex-digit cases are already accepted by SYN-6's `0x1F` example. -/
+def BaseDigit (radix : Radix) (c : Nat) : Prop :=
+  match radix with
+  | .decimal => 48 ≤ c ∧ c ≤ 57
+  | .binary => c = 48 ∨ c = 49
+  | .octal => 48 ≤ c ∧ c ≤ 55
+  | .hexadecimal => (48 ≤ c ∧ c ≤ 57) ∨ (65 ≤ c ∧ c ≤ 70) ∨ (97 ≤ c ∧ c ≤ 102)
+
+/-- The maximal digit run for a base at the front of an input. -/
+inductive DigitRun (radix : Radix) : List Nat → List Nat → List Nat → Prop
+  | stop (rest : List Nat) : (∀ c cs, rest = c :: cs → ¬ BaseDigit radix c) → DigitRun radix rest [] rest
+  | cons {c : Nat} {input digits rest : List Nat} : BaseDigit radix c → DigitRun radix input digits rest →
+      DigitRun radix (c :: input) (c :: digits) rest
+
+/-- Every base needs a digit; only decimal refuses a leading zero. -/
+def DigitsAccepted (radix : Radix) : List Nat → Prop
   | [] => False
   | [48] => True
-  | 48 :: _ => False
+  | 48 :: _ => radix ≠ .decimal
   | _ :: _ => True
 
-/-- Positional decimal value; the scanner-independent digit run supplies only ASCII digits. -/
-def decimalValue (digits : List Nat) : Nat :=
-  digits.foldl (fun value c => value * 10 + (c - 48)) 0
+/-- Positional value in the selected base. -/
+def positionalValue (radix : Radix) (digits : List Nat) : Nat :=
+  digits.foldl (fun value c => value * radix.base +
+    (if 65 ≤ c ∧ c ≤ 70 then c - 65 + 10 else if 97 ≤ c ∧ c ≤ 102 then c - 97 + 10 else c - 48)) 0
 
-/-- A maximal accepted decimal-digit lexeme, its value and its remainder. Nothing is specified
-about the remainder beyond the digit run's maximality. -/
-inductive DecimalInteger : List Nat → (List Nat × Nat × List Nat) → Prop
-  | intro {input digits rest : List Nat} {value : Nat} : DigitRun input digits rest →
-      DigitsAccepted digits → value = decimalValue digits → DecimalInteger input (digits, value, rest)
+/-- The canonical suffix spelling of each decided integer type (TYPE-19). -/
+def intTySpelling : ConcreteSpec.IntTy → List Nat
+  | .i8 => [105, 56] | .i16 => [105, 49, 54] | .i32 => [105, 50, 51] | .i64 => [105, 54, 52]
+  | .u8 => [117, 56] | .u16 => [117, 49, 54] | .u32 => [117, 50, 51] | .u64 => [117, 54, 52]
+
+/-- The empty suffix or exactly one decided integer-type name. -/
+inductive SuffixAccepted : List Nat → Option ConcreteSpec.IntTy → Prop
+  | none : SuffixAccepted [] none
+  | type (ty : ConcreteSpec.IntTy) : SuffixAccepted (intTySpelling ty) (some ty)
+
+/-- An integer token's exact lexeme, mathematical value, optional type suffix and remainder. -/
+structure IntegerToken where
+  lexeme : List Nat
+  value : Nat
+  suffix : Option ConcreteSpec.IntTy
+  rest : List Nat
+  deriving DecidableEq, Repr
+
+/-- A based digit run followed by its maximal identifier-continuation suffix candidate. The whole
+candidate must be accepted, so malformed suffixes and `_` separators have no integer judgment. -/
+inductive IntegerLiteral : List Nat → IntegerToken → Prop
+  | intro {radix : Radix} {input digitInput digits suffixInput suffix rest : List Nat}
+      {typeSuffix : Option ConcreteSpec.IntTy} :
+      input = radix.basePrefix ++ digitInput → DigitRun radix digitInput digits suffixInput →
+      DigitsAccepted radix digits → IdentBody suffixInput suffix rest →
+      SuffixAccepted suffix typeSuffix →
+      IntegerLiteral input ⟨radix.basePrefix ++ digits ++ suffix, positionalValue radix digits,
+        typeSuffix, rest⟩
 
 /-- Scalar membership is decidable by its interval bounds. -/
 instance (c : Nat) : Decidable (Utf8.Scalar c) := inferInstanceAs (Decidable (_ ∧ _))
@@ -177,13 +258,24 @@ instance (c : Nat) : Decidable (Whitespace c) := inferInstanceAs (Decidable (_ �
 instance (c : Nat) : Decidable (IdentStart c) := inferInstanceAs (Decidable (_ ∨ _))
 /-- Identifier-continuation membership is decidable by ASCII bounds. -/
 instance (c : Nat) : Decidable (IdentContinue c) := inferInstanceAs (Decidable (_ ∨ _))
-/-- The escape relation is decidable by its six scalar equalities. -/
+/-- The string escape relation is decidable by its six scalar equalities. -/
 instance (escaped decoded : Nat) : Decidable (StringEscape escaped decoded) :=
   inferInstanceAs (Decidable (_ ∨ _))
-/-- Decimal-digit membership is decidable by its interval bounds. -/
-instance (c : Nat) : Decidable (DecimalDigit c) := inferInstanceAs (Decidable (_ ∧ _))
-/-- Leading-zero acceptance is decidable by the digit-list shape. -/
-instance (digits : List Nat) : Decidable (DigitsAccepted digits) := by
+/-- Control membership is decidable by its intervals. -/
+instance (c : Nat) : Decidable (Control c) := inferInstanceAs (Decidable (_ ∨ _))
+/-- Raw-string membership is decidable by delimiter equalities and control intervals. -/
+instance (c : Nat) : Decidable (StringRaw c) := inferInstanceAs (Decidable (_ ∧ _))
+/-- Raw-byte membership is decidable by its ASCII bounds and delimiter equalities. -/
+instance (c : Nat) : Decidable (ByteRaw c) := inferInstanceAs (Decidable (_ ∧ _))
+/-- The byte escape relation is decidable by its six scalar equalities. -/
+instance (escaped decoded : Nat) : Decidable (ByteEscape escaped decoded) :=
+  inferInstanceAs (Decidable (_ ∨ _))
+/-- Base-digit membership is decidable by its intervals and equalities. -/
+instance (radix : Radix) (c : Nat) : Decidable (BaseDigit radix c) := by
+  unfold BaseDigit
+  split <;> infer_instance
+/-- Leading-zero acceptance is decidable by the radix and digit-list shape. -/
+instance (radix : Radix) (digits : List Nat) : Decidable (DigitsAccepted radix digits) := by
   unfold DigitsAccepted
   split <;> infer_instance
 /-- The one-byte range constraint is decidable. -/
