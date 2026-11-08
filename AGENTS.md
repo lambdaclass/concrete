@@ -105,7 +105,10 @@ Owner rule (2026-11-08), verbatim: "can you use only kimi codex and agy to code 
   ([decision](docs/decisions.md#decided-2026-11-08-commit-push)), today both `origin` and
   `lambdaclass`: `git push origin HEAD:refs/heads/wip/<branch>` and
   `git push lambdaclass HEAD:refs/heads/wip/<branch>`. The hook's wip tier only scans for conflict
-  markers.
+  markers. Reaffirmed 2026-11-08 (owner, relayed verbatim): "please commit and push every time you can to differnet PRs because the computer can crash at some point".
+  Commit and push every validated pass at once to the push remotes in force, on separate `wip/`
+  branches. Each check's own exit status gates the commit, never a pipe's: use `set -o pipefail`
+  or run the check on its own; never pipe a check into `tail` before `&&`.
 - Never push to `main`, `ci/*` or the remote `fork`. Landings go to both `origin` and
   `lambdaclass`, only through the landing script (`scripts/land/train.sh`).
   `train.sh check` runs the checks before the push, and the push runs the root hook's full set again;

@@ -1,3 +1,5 @@
+- Record the owner's 2026-11-08 commit/push reaffirmation verbatim: every validated pass goes at once to the push remotes in force on separate `wip/` branches, with each check's own exit status gating the commit.
+
 ### Record-chain fourth fix pass (2026-11-08)
 
 - Record "okay with your decisions" (15:31:59 UTC): lexer spellings (a)–(d), the permitted raw TAB in `//` comments, complementary suffixes, C9 Q1–Q3 and the approved Codex device-auth re-login for agent on concrete-ci-2. The owner explicitly approves the new refusal of raw Cc, U+2028–U+2029 and bidi controls in strings and comments.

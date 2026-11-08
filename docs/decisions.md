@@ -1406,6 +1406,10 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   `origin` and `lambdaclass`. Once one repository lands, only `lambdaclass/concrete` remains
   ([landing redesign](#decided-2026-11-08-landing-redesign), step 2). Pushes use `wip/` branches,
   from a full clone, with the hook on. `main` changes only through the train.
+  Reaffirmed 2026-11-08 (owner, relayed verbatim): "please commit and push every time you can to differnet PRs because the computer can crash at some point".
+  Every validated pass is committed and pushed at once to the push remotes in force, on separate
+  `wip/` branches. Each check's own exit status gates the commit, never a pipe's: use
+  `set -o pipefail` or run the check on its own; never pipe a check into `tail` before `&&`.
   Existing process rules in [AGENTS.md](../AGENTS.md) and [CLAUDE.md](../CLAUDE.md) govern force pushes and keeping a candidate under review fixed; they are not part of this owner quote. Revised 2026-11-08 by this record correction.
 - <a id="decided-2026-11-08-writers"></a>**Codex, Kimi and agy write; Claude reviews** (owner,
   2026-11-08: "can you have kimi, codex and agy implement things and we just review it"). Codex, Kimi
