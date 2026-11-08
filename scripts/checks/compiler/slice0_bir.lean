@@ -13,9 +13,13 @@ runtime entry as QBE text, for LCB's command line), `DIR/lcb_body.ssa` (a debug 
 observation the executables must show: `DIR/status` (the exit status) and `DIR/stderr` (the exact
 bytes on descriptor 2; descriptor 1 must stay empty).
 
-Two controls exercise the gate itself: `... loop DIR TARGET` emits a well-formed BIR body that
+Two controls exercise the test gate itself: `... loop DIR TARGET` emits a well-formed BIR body that
 never returns (`DIR/status` is `incomplete`), and `... invalid DIR TARGET` emits a body returning a
 word that encodes nothing, which the runtime must refuse (`Runtime.invalidLine`, then abort).
+`... emit-twice NAME DIR DIR2 TARGET EXPECT...` performs two emissions in one Lean process for the
+determinism gate. Its controls append the CWD to `llvm.ll` or monotonic nanoseconds to
+`lcb_body.s`, and are accepted only after `--allow-planted-failure --plant nondeterministic` or
+`--allow-planted-failure --plant monotonic` following the expectation.
 -/
 
 open Concrete.BIR Concrete.Backend
@@ -44,7 +48,8 @@ def writeExpected (dir : System.FilePath) (status : String) (stderr : String) : 
 
 /-- Write the LCB leg: the body assembled in process, the runtime entry as QBE text. -/
 def writeLcb (dir : System.FilePath) (target : LCB.Target)
-    (emitted : LeanCompilerBackend.Verified.Source.Function × SiteTable) : IO Bool := do
+    (emitted : LeanCompilerBackend.Verified.Source.Function × SiteTable)
+    (plant : Option String := none) : IO Bool := do
   let (f, sites) := emitted
   IO.FS.createDirAll dir
   IO.FS.writeFile (dir / "lcb_source.txt") (reprStr f ++ "\n")
@@ -59,20 +64,31 @@ def writeLcb (dir : System.FilePath) (target : LCB.Target)
   match LCB.assemble target f with
   | .error msg => IO.eprintln s!"{dir}: LCB: {msg}"; return false
   | .ok asm =>
+    let asm ← match plant with
+      | some "monotonic" => do
+        let now ← IO.monoNanosNow
+        pure (asm ++ s!"\n# determinism control monotonic nanos: {now}\n")
+      | _ => pure asm
     IO.FS.writeFile (dir / "lcb_body.s") asm
     IO.FS.writeFile (dir / "lcb_rt.ssa") (Runtime.qbe sites)
     IO.FS.writeFile (dir / "lcb_body.ssa") (LCB.render f)
     return true
 
 def writeBackends (dir : System.FilePath) (target : LCB.Target) (p : Program)
-    (emitted : LeanCompilerBackend.Verified.Source.Function × SiteTable) : IO Bool := do
+    (emitted : LeanCompilerBackend.Verified.Source.Function × SiteTable)
+    (plant : Option String := none) : IO Bool := do
   IO.FS.createDirAll dir
   IO.FS.writeFile (dir / "bir.txt") (reprStr p ++ "\n")
-  IO.FS.writeFile (dir / "llvm.ll") (LLVM.module p)
-  writeLcb dir target emitted
+  let llvm ← match plant with
+    | some "nondeterministic" => do
+      let cwd ← IO.currentDir
+      pure (LLVM.module p ++ s!"\n; determinism control cwd: {cwd}\n")
+    | _ => pure (LLVM.module p)
+  IO.FS.writeFile (dir / "llvm.ll") llvm
+  writeLcb dir target emitted plant
 
 def emit (name : String) (dir : System.FilePath) (expectation : List String)
-    (target : LCB.Target) : IO UInt32 := do
+    (target : LCB.Target) (plant : Option String := none) : IO UInt32 := do
   let some (_, p) := Examples.all.find? (·.1 == name)
     | IO.eprintln s!"unknown example {name}"; return 2
   let some expected := parseExpectation expectation
@@ -90,7 +106,7 @@ def emit (name : String) (dir : System.FilePath) (expectation : List String)
       unless w == word do
         IO.eprintln s!"{name}: LCB's evaluator returns {w}, BIR's result word is {word}"; return 1
     | none => IO.eprintln s!"{name}: LCB's evaluator does not return"; return 1
-    unless ← writeBackends dir target p (f, tbl) do return 1
+    unless ← writeBackends dir target p (f, tbl) plant do return 1
     match expected.outcome with
     | .exited c => writeExpected dir (toString c) ""
     | .trapped s => match tbl[s]? with
@@ -136,12 +152,36 @@ def withTarget (name : String) (k : LCB.Target → IO UInt32) : IO UInt32 :=
   | some t => k t
   | none => do IO.eprintln s!"unknown target {name}"; return 2
 
+def parseControl : List String → Option (Option String)
+  | [] => some none
+  | ["--allow-planted-failure", "--plant", "nondeterministic"] => some (some "nondeterministic")
+  | ["--allow-planted-failure", "--plant", "monotonic"] => some (some "monotonic")
+  | _ => none
+
+def emitArgs (name dir target : String) (args : List String) (twice : Option String) : IO UInt32 :=
+  let parsed : Option (List String × Option String) := match args with
+    | "exit" :: c :: rest => (parseControl rest).map (["exit", c], ·)
+    | "trap" :: kind :: "site" :: s :: rest => (parseControl rest).map (["trap", kind, "site", s], ·)
+    | _ => none
+  match parsed with
+  | none => do
+    IO.eprintln "invalid expectation, or a plant without --allow-planted-failure"
+    return 2
+  | some (expectation, plant) => withTarget target fun t => do
+    let rc ← emit name dir expectation t plant
+    if rc != 0 then return rc
+    match twice with
+    | none => return 0
+    | some second => emit name second expectation t plant
+
 def main (args : List String) : IO UInt32 := do
   match args with
   | ["list"] => do
     for (n, _) in Examples.all do IO.println n
     return 0
-  | "emit" :: name :: dir :: t :: expectation => withTarget t (emit name dir expectation)
+  | "emit" :: name :: dir :: t :: expectation => emitArgs name dir t expectation none
+  | "emit-twice" :: name :: dir :: second :: t :: expectation =>
+    emitArgs name dir t expectation (some second)
   | ["loop", dir, t] => withTarget t (emitLoop dir)
   | ["invalid", dir, t] => withTarget t (emitInvalid dir)
-  | _ => IO.eprintln "usage: slice0_bir.lean list | emit NAME DIR TARGET EXPECT... | (loop | invalid) DIR TARGET"; return 2
+  | _ => IO.eprintln "usage: slice0_bir.lean list | emit[-twice] NAME DIR [DIR2] TARGET EXPECT... [--allow-planted-failure --plant nondeterministic|monotonic] | (loop | invalid) DIR TARGET"; return 2
