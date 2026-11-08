@@ -1768,6 +1768,133 @@ example : ¬ Nonempty (TerminationEvidence ops spinningProgram spinningDomain) :
   exact E.excludes_infinite env [] .init spinningFn (start spinningFn [] .init)
     rfl ⟨rfl, rfl, rfl⟩ rfl admittedSpin
 
+/-! ### Closed round-four controls -/
+
+/-- The actual request continuation, extracted without postulating its answer. -/
+def terminalK : Answer ops.Val ops.Event ops.Store → Option (Config ops) := fun a =>
+  match a.result with
+  | .ok v => (bindLife ops none a.store).map fun st' => ⟨.done, bindDst none v [], st', []⟩
+  | .error kd => some ⟨.trapped kd s, [], a.store, []⟩
+
+/-- Helper (computation). The issued request's continuation is independent of the oracle
+(approved: PENDING). -/
+theorem terminalRequest : step prog terminalConfig = some (.request .log [1] s .init terminalK) := by
+  simp [terminalConfig, step, evalArgs, evalE, onRes, Res.bind, Res.map]
+  funext a
+  cases hr : a.result <;> simp [terminalK, hr]
+
+/-- Instance (law `runFromQ_request_correspondence`, case `terminalConfig`). -/
+example : RequestResolution prog noAnswerOracle 0 ⟨terminalConfig, [], []⟩ .log [1] s .init terminalK
+    (runFromQ prog noAnswerOracle 1 [] [] terminalConfig) :=
+  runFromQ_request_correspondence (O := ops) (P := prog) (ρ := noAnswerOracle)
+  (fuel := 0) (events := []) (issued := []) (c := terminalConfig) (p := .log) (vs := [1])
+  (site := s) (st := .init) (k := terminalK) rfl terminalRequest
+
+/-- Instance (law `runFromQ_request_correspondence`, case `badAnswerOracle`). -/
+example : RequestResolution prog badAnswerOracle 0 ⟨terminalConfig, [], []⟩ .log [1] s .init terminalK
+    (runFromQ prog badAnswerOracle 1 [] [] terminalConfig) :=
+  runFromQ_request_correspondence (O := ops) (P := prog) (ρ := badAnswerOracle)
+  (fuel := 0) (events := []) (issued := []) (c := terminalConfig) (p := .log) (vs := [1])
+  (site := s) (st := .init) (k := terminalK) rfl terminalRequest
+
+/-- Instance (law `runFromQ_request_correspondence`, case `env`). -/
+example : RequestResolution prog env.toQueryOracle 0 ⟨terminalConfig, [], []⟩ .log [1] s .init terminalK
+    (runFromQ prog env.toQueryOracle 1 [] [] terminalConfig) :=
+  runFromQ_request_correspondence (O := ops) (P := prog) (ρ := env.toQueryOracle)
+  (fuel := 0) (events := []) (issued := []) (c := terminalConfig) (p := .log) (vs := [1])
+  (site := s) (st := .init) (k := terminalK) rfl terminalRequest
+
+/-- A mutation substitutes the demo's successful oracle answer for the supplied oracle's answer.
+It also demonstrates that a query to the wrong history cannot be justified by transition inversion. -/
+def substitutedAnswerRun (O : Operands) (P : Program O) (ρ : QueryOracle O) (fuel : Nat)
+    (events : List O.Event) (issued : List (Query O)) (c : Config O) : QueryReport O :=
+  { runFromQ P ρ fuel events issued c with ending := .final .normal }
+
+/-- Planted (law `runFromQ_request_correspondence`, case `terminalConfig`,
+subject `runFromQ`, mutant `substitutedAnswerRun`). The issuance premises remain true. -/
+example : terminalConfig.final? = none ∧
+    step prog terminalConfig = some (.request .log [1] s .init terminalK) ∧
+    ¬ RequestResolution prog noAnswerOracle 0 ⟨terminalConfig, [], []⟩ .log [1] s .init terminalK
+      (substitutedAnswerRun ops prog noAnswerOracle 1 [] [] terminalConfig) := by
+  refine ⟨rfl, terminalRequest, ?_⟩
+  generalize he : substitutedAnswerRun ops prog noAnswerOracle 1 [] [] terminalConfig = report
+  intro h
+  cases h <;> simp_all [answer, noAnswerOracle, substitutedAnswerRun, terminalConfig]
+
+/-- Finite projected histories of the erasing execution. -/
+theorem erasedFinite : FiniteEvents erasingAdapter event_infinite :=
+  ⟨0, fun _ => by simp [erasing_project]⟩
+/-- Unbounded projected histories of the keeping execution. -/
+theorem keptInfinite : InfiniteEvents keepingAdapter event_infinite := by
+  intro bound
+  refine ⟨5 * (bound + 1), ?_⟩
+  simp [event_infinite, eventPosition, eventCount, keeping_project_rawEvents]
+
+/-- Instance (law `finite_projected_observation`, case `erasingAdapter`). -/
+example : ∃ events, (∃ steps, MatchesProjectedHistory erasingAdapter event_infinite steps) ∧
+    ∀ steps, MatchesProjectedHistory erasingAdapter event_infinite steps →
+      Observe.HasFullObservation (.infinite steps) (.finiteDivergence events) :=
+  finite_projected_observation (O := ops) (P := prog) (ρ := env.toQueryOracle)
+  (c := eventConfig) (S := Observe.Demo.signature) (A := erasingAdapter)
+  (X := event_infinite) erasedFinite
+
+/-- Instance (law `infinite_projected_observation`, case `keepingAdapter`). -/
+example : ∃ trace, (∃ steps, MatchesProjectedHistory keepingAdapter event_infinite steps) ∧
+    ∀ steps, MatchesProjectedHistory keepingAdapter event_infinite steps →
+      Observe.HasFullObservation (.infinite steps) (.infiniteDivergence trace) :=
+  infinite_projected_observation (O := ops) (P := prog) (ρ := env.toQueryOracle)
+  (c := eventConfig) (S := Observe.Demo.signature) (A := keepingAdapter)
+  (X := event_infinite) keptInfinite
+
+/-- A matching-relation mutation that fails to check either direction of prefix coverage. -/
+def uncheckedHistory {O : Operands} {S : Observe.EventSignature} {P : Program O}
+    {ρ : QueryOracle O} {c : Config O} (_ : Observe.ExecAdapter O S)
+    (_ : InfiniteExecution P ρ c) (_ : Nat → Observe.Step S) : Prop := True
+
+/-- Helper (arithmetic). A constantly emitting stream cannot have a finite observation,
+regardless of the chosen finite trace (approved: PENDING). -/
+theorem alwaysEmit_not_finite (events : List (Observe.Event Observe.Demo.signature)) :
+    ¬ Observe.HasFullObservation
+      (.infinite (fun _ => .emit (.output "invented"))) (.finiteDivergence events) := by
+  intro h
+  obtain ⟨m, rest, hr⟩ := h.1 (events.length + 1)
+  have hl := congrArg List.length hr
+  rw [visiblePrefix_finiteDivergenceSteps,
+    visiblePrefix_emitTrace (S := Observe.Demo.signature) (fun _ => .output "invented")] at hl
+  simp only [List.length_take, List.length_append, List.length_map, List.length_range] at hl
+  have := Nat.min_le_right m events.length
+  omega
+
+/-- Planted (law `finite_projected_observation`, case `erasingAdapter`,
+subject `MatchesProjectedHistory`, mutant `uncheckedHistory`). -/
+example : FiniteEvents erasingAdapter event_infinite ∧
+    ¬ (∃ events, (∃ steps, uncheckedHistory erasingAdapter event_infinite steps) ∧
+      ∀ steps, uncheckedHistory erasingAdapter event_infinite steps →
+        Observe.HasFullObservation (.infinite steps) (.finiteDivergence events)) := by
+  refine ⟨erasedFinite, ?_⟩
+  rintro ⟨events, _, sound⟩
+  exact alwaysEmit_not_finite events (sound (fun _ => .emit (.output "invented")) True.intro)
+
+/-- Planted (law `infinite_projected_observation`, case `keepingAdapter`,
+subject `MatchesProjectedHistory`, mutant `uncheckedHistory`). -/
+example : InfiniteEvents keepingAdapter event_infinite ∧
+    ¬ (∃ trace, (∃ steps, uncheckedHistory keepingAdapter event_infinite steps) ∧
+      ∀ steps, uncheckedHistory keepingAdapter event_infinite steps →
+        Observe.HasFullObservation (.infinite steps) (.infiniteDivergence trace)) := by
+  refine ⟨keptInfinite, ?_⟩
+  rintro ⟨trace, _, sound⟩
+  have h := sound (fun _ => .silent) True.intro
+  obtain ⟨m, rest, hr⟩ := h.2 1
+  have hl := congrArg List.length hr
+  have silent : ∀ n, Observe.visiblePrefix
+      (fun _ => (Observe.Step.silent : Observe.Step Observe.Demo.signature)) n = [] := by
+    intro n
+    induction n with
+    | zero => rfl
+    | succ n ih => simp [Observe.visiblePrefix_succ, Observe.Step.event?, ih]
+  rw [visiblePrefix_emitTrace, silent] at hl
+  simp at hl
+
 end Demo
 
 end ConcreteSpec.Core.Exec
