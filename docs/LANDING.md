@@ -430,8 +430,10 @@ script against a throwaway repository with bare-repo remotes and a fake `gh`. It
 `train.sh` against a throwaway repository with bare-repo remotes, a fake `gh`, a fake remote runner
 and a fake hook that fails exactly when the checkout contains `BAD`. It covers:
 
-- the remote leg: an existing ref at the candidate's SHA is refused, not adopted, a fresh name is
-  used, and only the run's own ref is deleted;
+- the remote leg: an existing ref at the candidate's SHA is refused, not adopted; the runner runs
+  once, on a fresh `wip/land-*` ref, and only the run's own ref is deleted;
+- `bisect --ci`: a member whose CI is red is named, each probe dispatching its own run, and nothing
+  lands;
 - `ready.sh`: a failed review leg publishing `gates: fail` over an older clean verdict, and
   passing legs making a head ready;
 - a static check that nothing under `scripts/land` force-pushes main.

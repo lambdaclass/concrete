@@ -7,6 +7,7 @@
 # touches this repository.
 #
 #   remote leg  train.sh check never adopts an existing ref at the candidate's SHA for its remote run
+#   bisect --ci a CI-red member is named, each probe dispatching its own run, and nothing lands
 #   ready.sh    its legs run; any failed leg, the review included, publishes `gates: fail` and revokes
 #               readiness over an older clean verdict; passing legs publish `gates: pass`
 #   main        no script under scripts/land force-pushes main
@@ -125,6 +126,14 @@ rlog="$(cat "$LAND_STATE_DIR"/cx-t/check-*/remote.log 2>/dev/null)"
 [ "$rc" = 0 ] && has "$rlog" "wip/land-collide was not created by this run" && ! has "$(cat "$TMP/gh/runner.log")" "wip/land-collide" \
   && [ "$(git --git-dir="$TMP/origin.git" rev-parse refs/heads/wip/land-collide)" = "$CXH" ] && [ "$(land_refs)" = "refs/heads/wip/land-collide" ] \
   && ok "an existing ref at the same SHA is refused, a fresh name is used, and only the run's own ref is deleted" || { no "collision: exit $rc, refs '$(land_refs)'"; echo "$rlog" | sed 's/^/      /'; }
+# The run's own ref, positively: the runner ran exactly once, on a fresh wip/land-* ref (not the
+# planted one), and that ref is gone.
+rl="$(cat "$TMP/gh/runner.log")"
+case "$rl" in wip/land-collide) fresh="" ;; wip/land-*) fresh="$rl" ;; *) fresh="" ;; esac
+[ "$(printf '%s\n' "$rl" | grep -c .)" = 1 ] && [ -n "$fresh" ] \
+  && ! git --git-dir="$TMP/origin.git" rev-parse -q --verify "refs/heads/$fresh" >/dev/null \
+  && ok "the remote runner ran once, on the run's own fresh ref ($fresh), which is deleted afterwards" \
+  || no "remote runner invocations: '$rl'"
 git --git-dir="$TMP/origin.git" update-ref -d refs/heads/wip/land-collide
 ( cd "$W" && git checkout -q --detach origin/main )
 
@@ -139,6 +148,26 @@ mk wip/rv2 rv2 src/rv2.txt rv2; mark wip/rv2 clean fail
 out="$(cd "$A" && LAND_REVIEW_CMD=true bash "$ROOT_DIR/scripts/land/ready.sh" wip/rv2 2>&1)"; rc=$?
 [ "$rc" = 0 ] && [ "$(cd "$A" && bash "$NOTES" get gates "$(sha_of wip/rv2)" gates)" = pass ] \
   && ok "passing legs publish gates: pass and the head becomes ready" || { no "ready.sh pass: exit $rc"; echo "$out" | sed 's/^/      /'; }
+
+echo "=== bisect --ci: a red CI run names the culprit, each probe its own run ==="
+mk wip/cired cired CIRED red; mark wip/cired
+mk wip/g3 g3 src/g3.txt g3; mark wip/g3
+MAIN0="$(git --git-dir="$TMP/origin.git" rev-parse refs/heads/main)"
+( cd "$W" && git fetch -q origin && git checkout -q --detach origin/main \
+  && bash "$ROOT_DIR/scripts/land/train.sh" build bt --no-fetch origin/wip/cired origin/wip/g3 >/dev/null 2>&1 ) || no "build bt"
+n0="$(cat "$TMP/gh/counter" 2>/dev/null || echo 0)"
+out="$(cd "$W" && bash "$ROOT_DIR/scripts/land/train.sh" bisect bt --ci 2>&1)"; rc=$?
+n1="$(cat "$TMP/gh/counter" 2>/dev/null || echo 0)"
+runs=""; i=$((n0+1)); while [ "$i" -le "$n1" ]; do runs="$runs $(cat "$TMP/gh/run.$i")"; i=$((i+1)); done
+# cired is the first half: a CI that never reports red would send the halving to g3 instead, and
+# "alone it is red" is the culprit probe's own run.
+[ "$rc" = 0 ] && has "$out" "step 1: first half [origin/wip/cired ] -> red" && has "$out" "culprit: origin/wip/cired" \
+  && has "$out" "alone it is red" && has "$out" "build bt --force origin/wip/g3" \
+  && ok "bisect --ci attributes the CI-red member and prints the rebuild without it" || { no "bisect --ci: exit $rc"; echo "$out" | sed 's/^/      /'; }
+[ $((n1-n0)) -ge 2 ] && [ "$(printf '%s\n' $runs | sort -u | grep -c .)" = $((n1-n0)) ] \
+  && ok "each probe dispatched its own CI run at its own SHA ($((n1-n0)) runs)" || no "bisect --ci runs: '$runs'"
+[ "$(git --git-dir="$TMP/origin.git" rev-parse refs/heads/main)" = "$MAIN0" ] && ok "bisect --ci lands nothing" || no "bisect --ci moved main"
+( cd "$W" && git checkout -q --detach origin/main )
 
 echo "=== main is never force-pushed ==="
 bad="$(grep -nE 'git push[^#]*(--force|[[:space:]]-f[[:space:]])[^#]*refs/heads/main' "$ROOT_DIR"/scripts/land/*.sh || true)"
