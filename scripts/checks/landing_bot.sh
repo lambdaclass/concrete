@@ -438,16 +438,20 @@ git -C "$BC" remote set-url --push origin https://github.com/unbalancedparenthes
 out="$(ib)"; rc=$?
 [ "$rc" = 0 ] && [ "$(git -C "$BC" config --get-all remote.origin.url)" = "$IB/origin.git" ] && ! git -C "$BC" config --get remote.origin.pushurl >/dev/null \
   && ok "the installer repoints every origin url and drops a stale push URL" || { no "installer repoint: exit $rc, urls '$(git -C "$BC" config --get-all remote.origin.url | tr '\n' ' ')'"; echo "$out" | sed 's/^/      /'; }
+# A git shim logs every fetch: a refused launcher must log none.
+printf '#!/bin/sh\nfor a in "$@"; do case "$a" in fetch|push|ls-remote) echo "$*" >> "%s"; break ;; esac; done\nexec "%s" "$@"\n' "$IB/git.log" "$(command -v git)" > "$IB/stub/git"
+chmod +x "$IB/stub/git"
 for stale in https://github.com/unbalancedparentheses/concrete2.git git@github-old:unbalancedparentheses/concrete2.git; do
   git -C "$BC" remote set-url origin "$stale"
-  rm -f "$BC/.git/FETCH_HEAD"
+  : > "$IB/git.log"
   out="$(bounded_run -i /dev/null 60 -- env HOME="$IB/home" PATH="$IB/stub:$PATH" "$IB/home/.local/libexec/concrete-landing-bot" status 2>&1)"; rc=$?
-  [ "$rc" != 0 ] && has "$out" "refusing to fetch" && has "$out" "points at another repository" && [ ! -e "$BC/.git/FETCH_HEAD" ] \
+  [ "$rc" != 0 ] && has "$out" "refusing to fetch" && has "$out" "points at another repository" && [ ! -s "$IB/git.log" ] \
     && ok "the launcher refuses origin=$stale before its first fetch" || { no "launcher with origin=$stale: exit $rc"; echo "$out" | sed 's/^/      /'; }
 done
 git -C "$BC" remote set-url origin "$IB/origin.git"
+: > "$IB/git.log"
 out="$(bounded_run -i /dev/null 60 -- env HOME="$IB/home" PATH="$IB/stub:$PATH" "$IB/home/.local/libexec/concrete-landing-bot" status 2>&1)"; rc=$?
-[ "$rc" = 0 ] && has "$out" "state (" && ok "the launcher runs the bot when origin is a local repository" || { no "launcher with a good origin: exit $rc"; echo "$out" | sed 's/^/      /'; }
+[ "$rc" = 0 ] && has "$out" "state (" && grep -q fetch "$IB/git.log" && ok "the launcher fetches and runs the bot when origin is a local repository (the shim sees the fetch)" || { no "launcher with a good origin: exit $rc"; echo "$out" | sed 's/^/      /'; }
 
 echo "=== main is never force-pushed ==="
 bad="$(grep -nE 'git push[^#]*(--force|[[:space:]]-f[[:space:]])[^#]*refs/heads/main' "$ROOT_DIR"/scripts/land/*.sh || true)"

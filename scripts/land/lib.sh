@@ -7,6 +7,7 @@
 #   MOVE_GATE_MARKER            the line train.sh's dry-run land prints when only the move gate refused
 #   dryland_only_move_gate rc out   0 iff a dry-run land exited 5 with MOVE_GATE_MARKER as a whole line
 #   LAND_CANONICAL_REPO         the one GitHub repository (owner/name); not overridable
+#   land_url_target url             "<host> <owner/name>" of a network URL; returns 1 for a local one
 #   land_remote_bad remote repo     print why <remote> or <repo> is not LAND_CANONICAL_REPO and return 1, else 0
 #
 # A LEG is one independent validation (impact gates, remote full gates, Codex review). Legs of one
@@ -80,42 +81,64 @@ dryland_only_move_gate() { # rc out
 # environment would otherwise pass a check that only compares the two.
 LAND_CANONICAL_REPO=lambdaclass/concrete
 # Every fetch URL and every push URL of <remote> (git pushes to remote.<r>.pushurl when one is set,
-# and to each of several; get-url applies url.*.insteadOf) that is a NETWORK URL must name
-# LAND_CANONICAL_REPO as its owner/name path, whatever the host: an ssh host alias
-# (git@github-lambdaclass:lambdaclass/concrete.git, used on the servers) is a network URL too, and
-# an alias for concrete2 must not pass as "not GitHub". When the remote has one, <repo>, the
-# repository gh reads, must be LAND_CANONICAL_REPO as well. A local path or file:// URL (the test
-# fixtures' bare repositories) passes and leaves <repo> free for a fake gh. Prints why, returns 1.
-# land_url_path url: returns 1 for a local URL (a path, or file://); for a network URL returns 0 and
-# prints its lowercased path after the host (and port), empty when it has none.
-land_url_path() {
-  local u="$1" p
+# and to each of several; get-url applies url.*.insteadOf) that is a NETWORK URL must be
+# github.com/LAND_CANONICAL_REPO: host github.com (an ssh host alias is resolved with `ssh -G`, which
+# reads the ssh config and connects nowhere: git@github-lambdaclass:lambdaclass/concrete.git, used on
+# the servers, is github.com) and owner/name LAND_CANONICAL_REPO. Another host serving that path, a
+# scheme git does not use for GitHub, and the archived unbalancedparentheses/concrete2 under any
+# host or alias are refused. When the remote has a network URL, <repo>, the repository gh reads,
+# must be LAND_CANONICAL_REPO as well. A local path or file:// URL (the test fixtures' bare
+# repositories) passes and leaves <repo> free for a fake gh. Prints why, returns 1.
+#
+# land_url_target url: returns 1 for a local URL (a path, or file://). For a network URL returns 0
+# and prints "<host> <owner/name>", both lowercased, the host without user, port or trailing dot and
+# resolved through the ssh config for ssh transports; "? ?" for a scheme other than
+# http(s)/ssh/git/git+ssh/ssh+git or a host that is not a plain name.
+land_ssh_host() { # host -> the HostName the ssh config gives it (itself without one, or without ssh)
+  local h
+  h="$(ssh -G "$1" 2>/dev/null | awk '$1 == "hostname" { print $2; exit }')" || h=""
+  printf '%s\n' "${h:-$1}"
+}
+land_url_target() {
+  local u="$1" scheme="" auth p h
   case "$u" in
-    file://*) return 1 ;;
-    *://*) p="${u#*://}"; case "$p" in */*) p="${p#*/}" ;; *) p="" ;; esac ;;
-    *:*) case "${u%%:*}" in */*) return 1 ;; esac; p="${u#*:}" ;;   # scp-like host:path (git's rule)
+    [Ff][Ii][Ll][Ee]://*) return 1 ;;
+    *://*) scheme="$(printf '%s' "${u%%://*}" | tr 'A-Z' 'a-z')"; p="${u#*://}"
+           case "$p" in */*) auth="${p%%/*}"; p="${p#*/}" ;; *) auth="$p"; p="" ;; esac ;;
+    *:*) case "${u%%:*}" in */*) return 1 ;; esac
+         scheme=scp; auth="${u%%:*}"; p="${u#*:}" ;;   # scp-like [user@]host:path (git's rule)
     *) return 1 ;;
   esac
+  h="${auth##*@}"
+  case "$scheme" in scp) ;; *) h="${h%%:*}" ;; esac
+  h="$(printf '%s' "$h" | tr 'A-Z' 'a-z')"
+  case "$h" in ""|-*|*[!a-z0-9.-]*) echo "? ?"; return 0 ;; esac
+  case "$scheme" in
+    scp|ssh|git+ssh|ssh+git) h="$(land_ssh_host "$h" | tr 'A-Z' 'a-z')" ;;
+    https|http|git) ;;
+    *) echo "? ?"; return 0 ;;
+  esac
+  h="${h%.}"
   while :; do case "$p" in /*) p="${p#/}" ;; *) break ;; esac; done
   p="${p%/}"; p="${p%.git}"
-  printf '%s\n' "$p" | tr 'A-Z' 'a-z'
+  printf '%s %s\n' "$h" "$(printf '%s' "$p" | tr 'A-Z' 'a-z')"
 }
 land_remote_bad() { # remote repo
-  local r="$1" want u path urls net=0
-  want="$(printf '%s' "$LAND_CANONICAL_REPO" | tr 'A-Z' 'a-z')"
+  local r="$1" want u target urls net=0
+  want="github.com $(printf '%s' "$LAND_CANONICAL_REPO" | tr 'A-Z' 'a-z')"
   urls="$(git remote get-url --all "$r" 2>/dev/null)" || { echo "the remote '$r' is not configured"; return 1; }
   urls="$urls"$'\n'"$(git remote get-url --push --all "$r" 2>/dev/null)"
   while IFS= read -r u; do
     [ -n "$u" ] || continue
-    path="$(land_url_path "$u")" || continue
+    target="$(land_url_target "$u")" || continue
     net=1
-    if [ "$path" != "$want" ]; then
-      echo "$r uses $u, not $LAND_CANONICAL_REPO: this clone points at another repository. Repoint it: git remote set-url $r https://github.com/$LAND_CANONICAL_REPO.git (and drop any other url or pushurl of $r)"
+    if [ "$target" != "$want" ]; then
+      echo "$r uses $u, not github.com/$LAND_CANONICAL_REPO: this clone points at another repository. Repoint it: git remote set-url $r https://github.com/$LAND_CANONICAL_REPO.git (and drop any other url or pushurl of $r)"
       return 1
     fi
   done <<< "$urls"
-  if [ "$net" = 1 ] && [ "$(printf '%s' "$2" | tr 'A-Z' 'a-z')" != "$want" ]; then
-    echo "LAND_REPO is '$2' but $r is $LAND_CANONICAL_REPO: gh would read another repository. Set LAND_REPO=$LAND_CANONICAL_REPO or unset it"
+  if [ "$net" = 1 ] && [ "$(printf '%s' "$2" | tr 'A-Z' 'a-z')" != "$(printf '%s' "$LAND_CANONICAL_REPO" | tr 'A-Z' 'a-z')" ]; then
+    echo "LAND_REPO is '$2' but $r is github.com/$LAND_CANONICAL_REPO: gh would read another repository. Set LAND_REPO=$LAND_CANONICAL_REPO or unset it"
     return 1
   fi
   return 0

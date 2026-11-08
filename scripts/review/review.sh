@@ -48,6 +48,12 @@ CODEX_BIN="${REVIEW_CODEX_BIN:-codex}"
 REMOTE="${REVIEW_REMOTE:-origin}"
 MAIN_REF="${REVIEW_MAIN_REF:-$REMOTE/main}"
 PUSH="${REVIEW_PUSH:-1}"
+if [ "$PUSH" = 1 ]; then
+  # The one repository, before the notes are fetched or pushed (land_remote_bad, lib.sh).
+  # shellcheck source=scripts/land/lib.sh
+  source "$SCRIPT_DIR/../land/lib.sh" || exit 2
+  why="$(land_remote_bad "$REMOTE" "$LAND_CANONICAL_REPO")" || { echo "review: $why" >&2; exit 2; }
+fi
 PIECE_BYTES="${REVIEW_PIECE_BYTES:-60000}"
 NOTES_REF="refs/notes/concrete-review"
 FINDINGS_REF="refs/notes/concrete-review-findings"

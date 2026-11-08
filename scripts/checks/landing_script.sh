@@ -633,10 +633,18 @@ out="$(LAND_REMOTE=gh-alias bash "$TRAIN" land t1 2>&1)"; rc=$?
   && ok "land refuses an ssh host alias for another repository (the host is not what is checked)" || no "land accepted an ssh alias for concrete2 (exit $rc)"
 # The URL table, read through the same function: every network form of the one repository passes,
 # every network form of another fails, local paths pass and leave LAND_REPO free.
+# ssh -G is stubbed: github-lambdaclass is an alias for github.com, every other name is itself.
+mkdir -p "$TMP/sshstub"
+cat > "$TMP/sshstub/ssh" <<'SSH'
+#!/bin/sh
+[ "$1" = -G ] || { echo "ssh stub: only -G" >&2; exit 255; }
+case "$2" in github-lambdaclass) echo "hostname github.com" ;; *) echo "hostname $2" ;; esac
+SSH
+chmod +x "$TMP/sshstub/ssh"
 url_ok=1
 while read -r want url repo; do
   git remote add url-probe "$url"
-  ( . "$ROOT_DIR/scripts/land/lib.sh"; land_remote_bad url-probe "$repo" >/dev/null ); got=$?
+  ( PATH="$TMP/sshstub:$PATH"; . "$ROOT_DIR/scripts/land/lib.sh"; land_remote_bad url-probe "$repo" >/dev/null ); got=$?
   git remote remove url-probe
   [ "$got" = "$want" ] || { url_ok=0; echo "      $url (LAND_REPO=$repo): exit $got, want $want"; }
 done <<'URLS'
@@ -646,6 +654,9 @@ done <<'URLS'
 0 git@github-lambdaclass:lambdaclass/concrete.git lambdaclass/concrete
 0 ssh://git@github.com/lambdaclass/concrete.git lambdaclass/concrete
 0 ssh://git@github.com:22/lambdaclass/concrete.git lambdaclass/concrete
+0 ssh://git@github-lambdaclass/lambdaclass/concrete lambdaclass/concrete
+0 git@GITHUB.COM.:lambdaclass/concrete lambdaclass/concrete
+0 https://user:token@github.com:443/lambdaclass/concrete lambdaclass/concrete
 0 /tmp/x.git test/repo
 0 file:///tmp/x.git test/repo
 0 repos/concrete:backup.git test/repo
@@ -655,12 +666,33 @@ done <<'URLS'
 1 ssh://git@github.com:22/unbalancedparentheses/concrete2.git lambdaclass/concrete
 1 https://github.com/unbalancedparentheses/concrete2.git unbalancedparentheses/concrete2
 1 ssh://host lambdaclass/concrete
+1 https://attacker.example/lambdaclass/concrete.git lambdaclass/concrete
+1 git@attacker.example:lambdaclass/concrete.git lambdaclass/concrete
+1 foo::https://github.com/lambdaclass/concrete lambdaclass/concrete
+1 ftp://github.com/lambdaclass/concrete lambdaclass/concrete
 URLS
-[ "$url_ok" = 1 ] && ok "the one-repository guard reads the owner/name path of every network URL form" || no "the one-repository guard misjudged a URL form"
+[ "$url_ok" = 1 ] && ok "the one-repository guard accepts only github.com/lambdaclass/concrete, in every URL form and through ssh aliases" || no "the one-repository guard misjudged a URL form"
 out="$(LAND_REMOTE=gh-canon bash "$TRAIN" ci t1 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "gh would read another repository" && ok "ci refuses a LAND_REPO that is not the one repository the remote names" || no "ci accepted LAND_REPO=test/repo on the canonical remote (exit $rc)"
+# Every script that fetches or pushes on its own refuses a stale remote before touching it: a git shim
+# logs every fetch and push, and must log none.
+REALGIT="$(command -v git)"; mkdir -p "$TMP/gitshim"
+printf '#!/bin/sh\nfor a in "$@"; do case "$a" in fetch|push|ls-remote|clone) echo "$*" >> "%s"; break ;; esac; done\nexec "%s" "$@"\n' "$TMP/gitshim.log" "$REALGIT" > "$TMP/gitshim/git"
+chmod +x "$TMP/gitshim/git"
+for ep in "LAND_REMOTE=gh-stale bash $ROOT_DIR/scripts/land/notes.sh fetch" \
+          "LAND_REMOTE=gh-stale bash $ROOT_DIR/scripts/land/notes.sh put review HEAD verdict=clean" \
+          "LAND_REMOTE=gh-stale bash $ROOT_DIR/scripts/land/ready.sh main" \
+          "REVIEW_REMOTE=gh-stale bash $ROOT_DIR/scripts/review/verify.sh --fetch HEAD" \
+          "REVIEW_REMOTE=gh-stale REVIEW_CODEX_BIN=false bash $ROOT_DIR/scripts/review/review.sh --base HEAD~1"; do
+  : > "$TMP/gitshim.log"
+  out="$(PATH="$TMP/gitshim:$PATH" eval "$ep" 2>&1)"; rc=$?
+  [ "$rc" != 0 ] && has "$out" "points at another repository" && [ ! -s "$TMP/gitshim.log" ] \
+    && ok "refused before any fetch or push: ${ep%% *} ${ep##*/}" || { no "not refused cleanly (exit $rc): $ep"; echo "$out" | sed 's/^/      /'; sed 's/^/      git: /' "$TMP/gitshim.log"; }
+done
+[ -f "$FAKE_GH_DIR/calls.log" ] && cp "$FAKE_GH_DIR/calls.log" "$TMP/calls.keep"; : > "$FAKE_GH_DIR/calls.log"
 out="$(LAND_REMOTE=gh-stale LAND_REPO=unbalancedparentheses/concrete2 bash "$TRAIN" watch t1 --interval 1 2>&1)"; rc=$?
-[ "$rc" != 0 ] && has "$out" "points at another repository" && ! grep -q 'unbalancedparentheses/concrete2' "$FAKE_GH_DIR/calls.log" 2>/dev/null \
+calls="$(cat "$FAKE_GH_DIR/calls.log")"; [ -f "$TMP/calls.keep" ] && mv "$TMP/calls.keep" "$FAKE_GH_DIR/calls.log"
+[ "$rc" != 0 ] && has "$out" "points at another repository" && [ -z "$calls" ] \
   && ok "watch refuses an old origin with an old LAND_REPO before reading any run" || no "watch read CI through a stale remote (exit $rc)"
 out="$(LAND_REMOTE=gh-stale bash "$TRAIN" --dry-run build tstale --no-fetch b1 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "points at another repository" && ok "build refuses a remote that is another GitHub repository" || no "build accepted a stale GitHub remote (exit $rc)"
@@ -1259,14 +1291,14 @@ out="$(cd "$W" && printf 'refs/heads/x %s refs/heads/wip/idn %s\n' "$(git rev-pa
   && ok "a real push never takes the identify answer (no environment switch exists)" || { no "identify leaked into a push: $out"; }
 # The hook refuses a push to any network URL that is not the one repository, before any tier (and
 # CONCRETE_SKIP_GATES does not skip it); the canonical URL in any form reaches the wip tier.
-for u in https://github.com/unbalancedparentheses/concrete2.git git@github-old:unbalancedparentheses/concrete2.git; do
+for u in https://github.com/unbalancedparentheses/concrete2.git git@github-old:unbalancedparentheses/concrete2.git https://attacker.example/lambdaclass/concrete.git; do
   out="$(cd "$W" && printf 'refs/heads/x %s refs/heads/wip/dst %s\n' "$(git rev-parse main)" 0000000000000000000000000000000000000000 \
     | CONCRETE_SKIP_GATES=1 bash "$ROOT_DIR/.githooks/pre-push" origin "$u" 2>&1)"; rc=$?
-  [ "$rc" = 1 ] && has "$out" "is not lambdaclass/concrete" && ok "the hook refuses a push to $u, even with CONCRETE_SKIP_GATES=1" || no "hook pushed to $u: exit $rc, $out"
+  [ "$rc" = 1 ] && has "$out" "is not github.com/lambdaclass/concrete" && ok "the hook refuses a push to $u, even with CONCRETE_SKIP_GATES=1" || no "hook pushed to $u: exit $rc, $out"
 done
 for u in git@github-lambdaclass:lambdaclass/concrete.git https://github.com/LambdaClass/concrete; do
   out="$(cd "$W" && printf 'refs/heads/x %s refs/heads/wip/dst %s\n' "$(git rev-parse main)" 0000000000000000000000000000000000000000 \
-    | bash "$ROOT_DIR/.githooks/pre-push" origin "$u" 2>&1)"; rc=$?
+    | PATH="$TMP/sshstub:$PATH" bash "$ROOT_DIR/.githooks/pre-push" origin "$u" 2>&1)"; rc=$?
   [ "$rc" = 0 ] && has "$out" "wip/* backup push" && ok "the hook lets a push to $u through to its tier" || no "hook refused $u: exit $rc, $out"
 done
 standin_hook

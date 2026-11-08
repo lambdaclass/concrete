@@ -10,10 +10,11 @@ accounts) reaches the self-hosted runners through branch pushes and `workflow_di
   lambdaclass/concrete, and the bot, `acceptance.sh` and `install-bot.sh` follow. `push-both.sh`
   keeps its name and lock and pushes one remote.
 - **Stale clones fail closed.** `build`, `check`, `ci`, `watch`, `land`, the bot (and its launcher,
-  before its first fetch) and `push-both.sh` refuse a remote any of whose fetch or push URLs is a
-  network URL whose owner/name is not lambdaclass/concrete (a constant in `scripts/land/lib.sh`, not
-  `LAND_REPO`; any host or ssh alias), and a `LAND_REPO` that is not it. The pre-push hook refuses a
-  push to any such URL, which covers `notes.sh`, `review.sh`, `ready.sh` and pushes by hand
+  before its first fetch), `push-both.sh`, `ready.sh`, `notes.sh fetch|put`, `review.sh` and
+  `verify.sh --fetch` refuse a remote any of whose fetch or push URLs is a network URL other than
+  github.com/lambdaclass/concrete (a constant in `scripts/land/lib.sh`, not `LAND_REPO`; ssh host
+  aliases resolved with `ssh -G`), and a `LAND_REPO` that is not it, before any fetch or push. The
+  pre-push hook refuses a push to any such URL, which also covers pushes by hand
   (`scripts/checks/landing_script.sh` and `landing_bot.sh` cover each).
 - **CI.** The Landing record job reads runs from `github.repository`. The concrete-ci-2 runners are
   registered on lambdaclass/concrete, with `CONCRETE_SELF_HOSTED=true` there.
