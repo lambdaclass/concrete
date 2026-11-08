@@ -1,0 +1,9 @@
+# Public specification theorems whose presence scripts/proofs/axioms.sh requires.
+ConcreteSpec.Brand.reset_fresh # A2b: reset creates a fresh allocator brand.
+ConcreteSpec.Cleanup.defer_cleanup_releases # A2b: deferred cleanup releases resources in order.
+ConcreteSpec.Borrow.open_mut_freezes_root # A2b: a mutable borrow freezes its root.
+ConcreteSpec.Rep.rep_roundtrip # A2b: encoding then decoding preserves a value.
+ConcreteSpec.check_iff # Slice 1: checker acceptance agrees with the judgments.
+ConcreteSpec.checked_never_stuck # Slice 1: accepted programs never get stuck.
+ConcreteSpec.checked_no_implicit_traps # Slice 1: accepted programs never trap implicitly.
+ConcreteSpec.checked_exits # Slice 1: accepted programs produce an exit outcome.

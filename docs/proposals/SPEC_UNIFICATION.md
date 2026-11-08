@@ -862,8 +862,8 @@ If one does, it goes to the owner (P1).
 
 - `lake build ConcreteSpec` with `warningAsError`;
 - no `sorry` and no `native_decide`; axioms only `propext`, `Quot.sound`, `Classical.choice`;
-- `scripts/proofs` green: the axiom golden updated in the same commit, the trust ban, the kernel
-  replay and the external checker;
+- `scripts/proofs` green: the standard-axiom and pinned-theorem properties, the trust ban, the
+  kernel replay and the external checker;
 - Codex review per step or per small group, until ACCEPT; pushed to both remotes.
 - phase A steps land on main through the train (review leg on) as soon as they pass; later steps
   land in small groups.

@@ -162,7 +162,7 @@ jobs:
           fi
 
   # PROOF INTEGRITY (scripts/proofs). Four jobs, each required, each with its own negative controls:
-  # the per-theorem axiom inventory against its golden list, the transitive sorry/native_decide ban,
+  # the standard-axiom property and pinned public theorems, the transitive sorry/native_decide ban,
   # the fresh kernel replay (leanchecker) and the independent re-check (con-leche, nanoda). The spec
   # is built in each (lean-action); a failed build fails the job before the check runs.
   proof-axioms:
