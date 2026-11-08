@@ -248,6 +248,47 @@ def life (types : Var → Option Descriptor) : Exec.Life → State → Option St
   | .leave, s => leave s
   | .drop xs, s => drop xs s
 
+/-- A call's view arguments have already opened their loans while arguments were evaluated,
+so later arguments observe their freezes (OD23). Transfer only those fresh children to the
+callee activation; do not reborrow again or move the caller's original view. -/
+def adoptDown (s : State) (args : List (Var × LoanId)) : Option State := do
+  let f ← s.frames.head?
+  if (args.map Prod.fst).Nodup ∧ (args.map Prod.snd).Nodup ∧
+      (∀ e ∈ args, ∃ l ∈ s.loans, l.id = e.2) ∧
+      (∀ e ∈ args, AList.lookup f.locals e.1 = none) then
+    validate { s with
+      loans := s.loans.map fun l =>
+        if l.id ∈ args.map Prod.snd then { l with activation := f.id } else l
+      frames := { f with views := args ++ f.views } :: s.frames.tail }
+  else none
+
+/-- Metadata for loan arguments waiting for C1's enter event. No reference is stored in a
+concrete value: the callee parameter is associated with its loan only in this instrumentation. -/
+structure CallState where
+  own : State
+  pending : List (Var × LoanId) := []
+  deriving DecidableEq, Repr
+
+/-- Evaluate a downward view argument now, before the next argument. Target binder identities
+come from the checked call signature. Shared views may be passed repeatedly, each with a fresh
+loan; a mutable view's first lending freezes it immediately. -/
+def passDown (s : CallState) (source : LoanId) (parameter : Var) : Option CallState := do
+  let l ← loan s.own source
+  let own ← reborrow s.own source [] l.mode
+  pure ⟨own, s.pending ++ [(parameter, ⟨s.own.nextLoan⟩)]⟩
+
+/-- A C1 lifecycle adapter for mixed owning/view parameters. Owning parameters use descriptors;
+view parameters adopt the loans opened during left-to-right argument evaluation. There is no
+loan-valued result-binding case. Every other lifecycle event uses the same ownership rules. -/
+def callLife (types : Var → Option Descriptor) : Exec.Life → CallState → Option CallState
+  | .enter params, s => do
+    if s.pending.all (fun e => decide (e.1 ∈ params)) then
+      let own ← enter types (params.filter fun x => decide (x ∉ s.pending.map Prod.fst)) s.own
+      let own ← adoptDown own s.pending
+      pure ⟨own, []⟩
+    else none
+  | e, s => (life types e s.own).map fun own => { s with own := own }
+
 /-- Erasure forgets the instrumentation, keeping exactly the operand instance's concrete store. -/
 structure Store (σ : Type) where
   concrete : σ
@@ -436,6 +477,59 @@ example : (match (runBody
           (.cond (.use ⟨0⟩) .skip
             (.cond (.endLoan ⟨0⟩) .skip .skip ⟨0⟩) ⟨0⟩) ⟨0⟩) ⟨0⟩) ⟨0⟩)).ending with
     | .final .normal => true
+    | _ => false) = true := by decide
+
+/-- The following C1 instance exercises actual calls with downward view parameters. -/
+inductive CE where
+  | value (e : E)
+  | argument (source : LoanId) (parameter : Var)
+  | useView (parameter : Var)
+
+def callEval (locals : AList Var Int) (s : CallState) : CE → Res (Int × CallState)
+  | .value e => (eval locals s.own e).map fun (v, own) => (v, { s with own := own })
+  | .argument i x => match passDown s i x with
+    | some s => .ok (0, s)
+    | none => .stuck
+  | .useView x => match s.own.frames.head?.bind (fun f => AList.lookup f.views x) with
+    | some i => if loanAccess s.own i .mutable then .ok (0, s) else .stuck
+    | none => .stuck
+
+abbrev callOps : Exec.Operands where
+  Val := Int
+  Expr := CE
+  Ty := Unit
+  Store := CallState
+  Prim := Empty
+  Event := Empty
+  unitVal := 0
+  unitTy := ()
+  isCopy := fun _ => false
+  eval := callEval
+  life := callLife types
+  test := fun n => some (n != 0)
+  allows := fun p => nomatch p
+
+def callee : FnId := ⟨⟨[]⟩, "callee"⟩
+def callProgram : Exec.Program callOps :=
+  ⟨[(callee, ⟨[(y, ())], (), ⟨1⟩,
+    .cond (.useView y) .skip .skip ⟨0⟩⟩)]⟩
+
+def callRun (body : Exec.Stmt callOps) : Exec.Report callOps :=
+  Exec.run callProgram (fun _ p => nomatch p) 100
+    ⟨.exec body, [(x, 7)], ⟨exclusive, []⟩, []⟩
+
+/-- Accepted: a real C1 call lends the mutable parent to its parameter; return ends the child,
+then the caller can use its original parent again. No reference is a returned/stored value. -/
+example : (match (callRun (.seq (.call none callee [.argument ⟨0⟩ y] ⟨0⟩)
+    (.cond (.value (.use ⟨0⟩)) .skip .skip ⟨0⟩))).ending with
+    | .final .normal => true
+    | _ => false) = true := by decide
+
+/-- Refused: OD23 applies during argument evaluation, before entry. The second argument
+cannot use the origin frozen by the first argument's mutable lending. -/
+example : (match (callRun (.call none callee
+    [.argument ⟨0⟩ y, .value (.use ⟨0⟩)] ⟨0⟩)).ending with
+    | .stuck _ => true
     | _ => false) = true := by decide
 
 end Examples
