@@ -6,7 +6,12 @@ root=$(cd "$(dirname "$0")/../../.." && pwd)
 source "$root/scripts/checks/lib/bounded.sh"
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
-git -C "$root" show 688e10a86:scripts/checks/lib/slice0_native.sh > "$work/historical.sh"
+# Frozen byte-for-byte source keeps this witness available in shallow CI clones.
+historical="$root/scripts/checks/lib/fixtures/slice0_native_688e10a86.txt"
+[ "$(sha256sum "$historical" | cut -d' ' -f1)" = "7460e8394edc60c76de4b9429d9236f12f9e9fe3bdc69d8aa6212eb79054ba70" ] || {
+  echo 'FAIL historical helper source digest' >&2; exit 1;
+}
+cp "$historical" "$work/historical.sh"
 rc=0
 CONCRETE_LINK_CONTROL_NATIVE_HELPER="$work/historical.sh" bounded_run -i /dev/null 120 -- bash "$root/scripts/checks/lib/link_controls.sh" >"$work/products.log" 2>&1 || rc=$?
 cat "$work/products.log"

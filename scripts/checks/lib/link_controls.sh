@@ -45,10 +45,6 @@ for side in a different/b; do
   done
 done
 [ "$product_failures" = 0 ] || exit 1
-if [ "$(uname -s)" = Linux ]; then
-  libc="$(cat "${CONCRETE_SLICE0_CLANG%/bin/clang}/nix-support/orig-libc")/lib/libc.so"
-  ln -s "$libc" "$work/host/lib/libc.so"
-fi
 for exe in control.exe llvm.san.exe; do
   cmp "$work/a/$exe" "$work/different/b/$exe"
   echo "ok link controls: $exe unchanged by host layout, cwd and TMPDIR"
@@ -67,21 +63,27 @@ if python3 "$root/scripts/checks/lib/link_purity.py" impure.exe impure.trace con
   echo 'FAIL link controls: host RUNPATH accepted' >&2; exit 1
 fi
 grep -F "link purity: undeclared path: $work/host space/lib" refusal
-if [ "$(uname -s)" = Linux ]; then
-  # A host alias into the store is still an undeclared filesystem input.
-  ln -s "$(dirname "$libc")" "$work/host/alias"
-  "$CONCRETE_SLICE0_CLANG" -w -Wl,-t -Wl,-rpath,"$work/host/alias" control.o -o alias.exe >alias.trace 2>&1
-  if python3 "$root/scripts/checks/lib/link_purity.py" alias.exe alias.trace control.o >refusal 2>&1; then
-    echo 'FAIL link controls: host alias RUNPATH accepted' >&2; exit 1
-  fi
-  grep -F "link purity: undeclared path: $work/host/alias" refusal
-  # Independently test a host input alias in the trace of an otherwise pure binary.
-  sed "s|$libc|$work/host/lib/libc.so|g" control.exe.trace >alias-input.trace
-  if python3 "$root/scripts/checks/lib/link_purity.py" control.exe alias-input.trace control.o >refusal 2>&1; then
-    echo 'FAIL link controls: host alias input accepted' >&2; exit 1
-  fi
-  grep -F "link purity: undeclared path: $work/host/lib/libc.so" refusal
+# A host alias into the store remains an undeclared filesystem input on both targets.
+libc=$(python3 - <<'INPUT'
+from pathlib import Path
+paths = Path('control.exe.trace').read_text().splitlines()
+print(next(p for p in paths if p.startswith('/') and Path(p).is_file()))
+INPUT
+)
+ln -s "$(dirname "$libc")" "$work/host/alias"
+"$CONCRETE_SLICE0_CLANG" -w -Wl,-t -Wl,-rpath,"$work/host/alias" control.o -o alias.exe >alias.trace 2>&1
+if python3 "$root/scripts/checks/lib/link_purity.py" alias.exe alias.trace control.o >refusal 2>&1; then
+  echo 'FAIL link controls: host alias RUNPATH accepted' >&2; exit 1
 fi
+grep -F "link purity: undeclared path: $work/host/alias" refusal
+# Add a host alias input independently of the binary's runtime metadata.
+ln -s "$libc" "$work/host/lib/$(basename "$libc")"
+cp control.exe.trace alias-input.trace
+printf '%s\n' "$work/host/lib/$(basename "$libc")" >>alias-input.trace
+if python3 "$root/scripts/checks/lib/link_purity.py" control.exe alias-input.trace control.o >refusal 2>&1; then
+  echo 'FAIL link controls: host alias input accepted' >&2; exit 1
+fi
+grep -F "link purity: undeclared path: $work/host/lib/$(basename "$libc")" refusal
 if CONCRETE_SLICE0_SYSROOT="$work/host" python3 "$root/scripts/checks/lib/link_policy.py" >refusal 2>&1; then
   echo 'FAIL link controls: effective policy mismatch accepted' >&2; exit 1
 fi

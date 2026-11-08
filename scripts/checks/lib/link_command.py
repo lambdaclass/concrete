@@ -35,7 +35,7 @@ def check_grammar(actual, objects, output, target):
                     sys.exit('link command: unexpected output')
             elif arg in paths:
                 allowed(next(args))
-            elif any(arg.startswith(p + '=') for p in paths):
+            elif not darwin and arg.startswith(('--sysroot=', '--dynamic-list=')):
                 allowed(arg.split('=', 1)[1])
             elif arg.startswith(('-L', '-F')) and len(arg) > 2:
                 if arg[:2] not in paths:
@@ -100,4 +100,5 @@ if __name__ == '__main__':
     actual = command(policy, output, objects, variant == 'sanitize')
     Path(record).write_text(json.dumps(actual) + '\n')
     validate(policy, json.loads(Path(record).read_text()), output, objects, variant == 'sanitize')
-    os.execve(actual[0], actual, {'LC_ALL': 'C', 'TZ': 'UTC', 'ZERO_AR_DATE': '1'})
+    os.execve(actual[0], actual, {'LC_ALL': 'C', 'TZ': 'UTC', 'ZERO_AR_DATE': '1',
+                                   'TMPDIR': os.environ['CONCRETE_NATIVE_TMP']})

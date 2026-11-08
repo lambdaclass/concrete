@@ -180,7 +180,7 @@
             # Grammar: binutils 2.44 ld/ld.texi; Apple ld64-954.16 doc/man/man1/ld-classic.1.
             link = if pkgs.stdenv.isDarwin then [
               nativeSettings.CONCRETE_SLICE0_REAL_LD "-dynamic" "-arch" "arm64"
-              "-platform_version" "macos" "15.0" "15.0" "-syslibroot"
+              "-platform_version" "macos" "15.0" nativeSysroot.version "-syslibroot"
               nativeSettings.CONCRETE_SLICE0_SYSROOT "-no_uuid" "-w" "-Z" "-t"
               "-o" "@OUTPUT@" "@OBJECTS@" "-L${nativeSettings.CONCRETE_SLICE0_SYSROOT}/usr/lib" "-lSystem"
             ] else [
@@ -204,8 +204,8 @@
               "${pkgs.lib.getLib pkgs.llvmPackages_21.libunwind}/lib/libunwind.a"
               "--no-as-needed" "-lpthread" "-lrt" "-lm" "-ldl" "-lresolv"
             ];
-            validation = "lexical and resolved closure containment; trace and recursive loader dependency resolution without host cache";
-            darwin = "native wrapper default target (no multi-target override), deployment 15.0; SDK-backed OS dylibs and /usr/lib/dyld ABI; explicit ASan runtime without executable-relative RPATH";
+            validation = "exact real-linker template and closed grammar; raw path and symlink-prefix closure containment; trace and recursive loader dependencies without host cache";
+            darwin = "direct ld64, no implicit directories; deployment 15.0 and pinned SDK version; SDK-backed OS dylibs and /usr/lib/dyld ABI; explicit ASan runtime and RPATH";
             };
           };
           nativeEnv = nativeSettings // { CONCRETE_SLICE0_LINK_POLICY = nativePolicy; };

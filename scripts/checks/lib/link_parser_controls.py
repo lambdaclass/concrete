@@ -5,6 +5,7 @@ Mach-O headers are subprocess fixtures: run the production parser on every host.
 Each negative must produce its own policy diagnostic; tool errors are failures.
 """
 import os
+import copy
 from pathlib import Path
 import runpy
 import sys
@@ -13,7 +14,7 @@ from unittest.mock import patch
 
 from link_command import command, validate, check_grammar
 from link_paths import allowed
-from link_policy import verify_policy
+from link_policy import verify_policy, shell_arrays
 
 count = 0
 
@@ -43,6 +44,12 @@ with tempfile.TemporaryDirectory() as scratch:
                  '-rpath', '-T', '@response', '--unknown']:
         refuse('final invocation ' + flag,
                lambda flag=flag: validate(policy, actual + [flag], 'out.exe', ['control.o']))
+    os.environ['CONCRETE_NATIVE_TMP'] = scratch
+    shell_arrays(policy)
+    for flag in ['-L/usr/lib', '-F/usr/lib', '-B/usr/bin', '--sysroot=/usr']:
+        mutated = copy.deepcopy(policy)
+        mutated['compile'].append(flag)
+        refuse('compiler policy ' + flag, lambda mutated=mutated: shell_arrays(mutated))
     target = policy['settings']['CONCRETE_SLICE0_TARGET']
     for args in [['-L/usr/lib'], ['-L', '/usr/lib'], ['-F/usr/lib'], ['-B/usr/bin'],
                  ['--sysroot=/usr'], ['-rpath', '/usr/lib'], ['-T', '/usr/script'],
@@ -57,6 +64,19 @@ with tempfile.TemporaryDirectory() as scratch:
     refuse('local symlink', lambda: allowed('alias.o', local=True))
     refuse('symlink dotdot traversal', lambda: allowed('/host/symlink/../../' + store.lstrip('/')))
     refuse('store dot traversal', lambda: allowed(store + '/./lib'))
+    # A symlink can leave and then re-enter a declared root. The final resolved
+    # target alone is insufficient: every traversed symlink prefix must be owned.
+    declared = Path(scratch) / 'declared'
+    declared.mkdir()
+    (declared / 'safe').mkdir()
+    outside = Path(scratch) / 'outside'
+    outside.mkdir()
+    (declared / 'leave').symlink_to(outside, target_is_directory=True)
+    (outside / 'return').symlink_to(declared / 'safe', target_is_directory=True)
+    closure = Path(scratch) / 'closure'
+    closure.write_text(str(declared) + '\n')
+    with patch.dict(os.environ, {'CONCRETE_SLICE0_LINK_CLOSURE': str(closure)}):
+        refuse('symlink prefix leaves and reenters closure', lambda: allowed(str(declared / 'leave' / 'return')))
     # Each Mach-O fixture begins with the legitimate fixed loader. Fixtures test
     # production handling of all path-bearing failure modes, not a duplicate parser.
     def header(commands):
@@ -77,4 +97,4 @@ with tempfile.TemporaryDirectory() as scratch:
         ('unparsed load command', loader + [('LC_RPATH', '')]),
     ]:
         refuse('Mach-O ' + label, lambda commands=commands: macho(commands))
-print(f'PASS parser controls: negative={count} positive=4')
+print(f'PASS parser controls: negative={count} positive=5')
