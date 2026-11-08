@@ -1,0 +1,2 @@
+[piece 1 of 1: docs]
+- docs/proposals/SLICE1_BRIEF.md:241: Assigning the Lean spec additions and all compiler code to Codex contradicts the owner’s 2026-11-08 rule in AGENTS.md: Claude handles the spec, slice 0 and front end; Codex and Kimi handle mechanical work. This revises a decided project assignment without citing an explicit owner answer authorizing the change.
