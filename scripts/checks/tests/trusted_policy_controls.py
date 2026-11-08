@@ -252,6 +252,36 @@ with tempfile.TemporaryDirectory() as tmp:
         rc, lines = check_trace(invoked, "native", resolved)
         assert rc == 1 and lines == [
             f"FAIL tools: identity-mismatch role 'native' program 'bash': {resolved}"], lines
+
+        # Live flake.nix trustedIdentity role-boundary controls.
+        os.chdir(ROOT)
+        real_ev = identity.store_evidence()
+        real_ev["inputs"] = {}
+        real_ev["lcb"] = str(lcb_bin.resolve())
+        real_ev["lcb_sha256"] = hashlib.sha256(lcb_bin.read_bytes()).hexdigest()
+        evidence.write_text(json.dumps(real_ev))
+        allowed.write_text("clang\nld.lld\nlean\nleanc\nlake\ngit\nlcb\nbash\n")
+        real_lean = real_ev["lean"]
+        real_git = os.path.realpath(shutil.which("git"))
+        for bad_path, bad_role, prog in [
+            (real_lean + "/bin/clang", "native", "clang"),
+            (real_lean + "/bin/ld.lld", "native", "ld.lld"),
+            (real_lean + "/bin/lean", "native", "lean"),
+            (real_lean + "/bin/leanc", "native", "leanc"),
+            (real_lean + "/bin/lake", "native", "lake"),
+            (real_git, "native", "git"),
+            (real_lean + "/bin/leanc", "lean-emit", "leanc"),
+            (real_lean + "/bin/lake", "lean-emit", "lake"),
+            (real_git, "lean-emit", "git"),
+            (str(lcb_bin), "lean-emit", "lcb"),
+            (str(lcb_bin), "lean-build", "lcb"),
+        ]:
+            rc, lines = check_trace(bad_path, bad_role)
+            expected_real = os.path.realpath(bad_path)
+            assert rc == 1 and lines == [
+                f"FAIL tools: identity-mismatch role '{bad_role}' program '{prog}': {expected_real}"], (bad_path, bad_role, lines)
+        assert check_trace(real_lean + "/bin/lean", "lean-emit")[0] == 0
+        assert check_trace(str(lcb_bin), "native")[0] == 0
     finally:
         os.chdir(old)
 print("PASS candidate consistency, pending owner authentication, writer-regeneration bypass, pins and role identity controls")

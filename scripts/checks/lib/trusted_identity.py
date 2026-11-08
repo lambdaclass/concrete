@@ -70,23 +70,29 @@ def store_evidence():
     for path, info in closure.items():
         if not path.startswith("/nix/store/") or not info.get("narHash"):
             raise ValueError(f"missing store hash for {path}")
-    root_closures = {
-        r: [p for p in run("nix", "path-info", "--recursive", r).splitlines() if p]
-        for r in roots
-    }
+    package_closures = {}
+    def closure_of(pkg):
+        if pkg not in package_closures:
+            package_closures[pkg] = [p for p in run("nix", "path-info", "--recursive", pkg).splitlines() if p]
+        return package_closures[pkg]
+
+    root_closures = {r: closure_of(r) for r in roots}
     tool_closures = {
         tool: sorted({p for r in r_list for p in root_closures.get(r, [])})
         for tool, r_list in identity["toolRoots"].items()
     }
-    # Role roots may include bintools outputs outside the top-level package list.
-    role_closures = {}
-    for role, overrides in identity["roleToolRoots"].items():
-        role_closures[role] = dict(tool_closures)
-        for tool, packages in overrides.items():
-            paths = set()
-            for package in packages:
-                paths.update(run("nix", "path-info", "--recursive", package).splitlines())
-            role_closures[role][tool] = sorted(paths)
+    # Each role enumerates its exact allowed tools and roots without inheriting tool_closures.
+    role_closures = {
+        role: {
+            tool: sorted({p for package in packages for p in closure_of(package)})
+            for tool, packages in role_tools.items()
+        }
+        for role, role_tools in identity["roleToolRoots"].items()
+    }
+    role_local_tools = {
+        role: sorted(set(tools))
+        for role, tools in identity["roleLocalTools"].items()
+    }
     role_compilers = {role: sorted({os.path.realpath(p) for p in paths})
                       for role, paths in identity["roleCompilers"].items()}
     role_linkers = {
@@ -104,6 +110,7 @@ def store_evidence():
     if f"version {pin}," not in run(lean + "/bin/lean", "--version"):
         raise ValueError("Lean version differs from lean-toolchain")
     return {"closure": closure, "tool_closures": tool_closures, "role_closures": role_closures,
+            "role_local_tools": role_local_tools,
             "role_compilers": role_compilers, "role_linkers": role_linkers, "lean": lean,
             "inputs": {p: hashlib.sha256(Path(p).read_bytes()).hexdigest()
                        for p in ("flake.nix", "flake.lock", "lean-toolchain", "lake-manifest.json")}}
@@ -132,6 +139,7 @@ def check(logs, allowed, evidence, lcb, role):
     if role not in evidence["role_closures"]:
         raise ValueError(f"unknown pipeline role: {role}")
     tool_closures = evidence["role_closures"][role]
+    allowed_local = set(evidence.get("role_local_tools", {}).get(role, ["lcb"] if role == "native" else []))
     for path in paths:
         name = os.path.basename(path)
         if name not in allowed:
@@ -141,7 +149,7 @@ def check(logs, allowed, evidence, lcb, role):
         real_name = os.path.basename(real)
         path_root = "/".join(path.split("/")[:4]) if path.startswith("/nix/store/") else ""
         root = "/".join(real.split("/")[:4]) if real.startswith("/nix/store/") else ""
-        local = (name == "lcb" and real_name == "lcb" and real == lcb_real)
+        local = (name == "lcb" and "lcb" in allowed_local and real_name == "lcb" and real == lcb_real)
         if local and (real != evidence.get("lcb") or
                 hashlib.sha256(Path(real).read_bytes()).hexdigest() != evidence.get("lcb_sha256")):
             print(f"FAIL tools: changed local LCB executable: {real}")

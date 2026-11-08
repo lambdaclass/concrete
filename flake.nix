@@ -160,26 +160,71 @@
                 realpath = map builtins.toString [ pkgs.coreutils pkgs.llvmPackages_21.clang pkgs.clang ];
                 rm = map builtins.toString [ pkgs.coreutils pkgs.llvmPackages_21.clang pkgs.clang ];
               };
-              # Role boundaries are independent of the union pipeline closure.
+              # Role boundaries enumerate every allowed tool and root per role independently of the union closure.
               roleToolRoots = let
-                compilerTools = cc: {
-                  clang = [ (builtins.toString cc) ];
-                  clang-21 = [ (builtins.toString cc) ];
-                  ar = [ (builtins.toString cc.bintools) ];
-                  ld = [ (builtins.toString cc.bintools) ];
-                  ld64 = [ (builtins.toString cc.bintools) ];
-                  "ld.lld" = [ (builtins.toString cc.bintools) ];
-                  as = [ (builtins.toString cc.bintools) ];
+                compilerTools = cc: let
+                  compilers = map builtins.toString [ cc cc.cc ];
+                  bintools = map builtins.toString [ cc.bintools cc.bintools.bintools ];
+                in {
+                  clang = compilers;
+                  clang-21 = compilers;
+                  ar = bintools;
+                  ld = bintools;
+                  ld64 = bintools;
+                  "ld.lld" = bintools;
+                  as = bintools;
+                };
+                shellTools = cc: {
+                  bash = map builtins.toString [ pkgs.bash cc ];
+                  env = map builtins.toString [ pkgs.coreutils cc ];
+                  uname = map builtins.toString [ pkgs.coreutils cc ];
+                  mktemp = map builtins.toString [ pkgs.coreutils cc ];
+                  realpath = map builtins.toString [ pkgs.coreutils cc ];
+                  rm = map builtins.toString [ pkgs.coreutils cc ];
+                };
+                noCompilerTools = {
+                  clang = [];
+                  clang-21 = [];
+                  ar = [];
+                  ld = [];
+                  ld64 = [];
+                  "ld.lld" = [];
+                  as = [];
+                };
+                noShellTools = {
+                  bash = [];
+                  env = [];
+                  uname = [];
+                  mktemp = [];
+                  realpath = [];
+                  rm = [];
                 };
               in {
-                native = (compilerTools pkgs.llvmPackages_21.clang) // {
-                  lean = []; leanc = []; lake = []; git = [];
-                };
+                native = (compilerTools pkgs.llvmPackages_21.clang)
+                  // (shellTools pkgs.llvmPackages_21.clang)
+                  // { lean = []; leanc = []; lake = []; git = []; };
                 # leanc uses the shell C compiler for headers/libc; Lean's
                 # bundled toolchain also serves Lean-generated code, never native IR.
-                lean-build = pkgs.lib.mapAttrs (_: roots: roots ++ [ (builtins.toString leanRelease) ])
-                  (compilerTools pkgs.clang);
-                lean-emit = pkgs.lib.mapAttrs (_: _: []) (compilerTools pkgs.clang);
+                lean-build = (pkgs.lib.mapAttrs (_: roots: roots ++ [ (builtins.toString leanRelease) ])
+                    (compilerTools pkgs.clang))
+                  // (shellTools pkgs.clang)
+                  // {
+                    lean = [ (builtins.toString leanRelease) ];
+                    leanc = [ (builtins.toString leanRelease) ];
+                    lake = [ (builtins.toString leanRelease) ];
+                    git = [ (builtins.toString pkgs.git) ];
+                  };
+                lean-emit = noCompilerTools // noShellTools // {
+                  lean = [ (builtins.toString leanRelease) ];
+                  leanc = [];
+                  lake = [];
+                  git = [];
+                };
+              };
+              roleLocalTools = {
+                native = [ "lcb" ];
+                lean-build = [];
+                lean-emit = [];
               };
               roleLinkers = {
                 native = map builtins.toString [ pkgs.llvmPackages_21.clang.bintools
