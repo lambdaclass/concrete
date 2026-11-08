@@ -85,13 +85,21 @@ def imm(s):
         raise Refuse(f"not an immediate: {s}") from None
 
 
+X86_SP = ("rsp", "esp", "sp", "spl")
+X86_FP = ("rbp", "ebp", "bp", "bpl")
+X86_GPR64 = re.compile(r"^(r[abcd]x|r[sd]i|rbp|r(?:8|9|1[0-5]))$")
+
+
 def x86_step(mn, ops, d, fp):
-    """New (d, fp) after a non-control x86 instruction."""
+    """New (d, fp) after a non-control x86 instruction. Every alias of the stack pointer is a
+    stack-pointer write (refused unless modelled); every alias of the frame pointer drops it."""
     args = [a.strip() for a in ops.split(",")] if ops else []
     dst = args[0] if args else ""
-    if mn == "push":
-        return d + 8, fp
-    if mn == "pop":
+    if mn in ("push", "pop"):
+        if not X86_GPR64.match(dst):
+            raise Refuse(f"push/pop of other than a 64-bit general register: {mn} {ops}")
+        if mn == "push":
+            return d + 8, fp
         return d - 8, (None if dst == "rbp" else fp)
     if mn == "leave":
         if fp is None:
@@ -106,15 +114,15 @@ def x86_step(mn, ops, d, fp):
         if fp is None:
             raise Refuse("mov rsp, rbp with an unknown frame pointer")
         return fp, fp
-    if mn in ("enter", "pushf", "pushfq", "popf", "popfq") or dst in ("rsp", "esp", "sp", "spl"):
+    if dst in X86_SP:
         raise Refuse(f"unmodelled stack-pointer write: {mn} {ops}")
-    if dst in ("rbp", "ebp"):
+    if dst in X86_FP:
         return d, None
     return d, fp
 
 
 MEM = re.compile(r"\[([^\]]*)\]")
-X86_STACK = ("rsp", "rbp", "esp", "ebp")
+X86_STACK = X86_SP + X86_FP
 # x86 instructions whose stack-register operands the depth tracking itself models.
 X86_MODELLED = {("push", "rbp"), ("pop", "rbp"), ("mov", "rbp, rsp"), ("mov", "rsp, rbp"),
                 ("leave", "")}
@@ -132,10 +140,12 @@ def x86_access(mn, ops, d, fp):
         base = [r for r in regs if r in X86_STACK]
         if not base:
             continue
+        if base[0] not in ("rsp", "rbp"):
+            raise Refuse(f"stack address through a partial register: {mn} {ops}")
         if len(regs) != 1:
             raise Refuse(f"indexed stack address: {mn} {ops}")
         k = sum(int(t.replace(" ", ""), 0) for t in terms if t.strip(" +-") not in regs)
-        if base[0] in ("rbp", "ebp"):
+        if base[0] == "rbp":
             if fp is None:
                 raise Refuse(f"frame-relative address with an unknown frame pointer: {mn} {ops}")
             depth = fp - k

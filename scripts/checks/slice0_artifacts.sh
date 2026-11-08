@@ -17,7 +17,8 @@
 #     Linux, a run under gdb (lib/stack_measure.py) must stay within it (the run measures the
 #     stack pointer only). REPORT/stack.tsv. Controls: the analysis must refuse an unmodelled
 #     stack-pointer write, an indirect call, recursion, a call to an unknown function, two depths
-#     meeting, a stack pointer used as a value, an indexed stack address, an unmodelled
+#     meeting, a stack pointer used as a value or written through a partial register, a partial
+#     frame-pointer write, an indexed stack address, an unmodelled
 #     instruction (x86 `loop`) and frame-pointer writeback (AArch64), and give the
 #     expected bound on a known function and on a red-zone store; the comparison must reject a
 #     measurement above the bound.
@@ -66,7 +67,7 @@ measure() {
   main=$(awk '$1 == "range" && $2 == "main" {print $3}' <<<"$2")
   STACK_RANGES=$ranges STACK_MAIN=$main STACK_EXPECT=$3 \
     "${capped[@]}" timeout -k 10 300 "$gdb" -batch -nx -x "$root/scripts/checks/lib/stack_measure.py" \
-    "$1" 2>"$1.gdb.err" | awk '$1 == "measured" || $1 == "error" {print}' || true
+    "$1" 2>"$1.gdb.err" | awk '$1 == "measured" || $1 == "error" {print}' | cap_out || true
 }
 
 # stack_check NAME BACKEND EXE: derive the bound, measure a run where supported, record both.
@@ -75,13 +76,13 @@ stack_check() {
   if ! timeout -k 10 60 "${objdump[@]}" "$exe" >"$dis" 2>"$dis.err"; then
     echo "FAIL $name [$backend] stack: disassembly failed: $(head -c 300 "$dis.err")"; fail=1; return
   fi
-  if ! out=$(stack_bound "$arch" "$dis" --ranges); then
+  if ! out=$(stack_bound "$arch" "$dis" --ranges | cap_out); then
     echo "FAIL $name [$backend] stack: $out"; fail=1; return
   fi
   bound=$(awk '$1 == "bound" {print $2}' <<<"$out")
   ext=$(awk '$1 == "external" {printf "%s%s@%s", sep, $2, $3; sep=","}' <<<"$out")
   if [ -n "$gdb" ]; then
-    m=$(measure "$exe" "$out" "$(cat "$(dirname "$exe")/status")")
+    m=$(measure "$exe" "$out" "$(head -c 16 "$(dirname "$exe")/status")")
     measured=$(awk '$1 == "measured" {print $2}' <<<"$m")
     if [ -z "$measured" ] || ! within "$measured" "$bound"; then
       echo "FAIL $name [$backend] stack: bound $bound, run: ${m:-no measurement} $(head -c 300 "$exe.gdb.err")"
@@ -96,7 +97,8 @@ stack_check() {
 size_report() { # size_report NAME BACKEND EXE
   local bytes text
   bytes=$(wc -c <"$3" | tr -d ' ')
-  text=$("${capped[@]}" timeout -k 10 60 "$CONCRETE_SLICE0_LLVM/llvm-size" "$3" 2>/dev/null | awk 'NR == 2 {print $1}') || true
+  text=$("${capped[@]}" timeout -k 10 60 "$CONCRETE_SLICE0_LLVM/llvm-size" "$3" 2>/dev/null |
+    awk 'NR == 2 {print $1}' | cap_out) || true
   printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$target" "$bytes" "${text:-unavailable}" >>"$sizes"
 }
 
@@ -197,6 +199,8 @@ refuse unknown-call '    1010:\tcall\t0x3000 <helper>\n    1015:\tret\n'
 refuse depths-meet '    1010:\tje\t0x1014 <main+0x4>\n    1012:\tpush\trax\n    1013:\tnop\n    1014:\tret\n'
 refuse stack-pointer-escape '    1010:\tmov\trax, rsp\n    1013:\tret\n'
 refuse indexed-stack-address '    1010:\tmov\teax, dword ptr [rsp + 4*rcx - 0x8]\n    1014:\tret\n'
+refuse partial-stack-pointer '    1010:\tpush\trax\n    1011:\tpop\tsp\n    1013:\tret\n'
+refuse partial-frame-pointer '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tmov\tbp, 0x0\n    1018:\tmov\teax, dword ptr [rbp - 0x100]\n    101e:\tpop\trbp\n    101f:\tret\n'
 refuse loop-instruction '    1010:\tmov\tecx, 0x2\n    1015:\tloop\t0x1018 <main+0x8>\n    1017:\tret\n    1018:\tsub\trsp, 0x100\n    101f:\tadd\trsp, 0x100\n    1026:\tret\n'
 refuse a64-frame-writeback '    1010:\tmov\tx29, sp\n    1014:\tstr\tx0, [x29], #-0x100\n    1018:\tstr\tx0, [x29]\n    101c:\tadd\tx29, x29, #0x100\n    1020:\tret\n' aarch64 _main
 # A leaf's red-zone store, below the stack pointer, is inside the bound: 8 + 0x30.
@@ -218,7 +222,7 @@ else
 fi
 if [ -n "$gdb" ]; then
   # A run that does not end as expected gives no measurement.
-  wrong=$(( ($(cat "$(dirname "$last_exe")/status") + 1) % 256 ))
+  wrong=$(( ($(head -c 16 "$(dirname "$last_exe")/status") + 1) % 256 ))
   if grep -q '^measured' <<<"$(measure "$last_exe" "$last_analysis" "$wrong")"; then
     echo "FAIL control: a run with an unexpected exit status is measured"; fail=1
   else

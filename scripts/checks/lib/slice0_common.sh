@@ -12,7 +12,10 @@
 #     OUT.stdout, OUT.stderr;
 #   judge EXPECTED_DIR OBS: the observation OBS.* equals the expectation, byte for byte;
 #   build NAME LOG CMD...: run CMD, or print LOG and fail the gate;
-#   emit_examples: the example names, one per line, failing if there are none.
+#   emit_examples: the example names, one per line, failing if there are none;
+#   cap_out: copy stdin to stdout, failing above 1 MiB: every command output a gate captures
+#     into a variable goes through it, so no producer can grow the gate's shell (which may run
+#     with no address-space cap, see SLICE0_GATE_MEM_GB) without bound.
 root=$(pwd)
 work=$(mktemp -d)
 trap 'rm -rf "${work:?}"' EXIT
@@ -52,9 +55,17 @@ build() {
   "$@" >"$log" 2>&1 || { cat "$log" >&2; echo "slice0: $name: build failed: $*" >&2; exit 1; }
 }
 
+cap_out() {
+  local LC_ALL=C out
+  out=$(head -c 1048577; echo x)
+  out=${out%x}
+  [ "${#out}" -le 1048576 ] || { echo "slice0: captured output over 1 MiB" >&2; return 1; }
+  printf '%s' "$out"
+}
+
 emit_examples() {
   local names
-  names=$("${emitter[@]}" list) || { echo "slice0: listing the examples failed" >&2; exit 1; }
+  names=$("${emitter[@]}" list | cap_out) || { echo "slice0: listing the examples failed" >&2; exit 1; }
   [ -n "$names" ] || { echo "slice0: no examples listed" >&2; exit 1; }
   printf '%s\n' "$names"
 }
