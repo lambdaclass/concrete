@@ -110,7 +110,10 @@
           rt = "${nativeCC}/resource-root/lib/linux";
           cpu = pkgs.stdenv.hostPlatform.parsed.cpu.name;
           libcLib = "${pkgs.lib.getLib nativeCC.libc}/lib";
-          nativeSysroot = if pkgs.stdenv.isDarwin then pkgs.apple-sdk
+          # Use the complete pinned SDK source. nixpkgs' processed apple-sdk
+          # removes libc++ stubs, although Apple's ASan runtime names that OS ABI.
+          # The source is a fixed-output Nix dependency, never xcrun or a host SDK.
+          nativeSysroot = if pkgs.stdenv.isDarwin then pkgs.apple-sdk.src
             else pkgs.lib.getDev nativeCC.libc;
           # Closure metadata needs no stdenv. In particular stdenvNoCC on Darwin
           # introduces an uncached locale -> bmake build just to enumerate paths.
@@ -142,9 +145,7 @@
             CONCRETE_SLICE0_LINKER_BIN = "${nativeLD}/bin";
             CONCRETE_SLICE0_REAL_LD = "${realLD}/bin/ld";
             CONCRETE_SLICE0_LLVM = "${pkgs.llvmPackages_21.llvm}/bin";
-            CONCRETE_SLICE0_SYSROOT = if pkgs.stdenv.isDarwin
-              then "${nativeSysroot}/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk"
-              else "${nativeSysroot}";
+            CONCRETE_SLICE0_SYSROOT = "${nativeSysroot}";
             CONCRETE_SLICE0_TOOL_PATH = pkgs.lib.makeBinPath [ nativeLD pkgs.coreutils pkgs.gnugrep pkgs.gnused ];
           };
           nativePolicy = builtins.derivation {
@@ -180,7 +181,7 @@
             # Grammar: binutils 2.44 ld/ld.texi; Apple ld64-954.16 doc/man/man1/ld-classic.1.
             link = if pkgs.stdenv.isDarwin then [
               nativeSettings.CONCRETE_SLICE0_REAL_LD "-dynamic" "-arch" "arm64"
-              "-platform_version" "macos" "15.0" nativeSysroot.version "-syslibroot"
+              "-platform_version" "macos" "15.0" pkgs.apple-sdk.version "-syslibroot"
               nativeSettings.CONCRETE_SLICE0_SYSROOT "-no_uuid" "-w" "-Z" "-t"
               "-o" "@OUTPUT@" "@OBJECTS@" "-L${nativeSettings.CONCRETE_SLICE0_SYSROOT}/usr/lib" "-lSystem"
               "${pkgs.llvmPackages_21.compiler-rt}/lib/darwin/libclang_rt.osx.a"

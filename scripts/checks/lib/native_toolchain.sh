@@ -16,7 +16,9 @@ link_native() {
   if ! python3 "$policy_root/link_command.py" "$output.command" "$output" "$variant" "$@" >"$output.trace" 2>&1; then
     cat "$output.trace" >&2; return 1
   fi
-  if ! python3 "$policy_root/link_purity.py" "$output" "$output.trace" "$@"; then
+  local purity_mode=()
+  if [ "$variant" = sanitize ]; then purity_mode=(--sanitize); fi
+  if ! python3 "$policy_root/link_purity.py" "$output" "$output.trace" "${purity_mode[@]}" "$@"; then
     rm -f "$output"; return 1
   fi
 }

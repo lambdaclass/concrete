@@ -13,6 +13,16 @@ define i32 @main() {
   ret i32 42
 }
 IR
+if [ "$(uname -s)" = Darwin ]; then
+  # This newer compiler-rt builtin is supplied by osx.a, not libSystem.
+  cat > "$work/a/llvm.ll" <<'IR'
+declare i32 @__isPlatformVersionAtLeast(i32, i32, i32)
+define i32 @main() {
+  %platform = call i32 @__isPlatformVersionAtLeast(i32 15, i32 0, i32 0)
+  ret i32 42
+}
+IR
+fi
 "$CONCRETE_SLICE0_CLANG" -w -S "$work/a/llvm.ll" -o "$work/a/control.s"
 cp "$work/a/llvm.ll" "$work/different/b/llvm.ll"
 cp "$work/a/control.s" "$work/different/b/control.s"
@@ -77,6 +87,25 @@ if python3 "$root/scripts/checks/lib/link_purity.py" impure.exe impure.trace con
   echo 'FAIL link controls: host RUNPATH accepted' >&2; exit 1
 fi
 grep -F "link purity: undeclared path: $work/host space/lib" refusal
+if [ "$(uname -s)" = Darwin ]; then
+  (
+    policy_root="$root/scripts/checks/lib"
+    source "$policy_root/native_toolchain.sh"
+    "${cc[@]}" -### control.o -o driver.exe >driver.trace 2>&1
+    PYTHONPATH="$policy_root" python3 - <<'DRIVER'
+import json, os, shlex
+from pathlib import Path
+policy = json.loads(Path(os.environ['CONCRETE_SLICE0_LINK_POLICY']).read_text())
+commands = [shlex.split(line) for line in Path('driver.trace').read_text().splitlines() if line.startswith(' "')]
+link = next(args for args in commands if '-lSystem' in args)
+runtime = next(arg for arg in link if arg.endswith('/libclang_rt.osx.a'))
+declared = next(arg for arg in policy['link'] if arg.endswith('/libclang_rt.osx.a'))
+assert Path(runtime).resolve() == Path(declared).resolve(), (runtime, declared)
+assert link.index(runtime) > link.index('-lSystem'), link
+print('ok link controls: Darwin runtime matches pinned clang driver')
+DRIVER
+  )
+fi
 # A host alias into the store remains an undeclared filesystem input on both targets.
 libc=$(python3 - <<'INPUT'
 from pathlib import Path

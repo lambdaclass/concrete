@@ -13,8 +13,11 @@ import sys
 from link_policy import verify_policy
 from link_paths import allowed
 
-verify_policy()
+policy = verify_policy()
 exe, trace, *args = sys.argv[1:]
+variant = 'sanitize' if args[:1] == ['--sanitize'] else 'normal'
+if variant == 'sanitize':
+    args = args[1:]
 objects = {}
 for arg in args:
     if arg.endswith('.o'):
@@ -49,6 +52,11 @@ if not set(objects.values()).issubset(seen):
     sys.exit('link purity: trace omitted an explicit object')
 if sys.platform == 'darwin':
     tool = os.environ['CONCRETE_SLICE0_LLVM'] + '/llvm-objdump'
+    from sdk_install_names import install_names
+    try:
+        sdk_names = install_names(os.environ['CONCRETE_SLICE0_SYSROOT'], allowed)
+    except (ValueError, OSError) as error:
+        sys.exit('link purity: ' + str(error))
     visited = set()
     executable_dir = Path(exe).resolve().parent
 
@@ -95,16 +103,8 @@ if sys.platform == 'darwin':
             # The OS shared cache is a runtime ABI dependency, represented at link
             # time by stubs in the pinned SDK, never by the host filesystem.
             if path.startswith(('/usr/lib/', '/System/Library/')):
-                sdk = Path(os.environ['CONCRETE_SLICE0_SYSROOT'])
-                stub = sdk / path.lstrip('/')
-                candidates = [stub, stub.with_suffix('.tbd') if stub.suffix == '.dylib'
-                              else Path(str(stub) + '.tbd')]
-                for candidate in candidates:
-                    if candidate.is_file():
-                        allowed(str(candidate))
-                        break
-                else:
-                    sys.exit('link purity: install name absent from SDK: ' + path)
+                from sdk_install_names import require_install_name
+                require_install_name(path, sdk_names, policy['sdkInstallNames'][variant])
                 continue
             if path.startswith('@rpath/'):
                 candidates = [Path(p) / path[len('@rpath/'):] for p in rpaths]

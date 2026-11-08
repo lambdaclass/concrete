@@ -738,11 +738,25 @@ and test command mutations, compiler-policy searches, raw path traversal and Mac
 the Mach-O fixtures exercise the production parser on both platforms, including environment
 injection, unexpected loaders, RPATHs, install names, missing SDK stubs and unresolved dependencies.
 Other controls reject host and aliased runtime paths and traces, malformed trace text and empty
-ELF runtime tags. Linux uses compiler-rt builtins and static LLVM libunwind for ASan; startup
+ELF runtime tags. Every product perturbation expands the production real-linker template
+and appends only its test option. Linux checks GNU_RELRO and immediate binding on both
+normal and sanitizer products (full RELRO, matching pinned wrapper hardening). Linux uses compiler-rt builtins and static LLVM libunwind for ASan; startup
 objects, libc, runtimes, unwinder and loader belong to the pinned closure.
 
 Darwin links directly with ld64, deployment version 15.0 and the pinned SDK's version, with an
-explicit compiler-rt ASan dylib and RPATH. Closure and policy metadata use only cached bash/jq,
+explicit compiler-rt ASan dylib and RPATH, and the `libclang_rt.osx.a` builtins archive after
+`-lSystem`, as selected by LLVM 21's `DarwinClang::AddLinkRuntimeLibArgs`. Darwin controls compare
+that archive against the pinned clang driver's `-###` vector and call a builtin from it.
+The sysroot is the complete, fixed-output `pkgs.apple-sdk.src`, not nixpkgs' processed
+`apple-sdk` output, which removes Apple's libc++ stubs. `sdk_install_names.py` is the sole owner
+of the SDK install-name set: it reads tagged TAPI v3/v4 YAML, validates fields, versions and
+targets, and resolves re-export edges against arm64 macOS stubs. Unknown/malformed schemas,
+duplicate keys and dangling re-exports fail closed. Stub filenames do not grant permissions.
+An OS load command must both occur in that set and be declared for its build mode: libSystem
+in normal mode, libSystem and libc++ in sanitizer mode. The OS loader remains the fixed
+`/usr/lib/dyld` ABI. Linux Mach-O/stub fixtures exercise mode-specific acceptance, missing and
+undeclared install names, target selection, malformed stubs and dangling re-exports.
+Closure and policy metadata use only cached bash/jq,
 without introducing a stdenv build (the previous `closureInfo` introduced Darwin
 `stdenvNoCC -> locale -> bmake`, whose unavailable source blocked CI). Darwin execution remains
 unverified until branch CI. Its fixed
