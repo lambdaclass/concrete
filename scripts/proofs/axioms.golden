@@ -1520,12 +1520,15 @@ ConcreteSpec.Core.Leak.apply_peak_monotone._simp_1_3	propext
 ConcreteSpec.Core.Leak.apply_wf	propext
 ConcreteSpec.Core.Leak.emptyFunctionEntryMemory.eq_1	
 ConcreteSpec.Core.Leak.forbidsRelease_not_authorized	propext
-ConcreteSpec.Core.Leak.free_conservation	propext
+ConcreteSpec.Core.Leak.free_conservation	Quot.sound propext
+ConcreteSpec.Core.Leak.free_conservation._proof_1_1	Quot.sound propext
+ConcreteSpec.Core.Leak.free_update	propext
 ConcreteSpec.Core.Leak.freed._sparseCasesOn_1.else_eq	propext
 ConcreteSpec.Core.Leak.freed.eq_1	propext
 ConcreteSpec.Core.Leak.freed.eq_2	propext
 ConcreteSpec.Core.Leak.freed.eq_3	propext
 ConcreteSpec.Core.Leak.freed.eq_def	propext
+ConcreteSpec.Core.Leak.function_entry_peak	Quot.sound propext
 ConcreteSpec.Core.Leak.instDecidableEqAccount.decEq._proof_1	
 ConcreteSpec.Core.Leak.instDecidableEqAccount.decEq._proof_2	
 ConcreteSpec.Core.Leak.instDecidableEqAccount.decEq._proof_3	
