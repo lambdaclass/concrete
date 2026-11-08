@@ -158,10 +158,10 @@ theorem borrow_preserves (s t : State) (p : Hybrid.Place) (path : List Projectio
     · exact Or.inr (Or.inr (Or.inr (Or.inr hm)))
   · contradiction
 
-theorem reborrowAt_preserves (s t : State) (i : LoanId) (path : List Projection)
+theorem reborrowTo_preserves (s t : State) (i : LoanId) (path : List Projection)
     (m : Mode) (activation : Nat) (hs : WellFormed s)
-    (h : reborrowAt s i path m activation = some t) : WellFormed t := by
-  unfold reborrowAt at h
+    (h : reborrowTo s i path m activation = some t) : WellFormed t := by
+  unfold reborrowTo at h
   obtain ⟨a, ha, h⟩ := Option.bind_eq_some_iff.mp h
   have hmem : a ∈ s.loans := List.mem_of_find?_eq_some ha
   have hi : a.id = i := by simpa using List.find?_some ha
@@ -180,7 +180,7 @@ theorem reborrowAt_preserves (s t : State) (i : LoanId) (path : List Projection)
       · exact hm
       · simp [he] at hm
     apply insert_loan s ⟨⟨s.nextLoan⟩, a.root, a.path ++ path, m, some i,
-      i :: a.ancestors, activation, false⟩ hs rfl (of_decide_eq_true hact)
+      i :: a.ancestors, activation, false⟩ hs rfl (of_decide_eq_true hact).1
       (hs.2.2.2.1 a hmem).2.2.1 ?_ (by simp) ?_
     · unfold ParentValid
       exact ⟨a, hmem, hi, rfl, by simpa [hi] using (hs.2.2.2.1 a hmem).1,
@@ -200,7 +200,7 @@ theorem reborrow_preserves (s t : State) (i : LoanId) (path : List Projection)
     (m : Mode) (hs : WellFormed s) (h : reborrow s i path m = some t) : WellFormed t := by
   unfold reborrow at h
   obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
-  exact reborrowAt_preserves s t i path m f.id hs h
+  exact reborrowTo_preserves s t i path m f.id hs h
 
 theorem endLoan_preserves (s t : State) (i : LoanId) (hs : WellFormed s)
     (h : endLoan s i = some t) : WellFormed t := by
@@ -263,18 +263,20 @@ theorem borrow_progress (s : State) (p : Hybrid.Place) (path : List Projection) 
     ∃ t, borrow s p path m = some t := by
   simp [borrow, frame, issued, allowed]
 
-theorem reborrowAt_progress (s : State) (i : LoanId) (path : List Projection) (m : Mode)
+theorem reborrowTo_progress (s : State) (i : LoanId) (path : List Projection) (m : Mode)
     (activation : Nat) (a : Loan) (found : loan s i = some a)
-    (issued : activation < s.nextActivation) (allowed : loanAccess s i m = true) :
-    ∃ t, reborrowAt s i path m activation = some t := by
-  simp [reborrowAt, found, issued, allowed]
+    (issued : activation < s.nextActivation)
+    (current : s.frames.head?.map Activation.id = some activation)
+    (allowed : loanAccess s i m = true) :
+    ∃ t, reborrowTo s i path m activation = some t := by
+  simp [reborrowTo, found, issued, current, allowed]
 
 theorem reborrow_progress (s : State) (i : LoanId) (path : List Projection) (m : Mode)
     (f : Activation) (frame : s.frames.head? = some f) (issued : f.id < s.nextActivation)
     (a : Loan) (found : loan s i = some a) (allowed : loanAccess s i m = true) :
     ∃ t, reborrow s i path m = some t := by
   simpa [reborrow, frame] using
-    reborrowAt_progress s i path m f.id a found issued allowed
+    reborrowTo_progress s i path m f.id a found issued (by simp [frame]) allowed
 
 theorem accessOwner_progress (s : State) (p : Hybrid.Place) (m : Mode)
     (allowed : ownerAccess s p m = true) : accessOwner s p m = some s := by
@@ -291,7 +293,7 @@ example : WellFormed initial ∧ (move initial ⟨0⟩).isSome = true ∧
     WellFormed ((move initial ⟨0⟩).getD initial) := by decide
 example : WellFormed shared ∧ (borrow shared ⟨0⟩ [] .shared).isSome = true ∧
     WellFormed ((borrow shared ⟨0⟩ [] .shared).getD initial) := by decide
-example : WellFormed exclusive ∧ (reborrowAt exclusive ⟨0⟩ [] .mutable 0).isSome = true ∧
+example : WellFormed exclusive ∧ (reborrowTo exclusive ⟨0⟩ [] .mutable 0).isSome = true ∧
     WellFormed child := by decide
 example : accessOwner shared ⟨0⟩ .shared = some shared ∧ WellFormed shared := by decide
 example : accessLoan child ⟨1⟩ .mutable = some child ∧ WellFormed child := by decide
@@ -305,7 +307,7 @@ example : ¬ WellFormed { child with loans := child.loans.filter (·.id != ⟨0�
 /-- Negated success with each operational permission violated. -/
 example : ¬ (move shared ⟨0⟩).isSome = true := by decide
 example : ¬ (borrow exclusive ⟨0⟩ [] .shared).isSome = true := by decide
-example : ¬ (reborrowAt shared ⟨0⟩ [] .mutable 0).isSome = true := by decide
+example : ¬ (reborrowTo shared ⟨0⟩ [] .mutable 0).isSome = true := by decide
 example : ¬ (reborrow shared ⟨0⟩ [] .mutable).isSome = true := by decide
 example : ¬ (accessOwner shared ⟨0⟩ .mutable).isSome = true := by decide
 example : ¬ (accessLoan child ⟨0⟩ .mutable).isSome = true := by decide
@@ -394,7 +396,7 @@ theorem enterDown_preserves (s t : State) (args : List (Var × LoanId)) (hs : We
   obtain ⟨f, _, hh⟩ := Option.bind_eq_some_iff.mp hh
   obtain ⟨v, hv, hh⟩ := Option.bind_eq_some_iff.mp hh
   cases hh
-  exact reborrowAt_preserves s v arg.2 [] a.mode f.id hs hv
+  exact reborrowTo_preserves s v arg.2 [] a.mode f.id hs hv
 
 theorem life_preserves (types : Var → Option Descriptor) (e : Exec.Life) (s t : State)
     (hs : WellFormed s) (h : life types e s = some t) : WellFormed t := by
@@ -645,7 +647,7 @@ theorem passDown_preserves (s t : CallState) (i : LoanId) (parameter : Var)
     have shape := hu
     unfold reborrow at shape
     obtain ⟨f, _, shape⟩ := Option.bind_eq_some_iff.mp shape
-    unfold reborrowAt at shape
+    unfold reborrowTo at shape
     rw [ha] at shape
     dsimp at shape
     split at shape
@@ -687,7 +689,7 @@ theorem passDown_call_preserves (s t : CallState) (i : LoanId) (parameter : Var)
     cases hh
     unfold reborrow at hu
     obtain ⟨f, hf, hu⟩ := Option.bind_eq_some_iff.mp hu
-    unfold reborrowAt at hu
+    unfold reborrowTo at hu
     rw [ha] at hu
     dsimp at hu
     split at hu
@@ -1009,10 +1011,10 @@ theorem borrow_birth (s t : State) (p : Hybrid.Place) (path : List Projection)
 
 /-- A reborrow keeps the original root and extends the parent's projection. -/
 theorem reborrow_birth (s t : State) (i : LoanId) (suffix : List Projection)
-    (m : Mode) (activation : Nat) (h : reborrowAt s i suffix m activation = some t) :
+    (m : Mode) (activation : Nat) (h : reborrowTo s i suffix m activation = some t) :
     t.nextLoan = s.nextLoan + 1 ∧ ∃ a l, loan s i = some a ∧ l ∈ t.loans ∧
       l.id = ⟨s.nextLoan⟩ ∧ l.root = a.root ∧ l.path = a.path ++ suffix ∧ l.parent = some i := by
-  unfold reborrowAt at h
+  unfold reborrowTo at h
   obtain ⟨a, ha, hh⟩ := Option.bind_eq_some_iff.mp h
   split at hh
   · cases hh
@@ -1118,6 +1120,20 @@ theorem leave_no_activation_slot (s t : State) (f : Activation)
     intro x hx he
     exact guard (List.any_eq_true.mpr ⟨x, hx, by simp [he]⟩)
 
+/-- Successful lending targets a real active frame, specifically the current frame.
+This includes a callee only after entry has made it current (owner Q1, 2026-11-08). -/
+theorem reborrowTo_current (s t : State) (i : LoanId) (suffix : List Projection)
+    (m : Mode) (activation : Nat) (h : reborrowTo s i suffix m activation = some t) :
+    ∃ f ∈ s.frames, f.id = activation ∧ s.frames.head? = some f := by
+  unfold reborrowTo at h
+  obtain ⟨a, _, h⟩ := Option.bind_eq_some_iff.mp h
+  split at h
+  · rename_i guard
+    have hc := (of_decide_eq_true (Bool.and_eq_true_iff.mp guard).2).2
+    obtain ⟨f, hf, he⟩ := Option.map_eq_some_iff.mp hc
+    exact ⟨f, List.mem_of_head? hf, he, hf⟩
+  · contradiction
+
 namespace RoundThreeWitnesses
 open ConcreteSpec.Core.Own.Examples
 /-- Instance (law `ConcreteSpec.Core.Own.borrow_birth`). A projected owner loan issues identity zero. -/
@@ -1128,11 +1144,11 @@ example : borrow initial ⟨0⟩ [.index 0] .shared = some shared ∧
 example : ¬ (∃ l ∈ shared.loans, l.id = LoanId.mk initial.nextLoan ∧
     l.root = ⟨0⟩ ∧ l.path = [.index 99]) := by decide
 /-- Instance (law `ConcreteSpec.Core.Own.reborrow_birth`). The child retains its parent's root, extended path and parent identity. -/
-example : reborrowAt exclusive ⟨0⟩ [.index 1] .mutable 0 = some child ∧
+example : reborrowTo exclusive ⟨0⟩ [.index 1] .mutable 0 = some child ∧
     child.nextLoan = exclusive.nextLoan + 1 ∧ ∃ a l, loan exclusive ⟨0⟩ = some a ∧
       l ∈ child.loans ∧ l.id = LoanId.mk exclusive.nextLoan ∧ l.root = a.root ∧
       l.path = a.path ++ [.index 1] ∧ l.parent = some ⟨0⟩ := by
-  simp [Examples.exclusive, Examples.child, Examples.initial, reborrow, reborrowAt, borrow,
+  simp [Examples.exclusive, Examples.child, Examples.initial, reborrow, reborrowTo, borrow,
     ownerAccess, loanAccess, slot, loan]
 /-- Planted (law `ConcreteSpec.Core.Own.reborrow_birth`). Removing the child's parent field falsifies the birth conclusion itself. -/
 example : ¬ (∃ a l, loan exclusive ⟨0⟩ = some a ∧
@@ -1172,6 +1188,15 @@ example : ¬ (∃ l ∈ exclusive.loans, l.id = LoanId.mk 0 ∧
 example : ¬ (enter (fun _ => none) [y] shared).isSome = true := by decide
 /-- Instance (law `ConcreteSpec.Core.Own.enter_progress`). A typed fresh parameter enters over a borrowed caller. -/
 example : (enter types [y] shared).isSome = true := by decide
+/-- Instance (law `ConcreteSpec.Core.Own.reborrowTo_current`). Lending downward after entry targets the newly active callee. -/
+example : (reborrowTo LifecycleWitnesses.called ⟨1⟩ [] .shared 1).isSome = true ∧
+    ∃ f ∈ LifecycleWitnesses.called.frames, f.id = 1 ∧
+      LifecycleWitnesses.called.frames.head? = some f := by decide
+/-- Refused: activation 1 cannot lend upward into its caller, activation 0. -/
+example : reborrowTo LifecycleWitnesses.called ⟨1⟩ [] .shared 0 = none := by decide
+/-- Planted (law `ConcreteSpec.Core.Own.reborrowTo_current`). The former arbitrary-destination rule admits upward lending, whose destination is not current. -/
+example : ¬ (∃ f ∈ LifecycleWitnesses.called.frames, f.id = 0 ∧
+    LifecycleWitnesses.called.frames.head? = some f) := by decide
 end RoundThreeWitnesses
 
 end ConcreteSpec.Core.Own

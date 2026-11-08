@@ -154,16 +154,15 @@ def borrow (s : State) (p : Hybrid.Place) (path : List Projection) (m : Mode) :
       loans := ⟨⟨s.nextLoan⟩, p, path, m, none, [], f.id, false⟩ :: s.loans }
   else none
 
-/-- Reborrow appends a projection, never changes the original root and never upgrades shared.
-The explicit activation is the destination activation for a downward call.
-The destination identity must be below the issued activation supply.
-PENDING (round-two boundary): arbitrary destinations are still admitted here. Q3.2 rules
-out upward parameter passing, but does not specify which activation identities this standalone
-helper may target. Do not treat this helper as an enforced downward-only interface. -/
-def reborrowAt (s : State) (i : LoanId) (suffix : List Projection) (m : Mode)
+/-- Reborrow appends a projection, retains its root and cannot upgrade shared access.
+Owner decision 2026-11-08 Q1: the requested destination must be the current active frame.
+`enterDown` first enters the callee, making that newly entered frame current. There is no
+operation that lends upward or targets an inactive, previously issued activation. -/
+def reborrowTo (s : State) (i : LoanId) (suffix : List Projection) (m : Mode)
     (activation : Nat) : Option State := do
   let a ← loan s i
-  if loanAccess s i m && decide (activation < s.nextActivation) then
+  if loanAccess s i m && decide (activation < s.nextActivation ∧
+      s.frames.head?.map Activation.id = some activation) then
     some { s with
       nextLoan := s.nextLoan + 1
       loans := ⟨⟨s.nextLoan⟩, a.root, a.path ++ suffix, m, some i,
@@ -173,7 +172,7 @@ def reborrowAt (s : State) (i : LoanId) (suffix : List Projection) (m : Mode)
 def reborrow (s : State) (i : LoanId) (suffix : List Projection) (m : Mode) :
     Option State := do
   let f ← s.frames.head?
-  reborrowAt s i suffix m f.id
+  reborrowTo s i suffix m f.id
 
 /-- Children must end before parents (Q3.2); ending a loan neither destroys nor moves its owner. -/
 def endLoan (s : State) (i : LoanId) : Option State := do
@@ -248,7 +247,7 @@ def enterDown (s : State) (args : List (Var × LoanId)) : Option State := do
   args.foldlM (fun s (x, i) => do
     let a ← loan s i
     let f ← s.frames.head?
-    let s ← reborrowAt s i [] a.mode f.id
+    let s ← reborrowTo s i [] a.mode f.id
     some { s with frames := { f with views := (x, ⟨s.nextLoan - 1⟩) :: f.views } :: s.frames.tail }) s
 
 /-- The C1-compatible lifecycle callback. -/
