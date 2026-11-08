@@ -1250,6 +1250,8 @@ ConcreteSpec.Core.Leak.Account.WF.eq_1
 ConcreteSpec.Core.Leak.Account.alloc.eq_1	
 ConcreteSpec.Core.Leak.Account.alloc_wf	propext
 ConcreteSpec.Core.Leak.Account.alloc_zero	propext
+ConcreteSpec.Core.Leak.Account.enter.eq_1	
+ConcreteSpec.Core.Leak.Account.enter_wf	
 ConcreteSpec.Core.Leak.Account.free.eq_1	
 ConcreteSpec.Core.Leak.Account.free_wf	
 ConcreteSpec.Core.Leak.Account.mk.inj	
@@ -1313,7 +1315,6 @@ ConcreteSpec.Core.Leak.Demo.secure_ct	propext
 ConcreteSpec.Core.Leak.Demo.secure_ni	propext
 ConcreteSpec.Core.Leak.Demo.secure_run_unique	propext
 ConcreteSpec.Core.Leak.Demo.start.eq_1	propext
-ConcreteSpec.Core.Leak.Demo.step_none_of_final	propext
 ConcreteSpec.Core.Leak.Demo.step_unique	propext
 ConcreteSpec.Core.Leak.Instrumentation.mk.inj	
 ConcreteSpec.Core.Leak.Instrumentation.mk.injEq	propext
@@ -1382,6 +1383,8 @@ ConcreteSpec.Core.Leak.apply.eq_3
 ConcreteSpec.Core.Leak.apply_alloc_zero	Quot.sound propext
 ConcreteSpec.Core.Leak.apply_peak_monotone	Quot.sound propext
 ConcreteSpec.Core.Leak.apply_wf	propext
+ConcreteSpec.Core.Leak.empty_function_report_sound	Quot.sound propext
+ConcreteSpec.Core.Leak.established_report_sound	Quot.sound propext
 ConcreteSpec.Core.Leak.free_conservation	propext
 ConcreteSpec.Core.Leak.freed._sparseCasesOn_1.else_eq	propext
 ConcreteSpec.Core.Leak.freed.eq_1	propext
@@ -1392,6 +1395,7 @@ ConcreteSpec.Core.Leak.instDecidableEqAccount.decEq._proof_1
 ConcreteSpec.Core.Leak.instDecidableEqAccount.decEq._proof_2	
 ConcreteSpec.Core.Leak.instDecidableEqAccount.decEq._proof_3	
 ConcreteSpec.Core.Leak.instDecidableEqAccount.decEq._proof_4	
+ConcreteSpec.Core.Leak.instDecidableEqAccount.decEq._proof_5	
 ConcreteSpec.Core.Leak.instDecidableEqAction.decEq._proof_1	
 ConcreteSpec.Core.Leak.instDecidableEqAction.decEq._proof_10	
 ConcreteSpec.Core.Leak.instDecidableEqAction.decEq._proof_11	
