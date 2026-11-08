@@ -118,5 +118,4 @@ if readme_rows "$work/ctl/readme" >"$work/ctl/rows" && cmp -s "$work/rows" "$wor
   echo "FAIL control: the table check accepts a drifted table"; fail=1
 else echo "ok   control: the table check rejects a drifted table"; fi
 
-bounded_summary
 [ "$fail" = 0 ] && echo "PASS slice0_trusted_base" || { echo "FAIL slice0_trusted_base"; exit 1; }

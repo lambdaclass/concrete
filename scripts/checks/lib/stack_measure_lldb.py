@@ -30,10 +30,16 @@ def measure(debugger):
     target = debugger.CreateTarget(exe)
     if not target.IsValid():
         raise RuntimeError(f"cannot load {exe}")
-    bp = target.BreakpointCreateByName("main", target.GetExecutable().GetFilename())
+    # Break at main's exact first instruction (a name breakpoint would skip its prologue, after
+    # the frame is allocated, and misplace both sp0 and the slide).
+    syms = [c.GetSymbol() for c in target.FindSymbols("main") if c.GetSymbol().IsValid()]
+    syms = [s for s in syms if s.GetType() == lldb.eSymbolTypeCode]
+    if len(syms) != 1:
+        raise RuntimeError(f"{len(syms)} code symbols named main")
+    entry = syms[0].GetStartAddress()
+    bp = target.BreakpointCreateBySBAddress(entry)
     if bp.GetNumLocations() != 1:
         raise RuntimeError(f"main has {bp.GetNumLocations()} breakpoint locations")
-    main_rt = bp.GetLocationAtIndex(0).GetLoadAddress()
     info = lldb.SBLaunchInfo([])
     info.SetLaunchFlags(lldb.eLaunchFlagDisableASLR)
     for fd, flags in ((0, os.O_RDONLY), (1, os.O_WRONLY), (2, os.O_WRONLY)):
@@ -43,6 +49,10 @@ def measure(debugger):
     if not err.Success() or not process.IsValid():
         raise RuntimeError(f"launch failed: {err}")
     try:
+        # Load addresses exist only once the process is loaded.
+        main_rt = entry.GetLoadAddress(target)
+        if main_rt == lldb.LLDB_INVALID_ADDRESS:
+            raise RuntimeError("main has no load address")
         return run(process, target, bp, ranges, main_lo, main_rt, expect)
     finally:
         if process.GetState() not in (lldb.eStateExited, lldb.eStateDetached, lldb.eStateInvalid):
@@ -57,8 +67,9 @@ def check_live(process):
     if state != lldb.eStateStopped:
         raise RuntimeError(f"unexpected process state {state}")
     thread = process.GetSelectedThread()
-    if thread.GetStopReason() == lldb.eStopReasonSignal or thread.GetStopReason() == lldb.eStopReasonException:
-        raise RuntimeError(f"signal or exception: {thread.GetStopDescription(200)}")
+    if thread.GetStopReason() not in (lldb.eStopReasonBreakpoint, lldb.eStopReasonPlanComplete,
+                                      lldb.eStopReasonTrace):
+        raise RuntimeError(f"unexpected stop ({thread.GetStopReason()}): {thread.GetStopDescription(200)}")
     return True
 
 
@@ -72,7 +83,10 @@ def run(process, target, bp, ranges, main_lo, main_rt, expect):
     target.BreakpointDelete(bp.GetID())
     offset = main_rt - main_lo
     sp0 = frame.GetSP()
-    low, steps = sp0, 0
+    # main's own return address: `bl` leaves it in the link register and the stack pointer unchanged,
+    # so main has returned when the pc reaches it with the stack pointer back at its entry value.
+    caller = frame.FindRegister("lr").GetValueAsUnsigned()
+    low, steps, returned = sp0, 0, False
 
     def owned(pc):
         return any(lo + offset <= pc <= hi + offset for lo, hi in ranges)
@@ -81,7 +95,8 @@ def run(process, target, bp, ranges, main_lo, main_rt, expect):
         thread = process.GetSelectedThread()
         frame = thread.GetFrameAtIndex(0)
         pc, sp = frame.GetPC(), frame.GetSP()
-        if sp > sp0:  # main has returned
+        if returned or sp > sp0 or (pc == caller and sp == sp0):  # main has returned
+            returned = True
             process.Continue()
             continue
         low = min(low, sp)

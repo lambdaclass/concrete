@@ -19,7 +19,14 @@
 #     with no address-space cap, see SLICE0_GATE_MEM_GB) without bound.
 root=$(pwd)
 work=$(mktemp -d)
-trap 'rm -rf "${work:?}"' EXIT
+# On every exit, the bounded-run summary (recovered and INCOMPLETE runs, whatever a caller did
+# with a command's stderr) goes to the gate's stdout before the scratch directory is removed, and a
+# gate that would pass with an INCOMPLETE run exits 3 instead (INCOMPLETE is never a pass).
+trap 'rc=$?; bounded_summary || true
+  if [ "$rc" = 0 ] && grep -qs "^incomplete\\|^runner-failed" "${BOUNDED_LOG:-/nonexistent}"; then
+    echo "INCOMPLETE: a bounded run timed out twice; not a pass"; rc=3
+  fi
+  rm -rf "${work:?}"; exit "$rc"' EXIT
 BOUNDED_PARENT="$work"
 # shellcheck source=scripts/checks/lib/bounded.sh
 source scripts/checks/lib/bounded.sh

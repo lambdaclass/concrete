@@ -71,7 +71,7 @@ def emit (name : String) (dir : System.FilePath) (target : LCB.Target) : IO UInt
     unless ← writeBackends dir target p (f, tbl) do return 1
     match expected with
     | .exited c => writeExpected dir (toString c) ""
-    | .trapped s => match p.sites[s]? with
+    | .trapped s => match tbl[s]? with
       | some e => writeExpected dir "134" (Runtime.trapLine e ++ "\n")
       | none => IO.eprintln s!"{name}: no site {s}"; return 1
     | _ => IO.eprintln s!"{name}: no observation"; return 1

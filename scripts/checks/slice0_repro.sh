@@ -19,7 +19,13 @@ source scripts/checks/lib/limits.sh
 source scripts/checks/lib/slice0_sources.sh
 gate_limits 64 40000
 work=$(mktemp -d)
-trap 'rm -rf "${work:?}"' EXIT
+# On every exit, the bounded-run summary (recovered and INCOMPLETE runs) goes to stdout before the
+# scratch directory is removed, and a gate that would pass with an INCOMPLETE run exits 3 instead.
+trap 'rc=$?; bounded_summary || true
+  if [ "$rc" = 0 ] && grep -qs "^incomplete\\|^runner-failed" "${BOUNDED_LOG:-/nonexistent}"; then
+    echo "INCOMPLETE: a bounded run timed out twice; not a pass"; rc=3
+  fi
+  rm -rf "${work:?}"; exit "$rc"' EXIT
 BOUNDED_PARENT="$work"
 # shellcheck source=scripts/checks/lib/bounded.sh
 source scripts/checks/lib/bounded.sh

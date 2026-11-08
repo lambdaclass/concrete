@@ -384,7 +384,7 @@ theorem compile_correct (F : FrontendPremises) {B N T} (P : NativePremises B N T
 1. `compile_spec`: `compile T src = .ok out` implies:
    - `Lex.lex`, `Parse.parse` and `Elab.elab` succeed and produce `out.p`;
    - `Fragment.core s0 out.p` and `check out.p = true`;
-   - `out.tokens = admit out.p`, `out.mir = lower out.p out.tokens`, `out.mem = memory out.mir`, `out.bir = ssa out.mem`, `out.ll = LLVM.print out.bir` and `out.lcb = LCB.adapt out.bir`;
+   - `out.tokens = admit out.p`, `out.mir = lower out.p out.tokens`, `out.mem = memory out.mir`, `out.bir = ssa out.mem`, `out.ll = LLVM.print out.bir` and `LCB.emit out.bir = .ok out.lcb` (the adapted body with `out.bir.sites`);
    - `out.bir.frameSlots ≤ T.maxSlots`.
 2. `F.lex`, `F.parse` and `elab_sound` give `Denotes src out.p`. `check_iff` gives `Checked`.
 3. `slice0_exits` gives `run … = .exit c` with `c < 256`; `run_exit_behaviour` then gives `Core.behaviour = .exited c`.
@@ -427,7 +427,7 @@ theorem answer_correct (F : FrontendPremises) (P : NativePremises B N T₀)
 
    Because a successful `emit b` is `(f, b.sites)` (`Proof.emit_ok`), a built image carries exactly `b.sites`, so `rt` holds by definition and no adapter injectivity is needed. `emit` is `emit_correct`.
 
-   `live` holds because LCB's step relation is deterministic, so a run returns, faults or diverges. The witness follows from `adapter_correct` and lands with it.
+   `live` holds because LCB's step relation is deterministic, so a run returns, faults or diverges. The witness follows from `emit_correct`.
 3. **Frontend premises:** these are claims about fixed code, not something a model can satisfy, so no model witness applies. They are discharged per compilation (next section), and universally once `lex_correct` and `parse_correct` land.
 4. **Native-build existence:** this is attested, not proved. The conformance job records toolchain provenance and the image digest for each example.
 
@@ -488,7 +488,7 @@ structure Stage (A B : Type) (Contract : (A → Except Refusal B) → Prop) wher
   evidence : Evidence (Contract run)
 ```
 
-The contract is an index, not a field, and it is applied to `run`. So `Contract := True` is impossible unless the golden table says so, and an unrelated theorem doesn't typecheck. The contract table's definitions are covered by the digest gate. The backend emits are stages too. Each has `native` evidence for its own backend family, as the golden table fixes. For the adapter it is `ι := Unit`, `B _ := lcb`. For the printer it is `ι := (String → BodyResult → Prop)`, `B M := llvm M`, so the contract is `∀ M, …`, with `M` in scope. `adapter_correct` turns LCB's evidence into `proof`. The glue between stages is stated as theorems:
+The contract is an index, not a field, and it is applied to `run`. So `Contract := True` is impossible unless the golden table says so, and an unrelated theorem doesn't typecheck. The contract table's definitions are covered by the digest gate. The backend emits are stages too. Each has `native` evidence for its own backend family, as the golden table fixes. For the adapter it is `ι := Unit`, `B _ := lcb`. For the printer it is `ι := (String → BodyResult → Prop)`, `B M := llvm M`, so the contract is `∀ M, …`, with `M` in scope. `emit_correct` turns LCB's evidence into `proof`. The glue between stages is stated as theorems:
 - `pre₀`: any bytes are an admissible input;
 - `postᵢ → preᵢ₊₁`;
 - `compile_spec`.
@@ -717,6 +717,8 @@ toolchains or targets.
 
 Every slice-0 gate runs under `scripts/checks/lib/limits.sh` (per-process address space 64 GiB on
 Linux, since Lake reserves far more than it uses; at most 40000 processes for the user), with
-`timeout -k` on every build and emitter call. Every executable under test runs under `bounded_run`
-(time, and its whole process group killed) and `lib/limited_exec.sh` (1 GiB address space, no core
+every in-gate time bound (builds, emitter calls, analyses, executables) through `bounded_run`
+(time, its whole process group killed, one re-run with a larger budget; a run that times out twice
+is INCOMPLETE, listed when the gate exits, and makes the gate fail rather than pass; the CI job's
+outer `timeout` is only a runaway guard). Every executable under test also runs under `lib/limited_exec.sh` (1 GiB address space, no core
 file). Darwin does not enforce an address-space limit, so there the CI job's memory is the bound.
