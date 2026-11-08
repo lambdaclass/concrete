@@ -19,8 +19,8 @@ private theorem fold_preserves {α : Type} (f : State → α → Option State)
     | none => simp [he] at h
     | some u => simp only [he] at h <;> dsimp at h; exact ih u (hf s a u hs he) h
 
-/-- Law (subject `ConcreteSpec.Core.Own.move`). Move changes only the selected slot's status, after excluding every loan of its root. -/
-theorem move_preserves (s t : State) (p : Hybrid.Place) (hs : WellFormed s)
+/-- Helper (inversion). Structural successful-result proof used by the operation-result law. (approved: PENDING). Move changes only the selected slot's status, after excluding every loan of its root. -/
+theorem move_preserves_result (s t : State) (p : Hybrid.Place) (hs : WellFormed s)
     (h : move s p = some t) : WellFormed t := by
   unfold move at h
   obtain ⟨x, _, h⟩ := Option.bind_eq_some_iff.mp h
@@ -49,8 +49,8 @@ theorem move_preserves (s t : State) (p : Hybrid.Place) (hs : WellFormed s)
       have hn : a.place ≠ p := fun h => clear l hl (he.symm.trans h)
       simpa [change, hn] using ho
 
-/-- Law (subject `ConcreteSpec.Core.Own.reinitialize`). -/
-theorem reinitialize_preserves (s t : State) (p : Hybrid.Place) (hs : WellFormed s)
+/-- Helper (inversion). Structural successful-result proof used by the operation-result law. (approved: PENDING).  -/
+theorem reinitialize_preserves_result (s t : State) (p : Hybrid.Place) (hs : WellFormed s)
     (h : reinitialize s p = some t) : WellFormed t := by
   unfold reinitialize at h
   obtain ⟨x, _, h⟩ := Option.bind_eq_some_iff.mp h
@@ -146,8 +146,8 @@ private theorem owner_guard (s : State) (p : Hybrid.Place) (m : Mode)
     have := List.all_eq_true.mp h.2 l hl
     simpa only [Bool.or_eq_true, bne_iff_ne, Bool.and_eq_true, beq_iff_eq] using this
 
-/-- Law (subject `ConcreteSpec.Core.Own.borrow`). -/
-theorem borrow_preserves (s t : State) (p : Hybrid.Place) (path : List Projection)
+/-- Helper (inversion). Structural successful-result proof used by the operation-result law. (approved: PENDING).  -/
+theorem borrow_preserves_result (s t : State) (p : Hybrid.Place) (path : List Projection)
     (m : Mode) (hs : WellFormed s) (h : borrow s p path m = some t) : WellFormed t := by
   unfold borrow at h
   obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
@@ -164,8 +164,8 @@ theorem borrow_preserves (s t : State) (p : Hybrid.Place) (path : List Projectio
     · exact Or.inr (Or.inr (Or.inr (Or.inr hm)))
   · contradiction
 
-/-- Law (subject `ConcreteSpec.Core.Own.reborrowTo`). -/
-theorem reborrowTo_preserves (s t : State) (i : LoanId) (path : List Projection)
+/-- Helper (inversion). Structural successful-result proof used by the operation-result law. (approved: PENDING).  -/
+theorem reborrowTo_preserves_result (s t : State) (i : LoanId) (path : List Projection)
     (m : Mode) (activation : Nat) (hs : WellFormed s)
     (h : reborrowTo s i path m activation = some t) : WellFormed t := by
   unfold reborrowTo at h
@@ -203,15 +203,15 @@ theorem reborrowTo_preserves (s t : State) (i : LoanId) (path : List Projection)
       · exact Or.inr (Or.inr (Or.inr (Or.inr he)))
   · contradiction
 
-/-- Law (subject `ConcreteSpec.Core.Own.reborrow`). -/
-theorem reborrow_preserves (s t : State) (i : LoanId) (path : List Projection)
+/-- Helper (inversion). Structural successful-result proof used by the operation-result law. (approved: PENDING).  -/
+theorem reborrow_preserves_result (s t : State) (i : LoanId) (path : List Projection)
     (m : Mode) (hs : WellFormed s) (h : reborrow s i path m = some t) : WellFormed t := by
   unfold reborrow at h
   obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
-  exact reborrowTo_preserves s t i path m f.id hs h
+  exact reborrowTo_preserves_result s t i path m f.id hs h
 
-/-- Law (subject `ConcreteSpec.Core.Own.endLoan`). -/
-theorem endLoan_preserves (s t : State) (i : LoanId) (hs : WellFormed s)
+/-- Helper (inversion). Structural successful-result proof used by the operation-result law. (approved: PENDING).  -/
+theorem endLoan_preserves_result (s t : State) (i : LoanId) (hs : WellFormed s)
     (h : endLoan s i = some t) : WellFormed t := by
   unfold endLoan at h
   obtain ⟨a, _, h⟩ := Option.bind_eq_some_iff.mp h
@@ -329,13 +329,13 @@ example : ¬ (accessOwner shared ⟨0⟩ .mutable).isSome = true := by decide
 example : ¬ (accessLoan child ⟨0⟩ .mutable).isSome = true := by decide
 end PrimitiveWitnesses
 
-/-- Law (subject `ConcreteSpec.Core.Own.bind`). -/
-theorem bind_preserves (types : Var → Option Descriptor) (s t : State) (x : Var)
+/-- Helper (inversion). Structural successful-result proof used by the operation-result law. (approved: PENDING).  -/
+theorem bind_preserves_result (types : Var → Option Descriptor) (s t : State) (x : Var)
     (hs : WellFormed s) (h : bind types x s = some t) : WellFormed t := by
   unfold bind at h
   obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
   split at h
-  · exact reinitialize_preserves _ _ _ hs h
+  · exact reinitialize_preserves_result _ _ _ hs h
   · obtain ⟨d, _, h⟩ := Option.bind_eq_some_iff.mp h
     split at h
     · rename_i hact
@@ -357,8 +357,8 @@ theorem bind_preserves (types : Var → Option Descriptor) (s t : State) (x : Va
         exact ⟨hb, ha, ⟨a, List.mem_cons_of_mem _ ham, he, ho⟩, hp, hpend⟩
     · contradiction
 
-/-- Law (subject `ConcreteSpec.Core.Own.drop`). -/
-theorem drop_preserves (s t : State) (xs : List Var) (hs : WellFormed s)
+/-- Helper (inversion). Structural successful-result proof used by the operation-result law. (approved: PENDING).  -/
+theorem drop_preserves_result (s t : State) (xs : List Var) (hs : WellFormed s)
     (h : drop xs s = some t) : WellFormed t := by
   unfold drop at h
   obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
@@ -376,8 +376,8 @@ theorem drop_preserves (s t : State) (xs : List Var) (hs : WellFormed s)
       simpa [he] using hc
   · contradiction
 
-/-- Law (subject `ConcreteSpec.Core.Own.enter`). -/
-theorem enter_preserves (types : Var → Option Descriptor) (s t : State) (xs : List Var)
+/-- Helper (inversion). Structural successful-result proof used by the operation-result law. (approved: PENDING).  -/
+theorem enter_preserves_result (types : Var → Option Descriptor) (s t : State) (xs : List Var)
     (hs : WellFormed s) (h : enter types xs s = some t) : WellFormed t := by
   have hw : WellFormed { s with
       nextActivation := s.nextActivation + 1
@@ -388,15 +388,15 @@ theorem enter_preserves (types : Var → Option Descriptor) (s t : State) (xs : 
     · intro l hl
       obtain ⟨hb, ha, hr, hp, hpend⟩ := hs.2.2.2.1 l hl
       exact ⟨hb, Nat.lt_succ_of_lt ha, hr, hp, hpend⟩
-  exact fold_preserves _ (fun s x t hs h => bind_preserves types s t x hs h) xs _ t hw h
+  exact fold_preserves _ (fun s x t hs h => bind_preserves_result types s t x hs h) xs _ t hw h
 
-/-- Law (subject `ConcreteSpec.Core.Own.endLocals`). -/
-theorem endLocals_preserves (s t : State) (a : Nat) (hs : WellFormed s)
+/-- Helper (inversion). Structural successful-result proof used by the operation-result law. (approved: PENDING).  -/
+theorem endLocals_preserves_result (s t : State) (a : Nat) (hs : WellFormed s)
     (h : endLocals a s = some t) : WellFormed t :=
-  fold_preserves _ (fun s l t hs h => endLoan_preserves s t l.id hs h) _ _ _ hs h
+  fold_preserves _ (fun s l t hs h => endLoan_preserves_result s t l.id hs h) _ _ _ hs h
 
-/-- Law (subject `ConcreteSpec.Core.Own.leave`). -/
-theorem leave_preserves (s t : State) (hs : WellFormed s)
+/-- Helper (inversion). Structural successful-result proof used by the operation-result law. (approved: PENDING).  -/
+theorem leave_preserves_result (s t : State) (hs : WellFormed s)
     (h : leave s = some t) : WellFormed t := by
   unfold leave at h
   obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
@@ -406,7 +406,7 @@ theorem leave_preserves (s t : State) (hs : WellFormed s)
   · contradiction
   · rename_i guard
     cases h
-    have hw := drop_preserves u v _ (endLocals_preserves s u f.id hs hu) hv
+    have hw := drop_preserves_result u v _ (endLocals_preserves_result s u f.id hs hu) hv
     have ok : (v.slots.all (fun x => x.activation != f.id || x.desc.copy || x.status == .moved) &&
         v.loans.all (fun l => v.slots.all (fun x => x.activation != f.id || x.place != l.root))) = true := by
       cases hb : (v.slots.all (fun x => x.activation != f.id || x.desc.copy || x.status == .moved) &&
@@ -422,27 +422,27 @@ theorem leave_preserves (s t : State) (hs : WellFormed s)
       have hc := List.all_eq_true.mp (List.all_eq_true.mp clear l hl) x hx
       simpa [he] using hc
 
-/-- Law (subject `ConcreteSpec.Core.Own.enterDown`). -/
-theorem enterDown_preserves (s t : State) (args : List (Var × LoanId)) (hs : WellFormed s)
+/-- Helper (inversion). Structural successful-result proof used by the operation-result law. (approved: PENDING).  -/
+theorem enterDown_preserves_result (s t : State) (args : List (Var × LoanId)) (hs : WellFormed s)
     (h : enterDown s args = some t) : WellFormed t := by
   unfold enterDown at h
   obtain ⟨u, hu, hh⟩ := Option.bind_eq_some_iff.mp h
-  refine fold_preserves _ ?_ args u t (enter_preserves _ _ _ _ hs hu) hh
+  refine fold_preserves _ ?_ args u t (enter_preserves_result _ _ _ _ hs hu) hh
   intro s arg t hs hh
   obtain ⟨a, _, hh⟩ := Option.bind_eq_some_iff.mp hh
   obtain ⟨f, _, hh⟩ := Option.bind_eq_some_iff.mp hh
   obtain ⟨v, hv, hh⟩ := Option.bind_eq_some_iff.mp hh
   cases hh
-  exact reborrowTo_preserves s v arg.2 [] a.mode f.id hs hv
+  exact reborrowTo_preserves_result s v arg.2 [] a.mode f.id hs hv
 
-/-- Law (subject `ConcreteSpec.Core.Own.life`). -/
-theorem life_preserves (types : Var → Option Descriptor) (e : Exec.Life) (s t : State)
+/-- Helper (inversion). Structural successful-result proof used by the operation-result law. (approved: PENDING).  -/
+theorem life_preserves_result (types : Var → Option Descriptor) (e : Exec.Life) (s t : State)
     (hs : WellFormed s) (h : life types e s = some t) : WellFormed t := by
   cases e with
-  | bind x => exact bind_preserves types s t x hs h
-  | enter ps => exact enter_preserves types s t ps hs h
-  | leave => exact leave_preserves s t hs h
-  | drop xs => exact drop_preserves s t xs hs h
+  | bind x => exact bind_preserves_result types s t x hs h
+  | enter ps => exact enter_preserves_result types s t ps hs h
+  | leave => exact leave_preserves_result s t hs h
+  | drop xs => exact drop_preserves_result s t xs hs h
 
 /-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). -/
 theorem reinitialize_progress (s : State) (p : Hybrid.Place) (x : Slot)
@@ -658,8 +658,8 @@ private theorem map_metadata_preserves (s : State) (hs : WellFormed s)
     obtain ⟨y, hy, rfl⟩ := List.mem_map.mp hb
     exact hs.2.2.2.2 x hx y hy
 
-/-- Law (subject `ConcreteSpec.Core.Own.adoptDown`). -/
-theorem adoptDown_preserves (s t : State) (args : List (Var × LoanId))
+/-- Helper (inversion). Structural successful-result proof used by the operation-result law. (approved: PENDING).  -/
+theorem adoptDown_preserves_result (s t : State) (args : List (Var × LoanId))
     (hs : WellFormed s) (h : adoptDown s args = some t) : WellFormed t := by
   unfold adoptDown at h
   obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
@@ -682,8 +682,8 @@ theorem adoptDown_preserves (s t : State) (args : List (Var × LoanId))
     exact hw
   · contradiction
 
-/-- Law (subject `ConcreteSpec.Core.Own.passDown`). -/
-theorem passDown_preserves (s t : CallState) (i : LoanId) (parameter : Var)
+/-- Helper (inversion). Structural successful-result proof used by the operation-result law. (approved: PENDING).  -/
+theorem passDown_preserves_result (s t : CallState) (i : LoanId) (parameter : Var)
     (hs : WellFormed s.own) (h : passDown s i parameter = some t) : WellFormed t.own := by
   unfold passDown at h
   split at h
@@ -691,7 +691,7 @@ theorem passDown_preserves (s t : CallState) (i : LoanId) (parameter : Var)
   · obtain ⟨a, ha, h⟩ := Option.bind_eq_some_iff.mp h
     obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
     cases h
-    have hw := reborrow_preserves s.own u i [] a.mode hs hu
+    have hw := reborrow_preserves_result s.own u i [] a.mode hs hu
     have shape := hu
     unfold reborrow at shape
     obtain ⟨f, _, shape⟩ := Option.bind_eq_some_iff.mp shape
@@ -723,11 +723,11 @@ theorem passDown_preserves (s t : CallState) (i : LoanId) (parameter : Var)
       exact hh
     · contradiction
 
-/-- Law (subject `ConcreteSpec.Core.Own.passDown`). Pending metadata stays synchronized when argument evaluation adds a fresh child. -/
-theorem passDown_call_preserves (s t : CallState) (i : LoanId) (parameter : Var)
+/-- Helper (inversion). Structural successful-result proof used by the operation-result law. (approved: PENDING). Pending metadata stays synchronized when argument evaluation adds a fresh child. -/
+theorem passDown_call_preserves_result (s t : CallState) (i : LoanId) (parameter : Var)
     (hs : CallState.WellFormed s) (h : passDown s i parameter = some t) :
     CallState.WellFormed t := by
-  have hw := passDown_preserves s t i parameter hs.1 h
+  have hw := passDown_preserves_result s t i parameter hs.1 h
   unfold passDown at h
   split at h
   · contradiction
@@ -785,8 +785,8 @@ theorem passDown_call_preserves (s t : CallState) (i : LoanId) (parameter : Var)
             using hs.2.2.2.2 b hb
     · contradiction
 
-/-- Law (subject `ConcreteSpec.Core.Own.callLife`). C1's actual call/lifecycle callback preserves ownership, for both owner and view parameters. -/
-theorem callLife_preserves (types : Var → Option Descriptor) (e : Exec.Life)
+/-- Helper (inversion). Structural successful-result proof used by the operation-result law. (approved: PENDING). C1's actual call/lifecycle callback preserves ownership, for both owner and view parameters. -/
+theorem callLife_preserves_result (types : Var → Option Descriptor) (e : Exec.Life)
     (s t : CallState) (hs : WellFormed s.own)
     (h : callLife types e s = some t) : WellFormed t.own := by
   cases e with
@@ -796,28 +796,28 @@ theorem callLife_preserves (types : Var → Option Descriptor) (e : Exec.Life)
     · obtain ⟨u, hu, hh⟩ := Option.bind_eq_some_iff.mp h
       obtain ⟨v, hv, hh⟩ := Option.bind_eq_some_iff.mp hh
       cases hh
-      exact adoptDown_preserves u v s.pending (enter_preserves types s.own u _ hs hu) hv
+      exact adoptDown_preserves_result u v s.pending (enter_preserves_result types s.own u _ hs hu) hv
     · contradiction
   | bind x =>
     simp only [callLife] at h
     split at h
     · obtain ⟨own, ho, hh⟩ := Option.map_eq_some_iff.mp h
       subst t
-      exact life_preserves types (.bind x) s.own own hs ho
+      exact life_preserves_result types (.bind x) s.own own hs ho
     · contradiction
   | leave =>
     simp only [callLife] at h
     split at h
     · obtain ⟨own, ho, hh⟩ := Option.map_eq_some_iff.mp h
       subst t
-      exact life_preserves types .leave s.own own hs ho
+      exact life_preserves_result types .leave s.own own hs ho
     · contradiction
   | drop xs =>
     simp only [callLife] at h
     split at h
     · obtain ⟨own, ho, hh⟩ := Option.map_eq_some_iff.mp h
       subst t
-      exact life_preserves types (.drop xs) s.own own hs ho
+      exact life_preserves_result types (.drop xs) s.own own hs ho
     · contradiction
 
 /-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
@@ -911,12 +911,12 @@ private theorem life_subset (types : Var → Option Descriptor) (e : Exec.Life) 
       rw [drop_loans u v _ hv] at hl
       exact fold_loans _ (fun s l t h => endLoan_subset s t l.id h) _ s u hu l hl
 
-/-- Law (subject `ConcreteSpec.Core.Own.callLife`). Entry consumes the pending metadata exactly once; other lifecycle events require an
+/-- Helper (inversion). Structural successful-result proof used by the operation-result law. (approved: PENDING). Entry consumes the pending metadata exactly once; other lifecycle events require an
 empty argument buffer, so they cannot leave dangling argument identities. -/
-theorem callLife_call_preserves (types : Var → Option Descriptor) (e : Exec.Life)
+theorem callLife_call_preserves_result (types : Var → Option Descriptor) (e : Exec.Life)
     (s t : CallState) (hs : CallState.WellFormed s) (h : callLife types e s = some t) :
     CallState.WellFormed t := by
-  have hw := callLife_preserves types e s t hs.1 h
+  have hw := callLife_preserves_result types e s t hs.1 h
   cases e with
   | enter params =>
     simp only [callLife] at h
@@ -1133,7 +1133,7 @@ theorem leave_no_local_loan (s t : State) (f : Activation)
     (hf : s.frames.head? = some f) (hs : WellFormed s) (h : leave s = some t)
     (entry : Var × Hybrid.Place) (he : entry ∈ f.locals)
     (l : Loan) (hl : l ∈ t.loans) : l.root ≠ entry.2 := by
-  have ht := leave_preserves s t hs h
+  have ht := leave_preserves_result s t hs h
   unfold leave at h
   rw [hf] at h
   dsimp at h
@@ -1199,8 +1199,8 @@ theorem reborrowTo_current (s t : State) (i : LoanId) (suffix : List Projection)
     exact ⟨f, List.mem_of_head? hf, he, hf⟩
   · contradiction
 
-/-- Law (subject `ConcreteSpec.Core.Own.passOwner`). A direct call argument adds a parentless pending root loan and preserves ownership. -/
-theorem passOwner_preserves (s t : CallState) (p : Hybrid.Place) (path : List Projection)
+/-- Helper (inversion). Structural successful-result proof used by the operation-result law. (approved: PENDING). A direct call argument adds a parentless pending root loan and preserves ownership. -/
+theorem passOwner_preserves_result (s t : CallState) (p : Hybrid.Place) (path : List Projection)
     (m : Mode) (x : Var) (hs : WellFormed s.own)
     (h : passOwner s p path m x = some t) : WellFormed t.own := by
   unfold passOwner at h
@@ -1219,11 +1219,11 @@ theorem passOwner_preserves (s t : CallState) (p : Hybrid.Place) (path : List Pr
       · exact Or.inr (Or.inr (Or.inr (Or.inr hm)))
     · contradiction
 
-/-- Law (subject `ConcreteSpec.Core.Own.passOwner`). Direct owner argument evaluation preserves synchronized call metadata as well as ownership. -/
-theorem passOwner_call_preserves (s t : CallState) (p : Hybrid.Place)
+/-- Helper (inversion). Structural successful-result proof used by the operation-result law. (approved: PENDING). Direct owner argument evaluation preserves synchronized call metadata as well as ownership. -/
+theorem passOwner_call_preserves_result (s t : CallState) (p : Hybrid.Place)
     (path : List Projection) (m : Mode) (x : Var) (hs : CallState.WellFormed s)
     (h : passOwner s p path m x = some t) : CallState.WellFormed t := by
-  have hw := passOwner_preserves s t p path m x hs.1 h
+  have hw := passOwner_preserves_result s t p path m x hs.1 h
   unfold passOwner at h
   split at h
   · contradiction
@@ -3520,5 +3520,371 @@ example : CheckerAccepted erasedOps types permitE emptyProg acceptedStuckConfig 
   exact ⟨acceptedStuck_checkerAccepted_inv, by decide⟩
 
 end ExecErasureWitnesses
+
+/-- Preservation is a property of the actual result, so an operation mutant can falsify
+it without changing a fixed output argument or the well-formed input premise. -/
+def StateResult : Option State → Prop
+  | none => True
+  | some s => WellFormed s
+
+def CallOwnResult : Option CallState → Prop
+  | none => True
+  | some s => WellFormed s.own
+
+def CallResult : Option CallState → Prop
+  | none => True
+  | some s => CallState.WellFormed s
+
+instance (r : Option State) : Decidable (StateResult r) := by
+  cases r <;> unfold StateResult <;> infer_instance
+instance (r : Option CallState) : Decidable (CallOwnResult r) := by
+  cases r <;> unfold CallOwnResult <;> infer_instance
+instance (r : Option CallState) : Decidable (CallResult r) := by
+  cases r <;> unfold CallResult <;> infer_instance
+
+/-- Law (subject `ConcreteSpec.Core.Own.move`). Every successful result preserves
+ownership; refusal does not fabricate a result. -/
+theorem move_preserves (s : State) (p : Hybrid.Place) (hs : WellFormed s) : StateResult (move s p) := by
+  cases he : move s p with
+  | none => trivial
+  | some t => exact move_preserves_result s t p hs he
+
+/-- Law (subject `ConcreteSpec.Core.Own.reinitialize`). Every successful result preserves
+ownership; refusal does not fabricate a result. -/
+theorem reinitialize_preserves (s : State) (p : Hybrid.Place) (hs : WellFormed s) : StateResult (reinitialize s p) := by
+  cases he : reinitialize s p with
+  | none => trivial
+  | some t => exact reinitialize_preserves_result s t p hs he
+
+/-- Law (subject `ConcreteSpec.Core.Own.borrow`). Every successful result preserves
+ownership; refusal does not fabricate a result. -/
+theorem borrow_preserves (s : State) (p : Hybrid.Place) (path : List Projection) (m : Mode) (hs : WellFormed s) : StateResult (borrow s p path m) := by
+  cases he : borrow s p path m with
+  | none => trivial
+  | some t => exact borrow_preserves_result s t p path m hs he
+
+/-- Law (subject `ConcreteSpec.Core.Own.reborrowTo`). Every successful result preserves
+ownership; refusal does not fabricate a result. -/
+theorem reborrowTo_preserves (s : State) (i : LoanId) (path : List Projection) (m : Mode) (a : Nat) (hs : WellFormed s) : StateResult (reborrowTo s i path m a) := by
+  cases he : reborrowTo s i path m a with
+  | none => trivial
+  | some t => exact reborrowTo_preserves_result s t i path m a hs he
+
+/-- Law (subject `ConcreteSpec.Core.Own.reborrow`). Every successful result preserves
+ownership; refusal does not fabricate a result. -/
+theorem reborrow_preserves (s : State) (i : LoanId) (path : List Projection) (m : Mode) (hs : WellFormed s) : StateResult (reborrow s i path m) := by
+  cases he : reborrow s i path m with
+  | none => trivial
+  | some t => exact reborrow_preserves_result s t i path m hs he
+
+/-- Law (subject `ConcreteSpec.Core.Own.endLoan`). Every successful result preserves
+ownership; refusal does not fabricate a result. -/
+theorem endLoan_preserves (s : State) (i : LoanId) (hs : WellFormed s) : StateResult (endLoan s i) := by
+  cases he : endLoan s i with
+  | none => trivial
+  | some t => exact endLoan_preserves_result s t i hs he
+
+/-- Law (subject `ConcreteSpec.Core.Own.bind`). Every successful result preserves
+ownership; refusal does not fabricate a result. -/
+theorem bind_preserves (types : Var → Option Descriptor) (s : State) (x : Var) (hs : WellFormed s) : StateResult (bind types x s) := by
+  cases he : bind types x s with
+  | none => trivial
+  | some t => exact bind_preserves_result types s t x hs he
+
+/-- Law (subject `ConcreteSpec.Core.Own.drop`). Every successful result preserves
+ownership; refusal does not fabricate a result. -/
+theorem drop_preserves (s : State) (xs : List Var) (hs : WellFormed s) : StateResult (drop xs s) := by
+  cases he : drop xs s with
+  | none => trivial
+  | some t => exact drop_preserves_result s t xs hs he
+
+/-- Law (subject `ConcreteSpec.Core.Own.enter`). Every successful result preserves
+ownership; refusal does not fabricate a result. -/
+theorem enter_preserves (types : Var → Option Descriptor) (s : State) (xs : List Var) (hs : WellFormed s) : StateResult (enter types xs s) := by
+  cases he : enter types xs s with
+  | none => trivial
+  | some t => exact enter_preserves_result types s t xs hs he
+
+/-- Law (subject `ConcreteSpec.Core.Own.endLocals`). Every successful result preserves
+ownership; refusal does not fabricate a result. -/
+theorem endLocals_preserves (s : State) (a : Nat) (hs : WellFormed s) : StateResult (endLocals a s) := by
+  cases he : endLocals a s with
+  | none => trivial
+  | some t => exact endLocals_preserves_result s t a hs he
+
+/-- Law (subject `ConcreteSpec.Core.Own.leave`). Every successful result preserves
+ownership; refusal does not fabricate a result. -/
+theorem leave_preserves (s : State) (hs : WellFormed s) : StateResult (leave s) := by
+  cases he : leave s with
+  | none => trivial
+  | some t => exact leave_preserves_result s t hs he
+
+/-- Law (subject `ConcreteSpec.Core.Own.enterDown`). Every successful result preserves
+ownership; refusal does not fabricate a result. -/
+theorem enterDown_preserves (s : State) (args : List (Var × LoanId)) (hs : WellFormed s) : StateResult (enterDown s args) := by
+  cases he : enterDown s args with
+  | none => trivial
+  | some t => exact enterDown_preserves_result s t args hs he
+
+/-- Law (subject `ConcreteSpec.Core.Own.life`). Every successful result preserves
+ownership; refusal does not fabricate a result. -/
+theorem life_preserves (types : Var → Option Descriptor) (e : Exec.Life) (s : State) (hs : WellFormed s) : StateResult (life types e s) := by
+  cases he : life types e s with
+  | none => trivial
+  | some t => exact life_preserves_result types e s t hs he
+
+/-- Law (subject `ConcreteSpec.Core.Own.adoptDown`). Every successful result preserves
+ownership; refusal does not fabricate a result. -/
+theorem adoptDown_preserves (s : State) (args : List (Var × LoanId)) (hs : WellFormed s) : StateResult (adoptDown s args) := by
+  cases he : adoptDown s args with
+  | none => trivial
+  | some t => exact adoptDown_preserves_result s t args hs he
+
+/-- Law (subject `ConcreteSpec.Core.Own.passDown`). Every successful result preserves
+ownership; refusal does not fabricate a result. -/
+theorem passDown_preserves (s : CallState) (i : LoanId) (x : Var) (hs : WellFormed s.own) : CallOwnResult (passDown s i x) := by
+  cases he : passDown s i x with
+  | none => trivial
+  | some t => exact passDown_preserves_result s t i x hs he
+
+/-- Law (subject `ConcreteSpec.Core.Own.passDown`). Every successful result preserves
+ownership; refusal does not fabricate a result. -/
+theorem passDown_call_preserves (s : CallState) (i : LoanId) (x : Var) (hs : CallState.WellFormed s) : CallResult (passDown s i x) := by
+  cases he : passDown s i x with
+  | none => trivial
+  | some t => exact passDown_call_preserves_result s t i x hs he
+
+/-- Law (subject `ConcreteSpec.Core.Own.callLife`). Every successful result preserves
+ownership; refusal does not fabricate a result. -/
+theorem callLife_preserves (types : Var → Option Descriptor) (e : Exec.Life) (s : CallState) (hs : WellFormed s.own) : CallOwnResult (callLife types e s) := by
+  cases he : callLife types e s with
+  | none => trivial
+  | some t => exact callLife_preserves_result types e s t hs he
+
+/-- Law (subject `ConcreteSpec.Core.Own.callLife`). Every successful result preserves
+ownership; refusal does not fabricate a result. -/
+theorem callLife_call_preserves (types : Var → Option Descriptor) (e : Exec.Life) (s : CallState) (hs : CallState.WellFormed s) : CallResult (callLife types e s) := by
+  cases he : callLife types e s with
+  | none => trivial
+  | some t => exact callLife_call_preserves_result types e s t hs he
+
+/-- Law (subject `ConcreteSpec.Core.Own.passOwner`). Every successful result preserves
+ownership; refusal does not fabricate a result. -/
+theorem passOwner_preserves (s : CallState) (p : Hybrid.Place) (path : List Projection) (m : Mode) (x : Var) (hs : WellFormed s.own) : CallOwnResult (passOwner s p path m x) := by
+  cases he : passOwner s p path m x with
+  | none => trivial
+  | some t => exact passOwner_preserves_result s t p path m x hs he
+
+/-- Law (subject `ConcreteSpec.Core.Own.passOwner`). Every successful result preserves
+ownership; refusal does not fabricate a result. -/
+theorem passOwner_call_preserves (s : CallState) (p : Hybrid.Place) (path : List Projection) (m : Mode) (x : Var) (hs : CallState.WellFormed s) : CallResult (passOwner s p path m x) := by
+  cases he : passOwner s p path m x with
+  | none => trivial
+  | some t => exact passOwner_call_preserves_result s t p path m x hs he
+
+namespace PreservationEvidence
+
+/-- A duplicate typed owner identity, as produced by a broken allocator or cleanup.
+The corruption is in instrumentation, not in the expected well-formedness predicate. -/
+def corruptState (s : State) : State :=
+  { s with slots := Examples.initial.slots ++ Examples.initial.slots }
+
+/-- Mutant: corrupt the slot inventory after a successful operation. -/
+def moveCorrupt (s : State) (p : Hybrid.Place) := (move s p).map corruptState
+
+/-- Mutant: corrupt the slot inventory after a successful operation. -/
+def reinitializeCorrupt (s : State) (p : Hybrid.Place) := (reinitialize s p).map corruptState
+
+/-- Mutant: corrupt the slot inventory after a successful operation. -/
+def borrowCorrupt (s : State) (p : Hybrid.Place) (path : List Projection) (m : Mode) := (borrow s p path m).map corruptState
+
+/-- Mutant: corrupt the slot inventory after a successful operation. -/
+def reborrowToCorrupt (s : State) (i : LoanId) (path : List Projection) (m : Mode) (a : Nat) := (reborrowTo s i path m a).map corruptState
+
+/-- Mutant: corrupt the slot inventory after a successful operation. -/
+def reborrowCorrupt (s : State) (i : LoanId) (path : List Projection) (m : Mode) := (reborrow s i path m).map corruptState
+
+/-- Mutant: corrupt the slot inventory after a successful operation. -/
+def endLoanCorrupt (s : State) (i : LoanId) := (endLoan s i).map corruptState
+
+/-- Mutant: corrupt the slot inventory after a successful operation. -/
+def bindCorrupt (types : Var → Option Descriptor) (x : Var) (s : State) := (bind types x s).map corruptState
+
+/-- Mutant: corrupt the slot inventory after a successful operation. -/
+def dropCorrupt (xs : List Var) (s : State) := (drop xs s).map corruptState
+
+/-- Mutant: corrupt the slot inventory after a successful operation. -/
+def enterCorrupt (types : Var → Option Descriptor) (xs : List Var) (s : State) := (enter types xs s).map corruptState
+
+/-- Mutant: corrupt the slot inventory after a successful operation. -/
+def endLocalsCorrupt (a : Nat) (s : State) := (endLocals a s).map corruptState
+
+/-- Mutant: corrupt the slot inventory after a successful operation. -/
+def leaveCorrupt (s : State) := (leave s).map corruptState
+
+/-- Mutant: corrupt the slot inventory after a successful operation. -/
+def enterDownCorrupt (s : State) (args : List (Var × LoanId)) := (enterDown s args).map corruptState
+
+/-- Mutant: corrupt the slot inventory after a successful operation. -/
+def lifeCorrupt (types : Var → Option Descriptor) (e : Exec.Life) (s : State) := (life types e s).map corruptState
+
+/-- Mutant: corrupt the slot inventory after a successful operation. -/
+def adoptDownCorrupt (s : State) (args : List (Var × LoanId)) := (adoptDown s args).map corruptState
+
+/-- Mutant: corrupt the slot inventory after a successful operation. -/
+def passDownCorrupt (s : CallState) (i : LoanId) (x : Var) := (passDown s i x).map fun t => { t with own := corruptState t.own }
+
+/-- Mutant: corrupt the slot inventory after a successful operation. -/
+def callLifeCorrupt (types : Var → Option Descriptor) (e : Exec.Life) (s : CallState) := (callLife types e s).map fun t => { t with own := corruptState t.own }
+
+/-- Mutant: corrupt the slot inventory after a successful operation. -/
+def passOwnerCorrupt (s : CallState) (p : Hybrid.Place) (path : List Projection) (m : Mode) (x : Var) := (passOwner s p path m x).map fun t => { t with own := corruptState t.own }
+
+end PreservationEvidence
+
+namespace PreservationEvidence
+open Examples
+
+/-- Instance (law `ConcreteSpec.Core.Own.move_preserves`, case `ConcreteSpec.Core.Own.Examples.initial`). -/
+example : StateResult ((fun (s : State) (p : Hybrid.Place) => move s p) initial ⟨0⟩) :=
+  @move_preserves initial ⟨0⟩ (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.move_preserves`, case `ConcreteSpec.Core.Own.Examples.initial`, subject `ConcreteSpec.Core.Own.move`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.moveCorrupt`). -/
+example : ((fun (s : State) (_p : Hybrid.Place) => WellFormed s) initial ⟨0⟩) ∧ ¬ StateResult ((fun (s : State) (p : Hybrid.Place) => moveCorrupt s p) initial ⟨0⟩) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.reinitialize_preserves`, case `ConcreteSpec.Core.Own.LifecycleWitnesses.moved`). -/
+example : StateResult ((fun (s : State) (p : Hybrid.Place) => reinitialize s p) LifecycleWitnesses.moved ⟨0⟩) :=
+  @reinitialize_preserves LifecycleWitnesses.moved ⟨0⟩ (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.reinitialize_preserves`, case `ConcreteSpec.Core.Own.LifecycleWitnesses.moved`, subject `ConcreteSpec.Core.Own.reinitialize`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.reinitializeCorrupt`). -/
+example : ((fun (s : State) (_p : Hybrid.Place) => WellFormed s) LifecycleWitnesses.moved ⟨0⟩) ∧ ¬ StateResult ((fun (s : State) (p : Hybrid.Place) => reinitializeCorrupt s p) LifecycleWitnesses.moved ⟨0⟩) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.borrow_preserves`, case `ConcreteSpec.Core.Own.Examples.shared`). -/
+example : StateResult ((fun (s : State) (p : Hybrid.Place) (path : List Projection) (m : Mode) => borrow s p path m) shared ⟨0⟩ [.index 1] .shared) :=
+  @borrow_preserves shared ⟨0⟩ [.index 1] .shared (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.borrow_preserves`, case `ConcreteSpec.Core.Own.Examples.shared`, subject `ConcreteSpec.Core.Own.borrow`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.borrowCorrupt`). -/
+example : ((fun (s : State) (_p : Hybrid.Place) (_path : List Projection) (_m : Mode) => WellFormed s) shared ⟨0⟩ [.index 1] .shared) ∧ ¬ StateResult ((fun (s : State) (p : Hybrid.Place) (path : List Projection) (m : Mode) => borrowCorrupt s p path m) shared ⟨0⟩ [.index 1] .shared) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.reborrowTo_preserves`, case `ConcreteSpec.Core.Own.Examples.exclusive`). -/
+example : StateResult ((fun (s : State) (i : LoanId) (path : List Projection) (m : Mode) (a : Nat) => reborrowTo s i path m a) exclusive ⟨0⟩ [.index 1] .mutable 0) :=
+  @reborrowTo_preserves exclusive ⟨0⟩ [.index 1] .mutable 0 (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.reborrowTo_preserves`, case `ConcreteSpec.Core.Own.Examples.exclusive`, subject `ConcreteSpec.Core.Own.reborrowTo`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.reborrowToCorrupt`). -/
+example : ((fun (s : State) (_i : LoanId) (_path : List Projection) (_m : Mode) (_a : Nat) => WellFormed s) exclusive ⟨0⟩ [.index 1] .mutable 0) ∧ ¬ StateResult ((fun (s : State) (i : LoanId) (path : List Projection) (m : Mode) (a : Nat) => reborrowToCorrupt s i path m a) exclusive ⟨0⟩ [.index 1] .mutable 0) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.reborrow_preserves`, case `ConcreteSpec.Core.Own.Examples.exclusive`). -/
+example : StateResult ((fun (s : State) (i : LoanId) (path : List Projection) (m : Mode) => reborrow s i path m) exclusive ⟨0⟩ [.index 1] .mutable) :=
+  @reborrow_preserves exclusive ⟨0⟩ [.index 1] .mutable (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.reborrow_preserves`, case `ConcreteSpec.Core.Own.Examples.exclusive`, subject `ConcreteSpec.Core.Own.reborrow`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.reborrowCorrupt`). -/
+example : ((fun (s : State) (_i : LoanId) (_path : List Projection) (_m : Mode) => WellFormed s) exclusive ⟨0⟩ [.index 1] .mutable) ∧ ¬ StateResult ((fun (s : State) (i : LoanId) (path : List Projection) (m : Mode) => reborrowCorrupt s i path m) exclusive ⟨0⟩ [.index 1] .mutable) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.endLoan_preserves`, case `ConcreteSpec.Core.Own.Examples.child`). -/
+example : StateResult ((fun (s : State) (i : LoanId) => endLoan s i) child ⟨1⟩) :=
+  @endLoan_preserves child ⟨1⟩ (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.endLoan_preserves`, case `ConcreteSpec.Core.Own.Examples.child`, subject `ConcreteSpec.Core.Own.endLoan`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.endLoanCorrupt`). -/
+example : ((fun (s : State) (_i : LoanId) => WellFormed s) child ⟨1⟩) ∧ ¬ StateResult ((fun (s : State) (i : LoanId) => endLoanCorrupt s i) child ⟨1⟩) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.bind_preserves`, case `ConcreteSpec.Core.Own.Examples.shared`). -/
+example : StateResult ((fun (types : Var → Option Descriptor) (s : State) (x : Var) => bind types x s) types shared y) :=
+  @bind_preserves types shared y (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.bind_preserves`, case `ConcreteSpec.Core.Own.Examples.shared`, subject `ConcreteSpec.Core.Own.bind`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.bindCorrupt`). -/
+example : ((fun (_types : Var → Option Descriptor) (s : State) (_x : Var) => WellFormed s) types shared y) ∧ ¬ StateResult ((fun (types : Var → Option Descriptor) (s : State) (x : Var) => bindCorrupt types x s) types shared y) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.drop_preserves`, case `ConcreteSpec.Core.Own.LifecycleWitnesses.moved`). -/
+example : StateResult ((fun (s : State) (xs : List Var) => drop xs s) LifecycleWitnesses.moved [x]) :=
+  @drop_preserves LifecycleWitnesses.moved [x] (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.drop_preserves`, case `ConcreteSpec.Core.Own.LifecycleWitnesses.moved`, subject `ConcreteSpec.Core.Own.drop`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.dropCorrupt`). -/
+example : ((fun (s : State) (_xs : List Var) => WellFormed s) LifecycleWitnesses.moved [x]) ∧ ¬ StateResult ((fun (s : State) (xs : List Var) => dropCorrupt xs s) LifecycleWitnesses.moved [x]) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.enter_preserves`, case `ConcreteSpec.Core.Own.Examples.shared`). -/
+example : StateResult ((fun (types : Var → Option Descriptor) (s : State) (xs : List Var) => enter types xs s) types shared [y]) :=
+  @enter_preserves types shared [y] (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.enter_preserves`, case `ConcreteSpec.Core.Own.Examples.shared`, subject `ConcreteSpec.Core.Own.enter`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.enterCorrupt`). -/
+example : ((fun (_types : Var → Option Descriptor) (s : State) (_xs : List Var) => WellFormed s) types shared [y]) ∧ ¬ StateResult ((fun (types : Var → Option Descriptor) (s : State) (xs : List Var) => enterCorrupt types xs s) types shared [y]) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.endLocals_preserves`, case `ConcreteSpec.Core.Own.LifecycleWitnesses.called`). -/
+example : StateResult ((fun (s : State) (a : Nat) => endLocals a s) LifecycleWitnesses.called 1) :=
+  @endLocals_preserves LifecycleWitnesses.called 1 (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.endLocals_preserves`, case `ConcreteSpec.Core.Own.LifecycleWitnesses.called`, subject `ConcreteSpec.Core.Own.endLocals`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.endLocalsCorrupt`). -/
+example : ((fun (s : State) (_a : Nat) => WellFormed s) LifecycleWitnesses.called 1) ∧ ¬ StateResult ((fun (s : State) (a : Nat) => endLocalsCorrupt a s) LifecycleWitnesses.called 1) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.leave_preserves`, case `ConcreteSpec.Core.Own.RoundThreeWitnesses.localLoan`). -/
+example : StateResult ((fun (s : State) => leave s) RoundThreeWitnesses.localLoan) :=
+  @leave_preserves RoundThreeWitnesses.localLoan (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.leave_preserves`, case `ConcreteSpec.Core.Own.RoundThreeWitnesses.localLoan`, subject `ConcreteSpec.Core.Own.leave`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.leaveCorrupt`). -/
+example : ((fun (s : State) => WellFormed s) RoundThreeWitnesses.localLoan) ∧ ¬ StateResult ((fun (s : State) => leaveCorrupt s) RoundThreeWitnesses.localLoan) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.enterDown_preserves`, case `ConcreteSpec.Core.Own.Examples.exclusive`). -/
+example : StateResult ((fun (s : State) (args : List (Var × LoanId)) => enterDown s args) exclusive [(y, ⟨0⟩)]) :=
+  @enterDown_preserves exclusive [(y, ⟨0⟩)] (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.enterDown_preserves`, case `ConcreteSpec.Core.Own.Examples.exclusive`, subject `ConcreteSpec.Core.Own.enterDown`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.enterDownCorrupt`). -/
+example : ((fun (s : State) (_args : List (Var × LoanId)) => WellFormed s) exclusive [(y, ⟨0⟩)]) ∧ ¬ StateResult ((fun (s : State) (args : List (Var × LoanId)) => enterDownCorrupt s args) exclusive [(y, ⟨0⟩)]) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.life_preserves`, case `ConcreteSpec.Core.Own.Examples.shared`). -/
+example : StateResult ((fun (types : Var → Option Descriptor) (e : Exec.Life) (s : State) => life types e s) types (.bind y) shared) :=
+  @life_preserves types (.bind y) shared (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.life_preserves`, case `ConcreteSpec.Core.Own.Examples.shared`, subject `ConcreteSpec.Core.Own.life`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.lifeCorrupt`). -/
+example : ((fun (_types : Var → Option Descriptor) (_e : Exec.Life) (s : State) => WellFormed s) types (.bind y) shared) ∧ ¬ StateResult ((fun (types : Var → Option Descriptor) (e : Exec.Life) (s : State) => lifeCorrupt types e s) types (.bind y) shared) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.adoptDown_preserves`, case `ConcreteSpec.Core.Own.DirectArgumentWitnesses.called`). -/
+example : StateResult ((fun (s : State) (args : List (Var × LoanId)) => adoptDown s args) DirectArgumentWitnesses.called.own []) :=
+  @adoptDown_preserves DirectArgumentWitnesses.called.own [] (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.adoptDown_preserves`, case `ConcreteSpec.Core.Own.DirectArgumentWitnesses.called`, subject `ConcreteSpec.Core.Own.adoptDown`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.adoptDownCorrupt`). -/
+example : ((fun (s : State) (_args : List (Var × LoanId)) => WellFormed s) DirectArgumentWitnesses.called.own []) ∧ ¬ StateResult ((fun (s : State) (args : List (Var × LoanId)) => adoptDownCorrupt s args) DirectArgumentWitnesses.called.own []) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.passDown_preserves`, case `ConcreteSpec.Core.Own.Examples.exclusive`). -/
+example : CallOwnResult ((fun (s : CallState) (i : LoanId) (x : Var) => passDown s i x) ⟨exclusive, []⟩ ⟨0⟩ y) :=
+  @passDown_preserves ⟨exclusive, []⟩ ⟨0⟩ y (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.passDown_preserves`, case `ConcreteSpec.Core.Own.Examples.exclusive`, subject `ConcreteSpec.Core.Own.passDown`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.passDownCorrupt`). -/
+example : ((fun (s : CallState) (_i : LoanId) (_x : Var) => WellFormed s.own) ⟨exclusive, []⟩ ⟨0⟩ y) ∧ ¬ CallOwnResult ((fun (s : CallState) (i : LoanId) (x : Var) => passDownCorrupt s i x) ⟨exclusive, []⟩ ⟨0⟩ y) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.passDown_call_preserves`, case `ConcreteSpec.Core.Own.Examples.exclusive`). -/
+example : CallResult ((fun (s : CallState) (i : LoanId) (x : Var) => passDown s i x) ⟨exclusive, []⟩ ⟨0⟩ y) :=
+  @passDown_call_preserves ⟨exclusive, []⟩ ⟨0⟩ y (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.passDown_call_preserves`, case `ConcreteSpec.Core.Own.Examples.exclusive`, subject `ConcreteSpec.Core.Own.passDown`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.passDownCorrupt`). -/
+example : ((fun (s : CallState) (_i : LoanId) (_x : Var) => CallState.WellFormed s) ⟨exclusive, []⟩ ⟨0⟩ y) ∧ ¬ CallResult ((fun (s : CallState) (i : LoanId) (x : Var) => passDownCorrupt s i x) ⟨exclusive, []⟩ ⟨0⟩ y) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.callLife_preserves`, case `ConcreteSpec.Core.Own.CallWitnesses.waiting`). -/
+example : CallOwnResult ((fun (types : Var → Option Descriptor) (e : Exec.Life) (s : CallState) => callLife types e s) types (.enter [y]) CallWitnesses.waiting) :=
+  @callLife_preserves types (.enter [y]) CallWitnesses.waiting (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.callLife_preserves`, case `ConcreteSpec.Core.Own.CallWitnesses.waiting`, subject `ConcreteSpec.Core.Own.callLife`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.callLifeCorrupt`). -/
+example : ((fun (_types : Var → Option Descriptor) (_e : Exec.Life) (s : CallState) => WellFormed s.own) types (.enter [y]) CallWitnesses.waiting) ∧ ¬ CallOwnResult ((fun (types : Var → Option Descriptor) (e : Exec.Life) (s : CallState) => callLifeCorrupt types e s) types (.enter [y]) CallWitnesses.waiting) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.callLife_call_preserves`, case `ConcreteSpec.Core.Own.CallWitnesses.waiting`). -/
+example : CallResult ((fun (types : Var → Option Descriptor) (e : Exec.Life) (s : CallState) => callLife types e s) types (.enter [y]) CallWitnesses.waiting) :=
+  @callLife_call_preserves types (.enter [y]) CallWitnesses.waiting (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.callLife_call_preserves`, case `ConcreteSpec.Core.Own.CallWitnesses.waiting`, subject `ConcreteSpec.Core.Own.callLife`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.callLifeCorrupt`). -/
+example : ((fun (_types : Var → Option Descriptor) (_e : Exec.Life) (s : CallState) => CallState.WellFormed s) types (.enter [y]) CallWitnesses.waiting) ∧ ¬ CallResult ((fun (types : Var → Option Descriptor) (e : Exec.Life) (s : CallState) => callLifeCorrupt types e s) types (.enter [y]) CallWitnesses.waiting) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.passOwner_preserves`, case `ConcreteSpec.Core.Own.DirectArgumentWitnesses.caller`). -/
+example : CallOwnResult ((fun (s : CallState) (p : Hybrid.Place) (path : List Projection) (m : Mode) (x : Var) => passOwner s p path m x) DirectArgumentWitnesses.caller ⟨1⟩ [.index 3] .mutable DirectArgumentWitnesses.z) :=
+  @passOwner_preserves DirectArgumentWitnesses.caller ⟨1⟩ [.index 3] .mutable DirectArgumentWitnesses.z (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.passOwner_preserves`, case `ConcreteSpec.Core.Own.DirectArgumentWitnesses.caller`, subject `ConcreteSpec.Core.Own.passOwner`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.passOwnerCorrupt`). -/
+example : ((fun (s : CallState) (_p : Hybrid.Place) (_path : List Projection) (_m : Mode) (_x : Var) => WellFormed s.own) DirectArgumentWitnesses.caller ⟨1⟩ [.index 3] .mutable DirectArgumentWitnesses.z) ∧ ¬ CallOwnResult ((fun (s : CallState) (p : Hybrid.Place) (path : List Projection) (m : Mode) (x : Var) => passOwnerCorrupt s p path m x) DirectArgumentWitnesses.caller ⟨1⟩ [.index 3] .mutable DirectArgumentWitnesses.z) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.passOwner_call_preserves`, case `ConcreteSpec.Core.Own.DirectArgumentWitnesses.caller`). -/
+example : CallResult ((fun (s : CallState) (p : Hybrid.Place) (path : List Projection) (m : Mode) (x : Var) => passOwner s p path m x) DirectArgumentWitnesses.caller ⟨1⟩ [.index 3] .mutable DirectArgumentWitnesses.z) :=
+  @passOwner_call_preserves DirectArgumentWitnesses.caller ⟨1⟩ [.index 3] .mutable DirectArgumentWitnesses.z (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.passOwner_call_preserves`, case `ConcreteSpec.Core.Own.DirectArgumentWitnesses.caller`, subject `ConcreteSpec.Core.Own.passOwner`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.passOwnerCorrupt`). -/
+example : ((fun (s : CallState) (_p : Hybrid.Place) (_path : List Projection) (_m : Mode) (_x : Var) => CallState.WellFormed s) DirectArgumentWitnesses.caller ⟨1⟩ [.index 3] .mutable DirectArgumentWitnesses.z) ∧ ¬ CallResult ((fun (s : CallState) (p : Hybrid.Place) (path : List Projection) (m : Mode) (x : Var) => passOwnerCorrupt s p path m x) DirectArgumentWitnesses.caller ⟨1⟩ [.index 3] .mutable DirectArgumentWitnesses.z) := by decide
+
+end PreservationEvidence
 
 end ConcreteSpec.Core.Own
