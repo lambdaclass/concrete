@@ -545,4 +545,197 @@ theorem report_outOfFuel_none (P : Exec.Program O) (A : ExecAdapter O S)
     (permitted : ExecAdapter.BlockingPermitted P A C input ⟨events, .outOfFuel c⟩) :
     reportObservation P A C input ⟨events, .outOfFuel c⟩ permitted = none := rfl
 
+/-! ### Non-vacuity of the C1 adapter laws
+
+A one-primitive instance doubles its integer request. Its ordinary oracle accepts the response and
+its blocking oracle leaves the request unanswered. The examples below apply every law whose C1
+continuation became partial, and mutate the response, blocking permission or expected observation
+to show that the corresponding conclusion is not obtained freely. -/
+
+namespace AdapterDemo
+
+inductive Op where
+  | double
+
+/-- Integer doubling requests and responses, with text output unused by these runs. -/
+abbrev signature : EventSignature where
+  Kind := Op
+  Request := fun _ => Int
+  Response := fun _ => Int
+  Output := String
+
+def query (n : Int) : Request signature := ⟨.double, n⟩
+def request (n : Int) : Event signature := .request (query n)
+def response (n : Int) : Event signature := .response ⟨.double, n⟩
+
+/-- The response contract is fixed; each instance chooses whether blocking is permitted. -/
+def makeContract (blocking : Unit → List (Event signature) → Request signature → Prop) :
+    OperationContract signature where
+  Input := Unit
+  allows := fun _ _ q r => q.2 * 2 = r.2
+  mayBlock := blocking
+
+abbrev permittingContract : OperationContract signature := makeContract (fun _ _ _ => True)
+abbrev forbiddingContract : OperationContract signature := makeContract (fun _ _ _ => False)
+
+/-- A total operand instance whose primitive `n` requests doubling `n`. -/
+abbrev ops : Exec.Operands where
+  Val := Int
+  Expr := Int
+  Ty := Unit
+  Store := Unit
+  Prim := Int
+  Event := Int
+  unitVal := 0
+  unitTy := ()
+  isCopy := fun _ => true
+  eval := fun _ st n => .ok (n, st)
+  life := fun _ st => some st
+  test := fun _ => none
+  allows := fun p _ _ a => match a.event, a.result, a.store with
+    | some ev, .ok 0, () => decide (ev = p)
+    | _, _, _ => false
+
+/-- One oracle supplies the contracted response; the other leaves every request unanswered. -/
+def answeringOracle : Exec.Oracle ops := fun _ p _ _ _ => some ⟨some p, .ok 0, ()⟩
+def blockingOracle : Exec.Oracle ops := fun _ _ _ _ _ => none
+
+/-- The single C1 event of an answer projects to its typed request and response. -/
+def adapter : ExecAdapter ops signature where
+  events := fun n => [request n, response (n * 2)]
+  request := fun p _ _ _ => some (query p)
+  status := fun _ => none
+  sites := []
+
+def program : Exec.Program ops := ⟨[]⟩
+def requesting (n : Int) : Exec.Config ops := ⟨.exec (.prim none n [] ⟨0⟩), [], (), []⟩
+
+/-- A successful response and a genuinely pending request, both after one evaluator step. -/
+def answeredReport : Exec.Report ops := Exec.run program answeringOracle 1 (requesting 3)
+def blockedReport : Exec.Report ops := Exec.run program blockingOracle 1 (requesting 3)
+
+/-- The answering oracle satisfies the adapter contract for either blocking policy. -/
+theorem answeringWellFormed (blocking : Unit → List (Event signature) → Request signature → Prop) :
+    ExecAdapter.WellFormed adapter (makeContract blocking) () answeringOracle := by
+  constructor
+  · intro hist p vs site store a answer typed
+    simp [adapter] at typed
+  · intro hist p vs site store a q answer typed
+    cases answer
+    cases typed
+    exact ⟨[], ⟨.double, p * 2⟩, [], rfl, ⟨[], rfl⟩, ⟨[], rfl⟩,
+      RequestResponse.matched (S := signature) Op.double p (p * 2), rfl⟩
+  · intro hist p vs site store q answer typed
+    simp [answeringOracle] at answer
+
+/-- The blocking oracle is well formed exactly because this contract permits blocking. -/
+theorem blockingWellFormed : ExecAdapter.WellFormed adapter permittingContract () blockingOracle := by
+  constructor
+  · intro hist p vs site store a answer typed
+    simp [blockingOracle] at answer
+  · intro hist p vs site store a q answer typed
+    simp [blockingOracle] at answer
+  · intro hist p vs site store q answer typed
+    trivial
+
+/-- Non-vacuity for `runFrom_validTrace`: the accepted answer really runs and its request and
+response form a complete valid trace. -/
+example : CompleteTrace forbiddingContract () (adapter.project answeredReport.events) :=
+  (runFrom_validTrace program adapter forbiddingContract () answeringOracle
+    (answeringWellFormed _) 1 [] (requesting 3) .idle).1
+
+/-- Planted bad response for `runFrom_validTrace`: `7` does not double `3`. -/
+example : ¬ CompleteTrace forbiddingContract () [request 3, response 7] := by
+  intro invalid
+  generalize htrace : [request 3, response 7] = events at invalid
+  cases invalid with
+  | idle => simp at htrace
+  | @response hist q r pending matching allows =>
+    have reversed : response 7 :: [request 3] = Event.response r :: hist.reverse := by
+      simpa using congrArg List.reverse htrace
+    have eventEq : response 7 = Event.response r := (List.cons.inj reversed).1
+    cases eventEq
+    change q.2 * 2 = 7 at allows
+    cases matching
+    rename_i n
+    change Int at n
+    change n * 2 = 7 at allows
+    omega
+  | @output hist o pending =>
+    have reversed : response 7 :: [request 3] = Event.output o :: hist.reverse := by
+      simpa using congrArg List.reverse htrace
+    have eventEq : response 7 = Event.output o := (List.cons.inj reversed).1
+    cases eventEq
+
+/-- Non-vacuity for `runFrom_noAnswer_pending_valid`: the run is pending on `3`, and the pending
+trace and blocking permission both hold. -/
+example :
+    ValidTrace permittingContract () (some (query 3))
+      (adapter.project blockedReport.events ++ [request 3]) ∧
+    permittingContract.mayBlock ()
+      (adapter.project blockedReport.events ++ [request 3]) (query 3) :=
+  runFrom_noAnswer_pending_valid program adapter permittingContract () blockingOracle
+    blockingWellFormed (fuel := 1) (hist := []) (c := requesting 3) (c' := requesting 3)
+    (q := query 3) .idle rfl rfl rfl
+
+/-- Planted blocking refusal for `runFrom_noAnswer_pending_valid`: the same pending trace cannot
+supply a blocking permission that its contract denies. -/
+example : ¬ (ValidTrace forbiddingContract () (some (query 3)) [request 3] ∧
+    forbiddingContract.mayBlock () [request 3] (query 3)) := by
+  intro invalid
+  exact invalid.2
+
+/-- Concrete evidence used by the two report-level examples below. -/
+theorem blockedPermitted : ExecAdapter.BlockingPermitted program adapter permittingContract ()
+    blockedReport :=
+  runFrom_blockingPermitted program adapter permittingContract () blockingOracle
+    blockingWellFormed (fuel := 1) (hist := []) (c := requesting 3) .idle
+
+/-- Non-vacuity for `runFrom_blockingPermitted`: its premise is satisfied by a real `noAnswer`
+report. -/
+example : ExecAdapter.BlockingPermitted program adapter permittingContract () blockedReport :=
+  blockedPermitted
+
+/-- Planted blocking refusal for `runFrom_blockingPermitted`: this same report does not satisfy
+`BlockingPermitted` when the operation may not block. -/
+example : ¬ ExecAdapter.BlockingPermitted program adapter forbiddingContract () blockedReport := by
+  intro permitted
+  exact permitted (c := requesting 3) (p := 3) (vs := []) (site := ⟨0⟩) (store := ())
+    (q := query 3) rfl rfl rfl
+
+/-- Non-vacuity for `report_noAnswer_mayBlock`: the report premise supplies the actual operation
+permission for the pending request. -/
+example : permittingContract.mayBlock ()
+    (adapter.project blockedReport.events ++ [request 3]) (query 3) :=
+  report_noAnswer_mayBlock program adapter permittingContract () [] (requesting 3)
+    blockedPermitted rfl rfl
+
+/-- Planted blocking refusal for `report_noAnswer_mayBlock`: changing only `mayBlock` makes the
+claimed permission false. -/
+example : ¬ forbiddingContract.mayBlock () [request 3] (query 3) := by
+  intro forbidden
+  exact forbidden
+
+/-- The permitted report has exactly its pending blocked observation. -/
+theorem blockedObservation :
+    reportObservation program adapter permittingContract () blockedReport blockedPermitted =
+      some (.blocked (adapter.project blockedReport.events ++ [request 3]) (query 3)) :=
+  report_noAnswer_blocked program adapter permittingContract () [] (requesting 3)
+    3 [] ⟨0⟩ () _ (query 3) blockedPermitted rfl rfl
+
+/-- Non-vacuity for `report_noAnswer_blocked`: the pending request and its history are observed. -/
+example : reportObservation program adapter permittingContract () blockedReport blockedPermitted =
+    some (.blocked (adapter.project blockedReport.events ++ [request 3]) (query 3)) :=
+  blockedObservation
+
+/-- Planted observation for `report_noAnswer_blocked`: the pending request cannot instead be
+observed as successful termination. -/
+example : reportObservation program adapter permittingContract () blockedReport blockedPermitted ≠
+    some (.terminal ⟨[request 3], .exited 0⟩) := by
+  rw [blockedObservation]
+  intro invalid
+  cases invalid
+
+end AdapterDemo
+
 end ConcreteSpec.Core.Observe
