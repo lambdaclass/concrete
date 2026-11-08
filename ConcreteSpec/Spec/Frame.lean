@@ -271,6 +271,57 @@ structure Signature.Call {Ty Val Reg Word : Type} (sig : Signature Ty Val Reg Wo
   preserved : Machine.Preserved before after sig.calleeSaved
   clobbers : Machine.RegisterFrame before after sig.clobbers
 
+/-- An abstract call-transition interface, independent of the ABI contract. -/
+abbrev CallTransition (_Ty Val Reg Word : Type) :=
+  Machine Reg Word → Machine Reg Word → List Val → Val → Prop
+
+/-- Conformance is a specification to prove about a transition, never execution evidence. -/
+def TransitionConforms {Ty Val Reg Word : Type} (sig : Signature Ty Val Reg Word)
+    (transition : CallTransition Ty Val Reg Word) : Prop :=
+  ∀ before after args result, transition before after args result → sig.Call before after args result
+
+/-- Small machine instructions for an executable, target-independent example. Frame entry and
+exit are explicit operations; writes carry their destinations rather than frame-law proofs. -/
+inductive ToyInstruction where
+  | register (r word : Nat)
+  | slot (offset word : Nat)
+  | reserve (bytes : Nat)
+  | release (bytes : Nat)
+
+/-- Execute instructions without checking any ABI contract. Stack writes address the current
+stack pointer plus their offset, so a write after reservation targets the callee's frame. -/
+def runToy : List ToyInstruction → Machine Nat Nat → Machine Nat Nat
+  | [], st => st
+  | instruction :: rest, st =>
+    let next := match instruction with
+      | .register r word => { st with regs := fun q => if q = r then word else st.regs q }
+      | .slot offset word =>
+        { st with slots := fun q => if q = st.stackPointer + offset then word else st.slots q }
+      | .reserve bytes => { st with stackPointer := st.stackPointer + bytes }
+      | .release bytes => { st with stackPointer := st.stackPointer - bytes }
+    runToy rest next
+
+/-- This toy convention passes one natural word in register 0 and returns one in register 1.
+It is an example implementation, not the linux-x86_64 ABI table. -/
+def toySignature : Signature Unit Nat Nat Nat :=
+  ⟨fun _ v => [v], [⟨(), [.register 0]⟩], ⟨(), [.register 1]⟩,
+    8, 8, [0], [1], 8⟩
+
+/-- Pack the toy input by executing a register write. -/
+def toyInput (base : Machine Nat Nat) (arg : Nat) : Machine Nat Nat :=
+  runToy [.register 0 arg] base
+
+/-- A real toy callee reserves a frame, writes its return value and a private spill, then
+releases the frame. No instruction tests restoration or result validity. -/
+def toyBody (result : Nat) : List ToyInstruction :=
+  [.reserve 8, .register 1 result, .slot 0 99, .release 8]
+
+/-- Independent execution relation for the toy convention. The witnesses describe input
+packing and actual instructions; they contain none of the ABI equalities being proved. -/
+def toyTransition : CallTransition Unit Nat Nat Nat := fun before after args result =>
+  ∃ base arg, before = toyInput base arg ∧ args = [arg] ∧
+    after = runToy (toyBody result) before
+
 /-- The stack-accounting handoff of one call: the caller's frame plus the callee's final-artifact
 bound. Heap accounting is separate. -/
 def callStack {Ty Val Reg Word : Type} (callerFrame : Nat) (sig : Signature Ty Val Reg Word) : Nat :=
