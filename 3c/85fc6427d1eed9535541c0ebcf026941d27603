@@ -1,0 +1,2 @@
+[piece 1 of 1: scripts]
+- scripts/land/lib.sh:108: The SSH override precedence differs from Git’s: Git uses `GIT_SSH_COMMAND`, then `core.sshCommand`, then `GIT_SSH`. With `GIT_SSH=ssh` and `core.sshCommand='ssh -o HostName=attacker.example'`, this guard checks ordinary SSH configuration and accepts the GitHub URL, while Git connects to `attacker.example`. Check `core.sshCommand` before falling back to `GIT_SSH`.
