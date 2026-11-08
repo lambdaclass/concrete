@@ -679,13 +679,15 @@ done <<'URLS'
 1 ftp://github.com/lambdaclass/concrete lambdaclass/concrete
 URLS
 # A refusal never prints a URL's credentials: the hook and the guard redact userinfo.
-git remote add gh-secret https://x-access-token:SENTINEL-SECRET@github.com/unbalancedparentheses/concrete2.git
+git remote add gh-secret https://x-access-token:pre@SENTINEL-SECRET@github.com/unbalancedparentheses/concrete2.git
 out="$(LAND_REMOTE=gh-secret bash "$TRAIN" ci t1 2>&1)"; rc=$?
 out2="$(cd "$W" && printf 'refs/heads/x %s refs/heads/wip/dst %s\n' "$(git rev-parse main)" 0000000000000000000000000000000000000000 \
-  | bash "$ROOT_DIR/.githooks/pre-push" gh-secret https://x-access-token:SENTINEL-SECRET@github.com/unbalancedparentheses/concrete2.git 2>&1)"; rc2=$?
+  | bash "$ROOT_DIR/.githooks/pre-push" gh-secret https://x-access-token:pre@SENTINEL-SECRET@github.com/unbalancedparentheses/concrete2.git 2>&1)"; rc2=$?
 git remote remove gh-secret
 [ "$rc" != 0 ] && [ "$rc2" = 1 ] && has "$out" "https://***@github.com" && has "$out2" "https://***@github.com" \
-  && ! has "$out$out2" "SENTINEL" && ok "refusals redact a URL's credentials" || no "a refusal printed credentials or did not refuse ($rc/$rc2): $out $out2"
+  && ! has "$out$out2" "SENTINEL" && [ "$(. "$ROOT_DIR/scripts/land/lib.sh"; land_url_redact 'https://u:a@b@github.com/x/y@z')" = 'https://***@github.com/x/y@z' ] \
+  && [ "$(printf '%s\n' 'https://u:a@SENTINEL@github.com/x' | sed -E "$(sed -n "s/^redact() { sed -E '\(.*\)' |.*/\1/p" "$ROOT_DIR/scripts/land/install-bot.sh")")" = 'https://***@github.com/x' ] \
+  && ok "refusals redact a URL's credentials (through the last @ of the authority, in lib.sh and install-bot.sh)" || no "a refusal printed credentials or did not refuse ($rc/$rc2): $out $out2"
 [ "$url_ok" = 1 ] && ok "the one-repository guard accepts only github.com/lambdaclass/concrete, in every URL form and through ssh aliases" || no "the one-repository guard misjudged a URL form"
 out="$(LAND_REMOTE=gh-canon bash "$TRAIN" ci t1 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "gh would read another repository" && ok "ci refuses a LAND_REPO that is not the one repository the remote names" || no "ci accepted LAND_REPO=test/repo on the canonical remote (exit $rc)"

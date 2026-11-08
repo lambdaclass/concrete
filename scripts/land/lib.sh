@@ -136,7 +136,10 @@ land_url_target() {
 # by "***", for messages; an scp-like user@ (no secret) is kept.
 land_url_redact() {
   case "$1" in
-    *://*@*) local rest="${1#*://}"; case "${rest%%/*}" in *@*) printf '%s://***@%s\n' "${1%%://*}" "${rest#*@}"; return 0 ;; esac ;;
+    *://*@*) local rest="${1#*://}" auth path=""
+             auth="${rest%%/*}"; case "$rest" in */*) path="/${rest#*/}" ;; esac
+             # through the LAST @ of the authority: userinfo may itself contain @
+             case "$auth" in *@*) printf '%s://***@%s%s\n' "${1%%://*}" "${auth##*@}" "$path"; return 0 ;; esac ;;
   esac
   printf '%s\n' "$1"
 }

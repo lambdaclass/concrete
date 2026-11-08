@@ -32,7 +32,7 @@ done
 say() { echo "install-bot: $*"; }
 # URLs on one line, with a scheme URL's userinfo (https://user:TOKEN@host) replaced by *** (as
 # land_url_redact in lib.sh, which this script, run over ssh as a single file, cannot source).
-redact() { sed -E 's#^([A-Za-z][A-Za-z0-9+.-]*://)[^/@]*@#\1***@#' | tr '\n' ' '; }
+redact() { sed -E 's#^([A-Za-z][A-Za-z0-9+.-]*://)[^/]*@#\1***@#' | tr '\n' ' '; }   # through the authority's last @
 [ "$(id -un)" = dev ] || say "WARNING: running as $(id -un), not dev"
 ORIGIN_URL="${INSTALL_ORIGIN_URL:-git@github.com:lambdaclass/concrete.git}"
 
