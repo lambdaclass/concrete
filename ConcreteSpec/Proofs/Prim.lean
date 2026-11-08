@@ -347,4 +347,291 @@ theorem ghost_erasure_ending (G : Language O) (P : Exec.Program O) (ρ : Exec.Or
   exact ⟨rfl, rfl⟩
 
 end Ghost
+
+/-! ## Non-vacuity witnesses
+
+Each law above has a concrete instance whose interesting premise or result holds, followed by a
+planted counter-example. The counter-examples mutate the transformation, checker, evidence match or
+execution state; they do not merely negate a definition. -/
+
+namespace Vacuity
+open Prim
+
+def x0 : Var := ⟨"x", 0⟩
+def x1 : Var := ⟨"x", 1⟩
+
+/-- Swap two numeric local identities and leave every other identity unchanged. -/
+def swapNat : Nat → Nat
+  | 0 => 1
+  | 1 => 0
+  | n => n
+
+def swap : Renaming where
+  toFun := swapNat
+  inv := swapNat
+  toFun_inv := fun
+    | 0 | 1 | _ + 2 => rfl
+  inv_toFun := fun
+    | 0 | 1 | _ + 2 => rfl
+
+def locals : AList Var Int := [(x0, 10), (x1, 3)]
+def source : Term := .bind x0 (.lit 2) (.add (.var x0) (.copy x1))
+def hints (_ : Var) : String := "renamed"
+
+/-- Non-trivial instance for `lookupId_rename`: lookup finds the second renamed entry. -/
+example : lookupId (renameLocals swap locals) (swap.toFun 1) = lookupId locals 1 ∧
+    lookupId locals 1 = some 3 := by decide
+
+/-- Planted counter-example: renaming the environment but not the numeric key loses the entry. -/
+example : lookupId (renameLocals swap [(x0, 3)]) 0 ≠ lookupId [(x0, 3)] 0 := by decide
+
+/-- Non-trivial instance for `eval_rename`: both evaluations return the same non-stuck value. -/
+example : Term.eval (renameLocals swap locals) (renameTerm swap source) = Term.eval locals source ∧
+    Term.eval locals source = .ok 5 := by decide
+
+/-- Planted counter-example: renaming only the term makes its read unbound. -/
+example : Term.eval locals (renameTerm swap (.var x0)) ≠ Term.eval locals (.var x0) := by decide
+
+/-- Non-trivial instance for `eval_operands_rename`: the C1 adapter also returns `5`. -/
+example : operands.eval (renameLocals swap locals) () (renameTerm swap source) =
+    operands.eval locals () source ∧
+    (operands.eval locals () source : Res (Int × Unit)) = .ok ((5 : Int), ()) := by
+  constructor <;> rfl
+
+/-- Planted counter-example: the adapter cannot repair an inconsistently renamed occurrence. -/
+example : (operands.eval locals () (renameTerm swap (.var x0)) : Res (Int × Unit)) ≠
+    operands.eval locals () (.var x0) := by
+  intro h
+  cases h
+
+/-- Non-trivial instance for `rename_inverse`: the source changes once and is then recovered. -/
+example : renameTerm swap.symm (renameTerm swap source) = source ∧
+    renameTerm swap source ≠ source := by decide
+
+/-- Planted counter-example: substituting the identity for the inverse does not recover the term. -/
+example : renameTerm .id (renameTerm swap (.var x0)) ≠ .var x0 := by decide
+
+/-- Non-trivial instance for `rename_id`: a compound binder term is unchanged. -/
+example : renameTerm .id source = source := by decide
+
+/-- Planted counter-example: a non-identity renaming is not the identity law. -/
+example : renameTerm swap (.var x0) ≠ .var x0 := by decide
+
+/-- Non-trivial instance for `lookupId_rehint`: numeric lookup still finds the value. -/
+example : lookupId (rehintLocals hints locals) 1 = lookupId locals 1 ∧
+    lookupId locals 1 = some 3 := by decide
+
+/-- Planted counter-example: C1's whole-`Var` lookup fails if only the environment is rehinted. -/
+example : AList.lookup (rehintLocals hints [(x0, 3)]) x0 ≠ AList.lookup [(x0, 3)] x0 := by decide
+
+/-- Non-trivial instance for `eval_rehint`: consistent rehinting preserves a successful result. -/
+example : Term.eval (rehintLocals hints locals) (rehintTerm hints source) =
+    Term.eval locals source ∧ Term.eval locals source = .ok 5 := by decide
+
+/-- Planted counter-example: a mutated rehinting that also changes the numeric identity breaks evaluation. -/
+example : Term.eval [(x0, 10)] (.var ⟨"renamed", 1⟩) ≠ Term.eval [(x0, 10)] (.var x0) := by decide
+
+/-- Non-trivial instance for `eval_operands_rehint`: the adapter preserves the value `5`. -/
+example : operands.eval (rehintLocals hints locals) () (rehintTerm hints source) =
+    operands.eval locals () source ∧
+    (operands.eval locals () source : Res (Int × Unit)) = .ok ((5 : Int), ()) := by
+  constructor <;> rfl
+
+/-- Planted counter-example: the adapter cannot excuse changing an occurrence's numeric identity. -/
+example : (operands.eval [(x0, (10 : Int))] () (.var ⟨"renamed", 1⟩) : Res (Int × Unit)) ≠
+    operands.eval [(x0, (10 : Int))] () (.var x0) := by
+  intro h
+  cases h
+
+/-- A non-trivial proved fact and its exact evidence context. -/
+def evidence : SafetyEvidence := ⟨1 + 1 = 2, EvidenceDemo.current, by decide⟩
+
+def obligationChanged : EvidenceContext := { EvidenceDemo.current with obligation := ⟨1⟩ }
+def targetChanged : EvidenceContext :=
+  { EvidenceDemo.current with target := { linuxX8664 with byteOrder := .big } }
+def contractChanged : EvidenceContext := { EvidenceDemo.current with contract := ⟨⟨0⟩, 2⟩ }
+def checkerChanged : EvidenceContext := { EvidenceDemo.current with checker := ⟨0, 2, 0⟩ }
+def specChanged : EvidenceContext := { EvidenceDemo.current with spec := ⟨0, 2⟩ }
+
+/-- Non-trivial instance for `SafetyEvidence.usable_current`: the proved arithmetic fact is usable. -/
+example : evidence.Usable evidence.context := by decide
+
+/-- Planted counter-example: an otherwise identical context with a new contract is not current. -/
+example : ¬ evidence.Usable contractChanged := by decide
+
+/-- Non-trivial instance for `SafetyEvidence.obligation_mismatch`. -/
+example : ¬ evidence.Usable obligationChanged := by decide
+
+/-- Planted counter-example: comparing only obligations accepts a context with the wrong target. -/
+example : ¬ (evidence.context.obligation = targetChanged.obligation →
+    evidence.Usable targetChanged) := by decide
+
+/-- Non-trivial instance for `SafetyEvidence.target_mismatch`. -/
+example : ¬ evidence.Usable targetChanged := by decide
+
+/-- Planted counter-example: comparing only targets accepts a context with the wrong obligation. -/
+example : ¬ (evidence.context.target = obligationChanged.target →
+    evidence.Usable obligationChanged) := by decide
+
+/-- Non-trivial instance for `SafetyEvidence.contract_mismatch`. -/
+example : ¬ evidence.Usable contractChanged := by decide
+
+/-- Planted counter-example: comparing only contracts accepts a context with the wrong checker. -/
+example : ¬ (evidence.context.contract = checkerChanged.contract →
+    evidence.Usable checkerChanged) := by decide
+
+/-- Non-trivial instance for `SafetyEvidence.checker_mismatch`. -/
+example : ¬ evidence.Usable checkerChanged := by decide
+
+/-- Planted counter-example: comparing only checkers accepts a context with the wrong spec. -/
+example : ¬ (evidence.context.checker = specChanged.checker → evidence.Usable specChanged) := by decide
+
+/-- Non-trivial instance for `SafetyEvidence.spec_mismatch`. -/
+example : ¬ evidence.Usable specChanged := by decide
+
+/-- Planted counter-example: comparing only spec versions accepts a context with the wrong contract. -/
+example : ¬ (evidence.context.spec = contractChanged.spec → evidence.Usable contractChanged) := by decide
+
+def successAnswer : Exec.Answer Int Int Int := ⟨none, .ok 0, 7⟩
+def failureAnswer : Exec.Answer Int Int Int := ⟨none, .ok 1, 7⟩
+def undeclaredAnswer : Exec.Answer Int Int Int := ⟨none, .ok 2, 7⟩
+def trapAnswer : Exec.Answer Int Int Int := ⟨none, .error .abort, 7⟩
+
+/-- Non-trivial instance for `PrimRegistry.answerOk_iff`: the declared failure passes both sides. -/
+example : PrimDemo.unitContract.answerOk [] 7 failureAnswer = true ↔
+    PrimDemo.unitContract.Allowed [] 7 failureAnswer := by
+  simp [PrimDemo.unitContract, PrimContract.Allowed, failureAnswer]
+
+/-- Planted counter-example: a checker that omits the declared failure violates the equivalence. -/
+example : ¬ (false = true ↔ PrimDemo.unitContract.Allowed [] 7 failureAnswer) := by
+  simp [PrimDemo.unitContract, PrimContract.Allowed, failureAnswer]
+
+/-- Non-trivial instance for `PrimRegistry.allows_unknown`: primitive one has no registry entry. -/
+example : PrimDemo.registry.allows ⟨1⟩ [] 7 successAnswer = false := by decide
+
+/-- Planted counter-example: treating the registered primitive zero as unknown rejects a valid answer. -/
+example : ¬ PrimDemo.registry.allows ⟨0⟩ [] 7 successAnswer = false := by decide
+
+abbrev requestProgram : Exec.Program PrimDemo.machine := ⟨[]⟩
+abbrev unknownStart : Exec.Config PrimDemo.machine :=
+  ⟨.exec (.prim none ⟨1⟩ [] ⟨0⟩), [], (7 : Int), []⟩
+abbrev registeredStart : Exec.Config PrimDemo.machine :=
+  ⟨.exec (.prim none ⟨0⟩ [] ⟨0⟩), [], (7 : Int), []⟩
+
+/-- Non-trivial instance for `PrimRegistry.unknown_primitive_stuck`: an actual request has no step. -/
+example (l : Exec.Label PrimDemo.machine) (c' : Exec.Config PrimDemo.machine) :
+    ¬ Exec.Step requestProgram unknownStart l c' := by
+  apply PrimRegistry.unknown_primitive_stuck (O := PrimDemo.base)
+    PrimDemo.registry requestProgram
+  · rfl
+  · rfl
+
+/-- Planted counter-example: the same request to the registered primitive does have a step. -/
+example : ¬ (∀ (l : Exec.Label PrimDemo.machine) (c' : Exec.Config PrimDemo.machine),
+    ¬ Exec.Step requestProgram registeredStart l c') := by
+  intro h
+  apply h .silent ⟨.done, [], (7 : Int), []⟩
+  exact Exec.Step.prim (P := requestProgram) (a := successAnswer) rfl (by decide) rfl
+
+/-- Non-trivial instance for `PrimRegistry.allows_allowed`: a declared failure satisfies `Allowed`. -/
+example : PrimDemo.unitContract.Allowed [] 7 failureAnswer :=
+  PrimRegistry.allows_allowed (O := PrimDemo.base) PrimDemo.registry ⟨0⟩ PrimDemo.unitContract rfl []
+    7 failureAnswer (by decide)
+
+/-- Planted counter-example: the undeclared ordinary result `2` is not allowed. -/
+example : ¬ PrimDemo.unitContract.Allowed [] 7 undeclaredAnswer := by
+  simp [PrimDemo.unitContract, PrimContract.Allowed, undeclaredAnswer]
+
+/-- Non-trivial instance for `PrimRegistry.allows_postcondition`: the declared failure matches its
+alternative even though it does not satisfy the success predicate. -/
+example : PrimDemo.unitContract.ensures 1 failureAnswer.store ∨
+    ∃ f ∈ PrimDemo.unitContract.failures,
+      f.errorTy = PrimDemo.unitContract.result ∧ f.holds 1 := by
+  simp [PrimDemo.unitContract, failureAnswer]
+
+/-- Planted counter-example: the old ensures-only claim rejects this accepted declared failure. -/
+example : ¬ (PrimDemo.registry.allows ⟨0⟩ [] 7 failureAnswer = true →
+    PrimDemo.unitContract.ensures 1 failureAnswer.store) := by
+  simp [PrimDemo.registry, PrimRegistry.allows, AList.lookup, PrimDemo.unitContract, failureAnswer]
+
+/-- Non-trivial instance for `PrimRegistry.allows_no_implicit_trap`: the accepted failure is ordinary. -/
+example : ∃ v, failureAnswer.result = .ok v :=
+  PrimRegistry.allows_no_implicit_trap (O := PrimDemo.base) PrimDemo.registry ⟨0⟩
+    PrimDemo.unitContract rfl [] 7 failureAnswer (by decide)
+
+/-- Planted counter-example: an implicit trap is not an ordinary result value. -/
+example : ¬ ∃ v, trapAnswer.result = .ok v := by
+  rintro ⟨v, hv⟩
+  simp [trapAnswer] at hv
+
+abbrev answerOracle : Exec.Oracle PrimDemo.machine := fun _ _ _ _ _ => some successAnswer
+
+/-- Non-trivial instance for `Ghost.drive_steps`: a real primitive request has a `Steps` derivation. -/
+example : ∃ tr, (Ghost.drive requestProgram answerOracle 2 [] registeredStart).events = [] ++ tr ∧
+    Exec.Steps requestProgram registeredStart tr
+      (Ghost.drive requestProgram answerOracle 2 [] registeredStart).config :=
+  Ghost.drive_steps requestProgram answerOracle 2 [] registeredStart _ rfl
+
+/-- Planted counter-example: the silent primitive step cannot emit the fabricated event `99`. -/
+example : (Ghost.drive requestProgram answerOracle 2 [] registeredStart).events ≠ [(99 : Int)] := by
+  intro h
+  cases h
+
+/-- Non-trivial instance for `Ghost.drive_steps_result`, with no auxiliary report argument. -/
+example : ∃ tr, (Ghost.drive requestProgram answerOracle 2 [] registeredStart).events = [] ++ tr ∧
+    Exec.Steps requestProgram registeredStart tr
+      (Ghost.drive requestProgram answerOracle 2 [] registeredStart).config :=
+  Ghost.drive_steps_result requestProgram answerOracle 2 [] registeredStart
+
+/-- Planted counter-example: the retained final store is `7`, not a fabricated successor state. -/
+example : (Ghost.drive requestProgram answerOracle 2 [] registeredStart).config.store ≠ (8 : Int) := by
+  intro h
+  cases h
+
+abbrev returnedStart : Exec.Config PrimDemo.base := ⟨.exiting (.ret 1), [], 5, []⟩
+
+/-- Non-trivial instance for `Ghost.runStmts_of_not_normal`: a returned configuration is not restarted. -/
+example : Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] [.skip] returnedStart =
+    Ghost.drive GhostDemo.program GhostDemo.oracle 20 [] returnedStart := by
+  apply Ghost.runStmts_of_not_normal
+  decide
+
+/-- Planted counter-example: a normal configuration does run the later `abort`, unlike plain `drive`. -/
+example : (Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] [.abort ⟨3⟩]
+    GhostDemo.start).ending ≠
+    (Ghost.drive GhostDemo.program GhostDemo.oracle 20 [] GhostDemo.start).ending := by
+  intro h
+  cases h
+
+/-- Non-trivial instance for `Ghost.ghost_erasure_run`: ghost reads and writes surround concrete `skip`. -/
+example : Ghost.runPieces GhostDemo.language GhostDemo.program GhostDemo.oracle 20 []
+    GhostDemo.pieces [] GhostDemo.start =
+    Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] [.skip] GhostDemo.start :=
+  Ghost.ghost_erasure_run GhostDemo.language GhostDemo.program GhostDemo.oracle 20 []
+    GhostDemo.pieces [] GhostDemo.start
+
+/-- Planted counter-example: erasing concrete `skip` as well changes the retained fuel. -/
+example : (Ghost.runPieces GhostDemo.language GhostDemo.program GhostDemo.oracle 20 []
+    GhostDemo.pieces [] GhostDemo.start).remaining ≠
+    (Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] [] GhostDemo.start).remaining := by decide
+
+/-- Non-trivial instance for `Ghost.ghost_erasure_ending`: both observations are preserved. -/
+example : (Ghost.runPieces GhostDemo.language GhostDemo.program GhostDemo.oracle 20 []
+    GhostDemo.pieces [] GhostDemo.start).events =
+    (Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] [.skip] GhostDemo.start).events ∧
+    (Ghost.runPieces GhostDemo.language GhostDemo.program GhostDemo.oracle 20 []
+      GhostDemo.pieces [] GhostDemo.start).ending =
+    (Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] [.skip] GhostDemo.start).ending :=
+  Ghost.ghost_erasure_ending GhostDemo.language GhostDemo.program GhostDemo.oracle 20 []
+    GhostDemo.pieces [] GhostDemo.start
+
+/-- Planted counter-example: erasing a concrete `abort` changes the ending, so only ghost code is
+removable. -/
+example : (Ghost.runPieces GhostDemo.language GhostDemo.program GhostDemo.oracle 20 []
+    [.ghost (.assert ⟨0⟩ True), .concrete (.abort ⟨3⟩)] [] GhostDemo.start).ending ≠
+    (Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] [] GhostDemo.start).ending := by
+  intro h
+  cases h
+
+end Vacuity
 end ConcreteSpec.Core
