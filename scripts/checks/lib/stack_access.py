@@ -13,7 +13,7 @@ MASK = (1 << 64) - 1
 NUM = re.compile(r"(?:0x[0-9a-f]+|\d+)$")
 # Register names an address may use. Anything else is refused before it reaches the debugger (gdb
 # reads `$name` as a convenience variable when it is not a register).
-X86_REG = re.compile(r"(?:r(?:[abcd]x|[sd]i|[sb]p|\d{1,2}[dwb]?)|e(?:[abcd]x|[sd]i|[sb]p)|r?ip)$")
+X86_REG = re.compile(r"(?:r(?:[abcd]x|[sd]i|[sb]p|(?:[89]|1[0-5])[dwb]?)|e(?:[abcd]x|[sd]i|[sb]p)|r?ip)$")
 A64_REG = re.compile(r"(?:[xw](?:[12]?\d|30)|sp|fp|lr)$")
 
 
@@ -61,7 +61,7 @@ def x86_addresses(asm, reg, next_pc):
                 v = _reg(reg, term, X86_REG)
             addr += v if sign == "+" else -v
         out.append(addr & MASK)
-    if not out and re.search(r"\b(movs|stos|lods|cmps|scas)", mn):
+    if not out and re.match(r"(?:rep\w*\s+)?(?:movs|stos|lods|cmps|scas)[bwdq]?(?:\s|$)", asm):
         raise ValueError(f"string instruction with implicit memory operands: {asm}")
     return out
 
