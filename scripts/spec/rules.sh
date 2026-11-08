@@ -5,9 +5,12 @@
 # registry is read from the built environment by scripts/spec/rules.lean.
 #
 # NEGATIVE CONTROLS run the same checker on small fixtures and require each failure: a rule with no
-# refused example, one whose doc cites no decision row, one registered twice, one naming no
-# declaration, a citation of an unregistered rule, a verdict outside an example's doc comment and a
-# truncated listing. A fixture that satisfies every check must pass (the positive control).
+# refused or no accepted example, no doc comment, a doc citing no decision row or one no inventory
+# holds, one registered twice, one naming no declaration, revision 0, a citation of an unregistered
+# rule (a quoted name too), a verdict outside an example's doc comment or in a nested comment, one
+# example claiming both verdicts, a truncated listing, an unlexable source, a missing or empty
+# source directory, and a checker that hangs through both bounded attempts. Fixtures that satisfy
+# every check must pass (the positive controls, attributed and modified examples included).
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/../checks/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -21,14 +24,16 @@ TMP="$(mktemp -d)" || { echo "FATAL: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$TMP"' EXIT
 export LC_ALL=C
 BOUNDED_PARENT="$TMP"; source scripts/checks/lib/bounded.sh || exit 2
-# check BUDGET RULES-JSONL SRC-DIR → the checker's output and status, bounded: a second timeout is
-# INCOMPLETE, status 2, which no check below accepts
-check() {
-  local out rc
-  out="$(bounded_run -i /dev/null "$1" -- python3 -I scripts/spec/rules.py "$2" "$3" 2>&1)"; rc=$?
-  if bounded_is_incomplete "$rc"; then bounded_summary >&2; echo "error: $CHECK_NAME: the checker timed out (INCOMPLETE)" >&2; return 2; fi
+# run_bounded BUDGET CMD... → CMD's output and status, bounded: a second timeout is INCOMPLETE,
+# status 2, which no check below accepts
+run_bounded() {
+  local out rc budget="$1"; shift
+  out="$(bounded_run -i /dev/null -r "$budget" "$budget" -- "$@" 2>&1)"; rc=$?
+  if bounded_is_incomplete "$rc"; then echo "error: $CHECK_NAME: timed out twice (INCOMPLETE)" >&2; return 2; fi
   printf '%s\n' "$out"; return "$rc"
 }
+# check BUDGET RULES-JSONL SRC-DIR ROWS... → the checker
+check() { local b="$1"; shift; run_bounded "$b" python3 -I scripts/spec/rules.py "$@"; }
 
 command -v lake >/dev/null || { echo "error: $CHECK_NAME needs Lean's lake on PATH (elan)" >&2; exit 2; }
 bounded_run -i /dev/null -r 3600 3600 -- lake build ConcreteSpec > "$TMP/build.log" 2>&1 \
@@ -37,7 +42,7 @@ bounded_run -i /dev/null -r 3600 3600 -- lake build ConcreteSpec > "$TMP/build.l
 echo "=== the specification ==="
 bounded_run -i /dev/null 600 -- lake env lean scripts/spec/rules.lean > "$TMP/rules.jsonl" 2> "$TMP/rules.err" \
   || { cat "$TMP/rules.err" >&2; bounded_summary >&2; echo "error: scripts/spec/rules.lean failed or timed out" >&2; exit 2; }
-OUT=$(check 120 "$TMP/rules.jsonl" ConcreteSpec); RC=$?
+OUT=$(check 120 "$TMP/rules.jsonl" ConcreteSpec docs/decisions.md ROADMAP.md); RC=$?
 echo "$OUT"
 [ "$RC" = 0 ] && ok "the registry and every rule citation of ConcreteSpec" || no "the specification (rc=$RC)"
 
@@ -45,8 +50,9 @@ echo "=== negative controls ==="
 # fixture NAME RULES-JSONL SOURCE → runs the checker on them, sets OUT and RC
 fixture() {
   mkdir -p "$TMP/$1"; printf '%s\n' "$2" > "$TMP/$1.jsonl"; printf '%s\n' "$3" > "$TMP/$1/A.lean"
-  OUT=$(check 60 "$TMP/$1.jsonl" "$TMP/$1"); RC=$?
+  OUT=$(check 60 "$TMP/$1.jsonl" "$TMP/$1" "$TMP/rows.md"); RC=$?
 }
+printf 'Q9.1 is a decided row.\n' > "$TMP/rows.md"
 END='{"end":true}'
 GOOD='{"name":"R.ok","rev":1,"exists":true,"doc":"The rule (Q9.1)."}'
 EXA='/-- Accepted (rule `R.ok`). -/
@@ -91,5 +97,51 @@ fixture rev0 '{"name":"R.ok","rev":0,"exists":true,"doc":"The rule (Q9.1)."}
 [ "$RC" = 1 ] && [[ "$OUT" == *"revision 0"* ]] && ok "control: revision 0 fails" || no "control: revision 0 not reported: $OUT"
 fixture trunc "$GOOD" "$EXA"
 [ "$RC" = 3 ] && ok "control: a truncated listing is an error" || no "control: truncated listing gave rc=$RC: $OUT"
+fixture noaccepted "$GOOD
+$END" '/-- Refused (rule `R.ok`). -/
+example : True := trivial'
+[ "$RC" = 1 ] && [[ "$OUT" == *"no example marked Accepted"* ]] && ok "control: a rule with no accepted example fails" \
+  || no "control: missing accepted example not reported: $OUT"
+fixture nodoc '{"name":"R.ok","rev":1,"exists":true,"doc":""}
+'"$END" "$EXA"
+[ "$RC" = 1 ] && [[ "$OUT" == *"has no doc comment"* ]] && ok "control: a rule with no doc comment fails" \
+  || no "control: missing doc comment not reported: $OUT"
+fixture badrow '{"name":"R.ok","rev":1,"exists":true,"doc":"The rule (Q999.999)."}
+'"$END" "$EXA"
+[ "$RC" = 1 ] && [[ "$OUT" == *"no existing decision row"* ]] && ok "control: a rule citing a row no inventory has fails" \
+  || no "control: nonexistent decision row not reported: $OUT"
+fixture both "$GOOD
+$END" '/-- Accepted (rule `R.ok`). Refused (rule `R.ok`). -/
+example : True := trivial'
+[ "$RC" = 1 ] && [[ "$OUT" == *"both accepted and refused"* ]] && ok "control: one example claiming both verdicts fails" \
+  || no "control: both verdicts on one example not reported: $OUT"
+fixture nested "$GOOD
+$END" "$EXA
+/-- Refused /- Accepted (rule \`R.ok\`) -/ -/
+example : True := trivial"
+[ "$RC" = 1 ] && [[ "$OUT" == *"nested comment"* ]] && ok "control: a verdict in a nested comment fails" \
+  || no "control: nested-comment verdict not reported: $OUT"
+fixture quoted "$GOOD
+$END" "$EXA
+-- see (rule \`R.«missing rule»\`)"
+[ "$RC" = 1 ] && [[ "$OUT" == *"cites unregistered rule R.«missing rule»"* ]] && ok "control: an unregistered quoted name fails" \
+  || no "control: quoted unregistered citation not reported: $OUT"
+fixture attr "$GOOD
+$END" '/-- Accepted (rule `R.ok`). -/
+@[simp] example : True := trivial
+
+/-- Refused (rule `R.ok`). -/
+noncomputable example : True := trivial'
+[ "$RC" = 0 ] && ok "control: examples with an attribute or a modifier count" || no "control: attributed examples refused: $OUT"
+fixture unlexable "$GOOD
+$END" '/-- Accepted (rule `R.ok`). unterminated'
+[ "$RC" = 3 ] && ok "control: an unlexable source is an error" || no "control: unlexable source gave rc=$RC: $OUT"
+OUT=$(check 60 "$TMP/good.jsonl" "$TMP/no-such-dir" "$TMP/rows.md"); RC=$?
+[ "$RC" = 3 ] && ok "control: a missing source directory is an error" || no "control: missing source dir gave rc=$RC: $OUT"
+mkdir -p "$TMP/empty"
+OUT=$(check 60 "$TMP/good.jsonl" "$TMP/empty" "$TMP/rows.md"); RC=$?
+[ "$RC" = 3 ] && ok "control: a source directory with no .lean file is an error" || no "control: empty source dir gave rc=$RC: $OUT"
+OUT=$(run_bounded 1 python3 -I -c 'import time; time.sleep(30)' 2>&1); RC=$?
+[ "$RC" = 2 ] && ok "control: a checker that hangs through both attempts is INCOMPLETE" || no "control: hung checker gave rc=$RC"
 
 finish

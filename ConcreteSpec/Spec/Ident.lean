@@ -177,7 +177,7 @@ def specVersion : SpecVersion := ⟨0, 1⟩
 example : DeclId.mk ⟨["a"]⟩ "Pair" ≠ DeclId.mk ⟨["b"]⟩ "Pair" := by decide
 
 /-- A field belongs to its owner: `a` of `Pair` is not `a` of `Point`, and `value` of variant
-`Some` is not `value` of variant `Ok`. -/
+`E.A` is not `value` of variant `E.B`. -/
 example : FieldId.mk (.struct ⟨⟨[]⟩, "Pair"⟩) "a" ≠ FieldId.mk (.struct ⟨⟨[]⟩, "Point"⟩) "a" := by
   decide
 
