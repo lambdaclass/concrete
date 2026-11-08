@@ -19,7 +19,7 @@
 # SAFETY: one instance (a kernel flock, via flock(1) or Python fcntl); state in a file, so a restart resumes a
 # train that is in CI instead of dispatching again; `touch ~/.concrete-bot-paused` stops it before
 # the next stage; --dry-run changes nothing; main is pushed only by train.sh land (fast-forward,
-# never forced) to the primary and the mirror; a remote named `fork` is refused; every git
+# never forced) to the one repository's main; a remote named `fork` is refused; every git
 # operation is followed by an in-progress check, and `git rebase` is never piped.
 #
 # ENV: BOT_STATE_DIR (default <git-common-dir>/concrete-landing/bot), BOT_PAUSE_FILE
@@ -57,7 +57,6 @@ NOTES="$SELF_DIR/notes.sh"
 IMPACT="$SELF_DIR/impact_gates.sh"
 NOTIFY="${BOT_NOTIFY:-$SELF_DIR/notify.sh}"
 REMOTE="${LAND_REMOTE:-origin}"
-MIRROR="${LAND_MIRROR-lambdaclass}"
 PREFIX="${BOT_BRANCH_PREFIX:-wip/}"; PREFIX="${PREFIX%/}/"
 PAUSE="${BOT_PAUSE_FILE:-$HOME/.concrete-bot-paused}"
 ACTIVE="${BOT_ACTIVE_SECONDS:-600}"
@@ -70,8 +69,7 @@ CHECK_ARGS=()
 now() { echo "${BOT_NOW:-$(date +%s)}"; }
 TRAIN_SEQ=0
 
-[ "$REMOTE" != fork ] || die "refusing the remote named 'fork' as primary"
-[ "$MIRROR" != fork ] || die "refusing the remote named 'fork' as mirror"
+[ "$REMOTE" != fork ] || die "refusing the remote named 'fork'"
 
 # --- state, events, notification -----------------------------------------------------------------
 
@@ -393,7 +391,7 @@ reconcile_run() { # train
   if [ -n "$id" ]; then echo "$id"; return 0; fi
   head="$(train_get "$name" head)"
   [ -n "$head" ] || return 0
-  out="$("${LAND_GH:-gh}" run list -R "${LAND_REPO:-unbalancedparentheses/concrete2}" --workflow CI --branch "ci/$name" \
+  out="$("${LAND_GH:-gh}" run list -R "${LAND_REPO:-$LAND_CANONICAL_REPO}" --workflow CI --branch "ci/$name" \
       --event workflow_dispatch -L 20 --json databaseId,headSha 2>/dev/null)" || return 2
   printf '%s' "$out" | python3 -I -c '
 import json, sys
@@ -509,16 +507,12 @@ cmd_tick() {
   if [ "$DRY" = 0 ]; then git checkout -q --detach "$REMOTE/main"; land_assert_no_op "final checkout"; fi
 }
 
-# Every pass that fetches, rebases, pushes or reads GitHub first checks that the remote (and the
-# mirror) is one of the project's repositories and that the remote is LAND_REPO (land_remote_bad,
-# lib.sh): `rebase` pushes without going through a guarded train command.
+# Every pass that fetches, rebases, pushes or reads GitHub first checks that the remote is the one
+# repository (land_remote_bad, lib.sh): `rebase` pushes without going through a guarded train command.
 case "$SUB" in
   tick|rebase|list)
-    if ! why="$(land_remote_bad "$REMOTE" "${LAND_REPO:-unbalancedparentheses/concrete2}")"; then
+    if ! why="$(land_remote_bad "$REMOTE" "${LAND_REPO:-$LAND_CANONICAL_REPO}")"; then
       echo "bot: refusing to run: $why" >&2; exit 1
-    fi
-    if [ -n "$MIRROR" ] && git remote get-url "$MIRROR" >/dev/null 2>&1 && ! why="$(land_remote_bad "$MIRROR")"; then
-      echo "bot: refusing to run: mirror: $why" >&2; exit 1
     fi ;;
 esac
 case "$SUB" in

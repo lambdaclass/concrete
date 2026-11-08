@@ -16,7 +16,7 @@
 # The rebuild is the VERIFICATION of the published artifact (fetch.sh is how runners get it): both
 # hashes reproduced from a fresh clone of the tag mean the release asset is what the tag builds.
 #
-# ORACLE_SOURCE   clone source (default: the lock's url, then mirror_url); a path or bundle also works
+# ORACLE_SOURCE   clone source (default: the lock's url); a path or bundle also works
 # ORACLE_HOME     install root (default ~/oracle); the install is <commit>/ (the unpacked artifact)
 #                 and <commit>.BUILD_INFO beside it
 # ORACLE_KEEP=1   keep a failed build's directory for inspection
@@ -46,7 +46,7 @@ NIX=(nix --extra-experimental-features "nix-command flakes")
 
 # 1. Source: a fresh clone; the tag must resolve to the locked commit.
 cloned=0
-for url in ${ORACLE_SOURCE:-} "$(lock url)" "$(lock mirror_url)"; do
+for url in ${ORACLE_SOURCE:-} "$(lock url)"; do
   [ -n "$url" ] || continue
   rm -rf "$SRC"
   if git clone --quiet --no-checkout "$url" "$SRC" 2>/dev/null \

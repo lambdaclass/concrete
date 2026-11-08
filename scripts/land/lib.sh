@@ -6,7 +6,8 @@
 #   legs_wait                   wait for every leg; sets LEGS_FAILED, LEGS_SUM, LEGS_REPORT
 #   MOVE_GATE_MARKER            the line train.sh's dry-run land prints when only the move gate refused
 #   dryland_only_move_gate rc out   0 iff a dry-run land exited 5 with MOVE_GATE_MARKER as a whole line
-#   LAND_REPOSITORIES           the project's GitHub repositories (owner/name), a constant
+#   LAND_CANONICAL_REPO         the one GitHub repository (owner/name), a constant
+#   LAND_REPOSITORIES           the project's GitHub repositories (owner/name): LAND_CANONICAL_REPO alone
 #   land_url_target url             "<host> <owner/name>" of a network URL; returns 1 for a local one
 #   land_url_redact url             the URL with a scheme URL's userinfo replaced by ***
 #   land_remote_bad remote [repo]   print why <remote> is not one of LAND_REPOSITORIES (or not <repo>), return 1
@@ -73,9 +74,11 @@ MOVE_GATE_MARKER="train (dry-run): every other land check passed; refused only b
 
 # THE PROJECT'S REPOSITORIES (docs/decisions.md#decided-project-repository). Every fetch and push of
 # the landing tooling, and every push the pre-push hook sees, goes to one of these and nowhere else.
-# A constant, not an environment variable: nothing a run inherits can widen it. Both are listed while
-# the migration to lambdaclass/concrete is under way; the one-repository change removes concrete2.
-LAND_REPOSITORIES="lambdaclass/concrete unbalancedparentheses/concrete2"
+# A constant, not an environment variable: nothing a run inherits can widen it. Since 2026-11-06
+# there is one, lambdaclass/concrete (LAND_CANONICAL_REPO, the default LAND_REPO); the archived
+# unbalancedparentheses/concrete2 is no longer one of them.
+LAND_CANONICAL_REPO=lambdaclass/concrete
+LAND_REPOSITORIES="$LAND_CANONICAL_REPO"
 land_known_repo() { # owner/name (lowercase) -> 0 iff it is one of LAND_REPOSITORIES
   local k
   for k in $LAND_REPOSITORIES; do [ "$1" = "$(printf '%s' "$k" | tr 'A-Z' 'a-z')" ] && return 0; done

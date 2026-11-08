@@ -2,7 +2,7 @@
 # THE LANDING BOT LANDS ONLY READY HEADS, IN RULE-FIRST ORDER, AND STOPS WHEN TOLD (R-0539).
 #
 # scripts/land/bot.sh takes the orchestrator out of the landing loop: it collects ready branches,
-# builds one train, checks it, runs CI, lands it on both remotes, bisects and ejects a red member,
+# builds one train, checks it, runs CI, lands it on main, bisects and ejects a red member,
 # and rebases ready branches onto a moved main. Each leg below drives the real bot (and the real
 # train.sh under it) against a THROWAWAY repository with bare-repo remotes, a fake `gh` whose CI is
 # red exactly when the candidate contains a file named CIRED, and a fake pre-push hook that fails
@@ -15,7 +15,7 @@
 #   dry-run    prints the train and changes nothing
 #   kill switch, lock   a pause file or a live lock holder stops the tick; a dead holder's lock is
 #              taken over
-#   train      the tick lands every ready branch in order on origin AND lambdaclass; fork untouched
+#   train      the tick lands every ready branch in order on origin; fork untouched
 #   bisect     a red check or a red CI ejects exactly the culprit, publishes `gates: fail` at its
 #              SHA, notifies, and lands the rest
 #   resume     a restart while a train is in CI watches it instead of dispatching again
@@ -130,20 +130,20 @@ echo "[concrete-remote] ref=$1 sha=$sha"
 EOF
 chmod +x "$TMP/fake-gh" "$TMP/hook" "$TMP/notify.sh" "$TMP/train-nobisect.sh" "$TMP/fake-runner"
 
-for r in origin lambdaclass fork; do git init -q --bare "$TMP/$r.git"; done
+for r in origin fork; do git init -q --bare "$TMP/$r.git"; done
 A="$TMP/agent"; W="$TMP/bot"
 git init -q "$A"; cd "$A" || exit 2
-for r in origin lambdaclass fork; do git remote add "$r" "$TMP/$r.git"; done
+for r in origin fork; do git remote add "$r" "$TMP/$r.git"; done
 mkdir -p Concrete/Check Concrete/Elab src
 printf 'def e := "E0001 existing"\n' > Concrete/Check/Check.lean
 printf 'def x := 1\n' > Concrete/Elab/Elab.lean
 printf 'x\n' > conflict.txt
 printf 'Build\n' > required-checks.txt  # train.sh refuses a landing with no required-checks.txt
 git add -A && git commit -qm base
-for r in origin lambdaclass fork; do git push -q "$r" main; done
+for r in origin fork; do git push -q "$r" main; done
 BASE="$(git rev-parse HEAD)"
 git clone -q "$TMP/origin.git" "$W"
-( cd "$W" && git remote add lambdaclass "$TMP/lambdaclass.git" && git remote add fork "$TMP/fork.git" )
+( cd "$W" && git remote add fork "$TMP/fork.git" )
 
 # mk <branch> <commit-message> <file> <content> [from]: one commit on <from> (default main), pushed.
 mk(){ ( cd "$A" && git fetch -q origin && git checkout -q -B "$1" "${5:-origin/main}" && mkdir -p "$(dirname "$3")" \
@@ -217,12 +217,11 @@ git --git-dir="$TMP/origin.git" update-ref refs/heads/wip/land-control "$BASE"
 [ -n "$(land_refs)" ] && ok "CONTROL: the leaked-ref probe sees a planted wip/land-* ref" || no "the leaked-ref probe is blind"
 git --git-dir="$TMP/origin.git" update-ref -d refs/heads/wip/land-control
 
-echo "=== train: the tick lands every ready branch, in order, on both remotes ==="
+echo "=== train: the tick lands every ready branch, in order, on main ==="
 out="$(bot tick)"; rc=$?
 [ "$rc" = 0 ] && ok "once the holder lets go, the next tick takes the lock and runs" || { no "tick after release: exit $rc"; echo "$out" | sed 's/^/      /'; }
 all=1; for b in wip/explicit wip/late wip/rule wip/a wip/checkonly; do in_main "$(sha_of "$b")" || all=0; done
 [ "$all" = 1 ] && ok "all five ready branches are in origin/main" || { no "a ready branch did not land"; echo "$out" | sed 's/^/      /'; }
-[ "$(main_sha origin)" = "$(main_sha lambdaclass)" ] && ok "lambdaclass/main equals origin/main" || no "mirror differs"
 [ "$(main_sha fork)" = "$BASE" ] && ok "fork untouched" || no "fork was pushed"
 for b in wip/nogates wip/findings wip/gatefail wip/stale; do in_main "$(sha_of "$b")" && no "$b landed"; done
 merges="$(git --git-dir="$TMP/origin.git" log --first-parent --reverse --format=%s "$BASE..refs/heads/main" | sed -n 's/.*merge refs\/bot\/\([^ ]*\) .*/\1/p' | tr '\n' ' ')"
@@ -405,22 +404,20 @@ out="$(cd "$A" && LAND_REVIEW_CMD=true bash "$ROOT_DIR/scripts/land/ready.sh" wi
 [ "$rc" = 0 ] && [ "$(cd "$A" && bash "$NOTES" get gates "$(sha_of wip/rv2)" gates)" = pass ] && has "$(bot list)" "wip/rv2" \
   && ok "passing legs publish gates: pass and the head becomes ready" || { no "ready.sh pass: exit $rc"; echo "$out" | sed 's/^/      /'; }
 
-echo "=== the bot refuses a remote that is not one of the project's repositories ==="
-( cd "$W" && git remote add gh-other https://github.com/someone/else.git && git remote add gh-canon https://github.com/lambdaclass/concrete.git )
+echo "=== the bot refuses a remote that is not the one repository ==="
+( cd "$W" && git remote add gh-stale https://github.com/unbalancedparentheses/concrete2.git )
 heads_before="$(git --git-dir="$ORIGIN_GIT" for-each-ref --format='%(refname) %(objectname)')"
 for sub in tick rebase list; do
-  out="$(LAND_REMOTE=gh-other bot "$sub")"; rc=$?
-  [ "$rc" != 0 ] && has "$out" "not one of the project's repositories" && ok "bot $sub refuses another GitHub repository" || { no "bot $sub accepted another repository: exit $rc"; echo "$out" | sed 's/^/      /'; }
+  out="$(LAND_REMOTE=gh-stale bot "$sub")"; rc=$?
+  [ "$rc" != 0 ] && has "$out" "points at another repository" && ok "bot $sub refuses a stale GitHub remote" || { no "bot $sub accepted a stale remote: exit $rc"; echo "$out" | sed 's/^/      /'; }
 done
-out="$(LAND_REMOTE=gh-canon bot rebase)"; rc=$?
-[ "$rc" != 0 ] && has "$out" "gh would read another repository" && ok "bot rebase refuses a LAND_REPO that is not the remote's repository" || no "bot rebase accepted LAND_REPO=test/repo on lambdaclass: exit $rc"
-out="$(LAND_MIRROR=gh-other bot tick)"; rc=$?
-[ "$rc" != 0 ] && has "$out" "mirror:" && ok "bot tick refuses a mirror that is another repository" || no "bot tick accepted a foreign mirror: exit $rc"
+out="$(LAND_REPO=unbalancedparentheses/concrete2 LAND_REMOTE=gh-stale bot rebase)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "points at another repository" && ok "bot rebase refuses an old origin even with an old LAND_REPO" || no "bot rebase accepted old origin + old LAND_REPO: exit $rc"
 [ "$(git --git-dir="$ORIGIN_GIT" for-each-ref --format='%(refname) %(objectname)')" = "$heads_before" ] \
   && ok "no branch or note moved on a refused pass" || no "a refused bot pass moved refs on origin"
-( cd "$W" && git remote remove gh-other && git remote remove gh-canon )
+( cd "$W" && git remote remove gh-stale )
 
-echo "=== the installer drops push URLs, logs URLs redacted, and its launcher checks the remote before fetching ==="
+echo "=== the installer migrates a stale clone and its launcher checks the remote before fetching ==="
 # The real install-bot.sh, in a sandboxed HOME, with a local origin holding scripts/land and stubs for
 # ssh, gh and systemctl (nothing here reaches the network or the user manager).
 BOUNDED_PARENT="$TMP"; source "$ROOT_DIR/scripts/checks/lib/bounded.sh" || exit 2
@@ -428,36 +425,40 @@ IB="$TMP/ib"; mkdir -p "$IB/home/.config" "$IB/stub" "$IB/src/scripts/checks/lib
 for c in ssh gh systemctl; do printf '#!/bin/sh\nexit 1\n' > "$IB/stub/$c"; chmod +x "$IB/stub/$c"; done
 cp -r "$ROOT_DIR/scripts/land" "$IB/src/scripts/"; cp "$ROOT_DIR/scripts/checks/lib/git_sandbox.sh" "$IB/src/scripts/checks/lib/"
 ( cd "$IB/src" && git init -q && git add -A && git commit -qm src ) && git clone -q --bare "$IB/src" "$IB/origin.git"
-ib(){ HOME="$IB/home" PATH="$IB/stub:$PATH" INSTALL_ORIGIN_URL="$IB/origin.git" INSTALL_MIRROR_URL="$IB/origin.git" bash "$ROOT_DIR/scripts/land/install-bot.sh" 2>&1; }
+printf 'LAND_REPO=unbalancedparentheses/concrete2\n' > "$IB/home/.config/concrete-landing-bot.env"
+ib(){ HOME="$IB/home" PATH="$IB/stub:$PATH" INSTALL_ORIGIN_URL="$IB/origin.git" bash "$ROOT_DIR/scripts/land/install-bot.sh" 2>&1; }
 out="$(ib)"; rc=$?
-[ "$rc" = 0 ] && ok "the installer installs from a local origin" || { no "installer: exit $rc"; echo "$out" | sed 's/^/      /'; }
-BC="$IB/home/concrete-bot"
-git -C "$BC" remote set-url --push origin https://github.com/someone/else.git
-git -C "$BC" remote set-url --push lambdaclass https://github.com/someone/else.git
-out="$(ib)"; rc=$?
-[ "$rc" = 0 ] && ! git -C "$BC" config --get remote.origin.pushurl >/dev/null && ! git -C "$BC" config --get remote.lambdaclass.pushurl >/dev/null \
-  && ! has "$out" "SENTINEL" && ok "the installer drops a push URL of origin and lambdaclass" || { no "installer pushurl: exit $rc"; echo "$out" | sed 's/^/      /'; }
+[ "$rc" = 0 ] && grep -qx 'LAND_REPO=lambdaclass/concrete' "$IB/home/.config/concrete-landing-bot.env" \
+  && ! grep -q 'concrete2' "$IB/home/.config/concrete-landing-bot.env" \
+  && ok "the installer migrates an old LAND_REPO line in an existing environment file" || { no "installer env migration: exit $rc"; echo "$out" | sed 's/^/      /'; }
+# A fresh install logs its origin redacted (the clone itself is refused by a git that does no network).
 mkdir -p "$IB/home2" "$IB/nonet"
 printf '#!/bin/sh\n[ "$1" = clone ] && { echo "git shim: no network" >&2; exit 1; }\nexec "%s" "$@"\n' "$(command -v git)" > "$IB/nonet/git"; chmod +x "$IB/nonet/git"
 for c in ssh gh systemctl; do cp "$IB/stub/$c" "$IB/nonet/$c"; done
 out="$(HOME="$IB/home2" PATH="$IB/nonet:$PATH" INSTALL_ORIGIN_URL='https://x-access-token:pre@SENTINEL-SECRET@github.com/lambdaclass/concrete.git' bash "$ROOT_DIR/scripts/land/install-bot.sh" 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "cloning https://***@github.com/lambdaclass/concrete.git" && ! has "$out" "SENTINEL" \
   && ok "a fresh install logs its origin with the credentials redacted" || { no "fresh install credential output: exit $rc"; echo "$out" | sed 's/^/      /'; }
+BC="$IB/home/concrete-bot"
+git -C "$BC" remote set-url origin https://github.com/unbalancedparentheses/concrete2.git
+git -C "$BC" config --add remote.origin.url https://github.com/unbalancedparentheses/concrete2.git
+git -C "$BC" remote set-url --push origin https://github.com/unbalancedparentheses/concrete2.git
+out="$(ib)"; rc=$?
+[ "$rc" = 0 ] && [ "$(git -C "$BC" config --get-all remote.origin.url)" = "$IB/origin.git" ] && ! git -C "$BC" config --get remote.origin.pushurl >/dev/null \
+  && ok "the installer repoints every origin url and drops a stale push URL" || { no "installer repoint: exit $rc, urls '$(git -C "$BC" config --get-all remote.origin.url | tr '\n' ' ')'"; echo "$out" | sed 's/^/      /'; }
 # A git shim logs every fetch: a refused launcher must log none.
 printf '#!/bin/sh\nfor a in "$@"; do case "$a" in fetch|push|ls-remote) echo "$*" >> "%s"; break ;; esac; done\nexec "%s" "$@"\n' "$IB/git.log" "$(command -v git)" > "$IB/stub/git"
 chmod +x "$IB/stub/git"
-for bad in https://github.com/someone/else.git git@github-old:someone/else.git https://attacker.example/lambdaclass/concrete.git; do
-  git -C "$BC" remote set-url origin "$bad"
+for stale in https://github.com/unbalancedparentheses/concrete2.git git@github-old:unbalancedparentheses/concrete2.git; do
+  git -C "$BC" remote set-url origin "$stale"
   : > "$IB/git.log"
   out="$(bounded_run -i /dev/null 60 -- env HOME="$IB/home" PATH="$IB/stub:$PATH" "$IB/home/.local/libexec/concrete-landing-bot" status 2>&1)"; rc=$?
-  [ "$rc" != 0 ] && has "$out" "refusing to fetch" && has "$out" "not one of the project's repositories" && [ ! -s "$IB/git.log" ] \
-    && ok "the launcher refuses origin=$bad before its first fetch" || { no "launcher with origin=$bad: exit $rc"; echo "$out" | sed 's/^/      /'; }
+  [ "$rc" != 0 ] && has "$out" "refusing to fetch" && has "$out" "points at another repository" && [ ! -s "$IB/git.log" ] \
+    && ok "the launcher refuses origin=$stale before its first fetch" || { no "launcher with origin=$stale: exit $rc"; echo "$out" | sed 's/^/      /'; }
 done
 git -C "$BC" remote set-url origin "$IB/origin.git"
 : > "$IB/git.log"
 out="$(bounded_run -i /dev/null 60 -- env HOME="$IB/home" PATH="$IB/stub:$PATH" "$IB/home/.local/libexec/concrete-landing-bot" status 2>&1)"; rc=$?
-[ "$rc" = 0 ] && has "$out" "state (" && grep -q fetch "$IB/git.log" \
-  && ok "the launcher fetches and runs the bot when origin is a local repository (the shim sees the fetch)" || { no "launcher with a good origin: exit $rc"; echo "$out" | sed 's/^/      /'; }
+[ "$rc" = 0 ] && has "$out" "state (" && grep -q fetch "$IB/git.log" && ok "the launcher fetches and runs the bot when origin is a local repository (the shim sees the fetch)" || { no "launcher with a good origin: exit $rc"; echo "$out" | sed 's/^/      /'; }
 
 echo "=== main is never force-pushed ==="
 bad="$(grep -nE 'git push[^#]*(--force|[[:space:]]-f[[:space:]])[^#]*refs/heads/main' "$ROOT_DIR"/scripts/land/*.sh || true)"

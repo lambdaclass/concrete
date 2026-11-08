@@ -77,28 +77,34 @@ back to GitHub-hosted. So turn the variable off before taking the servers down.
 
 ```sh
 # on (landing tier)
-gh variable set CONCRETE_SELF_HOSTED --body true -R unbalancedparentheses/concrete2
+gh variable set CONCRETE_SELF_HOSTED --body true -R lambdaclass/concrete
 # off (back to GitHub-hosted)
-gh variable delete CONCRETE_SELF_HOSTED -R unbalancedparentheses/concrete2
+gh variable delete CONCRETE_SELF_HOSTED -R lambdaclass/concrete
 # campaign tier, separately (normally left off)
-gh variable set CONCRETE_SELF_HOSTED_CAMPAIGN --body true -R unbalancedparentheses/concrete2
+gh variable set CONCRETE_SELF_HOSTED_CAMPAIGN --body true -R lambdaclass/concrete
 ```
 
 The variable is read when a run starts. Runs already queued keep the routing they started with.
 
-**lambdaclass/concrete** is a separate repository. Variables and repository-level runners do not
-carry over: it stays on GitHub-hosted runners until it gets its own runners (registered against
-`https://github.com/lambdaclass/concrete`, or through an org runner group that grants that repo the
-`concrete` label) and its own `CONCRETE_SELF_HOSTED` variable. The nightly campaign (`nightly.yml`,
-which dispatches CI with `campaign=true` on `main`) runs there, so `CONCRETE_SELF_HOSTED_CAMPAIGN`
-matters there for the nightly campaign. On concrete2 the nightly runs only when the variable
-`CONCRETE_NIGHTLY_QUALIFICATION` is `true`; otherwise the campaign variable only affects campaign
-runs you dispatch with `-f campaign=true`.
+**One repository.** Since 2026-11-06 the runners serve lambdaclass/concrete only
+([decision](decisions.md#decided-project-repository)); concrete2, where they were registered until
+then, is archived once a full landing has run on lambdaclass/concrete. Variables and repository-level runners belong to one repository: the move
+re-registered each runner there (the dotfiles `servers/runners.sh`, `RUNNER_REINSTALL=1`, which
+reinstalls the runner into a fresh user), and `CONCRETE_SELF_HOSTED=true` is set on
+lambdaclass/concrete. The root has no nightly campaign yet; `CONCRETE_SELF_HOSTED_CAMPAIGN` matters
+only when one returns.
 
 ## Security rules (public repository)
 
 GitHub's own guidance is that self-hosted runners should not be used with public repositories,
 because a pull request can run arbitrary code on them. We use them anyway, under these rules:
+
+**Who can reach the runners at all** (owner, 2026-11-06, "A";
+[decisions](decisions.md#decided-project-runner-exposure)). On lambdaclass/concrete every org member
+has push: 44 accounts. A push of any branch, or a `workflow_dispatch`, runs the workflow file of that
+branch, so any of them can put a job on these runners with no approval; the rules below do not
+change that. The owner accepted this exposure, as for stabileo's runners. On concrete2 one account
+had push.
 
 1. **No `pull_request` event runs on a self-hosted runner.** The `runs-on` expression enforces this
    for the workflow as written. But a pull request runs the workflow file **from the PR branch**, so
@@ -114,7 +120,7 @@ because a pull request can run arbitrary code on them. We use them anyway, under
    stay on the machine. Isolation comes from destroying the VM or container after each job and
    starting a fresh one from a clean image, which registers a new ephemeral runner. Automate that
    with actions-runner-controller, or with a supervisor **outside** the job's VM or container that
-   calls `gh api -X POST repos/unbalancedparentheses/concrete2/actions/runners/registration-token`.
+   calls `gh api -X POST repos/lambdaclass/concrete/actions/runners/registration-token`.
    The supervisor's admin token must never be readable from inside a job. Persistent runners (or
    `--ephemeral` re-registered on the same machine, which is the same thing) are acceptable only
    with rule 2, the cleanup hook below and a dedicated low-privilege user, and with the
@@ -199,8 +205,8 @@ mkdir actions-runner && cd actions-runner
 # Take the current version and checksum from Settings, Actions, Runners, New self-hosted runner.
 curl -o actions-runner.tar.gz -L https://github.com/actions/runner/releases/download/v<VERSION>/actions-runner-linux-x64-<VERSION>.tar.gz
 tar xzf actions-runner.tar.gz
-# The token is shown on that settings page (or: gh api -X POST repos/unbalancedparentheses/concrete2/actions/runners/registration-token)
-./config.sh --url https://github.com/unbalancedparentheses/concrete2 --token <TOKEN> \
+# The token is shown on that settings page (or: gh api -X POST repos/lambdaclass/concrete/actions/runners/registration-token)
+./config.sh --url https://github.com/lambdaclass/concrete --token <TOKEN> \
   --name "$(hostname)-runner1" --labels concrete --unattended   # add --ephemeral (recommended)
 exit
 cd /home/runner1/actions-runner
@@ -261,8 +267,8 @@ already handles, and what the host has to handle.
 
 1. Settings, Actions, Runners lists each runner as Idle, with labels
    `self-hosted, Linux, X64, concrete`.
-2. `gh variable set CONCRETE_SELF_HOSTED --body true -R unbalancedparentheses/concrete2`.
-3. `gh workflow run CI --ref main -R unbalancedparentheses/concrete2` (landing tier only), then
+2. `gh variable set CONCRETE_SELF_HOSTED --body true -R lambdaclass/concrete`.
+3. `gh workflow run CI --ref main -R lambdaclass/concrete` (landing tier only), then
    check in the run's job pages that "Runner name" is one of yours and that `Install clang` printed
    `self-hosted runner, using preinstalled clang`.
 4. To turn it off, delete the variable. Queued jobs that are still waiting for a self-hosted
