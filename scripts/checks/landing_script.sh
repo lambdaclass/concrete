@@ -1069,7 +1069,8 @@ MB="$HM"
   for a in "push -q fix main" "push -q $S/fix.git main" "push -q file://$S/fix.git main" "push -q fix HEAD:refs/heads/main" \
            "push -q fix :" "push -q origin wip/x" "push -q -o main origin wip/x" "push -q --repo=fix fix main" \
            "p -q fix main" "pp -q fix main" "q fix main" "-c alias.z=push z -q fix main" "status --short" \
-           "-c alias.st=status st --short"; do
+           "-c alias.st=status st --short" "push -q file://localhost$S/fix.git main" \
+           "push -q --force-with-lease fix main" "push -q --no-verify -- fix main"; do
     # shellcheck disable=SC2086
     "$G" -C w $a >/dev/null 2>"$S/err" || bad="$bad [allowed refused: git $a: $(cat "$S/err")]"
   done
@@ -1080,7 +1081,10 @@ MB="$HM"
            "push origin refs/heads/*:refs/heads/*" "push origin wip/x:heads/main" "push origin :main" \
            "push --delete origin main" "push $S/nb/.git main" "push $S/nb main" "push file://$S/nb/.git main" \
            "push $S/link.git main" "p origin main" "pp origin main" "q origin main" "-c alias.z=push z origin main" \
-           "qq" "sh" "-c url.$S/prot.git.insteadOf=fixalias push fixalias main"; do
+           "qq" "sh" "-c url.$S/prot.git.insteadOf=fixalias push fixalias main" \
+           "push --mir --receive-p git-receive-pack origin" "push -qf origin main" "push --branches origin wip/x" \
+           "push --prune origin wip/x" "push --recurse-submodules=on-demand fix wip/x" \
+           "-c push.recurseSubmodules=on-demand push fix wip/x" "push -- origin main"; do
     # shellcheck disable=SC2086
     if "$G" -C w $a >/dev/null 2>"$S/err"; then bad="$bad [refused passed: git $a]"
     elif ! grep -q 'acceptance git shim: refusing' "$S/err"; then bad="$bad [git $a failed but not by the shim: $(cat "$S/err")]"; fi
@@ -1090,15 +1094,17 @@ MB="$HM"
   CFG=push "$G" --config-env=alias.e=CFG -C w e origin main 2>"$S/err" && bad="$bad [an alias from --config-env= passed]"
   "$G" --no-such-option -C w push origin main 2>"$S/err" && bad="$bad [an unknown global option passed]"
   # Protected local URLs in the other spellings git accepts: file://localhost/ and ~/.
-  git init -q --bare p2.git; git init -q --bare p3.git
-  HOME="$S" make_git_shim "$S/bin2" "$(command -v git)" "file://localhost$S/p2.git" "~/p3.git" || bad="$bad [shim with file://localhost and ~ URLs not made]"
-  for r in p2.git p3.git; do
+  # And an absolute path holding "://", reached through a symlink.
+  git init -q --bare p2.git; git init -q --bare p3.git; git init -q --bare "$S/store://p4.git"; ln -s "store:/p4.git" p4.git
+  HOME="$S" make_git_shim "$S/bin2" "$(command -v git)" "file://localhost$S/p2.git" "~/p3.git" "$S/store://p4.git" \
+    || bad="$bad [shim with file://localhost, ~ and :// path URLs not made]"
+  for r in p2.git p3.git p4.git; do
     "$S/bin2/git" -C w push -q "$S/$r" main 2>"$S/err" && bad="$bad [a push to the protected $r by its absolute path passed]"
   done
   "$S/bin2/git" -C w push -q "$S/fix.git" main 2>"$S/err" || bad="$bad [a fixture push refused by the second shim: $(cat "$S/err")]"
   make_git_shim "$S/bin3" "$(command -v git)" "$S/no-such.git" 2>/dev/null && bad="$bad [a shim was made for a protected URL naming no repository]"
   make_git_shim "$S/bin3" "$(command -v git)" "file://otherhost/x.git" 2>/dev/null && bad="$bad [a shim was made for an unresolvable file:// URL]"
-  for r in prot.git nb p2.git p3.git; do
+  for r in prot.git nb p2.git p3.git p4.git; do
     [ -z "$(git -C "$r" rev-parse -q --verify refs/heads/main)" ] || bad="$bad [the protected $r gained a main]"
   done
   [ -n "$(git -C fix.git rev-parse -q --verify refs/heads/main)" ] || bad="$bad [the local fixture has no main]"

@@ -19,8 +19,11 @@
 # spelling or identity (a remote name, the URL, file://, a non-bare repository's .git, a symlink, a
 # second push URL, --repo), and any url.*.insteadOf or pushInsteadOf rewrite in effect.
 #
-# A push "could move main" when it names --all or --mirror, no refspec, ":", a glob, or a refspec whose
-# destination (or lone source) is main, refs/heads/main, any */main, HEAD or @.
+# A push "could move main" when it names --all, --branches, --mirror or --prune, no refspec, ":", a
+# glob, or a refspec whose destination (or lone source) is main, refs/heads/main, any */main, HEAD or
+# @. Push options come from a fixed list, spelled in full; an abbreviated, bundled or unknown one is
+# refused, and so is submodule recursion (by option or push.recurseSubmodules), whose remotes the shim
+# does not judge.
 #
 # The subcommand is found the way git finds it (after the global options; an unknown one is refused),
 # and an alias is expanded
@@ -31,10 +34,10 @@
 # The shim guards git as found on PATH; a script that runs the real git by its absolute path is
 # stopped by acceptance's other two guards (the pre-push guard and the before/after read of main).
 
-# repo_identity PATH-OR-FILE-URL: the absolute git common directory of the repository git would open
-# for this local push destination, or nothing (no such path, relative, not a repository).
+# repo_identity REAL-GIT ABSOLUTE-PATH: the absolute git common directory of the repository git would
+# open at this path, or nothing (no such path, not absolute, not a repository).
 repo_identity() {
-  local real="$1" u="${2#file://}" d
+  local real="$1" u="$2" d
   case "$u" in /*) ;; *) return 0 ;; esac
   [ -e "$u" ] || return 0
   d="$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY \
@@ -42,18 +45,20 @@ repo_identity() {
   [ -n "$d" ] && (cd "$d" 2>/dev/null && pwd -P)
 }
 
-# local_url_path URL: the absolute path git would open for a local URL, as git spells them (an
-# absolute or relative path, file:///p, file://localhost/p, ~/p, ~user/p; relative to $PWD); nothing
-# for a remote URL (scheme://, or host:path with no slash before the colon); exit 1 when it is local
-# but cannot be resolved (file://otherhost/, an unknown ~user).
+# local_url_path URL [dest]: the absolute path git would open for a local URL, as git spells them (an
+# absolute path, file:///p, file://localhost/p, ~/p, ~user/p, or a path relative to $PWD); nothing for
+# a remote URL (scheme://, or host:path with no slash before the colon); exit 1 when it is local but
+# cannot be resolved (file://otherhost/, an unknown ~user) and, with "dest", when it is relative (the
+# shim does not know which directory git will resolve it from).
 local_url_path() {
-  local u="$1" user home
+  local u="$1" mode="${2:-}" user home
   case "$u" in
+    /*) printf '%s\n' "$u"; return 0 ;;
     file://localhost/*) u="/${u#file://localhost/}" ;;
     file:///*) u="${u#file://}" ;;
     file://*) return 1 ;;
-    *://*) return 0 ;;
   esac
+  [[ "$u" =~ ^[A-Za-z][A-Za-z0-9+.-]*:// ]] && return 0
   case "$u" in
     '~'|'~/'*) u="$HOME${u#\~}" ;;
     '~'*) user="${u%%/*}"; user="${user#\~}"; home="$(getent passwd "$user" | cut -d: -f6)"
@@ -62,7 +67,7 @@ local_url_path() {
   esac
   case "$u" in
     /*) ;;
-    *) case "${u%%/*}" in *:*) return 0 ;; esac; u="$PWD/$u" ;;
+    *) case "${u%%/*}" in *:*) return 0 ;; esac; [ "$mode" = dest ] && return 1; u="$PWD/$u" ;;
   esac
   printf '%s\n' "$u"
 }
@@ -86,7 +91,7 @@ make_git_shim() {
     printf 'PROTECTED_RAW=(%s)\n' "$raw"
     printf 'PROTECTED_ID=(%s)\n' "$ids"
     printf 'BUILTINS=%q\n' " $("$real" --list-cmds=builtins 2>/dev/null | tr '\n' ' ')"
-    declare -f repo_identity
+    declare -f repo_identity local_url_path
     cat <<'SHIM'
 refuse() { echo "acceptance git shim: refusing $1 (git $ARGS)" >&2; exit 1; }
 ARGS="$*"; args=("$@"); pre=(); i=0
@@ -121,19 +126,37 @@ if [ "$sub" != push ]; then
   ACCEPT_SHIM_DEPTH=$((depth+1)) exec "$0" "${pre[@]}" "${words[@]}" "${rest[@]}"
 fi
 # As git reads push: the first positional argument is the repository; --repo only stands in for a
-# missing one; the remaining positionals are refspecs.
-repo=""; optrepo=""; have_repo=0; specs=(); flagall=0; j=0
+# missing one; the remaining positionals are refspecs. Options come from a fixed list, spelled in
+# full: git accepts abbreviations (--mir for --mirror) and bundled short flags, and an option the
+# shim misreads could hide a repository or a refspec, so anything else is refused.
+repo=""; optrepo=""; have_repo=0; specs=(); flagall=0; j=0; dashdash=0
+positional() { if [ "$have_repo" = 0 ]; then repo="$1"; have_repo=1; else specs+=("$1"); fi; }
+submod() { case "$1" in no|check) ;; *) refuse "a push with submodule recursion ($1): the submodules' remotes are not judged" ;; esac; }
 while [ "$j" -lt "${#rest[@]}" ]; do
   a="${rest[$j]}"
+  if [ "$dashdash" = 1 ]; then positional "$a"; j=$((j+1)); continue; fi
   case "$a" in
-    --all|--mirror) flagall=1 ;;
+    --) dashdash=1 ;;
+    --all|--branches|--mirror|--prune) flagall=1 ;;
     --repo=*) optrepo="${a#--repo=}" ;;
-    --repo|-o|--push-option|--receive-pack|--exec) j=$((j+1)); [ "$a" = --repo ] && optrepo="${rest[$j]:-}" ;;
-    --|-*) ;;
-    *) if [ "$have_repo" = 0 ]; then repo="$a"; have_repo=1; else specs+=("$a"); fi ;;
+    --repo) j=$((j+1)); optrepo="${rest[$j]:-}" ;;
+    -o|--push-option|--receive-pack|--exec) j=$((j+1)) ;;
+    --push-option=*|--receive-pack=*|--exec=*|--force-with-lease=*|--signed=*) ;;
+    --recurse-submodules=*) submod "${a#--recurse-submodules=}" ;;
+    --recurse-submodules) j=$((j+1)); submod "${rest[$j]:-}" ;;
+    --no-recurse-submodules) ;;
+    -4|-6|--ipv4|--ipv6|-n|--dry-run|--porcelain|-q|--quiet|-v|--verbose|--progress|--no-progress|\
+    -f|--force|--no-force|--force-with-lease|--no-force-with-lease|--force-if-includes|--no-force-if-includes|\
+    --atomic|--no-atomic|--thin|--no-thin|--verify|--no-verify|-u|--set-upstream|--no-set-upstream|\
+    --tags|--no-tags|--follow-tags|--no-follow-tags|--signed|--no-signed|-d|--delete) ;;
+    -*) refuse "an unknown or abbreviated push option $a" ;;
+    *) positional "$a" ;;
   esac
   j=$((j+1))
 done
+case "$("$REAL" "${pre[@]}" config --get push.recurseSubmodules 2>/dev/null)" in
+  ''|no|false|check) ;; *) refuse "a push while push.recurseSubmodules is set: the submodules' remotes are not judged" ;;
+esac
 [ "$have_repo" = 1 ] || repo="$optrepo"
 moves_main=$flagall
 [ "${#specs[@]}" = 0 ] && moves_main=1
@@ -150,8 +173,10 @@ urls="$("$REAL" "${pre[@]}" remote get-url --push --all "$repo" 2>/dev/null)" ||
 [ -n "$urls" ] || urls="$repo"
 while IFS= read -r u; do
   for p in "${PROTECTED_RAW[@]}"; do [ "$u" = "$p" ] && refuse "a push to $repo, a protected remote, that could move main"; done
-  id="$(repo_identity "$REAL" "$u")"
-  [ -n "$id" ] || refuse "a push to $repo that could move main: $u is not an absolute path to a local repository"
+  abs="$(local_url_path "$u" dest)" || refuse "a push to $repo that could move main: $u is relative or cannot be resolved"
+  [ -n "$abs" ] || refuse "a push to $repo that could move main: $u is a remote URL"
+  id="$(repo_identity "$REAL" "$abs")"
+  [ -n "$id" ] || refuse "a push to $repo that could move main: $u names no local repository"
   for p in "${PROTECTED_ID[@]}"; do [ "$id" = "$p" ] && refuse "a push to $repo ($id, a protected repository) that could move main"; done
 done <<< "$urls"
 exec "$REAL" "$@"
