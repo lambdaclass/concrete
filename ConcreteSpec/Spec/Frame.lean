@@ -8,12 +8,15 @@ PROPOSED: not normative until the owner freezes Core. Part of `ConcreteSpec.Spec
 
 A logical footprint names byte ranges by allocation identity, not by numeric address, together with
 structured places. `Footprint.Preserves` is the frame law: every byte of an old block outside the
-footprint and every place outside it is exactly unchanged. A fresh allocation has no old bytes to
-preserve; its fresh identity makes it disjoint from every range in an old block. Byte contents include
-initialization and pointer fragments, so preserving a byte preserves all three.
+footprint, all metadata of every block outside it, and every place outside it are exactly unchanged.
+A fresh allocation has no old bytes to preserve; its fresh identity makes it disjoint from every
+range in an old block. Byte contents include initialization and pointer fragments, so preserving a
+byte preserves all three.
 
 Sequential composition unions footprints. A C1 call contract supplies the callee footprint and its
-frame law. C1 return frames restore the caller's locals; shared hybrid state is not rolled back.
+frame law for the complete call, from argument evaluation and entry instrumentation through cleanup,
+leave instrumentation and result binding. C1 return frames restore the caller's locals; shared hybrid
+state is not rolled back.
 
 The ABI interface relates typed arguments and results to registers and stack slots, and records frame
 size/alignment, return locations, clobbers, preserved machine state and final-artifact stack
@@ -48,9 +51,12 @@ def ByteRange.Disjoint (r s : ByteRange) : Prop :=
 instance (r s : ByteRange) : Decidable (r.Disjoint s) := by
   unfold ByteRange.Disjoint; infer_instance
 
-/-- The complete byte footprint of a block of `size` bytes. Lifecycle operations such as `free` and
-`expose` use this to name the block whose metadata they may change. -/
+/-- The complete byte footprint of a block of `size` bytes. -/
 def fullBlock (b : MemBlockId) (size : Nat) : ByteRange := ⟨b, 0, size⟩
+
+/-- All block fields except its byte contents. -/
+def blockMetadata (x : Block) : AddrSpace × Nat × Nat × Nat × Bool × Bool :=
+  (x.space, x.base, x.size, x.align, x.live, x.exposed)
 
 /-- An operation's permitted effects on hybrid state. Byte ranges and places are sets represented by
 lists; membership, not list order or duplication, is semantic. -/
@@ -65,6 +71,10 @@ def Footprint.empty : Footprint := ⟨[], []⟩
 /-- Only one byte range is touched. -/
 def Footprint.byte (r : ByteRange) : Footprint := ⟨[r], []⟩
 
+/-- The metadata of one allocation may change. The nonempty marker range also covers a zero-sized
+allocation, whose lifecycle can change even though it contains no bytes. -/
+def Footprint.block (b : MemBlockId) : Footprint := .byte ⟨b, 0, 1⟩
+
 /-- Only one structured place is touched. -/
 def Footprint.place (p : Place) : Footprint := ⟨[], [p]⟩
 
@@ -75,21 +85,32 @@ def Footprint.union (f g : Footprint) : Footprint := ⟨f.bytes ++ g.bytes, f.pl
 def Footprint.ByteOutside (f : Footprint) (b : MemBlockId) (i : Nat) : Prop :=
   ∀ r ∈ f.bytes, ¬ r.Contains b i
 
+/-- No nonempty range in the footprint belongs to this block, so all of its metadata is outside. -/
+def Footprint.BlockOutside (f : Footprint) (b : MemBlockId) : Prop :=
+  ∀ r ∈ f.bytes, r.block ≠ b ∨ r.extent = 0
+
 /-- This place is outside the footprint. -/
 def Footprint.PlaceOutside (f : Footprint) (p : Place) : Prop := p ∉ f.places
 
 instance (f : Footprint) (b : MemBlockId) (i : Nat) : Decidable (f.ByteOutside b i) := by
   unfold Footprint.ByteOutside; infer_instance
 
+instance (f : Footprint) (b : MemBlockId) : Decidable (f.BlockOutside b) := by
+  unfold Footprint.BlockOutside; infer_instance
+
 instance (f : Footprint) (p : Place) : Decidable (f.PlaceOutside p) := by
   unfold Footprint.PlaceOutside; infer_instance
 
 /-- The frame law for one operation. Only bytes of blocks that existed before the operation are
 quantified: allocation creates bytes rather than changing old ones. The whole `MByte` is compared,
-including initialization and provenance fragments. Place cells are compared exactly. -/
+including initialization and provenance fragments. For a block outside every nonempty range, its
+space, base, size, alignment, liveness and exposure are also exactly unchanged. Place cells are
+compared exactly. -/
 def Footprint.Preserves (before after : State) (f : Footprint) : Prop :=
   (∀ b i x, before.memory.block b = some x → f.ByteOutside b i →
     (after.memory.block b).map (fun y => y.bytes[i]?) = some (x.bytes[i]?)) ∧
+  (∀ b x, before.memory.block b = some x → f.BlockOutside b →
+    (after.memory.block b).map blockMetadata = some (blockMetadata x)) ∧
   (∀ p, f.PlaceOutside p → after.places p = before.places p)
 
 /-- The footprint of a successful access. A zero-byte access touches no allocation range. -/
@@ -97,16 +118,19 @@ def accessFootprint : Option (Option (MemBlockId × Nat)) → Nat → Footprint
   | some (some (b, off)), n => .byte ⟨b, off, n⟩
   | _, _ => .empty
 
-/-- A complete C1 call of `f`: execution begins at its body with its scope above a `.ret` frame and
-finishes at that frame's continuation with the result bound into the restored caller locals. The
-`Steps` premise includes argument-independent callee execution and all of its cleanup. -/
+/-- A complete C1 call of `f`, from its `.call` statement to the caller continuation. Argument
+evaluation, `.enter`, the callee body and cleanup, `.leave`, and result binding are all inside the
+`Steps` premise. The result is bound into the restored caller locals at the saved continuation. -/
 def C1Call (O : Exec.Operands) (f : FnId) (P : Exec.Program O)
     (entry exit : Exec.Config O) : Prop :=
   ∃ (fn : Exec.Fn O) (dst : Option Var) (caller : AList Var O.Val)
-    (k : List (Exec.Frame O)) (tr : List O.Event) (result : O.Val),
+    (k : List (Exec.Frame O)) (args : List O.Expr) (site : SiteId) (vs : List O.Val)
+    (st stArgs stEnter : O.Store) (tr : List O.Event) (result : O.Val),
     AList.lookup P.fns f = some fn ∧
-    entry.ctrl = .exec fn.body ∧
-    entry.frames = .scope fn.block (fn.params.map Prod.fst) [] :: .ret dst caller :: k ∧
+    entry = ⟨.exec (.call dst f args site), caller, st, k⟩ ∧
+    Exec.evalArgs O caller st args = .ok (vs, stArgs) ∧
+    fn.params.length = vs.length ∧
+    O.life (.enter (fn.params.map Prod.fst)) stArgs = some stEnter ∧
     exit.ctrl = .done ∧ exit.locals = Exec.bindDst dst result caller ∧ exit.frames = k ∧
     Exec.Steps P entry tr exit
 

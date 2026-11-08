@@ -17,15 +17,32 @@ open ConcreteSpec.Core.Hybrid
 
 /-- The empty footprint frames every operation. -/
 theorem preserves_refl (st : State) : Footprint.empty.Preserves st st := by
-  constructor
+  refine ⟨?_, ?_, ?_⟩
   · intro b i x hx ho
+    simp only [hx, Option.map_some]
+  · intro b x hx ho
     simp only [hx, Option.map_some]
   · intro p hp
     rfl
 
+/-- A block outside every nonempty range has every individual byte outside the footprint. -/
+theorem byteOutside_of_blockOutside {f : Footprint} {b : MemBlockId}
+    (h : f.BlockOutside b) (i : Nat) : f.ByteOutside b i := by
+  intro r hr hc
+  rcases h r hr with hne | he
+  · exact hne hc.1
+  · have hi := hc.2.2
+    rw [he, Nat.add_zero] at hi
+    exact (Nat.not_lt_of_ge hc.2.1) hi
+
 /-- Membership outside a union is membership outside both components. -/
 theorem byteOutside_union {f g : Footprint} {b : MemBlockId} {i : Nat}
     (h : (f.union g).ByteOutside b i) : f.ByteOutside b i ∧ g.ByteOutside b i := by
+  constructor <;> intro r hr <;> apply h r <;> simp [Footprint.union, hr]
+
+/-- Block metadata outside a union is outside both components. -/
+theorem blockOutside_union {f g : Footprint} {b : MemBlockId}
+    (h : (f.union g).BlockOutside b) : f.BlockOutside b ∧ g.BlockOutside b := by
   constructor <;> intro r hr <;> apply h r <;> simp [Footprint.union, hr]
 
 /-- Place membership outside a union is membership outside both components. -/
@@ -35,10 +52,18 @@ theorem placeOutside_union {f g : Footprint} {p : Place}
   simp only [List.mem_append, not_or] at hp
   exact hp
 
+/-- A lifecycle footprint excludes metadata framing for its own block, even when that block is
+zero-sized. -/
+theorem blockOutside_block {b c : MemBlockId} (h : (Footprint.block b).BlockOutside c) : c ≠ b := by
+  intro hcb
+  subst c
+  have h' := h ⟨b, 0, 1⟩ (by simp [Footprint.block, Footprint.byte])
+  simp at h'
+
 /-- Sequential composition frames the union of the two operations' footprints. -/
 theorem preserves_seq {st st' st'' : State} {f g : Footprint}
     (h₁ : f.Preserves st st') (h₂ : g.Preserves st' st'') : (f.union g).Preserves st st'' := by
-  constructor
+  refine ⟨?_, ?_, ?_⟩
   · intro b i x hx ho
     obtain ⟨hf, hg⟩ := byteOutside_union ho
     have he₁ := h₁.1 b i x hx hf
@@ -48,12 +73,23 @@ theorem preserves_seq {st st' st'' : State} {f g : Footprint}
       simp only [hy, Option.map_some, Option.some.injEq] at he₁
       have he₂ := h₂.1 b i y hy hg
       exact he₂.trans (congrArg some he₁)
+  · intro b x hx ho
+    obtain ⟨hf, hg⟩ := blockOutside_union ho
+    have he₁ := h₁.1 b 0 x hx (byteOutside_of_blockOutside hf 0)
+    cases hy : st'.memory.block b with
+    | none => simp [hy] at he₁
+    | some y =>
+      have hm₁ := h₁.2.1 b x hx hf
+      simp only [hy, Option.map_some, Option.some.injEq] at hm₁
+      have hm₂ := h₂.2.1 b y hy hg
+      exact hm₂.trans (congrArg some hm₁)
   · intro p hp
     obtain ⟨hf, hg⟩ := placeOutside_union hp
-    exact (h₂.2 p hg).trans (h₁.2 p hf)
+    exact (h₂.2.2 p hg).trans (h₁.2.2 p hf)
 
-/-- A successful byte store preserves every old byte outside the exact access range and every
-structured place. A zero-byte store has the empty footprint. -/
+/-- A successful byte store preserves every old byte outside the exact access range, all metadata
+outside a nonempty access range, and every structured place. A zero-byte store has the empty
+footprint. -/
 theorem store_frame (tgt : Target) (st : State) (hw : st.memory.WellFormed tgt) (m' : Memory)
     (p : Ptr) (bs : List MByte) (a : Nat) (access : Option (Option (MemBlockId × Nat)))
     (ha : st.memory.access tgt p bs.length a = access)
@@ -69,7 +105,7 @@ theorem store_frame (tgt : Target) (st : State) (hw : st.memory.WellFormed tgt) 
       exact preserves_refl st
     | some pair =>
       obtain ⟨b, off⟩ := pair
-      constructor
+      refine ⟨?_, ?_, ?_⟩
       · intro c i x hx ho
         by_cases hc : c = b
         · subst c
@@ -80,20 +116,31 @@ theorem store_frame (tgt : Target) (st : State) (hw : st.memory.WellFormed tgt) 
           omega
         · rw [store_other_block tgt st.memory m' p bs a b off c ha h hc, hx]
           rfl
+      · intro c x hx ho
+        by_cases hc : c = b
+        · subst c
+          have hn : bs.length ≠ 0 := by
+            intro hn
+            simp [Memory.access, hn] at ha
+          rcases ho ⟨b, off, bs.length⟩ (by simp [accessFootprint, Footprint.byte]) with hne | he
+          · exact (hne rfl).elim
+          · exact (hn he).elim
+        · rw [store_other_block tgt st.memory m' p bs a b off c ha h hc, hx]
+          rfl
       · intro q hq
         rfl
 
-/-- Releasing a block may change its lifecycle metadata, but frames all bytes outside its full-block
-footprint and every structured place. -/
+/-- Releasing a block may change its lifecycle metadata, but frames all bytes and all metadata of
+other blocks and every structured place. -/
 theorem free_frame (st : State) (b : MemBlockId) (x : Block) (m' : Memory)
     (hx : st.memory.block b = some x) (h : st.memory.free b = some m') :
-    Footprint.Preserves st { st with memory := m' } (.byte (fullBlock b x.size)) := by
+    Footprint.Preserves st { st with memory := m' } (.block b) := by
   unfold Memory.free at h
   rw [hx] at h
   by_cases hl : x.live = true
   · simp only [hl, ↓reduceIte, Option.some.injEq] at h
     subst m'
-    constructor
+    refine ⟨?_, ?_, ?_⟩
     · intro c i y hy ho
       by_cases hc : c = b
       · subst c
@@ -101,21 +148,24 @@ theorem free_frame (st : State) (b : MemBlockId) (x : Block) (m' : Memory)
         cases hy
         simp only [block_modify, ↓reduceIte, hx, Option.map_some]
       · simp only [block_modify, hc, ↓reduceIte, hy, Option.map_some]
+    · intro c y hy ho
+      have hc : c ≠ b := blockOutside_block ho
+      simp only [block_modify, hc, ↓reduceIte, hy, Option.map_some]
     · intro q hq
       rfl
   · simp [hl] at h
 
-/-- Exposure may change only the exposed flag of the provenance block; every byte outside its
-full-block footprint and every place is preserved. -/
+/-- Exposure may change only the exposed flag of the provenance block; every byte and all metadata
+of other blocks and every place are preserved. -/
 theorem expose_frame (st : State) (m' : Memory) (p : Ptr) (b : MemBlockId) (x : Block)
     (hp : p.prov = some b) (hx : st.memory.block b = some x) (h : st.memory.expose p = some m') :
-    Footprint.Preserves st { st with memory := m' } (.byte (fullBlock b x.size)) := by
+    Footprint.Preserves st { st with memory := m' } (.block b) := by
   obtain ⟨c, y, hp', hx', hl, rfl⟩ := expose_result st.memory m' p h
   rw [hp] at hp'
   cases hp'
   rw [hx] at hx'
   cases hx'
-  constructor
+  refine ⟨?_, ?_, ?_⟩
   · intro d i z hz ho
     by_cases hd : d = b
     · subst d
@@ -123,18 +173,28 @@ theorem expose_frame (st : State) (m' : Memory) (p : Ptr) (b : MemBlockId) (x : 
       cases hz
       simp only [block_modify, ↓reduceIte, hx, Option.map_some]
     · simp only [block_modify, hd, ↓reduceIte, hz, Option.map_some]
+  · intro d z hz ho
+    have hd : d ≠ b := blockOutside_block ho
+    simp only [block_modify, hd, ↓reduceIte, hz, Option.map_some]
   · intro q hq
     rfl
 
-/-- Fresh allocation preserves every old byte and place. The footprint is the complete new block;
-old bytes are necessarily outside it because their allocation identities differ. -/
+/-- Fresh allocation preserves every old byte, every old block's metadata and every place. The
+footprint is the complete new block; old bytes are necessarily outside it because their allocation
+identities differ. -/
 theorem alloc_frame (tgt : Target) (st : State) (hw : st.memory.WellFormed tgt)
     (space : AddrSpace) (base size align : Nat) (b : MemBlockId) (m' : Memory)
     (h : st.memory.alloc tgt space base size align = .ok (b, m')) :
     Footprint.Preserves st { st with memory := m' } (.byte (fullBlock b size)) := by
   obtain ⟨hb, hm, hfits⟩ := alloc_result tgt st.memory space base size align b m' h
-  constructor
+  refine ⟨?_, ?_, ?_⟩
   · intro c i x hx ho
+    have hne : b ≠ c := alloc_ne_existing tgt st.memory hw space base size align b c m' x h hx
+    subst b
+    rw [hm]
+    change AList.lookup st.memory.blocks c = some x at hx
+    simp only [Memory.block, AList.lookup, hne, ↓reduceIte, hx, Option.map_some]
+  · intro c x hx ho
     have hne : b ≠ c := alloc_ne_existing tgt st.memory hw space base size align b c m' x h hx
     subst b
     rw [hm]
@@ -142,6 +202,70 @@ theorem alloc_frame (tgt : Target) (st : State) (hw : st.memory.WellFormed tgt)
     simp only [Memory.block, AList.lookup, hne, ↓reduceIte, hx, Option.map_some]
   · intro p hp
     rfl
+
+/-- Replacing one structured place has exactly that place's footprint; bytes and block metadata are
+untouched. -/
+theorem set_frame (st : State) (p : Place) (c : Cell) :
+    (Footprint.place p).Preserves st (st.set p c) := by
+  refine ⟨?_, ?_, ?_⟩
+  · intro b i x hx ho
+    simp only [State.memory_set, hx, Option.map_some]
+  · intro b x hx ho
+    simp only [State.memory_set, hx, Option.map_some]
+  · intro q hq
+    have hqp : q ≠ p := by simpa [Footprint.place, Footprint.PlaceOutside] using hq
+    have hpq : p ≠ q := Ne.symm hqp
+    simp [hpq]
+
+/-- A successful typed write to structured storage has exactly the written place's footprint. -/
+theorem write_structured_frame (tgt : Target) (st st' : State) (p : Place) (c : Cell)
+    (old v : Value) (hc : st.places p = some c) (hs : c.storage = .structured old)
+    (h : st.write tgt p v = some st') : (Footprint.place p).Preserves st st' := by
+  unfold State.write at h
+  simp only [hc] at h
+  dsimp at h
+  rw [hs] at h
+  split at h
+  · simp only [Option.some.injEq] at h
+    subst st'
+    exact set_frame st p { c with storage := .structured v }
+  · simp at h
+
+/-- A successful typed write to materialized storage has the byte footprint of its actual store. -/
+theorem write_materialized_frame (tgt : Target) (st st' : State) (hw : st.memory.WellFormed tgt)
+    (p : Place) (c : Cell) (r : Range) (v : Value)
+    (hc : st.places p = some c) (hs : c.storage = .materialized r)
+    (access : Option (Option (MemBlockId × Nat)))
+    (ha : st.memory.access tgt r.ptr (encode tgt v).length r.align = access)
+    (h : st.write tgt p v = some st') :
+    (accessFootprint access (encode tgt v).length).Preserves st st' := by
+  unfold State.write at h
+  simp only [hc] at h
+  dsimp at h
+  rw [hs] at h
+  split at h
+  · cases hm : st.memory.store tgt r.ptr (encode tgt v) r.align with
+    | none => simp [hm] at h
+    | some m =>
+      simp only [hm, Option.bind_some, Option.some.injEq] at h
+      subst st'
+      exact store_frame tgt st hw m r.ptr (encode tgt v) r.align access ha hm
+  · simp at h
+
+/-- A raw Hybrid write has the byte footprint of its underlying memory store and touches no place. -/
+theorem rawWrite_frame (tgt : Target) (st st' : State) (hw : st.memory.WellFormed tgt)
+    (p : Ptr) (bs : List MByte) (align : Nat)
+    (access : Option (Option (MemBlockId × Nat)))
+    (ha : st.memory.access tgt p bs.length align = access)
+    (h : st.rawWrite tgt p bs align = some st') :
+    (accessFootprint access bs.length).Preserves st st' := by
+  unfold State.rawWrite at h
+  cases hm : st.memory.store tgt p bs align with
+  | none => simp [hm] at h
+  | some m =>
+    simp [hm] at h
+    subst st'
+    exact store_frame tgt st hw m p bs align access ha hm
 
 /-- The allocated identity is disjoint from every range whose block existed before allocation. -/
 theorem alloc_fresh_disjoint (tgt : Target) (st : State) (hw : st.memory.WellFormed tgt)
@@ -164,25 +288,28 @@ theorem step_call_saves_caller {O : Exec.Operands} (P : Exec.Program O) (dst : O
         .scope fn.block (fn.params.map Prod.fst) [] :: .ret dst caller :: k⟩) := by
   simp [Exec.step, Exec.onRes, hv, hf, hlen, hl]
 
-/-- A returned value reaching a `.ret` frame with no result destination restores the caller's locals
-and continuation exactly. Only the lifecycle-transformed shared state is threaded through. -/
+/-- A returned value reaching a `.ret` frame restores the caller's locals and continuation, binding
+the result at any requested destination. Leave and destination-bind instrumentation thread the shared
+state through the same step. -/
 theorem step_return_restores_caller {O : Exec.Operands} (P : Exec.Program O) (v : O.Val)
-    (caller callee : AList Var O.Val) (st st' : O.Store) (k : List (Exec.Frame O))
-    (hl : O.life .leave st = some st') :
-    Exec.step P ⟨.exiting (.ret v), callee, st, .ret none caller :: k⟩ =
-      some (.next ⟨.done, caller, st', k⟩) := by
-  simpa [Exec.bindDst] using Exec.step_return_caller P v none caller callee st k st' st' hl rfl
+    (dst : Option Var) (caller callee : AList Var O.Val) (st stLeave stBind : O.Store)
+    (k : List (Exec.Frame O)) (hl : O.life .leave st = some stLeave)
+    (hb : Exec.bindLife O dst stLeave = some stBind) :
+    Exec.step P ⟨.exiting (.ret v), callee, st, .ret dst caller :: k⟩ =
+      some (.next ⟨.done, Exec.bindDst dst v caller, stBind, k⟩) :=
+  Exec.step_return_caller P v dst caller callee st k stLeave stBind hl hb
 
 /-- Successful cleanup does not disturb call-frame ownership: after every exited scope has run its
-deferred calls, a return with no destination restores exactly the caller's locals and continuation. -/
+deferred calls, return restores the caller and binds its result at any requested destination. -/
 theorem return_cleanup_restores_caller {O : Exec.Operands} (P : Exec.Program O) (v : O.Val)
-    (caller : AList Var O.Val) (k pre : List (Exec.Frame O)) {L : AList Var O.Val}
-    {st stClean stLeave : O.Store} {tr : List O.Event}
+    (dst : Option Var) (caller : AList Var O.Val) (k pre : List (Exec.Frame O)) {L : AList Var O.Val}
+    {st stClean stLeave stBind : O.Store} {tr : List O.Event}
     (h : Exec.Cleans P pre L st tr stClean) (hp : ∀ f ∈ pre, Exec.Passes (.ret v) f)
-    (hl : O.life .leave stClean = some stLeave) :
-    Exec.Steps P ⟨.exiting (.ret v), L, st, pre ++ .ret none caller :: k⟩ tr
-      ⟨.done, caller, stLeave, k⟩ := by
-  simpa [Exec.bindDst] using Exec.return_reaches_caller P v none caller k h hp stLeave stLeave hl rfl
+    (hl : O.life .leave stClean = some stLeave)
+    (hb : Exec.bindLife O dst stLeave = some stBind) :
+    Exec.Steps P ⟨.exiting (.ret v), L, st, pre ++ .ret dst caller :: k⟩ tr
+      ⟨.done, Exec.bindDst dst v caller, stBind, k⟩ :=
+  Exec.return_reaches_caller P v dst caller k h hp stLeave stBind hl hb
 
 /-- Every complete `C1Call` ends with the result bound into the saved caller locals at the saved
 continuation. With `dst = none`, this is literal equality with the caller locals. -/
@@ -190,7 +317,8 @@ theorem c1Call_restores_caller {O : Exec.Operands} {f : FnId} {P : Exec.Program 
     {entry exit : Exec.Config O} (h : C1Call O f P entry exit) :
     ∃ (dst : Option Var) (result : O.Val) (caller : AList Var O.Val) (k : List (Exec.Frame O)),
       exit.locals = Exec.bindDst dst result caller ∧ exit.frames = k := by
-  obtain ⟨fn, dst, caller, k, tr, result, hf, hec, hef, hxc, hxl, hxf, hs⟩ := h
+  obtain ⟨fn, dst, caller, k, args, site, vs, st, stArgs, stEnter, tr, result,
+    hf, he, hv, hlen, hl, hxc, hxl, hxf, hs⟩ := h
   exact ⟨dst, result, caller, k, hxl, hxf⟩
 
 /-- A complete C1 call has exactly the frame law supplied by its callee contract. -/
