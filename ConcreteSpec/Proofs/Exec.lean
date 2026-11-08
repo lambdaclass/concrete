@@ -1306,24 +1306,17 @@ private theorem boundary_complete_inv {P : Program O} {e : Exit O.Val} {k pre : 
 passable frames has a segmented `BoundaryRun` observation that runs `planWith pre L`, restores
 `Lend = unwindLocals pre L`, and performs every planned call and drop in order. -/
 theorem raw_cleanup_runs_plan (P : Program O) (e : Exit O.Val) (k pre : List (Frame O))
-    (L Lend : AList Var O.Val) (st stEnd : O.Store) (tr : List O.Event) :
-    ((∀ (f : Frame O), f ∈ pre → Passes e f) ∧
-      FirstSteps (Step P) (fun c => c.frames.length ≤ k.length)
-        ⟨.exiting e, L, st, pre ++ k⟩ tr ⟨.exiting e, Lend, stEnd, k⟩) ↔
-      ((∀ (f : Frame O), f ∈ pre → Passes e f) ∧
-        FirstSteps (Step P) (fun c => c.frames.length ≤ k.length)
-          ⟨.exiting e, L, st, pre ++ k⟩ tr ⟨.exiting e, Lend, stEnd, k⟩ ∧
-        ∃ acts, BoundaryRun P (Step P) e k pre L st acts tr Lend stEnd ∧
-          acts = planWith pre L ∧ Lend = unwindLocals pre L ∧ Performed P acts L st tr Lend stEnd) := by
-  constructor
-  · rintro ⟨hp, h⟩
-    obtain ⟨n, hn⟩ := h.sized_inv
-    obtain ⟨acts, ha⟩ := boundary_complete_inv hn rfl hp
-    obtain ⟨_, hacts, hL, hperf⟩ :=
-      (cleanup_runs_exact_plan P e k pre L Lend st stEnd acts tr).mp ha
-    exact ⟨hp, h, acts, ha, hacts, hL, hperf⟩
-  · rintro ⟨hp, h, _⟩
-    exact ⟨hp, h⟩
+    (L Lend : AList Var O.Val) (st stEnd : O.Store) (tr : List O.Event)
+    (hp : ∀ (f : Frame O), f ∈ pre → Passes e f)
+    (h : FirstSteps (Step P) (fun c => c.frames.length ≤ k.length)
+      ⟨.exiting e, L, st, pre ++ k⟩ tr ⟨.exiting e, Lend, stEnd, k⟩) :
+    ∃ acts, BoundaryRun P (Step P) e k pre L st acts tr Lend stEnd ∧
+      acts = planWith pre L ∧ Lend = unwindLocals pre L ∧ Performed P acts L st tr Lend stEnd := by
+  obtain ⟨n, hn⟩ := h.sized_inv
+  obtain ⟨acts, ha⟩ := boundary_complete_inv hn rfl hp
+  obtain ⟨_, hacts, hL, hperf⟩ :=
+    (cleanup_runs_exact_plan P e k pre L Lend st stEnd acts tr).mp ha
+  exact ⟨acts, ha, hacts, hL, hperf⟩
 
 
 /-- Law (subject `ConcreteSpec.Core.Exec.Steps`). From `abort()` the only reachable configurations
@@ -2104,140 +2097,39 @@ inductive EscapeStep (P : Program O) : Config O → Label O → Config O → Pro
       EscapeStep P ⟨.done, L, st, .resume (.exit e) :: k⟩ .silent
         ⟨.exiting e, L, st, k⟩
 
-/-- Instance (law `ConcreteSpec.Core.Exec.raw_cleanup_runs_plan`, case `single`). A raw
-first-arrival execution through `[inner]` emits `[1]`, restores `[]`, and yields a segmented
-`BoundaryRun`. -/
-example : ((∀ (f : Frame ops), f ∈ ([inner] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
-      FirstSteps (Step prog) (fun c => c.frames.length ≤ ([] : List (Frame ops)).length)
-        ⟨.exiting (.ret 7), [], .init, [inner] ++ []⟩ [1] ⟨.exiting (.ret 7), [], .init, []⟩) ↔
-    ((∀ (f : Frame ops), f ∈ ([inner] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
-      FirstSteps (Step prog) (fun c => c.frames.length ≤ ([] : List (Frame ops)).length)
-        ⟨.exiting (.ret 7), [], .init, [inner] ++ []⟩ [1] ⟨.exiting (.ret 7), [], .init, []⟩ ∧
-      ∃ acts, BoundaryRun prog (Step prog) (.ret 7) [] [inner] [] .init acts [1] [] .init ∧
-        acts = planWith [inner] [] ∧
-        ([] : AList Var Int) = unwindLocals [inner] [] ∧
-        Performed prog acts [] .init [1] [] .init) :=
-  raw_cleanup_runs_plan prog (.ret 7) [] [inner] [] [] .init .init [1]
+/-- Helper (computation). The concrete singleton cleanup frame passes a return
+(approved: PENDING). -/
+private theorem inner_passes : ∀ (f : Frame ops), f ∈ ([inner] : List (Frame ops)) →
+    Passes (O := ops) (.ret 7) f := by
+  intro f hf
+  cases hf with
+  | head => trivial
+  | tail _ hf => cases hf
+
+/-- Instance (law `ConcreteSpec.Core.Exec.raw_cleanup_runs_plan`, case `single`). A completed
+raw execution yields the exact dispatch plan, performed actions and restored locals. -/
+example : ∃ acts, BoundaryRun prog (Step prog) (.ret 7) [] [inner] [] .init acts [1] [] .init ∧
+    acts = planWith [inner] [] ∧ ([] : AList Var Int) = unwindLocals [inner] [] ∧
+    Performed prog acts [] .init [1] [] .init :=
+  raw_cleanup_runs_plan prog (.ret 7) [] [inner] [] [] .init .init [1] inner_passes inner_raw_run
 
 /-- Planted (law `ConcreteSpec.Core.Exec.raw_cleanup_runs_plan`, case `single`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.CleanupEvidence.EscapeEmitStep`).
-Jumping from `.exiting` directly to `.done` while emitting `1` reaches the boundary with `[1]`
-but has no valid `BoundaryRun` observation. -/
-example : ¬ (((∀ (f : Frame ops), f ∈ ([inner] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
-      FirstSteps (EscapeEmitStep prog) (fun c => c.frames.length ≤ ([] : List (Frame ops)).length)
-        ⟨.exiting (.ret 7), [], .init, [inner] ++ []⟩ [1] ⟨.exiting (.ret 7), [], .init, []⟩) ↔
-    ((∀ (f : Frame ops), f ∈ ([inner] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
-      FirstSteps (EscapeEmitStep prog) (fun c => c.frames.length ≤ ([] : List (Frame ops)).length)
-        ⟨.exiting (.ret 7), [], .init, [inner] ++ []⟩ [1] ⟨.exiting (.ret 7), [], .init, []⟩ ∧
-      ∃ acts, BoundaryRun prog (EscapeEmitStep prog) (.ret 7) [] [inner] [] .init acts [1] [] .init ∧
-        acts = planWith [inner] [] ∧
-        ([] : AList Var Int) = unwindLocals [inner] [] ∧
-        Performed prog acts [] .init [1] [] .init)) := by
-  intro h
-  have hp : ∀ (f : Frame ops), f ∈ ([inner] : List (Frame ops)) → Passes (O := ops) (.ret 7) f := by
-    intro f hf
-    cases hf with
-    | head => trivial
-    | tail _ hf => cases hf
-  have raw : FirstSteps (EscapeEmitStep prog) (fun c => c.frames.length ≤ 0)
-      ⟨.exiting (.ret 7), [], .init, [inner]⟩ [1] ⟨.exiting (.ret 7), [], .init, []⟩ :=
-    FirstSteps.step (R := EscapeEmitStep prog) (l := .emit 1) (by simp)
+A bypass preserves passability and raw execution but admits no plan segmentation. -/
+example : (∀ (f : Frame ops), f ∈ ([inner] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
+    FirstSteps (EscapeEmitStep prog) (fun c => c.frames.length ≤ ([] : List (Frame ops)).length)
+      ⟨.exiting (.ret 7), [], .init, [inner] ++ []⟩ [1] ⟨.exiting (.ret 7), [], .init, []⟩ ∧
+    ¬ (∃ acts, BoundaryRun prog (EscapeEmitStep prog) (.ret 7) [] [inner] [] .init acts [1] [] .init ∧
+      acts = planWith [inner] [] ∧ ([] : AList Var Int) = unwindLocals [inner] [] ∧
+      Performed prog acts [] .init [1] [] .init) := by
+  refine ⟨inner_passes, ?_, ?_⟩
+  · exact FirstSteps.step (R := EscapeEmitStep prog) (l := .emit 1) (by simp)
       (EscapeEmitStep.skip (O := ops) (ev := .lit 1) (ev' := 1) rfl rfl)
       (FirstSteps.step (R := EscapeEmitStep prog) (by simp) EscapeEmitStep.resume (.stop (by simp)))
-  obtain ⟨_, _, _, observed, _⟩ := h.mp ⟨hp, raw⟩
-  generalize htr : ([1] : List Int) = trace at observed
-  cases observed with
-  | pass _ hs _ => cases hs
-  | call _ hs _ _ _ => cases hs
-
-/-- Instance (law `ConcreteSpec.Core.Exec.raw_cleanup_runs_plan`, case `escape`). A raw run
-through `[inner]` with empty trace `[]` is characterized by `raw_cleanup_runs_plan`. -/
-example : ((∀ (f : Frame ops), f ∈ ([inner] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
-      FirstSteps (Step prog) (fun c => c.frames.length ≤ ([] : List (Frame ops)).length)
-        ⟨.exiting (.ret 7), [], .init, [inner] ++ []⟩ [] ⟨.exiting (.ret 7), [], .init, []⟩) ↔
-    ((∀ (f : Frame ops), f ∈ ([inner] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
-      FirstSteps (Step prog) (fun c => c.frames.length ≤ ([] : List (Frame ops)).length)
-        ⟨.exiting (.ret 7), [], .init, [inner] ++ []⟩ [] ⟨.exiting (.ret 7), [], .init, []⟩ ∧
-      ∃ acts, BoundaryRun prog (Step prog) (.ret 7) [] [inner] [] .init acts [] [] .init ∧
-        acts = planWith [inner] [] ∧
-        ([] : AList Var Int) = unwindLocals [inner] [] ∧
-        Performed prog acts [] .init [] [] .init) :=
-  raw_cleanup_runs_plan prog (.ret 7) [] [inner] [] [] .init .init []
-
-/-- Planted (law `ConcreteSpec.Core.Exec.raw_cleanup_runs_plan`, case `escape`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.CleanupEvidence.EscapeStep`).
-A raw first-boundary path which skips the call via `.done`/`.resume` cannot escape the
-contract: it falsifies the extraction obligation itself. -/
-example : ¬ (((∀ (f : Frame ops), f ∈ ([inner] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
-      FirstSteps (EscapeStep prog) (fun c => c.frames.length ≤ ([] : List (Frame ops)).length)
-        ⟨.exiting (.ret 7), [], .init, [inner] ++ []⟩ [] ⟨.exiting (.ret 7), [], .init, []⟩) ↔
-    ((∀ (f : Frame ops), f ∈ ([inner] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
-      FirstSteps (EscapeStep prog) (fun c => c.frames.length ≤ ([] : List (Frame ops)).length)
-        ⟨.exiting (.ret 7), [], .init, [inner] ++ []⟩ [] ⟨.exiting (.ret 7), [], .init, []⟩ ∧
-      ∃ acts, BoundaryRun prog (EscapeStep prog) (.ret 7) [] [inner] [] .init acts [] [] .init ∧
-        acts = planWith [inner] [] ∧
-        ([] : AList Var Int) = unwindLocals [inner] [] ∧
-        Performed prog acts [] .init [] [] .init)) := by
-  intro h
-  have hp : ∀ (f : Frame ops), f ∈ ([inner] : List (Frame ops)) → Passes (O := ops) (.ret 7) f := by
-    intro f hf
-    cases hf with
-    | head => trivial
-    | tail _ hf => cases hf
-  have raw : FirstSteps (EscapeStep prog) (fun c => c.frames.length ≤ 0)
-      ⟨.exiting (.ret 7), [], .init, [inner]⟩ [] ⟨.exiting (.ret 7), [], .init, []⟩ :=
-    FirstSteps.step (R := EscapeStep prog) (by simp) EscapeStep.skip
-      (FirstSteps.step (R := EscapeStep prog) (by simp) EscapeStep.resume (.stop (by simp)))
-  obtain ⟨_, _, _, observed, _⟩ := h.mp ⟨hp, raw⟩
-  generalize htr : ([] : List Int) = trace at observed
-  cases observed with
-  | pass _ hs _ => cases hs
-  | call _ hs _ _ _ => cases hs
-
-/-- Instance (law `ConcreteSpec.Core.Exec.raw_cleanup_runs_plan`, case `missing_restrict`). A raw
-unwind that fails to restore `Lend` to `unwindLocals` is rejected by `raw_cleanup_runs_plan`. -/
-example : ((∀ (f : Frame ops), f ∈ ([emptyScope] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
-      FirstSteps (Step prog) (fun c => c.frames.length ≤ ([] : List (Frame ops)).length)
-        ⟨.exiting (.ret 7), [(x, 1)], ⟨0, [[x]]⟩, [emptyScope] ++ []⟩ []
-        ⟨.exiting (.ret 7), [(x, 1)], ⟨0, [[]]⟩, []⟩) ↔
-    ((∀ (f : Frame ops), f ∈ ([emptyScope] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
-      FirstSteps (Step prog) (fun c => c.frames.length ≤ ([] : List (Frame ops)).length)
-        ⟨.exiting (.ret 7), [(x, 1)], ⟨0, [[x]]⟩, [emptyScope] ++ []⟩ []
-        ⟨.exiting (.ret 7), [(x, 1)], ⟨0, [[]]⟩, []⟩ ∧
-      ∃ acts, BoundaryRun prog (Step prog) (.ret 7) [] [emptyScope] [(x, 1)] ⟨0, [[x]]⟩
-          acts [] [(x, 1)] ⟨0, [[]]⟩ ∧
-        acts = planWith [emptyScope] [(x, 1)] ∧
-        ([(x, 1)] : AList Var Int) = unwindLocals [emptyScope] [(x, 1)] ∧
-        Performed prog acts [(x, 1)] ⟨0, [[x]]⟩ [] [(x, 1)] ⟨0, [[]]⟩) :=
-  raw_cleanup_runs_plan prog (.ret 7) [] [emptyScope] [(x, 1)] [(x, 1)] ⟨0, [[x]]⟩ ⟨0, [[]]⟩ []
-
-/-- Planted (law `ConcreteSpec.Core.Exec.raw_cleanup_runs_plan`, case `missing_restrict`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.CleanupEvidence.MissingRestrictStep`).
-A raw first-boundary path that pops the scope and updates the store via `dropOut` while
-failing to restrict `Lend` violates `Lend = unwindLocals`. -/
-example : ¬ (((∀ (f : Frame ops), f ∈ ([emptyScope] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
-      FirstSteps (MissingRestrictStep prog) (fun c => c.frames.length ≤ ([] : List (Frame ops)).length)
-        ⟨.exiting (.ret 7), [(x, 1)], ⟨0, [[x]]⟩, [emptyScope] ++ []⟩ []
-        ⟨.exiting (.ret 7), [(x, 1)], ⟨0, [[]]⟩, []⟩) ↔
-    ((∀ (f : Frame ops), f ∈ ([emptyScope] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
-      FirstSteps (MissingRestrictStep prog) (fun c => c.frames.length ≤ ([] : List (Frame ops)).length)
-        ⟨.exiting (.ret 7), [(x, 1)], ⟨0, [[x]]⟩, [emptyScope] ++ []⟩ []
-        ⟨.exiting (.ret 7), [(x, 1)], ⟨0, [[]]⟩, []⟩ ∧
-      ∃ acts, BoundaryRun prog (MissingRestrictStep prog) (.ret 7) [] [emptyScope] [(x, 1)] ⟨0, [[x]]⟩
-          acts [] [(x, 1)] ⟨0, [[]]⟩ ∧
-        acts = planWith [emptyScope] [(x, 1)] ∧
-        ([(x, 1)] : AList Var Int) = unwindLocals [emptyScope] [(x, 1)] ∧
-        Performed prog acts [(x, 1)] ⟨0, [[x]]⟩ [] [(x, 1)] ⟨0, [[]]⟩)) := by
-  intro h
-  have hp : ∀ (f : Frame ops), f ∈ ([emptyScope] : List (Frame ops)) → Passes (O := ops) (.ret 7) f := by
-    intro f hf
-    cases hf with
-    | head => trivial
-    | tail _ hf => cases hf
-  have raw : FirstSteps (MissingRestrictStep prog) (fun c => c.frames.length ≤ 0)
-      ⟨.exiting (.ret 7), [(x, 1)], ⟨0, [[x]]⟩, [emptyScope]⟩ []
-      ⟨.exiting (.ret 7), [(x, 1)], ⟨0, [[]]⟩, []⟩ :=
-    FirstSteps.step (R := MissingRestrictStep prog) (by simp) (.skip rfl) (.stop (by simp))
-  obtain ⟨_, _, _, _, _, hL, _⟩ := h.mp ⟨hp, raw⟩
-  change ([(x, 1)] : AList Var Int) = [] at hL
-  cases hL
+  · rintro ⟨_, observed, _⟩
+    generalize htr : ([1] : List Int) = trace at observed
+    cases observed with
+    | pass _ hs _ => cases hs
+    | call _ hs _ _ _ => cases hs
 
 end CleanupEvidence
 
