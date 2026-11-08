@@ -337,8 +337,79 @@ theorem plainNeg_trap_iff (t : IntTy) (a : Int) (k : TrapKind) :
   unfold plainNeg
   cases checkedNeg t a <;> simp
 
-theorem checkedNeg_inRange {t : IntTy} {a r : Int} (h : checkedNeg t a = .ok r) : t.InRange r :=
-  inRangeOr_inRange h
+/-- Helper (projection). The old range-only statement is retained as a projection; the arithmetic
+laws below independently characterize successful and failing negation. -/
+private theorem checkedNeg_inRange_proj {t : IntTy} {a r : Int} (h : checkedNeg t a = .ok r) :
+    t.InRange r := inRangeOr_inRange h
+
+/-- Helper (arithmetic). Representability of mathematical negation, independently of the
+`checkedNeg` result wrapper. -/
+private theorem neg_inRange_iff (t : IntTy) (a : Int) (ha : t.InRange a) :
+    t.InRange (-a) ↔ (if t.signed = true then a ≠ t.min else a = 0) := by
+  cases t <;> simp [IntTy.InRange, IntTy.min, IntTy.max, IntTy.signed, IntTy.bits] at * <;> omega
+
+/-- Checked negation succeeds exactly with the mathematical negation, when that integer is
+representable: signed `MIN` and nonzero unsigned inputs are the only invalid values in range. -/
+theorem checkedNeg_ok_arithmetic (t : IntTy) (a r : Int) (ha : t.InRange a) :
+    checkedNeg t a = .ok r ↔ r = -a ∧
+      (if t.signed = true then a ≠ t.min else a = 0) := by
+  unfold checkedNeg inRangeOr
+  split
+  · rename_i hn
+    have hc := (neg_inRange_iff t a ha).1 hn
+    constructor
+    · intro h
+      cases h
+      exact ⟨rfl, hc⟩
+    · rintro ⟨rfl, _⟩
+      rfl
+  · rename_i hn
+    simp only [reduceCtorEq, false_iff, not_and]
+    intro _ hc
+    exact hn ((neg_inRange_iff t a ha).2 hc)
+
+/-- Checked negation fails only with `Overflow`, exactly for signed `MIN` or a nonzero unsigned
+input. -/
+theorem checkedNeg_error_iff (t : IntTy) (a : Int) (e : ArithmeticError) (ha : t.InRange a) :
+    checkedNeg t a = .error e ↔ e = .overflow ∧
+      ¬(if t.signed = true then a ≠ t.min else a = 0) := by
+  unfold checkedNeg inRangeOr
+  split
+  · rename_i hn
+    have hc := (neg_inRange_iff t a ha).1 hn
+    constructor
+    · intro h
+      cases h
+    · rintro ⟨_, hnc⟩
+      exact (hnc hc).elim
+  · rename_i hn
+    have hc : ¬(if t.signed = true then a ≠ t.min else a = 0) := by
+      intro hc
+      exact hn ((neg_inRange_iff t a ha).2 hc)
+    constructor
+    · intro h
+      cases h
+      exact ⟨rfl, hc⟩
+    · rintro ⟨rfl, _⟩
+      rfl
+
+/-- Instance (law `ConcreteSpec.Core.checkedNeg_ok_arithmetic`). Signed and unsigned zero inputs
+exercise both branches of the representability condition. -/
+example : checkedNeg .i8 5 = .ok (-5) ∧ checkedNeg .u8 0 = .ok 0 := by decide
+
+/-- Planted (law `ConcreteSpec.Core.checkedNeg_ok_arithmetic`). Negation that keeps signed `MIN`
+or accepts a nonzero unsigned input would violate the arithmetic characterization. -/
+example : ¬(checkedNeg .i8 (-128) = .ok 128) ∧ ¬(checkedNeg .u8 1 = .ok (-1)) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.checkedNeg_error_iff`). The two invalid classes report the
+same arithmetic error. -/
+example : checkedNeg .i8 (-128) = .error .overflow ∧
+    checkedNeg .u8 1 = .error .overflow := by decide
+
+/-- Planted (law `ConcreteSpec.Core.checkedNeg_error_iff`). A wrong error category, or rejecting a
+representable negation, falsifies the failure law. -/
+example : ¬(checkedNeg .u8 1 = .error .invalidShift) ∧
+    ¬(checkedNeg .i8 5 = .error .overflow) := by decide
 
 theorem boolOfBits_boolToBits (b : Bool) : boolOfBits (boolToBits b) = some b := by
   cases b <;> rfl
