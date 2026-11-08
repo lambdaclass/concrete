@@ -35,7 +35,9 @@ fi
 # shellcheck source=scripts/land/lib.sh
 . "$(dirname "$HOOK_SELF")/../scripts/land/lib.sh" || { echo "pre-push: cannot read scripts/land/lib.sh; refusing" >&2; exit 1; }
 if dest="$(land_url_path "${2:-}")" && [ "$dest" != "$LAND_CANONICAL_REPO" ]; then
-  echo "pre-push: refusing to push to ${2:-}: it is not $LAND_CANONICAL_REPO, the one repository. Repoint the remote: git remote set-url ${1:-origin} https://github.com/$LAND_CANONICAL_REPO.git (and drop any pushurl)" >&2
+  hint="push to https://github.com/$LAND_CANONICAL_REPO.git instead"
+  [ "${1:-}" = "${2:-}" ] || hint="repoint the remote: git remote set-url ${1:-origin} https://github.com/$LAND_CANONICAL_REPO.git (and drop any pushurl)"
+  echo "pre-push: refusing to push to ${2:-}: it is not $LAND_CANONICAL_REPO, the one repository; $hint" >&2
   exit 1
 fi
 ROOT_DIR="$(git rev-parse --show-toplevel)"
