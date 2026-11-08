@@ -483,12 +483,10 @@ theorem ExecAdapter.project_append (A : ExecAdapter O S) (xs ys : List O.Event) 
     A.project (xs ++ ys) = A.project xs ++ A.project ys := by
   simp [ExecAdapter.project, List.flatMap_append]
 
-/-- Helper (computation). Evaluator induction supporting the operational report laws; establishes
-both complete-trace preservation and the existence of a typed permitted pending request whenever
-`runFrom` ends in `noAnswer`. (approved: PENDING)
- Every C1 evaluator report from a well-formed adapter and oracle has a complete valid event
-history. If it ends in `noAnswer`, that configuration steps to a primitive request with a typed
-C6 request permitted to block in the history ending in that request. -/
+/-- Law (subject `ConcreteSpec.Core.Exec.runFrom`).
+Evaluator induction preserves completed trace sequencing and ties every unanswered ending to
+an actual typed request step with the environment's blocking policy. This is the complete
+conjunction, rather than a projection of an admission premise. -/
 theorem runFrom_validTrace (P : Exec.Program O) (A : ExecAdapter O S) (C : OperationContract S)
     (input : C.Input) (ρ : Exec.Oracle O) (wellFormed : ExecAdapter.WellFormed A C input ρ) :
     ∀ (fuel : Nat) (hist : List O.Event) (c : Exec.Config O),
@@ -606,6 +604,11 @@ A one-primitive instance doubles its integer request. Its ordinary oracle accept
 its blocking oracle leaves the request unanswered. The examples below apply every law whose C1
 continuation became partial, and mutate the response, blocking permission or expected observation
 to show that the corresponding conclusion is not obtained freely. -/
+
+/-- Fault: labels a completed configuration as an unanswered request, keeping the history. -/
+def completedAsPendingRun {O : Exec.Operands} (_P : Exec.Program O) (_ρ : Exec.Oracle O)
+    (_fuel : Nat) (hist : List O.Event) (c : Exec.Config O) : Exec.Report O :=
+  ⟨hist, .noAnswer ⟨.done, [], c.store, []⟩⟩
 
 namespace AdapterDemo
 

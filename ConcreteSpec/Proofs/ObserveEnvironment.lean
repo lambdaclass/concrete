@@ -1,4 +1,4 @@
-import ConcreteSpec.Spec.Observe
+import ConcreteSpec.Proofs.Observe2
 
 /-! # Independent environment production and trace stepping
 
@@ -12,11 +12,8 @@ and advances `CompleteTrace` histories to valid completed or pending traces; `De
 namespace ConcreteSpec.Core.Observe
 open ConcreteSpec.Core
 
-/-- Law (subject `ConcreteSpec.Core.Observe.Environment.respond`).
-For any valid executable environment handler `E`, dispatching `E.respond` on a pending request `q`
-after `history ++ [.request q]` satisfies the relational environment contract `Responds C input
-(history ++ [.request q]) q`, and whenever `E.reply` returns `some resp`, the resulting answer is
-`.response ⟨q.1, resp⟩` with `RequestResponse q ⟨q.1, resp⟩` and `C.allows`. -/
+/-- Helper (computation). Admission bridge for typed handlers: repackages handler compliance
+and dependent routing. Operational C1 evidence is `environment_run_reply`. (approved: PENDING) -/
 theorem environment_respond_valid {S : EventSignature} (C : OperationContract S)
     (E : Environment S C.Input) (valid : Environment.Valid C E)
     (input : C.Input) (history : List (Event S)) (q : Request S) :
@@ -37,6 +34,74 @@ theorem environment_respond_valid {S : EventSignature} (C : OperationContract S)
   · intro resp h
     refine ⟨?_, RequestResponse.matched k req resp, valid.allows h⟩
     simp [Environment.respond, h]
+
+/-- Helper (computation). Establishes every C1 adapter obligation for the oracle actually built
+from typed handlers. Contract admission is inherited from the handler's independent proof;
+answer encoding, histories and stores are computed by the bridge. (approved: PENDING) -/
+theorem environment_oracle_wellFormed {S : EventSignature} (C : OperationContract S)
+    (E : Environment S C.Input) (valid : Environment.Valid C E) (input : C.Input) :
+    ExecAdapter.WellFormed (Environment.adapter S) C input (E.oracle input) := by
+  constructor
+  · intro hist p vs site store a answer typed
+    cases typed
+  · intro hist q vs site store a typedQ answer typed
+    have equal : q = typedQ := Option.some.inj typed
+    subst typedQ
+    unfold Environment.oracle at answer
+    cases h : E.reply input (Environment.history hist ++ [.request q]) q.1 q.2 with
+    | none => simp [h] at answer
+    | some reply =>
+      simp only [h, Option.map_some, Option.some.injEq] at answer
+      subst a
+      refine ⟨[], ⟨q.1, reply⟩, [], ?_, ⟨[], rfl⟩, ⟨[], rfl⟩,
+        RequestResponse.matched q.1 q.2 reply, ?_⟩
+      · rfl
+      · cases q
+        simpa only [ExecAdapter.project, Environment.adapter, Environment.history,
+          List.append_nil] using valid.allows h
+  · intro hist q vs site store answer
+    refine ⟨q, rfl, ?_⟩
+    unfold Environment.oracle at answer
+    have blocked : E.reply input (Environment.history hist ++ [.request q]) q.1 q.2 = none := by
+      cases h : E.reply input (Environment.history hist ++ [.request q]) q.1 q.2 with
+      | none => rfl
+      | some reply => simp [h] at answer
+    exact valid.mayBlock blocked
+  · intro site sp found
+    cases found
+
+/-- Law (subject `ConcreteSpec.Core.Observe.Environment.oracle`).
+Executing a typed handler call in C1 records the ordered request and computed reply, passes the
+same reply as the result, preserves the C1 store, and extends a valid history to a complete
+contract-compliant trace. No response-admission guard is evaluated by this bridge. -/
+theorem environment_run_reply {S : EventSignature} (C : OperationContract S)
+    (E : Environment S C.Input) (validEnv : Environment.Valid C E) (input : C.Input)
+    (hist : List (Request S × Response S)) (q : Request S) (site : SiteId)
+    (reply : S.Response q.1)
+    (validHist : CompleteTrace C input (Environment.history hist))
+    (answered : E.reply input (Environment.history hist ++ [.request q]) q.1 q.2 = some reply) :
+    Exec.runFrom (O := Environment.operands S) ⟨[]⟩ (E.oracle input) 1 hist (Environment.call S q site) =
+      ⟨hist ++ [(q, ⟨q.1, reply⟩)], .final .normal ()⟩ ∧
+    CompleteTrace C input
+      ((Environment.adapter S).project
+        (Exec.runFrom (O := Environment.operands S) ⟨[]⟩ (E.oracle input) 1 hist (Environment.call S q site)).events) := by
+  constructor
+  · have answer : E.oracle input hist q [] site () =
+        some ⟨some (q, ⟨q.1, reply⟩), .ok (some ⟨q.1, reply⟩), ()⟩ := by
+      simp only [Environment.oracle, answered, Option.map_some]
+    unfold Environment.call
+    rw [Exec.runFrom.eq_def]
+    dsimp [Exec.Config.final?, Exec.step, Exec.evalArgs, Exec.onRes, Environment.operands]
+    rw [answer]
+    rfl
+  · exact (runFrom_validTrace ⟨[]⟩ (Environment.adapter S) C input (E.oracle input)
+      (environment_oracle_wellFormed C E validEnv input) 1 hist
+      (Environment.call S q site) validHist).1
+
+/-- Fault: discards every typed handler answer before C1 can consume it. -/
+def noReplyOracle {S : EventSignature} {Input : Type}
+    (_E : Environment S Input) (_input : Input) : Exec.Oracle (Environment.operands S) :=
+  fun _ _ _ _ _ => none
 
 /-- Fault: environment dispatch always reports `.blocked` instead of delivering the handler's
 computed response. -/
@@ -115,7 +180,33 @@ theorem Demo.envHandler_valid : Environment.Valid Demo.contract Demo.envHandler 
   · intro input history k req h
     simp [Demo.envHandler] at h
 
-/-- Instance (law `ConcreteSpec.Core.Observe.environment_respond_valid`, case `doubling_reply`). -/
+/-- Instance (law `ConcreteSpec.Core.Observe.environment_run_reply`, case `doubling_c1_call`). -/
+example : Exec.runFrom ⟨[]⟩ (Demo.envHandler.oracle ()) 1 []
+      (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩) =
+      ⟨[] ++ [(⟨.double, 3⟩, ⟨.double, 6⟩)], .final .normal ()⟩ ∧
+    CompleteTrace Demo.contract () ((Environment.adapter Demo.signature).project
+      (Exec.runFrom ⟨[]⟩ (Demo.envHandler.oracle ()) 1 []
+        (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩)).events) :=
+  environment_run_reply Demo.contract Demo.envHandler Demo.envHandler_valid () []
+    ⟨.double, 3⟩ ⟨7⟩ 6 .idle rfl
+
+/-- Planted (law `ConcreteSpec.Core.Observe.environment_run_reply`, case `doubling_c1_call`,
+subject `ConcreteSpec.Core.Observe.Environment.oracle`, mutant `ConcreteSpec.Core.Observe.noReplyOracle`). -/
+example : Environment.Valid Demo.contract Demo.envHandler ∧
+    CompleteTrace Demo.contract () (Environment.history []) ∧
+    Demo.envHandler.reply () (Environment.history [] ++ [.request ⟨.double, 3⟩]) .double 3 = some 6 ∧
+    ¬ (Exec.runFrom ⟨[]⟩ (noReplyOracle Demo.envHandler ()) 1 []
+        (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩) =
+        ⟨[] ++ [(⟨.double, 3⟩, ⟨.double, 6⟩)], .final .normal ()⟩ ∧
+      CompleteTrace Demo.contract () ((Environment.adapter Demo.signature).project
+        (Exec.runFrom ⟨[]⟩ (noReplyOracle Demo.envHandler ()) 1 []
+          (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩)).events)) := by
+  refine ⟨Demo.envHandler_valid, .idle, rfl, ?_⟩
+  intro invalid
+  have ending := congrArg Exec.Report.ending invalid.1
+  cases ending
+
+/-- Computation example for the handler admission bridge, not independent law evidence. -/
 example : Responds Demo.contract () ([] ++ [.request ⟨.double, 3⟩]) ⟨.double, 3⟩
       (Demo.envHandler.respond () ([] ++ [.request ⟨.double, 3⟩]) ⟨.double, 3⟩) ∧
     ∀ resp, Demo.envHandler.reply () ([] ++ [.request ⟨.double, 3⟩]) .double 3 = some resp →
@@ -125,8 +216,7 @@ example : Responds Demo.contract () ([] ++ [.request ⟨.double, 3⟩]) ⟨.doub
       Demo.contract.allows () ([] ++ [.request ⟨.double, 3⟩]) ⟨.double, 3⟩ ⟨.double, resp⟩ :=
   environment_respond_valid Demo.contract Demo.envHandler Demo.envHandler_valid () [] ⟨.double, 3⟩
 
-/-- Planted (law `ConcreteSpec.Core.Observe.environment_respond_valid`, case `doubling_reply`,
-subject `ConcreteSpec.Core.Observe.Environment.respond`, mutant `ConcreteSpec.Core.Observe.alwaysBlockedRespond`). -/
+/-- Computation example for the handler admission bridge, not independent law evidence. -/
 example : Environment.Valid Demo.contract Demo.envHandler ∧
     ¬ (Responds Demo.contract () ([] ++ [.request ⟨.double, 3⟩]) ⟨.double, 3⟩
         (alwaysBlockedRespond Demo.envHandler () ([] ++ [.request ⟨.double, 3⟩]) ⟨.double, 3⟩) ∧
@@ -225,7 +315,33 @@ theorem envHandler_valid : Environment.Valid contract envHandler := by
   · intro input history k req h
     cases k <;> simp [envHandler] at h
 
-/-- Instance (law `ConcreteSpec.Core.Observe.environment_respond_valid`, case `routed_reply`). -/
+/-- Instance (law `ConcreteSpec.Core.Observe.environment_run_reply`, case `routed_c1_call`). -/
+example : Exec.runFrom ⟨[]⟩ (envHandler.oracle ()) 1 []
+      (Environment.call signature ⟨.fourTimes, 3⟩ ⟨7⟩) =
+      ⟨[] ++ [(⟨.fourTimes, 3⟩, ⟨.fourTimes, 12⟩)], .final .normal ()⟩ ∧
+    CompleteTrace contract () ((Environment.adapter signature).project
+      (Exec.runFrom ⟨[]⟩ (envHandler.oracle ()) 1 []
+        (Environment.call signature ⟨.fourTimes, 3⟩ ⟨7⟩)).events) :=
+  environment_run_reply contract envHandler envHandler_valid () []
+    ⟨.fourTimes, 3⟩ ⟨7⟩ 12 .idle rfl
+
+/-- Planted (law `ConcreteSpec.Core.Observe.environment_run_reply`, case `routed_c1_call`,
+subject `ConcreteSpec.Core.Observe.Environment.oracle`, mutant `ConcreteSpec.Core.Observe.noReplyOracle`). -/
+example : Environment.Valid contract envHandler ∧
+    CompleteTrace contract () (Environment.history []) ∧
+    envHandler.reply () (Environment.history [] ++ [.request ⟨.fourTimes, 3⟩]) .fourTimes 3 = some 12 ∧
+    ¬ (Exec.runFrom ⟨[]⟩ (noReplyOracle envHandler ()) 1 []
+        (Environment.call signature ⟨.fourTimes, 3⟩ ⟨7⟩) =
+        ⟨[] ++ [(⟨.fourTimes, 3⟩, ⟨.fourTimes, 12⟩)], .final .normal ()⟩ ∧
+      CompleteTrace contract () ((Environment.adapter signature).project
+        (Exec.runFrom ⟨[]⟩ (noReplyOracle envHandler ()) 1 []
+          (Environment.call signature ⟨.fourTimes, 3⟩ ⟨7⟩)).events)) := by
+  refine ⟨envHandler_valid, .idle, rfl, ?_⟩
+  intro invalid
+  have ending := congrArg Exec.Report.ending invalid.1
+  cases ending
+
+/-- Computation example for the handler admission bridge, not independent law evidence. -/
 example : Responds contract () ([] ++ [.request ⟨.fourTimes, 3⟩]) ⟨.fourTimes, 3⟩
       (envHandler.respond () ([] ++ [.request ⟨.fourTimes, 3⟩]) ⟨.fourTimes, 3⟩) ∧
     ∀ resp, envHandler.reply () ([] ++ [.request ⟨.fourTimes, 3⟩]) .fourTimes 3 = some resp →
@@ -235,8 +351,7 @@ example : Responds contract () ([] ++ [.request ⟨.fourTimes, 3⟩]) ⟨.fourTi
       contract.allows () ([] ++ [.request ⟨.fourTimes, 3⟩]) ⟨.fourTimes, 3⟩ ⟨.fourTimes, resp⟩ :=
   environment_respond_valid contract envHandler envHandler_valid () [] ⟨.fourTimes, 3⟩
 
-/-- Planted (law `ConcreteSpec.Core.Observe.environment_respond_valid`, case `routed_reply`,
-subject `ConcreteSpec.Core.Observe.Environment.respond`, mutant `ConcreteSpec.Core.Observe.alwaysBlockedRespond`). -/
+/-- Computation example for the handler admission bridge, not independent law evidence. -/
 example : Environment.Valid contract envHandler ∧
     ¬ (Responds contract () ([] ++ [.request ⟨.fourTimes, 3⟩]) ⟨.fourTimes, 3⟩
         (alwaysBlockedRespond envHandler () ([] ++ [.request ⟨.fourTimes, 3⟩]) ⟨.fourTimes, 3⟩) ∧

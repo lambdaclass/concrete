@@ -209,6 +209,17 @@ def sourcePrefixSpan (path : String) (pathOk : PathOk path) (prefixText : String
   let scanned := scanSourcePrefix prefixText.toList 0 []
   sourceSpan path pathOk (scanned.1 + 1) (Nat.zero_lt_succ _) (String.ofList scanned.2)
 
+/-- Source input for one elaborated operation. The source file owns its project path; the
+site producer derives positions from source text rather than accepting a precomputed span. -/
+structure SourcePosition where
+  path : String
+  pathOk : PathOk path
+  prefixText : String
+
+/-- Produce a diagnostic site table from source inputs, preserving typed site identities. -/
+def sourceSites (sources : AList SiteId SourcePosition) : SiteTable :=
+  AList.map (fun src => sourcePrefixSpan src.path src.pathOk src.prefixText) sources
+
 /-- A span's column is the byte column at the operation on its source line. -/
 def Span.HasByteColumn (sp : Span) (before : String) : Prop := sp.col = byteColumn before
 
@@ -387,6 +398,37 @@ def ExecAdapter.OutputCorrespondence (A : ExecAdapter O S)
     (physical : O.Event → List S.Output) : Prop :=
   ∀ event, publicOutputs (A.events event) = physical event
 
+/-- Primitive-level physical semantics, supplied by the operand instance independently of an
+observation adapter. `emit` describes the effect of executing an accepted primitive answer;
+`past` interprets the incoming history, including effects before the current evaluator call. -/
+structure PhysicalEffects (O : Exec.Operands) (Output : Type) where
+  emit : O.Prim → List O.Val → O.Store → Exec.Answer O.Val O.Event O.Store → List Output
+  past : O.Event → List Output
+
+/-- A lawful oracle records exactly the physical effects specified for its primitive answers.
+This obligation is about primitive execution, not the adapter's public projection. -/
+def PhysicalEffects.OracleFaithful {Output : Type} (F : PhysicalEffects O Output) (ρ : Exec.Oracle O) : Prop :=
+  ∀ hist p vs site store a, ρ hist p vs site store = some a →
+    O.allows p vs store a = true →
+    a.event.toList.flatMap F.past = F.emit p vs store a
+
+/-- Independent physical execution semantics. Each transition carries its primitive effect,
+with the actual oracle answer and continuation as witnesses. Unlike the fuel driver, this is
+an unbounded relation over executions; it neither computes nor validates public projections. -/
+inductive PhysicalEffects.Execution {Output : Type} (F : PhysicalEffects O Output)
+    (P : Exec.Program O) (ρ : Exec.Oracle O) :
+    List O.Event → Exec.Config O → List Output → List O.Event → Exec.Config O → Prop where
+  | refl (hist c) : F.Execution P ρ hist c [] hist c
+  | silent {hist c next outputs finalHist finalConfig} :
+      Exec.step P c = some (.next next) →
+      F.Execution P ρ hist next outputs finalHist finalConfig →
+      F.Execution P ρ hist c outputs finalHist finalConfig
+  | answer {hist c p vs site store k a next outputs finalHist finalConfig} :
+      Exec.step P c = some (.request p vs site store k) →
+      ρ hist p vs site store = some a → O.allows p vs store a = true → k a = some next →
+      F.Execution P ρ (hist ++ a.event.toList) next outputs finalHist finalConfig →
+      F.Execution P ρ hist c (F.emit p vs store a ++ outputs) finalHist finalConfig
+
 /-- Adapter and oracle well-formedness against a C6 operation contract. An internal answer emits
 only output. If a C1 request has typed request `q`, its answer projects to any output, then
 `.request q`, then a matching `.response r`, then any output; output cannot intervene while `q` is
@@ -467,6 +509,51 @@ def launchObservation {α : Type} [DecidableEq α] (required configured : List �
     some (.terminal ⟨[], .startupRefused, A.state c.store⟩)
 
 /-! ## Examples -/
+
+/-- C1 operand interface for typed environment calls. Requests and replies retain their dependent
+operation identities; ordinary operand evaluation has no external effect. -/
+abbrev Environment.operands (S : EventSignature) : Exec.Operands where
+  Val := Option (Response S)
+  Expr := Option (Response S)
+  Ty := Unit
+  Store := Unit
+  Prim := Request S
+  Event := Request S × Response S
+  unitVal := none
+  unitTy := ()
+  isCopy := fun _ => true
+  eval := fun _ st value => .ok (value, st)
+  life := fun _ st => some st
+  test := fun _ => none
+  allows := fun _ _ _ _ => true
+
+/-- Decode the C1 exchange records in their execution order. -/
+def Environment.history {S : EventSignature}
+    (hist : List (Request S × Response S)) : List (Event S) :=
+  hist.flatMap fun pair => [.request pair.1, .response pair.2]
+
+/-- Turn a typed operation handler into the actual oracle consumed by `Exec.runFrom`. Dispatch
+receives the preceding exchanges and current request. It returns the computed reply as both the
+C1 result and its recorded response, with unchanged store; blocking returns no C1 answer. -/
+def Environment.oracle {S : EventSignature} {Input : Type}
+    (E : Environment S Input) (input : Input) : Exec.Oracle (Environment.operands S) :=
+  fun hist q _ _ store =>
+    (E.reply input (Environment.history hist ++ [.request q]) q.1 q.2).map fun reply =>
+      ⟨some (q, ⟨q.1, reply⟩), .ok (some ⟨q.1, reply⟩), store⟩
+
+/-- The observation adapter for typed environment calls. This adapter does not compute or check
+handler responses; the executable oracle supplies them. -/
+def Environment.adapter (S : EventSignature) : ExecAdapter (Environment.operands S) S where
+  events := fun pair => [.request pair.1, .response pair.2]
+  request := fun q _ _ _ => some q
+  status := fun _ => none
+  state := fun _ => S.initState
+  sites := []
+
+/-- A single typed call, used by the operational handler laws for any signature and handler. -/
+def Environment.call (S : EventSignature) (q : Request S) (site : SiteId) :
+    Exec.Config (Environment.operands S) :=
+  ⟨.exec (.prim none q [] site), [], (), []⟩
 
 namespace Demo
 
