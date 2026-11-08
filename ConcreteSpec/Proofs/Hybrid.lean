@@ -494,4 +494,43 @@ theorem materialize_read (tgt : Target) (st st' : State) (hw : st.memory.WellFor
     rw [htake] at hshort
     simpa [State.read, hshort, ← ht, Rep] using (rep_roundtrip tgt v hv)
 
+
+namespace Audit
+private def range : Range := ⟨⟨⟨0⟩, 40, some ⟨0⟩⟩, 3, 1⟩
+private def memory : Memory := ⟨[(⟨0⟩, candidate ⟨0⟩ 40 3 1)], 1⟩
+private def before : State := ⟨[(⟨0⟩, ⟨.bool, .materialized range⟩)], memory⟩
+private def after : State :=
+  { before with memory := memory.modify ⟨0⟩ fun x =>
+      { x with bytes := [.init 1 none, .uninit, .uninit] } }
+
+private theorem before_wf : before.WellFormed linuxX8664 := by
+  refine ⟨alloc_wellFormed linuxX8664 Memory.empty (empty_wellFormed linuxX8664)
+    ⟨0⟩ 40 3 1 ⟨0⟩ memory rfl, ?_⟩
+  intro p c hc
+  simp only [State.places, before, AList.lookup] at hc
+  split at hc
+  next =>
+    cases hc
+    exact ⟨⟨0⟩, candidate ⟨0⟩ 40 3 1, rfl, rfl, rfl, rfl, rfl, rfl, by decide⟩
+  next => cases hc
+
+/-- Instance (law `ConcreteSpec.Core.Hybrid.typed_store_frame`). Accepted: a real typed
+State.write updates the bool and preserves uninitialized trailing bytes in a well-formed state. -/
+example : before.WellFormed linuxX8664 ∧ before.places ⟨0⟩ = some ⟨.bool, .materialized range⟩ ∧
+    before.memory.access linuxX8664 range.ptr (sizeof .bool) range.align = some (some (⟨0⟩, 0)) ∧
+    before.memory.block ⟨0⟩ = some (candidate ⟨0⟩ 40 3 1) ∧
+    before.write linuxX8664 ⟨0⟩ (.bool true) = some after ∧
+    0 + sizeof .bool ≤ 1 ∧
+    (after.memory.block ⟨0⟩).map (fun x => x.bytes[1]?) = some (some .uninit) := by
+  exact ⟨before_wf, rfl, rfl, rfl, rfl, by decide, rfl⟩
+
+/-- Planted (law `ConcreteSpec.Core.Hybrid.typed_store_frame`). A typed write mutated to
+initialize trailing padding to zero violates the frame at byte 1 of the same well-formed state. -/
+example : let clobbered : State := { after with memory := after.memory.modify ⟨0⟩ fun x =>
+      { x with bytes := [.init 1 none, .init 0 none, .uninit] } }
+    ¬ ((clobbered.memory.block ⟨0⟩).map (fun x => x.bytes[1]?) =
+      (before.memory.block ⟨0⟩).map (fun x => x.bytes[1]?)) := by decide
+
+end Audit
+
 end ConcreteSpec.Core.Hybrid

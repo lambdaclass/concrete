@@ -549,7 +549,8 @@ theorem decodePtr_valid_inv (tgt : Target) (bs : List MByte) (p : Ptr)
 
 /-- Successful pointer decoding recovers exactly a whole stored representation. -/
 theorem decodePtr_some (tgt : Target) (bs : List MByte) (p : Ptr)
-    (h : decodePtr tgt bs = some p) : bs = encodePtr tgt p := by
+    (h : decodePtr tgt bs = some p) : bs = encodePtr tgt p ∧ p.Valid tgt := by
+  refine ⟨?_, decodePtr_valid_inv tgt bs p h⟩
   match bs with
   | .init _ (some (q, 0)) :: _ =>
     simp only [decodePtr] at h
@@ -889,7 +890,7 @@ example : target.WellFormed ∧ ptr.Valid target ∧
 
 /-- Instance (law `ConcreteSpec.Core.Mem.decodePtr_some`). Accepted: successful decoding
 has exactly the stored encoding, including provenance. -/
-example : decodePtr target bytes = some ptr ∧ bytes = encodePtr target ptr := by decide
+example : decodePtr target bytes = some ptr ∧ bytes = encodePtr target ptr ∧ ptr.Valid target := by decide
 
 /-- Planted (law `ConcreteSpec.Core.Mem.decodePtr_encodePtr`). A decoder mutated to refuse
 whole pointers violates the round trip at this valid pointer. -/
