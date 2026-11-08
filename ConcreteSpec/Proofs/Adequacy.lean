@@ -666,8 +666,8 @@ theorem runFrom_complete {ρ₀ : Oracle O} {n : Nat} {events : List O.Event} {c
   rw [hq] at hr
   simpa [QueryReport.toReport] using hr.symm
 
-/-- Helper (computation). **Monotonicity.** Extra fuel preserves every report other than `outOfFuel`.
-(approved: PENDING). -/
+/-- Law (subject `runFrom`).
+Extra fuel preserves every report other than `outOfFuel`. -/
 theorem runFrom_mono {ρ₀ : Oracle O} : ∀ (n m : Nat), n ≤ m →
     ∀ (events : List O.Event) (c : Config O),
     (∀ c', (runFrom P ρ₀ n events c).ending ≠ .outOfFuel c') →
@@ -727,9 +727,8 @@ theorem runFrom_complete_le {ρ₀ : Oracle O} {n m : Nat} (hle : n ≤ m)
   rw [runFrom_mono (P := P) (ρ₀ := ρ₀) n m hle events c hnot]
   exact hexact
 
-/-- Helper (computation). **Trace-prefix consistency.** Increasing fuel never retracts or changes an
-event already
-reported. (approved: PENDING). -/
+/-- Law (subject `runFrom`).
+Increasing fuel never retracts or changes an event already reported. -/
 theorem runFrom_trace_prefix_le {ρ₀ : Oracle O} : ∀ (n m : Nat), n ≤ m →
     ∀ (events : List O.Event) (c : Config O),
     (runFrom P ρ₀ n events c).events <+: (runFrom P ρ₀ m events c).events := by
@@ -873,44 +872,60 @@ theorem Move.not_final {pos pos' : Position O} (hm : Move P ρ pos pos') :
   | silent hs => exact final?_none_of_step hs
   | prim hs _ _ _ => exact final?_none_of_step hs
 
-/-- Helper (computation). Two consecutive fuel-prefix reports determine exactly one transition between
-their positions. (approved: PENDING). -/
+/-- Law (subject `runFromQ`).
+Two consecutive fuel-exhausted evaluator reports determine one machine transition between
+their residual positions. -/
 theorem move_of_fuel_succ {n : Nat} {events : List O.Event} {issued : List (Query O)}
-    {c : Config O} {pos pos' : Position O}
-    (h0 : runFromQ P ρ n events issued c = ⟨pos.events, pos.queries, .outOfFuel pos.config⟩)
-    (h1 : runFromQ P ρ (n + 1) events issued c =
-      ⟨pos'.events, pos'.queries, .outOfFuel pos'.config⟩) : Move P ρ pos pos' := by
-  have hadd := runFromQ_add_of_outOfFuel (P := P) (ρ := ρ) h0 1
-  have h : runFromQ P ρ 1 pos.events pos.queries pos.config =
-      ⟨pos'.events, pos'.queries, .outOfFuel pos'.config⟩ := hadd.symm.trans h1
-  cases pos with
-  | mk c events issued =>
-    cases hf : c.final? with
-    | some f => simp [runFromQ, hf] at h
-    | none =>
-      cases hs : step P c with
-      | none => simp [runFromQ, hf, hs] at h
-      | some out =>
-        cases out with
-        | next c' =>
-          simp only [runFromQ, hf, hs] at h
-          have hp := eq_of_runFromQ_zero_out (P := P) (ρ := ρ) h
-          subst pos'
-          exact .silent hs
-        | request p vs site st k =>
-          cases ha : answer ρ (Query.issue events p vs site st issued) with
-          | none => simp [runFromQ, hf, hs, ha] at h
-          | some a =>
-            cases hallow : O.allows p vs st a with
-            | false => simp [runFromQ, hf, hs, ha, hallow] at h
-            | true =>
-              cases hk : k a with
-              | none => simp [runFromQ, hf, hs, ha, hallow, hk] at h
-              | some c' =>
-                simp only [runFromQ, hf, hs, ha, hallow, hk] at h
-                have hp := eq_of_runFromQ_zero_out (P := P) (ρ := ρ) h
-                subst pos'
-                exact .prim hs ha hallow hk
+    {c : Config O}
+    (h0 : (runFromQ P ρ n events issued c).isOutOfFuel = true)
+    (h1 : (runFromQ P ρ (n + 1) events issued c).isOutOfFuel = true) :
+    Move P ρ
+      ((runFromQ P ρ n events issued c).position c)
+      ((runFromQ P ρ (n + 1) events issued c).position c) := by
+  generalize hr0 : runFromQ P ρ n events issued c = r0 at h0 ⊢
+  generalize hr1 : runFromQ P ρ (n + 1) events issued c = r1 at h1 ⊢
+  cases r0 with
+  | mk ev0 q0 end0 =>
+    cases end0 with
+    | final _ | stuck _ | noAnswer _ | badAnswer _ =>
+      simp [QueryReport.isOutOfFuel] at h0
+    | outOfFuel c0 =>
+      cases r1 with
+      | mk ev1 q1 end1 =>
+        cases end1 with
+        | final _ | stuck _ | noAnswer _ | badAnswer _ =>
+          simp [QueryReport.isOutOfFuel] at h1
+        | outOfFuel c1 =>
+          have hadd := runFromQ_add_of_outOfFuel (P := P) (ρ := ρ) (pos := ⟨c0, ev0, q0⟩) hr0 1
+          have h : runFromQ P ρ 1 ev0 q0 c0 = ⟨ev1, q1, .outOfFuel c1⟩ :=
+            hadd.symm.trans hr1
+          simp only [QueryReport.position]
+          cases hf : c0.final? with
+          | some f => simp [runFromQ, hf] at h
+          | none =>
+            cases hs : step P c0 with
+            | none => simp [runFromQ, hf, hs] at h
+            | some out =>
+              cases out with
+              | next c' =>
+                simp only [runFromQ, hf, hs] at h
+                have hp := eq_of_runFromQ_zero_out (P := P) (ρ := ρ) (pos := ⟨c1, ev1, q1⟩) h
+                cases hp
+                exact .silent hs
+              | request p vs site st k =>
+                cases ha : answer ρ (Query.issue ev0 p vs site st q0) with
+                | none => simp [runFromQ, hf, hs, ha] at h
+                | some a =>
+                  cases hallow : O.allows p vs st a with
+                  | false => simp [runFromQ, hf, hs, ha, hallow] at h
+                  | true =>
+                    cases hk : k a with
+                    | none => simp [runFromQ, hf, hs, ha, hallow, hk] at h
+                    | some c' =>
+                      simp only [runFromQ, hf, hs, ha, hallow, hk] at h
+                      have hp := eq_of_runFromQ_zero_out (P := P) (ρ := ρ) (pos := ⟨c1, ev1, q1⟩) h
+                      cases hp
+                      exact .prim hs ha hallow hk
 
 /-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness
 (approved: PENDING).
@@ -947,7 +962,24 @@ def FuelLimit.toInfiniteExecution (L : FuelLimit P ρ c) : InfiniteExecution P �
   · apply eq_of_runFromQ_zero_out (P := P) (ρ := ρ)
     simpa [runQ] using L.prefixes 0
   · intro n
-    exact move_of_fuel_succ (L.prefixes n) (L.prefixes (n + 1))
+    have h0 : (runFromQ P ρ n [] [] c).isOutOfFuel = true := by
+      have hp := L.prefixes n
+      simpa [runQ, QueryReport.isOutOfFuel] using congrArg QueryReport.isOutOfFuel hp
+    have h1 : (runFromQ P ρ (n + 1) [] [] c).isOutOfFuel = true := by
+      have hp := L.prefixes (n + 1)
+      simpa [runQ, QueryReport.isOutOfFuel] using congrArg QueryReport.isOutOfFuel hp
+    have hm := move_of_fuel_succ (P := P) (ρ := ρ) (c := c) h0 h1
+    have hp0 : (runFromQ P ρ n [] [] c).position c = L.states n := by
+      have hp := L.prefixes n
+      change runFromQ P ρ n [] [] c = _ at hp
+      rw [hp]
+      rfl
+    have hp1 : (runFromQ P ρ (n + 1) [] [] c).position c = L.states (n + 1) := by
+      have hp := L.prefixes (n + 1)
+      change runFromQ P ρ (n + 1) [] [] c = _ at hp
+      rw [hp]
+      rfl
+    rwa [hp0, hp1] at hm
 
 /-- Representation lemma. This repackages the same states and proof fields; it supplies no independent
 behavioral evidence (approved: PENDING).
@@ -999,15 +1031,18 @@ theorem FuelLimit.unique (L K : FuelLimit P ρ c) : L = K := by
       cases hs
       rfl
 
-/-- Helper (computation). A fixed query-level oracle and initial configuration determine a unique
-infinite execution. (approved: PENDING). -/
-theorem InfiniteExecution.unique (X Y : InfiniteExecution P ρ c) : X = Y := by
+/-- Law (subject `InfiniteExecution.states`).
+A fixed query-level oracle and initial configuration determine a unique infinite execution and state
+sequence. -/
+theorem InfiniteExecution.unique (X Y : InfiniteExecution P ρ c) :
+    X.states = Y.toFuelLimit.states ∧ X = Y := by
   have h : X.toFuelLimit = Y.toFuelLimit := FuelLimit.unique _ _
-  calc
+  have hxy : X = Y := calc
     X = X.toFuelLimit.toInfiniteExecution := (toFuelLimit_toInfiniteExecution X).symm
     _ = Y.toFuelLimit.toInfiniteExecution :=
       congrArg (fun L : FuelLimit P ρ c => L.toInfiniteExecution) h
     _ = Y := toFuelLimit_toInfiniteExecution Y
+  exact ⟨congrArg FuelLimit.states h, hxy⟩
 
 /-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness
 (approved: PENDING).
@@ -1372,14 +1407,14 @@ theorem finite_not_infinite_events {S : Observe.EventSignature} {A : Observe.Exe
   obtain ⟨n, hn⟩ := hi bound
   exact Nat.not_lt_of_ge (hb n) hn
 
-/-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than
-independent execution evidence (approved: PENDING).
-External silent divergence and infinite interaction are mutually exclusive on the same run. -/
+/-- Law (subject `InfiniteInteraction`).
+External silent divergence excludes external infinite interaction on the same run. -/
 theorem silentDivergence_not_infiniteInteraction {S : Observe.EventSignature}
-    (A : Observe.ExecAdapter O S) :
-    SilentDivergence P A ρ c → InfiniteInteraction P A ρ c → False := by
-  rintro ⟨X, hf⟩ ⟨Y, hi⟩
-  have hxy : X = Y := InfiniteExecution.unique X Y
+    (A : Observe.ExecAdapter O S) (hs : SilentDivergence P A ρ c) :
+    ¬ InfiniteInteraction P A ρ c := by
+  rintro ⟨Y, hi⟩
+  obtain ⟨X, hf⟩ := hs
+  have hxy : X = Y := (InfiniteExecution.unique X Y).2
   subst Y
   exact finite_not_infinite_events hf hi
 
@@ -1397,11 +1432,12 @@ theorem internal_finite_or_infinite_events (X : InfiniteExecution P ρ c) :
     apply h
     exact ⟨bound, fun n => Nat.le_of_not_gt (fun hlt => hn ⟨n, hlt⟩)⟩
 
-/-- Helper (computation). A final report excludes an infinite execution from the same initial
-configuration. (approved: PENDING). -/
+/-- Law (subject `InfiniteExecution`).
+A final report excludes an infinite execution from the same initial configuration. -/
 theorem not_infinite_of_final {ρ₀ : Oracle O} {fuel : Nat} {c : Config O} {f : Final O.Val}
-    (h : (run P ρ₀ fuel c).ending = .final f)
-    (X : InfiniteExecution P ρ₀.toQueryOracle c) : False := by
+    (h : (run P ρ₀ fuel c).ending = .final f) :
+    ¬ Nonempty (InfiniteExecution P ρ₀.toQueryOracle c) := by
+  rintro ⟨X⟩
   have hp := X.toFuelLimit.prefixes fuel
   change runFromQ P ρ₀.toQueryOracle fuel [] [] c = _ at hp
   have hr := runFromQ_toReport (P := P) (ρ₀ := ρ₀) fuel [] [] c
@@ -1411,12 +1447,13 @@ theorem not_infinite_of_final {ρ₀ : Oracle O} {fuel : Nat} {c : Config O} {f 
   rw [← hr] at h
   cases h
 
-/-- Helper (computation). An endlessly blocked `noAnswer` report excludes an infinite execution from
-the same initial
-configuration. (approved: PENDING). -/
+/-- Law (subject `InfiniteExecution`).
+An endlessly blocked `noAnswer` report excludes an infinite execution from the same initial
+configuration. -/
 theorem not_infinite_of_noAnswer {ρ₀ : Oracle O} {fuel : Nat} {c blocked : Config O}
-    (h : (run P ρ₀ fuel c).ending = .noAnswer blocked)
-    (X : InfiniteExecution P ρ₀.toQueryOracle c) : False := by
+    (h : (run P ρ₀ fuel c).ending = .noAnswer blocked) :
+    ¬ Nonempty (InfiniteExecution P ρ₀.toQueryOracle c) := by
+  rintro ⟨X⟩
   have hp := X.toFuelLimit.prefixes fuel
   change runFromQ P ρ₀.toQueryOracle fuel [] [] c = _ at hp
   have hr := runFromQ_toReport (P := P) (ρ₀ := ρ₀) fuel [] [] c
@@ -1426,11 +1463,12 @@ theorem not_infinite_of_noAnswer {ρ₀ : Oracle O} {fuel : Nat} {c blocked : Co
   rw [← hr] at h
   cases h
 
-/-- Helper (computation). A blocked request remains blocked at every larger budget; it never turns
-into divergence or a
-program outcome merely because more fuel is supplied. (approved: PENDING). -/
+/-- Law (subject `run`).
+A blocked request remains blocked at every larger budget; it never turns into divergence or a
+program outcome merely because more fuel is supplied. -/
 theorem endlesslyBlocked_of_noAnswer {ρ₀ : Oracle O} {fuel : Nat} {c blocked : Config O}
-    (h : (run P ρ₀ fuel c).ending = .noAnswer blocked) : EndlesslyBlocked P ρ₀ fuel c blocked := by
+    (h : (run P ρ₀ fuel c).ending = .noAnswer blocked) :
+    ∀ n, fuel ≤ n → (run P ρ₀ n c).ending = .noAnswer blocked := by
   change (runFrom P ρ₀ fuel [] c).ending = .noAnswer blocked at h
   intro n hle
   have hm : run P ρ₀ n c = run P ρ₀ fuel c := by
@@ -1457,21 +1495,20 @@ theorem TerminationEvidence.all_allowed_runs {domain : CallDomain O} (E : Termin
     apply runFrom_mono (P := P) (ρ₀ := ρ) (E.conditional.fuel E.premises ρ args st) m hm [] c hnot
   exact (congrArg Report.ending hmono).trans hfinal
 
-/-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness
-(approved: PENDING).
+/-- Law (subject `InfiniteExecution`).
 Per-function termination evidence excludes divergence from every successful admitted entry
 configuration. -/
 theorem TerminationEvidence.excludes_infinite {domain : CallDomain O} (E : TerminationEvidence O P domain)
      (ρ : Oracle O) (args : List O.Val) (st : O.Store)
     (fn : Fn O) (c : Config O) (hf : AList.lookup P.fns domain.function = some fn)
-    (ha : domain.calls ρ args st) (he : enter fn args st = some c)
-    (X : InfiniteExecution P ρ.toQueryOracle c) : False := by
+    (ha : domain.calls ρ args st) (he : enter fn args st = some c) :
+    ¬ Nonempty (InfiniteExecution P ρ.toQueryOracle c) := by
   obtain ⟨fn', c', f, hf', he', hfinal⟩ := E.conditional.terminates E.premises ρ args st ha
   rw [hf] at hf'
   cases hf'
   rw [he] at he'
   cases he'
-  exact not_infinite_of_final hfinal X
+  exact not_infinite_of_final hfinal
 
 /-! ### Fuel exhaustion is only a budget report -/
 
@@ -2078,7 +2115,7 @@ def admittedSpin : InfiniteExecution spinningProgram env (start spinningFn [] .i
 example : ¬ Nonempty (TerminationEvidence ops spinningProgram spinningDomain) := by
   rintro ⟨E⟩
   exact E.excludes_infinite env [] .init spinningFn (start spinningFn [] .init)
-    rfl ⟨rfl, rfl, rfl⟩ rfl admittedSpin
+    rfl ⟨rfl, rfl, rfl⟩ rfl ⟨admittedSpin⟩
 
 /-! ### Closed round-four controls -/
 
@@ -2630,14 +2667,176 @@ example : thirdQuery.occurrence = interleavedQuery0.occurrence + 1 :=
       cases hr
       decide)
 
-/-- A reconstruction mutation skips every second transition. Its state sequence cannot satisfy
-fuel-prefix compatibility: already its one-step prefix claims the wrong configuration. -/
-example : ¬ (∀ n, runQ prog env n eventConfig =
-    ⟨(eventPosition (2 * n)).events, (eventPosition (2 * n)).queries,
-      .outOfFuel (eventPosition (2 * n)).config⟩) := by
+/-- A fuel-sensitive evaluator defect that agrees with `runFrom` up to fuel `1`, but drops
+reported events at larger fuel budgets. -/
+def extraFuelDropRunFrom {O : Operands} (P : Program O) (ρ : Oracle O) (fuel : Nat)
+    (events : List O.Event) (c : Config O) : Report O :=
+  if fuel ≤ 1 then runFrom P ρ fuel events c
+  else ⟨[], (runFrom P ρ fuel events c).ending⟩
+
+/-- Instance (law `runFrom_mono`, case `terminalConfig`). -/
+example : runFrom prog env 2 [] terminalConfig = runFrom prog env 1 [] terminalConfig :=
+  runFrom_mono (O := ops) (P := prog) (ρ₀ := env) 1 2 (by decide) [] terminalConfig
+    (by intro c' h; cases h)
+
+/-- Planted (law `runFrom_mono`, case `terminalConfig`,
+subject `runFrom`, mutant `extraFuelDropRunFrom`). -/
+example : 1 ≤ 2 ∧
+    (∀ c', (extraFuelDropRunFrom prog env 1 [] terminalConfig).ending ≠ .outOfFuel c') ∧
+    extraFuelDropRunFrom prog env 2 [] terminalConfig ≠
+      extraFuelDropRunFrom prog env 1 [] terminalConfig := by
+  refine ⟨by decide, ?_, ?_⟩
+  · intro c' h
+    cases h
+  · intro h
+    have he := congrArg Report.events h
+    cases he
+
+/-- Instance (law `runFrom_trace_prefix_le`, case `terminalConfig`). -/
+example : (runFrom prog env 1 [] terminalConfig).events <+:
+    (runFrom prog env 2 [] terminalConfig).events :=
+  runFrom_trace_prefix_le (O := ops) (P := prog) (ρ₀ := env) 1 2 (by decide) [] terminalConfig
+
+/-- Planted (law `runFrom_trace_prefix_le`, case `terminalConfig`,
+subject `runFrom`, mutant `extraFuelDropRunFrom`). -/
+example : 1 ≤ 2 ∧
+    ¬ (extraFuelDropRunFrom prog env 1 [] terminalConfig).events <+:
+      (extraFuelDropRunFrom prog env 2 [] terminalConfig).events := by
+  refine ⟨by decide, ?_⟩
+  rintro ⟨rest, h⟩
+  cases h
+
+/-- A reconstruction mutation skips every second transition by doubling the fuel budget. -/
+def skippedStepRunFromQ {O : Operands} (P : Program O) (ρ : QueryOracle O) (fuel : Nat)
+    (events : List O.Event) (issued : List (Query O)) (c : Config O) : QueryReport O :=
+  runFromQ P ρ (2 * fuel) events issued c
+
+/-- Instance (law `move_of_fuel_succ`, case `eventConfig`). -/
+example : Move prog env
+    ((runFromQ prog env 0 [] [] eventConfig).position eventConfig)
+    ((runFromQ prog env (0 + 1) [] [] eventConfig).position eventConfig) :=
+  move_of_fuel_succ (O := ops) (P := prog) (ρ := env.toQueryOracle) (n := 0)
+    (events := []) (issued := []) (c := eventConfig) rfl rfl
+
+/-- Planted (law `move_of_fuel_succ`, case `eventConfig`,
+subject `runFromQ`, mutant `skippedStepRunFromQ`). Doubling the fuel budget skips every second
+transition; both fuel prefixes still report `outOfFuel`, but no single machine transition links
+the initial position to the two-step position. -/
+example : (skippedStepRunFromQ prog env 0 [] [] eventConfig).isOutOfFuel = true ∧
+    (skippedStepRunFromQ prog env (0 + 1) [] [] eventConfig).isOutOfFuel = true ∧
+    ¬ Move prog env
+      ((skippedStepRunFromQ prog env 0 [] [] eventConfig).position eventConfig)
+      ((skippedStepRunFromQ prog env (0 + 1) [] [] eventConfig).position eventConfig) := by
+  refine ⟨rfl, rfl, ?_⟩
+  change ¬ Move prog env ⟨eventConfig, [], []⟩ ⟨eventConfig2, [], []⟩
+  intro hm
+  generalize hp : (⟨eventConfig2, [], []⟩ : Position ops) = pos' at hm
+  cases hm with
+  | silent hs =>
+    cases hp
+    cases hs
+  | prim hs _ _ _ =>
+    cases hs
+
+/-- A state-sequence projection mutation shifts every position by one transition. -/
+def shiftedStates {O : Operands} {P : Program O} {ρ : QueryOracle O} {c : Config O}
+    (X : InfiniteExecution P ρ c) (n : Nat) : Position O :=
+  X.states (n + 1)
+
+/-- Instance (law `InfiniteExecution.unique`, case `spin_infinite`). -/
+example : spin_infinite.states = spin_infinite.toFuelLimit.states ∧
+    spin_infinite = spin_infinite :=
+  InfiniteExecution.unique spin_infinite spin_infinite
+
+/-- Planted (law `InfiniteExecution.unique`, case `spin_infinite`,
+subject `InfiniteExecution.states`, mutant `shiftedStates`). -/
+example : ¬ (shiftedStates spin_infinite = spin_infinite.toFuelLimit.states ∧
+    spin_infinite = spin_infinite) := by
+  rintro ⟨h, _⟩
+  have h0 := congrArg (fun f => (f 0).config) h
+  cases h0
+
+/-- A classification mutation that confuses external infinite interaction with raw internal
+infinite interaction, ignoring the execution adapter's projection. -/
+def rawInfiniteInteraction {O : Operands} {S : Observe.EventSignature} (P : Program O)
+    (_ : Observe.ExecAdapter O S) (ρ : QueryOracle O) (c : Config O) : Prop :=
+  InternalInfiniteInteraction P ρ c
+
+/-- Instance (law `silentDivergence_not_infiniteInteraction`, case `erasingAdapter`). -/
+example : ¬ InfiniteInteraction prog erasingAdapter env eventConfig :=
+  silentDivergence_not_infiniteInteraction erasingAdapter erasing_silent_divergence
+
+/-- Planted (law `silentDivergence_not_infiniteInteraction`, case `erasingAdapter`,
+subject `InfiniteInteraction`, mutant `rawInfiniteInteraction`). -/
+example : SilentDivergence prog erasingAdapter env eventConfig ∧
+    ¬ ¬ rawInfiniteInteraction prog erasingAdapter env eventConfig :=
+  ⟨erasing_silent_divergence, fun h => h erasing_internal_infinite⟩
+
+/-- An execution-record mutation that drops the transition-step obligation (`step`), allowing a
+stationary configuration sequence to pose as an infinite execution. -/
+def stationaryExecution {O : Operands} (_ : Program O) (_ : QueryOracle O)
+    (c : Config O) : Type :=
+  { states : Nat → Position O // states 0 = ⟨c, [], []⟩ }
+
+/-- Instance (law `not_infinite_of_final`, case `finishingConfig`). -/
+example : ¬ Nonempty (InfiniteExecution prog env.toQueryOracle finishingConfig) :=
+  not_infinite_of_final (O := ops) (P := prog) (ρ₀ := env) (fuel := 1)
+    (c := finishingConfig) (f := .normal) rfl
+
+/-- Planted (law `not_infinite_of_final`, case `finishingConfig`,
+subject `InfiniteExecution`, mutant `stationaryExecution`). -/
+example : (run prog env 1 finishingConfig).ending = .final .normal ∧
+    ¬ ¬ Nonempty (stationaryExecution prog env.toQueryOracle finishingConfig) :=
+  ⟨rfl, fun h => h ⟨⟨fun _ => ⟨finishingConfig, [], []⟩, rfl⟩⟩⟩
+
+/-- A C1 oracle that leaves every primitive request unanswered. -/
+def blockingEnv : Oracle ops := fun _ _ _ _ _ => none
+
+/-- Instance (law `not_infinite_of_noAnswer`, case `terminalConfig`). -/
+example : ¬ Nonempty (InfiniteExecution prog blockingEnv.toQueryOracle terminalConfig) :=
+  not_infinite_of_noAnswer (O := ops) (P := prog) (ρ₀ := blockingEnv) (fuel := 1)
+    (c := terminalConfig) (blocked := terminalConfig) rfl
+
+/-- Planted (law `not_infinite_of_noAnswer`, case `terminalConfig`,
+subject `InfiniteExecution`, mutant `stationaryExecution`). -/
+example : (run prog blockingEnv 1 terminalConfig).ending = .noAnswer terminalConfig ∧
+    ¬ ¬ Nonempty (stationaryExecution prog blockingEnv.toQueryOracle terminalConfig) :=
+  ⟨rfl, fun h => h ⟨⟨fun _ => ⟨terminalConfig, [], []⟩, rfl⟩⟩⟩
+
+/-- A blocking-persistence mutation that preserves the one-step blocked report, but fabricates
+a final report at larger fuel budgets. -/
+def resumeBlockedRun {O : Operands} (P : Program O) (ρ : Oracle O) (fuel : Nat)
+    (c : Config O) : Report O :=
+  if fuel ≤ 1 then run P ρ fuel c else ⟨[], .final .normal⟩
+
+/-- Instance (law `endlesslyBlocked_of_noAnswer`, case `terminalConfig`). -/
+example : ∀ n, 1 ≤ n →
+    (run prog blockingEnv n terminalConfig).ending = .noAnswer terminalConfig :=
+  endlesslyBlocked_of_noAnswer (O := ops) (P := prog) (ρ₀ := blockingEnv) (fuel := 1)
+    (c := terminalConfig) (blocked := terminalConfig) rfl
+
+/-- Planted (law `endlesslyBlocked_of_noAnswer`, case `terminalConfig`,
+subject `run`, mutant `resumeBlockedRun`). -/
+example : (resumeBlockedRun prog blockingEnv 1 terminalConfig).ending = .noAnswer terminalConfig ∧
+    ¬ (∀ n, 1 ≤ n →
+      (resumeBlockedRun prog blockingEnv n terminalConfig).ending = .noAnswer terminalConfig) := by
+  refine ⟨rfl, ?_⟩
   intro h
-  have wrong := congrArg QueryReport.ending (h 1)
-  cases wrong
+  have h2 := h 2 (by decide)
+  cases h2
+
+/-- Instance (law `TerminationEvidence.excludes_infinite`, case `terminatingEvidence`). -/
+example : ¬ Nonempty (InfiniteExecution prog env.toQueryOracle (start boomFn [] .init)) :=
+  TerminationEvidence.excludes_infinite (O := ops) (P := prog) (domain := terminatingDomain)
+    terminatingEvidence env [] .init boomFn (start boomFn [] .init) rfl ⟨rfl, rfl, rfl⟩ rfl
+
+/-- Planted (law `TerminationEvidence.excludes_infinite`, case `terminatingEvidence`,
+subject `InfiniteExecution`, mutant `stationaryExecution`). -/
+example : AList.lookup prog.fns terminatingDomain.function = some boomFn ∧
+    terminatingDomain.calls env [] .init ∧
+    enter boomFn [] .init = some (start boomFn [] .init) ∧
+    ¬ ¬ Nonempty (stationaryExecution prog env.toQueryOracle (start boomFn [] .init)) :=
+  ⟨rfl, ⟨rfl, rfl, rfl⟩, rfl, fun h => h ⟨⟨fun _ => ⟨start boomFn [] .init, [], []⟩, rfl⟩⟩⟩
 
 end Demo
 
