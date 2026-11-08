@@ -7,8 +7,7 @@ script picks the diff, splits it, runs the reviewer, records the verdict as a
 git note on the reviewed commit, and enforces the round cap.
 `scripts/review/verify.sh` validates that note. The landing tools in `scripts/land/`
 ([LANDING.md](LANDING.md)) read its verdict through `scripts/land/notes.sh`: a branch is
-ready to land only when its head carries a clean review note, and the landing bot carries
-a clean verdict across a conflict-free rebase.
+ready to land only when its head carries a clean review note.
 
 ## Why one script
 
@@ -22,7 +21,7 @@ Measured on 2026-10-22:
   ("a compiler ownership-checker review") and the diff was sent in smaller pieces.
 
 Each agent had been solving both problems by hand, differently. The script does
-it the same way every time, and its note is the record the landing bot checks.
+it the same way every time, and its note is the record the landing train checks.
 
 ## Usage
 
@@ -137,12 +136,10 @@ base: <40-hex sha>
 pieces: K
 ```
 
-**The format is an interface.** The landing bot parses it, and `verify.sh`
-rejects any note that lacks one of these six keys, repeats a key, or carries a
-key other than these and the landing pipeline's two optional ones
-(`carried-from: <sha>`, which the bot writes when it carries a clean verdict
-across a conflict-free rebase, and `order: N`). Keys are matched by name, not
-position. Change the format only together with both.
+**The format is an interface.** `verify.sh` parses it, and the train's review
+leg reads it through `verify.sh`, which rejects any note that lacks one of these
+six keys, repeats a key, or carries any other key. Keys are matched by name, not
+position. Change the format only together with `verify.sh`.
 
 - `rounds` is this round's number, which is also the number of rounds run on the
   branch so far.

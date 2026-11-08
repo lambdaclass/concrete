@@ -38,10 +38,8 @@ ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 echo "=== structural: every repository-making script sources the sandbox helper ==="
-# Two exceptions, neither a sandbox: install-bot.sh runs on the gate host as `bash -s <
-# install-bot.sh` (no sibling files to source) and makes the bot's persistent clone, and
-# worktree-new.sh makes a worktree OF the caller's repository by design.
-EXEMPT=" scripts/land/install-bot.sh scripts/worktree-new.sh "
+# One exception, not a sandbox: worktree-new.sh makes a worktree OF the caller's repository by design.
+EXEMPT=" scripts/worktree-new.sh "
 MAKES='git( -C [^ ]+)? (init|clone)\b|worktree add'
 # shell_scripts DIR: every shell script under DIR/scripts at ANY depth, as paths relative to DIR,
 # sorted: a `*.sh` file, or any other file whose first line is a sh/bash shebang. (Until 2026-11-08
@@ -79,7 +77,7 @@ while IFS=$'\t' read -r verdict f why; do
   makers=$((makers+1))
   if [ "$verdict" = ok ]; then ok "$f $why"; else no "$f $why"; fi
 done < <(scan_makers "$ROOT_DIR")
-[ "$makers" -ge 9 ] && ok "found $makers repository-making scripts (at least the 9 known)" \
+[ "$makers" -ge 8 ] && ok "found $makers repository-making scripts (at least the 8 known)" \
   || no "found only $makers repository-making scripts; the scan is not seeing them"
 
 echo "=== control: the structural scan sees scripts at any depth and without a .sh suffix ==="

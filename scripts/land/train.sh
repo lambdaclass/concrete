@@ -465,8 +465,8 @@ review_cmd() {
 
 # REVIEW PROVENANCE (fail closed; docs/LANDING.md, "check" and "land"). A train is reviewed when its
 # head carries a clean review note, or when its head carries no review note and every member carries
-# one at its exact recorded SHA (each member was reviewed at its own head: the landing bot's trains,
-# and a train rebuilt from reviewed branches). Every note is judged by scripts/review/verify.sh, on
+# one at its exact recorded SHA (each member was reviewed at its own head: a train
+# built or rebuilt from reviewed branches). Every note is judged by scripts/review/verify.sh, on
 # $REMOTE's notes (fetched first, replacing the local copy, as verify.sh --fetch does): an absent,
 # malformed, blocked or findings note qualifies nothing, and a head note that is not clean is not
 # overridden by its members. Prints what qualified; on failure prints why and returns 1.
@@ -1030,12 +1030,6 @@ cmd_land() {
 # result is recorded against that train's SHA. Attribution assumes one culprit; an interaction
 # between members shows up as a culprit that is green alone, and the report says to check it.
 
-# The landing bot's kill switch (LAND_PAUSE_FILE) is read before and after every operation of every
-# probe (each --ci probe checks and dispatches a run). A probe that sees it answers `paused`, never
-# green or red. The switch is a file that stays until the bot has acknowledged it: one created and
-# removed inside a single operation is not seen.
-bisect_paused() { [ -n "${LAND_PAUSE_FILE:-}" ] && [ -e "$LAND_PAUSE_FILE" ]; }
-
 subset_red() { # sub-name test-cmd|"" members...
   local sub="$1" test="$2"; shift 2
   local refs=() m
@@ -1047,27 +1041,19 @@ subset_red() { # sub-name test-cmd|"" members...
     git update-ref "refs/landing-bisect/$sub/$i" "${m##*@}"
     pinned+=("refs/landing-bisect/$sub/$i"); i=$((i+1))
   done
-  if bisect_paused; then echo paused; return 0; fi
   local brc=0
   "$SELF_DIR/train.sh" build "$sub" --force --no-fetch "${pinned[@]}" >/dev/null || brc=$?
-  if bisect_paused; then echo paused; return 0; fi
   if [ "$brc" != 0 ]; then echo build-failed; return 0; fi
   local rc=0
-  # The switch is read again after EVERY operation, whatever it returned: a probe that ran while
-  # the switch was pulled gives no verdict, so nothing is attributed from it.
   if [ -n "$test" ]; then
     bash -c "$test" >/dev/null 2>&1 || rc=$?
-    if bisect_paused; then echo paused; return 0; fi
   else
     "$SELF_DIR/train.sh" check "$sub" --no-remote >/dev/null 2>&1 || rc=$?
-    if bisect_paused; then echo paused; return 0; fi
     if [ "$rc" = 0 ]; then
       "$SELF_DIR/train.sh" ci "$sub" >/dev/null 2>&1 || rc=$?
-      if bisect_paused; then echo paused; return 0; fi
     fi
     if [ "$rc" = 0 ]; then
       "$SELF_DIR/train.sh" watch "$sub" >/dev/null 2>&1 || rc=$?
-      if bisect_paused; then echo paused; return 0; fi
     fi
   fi
   STAGE_T0="$(date +%s)"
@@ -1099,21 +1085,12 @@ cmd_bisect() {
     verdict="$(subset_red "$name-b$step" "$test" "${first[@]}")"
     note "step $step: first half [$(printf '%s ' "${first[@]%@*}")] -> $verdict"
     case "$verdict" in
-      paused) log_row "$name" bisect incomplete "paused ($LAND_PAUSE_FILE) at step $step"; die "bisect: paused by $LAND_PAUSE_FILE at step $step; no culprit attributed" ;;
       red|build-failed) list=("${first[@]}") ;;
       green) list=("${second[@]}") ;;
     esac
   done
   local culprit="${list[0]}"
   verdict="$(subset_red "$name-bc" "$test" "$culprit")"
-  if [ "$verdict" = paused ]; then
-    log_row "$name" bisect incomplete "paused ($LAND_PAUSE_FILE) during the culprit probe"
-    die "bisect: paused by $LAND_PAUSE_FILE while probing ${culprit%@*} alone; no culprit attributed"
-  fi
-  if bisect_paused; then
-    log_row "$name" bisect incomplete "paused ($LAND_PAUSE_FILE) before attribution"
-    die "bisect: paused by $LAND_PAUSE_FILE before attribution; no culprit attributed"
-  fi
   local rest=() ; for m in $(printf '%s\n' "${members//,/ }"); do [ "$m" = "$culprit" ] || rest+=("${m%@*}"); done
   STAGE_T0="$(date +%s)"
   state_set "$name" bisect_culprit "$culprit"

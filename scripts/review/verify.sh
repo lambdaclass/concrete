@@ -32,12 +32,9 @@ NOTE="$(git notes --ref="$NOTES_REF" show "$SHA" 2>/dev/null)" || {
   exit 2
 }
 
-# The note must carry each of the six fields review.sh writes exactly once, each well formed. Two
-# optional keys are the landing pipeline's (scripts/land/notes.sh, docs/LANDING.md):
-# `carried-from: <sha>`, written by the landing bot when it carries a clean verdict across a
-# conflict-free rebase, and `order: N`. Any other key, a repeated key, or a line that is not
-# `key: value` makes the note malformed. Keys are matched by name, not position, because notes.sh
-# `put` (the bot's writer) appends `utc` last.
+# The note must carry each of the six fields review.sh writes exactly once, each well formed. Any
+# other key, a repeated key, or a line that is not `key: value` makes the note malformed. Keys are
+# matched by name, not position, because notes.sh `put` appends `utc` last.
 malformed() {
   echo "$SHA malformed review note${1:+ ($1)}:"
   printf '%s\n' "$NOTE" | sed 's/^/  /'
@@ -58,8 +55,6 @@ while IFS= read -r line; do
     utc)          [[ "$v" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] ;;
     base)         [[ "$v" =~ ^[0-9a-f]{40}$ ]] ;;
     pieces)       [[ "$v" =~ ^[0-9]+$ ]] ;;
-    carried-from) [[ "$v" =~ ^[0-9a-f]{40}$ ]] ;;
-    order)        [[ "$v" =~ ^[0-9]+$ ]] ;;
     *)            false ;;
   esac || malformed "bad $k"
 done <<< "$NOTE"
@@ -69,7 +64,6 @@ done
 
 field() { local n="F_${1//-/_}"; printf '%s' "${!n:-}"; }
 VERDICT="$(field verdict)"
-CARRIED=""; [ -z "$(field carried-from)" ] || CARRIED=", carried from $(field carried-from)"
-echo "$SHA $VERDICT (round $(field rounds), reviewer $(field reviewer), $(field utc), base $(field base), $(field pieces) piece(s)$CARRIED)"
+echo "$SHA $VERDICT (round $(field rounds), reviewer $(field reviewer), $(field utc), base $(field base), $(field pieces) piece(s))"
 [ "$VERDICT" = clean ] && exit 0
 exit 1
