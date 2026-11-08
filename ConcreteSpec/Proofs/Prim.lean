@@ -283,6 +283,13 @@ theorem drive_steps (P : Exec.Program O) (ρ : Exec.Oracle O) :
               cases h
               exact ⟨[], by simp, .refl _⟩
 
+/-- The concrete-step soundness law for the report returned by `drive` itself. -/
+theorem drive_steps_result (P : Exec.Program O) (ρ : Exec.Oracle O)
+    (fuel : Nat) (hist : List O.Event) (c : Exec.Config O) :
+    ∃ tr, (drive P ρ fuel hist c).events = hist ++ tr ∧
+      Exec.Steps P c tr (drive P ρ fuel hist c).config :=
+  drive_steps P ρ fuel hist c _ rfl
+
 /-- Once a configuration is not ordinarily completed, no later statement restarts it. -/
 theorem runStmts_of_not_normal (P : Exec.Program O) (ρ : Exec.Oracle O)
     (fuel : Nat) (hist : List O.Event) (ss : List (Exec.Stmt O)) (c : Exec.Config O)
