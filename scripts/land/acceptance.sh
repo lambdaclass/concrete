@@ -324,7 +324,9 @@ do_negative() {
   done
 }
 
-make_git_shim "$WORK/bin" "$(command -v git)" "$ORIGIN_URL" "$MIRROR_URL"
+# A relative remote URL is protected as git would resolve it from here and from the clone's top.
+rel=(); for u in "$ORIGIN_URL" "$MIRROR_URL"; do case "$u" in ''|/*|*://*|*@*:*) ;; *) rel+=("$SRC_REPO/$u") ;; esac; done
+make_git_shim "$WORK/bin" "$(command -v git)" "$ORIGIN_URL" "$MIRROR_URL" "${rel[@]}"
 export PATH="$WORK/bin:$PATH"
 echo "acceptance: $REF from $ORIGIN_URL"
 leg clone do_clone

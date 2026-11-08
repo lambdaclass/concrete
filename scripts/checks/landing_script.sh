@@ -1044,43 +1044,56 @@ MB="$HM"
 ) > "$TMP/dl.out" 2>&1
 [ "$(tr '\n' ' ' < "$TMP/dl.out")" = "pass1 pass2 pass3 pass4 pass5 pass6 " ] \
   && ok "acceptance's dry-run leg: exit 5 + whole marker line passes; no marker, another exit, a prefixed or altered marker fail" || { no "dryland classifier: $(cat "$TMP/dl.out")"; }
-# acceptance's git shim (ISS-0017) refuses a push that could move main on a protected remote, however
-# it is spelled, and lets a push to a throwaway local fixture through: the root checks the train's
-# impact leg runs inside acceptance push main to such fixtures.
+# acceptance's git shim (ISS-0017) refuses a push that could move main on a protected repository,
+# however it is spelled (remote name, URL, file://, a relative protected URL by its absolute path, a
+# non-bare repository's .git, a symlink, a second push URL, an alias from config, -c or the
+# environment, a shell alias), and lets a push to a throwaway local fixture through: the root checks
+# the train's impact leg runs inside acceptance push main to such fixtures.
 (
   source "$ROOT_DIR/scripts/land/acceptance_shim.sh"
   S="$TMP/shim"; mkdir -p "$S"; cd "$S"
   git init -q --bare prot.git; git init -q --bare fix.git; git -C prot.git config receive.advertisePushOptions true
-  make_git_shim "$S/bin" "$(command -v git)" "$S/prot.git" "https://example.invalid/mirror.git"
-  G="$S/bin/git"
+  git init -q -b other nb; ln -s prot.git link.git
+  # The protected origin is given relative to the shim's directory, as a clone's relative URL would be.
+  make_git_shim "$S/bin" "$(command -v git)" prot.git "$S/nb" "https://example.invalid/mirror.git"
+  G="$S/bin/git"; export PATH="$S/bin:$PATH"
   git init -q -b main w; git -C w -c user.name=t -c user.email=t@t commit -q --allow-empty -m x
   git -C w branch wip/x
   git -C w remote add origin "$S/prot.git"; git -C w remote add fix "$S/fix.git"
   git -C w remote add mirror "https://example.invalid/mirror.git"
   git -C w remote add two "$S/fix.git"; git -C w remote set-url --add --push two "$S/fix.git"
   git -C w remote set-url --add --push two "$S/prot.git"
+  git -C w config alias.p push; git -C w config alias.pp p; git -C w config alias.q "push -q"
+  git -C w config alias.qq "push 'origin' main"; git -C w config alias.sh '!git push -q origin main'
   bad=""
-  for a in "fix main" "$S/fix.git main" "file://$S/fix.git main" "fix HEAD:refs/heads/main" "fix :" \
-           "origin wip/x" "-o main origin wip/x" "--repo=fix fix main"; do
+  for a in "push -q fix main" "push -q $S/fix.git main" "push -q file://$S/fix.git main" "push -q fix HEAD:refs/heads/main" \
+           "push -q fix :" "push -q origin wip/x" "push -q -o main origin wip/x" "push -q --repo=fix fix main" \
+           "p -q fix main" "pp -q fix main" "q fix main" "-c alias.z=push z -q fix main" "status --short" \
+           "-c alias.st=status st --short"; do
     # shellcheck disable=SC2086
-    "$G" -C w push -q $a 2>"$S/err" || bad="$bad [allowed refused: push $a: $(cat "$S/err")]"
+    "$G" -C w $a >/dev/null 2>"$S/err" || bad="$bad [allowed refused: git $a: $(cat "$S/err")]"
   done
-  for a in "origin main" "$S/prot.git main" "file://$S/prot.git main" "--repo=origin main" "origin HEAD" \
-           "origin +wip/x:main" "origin wip/x:refs/heads/main" "origin refs/heads/main" "origin --all" "--mirror origin" \
-           "-o ci.skip origin main" "origin" "two main" "mirror main" "../prot.git main" "" "origin @" \
-           "origin :" "origin +:" "origin refs/heads/*:refs/heads/*" "origin wip/x:heads/main" "origin :main" \
-           "--delete origin main"; do
+  for a in "push origin main" "push $S/prot.git main" "push file://$S/prot.git main" "push --repo=origin main" \
+           "push origin HEAD" "push origin +wip/x:main" "push origin wip/x:refs/heads/main" "push origin refs/heads/main" \
+           "push origin --all" "push --mirror origin" "push -o ci.skip origin main" "push origin" "push two main" \
+           "push mirror main" "push ../prot.git main" "push" "push origin @" "push origin :" "push origin +:" \
+           "push origin refs/heads/*:refs/heads/*" "push origin wip/x:heads/main" "push origin :main" \
+           "push --delete origin main" "push $S/nb/.git main" "push $S/nb main" "push file://$S/nb/.git main" \
+           "push $S/link.git main" "p origin main" "pp origin main" "q origin main" "-c alias.z=push z origin main" \
+           "qq" "sh" "-c url.$S/prot.git.insteadOf=fixalias push fixalias main"; do
     # shellcheck disable=SC2086
-    if "$G" -C w push -q $a 2>"$S/err"; then bad="$bad [refused passed: push $a]"
-    elif ! grep -q 'acceptance git shim: refusing' "$S/err"; then bad="$bad [push $a failed but not by the shim: $(cat "$S/err")]"; fi
+    if "$G" -C w $a >/dev/null 2>"$S/err"; then bad="$bad [refused passed: git $a]"
+    elif ! grep -q 'acceptance git shim: refusing' "$S/err"; then bad="$bad [git $a failed but not by the shim: $(cat "$S/err")]"; fi
   done
-  "$G" -C w -c url."$S/prot.git".insteadOf=fixalias push -q fixalias main 2>"$S/err" && bad="$bad [insteadOf push passed]"
-  [ -z "$(git -C prot.git rev-parse -q --verify refs/heads/main)" ] || bad="$bad [the protected fixture gained a main]"
+  GIT_CONFIG_PARAMETERS="'alias.e=push'" "$G" -C w e origin main 2>"$S/err" && bad="$bad [an alias from the environment passed]"
+  for r in prot.git nb; do
+    [ -z "$(git -C "$r" rev-parse -q --verify refs/heads/main)" ] || bad="$bad [the protected $r gained a main]"
+  done
   [ -n "$(git -C fix.git rev-parse -q --verify refs/heads/main)" ] || bad="$bad [the local fixture has no main]"
   [ -z "$bad" ] && echo SHIM-OK || echo "SHIM-BAD:$bad"
 ) > "$TMP/shim.out" 2>&1
 grep -qx SHIM-OK "$TMP/shim.out" \
-  && ok "acceptance's git shim refuses every spelling of a push that could move main on a protected remote and lets local fixtures through" \
+  && ok "acceptance's git shim refuses every tested spelling of a push that could move main on a protected repository and lets local fixtures through" \
   || { no "acceptance git shim"; sed 's/^/      /' "$TMP/shim.out"; }
 # acceptance.sh refuses a --name or --ref that could forge a record row, before writing anything.
 for bad in "--name x"$'\n'"y" "--ref wip/a"$'\t'"b"; do
