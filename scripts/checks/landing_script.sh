@@ -572,10 +572,15 @@ dec="$( cd "$RI" && export CONCRETE_TEST_OUT="$TMP" CONCRETE_TEST_LIB="$ROOT_DIR
 dec="$( cd "$RI" && source "$ROOT_DIR/scripts/checks/lib/prepush_record.sh" && ppr_remote_components "$RI" "$RIH" "$TMP/ri.changed" "$TMP/ri.plan" "$TMP/ri.comp" \
   && ppr_remote_check "$RI" "$TMP/ri.comp" && echo REUSE || echo "refused:$PPR_REASON" )"
 has "$dec" "refused:changed:env" && ok "a push in another CONCRETE_* environment than the host's run does not reuse it" || no "e2e env mismatch: $dec"
+# A git shim on the "host" logs every fetch: the stale gate clone must log none.
+mkdir -p "$TMP/hostgit"
+printf '#!/bin/sh\nfor a in "$@"; do case "$a" in fetch|ls-remote) echo "$*" >> "%s"; break ;; esac; done\nexec "%s" "$@"\n' "$TMP/hostgit.log" "$(command -v git)" > "$TMP/hostgit/git"
+chmod +x "$TMP/hostgit/git"; : > "$TMP/hostgit.log"
 git -C "$HH/concrete2" remote set-url origin https://github.com/unbalancedparentheses/concrete2.git
-e2e
+PATH="$TMP/hostgit:$PATH" e2e
 git -C "$HH/concrete2" remote set-url origin "$TMP/ri-origin.git"
 [ "$rc" = 3 ] && has "$out" "INCOMPLETE" && has "$out" "the gate clone" && has "$out" "points at another repository" \
+  && ! grep -q "$HH/concrete2" "$TMP/hostgit.log" \
   && ok "a gate clone whose origin is the archived repository is refused on the host before it fetches (INCOMPLETE)" || { no "stale gate clone: exit $rc"; echo "$out" | sed 's/^/      /'; }
 touch "$HH/unreachable"; e2e; rm -f "$HH/unreachable"
 [ "$rc" = 3 ] && has "$out" "INCOMPLETE" && [ ! -f "$RIATT" ] && ok "the real transport to an unreachable host is INCOMPLETE (exit 3), attests nothing" || { no "e2e unreachable: exit $rc"; echo "$out" | sed 's/^/      /'; }
@@ -796,6 +801,16 @@ out="$(PUSH_REMOTE=nosuch bash scripts/push-both.sh 2>&1)"; rc=$?
 [ "$rc" = 1 ] && has "$out" "is not configured" && ok "push-both refuses a missing remote" || no "push-both missing remote: exit $rc"
 out="$(PUSH_REMOTE=gh-stale bash scripts/push-both.sh 2>&1)"; rc=$?
 [ "$rc" = 1 ] && has "$out" "points at another repository" && ok "push-both refuses a remote that is another GitHub repository" || no "push-both stale GitHub remote: exit $rc"
+# push-both prints its destination redacted: a canonical URL carrying credentials, with a git that
+# refuses every network operation (so nothing leaves this machine).
+mkdir -p "$TMP/gitnonet"
+printf '#!/bin/sh\nfor a in "$@"; do case "$a" in push|fetch|ls-remote) echo "git shim: no network" >&2; exit 1 ;; esac; done\nexec "%s" "$@"\n' "$(command -v git)" > "$TMP/gitnonet/git"
+chmod +x "$TMP/gitnonet/git"
+git remote add gh-cred https://x-access-token:pre@SENTINEL-SECRET@github.com/lambdaclass/concrete.git
+out="$(PATH="$TMP/gitnonet:$PATH" LAND_REPO=lambdaclass/concrete PUSH_REMOTE=gh-cred bash scripts/push-both.sh 2>&1)"; rc=$?
+git remote remove gh-cred
+[ "$rc" = 1 ] && has "$out" "(https://***@github.com/lambdaclass/concrete.git)" && has "$out" "no network" && ! has "$out" "SENTINEL" \
+  && ok "push-both prints its destination with the credentials redacted" || { no "push-both credential output: exit $rc"; echo "$out" | sed 's/^/      /'; }
 out="$(PUSH_REMOTE=gh-push bash scripts/push-both.sh 2>&1)"; rc=$?
 [ "$rc" = 1 ] && has "$out" "points at another repository" && ok "push-both refuses a remote whose push URL is another GitHub repository" || no "push-both stale push URL: exit $rc"
 [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$before" ] && [ "$(git ls-remote fork refs/heads/main | cut -f1)" = "$BASE" ] \

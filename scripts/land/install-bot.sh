@@ -38,7 +38,7 @@ ORIGIN_URL="${INSTALL_ORIGIN_URL:-git@github.com:lambdaclass/concrete.git}"
 
 # 1. the dedicated clone
 if [ ! -d "$CLONE/.git" ]; then
-  say "cloning $ORIGIN_URL into $CLONE"
+  say "cloning $(echo "$ORIGIN_URL" | redact)into $CLONE"
   git clone -q "$ORIGIN_URL" "$CLONE"
 fi
 cd "$CLONE"

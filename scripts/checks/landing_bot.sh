@@ -431,6 +431,13 @@ out="$(ib)"; rc=$?
 [ "$rc" = 0 ] && grep -qx 'LAND_REPO=lambdaclass/concrete' "$IB/home/.config/concrete-landing-bot.env" \
   && ! grep -q 'concrete2' "$IB/home/.config/concrete-landing-bot.env" \
   && ok "the installer migrates an old LAND_REPO line in an existing environment file" || { no "installer env migration: exit $rc"; echo "$out" | sed 's/^/      /'; }
+# A fresh install logs its origin redacted (the clone itself is refused by a git that does no network).
+mkdir -p "$IB/home2" "$IB/nonet"
+printf '#!/bin/sh\n[ "$1" = clone ] && { echo "git shim: no network" >&2; exit 1; }\nexec "%s" "$@"\n' "$(command -v git)" > "$IB/nonet/git"; chmod +x "$IB/nonet/git"
+for c in ssh gh systemctl; do cp "$IB/stub/$c" "$IB/nonet/$c"; done
+out="$(HOME="$IB/home2" PATH="$IB/nonet:$PATH" INSTALL_ORIGIN_URL='https://x-access-token:pre@SENTINEL-SECRET@github.com/lambdaclass/concrete.git' bash "$ROOT_DIR/scripts/land/install-bot.sh" 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "cloning https://***@github.com/lambdaclass/concrete.git" && ! has "$out" "SENTINEL" \
+  && ok "a fresh install logs its origin with the credentials redacted" || { no "fresh install credential output: exit $rc"; echo "$out" | sed 's/^/      /'; }
 BC="$IB/home/concrete-bot"
 git -C "$BC" remote set-url origin https://github.com/unbalancedparentheses/concrete2.git
 git -C "$BC" config --add remote.origin.url https://github.com/unbalancedparentheses/concrete2.git
