@@ -182,6 +182,12 @@ def publish(root, updates):
     """One transaction, exact leases. A lost response is resolved by reading every ref back."""
     if not updates:
         return
+    receipt_dir = Path(git(root, 'rev-parse', '--absolute-git-dir').stdout.strip()) / 'id-reservation-attempts'
+    receipt_dir.mkdir(exist_ok=True)
+    receipt = receipt_dir / (str(uuid.uuid4()) + '.json')
+    receipt.write_text(json.dumps(dict(updates=updates, commits={new: git(root, 'cat-file', 'commit', new).stdout
+                                                               for _, _, new in updates}), indent=2) + '\n')
+    print(f'ID reservation recovery receipt: {receipt}', file=sys.stderr)
     args = ['push', '--atomic', '--porcelain']
     args += [f'--force-with-lease={ref}:{old}' for ref, old, _ in updates]
     args += ['origin'] + [f'{new}:{ref}' for ref, _, new in updates]
@@ -196,6 +202,12 @@ def publish(root, updates):
 
 
 @functools.lru_cache(maxsize=None)
+def common_records(snapshot, branch, anchor):
+    base = git(snapshot.repo, 'merge-base', snapshot.heads[anchor], snapshot.heads[branch], check=False)
+    return tree_records(snapshot.repo, base.stdout.strip()) if base.returncode == 0 else {}
+
+
+@functools.lru_cache(maxsize=None)
 def inherited(snapshot, key, title, branch, owner):
     if branch == owner:
         return True
@@ -206,21 +218,21 @@ def inherited(snapshot, key, title, branch, owner):
     for anchor in anchors:
         if anchor not in snapshot.heads or branch not in snapshot.heads:
             continue
-        base = git(snapshot.repo, 'merge-base', snapshot.heads[anchor], snapshot.heads[branch], check=False)
-        if base.returncode == 0 and tree_records(snapshot.repo, base.stdout.strip()).get(key, (None,))[0] == title:
+        if common_records(snapshot, branch, anchor).get(key, (None,))[0] == title:
             return True
     return False
 
 
 def check_snapshot(snapshot, local=None, local_branch=None):
-    trees = dict(snapshot.trees)
+    trees = list(snapshot.trees.items())
     if local is not None:
-        # Replace the stale remote copy of this branch with the work tree under judgment.
-        trees[local_branch] = local
-    for branch, entries in trees.items():
+        # Inspect both the advertised head and this work tree; a stale local copy must not
+        # hide an ID already published under the same branch name by another clone.
+        trees.append((local_branch, local))
+    for branch, entries in trees:
         for key, (title, _) in entries.items():
             reservation = snapshot.reservation(key)
-            if reservation is None or 'legacy_oid' in reservation:
+            if reservation is None or 'schema' not in reservation:
                 raise Refused(f'{branch}: {key} has no schema-1 reservation; run backfill')
             if reservation['title'] != title:
                 raise Refused(f'{branch}: {key} title differs from reservation ({title!r})')
@@ -231,10 +243,9 @@ def check_snapshot(snapshot, local=None, local_branch=None):
 
 
 def make_plan(root, snapshot, local, branch):
-    trees = dict(snapshot.trees)
-    trees[branch] = local
+    trees = list(snapshot.trees.items()) + [(branch, local)]
     uses = {}
-    for name, entries in trees.items():
+    for name, entries in trees:
         for key, (title, _) in entries.items():
             uses.setdefault(key, []).append((name, title))
     conflicts = []
@@ -247,14 +258,14 @@ def make_plan(root, snapshot, local, branch):
         title = next(iter(titles))
         # main owns landed history; otherwise choose a branch whose record is inherited by all
         # other occurrences. Identical titles introduced independently are still collisions.
-        candidates = [b for b, _ in rows if all(inherited(snapshot, key, title, other, b)
-                                               for other, _ in rows)]
-        owner = 'main' if 'main' in candidates else next(iter(sorted(candidates)), None)
+        ordered = sorted((b for b, _ in rows), key=lambda b: (b != 'main', b))
+        owner = next((b for b in ordered if all(inherited(snapshot, key, title, other, b)
+                                               for other, _ in rows)), None)
         if owner is None:
             conflicts.append(f'{key}: independent introductions on ' + repr([b for b, _ in rows]))
             continue
         old = snapshot.reservation(key)
-        if old and 'legacy_oid' not in old:
+        if old and 'schema' in old:
             if old['title'] != title or old['branch'] != owner:
                 # Original branch remains authoritative even after landing.
                 if old['title'] != title or not all(inherited(snapshot, key, title, b, old['branch']) for b, _ in rows):
@@ -271,7 +282,7 @@ def make_plan(root, snapshot, local, branch):
             valid_key(key)
             if key not in uses:
                 old = snapshot.reservation(key)
-                if old and 'legacy_oid' in old:
+                if old and 'schema' not in old:
                     value = metadata(root, key, 'Retired legacy reservation ' + key, 'main')
                     value['legacy_oid'] = oid
                     updates.append(dict(ref=ref, old=oid, value=value))
@@ -336,7 +347,7 @@ def main():
                 branch = 'candidate'
                 for key, (title, _) in local.items():
                     res = snapshot.reservation(key)
-                    if not res or 'legacy_oid' in res or res['title'] != title:
+                    if not res or 'schema' not in res or res['title'] != title:
                         raise Refused(f'{key}: absent or mismatched reservation')
                     owner = res['branch']
                     anchors = [snapshot.heads.get(owner)]
@@ -394,6 +405,6 @@ def main():
 if __name__ == '__main__':
     try:
         main()
-    except (Refused, OSError, ValueError, KeyError) as error:
+    except (Refused, OSError, ValueError, KeyError, TypeError) as error:
         print(f'ids: REFUSED: {error}', file=sys.stderr)
         sys.exit(1)

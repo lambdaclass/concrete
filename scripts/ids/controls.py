@@ -69,6 +69,14 @@ def main():
         a.git(writer, 'push', '-q', 'origin', 'HEAD:refs/heads/wip/duplicate')
         run(writer, 'check', expect=1)
         print('PASS: two independent branches using same ID/title refused')
+        conflict_plan = base / 'conflict-plan.json'
+        before = a.git(writer, 'ls-remote', 'origin').stdout
+        run(writer, 'backfill', '--output', str(conflict_plan), expect=1)
+        assert json.loads(conflict_plan.read_text())['conflicts']
+        run(writer, 'publish-plan', str(conflict_plan), expect=1)
+        assert a.git(writer, 'ls-remote', 'origin').stdout == before
+        print('PASS: collision backfill records conflict and refuses publication without moving refs')
+
         a.git(writer, 'push', '-q', 'origin', ':refs/heads/wip/duplicate')
         a.git(writer, 'switch', '-q', 'wip/a')
         a.git(writer, 'switch', '-qc', 'wip/inherited')
@@ -101,9 +109,17 @@ def main():
         legacy = a.git(writer, 'commit-tree', a.git(writer, 'hash-object', '-t', 'tree', '--stdin', data='').stdout.strip(),
                        data='bug 300 reserved: legacy\n').stdout.strip()
         a.git(remote, 'fetch', '-q', str(writer), f'{legacy}:refs/bug-reservations/300')
+        frozen = writer / 'legacy/docs/bugs'
+        frozen.mkdir(parents=True)
+        (frozen / '300_legacy.md').write_text('# Bug 300: legacy bug\n')
+        a.git(writer, 'add', 'legacy/docs/bugs/300_legacy.md')
+        a.git(writer, 'commit', '-qm', 'existing frozen bug')
+        a.git(writer, 'push', '-q', 'origin', 'HEAD:refs/heads/wip/race')
+        run(writer, 'check', expect=1)
         plan = base / 'plan.json'
         run(writer, 'backfill', '--output', str(plan))
         run(writer, 'publish-plan', str(plan))
+        run(writer, 'check')
         run(writer, 'publish-plan', str(plan))
         run(writer, 'reserve', 'bug', 'new bug')
         assert a.git(writer, 'ls-remote', 'origin', 'refs/bug-reservations/301').stdout
@@ -122,6 +138,55 @@ def main():
                                 capture_output=True, text=True)
         assert result.returncode != 0
         print('PASS: hook refuses source commits as reservations')
+        # Validate transport ambiguity against actual local pushes, not matched output text.
+        real_git = a.git
+        value = a.metadata(writer, 'ISS-0090', 'lost response', 'wip/race')
+        oid = a.commit(writer, value)
+        def lost_response(root, *args, **kwargs):
+            result = real_git(root, *args, **kwargs)
+            if args and args[0] == 'push':
+                return subprocess.CompletedProcess(result.args, 1, result.stdout, 'lost response')
+            return result
+        a.git = lost_response
+        try:
+            a.publish(writer, [(a.ref_for('ISS-0090'), '', oid)])
+        finally:
+            a.git = real_git
+        print('PASS: failed push response is resolved by exact successful read-back')
+        attempts = writer / '.git/id-reservation-attempts'
+        receipts = list(attempts.glob('*.json'))
+        assert receipts and any(oid in json.loads(p.read_text())['commits'] for p in receipts)
+        print('PASS: recovery receipt preserves exact commit bytes before publication')
+        first = a.commit(writer, a.metadata(writer, 'ISS-0091', 'partial A', 'wip/race'))
+        second = a.commit(writer, a.metadata(writer, 'ISS-0092', 'partial B', 'wip/race'))
+        def partial(root, *args, **kwargs):
+            if args and args[0] == 'push':
+                real_git(root, 'push', '--porcelain', '--force-with-lease=refs/reserved/iss/0091:',
+                         'origin', first + ':refs/reserved/iss/0091')
+                return subprocess.CompletedProcess([], 1, '', 'simulated broken server transaction')
+            return real_git(root, *args, **kwargs)
+        a.git = partial
+        try:
+            try:
+                a.publish(writer, [(a.ref_for('ISS-0091'), '', first), (a.ref_for('ISS-0092'), '', second)])
+            except a.Refused as error:
+                assert 'partial reservation' in str(error)
+            else:
+                raise AssertionError('partial publication accepted')
+        finally:
+            a.git = real_git
+        print('PASS: partial transaction is refused, with recovery receipt retained')
+        for path in bugs.glob('*.md'):
+            path.unlink()
+        a.git(writer, 'merge', '--no-ff', '-m', 'integrate first ID', 'wip/a')
+        a.git(remote, 'fetch', '-q', str(writer), 'HEAD:refs/integration/control')
+        a.git(remote, 'update-ref', 'refs/heads/main', a.git(writer, 'rev-parse', 'HEAD').stdout.strip())
+        a.git(remote, 'update-ref', '-d', 'refs/heads/wip/a')
+        run(writer, 'check')
+        a.git(writer, 'checkout', '--detach', '-q')
+        run(writer, 'check')
+        print('PASS: landed IDs survive owner branch deletion and detached integration')
+
     print('ID reservation controls: PASS')
 
 

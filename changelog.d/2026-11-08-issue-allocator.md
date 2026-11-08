@@ -11,3 +11,6 @@ Migration is explicit: the operator resolves the ISS-0017 collision (acceptance-
 spec-* retains ISS-0017; lexer to ISS-0032), reviews a backfill plan and publishes its reservations
 in one atomic transaction. No reservation refs are pushed by the writer; the live gate refuses
 until backfill and branch reconciliation finish. See docs/ISSUE_IDS.md for the operator commands.
+
+The backfill dry run also refused independent ISS-0018 introductions on five advertised wip heads;
+the operator must reconcile those before publication. No collision exemption is installed.

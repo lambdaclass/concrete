@@ -42,8 +42,10 @@ forced update. This protocol assumes origin honours Git's leases and atomic ref 
 Every push is followed by an exact remote OID read-back. If the response was lost but the ref is
 ours, allocation succeeds. If another writer owns it, allocation fails. If origin cannot be read,
 the outcome is unknown: **do not file or retry with a different number**. Read the reservation
-ref and inspect its JSON metadata when origin returns; retain the orphan commit OID from the Git
-object store if reconciling an interrupted invocation. No rollback deletes a reservation. Filing
+ref and inspect its JSON metadata when origin returns. Before publication the tool writes and
+prints a recovery receipt under `.git/id-reservation-attempts/`, with every expected ref, old OID,
+new OID and complete commit bytes. Preserve that receipt; compare the remote OIDs with it, even
+after an interruption or local object pruning. No rollback deletes a reservation. Filing
 and reservation are separate: validate filing inputs first; a failed filing leaves the ID held,
 and the same branch can finish the record later without allocating again (the failure lesson of
 legacy bug 300). There is no offline mode or stale-fetch escape hatch.
@@ -98,3 +100,10 @@ requires operator reconciliation from the retained plan; it is not a pass. Regen
 head or reservation changes. The writer of this change has pushed no reservations; migration is
 an explicit operator step, and until it completes the live gate is expected to refuse the tree.
 This is operational rollout of the full structural design, not a temporary allocator.
+
+A writer dry run on 2026-11-08 planned 356 reservations and refused one additional collision:
+ISS-0018 was introduced without common record ancestry on `wip/record-chain-fix`,
+`wip/record-signoffs`, `wip/record-signoffs-r`, `wip/roadmap-sweep` and `wip/roadmap-sweep-r`.
+That advertised snapshot already contained the coordinated ISS-0017/0032/0033 resolution.
+The operator must reconcile ISS-0018 too (or retire stale heads), then regenerate the plan;
+matching titles alone do not grant two independent branches the same reservation.
