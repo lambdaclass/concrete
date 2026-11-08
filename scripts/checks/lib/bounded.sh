@@ -104,6 +104,11 @@ bounded_run() {
   while :; do
     tries=$((tries + 1))
     rm -f "$tmp/status"
+    if [ -n "${BOUNDED_DEADLINE_MONO:-}" ] &&
+       [ "$(python3 -I "$BOUNDED_EXEC" --monotonic-remaining "$BOUNDED_DEADLINE_MONO")" -le 0 ]; then
+      outcome=timeout
+      break
+    fi
     if [ -n "$stdin_file" ]; then
       python3 -I "$BOUNDED_EXEC" --timeout "$budget" --kill-after "${BOUNDED_KILL_AFTER:-10}" --status "$tmp/status" -- "$@" < "$stdin_file" > "$tmp/out" 2> "$tmp/err"
     else
