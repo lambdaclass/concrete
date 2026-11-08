@@ -58,6 +58,28 @@ def main():
         a.git(writer, 'push', '-q', 'origin', 'HEAD:refs/heads/wip/a')
         run(writer, 'check')
         print('PASS: reserved ID on its branch, through real hook')
+        # Test both metadata namespaces alone and in mixed pushes; full-tier detection
+        # uses a linked worktree refusal, so these probes never run real gates.
+        wt = base / 'tier-worktree'
+        a.git(writer, 'worktree', 'add', '--detach', str(wt))
+        (wt / 'scripts/ids').mkdir(parents=True, exist_ok=True)
+        shutil.copy(SOURCE / 'allocate.py', wt / 'scripts/ids/allocate.py')
+        head = a.git(writer, 'rev-parse', 'HEAD').stdout.strip()
+        zero = '0' * 40
+        for key in ('ISS-0088', 'BUG-088'):
+            oid = a.commit(writer, a.metadata(writer, key, 'tier control', 'wip/a'))
+            line = f'refs/x {oid} {a.ref_for(key)} {zero}\n'
+            for extra, tier, rc in [('', 'metadata push', 0),
+                                    (f'refs/x {head} refs/heads/wip/tier {zero}\n', 'wip/* backup push', 0),
+                                    (f'refs/x {head} refs/heads/ordinary {zero}\n', 'is a linked worktree', 1)]:
+                result = subprocess.run(['bash', str(hooks / 'pre-push'), 'origin', str(remote)],
+                                        cwd=wt, input=line + extra, capture_output=True, text=True)
+                assert result.returncode == rc and tier in result.stdout + result.stderr, result
+            result = run(writer, 'verify-ref', a.ref_for(key), zero, oid, expect=1)
+            assert 'may not be deleted' in result.stderr
+        a.git(writer, 'worktree', 'remove', '--force', str(wt))
+        print('PASS: ISS/bug metadata, wip mixed, full mixed tiers and explicit deletion refusal')
+
         # Evidence updates preserve identity.
         p = writer / 'ISSUES.tsv'
         p.write_text(p.read_text().replace('\tevidence\tR-', '\tupdated evidence\tR-'))
@@ -70,7 +92,7 @@ def main():
         save(writer, 'ISS-0001', 'different identity')
         a.git(writer, 'push', '-q', 'origin', 'HEAD:refs/heads/wip/duplicate')
         run(writer, 'check', expect=1)
-        print('PASS: two independent branches using same ID/title refused')
+        print('PASS: different titles for the same ID refused')
         conflict_plan = base / 'conflict-plan.json'
         before = a.git(writer, 'ls-remote', 'origin').stdout
         run(writer, 'backfill', '--output', str(conflict_plan), expect=1)

@@ -47,7 +47,7 @@ MAKES='git( -C [^ ]+)? (init|clone)\b|worktree add'
 shell_scripts() {
   (cd "$1" && find scripts -type f -print | LC_ALL=C sort | while IFS= read -r f; do
     case "$f" in
-      *.sh) echo "$f" ;;
+      *.sh|*.py) echo "$f" ;;
       *) head -n 1 "$f" 2>/dev/null | grep -qE '^#!.*[/ ](ba)?sh([[:space:]]|$)' && echo "$f" ;;
     esac
   done)
@@ -60,6 +60,15 @@ scan_makers() {
   shell_scripts "$dir" | while IFS= read -r f; do
     [ "$f" = scripts/checks/sandbox_isolation.sh ] && continue
     case "$EXEMPT" in *" $f "*) continue ;; esac
+    if [[ "$f" = *.py ]]; then
+      grep -qE "['\"](init|clone)['\"]" "$dir/$f" || continue
+      if grep -q 'sandbox_environment()' "$dir/$f"; then
+        printf 'ok\t%s\tuses Python sandbox_environment\n' "$f"
+      else
+        printf 'FAIL\t%s\tPython repository maker lacks sandbox_environment\n' "$f"
+      fi
+      continue
+    fi
     grep -qE "$MAKES" "$dir/$f" || continue
     first_make="$(grep -nE "$MAKES" "$dir/$f" | grep -vE '^[0-9]+:[[:space:]]*#' | head -n 1 | cut -d: -f1)"
     src_line="$(grep -nE '^[[:space:]]*(source|\.) .*checks/lib/git_sandbox\.sh' "$dir/$f" | head -n 1 | cut -d: -f1)"
@@ -88,11 +97,14 @@ mkdir -p "$CTL_TREE/scripts/a/b/c"
 printf '#!/usr/bin/env bash\ngit init -q "$1"\n' > "$CTL_TREE/scripts/a/b/c/deep.sh"
 printf '#!/bin/bash\ngit clone -q "$1" "$2"\n' > "$CTL_TREE/scripts/a/b/nosuffix"
 printf '#!/usr/bin/env bash\nsource "$(dirname "$0")/../../checks/lib/git_sandbox.sh"\ngit_sandbox "$1"\ngit init -q "$2"\n' > "$CTL_TREE/scripts/a/b/good.sh"
+printf "import subprocess\nsubprocess.run(['git', 'init', 'x'])\n" > "$CTL_TREE/scripts/a/b/bad.py"
 ctl="$(scan_makers "$CTL_TREE")"; rm -rf "${CTL_TREE:?}"
 printf '%s\n' "$ctl" | grep -q $'^FAIL\tscripts/a/b/c/deep.sh\t' \
   && ok "an unsandboxed maker three directories down is refused" || no "the scan missed scripts/a/b/c/deep.sh: $ctl"
 printf '%s\n' "$ctl" | grep -q $'^FAIL\tscripts/a/b/nosuffix\t' \
   && ok "an unsandboxed maker with a bash shebang and no .sh suffix is refused" || no "the scan missed scripts/a/b/nosuffix: $ctl"
+printf '%s\n' "$ctl" | grep -q $'^FAIL\tscripts/a/b/bad.py\t' \
+  && ok "an unsandboxed Python maker is refused" || no "Python scan missed maker: $ctl"
 printf '%s\n' "$ctl" | grep -q $'^ok\tscripts/a/b/good.sh\t' \
   && ok "a sandboxed maker at depth passes" || no "the scan did not accept scripts/a/b/good.sh: $ctl"
 

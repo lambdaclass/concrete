@@ -37,6 +37,7 @@ import subprocess
 import sys
 
 UNION = {
+    "ISSUES.tsv",
     "scripts/tests/audit_bug_corpus.sh",
     "CHANGELOG.md",
     "docs/bugs/discovery.tsv",

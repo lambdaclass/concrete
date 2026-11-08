@@ -1401,6 +1401,23 @@ out="$(cd "$W" && printf 'refs/heads/x %s refs/heads/wip/idn %s\n' "$(git rev-pa
 standin_hook
 [ ! -e "$TMP/state/tnh" ] && ok "no refused run left train state behind" || no "a refused run left state"
 
+# The actual resolver must union distinct issue insertions and refuse edits to one row.
+if python3 - "$ROOT_DIR/scripts/land/resolve_conflicts.py" <<'PYCONTROL'
+import importlib.util
+import sys
+spec = importlib.util.spec_from_file_location('resolver', sys.argv[1])
+r = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(r)
+assert 'ISSUES.tsv' in r.UNION
+base = b'id\ttitle\n'
+a = base + b'ISS-0001\tfirst\n'
+b = base + b'ISS-0002\tsecond\n'
+assert r.union_ok('ISSUES.tsv', a, base, b)[0]
+assert not r.union_ok('ISSUES.tsv', a.replace(b'first', b'edit A'), a, a.replace(b'first', b'edit B'))[0]
+PYCONTROL
+then ok "issue ledger unions distinct insertions and refuses competing row edits"
+else no "issue ledger union contract"; fi
+
 echo
 echo "check_landing_script: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

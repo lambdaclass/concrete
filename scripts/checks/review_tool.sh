@@ -304,7 +304,7 @@ NOTES_SHA="$(g rev-parse refs/notes/concrete-review)"
 hook_out="$(cd "$W" && printf 'refs/notes/concrete-review %s refs/notes/concrete-review %s\nrefs/notes/concrete-review-findings %s refs/notes/concrete-review-findings %s\n' \
   "$NOTES_SHA" "$Z" "$(g rev-parse refs/notes/concrete-review-findings)" "$Z" | bash "$HOOK" 2>&1)"; rc=$?
 check "notes-only push: hook exits 0 (got $rc)" test "$rc" -eq 0
-check "notes-only push: hook takes the review-notes tier" grep -q "review-notes push" <<<"$hook_out"
+check "notes-only push: hook takes the review-notes tier" grep -q "metadata push" <<<"$hook_out"
 # Owner sign-off refs: only a record (parentless, its subject's 40-hex name, exactly the seven files)
 # takes the notes tier. Anything else takes the full tier, which a linked worktree refuses before it
 # runs anything: that refusal is how these legs see the tier without running the gates.
@@ -317,7 +317,7 @@ g worktree add -q --detach "$T/so-wt" HEAD
 so_hook(){ (cd "$T/so-wt" && printf '%s %s %s %s\n' "$1" "$2" "$1" "$Z" | CONCRETE_GATES_SHELL= bash "$HOOK" origin x 2>&1); }
 hook_out="$(so_hook "refs/owner-signoff/$SO_SUBJ" "$SO_REC")"; rc=$?
 check "a seven-file owner sign-off record takes the review-notes tier (exit $rc)" \
-  bash -c "[ $rc -eq 0 ] && grep -q 'review-notes push' <<<'$hook_out'"
+  bash -c "[ $rc -eq 0 ] && grep -q 'metadata push' <<<'$hook_out'"
 hook_out="$(so_hook "refs/owner-signoff/$SO_SUBJ" "$SO_OLD_REC")"; rc=$?
 check "the old four-file owner sign-off shape takes the full tier (exit $rc)" \
   bash -c "[ $rc -eq 1 ] && grep -q 'is a linked worktree' <<<'$hook_out'"
