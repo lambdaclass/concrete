@@ -1190,6 +1190,30 @@ theorem InfiniteExecution.boundary_ge {S : Observe.EventSignature}
   | zero => exact Nat.zero_le _
   | succ n ih => have := X.boundary_growth A n; omega
 
+/-- Helper (arithmetic). The boundary map strictly preserves the machine-position order, hence
+is an embedding rather than a cofinal rescheduling. (approved: PENDING). -/
+theorem InfiniteExecution.boundary_strict {S : Observe.EventSignature}
+    (A : Observe.ExecAdapter O S) (X : InfiniteExecution P ρ c) {m n : Nat} (h : m < n) :
+    X.observeBoundary A m < X.observeBoundary A n := by
+  induction n with
+  | zero => omega
+  | succ n ih =>
+    have growth := X.boundary_growth A n
+    by_cases he : m = n
+    · subst m; exact growth
+    · have earlier := ih (by omega); omega
+
+/-- Helper (arithmetic). Distinct machine positions have distinct embedded C6 boundaries.
+(approved: PENDING). -/
+theorem InfiniteExecution.boundary_injective {S : Observe.EventSignature}
+    (A : Observe.ExecAdapter O S) (X : InfiniteExecution P ρ c) {m n : Nat}
+    (h : X.observeBoundary A m = X.observeBoundary A n) : m = n := by
+  by_cases hmn : m < n
+  · have := X.boundary_strict A hmn; omega
+  · by_cases hnm : n < m
+    · have := X.boundary_strict A hnm; omega
+    · omega
+
 /-- Helper (computation). Flattening agrees with each finite concatenation at every index in it.
 (approved: PENDING). -/
 theorem InfiniteExecution.flatten_get {S : Observe.EventSignature}
@@ -1292,6 +1316,15 @@ theorem InfiniteExecution.visiblePrefix_toObserveSteps {S : Observe.EventSignatu
   unfold Observe.visiblePrefix
   rw [X.flatten_boundary A n, X.visible_blocks A n]
 
+/-- Helper (computation). Cutting the flattened stream at successive embedded boundaries gives
+exactly that transition's block, including its silent step when erased. (approved: PENDING). -/
+theorem InfiniteExecution.flatten_interval {S : Observe.EventSignature}
+    (A : Observe.ExecAdapter O S) (X : InfiniteExecution P ρ c) (n : Nat) :
+    (((List.range (X.observeBoundary A (n + 1))).map (X.toObserveSteps A)).drop
+      (X.observeBoundary A n)) = X.observeBlock A n := by
+  rw [X.flatten_boundary A (n + 1)]
+  simp [blockPrefix, InfiniteExecution.observeBoundary]
+
 /-- Law (subject `InfiniteExecution.toObserveSteps`).
 The flattened C6 stream contains exactly each transition's events inside its own boundary
 interval. This is stronger than cofinality: events may not cross a machine boundary. -/
@@ -1299,8 +1332,7 @@ theorem InfiniteExecution.toObserveSteps_blocks {S : Observe.EventSignature}
     (A : Observe.ExecAdapter O S) (X : InfiniteExecution P ρ c) (n : Nat) :
     Observe.visible (((List.range (X.observeBoundary A (n + 1))).map (X.toObserveSteps A)).drop
       (X.observeBoundary A n)) = X.transitionEvents A n := by
-  rw [X.flatten_boundary A (n + 1)]
-  simp only [blockPrefix, InfiniteExecution.observeBoundary, List.drop_left]
+  rw [X.flatten_interval A n]
   exact X.visible_block A n
 
 /-- Law (subject `InfiniteExecution.toObserveSteps`).
@@ -1349,8 +1381,8 @@ theorem InfiniteExecution.projectedTrace_valid {S : Observe.EventSignature}
     exact .idle
   | succ n ih => exact extend (X.step n) ih
 
-/-- Helper (projection). This evaluator specialization previously projected the C6 bridge;
-independent execution-projection evidence is `InfiniteExecution.projectedTrace_valid`.
+/-- Helper (projection). This notation specialization of `InfiniteExecution.projectedTrace_valid`
+uses the adapter directly on the raw history; it supplies no independent semantic evidence.
 (approved: PENDING).
 Every finite prefix of an infinite execution under a well-formed adapter and C1 oracle has a
 complete valid C6 event trace. -/
