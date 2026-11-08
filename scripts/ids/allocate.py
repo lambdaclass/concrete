@@ -19,7 +19,7 @@ class Refused(Exception):
     pass
 
 
-def sandbox_environment():
+def sandbox_environment(root=None):
     # Equivalent to checks/lib/git_sandbox.sh, also for direct Python CLI use under a hook.
     clean = dict(os.environ)
     for name in ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR'):
@@ -28,6 +28,14 @@ def sandbox_environment():
                             text=True, capture_output=True, check=True)
     for name in result.stdout.splitlines():
         os.environ.pop(name, None)
+    # Preserve only writer identity before isolating config; temporary repos must never
+    # inherit hooks, signing, URL rewriting or arbitrary global/system configuration.
+    if root is not None:
+        for field, suffix in (('name', 'NAME'), ('email', 'EMAIL')):
+            value = git(root, 'config', 'user.' + field, check=False).stdout.strip()
+            if value:
+                for role in ('AUTHOR', 'COMMITTER'):
+                    os.environ.setdefault('GIT_' + role + '_' + suffix, value)
     os.environ['GIT_CONFIG_NOSYSTEM'] = '1'
     os.environ['GIT_CONFIG_SYSTEM'] = '/dev/null'
     os.environ['GIT_CONFIG_GLOBAL'] = '/dev/null'
@@ -190,7 +198,8 @@ def metadata(root, key, title, branch):
         raise Refused('branch must be main or wip/*')
     git(root, 'check-ref-format', 'refs/heads/' + branch)
     return dict(schema=1, id=valid_key(key), title=title, branch=branch,
-                who=git(root, 'config', 'user.email').stdout.strip() + '@' + socket.gethostname(),
+                who=(git(root, 'config', 'user.email', check=False).stdout.strip() or
+                     os.environ.get('GIT_AUTHOR_EMAIL', '')) + '@' + socket.gethostname(),
                 when=datetime.datetime.now(datetime.timezone.utc).isoformat(), nonce=str(uuid.uuid4()))
 
 
@@ -278,6 +287,7 @@ def make_plan(root, snapshot, local, branch):
             uses.setdefault(key, []).append((name, title))
     conflicts = [f'{b}: {error}' for b, error in snapshot.tree_errors.items()]
     updates = []
+    legacy_matches = []
     for key, rows in sorted(uses.items()):
         titles = {title for _, title in rows}
         # Six-column pre-migration rows have mutable evidence, not immutable titles.
@@ -287,8 +297,16 @@ def make_plan(root, snapshot, local, branch):
                           for b, _ in rows if b in snapshot.heads}
             explicit = {title for b, title in rows if b in snapshot.heads and
                         'id\ttitle\t' in git(snapshot.repo, 'show', f'{snapshot.heads[b]}:ISSUES.tsv', check=False).stdout}
-            if len(signatures) == 1 and None not in signatures and len(explicit) == 1:
-                titles = explicit
+            if len(signatures) == 1 and None not in signatures and any(next(iter(signatures))) and len(explicit) <= 1:
+                if explicit:
+                    titles = explicit
+                else:
+                    # A legacy-only inventory has no immutable column yet. Choose the
+                    # most widely preserved historical title, and expose every match
+                    # in the operator plan for review before it becomes immutable.
+                    titles = {min(titles, key=lambda t: (-sum(v == t for _, v in rows), t))}
+                legacy_matches.append(dict(id=key, rows=rows, signature=list(next(iter(signatures))),
+                                           title=next(iter(titles))))
 
         if len(titles) != 1:
             conflicts.append(f'{key}: ' + repr(rows))
@@ -317,11 +335,11 @@ def make_plan(root, snapshot, local, branch):
                     value['legacy_oid'] = oid
                     updates.append(dict(ref=ref, old=oid, value=value))
     return dict(schema=1, heads=snapshot.remote_heads, updates=updates, conflicts=conflicts,
+                legacy_matches=legacy_matches,
                 collision_resolution='ISS-0017 acceptance-shim -> ISS-0033; spec-* retains ISS-0017; lexer -> ISS-0032. Branches must actually be renumbered before publishing.')
 
 
 def main():
-    sandbox_environment()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', default='.')
     sub = parser.add_subparsers(dest='command', required=True)
@@ -341,6 +359,7 @@ def main():
     apply.add_argument('plan')
     args = parser.parse_args()
     root = Path(args.root).resolve()
+    sandbox_environment(root)
     branch = git(root, 'symbolic-ref', '--short', 'HEAD', check=False).stdout.strip()
     if not branch:
         # CI detached head: identify it only when exactly one fetched wip head matches it; main

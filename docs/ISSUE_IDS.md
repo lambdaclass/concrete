@@ -64,7 +64,9 @@ therefore cannot stop another branch's checks or reservations.
 `backfill --output PLAN` produces a nonpublishing operator plan for that same inventory plus the
 current tree and unused legacy reservations. Explicit titles define identity. For pre-title
 rows, backfill recovers historical titles; when evidence changed across rebases it accepts the
-canonical explicit title only if stable date/opened/area/kind fields agree. Conflicting explicit
+canonical explicit title only if stable date/opened/area/kind fields agree. If no explicit
+title exists yet, it proposes the most widely preserved historical title (lexical tie break)
+and exposes all variants and stable fields in `legacy_matches` for operator review. Conflicting explicit
 titles or incompatible legacy identities require operator reconciliation, never automatic
 renumbering. Main is preferred for initial provenance; existing reservation provenance never
 changes. The five ISS-0018 copies represent one evolving issue, not five introductions.
@@ -103,3 +105,7 @@ nix develop .#gates --command bash scripts/checks/issues.sh
 
 A successful unchanged plan is idempotent. A conflicting plan cannot publish. No reservation refs
 were pushed by the round-2 writer; bootstrap publication remains an explicit operator action.
+
+Round-2 read-only inventory on 2026-11-08: backfill exited 0 with 357 planned reservations and
+zero conflicts, including the five ISS-0018 heads. This plan was not published and must be
+regenerated if the advertised heads change.

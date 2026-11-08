@@ -78,7 +78,17 @@ if not makers:
     sys.exit(0)
 # Scripts may isolate at module entry, or as the first action in their main function.
 entry = next((n for n in module.body if isinstance(n, ast.FunctionDef) and n.name == 'main'), None)
-isolated = any(sandbox(n) for n in module.body) or bool(entry and entry.body and sandbox(entry.body[0]))
+def repository_use(statement):
+    return any(isinstance(n, ast.Call) and name(n) in ('git', 'Snapshot') for n in ast.walk(statement))
+entry_isolated = False
+if entry:
+    for statement in entry.body:
+        if sandbox(statement):
+            entry_isolated = True
+            break
+        if repository_use(statement):
+            break
+isolated = any(sandbox(n) for n in module.body) or entry_isolated
 sys.exit(3 if isolated else 1)
 PYSCAN
       case "$?" in

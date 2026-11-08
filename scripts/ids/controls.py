@@ -3,6 +3,7 @@
 import concurrent.futures
 import importlib.util
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -58,6 +59,15 @@ def main():
         a.git(writer, 'push', '-q', 'origin', 'HEAD:refs/heads/wip/a')
         run(writer, 'check')
         print('PASS: reserved ID on its branch, through real hook')
+        hostile = base / 'hostile.gitconfig'
+        hostile.write_text('[commit]\n gpgsign = true\n[core]\n hooksPath = /nonexistent/hooks\n'
+                           f'[url "{base / "missing"}"]\n insteadOf = {remote}\n')
+        result = subprocess.run(['python3', '-I', str(SOURCE / 'allocate.py'), '--root', str(writer), 'check'],
+                                env={**os.environ, 'GIT_CONFIG_GLOBAL': str(hostile),
+                                     'GIT_CONFIG_SYSTEM': str(hostile)}, capture_output=True, text=True)
+        assert result.returncode == 0, result.stderr
+        print('PASS: hostile global/system config cannot steer temporary Git repositories')
+
         # Test both metadata namespaces alone and in mixed pushes; full-tier detection
         # uses a linked worktree refusal, so these probes never run real gates.
         wt = base / 'tier-worktree'
@@ -114,6 +124,21 @@ def main():
         run(writer, 'backfill', '--output', str(base / 'evolved-plan.json'))
         assert not json.loads((base / 'evolved-plan.json').read_text())['conflicts']
         print('PASS: legacy evolving evidence maps to canonical reserved title across a squash')
+        for suffix, evidence in [('one', 'earlier mutable evidence'), ('two', 'edited mutable evidence')]:
+            a.git(writer, 'switch', '-qc', 'wip/legacy-' + suffix, 'main')
+            (writer / 'ISSUES.tsv').write_text('id\tdate\tarea\tevidence\towner\tstatus\n'
+                f'ISS-0084\t2026-11-08\tci\t{evidence}\tR-0542\topen\n')
+            a.git(writer, 'add', 'ISSUES.tsv')
+            a.git(writer, 'commit', '-qm', 'legacy-only evolving identity')
+            a.git(writer, 'push', '-q', 'origin', 'HEAD:refs/heads/wip/legacy-' + suffix)
+        a.git(writer, 'switch', '-q', 'wip/a')
+        legacy_plan = base / 'legacy-only-plan.json'
+        run(writer, 'backfill', '--output', str(legacy_plan))
+        assert any(row['id'] == 'ISS-0084' for row in json.loads(legacy_plan.read_text())['legacy_matches'])
+        for suffix in ('one', 'two'):
+            a.git(writer, 'push', '-q', 'origin', ':refs/heads/wip/legacy-' + suffix)
+        print('PASS: legacy-only edited rows expose their stable-field match in the operator plan')
+
         a.git(writer, 'push', '-q', 'origin', ':refs/heads/wip/legacy-evolved')
 
 
