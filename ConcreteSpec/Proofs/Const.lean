@@ -6,6 +6,9 @@ import ConcreteSpec.Proofs.Scalar
 
 PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `ConcreteSpec/README.md`.
 
+- `eval_agrees`: exact agreement with independent primitive-grounded, fuel-indexed semantics.
+- `semantic_failure_refuses`: a semantic failure after any successful prefix refuses the whole
+  list with the failing identity and prevents admission, regardless of usage.
 - `eval_wellTyped_progress`: with sufficient fuel, a well-typed initializer in the full closed
   grammar (including fallible operations) either evaluates to a valid value of its static type or
   reports a located failure of a fallible sub-expression (`ConstFailure.InExpr`), never `.invalid`

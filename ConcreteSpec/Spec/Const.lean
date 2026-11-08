@@ -32,7 +32,10 @@ reduction, never `native_decide` (item 18). With sufficient fuel, well-typed ini
 compute a valid value of their static type or report a located failure of a fallible sub-expression
 (`eval_wellTyped_progress`, `typed_evalConsts_refusal`); the old fallible-free fragment remains
 total (`eval_total`); admitted declarations have valid values of their declared types
-(`evalConsts_sound`).
+(`evalConsts_sound`). `eval_agrees` additionally proves exact agreement with the independent
+primitive-grounded `ConstEval` relation, so neither swallowed nor fabricated arithmetic failures
+are permitted. `semantic_failure_refuses` propagates a semantic failure after any successful
+prefix to declaration refusal and non-admission, including unused initializers.
 
 **Source order and elaboration** (owner decision 2026-11-08, item 19). A source initializer may
 name a later declaration. `dependsOn` extracts the actual reference relation, including references
@@ -127,7 +130,8 @@ structure ConstFailure where
   deriving DecidableEq, Repr
 
 /-- A located failure belongs to `e`: its expression is a fallible sub-expression of `e` whose
-constructor matches the reported `operation` and `error` category. -/
+constructor matches the reported `operation` and `error` category. This is location evidence
+only; primitive failure correctness is specified independently by `ConstEval`. -/
 def ConstFailure.InExpr (f : ConstFailure) : CExpr → Prop
   | .int _ _ | .bool _ | .unit | .ref _ => False
   | .wrapping _ a b | .saturating _ a b | .bit _ a b | .cmp _ a b
