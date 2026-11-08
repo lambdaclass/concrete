@@ -74,6 +74,8 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 - The landing protection redesign: server-side protection of `main` ([row](#decided-2026-11-08-landing-redesign)).
 - Commit each validated piece and push it at once to the push remotes in force ([row](#decided-2026-11-08-commit-push)).
 - Codex, Kimi and agy write; Claude reviews ([row](#decided-2026-11-08-writers)).
+- Four test gates: spec comparison, one test manifest, scaling and determinism, and the trusted-base list ([row](#decided-2026-11-08-gates)).
+- Six spec and process improvements: law vacuity, property-checked axioms, continuous foundation integration, frozen process tooling, bounded watchers and three-model owner-question review ([row](#decided-2026-11-08-six)).
 - Byte-for-byte sweeps into `legacy/`, and `docs/archive/` moves there ([sweep](#decided-2026-11-08-legacy-sweep), [archive](#decided-2026-11-08-archive-move)).
 - Every branch gets an agy review too ([row](#decided-project-review)).
 - Eleven plan and process decisions: UBSan dropped, a complete adapter theorem, smaller landing scripts, Claude's quota on the critical path, the front end now, one decisions writer, risk-capped reviews, one clones folder, a later no-libc runtime, a compile-speed budget and the termination wording ([row](#decided-2026-11-08-eleven)).
@@ -1386,6 +1388,34 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
 - <a id="decided-2026-11-08-writers"></a>**Codex, Kimi and agy write; Claude reviews** (owner,
   2026-11-08: "can you have kimi, codex and agy implement things and we just review it"). Codex, Kimi
   and agy implement. Claude briefs, reviews, runs the gates and lands.
+- <a id="decided-2026-11-08-gates"></a>**Four test gates, growing with the slices** (owner,
+  2026-11-08: "do this with kimi, codex and agy and review it" and "we should have ci or gates for
+  scaling, determinism, comparison in the spec and the compiler"; then, about the comparison's
+  back-end-first shape, "ok wuith this but we have to add it to the roadmap or a slice"; and "ok
+  let's make sure the roadmap has all this and the slices").
+  1. A spec-vs-compiler comparison uses a seeded generator that grows with each slice (R-0632). It
+     ships now at the back-end level: spec semantics versus the LLVM binary versus the proven-path
+     binary and its evaluator. It leaves a fixed hook for the full path. The branch that adds
+     lowering must also switch on the full spec comparison.
+  2. One test manifest and one runner hold the tests (R-0633).
+  3. Scaling checks run at 1x, 10x and 100x, with super-linear growth failing; two compiles must be
+     byte-identical (R-0634).
+  4. A maintained list names the trusted base (R-0635).
+  Every slice extends the generator and the manifest and states its trusted-base additions; scaling
+  and determinism stay green. This answer covered items 2–5 of the proposal; item 1, showcase
+  sketches before the freeze, was not included.
+- <a id="decided-2026-11-08-six"></a>**Six spec and process improvements** (owner, 2026-11-08,
+  about 14:00 UTC: "yes to 6 things"):
+  1. Every spec law has a non-trivial instance and a planted counter-example that must fail;
+     reviewers check each law for vacuity, and already accepted contracts are audited (R-0636).
+  2. The axioms golden becomes a property check that permits only the standard axioms, with only
+     named theorems pinned (R-0638).
+  3. Accepted foundation contracts merge into `wip/spec-core` continuously, starting at A2i (R-0637).
+  4. Process tooling is frozen once owner-signoff, its split follow-up and landing-shrink (R-0617)
+     land. Independent branches land independently instead of being chained (R-0640).
+  5. One shared launcher pairs every background job with a bounded watcher (R-0639).
+  6. Every owner question gets a Codex, Kimi and agy round before it reaches the owner (R-0641).
+  The decision records these outcomes, not the process for implementing them.
 - <a id="decided-2026-11-08-legacy-sweep"></a>**Byte-for-byte sweeps into `legacy/`** (owner,
   2026-11-08: "ok to 1", answering legacy sweep question 1). `legacy_frozen.sh` may accept an addition
   under `legacy/` only if it is byte-identical to the same root path at a named commit, and the file
