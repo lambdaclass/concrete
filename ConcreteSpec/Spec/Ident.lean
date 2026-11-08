@@ -503,7 +503,14 @@ def KeyConstruct.collectKeysIn (scope : List KeyConstruct) :
     List KeyConstruct → List FunctionRelativeKey
   | [] => []
   | construct :: rest =>
-    construct.key scope :: KeyConstruct.collectKeysIn (scope ++ [construct]) rest
+    construct.key scope ::
+      ((KeyConstruct.collectKeysIn (construct.childScope scope) construct.children).map
+        (fun key => ⟨construct.segment scope :: key.path⟩) ++
+       KeyConstruct.collectKeysIn (scope ++ [construct]) rest)
+termination_by forest => sizeOf forest
+decreasing_by
+  all_goals simp_wf
+  all_goals cases construct <;> simp_all <;> omega
 
 /-- Collect the persistent function-relative keys of a function body's construct forest in order. -/
 def KeyConstruct.collectKeys (body : List KeyConstruct) : List FunctionRelativeKey :=
