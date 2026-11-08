@@ -67,9 +67,6 @@ for side in first second; do
     cd "$d"
     if [ "$side" = second ]; then
       mkdir -p "$work/host/lib"
-      if [ "$(uname -s)" = Linux ]; then
-        ln -s "$(cat "${CONCRETE_SLICE0_CLANG%/bin/clang}/nix-support/orig-libc")/lib/libc.so" "$work/host/lib/libc.so"
-      fi
       export LIBRARY_PATH="$work/host/lib" LD_RUN_PATH="$work/host/lib"
       export NIX_LDFLAGS="-rpath $work/host/lib"
       export SDKROOT="$work/host" MACOSX_DEPLOYMENT_TARGET=10.1 DYLD_LIBRARY_PATH="$work/host/lib"

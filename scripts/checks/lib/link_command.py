@@ -18,7 +18,7 @@ if sys.argv[1] == '--inputs':
         if arg in permitted:
             continue
         if arg.endswith('.o') and not arg.startswith('-'):
-            allowed(arg, local=True)
+            allowed(os.path.abspath(arg), local=True)
         else:
             sys.exit('link command: unapproved caller argument: ' + arg)
     sys.exit(0)
@@ -41,13 +41,14 @@ allowed(command[0])
 args = iter(command[1:])
 # Closed grammar for the pinned GNU/Darwin linker invocation, not arbitrary driver flags.
 path_options = {'--sysroot', '-syslibroot', '-L', '-F', '-rpath', '-rpath-link',
-                '-dynamic-linker', '--dynamic-linker', '-plugin', '--dynamic-list'}
+                '-dynamic-linker', '--dynamic-linker', '-plugin', '--dynamic-list', '-lto_library'}
 value_options = {'-z', '-m', '-arch', '-macosx_version_min', '-sdk_version',
                  '-platform_version'}
 flags = {'-pie', '-no_uuid', '-t', '--eh-frame-hdr', '--as-needed', '--no-as-needed',
          '--push-state', '--pop-state', '--whole-archive', '--no-whole-archive',
          '-static', '-Bstatic', '-Bdynamic', '-export-dynamic', '--export-dynamic',
-         '-dead_strip', '-demangle', '-dynamic', '-search_paths_first'}
+         '-dead_strip', '-demangle', '-dynamic', '-search_paths_first',
+         '-no_deduplicate', '-headerpad_max_install_names', '-adhoc_codesign'}
 try:
     for arg in args:
         if arg == '-o':
