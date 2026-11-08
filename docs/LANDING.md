@@ -92,12 +92,16 @@ verdict; any failing leg fails the check (see [Pipelining](#pipelining)).
   `scripts/review/verify.sh` on origin's notes; an absent, malformed, blocked or findings note
   qualifies nothing, and a head note that is not clean is not overridden by the members. A member
   without a clean note qualifies instead by an **owner sign-off** at its exact SHA (R-0618: a branch
-  at the review-round cap of its diff's class, approved by the owner after Codex, Kimi and agy all
+  at the review-round cap of its diff's class, approved by the owner after the required reviewers
   reviewed that commit; `scripts/land/signoff.sh verify --base`, on origin's `refs/owner-signoff/*`).
-  Each output's last verdict line must be `VERDICT: ACCEPT` or `VERDICT: REJECT`; a REJECT is
-  recorded and reported, while an output with no verdict line is refused. A sign-off approves that
-  commit only, so a train with a signed-off member must be exactly the clean merge of its members
-  onto its base: one conflict-free merge per member and nothing else. Otherwise
+  The cap evidence is either a review.sh note or a verified `refs/review-evidence/<sha>` commit for
+  manually run rounds. A writer in Codex, Kimi or agy is excluded from its own reviewer set; new
+  writer-bearing records require full-repository ACCEPTs from the other reviewers. Original records
+  without writer provenance retain the three-reviewer ACCEPT-or-REJECT rule. Every record is
+  parentless and binds the signed SHA to the verbatim requests; abbreviated object names must be
+  unambiguous without resolving refs. See [REVIEW.md](REVIEW.md#the-cap) for both formats. A sign-off
+  approves that commit only, so a train with a signed-off member must be exactly the clean merge of
+  its members onto its base: one conflict-free merge per member and nothing else. Otherwise
   the leg runs `LAND_REVIEW_CMD`, else `scripts/review/review.sh`, with `--base --head`, and then
   requires provenance: a non-zero exit fails, and so does a zero exit that leaves no clean note at the
   head. With no review command at all, `check` fails; it never disables the leg silently.

@@ -7,7 +7,9 @@ script picks the diff, splits it, runs the reviewer, records the verdict as a
 git note on the reviewed commit, and enforces the round cap.
 `scripts/review/verify.sh` validates that note. The landing tools in `scripts/land/`
 ([LANDING.md](LANDING.md)) read its verdict through `scripts/land/notes.sh`: a branch is
-ready to land only when its head carries a clean review note.
+ready to land only when its head carries a clean review note, or when an exact-commit owner sign-off
+at the cap supplies the alternative provenance described below. Manually run rounds can support
+that sign-off through a verified review-evidence commit.
 
 ## Why one script
 
@@ -173,19 +175,50 @@ findings, and exits 3. Asking for another round exits 3 without calling the
 reviewer. Do not work around the cap: split the branch into smaller branches or
 escalate to a human reviewer, and pass on the open findings.
 
-The owner may then approve one exact commit (R-0618), after Codex, Kimi and agy have all reviewed
-that commit. The cap is the class of the branch's diff against its base, by path, the highest class
-present winning: docs and roadmap 2 rounds, scripts 3, compiler and spec 5 (an unclassified path
-counts as compiler and spec); it counts the rounds used, whatever their verdicts. The approval is
-recorded, from the owner's own words only, with `scripts/land/signoff.sh record <sha> --base <base>
---rounds-at <the review.sh-noted commit> --date --quote`, plus `--codex-request <request> --codex
-<output>` and the corresponding kimi and agy options. For each reviewer `r`, the recorder stores the
-verbatim request as `r-request.txt` after prepending `reviewed: <sha>`, and the output separately as
-`r.txt`. The request body must name that commit by an unambiguous prefix, and only the output's last
-verdict line counts; it must be `VERDICT: ACCEPT` or `VERDICT: REJECT`. A completed REJECT is
-recorded and reported, not a refusal of the owner's sign-off; an output with no verdict line does
-not qualify. Recording refuses a record that does not qualify.
-Push the resulting `refs/owner-signoff/<sha>` to both remotes. The landing train accepts it as that
+The owner may then approve one exact commit (R-0618). The cap is the class of the branch's diff
+against its base, by path, the highest class present winning: docs and roadmap 2 rounds, scripts 3,
+compiler and spec 5 (an unclassified path counts as compiler and spec); it counts the rounds used,
+whatever their verdicts. The approval is recorded, from the owner's own words only, with
+`scripts/land/signoff.sh record <sha> --base <base> --rounds-at <evidence> --date <date> --quote
+<quote>`, plus the required reviewers' `--<reviewer>-request <request> --<reviewer> <output>` pairs.
+Recording verifies the record before writing `refs/owner-signoff/<sha>` locally; it never pushes.
+
+**Requests and verdicts.** Every request is stored byte for byte and must itself begin `reviewed:
+<full sha>` as sent to the reviewer; the recorder does not add or alter that binding. Its body must
+name the same commit with an unambiguous object-only prefix of at least seven hex digits, and must
+not call another commit the exact one under review. Only the output's last `VERDICT:` line counts,
+whatever its value; it must be ACCEPT or REJECT. Thus ACCEPT followed by BLOCKED is not an ACCEPT.
+Records must be parentless and every stored file's SHA-256 must match `record.txt`.
+
+**Writer substitution (owner item 1).** A new record may carry `--writer codex|kimi|agy|claude` and
+`--writer-evidence author:<author>`, `committer:<committer>` or `trailer:<trailer>`, matched against
+the signed commit. It also records `absent-<writer>: writer`. A Codex, Kimi or agy writer is never a
+reviewer: the other two models are required. A Claude writer leaves all three required. Every
+required output must end in `VERDICT: ACCEPT`, contain `REPOSITORY: readable`, contain no
+`REPOSITORY: unreadable`, and name at least one file in a `READ: <file>` line. Existing records with
+no `writer` key keep the original rule: Codex, Kimi and agy are all required, ACCEPT or REJECT is
+recorded, and repository-access lines are not required.
+
+**Manually run rounds.** When reviews ran outside review.sh, build a parentless evidence commit:
+
+```sh
+scripts/land/signoff.sh evidence build <sha> \
+  --round 1 --reviewer codex --request <file> --output <file> \
+  --round 1 --reviewer kimi  --request <file> --output <file> \
+  --round 1 --reviewer agy   --request <file> --output <file> # repeat complete sets for later rounds
+scripts/land/signoff.sh evidence verify <sha>
+```
+
+The local ref is `refs/review-evidence/<full reviewed sha>`. For each round and reviewer its tree
+holds the exact request, raw output and a manifest binding the reviewed SHA, both files' SHA-256s and
+`repository: readable`. Rounds are contiguous and use one reviewer set; a sign-off requires its own
+required set. Each output's last verdict is ACCEPT or REJECT, and every output carries the
+full-repository access lines above, so a diff-only or failed review never counts. Pass the evidence commit as `--rounds-at` instead of a
+review.sh-noted commit. Build and verify push nothing; publish evidence before a sign-off using it.
+The pre-push notes tier semantically verifies both evidence and sign-off objects, including a
+structural sign-off check that omits only the base-dependent cap comparison.
+
+Push the resulting refs to both remotes. The landing train accepts a sign-off only as that exact
 commit's review provenance ([LANDING.md](LANDING.md)); it approves no other commit.
 
 ## verify.sh
