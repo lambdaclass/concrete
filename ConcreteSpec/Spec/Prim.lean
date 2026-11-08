@@ -266,9 +266,20 @@ structure SafetyEvidence where
   context : EvidenceContext
   proof : fact
 
+/-- A safety obligation binds the proposition to be established to its typed identity. -/
+structure SafetyObligation where
+  id : ObligationId
+  fact : Prop
+
 /-- A fact is usable only when every component of its context matches the current one. -/
 def SafetyEvidence.Usable (e : SafetyEvidence) (current : EvidenceContext) : Prop :=
   e.context = current
+
+/-- Evidence discharges an obligation only when its context is current, its typed identity names
+that obligation, and the proved fact is the obligation's proposition. -/
+def SafetyEvidence.Discharges (e : SafetyEvidence) (current : EvidenceContext)
+    (obligation : SafetyObligation) : Prop :=
+  e.Usable current ∧ current.obligation = obligation.id ∧ e.fact = obligation.fact
 
 instance (e : SafetyEvidence) (current : EvidenceContext) : Decidable (e.Usable current) := by
   unfold SafetyEvidence.Usable

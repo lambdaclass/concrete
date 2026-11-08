@@ -123,6 +123,14 @@ end Prim
 /-- Evidence is usable in its own exact context. -/
 theorem SafetyEvidence.usable_current (e : SafetyEvidence) : e.Usable e.context := rfl
 
+/-- **Evidence consumption is sound.** A discharge for the current context and the obligation named
+by that context supplies a proof of that obligation's actual proposition, not merely a context
+equality. -/
+theorem SafetyEvidence.discharge_fact (e : SafetyEvidence) (current : EvidenceContext)
+    (obligation : SafetyObligation) (h : e.Discharges current obligation) : obligation.fact := by
+  have hf : e.fact = obligation.fact := h.2.2
+  exact hf ▸ e.proof
+
 /-- Changing the typed obligation identity invalidates evidence. -/
 theorem SafetyEvidence.obligation_mismatch (e : SafetyEvidence) (current : EvidenceContext)
     (h : e.context.obligation ≠ current.obligation) : ¬ e.Usable current := by
@@ -458,6 +466,26 @@ example : evidence.Usable evidence.context := by decide
 
 /-- Planted counter-example: an otherwise identical context with a new contract is not current. -/
 example : ¬ evidence.Usable contractChanged := by decide
+
+/-- The arithmetic obligation named by the evidence context. -/
+def obligation : SafetyObligation := ⟨EvidenceDemo.current.obligation, 1 + 1 = 2⟩
+
+/-- The same proposition under a different typed obligation identity. -/
+def mismatchedObligation : SafetyObligation := { obligation with id := ⟨1⟩ }
+
+/-- Non-trivial instance for `SafetyEvidence.discharge_fact`: consuming the arithmetic evidence
+proves the obligation's proposition, and the evidence and proof both participate in the discharge. -/
+example : evidence.Discharges EvidenceDemo.current obligation ∧ 1 + 1 = 2 := by
+  have h : evidence.Discharges EvidenceDemo.current obligation := ⟨rfl, rfl, rfl⟩
+  exact ⟨h, evidence.discharge_fact EvidenceDemo.current obligation h⟩
+
+/-- Planted counter-example: the same proved fact cannot discharge a differently identified
+obligation, even though its proposition is unchanged. -/
+example : obligation.id ≠ mismatchedObligation.id ∧
+    ¬ evidence.Discharges EvidenceDemo.current mismatchedObligation := by
+  refine ⟨by decide, ?_⟩
+  intro h
+  cases h.2.1
 
 /-- Non-trivial instance for `SafetyEvidence.obligation_mismatch`. -/
 example : ¬ evidence.Usable obligationChanged := by decide
