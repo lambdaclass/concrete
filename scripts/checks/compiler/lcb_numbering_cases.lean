@@ -70,25 +70,31 @@ private def digest (p : Program) : UInt64 :=
       b.instructions.foldl (fun h i => h + hash (reprStr i)) (h + hash (reprStr b.terminator)))
       (UInt64.ofNat f.valueWidths.size)
 
-private def timeStage (family stage : String) (n : Nat) (run : Unit → UInt64) : IO Nat := do
+private def timeStage (window : Nat) (family stage : String) (n : Nat) (run : Unit → UInt64) : IO Nat := do
   let mut best := 1000000000000000000
   let mut previous : Option UInt64 := none
   for _ in List.range 3 do
     let t ← IO.monoNanosNow
-    let d ← IO.lazyPure run
-    let elapsed := (← IO.monoNanosNow) - t
-    best := min best elapsed
+    let mut elapsed := 0
+    let mut repetitions := 0
+    let mut d := 0
+    repeat
+      d ← IO.lazyPure run
+      repetitions := repetitions + 1
+      elapsed := (← IO.monoNanosNow) - t
+      if elapsed ≥ window then break
+    best := min best (elapsed / repetitions)
     if let some old := previous then require "unstable structural digest" (old == d)
     previous := some d
   IO.println s!"{family}\t{n}\t{stage}\t{best}\t{previous.getD 0}"
   pure best
 
-private def measureFamily (family : String) (n : Nat) (p : Program) : IO (Nat × Nat) := do
+private def measureFamily (window : Nat) (family : String) (n : Nat) (p : Program) : IO (Nat × Nat) := do
   match LCB.emit p with
   | .error e => throw (IO.userError s!"ISS-0030: scaling family {family} refused: {e}")
   | .ok _ => pure ()
-  let lcb ← timeStage family "lcb_emit" n (fun _ => digest p)
-  let llvm ← timeStage family "llvm_module" n (fun _ => hash (LLVM.module p))
+  let lcb ← timeStage window family "lcb_emit" n (fun _ => digest p)
+  let llvm ← timeStage window family "llvm_module" n (fun _ => hash (LLVM.module p))
   pure (lcb, llvm)
 
 def main (args : List String) : IO Unit := do
@@ -100,7 +106,7 @@ def main (args : List String) : IO Unit := do
       ("dense_registers", fun n => sparse n 1), ("many_blocks", deepBlocks)] do
     let mut previous : Option (Nat × Nat) := none
     for n in sizes do
-      let times ← measureFamily family n (make n)
+      let times ← measureFamily (if full then 50000000 else 10000000) family n (make n)
       if full then
         if let some old := previous then
           -- 15.84893 < 10^1.2. Exact integer arithmetic; failures name stage and family.
@@ -109,5 +115,5 @@ def main (args : List String) : IO Unit := do
       previous := some times
   if full then
     -- The extended tier also exercises stack depth independently of the timing ratios.
-    discard <| measureFamily "deep_instructions" 100000 (sparse 100000)
-    discard <| measureFamily "deep_blocks" 100000 (deepBlocks 100000)
+    discard <| measureFamily 0 "deep_instructions" 100000 (sparse 100000)
+    discard <| measureFamily 0 "deep_blocks" 100000 (deepBlocks 100000)

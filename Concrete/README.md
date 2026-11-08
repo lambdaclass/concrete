@@ -142,7 +142,8 @@ diagnostics, first-definition lookup, malformed large targets, reference equalit
 sparse and dense names, and many blocks. The weekly `Backend scaling` workflow runs `--full`:
 100→1000→10000 scaling with an exponent bound of 1.2 for each backend/family, plus 100000-entry
 instruction and block stack-depth probes. It records the exact SHA, times and structural digests.
-Timing includes a linear output digest and uses the minimum of three runs; tiny PR samples report
+Timing includes a linear output digest and uses the minimum per-operation average of three
+sampling windows (at least 10 ms in PRs, 50 ms in the weekly tier); tiny PR samples report
 measurements without claiming a reliable exponent. ISS-0030 remains open until the coordinator's
 server qualification passes; this local evidence is not that qualification.
 
