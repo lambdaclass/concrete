@@ -1383,17 +1383,17 @@ theorem seqDestroyOrder_storage (n : Nat) :
 /-- The entries of a map, in visiting order. -/
 private def entryParts (n : Nat) : List Part := (List.range n).flatMap fun i => [.key i, .value i]
 
-/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
+/-- Helper (arithmetic). Appending an entry adds its key and value visits. -/
 private theorem entryParts_succ (n : Nat) :
     entryParts (n + 1) = entryParts n ++ [.key n, .value n] := by
   simp [entryParts, List.range_succ, List.flatMap_append]
 
-/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
+/-- Helper (arithmetic). Each map entry contributes two visits. -/
 private theorem entryParts_length : ∀ n, (entryParts n).length = 2 * n
   | 0 => rfl
   | n + 1 => by rw [entryParts_succ]; simp [entryParts_length n]; omega
 
-/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
+/-- Helper (arithmetic). Locate the key and value in the alternating entry schedule. -/
 private theorem entryParts_get : ∀ (n i : Nat), i < n →
     (entryParts n)[2 * i]? = some (.key i) ∧ (entryParts n)[2 * i + 1]? = some (.value i)
   | 0, _, h => absurd h (Nat.not_lt_zero _)
