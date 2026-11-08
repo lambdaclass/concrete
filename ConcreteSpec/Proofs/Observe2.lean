@@ -19,27 +19,31 @@ open ConcreteSpec.Core
 
 variable {S : EventSignature}
 
-/-- Matching responses really do have the request's operation kind. -/
+/-- Helper (inversion). Inverts the same-kind constructor; this is not independent producer correctness. (approved: PENDING)
+ Matching responses really do have the request's operation kind. -/
 theorem RequestResponse.kind {q : Request S} {r : Response S} (h : RequestResponse q r) :
     q.fst = r.fst := by
   cases h
   rfl
 
-/-- Every response admitted by the environment relation satisfies its operation contract. -/
+/-- Helper (inversion). Inverts admission; contract compliance must instead be established for an independent producer. (approved: PENDING)
+ Every response admitted by the environment relation satisfies its operation contract. -/
 theorem Responds.allows {C : OperationContract S} {input : C.Input} {hist : List (Event S)}
     {q : Request S} {r : Response S} (h : Responds C input hist q (.response r)) :
     C.allows input hist q r := by
   cases h with
   | response _ allows => exact allows
 
-/-- Every response admitted by the environment relation matches its request. -/
+/-- Helper (inversion). Inverts admission; this is not independent evidence of correct response routing. (approved: PENDING)
+ Every response admitted by the environment relation matches its request. -/
 theorem Responds.matches {C : OperationContract S} {input : C.Input} {hist : List (Event S)}
     {q : Request S} {r : Response S} (h : Responds C input hist q (.response r)) :
     RequestResponse q r := by
   cases h with
   | response matching _ => exact matching
 
-/-- Inserting silent steps leaves exactly the same visible events, in the same order. -/
+/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
+ Inserting silent steps leaves exactly the same visible events, in the same order. -/
 theorem SilentInsertion.visible {before after : List (Step S)} (h : SilentInsertion before after) :
     visible before = visible after := by
   induction h with
@@ -48,23 +52,27 @@ theorem SilentInsertion.visible {before after : List (Step S)} (h : SilentInsert
   | keepSilent _ ih => exact ih
   | emit event _ ih => exact congrArg (List.cons event) ih
 
-/-- Any finite number of silent steps may be inserted anywhere in a finite terminated run. -/
+/-- Law (subject `ConcreteSpec.Core.Observe.visible`).
+ Any finite number of silent steps may be inserted anywhere in a finite terminated run. -/
 theorem silent_internal_steps {before after : List (Step S)} (h : SilentInsertion before after)
     (terminal : Terminal) : SameObservation (.finite before terminal) (.finite after terminal) := by
   exact ⟨h.visible, rfl⟩
 
-/-- The same arbitrary finite stuttering preserves a blocked run and its pending request. -/
+/-- Law (subject `ConcreteSpec.Core.Observe.visible`).
+ The same arbitrary finite stuttering preserves a blocked run and its pending request. -/
 theorem blocked_silent_internal_steps {before after : List (Step S)}
     (h : SilentInsertion before after) (request : Request S) :
     SameObservation (.blocked before request) (.blocked after request) := by
   exact ⟨h.visible, rfl⟩
 
-/-- Any finite visible prefix is immediately a prefix of the same execution's prefix. -/
+/-- Representation lemma. Algebra of the observation representation; not independent semantic soundness evidence. (approved: PENDING)
+ Any finite visible prefix is immediately a prefix of the same execution's prefix. -/
 theorem PrefixEventually.refl (steps : Nat → Step S) : PrefixEventually steps steps := by
   intro n
   exact ⟨n, [], by simp⟩
 
-/-- Eventual prefix containment composes; the second execution may need more internal steps. -/
+/-- Representation lemma. Algebra of the observation representation; not independent semantic soundness evidence. (approved: PENDING)
+ Eventual prefix containment composes; the second execution may need more internal steps. -/
 theorem PrefixEventually.trans {xs ys zs : Nat → Step S}
     (hxy : PrefixEventually xs ys) (hyz : PrefixEventually ys zs) : PrefixEventually xs zs := by
   intro n
@@ -72,23 +80,28 @@ theorem PrefixEventually.trans {xs ys zs : Nat → Step S}
   obtain ⟨p, rest₂, h₂⟩ := hyz m
   exact ⟨p, rest₁ ++ rest₂, by rw [h₂, h₁, List.append_assoc]⟩
 
+/-- Representation lemma. Algebra of the observation representation; not independent semantic soundness evidence. (approved: PENDING) -/
 theorem SameInfiniteObservation.refl (steps : Nat → Step S) : SameInfiniteObservation steps steps :=
   ⟨PrefixEventually.refl steps, PrefixEventually.refl steps⟩
 
+/-- Representation lemma. Algebra of the observation representation; not independent semantic soundness evidence. (approved: PENDING) -/
 theorem SameInfiniteObservation.symm {xs ys : Nat → Step S}
     (h : SameInfiniteObservation xs ys) : SameInfiniteObservation ys xs := ⟨h.2, h.1⟩
 
+/-- Representation lemma. Algebra of the observation representation; not independent semantic soundness evidence. (approved: PENDING) -/
 theorem SameInfiniteObservation.trans {xs ys zs : Nat → Step S}
     (hxy : SameInfiniteObservation xs ys) (hyz : SameInfiniteObservation ys zs) :
     SameInfiniteObservation xs zs := ⟨hxy.1.trans hyz.1, hyz.2.trans hxy.2⟩
 
-/-- One more step adds exactly its optional event to the visible prefix. -/
+/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
+ One more step adds exactly its optional event to the visible prefix. -/
 theorem visiblePrefix_succ (steps : Nat → Step S) (n : Nat) :
     visiblePrefix steps (n + 1) = visiblePrefix steps n ++ (steps n).event?.toList := by
   cases step : steps n <;>
     simp [visiblePrefix, List.range_succ, visible, List.filterMap_append, Step.event?, step]
 
-/-- A shorter step prefix's events are a prefix of a longer step prefix's events. -/
+/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
+ A shorter step prefix's events are a prefix of a longer step prefix's events. -/
 theorem visiblePrefix_prefix (steps : Nat → Step S) {m n : Nat} (h : m ≤ n) :
     ∃ rest, visiblePrefix steps n = visiblePrefix steps m ++ rest := by
   obtain ⟨d, rfl⟩ := Nat.exists_eq_add_of_le h
@@ -99,7 +112,8 @@ theorem visiblePrefix_prefix (steps : Nat → Step S) {m n : Nat} (h : m ≤ n) 
     refine ⟨rest ++ (steps (m + d)).event?.toList, ?_⟩
     rw [show m + (d + 1) = m + d + 1 by omega, visiblePrefix_succ, pref, List.append_assoc]
 
-/-- A strictly increasing step-index map is monotone on every pair of indices. -/
+/-- Helper (arithmetic). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
+ A strictly increasing step-index map is monotone on every pair of indices. -/
 theorem StepIndexIncreasing.monotone {f : Nat → Nat} (increasing : StepIndexIncreasing f)
     {m n : Nat} (h : m ≤ n) : f m ≤ f n := by
   induction n generalizing m with
@@ -109,21 +123,24 @@ theorem StepIndexIncreasing.monotone {f : Nat → Nat} (increasing : StepIndexIn
     · subst m; exact Nat.le_refl _
     · exact Nat.le_trans (ih (by omega)) (Nat.le_of_lt (increasing n))
 
-/-- A strictly increasing step-index map strictly increases on every ordered pair. -/
+/-- Helper (arithmetic). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
+ A strictly increasing step-index map strictly increases on every ordered pair. -/
 theorem StepIndexIncreasing.strict {f : Nat → Nat} (increasing : StepIndexIncreasing f)
     {m n : Nat} (h : m < n) : f m < f n := by
   have first := increasing m
   have rest := increasing.monotone (show m + 1 ≤ n by omega)
   omega
 
-/-- A strictly increasing map on natural step indices is unbounded. -/
+/-- Helper (arithmetic). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
+ A strictly increasing map on natural step indices is unbounded. -/
 theorem StepIndexIncreasing.apply_le {f : Nat → Nat} (increasing : StepIndexIncreasing f) (n : Nat) :
     n ≤ f n := by
   induction n with
   | zero => exact Nat.zero_le _
   | succ n ih => have next := increasing n; omega
 
-/-- At every stuttered index `m`, some old prefix `n` has exactly the same events: all retained
+/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
+ At every stuttered index `m`, some old prefix `n` has exactly the same events: all retained
 indices below `m` are below `n`, and `f n` is the next retained index at or after `m`. -/
 theorem InfiniteStuttering.prefix_indices {steps : Nat → Step S} {f : Nat → Nat}
     {stutter : Nat → Step S} (h : InfiniteStuttering steps f stutter) (m : Nat) :
@@ -164,7 +181,8 @@ theorem InfiniteStuttering.prefix_indices {steps : Nat → Step S} {f : Nat → 
         have index := before i hi
         omega
 
-/-- The stuttered prefix through the position just before `f n` is exactly the old prefix before
+/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
+ The stuttered prefix through the position just before `f n` is exactly the old prefix before
 `n`; leading and intermediate silent steps contribute nothing. -/
 theorem InfiniteStuttering.visiblePrefix_at {steps : Nat → Step S} {f : Nat → Nat}
     {stutter : Nat → Step S} (h : InfiniteStuttering steps f stutter) (n : Nat) :
@@ -185,7 +203,8 @@ theorem InfiniteStuttering.visiblePrefix_at {steps : Nat → Step S} {f : Nat �
   rw [same] at pref
   exact pref
 
-/-- **Infinite stuttering.** Retaining step `n` at `f n` for a strictly increasing `f`, with every
+/-- Law (subject `ConcreteSpec.Core.Observe.visiblePrefix`).
+ **Infinite stuttering.** Retaining step `n` at `f n` for a strictly increasing `f`, with every
 other step silent, preserves the complete observation in both eventual-prefix directions. This
 also covers runs that emit only finitely often and then remain silent forever. -/
 theorem infinite_stuttering {steps : Nat → Step S} {f : Nat → Nat} {stutter : Nat → Step S}
@@ -200,26 +219,30 @@ theorem infinite_stuttering {steps : Nat → Step S} {f : Nat → Nat} {stutter 
     obtain ⟨rest, extended⟩ := visiblePrefix_prefix steps oldBound
     exact ⟨m, rest, by rw [extended, pref]⟩
 
-/-- Full-observation equivalence is reflexive. -/
+/-- Representation lemma. Algebra of the observation representation; not independent semantic soundness evidence. (approved: PENDING)
+ Full-observation equivalence is reflexive. -/
 theorem SameObservation.refl (execution : Execution S) : SameObservation execution execution := by
   cases execution with
   | finite steps terminal => exact ⟨rfl, rfl⟩
   | blocked steps request => exact ⟨rfl, rfl⟩
   | infinite steps => exact SameInfiniteObservation.refl steps
 
-/-- Full-observation equivalence is symmetric. -/
+/-- Representation lemma. Algebra of the observation representation; not independent semantic soundness evidence. (approved: PENDING)
+ Full-observation equivalence is symmetric. -/
 theorem SameObservation.symm {x y : Execution S} (h : SameObservation x y) : SameObservation y x := by
   cases x <;> cases y <;> simp only [SameObservation] at h ⊢
   all_goals first | exact h.elim | exact ⟨h.1.symm, h.2.symm⟩ | exact h.symm
 
-/-- Full-observation equivalence is transitive. -/
+/-- Representation lemma. Algebra of the observation representation; not independent semantic soundness evidence. (approved: PENDING)
+ Full-observation equivalence is transitive. -/
 theorem SameObservation.trans {x y z : Execution S}
     (hxy : SameObservation x y) (hyz : SameObservation y z) : SameObservation x z := by
   cases x <;> cases y <;> cases z <;> simp only [SameObservation] at hxy hyz ⊢
   all_goals first | exact hxy.elim | exact hyz.elim |
     exact ⟨hxy.1.trans hyz.1, hxy.2.trans hyz.2⟩ | exact hxy.trans hyz
 
-/-- **Full-observation preservation.** An observation projected from `x` is also an observation of
+/-- Representation lemma. Relational transport of a represented observation, not execution or final-store adequacy. (approved: PENDING)
+ **Full-observation preservation.** An observation projected from `x` is also an observation of
 every `y` equivalent to `x`. Finite runs preserve their events and terminal action, blocked runs
 also preserve their pending request, and infinite runs transport both eventually silent and
 infinitely emitting histories. No infinite run is related to a finite termination. -/
@@ -261,14 +284,16 @@ theorem full_observation_preservation {x y : Execution S} {observation : FullObs
     | finite ys terminal => exact h.elim
     | blocked ys request => exact h.elim
 
-/-- No infinite execution, including one that eventually becomes silent forever, is equivalent to
+/-- Representation lemma. Distinguishes observation constructors; it does not validate an execution transformation. (approved: PENDING)
+ No infinite execution, including one that eventually becomes silent forever, is equivalent to
 any finite successful or trapped termination. -/
 theorem infinite_not_termination (steps : Nat → Step S) (finiteSteps : List (Step S))
     (terminal : Terminal) :
     ¬ SameObservation (.infinite steps) (.finite finiteSteps terminal) := by
   simp [SameObservation]
 
-/-- In particular, an infinite silent run never acquires a terminal observation. -/
+/-- Representation lemma. Distinguishes observation constructors; operational transformation evidence is separate. (approved: PENDING)
+ In particular, an infinite silent run never acquires a terminal observation. -/
 theorem infinite_silent_not_termination (terminal : Terminal) :
     ¬ SameObservation (.infinite (fun _ => Step.silent)) (.finite (S := S) [] terminal) :=
   infinite_not_termination _ [] terminal
@@ -280,6 +305,7 @@ private def stripPrefix : List Char → List Char → Option (List Char)
   | _ :: _, [] => none
   | c :: cs, d :: ds => if c = d then stripPrefix cs ds else none
 
+/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING) -/
 private theorem stripPrefix_append (pre rest : List Char) :
     stripPrefix pre (pre ++ rest) = some rest := by
   induction pre with
@@ -292,6 +318,7 @@ private def parseRevNat (cs : List Char) : Option (Nat × List Char) :=
   if digits.isEmpty then none
   else some (Nat.ofDigitChars 10 digits.reverse 0, cs.dropWhile Char.isDigit)
 
+/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING) -/
 private theorem parseRevNat_digits (n : Nat) (c : Char) (rest : List Char)
     (hc : c.isDigit = false) :
     parseRevNat ((Nat.toDigits 10 n).reverse ++ c :: rest) = some (n, c :: rest) := by
@@ -311,6 +338,7 @@ private def decodeKinds : List TrapKind → List Char → Option TrapKind
 
 private def decodeKind (cs : List Char) : Option TrapKind := decodeKinds TrapKind.all cs
 
+/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING) -/
 private theorem decodeKind_render (kind : TrapKind) (site : SiteId) (sp : Span) :
     decodeKind (trapLineChars kind site sp) = some kind := by
   cases kind <;>
@@ -337,12 +365,14 @@ private def decodeTrapLine (line : String) : Option (TrapKind × SiteId × Span)
   let (site, sp) ← decodeWithKind kind line.toList
   some (kind, site, sp)
 
+/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING) -/
 private theorem trapLineChars_prefix (kind : TrapKind) (site : SiteId) (sp : Span) :
     trapLineChars kind site sp = linePrefix kind ++
       (sp.path.toList ++ ":".toList ++ (toString sp.line).toList ++ ":".toList ++
         (toString sp.col).toList ++ " (site ".toList ++ (toString site.id).toList ++ ")".toList) := by
   simp [trapLineChars, linePrefix, List.append_assoc]
 
+/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING) -/
 private theorem decodeWithKind_render (kind : TrapKind) (site : SiteId) (sp : Span) :
     decodeWithKind kind (trapLineChars kind site sp) = some (site, sp) := by
   have hline : 0 < sp.line := sp.line_pos
@@ -351,11 +381,13 @@ private theorem decodeWithKind_render (kind : TrapKind) (site : SiteId) (sp : Sp
   rw [trapLineChars_prefix, stripPrefix_append]
   simp [List.reverse_append, stripPrefix, parseRevNat_digits, hline, hcol]
 
+/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING) -/
 private theorem decodeTrapLine_render (kind : TrapKind) (site : SiteId) (sp : Span) :
     decodeTrapLine (trapLine kind site sp) = some (kind, site, sp) := by
   simp [decodeTrapLine, trapLine, decodeKind_render, decodeWithKind_render]
 
-/-- **Trap-line injectivity.** Equal rendered lines have the same trap kind, typed site and full
+/-- Helper (inversion). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
+ **Trap-line injectivity.** Equal rendered lines have the same trap kind, typed site and full
 source span (path, 1-based line and byte column). No restriction on punctuation in the path is
 needed. -/
 theorem trapLine_injective {kind₁ kind₂ : TrapKind} {site₁ site₂ : SiteId} {sp₁ sp₂ : Span}
@@ -366,7 +398,8 @@ theorem trapLine_injective {kind₁ kind₂ : TrapKind} {site₁ site₂ : SiteI
   cases decoded
   exact ⟨rfl, rfl, rfl⟩
 
-/-- Rendering uses the byte column supplied by elaboration, not a Unicode-scalar column. -/
+/-- Helper (computation). Substitutes a caller-supplied column equality. Independent source-construction evidence is provided by the source trap-column law. (approved: PENDING)
+ Rendering uses the byte column supplied by elaboration, not a Unicode-scalar column. -/
 theorem trap_line_uses_byte_columns (kind : TrapKind) (site : SiteId) (sp : Span) (before : String)
     (h : Span.HasByteColumn sp before) :
     trapLine kind site sp = String.ofList (
@@ -375,7 +408,8 @@ theorem trap_line_uses_byte_columns (kind : TrapKind) (site : SiteId) (sp : Span
       " (site ".toList ++ (toString site.id).toList ++ ")".toList) := by
   rw [trapLine, trapLineChars, h]
 
-/-- A tab advances the byte column by exactly one. -/
+/-- Law (subject `ConcreteSpec.Core.Observe.byteColumn`).
+ A tab advances the byte column by exactly one. -/
 theorem byteColumn_tab (before : String) : byteColumn (before ++ "\t") = byteColumn before + 1 := by
   have htab : "\t".utf8ByteSize = 1 := by decide
   simp [byteColumn, String.utf8ByteSize_append, htab, Nat.add_assoc]
@@ -384,7 +418,8 @@ theorem byteColumn_tab (before : String) : byteColumn (before ++ "\t") = byteCol
 
 variable {O : Exec.Operands}
 
-/-- Output-only extensions preserve a complete valid trace. -/
+/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
+ Output-only extensions preserve a complete valid trace. -/
 theorem ValidTrace.outputs {C : OperationContract S} {input : C.Input} {hist : List (Event S)}
     (h : ValidTrace C input none hist) (outputs : List S.Output) :
     ValidTrace C input none (hist ++ outputs.map Event.output) := by
@@ -393,7 +428,8 @@ theorem ValidTrace.outputs {C : OperationContract S} {input : C.Input} {hist : L
   | cons output outputs ih =>
     simpa [List.append_assoc] using ih (ValidTrace.output h)
 
-/-- The adapter's output/request/response/output answer shape extends a complete valid trace. -/
+/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
+ The adapter's output/request/response/output answer shape extends a complete valid trace. -/
 theorem ValidTrace.answer_projection {C : OperationContract S} {input : C.Input}
     {hist before after : List (Event S)} {q : Request S} {r : Response S}
     (h : CompleteTrace C input hist)
@@ -408,12 +444,14 @@ theorem ValidTrace.answer_projection {C : OperationContract S} {input : C.Input}
   have answered := ValidTrace.response pending matching allows
   simpa [CompleteTrace, List.append_assoc] using answered.outputs afterOutputs
 
-/-- Projection distributes over the C1 event-history append performed by `runFrom`. -/
+/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
+ Projection distributes over the C1 event-history append performed by `runFrom`. -/
 theorem ExecAdapter.project_append (A : ExecAdapter O S) (xs ys : List O.Event) :
     A.project (xs ++ ys) = A.project xs ++ A.project ys := by
   simp [ExecAdapter.project, List.flatMap_append]
 
-/-- Every C1 evaluator report from a well-formed adapter and oracle has a complete valid event
+/-- Helper (computation). Evaluator induction supporting the operational report law; its blocking component inherits the environment policy and does not validate that policy independently. (approved: PENDING)
+ Every C1 evaluator report from a well-formed adapter and oracle has a complete valid event
 history. If it ends in `noAnswer`, the pending typed request is also permitted to block in the
 history ending in that request. -/
 theorem runFrom_validTrace (P : Exec.Program O) (A : ExecAdapter O S) (C : OperationContract S)
@@ -476,7 +514,8 @@ theorem runFrom_validTrace (P : Exec.Program O) (A : ExecAdapter O S) (C : Opera
                   ih (hist ++ a.event.toList) c' answerValid
             · simp [Exec.runFrom, final, next, answer, allowed, valid]
 
-/-- A blocked C1 observation has exactly the pending `ValidTrace` state and history that its
+/-- Helper (projection). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
+ A blocked C1 observation has exactly the pending `ValidTrace` state and history that its
 operation contract uses. -/
 theorem runFrom_noAnswer_pending_valid (P : Exec.Program O) (A : ExecAdapter O S)
     (C : OperationContract S) (input : C.Input) (ρ : Exec.Oracle O)
@@ -494,7 +533,8 @@ theorem runFrom_noAnswer_pending_valid (P : Exec.Program O) (A : ExecAdapter O S
   have laws := runFrom_validTrace P A C input ρ wellFormed fuel hist c valid
   exact ⟨ValidTrace.request laws.1, laws.2 ending pending typed⟩
 
-/-- A well-formed C1 run supplies the blocking premise required by `reportObservation`. -/
+/-- Helper (projection). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
+ A well-formed C1 run supplies the blocking premise required by `reportObservation`. -/
 theorem runFrom_blockingPermitted (P : Exec.Program O) (A : ExecAdapter O S)
     (C : OperationContract S) (input : C.Input) (ρ : Exec.Oracle O)
     (wellFormed : ExecAdapter.WellFormed A C input ρ)
@@ -504,7 +544,8 @@ theorem runFrom_blockingPermitted (P : Exec.Program O) (A : ExecAdapter O S)
   intro c' p vs site store k q ending pending typed
   exact (runFrom_validTrace P A C input ρ wellFormed fuel hist c valid).2 ending pending typed
 
-/-- **Output before a trap is kept.** The terminal C1 observation contains the projection of the
+/-- Helper (computation). Projection of a certified step history. This does not establish independent output correspondence for an arbitrary adapter. (approved: PENDING)
+ **Output before a trap is kept.** The terminal C1 observation contains the projection of the
 whole `Steps` history, not merely a suffix or the trap itself, and contains the exact trap line. -/
 theorem output_before_trap_kept (A : ExecAdapter O S) {P : Exec.Program O} {c c' : Exec.Config O}
     {events : List O.Event} (steps : Exec.Steps P c events c') {kind : TrapKind} {site : SiteId}
@@ -513,7 +554,8 @@ theorem output_before_trap_kept (A : ExecAdapter O S) {P : Exec.Program O} {c c'
     stepsObservation A steps = some ⟨A.project events, .trapped kind site sp (trapLine kind site sp)⟩ := by
   simp [stepsObservation, final, ExecAdapter.terminal?, trapTerminal, resolved]
 
-/-- The premise on `reportObservation` really supplies the operation contract's blocking
+/-- Helper (projection). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
+ The premise on `reportObservation` really supplies the operation contract's blocking
 permission, in the history ending in the current request. -/
 theorem report_noAnswer_mayBlock (P : Exec.Program O) (A : ExecAdapter O S)
     (C : OperationContract S) (input : C.Input) (events : List O.Event) (c : Exec.Config O)
@@ -525,7 +567,8 @@ theorem report_noAnswer_mayBlock (P : Exec.Program O) (A : ExecAdapter O S)
     C.mayBlock input (A.project events ++ [.request request]) request :=
   permitted rfl pending typed
 
-/-- A permitted pending C1 request observed through `noAnswer` retains the earlier event history
+/-- Helper (computation). Computes a report branch; independent reachable-run trace evidence is provided by the operational report law. (approved: PENDING)
+ A permitted pending C1 request observed through `noAnswer` retains the earlier event history
 and ends in the request itself; it is not mistaken for termination or divergence. -/
 theorem report_noAnswer_blocked (P : Exec.Program O) (A : ExecAdapter O S)
     (C : OperationContract S) (input : C.Input)
@@ -539,7 +582,8 @@ theorem report_noAnswer_blocked (P : Exec.Program O) (A : ExecAdapter O S)
       some (.blocked (A.project events ++ [.request request]) request) := by
   simp [reportObservation, pending, typed]
 
-/-- Fuel exhaustion produces no fabricated external observation or event. -/
+/-- Helper (computation). Computes the exhausted-fuel branch, not an independent operational classification law. (approved: PENDING)
+ Fuel exhaustion produces no fabricated external observation or event. -/
 theorem report_outOfFuel_none (P : Exec.Program O) (A : ExecAdapter O S)
     (C : OperationContract S) (input : C.Input) (events : List O.Event) (c : Exec.Config O)
     (permitted : ExecAdapter.BlockingPermitted P A C input ⟨events, .outOfFuel c⟩) :
@@ -614,7 +658,8 @@ def requesting (n : Int) : Exec.Config ops := ⟨.exec (.prim none n [] ⟨0⟩)
 def answeredReport : Exec.Report ops := Exec.run program answeringOracle 1 (requesting 3)
 def blockedReport : Exec.Report ops := Exec.run program blockingOracle 1 (requesting 3)
 
-/-- The answering oracle satisfies the adapter contract for either blocking policy. -/
+/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
+ The answering oracle satisfies the adapter contract for either blocking policy. -/
 theorem answeringWellFormed (blocking : Unit → List (Event signature) → Request signature → Prop) :
     ExecAdapter.WellFormed adapter (makeContract blocking) () answeringOracle := by
   constructor
@@ -627,8 +672,11 @@ theorem answeringWellFormed (blocking : Unit → List (Event signature) → Requ
       RequestResponse.matched (S := signature) Op.double p (p * 2), rfl⟩
   · intro hist p vs site store q answer typed
     simp [answeringOracle] at answer
+  · intro site sp resolved
+    cases resolved
 
-/-- The blocking oracle is well formed exactly because this contract permits blocking. -/
+/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
+ The blocking oracle is well formed exactly because this contract permits blocking. -/
 theorem blockingWellFormed : ExecAdapter.WellFormed adapter permittingContract () blockingOracle := by
   constructor
   · intro hist p vs site store a answer typed
@@ -637,14 +685,16 @@ theorem blockingWellFormed : ExecAdapter.WellFormed adapter permittingContract (
     simp [blockingOracle] at answer
   · intro hist p vs site store q answer typed
     trivial
+  · intro site sp resolved
+    cases resolved
 
-/-- Non-vacuity for `runFrom_validTrace`: the accepted answer really runs and its request and
+/-- Computation example for `runFrom_validTrace`: the accepted answer really runs and its request and
 response form a complete valid trace. -/
 example : CompleteTrace forbiddingContract () (adapter.project answeredReport.events) :=
   (runFrom_validTrace program adapter forbiddingContract () answeringOracle
     (answeringWellFormed _) 1 [] (requesting 3) .idle).1
 
-/-- Planted bad response for `runFrom_validTrace`: `7` does not double `3`. -/
+/-- Rejected response example for `runFrom_validTrace`: `7` does not double `3`. -/
 example : ¬ CompleteTrace forbiddingContract () [request 3, response 7] := by
   intro invalid
   generalize htrace : [request 3, response 7] = events at invalid
@@ -667,7 +717,7 @@ example : ¬ CompleteTrace forbiddingContract () [request 3, response 7] := by
     have eventEq : response 7 = Event.output o := (List.cons.inj reversed).1
     cases eventEq
 
-/-- Non-vacuity for `runFrom_noAnswer_pending_valid`: the run is pending on `3`, and the pending
+/-- Computation example for `runFrom_noAnswer_pending_valid`: the run is pending on `3`, and the pending
 trace and blocking permission both hold. -/
 example :
     ValidTrace permittingContract () (some (query 3))
@@ -678,57 +728,59 @@ example :
     blockingWellFormed (fuel := 1) (hist := []) (c := requesting 3) (c' := requesting 3)
     (q := query 3) .idle rfl rfl rfl
 
-/-- Planted blocking refusal for `runFrom_noAnswer_pending_valid`: the same pending trace cannot
+/-- Blocking refusal example for `runFrom_noAnswer_pending_valid`: the same pending trace cannot
 supply a blocking permission that its contract denies. -/
 example : ¬ (ValidTrace forbiddingContract () (some (query 3)) [request 3] ∧
     forbiddingContract.mayBlock () [request 3] (query 3)) := by
   intro invalid
   exact invalid.2
 
-/-- Concrete evidence used by the two report-level examples below. -/
+/-- Helper (projection). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
+ Concrete evidence used by the two report-level examples below. -/
 theorem blockedPermitted : ExecAdapter.BlockingPermitted program adapter permittingContract ()
     blockedReport :=
   runFrom_blockingPermitted program adapter permittingContract () blockingOracle
     blockingWellFormed (fuel := 1) (hist := []) (c := requesting 3) .idle
 
-/-- Non-vacuity for `runFrom_blockingPermitted`: its premise is satisfied by a real `noAnswer`
+/-- Computation example for `runFrom_blockingPermitted`: its premise is satisfied by a real `noAnswer`
 report. -/
 example : ExecAdapter.BlockingPermitted program adapter permittingContract () blockedReport :=
   blockedPermitted
 
-/-- Planted blocking refusal for `runFrom_blockingPermitted`: this same report does not satisfy
+/-- Blocking refusal example for `runFrom_blockingPermitted`: this same report does not satisfy
 `BlockingPermitted` when the operation may not block. -/
 example : ¬ ExecAdapter.BlockingPermitted program adapter forbiddingContract () blockedReport := by
   intro permitted
   exact permitted (c := requesting 3) (p := 3) (vs := []) (site := ⟨0⟩) (store := ())
     (q := query 3) rfl rfl rfl
 
-/-- Non-vacuity for `report_noAnswer_mayBlock`: the report premise supplies the actual operation
+/-- Computation example for `report_noAnswer_mayBlock`: the report premise supplies the actual operation
 permission for the pending request. -/
 example : permittingContract.mayBlock ()
     (adapter.project blockedReport.events ++ [request 3]) (query 3) :=
   report_noAnswer_mayBlock program adapter permittingContract () [] (requesting 3)
     blockedPermitted rfl rfl
 
-/-- Planted blocking refusal for `report_noAnswer_mayBlock`: changing only `mayBlock` makes the
+/-- Blocking refusal example for `report_noAnswer_mayBlock`: changing only `mayBlock` makes the
 claimed permission false. -/
 example : ¬ forbiddingContract.mayBlock () [request 3] (query 3) := by
   intro forbidden
   exact forbidden
 
-/-- The permitted report has exactly its pending blocked observation. -/
+/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
+ The permitted report has exactly its pending blocked observation. -/
 theorem blockedObservation :
     reportObservation program adapter permittingContract () blockedReport blockedPermitted =
       some (.blocked (adapter.project blockedReport.events ++ [request 3]) (query 3)) :=
   report_noAnswer_blocked program adapter permittingContract () [] (requesting 3)
     3 [] ⟨0⟩ () _ (query 3) blockedPermitted rfl rfl
 
-/-- Non-vacuity for `report_noAnswer_blocked`: the pending request and its history are observed. -/
+/-- Computation example for `report_noAnswer_blocked`: the pending request and its history are observed. -/
 example : reportObservation program adapter permittingContract () blockedReport blockedPermitted =
     some (.blocked (adapter.project blockedReport.events ++ [request 3]) (query 3)) :=
   blockedObservation
 
-/-- Planted observation for `report_noAnswer_blocked`: the pending request cannot instead be
+/-- Distinct observation example for `report_noAnswer_blocked`: the pending request cannot instead be
 observed as successful termination. -/
 example : reportObservation program adapter permittingContract () blockedReport blockedPermitted ≠
     some (.terminal ⟨[request 3], .exited 0⟩) := by

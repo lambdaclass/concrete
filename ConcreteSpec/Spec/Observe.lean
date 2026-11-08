@@ -313,6 +313,7 @@ structure ExecAdapter.WellFormed (A : ExecAdapter O S) (C : OperationContract S)
   blocked {hist p vs site store q} : ρ hist p vs site store = none →
     A.request p vs site store = some q →
     C.mayBlock input (A.project hist ++ [.request q]) q
+  sites_valid : SiteTable.Valid A.sites
 
 /-- Turn a C1 final configuration into a logical terminal observation, if it is a valid hosted
 `main` ending with a known trap site. -/
