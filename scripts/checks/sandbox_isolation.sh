@@ -67,6 +67,20 @@ source "$HELPER" || exit 2
 TMP="$(mktemp -d)" || exit 2
 trap 'rm -rf "$TMP"' EXIT
 git_sandbox "$TMP/gitconfig" || exit 2
+# Resolve in the real caller: a bare clone need not carry its origin/main ref.
+trusted_ref="${LEGACY_TRUSTED_REF:-origin/main}"
+git -C "$ROOT_DIR" rev-parse -q --verify "$trusted_ref^{commit}" >/dev/null
+trusted_rc=$?
+case "$trusted_rc" in
+  0) TRUSTED_BASE="$(git -C "$ROOT_DIR" merge-base HEAD "$trusted_ref")" || {
+       echo "FATAL: sandbox_isolation: trusted base merge-base failed" >&2; exit 2; } ;;
+  1) TRUSTED_BASE="$(git -C "$ROOT_DIR" rev-parse --verify 'HEAD^{commit}')" || {
+       echo "FATAL: sandbox_isolation: trusted base HEAD lookup failed" >&2; exit 2; } ;;
+  *) echo "FATAL: sandbox_isolation: trusted base ref lookup failed" >&2; exit 2 ;;
+esac
+[[ "$TRUSTED_BASE" =~ ^[0-9a-f]{40}$ ]] || {
+  echo "FATAL: sandbox_isolation: trusted base is not a full commit SHA" >&2; exit 2;
+}
 printf '[user]\n\tname = isolation gate\n\temail = isolation@example.invalid\n[init]\n\tdefaultBranch = main\n[advice]\n\tdetachedHead = false\n' > "$GIT_CONFIG_GLOBAL"
 
 BOUNDED_PARENT="$TMP"
@@ -130,7 +144,7 @@ snap() { # dir
 run_as_hook() {
   local d="$1" s="$2" gd
   gd="$(git -C "$d/linked" rev-parse --absolute-git-dir)"
-  ( cd "$d/linked" && GIT_DIR="$gd" && export GIT_DIR && bounded bash "$s" ) > "$d/run.log" 2>&1
+  ( cd "$d/linked" && GIT_DIR="$gd" && export GIT_DIR && LEGACY_TRUSTED_REF="$TRUSTED_BASE" bounded bash "$s" ) > "$d/run.log" 2>&1
   echo $?
 }
 probe() { # label script expect-change [completion-marker]
@@ -156,6 +170,25 @@ probe() { # label script expect-change [completion-marker]
       || no "$label: a leaking script left the caller unchanged; the harness is blind"
   fi
 }
+
+echo "=== control: the hook probe receives the root trusted base ==="
+mkdir -p "$TMP/trusted-control"
+cat > "$TMP/trusted-control/print.sh" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "${LEGACY_TRUSTED_REF:-}"
+EOF
+trusted_caller="$(mktemp -d "$TMP/caller.XXXXXX")"
+if mk_caller "$trusted_caller"; then
+  trusted_rc="$(run_as_hook "$trusted_caller" "$TMP/trusted-control/print.sh")"
+  if [ "$trusted_rc" = 0 ] && [ "$(cat "$trusted_caller/run.log")" = "$TRUSTED_BASE" ]; then
+    ok "trusted-base control: LEGACY_TRUSTED_REF equals $TRUSTED_BASE exactly"
+  else
+    no "trusted-base control: expected exactly $TRUSTED_BASE (exit $trusted_rc)"
+    cat "$trusted_caller/run.log"
+  fi
+else
+  no "trusted-base control: could not build the caller"
+fi
 
 echo "=== control: the harness sees a leak ==="
 mkdir -p "$TMP/ctl"

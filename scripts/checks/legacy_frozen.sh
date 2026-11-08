@@ -23,7 +23,8 @@
 #      lock line, or a file deleted by one sweep and re-added with other bytes by the next, would pass.
 #      History settles both. The trusted history is main's landed states: the first-parent chain of
 #      the merge base of HEAD and LEGACY_TRUSTED_REF (default origin/main), each commit read against
-#      its first parent, or HEAD's own first-parent chain when that ref is absent (on main and on a
+#      its first parent. Harnesses pass that merge base explicitly as LEGACY_TRUSTED_REF so a
+#      sandbox with different refs judges the same trusted history. Otherwise, use HEAD's own first-parent chain when that ref is absent (on main and on a
 #      train head, whose first parent is main, the same thing; on a bare branch tip it is stricter:
 #      the branch's own commits count, so a branch that corrected its own lock fails there). A train's member commits are second parents: a line a branch wrote and then
 #      corrected before it landed is not trusted history. (a) Every base, tree and sweep line of every trusted version of
