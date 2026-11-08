@@ -511,8 +511,7 @@ example : evidence.discharge mismatchedObligations EvidenceDemo.current mismatch
   apply SafetyEvidence.discharge_obligation_mismatch
   decide
 
-/-- Planted (law `ConcreteSpec.Core.SafetyEvidence.discharge_obligation_mismatch`). A consumer that
-omits the evidence's obligation identity accepts that exact mismatch. -/
+/-- Helper (projection). Mutated implementation used by the following planted example. -/
 noncomputable def dischargeIgnoringObligation (e : SafetyEvidence) (obligations : ObligationTable)
     (current : EvidenceContext) (requested : ObligationId) : Option SafetyObligation := by
   classical
@@ -523,6 +522,8 @@ noncomputable def dischargeIgnoringObligation (e : SafetyEvidence) (obligations 
       | none => none
     else none
 
+/-- Planted (law `ConcreteSpec.Core.SafetyEvidence.discharge_obligation_mismatch`). A consumer that
+omits the evidence's obligation identity accepts that exact mismatch. -/
 example : evidence.context.obligation ≠ mismatchedObligation.id ∧
     dischargeIgnoringObligation evidence mismatchedObligations EvidenceDemo.current
       mismatchedObligation.id = some mismatchedObligation := by
@@ -539,8 +540,21 @@ example : evidence.discharge obligations contractChanged obligation.id = none :=
   apply SafetyEvidence.discharge_context_mismatch
   decide
 
-/-- Planted (law `ConcreteSpec.Core.SafetyEvidence.discharge_context_mismatch`). A consumer omitting
-the context check accepts stale contract evidence. -/
+/-- Instance (law `ConcreteSpec.Core.SafetyEvidence.discharge_context_mismatch`). Target, checker,
+specification and obligation identity changes are each refused by the actual consumer as well. -/
+example :
+    evidence.discharge obligations { EvidenceDemo.current with target := { linuxX8664 with byteOrder := .big } }
+      obligation.id = none ∧
+    evidence.discharge obligations { EvidenceDemo.current with checker := ⟨0, 2, 0⟩ }
+      obligation.id = none ∧
+    evidence.discharge obligations { EvidenceDemo.current with spec := ⟨0, 2⟩ }
+      obligation.id = none ∧
+    evidence.discharge obligations
+      { EvidenceDemo.current with obligation := mismatchedObligation.id } obligation.id = none := by
+  refine ⟨?_, ?_, ?_, ?_⟩ <;>
+    apply SafetyEvidence.discharge_context_mismatch <;> decide
+
+/-- Helper (projection). Mutated implementation used by the following planted example. -/
 noncomputable def dischargeIgnoringContext (e : SafetyEvidence) (obligations : ObligationTable)
     (requested : ObligationId) : Option SafetyObligation := by
   classical
@@ -549,6 +563,8 @@ noncomputable def dischargeIgnoringContext (e : SafetyEvidence) (obligations : O
     | some found => if e.context.obligation = requested ∧ e.fact = found.fact then some found else none
     | none => none
 
+/-- Planted (law `ConcreteSpec.Core.SafetyEvidence.discharge_context_mismatch`). A consumer omitting
+the context check accepts stale contract evidence. -/
 example : evidence.context ≠ contractChanged ∧
     dischargeIgnoringContext evidence obligations obligation.id = some obligation := by
   refine ⟨by decide, ?_⟩
@@ -569,11 +585,12 @@ example : evidence.discharge differentObligations EvidenceDemo.current obligatio
     have invalid : 1 + 1 = 3 := equal ▸ valid
     omega
 
-/-- Planted (law `ConcreteSpec.Core.SafetyEvidence.discharge_proposition_mismatch`). Looking up the
-obligation while ignoring the evidence proposition returns the mismatched obligation successfully. -/
+/-- Helper (projection). Mutated implementation used by the following planted example. -/
 def lookupIgnoringEvidence (obligations : ObligationTable) (requested : ObligationId) :
     Option SafetyObligation := ObligationTable.lookup obligations requested
 
+/-- Planted (law `ConcreteSpec.Core.SafetyEvidence.discharge_proposition_mismatch`). Looking up the
+obligation while ignoring the evidence proposition returns the mismatched obligation successfully. -/
 example : evidence.fact ≠ differentObligation.fact ∧
     lookupIgnoringEvidence differentObligations obligation.id = some differentObligation := by
   refine ⟨?_, rfl⟩

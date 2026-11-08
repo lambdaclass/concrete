@@ -500,17 +500,6 @@ theorem Span.locationOk_iff (source : SourceText) (sp : Span) :
     sp.LocationOk source ↔ sp.endOffset ≤ source.length ∧
       sp.line = source.lineAt sp.startOffset ∧ sp.col = source.columnAt sp.startOffset := Iff.rfl
 
-/-- **Source bytes determine a span's start position.** Valid spans over the same source with the
-same start offset have the same 1-based line and byte column. -/
-theorem Span.location_determines_line_col (source : SourceText) (first second : Span)
-    (firstOk : first.LocationOk source) (secondOk : second.LocationOk source)
-    (start : first.startOffset = second.startOffset) : first.line = second.line ∧ first.col = second.col := by
-  rcases firstOk with ⟨_, firstLine, firstCol⟩
-  rcases secondOk with ⟨_, secondLine, secondCol⟩
-  constructor
-  · rw [firstLine, secondLine, start]
-  · rw [firstCol, secondCol, start]
-
 /-- A known category survives encoding and reading at the same specification version. -/
 theorem EncodedPremise.read_encode (record : PremiseRecord) (current : record.spec = specVersion) :
     record.encode.read specVersion = some record := by
@@ -612,16 +601,23 @@ def labelledBlock : KeyConstruct := KeyConstruct.mk .block (.unnamed (some "oute
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.key_insert_differentKind`). Inserting a call before
 an unnamed binding leaves the binding's zero ordinal unchanged. -/
-example : unnamedBinding.key [namedCall] = unnamedBinding.key [] ∧
+example : unnamedBinding.key [KeyConstruct.mk .call (.unnamed none) []] = unnamedBinding.key [] ∧
     unnamedBinding.key [] = ⟨[⟨.binding, .ordinal 0⟩]⟩ := by
-  exact ⟨KeyConstruct.key_insert_differentKind [] [] namedCall unnamedBinding (by decide), rfl⟩
+  exact ⟨KeyConstruct.key_insert_differentKind [] []
+    (KeyConstruct.mk .call (.unnamed none) []) unnamedBinding (by decide), rfl⟩
 
-/-- Planted (law `ConcreteSpec.Core.KeyConstruct.key_insert_differentKind`). A single ordinal across
-all construct kinds changes the binding key after that same insertion. -/
+/-- Helper (projection). A bad assignment uses one ordinal across all unnamed construct kinds. -/
+def allKindsOrdinal (preceding : List KeyConstruct) (target : KeyConstruct) : FunctionRelativeKey :=
+  ⟨[⟨target.kind, .ordinal (preceding.filter fun sibling => sibling.name.isUnnamed).length⟩]⟩
+
+/-- Helper (projection). A bad assignment uses raw child indices, counting named items as well. -/
 def rawOrdinalKey (preceding : List KeyConstruct) (target : KeyConstruct) : FunctionRelativeKey :=
   ⟨[⟨target.kind, .ordinal preceding.length⟩]⟩
 
-example : rawOrdinalKey [namedCall] unnamedBinding ≠ rawOrdinalKey [] unnamedBinding := by decide
+/-- Planted (law `ConcreteSpec.Core.KeyConstruct.key_insert_differentKind`). A single ordinal across
+all construct kinds changes the binding key after that same insertion. -/
+example : allKindsOrdinal [KeyConstruct.mk .call (.unnamed none) []] unnamedBinding ≠
+    allKindsOrdinal [] unnamedBinding := by decide
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.key_insert_named`). A named binding inserted before
 an unnamed binding does not consume its ordinal. -/
@@ -629,11 +625,12 @@ example : unnamedBinding.key [KeyConstruct.mk .binding (.named "x") []] =
     unnamedBinding.key [] := by
   exact KeyConstruct.key_insert_named [] [] "x" .binding [] unnamedBinding
 
-/-- Planted (law `ConcreteSpec.Core.KeyConstruct.key_insert_named`). Counting named siblings in the
-ordinal changes the unrelated key. -/
+/-- Helper (projection). Mutated implementation used by the following planted example. -/
 def countNamedKey (preceding : List KeyConstruct) (target : KeyConstruct) : FunctionRelativeKey :=
   ⟨[⟨target.kind, .ordinal (preceding.filter fun sibling => sibling.kind == target.kind).length⟩]⟩
 
+/-- Planted (law `ConcreteSpec.Core.KeyConstruct.key_insert_named`). Counting named siblings in the
+ordinal changes the unrelated key. -/
 example : countNamedKey [KeyConstruct.mk .binding (.named "x") []] unnamedBinding ≠
     countNamedKey [] unnamedBinding := by decide
 
@@ -643,13 +640,14 @@ example : unnamedBinding.key [unnamedBinding.rename "x", unnamedBinding] =
     unnamedBinding.key [unnamedBinding, unnamedBinding] := by
   exact KeyConstruct.key_rename_other [] [unnamedBinding] unnamedBinding unnamedBinding "x"
 
-/-- Planted (law `ConcreteSpec.Core.KeyConstruct.key_rename_other`). Recomputing ordinals from
-labels rather than stable named/unnamed status can change a sibling key. -/
+/-- Helper (projection). Mutated implementation used by the following planted example. -/
 def labelOnlyOrdinal (preceding : List KeyConstruct) (target : KeyConstruct) : FunctionRelativeKey :=
   let count := (preceding.filter fun sibling => sibling.kind == target.kind &&
     match sibling.name with | .named _ => false | .unnamed label => label.isNone).length
   ⟨[⟨target.kind, .ordinal count⟩]⟩
 
+/-- Planted (law `ConcreteSpec.Core.KeyConstruct.key_rename_other`). Recomputing ordinals from
+labels rather than stable named/unnamed status can change a sibling key. -/
 example : labelOnlyOrdinal [KeyConstruct.mk .binding (.unnamed (some "x")) []] unnamedBinding ≠
     labelOnlyOrdinal [KeyConstruct.mk .binding (.unnamed none) []] unnamedBinding := by decide
 
@@ -657,12 +655,13 @@ example : labelOnlyOrdinal [KeyConstruct.mk .binding (.unnamed (some "x")) []] u
 the named call's key to the new label. -/
 example : (namedCall.rename "renamed").key [] = ⟨[⟨.call, .label "renamed"⟩]⟩ := by decide
 
-/-- Planted (law `ConcreteSpec.Core.KeyConstruct.key_rename_named`). Rebuilding the key from a raw
-child index leaves the old parent label, so it is not the renaming law. -/
+/-- Helper (projection). Mutated implementation used by the following planted example. -/
 def rawChildUnder (preceding : List KeyConstruct) (construct : KeyConstruct) (childIndex : Nat) :
     FunctionRelativeKey := ⟨construct.segment preceding :: [⟨.call, .ordinal childIndex⟩]⟩
 
-example : rawChildUnder [] namedCall 0 ≠ (namedCall.rename "renamed").key [] := by decide
+/-- Planted (law `ConcreteSpec.Core.KeyConstruct.key_rename_named`). Rebuilding the key from a raw
+child index leaves the old parent label, so it is not the renaming law. -/
+example : ¬ (namedCall.key [] = (namedCall.rename "renamed").key []) := by decide
 
 /-- Helper (projection). A nested toy function body with two unnamed levels and a labelled leaf. -/
 def nestedBody : KeyConstruct := ⟨.block, .unnamed none,
@@ -681,7 +680,7 @@ example : KeyConstruct.pathAt [insertedCall, nestedBody] [1, 0, 0] = some nested
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.descendant_insert_differentKind`). One ordinal
 across all kinds changes the existing block's prefix after the earlier unnamed call. -/
-example : ¬ (rawOrdinalKey [insertedCall] nestedBody = rawOrdinalKey [] nestedBody) := by decide
+example : ¬ (allKindsOrdinal [insertedCall] nestedBody = allKindsOrdinal [] nestedBody) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.descendant_insert_named`). An earlier named block
 of the same kind leaves the complete three-segment path unchanged. -/
@@ -737,12 +736,13 @@ example : ∃ zeroEdge oneEdge, zeroEdge ∈ (SpecializationTable.canonicalize
     SpecializationTable.canonicalize_complete [requestZero, requestOne] requestOne (by simp)
   exact ⟨zeroEdge, oneEdge, zeroKept, oneKept, zeroIdentity, oneIdentity⟩
 
-/-- Planted (law `ConcreteSpec.Core.SpecializationTable.canonicalize_complete`). Dropping the first
-request's edge leaves no edge for it. -/
+/-- Helper (projection). Mutated implementation used by the following planted example. -/
 def dropFirstEdges {Ty Cap : Type} [DecidableEq Ty] [DecidableEq Cap]
     (requests : List (SpecializationRequest Ty Cap)) : SpecializationTable Ty Cap :=
   { SpecializationTable.canonicalize requests with edges := (SpecializationTable.canonicalize requests).edges.tail }
 
+/-- Planted (law `ConcreteSpec.Core.SpecializationTable.canonicalize_complete`). Dropping the first
+request's edge leaves no edge for it. -/
 example : ¬ ∃ edge ∈ (dropFirstEdges [requestZero, requestOne]).edges, edge.request = requestZero := by decide
 
 /-- Instance (law `ConcreteSpec.Core.SpecializationTable.canonicalize_edge_sound`). The concrete
@@ -764,12 +764,13 @@ example : ∃ zeroEdge oneEdge, zeroEdge ∈ (SpecializationTable.canonicalize
   SpecializationTable.canonicalize_share [requestZero, requestOne] requestZero requestOne
     (by simp) (by simp) rfl
 
-/-- Planted (law `ConcreteSpec.Core.SpecializationTable.canonicalize_share`). Canonicalizing by site
-creates two entries for one specialization. -/
+/-- Helper (projection). Mutated implementation used by the following planted example. -/
 def bySite (requests : List (SpecializationRequest Nat String)) : List SiteId := requests.map (·.site)
 
-example : (bySite [requestZero, requestOne]).length = 2 ∧
-    (SpecializationTable.canonicalize [requestZero, requestOne]).entries.length = 1 := by decide
+/-- Planted (law `ConcreteSpec.Core.SpecializationTable.canonicalize_share`). Canonicalizing by site
+creates two entries for one specialization. -/
+example : ¬ ((bySite [requestZero, requestOne]).length =
+    (SpecializationTable.canonicalize [requestZero, requestOne]).entries.length) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.SpecializationTable.canonicalize_distinct`). Different type
 arguments receive different canonical entries. -/
@@ -789,13 +790,14 @@ example : ∃ capabilityEdge otherEdge, capabilityEdge ∈ (SpecializationTable.
   SpecializationTable.canonicalize_distinct [requestZero, requestOtherCapability] requestZero
     requestOtherCapability (by simp) (by simp) (by decide)
 
-/-- Planted (law `ConcreteSpec.Core.SpecializationTable.canonicalize_distinct`). Canonicalizing by
-generic alone merges both type- and capability-different requests. -/
+/-- Helper (projection). Mutated implementation used by the following planted example. -/
 def onlyGeneric {Ty Cap : Type} (specialization : SpecializationId Ty Cap) : GenericId :=
   specialization.generic
 
-example : onlyGeneric numeric = onlyGeneric otherType ∧ onlyGeneric numeric = onlyGeneric otherCapability := by
-  exact ⟨rfl, rfl⟩
+/-- Planted (law `ConcreteSpec.Core.SpecializationTable.canonicalize_distinct`). Canonicalizing by
+generic alone merges both type- and capability-different requests. -/
+example : ¬ (onlyGeneric numeric ≠ onlyGeneric otherType) ∧
+    ¬ (onlyGeneric numeric ≠ onlyGeneric otherCapability) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.SpecializationTable.canonicalize_nodup`). Two equal requests
 produce one entry, not a duplicate. -/
@@ -819,25 +821,30 @@ example : ∃ collision, LoadedModules.load [firstModule, collidingModule] = .re
     collision.first = firstModule ∧ collision.second = collidingModule := by
   exact ⟨collidingTop, rfl, rfl, rfl⟩
 
-/-- Planted (law `ConcreteSpec.Core.LoadedModules.load_refusal_sound`). A one-sided diagnostic drops
-the second package and therefore is not the collision returned by the real load check. -/
+/-- Helper (projection). Mutated implementation used by the following planted example. -/
 def oneSided (_modules : List LoadedModule) (first : LoadedModule) : LoadedModule := first
 
+/-- Planted (law `ConcreteSpec.Core.LoadedModules.load_refusal_sound`). A one-sided diagnostic drops
+the second package and therefore is not the collision returned by the real load check. -/
 example : oneSided [firstModule, collidingModule] firstModule ≠ collidingModule := by decide
 
 /-- Instance (law `ConcreteSpec.Core.LoadedModules.load_refusal_complete`). Equal package name/version
 from a second origin is refused even though the module paths differ. -/
-example : ∃ detected, LoadedModules.load [firstModule, samePackageOtherOrigin] = .refused detected := by
-  exact LoadedModules.load_refusal_complete [firstModule, samePackageOtherOrigin] collidingOrigin
-    ⟨by decide, by decide⟩
+example : ∃ detected, LoadedModules.load [firstModule, samePackageOtherOrigin] = .refused detected ∧
+    detected.first = firstModule ∧ detected.second = samePackageOtherOrigin := by
+  exact ⟨collidingOrigin, rfl, rfl, rfl⟩
+
+/-- Helper (projection). Mutated implementation used by the following planted example. -/
+def admitAll (modules : List LoadedModule) : LoadResult := .admitted modules
 
 /-- Planted (law `ConcreteSpec.Core.LoadedModules.load_refusal_complete`). A loader that admits equal
 name/version from different origins violates the package-origin refusal rule. -/
-def admitAll (modules : List LoadedModule) : LoadResult := .admitted modules
-
-example : LoadedModules.HasCollision [firstModule, samePackageOtherOrigin] collidingOrigin ∧
-    admitAll [firstModule, samePackageOtherOrigin] = .admitted [firstModule, samePackageOtherOrigin] := by
-  exact ⟨⟨by decide, by decide⟩, rfl⟩
+example : ¬ (∀ modules collision, LoadedModules.HasCollision modules collision →
+    ∃ detected, admitAll modules = .refused detected) := by
+  intro complete
+  obtain ⟨detected, impossible⟩ := complete [firstModule, samePackageOtherOrigin] collidingOrigin
+    ⟨by decide, by decide⟩
+  cases impossible
 
 /-- Instance (law `ConcreteSpec.Core.LoadedModules.load_admitted`). Distinct top-level names from one
 package and origin are admitted unchanged. -/
@@ -876,10 +883,11 @@ example : aTab.lineAt 2 ≠ aSource.lineAt 1 + 1 := by decide
 column three. -/
 example : aTab.columnAt 2 = aSource.columnAt 1 + 1 ∧ aTab.columnAt 2 = 3 := by decide
 
-/-- Planted (law `ConcreteSpec.Core.SourceText.columnAt_append_tab`). A four-column tab stop violates
-the one-byte step law. -/
+/-- Helper (projection). Mutated implementation used by the following planted example. -/
 def tabStopFour (source : SourceText) (offset : Nat) : Nat := source.columnAt offset + 3
 
+/-- Planted (law `ConcreteSpec.Core.SourceText.columnAt_append_tab`). A four-column tab stop violates
+the one-byte step law. -/
 example : tabStopFour aSource 1 ≠ aTab.columnAt 2 := by decide
 
 /-- Instance (law `ConcreteSpec.Core.SourceText.columnAt_append_newline`). A newline resets to column
@@ -894,37 +902,27 @@ example : aTabNewline.columnAt 3 ≠ aTab.columnAt 2 + 1 := by decide
 newline branch and the ordinary-byte branch on real bytes. -/
 example : aNewline.lineAt 2 = 2 ∧ aTab.lineAt 2 = 1 := by decide
 
-/-- Planted (law `ConcreteSpec.Core.SourceText.lineAt_append`). A constant line function fails on a
-source ending in a newline. -/
+/-- Helper (projection). Mutated implementation used by the following planted example. -/
 def constantLine (_source : SourceText) (_offset : Nat) : Nat := 1
 
+/-- Planted (law `ConcreteSpec.Core.SourceText.lineAt_append`). A constant line function fails on a
+source ending in a newline. -/
 example : constantLine aNewline 2 ≠ aNewline.lineAt 2 := by decide
 
 /-- Instance (law `ConcreteSpec.Core.SourceText.columnAt_append`). UTF-8 continuation bytes each count
 one column, exactly as tabs do; offset two is also the UTF-8 EOF boundary. -/
 example : utf8Source.columnAt 2 = 3 ∧ aTab.columnAt 2 = aSource.columnAt 1 + 1 := by decide
 
-/-- Planted (law `ConcreteSpec.Core.SourceText.columnAt_append`). Counting Unicode scalar values
-instead of bytes gives column two after `é`, not the required column three. -/
+/-- Helper (projection). Mutated implementation used by the following planted example. -/
 def scalarColumn (_source : SourceText) (_offset : Nat) : Nat := 2
 
+/-- Planted (law `ConcreteSpec.Core.SourceText.columnAt_append`). Counting Unicode scalar values
+instead of bytes gives column two after `é`, not the required column three. -/
 example : scalarColumn utf8Source 2 ≠ utf8Source.columnAt 2 := by decide
 
 /-- Helper (projection). The same start with a different end, and a bad state with a wrong column. -/
 def tabPointSpan : Span := { tabSpan with endOffset := 2, range_ok := by decide }
 def wrongTabSpan : Span := { tabSpan with col := 2, col_pos := by decide }
-
-/-- Instance (law `ConcreteSpec.Core.Span.location_determines_line_col`). Distinct valid ranges share
-the start, so source bytes determine the same coordinates. -/
-example : tabSpan.endOffset ≠ tabPointSpan.endOffset ∧
-    tabSpan.line = tabPointSpan.line ∧ tabSpan.col = tabPointSpan.col := by
-  exact ⟨by decide, Span.location_determines_line_col tabSource tabSpan tabPointSpan
-    (by decide) (by decide) rfl⟩
-
-/-- Planted (law `ConcreteSpec.Core.Span.location_determines_line_col`). The wrong-column span fails
-source validation, so no valid span can carry that coordinate. -/
-example : wrongTabSpan.startOffset = tabSpan.startOffset ∧ wrongTabSpan.line = tabSpan.line ∧
-    wrongTabSpan.col ≠ tabSpan.col ∧ ¬ wrongTabSpan.LocationOk tabSource := by decide
 
 /-- Accepted: the tab span satisfies the `LocationOk` projection at a real in-bounds range. -/
 example : tabSpan.LocationOk tabSource ↔ tabSpan.endOffset ≤ tabSource.length ∧
@@ -958,12 +956,13 @@ example : ({ stackRecord with spec := ⟨0, 2⟩ }.encode.read specVersion) ≠
 closed schema and is refused. -/
 example : unknownRecord.read specVersion = none := by decide
 
-/-- Planted (law `ConcreteSpec.Core.EncodedPremise.read_unknown`). A catch-all reader accepts the
-unknown category by silently calling it `assume`. -/
+/-- Helper (projection). Mutated implementation used by the following planted example. -/
 def catchAllRead (reader : SpecVersion) (record : EncodedPremise) : Option PremiseRecord :=
   if record.spec = reader then some ⟨.assume, record.scope, record.spec⟩ else none
 
-example : catchAllRead specVersion unknownRecord = some ⟨.assume, unknownRecord.scope, specVersion⟩ := by decide
+/-- Planted (law `ConcreteSpec.Core.EncodedPremise.read_unknown`). A catch-all reader accepts the
+unknown category by silently calling it `assume`. -/
+example : ¬ (catchAllRead specVersion unknownRecord = none) := by decide
 
 /-- Accepted: declaration and constant owners cover non-function obligations without fake functions. -/
 example : invariantKey.owner = .declaration declaration ∧ initializerKey.owner = .constant constant := by

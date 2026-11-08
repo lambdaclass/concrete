@@ -373,7 +373,7 @@ theorem trapLine_injective {kind₁ kind₂ : TrapKind} {site₁ site₂ : SiteI
 def spDifferentRange : Span :=
   ⟨Demo.sp.path, 41, 41, by decide, Demo.sp.line, Demo.sp.col, Demo.sp.line_pos, Demo.sp.col_pos⟩
 
-/-- Non-trivial instance for `trapLine_injective`: equal lines recover the rendered fields even
+/-- Instance (law `ConcreteSpec.Core.Observe.trapLine_injective`). Equal lines recover rendered fields even
 when the underlying ranges differ. -/
 example : Demo.sp.path = spDifferentRange.path ∧ Demo.sp.line = spDifferentRange.line ∧
     Demo.sp.col = spDifferentRange.col := by
