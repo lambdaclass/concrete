@@ -1,0 +1,270 @@
+import ConcreteSpec.Spec.Hybrid
+import ConcreteSpec.Spec.Exec
+
+/-!
+# C5: ownership instrumentation
+
+PROPOSED, before Core freeze. Q3.2–Q3.4, OD15 and OD23. Roots reuse `Hybrid.Place`,
+not addresses or a third place identity. The monotonically increasing place supply distinguishes
+recursive activations. A slot carries its type and checked Copy/mutability facts; C9 must bind
+those facts to its richer type identity when the scalar-only Hybrid universe is extended.
+
+This executable reference model validates a candidate transition against the finite invariant.
+Validation refuses the entire transition; it never repairs slots, ends loans or changes values.
+Parent links record lending dependencies only: no stacked/tree borrow validity model is assumed.
+Projection paths are logical selectors; resolving their types/values belongs to aggregate slices.
+-/
+namespace ConcreteSpec.Core.Own
+
+inductive Status where
+  | owned | moved
+  deriving DecidableEq, Repr
+
+inductive Mode where
+  | shared | mutable
+  deriving DecidableEq, Repr
+
+/-- A logical projection, retaining field identity or element index (Q3.3). -/
+inductive Projection where
+  | field (id : FieldId)
+  | index (n : Nat)
+  deriving DecidableEq, Repr
+
+/-- The checked binding descriptor supplied by the operand instance, not guessed from a value. -/
+structure Descriptor where
+  ty : CTy
+  copy : Bool
+  mutable : Bool
+  deriving DecidableEq, Repr
+
+structure Slot where
+  place : Hybrid.Place
+  activation : Nat
+  desc : Descriptor
+  status : Status
+  deriving DecidableEq, Repr
+
+/-- A loan retains its original owner and full projection. `ancestors` caches the parent chain;
+the invariant checks the cache, including strict birth order. No loan identity is recycled. -/
+structure Loan where
+  id : LoanId
+  root : Hybrid.Place
+  path : List Projection
+  mode : Mode
+  parent : Option LoanId
+  ancestors : List LoanId
+  activation : Nat
+  deriving DecidableEq, Repr
+
+structure Activation where
+  id : Nat
+  locals : AList Var Hybrid.Place := []
+  views : AList Var LoanId := []
+  deriving DecidableEq, Repr
+
+structure State where
+  slots : List Slot := []
+  loans : List Loan := []
+  frames : List Activation := []
+  nextPlace : Nat := 0
+  nextLoan : Nat := 0
+  nextActivation : Nat := 0
+  deriving DecidableEq, Repr
+
+def slot (s : State) (p : Hybrid.Place) : Option Slot := s.slots.find? (·.place == p)
+def loan (s : State) (i : LoanId) : Option Loan := s.loans.find? (·.id == i)
+
+/-- An exclusive conflict is whole-root, even for disjoint paths. Ancestor loans are suspended
+rather than competing grants; their access is checked separately by `loanAccess`. -/
+def Compatible (a b : Loan) : Prop :=
+  a.root ≠ b.root ∨ a.id = b.id ∨ a.id ∈ b.ancestors ∨ b.id ∈ a.ancestors ∨
+    (a.mode = .shared ∧ b.mode = .shared)
+instance (a b : Loan) : Decidable (Compatible a b) := by unfold Compatible; infer_instance
+
+/-- Check a lending edge against the active loan table. -/
+def ParentValid (s : State) (l : Loan) : Prop :=
+  match l.parent with
+  | none => l.ancestors = []
+  | some p => ∃ a ∈ s.loans, a.id = p ∧ a.root = l.root ∧ a.id.id < l.id.id ∧
+      l.ancestors = a.id :: a.ancestors ∧
+      (a.mode = .shared → l.mode = .shared) ∧ a.path <+: l.path
+
+instance (s : State) (l : Loan) : Decidable (ParentValid s l) := by
+  unfold ParentValid
+  split <;> infer_instance
+
+/-- Every live loan has an owned root; every parent exists, predates its child and has the
+same root. Shared access cannot be upgraded. Cached chains agree exactly. Distinct competing
+loans are compatible. Supplies bound all issued identities, including moved slots. -/
+def WellFormed (s : State) : Prop :=
+  (s.slots.map Slot.place).Nodup ∧ (s.loans.map Loan.id).Nodup ∧
+  (∀ x ∈ s.slots, x.place.id < s.nextPlace ∧ x.activation < s.nextActivation) ∧
+  (∀ l ∈ s.loans,
+    l.id.id < s.nextLoan ∧ l.activation < s.nextActivation ∧
+    (∃ x ∈ s.slots, x.place = l.root ∧ x.status = .owned) ∧
+    ParentValid s l) ∧
+  (∀ a ∈ s.loans, ∀ b ∈ s.loans, Compatible a b)
+
+instance (s : State) : Decidable (WellFormed s) := by
+  unfold WellFormed
+  infer_instance
+
+/-- The reference transition checker: accept the candidate unchanged, or refuse it. -/
+def validate (s : State) : Option State := if WellFormed s then some s else none
+
+/-- Owner accesses cannot bypass whole-root loans. Reads may coexist with shared loans. -/
+def ownerAccess (s : State) (p : Hybrid.Place) (m : Mode) : Bool :=
+  (slot s p).any fun x => x.status == .owned &&
+    (m == .shared || x.desc.mutable) && s.loans.all (fun l =>
+      l.root != p || (m == .shared && l.mode == .shared))
+
+/-- Access through a loan ignores its suspended ancestors. A conflicting child suspends access
+through the parent until it ends; unrelated accesses still obey whole-root exclusion. -/
+def loanAccess (s : State) (i : LoanId) (m : Mode) : Bool :=
+  (loan s i).any fun a => (m == .shared || a.mode == .mutable) &&
+    s.loans.all (fun b => b.id == i || decide (b.id ∈ a.ancestors) || b.root != a.root ||
+      (m == .shared && b.mode == .shared))
+
+/-- Move is only for non-Copy owners; it changes no concrete value. -/
+def move (s : State) (p : Hybrid.Place) : Option State := do
+  let x ← slot s p
+  if x.desc.copy || x.status != .owned || s.loans.any (·.root == p) then none else
+    validate { s with slots := s.slots.map fun x =>
+      if x.place = p then { x with status := .moved } else x }
+
+/-- Reinitialization requires no active loan. Replacing an owned linear value is refused:
+consume it first, rather than silently discarding its obligation. -/
+def reinitialize (s : State) (p : Hybrid.Place) : Option State := do
+  let x ← slot s p
+  if (x.status == .moved || (x.desc.copy && x.desc.mutable)) &&
+      s.loans.all (·.root != p) then
+    validate { s with slots := s.slots.map fun x =>
+      if x.place = p then { x with status := .owned } else x }
+  else none
+
+/-- Open an owner loan. The fresh identity is the old counter. -/
+def borrow (s : State) (p : Hybrid.Place) (path : List Projection) (m : Mode) :
+    Option State := do
+  let f ← s.frames.head?
+  if ownerAccess s p m then
+    validate { s with
+      nextLoan := s.nextLoan + 1
+      loans := ⟨⟨s.nextLoan⟩, p, path, m, none, [], f.id⟩ :: s.loans }
+  else none
+
+/-- Reborrow appends a projection, never changes the original root and never upgrades shared.
+The explicit activation is the destination activation for a downward call. -/
+def reborrowAt (s : State) (i : LoanId) (suffix : List Projection) (m : Mode)
+    (activation : Nat) : Option State := do
+  let a ← loan s i
+  if loanAccess s i m then
+    validate { s with
+      nextLoan := s.nextLoan + 1
+      loans := ⟨⟨s.nextLoan⟩, a.root, a.path ++ suffix, m, some i,
+        i :: a.ancestors, activation⟩ :: s.loans }
+  else none
+
+def reborrow (s : State) (i : LoanId) (suffix : List Projection) (m : Mode) :
+    Option State := do
+  let f ← s.frames.head?
+  reborrowAt s i suffix m f.id
+
+/-- Children must end before parents; ending a loan neither destroys nor moves its owner. -/
+def endLoan (s : State) (i : LoanId) : Option State := do
+  let _ ← loan s i
+  if s.loans.any (·.parent == some i) then none else
+    validate { s with loans := s.loans.filter (·.id != i) }
+
+/-- Read/write permissions are partial identity transitions on the instrumentation. Concrete
+reads/writes are supplied separately by `instrument`; they cannot manufacture permission. -/
+def accessOwner (s : State) (p : Hybrid.Place) (m : Mode) : Option State :=
+  if ownerAccess s p m then validate s else none
+
+def accessLoan (s : State) (i : LoanId) (m : Mode) : Option State :=
+  if loanAccess s i m then validate s else none
+
+/-- A descriptor is supplied by the checked operand language. A fresh binding gets a fresh place;
+an assignment to an existing binding must discharge/reinitialize its previous obligation. -/
+def bind (types : Var → Option Descriptor) (x : Var) (s : State) : Option State := do
+  let f ← s.frames.head?
+  match AList.lookup f.locals x with
+  | some p => reinitialize s p
+  | none =>
+    let d ← types x
+    validate { s with
+      nextPlace := s.nextPlace + 1
+      slots := ⟨⟨s.nextPlace⟩, f.id, d, .owned⟩ :: s.slots
+      frames := { f with locals := (x, ⟨s.nextPlace⟩) :: f.locals } :: s.frames.tail }
+
+/-- A local can leave scope only after its linear obligation is discharged and all its loans
+end. Copy permits duplication, and does not justify discarding a non-Copy value (Q3.8). -/
+def drop (xs : List Var) (s : State) : Option State := do
+  let f ← s.frames.head?
+  let ps := List.map Prod.snd (f.locals.filter fun e => decide (e.1 ∈ xs))
+  if s.slots.all (fun x => decide (x.place ∉ ps) || x.desc.copy || x.status == .moved) &&
+      s.loans.all (fun l => decide (l.root ∉ ps)) then
+    validate { s with
+      slots := s.slots.filter (fun x => decide (x.place ∉ ps))
+      frames := { f with locals := f.locals.filter (fun e => decide (e.1 ∉ xs)) } :: s.frames.tail }
+  else none
+
+/-- Enter owns a new activation. Downward loans use `enterDown` below; ordinary values use bind. -/
+def enter (types : Var → Option Descriptor) (params : List Var) (s : State) : Option State := do
+  let s ← validate { s with
+    nextActivation := s.nextActivation + 1
+    frames := ⟨s.nextActivation, [], []⟩ :: s.frames }
+  params.foldlM (fun s x => bind types x s) s
+
+/-- End all loans created by this activation in reverse birth order (children first).
+Loans are newest first. A loan of an outer root passed into this call is a callee child,
+not the caller's parent loan. -/
+def endLocals (activation : Nat) (s : State) : Option State :=
+  (s.loans.filter (·.activation == activation)).foldlM (fun s l => endLoan s l.id) s
+
+/-- Leave consumes no resource implicitly: all remaining local owners must be Copy or moved.
+Local loans end before local roots are removed. -/
+def leave (s : State) : Option State := do
+  let f ← s.frames.head?
+  let s ← endLocals f.id s
+  let s ← drop (List.map Prod.fst f.locals) s
+  validate { s with frames := s.frames.tail }
+
+/-- Downward-only lending: each parameter gets a new child loan. Views never become owner slots,
+so cannot be returned/stored/moved by the owner operations. C1 operand instances can prepare this
+transition while evaluating typed call arguments; its `Life.enter` adapter is for owner parameters.
+No reference-valued concrete storage is introduced. -/
+def enterDown (s : State) (args : List (Var × LoanId)) : Option State := do
+  let s ← enter (fun _ => none) [] s
+  args.foldlM (fun s (x, i) => do
+    let a ← loan s i
+    let f ← s.frames.head?
+    let s ← reborrowAt s i [] a.mode f.id
+    validate { s with frames := { f with views := (x, ⟨s.nextLoan - 1⟩) :: f.views } :: s.frames.tail }) s
+
+/-- The C1-compatible lifecycle callback. -/
+def life (types : Var → Option Descriptor) : Exec.Life → State → Option State
+  | .bind x, s => bind types x s
+  | .enter ps, s => enter types ps s
+  | .leave, s => leave s
+  | .drop xs, s => drop xs s
+
+/-- Erasure forgets the instrumentation, keeping exactly the operand instance's concrete store. -/
+structure Store (σ : Type) where
+  concrete : σ
+  own : State
+
+def erase {σ : Type} (s : Store σ) : σ := s.concrete
+
+/-- Couple a permission transition to an uninstrumented concrete operation. Neither permission
+checking nor erasure can select a different value, result or concrete branch. -/
+def instrument {σ α : Type} (permit : State → Option State)
+    (operation : σ → Option (α × σ)) (s : Store σ) : Option (α × Store σ) := do
+  let own ← permit s.own
+  let (a, concrete) ← operation s.concrete
+  some (a, ⟨concrete, own⟩)
+
+def lifeStore {σ : Type} (types : Var → Option Descriptor) (e : Exec.Life)
+    (s : Store σ) : Option (Store σ) :=
+  (life types e s.own).map fun own => ⟨s.concrete, own⟩
+
+end ConcreteSpec.Core.Own
