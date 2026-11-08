@@ -11,6 +11,16 @@ import re
 
 MASK = (1 << 64) - 1
 NUM = re.compile(r"(?:0x[0-9a-f]+|\d+)$")
+# Register names an address may use. Anything else is refused before it reaches the debugger (gdb
+# reads `$name` as a convenience variable when it is not a register).
+X86_REG = re.compile(r"(?:r(?:[abcd]x|[sd]i|[sb]p|\d{1,2}[dwb]?)|e(?:[abcd]x|[sd]i|[sb]p)|r?ip)$")
+A64_REG = re.compile(r"(?:[xw](?:[12]?\d|30)|sp|fp|lr)$")
+
+
+def _reg(reg, name, pattern):
+    if not pattern.match(name):
+        raise ValueError(f"unmodelled register {name!r} in an address")
+    return reg(name)
 
 
 def _num(text):
@@ -38,14 +48,17 @@ def x86_addresses(asm, reg, next_pc):
         addr = 0
         for sign, term in terms:
             if "*" in term:
-                r, scale = term.split("*", 1)
-                v = reg(r) * _num(scale)
+                a, b = term.split("*", 1)
+                r, scale = (b, a) if NUM.match(a) else (a, b)
+                if not NUM.match(scale) or _num(scale) not in (1, 2, 4, 8):
+                    raise ValueError(f"unparsed scaled index {term} in {asm}")
+                v = _reg(reg, r, X86_REG) * _num(scale)
             elif NUM.match(term):
                 v = _num(term)
             elif term == "rip":
                 v = next_pc
             else:
-                v = reg(term)
+                v = _reg(reg, term, X86_REG)
             addr += v if sign == "+" else -v
         out.append(addr & MASK)
     if not out and re.search(r"\b(movs|stos|lods|cmps|scas)", mn):
@@ -57,7 +70,7 @@ def _a64_index(text, reg):
     """Value of an AArch64 index operand: `x9`, `x9, lsl #3`, `w9, sxtw #2`, `w9, uxtw`."""
     parts = [p.strip() for p in text.split(",")]
     r = parts[0]
-    v = reg("x" + r[1:]) if r.startswith("w") else reg(r)
+    v = _reg(reg, "x" + r[1:], A64_REG) if r.startswith("w") else _reg(reg, r, A64_REG)
     if r.startswith("w"):
         v &= 0xFFFFFFFF
     shift = 0
@@ -85,7 +98,7 @@ def a64_addresses(mnemonic, operands, reg):
     if not m:
         return []
     parts = [p.strip() for p in m.group(1).split(",", 1)]
-    base = reg(parts[0])
+    base = _reg(reg, parts[0], A64_REG)
     post = ops[m.end():].strip()
     if post:
         if not re.fullmatch(r",\s*(#-?(0x[0-9a-f]+|\d+)|x\d+)", post) or len(parts) > 1:
