@@ -21,6 +21,27 @@ theorem LoadedModules.collision_refuses (modules : List ModuleId) (collision : M
   exact collision.differentPackages
     (hwf collision.first h.1 collision.second h.2 collision.sameTopLevel)
 
+/-- **Specialization identity is request-site independent.** Equal generic and argument lists name
+the same specialization no matter which call sites request it. -/
+theorem SpecializationRequest.site_independent {Ty Cap : Type} (first second : SiteId)
+    (generic : GenericId) (typeArguments : List Ty) (capabilityArguments : List Cap) :
+    (SpecializationRequest.for first generic typeArguments capabilityArguments).specialization =
+      (SpecializationRequest.for second generic typeArguments capabilityArguments).specialization := rfl
+
+/-- Different type arguments name different specializations. -/
+theorem SpecializationId.ne_of_typeArguments_ne {Ty Cap : Type}
+    (first second : SpecializationId Ty Cap) (h : first.typeArguments ≠ second.typeArguments) :
+    first ≠ second := by
+  intro he
+  exact h (congrArg (fun s : SpecializationId Ty Cap => s.typeArguments) he)
+
+/-- Different capability arguments also name different specializations. -/
+theorem SpecializationId.ne_of_capabilityArguments_ne {Ty Cap : Type}
+    (first second : SpecializationId Ty Cap)
+    (h : first.capabilityArguments ≠ second.capabilityArguments) : first ≠ second := by
+  intro he
+  exact h (congrArg (fun s : SpecializationId Ty Cap => s.capabilityArguments) he)
+
 namespace Vacuity
 
 /-- An enclosing function used by the persistent-key examples. -/
@@ -79,6 +100,39 @@ example : ¬ LoadedModules.WellFormed [firstModule, collidingModule] ∧
   have hc : LoadedModules.HasCollision [firstModule, collidingModule] collision :=
     ⟨by decide, by decide⟩
   exact ⟨LoadedModules.collision_refuses [firstModule, collidingModule] collision hc, trivial⟩
+
+/-- Three specializations of one generic, differing only in one argument list at a time. -/
+def numeric : SpecializationId Nat String := ⟨.function function, [0], ["Fs"]⟩
+def otherType : SpecializationId Nat String := ⟨.function function, [1], ["Fs"]⟩
+def otherCapability : SpecializationId Nat String := ⟨.function function, [0], ["Console"]⟩
+
+/-- Non-trivial instance for `SpecializationRequest.site_independent`: distinct sites request the
+same numeric specialization and obtain equal identities. -/
+example : (⟨0⟩ : SiteId) ≠ ⟨1⟩ ∧
+    (SpecializationRequest.for ⟨0⟩ (.function function) [0] ["Fs"]).specialization =
+      (SpecializationRequest.for ⟨1⟩ (.function function) [0] ["Fs"]).specialization := by
+  exact ⟨by decide, SpecializationRequest.site_independent ⟨0⟩ ⟨1⟩ (.function function) [0] ["Fs"]⟩
+
+/-- Non-trivial instances for the argument-difference laws. -/
+example : numeric ≠ otherType :=
+  SpecializationId.ne_of_typeArguments_ne numeric otherType (by decide)
+
+example : numeric ≠ otherCapability :=
+  SpecializationId.ne_of_capabilityArguments_ne numeric otherCapability (by decide)
+
+/-- Planted counter-example for site independence: adding the request site to the identity splits
+one specialization into two. -/
+def withRequestSite {Ty Cap : Type} (site : SiteId) (s : SpecializationId Ty Cap) :=
+  (s, site)
+
+example : withRequestSite ⟨0⟩ numeric ≠ withRequestSite ⟨1⟩ numeric := by decide
+
+/-- Planted counter-example for the argument laws: keeping only the generic equates identities that
+the real rules distinguish. -/
+def onlyGeneric {Ty Cap : Type} (s : SpecializationId Ty Cap) : GenericId := s.generic
+
+example : onlyGeneric numeric = onlyGeneric otherType ∧ numeric ≠ otherType := by
+  exact ⟨rfl, SpecializationId.ne_of_typeArguments_ne numeric otherType (by decide)⟩
 
 end Vacuity
 end ConcreteSpec.Core

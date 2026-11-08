@@ -164,6 +164,33 @@ structure InstanceId where
   id : Nat
   deriving DecidableEq, Repr
 
+/-- A generic definition that can be specialized: a generic function or a generic type declaration. -/
+inductive GenericId where
+  | function (f : FnId)
+  | declaration (d : DeclId)
+  deriving DecidableEq, Repr
+
+/-- A specialization keyed by the generic and all of its type and capability arguments. The argument
+representations are parameters because `Ident` precedes the Core type and capability languages;
+`InstanceId` remains the separate, elaboration-numbered identity of a trait instance. -/
+structure SpecializationId (Ty Cap : Type) where
+  generic : GenericId
+  typeArguments : List Ty
+  capabilityArguments : List Cap
+  deriving DecidableEq, Repr
+
+/-- A call-site request edge. The site is metadata of the request, never a component of the
+specialization identity, so equal requests from different sites share one specialization. -/
+structure SpecializationRequest (Ty Cap : Type) where
+  site : SiteId
+  specialization : SpecializationId Ty Cap
+  deriving DecidableEq, Repr
+
+/-- Record that one site requests the specialization of a generic at exactly these arguments. -/
+def SpecializationRequest.for {Ty Cap : Type} (site : SiteId) (generic : GenericId)
+    (typeArguments : List Ty) (capabilityArguments : List Cap) : SpecializationRequest Ty Cap :=
+  ⟨site, ⟨generic, typeArguments, capabilityArguments⟩⟩
+
 /-- An opaque key relative to one enclosing function. Its token carries stable source-relative data;
 whether that data is a syntactic path, an ordinal per construct kind, a user label, or another
 representation is deliberately not fixed here (R-0492). -/
