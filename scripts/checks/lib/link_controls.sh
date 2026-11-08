@@ -11,7 +11,7 @@ define i32 @main() {
   ret i32 42
 }
 IR
-"$CONCRETE_SLICE0_CLANG" -S "$work/a/llvm.ll" -o "$work/a/control.s"
+"$CONCRETE_SLICE0_CLANG" -w -S "$work/a/llvm.ll" -o "$work/a/control.s"
 cp "$work/a/llvm.ll" "$work/different/b/llvm.ll"
 cp "$work/a/control.s" "$work/different/b/control.s"
 for side in a different/b; do
@@ -29,6 +29,27 @@ for side in a different/b; do
   bash "$root/scripts/checks/lib/slice0_native.sh" control "$work/$side"
   bash "$root/scripts/checks/lib/slice0_native.sh" "$work/$side" - sanitize
 done
+# Reproduce the original mechanism exactly, without modifying host /usr/lib:
+# a surrogate host sysroot changes from empty to containing libc.so. Use the SAME
+# driver/environment constructor as production, then override only the sysroot
+# for this diagnostic. Wrapper-pinned startup/libc inputs remain in the closure.
+if [ "$(uname -s)" = Linux ]; then
+  rm "$work/host/lib/libc.so"
+  (
+    cd "$work/a"
+    target=$(bash "$root/scripts/checks/lib/slice0_native.sh" target)
+    link=(-Wl,--build-id=none)
+    policy_root="$root/scripts/checks/lib"
+    source "$policy_root/native_toolchain.sh"
+    cc+=(--sysroot="$work/host")
+    link_native probe.exe control.o
+    cp probe.exe absent.exe
+    ln -s "$libc" "$work/host/lib/libc.so"
+    link_native probe.exe control.o
+    cmp absent.exe probe.exe
+  )
+  echo 'ok link controls: surrogate sysroot libc.so perturbation unchanged'
+fi
 for exe in control.exe llvm.san.exe; do
   cmp "$work/a/$exe" "$work/different/b/$exe"
   echo "ok link controls: $exe unchanged by host layout, cwd and TMPDIR"
@@ -37,13 +58,33 @@ done
 # must reject its metadata even though the consumed objects and trace are declared.
 unset NIX_LDFLAGS LIBRARY_PATH LD_RUN_PATH
 cd "$work/a"
+mkdir -p "$work/host space/lib"
 if [ "$(uname -s)" = Linux ]; then
-  "$CONCRETE_SLICE0_CLANG" -Wl,-t -Wl,--build-id=none -Wl,-rpath,"$work/host/lib" control.o -o impure.exe >impure.trace 2>&1
+  "$CONCRETE_SLICE0_CLANG" -Wl,-t -Wl,--build-id=none -Wl,-rpath,"$work/host space/lib" control.o -o impure.exe >impure.trace 2>&1
 else
-  "$CONCRETE_SLICE0_CLANG" -Wl,-t -Wl,-no_uuid -Wl,-rpath,"$work/host/lib" control.o -o impure.exe >impure.trace 2>&1
+  "$CONCRETE_SLICE0_CLANG" -Wl,-t -Wl,-no_uuid -Wl,-rpath,"$work/host space/lib" control.o -o impure.exe >impure.trace 2>&1
 fi
 if python3 "$root/scripts/checks/lib/link_purity.py" impure.exe impure.trace control.o >refusal 2>&1; then
   echo 'FAIL link controls: host RUNPATH accepted' >&2; exit 1
 fi
-grep -F "link purity: undeclared path: $work/host/lib" refusal
+grep -F "link purity: undeclared path: $work/host space/lib" refusal
+if [ "$(uname -s)" = Linux ]; then
+  # A host alias into the store is still an undeclared filesystem input.
+  ln -s "$(dirname "$libc")" "$work/host/alias"
+  "$CONCRETE_SLICE0_CLANG" -w -Wl,-t -Wl,-rpath,"$work/host/alias" control.o -o alias.exe >alias.trace 2>&1
+  if python3 "$root/scripts/checks/lib/link_purity.py" alias.exe alias.trace control.o >refusal 2>&1; then
+    echo 'FAIL link controls: host alias RUNPATH accepted' >&2; exit 1
+  fi
+  grep -F "link purity: undeclared path: $work/host/alias" refusal
+  # Independently test a host input alias in the trace of an otherwise pure binary.
+  sed "s|$libc|$work/host/lib/libc.so|g" control.exe.trace >alias-input.trace
+  if python3 "$root/scripts/checks/lib/link_purity.py" control.exe alias-input.trace control.o >refusal 2>&1; then
+    echo 'FAIL link controls: host alias input accepted' >&2; exit 1
+  fi
+  grep -F "link purity: undeclared path: $work/host/lib/libc.so" refusal
+fi
+if CONCRETE_SLICE0_SYSROOT="$work/host" python3 "$root/scripts/checks/lib/link_policy.py" >refusal 2>&1; then
+  echo 'FAIL link controls: effective policy mismatch accepted' >&2; exit 1
+fi
+grep -F 'link policy: effective setting differs: CONCRETE_SLICE0_SYSROOT' refusal
 echo 'PASS native link controls'

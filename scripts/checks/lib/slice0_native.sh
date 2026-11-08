@@ -5,6 +5,7 @@ set -euo pipefail
 : "${CONCRETE_SLICE0_CLANG:?run inside nix develop}"
 policy_root=$(cd "$(dirname "$0")" && pwd)
 : "${CONCRETE_SLICE0_LINK_POLICY:?run inside nix develop}"
+python3 "$policy_root/link_policy.py"
 case "$(uname -s)-$(uname -m)" in
   Linux-x86_64) target=x86_64-linux; link=(-Wl,--build-id=none) ;;
   Linux-aarch64) target=aarch64-linux; link=(-Wl,--build-id=none) ;;
@@ -21,27 +22,8 @@ if [ "${1:-}" = control ] && [ "$#" = 2 ]; then control=1; set -- "$2" -; fi
   { echo 'usage: slice0_native.sh DIRECTORY LCB [sanitize] | control DIRECTORY | target' >&2; exit 2; }
 lcb=$2
 cd "$1"
-# Fixed epoch rather than wall clock or caller environment. No debug data is requested, and
-# prefix maps also cover future debug additions. Separate objects avoid random linker temp names.
-clean=(env -i "PATH=$CONCRETE_SLICE0_TOOL_PATH" NIX_STORE=/nix/store NIX_ENFORCE_PURITY=1 "NIX_BUILD_TOP=$PWD" "TMPDIR=${TMPDIR:-/tmp}"
-  LC_ALL=C TZ=UTC SOURCE_DATE_EPOCH=1 ZERO_AR_DATE=1)
-cc=("${clean[@]}" "$CONCRETE_SLICE0_CLANG" --no-default-config
-  -B"$CONCRETE_SLICE0_LINKER_BIN" --sysroot="$CONCRETE_SLICE0_SYSROOT"
-  -O0 -g0 -w "-ffile-prefix-map=$PWD=." "-fdebug-prefix-map=$PWD=."
-  -fdebug-compilation-dir=.)
-# Do not derive the deployment target from the macOS version on the build host.
-[ "$target" != aarch64-macos ] || cc+=(--target=arm64-apple-macosx15.0 -mmacosx-version-min=15.0)
-# Every link is traced and validated before the executable is released to callers.
-link_native() {
-  local output=$1; shift
-  rm -f "$output"
-  if ! "${cc[@]}" "${link[@]}" -Wl,-t "$@" -o "$output" >"$output.trace" 2>&1; then
-    cat "$output.trace" >&2; return 1
-  fi
-  if ! python3 "$policy_root/link_purity.py" "$output" "$output.trace" "$@"; then
-    rm -f "$output"; return 1
-  fi
-}
+# shellcheck source=scripts/checks/lib/native_toolchain.sh
+source "$policy_root/native_toolchain.sh"
 if [ "${3:-}" = sanitize ]; then
   # ASan instruments only functions carrying `sanitize_address`, which clang's C front end adds and
   # the printed IR does not; the sanitizer build adds it to every definition (llvm.san.ll).
@@ -50,7 +32,15 @@ if [ "${3:-}" = sanitize ]; then
     { echo 'slice0_native: a definition lacks sanitize_address' >&2; exit 1; }
   san=(-fsanitize=address -fno-sanitize-recover=all)
   "${cc[@]}" "${san[@]}" -c llvm.san.ll -o llvm.san.o
-  link_native llvm.san.exe "${san[@]}" llvm.san.o
+  sanlink=("${san[@]}")
+  if [ "$target" = aarch64-macos ]; then
+    # Clang's implicit ASan link adds @executable_path, an undeclared runtime
+    # search directory. Name the pinned runtime and its search path explicitly.
+    runtime="${CONCRETE_SLICE0_CLANG%/bin/clang}/resource-root/lib/darwin"
+    sanlink+=(-fno-sanitize-link-runtime "$runtime/libclang_rt.asan_osx_dynamic.dylib"
+      "-Wl,-rpath,$runtime")
+  fi
+  link_native llvm.san.exe "${sanlink[@]}" llvm.san.o
   exit
 fi
 if [ "$control" = 1 ]; then

@@ -109,27 +109,30 @@
           nativeSysroot = if pkgs.stdenv.isDarwin then pkgs.apple-sdk
             else pkgs.lib.getDev nativeCC.libc;
           nativeClosure = pkgs.closureInfo {
-            rootPaths = [ nativeCC nativeLD nativeSysroot pkgs.llvmPackages_21.llvm ];
+            rootPaths = [ nativeCC nativeLD nativeSysroot pkgs.llvmPackages_21.llvm pkgs.llvmPackages_21.compiler-rt ];
           };
-          nativePolicy = pkgs.writeText "slice0-link-policy-v1" (builtins.toJSON {
-            version = 1;
-            compiler = "${nativeCC}/bin/clang";
-            linker = "${nativeLD}/bin/ld";
-            sysroot = "${nativeSysroot}";
-            closure = "${nativeClosure}/store-paths";
-            environment = "empty; fixed PATH, NIX_STORE, NIX_ENFORCE_PURITY; no ambient flags";
-            validation = "link trace and executable loader/search paths must belong to closure";
-          });
-          nativeEnv = {
+          nativeSettings = {
             CONCRETE_SLICE0_CLANG = "${nativeCC}/bin/clang";
-            CONCRETE_SLICE0_LINK_POLICY = nativePolicy;
             CONCRETE_SLICE0_LINK_CLOSURE = "${nativeClosure}/store-paths";
             CONCRETE_SLICE0_LINKER_BIN = "${nativeLD}/bin";
+            CONCRETE_SLICE0_LLVM = "${pkgs.llvmPackages_21.llvm}/bin";
             CONCRETE_SLICE0_SYSROOT = if pkgs.stdenv.isDarwin
               then "${nativeSysroot}/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk"
               else "${nativeSysroot}";
             CONCRETE_SLICE0_TOOL_PATH = pkgs.lib.makeBinPath [ nativeLD pkgs.coreutils pkgs.gnugrep pkgs.gnused ];
           };
+          nativePolicy = pkgs.writeText "slice0-link-policy-v1" (builtins.toJSON {
+            version = 1;
+            settings = nativeSettings;
+            # Startup objects and GCC/compiler runtimes are references of the
+            # pinned wrapper, enumerated transitively by closureInfo.
+            libc = "${nativeCC.libc}";
+            compilerRuntime = "${pkgs.llvmPackages_21.compiler-rt}";
+            environment = "empty; fixed PATH, NIX_STORE, NIX_ENFORCE_PURITY, NIX_BUILD_TOP; no ambient flags";
+            validation = "lexical and resolved closure containment; trace and recursive loader dependency resolution without host cache";
+            darwin = "arm64-apple-macosx15.0; SDK-backed OS dylibs and /usr/lib/dyld ABI; explicit ASan runtime without executable-relative RPATH";
+          });
+          nativeEnv = nativeSettings // { CONCRETE_SLICE0_LINK_POLICY = nativePolicy; };
 
           # Every gate refuses to run without this (scripts/tests/lib/gate_env.sh). Each shell
           # below that is a superset of the gate userland sets it too.

@@ -63,14 +63,17 @@ for side in first second; do
     (cd ".lake/packages/$pkg" && { git ls-files -z; printf '.git\0'; } | tar --null -T - -cf -) |
       tar -xf - -C "$d/.lake/packages/$pkg"
   done
-  if [ "$side" = second ] && [ "$(uname -s)" = Linux ]; then
-    mkdir -p "$work/host/lib"
-    ln -s "$(cat "${CONCRETE_SLICE0_CLANG%/bin/clang}/nix-support/orig-libc")/lib/libc.so" "$work/host/lib/libc.so"
-    export LIBRARY_PATH="$work/host/lib" LD_RUN_PATH="$work/host/lib"
-    export NIX_LDFLAGS="-rpath $work/host/lib"
-  fi
   (
     cd "$d"
+    if [ "$side" = second ]; then
+      mkdir -p "$work/host/lib"
+      if [ "$(uname -s)" = Linux ]; then
+        ln -s "$(cat "${CONCRETE_SLICE0_CLANG%/bin/clang}/nix-support/orig-libc")/lib/libc.so" "$work/host/lib/libc.so"
+      fi
+      export LIBRARY_PATH="$work/host/lib" LD_RUN_PATH="$work/host/lib"
+      export NIX_LDFLAGS="-rpath $work/host/lib"
+      export SDKROOT="$work/host" MACOSX_DEPLOYMENT_TARGET=10.1 DYLD_LIBRARY_PATH="$work/host/lib"
+    fi
     export TMPDIR="$work/$side/tmp" LC_ALL=C TZ=UTC SOURCE_DATE_EPOCH=1 ZERO_AR_DATE=1
     # No Lake artifact cache: each side compiles everything it uses.
     export LAKE_ARTIFACT_CACHE=false LAKE_CACHE_DIR="$work/$side/lake-cache"
