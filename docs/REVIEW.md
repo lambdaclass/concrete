@@ -138,11 +138,22 @@ caller) invokes `collect_reviewer_output` from
   assistant step through `PromptBlockWriter` on stdout, and `stream-json` emits
   a JSONL event stream). Per project policy, neither `collect_output.sh` nor
   `output_contract.py` parses or strips logs.
-- **No log fallback and structural check:** `collect_reviewer_output` refuses
-  identical `<out-file>` and `<log-file>` paths and never copies or falls back
-  from `<log-file>` to `<out-file>`. `scripts/review/collect_output.sh --check-structure`
+- **Shared archive verification, validation and structural check:** `collect_output.sh`
+  provides `prepare_review_archive`, `verify_review_archive`,
+  `collect_reviewer_output` and `validate_reviewer_output`, shared by both
+  `review.sh` and `signoff.sh`. `prepare_review_archive` extracts the reviewed
+  commit's read-only archive (`chmod -R a-w`) and records its manifest before
+  the reviewer runs; `validate_reviewer_output` verifies the archive manifest
+  afterward (refusing any modification as `blocked` and restoring the archive)
+  and invokes `output_contract.py` with `--rc`, `--incomplete` (when
+  `bounded_is_incomplete`), `--log <log-file>`, and `<out-file>`.
+  `collect_reviewer_output` and `validate_reviewer_output` refuse identical
+  `<out-file>` and `<log-file>` paths and never copy or fall back from
+  `<log-file>` to `<out-file>`. `scripts/review/collect_output.sh --check-structure`
   verifies structurally that the collector and its callers (`review.sh`,
-  `signoff.sh`) feed the reader only `<out-file>` and never `<log-file>`.
+  `signoff.sh`) use `prepare_review_archive`, `collect_reviewer_output` and
+  `validate_reviewer_output` and feed the reader only `<out-file>` and never
+  `<log-file>`.
 
 Every automated reviewer output — branch reviews (`scripts/review/review.sh`),
 owner sign-off reviewer outputs (`scripts/land/signoff.sh`), and review-evidence
@@ -215,7 +226,11 @@ a self-declared claim, or a default attribution on unstamped commits:
     4. Stamp (`stamp-commit`) or backfill (`backfill`) the branch's writer-log
        entries so each stanza is signed by the authorized key, and verify with
        `python3 -I scripts/review/writer_provenance.py report --base <base> --head <head>`.
-- **Append-only log and signed corrections.** The writer log is append-only: an
+- **Append-only log and signed corrections.** Each commit has one authoritative
+  writer history on its own `refs/notes/concrete-writer` note (a note on a
+  commit may contain stanzas for that commit only, and exported logs passed via
+  `--log-object` are verified against each commit's authoritative note history so
+  conflicting or truncated copies are refused). The writer log is append-only: an
   existing entry is never replaced or removed. `backfill` refuses to overwrite
   an existing entry; a correction is a new signed stanza appended to the commit's
   note via `backfill --supersedes <entry-id> --reason "<why>"` naming the latest
@@ -224,10 +239,12 @@ a self-declared claim, or a default attribution on unstamped commits:
   and uses the latest valid entry for `writers:`. Any model attested as writer
   in an earlier superseded signed entry remains disqualified from reviewing that
   commit (so relabelling an unstamped Kimi commit can never make Kimi eligible
-  to review it). `.githooks/pre-push` (`validate-notes`) checks against the
-  previous ref state that existing stanzas on every commit remain an unmodified
-  prefix of the new stanzas, refusing any update that rewrites or drops an
-  existing entry.
+  to review it). `.githooks/pre-push` (`validate-notes`) requires every nonzero
+  `--old-notes-rev` to resolve locally and be compared (distinguishing an absent
+  object from the all-zero creation sentinel), checking that no existing commit
+  note was deleted and that existing stanzas on every changed commit remain an
+  unmodified prefix of the new stanzas, refusing any update that rewrites or
+  drops an existing entry.
 - **Harness-stamped commits (`source: harness`).** Each harness-written commit
   (`scripts/review/writer_provenance.py stamp-commit`) is stamped with author
   `<Model> (writer) <model@writers.concrete>` (while the committer remains the

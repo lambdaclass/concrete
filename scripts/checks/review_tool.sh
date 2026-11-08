@@ -694,6 +694,57 @@ review --reviewer codex >"$T/corr-codex-ok" 2>&1; rc=$?
 check "codex is accepted as reviewer on the corrected commit and records writer: claude (exit 0, got $rc)" \
   test "$rc" -eq 0 -a "$(field writer "$CORR_SHA")" = "claude"
 
+# Multi-commit note & exported-log replay controls (one authoritative history per commit):
+# Reproducing a signed claude -> kimi correction on an ancestor commit, then appending its older
+# signed claude stanza to the head's note (or supplying a truncated/conflicting --log-object) must
+# be refused by validate-notes, derive, verify, and verify.sh.
+reset_fake
+g checkout -q main && g checkout -qb replay-ancestor-corr
+commit_unstamped anc.txt "ancestor commit" "ancestor work"
+REPLAY_ANC="$(g rev-parse HEAD)"
+REPLAY_BASE="$(g merge-base HEAD main)"
+backfill_writer "$REPLAY_ANC" claude 1 replay-ancestor-corr "$REPLAY_BASE" "$REPLAY_ANC" "initial claude attribution"
+REPLAY_ANC_OLD_STANZA="$(g notes --ref=refs/notes/concrete-writer show "$REPLAY_ANC")"
+REPLAY_ANC_EID1="$(sed -n 's/^entry-id: //p' <<<"$REPLAY_ANC_OLD_STANZA")"
+commit_file head.txt "head commit by claude" "head work"
+REPLAY_HEAD="$(g rev-parse HEAD)"
+REPLAY_HEAD_STANZA="$(g notes --ref=refs/notes/concrete-writer show "$REPLAY_HEAD")"
+# Export pre-correction log blob (before claude -> kimi correction on REPLAY_ANC):
+REPLAY_TRUNC_BLOB="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" export-log --repo "$W" --base "$REPLAY_BASE" --head "$REPLAY_HEAD" --write-blob)"
+# Now append signed claude -> kimi correction on REPLAY_ANC:
+backfill_writer "$REPLAY_ANC" kimi 1 replay-ancestor-corr "$REPLAY_BASE" "$REPLAY_ANC" "corrected to kimi" \
+  "$REPLAY_ANC_EID1" "audit found ancestor was written by kimi"
+g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 1\nreviewer: kimi\nwriter: claude\nutc: 2026-11-08T00:00:00Z\nbase: %s\npieces: 1\nrepository: readable' "$REPLAY_BASE")" "$REPLAY_HEAD"
+v_replay_before="$(cd "$W" && bash "$VERIFY" "$REPLAY_HEAD" 2>&1)"; rc=$?
+check "before replay: verify.sh refuses kimi clean note after claude->kimi correction on ancestor (exit 1, got $rc)" test "$rc" -eq 1
+# Replay 1: append ancestor's older signed claude stanza to head's note.
+g notes --ref=refs/notes/concrete-writer add -f -m "$(printf '%s\n\n%s' "$REPLAY_HEAD_STANZA" "$REPLAY_ANC_OLD_STANZA")" "$REPLAY_HEAD" 2>/dev/null
+REPLAY_NOTES_SHA="$(g rev-parse refs/notes/concrete-writer)"
+val_replay="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" validate-notes --repo "$W" --notes-rev "$REPLAY_NOTES_SHA" 2>&1)"; rc=$?
+check "validate-notes refuses a head note that embeds an ancestor's writer-log stanza (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "records commit $3, not $4" <<<"$2"' _ "$rc" "$val_replay" "$REPLAY_ANC" "$REPLAY_HEAD"
+drv_replay="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" derive --repo "$W" --base "$REPLAY_BASE" --head "$REPLAY_HEAD" --reviewer kimi 2>&1)"; rc=$?
+check "derive refuses when head note embeds an ancestor's older signed stanza (exit 2, got $rc)" test "$rc" -eq 2
+v_replay_after="$(cd "$W" && bash "$VERIFY" "$REPLAY_HEAD" 2>&1)"; rc=$?
+check "verify.sh still refuses kimi clean note when ancestor's older signed claude stanza is appended to head's note (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "records commit $3, not $4" <<<"$2"' _ "$rc" "$v_replay_after" "$REPLAY_ANC" "$REPLAY_HEAD"
+g notes --ref=refs/notes/concrete-writer add -f -m "$REPLAY_HEAD_STANZA" "$REPLAY_HEAD" 2>/dev/null
+# Replay 2: pass the truncated pre-correction exported log via --log-object.
+trunc_ver="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" verify --repo "$W" --base "$REPLAY_BASE" --head "$REPLAY_HEAD" --claimed-writer "claude" --reviewer kimi --log-object "$REPLAY_TRUNC_BLOB" 2>&1)"; rc=$?
+check "verify with --log-object refuses a truncated pre-correction exported log against authoritative per-commit history (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "has truncated history for commit" <<<"$2"' _ "$rc" "$trunc_ver"
+trunc_drv="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" derive --repo "$W" --base "$REPLAY_BASE" --head "$REPLAY_HEAD" --log-object "$REPLAY_TRUNC_BLOB" 2>&1)"; rc=$?
+check "derive with --log-object refuses a truncated pre-correction exported log (exit 2, got $rc)" \
+  bash -c '[ "$1" -eq 2 ] && grep -q "has truncated history for commit" <<<"$2"' _ "$rc" "$trunc_drv"
+# Replay 3: pass a conflicting exported log via --log-object (different signed entry for REPLAY_ANC).
+sed 's/^evidence: .*/evidence: conflicting signed backfill entry/' <<<"$REPLAY_ANC_OLD_STANZA" >"$T/replay-conflict-raw"
+sign_raw_stanza "$T/replay-conflict-raw" "$T/replay-conflict-stanza"
+printf '%s\n\n%s\n' "$(cat "$T/replay-conflict-stanza")" "$REPLAY_HEAD_STANZA" >"$T/replay-conflict.log"
+conf_ver="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" verify --repo "$W" --base "$REPLAY_BASE" --head "$REPLAY_HEAD" --claimed-writer "claude" --reviewer codex --log-object "$T/replay-conflict.log" 2>&1)"; rc=$?
+check "verify with --log-object refuses a conflicting exported log against authoritative per-commit history (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "conflicts with authoritative writer history for commit" <<<"$2"' _ "$rc" "$conf_ver"
+g notes --ref=refs/notes/concrete-review remove "$REPLAY_HEAD" 2>/dev/null
+
 # Allowed signers controls (Task A / owner item 7, approved 2026-11-08):
 # 1. Entry signed by a throwaway key listed under its principal verifies (tested across BF_BASE..BF_R4).
 listed_drv="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" derive --repo "$W" --base "$BF_BASE" --head "$BF_R4" 2>&1)"; rc=$?
@@ -978,6 +1029,14 @@ sed 's/collect_reviewer_output "\$REVIEWER" "\$REVIEW_TREE" "\$prompt" "\$out" "
 bad_c4="$(bash "$COLLECTOR" --check-structure "$COLLECTOR" "$T/bad-caller-swap.sh" 2>&1)"; rc=$?
 check "structural check catches a caller that passes \$log in place of the final-message file (exit 1, got $rc)" \
   bash -c '[ "$1" -eq 1 ] && grep -q "passes log file in place of final-message out file" <<<"$2"' _ "$rc" "$bad_c4"
+sed 's/validate_reviewer_output/python3 -I "\$OUTPUT_CONTRACT" --commit "\$sha" --verdicts ACCEPT,REJECT </g' "$ROOT_DIR/scripts/land/signoff.sh" >"$T/bad-signoff-novalidate.sh"
+bad_c5="$(bash "$COLLECTOR" --check-structure "$COLLECTOR" "$T/bad-signoff-novalidate.sh" 2>&1)"; rc=$?
+check "structural check catches a caller that bypasses validate_reviewer_output (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "caller does not call validate_reviewer_output" <<<"$2"' _ "$rc" "$bad_c5"
+sed 's/prepare_review_archive "\$repo_root" "\$sha" "\$tree" "\$manifest"/git archive "\$sha" | tar -x -C "\$tree"/' "$ROOT_DIR/scripts/land/signoff.sh" >"$T/bad-signoff-noarchive.sh"
+bad_c6="$(bash "$COLLECTOR" --check-structure "$COLLECTOR" "$T/bad-signoff-noarchive.sh" 2>&1)"; rc=$?
+check "structural check catches a caller that extracts git archive directly instead of using prepare_review_archive (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "caller does not call prepare_review_archive" <<<"$2" && grep -q "invokes git archive directly" <<<"$2"' _ "$rc" "$bad_c6"
 chmod -R u+w "$T/col-tree" 2>/dev/null || true
 
 echo "=== content-filter refusal: one neutral retry on smaller pieces ==="
@@ -1090,6 +1149,21 @@ g notes --ref=refs/notes/concrete-writer-replace add -f -F "$T/replaced-bf-r1" "
 hook_out="$(wnote_hook "$(g rev-parse refs/notes/concrete-writer-replace)" "$WRITER_NOTES_SHA")"; rc=$?
 check "hook refuses a refs/notes/concrete-writer update that rewrites/replaces an existing entry instead of appending (exit 1, got $rc)" \
   bash -c '[ "$1" -eq 1 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$hook_out"
+# Absent nonzero old_notes_rev vs all-zero creation sentinel:
+# Supplying a nonzero old notes SHA that is not available locally must fail closed (never be treated as
+# initial creation skipping deletion/replacement checks), whereas the all-zero creation sentinel Z is accepted.
+ABSENT_OLD_NOTES_SHA="deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+hook_out="$(wnote_hook "$(g rev-parse refs/notes/concrete-writer-replace)" "$ABSENT_OLD_NOTES_SHA")"; rc=$?
+check "hook refuses a replacement notes tree when supplied a nonzero old SHA not available locally (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "old-notes-rev '\''deadbeefdeadbeefdeadbeefdeadbeefdeadbeef'\'' is not available locally" <<<"$2"' _ "$rc" "$hook_out"
+hook_out="$(wnote_hook "$WRITER_NOTES_SHA" "$ABSENT_OLD_NOTES_SHA")"; rc=$?
+check "hook refuses even a valid notes tree when supplied an absent nonzero old SHA, distinguishing it from the all-zero creation sentinel (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "every nonzero old notes SHA must resolve and be compared" <<<"$2"' _ "$rc" "$hook_out"
+hook_out="$(wnote_hook "$WRITER_NOTES_SHA" "$Z")"; rc=$?
+check "hook accepts the valid notes tree when supplied the all-zero creation sentinel (exit 0, got $rc)" test "$rc" -eq 0
+empty_old_out="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" validate-notes --repo "$W" --notes-rev "$WRITER_NOTES_SHA" --old-notes-rev "" 2>&1)"; rc=$?
+check "validate-notes refuses an empty --old-notes-rev argument (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "old-notes-rev is empty" <<<"$2"' _ "$rc" "$empty_old_out"
 # Appending a valid signed superseding entry on BF_R2 is accepted by the pre-push hook against WRITER_NOTES_SHA.
 BF_R2_OLD_NOTE="$(g notes --ref=refs/notes/concrete-writer show "$BF_R2")"
 BF_R2_EID="$(sed -n 's/^entry-id: //p' <<<"$BF_R2_OLD_NOTE")"

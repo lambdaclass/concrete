@@ -609,15 +609,49 @@ def get_commit_note_history(
         return None
     eff_signers = resolve_allowed_signers(repo, allowed_signers_path)
     stanzas = parse_multi_stanza_log(proc.stdout, f"{WRITER_NOTES_REF} on {sha[:10]}", eff_signers)
-    if sha in stanzas:
-        return stanzas[sha]
-    if len(stanzas) == 1:
-        only_list = next(iter(stanzas.values()))
-        only = only_list[-1]
+    if not stanzas:
+        raise ProvenanceError(f"{WRITER_NOTES_REF} on {sha[:10]} is empty")
+    for c_sha, c_hist in stanzas.items():
+        if c_sha != sha:
+            raise ProvenanceError(
+                f"{WRITER_NOTES_REF} on {sha[:10]} records commit {c_hist[-1]['commit']}, not {sha} "
+                f"(each commit has one authoritative writer history on its own note)"
+            )
+    return stanzas[sha]
+
+
+def verify_history_against_authority(
+    commit_sha: str,
+    candidate: list[dict[str, str]] | None,
+    authority: list[dict[str, str]] | None,
+    source_desc: str = "exported writer-log",
+) -> None:
+    """Verify an exported or external per-commit history against the commit's authoritative note history."""
+    if authority is None and candidate is None:
+        return
+    if authority is None and candidate is not None:
         raise ProvenanceError(
-            f"{WRITER_NOTES_REF} on {sha[:10]} records commit {only['commit']}, not {sha}"
+            f"{source_desc} contains history for commit {commit_sha[:10]}, which has no authoritative note in {WRITER_NOTES_REF}"
         )
-    raise ProvenanceError(f"{WRITER_NOTES_REF} on {sha[:10]} has no entry for {sha}")
+    if authority is not None and candidate is None:
+        raise ProvenanceError(
+            f"{source_desc} is missing history for commit {commit_sha[:10]} "
+            f"(authoritative note in {WRITER_NOTES_REF} has {len(authority)} entr{'y' if len(authority) == 1 else 'ies'})"
+        )
+    assert authority is not None and candidate is not None
+    auth_ids = [e["entry-id"] for e in authority]
+    cand_ids = [e["entry-id"] for e in candidate]
+    auth_stanzas = [format_log_stanza(e) for e in authority]
+    cand_stanzas = [format_log_stanza(e) for e in candidate]
+    if len(candidate) < len(authority) and cand_ids == auth_ids[: len(candidate)]:
+        raise ProvenanceError(
+            f"{source_desc} has truncated history for commit {commit_sha[:10]} "
+            f"({len(candidate)} of {len(authority)} entries, ending at {cand_ids[-1][:10]} instead of {auth_ids[-1][:10]})"
+        )
+    if cand_stanzas != auth_stanzas:
+        raise ProvenanceError(
+            f"{source_desc} conflicts with authoritative writer history for commit {commit_sha[:10]} in {WRITER_NOTES_REF}"
+        )
 
 
 def validate_entry_against_commit(
@@ -936,14 +970,6 @@ def derive_range_provenance(
 
     eff_signers = resolve_allowed_signers(repo, allowed_signers_path)
 
-    head_multi_log: dict[str, list[dict[str, str]]] = {}
-    if external_log is None:
-        proc = git_run(repo, ["notes", f"--ref={WRITER_NOTES_REF}", "show", head_sha], check=False)
-        if proc.returncode == 0 and proc.stdout.strip():
-            head_multi_log = parse_multi_stanza_log(
-                proc.stdout, f"{WRITER_NOTES_REF} on {head_sha[:10]}", eff_signers
-            )
-
     writers: list[str] = []
     log_entries: list[dict[str, str]] = []
     histories: dict[str, list[dict[str, str]]] = {}
@@ -953,12 +979,15 @@ def derive_range_provenance(
             writers.append(w)
 
     for c in commits:
-        eff_log = external_log if external_log is not None else (head_multi_log if c in head_multi_log else None)
         model, entry, history, is_merge, merge_has_resolution = inspect_commit(
-            repo, c, head_sha, eff_log, eff_signers
+            repo, c, head_sha, None, eff_signers
         )
         if is_merge and not merge_has_resolution:
+            if external_log is not None and c in external_log:
+                verify_history_against_authority(c, external_log.get(c), history or None)
             continue
+        if external_log is not None:
+            verify_history_against_authority(c, external_log.get(c), history or None)
         if model is not None and entry is not None:
             add_writer(model)
             log_entries.append(entry)
@@ -1392,6 +1421,12 @@ def cmd_backfill(args: argparse.Namespace) -> int:
             parsed_map = parse_multi_stanza_log(
                 existing_raw, f"existing {WRITER_NOTES_REF} on {commit_sha[:10]}", eff_signers
             )
+            for c_sha, c_hist in parsed_map.items():
+                if c_sha != commit_sha:
+                    raise ProvenanceError(
+                        f"existing {WRITER_NOTES_REF} on {commit_sha[:10]} records commit {c_hist[-1]['commit']}, "
+                        f"not {commit_sha} (each commit has one authoritative writer history on its own note)"
+                    )
             existing_history = parsed_map.get(commit_sha, [])
 
         if existing_history and not args.supersedes:
@@ -1523,14 +1558,25 @@ def validate_notes_ref(
     eff_signers = resolve_allowed_signers(repo, allowed_signers_path)
     new_entries = list_notes_tree(repo, notes_rev)
     old_entries: dict[str, str] = {}
-    if old_notes_rev and old_notes_rev != ZERO40 and commit_exists(repo, old_notes_rev):
-        old_entries = list_notes_tree(repo, old_notes_rev)
-        removed = sorted(set(old_entries.keys()) - set(new_entries.keys()))
-        if removed:
-            rem_str = ", ".join(c[:10] for c in removed)
+    if old_notes_rev is not None:
+        old_rev_stripped = old_notes_rev.strip()
+        if not old_rev_stripped:
             raise ProvenanceError(
-                f"writer-notes push deletes existing writer-log entry for commit(s): {rem_str}"
+                "old-notes-rev is empty (expected 40-hex creation sentinel 0000... or an existing notes commit)"
             )
+        if old_rev_stripped != ZERO40:
+            if not commit_exists(repo, old_rev_stripped):
+                raise ProvenanceError(
+                    f"old-notes-rev '{old_rev_stripped}' is not available locally "
+                    f"(every nonzero old notes SHA must resolve and be compared)"
+                )
+            old_entries = list_notes_tree(repo, old_rev_stripped)
+            removed = sorted(set(old_entries.keys()) - set(new_entries.keys()))
+            if removed:
+                rem_str = ", ".join(c[:10] for c in removed)
+                raise ProvenanceError(
+                    f"writer-notes push deletes existing writer-log entry for commit(s): {rem_str}"
+                )
 
     validated = 0
     for annotated_sha, blob_sha in sorted(new_entries.items()):
@@ -1547,15 +1593,12 @@ def validate_notes_ref(
         )
         if not stanzas:
             raise ProvenanceError(f"{WRITER_NOTES_REF} on {annotated_sha[:10]} is empty")
-        if annotated_sha not in stanzas:
-            if len(stanzas) == 1:
-                only = next(iter(stanzas.values()))[-1]
+        for c_sha, c_hist in stanzas.items():
+            if c_sha != annotated_sha:
                 raise ProvenanceError(
-                    f"{WRITER_NOTES_REF} on {annotated_sha[:10]} records commit {only['commit']}, not {annotated_sha}"
+                    f"{WRITER_NOTES_REF} on {annotated_sha[:10]} records commit {c_hist[-1]['commit']}, not {annotated_sha} "
+                    f"(each commit has one authoritative writer history on its own note)"
                 )
-            raise ProvenanceError(
-                f"{WRITER_NOTES_REF} on {annotated_sha[:10]} has no entry for {annotated_sha}"
-            )
 
         if old_blob_sha and is_changed:
             old_proc = git_run(repo, ["cat-file", "blob", old_blob_sha], check=True)
@@ -1576,27 +1619,22 @@ def validate_notes_ref(
                 f"{WRITER_NOTES_REF} on {annotated_sha[:10]} annotates a commit not present in this repository"
             )
         if has_target:
-            for c_sha, history in stanzas.items():
-                if not commit_exists(repo, c_sha):
-                    raise ProvenanceError(
-                        f"{WRITER_NOTES_REF} on {annotated_sha[:10]} references missing commit {c_sha[:10]}"
-                    )
-                latest = history[-1]
-                head_for_check = annotated_sha if len(stanzas) > 1 else latest["end-sha"]
-                inspect_commit(repo, c_sha, head_for_check, stanzas, eff_signers)
-                # Also enforce that a backfill entry never attributes a commit to its review note's
-                # reviewer unless an earlier signed entry already did so.
-                for idx, h in enumerate(history):
-                    if h.get("source") == "backfill":
-                        earlier_models = {p["model"] for p in history[:idx]}
-                        for rev_target in dict.fromkeys([c_sha, h["end-sha"], annotated_sha]):
-                            rev_model = get_review_note_reviewer(repo, rev_target)
-                            if rev_model and rev_model == h["model"] and h["model"] not in earlier_models:
-                                raise ProvenanceError(
-                                    f"{WRITER_NOTES_REF} on {annotated_sha[:10]}: backfill entry "
-                                    f"{h['entry-id'][:10]} attributes {c_sha[:10]} to '{h['model']}', "
-                                    f"which is the reviewer on {rev_target[:10]}'s review note"
-                                )
+            history = stanzas[annotated_sha]
+            latest = history[-1]
+            inspect_commit(repo, annotated_sha, latest["end-sha"], stanzas, eff_signers)
+            # Also enforce that a backfill entry never attributes a commit to its review note's
+            # reviewer unless an earlier signed entry already did so.
+            for idx, h in enumerate(history):
+                if h.get("source") == "backfill":
+                    earlier_models = {p["model"] for p in history[:idx]}
+                    for rev_target in dict.fromkeys([annotated_sha, h["end-sha"]]):
+                        rev_model = get_review_note_reviewer(repo, rev_target)
+                        if rev_model and rev_model == h["model"] and h["model"] not in earlier_models:
+                            raise ProvenanceError(
+                                f"{WRITER_NOTES_REF} on {annotated_sha[:10]}: backfill entry "
+                                f"{h['entry-id'][:10]} attributes {annotated_sha[:10]} to '{h['model']}', "
+                                f"which is the reviewer on {rev_target[:10]}'s review note"
+                            )
         validated += 1
     return validated
 

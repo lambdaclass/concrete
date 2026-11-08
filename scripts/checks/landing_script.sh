@@ -1526,6 +1526,37 @@ o="$(bash "$ROOT_DIR/scripts/land/signoff.sh" record "$R2" --base "$MR" --rounds
   --agy-request "$TMP/so-collect-req.txt" --agy "$TMP/so-collect-out.txt" 2>&1)"; r=$?
 [ "$r" = 0 ] && has "$o" "verdicts: codex ACCEPT, kimi ACCEPT, agy ACCEPT" \
   && ok "signoff.sh record accepts the matching -o final-message file collected by signoff.sh collect" || { no "signoff.sh record with codex -o file (exit $r)"; echo "$o" | sed 's/^/      /'; }
+# Negative controls for signoff.sh collect shared validation path:
+# 1. A reviewer emitting a valid final message while reporting "sandbox could not start" on stderr (--log)
+#    must be rejected by signoff.sh collect (exit 1) and leave no --out file behind.
+cat > "$TMP/fake-codex-so-stderr-fail" <<'EOF'
+#!/usr/bin/env bash
+out=""
+while [ $# -gt 0 ]; do
+  case "$1" in -o) out="$2"; shift 2 ;; *) shift ;; esac
+done
+printf 'READ: rv2.txt\nREPOSITORY: readable\nVERDICT: ACCEPT\n' > "$out"
+echo "sandbox could not start" >&2
+EOF
+chmod +x "$TMP/fake-codex-so-stderr-fail"
+o="$(REVIEW_CODEX_BIN="$TMP/fake-codex-so-stderr-fail" bash "$ROOT_DIR/scripts/land/signoff.sh" collect "$R2" --reviewer codex --request "$TMP/so-collect-req.txt" --out "$TMP/so-collect-stderr-out.txt" --log "$TMP/so-collect-stderr-log.txt" 2>&1)"; r=$?
+[ "$r" != 0 ] && has "$o" "status=blocked (reviewer output or log reported a repository or sandbox failure" && [ ! -e "$TMP/so-collect-stderr-out.txt" ] \
+  && ok "signoff.sh collect rejects a reviewer that reports a sandbox failure on stderr and removes --out" || { no "signoff.sh collect stderr sandbox failure (exit $r)"; echo "$o" | sed 's/^/      /'; }
+# 2. A reviewer that makes an archived source file writable, modifies it, and returns ACCEPT with valid
+#    READ: lines must be rejected by signoff.sh collect's before/after archive manifest check (exit 1).
+cat > "$TMP/fake-codex-so-mutate" <<'EOF'
+#!/usr/bin/env bash
+out="" cd_dir=""
+while [ $# -gt 0 ]; do
+  case "$1" in -o) out="$2"; shift 2 ;; -C) cd_dir="$2"; shift 2 ;; *) shift ;; esac
+done
+chmod u+w "$cd_dir/rv2.txt" 2>/dev/null && printf 'mutated by reviewer\n' > "$cd_dir/rv2.txt"
+printf 'READ: rv2.txt\nREPOSITORY: readable\nVERDICT: ACCEPT\n' > "$out"
+EOF
+chmod +x "$TMP/fake-codex-so-mutate"
+o="$(REVIEW_CODEX_BIN="$TMP/fake-codex-so-mutate" bash "$ROOT_DIR/scripts/land/signoff.sh" collect "$R2" --reviewer codex --request "$TMP/so-collect-req.txt" --out "$TMP/so-collect-mutate-out.txt" --log "$TMP/so-collect-mutate-log.txt" 2>&1)"; r=$?
+[ "$r" != 0 ] && has "$o" "status=blocked (reviewer modified the read-only archived review tree" && [ ! -e "$TMP/so-collect-mutate-out.txt" ] \
+  && ok "signoff.sh collect rejects a reviewer that modifies the read-only archive and removes --out" || { no "signoff.sh collect mutating reviewer (exit $r)"; echo "$o" | sed 's/^/      /'; }
 bash "$TMP/put-review" "$R2" none; bash "$TMP/put-signoff" "$R2" none
 bash "$TMP/put-signoff" "$SD" none
 git checkout -q train/trv

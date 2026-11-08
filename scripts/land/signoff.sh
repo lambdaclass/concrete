@@ -255,20 +255,21 @@ cmd_collect() {
   [ -f "$req" ] || die "collect: --request FILE is required"
   [ -n "$out" ] || die "collect: --out FILE is required"
   names "$sha" < "$req" || die "collect: request body does not name ${sha:0:10} (an unambiguous prefix of at least 7 hex digits)"
-  local work tree rc=0 c_out c_status c_reason
+  local work tree manifest repo_root rc=0 c_out c_status c_reason
+  repo_root="$(git rev-parse --show-toplevel)"
   work="$(mktemp -d "${TMPDIR:-/tmp}/concrete-signoff-collect.XXXXXX")"
   # shellcheck disable=SC2064
   trap "chmod -R u+w '$work' 2>/dev/null || true; rm -rf '$work'" RETURN
   [ -n "$log" ] || log="$work/$reviewer.log"
   tree="$work/tree"
-  mkdir -p "$tree"
-  git archive "$sha" | tar -x -C "$tree"
-  chmod -R a-w "$tree"
+  manifest="$work/tree.manifest"
+  prepare_review_archive "$repo_root" "$sha" "$tree" "$manifest"
   collect_reviewer_output "$reviewer" "$tree" "$req" "$out" "$log" "$timeout" || rc=$?
-  c_out="$(python3 -I "$OUTPUT_CONTRACT" --commit "$sha" --verdicts ACCEPT,REJECT < "$out")" || die "collect: output_contract.py failed"
+  c_out="$(validate_reviewer_output "$repo_root" "$sha" "$tree" "$manifest" "$out" "$log" "ACCEPT,REJECT" "$rc")" || die "collect: validate_reviewer_output failed"
   c_status="$(printf '%s\n' "$c_out" | sed -n 's/^status: //p' | head -1)"
   c_reason="$(printf '%s\n' "$c_out" | sed -n 's/^reason: //p' | head -1)"
   if [ "$rc" -ne 0 ] || { [ "$c_status" != ACCEPT ] && [ "$c_status" != REJECT ]; }; then
+    rm -f "$out"
     echo "signoff: collect ($reviewer on ${sha:0:10}) failed: status=$c_status ($c_reason, exit $rc)" >&2
     return 1
   fi

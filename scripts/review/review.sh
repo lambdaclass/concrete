@@ -283,36 +283,7 @@ if [ ! -s "$WORK/full.diff" ]; then
 fi
 
 REVIEW_TREE="$WORK/reviewed-tree"
-extract_review_tree() {
-  chmod -R u+w "$REVIEW_TREE" 2>/dev/null || true
-  rm -rf "$REVIEW_TREE"
-  mkdir -p "$REVIEW_TREE"
-  git archive "$HEAD_SHA" | tar -x -C "$REVIEW_TREE"
-  chmod -R a-w "$REVIEW_TREE"
-}
-snapshot_review_tree() {
-  python3 -I - "$REVIEW_TREE" <<'PY'
-import hashlib, os, sys
-root = sys.argv[1]
-for dirpath, dirnames, filenames in os.walk(root):
-    dirnames.sort()
-    filenames.sort()
-    rel_d = os.path.relpath(dirpath, root)
-    print(f"D\t{rel_d}\t{os.stat(dirpath, follow_symlinks=False).st_mode & 0o777}")
-    for fn in filenames:
-        p = os.path.join(dirpath, fn)
-        rel = os.path.relpath(p, root)
-        st = os.stat(p, follow_symlinks=False)
-        if os.path.islink(p):
-            h = os.readlink(p)
-        else:
-            with open(p, "rb") as f:
-                h = hashlib.sha256(f.read()).hexdigest()
-        print(f"F\t{rel}\t{st.st_mode & 0o777}\t{h}")
-PY
-}
-extract_review_tree
-snapshot_review_tree >"$WORK/tree.manifest"
+prepare_review_archive "$ROOT" "$HEAD_SHA" "$REVIEW_TREE" "$WORK/tree.manifest"
 
 # Open findings to carry forward: those of the latest round, and, when that
 # round was blocked, also those of the last fully reviewed round (the blocked
@@ -411,29 +382,19 @@ run_one() {
   cat "$piece" >>"$prompt"
   cp "$prompt" "$LAST_PROMPT"
   LAST_PROMPT_SHA="$(sha256_file "$LAST_PROMPT")"
-  # Collect only the reviewer's final message into $out (and diagnostic logs into $log) via the
-  # shared collector (scripts/review/collect_output.sh). Never fall back from $log to $out.
+  # Collect only the reviewer's final message into $out (and diagnostic logs into $log) and
+  # validate archive integrity, process outcome, final message and log via scripts/review/collect_output.sh.
   collect_reviewer_output "$REVIEWER" "$REVIEW_TREE" "$prompt" "$out" "$log" "$TIMEOUT" "$REVIEWER_BIN" || rc=$?
   msg="$(cat "$out")"
   LAST_BODY="$msg"
-  snapshot_review_tree >"$WORK/tree.after"
-  if ! cmp -s "$WORK/tree.manifest" "$WORK/tree.after"; then
-    extract_review_tree
-    LAST_RESULT=blocked
-    LAST_BODY="${msg:+$msg
-}(reviewer modified the read-only archived review tree; tree restored)"
-    return 0
-  fi
-  local incomplete_flag=()
-  if bounded_is_incomplete "$rc"; then
-    incomplete_flag=(--incomplete)
-  fi
-  printf '%s' "$msg" >"$WORK/msg.$RUN_N.txt"
-  contract_out="$(python3 -I "$SCRIPT_DIR/output_contract.py" \
-    --repo "$ROOT" --commit "$HEAD_SHA" --verdicts clean,findings \
-    --rc "$rc" "${incomplete_flag[@]}" --log "$log" "$WORK/msg.$RUN_N.txt")"
+  contract_out="$(validate_reviewer_output "$ROOT" "$HEAD_SHA" "$REVIEW_TREE" "$WORK/tree.manifest" "$out" "$log" "clean,findings" "$rc")"
   LAST_RESULT="$(note_field "$contract_out" status)"
   reason="$(note_field "$contract_out" reason)"
+  if [ "$(note_field "$contract_out" tree_modified)" = yes ]; then
+    LAST_BODY="${msg:+$msg
+}($reason; tree restored)"
+    return 0
+  fi
   if [ "$LAST_RESULT" = error ]; then
     LAST_BODY="$msg
 (reviewer exited $rc; last lines of its log:)

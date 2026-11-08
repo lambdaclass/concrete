@@ -8,7 +8,10 @@
 # agent's final message to `-o <file>`.
 #
 # Every tool that collects reviewer output (scripts/review/review.sh, scripts/land/signoff.sh,
-# and any other caller) must use `collect_reviewer_output` from this file so that:
+# and any other caller) must use `prepare_review_archive`, `collect_reviewer_output`, and
+# `validate_reviewer_output` from this file so that:
+#   - The read-only archive is extracted and snapshotted before the reviewer runs and verified
+#     afterward (`prepare_review_archive` / `verify_review_archive`), refusing any modification;
 #   - Codex runs with `-o <out-file>` for the final message and `><log-file> 2>&1` for stdout/stderr;
 #   - agy runs with `-p <prompt> ><out-file> 2><log-file>` (final response on stdout, stderr separate);
 #   - Kimi runs with `-p <prompt> ><out-file> 2><log-file>` (stdout separate from stderr).
@@ -17,11 +20,15 @@
 #     final-message-only flag (`text` renders every assistant step through PromptBlockWriter on
 #     stdout, and `stream-json` emits a JSONL event stream). Per project policy, neither this
 #     collector nor output_contract.py parses or strips logs.
-#   - Diagnostic logs (`<log-file>`) are never copied or fallen back into `<out-file>` or `msg`.
+#   - Diagnostic logs (`<log-file>`) are never copied or fallen back into `<out-file>` or `msg`,
+#     and `validate_reviewer_output` always supplies `--log <log-file>`, `--rc <rc>`, and
+#     `--incomplete` (when `bounded_is_incomplete`) to `output_contract.py` alongside `<out-file>`.
 #
 # Usage (sourced):
 #   source scripts/review/collect_output.sh
+#   prepare_review_archive <repo> <commit> <review-tree> <manifest-file>
 #   collect_reviewer_output <codex|kimi|agy> <review-tree> <prompt-file> <out-file> <log-file> [timeout] [bin]
+#   validate_reviewer_output <repo> <commit> <review-tree> <manifest-file> <out-file> <log-file> <verdicts> <rc>
 #
 # Usage (CLI):
 #   scripts/review/collect_output.sh collect <codex|kimi|agy> --tree DIR --prompt FILE --out FILE --log FILE [--timeout SECS] [--bin PATH]
@@ -32,6 +39,87 @@ if ! declare -F bounded_run >/dev/null 2>&1; then
   # shellcheck source=../checks/lib/bounded.sh
   source "$COLLECT_OUTPUT_DIR/../checks/lib/bounded.sh"
 fi
+
+snapshot_review_archive() {
+  local tree_dir="$1"
+  python3 -I - "$tree_dir" <<'PY'
+import hashlib, os, sys
+root = sys.argv[1]
+for dirpath, dirnames, filenames in os.walk(root):
+    dirnames.sort()
+    filenames.sort()
+    rel_d = os.path.relpath(dirpath, root)
+    print(f"D\t{rel_d}\t{os.stat(dirpath, follow_symlinks=False).st_mode & 0o777}")
+    for fn in filenames:
+        p = os.path.join(dirpath, fn)
+        rel = os.path.relpath(p, root)
+        st = os.stat(p, follow_symlinks=False)
+        if os.path.islink(p):
+            h = os.readlink(p)
+        else:
+            with open(p, "rb") as f:
+                h = hashlib.sha256(f.read()).hexdigest()
+        print(f"F\t{rel}\t{st.st_mode & 0o777}\t{h}")
+PY
+}
+
+prepare_review_archive() {
+  if [ "$#" -ne 4 ]; then
+    echo "collect_output: usage: prepare_review_archive <repo> <commit> <review-tree> <manifest-file>" >&2
+    return 2
+  fi
+  local repo="$1" commit="$2" review_tree="$3" manifest_file="$4"
+  chmod -R u+w "$review_tree" 2>/dev/null || true
+  rm -rf "$review_tree"
+  mkdir -p "$review_tree"
+  git -C "$repo" archive "$commit" | tar -x -C "$review_tree"
+  chmod -R a-w "$review_tree"
+  snapshot_review_archive "$review_tree" >"$manifest_file"
+}
+
+verify_review_archive() {
+  if [ "$#" -ne 4 ]; then
+    echo "collect_output: usage: verify_review_archive <repo> <commit> <review-tree> <manifest-file>" >&2
+    return 2
+  fi
+  local repo="$1" commit="$2" review_tree="$3" manifest_file="$4"
+  local after_file="${manifest_file}.after"
+  snapshot_review_archive "$review_tree" >"$after_file"
+  if ! cmp -s "$manifest_file" "$after_file"; then
+    rm -f "$after_file"
+    prepare_review_archive "$repo" "$commit" "$review_tree" "$manifest_file"
+    return 1
+  fi
+  rm -f "$after_file"
+  return 0
+}
+
+validate_reviewer_output() {
+  if [ "$#" -ne 8 ]; then
+    echo "collect_output: usage: validate_reviewer_output <repo> <commit> <review-tree> <manifest-file> <out-file> <log-file> <verdicts> <rc>" >&2
+    return 2
+  fi
+  local repo="$1" commit="$2" review_tree="$3" manifest_file="$4" out_file="$5" log_file="$6" verdicts="$7" rc="$8"
+  if [ -z "$out_file" ] || [ -z "$log_file" ]; then
+    echo "collect_output: out-file and log-file must be non-empty paths" >&2
+    return 2
+  fi
+  if [ "$out_file" -ef "$log_file" ]; then
+    echo "collect_output: out-file and log-file must be distinct files ('$out_file' vs '$log_file')" >&2
+    return 2
+  fi
+  if ! verify_review_archive "$repo" "$commit" "$review_tree" "$manifest_file"; then
+    printf 'status: blocked\nreason: reviewer modified the read-only archived review tree\ntree_modified: yes\n'
+    return 0
+  fi
+  local incomplete_flag=()
+  if bounded_is_incomplete "$rc"; then
+    incomplete_flag=(--incomplete)
+  fi
+  python3 -I "$COLLECT_OUTPUT_DIR/output_contract.py" \
+    --repo "$repo" --commit "$commit" --verdicts "$verdicts" \
+    --rc "$rc" "${incomplete_flag[@]}" --log "$log_file" "$out_file"
+}
 
 collect_reviewer_output() {
   if [ "$#" -lt 5 ] || [ "$#" -gt 7 ]; then
@@ -158,9 +246,14 @@ if not re.search(r'"\$out_file"\s+-ef\s+"\$log_file"', collector_code):
     errors.append(f"{collector_path}: collector must guard against \"$out_file\" -ef \"$log_file\"")
 if re.search(r'cat\s+["\']?\$log|cp\s+["\']?\$log', collector_code):
     errors.append(f"{collector_path}: collector must never read or copy from $log_file into the final message")
+if not re.search(r'verify_review_archive\s+"\$repo"\s+"\$commit"\s+"\$review_tree"\s+"\$manifest_file"', collector_code):
+    errors.append(f"{collector_path}: validate_reviewer_output must verify the read-only archive via verify_review_archive")
+if not re.search(r'--rc\s+"\$rc"\s+"\$\{incomplete_flag\[@\]\}"\s+--log\s+"\$log_file"\s+"\$out_file"', collector_code):
+    errors.append(f"{collector_path}: validate_reviewer_output must pass --rc, --incomplete, --log \"$log_file\" and \"$out_file\" to output_contract.py")
 
-# 4. Every caller must source collect_output.sh, invoke collect_reviewer_output, never invoke reviewer CLIs directly,
-#    never fall back from $log to $out/msg, and never pass $log to output_contract.py or collect_reviewer_output's out arg.
+# 4. Every caller must source collect_output.sh, invoke prepare_review_archive, collect_reviewer_output,
+#    and validate_reviewer_output, never invoke reviewer CLIs or git archive directly, never fall back
+#    from $log to $out/msg, and never pass $log to output_contract.py or collect_reviewer_output's out arg.
 for cp in caller_paths:
     try:
         raw = open(cp, encoding="utf-8").read()
@@ -170,8 +263,14 @@ for cp in caller_paths:
     code = strip_comments(raw)
     if "collect_output.sh" not in code:
         errors.append(f"{cp}: caller does not source collect_output.sh")
-    if "collect_reviewer_output" not in code:
+    if not re.search(r'\bprepare_review_archive\s+"', code):
+        errors.append(f"{cp}: caller does not call prepare_review_archive")
+    if not re.search(r'\bcollect_reviewer_output\s+"', code):
         errors.append(f"{cp}: caller does not call collect_reviewer_output")
+    if not re.search(r'\bvalidate_reviewer_output\s+"', code):
+        errors.append(f"{cp}: caller does not call validate_reviewer_output")
+    if re.search(r'\bgit\s+archive\b', code):
+        errors.append(f"{cp}: caller invokes git archive directly instead of using prepare_review_archive")
     if re.search(r'--skip-git-repo-check|--dangerously-skip-permissions', code):
         errors.append(f"{cp}: caller invokes reviewer CLI flags directly instead of using collect_reviewer_output")
     if re.search(r'msg="\$\(cat\s+"\$log"|cp\s+"\$log"\s+"\$out"', code):
@@ -180,6 +279,10 @@ for cp in caller_paths:
         args_str = m.group(1)
         if re.search(r'"\$log"\s+"\$log"|"\$log_file"\s+"\$log_file"|"\$log"\s+"\$out"', args_str):
             errors.append(f"{cp}: collect_reviewer_output call passes log file in place of final-message out file: {args_str}")
+    for m in re.finditer(r'validate_reviewer_output\s+([^\n;]+)', code):
+        args_str = m.group(1)
+        if re.search(r'"\$log"\s+"\$log"|"\$log_file"\s+"\$log_file"|"\$log"\s+"\$out"', args_str):
+            errors.append(f"{cp}: validate_reviewer_output call passes log file in place of final-message out file: {args_str}")
     for m in re.finditer(r'output_contract\.py[^\n]*', code):
         line = m.group(0)
         if re.search(r'<"\$log"|"\$log"', line):
