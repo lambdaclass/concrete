@@ -10,18 +10,18 @@ owner on 2026-11-08), under the information-flow and memory decisions of 2026-11
 Leakage is what the baseline timing observer sees, not ordinary output. It is separate from public
 observations. `InstrumentedSteps` instruments C1's existing `Exec.Step` relation without changing
 the machine: each step contributes public observations, leakage, ordered release records and the
-external choices on which it depended. C6 is not on this base, so observations and choices are
-parameters of the instrumentation rather than a launcher-specific type.
+external choices on which it depended. C6's observation and environment contracts can supply the
+observation and choice instances; the instrumentation keeps those types explicit at this boundary.
 
 `DelimitedReleaseNI` and `ConstantTime` are different claims about executions. Both assume low-equivalent
 initial states, matched external choices and the same ordered release sites and values. NI requires
 the same public observations; CT requires the same leakage. A release policy authorizes sites; it
 does not discharge either claim. No scalar secret typing rule is chosen here (slice 7).
 
-The accounting half is an abstract per-lineage alloc/free/reset model. C4 is not on this base: its
-successful sized allocation and free operations instantiate `Action.alloc` and `Action.free`, and a
-reset instantiates `Action.reset` with the live bytes it releases. Addresses, provenance and failed
-operations are C4's concern; a failed operation has no accounting action. Requested bytes, net
+The accounting half is an abstract per-lineage alloc/free/reset model. C4's successful sized
+allocation and free operations instantiate `Action.alloc` and `Action.free`; a reset instantiates
+`Action.reset`, whose outflow is read from the actual pre-transition account. Addresses, provenance
+and failed operations are C4's concern; a failed operation has no accounting action. Requested bytes, net
 change, peak logical bytes and an allocator-defined footprint have independent evidence statuses.
 Stack accounting is separate. Wipes are effects, and `WipePreservation` states the obligation that
 erasure and optimization preserve them. Arrays, wiping implementations, heaps, hardware timing,
@@ -209,12 +209,12 @@ remain. -/
 def Account.reset (a : Account) : Account :=
   { a with live := 0 }
 
-/-- An abstract C4 accounting action. Reset carries exactly the live bytes it releases, making the
-outflow explicit in the execution history. -/
+/-- An abstract C4 accounting action. A reset names only its lineage: the amount released is a fact
+of the transition, not a caller-supplied field that the transition could be asked to confirm. -/
 inductive Action where
   | alloc (lineage : LineageId) (bytes : Nat)
   | free (lineage : LineageId) (bytes : Nat)
-  | reset (lineage : LineageId) (released : Nat)
+  | reset (lineage : LineageId)
   deriving DecidableEq, Repr
 
 /-- Abstract memory is only the accounting projection of C4 state. Every lineage starts empty. -/
@@ -227,14 +227,13 @@ def Memory.set (m : Memory) (lineage : LineageId) (a : Account) : Memory :=
 /-- The empty accounting projection. -/
 def Memory.empty : Memory := fun _ => Account.empty
 
-/-- Apply an action. Freeing more than the lineage's live bytes, or misstating a reset's released
-bytes, has no transition; C4's successful operations must satisfy these guards. -/
+/-- Apply an action. Freeing more than the lineage's live bytes has no transition. A reset releases
+exactly the lineage's current live bytes by setting that account's live field to zero. -/
 def apply (m : Memory) : Action → Option Memory
   | .alloc lineage bytes => some (Memory.set m lineage ((m lineage).alloc bytes))
   | .free lineage bytes =>
       if bytes ≤ (m lineage).live then some (Memory.set m lineage ((m lineage).free bytes)) else none
-  | .reset lineage released =>
-      if released = (m lineage).live then some (Memory.set m lineage (m lineage).reset) else none
+  | .reset lineage => some (Memory.set m lineage (m lineage).reset)
 
 /-- A successful sequence of abstract C4 accounting actions. -/
 def run (m : Memory) : List Action → Option Memory
@@ -253,11 +252,27 @@ def freed (lineage : LineageId) : List Action → Nat
   | .free l bytes :: rest => (if l = lineage then bytes else 0) + freed lineage rest
   | _ :: rest => freed lineage rest
 
-/-- Bytes released by resets of `lineage` in a sequence. -/
-def resetBytes (lineage : LineageId) : List Action → Nat
+/-- The reset outflow of one action, read from the account immediately before that action. -/
+def resetOutflow (lineage : LineageId) (m : Memory) : Action → Nat
+  | .reset l => if l = lineage then (m l).live else 0
+  | _ => 0
+
+/-- Bytes released by resets of `lineage` while executing a sequence from `m`. Each outflow comes
+from the actual intermediate state. An unsuccessful suffix contributes nothing. -/
+def resetBytes (lineage : LineageId) (m : Memory) : List Action → Nat
   | [] => 0
-  | .reset l bytes :: rest => (if l = lineage then bytes else 0) + resetBytes lineage rest
-  | _ :: rest => resetBytes lineage rest
+  | action :: rest =>
+      match apply m action with
+      | none => 0
+      | some m' => resetOutflow lineage m action + resetBytes lineage m' rest
+
+/-- Independent conservation obligation for a reset. The recorded outflow is not an input to the
+account transition, so a wrong record makes this predicate false rather than making the reset
+inadmissible. Cumulative history and both peaks must be conserved. -/
+def ResetConservation (before after : Account) (recordedOutflow : Nat) : Prop :=
+  after.requested = before.requested ∧
+    after.live = before.live - recordedOutflow ∧
+    after.peak = before.peak ∧ after.functionPeak = before.functionPeak
 
 /-- Evidence for a reported bound. A bound is either established, with its stated limit, or not
 established. The latter never turns an unknown into a reassuring numeric claim. -/
@@ -304,7 +319,7 @@ def LineageReport.Sound (entry exit : Account) (footprint : Option Nat)
 /-- Accepted: a valid allocate/free/reset sequence. Refused: freeing a byte not owned by the
 lineage has no accounting transition. -/
 example : (run Memory.empty
-    [.alloc ⟨0⟩ 8, .free ⟨0⟩ 3, .reset ⟨0⟩ 5]).map (· ⟨0⟩) = some ⟨8, 0, 8, 8⟩ := by decide
+    [.alloc ⟨0⟩ 8, .free ⟨0⟩ 3, .reset ⟨0⟩]).map (· ⟨0⟩) = some ⟨8, 0, 8, 8⟩ := by decide
 
 example : apply Memory.empty (.free ⟨0⟩ 1) = none := by decide
 

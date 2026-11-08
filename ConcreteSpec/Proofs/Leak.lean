@@ -368,17 +368,13 @@ theorem apply_wf {m : Memory} {action : Action} {m' : Memory}
         simpa [Memory.set] using Account.free_wf (m lineage) bytes (hwf lineage)
       · simpa [Memory.set, hl] using hwf l
     next => cases h
-  | reset lineage released =>
-    simp only [apply] at h
-    split at h
-    next heq =>
-      cases h
-      intro l
-      by_cases hl : l = lineage
-      · subst l
-        simpa [Memory.set] using Account.reset_wf (m lineage)
-      · simpa [Memory.set, hl] using hwf l
-    next => cases h
+  | reset lineage =>
+    cases h
+    intro l
+    by_cases hl : l = lineage
+    · subst l
+      simpa [Memory.set] using Account.reset_wf (m lineage)
+    · simpa [Memory.set, hl] using hwf l
 
 /-- Every successful sequence preserves well-formedness. -/
 theorem run_wf {m m' : Memory} {actions : List Action}
@@ -397,42 +393,60 @@ theorem apply_alloc_zero {m : Memory} (hwf : ∀ l, (m l).WF) (lineage : Lineage
     apply m (.alloc lineage 0) = some m := by
   simp only [apply, Account.alloc_zero (m lineage) (hwf lineage), Memory.set_same]
 
-/-- A successful free conserves cumulative requested bytes and peak, and its net change is exactly
-the freed bytes. -/
+/-- A successful free conserves cumulative requested bytes and both peaks, changes live bytes by
+exactly the freed amount, and leaves every other lineage unchanged. -/
 theorem free_conservation {m m' : Memory} {lineage : LineageId} {bytes : Nat}
     (h : apply m (.free lineage bytes) = some m') :
     (m' lineage).requested = (m lineage).requested ∧
       (m' lineage).live = (m lineage).live - bytes ∧
-      (m' lineage).peak = (m lineage).peak := by
+      (m' lineage).peak = (m lineage).peak ∧
+      (m' lineage).functionPeak = (m lineage).functionPeak ∧
+      ∀ l, l ≠ lineage → m' l = m l := by
   simp only [apply] at h
   split at h
   next hle =>
     cases h
-    simp [Memory.set, Account.free]
+    simp only [Memory.set, ↓reduceIte]
+    refine ⟨rfl, rfl, rfl, rfl, ?_⟩
+    intro l hl
+    simp [hl]
   next => cases h
 
-/-- A successful reset conserves cumulative requested bytes and peak, and releases exactly the live
-bytes named by the action. -/
-theorem reset_conservation {m m' : Memory} {lineage : LineageId} {released : Nat}
-    (h : apply m (.reset lineage released) = some m') :
-    (m' lineage).requested = (m lineage).requested ∧
-      (m' lineage).live = (m lineage).live - released ∧
-      (m' lineage).peak = (m lineage).peak := by
-  simp only [apply] at h
-  split at h
-  next heq =>
-    cases h
-    simp [Memory.set, Account.reset, heq]
-  next => cases h
+/-- A successful reset satisfies the independent conservation predicate with the actual live bytes
+before the transition as its outflow. Other lineages are unchanged. -/
+theorem reset_conservation {m m' : Memory} {lineage : LineageId}
+    (h : apply m (.reset lineage) = some m') :
+    ResetConservation (m lineage) (m' lineage) (m lineage).live ∧
+      ∀ l, l ≠ lineage → m' l = m l := by
+  cases h
+  constructor
+  · simp [ResetConservation, Memory.set, Account.reset]
+  · intro l hl
+    simp [Memory.set, hl]
+
+/-- Non-trivial reset conservation: five live bytes are released and all history is retained. -/
+example : ResetConservation ⟨100, 5, 12, 5⟩ (Account.reset ⟨100, 5, 12, 5⟩) 5 := by
+  simp [ResetConservation, Account.reset]
+
+/-- Planted bad reset record: four bytes cannot account for the five bytes actually released. -/
+example : ¬ ResetConservation ⟨100, 5, 12, 5⟩ (Account.reset ⟨100, 5, 12, 5⟩) 4 := by
+  simp [ResetConservation, Account.reset]
+
+@[simp] theorem resetBytes_cons {m m' : Memory} {action : Action} {rest : List Action}
+    (lineage : LineageId) (h : apply m action = some m') :
+    resetBytes lineage m (action :: rest) =
+      resetOutflow lineage m action + resetBytes lineage m' rest := by
+  simp [resetBytes, h]
 
 /-- **Whole-sequence conservation.** Requested bytes increase by exactly the sequence's allocation
-requests. Net live bytes equal allocations minus explicit frees and reset outflows. The statement
-holds independently for every allocator lineage, including lineages the sequence never touches. -/
+requests. Net live bytes equal allocations minus explicit frees and reset outflows read from the
+actual intermediate states. The statement holds independently for every allocator lineage,
+including lineages the sequence never touches. -/
 theorem run_conservation {m m' : Memory} {actions : List Action}
     (h : run m actions = some m') (lineage : LineageId) :
     (m' lineage).requested = (m lineage).requested + allocated lineage actions ∧
       (m' lineage).live = (m lineage).live + allocated lineage actions -
-        freed lineage actions - resetBytes lineage actions := by
+        freed lineage actions - resetBytes lineage m actions := by
   induction actions generalizing m with
   | nil => cases h; simp [allocated, freed, resetBytes]
   | cons action rest ih =>
@@ -441,15 +455,16 @@ theorem run_conservation {m m' : Memory} {actions : List Action}
     | some m₁ =>
       have hr : run m₁ rest = some m' := by simpa [run, ha] using h
       have hc := ih hr
+      rw [resetBytes_cons lineage ha]
       cases action with
       | alloc l bytes =>
         simp only [apply, Option.some.injEq] at ha
         subst m₁
         by_cases hl : l = lineage
         · subst l
-          simp [Memory.set, Account.alloc, allocated, freed, resetBytes] at hc ⊢
+          simp [Memory.set, Account.alloc, allocated, freed, resetOutflow] at hc ⊢
           omega
-        · simp [Memory.set, hl, Ne.symm hl, allocated, freed, resetBytes] at hc ⊢
+        · simp [Memory.set, hl, Ne.symm hl, allocated, freed, resetOutflow] at hc ⊢
           omega
       | free l bytes =>
         by_cases hle : bytes ≤ (m l).live
@@ -457,34 +472,32 @@ theorem run_conservation {m m' : Memory} {actions : List Action}
           subst m₁
           by_cases hl : l = lineage
           · subst l
-            simp [Memory.set, Account.free, allocated, freed, resetBytes] at hc ⊢
+            simp [Memory.set, Account.free, allocated, freed, resetOutflow] at hc ⊢
             omega
-          · simp [Memory.set, hl, Ne.symm hl, allocated, freed, resetBytes] at hc ⊢
+          · simp [Memory.set, hl, Ne.symm hl, allocated, freed, resetOutflow] at hc ⊢
             omega
         · simp [apply, hle] at ha
-      | reset l released =>
-        by_cases heq : released = (m l).live
-        · simp only [apply, heq, ↓reduceIte, Option.some.injEq] at ha
-          subst m₁
-          by_cases hl : l = lineage
-          · subst l
-            simp [Memory.set, Account.reset, allocated, freed, resetBytes, heq] at hc ⊢
-            omega
-          · simp [Memory.set, hl, Ne.symm hl, allocated, freed, resetBytes] at hc ⊢
-            omega
-        · simp [apply, heq] at ha
+      | reset l =>
+        simp only [apply, Option.some.injEq] at ha
+        subst m₁
+        by_cases hl : l = lineage
+        · subst l
+          simp [Memory.set, Account.reset, allocated, freed, resetOutflow] at hc ⊢
+          omega
+        · simp [Memory.set, hl, Ne.symm hl, allocated, freed, resetOutflow] at hc ⊢
+          omega
 
-/-- No successful action lowers any lineage's historical peak. -/
+/-- No successful action lowers either the historical or function-local peak of any lineage. -/
 theorem apply_peak_monotone {m m' : Memory} {action : Action}
     (h : apply m action = some m') (lineage : LineageId) :
-    (m lineage).peak ≤ (m' lineage).peak := by
+    (m lineage).peak ≤ (m' lineage).peak ∧
+      (m lineage).functionPeak ≤ (m' lineage).functionPeak := by
   cases action with
   | alloc l bytes =>
     cases h
     by_cases hl : l = lineage
     · subst l
-      simpa [Memory.set, Account.alloc] using
-        Nat.le_max_left (m lineage).peak ((m lineage).live + bytes)
+      simp [Memory.set, Account.alloc, Nat.le_max_left]
     · simp [Memory.set, Ne.symm hl]
   | free l bytes =>
     simp only [apply] at h
@@ -495,28 +508,27 @@ theorem apply_peak_monotone {m m' : Memory} {action : Action}
       · subst l; simp [Memory.set, Account.free]
       · simp [Memory.set, Ne.symm hl]
     next => cases h
-  | reset l released =>
-    simp only [apply] at h
-    split at h
-    next =>
-      cases h
-      by_cases hl : l = lineage
-      · subst l; simp [Memory.set, Account.reset]
-      · simp [Memory.set, Ne.symm hl]
-    next => cases h
+  | reset l =>
+    cases h
+    by_cases hl : l = lineage
+    · subst l; simp [Memory.set, Account.reset]
+    · simp [Memory.set, Ne.symm hl]
 
-/-- No successful sequence lowers any lineage's historical peak. -/
+/-- No successful sequence lowers either the historical or function-local peak of any lineage. -/
 theorem run_peak_monotone {m m' : Memory} {actions : List Action}
     (h : run m actions = some m') (lineage : LineageId) :
-    (m lineage).peak ≤ (m' lineage).peak := by
+    (m lineage).peak ≤ (m' lineage).peak ∧
+      (m lineage).functionPeak ≤ (m' lineage).functionPeak := by
   induction actions generalizing m with
-  | nil => cases h; exact Nat.le_refl _
+  | nil => cases h; exact ⟨Nat.le_refl _, Nat.le_refl _⟩
   | cons action rest ih =>
     cases ha : apply m action with
     | none => simp [run, ha] at h
     | some m₁ =>
       have hr : run m₁ rest = some m' := by simpa [run, ha] using h
-      exact Nat.le_trans (apply_peak_monotone ha lineage) (ih hr)
+      have ha' := apply_peak_monotone ha lineage
+      have hr' := ih hr
+      exact ⟨Nat.le_trans ha'.1 hr'.1, Nat.le_trans ha'.2 hr'.2⟩
 
 /-- Exact function-local requested, net-change and peak limits establish a sound report. With no
 allocator-defined footprint, its footprint status remains unestablished. -/
