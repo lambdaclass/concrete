@@ -14,7 +14,9 @@ pointer or by any byte addressed relative to it or the frame pointer (the red zo
 stack pointer is used without moving it), counting each
 internal callee's own bound and the depth at which each external function (libc's `write`,
 `_exit`, `abort`) is entered; the external functions' own use is outside it (a premise, listed),
-and so is that `_exit` and `abort` do not return (a path ends at a call to one).
+and so is that `_exit` and `abort` do not return (a path ends at a call to one) and that external
+functions preserve the frame pointer (the ABI's callee-saved rule; every owned function's return
+is checked to restore it).
 
 Stack addresses never leave the stack and frame pointers: taking one as a value, storing or
 loading a saved frame pointer other than through the modelled frame save and restore, touching
@@ -100,17 +102,22 @@ X86_SIZE = {"byte": 1, "word": 2, "dword": 4, "qword": 8, "tbyte": 10, "xmmword"
 MEM = re.compile(r"\[([^\]]*)\]")
 
 
+ENTRY = "entry"
+
+
 class St:
     """The abstract state at an instruction: `d`, the stack pointer's depth below the function's
-    entry; `fp`, the frame pointer's depth (None: unknown); `saved`, the stack slots holding a
-    saved frame pointer or link register, as (lowest, highest) byte depths with a tag ("fp", or
-    "lr" with whether it holds the function's own return address); `lr`, whether the AArch64 link
+    entry; `fp`, the frame pointer's value: a depth (an int), ENTRY (the caller's frame pointer,
+    which every return must restore) or None (unknown); `saved`, the stack slots holding a saved
+    frame pointer or link register, as (lowest, highest) byte depths with a tag (("fp", value) or
+    ("lr", whether it holds the function's own return address)), kept after the stack pointer
+    moves past them, since the memory keeps their contents; `lr`, whether the AArch64 link
     register holds the function's own return address. A byte at depth n lies n bytes below the
     entry stack pointer; the function's own bytes have depth >= 1."""
 
     __slots__ = ("d", "fp", "saved", "lr")
 
-    def __init__(self, d=0, fp=None, saved=frozenset(), lr=True):
+    def __init__(self, d=0, fp=ENTRY, saved=frozenset(), lr=True):
         self.d, self.fp, self.saved, self.lr = d, fp, saved, lr
 
     def key(self):
@@ -120,9 +127,18 @@ class St:
         s = St(self.d, self.fp, self.saved, self.lr)
         for k, v in kw.items():
             setattr(s, k, v)
-        # Slots wholly below the stack pointer are free memory: drop them.
-        s.saved = frozenset(x for x in s.saved if x[0] <= s.d)
         return s
+
+
+def frame_depth(fp, what):
+    """The frame pointer as a depth, for addressing; refused unless it is one."""
+    if not isinstance(fp, int):
+        raise Refuse(f"frame-relative use of a frame pointer that is not this frame's: {what}")
+    return fp
+
+
+def slot_at(saved, lo, hi):
+    return next((x for x in saved if x[:2] == (lo, hi)), None)
 
 
 def check_bytes(st, lo, hi, what, allowed=()):
@@ -163,9 +179,7 @@ def x86_inst(mn, ops, st):
             raise Refuse(f"stack access of unknown size: {what}")
         k = sum(int(t.replace(" ", ""), 0) for t in terms if t.strip(" +-") not in regs)
         if base[0] == "rbp":
-            if st.fp is None:
-                raise Refuse(f"frame-relative address with an unknown frame pointer: {what}")
-            top = st.fp - k
+            top = frame_depth(st.fp, what) - k
         else:
             top = st.d - k
         check_bytes(st, top - X86_SIZE[size.group(1)] + 1, top, what)
@@ -181,33 +195,37 @@ def x86_inst(mn, ops, st):
             raise Refuse(f"push/pop of other than a 64-bit general register: {what}")
         if mn == "push":
             d = st.d + 8
-            saved = st.saved | {(d - 7, d, "fp")} if dst == "rbp" else st.saved
+            check_bytes(st, d - 7, d, what)
+            saved = st.saved | {(d - 7, d, ("fp", st.fp))} if dst == "rbp" else st.saved
             return st.but(d=d, saved=saved), d
-        slot = (st.d - 7, st.d, "fp")
-        if slot in st.saved and dst != "rbp":
-            raise Refuse(f"a saved frame pointer popped into {dst}: {what}")
-        check_bytes(st, st.d - 7, st.d, what, allowed=(slot,))
-        return st.but(d=st.d - 8, fp=None if dst == "rbp" else st.fp, saved=st.saved - {slot}), None
+        return x86_pop(st, dst, st.d, what), None
     if mn == "leave":
-        if st.fp is None:
-            raise Refuse(f"leave with an unknown frame pointer: {what}")
-        slot = (st.fp - 7, st.fp, "fp")
-        check_bytes(st, st.fp - 7, st.fp, what, allowed=(slot,))
-        return st.but(d=st.fp - 8, fp=None, saved=st.saved - {slot}), None
+        return x86_pop(st, "rbp", frame_depth(st.fp, what), what), None
     if mn in ("sub", "add") and dst == "rsp":
         n = imm(args[1])
         return st.but(d=st.d + n if mn == "sub" else st.d - n), deepest
     if (mn, ops) == ("mov", "rbp, rsp"):
         return st.but(fp=st.d), deepest
     if (mn, ops) == ("mov", "rsp, rbp"):
-        if st.fp is None:
-            raise Refuse(f"mov rsp, rbp with an unknown frame pointer: {what}")
-        return st.but(d=st.fp), deepest
+        return st.but(d=frame_depth(st.fp, what)), deepest
     if dst in X86_SP:
         raise Refuse(f"unmodelled stack-pointer write: {what}")
     if dst in X86_FP:
         return st.but(fp=None), deepest
     return st, deepest
+
+
+def x86_pop(st, dst, at, what):
+    """Pop the 8 bytes whose deepest is at depth `at` into `dst`: a saved frame pointer only into
+    rbp, which then holds the saved value again (any other pop into rbp makes it unknown)."""
+    slot = slot_at(st.saved, at - 7, at)
+    if slot and dst != "rbp":
+        raise Refuse(f"a saved frame pointer popped into {dst}: {what}")
+    check_bytes(st, at - 7, at, what, allowed=(slot,) if slot else ())
+    if dst != "rbp":
+        return st.but(d=at - 8)
+    fp = slot[2][1] if slot and slot[2][0] == "fp" else None
+    return st.but(d=at - 8, fp=fp, saved=st.saved - {slot} if slot else st.saved)
 
 
 A64_SP = ("sp", "wsp")
@@ -227,8 +245,8 @@ def a64_inst(mn, ops, st):
     first_mem = next((i for i, a in enumerate(args) if a.startswith("[")), len(args))
     data = args[:first_mem]
     is_load, is_store = mn.startswith("ld"), mn.startswith("st")
-    record = mn in ("stp", "ldp") and data == ["x29", "x30"]
     d, deepest, saved, fp, lr = st.d, None, st.saved, st.fp, st.lr
+    base, record, restored = None, False, False
     if first_mem < len(args):
         mem = args[first_mem]
         post = args[first_mem + 1] if first_mem + 1 < len(args) else None
@@ -239,6 +257,8 @@ def a64_inst(mn, ops, st):
             base = None
         else:
             base, off, pre = m.group(1), m.group(2), m.group(3) == "!"
+        # The frame record: stp/ldp of x29 and x30, with base sp only.
+        record = mn in ("stp", "ldp") and data == ["x29", "x30"] and base == "sp"
         if base in A64_FP and (pre or post is not None):
             raise Refuse(f"writeback on the frame pointer: {what}")
         if base in ("sp", "x29"):
@@ -254,9 +274,7 @@ def a64_inst(mn, ops, st):
                 size = A64_REGSIZE[data[0][0]] * len(data)
             k = imm(off) if off else 0
             if base == "x29":
-                if fp is None:
-                    raise Refuse(f"frame-relative address with an unknown frame pointer: {what}")
-                top = fp - k
+                top = frame_depth(fp, what) - k
             elif pre:
                 d = d - k
                 top = d
@@ -268,18 +286,19 @@ def a64_inst(mn, ops, st):
                 top = st.d
                 d = d - imm(post)
             lo = top - size + 1
-            if record and base == "sp":
+            if record:
                 # x29 at the lower address (the deeper half), x30 above it.
-                rec = ((lo + 8, lo + 15, "fp"), (lo, lo + 7, ("lr", lr)))
                 if is_store:
                     check_bytes(st, lo, top, what)
-                    saved = saved | set(rec)
+                    saved = saved | {(lo + 8, lo + 15, ("fp", fp)), (lo, lo + 7, ("lr", lr))}
                 else:
-                    lr_slot = next((s for s in saved if s[:2] == (lo, lo + 7)), None)
-                    check_bytes(st, lo, top, what, allowed=tuple(s for s in saved if s[0] >= lo and s[1] <= top))
+                    fp_slot, lr_slot = slot_at(saved, lo + 8, lo + 15), slot_at(saved, lo, lo + 7)
+                    inside = tuple(x for x in saved if x[0] >= lo and x[1] <= top)
+                    check_bytes(st, lo, top, what, allowed=inside)
                     lr = bool(lr_slot and lr_slot[2] == ("lr", True))
-                    saved = frozenset(s for s in saved if not (s[0] >= lo and s[1] <= top))
-                    fp = None
+                    fp = fp_slot[2][1] if fp_slot and fp_slot[2][0] == "fp" else None
+                    saved = frozenset(x for x in saved if x not in inside)
+                    restored = True
             else:
                 check_bytes(st, lo, top, what)
             deepest = top
@@ -292,7 +311,7 @@ def a64_inst(mn, ops, st):
             raise Refuse(f"stack pointer loaded: {what}")
         if any(a in A64_LR for a in data) and not record:
             raise Refuse(f"link register overwritten: {what}")
-        if any(a in A64_FP for a in data):
+        if any(a in A64_FP for a in data) and not restored:
             fp = None
         return st.but(d=d, fp=fp, saved=frozenset(saved), lr=lr), deepest
     if is_store:
@@ -304,14 +323,11 @@ def a64_inst(mn, ops, st):
             n = imm(args[2])
             return st.but(d=d + n if mn == "sub" else d - n), None
         if (mn, args[1:]) == ("mov", ["x29"]):
-            if fp is None:
-                raise Refuse(f"mov sp, x29 with an unknown frame pointer: {what}")
-            return st.but(d=fp), None
+            return st.but(d=frame_depth(fp, what)), None
         if mn in ("sub", "add") and len(args) == 3 and args[1] == "x29" and args[2].startswith("#"):
-            if fp is None:
-                raise Refuse(f"sp from an unknown frame pointer: {what}")
             n = imm(args[2])
-            return st.but(d=fp + n if mn == "sub" else fp - n), None
+            f = frame_depth(fp, what)
+            return st.but(d=f + n if mn == "sub" else f - n), None
         raise Refuse(f"unmodelled stack-pointer write: {what}")
     if dst in A64_FP:
         if (mn, srcs) == ("mov", ["sp"]):
@@ -439,6 +455,8 @@ def analyse(funcs, stubs):
                         raise Refuse(f"{key}+{addr:#x}: return at depth {st.d}")
                     if not st.lr:
                         raise Refuse(f"{key}+{addr:#x}: return through a link register not restored")
+                    if st.fp != ENTRY:
+                        raise Refuse(f"{key}+{addr:#x}: return without the caller's frame pointer restored")
                     break
                 if kind == "stop":
                     break
@@ -449,6 +467,10 @@ def analyse(funcs, stubs):
                     base = sym.split("+")[0]
                     callee = owned_name(base)
                     d = st.d
+                    if any(x[0] > d for x in st.saved):
+                        # The callee's frame lies below d, where a freed saved slot still holds
+                        # a stack address the callee could read.
+                        raise Refuse(f"{key}+{addr:#x}: call over a freed saved frame slot")
                     if callee and "+" not in sym:
                         sub_deep, sub_ext = fn_bound(callee)
                         deepest = max(deepest, d + ret_push + sub_deep)
