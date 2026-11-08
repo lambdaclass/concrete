@@ -1,0 +1,1259 @@
+diff --git a/ConcreteSpec/Proofs/Frame.lean b/ConcreteSpec/Proofs/Frame.lean
+new file mode 100644
+index 000000000..cdb40104c
+--- /dev/null
++++ b/ConcreteSpec/Proofs/Frame.lean
+@@ -0,0 +1,710 @@
++import ConcreteSpec.Spec.Frame
++import ConcreteSpec.Proofs.Memory
++import ConcreteSpec.Proofs.Exec
++
++/-!
++# Laws of logical footprints and frames (foundation C10)
++
++Byte-range disjointness, preservation under sequential composition, and the frame laws of C4 byte
++store, release, exposure and fresh allocation; fresh-block disjointness and C1 callee-contract
++framing. Call entry and return restore caller locals and continuations, including after cleanup.
++The ABI laws cover typed locations, callee-saved and non-clobbered registers, stack restoration and
++accounting, paired `kept` retention, and launcher admission and entry/exit relations.
++-/
++namespace ConcreteSpec.Core.Frame
++open ConcreteSpec.Core.Mem
++open ConcreteSpec.Core.Hybrid
++
++/-- The empty footprint frames every operation. -/
++theorem preserves_refl (st : State) : Footprint.empty.Preserves st st := by
++  refine ⟨?_, ?_, ?_⟩
++  · intro b i x hx ho
++    simp only [hx, Option.map_some]
++  · intro b x hx ho
++    simp only [hx, Option.map_some]
++  · intro p hp
++    rfl
++
++/-- Membership outside a union is membership outside both components. -/
++theorem byteOutside_union {f g : Footprint} {b : MemBlockId} {i : Nat}
++    (h : (f.union g).ByteOutside b i) : f.ByteOutside b i ∧ g.ByteOutside b i := by
++  constructor <;> intro r hr <;> apply h r <;> simp [Footprint.union, hr]
++
++/-- Block metadata outside a union is outside both components. -/
++theorem blockOutside_union {f g : Footprint} {b : MemBlockId}
++    (h : (f.union g).BlockOutside b) : f.BlockOutside b ∧ g.BlockOutside b := by
++  have hb : b ∉ f.blocks ++ g.blocks := h
++  simp only [List.mem_append, not_or] at hb
++  exact hb
++
++/-- Place membership outside a union is membership outside both components. -/
++theorem placeOutside_union {f g : Footprint} {p : Place}
++    (h : (f.union g).PlaceOutside p) : f.PlaceOutside p ∧ g.PlaceOutside p := by
++  have hp : p ∉ f.places ++ g.places := h
++  simp only [List.mem_append, not_or] at hp
++  exact hp
++
++/-- A lifecycle footprint excludes metadata framing for its own block, even when that block is
++zero-sized. -/
++theorem blockOutside_block {b c : MemBlockId} (h : (Footprint.block b).BlockOutside c) : c ≠ b := by
++  intro hcb
++  subst c
++  exact h (by simp [Footprint.block])
++
++/-- Sequential composition frames the union of the two operations' footprints. -/
++theorem preserves_seq {st st' st'' : State} {f g : Footprint}
++    (h₁ : f.Preserves st st') (h₂ : g.Preserves st' st'') : (f.union g).Preserves st st'' := by
++  refine ⟨?_, ?_, ?_⟩
++  · intro b i x hx ho
++    obtain ⟨hf, hg⟩ := byteOutside_union ho
++    have he₁ := h₁.1 b i x hx hf
++    cases hy : st'.memory.block b with
++    | none => simp [hy] at he₁
++    | some y =>
++      simp only [hy, Option.map_some, Option.some.injEq] at he₁
++      have he₂ := h₂.1 b i y hy hg
++      exact he₂.trans (congrArg some he₁)
++  · intro b x hx ho
++    obtain ⟨hf, hg⟩ := blockOutside_union ho
++    have hm₁ := h₁.2.1 b x hx hf
++    cases hy : st'.memory.block b with
++    | none => simp [hy] at hm₁
++    | some y =>
++      simp only [hy, Option.map_some, Option.some.injEq] at hm₁
++      have hm₂ := h₂.2.1 b y hy hg
++      exact hm₂.trans (congrArg some hm₁)
++  · intro p hp
++    obtain ⟨hf, hg⟩ := placeOutside_union hp
++    exact (h₂.2.2 p hg).trans (h₁.2.2 p hf)
++
++/-- A successful byte store preserves every old byte outside the exact access range, every block's
++metadata (including the written block's), and every structured place. A zero-byte store has the
++empty footprint. -/
++theorem store_frame (tgt : Target) (st : State) (hw : st.memory.WellFormed tgt) (m' : Memory)
++    (p : Ptr) (bs : List MByte) (a : Nat) (access : Option (Option (MemBlockId × Nat)))
++    (ha : st.memory.access tgt p bs.length a = access)
++    (h : st.memory.store tgt p bs a = some m') :
++    Footprint.Preserves st { st with memory := m' } (accessFootprint access bs.length) := by
++  cases access with
++  | none => simp [Memory.store, ha] at h
++  | some r =>
++    cases r with
++    | none =>
++      simp only [Memory.store, ha, Option.some.injEq] at h
++      cases h
++      exact preserves_refl st
++    | some pair =>
++      obtain ⟨b, off⟩ := pair
++      refine ⟨?_, ?_, ?_⟩
++      · intro c i x hx ho
++        by_cases hc : c = b
++        · subst c
++          apply store_same_block_frame tgt st.memory _ hw p bs a b off i x ha hx h
++          have hn : ¬ ByteRange.Contains ⟨b, off, bs.length⟩ b i :=
++            ho _ (by simp [accessFootprint, Footprint.byte])
++          simp only [ByteRange.Contains, true_and] at hn
++          omega
++        · rw [store_other_block tgt st.memory m' p bs a b off c ha h hc, hx]
++          rfl
++      · intro c x hx ho
++        by_cases hc : c = b
++        · subst c
++          simp only [Memory.store, ha, Option.some.injEq] at h
++          subst m'
++          simp [blockMetadata, block_modify, hx]
++        · rw [store_other_block tgt st.memory m' p bs a b off c ha h hc, hx]
++          rfl
++      · intro q hq
++        rfl
++
++private def metadataStoreBlock : Block :=
++  ⟨⟨0⟩, 4096, 2, 1, true, false, [.uninit, .uninit]⟩
++
++private def metadataStoreBefore : State :=
++  ⟨[], ⟨[(⟨0⟩, metadataStoreBlock)], 1⟩⟩
++
++private theorem metadataStoreWellFormed : metadataStoreBefore.memory.WellFormed linuxX8664 :=
++  alloc_wellFormed linuxX8664 Memory.empty (empty_wellFormed _) ⟨0⟩ 4096 2 1 ⟨0⟩
++    metadataStoreBefore.memory rfl
++
++private def metadataStorePtr : Ptr := ⟨⟨0⟩, 4096, some ⟨0⟩⟩
++
++private def metadataStoreAfter : State :=
++  { metadataStoreBefore with memory := metadataStoreBefore.memory.modify ⟨0⟩ fun x =>
++    { x with bytes := [.init 7 none, .uninit] } }
++
++private def metadataStoreBadAfter : State :=
++  { metadataStoreAfter with memory := metadataStoreAfter.memory.modify ⟨0⟩ fun x =>
++    { x with live := false } }
++
++/-- Accepted: an actual nonempty store and its composition with an empty footprint preserve the
++written block's metadata as well as the unwritten byte. -/
++example :
++    Footprint.Preserves metadataStoreBefore metadataStoreAfter (.byte ⟨⟨0⟩, 0, 1⟩) ∧
++    Footprint.Preserves metadataStoreBefore metadataStoreAfter
++      (Footprint.union .empty (.byte ⟨⟨0⟩, 0, 1⟩)) := by
++  have hs : Footprint.Preserves metadataStoreBefore metadataStoreAfter (.byte ⟨⟨0⟩, 0, 1⟩) :=
++    store_frame linuxX8664 metadataStoreBefore metadataStoreWellFormed metadataStoreAfter.memory
++      metadataStorePtr [.init 7 none] 1 (some (some (⟨0⟩, 0))) (by decide) rfl
++  exact ⟨hs, preserves_seq (preserves_refl _) hs⟩
++
++/-- Refused: changing the written block's liveness violates the store and sequence frame laws;
++their byte footprints do not excuse a metadata mutation. -/
++example :
++    ¬ Footprint.Preserves metadataStoreBefore metadataStoreBadAfter (.byte ⟨⟨0⟩, 0, 1⟩) ∧
++    ¬ Footprint.Preserves metadataStoreBefore metadataStoreBadAfter
++      (Footprint.union .empty (.byte ⟨⟨0⟩, 0, 1⟩)) := by
++  constructor <;> intro h
++  all_goals
++    have hm := h.2.1 ⟨0⟩ metadataStoreBlock (by decide) (by decide)
++    simp [metadataStoreBadAfter, metadataStoreAfter, metadataStoreBefore, metadataStoreBlock,
++      blockMetadata, Memory.block, Memory.modify, AList.update, AList.lookup] at hm
++
++/-- Releasing a block may change its lifecycle metadata, but frames all bytes and all metadata of
++other blocks and every structured place. -/
++theorem free_frame (st : State) (b : MemBlockId) (x : Block) (m' : Memory)
++    (hx : st.memory.block b = some x) (h : st.memory.free b = some m') :
++    Footprint.Preserves st { st with memory := m' } (.block b) := by
++  unfold Memory.free at h
++  rw [hx] at h
++  by_cases hl : x.live = true
++  · simp only [hl, ↓reduceIte, Option.some.injEq] at h
++    subst m'
++    refine ⟨?_, ?_, ?_⟩
++    · intro c i y hy ho
++      by_cases hc : c = b
++      · subst c
++        rw [hx] at hy
++        cases hy
++        simp only [block_modify, ↓reduceIte, hx, Option.map_some]
++      · simp only [block_modify, hc, ↓reduceIte, hy, Option.map_some]
++    · intro c y hy ho
++      have hc : c ≠ b := blockOutside_block ho
++      simp only [block_modify, hc, ↓reduceIte, hy, Option.map_some]
++    · intro q hq
++      rfl
++  · simp [hl] at h
++
++/-- Exposure may change only the exposed flag of the provenance block; every byte and all metadata
++of other blocks and every place are preserved. -/
++theorem expose_frame (st : State) (m' : Memory) (p : Ptr) (b : MemBlockId) (x : Block)
++    (hp : p.prov = some b) (hx : st.memory.block b = some x) (h : st.memory.expose p = some m') :
++    Footprint.Preserves st { st with memory := m' } (.block b) := by
++  obtain ⟨c, y, hp', hx', hl, rfl⟩ := expose_result st.memory m' p h
++  rw [hp] at hp'
++  cases hp'
++  rw [hx] at hx'
++  cases hx'
++  refine ⟨?_, ?_, ?_⟩
++  · intro d i z hz ho
++    by_cases hd : d = b
++    · subst d
++      rw [hx] at hz
++      cases hz
++      simp only [block_modify, ↓reduceIte, hx, Option.map_some]
++    · simp only [block_modify, hd, ↓reduceIte, hz, Option.map_some]
++  · intro d z hz ho
++    have hd : d ≠ b := blockOutside_block ho
++    simp only [block_modify, hd, ↓reduceIte, hz, Option.map_some]
++  · intro q hq
++    rfl
++
++/-- Fresh allocation preserves every old byte, every old block's metadata and every place. The
++footprint is the complete new block; old bytes are necessarily outside it because their allocation
++identities differ. -/
++theorem alloc_frame (tgt : Target) (st : State) (hw : st.memory.WellFormed tgt)
++    (space : AddrSpace) (base size align : Nat) (b : MemBlockId) (m' : Memory)
++    (h : st.memory.alloc tgt space base size align = .ok (b, m')) :
++    Footprint.Preserves st { st with memory := m' } (.byte (fullBlock b size)) := by
++  obtain ⟨hb, hm, hfits⟩ := alloc_result tgt st.memory space base size align b m' h
++  refine ⟨?_, ?_, ?_⟩
++  · intro c i x hx ho
++    have hne : b ≠ c := alloc_ne_existing tgt st.memory hw space base size align b c m' x h hx
++    subst b
++    rw [hm]
++    change AList.lookup st.memory.blocks c = some x at hx
++    simp only [Memory.block, AList.lookup, hne, ↓reduceIte, hx, Option.map_some]
++  · intro c x hx ho
++    have hne : b ≠ c := alloc_ne_existing tgt st.memory hw space base size align b c m' x h hx
++    subst b
++    rw [hm]
++    change AList.lookup st.memory.blocks c = some x at hx
++    simp only [Memory.block, AList.lookup, hne, ↓reduceIte, hx, Option.map_some]
++  · intro p hp
++    rfl
++
++/-- Replacing one structured place has exactly that place's footprint; bytes and block metadata are
++untouched. -/
++theorem set_frame (st : State) (p : Place) (c : Cell) :
++    (Footprint.place p).Preserves st (st.set p c) := by
++  refine ⟨?_, ?_, ?_⟩
++  · intro b i x hx ho
++    simp only [State.memory_set, hx, Option.map_some]
++  · intro b x hx ho
++    simp only [State.memory_set, hx, Option.map_some]
++  · intro q hq
++    have hqp : q ≠ p := by simpa [Footprint.place, Footprint.PlaceOutside] using hq
++    have hpq : p ≠ q := Ne.symm hqp
++    simp [hpq]
++
++/-- A successful typed write to structured storage has exactly the written place's footprint. -/
++theorem write_structured_frame (tgt : Target) (st st' : State) (p : Place) (c : Cell)
++    (old v : Value) (hc : st.places p = some c) (hs : c.storage = .structured old)
++    (h : st.write tgt p v = some st') : (Footprint.place p).Preserves st st' := by
++  unfold State.write at h
++  simp only [hc] at h
++  dsimp at h
++  rw [hs] at h
++  split at h
++  · simp only [Option.some.injEq] at h
++    subst st'
++    exact set_frame st p { c with storage := .structured v }
++  · simp at h
++
++/-- A successful typed write to materialized storage has the byte footprint of its actual store. -/
++theorem write_materialized_frame (tgt : Target) (st st' : State) (hw : st.memory.WellFormed tgt)
++    (p : Place) (c : Cell) (r : Range) (v : Value)
++    (hc : st.places p = some c) (hs : c.storage = .materialized r)
++    (access : Option (Option (MemBlockId × Nat)))
++    (ha : st.memory.access tgt r.ptr (encode tgt v).length r.align = access)
++    (h : st.write tgt p v = some st') :
++    (accessFootprint access (encode tgt v).length).Preserves st st' := by
++  unfold State.write at h
++  simp only [hc] at h
++  dsimp at h
++  rw [hs] at h
++  split at h
++  · cases hm : st.memory.store tgt r.ptr (encode tgt v) r.align with
++    | none => simp [hm] at h
++    | some m =>
++      simp only [hm, Option.bind_some, Option.some.injEq] at h
++      subst st'
++      exact store_frame tgt st hw m r.ptr (encode tgt v) r.align access ha hm
++  · simp at h
++
++/-- A raw Hybrid write has the byte footprint of its underlying memory store and touches no place. -/
++theorem rawWrite_frame (tgt : Target) (st st' : State) (hw : st.memory.WellFormed tgt)
++    (p : Ptr) (bs : List MByte) (align : Nat)
++    (access : Option (Option (MemBlockId × Nat)))
++    (ha : st.memory.access tgt p bs.length align = access)
++    (h : st.rawWrite tgt p bs align = some st') :
++    (accessFootprint access bs.length).Preserves st st' := by
++  unfold State.rawWrite at h
++  cases hm : st.memory.store tgt p bs align with
++  | none => simp [hm] at h
++  | some m =>
++    simp [hm] at h
++    subst st'
++    exact store_frame tgt st hw m p bs align access ha hm
++
++/-- Accepted: the same actual byte store, through the raw Hybrid interface, preserves the written
++block's metadata. -/
++example : Footprint.Preserves metadataStoreBefore metadataStoreAfter (.byte ⟨⟨0⟩, 0, 1⟩) :=
++  rawWrite_frame linuxX8664 metadataStoreBefore metadataStoreAfter metadataStoreWellFormed
++    metadataStorePtr [.init 7 none] 1 (some (some (⟨0⟩, 0))) (by decide) rfl
++
++/-- Refused: the raw-write frame law rejects the same planted liveness mutation. -/
++example : ¬ Footprint.Preserves metadataStoreBefore metadataStoreBadAfter (.byte ⟨⟨0⟩, 0, 1⟩) := by
++  intro h
++  have hm := h.2.1 ⟨0⟩ metadataStoreBlock (by decide) (by decide)
++  simp [metadataStoreBadAfter, metadataStoreAfter, metadataStoreBefore, metadataStoreBlock,
++    blockMetadata, Memory.block, Memory.modify, AList.update, AList.lookup] at hm
++
++/-- The allocated identity is disjoint from every range whose block existed before allocation. -/
++theorem alloc_fresh_disjoint (tgt : Target) (st : State) (hw : st.memory.WellFormed tgt)
++    (space : AddrSpace) (base size align : Nat) (b : MemBlockId) (m' : Memory)
++    (h : st.memory.alloc tgt space base size align = .ok (b, m'))
++    (r : ByteRange) (x : Block) (hx : st.memory.block r.block = some x) :
++    (fullBlock b size).Disjoint r :=
++  .inl (alloc_ne_existing tgt st.memory hw space base size align b r.block m' x h hx)
++
++/-- Entering a C1 call saves the caller's locals in a `.ret` frame, binds the evaluated arguments to
++callee parameters, and preserves the caller's continuation below that frame. -/
++theorem step_call_saves_caller {O : Exec.Operands} (P : Exec.Program O) (dst : Option Var)
++    (f : FnId) (args : List O.Expr) (site : SiteId) (caller : AList Var O.Val)
++    (st stArgs stEnter : O.Store) (k : List (Exec.Frame O)) (vs : List O.Val) (fn : Exec.Fn O)
++    (hv : Exec.evalArgs O caller st args = .ok (vs, stArgs))
++    (hf : AList.lookup P.fns f = some fn) (hlen : fn.params.length = vs.length)
++    (hl : O.life (.enter (fn.params.map Prod.fst)) stArgs = some stEnter) :
++    Exec.step P ⟨.exec (.call dst f args site), caller, st, k⟩ =
++      some (.next ⟨.exec fn.body, (fn.params.map Prod.fst).zip vs, stEnter,
++        .scope fn.block (fn.params.map Prod.fst) [] :: .ret dst caller :: k⟩) := by
++  simp [Exec.step, Exec.onRes, hv, hf, hlen, hl]
++
++/-- A returned value reaching a `.ret` frame restores the caller's locals and continuation, binding
++the result at any requested destination. Leave and destination-bind instrumentation thread the shared
++state through the same step. -/
++theorem step_return_restores_caller {O : Exec.Operands} (P : Exec.Program O) (v : O.Val)
++    (dst : Option Var) (caller callee : AList Var O.Val) (st stLeave stBind : O.Store)
++    (k : List (Exec.Frame O)) (hl : O.life .leave st = some stLeave)
++    (hb : Exec.bindLife O dst stLeave = some stBind) :
++    Exec.step P ⟨.exiting (.ret v), callee, st, .ret dst caller :: k⟩ =
++      some (.next ⟨.done, Exec.bindDst dst v caller, stBind, k⟩) :=
++  Exec.step_return_caller P v dst caller callee st k stLeave stBind hl hb
++
++/-- Successful cleanup does not disturb call-frame ownership: after every exited scope has run its
++deferred calls, return restores the caller and binds its result at any requested destination. -/
++theorem return_cleanup_restores_caller {O : Exec.Operands} (P : Exec.Program O) (v : O.Val)
++    (dst : Option Var) (caller : AList Var O.Val) (k pre : List (Exec.Frame O)) {L : AList Var O.Val}
++    {st stClean stLeave stBind : O.Store} {tr : List O.Event}
++    (h : Exec.Cleans P pre L st tr stClean) (hp : ∀ f ∈ pre, Exec.Passes (.ret v) f)
++    (hl : O.life .leave stClean = some stLeave)
++    (hb : Exec.bindLife O dst stLeave = some stBind) :
++    Exec.Steps P ⟨.exiting (.ret v), L, st, pre ++ .ret dst caller :: k⟩ tr
++      ⟨.done, Exec.bindDst dst v caller, stBind, k⟩ :=
++  Exec.return_reaches_caller P v dst caller k h hp stLeave stBind hl hb
++
++/-- Every complete `C1Call` ends with its result bound into the caller locals and at the caller
++continuation saved by its entry statement. The conclusion follows from the actual final return or
++Unit fall-through step, including successful leave and destination-bind instrumentation. -/
++theorem c1Call_restores_caller {O : Exec.Operands} {f : FnId} {P : Exec.Program O}
++    {entry exit : Exec.Config O} (h : C1Call O f P entry exit) :
++    ∃ (dst : Option Var) (result : O.Val) (caller : AList Var O.Val)
++      (k : List (Exec.Frame O)) (args : List O.Expr) (site : SiteId) (st : O.Store),
++      entry = ⟨.exec (.call dst f args site), caller, st, k⟩ ∧
++      exit.ctrl = .done ∧ exit.locals = Exec.bindDst dst result caller ∧ exit.frames = k := by
++  obtain ⟨fn, dst, caller, k, args, site, vs, st, stArgs, stEnter, stReturn, callee, tr, result,
++    hf, he, hv, hlen, hl, hreturn⟩ := h
++  refine ⟨dst, result, caller, k, args, site, st, he, ?_⟩
++  cases hreturn with
++  | inl hexplicit =>
++    obtain ⟨hs, hr⟩ := hexplicit
++    cases hl' : O.life .leave stReturn with
++    | none => simp [Exec.step, Exec.stepExit, hl'] at hr
++    | some stLeave =>
++      cases hb : Exec.bindLife O dst stLeave with
++      | none => simp [Exec.step, Exec.stepExit, hl', hb] at hr
++      | some stBind =>
++        simp only [Exec.step, Exec.stepExit, hl', Option.bind_some, hb, Option.map_some,
++          Option.some.injEq, Exec.Out.next.injEq] at hr
++        cases hr
++        exact ⟨rfl, rfl, rfl⟩
++  | inr hfall =>
++    obtain ⟨hresult, hs, hr⟩ := hfall
++    subst result
++    cases hl' : O.life .leave stReturn with
++    | none => simp [Exec.step, hl'] at hr
++    | some stLeave =>
++      cases hb : Exec.bindLife O dst stLeave with
++      | none => simp [Exec.step, hl', hb] at hr
++      | some stBind =>
++        simp only [Exec.step, hl', Option.bind_some, hb, Option.map_some,
++          Option.some.injEq, Exec.Out.next.injEq] at hr
++        cases hr
++        exact ⟨rfl, rfl, rfl⟩
++
++private def c1Operands : Exec.Operands where
++  Val := Nat
++  Expr := Nat
++  Ty := Unit
++  Store := Unit
++  Prim := Unit
++  Event := Unit
++  unitVal := 0
++  unitTy := ()
++  isCopy := fun _ => true
++  eval := fun _ _ n => .ok (n, ())
++  life := fun _ st => some st
++  test := fun n => some (n != 0)
++  allows := fun _ _ _ _ => false
++
++private def c1FnId : FnId := ⟨⟨[]⟩, "seven"⟩
++
++private def c1Fn : Exec.Fn c1Operands := ⟨[], (), ⟨0⟩, .ret (7 : Nat) ⟨0⟩⟩
++
++private def c1Program : Exec.Program c1Operands := ⟨[(c1FnId, c1Fn)]⟩
++
++private def c1Entry : Exec.Config c1Operands :=
++  ⟨.exec (.call none c1FnId [] ⟨0⟩), [], (), []⟩
++
++private def c1Boundary : Exec.Config c1Operands :=
++  ⟨.exiting (.ret (7 : Nat)), [], (), [.ret none []]⟩
++
++private def c1Exit : Exec.Config c1Operands := ⟨.done, [], (), []⟩
++
++private theorem c1ExplicitCall : C1Call c1Operands c1FnId c1Program c1Entry c1Exit := by
++  have hs : Exec.Steps c1Program c1Entry [] c1Boundary := by
++    apply Exec.steps_next rfl
++    apply Exec.steps_next rfl
++    apply Exec.steps_next rfl
++    exact Exec.Steps.refl _
++  exact ⟨c1Fn, none, [], [], [], ⟨0⟩, [], (), (), (), (), [], [], (7 : Nat),
++    rfl, rfl, rfl, rfl, rfl, .inl ⟨hs, rfl⟩⟩
++
++/-- Accepted: an explicit return reaches its own `.ret` frame after evaluating and cleaning up the
++callee, then takes the final return step. -/
++example : C1Call c1Operands c1FnId c1Program c1Entry c1Exit := c1ExplicitCall
++
++/-- Accepted: caller restoration has a non-vacuous explicit-return instance with the caller's empty
++locals and continuation restored. -/
++example : c1Exit.locals = [] ∧ c1Exit.frames = [] := by
++  obtain ⟨dst, result, caller, k, args, site, st, he, hctrl, hlocals, hframes⟩ :=
++    c1Call_restores_caller c1ExplicitCall
++  have hk : k = [] := (congrArg Exec.Config.frames he).symm
++  rw [hk] at hframes
++  refine ⟨?_, hframes⟩
++  cases dst <;> simp [c1Exit, Exec.bindDst] at hlocals ⊢
++
++private def c1UnitFnId : FnId := ⟨⟨[]⟩, "unit"⟩
++
++private def c1UnitFn : Exec.Fn c1Operands := ⟨[], (), ⟨0⟩, .skip⟩
++
++private def c1UnitProgram : Exec.Program c1Operands := ⟨[(c1UnitFnId, c1UnitFn)]⟩
++
++private def c1UnitEntry : Exec.Config c1Operands :=
++  ⟨.exec (.call none c1UnitFnId [] ⟨0⟩), [], (), []⟩
++
++private def c1UnitBoundary : Exec.Config c1Operands :=
++  ⟨.done, [], (), [.ret none []]⟩
++
++/-- Accepted: a Unit body can reach its `.ret` frame by falling through; the actual final step then
++binds `unitVal` and restores the caller. -/
++example : C1Call c1Operands c1UnitFnId c1UnitProgram c1UnitEntry c1Exit := by
++  have hs : Exec.Steps c1UnitProgram c1UnitEntry [] c1UnitBoundary := by
++    apply Exec.steps_next rfl
++    apply Exec.steps_next rfl
++    apply Exec.steps_next rfl
++    exact Exec.Steps.refl _
++  exact ⟨c1UnitFn, none, [], [], [], ⟨0⟩, [], (), (), (), (), [], [], (0 : Nat),
++    rfl, rfl, rfl, rfl, rfl, .inr ⟨rfl, hs, rfl⟩⟩
++
++private def c1BadExit : Exec.Config c1Operands := ⟨.done, [], (), [.ret none []]⟩
++
++/-- Refused: a configuration that still contains the call's return frame is not a completed call. -/
++example : ¬ C1Call c1Operands c1FnId c1Program c1Entry c1BadExit := by
++  intro h
++  obtain ⟨dst, result, caller, k, args, site, st, he, hctrl, hlocals, hframes⟩ :=
++    c1Call_restores_caller h
++  have hk : k = [] := (congrArg Exec.Config.frames he).symm
++  rw [hk] at hframes
++  simp [c1BadExit] at hframes
++
++/-- Refused: even with `.done` control and empty locals, an exit whose continuation differs from
++the one saved at entry fails the restoration conclusion itself. -/
++example : ¬ ∃ (dst : Option Var) (result : Nat) (caller : AList Var Nat)
++    (k : List (Exec.Frame c1Operands)) (args : List Nat) (site : SiteId) (st : Unit),
++    c1Entry = ⟨.exec (.call dst c1FnId args site), caller, st, k⟩ ∧
++    c1BadExit.ctrl = .done ∧ c1BadExit.locals = Exec.bindDst dst result caller ∧
++    c1BadExit.frames = k := by
++  intro h
++  obtain ⟨dst, result, caller, k, args, site, st, he, hctrl, hlocals, hframes⟩ := h
++  have hk : k = [] := (congrArg Exec.Config.frames he).symm
++  rw [hk] at hframes
++  simp [c1BadExit] at hframes
++
++/-- A complete C1 call has exactly the frame law supplied by its callee contract. -/
++theorem c1_call_frame {O : Exec.Operands} {f : FnId} {P : Exec.Program O}
++    {project : O.Store → State} (contract : C1CallContract O f P project)
++    {entry exit : Exec.Config O} (h : C1Call O f P entry exit) :
++    contract.footprint.Preserves (project entry.store) (project exit.store) :=
++  contract.frame h
++
++namespace ABI
++
++/-- Preserved machine state composes across sequential calls with the same saved-register set. -/
++theorem machine_preserved_trans {Reg Word : Type} {before middle after : Machine Reg Word}
++    {saved : List Reg} (h₁ : Machine.Preserved before middle saved)
++    (h₂ : Machine.Preserved middle after saved) : Machine.Preserved before after saved := by
++  refine ⟨?_, ?_, ?_⟩
++  · intro r hr
++    exact (h₂.1 r hr).trans (h₁.1 r hr)
++  · intro slot hs
++    have hs' : slot < middle.stackPointer := by rwa [h₁.2.2]
++    exact (h₂.2.1 slot hs').trans (h₁.2.1 slot hs)
++  · exact h₂.2.2.trans h₁.2.2
++
++/-- Sequential calls preserve every register outside the union of their clobber sets. -/
++theorem machine_registerFrame_union {Reg Word : Type} {before middle after : Machine Reg Word}
++    {clobbers₁ clobbers₂ : List Reg} (h₁ : Machine.RegisterFrame before middle clobbers₁)
++    (h₂ : Machine.RegisterFrame middle after clobbers₂) :
++    Machine.RegisterFrame before after (clobbers₁ ++ clobbers₂) := by
++  intro r hr
++  have hr' : r ∉ clobbers₁ ∧ r ∉ clobbers₂ := by
++    simpa only [List.mem_append, not_or] using hr
++  exact (h₂ r hr'.2).trans (h₁ r hr'.1)
++
++/-- A well-formed returning ABI call restores every callee-saved register exactly: well-formedness
++puts those registers outside the clobber set, and the call's register frame preserves that set. -/
++theorem callee_saved_registers_equal {Ty Val Reg Word : Type} {sig : Signature Ty Val Reg Word}
++    {before after : Machine Reg Word} {args : List Val} {result : Val}
++    (hw : sig.WellFormed) (h : sig.Call before after args result) :
++    ∀ r ∈ sig.calleeSaved, after.regs r = before.regs r :=
++  fun r hr => h.clobbers r (hw.2.2.2 r hr)
++
++/-- Registers outside the clobber set are unchanged; equivalently, clobbers are the only registers
++permitted to differ after return. -/
++theorem clobbers_only_changed_registers {Ty Val Reg Word : Type} {sig : Signature Ty Val Reg Word}
++    {before after : Machine Reg Word} {args : List Val} {result : Val}
++    (h : sig.Call before after args result) :
++    ∀ r, r ∉ sig.clobbers → after.regs r = before.regs r :=
++  h.clobbers
++
++/-- The caller's stack slots below its stack pointer are restored exactly. -/
++theorem caller_stack_slots_equal {Ty Val Reg Word : Type} {sig : Signature Ty Val Reg Word}
++    {before after : Machine Reg Word} {args : List Val} {result : Val}
++    (h : sig.Call before after args result) :
++    ∀ slot, slot < before.stackPointer → after.slots slot = before.slots slot :=
++  h.preserved.2.1
++
++/-- Returning restores the caller's stack pointer exactly. -/
++theorem stack_pointer_restored {Ty Val Reg Word : Type} {sig : Signature Ty Val Reg Word}
++    {before after : Machine Reg Word} {args : List Val} {result : Val}
++    (h : sig.Call before after args result) : after.stackPointer = before.stackPointer :=
++  h.preserved.2.2
++
++/-- Typed arguments occupy their signature locations at entry. -/
++theorem typed_arguments_at_entry {Ty Val Reg Word : Type} {sig : Signature Ty Val Reg Word}
++    {before after : Machine Reg Word} {args : List Val} {result : Val}
++    (h : sig.Call before after args result) : ArgumentsHold sig.encode sig.arguments args before :=
++  h.arguments
++
++/-- The typed result occupies its return-convention locations after return. -/
++theorem typed_result_at_return {Ty Val Reg Word : Type} {sig : Signature Ty Val Reg Word}
++    {before after : Machine Reg Word} {args : List Val} {result : Val}
++    (h : sig.Call before after args result) : sig.result.Holds sig.encode result after :=
++  h.result
++
++/-- A well-formed signature's frame size is a multiple of its positive power-of-two alignment. -/
++theorem frame_size_aligned {Ty Val Reg Word : Type} {sig : Signature Ty Val Reg Word}
++    (h : sig.WellFormed) : IsPow2 sig.frameAlign ∧ sig.frameSize % sig.frameAlign = 0 :=
++  ⟨h.1, h.2.1⟩
++
++/-- The callee's own frame is included in its final-artifact stack bound. -/
++theorem frame_within_stack_bound {Ty Val Reg Word : Type} {sig : Signature Ty Val Reg Word}
++    (h : sig.WellFormed) : sig.frameSize ≤ sig.stackBound :=
++  h.2.2.1
++
++/-- Stack accounting of a call is exactly caller frame plus callee bound. -/
++theorem call_stack_account {Ty Val Reg Word : Type} (callerFrame : Nat)
++    (sig : Signature Ty Val Reg Word) : callStack callerFrame sig = callerFrame + sig.stackBound :=
++  rfl
++
++/-- Whole-artifact accounting adds launcher/runtime bytes to that same handoff. -/
++theorem artifact_stack_account {Ty Val Reg Word : Type} (launcherRuntime callerFrame : Nat)
++    (sig : Signature Ty Val Reg Word) :
++    artifactStack launcherRuntime callerFrame sig =
++      launcherRuntime + callerFrame + sig.stackBound := by
++  simp [artifactStack, callStack, Nat.add_assoc]
++
++/-- An extern unrelated to both sides of a pair cannot validly return either retention value. -/
++theorem extern_result_rejects_unrelated_retention {F H : Type} (pair : KeptPair F H) (f : F) (h : H)
++    (hfs : f ≠ pair.submit) (hfc : f ≠ pair.complete) :
++    ¬ ExternResult.Valid pair f (.receipt h) ∧ ¬ ExternResult.Valid pair f (.owned h) := by
++  constructor
++  · intro hr
++    exact hfs hr.1
++  · intro ho
++    exact hfc ho.1
++
++/-- A well-formed kept pair validly returns its submission receipt and completion-owned handle.
++The exact result constraints already imply both `ExternResult.Valid` facts. -/
++theorem keptPair_results_valid {F H : Type} (pair : KeptPair F H)
++    (submitParam : ExternParam H) (submitResult completeParam completeResult : ExternType H)
++    (h : pair.WellFormed submitParam submitResult completeParam completeResult) :
++    ExternResult.Valid pair pair.submit submitResult ∧
++      ExternResult.Valid pair pair.complete completeResult := by
++  obtain ⟨hne, hsp, hsr, hcp, hcr⟩ := h
++  subst submitResult
++  subst completeResult
++  exact ⟨⟨rfl, rfl⟩, ⟨rfl, rfl⟩⟩
++
++/-- Accepted: the correctly paired declarations are a non-trivial instance of endpoint validity. -/
++example : ExternResult.Valid (⟨0, 1, 7⟩ : KeptPair Nat Nat) 0 (.receipt 7) ∧
++    ExternResult.Valid ⟨0, 1, 7⟩ 1 (.owned 7) := by
++  exact keptPair_results_valid ⟨0, 1, 7⟩ ⟨.owned 7, .kept⟩
++    (.receipt 7) (.receipt 7) (.owned 7) ⟨by decide, rfl, rfl, rfl, rfl⟩
++
++/-- Refused: changing the submission receipt's handle makes both the exact pairing premise and the
++endpoint's independent validity check fail. -/
++example : ¬ (⟨0, 1, 7⟩ : KeptPair Nat Nat).WellFormed
++    ⟨.owned 7, .kept⟩ (.receipt 8) (.receipt 7) (.owned 7) ∧
++    ¬ ExternResult.Valid (⟨0, 1, 7⟩ : KeptPair Nat Nat) 0 (.receipt 8) := by
++  constructor <;> intro h
++  · have hr := h.2.2.1
++    cases hr
++  · have hh := h.2
++    cases hh
++
++/-- A kept receipt has exactly one retention transition: the paired completion returns the same
++handle to Concrete ownership. -/
++theorem kept_only_paired_completion {F H : Type} (pair : KeptPair F H) (h : H)
++    (event : ForeignEvent F H) (after : RetentionState H)
++    (hs : KeptStep pair (.kept h) event after) :
++    event = .call pair.complete h ∧ after = .owned pair.handle := by
++  cases event with
++  | call f h' =>
++    cases after with
++    | owned h'' =>
++      obtain ⟨hf, _hne, hh, hh', hh''⟩ := hs
++      cases hf
++      cases hh
++      cases hh'
++      cases hh''
++      exact ⟨rfl, rfl⟩
++    | kept h'' => cases hs
++
++/-- Submission of an owned handle calls the paired submitting extern and produces a receipt for the
++same handle. -/
++theorem submit_produces_paired_receipt {F H : Type} (pair : KeptPair F H) (h : H)
++    (event : ForeignEvent F H) (after : RetentionState H)
++    (hs : KeptStep pair (.owned h) event after) :
++    event = .call pair.submit h ∧ after = .kept pair.handle := by
++  cases event with
++  | call f h' =>
++    cases after with
++    | owned h'' => cases hs
++    | kept h'' =>
++      obtain ⟨hf, hh, hh', hh''⟩ := hs
++      cases hf
++      cases hh
++      cases hh'
++      cases hh''
++      exact ⟨rfl, rfl⟩
++
++/-- The submitting extern cannot consume its own receipt, even though it is the other member of the
++pair: completion requires a distinct extern identity. -/
++theorem kept_receipt_rejects_submission {F H : Type} (pair : KeptPair F H) (h h' : H)
++    (after : RetentionState H) : ¬ KeptStep pair (.kept h) (.call pair.submit h') after := by
++  intro hs
++  cases after with
++  | owned h'' => exact hs.2.1 hs.1
++  | kept h'' => cases hs
++
++/-- No other extern can consume a kept receipt. -/
++theorem kept_receipt_rejects_other_extern {F H : Type} (pair : KeptPair F H) (h h' : H)
++    (f : F) (after : RetentionState H) (hf : f ≠ pair.complete) :
++    ¬ KeptStep pair (.kept h) (.call f h') after := by
++  intro hs
++  have he := (kept_only_paired_completion pair h (.call f h') after hs).1
++  cases he
++  exact hf rfl
++
++/-- A reservation below the final artifact bound refuses startup with status 125. -/
++theorem stack_under_reservation {Input : Type} (bound reserved : Nat) (input : Input)
++    (h : reserved < bound) : stackAdmission bound reserved input = .refused125 := by
++  simp [stackAdmission, h]
++
++/-- A reservation at least the bound admits the same launcher input. -/
++theorem stack_adequate {Input : Type} (bound reserved : Nat) (input : Input)
++    (h : bound ≤ reserved) : stackAdmission bound reserved input = .entered input := by
++  simp [stackAdmission, Nat.not_lt_of_ge h]
++
++/-- A launcher run relates its exact retained closure to the stated entry and exit observations. -/
++theorem launcher_entry_exit {Artifact Input Result Observation : Type}
++    {l : Launcher Artifact Input Result Observation} {artifact : Artifact} {reserved : Nat}
++    {input : Input} {result : Result} {observation : Observation}
++    (run : l.Run artifact reserved input result observation) :
++    l.retainedClosure artifact ∧ l.entry artifact input ∧ l.exit artifact result observation :=
++  ⟨run.closure, run.entry, run.exit⟩
++
++/-- Every launched run passes stack admission with its recorded reservation. -/
++theorem launcher_run_admitted {Artifact Input Result Observation : Type}
++    {l : Launcher Artifact Input Result Observation} {artifact : Artifact} {reserved : Nat}
++    {input : Input} {result : Result} {observation : Observation}
++    (run : l.Run artifact reserved input result observation) :
++    stackAdmission (l.stackBound artifact) reserved input = .entered input :=
++  stack_adequate _ _ _ run.adequateStack
++
++end ABI
++
++end ConcreteSpec.Core.Frame
+diff --git a/ConcreteSpec/README.md b/ConcreteSpec/README.md
+index 3e08eb415..2c9b52cce 100644
+--- a/ConcreteSpec/README.md
++++ b/ConcreteSpec/README.md
+@@ -93,7 +93,10 @@ Open obligations, by name:
+   encoding over the old type universe. The slice-1-to-Core integration slice must port that
+   layer to `Mem.MByte`/`Mem.encodeInt` and retire the old encoders while preserving its proofs;
+   C4 has not completed that port. Core constants and Hybrid share `CTy`/`CVal` from `Scalar`.
+-  C5 and C7–C10 remain. C1 leaves to later slices the source-level
++  C10 (`Frame`) now covers logical footprints, C1 caller restoration, target-independent ABI and
++  `kept` retention interfaces, and launcher entry/exit relations; concrete ABI implementations,
++  extern syntax, packed access and source frame/snapshot constructs remain out. C5 and C7–C9 remain.
++  C1 leaves to later slices the source-level
+   evaluation orders (elaboration, O1), counted loops (slice 4), and ownership of moved values
+   (C5) and the oracle's query record (C8); its
+   storage can use C4's hybrid state; C5 must still supply ownership instrumentation. Lifecycle
+diff --git a/ConcreteSpec/Spec.lean b/ConcreteSpec/Spec.lean
+index 6efb7047c..44c5131a9 100644
+--- a/ConcreteSpec/Spec.lean
++++ b/ConcreteSpec/Spec.lean
+@@ -21,6 +21,7 @@ import ConcreteSpec.Spec.Scalar
+ import ConcreteSpec.Spec.Const
+ import ConcreteSpec.Spec.Memory
+ import ConcreteSpec.Spec.Hybrid
++import ConcreteSpec.Spec.Frame
+ import ConcreteSpec.Spec.Rules
+ 
+ /-!
+@@ -57,9 +58,10 @@ laws, written, proved and tested before the freeze) is in the namespace `Concret
+ `Target` on: `Target` (C3, target profiles), `Outcome` (trap kinds and the ways a run stops),
+ `Exec` (C1, execution, calls and cleanup), `Scalar` (C2, scalars and arithmetic), `Const` (C2,
+ the constant initializer subset), `Memory` (C4, byte memory and scalar representation),
+-`Hybrid` (C4, structured places and stable materialized ranges) and `Observe` (C6, observations
+-and the environment). Each module's header says which contract it states and what it leaves to a
+-later slice.
++`Hybrid` (C4, structured places and stable materialized ranges), `Observe` (C6, observations
++and the environment), and `Frame` (C10, logical footprints, call restoration and target-independent
++ABI contracts). Each module's header says which contract it states and what it leaves to a later
++slice.
+ 
+ Only Lean core is imported (Q9.16). No proof uses `native_decide` or `sorry` (Q9.17).
+ 
+diff --git a/ConcreteSpec/Spec/Frame.lean b/ConcreteSpec/Spec/Frame.lean
+new file mode 100644
+index 000000000..8029fafce
+--- /dev/null
++++ b/ConcreteSpec/Spec/Frame.lean
+@@ -0,0 +1,495 @@
++import ConcreteSpec.Spec.Hybrid
++
++/-!
++# Logical footprints, call frames and ABI contracts (foundation C10)
++
++PROPOSED: not normative until the owner freezes Core. Part of `ConcreteSpec.Spec`; see
++`ConcreteSpec/README.md`. This module states interfaces and laws, not a concrete target ABI.
++
++A logical footprint names byte ranges by allocation identity, not by numeric address, together with
++block metadata and structured places as separate permissions. `Footprint.Preserves` is the frame
++law: every byte of an old block outside its byte ranges, all metadata of every block outside its
++block set, and every place outside it are exactly unchanged.
++A fresh allocation has no old bytes to preserve; its fresh identity makes it disjoint from every
++range in an old block. Byte contents include initialization and pointer fragments, so preserving a
++byte preserves all three.
++
++Sequential composition unions footprints. A C1 call contract supplies the callee footprint and its
++frame law for the complete call, from argument evaluation and entry instrumentation through cleanup,
++leave instrumentation and result binding. C1 return frames restore the caller's locals; shared hybrid
++state is not rolled back.
++
++The ABI interface relates typed arguments and results to registers and stack slots, and records frame
++size/alignment, return locations, clobbers, preserved machine state and final-artifact stack
++accounting. Foreign arguments are FFI-safe, never enums. `kept` consumes an owned allocation and
++produces a linear `Kept<H>` receipt which only the paired extern consumes. No source frame clause,
++snapshot construct, extern syntax, packed-access semantics or target-specific ABI table is introduced.
++-/
++namespace ConcreteSpec.Core.Frame
++open ConcreteSpec.Core.Mem
++open ConcreteSpec.Core.Hybrid
++
++/-- One logical byte range: an allocation identity and offsets within that allocation. -/
++structure ByteRange where
++  block : MemBlockId
++  offset : Nat
++  extent : Nat
++  deriving DecidableEq, Repr
++
++/-- Byte `i` of block `b` belongs to the range. A zero-extent range contains no bytes. -/
++def ByteRange.Contains (r : ByteRange) (b : MemBlockId) (i : Nat) : Prop :=
++  r.block = b ∧ r.offset ≤ i ∧ i < r.offset + r.extent
++
++instance (r : ByteRange) (b : MemBlockId) (i : Nat) : Decidable (r.Contains b i) := by
++  unfold ByteRange.Contains; infer_instance
++
++/-- Two ranges are disjoint when their allocations differ, either is empty, or their offsets do not
++overlap. Numeric address reuse cannot make ranges in different allocations overlap. -/
++def ByteRange.Disjoint (r s : ByteRange) : Prop :=
++  r.block ≠ s.block ∨ r.extent = 0 ∨ s.extent = 0 ∨
++    r.offset + r.extent ≤ s.offset ∨ s.offset + s.extent ≤ r.offset
++
++instance (r s : ByteRange) : Decidable (r.Disjoint s) := by
++  unfold ByteRange.Disjoint; infer_instance
++
++/-- The complete byte footprint of a block of `size` bytes. -/
++def fullBlock (b : MemBlockId) (size : Nat) : ByteRange := ⟨b, 0, size⟩
++
++/-- All block fields except its byte contents. -/
++def blockMetadata (x : Block) : AddrSpace × Nat × Nat × Nat × Bool × Bool :=
++  (x.space, x.base, x.size, x.align, x.live, x.exposed)
++
++/-- An operation's permitted effects on hybrid state. Byte ranges, block metadata and places are
++sets represented by lists; membership, not list order or duplication, is semantic. A byte write does
++not claim permission to change its block's metadata. -/
++structure Footprint where
++  bytes : List ByteRange
++  blocks : List MemBlockId
++  places : List Place
++  deriving DecidableEq, Repr
++
++/-- The empty footprint. -/
++def Footprint.empty : Footprint := ⟨[], [], []⟩
++
++/-- Only one byte range is touched; every block's metadata remains outside the footprint. -/
++def Footprint.byte (r : ByteRange) : Footprint := ⟨[r], [], []⟩
++
++/-- Only the metadata of one allocation may change, including for a zero-sized allocation. -/
++def Footprint.block (b : MemBlockId) : Footprint := ⟨[], [b], []⟩
++
++/-- Only one structured place is touched. -/
++def Footprint.place (p : Place) : Footprint := ⟨[], [], [p]⟩
++
++/-- The combined permission of two operations run in sequence. -/
++def Footprint.union (f g : Footprint) : Footprint :=
++  ⟨f.bytes ++ g.bytes, f.blocks ++ g.blocks, f.places ++ g.places⟩
++
++/-- This byte is outside every range in the footprint. -/
++def Footprint.ByteOutside (f : Footprint) (b : MemBlockId) (i : Nat) : Prop :=
++  ∀ r ∈ f.bytes, ¬ r.Contains b i
++
++/-- This block's metadata is outside the footprint, independently of its byte ranges. -/
++def Footprint.BlockOutside (f : Footprint) (b : MemBlockId) : Prop := b ∉ f.blocks
++
++/-- This place is outside the footprint. -/
++def Footprint.PlaceOutside (f : Footprint) (p : Place) : Prop := p ∉ f.places
++
++instance (f : Footprint) (b : MemBlockId) (i : Nat) : Decidable (f.ByteOutside b i) := by
++  unfold Footprint.ByteOutside; infer_instance
++
++instance (f : Footprint) (b : MemBlockId) : Decidable (f.BlockOutside b) := by
++  unfold Footprint.BlockOutside; infer_instance
++
++instance (f : Footprint) (p : Place) : Decidable (f.PlaceOutside p) := by
++  unfold Footprint.PlaceOutside; infer_instance
++
++/-- The frame law for one operation. Only bytes of blocks that existed before the operation are
++quantified: allocation creates bytes rather than changing old ones. The whole `MByte` is compared,
++including initialization and provenance fragments. For every block outside the metadata footprint,
++its space, base, size, alignment, liveness and exposure are exactly unchanged, even when one of its
++byte ranges is written. Place cells are compared exactly. -/
++def Footprint.Preserves (before after : State) (f : Footprint) : Prop :=
++  (∀ b i x, before.memory.block b = some x → f.ByteOutside b i →
++    (after.memory.block b).map (fun y => y.bytes[i]?) = some (x.bytes[i]?)) ∧
++  (∀ b x, before.memory.block b = some x → f.BlockOutside b →
++    (after.memory.block b).map blockMetadata = some (blockMetadata x)) ∧
++  (∀ p, f.PlaceOutside p → after.places p = before.places p)
++
++/-- The footprint of a successful access. A zero-byte access touches no allocation range. -/
++def accessFootprint : Option (Option (MemBlockId × Nat)) → Nat → Footprint
++  | some (some (b, off)), n => .byte ⟨b, off, n⟩
++  | _, _ => .empty
++
++/-- A complete C1 call of `f`, from its `.call` statement to the caller continuation. The `Steps`
++premise reaches this call's own `.ret` frame, either at an explicit return or at normal Unit
++fall-through. The final silent step performs `.leave`, result binding and restoration. A matching
++intermediate configuration therefore cannot stand in for the outer return. -/
++def C1Call (O : Exec.Operands) (f : FnId) (P : Exec.Program O)
++    (entry exit : Exec.Config O) : Prop :=
++  ∃ (fn : Exec.Fn O) (dst : Option Var) (caller : AList Var O.Val)
++    (k : List (Exec.Frame O)) (args : List O.Expr) (site : SiteId) (vs : List O.Val)
++    (st stArgs stEnter stReturn : O.Store) (callee : AList Var O.Val)
++    (tr : List O.Event) (result : O.Val),
++    AList.lookup P.fns f = some fn ∧
++    entry = ⟨.exec (.call dst f args site), caller, st, k⟩ ∧
++    Exec.evalArgs O caller st args = .ok (vs, stArgs) ∧
++    fn.params.length = vs.length ∧
++    O.life (.enter (fn.params.map Prod.fst)) stArgs = some stEnter ∧
++    ((Exec.Steps P entry tr
++        ⟨.exiting (.ret result), callee, stReturn, .ret dst caller :: k⟩ ∧
++      Exec.step P ⟨.exiting (.ret result), callee, stReturn, .ret dst caller :: k⟩ =
++        some (.next exit)) ∨
++     (result = O.unitVal ∧ Exec.Steps P entry tr
++        ⟨.done, callee, stReturn, .ret dst caller :: k⟩ ∧
++      Exec.step P ⟨.done, callee, stReturn, .ret dst caller :: k⟩ = some (.next exit)))
++
++/-- The footprint contract of one C1 callee. `project` exposes the hybrid part of the operand
++instance's shared state; ownership instrumentation need not have a footprint. Every complete call of
++`f` must satisfy the stated frame law. -/
++structure C1CallContract (O : Exec.Operands) (f : FnId) (P : Exec.Program O)
++    (project : O.Store → State) where
++  footprint : Footprint
++  frame : ∀ {entry exit}, C1Call O f P entry exit →
++    footprint.Preserves (project entry.store) (project exit.store)
++
++/-! ### Examples -/
++
++/-- Accepted: adjacent ranges are disjoint, and a byte inside a range is contained in it. -/
++example : (⟨⟨0⟩, 4, 4⟩ : ByteRange).Disjoint ⟨⟨0⟩, 8, 2⟩ ∧
++    (⟨⟨0⟩, 4, 4⟩ : ByteRange).Contains ⟨0⟩ 5 := by decide
++
++/-- Accepted: equal numeric offsets in different allocation identities are disjoint. -/
++example : (⟨⟨0⟩, 4, 4⟩ : ByteRange).Disjoint ⟨⟨1⟩, 4, 4⟩ := by decide
++
++/-- Refused: overlapping ranges in one allocation are not disjoint; nor does a range contain its
++one-past offset. -/
++example : ¬ (⟨⟨0⟩, 4, 4⟩ : ByteRange).Disjoint ⟨⟨0⟩, 7, 2⟩ ∧
++    ¬ (⟨⟨0⟩, 4, 4⟩ : ByteRange).Contains ⟨0⟩ 8 := by decide
++
++/-- Accepted: a zero-extent range is disjoint from every range, including itself. -/
++example : (⟨⟨0⟩, 4, 0⟩ : ByteRange).Disjoint ⟨⟨0⟩, 4, 0⟩ := by decide
++
++/-- Accepted: a nonempty byte footprint still leaves the written block's metadata framed; a
++lifecycle footprint frames other blocks, and a union frames a block absent from both components. -/
++example : (Footprint.byte ⟨⟨0⟩, 4, 4⟩).BlockOutside ⟨0⟩ ∧
++    (Footprint.block ⟨0⟩).BlockOutside ⟨1⟩ ∧
++    (Footprint.union (.byte ⟨⟨0⟩, 4, 4⟩) (.block ⟨1⟩)).BlockOutside ⟨0⟩ := by decide
++
++/-- Refused: a lifecycle footprint claims its block's metadata even though it writes no bytes, and
++a union cannot frame metadata claimed by either component. -/
++example : ¬ (Footprint.block ⟨0⟩).BlockOutside ⟨0⟩ ∧
++    ¬ (Footprint.union (.block ⟨0⟩) .empty).BlockOutside ⟨0⟩ := by decide
++
++/-- Accepted: returning without a destination restores exactly the caller's association list. -/
++example {V : Type} (v : V) (caller : AList Var V) : Exec.bindDst none v caller = caller := rfl
++
++/-- Refused: a loop exit cannot cross a call's `.ret` frame; only a returned value restores its
++caller. -/
++example {O : Exec.Operands} (dst : Option Var) (caller callee : AList Var O.Val)
++    (st : O.Store) (l : LoopId) (k : List (Exec.Frame O)) :
++    Exec.stepExit callee st (.brk l) (.ret dst caller :: k) = none := rfl
++
++/-! ## ABI signature interface -/
++
++namespace ABI
++
++/-- A machine word location for one typed value: a register or a logical stack slot. A value may
++use several locations, in the order given by its binding. -/
++inductive Location (Reg : Type) where
++  | register (r : Reg)
++  | stack (slot : Nat)
++  deriving DecidableEq, Repr
++
++/-- The machine state visible to the ABI interface. Stack slots below `stackPointer` are the
++caller's preserved stack; argument and result areas at or above it need not be preserved. -/
++structure Machine (Reg Word : Type) where
++  regs : Reg → Word
++  slots : Nat → Word
++  stackPointer : Nat
++
++/-- Read one location in a machine state. -/
++def Location.read {Reg Word : Type} (st : Machine Reg Word) : Location Reg → Word
++  | .register r => st.regs r
++  | .stack slot => st.slots slot
++
++/-- The ABI locations and logical type of one argument or result. -/
++structure Binding (Ty Reg : Type) where
++  ty : Ty
++  locations : List (Location Reg)
++
++/-- The encoded words of a typed value are exactly the words in its locations. -/
++def Binding.Holds {Ty Val Reg Word : Type} (encode : Ty → Val → List Word)
++    (b : Binding Ty Reg) (v : Val) (st : Machine Reg Word) : Prop :=
++  encode b.ty v = b.locations.map (Location.read st)
++
++/-- Every argument has its declared type and location binding; too few or too many arguments do not
++satisfy the relation. -/
++def ArgumentsHold {Ty Val Reg Word : Type} (encode : Ty → Val → List Word) :
++    List (Binding Ty Reg) → List Val → Machine Reg Word → Prop
++  | [], [], _ => True
++  | b :: bs, v :: vs, st => b.Holds encode v st ∧ ArgumentsHold encode bs vs st
++  | _, _, _ => False
++
++/-- An explicit target convention. `stackBound` is the complete callee contribution from final
++artifact evidence, including its frame, spills, cleanup and nested calls; it is not a source-local
++estimate. `result` is the return convention. -/
++structure Signature (Ty Val Reg Word : Type) where
++  encode : Ty → Val → List Word
++  arguments : List (Binding Ty Reg)
++  result : Binding Ty Reg
++  frameSize : Nat
++  frameAlign : Nat
++  calleeSaved : List Reg
++  clobbers : List Reg
++  stackBound : Nat
++
++/-- The callee-saved registers, the caller's stack below its stack pointer, and the stack pointer
++itself are exactly restored. -/
++def Machine.Preserved {Reg Word : Type} (before after : Machine Reg Word) (saved : List Reg) : Prop :=
++  (∀ r ∈ saved, after.regs r = before.regs r) ∧
++  (∀ slot, slot < before.stackPointer → after.slots slot = before.slots slot) ∧
++  after.stackPointer = before.stackPointer
++
++/-- Every register outside the clobber set has the same value after return. -/
++def Machine.RegisterFrame {Reg Word : Type} (before after : Machine Reg Word)
++    (clobbers : List Reg) : Prop :=
++  ∀ r, r ∉ clobbers → after.regs r = before.regs r
++
++/-- A signature's structural laws: positive power-of-two alignment, frame size rounded to it, the
++frame included in the callee stack bound, and callee-saved registers disjoint from clobbers. -/
++def Signature.WellFormed {Ty Val Reg Word : Type} (sig : Signature Ty Val Reg Word) : Prop :=
++  IsPow2 sig.frameAlign ∧ sig.frameSize % sig.frameAlign = 0 ∧
++    sig.frameSize ≤ sig.stackBound ∧ ∀ r, r ∈ sig.calleeSaved → r ∉ sig.clobbers
++
++/-- A returning ABI call: typed arguments occupy their entry locations, the typed result occupies
++its return locations, preserved machine state is restored exactly, and only clobbers may change
++registers. -/
++structure Signature.Call {Ty Val Reg Word : Type} (sig : Signature Ty Val Reg Word)
++    (before after : Machine Reg Word) (args : List Val) (result : Val) : Prop where
++  arguments : ArgumentsHold sig.encode sig.arguments args before
++  result : sig.result.Holds sig.encode result after
++  preserved : Machine.Preserved before after sig.calleeSaved
++  clobbers : Machine.RegisterFrame before after sig.clobbers
++
++/-- The stack-accounting handoff of one call: the caller's frame plus the callee's final-artifact
++bound. Heap accounting is separate. -/
++def callStack {Ty Val Reg Word : Type} (callerFrame : Nat) (sig : Signature Ty Val Reg Word) : Nat :=
++  callerFrame + sig.stackBound
++
++/-- Whole-artifact stack accounting adds the launcher/runtime contribution to the call handoff. -/
++def artifactStack {Ty Val Reg Word : Type} (launcherRuntime callerFrame : Nat)
++    (sig : Signature Ty Val Reg Word) : Nat :=
++  launcherRuntime + callStack callerFrame sig
++
++/-! ### Foreign validity and retention (Q3.12) -/
++
++/-- Types with a direct foreign representation: integers, floats, bool, Unit, raw pointers to values,
++and C-layout structs of such values. There is no reference or enum constructor, so neither can be
++smuggled behind a raw pointer or inside a C struct. -/
++inductive FFIType where
++  | int
++  | float
++  | bool
++  | unit
++  | rawPointer (pointee : FFIType)
++  | cStruct (fields : List FFIType)
++  deriving Repr
++
++/-- The logical types at an extern boundary. Owned `H` and its receipt are retention interface
++values, not direct C representations. `enum` is present only so the validity rule can refuse it. -/
++inductive ExternType (H : Type) where
++  | ffi (t : FFIType)
++  | owned (h : H)
++  | receipt (h : H)
++  | enum
++
++/-- Extern retention: call-only by default, or `kept` for an owned allocation. Call-only pointers
++permit reads, and writes only from a mutable borrow or owned allocation, during the call only;
++borrow-derived pointers are never `kept`. That foreign code does not access call-only memory after
++return, or kept memory before its paired completion returns, is a named trusted-base premise of
++Q3.12, not a theorem proved by this transition interface. -/
++inductive Retention where
++  | callOnly
++  | kept
++  deriving DecidableEq, Repr
++
++/-- One extern parameter's logical type and retention marker. -/
++structure ExternParam (H : Type) where
++  ty : ExternType H
++  retention : Retention
++
++/-- Valid ordinary extern parameters are call-only direct FFI values, or `kept` owned allocations.
++Enums, kept raw pointers, receipts as fresh inputs, and unmarked owned allocations are refused. A
++receipt accepted by the paired completion is checked separately by `KeptPair.WellFormed`. -/
++def ExternParam.Valid {H : Type} : ExternParam H → Prop
++  | ⟨.ffi _, .callOnly⟩ => True
++  | ⟨.owned _, .kept⟩ => True
++  | _ => False
++
++instance {H : Type} (p : ExternParam H) : Decidable p.Valid := by
++  cases p with
++  | mk ty retention =>
++    cases ty <;> cases retention <;> unfold ExternParam.Valid <;> infer_instance
++
++/-- The two distinct extern identities paired for one tracked handle instance. `H` is the handle
++identity type; `handle` is the instance tracked by this single-handle retention trace. -/
++structure KeptPair (F H : Type) where
++  submit : F
++  complete : F
++  handle : H
++
++/-- Valid extern results are direct FFI values, the paired owned allocation returned by its
++completion, or its linear receipt returned by its submission. Checking the extern identity prevents
++an unrelated declaration from manufacturing either retention value. An enum result is refused. -/
++def ExternResult.Valid {F H : Type} (pair : KeptPair F H) (f : F) : ExternType H → Prop
++  | .ffi _ => True
++  | .owned h => f = pair.complete ∧ h = pair.handle
++  | .receipt h => f = pair.submit ∧ h = pair.handle
++  | .enum => False
++
++instance {F H : Type} [DecidableEq F] [DecidableEq H] (pair : KeptPair F H) (f : F)
++    (t : ExternType H) : Decidable (ExternResult.Valid pair f t) := by
++  cases t <;> unfold ExternResult.Valid <;> infer_instance
++
++/-- The signature-pairing law of Q3.12: distinct submission and completion take `kept h: H` and its
++receipt respectively; only submission returns `Kept<H>` and only completion returns `H`. The four
++descriptors are the declaration's actual parameter/result types, so this is an interface validity
++check, not just a naming convention. -/
++def KeptPair.WellFormed {F H : Type} (pair : KeptPair F H)
++    (submitParam : ExternParam H) (submitResult completeParam completeResult : ExternType H) : Prop :=
++  pair.submit ≠ pair.complete ∧ submitParam = ⟨.owned pair.handle, .kept⟩ ∧
++    submitResult = .receipt pair.handle ∧ completeParam = .receipt pair.handle ∧
++    completeResult = .owned pair.handle
++
++/-- The ownership state of one handle: the Concrete owner has it, or foreign code retains it and
++Concrete has only the linear `Kept<H>` receipt. There is no discard transition for a receipt. -/
++inductive RetentionState (H : Type) where
++  | owned (h : H)
++  | kept (h : H)
++
++/-- A foreign call, carrying the handle whose retention it changes. -/
++inductive ForeignEvent (F H : Type) where
++  | call (f : F) (h : H)
++
++/-- The complete retention transition relation. Submission consumes `H` and returns `Kept<H>`;
++only the distinct paired completion consumes that receipt and returns the same `H`. No other call
++changes retention. The receipt keeps the allocator dependency in `H` and has no operations of its
++own. -/
++def KeptStep {F H : Type} (pair : KeptPair F H) :
++    RetentionState H → ForeignEvent F H → RetentionState H → Prop
++  | .owned h, .call f h', .kept h'' =>
++    f = pair.submit ∧ h = pair.handle ∧ h' = h ∧ h'' = h
++  | .kept h, .call f h', .owned h'' =>
++    f = pair.complete ∧ pair.submit ≠ pair.complete ∧ h = pair.handle ∧ h' = h ∧ h'' = h
++  | _, _, _ => False
++
++instance {F H : Type} [DecidableEq F] [DecidableEq H] (pair : KeptPair F H)
++    (before : RetentionState H) (event : ForeignEvent F H) (after : RetentionState H) :
++    Decidable (KeptStep pair before event after) := by
++  cases before <;> cases event <;> cases after <;> unfold KeptStep <;> infer_instance
++
++/-! ### Launcher entry and exit (Q8.5–Q8.6) -/
++
++/-- The launcher contract binds an exact retained artifact closure, entry inputs, exit observations
++and the final artifact's stack bound. These are relations, not a concrete launcher implementation. -/
++structure Launcher (Artifact Input Result Observation : Type) where
++  retainedClosure : Artifact → Prop
++  entry : Artifact → Input → Prop
++  exit : Artifact → Result → Observation → Prop
++  stackBound : Artifact → Nat
++
++/-- Startup either refuses an inadequate reservation with status 125 or admits the input. -/
++inductive Startup (Input : Type) where
++  | refused125
++  | entered (input : Input)
++  deriving DecidableEq, Repr
++
++/-- The decided stack-budget admission rule. -/
++def stackAdmission {Input : Type} (bound reserved : Nat) (input : Input) : Startup Input :=
++  if reserved < bound then .refused125 else .entered input
++
++/-- A launched run carries the exact artifact closure and entry/exit relations, with a reservation
++at least the final artifact bound. -/
++structure Launcher.Run {Artifact Input Result Observation : Type}
++    (l : Launcher Artifact Input Result Observation) (artifact : Artifact) (reserved : Nat)
++    (input : Input) (result : Result) (observation : Observation) : Prop where
++  closure : l.retainedClosure artifact
++  entry : l.entry artifact input
++  exit : l.exit artifact result observation
++  adequateStack : l.stackBound artifact ≤ reserved
++
++/-! ### ABI examples -/
++
++/-- Accepted: two typed arguments are read from register 0 and stack slot 0 respectively. -/
++example : ArgumentsHold (fun (_ : Nat) (v : Nat) => [v])
++    [⟨0, [.register 0]⟩, ⟨1, [.stack 0]⟩] [11, 12]
++    ⟨fun _ => 11, fun _ => 12, 1⟩ := by
++  exact ⟨rfl, rfl, trivial⟩
++
++/-- Refused: a value different from the word in its bound stack slot does not satisfy the argument
++relation. -/
++example : ¬ ArgumentsHold (fun (_ : Nat) (v : Nat) => [v])
++    [⟨0, [.register 0]⟩, ⟨1, [.stack 0]⟩] [11, 99]
++    ⟨fun _ => 11, fun _ => 12, 1⟩ := by
++  intro h
++  have h' := h.2.1
++  simp [Binding.Holds, Location.read] at h'
++
++/-- Accepted: a call-only C pointer and a kept owned allocation are valid extern parameters. -/
++example : (⟨.ffi (.rawPointer .int), .callOnly⟩ : ExternParam Nat).Valid ∧
++    (⟨.owned 7, .kept⟩ : ExternParam Nat).Valid := by decide
++
++/-- Refused: enums never cross an extern boundary, and a raw pointer cannot be marked `kept`. -/
++example : ¬ (⟨.enum, .callOnly⟩ : ExternParam Nat).Valid ∧
++    ¬ (⟨.ffi (.rawPointer .int), .kept⟩ : ExternParam Nat).Valid ∧
++    ¬ (ExternResult.Valid ⟨0, 1, 7⟩ 0 (.enum : ExternType Nat)) := by decide
++
++/-- Refused: an unrelated extern can return neither the paired receipt nor the paired owned handle. -/
++example : ¬ ExternResult.Valid (⟨0, 1, 7⟩ : KeptPair Nat Nat) 2 (.receipt 7) ∧
++    ¬ ExternResult.Valid (⟨0, 1, 7⟩ : KeptPair Nat Nat) 2 (.owned 7) := by decide
++
++/-- Accepted: the paired declarations have exactly the owned/receipt types of the same handle. -/
++example : (⟨0, 1, 7⟩ : KeptPair Nat Nat).WellFormed
++    ⟨.owned 7, .kept⟩ (.receipt 7) (.receipt 7) (.owned 7) := by
++  exact ⟨by decide, rfl, rfl, rfl, rfl⟩
++
++/-- Refused: ordinary FFI results cannot stand in for the submission receipt or completion's owned
++handle, even though each is individually a valid extern result. -/
++example : ¬ (⟨0, 1, 7⟩ : KeptPair Nat Nat).WellFormed
++    ⟨.owned 7, .kept⟩ (.ffi .int) (.receipt 7) (.owned 7) ∧
++    ¬ (⟨0, 1, 7⟩ : KeptPair Nat Nat).WellFormed
++      ⟨.owned 7, .kept⟩ (.receipt 7) (.receipt 7) (.ffi .int) := by
++  constructor <;> intro h
++  · have hr := h.2.2.1
++    cases hr
++  · have hr := h.2.2.2.2
++    cases hr
++
++/-- Refused: a completion for a different handle's receipt does not satisfy the pairing law. -/
++example : ¬ (⟨0, 1, 7⟩ : KeptPair Nat Nat).WellFormed
++    ⟨.owned 7, .kept⟩ (.receipt 7) (.receipt 8) (.owned 7) := by
++  intro h
++  have hc := h.2.2.2.1
++  cases hc
++
++/-- Refused: submission and completion cannot be the same extern identity. -/
++example : ¬ (⟨0, 0, 7⟩ : KeptPair Nat Nat).WellFormed
++    ⟨.owned 7, .kept⟩ (.receipt 7) (.receipt 7) (.owned 7) := by
++  intro h
++  exact h.1 rfl
++
++/-- Accepted: submitting handle 7 to the paired extern turns ownership into its receipt. -/
++example : KeptStep ⟨0, 1, 7⟩ (.owned 7) (.call 0 7) (.kept 7) := by decide
++
++/-- Refused: the submitting extern cannot consume its own receipt; only completion can. -/
++example : ¬ KeptStep ⟨0, 1, 7⟩ (.kept 7) (.call 0 7) (.owned 7) := by decide
++
++/-- Accepted: an adequate reservation admits startup. -/
++example : stackAdmission 64 64 7 = .entered 7 := by decide
++
++/-- Refused: a smaller reservation refuses startup with status 125. -/
++example : stackAdmission 64 32 7 = .refused125 := by decide
++
++end ABI
++
++end ConcreteSpec.Core.Frame

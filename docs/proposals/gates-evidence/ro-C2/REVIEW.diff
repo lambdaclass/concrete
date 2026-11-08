@@ -1,0 +1,2090 @@
+diff --git a/.github/workflows/lean_action_ci.yml b/.github/workflows/lean_action_ci.yml
+index 4da99f7b..8d1da38a 100644
+--- a/.github/workflows/lean_action_ci.yml
++++ b/.github/workflows/lean_action_ci.yml
+@@ -1,6 +1,6 @@
+ name: CI
+ 
+-# The root's CI after the legacy/ move. Eighteen jobs, all required (required-checks.txt):
++# The root's CI after the legacy/ move. Twenty-one jobs, all required (required-checks.txt):
+ #   Landing record  main's push run names the run that qualified its exact SHA (R-0570), kept from
+ #                the base unchanged; when it finds one, the jobs below are skipped on main.
+ #   Root checks  every check of scripts/checks/run.sh: legacy/ frozen, the day-one root inventory,
+@@ -345,16 +345,16 @@ jobs:
+       - name: "Fetch the published oracle, verify it, run smoke.con through it (exit 42)"
+         run: bash scripts/oracle/ci_check.sh
+ 
+-  # THE COMPILER'S GATES (Concrete/README.md gates 4, 6, 6a, 8, 9, 10, 11 and 12; slice 0, provisional),
++  # THE COMPILER'S GATES (Concrete/README.md gates 4, 6, 6a, 8–14; slice 0, provisional),
+   # scripts/checks/compiler/: not root checks (run.sh runs only scripts/checks/*.sh), because they need
+-  # the compiler's devshell, a native macOS runner and minutes each. Every hand-written BIR example
+-  # through the LLVM path and the LCB path, each executable's observation compared with the BIR
+-  # semantics; sanitizers, binary size (report-only) and the stack bound; the trusted-base golden; and
+-  # every build stage reproduced in distinct directories and on distinct machines. Each runs natively
+-  # on x86-64 Linux and on AArch64 macOS (LCB's first native proof profile is Apple AArch64), and every
+-  # matrix leg is a required job of its own name.
+-  backends:
+-    name: Slice 0 backends (${{ matrix.arch }})
++  # the compiler's devshell, a native macOS runner and minutes each. Every bir: row in the test manifest
++  # through the LLVM path and the LCB path, each executable's observation compared with the manifest
++  # expectation; sanitizers, binary size (report-only) and the stack bound; the trusted-base golden;
++  # every build stage reproduced in distinct directories and on distinct machines; per-test determinism
++  # from one compiler build; and interleaved scaling. Scaling runs only on x86-64 Linux; the other native
++  # matrix gates run on x86-64 Linux and AArch64 macOS, and every matrix leg is a required job of its own.
++  tests:
++    name: Tests (${{ matrix.arch }})
+     needs: landing-record
+     if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
+     # The compiler's devshell (flake.nix default: Lean, clang, LLVM, gdb/lldb), entered per step;
+@@ -378,8 +378,59 @@ jobs:
+       - uses: actions/checkout@v4
+       - name: Install Nix
+         uses: cachix/install-nix-action@v31
+-      - name: Backend gate (LLVM and LCB, native)
+-        run: nix develop --command bash scripts/checks/compiler/slice0_backends.sh
++      - name: Manifest tests (LLVM and LCB, native)
++        run: nix develop --command bash scripts/checks/compiler/tests.sh
++
++  determinism:
++    name: Determinism (${{ matrix.arch }})
++    needs: landing-record
++    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
++    defaults:
++      run:
++        shell: bash
++    strategy:
++      fail-fast: false
++      matrix:
++        include:
++          - arch: x86-64
++            runner: ubuntu-latest
++          - arch: aarch64-macos
++            runner: macos-15
++    runs-on: ${{ matrix.runner }}
++    timeout-minutes: 60
++    permissions:
++      contents: read
++    steps:
++      - uses: actions/checkout@v4
++      - name: Install Nix
++        uses: cachix/install-nix-action@v31
++      - name: Per-test determinism (one compiler build, two native builds per test)
++        run: nix develop --command timeout 3000 bash scripts/checks/compiler/determinism.sh
++
++  scaling:
++    name: Scaling (x86-64)
++    needs: landing-record
++    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
++    defaults:
++      run:
++        shell: bash
++    # Scaling measurements are confined to one x86-64 Linux job; hosted macOS is too noisy.
++    runs-on: ubuntu-latest
++    timeout-minutes: 15
++    permissions:
++      contents: read
++    steps:
++      - uses: actions/checkout@v4
++      - name: Install Nix
++        uses: cachix/install-nix-action@v31
++      - name: Interleaved 1x, 10x and 100x backend scaling
++        run: nix develop --command timeout 600 bash scripts/checks/compiler/scaling.sh scaling-report
++      - uses: actions/upload-artifact@v4
++        if: always()
++        with:
++          name: scaling-x86-64
++          path: scaling-report/scaling.tsv
++          if-no-files-found: error
+ 
+   artifacts:
+     name: Slice 0 artifacts (${{ matrix.arch }})
+diff --git a/Concrete/BIR.lean b/Concrete/BIR.lean
+index 9887a62f..97b51a86 100644
+--- a/Concrete/BIR.lean
++++ b/Concrete/BIR.lean
+@@ -648,38 +648,38 @@ example : ¬ WF unreachableParam := by decide
+ example : ¬ WF crossBlockUse := by decide
+ example : ¬ WF useBeforeDef := by decide
+ 
+-/-- The examples, by name, with the outcome each must show (`scripts/checks/compiler/slice0_backends.sh`). -/
+-def all : List (String × Program × Outcome) :=
+-  [("answer", answer, .exited 42), ("boundary", boundary, .exited 255),
+-   ("overflow", overflow, .trapped 0), ("answer_discharged", answerDischarged, .exited 42),
+-   ("return134", return134, .exited 134),
+-   ("i8_add_ok", checkedOp .add .i8 (-100) (-28), .exited 0),
+-   ("i8_add_ovf", checkedOp .add .i8 (-100) (-29), .trapped 0),
+-   ("u16_mul_ok", checkedOp .mul .u16 300 218, .exited 0),
+-   ("u16_mul_ovf", checkedOp .mul .u16 300 219, .trapped 0),
+-   ("i16_sub_ovf", checkedOp .sub .i16 (-32768) 1, .trapped 0),
+-   ("u8_sub_ovf", checkedOp .sub .u8 0 1, .trapped 0),
+-   ("i8_mul_ok", checkedOp .mul .i8 (-16) 8, .exited 0),
+-   ("i8_mul_ovf", checkedOp .mul .i8 (-16) (-8), .trapped 0),
+-   ("w_i8_add", wrapped .add .i8 100 100, .exited 72),
+-   ("w_i8_add_ok", wrapped .add .i8 (-100) 50, .exited 206),
+-   ("w_i8_sub", wrapped .sub .i8 (-100) 100, .exited 184),
+-   ("w_i8_mul", wrapped .mul .i8 (-16) 9, .exited 240),
+-   ("w_u8_add", wrapped .add .u8 200 100, .exited 172),
+-   ("w_u8_sub", wrapped .sub .u8 3 5, .exited 126),
+-   ("w_u8_mul", wrapped .mul .u8 20 20, .exited 16),
+-   ("w_i16_add", wrapped .add .i16 32767 1, .exited 128),
+-   ("w_i16_sub", wrapped .sub .i16 (-32768) 1, .exited 127),
+-   ("w_i16_sub_ok", wrapped .sub .i16 (-1000) 24000, .exited 88),
+-   ("w_i16_mul", wrapped .mul .i16 300 301, .exited 60),
+-   ("w_u16_sub", wrapped .sub .u16 1 3, .exited 126),
+-   ("w_u16_mul", wrapped .mul .u16 65535 65535, .exited 129),
+-   ("w_u16_mul_ok", wrapped .mul .u16 255 257, .exited 255),
+-   ("widen_u", widenU, .exited 160), ("widen_s", widenS, .exited 90),
+-   ("site1", twoSites 100 100 2, .trapped 1), ("site0", twoSites 200 100 2, .trapped 0),
+-   ("two_sites_ok", twoSites 20 1 2, .exited 42)]
++/-- The examples, by name. Their expected outcomes live only in `tests/manifest.tsv`. -/
++def all : List (String × Program) :=
++  [("answer", answer), ("boundary", boundary),
++   ("overflow", overflow), ("answer_discharged", answerDischarged),
++   ("return134", return134),
++   ("i8_add_ok", checkedOp .add .i8 (-100) (-28)),
++   ("i8_add_ovf", checkedOp .add .i8 (-100) (-29)),
++   ("u16_mul_ok", checkedOp .mul .u16 300 218),
++   ("u16_mul_ovf", checkedOp .mul .u16 300 219),
++   ("i16_sub_ovf", checkedOp .sub .i16 (-32768) 1),
++   ("u8_sub_ovf", checkedOp .sub .u8 0 1),
++   ("i8_mul_ok", checkedOp .mul .i8 (-16) 8),
++   ("i8_mul_ovf", checkedOp .mul .i8 (-16) (-8)),
++   ("w_i8_add", wrapped .add .i8 100 100),
++   ("w_i8_add_ok", wrapped .add .i8 (-100) 50),
++   ("w_i8_sub", wrapped .sub .i8 (-100) 100),
++   ("w_i8_mul", wrapped .mul .i8 (-16) 9),
++   ("w_u8_add", wrapped .add .u8 200 100),
++   ("w_u8_sub", wrapped .sub .u8 3 5),
++   ("w_u8_mul", wrapped .mul .u8 20 20),
++   ("w_i16_add", wrapped .add .i16 32767 1),
++   ("w_i16_sub", wrapped .sub .i16 (-32768) 1),
++   ("w_i16_sub_ok", wrapped .sub .i16 (-1000) 24000),
++   ("w_i16_mul", wrapped .mul .i16 300 301),
++   ("w_u16_sub", wrapped .sub .u16 1 3),
++   ("w_u16_mul", wrapped .mul .u16 65535 65535),
++   ("w_u16_mul_ok", wrapped .mul .u16 255 257),
++   ("widen_u", widenU), ("widen_s", widenS),
++   ("site1", twoSites 100 100 2), ("site0", twoSites 200 100 2),
++   ("two_sites_ok", twoSites 20 1 2)]
+ 
+-example : all.all (fun (_, p, o) => wf p && run p 5 == o) := by decide +kernel
++example : all.all (fun (_, p) => wf p) := by decide +kernel
+ 
+ end Examples
+ 
+diff --git a/Concrete/README.md b/Concrete/README.md
+index 9e99868c..501286b7 100644
+--- a/Concrete/README.md
++++ b/Concrete/README.md
+@@ -1,6 +1,6 @@
+ # The Concrete compiler: slice 0 design (provisional)
+ 
+-PROVISIONAL. This is a design sketch, revision 8, written after eight Codex and agy review rounds. It folds in the Codex/agy/Kimi pipeline review and the owner's answers (2026-11-06). Build step 1 (BIR as the shared backend contract) is implemented: `Concrete/BIR.lean` and `Concrete/Backend/`, gate `scripts/checks/compiler/slice0_backends.sh`. Slice 0 is the first compiler slice. It is built before the owner freezes Core (A2c) and makes no normative claim before that freeze ([decision](../docs/decisions.md#decided-project-proof-infrastructure)). Branch `wip/slice0` depends on `wip/spec-root`, which puts `ConcreteSpec` on the new root, and is rebased onto main (under a new branch name) once that lands.
++PROVISIONAL. This is a design sketch, revision 8, written after eight Codex and agy review rounds. It folds in the Codex/agy/Kimi pipeline review and the owner's answers (2026-11-06). Build step 1 (BIR as the shared backend contract) is implemented: `Concrete/BIR.lean` and `Concrete/Backend/`, gate `scripts/checks/compiler/tests.sh`. Slice 0 is the first compiler slice. It is built before the owner freezes Core (A2c) and makes no normative claim before that freeze ([decision](../docs/decisions.md#decided-project-proof-infrastructure)). Branch `wip/slice0` depends on `wip/spec-root`, which puts `ConcreteSpec` on the new root, and is rebased onto main (under a new branch name) once that lands.
+ 
+ ## Scope
+ 
+@@ -10,7 +10,7 @@ This document describes **the compiler**: its stages, IRs, proof strategy, premi
+ - what the parent process observes, including the trap status and the trap line: [`ConcreteSpec/Spec/Observation.lean`](../ConcreteSpec/Spec/Observation.lean);
+ - the slice-0 surface (token rules, grammar, elaboration): the new `ConcreteSpec/Spec/Surface0.lean` described below.
+ 
+-The conformance corpus (`tests/slice0/`) instantiates those spec examples as source files.
++The test corpus is `tests/manifest.tsv`. Today's rows name hand-written BIR programs. Future `con:` rows name source files under `tests/`.
+ 
+ ## The pipeline
+ 
+@@ -154,7 +154,7 @@ Each IR has a total, fuel-indexed evaluator returning the spec's `Outcome` and a
+ |---|---|
+ | `Concrete.lean` | The library root that lake requires; it imports every stage. It is the same pattern as `ConcreteSpec.lean`. |
+ | `Concrete/` | The compiler: one flat folder, one file per pipeline stage or concern. |
+-| `tests/` | The executable test corpus. Each slice gets one subfolder, which holds `.con` sources and their `.expect` outcomes. |
++| `tests/` | The test corpus. `manifest.tsv` declares each program, its expected outcome and its owning slice. Source programs live under `tests/`. |
+ 
+ **Changes to existing entries.** No new entry is created for any of these:
+ - `lakefile.toml` gains the `Concrete` lib, the `concrete` exe, and a pinned `require` of `lean-compiler-backend`; `lake-manifest.json` records it.
+@@ -191,7 +191,9 @@ Concrete/
+   Cert.lean            per-compilation certificate emitter
+   Main.lean            CLI driver (IO, toolchain invocation); placeholder spellings
+ tests/
+-  slice0/              *.con sources and *.expect outcomes (exit status, or refusal + rule)
++  manifest.tsv         one row per test: program, expected outcome and owning slice
++  slice0/              future *.con sources; their outcomes stay in manifest.tsv
++  golden/              golden outputs, not test programs
+ ```
+ 
+ **Rules:**
+@@ -556,12 +558,12 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
+ 
+    Not yet a job. Until it is, the trusted-base golden (gate 9) fixes each headline theorem's axioms (a `sorryAx` among them fails it), and the trust ban of `scripts/proofs/trust_ban.sh` covers the specification only: it reads the compiler's library entry and its pinned dependency in `lakefile.toml`, not its sources or constants.
+ 3. **Premise registry and stage coverage:** the checks described in the stage registry section above.
+-4. **Conformance, both backends:** each `tests/slice0/*.con` example runs through:
++4. **Conformance, both backends:** each `bir:` row in `tests/manifest.tsv` runs through:
+    - the Lean `run`;
+    - the LLVM-native executable;
+    - the LCB-native executable.
+ 
+-   All three must give the same observation, and each must match the `.expect`.
++   All three must give the same observation, and each must match the row's `expect`. Future `con:` rows use the same manifest and runner.
+ 
+    **Classification uses the status and the runtime evidence, never the status alone.** `Observation.status` is many-to-one.
+    - Status 134 **with** the runtime's trap line on fd 2 is `trapped k`.
+@@ -571,7 +573,7 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
+ 
+    Accepted examples `return 125;` and `return 134;` are in the corpus and must classify as exits. Slice 0 can't produce a real startup refusal, because it has no grants. The refusal and trap classifications are also exercised by comparator self-tests: stub images, and the trap via gate 6.
+ 
+-   **Refused examples have their own leg.** The Lean `check` result, the compiler's refusal (with its rule) and the refusal certificate must agree with `.expect`. No executable exists for a refused example. A separate supported-subset coverage report lists every grammar production and Core form that the corpus exercises. A reject-all compiler fails, because every accepted example must exit with its status.
++   **Refused examples have their own leg.** The Lean `check` result, the compiler's refusal (with its rule) and the refusal certificate must agree with the row's `refuse RULE-ID` expectation. No executable exists for a refused example. A separate supported-subset coverage report lists every grammar production and Core form that the corpus exercises. A reject-all compiler fails, because every accepted example must exit with its status.
+ 5. **Differential at the source:** generated accepted programs, with replayable seeds; native exit = Lean `run`.
+ 6. **Differential through the token-free lowering, both backends.** This covers overflow. Generated **well-scoped, unchecked** slice-0 programs over **arbitrary** `u8` operands, including `200 + 56`, take `lower q ∅ → memory → ssa`, so they have no tokens and no checker. Their Core `run` is compared with the LLVM path and the LCB path. Overflow must give exit 134 and the right site's trap line on fd 2, for both backends. This exercises token-aware lowering, Memory CFG and SSA, not only the backends.
+    A second leg compares generated BIR directly with both backends, to cover BIR shapes that lowering does not produce.
+@@ -585,6 +587,9 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
+ 11. **Binary size** (owner, 2026-11-07; implemented, same script): the size of each example's executable (bytes and text size, pinned `llvm-size`), per backend and target, is recorded per run in `sizes.tsv`, uploaded with the job. Report-only: it never fails a run. **Compile time** (owner, 2026-11-08; same script, report-only): each example's emit step (the Lean emitter, Lean start-up included) and native step (clang and LCB's command line) in wall-clock milliseconds, next to its budget (the step's time bound), in `compile_times.tsv`.
+ 12. **Stack bound** (owner, 2026-11-07; implemented in the same script and `lib/stack_bound.py`; the `aarch64-macos` run check with LLDB, 2026-11-08): a stack-bound fact for each example, derived from the final artifact (the linked executable, not the IR) for both backends, and checked against a run. The analysis follows every path of the Concrete-owned code, instruction by instruction from an explicit set of modelled instructions, (`main`, `concrete_rt_write_all`, `concrete_body`) over the disassembly's control-flow graph, tracking the stack and frame pointers' depth below `main`'s entry and every byte addressed relative to them (so the red zone), refusing an access deeper than the target's red zone below the stack pointer (128 bytes on x86-64 System V and on Apple arm64, none under AAPCS64 on Linux: deeper bytes may be overwritten by a signal handler), and fails closed on anything it does not model (an instruction outside the set, another stack-pointer write, frame- or link-register writeback, an indirect branch or call, a stack pointer copied out, an indexed stack address, a stack read of bytes the function has not itself written on every path since its last call (so no stale saved frame pointer is ever loaded), a saved slot read other than by the modelled restore, two depths meeting, recursion, a call to a function neither owned nor a PLT/stub). The external calls (`write`, `_exit`, `abort`) are listed with the depth at their entry; their own use, and that `_exit` and `abort` do not return, are the libc premise. On x86-64 Linux the run check single-steps the owned code under the pinned gdb and requires the measured depth to be within the bound, for a complete run only (stopped first at `main`, back at each external call's return address, no signal, the expected exit status). The measured depth is the lowest of the stack pointer and every stack byte a stepped instruction addresses (`lib/stack_access.py` evaluates each memory operand), so a red-zone access is counted, and one deeper than the red zone is an error. A control links a `main` that stores at the red zone's edge without moving the stack pointer and requires bound 128 and measured 128 (on AArch64 it first allocates and frees a 144-byte frame with a pre-indexed store, judged against the new stack pointer, so 144); with a 120-byte red zone the same run gives no measurement. On Mach-O each stub entry's imported symbol comes from the indirect symbol table (`llvm-objdump --macho --indirect-symbols`), since the disassembly names only the `__stubs` section. On `aarch64-macos` the run check is the same, under Apple's LLDB (`/usr/bin/lldb`, `lib/stack_measure_lldb.py`; an external call's return address is the link register); LLDB is not pinned (Apple's signed debugserver is the only one allowed to attach), so its version is printed in the gate log. `stack.tsv` records bound, measurement and externals.
+ 
++13. **Scaling** (implemented in `scripts/checks/compiler/scaling.sh`, `scaling.lean` and `lib/scaling_report.py`): a deterministic BIR family chains a checked operation with its trap branch, a wrapping operation and a truncation in each repetition, so no result is dead. The Lean evaluator must exit 1 before a size is timed. The default base is `k0=1`, measured at 1×, 10× and 100× (201 blocks and about 58 KiB of LLVM text at 100×); all real in-process stages exceeded the 10 ms resolution floor at 100× in the smoke measurement, while `k0=2` would make the currently slow adapter exceed the job budget. `LLVM.module`, `LCB.emit` and `LCB.assemble` are timed separately with monotonic nanoseconds. String stages force their lengths; emit uses a linear structural digest of blocks, phi arms, instruction counts and terminators, never `repr`. Distinct per-repetition site metadata and a no-inline identity guard against hoisting/CSE. `lean --run` measures the interpreted compiler, which is the compiler available until the `concrete` executable exists; the exponents compare like stages, not a future executable's absolute time. Native inputs are written once per size and copied to a fresh directory per repetition before the whole `slice0_native.sh` step is timed by wall clock. Five repetitions are interleaved 1×, 10×, 100× in one job on one machine, and the minimum per size is used. The exact per-mode stage inventory and every (stage, size, repetition) sample are required. The report includes both step exponents for every stage, their in-process sum and the native total, in stdout and `scaling.tsv`. The gate fails if the 10×→100× exponent exceeds `SCALING_MAX_EXPONENT` (default 1.35, a noise margin over linear growth), if a 100× in-process stage is below `SCALING_MIN_STAGE_NS` (default 10 ms), or if native is below its own `SCALING_MIN_NATIVE_NS` floor (default 100 ms). It runs only on x86-64 Linux: hosted macOS runners are shared VMs whose exponents are not comparable. The whole gate has a ten-minute CI command bound. Every normal run, without rebuilding, automatically requires the linear plant to PASS and the quadratic plant to FAIL naming `plant_quadratic` with exponent in [1.7, 2.3] and the threshold diagnostic. Controls measure and analyze only the planted stage, so ISS-0030 cannot mask them; validation, timeout, resolution, inventory or unexpected-verdict failures are control-setup failures. Gate 11's `compile_times.tsv` **stays**: it is report-only per-example emit/native wall time and budget evidence, whereas this gate is a pass/fail growth test over generated sizes with stage-level in-process measurements.
++14. **Per-test determinism** (implemented in `scripts/checks/compiler/determinism.sh`): with one compiler build, every `bir:` row from the manifest is emitted and built natively twice from different absolute output paths, working directories, HOMEs, TMPDIRs and opposite insertion orders of the same explicit `env -i` keys. `slice0_native.sh` normalizes its own child environment, so its step varies paths, cwd and TMPDIR. A recursive inventory of each program's output directory must be equal on both sides and every file byte-compared; required-file assertions catch an artifact missing from both. Two emissions in the same Lean process provide an in-process leg. This is the per-test complement of gate 8, not a replacement: gate 8 remains the heavier independent-compiler/rebuild gate from two source paths, with cross-runner manifest comparison and its original explicit-list comparator mode. Controls require an explicit flag: a planted CWD comment must fail naming `llvm.ll`, planted monotonic time must fail naming `lcb_body.s`, and a missing or extra unexpected file must fail naming it; a clean double run must pass.
++
+ With the front end (owner, 2026-11-07): gate 5's random-program fuzzer compares the native executables with the Lean evaluator, and a JSON schema generated from the Lean types of the `facts` output has goldens. Each gate joins `required-checks.txt` when the compiler lands.
+ 
+ **Negative controls**, each a mutation the matching gate must refuse:
+@@ -700,11 +705,11 @@ planned `concrete facts` command will print this identity.
+ different paths with different TMPDIRs, each compiling the compiler, its dependencies and the `lcb`
+ executable itself, with no Lake artifact cache. They share only the pinned Lean toolchain and the
+ dependency sources (tracked files only). Each side
+-emits every hand-written BIR example and builds it natively, and every stage is compared without
+-normalization: the BIR and adapted LCB value dumps, both text formats, both LCB assembly outputs,
+-all objects and both executables. Negative controls check that the comparator refuses a flipped
+-byte, a missing artifact and a differing inventory. The slice-0 front end is not implemented yet, so
+-this gate starts at the hand-written BIR contract.
++emits every `bir:` row in `tests/manifest.tsv` and builds it natively, and every stage is compared
++without normalization: the BIR and adapted LCB value dumps, both text formats, both LCB assembly
++outputs, all objects and both executables. Negative controls check that the comparator refuses a
++flipped byte, a missing artifact and a differing inventory. The slice-0 front end is not implemented
++yet, so this gate starts at the hand-written BIR contract.
+ 
+ Both native gates use `scripts/checks/lib/slice0_native.sh` (a build helper, not a gate): the Nix-pinned clang 21 (`CONCRETE_SLICE0_CLANG`; the
+ shell's general `clang` is unchanged), an environment reduced to `PATH`, `HOME` and `TMPDIR`
+diff --git a/RETENTION.tsv b/RETENTION.tsv
+index 32782c27..f8c58e70 100644
+--- a/RETENTION.tsv
++++ b/RETENTION.tsv
+@@ -29,6 +29,7 @@ required-checks.txt required-checks-transition.tsv	landing	retained	root (script
+ RETENTION.tsv	landing	retained	RETENTION.tsv	R-0562	root: never; survives the deletion of legacy/; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+ ISSUES.tsv	issue record	retained	ISSUES.tsv (minimal issue record, P12)	R-0558	root: never; the full ledger joins it with slice 1; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+ ConcreteSpec ConcreteSpec.lean	spec	retained	root (the normative Lean specification)	R-0560	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
++tests/manifest.tsv tests/slice0	corpus	retained	root (the manifest-driven test corpus)	R-0558	root: never; legacy/ copy: none (new at the root, nothing to delete)	open
+ scripts/proofs	proof integrity	retained	scripts/proofs (the proof-integrity checks of ConcreteSpec: axiom inventory, trust ban, kernel replay, external re-check; rewritten from legacy/scripts/tests/check_external_checker.sh and legacy/scripts/tools, which stay governed by their own rows)	R-0560	root: never; legacy/ copy: none (new at the root, nothing to delete)	open
+ .github	ci	retained	rewritten for the new root; the old workflows move to legacy/.github and are not run	R-0563	root: never (the new root's workflows); legacy/ copy (the old workflows, never run): at LD (R-0590)	open
+ .githooks	landing	retained	.githooks (pre-push, re-pointed at the new gate set)	R-0563	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+diff --git a/changelog.d/2026-11-08-scaling-determinism.md b/changelog.d/2026-11-08-scaling-determinism.md
+new file mode 100644
+index 00000000..8603ad10
+--- /dev/null
++++ b/changelog.d/2026-11-08-scaling-determinism.md
+@@ -0,0 +1,5 @@
++### Scaling and per-test determinism gates
++
++The new required Scaling job times generated 1×, 10× and 100× BIR programs with interleaved repetitions, reports per-stage growth exponents, and rejects clearly superlinear compilation on x86-64 Linux. Every run automatically checks linear-PASS and quadratic-FAIL controls without rebuilding, with exact stage/sample inventories and separate in-process/native resolution floors. Gate 11's report-only `compile_times.tsv` remains unchanged.
++
++The new Determinism jobs emit and natively build every manifest test twice from one compiler build, varying paths and explicit environment order, recursively comparing every output file byte for byte. Same-process emission and planted CWD, monotonic-time, missing-artifact and extra-artifact controls complement gate 8's independent compiler rebuilds.
+diff --git a/changelog.d/2026-11-08-test-manifest.md b/changelog.d/2026-11-08-test-manifest.md
+new file mode 100644
+index 00000000..d597edc9
+--- /dev/null
++++ b/changelog.d/2026-11-08-test-manifest.md
+@@ -0,0 +1,5 @@
++### One manifest-driven test format
++
++The slice-0 BIR programs and their expected outcomes now have one inventory in `tests/manifest.tsv`.
++A shared fail-closed reader feeds the test, artifact and reproducibility gates. The compiler test job
++is now `Tests`; root checks validate the manifest, source-file ownership and planted defects.
+diff --git a/required-checks-transition.tsv b/required-checks-transition.tsv
+index 1e24388b..47fe920f 100644
+--- a/required-checks-transition.tsv
++++ b/required-checks-transition.tsv
+@@ -5,3 +5,5 @@
+ # "Root checks" keeps its name and is required on both sides, so it has no row. Delete a row once main
+ # no longer requires its job (required_checks.py reports it stale).
+ old_job	replacements	reason
++Slice 0 backends (x86-64)	Tests (x86-64)	The manifest-driven runner replaces the slice-0 backend gate.
++Slice 0 backends (aarch64-macos)	Tests (aarch64-macos)	The manifest-driven runner replaces the slice-0 backend gate.
+diff --git a/required-checks.txt b/required-checks.txt
+index 10a6199e..3feabdef 100644
+--- a/required-checks.txt
++++ b/required-checks.txt
+@@ -11,8 +11,11 @@ Proof axioms
+ Proof trust ban (sorry, native_decide)
+ Kernel replay (leanchecker)
+ External re-check (con-leche, nanoda)
+-Slice 0 backends (x86-64)
+-Slice 0 backends (aarch64-macos)
++Tests (x86-64)
++Tests (aarch64-macos)
++Determinism (x86-64)
++Determinism (aarch64-macos)
++Scaling (x86-64)
+ Slice 0 artifacts (x86-64)
+ Slice 0 artifacts (aarch64-macos)
+ Slice 0 trusted base (gate 9, x86-64)
+diff --git a/scripts/checks/compiler/determinism.sh b/scripts/checks/compiler/determinism.sh
+new file mode 100755
+index 00000000..fbeb8b8f
+--- /dev/null
++++ b/scripts/checks/compiler/determinism.sh
+@@ -0,0 +1,198 @@
++#!/usr/bin/env bash
++# Per-test determinism gate, the one-compiler-build complement of gate 8. Every bir: manifest row is
++# emitted and built natively twice from different absolute output paths, working directories, HOMEs,
++# TMPDIRs and opposite insertion orders of the same explicit env -i keys. Recursive inventories must
++# be equal and every emitted/native file byte-identical; required files also catch absence on both sides.
++# A second emit in the same Lean process checks in-process determinism. Gate 8 instead rebuilds the
++# compiler and LCB independently from two source copies and also compares cross-runner manifests.
++# slice0_native.sh normalizes its own children with env -i, so its step varies paths, cwd and TMPDIR.
++# Controls: a planted CWD in llvm.ll, planted monotonic time in lcb_body.s, and missing or extra files
++# must each fail for that named reason; a clean double run must pass. Plants require
++# --allow-planted-failure in slice0_bir.lean.
++#
++# usage: determinism.sh. Run inside nix develop. DETERMINISM_EMIT_ONLY=1 is the local smoke mode:
++# it builds only Concrete and omits native compilation (the normal gate always builds it and LCB).
++set -euo pipefail
++root=$(cd "$(dirname "$0")/../../.." && pwd)
++cd "$root"
++# shellcheck source=scripts/checks/lib/limits.sh
++source scripts/checks/lib/limits.sh
++gate_limits 64 40000
++work=$(mktemp -d)
++trap 'rc=$?; bounded_summary || true
++  if [ "$rc" = 0 ] && grep -Eqs "^(incomplete|runner-failed)" "${BOUNDED_LOG:-/nonexistent}"; then
++    echo "INCOMPLETE: a bounded run timed out twice; not a pass"; rc=3
++  fi
++  rm -rf "${work:?}"; exit "$rc"' EXIT
++BOUNDED_PARENT="$work"
++# shellcheck source=scripts/checks/lib/bounded.sh
++source scripts/checks/lib/bounded.sh
++[ "$BOUNDED_HAVE_WATCHDOG" = 1 ] || { echo "determinism: python3 is required for bounded runs" >&2; exit 2; }
++bounded() {
++  local secs=$1 rc=0
++  shift
++  bounded_run -i /dev/null "$secs" -- "$@" || rc=$?
++  if [ "$rc" != 0 ] && bounded_is_incomplete "$rc"; then
++    echo "determinism: INCOMPLETE (timed out twice): $*" >&2
++  fi
++  return "$rc"
++}
++emit_only=${DETERMINISM_EMIT_ONLY:-0}
++case "$emit_only" in 0|1) ;; *) echo "determinism: DETERMINISM_EMIT_ONLY must be 0 or 1" >&2; exit 2 ;; esac
++if [ "$emit_only" = 1 ]; then
++  bounded 1800 lake build Concrete >"$work/lake-build.log" 2>&1 ||
++    { tail -n 100 "$work/lake-build.log" >&2; exit 1; }
++else
++  bounded 1800 lake build Concrete lean-compiler-backend/lcb >"$work/lake-build.log" 2>&1 ||
++    { tail -n 100 "$work/lake-build.log" >&2; exit 1; }
++fi
++lcb=$root/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb
++case "$(uname -s)-$(uname -m)" in
++  Linux-x86_64) target=x86_64-linux ;;
++  Linux-aarch64) target=aarch64-linux ;;
++  Darwin-arm64) target=aarch64-macos ;;
++  *) echo "determinism: unsupported host $(uname -s)-$(uname -m)" >&2; exit 2 ;;
++esac
++lake_cmd=$(command -v lake)
++driver=$root/scripts/checks/compiler/slice0_bir.lean
++manifest=${CONCRETE_TEST_MANIFEST:-tests/manifest.tsv}
++bounded 30 python3 -I "$root/scripts/checks/lib/test_manifest.py" rows --kind bir "$manifest" >"$work/rows"
++[ -s "$work/rows" ] || { echo "determinism: no bir tests" >&2; exit 1; }
++awk -F '\t' '{print $1}' "$work/rows" >"$work/names"
++awk -F '\t' '{sub(/^bir:/, "", $2); print $2}' "$work/rows" | LC_ALL=C sort >"$work/manifest-programs"
++bounded 120 "$lake_cmd" --dir "$root" env lean --run "$driver" list | LC_ALL=C sort >"$work/emitter-programs"
++if [ "$emit_only" = 0 ]; then
++  cmp -s "$work/manifest-programs" "$work/emitter-programs" ||
++    { echo "determinism: test manifest inventory differs from emitter" >&2; exit 1; }
++fi
++printf 'one compiler build; per-test determinism\n' >"$work/identity"
++emitted=bir.txt,llvm.ll,lcb_job.txt,lcb_source.txt,lcb_body.ssa,lcb_body.s,lcb_rt.ssa,status,stderr
++all=$emitted,lcb_rt.s,llvm.o,lcb_body.o,lcb_rt.o,llvm.exe,lcb.exe
++compare=(python3 -I "$root/scripts/checks/lib/repro_compare.py" --inventory --label slice0_determinism)
++
++a=$work/first/output-with-one-absolute-path
++b=$work/second/a-different-and-deliberately-longer-absolute-output-path
++for side in "$a" "$b"; do
++  mkdir -p "$side/out" "$side/home" "$side/tmp"
++  cp "$work/names" "$side/names"
++done
++
++emit_one() { # emit_one SIDE CWD NAME PROGRAM EXPECT [PLANT]
++  local side=$1 cwd=$2 name=$3 program=$4 expect=$5 plant=${6:-}
++  local out=$side/out/$name
++  local -a expectation plant_args envs
++  read -r -a expectation <<<"$expect"
++  plant_args=()
++  [ -z "$plant" ] || plant_args=(--allow-planted-failure --plant "$plant")
++  if [ "$side" = "$a" ]; then
++    envs=("PATH=$PATH" "HOME=$side/home" "TMPDIR=$side/tmp" LC_ALL=C TZ=UTC SOURCE_DATE_EPOCH=1 ZERO_AR_DATE=1)
++  else
++    envs=(ZERO_AR_DATE=1 SOURCE_DATE_EPOCH=1 TZ=UTC LC_ALL=C "TMPDIR=$side/tmp" "HOME=$side/home" "PATH=$PATH")
++  fi
++  (cd "$cwd" && bounded 120 env -i "${envs[@]}" "$lake_cmd" --dir "$root" env lean --run "$driver" emit \
++    "${program#bir:}" "$out" "$target" "${expectation[@]}" ${plant_args[@]+"${plant_args[@]}"})
++}
++
++native_one() { # native_one SIDE NAME
++  local side=$1
++  local name=$2
++  local out=$side/out/$name
++  local log=$side/$name.native.log
++  local -a envs
++  if [ "$side" = "$a" ]; then
++    envs=("PATH=$PATH" "HOME=$side/home" "TMPDIR=$side/tmp" LC_ALL=C TZ=UTC SOURCE_DATE_EPOCH=1
++      ZERO_AR_DATE=1 "CONCRETE_SLICE0_CLANG=$CONCRETE_SLICE0_CLANG")
++  else
++    envs=("CONCRETE_SLICE0_CLANG=$CONCRETE_SLICE0_CLANG" ZERO_AR_DATE=1 SOURCE_DATE_EPOCH=1 TZ=UTC
++      LC_ALL=C "TMPDIR=$side/tmp" "HOME=$side/home" "PATH=$PATH")
++  fi
++  if ! (cd "$side" && bounded 300 env -i "${envs[@]}" \
++      bash "$root/scripts/checks/lib/slice0_native.sh" "$out" "$lcb") >"$log" 2>&1; then
++    cat "$log" >&2
++    echo "FAIL slice0_determinism: $name: native build failed" >&2
++    exit 1
++  fi
++}
++
++first_name= first_program= first_expect=
++while IFS=$'\t' read -r name program expect; do
++  if [ -z "$first_name" ]; then first_name=$name first_program=$program first_expect=$expect; fi
++  emit_one "$a" "$root" "$name" "$program" "$expect"
++  emit_one "$b" "$root/scripts" "$name" "$program" "$expect"
++  if [ "$emit_only" = 0 ]; then
++    native_one "$a" "$name"
++    native_one "$b" "$name"
++  fi
++
++  same=$work/same/$name
++  mkdir -p "$same/a/out/$name" "$same/b/out/$name"
++  printf '%s\n' "$name" >"$same/a/names"
++  cp "$same/a/names" "$same/b/names"
++  read -r -a expectation <<<"$expect"
++  bounded 120 "$lake_cmd" --dir "$root" env lean --run "$driver" emit-twice "${program#bir:}" \
++    "$same/a/out/$name" "$same/b/out/$name" "$target" "${expectation[@]}"
++  "${compare[@]}" --required "$emitted" "$same/a" "$same/b" "$work/identity"
++done <"$work/rows"
++
++required=$all
++[ "$emit_only" = 0 ] || required=$emitted
++"${compare[@]}" --required "$required" "$a" "$b" "$work/identity"
++echo 'ok slice0_determinism: clean double run'
++
++control_compare() { # control_compare LABEL ARTIFACT SIDE_A SIDE_B REQUIRED
++  local label=$1 artifact=$2 ca=$3 cb=$4 selected=$5 rc=0
++  local log=$work/control-$label.log
++  "${compare[@]}" --required "$selected" "$ca" "$cb" "$work/identity" >"$log" 2>&1 || rc=$?
++  if [ "$rc" = 0 ] || ! grep -qF "$first_name: $artifact:" "$log"; then
++    echo "FAIL slice0_determinism control $label: comparator did not name $artifact" >&2
++    cat "$log" >&2
++    exit 1
++  fi
++  cat "$log"
++  echo "ok slice0_determinism control $label: refused for the planted reason"
++}
++for plant in nondeterministic monotonic; do
++  c=$work/control-$plant
++  for side in ca cb; do
++    mkdir -p "$c/$side/out" "$c/$side/home" "$c/$side/tmp"
++    printf '%s\n' "$first_name" >"$c/$side/names"
++  done
++  # Reuse emit_one's environment variations by making the control paths the two known sides.
++  old_a=$a old_b=$b
++  a=$c/ca b=$c/cb
++  emit_one "$a" "$root" "$first_name" "$first_program" "$first_expect" "$plant"
++  # The CWD plant needs distinct CWDs; the time plant is deliberately run from the same CWD.
++  cwd=$root
++  [ "$plant" != nondeterministic ] || cwd=$root/scripts
++  emit_one "$b" "$cwd" "$first_name" "$first_program" "$first_expect" "$plant"
++  a=$old_a b=$old_b
++  artifact=llvm.ll
++  [ "$plant" != monotonic ] || artifact=lcb_body.s
++  control_compare "$plant" "$artifact" "$c/ca" "$c/cb" "$emitted"
++done
++
++c=$work/control-missing
++mkdir -p "$c"
++cp -R "$a" "$c/a"
++cp -R "$a" "$c/b"
++rm "$c/b/out/$first_name/lcb_body.s"
++control_compare missing-artifact lcb_body.s "$c/a" "$c/b" "$required"
++
++c=$work/control-extra
++mkdir -p "$c"
++cp -R "$a" "$c/a"
++cp -R "$a" "$c/b"
++touch "$c/b/out/$first_name/unexpected.extra"
++control_compare extra-artifact unexpected.extra "$c/a" "$c/b" "$required"
++
++rc=0
++read -r -a first_expectation <<<"$first_expect"
++(cd "$root" && bounded 120 "$lake_cmd" --dir "$root" env lean --run "$driver" emit "${first_program#bir:}" \
++  "$work/refused" "$target" "${first_expectation[@]}" --plant nondeterministic) >"$work/refusal.log" 2>&1 || rc=$?
++if [ "$rc" != 2 ] || ! grep -qF 'plant without --allow-planted-failure' "$work/refusal.log"; then
++  echo 'FAIL slice0_determinism control refusal: plant did not require the explicit flag' >&2
++  cat "$work/refusal.log" >&2
++  exit 1
++fi
++echo 'ok slice0_determinism control refusal: explicit flag required'
++echo 'PASS slice0_determinism'
+diff --git a/scripts/checks/compiler/scaling.lean b/scripts/checks/compiler/scaling.lean
+new file mode 100644
+index 00000000..cd7e858b
+--- /dev/null
++++ b/scripts/checks/compiler/scaling.lean
+@@ -0,0 +1,168 @@
++import Concrete
++
++/-!
++Deterministic BIR scaling family and in-process stage timer. This is test machinery, not a
++compiler stage. `scaled k rep` has one checked operation and trap branch, one wrapping operation
++and one truncation per repetition; block arguments carry every result into the next repetition.
++The repetition number changes only source-site metadata, preventing hoisting/CSE across timings.
++
++`lean --run` measures the interpreted compiler. That is the compiler available today (the `concrete`
++executable does not exist yet), and exponents over the same interpreted stages are the useful signal
++until an executable exists; absolute times are not claimed to predict a future native executable.
++-/
++
++open Concrete.BIR Concrete.Backend
++
++private def site (rep i : Nat) : SiteEntry :=
++  ⟨.arithmeticOverflow, ⟨i⟩, ⟨rep + 4 * i, rep + 4 * i + 3⟩,
++    ⟨"tests/slice0/scaled.con", rep + i + 1, 1⟩⟩
++
++private def bodyBlock (k i : Nat) : Block :=
++  let base := 6 * i
++  let previous : Operand := if i = 0 then .imm .u8 1 else .reg base
++  let next := if i + 1 = k then 2 * k else 2 * (i + 1)
++  { params := if i = 0 then [] else [(base, .int .u8)]
++    insts := [
++      .trunc .u8 .u16 (base + 1) previous,
++      .binOvf .add .u16 (base + 2) (base + 3) (.reg (base + 1)) (.imm .u16 0),
++      .bin .add .u16 (base + 4) (.reg (base + 2)) (.imm .u16 0),
++      .trunc .u16 .u8 (base + 5) (.reg (base + 4))]
++    term := .condbr (base + 3) (2 * i + 1) [] next [.reg (base + 5)] }
++
++/-- A linear-size, non-dead family whose expected result is always `exited 1`. -/
++def scaled (k rep : Nat) : Program :=
++  { blocks := (List.range k).flatMap (fun i =>
++        [bodyBlock k i, { params := [], insts := [], term := .trap i }]) ++
++      [{ params := [(6 * k, .int .u8)], insts := [], term := .ret (.reg (6 * k)) }]
++    sites := (List.range k).map (site rep) }
++
++private def instructions (p : Program) : List Inst := p.blocks.flatMap (·.insts)
++
++private def scan (is : List Inst) : Nat := is.foldl (fun n i => n + i.defs.length) 0
++
++private def plantLinear (p : Program) : Nat :=
++  let is := instructions p
++  (List.range 16384).foldl (fun n _ => n + scan is) 0
++
++private def plantQuadratic (p : Program) : Nat :=
++  let is := instructions p
++  (List.range (256 * is.length)).foldl (fun n _ => n + scan is) 0
++
++private def terminatorDigest : LeanCompilerBackend.Verified.Source.Terminator → Nat
++  | .ret _ => 1
++  | .jump target => target + 2
++  | .branch _ yes no => yes + no + 3
++
++private def blockDigest (b : LeanCompilerBackend.Verified.Source.Block) : Nat :=
++  b.instructions.size + b.phis.foldl (fun n phi => n + phi.incoming.size) 0 +
++    terminatorDigest b.terminator
++
++/-- Linear structural forcing: every block, phi arm, instruction count and terminator is visited,
++with no `repr` or string construction. -/
++private def forceEmit : Except String (LeanCompilerBackend.Verified.Source.Function × SiteTable) → Nat
++  | .ok (f, sites) =>
++    f.blocks.foldl (fun n b => 33 * n + blockDigest b) (f.valueWidths.size + sites.length)
++  | .error msg => msg.length
++
++@[noinline] private def opaqueIdentity (x : α) : α := x
++
++/-- Evaluate `force result` in a branch BEFORE reading the second clock, so laziness cannot move the
++stage's work past the measurement. Returning the result lets the next measured stage consume it. -/
++private def timedPure (value : Unit → α) (force : α → Nat) : IO (α × Nat × Nat) := do
++  let start ← IO.monoNanosNow
++  let result := value ()
++  let digest := force result
++  match digest % 2 with
++  | 0 =>
++    let stop ← IO.monoNanosNow
++    return (result, stop - start, digest)
++  | _ =>
++    let stop ← IO.monoNanosNow
++    return (result, stop - start, digest)
++
++private def sample (rep k : Nat) (stage : String) (measurement : α × Nat × Nat) : IO Unit :=
++  IO.println s!"sample\t{rep}\t{k}\t{stage}\t{measurement.2.1}\t{measurement.2.2}"
++
++private def measureOne (rep k : Nat) (t : LCB.Target) (p : Program) (plant : Option String) :
++    IO Bool := do
++  match plant with
++  | some "linear" =>
++    let planted ← timedPure (fun _ => plantLinear (opaqueIdentity p)) id
++    sample rep k "plant_linear" planted
++    return true
++  | some "quadratic" =>
++    let planted ← timedPure (fun _ => plantQuadratic (opaqueIdentity p)) id
++    sample rep k "plant_quadratic" planted
++    return true
++  | some _ => IO.eprintln "unknown plant"; return false
++  | none =>
++    let llvm ← timedPure (fun _ => LLVM.module (opaqueIdentity p)) String.length
++    sample rep k "llvm_module" llvm
++    let emitted ← timedPure (fun _ => LCB.emit (opaqueIdentity p)) forceEmit
++    sample rep k "lcb_emit" emitted
++    match emitted.1 with
++    | .error msg => IO.eprintln s!"scaled {k}: LCB emit: {msg}"; return false
++    | .ok (f, _) =>
++      let assembly ← timedPure (fun _ => LCB.assemble t (opaqueIdentity f)) (fun
++        | .ok asm => asm.length
++        | .error msg => msg.length)
++      sample rep k "lcb_assemble" assembly
++      match assembly.1 with
++      | .error msg => IO.eprintln s!"scaled {k}: LCB assemble: {msg}"; return false
++      | .ok _ => return true
++
++private def validate (k : Nat) (p : Program) : IO Bool := do
++  unless wf p do IO.eprintln s!"scaled {k}: not well formed"; return false
++  unless run p (k + 2) == .exited 1 do
++    IO.eprintln s!"scaled {k}: expected exit 1, got {repr (run p (k + 2))}"; return false
++  return true
++
++private def runMeasurement (k0 repetitions : Nat) (targetName : String) (plant : Option String) : IO UInt32 := do
++  if k0 = 0 || repetitions = 0 then IO.eprintln "k0 and repetitions must be positive"; return 2
++  let some target := LCB.Target.ofName targetName
++    | IO.eprintln s!"unknown target {targetName}"; return 2
++  let sizes := [k0, 10 * k0, 100 * k0]
++  for k in sizes do unless ← validate k (scaled k 0) do return 1
++  IO.println s!"family\tk0={k0}\trepetitions={repetitions}\ttarget={targetName}\texpected=exit-1"
++  for rep in List.range repetitions do
++    for k in sizes do
++      unless ← measureOne rep k target (scaled k rep) plant do return 1
++  return 0
++
++private def emitInputs (k : Nat) (dir : System.FilePath) (targetName : String) : IO UInt32 := do
++  let p := scaled k 0
++  unless ← validate k p do return 1
++  let some target := LCB.Target.ofName targetName
++    | IO.eprintln s!"unknown target {targetName}"; return 2
++  match LCB.emit p with
++  | .error msg => IO.eprintln s!"scaled {k}: LCB emit: {msg}"; return 1
++  | .ok (f, sites) =>
++    match LCB.assemble target f with
++    | .error msg => IO.eprintln s!"scaled {k}: LCB assemble: {msg}"; return 1
++    | .ok asm =>
++      IO.FS.createDirAll dir
++      IO.FS.writeFile (dir / "llvm.ll") (LLVM.module p)
++      IO.FS.writeFile (dir / "lcb_body.s") asm
++      IO.FS.writeFile (dir / "lcb_rt.ssa") (Runtime.qbe sites)
++      return 0
++
++private def parsePlant : List String → Option (Option String)
++  | [] => some none
++  | ["--allow-planted-failure", "--plant", "linear"] => some (some "linear")
++  | ["--allow-planted-failure", "--plant", "quadratic"] => some (some "quadratic")
++  | _ => none
++
++def main (args : List String) : IO UInt32 := do
++  match args with
++  | ["emit", k, dir, target] => match k.toNat? with
++    | some n => emitInputs n dir target
++    | none => IO.eprintln "emit: K must be a natural"; return 2
++  | "measure" :: k :: reps :: target :: plantArgs =>
++    match k.toNat?, reps.toNat?, parsePlant plantArgs with
++    | some n, some r, some plant => runMeasurement n r target plant
++    | _, _, none =>
++      IO.eprintln "plants require --allow-planted-failure --plant linear|quadratic"; return 2
++    | _, _, _ => IO.eprintln "measure: K0 and REPETITIONS must be naturals"; return 2
++  | _ =>
++    IO.eprintln "usage: scaling.lean emit K DIR TARGET | measure K0 REPETITIONS TARGET [--allow-planted-failure --plant linear|quadratic]"
++    return 2
+diff --git a/scripts/checks/compiler/scaling.sh b/scripts/checks/compiler/scaling.sh
+new file mode 100755
+index 00000000..6af4b5b5
+--- /dev/null
++++ b/scripts/checks/compiler/scaling.sh
+@@ -0,0 +1,188 @@
++#!/usr/bin/env bash
++# Scaling gate (x86-64 Linux only): one machine, one job. Generated BIR at k0, 10*k0 and 100*k0 is
++# checked by the Lean evaluator, then every in-process backend stage and the native step are timed.
++# Repetitions are interleaved across sizes and the minimum is used. The 10x->100x exponent must be
++# at most SCALING_MAX_EXPONENT (default 1.35); 100x in-process stages must be at least
++# SCALING_MIN_STAGE_NS (default 10 ms), and native at least SCALING_MIN_NATIVE_NS (default 100 ms).
++# k0=1 gives 201 blocks and about 58 KiB of LLVM at 100x; smoke measurements put all real in-process
++# stages above 10 ms there, so k0=2 is unnecessary and would make the currently slow adapter exceed
++# the approximately ten-minute budget. scaling.tsv records every minimum and both exponents.
++# Hosted macOS runners are shared VMs; exponents there are not comparable, so x86-64-only is a decision.
++# lean --run measures the interpreted compiler, the only compiler available until concrete exists.
++#
++# usage: scaling.sh [REPORT_DIR] [--allow-planted-failure --plant linear|quadratic]
++# SCALING_IN_PROCESS_ONLY=1 omits native timing for local smoke runs. Every normal run automatically
++# checks linear PASS and quadratic FAIL controls without rebuilding; they measure/analyze only their
++# planted stage, so independent pipeline scaling defects (ISS-0030) cannot mask them. A control's
++# validation, timeout, resolution, inventory or unexpected verdict is a "control setup" failure.
++set -euo pipefail
++root=$(cd "$(dirname "$0")/../../.." && pwd)
++cd "$root"
++# shellcheck source=scripts/checks/lib/limits.sh
++source scripts/checks/lib/limits.sh
++gate_limits 64 40000
++work=$(mktemp -d)
++trap 'rc=$?; bounded_summary || true
++  if [ "$rc" = 0 ] && grep -Eqs "^(incomplete|runner-failed)" "${BOUNDED_LOG:-/nonexistent}"; then
++    echo "INCOMPLETE: a bounded run timed out twice; not a pass"; rc=3
++  fi
++  rm -rf "${work:?}"; exit "$rc"' EXIT
++BOUNDED_PARENT="$work"
++# shellcheck source=scripts/checks/lib/bounded.sh
++source scripts/checks/lib/bounded.sh
++[ "$BOUNDED_HAVE_WATCHDOG" = 1 ] || { echo "scaling: python3 is required for bounded runs" >&2; exit 2; }
++bounded() {
++  local secs=$1 rc=0
++  shift
++  bounded_run -i /dev/null "$secs" -- "$@" || rc=$?
++  if [ "$rc" != 0 ] && bounded_is_incomplete "$rc"; then
++    echo "scaling: INCOMPLETE (timed out twice): $*" >&2
++  fi
++  return "$rc"
++}
++
++report=$work/report
++if [ "$#" -gt 0 ] && [ "${1#-}" = "$1" ]; then report=$1; shift; fi
++plant=
++if [ "$#" -gt 0 ]; then
++  [ "$#" = 3 ] && [ "$1" = --allow-planted-failure ] && [ "$2" = --plant ] &&
++    { [ "$3" = linear ] || [ "$3" = quadratic ]; } ||
++    { echo "scaling: plants require --allow-planted-failure --plant linear|quadratic" >&2; exit 2; }
++  plant=$3
++fi
++k0=${SCALING_K0:-1}
++repetitions=${SCALING_REPETITIONS:-5}
++max_exponent=${SCALING_MAX_EXPONENT:-1.35}
++min_stage_ns=${SCALING_MIN_STAGE_NS:-10000000}
++min_native_ns=${SCALING_MIN_NATIVE_NS:-100000000}
++in_process_only=${SCALING_IN_PROCESS_ONLY:-0}
++[ -n "$plant" ] && in_process_only=1
++case "$(uname -s)-$(uname -m)" in
++  Linux-x86_64) target=x86_64-linux ;;
++  *) echo "scaling: runs only on x86-64 Linux (one machine, one job)" >&2; exit 2 ;;
++esac
++case "$in_process_only" in 0|1) ;; *) echo "scaling: SCALING_IN_PROCESS_ONLY must be 0 or 1" >&2; exit 2 ;; esac
++mkdir -p "$report"
++driver=(lake env lean --run "$root/scripts/checks/compiler/scaling.lean")
++if [ "$in_process_only" = 1 ]; then
++  bounded 1800 lake build Concrete >"$work/lake-build.log" 2>&1 ||
++    { tail -n 100 "$work/lake-build.log" >&2; exit 1; }
++else
++  bounded 1800 lake build Concrete lean-compiler-backend/lcb >"$work/lake-build.log" 2>&1 ||
++    { tail -n 100 "$work/lake-build.log" >&2; exit 1; }
++fi
++
++run_lean() { # run_lean PLANT OUTPUT
++  local selected=$1 output=$2
++  local -a plant_args=()
++  [ -z "$selected" ] || plant_args=(--allow-planted-failure --plant "$selected")
++  bounded 600 "${driver[@]}" measure "$k0" "$repetitions" "$target" \
++    ${plant_args[@]+"${plant_args[@]}"} >"$output"
++}
++
++analyze() { # analyze SAMPLES REPORT MODE
++  bounded 60 python3 -I "$root/scripts/checks/lib/scaling_report.py" "$1" "$2" \
++    --k0 "$k0" --repetitions "$repetitions" --max-exponent "$max_exponent" \
++    --min-stage-ns "$min_stage_ns" --min-native-ns "$min_native_ns" --mode "$3"
++}
++
++if [ -n "$plant" ]; then
++  run_lean "$plant" "$work/plant.tsv"
++  analyze "$work/plant.tsv" "$report/scaling.tsv" "$plant"
++  exit
++fi
++
++mode=normal
++[ "$in_process_only" = 0 ] || mode=in-process
++clean_rc=0
++run_lean "" "$work/clean.tsv" || clean_rc=$?
++
++if [ "$clean_rc" = 0 ] && [ "$in_process_only" = 0 ]; then
++  lcb=$root/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb
++  for k in "$k0" "$((10 * k0))" "$((100 * k0))"; do
++    bounded 600 "${driver[@]}" emit "$k" "$work/native-inputs/$k" "$target" || clean_rc=$?
++  done
++  now_ns() { python3 -I -c 'import time; print(time.monotonic_ns())'; }
++  if [ "$clean_rc" = 0 ]; then
++    for ((rep = 0; rep < repetitions; rep++)); do
++      for k in "$k0" "$((10 * k0))" "$((100 * k0))"; do
++        run=$work/native-runs/$rep/$k
++        mkdir -p "$(dirname "$run")"
++        cp -R "$work/native-inputs/$k" "$run"
++        log=$work/native-$k-$rep.log
++        start=$(now_ns)
++        if bounded 300 bash "$root/scripts/checks/lib/slice0_native.sh" "$run" "$lcb" >"$log" 2>&1; then
++          stop=$(now_ns)
++          printf 'sample\t%s\t%s\tnative\t%s\t0\n' "$rep" "$k" "$((stop - start))" >>"$work/clean.tsv"
++        else
++          cat "$log" >&2
++          echo "FAIL scaling: native build failed at size $k repetition $rep" >&2
++          clean_rc=1
++          break 2
++        fi
++      done
++    done
++  fi
++fi
++if [ "$clean_rc" = 0 ]; then
++  analyze "$work/clean.tsv" "$report/scaling.tsv" "$mode" || clean_rc=$?
++else
++  echo "FAIL scaling: clean measurement failed with status $clean_rc; running controls" >&2
++fi
++
++control_setup() { # control_setup PLANT REASON LOG
++  echo "FAIL scaling control $1: control setup: $2" >&2
++  [ ! -f "$3" ] || cat "$3" >&2
++}
++
++control_linear() {
++  local samples=$work/control-linear.tsv log=$work/control-linear.log rc=0
++  run_lean linear "$samples" >"$work/control-linear-driver.log" 2>&1 || rc=$?
++  if [ "$rc" != 0 ]; then
++    control_setup linear "driver exited $rc" "$work/control-linear-driver.log"
++    return 1
++  fi
++  analyze "$samples" "$work/control-linear-report.tsv" linear >"$log" 2>&1 || rc=$?
++  if [ "$rc" != 0 ]; then
++    control_setup linear "linear plant was rejected (status $rc)" "$log"
++    return 1
++  fi
++  cat "$log"
++  echo 'ok scaling control linear: PASS'
++}
++
++control_quadratic() {
++  local samples=$work/control-quadratic.tsv log=$work/control-quadratic.log rc=0 value
++  run_lean quadratic "$samples" >"$work/control-quadratic-driver.log" 2>&1 || rc=$?
++  if [ "$rc" != 0 ]; then
++    control_setup quadratic "driver exited $rc" "$work/control-quadratic-driver.log"
++    return 1
++  fi
++  analyze "$samples" "$work/control-quadratic-report.tsv" quadratic >"$log" 2>&1 || rc=$?
++  if [ "$rc" = 0 ]; then
++    control_setup quadratic "quadratic plant unexpectedly passed" "$log"
++    return 1
++  fi
++  if [ "$(grep -c '^FAIL scaling:' "$log")" != 1 ] || ! grep -Eq \
++      '^FAIL scaling: stage plant_quadratic exponent 10x->100x = [0-9]+\.[0-9]{3} exceeds [0-9]+\.[0-9]{3}$' "$log"; then
++    control_setup quadratic "missing or additional analyzer failure" "$log"
++    return 1
++  fi
++  value=$(sed -n 's/^FAIL scaling: stage plant_quadratic exponent 10x->100x = \([0-9.]*\) exceeds.*/\1/p' "$log")
++  if ! bounded 30 python3 -I -c 'import sys; e=float(sys.argv[1]); t=float(sys.argv[2]); sys.exit(0 if 1.7 <= e <= 2.3 and e > t else 1)' \
++      "$value" "$max_exponent"; then
++    control_setup quadratic "planted exponent $value is outside [1.7, 2.3] or not above threshold" "$log"
++    return 1
++  fi
++  cat "$log"
++  echo "ok scaling control quadratic: refused for planted reason (exponent $value)"
++}
++
++controls_rc=0
++control_linear || controls_rc=1
++control_quadratic || controls_rc=1
++if [ "$controls_rc" != 0 ]; then
++  echo 'FAIL scaling: automatic planted controls failed' >&2
++  [ "$clean_rc" != 0 ] || clean_rc=1
++fi
++exit "$clean_rc"
+diff --git a/scripts/checks/compiler/slice0_artifacts.sh b/scripts/checks/compiler/slice0_artifacts.sh
+index 319cba78..21dcde9d 100644
+--- a/scripts/checks/compiler/slice0_artifacts.sh
++++ b/scripts/checks/compiler/slice0_artifacts.sh
+@@ -1,6 +1,6 @@
+ #!/usr/bin/env bash
+-# Slice-0 artifact gates (PROVISIONAL, Concrete/README.md gates 10, 11 and 12), over every
+-# hand-written BIR example, on the executables slice0_native.sh links:
++# Slice-0 artifact gates (PROVISIONAL, Concrete/README.md gates 10, 11 and 12), over every bir:
++# row in tests/manifest.tsv, on the executables slice0_native.sh links:
+ #
+ # 10. Sanitizers: the LLVM example also built with ASan (slice0_native.sh sanitize: ASan
+ #     instruments the printed IR once every definition carries sanitize_address; no UBSan: its
+@@ -158,12 +158,15 @@ size_report() { # size_report NAME BACKEND EXE
+   printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$target" "$bytes" "${text:-unavailable}" >>"$sizes"
+ }
+ 
+-names=$(emit_examples)
++rows=$(manifest_rows bir)
+ mkdir -p "$work/ctl"
+-for name in $names; do
++first_name= first_program= first_expect=
++while IFS=$'\t' read -r name program expect; do
++  if [ -z "$first_name" ]; then first_name=$name first_program=$program first_expect=$expect; fi
+   d="$work/ex/$name"
+   t0=$(now_ms)
+-  "${emitter[@]}" emit "$name" "$d" "$target"
++  read -r -a expectation <<<"$expect"
++  "${emitter[@]}" emit "${program#bir:}" "$d" "$target" "${expectation[@]}"
+   t1=$(now_ms)
+   build "$name" "$d/build.log" bounded "$native_secs" bash "$root/scripts/checks/lib/slice0_native.sh" "$d" "$lcb"
+   t2=$(now_ms)
+@@ -183,11 +186,12 @@ for name in $names; do
+     stack_check "$name" "$backend" "$d/$backend.exe"
+   done
+   examples=$((examples + 1))
+-done
++done <<<"$rows"
+ 
+ # Control (gate 10): an out-of-bounds load in the body must be reported by ASan.
+ c="$work/ctl/asan"
+-"${emitter[@]}" emit "${names%%$'\n'*}" "$c" "$target"
++read -r -a first_expectation <<<"$first_expect"
++"${emitter[@]}" emit "${first_program#bir:}" "$c" "$target" "${first_expectation[@]}"
+ sed -i.orig 's/^define i32 @concrete_body() {$/define i32 @concrete_body_orig() {/' "$c/llvm.ll"
+ cat >>"$c/llvm.ll" <<'LL'
+ 
+diff --git a/scripts/checks/compiler/slice0_backends.sh b/scripts/checks/compiler/slice0_backends.sh
+deleted file mode 100755
+index 0d20e7b5..00000000
+--- a/scripts/checks/compiler/slice0_backends.sh
++++ /dev/null
+@@ -1,73 +0,0 @@
+-#!/usr/bin/env bash
+-# Slice-0 backend gate (PROVISIONAL, Concrete/README.md gates 4 and 6, hand-written BIR leg):
+-# every hand-written BIR example goes through the LLVM path (clang) and the LCB path: the adapted
+-# body assembled by LCB in process (no text on the proved path), linked with the runtime entry,
+-# which LCB's command line assembles from QBE text.
+-# Each executable runs under bounded_run; its observation is its exit status (or "incomplete"),
+-# the exact bytes on descriptor 2, and descriptor 1, which must be empty. All three must equal what
+-# the BIR semantics gives (the emitter writes the expected status and stderr bytes).
+-#
+-# Controls: a body that never returns must be observed as incomplete on both backends; a body
+-# returning a word that encodes nothing must reach the runtime's refusal; and the comparison
+-# itself must reject a missing or extra newline, a wrong status with the right stderr, and stray
+-# stdout. Run inside the nix devshell, from the repository root.
+-set -euo pipefail
+-# shellcheck source=scripts/checks/lib/slice0_common.sh
+-source scripts/checks/lib/slice0_common.sh
+-
+-fail=0
+-count=0
+-examples=0
+-# check NAME DIR SECS RETRY: build both backends in DIR, run them and judge them.
+-check() {
+-  local name=$1 d=$2 backend
+-  build "$name" "$d/build.log" bounded "$native_secs" bash "$root/scripts/checks/lib/slice0_native.sh" "$d" "$lcb"
+-  for backend in llvm lcb; do
+-    observe "$d/$backend.exe" "$d/$backend" "$3" "$4"
+-    count=$((count + 1))
+-    if judge "$d" "$d/$backend"; then
+-      echo "ok   $name [$backend]: status $(cat "$d/$backend.status")"
+-    else
+-      echo "FAIL $name [$backend]: status $(cat "$d/$backend.status") (expected $(cat "$d/status"))," \
+-        "stderr $(od -An -c "$d/$backend.stderr" | tr -s ' ' | head -c 300)," \
+-        "stdout $(wc -c <"$d/$backend.stdout") bytes"
+-      fail=1
+-    fi
+-  done
+-}
+-
+-names=$(emit_examples)
+-for name in $names; do
+-  d="$work/ex/$name"
+-  "${emitter[@]}" emit "$name" "$d" "$target"
+-  check "$name" "$d" 10 20
+-  examples=$((examples + 1))
+-done
+-"${emitter[@]}" loop "$work/ctl/loop" "$target"
+-expected_timeout check control-loop "$work/ctl/loop" 1 1
+-"${emitter[@]}" invalid "$work/ctl/invalid" "$target"
+-check control-invalid-word "$work/ctl/invalid" 10 20
+-
+-# The comparison's own negative controls: each forged observation must be rejected.
+-e="$work/ctl/judge"; mkdir -p "$e"
+-echo 134 >"$e/status"; printf 'concrete: trap: x\n' >"$e/stderr"
+-forge() { # forge NAME STATUS STDERR-PRINTF STDOUT
+-  local o="$work/ctl/forged-$1"
+-  echo "$2" >"$o.status"; printf "$3" >"$o.stderr"; printf '%s' "$4" >"$o.stdout"
+-  echo "$o"
+-}
+-judge "$e" "$(forge same 134 'concrete: trap: x\n' '')" || { echo "FAIL judge rejects an exact match"; fail=1; }
+-for c in "no-newline|134|concrete: trap: x|" "extra-newline|134|concrete: trap: x\n\n|" \
+-         "wrong-status|1|concrete: trap: x\n|" "stray-stdout|134|concrete: trap: x\n|42" \
+-         "incomplete|incomplete||"; do
+-  IFS='|' read -r n s err out <<<"$c"
+-  if judge "$e" "$(forge "$n" "$s" "$err" "$out")"; then
+-    echo "FAIL judge accepts a forged observation: $n"; fail=1
+-  else
+-    echo "ok   judge rejects $n"
+-  fi
+-done
+-
+-[ "$examples" -gt 0 ] || { echo "slice0_backends: no examples ran" >&2; exit 1; }
+-echo "slice0_backends: $examples examples, $count backend runs (controls included)"
+-exit "$fail"
+diff --git a/scripts/checks/compiler/slice0_bir.lean b/scripts/checks/compiler/slice0_bir.lean
+index 90176ba5..333a2143 100644
+--- a/scripts/checks/compiler/slice0_bir.lean
++++ b/scripts/checks/compiler/slice0_bir.lean
+@@ -1,23 +1,46 @@
+ import Concrete
+ 
+ /-!
+-Emitter for the slice-0 backend gate (`scripts/checks/compiler/slice0_backends.sh`). PROVISIONAL.
++Emitter for the manifest-driven test gate (`scripts/checks/compiler/tests.sh`). PROVISIONAL.
+ 
+ `lake env lean --run scripts/checks/compiler/slice0_bir.lean list` prints the hand-written BIR examples;
+-`... emit NAME DIR TARGET` checks the example in Lean (well formed; its BIR run gives the expected
+-outcome; LCB's own evaluator on the adapted body returns the same result word) and writes
++`... emit NAME DIR TARGET EXPECT...` takes the expectation from `tests/manifest.tsv` and checks the
++example in Lean (well formed; its BIR run gives that outcome; LCB's own evaluator on the adapted
++body returns the same result word; a trap site's kind is the expected kind) and writes
+ `DIR/llvm.ll` (body + runtime entry), `DIR/lcb_body.s` (the adapted body, assembled by LCB in
+ process for TARGET: `x86_64-linux`, `aarch64-linux` or `aarch64-macos`), `DIR/lcb_rt.ssa` (the
+ runtime entry as QBE text, for LCB's command line), `DIR/lcb_body.ssa` (a debug dump only), and the
+ observation the executables must show: `DIR/status` (the exit status) and `DIR/stderr` (the exact
+ bytes on descriptor 2; descriptor 1 must stay empty).
+ 
+-Two controls exercise the gate itself: `... loop DIR TARGET` emits a well-formed BIR body that
++Two controls exercise the test gate itself: `... loop DIR TARGET` emits a well-formed BIR body that
+ never returns (`DIR/status` is `incomplete`), and `... invalid DIR TARGET` emits a body returning a
+ word that encodes nothing, which the runtime must refuse (`Runtime.invalidLine`, then abort).
++`... emit-twice NAME DIR DIR2 TARGET EXPECT...` performs two emissions in one Lean process for the
++determinism gate. Its controls append the CWD to `llvm.ll` or monotonic nanoseconds to
++`lcb_body.s`, and are accepted only after `--allow-planted-failure --plant nondeterministic` or
++`--allow-planted-failure --plant monotonic` following the expectation.
+ -/
+ 
+ open Concrete.BIR Concrete.Backend
++open ConcreteSpec (Trap)
++
++structure Expectation where
++  outcome : Outcome
++  trapKind : Option Trap
++
++def trapOfName : String → Option Trap
++  | "arithmeticOverflow" => some .arithmeticOverflow
++  | _ => none
++
++def parseExpectation : List String → Option Expectation
++  | ["exit", c] => match c.toNat? with
++    | some n => if n ≤ 255 then some ⟨.exited n, none⟩ else none
++    | none => none
++  | ["trap", kind, "site", s] => match trapOfName kind, s.toNat? with
++    | some k, some n => some ⟨.trapped n, some k⟩
++    | _, _ => none
++  | _ => none
+ 
+ def writeExpected (dir : System.FilePath) (status : String) (stderr : String) : IO Unit := do
+   IO.FS.writeFile (dir / "status") (status ++ "\n")
+@@ -25,7 +48,8 @@ def writeExpected (dir : System.FilePath) (status : String) (stderr : String) :
+ 
+ /-- Write the LCB leg: the body assembled in process, the runtime entry as QBE text. -/
+ def writeLcb (dir : System.FilePath) (target : LCB.Target)
+-    (emitted : LeanCompilerBackend.Verified.Source.Function × SiteTable) : IO Bool := do
++    (emitted : LeanCompilerBackend.Verified.Source.Function × SiteTable)
++    (plant : Option String := none) : IO Bool := do
+   let (f, sites) := emitted
+   IO.FS.createDirAll dir
+   IO.FS.writeFile (dir / "lcb_source.txt") (reprStr f ++ "\n")
+@@ -40,26 +64,40 @@ def writeLcb (dir : System.FilePath) (target : LCB.Target)
+   match LCB.assemble target f with
+   | .error msg => IO.eprintln s!"{dir}: LCB: {msg}"; return false
+   | .ok asm =>
++    let asm ← match plant with
++      | some "monotonic" => do
++        let now ← IO.monoNanosNow
++        pure (asm ++ s!"\n# determinism control monotonic nanos: {now}\n")
++      | _ => pure asm
+     IO.FS.writeFile (dir / "lcb_body.s") asm
+     IO.FS.writeFile (dir / "lcb_rt.ssa") (Runtime.qbe sites)
+     IO.FS.writeFile (dir / "lcb_body.ssa") (LCB.render f)
+     return true
+ 
+ def writeBackends (dir : System.FilePath) (target : LCB.Target) (p : Program)
+-    (emitted : LeanCompilerBackend.Verified.Source.Function × SiteTable) : IO Bool := do
++    (emitted : LeanCompilerBackend.Verified.Source.Function × SiteTable)
++    (plant : Option String := none) : IO Bool := do
+   IO.FS.createDirAll dir
+   IO.FS.writeFile (dir / "bir.txt") (reprStr p ++ "\n")
+-  IO.FS.writeFile (dir / "llvm.ll") (LLVM.module p)
+-  writeLcb dir target emitted
++  let llvm ← match plant with
++    | some "nondeterministic" => do
++      let cwd ← IO.currentDir
++      pure (LLVM.module p ++ s!"\n; determinism control cwd: {cwd}\n")
++    | _ => pure (LLVM.module p)
++  IO.FS.writeFile (dir / "llvm.ll") llvm
++  writeLcb dir target emitted plant
+ 
+-def emit (name : String) (dir : System.FilePath) (target : LCB.Target) : IO UInt32 := do
+-  let some (_, p, expected) := Examples.all.find? (·.1 == name)
++def emit (name : String) (dir : System.FilePath) (expectation : List String)
++    (target : LCB.Target) (plant : Option String := none) : IO UInt32 := do
++  let some (_, p) := Examples.all.find? (·.1 == name)
+     | IO.eprintln s!"unknown example {name}"; return 2
++  let some expected := parseExpectation expectation
++    | IO.eprintln s!"{name}: invalid BIR expectation; use exit N or trap KIND site N"; return 2
+   unless wf p do IO.eprintln s!"{name}: not well formed"; return 1
+   let got := run p 1000
+-  unless got == expected do
+-    IO.eprintln s!"{name}: BIR run gives {repr got}, expected {repr expected}"; return 1
+-  let some word := encode expected | IO.eprintln s!"{name}: no result word"; return 1
++  unless got == expected.outcome do
++    IO.eprintln s!"{name}: expectation mismatch: BIR run gives {repr got}, expected {repr expected.outcome}"; return 1
++  let some word := encode expected.outcome | IO.eprintln s!"{name}: no result word"; return 1
+   match LCB.emit p with
+   | .error msg => IO.eprintln s!"{name}: adapter: {msg}"; return 1
+   | .ok (f, tbl) =>
+@@ -68,11 +106,14 @@ def emit (name : String) (dir : System.FilePath) (target : LCB.Target) : IO UInt
+       unless w == word do
+         IO.eprintln s!"{name}: LCB's evaluator returns {w}, BIR's result word is {word}"; return 1
+     | none => IO.eprintln s!"{name}: LCB's evaluator does not return"; return 1
+-    unless ← writeBackends dir target p (f, tbl) do return 1
+-    match expected with
++    unless ← writeBackends dir target p (f, tbl) plant do return 1
++    match expected.outcome with
+     | .exited c => writeExpected dir (toString c) ""
+     | .trapped s => match tbl[s]? with
+-      | some e => writeExpected dir "134" (Runtime.trapLine e ++ "\n")
++      | some e =>
++        unless expected.trapKind == some e.kind do
++          IO.eprintln s!"{name}: expectation mismatch: trap site {s} has kind {repr e.kind}, expected {repr expected.trapKind}"; return 1
++        writeExpected dir "134" (Runtime.trapLine e ++ "\n")
+       | none => IO.eprintln s!"{name}: no site {s}"; return 1
+     | _ => IO.eprintln s!"{name}: no observation"; return 1
+     return 0
+@@ -111,12 +152,36 @@ def withTarget (name : String) (k : LCB.Target → IO UInt32) : IO UInt32 :=
+   | some t => k t
+   | none => do IO.eprintln s!"unknown target {name}"; return 2
+ 
++def parseControl : List String → Option (Option String)
++  | [] => some none
++  | ["--allow-planted-failure", "--plant", "nondeterministic"] => some (some "nondeterministic")
++  | ["--allow-planted-failure", "--plant", "monotonic"] => some (some "monotonic")
++  | _ => none
++
++def emitArgs (name dir target : String) (args : List String) (twice : Option String) : IO UInt32 :=
++  let parsed : Option (List String × Option String) := match args with
++    | "exit" :: c :: rest => (parseControl rest).map (["exit", c], ·)
++    | "trap" :: kind :: "site" :: s :: rest => (parseControl rest).map (["trap", kind, "site", s], ·)
++    | _ => none
++  match parsed with
++  | none => do
++    IO.eprintln "invalid expectation, or a plant without --allow-planted-failure"
++    return 2
++  | some (expectation, plant) => withTarget target fun t => do
++    let rc ← emit name dir expectation t plant
++    if rc != 0 then return rc
++    match twice with
++    | none => return 0
++    | some second => emit name second expectation t plant
++
+ def main (args : List String) : IO UInt32 := do
+   match args with
+   | ["list"] => do
+-    for (n, _, _) in Examples.all do IO.println n
++    for (n, _) in Examples.all do IO.println n
+     return 0
+-  | ["emit", name, dir, t] => withTarget t (emit name dir)
++  | "emit" :: name :: dir :: t :: expectation => emitArgs name dir t expectation none
++  | "emit-twice" :: name :: dir :: second :: t :: expectation =>
++    emitArgs name dir t expectation (some second)
+   | ["loop", dir, t] => withTarget t (emitLoop dir)
+   | ["invalid", dir, t] => withTarget t (emitInvalid dir)
+-  | _ => IO.eprintln "usage: slice0_bir.lean list | (emit NAME | loop | invalid) DIR TARGET"; return 2
++  | _ => IO.eprintln "usage: slice0_bir.lean list | emit[-twice] NAME DIR [DIR2] TARGET EXPECT... [--allow-planted-failure --plant nondeterministic|monotonic] | (loop | invalid) DIR TARGET"; return 2
+diff --git a/scripts/checks/compiler/slice0_repro.sh b/scripts/checks/compiler/slice0_repro.sh
+index 21ad81ca..181fdf2d 100755
+--- a/scripts/checks/compiler/slice0_repro.sh
++++ b/scripts/checks/compiler/slice0_repro.sh
+@@ -1,7 +1,7 @@
+ #!/usr/bin/env bash
+ # Slice-0 reproducibility gate (Concrete/README.md, gate 8). Two independent builds of the compiler
+-# and of LCB, from two source copies with different paths and TMPDIRs, emit every hand-written BIR
+-# example and build it natively; every stage is compared byte for byte, with no normalization.
++# and of LCB, from two source copies with different paths and TMPDIRs, emit every bir: row in the
++# test manifest and build it natively; every stage is compared byte for byte, with no normalization.
+ # The two sides share only the pinned Lean toolchain and the dependency SOURCES (each side compiles
+ # them itself, with no Lake artifact cache). The comparator is checked by negative controls: a flipped byte, a missing artifact
+ # and a differing inventory must each be refused.
+@@ -43,7 +43,7 @@ bounded() {
+ }
+ manifest=${1:-}
+ [ -z "$manifest" ] || manifest=$(realpath -m "$manifest")
+-compare=(python3 "$root/scripts/checks/lib/repro_compare.py")
++compare=(python3 -I "$root/scripts/checks/lib/repro_compare.py")
+ # Materialize the dependency checkouts (no build): they must be the manifest's clean revisions,
+ # which build_identity.sh checks before anything is built.
+ bounded 600 lake env true
+@@ -70,12 +70,19 @@ for side in first second; do
+     bounded 3000 lake build Concrete lean-compiler-backend/lcb >"$work/$side/build.log" 2>&1 ||
+       { tail -50 "$work/$side/build.log" >&2; echo "slice0_repro: $side: build failed" >&2; exit 1; }
+     lcb="$d/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
+-    bounded 120 lake env lean --run scripts/checks/compiler/slice0_bir.lean list > names
++    bounded 30 python3 -I scripts/checks/lib/test_manifest.py rows --kind bir tests/manifest.tsv > test-rows
++    awk -F '\t' '{print $1}' test-rows > names
++    awk -F '\t' '{sub(/^bir:/, "", $2); print $2}' test-rows | LC_ALL=C sort > manifest-programs
+     [ -s names ] || { echo 'slice0_repro: no examples' >&2; exit 1; }
+-    while read -r name; do
+-      bounded 120 lake env lean --run scripts/checks/compiler/slice0_bir.lean emit "$name" "$d/out/$name" "$target"
++    bounded 120 lake env lean --run scripts/checks/compiler/slice0_bir.lean list | LC_ALL=C sort > emitter-programs
++    if ! cmp -s manifest-programs emitter-programs; then
++      echo 'slice0_repro: test manifest inventory differs from emitter' >&2; exit 1
++    fi
++    while IFS=$'\t' read -r name program expect; do
++      read -r -a expectation <<<"$expect"
++      bounded 120 lake env lean --run scripts/checks/compiler/slice0_bir.lean emit "${program#bir:}" "$d/out/$name" "$target" "${expectation[@]}"
+       bounded 120 bash scripts/checks/lib/slice0_native.sh "$d/out/$name" "$lcb"
+-    done < names
++    done < test-rows
+   )
+ done
+ a="$work/first/checkout-with-first-path"
+diff --git a/scripts/checks/compiler/tests.sh b/scripts/checks/compiler/tests.sh
+new file mode 100755
+index 00000000..33d305cd
+--- /dev/null
++++ b/scripts/checks/compiler/tests.sh
+@@ -0,0 +1,113 @@
++#!/usr/bin/env bash
++# Manifest-driven test gate (PROVISIONAL, Concrete/README.md gates 4 and 6, hand-written BIR leg):
++# every bir: row in tests/manifest.tsv goes through the LLVM path (clang) and the LCB path: the
++# adapted body assembled by LCB in process (no text on the proved path), linked with the runtime
++# entry, which LCB's command line assembles from QBE text. The manifest's bir: inventory must equal
++# the emitter's list in both directions. CONCRETE_TEST_MANIFEST selects another manifest (controls).
++# Each executable runs under bounded_run; its observation is its exit status (or "incomplete"),
++# the exact bytes on descriptor 2, and descriptor 1, which must be empty. All three must equal the
++# manifest expectation checked by the emitter (which writes the expected status and stderr bytes).
++#
++# Controls: wrong exit and trap expectations must fail in the emitter; a missing row and a
++# nonexistent program must fail opposite inventory directions (these child runs are emit-only,
++# never native). A body that never returns must
++# be observed as incomplete on both backends; a body returning a word that encodes nothing must reach
++# the runtime's refusal; and the comparison itself must reject a missing or extra newline, a wrong
++# status with the right stderr, and stray stdout. Run inside the nix devshell, from the repo root.
++set -euo pipefail
++# shellcheck source=scripts/checks/lib/slice0_common.sh
++source scripts/checks/lib/slice0_common.sh
++
++fail=0
++count=0
++examples=0
++# check NAME DIR SECS RETRY: build both backends in DIR, run them and judge them.
++check() {
++  local name=$1 d=$2 backend
++  build "$name" "$d/build.log" bounded "$native_secs" bash "$root/scripts/checks/lib/slice0_native.sh" "$d" "$lcb"
++  for backend in llvm lcb; do
++    observe "$d/$backend.exe" "$d/$backend" "$3" "$4"
++    count=$((count + 1))
++    if judge "$d" "$d/$backend"; then
++      echo "ok   $name [$backend]: status $(cat "$d/$backend.status")"
++    else
++      echo "FAIL $name [$backend]: status $(cat "$d/$backend.status") (expected $(cat "$d/status"))," \
++        "stderr $(od -An -c "$d/$backend.stderr" | tr -s ' ' | head -c 300)," \
++        "stdout $(wc -c <"$d/$backend.stdout") bytes"
++      fail=1
++    fi
++  done
++}
++
++rows=$(manifest_rows bir)
++
++wrong_expectation() { awk -F '\t' -v OFS='\t' '$1 == "answer" {$3 = "exit 41"} {print}' "$1" >"$1.new"; mv "$1.new" "$1"; }
++wrong_trap_expectation() { awk -F '\t' -v OFS='\t' '$1 == "overflow" {$3 = "trap arithmeticOverflow site 1"} {print}' "$1" >"$1.new"; mv "$1.new" "$1"; }
++missing_row() { awk -F '\t' '$1 != "answer"' "$1" >"$1.new"; mv "$1.new" "$1"; }
++nonexistent_program() { printf 'no_such_program\tbir:no_such_program\texit 0\tslice0\n' >>"$1"; }
++manifest_control() { # manifest_control LABEL EXPECTED-MESSAGE MUTATION-FUNCTION
++  local label=$1 expected=$2 mutation=$3 dir="$work/ctl/$1" copy rc=0
++  mkdir -p "$dir"
++  cp -R "$(dirname "$test_manifest")" "$dir/tests"
++  copy="$dir/tests/$(basename "$test_manifest")"
++  "$mutation" "$copy"
++  if cmp -s "$test_manifest" "$copy"; then
++    echo "FAIL manifest control $label: mutation changed nothing" >&2; fail=1; return
++  fi
++  CONCRETE_TEST_MANIFEST="$copy" CONCRETE_TEST_MANIFEST_SKIP_CONTROLS=1 CONCRETE_TEST_EMIT_ONLY=1 \
++    bash "$root/scripts/checks/compiler/tests.sh" >"$work/ctl/$label.log" 2>&1 || rc=$?
++  if [ "$rc" -ne 0 ] && grep -qF "$expected" "$work/ctl/$label.log"; then
++    echo "ok   manifest control $label: refused for the planted reason"
++  else
++    echo "FAIL manifest control $label: not refused as '$expected'" >&2
++    cat "$work/ctl/$label.log" >&2
++    fail=1
++  fi
++}
++mkdir -p "$work/ctl"
++if [ "${CONCRETE_TEST_MANIFEST_SKIP_CONTROLS:-0}" != 1 ]; then
++  manifest_control wrong-expectation "answer: expectation mismatch: BIR run gives" wrong_expectation
++  manifest_control wrong-trap-expectation "overflow: expectation mismatch: BIR run gives" wrong_trap_expectation
++  manifest_control missing-row "program without a manifest row: answer" missing_row
++  manifest_control nonexistent-program "manifest row names no program: no_such_program" nonexistent_program
++fi
++
++while IFS=$'\t' read -r name program expect; do
++  d="$work/ex/$name"
++  read -r -a expectation <<<"$expect"
++  "${emitter[@]}" emit "${program#bir:}" "$d" "$target" "${expectation[@]}"
++  # Emit-only controls cover every row and never reach a native build, even if a planted defect is
++  # accidentally accepted: the control then fails because the child returns zero after the loop.
++  if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" = 1 ]; then continue; fi
++  check "$name" "$d" 10 20
++  examples=$((examples + 1))
++done <<<"$rows"
++if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" = 1 ]; then exit 0; fi
++"${emitter[@]}" loop "$work/ctl/loop" "$target"
++expected_timeout check control-loop "$work/ctl/loop" 1 1
++"${emitter[@]}" invalid "$work/ctl/invalid" "$target"
++check control-invalid-word "$work/ctl/invalid" 10 20
++
++# The comparison's own negative controls: each forged observation must be rejected.
++e="$work/ctl/judge"; mkdir -p "$e"
++echo 134 >"$e/status"; printf 'concrete: trap: x\n' >"$e/stderr"
++forge() { # forge NAME STATUS STDERR-PRINTF STDOUT
++  local o="$work/ctl/forged-$1"
++  echo "$2" >"$o.status"; printf "$3" >"$o.stderr"; printf '%s' "$4" >"$o.stdout"
++  echo "$o"
++}
++judge "$e" "$(forge same 134 'concrete: trap: x\n' '')" || { echo "FAIL judge rejects an exact match"; fail=1; }
++for c in "no-newline|134|concrete: trap: x|" "extra-newline|134|concrete: trap: x\n\n|" \
++         "wrong-status|1|concrete: trap: x\n|" "stray-stdout|134|concrete: trap: x\n|42" \
++         "incomplete|incomplete||"; do
++  IFS='|' read -r n s err out <<<"$c"
++  if judge "$e" "$(forge "$n" "$s" "$err" "$out")"; then
++    echo "FAIL judge accepts a forged observation: $n"; fail=1
++  else
++    echo "ok   judge rejects $n"
++  fi
++done
++
++[ "$examples" -gt 0 ] || { echo "tests: no examples ran" >&2; exit 1; }
++echo "tests: $examples examples, $count backend runs (controls included)"
++exit "$fail"
+diff --git a/scripts/checks/landing_script.sh b/scripts/checks/landing_script.sh
+index e849808f..bb1002ee 100755
+--- a/scripts/checks/landing_script.sh
++++ b/scripts/checks/landing_script.sh
+@@ -1013,13 +1013,13 @@ out="$(python3 -I "$TMP/required_names.py" "$ROOT_DIR/.github/workflows/lean_act
+ python3 -I - "$ROOT_DIR/.github/workflows/lean_action_ci.yml" "$TMP/rn" <<'PY3'
+ import sys, yaml, copy, os
+ w = yaml.safe_load(open(sys.argv[1])); os.makedirs(sys.argv[2], exist_ok=True)
+-a = copy.deepcopy(w); a["jobs"]["backends"]["strategy"]["matrix"]["include"].append({"arch": "riscv64", "runner": "ubuntu-latest"})
+-b = copy.deepcopy(w); b["jobs"]["backends"]["name"] = "Slice 0 backends (${{ matrix.os }})"
+-c = copy.deepcopy(w); c["jobs"]["backends"]["strategy"]["matrix"] = {"arch": ["x86-64", "aarch64-macos"]}
++a = copy.deepcopy(w); a["jobs"]["tests"]["strategy"]["matrix"]["include"].append({"arch": "riscv64", "runner": "ubuntu-latest"})
++b = copy.deepcopy(w); b["jobs"]["tests"]["name"] = "Tests (${{ matrix.os }})"
++c = copy.deepcopy(w); c["jobs"]["tests"]["strategy"]["matrix"] = {"arch": ["x86-64", "aarch64-macos"]}
+ for n, x in (("extraleg", a), ("unresolved", b), ("product", c)):
+     yaml.safe_dump(x, open(os.path.join(sys.argv[2], n + ".yml"), "w"))
+ PY3
+-for v in extraleg:"landing-tier job not required: Slice 0 backends (riscv64)" unresolved:"leaves its name unresolved" product:"is not a non-empty include list"; do
++for v in extraleg:"landing-tier job not required: Tests (riscv64)" unresolved:"leaves its name unresolved" product:"is not a non-empty include list"; do
+   o="$(python3 -I "$TMP/required_names.py" "$TMP/rn/${v%%:*}.yml" "$re_default" "$ROOT_DIR/required-checks.txt")"
+   has "$o" "${v#*:}" && ok "CONTROL: the required-checks check reports the ${v%%:*} matrix" || no "CONTROL: the required-checks check missed the ${v%%:*} matrix: '$o'"
+ done
+diff --git a/scripts/checks/lib/repro_compare.py b/scripts/checks/lib/repro_compare.py
+index aab0214a..e2a75f4f 100755
+--- a/scripts/checks/lib/repro_compare.py
++++ b/scripts/checks/lib/repro_compare.py
+@@ -1,12 +1,17 @@
+ #!/usr/bin/env python3
+ """Compare the stage outputs of two independent slice-0 builds, byte for byte.
+ 
+-usage: repro_compare.py SIDE_A SIDE_B IDENTITY [MANIFEST]
++usage: repro_compare.py [--stages A,B,...] [--inventory] [--required A,B,...]
++                       [--label NAME] SIDE_A SIDE_B IDENTITY [MANIFEST]
+ 
+-Each SIDE holds `names` (the example inventory) and `out/NAME/STAGE` for every stage. Every file
+-is read on both sides: a missing file, a differing inventory or one differing byte fails. With
++Each SIDE holds `names` (the example inventory) and `out/NAME/STAGE` for every stage. Every selected
++file is read on both sides: a missing file, a differing inventory or one differing byte fails. With
+ MANIFEST, writes the identity lines followed by one `SHA256  NAME/STAGE` line per artifact.
++--inventory recursively compares every file below each program's output directory, and --required
++adds assertions for files that must not be missing from both sides. --stages selects gate 8's
++original explicit-list mode; its default is `slice0_repro`. --label changes the diagnostic prefix.
+ """
++import argparse
+ import hashlib
+ import sys
+ from pathlib import Path
+@@ -15,29 +20,80 @@ STAGES = ['bir.txt', 'llvm.ll', 'lcb_job.txt', 'lcb_source.txt', 'lcb_body.ssa',
+           'lcb_rt.ssa', 'lcb_rt.s', 'llvm.o', 'lcb_body.o', 'lcb_rt.o', 'llvm.exe', 'lcb.exe']
+ 
+ 
++def names(value):
++    if value is None:
++        return []
++    result = value.split(',')
++    if any(not name or name.startswith('/') or '..' in Path(name).parts for name in result):
++        raise ValueError('file lists must contain relative file paths')
++    if len(set(result)) != len(result):
++        raise ValueError('file lists contain a duplicate')
++    return result
++
++
++def inventory(root):
++    if not root.is_dir():
++        sys.exit(f'FAIL output directory missing ({root})')
++    result = []
++    for path in root.rglob('*'):
++        relative = path.relative_to(root).as_posix()
++        if path.is_file():
++            result.append(relative)
++        elif not path.is_dir():
++            sys.exit(f'FAIL non-file artifact {relative}')
++    return sorted(result)
++
++
+ def main(argv):
+-    if len(argv) not in (4, 5):
+-        sys.exit(__doc__)
+-    a, b, identity = Path(argv[1]), Path(argv[2]), Path(argv[3])
+-    names = (a / 'names').read_bytes()
+-    if names != (b / 'names').read_bytes():
+-        sys.exit('FAIL slice0_repro: example inventory differs')
+-    if not names.strip():
+-        sys.exit('FAIL slice0_repro: no examples')
++    parser = argparse.ArgumentParser()
++    parser.add_argument('--stages')
++    parser.add_argument('--inventory', action='store_true')
++    parser.add_argument('--required')
++    parser.add_argument('--label', default='slice0_repro')
++    parser.add_argument('side_a')
++    parser.add_argument('side_b')
++    parser.add_argument('identity')
++    parser.add_argument('manifest', nargs='?')
++    args = parser.parse_args(argv[1:])
++    try:
++        required = names(args.required)
++        stages = names(args.stages) if args.stages is not None else STAGES
++    except ValueError as error:
++        parser.error(str(error))
++    if args.inventory and args.stages is not None:
++        parser.error('--inventory and --stages are alternative comparison modes')
++    a, b, identity = Path(args.side_a), Path(args.side_b), Path(args.identity)
++    names_bytes = (a / 'names').read_bytes()
++    if names_bytes != (b / 'names').read_bytes():
++        sys.exit(f'FAIL {args.label}: example inventory differs')
++    if not names_bytes.strip():
++        sys.exit(f'FAIL {args.label}: no examples')
+     lines = identity.read_text().splitlines()
+-    for name in names.decode().splitlines():
+-        for stage in STAGES:
++    for name in names_bytes.decode().splitlines():
++        roots = [d / 'out' / name for d in (a, b)]
++        selected = sorted(set(required + ([] if args.inventory else stages)))
++        for stage in selected:
+             try:
+-                hashes = [hashlib.sha256((d / 'out' / name / stage).read_bytes()).hexdigest()
+-                          for d in (a, b)]
+-            except FileNotFoundError as e:
+-                sys.exit(f'FAIL slice0_repro: {name}: {stage}: missing ({e.filename})')
++                hashes = [hashlib.sha256((root / stage).read_bytes()).hexdigest() for root in roots]
++            except FileNotFoundError as error:
++                sys.exit(f'FAIL {args.label}: {name}: {stage}: missing ({error.filename})')
++            if not args.inventory and hashes[0] != hashes[1]:
++                sys.exit(f'FAIL {args.label}: {name}: {stage}: {hashes[0]} != {hashes[1]}')
++        if args.inventory:
++            inventories = [inventory(root) for root in roots]
++            if inventories[0] != inventories[1]:
++                extra = sorted(set(inventories[0]) ^ set(inventories[1]))[0]
++                side = 'second' if extra in inventories[1] else 'first'
++                sys.exit(f'FAIL {args.label}: {name}: {extra}: inventory differs (only in {side} side)')
++            selected = inventories[0]
++        for stage in selected:
++            hashes = [hashlib.sha256((root / stage).read_bytes()).hexdigest() for root in roots]
+             if hashes[0] != hashes[1]:
+-                sys.exit(f'FAIL slice0_repro: {name}: {stage}: {hashes[0]} != {hashes[1]}')
++                sys.exit(f'FAIL {args.label}: {name}: {stage}: {hashes[0]} != {hashes[1]}')
+             lines.append(f'{hashes[0]}  {name}/{stage}')
+-        print(f'ok slice0_repro: {name}: all stages byte-identical')
+-    if len(argv) == 5:
+-        Path(argv[4]).write_text('\n'.join(lines) + '\n')
++        print(f'ok {args.label}: {name}: all stages byte-identical')
++    if args.manifest:
++        Path(args.manifest).write_text('\n'.join(lines) + '\n')
+ 
+ 
+ if __name__ == '__main__':
+diff --git a/scripts/checks/lib/scaling_report.py b/scripts/checks/lib/scaling_report.py
+new file mode 100755
+index 00000000..54860a30
+--- /dev/null
++++ b/scripts/checks/lib/scaling_report.py
+@@ -0,0 +1,134 @@
++#!/usr/bin/env python3
++"""Summarize interleaved scaling samples and enforce inventory, exponent and resolution limits."""
++
++import argparse
++import math
++import sys
++from collections import defaultdict
++
++CORE = ("llvm_module", "lcb_emit", "lcb_assemble")
++
++
++def exponent(small, large):
++    if small <= 0 or large <= 0:
++        raise ValueError("stage times must be positive")
++    return math.log(large / small) / math.log(10)
++
++
++def main():
++    parser = argparse.ArgumentParser()
++    parser.add_argument("samples")
++    parser.add_argument("report")
++    parser.add_argument("--k0", type=int, required=True)
++    parser.add_argument("--repetitions", type=int, required=True)
++    parser.add_argument("--max-exponent", type=float, required=True)
++    parser.add_argument("--min-stage-ns", type=int, required=True)
++    parser.add_argument("--min-native-ns", type=int, required=True)
++    parser.add_argument("--mode", choices=["normal", "in-process", "linear", "quadratic"],
++                        default="normal")
++    args = parser.parse_args()
++    if (args.k0 <= 0 or args.repetitions <= 0 or args.max_exponent <= 0
++            or args.min_stage_ns <= 0 or args.min_native_ns <= 0):
++        parser.error("k0/repetitions/exponent and both resolution floors must be positive")
++
++    samples = defaultdict(dict)
++    with open(args.samples, encoding="utf-8") as stream:
++        for line_number, line in enumerate(stream, 1):
++            fields = line.rstrip("\n").split("\t")
++            if not fields or fields[0] != "sample":
++                continue
++            if len(fields) != 6:
++                sys.exit(f"FAIL scaling: malformed sample at line {line_number}")
++            _, rep, k, stage, nanos, _ = fields
++            try:
++                key = (int(rep), int(k))
++                nanos = int(nanos)
++            except ValueError:
++                sys.exit(f"FAIL scaling: non-numeric sample at line {line_number}")
++            if key in samples[stage]:
++                sys.exit(f"FAIL scaling: duplicate sample for {stage} at line {line_number}")
++            samples[stage][key] = nanos
++
++    sizes = [args.k0, 10 * args.k0, 100 * args.k0]
++    expected_keys = {(rep, k) for rep in range(args.repetitions) for k in sizes}
++    failures = []
++    if args.mode in ("linear", "quadratic"):
++        expected_inventory = {"plant_" + args.mode}
++    else:
++        raw_expected = set(CORE)
++        if args.mode == "normal":
++            raw_expected.add("native")
++        if set(samples) != raw_expected:
++            missing = sorted(raw_expected - set(samples))
++            unexpected = sorted(set(samples) - raw_expected)
++            failures.append(f"FAIL scaling: raw stage inventory differs (missing {missing}, unexpected {unexpected})")
++        per_rep = defaultdict(dict)
++        for stage, values in samples.items():
++            for key, nanos in values.items():
++                per_rep[key][stage] = nanos
++        if args.mode in ("normal", "in-process"):
++            samples["in_process_total"] = {
++                key: sum(stages[stage] for stage in CORE)
++                for key, stages in per_rep.items() if all(stage in stages for stage in CORE)
++            }
++        if args.mode == "normal":
++            samples["total"] = {
++                key: stages["native"] + samples["in_process_total"][key]
++                for key, stages in per_rep.items()
++                if "native" in stages and key in samples["in_process_total"]
++            }
++        expected_inventory = set(CORE) | {"in_process_total"}
++        if args.mode == "normal":
++            expected_inventory.update(("native", "total"))
++    if set(samples) != expected_inventory:
++        missing = sorted(expected_inventory - set(samples))
++        unexpected = sorted(set(samples) - expected_inventory)
++        failures.append(f"FAIL scaling: stage inventory differs (missing {missing}, unexpected {unexpected})")
++
++    lines = [
++        f"# mode={args.mode}; k0={args.k0}; sizes={sizes[0]},{sizes[1]},{sizes[2]}; repetitions={args.repetitions}",
++        f"# minimum per size; max_exponent={args.max_exponent:.3f}; "
++        f"min_100x_stage_ns={args.min_stage_ns}; min_100x_native_ns={args.min_native_ns}",
++        "stage\t1x_ms\t10x_ms\t100x_ms\texponent_1x_10x\texponent_10x_100x",
++    ]
++    for stage in sorted(expected_inventory):
++        if stage not in samples:
++            continue
++        values = samples[stage]
++        if values.keys() != expected_keys:
++            missing = len(expected_keys - values.keys())
++            unexpected = len(values.keys() - expected_keys)
++            failures.append(
++                f"FAIL scaling: stage {stage}: sample inventory differs "
++                f"({missing} missing, {unexpected} unexpected)")
++            continue
++        minima = [min(values[(rep, k)] for rep in range(args.repetitions)) for k in sizes]
++        try:
++            exponents = [exponent(minima[i], minima[i + 1]) for i in range(2)]
++        except ValueError as error:
++            failures.append(f"FAIL scaling: stage {stage}: {error}")
++            continue
++        lines.append("{}\t{:.3f}\t{:.3f}\t{:.3f}\t{:.3f}\t{:.3f}".format(
++            stage, *(nanos / 1_000_000 for nanos in minima), *exponents))
++        floor = args.min_native_ns if stage == "native" else args.min_stage_ns
++        if minima[2] < floor:
++            failures.append(
++                f"FAIL scaling: stage {stage}: 100x minimum {minima[2]} ns is below resolution "
++                f"{floor} ns; increase SCALING_K0")
++        if exponents[1] > args.max_exponent:
++            failures.append(
++                f"FAIL scaling: stage {stage} exponent 10x->100x = {exponents[1]:.3f} "
++                f"exceeds {args.max_exponent:.3f}")
++    text = "\n".join(lines) + "\n"
++    with open(args.report, "w", encoding="utf-8") as stream:
++        stream.write(text)
++    sys.stdout.write(text)
++    for failure in failures:
++        print(failure)
++    if failures:
++        sys.exit(1)
++    print(f"PASS scaling: all 10x->100x exponents are at most {args.max_exponent:.3f}")
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/scripts/checks/lib/slice0_common.sh b/scripts/checks/lib/slice0_common.sh
+index a341dcf1..e0e2799b 100644
+--- a/scripts/checks/lib/slice0_common.sh
++++ b/scripts/checks/lib/slice0_common.sh
+@@ -1,5 +1,5 @@
+ # shellcheck shell=bash
+-# Shared machinery of the slice-0 example gates (PROVISIONAL): slice0_backends.sh (gates 4, 6, 6a)
++# Shared machinery of the slice-0 example gates (PROVISIONAL): tests.sh (gates 4, 6, 6a)
+ # and slice0_artifacts.sh (gates 10, 11, 12). Source it from the repository root, inside the nix
+ # devshell, with `set -euo pipefail`. It builds the compiler and LCB's command line under the
+ # gate's limits (lib/limits.sh: an address-space cap of SLICE0_GATE_MEM_GB GiB, default 64; 0 for
+@@ -14,7 +14,7 @@
+ #     OUT.stdout, OUT.stderr;
+ #   judge EXPECTED_DIR OBS: the observation OBS.* equals the expectation, byte for byte;
+ #   build NAME LOG CMD...: run CMD, or print LOG and fail the gate;
+-#   emit_examples: the example names, one per line, failing if there are none;
++#   manifest_rows KIND: validated rows, with the bir: inventory checked against the emitter;
+ #   cap_out: copy stdin to stdout, failing above 1 MiB: every command output a gate captures
+ #     into a variable goes through it, so no producer can grow the gate's shell (which may run
+ #     with no address-space cap, see SLICE0_GATE_MEM_GB) without bound.
+@@ -97,9 +97,29 @@ cap_out() {
+   printf '%s' "$out"
+ }
+ 
+-emit_examples() {
+-  local names
+-  names=$("${emitter[@]}" list | cap_out) || { echo "slice0: listing the examples failed" >&2; exit 1; }
+-  [ -n "$names" ] || { echo "slice0: no examples listed" >&2; exit 1; }
+-  printf '%s\n' "$names"
++test_manifest=${CONCRETE_TEST_MANIFEST:-tests/manifest.tsv}
++manifest_rows() {
++  local kind=$1 rows emitter_names name
++  rows=$(bounded 30 python3 -I "$root/scripts/checks/lib/test_manifest.py" rows --kind "$kind" "$test_manifest" | cap_out) ||
++    { echo "slice0: reading $test_manifest failed" >&2; exit 1; }
++  [ -n "$rows" ] || { echo "slice0: no $kind tests listed in $test_manifest" >&2; exit 1; }
++  if [ "$kind" = bir ]; then
++    printf '%s\n' "$rows" | awk -F '\t' '{sub(/^bir:/, "", $2); print $2}' |
++      LC_ALL=C sort >"$work/manifest-programs"
++    emitter_names=$("${emitter[@]}" list | cap_out) ||
++      { echo "slice0: listing emitter programs failed" >&2; exit 1; }
++    printf '%s\n' "$emitter_names" | LC_ALL=C sort >"$work/emitter-programs"
++    comm -13 "$work/manifest-programs" "$work/emitter-programs" >"$work/programs-without-rows"
++    comm -23 "$work/manifest-programs" "$work/emitter-programs" >"$work/rows-without-programs"
++    if [ -s "$work/programs-without-rows" ] || [ -s "$work/rows-without-programs" ]; then
++      while IFS= read -r name; do
++        echo "slice0: program without a manifest row: $name" >&2
++      done <"$work/programs-without-rows"
++      while IFS= read -r name; do
++        echo "slice0: manifest row names no program: $name" >&2
++      done <"$work/rows-without-programs"
++      exit 1
++    fi
++  fi
++  printf '%s\n' "$rows"
+ }
+diff --git a/scripts/checks/lib/slice0_sources.sh b/scripts/checks/lib/slice0_sources.sh
+index a449be8b..e6e50864 100644
+--- a/scripts/checks/lib/slice0_sources.sh
++++ b/scripts/checks/lib/slice0_sources.sh
+@@ -1,5 +1,5 @@
+ #!/usr/bin/env bash
+ # The tracked inputs of a slice-0 build: what slice0_repro.sh copies and build_identity.sh digests.
+ # shellcheck disable=SC2034
+-slice0_sources=(Concrete Concrete.lean ConcreteSpec scripts/checks lakefile.toml lean-toolchain
++slice0_sources=(Concrete Concrete.lean ConcreteSpec scripts/checks tests lakefile.toml lean-toolchain
+   lake-manifest.json)
+diff --git a/scripts/checks/lib/test_manifest.py b/scripts/checks/lib/test_manifest.py
+new file mode 100755
+index 00000000..e675c4ed
+--- /dev/null
++++ b/scripts/checks/lib/test_manifest.py
+@@ -0,0 +1,209 @@
++#!/usr/bin/env python3
++"""Read and validate tests/manifest.tsv; print rows for shell consumers.
++
++Usage: test_manifest.py [validate] [MANIFEST]
++       test_manifest.py rows [--kind bir|con] [MANIFEST]
++       test_manifest.py self-test
++
++The manifest's directory is the tests/ directory. Source paths are written as
++con:tests/... and resolved from that directory's parent. Every defect is an
++error naming its manifest line; no partial row set is printed.
++"""
++
++import re
++import sys
++import tempfile
++from pathlib import Path, PurePosixPath
++from typing import NamedTuple
++
++HEADER = ["id", "program", "expect", "slice"]
++ID_RE = re.compile(r"[a-z0-9_]+")
++SLICE_RE = re.compile(r"[a-z0-9_]+")
++RULE_RE = re.compile(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*(?:@[0-9]+)?")
++TRAP_KIND_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
++TRAP_KINDS = frozenset({"arithmeticOverflow"})
++
++
++class Row(NamedTuple):
++    id: str
++    program: str
++    expect: str
++    slice: str
++
++
++class ManifestError(Exception):
++    pass
++
++
++def fail(path, line, message):
++    where = f"{path}:{line}" if line is not None else str(path)
++    raise ManifestError(f"{where}: {message}")
++
++
++def natural(path, line, text):
++    try:
++        return int(text)
++    except ValueError:
++        fail(path, line, f"invalid natural number {text!r}")
++
++
++def validate_expect(path, line, expect):
++    parts = expect.split(" ")
++    if len(parts) == 2 and parts[0] == "exit" and re.fullmatch(r"[0-9]+", parts[1]):
++        status = natural(path, line, parts[1])
++        if status > 255:
++            fail(path, line, f"exit status {status} is outside 0..255")
++        return
++    if (len(parts) == 4 and parts[0] == "trap" and parts[2] == "site"
++            and TRAP_KIND_RE.fullmatch(parts[1]) and re.fullmatch(r"[0-9]+", parts[3])):
++        if parts[1] not in TRAP_KINDS:
++            fail(path, line, f"unknown ConcreteSpec.Trap constructor {parts[1]!r}")
++        natural(path, line, parts[3])
++        return
++    if len(parts) == 2 and parts[0] == "refuse" and RULE_RE.fullmatch(parts[1]):
++        return
++    fail(path, line, f"invalid expect {expect!r}; use exit N, trap KIND site N, or refuse RULE-ID")
++
++
++def validate_source(path, line, program, seen_sources):
++    relative = program[4:]
++    parts = relative.split("/")
++    pure = PurePosixPath(relative)
++    if (not relative.startswith("tests/") or not relative.endswith(".con")
++            or pure.is_absolute() or "\\" in relative
++            or any(part in ("", ".", "..") for part in parts)):
++        fail(path, line, f"con: path {relative!r} must be a normalized tests/*.con path")
++    if len(parts) > 1 and parts[1] == "golden":
++        fail(path, line, f"con: path {relative!r} must not be under tests/golden/")
++    tests_dir = path.parent.resolve()
++    source = tests_dir.joinpath(*parts[1:])
++    try:
++        resolved = source.resolve(strict=True)
++    except OSError:
++        fail(path, line, f"con: file {relative!r} does not exist")
++    except RuntimeError as error:
++        fail(path, line, f"con: file {relative!r} cannot be resolved: {error}")
++    if not resolved.is_file():
++        fail(path, line, f"con: path {relative!r} is not a file")
++    if resolved != tests_dir and tests_dir not in resolved.parents:
++        fail(path, line, f"con: file {relative!r} escapes tests/")
++    if relative in seen_sources or resolved in seen_sources.values():
++        fail(path, line, f"con: path {relative!r} is listed more than once")
++    seen_sources[relative] = resolved
++
++
++def parse(path, text):
++    rows = []
++    ids = {}
++    seen_bir = {}
++    seen_sources = {}
++    header_line = None
++    for line_number, line in enumerate(text.splitlines(), 1):
++        if not line or line.startswith("#"):
++            continue
++        fields = line.split("\t")
++        if header_line is None:
++            if fields != HEADER:
++                fail(path, line_number, "header must be id<TAB>program<TAB>expect<TAB>slice")
++            header_line = line_number
++            continue
++        if len(fields) != 4:
++            fail(path, line_number, f"needs 4 tab-separated columns, found {len(fields)}")
++        ident, program, expect, slice_name = fields
++        if not ID_RE.fullmatch(ident):
++            fail(path, line_number, f"invalid id {ident!r}; expected [a-z0-9_]+")
++        if ident in ids:
++            fail(path, line_number, f"duplicate id {ident!r} (first at line {ids[ident]})")
++        ids[ident] = line_number
++        if program.startswith("bir:"):
++            name = program[4:]
++            if not ID_RE.fullmatch(name):
++                fail(path, line_number, f"invalid BIR example name {name!r}")
++            if name in seen_bir:
++                fail(path, line_number, f"duplicate bir program {name!r} (first at line {seen_bir[name]})")
++            seen_bir[name] = line_number
++        elif program.startswith("con:"):
++            validate_source(path, line_number, program, seen_sources)
++        else:
++            fail(path, line_number, f"invalid program {program!r}; expected bir: or con:")
++        validate_expect(path, line_number, expect)
++        if program.startswith("bir:") and expect.startswith("refuse "):
++            fail(path, line_number, f"bir: row {ident!r} cannot use refuse; expected exit or trap")
++        if not SLICE_RE.fullmatch(slice_name):
++            fail(path, line_number, f"invalid slice {slice_name!r}; expected [a-z0-9_]+")
++        rows.append(Row(ident, program, expect, slice_name))
++    if header_line is None:
++        fail(path, 1, "missing header id<TAB>program<TAB>expect<TAB>slice")
++    if not rows:
++        fail(path, header_line, "manifest has no test rows")
++    return rows
++
++
++def load(manifest):
++    path = Path(manifest)
++    try:
++        text = path.read_text(encoding="utf-8")
++    except (OSError, UnicodeError) as error:
++        raise ManifestError(f"{path}: cannot read manifest: {error}") from error
++    return parse(path, text)
++
++
++def self_test():
++    with tempfile.TemporaryDirectory(prefix="concrete-manifest-") as tmp:
++        root = Path(tmp)
++        tests = root / "tests"
++        tests.mkdir()
++        (tests / "slice0").mkdir()
++        (tests / "slice0" / "ok.con").write_text("return 0;\n", encoding="utf-8")
++        valid = ("id\tprogram\texpect\tslice\n"
++                 "a\tbir:answer\texit 42\tslice0\n"
++                 "b\tcon:tests/slice0/ok.con\trefuse SYN-5@1\tslice0\n")
++        assert len(parse(tests / "manifest.tsv", valid)) == 2
++        bad = [
++            valid + "a\tbir:other\texit 0\tslice0\n",
++            valid + "c\tbir:other\texit 256\tslice0\n",
++            valid + "c\tbir:other\ttrap foo\tslice0\n",
++            valid + "c\tbir:other\ttrap arithmeticOverflow site 0\n",
++            valid + "c\tbir:answer\texit 0\tslice0\n",
++            valid + "c\tbir:other\trefuse SYN-5\tslice0\n",
++            valid + "c\tcon:tests/slice0/missing.con\texit 0\tslice0\n",
++        ]
++        for text in bad:
++            try:
++                parse(tests / "manifest.tsv", text)
++            except ManifestError:
++                pass
++            else:
++                raise AssertionError("self-test accepted a defective manifest")
++    print("test_manifest self-test: ok")
++
++
++def main(argv):
++    command = argv[1] if len(argv) > 1 else "validate"
++    if command == "self-test" and len(argv) == 2:
++        self_test()
++        return
++    args = argv[2:] if len(argv) > 1 else []
++    kind = None
++    if command == "rows" and args[:1] == ["--kind"]:
++        if len(args) < 2 or args[1] not in ("bir", "con"):
++            raise ManifestError("rows --kind requires bir or con")
++        kind = args[1]
++        args = args[2:]
++    if command not in ("validate", "rows") or len(args) > 1:
++        raise ManifestError(__doc__)
++    rows = load(args[0] if args else "tests/manifest.tsv")
++    if command == "rows":
++        for row in rows:
++            if kind is None or row.program.startswith(kind + ":"):
++                print(f"{row.id}\t{row.program}\t{row.expect}")
++    else:
++        print(f"test_manifest: {len(rows)} rows valid")
++
++
++if __name__ == "__main__":
++    try:
++        main(sys.argv)
++    except ManifestError as error:
++        print(f"test_manifest: {error}", file=sys.stderr)
++        sys.exit(1)
+diff --git a/scripts/checks/run.sh b/scripts/checks/run.sh
+index 856b9ad5..460cd345 100755
+--- a/scripts/checks/run.sh
++++ b/scripts/checks/run.sh
+@@ -9,7 +9,7 @@ set -uo pipefail
+ source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
+ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ cd "$ROOT_DIR"
+-REQUIRED="legacy_frozen root_inventory workflow_yaml doc_links landing_script landing_ready review_tool sandbox_isolation retention_manifest issues oracle_fetch"
++REQUIRED="legacy_frozen root_inventory workflow_yaml doc_links landing_script landing_ready review_tool sandbox_isolation retention_manifest issues oracle_fetch test_manifest"
+ missing=""
+ for c in $REQUIRED; do [ -f "scripts/checks/$c.sh" ] || missing="$missing $c"; done
+ [ -z "$missing" ] || { echo "run.sh: required check(s) missing:$missing" >&2; exit 1; }
+diff --git a/scripts/checks/test_manifest.sh b/scripts/checks/test_manifest.sh
+new file mode 100755
+index 00000000..cb0f2231
+--- /dev/null
++++ b/scripts/checks/test_manifest.sh
+@@ -0,0 +1,97 @@
++#!/usr/bin/env bash
++# The one test manifest is valid and owns every test file under tests/ (except its own manifest and
++# tests/golden/). The shared reader checks every row; this check also compares the con: inventory in
++# both directions. Controls plant malformed rows and source-inventory defects in private copies and
++# require the matching diagnostic. Each mutation must change its copy before the control runs.
++set -uo pipefail
++source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
++ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
++cd "$ROOT_DIR"
++MANIFEST=${CONCRETE_TEST_MANIFEST:-tests/manifest.tsv}
++[[ "$MANIFEST" = /* ]] || MANIFEST="$ROOT_DIR/$MANIFEST"
++TEST_DIR=$(dirname "$MANIFEST")
++TEST_PARENT=$(cd "$TEST_DIR/.." && pwd)
++cd "$TEST_PARENT"
++TMP=$(mktemp -d)
++trap 'rm -rf "$TMP"' EXIT
++PASS=0
++FAIL=0
++ok() { echo "  ok   $1"; PASS=$((PASS + 1)); }
++no() { echo "  FAIL $1"; FAIL=$((FAIL + 1)); }
++reader=(python3 -I "$ROOT_DIR/scripts/checks/lib/test_manifest.py")
++
++if out=$("${reader[@]}" validate "$MANIFEST" 2>&1); then
++  ok "$out"
++else
++  no "the manifest is invalid: $out"
++fi
++if out=$("${reader[@]}" self-test 2>&1); then
++  ok "$out"
++else
++  no "the reader's self-test failed: $out"
++fi
++
++if "${reader[@]}" rows "$MANIFEST" >"$TMP/rows"; then
++  awk -F '\t' '$2 ~ /^con:/ {sub(/^con:/, "", $2); print $2}' "$TMP/rows" |
++    LC_ALL=C sort >"$TMP/listed"
++  find tests -type f ! -path tests/manifest.tsv ! -path 'tests/golden/*' |
++    LC_ALL=C sort >"$TMP/files"
++  comm -23 "$TMP/files" "$TMP/listed" >"$TMP/unlisted"
++  comm -13 "$TMP/files" "$TMP/listed" >"$TMP/not-on-disk"
++  if [ ! -s "$TMP/unlisted" ] && [ ! -s "$TMP/not-on-disk" ]; then
++    ok "every test file has exactly one con: row"
++  else
++    while IFS= read -r file; do no "unlisted test file: $file"; done <"$TMP/unlisted"
++    while IFS= read -r file; do no "con: row has no discovered file: $file"; done <"$TMP/not-on-disk"
++  fi
++else
++  no "cannot enumerate the test inventory"
++fi
++
++control() { # control LABEL EXPECTED-MESSAGE MUTATION-FUNCTION CHANGED-PATH
++  local label=$1 expected=$2 mutation=$3 changed=$4 dir="$TMP/control-$1" rc=0
++  mkdir -p "$dir"
++  if ! cp -R "$TEST_DIR" "$dir/tests"; then no "control: $label could not copy tests/"; return; fi
++  if ! "$mutation" "$dir"; then no "control: $label mutation failed"; return; fi
++  if [ ! -e "$dir/tests/$changed" ]; then
++    no "control: $label mutation produced no $changed"; return
++  fi
++  if cmp -s "$TEST_DIR/$changed" "$dir/tests/$changed" 2>/dev/null; then
++    no "control: $label mutation changed nothing"; return
++  fi
++  CONCRETE_TEST_MANIFEST="$dir/tests/manifest.tsv" CONCRETE_TEST_MANIFEST_SKIP_CONTROLS=1 \
++    bash "$ROOT_DIR/scripts/checks/test_manifest.sh" >"$dir/log" 2>&1 || rc=$?
++  if [ "$rc" -ne 0 ] && has_match -F "$expected" <"$dir/log"; then
++    ok "control: $label is refused for the planted reason"
++  else
++    no "control: $label was not refused as '$expected'"
++    cat "$dir/log"
++  fi
++}
++duplicate_id() {
++  local row
++  row=$(awk -F '\t' '$1 == "answer" {print; exit}' "$1/tests/manifest.tsv")
++  [ -n "$row" ] || { echo "duplicate_id: answer row lookup was empty" >&2; return 1; }
++  printf '%s\n' "$row" >>"$1/tests/manifest.tsv"
++}
++unlisted_source() { mkdir -p "$1/tests/slice0" && : >"$1/tests/slice0/x.con"; }
++missing_source() { printf 'missing\tcon:tests/slice0/missing.con\texit 0\tslice0\n' >>"$1/tests/manifest.tsv"; }
++exit_256() { printf 'bad_exit\tbir:other\texit 256\tslice0\n' >>"$1/tests/manifest.tsv"; }
++bad_trap() { printf 'bad_trap\tbir:other\ttrap foo\tslice0\n' >>"$1/tests/manifest.tsv"; }
++wrong_columns() { printf 'bad_columns\tbir:answer\texit 0\n' >>"$1/tests/manifest.tsv"; }
++duplicate_bir() { printf 'duplicate_bir\tbir:answer\texit 0\tslice0\n' >>"$1/tests/manifest.tsv"; }
++refuse_bir() { printf 'refused_bir\tbir:other\trefuse SYN-5\tslice0\n' >>"$1/tests/manifest.tsv"; }
++
++if [ "${CONCRETE_TEST_MANIFEST_SKIP_CONTROLS:-0}" != 1 ]; then
++  control duplicate-id "duplicate id 'answer'" duplicate_id manifest.tsv
++  control unlisted-source "unlisted test file: tests/slice0/x.con" unlisted_source slice0/x.con
++  control missing-source "con: file 'tests/slice0/missing.con' does not exist" missing_source manifest.tsv
++  control exit-256 "exit status 256 is outside 0..255" exit_256 manifest.tsv
++  control malformed-trap "invalid expect 'trap foo'" bad_trap manifest.tsv
++  control wrong-columns "needs 4 tab-separated columns" wrong_columns manifest.tsv
++  control duplicate-bir "duplicate bir program 'answer'" duplicate_bir manifest.tsv
++  control refuse-bir "bir: row 'refused_bir' cannot use refuse" refuse_bir manifest.tsv
++fi
++
++echo "test_manifest: PASS=$PASS FAIL=$FAIL"
++[ "$FAIL" -eq 0 ]
+diff --git a/tests/manifest.tsv b/tests/manifest.tsv
+new file mode 100644
+index 00000000..6ea3de0c
+--- /dev/null
++++ b/tests/manifest.tsv
+@@ -0,0 +1,37 @@
++# One row per test: id, program, expected outcome, owning slice (tab-separated).
++# id: [a-z0-9_]+. program: bir:NAME (Concrete.BIR.Examples) or con:tests/PATH.con.
++# expect: exit N (0..255), trap KIND site N, or refuse RULE-ID. No other outcome forms.
++# slice: [a-z0-9_]+. A con: path is relative to the repository root and must exist.
++id	program	expect	slice
++answer	bir:answer	exit 42	slice0
++boundary	bir:boundary	exit 255	slice0
++overflow	bir:overflow	trap arithmeticOverflow site 0	slice0
++answer_discharged	bir:answer_discharged	exit 42	slice0
++return134	bir:return134	exit 134	slice0
++i8_add_ok	bir:i8_add_ok	exit 0	slice0
++i8_add_ovf	bir:i8_add_ovf	trap arithmeticOverflow site 0	slice0
++u16_mul_ok	bir:u16_mul_ok	exit 0	slice0
++u16_mul_ovf	bir:u16_mul_ovf	trap arithmeticOverflow site 0	slice0
++i16_sub_ovf	bir:i16_sub_ovf	trap arithmeticOverflow site 0	slice0
++u8_sub_ovf	bir:u8_sub_ovf	trap arithmeticOverflow site 0	slice0
++i8_mul_ok	bir:i8_mul_ok	exit 0	slice0
++i8_mul_ovf	bir:i8_mul_ovf	trap arithmeticOverflow site 0	slice0
++w_i8_add	bir:w_i8_add	exit 72	slice0
++w_i8_add_ok	bir:w_i8_add_ok	exit 206	slice0
++w_i8_sub	bir:w_i8_sub	exit 184	slice0
++w_i8_mul	bir:w_i8_mul	exit 240	slice0
++w_u8_add	bir:w_u8_add	exit 172	slice0
++w_u8_sub	bir:w_u8_sub	exit 126	slice0
++w_u8_mul	bir:w_u8_mul	exit 16	slice0
++w_i16_add	bir:w_i16_add	exit 128	slice0
++w_i16_sub	bir:w_i16_sub	exit 127	slice0
++w_i16_sub_ok	bir:w_i16_sub_ok	exit 88	slice0
++w_i16_mul	bir:w_i16_mul	exit 60	slice0
++w_u16_sub	bir:w_u16_sub	exit 126	slice0
++w_u16_mul	bir:w_u16_mul	exit 129	slice0
++w_u16_mul_ok	bir:w_u16_mul_ok	exit 255	slice0
++widen_u	bir:widen_u	exit 160	slice0
++widen_s	bir:widen_s	exit 90	slice0
++site1	bir:site1	trap arithmeticOverflow site 1	slice0
++site0	bir:site0	trap arithmeticOverflow site 0	slice0
++two_sites_ok	bir:two_sites_ok	exit 42	slice0

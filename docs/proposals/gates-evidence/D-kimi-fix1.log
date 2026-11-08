@@ -751,4 +751,118 @@ Good. Run nonnative harness again (same mock). One run at time gate 9 actual not
 ?? scripts/checks/compiler/slice0_allowed_axioms.lean
 ?? scripts/checks/compiler/slice0_concrete_modules.lean
 ?? scripts/checks/lib/execve_names.py
-No notification yet perhaps use TaskOutput nonblocking snapshot allowed but prefer auto. I can inspect scripts diff read-only but no need. Should wait some time, can run no other work. WaitFor warning says do not call again unless explicitly asked wait, user asked gate run but not wait. Could just call TaskOutput once nonblocking after other work.
+No notification yet perhaps use TaskOutput nonblocking snapshot allowed but prefer auto. I can inspect scripts diff read-only but no need. Should wait some time, can run no other work. WaitFor warning says do not call again unless explicitly asked wait, user asked gate run but not wait. Could just call TaskOutput once nonblocking after other work.Still running controls, but failure known allowed printer axiom keyword. Can edit while harness active? Candidate validation fixed, don't edit until ends. It will finish soon. I can prepare: rename variable `axiom` reserved to `a`. New script error. Wait auto.
+
+• The harness confirms the extern, axiom, and module controls now work. It also found a small printer syntax error—`axiom` is reserved in the allowed-axioms renderer—which I’ll fix once this read-only run finishes.
+
+• Fix allowed. Read file then edit.Run printer direct then harness third.warning: Git tree '/home/unbalancedparen/projects/gates-trusted-base' is dirty
+propext
+Classical.choice
+Quot.sound
+Run harness again background.
+
+• The allowed-axiom renderer is fixed. All other non-native controls passed in the last harness; I’m rerunning it to verify the real 43-example audit and the planted native example.
+
+• While active no edits. Could run read-only `git diff --stat` no. Perhaps 35s. Use TaskOutput after 30? I can inspect actual strace parser with real emitter to verify split? Full native blocked. Could run `strace lake build` incremental direct outside gate while harness running would violate one gate? Not gate but heavy lake build and candidate tree stable, however user one run at time no other builds perhaps avoid. Do read-only review of lean_lex backward compatibility: default unchanged except signature optional, CLI doc. Good.
+
+  Potential issue user constraint "Do not touch scripts/proofs/trust_ban.sh" I didn't. lean_lex shared changed with default unchanged. Should run trust_ban? Heavy and another workstream no native? Not allowed no full. Could run lean_lex spec examples command to ensure default works quick but harness active reading, safe. Not needed.
+
+  Perhaps gate actual run after fixes still fails shared thread, no point rerun? User allowed one run at a time, not only one total. Could run again final to confirm same failure, but already known. They say if fails say so CI. No need.
+
+  Should commit fixes before responding even if full gate blocked. But nonnative pass needed.
+
+  TaskOutput nonblock after some analysis.Good, real examples pass. Native control still to come. Wait auto, no edits. Could read output again later, avoid polling. I'll use the time to inspect git diff for the review current read-only; perhaps a big output is not needed. Check exact registry matches count uniqueness with report, already golden. Fine.
+
+  Potential print_lean returns cap output before failure solved. set -e cap_rc handled.
+  Parser unfinished normal success duplicate? If normal success line for same pid after unfinished impossible resumed instead. Good.
+  Examples module count not counted imported if new module added source but not root: population fails, examples still elaborates with dependencies; perhaps new unimported file works. Good.
+  Native example control output allowed now, should fail expected.
+  Exactly-once registry control duplicate id messages repeated, acceptable.
+  Ownership every audited name registry matches across all, yes.
+  NonTrusted declaration control good.
+  Build tool trace exact still unrun.
+  Should commit messages "review round 1". Could commit one large all changes. User "Commit fixes as commits whose messages say review round 1" one commit okay. I might split parser/output + rest but no need. All one ~500 lines. Small? Round fixes six findings one branch. Perhaps two commits:
+  1 output/parser/execve + registry/twin
+  2 build/population/examples docs.
+  But current files intertwined shell/golden, difficult split. One cohesive review commit acceptable.
+
+  Should check harness completion.
+
+• The real audit now passes all 43 retained examples. The remaining harness steps are the planted native example and the declaration/registry controls; the full native tool trace is still blocked by the shared-build thread failure.
+
+• Great. Should test parser gate control actual passed only synthetic direct earlier, not harness skipped. Could run `check_tools` function with harness or direct parse already. Full script parser control code straightforward. I can run Python parser focused done. Perhaps run actual `trace_build` incremental to get exact set independent full gate and identify tools. User full gate blocked initial but incremental direct `strace lake build` works (lake build Concrete only? lcb missing triggers thread fail under capped perhaps direct no limit builds lcb could be heavy but user permits gate 9 not native gates. I shouldn't run standalone lcb build beyond gate. Could use mock initial shared build then run full Linux gate; trace_build mock no real, native fails lcb. Not useful. I can run full Linux gate with mock initial build to get through nonnative then traced build mock and native lcb fail; no exact.
+  Could build lcb direct now? User only gate9 permission, previous constraints no heavy except Concrete. Don't.
+  Should have final commit. Before commit cleanup scratch `/tmp/tmp.xYS6...` and earlier `/tmp/tmp.cGI...` both mine. Also check pycache none. `git status`. Run `git diff --check`, build final already after last Lean no changes except scripts, audit pass. Golden matches harness. Parser direct pass. Commit all. First perhaps update comment in Premises `isGeneratedPartialTwin` no doc okay. Header "only genuine compiler-generated partial twins" changelog excludes structural twins wording slight inaccurate. Changelog says only genuine compiler-generated partial twins receive exemption includes partial-safety structural twins, fine.
+  One concern "prefer reusing leg X mechanism" yes shared lexer modified.
+  One concern "Do not touch other workstream" lean_lex shared perhaps allowed. Fine.
+
+  Commit message exactly `review round 1: harden trusted-base audits`. Git add all relevant. Then status.
+
+• The complete non-native harness now passes, including the native-example, unsafe-twin, duplicate-ID, duplicate-match, and non-trusted-owner controls. I’ll commit all review-round fixes, then run the final build and focused parser/audit checks on the committed tree.[trusted-base 217d122a] review round 1: harden trusted-base audits
+ 9 files changed, 387 insertions(+), 74 deletions(-)
+ create mode 100644 changelog.d/2026-11-08-trusted-base-review-1.md
+ create mode 100644 scripts/checks/compiler/slice0_allowed_axioms.lean
+ create mode 100644 scripts/checks/compiler/slice0_concrete_modules.lean
+ create mode 100644 scripts/checks/lib/execve_names.py
+## trusted-base
+
+
+• Now final build/audit/parser. Also lean_lex spec default test to ensure backward compatible:
+  ```
+  tmp mktemp; python lean_lex examples . tmp ConcreteSpec/Spec/Slice0.lean perhaps works, no heavy.
+  ```
+  Could run `scan` not needed. `compiler-examples` tested. Build+audit. Parser direct. `git status`.
+  Do one Bash with tmp and parser assertions.Build completed successfully (42 jobs).
+trusted declarations: 0
+execve parser controls: ok
+10
+217d122a99c1c8294ef68b13e97c43d2709e5a4e
+## trusted-base
+Perhaps final Todo last stays blocked because gate full not done and commit done. Update title done committed, pending full native gate. But user asks final response "anything not fixed with reason." All findings fixed code, native unverified due build. Todo:
+  done Run available checks commit
+  pending Run end-to-end Linux gate CI. Use update.I'll respond with commits one 217d. Run summary detail six findings fixed. Actual gate attempted failed before checks thread. Non-native harness passed with mocks should clearly not qualification. Build final pass, audit, parser, spec lexer 10 examples. No exact exec set because no end-to-end. User "When gate runs end to end report exact set" didn't, explicitly not available. "anything not fixed reason" all fixed, but native verification outstanding. Could mention full tool trace controls unrun. No other issues.
+  Should avoid too verbose but enough. Headings Commit, Validation, Outstanding. Mention no push clean.
+  Perhaps user expected multiple commits? one fine.
+  Run summary:
+  - exact permitted command failed in shared `lake build` with thread error before checks, as anticipated.
+  - scratch non-native harness bypassed only shared build and host tool leg: PASS, including golden tables full audit module closure 43 examples and all nonnative controls.
+  - final HEAD build/audit/parser passed.
+  - no exact exec set observed. CI needed.
+  Changes summary one sentence six.
+  - `print_lean` capped on failure
+  - split parser fail closed
+  - build trace + ar leanc
+  - import closure and examples using shared lexer
+  - twin exemptions actual generated shapes
+  - exactly once + controls.
+  No need list all perhaps important.
+
+  Respond now.
+
+• Committed the review fixes:
+
+  - `217d122a` — `review round 1: harden trusted-base audits`
+
+  All six findings are addressed: preserved failure output, split `execve` reconstruction, traced incremental Lake builds, module/example population audits, precise generated-twin handling, and exactly-once ownership rules with controls.
+
+  **Validation:**
+
+  - Final `lake build Concrete`: passed, 42 jobs.
+  - Full-library audit: `trusted declarations: 0`.
+  - Non-native gate harness: passed all golden, table, module-closure, 43-example, declaration, registry, and planted-control checks.
+  - Split-trace parser controls: passed, including ignored `ENOENT` lookups.
+  - Existing spec example rewriting remains compatible.
+  - Worktree is clean; nothing was pushed.
+
+  **Outstanding:**
+
+  The permitted end-to-end gate 9 command stopped before any check in the shared LCB build with `failed to create thread: Resource temporarily unavailable`. I cannot move it to a less-limited machine. Therefore the build/emitter/native tool sets and native tool controls remain unverified; no exact observed set is available. Please run gate 9 on concrete-ci-2.
+
+To resume this session: kimi -r session_5ca3ac88-b0e8-4aaf-8351-53a7465cfdeb
+[unexpected] RuntimeError: workspace wd_gates-trusted-base_ef9d1db6657b is not materialized
+    at RuntimeResolver.acquire (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:180498:36)
+    at AgentRuntimeService.acquire (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:132231:25)
+    at AgentFileHistoryService.readCurrent (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:177606:31)
+    at AgentFileHistoryService.endCheckpoint (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:177519:32) {
+  code: 'runtime.not_found'
+}

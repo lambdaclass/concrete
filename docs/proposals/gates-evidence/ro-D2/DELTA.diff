@@ -1,0 +1,684 @@
+diff --git a/Concrete/Premises.lean b/Concrete/Premises.lean
+index 2c0cba1e..5ee8ddff 100644
+--- a/Concrete/Premises.lean
++++ b/Concrete/Premises.lean
+@@ -104,11 +104,11 @@ def components : List Component := [
+     what := "Lean's quotient soundness axiom"
+     why := "allowed logical axiom used by the proofs"
+     removal := "remove its uses from the proofs and delete this entry" },
+-  { id := "lean-compiler-runtime", kind := .leanRuntime, slice := "slice0", premises := [], «matches» := ["lean"]
++  { id := "lean-compiler-runtime", kind := .leanRuntime, slice := "slice0", premises := [], «matches» := ["lean", "leanc"]
+     what := "the Lean compiler, runtime and interpreter executing Concrete via lake env lean --run and the compiled lean binary"
+     why := "the compiler's executable behaviour is produced by Lean code outside its kernel proofs"
+     removal := "not planned; per-compilation certificates attest the emitted output" },
+-  { id := "lake", kind := .buildTool, slice := "slice0", premises := [], «matches» := ["lake", "git"]
++  { id := "lake", kind := .buildTool, slice := "slice0", premises := [], «matches» := ["lake", "git", "ar"]
+     what := "Lake dependency resolution and builds, including the pinned lean-compiler-backend revision"
+     why := "Lake selects and builds the code that the compiler and gates execute"
+     removal := "not planned; replace with another pinned, reproducible dependency and build mechanism" },
+@@ -192,8 +192,15 @@ def registryErrors (cs : List Component := components) : List String := Id.run d
+     unless carriers == 1 do
+       errors := errors ++ [s!"premise {p.id} is carried by {carriers} components, expected exactly one"]
+   for c in cs do
++    let idOwners := (cs.filter (·.id == c.id)).length
++    unless idOwners == 1 do
++      errors := errors ++ [s!"component id {c.id} occurs {idOwners} times, expected exactly one"]
+     for p in c.premises do
+       unless all.any (·.id == p) do errors := errors ++ [s!"component {c.id} names unknown premise {p}"]
++    for m in c.«matches» do
++      let owners := cs.foldl (fun n c => n + (c.«matches».filter (· == m)).length) 0
++      unless owners == 1 do
++        errors := errors ++ [s!"match {m} is owned by {owners} components, expected exactly one"]
+   for k in ComponentKind.all do
+     unless cs.any (·.kind == k) do errors := errors ++ [s!"component kind {k.name} has no entry"]
+   return errors
+@@ -259,24 +266,29 @@ def axiomErrors (env : Environment) (localPrefix : Option Name := none)
+       unless allowed.contains ax do errors := errors ++ [s!"unlisted axiom {ax} in {n}"]
+   return errors
+ 
+-def isUnsafeRecTwin (env : Environment) (n : Name) : Bool :=
++def isGeneratedPartialTwin (env : Environment) (n : Name) : Bool :=
+   match n with
+-  | .str _ "_unsafe_rec" => env.contains n.getPrefix
++  | .str parent "_unsafe_rec" =>
++      match env.find? n, env.find? parent with
++      | some (.defnInfo d), some (.opaqueInfo _) => d.safety == .partial
++      | some (.defnInfo d), some (.defnInfo parentVal) =>
++          d.safety == .partial && parentVal.safety == .safe && env.contains (.str parent "_f")
++      | _, _ => false
+   | _ => false
+ 
+ def trustedDeclarationKinds (env : Environment) (n : Name) (ci : ConstantInfo) : List String := Id.run do
+-  if isUnsafeRecTwin env n then return []
+   let mut kinds := []
+   if isExtern env n then kinds := kinds ++ ["extern"]
+   if (Compiler.implementedByAttr.getParam? env n).isSome then kinds := kinds ++ ["implemented_by"]
+-  match ci with
+-  | .opaqueInfo o =>
+-      kinds := kinds ++ [if env.contains (.str n "_unsafe_rec") then "partial" else "opaque"]
+-      if o.isUnsafe && !kinds.contains "unsafe" then kinds := kinds ++ ["unsafe"]
+-  | .defnInfo d =>
+-      if d.safety == .unsafe then kinds := kinds ++ ["unsafe"]
+-      else if d.safety == .partial then kinds := kinds ++ ["partial"]
+-  | _ => pure ()
++  unless isGeneratedPartialTwin env n do
++    match ci with
++    | .opaqueInfo o =>
++        kinds := kinds ++ [if isGeneratedPartialTwin env (.str n "_unsafe_rec") then "partial" else "opaque"]
++        if o.isUnsafe && !kinds.contains "unsafe" then kinds := kinds ++ ["unsafe"]
++    | .defnInfo d =>
++        if d.safety == .unsafe then kinds := kinds ++ ["unsafe"]
++        else if d.safety == .partial then kinds := kinds ++ ["partial"]
++    | _ => pure ()
+   return kinds
+ 
+ def trustedDeclarations (env : Environment) (localPrefix : Option Name := none) :
+@@ -287,17 +299,22 @@ def trustedDeclarations (env : Environment) (localPrefix : Option Name := none)
+     unless kinds.isEmpty do out := out.push (n, kinds)
+   return out
+ 
+-def declarationListed (n : Name) (cs : List Component) : Bool :=
++def declarationOwners (n : Name) (cs : List Component) : List Component :=
+   let user := (privateToUserName? n).getD n
+-  cs.any fun c => c.«matches».contains n.toString || c.«matches».contains user.toString
++  cs.filter fun c => c.«matches».contains n.toString || c.«matches».contains user.toString
+ 
+-/-- Every compiled escape hatch must be explicitly named by a component's matches. -/
++/-- Every compiled escape hatch must have exactly one owner, and not a non-trusted component. -/
+ def trustedDeclarationErrors (env : Environment) (localPrefix : Option Name := none)
+     (cs : List Component := components) : List String := Id.run do
+   let mut errors := []
+   for (n, kinds) in trustedDeclarations env localPrefix do
+-    unless declarationListed n cs do
+-      errors := errors ++ [s!"unlisted trusted declaration {n} [{", ".intercalate kinds}]"]
++    match declarationOwners n cs with
++    | [] => errors := errors ++ [s!"unlisted trusted declaration {n} [{", ".intercalate kinds}]"]
++    | [owner] =>
++        if owner.kind == .notTrusted then
++          errors := errors ++ [s!"trusted declaration {n} belongs to non-trusted component {owner.id}"]
++    | owners =>
++        errors := errors ++ [s!"trusted declaration {n} is owned by {owners.length} components, expected exactly one"]
+   return errors
+ 
+ /-- The trusted-base report: components, premises, each theorem's sorted axioms, then each axiom
+diff --git a/Concrete/README.md b/Concrete/README.md
+index 7f998419..3dd8ad3a 100644
+--- a/Concrete/README.md
++++ b/Concrete/README.md
+@@ -361,8 +361,8 @@ There are two target profiles: `x86_64-linux` and `aarch64-macos` (LCB's first n
+ | axiom-propext | axiom | slice0 | — | Lean's propositional extensionality axiom | allowed logical axiom used by the proofs | remove its uses from the proofs and delete this entry | propext |
+ | axiom-classical-choice | axiom | slice0 | — | Lean's classical choice axiom | allowed logical axiom used by the proofs | remove its uses from the proofs and delete this entry | Classical.choice |
+ | axiom-quot-sound | axiom | slice0 | — | Lean's quotient soundness axiom | allowed logical axiom used by the proofs | remove its uses from the proofs and delete this entry | Quot.sound |
+-| lean-compiler-runtime | Lean compiler/runtime | slice0 | — | the Lean compiler, runtime and interpreter executing Concrete via lake env lean --run and the compiled lean binary | the compiler's executable behaviour is produced by Lean code outside its kernel proofs | not planned; per-compilation certificates attest the emitted output | lean |
+-| lake | build tool | slice0 | — | Lake dependency resolution and builds, including the pinned lean-compiler-backend revision | Lake selects and builds the code that the compiler and gates execute | not planned; replace with another pinned, reproducible dependency and build mechanism | lake, git |
++| lean-compiler-runtime | Lean compiler/runtime | slice0 | — | the Lean compiler, runtime and interpreter executing Concrete via lake env lean --run and the compiled lean binary | the compiler's executable behaviour is produced by Lean code outside its kernel proofs | not planned; per-compilation certificates attest the emitted output | lean, leanc |
++| lake | build tool | slice0 | — | Lake dependency resolution and builds, including the pinned lean-compiler-backend revision | Lake selects and builds the code that the compiler and gates execute | not planned; replace with another pinned, reproducible dependency and build mechanism | lake, git, ar |
+ | lexer | trusted Lean code | slice0 | P_lex | the Concrete lexer implementation | its correspondence with the independent byte-level lexing specification is not yet proved | prove lex_correct and retire P_lex | Concrete.Lex.lex |
+ | parser | trusted Lean code | slice0 | P_parse | the Concrete table-driven parser implementation | its correspondence with the surface grammar's derivation relation is not yet proved | prove the generic table-parser theorem and retire P_parse | Concrete.Parse.parse |
+ | llvm-printer | unproved backend | slice0 | P_print | the unproved BIR-to-LLVM printer in Concrete/Backend/LLVM.lean | no LLVM-IR semantics yet relates the printed text to BIR behaviour | prove the printer against an LLVM-IR semantics and retire P_print | Concrete.Backend.LLVM.print, Concrete.Backend.LLVM.module |
+@@ -608,7 +608,7 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
+ 6a. **AArch64:** a GitHub-hosted AArch64 macOS job (`macos-15`) builds the LCB output for `aarch64-macos`, runs gates 4 and 6 there natively, and compares against Lean. LLVM-native also runs there, as a third cross-check. Gates 4 and 6 for x86-64 run on concrete-ci-2.
+ 7. **Certificates:** the kernel checks every acceptance and refusal certificate, with measured budgets.
+ 8. **Reproducibility** (implemented, `scripts/checks/compiler/slice0_repro.sh`): two independent builds give byte-identical outputs at every stage, on each target, and two independent Linux runners give identical manifests. See [Reproducible builds](#reproducible-builds-owner-2026-11-07).
+-9. **Trusted base** (owner, 2026-11-07): `Concrete/Premises.lean` is the one list of trusted components and open premises. Until `concrete facts` exists, `scripts/checks/compiler/slice0_trusted_base.lean` prints `Premises.report`: components, premises, the sorted axioms of each headline theorem (`Premises.theorems`) and each axiom's type; the gate appends the Lean toolchain and the Lake pins, and the result must equal `tests/golden/slice0_trusted_base.txt` byte for byte. The README's component and open-premise tables must equal their registry renderings. Gate 9 also audits every `Concrete` declaration's axiom closure and every `extern`, `implemented_by`, `opaque`, `unsafe` or `partial` declaration against the component list. On Linux it traces every manifest `bir:` emission and native build and refuses an exec'd program the list does not name; other hosts print that tools were not checked. Controls cover golden drift, a failing printer, an extra axiom, an unlisted extern, an unlisted tool, a removed clang entry and drifted tables. **Every slice brief must list the trusted components it adds or removes; gate 9 fails until `Concrete/Premises.lean` names them.** The premise statements are text until `FrontendPremises` and `NativePremises` land as Lean structures; each entry then names its field.
++9. **Trusted base** (owner, 2026-11-07): `Concrete/Premises.lean` is the one list of trusted components and open premises. Until `concrete facts` exists, `scripts/checks/compiler/slice0_trusted_base.lean` prints `Premises.report`: components, premises, the sorted axioms of each headline theorem (`Premises.theorems`) and each axiom's type; the gate appends the Lean toolchain and the Lake pins, and the result must equal `tests/golden/slice0_trusted_base.txt` byte for byte. The README's component and open-premise tables must equal their registry renderings. Gate 9 requires every `Concrete` source module to be imported and audits every declaration's axiom closure and every `extern`, `implemented_by`, `opaque`, `unsafe` or `partial` declaration against the component list. The proof gate's shared lexer retains discarded `example`s as declarations in scratch copies, so their axioms are audited too. Component ids and matched names have exactly one owner, and a non-trusted component cannot own a trusted declaration. On Linux it traces an incremental Lake build (a fresh build is the daily tier's job), every manifest `bir:` emission and every native build, including split unfinished/resumed `execve` records, and refuses an exec'd program the list does not name; other hosts print that tools were not checked. Controls cover golden drift, a failing printer, an extra axiom, an unlisted extern, an unlisted tool, a removed clang entry, an unimported module, a native example, a hand-written unsafe twin, duplicate ownership and drifted tables. **Every slice brief must list the trusted components it adds or removes; gate 9 fails until `Concrete/Premises.lean` names them.** The premise statements are text until `FrontendPremises` and `NativePremises` land as Lean structures; each entry then names its field.
+ 10. **Sanitizers** (owner, 2026-11-07; UBSan dropped by the owner, 2026-11-08; implemented in `scripts/checks/compiler/slice0_artifacts.sh`): every LLVM example also runs built with ASan in CI, and must give the same observation with no sanitizer report. ASan instruments only functions marked `sanitize_address`, which clang's C front end adds and the printed IR lacks, so the sanitizer build adds it to every definition (`slice0_native.sh sanitize`); a control body with an out-of-bounds load must be reported. There is no UBSan leg: UBSan's checks are inserted by clang's C front end, so on LLVM IR input it checks nothing. No C is compiled in slice 0, and the LLVM-level undefined behaviour of the printed IR (poison, `unreachable`) stays P_print's.
+ 11. **Binary size** (owner, 2026-11-07; implemented, same script): the size of each example's executable (bytes and text size, pinned `llvm-size`), per backend and target, is recorded per run in `sizes.tsv`, uploaded with the job. Report-only: it never fails a run. **Compile time** (owner, 2026-11-08; same script, report-only): each example's emit step (the Lean emitter, Lean start-up included) and native step (clang and LCB's command line) in wall-clock milliseconds, next to its budget (the step's time bound), in `compile_times.tsv`.
+ 12. **Stack bound** (owner, 2026-11-07; implemented in the same script and `lib/stack_bound.py`; the `aarch64-macos` run check with LLDB, 2026-11-08): a stack-bound fact for each example, derived from the final artifact (the linked executable, not the IR) for both backends, and checked against a run. The analysis follows every path of the Concrete-owned code, instruction by instruction from an explicit set of modelled instructions, (`main`, `concrete_rt_write_all`, `concrete_body`) over the disassembly's control-flow graph, tracking the stack and frame pointers' depth below `main`'s entry and every byte addressed relative to them (so the red zone), refusing an access deeper than the target's red zone below the stack pointer (128 bytes on x86-64 System V and on Apple arm64, none under AAPCS64 on Linux: deeper bytes may be overwritten by a signal handler), and fails closed on anything it does not model (an instruction outside the set, another stack-pointer write, frame- or link-register writeback, an indirect branch or call, a stack pointer copied out, an indexed stack address, a stack read of bytes the function has not itself written on every path since its last call (so no stale saved frame pointer is ever loaded), a saved slot read other than by the modelled restore, two depths meeting, recursion, a call to a function neither owned nor a PLT/stub). The external calls (`write`, `_exit`, `abort`) are listed with the depth at their entry; their own use, and that `_exit` and `abort` do not return, are the libc premise. On x86-64 Linux the run check single-steps the owned code under the pinned gdb and requires the measured depth to be within the bound, for a complete run only (stopped first at `main`, back at each external call's return address, no signal, the expected exit status). The measured depth is the lowest of the stack pointer and every stack byte a stepped instruction addresses (`lib/stack_access.py` evaluates each memory operand), so a red-zone access is counted, and one deeper than the red zone is an error. A control links a `main` that stores at the red zone's edge without moving the stack pointer and requires bound 128 and measured 128 (on AArch64 it first allocates and frees a 144-byte frame with a pre-indexed store, judged against the new stack pointer, so 144); with a 120-byte red zone the same run gives no measurement. On Mach-O each stub entry's imported symbol comes from the indirect symbol table (`llvm-objdump --macho --indirect-symbols`), since the disassembly names only the `__stubs` section. On `aarch64-macos` the run check is the same, under Apple's LLDB (`/usr/bin/lldb`, `lib/stack_measure_lldb.py`; an external call's return address is the link register); LLDB is not pinned (Apple's signed debugserver is the only one allowed to attach), so its version is printed in the gate log. `stack.tsv` records bound, measurement and externals.
+diff --git a/changelog.d/2026-11-08-trusted-base-review-1.md b/changelog.d/2026-11-08-trusted-base-review-1.md
+new file mode 100644
+index 00000000..c4afb344
+--- /dev/null
++++ b/changelog.d/2026-11-08-trusted-base-review-1.md
+@@ -0,0 +1,6 @@
++- Review round 1 hardens gate 9: failed Lean controls retain their capped output; split
++  unfinished/resumed `execve` records are reconstructed fail-closed; the incremental Lake build is
++  traced alongside emitters and native builds; every Concrete source module must be imported; and
++  the shared proof lexer retains compiler examples for axiom audits. Registry matches and component
++  ids have exactly one owner, non-trusted entries cannot own trusted declarations, and only genuine
++  compiler-generated partial twins receive the `_unsafe_rec` exemption. New controls cover each case.
+diff --git a/scripts/checks/compiler/slice0_allowed_axioms.lean b/scripts/checks/compiler/slice0_allowed_axioms.lean
+new file mode 100644
+index 00000000..6d024250
+--- /dev/null
++++ b/scripts/checks/compiler/slice0_allowed_axioms.lean
+@@ -0,0 +1,5 @@
++import Concrete
++
++#eval show IO Unit from do
++  for a in Concrete.Premises.allowedAxioms do
++    IO.println a
+diff --git a/scripts/checks/compiler/slice0_concrete_modules.lean b/scripts/checks/compiler/slice0_concrete_modules.lean
+new file mode 100644
+index 00000000..c9af9ad0
+--- /dev/null
++++ b/scripts/checks/compiler/slice0_concrete_modules.lean
+@@ -0,0 +1,7 @@
++import Lean.Elab.Command
++import Concrete
++
++open Lean Elab Command in
++#eval show CommandElabM Unit from do
++  for m in (← getEnv).header.moduleNames do
++    if m.getRoot == `Concrete then IO.println m
+diff --git a/scripts/checks/compiler/slice0_trusted_base.sh b/scripts/checks/compiler/slice0_trusted_base.sh
+index 6ac75d64..23ffa820 100644
+--- a/scripts/checks/compiler/slice0_trusted_base.sh
++++ b/scripts/checks/compiler/slice0_trusted_base.sh
+@@ -4,11 +4,14 @@
+ # headline theorem axioms and axiom types, the Lean toolchain and every Lake pin. The README's two
+ # tables are generated views. Environment audits reject an unlisted axiom in ANY Concrete
+ # declaration's closure and any unlisted extern, implemented_by, opaque, unsafe or partial
+-# declaration. On Linux, strace checks every successfully exec'd program in every manifest bir:
+-# emission and native build against the registry; other hosts report the tool check as not run.
++# declaration. Every source module must be imported; the proof gate's shared lexer retains examples
++# in scratch copies so their axiom closures are audited too. On Linux, strace checks an incremental
++# Lake build (a fresh build is the daily tier's job), every manifest bir: emission and every native
++# build, reconstructing split unfinished/resumed execve records; other hosts report tools not run.
+ #
+ # Controls cover golden and table drift, a failing printer, theorem axiom reporting, an unlisted
+-# extern, an extra library axiom and its user, an unlisted objcopy and removal of clang.
++# extern, an extra library axiom and its user, split and unlisted tools, removal of clang, an
++# unimported module, a native example, a hand-written unsafe twin and duplicate/non-trusted owners.
+ #
+ # usage: slice0_trusted_base.sh [update]. Run inside the nix devshell, from the repository root;
+ # `update` rewrites the golden (review the diff before committing it).
+@@ -20,14 +23,16 @@ golden=tests/golden/slice0_trusted_base.txt
+ # print_lean FILE OUT: elaborate FILE (bounded, capped) and write its stdout to OUT; fails (with
+ # the bounded diagnostics) when Lean fails, times out, or prints more than 1 MiB.
+ print_lean() {
+-  local rc=0
++  local rc=0 cap_rc=0
++  : >"$2"
+   bounded_run -i /dev/null 600 -- "${capped[@]}" lake env lean "$1" >"$2.raw" 2>"$2.err" || rc=$?
++  cap_out <"$2.raw" >"$2" || cap_rc=$?
+   if [ "$rc" != 0 ]; then
+     bounded_is_incomplete "$rc" && echo "slice0_trusted_base: $1: INCOMPLETE (timed out)" >&2
+     head -c 20000 "$2.raw" "$2.err" >&2
+     return 1
+   fi
+-  cap_out <"$2.raw" >"$2"
++  [ "$cap_rc" = 0 ] || return 1
+ }
+ 
+ # current OUT: the whole trusted base into OUT; fails if any step fails.
+@@ -55,16 +60,7 @@ pipeline_tools() {
+ # tool_names LOG OUT: basenames of successful execve calls only. Failed execs and strace's own
+ # process are not compilation tools; python3 and the bounded runner sit outside the traced command.
+ tool_names() {
+-  bounded 30 python3 -I -c 'import os, re, sys
+-names = set()
+-pattern = re.compile(r"execve\(\"((?:[^\"\\]|\\.)*)\".*\)\s+=\s+0\s*$")
+-with open(sys.argv[1], encoding="utf-8", errors="replace") as log:
+-    for line in log:
+-        match = pattern.search(line.rstrip("\n"))
+-        if match:
+-            names.add(os.path.basename(match.group(1)))
+-for name in sorted(names):
+-    print(name)' "$1" | cap_out >"$2"
++  bounded 30 python3 -I "$root/scripts/checks/lib/execve_names.py" "$1" | cap_out >"$2"
+ }
+ 
+ # check_tools LOG ALLOWED: every successfully executed program must be named by a non-gate component.
+@@ -97,15 +93,79 @@ trace_native() { # trace_native DIR HELPER
+ trace_all() {
+   local rows name program expect d
+   rows=$(manifest_rows bir) || return 1
++  : >"$work/emitter.execve"
++  : >"$work/native.execve"
+   while IFS=$'\t' read -r name program expect; do
+     d="$work/trace/$name"
+     read -r -a expectation <<<"$expect"
+     trace_emit "${program#bir:}" "$d" "${expectation[@]}" || return 1
+     trace_native "$d" "$root/scripts/checks/lib/slice0_native.sh" || return 1
++    cat "$d/emit.execve" >>"$work/emitter.execve"
++    cat "$d/native.execve" >>"$work/native.execve"
+     cat "$d/emit.execve" "$d/native.execve"
+   done <<<"$rows"
+ }
+ 
++trace_build() {
++  bounded 1800 strace -f -qq -s 4096 -e trace=execve -o "$work/build.execve" \
++    lake build Concrete lean-compiler-backend/lcb
++}
++
++concrete_source_files() {
++  { printf 'Concrete.lean\n'; find Concrete -name '*.lean'; } | LC_ALL=C sort
++}
++
++concrete_modules() {
++  concrete_source_files | sed -E 's#\.lean$##; s#/#.#g'
++}
++
++# check_examples ROOT OUT: rewrite examples with the proof gate's shared lexer, elaborate every
++# rewritten module, and require every retained example's axiom closure to be registered.
++check_examples() {
++  local source_root=$1 out=$2 rel count
++  local sources=()
++  while IFS= read -r rel; do sources+=("$rel"); done < <(concrete_source_files)
++  mkdir -p "$out/src"
++  count=$(bounded 60 python3 -I "$root/scripts/proofs/lean_lex.py" compiler-examples \
++    "$source_root" "$out/src" "${sources[@]}" | cap_out) || return 1
++  : >"$out/examples"
++  for rel in "${sources[@]}"; do
++    {
++      printf 'import Lean.Elab.Command\nimport Lean.Util.CollectAxioms\n'
++      cat "$out/src/$rel"
++      cat <<'EOF'
++
++open Lean Elab Command in
++#eval show CommandElabM Unit from do
++  let env ← getEnv
++  for (n, _) in env.constants.toList do
++    if let .str _ s := n then
++      if s.startsWith "⟪example⟫" then
++        let axioms := (← liftCoreM (collectAxioms n)).qsort Name.lt
++        IO.println s!"example {n} axioms: {" ".intercalate (axioms.map toString).toList}"
++EOF
++    } >"$out/src/$rel.audit"
++    mv "$out/src/$rel.audit" "$out/src/$rel"
++    print_lean "$out/src/$rel" "$out/$(basename "$rel").out" || return 1
++    grep '^example ' "$out/$(basename "$rel").out" >>"$out/examples" || true
++  done
++  print_lean scripts/checks/compiler/slice0_allowed_axioms.lean "$out/allowed" || return 1
++  bounded 30 python3 -I -c 'import sys
++allowed = {line.strip() for line in open(sys.argv[1], encoding="utf-8") if line.strip()}
++rows = [line.strip() for line in open(sys.argv[2], encoding="utf-8") if line.startswith("example ")]
++bad = False
++for row in rows:
++    name, axioms = row[len("example "):].split(" axioms: ", 1)
++    for axiom in axioms.split():
++        if axiom not in allowed:
++            print(f"FAIL unlisted example axiom {axiom} in {name}")
++            bad = True
++if len(rows) != int(sys.argv[3]):
++    print(f"FAIL examples: {sys.argv[3]} rewritten, {len(rows)} present in Lean environments")
++    bad = True
++sys.exit(1 if bad else 0)' "$out/allowed" "$out/examples" "$count" | cap_out || return 1
++}
++
+ if ! current "$work/current"; then
+   echo "FAIL slice0_trusted_base: printing the trusted base failed"
+   exit 1
+@@ -177,6 +237,25 @@ else
+   fail=1
+ fi
+ 
++if print_lean scripts/checks/compiler/slice0_concrete_modules.lean "$work/imported-modules"; then
++  missing=$(concrete_modules | comm -23 - <(LC_ALL=C sort -u "$work/imported-modules"))
++  if [ -z "$missing" ]; then
++    echo "ok   every Concrete source module is in the root's import closure"
++  else
++    echo "FAIL Concrete source modules outside the root's import closure:"
++    printf '%s\n' "$missing"
++    fail=1
++  fi
++else
++  echo "FAIL listing Concrete's import closure"; fail=1
++fi
++
++if check_examples . "$work/examples-real"; then
++  echo "ok   every retained Concrete example uses only listed axioms"
++else
++  echo "FAIL Concrete example audit"; fail=1
++fi
++
+ # Controls.
+ differs() { # differs NAME FILE: FILE must not equal the current trusted base
+   if cmp -s "$2" "$work/current"; then echo "FAIL control: comparison accepts $1"; fail=1
+@@ -251,6 +330,117 @@ else
+   fail=1
+ fi
+ 
++grep -vxF 'Concrete.Backend.LCB' "$work/imported-modules" >"$work/ctl/modules-without-lcb"
++missing=$(concrete_modules | comm -23 - <(LC_ALL=C sort -u "$work/ctl/modules-without-lcb"))
++if [ "$missing" = 'Concrete.Backend.LCB' ]; then
++  echo "ok   control: an unimported Concrete module is named by the population check"
++else
++  echo "FAIL control: the population check did not name the unimported module: '$missing'"; fail=1
++fi
++
++mkdir -p "$work/ctl/native-example"
++cp Concrete.lean "$work/ctl/native-example/Concrete.lean"
++cp -r Concrete "$work/ctl/native-example/Concrete"
++python3 -I -c 'import sys
++p = sys.argv[1]
++s = open(p, encoding="utf-8").read()
++old = "by decide +kernel"
++assert old in s
++open(p, "w", encoding="utf-8").write(s.replace(old, "by decide +native", 1))' \
++  "$work/ctl/native-example/Concrete/BIR.lean"
++if check_examples "$work/ctl/native-example" "$work/ctl/native-example-out" \
++     >"$work/ctl/native-example.log" 2>&1; then
++  echo "FAIL control: the example audit accepts decide +native"; fail=1
++elif grep -q 'FAIL unlisted example axiom .* in .*Concrete/BIR.lean:542' "$work/ctl/native-example.log"; then
++  echo "ok   control: an example proved by decide +native is named"
++else
++  echo "FAIL control: the example audit did not reject decide +native for the planted reason"
++  cat "$work/ctl/native-example.log" >&2
++  fail=1
++fi
++
++cat >"$work/ctl/unsafe-twin.lean" <<'EOF'
++import Lean.Elab.Command
++import Concrete
++def Concrete.Control.f (n : Nat) : Nat := n
++unsafe def Concrete.Control.f._unsafe_rec (n : Nat) : Nat := n
++partial def Concrete.Control.p (n : Nat) : Nat := if n = 0 then 0 else Concrete.Control.p (n - 1)
++open Lean Elab Command in
++#eval show CommandElabM Unit from do
++  let errors := Concrete.Premises.trustedDeclarationErrors (← getEnv) (some `Concrete.Control)
++  for error in errors do IO.println s!"FAIL {error}"
++  unless errors.isEmpty do throwError "trusted-base control failed"
++EOF
++if print_lean "$work/ctl/unsafe-twin.lean" "$work/ctl/unsafe-twin.out"; then
++  echo "FAIL control: the trusted-code audit accepts a hand-written unsafe twin"; fail=1
++elif grep -qxF 'FAIL unlisted trusted declaration Concrete.Control.f._unsafe_rec [unsafe]' "$work/ctl/unsafe-twin.out" &&
++     grep -qxF 'FAIL unlisted trusted declaration Concrete.Control.p [partial]' "$work/ctl/unsafe-twin.out" &&
++     ! grep -q 'Concrete.Control.p._unsafe_rec' "$work/ctl/unsafe-twin.out"; then
++  echo "ok   control: a hand-written unsafe twin and partial parent are named, its genuine twin is not duplicated"
++else
++  echo "FAIL control: the unsafe-twin check did not fail for the planted reason"
++  cat "$work/ctl/unsafe-twin.out" "$work/ctl/unsafe-twin.out.err" >&2
++  fail=1
++fi
++
++cat >"$work/ctl/duplicate-id.lean" <<'EOF'
++import Lean.Elab.Command
++import Concrete
++open Lean Elab Command in
++#eval show CommandElabM Unit from do
++  let components := Concrete.Premises.components.map fun c =>
++    if c.id == "lake" then { c with id := "lean-kernel" } else c
++  let errors := Concrete.Premises.registryErrors components
++  for error in errors do IO.println s!"FAIL {error}"
++  unless errors.isEmpty do throwError "trusted-base control failed"
++EOF
++if print_lean "$work/ctl/duplicate-id.lean" "$work/ctl/duplicate-id.out"; then
++  echo "FAIL control: the registry accepts duplicate component ids"; fail=1
++elif grep -qxF 'FAIL component id lean-kernel occurs 2 times, expected exactly one' "$work/ctl/duplicate-id.out"; then
++  echo "ok   control: duplicate component ids are rejected"
++else
++  echo "FAIL control: duplicate ids did not fail for the planted reason"; fail=1
++fi
++
++cat >"$work/ctl/duplicate-match.lean" <<'EOF'
++import Lean.Elab.Command
++import Concrete
++open Lean Elab Command in
++#eval show CommandElabM Unit from do
++  let components := Concrete.Premises.components.map fun c =>
++    if c.id == "native-shell-utilities" then { c with «matches» := "git" :: c.«matches» } else c
++  let errors := Concrete.Premises.registryErrors components
++  for error in errors do IO.println s!"FAIL {error}"
++  unless errors.isEmpty do throwError "trusted-base control failed"
++EOF
++if print_lean "$work/ctl/duplicate-match.lean" "$work/ctl/duplicate-match.out"; then
++  echo "FAIL control: the registry accepts a match owned twice"; fail=1
++elif grep -qxF 'FAIL match git is owned by 2 components, expected exactly one' "$work/ctl/duplicate-match.out"; then
++  echo "ok   control: a match owned by two components is rejected"
++else
++  echo "FAIL control: duplicate match ownership did not fail for the planted reason"; fail=1
++fi
++
++cat >"$work/ctl/not-trusted-owner.lean" <<'EOF'
++import Lean.Elab.Command
++import Concrete
++@[extern "x"] opaque Concrete.Control.f : Nat → Nat
++open Lean Elab Command in
++#eval show CommandElabM Unit from do
++  let components := Concrete.Premises.components.map fun c =>
++    if c.id == "bir-lcb-adapter" then { c with «matches» := ["Concrete.Control.f"] } else c
++  let errors := Concrete.Premises.trustedDeclarationErrors (← getEnv) (some `Concrete.Control) components
++  for error in errors do IO.println s!"FAIL {error}"
++  unless errors.isEmpty do throwError "trusted-base control failed"
++EOF
++if print_lean "$work/ctl/not-trusted-owner.lean" "$work/ctl/not-trusted-owner.out"; then
++  echo "FAIL control: a non-trusted component can own a trusted declaration"; fail=1
++elif grep -qxF 'FAIL trusted declaration Concrete.Control.f belongs to non-trusted component bir-lcb-adapter' "$work/ctl/not-trusted-owner.out"; then
++  echo "ok   control: a trusted declaration cannot belong to the non-trusted adapter entry"
++else
++  echo "FAIL control: non-trusted ownership did not fail for the planted reason"; fail=1
++fi
++
+ sed 's/^| P_rt | implementation | /| P_rt | toolchain | /' Concrete/README.md >"$work/ctl/readme"
+ if readme_rows "$work/ctl/readme" >"$work/ctl/rows" && cmp -s "$work/rows" "$work/ctl/rows"; then
+   echo "FAIL control: the table check accepts a drifted table"; fail=1
+@@ -261,40 +451,65 @@ if [ "$(uname -s)" = Linux ]; then
+     echo "FAIL tools: strace is required on Linux"; fail=1
+   elif ! pipeline_tools "$work/pipeline-tools"; then
+     echo "FAIL tools: rendering the pipeline tool list failed"; fail=1
+-  elif ! trace_all >"$work/all.execve"; then
+-    echo "FAIL tools: tracing the manifest's native builds failed"; fail=1
+   else
+-    check_tools "$work/all.execve" "$work/pipeline-tools" || fail=1
+-
+-    first=$(manifest_rows bir | head -n 1)
+-    IFS=$'\t' read -r name program expect <<<"$first"
+-    read -r -a expectation <<<"$expect"
+-    d="$work/ctl/unlisted-tool"
+-    cp scripts/checks/lib/slice0_native.sh "$work/ctl/native-with-objcopy.sh"
+-    printf '\nobjcopy --version >/dev/null\n' >>"$work/ctl/native-with-objcopy.sh"
+-    if ! trace_emit "${program#bir:}" "$d" "${expectation[@]}" ||
+-       ! trace_native "$d" "$work/ctl/native-with-objcopy.sh"; then
+-      echo "FAIL control: the unlisted-tool native build did not complete"; fail=1
+-    elif check_tools "$d/native.execve" "$work/pipeline-tools" >"$work/ctl/unlisted-tool.log" 2>&1; then
+-      echo "FAIL control: the tool audit accepts objcopy"; fail=1
+-    elif grep -qF "FAIL tools: unlisted program 'objcopy'" "$work/ctl/unlisted-tool.log"; then
+-      echo "ok   control: the tool audit names objcopy"
++    cat >"$work/ctl/split-execve.log" <<'EOF'
++100 execve("/nix/store/lean/bin/lean", ["lean"], 0x0) = 0
++101 execve("/usr/bin/objcopy", ["objcopy"], 0x0) <unfinished ...>
++101 <... execve resumed>) = 0
++102 execve("/missing/objcopy", ["objcopy"], 0x0) = -1 ENOENT (No such file or directory)
++EOF
++    if check_tools "$work/ctl/split-execve.log" "$work/pipeline-tools" >"$work/ctl/split-execve.out" 2>&1; then
++      echo "FAIL control: the parser accepts a split successful execve of objcopy"; fail=1
++    elif [ "$(grep -cF "FAIL tools: unlisted program 'objcopy'" "$work/ctl/split-execve.out")" = 1 ]; then
++      echo "ok   control: a split successful execve is named; failed PATH lookups are ignored"
+     else
+-      echo "FAIL control: the tool audit did not reject objcopy for the planted reason"
+-      cat "$work/ctl/unlisted-tool.log" >&2
++      echo "FAIL control: split execve parsing did not fail for the planted reason"
++      cat "$work/ctl/split-execve.out" >&2
+       fail=1
+     fi
+ 
+-    if ! pipeline_tools "$work/tools-without-clang" clang-llvm; then
+-      echo "FAIL control: rendering the list without clang failed"; fail=1
+-    elif check_tools "$work/all.execve" "$work/tools-without-clang" >"$work/ctl/without-clang.log" 2>&1; then
+-      echo "FAIL control: the tool audit accepts a list without clang"; fail=1
+-    elif grep -Eq "FAIL tools: unlisted program 'clang(-[0-9]+)?'" "$work/ctl/without-clang.log"; then
+-      echo "ok   control: removing clang makes the real native-helper trace fail"
++    if ! trace_build; then
++      echo "FAIL tools: tracing the incremental Lake build failed"; fail=1
++    elif ! trace_all >"$work/manifest.execve"; then
++      echo "FAIL tools: tracing the manifest's native builds failed"; fail=1
+     else
+-      echo "FAIL control: removing clang did not fail for the planted reason"
+-      cat "$work/ctl/without-clang.log" >&2
+-      fail=1
++      cat "$work/build.execve" "$work/manifest.execve" >"$work/all.execve"
++      check_tools "$work/all.execve" "$work/pipeline-tools" || fail=1
++      for phase in build emitter native; do
++        tool_names "$work/$phase.execve" "$work/$phase.tools" || fail=1
++        echo "tools $phase: $(tr '\n' ' ' <"$work/$phase.tools")"
++      done
++
++      first=$(manifest_rows bir | head -n 1)
++      IFS=$'\t' read -r name program expect <<<"$first"
++      read -r -a expectation <<<"$expect"
++      d="$work/ctl/unlisted-tool"
++      cp scripts/checks/lib/slice0_native.sh "$work/ctl/native-with-objcopy.sh"
++      printf '\nobjcopy --version >/dev/null\n' >>"$work/ctl/native-with-objcopy.sh"
++      if ! trace_emit "${program#bir:}" "$d" "${expectation[@]}" ||
++         ! trace_native "$d" "$work/ctl/native-with-objcopy.sh"; then
++        echo "FAIL control: the unlisted-tool native build did not complete"; fail=1
++      elif check_tools "$d/native.execve" "$work/pipeline-tools" >"$work/ctl/unlisted-tool.log" 2>&1; then
++        echo "FAIL control: the tool audit accepts objcopy"; fail=1
++      elif grep -qF "FAIL tools: unlisted program 'objcopy'" "$work/ctl/unlisted-tool.log"; then
++        echo "ok   control: the tool audit names objcopy"
++      else
++        echo "FAIL control: the tool audit did not reject objcopy for the planted reason"
++        cat "$work/ctl/unlisted-tool.log" >&2
++        fail=1
++      fi
++
++      if ! pipeline_tools "$work/tools-without-clang" clang-llvm; then
++        echo "FAIL control: rendering the list without clang failed"; fail=1
++      elif check_tools "$work/all.execve" "$work/tools-without-clang" >"$work/ctl/without-clang.log" 2>&1; then
++        echo "FAIL control: the tool audit accepts a list without clang"; fail=1
++      elif grep -Eq "FAIL tools: unlisted program 'clang(-[0-9]+)?'" "$work/ctl/without-clang.log"; then
++        echo "ok   control: removing clang makes the real native-helper trace fail"
++      else
++        echo "FAIL control: removing clang did not fail for the planted reason"
++        cat "$work/ctl/without-clang.log" >&2
++        fail=1
++      fi
+     fi
+   fi
+ else
+diff --git a/scripts/checks/lib/execve_names.py b/scripts/checks/lib/execve_names.py
+new file mode 100644
+index 00000000..5f8b6c1f
+--- /dev/null
++++ b/scripts/checks/lib/execve_names.py
+@@ -0,0 +1,59 @@
++#!/usr/bin/env python3
++"""Print basenames of successful execve calls in a strace -f execve log."""
++
++import os
++import re
++import sys
++
++SUCCESS = re.compile(r'execve\("((?:[^"\\]|\\.)*)".*\)\s+=\s+0\s*$')
++UNFINISHED = re.compile(r'execve\("((?:[^"\\]|\\.)*)".*\)\s+<unfinished \.\.\.>\s*$')
++RESUMED = re.compile(r'<\.\.\. execve resumed>.*=\s+(-?[0-9]+)\s*$')
++PID = re.compile(r'^\s*([0-9]+)\s+')
++
++
++def parse(lines):
++    names = set()
++    pending = {}
++    for line_number, line in enumerate(lines, 1):
++        line = line.rstrip("\n")
++        pid_match = PID.match(line)
++        pid = pid_match.group(1) if pid_match else None
++        match = SUCCESS.search(line)
++        if match:
++            names.add(os.path.basename(match.group(1)))
++            continue
++        match = UNFINISHED.search(line)
++        if match:
++            if pid is None or pid in pending:
++                raise ValueError(f"line {line_number}: ambiguous unfinished execve")
++            pending[pid] = match.group(1)
++            continue
++        match = RESUMED.search(line)
++        if match:
++            if pid is None or pid not in pending:
++                raise ValueError(f"line {line_number}: resumed execve has no unfinished call")
++            if int(match.group(1)) == 0:
++                names.add(os.path.basename(pending[pid]))
++            del pending[pid]
++            continue
++        if "execve" in line and re.search(r"=\s+0\s*$", line):
++            raise ValueError(f"line {line_number}: unrecognised successful execve")
++    if pending:
++        raise ValueError(f"unfinished execve calls have no result: {', '.join(sorted(pending))}")
++    return sorted(names)
++
++
++def main():
++    if len(sys.argv) != 2:
++        raise ValueError("usage: execve_names.py LOG")
++    with open(sys.argv[1], encoding="utf-8", errors="replace") as log:
++        for name in parse(log):
++            print(name)
++
++
++if __name__ == "__main__":
++    try:
++        main()
++    except (OSError, UnicodeError, ValueError) as error:
++        print(f"execve_names: {error}", file=sys.stderr)
++        sys.exit(1)
+diff --git a/scripts/proofs/lean_lex.py b/scripts/proofs/lean_lex.py
+index 8fea9840..46385096 100755
+--- a/scripts/proofs/lean_lex.py
++++ b/scripts/proofs/lean_lex.py
+@@ -24,6 +24,8 @@ Commands (exit 3 when a source cannot be read or lexed):
+                            so listings split on spaces stay sound), so the kernel's view of it
+                            stays in the environment; prints the count. Every
+                            `example` token must start a line.
++  compiler-examples ...    the same rewrite for Concrete, whose IR printer strings may contain
++                           ordinary `{` and `}` characters. Spec scanning/rewriting is unchanged.
+ """
+ import os, re, sys
+ 
+@@ -34,10 +36,11 @@ class LexError(Exception):
+     pass
+ 
+ 
+-def lex(src, spans=None, literals=True):
++def lex(src, spans=None, literals=True, ordinary_braces=False):
+     """`src` with its comments blanked; when `spans` is a list, each top-level comment's
+     (start, end) offsets are appended to it (a comment nested in another is part of that one).
+-    With `literals=False`, string, character and name literals are blanked too (code tokens only)."""
++    With `literals=False`, string, character and name literals are blanked too (code tokens only).
++    `ordinary_braces` admits braces in non-interpolated strings, needed by the compiler's IR printers."""
+     n, out = len(src), []
+ 
+     def emit(text, literal=False):
+@@ -68,7 +71,7 @@ def lex(src, spans=None, literals=True):
+             if c == "\\": emit(src[i:i + 2], True); i += 2
+             elif c == '"': emit(c, True); return i + 1
+             elif c == "{" and interp: emit(c, True); i = code(i + 1, True)
+-            elif c == "{":
++            elif c == "{" and not ordinary_braces:
+                 line = src.count("\n", 0, i) + 1
+                 raise LexError(f"line {line}: a string holding '{{' without s!, m! or f! before it")
+             else: emit(c, True); i += 1
+@@ -158,11 +161,11 @@ def count_examples(src):
+     return len(EXAMPLE.findall(lex(src, literals=False)))
+ 
+ 
+-def examples(src_dir, dst_dir, paths):
++def examples(src_dir, dst_dir, paths, ordinary_braces=False):
+     count = 0
+     for rel in paths:
+         src = open(os.path.join(src_dir, rel), encoding="utf-8").read()
+-        text = lex(src, literals=False)          # an `example` inside a literal is not a command
++        text = lex(src, literals=False, ordinary_braces=ordinary_braces)
+         out, last = [], 0
+         for m in EXAMPLE.finditer(text):
+             line = text.count("\n", 0, m.start()) + 1
+@@ -182,9 +185,10 @@ if __name__ == "__main__":
+     try:
+         if sys.argv[1] == "scan":
+             sys.exit(scan(sys.argv[2], sys.argv[3:]))
+-        if sys.argv[1] == "examples":
+-            examples(sys.argv[2], sys.argv[3], sys.argv[4:]); sys.exit(0)
++        if sys.argv[1] in ("examples", "compiler-examples"):
++            examples(sys.argv[2], sys.argv[3], sys.argv[4:],
++                     ordinary_braces=sys.argv[1] == "compiler-examples"); sys.exit(0)
+     except (OSError, UnicodeDecodeError, LexError) as e:
+         print(f"error: {e}", file=sys.stderr); sys.exit(3)
+-    print(f"usage: {sys.argv[0]} scan RE FILE... | examples SRC DST FILE...", file=sys.stderr)
++    print(f"usage: {sys.argv[0]} scan RE FILE... | (compiler-)examples SRC DST FILE...", file=sys.stderr)
+     sys.exit(2)
+diff --git a/tests/golden/slice0_trusted_base.txt b/tests/golden/slice0_trusted_base.txt
+index d34945ee..07553af2 100644
+--- a/tests/golden/slice0_trusted_base.txt
++++ b/tests/golden/slice0_trusted_base.txt
+@@ -2,8 +2,8 @@ component lean-kernel [kernel] slice: slice0 premises: - matches: - :: the Lean
+ component axiom-propext [axiom] slice: slice0 premises: - matches: propext :: Lean's propositional extensionality axiom :: why: allowed logical axiom used by the proofs :: removal: remove its uses from the proofs and delete this entry
+ component axiom-classical-choice [axiom] slice: slice0 premises: - matches: Classical.choice :: Lean's classical choice axiom :: why: allowed logical axiom used by the proofs :: removal: remove its uses from the proofs and delete this entry
+ component axiom-quot-sound [axiom] slice: slice0 premises: - matches: Quot.sound :: Lean's quotient soundness axiom :: why: allowed logical axiom used by the proofs :: removal: remove its uses from the proofs and delete this entry
+-component lean-compiler-runtime [Lean compiler/runtime] slice: slice0 premises: - matches: lean :: the Lean compiler, runtime and interpreter executing Concrete via lake env lean --run and the compiled lean binary :: why: the compiler's executable behaviour is produced by Lean code outside its kernel proofs :: removal: not planned; per-compilation certificates attest the emitted output
+-component lake [build tool] slice: slice0 premises: - matches: lake, git :: Lake dependency resolution and builds, including the pinned lean-compiler-backend revision :: why: Lake selects and builds the code that the compiler and gates execute :: removal: not planned; replace with another pinned, reproducible dependency and build mechanism
++component lean-compiler-runtime [Lean compiler/runtime] slice: slice0 premises: - matches: lean, leanc :: the Lean compiler, runtime and interpreter executing Concrete via lake env lean --run and the compiled lean binary :: why: the compiler's executable behaviour is produced by Lean code outside its kernel proofs :: removal: not planned; per-compilation certificates attest the emitted output
++component lake [build tool] slice: slice0 premises: - matches: lake, git, ar :: Lake dependency resolution and builds, including the pinned lean-compiler-backend revision :: why: Lake selects and builds the code that the compiler and gates execute :: removal: not planned; replace with another pinned, reproducible dependency and build mechanism
+ component lexer [trusted Lean code] slice: slice0 premises: P_lex matches: Concrete.Lex.lex :: the Concrete lexer implementation :: why: its correspondence with the independent byte-level lexing specification is not yet proved :: removal: prove lex_correct and retire P_lex
+ component parser [trusted Lean code] slice: slice0 premises: P_parse matches: Concrete.Parse.parse :: the Concrete table-driven parser implementation :: why: its correspondence with the surface grammar's derivation relation is not yet proved :: removal: prove the generic table-parser theorem and retire P_parse
+ component llvm-printer [unproved backend] slice: slice0 premises: P_print matches: Concrete.Backend.LLVM.print, Concrete.Backend.LLVM.module :: the unproved BIR-to-LLVM printer in Concrete/Backend/LLVM.lean :: why: no LLVM-IR semantics yet relates the printed text to BIR behaviour :: removal: prove the printer against an LLVM-IR semantics and retire P_print

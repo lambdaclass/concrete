@@ -1,0 +1,715 @@
+diff --git a/Concrete/Premises.lean b/Concrete/Premises.lean
+index b612bdc3..2c0cba1e 100644
+--- a/Concrete/Premises.lean
++++ b/Concrete/Premises.lean
+@@ -1,16 +1,14 @@
+ /-
+-The slice-0 trusted base (PROVISIONAL): the open premises and the headline theorems whose axiom
+-closure the trusted-base golden records (Concrete/README.md gate 9).
++The slice-0 trusted base (PROVISIONAL): the trusted-component registry, the open premises and the
++headline theorems whose axiom closure the trusted-base golden records (Concrete/README.md gate 9).
+ 
+-This is the premise REGISTRY, the one list of the open premises: each entry has its trust class,
+-what retires it, and its statement. The statements are text until the structures that state them
+-as Lean propositions (`FrontendPremises`, `NativePremises`, whose design is in Concrete/README.md)
+-land with the front end; each entry then names its field instead. `scripts/checks/compiler/slice0_trusted_base.sh` prints
+-this registry and the axioms of `theorems` and compares them with `tests/golden/slice0_trusted_base.txt`,
+-so a premise added, removed or reworded fails until the golden is updated with it.
++This is THE trusted-base list. Each component records what is trusted, why, the slice that added it,
++how it could be removed, the premises it carries and the concrete names matched by gate 9's checks.
++The premise statements are text until the structures that state them as Lean propositions
++(`FrontendPremises`, `NativePremises`, whose design is in Concrete/README.md) land with the front
++end; each entry then names its field instead.
+ -/
+-import Lean.Meta.Basic
+-import Lean.PrettyPrinter
++import Lean
+ import Lean.Util.CollectAxioms
+ import Concrete.BIR.Progress
+ import Concrete.Backend.LCB
+@@ -32,6 +30,40 @@ structure Premise where
+   retiredBy : String
+   statement : String
+ 
++inductive ComponentKind where
++  | kernel | axiom | leanRuntime | buildTool | implementation | backend | notTrusted | runtime
++  | toolchain | pipelineTool | system | gateTool
++  deriving Repr, DecidableEq
++
++def ComponentKind.name : ComponentKind → String
++  | .kernel => "kernel"
++  | .axiom => "axiom"
++  | .leanRuntime => "Lean compiler/runtime"
++  | .buildTool => "build tool"
++  | .implementation => "trusted Lean code"
++  | .backend => "unproved backend"
++  | .notTrusted => "not trusted (proved)"
++  | .runtime => "runtime"
++  | .toolchain => "toolchain"
++  | .pipelineTool => "pipeline tool"
++  | .system => "OS/libc"
++  | .gateTool => "gate tool"
++
++def ComponentKind.all : List ComponentKind := [
++  .kernel, .axiom, .leanRuntime, .buildTool, .implementation, .backend, .notTrusted, .runtime,
++  .toolchain, .pipelineTool, .system, .gateTool
++]
++
++structure Component where
++  id : String
++  kind : ComponentKind
++  what : String
++  why : String
++  slice : String
++  removal : String
++  premises : List String
++  «matches» : List String
++
+ /-- The open premises for slice 0, in the README's order. -/
+ def all : List Premise := [
+   ⟨"P_lex", .implementation, "`lex_correct`",
+@@ -54,6 +86,139 @@ def all : List Premise := [
+     "an admitted launch happens and has a behaviour"⟩
+ ]
+ 
++/-- Every trusted piece and the proved adapter explicitly excluded from the trusted base. -/
++def components : List Component := [
++  { id := "lean-kernel", kind := .kernel, slice := "slice0", premises := [], «matches» := []
++    what := "the Lean kernel that checks the compiler's proofs"
++    why := "proof checking is the root of the kernel-checked guarantees"
++    removal := "not planned; independent checker replay can reduce reliance on this one implementation" },
++  { id := "axiom-propext", kind := .axiom, slice := "slice0", premises := [], «matches» := ["propext"]
++    what := "Lean's propositional extensionality axiom"
++    why := "allowed logical axiom used by the proofs"
++    removal := "remove its uses from the proofs and delete this entry" },
++  { id := "axiom-classical-choice", kind := .axiom, slice := "slice0", premises := [], «matches» := ["Classical.choice"]
++    what := "Lean's classical choice axiom"
++    why := "allowed logical axiom used by the proofs"
++    removal := "remove its uses from the proofs and delete this entry" },
++  { id := "axiom-quot-sound", kind := .axiom, slice := "slice0", premises := [], «matches» := ["Quot.sound"]
++    what := "Lean's quotient soundness axiom"
++    why := "allowed logical axiom used by the proofs"
++    removal := "remove its uses from the proofs and delete this entry" },
++  { id := "lean-compiler-runtime", kind := .leanRuntime, slice := "slice0", premises := [], «matches» := ["lean"]
++    what := "the Lean compiler, runtime and interpreter executing Concrete via lake env lean --run and the compiled lean binary"
++    why := "the compiler's executable behaviour is produced by Lean code outside its kernel proofs"
++    removal := "not planned; per-compilation certificates attest the emitted output" },
++  { id := "lake", kind := .buildTool, slice := "slice0", premises := [], «matches» := ["lake", "git"]
++    what := "Lake dependency resolution and builds, including the pinned lean-compiler-backend revision"
++    why := "Lake selects and builds the code that the compiler and gates execute"
++    removal := "not planned; replace with another pinned, reproducible dependency and build mechanism" },
++  { id := "lexer", kind := .implementation, slice := "slice0", premises := ["P_lex"]
++    «matches» := ["Concrete.Lex.lex"]
++    what := "the Concrete lexer implementation"
++    why := "its correspondence with the independent byte-level lexing specification is not yet proved"
++    removal := "prove lex_correct and retire P_lex" },
++  { id := "parser", kind := .implementation, slice := "slice0", premises := ["P_parse"]
++    «matches» := ["Concrete.Parse.parse"]
++    what := "the Concrete table-driven parser implementation"
++    why := "its correspondence with the surface grammar's derivation relation is not yet proved"
++    removal := "prove the generic table-parser theorem and retire P_parse" },
++  { id := "llvm-printer", kind := .backend, slice := "slice0", premises := ["P_print"]
++    «matches» := ["Concrete.Backend.LLVM.print", "Concrete.Backend.LLVM.module"]
++    what := "the unproved BIR-to-LLVM printer in Concrete/Backend/LLVM.lean"
++    why := "no LLVM-IR semantics yet relates the printed text to BIR behaviour"
++    removal := "prove the printer against an LLVM-IR semantics and retire P_print" },
++  { id := "bir-lcb-adapter", kind := .notTrusted, slice := "slice0", premises := []
++    «matches» := ["Concrete.Backend.LCB.Proof.emit_correct"]
++    what := "the BIR-to-LCB adapter in Concrete/Backend/LCB.lean"
++    why := "NOT trusted: emit_correct proves accepted adaptations against LCB's imported source semantics"
++    removal := "not applicable; this entry records the proved boundary, not a trusted component" },
++  { id := "runtime-entry", kind := .runtime, slice := "slice0", premises := ["P_rt", "P_trap_site"]
++    «matches» := ["Concrete.Backend.Runtime.llvm", "Concrete.Backend.Runtime.qbe"]
++    what := "the fixed runtime entry in Concrete/Backend/Runtime.lean that decodes result words and reports trap sites"
++    why := "its native behaviour and exact trap-site output are not yet proved against a libc model"
++    removal := "prove the decoding entry against a libc model and retire P_rt and P_trap_site" },
++  { id := "lcb-lowering-assembler", kind := .implementation, slice := "slice0", premises := ["P_toolchain[lcb]"]
++    «matches» := ["LeanCompilerBackend.Verified.compileFunction", "LeanCompilerBackend.Verified.reify",
++      "LeanCompilerBackend.AMD64.emitModuleValidated", "LeanCompilerBackend.AArch64.emitModuleValidated"]
++    what := "LCB's in-process lowering and assembly rendering"
++    why := "native execution of the adapted function relies on LCB's named trust boundaries"
++    removal := "LCB's preservation proofs for the slice-0 domain retire P_toolchain[lcb]" },
++  { id := "lcb-command", kind := .pipelineTool, slice := "slice0", premises := [], «matches» := ["lcb"]
++    what := "the lcb command line that assembles the runtime entry's QBE text"
++    why := "the runtime QBE text is assembled outside the proved BIR-to-LCB adapter path"
++    removal := "emit the runtime through LCB's proved object path, or prove this command's assembly path" },
++  { id := "clang-llvm", kind := .toolchain, slice := "slice0", premises := ["P_toolchain[llvm]"]
++    «matches» := ["clang", "clang-21"]
++    what := "clang and LLVM compiling the printed LLVM IR and driving native assembly and linking"
++    why := "native execution of LLVM output relies on the correctness of this toolchain"
++    removal := "not planned; a verified LLVM path could retire P_toolchain[llvm]" },
++  { id := "system-linker", kind := .pipelineTool, slice := "slice0", premises := []
++    «matches» := ["ld", "ld64", "ld.lld"]
++    what := "the system linker invoked by clang (ld, ld64 or ld.lld)"
++    why := "the linked executable's layout and symbol resolution are not kernel-checked"
++    removal := "not planned; use a verified linker and object path" },
++  { id := "assembler", kind := .pipelineTool, slice := "slice0", premises := [], «matches» := ["as"]
++    what := "the assembler, integrated in clang or invoked by clang as as"
++    why := "assembly text is translated to native machine code outside Lean's proofs"
++    removal := "use LCB's verified object emission for every native input" },
++  { id := "libc", kind := .system, slice := "slice0", premises := [], «matches» := ["write", "_exit", "abort"]
++    what := "libc's write, _exit and abort used by the runtime entry"
++    why := "their native contracts and implementations are outside the Lean model"
++    removal := "replace them with a minimal direct-syscall launcher and prove that launcher" },
++  { id := "os-kernel-loader", kind := .system, slice := "slice0", premises := ["P_launch", "P_live"], «matches» := []
++    what := "the OS kernel and loader that launch images and provide process and file-descriptor behaviour"
++    why := "launch liveness, resource behaviour and trap-line delivery are environmental assumptions"
++    removal := "not planned for a hosted native executable" },
++  { id := "nix-flake", kind := .buildTool, slice := "slice0", premises := [], «matches» := ["nix"]
++    what := "Nix, the devshell and the pinned flake inputs supplying the toolchain"
++    why := "the development and CI environment determines the programs used by the pipeline"
++    removal := "not planned; another reproducibly pinned environment would replace this entry" },
++  { id := "native-shell-utilities", kind := .pipelineTool, slice := "slice0", premises := []
++    «matches» := ["bash", "env", "uname"]
++    what := "the shell and small utilities used by the native build helper"
++    why := "they select targets, construct the reduced environment and invoke the native tools"
++    removal := "replace the shell helper with a pinned, attested build driver" },
++  { id := "gate-analysis-tools", kind := .gateTool, slice := "slice0", premises := []
++    «matches» := ["gdb", "lldb", "llvm-objdump", "llvm-size", "python3", "strace"]
++    what := "gdb, lldb, llvm-objdump, llvm-size, python3 and strace used only by gates"
++    why := "trusted only for the gates' analyses and verdicts, not as compilation-pipeline components"
++    removal := "remove or replace the corresponding gate analyses; these tools are not needed to compile a program" }
++]
++
++def registryErrors (cs : List Component := components) : List String := Id.run do
++  let mut errors := []
++  for p in all do
++    let carriers := cs.foldl (fun n c => n + (c.premises.filter (· == p.id)).length) 0
++    unless carriers == 1 do
++      errors := errors ++ [s!"premise {p.id} is carried by {carriers} components, expected exactly one"]
++  for c in cs do
++    for p in c.premises do
++      unless all.any (·.id == p) do errors := errors ++ [s!"component {c.id} names unknown premise {p}"]
++  for k in ComponentKind.all do
++    unless cs.any (·.kind == k) do errors := errors ++ [s!"component kind {k.name} has no entry"]
++  return errors
++
++/-- The premise's row in Concrete/README.md's open-premise table (a generated view). -/
++def Premise.tableRow (p : Premise) : String :=
++  s!"| {p.id} | {p.trust.name} | {p.retiredBy} |"
++
++def Premise.line (p : Premise) : String :=
++  s!"premise {p.id} [{p.trust.name}] retired-by: {p.retiredBy} :: {p.statement}"
++
++def Component.tableRow (c : Component) : String :=
++  let premises := if c.premises.isEmpty then "—" else ", ".intercalate c.premises
++  let toolNames := if c.«matches».isEmpty then "—" else ", ".intercalate c.«matches»
++  s!"| {c.id} | {c.kind.name} | {c.slice} | {premises} | {c.what} | {c.why} | {c.removal} | {toolNames} |"
++
++def Component.line (c : Component) : String :=
++  let premises := if c.premises.isEmpty then "-" else ", ".intercalate c.premises
++  let toolNames := if c.«matches».isEmpty then "-" else ", ".intercalate c.«matches»
++  s!"component {c.id} [{c.kind.name}] slice: {c.slice} premises: {premises} matches: {toolNames} :: {c.what} :: why: {c.why} :: removal: {c.removal}"
++
++/-- Names executable by the compilation pipeline; gate-only tools are deliberately excluded. -/
++def pipelineMatches (cs : List Component := components) : List String :=
++  (cs.filter fun c => !(#[ComponentKind.kernel, .axiom, .implementation, .backend, .notTrusted, .runtime, .system, .gateTool].contains c.kind)).flatMap (·.«matches»)
++
+ /-- The headline theorems, whose axioms the golden records. -/
+ def theorems : List Lean.Name := [
+   ``Concrete.BIR.decode_encode,
+@@ -65,18 +230,82 @@ def theorems : List Lean.Name := [
+   ``Concrete.Backend.LCB.Proof.artifact_correct
+ ]
+ 
+-/-- The premise's row in Concrete/README.md's open-premise table (a generated view). -/
+-def Premise.tableRow (p : Premise) : String :=
+-  s!"| {p.id} | {p.trust.name} | {p.retiredBy} |"
++open Lean
+ 
+-def Premise.line (p : Premise) : String :=
+-  s!"premise {p.id} [{p.trust.name}] retired-by: {p.retiredBy} :: {p.statement}"
++def inConcreteLibrary (env : Environment) (localPrefix : Option Name) (n : Name) : Bool :=
++  match env.getModuleIdxFor? n with
++  | some i => (env.header.moduleNames[i.toNat]?.map (·.getRoot)) == some `Concrete
++  | none => match localPrefix with
++    | some p => p.isPrefixOf ((privateToUserName? n).getD n)
++    | none => false
+ 
+-open Lean in
+-/-- The trusted-base report: one line per premise, then for each theorem its sorted axioms, then
+-    each axiom once with its type (so an axiom restated under the same name changes the report). -/
++def concreteDeclarations (env : Environment) (localPrefix : Option Name := none) :
++    Array (Name × ConstantInfo) := Id.run do
++  let mut out := #[]
++  for (n, ci) in env.constants.toList do
++    if inConcreteLibrary env localPrefix n then out := out.push (n, ci)
++  return out.qsort fun a b => a.1.toString < b.1.toString
++
++def allowedAxioms (cs : List Component := components) : List Name :=
++  (cs.filter (·.kind == .axiom)).flatMap (·.«matches») |>.map (·.toName)
++
++/-- Every axiom in every Concrete declaration's transitive closure must have an axiom component. -/
++def axiomErrors (env : Environment) (localPrefix : Option Name := none)
++    (cs : List Component := components) : CoreM (List String) := do
++  let allowed := allowedAxioms cs
++  let mut errors := []
++  for (n, _) in concreteDeclarations env localPrefix do
++    for ax in ← collectAxioms n do
++      unless allowed.contains ax do errors := errors ++ [s!"unlisted axiom {ax} in {n}"]
++  return errors
++
++def isUnsafeRecTwin (env : Environment) (n : Name) : Bool :=
++  match n with
++  | .str _ "_unsafe_rec" => env.contains n.getPrefix
++  | _ => false
++
++def trustedDeclarationKinds (env : Environment) (n : Name) (ci : ConstantInfo) : List String := Id.run do
++  if isUnsafeRecTwin env n then return []
++  let mut kinds := []
++  if isExtern env n then kinds := kinds ++ ["extern"]
++  if (Compiler.implementedByAttr.getParam? env n).isSome then kinds := kinds ++ ["implemented_by"]
++  match ci with
++  | .opaqueInfo o =>
++      kinds := kinds ++ [if env.contains (.str n "_unsafe_rec") then "partial" else "opaque"]
++      if o.isUnsafe && !kinds.contains "unsafe" then kinds := kinds ++ ["unsafe"]
++  | .defnInfo d =>
++      if d.safety == .unsafe then kinds := kinds ++ ["unsafe"]
++      else if d.safety == .partial then kinds := kinds ++ ["partial"]
++  | _ => pure ()
++  return kinds
++
++def trustedDeclarations (env : Environment) (localPrefix : Option Name := none) :
++    Array (Name × List String) := Id.run do
++  let mut out := #[]
++  for (n, ci) in concreteDeclarations env localPrefix do
++    let kinds := trustedDeclarationKinds env n ci
++    unless kinds.isEmpty do out := out.push (n, kinds)
++  return out
++
++def declarationListed (n : Name) (cs : List Component) : Bool :=
++  let user := (privateToUserName? n).getD n
++  cs.any fun c => c.«matches».contains n.toString || c.«matches».contains user.toString
++
++/-- Every compiled escape hatch must be explicitly named by a component's matches. -/
++def trustedDeclarationErrors (env : Environment) (localPrefix : Option Name := none)
++    (cs : List Component := components) : List String := Id.run do
++  let mut errors := []
++  for (n, kinds) in trustedDeclarations env localPrefix do
++    unless declarationListed n cs do
++      errors := errors ++ [s!"unlisted trusted declaration {n} [{", ".intercalate kinds}]"]
++  return errors
++
++/-- The trusted-base report: components, premises, each theorem's sorted axioms, then each axiom
++    once with its type (so an axiom restated under the same name changes the report). -/
+ def report (thms : List Name) : CoreM (List String) := do
+-  let mut lines := all.map Premise.line
++  unless registryErrors.isEmpty do
++    throwError "trusted-component registry is inconsistent: {registryErrors}"
++  let mut lines := components.map Component.line ++ all.map Premise.line
+   let mut seen : Array Name := #[]
+   for n in thms do
+     let axs := (← collectAxioms n).qsort Name.lt
+diff --git a/Concrete/README.md b/Concrete/README.md
+index 7031a2e2..7f998419 100644
+--- a/Concrete/README.md
++++ b/Concrete/README.md
+@@ -353,6 +353,32 @@ There are two target profiles: `x86_64-linux` and `aarch64-macos` (LCB's first n
+ | P_launch | environment | not planned |
+ | P_live | environment | not planned |
+ 
++**The trusted components** (a generated view of `Concrete.Premises.components`; gate 9 fails when this table drifts from it):
++
++| Component | Kind | Added by | Premises | What | Why trusted / not trusted | Removal | Matches |
++|---|---|---|---|---|---|---|---|
++| lean-kernel | kernel | slice0 | — | the Lean kernel that checks the compiler's proofs | proof checking is the root of the kernel-checked guarantees | not planned; independent checker replay can reduce reliance on this one implementation | — |
++| axiom-propext | axiom | slice0 | — | Lean's propositional extensionality axiom | allowed logical axiom used by the proofs | remove its uses from the proofs and delete this entry | propext |
++| axiom-classical-choice | axiom | slice0 | — | Lean's classical choice axiom | allowed logical axiom used by the proofs | remove its uses from the proofs and delete this entry | Classical.choice |
++| axiom-quot-sound | axiom | slice0 | — | Lean's quotient soundness axiom | allowed logical axiom used by the proofs | remove its uses from the proofs and delete this entry | Quot.sound |
++| lean-compiler-runtime | Lean compiler/runtime | slice0 | — | the Lean compiler, runtime and interpreter executing Concrete via lake env lean --run and the compiled lean binary | the compiler's executable behaviour is produced by Lean code outside its kernel proofs | not planned; per-compilation certificates attest the emitted output | lean |
++| lake | build tool | slice0 | — | Lake dependency resolution and builds, including the pinned lean-compiler-backend revision | Lake selects and builds the code that the compiler and gates execute | not planned; replace with another pinned, reproducible dependency and build mechanism | lake, git |
++| lexer | trusted Lean code | slice0 | P_lex | the Concrete lexer implementation | its correspondence with the independent byte-level lexing specification is not yet proved | prove lex_correct and retire P_lex | Concrete.Lex.lex |
++| parser | trusted Lean code | slice0 | P_parse | the Concrete table-driven parser implementation | its correspondence with the surface grammar's derivation relation is not yet proved | prove the generic table-parser theorem and retire P_parse | Concrete.Parse.parse |
++| llvm-printer | unproved backend | slice0 | P_print | the unproved BIR-to-LLVM printer in Concrete/Backend/LLVM.lean | no LLVM-IR semantics yet relates the printed text to BIR behaviour | prove the printer against an LLVM-IR semantics and retire P_print | Concrete.Backend.LLVM.print, Concrete.Backend.LLVM.module |
++| bir-lcb-adapter | not trusted (proved) | slice0 | — | the BIR-to-LCB adapter in Concrete/Backend/LCB.lean | NOT trusted: emit_correct proves accepted adaptations against LCB's imported source semantics | not applicable; this entry records the proved boundary, not a trusted component | Concrete.Backend.LCB.Proof.emit_correct |
++| runtime-entry | runtime | slice0 | P_rt, P_trap_site | the fixed runtime entry in Concrete/Backend/Runtime.lean that decodes result words and reports trap sites | its native behaviour and exact trap-site output are not yet proved against a libc model | prove the decoding entry against a libc model and retire P_rt and P_trap_site | Concrete.Backend.Runtime.llvm, Concrete.Backend.Runtime.qbe |
++| lcb-lowering-assembler | trusted Lean code | slice0 | P_toolchain[lcb] | LCB's in-process lowering and assembly rendering | native execution of the adapted function relies on LCB's named trust boundaries | LCB's preservation proofs for the slice-0 domain retire P_toolchain[lcb] | LeanCompilerBackend.Verified.compileFunction, LeanCompilerBackend.Verified.reify, LeanCompilerBackend.AMD64.emitModuleValidated, LeanCompilerBackend.AArch64.emitModuleValidated |
++| lcb-command | pipeline tool | slice0 | — | the lcb command line that assembles the runtime entry's QBE text | the runtime QBE text is assembled outside the proved BIR-to-LCB adapter path | emit the runtime through LCB's proved object path, or prove this command's assembly path | lcb |
++| clang-llvm | toolchain | slice0 | P_toolchain[llvm] | clang and LLVM compiling the printed LLVM IR and driving native assembly and linking | native execution of LLVM output relies on the correctness of this toolchain | not planned; a verified LLVM path could retire P_toolchain[llvm] | clang, clang-21 |
++| system-linker | pipeline tool | slice0 | — | the system linker invoked by clang (ld, ld64 or ld.lld) | the linked executable's layout and symbol resolution are not kernel-checked | not planned; use a verified linker and object path | ld, ld64, ld.lld |
++| assembler | pipeline tool | slice0 | — | the assembler, integrated in clang or invoked by clang as as | assembly text is translated to native machine code outside Lean's proofs | use LCB's verified object emission for every native input | as |
++| libc | OS/libc | slice0 | — | libc's write, _exit and abort used by the runtime entry | their native contracts and implementations are outside the Lean model | replace them with a minimal direct-syscall launcher and prove that launcher | write, _exit, abort |
++| os-kernel-loader | OS/libc | slice0 | P_launch, P_live | the OS kernel and loader that launch images and provide process and file-descriptor behaviour | launch liveness, resource behaviour and trap-line delivery are environmental assumptions | not planned for a hosted native executable | — |
++| nix-flake | build tool | slice0 | — | Nix, the devshell and the pinned flake inputs supplying the toolchain | the development and CI environment determines the programs used by the pipeline | not planned; another reproducibly pinned environment would replace this entry | nix |
++| native-shell-utilities | pipeline tool | slice0 | — | the shell and small utilities used by the native build helper | they select targets, construct the reduced environment and invoke the native tools | replace the shell helper with a pinned, attested build driver | bash, env, uname |
++| gate-analysis-tools | gate tool | slice0 | — | gdb, lldb, llvm-objdump, llvm-size, python3 and strace used only by gates | trusted only for the gates' analyses and verdicts, not as compilation-pipeline components | remove or replace the corresponding gate analyses; these tools are not needed to compile a program | gdb, lldb, llvm-objdump, llvm-size, python3, strace |
++
+ The fd-2 condition is part of the admitted launch, so it is inside P_launch (environment).
+ 
+ **The trap site the executable reports is covered by premise `P_trap_site`** (owner, 2026-11-06). `trap_site_correct` proves the site at IR level. The executable's report is assumed: `Native` gains `ReportsSite : TargetProfile → Image → SiteId → Prop`, and a field states that a launch whose body returns `256 + i` writes exactly `Runtime.trapLine tbl[i]` and a newline on fd 2 (the kind, the `Loc` and the site id of entry `i`). Gates 4 and 6 test it. A proof of the runtime entry retires it, together with `P_rt`.
+@@ -582,7 +608,7 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
+ 6a. **AArch64:** a GitHub-hosted AArch64 macOS job (`macos-15`) builds the LCB output for `aarch64-macos`, runs gates 4 and 6 there natively, and compares against Lean. LLVM-native also runs there, as a third cross-check. Gates 4 and 6 for x86-64 run on concrete-ci-2.
+ 7. **Certificates:** the kernel checks every acceptance and refusal certificate, with measured budgets.
+ 8. **Reproducibility** (implemented, `scripts/checks/compiler/slice0_repro.sh`): two independent builds give byte-identical outputs at every stage, on each target, and two independent Linux runners give identical manifests. See [Reproducible builds](#reproducible-builds-owner-2026-11-07).
+-9. **Trusted base** (owner, 2026-11-07): a golden test that `concrete facts` prints exactly the spec's premise list, so a premise added, removed or reworded anywhere fails until the golden is updated with it. Implemented provisionally in `scripts/checks/compiler/slice0_trusted_base.sh`: until `concrete facts` exists, `scripts/checks/compiler/slice0_trusted_base.lean` prints `Premises.report`: the premise registry `Concrete/Premises.lean`, the sorted axioms of each headline theorem (`Premises.theorems`) and each axiom's type; the gate appends the Lean toolchain and the Lake pins, and the result must equal `tests/golden/slice0_trusted_base.txt` byte for byte. The README's open-premise table must equal the registry's rendering (`Premises.tableRow`). Controls cover the comparison, a failing printer, the axiom collection and a drifted table. The statements are text until `FrontendPremises` and `NativePremises` land as Lean structures; each entry then names its field.
++9. **Trusted base** (owner, 2026-11-07): `Concrete/Premises.lean` is the one list of trusted components and open premises. Until `concrete facts` exists, `scripts/checks/compiler/slice0_trusted_base.lean` prints `Premises.report`: components, premises, the sorted axioms of each headline theorem (`Premises.theorems`) and each axiom's type; the gate appends the Lean toolchain and the Lake pins, and the result must equal `tests/golden/slice0_trusted_base.txt` byte for byte. The README's component and open-premise tables must equal their registry renderings. Gate 9 also audits every `Concrete` declaration's axiom closure and every `extern`, `implemented_by`, `opaque`, `unsafe` or `partial` declaration against the component list. On Linux it traces every manifest `bir:` emission and native build and refuses an exec'd program the list does not name; other hosts print that tools were not checked. Controls cover golden drift, a failing printer, an extra axiom, an unlisted extern, an unlisted tool, a removed clang entry and drifted tables. **Every slice brief must list the trusted components it adds or removes; gate 9 fails until `Concrete/Premises.lean` names them.** The premise statements are text until `FrontendPremises` and `NativePremises` land as Lean structures; each entry then names its field.
+ 10. **Sanitizers** (owner, 2026-11-07; UBSan dropped by the owner, 2026-11-08; implemented in `scripts/checks/compiler/slice0_artifacts.sh`): every LLVM example also runs built with ASan in CI, and must give the same observation with no sanitizer report. ASan instruments only functions marked `sanitize_address`, which clang's C front end adds and the printed IR lacks, so the sanitizer build adds it to every definition (`slice0_native.sh sanitize`); a control body with an out-of-bounds load must be reported. There is no UBSan leg: UBSan's checks are inserted by clang's C front end, so on LLVM IR input it checks nothing. No C is compiled in slice 0, and the LLVM-level undefined behaviour of the printed IR (poison, `unreachable`) stays P_print's.
+ 11. **Binary size** (owner, 2026-11-07; implemented, same script): the size of each example's executable (bytes and text size, pinned `llvm-size`), per backend and target, is recorded per run in `sizes.tsv`, uploaded with the job. Report-only: it never fails a run. **Compile time** (owner, 2026-11-08; same script, report-only): each example's emit step (the Lean emitter, Lean start-up included) and native step (clang and LCB's command line) in wall-clock milliseconds, next to its budget (the step's time bound), in `compile_times.tsv`.
+ 12. **Stack bound** (owner, 2026-11-07; implemented in the same script and `lib/stack_bound.py`; the `aarch64-macos` run check with LLDB, 2026-11-08): a stack-bound fact for each example, derived from the final artifact (the linked executable, not the IR) for both backends, and checked against a run. The analysis follows every path of the Concrete-owned code, instruction by instruction from an explicit set of modelled instructions, (`main`, `concrete_rt_write_all`, `concrete_body`) over the disassembly's control-flow graph, tracking the stack and frame pointers' depth below `main`'s entry and every byte addressed relative to them (so the red zone), refusing an access deeper than the target's red zone below the stack pointer (128 bytes on x86-64 System V and on Apple arm64, none under AAPCS64 on Linux: deeper bytes may be overwritten by a signal handler), and fails closed on anything it does not model (an instruction outside the set, another stack-pointer write, frame- or link-register writeback, an indirect branch or call, a stack pointer copied out, an indexed stack address, a stack read of bytes the function has not itself written on every path since its last call (so no stale saved frame pointer is ever loaded), a saved slot read other than by the modelled restore, two depths meeting, recursion, a call to a function neither owned nor a PLT/stub). The external calls (`write`, `_exit`, `abort`) are listed with the depth at their entry; their own use, and that `_exit` and `abort` do not return, are the libc premise. On x86-64 Linux the run check single-steps the owned code under the pinned gdb and requires the measured depth to be within the bound, for a complete run only (stopped first at `main`, back at each external call's return address, no signal, the expected exit status). The measured depth is the lowest of the stack pointer and every stack byte a stepped instruction addresses (`lib/stack_access.py` evaluates each memory operand), so a red-zone access is counted, and one deeper than the red zone is an error. A control links a `main` that stores at the red zone's edge without moving the stack pointer and requires bound 128 and measured 128 (on AArch64 it first allocates and frees a 144-byte frame with a pre-indexed store, judged against the new stack pointer, so 144); with a 120-byte red zone the same run gives no measurement. On Mach-O each stub entry's imported symbol comes from the indirect symbol table (`llvm-objdump --macho --indirect-symbols`), since the disassembly names only the `__stubs` section. On `aarch64-macos` the run check is the same, under Apple's LLDB (`/usr/bin/lldb`, `lib/stack_measure_lldb.py`; an external call's return address is the link register); LLDB is not pinned (Apple's signed debugserver is the only one allowed to attach), so its version is printed in the gate log. `stack.tsv` records bound, measurement and externals.
+diff --git a/changelog.d/2026-11-08-trusted-components.md b/changelog.d/2026-11-08-trusted-components.md
+new file mode 100644
+index 00000000..77da0206
+--- /dev/null
++++ b/changelog.d/2026-11-08-trusted-components.md
+@@ -0,0 +1,6 @@
++- Gate 9 now keeps the complete trusted base in `Concrete/Premises.lean`: trusted components (and the
++  explicitly non-trusted, proved BIR→LCB adapter), their premises, removal paths and matched names.
++  The golden and README render that registry, while new audits cover every Concrete declaration's
++  axioms and trusted-code attributes. On Linux, the gate traces every manifest BIR build and rejects
++  unlisted exec'd tools, with planted controls for an extern, an axiom, `objcopy` and removed clang.
++  Future slice briefs must declare the trusted components they add or remove.
+diff --git a/flake.nix b/flake.nix
+index 45f7269a..a95bb7c9 100644
+--- a/flake.nix
++++ b/flake.nix
+@@ -114,7 +114,9 @@
+             # failed in this shell while passing on CI, whose elan puts no clang on PATH.
+             clang
+             leanRelease
+-          ] ++ gatesUserland;
++          ] ++ gatesUserland ++ lib.optionals stdenv.isLinux [
++            strace               # gate 9 inventories exec'd compilation-pipeline tools
++          ];
+         in {
+           # Default shell stays light: the pre-existing toolchain only. The
+           # second-kernel drivers (Rocq, Isabelle) are an opt-in spike and Isabelle
+diff --git a/scripts/checks/compiler/slice0_component_table.lean b/scripts/checks/compiler/slice0_component_table.lean
+new file mode 100644
+index 00000000..fc65c41b
+--- /dev/null
++++ b/scripts/checks/compiler/slice0_component_table.lean
+@@ -0,0 +1,10 @@
++import Concrete
++
++/-!
++Prints the rows of Concrete/README.md's trusted-component table from
++`Concrete.Premises.components`, for `scripts/checks/compiler/slice0_trusted_base.sh`.
++-/
++
++#eval do
++  for c in Concrete.Premises.components do
++    IO.println c.tableRow
+diff --git a/scripts/checks/compiler/slice0_pipeline_tools.lean b/scripts/checks/compiler/slice0_pipeline_tools.lean
+new file mode 100644
+index 00000000..ca7a045c
+--- /dev/null
++++ b/scripts/checks/compiler/slice0_pipeline_tools.lean
+@@ -0,0 +1,13 @@
++import Concrete
++
++/-!
++Prints the tool basenames allowed by Concrete.Premises.components. Setting
++CONCRETE_TRUSTED_BASE_WITHOUT to a component id makes the removed-entry control use the same registry.
++-/
++
++#eval show IO Unit from do
++  let without ← IO.getEnv "CONCRETE_TRUSTED_BASE_WITHOUT"
++  let components : List Concrete.Premises.Component :=
++    Concrete.Premises.components.filter fun c => some c.id != without
++  for name in Concrete.Premises.pipelineMatches components do
++    IO.println name
+diff --git a/scripts/checks/compiler/slice0_trusted_base.sh b/scripts/checks/compiler/slice0_trusted_base.sh
+index 3383d501..6ac75d64 100644
+--- a/scripts/checks/compiler/slice0_trusted_base.sh
++++ b/scripts/checks/compiler/slice0_trusted_base.sh
+@@ -1,18 +1,14 @@
+ #!/usr/bin/env bash
+-# Slice-0 trusted-base golden (PROVISIONAL, Concrete/README.md gate 9). The trusted base, printed
+-# by scripts/checks/compiler/slice0_trusted_base.lean (until `concrete facts` exists): the premise registry
+-# Concrete/Premises.lean (the one list of open premises), each headline theorem's axioms and each
+-# axiom's type, followed by the Lean toolchain and every Lake pin, must equal
+-# tests/golden/slice0_trusted_base.txt byte for byte. A premise added, removed or reworded (id,
+-# trust class, what retires it, statement), a headline theorem gaining an axiom (sorryAx
+-# included), an axiom restated, or a toolchain or pin change fails until the golden is updated.
+-# The README's open-premise table is a generated view: it must equal the registry's rendering
+-# (scripts/checks/compiler/slice0_premise_table.lean).
++# Slice-0 trusted base (PROVISIONAL, Concrete/README.md gate 9). Concrete/Premises.lean is the one
++# registry of trusted components and open premises. The golden contains components, premises,
++# headline theorem axioms and axiom types, the Lean toolchain and every Lake pin. The README's two
++# tables are generated views. Environment audits reject an unlisted axiom in ANY Concrete
++# declaration's closure and any unlisted extern, implemented_by, opaque, unsafe or partial
++# declaration. On Linux, strace checks every successfully exec'd program in every manifest bir:
++# emission and native build against the registry; other hosts report the tool check as not run.
+ #
+-# Controls: the comparison must reject the golden with a premise line removed, reworded, or with an
+-# extra axiom; the printer must fail on a Lean file that prints and then errors; the report must
+-# list a theorem's own axiom with its type (a control file declaring one); the table check must
+-# reject a drifted table.
++# Controls cover golden and table drift, a failing printer, theorem axiom reporting, an unlisted
++# extern, an extra library axiom and its user, an unlisted objcopy and removal of clang.
+ #
+ # usage: slice0_trusted_base.sh [update]. Run inside the nix devshell, from the repository root;
+ # `update` rewrites the golden (review the diff before committing it).
+@@ -44,6 +40,72 @@ for p in json.load(open(sys.argv[1]))["packages"]: print("pin", p["name"], p["re
+     lake-manifest.json | cap_out >>"$1" || return 1
+ }
+ 
++# pipeline_tools OUT [WITHOUT]: render the executable names from the component registry, optionally
++# with one component removed (the removed-entry control uses exactly the same renderer).
++pipeline_tools() {
++  if [ "$#" = 2 ]; then
++    CONCRETE_TRUSTED_BASE_WITHOUT="$2" print_lean scripts/checks/compiler/slice0_pipeline_tools.lean "$1" || return 1
++  else
++    print_lean scripts/checks/compiler/slice0_pipeline_tools.lean "$1" || return 1
++  fi
++  LC_ALL=C sort -u "$1" >"$1.sorted" || return 1
++  mv "$1.sorted" "$1"
++}
++
++# tool_names LOG OUT: basenames of successful execve calls only. Failed execs and strace's own
++# process are not compilation tools; python3 and the bounded runner sit outside the traced command.
++tool_names() {
++  bounded 30 python3 -I -c 'import os, re, sys
++names = set()
++pattern = re.compile(r"execve\(\"((?:[^\"\\]|\\.)*)\".*\)\s+=\s+0\s*$")
++with open(sys.argv[1], encoding="utf-8", errors="replace") as log:
++    for line in log:
++        match = pattern.search(line.rstrip("\n"))
++        if match:
++            names.add(os.path.basename(match.group(1)))
++for name in sorted(names):
++    print(name)' "$1" | cap_out >"$2"
++}
++
++# check_tools LOG ALLOWED: every successfully executed program must be named by a non-gate component.
++check_tools() {
++  tool_names "$1" "$1.names" || return 1
++  [ -s "$1.names" ] || { echo "FAIL tools: no successful execve records"; return 1; }
++  local unlisted
++  unlisted=$(comm -23 "$1.names" "$2")
++  if [ -n "$unlisted" ]; then
++    local tool
++    while IFS= read -r tool; do echo "FAIL tools: unlisted program '$tool'"; done <<<"$unlisted"
++    return 1
++  fi
++  echo "ok   tools: every exec'd program is listed"
++}
++
++trace_emit() { # trace_emit NAME DIR EXPECT...
++  local name=$1 d=$2
++  shift 2
++  mkdir -p "$d"
++  bounded "$emit_secs" strace -f -qq -s 4096 -e trace=execve -o "$d/emit.execve" \
++    lake env lean --run scripts/checks/compiler/slice0_bir.lean emit "$name" "$d" "$target" "$@"
++}
++
++trace_native() { # trace_native DIR HELPER
++  bounded "$native_secs" strace -f -qq -s 4096 -e trace=execve -o "$1/native.execve" \
++    bash "$2" "$1" "$lcb"
++}
++
++trace_all() {
++  local rows name program expect d
++  rows=$(manifest_rows bir) || return 1
++  while IFS=$'\t' read -r name program expect; do
++    d="$work/trace/$name"
++    read -r -a expectation <<<"$expect"
++    trace_emit "${program#bir:}" "$d" "${expectation[@]}" || return 1
++    trace_native "$d" "$root/scripts/checks/lib/slice0_native.sh" || return 1
++    cat "$d/emit.execve" "$d/native.execve"
++  done <<<"$rows"
++}
++
+ if ! current "$work/current"; then
+   echo "FAIL slice0_trusted_base: printing the trusted base failed"
+   exit 1
+@@ -84,13 +146,46 @@ else
+   fail=1
+ fi
+ 
++readme_component_rows() {
++  awk '/^\*\*The trusted components\*\*/{h=1; next}
++       h==1 && /^\| Component \| Kind \| Added by \| Premises \| What \| Why trusted \/ not trusted \| Removal \| Matches \|$/{h=2; next}
++       h==2 && /^\|---|---\|---|---\|---|---\|---|---\|---\|$/{h=3; next}
++       h==3 && /^\|/{print; n++; next}
++       h==3{exit}
++       END{if (n == 0) exit 1}' "$1"
++}
++if ! print_lean scripts/checks/compiler/slice0_component_table.lean "$work/component_rows"; then
++  echo "FAIL printing the registry's component table rows"; fail=1
++elif readme_component_rows Concrete/README.md >"$work/readme_component_rows" &&
++     cmp -s "$work/component_rows" "$work/readme_component_rows"; then
++  echo "ok   README's trusted-component table equals the registry"
++else
++  echo "FAIL README's trusted-component table differs from the registry (Concrete/Premises.lean):"
++  diff "$work/readme_component_rows" "$work/component_rows" | head -c 20000 || true
++  fail=1
++fi
++
++if print_lean scripts/checks/compiler/slice0_trusted_base_audit.lean "$work/audit"; then
++  if grep -Eq '^trusted declarations: [0-9]+$' "$work/audit"; then
++    echo "ok   axioms and trusted code: $(grep '^trusted declarations: ' "$work/audit")"
++  else
++    echo "FAIL environment audit did not report its trusted-declaration total"; fail=1
++  fi
++else
++  echo "FAIL environment audit found an unlisted axiom or trusted declaration:"
++  head -c 20000 "$work/audit" "$work/audit.err" >&2 || true
++  fail=1
++fi
++
+ # Controls.
+ differs() { # differs NAME FILE: FILE must not equal the current trusted base
+   if cmp -s "$2" "$work/current"; then echo "FAIL control: comparison accepts $1"; fail=1
+   else echo "ok   control: comparison rejects $1"; fi
+ }
+-sed '1d' "$work/current" >"$work/c1"; differs "a premise removed" "$work/c1"
+-sed '1s/$/ (reworded)/' "$work/current" >"$work/c2"; differs "a premise reworded" "$work/c2"
++awk '!done && /^premise / {done = 1; next} {print}' "$work/current" >"$work/c1"
++differs "a premise removed" "$work/c1"
++awk '!done && /^premise / {$0 = $0 " (reworded)"; done = 1} {print}' "$work/current" >"$work/c2"
++differs "a premise reworded" "$work/c2"
+ # POSIX awk, not GNU sed's `0,/re/` range (BSD sed has none): the first theorem line gains an axiom.
+ awk '!done && /^theorem / { $0 = $0 ", sorryAx"; done = 1 } { print }' "$work/current" >"$work/c3"
+ differs "an extra axiom" "$work/c3"
+@@ -114,9 +209,96 @@ if print_lean "$work/ctl/axiom.lean" "$work/ctl/axiom.out" &&
+   echo "ok   control: the report lists a theorem's axiom with its type"
+ else echo "FAIL control: the report misses a theorem's axiom: $(head -c 2000 "$work/ctl/axiom.out" 2>/dev/null)"; fail=1; fi
+ 
++cat >"$work/ctl/extern.lean" <<'EOF'
++import Lean.Elab.Command
++import Concrete
++@[extern "x"] opaque Concrete.Control.f : Nat → Nat
++open Lean Elab Command in
++#eval show CommandElabM Unit from do
++  let errors := Concrete.Premises.trustedDeclarationErrors (← getEnv) (some `Concrete.Control)
++  for error in errors do IO.println s!"FAIL {error}"
++  unless errors.isEmpty do throwError "trusted-base control failed"
++EOF
++if print_lean "$work/ctl/extern.lean" "$work/ctl/extern.out"; then
++  echo "FAIL control: the trusted-code audit accepts an unlisted extern"; fail=1
++elif grep -qxF 'FAIL unlisted trusted declaration Concrete.Control.f [extern, opaque]' "$work/ctl/extern.out"; then
++  echo "ok   control: the trusted-code audit names an unlisted extern"
++else
++  echo "FAIL control: the trusted-code audit did not reject the extern for the planted reason"
++  cat "$work/ctl/extern.out" "$work/ctl/extern.out.err" >&2
++  fail=1
++fi
++
++cat >"$work/ctl/library-axiom.lean" <<'EOF'
++import Lean.Elab.Command
++import Concrete
++axiom Concrete.Control.ax : False
++def Concrete.Control.usesAx : False := Concrete.Control.ax
++open Lean Elab Command in
++#eval show CommandElabM Unit from do
++  let errors ← liftCoreM (Concrete.Premises.axiomErrors (← getEnv) (some `Concrete.Control))
++  for error in errors do IO.println s!"FAIL {error}"
++  unless errors.isEmpty do throwError "trusted-base control failed"
++EOF
++if print_lean "$work/ctl/library-axiom.lean" "$work/ctl/library-axiom.out"; then
++  echo "FAIL control: the axiom audit accepts an unlisted library axiom"; fail=1
++elif grep -qxF 'FAIL unlisted axiom Concrete.Control.ax in Concrete.Control.ax' "$work/ctl/library-axiom.out" &&
++     grep -qxF 'FAIL unlisted axiom Concrete.Control.ax in Concrete.Control.usesAx' "$work/ctl/library-axiom.out"; then
++  echo "ok   control: the axiom audit names an extra axiom and its user"
++else
++  echo "FAIL control: the axiom audit did not reject the extra axiom for the planted reason"
++  cat "$work/ctl/library-axiom.out" "$work/ctl/library-axiom.out.err" >&2
++  fail=1
++fi
++
+ sed 's/^| P_rt | implementation | /| P_rt | toolchain | /' Concrete/README.md >"$work/ctl/readme"
+ if readme_rows "$work/ctl/readme" >"$work/ctl/rows" && cmp -s "$work/rows" "$work/ctl/rows"; then
+   echo "FAIL control: the table check accepts a drifted table"; fail=1
+ else echo "ok   control: the table check rejects a drifted table"; fi
+ 
++if [ "$(uname -s)" = Linux ]; then
++  if ! command -v strace >/dev/null 2>&1; then
++    echo "FAIL tools: strace is required on Linux"; fail=1
++  elif ! pipeline_tools "$work/pipeline-tools"; then
++    echo "FAIL tools: rendering the pipeline tool list failed"; fail=1
++  elif ! trace_all >"$work/all.execve"; then
++    echo "FAIL tools: tracing the manifest's native builds failed"; fail=1
++  else
++    check_tools "$work/all.execve" "$work/pipeline-tools" || fail=1
++
++    first=$(manifest_rows bir | head -n 1)
++    IFS=$'\t' read -r name program expect <<<"$first"
++    read -r -a expectation <<<"$expect"
++    d="$work/ctl/unlisted-tool"
++    cp scripts/checks/lib/slice0_native.sh "$work/ctl/native-with-objcopy.sh"
++    printf '\nobjcopy --version >/dev/null\n' >>"$work/ctl/native-with-objcopy.sh"
++    if ! trace_emit "${program#bir:}" "$d" "${expectation[@]}" ||
++       ! trace_native "$d" "$work/ctl/native-with-objcopy.sh"; then
++      echo "FAIL control: the unlisted-tool native build did not complete"; fail=1
++    elif check_tools "$d/native.execve" "$work/pipeline-tools" >"$work/ctl/unlisted-tool.log" 2>&1; then
++      echo "FAIL control: the tool audit accepts objcopy"; fail=1
++    elif grep -qF "FAIL tools: unlisted program 'objcopy'" "$work/ctl/unlisted-tool.log"; then
++      echo "ok   control: the tool audit names objcopy"
++    else
++      echo "FAIL control: the tool audit did not reject objcopy for the planted reason"
++      cat "$work/ctl/unlisted-tool.log" >&2
++      fail=1
++    fi
++
++    if ! pipeline_tools "$work/tools-without-clang" clang-llvm; then
++      echo "FAIL control: rendering the list without clang failed"; fail=1
++    elif check_tools "$work/all.execve" "$work/tools-without-clang" >"$work/ctl/without-clang.log" 2>&1; then
++      echo "FAIL control: the tool audit accepts a list without clang"; fail=1
++    elif grep -Eq "FAIL tools: unlisted program 'clang(-[0-9]+)?'" "$work/ctl/without-clang.log"; then
++      echo "ok   control: removing clang makes the real native-helper trace fail"
++    else
++      echo "FAIL control: removing clang did not fail for the planted reason"
++      cat "$work/ctl/without-clang.log" >&2
++      fail=1
++    fi
++  fi
++else
++  echo "tools: not checked on this host (Linux only)"
++fi
++
+ [ "$fail" = 0 ] && echo "PASS slice0_trusted_base" || { echo "FAIL slice0_trusted_base"; exit 1; }
+diff --git a/scripts/checks/compiler/slice0_trusted_base_audit.lean b/scripts/checks/compiler/slice0_trusted_base_audit.lean
+new file mode 100644
+index 00000000..b4d91907
+--- /dev/null
++++ b/scripts/checks/compiler/slice0_trusted_base_audit.lean
+@@ -0,0 +1,19 @@
++import Lean.Elab.Command
++import Concrete
++
++/-!
++Audits every declaration in the Concrete library for `scripts/checks/compiler/slice0_trusted_base.sh`.
++The check functions live in Concrete.Premises and are reused unchanged by the planted controls.
++-/
++
++open Lean Elab Command Concrete.Premises in
++#eval show CommandElabM Unit from do
++  let env ← getEnv
++  let axiomErrors ← liftCoreM (Concrete.Premises.axiomErrors env)
++  let trusted := trustedDeclarations env
++  let trustedErrors := trustedDeclarationErrors env
++  for error in axiomErrors ++ trustedErrors do
++    IO.println s!"FAIL {error}"
++  IO.println s!"trusted declarations: {trusted.size}"
++  unless axiomErrors.isEmpty && trustedErrors.isEmpty do
++    throwError "trusted-base environment audit failed"
+diff --git a/tests/golden/slice0_trusted_base.txt b/tests/golden/slice0_trusted_base.txt
+index 228b872f..d34945ee 100644
+--- a/tests/golden/slice0_trusted_base.txt
++++ b/tests/golden/slice0_trusted_base.txt
+@@ -1,3 +1,24 @@
++component lean-kernel [kernel] slice: slice0 premises: - matches: - :: the Lean kernel that checks the compiler's proofs :: why: proof checking is the root of the kernel-checked guarantees :: removal: not planned; independent checker replay can reduce reliance on this one implementation
++component axiom-propext [axiom] slice: slice0 premises: - matches: propext :: Lean's propositional extensionality axiom :: why: allowed logical axiom used by the proofs :: removal: remove its uses from the proofs and delete this entry
++component axiom-classical-choice [axiom] slice: slice0 premises: - matches: Classical.choice :: Lean's classical choice axiom :: why: allowed logical axiom used by the proofs :: removal: remove its uses from the proofs and delete this entry
++component axiom-quot-sound [axiom] slice: slice0 premises: - matches: Quot.sound :: Lean's quotient soundness axiom :: why: allowed logical axiom used by the proofs :: removal: remove its uses from the proofs and delete this entry
++component lean-compiler-runtime [Lean compiler/runtime] slice: slice0 premises: - matches: lean :: the Lean compiler, runtime and interpreter executing Concrete via lake env lean --run and the compiled lean binary :: why: the compiler's executable behaviour is produced by Lean code outside its kernel proofs :: removal: not planned; per-compilation certificates attest the emitted output
++component lake [build tool] slice: slice0 premises: - matches: lake, git :: Lake dependency resolution and builds, including the pinned lean-compiler-backend revision :: why: Lake selects and builds the code that the compiler and gates execute :: removal: not planned; replace with another pinned, reproducible dependency and build mechanism
++component lexer [trusted Lean code] slice: slice0 premises: P_lex matches: Concrete.Lex.lex :: the Concrete lexer implementation :: why: its correspondence with the independent byte-level lexing specification is not yet proved :: removal: prove lex_correct and retire P_lex
++component parser [trusted Lean code] slice: slice0 premises: P_parse matches: Concrete.Parse.parse :: the Concrete table-driven parser implementation :: why: its correspondence with the surface grammar's derivation relation is not yet proved :: removal: prove the generic table-parser theorem and retire P_parse
++component llvm-printer [unproved backend] slice: slice0 premises: P_print matches: Concrete.Backend.LLVM.print, Concrete.Backend.LLVM.module :: the unproved BIR-to-LLVM printer in Concrete/Backend/LLVM.lean :: why: no LLVM-IR semantics yet relates the printed text to BIR behaviour :: removal: prove the printer against an LLVM-IR semantics and retire P_print
++component bir-lcb-adapter [not trusted (proved)] slice: slice0 premises: - matches: Concrete.Backend.LCB.Proof.emit_correct :: the BIR-to-LCB adapter in Concrete/Backend/LCB.lean :: why: NOT trusted: emit_correct proves accepted adaptations against LCB's imported source semantics :: removal: not applicable; this entry records the proved boundary, not a trusted component
++component runtime-entry [runtime] slice: slice0 premises: P_rt, P_trap_site matches: Concrete.Backend.Runtime.llvm, Concrete.Backend.Runtime.qbe :: the fixed runtime entry in Concrete/Backend/Runtime.lean that decodes result words and reports trap sites :: why: its native behaviour and exact trap-site output are not yet proved against a libc model :: removal: prove the decoding entry against a libc model and retire P_rt and P_trap_site
++component lcb-lowering-assembler [trusted Lean code] slice: slice0 premises: P_toolchain[lcb] matches: LeanCompilerBackend.Verified.compileFunction, LeanCompilerBackend.Verified.reify, LeanCompilerBackend.AMD64.emitModuleValidated, LeanCompilerBackend.AArch64.emitModuleValidated :: LCB's in-process lowering and assembly rendering :: why: native execution of the adapted function relies on LCB's named trust boundaries :: removal: LCB's preservation proofs for the slice-0 domain retire P_toolchain[lcb]
++component lcb-command [pipeline tool] slice: slice0 premises: - matches: lcb :: the lcb command line that assembles the runtime entry's QBE text :: why: the runtime QBE text is assembled outside the proved BIR-to-LCB adapter path :: removal: emit the runtime through LCB's proved object path, or prove this command's assembly path
++component clang-llvm [toolchain] slice: slice0 premises: P_toolchain[llvm] matches: clang, clang-21 :: clang and LLVM compiling the printed LLVM IR and driving native assembly and linking :: why: native execution of LLVM output relies on the correctness of this toolchain :: removal: not planned; a verified LLVM path could retire P_toolchain[llvm]
++component system-linker [pipeline tool] slice: slice0 premises: - matches: ld, ld64, ld.lld :: the system linker invoked by clang (ld, ld64 or ld.lld) :: why: the linked executable's layout and symbol resolution are not kernel-checked :: removal: not planned; use a verified linker and object path
++component assembler [pipeline tool] slice: slice0 premises: - matches: as :: the assembler, integrated in clang or invoked by clang as as :: why: assembly text is translated to native machine code outside Lean's proofs :: removal: use LCB's verified object emission for every native input
++component libc [OS/libc] slice: slice0 premises: - matches: write, _exit, abort :: libc's write, _exit and abort used by the runtime entry :: why: their native contracts and implementations are outside the Lean model :: removal: replace them with a minimal direct-syscall launcher and prove that launcher
++component os-kernel-loader [OS/libc] slice: slice0 premises: P_launch, P_live matches: - :: the OS kernel and loader that launch images and provide process and file-descriptor behaviour :: why: launch liveness, resource behaviour and trap-line delivery are environmental assumptions :: removal: not planned for a hosted native executable
++component nix-flake [build tool] slice: slice0 premises: - matches: nix :: Nix, the devshell and the pinned flake inputs supplying the toolchain :: why: the development and CI environment determines the programs used by the pipeline :: removal: not planned; another reproducibly pinned environment would replace this entry
++component native-shell-utilities [pipeline tool] slice: slice0 premises: - matches: bash, env, uname :: the shell and small utilities used by the native build helper :: why: they select targets, construct the reduced environment and invoke the native tools :: removal: replace the shell helper with a pinned, attested build driver
++component gate-analysis-tools [gate tool] slice: slice0 premises: - matches: gdb, lldb, llvm-objdump, llvm-size, python3, strace :: gdb, lldb, llvm-objdump, llvm-size, python3 and strace used only by gates :: why: trusted only for the gates' analyses and verdicts, not as compilation-pipeline components :: removal: remove or replace the corresponding gate analyses; these tools are not needed to compile a program
+ premise P_lex [implementation] retired-by: `lex_correct` :: every token list the lexer returns for a source is one the source lexes to
+ premise P_parse [implementation] retired-by: the generic table-parser theorem :: every tree the parser returns for a token list is one the grammar derives from it
+ premise P_print [implementation] retired-by: an LLVM-IR semantics; not planned for slice 0 :: the printed LLVM text of a WF BIR means at most the BIR behaviour, encoded

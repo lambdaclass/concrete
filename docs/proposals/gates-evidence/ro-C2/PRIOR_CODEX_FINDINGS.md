@@ -1,0 +1,13 @@
+1. **P1 — Artifact comparison silently skips new outputs.** `scripts/checks/compiler/determinism.sh:67` and `scripts/checks/lib/repro_compare.py:33` use an explicit filename allow-list. Any new emitter or native-build artifact—even one differing between runs—is ignored. **Fix:** recursively inventory each program’s output directory, require identical inventories, and compare every file. Retain required-file assertions to detect artifacts missing from both sides. Preserve gate 8’s existing default behavior separately.
+
+2. **P1 — Scaling’s planted controls are never checked automatically.** `scripts/checks/compiler/scaling.sh:100` only analyzes a plant when manually requested; the CI invocation runs neither plant. Nothing asserts that linear passes or that quadratic fails specifically with `plant_quadratic` and an approximately quadratic exponent. A manually observed nonzero exit could instead come from validation, compilation, timeout, or the resolution floor. **Fix:** add an automatic control harness that requires linear success and quadratic rejection with the expected stage, exponent range, and threshold diagnostic; reject unrelated failures.
+
+3. **P2 — Entire missing stages can pass scaling.** `scripts/checks/lib/scaling_report.py:67` checks completeness only for stages present in the input. A complete set of `llvm_module` samples alone passes; absent `lcb_emit`, `lcb_assemble`, native, and derived totals are never required. **Fix:** declare the required stage inventory for normal, smoke, and plant modes, then require exactly the expected repetition/size samples for every required stage before calculating ratios.
+
+4. **P2 — Reversing assignments does not reliably vary environment order.** `scripts/checks/compiler/determinism.sh:85` invokes `env` without clearing the inherited environment. Existing variables such as `HOME`, `TMPDIR`, and locale settings retain their environment positions when replaced. The native leg also uses the same assignment order on both sides. **Fix:** construct explicit environments with `env -i`, inserting the same required keys in opposite orders; account for `slice0_native.sh` rebuilding its child environment in a fixed order.
+
+The proposed linear structural digest is the right correction for the acknowledged forcing issue. Gate 8’s default artifact sequence, manifest formatting, and control diagnostics appear preserved. CI job names match required checks; Nix supplies `timeout` on macOS. No owner language decision appears to be taken. The macOS scaling exclusion is documented, though its noise justification is asserted without supporting measurements.
+
+Read-only review; no builds or network access.
+
+VERDICT: FINDINGS

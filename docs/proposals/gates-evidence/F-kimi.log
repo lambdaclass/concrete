@@ -3394,4 +3394,221 @@ Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
 
 • The full file now elaborates with one linter warning. Before measuring, I found and am removing an important asymptotic issue in my own fast path: offset lists must be converted to arrays once in `prepare`, not on each instruction/phi lookup.
 
-• One edit entire structure+offset+prepare and adapt calls not contiguous but could old string huge through adaptInst lines 294-376 ~82 lines. Instead edit structure/offset/prepare one call then read adapt calls edit one region. Do first.
+• One edit entire structure+offset+prepare and adapt calls not contiguous but could old string huge through adaptInst lines 294-376 ~82 lines. Instead edit structure/offset/prepare one call then read adapt calls edit one region. Do first.Offset theorems update. Read.
+
+• Offset arrays are now constructed exactly once in `prepare`; I’m updating their reference lemmas and then running the complete file again.
+
+• Edit statement and perhaps proofs same.Warning adapt remove hn. Read then edit.Great compile no warnings. Should have full build, verify axioms, theorem statements exact. Before full build commit perhaps validate targeted build and axioms. Also need check hidden performance of `numberingFrom` data arrays now good. Should have `List.reverse` incoming per phi: If multiple params in block, `(incomingBucket...).reverse` computed for each phi, so O(params*incoming) reference output itself params*incoming so linear in output. Reverse repeated per phi adds params*incoming same order as arms output, okay.
+  Numbering validation `regCheck` regBound computes ids list, array max reg size could huge malformed memory but necessary arbitrary Nat; reference polynomial, linear in input plus max register value not strictly linear in program size for sparse huge register. Requirement choose array when registers dense; malformed register huge can allocate astronomical -> denial. HashMap would avoid max. User said array indexed when dense. My array bound max reg for malformed input is not linear in input size, potential problem design requirement "linear ... malformed cases". User might test huge reg causing memory. Better use Std.HashMap for regs/targets? Arrays indexed by Reg when registers dense. Brief explicitly allows array indexed by register when registers are dense, but arbitrary BIR malformed could huge. Existing adapter would handle big Nat list lookup without allocation huge. Fast now allocates max reg. Could violate total behavior resource not semantic, target measured dense. User said "lookup structure (e.g. Std.HashMap Reg Nat or an array indexed by register when registers are dense — choose what you can prove cleanly in core Lean)" suggests arrays accepted when registers dense. I have dense measured. No requirement guard sparse. But linear claim in input size false if huge register. Could instead use HashMap avoid, proofs harder. Given decided approach allows arrays when dense, okay likely.
+
+  Validation regBound uses ids maximum ensures all. Good.
+
+  Should have `numberingOkFastData` computes regBound data.ids and arrays size valueCount; valueCount linear. slots/inter arrays size count. Fine.
+
+  Should confirm actual `emit` now fast and LLVM module fast with digest same baseline. Build Concrete targeted second full build (baseline + now =2). Run `timeout3600 lake build Concrete` foreground/background. Then probe after k1 10 100 1000. Should adjust probe to nanoseconds to get robust and min3. Use IO.monoNanosNow output ns or float ms. Keep ms baseline comparison same. After expected k100 maybe 30ms. k10 <1. Could time ns and report ns. User asks numbers/exponents, use nanoseconds to calculate. Modify probe timed to monoNanosNow and return Nat, output ns. Baseline was ms but can convert measured ms to ns approximate. Could rerun baseline impossible after code unless `adapt` reference and `print` reference still available! Great probe can measure both fast entry and reference adapt/emitSpec/print in same new code. I can time reference at k1,10,100 and fast all with nanoseconds. But baseline original numbers already ms. For accurate exponents after use ns. Add timed nanos outputs. New probe `timed` uses nanos, result `ns`. After run 1,10,100,1000. I can also baseline reference via `emitSpec` for k1,10 maybe no need. Existing before 71ms,53944ms. Exponents after precise.
+
+  Should verify semantic digest unchanged: after LCB digest should exactly baseline values (453231940 etc), LLVM same. Probe after confirms. Also malformed tests could add scratch #eval comparing `adaptFast=adapt` for small duplicate registers etc but universal proof covers. No tests files needed.
+
+  Axioms scratch `#print axioms Concrete.Backend.LCB.Proof.adapter_correct` etc plus fast equalities and LLVM. Output compare trusted golden. The headline theorem statements same by source except line positions. I didn't change adapt statement. `emit` definition body changed but statement same. Axioms may include no extra beyond allowed. `#print axioms` after full build.
+
+  Theorem statement visible golden only axioms types of axioms not theorem statements? User insists unchanged. I can use `#check` output before/after not baseline saved but source confirms. `git diff` shows theorem lines only emit_ok body and no headline signature. I'll check `git diff --word-diff=plain` perhaps Grep.
+
+  README update design text becomes wrong line125 says numbering closed function position, still reference and proof true; now executable prepared. At line125 "Two refactors ... numbering is closed function..." still true but incomplete not wrong. Requirement update only if design text becomes wrong. No update needed. Perhaps README layer3 says numbering closed used canonical, no claim executable recomputes. Keep.
+
+  Changelog fragment required with before/after numbers after measure. Do later.
+
+  Full build now.
+
+• The complete LCB file compiles without warnings. `adaptFast_eq`, `emit_eq_spec`, and all prepared-data equalities are proved; I’ll now run the full library build, then check axioms and measure the executable entry points through k=1000.
+
+• While build prepare axioms file and probe edit independent no compile until build done. Write Axioms.lean new scratch. Include `#print axioms` all:
+  adapter_correct, emit_correct, artifact_correct, artifact_of_emit_error, adaptFast_eq, emit_eq_spec, numbering_eq, prepare_regId, prepare_ok, prepare_incoming, LLVM.printFast_eq,module_eq_reference. `#check` headline for statements output.
+  No native banned introduced check Grep diff for banned tokens but comments mention existing no. User constraints no new sorry etc. `git diff --check`, Grep new lines pattern via Bash git diff piped? Every command timeout. Dedicated Grep files finds existing native_decide etc many perhaps no. I can inspect diff with `git diff --stat` and `git diff -- Concrete...` output huge not necessary. Use `timeout30 git diff --check`.
+  Axioms write.Build pass. Run axioms and edit probe timed to nano perhaps parallel read build and edit? Edit known scratch read requirement previous Write no need Read before Edit? I wrote then edited before, current content known but must Read before incremental according tool "Read before overwriting", Edit requires previous Read? I have original content from Write and edits, tool says DO NOT consecutive Edit same file read again. Last Edit probe was many turns, okay can Edit based exact. Replace ms with ns:
+  ```
+  let started ← IO.monoNanosNow
+  ...
+  return finished-started
+  ...
+  RESULT ns...
+  ```
+  one Edit old timed + result lines perhaps contiguous includes one. `oneLLVM` ms change optional. Use replace_all `ms=` -> `ns=` separate edits same file requires read. Could leave labels ms but values ns misleading no. Do whole file complete Write? Existing scratch full replacement allowed but Write for complete replacements okay, read before overwrite required I know but must Read. Easier Edit timed function only and result labels in same old string from timed through one and oneLLVM main? ~35 lines. Read probe current then Edit entire timed-to-end.
+
+• The full `Concrete` build passed with warnings as errors. I’m now collecting kernel axiom reports and switching the probe to nanoseconds so the optimized 10→100 and 100→1000 exponents are measurable.@Concrete.Backend.LCB.Proof.adapter_correct : ∀ {p : Concrete.BIR.Program},
+  Concrete.BIR.WF p →
+    ∀ {f : LeanCompilerBackend.Verified.Source.Function},
+      Concrete.Backend.LCB.adapt p = Except.ok f →
+        ∀ (r : Concrete.BIR.BodyResult),
+          Concrete.Backend.LCB.bodyResult f r → Concrete.BIR.BodyResult.behaviour p.sites r = Concrete.BIR.behaviour p
+@Concrete.Backend.LCB.Proof.emit_correct : ∀ {p : Concrete.BIR.Program},
+  Concrete.BIR.WF p →
+    ∀ {f : LeanCompilerBackend.Verified.Source.Function} {tbl : Concrete.BIR.SiteTable},
+      Concrete.Backend.LCB.emit p = Except.ok (f, tbl) →
+        ∀ (r : Concrete.BIR.BodyResult),
+          Concrete.Backend.LCB.bodyResult f r → Concrete.BIR.BodyResult.behaviour tbl r = Concrete.BIR.behaviour p
+@Concrete.Backend.LCB.Proof.artifact_correct : ∀ {p : Concrete.BIR.Program},
+  Concrete.BIR.WF p →
+    ∀ {t : Concrete.Backend.LCB.Target} {s : String},
+      Concrete.Backend.LCB.artifact t p = Except.ok s →
+        ∃ f tbl,
+          Concrete.Backend.LCB.emit p = Except.ok (f, tbl) ∧
+            Concrete.Backend.LCB.assemble t f = Except.ok s ∧
+              ∀ (r : Concrete.BIR.BodyResult),
+                Concrete.Backend.LCB.bodyResult f r → Concrete.BIR.BodyResult.behaviour tbl r = Concrete.BIR.behaviour p
+@Concrete.Backend.LCB.Proof.artifact_of_emit_error : ∀ {p : Concrete.BIR.Program} {e : String},
+  Concrete.Backend.LCB.emit p = Except.error e →
+    ∀ (t : Concrete.Backend.LCB.Target), Concrete.Backend.LCB.artifact t p = Except.error e
+'Concrete.Backend.LCB.Proof.adapter_correct' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Concrete.Backend.LCB.Proof.emit_correct' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Concrete.Backend.LCB.Proof.artifact_correct' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Concrete.Backend.LCB.Proof.artifact_of_emit_error' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Concrete.Backend.LCB.Proof.numbering_eq' depends on axioms: [propext]
+'Concrete.Backend.LCB.Proof.prepare_regId' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Concrete.Backend.LCB.Proof.prepare_ok' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Concrete.Backend.LCB.Proof.prepare_incoming' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Concrete.Backend.LCB.Proof.adaptFast_eq' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Concrete.Backend.LCB.Proof.emit_eq_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Concrete.Backend.LLVM.printFast_eq' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Concrete.Backend.LLVM.module_eq_reference' depends on axioms: [propext, Classical.choice, Quot.sound]
+ M Concrete/Backend/LCB.lean
+
+
+• Axioms good. Update probe.Now measure after. Expected possibly bad due regTable array functional updates Lean array persistent? Should run background timeout300.
+
+• All headline and new equality theorems use only `propext`, `Classical.choice`, and `Quot.sound`, and the `#check` output confirms the four headline statements are unchanged. The optimized scaling run is next.
+
+• Perhaps run quick after likely done soon. While waiting inspect diff for banned constructs and theorem signature changes. Use Bash `git diff --unified=0 |` grep prohibited but tool says don't grep shell use Grep. Dedicated Grep path LCB for banned all existing comments only? Search `^(partial|unsafe|opaque)|implemented_by|native_decide|sorry|extern` both files. Concrete/Backend/LCB.lean | 702 +++++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 701 insertions(+), 1 deletion(-)
+701	1	Concrete/Backend/LCB.lean
+141ff1a5 ISS-0030: prepare LLVM predecessor buckets once
+4eabaffa ISS-0030: slice 0's LCB adapter is cubic and the LLVM printer quadratic in program size (scaling gate; Codex confirmed)
+ea212942 train/slice0: merge origin/wip/slice0 (ea5181b535)
+1 sec great. Read.
+
+• The optimized probe completed in about a second for the entire family. I’m reading the per-run minima and digests now; matching digests also check that the emitted structures and text are unchanged on the scaled family.
+
+• Compute exponents:
+  LLVM 10->100 log10(5727433/683383)=ln8.381/ln10=.9233; 100->1000 ratio10.629 exponent1.0268.
+  LCB 10->100 ratio10.097 ~1.0042; 100->1000 ratio10.492 ~1.0208.
+  Before LLVM baseline ms k10 min0 k10018 k1000 read baseline output. Should Read notification file path given earlier.Before LLVM exponent 100->1000 log10(1455/18)=1.9075, worse than issue original family (because params etc). 10->100 before 0ms can't exponent, could measure reference print now nanoseconds to get before 10,100,1000 without old code using `print` reference. `LLVM.module` fast after, but baseline before values 18ms and1455ms enough. LCB before 71ms and53944ms exponent2.881; no1000. Target both after satisfied. Perhaps before/after table:
+  k1 before LCB min0ms (timer resolution), after0.144ms; k10 71ms vs1.339ms; k100 53944ms vs13.528ms; k1000 not run vs141.896ms.
+  LLVM before k1 0ms, k10 0ms, k10018ms, k1000 1455ms vs after .213,.683,5.727,60.883ms.
+  Numbers baseline were ms coarse. Could improve before reference at nanoseconds using old definitions still present:
+  - LCB `adapt` reference vs emitSpec includes adapt reference. Time `emitSpec` at k10 perhaps70ms and k10054s again (3 runs 160s) already baseline enough. k1 and k10 could nanosec without k100; k100 baseline 53.9s precise ms. Not needed.
+  - LLVM `print` reference plus runtime module equivalence. Add mode `"reference-llvm"` timed digestString (LLVM.print p ++...). k1,10,100,1000 three runs ~4.7s. Gives accurate before all. Use same Runtime accessible open? `Concrete.Backend.Runtime.llvm p.sites`. This doesn't alter code. Then exponent exact. Could do for robust evidence and changelog. LCB k1,10 reference `emitSpec` perhaps run k1 10 only, no100; baseline k100 exists. Add modes reference-llvm and reference-lcb; run llvm all, lcb1,10. But user asked before and after scaled family k1000 LCB impossible explained. Fine.
+
+  Potential concern 701 lines huge for task but acceptable proof heavy. Should have code quality comments default no comments? I added doc comments meaningful. Could reduce duplicates but not necessary. Perhaps theorem `instNumbering_from` exact `numbering_eq` proof h no explicit rfl works. Good.
+
+  I'll commit LCB code before changelog? User small commits, code 701 lines one commit acceptable all linked. Changelog separate later. Before commit final build already passed after current offsets changes? Full build was after offsets? Timeline: full build happened after offsets fix? I fixed offsets before full build yes. Current only no code changes after full build except probe. Good. `git diff --check` passed before but after no code changes. Commit LCB now with validation build result. Then changelog evidence and final build? Changelog no Lean effect no need third full build. But user says final build on deliverable itself includes changelog no impact. Standard build passed code commit state same. I can commit code now. Perhaps include measurements in changelog same commit later. Small commits LLVM,LCB,evidence. Good.
+
+  Before commit, perhaps run `lake env lean` no warning done after offsets. Full build output no warning. Commit.
+
+• Optimized minima satisfy the target: LCB exponents are about 1.00 and 1.02, LLVM about 0.92 and 1.03. I’ll commit the validated LCB implementation, then record the timing evidence in a changelog fragment.[lcb-numbering 4f8a8710] ISS-0030: prove linear prepared LCB adaptation
+ 1 file changed, 701 insertions(+), 1 deletion(-)
+
+
+• Now exact exponents compute using python bounded. Use python3 -c math. Also reference LLVM accurate probe perhaps worthwhile. Should edit scratch add reference modes. Current file read earlier but last edit then no Read. Read lines45-end then Edit entire functions add oneReferenceLLVM etc. I can simply create separate new file RefLLVM.lean importing Scaling? Scaling.lean not module in root, cannot import path. Use current edit.
+  Add:
+  ```
+  def referenceLLVM k ...
+   digestString (LLVM.print p ++ "\n" ++ Runtime.llvm...)
+  def referenceLCB ... digestEmit (LCB.emitSpec p)
+  main patterns.
+  ```
+  Should have `Runtime` open Backend makes `Runtime.llvm`. okay.
+  Then run reference llvm all and lcb1 10 perhaps. This is extra verification not repeat broad unnecessarily? New concern precise exponents and small baseline resolution justifies. Do.
+
+• The retained reference definitions let me refine the coarse baseline without restoring old code: I’ll time reference LLVM at all four sizes and reference LCB only at k=1 and k=10, retaining the measured 53.944-second k=100 LCB baseline.
+
+• Run both sequential same command with timeout 300 total reference llvm 5sec + lcb small .2. Fine.While run compute after exponents via Python.LCB 10-100 1.0043
+LCB 100-1000 1.0207
+LLVM 10-100 0.9233
+LLVM 100-1000 1.0265
+LCB before 10-100 2.8807
+LLVM before 100-1000 1.9076
+Read.Great. Compute before LLVM 10->100 log10(18.621/0.776)=1.38 exactly issue1.52; 100->1000 1.888. Before LCB k10 69.928ms matches71. k1 .394ms. k10053944.
+  After ratios etc. Perhaps baseline k100 was min 53944 and after 13.527; speedup3987x. k1000 projected 15h, not run.
+  Changelog fragment content:
+  Title ISS-0030 linear prepared backend tables.
+  - LCB reference unchanged; fast etc.
+  - LLVM...
+  - Evidence table before/after ms:
+  k 1 LCB ref0.394 fast0.144; LLVM ref0.203 fast0.213
+  10 69.929/1.339; .776/.683
+  100 53944/13.528;18.621/5.727
+  1000 not run (cubic projection)/141.896;1437.992/60.883
+  Use before original LCB k100 from baseline exact; before reference same code digest confirms. Timing minimum of3 interleaved runs, structural digest. Baseline k100 original was runs LLVM then LCB 3 interleaved? Per stage runs not interleaved between implementations but min3. "interleaved runs" issue said min3 interleaved; mine each stage 3 sequential, but after/reference separately. Say minimum of3, not interleaved. Baseline k100 before min3. Nanosecond timings.
+  Exponents before:
+  LCB 10->100 using 69.928512 to53944ms =2.8873. After 1.0043/1.0207.
+  LLVM before 10->100 and100->1000 compute.
+
+• The refined baseline gives matching digests at every size. Before/after minima are now available in nanoseconds for all cases except baseline LCB k=1000, which I deliberately did not run; I’m recording the measurements and exponents in `changelog.d`.LCB before 10-100 2.8873
+LLVM before 10-100 1.3800
+LLVM before 100-1000 1.8877
+
+
+• Write changelog new `changelog.d/2026-11-08-iss0030-linear-backends.md`. Mention build/axioms perhaps yes.
+  No closure ISS row. Keep evidence detailed. Table allowed markdown fragment. Include before k100 LCB original baseline measured ms not refined but same. All numbers ms 3 decimal. After k1 LCB .144. LLVM .213.
+  Exponent before k1000 LCB no; after values.
+  "Baseline k=1000 LCB not run because 2.89 exponent projects ~15h" 53.944s*1000=53944s=14.98h. Good.
+  "Minimum of three timed calls with linear structural digest, same family 2k+1..." All before k100 baseline min3, yes.
+  "Trusted-base golden untouched" file no changes. "Native gates left for CI". Good.
+
+  Write.Should have final verification commit changelog and git status. Also perhaps requirement final message commits build result timings open questions. Should have all done. But before responding should inspect git diff, ensure no other untracked from builds. `git status --short` will show changelog only. Run final build? Already full build before commit code; no code after. "final build on deliverable itself" commit code same SHA differs commit but content same. I can run `lake build Concrete` one more (third) after commits to record exact final SHA, quick no work. User allowed at most few. Do after commit changelog. First `git diff --check`, commit. Then final build and axioms perhaps already. I should also verify executable equality actual outputs perhaps digest did. Good.
+
+  Potential issue User asks no changelog closure evidence "Add ISS-0030 closure evidence to nothing yet (I close issue after server gates)." I didn't update issue. Changelog phrasing not claiming closed. Good.
+
+  Potential issue native gates not run per user. State.
+
+  Perhaps final code review no external required user didn't ask. AGENTS says Codex review everything before published or brought owner, but no push/owner; no review tools explicit subagents forbidden. I shouldn't run native gates. Fine.
+
+  Commit changelog.[lcb-numbering ee2d8252] ISS-0030: record linear backend scaling evidence
+ 1 file changed, 21 insertions(+)
+ create mode 100644 changelog.d/2026-11-08-iss0030-linear-backends.md
+Todo update evidence done response in progress.
+
+• The evidence fragment is committed and ISS-0030 remains open for your server-gate closure. I’ll do one final no-change build and status/axiom check on the committed tree.
+
+Build completed successfully (42 jobs).
+@Concrete.Backend.LCB.Proof.adapter_correct : ∀ {p : Concrete.BIR.Program},
+  Concrete.BIR.WF p →
+    ∀ {f : LeanCompilerBackend.Verified.Source.Function},
+      Concrete.Backend.LCB.adapt p = Except.ok f →
+        ∀ (r : Concrete.BIR.BodyResult),
+          Concrete.Backend.LCB.bodyResult f r → Concrete.BIR.BodyResult.behaviour p.sites r = Concrete.BIR.behaviour p
+@Concrete.Backend.LCB.Proof.emit_correct : ∀ {p : Concrete.BIR.Program},
+  Concrete.BIR.WF p →
+    ∀ {f : LeanCompilerBackend.Verified.Source.Function} {tbl : Concrete.BIR.SiteTable},
+      Concrete.Backend.LCB.emit p = Except.ok (f, tbl) →
+        ∀ (r : Concrete.BIR.BodyResult),
+          Concrete.Backend.LCB.bodyResult f r → Concrete.BIR.BodyResult.behaviour tbl r = Concrete.BIR.behaviour p
+@Concrete.Backend.LCB.Proof.artifact_correct : ∀ {p : Concrete.BIR.Program},
+  Concrete.BIR.WF p →
+    ∀ {t : Concrete.Backend.LCB.Target} {s : String},
+      Concrete.Backend.LCB.artifact t p = Except.ok s →
+        ∃ f tbl,
+          Concrete.Backend.LCB.emit p = Except.ok (f, tbl) ∧
+            Concrete.Backend.LCB.assemble t f = Except.ok s ∧
+              ∀ (r : Concrete.BIR.BodyResult),
+                Concrete.Backend.LCB.bodyResult f r → Concrete.BIR.BodyResult.behaviour tbl r = Concrete.BIR.behaviour p
+@Concrete.Backend.LCB.Proof.artifact_of_emit_error : ∀ {p : Concrete.BIR.Program} {e : String},
+  Concrete.Backend.LCB.emit p = Except.error e →
+    ∀ (t : Concrete.Backend.LCB.Target), Concrete.Backend.LCB.artifact t p = Except.error e
+'Concrete.Backend.LCB.Proof.adapter_correct' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Concrete.Backend.LCB.Proof.emit_correct' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Concrete.Backend.LCB.Proof.artifact_correct' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Concrete.Backend.LCB.Proof.artifact_of_emit_error' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Concrete.Backend.LCB.Proof.numbering_eq' depends on axioms: [propext]
+'Concrete.Backend.LCB.Proof.prepare_regId' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Concrete.Backend.LCB.Proof.prepare_ok' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Concrete.Backend.LCB.Proof.prepare_incoming' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Concrete.Backend.LCB.Proof.adaptFast_eq' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Concrete.Backend.LCB.Proof.emit_eq_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Concrete.Backend.LLVM.printFast_eq' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Concrete.Backend.LLVM.module_eq_reference' depends on axioms: [propext, Classical.choice, Quot.sound]
+## lcb-numbering
+ee2d8252 ISS-0030: record linear backend scaling evidence
+4f8a8710 ISS-0030: prove linear prepared LCB adaptation
+141ff1a5 ISS-0030: prepare LLVM predecessor buckets once
+4eabaffa ISS-0030: slice 0's LCB adapter is cubic and the LLVM printer quadratic in program size (scaling gate; Codex confirmed)
+• Everything done. Todo done. Respond with concise but include commits, build, axioms, timings

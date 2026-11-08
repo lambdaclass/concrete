@@ -1,0 +1,290 @@
+diff --git a/RETENTION.tsv b/RETENTION.tsv
+index 32782c270..f8c58e70e 100644
+--- a/RETENTION.tsv
++++ b/RETENTION.tsv
+@@ -29,6 +29,7 @@ required-checks.txt required-checks-transition.tsv	landing	retained	root (script
+ RETENTION.tsv	landing	retained	RETENTION.tsv	R-0562	root: never; survives the deletion of legacy/; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+ ISSUES.tsv	issue record	retained	ISSUES.tsv (minimal issue record, P12)	R-0558	root: never; the full ledger joins it with slice 1; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+ ConcreteSpec ConcreteSpec.lean	spec	retained	root (the normative Lean specification)	R-0560	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
++tests/manifest.tsv tests/slice0	corpus	retained	root (the manifest-driven test corpus)	R-0558	root: never; legacy/ copy: none (new at the root, nothing to delete)	open
+ scripts/proofs	proof integrity	retained	scripts/proofs (the proof-integrity checks of ConcreteSpec: axiom inventory, trust ban, kernel replay, external re-check; rewritten from legacy/scripts/tests/check_external_checker.sh and legacy/scripts/tools, which stay governed by their own rows)	R-0560	root: never; legacy/ copy: none (new at the root, nothing to delete)	open
+ .github	ci	retained	rewritten for the new root; the old workflows move to legacy/.github and are not run	R-0563	root: never (the new root's workflows); legacy/ copy (the old workflows, never run): at LD (R-0590)	open
+ .githooks	landing	retained	.githooks (pre-push, re-pointed at the new gate set)	R-0563	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+diff --git a/scripts/checks/compiler/tests.sh b/scripts/checks/compiler/tests.sh
+index 64ba8d47f..33d305cd0 100755
+--- a/scripts/checks/compiler/tests.sh
++++ b/scripts/checks/compiler/tests.sh
+@@ -8,8 +8,9 @@
+ # the exact bytes on descriptor 2, and descriptor 1, which must be empty. All three must equal the
+ # manifest expectation checked by the emitter (which writes the expected status and stderr bytes).
+ #
+-# Controls: a wrong expectation must fail in the emitter; a missing row and a nonexistent program
+-# must fail inventory (these child runs are emit-only, never native). A body that never returns must
++# Controls: wrong exit and trap expectations must fail in the emitter; a missing row and a
++# nonexistent program must fail opposite inventory directions (these child runs are emit-only,
++# never native). A body that never returns must
+ # be observed as incomplete on both backends; a body returning a word that encodes nothing must reach
+ # the runtime's refusal; and the comparison itself must reject a missing or extra newline, a wrong
+ # status with the right stderr, and stray stdout. Run inside the nix devshell, from the repo root.
+@@ -39,21 +40,16 @@ check() {
+ }
+ 
+ rows=$(manifest_rows bir)
+-printf '%s\n' "$rows" | awk -F '\t' '{sub(/^bir:/, "", $2); print $2}' | LC_ALL=C sort >"$work/manifest-programs"
+-emitter_names=$("${emitter[@]}" list | cap_out) || { echo "tests: listing emitter programs failed" >&2; exit 1; }
+-printf '%s\n' "$emitter_names" | LC_ALL=C sort >"$work/emitter-programs"
+-if ! cmp -s "$work/manifest-programs" "$work/emitter-programs"; then
+-  echo "tests: test manifest inventory differs from emitter" >&2
+-  diff -u "$work/emitter-programs" "$work/manifest-programs" >&2 || true
+-  exit 1
+-fi
+ 
+ wrong_expectation() { awk -F '\t' -v OFS='\t' '$1 == "answer" {$3 = "exit 41"} {print}' "$1" >"$1.new"; mv "$1.new" "$1"; }
++wrong_trap_expectation() { awk -F '\t' -v OFS='\t' '$1 == "overflow" {$3 = "trap arithmeticOverflow site 1"} {print}' "$1" >"$1.new"; mv "$1.new" "$1"; }
+ missing_row() { awk -F '\t' '$1 != "answer"' "$1" >"$1.new"; mv "$1.new" "$1"; }
+-nonexistent_program() { awk -F '\t' -v OFS='\t' '$1 == "answer" {$2 = "bir:no_such_program"} {print}' "$1" >"$1.new"; mv "$1.new" "$1"; }
++nonexistent_program() { printf 'no_such_program\tbir:no_such_program\texit 0\tslice0\n' >>"$1"; }
+ manifest_control() { # manifest_control LABEL EXPECTED-MESSAGE MUTATION-FUNCTION
+-  local label=$1 expected=$2 mutation=$3 copy="$work/ctl/$1.tsv" rc=0
+-  cp "$test_manifest" "$copy"
++  local label=$1 expected=$2 mutation=$3 dir="$work/ctl/$1" copy rc=0
++  mkdir -p "$dir"
++  cp -R "$(dirname "$test_manifest")" "$dir/tests"
++  copy="$dir/tests/$(basename "$test_manifest")"
+   "$mutation" "$copy"
+   if cmp -s "$test_manifest" "$copy"; then
+     echo "FAIL manifest control $label: mutation changed nothing" >&2; fail=1; return
+@@ -71,20 +67,22 @@ manifest_control() { # manifest_control LABEL EXPECTED-MESSAGE MUTATION-FUNCTION
+ mkdir -p "$work/ctl"
+ if [ "${CONCRETE_TEST_MANIFEST_SKIP_CONTROLS:-0}" != 1 ]; then
+   manifest_control wrong-expectation "answer: expectation mismatch: BIR run gives" wrong_expectation
+-  manifest_control missing-row "tests: test manifest inventory differs from emitter" missing_row
+-  manifest_control nonexistent-program "tests: test manifest inventory differs from emitter" nonexistent_program
++  manifest_control wrong-trap-expectation "overflow: expectation mismatch: BIR run gives" wrong_trap_expectation
++  manifest_control missing-row "program without a manifest row: answer" missing_row
++  manifest_control nonexistent-program "manifest row names no program: no_such_program" nonexistent_program
+ fi
+ 
+ while IFS=$'\t' read -r name program expect; do
+   d="$work/ex/$name"
+   read -r -a expectation <<<"$expect"
+   "${emitter[@]}" emit "${program#bir:}" "$d" "$target" "${expectation[@]}"
+-  # A child running a planted manifest control never reaches a native build, even if its planted
+-  # defect is accidentally accepted: the control then fails because the child returned zero.
+-  if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" = 1 ]; then exit 0; fi
++  # Emit-only controls cover every row and never reach a native build, even if a planted defect is
++  # accidentally accepted: the control then fails because the child returns zero after the loop.
++  if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" = 1 ]; then continue; fi
+   check "$name" "$d" 10 20
+   examples=$((examples + 1))
+ done <<<"$rows"
++if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" = 1 ]; then exit 0; fi
+ "${emitter[@]}" loop "$work/ctl/loop" "$target"
+ expected_timeout check control-loop "$work/ctl/loop" 1 1
+ "${emitter[@]}" invalid "$work/ctl/invalid" "$target"
+diff --git a/scripts/checks/landing_script.sh b/scripts/checks/landing_script.sh
+index ae3cd1d46..78065724e 100755
+--- a/scripts/checks/landing_script.sh
++++ b/scripts/checks/landing_script.sh
+@@ -988,13 +988,13 @@ out="$(python3 -I "$TMP/required_names.py" "$ROOT_DIR/.github/workflows/lean_act
+ python3 -I - "$ROOT_DIR/.github/workflows/lean_action_ci.yml" "$TMP/rn" <<'PY3'
+ import sys, yaml, copy, os
+ w = yaml.safe_load(open(sys.argv[1])); os.makedirs(sys.argv[2], exist_ok=True)
+-a = copy.deepcopy(w); a["jobs"]["backends"]["strategy"]["matrix"]["include"].append({"arch": "riscv64", "runner": "ubuntu-latest"})
+-b = copy.deepcopy(w); b["jobs"]["backends"]["name"] = "Slice 0 backends (${{ matrix.os }})"
+-c = copy.deepcopy(w); c["jobs"]["backends"]["strategy"]["matrix"] = {"arch": ["x86-64", "aarch64-macos"]}
++a = copy.deepcopy(w); a["jobs"]["tests"]["strategy"]["matrix"]["include"].append({"arch": "riscv64", "runner": "ubuntu-latest"})
++b = copy.deepcopy(w); b["jobs"]["tests"]["name"] = "Tests (${{ matrix.os }})"
++c = copy.deepcopy(w); c["jobs"]["tests"]["strategy"]["matrix"] = {"arch": ["x86-64", "aarch64-macos"]}
+ for n, x in (("extraleg", a), ("unresolved", b), ("product", c)):
+     yaml.safe_dump(x, open(os.path.join(sys.argv[2], n + ".yml"), "w"))
+ PY3
+-for v in extraleg:"landing-tier job not required: Slice 0 backends (riscv64)" unresolved:"leaves its name unresolved" product:"is not a non-empty include list"; do
++for v in extraleg:"landing-tier job not required: Tests (riscv64)" unresolved:"leaves its name unresolved" product:"is not a non-empty include list"; do
+   o="$(python3 -I "$TMP/required_names.py" "$TMP/rn/${v%%:*}.yml" "$re_default" "$ROOT_DIR/required-checks.txt")"
+   has "$o" "${v#*:}" && ok "CONTROL: the required-checks check reports the ${v%%:*} matrix" || no "CONTROL: the required-checks check missed the ${v%%:*} matrix: '$o'"
+ done
+diff --git a/scripts/checks/lib/slice0_common.sh b/scripts/checks/lib/slice0_common.sh
+index 2833b8fdf..e0e2799b0 100644
+--- a/scripts/checks/lib/slice0_common.sh
++++ b/scripts/checks/lib/slice0_common.sh
+@@ -14,7 +14,7 @@
+ #     OUT.stdout, OUT.stderr;
+ #   judge EXPECTED_DIR OBS: the observation OBS.* equals the expectation, byte for byte;
+ #   build NAME LOG CMD...: run CMD, or print LOG and fail the gate;
+-#   manifest_rows KIND: validated manifest rows of one program kind, failing if there are none;
++#   manifest_rows KIND: validated rows, with the bir: inventory checked against the emitter;
+ #   cap_out: copy stdin to stdout, failing above 1 MiB: every command output a gate captures
+ #     into a variable goes through it, so no producer can grow the gate's shell (which may run
+ #     with no address-space cap, see SLICE0_GATE_MEM_GB) without bound.
+@@ -99,9 +99,27 @@ cap_out() {
+ 
+ test_manifest=${CONCRETE_TEST_MANIFEST:-tests/manifest.tsv}
+ manifest_rows() {
+-  local kind=$1 rows
++  local kind=$1 rows emitter_names name
+   rows=$(bounded 30 python3 -I "$root/scripts/checks/lib/test_manifest.py" rows --kind "$kind" "$test_manifest" | cap_out) ||
+     { echo "slice0: reading $test_manifest failed" >&2; exit 1; }
+   [ -n "$rows" ] || { echo "slice0: no $kind tests listed in $test_manifest" >&2; exit 1; }
++  if [ "$kind" = bir ]; then
++    printf '%s\n' "$rows" | awk -F '\t' '{sub(/^bir:/, "", $2); print $2}' |
++      LC_ALL=C sort >"$work/manifest-programs"
++    emitter_names=$("${emitter[@]}" list | cap_out) ||
++      { echo "slice0: listing emitter programs failed" >&2; exit 1; }
++    printf '%s\n' "$emitter_names" | LC_ALL=C sort >"$work/emitter-programs"
++    comm -13 "$work/manifest-programs" "$work/emitter-programs" >"$work/programs-without-rows"
++    comm -23 "$work/manifest-programs" "$work/emitter-programs" >"$work/rows-without-programs"
++    if [ -s "$work/programs-without-rows" ] || [ -s "$work/rows-without-programs" ]; then
++      while IFS= read -r name; do
++        echo "slice0: program without a manifest row: $name" >&2
++      done <"$work/programs-without-rows"
++      while IFS= read -r name; do
++        echo "slice0: manifest row names no program: $name" >&2
++      done <"$work/rows-without-programs"
++      exit 1
++    fi
++  fi
+   printf '%s\n' "$rows"
+ }
+diff --git a/scripts/checks/lib/test_manifest.py b/scripts/checks/lib/test_manifest.py
+index a56d72878..e675c4ede 100755
+--- a/scripts/checks/lib/test_manifest.py
++++ b/scripts/checks/lib/test_manifest.py
+@@ -73,8 +73,10 @@ def validate_source(path, line, program, seen_sources):
+             or pure.is_absolute() or "\\" in relative
+             or any(part in ("", ".", "..") for part in parts)):
+         fail(path, line, f"con: path {relative!r} must be a normalized tests/*.con path")
++    if len(parts) > 1 and parts[1] == "golden":
++        fail(path, line, f"con: path {relative!r} must not be under tests/golden/")
+     tests_dir = path.parent.resolve()
+-    source = path.parent.parent / pure
++    source = tests_dir.joinpath(*parts[1:])
+     try:
+         resolved = source.resolve(strict=True)
+     except OSError:
+@@ -93,6 +95,7 @@ def validate_source(path, line, program, seen_sources):
+ def parse(path, text):
+     rows = []
+     ids = {}
++    seen_bir = {}
+     seen_sources = {}
+     header_line = None
+     for line_number, line in enumerate(text.splitlines(), 1):
+@@ -113,13 +116,19 @@ def parse(path, text):
+             fail(path, line_number, f"duplicate id {ident!r} (first at line {ids[ident]})")
+         ids[ident] = line_number
+         if program.startswith("bir:"):
+-            if not ID_RE.fullmatch(program[4:]):
+-                fail(path, line_number, f"invalid BIR example name {program[4:]!r}")
++            name = program[4:]
++            if not ID_RE.fullmatch(name):
++                fail(path, line_number, f"invalid BIR example name {name!r}")
++            if name in seen_bir:
++                fail(path, line_number, f"duplicate bir program {name!r} (first at line {seen_bir[name]})")
++            seen_bir[name] = line_number
+         elif program.startswith("con:"):
+             validate_source(path, line_number, program, seen_sources)
+         else:
+             fail(path, line_number, f"invalid program {program!r}; expected bir: or con:")
+         validate_expect(path, line_number, expect)
++        if program.startswith("bir:") and expect.startswith("refuse "):
++            fail(path, line_number, f"bir: row {ident!r} cannot use refuse; expected exit or trap")
+         if not SLICE_RE.fullmatch(slice_name):
+             fail(path, line_number, f"invalid slice {slice_name!r}; expected [a-z0-9_]+")
+         rows.append(Row(ident, program, expect, slice_name))
+@@ -155,6 +164,8 @@ def self_test():
+             valid + "c\tbir:other\texit 256\tslice0\n",
+             valid + "c\tbir:other\ttrap foo\tslice0\n",
+             valid + "c\tbir:other\ttrap arithmeticOverflow site 0\n",
++            valid + "c\tbir:answer\texit 0\tslice0\n",
++            valid + "c\tbir:other\trefuse SYN-5\tslice0\n",
+             valid + "c\tcon:tests/slice0/missing.con\texit 0\tslice0\n",
+         ]
+         for text in bad:
+diff --git a/scripts/checks/test_manifest.sh b/scripts/checks/test_manifest.sh
+index e7f03edcc..cb0f2231a 100755
+--- a/scripts/checks/test_manifest.sh
++++ b/scripts/checks/test_manifest.sh
+@@ -1,9 +1,9 @@
+ #!/usr/bin/env bash
+ # The one test manifest is valid and owns every test file under tests/ (except its own manifest and
+ # tests/golden/). The shared reader checks every row; this check also compares the con: inventory in
+-# both directions. Controls plant a duplicate id, an unlisted source, a missing source, malformed
+-# expectations and a wrong column count in private copies, and require the matching diagnostic.
+-set -euo pipefail
++# both directions. Controls plant malformed rows and source-inventory defects in private copies and
++# require the matching diagnostic. Each mutation must change its copy before the control runs.
++set -uo pipefail
+ source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
+ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ cd "$ROOT_DIR"
+@@ -25,6 +25,11 @@ if out=$("${reader[@]}" validate "$MANIFEST" 2>&1); then
+ else
+   no "the manifest is invalid: $out"
+ fi
++if out=$("${reader[@]}" self-test 2>&1); then
++  ok "$out"
++else
++  no "the reader's self-test failed: $out"
++fi
+ 
+ if "${reader[@]}" rows "$MANIFEST" >"$TMP/rows"; then
+   awk -F '\t' '$2 ~ /^con:/ {sub(/^con:/, "", $2); print $2}' "$TMP/rows" |
+@@ -43,11 +48,17 @@ else
+   no "cannot enumerate the test inventory"
+ fi
+ 
+-control() { # control LABEL EXPECTED-MESSAGE MUTATION-FUNCTION
+-  local label=$1 expected=$2 mutation=$3 dir="$TMP/control-$1" rc=0
++control() { # control LABEL EXPECTED-MESSAGE MUTATION-FUNCTION CHANGED-PATH
++  local label=$1 expected=$2 mutation=$3 changed=$4 dir="$TMP/control-$1" rc=0
+   mkdir -p "$dir"
+-  cp -R "$TEST_DIR" "$dir/tests"
+-  "$mutation" "$dir"
++  if ! cp -R "$TEST_DIR" "$dir/tests"; then no "control: $label could not copy tests/"; return; fi
++  if ! "$mutation" "$dir"; then no "control: $label mutation failed"; return; fi
++  if [ ! -e "$dir/tests/$changed" ]; then
++    no "control: $label mutation produced no $changed"; return
++  fi
++  if cmp -s "$TEST_DIR/$changed" "$dir/tests/$changed" 2>/dev/null; then
++    no "control: $label mutation changed nothing"; return
++  fi
+   CONCRETE_TEST_MANIFEST="$dir/tests/manifest.tsv" CONCRETE_TEST_MANIFEST_SKIP_CONTROLS=1 \
+     bash "$ROOT_DIR/scripts/checks/test_manifest.sh" >"$dir/log" 2>&1 || rc=$?
+   if [ "$rc" -ne 0 ] && has_match -F "$expected" <"$dir/log"; then
+@@ -60,21 +71,26 @@ control() { # control LABEL EXPECTED-MESSAGE MUTATION-FUNCTION
+ duplicate_id() {
+   local row
+   row=$(awk -F '\t' '$1 == "answer" {print; exit}' "$1/tests/manifest.tsv")
++  [ -n "$row" ] || { echo "duplicate_id: answer row lookup was empty" >&2; return 1; }
+   printf '%s\n' "$row" >>"$1/tests/manifest.tsv"
+ }
+-unlisted_source() { mkdir -p "$1/tests/slice0"; : >"$1/tests/slice0/x.con"; }
++unlisted_source() { mkdir -p "$1/tests/slice0" && : >"$1/tests/slice0/x.con"; }
+ missing_source() { printf 'missing\tcon:tests/slice0/missing.con\texit 0\tslice0\n' >>"$1/tests/manifest.tsv"; }
+-exit_256() { printf 'bad_exit\tbir:answer\texit 256\tslice0\n' >>"$1/tests/manifest.tsv"; }
+-bad_trap() { printf 'bad_trap\tbir:answer\ttrap foo\tslice0\n' >>"$1/tests/manifest.tsv"; }
++exit_256() { printf 'bad_exit\tbir:other\texit 256\tslice0\n' >>"$1/tests/manifest.tsv"; }
++bad_trap() { printf 'bad_trap\tbir:other\ttrap foo\tslice0\n' >>"$1/tests/manifest.tsv"; }
+ wrong_columns() { printf 'bad_columns\tbir:answer\texit 0\n' >>"$1/tests/manifest.tsv"; }
++duplicate_bir() { printf 'duplicate_bir\tbir:answer\texit 0\tslice0\n' >>"$1/tests/manifest.tsv"; }
++refuse_bir() { printf 'refused_bir\tbir:other\trefuse SYN-5\tslice0\n' >>"$1/tests/manifest.tsv"; }
+ 
+ if [ "${CONCRETE_TEST_MANIFEST_SKIP_CONTROLS:-0}" != 1 ]; then
+-  control duplicate-id "duplicate id 'answer'" duplicate_id
+-  control unlisted-source "unlisted test file: tests/slice0/x.con" unlisted_source
+-  control missing-source "con: file 'tests/slice0/missing.con' does not exist" missing_source
+-  control exit-256 "exit status 256 is outside 0..255" exit_256
+-  control malformed-trap "invalid expect 'trap foo'" bad_trap
+-  control wrong-columns "needs 4 tab-separated columns" wrong_columns
++  control duplicate-id "duplicate id 'answer'" duplicate_id manifest.tsv
++  control unlisted-source "unlisted test file: tests/slice0/x.con" unlisted_source slice0/x.con
++  control missing-source "con: file 'tests/slice0/missing.con' does not exist" missing_source manifest.tsv
++  control exit-256 "exit status 256 is outside 0..255" exit_256 manifest.tsv
++  control malformed-trap "invalid expect 'trap foo'" bad_trap manifest.tsv
++  control wrong-columns "needs 4 tab-separated columns" wrong_columns manifest.tsv
++  control duplicate-bir "duplicate bir program 'answer'" duplicate_bir manifest.tsv
++  control refuse-bir "bir: row 'refused_bir' cannot use refuse" refuse_bir manifest.tsv
+ fi
+ 
+ echo "test_manifest: PASS=$PASS FAIL=$FAIL"

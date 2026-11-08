@@ -1,0 +1,257 @@
+kimi version 2.4.1
+• I need execute task. Should carefully inspect dirs. User asks writer Kimi in branch etc copy exact, no outside path. Should commit if changes, no push despite owner rule general push conflicting explicit no push. Should report sha file count. I need use tools. Likely multi-step todo appropriate. Should verify cwd branch, source listing and dest. Must not modify outside dest. Use Bash for cp etc because file copying many. Dedicated Glob for finding source patterns perhaps. Should obey regular top-level files incl hidden? every regular file top-level except *.sh helper may also copied = all regular files. cp -p byte exact. Subdirs review-export prop,n2,prop-agy,prop-kimi,prop-codex2,ro-* only selected. Should understand existing destination layout and source. I should list known dirs via Bash ls allowed. Could use Glob patterns files. Should not read files content since no edit. Should copy all top-level regular files using find? Instructions say find/recursive ls to locate files by name -> Glob, plain ls known dir okay. I can use Glob top-level patterns and selected subdir patterns. But cp byte exact preserving metadata with cp -p. Should remove stale files in dest? "Refresh snapshot" implies mirror source selection, removing files no longer in source within dest. Do not touch outside. Should inspect. Could rsync? Should have exact selection and preserve dirs names. Best build staging under dest maybe .staging then cp and replace? But all inside allowed. Avoid extra remaining. Could remove destination contents then copy selected. That's destructive but task refresh means okay, yet preserve only scope. Make sure no unrelated files in destination? likely previous snapshot. Could synchronize based on manifest. Since source may large but selected limited. Use bash python script to enumerate and copy with cp -p, remove stale files, dirs. But tool says cp -p explicitly. Use Bash commands with `cp -p`. I can use `find` for actual sync? Instructions say find to locate files by name -> Glob. Could Glob source top-level and nested. But shell loop with for top-level `for src in "$src"/* "$src"/.[!.]* "$src"/..?*; [[ -f ]]`. regular file symlink? `-f` follows symlinks, "regular file" often find -type f excludes symlinks. Should use `[[ -f && ! -L ]]`. Better use Python for selection? But cp -p required. Could use Bash `shopt -s nullglob dotglob; for src in "$source"/*; do if [[ -f "$src" && ! -L "$src" ]]; then cp -p -- "$src" "$dest/"; fi; done`. Top-level subdirs list from user explicit plus ro-*. For selected nested files use Bash globs. `for dir in prop n2 ... "$source"/ro-*; do ...` ensure directory. Copy `*.md` except exclusions top-level only within each subdir, REVIEW.diff DELTA.diff, branches/*.diff prop n2. Are nested *.md recursively? Wording "from each review-export subdirectory ... only the prompt/input files that are not part of repository export: *.md files except..." likely top-level .md plus diff, branches. Could use glob direct. Keep subdir names. Existing structure inspect. Should branch verify and git status to avoid others changes. User says in current branch. I should not include other changes in commit, only add path. I need not create worktree due explicit current task and scope. Should have no reviewers needed (mechanical copy no review? AGENTS says reviews everything but user explicit task no push coordinator, just commit. I should not launch reviewers). Owner says always tell reviewers long term but no reviewers invoked.
+
+  Should have exact UTC time via `date -u`. Commit. Count files after `git ls-files` under dest? File count likely snapshot count. Could report count of regular files in destination via `git ls-files ... | wc -l`, robust. Commit SHA via git rev-parse HEAD. If no changes report no commit and current SHA? Task says report commit SHA and file count. If changed expected.
+
+  I'll start progress sentence and todo.
+
+• I’ll verify the branch and snapshot layout, copy only the specified evidence with `cp -p`, then commit any changes without pushing.
+
+wip/gates-evidence-2026-11-08
+2e0b649afdbbbc5b607c3d4b39ddbac5121d069f
+total 6748
+drwx------ 19 unbalancedparen unbalancedparen    4096 Nov  8 15:38 .
+drwx------ 77 unbalancedparen unbalancedparen    4096 Nov  8 15:34 ..
+-rw-------  1 unbalancedparen unbalancedparen    2407 Nov  8 15:36 A2-goal.md
+-rw-------  1 unbalancedparen unbalancedparen   24477 Nov  8 15:01 A-agy-r1.log
+-rw-------  1 unbalancedparen unbalancedparen  153455 Nov  8 14:51 A-codex-r1.log
+-rw-------  1 unbalancedparen unbalancedparen    4220 Nov  8 14:51 A-codex-r1.md
+-rw-------  1 unbalancedparen unbalancedparen    5548 Nov  8 15:02 A-fix1.md
+-rw-------  1 unbalancedparen unbalancedparen 2145286 Nov  8 15:34 A-kimi-fix1.log
+-rw-------  1 unbalancedparen unbalancedparen  171791 Nov  8 14:49 A-kimi.log
+-rw-------  1 unbalancedparen unbalancedparen    2750 Nov  8 14:50 A-review-prompt.md
+-rw-------  1 unbalancedparen unbalancedparen    8869 Nov  8 14:15 A-spec-diff.md
+-rw-------  1 unbalancedparen unbalancedparen     505 Nov  8 15:38 backup-loop.log
+-rwx------  1 unbalancedparen unbalancedparen     925 Nov  8 15:38 backup-loop.sh
+-rw-------  1 unbalancedparen unbalancedparen   18681 Nov  8 14:29 B-agy-r1.log
+-rw-------  1 unbalancedparen unbalancedparen    1864 Nov  8 14:42 B-agy-r2.log
+-rw-------  1 unbalancedparen unbalancedparen    2124 Nov  8 14:42 B-codex-manual-prompt.md
+-rw-------  1 unbalancedparen unbalancedparen  168928 Nov  8 14:43 B-codex-manual-r1.log
+-rw-------  1 unbalancedparen unbalancedparen     656 Nov  8 14:43 B-codex-manual-r1.md
+-rw-------  1 unbalancedparen unbalancedparen     841 Nov  8 14:17 B-codex-r1.log
+-rw-------  1 unbalancedparen unbalancedparen     404 Nov  8 14:42 B-codex-r2.log
+-rw-------  1 unbalancedparen unbalancedparen   53451 Nov  8 14:16 B.diff
+-rw-------  1 unbalancedparen unbalancedparen    3757 Nov  8 14:29 B-fix1.md
+-rw-------  1 unbalancedparen unbalancedparen   69749 Nov  8 14:39 B-kimi-fix1.log
+-rw-------  1 unbalancedparen unbalancedparen  106758 Nov  8 14:14 B-kimi.log
+-rw-------  1 unbalancedparen unbalancedparen    7118 Nov  8 13:46 B-test-manifest.md
+-rw-------  1 unbalancedparen unbalancedparen    2451 Nov  8 15:36 C2-goal.md
+-rw-------  1 unbalancedparen unbalancedparen   16501 Nov  8 15:04 C-agy-r1.log
+-rw-------  1 unbalancedparen unbalancedparen  118244 Nov  8 14:58 C-codex-r1.log
+-rw-------  1 unbalancedparen unbalancedparen    2715 Nov  8 14:58 C-codex-r1.md
+-rw-------  1 unbalancedparen unbalancedparen    4531 Nov  8 15:05 C-fix1.md
+-rw-------  1 unbalancedparen unbalancedparen   78717 Nov  8 15:31 C-kimi-fix1.log
+-rw-------  1 unbalancedparen unbalancedparen  111327 Nov  8 14:53 C-kimi.log
+-rw-------  1 unbalancedparen unbalancedparen    2449 Nov  8 14:57 C-review-prompt.md
+-rw-------  1 unbalancedparen unbalancedparen    6475 Nov  8 14:15 C-scaling-determinism.md
+drwx------ 12 unbalancedparen unbalancedparen    4096 Nov  8 14:50 cx-A1
+drwx------ 12 unbalancedparen unbalancedparen    4096 Nov  8 14:42 cx-B2
+drwx------ 12 unbalancedparen unbalancedparen    4096 Nov  8 14:57 cx-C1
+drwx------ 12 unbalancedparen unbalancedparen    4096 Nov  8 14:57 cx-D1
+drwx------ 12 unbalancedparen unbalancedparen    4096 Nov  8 14:57 cx-perf
+-rw-------  1 unbalancedparen unbalancedparen      19 Nov  8 14:58 D-agy-r1.log
+-rw-------  1 unbalancedparen unbalancedparen  216921 Nov  8 14:58 D-codex-r1.log
+-rw-------  1 unbalancedparen unbalancedparen    4225 Nov  8 14:58 D-codex-r1.md
+-rw-------  1 unbalancedparen unbalancedparen    3947 Nov  8 15:05 D-fix1.md
+-rw-------  1 unbalancedparen unbalancedparen   82478 Nov  8 15:39 D-kimi-fix1.log
+-rw-------  1 unbalancedparen unbalancedparen  127136 Nov  8 14:55 D-kimi.log
+-rw-------  1 unbalancedparen unbalancedparen    2845 Nov  8 14:57 D-review-prompt.md
+-rw-------  1 unbalancedparen unbalancedparen    7933 Nov  8 14:15 D-trusted-base.md
+-rw-------  1 unbalancedparen unbalancedparen    4146 Nov  8 15:39 EVIDENCE-kimi-1.log
+-rw-------  1 unbalancedparen unbalancedparen    1388 Nov  8 15:38 EVIDENCE-sync-brief.md
+-rw-------  1 unbalancedparen unbalancedparen  203873 Nov  8 15:38 F-kimi.log
+-rw-------  1 unbalancedparen unbalancedparen    5394 Nov  8 14:59 F-lcb-numbering.md
+-rw-------  1 unbalancedparen unbalancedparen     708 Nov  8 15:14 LONGTERM.md
+drwx------ 12 unbalancedparen unbalancedparen    4096 Nov  8 15:28 n2
+-rw-------  1 unbalancedparen unbalancedparen       0 Nov  8 15:36 n2-agy.log
+-rw-------  1 unbalancedparen unbalancedparen  513244 Nov  8 15:36 n2-codex.log
+-rw-------  1 unbalancedparen unbalancedparen   22785 Nov  8 15:36 n2-codex.md
+-rw-------  1 unbalancedparen unbalancedparen   20726 Nov  8 15:38 n2-kimi.log
+-rwx------  1 unbalancedparen unbalancedparen    1061 Nov  8 15:28 n2-queue.sh
+-rw-------  1 unbalancedparen unbalancedparen     826 Nov  8 15:29 n2-specworker-views.md
+-rw-------  1 unbalancedparen unbalancedparen  160549 Nov  8 14:58 perf-codex.log
+-rw-------  1 unbalancedparen unbalancedparen    4526 Nov  8 14:58 perf-codex.md
+-rw-------  1 unbalancedparen unbalancedparen    1903 Nov  8 14:56 perf-confirm-prompt.md
+drwx------ 13 unbalancedparen unbalancedparen    4096 Nov  8 15:28 prop
+drwx------ 13 unbalancedparen unbalancedparen    4096 Nov  8 15:26 prop-agy
+-rw-------  1 unbalancedparen unbalancedparen   69930 Nov  8 15:34 prop-agy2.log
+-rw-------  1 unbalancedparen unbalancedparen   56384 Nov  8 15:17 prop-agy.log
+drwx------ 13 unbalancedparen unbalancedparen    4096 Nov  8 15:22 prop-codex2
+-rw-------  1 unbalancedparen unbalancedparen  671108 Nov  8 15:26 prop-codex2.log
+-rw-------  1 unbalancedparen unbalancedparen   32392 Nov  8 15:26 prop-codex2.md
+-rw-------  1 unbalancedparen unbalancedparen  893462 Nov  8 15:09 prop-codex.log
+-rw-------  1 unbalancedparen unbalancedparen   18973 Nov  8 15:09 prop-codex.md
+drwx------ 13 unbalancedparen unbalancedparen    4096 Nov  8 15:22 prop-kimi
+-rw-------  1 unbalancedparen unbalancedparen   52505 Nov  8 15:32 prop-kimi2.log
+-rw-------  1 unbalancedparen unbalancedparen   33759 Nov  8 15:22 prop-kimi-answer.md
+-rw-------  1 unbalancedparen unbalancedparen   93242 Nov  8 15:22 prop-kimi.log
+-rwx------  1 unbalancedparen unbalancedparen    1465 Nov  8 15:37 review-r2.sh
+drwx------ 12 unbalancedparen unbalancedparen    4096 Nov  8 14:50 ro-A1
+drwx------ 13 unbalancedparen unbalancedparen    4096 Nov  8 15:37 ro-A2
+drwx------ 12 unbalancedparen unbalancedparen    4096 Nov  8 14:17 ro-B
+drwx------ 12 unbalancedparen unbalancedparen    4096 Nov  8 14:42 ro-B2
+drwx------ 12 unbalancedparen unbalancedparen    4096 Nov  8 14:57 ro-C1
+drwx------ 13 unbalancedparen unbalancedparen    4096 Nov  8 15:38 ro-C2
+drwx------ 12 unbalancedparen unbalancedparen    4096 Nov  8 14:57 ro-D1
+-rw-------  1 unbalancedparen unbalancedparen     968 Nov  8 15:34 sync-evidence.sh
+total 6512
+drwx------ 12 unbalancedparen unbalancedparen    4096 Nov  8 15:35 .
+drwx------  3 unbalancedparen unbalancedparen    4096 Nov  8 15:34 ..
+-rw-------  1 unbalancedparen unbalancedparen   24477 Nov  8 15:01 A-agy-r1.log
+-rw-------  1 unbalancedparen unbalancedparen  153455 Nov  8 14:51 A-codex-r1.log
+-rw-------  1 unbalancedparen unbalancedparen    4220 Nov  8 14:51 A-codex-r1.md
+-rw-------  1 unbalancedparen unbalancedparen    5548 Nov  8 15:02 A-fix1.md
+-rw-------  1 unbalancedparen unbalancedparen 2145286 Nov  8 15:34 A-kimi-fix1.log
+-rw-------  1 unbalancedparen unbalancedparen  171791 Nov  8 14:49 A-kimi.log
+-rw-------  1 unbalancedparen unbalancedparen    2750 Nov  8 14:50 A-review-prompt.md
+-rw-------  1 unbalancedparen unbalancedparen    8869 Nov  8 14:15 A-spec-diff.md
+-rw-------  1 unbalancedparen unbalancedparen       0 Nov  8 15:35 backup-loop.log
+-rwx------  1 unbalancedparen unbalancedparen     985 Nov  8 15:35 backup-loop.sh
+-rw-------  1 unbalancedparen unbalancedparen   18681 Nov  8 14:29 B-agy-r1.log
+-rw-------  1 unbalancedparen unbalancedparen    1864 Nov  8 14:42 B-agy-r2.log
+-rw-------  1 unbalancedparen unbalancedparen    2124 Nov  8 14:42 B-codex-manual-prompt.md
+-rw-------  1 unbalancedparen unbalancedparen  168928 Nov  8 14:43 B-codex-manual-r1.log
+-rw-------  1 unbalancedparen unbalancedparen     656 Nov  8 14:43 B-codex-manual-r1.md
+-rw-------  1 unbalancedparen unbalancedparen     841 Nov  8 14:17 B-codex-r1.log
+-rw-------  1 unbalancedparen unbalancedparen     404 Nov  8 14:42 B-codex-r2.log
+-rw-------  1 unbalancedparen unbalancedparen   53451 Nov  8 14:16 B.diff
+-rw-------  1 unbalancedparen unbalancedparen    3757 Nov  8 14:29 B-fix1.md
+-rw-------  1 unbalancedparen unbalancedparen   69749 Nov  8 14:39 B-kimi-fix1.log
+-rw-------  1 unbalancedparen unbalancedparen  106758 Nov  8 14:14 B-kimi.log
+-rw-------  1 unbalancedparen unbalancedparen    7118 Nov  8 13:46 B-test-manifest.md
+-rw-------  1 unbalancedparen unbalancedparen   16501 Nov  8 15:04 C-agy-r1.log
+-rw-------  1 unbalancedparen unbalancedparen  118244 Nov  8 14:58 C-codex-r1.log
+-rw-------  1 unbalancedparen unbalancedparen    2715 Nov  8 14:58 C-codex-r1.md
+-rw-------  1 unbalancedparen unbalancedparen    4531 Nov  8 15:05 C-fix1.md
+-rw-------  1 unbalancedparen unbalancedparen   78717 Nov  8 15:31 C-kimi-fix1.log
+-rw-------  1 unbalancedparen unbalancedparen  111327 Nov  8 14:53 C-kimi.log
+-rw-------  1 unbalancedparen unbalancedparen    2449 Nov  8 14:57 C-review-prompt.md
+-rw-------  1 unbalancedparen unbalancedparen    6475 Nov  8 14:15 C-scaling-determinism.md
+-rw-------  1 unbalancedparen unbalancedparen      19 Nov  8 14:58 D-agy-r1.log
+-rw-------  1 unbalancedparen unbalancedparen  216921 Nov  8 14:58 D-codex-r1.log
+-rw-------  1 unbalancedparen unbalancedparen    4225 Nov  8 14:58 D-codex-r1.md
+-rw-------  1 unbalancedparen unbalancedparen    3947 Nov  8 15:05 D-fix1.md
+-rw-------  1 unbalancedparen unbalancedparen   71857 Nov  8 15:35 D-kimi-fix1.log
+-rw-------  1 unbalancedparen unbalancedparen  127136 Nov  8 14:55 D-kimi.log
+-rw-------  1 unbalancedparen unbalancedparen    2845 Nov  8 14:57 D-review-prompt.md
+-rw-------  1 unbalancedparen unbalancedparen    7933 Nov  8 14:15 D-trusted-base.md
+-rw-------  1 unbalancedparen unbalancedparen  192345 Nov  8 15:35 F-kimi.log
+-rw-------  1 unbalancedparen unbalancedparen    5394 Nov  8 14:59 F-lcb-numbering.md
+-rw-------  1 unbalancedparen unbalancedparen     708 Nov  8 15:14 LONGTERM.md
+drwx------  2 unbalancedparen unbalancedparen    4096 Nov  8 15:34 n2
+-rw-------  1 unbalancedparen unbalancedparen  467636 Nov  8 15:33 n2-codex.log
+-rw-------  1 unbalancedparen unbalancedparen    2004 Nov  8 15:35 n2-kimi.log
+-rwx------  1 unbalancedparen unbalancedparen    1061 Nov  8 15:28 n2-queue.sh
+-rw-------  1 unbalancedparen unbalancedparen     826 Nov  8 15:29 n2-specworker-views.md
+-rw-------  1 unbalancedparen unbalancedparen  160549 Nov  8 14:58 perf-codex.log
+-rw-------  1 unbalancedparen unbalancedparen    4526 Nov  8 14:58 perf-codex.md
+-rw-------  1 unbalancedparen unbalancedparen    1903 Nov  8 14:56 perf-confirm-prompt.md
+drwx------  2 unbalancedparen unbalancedparen    4096 Nov  8 15:34 prop
+drwx------  2 unbalancedparen unbalancedparen    4096 Nov  8 15:34 prop-agy
+-rw-------  1 unbalancedparen unbalancedparen   69930 Nov  8 15:34 prop-agy2.log
+-rw-------  1 unbalancedparen unbalancedparen   56384 Nov  8 15:17 prop-agy.log
+drwx------  2 unbalancedparen unbalancedparen    4096 Nov  8 15:34 prop-codex2
+-rw-------  1 unbalancedparen unbalancedparen  671108 Nov  8 15:26 prop-codex2.log
+-rw-------  1 unbalancedparen unbalancedparen   32392 Nov  8 15:26 prop-codex2.md
+-rw-------  1 unbalancedparen unbalancedparen  893462 Nov  8 15:09 prop-codex.log
+-rw-------  1 unbalancedparen unbalancedparen   18973 Nov  8 15:09 prop-codex.md
+drwx------  2 unbalancedparen unbalancedparen    4096 Nov  8 15:34 prop-kimi
+-rw-------  1 unbalancedparen unbalancedparen   52505 Nov  8 15:32 prop-kimi2.log
+-rw-------  1 unbalancedparen unbalancedparen   33759 Nov  8 15:22 prop-kimi-answer.md
+-rw-------  1 unbalancedparen unbalancedparen   93242 Nov  8 15:22 prop-kimi.log
+drwx------  2 unbalancedparen unbalancedparen    4096 Nov  8 15:34 ro-A1
+drwx------  2 unbalancedparen unbalancedparen    4096 Nov  8 15:34 ro-B
+drwx------  2 unbalancedparen unbalancedparen    4096 Nov  8 15:34 ro-B2
+drwx------  2 unbalancedparen unbalancedparen    4096 Nov  8 15:34 ro-C1
+drwx------  2 unbalancedparen unbalancedparen    4096 Nov  8 15:34 ro-D1
+-rwx------  1 unbalancedparen unbalancedparen     968 Nov  8 15:34 sync-evidence.sh
+• I see destination from previous copy, new files at source. Should sync script source `sync-evidence.sh` perhaps existing logic; reading allowed source file top-level. Could inspect to mirror expected. User says do not edit copied files but reading okay. Read source sync script and perhaps destination? Same. Should avoid copying helper script executing. Use Read known file. Also enumerate subdir selected file names with Glob to know. I can Glob `/home/.../gates-briefs` pattern? absolute path accepted. Parallel patterns perhaps top-level `*`, prop etc. Glob only files recursive with `*.md` would huge repository exports, avoid. `prop/*.md` etc direct. `ro-*/*.md`, `{prop,n2}/branches/*.diff`. Also `*/REVIEW.diff` could narrow. Should top-level all regular files listing from ls. I can copy via loops.
+
+  Potential source actively changing logs due other processes (EVIDENCE log, backup etc). Should copy snapshot point-in-time; verification after copy may detect changes. I should copy and immediately verify. Files may continue changing; User expects current at time. Byte-for-byte at copy. Could logs mutate after; verification mismatch not necessarily failure. Should best effort perhaps copy twice if source changes during copy, or capture. User explicitly cp -p, no staging? I can use cp -p all.
+
+  Should remove stale dest entries? Destination missing new source dirs and has top-level no A2 etc. Add. Also previous n2-codex.md absent because new. New C2 etc. Should stale? Most destination same. Could determine selection and remove extraneous destination files with script. E.g destination might no longer have files absent source? Here all source. Subdirs old. To mirror exact, easiest remove all files under dest then copy selection. But requirement cp -p, and do not touch outside. Safe. Yet "Do not edit ... any copied file" deleting/recopying fine? It changes metadata? cp -p preserves. Could remove dest entirely contents and repopulate, but would be massive delete/add in git only content same no diff. Fine. However deleting dest and copying from active source risks partial if crash. Better only copy selected over and remove files not selected. Since User owner crash commit frequently. I should commit soon.
+
+  Use Python to generate selected source list and destination expected then shell cp. But can use `rsync` perhaps not guaranteed. Should not handle. Read sync script may already be exact selection.Glob output lacks many ro md because excluded all? ro-A1 only repo docs + REVIEW diff. Fine. prop REVIEW/DELTA absent. Now copy. I can leverage source sync script but it doesn't include new ro-* dynamic nor diffs/branches and pushes prohibited. Must own.
+
+  Make sure no other modifications in dest status initially none. Branch correct.
+
+  Plan copy with Bash loop. Should stale cleanup exact. Could create expected list using Bash temp file inside dest? Don't want untracked temp. Use `/tmp` would touch outside forbidden. Could use shell variable string. I can copy selection then use `git status` but no removal. Existing destination files all correspond source selected from previous. Source additions only; no stale likely. But refresh requires removing removed source if any. Could compare `git ls-files` to expected via Python in-memory subprocess cp? Python script can select and remove stale, invoke cp -p. But instructions say dedicated tool fits before raw shell. Copy Bash is appropriate. I can run a Bash script with `set -euo pipefail`, `shopt -s nullglob dotglob`, define source/dest, `cp -p` top files, loop subdirs. For stale removal, use `git ls-files -z docs/proposals/gates-evidence` and check if corresponding source selected? Complex but doable function `is_selected(relative)`:
+  - top-level no slash: source regular file exists => keep
+  - first dir in allowed set and remainder no slash:
+    - .md not excluded and source file regular => keep
+    - REVIEW.diff/DELTA.diff source regular => keep
+  - prop/n2 branches/*.diff source regular => keep.
+  Then `git rm`? User said do not touch outside and only add later. `rm` inside dest for stale tracked and untracked. Should enumerate all files recursively to remove stale including untracked. Can't use find per tools; Glob destination `**/*` returns files all. But could Python `os.walk` as part sync. This isn't using find shell but tool instruction spirit use Glob to locate. I can first Glob dest all files, compare manually but many ~100. Could use `git ls-files` for tracked, allowed not "find". Untracked initially status none so all tracked. Then remove stale tracked via loop based on expected set built in associative array. I can build expected relative paths in Bash variable (newline file names unlikely but can handle). Filenames known no newline. Use associative array `expected=()`, add top files `rel=${src##*/}`, selected nested. Then copy. Then `while IFS= read -r rel; do [[ -v "expected[$rel]" ]] || rm -- "$dest/$rel"; done < <(git ls-files docs/proposals/gates-evidence | sed ...)` sed prohibited? "sed/awk in-place edit -> Edit", non-in-place allowed? But avoid. `git ls-files -z -- docs...` gives full path. Strip prefix via `${path#docs/proposals/gates-evidence/}`. No untracked initially. Remove empty dirs? Can leave empty dirs irrelevant git. I can `rmdir` known subdir if empty but not necessary. File count expected `${#expected[@]}`.
+
+  Filenames spaces possible use arrays and quoted. Associative array keys weird but okay. Top-level loop `for src in "$source"/*; [[ -f $src && ! -L $src ]]`. `dotglob` includes hidden, nullglob. `*.sh` included naturally. Exclude directories via -f. For nested `for dir in prop n2 prop-agy prop-kimi prop-codex2 "$source"/ro-*; do [[ -d ]]`. name. `mkdir -p "$dest/$name"` only when selected? If dir exists but no selected files, creates empty no issue. For md `for src in "$dir"/*.md; do ... base case exclusions`; cp -p. For diff direct `for base in REVIEW.diff DELTA.diff; [[ -f ]]`. For prop/n2 branches `mkdir -p` only if files. `for src in "$dir"/branches/*.diff`. Should only regular not symlink. Add expected keys relative.
+
+  Stale remove: all tracked files under dest, `git ls-files -z -- docs/proposals/gates-evidence`; path full relative to root. While process substitution return. Use `if [[ ! -v "expected[$rel]" ]]; then rm -- "$dest/$rel"; fi`. Bash `-v 'expected[$rel]'` quoting associative array with special keys; `[[ -z ${expected[$rel]+x} ]]` safer but if rel empty. `if [[ ! ${expected[$rel]+_} ]]; then`. `set -u` and assoc. Could use `[[ -v expected["$rel"] ]]`? Bash syntax. `if [[ ! -v "expected[$rel]" ]]; then`. Fine.
+
+  Should have no temp outside. Output count copied selected and removed. Use variable removed.
+
+  Then validate exact byte identity and selection. I can run Python via Bash to independently build selection and compare using `filecmp.cmp(shallow=False)` plus os.walk dest. But instructions say no raw shell when dedicated fits; no dedicated hash trees. Bash `sha256sum` possible. Python independent is robust. It would read file contents, allowed, no secrets? Source evidence may contain sensitive? User authorized copy all regular top-level, so okay. Dedicated tools would refuse .env but Bash never read secret files; source listing no .env. dotglob might include hidden .env if present? User says every regular file but instructions say never use shell to read secret files. There are none listing top-level `ls -la`, good. No hidden. I can copy. Validation Python os.walk and filecmp reads all authorized evidence. Fine. But no need Python if `diff -qr` per directories tricky. Could build expected and `cmp -s` each in same Bash copy loop, and check tracked count. Independent selection perhaps enough. Should verify no forbidden files and exact source-dest hashes. Use Python script no writing to compare. Since source logs may be changing, cmp might fail due active writes; need handle. I can do copy then immediate validation. If mismatch, recopy changed file and revalidate; perhaps ongoing logs means impossible stable. But can report snapshot at copy time, not require stable after. Yet task requires byte-for-byte at time. cp does. `cmp` soon likely most stable except EVIDENCE-kimi log and backup-loop perhaps my process isn't writing source? Other coordinator logs are active. They could change. Could copy and commit quickly. I may capture while source writes causing cp result not consistent? cp byte copy of file at moments. Good enough.
+
+  Potential commit huge ~2MB additions, okay. Now update todo.
+
+• The destination is an earlier snapshot. I’ll now synchronize the expanded selection, including the new `ro-*` exports, review diffs, and `prop`/`n2` branch diffs, and remove any stale snapshot entries.
+
+Selected files: 120
+Stale files removed: 0
+• Now validate. Now mark refresh done next in progress. Validation independently source select exact and dest all files no extras. I can use Python script with expected path set and compare bytes using hashlib or filecmp. Also modes preserved? Byte-for-byte only, cp -p. Count regular dest. Should have no files outside scope modified by my command (only cp inside). `git status --short` entire repo may have preexisting other changes; initial status only scoped so unknown elsewhere. User says do not touch outside. I can check status and perhaps lots others, don't attribute. I should ensure staged none before commit? I only commit path. Should `git diff --stat -- docs...` and `git diff --name-only` etc. Should inspect expected changed names maybe output huge. `git status --short -- docs` 120 many. Fine output truncated perhaps. Use `git diff --stat` and `git diff --name-only | wc -l`. Validation script:
+  ```
+  from pathlib import Path
+  import os, filecmp
+  src=...
+  dst=...
+  expected={}
+  for entry in src.iterdir():
+   if entry.is_file() and not entry.is_symlink(): expected[entry.name]=entry
+  ...
+  for d in ...
+   for p in d.glob("*.md") if file etc...
+  ...
+  actual = {str(p.relative_to(dst)):p for p in dst.rglob("*") if p.is_file() and not p.is_symlink()}
+  # rglob includes repo export? destination only selected.
+  missing, extra
+  mismatch = [rel for ... if read_bytes different] (large 2MB okay total 6MB).
+  if issues print and exit 1
+  print verified 120
+  ```
+  Path.is_file follows symlinks then check not symlink. Good. Source active could mismatch. Run. Also `git diff --check` may complain evidence diff whitespace errors (verbatim exports) not appropriate and could fail. No build needed mechanical evidence. Validate no content editing via byte identity. Then commit. Should have UTC time format `<UTC time>` user exact. `date -u +%Y-%m-%dT%H:%M:%SZ`. Commit message `gates evidence: verbatim snapshot (2026-11-08T15:...Z)`. Stage `git add docs/proposals/gates-evidence` exact requested not `git add -A` but removal tracked would be staged by git add? Modern git add path stages deletion yes. Use exact.
+
+  Before commit validation `git status --short` to ensure outside? Should not modify. Could `git diff --name-only` after stage. Commit only path. No push. Should file count perhaps 120. Commit SHA.
+
+  Run validation and diff summary parallel? validation and `git diff --stat` independent. Could do in same Bash sequential after validation, no need. Update todo.
+
+• The refreshed selection contains 120 files and no stale tracked entries. I’ll verify the destination has exactly that selection and that every copied file matches its source byte-for-byte before committing.
+
+Missing: ['A2-ci2-findings.md', 'D2-goal.md', 'ro-D2/DELTA.diff', 'ro-D2/FIX_BRIEF.md', 'ro-D2/PRIOR_AGY_FINDINGS.md', 'ro-D2/PRIOR_CODEX_FINDINGS.md', 'ro-D2/PROMPT.md', 'ro-D2/REVIEW.diff']
+Extra: []
+Byte mismatches: ['EVIDENCE-kimi-1.log', 'F-kimi.log', 'n2-agy.log', 'n2-kimi.log']
+ docs/proposals/gates-evidence/D-kimi-fix1.log  | 116 ++++-
+ docs/proposals/gates-evidence/F-kimi.log       | 128 +++++-
+ docs/proposals/gates-evidence/backup-loop.log  |   5 +
+ docs/proposals/gates-evidence/backup-loop.sh   |   3 +-
+ docs/proposals/gates-evidence/n2-codex.log     | 614 +++++++++++++++++++++++++
+ docs/proposals/gates-evidence/n2-kimi.log      |  79 +++-
+ docs/proposals/gates-evidence/sync-evidence.sh |   0
+ 7 files changed, 940 insertions(+), 5 deletions(-)
+Changed snapshot paths: 
+7
+• Interesting source changed during seconds, new files and dirs. Validation expected new source, actual old; git diff only unstaged vs index showing 7? Wait destination copied new files A2-goal etc but git diff default should show untracked not in diff. New source after copy includes D2. I need refresh again. Active source changes. Should coordinate perhaps files appearing. Should re-run copy selection, validate immediately. Could make robust retry loop in one Bash: copy, validate quick, if mismatch recopy changed and add new. Should not endless. User wants snapshot at UTC now. Source actively being written by other agents. I can get a consistent instantaneous snapshot impossible for changing files unless copy and validate then commit immediately. I can recopy all then validate; new changes ongoing. Could ignore mismatches after copy as source post-copy, but verification desired. Should best effort and commit current. Could loop until validation pass perhaps logs constantly changing n2-agy zero could become nonzero. My own EVIDENCE log perhaps coordinator recording? I should check source processes? Not needed. Could use `cp -p` then Python compare; 0.05s; source changes every seconds, likely pass sometimes. New files can appear. Loop max say 5. Should have code combine sync and validate. Previous copy command long. Could reuse Bash history? fresh shell no. I can define function sync and validation Python inside loop. No files outside. But repetitive command. I can create temporary script inside dest? That would become extra, bad. Use Bash command. I need not mark validation done. Note found source still changing; refresh again. Should not ask. Use `for attempt in 1 2 3 4 5; do` synchronize all and run Python validation; if pass break; sleep 1. Could Python return 1 and set -e off around. Simpler separate copy command again then validation; if mismatches only logs perhaps copy them individually. But new D2 etc. I should rerun same full copy command. Could leverage `sync-evidence.sh`? no.
+
+  Alternative Python calls cp -p for expected selection each attempt and compare using bytes. But requirement cp -p yes subprocess.run(["cp","-p",...]). This allows compact synchronization and validation with dynamic expected and stale. Yet top-level regular every file and preserve mode timestamps. Use Python os, subprocess. It would also delete stale. Could implement retries. But instructions "Use dedicated tools before raw shell" copy is Bash genuine. Python inside Bash okay for multi-step. No writing script file. `subprocess.run(['cp','-p','--',str(src),str(target)],check=True)`. It reads all files for compare. Destination outside never. Build expected each attempt, remove actual extra, copy all. On pass print. If failure due source changed print attempt. After 5 perhaps proceed with latest but validation cannot claim. I need commit even if logs keep changing. Could freeze by copying source files using `cp -p` then no requirement destination match future source. Validation can verify hashes captured before copy? Better to prove at copy time via before/after source metadata? For byte identity, compare immediately. Active logs expected. A pass possible.
+
+  Should avoid destination file count while sync changes. All good.
+
+  Could simply re-run original Bash then original Python perhaps likely pass except ongoing logs. I'll do loop robust. Should handle if source directory disappears? likely not. `Path.rglob` actual only dest. File names with hidden top-level included `iterdir`. Copy top-level .sh yes. Exclusions correct. Destination symlinks? None. Extras symlink perhaps actual ignores but task regular file only; I should detect any path file incl symlink and remove. Existing none. Use os.walk perhaps. No need.
+
+  Retries only on validation failure, copy all 6MB each cheap. Sleep 0.2 perhaps Python time no sleep. `time.sleep(0.2)`.
+
+  At each attempt expected built once, then copy. Source can add file not in expected; validation actual matches expected but source now has more not detected. Build expected again for validation selection? Should recompute selection after copy to detect additions. Could function select returns dict. After copy, `expected_after=select()` and compare actual to after. This catches new files. For source removed between, destination extra. Fine. Byte compare with expected_after. If source file removed after select before read could exception; catch OSError and retry.
+
+  At pass, immediately commit perhaps new changes after pass okay. I need output SHA and file count. Stage and commit right away. Could combine sync+validation and git add+commit in one Bash to reduce window. But todo says commit pending, can mark validation done only after command returns; if command includes commit then todo statuses weird. Better separate but changes okay. User doesn't require source stable at commit exact time. Validate then commit.
+
+  I'll run Python retry.
+
+• The source is still being updated: new `D2` evidence appeared and four logs changed during verification. I’ll repeat the copy-and-check cycle until one complete snapshot verifies cleanly.

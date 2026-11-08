@@ -1,0 +1,1077 @@
+diff --git a/.github/workflows/lean_action_ci.yml b/.github/workflows/lean_action_ci.yml
+index b4882074..13b34c86 100644
+--- a/.github/workflows/lean_action_ci.yml
++++ b/.github/workflows/lean_action_ci.yml
+@@ -345,7 +345,7 @@ jobs:
+       - name: "Fetch the published oracle, verify it, run smoke.con through it (exit 42)"
+         run: bash scripts/oracle/ci_check.sh
+ 
+-  # THE COMPILER'S GATES (Concrete/README.md gates 4, 6, 6a, 8, 9, 10, 11 and 12; slice 0, provisional),
++  # THE COMPILER'S GATES (Concrete/README.md gates 4, 5, 6, 6a, 8, 9, 10, 11 and 12; slice 0, provisional),
+   # scripts/checks/compiler/: not root checks (run.sh runs only scripts/checks/*.sh), because they need
+   # the compiler's devshell, a native macOS runner and minutes each. Every bir: row in the test manifest
+   # through the LLVM path and the LCB path, each executable's observation compared with the manifest
+@@ -381,6 +381,32 @@ jobs:
+       - name: Manifest tests (LLVM and LCB, native)
+         run: nix develop --command bash scripts/checks/compiler/tests.sh
+ 
++  spec-differential:
++    name: Spec differential (${{ matrix.arch }})
++    needs: landing-record
++    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
++    defaults:
++      run:
++        shell: bash
++    strategy:
++      fail-fast: false
++      matrix:
++        include:
++          - arch: x86-64
++            runner: ubuntu-latest
++          - arch: aarch64-macos
++            runner: macos-15
++    runs-on: ${{ matrix.runner }}
++    timeout-minutes: 45
++    permissions:
++      contents: read
++    steps:
++      - uses: actions/checkout@v4
++      - name: Install Nix
++        uses: cachix/install-nix-action@v31
++      - name: Seeded spec and BIR differentials (gates 5 and 6)
++        run: nix develop --command bash scripts/checks/compiler/spec_diff.sh
++
+   artifacts:
+     name: Slice 0 artifacts (${{ matrix.arch }})
+     needs: landing-record
+diff --git a/Concrete.lean b/Concrete.lean
+index 4e4ace57..8ba032b1 100644
+--- a/Concrete.lean
++++ b/Concrete.lean
+@@ -6,3 +6,6 @@ import Concrete.Backend.Runtime
+ import Concrete.Backend.LLVM
+ import Concrete.Backend.LCB
+ import Concrete.Premises
++import Concrete.SpecDiffRandom
++import Concrete.SpecDiffSpecGen
++import Concrete.SpecDiffBirGen
+diff --git a/Concrete/README.md b/Concrete/README.md
+index 7031a2e2..0b6a03f4 100644
+--- a/Concrete/README.md
++++ b/Concrete/README.md
+@@ -186,6 +186,9 @@ Concrete/
+     Runtime.lean       the fixed entry that decodes the result word into exit status / trap line, per backend
+   Stages.lean          typed stage contracts; `compile` is the fold of the stage list
+   Premises.lean        THE one file of premises, plus the execution-trust inventory
++  SpecDiffRandom.lean  pure splitmix64 for the seeded differential
++  SpecDiffSpecGen.lean the spec leg's weighted slice-0 Core productions
++  SpecDiffBirGen.lean  the interim BIR leg's weighted productions
+   Theorem.lean         compile_correct, the non-vacuity witnesses, answer_correct
+   Facts.lean           per-function facts: judgments, derive, derive_sound, rendering (text/JSON)
+   Cert.lean            per-compilation certificate emitter
+@@ -574,11 +577,11 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
+    Accepted examples `return 125;` and `return 134;` are in the corpus and must classify as exits. Slice 0 can't produce a real startup refusal, because it has no grants. The refusal and trap classifications are also exercised by comparator self-tests: stub images, and the trap via gate 6.
+ 
+    **Refused examples have their own leg.** The Lean `check` result, the compiler's refusal (with its rule) and the refusal certificate must agree with the row's `refuse RULE-ID` expectation. No executable exists for a refused example. A separate supported-subset coverage report lists every grammar production and Core form that the corpus exercises. A reject-all compiler fails, because every accepted example must exit with its status.
+-5. **Differential at the source:** generated accepted programs, with replayable seeds; native exit = Lean `run`.
+-6. **Differential through the token-free lowering, both backends.** This covers overflow. Generated **well-scoped, unchecked** slice-0 programs over **arbitrary** `u8` operands, including `200 + 56`, take `lower q ∅ → memory → ssa`, so they have no tokens and no checker. Their Core `run` is compared with the LLVM path and the LCB path. Overflow must give exit 134 and the right site's trap line on fd 2, for both backends. This exercises token-aware lowering, Memory CFG and SSA, not only the backends.
+-   A second leg compares generated BIR directly with both backends, to cover BIR shapes that lowering does not produce.
++5. **Differential at the source** (implemented in `scripts/checks/compiler/spec_diff.sh` and `spec_diff.lean`): a pure splitmix64 generator makes slice-0 `Slice0.Program` candidates, filtered by the spec's `check`; every accepted program is in the fragment by construction and its oracle is `run (toCore q)`. The seed comes from `SPEC_DIFF_SEED` or the commit SHA, and seed plus candidate index determines the program. `SPEC_DIFF_REPLAY=seed:index` replays a BIR candidate; the driver also exposes `gen-spec`, `gen-bir` and `replay`. The one weighted production table is `Concrete/SpecDiffSpecGen.lean`: every slice brief must extend it with its constructs.
++   `compileCore : ConcreteSpec.Program → Except String Concrete.BIR.Program`, in `spec_diff.lean`, is **the** integration point for Core→BIR lowering. It currently returns `no Core→BIR lowering yet (slice 1)`. The gate checks generation, acceptance, oracle exits and construct coverage, and loudly reports `spec leg: 0 programs compiled`; it never claims a spec/native comparison passed. The branch that adds lowering (slice-1 work, no owner yet) must fill this hook and make compiled programs required. The driver then emits the same native artifacts, with status, empty stdout and stderr derived from the SPEC outcome (a trap uses the runtime line for the lowered site), so no new comparison path is needed.
++6. **Differential through the token-free lowering, both backends.** The interim implemented leg generates BIR directly in `Concrete/SpecDiffBirGen.lean` (one weighted production table every slice brief must extend), over checked operations and trap branches, wrapped results observed through `trunc`, widening, multiple sites and multi-block chains at 8/16-bit types. Every candidate is filtered by `wf` and `LCB.emit`; rejects are counted and accepted yield must be at least 50%. BIR `run` supplies the expectation, and LLVM-native, LCB-native and LCB's in-process `evalBody` observation must match it exactly through `slice0_native.sh` and the one `observe`/`judge` machinery in `slice0_common.sh`. Zero exits or zero traps fails the vacuity guard; every production must occur. When lowering lands, generated **well-scoped, unchecked** slice-0 programs over **arbitrary** `u8` operands, including `200 + 56`, additionally take `lower q ∅ → memory → ssa`, so they have no tokens and no checker. Their Core `run` is compared with both native paths, including exit 134 and the right site's trap line on overflow.
+ 
+-   An in-process leg also compares `BIR.behaviour b` with LCB's own evaluator on the emitted body, an executable cross-check of `emit_correct`.
++   `SPEC_DIFF_SECS` (default 600) bounds the shared build, generation, controls and comparisons; `SPEC_DIFF_N` (default 300) caps candidates per leg, and too few judged programs is INCOMPLETE, never a pass. Outcome and construct counts are printed. A mismatch prints the seed, index, Lean term, exact `bir:` manifest row and `Concrete.BIR.Examples` entry to save as a regression. Controls require LLVM overflow removal and LCB exit-off-by-one to fail for those planted reasons (the latter in both native and evaluator legs), require a planted spec exit+1 expectation to be rejected against the spec-derived outcome, and check same-seed byte determinism and different-seed variation. Mutation flags are unavailable on normal driver commands and require the explicit planted-control command.
+ 6a. **AArch64:** a GitHub-hosted AArch64 macOS job (`macos-15`) builds the LCB output for `aarch64-macos`, runs gates 4 and 6 there natively, and compares against Lean. LLVM-native also runs there, as a third cross-check. Gates 4 and 6 for x86-64 run on concrete-ci-2.
+ 7. **Certificates:** the kernel checks every acceptance and refusal certificate, with measured budgets.
+ 8. **Reproducibility** (implemented, `scripts/checks/compiler/slice0_repro.sh`): two independent builds give byte-identical outputs at every stage, on each target, and two independent Linux runners give identical manifests. See [Reproducible builds](#reproducible-builds-owner-2026-11-07).
+@@ -587,7 +590,7 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
+ 11. **Binary size** (owner, 2026-11-07; implemented, same script): the size of each example's executable (bytes and text size, pinned `llvm-size`), per backend and target, is recorded per run in `sizes.tsv`, uploaded with the job. Report-only: it never fails a run. **Compile time** (owner, 2026-11-08; same script, report-only): each example's emit step (the Lean emitter, Lean start-up included) and native step (clang and LCB's command line) in wall-clock milliseconds, next to its budget (the step's time bound), in `compile_times.tsv`.
+ 12. **Stack bound** (owner, 2026-11-07; implemented in the same script and `lib/stack_bound.py`; the `aarch64-macos` run check with LLDB, 2026-11-08): a stack-bound fact for each example, derived from the final artifact (the linked executable, not the IR) for both backends, and checked against a run. The analysis follows every path of the Concrete-owned code, instruction by instruction from an explicit set of modelled instructions, (`main`, `concrete_rt_write_all`, `concrete_body`) over the disassembly's control-flow graph, tracking the stack and frame pointers' depth below `main`'s entry and every byte addressed relative to them (so the red zone), refusing an access deeper than the target's red zone below the stack pointer (128 bytes on x86-64 System V and on Apple arm64, none under AAPCS64 on Linux: deeper bytes may be overwritten by a signal handler), and fails closed on anything it does not model (an instruction outside the set, another stack-pointer write, frame- or link-register writeback, an indirect branch or call, a stack pointer copied out, an indexed stack address, a stack read of bytes the function has not itself written on every path since its last call (so no stale saved frame pointer is ever loaded), a saved slot read other than by the modelled restore, two depths meeting, recursion, a call to a function neither owned nor a PLT/stub). The external calls (`write`, `_exit`, `abort`) are listed with the depth at their entry; their own use, and that `_exit` and `abort` do not return, are the libc premise. On x86-64 Linux the run check single-steps the owned code under the pinned gdb and requires the measured depth to be within the bound, for a complete run only (stopped first at `main`, back at each external call's return address, no signal, the expected exit status). The measured depth is the lowest of the stack pointer and every stack byte a stepped instruction addresses (`lib/stack_access.py` evaluates each memory operand), so a red-zone access is counted, and one deeper than the red zone is an error. A control links a `main` that stores at the red zone's edge without moving the stack pointer and requires bound 128 and measured 128 (on AArch64 it first allocates and frees a 144-byte frame with a pre-indexed store, judged against the new stack pointer, so 144); with a 120-byte red zone the same run gives no measurement. On Mach-O each stub entry's imported symbol comes from the indirect symbol table (`llvm-objdump --macho --indirect-symbols`), since the disassembly names only the `__stubs` section. On `aarch64-macos` the run check is the same, under Apple's LLDB (`/usr/bin/lldb`, `lib/stack_measure_lldb.py`; an external call's return address is the link register); LLDB is not pinned (Apple's signed debugserver is the only one allowed to attach), so its version is printed in the gate log. `stack.tsv` records bound, measurement and externals.
+ 
+-With the front end (owner, 2026-11-07): gate 5's random-program fuzzer compares the native executables with the Lean evaluator, and a JSON schema generated from the Lean types of the `facts` output has goldens. Each gate joins `required-checks.txt` when the compiler lands.
++With the front end (owner, 2026-11-07), gate 5's `compileCore` hook makes native comparison against the Lean evaluator non-vacuous and required. A JSON schema generated from the Lean types of the `facts` output has goldens. Each remaining gate joins `required-checks.txt` when its compiler stage lands.
+ 
+ **Negative controls**, each a mutation the matching gate must refuse:
+ - a deleted pass theorem;
+diff --git a/Concrete/SpecDiffBirGen.lean b/Concrete/SpecDiffBirGen.lean
+new file mode 100644
+index 00000000..2efffcd0
+--- /dev/null
++++ b/Concrete/SpecDiffBirGen.lean
+@@ -0,0 +1,114 @@
++import Concrete.Backend.LCB
++import Concrete.SpecDiffRandom
++
++/-!
++Seeded BIR generation over the shapes accepted by the current LCB adapter. Each slice brief must
++extend `weightedProductions` here with its new constructs; this is the one production table for
++this leg. Candidates are checked by `BIR.wf` and `LCB.emit` by the driver, never assumed accepted.
++-/
++
++namespace ConcreteSpecDiff.BirGen
++open Concrete.BIR Concrete.Backend
++open ConcreteSpec (IntTy)
++open ConcreteSpecDiff.Random
++
++inductive Production where
++  | checked | wrapped | widening | twoSites | chain
++  deriving DecidableEq, Repr
++
++def Production.name : Production → String
++  | .checked => "checked"
++  | .wrapped => "wrapped"
++  | .widening => "widening"
++  | .twoSites => "two_sites"
++  | .chain => "chain"
++
++def weightedProductions : List (Nat × Production) :=
++  [(4, .checked), (4, .wrapped), (2, .widening), (2, .twoSites), (3, .chain)]
++
++structure Generated where
++  program : Program
++  production : Production
++  constructs : List String
++
++def tyName : IntTy → String
++  | .i8 => "i8" | .i16 => "i16" | .i32 => "i32" | .i64 => "i64"
++  | .u8 => "u8" | .u16 => "u16" | .u32 => "u32" | .u64 => "u64"
++
++def opName : BinOp → String
++  | .add => "add" | .sub => "sub" | .mul => "mul"
++
++def randomTy (r : Rng) : IntTy × Rng :=
++  let (n, r') := below 4 r
++  ([IntTy.u8, .i8, .u16, .i16].getD n .u8, r')
++
++def randomOp (r : Rng) : BinOp × Rng :=
++  let (n, r') := below 3 r
++  ([BinOp.add, .sub, .mul].getD n .add, r')
++
++def randomValue (t : IntTy) (r : Rng) : Int × Rng :=
++  let (n, r') := below (2 ^ t.bits) r
++  (t.min + Int.ofNat n, r')
++
++def binaryOperands (t : IntTy) (r : Rng) : (BinOp × Int × Int) × Rng :=
++  let (op, r₁) := randomOp r
++  let (a, r₂) := randomValue t r₁
++  let (b, r₃) := randomValue t r₂
++  ((op, a, b), r₃)
++
++def twoSiteTable : SiteTable :=
++  [Examples.plusSite, ⟨.arithmeticOverflow, ⟨7⟩, ⟨80, 88⟩, ⟨"generated/chain.con", 4, 9⟩⟩]
++
++/-- Checked arithmetic followed by truncation, an unconditional edge, and a second checked site. -/
++def chained (op : BinOp) (t : IntTy) (a b : Int) (c : Int) : Program :=
++  { blocks := [
++      { params := [], insts := [.binOvf op t 0 1 (.imm t a) (.imm t b)],
++        term := .condbr 1 1 [] 2 [.reg 0] },
++      { params := [], insts := [], term := .trap 0 },
++      { params := [(2, .int t)], insts := [.trunc t .u8 3 (.reg 2)], term := .br 3 [.reg 3] },
++      { params := [(4, .int .u8)],
++        insts := [.binOvf .add .u8 5 6 (.reg 4) (.imm .u8 c)],
++        term := .condbr 6 4 [] 5 [.reg 5] },
++      { params := [], insts := [], term := .trap 1 },
++      { params := [(7, .int .u8)], insts := [], term := .ret (.reg 7) }],
++    sites := twoSiteTable }
++
++/-- One candidate, with no hidden retry: `seed` and `index` alone determine it. -/
++def generate (seed : String) (index : Nat) : Generated :=
++  let r := forSeed seed index
++  let (choice, r₁) := pick weightedProductions r
++  let production := choice.getD .checked
++  match production with
++  | .checked =>
++    let (t, r₂) := randomTy r₁
++    let ((op, a, b), _) := binaryOperands t r₂
++    ⟨Examples.checkedOp op t a b, production,
++      [Production.name production, "binOvf", "condbr", "trap", opName op, tyName t]⟩
++  | .wrapped =>
++    let (t, r₂) := randomTy r₁
++    let ((op, a, b), _) := binaryOperands t r₂
++    ⟨Examples.wrapped op t a b, production,
++      [Production.name production, "binOvf", "trunc", "condbr", opName op, tyName t]⟩
++  | .widening =>
++    let (signed, r₂) := below 2 r₁
++    let fr : IntTy := if signed = 0 then .u8 else .i8
++    let to : IntTy := if signed = 0 then .u16 else .i16
++    let (a, r₃) := randomValue fr r₂
++    let ((op, _, b), _) := binaryOperands to r₃
++    ⟨Examples.observe [.trunc fr to 0 (.imm fr a)] op to (.reg 0) (.imm to b), production,
++      [Production.name production, "binOvf", "trunc", "condbr", opName op, tyName to]⟩
++  | .twoSites =>
++    let (a, r₂) := randomValue .u8 r₁
++    let (b, r₃) := randomValue .u8 r₂
++    let (c, _) := randomValue .u8 r₃
++    ⟨Examples.twoSites a b c, production,
++      [Production.name production, "binOvf", "condbr", "trap", "multi_block", "multi_site"]⟩
++  | .chain =>
++    let (t, r₂) := randomTy r₁
++    let ((op, a, b), r₃) := binaryOperands t r₂
++    let (c, _) := randomValue .u8 r₃
++    ⟨chained op t a b c, production,
++      [Production.name production, "binOvf", "trunc", "br", "condbr", "trap", "multi_block",
++       "multi_site", opName op, tyName t]⟩
++
++end ConcreteSpecDiff.BirGen
+diff --git a/Concrete/SpecDiffRandom.lean b/Concrete/SpecDiffRandom.lean
+new file mode 100644
+index 00000000..e26b5b81
+--- /dev/null
++++ b/Concrete/SpecDiffRandom.lean
+@@ -0,0 +1,44 @@
++/-!
++Pure deterministic randomness for the spec/compiler differential. No IO entropy is used:
++`seed` and the candidate index determine the initial splitmix64 state.
++-/
++
++namespace ConcreteSpecDiff.Random
++
++structure Rng where
++  state : UInt64
++  deriving DecidableEq, Repr
++
++def mix64 (x : UInt64) : UInt64 :=
++  let z := (x + 0x9E3779B97F4A7C15)
++  let z := UInt64.xor z (UInt64.shiftRight z 30) * 0xBF58476D1CE4E5B9
++  let z := UInt64.xor z (UInt64.shiftRight z 27) * 0x94D049BB133111EB
++  UInt64.xor z (UInt64.shiftRight z 31)
++
++def seedHash (seed : String) : UInt64 :=
++  seed.toUTF8.foldl (fun h b => UInt64.xor h (UInt64.ofNat b.toNat) * 0x100000001B3)
++    0xCBF29CE484222325
++
++def forSeed (seed : String) (index : Nat) : Rng :=
++  ⟨mix64 (UInt64.xor (seedHash seed) (mix64 (UInt64.ofNat index)))⟩
++
++def next (r : Rng) : UInt64 × Rng :=
++  let state := r.state + 0x9E3779B97F4A7C15
++  (mix64 state, ⟨state⟩)
++
++def below (n : Nat) (r : Rng) : Nat × Rng :=
++  let (x, r') := next r
++  (x.toNat % n, r')
++
++/-- Choose from a non-empty weighted production table. Every slice brief extends the relevant
++leg's table in its one generator file when it adds constructs to the accepted fragment. -/
++def pick {α : Type} (xs : List (Nat × α)) (r : Rng) : Option α × Rng :=
++  let total := (xs.map Prod.fst).sum
++  if total = 0 then (none, r) else
++    let (ticket, r') := below total r
++    let rec go (left : Nat) : List (Nat × α) → Option α
++      | [] => none
++      | (w, x) :: rest => if left < w then some x else go (left - w) rest
++    (go ticket xs, r')
++
++end ConcreteSpecDiff.Random
+diff --git a/Concrete/SpecDiffSpecGen.lean b/Concrete/SpecDiffSpecGen.lean
+new file mode 100644
+index 00000000..bdad0976
+--- /dev/null
++++ b/Concrete/SpecDiffSpecGen.lean
+@@ -0,0 +1,77 @@
++import ConcreteSpec.Spec.Slice0
++import Concrete.SpecDiffRandom
++
++/-!
++Seeded slice-0 Core generation for the spec leg. Each slice brief must extend
++`weightedProductions` here with its newly accepted constructs; this is the one production table
++for this leg. Generated candidates remain `Slice0.Program`s whether or not `check` accepts them.
++-/
++
++namespace ConcreteSpecDiff.SpecGen
++open ConcreteSpec ConcreteSpec.Slice0
++open ConcreteSpecDiff.Random
++
++inductive Production where
++  | letLiteral | letCopy | addLiteral | addVariable | returnLiteral | returnVariable
++  deriving DecidableEq, Repr
++
++def Production.name : Production → String
++  | .letLiteral => "let_literal"
++  | .letCopy => "let_copy"
++  | .addLiteral => "add_literal"
++  | .addVariable => "add_variable"
++  | .returnLiteral => "return_literal"
++  | .returnVariable => "return_variable"
++
++def weightedProductions : List (Nat × Production) :=
++  [(4, .letLiteral), (2, .letCopy), (4, .addLiteral), (3, .addVariable),
++   (1, .returnLiteral), (5, .returnVariable)]
++
++structure Generated where
++  program : Slice0.Program
++  constructs : List String
++
++def literal (r : Rng) : Slice0.Atom × Rng :=
++  let (n, r') := below 32 r
++  (.lit n, r')
++
++def statementProductions : List (Nat × Production) :=
++  weightedProductions.filter fun (_, p) => p != .returnLiteral && p != .returnVariable
++
++def go (fuel : Nat) (previous : Var) (vars : List Var) (r : Rng) :
++    List Slice0.Stmt × List Production × Rng :=
++  match fuel with
++  | 0 => ([], [], r)
++  | fuel + 1 =>
++    let (choice, r₁) := pick statementProductions r
++    let production := choice.getD .addLiteral
++    let (rhs, r₂) :=
++      match production with
++      | .letCopy => (Slice0.Expr.atom (.var previous), r₁)
++      | .addVariable =>
++        let (which, r') := below vars.length r₁
++        (.add (.var previous) (.var (vars.getD which previous)), r')
++      | _ =>
++        let (a, r') := literal r₁
++        (.add (.var previous) a, r')
++    let x : Var := ⟨"v", vars.length⟩
++    let (rest, productions, r₃) := go fuel x (vars ++ [x]) r₂
++    (⟨x, rhs⟩ :: rest, production :: productions, r₃)
++
++/-- One candidate, with no hidden retry: `seed` and `index` alone determine it. -/
++def generate (seed : String) (index : Nat) : Generated :=
++  let r := forSeed seed index
++  let (count, r₁) := below 6 r
++  if count = 0 then
++    let (a, _) := literal r₁
++    ⟨{ body := [], ret := a }, [Production.name .returnLiteral]⟩
++  else
++    let (a, r₂) := literal r₁
++    let x : Var := ⟨"v", 0⟩
++    let first : Slice0.Stmt := ⟨x, .atom a⟩
++    let (rest, productions, _) := go (count - 1) x [x] r₂
++    ⟨{ body := first :: rest, ret := .var (if rest.isEmpty then x else ⟨"v", count - 1⟩) },
++      (Production.name .letLiteral) ::
++        (productions.map Production.name ++ [Production.name .returnVariable])⟩
++
++end ConcreteSpecDiff.SpecGen
+diff --git a/changelog.d/2026-11-08-spec-diff.md b/changelog.d/2026-11-08-spec-diff.md
+new file mode 100644
+index 00000000..28ec6b1b
+--- /dev/null
++++ b/changelog.d/2026-11-08-spec-diff.md
+@@ -0,0 +1,9 @@
++### Seeded spec/compiler differential
++
++Two required CI jobs now run the seeded differential on x86-64 Linux and AArch64 macOS. The spec leg
++checks generated, accepted slice-0 Core programs against the executable spec and exposes the fixed
++`compileCore` lowering hook; it reports zero compiled programs until that hook is implemented. The
++interim BIR leg compares BIR semantics with LLVM-native, LCB-native and LCB's in-process evaluator
++through the shared observation judge. Both legs are deterministic and replayable by seed and index,
++with construct/outcome coverage, bounded run time, regression instructions and planted-failure
++controls.
+diff --git a/required-checks.txt b/required-checks.txt
+index 18a8e3db..6474d7b6 100644
+--- a/required-checks.txt
++++ b/required-checks.txt
+@@ -13,6 +13,8 @@ Kernel replay (leanchecker)
+ External re-check (con-leche, nanoda)
+ Tests (x86-64)
+ Tests (aarch64-macos)
++Spec differential (x86-64)
++Spec differential (aarch64-macos)
+ Slice 0 artifacts (x86-64)
+ Slice 0 artifacts (aarch64-macos)
+ Slice 0 trusted base (gate 9, x86-64)
+diff --git a/scripts/checks/compiler/spec_diff.lean b/scripts/checks/compiler/spec_diff.lean
+new file mode 100644
+index 00000000..d6aaca4b
+--- /dev/null
++++ b/scripts/checks/compiler/spec_diff.lean
+@@ -0,0 +1,374 @@
++import Concrete
++
++/-!
++Seeded spec/compiler differential driver (`scripts/checks/compiler/spec_diff.sh`). Generators live
++in the existing Concrete library as flat `Concrete/SpecDiff*.lean` modules; no lake library, new
++folder, or root entry is added.
++Normal commands accept no mutation option. Planted defects require the explicit `control-emit`
++command, `--mutate`, and `--control SPEC_DIFF_PLANTED_CONTROL`.
++-/
++
++open Concrete.BIR Concrete.Backend
++open ConcreteSpec (Trap)
++open LeanCompilerBackend (Width)
++open LeanCompilerBackend.Verified
++
++namespace ConcreteSpecDiff
++
++/-- Same expectation bytes and backend artifacts as slice0_bir.lean; the script module itself is
++not on Lake's import path, so its small IO adapter is mirrored here over the same backend calls. -/
++def writeExpected (dir : System.FilePath) (status : String) (stderr : String) : IO Unit := do
++  IO.FS.writeFile (dir / "status") (status ++ "\n")
++  IO.FS.writeFile (dir / "stderr") stderr
++
++def writeLcb (dir : System.FilePath) (target : LCB.Target)
++    (emitted : Source.Function × SiteTable) : IO Bool := do
++  let (f, sites) := emitted
++  IO.FS.createDirAll dir
++  IO.FS.writeFile (dir / "lcb_source.txt") (reprStr f ++ "\n")
++  let job : FunctionJob :=
++    { code := { symbol := LCB.bodySymbol, body := f, abi := planAbi f, layout := planFrame f } }
++  IO.FS.writeFile (dir / "lcb_job.txt") (reprStr job ++ "\n")
++  if let .error msg := LCB.assemble .aarch64Macos f then
++    IO.eprintln s!"{dir}: LCB first path: {msg}"; return false
++  match LCB.assemble target f with
++  | .error msg => IO.eprintln s!"{dir}: LCB: {msg}"; return false
++  | .ok asm =>
++    IO.FS.writeFile (dir / "lcb_body.s") asm
++    IO.FS.writeFile (dir / "lcb_rt.ssa") (Runtime.qbe sites)
++    IO.FS.writeFile (dir / "lcb_body.ssa") (LCB.render f)
++    return true
++
++def writeBackends (dir : System.FilePath) (target : LCB.Target) (p : Program)
++    (emitted : Source.Function × SiteTable) : IO Bool := do
++  IO.FS.createDirAll dir
++  IO.FS.writeFile (dir / "bir.txt") (reprStr p ++ "\n")
++  IO.FS.writeFile (dir / "llvm.ll") (LLVM.module p)
++  writeLcb dir target emitted
++
++def unwiredMessage := "no Core→BIR lowering yet (slice 1)"
++
++/-- THE integration point for the lowering branch. Its implementation must lower the spec's Core
++program to BIR; until that branch lands, the spec leg runs its generator/oracle invariants but has
++no compiled programs and never claims a spec/native comparison. -/
++def compileCore (_ : ConcreteSpec.Program) : Except String Program :=
++  .error unwiredMessage
++
++inductive Mutation where
++  | none | dropOverflowLLVM | lcbOffByOne
++  deriving DecidableEq, Repr
++
++def mutationOfName : String → Option Mutation
++  | "drop-overflow-llvm" => some .dropOverflowLLVM
++  | "lcb-off-by-one" => some .lcbOffByOne
++  | _ => none
++
++/-- Replace every overflow-flag extraction by constant false. The wrapped value and control-flow
++shape remain, so a trapping generated program exits through its non-trap arm instead. -/
++def dropOverflowLLVM (text : String) : String :=
++  let lines := text.splitOn "\n"
++  String.intercalate "\n" <| lines.map fun line =>
++    match line.splitOn " = extractvalue " with
++    | [lhs, _] => if line.endsWith ", 1" then lhs ++ " = xor i1 0, 0" else line
++    | _ => line
++
++/-- Add one to every adapted body return. This is used only by the explicit off-by-one control,
++whose generated program exits; both assembly and the in-process evaluator consume this same value. -/
++def lcbOffByOne (f : Source.Function) : Source.Function :=
++  let (blocks, _, widths) := f.blocks.foldl
++    (fun (acc : Array Source.Block × Nat × Array Width) b =>
++      let (blocks, next, widths) := acc
++      match b.terminator with
++      | .ret a =>
++        let ins := LCB.ins next (.binary .add a (.literal (LCB.word 1)))
++        (blocks.push { b with instructions := b.instructions.push ins,
++                              terminator := .ret (.local next) },
++         next + 1, widths.push .word)
++      | _ => (blocks.push b, next, widths))
++    (#[], f.valueWidths.size, f.valueWidths)
++  { f with blocks := blocks, valueWidths := widths }
++
++def safeSeed (seed : String) : String :=
++  let cleaned := seed.toList.map fun c => if c.isAlphanum || c = '_' then c else '_'
++  let result := String.ofList cleaned
++  if result.isEmpty then "seed" else result
++
++def regressionName (seed : String) (index : Nat) : String :=
++  s!"regression_{safeSeed seed}_{index}"
++
++def trapKindName : Trap → String
++  | .arithmeticOverflow => "arithmeticOverflow"
++
++def outcomeName : Outcome → String
++  | .exited _ => "exit"
++  | .trapped _ => "trap"
++  | .stuck => "stuck"
++  | .outOfFuel => "out_of_fuel"
++
++def writeObservation (dir : System.FilePath) (status : String) (stderr : String) : IO Unit := do
++  IO.FS.createDirAll dir
++  writeExpected dir status stderr
++  IO.FS.writeFile (dir / "stdout") ""
++
++def writeOutcome (dir : System.FilePath) (outcome : Outcome) (sites : SiteTable) : IO Bool := do
++  match outcome with
++  | .exited c => writeObservation dir (toString c) ""; return true
++  | .trapped s => match sites[s]? with
++    | some e => writeObservation dir "134" (Runtime.trapLine e ++ "\n"); return true
++    | none => IO.eprintln s!"{dir}: no trap site {s}"; return false
++  | _ => IO.eprintln s!"{dir}: outcome {repr outcome} has no final observation"; return false
++
++def evaluatorObservation (f : Source.Function) (sites : SiteTable) : String × String :=
++  match LCB.evalBody f 100000 with
++  | none => ("incomplete", "")
++  | some w =>
++    if w < 256 then (toString w, "") else
++      match sites[w - 256]? with
++      | some e => ("134", Runtime.trapLine e ++ "\n")
++      | none => ("134", Runtime.invalidLine ++ "\n")
++
++def writeEvaluator (dir : System.FilePath) (f : Source.Function) (sites : SiteTable) : IO Unit := do
++  let (status, stderr) := evaluatorObservation f sites
++  IO.FS.writeFile (dir / "lcb_eval.status") (status ++ "\n")
++  IO.FS.writeFile (dir / "lcb_eval.stderr") stderr
++  IO.FS.writeFile (dir / "lcb_eval.stdout") ""
++
++def writeRegressionMetadata (dir : System.FilePath) (name : String) (outcome : Outcome)
++    (sites : SiteTable) : IO Unit := do
++  let expectation ← match outcome with
++    | .exited c => pure s!"exit {c}"
++    | .trapped s => match sites[s]? with
++      | some e => pure s!"trap {trapKindName e.kind} site {s}"
++      | none => pure "INVALID"
++    | _ => pure "INVALID"
++  IO.FS.writeFile (dir / "manifest-row.txt")
++    s!"{name}\tbir:{name}\t{expectation}\tslice0\n"
++  IO.FS.writeFile (dir / "regression-name.txt") (name ++ "\n")
++
++/-- Emit exactly the files consumed by slice0_native.sh, plus the evaluator's observation and the
++same judge inputs as the manifest runner. The expectation is supplied separately for the spec leg. -/
++def emitArtifacts (dir : System.FilePath) (target : LCB.Target) (p : Program) (mutation : Mutation) :
++    IO Bool := do
++  unless wf p do IO.eprintln s!"{dir}: generated BIR is not well formed"; return false
++  match LCB.emit p with
++  | .error msg => IO.eprintln s!"{dir}: adapter: {msg}"; return false
++  | .ok (f, sites) =>
++    let f := if mutation = .lcbOffByOne then lcbOffByOne f else f
++    unless ← writeBackends dir target p (f, sites) do return false
++    if mutation = .dropOverflowLLVM then
++      let original ← IO.FS.readFile (dir / "llvm.ll")
++      let changed := dropOverflowLLVM original
++      if changed = original then IO.eprintln s!"{dir}: drop-overflow-llvm changed nothing"; return false
++      IO.FS.writeFile (dir / "llvm.ll") changed
++    writeEvaluator dir f sites
++    return true
++
++def emitBirCandidate (seed : String) (index : Nat) (dir : System.FilePath) (target : LCB.Target)
++    (mutation : Mutation) : IO UInt32 := do
++  let g := BirGen.generate seed index
++  unless wf g.program do
++    IO.eprintln s!"seed {seed} index {index}: rejected: generated BIR is not well formed"
++    return 4
++  match LCB.emit g.program with
++  | .error msg => IO.eprintln s!"seed {seed} index {index}: rejected: {msg}"; return 4
++  | .ok _ =>
++    let outcome := run g.program 1000
++    unless outcome.final && outcome != .stuck do
++      IO.eprintln s!"seed {seed} index {index}: non-final/stuck outcome {repr outcome}"
++      return 1
++    unless ← emitArtifacts dir target g.program mutation do return 1
++    unless ← writeOutcome dir outcome g.program.sites do return 1
++    IO.FS.writeFile (dir / "program.lean.txt") (reprStr g.program ++ "\n")
++    IO.FS.writeFile (dir / "constructs.txt") (String.intercalate "," g.constructs ++ "\n")
++    writeRegressionMetadata dir (regressionName seed index) outcome g.program.sites
++    IO.println s!"seed {seed} index {index}: {outcomeName outcome} {BirGen.Production.name g.production}"
++    return 0
++
++abbrev Counts := List (String × Nat)
++
++def bump (key : String) : Counts → Counts
++  | [] => [(key, 1)]
++  | (k, n) :: rest => if k = key then (k, n + 1) :: rest else (k, n) :: bump key rest
++
++def addConstructs (counts : Counts) (xs : List String) : Counts :=
++  xs.foldl (fun acc x => bump x acc) counts
++
++def countsLines (kind : String) (counts : Counts) : String :=
++  String.join <| counts.map fun (name, n) => s!"{kind}\t{name}\t{n}\n"
++
++/-- Generate and filter N independent BIR candidates. Rejections are data and are counted; the
++shell gate imposes its stated yield floor and coverage/vacuity requirements. -/
++def genBir (seed : String) (n : Nat) (dir : System.FilePath) (target : LCB.Target) : IO UInt32 := do
++  IO.FS.createDirAll dir
++  let mut programs := ""
++  let mut rejects := ""
++  let mut constructs : Counts := []
++  let mut accepted := 0
++  let mut rejected := 0
++  let mut exits := 0
++  let mut traps := 0
++  for index in List.range n do
++    let g := BirGen.generate seed index
++    if !wf g.program then
++      rejected := rejected + 1
++      rejects := rejects ++ s!"reject\t{index}\tnot well formed\n"
++    else match LCB.emit g.program with
++      | .error msg =>
++        rejected := rejected + 1
++        rejects := rejects ++ s!"reject\t{index}\t{msg}\n"
++      | .ok _ =>
++        let outcome := run g.program 1000
++        if !outcome.final || outcome == .stuck then
++          IO.eprintln s!"seed {seed} index {index}: generated outcome {repr outcome}"
++          return 1
++        let child := dir / s!"p{index}"
++        unless ← emitArtifacts child target g.program .none do return 1
++        unless ← writeOutcome child outcome g.program.sites do return 1
++        IO.FS.writeFile (child / "program.lean.txt") (reprStr g.program ++ "\n")
++        IO.FS.writeFile (child / "constructs.txt") (String.intercalate "," g.constructs ++ "\n")
++        writeRegressionMetadata child (regressionName seed index) outcome g.program.sites
++        accepted := accepted + 1
++        constructs := addConstructs constructs g.constructs
++        if outcomeName outcome = "exit" then exits := exits + 1 else traps := traps + 1
++        programs := programs ++
++          s!"program\t{index}\t{outcomeName outcome}\t{BirGen.Production.name g.production}\n"
++    IO.FS.writeFile (dir / "summary.tsv")
++      (s!"seed\t{seed}\naccepted\t{accepted}\nrejected\t{rejected}\nattempted\t{n}\n" ++
++       s!"outcome\texit\t{exits}\noutcome\ttrap\t{traps}\n" ++
++       countsLines "construct" constructs ++ programs ++ rejects)
++  IO.println s!"bir leg: {accepted} accepted, {rejected} rejected, exits {exits}, traps {traps}"
++  IO.print <| countsLines "construct" constructs
++  return 0
++
++def specOutcome (q : ConcreteSpec.Slice0.Program) : ConcreteSpec.Outcome :=
++  ConcreteSpec.run (ConcreteSpec.Slice0.toCore q) (q.body.length + 1)
++
++/-- The spec outcome alone supplies the status and trap kind. Slice 0 is exit-only. For a future
++trapping fragment, the lowering's site table supplies the line at its first site of that kind. -/
++def writeSpecOutcome (dir : System.FilePath) (p : Program) (o : ConcreteSpec.Outcome) : IO Bool := do
++  match o with
++  | .exit c => writeObservation dir (toString c) ""; return true
++  | .trap k => match p.sites.find? (fun e => e.kind = k) with
++    | some e => writeObservation dir "134" (Runtime.trapLine e ++ "\n"); return true
++    | none => IO.eprintln s!"{dir}: spec trap {repr k} has no lowered site"; return false
++  | _ => IO.eprintln s!"{dir}: spec outcome {repr o} has no observation"; return false
++
++def specOutcomeName : ConcreteSpec.Outcome → String
++  | .exit _ => "exit" | .trap _ => "trap" | .stuck _ => "stuck" | .outOfFuel => "out_of_fuel"
++
++/-- Generate accepted slice-0 Core programs, run the spec oracle, and offer each to compileCore.
++While the fixed hook is unwired, only its exact refusal is non-fatal and no native-ready directory
++is produced. -/
++def genSpec (seed : String) (n : Nat) (dir : System.FilePath) (target : LCB.Target) : IO UInt32 := do
++  IO.FS.createDirAll dir
++  let mut programs := ""
++  let mut rejects := ""
++  let mut constructs : Counts := []
++  let mut accepted := 0
++  let mut rejected := 0
++  let mut compiled := 0
++  let mut exits := 0
++  let mut traps := 0
++  for index in List.range n do
++    let g := SpecGen.generate seed index
++    let core := ConcreteSpec.Slice0.toCore g.program
++    if !ConcreteSpec.check core then
++      rejected := rejected + 1
++      rejects := rejects ++ s!"reject\t{index}\tspec check\n"
++    else
++      let outcome := specOutcome g.program
++      match outcome with
++      | .exit c =>
++        unless c < 256 do IO.eprintln s!"seed {seed} index {index}: invalid spec exit {c}"; return 1
++        accepted := accepted + 1
++        exits := exits + 1
++        constructs := addConstructs constructs g.constructs
++        let child := dir / s!"p{index}"
++        IO.FS.createDirAll child
++        IO.FS.writeFile (child / "program.lean.txt") (reprStr g.program ++ "\n")
++        IO.FS.writeFile (child / "constructs.txt") (String.intercalate "," g.constructs ++ "\n")
++        IO.FS.writeFile (child / "oracle.txt") s!"exit {c}\n"
++        let mut didCompile := false
++        match compileCore core with
++        | .error msg =>
++          if msg != unwiredMessage then
++            IO.eprintln s!"seed {seed} index {index}: compileCore: {msg}"
++            return 1
++        | .ok bir =>
++          unless ← emitArtifacts child target bir .none do return 1
++          unless ← writeSpecOutcome child bir outcome do return 1
++          IO.FS.writeFile (child / "native-ready") ""
++          writeRegressionMetadata child (regressionName seed index) (.exited c) bir.sites
++          compiled := compiled + 1
++          didCompile := true
++        programs := programs ++
++          s!"program\t{index}\texit\t{if didCompile then "true" else "false"}\n"
++      | .trap _ =>
++        accepted := accepted + 1
++        traps := traps + 1
++        IO.eprintln s!"seed {seed} index {index}: accepted slice-0 program trapped"
++        return 1
++      | _ =>
++        IO.eprintln s!"seed {seed} index {index}: spec oracle gives {repr outcome}"
++        return 1
++    IO.FS.writeFile (dir / "summary.tsv")
++      (s!"seed\t{seed}\naccepted\t{accepted}\nrejected\t{rejected}\nattempted\t{n}\ncompiled\t{compiled}\n" ++
++       s!"outcome\texit\t{exits}\noutcome\ttrap\t{traps}\n" ++
++       countsLines "construct" constructs ++ programs ++ rejects)
++  IO.FS.writeFile (dir / "summary.tsv")
++    (s!"seed\t{seed}\naccepted\t{accepted}\nrejected\t{rejected}\nattempted\t{n}\ncompiled\t{compiled}\n" ++
++     s!"outcome\texit\t{exits}\noutcome\ttrap\t{traps}\n" ++
++     countsLines "construct" constructs ++ programs ++ rejects)
++  IO.println s!"spec leg: {accepted} accepted, {rejected} rejected, exits {exits}, traps {traps}"
++  IO.print <| countsLines "construct" constructs
++  if compiled = 0 then
++    IO.println "spec leg: 0 programs compiled (no Core→BIR lowering; becomes required in the lowering branch)"
++  else
++    IO.println s!"spec leg: {compiled} programs compiled for native comparison"
++  return 0
++
++/-- Stand-in compiled output for the spec-oracle control: Slice0.answer and BIR answer both exit 42,
++but the judge receives a planted expected 43. -/
++def controlSpecOracle (dir : System.FilePath) (target : LCB.Target) : IO UInt32 := do
++  let q := ConcreteSpec.Slice0.answer
++  let p := Concrete.BIR.Examples.answer
++  unless ← emitArtifacts dir target p .none do return 1
++  unless ← writeSpecOutcome (dir / "spec-expected") p (specOutcome q) do return 1
++  writeObservation (dir / "wrong-expected") "43" ""
++  IO.println "control spec-oracle: spec exits 42; planted expectation exits 43"
++  return 0
++
++def withTarget (name : String) (k : LCB.Target → IO UInt32) : IO UInt32 :=
++  match LCB.Target.ofName name with
++  | some t => k t
++  | none => do IO.eprintln s!"unknown target {name}"; return 2
++
++def parseNat (value : String) : Option Nat := value.toNat?
++
++end ConcreteSpecDiff
++
++open ConcreteSpecDiff
++
++def main (args : List String) : IO UInt32 := do
++  match args with
++  | ["gen-spec", seed, n, dir] => match parseNat n with
++    | some n => do
++      let target := (← IO.getEnv "SPEC_DIFF_TARGET").getD "x86_64-linux"
++      withTarget target (genSpec seed n dir)
++    | none => return 2
++  | ["gen-bir", seed, n, dir, target] => match parseNat n with
++    | some n => withTarget target (genBir seed n dir)
++    | none => return 2
++  | ["replay", seed, index, dir, target] => match parseNat index with
++    | some index => withTarget target (fun t => emitBirCandidate seed index dir t .none)
++    | none => return 2
++  | ["control-emit", "--mutate", mutation, seed, index, dir, target,
++      "--control", "SPEC_DIFF_PLANTED_CONTROL"] => match mutationOfName mutation, parseNat index with
++    | some mutation, some index =>
++      withTarget target (fun t => emitBirCandidate seed index dir t mutation)
++    | _, _ => return 2
++  | ["control-spec-oracle", dir, target, "--control", "SPEC_DIFF_PLANTED_CONTROL"] =>
++    withTarget target (controlSpecOracle dir)
++  | _ =>
++    IO.eprintln "usage: spec_diff.lean gen-spec SEED N DIR | gen-bir SEED N DIR TARGET | replay SEED INDEX DIR TARGET | control-emit --mutate NAME SEED INDEX DIR TARGET --control SPEC_DIFF_PLANTED_CONTROL | control-spec-oracle DIR TARGET --control SPEC_DIFF_PLANTED_CONTROL"
++    return 2
+diff --git a/scripts/checks/compiler/spec_diff.sh b/scripts/checks/compiler/spec_diff.sh
+new file mode 100755
+index 00000000..557eecd5
+--- /dev/null
++++ b/scripts/checks/compiler/spec_diff.sh
+@@ -0,0 +1,300 @@
++#!/usr/bin/env bash
++# Seeded spec/compiler differential (Concrete/README.md gates 5 and 6). Run from the repo root in
++# nix develop. The seed is SPEC_DIFF_SEED or the commit SHA. SPEC_DIFF_SECS (default 600) bounds
++# the shared build, generation, controls and native comparisons; SPEC_DIFF_N (default
++# 300) is the candidate count per leg, and SPEC_DIFF_MIN_JUDGED (default 8) is the minimum number of
++# BIR programs compared on all three legs. Too few comparisons by the deadline is INCOMPLETE (3),
++# never a pass. Both generators require at least 50% accepted candidates. All native executables
++# use the shared build/observe/judge functions; the in-process LCB observation uses the same judge.
++#
++# Replay one BIR candidate, without coverage or minimum-count checks:
++#   SPEC_DIFF_REPLAY='SEED:INDEX' bash scripts/checks/compiler/spec_diff.sh
++# On a mismatch the gate prints the seed/index, generated term, exact manifest row, Examples
++# definition/list entry, and this replay command. To save the regression: put the printed definition
++# in Concrete.BIR.Examples, put its tuple in Examples.all, add the row to tests/manifest.tsv, then
++# replay the seed:index and run the manifest Tests job. No generated output is committed directly.
++#
++# Planted controls must fail for their stated reason. Mutations exist only in the Lean driver's
++# explicit control-emit command and require --control SPEC_DIFF_PLANTED_CONTROL; normal commands
++# reject them. A control that builds incorrectly or fails without its expected FAIL line is a gate
++# failure. Determinism controls compare program.lean.txt fingerprints, not native artifacts.
++set -euo pipefail
++
++seed=${SPEC_DIFF_SEED:-$(git rev-parse HEAD)}
++candidate_count=${SPEC_DIFF_N:-300}
++budget=${SPEC_DIFF_SECS:-600}
++minimum_judged=${SPEC_DIFF_MIN_JUDGED:-8}
++replay=${SPEC_DIFF_REPLAY:-}
++for value in "$candidate_count" "$budget" "$minimum_judged"; do
++  [[ "$value" =~ ^[0-9]+$ ]] && [ "$value" -gt 0 ] ||
++    { echo "spec_diff: N, SECS and MIN_JUDGED must be positive integers" >&2; exit 2; }
++done
++printf 'spec_diff seed: %s\n' "$seed"
++printf 'replay: SPEC_DIFF_REPLAY=%s:INDEX bash scripts/checks/compiler/spec_diff.sh\n' "$seed"
++start=$(date +%s)
++deadline=$((start + budget))
++remaining() { echo $((deadline - $(date +%s))); }
++export SLICE0_BUILD_SECS=$budget
++
++# shellcheck source=scripts/checks/lib/slice0_common.sh
++source scripts/checks/lib/slice0_common.sh
++driver=(env "SPEC_DIFF_TARGET=$target" lake env lean --run scripts/checks/compiler/spec_diff.lean)
++fail=0
++bir_judged=0
++spec_judged=0
++
++summary_value() { # summary_value FILE KEY [FIELD]
++  awk -F '\t' -v key="$2" -v field="${3:-2}" '$1 == key {print $field; exit}' "$1"
++}
++
++print_counts() { # print_counts LABEL SUMMARY
++  echo "$1 outcome/construct counts:"
++  awk -F '\t' '$1 == "outcome" || $1 == "construct" {printf "  %s %s %s\n", $1, $2, $3}' "$2"
++  printf '  accepted %s, rejected %s, attempted %s\n' \
++    "$(summary_value "$2" accepted)" "$(summary_value "$2" rejected)" "$(summary_value "$2" attempted)"
++}
++
++check_generation() { # check_generation LABEL SUMMARY REQUIRED-CONSTRUCTS...
++  local label=$1 summary=$2 accepted rejected attempted
++  shift 2
++  accepted=$(summary_value "$summary" accepted)
++  rejected=$(summary_value "$summary" rejected)
++  attempted=$(summary_value "$summary" attempted)
++  [ -n "$accepted" ] && [ -n "$rejected" ] && [ -n "$attempted" ] ||
++    { echo "FAIL $label: missing generation counts" >&2; fail=1; return; }
++  if [ "$accepted" -eq 0 ] || [ $((accepted * 2)) -lt "$attempted" ]; then
++    echo "FAIL $label: yield $accepted/$attempted is below the 50% floor" >&2
++    fail=1
++  fi
++  local construct count
++  for construct in "$@"; do
++    count=$(awk -F '\t' -v c="$construct" '$1 == "construct" && $2 == c {print $3}' "$summary")
++    if [ -z "$count" ] || [ "$count" -eq 0 ]; then
++      echo "FAIL $label: construct $construct has zero coverage" >&2
++      fail=1
++    fi
++  done
++}
++
++report_mismatch() { # report_mismatch LEG INDEX DIR BACKEND
++  local leg=$1 index=$2 d=$3 backend=$4 name term
++  echo "FAIL $leg seed $seed index $index [$backend]: observation mismatch" >&2
++  echo "  expected status $(cat "$d/status"), observed $(cat "$d/$backend.status")" >&2
++  echo "  expected stderr bytes $(wc -c <"$d/stderr"), observed $(wc -c <"$d/$backend.stderr"), stdout $(wc -c <"$d/$backend.stdout")" >&2
++  echo "  generated program (program.lean.txt):" >&2
++  cat "$d/program.lean.txt" >&2
++  if [ "$leg" = spec ]; then term="$d/bir.txt"; else term="$d/program.lean.txt"; fi
++  if [ -f "$d/regression-name.txt" ]; then
++    name=$(cat "$d/regression-name.txt")
++    echo "  add exactly this tests/manifest.tsv row (tab-separated):" >&2
++    cat "$d/manifest-row.txt" >&2
++    echo "  add to Concrete.BIR.Examples:" >&2
++    printf 'def %s : Concrete.BIR.Program :=\n' "$name" >&2
++    cat "$term" >&2
++    printf '\n-- and add to Examples.all:\n("%s", %s),\n' "$name" "$name" >&2
++  fi
++  echo "  replay: SPEC_DIFF_REPLAY='$seed:$index' bash scripts/checks/compiler/spec_diff.sh" >&2
++}
++
++native_one() { # native_one LEG INDEX DIR: return 1 after reporting any observation mismatch
++  local leg=$1 index=$2 d=$3 name=$1-$2 backend bad=0 secs
++  build "$name" "$d/build.log" bounded "$(remaining)" bash "$root/scripts/checks/lib/slice0_native.sh" "$d" "$lcb"
++  for backend in llvm lcb; do
++    secs=$(remaining); [ "$secs" -gt 10 ] && secs=10
++    [ "$secs" -gt 0 ] || { echo "spec_diff: deadline before $name [$backend]" >&2; return 2; }
++    observe "$d/$backend.exe" "$d/$backend" "$secs" "$secs"
++    if judge "$d" "$d/$backend"; then
++      echo "ok   $name [$backend]: status $(cat "$d/$backend.status")"
++    else
++      report_mismatch "$leg" "$index" "$d" "$backend"
++      bad=1
++    fi
++  done
++  if judge "$d" "$d/lcb_eval"; then
++    echo "ok   $name [lcb-eval]: status $(cat "$d/lcb_eval.status")"
++  else
++    report_mismatch "$leg" "$index" "$d" lcb_eval
++    bad=1
++  fi
++  return "$bad"
++}
++
++run_control() { # run_control LABEL EXPECTED-FAIL-LINE FUNCTION: an expected failure is a pass
++  local label=$1 expected=$2 fn=$3 log="$work/ctl-$label.log" rc=0
++  ( "$fn" ) >"$log" 2>&1 || rc=$?
++  if [ "$rc" -ne 0 ] && grep -qF "$expected" "$log"; then
++    echo "ok   control $label: failed for the planted reason"
++  else
++    echo "FAIL control $label: did not fail as '$expected' (rc $rc)" >&2
++    cat "$log" >&2
++    fail=1
++  fi
++}
++
++first_outcome_index() { # first_outcome_index SUMMARY exit|trap
++  awk -F '\t' -v outcome="$2" '$1 == "program" && $3 == outcome {print $2; exit}' "$1"
++}
++
++control_drop_overflow() {
++  local index d="$work/control-drop-overflow"
++  index=$(first_outcome_index "$work/bir/summary.tsv" trap)
++  [ -n "$index" ] || { echo "control setup: no generated trap" >&2; return 0; }
++  bounded 120 "${driver[@]}" control-emit --mutate drop-overflow-llvm "$seed" "$index" "$d" "$target" \
++    --control SPEC_DIFF_PLANTED_CONTROL
++  build control-drop-overflow "$d/build.log" bounded 300 bash "$root/scripts/checks/lib/slice0_native.sh" "$d" "$lcb"
++  observe "$d/llvm.exe" "$d/llvm" 10 20
++  if judge "$d" "$d/llvm"; then
++    echo "control setup: drop-overflow-llvm did not change the observation" >&2
++    return 0
++  fi
++  echo "FAIL drop-overflow-llvm: planted LLVM overflow removal changed status/stderr"
++  return 1
++}
++
++control_lcb_off_by_one() {
++  local index d="$work/control-lcb-off-by-one" native_bad=1 eval_bad=1
++  index=$(first_outcome_index "$work/bir/summary.tsv" exit)
++  [ -n "$index" ] || { echo "control setup: no generated exit" >&2; return 0; }
++  bounded 120 "${driver[@]}" control-emit --mutate lcb-off-by-one "$seed" "$index" "$d" "$target" \
++    --control SPEC_DIFF_PLANTED_CONTROL
++  build control-lcb-off-by-one "$d/build.log" bounded 300 bash "$root/scripts/checks/lib/slice0_native.sh" "$d" "$lcb"
++  observe "$d/lcb.exe" "$d/lcb" 10 20
++  judge "$d" "$d/lcb" && native_bad=0
++  judge "$d" "$d/lcb_eval" && eval_bad=0
++  if [ "$native_bad" -eq 1 ] && [ "$eval_bad" -eq 1 ]; then
++    echo "FAIL lcb-off-by-one: native LCB and in-process evaluator both changed exit status"
++    return 1
++  fi
++  echo "control setup: off-by-one escaped native=$native_bad evaluator=$eval_bad (1 means caught)" >&2
++  return 0
++}
++
++control_spec_oracle() {
++  local d="$work/control-spec-oracle"
++  bounded 120 "${driver[@]}" control-spec-oracle "$d" "$target" --control SPEC_DIFF_PLANTED_CONTROL
++  build control-spec-oracle "$d/build.log" bounded 300 bash "$root/scripts/checks/lib/slice0_native.sh" "$d" "$lcb"
++  observe "$d/llvm.exe" "$d/llvm" 10 20
++  if ! judge "$d/spec-expected" "$d/llvm"; then
++    echo "control setup: stand-in does not match the spec's actual outcome" >&2
++    return 0
++  fi
++  if judge "$d/wrong-expected" "$d/llvm"; then
++    echo "control setup: judge accepted planted expected exit 43" >&2
++    return 0
++  fi
++  echo "FAIL spec-oracle: judge rejected planted exit 43 against spec exit 42"
++  return 1
++}
++
++term_fingerprint() { # term_fingerprint DIRECTORY OUTPUT: paths and exact bytes of every Lean term
++  local d=$1 out=$2 list="$work/fingerprint-list"
++  (cd "$d" && find . -type f -name program.lean.txt -print | LC_ALL=C sort) >"$list"
++  : >"$out"
++  while IFS= read -r path; do
++    printf '%s\n' "$path" >>"$out"
++    cat "$d/$path" >>"$out"
++  done <"$list"
++}
++
++control_determinism() {
++  local leg seed_a="$work/determinism-a" seed_b="$work/determinism-b" seed_c="$work/determinism-c"
++  for leg in spec bir; do
++    rm -rf "$seed_a" "$seed_b" "$seed_c"
++    if [ "$leg" = spec ]; then
++      bounded 120 "${driver[@]}" gen-spec determinism-seed 16 "$seed_a"
++      bounded 120 "${driver[@]}" gen-spec determinism-seed 16 "$seed_b"
++      bounded 120 "${driver[@]}" gen-spec determinism-other 16 "$seed_c"
++    else
++      bounded 120 "${driver[@]}" gen-bir determinism-seed 16 "$seed_a" "$target"
++      bounded 120 "${driver[@]}" gen-bir determinism-seed 16 "$seed_b" "$target"
++      bounded 120 "${driver[@]}" gen-bir determinism-other 16 "$seed_c" "$target"
++    fi
++    term_fingerprint "$seed_a" "$work/$leg-a.terms"
++    term_fingerprint "$seed_b" "$work/$leg-b.terms"
++    term_fingerprint "$seed_c" "$work/$leg-c.terms"
++    if ! cmp -s "$work/$leg-a.terms" "$work/$leg-b.terms"; then
++      echo "FAIL determinism $leg: identical seeds produced different terms" >&2; fail=1
++    elif cmp -s "$work/$leg-a.terms" "$work/$leg-c.terms"; then
++      echo "FAIL determinism $leg: different seeds produced identical terms" >&2; fail=1
++    else
++      echo "ok   control determinism $leg: same seed identical, different seed distinct"
++    fi
++  done
++}
++
++if [ -n "$replay" ]; then
++  case "$replay" in
++    *:*) replay_seed=${replay%%:*}; replay_index=${replay#*:} ;;
++    *) echo "spec_diff: SPEC_DIFF_REPLAY must be SEED:INDEX" >&2; exit 2 ;;
++  esac
++  [[ "$replay_index" =~ ^[0-9]+$ ]] || { echo "spec_diff: replay index is not a natural" >&2; exit 2; }
++  d="$work/replay"
++  bounded "$(remaining)" "${driver[@]}" replay "$replay_seed" "$replay_index" "$d" "$target"
++  native_one bir "$replay_index" "$d" || fail=1
++  bir_judged=1
++  echo "spec_diff replay: $replay_seed:$replay_index judged on LLVM, LCB and LCB evaluator"
++  exit "$fail"
++fi
++
++left=$(remaining)
++[ "$left" -gt 0 ] || { echo "INCOMPLETE: no time for spec generation" >&2; exit 3; }
++bounded "$left" "${driver[@]}" gen-spec "$seed" "$candidate_count" "$work/spec"
++left=$(remaining)
++[ "$left" -gt 0 ] || { echo "INCOMPLETE: no time for BIR generation" >&2; exit 3; }
++bounded "$left" "${driver[@]}" gen-bir "$seed" "$candidate_count" "$work/bir" "$target"
++print_counts "spec leg" "$work/spec/summary.tsv"
++print_counts "BIR leg" "$work/bir/summary.tsv"
++check_generation "spec leg" "$work/spec/summary.tsv" \
++  let_literal let_copy add_literal add_variable return_literal return_variable
++check_generation "BIR leg" "$work/bir/summary.tsv" checked wrapped widening two_sites chain
++for outcome in exit trap; do
++  count=$(awk -F '\t' -v o="$outcome" '$1 == "outcome" && $2 == o {print $3}' "$work/bir/summary.tsv")
++  if [ -z "$count" ] || [ "$count" -eq 0 ]; then
++    echo "FAIL BIR leg: vacuity guard: zero ${outcome}s" >&2
++    fail=1
++  fi
++done
++
++control_determinism
++run_control drop-overflow-llvm \
++  "FAIL drop-overflow-llvm: planted LLVM overflow removal changed status/stderr" control_drop_overflow
++run_control lcb-off-by-one \
++  "FAIL lcb-off-by-one: native LCB and in-process evaluator both changed exit status" control_lcb_off_by_one
++run_control spec-oracle \
++  "FAIL spec-oracle: judge rejected planted exit 43 against spec exit 42" control_spec_oracle
++
++while IFS=$'\t' read -r tag index outcome production; do
++  [ "$tag" = program ] || continue
++  [ "$(remaining)" -gt 0 ] || break
++  d="$work/bir/p$index"
++  rc=0
++  native_one bir "$index" "$d" || rc=$?
++  [ "$rc" -ne 2 ] || { echo "INCOMPLETE: deadline during BIR comparison $index" >&2; exit 3; }
++  [ "$rc" -eq 0 ] || fail=1
++  bir_judged=$((bir_judged + 1))
++done < <(awk -F '\t' '$1 == "program"' "$work/bir/summary.tsv")
++
++spec_compiled=$(summary_value "$work/spec/summary.tsv" compiled)
++while IFS=$'\t' read -r tag index outcome compiled; do
++  [ "$tag" = program ] || continue
++  [ "$compiled" = true ] || continue
++  [ "$(remaining)" -gt 0 ] || break
++  d="$work/spec/p$index"
++  [ -f "$d/native-ready" ] || { echo "FAIL spec leg: compiled program lacks native-ready marker" >&2; fail=1; continue; }
++  rc=0
++  native_one spec "$index" "$d" || rc=$?
++  [ "$rc" -ne 2 ] || { echo "INCOMPLETE: deadline during spec comparison $index" >&2; exit 3; }
++  [ "$rc" -eq 0 ] || fail=1
++  spec_judged=$((spec_judged + 1))
++done < <(awk -F '\t' '$1 == "program"' "$work/spec/summary.tsv")
++
++if [ "$bir_judged" -lt "$minimum_judged" ]; then
++  echo "INCOMPLETE: judged $bir_judged BIR programs, minimum $minimum_judged, before the deadline" >&2
++  exit 3
++fi
++if [ "$spec_compiled" -gt 0 ] && [ "$spec_judged" -eq 0 ]; then
++  echo "INCOMPLETE: $spec_compiled spec programs compiled but none was judged" >&2
++  exit 3
++fi
++echo "spec_diff: $bir_judged BIR programs judged on 3 legs; $spec_judged spec programs judged; seed $seed"
++exit "$fail"
+diff --git a/scripts/checks/lib/slice0_common.sh b/scripts/checks/lib/slice0_common.sh
+index e0e2799b..095c9698 100644
+--- a/scripts/checks/lib/slice0_common.sh
++++ b/scripts/checks/lib/slice0_common.sh
+@@ -49,7 +49,8 @@ bounded() {
+   return "$rc"
+ }
+ # The build's output is kept and shown on failure: lake prints only "error: build failed" last.
+-bounded 1800 lake build Concrete lean-compiler-backend/lcb >"$work/lake-build.log" 2>&1 \
++# SLICE0_BUILD_SECS lets a gate with a total deadline include this build in that deadline.
++bounded "${SLICE0_BUILD_SECS:-1800}" lake build Concrete lean-compiler-backend/lcb >"$work/lake-build.log" 2>&1 \
+   || { tail -n 200 "$work/lake-build.log" >&2; echo "slice0: lake build Concrete failed" >&2; exit 1; }
+ lcb="$root/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
+ case "$(uname -s)-$(uname -m)" in

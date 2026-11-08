@@ -1,0 +1,5 @@
+2e0b649a gates evidence: verbatim snapshot of briefs, prompts and review outputs (15:35Z)
+pre-push: wip/* backup push (1 update(s), 0 deletion(s)) — conflict-marker check only; the full set runs on ci/* and main
+15:38:08 pushed wip/trusted-base@origin 217d122a99c1c8294ef68b13e97c43d2709e5a4e
+pre-push: wip/* backup push (1 update(s), 0 deletion(s)) — conflict-marker check only; the full set runs on ci/* and main
+15:38:10 pushed wip/trusted-base@lambdaclass 217d122a99c1c8294ef68b13e97c43d2709e5a4e

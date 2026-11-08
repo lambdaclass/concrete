@@ -1,5 +1,5 @@
 #!/bin/bash
-# Every 10 min: push moved writer-branch tips to both remotes (never force) and snapshot evidence.
+# Every 10 min: push moved writer-branch tips to both remotes (never force). Pushes writer commits only.
 L=~/projects/gates-briefs/backup-loop.log
 for i in $(seq 60); do
   for p in gates-spec-diff:gate-spec-diff gates-scaling:gate-scaling-determinism gates-trusted-base:trusted-base gates-lcb-numbering:lcb-numbering gates-test-manifest:gates-manifest; do
@@ -11,6 +11,5 @@ for i in $(seq 60); do
       timeout 900 env GIT_SSH_COMMAND="ssh -o ServerAliveInterval=20" git -C $c push -q $r HEAD:$b >>$L 2>&1 && echo "$(date -u +%T) pushed $b@$r $h" >>$L
     done
   done
-  timeout 1900 ~/projects/gates-briefs/sync-evidence.sh >>$L 2>&1
   sleep 600
 done
