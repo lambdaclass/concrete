@@ -1,0 +1,2 @@
+[piece 1 of 2: scripts]
+- scripts/land/acceptance_shim.sh:65: `canon` recognizes only absolute paths, but protected remote URLs can be relative paths. If acceptance starts with origin `../upstream.git`, a push naming that repository by its absolute path resolves successfully while the protected URL cannot be canonicalized. The comparison therefore treats the real upstream as an unprotected fixture and allows a push to main, including with `--no-verify`. Resolve protected local URLs against their original working directory when creating the shim.
