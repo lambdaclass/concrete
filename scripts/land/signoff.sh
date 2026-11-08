@@ -5,24 +5,30 @@
 # refs/notes/concrete-review note is (scripts/review/verify.sh); train.sh accepts either for a member.
 #
 #   signoff.sh record <commit> --base BASE --rounds-at NOTED --date YYYY-MM-DD --quote TEXT
-#                     --codex FILE --kimi FILE --agy FILE
+#                     --codex-request FILE --codex FILE --kimi-request FILE --kimi FILE
+#                     --agy-request FILE --agy FILE
 #   signoff.sh verify <commit> --base BASE
 #
-# THE RECORD is the ref refs/owner-signoff/<full sha>, a commit whose tree holds record.txt and the
-# three reviewers' transcripts (the request each was given and its output, which names the commit
-# reviewed), copied in byte for byte (codex.txt, kimi.txt, agy.txt), so any
-# clone that fetches the ref can check them. record.txt is `key: value` lines, each key once:
+# THE RECORD is the ref refs/owner-signoff/<full sha>, a parentless commit whose tree holds exactly
+# seven plain files: record.txt and, for each reviewer r in codex, kimi and agy, r-request.txt and
+# r.txt. The output is copied byte for byte. The request is copied verbatim after a structured first
+# line, `reviewed: <full sha>`, which `record` prepends to attest the commit reviewed. Thus a clone
+# that fetches the ref can check what each reviewer was asked and its output separately. record.txt
+# is `key: value` lines, each key once:
 #   signoff: owner
 #   commit: <the 40-hex SHA approved>
 #   date: YYYY-MM-DD
 #   quote: <the owner's words, verbatim; they name the commit by an unambiguous prefix of 7+ hex digits>
 #   rounds-at: <the 40-hex SHA of the commit whose scripts/review/review.sh note records the rounds used>
+#   request-codex: codex-request.txt <sha256>
 #   verdict-codex: codex.txt <sha256>
+#   request-kimi: kimi-request.txt <sha256>
 #   verdict-kimi: kimi.txt <sha256>
+#   request-agy: agy-request.txt <sha256>
 #   verdict-agy: agy.txt <sha256>
 # `record` builds the record, verifies it, and only then writes the ref locally; it pushes nothing
-# (push the ref to both remotes: the pre-push hook takes refs/owner-signoff/* in its no-source-tree
-# tier). Only the owner's recorded words go in a quote.
+# (push the ref to both remotes: the pre-push hook takes a refs/owner-signoff/* record in its
+# no-source-tree tier). Only the owner's recorded words go in a quote.
 #
 # THE CAP (R-0618) comes from the class of the member's diff against its base, classified by path,
 # the highest class present winning: docs and roadmap 2, scripts 3, compiler and spec 5; a path in no
@@ -32,11 +38,13 @@
 # blocked) whose round is at least the cap, whatever its verdict
 # (the cap counts rounds used: the other reviewers' rejections are why a branch reaches it).
 #
-# `verify` accepts the record only if the ref exists, the tree holds exactly those four files, every
-# key is present once and well formed, `commit` is the commit asked about, the quote names it, the
-# cap was reached, each file's sha256 is the recorded one, each transcript names the commit, and each
-# output's last VERDICT line is `VERDICT: ACCEPT` (all three reviewed the signed commit and accepted it). It judges the exact
-# commit: a sign-off says nothing about any other commit.
+# `verify` accepts the record only if the ref exists, the tree holds exactly those seven 100644 blobs,
+# every key is present once and well formed, `commit` is the commit asked about, the quote names it,
+# the cap was reached, and every file's sha256 is the recorded one. Each request's `reviewed:` line
+# must equal the signed commit, and its body must name that commit by an unambiguous prefix of 7+
+# hex digits; output mentions do not bind a review to a commit. Each output's last VERDICT line must
+# be `VERDICT: ACCEPT`, and an output without one is refused; request lines never count as verdicts.
+# The sign-off judges the exact commit and says nothing about any other commit.
 #
 # Exit codes: 0 a valid sign-off; 1 a sign-off that does not qualify (the reason is printed);
 #             2 no sign-off, or a usage error.
@@ -82,13 +90,14 @@ diff_class() {
 
 cmd_record() {
   [ $# -ge 1 ] || die "record: name the commit"
-  local sha date="" quote="" base="" at="" r f v; sha="$(git rev-parse -q --verify "$1^{commit}")" || die "record: not a commit: $1"; shift
-  local codex="" kimi="" agy=""
+  local sha date="" quote="" base="" at="" r f q v; sha="$(git rev-parse -q --verify "$1^{commit}")" || die "record: not a commit: $1"; shift
+  local codex="" kimi="" agy="" codex_request="" kimi_request="" agy_request=""
   while [ $# -gt 0 ]; do
     [ $# -ge 2 ] || die "record: $1 needs a value"
     case "$1" in
       --date) date="$2" ;; --quote) quote="$2" ;; --base) base="$2" ;; --rounds-at) at="$2" ;;
       --codex) codex="$2" ;; --kimi) kimi="$2" ;; --agy) agy="$2" ;;
+      --codex-request) codex_request="$2" ;; --kimi-request) kimi_request="$2" ;; --agy-request) agy_request="$2" ;;
       *) die "record: unknown option $1" ;;
     esac; shift 2
   done
@@ -102,7 +111,13 @@ date: $date
 quote: $quote
 rounds-at: $at" entries=""
   for r in $REVIEWERS; do
+    q="${r}_request"; q="${!q}"; [ -f "$q" ] || die "record: --$r-request FILE is required (the verbatim review request)"
     f="${!r}"; [ -f "$f" ] || die "record: --$r FILE is required (the reviewer's verdict output)"
+    v="$({ printf 'reviewed: %s\n' "$sha"; cat -- "$q"; } | git hash-object -w --no-filters --stdin)"
+    rec="$rec
+request-$r: $r-request.txt $({ printf 'reviewed: %s\n' "$sha"; cat -- "$q"; } | sha256)"
+    entries="${entries}100644 blob $v	$r-request.txt
+"
     v="$(git hash-object -w --no-filters -- "$f")"
     rec="$rec
 verdict-$r: $r.txt $(sha256 < "$f")"
@@ -125,14 +140,15 @@ check() {
   local sha="$1" obj="$2" base="$3"
   bad() { echo "$sha owner sign-off does not qualify: $*"; exit 1; }
   [ "$(git cat-file -t "$obj:record.txt" 2>/dev/null)" = blob ] || bad "the record holds no record.txt"
-  local rec line k v seen=" " F_signoff="" F_commit="" F_date="" F_quote="" F_rounds_at="" F_verdict_codex="" F_verdict_kimi="" F_verdict_agy=""
+  local rec line k v seen=" " F_signoff="" F_commit="" F_date="" F_quote="" F_rounds_at=""
+  local F_request_codex="" F_verdict_codex="" F_request_kimi="" F_verdict_kimi="" F_request_agy="" F_verdict_agy=""
   rec="$(git cat-file blob "$obj:record.txt")"
   while IFS= read -r line; do
     [[ "$line" =~ ^([a-z-]+):\ (.*)$ ]] || bad "record.txt line is not key: value: '$line'"
     k="${BASH_REMATCH[1]}" v="${BASH_REMATCH[2]}"
     case "$seen" in *" $k "*) bad "record.txt repeats $k" ;; esac
     seen="$seen$k "
-    case "$k" in signoff|commit|date|quote|rounds-at|verdict-codex|verdict-kimi|verdict-agy) ;; *) bad "record.txt has the unknown key $k" ;; esac
+    case "$k" in signoff|commit|date|quote|rounds-at|request-codex|verdict-codex|request-kimi|verdict-kimi|request-agy|verdict-agy) ;; *) bad "record.txt has the unknown key $k" ;; esac
     printf -v "F_${k//-/_}" '%s' "$v"
   done <<< "$rec"
   for k in signoff commit date quote rounds-at; do case "$seen" in *" $k "*) ;; *) bad "record.txt has no $k" ;; esac; done
@@ -158,21 +174,33 @@ check() {
   [ -n "$rounds" ] || bad "rounds-at ${at:0:10}: no round count in '$vout'"
   [ "$rounds" -ge "$cap" ] \
     || bad "the review cap was not reached: a $cls change has cap $cap, and ${at:0:10} records $rounds round(s)"
-  local r n entry file hash got verdict
-  for r in $REVIEWERS; do n="F_verdict_$r"; [ -n "${!n}" ] || bad "the record has no $r verdict"; done
-  local want="agy.txt codex.txt kimi.txt record.txt" have
-  have="$(git ls-tree --name-only "$obj" | sort | tr '\n' ' ')"
-  [ "$have" = "$want " ] || bad "the record holds [${have% }], not exactly [$want]"
+  local r n entry file hash got reviewed verdict
   for r in $REVIEWERS; do
+    n="F_request_$r"; [ -n "${!n}" ] || bad "the record has no $r request"
+    n="F_verdict_$r"; [ -n "${!n}" ] || bad "the record has no $r verdict"
+  done
+  local want="100644 blob agy-request.txt 100644 blob agy.txt 100644 blob codex-request.txt 100644 blob codex.txt 100644 blob kimi-request.txt 100644 blob kimi.txt 100644 blob record.txt " have
+  have="$(git ls-tree --format='%(objectmode) %(objecttype) %(path)' "$obj" | LC_ALL=C sort | tr '\n' ' ')"
+  [ "$have" = "$want" ] || bad "the record tree is not exactly the seven sign-off files as 100644 blobs"
+  for r in $REVIEWERS; do
+    n="F_request_$r"; entry="${!n}"
+    file="${entry%% *}" hash="${entry#* }"
+    [ "$file" = "$r-request.txt" ] && [[ "$hash" =~ ^[0-9a-f]{64}$ ]] || bad "request-$r is '$entry', not '$r-request.txt <sha256>'"
+    got="$(git cat-file blob "$obj:$file" | sha256)"
+    [ "$got" = "$hash" ] || bad "the sha256 of $file is $got, not the recorded $hash"
+    reviewed="$(git cat-file blob "$obj:$file" | sed -n '1p')"
+    [[ "$reviewed" =~ ^reviewed:\ [0-9a-f]{40}$ ]] || bad "the $r request's first line is not a 'reviewed: <full 40-hex SHA>' line"
+    [ "$reviewed" = "reviewed: $sha" ] || bad "the $r request's reviewed line is '${reviewed#reviewed: }', not $sha"
+    git cat-file blob "$obj:$file" | tail -n +2 | names "$sha" \
+      || bad "the $r request body does not name ${sha:0:10} (an unambiguous prefix of at least 7 hex digits)"
     n="F_verdict_$r"; entry="${!n}"
     file="${entry%% *}" hash="${entry#* }"
     [ "$file" = "$r.txt" ] && [[ "$hash" =~ ^[0-9a-f]{64}$ ]] || bad "verdict-$r is '$entry', not '$r.txt <sha256>'"
-    [ "$(git cat-file -t "$obj:$file" 2>/dev/null)" = blob ] || bad "$file is not a file"
     got="$(git cat-file blob "$obj:$file" | sha256)"
     [ "$got" = "$hash" ] || bad "the sha256 of $file is $got, not the recorded $hash"
-    git cat-file blob "$obj:$file" | names "$sha" || bad "the $r transcript does not name ${sha:0:10}: it is the review of another commit"
     verdict="$(git cat-file blob "$obj:$file" | grep -E '^[[:space:]]*VERDICT: (ACCEPT|REJECT)[[:space:]]*$' | tail -1 | tr -d '[:space:]')" || true
-    [ "$verdict" = "VERDICT:ACCEPT" ] || bad "the $r output's last verdict is '${verdict:-none}', not VERDICT: ACCEPT"
+    [ -n "$verdict" ] || bad "the $r output has no verdict"
+    [ "$verdict" = "VERDICT:ACCEPT" ] || bad "the $r output's last verdict is '$verdict', not VERDICT: ACCEPT"
   done
   echo "$sha signed off by the owner ($F_date; $cls change, cap $cap reached at ${at:0:10} with $rounds round(s); codex, kimi and agy accepted): \"$F_quote\""
 }

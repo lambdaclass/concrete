@@ -299,24 +299,29 @@ hook_out="$(cd "$W" && printf 'refs/notes/concrete-review %s refs/notes/concrete
   "$NOTES_SHA" "$Z" "$(g rev-parse refs/notes/concrete-review-findings)" "$Z" | bash "$HOOK" 2>&1)"; rc=$?
 check "notes-only push: hook exits 0 (got $rc)" test "$rc" -eq 0
 check "notes-only push: hook takes the review-notes tier" grep -q "review-notes push" <<<"$hook_out"
-# Owner sign-off refs: only a record (parentless, its subject's 40-hex name, exactly the four files)
+# Owner sign-off refs: only a record (parentless, its subject's 40-hex name, exactly the seven files)
 # takes the notes tier. Anything else takes the full tier, which a linked worktree refuses before it
 # runs anything: that refusal is how these legs see the tier without running the gates.
 SO_BLOB="$(printf 'x\n' | g hash-object -w --stdin)"
-SO_TREE="$(printf '100644 blob %s\tagy.txt\n100644 blob %s\tcodex.txt\n100644 blob %s\tkimi.txt\n100644 blob %s\trecord.txt\n' "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" | g mktree)"
+SO_TREE="$(printf '100644 blob %s\tagy-request.txt\n100644 blob %s\tagy.txt\n100644 blob %s\tcodex-request.txt\n100644 blob %s\tcodex.txt\n100644 blob %s\tkimi-request.txt\n100644 blob %s\tkimi.txt\n100644 blob %s\trecord.txt\n' "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" | g mktree)"
 SO_REC="$(g commit-tree "$SO_TREE" -m record)"; SO_SUBJ="$(g rev-parse HEAD)"
+SO_OLD_TREE="$(printf '100644 blob %s\tagy.txt\n100644 blob %s\tcodex.txt\n100644 blob %s\tkimi.txt\n100644 blob %s\trecord.txt\n' "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" | g mktree)"
+SO_OLD_REC="$(g commit-tree "$SO_OLD_TREE" -m old-record)"
 g worktree add -q --detach "$T/so-wt" HEAD
 so_hook(){ (cd "$T/so-wt" && printf '%s %s %s %s\n' "$1" "$2" "$1" "$Z" | CONCRETE_GATES_SHELL= bash "$HOOK" origin x 2>&1); }
 hook_out="$(so_hook "refs/owner-signoff/$SO_SUBJ" "$SO_REC")"; rc=$?
-check "an owner sign-off record takes the review-notes tier (exit $rc)" \
+check "a seven-file owner sign-off record takes the review-notes tier (exit $rc)" \
   bash -c "[ $rc -eq 0 ] && grep -q 'review-notes push' <<<'$hook_out'"
+hook_out="$(so_hook "refs/owner-signoff/$SO_SUBJ" "$SO_OLD_REC")"; rc=$?
+check "the old four-file owner sign-off shape takes the full tier (exit $rc)" \
+  bash -c "[ $rc -eq 1 ] && grep -q 'is a linked worktree' <<<'$hook_out'"
 hook_out="$(so_hook "refs/owner-signoff/$SO_SUBJ" "$SO_SUBJ")"; rc=$?
 check "a source commit pushed as a sign-off takes the full tier (exit $rc)" \
   bash -c "[ $rc -eq 1 ] && grep -q 'is a linked worktree' <<<'$hook_out'"
 SO_DTREE="$(printf '100644 blob %s\tsrc.lean\n' "$SO_BLOB" | g mktree)"
-SO_DIRS="$(g commit-tree "$(printf '040000 tree %s\tagy.txt\n040000 tree %s\tcodex.txt\n040000 tree %s\tkimi.txt\n040000 tree %s\trecord.txt\n' "$SO_DTREE" "$SO_DTREE" "$SO_DTREE" "$SO_DTREE" | g mktree)" -m dirs)"
+SO_DIRS="$(g commit-tree "$(printf '040000 tree %s\tagy-request.txt\n040000 tree %s\tagy.txt\n040000 tree %s\tcodex-request.txt\n040000 tree %s\tcodex.txt\n040000 tree %s\tkimi-request.txt\n040000 tree %s\tkimi.txt\n040000 tree %s\trecord.txt\n' "$SO_DTREE" "$SO_DTREE" "$SO_DTREE" "$SO_DTREE" "$SO_DTREE" "$SO_DTREE" "$SO_DTREE" | g mktree)" -m dirs)"
 hook_out="$(so_hook "refs/owner-signoff/$SO_SUBJ" "$SO_DIRS")"; rc=$?
-check "four directories named like a record's files take the full tier (exit $rc)" \
+check "seven directories named like a record's files take the full tier (exit $rc)" \
   bash -c "[ $rc -eq 1 ] && grep -q 'is a linked worktree' <<<'$hook_out'"
 hook_out="$(so_hook "refs/owner-signoff/not-a-sha" "$SO_REC")"; rc=$?
 check "a record under a name that is no SHA takes the full tier (exit $rc)" \
