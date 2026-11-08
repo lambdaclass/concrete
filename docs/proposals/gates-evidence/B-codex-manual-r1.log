@@ -1,0 +1,2727 @@
+Reading additional input from stdin...
+OpenAI Codex v0.166.0
+--------
+workdir: /home/unbalancedparen/projects/gates-briefs/cx-B2
+model: gpt-6.1-sol
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: none
+reasoning summaries: none
+session id: 01a1bb9c-a012-74c0-a8d0-53298f4423ed
+--------
+user
+You are a code reviewer working in a throwaway export of the Concrete repository (current directory) at commit c2245c99 of branch gates-manifest, on top of main ea212942. Do not modify any file, do not build, no network. REVIEW.diff is the branch's whole diff against main.
+
+The branch implements an owner-approved item: one test format. Each test is one program with its expected outcome in a single manifest tests/manifest.tsv (id, program bir:NAME or con:PATH, expect exit N / trap KIND site N / refuse RULE-ID, slice); one shared reader scripts/checks/lib/test_manifest.py; one runner scripts/checks/compiler/tests.sh (renamed from slice0_backends.sh); one owner per test; the slice-0 BIR examples' expected outcomes moved out of Concrete/BIR.lean Examples.all into the manifest; slice0_artifacts.sh and slice0_repro.sh enumerate through the reader; a root check scripts/checks/test_manifest.sh; CI job renamed to "Tests (...)" with required-checks-transition rows.
+
+Review for correctness bugs, reading the actual files (not only the diff). In particular:
+1. Does each planted-failure control (test_manifest.sh controls; tests.sh manifest_control wrong-expectation, wrong-trap-expectation, missing-row, nonexistent-program; the judge controls) fail FOR THE PLANTED REASON? Could any pass vacuously, or fail for an unrelated reason while reporting ok?
+2. Does any test expectation have two homes? (The `example : run ... := by decide` lines in Concrete/BIR.lean are kept on purpose as semantic facts.)
+3. Do slice0_artifacts.sh and slice0_repro.sh still cover every test, and does the inventory check in slice0_common.sh's manifest_rows behave correctly under set -e inside command substitution?
+4. Are .github/workflows/lean_action_ci.yml, required-checks.txt, required-checks-transition.tsv and scripts/land/required_checks.py consistent; RETENTION.tsv and scripts/checks/root_inventory.txt consistent with the new files?
+5. Does the change pick a side on any owner decision in docs (OD rows)? It should not.
+For each finding: file:line, severity, concrete fix. Last line exactly: VERDICT: CLEAN or VERDICT: FINDINGS.
+codex
+I’ll read the diff and relevant files, then trace the failure controls and inventory checks. I won’t modify files, build, or use the network.
+exec
+/bin/bash -lc 'cat REVIEW.diff' in /home/unbalancedparen/projects/gates-briefs/cx-B2
+ succeeded in 0ms:
+diff --git a/.github/workflows/lean_action_ci.yml b/.github/workflows/lean_action_ci.yml
+index 4da99f7bf..b48820744 100644
+--- a/.github/workflows/lean_action_ci.yml
++++ b/.github/workflows/lean_action_ci.yml
+@@ -347,14 +347,14 @@ jobs:
+ 
+   # THE COMPILER'S GATES (Concrete/README.md gates 4, 6, 6a, 8, 9, 10, 11 and 12; slice 0, provisional),
+   # scripts/checks/compiler/: not root checks (run.sh runs only scripts/checks/*.sh), because they need
+-  # the compiler's devshell, a native macOS runner and minutes each. Every hand-written BIR example
+-  # through the LLVM path and the LCB path, each executable's observation compared with the BIR
+-  # semantics; sanitizers, binary size (report-only) and the stack bound; the trusted-base golden; and
++  # the compiler's devshell, a native macOS runner and minutes each. Every bir: row in the test manifest
++  # through the LLVM path and the LCB path, each executable's observation compared with the manifest
++  # expectation; sanitizers, binary size (report-only) and the stack bound; the trusted-base golden; and
+   # every build stage reproduced in distinct directories and on distinct machines. Each runs natively
+   # on x86-64 Linux and on AArch64 macOS (LCB's first native proof profile is Apple AArch64), and every
+   # matrix leg is a required job of its own name.
+-  backends:
+-    name: Slice 0 backends (${{ matrix.arch }})
++  tests:
++    name: Tests (${{ matrix.arch }})
+     needs: landing-record
+     if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
+     # The compiler's devshell (flake.nix default: Lean, clang, LLVM, gdb/lldb), entered per step;
+@@ -378,8 +378,8 @@ jobs:
+       - uses: actions/checkout@v4
+       - name: Install Nix
+         uses: cachix/install-nix-action@v31
+-      - name: Backend gate (LLVM and LCB, native)
+-        run: nix develop --command bash scripts/checks/compiler/slice0_backends.sh
++      - name: Manifest tests (LLVM and LCB, native)
++        run: nix develop --command bash scripts/checks/compiler/tests.sh
+ 
+   artifacts:
+     name: Slice 0 artifacts (${{ matrix.arch }})
+diff --git a/Concrete/BIR.lean b/Concrete/BIR.lean
+index 9887a62f7..97b51a867 100644
+--- a/Concrete/BIR.lean
++++ b/Concrete/BIR.lean
+@@ -648,38 +648,38 @@ example : ¬ WF unreachableParam := by decide
+ example : ¬ WF crossBlockUse := by decide
+ example : ¬ WF useBeforeDef := by decide
+ 
+-/-- The examples, by name, with the outcome each must show (`scripts/checks/compiler/slice0_backends.sh`). -/
+-def all : List (String × Program × Outcome) :=
+-  [("answer", answer, .exited 42), ("boundary", boundary, .exited 255),
+-   ("overflow", overflow, .trapped 0), ("answer_discharged", answerDischarged, .exited 42),
+-   ("return134", return134, .exited 134),
+-   ("i8_add_ok", checkedOp .add .i8 (-100) (-28), .exited 0),
+-   ("i8_add_ovf", checkedOp .add .i8 (-100) (-29), .trapped 0),
+-   ("u16_mul_ok", checkedOp .mul .u16 300 218, .exited 0),
+-   ("u16_mul_ovf", checkedOp .mul .u16 300 219, .trapped 0),
+-   ("i16_sub_ovf", checkedOp .sub .i16 (-32768) 1, .trapped 0),
+-   ("u8_sub_ovf", checkedOp .sub .u8 0 1, .trapped 0),
+-   ("i8_mul_ok", checkedOp .mul .i8 (-16) 8, .exited 0),
+-   ("i8_mul_ovf", checkedOp .mul .i8 (-16) (-8), .trapped 0),
+-   ("w_i8_add", wrapped .add .i8 100 100, .exited 72),
+-   ("w_i8_add_ok", wrapped .add .i8 (-100) 50, .exited 206),
+-   ("w_i8_sub", wrapped .sub .i8 (-100) 100, .exited 184),
+-   ("w_i8_mul", wrapped .mul .i8 (-16) 9, .exited 240),
+-   ("w_u8_add", wrapped .add .u8 200 100, .exited 172),
+-   ("w_u8_sub", wrapped .sub .u8 3 5, .exited 126),
+-   ("w_u8_mul", wrapped .mul .u8 20 20, .exited 16),
+-   ("w_i16_add", wrapped .add .i16 32767 1, .exited 128),
+-   ("w_i16_sub", wrapped .sub .i16 (-32768) 1, .exited 127),
+-   ("w_i16_sub_ok", wrapped .sub .i16 (-1000) 24000, .exited 88),
+-   ("w_i16_mul", wrapped .mul .i16 300 301, .exited 60),
+-   ("w_u16_sub", wrapped .sub .u16 1 3, .exited 126),
+-   ("w_u16_mul", wrapped .mul .u16 65535 65535, .exited 129),
+-   ("w_u16_mul_ok", wrapped .mul .u16 255 257, .exited 255),
+-   ("widen_u", widenU, .exited 160), ("widen_s", widenS, .exited 90),
+-   ("site1", twoSites 100 100 2, .trapped 1), ("site0", twoSites 200 100 2, .trapped 0),
+-   ("two_sites_ok", twoSites 20 1 2, .exited 42)]
++/-- The examples, by name. Their expected outcomes live only in `tests/manifest.tsv`. -/
++def all : List (String × Program) :=
++  [("answer", answer), ("boundary", boundary),
++   ("overflow", overflow), ("answer_discharged", answerDischarged),
++   ("return134", return134),
++   ("i8_add_ok", checkedOp .add .i8 (-100) (-28)),
++   ("i8_add_ovf", checkedOp .add .i8 (-100) (-29)),
++   ("u16_mul_ok", checkedOp .mul .u16 300 218),
++   ("u16_mul_ovf", checkedOp .mul .u16 300 219),
++   ("i16_sub_ovf", checkedOp .sub .i16 (-32768) 1),
++   ("u8_sub_ovf", checkedOp .sub .u8 0 1),
++   ("i8_mul_ok", checkedOp .mul .i8 (-16) 8),
++   ("i8_mul_ovf", checkedOp .mul .i8 (-16) (-8)),
++   ("w_i8_add", wrapped .add .i8 100 100),
++   ("w_i8_add_ok", wrapped .add .i8 (-100) 50),
++   ("w_i8_sub", wrapped .sub .i8 (-100) 100),
++   ("w_i8_mul", wrapped .mul .i8 (-16) 9),
++   ("w_u8_add", wrapped .add .u8 200 100),
++   ("w_u8_sub", wrapped .sub .u8 3 5),
++   ("w_u8_mul", wrapped .mul .u8 20 20),
++   ("w_i16_add", wrapped .add .i16 32767 1),
++   ("w_i16_sub", wrapped .sub .i16 (-32768) 1),
++   ("w_i16_sub_ok", wrapped .sub .i16 (-1000) 24000),
++   ("w_i16_mul", wrapped .mul .i16 300 301),
++   ("w_u16_sub", wrapped .sub .u16 1 3),
++   ("w_u16_mul", wrapped .mul .u16 65535 65535),
++   ("w_u16_mul_ok", wrapped .mul .u16 255 257),
++   ("widen_u", widenU), ("widen_s", widenS),
++   ("site1", twoSites 100 100 2), ("site0", twoSites 200 100 2),
++   ("two_sites_ok", twoSites 20 1 2)]
+ 
+-example : all.all (fun (_, p, o) => wf p && run p 5 == o) := by decide +kernel
++example : all.all (fun (_, p) => wf p) := by decide +kernel
+ 
+ end Examples
+ 
+diff --git a/Concrete/README.md b/Concrete/README.md
+index 9e99868c4..7031a2e2a 100644
+--- a/Concrete/README.md
++++ b/Concrete/README.md
+@@ -1,6 +1,6 @@
+ # The Concrete compiler: slice 0 design (provisional)
+ 
+-PROVISIONAL. This is a design sketch, revision 8, written after eight Codex and agy review rounds. It folds in the Codex/agy/Kimi pipeline review and the owner's answers (2026-11-06). Build step 1 (BIR as the shared backend contract) is implemented: `Concrete/BIR.lean` and `Concrete/Backend/`, gate `scripts/checks/compiler/slice0_backends.sh`. Slice 0 is the first compiler slice. It is built before the owner freezes Core (A2c) and makes no normative claim before that freeze ([decision](../docs/decisions.md#decided-project-proof-infrastructure)). Branch `wip/slice0` depends on `wip/spec-root`, which puts `ConcreteSpec` on the new root, and is rebased onto main (under a new branch name) once that lands.
++PROVISIONAL. This is a design sketch, revision 8, written after eight Codex and agy review rounds. It folds in the Codex/agy/Kimi pipeline review and the owner's answers (2026-11-06). Build step 1 (BIR as the shared backend contract) is implemented: `Concrete/BIR.lean` and `Concrete/Backend/`, gate `scripts/checks/compiler/tests.sh`. Slice 0 is the first compiler slice. It is built before the owner freezes Core (A2c) and makes no normative claim before that freeze ([decision](../docs/decisions.md#decided-project-proof-infrastructure)). Branch `wip/slice0` depends on `wip/spec-root`, which puts `ConcreteSpec` on the new root, and is rebased onto main (under a new branch name) once that lands.
+ 
+ ## Scope
+ 
+@@ -10,7 +10,7 @@ This document describes **the compiler**: its stages, IRs, proof strategy, premi
+ - what the parent process observes, including the trap status and the trap line: [`ConcreteSpec/Spec/Observation.lean`](../ConcreteSpec/Spec/Observation.lean);
+ - the slice-0 surface (token rules, grammar, elaboration): the new `ConcreteSpec/Spec/Surface0.lean` described below.
+ 
+-The conformance corpus (`tests/slice0/`) instantiates those spec examples as source files.
++The test corpus is `tests/manifest.tsv`. Today's rows name hand-written BIR programs. Future `con:` rows name source files under `tests/`.
+ 
+ ## The pipeline
+ 
+@@ -154,7 +154,7 @@ Each IR has a total, fuel-indexed evaluator returning the spec's `Outcome` and a
+ |---|---|
+ | `Concrete.lean` | The library root that lake requires; it imports every stage. It is the same pattern as `ConcreteSpec.lean`. |
+ | `Concrete/` | The compiler: one flat folder, one file per pipeline stage or concern. |
+-| `tests/` | The executable test corpus. Each slice gets one subfolder, which holds `.con` sources and their `.expect` outcomes. |
++| `tests/` | The test corpus. `manifest.tsv` declares each program, its expected outcome and its owning slice. Source programs live under `tests/`. |
+ 
+ **Changes to existing entries.** No new entry is created for any of these:
+ - `lakefile.toml` gains the `Concrete` lib, the `concrete` exe, and a pinned `require` of `lean-compiler-backend`; `lake-manifest.json` records it.
+@@ -191,7 +191,9 @@ Concrete/
+   Cert.lean            per-compilation certificate emitter
+   Main.lean            CLI driver (IO, toolchain invocation); placeholder spellings
+ tests/
+-  slice0/              *.con sources and *.expect outcomes (exit status, or refusal + rule)
++  manifest.tsv         one row per test: program, expected outcome and owning slice
++  slice0/              future *.con sources; their outcomes stay in manifest.tsv
++  golden/              golden outputs, not test programs
+ ```
+ 
+ **Rules:**
+@@ -556,12 +558,12 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
+ 
+    Not yet a job. Until it is, the trusted-base golden (gate 9) fixes each headline theorem's axioms (a `sorryAx` among them fails it), and the trust ban of `scripts/proofs/trust_ban.sh` covers the specification only: it reads the compiler's library entry and its pinned dependency in `lakefile.toml`, not its sources or constants.
+ 3. **Premise registry and stage coverage:** the checks described in the stage registry section above.
+-4. **Conformance, both backends:** each `tests/slice0/*.con` example runs through:
++4. **Conformance, both backends:** each `bir:` row in `tests/manifest.tsv` runs through:
+    - the Lean `run`;
+    - the LLVM-native executable;
+    - the LCB-native executable.
+ 
+-   All three must give the same observation, and each must match the `.expect`.
++   All three must give the same observation, and each must match the row's `expect`. Future `con:` rows use the same manifest and runner.
+ 
+    **Classification uses the status and the runtime evidence, never the status alone.** `Observation.status` is many-to-one.
+    - Status 134 **with** the runtime's trap line on fd 2 is `trapped k`.
+@@ -571,7 +573,7 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
+ 
+    Accepted examples `return 125;` and `return 134;` are in the corpus and must classify as exits. Slice 0 can't produce a real startup refusal, because it has no grants. The refusal and trap classifications are also exercised by comparator self-tests: stub images, and the trap via gate 6.
+ 
+-   **Refused examples have their own leg.** The Lean `check` result, the compiler's refusal (with its rule) and the refusal certificate must agree with `.expect`. No executable exists for a refused example. A separate supported-subset coverage report lists every grammar production and Core form that the corpus exercises. A reject-all compiler fails, because every accepted example must exit with its status.
++   **Refused examples have their own leg.** The Lean `check` result, the compiler's refusal (with its rule) and the refusal certificate must agree with the row's `refuse RULE-ID` expectation. No executable exists for a refused example. A separate supported-subset coverage report lists every grammar production and Core form that the corpus exercises. A reject-all compiler fails, because every accepted example must exit with its status.
+ 5. **Differential at the source:** generated accepted programs, with replayable seeds; native exit = Lean `run`.
+ 6. **Differential through the token-free lowering, both backends.** This covers overflow. Generated **well-scoped, unchecked** slice-0 programs over **arbitrary** `u8` operands, including `200 + 56`, take `lower q ∅ → memory → ssa`, so they have no tokens and no checker. Their Core `run` is compared with the LLVM path and the LCB path. Overflow must give exit 134 and the right site's trap line on fd 2, for both backends. This exercises token-aware lowering, Memory CFG and SSA, not only the backends.
+    A second leg compares generated BIR directly with both backends, to cover BIR shapes that lowering does not produce.
+@@ -700,11 +702,11 @@ planned `concrete facts` command will print this identity.
+ different paths with different TMPDIRs, each compiling the compiler, its dependencies and the `lcb`
+ executable itself, with no Lake artifact cache. They share only the pinned Lean toolchain and the
+ dependency sources (tracked files only). Each side
+-emits every hand-written BIR example and builds it natively, and every stage is compared without
+-normalization: the BIR and adapted LCB value dumps, both text formats, both LCB assembly outputs,
+-all objects and both executables. Negative controls check that the comparator refuses a flipped
+-byte, a missing artifact and a differing inventory. The slice-0 front end is not implemented yet, so
+-this gate starts at the hand-written BIR contract.
++emits every `bir:` row in `tests/manifest.tsv` and builds it natively, and every stage is compared
++without normalization: the BIR and adapted LCB value dumps, both text formats, both LCB assembly
++outputs, all objects and both executables. Negative controls check that the comparator refuses a
++flipped byte, a missing artifact and a differing inventory. The slice-0 front end is not implemented
++yet, so this gate starts at the hand-written BIR contract.
+ 
+ Both native gates use `scripts/checks/lib/slice0_native.sh` (a build helper, not a gate): the Nix-pinned clang 21 (`CONCRETE_SLICE0_CLANG`; the
+ shell's general `clang` is unchanged), an environment reduced to `PATH`, `HOME` and `TMPDIR`
+diff --git a/RETENTION.tsv b/RETENTION.tsv
+index 32782c270..f8c58e70e 100644
+--- a/RETENTION.tsv
++++ b/RETENTION.tsv
+@@ -29,6 +29,7 @@ required-checks.txt required-checks-transition.tsv	landing	retained	root (script
+ RETENTION.tsv	landing	retained	RETENTION.tsv	R-0562	root: never; survives the deletion of legacy/; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+ ISSUES.tsv	issue record	retained	ISSUES.tsv (minimal issue record, P12)	R-0558	root: never; the full ledger joins it with slice 1; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+ ConcreteSpec ConcreteSpec.lean	spec	retained	root (the normative Lean specification)	R-0560	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
++tests/manifest.tsv tests/slice0	corpus	retained	root (the manifest-driven test corpus)	R-0558	root: never; legacy/ copy: none (new at the root, nothing to delete)	open
+ scripts/proofs	proof integrity	retained	scripts/proofs (the proof-integrity checks of ConcreteSpec: axiom inventory, trust ban, kernel replay, external re-check; rewritten from legacy/scripts/tests/check_external_checker.sh and legacy/scripts/tools, which stay governed by their own rows)	R-0560	root: never; legacy/ copy: none (new at the root, nothing to delete)	open
+ .github	ci	retained	rewritten for the new root; the old workflows move to legacy/.github and are not run	R-0563	root: never (the new root's workflows); legacy/ copy (the old workflows, never run): at LD (R-0590)	open
+ .githooks	landing	retained	.githooks (pre-push, re-pointed at the new gate set)	R-0563	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+diff --git a/changelog.d/2026-11-08-test-manifest.md b/changelog.d/2026-11-08-test-manifest.md
+new file mode 100644
+index 000000000..d597edc9a
+--- /dev/null
++++ b/changelog.d/2026-11-08-test-manifest.md
+@@ -0,0 +1,5 @@
++### One manifest-driven test format
++
++The slice-0 BIR programs and their expected outcomes now have one inventory in `tests/manifest.tsv`.
++A shared fail-closed reader feeds the test, artifact and reproducibility gates. The compiler test job
++is now `Tests`; root checks validate the manifest, source-file ownership and planted defects.
+diff --git a/required-checks-transition.tsv b/required-checks-transition.tsv
+index 1e24388b2..47fe920fa 100644
+--- a/required-checks-transition.tsv
++++ b/required-checks-transition.tsv
+@@ -5,3 +5,5 @@
+ # "Root checks" keeps its name and is required on both sides, so it has no row. Delete a row once main
+ # no longer requires its job (required_checks.py reports it stale).
+ old_job	replacements	reason
++Slice 0 backends (x86-64)	Tests (x86-64)	The manifest-driven runner replaces the slice-0 backend gate.
++Slice 0 backends (aarch64-macos)	Tests (aarch64-macos)	The manifest-driven runner replaces the slice-0 backend gate.
+diff --git a/required-checks.txt b/required-checks.txt
+index 10a6199ef..18a8e3db2 100644
+--- a/required-checks.txt
++++ b/required-checks.txt
+@@ -11,8 +11,8 @@ Proof axioms
+ Proof trust ban (sorry, native_decide)
+ Kernel replay (leanchecker)
+ External re-check (con-leche, nanoda)
+-Slice 0 backends (x86-64)
+-Slice 0 backends (aarch64-macos)
++Tests (x86-64)
++Tests (aarch64-macos)
+ Slice 0 artifacts (x86-64)
+ Slice 0 artifacts (aarch64-macos)
+ Slice 0 trusted base (gate 9, x86-64)
+diff --git a/scripts/checks/compiler/slice0_artifacts.sh b/scripts/checks/compiler/slice0_artifacts.sh
+index 319cba787..21dcde9d6 100644
+--- a/scripts/checks/compiler/slice0_artifacts.sh
++++ b/scripts/checks/compiler/slice0_artifacts.sh
+@@ -1,6 +1,6 @@
+ #!/usr/bin/env bash
+-# Slice-0 artifact gates (PROVISIONAL, Concrete/README.md gates 10, 11 and 12), over every
+-# hand-written BIR example, on the executables slice0_native.sh links:
++# Slice-0 artifact gates (PROVISIONAL, Concrete/README.md gates 10, 11 and 12), over every bir:
++# row in tests/manifest.tsv, on the executables slice0_native.sh links:
+ #
+ # 10. Sanitizers: the LLVM example also built with ASan (slice0_native.sh sanitize: ASan
+ #     instruments the printed IR once every definition carries sanitize_address; no UBSan: its
+@@ -158,12 +158,15 @@ size_report() { # size_report NAME BACKEND EXE
+   printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$target" "$bytes" "${text:-unavailable}" >>"$sizes"
+ }
+ 
+-names=$(emit_examples)
++rows=$(manifest_rows bir)
+ mkdir -p "$work/ctl"
+-for name in $names; do
++first_name= first_program= first_expect=
++while IFS=$'\t' read -r name program expect; do
++  if [ -z "$first_name" ]; then first_name=$name first_program=$program first_expect=$expect; fi
+   d="$work/ex/$name"
+   t0=$(now_ms)
+-  "${emitter[@]}" emit "$name" "$d" "$target"
++  read -r -a expectation <<<"$expect"
++  "${emitter[@]}" emit "${program#bir:}" "$d" "$target" "${expectation[@]}"
+   t1=$(now_ms)
+   build "$name" "$d/build.log" bounded "$native_secs" bash "$root/scripts/checks/lib/slice0_native.sh" "$d" "$lcb"
+   t2=$(now_ms)
+@@ -183,11 +186,12 @@ for name in $names; do
+     stack_check "$name" "$backend" "$d/$backend.exe"
+   done
+   examples=$((examples + 1))
+-done
++done <<<"$rows"
+ 
+ # Control (gate 10): an out-of-bounds load in the body must be reported by ASan.
+ c="$work/ctl/asan"
+-"${emitter[@]}" emit "${names%%$'\n'*}" "$c" "$target"
++read -r -a first_expectation <<<"$first_expect"
++"${emitter[@]}" emit "${first_program#bir:}" "$c" "$target" "${first_expectation[@]}"
+ sed -i.orig 's/^define i32 @concrete_body() {$/define i32 @concrete_body_orig() {/' "$c/llvm.ll"
+ cat >>"$c/llvm.ll" <<'LL'
+ 
+diff --git a/scripts/checks/compiler/slice0_backends.sh b/scripts/checks/compiler/slice0_backends.sh
+deleted file mode 100755
+index 0d20e7b59..000000000
+--- a/scripts/checks/compiler/slice0_backends.sh
++++ /dev/null
+@@ -1,73 +0,0 @@
+-#!/usr/bin/env bash
+-# Slice-0 backend gate (PROVISIONAL, Concrete/README.md gates 4 and 6, hand-written BIR leg):
+-# every hand-written BIR example goes through the LLVM path (clang) and the LCB path: the adapted
+-# body assembled by LCB in process (no text on the proved path), linked with the runtime entry,
+-# which LCB's command line assembles from QBE text.
+-# Each executable runs under bounded_run; its observation is its exit status (or "incomplete"),
+-# the exact bytes on descriptor 2, and descriptor 1, which must be empty. All three must equal what
+-# the BIR semantics gives (the emitter writes the expected status and stderr bytes).
+-#
+-# Controls: a body that never returns must be observed as incomplete on both backends; a body
+-# returning a word that encodes nothing must reach the runtime's refusal; and the comparison
+-# itself must reject a missing or extra newline, a wrong status with the right stderr, and stray
+-# stdout. Run inside the nix devshell, from the repository root.
+-set -euo pipefail
+-# shellcheck source=scripts/checks/lib/slice0_common.sh
+-source scripts/checks/lib/slice0_common.sh
+-
+-fail=0
+-count=0
+-examples=0
+-# check NAME DIR SECS RETRY: build both backends in DIR, run them and judge them.
+-check() {
+-  local name=$1 d=$2 backend
+-  build "$name" "$d/build.log" bounded "$native_secs" bash "$root/scripts/checks/lib/slice0_native.sh" "$d" "$lcb"
+-  for backend in llvm lcb; do
+-    observe "$d/$backend.exe" "$d/$backend" "$3" "$4"
+-    count=$((count + 1))
+-    if judge "$d" "$d/$backend"; then
+-      echo "ok   $name [$backend]: status $(cat "$d/$backend.status")"
+-    else
+-      echo "FAIL $name [$backend]: status $(cat "$d/$backend.status") (expected $(cat "$d/status"))," \
+-        "stderr $(od -An -c "$d/$backend.stderr" | tr -s ' ' | head -c 300)," \
+-        "stdout $(wc -c <"$d/$backend.stdout") bytes"
+-      fail=1
+-    fi
+-  done
+-}
+-
+-names=$(emit_examples)
+-for name in $names; do
+-  d="$work/ex/$name"
+-  "${emitter[@]}" emit "$name" "$d" "$target"
+-  check "$name" "$d" 10 20
+-  examples=$((examples + 1))
+-done
+-"${emitter[@]}" loop "$work/ctl/loop" "$target"
+-expected_timeout check control-loop "$work/ctl/loop" 1 1
+-"${emitter[@]}" invalid "$work/ctl/invalid" "$target"
+-check control-invalid-word "$work/ctl/invalid" 10 20
+-
+-# The comparison's own negative controls: each forged observation must be rejected.
+-e="$work/ctl/judge"; mkdir -p "$e"
+-echo 134 >"$e/status"; printf 'concrete: trap: x\n' >"$e/stderr"
+-forge() { # forge NAME STATUS STDERR-PRINTF STDOUT
+-  local o="$work/ctl/forged-$1"
+-  echo "$2" >"$o.status"; printf "$3" >"$o.stderr"; printf '%s' "$4" >"$o.stdout"
+-  echo "$o"
+-}
+-judge "$e" "$(forge same 134 'concrete: trap: x\n' '')" || { echo "FAIL judge rejects an exact match"; fail=1; }
+-for c in "no-newline|134|concrete: trap: x|" "extra-newline|134|concrete: trap: x\n\n|" \
+-         "wrong-status|1|concrete: trap: x\n|" "stray-stdout|134|concrete: trap: x\n|42" \
+-         "incomplete|incomplete||"; do
+-  IFS='|' read -r n s err out <<<"$c"
+-  if judge "$e" "$(forge "$n" "$s" "$err" "$out")"; then
+-    echo "FAIL judge accepts a forged observation: $n"; fail=1
+-  else
+-    echo "ok   judge rejects $n"
+-  fi
+-done
+-
+-[ "$examples" -gt 0 ] || { echo "slice0_backends: no examples ran" >&2; exit 1; }
+-echo "slice0_backends: $examples examples, $count backend runs (controls included)"
+-exit "$fail"
+diff --git a/scripts/checks/compiler/slice0_bir.lean b/scripts/checks/compiler/slice0_bir.lean
+index 90176ba52..0e7b83c8c 100644
+--- a/scripts/checks/compiler/slice0_bir.lean
++++ b/scripts/checks/compiler/slice0_bir.lean
+@@ -1,11 +1,12 @@
+ import Concrete
+ 
+ /-!
+-Emitter for the slice-0 backend gate (`scripts/checks/compiler/slice0_backends.sh`). PROVISIONAL.
++Emitter for the manifest-driven test gate (`scripts/checks/compiler/tests.sh`). PROVISIONAL.
+ 
+ `lake env lean --run scripts/checks/compiler/slice0_bir.lean list` prints the hand-written BIR examples;
+-`... emit NAME DIR TARGET` checks the example in Lean (well formed; its BIR run gives the expected
+-outcome; LCB's own evaluator on the adapted body returns the same result word) and writes
++`... emit NAME DIR TARGET EXPECT...` takes the expectation from `tests/manifest.tsv` and checks the
++example in Lean (well formed; its BIR run gives that outcome; LCB's own evaluator on the adapted
++body returns the same result word; a trap site's kind is the expected kind) and writes
+ `DIR/llvm.ll` (body + runtime entry), `DIR/lcb_body.s` (the adapted body, assembled by LCB in
+ process for TARGET: `x86_64-linux`, `aarch64-linux` or `aarch64-macos`), `DIR/lcb_rt.ssa` (the
+ runtime entry as QBE text, for LCB's command line), `DIR/lcb_body.ssa` (a debug dump only), and the
+@@ -18,6 +19,24 @@ word that encodes nothing, which the runtime must refuse (`Runtime.invalidLine`,
+ -/
+ 
+ open Concrete.BIR Concrete.Backend
++open ConcreteSpec (Trap)
++
++structure Expectation where
++  outcome : Outcome
++  trapKind : Option Trap
++
++def trapOfName : String → Option Trap
++  | "arithmeticOverflow" => some .arithmeticOverflow
++  | _ => none
++
++def parseExpectation : List String → Option Expectation
++  | ["exit", c] => match c.toNat? with
++    | some n => if n ≤ 255 then some ⟨.exited n, none⟩ else none
++    | none => none
++  | ["trap", kind, "site", s] => match trapOfName kind, s.toNat? with
++    | some k, some n => some ⟨.trapped n, some k⟩
++    | _, _ => none
++  | _ => none
+ 
+ def writeExpected (dir : System.FilePath) (status : String) (stderr : String) : IO Unit := do
+   IO.FS.writeFile (dir / "status") (status ++ "\n")
+@@ -52,14 +71,17 @@ def writeBackends (dir : System.FilePath) (target : LCB.Target) (p : Program)
+   IO.FS.writeFile (dir / "llvm.ll") (LLVM.module p)
+   writeLcb dir target emitted
+ 
+-def emit (name : String) (dir : System.FilePath) (target : LCB.Target) : IO UInt32 := do
+-  let some (_, p, expected) := Examples.all.find? (·.1 == name)
++def emit (name : String) (dir : System.FilePath) (expectation : List String)
++    (target : LCB.Target) : IO UInt32 := do
++  let some (_, p) := Examples.all.find? (·.1 == name)
+     | IO.eprintln s!"unknown example {name}"; return 2
++  let some expected := parseExpectation expectation
++    | IO.eprintln s!"{name}: invalid BIR expectation; use exit N or trap KIND site N"; return 2
+   unless wf p do IO.eprintln s!"{name}: not well formed"; return 1
+   let got := run p 1000
+-  unless got == expected do
+-    IO.eprintln s!"{name}: BIR run gives {repr got}, expected {repr expected}"; return 1
+-  let some word := encode expected | IO.eprintln s!"{name}: no result word"; return 1
++  unless got == expected.outcome do
++    IO.eprintln s!"{name}: expectation mismatch: BIR run gives {repr got}, expected {repr expected.outcome}"; return 1
++  let some word := encode expected.outcome | IO.eprintln s!"{name}: no result word"; return 1
+   match LCB.emit p with
+   | .error msg => IO.eprintln s!"{name}: adapter: {msg}"; return 1
+   | .ok (f, tbl) =>
+@@ -69,10 +91,13 @@ def emit (name : String) (dir : System.FilePath) (target : LCB.Target) : IO UInt
+         IO.eprintln s!"{name}: LCB's evaluator returns {w}, BIR's result word is {word}"; return 1
+     | none => IO.eprintln s!"{name}: LCB's evaluator does not return"; return 1
+     unless ← writeBackends dir target p (f, tbl) do return 1
+-    match expected with
++    match expected.outcome with
+     | .exited c => writeExpected dir (toString c) ""
+     | .trapped s => match tbl[s]? with
+-      | some e => writeExpected dir "134" (Runtime.trapLine e ++ "\n")
++      | some e =>
++        unless expected.trapKind == some e.kind do
++          IO.eprintln s!"{name}: expectation mismatch: trap site {s} has kind {repr e.kind}, expected {repr expected.trapKind}"; return 1
++        writeExpected dir "134" (Runtime.trapLine e ++ "\n")
+       | none => IO.eprintln s!"{name}: no site {s}"; return 1
+     | _ => IO.eprintln s!"{name}: no observation"; return 1
+     return 0
+@@ -114,9 +139,9 @@ def withTarget (name : String) (k : LCB.Target → IO UInt32) : IO UInt32 :=
+ def main (args : List String) : IO UInt32 := do
+   match args with
+   | ["list"] => do
+-    for (n, _, _) in Examples.all do IO.println n
++    for (n, _) in Examples.all do IO.println n
+     return 0
+-  | ["emit", name, dir, t] => withTarget t (emit name dir)
++  | "emit" :: name :: dir :: t :: expectation => withTarget t (emit name dir expectation)
+   | ["loop", dir, t] => withTarget t (emitLoop dir)
+   | ["invalid", dir, t] => withTarget t (emitInvalid dir)
+-  | _ => IO.eprintln "usage: slice0_bir.lean list | (emit NAME | loop | invalid) DIR TARGET"; return 2
++  | _ => IO.eprintln "usage: slice0_bir.lean list | emit NAME DIR TARGET EXPECT... | (loop | invalid) DIR TARGET"; return 2
+diff --git a/scripts/checks/compiler/slice0_repro.sh b/scripts/checks/compiler/slice0_repro.sh
+index 21ad81caf..9b49f24c5 100755
+--- a/scripts/checks/compiler/slice0_repro.sh
++++ b/scripts/checks/compiler/slice0_repro.sh
+@@ -1,7 +1,7 @@
+ #!/usr/bin/env bash
+ # Slice-0 reproducibility gate (Concrete/README.md, gate 8). Two independent builds of the compiler
+-# and of LCB, from two source copies with different paths and TMPDIRs, emit every hand-written BIR
+-# example and build it natively; every stage is compared byte for byte, with no normalization.
++# and of LCB, from two source copies with different paths and TMPDIRs, emit every bir: row in the
++# test manifest and build it natively; every stage is compared byte for byte, with no normalization.
+ # The two sides share only the pinned Lean toolchain and the dependency SOURCES (each side compiles
+ # them itself, with no Lake artifact cache). The comparator is checked by negative controls: a flipped byte, a missing artifact
+ # and a differing inventory must each be refused.
+@@ -70,12 +70,19 @@ for side in first second; do
+     bounded 3000 lake build Concrete lean-compiler-backend/lcb >"$work/$side/build.log" 2>&1 ||
+       { tail -50 "$work/$side/build.log" >&2; echo "slice0_repro: $side: build failed" >&2; exit 1; }
+     lcb="$d/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
+-    bounded 120 lake env lean --run scripts/checks/compiler/slice0_bir.lean list > names
++    bounded 30 python3 -I scripts/checks/lib/test_manifest.py rows --kind bir tests/manifest.tsv > test-rows
++    awk -F '\t' '{print $1}' test-rows > names
++    awk -F '\t' '{sub(/^bir:/, "", $2); print $2}' test-rows | LC_ALL=C sort > manifest-programs
+     [ -s names ] || { echo 'slice0_repro: no examples' >&2; exit 1; }
+-    while read -r name; do
+-      bounded 120 lake env lean --run scripts/checks/compiler/slice0_bir.lean emit "$name" "$d/out/$name" "$target"
++    bounded 120 lake env lean --run scripts/checks/compiler/slice0_bir.lean list | LC_ALL=C sort > emitter-programs
++    if ! cmp -s manifest-programs emitter-programs; then
++      echo 'slice0_repro: test manifest inventory differs from emitter' >&2; exit 1
++    fi
++    while IFS=$'\t' read -r name program expect; do
++      read -r -a expectation <<<"$expect"
++      bounded 120 lake env lean --run scripts/checks/compiler/slice0_bir.lean emit "${program#bir:}" "$d/out/$name" "$target" "${expectation[@]}"
+       bounded 120 bash scripts/checks/lib/slice0_native.sh "$d/out/$name" "$lcb"
+-    done < names
++    done < test-rows
+   )
+ done
+ a="$work/first/checkout-with-first-path"
+diff --git a/scripts/checks/compiler/tests.sh b/scripts/checks/compiler/tests.sh
+new file mode 100755
+index 000000000..33d305cd0
+--- /dev/null
++++ b/scripts/checks/compiler/tests.sh
+@@ -0,0 +1,113 @@
++#!/usr/bin/env bash
++# Manifest-driven test gate (PROVISIONAL, Concrete/README.md gates 4 and 6, hand-written BIR leg):
++# every bir: row in tests/manifest.tsv goes through the LLVM path (clang) and the LCB path: the
++# adapted body assembled by LCB in process (no text on the proved path), linked with the runtime
++# entry, which LCB's command line assembles from QBE text. The manifest's bir: inventory must equal
++# the emitter's list in both directions. CONCRETE_TEST_MANIFEST selects another manifest (controls).
++# Each executable runs under bounded_run; its observation is its exit status (or "incomplete"),
++# the exact bytes on descriptor 2, and descriptor 1, which must be empty. All three must equal the
++# manifest expectation checked by the emitter (which writes the expected status and stderr bytes).
++#
++# Controls: wrong exit and trap expectations must fail in the emitter; a missing row and a
++# nonexistent program must fail opposite inventory directions (these child runs are emit-only,
++# never native). A body that never returns must
++# be observed as incomplete on both backends; a body returning a word that encodes nothing must reach
++# the runtime's refusal; and the comparison itself must reject a missing or extra newline, a wrong
++# status with the right stderr, and stray stdout. Run inside the nix devshell, from the repo root.
++set -euo pipefail
++# shellcheck source=scripts/checks/lib/slice0_common.sh
++source scripts/checks/lib/slice0_common.sh
++
++fail=0
++count=0
++examples=0
++# check NAME DIR SECS RETRY: build both backends in DIR, run them and judge them.
++check() {
++  local name=$1 d=$2 backend
++  build "$name" "$d/build.log" bounded "$native_secs" bash "$root/scripts/checks/lib/slice0_native.sh" "$d" "$lcb"
++  for backend in llvm lcb; do
++    observe "$d/$backend.exe" "$d/$backend" "$3" "$4"
++    count=$((count + 1))
++    if judge "$d" "$d/$backend"; then
++      echo "ok   $name [$backend]: status $(cat "$d/$backend.status")"
++    else
++      echo "FAIL $name [$backend]: status $(cat "$d/$backend.status") (expected $(cat "$d/status"))," \
++        "stderr $(od -An -c "$d/$backend.stderr" | tr -s ' ' | head -c 300)," \
++        "stdout $(wc -c <"$d/$backend.stdout") bytes"
++      fail=1
++    fi
++  done
++}
++
++rows=$(manifest_rows bir)
++
++wrong_expectation() { awk -F '\t' -v OFS='\t' '$1 == "answer" {$3 = "exit 41"} {print}' "$1" >"$1.new"; mv "$1.new" "$1"; }
++wrong_trap_expectation() { awk -F '\t' -v OFS='\t' '$1 == "overflow" {$3 = "trap arithmeticOverflow site 1"} {print}' "$1" >"$1.new"; mv "$1.new" "$1"; }
++missing_row() { awk -F '\t' '$1 != "answer"' "$1" >"$1.new"; mv "$1.new" "$1"; }
++nonexistent_program() { printf 'no_such_program\tbir:no_such_program\texit 0\tslice0\n' >>"$1"; }
++manifest_control() { # manifest_control LABEL EXPECTED-MESSAGE MUTATION-FUNCTION
++  local label=$1 expected=$2 mutation=$3 dir="$work/ctl/$1" copy rc=0
++  mkdir -p "$dir"
++  cp -R "$(dirname "$test_manifest")" "$dir/tests"
++  copy="$dir/tests/$(basename "$test_manifest")"
++  "$mutation" "$copy"
++  if cmp -s "$test_manifest" "$copy"; then
++    echo "FAIL manifest control $label: mutation changed nothing" >&2; fail=1; return
++  fi
++  CONCRETE_TEST_MANIFEST="$copy" CONCRETE_TEST_MANIFEST_SKIP_CONTROLS=1 CONCRETE_TEST_EMIT_ONLY=1 \
++    bash "$root/scripts/checks/compiler/tests.sh" >"$work/ctl/$label.log" 2>&1 || rc=$?
++  if [ "$rc" -ne 0 ] && grep -qF "$expected" "$work/ctl/$label.log"; then
++    echo "ok   manifest control $label: refused for the planted reason"
++  else
++    echo "FAIL manifest control $label: not refused as '$expected'" >&2
++    cat "$work/ctl/$label.log" >&2
++    fail=1
++  fi
++}
++mkdir -p "$work/ctl"
++if [ "${CONCRETE_TEST_MANIFEST_SKIP_CONTROLS:-0}" != 1 ]; then
++  manifest_control wrong-expectation "answer: expectation mismatch: BIR run gives" wrong_expectation
++  manifest_control wrong-trap-expectation "overflow: expectation mismatch: BIR run gives" wrong_trap_expectation
++  manifest_control missing-row "program without a manifest row: answer" missing_row
++  manifest_control nonexistent-program "manifest row names no program: no_such_program" nonexistent_program
++fi
++
++while IFS=$'\t' read -r name program expect; do
++  d="$work/ex/$name"
++  read -r -a expectation <<<"$expect"
++  "${emitter[@]}" emit "${program#bir:}" "$d" "$target" "${expectation[@]}"
++  # Emit-only controls cover every row and never reach a native build, even if a planted defect is
++  # accidentally accepted: the control then fails because the child returns zero after the loop.
++  if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" = 1 ]; then continue; fi
++  check "$name" "$d" 10 20
++  examples=$((examples + 1))
++done <<<"$rows"
++if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" = 1 ]; then exit 0; fi
++"${emitter[@]}" loop "$work/ctl/loop" "$target"
++expected_timeout check control-loop "$work/ctl/loop" 1 1
++"${emitter[@]}" invalid "$work/ctl/invalid" "$target"
++check control-invalid-word "$work/ctl/invalid" 10 20
++
++# The comparison's own negative controls: each forged observation must be rejected.
++e="$work/ctl/judge"; mkdir -p "$e"
++echo 134 >"$e/status"; printf 'concrete: trap: x\n' >"$e/stderr"
++forge() { # forge NAME STATUS STDERR-PRINTF STDOUT
++  local o="$work/ctl/forged-$1"
++  echo "$2" >"$o.status"; printf "$3" >"$o.stderr"; printf '%s' "$4" >"$o.stdout"
++  echo "$o"
++}
++judge "$e" "$(forge same 134 'concrete: trap: x\n' '')" || { echo "FAIL judge rejects an exact match"; fail=1; }
++for c in "no-newline|134|concrete: trap: x|" "extra-newline|134|concrete: trap: x\n\n|" \
++         "wrong-status|1|concrete: trap: x\n|" "stray-stdout|134|concrete: trap: x\n|42" \
++         "incomplete|incomplete||"; do
++  IFS='|' read -r n s err out <<<"$c"
++  if judge "$e" "$(forge "$n" "$s" "$err" "$out")"; then
++    echo "FAIL judge accepts a forged observation: $n"; fail=1
++  else
++    echo "ok   judge rejects $n"
++  fi
++done
++
++[ "$examples" -gt 0 ] || { echo "tests: no examples ran" >&2; exit 1; }
++echo "tests: $examples examples, $count backend runs (controls included)"
++exit "$fail"
+diff --git a/scripts/checks/landing_script.sh b/scripts/checks/landing_script.sh
+index e849808f1..bb1002ee4 100755
+--- a/scripts/checks/landing_script.sh
++++ b/scripts/checks/landing_script.sh
+@@ -1013,13 +1013,13 @@ out="$(python3 -I "$TMP/required_names.py" "$ROOT_DIR/.github/workflows/lean_act
+ python3 -I - "$ROOT_DIR/.github/workflows/lean_action_ci.yml" "$TMP/rn" <<'PY3'
+ import sys, yaml, copy, os
+ w = yaml.safe_load(open(sys.argv[1])); os.makedirs(sys.argv[2], exist_ok=True)
+-a = copy.deepcopy(w); a["jobs"]["backends"]["strategy"]["matrix"]["include"].append({"arch": "riscv64", "runner": "ubuntu-latest"})
+-b = copy.deepcopy(w); b["jobs"]["backends"]["name"] = "Slice 0 backends (${{ matrix.os }})"
+-c = copy.deepcopy(w); c["jobs"]["backends"]["strategy"]["matrix"] = {"arch": ["x86-64", "aarch64-macos"]}
++a = copy.deepcopy(w); a["jobs"]["tests"]["strategy"]["matrix"]["include"].append({"arch": "riscv64", "runner": "ubuntu-latest"})
++b = copy.deepcopy(w); b["jobs"]["tests"]["name"] = "Tests (${{ matrix.os }})"
++c = copy.deepcopy(w); c["jobs"]["tests"]["strategy"]["matrix"] = {"arch": ["x86-64", "aarch64-macos"]}
+ for n, x in (("extraleg", a), ("unresolved", b), ("product", c)):
+     yaml.safe_dump(x, open(os.path.join(sys.argv[2], n + ".yml"), "w"))
+ PY3
+-for v in extraleg:"landing-tier job not required: Slice 0 backends (riscv64)" unresolved:"leaves its name unresolved" product:"is not a non-empty include list"; do
++for v in extraleg:"landing-tier job not required: Tests (riscv64)" unresolved:"leaves its name unresolved" product:"is not a non-empty include list"; do
+   o="$(python3 -I "$TMP/required_names.py" "$TMP/rn/${v%%:*}.yml" "$re_default" "$ROOT_DIR/required-checks.txt")"
+   has "$o" "${v#*:}" && ok "CONTROL: the required-checks check reports the ${v%%:*} matrix" || no "CONTROL: the required-checks check missed the ${v%%:*} matrix: '$o'"
+ done
+diff --git a/scripts/checks/lib/slice0_common.sh b/scripts/checks/lib/slice0_common.sh
+index a341dcf14..e0e2799b0 100644
+--- a/scripts/checks/lib/slice0_common.sh
++++ b/scripts/checks/lib/slice0_common.sh
+@@ -1,5 +1,5 @@
+ # shellcheck shell=bash
+-# Shared machinery of the slice-0 example gates (PROVISIONAL): slice0_backends.sh (gates 4, 6, 6a)
++# Shared machinery of the slice-0 example gates (PROVISIONAL): tests.sh (gates 4, 6, 6a)
+ # and slice0_artifacts.sh (gates 10, 11, 12). Source it from the repository root, inside the nix
+ # devshell, with `set -euo pipefail`. It builds the compiler and LCB's command line under the
+ # gate's limits (lib/limits.sh: an address-space cap of SLICE0_GATE_MEM_GB GiB, default 64; 0 for
+@@ -14,7 +14,7 @@
+ #     OUT.stdout, OUT.stderr;
+ #   judge EXPECTED_DIR OBS: the observation OBS.* equals the expectation, byte for byte;
+ #   build NAME LOG CMD...: run CMD, or print LOG and fail the gate;
+-#   emit_examples: the example names, one per line, failing if there are none;
++#   manifest_rows KIND: validated rows, with the bir: inventory checked against the emitter;
+ #   cap_out: copy stdin to stdout, failing above 1 MiB: every command output a gate captures
+ #     into a variable goes through it, so no producer can grow the gate's shell (which may run
+ #     with no address-space cap, see SLICE0_GATE_MEM_GB) without bound.
+@@ -97,9 +97,29 @@ cap_out() {
+   printf '%s' "$out"
+ }
+ 
+-emit_examples() {
+-  local names
+-  names=$("${emitter[@]}" list | cap_out) || { echo "slice0: listing the examples failed" >&2; exit 1; }
+-  [ -n "$names" ] || { echo "slice0: no examples listed" >&2; exit 1; }
+-  printf '%s\n' "$names"
++test_manifest=${CONCRETE_TEST_MANIFEST:-tests/manifest.tsv}
++manifest_rows() {
++  local kind=$1 rows emitter_names name
++  rows=$(bounded 30 python3 -I "$root/scripts/checks/lib/test_manifest.py" rows --kind "$kind" "$test_manifest" | cap_out) ||
++    { echo "slice0: reading $test_manifest failed" >&2; exit 1; }
++  [ -n "$rows" ] || { echo "slice0: no $kind tests listed in $test_manifest" >&2; exit 1; }
++  if [ "$kind" = bir ]; then
++    printf '%s\n' "$rows" | awk -F '\t' '{sub(/^bir:/, "", $2); print $2}' |
++      LC_ALL=C sort >"$work/manifest-programs"
++    emitter_names=$("${emitter[@]}" list | cap_out) ||
++      { echo "slice0: listing emitter programs failed" >&2; exit 1; }
++    printf '%s\n' "$emitter_names" | LC_ALL=C sort >"$work/emitter-programs"
++    comm -13 "$work/manifest-programs" "$work/emitter-programs" >"$work/programs-without-rows"
++    comm -23 "$work/manifest-programs" "$work/emitter-programs" >"$work/rows-without-programs"
++    if [ -s "$work/programs-without-rows" ] || [ -s "$work/rows-without-programs" ]; then
++      while IFS= read -r name; do
++        echo "slice0: program without a manifest row: $name" >&2
++      done <"$work/programs-without-rows"
++      while IFS= read -r name; do
++        echo "slice0: manifest row names no program: $name" >&2
++      done <"$work/rows-without-programs"
++      exit 1
++    fi
++  fi
++  printf '%s\n' "$rows"
+ }
+diff --git a/scripts/checks/lib/slice0_sources.sh b/scripts/checks/lib/slice0_sources.sh
+index a449be8bb..e6e508642 100644
+--- a/scripts/checks/lib/slice0_sources.sh
++++ b/scripts/checks/lib/slice0_sources.sh
+@@ -1,5 +1,5 @@
+ #!/usr/bin/env bash
+ # The tracked inputs of a slice-0 build: what slice0_repro.sh copies and build_identity.sh digests.
+ # shellcheck disable=SC2034
+-slice0_sources=(Concrete Concrete.lean ConcreteSpec scripts/checks lakefile.toml lean-toolchain
++slice0_sources=(Concrete Concrete.lean ConcreteSpec scripts/checks tests lakefile.toml lean-toolchain
+   lake-manifest.json)
+diff --git a/scripts/checks/lib/test_manifest.py b/scripts/checks/lib/test_manifest.py
+new file mode 100755
+index 000000000..e675c4ede
+--- /dev/null
++++ b/scripts/checks/lib/test_manifest.py
+@@ -0,0 +1,209 @@
++#!/usr/bin/env python3
++"""Read and validate tests/manifest.tsv; print rows for shell consumers.
++
++Usage: test_manifest.py [validate] [MANIFEST]
++       test_manifest.py rows [--kind bir|con] [MANIFEST]
++       test_manifest.py self-test
++
++The manifest's directory is the tests/ directory. Source paths are written as
++con:tests/... and resolved from that directory's parent. Every defect is an
++error naming its manifest line; no partial row set is printed.
++"""
++
++import re
++import sys
++import tempfile
++from pathlib import Path, PurePosixPath
++from typing import NamedTuple
++
++HEADER = ["id", "program", "expect", "slice"]
++ID_RE = re.compile(r"[a-z0-9_]+")
++SLICE_RE = re.compile(r"[a-z0-9_]+")
++RULE_RE = re.compile(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*(?:@[0-9]+)?")
++TRAP_KIND_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
++TRAP_KINDS = frozenset({"arithmeticOverflow"})
++
++
++class Row(NamedTuple):
++    id: str
++    program: str
++    expect: str
++    slice: str
++
++
++class ManifestError(Exception):
++    pass
++
++
++def fail(path, line, message):
++    where = f"{path}:{line}" if line is not None else str(path)
++    raise ManifestError(f"{where}: {message}")
++
++
++def natural(path, line, text):
++    try:
++        return int(text)
++    except ValueError:
++        fail(path, line, f"invalid natural number {text!r}")
++
++
++def validate_expect(path, line, expect):
++    parts = expect.split(" ")
++    if len(parts) == 2 and parts[0] == "exit" and re.fullmatch(r"[0-9]+", parts[1]):
++        status = natural(path, line, parts[1])
++        if status > 255:
++            fail(path, line, f"exit status {status} is outside 0..255")
++        return
++    if (len(parts) == 4 and parts[0] == "trap" and parts[2] == "site"
++            and TRAP_KIND_RE.fullmatch(parts[1]) and re.fullmatch(r"[0-9]+", parts[3])):
++        if parts[1] not in TRAP_KINDS:
++            fail(path, line, f"unknown ConcreteSpec.Trap constructor {parts[1]!r}")
++        natural(path, line, parts[3])
++        return
++    if len(parts) == 2 and parts[0] == "refuse" and RULE_RE.fullmatch(parts[1]):
++        return
++    fail(path, line, f"invalid expect {expect!r}; use exit N, trap KIND site N, or refuse RULE-ID")
++
++
++def validate_source(path, line, program, seen_sources):
++    relative = program[4:]
++    parts = relative.split("/")
++    pure = PurePosixPath(relative)
++    if (not relative.startswith("tests/") or not relative.endswith(".con")
++            or pure.is_absolute() or "\\" in relative
++            or any(part in ("", ".", "..") for part in parts)):
++        fail(path, line, f"con: path {relative!r} must be a normalized tests/*.con path")
++    if len(parts) > 1 and parts[1] == "golden":
++        fail(path, line, f"con: path {relative!r} must not be under tests/golden/")
++    tests_dir = path.parent.resolve()
++    source = tests_dir.joinpath(*parts[1:])
++    try:
++        resolved = source.resolve(strict=True)
++    except OSError:
++        fail(path, line, f"con: file {relative!r} does not exist")
++    except RuntimeError as error:
++        fail(path, line, f"con: file {relative!r} cannot be resolved: {error}")
++    if not resolved.is_file():
++        fail(path, line, f"con: path {relative!r} is not a file")
++    if resolved != tests_dir and tests_dir not in resolved.parents:
++        fail(path, line, f"con: file {relative!r} escapes tests/")
++    if relative in seen_sources or resolved in seen_sources.values():
++        fail(path, line, f"con: path {relative!r} is listed more than once")
++    seen_sources[relative] = resolved
++
++
++def parse(path, text):
++    rows = []
++    ids = {}
++    seen_bir = {}
++    seen_sources = {}
++    header_line = None
++    for line_number, line in enumerate(text.splitlines(), 1):
++        if not line or line.startswith("#"):
++            continue
++        fields = line.split("\t")
++        if header_line is None:
++            if fields != HEADER:
++                fail(path, line_number, "header must be id<TAB>program<TAB>expect<TAB>slice")
++            header_line = line_number
++            continue
++        if len(fields) != 4:
++            fail(path, line_number, f"needs 4 tab-separated columns, found {len(fields)}")
++        ident, program, expect, slice_name = fields
++        if not ID_RE.fullmatch(ident):
++            fail(path, line_number, f"invalid id {ident!r}; expected [a-z0-9_]+")
++        if ident in ids:
++            fail(path, line_number, f"duplicate id {ident!r} (first at line {ids[ident]})")
++        ids[ident] = line_number
++        if program.startswith("bir:"):
++            name = program[4:]
++            if not ID_RE.fullmatch(name):
++                fail(path, line_number, f"invalid BIR example name {name!r}")
++            if name in seen_bir:
++                fail(path, line_number, f"duplicate bir program {name!r} (first at line {seen_bir[name]})")
++            seen_bir[name] = line_number
++        elif program.startswith("con:"):
++            validate_source(path, line_number, program, seen_sources)
++        else:
++            fail(path, line_number, f"invalid program {program!r}; expected bir: or con:")
++        validate_expect(path, line_number, expect)
++        if program.startswith("bir:") and expect.startswith("refuse "):
++            fail(path, line_number, f"bir: row {ident!r} cannot use refuse; expected exit or trap")
++        if not SLICE_RE.fullmatch(slice_name):
++            fail(path, line_number, f"invalid slice {slice_name!r}; expected [a-z0-9_]+")
++        rows.append(Row(ident, program, expect, slice_name))
++    if header_line is None:
++        fail(path, 1, "missing header id<TAB>program<TAB>expect<TAB>slice")
++    if not rows:
++        fail(path, header_line, "manifest has no test rows")
++    return rows
++
++
++def load(manifest):
++    path = Path(manifest)
++    try:
++        text = path.read_text(encoding="utf-8")
++    except (OSError, UnicodeError) as error:
++        raise ManifestError(f"{path}: cannot read manifest: {error}") from error
++    return parse(path, text)
++
++
++def self_test():
++    with tempfile.TemporaryDirectory(prefix="concrete-manifest-") as tmp:
++        root = Path(tmp)
++        tests = root / "tests"
++        tests.mkdir()
++        (tests / "slice0").mkdir()
++        (tests / "slice0" / "ok.con").write_text("return 0;\n", encoding="utf-8")
++        valid = ("id\tprogram\texpect\tslice\n"
++                 "a\tbir:answer\texit 42\tslice0\n"
++                 "b\tcon:tests/slice0/ok.con\trefuse SYN-5@1\tslice0\n")
++        assert len(parse(tests / "manifest.tsv", valid)) == 2
++        bad = [
++            valid + "a\tbir:other\texit 0\tslice0\n",
++            valid + "c\tbir:other\texit 256\tslice0\n",
++            valid + "c\tbir:other\ttrap foo\tslice0\n",
++            valid + "c\tbir:other\ttrap arithmeticOverflow site 0\n",
++            valid + "c\tbir:answer\texit 0\tslice0\n",
++            valid + "c\tbir:other\trefuse SYN-5\tslice0\n",
++            valid + "c\tcon:tests/slice0/missing.con\texit 0\tslice0\n",
++        ]
++        for text in bad:
++            try:
++                parse(tests / "manifest.tsv", text)
++            except ManifestError:
++                pass
++            else:
++                raise AssertionError("self-test accepted a defective manifest")
++    print("test_manifest self-test: ok")
++
++
++def main(argv):
++    command = argv[1] if len(argv) > 1 else "validate"
++    if command == "self-test" and len(argv) == 2:
++        self_test()
++        return
++    args = argv[2:] if len(argv) > 1 else []
++    kind = None
++    if command == "rows" and args[:1] == ["--kind"]:
++        if len(args) < 2 or args[1] not in ("bir", "con"):
++            raise ManifestError("rows --kind requires bir or con")
++        kind = args[1]
++        args = args[2:]
++    if command not in ("validate", "rows") or len(args) > 1:
++        raise ManifestError(__doc__)
++    rows = load(args[0] if args else "tests/manifest.tsv")
++    if command == "rows":
++        for row in rows:
++            if kind is None or row.program.startswith(kind + ":"):
++                print(f"{row.id}\t{row.program}\t{row.expect}")
++    else:
++        print(f"test_manifest: {len(rows)} rows valid")
++
++
++if __name__ == "__main__":
++    try:
++        main(sys.argv)
++    except ManifestError as error:
++        print(f"test_manifest: {error}", file=sys.stderr)
++        sys.exit(1)
+diff --git a/scripts/checks/run.sh b/scripts/checks/run.sh
+index 856b9ad52..460cd3451 100755
+--- a/scripts/checks/run.sh
++++ b/scripts/checks/run.sh
+@@ -9,7 +9,7 @@ set -uo pipefail
+ source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
+ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ cd "$ROOT_DIR"
+-REQUIRED="legacy_frozen root_inventory workflow_yaml doc_links landing_script landing_ready review_tool sandbox_isolation retention_manifest issues oracle_fetch"
++REQUIRED="legacy_frozen root_inventory workflow_yaml doc_links landing_script landing_ready review_tool sandbox_isolation retention_manifest issues oracle_fetch test_manifest"
+ missing=""
+ for c in $REQUIRED; do [ -f "scripts/checks/$c.sh" ] || missing="$missing $c"; done
+ [ -z "$missing" ] || { echo "run.sh: required check(s) missing:$missing" >&2; exit 1; }
+diff --git a/scripts/checks/test_manifest.sh b/scripts/checks/test_manifest.sh
+new file mode 100755
+index 000000000..cb0f2231a
+--- /dev/null
++++ b/scripts/checks/test_manifest.sh
+@@ -0,0 +1,97 @@
++#!/usr/bin/env bash
++# The one test manifest is valid and owns every test file under tests/ (except its own manifest and
++# tests/golden/). The shared reader checks every row; this check also compares the con: inventory in
++# both directions. Controls plant malformed rows and source-inventory defects in private copies and
++# require the matching diagnostic. Each mutation must change its copy before the control runs.
++set -uo pipefail
++source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
++ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
++cd "$ROOT_DIR"
++MANIFEST=${CONCRETE_TEST_MANIFEST:-tests/manifest.tsv}
++[[ "$MANIFEST" = /* ]] || MANIFEST="$ROOT_DIR/$MANIFEST"
++TEST_DIR=$(dirname "$MANIFEST")
++TEST_PARENT=$(cd "$TEST_DIR/.." && pwd)
++cd "$TEST_PARENT"
++TMP=$(mktemp -d)
++trap 'rm -rf "$TMP"' EXIT
++PASS=0
++FAIL=0
++ok() { echo "  ok   $1"; PASS=$((PASS + 1)); }
++no() { echo "  FAIL $1"; FAIL=$((FAIL + 1)); }
++reader=(python3 -I "$ROOT_DIR/scripts/checks/lib/test_manifest.py")
++
++if out=$("${reader[@]}" validate "$MANIFEST" 2>&1); then
++  ok "$out"
++else
++  no "the manifest is invalid: $out"
++fi
++if out=$("${reader[@]}" self-test 2>&1); then
++  ok "$out"
++else
++  no "the reader's self-test failed: $out"
++fi
++
++if "${reader[@]}" rows "$MANIFEST" >"$TMP/rows"; then
++  awk -F '\t' '$2 ~ /^con:/ {sub(/^con:/, "", $2); print $2}' "$TMP/rows" |
++    LC_ALL=C sort >"$TMP/listed"
++  find tests -type f ! -path tests/manifest.tsv ! -path 'tests/golden/*' |
++    LC_ALL=C sort >"$TMP/files"
++  comm -23 "$TMP/files" "$TMP/listed" >"$TMP/unlisted"
++  comm -13 "$TMP/files" "$TMP/listed" >"$TMP/not-on-disk"
++  if [ ! -s "$TMP/unlisted" ] && [ ! -s "$TMP/not-on-disk" ]; then
++    ok "every test file has exactly one con: row"
++  else
++    while IFS= read -r file; do no "unlisted test file: $file"; done <"$TMP/unlisted"
++    while IFS= read -r file; do no "con: row has no discovered file: $file"; done <"$TMP/not-on-disk"
++  fi
++else
++  no "cannot enumerate the test inventory"
++fi
++
++control() { # control LABEL EXPECTED-MESSAGE MUTATION-FUNCTION CHANGED-PATH
++  local label=$1 expected=$2 mutation=$3 changed=$4 dir="$TMP/control-$1" rc=0
++  mkdir -p "$dir"
++  if ! cp -R "$TEST_DIR" "$dir/tests"; then no "control: $label could not copy tests/"; return; fi
++  if ! "$mutation" "$dir"; then no "control: $label mutation failed"; return; fi
++  if [ ! -e "$dir/tests/$changed" ]; then
++    no "control: $label mutation produced no $changed"; return
++  fi
++  if cmp -s "$TEST_DIR/$changed" "$dir/tests/$changed" 2>/dev/null; then
++    no "control: $label mutation changed nothing"; return
++  fi
++  CONCRETE_TEST_MANIFEST="$dir/tests/manifest.tsv" CONCRETE_TEST_MANIFEST_SKIP_CONTROLS=1 \
++    bash "$ROOT_DIR/scripts/checks/test_manifest.sh" >"$dir/log" 2>&1 || rc=$?
++  if [ "$rc" -ne 0 ] && has_match -F "$expected" <"$dir/log"; then
++    ok "control: $label is refused for the planted reason"
++  else
++    no "control: $label was not refused as '$expected'"
++    cat "$dir/log"
++  fi
++}
++duplicate_id() {
++  local row
++  row=$(awk -F '\t' '$1 == "answer" {print; exit}' "$1/tests/manifest.tsv")
++  [ -n "$row" ] || { echo "duplicate_id: answer row lookup was empty" >&2; return 1; }
++  printf '%s\n' "$row" >>"$1/tests/manifest.tsv"
++}
++unlisted_source() { mkdir -p "$1/tests/slice0" && : >"$1/tests/slice0/x.con"; }
++missing_source() { printf 'missing\tcon:tests/slice0/missing.con\texit 0\tslice0\n' >>"$1/tests/manifest.tsv"; }
++exit_256() { printf 'bad_exit\tbir:other\texit 256\tslice0\n' >>"$1/tests/manifest.tsv"; }
++bad_trap() { printf 'bad_trap\tbir:other\ttrap foo\tslice0\n' >>"$1/tests/manifest.tsv"; }
++wrong_columns() { printf 'bad_columns\tbir:answer\texit 0\n' >>"$1/tests/manifest.tsv"; }
++duplicate_bir() { printf 'duplicate_bir\tbir:answer\texit 0\tslice0\n' >>"$1/tests/manifest.tsv"; }
++refuse_bir() { printf 'refused_bir\tbir:other\trefuse SYN-5\tslice0\n' >>"$1/tests/manifest.tsv"; }
++
++if [ "${CONCRETE_TEST_MANIFEST_SKIP_CONTROLS:-0}" != 1 ]; then
++  control duplicate-id "duplicate id 'answer'" duplicate_id manifest.tsv
++  control unlisted-source "unlisted test file: tests/slice0/x.con" unlisted_source slice0/x.con
++  control missing-source "con: file 'tests/slice0/missing.con' does not exist" missing_source manifest.tsv
++  control exit-256 "exit status 256 is outside 0..255" exit_256 manifest.tsv
++  control malformed-trap "invalid expect 'trap foo'" bad_trap manifest.tsv
++  control wrong-columns "needs 4 tab-separated columns" wrong_columns manifest.tsv
++  control duplicate-bir "duplicate bir program 'answer'" duplicate_bir manifest.tsv
++  control refuse-bir "bir: row 'refused_bir' cannot use refuse" refuse_bir manifest.tsv
++fi
++
++echo "test_manifest: PASS=$PASS FAIL=$FAIL"
++[ "$FAIL" -eq 0 ]
+diff --git a/tests/manifest.tsv b/tests/manifest.tsv
+new file mode 100644
+index 000000000..6ea3de0c4
+--- /dev/null
++++ b/tests/manifest.tsv
+@@ -0,0 +1,37 @@
++# One row per test: id, program, expected outcome, owning slice (tab-separated).
++# id: [a-z0-9_]+. program: bir:NAME (Concrete.BIR.Examples) or con:tests/PATH.con.
++# expect: exit N (0..255), trap KIND site N, or refuse RULE-ID. No other outcome forms.
++# slice: [a-z0-9_]+. A con: path is relative to the repository root and must exist.
++id	program	expect	slice
++answer	bir:answer	exit 42	slice0
++boundary	bir:boundary	exit 255	slice0
++overflow	bir:overflow	trap arithmeticOverflow site 0	slice0
++answer_discharged	bir:answer_discharged	exit 42	slice0
++return134	bir:return134	exit 134	slice0
++i8_add_ok	bir:i8_add_ok	exit 0	slice0
++i8_add_ovf	bir:i8_add_ovf	trap arithmeticOverflow site 0	slice0
++u16_mul_ok	bir:u16_mul_ok	exit 0	slice0
++u16_mul_ovf	bir:u16_mul_ovf	trap arithmeticOverflow site 0	slice0
++i16_sub_ovf	bir:i16_sub_ovf	trap arithmeticOverflow site 0	slice0
++u8_sub_ovf	bir:u8_sub_ovf	trap arithmeticOverflow site 0	slice0
++i8_mul_ok	bir:i8_mul_ok	exit 0	slice0
++i8_mul_ovf	bir:i8_mul_ovf	trap arithmeticOverflow site 0	slice0
++w_i8_add	bir:w_i8_add	exit 72	slice0
++w_i8_add_ok	bir:w_i8_add_ok	exit 206	slice0
++w_i8_sub	bir:w_i8_sub	exit 184	slice0
++w_i8_mul	bir:w_i8_mul	exit 240	slice0
++w_u8_add	bir:w_u8_add	exit 172	slice0
++w_u8_sub	bir:w_u8_sub	exit 126	slice0
++w_u8_mul	bir:w_u8_mul	exit 16	slice0
++w_i16_add	bir:w_i16_add	exit 128	slice0
++w_i16_sub	bir:w_i16_sub	exit 127	slice0
++w_i16_sub_ok	bir:w_i16_sub_ok	exit 88	slice0
++w_i16_mul	bir:w_i16_mul	exit 60	slice0
++w_u16_sub	bir:w_u16_sub	exit 126	slice0
++w_u16_mul	bir:w_u16_mul	exit 129	slice0
++w_u16_mul_ok	bir:w_u16_mul_ok	exit 255	slice0
++widen_u	bir:widen_u	exit 160	slice0
++widen_s	bir:widen_s	exit 90	slice0
++site1	bir:site1	trap arithmeticOverflow site 1	slice0
++site0	bir:site0	trap arithmeticOverflow site 0	slice0
++two_sites_ok	bir:two_sites_ok	exit 42	slice0
+
+exec
+/bin/bash -lc 'cat scripts/checks/compiler/tests.sh scripts/checks/lib/slice0_common.sh' in /home/unbalancedparen/projects/gates-briefs/cx-B2
+ succeeded in 0ms:
+#!/usr/bin/env bash
+# Manifest-driven test gate (PROVISIONAL, Concrete/README.md gates 4 and 6, hand-written BIR leg):
+# every bir: row in tests/manifest.tsv goes through the LLVM path (clang) and the LCB path: the
+# adapted body assembled by LCB in process (no text on the proved path), linked with the runtime
+# entry, which LCB's command line assembles from QBE text. The manifest's bir: inventory must equal
+# the emitter's list in both directions. CONCRETE_TEST_MANIFEST selects another manifest (controls).
+# Each executable runs under bounded_run; its observation is its exit status (or "incomplete"),
+# the exact bytes on descriptor 2, and descriptor 1, which must be empty. All three must equal the
+# manifest expectation checked by the emitter (which writes the expected status and stderr bytes).
+#
+# Controls: wrong exit and trap expectations must fail in the emitter; a missing row and a
+# nonexistent program must fail opposite inventory directions (these child runs are emit-only,
+# never native). A body that never returns must
+# be observed as incomplete on both backends; a body returning a word that encodes nothing must reach
+# the runtime's refusal; and the comparison itself must reject a missing or extra newline, a wrong
+# status with the right stderr, and stray stdout. Run inside the nix devshell, from the repo root.
+set -euo pipefail
+# shellcheck source=scripts/checks/lib/slice0_common.sh
+source scripts/checks/lib/slice0_common.sh
+
+fail=0
+count=0
+examples=0
+# check NAME DIR SECS RETRY: build both backends in DIR, run them and judge them.
+check() {
+  local name=$1 d=$2 backend
+  build "$name" "$d/build.log" bounded "$native_secs" bash "$root/scripts/checks/lib/slice0_native.sh" "$d" "$lcb"
+  for backend in llvm lcb; do
+    observe "$d/$backend.exe" "$d/$backend" "$3" "$4"
+    count=$((count + 1))
+    if judge "$d" "$d/$backend"; then
+      echo "ok   $name [$backend]: status $(cat "$d/$backend.status")"
+    else
+      echo "FAIL $name [$backend]: status $(cat "$d/$backend.status") (expected $(cat "$d/status"))," \
+        "stderr $(od -An -c "$d/$backend.stderr" | tr -s ' ' | head -c 300)," \
+        "stdout $(wc -c <"$d/$backend.stdout") bytes"
+      fail=1
+    fi
+  done
+}
+
+rows=$(manifest_rows bir)
+
+wrong_expectation() { awk -F '\t' -v OFS='\t' '$1 == "answer" {$3 = "exit 41"} {print}' "$1" >"$1.new"; mv "$1.new" "$1"; }
+wrong_trap_expectation() { awk -F '\t' -v OFS='\t' '$1 == "overflow" {$3 = "trap arithmeticOverflow site 1"} {print}' "$1" >"$1.new"; mv "$1.new" "$1"; }
+missing_row() { awk -F '\t' '$1 != "answer"' "$1" >"$1.new"; mv "$1.new" "$1"; }
+nonexistent_program() { printf 'no_such_program\tbir:no_such_program\texit 0\tslice0\n' >>"$1"; }
+manifest_control() { # manifest_control LABEL EXPECTED-MESSAGE MUTATION-FUNCTION
+  local label=$1 expected=$2 mutation=$3 dir="$work/ctl/$1" copy rc=0
+  mkdir -p "$dir"
+  cp -R "$(dirname "$test_manifest")" "$dir/tests"
+  copy="$dir/tests/$(basename "$test_manifest")"
+  "$mutation" "$copy"
+  if cmp -s "$test_manifest" "$copy"; then
+    echo "FAIL manifest control $label: mutation changed nothing" >&2; fail=1; return
+  fi
+  CONCRETE_TEST_MANIFEST="$copy" CONCRETE_TEST_MANIFEST_SKIP_CONTROLS=1 CONCRETE_TEST_EMIT_ONLY=1 \
+    bash "$root/scripts/checks/compiler/tests.sh" >"$work/ctl/$label.log" 2>&1 || rc=$?
+  if [ "$rc" -ne 0 ] && grep -qF "$expected" "$work/ctl/$label.log"; then
+    echo "ok   manifest control $label: refused for the planted reason"
+  else
+    echo "FAIL manifest control $label: not refused as '$expected'" >&2
+    cat "$work/ctl/$label.log" >&2
+    fail=1
+  fi
+}
+mkdir -p "$work/ctl"
+if [ "${CONCRETE_TEST_MANIFEST_SKIP_CONTROLS:-0}" != 1 ]; then
+  manifest_control wrong-expectation "answer: expectation mismatch: BIR run gives" wrong_expectation
+  manifest_control wrong-trap-expectation "overflow: expectation mismatch: BIR run gives" wrong_trap_expectation
+  manifest_control missing-row "program without a manifest row: answer" missing_row
+  manifest_control nonexistent-program "manifest row names no program: no_such_program" nonexistent_program
+fi
+
+while IFS=$'\t' read -r name program expect; do
+  d="$work/ex/$name"
+  read -r -a expectation <<<"$expect"
+  "${emitter[@]}" emit "${program#bir:}" "$d" "$target" "${expectation[@]}"
+  # Emit-only controls cover every row and never reach a native build, even if a planted defect is
+  # accidentally accepted: the control then fails because the child returns zero after the loop.
+  if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" = 1 ]; then continue; fi
+  check "$name" "$d" 10 20
+  examples=$((examples + 1))
+done <<<"$rows"
+if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" = 1 ]; then exit 0; fi
+"${emitter[@]}" loop "$work/ctl/loop" "$target"
+expected_timeout check control-loop "$work/ctl/loop" 1 1
+"${emitter[@]}" invalid "$work/ctl/invalid" "$target"
+check control-invalid-word "$work/ctl/invalid" 10 20
+
+# The comparison's own negative controls: each forged observation must be rejected.
+e="$work/ctl/judge"; mkdir -p "$e"
+echo 134 >"$e/status"; printf 'concrete: trap: x\n' >"$e/stderr"
+forge() { # forge NAME STATUS STDERR-PRINTF STDOUT
+  local o="$work/ctl/forged-$1"
+  echo "$2" >"$o.status"; printf "$3" >"$o.stderr"; printf '%s' "$4" >"$o.stdout"
+  echo "$o"
+}
+judge "$e" "$(forge same 134 'concrete: trap: x\n' '')" || { echo "FAIL judge rejects an exact match"; fail=1; }
+for c in "no-newline|134|concrete: trap: x|" "extra-newline|134|concrete: trap: x\n\n|" \
+         "wrong-status|1|concrete: trap: x\n|" "stray-stdout|134|concrete: trap: x\n|42" \
+         "incomplete|incomplete||"; do
+  IFS='|' read -r n s err out <<<"$c"
+  if judge "$e" "$(forge "$n" "$s" "$err" "$out")"; then
+    echo "FAIL judge accepts a forged observation: $n"; fail=1
+  else
+    echo "ok   judge rejects $n"
+  fi
+done
+
+[ "$examples" -gt 0 ] || { echo "tests: no examples ran" >&2; exit 1; }
+echo "tests: $examples examples, $count backend runs (controls included)"
+exit "$fail"
+# shellcheck shell=bash
+# Shared machinery of the slice-0 example gates (PROVISIONAL): tests.sh (gates 4, 6, 6a)
+# and slice0_artifacts.sh (gates 10, 11, 12). Source it from the repository root, inside the nix
+# devshell, with `set -euo pipefail`. It builds the compiler and LCB's command line under the
+# gate's limits (lib/limits.sh: an address-space cap of SLICE0_GATE_MEM_GB GiB, default 64; 0 for
+# a gate whose executables under test need no cap, slice0_artifacts.sh) and defines:
+#   capped (a command prefix, an array): run under a 64 GiB address-space cap of its own, so
+#     every build and analysis command is capped whatever the gate's cap;
+#   bounded SECS CMD...: CMD under capped and bounded_run (the gates' only time bound);
+#   root, work (removed on exit), lcb, target, emitter (the Lean emitter command, an array);
+#   expected_timeout CMD...: CMD with its bounded runs logged apart (a control expecting a timeout);
+#   observe EXE OUT SECS RETRY [MEM_MB [ENV...]]: run EXE under bounded_run (and limited_exec.sh
+#     MEM_MB, default 1024) with ENV assignments; OUT.status (status or "incomplete"),
+#     OUT.stdout, OUT.stderr;
+#   judge EXPECTED_DIR OBS: the observation OBS.* equals the expectation, byte for byte;
+#   build NAME LOG CMD...: run CMD, or print LOG and fail the gate;
+#   manifest_rows KIND: validated rows, with the bir: inventory checked against the emitter;
+#   cap_out: copy stdin to stdout, failing above 1 MiB: every command output a gate captures
+#     into a variable goes through it, so no producer can grow the gate's shell (which may run
+#     with no address-space cap, see SLICE0_GATE_MEM_GB) without bound.
+root=$(pwd)
+work=$(mktemp -d)
+# On every exit, the bounded-run summary (recovered and INCOMPLETE runs, whatever a caller did
+# with a command's stderr) goes to the gate's stdout before the scratch directory is removed, and a
+# gate that would pass with an INCOMPLETE run exits 3 instead (INCOMPLETE is never a pass).
+trap 'rc=$?; bounded_summary || true
+  if [ "$rc" = 0 ] && grep -Eqs "^(incomplete|runner-failed)" "${BOUNDED_LOG:-/nonexistent}"; then
+    echo "INCOMPLETE: a bounded run timed out twice; not a pass"; rc=3
+  fi
+  rm -rf "${work:?}"; exit "$rc"' EXIT
+BOUNDED_PARENT="$work"
+# shellcheck source=scripts/checks/lib/bounded.sh
+source scripts/checks/lib/bounded.sh
+[ "$BOUNDED_HAVE_WATCHDOG" = 1 ] || { echo "slice0: python3 is required for bounded runs" >&2; exit 2; }
+# shellcheck source=scripts/checks/lib/limits.sh
+source scripts/checks/lib/limits.sh
+gate_limits "${SLICE0_GATE_MEM_GB:-64}" 40000
+capped=(bash "$root/scripts/checks/lib/limited_exec.sh" 65536)
+# bounded SECS CMD...: CMD under `capped`, through bounded_run (stdin /dev/null; a timeout is
+# re-run once with a larger budget; a second timeout writes no output, returns 124 and is reported
+# INCOMPLETE, never a pass).
+bounded() {
+  local secs=$1 rc=0
+  shift
+  bounded_run -i /dev/null "$secs" -- "${capped[@]}" "$@" || rc=$?
+  if [ "$rc" != 0 ] && bounded_is_incomplete "$rc"; then
+    echo "slice0: INCOMPLETE (timed out twice): $*" >&2
+  fi
+  return "$rc"
+}
+# The build's output is kept and shown on failure: lake prints only "error: build failed" last.
+bounded 1800 lake build Concrete lean-compiler-backend/lcb >"$work/lake-build.log" 2>&1 \
+  || { tail -n 200 "$work/lake-build.log" >&2; echo "slice0: lake build Concrete failed" >&2; exit 1; }
+lcb="$root/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
+case "$(uname -s)-$(uname -m)" in
+  Linux-x86_64) target=x86_64-linux ;;
+  Linux-aarch64) target=aarch64-linux ;;
+  Darwin-arm64) target=aarch64-macos ;;
+  *) echo "slice0: unsupported host $(uname -s)-$(uname -m)" >&2; exit 2 ;;
+esac
+# The time bounds of the emit step (the Lean emitter) and the native step (slice0_native.sh).
+emit_secs=120
+native_secs=300
+emitter=(bounded "$emit_secs" lake env lean --run scripts/checks/compiler/slice0_bir.lean)
+
+# expected_timeout CMD...: run CMD (a function or command) with its bounded runs logged apart, for
+# a control whose expected observation IS a timeout (the diverging body): its INCOMPLETE runs are
+# the observation that CMD checks, not an incomplete gate, so the exit trap does not count them.
+expected_timeout() {
+  local BOUNDED_LOG="$work/expected-timeouts.log"
+  "$@"
+}
+
+observe() {
+  local rc=0 mem=${5:-1024}
+  local envs=("${@:6}")
+  bounded_run -i /dev/null -r "$4" "$3" -- env ${envs[@]+"${envs[@]}"} \
+    bash "$root/scripts/checks/lib/limited_exec.sh" "$mem" "$1" \
+    >"$2.stdout" 2>"$2.stderr" || rc=$?
+  if bounded_is_incomplete "$rc"; then echo incomplete >"$2.status"; else echo "$rc" >"$2.status"; fi
+}
+
+judge() {
+  cmp -s "$1/status" "$2.status" && cmp -s "$1/stderr" "$2.stderr" && [ ! -s "$2.stdout" ]
+}
+
+build() {
+  local name=$1 log=$2; shift 2
+  "$@" >"$log" 2>&1 || { cat "$log" >&2; echo "slice0: $name: build failed: $*" >&2; exit 1; }
+}
+
+cap_out() {
+  local LC_ALL=C out
+  out=$(head -c 1048577; echo x)
+  out=${out%x}
+  [ "${#out}" -le 1048576 ] || { echo "slice0: captured output over 1 MiB" >&2; return 1; }
+  printf '%s' "$out"
+}
+
+test_manifest=${CONCRETE_TEST_MANIFEST:-tests/manifest.tsv}
+manifest_rows() {
+  local kind=$1 rows emitter_names name
+  rows=$(bounded 30 python3 -I "$root/scripts/checks/lib/test_manifest.py" rows --kind "$kind" "$test_manifest" | cap_out) ||
+    { echo "slice0: reading $test_manifest failed" >&2; exit 1; }
+  [ -n "$rows" ] || { echo "slice0: no $kind tests listed in $test_manifest" >&2; exit 1; }
+  if [ "$kind" = bir ]; then
+    printf '%s\n' "$rows" | awk -F '\t' '{sub(/^bir:/, "", $2); print $2}' |
+      LC_ALL=C sort >"$work/manifest-programs"
+    emitter_names=$("${emitter[@]}" list | cap_out) ||
+      { echo "slice0: listing emitter programs failed" >&2; exit 1; }
+    printf '%s\n' "$emitter_names" | LC_ALL=C sort >"$work/emitter-programs"
+    comm -13 "$work/manifest-programs" "$work/emitter-programs" >"$work/programs-without-rows"
+    comm -23 "$work/manifest-programs" "$work/emitter-programs" >"$work/rows-without-programs"
+    if [ -s "$work/programs-without-rows" ] || [ -s "$work/rows-without-programs" ]; then
+      while IFS= read -r name; do
+        echo "slice0: program without a manifest row: $name" >&2
+      done <"$work/programs-without-rows"
+      while IFS= read -r name; do
+        echo "slice0: manifest row names no program: $name" >&2
+      done <"$work/rows-without-programs"
+      exit 1
+    fi
+  fi
+  printf '%s\n' "$rows"
+}
+
+exec
+/bin/bash -lc 'cat scripts/checks/compiler/slice0_repro.sh scripts/checks/compiler/slice0_artifacts.sh' in /home/unbalancedparen/projects/gates-briefs/cx-B2
+ succeeded in 0ms:
+#!/usr/bin/env bash
+# Slice-0 reproducibility gate (Concrete/README.md, gate 8). Two independent builds of the compiler
+# and of LCB, from two source copies with different paths and TMPDIRs, emit every bir: row in the
+# test manifest and build it natively; every stage is compared byte for byte, with no normalization.
+# The two sides share only the pinned Lean toolchain and the dependency SOURCES (each side compiles
+# them itself, with no Lake artifact cache). The comparator is checked by negative controls: a flipped byte, a missing artifact
+# and a differing inventory must each be refused.
+#
+#   slice0_repro.sh [MANIFEST]   (inside nix develop, from the repository root)
+#
+# MANIFEST gets the build identity and one hash per artifact; CI compares the manifests of two
+# independent runners of the same target.
+set -euo pipefail
+root=$(cd "$(dirname "$0")/../../.." && pwd)
+cd "$root"
+# shellcheck source=scripts/checks/lib/limits.sh
+source scripts/checks/lib/limits.sh
+# shellcheck source=scripts/checks/lib/slice0_sources.sh
+source scripts/checks/lib/slice0_sources.sh
+gate_limits 64 40000
+work=$(mktemp -d)
+# On every exit, the bounded-run summary (recovered and INCOMPLETE runs) goes to stdout before the
+# scratch directory is removed, and a gate that would pass with an INCOMPLETE run exits 3 instead.
+trap 'rc=$?; bounded_summary || true
+  if [ "$rc" = 0 ] && grep -Eqs "^(incomplete|runner-failed)" "${BOUNDED_LOG:-/nonexistent}"; then
+    echo "INCOMPLETE: a bounded run timed out twice; not a pass"; rc=3
+  fi
+  rm -rf "${work:?}"; exit "$rc"' EXIT
+BOUNDED_PARENT="$work"
+# shellcheck source=scripts/checks/lib/bounded.sh
+source scripts/checks/lib/bounded.sh
+[ "$BOUNDED_HAVE_WATCHDOG" = 1 ] || { echo "slice0_repro: python3 is required for bounded runs" >&2; exit 2; }
+# bounded SECS CMD...: CMD through bounded_run (stdin /dev/null, one re-run on a timeout; a second
+# timeout returns 124 with no output and is reported INCOMPLETE, never a pass).
+bounded() {
+  local secs=$1 rc=0
+  shift
+  bounded_run -i /dev/null "$secs" -- "$@" || rc=$?
+  if [ "$rc" != 0 ] && bounded_is_incomplete "$rc"; then
+    echo "slice0_repro: INCOMPLETE (timed out twice): $*" >&2
+  fi
+  return "$rc"
+}
+manifest=${1:-}
+[ -z "$manifest" ] || manifest=$(realpath -m "$manifest")
+compare=(python3 "$root/scripts/checks/lib/repro_compare.py")
+# Materialize the dependency checkouts (no build): they must be the manifest's clean revisions,
+# which build_identity.sh checks before anything is built.
+bounded 600 lake env true
+bash scripts/checks/compiler/build_identity.sh > "$work/identity"
+target=$(bash scripts/checks/lib/slice0_native.sh target)
+# Working source edits are included (the identity records their digest); no build product is.
+for side in first second; do
+  d="$work/$side/checkout-with-$side-path"
+  mkdir -p "$d/.lake/packages" "$work/$side/tmp"
+  git ls-files -z -- "${slice0_sources[@]}" |
+    tar --null -T - -cf - | tar -xf - -C "$d"
+  # Dependency checkouts: tracked files and .git (which Lake checks against the manifest) only.
+  for pkg in .lake/packages/*/; do
+    pkg=$(basename "$pkg")
+    mkdir -p "$d/.lake/packages/$pkg"
+    (cd ".lake/packages/$pkg" && { git ls-files -z; printf '.git\0'; } | tar --null -T - -cf -) |
+      tar -xf - -C "$d/.lake/packages/$pkg"
+  done
+  (
+    cd "$d"
+    export TMPDIR="$work/$side/tmp" LC_ALL=C TZ=UTC SOURCE_DATE_EPOCH=1 ZERO_AR_DATE=1
+    # No Lake artifact cache: each side compiles everything it uses.
+    export LAKE_ARTIFACT_CACHE=false LAKE_CACHE_DIR="$work/$side/lake-cache"
+    bounded 3000 lake build Concrete lean-compiler-backend/lcb >"$work/$side/build.log" 2>&1 ||
+      { tail -50 "$work/$side/build.log" >&2; echo "slice0_repro: $side: build failed" >&2; exit 1; }
+    lcb="$d/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
+    bounded 30 python3 -I scripts/checks/lib/test_manifest.py rows --kind bir tests/manifest.tsv > test-rows
+    awk -F '\t' '{print $1}' test-rows > names
+    awk -F '\t' '{sub(/^bir:/, "", $2); print $2}' test-rows | LC_ALL=C sort > manifest-programs
+    [ -s names ] || { echo 'slice0_repro: no examples' >&2; exit 1; }
+    bounded 120 lake env lean --run scripts/checks/compiler/slice0_bir.lean list | LC_ALL=C sort > emitter-programs
+    if ! cmp -s manifest-programs emitter-programs; then
+      echo 'slice0_repro: test manifest inventory differs from emitter' >&2; exit 1
+    fi
+    while IFS=$'\t' read -r name program expect; do
+      read -r -a expectation <<<"$expect"
+      bounded 120 lake env lean --run scripts/checks/compiler/slice0_bir.lean emit "${program#bir:}" "$d/out/$name" "$target" "${expectation[@]}"
+      bounded 120 bash scripts/checks/lib/slice0_native.sh "$d/out/$name" "$lcb"
+    done < test-rows
+  )
+done
+a="$work/first/checkout-with-first-path"
+b="$work/second/checkout-with-second-path"
+"${compare[@]}" "$a" "$b" "$work/identity" ${manifest:+"$manifest"}
+
+# Negative controls: the comparator must refuse each perturbation of an identical pair.
+control() { # control LABEL EXPECTED-MESSAGE SETUP...
+  local label=$1 expect=$2 c="$work/ctl/$1" rc=0; shift 2
+  mkdir -p "$c"
+  cp -R "$a" "$c/a"; cp -R "$a" "$c/b"
+  (cd "$c/b" && "$@")
+  "${compare[@]}" "$c/a" "$c/b" "$work/identity" >"$c/log" 2>&1 || rc=$?
+  if [ "$rc" = 0 ] || ! grep -qF -- "$expect" "$c/log"; then
+    echo "FAIL slice0_repro control $label: not refused as '$expect'" >&2; cat "$c/log" >&2; exit 1
+  fi
+  echo "ok slice0_repro control $label: refused"
+}
+first=$(head -1 "$a/names")
+flip() { python3 -c 'import sys;p=sys.argv[1];d=bytearray(open(p,"rb").read());d[len(d)//2]^=1;open(p,"wb").write(d)' "$1"; }
+control flipped-byte "$first: lcb.exe:" flip "out/$first/lcb.exe"
+control missing-artifact "$first: lcb_rt.o: missing" rm "out/$first/lcb_rt.o"
+control inventory 'example inventory differs' sh -c 'echo extra >> names'
+echo 'PASS slice0_repro'
+#!/usr/bin/env bash
+# Slice-0 artifact gates (PROVISIONAL, Concrete/README.md gates 10, 11 and 12), over every bir:
+# row in tests/manifest.tsv, on the executables slice0_native.sh links:
+#
+# 10. Sanitizers: the LLVM example also built with ASan (slice0_native.sh sanitize: ASan
+#     instruments the printed IR once every definition carries sanitize_address; no UBSan: its
+#     checks are inserted by clang's C front end, so on IR input it checks nothing) must
+#     give the same observation as the BIR semantics (status, exact fd-2 bytes, empty fd 1), so no
+#     sanitizer report. Its memory is bounded by ASan's hard_rss_limit_mb (the shadow reservation
+#     rules out an address-space cap; every other command is capped, see SLICE0_GATE_MEM_GB). Control: a body with an out-of-bounds load must be reported.
+# 11. Binary size (report-only, never fails on a size): bytes and text size of each executable,
+#     per backend and target, in REPORT/sizes.tsv. Compile time (report-only, owner 2026-11-08):
+#     wall-clock milliseconds of each example's emit step (the Lean emitter: checks, LLVM print,
+#     LCB adaptation and in-process assembly, Lean start-up included) and native step (clang and
+#     LCB's command line, linking both executables), next to its budget (the step's time bound), in
+#     REPORT/compile_times.tsv.
+# 12. Stack bound: lib/stack_bound.py derives, from the linked executable's disassembly, a bound on
+#     the Concrete-owned stack below main's entry, covering every byte addressed relative to the
+#     stack or frame pointer (so the red zone), with external libc calls listed with their entry
+#     depth (their own use, and that _exit and abort do not return, are premises). A run under
+#     gdb (x86-64 Linux, lib/stack_measure.py) or LLDB (aarch64-macos, lib/stack_measure_lldb.py)
+#     must stay within it (the run counts the stack pointer and every stack byte a stepped
+#     instruction addresses, lib/stack_access.py, so the red zone). Each analysed disassembly is
+#     kept in REPORT/disassembly/. REPORT/stack.tsv. Controls: the analysis must refuse an unmodelled
+#     stack-pointer write, an indirect call, recursion, a call to an unknown function, two depths
+#     meeting, a stack pointer used as a value or written through a partial register, a partial
+#     frame-pointer write, an indexed stack address, a saved frame pointer popped into another
+#     register, a stack address taken, an overwritten return address, an AArch64 frame pointer
+#     stored, a register-directed return, a return after a call without the link register
+#     restored, a freed or restored saved slot reread, a callee's leftover saved slot reread by
+#     its caller (both architectures), a read of bytes written on one path only or never written,
+#     a store through main's argv, a PC-relative base kept across a call, walked by repeated adds or
+#     beyond the reach premise, an absolute address (memory only through sp/fp, PC-relative or fs/gs), a callee that does not restore the frame pointer, a frame record away from sp, an unmodelled
+#     instruction (x86 `loop`) and frame- or link-register writeback (AArch64), and give the
+#     expected bound on known functions (x86 frame, red-zone store, two AArch64 frame-record
+#     shapes, a read of bytes written on both paths, an adrp-based load, LCB's single link-register
+#     save with a Mach-O stub call in a loop); also refuse the link register loaded from another
+#     slot, a stub call with no indirect-symbol entry, into a stub entry's middle or to the bare stub
+#     section; the comparison must reject a
+#     measurement above the bound; refuse an access beyond the target's red zone (x86-64, Apple
+#     arm64) and any below the stack pointer on aarch64-linux; and a linked main storing at the red
+#     zone's edge must be measured at 128 (bound 128), and with a 120-byte red zone not at all.
+#
+# usage: slice0_artifacts.sh [REPORT_DIR]. Run inside the nix devshell, from the repository root.
+set -euo pipefail
+report=${1:-}
+# The sanitizer executions need an unbounded address-space reservation, so the gate sets no cap of
+# its own and caps every other command it starts (`capped`, and limited_exec.sh for executables).
+SLICE0_GATE_MEM_GB=0
+# shellcheck source=scripts/checks/lib/slice0_common.sh
+source scripts/checks/lib/slice0_common.sh
+: "${CONCRETE_SLICE0_LLVM:?run inside nix develop}"
+objdump=(bounded 60 "$CONCRETE_SLICE0_LLVM/llvm-objdump" -d --no-show-raw-insn)
+indirect=(bounded 60 "$CONCRETE_SLICE0_LLVM/llvm-objdump" --macho --indirect-symbols)
+case "$target" in
+  x86_64-linux) arch=x86_64; objdump+=(--x86-asm-syntax=intel) ;;
+  aarch64-*) arch=aarch64 ;;
+esac
+# The run check's debugger: gdb on x86-64 Linux, LLDB on aarch64-macos (none elsewhere).
+gdb= lldb=
+case "$target" in
+  x86_64-linux) gdb=${CONCRETE_SLICE0_GDB:?the x86-64 Linux shell pins gdb} ;;
+  aarch64-macos)
+    lldb=${CONCRETE_SLICE0_LLDB:?the macOS shell names lldb}
+    [ -x "$lldb" ] || { echo "slice0_artifacts: no LLDB at $lldb" >&2; exit 2; }
+    echo "lldb: $("$lldb" --version 2>&1 | head -c 200 | head -1)" ;;
+esac
+measuring=${gdb:-$lldb}
+[ -n "$report" ] || report="$work/report"
+mkdir -p "$report"
+sizes="$report/sizes.tsv"
+stack="$report/stack.tsv"
+printf 'example\tbackend\ttarget\tbytes\ttext\n' >"$sizes"
+times="$report/compile_times.tsv"
+printf 'example\ttarget\temit_ms\temit_budget_ms\tnative_ms\tnative_budget_ms\n' >"$times"
+# now_ms: a monotonic clock in milliseconds (portable: BSD date has no %N).
+now_ms() { python3 -I -c 'import time; print(time.monotonic_ns() // 1000000)'; }
+printf 'example\tbackend\ttarget\tbound\tmeasured\texternals\n' >"$stack"
+# hard_rss_limit_mb and LeakSanitizer are Linux-only (ASan on Darwin refuses detect_leaks); on
+# macOS RLIMIT_AS is not enforced either, so there the job's memory is the bound, as for all runs.
+asan=abort_on_error=0:symbolize=0
+[ "$(uname -s)" != Linux ] || asan="$asan:hard_rss_limit_mb=1024:detect_leaks=1"
+san_env=("ASAN_OPTIONS=$asan")
+# stack_bound TARGET DISASM [--ranges]: the analysis, capped and bounded in time.
+stack_bound() { bounded 60 python3 -I "$root/scripts/checks/lib/stack_bound.py" "$@"; }
+fail=0
+examples=0
+last_exe= last_analysis=
+
+# within MEASURED BOUND: the run stayed within the static bound (and actually ran).
+within() { [ "$1" -gt 0 ] && [ "$1" -le "$2" ]; }
+
+# measure EXE ANALYSIS EXPECT: the run check's output (`measured N` or `error ...`), given the
+# analysis output (its `range` lines) and the expected exit status: gdb (lib/stack_measure.py) or
+# LLDB (lib/stack_measure_lldb.py, the same contract; Apple's LLDB runs its own Python, so the
+# shell's Python variables are removed).
+measure() {
+  local ranges main redzone
+  ranges=$(awk '$1 == "range" {printf "%s%s:%s", sep, $3, $4; sep=","}' <<<"$2")
+  main=$(awk '$1 == "range" && $2 == "main" {print $3}' <<<"$2")
+  redzone=$(awk '$1 == "redzone" {print $2}' <<<"$2")
+  [ -n "$redzone" ] || { echo "error the analysis names no red zone"; return; }
+  if [ -n "$gdb" ]; then
+    STACK_RANGES=$ranges STACK_MAIN=$main STACK_EXPECT=$3 STACK_RED_ZONE=$redzone \
+      STACK_LIB="$root/scripts/checks/lib" \
+      bounded 300 "$gdb" -batch -nx -x "$root/scripts/checks/lib/stack_measure.py" \
+      "$1" 2>"$1.gdb.err" | awk '$1 == "measured" || $1 == "error" {print}' | cap_out || true
+  else
+    STACK_EXE=$1 STACK_RANGES=$ranges STACK_MAIN=$main STACK_EXPECT=$3 STACK_RED_ZONE=$redzone \
+      STACK_LIB="$root/scripts/checks/lib" \
+      bounded 300 env -u PYTHONPATH -u PYTHONHOME "$lldb" --batch --no-lldbinit \
+      -o "command script import $root/scripts/checks/lib/stack_measure_lldb.py" \
+      2>"$1.gdb.err" | awk '$1 == "measured" || $1 == "error" {print}' | cap_out || true
+  fi
+}
+
+# stack_check NAME BACKEND EXE: derive the bound, measure a run where supported, record both.
+stack_check() {
+  local name=$1 backend=$2 exe=$3 dis="$3.dis" out bound ext m measured=not-run
+  if ! "${objdump[@]}" "$exe" >"$dis" 2>"$dis.err"; then
+    echo "FAIL $name [$backend] stack: disassembly failed: $(head -c 300 "$dis.err")"; fail=1; return
+  fi
+  # Mach-O names only the whole __stubs section; each stub entry's imported symbol comes from the
+  # indirect symbol table, appended as `stub ADDR SYMBOL` lines (lib/stack_bound.py).
+  if [ "$target" = aarch64-macos ]; then
+    if ! "${indirect[@]}" "$exe" 2>"$dis.err" | awk '
+         /^Indirect symbols for / {s = ($0 ~ /\(__TEXT,__stubs\)/); next}
+         s && $1 ~ /^0x[0-9a-f]+$/ && NF == 3 {print "stub", $1, $3}' >>"$dis"; then
+      echo "FAIL $name [$backend] stack: indirect symbols failed: $(head -c 300 "$dis.err")"; fail=1; return
+    fi
+  fi
+  # The disassembly the bound is derived from is kept in the report (audit evidence).
+  mkdir -p "$report/disassembly"
+  cp "$dis" "$report/disassembly/$name.$backend.$target.dis"
+  if ! out=$(stack_bound "$target" "$dis" --ranges | cap_out); then
+    echo "FAIL $name [$backend] stack: $out"; fail=1; return
+  fi
+  bound=$(awk '$1 == "bound" {print $2}' <<<"$out")
+  ext=$(awk '$1 == "external" {printf "%s%s@%s", sep, $2, $3; sep=","}' <<<"$out")
+  if [ -n "$measuring" ]; then
+    m=$(measure "$exe" "$out" "$(head -c 16 "$(dirname "$exe")/status")")
+    measured=$(awk '$1 == "measured" {print $2}' <<<"$m")
+    if [ -z "$measured" ] || ! within "$measured" "$bound"; then
+      echo "FAIL $name [$backend] stack: bound $bound, run: ${m:-no measurement} $(head -c 300 "$exe.gdb.err")"
+      fail=1; return
+    fi
+    last_exe=$exe last_analysis=$out
+  fi
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$name" "$backend" "$target" "$bound" "$measured" "$ext" >>"$stack"
+  echo "ok   $name [$backend] stack: bound $bound, measured $measured, externals ${ext:-none}"
+}
+
+size_report() { # size_report NAME BACKEND EXE
+  local bytes text
+  bytes=$(wc -c <"$3" | tr -d ' ')
+  text=$(bounded 60 "$CONCRETE_SLICE0_LLVM/llvm-size" "$3" 2>/dev/null |
+    awk 'NR == 2 {print $1}' | cap_out) || true
+  printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$target" "$bytes" "${text:-unavailable}" >>"$sizes"
+}
+
+rows=$(manifest_rows bir)
+mkdir -p "$work/ctl"
+first_name= first_program= first_expect=
+while IFS=$'\t' read -r name program expect; do
+  if [ -z "$first_name" ]; then first_name=$name first_program=$program first_expect=$expect; fi
+  d="$work/ex/$name"
+  t0=$(now_ms)
+  read -r -a expectation <<<"$expect"
+  "${emitter[@]}" emit "${program#bir:}" "$d" "$target" "${expectation[@]}"
+  t1=$(now_ms)
+  build "$name" "$d/build.log" bounded "$native_secs" bash "$root/scripts/checks/lib/slice0_native.sh" "$d" "$lcb"
+  t2=$(now_ms)
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$name" "$target" $((t1 - t0)) $((emit_secs * 1000)) $((t2 - t1)) $((native_secs * 1000)) >>"$times"
+  build "$name" "$d/build-san.log" \
+    bounded "$native_secs" bash "$root/scripts/checks/lib/slice0_native.sh" "$d" "$lcb" sanitize
+  observe "$d/llvm.san.exe" "$d/san" 30 30 0 "${san_env[@]}"
+  if judge "$d" "$d/san"; then
+    echo "ok   $name [llvm+asan]: status $(cat "$d/san.status")"
+  else
+    echo "FAIL $name [llvm+asan]: status $(head -c 16 "$d/san.status") (expected $(head -c 16 "$d/status")), stderr" \
+      "$(head -c 600 "$d/san.stderr")"
+    fail=1
+  fi
+  for backend in llvm lcb; do
+    size_report "$name" "$backend" "$d/$backend.exe"
+    stack_check "$name" "$backend" "$d/$backend.exe"
+  done
+  examples=$((examples + 1))
+done <<<"$rows"
+
+# Control (gate 10): an out-of-bounds load in the body must be reported by ASan.
+c="$work/ctl/asan"
+read -r -a first_expectation <<<"$first_expect"
+"${emitter[@]}" emit "${first_program#bir:}" "$c" "$target" "${first_expectation[@]}"
+sed -i.orig 's/^define i32 @concrete_body() {$/define i32 @concrete_body_orig() {/' "$c/llvm.ll"
+cat >>"$c/llvm.ll" <<'LL'
+
+@concrete_ctl = global [4 x i8] zeroinitializer
+define i32 @concrete_body() {
+entry:
+  %p = getelementptr i8, ptr @concrete_ctl, i64 4
+  %v = load volatile i8, ptr %p
+  %r = call i32 @concrete_body_orig()
+  ret i32 %r
+}
+LL
+build control-asan "$c/build.log" bounded "$native_secs" bash "$root/scripts/checks/lib/slice0_native.sh" "$c" "$lcb"
+build control-asan "$c/build-san.log" \
+  bounded "$native_secs" bash "$root/scripts/checks/lib/slice0_native.sh" "$c" "$lcb" sanitize
+observe "$c/llvm.san.exe" "$c/san" 30 30 0 "${san_env[@]}"
+if ! judge "$c" "$c/san" && grep -q 'AddressSanitizer' "$c/san.stderr"; then
+  echo "ok   control: ASan reports an out-of-bounds load"
+else
+  echo "FAIL control: ASan did not report an out-of-bounds load (status $(cat "$c/san.status"))"; fail=1
+fi
+
+# Controls (gate 12): the analysis on synthetic disassembly.
+ctl_dis() { # ctl_dis NAME: write a synthetic x86-64 disassembly from stdin
+  { echo "Disassembly of section .text:"; cat; } >"$work/ctl/$1.dis"
+  echo "$work/ctl/$1.dis"
+}
+known=$(ctl_dis known <<'D'
+
+0000000000001000 <concrete_body>:
+    1000:	push	rbp
+    1001:	mov	rbp, rsp
+    1004:	sub	rsp, 0x10
+    1008:	add	rsp, 0x10
+    100c:	pop	rbp
+    100d:	ret
+
+0000000000001010 <main>:
+    1010:	push	rbp
+    1011:	mov	rbp, rsp
+    1014:	sub	rsp, 0x20
+    1018:	call	0x1000 <concrete_body>
+    101d:	je	0x1024 <main+0x14>
+    101f:	call	0x2000 <write@plt>
+    1024:	leave
+    1025:	ret
+D
+)
+# main: 8 + 0x20 = 40 deep; the call pushes 8; the body goes 8 + 0x10 = 24 deeper: 72.
+if [ "$(stack_bound x86_64-linux "$known")" = "$(printf 'bound 72\nexternal write 48')" ]; then
+  echo "ok   control: stack bound of a known function"
+else
+  echo "FAIL control: stack bound of a known function: $(stack_bound x86_64-linux "$known")"
+  fail=1
+fi
+refuse() { # refuse NAME BODY [TARGET [MAIN]]: BODY (printf format) follows the main header
+  local f
+  f=$(ctl_dis "$1" <<<"$(printf "\n0000000000001010 <${4:-main}>:\n$2")")
+  if stack_bound "${3:-x86_64-linux}" "$f" >"$f.out"; then
+    echo "FAIL control: stack analysis accepts $1: $(head -c 2000 "$f.out")"; fail=1
+  else
+    echo "ok   control: stack analysis refuses $1"
+  fi
+}
+refuse dynamic-sp '    1010:\tsub\trsp, rax\n    1013:\tret\n'
+refuse indirect-call '    1010:\tcall\trax\n    1012:\tret\n'
+refuse recursion '    1010:\tpush\trbp\n    1011:\tcall\t0x1010 <main>\n    1016:\tpop\trbp\n    1017:\tret\n'
+refuse unknown-call '    1010:\tcall\t0x3000 <helper>\n    1015:\tret\n'
+refuse depths-meet '    1010:\tje\t0x1014 <main+0x4>\n    1012:\tpush\trax\n    1013:\tnop\n    1014:\tret\n'
+refuse stack-pointer-escape '    1010:\tmov\trax, rsp\n    1013:\tret\n'
+refuse indexed-stack-address '    1010:\tmov\teax, dword ptr [rsp + 4*rcx - 0x8]\n    1014:\tret\n'
+refuse partial-stack-pointer '    1010:\tpush\trax\n    1011:\tpop\tsp\n    1013:\tret\n'
+refuse partial-frame-pointer '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tmov\tbp, 0x0\n    1018:\tmov\teax, dword ptr [rbp - 0x100]\n    101e:\tpop\trbp\n    101f:\tret\n'
+refuse loop-instruction '    1010:\tmov\tecx, 0x2\n    1015:\tloop\t0x1018 <main+0x8>\n    1017:\tret\n    1018:\tsub\trsp, 0x100\n    101f:\tadd\trsp, 0x100\n    1026:\tret\n'
+refuse saved-frame-pointer-popped '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tpush\trbp\n    1015:\tpop\trax\n    1016:\tmov\tdword ptr [rax - 0x100], ecx\n    101c:\tpop\trbp\n    101d:\tret\n'
+refuse stack-address-taken '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tlea\trax, [rbp - 0x10]\n    1018:\tpop\trbp\n    1019:\tret\n'
+refuse return-address-overwrite '    1010:\tmov\tqword ptr [rsp], rax\n    1014:\tret\n'
+refuse a64-frame-pointer-stored '    1010:\tmov\tx29, sp\n    1014:\tstr\tx29, [x0]\n    1018:\tret\n' aarch64-macos _main
+refuse a64-ret-register '    1010:\tret\tx0\n' aarch64-macos _main
+refuse a64-link-register-lost '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tbl\t0x1020 <_concrete_body>\n    1018:\tadd\tsp, sp, #0x10\n    101c:\tret\n\n0000000000001020 <_concrete_body>:\n    1020:\tret\n' aarch64-macos _main
+refuse freed-slot-reread '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tpush\trbp\n    1015:\tadd\trsp, 0x8\n    1019:\tmov\trax, qword ptr [rsp - 0x8]\n    101e:\tmov\tdword ptr [rax - 0x100], ecx\n    1024:\tpop\trbp\n    1025:\tret\n'
+refuse callee-clobbers-frame-pointer '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tcall\t0x1040 <concrete_body>\n    1019:\tmov\tdword ptr [rbp - 0x100], ecx\n    101f:\tpop\trbp\n    1020:\tret\n\n0000000000001040 <concrete_body>:\n    1040:\tsub\trsp, 0x1000\n    1047:\tmov\trbp, rsp\n    104a:\tadd\trsp, 0x1000\n    1051:\tret\n'
+refuse a64-frame-record-elsewhere '    1010:\tldp\tx29, x30, [x0]\n    1014:\tret\n' aarch64-macos _main
+refuse restored-slot-reread '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tpush\trbp\n    1015:\tpop\trbp\n    1016:\tmov\trax, qword ptr [rsp - 0x8]\n    101b:\tmov\tdword ptr [rax - 0x1000], ecx\n    1021:\tpop\trbp\n    1022:\tret\n'
+refuse a64-restored-record-reread '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tmov\tx29, sp\n    1018:\tstp\tx29, x30, [sp, #-0x10]!\n    101c:\tldp\tx29, x30, [sp], #0x10\n    1020:\tldr\tx0, [sp, #-0x10]\n    1024:\tstr\tx1, [x0, #-0x1000]\n    1028:\tldp\tx29, x30, [sp], #0x10\n    102c:\tret\n' aarch64-macos _main
+refuse a64-w29-writeback-load '    1010:\tsub\tsp, sp, #0x10\n    1014:\tmov\tx29, sp\n    1018:\tldr\tw29, [sp], #0x10\n    101c:\tstr\tx0, [x29, #-0x100]\n    1020:\tret\n' aarch64-macos _main
+refuse a64-frame-writeback '    1010:\tmov\tx29, sp\n    1014:\tstr\tx0, [x29], #-0x100\n    1018:\tstr\tx0, [x29]\n    101c:\tadd\tx29, x29, #0x100\n    1020:\tret\n' aarch64-macos _main
+# A callee's saved frame pointer, left below the caller's stack pointer, reread by the caller.
+refuse callee-residual-reread '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tcall\t0x1040 <concrete_body>\n    1019:\tmov\trax, qword ptr [rsp - 0x10]\n    101e:\tmov\tdword ptr [rax - 0x1000], ecx\n    1024:\tpop\trbp\n    1025:\tret\n\n0000000000001040 <concrete_body>:\n    1040:\tpush\trbp\n    1041:\tpop\trbp\n    1042:\tret\n'
+# Writeback through the link register changes the return address.
+refuse a64-link-register-writeback '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tbl\t0x1040 <_concrete_body>\n    1018:\tldp\tx29, x30, [sp], #0x10\n    101c:\tret\n\n0000000000001040 <_concrete_body>:\n    1040:\tldr\tx0, [x30], #-0x8\n    1044:\tret\n' aarch64-macos _main
+refuse a64-link-register-store-writeback '    1010:\tstr\tx0, [x30, #0x8]!\n    1014:\tret\n' aarch64-macos _main
+# main's argv (rsi, x1) points into the stack: memory is not addressed through it.
+refuse argv-store '    1010:\tmov\tbyte ptr [rsi - 0x1000], 0x0\n    1017:\txor\teax, eax\n    1019:\tret\n'
+refuse a64-argv-store '    1010:\tstrb\twzr, [x1, #-0x100]\n    1014:\tret\n' aarch64-macos _main
+refuse a64-pc-relative-after-call '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tadrp\tx8, 0x2000 <_main+0xff0>\n    1018:\tbl\t0x1040 <_concrete_body>\n    101c:\tldr\tw0, [x8, #0x10]\n    1020:\tldp\tx29, x30, [sp], #0x10\n    1024:\tret\n\n0000000000001040 <_concrete_body>:\n    1040:\tret\n' aarch64-macos _main
+# PC-relative provenance through repeated adds (a loop walking toward the stack).
+refuse a64-pc-relative-walk '    1010:\tadr\tx8, 0x1010 <_main>\n    1014:\tsub\tx2, x1, #0xfff\n    1018:\tadd\tx8, x8, #0x8\n    101c:\tcmp\tx8, x2\n    1020:\tb.lo\t0x1018 <_main+0x8>\n    1024:\tstrb\twzr, [x8]\n    1028:\tret\n' aarch64-macos _main
+refuse a64-pc-relative-far '    1010:\tadrp\tx8, 0x7fff0000\n    1014:\tstrb\twzr, [x8]\n    1018:\tret\n' aarch64-macos _main
+refuse absolute-address '    1010:\tmov\tbyte ptr [0x7fffffd0], 0x0\n    1018:\tret\n'
+# The link register loaded from a slot that does not hold it, and a stub call with no stub entry.
+refuse a64-lr-from-other-slot '    1010:\tsub\tsp, sp, #0x20\n    1014:\tstr\tx30, [sp, #0x10]\n    1018:\tstr\tx0, [sp, #0x8]\n    101c:\tldr\tx30, [sp, #0x8]\n    1020:\tadd\tsp, sp, #0x20\n    1024:\tret\n' aarch64-macos _main
+refuse a64-unmapped-stub '    1010:\tstr\tx30, [sp, #-0x10]!\n    1014:\tbl\t0x1040 <_write+0x1040>\n    1018:\tldr\tx30, [sp], #0x10\n    101c:\tret\n' aarch64-macos _main
+# A call into the middle of a Mach-O stub entry, and to the stub section with no entry mapped.
+refuse a64-mid-stub-call '    1010:\tstr\tx30, [sp, #-0x10]!\n    1014:\tbl\t0x1044 <__stubs+0x4>\n    1018:\tldr\tx30, [sp], #0x10\n    101c:\tret\n\nDisassembly of section __TEXT,__stubs:\n\n0000000000001040 <__stubs>:\n    1040:\tadrp\tx16, 0x2000\n    1044:\tldr\tx16, [x16]\n    1048:\tbr\tx16\nstub 0x0000000000001040 _write\n' aarch64-macos _main
+refuse a64-unmapped-stub-section '    1010:\tstr\tx30, [sp, #-0x10]!\n    1014:\tbl\t0x1040 <__stubs>\n    1018:\tldr\tx30, [sp], #0x10\n    101c:\tret\n\nDisassembly of section __TEXT,__stubs:\n\n0000000000001040 <__stubs>:\n    1040:\tadrp\tx16, 0x2000\n    1044:\tldr\tx16, [x16]\n    1048:\tbr\tx16\n' aarch64-macos _main
+refuse a64-callee-residual-reread '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tmov\tx29, sp\n    1018:\tbl\t0x1040 <_concrete_body>\n    101c:\tldr\tx0, [sp, #-0x10]\n    1020:\tstr\tx1, [x0, #-0x100]\n    1024:\tldp\tx29, x30, [sp], #0x10\n    1028:\tret\n\n0000000000001040 <_concrete_body>:\n    1040:\tstp\tx29, x30, [sp, #-0x10]!\n    1044:\tldp\tx29, x30, [sp], #0x10\n    1048:\tret\n' aarch64-macos _main
+# A read of a byte written on only one path into it.
+refuse one-path-write '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tje\t0x101e <main+0xe>\n    1016:\tmov\tqword ptr [rbp - 0x8], rax\n    101e:\tmov\trax, qword ptr [rbp - 0x8]\n    1022:\tpop\trbp\n    1023:\tret\n'
+# A read never written (stale bytes of whatever ran before).
+refuse unwritten-read '    1010:\tmov\trax, qword ptr [rsp - 0x40]\n    1015:\tret\n'
+# A leaf's red-zone store, below the stack pointer, is inside the bound: 8 + 0x30.
+redzone=$(ctl_dis redzone <<'D'
+
+0000000000001010 <main>:
+    1010:	push	rbp
+    1011:	mov	rbp, rsp
+    1014:	mov	dword ptr [rbp - 0x30], eax
+    1017:	pop	rbp
+    1018:	ret
+D
+)
+if [ "$(stack_bound x86_64-linux "$redzone")" = "bound 56" ]; then
+  echo "ok   control: a red-zone store is inside the bound"
+else
+  echo "FAIL control: red-zone bound: $(stack_bound x86_64-linux "$redzone")"
+  fail=1
+fi
+# bound_is NAME ARCH EXPECTED BODY: the analysis of the synthetic function(s) BODY (printf format,
+# headers included) gives exactly EXPECTED.
+bound_is() {
+  local f got
+  f=$(ctl_dis "$1" <<<"$(printf "\n$4")")
+  got=$(stack_bound "$2" "$f" | cap_out | tr '\n' ' ') || true
+  if [ "$got" = "$3 " ]; then echo "ok   control: stack bound of $1"
+  else echo "FAIL control: stack bound of $1: ${got:-refused}, expected $3"; fail=1; fi
+}
+bound_is a64-framed-main-and-leaf aarch64-macos 'bound 32' '0000000000001000 <_main>:\n    1000:\tstp\tx29, x30, [sp, #-0x10]!\n    1004:\tmov\tx29, sp\n    1008:\tbl\t0x1020 <_concrete_body>\n    100c:\tldp\tx29, x30, [sp], #0x10\n    1010:\tret\n\n0000000000001020 <_concrete_body>:\n    1020:\tsub\tsp, sp, #0x10\n    1024:\tstr\tw0, [sp, #0xc]\n    1028:\tadd\tsp, sp, #0x10\n    102c:\tret\n'
+bound_is a64-offset-frame-record aarch64-macos 'bound 32' '0000000000001000 <_main>:\n    1000:\tsub\tsp, sp, #0x20\n    1004:\tstp\tx29, x30, [sp, #0x10]\n    1008:\tadd\tx29, sp, #0x10\n    100c:\tstur\twzr, [x29, #-0x4]\n    1010:\tldp\tx29, x30, [sp, #0x10]\n    1014:\tadd\tsp, sp, #0x20\n    1018:\tret\n'
+# A load PC-relative through adrp + add is not a stack access.
+bound_is a64-pc-relative-load aarch64-macos 'bound 0' '0000000000001000 <_main>:\n    1000:\tadrp\tx8, 0x2000 <_main+0x1000>\n    1004:\tadd\tx8, x8, #0x10\n    1008:\tldr\tw0, [x8, #0x4]\n    100c:\tret\n'
+# LCB's frame: the link register saved and restored by a single str/ldr; a Mach-O stub entry named
+# by the indirect symbol table (a `stub` line); a call made in a loop (the link register meets).
+bound_is a64-single-lr-save-and-stub aarch64-macos 'bound 48 external write 48' '0000000000001000 <_main>:\n    1000:\tsub\tsp, sp, #0x30\n    1004:\tstr\tx30, [sp, #0x20]\n    1008:\tmov\tw0, #0x2\n    100c:\tbl\t0x1040 <_write+0x1040>\n    1010:\tcbnz\tw0, 0x1008 <_main+0x8>\n    1014:\tldr\tx30, [sp, #0x20]\n    1018:\tadd\tsp, sp, #0x30\n    101c:\tret\n\nDisassembly of section __TEXT,__stubs:\n\n0000000000001040 <__stubs>:\n    1040:\tadrp\tx16, 0x2000\n    1044:\tldr\tx16, [x16]\n    1048:\tbr\tx16\nstub 0x0000000000001040 _write\n'
+# A read of bytes the function wrote on both paths into it is accepted.
+bound_is both-path-write x86_64-linux 'bound 16' '0000000000001010 <main>:\n    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tje\t0x101c <main+0xc>\n    1016:\tmov\tqword ptr [rbp - 0x8], rax\n    101a:\tjmp\t0x1020 <main+0x10>\n    101c:\tmov\tqword ptr [rbp - 0x8], rcx\n    1020:\tmov\trax, qword ptr [rbp - 0x8]\n    1024:\tpop\trbp\n    1025:\tret\n'
+if [ -n "$measuring" ]; then
+  # A run that does not end as expected gives no measurement.
+  wrong=$(( ($(head -c 16 "$(dirname "$last_exe")/status") + 1) % 256 ))
+  if grep -q '^measured' <<<"$(measure "$last_exe" "$last_analysis" "$wrong")"; then
+    echo "FAIL control: a run with an unexpected exit status is measured"; fail=1
+  else
+    echo "ok   control: a run with an unexpected exit status gives no measurement"
+  fi
+fi
+if within 73 72; then echo "FAIL control: a measurement above the bound is accepted"; fail=1
+else echo "ok   control: a measurement above the bound is rejected"; fi
+
+# The red zone (stack_bound.py TARGETS: 128 bytes on x86-64 System V and Apple arm64, none under
+# AAPCS64 on Linux): a store at its edge is in the bound, one past it is refused.
+refuse x86-beyond-red-zone '    1010:\tmov\tqword ptr [rsp - 0x88], 0x0\n    101c:\tret\n'
+bound_is x86-red-zone-edge x86_64-linux 'bound 128' '0000000000001010 <main>:\n    1010:\tmov\tqword ptr [rsp - 0x80], 0x0\n    1019:\tret\n'
+refuse a64-beyond-red-zone '    1010:\tstur\txzr, [sp, #-0x88]\n    1014:\tret\n' aarch64-macos _main
+bound_is a64-red-zone-edge aarch64-macos 'bound 128' '0000000000001010 <_main>:\n    1010:\tstur\txzr, [sp, #-0x80]\n    1014:\tret\n'
+refuse a64-linux-no-red-zone '    1010:\tstur\txzr, [sp, #-0x8]\n    1014:\tret\n' aarch64-linux main
+if [ -n "$measuring" ]; then
+  # The run check counts the bytes an instruction addresses below the stack pointer, not only the
+  # stack pointer: a main that stores at the red zone's edge without moving the stack pointer
+  # (built like the examples, slice0_native.sh control) is measured at 128 bytes, not 0. With a
+  # smaller red zone the same run is an error, not a measurement. On AArch64 it first allocates and
+  # frees a 144-byte frame with a pre-indexed store (judged against the new stack pointer, so not
+  # beyond the red zone), so the expected depth there is 144.
+  rz="$work/ctl/redzone"; mkdir -p "$rz"
+  case "$target" in
+    x86_64-linux) rzdepth=128; printf '\t.intel_syntax noprefix\n\t.text\n\t.globl\tmain\n\t.type\tmain,@function\nmain:\n\tmov\tqword ptr [rsp - 0x80], 0\n\tmov\teax, 7\n\tret\n\t.size\tmain, .-main\n\t.section\t.note.GNU-stack,"",@progbits\n' ;;
+    aarch64-macos) rzdepth=144; printf '\t.text\n\t.globl\t_main\n\t.p2align\t2\n_main:\n\tstp\tx29, x30, [sp, #-0x90]!\n\tldp\tx29, x30, [sp], #0x90\n\tstur\txzr, [sp, #-0x80]\n\tmov\tw0, #7\n\tret\n' ;;
+  esac >"$rz/control.s"
+  if ! bounded "$native_secs" bash "$root/scripts/checks/lib/slice0_native.sh" control "$rz" >"$rz/build.log" 2>&1; then
+    echo "FAIL control: the red-zone executable does not build: $(head -c 1000 "$rz/build.log")"; fail=1
+  else
+    "${objdump[@]}" "$rz/control.exe" >"$rz/control.exe.dis"
+    rza=$(stack_bound "$target" "$rz/control.exe.dis" --ranges | cap_out) || true
+    rzm=$(measure "$rz/control.exe" "$rza" 7)
+    if [ "$(awk '$1 == "bound" {print $2}' <<<"$rza")" = "$rzdepth" ] && [ "$rzm" = "measured $rzdepth" ]; then
+      echo "ok   control: a red-zone store is measured (bound $rzdepth, measured $rzdepth)"
+    else
+      echo "FAIL control: red-zone run: analysis ${rza:-none}; run ${rzm:-none} $(head -c 300 "$rz/control.exe.gdb.err")"; fail=1
+    fi
+    rzm=$(measure "$rz/control.exe" "$(sed 's/^redzone .*/redzone 120/' <<<"$rza")" 7)
+    if grep -q '^error .*beyond the 120-byte red zone' <<<"$rzm"; then
+      echo "ok   control: a run beyond the red zone gives no measurement"
+    else
+      echo "FAIL control: a run beyond the red zone: ${rzm:-none}"; fail=1
+    fi
+  fi
+fi
+
+[ "$examples" -gt 0 ] || { echo "slice0_artifacts: no examples ran" >&2; exit 1; }
+echo "slice0_artifacts: $examples examples; sizes in $sizes, compile times in $times, stack bounds in $stack"
+column -t -s "$(printf '\t')" "$sizes" 2>/dev/null || cat "$sizes"
+column -t -s "$(printf '\t')" "$times" 2>/dev/null || cat "$times"
+exit "$fail"
+
+exec
+/bin/bash -lc "rg '"'^diff --git'"' REVIEW.diff; cat scripts/checks/compiler/EmitExamples.lean" in /home/unbalancedparen/projects/gates-briefs/cx-B2
+ exited 1 in 0ms:
+diff --git a/.github/workflows/lean_action_ci.yml b/.github/workflows/lean_action_ci.yml
+diff --git a/Concrete/BIR.lean b/Concrete/BIR.lean
+diff --git a/Concrete/README.md b/Concrete/README.md
+diff --git a/RETENTION.tsv b/RETENTION.tsv
+diff --git a/changelog.d/2026-11-08-test-manifest.md b/changelog.d/2026-11-08-test-manifest.md
+diff --git a/required-checks-transition.tsv b/required-checks-transition.tsv
+diff --git a/required-checks.txt b/required-checks.txt
+diff --git a/scripts/checks/compiler/slice0_artifacts.sh b/scripts/checks/compiler/slice0_artifacts.sh
+diff --git a/scripts/checks/compiler/slice0_backends.sh b/scripts/checks/compiler/slice0_backends.sh
+diff --git a/scripts/checks/compiler/slice0_bir.lean b/scripts/checks/compiler/slice0_bir.lean
+diff --git a/scripts/checks/compiler/slice0_repro.sh b/scripts/checks/compiler/slice0_repro.sh
+diff --git a/scripts/checks/compiler/tests.sh b/scripts/checks/compiler/tests.sh
+diff --git a/scripts/checks/landing_script.sh b/scripts/checks/landing_script.sh
+diff --git a/scripts/checks/lib/slice0_common.sh b/scripts/checks/lib/slice0_common.sh
+diff --git a/scripts/checks/lib/slice0_sources.sh b/scripts/checks/lib/slice0_sources.sh
+diff --git a/scripts/checks/lib/test_manifest.py b/scripts/checks/lib/test_manifest.py
+diff --git a/scripts/checks/run.sh b/scripts/checks/run.sh
+diff --git a/scripts/checks/test_manifest.sh b/scripts/checks/test_manifest.sh
+diff --git a/tests/manifest.tsv b/tests/manifest.tsv
+cat: scripts/checks/compiler/EmitExamples.lean: No such file or directory
+
+exec
+/bin/bash -lc 'cat scripts/checks/compiler/slice0_bir.lean scripts/land/required_checks.py' in /home/unbalancedparen/projects/gates-briefs/cx-B2
+ succeeded in 0ms:
+import Concrete
+
+/-!
+Emitter for the manifest-driven test gate (`scripts/checks/compiler/tests.sh`). PROVISIONAL.
+
+`lake env lean --run scripts/checks/compiler/slice0_bir.lean list` prints the hand-written BIR examples;
+`... emit NAME DIR TARGET EXPECT...` takes the expectation from `tests/manifest.tsv` and checks the
+example in Lean (well formed; its BIR run gives that outcome; LCB's own evaluator on the adapted
+body returns the same result word; a trap site's kind is the expected kind) and writes
+`DIR/llvm.ll` (body + runtime entry), `DIR/lcb_body.s` (the adapted body, assembled by LCB in
+process for TARGET: `x86_64-linux`, `aarch64-linux` or `aarch64-macos`), `DIR/lcb_rt.ssa` (the
+runtime entry as QBE text, for LCB's command line), `DIR/lcb_body.ssa` (a debug dump only), and the
+observation the executables must show: `DIR/status` (the exit status) and `DIR/stderr` (the exact
+bytes on descriptor 2; descriptor 1 must stay empty).
+
+Two controls exercise the gate itself: `... loop DIR TARGET` emits a well-formed BIR body that
+never returns (`DIR/status` is `incomplete`), and `... invalid DIR TARGET` emits a body returning a
+word that encodes nothing, which the runtime must refuse (`Runtime.invalidLine`, then abort).
+-/
+
+open Concrete.BIR Concrete.Backend
+open ConcreteSpec (Trap)
+
+structure Expectation where
+  outcome : Outcome
+  trapKind : Option Trap
+
+def trapOfName : String → Option Trap
+  | "arithmeticOverflow" => some .arithmeticOverflow
+  | _ => none
+
+def parseExpectation : List String → Option Expectation
+  | ["exit", c] => match c.toNat? with
+    | some n => if n ≤ 255 then some ⟨.exited n, none⟩ else none
+    | none => none
+  | ["trap", kind, "site", s] => match trapOfName kind, s.toNat? with
+    | some k, some n => some ⟨.trapped n, some k⟩
+    | _, _ => none
+  | _ => none
+
+def writeExpected (dir : System.FilePath) (status : String) (stderr : String) : IO Unit := do
+  IO.FS.writeFile (dir / "status") (status ++ "\n")
+  IO.FS.writeFile (dir / "stderr") stderr
+
+/-- Write the LCB leg: the body assembled in process, the runtime entry as QBE text. -/
+def writeLcb (dir : System.FilePath) (target : LCB.Target)
+    (emitted : LeanCompilerBackend.Verified.Source.Function × SiteTable) : IO Bool := do
+  let (f, sites) := emitted
+  IO.FS.createDirAll dir
+  IO.FS.writeFile (dir / "lcb_source.txt") (reprStr f ++ "\n")
+  let job : LeanCompilerBackend.Verified.FunctionJob :=
+    { code := { symbol := LCB.bodySymbol, body := f,
+                abi := LeanCompilerBackend.Verified.planAbi f,
+                layout := LeanCompilerBackend.Verified.planFrame f } }
+  IO.FS.writeFile (dir / "lcb_job.txt") (reprStr job ++ "\n")
+  -- On every host, LCB's verified first path (the `aarch64-macos` target) must admit the body.
+  if let .error msg := LCB.assemble .aarch64Macos f then
+    IO.eprintln s!"{dir}: LCB first path: {msg}"; return false
+  match LCB.assemble target f with
+  | .error msg => IO.eprintln s!"{dir}: LCB: {msg}"; return false
+  | .ok asm =>
+    IO.FS.writeFile (dir / "lcb_body.s") asm
+    IO.FS.writeFile (dir / "lcb_rt.ssa") (Runtime.qbe sites)
+    IO.FS.writeFile (dir / "lcb_body.ssa") (LCB.render f)
+    return true
+
+def writeBackends (dir : System.FilePath) (target : LCB.Target) (p : Program)
+    (emitted : LeanCompilerBackend.Verified.Source.Function × SiteTable) : IO Bool := do
+  IO.FS.createDirAll dir
+  IO.FS.writeFile (dir / "bir.txt") (reprStr p ++ "\n")
+  IO.FS.writeFile (dir / "llvm.ll") (LLVM.module p)
+  writeLcb dir target emitted
+
+def emit (name : String) (dir : System.FilePath) (expectation : List String)
+    (target : LCB.Target) : IO UInt32 := do
+  let some (_, p) := Examples.all.find? (·.1 == name)
+    | IO.eprintln s!"unknown example {name}"; return 2
+  let some expected := parseExpectation expectation
+    | IO.eprintln s!"{name}: invalid BIR expectation; use exit N or trap KIND site N"; return 2
+  unless wf p do IO.eprintln s!"{name}: not well formed"; return 1
+  let got := run p 1000
+  unless got == expected.outcome do
+    IO.eprintln s!"{name}: expectation mismatch: BIR run gives {repr got}, expected {repr expected.outcome}"; return 1
+  let some word := encode expected.outcome | IO.eprintln s!"{name}: no result word"; return 1
+  match LCB.emit p with
+  | .error msg => IO.eprintln s!"{name}: adapter: {msg}"; return 1
+  | .ok (f, tbl) =>
+    match LCB.evalBody f 100000 with
+    | some w =>
+      unless w == word do
+        IO.eprintln s!"{name}: LCB's evaluator returns {w}, BIR's result word is {word}"; return 1
+    | none => IO.eprintln s!"{name}: LCB's evaluator does not return"; return 1
+    unless ← writeBackends dir target p (f, tbl) do return 1
+    match expected.outcome with
+    | .exited c => writeExpected dir (toString c) ""
+    | .trapped s => match tbl[s]? with
+      | some e =>
+        unless expected.trapKind == some e.kind do
+          IO.eprintln s!"{name}: expectation mismatch: trap site {s} has kind {repr e.kind}, expected {repr expected.trapKind}"; return 1
+        writeExpected dir "134" (Runtime.trapLine e ++ "\n")
+      | none => IO.eprintln s!"{name}: no site {s}"; return 1
+    | _ => IO.eprintln s!"{name}: no observation"; return 1
+    return 0
+
+/-- A body that branches back to itself forever. -/
+def loopBody : Program :=
+  { blocks := [{ params := [], insts := [], term := .br 1 [] },
+               { params := [], insts := [], term := .br 1 [] }], sites := [] }
+
+def emitLoop (dir : System.FilePath) (target : LCB.Target) : IO UInt32 := do
+  unless wf loopBody && run loopBody 1000 == .outOfFuel do
+    IO.eprintln "loop: not a well-formed diverging body"; return 1
+  match LCB.emit loopBody with
+  | .error msg => IO.eprintln s!"loop: adapter: {msg}"; return 1
+  | .ok (f, tbl) =>
+    if (LCB.evalBody f 10000).isSome then IO.eprintln "loop: LCB's evaluator returns"; return 1
+    unless ← writeBackends dir target loopBody (f, tbl) do return 1
+    writeExpected dir "incomplete" ""
+    return 0
+
+/-- One site, and a body returning `256 + 1`: past the table, so the word encodes nothing. -/
+def emitInvalid (dir : System.FilePath) (target : LCB.Target) : IO UInt32 := do
+  let tbl : SiteTable := [Examples.plusSite]
+  IO.FS.createDirAll dir
+  IO.FS.writeFile (dir / "llvm.ll")
+    ("define i32 @concrete_body() {\nentry:\n  ret i32 257\n}\n\n" ++ Runtime.llvm tbl)
+  let f : LeanCompilerBackend.Verified.Source.Function :=
+    { resultWidth := .word, parameters := #[], valueWidths := #[],
+      blocks := #[{ phis := #[], instructions := #[], terminator := .ret (.literal (LCB.word 257)) }] }
+  unless ← writeLcb dir target (f, tbl) do return 1
+  writeExpected dir "134" (Runtime.invalidLine ++ "\n")
+  return 0
+
+def withTarget (name : String) (k : LCB.Target → IO UInt32) : IO UInt32 :=
+  match LCB.Target.ofName name with
+  | some t => k t
+  | none => do IO.eprintln s!"unknown target {name}"; return 2
+
+def main (args : List String) : IO UInt32 := do
+  match args with
+  | ["list"] => do
+    for (n, _) in Examples.all do IO.println n
+    return 0
+  | "emit" :: name :: dir :: t :: expectation => withTarget t (emit name dir expectation)
+  | ["loop", dir, t] => withTarget t (emitLoop dir)
+  | ["invalid", dir, t] => withTarget t (emitInvalid dir)
+  | _ => IO.eprintln "usage: slice0_bir.lean list | emit NAME DIR TARGET EXPECT... | (loop | invalid) DIR TARGET"; return 2
+#!/usr/bin/env python3
+"""THE REQUIRED-CHECK VERDICT FOR ONE CANDIDATE (train.sh watch and land).
+
+Usage: required_checks.py BASE_FILE CAND_FILE TRANSITION_FILE JOBS_FILE
+  BASE_FILE        required-checks.txt as the base (main) has it; empty file if absent
+  CAND_FILE        required-checks.txt as the candidate has it; empty file if absent
+  TRANSITION_FILE  required-checks-transition.tsv as the candidate has it; empty file if absent
+  JOBS_FILE        the run's jobs, "<tier>\\t<conclusion>\\t<id>\\t<name>" per line (train.sh run_jobs)
+  (a missing file and an empty file are the same: "the commit has no such file")
+
+Prints one line per finding and exits 0; train.sh refuses when any line starts with an unmet kind:
+  missing: <job>            a required job is absent from the run
+  <conclusion>: <job>       a required job did not succeed (skipped, cancelled, failure, pending...)
+  invalid: <reason>         the files themselves are unusable (nothing required, a bad transition row)
+and prints notes that never refuse and never count as a pass:
+  retired: <job> (<reason>) a base requirement the candidate retires with no replacement; NOT RUN
+  replaced: <job> by <jobs> a base requirement whose replacements are required (and checked) instead
+  stale: <job>              a transition row for a job the base no longer requires (delete the row)
+
+THE RULE. The required set is the candidate's list plus every job the base requires, except a base
+job the candidate drops through an explicit transition row. Without a row, a dropped base job stays
+required, so a candidate cannot weaken main's requirements by editing its own list. A row is
+`old_job<TAB>replacements<TAB>reason`: replacements is a comma-separated list of jobs that must
+each be in the candidate's list (so they are required and checked at this exact SHA), or `-` to
+retire the old job outright, which needs a reason and is reported as retired, never as passed.
+A row for a job the candidate still requires is contradictory and refused. Files are read
+separately and newline-terminated, so names from two files never fuse.
+"""
+import sys
+
+UNMET = ("missing:", "invalid:")
+
+
+def names(path):
+    try:
+        text = open(path).read()
+    except OSError:
+        return set()
+    out = set()
+    for line in text.splitlines():
+        line = line.split("#", 1)[0].strip()
+        if line:
+            out.add(line)
+    return out
+
+
+def transition(path):
+    rows, bad = {}, []
+    try:
+        text = open(path).read()
+    except OSError:
+        return rows, bad
+    for n, line in enumerate(text.splitlines(), 1):
+        if not line.strip() or line.startswith("#"):
+            continue
+        f = line.split("\t")
+        if f[0] == "old_job":
+            continue  # header
+        if len(f) != 3 or not all(x.strip() for x in f):
+            bad.append(f"transition row {n} needs old_job, replacements, reason (tab-separated, non-empty)")
+            continue
+        old, repl, why = (x.strip() for x in f)
+        if old in rows:
+            bad.append(f"transition row {n} repeats {old}")
+            continue
+        if repl == "-":
+            rows[old] = ([], why)
+            continue
+        parts = [r.strip() for r in repl.split(",")]
+        if not all(parts):
+            # "a,,b" or "," must not degrade into a retirement: only a literal "-" retires
+            bad.append(f"transition row {n} has an empty replacement name in {repl!r} (use '-' to retire)")
+            continue
+        rows[old] = (parts, why)
+    return rows, bad
+
+
+def plan(base, cand, rows, bad):
+    """-> (required set, findings list)"""
+    out = [f"invalid: {b}" for b in bad]
+    if not base and not cand:
+        out.append("invalid: required-checks.txt (neither the base nor the candidate has one)")
+        return set(), out
+    req = set(cand)
+    for old in sorted(base):
+        if old in cand:
+            continue
+        if old not in rows:
+            req.add(old)  # dropped without a transition row: still required
+            continue
+        repl, why = rows[old]
+        if not repl:
+            out.append(f"retired: {old} ({why}); not run, not passed")
+            continue
+        missing = [r for r in repl if r not in cand]
+        if missing:
+            out.append(f"invalid: replacement {', '.join(missing)} for {old} is not in the candidate's required-checks.txt")
+            req.add(old)
+            continue
+        out.append(f"replaced: {old} by {', '.join(repl)}")
+    for old in sorted(rows):
+        if old in cand:
+            out.append(f"invalid: transition row for {old}, which the candidate still requires")
+        elif old not in base:
+            out.append(f"stale: {old} (the base does not require it; delete the row)")
+    return req, out
+
+
+def verdict(req, jobs_path):
+    seen = {}
+    for line in open(jobs_path):
+        f = line.rstrip("\n").split("\t")
+        if len(f) >= 4:
+            seen.setdefault(f[3], []).append(f[1])
+    out = []
+    for name in sorted(req):
+        c = seen.get(name)
+        if not c:
+            out.append("missing: " + name)
+        elif any(x != "success" for x in c):
+            out.append(",".join(sorted(set(c))) + ": " + name)
+    return out
+
+
+def main():
+    if len(sys.argv) != 5:
+        sys.exit(__doc__)
+    base, cand = names(sys.argv[1]), names(sys.argv[2])
+    rows, bad = transition(sys.argv[3])
+    req, notes = plan(base, cand, rows, bad)
+    for line in notes + verdict(req, sys.argv[4]):
+        print(line)
+
+
+if __name__ == "__main__":
+    main()
+
+exec
+/bin/bash -lc "cat scripts/checks/root_inventory.txt RETENTION.tsv; rg -n 'manifest|one test|OD[0-9]|test format' docs/decisions.md | tail -65; cat scripts/checks/lib/gate_env.sh; sed -n '150,205p' scripts/checks/compiler/slice0_artifacts.sh; cat scripts/checks/lib/repro_compare.py" in /home/unbalancedparen/projects/gates-briefs/cx-B2
+ succeeded in 0ms:
+# The day-one root (ROADMAP R-0558): every top-level entry, and every first-level entry under docs/
+# and scripts/, that may exist outside legacy/. scripts/checks/root_inventory.sh refuses any other
+# entry and any listed entry that is missing. Something comes back from legacy/ only in the change
+# that needs it, and that change adds its line here.
+.claude
+.envrc
+.gitattributes
+.githooks
+.github
+.gitignore
+AGENTS.md
+CHANGELOG.md
+CLAUDE.md
+Concrete
+Concrete.lean
+ConcreteSpec
+ConcreteSpec.lean
+ISSUES.tsv
+LICENSE
+README.md
+RETENTION.tsv
+ROADMAP.md
+changelog.d
+docs
+flake.lock
+flake.nix
+lake-manifest.json
+lakefile.toml
+lean-toolchain
+legacy
+required-checks-transition.tsv
+required-checks.txt
+scripts
+tests
+docs/LANDING.md
+docs/PHILOSOPHY.md
+docs/REVIEW.md
+docs/SELF_HOSTED_RUNNERS.md
+docs/archive
+docs/decisions.md
+docs/proposals
+scripts/checks
+scripts/land
+scripts/oracle
+scripts/proofs
+scripts/push-both.sh
+scripts/review
+scripts/spec
+scripts/worktree-new.sh
+# Root retention manifest (ROADMAP R-0562; P6, P8, P14, P21). One row per asset group.
+# disposition: retained = stays live at the root (outside legacy/, survives its deletion);
+#   migrate = moves to legacy/ and returns as slices need it, deleted only by its own criterion;
+#   archived = moves to legacy/ and stays readable, never run, never deleted automatically;
+#   retire = the old pipeline (compiler, build files, its gates and tooling), deleted with legacy/ at LD (R-0590).
+# PATHS: a space-separated list. Assets are named by their path before the move; after it, a path
+# legacy/P is the same asset as P (scripts/land/retention.py strips the prefix). A retained row also
+# names the new root's path of the file (docs/project/AGENTS.md is AGENTS.md at the root). A new root
+# file and its legacy/ namesake (lakefile.toml, legacy/lakefile.toml) share a row; the row describes
+# the legacy/ copy, and the root file is the new root's own (scripts/checks/root_inventory.txt).
+# PRECEDENCE: a path is governed by the row naming its longest listed prefix, so a specific row
+# (docs/spec/decisions.md) governs inside a broad one (docs). No path may be listed twice.
+# check_retention_manifest.sh checks that every tracked file has exactly one governing row.
+# STATUS: open | resolved, and it is about the legacy/ copy only. A row is resolved when its
+# deletion criterion for the legacy/ copy holds, recorded by the change that resolves it. Deleting a
+# path under legacy/ needs EVERY row covering the path (its own and each ancestor's) resolved
+# (scripts/checks/legacy_frozen.sh after the move). legacy/ is deleted only at LD (R-0590), once the new compiler implements a full real program (such as RocksDB, ethrex or similar),
+# when no row is open, a final ideas sweep has dispositioned every idea and the owner approves (P6, revised 2026-11-06). This manifest never authorizes deleting a live root file: a retained row's criterion
+# reads "root: <when the root file goes, normally never>; legacy/ copy: <when its frozen duplicate
+# may go>", and resolving it releases only the legacy/ copy.
+# FIRST DRAFT, 2026-11-04, from the tree at b78fff1a5; the owner approves it with the move (R-0558).
+path	kind	disposition	destination	owner	deletion_criterion	status
+README.md	doc	retained	README.md (rewritten for the new root)	R-0558	root: never; rewritten at the move; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+ROADMAP.md	plan	retained	ROADMAP.md	R-0558	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+docs/project/AGENTS.md AGENTS.md	process	retained	AGENTS.md (root; CLAUDE.md points to it)	R-0558	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+CLAUDE.md	process	retained	CLAUDE.md (pointer to AGENTS.md)	R-0558	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+LICENSE	legal	retained	LICENSE	R-0558	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+required-checks.txt required-checks-transition.tsv	landing	retained	root (scripts/land/required_checks.py reads both)	R-0563	root: never; the transition file is emptied once its rows are stale; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+RETENTION.tsv	landing	retained	RETENTION.tsv	R-0562	root: never; survives the deletion of legacy/; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+ISSUES.tsv	issue record	retained	ISSUES.tsv (minimal issue record, P12)	R-0558	root: never; the full ledger joins it with slice 1; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+ConcreteSpec ConcreteSpec.lean	spec	retained	root (the normative Lean specification)	R-0560	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+tests/manifest.tsv tests/slice0	corpus	retained	root (the manifest-driven test corpus)	R-0558	root: never; legacy/ copy: none (new at the root, nothing to delete)	open
+scripts/proofs	proof integrity	retained	scripts/proofs (the proof-integrity checks of ConcreteSpec: axiom inventory, trust ban, kernel replay, external re-check; rewritten from legacy/scripts/tests/check_external_checker.sh and legacy/scripts/tools, which stay governed by their own rows)	R-0560	root: never; legacy/ copy: none (new at the root, nothing to delete)	open
+.github	ci	retained	rewritten for the new root; the old workflows move to legacy/.github and are not run	R-0563	root: never (the new root's workflows); legacy/ copy (the old workflows, never run): at LD (R-0590)	open
+.githooks	landing	retained	.githooks (pre-push, re-pointed at the new gate set)	R-0563	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+.claude	agent skills	retained	.claude (skills re-pointed at moved paths)	R-0558	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+.gitignore .gitattributes .envrc	repo	retained	root	R-0558	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+scripts/land scripts/checks	landing	retained	scripts/land	R-0563	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+scripts/review	landing	retained	scripts/review	R-0563	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+scripts/push-both.sh scripts/worktree-new.sh	landing	retained	scripts/	R-0563	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+scripts/oracle	oracle	retained	scripts/oracle (ORACLE.lock, build, fetch, publish, run)	R-0564	root: when the differential no longer uses the legacy oracle (after D); legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+scripts/tests/check_oracle_fetch.sh	oracle	retained	scripts/checks/oracle_fetch.sh (the controls of the required job Oracle (GitHub-hosted fetch + smoke); at the move its guard line is repointed at the new root's gate guard and the job runs it there)	R-0564	root: with scripts/oracle; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+docs/project/LANDING.md docs/project/SELF_HOSTED_RUNNERS.md docs/project/REVIEW.md docs/LANDING.md docs/SELF_HOSTED_RUNNERS.md docs/REVIEW.md	process	retained	docs/	R-0563	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+docs/project/PHILOSOPHY.md docs/PHILOSOPHY.md	vision	retained	docs/PHILOSOPHY.md	R-0558	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+docs/spec/decisions.md docs/decisions.md	decisions	retained	docs/decisions.md	R-0558	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+docs/archive/roadmap-2026-11 docs/archive/site-down.md docs/archive/decisions-2026-11-05 docs/archive/bugs-2026-11	plan and decision history	retained	docs/archive/ (the roadmap task_disposition.tsv, decision log, task register, reconciliation and restructure records, the site takedown record, the 2026-11-05 decision rows, the old bug ledger's disposition)	R-0558	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+docs/archive/roadmap-2026-11/ROADMAP.md docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md docs/archive/roadmap-2026-11/ROADMAP_DIRECTION.md docs/archive/roadmap-2026-11/WORK_QUEUE.md	plan history	archived	legacy/docs/archive/roadmap-2026-11/ only: the root duplicates were removed 2026-11-06 (owner: "do the whole movement"; P21 revised)	R-0558	never deleted automatically; deleted with legacy/ at LD (R-0590), after the ideas sweeps and with the owner's approval	open
+CHANGELOG.md	history	archived	legacy/CHANGELOG.md; the root starts a new empty CHANGELOG.md whose first entry names the tag	R-0558	never deleted with the pipeline	open
+changelog.d	history	archived	legacy/changelog.d (pending fragments folded first); the root starts an empty changelog.d	R-0558	never deleted with the pipeline	open
+Concrete Main.lean Concrete.lean Browser.lean	old compiler	retire	legacy/ (the oracle is the tag-built artifact, not this copy)	R-0558	LD (R-0590): once the new compiler implements a full real program, after the final ideas sweep and with the owner's approval	open
+lakefile.toml lake-manifest.json lean-toolchain flake.nix flake.lock Makefile	build	retire	legacy/; the root gets new build files for ConcreteSpec and the new compiler	R-0558	LD (R-0590), with the old pipeline	open
+scripts/tests	old gates	retire	legacy/scripts/tests (frozen, never run)	R-0498	LD (R-0590); a gate a new slice needs is rewritten against the new tree, with its mutation (R-0498)	open
+scripts/gen scripts/ci scripts/spec scripts/tools scripts/dev scripts/reduce scripts/README.md scripts/check_ll1.c scripts/check_ll1.py scripts/check_ll1.rs scripts/bv_capture_solver.sh	old tooling	retire	legacy/scripts	R-0558	LD (R-0590), unless a slice task pulls a tool back first	open
+tests/fixtures/gate_selection tests/fixtures/test_dep_map.toml tests/fixtures/test_manifest.toml tests/perf tests/README.md	old test support	retire	legacy/tests	R-0558	LD (R-0590), with the gates that read them	open
+scripts/fuzz tests/fixtures/fuzz_farm/cases tests/fixtures/fuzz_farm/gen tests/fixtures/fuzz_farm/fake_compiler.py tests/fixtures/fuzz_farm/promote.golden	service	archived	legacy/; the fuzz farm stops. Its ci-3 corpus and findings were not copied and are lost (P14)	R-0272	never deleted automatically; R-0272 restarts fuzzing from tests/regressions, tests/wrong-code and newly generated programs, then the owner decides	open
+scripts/perf tests/fixtures/leanprof_profile	service	archived	legacy/; perf tracking and leanprof stop. Their history on ci-3 was not copied and is lost (P14)	R-0550	never deleted automatically; R-0550 sets new baselines at exact SHAs, then the owner decides	open
+scripts/queue scripts/status	service	archived	legacy/scripts; the work-queue dispatcher and the status page stop	R-0558	never deleted automatically; each returns only with a roadmap task, otherwise the owner decides	open
+docs/bugs	bug ledger	migrate	legacy/docs/bugs; ISSUES.tsv from day one, then the ledger by compiler	R-0561	only when R-0561 closes: each record retired with the old implementation keeps reproducer, ruling and structural class in the new ledger	open
+tests/programs tests/regressions tests/golden tests/wrong-code tests/codegen tests/invalid_programs	corpus	migrate	legacy/tests; each slice brings back the programs its rules cover as conformance examples	R-0425	only when every program is migrated, recorded as covered by a rule, or recorded as retired with a reason (R-0491)	open
+tests/fixtures/bad_class.bin tests/fixtures/bad_magic.bin tests/fixtures/bad_version.bin tests/fixtures/too_short.bin tests/fixtures/valid_elf_header.bin	corpus input	migrate	legacy/tests/fixtures; inputs of tests/programs/pressure_parse_binary_endian.con	R-0425	with that program: migrated or retired with it	open
+tests/fixtures/fuzz_farm/findings	regression evidence	migrate	legacy/tests/fixtures/fuzz_farm/findings; a fuzz finding is a regression	R-0272	only when each finding is a regression of the new compiler or retired with a reason	open
+tests/fixtures/grammar_conformance tests/fixtures/grammar_ll1 grammar	grammar	migrate	legacy/; the new grammar is derived from ConcreteSpec	R-0500	only when the slice grammar in ConcreteSpec covers each case, or it is retired with a reason	open
+tests/oracle	corpus	migrate	legacy/tests/oracle; vectors.txt is the differential corpus	R-0491	only when its vectors are ported to the new differential or each is recorded as retired with a reason	open
+tests/rules	rule record	migrate	legacy/tests/rules; rule-to-fixture expectations (exit_2i.tsv)	R-0500	only when each expectation is carried by a Lean rule's examples or recorded as retired	open
+tests/showcase	evidence record	archived	legacy/tests/showcase; graduation and evidence history (manifest.toml)	R-0558	never deleted with the pipeline	open
+examples	corpus	migrate	legacy/examples; examples return as the language they use is specified	R-0425	only when each example is ported, or retired with a reason	open
+std	library	migrate	legacy/std; std returns module by module with its contracts and regressions	R-0561	only when each module is ported or retired; std defects move with it	open
+proofs	proofs	migrate	legacy/proofs; DesignExamples inform ConcreteSpec, flagship proofs return with their slice	R-0555	only when the matching Lean rules and theorems exist in ConcreteSpec	open
+scripts/browser	website tooling	archived	legacy/scripts/browser; no frozen bundle is served (P9): the site goes down at the move	R-0569	never deleted automatically; the new site (R-0569) is built from scratch, then the owner decides	open
+site	website	archived	legacy/site; the site is taken down at the move (P9, docs/archive/site-down.md) and rebuilt from scratch (R-0569)	R-0569	never deleted automatically; the new site does not derive from it, then the owner decides	open
+docs/spec	prose spec	archived	legacy/docs/spec (non-normative once the Lean rules exist)	R-0555	never deleted with the pipeline; each chapter is retired as its Lean rules land	open
+docs	docs	archived	legacy/docs; a page returns when a task needs it (more specific rows above govern their paths)	R-0558	never deleted with the pipeline	open
+editor	tooling	archived	legacy/editor	R-0558	never deleted automatically; returns with an editor task (phase G)	open
+research paper bench tasks logo.png	research	archived	legacy/	R-0558	never deleted with the pipeline	open
+1752:- <a id="OPEN-111"></a>**OPEN-111** (OD111, Misaligned fields of a packed struct): See [OD111](#od111).
+1753:- <a id="OPEN-115"></a>**OPEN-115** (OD115, The body and totality of a specification function): See [OD115](#od115).
+1754:- <a id="OPEN-116"></a>**OPEN-116** (OD116, A checked total function category): See [OD116](#od116).
+1755:- <a id="OPEN-117"></a>**OPEN-117** (OD117, `old`, quantifiers and implication in contracts): See [OD117](#od117).
+1756:- <a id="OPEN-120"></a>**OPEN-120** (OD120, A vacuous contract): See [OD120](#od120).
+1757:- <a id="OPEN-122"></a>**OPEN-122** (OD122, A `repr(C)` struct returned from an extern function): See [OD122](#od122).
+1758:- <a id="OPEN-123"></a>**OPEN-123** (OD123, `as` on a newtype outside its module): See [OD123](#od123).
+1759:- <a id="OPEN-124"></a>**OPEN-124** (OD124, Profiles in the specification): See [OD124](#od124).
+1760:- <a id="OPEN-125"></a>**OPEN-125** (OD125, Contracts at run time): See [OD125](#od125).
+1761:- <a id="OPEN-126"></a>**OPEN-126** (OD126, Target assumptions): See [OD126](#od126).
+1762:- <a id="OPEN-128"></a>**OPEN-128** (OD128, `->` between a match arm's pattern and body): See [OD128](#od128).
+1763:- <a id="OPEN-129"></a>**OPEN-129** (OD129, Type arguments of an enum literal taken from its expected type): See [OD129](#od129).
+1764:- <a id="OPEN-132"></a>**OPEN-132** (OD132, Polymorphic recursion): See [OD132](#od132).
+1765:- <a id="OPEN-133"></a>**OPEN-133** (OD133, User functions named `print`, `println` or `append`): See [OD133](#od133).
+1766:- <a id="OPEN-134"></a>**OPEN-134** (OD134, The capabilities of a container's generated destruction): See [OD134](#od134).
+1767:- <a id="OPEN-135"></a>**OPEN-135** (OD135, A method's `Type_method` name in its module's namespace): See [OD135](#od135).
+1768:- <a id="OPEN-138"></a>**OPEN-138** (OD138, Which positions give a literal its expected type): See [OD138](#od138).
+1769:- <a id="OPEN-140"></a>**OPEN-140** (OD140, Implicitly dropped results of `free` and of a deferred call): See [OD140](#od140).
+1770:- <a id="OPEN-141"></a>**OPEN-141** (OD141, More than one `main` in a program): See [OD141](#od141).
+1771:- <a id="OPEN-142"></a>**OPEN-142** (OD142, `X.con` beside `X/mod.con`): See [OD142](#od142).
+1772:- <a id="OPEN-143"></a>**OPEN-143** (OD143, What a contract may read): See [OD143](#od143).
+1773:- <a id="OPEN-144"></a>**OPEN-144** (OD144, Postconditions and deferred calls): See [OD144](#od144).
+1774:- <a id="OPEN-145"></a>**OPEN-145** (OD145, How a contract names machine arithmetic): See [OD145](#od145).
+1775:- <a id="OPEN-146"></a>**OPEN-146** (OD146, The result type of a test function): See [OD146](#od146).
+1776:- <a id="OPEN-147"></a>**OPEN-147** (OD147, `repr(C, packed)` together): See [OD147](#od147).
+1777:- <a id="OPEN-149"></a>**OPEN-149** (OD149, How `[e; N]` evaluates `e`): See [OD149](#od149).
+1778:- <a id="OPEN-150"></a>**OPEN-150** (OD150, Which text governs the grammar until it is resynchronized): See [OD150](#od150).
+1779:- <a id="OPEN-151"></a>**OPEN-151** (OD151, Module paths of more than one level): See [OD151](#od151).
+1780:- <a id="OPEN-152"></a>**OPEN-152** (OD152, Whether a path's first letter decides its syntactic form): See [OD152](#od152).
+1781:- <a id="OPEN-153"></a>**OPEN-153** (OD153, Program functions named like a builtin): See [OD153](#od153).
+1782:- <a id="OPEN-154"></a>**OPEN-154** (OD154, Whether the string builtins require `Alloc`): See [OD154](#od154).
+1783:- <a id="OPEN-155"></a>**OPEN-155** (OD155, `unwrap` beside TYPE-24's conversions): See [OD155](#od155).
+1784:- <a id="OPEN-156"></a>**OPEN-156** (OD156, The capability of `get_args`): See [OD156](#od156).
+1785:- <a id="OPEN-157"></a>**OPEN-157** (OD157, How the type `Unit` is written): See [OD157](#od157).
+1789:- **OD47** (loops, decided 2026-10-29, never an open entry): `while` and the counted loop `for i from a
+1790:  until b`, the C-style `for` removed. Now STMT-6@3, STMT-11@2 and STMT-12 (pending, bug 331); OD47 left OPEN-48 to
+1792:- **OD23 – OD32** (the strictness pass, decided 2026-10-29, never open entries): REF-11@3 (OD23),
+1793:  STMT-7@3 (OD24, revised 2026-11-02 to [`u8` only](#decided-2026-11-02-main)), PAT-3@3 and PAT-5@3 (OD25), TYPE-6@2 (OD26), STMT-6@2 (OD27), TRAIT-10@2 (OD28),
+1794:  OWN-7@3 (OD29), MEM-4@3 (OD30), ARITH-2@2 (OD31) and OWN-15@3 (OD32), each pending its bug (319 –
+1795:  328); OD28 and OD30 left OPEN-35 and OPEN-36.
+1796:- **OPEN-1** (OD1, references): decided 2026-10-29. Now REF-5 (formation, `&s.f`, no temporary root), REF-1 and REF-3 (second-class), TRUST-3 (the raw-pointer validity premise, pending) and REF-8 (loans keyed by the root variable, as OD15 (a) confirmed).
+1797:- **OPEN-4** (OD4, foreign function values): decided 2026-10-29. Now FFI-1.
+1798:- **OPEN-5** (OD5, generics and Copy): decided 2026-10-29. Now OWN-D1, TYPE-13 and TYPE-14.
+1799:- **OPEN-6** (OD6, trait coherence): decided 2026-10-29. Now TRAIT-1 to TRAIT-7.
+1800:- **OPEN-7** (OD7, an unsafe-module marker): decided 2026-10-29. Now TRUST-6@2 (pending, R-0509).
+1801:- **OPEN-10** (OD10, arithmetic): decided 2026-10-29. Now ARITH-3, ARITH-4 and STMT-2 (pending).
+1802:- **OPEN-11** (OD11, casts): decided 2026-10-29. Now ARITH-5 (partial) and TRUST-1 (pending).
+1803:- **OPEN-12** (OD12, contracts): decided 2026-10-29. Now CON-1 (pending) and CON-3 (partial).
+1804:- **OPEN-13** (OD13, raw-pointer ownership): decided 2026-10-29. Now TRUST-7.
+1805:- **OPEN-14** (OD14, type validity): decided 2026-10-29. Now REF-2 and REF-4 (the single judgment before specialization is R-0499's).
+1806:- **OPEN-18** (OD18, match arm order and unreachable arms): decided 2026-10-29. Now PAT-9 (pending, R-0500).
+1807:- **OPEN-19** (OD19, the provable subset): decided 2026-10-29. Now the scope of [PROVABLE_V1.md](../legacy/docs/verification/PROVABLE_V1.md), not a language rule.
+1808:- **OPEN-2** (OD2, `&mut` arguments, deferred loans and the exit order): decided 2026-10-29. Now
+1809:  REF-10@2 (lending), REF-11@3 (exclusivity at a call, keyed by the root as OD15 (a) tightened it), REF-13 (a `&mut` refers to the
+1811:- **OPEN-9** (OD9, modules and interfaces): decided 2026-10-29. Now MOD-7 (pending, R-0556).
+1812:- **OPEN-3** (OD3, pattern binders through a borrowed scrutinee): decided 2026-10-29, as enforced.
+1815:- **OPEN-15** (OD15, freezing and `&mut` exclusivity): decided 2026-10-29. Part (a), whole-owner
+1816:  freezing with loans keyed by the root binding, is REF-11@3 (it tightens OD2's part 2; partial, bug 319,
+1817:  for OD23's re-lent case).
+1820:- **OPEN-16** (OD16, a struct literal in a condition head): decided 2026-10-29, refused unless
+1823:- **OPEN-17** (OD17, field writes and `mut`): decided 2026-10-29. Now OWN-10@2 (partial, bug 216).
+1824:- **OPEN-8** (OD8, global state): decided 2026-10-29, constants only and global resources as linear
+1827:- **OPEN-20** (OD20, the visibility of std's `std.libc` bindings): decided 2026-10-29, private to std.
+1829:- **OPEN-21** (OD21, a parent module's rights over its child): decided 2026-10-29, only the declaring
+1832:- **OPEN-22** (OD22, trust on an `impl` block): decided 2026-10-29, per method only. Now TRUST-5@2 of
+#!/usr/bin/env bash
+# The gate environment guard. Every gate sources this first:
+#
+#   source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
+#
+# Gates run in three places: the dev shell, Linux CI runners and the macOS CI runner. When each took
+# coreutils, sed, grep, python and the rest from whatever host it landed on, a gate could pass on one
+# and fail on another for reasons unrelated to what it tests: macOS has no `timeout`, and BSD `sed -i`,
+# `stat`, `date` and `readlink` take other flags. flake.nix now defines that userland once (the
+# `gates` shell), CI runs every step inside it, and the dev shells include it. Each of those shells
+# exports CONCRETE_GATES_SHELL=1; a gate started anywhere else refuses here, before it can produce a
+# verdict about the wrong environment.
+#
+# Use `nix develop .#gates` (no Lean; what CI uses, with elan's Lean on PATH) or `nix develop` (the
+# dev shell, with its own Lean). An entry point that must start outside both, like the pre-push
+# hook, re-executes itself inside `nix develop` before it runs a gate.
+#
+# check_gate_hygiene.sh proves every gate sources this file.
+
+if [ "${CONCRETE_GATES_SHELL:-}" != 1 ]; then
+  echo "error: ${0##*/} refuses to run outside the gate shell: run inside nix develop .#gates (CI) or nix develop" >&2
+  exit 2
+fi
+
+# Every gate matches text with has_match, never a pipe into grep -q (bug 283).
+source "$(dirname "${BASH_SOURCE[0]}")/has_match.sh" || exit 2
+  echo "ok   $name [$backend] stack: bound $bound, measured $measured, externals ${ext:-none}"
+}
+
+size_report() { # size_report NAME BACKEND EXE
+  local bytes text
+  bytes=$(wc -c <"$3" | tr -d ' ')
+  text=$(bounded 60 "$CONCRETE_SLICE0_LLVM/llvm-size" "$3" 2>/dev/null |
+    awk 'NR == 2 {print $1}' | cap_out) || true
+  printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$target" "$bytes" "${text:-unavailable}" >>"$sizes"
+}
+
+rows=$(manifest_rows bir)
+mkdir -p "$work/ctl"
+first_name= first_program= first_expect=
+while IFS=$'\t' read -r name program expect; do
+  if [ -z "$first_name" ]; then first_name=$name first_program=$program first_expect=$expect; fi
+  d="$work/ex/$name"
+  t0=$(now_ms)
+  read -r -a expectation <<<"$expect"
+  "${emitter[@]}" emit "${program#bir:}" "$d" "$target" "${expectation[@]}"
+  t1=$(now_ms)
+  build "$name" "$d/build.log" bounded "$native_secs" bash "$root/scripts/checks/lib/slice0_native.sh" "$d" "$lcb"
+  t2=$(now_ms)
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$name" "$target" $((t1 - t0)) $((emit_secs * 1000)) $((t2 - t1)) $((native_secs * 1000)) >>"$times"
+  build "$name" "$d/build-san.log" \
+    bounded "$native_secs" bash "$root/scripts/checks/lib/slice0_native.sh" "$d" "$lcb" sanitize
+  observe "$d/llvm.san.exe" "$d/san" 30 30 0 "${san_env[@]}"
+  if judge "$d" "$d/san"; then
+    echo "ok   $name [llvm+asan]: status $(cat "$d/san.status")"
+  else
+    echo "FAIL $name [llvm+asan]: status $(head -c 16 "$d/san.status") (expected $(head -c 16 "$d/status")), stderr" \
+      "$(head -c 600 "$d/san.stderr")"
+    fail=1
+  fi
+  for backend in llvm lcb; do
+    size_report "$name" "$backend" "$d/$backend.exe"
+    stack_check "$name" "$backend" "$d/$backend.exe"
+  done
+  examples=$((examples + 1))
+done <<<"$rows"
+
+# Control (gate 10): an out-of-bounds load in the body must be reported by ASan.
+c="$work/ctl/asan"
+read -r -a first_expectation <<<"$first_expect"
+"${emitter[@]}" emit "${first_program#bir:}" "$c" "$target" "${first_expectation[@]}"
+sed -i.orig 's/^define i32 @concrete_body() {$/define i32 @concrete_body_orig() {/' "$c/llvm.ll"
+cat >>"$c/llvm.ll" <<'LL'
+
+@concrete_ctl = global [4 x i8] zeroinitializer
+define i32 @concrete_body() {
+entry:
+  %p = getelementptr i8, ptr @concrete_ctl, i64 4
+  %v = load volatile i8, ptr %p
+  %r = call i32 @concrete_body_orig()
+  ret i32 %r
+}
+#!/usr/bin/env python3
+"""Compare the stage outputs of two independent slice-0 builds, byte for byte.
+
+usage: repro_compare.py SIDE_A SIDE_B IDENTITY [MANIFEST]
+
+Each SIDE holds `names` (the example inventory) and `out/NAME/STAGE` for every stage. Every file
+is read on both sides: a missing file, a differing inventory or one differing byte fails. With
+MANIFEST, writes the identity lines followed by one `SHA256  NAME/STAGE` line per artifact.
+"""
+import hashlib
+import sys
+from pathlib import Path
+
+STAGES = ['bir.txt', 'llvm.ll', 'lcb_job.txt', 'lcb_source.txt', 'lcb_body.ssa', 'lcb_body.s',
+          'lcb_rt.ssa', 'lcb_rt.s', 'llvm.o', 'lcb_body.o', 'lcb_rt.o', 'llvm.exe', 'lcb.exe']
+
+
+def main(argv):
+    if len(argv) not in (4, 5):
+        sys.exit(__doc__)
+    a, b, identity = Path(argv[1]), Path(argv[2]), Path(argv[3])
+    names = (a / 'names').read_bytes()
+    if names != (b / 'names').read_bytes():
+        sys.exit('FAIL slice0_repro: example inventory differs')
+    if not names.strip():
+        sys.exit('FAIL slice0_repro: no examples')
+    lines = identity.read_text().splitlines()
+    for name in names.decode().splitlines():
+        for stage in STAGES:
+            try:
+                hashes = [hashlib.sha256((d / 'out' / name / stage).read_bytes()).hexdigest()
+                          for d in (a, b)]
+            except FileNotFoundError as e:
+                sys.exit(f'FAIL slice0_repro: {name}: {stage}: missing ({e.filename})')
+            if hashes[0] != hashes[1]:
+                sys.exit(f'FAIL slice0_repro: {name}: {stage}: {hashes[0]} != {hashes[1]}')
+            lines.append(f'{hashes[0]}  {name}/{stage}')
+        print(f'ok slice0_repro: {name}: all stages byte-identical')
+    if len(argv) == 5:
+        Path(argv[4]).write_text('\n'.join(lines) + '\n')
+
+
+if __name__ == '__main__':
+    main(sys.argv)
+
+codex
+The inventory mismatch path explicitly exits, so it still fails inside `rows=$(manifest_rows bir)`, where Bash may disable `errexit`. The manifest controls require both a nonzero exit and the expected diagnostic. I’ll finish checking the judge controls, CI names, and owner-decision scope.
+exec
+/bin/bash -lc "sed -n '/diff --git a\\/scripts\\/checks\\/compiler\\/slice0_bir.lean/,/diff --git a\\/scripts\\/checks\\/compiler\\/slice0_repro.sh/p' REVIEW.diff; sed -n '/diff --git a\\/scripts\\/checks\\/landing_script.sh/,/diff --git a\\/scripts\\/checks\\/lib\\/slice0_common.sh/p' REVIEW.diff; rg -n 'backends|Tests \\(|matrix:|arch:' .github/workflows/lean_action_ci.yml; rg -n 'one test|manifest|test format|test harness|test runner' docs/decisions.md docs/PHILOSOPHY.md ROADMAP.md; cat scripts/checks/root_inventory.sh; rg -n 'Examples.all|slice0_backends|exit 42|\\.expect' Concrete scripts tests --glob '"'!root_inventory.txt'"'" in /home/unbalancedparen/projects/gates-briefs/cx-B2
+ succeeded in 0ms:
+diff --git a/scripts/checks/compiler/slice0_bir.lean b/scripts/checks/compiler/slice0_bir.lean
+index 90176ba52..0e7b83c8c 100644
+--- a/scripts/checks/compiler/slice0_bir.lean
++++ b/scripts/checks/compiler/slice0_bir.lean
+@@ -1,11 +1,12 @@
+ import Concrete
+ 
+ /-!
+-Emitter for the slice-0 backend gate (`scripts/checks/compiler/slice0_backends.sh`). PROVISIONAL.
++Emitter for the manifest-driven test gate (`scripts/checks/compiler/tests.sh`). PROVISIONAL.
+ 
+ `lake env lean --run scripts/checks/compiler/slice0_bir.lean list` prints the hand-written BIR examples;
+-`... emit NAME DIR TARGET` checks the example in Lean (well formed; its BIR run gives the expected
+-outcome; LCB's own evaluator on the adapted body returns the same result word) and writes
++`... emit NAME DIR TARGET EXPECT...` takes the expectation from `tests/manifest.tsv` and checks the
++example in Lean (well formed; its BIR run gives that outcome; LCB's own evaluator on the adapted
++body returns the same result word; a trap site's kind is the expected kind) and writes
+ `DIR/llvm.ll` (body + runtime entry), `DIR/lcb_body.s` (the adapted body, assembled by LCB in
+ process for TARGET: `x86_64-linux`, `aarch64-linux` or `aarch64-macos`), `DIR/lcb_rt.ssa` (the
+ runtime entry as QBE text, for LCB's command line), `DIR/lcb_body.ssa` (a debug dump only), and the
+@@ -18,6 +19,24 @@ word that encodes nothing, which the runtime must refuse (`Runtime.invalidLine`,
+ -/
+ 
+ open Concrete.BIR Concrete.Backend
++open ConcreteSpec (Trap)
++
++structure Expectation where
++  outcome : Outcome
++  trapKind : Option Trap
++
++def trapOfName : String → Option Trap
++  | "arithmeticOverflow" => some .arithmeticOverflow
++  | _ => none
++
++def parseExpectation : List String → Option Expectation
++  | ["exit", c] => match c.toNat? with
++    | some n => if n ≤ 255 then some ⟨.exited n, none⟩ else none
++    | none => none
++  | ["trap", kind, "site", s] => match trapOfName kind, s.toNat? with
++    | some k, some n => some ⟨.trapped n, some k⟩
++    | _, _ => none
++  | _ => none
+ 
+ def writeExpected (dir : System.FilePath) (status : String) (stderr : String) : IO Unit := do
+   IO.FS.writeFile (dir / "status") (status ++ "\n")
+@@ -52,14 +71,17 @@ def writeBackends (dir : System.FilePath) (target : LCB.Target) (p : Program)
+   IO.FS.writeFile (dir / "llvm.ll") (LLVM.module p)
+   writeLcb dir target emitted
+ 
+-def emit (name : String) (dir : System.FilePath) (target : LCB.Target) : IO UInt32 := do
+-  let some (_, p, expected) := Examples.all.find? (·.1 == name)
++def emit (name : String) (dir : System.FilePath) (expectation : List String)
++    (target : LCB.Target) : IO UInt32 := do
++  let some (_, p) := Examples.all.find? (·.1 == name)
+     | IO.eprintln s!"unknown example {name}"; return 2
++  let some expected := parseExpectation expectation
++    | IO.eprintln s!"{name}: invalid BIR expectation; use exit N or trap KIND site N"; return 2
+   unless wf p do IO.eprintln s!"{name}: not well formed"; return 1
+   let got := run p 1000
+-  unless got == expected do
+-    IO.eprintln s!"{name}: BIR run gives {repr got}, expected {repr expected}"; return 1
+-  let some word := encode expected | IO.eprintln s!"{name}: no result word"; return 1
++  unless got == expected.outcome do
++    IO.eprintln s!"{name}: expectation mismatch: BIR run gives {repr got}, expected {repr expected.outcome}"; return 1
++  let some word := encode expected.outcome | IO.eprintln s!"{name}: no result word"; return 1
+   match LCB.emit p with
+   | .error msg => IO.eprintln s!"{name}: adapter: {msg}"; return 1
+   | .ok (f, tbl) =>
+@@ -69,10 +91,13 @@ def emit (name : String) (dir : System.FilePath) (target : LCB.Target) : IO UInt
+         IO.eprintln s!"{name}: LCB's evaluator returns {w}, BIR's result word is {word}"; return 1
+     | none => IO.eprintln s!"{name}: LCB's evaluator does not return"; return 1
+     unless ← writeBackends dir target p (f, tbl) do return 1
+-    match expected with
++    match expected.outcome with
+     | .exited c => writeExpected dir (toString c) ""
+     | .trapped s => match tbl[s]? with
+-      | some e => writeExpected dir "134" (Runtime.trapLine e ++ "\n")
++      | some e =>
++        unless expected.trapKind == some e.kind do
++          IO.eprintln s!"{name}: expectation mismatch: trap site {s} has kind {repr e.kind}, expected {repr expected.trapKind}"; return 1
++        writeExpected dir "134" (Runtime.trapLine e ++ "\n")
+       | none => IO.eprintln s!"{name}: no site {s}"; return 1
+     | _ => IO.eprintln s!"{name}: no observation"; return 1
+     return 0
+@@ -114,9 +139,9 @@ def withTarget (name : String) (k : LCB.Target → IO UInt32) : IO UInt32 :=
+ def main (args : List String) : IO UInt32 := do
+   match args with
+   | ["list"] => do
+-    for (n, _, _) in Examples.all do IO.println n
++    for (n, _) in Examples.all do IO.println n
+     return 0
+-  | ["emit", name, dir, t] => withTarget t (emit name dir)
++  | "emit" :: name :: dir :: t :: expectation => withTarget t (emit name dir expectation)
+   | ["loop", dir, t] => withTarget t (emitLoop dir)
+   | ["invalid", dir, t] => withTarget t (emitInvalid dir)
+-  | _ => IO.eprintln "usage: slice0_bir.lean list | (emit NAME | loop | invalid) DIR TARGET"; return 2
++  | _ => IO.eprintln "usage: slice0_bir.lean list | emit NAME DIR TARGET EXPECT... | (loop | invalid) DIR TARGET"; return 2
+diff --git a/scripts/checks/compiler/slice0_repro.sh b/scripts/checks/compiler/slice0_repro.sh
+diff --git a/scripts/checks/landing_script.sh b/scripts/checks/landing_script.sh
+index e849808f1..bb1002ee4 100755
+--- a/scripts/checks/landing_script.sh
++++ b/scripts/checks/landing_script.sh
+@@ -1013,13 +1013,13 @@ out="$(python3 -I "$TMP/required_names.py" "$ROOT_DIR/.github/workflows/lean_act
+ python3 -I - "$ROOT_DIR/.github/workflows/lean_action_ci.yml" "$TMP/rn" <<'PY3'
+ import sys, yaml, copy, os
+ w = yaml.safe_load(open(sys.argv[1])); os.makedirs(sys.argv[2], exist_ok=True)
+-a = copy.deepcopy(w); a["jobs"]["backends"]["strategy"]["matrix"]["include"].append({"arch": "riscv64", "runner": "ubuntu-latest"})
+-b = copy.deepcopy(w); b["jobs"]["backends"]["name"] = "Slice 0 backends (${{ matrix.os }})"
+-c = copy.deepcopy(w); c["jobs"]["backends"]["strategy"]["matrix"] = {"arch": ["x86-64", "aarch64-macos"]}
++a = copy.deepcopy(w); a["jobs"]["tests"]["strategy"]["matrix"]["include"].append({"arch": "riscv64", "runner": "ubuntu-latest"})
++b = copy.deepcopy(w); b["jobs"]["tests"]["name"] = "Tests (${{ matrix.os }})"
++c = copy.deepcopy(w); c["jobs"]["tests"]["strategy"]["matrix"] = {"arch": ["x86-64", "aarch64-macos"]}
+ for n, x in (("extraleg", a), ("unresolved", b), ("product", c)):
+     yaml.safe_dump(x, open(os.path.join(sys.argv[2], n + ".yml"), "w"))
+ PY3
+-for v in extraleg:"landing-tier job not required: Slice 0 backends (riscv64)" unresolved:"leaves its name unresolved" product:"is not a non-empty include list"; do
++for v in extraleg:"landing-tier job not required: Tests (riscv64)" unresolved:"leaves its name unresolved" product:"is not a non-empty include list"; do
+   o="$(python3 -I "$TMP/required_names.py" "$TMP/rn/${v%%:*}.yml" "$re_default" "$ROOT_DIR/required-checks.txt")"
+   has "$o" "${v#*:}" && ok "CONTROL: the required-checks check reports the ${v%%:*} matrix" || no "CONTROL: the required-checks check missed the ${v%%:*} matrix: '$o'"
+ done
+diff --git a/scripts/checks/lib/slice0_common.sh b/scripts/checks/lib/slice0_common.sh
+11:#   Slice 0 backends, artifacts, trusted base, reproducibility (x86-64 Linux and AArch64 macOS)
+357:    name: Tests (${{ matrix.arch }})
+367:      matrix:
+369:          - arch: x86-64
+371:          - arch: aarch64-macos
+395:      matrix:
+397:          - arch: x86-64
+399:          - arch: aarch64-macos
+429:      matrix:
+431:          - arch: x86-64
+433:          - arch: aarch64-macos
+457:      matrix:
+ROADMAP.md:47:   views (the rule registry, IDs and manifests) are derived and have a staleness gate. The user guide
+ROADMAP.md:89:   deferred or dropped on purpose), every row of the root retention manifest `RETENTION.tsv`
+ROADMAP.md:91:   examples, std, the bug ledger, the site and docs) migrate as slices need them. That manifest and
+ROADMAP.md:218:| 8 | the proof surface: `assert`, `assert(e) by thm(...)`, `assume` (never admits safety), `ghost let`, total `spec fn`, `#[proof(path)]`, vacuity refusal and strength labels (OD120, R-0585), `#[test]`; proofs of step bounds; the test runner | C |
+ROADMAP.md:227:| 17 | modules, `pub`, imports, paths (OD43, OD21), constants (Q6.4), generated interfaces and their diff gate (R-0556), DWARF on LLVM (R-0587); `#[invariant(...)]` on structs with private fields; the test runner extended to modules; the formatter | C |
+ROADMAP.md:320:| test | 8 test runner; module support 17; legacy helper API not placed | C9 evidence; `Examples` conformance; theorems in `Proofs/` | `std/src/test.con` ← `legacy/std/src/test.con` | Not started; conformance examples and kernel-checked program theorems, not tests alone | every showcase and both acceptance programs |
+ROADMAP.md:477:| R-0562 | The retention manifest `RETENTION.tsv` at the root, written before the move and checked before any deletion under `legacy/` | every legacy asset (corpora, regressions, examples, std, the bug ledger, the site, docs and the archived services) has a row with a destination and a deletion condition; deleting a path under `legacy/` whose row is unresolved is refused (control); the manifest and the task disposition table stay at the root and survive the deletion of `legacy/` (LD) | — |
+ROADMAP.md:494:| R-0071 | Std on the new compiler: modules return when their constructs land, against the completion contract | each returned module has its manifest, coverage and error conventions | R-0052 |
+ROADMAP.md:568:| R-0383 | Packages: manifest, resolution, interfaces, provenance, trust policy | the multi-package workspace passes | F |
+docs/PHILOSOPHY.md:78:   generated from them. Machine views (the rule registry, rule IDs, manifests) are derived from them
+docs/decisions.md:294:- **P6** Retention manifest gates deleting legacy/ — RETENTION.tsv at the root gives every legacy asset (corpus, regressions, examples, std, bug ledger, site, docs, research) a destination and deletion criterion. Revised 2026-11-06 ([restart row](#decided-project-restart)): nothing is deleted at B3; legacy/, the old pipeline included, is deleted way later (LD: once the new compiler implements a full real program such as RocksDB, ethrex or similar), when RETENTION.tsv has no live entry, a final ideas sweep has dispositioned every idea and the owner explicitly approves.
+docs/decisions.md:359:  superseded. Derived machine views (rule registry, IDs, manifests) keep a staleness gate. Prose
+docs/decisions.md:959:  arrive: the test runner lands at slice 8 with `#[test]`, extends to modules at slice 17, and the
+#!/usr/bin/env bash
+# THE ROOT HOLDS ONLY THE DAY-ONE SET (ROADMAP R-0558). Every tracked top-level entry, and every
+# first-level entry under docs/ and scripts/, must be listed in scripts/checks/root_inventory.txt,
+# and every listed entry must exist. A negative control runs the same judgment on a synthetic
+# listing first.
+set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT_DIR"
+LIST=scripts/checks/root_inventory.txt
+PASS=0; FAIL=0
+ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
+no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
+
+# judge LIST: reads tracked paths on stdin, prints one problem per line.
+judge() {
+  python3 -I -c '
+import sys
+want = {l.strip() for l in open(sys.argv[1]) if l.strip() and not l.startswith("#")}
+have = set()
+for p in (l.rstrip("\n") for l in sys.stdin):
+    if not p: continue
+    parts = p.split("/")
+    have.add(parts[0])
+    if parts[0] in ("docs", "scripts") and len(parts) > 1:
+        have.add(parts[0] + "/" + parts[1])
+for e in sorted(have - want): print("not in the day-one set: " + e)
+for e in sorted(want - have): print("listed but missing: " + e)
+' "$1"
+}
+
+echo "=== negative controls ==="
+TMP="$(mktemp -d)" || exit 2
+trap 'rm -rf "$TMP"' EXIT
+printf 'a\nb\ndocs\ndocs/x.md\n' > "$TMP/list"
+[ -z "$(printf 'a\nb/c\ndocs/x.md\n' | judge "$TMP/list")" ] && ok "control: exactly the listed set passes" || no "control: listed set refused"
+[ -n "$(printf 'a\nb/c\ndocs/x.md\nstray\n' | judge "$TMP/list")" ] && ok "control: an unlisted top-level entry is refused" || no "control: stray accepted"
+[ -n "$(printf 'a\nb/c\ndocs/x.md\ndocs/y.md\n' | judge "$TMP/list")" ] && ok "control: an unlisted docs/ entry is refused" || no "control: docs stray accepted"
+[ -n "$(printf 'a\ndocs/x.md\n' | judge "$TMP/list")" ] && ok "control: a missing listed entry is refused" || no "control: missing accepted"
+
+echo "=== the tracked root against $LIST ==="
+[ -f "$LIST" ] || { no "$LIST is missing"; echo "root_inventory: PASS=$PASS FAIL=$FAIL"; exit 1; }
+out="$(git ls-files --cached | judge "$LIST")"
+[ -z "$out" ] && ok "the root holds exactly the day-one set" || { no "the root differs from the day-one set:"; echo "$out" | sed 's/^/      /'; }
+echo "root_inventory: PASS=$PASS FAIL=$FAIL"
+[ "$FAIL" -eq 0 ]
+tests/manifest.tsv:6:answer	bir:answer	exit 42	slice0
+tests/manifest.tsv:9:answer_discharged	bir:answer_discharged	exit 42	slice0
+tests/manifest.tsv:37:two_sites_ok	bir:two_sites_ok	exit 42	slice0
+scripts/oracle/ci_check.sh:11:# was checked); 1 FAILED (the verified oracle ran and the smoke program did not exit 42). Both 1 and 3
+scripts/oracle/ci_check.sh:14:# on stderr, so a compiler (or nested nix) that happened to exit 42 is never taken for the program.
+scripts/oracle/ci_check.sh:30:echo "oracle-check: passed: the published oracle fetched, verified, and ran smoke.con to exit 42"
+scripts/checks/oracle_fetch.sh:132:  ok)        printf '#!/bin/sh\nexit 42\n' > "$out"; chmod +x "$out" ;;
+scripts/checks/oracle_fetch.sh:134:  compile42) echo "error: the compiler failed" >&2; exit 42 ;;
+scripts/checks/compiler/slice0_bir.lean:76:  let some (_, p) := Examples.all.find? (·.1 == name)
+scripts/checks/compiler/slice0_bir.lean:142:    for (n, _) in Examples.all do IO.println n
+scripts/proofs/axioms.golden:555:ConcreteSpec.Cleanup.expected.eq_1	
+scripts/checks/lib/test_manifest.py:159:                 "a\tbir:answer\texit 42\tslice0\n"
+scripts/checks/lib/test_manifest.py:199:                print(f"{row.id}\t{row.program}\t{row.expect}")
+
+codex
+No correctness findings.
+
+- Planted controls check the intended failure; judge controls include an exact-match positive control.
+- Expectations have one home in the manifest. Retained Lean semantic facts do not duplicate runner expectations.
+- Artifact and reproducibility gates enumerate all current tests. Inventory mismatches explicitly exit inside command substitution.
+- CI names, required-check transitions, retention entries, and root inventory are consistent.
+- The change does not choose a side on an owner decision.
+
+Reviewed actual files without modifications, builds, or network access. Runtime behavior was assessed statically.
+
+VERDICT: CLEAN
+tokens used
+53,723
+No correctness findings.
+
+- Planted controls check the intended failure; judge controls include an exact-match positive control.
+- Expectations have one home in the manifest. Retained Lean semantic facts do not duplicate runner expectations.
+- Artifact and reproducibility gates enumerate all current tests. Inventory mismatches explicitly exit inside command substitution.
+- CI names, required-check transitions, retention entries, and root inventory are consistent.
+- The change does not choose a side on an owner decision.
+
+Reviewed actual files without modifications, builds, or network access. Runtime behavior was assessed statically.
+
+VERDICT: CLEAN

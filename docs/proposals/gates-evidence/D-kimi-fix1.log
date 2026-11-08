@@ -1,0 +1,735 @@
+kimi version 2.4.1
+• I need new task significant. Must first git log --oneline -6. Do commentary and tool.
+
+• I’ll confirm the rebased history first, then reproduce the control-file issue and inspect the trust-ban lexer and current audit code before making the six fixes.5e91dc13 trusted-base: audit declarations and pipeline tools
+728ee6a0 trusted-base: add component registry
+c2245c99 review round 1: harden manifest validation and controls
+18869535 tests: drive slice-0 gates from the manifest
+466d5776 slice0: move BIR expectations into the manifest
+a8c10356 tests: add one validated test manifest
+
+
+• Should inspect status and current files perhaps same plus rebase. Read trust_ban leg X and lean_lex. Also scripts current relevant. Todo list reset with six fixes validation commits. Use Todo.## trusted-base
+Should have no edit scripts/proofs/trust_ban, can read lean_lex and reuse by invocation. Should have population approach perhaps spec lib closure functions. Read lean_lex examples docs, scripts/proofs/lib population closure.I can reuse lean_lex examples but its lexer refuses syntax quotations ``( common in compiler? Concrete code uses `` names extensively e.g. Premises uses ``Concrete... which lean_lex rejects ` ``(` only syntax quotations with open paren, names no. Backtick `( command perhaps none. Strings with `{` not s! could be LLVM strings containing braces! lean_lex rejects any normal string holding `{` without interpolation; Concrete LLVM has many `"entry:\n"` and `"define ... {\n"` normal strings with `{`. So lean_lex examples will fail on compiler source due syntax strings. Finding says "reuse its lean_lex.py approach rather than writing a second one. Prefer reusing leg X's mechanism." I need use script despite lexer limitations? It will fail closed, meaning gate cannot pass current code. I can test. `python3 lean_lex.py examples . tmp $(find...)` likely errors strings with braces. I need reuse approach but adapt lexer to support compiler syntax? Cannot edit scripts/proofs/lean_lex.py? Constraint prior "do not touch scripts/proofs/axioms.sh or trust_ban.sh another workstream owns" lean_lex not forbidden, but changing shared lexer risky and outside branch scope. Could reuse `EXAMPLE` transformation via import and custom? They explicitly prefer mechanism. I can call `lean_lex.py examples` and see. If fails, could state examples carry no trust and lexical native_decide refusal using `lean_lex.py scan` also fails due header and strings. Should alternative use Lean's own parser to retain examples? `Lean.Elab.runFrontend` with `example` discarded; can transform via simple lexical line regex `^example\b` because current examples command must start line, without comments stripping? Finding demands reuse approach. Could invoke lean_lex on sources but adjust ordinary string behavior to accept `{` when not s! for compiler. This lexer built spec intentionally fails on braces because possible hidden sorry? For examples rewriting literals=False only need identify examples and avoid comments/literals. Normal strings with braces can safely be treated literal; spec restriction not needed for examples. Modify lean_lex to optional `strictInterpolation` flag? Then examples command `examples` could pass option to allow? That changes shared behavior for spec if default same. Add CLI `compiler-examples` mode? This is reusing mechanism but modifying other workstream file perhaps allowed (only trust_ban/axioms banned). However User says read it reuse approach not writing second one. Could extend lean_lex `examples` with optional flag `--ordinary-braces` and `lex` parameter to allow normal `{` in strings, keeping default behavior. Also syntax quotations in Concrete? Search `` `( `` and `` ``( ``. Grep.
+
+• The spec’s example leg can be reused, but its lexer deliberately rejects ordinary strings containing `{` and syntax quotations. I’m checking whether those occur in `Concrete`; if so, I’ll extend the shared lexer in a backward-compatible way rather than create a second example rewriter.error: line 107: a string holding '{' without s!, m! or f! before it
+
+
+• I'll extend lean_lex. Could simpler `lex` optional `allowBraces=False`, examples call `allowBraces=True` for new `compiler-examples`. Reuse same `examples` function param. Should not affect spec. Syntax quotation grep only comments no actual, okay. Header irrelevant examples. This solves.
+
+  Population check every .lean under Concrete + root. Use Lean audit script print imported modules:
+  ```
+  def importedConcreteModules env := env.header.moduleNames.filter root
+  ```
+  Could output file separate script or audit includes `module ...` lines but real audit parser. Better new `slice0_concrete_modules.lean` imports Concrete and prints. Shell `concrete_modules` derives with Python or find/sed. Existing use find allowed inside script. `concrete_modules() { { echo Concrete.lean; find Concrete -name '*.lean'; } | sed...|sort; }`. Compare comm. Control unimported module: create temporary copy of module list? The actual population check should compare env list vs source. Control can feed truncated imported list to `closure_gap` function and expect name. Similar spec. Add functions `concrete_modules`, `closure_gap`. Real `print_lean modules`, `missing=$(concrete_modules | comm -23 - <(sort ...))`. If missing fail. Control `head -n1 imported` and closure_gap nonempty expected. Must ensure control specifically unimported module fails with message. Use `population_errors SOURCES IMPORTED` perhaps shell. Fine.
+
+  Examples leg:
+  - create copy under `$work/examples` with lake files and source copy rewritten using lean_lex compiler-examples.
+  - Copy `.lake/build` for speed? spec copies build to temp to avoid dependencies? `cp -r .lake/build` can be huge but okay. More importantly paths in build setup reference original root? Lake can build in copy. Should dependency `.lake/packages` available? Copy lake-manifest but not packages; Lake will use root? In temp outside root, `.lake/packages` absent; `lake build Concrete` may fetch dependency remote (forbidden no remotes!) Not allowed. Spec leg copy only `.lake/build` and lake build ConcreteSpec no deps. For Concrete needs LCB package. I can symlink `$EX/.lake/packages` to `$root/.lake/packages` (local, no remote), and copy build. Lakefile require dependency uses packages. Or avoid Lake build copy by use `lake env lean` on each rewritten file with root LEAN_PATH and output no olean? Running `lake env lean $EX/Concrete/BIR.lean` elaborates modified module in root environment, imports relative deps resolved root. But declarations from examples in environment only per file, and audit script can import? I need run examples and collect axioms within same file. Could append audit #eval to each rewritten source and invoke `lake env lean` on file directly, no Lake copy build. This elaborates entire file and examples as defs, then `#eval` at end sees them. But source module file may use `namespace` etc ended, append script imports not needed (already imports Lean maybe CollectAxioms not imported). I can create separate driver that elaborates modified module then imports? Lean running file has own env, appended #eval can use `Lean.Util.CollectAxioms` if file doesn't import. Could prepend `import Lean.Util.CollectAxioms` to every copy? Imports must at header before existing imports okay. Or append `open Lean in #eval ...` and `collectAxioms` available if Concrete.Premises imports Lean Util? BIR imports ConcreteSpec etc not Premises, but `Lean` likely not full. Prepend `import Lean.Util.CollectAxioms` to rewritten file. `#eval` code scans environment names starts `⟪example⟫`. No need compile module. This is lighter than spec copy build but same rewrite mechanism and axiom collection. It elaborates each module independently using root dependency oleans. For root Concrete.lean no examples, skip zero? I can only process files with examples? Should verify all examples counts. lean_lex outputs total count. For each source, appended #eval prints `example-axiom name axs`. Shell checks all names count and unlisted axioms. Control native example on copy of one source, run same function and grep Lean.ofReduceBool or generated native axiom. Could run control BIR modified example by `decide +native` existing first example replaced. `decide +native` elaborates to `ofReduceBool` and environment scan names. No need compile copy with Lake. This deviates spec leg X "copy built" but elaborating file is equivalent kernel checks, and reuses lexer. Good. But names in rewritten file `noncomputable def «⟪example⟫Concrete/BIR.lean:542»` and scan n last string starts marker. I can append generic audit code from new script partial? Can't import script without elaborating Concrete root again. Add code via shell heredoc to each copy:
+  ```
+  import Lean.Util.CollectAxioms
+  ```
+  at top then original.
+  Appended:
+  ```
+  open Lean Elab Command in
+  #eval show CommandElabM Unit from do
+   let env ← getEnv
+   for (n, _) in env.constants.toList do
+    match n with
+    | .str _ s =>
+     if s.startsWith ... then
+      let axs ← liftCoreM (collectAxioms n)
+      IO.println ...
+  ```
+  `env.constants.toList` includes current declarations map? Legacy used map₁ ++ map₂ because `.toList` perhaps all works in Premises real controls local yes. Use both consistent.
+  Names printed may be `_root_.⟪...` actual Name str anonymous marker, okay.
+  Axioms output line with tabs. Could instead Lean code itself enforce allowed axioms from `Concrete.Premises.allowedAxioms` but BIR doesn't import Premises. Prepend import Concrete.Premises would create cycle if rewriting Premises itself (imports itself). No. Use standard three hardcoded? Should have one list no second list. Could output and shell compares against pipeline axiom list printed from registry via new `slice0_allowed_axioms.lean`. Or the audit driver can import `Concrete.Premises` after module? Cyclic only Premises file, but can special case. Better output and check shell against `slice0_axiom_components.lean` prints names. I already pipeline tools. Add printer perhaps overkill.
+
+  Could append audit Lean code that defines allowed list from strings passed? The allowed axioms fixed three already kernel components, but design no second list says no second trusted list. Hardcoding check violates. Use `Premises.allowedAxioms` in appended source by `import Concrete.Premises` at top for all files except Premises creates cycle if source Premises. Could not process Premises examples (currently none) but future examples there need. Could use generated allowed file and shell check.
+
+  Simpler examples output all axiom closures and shell `nonstandard` uses `allowed_axioms` rendered by new Lean script. Good.
+
+  Function `check_examples SRC_ROOT` expects rewritten tree already:
+  - `python3 lean_lex.py compiler-examples . "$dst" "${sources[@]}"` outputs count
+  - for each rel source with examples? Run all 8 files (BIR 2100 lines LCB, takes perhaps 6 sec each) fine <600 each.
+  - append code via `cat >>` then print_lean each. Note print_lean invokes `lake env lean` on file path outside root, root LEAN_PATH imports okay. Prepend import Lean.Util CollectAxioms via temp:
+  ```
+  { echo import...; cat dst; cat audit snippet; } > tmp; mv
+  ```
+  - `print_lean` errors for native_decide? `decide +native` requires codegen but elaborates and adds axiom, no error. Good.
+  - collect lines `example ...` and check count = NEX and no unlisted axiom. To avoid count as property? Count ensures rewritten population, appropriate. `NEX` perhaps 38.
+  - Use `grep -c '^example '`. Each line format `example {n} axioms: ...`.
+  - allowed file one per axiom. For each line parse after `axioms: ` and ensure each in allowed. `while read` subprocess issue fail variable; use awk with allowed loaded:
+  ```
+  awk 'NR==FNR{allowed[$1]=1;next} /^example /{n++; split($0,a," axioms: "); ...; if bad print "FAIL example ..."; count} END{if n != expected exit...}'
+  ```
+  Simpler Python script for examples audit (gate tool) reads output files and allowed set, expected count; prints unlisted. But new analysis code okay not second lexer. Use `python3 -I -c` with glob.
+  Perhaps examples checker function Lean could output only offending lines itself using standard list from env var string passed via `set_option`? No.
+
+  Should have registry exactly once:
+  - duplicate component ids registryErrors.
+  - each audited name tool, declaration, axiom owned exactly one component. `matches` across all components duplicates rejected regardless kind. Requirement "each audited name (tool, declaration, axiom)" could all matches. Add for every c match count total ==1. Error `match X is owned by N components, expected exactly one`. Duplicate matches within same component counts 2, good.
+  - trusted declaration belong trusted component not notTrusted. `declarationListed` returns list owners. `trustedDeclarationErrors`: if owners length !=1 error; if sole kind .notTrusted error. Currently registry rejects duplicate match globally before but audit functions should still report controls independently even registryErrors not invoked in control. Implement `declarationOwners`.
+  Messages:
+  `unlisted trusted declaration` when zero.
+  `trusted declaration {n} has {n} owners` duplicates
+  `trusted declaration {n} belongs to non-trusted component {id}`.
+  Controls per rule:
+    duplicate component ids
+    duplicate audited name ownership
+    notTrusted owner.
+  Also exactly once each axiom/tool perhaps duplicate match control enough one per rule as finding "Add one control per rule" three controls. Could add registry error control for duplicate IDs, duplicate match, notTrusted. Make sure duplicate ID entries can create via Lean control cs transformations:
+  ```
+  def duplicateIds := components.map fun c => if c.id=="lake" then {c with id := "lean-kernel"} else c
+  #eval IO.println registryErrors duplicateIds
+  ```
+  But this also duplicate matches? no id only. Expected `duplicate component id lean-kernel`.
+  duplicate name: modify lake matches add "git" duplicate within same component? Requirement owned by exactly one component implies same owner duplicate not multiple components. Better change `native-shell-utilities` matches add "git" yields 2 owners. But then matches field with quoted syntax in control. Lean code:
+  ```
+  let cs := components.map fun c => if c.id == "native-shell-utilities" then {c with «matches» := "git" :: c.«matches»} else c
+  ```
+  Expected `match git is owned by 2 components`.
+  notTrusted: change bir-lcb-adapter matches to `Concrete.Control.f` and declare extern f; trustedDeclarationErrors env local cs -> non-trusted error. But cs also registry duplicates none. Control needs output fail.
+  Could combine with unsafe twin? Separate required.
+
+  Twin:
+  Current isUnsafeRecTwin skips before attrs. Fix:
+  ```
+  def isPartialUnsafeRecTwin env n :=
+   match n with
+   | .str p "_unsafe_rec" =>
+     match env.find? p with
+     | some (.opaqueInfo _) =>
+        (Compiler.implementedByAttr.getParam? env p).isSome &&
+        match Compiler.implementedByAttr.getParam? env p with
+        | some impl => impl == n? getParam returns Name perhaps.
+  ...
+  ```
+  Should inspect actual partial environment attributes. Create scratch control with partial def and print env info to know. I can use Lean #eval output `implementedByAttr.getParam?` for parent, twin, CI safety. Use temporary under mktemp. Should have no changes before understand. Also finding says check parent's implemented_by/partial relationship as Lean records. Partial def parent opaque and implementedBy attr param likely twin name. I can define:
+  ```
+  def isCompilerPartialTwin env n :=
+   match n with
+   | .str p "_unsafe_rec" =>
+     (Compiler.implementedByAttr.getParam? env p) == some n &&
+     match env.find? p with
+     | some (.opaqueInfo _) => true
+     | _ => false
+  ```
+  This ensures hand-written f._unsafe_rec with parent ordinary def perhaps parent no implementedBy, not exempt. A malicious user can set implemented_by manually to twin but then trusted parent flagged implemented_by and twin attrs always checked. Exemption just avoids duplicate unsafe twin for genuine partial. Could also parent `implemented_by` and opaque enough.
+  Always check extern/implementedBy attributes on twin before skip:
+  ```
+  let mut kinds attrs...
+  if !isCompilerPartialTwin then match ci...
+  ```
+  For genuine partial twin has no attrs so [] skipped. Hand-written twin defn unsafe flagged. Hand-written safe `_unsafe_rec` would not be marked unsafe? Finding "hides ordinary declarations" if safe ordinary twin no extern/unsafe/implBy then no trusted declaration anyway, but control hand-written likely `unsafe def Concrete.Control.f._unsafe_rec`. Add exactly. `def f` total plus `unsafe def f._unsafe_rec` allowed? Existing legacy control similar. Report unsafe. Always extern attr even for compiler twin if any flagged.
+  Parent partial classification currently any opaque with twin gets "partial", even hand-written f opaque + manually twin no implementedBy would misclassify parent partial. Should update parent detection to `isPartialDeclaration`: parent opaque and implementedBy == twin. Use in opaque:
+  ```
+  if isPartialDefinition env n then partial else opaque
+  ```
+  This meets.
+  Should implement registry + twin first later.
+
+  Failure print_lean: move cap_out before rc check, but cap_out failure under set -e inside function? 
+  ```
+  local cap_rc=0
+  cap_out < raw > out || cap_rc=$?
+  if rc !=0 ... return 1
+  [cap_rc=0] || return1
+  ```
+  Always out written even Lean fail. If cap_out fails, out may partial and error. Missing file diagnostics guard `: > "$2"` before bounded to ensure. `head` files exist. Good.
+  On failure control now grep out works. Also error branches cat file exists. Fix straightforward.
+
+  Strace split:
+  Option use `-ff -o prefix` per-process traces avoids unfinished/resumed? `-ff` with -f and per-process output still syscalls can be unfinished/resumed within same pid due other threads? Each process separate file, but a process with multiple threads same PID? strace -ff writes each thread's own file perhaps PID/TID, so no interleaving within one trace. Simpler reconstruct by PID robust. Finding explicitly add parser control. Could implement Python parse unfinished map:
+  Lines:
+  `123 execve("/unlisted", ["..."], ...) <unfinished ...>`
+  `456 <... execve resumed>) = 0`
+  Should associate initial by pid and resumed result by pid. Only successful resumed should add initial path. For normal success regex existing.
+  Failed resumed should ignore. Pending at end incomplete should fail closed? If an execve unfinished and log ends no result, cannot claim success; build may still running? strace complete means should have resumed or process exited. To fail closed, report parser error `unresolved execve` so no unseen. Also resumed without pending error.
+  Multiple syscalls only execve traced so per pid at most one pending. PID parsing `^\s*(\d+)\s+`.
+  Normal success handles path and `=0`.
+  Unfinished pattern `execve\("((?:...)".*\) <unfinished \.\.\.>$` captures.
+  Resumed pattern `<\.\.\. execve resumed>\s*(?:\)\s*)?=\s*(-?\d+)` actual `<... execve resumed>) = 0` or `<... execve resumed> ...) = 0`? User example. Regex `<\.\.\. execve resumed>.*=\s*(-?\d+)` enough.
+  Normal failure ignored no pending.
+  If initial execve path truncated no due -s.
+  Could record `pending[pid]=path`, on resumed result 0 add.
+  Normal lines PID perhaps `[pid 123]` if strace `-ff` no; default numeric. Use `(?:\[pid\s+)?` not needed. Strace -f default `123`.
+  Add parser control log with successful split objcopy plus failed PATH lookup:
+  ```
+  123 execve("/usr/bin/objcopy", ...) <unfinished ...>
+  123 <... execve resumed>) = 0
+  124 execve("/no/such", ...) = -1 ENOENT
+  ```
+  check_tools fail objcopy. Also failed-only log with one successful listed perhaps ensure ignored ENOENT. The control log can include successful lean normal to avoid no records; objcopy dominates. Keep failed lookup ignored and check expected only objcopy perhaps grep exact count. Good.
+
+  Trace build:
+  After shared build, under Linux run incremental `bounded 1800 strace ... lake build Concrete lean-compiler-backend/lcb` and include log in all.execve before trace_all. Could trace before current? Shared build happens source. Tools section:
+  ```
+  trace_build() { bounded 1800 strace ... lake build Concrete lean-compiler-backend/lcb; }
+  ...
+  elif ! trace_build > "$work/build.execve" ??? strace -o path, stdout log separate.
+  ```
+  `trace_build` no output. Then `trace_all > all`; combine build + all via cat to combined. Better:
+  ```
+  if ! trace_build; ...
+  elif ! trace_all > manifest...
+  ...
+  cat build.manifest > all
+  ```
+  Header fresh build daily tier, incremental traced here. Build tool list add legitimate children from actual trace. Current likely `git`, `lake`, `lean`, `leanc`, `clang`, `ar`, `ld`, perhaps `rm`, `mkdir`, `install`? Lake incremental no compile if up-to-date but shared just built so only `git`, `lake` perhaps no lean. Finding says list leanc/clang/ar. Add to components:
+  - lean-compiler-runtime matches `lean`, `leanc` (Lean compiler executable C driver)
+  - clang-llvm matches clang etc already
+  - assembler matches `as`, `ar`? `ar` archiver not assembler. Add new component `archiver` pipelineTool or include Lake build tool matches ar. Requirement each tool owned exactly one, choose `lake` matches `lake`,`git`,`ar` (Lake invokes archiver). `leanc` Lean component. `clang` already. Native shell `bash env uname` etc. `ld` linker.
+  Build could exec `cc`? Actual see.
+  Should not pre-add guessed tools beyond finding suggests. Add ar Lake, leanc Lean. README golden update.
+  "Fresh build daily tier job say so header." Add comment: incremental traced, fresh build traced daily tier. Is there daily tier actually? I just state "A fresh build is the daily tier's job" as instructed.
+
+  Module population + examples controls could be substantial. I'll plan commits small review round 1:
+  1 fix print + strace + twin + registry with controls perhaps one commit.
+  2 build trace + population/examples + flake? one commit.
+  All messages "review round 1: ...".
+  Could commit after each validated build/gate perhaps full only final. Should not commit before tests.
+
+  First implement failure and parser. Use Edit print function and Python. Could create standalone `scripts/checks/lib/execve_names.py` to test and reuse instead of inline. Better dedicated script with parser robust and controls. Existing tool_names inline can replace with call to new script. New file `scripts/checks/lib/execve_names.py`, no tests scaffolding. Code:
+  ```
+  def names(lines):
+   pending={}
+  ...
+  if pending at end raise ValueError
+  if resumed unknown raise
+  ```
+  Normal success regex needs avoid matching unfinished. `successful = re.compile(r'execve\("((?:...)".*\)\s+=\s+0\s*$')`.
+  Unfinished captures path.
+  Resumed status.
+  Ignore failed normal. Other lines ignored. If malformed execve success? Could fail closed on any line containing execve and `= 0` but unmatched -> error to avoid unseen. Also any `execve` unfinished matched. On normal failed ignore. If line contains `execve` not matching and not signal? `+++ exited` no. Add:
+  ```
+  elif "execve" in line and re.search(r"=\s*0\s*$",line): raise
+  ```
+  Resumed handled first perhaps.
+  Normal execve with return `= 0 <...>` no.
+  Path escapes: `os.path.basename(match)` if escaped quotes no concern.
+  `pending` normal new execve same pid while pending impossible.
+  Exit errors print stderr exit1. tool_names fails closed.
+  Parser control invokes check_tools synthetic.
+
+  Implement new file and edits.
+
+• I’ve mapped the fixes. I’ll start with the two P1 output/trace issues: preserve capped Lean output on failure, and replace the inline strace regex with a fail-closed PID-aware parser that handles unfinished/resumed calls and still ignores failed lookups.
+
+• Edit shell print and tool names one edit? Same file can one Edit replace block from print_lean through tool_names includes current/pipeline in between too much. Do print then read then tool.Update todo inspect done current.Add parser control near tools before real if, can run on all hosts? Finding parser control should run independent Linux? `check_tools` uses bounded etc all hosts python. Tool allowed file needed pipeline_tools generated currently inside Linux. Could generate allowed for parser separately in Linux. Add inside Linux before trace_all perhaps after pipeline_tools success. Control:
+  ```
+  cat > ctl/split.execve
+  100 execve("/usr/bin/lean"...)=0
+  101 execve("/usr/bin/objcopy"... <unfinished>
+  101 resumed =0
+  102 failed = -1
+  if check_tools ...; then fail elif grep objcopy and not no-such... ok
+  ```
+  Should pipeline_tools available after elif. Current elif chain goes directly trace_all. Insert trace build later and parser function perhaps `tool_controls` to avoid. For now add inside else after real check. But if real trace fails build, parser doesn't run. Better controls should run independent before real tracing. Restructure Linux section significantly when adding build. Later.
+
+  Test parser standalone now with scratch and print_lean controls after build. Use `python3 execve_names` direct on synthetic via Write scratch dynamic. Could use Bash `tmp=$(mktemp)` printf files tool guidelines but tests generated okay. Better Python `-c` import parser with strings no file:
+  ```
+  sys.path... import execve_names; assert parse([...])==...
+  ```
+  Command bounded. Run.Traceback (most recent call last):
+  File "<string>", line 5, in <module>
+    assert module.parse(log) == ["lean", "objcopy"], module.parse(log)
+           ~~~~~~~~~~~~^^^^^
+  File "/home/unbalancedparen/projects/gates-trusted-base/scripts/checks/lib/execve_names.py", line 34, in parse
+    raise ValueError(f"line {line_number}: resumed execve has no unfinished call")
+ValueError: line 3: resumed execve has no unfinished call
+Why unfinished regex expected `\)` before `<unfinished`, actual `0x0 <unfinished` no closing )? Actual strace `execve("...", ["..."], 0x7...) <unfinished ...>` has close parenthesis after env? Sample user `execve(...) <unfinished`. My synthetic has `0x0 <unfinished` missing `)`. Fix test not code. Real strace format `execve("...", ..., 0x7ffd) <unfinished ...>`. Use `0x0) <unfinished`. Resume good. Run.execve parser controls: ok
+Good.
+
+  Should implement twin + registry now perhaps task order not strict. I can do while fresh. First inspect partial attrs via scratch. Use mktemp and Write.
+
+• The parser now reconstructs split calls and ignores `ENOENT` failures in focused controls. Next I’m inspecting Lean’s actual `partial` metadata so the `_unsafe_rec` exemption applies only to compiler-generated twins./tmp/tmp.cGI9clPAxN
+
+
+• Write probe.ConstantInfo.kind perhaps unknown. Run.warning: Git tree '/home/unbalancedparen/projects/gates-trusted-base' is dirty
+/tmp/tmp.cGI9clPAxN/partial.lean:9:127: error(lean.unknownIdentifier): Unknown constant `Lean.ConstantInfo.kind`
+Edit remove info use match string. Simpler `ci.isSome` and attrs enough.warning: Git tree '/home/unbalancedparen/projects/gates-trusted-base' is dirty
+Concrete.Control.p: implementedBy=none, extern=false, present=true
+Concrete.Control.p._unsafe_rec: implementedBy=none, extern=false, present=false
+Surprising partial nonrecursive optimized to ordinary def? p present twin false. Should recursive partial:
+  ```
+  partial def p : Nat -> Nat | n => p n
+  ```
+  Should twin. implementedBy none suggests Lean partial info safety `.partial` on defn? Earlier legacy says opaque. Could be environment doesn't include partial twin until codegen? But legacy used same. Perhaps because partial def unused compiler erases? Should recursive. Write edit line.
+
+• The first nonrecursive probe was optimized away and did not establish the metadata. I’m using a recursive `partial` definition, which forces Lean’s opaque declaration and `_unsafe_rec` implementation shape.
+
+warning: Git tree '/home/unbalancedparen/projects/gates-trusted-base' is dirty
+Concrete.Control.p: implementedBy=none, extern=false, present=true
+Concrete.Control.p._unsafe_rec: implementedBy=none, extern=false, present=true
+• No implementedBy attr. Should inspect ci safety:
+  ```
+  match ci with opaque => "opaque unsafe="; defn safety.
+  ```
+  Write probe print via match.Run.warning: Git tree '/home/unbalancedparen/projects/gates-trusted-base' is dirty
+Concrete.Control.p: implementedBy=none, extern=false, kind=opaque unsafe=false
+Concrete.Control.p._unsafe_rec: implementedBy=none, extern=false, kind=defn safety=Lean.DefinitionSafety.partial
+Twin safety `.partial` is compiler marker. Hand-written `unsafe def f._unsafe_rec` safety unsafe. So exemption only twin ci defn safety partial AND parent opaque. That's "partial relationship as Lean records it". Could hand-written `partial def f._unsafe_rec` safety partial with ordinary parent def -> parent not opaque so not exempt. Good. No implemented_by needed. Parent opaque + twin safety partial. Also always attrs before. Parent partial detect same relation:
+  ```
+  def isPartialTwin env n :=
+   match n with .str p suffix =>
+    match env.find? n, env.find? p with
+    | some (.defnInfo d), some (.opaqueInfo _) => d.safety == .partial
+  ...
+  ```
+  For parent `hasPartialTwin env parent` checks twin.
+  Current twin itself would be classified partial if not exempt, correct.
+  No implemented_by relation available, safety is relationship.
+  Add extern and implBy computed before skip.
+  ```
+  let generatedTwin := is...
+  if !generatedTwin then match ci...
+  ```
+  For parent opaque `hasPartialTwin` else opaque.
+  Trusted declaration on hand-written safe `def f._unsafe_rec` total not flagged but not trusted escape hatch; okay.
+
+  Registry duplicate:
+  `registryErrors` add duplicate IDs and matches. Also unique premise ids? Not requested but could. `for c in cs do if count id !=1`. `for m in c.matches do count across ==1`.
+  `declarationOwners` uses cs filter matches. `trustedDeclarationErrors`:
+  ```
+  let owners := ...
+  if owners.isEmpty unlisted
+  else if owners.length !=1 multiple (registry also)
+  else if owners[0]!.kind == .notTrusted nontrusted
+  ```
+  Require trusted declaration belongs trusted component; are gateTool/axiom kinds trusted? They are trusted for gates only, should a trusted Concrete declaration be allowed owned by gate tool? Requirement "trusted component (not .notTrusted)" explicit only notTrusted exclusion. Good.
+  Errors if owners duplicate should say `trusted declaration X is owned by 2 components, expected exactly one`. Control registry duplicates could use registryErrors only, no environment.
+
+  `allowedAxioms` duplicates registry errors but axiomErrors doesn't enforce exactly once. Finding "require each audited name ... exactly one" registryErrors called only report, real audit runs after current so gate fails if report inconsistent. Control can directly registryErrors. good.
+  Tools `pipeline_tools` doesn't call registryErrors, but current report runs before tools so fail. okay.
+
+  Implement Premises one edit for registry and twin/declaration maybe two edits with reads. First registry.
+
+• Lean marks the generated twin itself with `DefinitionSafety.partial`; the parent is opaque, and neither carries `implemented_by`. I’ll use that actual relationship, always inspect attributes first, and add duplicate-ID/match ownership checks to the registry.
+
+• Read twin section then edit.Replace block. Lean `owners.head!` List has head! perhaps. Use `match owners with | [owner] => ... | [] ... | _ ...`.
+  `declarationOwners` handles private user names.
+  `isGeneratedPartialTwin` uses `ci` twin:
+  ```
+  | .str p "_unsafe_rec" =>
+   match env.find? n, env.find? p with
+   | some (.defnInfo d), some (.opaqueInfo _) => d.safety == .partial
+  ...
+  ```
+  Parent `isGeneratedPartialTwin env (.str n ...)` detects.
+  Trusted kinds attrs first then `unless isGenerated... do match`.
+  If generated twin has extern attr, kinds nonempty returned; match skipped. Good.
+  Error multiple:
+  ```
+  errors ++ [s!"trusted declaration {n} is owned by {owners.length} components..."]
+  ```
+  nontrusted message.
+  No use kinds in errors except unlisted; other errors perhaps include kinds not needed.
+  Edit.Should build after more changes later. Should test hand twin via control after build.
+
+  Now add ar/leanc registry matches and docs/golden. Could wait after trace exact, but finding asks list. Add now. Premises two edits same file require read. Use Read lines components.Can one Edit block both entries.
+
+• The twin and ownership logic is updated. I’m also recording Lake/Lean’s legitimate build children (`ar` and `leanc`) before adding the incremental traced build; the final trace will confirm whether any others are needed.
+
+• Now shared lexer extension. Read already full. Modify `lex` signature add `ordinary_braces=False`, string branch:
+  ```
+  elif c=="{":
+   if not ordinary_braces raise
+   emit...
+  ```
+  examples signature `ordinary_braces=False`, calls lex(... ordinary_braces=ordinary_braces). CLI `compiler-examples` calls true. Doc update. Backward default spec unchanged.
+  Multiple edits same file can one large replacements? Should have 4 edits with reads each. Could one Edit replace full relevant sections not contiguous? Do sequential. First signature and doc perhaps one.Doc exact includes comment spans next line "spans, so offsets" not my old. Should Read lines 30-45.Read string lines 70.Todo could update multiple tasks but later. Edit branch.Should else handles brace yes. Read examples lines 156+.One edit whole examples+CLI doc perhaps update top separately later.Should top doc update compiler mode. Later sweep.
+
+  Test rewrite now.43
+Great 43 examples.
+
+  Should module printer + axiom list + example audit snippet. I can add one new Lean script `slice0_concrete_modules.lean` prints modules and allowed axioms? Modes env var `MODE` complexity. Better modules only, allowed axioms via `slice0_pipeline_tools` no. New `slice0_allowed_axioms.lean` tiny. Could combine `slice0_concrete_modules.lean` prints `module ...` and `allowed-axiom ...`; shell greps. Do:
+  ```
+  #eval show IO Unit from do
+   let env ← Lean.getEnv? #eval CoreM? Existing #eval do `getEnv` needs open Lean Elab Command. Use open...
+   for m in env.header.moduleNames if root Concrete IO.println m
+  ```
+  No axiom.
+  Allowed printer simple #eval for `allowedAxioms`.
+  Could generate allowed via pipeline tools Lean `Concrete.Premises.allowedAxioms` with `#eval`. New file.
+
+  Example audit snippet file `slice0_example_audit.lean` can't be appended if it includes import. Could create `scripts/checks/compiler/slice0_example_audit.inc` non-Lean new file type maybe root inventory okay but new scaffolding not ideal. Shell heredoc appends code. Existing script uses heredoc controls. Use function `check_examples` writes:
+  ```
+  for source in sources; do
+    target=$dst/$source
+    { printf 'import Lean.Util.CollectAxioms\n'; cat target; cat <<'EOF'; } > target.audit
+    mv...
+    print_lean target.out
+    grep '^example ' >> examples.out
+  done
+  ```
+  The source file path outside root absolute. `print_lean` output raw includes warnings but grep examples.
+  Audit code:
+  ```
+  open Lean Elab Command in
+  #eval show CommandElabM Unit from do
+   let env ← getEnv
+   for (n, _) in env.constants.toList do
+    if let .str _ s := n then
+     if s.startsWith "⟪example⟫" then
+      let axs ← liftCoreM (collectAxioms n)
+      IO.println s!"example {n} axioms: {...}"
+  ```
+  `collectAxioms` CoreM, Name.qsort. `Name.lt` available.
+  Prepending import before current module doc okay Lean imports must first except comments, yes.
+  `example` declarations noncomputable def warnings maybe no fail.
+  Count expected compare all outputs. Allowed axiom file one per name.
+  Use Python checker:
+  ```
+  python3 -I -c '... allowed set; expected; lines; for line starts example; for ax after; if not allowed print FAIL unlisted example axiom ...; count mismatch print FAIL...; sys.exit'
+  ```
+  Message control expected `FAIL unlisted example axiom Lean.ofReduceBool in «⟪example⟫...»` perhaps native produces `Lean.ofReduceBool` and `_native` axiom. Check grep `FAIL unlisted example axiom` and `Concrete/BIR.lean:542`. Good.
+  Function `check_examples SRC_ROOT LABEL` should rewrite from given root source paths same relative list. Real root `.`, control `$work/ctl/native-example-src` containing copy of Concrete tree with one modified file. If root control missing other source files, function takes all sources and fails. Could control copy entire 8 files small (~200KB) via `cp -r Concrete` and Concrete.lean. Fine.
+  `check_examples ROOT OUT` uses `sources` global relative; destination `$OUT/src`; rewrite count capture; then for each print_lean. Real may take 8* few sec.
+  Control modifies BIR first `by decide +kernel` to `by decide +native` only first using sed `0,/+kernel/` not BSD; use `sed '542s/+kernel/+native/'` line number brittle control intended planted. Use Python replace first:
+  ```
+  python3 -c p...replace("by decide +kernel","by decide +native",1)
+  ```
+  Then `check_examples root out` expected print_lean for BIR returns success (audit just reports), Python checker returns 1 with line. Function should return checker status. For real if any print fails returns 1 generic.
+  Control grep `FAIL unlisted example axiom` and `Concrete/BIR.lean:542`.
+  `decide +native` may print warning but output.
+  Should avoid controls running examples 2x expensive but okay ~30sec.
+
+  Population modules:
+  new printer file, shell `concrete_sources` relative list and `concrete_modules`.
+  Check real after tables before audit:
+  ```
+  print_lean modules out
+  missing=$(concrete_modules | comm -23 - <(sort -u out))
+  if nonempty FAIL ...
+  ```
+  Control truncated:
+  ```
+  head -n1 out > truncated
+  missing=...
+  expected name maybe `Concrete.Backend.LCB`.
+  grep.
+  ```
+  Also imported could include modules outside Concrete ignored printer. Root Concrete included? env.header.moduleNames includes imports not current root `Concrete`? `import Concrete` environment header includes Concrete yes. Good.
+
+  Trace build add function and tools. I'll restructure after new functions.
+
+  I'll create module and axiom printers.
+
+• The shared rewriter now handles all current compiler sources and retains 43 examples. I’ll audit those rewritten examples directly in Lean, check the root’s import closure against every source module, and compare example axioms against the registry’s allowed-axiom components.
+
+• Should manage todo perhaps current tasks 2/4 implementation done but controls not. Keep.
+
+  Add helper functions to shell after trace_all before current. Includes trace_build, concrete_source list, check_examples. Large Edit anchor `if ! current`. Should shell `sources` global array via mapfile (macOS Bash 3.2 no mapfile! Existing scripts uses macOS Bash maybe `mapfile` not available. Use while loop array:
+  ```
+  concrete_source_files() { { printf...; find...;}|LC_ALL=C sort; }
+  ```
+  `check_examples` local sources=() while read append.
+  `find` output safe no spaces paths.
+  `concrete_modules` sed.
+  `trace_build`.
+  `check_examples ROOT OUT`:
+  ```
+  local source_root=$1 out=$2 rel count rc=0
+  mkdir -p "$out/src"
+  count=$(bounded 60 python3 ... compiler-examples "$source_root" "$out/src" "${sources[@]}" | cap_out) || return1
+  : > out/examples
+  for rel...
+    { printf...; cat ...; cat <<'EOF'... } > "$out/src/$rel.audit"
+    mv...
+    print_lean ... || return1
+    grep '^example ' out >> examples || true
+  done
+  print_lean allowed...
+  bounded 30 python3 ... expected count allowed examples | cap_out
+  ```
+  Potential prepending `import Lean.Util.CollectAxioms` to `Concrete/Premises.lean` which already imports same later duplicate import allowed? Lean duplicate imports okay. To root `Concrete.lean` no examples, elaborates.
+  Lean script append uses `env.constants.toList`, all current declarations? Real Premises used works.
+  `Name.lt` sort.
+  Output names include `«...»`.
+  Python checker:
+  ```
+  allowed={line.strip...}
+  rows=[line for line in open if line.startswith("example ")]
+  errors...
+  for row:
+   name, axs = row[len example:].split(" axioms: ",1)
+   for ax in axs.split():
+  ...
+  print FAIL...
+  if len != int expected print FAIL examples population...
+  sys.exit(bool)
+  ```
+  Allowed output path no warning (print_lean strips stderr).
+  `count` captured string 43.
+  Native example output may include `Lean.ofReduceBool` and generated axiom with spaces? names no spaces.
+  Function prints `ok examples: ...` only real? If checker success echo inside function; control expected failure no. Fine.
+  Population control functions outside.
+
+  Add.
+
+• I’m adding the reusable gate helpers now: an incremental traced Lake build, source-module enumeration, and the shared-lexer example audit. The example checker will run unchanged against both the real sources and a planted `decide +native` copy.
+
+• Potential output collisions basename BIR.lean and others unique all yes.
+  Should real checks population/examples after audit before controls. Read around audit lines shifted.Insert real population and examples. Control population later near controls. Real:
+  ```
+  if print modules; then missing...
+  else fail
+  fi
+  if check_examples . work/example-real; then echo ok else fail
+  ```
+  `check_examples` on failure may print no FAIL for native (python prints) captured main output yes. Good.
+  Edit.Should have controls additions. Existing controls extern/axiom now output works. Add after library axiom before table:
+  - unsafe twin Lean control.
+  - duplicate registry controls perhaps one Lean file prints lines no failure needed? Requirement controls must fail for planted reason. Functions registryErrors pure returns errors, control script can assert lines and exit 1 if present. Existing pattern prints FAIL and throwError. Create one file with three sections? "one control per rule" separate files/shell checks. Could create `registry-duplicate-id.lean`, `registry-duplicate-match.lean`, `not-trusted-owner.lean`. All use same pattern.
+  - `duplicate id`: define cs, errors, print `FAIL {error}` for all (could multiple because kind etc? Only duplicate id, premises same). throw if nonempty. Shell expected `FAIL component id lean-kernel occurs 2 times, expected exactly one` occurs twice (once per each component), grep works.
+  - duplicate match: change native shell add git, errors only match git 2. shell expected.
+  - not-trusted: extern f plus cs modify adapter matches to f; note original adapter emit_correct removed from matches -> no duplicates. trustedDeclarationErrors finds f owner adapter notTrusted. shell expected.
+  - unsafe twin: `def Concrete.Control.f (n):Nat:=n` and `unsafe def Concrete.Control.f._unsafe_rec...`. trustedDeclarationErrors names twin unsafe. Parent total no flagged. Expected.
+  - genuine partial control should pass? Not required but ensure exemption doesn't overreport. Real library zero, but add control partial perhaps no need. Could include in unsafe twin file a genuine partial `p` and ensure no errors for p; errors only twin. Shell grep exact and `! grep p`. Good.
+  - module population control: after real imported file exists, `head -n1 > truncated`, missing computed; require nonempty and print okay. Better planted unimported module with explicit list removing `Concrete.Backend.LCB`:
+  ```
+  grep -vxF Concrete.Backend.LCB imported > without
+  missing=$(...)
+  if exactly LCB then ok
+  ```
+  This tests function. It doesn't mutate source root but simulates import closure missing, appropriate.
+  - native example control as described after real check, copies sources and calls check_examples expected fail. `cp Concrete.lean`, `cp -r Concrete`. Use scratch. `python replace`.
+  - parser control inside Linux.
+  Should output print_lean now preserves .out, so controls pass.
+
+  Could reduce code via helper `expect_lean_control FILE EXPECT` but expected multiple etc. Existing verbose style match. I'll insert large block after library axiom before sed table. Should Read that portion after previous edit.
+
+• The real population and example checks are wired in. I’m adding the remaining planted controls now: an unimported module, native example, hand-written unsafe twin, duplicate component ID, duplicate match owner, and a declaration assigned to the non-trusted adapter entry.
+
+• Large insert anchor sed. Write controls Lean syntax for matches field:
+  ```
+  {c with «matches» := ...}
+  ```
+  Lean parser okay.
+  Duplicate ID errors prints twice, throw.
+  NotTrusted `owner.kind` etc.
+  Use `Concrete.Control.p` partial recursive. `unsafe def Concrete.Control.f._unsafe_rec` name parser accepts.
+  Control output no errors for partial but errors for f twin, `throwError`.
+  `print_lean` returns fail, grep.
+  Example control copy `mkdir -p "$work/ctl/native-example"; cp Concrete.lean...; cp -r Concrete ...`.
+  Then Python modifies. `check_examples` returns nonzero expected; output main prints FAIL lines. To capture for grep redirect `> native-example.log 2>&1`. print_lean inside on audit success no extra except bounded outputs captured. Python failure prints to log. `check_examples` if Lean fails print logs in log. Good.
+  Population control imported file may print failed real earlier missing file still created print_lean ensures.
+  Add.Now tools section restructure with build and parser. Current lines bottom shifted. Read.Should include build. I can rewrite entire Linux block from `if [ uname` to else. Read start lines 438.New block:
+  ```
+  if Linux:
+   if ! command...; elif ! pipeline...; then...
+   else
+    # parser control always
+    cat log
+    if check_tools... then fail else grep...
+    if ! trace_build; then fail
+    elif ! trace_all > manifest; then fail
+    else
+     cat build manifest > all
+     check_tools
+     tool_names build etc print exact sets? Response asks exact set observed. Gate can print:
+     `tool_names "$work/build.execve" "$work/build.tools"; echo "tools build: $(paste -sd' '...)"`
+     Emitter and native separately currently trace_all concatenates each logs all. Should report exact set build, emitter,native. Modify trace_all to write combined plus side sets:
+     In function before loop `: > "$work/emitter.execve"; : > native...`; after each cat append. At end cat both to stdout. Then check individually and print sets. This is helpful and ensures all.
+  ```
+  trace_all currently writes just combined. Add initialization and append:
+  ```
+  : > "$work/emitter.execve"
+  ...
+  cat "$d/emit.execve" >>...
+  cat both stdout
+  ```
+  After real:
+  ```
+  for phase in build emitter native; do tool_names...; echo "tools $phase: $(paste -sd' ' -)"
+  done
+  ```
+  `paste` available coreutils. Use `tr '\n' ' '` and command substitution strips trailing. `echo "tools build: $(tr '\n' ' ' < file)"`.
+  Gate checks each phase separately perhaps all combined enough. Print exact.
+  - Parser log split objcopy plus lean normal and failed lookup. `check_tools` output captured. If it succeeds fail; else grep objcopy and ensure missing not reported? `! grep -q "missing"` log. The path basename `objcopy` same failure ignored; only split success one report. Check count one `grep -c ... =1`.
+  - trace_build incremental shared build after all Lean/examples? Actually tools section near end, but earlier real `print_lean` doesn't build. Shared build at start. Traced build at end incremental. Good.
+  - unlisted objcopy native control uses real helper and pipeline.
+  - without clang all includes build+emitter+native, still fails. good.
+  If trace build fails no native controls run. Fine.
+  I'll modify trace_all first then block. Read trace_all before edit.
+
+• I’m restructuring the Linux leg so the parser control runs independently, the incremental Lake build is traced too, and the gate prints separate exact tool sets for build, emitter, and native phases.
+
+• Read the bottom again, then replace it.Edit block.
+
+• All required controls are now present in the script. I’m finishing the Linux control flow so split-trace parsing is tested even before the real build/native traces run.
+
+• Should have docs header update all new. Golden README matches ar leanc. Also scripts/proofs/lean_lex top doc compiler mode. Changelog fragment new review. Existing changelog can add new file or edit prior? New `2026-11-08-trusted-base-review-1.md`. User commit messages say review round1. Fine.
+
+  Before docs test build Lean to catch registry/twin. Run `lake build Concrete` allowed and light. Also bash -n, Python compile. Use background? foreground 300.
+
+• The implementation is complete enough for a first compile pass. I’ll build `Concrete`, check both scripts’ syntax, and run focused controls before updating the golden and README renderings.warning: Git tree '/home/unbalancedparen/projects/gates-trusted-base' is dirty
+✔ [40/42] Built Concrete.Premises (715ms)
+✔ [41/42] Built Concrete (501ms)
+Build completed successfully (42 jobs).
+
+
+• Py_compile created __pycache__ tracked new files should remove generated. Should locate via git status later and remove created dirs. User says scratch only mktemp; py_compile writes repo violating. I should remove generated `scripts/checks/lib/__pycache__` and scripts/proofs/__pycache__, known created by me. Use Glob perhaps.Remove dirs via rm allowed generated.Now run gate 9 now allowed one run at time nice. But golden outdated ar/leanc so expected FAIL golden and README but continue controls. Full gate might expose many failures. Gate shared build lcb perhaps now binary built from previous? On rebased clone same .lake LCB perhaps still missing? CI had full success build, local previous failure. User says if fails thread say. Run exact command timeout 3000 background? User specifically allows. One run at time. I should run before docs to get failures. It might take >300 tool foreground, use background with timeout3100. But User says one run at time no other gate. I can work docs while running? Candidate under validation fixed instruction says keep candidate fixed no edits while active local validation. Do not edit during gate. Run foreground with Bash max300 cannot full; background and wait automatic, no edits. I can start then perhaps inspect read-only. Should not run until golden updated to reduce expected. Update golden manually and README first, then gate.
+
+  Update README rows ar/leanc. Read lines.
+
+• The build and syntax checks pass. I’m updating the two generated views for the new `ar`/`leanc` matches, then I’ll run gate 9 unchanged under the permitted command and leave the tree untouched while it runs.
+
+• Update todo all implementation done except docs validation.Edit README both one block.Golden lines edit both one block. Read.README gate9 update text mentions audit every Concrete declaration but now modules examples and build. Read line around 609.Should Read before Edit same file since last edit then Grep not Read. Use Read line.Edit gate text minimal insert import closure/examples and build.
+
+• The generated views are updated. I’m aligning gate 9’s prose with the new behavior: source-closure and retained-example audits, exactly-once ownership, and an incremental traced build whose fresh-build counterpart belongs to the daily tier.
+
+• Update script header. Read first lines then edit.Update lean_lex top doc with compiler-examples. Read first 28 already, but edit after modifications requires read.Changelog add new.Now run full gate. Before run `git diff --check`, golden compare quick, but gate will. No edits during. Start exact background.
+
+• All six findings now have implementations and controls. I’m starting the single permitted gate 9 run under `nice`; I won’t edit the tree while it is active.
+
+• While active no edits, can read status? Do not poll. I can inspect git diff read-only to prepare, but no need. Should wait notification. Could run read-only `git diff --check` command while gate active? It reads working tree safe but unnecessary. I have work no other independent. WaitFor appropriate since next depends. Tool says use only if no other work. Call WaitFor 90.As user says if fails thread can't fewer say so CI. But need validate fixes focused locally without gate. I can run individual scripts/controls via custom harness perhaps important. Full gate blocked before all. Should not stop early, need finish tests possible. I should run `lake build Concrete` works and audit, examples check perhaps cannot call function without common because shared build. Could make harness source gate functions bypass `source common` by using existing built lcb? Missing. Could run nonnative checks by extract functions with mock common work variables. Better test direct.
+
+  First report gate blocked, then run focused tests not full gate. Perhaps full gate impossible this run. I should ensure controls code works by constructing harness that sources script definitions after common without executing body? Could use `awk` to extract from `print_lean()` through before `if ! current`, but functions refer work/root/capped/bounded. Set up in harness:
+  ```
+  root=$(pwd); work=$(mktemp -d); source bounded; capped=(bash limited_exec); bounded definition copied; emitter etc.
+  source <(awk '/^print_lean\(\)/,/^if ! current/' script | head -n -1)
+  ```
+  This uses same functions, no edits. Then `print_lean audit`, `check_examples`, controls generated only in body not accessible. Could manually run full script with fake `lake` wrapper that returns success for initial `lake build` and real for others, and fake `lcb` file only tools later fails; nonnative controls all run then tools fails. But no need if focused.
+
+  I can run direct Lean control files from shell here docs by extracting control blocks? Could run full script until tools with `uname` mock non-Linux to skip tools and initial lake build mocked. This would run all nonnative controls, exactly same script, no native. But user says no quietly workaround; state as focused harness with shared build bypassed due known failure. It is acceptable standard blocked, finish parts not blocked. Should not modify gate. Create scratch mock bin `lake` wrapper:
+  ```
+  if [ "$1" = build ]; then exit 0; else exec real lake "$@"; fi
+  ```
+  But common also sets lcb path nonexistent no check until tools. Mock `uname` to Darwin-arm64 to skip tools. `slice0_common` case target supports Darwin-arm64. `limits` no AS on Darwin. `trace` skipped. `CONCRETE_SLICE0_CLANG` not needed. Gate prints "tools not checked". Run under `PATH=mock:$PATH` inside nix develop? `nix develop --command env PATH=... bash script` uses mock. Real lake path captured before. This runs current golden, tables, full audit, modules, examples, all nonnative controls including unsafe etc. It is not actual gate qualification but useful. I can report "focused non-native harness passed" not gate pass. User asked when gate runs end to end report sets; gate didn't, say not.
+  Could avoid mock uname by actual Linux then tools builds fails later after nonnative; script still runs controls and returns fail. Initial lake mocked, then real nonnative. Tools `trace_build` uses mock lake returns success and strace only mock bash? It may unlisted tool mock `lake` is bash script exec real? If build returns 0 no children, trace log lake? `strace lake` script shebang exec env bash, names lake,bash perhaps. `trace_all` lcb missing fails, no full. Nonnative control outcomes printed before failure, could inspect. Mock uname skip avoids. Good.
+
+  Should run nonnative harness command bounded perhaps 600. Create mock files scratch via Write. First mktemp.
+
+• Gate 9 stopped at the shared build with the same `failed to create thread` error, before any check ran; I can’t move it to a less-limited machine. I’ll still validate the non-native checks and controls in a scratch harness that bypasses only that known shared-build failure, without treating it as a gate pass./tmp/tmp.xYS6pvI6OC
+
+
+• Write mock lake/uname. Should real lake path `/nix/store/...` command -v earlier. Use `/nix/var/nix/profiles/default/bin/lake` perhaps command -v current returns store. I can use mock:
+  ```
+  if build exit; else exec /nix/store/94.../bin/lake
+  ```
+  Current command `command -v lake` earlier path store. Confirm timeout 30 command -v./nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lake
+Write both. `uname` mock parse `-s` -> Darwin, `-m` arm64, both Darwin-arm64. `/bin/uname` for others.
+  Mock lake initial build also trace not used due Darwin. Good.Run chmod + script with PATH inside current devshell? `timeout 900 nix develop --command bash -c 'chmod...; PATH=... bash...'` chmod outside nix? Use `timeout 30 chmod` then run. Every command bounded. Run background perhaps <300 but examples 2x perhaps 60s. Use foreground 300 max; set timeout900 but tool max300 foreground could move background. Better background and wait. Command `timeout 900 nix develop --command env PATH=/tmp/...:$PATH bash ...` env PATH expansion outer current includes lake etc. Nix develop `--command env PATH=...` should retain. Run background.
+
+• The harness will mock only the initial `lake build` success and report a non-Linux host so the native leg is skipped. All golden, audit, module, example, and declaration/registry controls will still execute through the real gate script.
+
+• No edits active harness reads tree, wait.Waiting 1s / 1m 30s · 1 background task still running
+Waiting 2s / 1m 30s · 1 background task still running
+Waiting 3s / 1m 30s · 1 background task still running
+Waiting 4s / 1m 30s · 1 background task still running
+Waiting 5s / 1m 30s · 1 background task still running
+Waiting 6s / 1m 30s · 1 background task still running
+Waiting 7s / 1m 30s · 1 background task still running
+Waiting 8s / 1m 30s · 1 background task still running
+Waiting 9s / 1m 30s · 1 background task still running
+Waiting 10s / 1m 30s · 1 background task still running
+Waiting 11s / 1m 30s · 1 background task still running
+Good found bugs. Should fix:
+  A twin exemption rejects well-founded recursion twins safety partial parent defn not opaque. Legacy comment says well-founded total def whose kernel body WellFounded.fix compiled through twin, should skip too. Requirement "Exempt a twin only when compiler-generated twin of a partial definition (check parent's implemented_by/partial relationship as Lean records it)" But existing real total definitions produce safety partial twins with parent defn, and original behavior skipped. Finding wording only partial def maybe they expect also well-founded twins? Should distinguish genuine partial vs WF. Current real total defs parent defn and twin partial. Exemption should include compiler-generated twin for well-founded total definitions. How to check? Parent is `.defnInfo` and twin safety partial. Hand-written parent defn + unsafe twin safety unsafe not exempt. Hand-written parent defn + partial twin safety partial could hide, but finding specifically hand-written `_unsafe_rec` likely unsafe. Could use parent value contains `WellFounded.fix` to distinguish total well-founded. Check parent body used constants includes WellFounded.fix. For real definitions likely yes. Genuine partial parent opaque. So:
+  ```
+  isGeneratedPartialTwin:
+   twin defn safety partial AND
+    parent opaque OR (parent defn and parent.value.getUsedConstants.contains ``WellFounded.fix)
+  ```
+  Some real `lookup` structural recursion maybe parent defn uses `WellFounded.fix`? Likely all listed. Could inspect probe real env to see parent types and used wellFounded. Use Lean #eval on actual names print. But easier code and audit. Requirement wording says only partial definition maybe they consider partial safety twin of WF compiler-generated as well. Should be precise:
+  - partial parent `.opaqueInfo`
+  - WF parent `.defnInfo` body contains WellFounded.fix.
+  Then real zero.
+  Parent `Concrete.Control.p` opaque + twin partial => isGeneratedPartialTwin parent returns true, trustedDeclarationKinds parent marks "partial" currently still flags parent. Original did flag partial parent too! Real control expected no `Concrete.Control.p` is wrong because partial definitions themselves trusted and must be reported. The finding requires partial declarations named. Genuine partial control should expect both p [partial] and hand-written f twin. Original earlier control `!grep p` mistaken. Update control to require p partial and no p._unsafe_rec duplicate. Real library no opaque partial parent, only total WF twins. Good.
+
+  Examples unknown `Command` because import Lean.Util.CollectAxioms doesn't import Lean.Elab.Command. Prepend both `import Lean.Elab.Command` and CollectAxioms. Then works.
+  Native control should then report.
+
+  Twin real list names are total WF. Implement isGeneratedPartialTwin with WF. Should check constants name ``WellFounded.fix perhaps actual used `WellFounded.fix` yes. Use `d.value.getUsedConstants.contains ``WellFounded.fix`.
+  For parent `.defnInfo parent => parent.safety != .partial? total safe and WF.`
+  ```
+  | some (.defnInfo twin), some (.defnInfo parent) =>
+   twin.safety == .partial && parent.value.getUsedConstants.contains ``WellFounded.fix
+  ```
+  Opaque case.
+  `isGeneratedPartialTwin env (.str n twin)` for parent WF not used because parent defn handled safety normal no partial (d.safety safe) so okay.
+  Hand-written partial twin parent ordinary def no WF not exempt, flagged partial. Good.
+  Update control expected:
+  ```
+  grep f twin unsafe
+  grep p [partial]
+  ! grep 'p._unsafe_rec'
+  ```
+  Also extern controls now include no WF after fix.
+  Examples import fix.
+
+  Do edits.
+
+• The harness exposed two implementation mistakes before the native leg: total well-founded definitions also have partial-safety compiled twins, and the example driver lacked `Lean.Elab.Command`. I’ll exempt only genuine partial or `WellFounded.fix` twins, require the partial parent itself to be listed in the control, and add the missing import.
+
+• Read the shell import lines around 120.Edit import.Update control read lines.Should Read tool before edit.Now rebuild audit quickly.warning: Git tree '/home/unbalancedparen/projects/gates-trusted-base' is dirty
+✔ [40/42] Built Concrete.Premises (754ms)
+✔ [41/42] Built Concrete (540ms)
+Build completed successfully (42 jobs).
+warning: Git tree '/home/unbalancedparen/projects/gates-trusted-base' is dirty
+FAIL unlisted trusted declaration Concrete.BIR.execInsts._unsafe_rec [partial]
+FAIL unlisted trusted declaration Concrete.BIR.lookup._unsafe_rec [partial]
+FAIL unlisted trusted declaration Concrete.BIR.lookupTy._unsafe_rec [partial]
+FAIL unlisted trusted declaration Concrete.BIR.runBlock._unsafe_rec [partial]
+FAIL unlisted trusted declaration Concrete.BIR.segments._unsafe_rec [partial]
+FAIL unlisted trusted declaration Concrete.Backend.Runtime.indexedFrom._unsafe_rec [partial]
+FAIL unlisted trusted declaration Concrete.LL1.firstSeqB._unsafe_rec [partial]
+FAIL unlisted trusted declaration Concrete.LL1.saturate._unsafe_rec [partial]
+FAIL unlisted trusted declaration Concrete.LL1.splits._unsafe_rec [partial]
+trusted declarations: 9
+scripts/checks/compiler/slice0_trusted_base_audit.lean:10:0: error: trusted-base environment audit failed
+Parent bodies don't directly contain WellFounded.fix maybe `WellFounded.fix` in value after elaborator uses `WellFounded.fix` not direct? Should inspect parent used constants names relevant. Probe actual parent kind and constants filtered WellFounded. Use scratch Lean file Write.
+
+• The real twins are still reported, so their parents do not directly reference `WellFounded.fix`. I’m inspecting the elaborated parent/twin metadata rather than broadening the exemption blindly.
+
+warning: Git tree '/home/unbalancedparen/projects/gates-trusted-base' is dirty
+Concrete.BIR.lookup: defn safety=Lean.DefinitionSafety.safe; implementedBy=none; uses=[]
+Concrete.BIR.lookup._unsafe_rec: defn safety=Lean.DefinitionSafety.partial; implementedBy=none; uses=[]
+Concrete.LL1.saturate: defn safety=Lean.DefinitionSafety.safe; implementedBy=none; uses=[]
+Concrete.LL1.saturate._unsafe_rec: defn safety=Lean.DefinitionSafety.partial; implementedBy=none; uses=[]
+/tmp/tmp.xYS6pvI6OC/twins.lean:10:24: warning: Variable name `o` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _o
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+• Parent value may use `WellFounded.fix` indirectly through `WellFoundedRelation`? getUsedConstants root filter no. Should print all parent used constants perhaps 30. Use output full.warning: Git tree '/home/unbalancedparen/projects/gates-trusted-base' is dirty
+Concrete.BIR.lookup: defn safety=Lean.DefinitionSafety.safe; implementedBy=none; uses=[Concrete.BIR.Env, Concrete.BIR.Reg, List.brecOn, Prod, Concrete.BIR.Val, Option, Concrete.BIR.lookup._f]
+Concrete.BIR.lookup._unsafe_rec: defn safety=Lean.DefinitionSafety.partial; implementedBy=none; uses=[Concrete.BIR.Env, Concrete.BIR.Reg, Concrete.BIR.lookup.match_1, Option, Concrete.BIR.Val, Unit, Option.none, List, Prod, ite, Eq, instDecidableEqNat, Option.some, Concrete.BIR.lookup._unsafe_rec]
+Concrete.LL1.saturate: defn safety=Lean.DefinitionSafety.safe; implementedBy=none; uses=[DecidableEq, List, Nat, Nat.brecOn, Concrete.LL1.saturate._f]
+Concrete.LL1.saturate._unsafe_rec: defn safety=Lean.DefinitionSafety.partial; implementedBy=none; uses=[DecidableEq, List, Nat, Concrete.LL1.saturate.match_1, List.eraseDups, instBEqOfDecidableEq, List.filter, Bool.not, List.contains, ite, Eq, Bool, List.isEmpty, Bool.true, instDecidableEqBool, Concrete.LL1.saturate._unsafe_rec, HAppend.hAppend, instHAppendOfAppend, List.instAppend]
+/tmp/tmp.xYS6pvI6OC/twins.lean:10:24: warning: Variable name `o` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _o
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+Structural recursion twins parent safe uses `._f`, twin partial self. To identify compiler generated: parent defn safe and twin defn partial plus parent has companion `parent._f`? Partial parent opaque + twin partial. Hand-written parent safe + partial twin could be hand-written `partial def f._unsafe_rec` which Lean parent defn safe and twin partial self, would look same except companion `_f` absent. Check existence `env.contains (.str parent "_f")` for structural. Well-founded may also `_f`. All listed likely `_f`. Could use twin name registered in `Compiler.getImplementedBy?` none. There is `partial` attr? `Lean.isPartialDefinition env parent` perhaps compiler metadata. Search Lean source for `_unsafe_rec` functions to identify robust. Use Grep in `.lake/packages` no Lean source. Nix Lean source not present perhaps `/nix/store/.../lib/lean4/library` no. Existing legacy inventory skipped all twins for this reason. Finding wants only compiler generated twin of partial definition check parent's implemented_by/partial relationship as records. Could identify twin `.partial` and parent `.safe` plus `_f` companion. For partial parent opaque. For total structural twin, parent safe with `_f` generated. Should have `_f` existence. Hand-written `partial def f._unsafe_rec` parent total def no `_f`, flagged. Good. Hand-written unsafe twin already flagged. Implement parent defn safe and twin partial and env.contains parent._f. What about real parent `_f` name perhaps `Concrete.BIR.lookup._f` present yes uses. All 9 likely. Check with function audit.
+  ```
+  parent.safety == .safe && d.safety == .partial && env.contains (.str parent "_f")
+  ```
+  DefinitionSafety.safe constructor `.safe`. Parent could `.unsafe` no.
+  This matches compiler generated structural recursion. Wording finding "partial definition" parent safe not partial but twin partial; I can doc compiled twin of partial or structural recursion. Should not explain response unless.
+
+  Change.
+
+• The remaining twins are structural-recursion implementations: the parent is safe and has Lean’s generated `._f` companion, while the twin is partial-safety and self-recursive. I’ll require that exact generated shape (or an opaque partial parent), so a hand-written partial/unsafe twin without `._f` remains visible.
+
+• Build audit again.warning: Git tree '/home/unbalancedparen/projects/gates-trusted-base' is dirty
+✖ [40/42] Building Concrete.Premises (701ms)
+trace: .> LEAN_PATH=/home/unbalancedparen/projects/gates-trusted-base/.lake/packages/lean-compiler-backend/.lake/build/lib/lean:/home/unbalancedparen/projects/gates-trusted-base/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /home/unbalancedparen/projects/gates-trusted-base/Concrete/Premises.lean -o /home/unbalancedparen/projects/gates-trusted-base/.lake/build/lib/lean/Concrete/Premises.olean -i /home/unbalancedparen/projects/gates-trusted-base/.lake/build/lib/lean/Concrete/Premises.ilean -c /home/unbalancedparen/projects/gates-trusted-base/.lake/build/ir/Concrete/Premises.c --setup /home/unbalancedparen/projects/gates-trusted-base/.lake/build/ir/Concrete/Premises.setup.json --json
+error: Concrete/Premises.lean:275:79: Application type mismatch: The argument
+  parent
+has type
+  DefinitionVal
+but is expected to have type
+  Name
+in the application
+  Name.str parent
+Some required targets logged failures:
+- Concrete.Premises
+error: build failed
+Shadow parent name by DefinitionVal. Should rename pattern pVal and use outer parent Name. `parent.safety` to pVal. Edit after Read.

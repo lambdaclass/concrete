@@ -1,0 +1,477 @@
+# Group 3 — Additional Early Test Types (`T-a` – `T-j`)
+
+```text
+ITEM T-a: AGREE-WITH-CHANGES
+why: Directly targets the old compiler's shadowing/name-resolution structural class (bugs 039–045; ROADMAP.md:440 R-0492) and complements Concrete/README.md:28,213 (`elab_rename_invariant`). Change: Concrete refuses unused bindings with `OWN-5` (ConcreteSpec/Spec/Slice1Ownership.lean:212) and refuses local shadowing (OD67, ROADMAP.md:213), so "add dead code/unused items" cannot insert bare unused `let`s and expect equivalence—it must insert explicit discards (`let _: T = ...` once OD62 lands) for equivalence AND assert that adding an unused binding flips `accept` to `refuse OWN-5`; alpha-renaming, reformatting, ANF `let` split/join, and reordering independent top-level `struct`/`fn` declarations must further require identical `Core` (up to fresh binder IDs), not only identical runtime output.
+tier: Split — PR runs deterministic rewrites (alpha-rename binders/labels/regs, reformat, ANF `let` split/join, top-level decl permutation) across `tests/manifest.tsv` in-process (~5s); Daily runs large seeded metamorphic campaigns across generated `spec_diff` programs on `concrete-ci-2`.
+slice: now for BIR register/block alpha-renaming and non-entry block permutation (`Concrete/BIR.lean`); slice 0 (`R-0620`) for surface reformat, binder alpha-renaming, and `let` split/join once `Surface0.lean`/`Elab.lean` land; slice 1 (`struct` decls) and slice 5 (`fn` decls) for top-level item reordering.
+size: SMALL
+exists already?: no (tracked in [ROADMAP.md](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ROADMAP.md#L440) as `R-0492`, and theorem target `elab_rename_invariant` noted in [Concrete/README.md](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/Concrete/README.md#L213), but no gate or generator implements it yet).
+where it lives: Gate A ([scripts/checks/compiler/spec_diff.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/scripts/checks/compiler/spec_diff.lean) and [scripts/checks/compiler/spec_diff.sh](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/scripts/checks/compiler/spec_diff.sh), extended with a metamorphic rewrite harness).
+```
+
+```text
+ITEM T-b: AGREE-WITH-CHANGES
+why: Directly implements [ROADMAP.md](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ROADMAP.md#L441) `R-0493` ("Exhaustive `u8`/`i8` arithmetic and boundary matrices for `16`/`32`/`64`-bit") and tests Foundation C2 ([ROADMAP.md](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ROADMAP.md#L417) `R-0608`). Change: spawning 65,536 separate `clang`/`lcb` processes per operator would take hours, so split execution two ways: (1) in-process Lean evaluation (`ConcreteSpec` vs `BIR.run` vs `LCB.evalBody`) tests all 65,536 `u8`/`i8` pairs per operator and all 16/32/64-bit boundary pairs (`0, 1, -1, min, min+1, max-1, max, ±2^k, ±2^k±1`) in `<3s` on PR; (2) native (`llvm.exe` vs `lcb.exe`) compiles one batched driver binary per operator (evaluating a table of pairs or a loop in Slice 4, plus individual trap-check binaries for trapping pairs so exit code 101 and stderr trap name `PANIC-ARITH` are verified per pair).
+tier: Split — PR runs all 65,536 `u8`/`i8` pairs + 16/32/64-bit boundary matrices in-process (`Spec` vs `BIR` vs `LCB`) and batched native binaries for value-producing pairs + boundary trap fixtures (~8s total); Daily runs per-trap-pair native binaries across all trapping `u8`/`i8` and boundary combinations on `concrete-ci-2`.
+slice: now (slice 0) for `u8` `+` (all 65,536 wrapping/trapping pairs) and `i32` boundary values (`0, 1, -1, INT32_MIN, INT32_MIN+1, INT32_MAX-1, INT32_MAX, ±2^k`); slice 2 ([ROADMAP.md](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ROADMAP.md#L212)) for full `i8`/`u8`/`16`/`32`/`64`-bit operators (`-`, `*`, `/`, `%`, shifts, bitwise, comparisons, `as`, `wrapping_*`, `checked_*`, `saturating_*`).
+size: SMALL
+exists already?: no ([ConcreteSpec/Spec/Rep.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ConcreteSpec/Spec/Rep.lean#L109-L128) tests a handful of `i8`/`u8`/`i32` round-trip examples and [branches/A-gate-spec-diff.diff](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/branches/A-gate-spec-diff.diff) `SpecDiffBirGen.lean` samples random pairs, but no exhaustive 65,536 sweep or systematic power-of-two boundary matrix exists).
+where it lives: Gate A ([scripts/checks/compiler/spec_diff.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/scripts/checks/compiler/spec_diff.lean) for the in-process 65,536 sweep and batched native runner) + Gate B (`tests/manifest.tsv` for canonical boundary and trap-name fixtures).
+```
+
+```text
+ITEM T-c: AGREE-WITH-CHANGES
+why: A fast, total boolean well-formedness validator (`Stage.wf : Bool`) run after every pass catches pass-boundary invariant breaks immediately and attributes the bug to the exact pass that introduced it ([Concrete/README.md](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/Concrete/README.md#L60)). Change: match the new compiler's actual IR pipeline in [Concrete/README.md](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/Concrete/README.md#L19-L58) — there is no separate HIR checker ("Resolve merges into Elab... no second checker", line 78); the pipeline stages are `Core` (`WellScoped`/`Checked`), `Mono Core` (slice 15), `Place MIR` (`MIR.wf`), `Memory CFG` (`Mem.wf`), `BIR` (`BIR.Program.wf`), and `LCB.Source.Function` (`LCB.admit`). Every pass transition in `Output` (`Concrete/Stages.lean`, [Concrete/README.md](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/Concrete/README.md#L147)) must run its target IR's validator automatically and return `.error ⟨stageName, ruleId, msg⟩` if it fails.
+tier: PR (in-process boolean check on every compiled test in `tests.sh` and `spec_diff.lean`; adds `<1s` total).
+slice: now for `BIR.Program.wf` and `LCB.admit`; slice 0 (`R-0620`) for `Core.wf`, `MIR.wf`, and `Mem.wf` as `Elab.lean`, `MIR.lean`, and `Lower.lean` land.
+size: SMALL
+exists already?: Partially — `BIR.Program.wf` exists at [Concrete/BIR.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/Concrete/BIR.lean#L245-L249) and LCB's admission validator runs at [Concrete/Backend/LCB.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/Concrete/Backend/LCB.lean#L47-L55) (invoked in [scripts/checks/compiler/slice0_bir.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/scripts/checks/compiler/slice0_bir.lean#L430) and [scripts/checks/compiler/spec_diff.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/scripts/checks/compiler/spec_diff.lean#L679)); `Core`, `Place MIR`, and `Memory CFG` validators do not exist yet.
+where it lives: Inside the compiler pipeline (`Concrete/Stages.lean` / `Concrete/Pipeline.lean`, so `concrete` itself and every gate calling it runs every stage validator unconditionally) + Gate B (`tests.sh`) and Gate A (`spec_diff.lean`) which assert zero validator failures and test validator rejection on mutated IR controls.
+```
+
+```text
+ITEM T-d: AGREE-WITH-CHANGES
+why: Catches backend miscompiles (out-of-bounds stack/slot access, uninitialized register/stack reads, red-zone clobbers, misaligned accesses, or leaks once heap/FFI arrive) that happen to produce the right exit code or stdout ([ROADMAP.md](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ROADMAP.md#L499) `R-0301`). Change: Gate 10 ([scripts/checks/compiler/slice0_artifacts.sh](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/scripts/checks/compiler/slice0_artifacts.sh#L81-L118)) already runs AddressSanitizer (`-fsanitize=address`) on `llvm.exe`, but ASan only instruments the LLVM path and cannot inspect `lcb.exe` (which emits direct x86_64 assembly without clang sanitizer instrumentation) or catch uninitialized-value branches like Valgrind Memcheck (`--track-origins=yes`). Run `valgrind --tool=memcheck --error-exitcode=99 --leak-check=full --track-origins=yes` on **both** `lcb.exe` and uninstrumented `llvm.exe` on `x86_64-linux` (keeping ASan+UBSan on `llvm.exe` for both Linux and macOS).
+tier: Split — PR runs `valgrind --tool=memcheck` on all accepted `tests/manifest.tsv` `lcb.exe` and `llvm.exe` binaries on `x86_64-linux` (~10–15s for the manifest corpus) alongside Gate 10's existing ASan check; Daily runs `valgrind --tool=memcheck` across the entire generated `spec_diff` binary corpus on `concrete-ci-2`.
+slice: now (Slice 0 already emits native `x86_64-linux` ELF binaries from both `LCB` and `LLVM` in [scripts/checks/compiler/slice0_native.sh](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/scripts/checks/compiler/slice0_native.sh#L98-L148)).
+size: SMALL
+exists already?: Partially — LLVM ASan exists at [scripts/checks/compiler/slice0_artifacts.sh](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/scripts/checks/compiler/slice0_artifacts.sh#L81-L118) (using `sanitize_address` injection in [scripts/checks/compiler/slice0_native.sh](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/scripts/checks/compiler/slice0_native.sh#L89-L94)), but Valgrind Memcheck on `lcb.exe` and `llvm.exe` does not exist ("no").
+where it lives: Gate B ([scripts/checks/compiler/tests.sh](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/branches/B-gates-manifest.diff) / [scripts/checks/compiler/slice0_artifacts.sh](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/scripts/checks/compiler/slice0_artifacts.sh) for PR manifest binaries) + Gate A ([scripts/checks/compiler/spec_diff.sh](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/scripts/checks/compiler/spec_diff.sh) `--daily` for generated corpora).
+```
+
+```text
+ITEM T-e: AGREE
+why: C ABI and layout mismatches (padding, alignment, SysV vs Darwin ABI classification of small structs, sign/zero extension of narrow returns) are silent wrong-code bugs across language boundaries ([ROADMAP.md](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ROADMAP.md#L499) `R-0301`). Generating a paired C harness compiled by the nix-pinned `clang` that asserts `sizeof`, `_Alignof`, and `offsetof` of every field and calls across the boundary in both directions (Concrete calling C and C calling Concrete, checking every field and return byte) validates both Foundation C3/C10 ([ROADMAP.md](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ROADMAP.md#L418-L425) `R-0609`, `R-0616`) and both backends (`LLVM` and `LCB`).
+tier: Split — PR checks the spec's `Layout` (`sizeof`/`alignof`/`offsetof`) against `clang -x c` static assertions on a curated corpus of scalar/struct/enum types (~3s) and runs bidirectional call fixtures in `tests.sh` (~5s); Daily runs a random nested `repr(C)`/`repr(packed)` struct and signature generator (`abicheck` style) comparing Concrete (`LLVM` + `LCB`) against `clang` on `concrete-ci-2`.
+slice: later — split across three milestones: (1) spec-level `Layout` vs `clang` `_Static_assert(sizeof/offsetof/alignof)` as soon as Foundation C3 (`R-0609`) lands; (2) internal struct layout & multi-arg/struct calling convention between `LCB` and `LLVM` at Slice 5 (functions) and Slice 9 (structs, [ROADMAP.md](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ROADMAP.md#L219)); (3) full bidirectional C `extern fn` / `#[repr(C)]` ABI at Slice 25 (FFI, [ROADMAP.md](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ROADMAP.md#L235)).
+size: LARGE (across the full type and calling-convention matrix; the initial C3 layout static-assert harness is SMALL).
+exists already?: no (Foundation C2 [ConcreteSpec/Spec/Rep.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ConcreteSpec/Spec/Rep.lean#L17-L31) defines scalar byte widths, and [scripts/checks/compiler/slice0_native.sh](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/scripts/checks/compiler/slice0_native.sh#L190-L202) links a 3-arg `i32` C shim `main.c`, but no layout/offset/ABI comparator against `clang` exists).
+where it lives: Gate A (`spec_diff.sh` for C3 layout static-assert comparison and Daily random ABI fuzzing) + Gate B (`tests/manifest.tsv` and `tests.sh` for curated bidirectional FFI fixtures).
+```
+
+```text
+ITEM T-f: AGREE
+why: Enforces [ROADMAP.md](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ROADMAP.md#L461) `R-0593` ("Diagnostics contract (`--format=human|json`): frozen, versioned JSON schema and human rendering, with golden tests") and Foundation Q10 (`R-0612`: UTF-8 input, 1-based line and byte column with tab = 1 byte) plus `R-0603` (rule IDs + revisions). Snapshotting the exact JSON diagnostic payload (rule ID, rule revision, file, 1-based start/end line and byte column, message) and `--format=human` rendering, deterministic multi-error ordering, and exit code prevents silent diagnostic drift or regressions where a test refuses for the right rule ID at the wrong span.
+tier: PR (runs on every `refuse` fixture in `tests/manifest.tsv` as part of `tests.sh`; diffing stdout/stderr against golden `.diag.json` / `.diag.txt` files takes `<2s`).
+slice: slice 0 (`R-0593` and `R-0620`, as the Slice 0 front end `Lexer`/`Parser`/`Elab` and CLI diagnostic renderer land; BIR/LCB refusal codes like `LCB-FRAME-ALIGN` can be snapshotted immediately).
+size: SMALL
+exists already?: Partially — [branches/B-gates-manifest.diff](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/branches/B-gates-manifest.diff) (`scripts/checks/compiler/test_manifest.py:772`) checks `refuse <RULE-ID>` and exit code on `tests/manifest.tsv` fixtures, and [tests/golden/slice0_trusted_base.txt](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/tests/golden/slice0_trusted_base.txt) pins Gate 9's report, but golden snapshots of full diagnostic text, spans, JSON schema, and multi-error ordering do not exist yet ("no").
+where it lives: Gate B ([scripts/checks/compiler/test_manifest.py](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/branches/B-gates-manifest.diff) / `tests.sh` + `tests/golden/diagnostics/`).
+```
+
+```text
+ITEM T-g: AGREE
+why: `scripts/proofs/axioms.sh` currently pins only `<theorem>\t<axioms>` in [scripts/proofs/axioms.golden](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/scripts/proofs/axioms.golden#L1-L82), and `PROOF_MODE=heads` ([scripts/proofs/theorems.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/scripts/proofs/theorems.lean#L234-L242)) only checks that theorem conclusions have a universe-monomorphic inductive head. A writer can weaken a hypothesis, drop a conjunct from a conclusion, or weaken a helper definition (`Accepted`, `Typed`, `Owns`, `evalBody`) and both `axioms.sh` and `N2` (vacuity) can still pass. Crucially, `theorems.lean` *already* has `dag` and `declLine` ([scripts/proofs/theorems.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/scripts/proofs/theorems.lean#L98-L151)), a canonical alpha-invariant DAG serializer of kernel `Expr`s (`ci.type` and `ci.value`): pinning the canonical `dag` fingerprint of every headline/contract theorem's `ci.type` AND its transitive type-dependency definitions in `scripts/proofs/statements.golden` makes silent theorem weakening impossible.
+tier: PR (runs inside `scripts/proofs/axioms.sh` in the same `lake env lean` invocation; adds `<1s`).
+slice: now (all machinery in `scripts/proofs/theorems.lean` is already written and working on Slice 0 and `ConcreteSpec`).
+size: SMALL
+exists already?: Partially — [scripts/proofs/theorems.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/scripts/proofs/theorems.lean#L98-L151) already implements the canonical `Expr` DAG printer `dag`/`declLine` and runs it in `PROOF_MODE=1` (used only by [scripts/checks/compiler/slice0_trusted_base.sh](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/scripts/checks/compiler/slice0_trusted_base.sh#L56-L77) to compare `ConcreteSpec` against `Concrete`), while [scripts/proofs/axioms.sh](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/scripts/proofs/axioms.sh#L45-L60) only runs `PROOF_MODE=axioms` and `PROOF_MODE=heads`; theorem statements themselves are not pinned in a golden file yet.
+where it lives: Root proof check ([scripts/proofs/axioms.sh](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/scripts/proofs/axioms.sh) + [scripts/proofs/theorems.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/scripts/proofs/theorems.lean) + a new `scripts/proofs/statements.golden`).
+```
+
+```text
+ITEM T-h: AGREE
+why: Directly implements [ROADMAP.md](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ROADMAP.md#L456) `R-0528` ("Resource limits on input size, memory, time and import closure: each input class has a limit and a hostile fixture") and verifies the backend bounds in [Concrete/README.md](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/Concrete/README.md#L251-L255) (`TargetProfile.maxSlots`, LCB's 64-block / 480-def / 4080-byte frame bounds). Every explicit compiler limit must be tested at both `limit` (accepted and compiles cleanly) and `limit + 1` (refused cleanly with a specific rule ID, never panicking, overflowing the Lean stack, or hanging), alongside degenerate inputs (0-byte empty file, whitespace-only file, 64 KiB identifier, `u64::MAX + 1` literal, 512-deep nested expressions/blocks).
+tier: Split — PR runs fast boundary fixtures (`0`-byte file, huge literal, long identifier, deep expression nesting at `limit` and `limit+1`, `TargetProfile.maxSlots` at `limit` and `limit+1`, LCB `64` vs `65` blocks and `480` vs `481` defs) in `<5s`; Daily runs heavy scale/hostile-input fixtures (`10,000` functions, max file-size input, max import-closure fanout) under memory/time caps on `concrete-ci-2`.
+slice: now for BIR/LCB limits (`64` blocks, `480` defs, `4080`-byte frame size, `TargetProfile.maxSlots` in [Concrete/BIR.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/Concrete/BIR.lean#L19-L26) and [Concrete/Backend/LCB.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/Concrete/Backend/LCB.lean#L47-L55)); slice 0 (`R-0620`, `R-0528`) for lexer/parser/elaborator limits (empty file, long identifier, huge literal, nesting depth); slice 5 for `10,000` functions; slice 17 for import-closure limits.
+size: SMALL
+exists already?: Partially — [scripts/checks/compiler/slice0_bir.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/scripts/checks/compiler/slice0_bir.lean#L360-L418) tests `overBudgetProg` (`TargetProfile.maxSlots` exceeded → `.frameBudgetExceeded`) and `unalignedTarget`, and Gate C ([branches/C-gates-scaling-det.diff](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/branches/C-gates-scaling-det.diff)) tests scaling up to `N=800`, but no systematic `limit` / `limit + 1` fixture matrix for LCB `64` blocks / `480` defs / `4080` frame bytes or surface limits exists yet.
+where it lives: Gate B (`tests/manifest.tsv` and `tests.sh` for PR boundary fixtures) + Gate C (`scripts/checks/compiler/scaling.sh` for Daily 10k-function and import-closure stress tests).
+```
+
+```text
+ITEM T-i: AGREE
+why: Enforces the owner's foundational safety and predictability invariants: [ROADMAP.md](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ROADMAP.md#L426) `R-0574` ("No hidden traps and bounded execution"), `R-0575` (`--report=facts` per-function termination and frame bounds), and `R-0576` (`[policy]` predictable-execution refusals). Every way a function can fail to terminate or exceed an execution/memory bound must have a positive (`#[variant(...)]` or explicit `#[may_not_terminate("reason")]` when policy allows) and a negative refusal fixture naming its exact rule ID: unbounded `while` loop without variant, loop whose `#[variant]` is not bounded below or does not decrease on every path, direct recursion without `#[variant]`, mutual recursion cycle without `#[variant]`, `#[may_not_terminate]` forbidden under `termination = "required"`, and stack frame or call chain exceeding the `Concrete.toml` budget.
+tier: PR (static checker/budget refusal fixtures in `tests/manifest.tsv`; runs in `<2s` inside `tests.sh`).
+slice: now (slice 0) for stack-frame bound refusal (`TargetProfile.maxSlots` / `--report=facts` in [scripts/checks/compiler/slice0_artifacts.sh](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/scripts/checks/compiler/slice0_artifacts.sh#L66-L78)); slice 1 for `[policy]` predictable-profile refusals (`R-0576`); slice 4 ([ROADMAP.md](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ROADMAP.md#L214)) for `while` loop `#[variant]` and `#[may_not_terminate]` refusals; slice 5 ([ROADMAP.md](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ROADMAP.md#L215)) for direct and mutual recursion refusals (`OD82`); slice 20 for indirect-call bound refusals.
+size: SMALL
+exists already?: Partially — `overBudgetProg` in [scripts/checks/compiler/slice0_bir.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/scripts/checks/compiler/slice0_bir.lean#L360-L418) and `bad_over_budget` in [branches/B-gates-manifest.diff](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/branches/B-gates-manifest.diff) (`tests/manifest.tsv:37`) test single-function frame budget refusal; loop, variant, recursion, and `[policy]` termination refusal fixtures do not exist yet ("no").
+where it lives: Gate B (`tests/manifest.tsv` and `tests.sh`).
+```
+
+```text
+ITEM T-j: AGREE
+why: Enforces [ROADMAP.md](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ROADMAP.md#L140-L151) ("Defect disposition rule: every silent defect is stopped at once by repair or fail-closed containment; a loud one is filed, pinned and owned"). Requiring every closed `compiler`/`spec`/`launcher` defect row in [ISSUES.tsv](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ISSUES.tsv) (and later the Slice 1 bug ledger `R-0561`) to carry a `fixture` column (or `regression:` tag in `notes`) naming a real fixture ID in `tests/manifest.tsv` (or a planted gate control for `ci`/`proof` rows), verified mechanically by `scripts/checks/check_issues.sh`, guarantees that no bug is ever closed without a permanent regression test.
+tier: PR (table cross-check between `ISSUES.tsv` and `tests/manifest.tsv` in `scripts/checks/check_issues.sh`; runs in `<0.2s`, plus the fixtures themselves run in Gate B `tests.sh`).
+slice: now (`ISSUES.tsv`, `scripts/checks/check_issues.sh`, and `tests/manifest.tsv` all exist today; `ISS-001`–`ISS-005` are all `ci`/`proof` rows that already cite their gate controls in `notes`).
+size: SMALL
+exists already?: Partially — [scripts/checks/check_issues.sh](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/scripts/checks/check_issues.sh#L45-L66) validates `ISSUES.tsv` schema and closed-row commit references (`fixed <sha>`), and `legacy/scripts/tests/check_bug_corpus.sh` did this for the frozen compiler, but `check_issues.sh` does not yet verify that closed `compiler`/`spec`/`launcher` rows cite an existing fixture in `tests/manifest.tsv`.
+where it lives: Root check ([scripts/checks/check_issues.sh](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/scripts/checks/check_issues.sh)) cross-referencing Gate B (`tests/manifest.tsv`).
+```
+
+---
+
+# Updated TIERS Ranking, PR Budget, and Build Order (Groups 1–4)
+
+### 1. Complete Per-Item Tier Assignment Table (Groups 1, 2, 3, and 4)
+
+| Item | Verdict | Tier | PR Cost | Scheduled Cost & Cadence | Slice / Dependency | Size | Where It Lives |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **A1** (Spec/BIR/Native diff) | AGREE-W-CHANGES | **Split** | ~15s (64 cases + corpus) | Daily (`5,000` cases, ~10m) | now (BIR); slice 0 (surface) | SMALL | Gate A (`spec_diff.sh`) |
+| **A2** (5 representations) | AGREE-W-CHANGES | **Split** | (part of A1) | Daily (part of A1) | now (`Spec`/`BIR`/`LLVM`/`LCB`); slice 0 (`Surface`/`Core`/`MIR`) | SMALL | Gate A (`spec_diff.lean`) |
+| **A3** (Triple observation) | AGREE | **PR** | (part of A1/B) | Daily (on large seeds) | now | SMALL | Gate A + Gate B |
+| **A4** (Planted mutations) | AGREE | **PR** | ~8s (in-proc + 1 native) | Daily (full native sweep) | now | SMALL | Gate A (`spec_diff.sh`) |
+| **A5** (Minimization) | AGREE | **PR** (on fail) | 0s on pass | Runs on failure only | now (BIR); slice 0 (AST) | SMALL | Gate A (`spec_diff.lean`) |
+| **B1** (`manifest.tsv` schema) | AGREE-W-CHANGES | **PR** | <1s | — | now | SMALL | Gate B (`tests/manifest.tsv`) |
+| **B2** (`tests.sh` runner) | AGREE-W-CHANGES | **PR** | ~20s | — | now | SMALL | Gate B (`tests.sh`) |
+| **B3** (Coverage audit) | AGREE-W-CHANGES | **PR** | <1s | — | now (`Spec` rules); slice 0 (`Compiler` rules) | SMALL | Gate B (`test_manifest.py`) |
+| **C1** (Scaling $O(n^{1.5})$) | AGREE-W-CHANGES | **Daily** | 0s (not in PR) | Daily (`concrete-ci-2`, ~45s) | now (BIR/LCB); slice 0 (front end) | SMALL | Gate C (`scaling.sh`) |
+| **C2** (Determinism) | AGREE-W-CHANGES | **Split** | ~4s (`cwd`/env/2x build) | Daily (+ mtime/locale/tz/shuffled imports) | now (artifacts); slice 17 (imports) | SMALL | Gate C (`determinism.sh`) |
+| **D1** (Theorem premises) | AGREE | **PR** | ~3s | — | now | SMALL | Gate D (`slice0_trusted_base.sh`) |
+| **D2** (Spec drift `PROOF_MODE=1`) | AGREE-W-CHANGES | **PR** | ~3s | — | now | SMALL | Gate D (`slice0_trusted_base.sh`) |
+| **D3** (Trusted components) | AGREE-W-CHANGES | **PR** | ~2s | — | now | SMALL | Gate D (`slice0_trusted_base.sh`) |
+| **D4** (Honest theorem names) | AGREE-W-CHANGES | **PR** | <1s | — | now | SMALL | Gate D (`slice0_trusted_base.sh`) |
+| **G8** (Decompile round-trip) | AGREE-W-CHANGES | **PR** | ~15s (pooled 4-way) | — | now | SMALL | Gate 8 (`slice0_decompile.sh`) |
+| **G9** (Trusted-base pins) | AGREE-W-CHANGES | **PR** | (merged w/ D1–D4) | — | now | SMALL | Gate 9 (`slice0_trusted_base.sh`) |
+| **X1** (Import boundary) | AGREE | **PR** | <1s (`lean_lex.py`) | — | now | SMALL | Root (`scripts/proofs/imports.sh`) |
+| **X2** (Per-stage timing) | AGREE-W-CHANGES | **Split** | <1s (`--timings-json`) | Daily (regression check on `concrete-ci-2`) | now | SMALL | Gate C (`scaling.sh`) + CLI |
+| **X3** (Gate manifest) | DISAGREE (separate) | **PR** | <0.2s (table in `run.sh`) | — | now | SMALL | Root (`scripts/checks/run.sh`) |
+| **X4** (Per-law witness/refute) | AGREE-W-CHANGES | **PR** | (folded into **N2**) | — | now (prioritized on spec branches) | SMALL | Gate N2 (`scripts/proofs/vacuity.sh`) |
+| **X5** (Self-checks / controls) | AGREE-W-CHANGES | **Split** | ~10s (in-proc controls) | Daily (subprocess shell controls) | now | SMALL | Each gate (`--self-test`) |
+| **X6** (Cross-target QEMU) | AGREE-W-CHANGES | **Split** | ~3s (emit asm + `clang -c`) | Daily (`qemu-aarch64` / Darwin execution) | later (slice 0 has `x86_64` only) | LARGE | Gate B (`tests.sh`) + Gate A |
+| **N1** (Metatheory / fuel) | AGREE | **PR** | ~2s (in `axioms.sh`) | — | slice 0 (as proofs land) | SMALL | Root (`scripts/proofs/axioms.sh`) |
+| **N2** (Mechanized vacuity) | AGREE | **PR** | ~3s (`lake env lean`) | — | **now** (prioritized early on spec branches) | SMALL | New Gate N2 (`scripts/proofs/vacuity.sh`) |
+| **N3** (Compiler mutation) | AGREE | **Weekly** (+ Daily Δ) | 0s (not in PR) | Daily (touched files, ~5m); Weekly (full tree) | slice 0 (once `Elab`/`MIR`/`Lower` land) | LARGE | New Gate (`mutation.sh`) |
+| **N4** (Parser/lexer fuzzing) | AGREE | **Split** | ~2s (regression corpus) | Daily (10m fuzz); Weekly (2h fuzz) | slice 0 (once `Lexer`/`Parser` land) | SMALL | New Gate (`fuzz_front.sh`) |
+| **N5** (ELF/Mach-O structural) | AGREE | **PR** | ~2s (`readelf` on corpus) | — | now | SMALL | Gate 10 (`slice0_artifacts.sh`) / Gate B |
+| **T-a** (Metamorphic rewrites) | AGREE-W-CHANGES | **Split** | ~5s (manifest rewrites) | Daily (large seeded metamorphic run) | now (BIR); slice 0 (surface); slice 1/5 (decls) | SMALL | Gate A (`spec_diff.lean`) |
+| **T-b** (Exhaustive `u8`/`i8` + bounds) | AGREE-W-CHANGES | **Split** | ~8s (65,536 in-proc + batched native) | Daily (per-trap-pair native binaries) | now (`u8` `+`, `i32` bounds); slice 2 (full ops/widths) | SMALL | Gate A (`spec_diff.lean`) + Gate B |
+| **T-c** (Pass IR validators) | AGREE-W-CHANGES | **PR** | <1s (in-process `wf` checks) | — | now (`BIR`/`LCB`); slice 0 (`Core`/`MIR`/`Mem`) | SMALL | Pipeline (`Stages.lean`) + Gates A/B |
+| **T-d** (Valgrind Memcheck) | AGREE-W-CHANGES | **Split** | ~12s (manifest `lcb.exe` + `llvm.exe` on Linux) | Daily (all generated `spec_diff` binaries) | now | SMALL | Gate B (`tests.sh` / `slice0_artifacts.sh`) + Gate A |
+| **T-e** (C layout/ABI vs `clang`) | AGREE | **Split** | ~5s (C3 layout static-asserts + FFI fixtures) | Daily (random nested struct/ABI generator) | later (C3 for layout; slice 9/25 for struct/FFI ABI) | LARGE | Gate A (`spec_diff.sh`) + Gate B |
+| **T-f** (Golden diagnostics) | AGREE | **PR** | ~2s (diff vs `.diag.json`/`.txt`) | — | slice 0 (`R-0593` front end; BIR/LCB codes now) | SMALL | Gate B (`test_manifest.py` + `tests/golden/`) |
+| **T-g** (Theorem-statement pin) | AGREE | **PR** | ~1s (in `axioms.sh` via `dag`) | — | now | SMALL | Root (`scripts/proofs/axioms.sh` + `statements.golden`) |
+| **T-h** (Limit & `limit+1` tests) | AGREE | **Split** | ~4s (frame/block/lex/nest `limit` & `limit+1`) | Daily (`10,000` fns, max file/import closure) | now (BIR/LCB limits); slice 0 (lex/parse); slice 5 (10k fns) | SMALL | Gate B (`tests/manifest.tsv`) + Gate C (`scaling.sh`) |
+| **T-i** (Termination/bound refusals) | AGREE | **PR** | ~2s (refusal fixtures in `tests.sh`) | — | now (stack bound); slice 1 (policy); slice 4/5 (loops/recursion) | SMALL | Gate B (`tests/manifest.tsv`) |
+| **T-j** (Bug regression fixture check) | AGREE | **PR** | <0.2s (in `check_issues.sh`) | — | now | SMALL | Root (`scripts/checks/check_issues.sh`) + Gate B |
+
+---
+
+### 2. Updated 10-Minute PR Budget Analysis (`scripts/checks/run.sh`)
+
+Even with Group 3 (`T-a`–`T-j`) and early Gate `N2` (mechanized vacuity) added to the PR tier, the entire PR gate suite finishes in **~115–125 seconds (~2 minutes) after `lake build`**, leaving an 8-minute margin inside the 10-minute PR cap:
+
+1. **Fast shell, ledger, hygiene, and lexical checks (`< 3s` total):**
+   `check_issues.sh` (including **T-j** bug-to-fixture check), `check_roadmap.sh`, `check_Toolchain.sh`, `check_workflows.sh`, `check_gate_hygiene.sh`, `trust_ban.sh`, and **X1** (`imports.sh`).
+2. **Proof, statement-pinning, and mechanized vacuity gates (`~12s` total):**
+   `scripts/proofs/axioms.sh` (including **T-g** `statements.golden` via `theorems.lean`'s `dag` and **N1** metatheory checks) + **Gate N2** (`scripts/proofs/vacuity.sh`, inspecting `ConcreteSpec` in one `lake env lean` invocation, `~3s`) + **Gate D / Gate 9** (`slice0_trusted_base.sh`, `~5s`).
+3. **Manifest corpus, IR validators, golden diagnostics, limits, Valgrind, and artifacts (`~45s` total):**
+   - **Gate B** (`tests.sh` + `test_manifest.py`): compiles and runs `tests/manifest.tsv` (including **T-c** per-pass validators, **T-f** golden diagnostics, **T-h** `limit`/`limit+1` fixtures, **T-i** termination/bound refusals, **N5** ELF structural checks, and **T-d** `valgrind --tool=memcheck` on `lcb.exe`/`llvm.exe` on Linux + ASan on `llvm.exe`).
+   - **Gate 8** (`slice0_decompile.sh`, pooled 4-way, `~15s`).
+4. **Differential, metamorphic, exhaustive `u8`/`i8`, and determinism checks (`~45s` total):**
+   - **Gate A** (`spec_diff.sh`): 64 seeded differential cases + **A4** planted mutations + **T-a** PR metamorphic rewrites + **T-b** 65,536 `u8`/`i8` in-process sweep & batched native binary (`~35s` total).
+   - **Gate C** (`determinism.sh` PR mode: `cwd` invariance + double build, `~4s`).
+   - **N4** (`fuzz_front.sh` fixed crash/hang regression corpus, `~2s`, once Slice 0 front end lands).
+
+**How Scheduled Tiers Are Recorded (`Daily` and `Weekly`):**
+Every scheduled run on `concrete-ci-2` (or GitHub Actions `schedule:`) binds its verdict to the exact `HEAD` commit SHA via a git note under `refs/notes/ci-gates` (`tier=daily|weekly sha=<full-sha> status=PASS|FAIL ts=<iso8601> host=<host>`) and appends a row to `.ci-gate-timings.tsv`. Any `FAIL` or `INCOMPLETE` fails the workflow and opens/updates a row in `ISSUES.tsv` naming the command, seed, and counterexample.
+
+---
+
+### 3. Updated Small-Branch Build Order (One Gate / Cohesive Rule Per Branch)
+
+Ordered by **Immediate Bug-Catching Value per Line of Code**, with **Gate N2** moved to **Branch 1** as prioritized by the owner for active spec reviews (`C6`, `C7`, `C8`, `C10`):
+
+1. **Branch 1 (`gate-n2-vacuity-and-statement-pins`):** Implement **Gate N2** (`ConcreteSpec/Attr.lean` + `scripts/proofs/vacuity.lean` + `scripts/proofs/vacuity.sh`) for `(v1)`–`(v3)`, plus **T-g** (`PROOF_MODE=statements` + `scripts/proofs/statements.golden` in `axioms.sh`) and **X1** (`imports.sh`). Migrate `ConcreteSpec/Spec/Slice0.lean` + `Proofs/Slice0.lean` first as the template, then `Rep`, `Cleanup`, `Borrow`, `Brand`, `Authority`, `Observation`, `Slice1*`. *(Immediate PR protection for active spec branches C6, C7, C8, C10).*
+2. **Branch 2 (`gate-9-trusted-base` — D1–D4, G9):** Merge Branch D (`D-gate-trusted-base.diff`) with dynamic `ConcreteSpec` file discovery (no hardcoded 9-file list) and exact source-equality checking for `TargetProfile`/`Layout`/`BuiltinId` (`D2`/`D3`).
+3. **Branch 3 (`gate-b-manifest-and-validators` — B1–B3, T-c, T-h, T-i, T-j, N5):** Land `tests/manifest.tsv`, `test_manifest.py`, and `tests.sh` (folding `slice0_native.sh` and `slice0_artifacts.sh`), wire **T-c** (`BIR.Program.wf` and `LCB.admit` checked on every test), add **T-h** BIR/LCB `limit` and `limit+1` fixtures (`64`/`65` blocks, `480`/`481` defs, `4080` frame bytes), **T-i** frame-bound refusal fixtures, **N5** `readelf` checks, and **T-j** (`check_issues.sh` fixture cross-check).
+4. **Branch 4 (`gate-b-valgrind-memcheck` — T-d):** Add `valgrind --tool=memcheck --error-exitcode=99 --leak-check=full --track-origins=yes` execution on both `lcb.exe` and `llvm.exe` in `tests.sh` on `x86_64-linux` (with a planted out-of-bounds stack slot control verified in `--self-test`).
+5. **Branch 5 (`gate-a-spec-diff-and-arith` — A1–A5, T-a, T-b):** Land `spec_diff.lean` and `spec_diff.sh` with `--tier=pr|daily`, **A4** planted mutations, **A5** shrinker, **T-b** exhaustive 65,536 `u8` in-process sweep + `i32` power-of-two boundary matrix + batched native runner, and **T-a** BIR register/block alpha-rename and non-entry block permutation metamorphic checks.
+6. **Branch 6 (`gate-8-decompile-fast` — G8):** Pool the 56 `objdump` checks in `slice0_decompile.sh` (4-way parallel) and add an explicit positive/negative control.
+7. **Branch 7 (`gate-c-determinism-and-scaling` — C1, C2, X2, X3):** Land `determinism.sh` (PR fast mode: `cwd` + double-build; Daily full mode) and `scaling.sh` (Daily tier on `concrete-ci-2`), plus the inline tier table in `scripts/checks/run.sh` (**X3**).
+8. **Branch 8 (`slice0-frontend-gates` — T-f, N4, and Slice 0 extensions of A2, T-a, T-c, T-h):** As the Slice 0 front end (`R-0620`) and diagnostics contract (`R-0593`) land, enable **T-f** golden `.diag.json`/`.diag.txt` snapshots, **N4** lexer/parser fuzzing + hostile lexical limits (**T-h**), `Core`/`MIR`/`Mem` pass validators (**T-c**), and surface metamorphic rewrites (**T-a**).
+9. **Branch 9 (`slice2-and-c3-arith-abi-mutation` — T-b full, T-e, N3):** Enable full `u8`/`i8`/`16`/`32`/`64`-bit operator sweeps (**T-b**) at Slice 2, `Layout` vs `clang` `_Static_assert` checks (**T-e**) at Foundation C3 (`R-0609`), and Weekly/Daily compiler mutation testing (**N3**).
+
+### Updated Top-5 Highest-Value Items Right Now
+
+1. **Gate N2 + T-g (Mechanized Vacuity `(v1)`–`(v3)` & Theorem-Statement Pinning):** Directly stops vacuous projection laws, unsatisfiable premises, and premise-only counterexamples on the active spec branches (`C6`, `C7`, `C8`, `C10`) and pins every theorem statement's canonical `Expr` DAG.
+2. **Gate A + T-b + T-a (Differential Testing + Exhaustive `u8`/`i8` & Boundary Matrix + Metamorphic Rewrites):** Cross-checks `ConcreteSpec`, `BIR`, `LLVM`, and `LCB` across all 65,536 small-width pairs, boundary values, planted mutations, and semantics-preserving rewrites.
+3. **Gate B + T-c + T-f + T-j (Single Manifest Corpus + Per-Pass IR Validators + Golden Diagnostics + Bug-Fixture Pinning):** Unifies test execution, enforces `Stage.wf` after every pass, snapshots exact diagnostics, and requires a manifest fixture for every closed bug.
+4. **T-d (Valgrind Memcheck on Both `lcb.exe` and `llvm.exe`):** Closes the biggest gap in Gate 10's LLVM-only ASan check by verifying memory safety and initialized reads on the custom `LCB` x86_64 codegen path.
+5. **Gate D / Gate 9 (`slice0_trusted_base.sh`):** Mechanically pins theorem premises (`D1`), spec-to-compiler definition identity (`D2`), trusted-base boundaries (`D3`), and honest theorem naming (`D4`).
+
+---
+
+# Group 4 — Design of Gate `N2` (Mechanized Vacuity on Spec & Proof Branches)
+
+## 1. Architectural Constraint: `ConcreteSpec` Purity (`trust_ban.sh`) vs Annotations
+
+Before choosing an annotation mechanism, inspect [ConcreteSpec/README.md](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ConcreteSpec/README.md#L31) and [scripts/proofs/trust_ban.sh](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/scripts/proofs/trust_ban.sh#L38-L44) ([scripts/proofs/lean_lex.py](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/scripts/proofs/lean_lex.py#L126-L127)):
+- `ConcreteSpec/**/*.lean` may **not** `import Lean` (outside imports are banned so `ConcreteSpec` depends only on Lean's `Init` prelude), and `lean_lex.py` bans `syntax`, `macro`, `elab`, `attribute`, `#eval`, and `run_cmd` inside `ConcreteSpec`.
+- Meanwhile, [scripts/proofs/theorems.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/scripts/proofs/theorems.lean#L45-L46) lives outside `ConcreteSpec/`, imports both `Lean` and `ConcreteSpec`, and inspects the compiled `Lean.Environment` directly via `Lean.importModules`.
+
+To honour **both** "one home, in the spec source, no side list" **and** "zero `import Lean` / metaprogramming inside `ConcreteSpec`", we have two clean options (and we can support both seamlessly):
+
+### Recommended Annotation Scheme (Pure `Init` Attribute Tags via a Tiny `ConcreteSpec/Attr.lean` OR Structured Tag Declarations)
+
+1. **Option 1 (Attribute syntax `@[law]`, `@[witness law]`, `@[refutes law]` via a 20-line `ConcreteSpec/Attr.lean`):**
+   - Place attribute registrations in a single tiny file `ConcreteSpec/Attr.lean` (the **only** file allowed by `trust_ban.sh:44` and `imports.sh` to `import Lean.Attributes`, excluded from `Spec/*` and `Proofs/*` semantic files just as `theorems.lean` is):
+     ```lean
+     import Lean.Attributes
+     namespace ConcreteSpec
+     initialize lawAttr : Lean.TagAttribute ←
+       Lean.registerTagAttribute `law "Contract law subject to N2 vacuity checking"
+     initialize lawExemptAttr : Lean.ParametricAttribute String ←
+       Lean.registerParametricAttribute {
+         name := `law_exempt
+         descr := "Reviewer-approved N2 exemption with mandatory reason string"
+         getParam := fun _ stx => match stx with
+           | `(attr| law_exempt $s:str) => pure s.getString
+           | _ => throwError "usage: @[law_exempt \"<reason and reviewer>\"]" }
+     initialize witnessAttr : Lean.ParametricAttribute Lean.Name ←
+       Lean.registerParametricAttribute {
+         name := `witness
+         descr := "Non-trivial satisfiability witness for a @[law] theorem"
+         getParam := fun _ stx => match stx with
+           | `(attr| witness $id:ident) => Lean.realizeGlobalConstNoOverload id
+           | _ => throwError "usage: @[witness <lawName>]" }
+     initialize refutesAttr : Lean.ParametricAttribute (Lean.Name × Option Lean.Name) ←
+       Lean.registerParametricAttribute {
+         name := `refutes
+         descr := "Behaviour-refuting counter-example for a @[law] theorem"
+         getParam := fun _ stx => match stx with
+           | `(attr| refutes $law:ident) => do
+               pure (← Lean.realizeGlobalConstNoOverload law, none)
+           | `(attr| refutes $law:ident via $mutDef:ident) => do
+               pure (← Lean.realizeGlobalConstNoOverload law,
+                     some (← Lean.realizeGlobalConstNoOverload mutDef))
+           | _ => throwError "usage: @[refutes <lawName>] or @[refutes <lawName> via <mutatedDef>]" }
+     end ConcreteSpec
+     ```
+   - Notice `Lean.realizeGlobalConstNoOverload` resolves `@[witnesscheck_complete]` or `@[refutes borrow_exclusive]` to its fully-qualified `Lean.Name` at elaboration time—so a typo in the law name is an immediate compile error!
+   - In `scripts/proofs/lean_lex.py:126` and `trust_ban.sh:44`, `ConcreteSpec/Attr.lean` is whitelisted exclusively for those 4 `register*Attribute` calls, while `ConcreteSpec/Spec/**` and `ConcreteSpec/Proofs/**` remain 100% barred from `import Lean`, `macro`, `elab`, `syntax`, `local instance`, etc.
+
+2. **Completeness Rule ("No Silent Unannotated Laws"):**
+   What stops a writer from simply omitting `@[law]` on a new theorem in `ConcreteSpec/Proofs/*` or `ConcreteSpec/Spec/*`?
+   - Gate `N2` scans **every** `ConstantInfo.thmInfo` in `ConcreteSpec.Spec.*` and `ConcreteSpec.Proofs.*`.
+   - Every theorem must carry **exactly one** role attribute:
+     - `@[law]` — a contract law or headline theorem (must pass `v1`, `v2`, and `v3`);
+     - `@[witness <law>]` — a witness theorem/example for `<law>`;
+     - `@[refutes <law>]` — a behaviour-refuting counterexample for `<law>`;
+     - `@[helper]` (or `private theorem`) — an internal plumbing lemma (still checked for `v1` so it is not a projection tautology, and required to appear in the proof DAG of at least one `@[law]` theorem so dead/orphan lemmas cannot masquerade as helpers!);
+     - `@[law_exempt "<kind>: <reason> (approved: <reviewer>, <date>)"]` — an explicit, reviewer-approved exemption.
+   - Any `theorem` in `ConcreteSpec` lacking one of these attributes **fails Gate `N2` immediately** with `UNCLASSIFIED-THEOREM: <name>`. There is **no side list** anywhere outside `.lean` source.
+
+---
+
+## 2. Concrete Mechanical Detection of `(v1)`, `(v2)`, and `(v3)` in Lean 4.34.1 Core
+
+Gate `N2` runs in `scripts/proofs/vacuity.lean` (invoked by `scripts/proofs/vacuity.sh` or `scripts/proofs/axioms.sh` via `lake env lean scripts/proofs/vacuity.lean`), using `Lean.importModules #[{module := `ConcreteSpec}]` and running a `MetaM` pass over `env.constants`.
+
+### Detection of `(v1)`: Projection / Contract-Reading / Definitional-Tautology Laws
+
+**Why projection laws happen in `ConcreteSpec`:**
+Look at actual examples in `ConcreteSpec` today:
+- [ConcreteSpec/Proofs/Cleanup.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ConcreteSpec/Proofs/Cleanup.lean#L9-L17):
+  ```lean
+  theorem def_site_determinism (C : CleanupContract S) ... (h2 : C.Typed p τ) :
+      C.cleanupPlan p = C.cleanupPlan p := rfl
+  theorem no_hidden_drops (C : CleanupContract S) ... (h : C.Exec p s (.ok (v, tr))) :
+      C.Balanced tr := C.exec_balanced h
+  theorem no_double_drop (C : CleanupContract S) ... (h : C.Exec p s (.ok (v, tr))) :
+      C.NoDupDrop tr := C.exec_no_dup h
+  ```
+- [ConcreteSpec/Proofs/Brand.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ConcreteSpec/Proofs/Brand.lean#L8-L17):
+  `brand_safety` is literally `C.step_safe h1 h2`; `unbranded_cannot_pass` is literally `C.typed_brands h`.
+- [ConcreteSpec/Proofs/Authority.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ConcreteSpec/Proofs/Authority.lean#L8-L13):
+  `authority_safety` is literally `C.exec_within h1 h2`.
+- [ConcreteSpec/Proofs/Borrow.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ConcreteSpec/Proofs/Borrow.lean#L13-L22):
+  `loan_bound_to_owner` is `C.valid_live h hIn`; `frozen_no_write` is `C.frozen_blocks_write hFr`.
+
+In every one of these, the `structure ...Contract` packed the theorem statement in as a structure field, and the `Proofs/*.lean` theorem just projected that field back out and applied it to the hypotheses!
+
+**Exact `MetaM` algorithm for `(v1)` in Lean 4.34.1:**
+For each `@[law]` theorem `c` with `thmInfo tv`:
+1. Enter `Meta.forallTelescopeReducing tv.type fun xs concl => do`:
+   - Instantiate the proof body with the telescope fvars:
+     `let body := tv.value.instantiateRev xs` (after stripping `xs.size` outer `.lam` binders from `tv.value`, using `Meta.lambdaTelescope tv.value`).
+2. Normalize `body` to strip trivial wrappers (`Eq.mp`/`Eq.mpr`, `id`, beta-redexes, let-bindings, `.mdata`, eta-expansions) and unfold **one** layer of non-recursive helper definitions if needed, via a custom normalizer `stripTrivialProof (e : Expr) : MetaM Expr`:
+   - Beta-reduce (`Core.betaReduce`), inline `.letE`, strip `.mdata`, and eta-reduce (`Expr.eta`).
+   - Do **not** blindly `whnf` recursive proof functions (`Nat.rec`, `List.rec`, `WellFounded.fix`), because genuine inductive proofs reduce to recursor applications.
+   - Instead, inspect the head and spine of `e.getAppFn` and `e.getAppArgs`:
+3. **Flag `FAIL (v1: PROJECTION-OR-TAUTOLOGY)` if `stripTrivialProof body` matches any of these 4 shapes:**
+   - **(v1-a) Direct Hypothesis Forward (`h x₁ ... xₙ`):**
+     The head `fn` is one of the local hypothesis fvars `h ∈ xs`, applied only to other fvars in `xs` (or projections thereof).
+   - **(v1-b) Contract / Structure Field Projection (`C.field x₁ ... xₙ` or `ProjName C x₁ ... xₙ`):**
+     The head `fn` is either:
+     - `Expr.proj structName idx structTerm` where `structTerm` is built from fvars in `xs`, or
+     - `Expr.const projFn _` where `env.isProjectionFn projFn` is `true` (or `getProjectionFnInfo? projFn` returns `some info`), applied to a contract/hypothesis fvar `C ∈ xs` and fvars in `xs`!
+     *(This directly catches `C.exec_balanced h`, `C.exec_no_dup h`, `C.step_safe h1 h2`, `C.typed_brands h`, `C.exec_within h1 h2`, `C.valid_live h hIn`, `C.frozen_blocks_write hFr`).*
+   - **(v1-c) Single-Constructor Elimination of a Hypothesis (`And.left h`, `And.right h`, `Exists.elim h ...`):**
+     The proof term only unpacks `And` / `Exists` / `Subtype` / a 1-constructor `structure` from a single hypothesis `h ∈ xs` and projects a field without combining two distinct semantic judgements or performing case analysis / recursion on syntax, typing, or evaluation.
+   - **(v1-d) Reflexivity Tautology (`rfl` / `Eq.refl t`) on an Syntactically Identical LHS/RHS:**
+     The conclusion is `lhs = rhs` where `lhs == rhs` *before* unfolding any spec function (catching `C.cleanupPlan p = C.cleanupPlan p := rfl` in [ConcreteSpec/Proofs/Cleanup.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ConcreteSpec/Proofs/Cleanup.lean#L12) and `C.observe p s = C.observe p s := rfl` in [ConcreteSpec/Proofs/Observe.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ConcreteSpec/Proofs/Observe.lean#L12)), OR the proof term is `Eq.refl _` without reducing at least one non-projection constant from `ConcreteSpec.Spec`.
+
+---
+
+### Detection of `(v2)`: Paired Non-Trivial Witness Instance (`@[witness <law>]`)
+
+**What `(v2)` catches:**
+A law `∀ x₁ ... xₙ, H₁ → ... → Hₖ → P` holds vacuously if `H₁ ∧ ... ∧ Hₖ` is unsatisfiable, or is only tested on the empty program `[]` / `0` iterations / `.ok` trivial base case.
+
+**How `@[witness <law>]` works and how "non-trivial" is made mechanically checkable:**
+1. Every `@[law]` theorem `L` of telescope `∀ (x₁ : A₁) ... (xₘ : Aₘ), H₁ → ... → Hₖ → Concl` (where `H₁ ... Hₖ : Prop` are the `Prop` hypotheses and `x₁ ... xₘ` are the data/type parameters) must have at least one declaration `W` annotated `@[witness L]`.
+2. **Mechanical check that `W` instantiates `L`'s exact hypotheses (`MetaM`):**
+   - `W` must be a `theorem` (not an `axiom` or `opaque`, and using only `[propext, Quot.sound]`).
+   - Either:
+     - **(Shape W-App, preferred):** `W`'s proof term `wVal` contains a direct application `Expr.const L _ args` of `L` to concrete closed arguments `a₁ ... aₘ` and concrete hypothesis proofs `h₁ ... hₖ`, deriving the ground conclusion `Concl[a/x]`; **OR**
+     - **(Shape W-Conj):** `W`'s statement is the ground conjunction `H₁[a/x] ∧ ... ∧ Hₖ[a/x] ∧ Concl[a/x]` for closed terms `a₁ ... aₘ`.
+   - Using Shape W-App is the simplest and strongest: the writer writes a concrete theorem `theorem my_law_witness : <ground conclusion> := L <concrete_args> <concrete_hyp_proofs>`, and `vacuity.lean` finds the subterm `L a₁ ... aₘ h₁ ... hₖ` inside `W`'s value and extracts the exact argument tuple `(a₁, ..., aₘ)`!
+3. **How "Non-Trivial" (`nonDegenerate`) is Mechanically Checkable:**
+   In `vacuity.lean`, for each data argument `aᵢ` of type `Aᵢ` passed to `L` in `W`, reduce `aᵢ` via `Meta.whnf` and check:
+   - **No free variables or metavariables:** `!aᵢ.hasFVar && !aᵢ.hasMVar` (the witness must be a closed, concrete instance, not parameterized by an assumed `C : CleanupContract S` variable!).
+   - **Non-empty collection / AST / trace requirement:**
+     - If `Aᵢ` is `List α` (e.g., `Decls`, `Block`, `Env`, `Trace`, `Loans`, `Caps`), `whnf aᵢ` must have head ``List.cons`` (never ``List.nil``).
+     - If `Aᵢ` is `Option α`, at least one `Option` parameter in the witness must be ``Option.some`` (not all ``Option.none``).
+     - If `Aᵢ` is a `ConcreteSpec` syntax/program/statement/expression inductive (`Stmt`, `Expr`, `Program`, `FnDef`, `Ty`), its constructor depth must be `≥ 2` (or for `Stmt`/`Program`, have a non-empty body/list of statements).
+     - If `Aᵢ` is a `*Contract` structure (`RepContract`, `CleanupContract`, `BorrowContract`, `BrandContract`, `AuthorityContract`, `ObsContract`), none of its predicate fields (`Typed`, `Step`, `Exec`, `ValidState`) may reduce to the constant `fun _ => False` or `fun _ => True` (`isConstantPropField` check via `lambdaTelescope` + `whnf`), and its carrier type `S` may not be `Empty`, `PEmpty`, `Unit`, or `PUnit` (`isTrivialCarrier` check)!
+
+---
+
+### Detection of `(v3)`: Paired Behaviour-Refuting Counter-Example (`@[refutes <law>]`)
+
+**What `(v3)` catches:**
+In [ConcreteSpec/Proofs/Examples.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ConcreteSpec/Proofs/Examples.lean#L82-L108) today, declarations like `ex_use_after_move_rejected` and `ex_leak_rejected` only show that `checkProgram ... = .error (.useAfterMove "x")`. That tests the *checker on a bad program* (falsifying the `Accepted p` premise of soundness); it does **not** test what happens if a *rule or state violates the behaviour while the law's hypotheses still hold*!
+Conversely, a genuine behaviour-refuting counterexample mutates the operational semantics, checker rule, or state invariant (or supplies a concrete rogue step/state satisfying the premise) and proves `¬ Concl`.
+
+**How "Refutes the Behaviour, Not the Premise" is Made Mechanically Checkable in Lean 4.34.1:**
+We support two complementary, mechanically verified shapes for `@[refutes L]` (or `@[refutes L via mutDef]`):
+
+1. **Shape R-Mut (`@[refutes L via mutDef]` — Mutated Rule / Semantics Counter-Example):**
+   - Suppose law `L` has telescope `∀ x₁ ... xₘ, H₁ → ... → Hₖ → Concl`, where `H₁ ... Hₖ` and/or `Concl` reference a spec definition `origDef` (e.g., `checkStmt`, `evalStmt`, `canAccess`, `lookupVar`, `encode`, `decode`).
+   - The counterexample author defines a mutated rule `mutDef` (e.g., `checkStmt_forgot_consume`, which omits consuming a linear variable on `.move`, or `evalStmt_wrapped_on_overflow`) and proves a theorem `R`:
+     ```lean
+     @[refutes slice1_soundness via checkStmt_forgot_consume]
+     theorem refute_slice1_soundness_move :
+         Accepted_mut exProg ∧ Typed_mut exProg ∧ ¬ SafeExec exProg := by decide
+     ```
+   - **How `vacuity.lean` mechanically verifies `R` refutes the behaviour and NOT the premise:**
+     1. Obtain `L`'s stripped telescope `(xs, hyps, concl)` where `hyps = [H₁, ..., Hₖ]` and `concl = Concl`.
+     2. Obtain `R`'s statement `rType`. Verify `R` is a proven `theorem` (no `sorryAx`).
+     3. Define a homomorphic constant-replacement map `σ : Name → Name` that maps `origDef ↦ mutDef` (and any wrapper along the path from `origDef` to `L`'s signature) and leaves all other constants unchanged.
+     4. Verify that `rType` unifies with (or is definitionally equal after `whnfR` to) the instantiated conjunction:
+        $$\sigma(H_1)[a/x] \;\land\; \dots \;\land\; \sigma(H_k)[a/x] \;\land\; \neg\,\sigma(\text{Concl})[a/x]$$
+        (or equivalently the implication chain $\sigma(H_1)[a/x]` proved as term 1, ..., $\sigma(H_k)[a/x]$ proved as term $k$, and $\neg\,\sigma(\text{Concl})[a/x]$ proved as the final conjunct!).
+     5. **Why this makes "refutes the premise" impossible:**
+        - If a counterexample only falsifies a premise $H_i$ (i.e. proves $\neg H_i[a/x]$), it **lacks** the positive proof terms for $H_1[a/x] \dots H_k[a/x]$ and fails step 4 with `PREMISE-ONLY-REFUTATION: hypothesis H_i was negated or omitted instead of satisfied`.
+        - Moreover, `vacuity.lean` checks that the conclusion conjunct in `R` is literally `Not (σ(Concl)[a/x])` (or `σ(lhs)[a/x] ≠ σ(rhs)[a/x]`) and that **every** hypothesis $H_1 \dots H_k$ is positively proved in `R`!
+
+2. **Shape R-Contract (`@[refutes L]` — Rogue Contract / Bad-State Counter-Example for Parametric Laws):**
+   - When `L` is parameterized by a transition/checker relation or state predicate (or when testing a law `∀ s s', Pre s → Step p s s' → Post s'`), `R` instantiates the relation/state with a concrete rogue transition `Step_bad` (or concrete state `s_bad`) and proves:
+     $$H_1[a/x] \;\land\; \dots \;\land\; H_k[a/x] \;\land\; \neg\,\text{Concl}[a/x]$$
+   - `vacuity.lean` checks the exact same structural matching: every hypothesis $H_i[a/x]$ of `L` is **positively proved** in `R`, and `L`'s conclusion $\text{Concl}[a/x]$ is **negated** ($\neg\text{Concl}[a/x]$) in `R`!
+
+---
+
+## 3. What Gate `N2` Cannot Decide & How Reviewer-Approved Exemptions Work
+
+### What `N2` Cannot Decide Mechanically
+1. **Unconditional / Premise-Free Identities (Zero Hypotheses, $k = 0$):**
+   Laws with no implication premises—for example, unconditional algebraic identities on total functions like ` evalBinOp .add a b = evalBinOp .add b a` or `Ty.isCopy .i32 = true`—have no $H_i$ premise to satisfy separately from the conclusion, and their proof may legitimately be a 3-case split or `rfl` on concrete ground constants.
+2. **Semantic Fidelity of a Mutated Definition `mutDef` in `(v3)`:**
+   While `vacuity.lean` mechanically verifies that `R` proves $H_1^{\text{mut}} \land \dots \land H_k^{\text{mut}} \land \neg\text{Concl}^{\text{mut}}$, a malicious or lazy writer could define `mutDef` to be trivially `fun _ => True` on the hypothesis side. To close even that loophole, `vacuity.lean` checks two structural properties on `mutDef`:
+   - `mutDef` must have the **exact same Lean type signature** as `origDef` (`Meta.isDefEq origType mutType`);
+   - `mutDef` and `origDef` must agree on at least one positive witness (`origDef w = mutDef w`, so `mutDef` is a perturbation of `origDef`, not a constant dummy function).
+   Beyond that, whether the mutation represents an insightful domain bug is a review question.
+3. **Pure Exclusion / Negation Laws (`H₁ → ¬ Bad`):**
+   When a law's conclusion is already `¬ Bad x` (e.g., `frozen_cannot_donate : ... → ¬ DonateAllowed ...`), negating the conclusion $\neg(\neg\text{Bad } x)$ is equivalent to exhibiting `Bad x` under a mutated rule `DonateAllowed_mut` while keeping `Frozen` true. `vacuity.lean` accepts either `¬ (¬ Bad_mut x)` or positive `Bad_mut x` as the refutation of `¬ Bad x`.
+
+### How a Reviewer-Approved Exemption Is Recorded
+- Any law that legitimately cannot satisfy `v1`, `v2`, or `v3` (for example, an unconditional ground identity with $k=0$ that needs no `v2` hypothesis witness) must carry the in-source attribute:
+  ```lean
+  @[law, law_exempt "v2: unconditional total identity with zero hypotheses (approved: codex, 2026-11-08)"]
+  ```
+- `vacuity.lean` parses the exemption string and enforces:
+  1. It names the specific check exempted (`v1`, `v2`, or `v3` — never a blanket exemption of all three);
+  2. It contains a non-empty reason and `(approved: <reviewer>, <YYYY-MM-DD>)`;
+  3. `vacuity.sh` prints every active `@[law_exempt ...]` line in its summary output and pins the exact list of exemptions in `scripts/proofs/vacuity_exemptions.golden` (just like `axioms.golden`), so adding or changing an exemption always forces a visible golden diff in `/creview`!
+
+---
+
+## 4. Planted Controls (Mandatory Self-Tests for Gate `N2`)
+
+`scripts/proofs/vacuity.sh --self-test` (and every PR run of `vacuity.sh` via an isolated in-memory test module or negative control namespace `ConcreteSpec.VacuityControls` checked in `PROOF_MODE=vacuity_controls`) runs **four planted negative controls**, and Gate `N2` **fails if any control is not caught naming the exact law and failure code**:
+
+1. **Control C-v1a (`control_proj_law` — Projection Law):**
+   ```lean
+   structure DummyContract where
+     Valid : Nat → Prop
+     Safe  : Nat → Prop
+     valid_imp_safe : ∀ n, Valid n → Safe n
+   @[law] theorem control_proj_law (C : DummyContract) (n : Nat) (h : C.Valid n) : C.Safe n :=
+     C.valid_imp_safe n h
+   ```
+   **Required failure:** `FAIL [v1:PROJECTION-LAW] ConcreteSpec.VacuityControls.control_proj_law: proof term projects field 'DummyContract.valid_imp_safe' (idx 2) from hypothesis 'C'`.
+
+2. **Control C-v1b (`control_rfl_tautology` — Definitional `rfl` Tautology):**
+   ```lean
+   @[law] theorem control_rfl_tautology (p : Program) : evalProg p 0 = evalProg p 0 := rfl
+   ```
+   **Required failure:** `FAIL [v1:RFL-TAUTOLOGY] ConcreteSpec.VacuityControls.control_rfl_tautology: LHS and RHS are syntactically identical before unfolding`.
+
+3. **Control C-v2 (`control_unsat_premise_law` — Unsatisfiable Hypothesis / Missing or Trivial Witness):**
+   ```lean
+   @[law] theorem control_unsat_premise_law (n : Nat) (h1 : n < 0) : n = 42 := by omega
+   ```
+   (Plus a companion sub-control `control_trivial_empty_witness` that supplies `List.nil` / constant-`False` contract as `@[witness ...]`).
+   **Required failure:** `FAIL [v2:MISSING-OR-TRIVIAL-WITNESS] ConcreteSpec.VacuityControls.control_unsat_premise_law: no non-trivial @[witness] found`.
+
+4. **Control C-v3 (`control_premise_only_refute_law` — Counter-Example That Only Falsifies the Premise):**
+   ```lean
+   @[law] theorem control_premise_only_refute_law (p : Program) (h : checkProg p = .ok ()) :
+       evalProg p 10 ≠ .err .unboundVar := ...
+   -- Bad refutation: only proves checkProg badProg ≠ .ok () (negating the premise h!)
+   @[refutes control_premise_only_refute_law]
+   theorem bad_refute_premise_only : checkProg badProg ≠ .ok () := by decide
+   ```
+   **Required failure:** `FAIL [v3:PREMISE-ONLY-REFUTATION] ConcreteSpec.VacuityControls.control_premise_only_refute_law (via bad_refute_premise_only): refutation negates or omits hypothesis 'h : checkProg p = .ok ()' instead of proving hypotheses and negating conclusion`.
+
+---
+
+## 5. PR-Tier Cost & Integration with `scripts/proofs/axioms.sh` and `ConcreteSpec`
+
+### PR-Tier Cost
+- **Wall-clock time: `~2–3 seconds` on PR** (once `ConcreteSpec` oleans are built by `lake build ConcreteSpec`).
+- Why it is so fast: `theorems.lean` already imports `ConcreteSpec` and iterates over `env.constants` in `~2.5s`. Running `PROOF_MODE=vacuity` inside the **same** `scripts/proofs/theorems.lean` binary (or `scripts/proofs/vacuity.lean`) inspects ~70 theorem `ConstantInfo` entries in memory without spawning extra Lean processes or re-elaborating files.
+
+### Integration with `scripts/proofs/axioms.sh`'s Population
+- Currently, [scripts/proofs/axioms.sh](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/scripts/proofs/axioms.sh#L45-L60) runs `theorems.lean` in two passes (`PROOF_MODE=axioms` comparing against `scripts/proofs/axioms.golden`, and `PROOF_MODE=heads` checking universe-monomorphic inductive heads on `Concrete.slice0_soundness`).
+- Integrate Gate `N2` and `T-g` directly into `scripts/proofs/` so the population is unified:
+  1. `PROOF_MODE=axioms` checks the axiom footprint of every theorem in `ConcreteSpec` and `Concrete` against `axioms.golden`. (Update `axioms.sh` so `@[witness ...]` and `@[refutes ...]` theorems are verified for zero `sorryAx`/non-standard axioms automatically without requiring manual edits to `axioms.golden` for every helper/witness if desired, OR keep `@[law]` + headline theorems in `axioms.golden` and check all constants in `ConcreteSpec` and `Concrete` for `sorryAx` / non-standard axioms).
+  2. `PROOF_MODE=statements` (**T-g**) prints `<law-or-headline-theorem>\t<sha256-of-canonical-dag>` and diffs against `scripts/proofs/statements.golden`.
+  3. `PROOF_MODE=vacuity` (**Gate N2**) verifies completeness (every theorem in `ConcreteSpec` has `@[law]`, `@[witness]`, `@[refutes]`, `@[helper]`, or `@[law_exempt]`), runs `(v1)`, `(v2)`, and `(v3)` on every `@[law]`, verifies the 4 planted controls in `ConcreteSpec.VacuityControls`, and diffs any `@[law_exempt]` against `scripts/proofs/vacuity_exemptions.golden`.
+- Add `bash scripts/proofs/vacuity.sh` (or call it from `scripts/proofs/axioms.sh`) in [scripts/checks/run.sh](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/scripts/checks/run.sh#L17) right after `axioms.sh`, so it runs on **every PR and spec branch push**.
+
+---
+
+## 6. Inventory of Existing `ConcreteSpec` Contracts (Rough Count) & Migration Order
+
+### Existing Theorem Count Across `ConcreteSpec` (68 `theorem` declarations across 13 files)
+
+| Module Pair (`Spec/*.lean` + `Proofs/*.lean`) | Current `theorem` Count | Current Status Against `(v1)`, `(v2)`, `(v3)` |
+| :--- | :--- | :--- |
+| **`Slice0`** ([Spec/Slice0.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ConcreteSpec/Spec/Slice0.lean) + [Proofs/Slice0.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ConcreteSpec/Proofs/Slice0.lean)) | **14** theorems (4 headline laws: `evalExpr_deterministic`, `check_complete`, `slice0_progress`, `slice0_soundness`; 7 helpers; 3 examples) | **Passes `(v1)`** (real inductive proofs over concrete syntax/eval). Needs `@[witness]` tags on the 3 examples (`ex_ok_150`, `ex_wrap_0`, `ex_overflow_traps`) and 3 `@[refutes ... via ...]` mutated-checker/eval theorems for `(v3)`. |
+| **`Slice1` & `Checker` & `Examples`** ([Proofs/Slice1.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ConcreteSpec/Proofs/Slice1.lean), [Checker.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ConcreteSpec/Proofs/Checker.lean), [Examples.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ConcreteSpec/Proofs/Examples.lean)) | **33** theorems (9 laws in `Slice1.lean`, 14 checker soundness laws/lemmas in `Checker.lean`, 10 example theorems in `Examples.lean`) | **Passes `(v1)`** (real structural proofs). `Examples.lean` already has 4 positive witnesses (`ex_move_consume_runs`, `ex_copy_reuse_runs`, `ex_borrow_freeze_runs`, `ex_field_move_runs`) ready for `@[witness]`, whereas its 6 negative examples (`ex_use_after_move_rejected`, etc.) only test checker rejection (premise falsification) and need paired `@[refutes ... via ...]` mutated-checker counterexamples for `(v3)`. |
+| **`Rep` (C2)** ([Spec/Rep.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ConcreteSpec/Spec/Rep.lean) + [Proofs/Rep.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ConcreteSpec/Proofs/Rep.lean)) | **8** theorems (3 laws in `Proofs/Rep.lean`; 5 concrete `decide` theorems in `Spec/Rep.lean`) | **Mixed:** `roundtrip` (`C.decode_encode v h`) and `encode_deterministic` (`rfl`) in `Proofs/Rep.lean` are **`(v1)` projection/rfl laws** over `RepContract`, while `Spec/Rep.lean` has concrete `int8Rep`/`uint8Rep`/`int32Rep` definitions and `decide` witnesses. Fix: prove `int8_roundtrip`, `uint8_roundtrip`, `int32_roundtrip` for all bounded values (or `BitVec`), tag the concrete witnesses `@[witness]`, and add a mutated `encode_broken_endian` `@[refutes]`. |
+| **`Borrow` (C6)** ([Spec/Borrow.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ConcreteSpec/Spec/Borrow.lean) + [Proofs/Borrow.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ConcreteSpec/Proofs/Borrow.lean)) | **3** theorems (`loan_bound_to_owner`, `frozen_no_write`, `mut_borrow_exclusive`) | **2 of 3 fail `(v1)`** (`loan_bound_to_owner` is `C.valid_live h hIn`; `frozen_no_write` is `C.frozen_blocks_write hFr`; `mut_borrow_exclusive` is a 1-step wrapper around `C.mut_exclusive`), and **0 witnesses `(v2)` / 0 refutations `(v3)`** exist. |
+| **`Cleanup` (C5)** ([Spec/Cleanup.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ConcreteSpec/Spec/Cleanup.lean) + [Proofs/Cleanup.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ConcreteSpec/Proofs/Cleanup.lean)) | **3** theorems (`def_site_determinism`, `no_hidden_drops`, `no_double_drop`) | **All 3 fail `(v1)`** (`rfl`, `C.exec_balanced h`, `C.exec_no_dup h`), and **0 witnesses `(v2)` / 0 refutations `(v3)`** exist. |
+| **`Brand` (C7)** ([Spec/Brand.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ConcreteSpec/Spec/Brand.lean) + [Proofs/Brand.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ConcreteSpec/Proofs/Brand.lean)) | **2** theorems (`brand_safety`, `unbranded_cannot_pass`) | **Both fail `(v1)`** (`C.step_safe h1 h2` and `C.typed_brands h`), and **0 witnesses `(v2)` / 0 refutations `(v3)`** exist. |
+| **`Authority` (C8)** ([Spec/Authority.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ConcreteSpec/Spec/Authority.lean) + [Proofs/Authority.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ConcreteSpec/Proofs/Authority.lean)) | **2** theorems (`authority_safety`, `sub_authority_execution`) | **`authority_safety` fails `(v1)`** (`C.exec_within h1 h2`), and **0 witnesses `(v2)` / 0 refutations `(v3)`** exist. |
+| **`Observation` (C1)** ([Spec/Observation.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ConcreteSpec/Spec/Observation.lean) + [Proofs/Observe.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ConcreteSpec/Proofs/Observe.lean)) | **2** theorems (`obs_deterministic`, `same_obs_refl`) | **Both fail `(v1)`** (`rfl` on `C.observe p s = C.observe p s`), and **0 witnesses `(v2)` / 0 refutations `(v3)`** exist. |
+| **`Basics`** ([Proofs/Basics.lean](file:///home/unbalancedparen/projects/gates-briefs/prop-agy/ConcreteSpec/Proofs/Basics.lean)) | **1** theorem (`lookup_update_same`) | **Passes `(v1)`** (case split on `BEq`). Needs `@[helper]` (as it is used by `Slice0`/`Slice1`) + 1 `@[witness]` / `@[refutes]` if promoted to `@[law]`. |
+
+**Summary count:** Out of **68 existing theorems** (~26 headline laws, ~24 helper lemmas, ~18 example/ground theorems), **11 of the 12 theorems in `Cleanup`, `Borrow`, `Brand`, `Authority`, `Observe`, and `Proofs/Rep` are currently `(v1)` projection or `rfl` laws with zero `(v2)` witnesses and zero `(v3)` refutations**—confirming the exact failure pattern the reviewers of C6, C7, C8, and C10 keep hitting!
+
+### Recommended Migration Order
+
+1. **Step 1 — Infrastructure + `Slice0` & `Basics` (Template Branch):**
+   Land `ConcreteSpec/Attr.lean`, `scripts/proofs/vacuity.lean`, `scripts/proofs/vacuity.sh`, the 4 planted controls in `ConcreteSpec.VacuityControls`, and migrate `ConcreteSpec/Spec/Slice0.lean` + `ConcreteSpec/Proofs/Slice0.lean` + `ConcreteSpec/Proofs/Basics.lean` (adding `@[law]`, `@[helper]`, `@[witness]`, and 4 `@[refutes ... via ...]` declarations). During the migration window, support a module-level phased rollout or track unmigrated legacy contract modules via `@[law_exempt "migration: R-0609..R-0616 in flight"]` while enforcing **strict zero-exemption mode on all newly touched or reviewed spec modules**.
+2. **Step 2 — Active Spec Review Branches (`Borrow` C6, `Brand` C7, `Authority` C8, and `Frame/Target` C10):**
+   Apply Gate `N2` immediately to `ConcreteSpec/Spec/Borrow.lean` + `Proofs/Borrow.lean` (C6), `Brand.lean` (C7), `Authority.lean` (C8), and C10 (`R-0616`): replace the abstract projection-field contracts with executable checker/operational rules (or concrete model instances), prove the laws from the definitions instead of projecting structure fields (`v1`), and add a concrete `@[witness]` (`v2`) and mutated-rule `@[refutes ... via ...]` (`v3`) for each law.
+3. **Step 3 — Remaining Foundation Contracts (`Rep` C2, `Cleanup` C5, `Observation` C1):**
+   Migrate `Rep.lean`, `Cleanup.lean`, and `Observation.lean`/`Observe.lean`, replacing `C.cleanupPlan p = C.cleanupPlan p := rfl` and `C.exec_balanced h` with concrete scope-exit cleanup trace generation and balance proofs, plus witnesses and refutations.
+4. **Step 4 — `Slice1` (`Proofs/Slice1.lean`, `Proofs/Checker.lean`, `Proofs/Examples.lean`):**
+   Tag the 9 `Slice1.lean` laws and headline `Checker.lean` soundness theorems with `@[law]`, tag internal lemmas with `@[helper]`, connect `Examples.lean`'s 4 positive execution examples with `@[witness]`, and add mutated-checker refutations (`@[refutes ... via ...]`) alongside the 6 negative examples in `Examples.lean`.
+
+DONE

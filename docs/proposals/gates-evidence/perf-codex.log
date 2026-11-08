@@ -1,0 +1,2708 @@
+Reading additional input from stdin...
+OpenAI Codex v0.166.0
+--------
+workdir: /home/unbalancedparen/projects/gates-briefs/cx-perf
+model: gpt-6.1-sol
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: none
+reasoning summaries: none
+session id: 01a1bbaa-3dd2-7031-931e-3754134d9a54
+--------
+user
+You are confirming (or refuting) a suspected performance bug in the Concrete compiler, in a throwaway export of main (ea212942) in the current directory. Do not modify files, do not build, no network; reason from the source.
+
+Measurement (fede-256gb, `lake env lean --run PROBE_scaling.lean measure 1 3 x86_64-linux`; PROBE_scaling.lean builds `scaled k`, a WF BIR program with 2k+1 blocks and 4 instructions per body block, k = 1, 10, 100, and times each stage, minimum of 3 interleaved repetitions; the emit result is forced by a linear structural digest, not by repr):
+  LCB.emit:     k=1 0.18 ms, k=10 27.9 ms, k=100 21584 ms   (10x->100x exponent 2.89)
+  LLVM.module:  k=1 0.11 ms, k=10 0.49 ms, k=100 16.1 ms    (exponent 1.52)
+  LCB.assemble: k=1 0.60 ms, k=10 4.46 ms, k=100 52.5 ms    (exponent 1.07)
+
+Suspected cause: in Concrete/Backend/LCB.lean the numbering is a closed function of position evaluated naively: `blockBase p j` sums the sizes of the first j blocks; `ids p` builds every register's id calling `blockBase` per entry (O(n^2)); `regId p r := (ids p).lookup r` recomputes `ids p` on every operand lookup, so `adapt` is O(n^3); `numberingOk` adds List.Nodup checks (O(n^2)) over `ids p`. LLVM.module's 1.5 is unexplained.
+
+Tasks: (1) confirm or refute that LCB.emit / adapt is superlinear (state the complexity with the exact functions and lines responsible); (2) find the cause of LLVM.module's superlinearity in Concrete/Backend/LLVM.lean (or say it is noise/interpreter artifact, with reasons); (3) state the structural cause (the design fact) and the smallest fix that keeps the proofs (`adapter_correct`, `emit_correct` and the lemmas over `blockBase`/`instBase`/`regId`) intact, e.g. computing the table once and proving it equal to the closed functions; (4) is this a correctness issue anywhere (it should not be)? Last line exactly: VERDICT: CONFIRMED or VERDICT: REFUTED.
+codex
+I’ll trace both backend paths and their proof dependencies from the source, without changing files, building, or using the network.
+exec
+/bin/bash -lc "pwd; rg --files -g '*LCB.lean' -g '*LLVM.lean' -g 'AGENTS.md' -g '*PROBE*'" in /home/unbalancedparen/projects/gates-briefs/cx-perf
+ succeeded in 0ms:
+/home/unbalancedparen/projects/gates-briefs/cx-perf
+AGENTS.md
+PROBE_scaling.lean
+Concrete/Backend/LCB.lean
+Concrete/Backend/LLVM.lean
+legacy/Concrete/Backend/LLVM.lean
+legacy/Concrete/Backend/EmitLLVM.lean
+legacy/docs/project/AGENTS.md
+
+exec
+/bin/bash -lc 'nl -ba Concrete/Backend/LCB.lean' in /home/unbalancedparen/projects/gates-briefs/cx-perf
+ succeeded in 0ms:
+     1	import Concrete.Backend.Runtime
+     2	import Concrete.BIR.Progress
+     3	import LeanCompilerBackend.Verified.Job
+     4	import LeanCompilerBackend.AMD64
+     5	import LeanCompilerBackend.AArch64
+     6	
+     7	/-!
+     8	# BIR → LCB-IR: the adapter (the first backend proof target)
+     9	
+    10	PROVISIONAL (slice 0). The adapter turns `main`'s body into a function of LCB's verified source
+    11	profile (`LeanCompilerBackend.Verified.Source`, `ssa-int-v2`: integer operations, comparisons,
+    12	branches and phis, no calls, memory or traps), returning the result word. Its correctness against
+    13	LCB's own semantics is proved: `Proof.adapter_correct` for an accepted program, and the complete
+    14	backend contract `Proof.emit_correct` / `Proof.artifact_correct` (a refused adaptation produces no
+    15	artifact), which retired premise `P_adapter` (`Concrete/README.md`).
+    16	
+    17	Representation: an integer of type `t` is the 32-bit word `BitVec.ofInt 32 v`; a flag is the word
+    18	0 or 1. Slice 0's profile covers the types of at most 16 bits, whose exact results fit a word:
+    19	
+    20	* `bin op t d a b`: `e := a op b`, `x := e - min`, `m := x & (2^bits - 1)`, `d := m + min`
+    21	  (`wrap t (a op b)`, two's complement for a signed type);
+    22	* `binOvf` also sets `l := x <u 2^bits` and `f := (l = 0)`: out of range exactly when
+    23	  `(a op b) - min` is not below `2^bits`;
+    24	* `trunc from to d a`: `x := a - to.min`, `m := x & (2^to.bits - 1)`, `d := m + to.min`;
+    25	* a block parameter is a phi over its predecessors' arguments, ordered by predecessor;
+    26	* `ret a` returns `a`; `trap s` returns `256 + s`.
+    27	
+    28	`assemble` hands the `Source.Function` value to LCB IN PROCESS: no text is printed or parsed on the
+    29	path the adapter proof covers. On `aarch64-macos` it goes through LCB's verified first path
+    30	(`Verified.compileFunction`: source validation, stack MIR, typed A64, rendering); on the other
+    31	targets through LCB's compatibility backends, reached with LCB's own `Verified.reify`. LCB's
+    32	lowering, assembly rendering, the assembler and the linker are inside `P_toolchain[lcb]`. `render`
+    33	prints the function as QBE text only as a debug dump.
+    34	-/
+    35	
+    36	namespace Concrete.Backend.LCB
+    37	open Concrete.BIR
+    38	open ConcreteSpec (IntTy Trap)
+    39	open Concrete.Backend.Runtime (indexed)
+    40	open LeanCompilerBackend (Width)
+    41	open LeanCompilerBackend.Verified
+    42	
+    43	/-- The integer types slice 0's LCB profile covers: exact results of every `BinOp` on two
+    44	in-range operands fit a 32-bit word. -/
+    45	def inProfile (t : IntTy) : Bool := t.bits ≤ 16
+    46	
+    47	def word (n : Int) : Source.Value := .word (BitVec.ofInt 32 n)
+    48	
+    49	/-- How many LCB values an instruction defines. -/
+    50	def Inst.width : Inst → Nat
+    51	  | .bin .. => 4
+    52	  | .binOvf .. => 6
+    53	  | .trunc .. => 3
+    54	
+    55	/-! The numbering is a closed function of position: block `j`'s values start at `blockBase p j`;
+    56	its parameters come first, then each instruction's values, instruction `i` at `instBase b i`.
+    57	This is LCB's canonical order (block, phi, instruction). -/
+    58	
+    59	def blockSize (b : Block) : Nat := b.params.length + (b.insts.map Inst.width).sum
+    60	
+    61	def blockBase (p : Program) (j : Nat) : Nat := ((p.blocks.take j).map blockSize).sum
+    62	
+    63	def instBase (b : Block) (i : Nat) : Nat := b.params.length + ((b.insts.take i).map Inst.width).sum
+    64	
+    65	/-- The number of LCB values the body defines. -/
+    66	def valueCount (p : Program) : Nat := (p.blocks.map blockSize).sum
+    67	
+    68	/-- The registers an instruction defines, with their offset among its values. -/
+    69	def instDefs : Inst → List (Reg × Nat)
+    70	  | .bin _ _ d _ _ => [(d, 3)]
+    71	  | .binOvf _ _ d f _ _ => [(d, 3), (f, 5)]
+    72	  | .trunc _ _ d _ => [(d, 2)]
+    73	
+    74	/-- Every register definition with its LCB value id, in definition order. -/
+    75	def ids (p : Program) : List (Reg × Nat) :=
+    76	  (indexed p.blocks).flatMap fun (j, b) =>
+    77	    (indexed b.params).map (fun (k, (r, _)) => (r, blockBase p j + k)) ++
+    78	    (indexed b.insts).flatMap fun (i, ins) =>
+    79	      (instDefs ins).map fun (r, off) => (r, blockBase p j + instBase b i + off)
+    80	
+    81	/-- The offsets of an instruction's intermediate values (those no register names). -/
+    82	def interOffsets : Inst → List Nat
+    83	  | .bin .. => [0, 1, 2]
+    84	  | .binOvf .. => [0, 1, 2, 4]
+    85	  | .trunc .. => [0, 1]
+    86	
+    87	/-- Every intermediate value's id. -/
+    88	def intermediates (p : Program) : List Nat :=
+    89	  (indexed p.blocks).flatMap fun (j, b) => (indexed b.insts).flatMap fun (i, ins) =>
+    90	    (interOffsets ins).map (blockBase p j + instBase b i + ·)
+    91	
+    92	/-- The numbering invariants the simulation proof uses, checked on every program `adapt`
+    93	accepts (translation validation): registers and their ids are both duplicate-free, every id is
+    94	below `valueCount`, and no intermediate value shares an id with a register. -/
+    95	def numberingOk (p : Program) : Bool :=
+    96	  let slots := (ids p).map Prod.snd
+    97	  decide ((ids p).map Prod.fst).Nodup && decide slots.Nodup &&
+    98	  slots.all (· < valueCount p) && (intermediates p).all (· < valueCount p) &&
+    99	  (intermediates p).all (fun m => !slots.contains m)
+   100	
+   101	/-- The LCB value id of a register. `adapt` refuses a program where a register has two
+   102	definitions, so this is a function of the register. -/
+   103	def regId (p : Program) (r : Reg) : Option Nat := (ids p).lookup r
+   104	
+   105	def idOf (p : Program) (r : Reg) : Except String Nat :=
+   106	  match regId p r with
+   107	  | some n => .ok n
+   108	  | none => .error s!"register %r{r} has no definition"
+   109	
+   110	def operand (p : Program) : Operand → Except String Source.Operand
+   111	  | .reg r => return .local (← idOf p r)
+   112	  | .imm _ v => return .literal (word v)
+   113	
+   114	def opBinary : BinOp → Source.Binary
+   115	  | .add => .add
+   116	  | .sub => .sub
+   117	  | .mul => .mul
+   118	
+   119	def ins (d : Nat) (op : Source.Operation) : Source.Instruction :=
+   120	  { destination := d, width := .word, operation := op }
+   121	
+   122	/-- An instruction's LCB instructions, its first value numbered `n`. -/
+   123	def inst (p : Program) (n : Nat) : Inst → Except String (List Source.Instruction)
+   124	  | .bin op t _ a b => do
+   125	    unless inProfile t do throw s!"{repr t} is outside LCB's slice-0 profile"
+   126	    let a ← operand p a
+   127	    let b ← operand p b
+   128	    return [ins n (.binary (opBinary op) a b),
+   129	      ins (n + 1) (.binary .sub (.local n) (.literal (word t.min))),
+   130	      ins (n + 2) (.binary .andBits (.local (n + 1)) (.literal (word (2 ^ t.bits - 1)))),
+   131	      ins (n + 3) (.binary .add (.local (n + 2)) (.literal (word t.min)))]
+   132	  | .binOvf op t _ _ a b => do
+   133	    unless inProfile t do throw s!"{repr t} is outside LCB's slice-0 profile"
+   134	    let a ← operand p a
+   135	    let b ← operand p b
+   136	    return [ins n (.binary (opBinary op) a b),
+   137	      ins (n + 1) (.binary .sub (.local n) (.literal (word t.min))),
+   138	      ins (n + 2) (.binary .andBits (.local (n + 1)) (.literal (word (2 ^ t.bits - 1)))),
+   139	      ins (n + 3) (.binary .add (.local (n + 2)) (.literal (word t.min))),
+   140	      ins (n + 4) (.compare .unsignedLT .word (.local (n + 1)) (.literal (word (2 ^ t.bits)))),
+   141	      ins (n + 5) (.compare .eq .word (.local (n + 4)) (.literal (word 0)))]
+   142	  | .trunc fr to _ a => do
+   143	    unless inProfile fr && inProfile to do throw s!"{repr fr} → {repr to} is outside LCB's slice-0 profile"
+   144	    let a ← operand p a
+   145	    return [ins n (.binary .sub a (.literal (word to.min))),
+   146	      ins (n + 1) (.binary .andBits (.local n) (.literal (word (2 ^ to.bits - 1)))),
+   147	      ins (n + 2) (.binary .add (.local (n + 1)) (.literal (word to.min)))]
+   148	
+   149	/-- The edges into block `j` from block `k`, whose terminator is `term`: (k, arguments). -/
+   150	def edgesTo (j k : Nat) : Term → List (Nat × List Operand)
+   151	  | .br t args => if t = j then [(k, args)] else []
+   152	  | .condbr _ t ta e ea => (if t = j then [(k, ta)] else []) ++ (if e = j then [(k, ea)] else [])
+   153	  | _ => []
+   154	
+   155	/-- The edges into block `j`: (predecessor, arguments), by predecessor. -/
+   156	def incoming (p : Program) (j : Nat) : List (Nat × List Operand) :=
+   157	  (indexed p.blocks).flatMap fun (k, b) => edgesTo j k b.term
+   158	
+   159	def term (p : Program) : Term → Except String Source.Terminator
+   160	  | .ret a => return .ret (← operand p a)
+   161	  | .trap s => return .ret (.literal (word (256 + s)))
+   162	  | .br t _ => return .jump t
+   163	  | .condbr c t _ e _ => return .branch (.local (← idOf p c)) t e
+   164	
+   165	/-- Block `j`'s phi for its parameter `k`: one arm per incoming edge, by predecessor. -/
+   166	def adaptPhi (p : Program) (j k : Nat) : Except String Source.Phi := do
+   167	  let arms ← (incoming p j).mapM fun (pred, args) => do
+   168	    let a ← match args[k]? with
+   169	      | some a => operand p a
+   170	      | none => throw s!"block {pred} passes too few arguments to block {j}"
+   171	    pure (pred, a)
+   172	  pure { destination := blockBase p j + k, width := .word, incoming := arms.toArray }
+   173	
+   174	/-- Instruction `i` of block `j`, numbered from its slot. -/
+   175	def adaptInst (p : Program) (j : Nat) (b : Block) : Nat × Inst → Except String (List Source.Instruction)
+   176	  | (i, ins) => inst p (blockBase p j + instBase b i) ins
+   177	
+   178	/-- Block `j`: its phis, its instructions' expansions in order, its terminator. -/
+   179	def adaptBlock (p : Program) : Nat × Block → Except String Source.Block
+   180	  | (j, b) => do
+   181	    let phis ← (indexed b.params).mapM fun (k, _) => adaptPhi p j k
+   182	    let insts ← (indexed b.insts).mapM (adaptInst p j b)
+   183	    pure { phis := phis.toArray, instructions := insts.flatten.toArray, terminator := ← term p b.term }
+   184	
+   185	/-- `main`'s body as a function of LCB's verified source profile. -/
+   186	def adapt (p : Program) : Except String Source.Function := do
+   187	  unless numberingOk p do throw "the numbering is not injective (a register defined twice?)"
+   188	  let blocks ← (indexed p.blocks).mapM (adaptBlock p)
+   189	  return { resultWidth := .word, parameters := #[],
+   190	           valueWidths := Array.replicate (valueCount p) .word, blocks := blocks.toArray }
+   191	
+   192	/-- The LCB backend's emit: the adapted body paired with the program's site table (the table that
+   193	decodes the body's result is part of the emitted artifact), or the adapter's refusal, in which case
+   194	no artifact exists (`artifact` and the emitter build only from `.ok`). `Proof.emit_correct` and
+   195	`Proof.artifact_correct` are the backend contract: no premise. -/
+   196	def emit (p : Program) : Except String (Source.Function × SiteTable) := do
+   197	  let f ← adapt p
+   198	  return (f, p.sites)
+   199	
+   200	/-! ## Assembly, in process (inside `P_toolchain[lcb]`) -/
+   201	
+   202	/-- The targets the gate runs LCB's output on. -/
+   203	inductive Target where
+   204	  | x86_64Linux | aarch64Linux | aarch64Macos
+   205	  deriving DecidableEq, Repr
+   206	
+   207	def Target.ofName : String → Option Target
+   208	  | "x86_64-linux" => some .x86_64Linux
+   209	  | "aarch64-linux" => some .aarch64Linux
+   210	  | "aarch64-macos" => some .aarch64Macos
+   211	  | _ => none
+   212	
+   213	/-- The body's symbol: the runtime entry calls `concrete_body`. -/
+   214	def bodySymbol : LeanCompilerBackend.Verified.Symbol := { namespaceName := "concrete", name := "concrete_body", exported := true }
+   215	
+   216	/-- The adapted body as assembly text for `target`, computed in process from the value. -/
+   217	def assemble (target : Target) (f : Source.Function) : Except String String :=
+   218	  match target with
+   219	  | .aarch64Macos => do
+   220	    let job : LeanCompilerBackend.Verified.FunctionJob :=
+   221	      { code := { symbol := bodySymbol, body := f, abi := LeanCompilerBackend.Verified.planAbi f,
+   222	                  layout := LeanCompilerBackend.Verified.planFrame f } }
+   223	    let artifact ← (LeanCompilerBackend.Verified.compileFunction job).mapError (fun e => s!"LCB first path: {repr e}")
+   224	    return ".text\n" ++ artifact.code.fragment ++ ".subsections_via_symbols\n"
+   225	  | .x86_64Linux | .aarch64Linux => do
+   226	    let m : LeanCompilerBackend.Module :=
+   227	      { functions := #[LeanCompilerBackend.Verified.reify f bodySymbol.name bodySymbol.exported] }
+   228	    LeanCompilerBackend.validateModule m
+   229	    match target with
+   230	    | .x86_64Linux => LeanCompilerBackend.AMD64.emitModuleValidated m false false
+   231	    | _ => LeanCompilerBackend.AArch64.emitModuleValidated m false false
+   232	
+   233	/-- The LCB body artifact for `target`: the assembly of a successful `emit`, or its refusal. -/
+   234	def artifact (target : Target) (p : Program) : Except String String := do
+   235	  let (f, _) ← emit p
+   236	  assemble target f
+   237	
+   238	/-! ## `adapter_correct`, value level
+   239	
+   240	The first layer of the adapter proof: each BIR instruction's expansion computes, in LCB's 32-bit
+   241	words, the encoding of the BIR result. `enc` is the value representation; `wrap_word` and
+   242	`flag_word` are the two facts the instruction expansions rest on. -/
+   243	
+   244	/-- What the adapted body produces, from LCB's own source semantics with no arguments: `returns w`
+   245	iff `Source.HasBehavior f #[] (.returned (.word w))`, `diverges` iff
+   246	`Source.HasBehavior f #[] .diverges`, and `stuck` when neither holds (an `initial` fault, a `.long`
+   247	return, a stuck fault). LCB's behaviour is unique (`Proof.hasBehavior_unique`), so exactly one
+   248	holds. -/
+   249	def bodyResult (f : Source.Function) : BodyResult → Prop
+   250	  | .returns w => Source.HasBehavior f #[] (.returned (.word w))
+   251	  | .diverges => Source.HasBehavior f #[] .diverges
+   252	  | .stuck => (∀ w, ¬ Source.HasBehavior f #[] (.returned (.word w))) ∧
+   253	      ¬ Source.HasBehavior f #[] .diverges
+   254	
+   255	namespace Proof
+   256	
+   257	/-- How a BIR value is represented in LCB: an integer as its 32-bit word, a flag as 0 or 1. -/
+   258	def enc : Val → Source.Value
+   259	  | .int _ v => word v
+   260	  | .bool b => word (if b then 1 else 0)
+   261	
+   262	theorem ofInt_sub (x y : Int) :
+   263	    BitVec.ofInt 32 (x - y) = BitVec.ofInt 32 x - BitVec.ofInt 32 y := by
+   264	  have h : BitVec.ofInt 32 x = BitVec.ofInt 32 (x - y) + BitVec.ofInt 32 y := by
+   265	    rw [← BitVec.ofInt_add]; congr 1; omega
+   266	  rw [h, BitVec.add_sub_cancel]
+   267	
+   268	theorem binaryBits_exact (op : BinOp) (x y : Int) :
+   269	    Source.binaryBits (opBinary op) (BitVec.ofInt 32 x) (BitVec.ofInt 32 y) =
+   270	      BitVec.ofInt 32 (op.exact x y) := by
+   271	  cases op <;> simp [Source.binaryBits, opBinary, BinOp.exact, BitVec.ofInt_add, BitVec.ofInt_mul,
+   272	    ofInt_sub]
+   273	
+   274	/-- The profile's types, by cases. -/
+   275	theorem inProfile_cases {t : IntTy} (ht : inProfile t = true) :
+   276	    t = .u8 ∨ t = .i8 ∨ t = .u16 ∨ t = .i16 := by
+   277	  cases t <;> simp_all [inProfile, IntTy.bits]
+   278	
+   279	/-- Masking with `2^b - 1` is reduction modulo `2^b`, for the profile's widths. -/
+   280	theorem mask_lit (b : Nat) (hb : b = 8 ∨ b = 16) (z : Int) :
+   281	    BitVec.ofInt 32 z &&& BitVec.ofInt 32 (2 ^ b - 1) = BitVec.ofInt 32 (z % 2 ^ b) := by
+   282	  apply BitVec.eq_of_toNat_eq
+   283	  have hc : (BitVec.ofInt 32 (2 ^ b - 1)).toNat = 2 ^ b - 1 := by
+   284	    rcases hb with rfl | rfl <;> decide
+   285	  rw [BitVec.toNat_and, hc, Nat.and_two_pow_sub_one_eq_mod, BitVec.toNat_ofInt, BitVec.toNat_ofInt]
+   286	  rcases hb with rfl | rfl <;>
+   287	  · simp only [Nat.reducePow, Int.reducePow]
+   288	    omega
+   289	
+   290	theorem mask_ofInt {t : IntTy} (ht : inProfile t = true) (z : Int) :
+   291	    BitVec.ofInt 32 z &&& BitVec.ofInt 32 (2 ^ t.bits - 1) = BitVec.ofInt 32 (z % 2 ^ t.bits) := by
+   292	  rcases inProfile_cases ht with rfl | rfl | rfl | rfl <;>
+   293	    exact mask_lit _ (by simp [IntTy.bits]) z
+   294	
+   295	/-- The `bin`/`binOvf`/`trunc` expansion's result word is the word of `wrap t z`. -/
+   296	theorem wrap_word {t : IntTy} (ht : inProfile t = true) (z : Int) :
+   297	    ((BitVec.ofInt 32 z - BitVec.ofInt 32 t.min) &&& BitVec.ofInt 32 (2 ^ t.bits - 1)) +
+   298	      BitVec.ofInt 32 t.min = BitVec.ofInt 32 (wrap t z) := by
+   299	  rw [← ofInt_sub, mask_ofInt ht, ← BitVec.ofInt_add, wrap]
+   300	
+   301	/-- In range for a profile type: magnitude at most `2^16 - 1`. -/
+   302	theorem natAbs_le_of_inRange {t : IntTy} (ht : inProfile t = true) {x : Int}
+   303	    (hx : t.inRange x = true) : x.natAbs ≤ 65535 := by
+   304	  rcases inProfile_cases ht with rfl | rfl | rfl | rfl <;>
+   305	  · simp [IntTy.inRange, IntTy.min, IntTy.max, IntTy.bits, IntTy.signed] at hx
+   306	    omega
+   307	
+   308	/-- Every exact result over a profile type fits well inside a 32-bit word. -/
+   309	theorem exact_natAbs_le {t : IntTy} (ht : inProfile t = true) (op : BinOp) {x y : Int}
+   310	    (hx : t.inRange x = true) (hy : t.inRange y = true) :
+   311	    (op.exact x y).natAbs ≤ 4294836225 := by
+   312	  have bx := natAbs_le_of_inRange ht hx
+   313	  have by' := natAbs_le_of_inRange ht hy
+   314	  cases op with
+   315	  | add => simp only [BinOp.exact]; omega
+   316	  | sub => simp only [BinOp.exact]; omega
+   317	  | mul =>
+   318	    simp only [BinOp.exact]
+   319	    rw [Int.natAbs_mul]
+   320	    exact Nat.le_trans (Nat.mul_le_mul bx by') (by decide)
+   321	
+   322	/-- The `binOvf` flag: `(a op b) - min` is below `2^bits` as an unsigned word exactly when the
+   323	result is in range. -/
+   324	theorem flag_word {t : IntTy} (ht : inProfile t = true) (op : BinOp) {x y : Int}
+   325	    (hx : t.inRange x = true) (hy : t.inRange y = true) :
+   326	    decide ((BitVec.ofInt 32 (op.exact x y) - BitVec.ofInt 32 t.min).toNat < 2 ^ t.bits) =
+   327	      t.inRange (op.exact x y) := by
+   328	  have hb := exact_natAbs_le ht op hx hy
+   329	  rw [← ofInt_sub, BitVec.toNat_ofInt]
+   330	  generalize op.exact x y = r at hb ⊢
+   331	  rcases inProfile_cases ht with rfl | rfl | rfl | rfl <;>
+   332	  · simp only [IntTy.inRange, IntTy.min, IntTy.max, IntTy.bits, IntTy.signed, Bool.false_eq_true, ↓reduceIte,
+   333	      Nat.reduceSub, Nat.reducePow, Int.reducePow, decide_eq_decide]
+   334	    omega
+   335	
+   336	/-! ## `adapter_correct`, the adapter's output shape -/
+   337	
+   338	theorem mapM_ok {α β ε : Type} {g : α → Except ε β} :
+   339	    ∀ {l : List α} {l' : List β}, l.mapM g = .ok l' →
+   340	      l'.length = l.length ∧ ∀ (i : Nat) (x : α), l[i]? = some x → ∃ y, g x = .ok y ∧ l'[i]? = some y
+   341	  | [], l', h => by
+   342	    simp only [List.mapM_nil] at h
+   343	    cases h; exact ⟨rfl, fun i x hx => by simp at hx⟩
+   344	  | a :: l, l', h => by
+   345	    simp only [List.mapM_cons] at h
+   346	    cases ha : g a with
+   347	    | error e => simp [ha] at h; cases h
+   348	    | ok b =>
+   349	      cases hl : l.mapM g with
+   350	      | error e => simp [ha, hl] at h; cases h
+   351	      | ok bs =>
+   352	        simp [ha, hl] at h
+   353	        cases h
+   354	        obtain ⟨hlen, hel⟩ := mapM_ok hl
+   355	        refine ⟨by simp [hlen], fun i x hx => ?_⟩
+   356	        cases i with
+   357	        | zero => simp at hx; subst hx; exact ⟨b, ha, rfl⟩
+   358	        | succ i => simpa using hel i x (by simpa using hx)
+   359	
+   360	/-- An instruction's expansion has `Inst.width` instructions. -/
+   361	theorem inst_length {p : Program} {n : Nat} {ins : Inst} {xs : List Source.Instruction}
+   362	    (h : inst p n ins = .ok xs) : xs.length = Inst.width ins := by
+   363	  cases ins with
+   364	  | bin op t d a b =>
+   365	    unfold inst at h
+   366	    cases hp : inProfile t <;> cases ha : operand p a <;> cases hb : operand p b <;>
+   367	      simp_all [Inst.width, bind, Except.bind, pure, Except.pure] <;> (subst h; rfl)
+   368	  | binOvf op t d f a b =>
+   369	    unfold inst at h
+   370	    cases hp : inProfile t <;> cases ha : operand p a <;> cases hb : operand p b <;>
+   371	      simp_all [Inst.width, bind, Except.bind, pure, Except.pure] <;> (subst h; rfl)
+   372	  | trunc fr to d a =>
+   373	    unfold inst at h
+   374	    cases hp : inProfile fr <;> cases hq : inProfile to <;> cases ha : operand p a <;>
+   375	      simp_all [Inst.width, bind, Except.bind, pure, Except.pure] <;> (subst h; rfl)
+   376	
+   377	/-! ## `adapter_correct`, numbering -/
+   378	
+   379	theorem lookup_of_mem {l : List (Reg × Nat)} (hn : (l.map Prod.fst).Nodup) {r : Reg} {n : Nat}
+   380	    (hm : (r, n) ∈ l) : l.lookup r = some n := by
+   381	  induction l with
+   382	  | nil => simp at hm
+   383	  | cons a l ih =>
+   384	    obtain ⟨r', n'⟩ := a
+   385	    simp only [List.map_cons, List.nodup_cons, List.mem_map] at hn
+   386	    simp only [List.mem_cons, Prod.mk.injEq] at hm
+   387	    rcases hm with ⟨rfl, rfl⟩ | hm
+   388	    · simp [List.lookup]
+   389	    · have hne : r ≠ r' := by
+   390	        rintro rfl; exact hn.1 ⟨(r, n), hm, rfl⟩
+   391	      have hb : (r == r') = false := by simpa using hne
+   392	      simp only [List.lookup, hb]
+   393	      exact ih hn.2 hm
+   394	
+   395	/-- A block parameter's id is its position. -/
+   396	theorem regId_param {p : Program} (hn : ((ids p).map Prod.fst).Nodup) {j k : Nat} {b : Block}
+   397	    {r : Reg} {ty : Ty} (hb : p.blocks[j]? = some b) (hk : b.params[k]? = some (r, ty)) :
+   398	    regId p r = some (blockBase p j + k) := by
+   399	  apply lookup_of_mem hn
+   400	  simp only [ids, List.mem_flatMap, List.mem_append, List.mem_map]
+   401	  exact ⟨(j, b), Runtime.mem_indexed hb, Or.inl ⟨(k, (r, ty)), Runtime.mem_indexed hk, rfl⟩⟩
+   402	
+   403	/-- A register an instruction defines has the id of its slot among the instruction's values. -/
+   404	theorem regId_inst {p : Program} (hn : ((ids p).map Prod.fst).Nodup) {j i : Nat} {b : Block}
+   405	    {ins : Inst} {r : Reg} {off : Nat} (hb : p.blocks[j]? = some b) (hi : b.insts[i]? = some ins)
+   406	    (hd : (r, off) ∈ instDefs ins) :
+   407	    regId p r = some (blockBase p j + instBase b i + off) := by
+   408	  apply lookup_of_mem hn
+   409	  simp only [ids, List.mem_flatMap, List.mem_append, List.mem_map]
+   410	  exact ⟨(j, b), Runtime.mem_indexed hb,
+   411	    Or.inr ⟨(i, ins), Runtime.mem_indexed hi, ⟨(r, off), hd, rfl⟩⟩⟩
+   412	
+   413	/-! ## `adapter_correct`, environments -/
+   414	
+   415	theorem enc_width (v : Val) : (enc v).width = .word := by cases v <;> rfl
+   416	
+   417	theorem word_bne : (Width.word != Width.word) = false := by decide
+   418	
+   419	theorem mem_of_lookup {l : List (Reg × Nat)} {r : Reg} {n : Nat} (h : l.lookup r = some n) :
+   420	    (r, n) ∈ l := by
+   421	  obtain ⟨l₁, l₂, rfl, _⟩ := List.lookup_eq_some_iff.mp h
+   422	  simp
+   423	
+   424	theorem eq_of_snd {l : List (Reg × Nat)} (hn : (l.map Prod.snd).Nodup) {a b : Reg} {n : Nat}
+   425	    (ha : (a, n) ∈ l) (hb : (b, n) ∈ l) : a = b := by
+   426	  induction l with
+   427	  | nil => simp at ha
+   428	  | cons x l ih =>
+   429	    simp only [List.map_cons, List.nodup_cons, List.mem_map] at hn
+   430	    simp only [List.mem_cons] at ha hb
+   431	    rcases ha with rfl | ha <;> rcases hb with hb | hb
+   432	    · cases hb; rfl
+   433	    · exact absurd ⟨(b, n), hb, rfl⟩ hn.1
+   434	    · subst hb; exact absurd ⟨(a, n), ha, rfl⟩ hn.1
+   435	    · exact ih hn.2 ha hb
+   436	
+   437	/-- Agreement: every BIR register's newest value sits, encoded, at its LCB id. -/
+   438	def Agrees (p : Program) (benv : Env) (lenv : Source.Environment) : Prop :=
+   439	  ∀ r v, lookup benv r = some v → ∃ n, regId p r = some n ∧ lenv[n]? = some (some (enc v))
+   440	
+   441	theorem regId_injective {p : Program} (hok : numberingOk p = true) {a b : Reg} {n : Nat}
+   442	    (ha : regId p a = some n) (hb : regId p b = some n) : a = b := by
+   443	  simp only [numberingOk, Bool.and_eq_true, decide_eq_true_eq] at hok
+   444	  exact eq_of_snd hok.1.1.1.2 (mem_of_lookup ha) (mem_of_lookup hb)
+   445	
+   446	/-- Reading a translated operand gives the encoded BIR value. -/
+   447	theorem read_operand {p : Program} {benv : Env} {lenv : Source.Environment}
+   448	    (hag : Agrees p benv lenv) {a : Operand} {a' : Source.Operand} {v : Val}
+   449	    (ha : operand p a = .ok a') (hv : evalOp benv a = some v) :
+   450	    Source.read lenv .word a' = .ok (enc v) := by
+   451	  cases a with
+   452	  | reg r =>
+   453	    obtain ⟨n, hn, hl⟩ := hag r v hv
+   454	    simp [operand, idOf, hn, bind, Except.bind, pure, Except.pure] at ha
+   455	    subst ha
+   456	    simp [Source.read, hl, enc_width, word_bne, bind, Except.bind, pure, Except.pure]
+   457	  | imm t x =>
+   458	    simp only [operand, pure, Except.pure] at ha
+   459	    cases ha
+   460	    simp only [evalOp] at hv
+   461	    split at hv
+   462	    · cases hv; simp [Source.read, enc, word, Source.Value.width, word_bne, bind, Except.bind, pure, Except.pure]
+   463	    · cases hv
+   464	
+   465	/-- A write at a word slot inside the environment succeeds. -/
+   466	theorem write_ok {f : Source.Function} {env : Source.Environment} {n : Nat} {val : Source.Value}
+   467	    (hw : f.valueWidths[n]? = some .word) (hs : n < env.size) (hv : val.width = .word) :
+   468	    Source.write f env n val = .ok (env.set! n (some val)) := by
+   469	  have : ¬ n ≥ env.size := by omega
+   470	  simp [Source.write, hw, this, hv, word_bne, pure, Except.pure, Array.set!_eq_setIfInBounds]
+   471	
+   472	/-- Writing a slot no register owns keeps agreement. -/
+   473	theorem agrees_set_other {p : Program} {benv : Env} {lenv : Source.Environment} {m : Nat}
+   474	    {x : Option Source.Value} (hag : Agrees p benv lenv) (hm : ∀ r n, regId p r = some n → n ≠ m) :
+   475	    Agrees p benv (lenv.set! m x) := by
+   476	  intro r v hv
+   477	  obtain ⟨n, hn, hl⟩ := hag r v hv
+   478	  refine ⟨n, hn, ?_⟩
+   479	  rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_ne (hm r n hn).symm]
+   480	  exact hl
+   481	
+   482	/-- Defining register `d` with `v` at its own slot extends agreement. -/
+   483	theorem agrees_define {p : Program} (hok : numberingOk p = true) {benv : Env}
+   484	    {lenv : Source.Environment} {d : Reg} {nd : Nat} {v : Val} (hag : Agrees p benv lenv)
+   485	    (hd : regId p d = some nd) (hs : nd < lenv.size) :
+   486	    Agrees p ((d, v) :: benv) (lenv.set! nd (some (enc v))) := by
+   487	  intro r w hw
+   488	  simp only [lookup] at hw
+   489	  by_cases hdr : d = r
+   490	  · subst hdr
+   491	    simp at hw
+   492	    subst hw
+   493	    refine ⟨nd, hd, ?_⟩
+   494	    simp [Array.set!_eq_setIfInBounds, hs]
+   495	  · simp [hdr] at hw
+   496	    obtain ⟨n, hn, hl⟩ := hag r w hw
+   497	    refine ⟨n, hn, ?_⟩
+   498	    have hne : nd ≠ n := by
+   499	      rintro rfl; exact hdr (regId_injective hok hd hn)
+   500	    rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_ne hne]
+   501	    exact hl
+   502	
+   503	/-! ## `adapter_correct`, instructions -/
+   504	
+   505	/-- One body step: the instruction at the current position evaluates and writes. -/
+   506	theorem step_body {f : Source.Function} {s : Source.State} {lb : Source.Block}
+   507	    {i : Source.Instruction} {v : Source.Value} {env' : Source.Environment}
+   508	    (hb : f.blocks[s.block]? = some lb) (hi : lb.instructions[s.position]? = some i)
+   509	    (he : Source.evaluate s.environment i = .ok v)
+   510	    (hw : Source.write f s.environment i.destination v = .ok env') :
+   511	    Source.step f s = .ok (.next { s with position := s.position + 1, environment := env' }) := by
+   512	  have hp : s.position < lb.instructions.size := by
+   513	    rcases Nat.lt_or_ge s.position lb.instructions.size with h | h
+   514	    · exact h
+   515	    · simp [Array.getElem?_eq_none h] at hi
+   516	  have hi' : lb.instructions[s.position] = i := by
+   517	    rw [Array.getElem?_eq_getElem hp] at hi; exact Option.some.inj hi
+   518	  simp [Source.step, hb, hp, hi', he, hw, bind, Except.bind, pure, Except.pure]
+   519	
+   520	/-- What a successful `bin` expansion is. -/
+   521	theorem inst_bin {p : Program} {n : Nat} {op : BinOp} {t : IntTy} {d : Reg} {a b : Operand}
+   522	    {xs : List Source.Instruction} (h : inst p n (.bin op t d a b) = .ok xs) :
+   523	    inProfile t = true ∧ ∃ a' b', operand p a = .ok a' ∧ operand p b = .ok b' ∧
+   524	      xs = [ins n (.binary (opBinary op) a' b'),
+   525	        ins (n + 1) (.binary .sub (.local n) (.literal (word t.min))),
+   526	        ins (n + 2) (.binary .andBits (.local (n + 1)) (.literal (word (2 ^ t.bits - 1)))),
+   527	        ins (n + 3) (.binary .add (.local (n + 2)) (.literal (word t.min)))] := by
+   528	  unfold inst at h
+   529	  cases hp : inProfile t <;> cases ha : operand p a <;> cases hb : operand p b <;>
+   530	    simp_all [bind, Except.bind, pure, Except.pure]
+   531	
+   532	/-- What a successful `binOvf` expansion is. -/
+   533	theorem inst_binOvf {p : Program} {n : Nat} {op : BinOp} {t : IntTy} {d fl : Reg} {a b : Operand}
+   534	    {xs : List Source.Instruction} (h : inst p n (.binOvf op t d fl a b) = .ok xs) :
+   535	    inProfile t = true ∧ ∃ a' b', operand p a = .ok a' ∧ operand p b = .ok b' ∧
+   536	      xs = [ins n (.binary (opBinary op) a' b'),
+   537	        ins (n + 1) (.binary .sub (.local n) (.literal (word t.min))),
+   538	        ins (n + 2) (.binary .andBits (.local (n + 1)) (.literal (word (2 ^ t.bits - 1)))),
+   539	        ins (n + 3) (.binary .add (.local (n + 2)) (.literal (word t.min))),
+   540	        ins (n + 4) (.compare .unsignedLT .word (.local (n + 1)) (.literal (word (2 ^ t.bits)))),
+   541	        ins (n + 5) (.compare .eq .word (.local (n + 4)) (.literal (word 0)))] := by
+   542	  unfold inst at h
+   543	  cases hp : inProfile t <;> cases ha : operand p a <;> cases hb : operand p b <;>
+   544	    simp_all [bind, Except.bind, pure, Except.pure]
+   545	
+   546	/-- What a successful `trunc` expansion is. -/
+   547	theorem inst_trunc {p : Program} {n : Nat} {fr to : IntTy} {d : Reg} {a : Operand}
+   548	    {xs : List Source.Instruction} (h : inst p n (.trunc fr to d a) = .ok xs) :
+   549	    inProfile to = true ∧ ∃ a', operand p a = .ok a' ∧
+   550	      xs = [ins n (.binary .sub a' (.literal (word to.min))),
+   551	        ins (n + 1) (.binary .andBits (.local n) (.literal (word (2 ^ to.bits - 1)))),
+   552	        ins (n + 2) (.binary .add (.local (n + 1)) (.literal (word to.min)))] := by
+   553	  unfold inst at h
+   554	  cases hp : inProfile fr <;> cases hq : inProfile to <;> cases ha : operand p a <;>
+   555	    simp_all [bind, Except.bind, pure, Except.pure]
+   556	
+   557	/-- Reading a slot just written. -/
+   558	theorem read_set_self {env : Source.Environment} {n : Nat} {v : Source.Value} (hs : n < env.size)
+   559	    (hv : v.width = .word) : Source.read (env.set! n (some v)) .word (.local n) = .ok v := by
+   560	  simp [Source.read, Array.set!_eq_setIfInBounds, hs, hv, word_bne, bind, Except.bind, pure,
+   561	    Except.pure]
+   562	
+   563	theorem read_literal (env : Source.Environment) (z : Int) : Source.read env .word (.literal (word z)) = .ok (word z) := by
+   564	  simp [Source.read, word, Source.Value.width, word_bne, bind, Except.bind, pure, Except.pure]
+   565	
+   566	/-- Evaluating an expansion instruction on two word reads. -/
+   567	theorem eval_bin {env : Source.Environment} {d : Nat} {op : Source.Binary} {a b : Source.Operand}
+   568	    {p q : BitVec 32} (ha : Source.read env .word a = .ok (.word p))
+   569	    (hb : Source.read env .word b = .ok (.word q)) :
+   570	    Source.evaluate env (ins d (.binary op a b)) = .ok (.word (Source.binaryBits op p q)) := by
+   571	  simp [Source.evaluate, ins, ha, hb, bind, Except.bind, Source.evaluateBinary]
+   572	
+   573	/-- Four consecutive slot writes, as a `bin` expansion makes them. -/
+   574	def set4 (e : Source.Environment) (n : Nat) (u₀ u₁ u₂ v : Option Source.Value) : Source.Environment :=
+   575	  (((e.set! n u₀).set! (n + 1) u₁).set! (n + 2) u₂).set! (n + 3) v
+   576	
+   577	theorem size_set! (e : Source.Environment) (m : Nat) (u : Option Source.Value) :
+   578	    (e.set! m u).size = e.size := by
+   579	  simp [Array.set!_eq_setIfInBounds]
+   580	
+   581	/-- The intermediate words of a `bin`/`binOvf` expansion: the raw result, minus `t.min`, masked. -/
+   582	def raw (op : BinOp) (x y : Int) : BitVec 32 :=
+   583	  Source.binaryBits (opBinary op) (BitVec.ofInt 32 x) (BitVec.ofInt 32 y)
+   584	def biased (t : IntTy) (z : BitVec 32) : BitVec 32 := Source.binaryBits .sub z (BitVec.ofInt 32 t.min)
+   585	def masked (t : IntTy) (z : BitVec 32) : BitVec 32 :=
+   586	  Source.binaryBits .andBits z (BitVec.ofInt 32 (2 ^ t.bits - 1))
+   587	
+   588	/-- `Steps` compose. -/
+   589	theorem steps_append {f : Source.Function} {m k : Nat} {s t u : Source.State} :
+   590	    Source.Steps f m s t → Source.Steps f k t u → Source.Steps f (k + m) s u
+   591	  | .zero _, h => h
+   592	  | .succ h₁ h₂, h => .succ h₁ (steps_append h₂ h)
+   593	
+   594	/-- The four steps of a `bin` expansion compute the word of `wrap t (a op b)` at slot `n + 3`. -/
+   595	theorem bin_steps {f : Source.Function} {s : Source.State} {lb : Source.Block} {n : Nat}
+   596	    {op : BinOp} {t : IntTy} {a' b' : Source.Operand} {x y : Int} (ht : inProfile t = true)
+   597	    (hb : f.blocks[s.block]? = some lb)
+   598	    (hq : ∀ k, k < 4 → lb.instructions[s.position + k]? =
+   599	      [ins n (.binary (opBinary op) a' b'),
+   600	        ins (n + 1) (.binary .sub (.local n) (.literal (word t.min))),
+   601	        ins (n + 2) (.binary .andBits (.local (n + 1)) (.literal (word (2 ^ t.bits - 1)))),
+   602	        ins (n + 3) (.binary .add (.local (n + 2)) (.literal (word t.min)))][k]?)
+   603	    (hA : Source.read s.environment .word a' = .ok (word x))
+   604	    (hB : Source.read s.environment .word b' = .ok (word y))
+   605	    (hW : ∀ m, m < s.environment.size → f.valueWidths[m]? = some .word)
+   606	    (hs : n + 3 < s.environment.size) :
+   607	    Source.Steps f 4 s ⟨s.block, s.position + 4,
+   608	      set4 s.environment n (some (.word (raw op x y))) (some (.word (biased t (raw op x y))))
+   609	        (some (.word (masked t (biased t (raw op x y))))) (some (word (wrap t (op.exact x y))))⟩ := by
+   610	  obtain ⟨blk, pos, env⟩ := s
+   611	  simp only at hb hq hA hB hW hs ⊢
+   612	  let p₀ := raw op x y
+   613	  let p₁ := biased t p₀
+   614	  let p₂ := masked t p₁
+   615	  let p₃ := Source.binaryBits .add p₂ (BitVec.ofInt 32 t.min)
+   616	  let e₁ := env.set! n (some (.word p₀))
+   617	  let e₂ := e₁.set! (n + 1) (some (.word p₁))
+   618	  let e₃ := e₂.set! (n + 2) (some (.word p₂))
+   619	  have z₁ : e₁.size = env.size := size_set! ..
+   620	  have z₂ : e₂.size = env.size := (size_set! ..).trans z₁
+   621	  have z₃ : e₃.size = env.size := (size_set! ..).trans z₂
+   622	  have hv₃ : word (wrap t (op.exact x y)) = .word p₃ := by
+   623	    show word _ = .word (Source.binaryBits .add (Source.binaryBits .andBits (Source.binaryBits .sub
+   624	      (Source.binaryBits (opBinary op) (BitVec.ofInt 32 x) (BitVec.ofInt 32 y)) _) _) _)
+   625	    rw [binaryBits_exact]
+   626	    show word _ = Source.Value.word ((BitVec.ofInt 32 (op.exact x y) - BitVec.ofInt 32 t.min &&&
+   627	      BitVec.ofInt 32 (2 ^ t.bits - 1)) + BitVec.ofInt 32 t.min)
+   628	    rw [wrap_word ht]; rfl
+   629	  show Source.Steps f 4 ⟨blk, pos, env⟩ ⟨blk, pos + 4, e₃.set! (n + 3) (some (word _))⟩
+   630	  rw [hv₃]
+   631	  have s₀ := step_body (s := ⟨blk, pos, env⟩) hb (by simpa using hq 0 (by omega))
+   632	    (eval_bin (d := n) (op := opBinary op) hA hB)
+   633	    (write_ok (n := n) (hW n (by omega)) (by first | omega | (dsimp only; omega)) rfl)
+   634	  have s₁ := step_body (s := ⟨blk, pos + 1, e₁⟩) hb (by simpa [Nat.add_assoc] using hq 1 (by omega))
+   635	    (eval_bin (d := n + 1) (op := .sub) (read_set_self (by omega) rfl) (read_literal _ t.min))
+   636	    (write_ok (n := n + 1) (hW (n + 1) (by omega)) (by first | omega | (dsimp only; omega)) rfl)
+   637	  have s₂ := step_body (s := ⟨blk, pos + 1 + 1, e₂⟩) hb
+   638	    (by simpa [Nat.add_assoc] using hq 2 (by omega))
+   639	    (eval_bin (d := n + 2) (op := .andBits) (read_set_self (by omega) rfl)
+   640	      (read_literal _ (2 ^ t.bits - 1)))
+   641	    (write_ok (n := n + 2) (hW (n + 2) (by omega)) (by first | omega | (dsimp only; omega)) rfl)
+   642	  have s₃ := step_body (s := ⟨blk, pos + 1 + 1 + 1, e₃⟩) hb
+   643	    (by simpa [Nat.add_assoc] using hq 3 (by omega))
+   644	    (eval_bin (d := n + 3) (op := .add) (read_set_self (by omega) rfl) (read_literal _ t.min))
+   645	    (write_ok (n := n + 3) (hW (n + 3) (by omega)) (by first | omega | (dsimp only; omega)) rfl)
+   646	  exact .succ s₀ (.succ s₁ (.succ s₂ (.succ s₃ (.zero _))))
+   647	
+   648	/-- Reading a slot past a write to another slot. -/
+   649	theorem read_set_other {env : Source.Environment} {m k : Nat} {u : Option Source.Value} {w : Width}
+   650	    (h : m ≠ k) : Source.read (env.set! m u) w (.local k) = Source.read env w (.local k) := by
+   651	  simp [Source.read, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_ne h]
+   652	
+   653	/-- Evaluating an expansion comparison on two word reads. -/
+   654	theorem eval_cmp {env : Source.Environment} {d : Nat} {op : Source.Comparison}
+   655	    {a b : Source.Operand} {p q : BitVec 32} (ha : Source.read env .word a = .ok (.word p))
+   656	    (hb : Source.read env .word b = .ok (.word q)) :
+   657	    Source.evaluate env (ins d (.compare op .word a b)) =
+   658	      Source.evaluateComparison op (.word p) (.word q) := by
+   659	  simp [Source.evaluate, ins, ha, hb, word_bne, bind, Except.bind]
+   660	
+   661	/-- The words LCB's comparisons give. Named, so that unification never evaluates them. -/
+   662	def ultBit (p q : BitVec 32) : BitVec 32 := if p.toNat < q.toNat then 1 else 0
+   663	def eqBit (p q : BitVec 32) : BitVec 32 := if p.toNat = q.toNat then 1 else 0
+   664	
+   665	theorem cmp_ult (p q : BitVec 32) : Source.evaluateComparison .unsignedLT (.word p) (.word q) =
+   666	    .ok (.word (ultBit p q)) := by
+   667	  by_cases h : p.toNat < q.toNat <;>
+   668	    simp [Source.evaluateComparison, Source.Value.width, Source.Value.toNat, word_bne, pure,
+   669	      Except.pure, ultBit, h]
+   670	
+   671	theorem cmp_eq (p q : BitVec 32) : Source.evaluateComparison .eq (.word p) (.word q) =
+   672	    .ok (.word (eqBit p q)) := by
+   673	  by_cases h : p.toNat = q.toNat <;>
+   674	    simp [Source.evaluateComparison, Source.Value.width, Source.Value.toNat, word_bne, pure,
+   675	      Except.pure, eqBit, h]
+   676	
+   677	theorem pow_bits_toNat {t : IntTy} (ht : inProfile t = true) :
+   678	    (BitVec.ofInt 32 (2 ^ t.bits)).toNat = 2 ^ t.bits := by
+   679	  rcases inProfile_cases ht with rfl | rfl | rfl | rfl <;> decide
+   680	
+   681	/-- The overflow flag word: `1` exactly when the result is outside `t`. -/
+   682	theorem flag_value {t : IntTy} (ht : inProfile t = true) (op : BinOp) {x y : Int}
+   683	    (hx : t.inRange x = true) (hy : t.inRange y = true) :
+   684	    eqBit (ultBit (biased t (raw op x y)) (BitVec.ofInt 32 (2 ^ t.bits))) (BitVec.ofInt 32 0) =
+   685	      BitVec.ofInt 32 (if !t.inRange (op.exact x y) then 1 else 0) := by
+   686	  unfold eqBit ultBit
+   687	  have hf := flag_word ht op hx hy
+   688	  have hr : biased t (raw op x y) = BitVec.ofInt 32 (op.exact x y) - BitVec.ofInt 32 t.min := by
+   689	    simp only [biased, raw, binaryBits_exact]; rfl
+   690	  rw [hr, pow_bits_toNat ht]
+   691	  revert hf
+   692	  generalize (BitVec.ofInt 32 (op.exact x y) - BitVec.ofInt 32 t.min).toNat = v
+   693	  intro hf
+   694	  cases h : t.inRange (op.exact x y)
+   695	  · have hv : ¬ v < 2 ^ t.bits := by simpa [h] using hf
+   696	    simp [hv]
+   697	  · have hv : v < 2 ^ t.bits := by simpa [h] using hf
+   698	    simp [hv]
+   699	
+   700	/-- The two flag steps of a `binOvf` expansion, from any slot `n + 1` holding the word `p`. -/
+   701	theorem flag_steps {f : Source.Function} {lb : Source.Block} {blk : Source.BlockId} {pos n : Nat}
+   702	    {E : Source.Environment} {p Q : BitVec 32} (hb : f.blocks[blk]? = some lb)
+   703	    (hi₄ : lb.instructions[pos]? = some (ins (n + 4) (.compare .unsignedLT .word (.local (n + 1))
+   704	      (.literal (.word Q)))))
+   705	    (hi₅ : lb.instructions[pos + 1]? = some (ins (n + 5) (.compare .eq .word (.local (n + 4))
+   706	      (.literal (word 0)))))
+   707	    (r₁ : Source.read E .word (.local (n + 1)) = .ok (.word p))
+   708	    (hW₄ : f.valueWidths[n + 4]? = some .word) (hW₅ : f.valueWidths[n + 5]? = some .word)
+   709	    (hs : n + 5 < E.size) :
+   710	    Source.Steps f 2 ⟨blk, pos, E⟩ ⟨blk, pos + 1 + 1,
+   711	      (E.set! (n + 4) (some (.word (ultBit p Q)))).set! (n + 5)
+   712	        (some (.word (eqBit (ultBit p Q) (BitVec.ofInt 32 0))))⟩ := by
+   713	  have rQ : Source.read E .word (.literal (.word Q)) = .ok (.word Q) := by
+   714	    simp [Source.read, Source.Value.width, word_bne, bind, Except.bind, pure, Except.pure]
+   715	  have s₄ := step_body (s := ⟨blk, pos, E⟩) hb hi₄
+   716	    ((eval_cmp (d := n + 4) r₁ rQ).trans (cmp_ult _ _))
+   717	    (write_ok (n := n + 4) hW₄ (by show n + 4 < E.size; omega) rfl)
+   718	  have r₄ := read_set_self (env := E) (n := n + 4) (v := .word (ultBit p Q)) (by omega) rfl
+   719	  have s₅ := step_body (s := ⟨blk, pos + 1, E.set! (n + 4) (some (.word (ultBit p Q)))⟩) hb hi₅
+   720	    ((eval_cmp (d := n + 5) r₄ (read_literal _ 0)).trans (cmp_eq _ _))
+   721	    (write_ok (n := n + 5) hW₅ (by show n + 5 < (E.set! _ _).size; rw [size_set!]; omega) rfl)
+   722	  exact .succ s₄ (.succ s₅ (.zero _))
+   723	
+   724	/-- The six steps of a `binOvf` expansion: the wrapped result at slot `n + 3` and the overflow flag
+   725	at slot `n + 5`, both as `enc` gives them. -/
+   726	theorem binOvf_steps {f : Source.Function} {s : Source.State} {lb : Source.Block} {n : Nat}
+   727	    {op : BinOp} {t : IntTy} {a' b' : Source.Operand} {x y : Int} (ht : inProfile t = true)
+   728	    (hx : t.inRange x = true) (hy : t.inRange y = true)
+   729	    (hb : f.blocks[s.block]? = some lb)
+   730	    (hq : ∀ k, k < 6 → lb.instructions[s.position + k]? =
+   731	      [ins n (.binary (opBinary op) a' b'),
+   732	        ins (n + 1) (.binary .sub (.local n) (.literal (word t.min))),
+   733	        ins (n + 2) (.binary .andBits (.local (n + 1)) (.literal (word (2 ^ t.bits - 1)))),
+   734	        ins (n + 3) (.binary .add (.local (n + 2)) (.literal (word t.min))),
+   735	        ins (n + 4) (.compare .unsignedLT .word (.local (n + 1)) (.literal (word (2 ^ t.bits)))),
+   736	        ins (n + 5) (.compare .eq .word (.local (n + 4)) (.literal (word 0)))][k]?)
+   737	    (hA : Source.read s.environment .word a' = .ok (word x))
+   738	    (hB : Source.read s.environment .word b' = .ok (word y))
+   739	    (hW : ∀ m, m < s.environment.size → f.valueWidths[m]? = some .word)
+   740	    (hs : n + 5 < s.environment.size) :
+   741	    ∃ u₄, Source.Steps f 6 s ⟨s.block, s.position + 6,
+   742	      ((set4 s.environment n (some (.word (raw op x y))) (some (.word (biased t (raw op x y))))
+   743	        (some (.word (masked t (biased t (raw op x y))))) (some (word (wrap t (op.exact x y))))).set!
+   744	        (n + 4) u₄).set! (n + 5) (some (enc (.bool (!t.inRange (op.exact x y)))))⟩ := by
+   745	  obtain ⟨blk, pos, env⟩ := s
+   746	  simp only at hb hq hA hB hW hs ⊢
+   747	  let E := set4 env n (some (.word (raw op x y))) (some (.word (biased t (raw op x y))))
+   748	    (some (.word (masked t (biased t (raw op x y))))) (some (word (wrap t (op.exact x y))))
+   749	  have h4 : Source.Steps f 4 ⟨blk, pos, env⟩ ⟨blk, pos + 4, E⟩ :=
+   750	    bin_steps (s := ⟨blk, pos, env⟩) ht hb (fun k hk => by
+   751	      rw [hq k (by omega)]; rcases k with _ | _ | _ | _ | k <;> first | rfl | omega)
+   752	      hA hB hW (by first | omega | (dsimp only; omega))
+   753	  have zE : E.size = env.size := by simp only [E, set4, size_set!]
+   754	  have r₁ : Source.read E .word (.local (n + 1)) = .ok (.word (biased t (raw op x y))) := by
+   755	    simp only [E, set4]
+   756	    rw [read_set_other (by omega), read_set_other (by omega)]
+   757	    exact read_set_self (by simp only [size_set!]; omega) rfl
+   758	  have h2 := flag_steps (E := E) (pos := pos + 4) (Q := BitVec.ofInt 32 (2 ^ t.bits)) hb
+   759	    (hq 4 (by omega)) (by simpa [Nat.add_assoc] using hq 5 (by omega)) r₁
+   760	    (hW (n + 4) (by omega)) (hW (n + 5) (by omega)) (by omega)
+   761	  refine ⟨some (.word (ultBit (biased t (raw op x y)) (BitVec.ofInt 32 (2 ^ t.bits)))), ?_⟩
+   762	  have hflag : enc (.bool (!t.inRange (op.exact x y))) = .word (eqBit (ultBit (biased t
+   763	      (raw op x y)) (BitVec.ofInt 32 (2 ^ t.bits))) (BitVec.ofInt 32 0)) := by
+   764	    simp only [enc, word]; rw [flag_value ht op hx hy]
+   765	  rw [hflag, show pos + 6 = pos + 4 + 1 + 1 from rfl]
+   766	  exact steps_append h4 h2
+   767	
+   768	/-- The three steps of a `trunc` expansion compute the word of `wrap to x` at slot `n + 2`. -/
+   769	theorem trunc_steps {f : Source.Function} {s : Source.State} {lb : Source.Block} {n : Nat}
+   770	    {to : IntTy} {a' : Source.Operand} {x : Int} (ht : inProfile to = true)
+   771	    (hb : f.blocks[s.block]? = some lb)
+   772	    (hq : ∀ k, k < 3 → lb.instructions[s.position + k]? =
+   773	      [ins n (.binary .sub a' (.literal (word to.min))),
+   774	        ins (n + 1) (.binary .andBits (.local n) (.literal (word (2 ^ to.bits - 1)))),
+   775	        ins (n + 2) (.binary .add (.local (n + 1)) (.literal (word to.min)))][k]?)
+   776	    (hA : Source.read s.environment .word a' = .ok (word x))
+   777	    (hW : ∀ m, m < s.environment.size → f.valueWidths[m]? = some .word)
+   778	    (hs : n + 2 < s.environment.size) :
+   779	    Source.Steps f 3 s ⟨s.block, s.position + 3,
+   780	      ((s.environment.set! n (some (.word (biased to (BitVec.ofInt 32 x))))).set! (n + 1)
+   781	        (some (.word (masked to (biased to (BitVec.ofInt 32 x)))))).set! (n + 2)
+   782	        (some (word (wrap to x)))⟩ := by
+   783	  obtain ⟨blk, pos, env⟩ := s
+   784	  simp only at hb hq hA hW hs ⊢
+   785	  let p₀ := biased to (BitVec.ofInt 32 x)
+   786	  let p₁ := masked to p₀
+   787	  let e₁ := env.set! n (some (.word p₀))
+   788	  let e₂ := e₁.set! (n + 1) (some (.word p₁))
+   789	  have z₁ : e₁.size = env.size := size_set! ..
+   790	  have z₂ : e₂.size = env.size := (size_set! ..).trans z₁
+   791	  have hv : word (wrap to x) = .word (Source.binaryBits .add p₁ (BitVec.ofInt 32 to.min)) := by
+   792	    show word _ = Source.Value.word ((BitVec.ofInt 32 x - BitVec.ofInt 32 to.min &&&
+   793	      BitVec.ofInt 32 (2 ^ to.bits - 1)) + BitVec.ofInt 32 to.min)
+   794	    rw [wrap_word ht]; rfl
+   795	  show Source.Steps f 3 ⟨blk, pos, env⟩ ⟨blk, pos + 3, e₂.set! (n + 2) (some (word _))⟩
+   796	  rw [hv]
+   797	  have s₀ := step_body (s := ⟨blk, pos, env⟩) hb (by simpa using hq 0 (by omega))
+   798	    (eval_bin (d := n) (op := .sub) hA (read_literal _ to.min))
+   799	    (write_ok (n := n) (hW n (by omega)) (by first | omega | (dsimp only; omega)) rfl)
+   800	  have s₁ := step_body (s := ⟨blk, pos + 1, e₁⟩) hb (by simpa [Nat.add_assoc] using hq 1 (by omega))
+   801	    (eval_bin (d := n + 1) (op := .andBits) (read_set_self (by omega) rfl)
+   802	      (read_literal _ (2 ^ to.bits - 1)))
+   803	    (write_ok (n := n + 1) (hW (n + 1) (by omega)) (by first | omega | (dsimp only; omega)) rfl)
+   804	  have s₂ := step_body (s := ⟨blk, pos + 1 + 1, e₂⟩) hb
+   805	    (by simpa [Nat.add_assoc] using hq 2 (by omega))
+   806	    (eval_bin (d := n + 2) (op := .add) (read_set_self (by omega) rfl) (read_literal _ to.min))
+   807	    (write_ok (n := n + 2) (hW (n + 2) (by omega)) (by first | omega | (dsimp only; omega)) rfl)
+   808	  exact .succ s₀ (.succ s₁ (.succ s₂ (.zero _)))
+   809	
+   810	/-! ## `adapter_correct`, the invariant through one instruction -/
+   811	
+   812	/-- Every integer a BIR environment binds is in its type's range (immediates are, by WF; results
+   813	are, by `wrap_inRange`). `binOvf_steps` needs it: agreement alone would let a `.u8` register hold
+   814	`2 ^ 32`, whose word is `0`. -/
+   815	def InRange (benv : Env) : Prop := ∀ r t x, lookup benv r = some (.int t x) → t.inRange x = true
+   816	
+   817	theorem inRange_cons {benv : Env} {d : Reg} {v : Val} (hr : InRange benv)
+   818	    (hv : ∀ t x, v = .int t x → t.inRange x = true) : InRange ((d, v) :: benv) := by
+   819	  intro r t x h
+   820	  simp only [lookup] at h
+   821	  by_cases hdr : d = r
+   822	  · simp [hdr] at h; exact hv t x h
+   823	  · simp [hdr] at h; exact hr r t x h
+   824	
+   825	theorem evalOp_inRange {benv : Env} {a : Operand} {t : IntTy} {x : Int} (hr : InRange benv)
+   826	    (h : evalOp benv a = some (.int t x)) : t.inRange x = true := by
+   827	  cases a with
+   828	  | reg r => exact hr r t x h
+   829	  | imm t' v =>
+   830	    simp only [evalOp] at h
+   831	    split at h
+   832	    · cases h; assumption
+   833	    · cases h
+   834	
+   835	theorem intArgs_ok {benv : Env} {t : IntTy} {a b : Operand} {x y : Int}
+   836	    (h : intArgs benv t a b = some (x, y)) :
+   837	    evalOp benv a = some (.int t x) ∧ evalOp benv b = some (.int t y) := by
+   838	  unfold intArgs at h
+   839	  split at h
+   840	  · rename_i ta x' tb y' ha hb
+   841	    split at h
+   842	    · rename_i hab
+   843	      obtain ⟨rfl, rfl⟩ := hab
+   844	      cases h
+   845	      exact ⟨ha, hb⟩
+   846	    · cases h
+   847	  · cases h
+   848	
+   849	/-- A register's id is a slot below `valueCount`. -/
+   850	theorem regId_lt {p : Program} (hok : numberingOk p = true) {r : Reg} {n : Nat}
+   851	    (h : regId p r = some n) : n < valueCount p := by
+   852	  simp only [numberingOk, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true] at hok
+   853	  exact hok.1.1.2 n (List.mem_map.mpr ⟨(r, n), mem_of_lookup h, rfl⟩)
+   854	
+   855	theorem ids_nodup {p : Program} (hok : numberingOk p = true) : ((ids p).map Prod.fst).Nodup := by
+   856	  simp only [numberingOk, Bool.and_eq_true, decide_eq_true_eq] at hok
+   857	  exact hok.1.1.1.1
+   858	
+   859	theorem inter_mem {p : Program} {j i off : Nat} {b : Block} {ins : Inst}
+   860	    (hb : p.blocks[j]? = some b) (hi : b.insts[i]? = some ins) (ho : off ∈ interOffsets ins) :
+   861	    blockBase p j + instBase b i + off ∈ intermediates p := by
+   862	  simp only [intermediates, List.mem_flatMap, List.mem_map]
+   863	  exact ⟨(j, b), Runtime.mem_indexed hb, (i, ins), Runtime.mem_indexed hi, off, ho, rfl⟩
+   864	
+   865	/-- No register has an intermediate's id. -/
+   866	theorem inter_not_reg {p : Program} (hok : numberingOk p = true) {m : Nat}
+   867	    (hm : m ∈ intermediates p) : ∀ r n, regId p r = some n → n ≠ m := by
+   868	  intro r n hr heq
+   869	  subst heq
+   870	  simp only [numberingOk, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true] at hok
+   871	  have h := hok.2 n hm
+   872	  have hmem : n ∈ (ids p).map Prod.snd := List.mem_map.mpr ⟨(r, n), mem_of_lookup hr, rfl⟩
+   873	  simp [hmem] at h
+   874	
+   875	theorem size_set4 (e : Source.Environment) (n : Nat) (u₀ u₁ u₂ v : Option Source.Value) :
+   876	    (set4 e n u₀ u₁ u₂ v).size = e.size := by
+   877	  simp only [set4, size_set!]
+   878	
+   879	/-- One `bin` instruction: its four LCB steps keep agreement, range and size, with the result
+   880	bound. -/
+   881	theorem bin_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function}
+   882	    {j i : Nat} {b : Block} {op : BinOp} {t : IntTy} {d : Reg} {a c : Operand}
+   883	    {xs : List Source.Instruction} {s : Source.State} {lb : Source.Block} {benv benv' : Env}
+   884	    (hbj : p.blocks[j]? = some b) (hi : b.insts[i]? = some (.bin op t d a c))
+   885	    (hx : inst p (blockBase p j + instBase b i) (.bin op t d a c) = .ok xs)
+   886	    (hb : f.blocks[s.block]? = some lb)
+   887	    (hq : ∀ k, k < 4 → lb.instructions[s.position + k]? = xs[k]?)
+   888	    (hW : ∀ m, m < s.environment.size → f.valueWidths[m]? = some .word)
+   889	    (hsz : s.environment.size = valueCount p)
+   890	    (hag : Agrees p benv s.environment) (hr : InRange benv)
+   891	    (he : execInst benv (.bin op t d a c) = some benv') :
+   892	    ∃ env', Source.Steps f 4 s ⟨s.block, s.position + 4, env'⟩ ∧ env'.size = valueCount p ∧
+   893	      Agrees p benv' env' ∧ InRange benv' := by
+   894	  obtain ⟨ht, a', c', ha', hc', rfl⟩ := inst_bin hx
+   895	  simp only [execInst, bind, Option.bind] at he
+   896	  split at he
+   897	  · cases he
+   898	  · rename_i xy hxy
+   899	    obtain ⟨x, y⟩ := xy
+   900	    cases he
+   901	    obtain ⟨hax, hcy⟩ := intArgs_ok hxy
+   902	    let n := blockBase p j + instBase b i
+   903	    have hd : regId p d = some (n + 3) := regId_inst (ids_nodup hok) hbj hi (by simp [instDefs])
+   904	    have hn3 : n + 3 < s.environment.size := hsz ▸ regId_lt hok hd
+   905	    have hst := bin_steps (s := s) (n := n) ht hb hq (read_operand hag ha' hax)
+   906	      (read_operand hag hc' hcy) hW hn3
+   907	    refine ⟨_, hst, by rw [size_set4]; exact hsz, ?_, ?_⟩
+   908	    · have m₀ := inter_not_reg hok (inter_mem (off := 0) hbj hi (by simp [interOffsets]))
+   909	      have m₁ := inter_not_reg hok (inter_mem (off := 1) hbj hi (by simp [interOffsets]))
+   910	      have m₂ := inter_not_reg hok (inter_mem (off := 2) hbj hi (by simp [interOffsets]))
+   911	      exact agrees_define hok (agrees_set_other (agrees_set_other (agrees_set_other hag m₀) m₁) m₂)
+   912	        hd (by simp only [size_set!]; omega)
+   913	    · exact inRange_cons hr (fun t' x' h => by cases h; exact wrap_inRange _ _)
+   914	
+   915	/-- One `binOvf` instruction: its six LCB steps keep agreement, range and size, with the result
+   916	and the flag bound. -/
+   917	theorem binOvf_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function}
+   918	    {j i : Nat} {b : Block} {op : BinOp} {t : IntTy} {d fl : Reg} {a c : Operand}
+   919	    {xs : List Source.Instruction} {s : Source.State} {lb : Source.Block} {benv benv' : Env}
+   920	    (hbj : p.blocks[j]? = some b) (hi : b.insts[i]? = some (.binOvf op t d fl a c))
+   921	    (hx : inst p (blockBase p j + instBase b i) (.binOvf op t d fl a c) = .ok xs)
+   922	    (hb : f.blocks[s.block]? = some lb)
+   923	    (hq : ∀ k, k < 6 → lb.instructions[s.position + k]? = xs[k]?)
+   924	    (hW : ∀ m, m < s.environment.size → f.valueWidths[m]? = some .word)
+   925	    (hsz : s.environment.size = valueCount p)
+   926	    (hag : Agrees p benv s.environment) (hr : InRange benv)
+   927	    (he : execInst benv (.binOvf op t d fl a c) = some benv') :
+   928	    ∃ env', Source.Steps f 6 s ⟨s.block, s.position + 6, env'⟩ ∧ env'.size = valueCount p ∧
+   929	      Agrees p benv' env' ∧ InRange benv' := by
+   930	  obtain ⟨ht, a', c', ha', hc', rfl⟩ := inst_binOvf hx
+   931	  simp only [execInst, bind, Option.bind] at he
+   932	  split at he
+   933	  · cases he
+   934	  · rename_i xy hxy
+   935	    obtain ⟨x, y⟩ := xy
+   936	    cases he
+   937	    obtain ⟨hax, hcy⟩ := intArgs_ok hxy
+   938	    let n := blockBase p j + instBase b i
+   939	    have hd : regId p d = some (n + 3) := regId_inst (ids_nodup hok) hbj hi (by simp [instDefs])
+   940	    have hf : regId p fl = some (n + 5) := regId_inst (ids_nodup hok) hbj hi (by simp [instDefs])
+   941	    have hn5 : n + 5 < s.environment.size := hsz ▸ regId_lt hok hf
+   942	    obtain ⟨u₄, hst⟩ := binOvf_steps (s := s) (n := n) ht (evalOp_inRange hr hax)
+   943	      (evalOp_inRange hr hcy) hb hq (read_operand hag ha' hax) (read_operand hag hc' hcy) hW hn5
+   944	    refine ⟨_, hst, by simp only [size_set!, size_set4]; exact hsz, ?_, ?_⟩
+   945	    · have m₀ := inter_not_reg hok (inter_mem (off := 0) hbj hi (by simp [interOffsets]))
+   946	      have m₁ := inter_not_reg hok (inter_mem (off := 1) hbj hi (by simp [interOffsets]))
+   947	      have m₂ := inter_not_reg hok (inter_mem (off := 2) hbj hi (by simp [interOffsets]))
+   948	      have m₄ := inter_not_reg hok (inter_mem (off := 4) hbj hi (by simp [interOffsets]))
+   949	      have hdef : Agrees p ((d, .int t (wrap t (op.exact x y))) :: benv)
+   950	          (set4 s.environment n (some (.word (raw op x y))) (some (.word (biased t (raw op x y))))
+   951	            (some (.word (masked t (biased t (raw op x y))))) (some (word (wrap t (op.exact x y))))) :=
+   952	        agrees_define hok (agrees_set_other (agrees_set_other (agrees_set_other hag m₀) m₁) m₂) hd
+   953	          (by simp only [size_set!]; omega)
+   954	      exact agrees_define hok (agrees_set_other (x := u₄) hdef m₄) hf
+   955	        (by simp only [size_set!, size_set4]; omega)
+   956	    · exact inRange_cons (inRange_cons hr (fun t' x' h => by cases h; exact wrap_inRange _ _))
+   957	        (fun t' x' h => by cases h)
+   958	
+   959	/-- One `trunc` instruction: its three LCB steps keep agreement, range and size, with the result
+   960	bound. -/
+   961	theorem trunc_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function}
+   962	    {j i : Nat} {b : Block} {fr to : IntTy} {d : Reg} {a : Operand}
+   963	    {xs : List Source.Instruction} {s : Source.State} {lb : Source.Block} {benv benv' : Env}
+   964	    (hbj : p.blocks[j]? = some b) (hi : b.insts[i]? = some (.trunc fr to d a))
+   965	    (hx : inst p (blockBase p j + instBase b i) (.trunc fr to d a) = .ok xs)
+   966	    (hb : f.blocks[s.block]? = some lb)
+   967	    (hq : ∀ k, k < 3 → lb.instructions[s.position + k]? = xs[k]?)
+   968	    (hW : ∀ m, m < s.environment.size → f.valueWidths[m]? = some .word)
+   969	    (hsz : s.environment.size = valueCount p)
+   970	    (hag : Agrees p benv s.environment) (hr : InRange benv)
+   971	    (he : execInst benv (.trunc fr to d a) = some benv') :
+   972	    ∃ env', Source.Steps f 3 s ⟨s.block, s.position + 3, env'⟩ ∧ env'.size = valueCount p ∧
+   973	      Agrees p benv' env' ∧ InRange benv' := by
+   974	  obtain ⟨ht, a', ha', rfl⟩ := inst_trunc hx
+   975	  simp only [execInst] at he
+   976	  split at he
+   977	  · rename_i t x hax
+   978	    split at he
+   979	    · cases he
+   980	      let n := blockBase p j + instBase b i
+   981	      have hd : regId p d = some (n + 2) := regId_inst (ids_nodup hok) hbj hi (by simp [instDefs])
+   982	      have hn2 : n + 2 < s.environment.size := hsz ▸ regId_lt hok hd
+   983	      have hst := trunc_steps (s := s) (n := n) ht hb hq (read_operand hag ha' hax) hW hn2
+   984	      refine ⟨_, hst, by simp only [size_set!]; exact hsz, ?_, ?_⟩
+   985	      · have m₀ := inter_not_reg hok (inter_mem (off := 0) hbj hi (by simp [interOffsets]))
+   986	        have m₁ := inter_not_reg hok (inter_mem (off := 1) hbj hi (by simp [interOffsets]))
+   987	        exact agrees_define hok (agrees_set_other (agrees_set_other hag m₀) m₁) hd
+   988	          (by simp only [size_set!]; omega)
+   989	      · exact inRange_cons hr (fun t' x' h => by cases h; exact wrap_inRange _ _)
+   990	    · cases he
+   991	  · cases he
+   992	
+   993	/-- One instruction, whichever it is: its `width` LCB steps keep agreement, range and size. -/
+   994	theorem inst_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function}
+   995	    {j i : Nat} {b : Block} {ins : Inst}
+   996	    {xs : List Source.Instruction} {s : Source.State} {lb : Source.Block} {benv benv' : Env}
+   997	    (hbj : p.blocks[j]? = some b) (hi : b.insts[i]? = some ins)
+   998	    (hx : inst p (blockBase p j + instBase b i) ins = .ok xs)
+   999	    (hb : f.blocks[s.block]? = some lb)
+  1000	    (hq : ∀ k, k < (Inst.width ins) → lb.instructions[s.position + k]? = xs[k]?)
+  1001	    (hW : ∀ m, m < s.environment.size → f.valueWidths[m]? = some .word)
+  1002	    (hsz : s.environment.size = valueCount p)
+  1003	    (hag : Agrees p benv s.environment) (hr : InRange benv)
+  1004	    (he : execInst benv ins = some benv') :
+  1005	    ∃ env', Source.Steps f (Inst.width ins) s ⟨s.block, s.position + (Inst.width ins), env'⟩ ∧
+  1006	      env'.size = valueCount p ∧ Agrees p benv' env' ∧ InRange benv' := by
+  1007	  cases ins with
+  1008	  | bin => exact bin_sim hok hbj hi hx hb hq hW hsz hag hr he
+  1009	  | binOvf => exact binOvf_sim hok hbj hi hx hb hq hW hsz hag hr he
+  1010	  | trunc => exact trunc_sim hok hbj hi hx hb hq hW hsz hag hr he
+  1011	
+  1012	/-! ## `adapter_correct`, the shape of the adapted body -/
+  1013	
+  1014	/-- Where instruction `i`'s expansion starts in its LCB block. -/
+  1015	def instPos (b : Block) (i : Nat) : Nat := ((b.insts.take i).map Inst.width).sum
+  1016	
+  1017	theorem getElem?_flatten_at {α : Type} : ∀ (xss : List (List α)) (i k : Nat) (xs : List α),
+  1018	    xss[i]? = some xs → k < xs.length →
+  1019	      xss.flatten[((xss.take i).map List.length).sum + k]? = xs[k]?
+  1020	  | [], _, _, _, h, _ => by simp at h
+  1021	  | ys :: xss, 0, k, xs, h, hk => by
+  1022	    simp only [List.getElem?_cons_zero, Option.some.injEq] at h
+  1023	    subst h
+  1024	    simp [List.getElem?_append_left hk]
+  1025	  | ys :: xss, i + 1, k, xs, h, hk => by
+  1026	    simp only [List.getElem?_cons_succ] at h
+  1027	    rw [List.flatten_cons, List.take_succ_cons, List.map_cons, List.sum_cons,
+  1028	      List.getElem?_append_right (by omega)]
+  1029	    rw [show ys.length + ((xss.take i).map List.length).sum + k - ys.length =
+  1030	      ((xss.take i).map List.length).sum + k by omega]
+  1031	    exact getElem?_flatten_at xss i k xs h hk
+  1032	
+  1033	theorem mapM_ok_ok {α β ε : Type} {g : α → Except ε β} {l : List α} {l' : List β}
+  1034	    (h : l.mapM g = .ok l') {i : Nat} {x : α} (hx : l[i]? = some x) :
+  1035	    ∃ y, g x = .ok y ∧ l'[i]? = some y := (mapM_ok h).2 i x hx
+  1036	
+  1037	theorem length_indexedFrom {α : Type} : ∀ (n : Nat) (l : List α), (Runtime.indexedFrom n l).length = l.length
+  1038	  | _, [] => rfl
+  1039	  | n, _ :: l => by simp [Runtime.indexedFrom, length_indexedFrom (n + 1) l]
+  1040	
+  1041	theorem length_indexed {α : Type} (l : List α) : (indexed l).length = l.length :=
+  1042	  length_indexedFrom 0 l
+  1043	
+  1044	/-- What a successful `adapt` is. -/
+  1045	theorem adapt_ok {p : Program} {f : Source.Function} (h : adapt p = .ok f) :
+  1046	    numberingOk p = true ∧ ∃ bs, (indexed p.blocks).mapM (adaptBlock p) = .ok bs ∧
+  1047	      f = { resultWidth := .word, parameters := #[],
+  1048	            valueWidths := Array.replicate (valueCount p) .word, blocks := bs.toArray } := by
+  1049	  unfold adapt at h
+  1050	  cases hn : numberingOk p <;> cases hb : (indexed p.blocks).mapM (adaptBlock p) <;>
+  1051	    simp_all [bind, Except.bind, pure, Except.pure]
+  1052	
+  1053	/-- What a successful `adaptBlock` is. -/
+  1054	theorem adaptBlock_ok {p : Program} {j : Nat} {b : Block} {lb : Source.Block}
+  1055	    (h : adaptBlock p (j, b) = .ok lb) :
+  1056	    ∃ phis xss tm, (indexed b.params).mapM (fun (k, _) => adaptPhi p j k) = .ok phis ∧
+  1057	      (indexed b.insts).mapM (adaptInst p j b) = .ok xss ∧ term p b.term = .ok tm ∧
+  1058	      lb = { phis := phis.toArray, instructions := xss.flatten.toArray, terminator := tm } := by
+  1059	  unfold adaptBlock at h
+  1060	  cases hp : (indexed b.params).mapM (fun (k, _) => adaptPhi p j k) <;>
+  1061	    cases hi : (indexed b.insts).mapM (adaptInst p j b) <;> cases ht : term p b.term <;>
+  1062	    simp_all [bind, Except.bind, pure, Except.pure]
+  1063	
+  1064	/-- The expansions of a block's instructions have the instructions' widths. -/
+  1065	theorem insts_lengths {p : Program} {j : Nat} {b : Block} {xss : List (List Source.Instruction)}
+  1066	    (hx : (indexed b.insts).mapM (adaptInst p j b) = .ok xss) :
+  1067	    xss.map List.length = b.insts.map Inst.width := by
+  1068	  have hlen := (mapM_ok hx).1
+  1069	  rw [length_indexed] at hlen
+  1070	  apply List.ext_getElem?
+  1071	  intro m
+  1072	  simp only [List.getElem?_map]
+  1073	  cases hm : b.insts[m]? with
+  1074	  | none =>
+  1075	    have : xss.length ≤ m := by
+  1076	      have := List.getElem?_eq_none_iff.mp hm; omega
+  1077	    simp [List.getElem?_eq_none this]
+  1078	  | some ins' =>
+  1079	    obtain ⟨ys, hys, hym⟩ := mapM_ok_ok hx (i := m) (x := (m, ins'))
+  1080	      (by simp [Runtime.getElem?_indexed, hm])
+  1081	    simp [hym, inst_length (show inst p _ ins' = .ok ys from hys)]
+  1082	
+  1083	/-- An adapted block has exactly its instructions' expansions: the terminator follows them. -/
+  1084	theorem block_size {p : Program} {j : Nat} {b : Block} {lb : Source.Block}
+  1085	    (h : adaptBlock p (j, b) = .ok lb) : lb.instructions.size = (b.insts.map Inst.width).sum := by
+  1086	  obtain ⟨phis, xss, tm, -, hx, -, rfl⟩ := adaptBlock_ok h
+  1087	  simp only [List.size_toArray, List.length_flatten, insts_lengths hx]
+  1088	
+  1089	/-- In an adapted body, block `j` is `adaptBlock` of BIR block `j`, and every slot is a word. -/
+  1090	theorem adapt_block {p : Program} {f : Source.Function} (h : adapt p = .ok f) {j : Nat} {b : Block}
+  1091	    (hbj : p.blocks[j]? = some b) :
+  1092	    ∃ lb, f.blocks[j]? = some lb ∧ adaptBlock p (j, b) = .ok lb := by
+  1093	  obtain ⟨-, bs, hbs, rfl⟩ := adapt_ok h
+  1094	  obtain ⟨lb, hlb, hi⟩ := mapM_ok_ok hbs (i := j) (x := (j, b)) (by simp [Runtime.getElem?_indexed, hbj])
+  1095	  exact ⟨lb, by simpa using hi, hlb⟩
+  1096	
+  1097	theorem adapt_widths {p : Program} {f : Source.Function} (h : adapt p = .ok f) :
+  1098	    ∀ m, m < valueCount p → f.valueWidths[m]? = some .word := by
+  1099	  obtain ⟨-, bs, -, rfl⟩ := adapt_ok h
+  1100	  intro m hm
+  1101	  simp [hm]
+  1102	
+  1103	/-- In an adapted block, instruction `i`'s expansion sits at `instPos b i`. -/
+  1104	theorem block_insts {p : Program} {j : Nat} {b : Block} {lb : Source.Block}
+  1105	    (h : adaptBlock p (j, b) = .ok lb) {i : Nat} {ins : Inst} (hi : b.insts[i]? = some ins) :
+  1106	    ∃ xs, inst p (blockBase p j + instBase b i) ins = .ok xs ∧
+  1107	      ∀ k, k < Inst.width ins → lb.instructions[instPos b i + k]? = xs[k]? := by
+  1108	  obtain ⟨phis, xss, tm, -, hx, -, rfl⟩ := adaptBlock_ok h
+  1109	  obtain ⟨xs, hxs, hxi⟩ := mapM_ok_ok hx (i := i) (x := (i, ins)) (by simp [Runtime.getElem?_indexed, hi])
+  1110	  refine ⟨xs, hxs, fun k hk => ?_⟩
+  1111	  have hw := insts_lengths hx
+  1112	  have hpos : instPos b i = ((xss.take i).map List.length).sum := by
+  1113	    simp only [instPos, ← hw, List.map_take]
+  1114	  simp only [List.getElem?_toArray]
+  1115	  rw [hpos, getElem?_flatten_at xss i k xs hxi (by rw [inst_length hxs]; exact hk)]
+  1116	
+  1117	theorem instPos_succ {b : Block} {i : Nat} {ins : Inst} (hi : b.insts[i]? = some ins) :
+  1118	    instPos b (i + 1) = instPos b i + Inst.width ins := by
+  1119	  simp [instPos, List.take_add_one, hi, List.sum_append]
+  1120	
+  1121	/-! ## `adapter_correct`, blocks -/
+  1122	
+  1123	/-- A block's instructions from the `i`-th on: the LCB steps from `instPos b i` keep the
+  1124	invariant through all of them, as BIR's `execInsts` does. -/
+  1125	theorem body_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function}
+  1126	    (hW : ∀ m, m < valueCount p → f.valueWidths[m]? = some .word)
+  1127	    {j : Nat} {b : Block} {lb : Source.Block} (hbj : p.blocks[j]? = some b)
+  1128	    (hlb : adaptBlock p (j, b) = .ok lb) (hfb : f.blocks[j]? = some lb) :
+  1129	    ∀ (l : List Inst) (i : Nat) (benv benv' : Env) (env : Source.Environment),
+  1130	      b.insts.drop i = l → execInsts benv l = some benv' → env.size = valueCount p →
+  1131	      Agrees p benv env → InRange benv →
+  1132	      ∃ env', Source.Steps f (l.map Inst.width).sum ⟨j, instPos b i, env⟩
+  1133	          ⟨j, instPos b i + (l.map Inst.width).sum, env'⟩ ∧
+  1134	        env'.size = valueCount p ∧ Agrees p benv' env' ∧ InRange benv'
+  1135	  | [], _, benv, benv', env, _, he, hsz, hag, hr => by
+  1136	    simp only [execInsts, Option.some.injEq] at he
+  1137	    subst he
+  1138	    exact ⟨env, .zero _, hsz, hag, hr⟩
+  1139	  | ins :: rest, i, benv, benv', env, hd, he, hsz, hag, hr => by
+  1140	    have hi : b.insts[i]? = some ins := by
+  1141	      have := congrArg (·[0]?) hd
+  1142	      simpa [List.getElem?_drop] using this
+  1143	    have hd' : b.insts.drop (i + 1) = rest := by
+  1144	      rw [← List.tail_drop, hd]; rfl
+  1145	    simp only [execInsts] at he
+  1146	    split at he
+  1147	    · rename_i benv₁ he₁
+  1148	      obtain ⟨xs, hxs, hq⟩ := block_insts hlb hi
+  1149	      obtain ⟨env₁, hst, hsz₁, hag₁, hr₁⟩ := inst_sim (s := ⟨j, instPos b i, env⟩) hok hbj hi hxs hfb
+  1150	        hq (fun m hm => hW m (hsz ▸ hm)) hsz hag hr he₁
+  1151	      obtain ⟨env', hst', hsz', hag', hr'⟩ := body_sim hok hW hbj hlb hfb rest (i + 1) benv₁ benv'
+  1152	        env₁ hd' he hsz₁ hag₁ hr₁
+  1153	      rw [instPos_succ hi] at hst'
+  1154	      refine ⟨env', ?_, hsz', hag', hr'⟩
+  1155	      simp only [List.map_cons, List.sum_cons]
+  1156	      have h := steps_append hst hst'
+  1157	      rw [Nat.add_comm (List.map Inst.width rest).sum, Nat.add_assoc] at h
+  1158	      exact h
+  1159	    · cases he
+  1160	
+  1161	/-! ## `adapter_correct`, terminators -/
+  1162	
+  1163	/-- LCB's step at a block's terminator position, one lemma per terminator. -/
+  1164	theorem step_ret {f : Source.Function} {s : Source.State} {lb : Source.Block}
+  1165	    (hb : f.blocks[s.block]? = some lb) (hp : s.position = lb.instructions.size)
+  1166	    {a : Source.Operand} (ht : lb.terminator = .ret a) {v : Source.Value}
+  1167	    (hr : Source.read s.environment f.resultWidth a = .ok v) :
+  1168	    Source.step f s = .ok (.returned v) := by
+  1169	  simp [Source.step, hb, hp, ht, hr, bind, Except.bind, pure, Except.pure]
+  1170	
+  1171	theorem step_jump {f : Source.Function} {s : Source.State} {lb : Source.Block}
+  1172	    (hb : f.blocks[s.block]? = some lb) (hp : s.position = lb.instructions.size)
+  1173	    {t : Nat} (ht : lb.terminator = .jump t) {s' : Source.State}
+  1174	    (htr : Source.transfer f s.block t s.environment = .ok s') :
+  1175	    Source.step f s = .ok (.next s') := by
+  1176	  simp [Source.step, hb, hp, ht, htr, Functor.map, Except.map]
+  1177	
+  1178	theorem step_branch {f : Source.Function} {s : Source.State} {lb : Source.Block}
+  1179	    (hb : f.blocks[s.block]? = some lb) (hp : s.position = lb.instructions.size)
+  1180	    {c : Source.Operand} {y n : Nat} (ht : lb.terminator = .branch c y n) {cv : Source.Value}
+  1181	    (hc : Source.read s.environment .word c = .ok cv) {s' : Source.State}
+  1182	    (htr : Source.transfer f s.block (if cv.toNat != 0 then y else n) s.environment = .ok s') :
+  1183	    Source.step f s = .ok (.next s') := by
+  1184	  simp only [Source.step, hb, hp, Nat.lt_irrefl, ↓reduceIte, beq_self_eq_true, ht, hc, bind,
+  1185	    Except.bind]
+  1186	  rw [htr]; rfl
+  1187	
+  1188	theorem adapt_result {p : Program} {f : Source.Function} (h : adapt p = .ok f) :
+  1189	    f.resultWidth = .word := by
+  1190	  obtain ⟨-, bs, -, rfl⟩ := adapt_ok h
+  1191	  rfl
+  1192	
+  1193	theorem block_term {p : Program} {j : Nat} {b : Block} {lb : Source.Block}
+  1194	    (h : adaptBlock p (j, b) = .ok lb) : term p b.term = .ok lb.terminator := by
+  1195	  obtain ⟨phis, xss, tm, -, -, ht, rfl⟩ := adaptBlock_ok h
+  1196	  exact ht
+  1197	
+  1198	/-- `ret a`: LCB returns the encoded value of `a`. -/
+  1199	theorem ret_sim {p : Program} {f : Source.Function} (hf : adapt p = .ok f) {j : Nat} {b : Block}
+  1200	    {lb : Source.Block} (hfb : f.blocks[j]? = some lb) (hlb : adaptBlock p (j, b) = .ok lb)
+  1201	    {a : Operand} (ht : b.term = .ret a) {benv : Env} {env : Source.Environment} {v : Val}
+  1202	    (hag : Agrees p benv env) (hv : evalOp benv a = some v) :
+  1203	    Source.step f ⟨j, (b.insts.map Inst.width).sum, env⟩ = .ok (.returned (enc v)) := by
+  1204	  have hterm := block_term hlb
+  1205	  rw [ht] at hterm
+  1206	  simp only [term, bind, Except.bind, pure, Except.pure] at hterm
+  1207	  cases ha : operand p a with
+  1208	  | error e => simp [ha] at hterm
+  1209	  | ok a' =>
+  1210	    simp only [ha] at hterm
+  1211	    injection hterm with hterm
+  1212	    exact step_ret hfb (block_size hlb).symm hterm.symm
+  1213	      (by rw [adapt_result hf]; exact read_operand hag ha hv)
+  1214	
+  1215	/-- `trap s`: LCB returns the word `256 + s`. -/
+  1216	theorem trap_sim {p : Program} {f : Source.Function} (hf : adapt p = .ok f) {j : Nat} {b : Block}
+  1217	    {lb : Source.Block} (hfb : f.blocks[j]? = some lb) (hlb : adaptBlock p (j, b) = .ok lb)
+  1218	    {st : Nat} (ht : b.term = .trap st) (env : Source.Environment) :
+  1219	    Source.step f ⟨j, (b.insts.map Inst.width).sum, env⟩ = .ok (.returned (word (256 + st))) := by
+  1220	  have hterm := block_term hlb
+  1221	  rw [ht] at hterm
+  1222	  simp only [term, pure, Except.pure] at hterm
+  1223	  injection hterm with hterm
+  1224	  exact step_ret hfb (block_size hlb).symm hterm.symm
+  1225	    (by rw [adapt_result hf]; exact read_literal _ _)
+  1226	
+  1227	/-! ## `adapter_correct`, edges: LCB's `transfer` -/
+  1228	
+  1229	/-- A `forIn` whose body yields `g a s` at every element, from the state the earlier elements
+  1230	left, folds `g`. -/
+  1231	theorem forIn_yields {ε σ α : Type} (F : α → σ → Except ε (ForInStep σ)) (g : α → σ → σ) :
+  1232	    ∀ (l : List α) (init : σ),
+  1233	      (∀ i (h : i < l.length), F l[i] ((l.take i).foldl (fun s a => g a s) init) =
+  1234	        .ok (.yield (g l[i] ((l.take i).foldl (fun s a => g a s) init)))) →
+  1235	      forIn l init F = .ok (l.foldl (fun s a => g a s) init)
+  1236	  | [], _, _ => rfl
+  1237	  | a :: l, init, h => by
+  1238	    rw [List.forIn_cons]
+  1239	    have h0 := h 0 (by simp)
+  1240	    simp only [List.getElem_cons_zero, List.take_zero, List.foldl_nil] at h0
+  1241	    simp only [h0, bind, Except.bind, List.foldl_cons]
+  1242	    exact forIn_yields F g l (g a init) fun i hi => by
+  1243	      have := h (i + 1) (by simp; omega)
+  1244	      simpa only [List.getElem_cons_succ, List.take_succ_cons, List.foldl_cons] using this
+  1245	
+  1246	theorem size_foldl_set {α : Type} (g : α → Nat) (v : α → Option Source.Value) :
+  1247	    ∀ (l : List α) (e : Source.Environment), (l.foldl (fun u x => u.set! (g x) (v x)) e).size = e.size
+  1248	  | [], _ => rfl
+  1249	  | x :: l, e => by simp only [List.foldl_cons, size_foldl_set g v l, size_set!]
+  1250	
+  1251	theorem foldl_push_toList {α β : Type} (h : α → β) :
+  1252	    ∀ (l : List α) (acc : Array β), (l.foldl (fun pd a => pd.push (h a)) acc).toList =
+  1253	      acc.toList ++ l.map h
+  1254	  | [], acc => by simp
+  1255	  | a :: l, acc => by simp
+  1256	
+  1257	theorem not_mem_take_of_nodup {α β : Type} (f : α → β) {l : List α} (hn : (l.map f).Nodup)
+  1258	    {i : Nat} (hi : i < l.length) : f l[i] ∉ (l.take i).map f := by
+  1259	  intro hm
+  1260	  have hl : l = l.take i ++ l[i] :: l.drop (i + 1) := by simp
+  1261	  rw [hl, List.map_append, List.map_cons] at hn
+  1262	  exact (List.nodup_append.mp hn).2.2 _ hm _ (by simp) rfl
+  1263	
+  1264	/-- LCB's `transfer` along an edge whose every phi has exactly one arm from the predecessor,
+  1265	reading `w phi`: all phis are read from the old environment, then written. -/
+  1266	theorem transfer_ok {f : Source.Function} {pred target : Nat} {env : Source.Environment}
+  1267	    {tb : Source.Block} (htb : f.blocks[target]? = some tb) (w : Source.Phi → Source.Value)
+  1268	    (hphi : ∀ i (h : i < tb.phis.toList.length), ∃ x op,
+  1269	      tb.phis.toList[i].incoming.filter (·.1 == pred) = #[(x, op)] ∧
+  1270	      Source.read env tb.phis.toList[i].width op = .ok (w tb.phis.toList[i]))
+  1271	    (hdist : (tb.phis.toList.map (·.destination)).Nodup)
+  1272	    (hW : ∀ phi ∈ tb.phis.toList, f.valueWidths[phi.destination]? = some .word ∧
+  1273	      phi.destination < env.size ∧ (w phi).width = .word) :
+  1274	    Source.transfer f pred target env = .ok ⟨target, 0,
+  1275	      tb.phis.toList.foldl (fun u phi => u.set! phi.destination (some (w phi))) env⟩ := by
+  1276	  unfold Source.transfer
+  1277	  simp only [htb]
+  1278	  rw [← Array.forIn_toList, forIn_yields _
+  1279	    (fun phi (pd : Array (Source.ValueId × Source.Value)) => pd.push (phi.destination, w phi)) _ _
+  1280	    ?loop]
+  1281	  · simp only [bind, Except.bind]
+  1282	    rw [← Array.forIn_toList, foldl_push_toList (fun phi => (phi.destination, w phi))]
+  1283	    simp only [List.nil_append]
+  1284	    rw [forIn_yields _ (fun (x : Source.ValueId × Source.Value) (u : Source.Environment) =>
+  1285	      u.set! x.1 (some x.2)) _ _ ?writes]
+  1286	    · simp [List.foldl_map, pure, Except.pure]
+  1287	    case writes =>
+  1288	      intro i hi
+  1289	      have hm : (tb.phis.toList.map fun phi => (phi.destination, w phi))[i] ∈
+  1290	          tb.phis.toList.map fun phi => (phi.destination, w phi) := List.getElem_mem hi
+  1291	      obtain ⟨phi, hphm, he⟩ := List.mem_map.mp hm
+  1292	      obtain ⟨hw, hs, hv⟩ := hW phi hphm
+  1293	      rw [← he]
+  1294	      have hsz := size_foldl_set (fun (x : Source.ValueId × Source.Value) => x.1)
+  1295	        (fun x => some x.2) ((tb.phis.toList.map fun phi => (phi.destination, w phi)).take i) env
+  1296	      simp only [write_ok hw (by rw [hsz]; exact hs) hv, pure, Except.pure]
+  1297	  case loop =>
+  1298	    intro i hi
+  1299	    obtain ⟨x, op, hf, hr⟩ := hphi i hi
+  1300	    have hany : ((tb.phis.toList.take i).foldl
+  1301	        (fun (pd : Array (Source.ValueId × Source.Value)) phi => pd.push (phi.destination, w phi))
+  1302	          #[]).any
+  1303	        (fun y => y.fst == tb.phis.toList[i].destination) = false := by
+  1304	      rw [Array.any_eq_false]
+  1305	      intro k hk
+  1306	      have hl := foldl_push_toList (fun phi => (phi.destination, w phi)) (tb.phis.toList.take i) #[]
+  1307	      simp only [List.nil_append] at hl
+  1308	      have hmem : (((tb.phis.toList.take i).foldl
+  1309	          (fun (pd : Array (Source.ValueId × Source.Value)) phi => pd.push (phi.destination, w phi))
+  1310	            #[])[k]).1 ∈
+  1311	          (tb.phis.toList.take i).map (·.destination) := by
+  1312	        have := Array.getElem_mem_toList hk
+  1313	        rw [hl] at this
+  1314	        obtain ⟨phi, hm, he⟩ := List.mem_map.mp this
+  1315	        exact List.mem_map.mpr ⟨phi, hm, by rw [← he]⟩
+  1316	      intro he
+  1317	      exact not_mem_take_of_nodup (·.destination) hdist hi (by
+  1318	        rw [beq_iff_eq] at he; rw [← he]; exact hmem)
+  1319	    have h1 : (#[(x, op)].size != 1 || false) = false := rfl
+  1320	    have h0 : (#[(x, op)] : Array (Source.BlockId × Source.Operand))[0]? = some (x, op) := rfl
+  1321	    simp only [hf, hany, h1, h0, Bool.false_eq_true, ↓reduceIte, hr, bind, Except.bind, pure,
+  1322	      Except.pure]
+  1323	
+  1324	/-! ## `adapter_correct`, edges: the adapter's phis -/
+  1325	
+  1326	theorem edgesTo_fst {j k : Nat} {term : Term} : ∀ x ∈ edgesTo j k term, x.1 = k := by
+  1327	  intro x hx
+  1328	  cases term <;> simp only [edgesTo] at hx <;> (try split at hx) <;> (try split at hx) <;>
+  1329	    simp at hx <;> (try rcases hx with rfl | rfl) <;> (try subst hx) <;> rfl
+  1330	
+  1331	/-- Picking one index out of an indexed flatMap. -/
+  1332	theorem flatMap_indexedFrom_pick {α β : Type} (F : Nat → α → List β) (j : Nat) :
+  1333	    ∀ (n : Nat) (l : List α), (Runtime.indexedFrom n l).flatMap
+  1334	      (fun (kx : Nat × α) => if kx.1 = j then F kx.1 kx.2 else []) =
+  1335	      if n ≤ j then (match l[j - n]? with | some x => F j x | none => []) else []
+  1336	  | n, [] => by simp [Runtime.indexedFrom]
+  1337	  | n, x :: l => by
+  1338	    simp only [Runtime.indexedFrom, List.flatMap_cons]
+  1339	    rw [flatMap_indexedFrom_pick F j (n + 1) l]
+  1340	    rcases Nat.lt_trichotomy n j with h | h | h
+  1341	    · have h1 : j - n = (j - (n + 1)) + 1 := by omega
+  1342	      have h2 : n ≠ j := by omega
+  1343	      simp only [h2, ↓reduceIte, List.nil_append, h1, List.getElem?_cons_succ,
+  1344	        show n + 1 ≤ j by omega, show n ≤ j by omega]
+  1345	    · subst h
+  1346	      simp only [↓reduceIte, Nat.sub_self, List.getElem?_cons_zero, Nat.le_refl,
+  1347	        show ¬ n + 1 ≤ n by omega, List.append_nil]
+  1348	    · have h2 : n ≠ j := by omega
+  1349	      simp only [h2, ↓reduceIte, List.nil_append, show ¬ n + 1 ≤ j by omega,
+  1350	        show ¬ n ≤ j by omega]
+  1351	
+  1352	/-- The edges into `t` from block `j` are exactly `j`'s own. -/
+  1353	theorem incoming_filter {p : Program} {j t : Nat} {bj : Block} (hbj : p.blocks[j]? = some bj) :
+  1354	    (incoming p t).filter (·.1 == j) = edgesTo t j bj.term := by
+  1355	  unfold incoming
+  1356	  rw [List.filter_flatMap]
+  1357	  have hc : (fun (kx : Nat × Block) => (match kx with | (k, b) => edgesTo t k b.term).filter
+  1358	      (·.1 == j)) = (fun (kx : Nat × Block) => if kx.1 = j then edgesTo t kx.1 kx.2.term else []) := by
+  1359	    funext kx
+  1360	    obtain ⟨k, b⟩ := kx
+  1361	    simp only
+  1362	    by_cases h : k = j
+  1363	    · simp only [h, ↓reduceIte]
+  1364	      apply List.filter_eq_self.mpr
+  1365	      intro x hx
+  1366	      simp [edgesTo_fst x hx]
+  1367	    · simp only [h, ↓reduceIte]
+  1368	      apply List.filter_eq_nil_iff.mpr
+  1369	      intro x hx
+  1370	      simp [edgesTo_fst x hx, h]
+  1371	  rw [hc]
+  1372	  have := flatMap_indexedFrom_pick (fun k (b : Block) => edgesTo t k b.term) j 0 p.blocks
+  1373	  simp only [Nat.sub_zero, hbj, Nat.zero_le, ↓reduceIte] at this
+  1374	  exact this
+  1375	
+  1376	/-- A first-component-preserving `mapM` commutes with filtering on the first component. -/
+  1377	theorem mapM_filter_fst {α β γ ε : Type} [BEq α] {G : α × β → Except ε (α × γ)}
+  1378	    (hG : ∀ x y, G x = .ok y → y.1 = x.1) (j : α) :
+  1379	    ∀ {l : List (α × β)} {l' : List (α × γ)}, l.mapM G = .ok l' →
+  1380	      (l.filter (·.1 == j)).mapM G = .ok (l'.filter (·.1 == j))
+  1381	  | [], l', h => by simp only [List.mapM_nil, pure, Except.pure, Except.ok.injEq] at h; subst h; rfl
+  1382	  | x :: l, l', h => by
+  1383	    simp only [List.mapM_cons, bind, Except.bind] at h
+  1384	    cases hx : G x with
+  1385	    | error e => simp [hx] at h
+  1386	    | ok y =>
+  1387	      cases hl : l.mapM G with
+  1388	      | error e => simp [hx, hl] at h
+  1389	      | ok ys =>
+  1390	        simp only [hx, hl, pure, Except.pure, Except.ok.injEq] at h
+  1391	        subst h
+  1392	        have ih := mapM_filter_fst hG j hl
+  1393	        have hy := hG x y hx
+  1394	        simp only [List.filter_cons, hy]
+  1395	        split
+  1396	        · simp [List.mapM_cons, hx, ih, bind, Except.bind, pure, Except.pure]
+  1397	        · exact ih
+  1398	
+  1399	/-- What a successful `adaptPhi` is. -/
+  1400	theorem adaptPhi_ok {p : Program} {t k : Nat} {phi : Source.Phi} (h : adaptPhi p t k = .ok phi) :
+  1401	    ∃ arms, (incoming p t).mapM (fun (pa : Nat × List Operand) => (do
+  1402	        let a ← match pa.2[k]? with
+  1403	          | some a => operand p a
+  1404	          | none => throw s!"block {pa.1} passes too few arguments to block {t}"
+  1405	        pure (pa.1, a) : Except String (Nat × Source.Operand))) = .ok arms ∧
+  1406	      phi = { destination := blockBase p t + k, width := .word, incoming := arms.toArray } := by
+  1407	  unfold adaptPhi at h
+  1408	  cases ha : (incoming p t).mapM (fun (pa : Nat × List Operand) => (do
+  1409	        let a ← match pa.2[k]? with
+  1410	          | some a => operand p a
+  1411	          | none => throw s!"block {pa.1} passes too few arguments to block {t}"
+  1412	        pure (pa.1, a) : Except String (Nat × Source.Operand))) <;>
+  1413	    simp_all [bind, Except.bind, pure, Except.pure]
+  1414	
+  1415	/-- An adapted phi has exactly one arm from a predecessor with exactly one edge into its block:
+  1416	the translated `k`-th argument of that edge. -/
+  1417	theorem phi_arm {p : Program} {t k j : Nat} {phi : Source.Phi} (h : adaptPhi p t k = .ok phi)
+  1418	    {bj : Block} (hbj : p.blocks[j]? = some bj) {args : List Operand}
+  1419	    (hedge : edgesTo t j bj.term = [(j, args)]) {a : Operand} (ha : args[k]? = some a) :
+  1420	    ∃ a', operand p a = .ok a' ∧ phi.incoming.filter (·.1 == j) = #[(j, a')] := by
+  1421	  obtain ⟨arms, harms, rfl⟩ := adaptPhi_ok h
+  1422	  have hG : ∀ (x : Nat × List Operand) (y : Nat × Source.Operand), (do
+  1423	        let a ← match x.2[k]? with
+  1424	          | some a => operand p a
+  1425	          | none => throw s!"block {x.1} passes too few arguments to block {t}"
+  1426	        pure (x.1, a) : Except String (Nat × Source.Operand)) = .ok y → y.1 = x.1 := by
+  1427	    intro x y hy
+  1428	    cases hx : x.2[k]? with
+  1429	    | none => simp [hx, bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at hy
+  1430	    | some a =>
+  1431	      cases hop : operand p a with
+  1432	      | error e => simp [hx, hop, bind, Except.bind] at hy
+  1433	      | ok a'' =>
+  1434	        simp only [hx, hop, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at hy
+  1435	        rw [← hy]
+  1436	  have hf := mapM_filter_fst hG j harms
+  1437	  rw [incoming_filter hbj, hedge] at hf
+  1438	  cases ha' : operand p a with
+  1439	  | error e => simp [List.mapM_cons, ha, ha', bind, Except.bind] at hf
+  1440	  | ok a' =>
+  1441	    refine ⟨a', rfl, ?_⟩
+  1442	    simp only [List.mapM_cons, List.mapM_nil, ha, ha', bind, Except.bind, pure, Except.pure,
+  1443	      Except.ok.injEq] at hf
+  1444	    simp only [List.filter_toArray, ← hf]
+  1445	
+  1446	theorem getElem?_foldl_set_other {α : Type} (g : α → Nat) (v : α → Option Source.Value) {m : Nat} :
+  1447	    ∀ (l : List α) (e : Source.Environment), (∀ x ∈ l, g x ≠ m) →
+  1448	      (l.foldl (fun u x => u.set! (g x) (v x)) e)[m]? = e[m]?
+  1449	  | [], _, _ => rfl
+  1450	  | x :: l, e, h => by
+  1451	    simp only [List.foldl_cons]
+  1452	    rw [getElem?_foldl_set_other g v l _ (fun y hy => h y (by simp [hy])),
+  1453	      Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_ne (h x (by simp))]
+  1454	
+  1455	theorem getElem?_foldl_set_mem {α : Type} (g : α → Nat) (v : α → Option Source.Value) :
+  1456	    ∀ (l : List α) (e : Source.Environment), (l.map g).Nodup → ∀ x ∈ l, g x < e.size →
+  1457	      (l.foldl (fun u x => u.set! (g x) (v x)) e)[g x]? = some (v x)
+  1458	  | [], _, _, _, hx, _ => by simp at hx
+  1459	  | y :: l, e, hn, x, hx, hs => by
+  1460	    simp only [List.map_cons, List.nodup_cons, List.mem_map] at hn
+  1461	    simp only [List.foldl_cons]
+  1462	    rcases List.mem_cons.mp hx with rfl | hx
+  1463	    · rw [getElem?_foldl_set_other g v l _ (fun z hz he => hn.1 ⟨z, hz, he⟩)]
+  1464	      simp [Array.set!_eq_setIfInBounds, hs]
+  1465	    · exact getElem?_foldl_set_mem g v l _ hn.2 x hx (by rw [size_set!]; exact hs)
+  1466	
+  1467	theorem lookup_append {l₁ l₂ : Env} {r : Reg} :
+  1468	    lookup (l₁ ++ l₂) r = match lookup l₁ r with | some v => some v | none => lookup l₂ r := by
+  1469	  induction l₁ with
+  1470	  | nil => rfl
+  1471	  | cons x l ih =>
+  1472	    obtain ⟨r', v'⟩ := x
+  1473	    simp only [List.cons_append, lookup]
+  1474	    split <;> simp_all
+  1475	
+  1476	theorem lookup_zip {r : Reg} : ∀ {ps : List Reg} {vs : List Val}, ps.length = vs.length →
+  1477	    (∀ v, lookup (ps.zip vs) r = some v → ∃ i : Nat, ps[i]? = some r ∧ vs[i]? = some v) ∧
+  1478	    (lookup (ps.zip vs) r = none → r ∉ ps)
+  1479	  | [], [], _ => by simp [lookup]
+  1480	  | [], _ :: _, h => by simp at h
+  1481	  | _ :: _, [], h => by simp at h
+  1482	  | q :: ps, w :: vs, h => by
+  1483	    simp only [List.length_cons, Nat.add_right_cancel_iff] at h
+  1484	    obtain ⟨ih₁, ih₂⟩ := lookup_zip (r := r) h
+  1485	    simp only [List.zip_cons_cons, lookup]
+  1486	    by_cases hq : q = r
+  1487	    · subst hq
+  1488	      simp only [↓reduceIte, Option.some.injEq, reduceCtorEq, false_implies, and_true]
+  1489	      intro v hv
+  1490	      exact ⟨0, rfl, by simp [hv]⟩
+  1491	    · simp only [hq, ↓reduceIte]
+  1492	      refine ⟨fun v hv => ?_, fun hn => ?_⟩
+  1493	      · obtain ⟨i, h1, h2⟩ := ih₁ v hv
+  1494	        exact ⟨i + 1, by simpa using h1, by simpa using h2⟩
+  1495	      · simp only [List.mem_cons, not_or]
+  1496	        exact ⟨fun e => hq e.symm, ih₂ hn⟩
+  1497	
+  1498	theorem optionMapM_ok {α β : Type} {g : α → Option β} :
+  1499	    ∀ {l : List α} {l' : List β}, l.mapM g = some l' →
+  1500	      l'.length = l.length ∧ ∀ (i : Nat) (x : α), l[i]? = some x → ∃ y, g x = some y ∧ l'[i]? = some y
+  1501	  | [], l', h => by
+  1502	    simp only [List.mapM_nil, pure, Option.some.injEq] at h
+  1503	    subst h; exact ⟨rfl, fun i x hx => by simp at hx⟩
+  1504	  | a :: l, l', h => by
+  1505	    simp only [List.mapM_cons, bind, Option.bind] at h
+  1506	    cases ha : g a with
+  1507	    | none => simp [ha] at h
+  1508	    | some b =>
+  1509	      cases hl : l.mapM g with
+  1510	      | none => simp [ha, hl] at h
+  1511	      | some bs =>
+  1512	        simp only [ha, hl, pure, Option.some.injEq] at h
+  1513	        subst h
+  1514	        obtain ⟨hlen, hel⟩ := optionMapM_ok hl
+  1515	        refine ⟨by simp [hlen], fun i x hx => ?_⟩
+  1516	        cases i with
+  1517	        | zero => simp at hx; subst hx; exact ⟨b, ha, rfl⟩
+  1518	        | succ i => simpa using hel i x (by simpa using hx)
+  1519	
+  1520	/-- One BIR edge `j → t` with arguments `args`, the only edge from `j` into `t`: LCB's `transfer`
+  1521	lands at `t`'s first position with the invariant for BIR's `enter`. -/
+  1522	theorem edge_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function}
+  1523	    (hf : adapt p = .ok f) {j t : Nat} {bj : Block} (hbj : p.blocks[j]? = some bj)
+  1524	    {args : List Operand} (hedge : edgesTo t j bj.term = [(j, args)])
+  1525	    {benv benv' : Env} {env : Source.Environment} (hen : enter p t args benv = some benv')
+  1526	    (hsz : env.size = valueCount p) (hag : Agrees p benv env) (hr : InRange benv) :
+  1527	    ∃ env', Source.transfer f j t env = .ok ⟨t, 0, env'⟩ ∧ env'.size = valueCount p ∧
+  1528	      Agrees p benv' env' ∧ InRange benv' := by
+  1529	  simp only [enter] at hen
+  1530	  cases hbt : p.blocks[t]? with
+  1531	  | none => simp [hbt] at hen
+  1532	  | some bt =>
+  1533	  by_cases hl : bt.params.length ≠ args.length
+  1534	  · simp [hbt, hl] at hen
+  1535	  cases hvals : args.mapM (evalOp benv) with
+  1536	  | none => simp [hbt, hvals] at hen
+  1537	  | some vals =>
+  1538	  simp only [hbt, hl, hvals, Option.bind_some, ↓reduceIte, Option.pure_def, Option.bind_eq_bind,
+  1539	    Option.some.injEq] at hen
+  1540	  subst hen
+  1541	  simp only [ne_eq, Decidable.not_not] at hl
+  1542	  obtain ⟨hvlen, hvel⟩ := optionMapM_ok hvals
+  1543	  obtain ⟨tb, hfb, htb⟩ := adapt_block hf hbt
+  1544	  obtain ⟨phis, xss, tm, hphis, -, -, rfl⟩ := adaptBlock_ok htb
+  1545	  obtain ⟨hplen, hpel⟩ := mapM_ok hphis
+  1546	  rw [length_indexed] at hplen
+  1547	  -- phi `i` is `adaptPhi p t i`, for parameter `i`
+  1548	  have hphi_i : ∀ i (hi : i < phis.length), adaptPhi p t i = .ok phis[i] := by
+  1549	    intro i hi
+  1550	    have hpi : bt.params[i]? = some bt.params[i] := List.getElem?_eq_getElem (by omega)
+  1551	    obtain ⟨y, hy, hyi⟩ := hpel i (i, bt.params[i]) (by simp [Runtime.getElem?_indexed, hpi])
+  1552	    rw [List.getElem?_eq_getElem hi, Option.some.injEq] at hyi
+  1553	    rw [hyi]; exact hy
+  1554	  have hdest : ∀ i (hi : i < phis.length), phis[i].destination = blockBase p t + i := by
+  1555	    intro i hi
+  1556	    obtain ⟨arms, -, he⟩ := adaptPhi_ok (hphi_i i hi)
+  1557	    rw [he]
+  1558	  have hreg : ∀ i (hi : i < phis.length), regId p (bt.params[i]'(by omega)).1 = some (blockBase p t + i) :=
+  1559	    fun i hi => regId_param (ids_nodup hok) hbt (List.getElem?_eq_getElem (by omega))
+  1560	  let w : Source.Phi → Source.Value := fun phi =>
+  1561	    match vals[phi.destination - blockBase p t]? with
+  1562	    | some v => enc v
+  1563	    | none => word 0
+  1564	  have hw : ∀ i (hi : i < phis.length), w phis[i] = enc (vals[i]'(by omega)) := by
+  1565	    intro i hi
+  1566	    simp only [w, hdest i hi, Nat.add_sub_cancel_left, List.getElem?_eq_getElem (show i < vals.length by omega)]
+  1567	  have hev : ∀ i (hi : i < phis.length), evalOp benv (args[i]'(by omega)) = some (vals[i]'(by omega)) := by
+  1568	    intro i hi
+  1569	    obtain ⟨y, hy, hyi⟩ := hvel i (args[i]'(by omega)) (List.getElem?_eq_getElem (by omega))
+  1570	    rw [List.getElem?_eq_getElem (show i < vals.length by omega), Option.some.injEq] at hyi
+  1571	    rw [hyi]; exact hy
+  1572	  have hnodup : (phis.map (·.destination)).Nodup := by
+  1573	    have : phis.map (·.destination) = (List.range phis.length).map (blockBase p t + ·) := by
+  1574	      apply List.ext_getElem (by simp)
+  1575	      intro i h1 h2
+  1576	      simp [hdest i (by simpa using h1)]
+  1577	    rw [this]
+  1578	    exact List.pairwise_map.mpr (List.nodup_range.imp fun h e => h (Nat.add_left_cancel e))
+  1579	  have htr := transfer_ok (pred := j) (env := env) hfb w
+  1580	    (fun i hi => by
+  1581	      simp only [List.toList_toArray] at hi ⊢
+  1582	      obtain ⟨a', hop, hfil⟩ := phi_arm (hphi_i i hi) hbj hedge
+  1583	        (List.getElem?_eq_getElem (show i < args.length by omega))
+  1584	      refine ⟨j, a', hfil, ?_⟩
+  1585	      obtain ⟨arms, -, he⟩ := adaptPhi_ok (hphi_i i hi)
+  1586	      rw [hw i hi, show phis[i].width = .word by rw [he]]
+  1587	      exact read_operand hag hop (hev i hi))
+  1588	    (by simpa using hnodup)
+  1589	    (fun phi hm => by
+  1590	      obtain ⟨i, hi, rfl⟩ := List.mem_iff_getElem.mp hm
+  1591	      have hlt := regId_lt hok (hreg i hi)
+  1592	      rw [hdest i hi]
+  1593	      exact ⟨adapt_widths hf _ hlt, by rw [hsz]; exact hlt, by rw [hw i hi]; exact enc_width _⟩)
+  1594	  refine ⟨_, htr, by rw [size_foldl_set]; exact hsz, ?_, ?_⟩
+  1595	  · intro r v hv
+  1596	    rw [lookup_append] at hv
+  1597	    have hz := lookup_zip (r := r) (show (bt.params.map Prod.fst).length = vals.length by simp; omega)
+  1598	    cases hlz : lookup ((bt.params.map Prod.fst).zip vals) r with
+  1599	    | none =>
+  1600	      simp only [hlz] at hv
+  1601	      have hnot := hz.2 hlz
+  1602	      obtain ⟨n, hn, hl⟩ := hag r v hv
+  1603	      refine ⟨n, hn, ?_⟩
+  1604	      rw [getElem?_foldl_set_other (·.destination) (fun phi => some (w phi)) phis env ?_]
+  1605	      · exact hl
+  1606	      · intro phi hm hdn
+  1607	        obtain ⟨i, hi, rfl⟩ := List.mem_iff_getElem.mp hm
+  1608	        rw [hdest i hi] at hdn
+  1609	        subst hdn
+  1610	        have := regId_injective hok hn (hreg i hi)
+  1611	        exact hnot (this ▸ List.mem_map.mpr ⟨_, List.getElem_mem _, rfl⟩)
+  1612	    | some v' =>
+  1613	      simp only [hlz, Option.some.injEq] at hv
+  1614	      subst hv
+  1615	      obtain ⟨i, hpi, hvi⟩ := hz.1 v' hlz
+  1616	      have hi : i < phis.length := by
+  1617	        have := (List.getElem?_eq_some_iff.mp hpi).1; simp at this; omega
+  1618	      have hr' : r = (bt.params[i]'(by omega)).1 := by
+  1619	        simp [List.getElem?_map, List.getElem?_eq_getElem (show i < bt.params.length by omega)] at hpi
+  1620	        exact hpi.symm
+  1621	      refine ⟨blockBase p t + i, hr' ▸ hreg i hi, ?_⟩
+  1622	      have hmem := getElem?_foldl_set_mem (·.destination) (fun phi => some (w phi)) phis env hnodup
+  1623	        phis[i] (List.getElem_mem hi) (by rw [hdest i hi, hsz]; exact regId_lt hok (hreg i hi))
+  1624	      simp only [hdest i hi] at hmem
+  1625	      rw [hmem, hw i hi]
+  1626	      rw [List.getElem?_eq_getElem (show i < vals.length by omega), Option.some.injEq] at hvi
+  1627	      rw [hvi]
+  1628	  · intro r t' x hv
+  1629	    rw [lookup_append] at hv
+  1630	    have hz := lookup_zip (r := r) (show (bt.params.map Prod.fst).length = vals.length by simp; omega)
+  1631	    cases hlz : lookup ((bt.params.map Prod.fst).zip vals) r with
+  1632	    | none => simp only [hlz] at hv; exact hr r t' x hv
+  1633	    | some v' =>
+  1634	      simp only [hlz, Option.some.injEq] at hv
+  1635	      subst hv
+  1636	      obtain ⟨i, hpi, hvi⟩ := hz.1 _ hlz
+  1637	      have hi : i < phis.length := by
+  1638	        have := (List.getElem?_eq_some_iff.mp hpi).1; simp at this; omega
+  1639	      rw [List.getElem?_eq_getElem (show i < vals.length by omega), Option.some.injEq] at hvi
+  1640	      exact evalOp_inRange hr (hvi ▸ hev i hi)
+  1641	
+  1642	/-! ## `adapter_correct`, runs -/
+  1643	
+  1644	theorem block_wf {p : Program} (hwf : WF p) {j : Nat} {b : Block} (hb : p.blocks[j]? = some b) :
+  1645	    Block.wf p b = true := by
+  1646	  unfold WF wf at hwf
+  1647	  simp only [Bool.and_eq_true, List.all_eq_true] at hwf
+  1648	  exact hwf.2 b (List.mem_of_getElem? hb)
+  1649	
+  1650	theorem term_wf {p : Program} (hwf : WF p) {j : Nat} {b : Block} (hb : p.blocks[j]? = some b) :
+  1651	    ∃ scope, b.term.wf p scope = true := by
+  1652	  have h := block_wf hwf hb
+  1653	  unfold Block.wf at h
+  1654	  split at h
+  1655	  rename_i ok scope _
+  1656	  simp only [Bool.and_eq_true] at h
+  1657	  exact ⟨scope, h.2⟩
+  1658	
+  1659	theorem condbr_ne {p : Program} (hwf : WF p) {j : Nat} {b : Block} (hb : p.blocks[j]? = some b)
+  1660	    {c : Reg} {t e : Nat} {ta ea : List Operand} (ht : b.term = .condbr c t ta e ea) : t ≠ e := by
+  1661	  obtain ⟨scope, h⟩ := term_wf hwf hb
+  1662	  rw [ht] at h
+  1663	  simp only [Term.wf, Bool.and_eq_true, bne_iff_ne] at h
+  1664	  exact h.1.1.2
+  1665	
+  1666	/-- Each BIR run from block `j` is matched by LCB from `⟨j, 0, env⟩`: an exit or a trap by a
+  1667	return of its encoding, running out of fuel by at least `fuel` LCB steps. -/
+  1668	theorem runBlock_sim {p : Program} (hwf : WF p) (hok : numberingOk p = true) {f : Source.Function}
+  1669	    (hf : adapt p = .ok f) :
+  1670	    ∀ (fuel j : Nat) (benv : Env) (env : Source.Environment), env.size = valueCount p →
+  1671	      Agrees p benv env → InRange benv →
+  1672	      match runBlock p fuel j benv with
+  1673	      | .exited c => ∃ n s, Source.Steps f n ⟨j, 0, env⟩ s ∧
+  1674	          Source.step f s = .ok (.returned (word c))
+  1675	      | .trapped st => ∃ n s, Source.Steps f n ⟨j, 0, env⟩ s ∧
+  1676	          Source.step f s = .ok (.returned (word (256 + st)))
+  1677	      | .outOfFuel => ∃ n s, fuel ≤ n ∧ Source.Steps f n ⟨j, 0, env⟩ s
+  1678	      | .stuck => True
+  1679	  | 0, j, benv, env, _, _, _ => by
+  1680	    simp only [runBlock]
+  1681	    exact ⟨0, _, Nat.le_refl 0, .zero _⟩
+  1682	  | fuel + 1, j, benv, env, hsz, hag, hr => by
+  1683	    simp only [runBlock]
+  1684	    cases hbj : p.blocks[j]? with
+  1685	    | none => trivial
+  1686	    | some bj =>
+  1687	    simp only
+  1688	    cases hex : execInsts benv bj.insts with
+  1689	    | none => trivial
+  1690	    | some benv₁ =>
+  1691	    simp only
+  1692	    obtain ⟨lb, hfb, hlb⟩ := adapt_block hf hbj
+  1693	    obtain ⟨env₁, hst, hsz₁, hag₁, hr₁⟩ := body_sim hok (adapt_widths hf) hbj hlb hfb bj.insts 0
+  1694	      benv benv₁ env (by simp) hex hsz hag hr
+  1695	    simp only [instPos, List.take_zero, List.map_nil, List.sum_nil, Nat.zero_add] at hst
+  1696	    -- after a jump to `tgt`, the rest of the run is the run from `tgt`
+  1697	    have cont : ∀ (tgt : Nat) (benv₂ : Env) (env₂ : Source.Environment),
+  1698	        Source.Steps f ((bj.insts.map Inst.width).sum + 1) ⟨j, 0, env⟩ ⟨tgt, 0, env₂⟩ →
+  1699	        env₂.size = valueCount p → Agrees p benv₂ env₂ → InRange benv₂ →
+  1700	        match runBlock p fuel tgt benv₂ with
+  1701	        | .exited c => ∃ n s, Source.Steps f n ⟨j, 0, env⟩ s ∧
+  1702	            Source.step f s = .ok (.returned (word c))
+  1703	        | .trapped st => ∃ n s, Source.Steps f n ⟨j, 0, env⟩ s ∧
+  1704	            Source.step f s = .ok (.returned (word (256 + st)))
+  1705	        | .outOfFuel => ∃ n s, fuel + 1 ≤ n ∧ Source.Steps f n ⟨j, 0, env⟩ s
+  1706	        | .stuck => True := by
+  1707	      intro tgt benv₂ env₂ hpre hsz₂ hag₂ hr₂
+  1708	      have ih := runBlock_sim hwf hok hf fuel tgt benv₂ env₂ hsz₂ hag₂ hr₂
+  1709	      revert ih
+  1710	      cases runBlock p fuel tgt benv₂ with
+  1711	      | exited c =>
+  1712	        rintro ⟨n, s, hs, hret⟩
+  1713	        exact ⟨_, s, steps_append hpre hs, hret⟩
+  1714	      | trapped st =>
+  1715	        rintro ⟨n, s, hs, hret⟩
+  1716	        exact ⟨_, s, steps_append hpre hs, hret⟩
+  1717	      | outOfFuel =>
+  1718	        rintro ⟨n, s, hn, hs⟩
+  1719	        exact ⟨_, s, by omega, steps_append hpre hs⟩
+  1720	      | stuck => intro; trivial
+  1721	    have pre : ∀ {tgt : Nat} {env₂ : Source.Environment},
+  1722	        Source.step f ⟨j, (bj.insts.map Inst.width).sum, env₁⟩ = .ok (.next ⟨tgt, 0, env₂⟩) →
+  1723	        Source.Steps f ((bj.insts.map Inst.width).sum + 1) ⟨j, 0, env⟩ ⟨tgt, 0, env₂⟩ := by
+  1724	      intro tgt env₂ hstep
+  1725	      have := steps_append hst (.succ hstep (.zero _))
+  1726	      rwa [Nat.add_comm] at this
+  1727	    cases htm : bj.term with
+  1728	    | ret a =>
+  1729	      cases hv : evalOp benv₁ a with
+  1730	      | none => simp only [hv]
+  1731	      | some v =>
+  1732	        rcases v with ⟨ty, c⟩ | bb
+  1733	        · cases ty
+  1734	          case u8 =>
+  1735	            simp only [hv]
+  1736	            have hc0 : 0 ≤ c := by
+  1737	              have := evalOp_inRange hr₁ hv
+  1738	              simp [IntTy.inRange, IntTy.min, IntTy.max, IntTy.signed, IntTy.bits] at this
+  1739	              omega
+  1740	            refine ⟨_, _, hst, ?_⟩
+  1741	            rw [ret_sim hf hfb hlb htm hag₁ hv]
+  1742	            simp [enc, Int.toNat_of_nonneg hc0]
+  1743	          all_goals simp only [hv]
+  1744	        · simp only [hv]
+  1745	    | trap st =>
+  1746	      by_cases hs : st < p.sites.length
+  1747	      · simp only [hs, ↓reduceIte]
+  1748	        exact ⟨_, _, hst, trap_sim hf hfb hlb htm env₁⟩
+  1749	      · simp only [hs, ↓reduceIte]
+  1750	    | br t args =>
+  1751	      simp only
+  1752	      cases hen : enter p t args benv₁ with
+  1753	      | none => trivial
+  1754	      | some benv₂ =>
+  1755	      simp only
+  1756	      have hedge : edgesTo t j bj.term = [(j, args)] := by simp [htm, edgesTo]
+  1757	      obtain ⟨env₂, htr, hsz₂, hag₂, hr₂⟩ := edge_sim hok hf hbj hedge hen hsz₁ hag₁ hr₁
+  1758	      have hterm := block_term hlb
+  1759	      rw [htm] at hterm
+  1760	      simp only [term, pure, Except.pure, Except.ok.injEq] at hterm
+  1761	      exact cont t benv₂ env₂ (pre (step_jump hfb (block_size hlb).symm hterm.symm htr)) hsz₂ hag₂ hr₂
+  1762	    | condbr c t ta e ea =>
+  1763	      have hne := condbr_ne hwf hbj htm
+  1764	      have hterm := block_term hlb
+  1765	      rw [htm] at hterm
+  1766	      simp only [term, bind, Except.bind] at hterm
+  1767	      cases hid : idOf p c with
+  1768	      | error e => simp [hid] at hterm
+  1769	      | ok nc =>
+  1770	      simp only [hid, pure, Except.pure, Except.ok.injEq] at hterm
+  1771	      cases hl : lookup benv₁ c with
+  1772	      | none => simp only [hl]
+  1773	      | some v =>
+  1774	      rcases v with ⟨ty, x⟩ | bb
+  1775	      · simp only [hl]
+  1776	      have hread : Source.read env₁ .word (.local nc) = .ok (enc (.bool bb)) :=
+  1777	        read_operand (a := .reg c) hag₁ (by simp [operand, hid, bind, Except.bind, pure, Except.pure])
+  1778	          (by simpa [evalOp] using hl)
+  1779	      cases bb with
+  1780	      | true =>
+  1781	        simp only [hl]
+  1782	        cases hen : enter p t ta benv₁ with
+  1783	        | none => simp only
+  1784	        | some benv₂ =>
+  1785	        simp only
+  1786	        have hedge : edgesTo t j bj.term = [(j, ta)] := by
+  1787	          simp [htm, edgesTo, Ne.symm hne]
+  1788	        obtain ⟨env₂, htr, hsz₂, hag₂, hr₂⟩ := edge_sim hok hf hbj hedge hen hsz₁ hag₁ hr₁
+  1789	        exact cont t benv₂ env₂ (pre (step_branch hfb (block_size hlb).symm hterm.symm hread
+  1790	          (by simpa [enc, word, Source.Value.toNat] using htr))) hsz₂ hag₂ hr₂
+  1791	      | false =>
+  1792	        simp only [hl]
+  1793	        cases hen : enter p e ea benv₁ with
+  1794	        | none => simp only
+  1795	        | some benv₂ =>
+  1796	        simp only
+  1797	        have hedge : edgesTo e j bj.term = [(j, ea)] := by
+  1798	          simp [htm, edgesTo, hne]
+  1799	        obtain ⟨env₂, htr, hsz₂, hag₂, hr₂⟩ := edge_sim hok hf hbj hedge hen hsz₁ hag₁ hr₁
+  1800	        exact cont e benv₂ env₂ (pre (step_branch hfb (block_size hlb).symm hterm.symm hread
+  1801	          (by simpa [enc, word, Source.Value.toNat] using htr))) hsz₂ hag₂ hr₂
+  1802	
+  1803	theorem steps_prefix {f : Source.Function} :
+  1804	    ∀ {k : Nat} {s u : Source.State}, Source.Steps f k s u → ∀ n, n ≤ k → ∃ t, Source.Steps f n s t
+  1805	  | _, s, _, _, 0, _ => ⟨s, .zero _⟩
+  1806	  | _, _, _, .succ h₁ h₂, n + 1, hn => by
+  1807	    obtain ⟨t, ht⟩ := steps_prefix h₂ n (by omega)
+  1808	    exact ⟨t, .succ h₁ ht⟩
+  1809	  | _, _, _, .zero _, _ + 1, hn => by omega
+  1810	
+  1811	theorem entry_params {p : Program} (hwf : WF p) {b : Block} (hb : p.blocks[0]? = some b) :
+  1812	    b.params = [] := by
+  1813	  unfold WF wf at hwf
+  1814	  simp only [Bool.and_eq_true, hb, List.isEmpty_iff] at hwf
+  1815	  exact hwf.1.1.1.1.1
+  1816	
+  1817	/-- LCB's initial state for the adapted body: the entry block, an empty environment. -/
+  1818	theorem initial_ok {p : Program} (hwf : WF p) {f : Source.Function} (hf : adapt p = .ok f)
+  1819	    {b : Block} (hb : p.blocks[0]? = some b) :
+  1820	    Source.initial f #[] = .ok ⟨0, 0, Array.replicate (valueCount p) none⟩ := by
+  1821	  obtain ⟨lb, hfb, hlb⟩ := adapt_block hf hb
+  1822	  obtain ⟨phis, xss, tm, hphis, -, -, rfl⟩ := adaptBlock_ok hlb
+  1823	  rw [entry_params hwf hb] at hphis
+  1824	  simp only [indexed, Runtime.indexedFrom, List.mapM_nil, pure, Except.pure, Except.ok.injEq] at hphis
+  1825	  subst hphis
+  1826	  have hf' := adapt_ok hf
+  1827	  obtain ⟨-, bs, -, rfl⟩ := hf'
+  1828	  simp [Source.initial, hfb, bind, Except.bind, pure, Except.pure]
+  1829	
+  1830	/-- **`adapter_correct`, over runs.** For a well-formed BIR program that the adapter accepts, under
+  1831	LCB's own semantics (`Source.HasBehavior`, imported and never restated): a BIR run that exits with
+  1832	`c` makes the adapted body return the word `c`; one that traps at site `s` makes it return the
+  1833	word `256 + s`; and a program that runs out of fuel at every fuel makes it diverge. -/
+  1834	theorem adapter_correct_run {p : Program} (hwf : WF p) {f : Source.Function}
+  1835	    (hf : adapt p = .ok f) :
+  1836	    (∀ fuel c, run p fuel = .exited c → Source.HasBehavior f #[] (.returned (word c))) ∧
+  1837	    (∀ fuel st, run p fuel = .trapped st →
+  1838	      Source.HasBehavior f #[] (.returned (word (256 + st)))) ∧
+  1839	    ((∀ fuel, run p fuel = .outOfFuel) → Source.HasBehavior f #[] .diverges) := by
+  1840	  have hok := (adapt_ok hf).1
+  1841	  have sim := fun fuel => runBlock_sim hwf hok hf fuel 0 [] (Array.replicate (valueCount p) none)
+  1842	    (by simp) (fun r v h => by simp [lookup] at h) (fun r t x h => by simp [lookup] at h)
+  1843	  refine ⟨fun fuel c h => ?_, fun fuel st h => ?_, fun h => ?_⟩
+  1844	  · unfold run at h
+  1845	    cases hb : p.blocks[0]? with
+  1846	    | none => simp [hb] at h
+  1847	    | some b =>
+  1848	      simp only [hb] at h
+  1849	      have := sim fuel
+  1850	      rw [h] at this
+  1851	      exact ⟨_, initial_ok hwf hf hb, this⟩
+  1852	  · unfold run at h
+  1853	    cases hb : p.blocks[0]? with
+  1854	    | none => simp [hb] at h
+  1855	    | some b =>
+  1856	      simp only [hb] at h
+  1857	      have := sim fuel
+  1858	      rw [h] at this
+  1859	      exact ⟨_, initial_ok hwf hf hb, this⟩
+  1860	  · have h0 := h 0
+  1861	    unfold run at h0
+  1862	    cases hb : p.blocks[0]? with
+  1863	    | none => simp [hb] at h0
+  1864	    | some b =>
+  1865	      refine ⟨_, initial_ok hwf hf hb, fun n => ?_⟩
+  1866	      have hn := h n
+  1867	      unfold run at hn
+  1868	      simp only [hb] at hn
+  1869	      have := sim n
+  1870	      rw [hn] at this
+  1871	      obtain ⟨k, s, hk, hs⟩ := this
+  1872	      exact steps_prefix hs n hk
+  1873	
+  1874	/-! ### LCB's behaviour is unique -/
+  1875	
+  1876	/-- Determinism: the state `n` steps reach is the prefix of any longer run. -/
+  1877	theorem steps_split {f : Source.Function} :
+  1878	    ∀ {n m : Nat} {s t u : Source.State}, Source.Steps f n s t → Source.Steps f (n + m) s u →
+  1879	      Source.Steps f m t u
+  1880	  | 0, _, _, _, _, .zero _, h => by simpa using h
+  1881	  | n + 1, m, _, _, _, .succ h₁ h₂, h => by
+  1882	    rw [show n + 1 + m = (n + m) + 1 by omega] at h
+  1883	    cases h with
+  1884	    | succ h₁' h₂' =>
+  1885	      cases Source.step_deterministic f _ _ _ h₁ h₁'
+  1886	      exact steps_split h₂ h₂'
+  1887	
+  1888	theorem returned_not_step {f : Source.Function} {t u : Source.State} {v : Source.Value}
+  1889	    (hr : Source.step f t = .ok (.returned v)) (hs : Source.Step f t u) : False := by
+  1890	  unfold Source.Step at hs
+  1891	  rw [hr] at hs
+  1892	  cases hs
+  1893	
+  1894	theorem returns_le {f : Source.Function} {s t₁ t₂ : Source.State} {v₁ v₂ : Source.Value}
+  1895	    {n k : Nat} (h₁ : Source.Steps f n s t₁) (r₁ : Source.step f t₁ = .ok (.returned v₁))
+  1896	    (h₂ : Source.Steps f (n + k) s t₂) (r₂ : Source.step f t₂ = .ok (.returned v₂)) :
+  1897	    v₁ = v₂ := by
+  1898	  have h := steps_split h₁ h₂
+  1899	  cases k with
+  1900	  | zero =>
+  1901	    cases h
+  1902	    rw [r₁] at r₂
+  1903	    cases r₂
+  1904	    rfl
+  1905	  | succ k =>
+  1906	    cases h with
+  1907	    | succ hs _ => exact (returned_not_step r₁ hs).elim
+  1908	
+  1909	theorem returns_unique {f : Source.Function} {s : Source.State} {v₁ v₂ : Source.Value}
+  1910	    (h₁ : Source.Returns f s v₁) (h₂ : Source.Returns f s v₂) : v₁ = v₂ := by
+  1911	  obtain ⟨n₁, t₁, s₁, r₁⟩ := h₁
+  1912	  obtain ⟨n₂, t₂, s₂, r₂⟩ := h₂
+  1913	  rcases Nat.le_total n₁ n₂ with h | h
+  1914	  · obtain ⟨k, rfl⟩ := Nat.exists_eq_add_of_le h
+  1915	    exact returns_le s₁ r₁ s₂ r₂
+  1916	  · obtain ⟨k, rfl⟩ := Nat.exists_eq_add_of_le h
+  1917	    exact (returns_le s₂ r₂ s₁ r₁).symm
+  1918	
+  1919	theorem returns_not_diverges {f : Source.Function} {s : Source.State} {v : Source.Value}
+  1920	    (hr : Source.Returns f s v) (hd : Source.Diverges f s) : False := by
+  1921	  obtain ⟨n, t, hs, ht⟩ := hr
+  1922	  obtain ⟨u, hu⟩ := hd (n + 1)
+  1923	  cases steps_split hs hu with
+  1924	  | succ h _ => exact returned_not_step ht h
+  1925	
+  1926	/-- LCB's behaviour of a function on given arguments is unique. -/
+  1927	theorem hasBehavior_unique {f : Source.Function} {args : Array Source.Value}
+  1928	    {b₁ b₂ : Source.Behavior} (h₁ : Source.HasBehavior f args b₁)
+  1929	    (h₂ : Source.HasBehavior f args b₂) : b₁ = b₂ := by
+  1930	  obtain ⟨s₁, i₁, h₁⟩ := h₁
+  1931	  obtain ⟨s₂, i₂, h₂⟩ := h₂
+  1932	  rw [i₁] at i₂
+  1933	  cases i₂
+  1934	  cases b₁ with
+  1935	  | returned v₁ =>
+  1936	    cases b₂ with
+  1937	    | returned v₂ => rw [returns_unique h₁ h₂]
+  1938	    | diverges => exact (returns_not_diverges h₁ h₂).elim
+  1939	  | diverges =>
+  1940	    cases b₂ with
+  1941	    | returned v₂ => exact (returns_not_diverges h₂ h₁).elim
+  1942	    | diverges => rfl
+  1943	
+  1944	/-! ### `adapter_correct` -/
+  1945	
+  1946	theorem word_nat (n : Nat) : word (n : Int) = .word (BitVec.ofNat 32 n) := by
+  1947	  simp [word]
+  1948	
+  1949	/-- The adapted body has a behaviour, and it decodes to BIR's: a return of the word that BIR's
+  1950	outcome encodes, or divergence exactly when BIR diverges. -/
+  1951	theorem adapter_correct_behaviour {p : Program} (hwf : WF p) {f : Source.Function}
+  1952	    (hf : adapt p = .ok f) :
+  1953	    (∃ w, Source.HasBehavior f #[] (.returned (.word w)) ∧ behaviour p = decode p.sites w) ∨
+  1954	    (Source.HasBehavior f #[] .diverges ∧ behaviour p = .diverges) := by
+  1955	  obtain ⟨hexit, htrap, hdiv⟩ := adapter_correct_run hwf hf
+  1956	  by_cases hex : ∃ n, (run p n).final = true
+  1957	  · obtain ⟨n, hn⟩ := hex
+  1958	    have hb := behaviour_of_run hn
+  1959	    have henc : (run p n).Encodable p.sites := by
+  1960	      rcases run_progress hwf n with h | h
+  1961	      · exact h
+  1962	      · rw [h] at hn
+  1963	        cases hn
+  1964	    cases hr : run p n with
+  1965	    | exited c =>
+  1966	      rw [hr] at hb henc
+  1967	      refine .inl ⟨BitVec.ofNat 32 c, ?_, ?_⟩
+  1968	      · rw [← word_nat]
+  1969	        exact hexit n c hr
+  1970	      · rw [hb, decode_encode p.sites _ c rfl henc]
+  1971	    | trapped st =>
+  1972	      rw [hr] at hb henc
+  1973	      refine .inl ⟨BitVec.ofNat 32 (256 + st), ?_, ?_⟩
+  1974	      · rw [← word_nat, show (((256 + st : Nat)) : Int) = 256 + (st : Int) by omega]
+  1975	        exact htrap n st hr
+  1976	      · rw [hb, decode_encode p.sites _ (256 + st) rfl henc]
+  1977	    | stuck =>
+  1978	      rw [hr] at henc
+  1979	      exact henc.elim
+  1980	    | outOfFuel =>
+  1981	      rw [hr] at hn
+  1982	      cases hn
+  1983	  · have hall : ∀ fuel, run p fuel = .outOfFuel := by
+  1984	      intro fuel
+  1985	      cases hr : run p fuel with
+  1986	      | outOfFuel => rfl
+  1987	      | _ => exact absurd ⟨fuel, by simp [hr, Outcome.final]⟩ hex
+  1988	    exact .inr ⟨hdiv hall, (behaviour_diverges_iff p).mpr hall⟩
+  1989	
+  1990	/-- **`adapter_correct`.** For a well-formed BIR program that the adapter accepts, whatever result
+  1991	the adapted body produces under LCB's own semantics (`bodyResult`, from `Source.HasBehavior`,
+  1992	imported and never restated) decodes, with the program's site table, to the BIR behaviour. -/
+  1993	theorem adapter_correct {p : Program} (hwf : WF p) {f : Source.Function}
+  1994	    (hf : adapt p = .ok f) (r : BodyResult) (hr : bodyResult f r) :
+  1995	    r.behaviour p.sites = behaviour p := by
+  1996	  rcases adapter_correct_behaviour hwf hf with ⟨w, hw, hb⟩ | ⟨hd, hb⟩
+  1997	  · cases r with
+  1998	    | returns w' =>
+  1999	      have := hasBehavior_unique (by unfold bodyResult at hr; exact hr) hw
+  2000	      simp only [Source.Behavior.returned.injEq, Source.Value.word.injEq] at this
+  2001	      subst this
+  2002	      exact hb.symm
+  2003	    | diverges => cases hasBehavior_unique (by unfold bodyResult at hr; exact hr) hw
+  2004	    | stuck => exact (hr.1 w hw).elim
+  2005	  · cases r with
+  2006	    | returns w' => cases hasBehavior_unique (by unfold bodyResult at hr; exact hr) hd
+  2007	    | diverges => exact hb.symm
+  2008	    | stuck => exact (hr.2 hd).elim
+  2009	
+  2010	theorem emit_ok {p : Program} {f : Source.Function} {tbl : SiteTable}
+  2011	    (h : emit p = .ok (f, tbl)) : adapt p = .ok f ∧ tbl = p.sites := by
+  2012	  unfold emit at h
+  2013	  cases ha : adapt p with
+  2014	  | error e => rw [ha] at h; cases h
+  2015	  | ok g =>
+  2016	    rw [ha] at h
+  2017	    cases h
+  2018	    exact ⟨rfl, rfl⟩
+  2019	
+  2020	/-- **The LCB backend contract, complete.** A refused adaptation emits nothing (`emit` is
+  2021	`.error`); a successful one emits a body whose every result, under LCB's own semantics, decodes
+  2022	with the emitted site table to the BIR behaviour. Retires `P_adapter`. -/
+  2023	theorem emit_correct {p : Program} (hwf : WF p) {f : Source.Function} {tbl : SiteTable}
+  2024	    (h : emit p = .ok (f, tbl)) (r : BodyResult) (hr : bodyResult f r) :
+  2025	    r.behaviour tbl = behaviour p := by
+  2026	  obtain ⟨ha, rfl⟩ := emit_ok h
+  2027	  exact adapter_correct hwf ha r hr
+  2028	
+  2029	/-- An adapter refusal produces no artifact, for every target. -/
+  2030	theorem artifact_of_emit_error {p : Program} {e : String} (h : emit p = .error e) (t : Target) :
+  2031	    artifact t p = .error e := by
+  2032	  unfold artifact
+  2033	  rw [h]
+  2034	  rfl
+  2035	
+  2036	/-- Every artifact comes from a successful `emit` whose body is correct. -/
+  2037	theorem artifact_correct {p : Program} (hwf : WF p) {t : Target} {s : String}
+  2038	    (h : artifact t p = .ok s) : ∃ f tbl, emit p = .ok (f, tbl) ∧ assemble t f = .ok s ∧
+  2039	      ∀ r, bodyResult f r → r.behaviour tbl = behaviour p := by
+  2040	  unfold artifact at h
+  2041	  cases he : emit p with
+  2042	  | error e => rw [he] at h; cases h
+  2043	  | ok ft =>
+  2044	    obtain ⟨f, tbl⟩ := ft
+  2045	    rw [he] at h
+  2046	    exact ⟨f, tbl, rfl, h, emit_correct hwf he⟩
+  2047	
+  2048	end Proof
+  2049	
+  2050	/-! ## The QBE debug dump (not on the build path) -/
+  2051	
+  2052	def renderWidth : Width → String
+  2053	  | .word => "w"
+  2054	  | .long => "l"
+  2055	
+  2056	def renderOperand : Source.Operand → String
+  2057	  | .local id => s!"%v{id}"
+  2058	  | .literal (.word b) => toString b.toNat
+  2059	  | .literal (.long b) => toString b.toNat
+  2060	
+  2061	def renderBinary : Source.Binary → String
+  2062	  | .add => "add" | .sub => "sub" | .mul => "mul"
+  2063	  | .andBits => "and" | .orBits => "or" | .xorBits => "xor"
+  2064	  | .shiftLeft => "shl" | .logicalRight => "shr" | .arithmeticRight => "sar"
+  2065	  -- no QBE spelling (LCB admits them only from a job); debug names
+  2066	  | .mulHighUnsigned => "umulh" | .mulHighSigned => "smulh"
+  2067	
+  2068	def renderDivision : Source.Division → String
+  2069	  | .unsignedDiv => "udiv" | .unsignedRem => "urem" | .signedDiv => "div" | .signedRem => "rem"
+  2070	
+  2071	def renderOperation : Source.Operation → String
+  2072	  | .copy a => s!"copy {renderOperand a}"
+  2073	  | .binary op a b => s!"{renderBinary op} {renderOperand a}, {renderOperand b}"
+  2074	  | .compare op w a b =>
+  2075	    let c := match op with
+  2076	      | .eq => "ceq"
+  2077	      | .unsignedLT => "cult"
+  2078	      | .unsignedLE => "cule"
+  2079	      | .signedLT => "cslt"
+  2080	      | .signedLE => "csle"
+  2081	    s!"{c}{renderWidth w} {renderOperand a}, {renderOperand b}"
+  2082	  | .divide op a b => s!"{renderDivision op} {renderOperand a}, {renderOperand b}"
+  2083	
+  2084	def renderTerminator : Source.Terminator → String
+  2085	  | .ret a => s!"    ret {renderOperand a}\n"
+  2086	  | .jump t => s!"    jmp @b{t}\n"
+  2087	  | .branch c y n => s!"    jnz {renderOperand c}, @b{y}, @b{n}\n"
+  2088	
+  2089	/-- The body as QBE text for `lcb`. -/
+  2090	def render (f : Source.Function) : String :=
+  2091	  let blocks := (indexed f.blocks.toList).map fun (j, b) =>
+  2092	    s!"@b{j}\n" ++
+  2093	    String.join (b.phis.toList.map fun ph =>
+  2094	      let arms := ph.incoming.toList.map fun (pred, a) => s!"@b{pred} {renderOperand a}"
+  2095	      s!"    %v{ph.destination} ={renderWidth ph.width} phi {", ".intercalate arms}\n") ++
+  2096	    String.join (b.instructions.toList.map fun i =>
+  2097	      s!"    %v{i.destination} ={renderWidth i.width} {renderOperation i.operation}\n") ++
+  2098	    renderTerminator b.terminator
+  2099	  "export function w $concrete_body() {\n" ++ String.join blocks ++ "}\n"
+  2100	
+  2101	/-! ## The in-process leg: LCB's own evaluator against BIR -/
+  2102	
+  2103	/-- The result word LCB's semantics gives the adapted body, with `fuel` steps. -/
+  2104	def evalBody (f : Source.Function) (fuel : Nat) : Option Nat :=
+  2105	  match Source.evaluateFunction f #[] fuel with
+  2106	  | .returned (.word w) => some w.toNat
+  2107	  | _ => none
+  2108	
+  2109	end Concrete.Backend.LCB
+
+exec
+/bin/bash -lc 'nl -ba Concrete/Backend/LLVM.lean' in /home/unbalancedparen/projects/gates-briefs/cx-perf
+ succeeded in 0ms:
+     1	import Concrete.Backend.Runtime
+     2	
+     3	/-!
+     4	# BIR → LLVM text (UNVERIFIED)
+     5	
+     6	PROVISIONAL (slice 0). The printer is labelled unverified: what its text means is premise
+     7	`P_print` (`Concrete/README.md`), and LLVM itself is inside `P_toolchain[llvm]`. It prints `main`'s
+     8	body as `define i32 @concrete_body()` returning the result word; the runtime entry
+     9	(`Runtime.llvm`) is linked with it.
+    10	
+    11	* an integer of type `t` is an `i{bits}` holding its two's-complement bit pattern; a flag is `i1`;
+    12	* `binOvf` is `@llvm.{s,u}{add,sub,mul}.with.overflow.i{bits}`;
+    13	* `trunc` is `trunc`, `sext`/`zext` by the source's signedness, or a copy at equal width;
+    14	* block parameters become `phi` nodes over the predecessors' arguments;
+    15	* `ret a` returns `zext a`; `trap s` returns `256 + s`.
+    16	-/
+    17	
+    18	namespace Concrete.Backend.LLVM
+    19	open Concrete.BIR
+    20	open ConcreteSpec (IntTy Trap)
+    21	open Concrete.Backend.Runtime (indexed)
+    22	
+    23	def intTy (t : IntTy) : String := s!"i{t.bits}"
+    24	
+    25	def ty : Ty → String
+    26	  | .int t => intTy t
+    27	  | .bool => "i1"
+    28	
+    29	/-- The bit pattern of `v` in `t`, as an unsigned decimal. -/
+    30	def pattern (t : IntTy) (v : Int) : Nat := (v % ((2 : Int) ^ t.bits)).toNat
+    31	
+    32	def operand : Operand → String
+    33	  | .reg r => s!"%r{r}"
+    34	  | .imm t v => toString (pattern t v)
+    35	
+    36	def opName : BinOp → String
+    37	  | .add => "add"
+    38	  | .sub => "sub"
+    39	  | .mul => "mul"
+    40	
+    41	def intrinsic (op : BinOp) (t : IntTy) : String :=
+    42	  s!"llvm.{if t.signed then "s" else "u"}{opName op}.with.overflow.{intTy t}"
+    43	
+    44	def inst : Inst → String
+    45	  | .bin op t d a b => s!"  %r{d} = {opName op} {intTy t} {operand a}, {operand b}\n"
+    46	  | .binOvf op t d f a b =>
+    47	    let pair := s!"\{{intTy t}, i1}"
+    48	    s!"  %o{d} = call {pair} @{intrinsic op t}({intTy t} {operand a}, {intTy t} {operand b})\n" ++
+    49	    s!"  %r{d} = extractvalue {pair} %o{d}, 0\n" ++
+    50	    s!"  %r{f} = extractvalue {pair} %o{d}, 1\n"
+    51	  | .trunc fr to d a =>
+    52	    let conv := if to.bits < fr.bits then "trunc" else if fr.signed then "sext" else "zext"
+    53	    if fr.bits = to.bits then s!"  %r{d} = add {intTy to} {operand a}, 0\n"
+    54	    else s!"  %r{d} = {conv} {intTy fr} {operand a} to {intTy to}\n"
+    55	
+    56	/-- The edges into each block: (target, predecessor, arguments). -/
+    57	def edges (p : Program) : List (Nat × Nat × List Operand) :=
+    58	  (indexed p.blocks).flatMap fun (j, b) =>
+    59	    match b.term with
+    60	    | .br t args => [(t, j, args)]
+    61	    | .condbr _ t ta e ea => [(t, j, ta), (e, j, ea)]
+    62	    | _ => []
+    63	
+    64	def phis (p : Program) (j : Nat) (b : Block) : String :=
+    65	  let incoming := (edges p).filter (·.1 == j)
+    66	  String.join ((indexed b.params).map fun (k, (r, pty)) =>
+    67	    let arms := incoming.map fun (_, pred, args) =>
+    68	      s!"[ {operand (args.getD k (.imm .u8 0))}, %b{pred} ]"
+    69	    s!"  %r{r} = phi {ty pty} {", ".intercalate arms}\n")
+    70	
+    71	def term (j : Nat) : Term → String
+    72	  | .ret a => s!"  %ret{j} = zext i8 {operand a} to i32\n  ret i32 %ret{j}\n"
+    73	  | .trap s => s!"  ret i32 {256 + s}\n"
+    74	  | .br t _ => s!"  br label %b{t}\n"
+    75	  | .condbr c t _ e _ => s!"  br i1 %r{c}, label %b{t}, label %b{e}\n"
+    76	
+    77	/-- The intrinsics the body uses, each declared once. -/
+    78	def declarations (p : Program) : String :=
+    79	  let used := (p.blocks.flatMap (·.insts)).filterMap fun
+    80	    | .binOvf op t _ _ _ _ => some (op, t)
+    81	    | _ => none
+    82	  let distinct := used.eraseDups
+    83	  String.join (distinct.map fun (op, t) =>
+    84	    s!"declare \{{intTy t}, i1} @{intrinsic op t}({intTy t}, {intTy t})\n")
+    85	
+    86	/-- `main`'s body as LLVM text. -/
+    87	def print (p : Program) : String :=
+    88	  declarations p ++ "\ndefine i32 @concrete_body() {\n" ++
+    89	  String.join ((indexed p.blocks).map fun (j, b) =>
+    90	    s!"b{j}:\n" ++ phis p j b ++ String.join (b.insts.map inst) ++ term j b.term) ++
+    91	  "}\n"
+    92	
+    93	/-- The whole LLVM module: the body and the runtime entry. -/
+    94	def module (p : Program) : String := print p ++ "\n" ++ Runtime.llvm p.sites
+    95	
+    96	end Concrete.Backend.LLVM
+
+exec
+/bin/bash -lc "nl -ba PROBE_scaling.lean | head -240; nl -ba Concrete/Backend/Runtime.lean | head -240; rg -n 'blockBase|instBase|regId|numberingOk' Concrete/Backend/LCB.lean" in /home/unbalancedparen/projects/gates-briefs/cx-perf
+ succeeded in 0ms:
+     1	import Concrete
+     2	
+     3	/-!
+     4	Deterministic BIR scaling family and in-process stage timer. This is test machinery, not a
+     5	compiler stage. `scaled k` has one checked operation and trap branch, one wrapping operation and
+     6	one truncation per repetition; block arguments carry every result into the next repetition.
+     7	-/
+     8	
+     9	open Concrete.BIR Concrete.Backend
+    10	
+    11	private def site (i : Nat) : SiteEntry :=
+    12	  ⟨.arithmeticOverflow, ⟨i⟩, ⟨4 * i, 4 * i + 3⟩, ⟨"tests/slice0/scaled.con", i + 1, 1⟩⟩
+    13	
+    14	private def bodyBlock (k i : Nat) : Block :=
+    15	  let base := 6 * i
+    16	  let previous : Operand := if i = 0 then .imm .u8 1 else .reg base
+    17	  let next := if i + 1 = k then 2 * k else 2 * (i + 1)
+    18	  { params := if i = 0 then [] else [(base, .int .u8)]
+    19	    insts := [
+    20	      .trunc .u8 .u16 (base + 1) previous,
+    21	      .binOvf .add .u16 (base + 2) (base + 3) (.reg (base + 1)) (.imm .u16 0),
+    22	      .bin .add .u16 (base + 4) (.reg (base + 2)) (.imm .u16 0),
+    23	      .trunc .u16 .u8 (base + 5) (.reg (base + 4))]
+    24	    term := .condbr (base + 3) (2 * i + 1) [] next [.reg (base + 5)] }
+    25	
+    26	/-- A linear-size, non-dead family whose expected result is always `exited 1`. -/
+    27	def scaled (k : Nat) : Program :=
+    28	  { blocks := (List.range k).flatMap (fun i =>
+    29	        [bodyBlock k i, { params := [], insts := [], term := .trap i }]) ++
+    30	      [{ params := [(6 * k, .int .u8)], insts := [], term := .ret (.reg (6 * k)) }]
+    31	    sites := (List.range k).map site }
+    32	
+    33	private def instructions (p : Program) : List Inst := p.blocks.flatMap (·.insts)
+    34	
+    35	private def scan (is : List Inst) : Nat := is.foldl (fun n i => n + i.defs.length) 0
+    36	
+    37	private def plantLinear (p : Program) : Nat :=
+    38	  let is := instructions p
+    39	  (List.range 16384).foldl (fun n _ => n + scan is) 0
+    40	
+    41	private def plantQuadratic (p : Program) : Nat :=
+    42	  let is := instructions p
+    43	  (List.range (256 * is.length)).foldl (fun n _ => n + scan is) 0
+    44	
+    45	private def forceEmit : Except String (LeanCompilerBackend.Verified.Source.Function × SiteTable) → Nat
+    46	  | .ok (f, sites) => f.blocks.foldl (fun n b => n + b.instructions.size + 1) 0 + sites.length
+    47	  | .error msg => msg.length
+    48	
+    49	/-- Evaluate `force result` in a branch BEFORE reading the second clock, so laziness cannot move the
+    50	stage's work past the measurement. Returning the result lets the next measured stage consume it. -/
+    51	private def timedPure (value : Unit → α) (force : α → Nat) : IO (α × Nat × Nat) := do
+    52	  let start ← IO.monoNanosNow
+    53	  let result := value ()
+    54	  let digest := force result
+    55	  match digest % 2 with
+    56	  | 0 =>
+    57	    let stop ← IO.monoNanosNow
+    58	    return (result, stop - start, digest)
+    59	  | _ =>
+    60	    let stop ← IO.monoNanosNow
+    61	    return (result, stop - start, digest)
+    62	
+    63	private def sample (rep k : Nat) (stage : String) (measurement : α × Nat × Nat) : IO Unit :=
+    64	  IO.println s!"sample\t{rep}\t{k}\t{stage}\t{measurement.2.1}\t{measurement.2.2}"
+    65	
+    66	private def measureOne (rep k : Nat) (t : LCB.Target) (p : Program) (plant : Option String) :
+    67	    IO Bool := do
+    68	  let llvm ← timedPure (fun _ => LLVM.module p) String.length
+    69	  sample rep k "llvm_module" llvm
+    70	  let emitted ← timedPure (fun _ => LCB.emit p) forceEmit
+    71	  sample rep k "lcb_emit" emitted
+    72	  match emitted.1 with
+    73	  | .error msg => IO.eprintln s!"scaled {k}: LCB emit: {msg}"; return false
+    74	  | .ok (f, _) =>
+    75	    let assembly ← timedPure (fun _ => LCB.assemble t f) (fun
+    76	      | .ok asm => asm.length
+    77	      | .error msg => msg.length)
+    78	    sample rep k "lcb_assemble" assembly
+    79	    match assembly.1 with
+    80	    | .error msg => IO.eprintln s!"scaled {k}: LCB assemble: {msg}"; return false
+    81	    | .ok _ =>
+    82	      match plant with
+    83	      | none => return true
+    84	      | some "linear" =>
+    85	        let planted ← timedPure (fun _ => plantLinear p) id
+    86	        sample rep k "plant_linear" planted
+    87	        return true
+    88	      | some "quadratic" =>
+    89	        let planted ← timedPure (fun _ => plantQuadratic p) id
+    90	        sample rep k "plant_quadratic" planted
+    91	        return true
+    92	      | some _ => IO.eprintln "unknown plant"; return false
+    93	
+    94	private def validate (k : Nat) (p : Program) : IO Bool := do
+    95	  unless wf p do IO.eprintln s!"scaled {k}: not well formed"; return false
+    96	  unless run p (k + 2) == .exited 1 do
+    97	    IO.eprintln s!"scaled {k}: expected exit 1, got {repr (run p (k + 2))}"; return false
+    98	  return true
+    99	
+   100	private def runMeasurement (k0 repetitions : Nat) (targetName : String) (plant : Option String) : IO UInt32 := do
+   101	  if k0 = 0 || repetitions = 0 then IO.eprintln "k0 and repetitions must be positive"; return 2
+   102	  let some target := LCB.Target.ofName targetName
+   103	    | IO.eprintln s!"unknown target {targetName}"; return 2
+   104	  let sizes := [k0, 10 * k0, 100 * k0]
+   105	  let programs := sizes.map (fun k => (k, scaled k))
+   106	  for (k, p) in programs do unless ← validate k p do return 1
+   107	  IO.println s!"family\tk0={k0}\trepetitions={repetitions}\ttarget={targetName}\texpected=exit-1"
+   108	  for rep in List.range repetitions do
+   109	    for (k, p) in programs do
+   110	      unless ← measureOne rep k target p plant do return 1
+   111	  return 0
+   112	
+   113	private def emitInputs (k : Nat) (dir : System.FilePath) (targetName : String) : IO UInt32 := do
+   114	  let p := scaled k
+   115	  unless ← validate k p do return 1
+   116	  let some target := LCB.Target.ofName targetName
+   117	    | IO.eprintln s!"unknown target {targetName}"; return 2
+   118	  match LCB.emit p with
+   119	  | .error msg => IO.eprintln s!"scaled {k}: LCB emit: {msg}"; return 1
+   120	  | .ok (f, sites) =>
+   121	    match LCB.assemble target f with
+   122	    | .error msg => IO.eprintln s!"scaled {k}: LCB assemble: {msg}"; return 1
+   123	    | .ok asm =>
+   124	      IO.FS.createDirAll dir
+   125	      IO.FS.writeFile (dir / "llvm.ll") (LLVM.module p)
+   126	      IO.FS.writeFile (dir / "lcb_body.s") asm
+   127	      IO.FS.writeFile (dir / "lcb_rt.ssa") (Runtime.qbe sites)
+   128	      return 0
+   129	
+   130	private def parsePlant : List String → Option (Option String)
+   131	  | [] => some none
+   132	  | ["--allow-planted-failure", "--plant", "linear"] => some (some "linear")
+   133	  | ["--allow-planted-failure", "--plant", "quadratic"] => some (some "quadratic")
+   134	  | _ => none
+   135	
+   136	def main (args : List String) : IO UInt32 := do
+   137	  match args with
+   138	  | ["generate", k, dir] => match k.toNat? with
+   139	    | some n => emitInputs n dir "x86_64-linux"
+   140	    | none => IO.eprintln "generate: K must be a natural"; return 2
+   141	  | "emit" :: k :: dir :: target :: [] => match k.toNat? with
+   142	    | some n => emitInputs n dir target
+   143	    | none => IO.eprintln "emit: K must be a natural"; return 2
+   144	  | "measure" :: k :: reps :: target :: plantArgs =>
+   145	    match k.toNat?, reps.toNat?, parsePlant plantArgs with
+   146	    | some n, some r, some plant => runMeasurement n r target plant
+   147	    | _, _, none =>
+   148	      IO.eprintln "plants require --allow-planted-failure --plant linear|quadratic"; return 2
+   149	    | _, _, _ => IO.eprintln "measure: K0 and REPETITIONS must be naturals"; return 2
+   150	  | _ =>
+   151	    IO.eprintln "usage: scaling.lean emit K DIR TARGET | measure K0 REPETITIONS TARGET [--allow-planted-failure --plant linear|quadratic]"
+   152	    return 2
+     1	import Concrete.BIR
+     2	
+     3	/-!
+     4	# The runtime entry (both backends)
+     5	
+     6	PROVISIONAL (slice 0). Every backend emits `main`'s body as `concrete_body`, returning the result
+     7	word (`Concrete.BIR.encode`). The runtime entry is fixed: it calls the body and then
+     8	
+     9	* exits with the word if it is below 256;
+    10	* otherwise writes the trap line of site `word - 256` to descriptor 2 (looping on partial writes,
+    11	  ignoring write errors) and exits 134 (`ConcreteSpec.Observe.Observation.status`);
+    12	* on a word that encodes nothing (no well-formed body returns one, `emit_encodes`), writes
+    13	  `invalidLine` and aborts.
+    14	
+    15	Its correctness is premise `P_rt`, and the site it reports is premise `P_trap_site`
+    16	(`Concrete/README.md`). This file emits it as LLVM text and as QBE text for LCB.
+    17	
+    18	The trap line is the owner's decided form (2026-11-06):
+    19	`concrete: trap: <kind> at <path>:<line>:<col> (site <id>)`, the path relative to the project
+    20	root with forward slashes, line and column 1-based. That the executable writes exactly this line
+    21	for the site it trapped at is premise `P_trap_site`.
+    22	-/
+    23	
+    24	namespace Concrete.Backend.Runtime
+    25	open Concrete.BIR
+    26	open ConcreteSpec (IntTy Trap)
+    27	
+    28	/-- The trap's name in the trap line. -/
+    29	def trapName : Trap → String
+    30	  | .arithmeticOverflow => "overflow"
+    31	
+    32	/-- The trap line for one site, without the final newline. -/
+    33	def trapLine (e : SiteEntry) : String :=
+    34	  s!"concrete: trap: {trapName e.kind} at {e.loc.path}:{e.loc.line}:{e.loc.col} (site {e.site.id})"
+    35	
+    36	/-- What the runtime writes before aborting on a result word that encodes nothing. -/
+    37	def invalidLine : String := "concrete: runtime: invalid result word"
+    38	
+    39	/-- The decided form, checked against a literal (not against `trapLine` itself). -/
+    40	example : trapLine ⟨.arithmeticOverflow, ⟨9⟩, ⟨40, 47⟩, ⟨"src/main.con", 4, 12⟩⟩ =
+    41	    "concrete: trap: overflow at src/main.con:4:12 (site 9)" := by decide +kernel
+    42	
+    43	/-- Pair every element with its index. -/
+    44	def indexedFrom {α : Type} (n : Nat) : List α → List (Nat × α)
+    45	  | [] => []
+    46	  | a :: l => (n, a) :: indexedFrom (n + 1) l
+    47	
+    48	def indexed {α : Type} (l : List α) : List (Nat × α) := indexedFrom 0 l
+    49	
+    50	theorem getElem?_indexedFrom {α : Type} (l : List α) (n k : Nat) :
+    51	    (indexedFrom n l)[k]? = l[k]?.map (n + k, ·) := by
+    52	  induction l generalizing n k with
+    53	  | nil => simp [indexedFrom]
+    54	  | cons a l ih =>
+    55	    cases k with
+    56	    | zero => simp [indexedFrom]
+    57	    | succ k =>
+    58	      simp only [indexedFrom, List.getElem?_cons_succ, ih]
+    59	      congr 1; funext x; congr 1; omega
+    60	
+    61	theorem getElem?_indexed {α : Type} (l : List α) (k : Nat) :
+    62	    (indexed l)[k]? = l[k]?.map (k, ·) := by
+    63	  simpa [indexed] using getElem?_indexedFrom l 0 k
+    64	
+    65	theorem mem_indexedFrom {α : Type} {l : List α} {n k : Nat} {x : α} (h : l[k]? = some x) :
+    66	    (n + k, x) ∈ indexedFrom n l := by
+    67	  induction l generalizing n k with
+    68	  | nil => simp at h
+    69	  | cons a l ih =>
+    70	    cases k with
+    71	    | zero => simp at h; subst h; simp [indexedFrom]
+    72	    | succ k =>
+    73	      simp only [List.getElem?_cons_succ] at h
+    74	      have := ih (n := n + 1) h
+    75	      simp only [indexedFrom, List.mem_cons]
+    76	      exact Or.inr (by rwa [show n + (k + 1) = n + 1 + k by omega])
+    77	
+    78	theorem mem_indexed {α : Type} {l : List α} {k : Nat} {x : α} (h : l[k]? = some x) :
+    79	    (k, x) ∈ indexed l := by
+    80	  simpa [indexed] using mem_indexedFrom (n := 0) h
+    81	
+    82	/-- An LLVM `c"..."` string body over the UTF-8 bytes: printable ASCII except `"` and `\` verbatim,
+    83	every other byte as `\XX`. -/
+    84	def llvmEscape (s : String) : String :=
+    85	  String.join (s.toUTF8.toList.map fun b =>
+    86	    let n := b.toNat
+    87	    if 32 ≤ n ∧ n < 127 ∧ n ≠ 34 ∧ n ≠ 92 then (Char.ofNat n).toString
+    88	    else
+    89	      let hex := Nat.toDigits 16 n
+    90	      "\\" ++ String.ofList ((if hex.length < 2 then ['0'] else []) ++ hex.map Char.toUpper))
+    91	
+    92	/-- The runtime entry as LLVM text, for the site table `tbl`. -/
+    93	def llvm (tbl : SiteTable) : String :=
+    94	  let sites := indexed tbl
+    95	  let globals := sites.map fun (i, e) =>
+    96	    let line := trapLine e ++ "\n"
+    97	    s!"@.site{i} = private constant [{line.utf8ByteSize} x i8] c\"{llvmEscape line}\"\n"
+    98	  let cases := String.join (sites.map fun (i, _) => s!" i32 {i}, label %t{i}")
+    99	  let traps := sites.map fun (i, e) =>
+   100	    s!"t{i}:\n  call void @concrete_rt_write_all(ptr @.site{i}, i64 {(trapLine e ++ "\n").utf8ByteSize})\n" ++
+   101	    "  call void @_exit(i32 134)\n  unreachable\n"
+   102	  String.join globals ++
+   103	  s!"@.bad = private constant [{(invalidLine ++ "\n").utf8ByteSize} x i8] c\"{llvmEscape (invalidLine ++ "\n")}\"\n" ++
+   104	  "declare i64 @write(i32, ptr, i64)\n" ++
+   105	  "declare void @_exit(i32)\n" ++
+   106	  "declare void @abort()\n\n" ++
+   107	  "define internal void @concrete_rt_write_all(ptr %p, i64 %n) {\n" ++
+   108	  "entry:\n  br label %loop\n" ++
+   109	  "loop:\n  %pp = phi ptr [ %p, %entry ], [ %np, %more ]\n" ++
+   110	  "  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]\n" ++
+   111	  "  %done = icmp eq i64 %nn, 0\n  br i1 %done, label %out, label %wr\n" ++
+   112	  "wr:\n  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)\n" ++
+   113	  "  %bad = icmp sle i64 %k, 0\n  br i1 %bad, label %out, label %more\n" ++
+   114	  "more:\n  %np = getelementptr i8, ptr %pp, i64 %k\n  %rest = sub i64 %nn, %k\n  br label %loop\n" ++
+   115	  "out:\n  ret void\n}\n\n" ++
+   116	  "define i32 @main() {\n" ++
+   117	  "entry:\n  %w = call i32 @concrete_body()\n  %ok = icmp ult i32 %w, 256\n" ++
+   118	  "  br i1 %ok, label %exit, label %trap\n" ++
+   119	  "exit:\n  ret i32 %w\n" ++
+   120	  "trap:\n  %i = sub i32 %w, 256\n" ++
+   121	  s!"  switch i32 %i, label %bad [{cases} ]\n" ++
+   122	  String.join traps ++
+   123	  "bad:\n" ++
+   124	  s!"  call void @concrete_rt_write_all(ptr @.bad, i64 {(invalidLine ++ "\n").utf8ByteSize})\n" ++
+   125	  "  call void @abort()\n  unreachable\n}\n"
+   126	
+   127	/-- QBE data bytes for a string: one `b N` per UTF-8 byte, so no character needs escaping. -/
+   128	def qbeBytes (s : String) : String := ", ".intercalate (s.toUTF8.toList.map fun b => s!"b {b}")
+   129	
+   130	/-- The runtime entry as QBE text for LCB, for the site table `tbl`. -/
+   131	def qbe (tbl : SiteTable) : String :=
+   132	  let sites := indexed tbl
+   133	  let datas := sites.map fun (i, e) => s!"data $site{i} = \{ {qbeBytes (trapLine e ++ "\n")} }\n"
+   134	  let dispatch := sites.map fun (i, e) =>
+   135	    s!"@c{i}\n    %c{i} =w ceqw %i, {i}\n    jnz %c{i}, @t{i}, @c{i + 1}\n" ++
+   136	    s!"@t{i}\n    call $concrete_rt_write_all(l $site{i}, l {(trapLine e ++ "\n").utf8ByteSize})\n" ++
+   137	    "    call $_exit(w 134)\n    ret 0\n"
+   138	  String.join datas ++
+   139	  s!"data $bad = \{ {qbeBytes (invalidLine ++ "\n")} }\n" ++
+   140	  "function $concrete_rt_write_all(l %p, l %n) {\n" ++
+   141	  "@start\n    jmp @loop\n" ++
+   142	  "@loop\n    %done =w ceql %n, 0\n    jnz %done, @out, @wr\n" ++
+   143	  "@wr\n    %k =l call $write(w 2, l %p, l %n)\n    %bad =w cslel %k, 0\n    jnz %bad, @out, @more\n" ++
+   144	  "@more\n    %p =l add %p, %k\n    %n =l sub %n, %k\n    jmp @loop\n" ++
+   145	  "@out\n    ret\n}\n\n" ++
+   146	  "export function w $main() {\n" ++
+   147	  "@start\n    %w =w call $concrete_body()\n    %ok =w cultw %w, 256\n    jnz %ok, @exit, @trap\n" ++
+   148	  "@exit\n    ret %w\n" ++
+   149	  "@trap\n    %i =w sub %w, 256\n    jmp @c0\n" ++
+   150	  String.join dispatch ++
+   151	  s!"@c{tbl.length}\n    call $concrete_rt_write_all(l $bad, l {(invalidLine ++ "\n").utf8ByteSize})\n" ++
+   152	  "    call $abort()\n    ret 0\n" ++
+   153	  "}\n"
+   154	
+   155	end Concrete.Backend.Runtime
+55:/-! The numbering is a closed function of position: block `j`'s values start at `blockBase p j`;
+56:its parameters come first, then each instruction's values, instruction `i` at `instBase b i`.
+61:def blockBase (p : Program) (j : Nat) : Nat := ((p.blocks.take j).map blockSize).sum
+63:def instBase (b : Block) (i : Nat) : Nat := b.params.length + ((b.insts.take i).map Inst.width).sum
+77:    (indexed b.params).map (fun (k, (r, _)) => (r, blockBase p j + k)) ++
+79:      (instDefs ins).map fun (r, off) => (r, blockBase p j + instBase b i + off)
+90:    (interOffsets ins).map (blockBase p j + instBase b i + ·)
+95:def numberingOk (p : Program) : Bool :=
+103:def regId (p : Program) (r : Reg) : Option Nat := (ids p).lookup r
+106:  match regId p r with
+172:  pure { destination := blockBase p j + k, width := .word, incoming := arms.toArray }
+176:  | (i, ins) => inst p (blockBase p j + instBase b i) ins
+187:  unless numberingOk p do throw "the numbering is not injective (a register defined twice?)"
+396:theorem regId_param {p : Program} (hn : ((ids p).map Prod.fst).Nodup) {j k : Nat} {b : Block}
+398:    regId p r = some (blockBase p j + k) := by
+404:theorem regId_inst {p : Program} (hn : ((ids p).map Prod.fst).Nodup) {j i : Nat} {b : Block}
+407:    regId p r = some (blockBase p j + instBase b i + off) := by
+439:  ∀ r v, lookup benv r = some v → ∃ n, regId p r = some n ∧ lenv[n]? = some (some (enc v))
+441:theorem regId_injective {p : Program} (hok : numberingOk p = true) {a b : Reg} {n : Nat}
+442:    (ha : regId p a = some n) (hb : regId p b = some n) : a = b := by
+443:  simp only [numberingOk, Bool.and_eq_true, decide_eq_true_eq] at hok
+474:    {x : Option Source.Value} (hag : Agrees p benv lenv) (hm : ∀ r n, regId p r = some n → n ≠ m) :
+483:theorem agrees_define {p : Program} (hok : numberingOk p = true) {benv : Env}
+485:    (hd : regId p d = some nd) (hs : nd < lenv.size) :
+499:      rintro rfl; exact hdr (regId_injective hok hd hn)
+850:theorem regId_lt {p : Program} (hok : numberingOk p = true) {r : Reg} {n : Nat}
+851:    (h : regId p r = some n) : n < valueCount p := by
+852:  simp only [numberingOk, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true] at hok
+855:theorem ids_nodup {p : Program} (hok : numberingOk p = true) : ((ids p).map Prod.fst).Nodup := by
+856:  simp only [numberingOk, Bool.and_eq_true, decide_eq_true_eq] at hok
+861:    blockBase p j + instBase b i + off ∈ intermediates p := by
+866:theorem inter_not_reg {p : Program} (hok : numberingOk p = true) {m : Nat}
+867:    (hm : m ∈ intermediates p) : ∀ r n, regId p r = some n → n ≠ m := by
+870:  simp only [numberingOk, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true] at hok
+881:theorem bin_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function}
+885:    (hx : inst p (blockBase p j + instBase b i) (.bin op t d a c) = .ok xs)
+902:    let n := blockBase p j + instBase b i
+903:    have hd : regId p d = some (n + 3) := regId_inst (ids_nodup hok) hbj hi (by simp [instDefs])
+904:    have hn3 : n + 3 < s.environment.size := hsz ▸ regId_lt hok hd
+917:theorem binOvf_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function}
+921:    (hx : inst p (blockBase p j + instBase b i) (.binOvf op t d fl a c) = .ok xs)
+938:    let n := blockBase p j + instBase b i
+939:    have hd : regId p d = some (n + 3) := regId_inst (ids_nodup hok) hbj hi (by simp [instDefs])
+940:    have hf : regId p fl = some (n + 5) := regId_inst (ids_nodup hok) hbj hi (by simp [instDefs])
+941:    have hn5 : n + 5 < s.environment.size := hsz ▸ regId_lt hok hf
+961:theorem trunc_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function}
+965:    (hx : inst p (blockBase p j + instBase b i) (.trunc fr to d a) = .ok xs)
+980:      let n := blockBase p j + instBase b i
+981:      have hd : regId p d = some (n + 2) := regId_inst (ids_nodup hok) hbj hi (by simp [instDefs])
+982:      have hn2 : n + 2 < s.environment.size := hsz ▸ regId_lt hok hd
+994:theorem inst_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function}
+998:    (hx : inst p (blockBase p j + instBase b i) ins = .ok xs)
+1046:    numberingOk p = true ∧ ∃ bs, (indexed p.blocks).mapM (adaptBlock p) = .ok bs ∧
+1050:  cases hn : numberingOk p <;> cases hb : (indexed p.blocks).mapM (adaptBlock p) <;>
+1106:    ∃ xs, inst p (blockBase p j + instBase b i) ins = .ok xs ∧
+1125:theorem body_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function}
+1406:      phi = { destination := blockBase p t + k, width := .word, incoming := arms.toArray } := by
+1522:theorem edge_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function}
+1554:  have hdest : ∀ i (hi : i < phis.length), phis[i].destination = blockBase p t + i := by
+1558:  have hreg : ∀ i (hi : i < phis.length), regId p (bt.params[i]'(by omega)).1 = some (blockBase p t + i) :=
+1559:    fun i hi => regId_param (ids_nodup hok) hbt (List.getElem?_eq_getElem (by omega))
+1561:    match vals[phi.destination - blockBase p t]? with
+1573:    have : phis.map (·.destination) = (List.range phis.length).map (blockBase p t + ·) := by
+1591:      have hlt := regId_lt hok (hreg i hi)
+1610:        have := regId_injective hok hn (hreg i hi)
+1621:      refine ⟨blockBase p t + i, hr' ▸ hreg i hi, ?_⟩
+1623:        phis[i] (List.getElem_mem hi) (by rw [hdest i hi, hsz]; exact regId_lt hok (hreg i hi))
+1668:theorem runBlock_sim {p : Program} (hwf : WF p) (hok : numberingOk p = true) {f : Source.Function}
+
+codex
+The source confirms the cubic LCB path. LLVM also has a concrete quadratic path: each block’s phi printer rebuilds the full edge list and filters it for that block. The measured exponent of 1.52 is consistent with quadratic work mixed with printing and fixed overhead.
+codex
+Confirmed from source. No files changed, builds run, or network used.
+
+1. **LCB.emit / adapt is cubic on this family.** Let \(n\) be program size, counting blocks, instructions, parameters, and operand occurrences; use unit-cost arithmetic.
+
+   - [`blockBase`, line 61](Concrete/Backend/LCB.lean:61) traverses preceding blocks and their instructions through `blockSize` (line 59). [`instBase`, line 63](Concrete/Backend/LCB.lean:63) similarly rescans an instruction prefix.
+   - [`ids`, lines 75–79](Concrete/Backend/LCB.lean:75) computes these prefixes for every definition. On `scaled k`, there are Θ(k) definitions and bounded block sizes, so constructing `ids p` costs Θ(k²).
+   - [`regId`, line 103](Concrete/Backend/LCB.lean:103) constructs `ids p` anew for each lookup, then performs a linear list lookup. Nothing here memoizes the table across calls.
+   - `idOf` → `operand` → `inst` invokes this path for instruction operands (lines 105–147); terminators and phi arms also invoke it (lines 159–172). `scaled k` has Θ(k) register uses. Thus **`adapt`, and consequently `emit`, perform Θ(k³) work** on this family. The observed exponent 2.89 fits that mechanism.
+
+   [`numberingOk`, lines 95–99](Concrete/Backend/LCB.lean:95) adds quadratic work: list `Nodup`, intermediate-to-slot membership tests, and prefix-based construction of IDs/intermediates. It also places `valueCount p` inside per-element predicates. Separately, `adaptInst` repeats prefix calculations, and `adaptPhi` scans all blocks for incoming edges. These matter after eliminating the cubic term.
+
+2. **LLVM.module has a source-level quadratic cause.**
+
+   [`print`, lines 87–90](Concrete/Backend/LLVM.lean:87) calls `phis p j b` for each block. [`phis`, lines 64–69](Concrete/Backend/LLVM.lean:64) constructs `edges p` and filters the entire edge list for target `j`. [`edges`, lines 57–62](Concrete/Backend/LLVM.lean:57) scans all blocks.
+
+   `scaled k` has Θ(k) blocks, Θ(k) edges, and Θ(k) parameter-bearing blocks. Even restricting attention to those blocks, this is **Θ(k²)** work. It remains quadratic if edge construction were shared: each target still filters the whole list.
+
+   The finite-range exponent 1.52 does not establish an asymptotic exponent of 1.5. A mixture of quadratic edge processing, output construction, and fixed overhead explains a value between 1 and 2; source inspection cannot apportion the measured milliseconds. There is no need to attribute the superlinearity solely to interpreter noise. Intrinsic declarations have a bounded set of `(BinOp, IntTy)` combinations, so `eraseDups` is not an unbounded quadratic explanation here.
+
+3. **Structural cause and smallest proof-preserving fix.**
+
+   The design fact is that **closed specification functions also serve directly as executable queries**, repeatedly deriving global information from the entire program. Neither numbering nor predecessor information has a shared, prepared representation.
+
+   The smallest fix removing the cubic term is to prepare the numbering table once per adaptation and pass it through operand translation, proving its lookup equals `regId p r`. Merely sharing the existing list leaves quadratic construction and quadratic aggregate lookups.
+
+   A fuller repair should:
+
+   - Build numbering with running block/instruction offsets; prove the generated list equals `ids p` and offsets equal `blockBase` / `instBase`.
+   - Build a lookup map preserving first-definition behavior, and prove lookup equality with `regId`, including malformed inputs.
+   - Replace quadratic validation with an equivalent checked implementation, preserving acceptance and refusal behavior.
+   - Group incoming edges by target once, preserving predecessor order and both conditional edges. Use that in both backends.
+
+   Keep the existing definitions and proofs as the reference specification. Prove `adaptFast p = adapt p` and corresponding emit equality; then [`adapter_correct`](Concrete/Backend/LCB.lean:1993) and [`emit_correct`](Concrete/Backend/LCB.lean:2023) transfer by rewriting. Existing numbering lemmas remain intact. This requires no language decision.
+
+4. **This is a performance defect, not a semantic correctness defect.** Repeated computation produces the same IDs, checks, and phi arms; it does not change generated behavior or invalidate those proofs. Excessive time or memory can prevent compilation operationally. Any optimization must preserve validation and ordering rather than bypass them.
+
+VERDICT: CONFIRMED
+tokens used
+31,730
+Confirmed from source. No files changed, builds run, or network used.
+
+1. **LCB.emit / adapt is cubic on this family.** Let \(n\) be program size, counting blocks, instructions, parameters, and operand occurrences; use unit-cost arithmetic.
+
+   - [`blockBase`, line 61](Concrete/Backend/LCB.lean:61) traverses preceding blocks and their instructions through `blockSize` (line 59). [`instBase`, line 63](Concrete/Backend/LCB.lean:63) similarly rescans an instruction prefix.
+   - [`ids`, lines 75–79](Concrete/Backend/LCB.lean:75) computes these prefixes for every definition. On `scaled k`, there are Θ(k) definitions and bounded block sizes, so constructing `ids p` costs Θ(k²).
+   - [`regId`, line 103](Concrete/Backend/LCB.lean:103) constructs `ids p` anew for each lookup, then performs a linear list lookup. Nothing here memoizes the table across calls.
+   - `idOf` → `operand` → `inst` invokes this path for instruction operands (lines 105–147); terminators and phi arms also invoke it (lines 159–172). `scaled k` has Θ(k) register uses. Thus **`adapt`, and consequently `emit`, perform Θ(k³) work** on this family. The observed exponent 2.89 fits that mechanism.
+
+   [`numberingOk`, lines 95–99](Concrete/Backend/LCB.lean:95) adds quadratic work: list `Nodup`, intermediate-to-slot membership tests, and prefix-based construction of IDs/intermediates. It also places `valueCount p` inside per-element predicates. Separately, `adaptInst` repeats prefix calculations, and `adaptPhi` scans all blocks for incoming edges. These matter after eliminating the cubic term.
+
+2. **LLVM.module has a source-level quadratic cause.**
+
+   [`print`, lines 87–90](Concrete/Backend/LLVM.lean:87) calls `phis p j b` for each block. [`phis`, lines 64–69](Concrete/Backend/LLVM.lean:64) constructs `edges p` and filters the entire edge list for target `j`. [`edges`, lines 57–62](Concrete/Backend/LLVM.lean:57) scans all blocks.
+
+   `scaled k` has Θ(k) blocks, Θ(k) edges, and Θ(k) parameter-bearing blocks. Even restricting attention to those blocks, this is **Θ(k²)** work. It remains quadratic if edge construction were shared: each target still filters the whole list.
+
+   The finite-range exponent 1.52 does not establish an asymptotic exponent of 1.5. A mixture of quadratic edge processing, output construction, and fixed overhead explains a value between 1 and 2; source inspection cannot apportion the measured milliseconds. There is no need to attribute the superlinearity solely to interpreter noise. Intrinsic declarations have a bounded set of `(BinOp, IntTy)` combinations, so `eraseDups` is not an unbounded quadratic explanation here.
+
+3. **Structural cause and smallest proof-preserving fix.**
+
+   The design fact is that **closed specification functions also serve directly as executable queries**, repeatedly deriving global information from the entire program. Neither numbering nor predecessor information has a shared, prepared representation.
+
+   The smallest fix removing the cubic term is to prepare the numbering table once per adaptation and pass it through operand translation, proving its lookup equals `regId p r`. Merely sharing the existing list leaves quadratic construction and quadratic aggregate lookups.
+
+   A fuller repair should:
+
+   - Build numbering with running block/instruction offsets; prove the generated list equals `ids p` and offsets equal `blockBase` / `instBase`.
+   - Build a lookup map preserving first-definition behavior, and prove lookup equality with `regId`, including malformed inputs.
+   - Replace quadratic validation with an equivalent checked implementation, preserving acceptance and refusal behavior.
+   - Group incoming edges by target once, preserving predecessor order and both conditional edges. Use that in both backends.
+
+   Keep the existing definitions and proofs as the reference specification. Prove `adaptFast p = adapt p` and corresponding emit equality; then [`adapter_correct`](Concrete/Backend/LCB.lean:1993) and [`emit_correct`](Concrete/Backend/LCB.lean:2023) transfer by rewriting. Existing numbering lemmas remain intact. This requires no language decision.
+
+4. **This is a performance defect, not a semantic correctness defect.** Repeated computation produces the same IDs, checks, and phi arms; it does not change generated behavior or invalidate those proofs. Excessive time or memory can prevent compilation operationally. Any optimization must preserve validation and ordering rather than bypass them.
+
+VERDICT: CONFIRMED

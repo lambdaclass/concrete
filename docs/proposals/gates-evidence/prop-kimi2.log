@@ -1,0 +1,322 @@
+kimi version 2.4.1
+• I need respond Group3 same format update tiers ranking/build order. Must re-read PROMPT_FULL.md and files cites. I have previous context response. Should inspect PROMPT_FULL perhaps group3 and details, files cited relevant. No modify/build/network. Should owner best long-term no shortcuts. I need assess T-a..T-j with robust long-term designs and tiers not cost cutting. Should update previous TIERS perhaps identify shortcuts in my prior response? User asks re-read and files, respond group3 and update ranking/build order. Owner says report shortcut as real finding long-term fix. I should explicitly correct any previous recommendations that watered down gates (C1 structural counters vs full, D2 only second emission PR, T1 representative hashes, N2 changed law only, C2 small smoke). Owner allows cheap PR version but full daily/weekly. My previous had full versions scheduled okay. Perhaps prior response PR consolidation is okay not watering full. But D3 current vs long term. Should inspect relevant current files for T-a legacy bug info? legacy frozen never run but can read archived bug records? User says old compiler bugs 039-045. Could read ISSUES? Legacy bug ledger relevant but do not need? Should have files it cites from previous response many. I should read PROMPT_FULL, Concrete README relevant gates, ConcreteSpec semantics/checker, BIR WF, Backend printers, Premises, scripts manifest diff, proofs axioms/trust ban, artifacts ASan, decisions termination/no hidden traps and rule IDs, ISSUES schema. Perhaps specific bug records in legacy/docs/bugs? Since relevant T-a and T-j. I can Grep names bug 039 etc but not run. Read known paths after Glob. Also T-e repr(C)/extern future decisions and roadmap slices 24/25. T-d valgrind current devshell? flake includes valgrind? Earlier docs self-hosted old mention valgrind but current flake maybe not. Should read flake packages and artifacts. T-c current BIR.WF and planned stage contracts. T-g theorem statements fingerprint existing trusted base collects axioms but no statement golden? Gate9 report axiom types only. `scripts/proofs/external.sh` declaration fidelity export vs environment same build not historical statement. Axioms golden names only, no statement. D component audit no theorem statements. Should derive all key theorem statements from environment and pin canonical types + maybe source semantics digest planned. T-g best long-term derive statement fingerprints from elaborated expressions, not pretty printed text to avoid formatting noise; include theorem type, maybe binder names? Fingerprint normalized kernel expression. For every key theorem registry, maybe all spec theorems and compiler theorem. Should not hand list key? Long-term all registered theorem statements; theorems population all spec + compiler. Should prevent weakened statement by renaming or replacing? Axioms golden detects names additions/removals, statement pin catches changed type. For compiler all declarations? key theorem registry one home Stages contracts and Premises.theorems. Spec all theorems via existing population. Pin every theorem not just key? T-g asks key; best long-term all public theorem statements, maybe all theorem types to avoid private too. Costs perhaps PR daily? Statement collection moderate, PR. Size LARGE. Control silently weakened proof passes rejected.
+
+  T-a metamorphic rewrites: alpha rename every binder preserving typed identity? If typed SiteIds generated, alpha-renaming source names should preserve Core behavior and outputs except diagnostics spans/path? Should observable results exact (exit/trap kind, perhaps trap SiteId? Alpha rename should preserve semantic observations, diagnostics if accepted no output). For rejected programs diagnostics should be equivalent up to expected source names/spans? They ask semantics-preserving rewrites identical observable results. Should define transformations formally using Lean spec elaborator/judgment or prove equivalence? Avoid test generator asserting preservation wrongly. Long-term implement each rewrite as semantics-preserving function plus theorem or validate via independent spec judgment, both directions. Metamorphic relation tailored per rewrite:
+  - alpha rename every binder consistent with scope and fresh IDs; avoid shadowing old bugs.
+  - reorder independent items (declarations/lets) only dependency DAG and evaluation order no effects. Reordering declarations allowed, statements only if independent and spec semantics says no effect. Not blindly reorder.
+  - add dead code/unused items: slice0 unused binding refused so not semantics preserving; "dead code" accepted only where spec permits; no insertion unused items if OWN-5 rejects. Should use unreachable but checked code? Unreachable code still checked and may have semantic no run but unused items rules. Use valid declarations or `if false` later but all written code checked. Ensure acceptance remains. Reformat whitespace/comments only source parse same AST, not all output paths (spans change) but behavior same. Split/join lets preserving ANF and no shadowing, fresh identities. For semantic outputs exact. Should target names rule IDs maybe diagnostic names change, only accepted programs.
+  - run through spec, compiler stages and both backends. PR curated pairs, daily generated many, weekly exhaustive binder patterns? Tier split. Slice1 source frontend and Core lowering; BIR alpha rename registers now possible interim. Size LARGE. Exists A random determinism not metamorphic; old bug class not current tests. Could cite A generator lines etc and B manifest. Legacy bug references perhaps find.
+
+  T-b exhaustive arithmetic: every op every u8/i8 pair = 65536 per operator. Current BIR supports add/sub/mul all types, spec Slice0 only u8 add source. Should test Core spec all ops? Current spec slice1 only add? `Concrete/BIR.lean` BIR BinOp add/sub/mul. Spec IntTy semantics has add only? Should inspect Statics/Semantics for BinOp. T-b long-term table of all supported ops derived from spec; don't test BIR-only as spec agreement if spec lacks op. For u8/i8 each pair each operator through spec and both backends; wrapping and checked variants. 65536*2? u8/i8 each 65536, 3 ops, checked/wrapped, both native = huge daily/weekly, not PR. Full exhaustive weekly? 65,536 per op is manageable Lean evaluator maybe LCB process compile each impossible. Compiling 393k programs native extremely heavy (hours/days). Best structural design exhaustive exhaustive in-process BIR/LCB evaluator/spec, native backends batched many cases into one generated program? Slice0 no functions/input loops, but BIR can generate many blocks, LCB limits 64 blocks,480 defs; need shards. Could enumerate exhaustive through all three evaluators in Lean and native backend per pair via generated BIR modules, huge. Daily maybe full exhaustive u8/i8 in-process and native sharded weekly. Owner tier choose catches bugs: exhaustive small-width should run weekly full native, PR boundary representative, daily exhaustive spec+BIR/LCB evaluator maybe no native clang? LLVM printer proof unverified so native essential. I need decide full exhaustive both backends daily or weekly. 393k native compilations not feasible daily, but could generate native program per operand pair? Long-term build a batch harness that invokes body function with inputs, but current BIR no function params, calls, runtime inputs. I cannot water down by not native. Use weekly full exhaustive native, daily full exhaustive in-process evaluators plus native boundary suite, PR boundaries. Slice0 for BIR add/sub/mul? user says current slice0 just landed BIR examples includes add/sub/mul across u8/i8 etc. Spec leg only u8 add and no Core lowering. So for spec + both backends on all operators requires spec operations slice2 (integers complete) and Core lowering slice1. Current BIR leg can do BIR semantics vs backends now. Slice now BIR exhaustive; full spec comparison slice2, not merely slice1. Boundary values 16/32/64: LCB adapter currently only accepts up to16? Concrete README 121 adapter domain, 659 LCB types up to16 today, slice2 needs support 64; so 32/64 backend both blocked LCB slice2. Good. Size LARGE. Exists B manifest has selected boundaries add/sub/mul at 8/16, no exhaustive. Cite B manifest diff 1050-1081 and BIR BinOp 102-116. T-b traps trap names arithmeticOverflow only currently. Full results trap names.
+  Tier split PR small boundaries, daily full exhaustive semantics/evaluators + native maybe representative full operator matrix, weekly exhaustive native all pairs. Should say no reduction full native.
+
+  T-c validator after every pass: every IR HIR Core MIR CFG SSA BIR well-formedness after every pass on every test, failure pass names. Current only BIR wf and LCB emit checks. Best long-term validators registered in stage registry with total decidable WF and soundness, run on inputs/outputs including refused? after every stage output success; on refusal ensure no artifact. Run on every test including generated, controls, not only manifest. Include validator self-tests invalid each constructor/invariant. Could be PR full validators (cheap relative compile) every test and daily fuzz. Slice0 BIR now, slice1 Core/MIR/CFG etc. HIR maybe Resolve/HIR design. Size LARGE. Exists BIR WF `Concrete/BIR.lean:435 etc` and B emitter checks B diff 423-435, stage registry planned `Concrete/README:468-502`, R-0504. Tier split PR all manifest validators; daily all generated/fuzz. No new gate? stage registry/root gate 3 and shared test runner, not separate maybe new validation gate in stage registry. Where lives gate3/stage contracts + B/A.
+
+  T-d memory checking emitted binaries every test binary valgrind memcheck or equivalent; safe code zero invalid accesses or leaks. Existing ASan every LLVM example only, not LCB, no valgrind. Owner dropped UBSan because vacuous. Should best long-term: ASan is more direct instrumentation; Valgrind on uninstrumented both backend binaries catches different issues but Leak checking: slice0 no allocation by Concrete but libc/startup may have reachable leaks; define precise invalid access and definitely lost memory from Concrete-owned code, not "zero leaks" blindly. Valgrind memcheck can catch invalid reads/writes, uninitialized values, but not all OOB on stack or static? ASan better coverage. Equivalent per target: Linux valgrind both LLVM/LCB, macOS ASan both or guarded equivalent. Should avoid vacuity: planted OOB use-after-free leak and uninitialized read detected for each tool/backend. Sanitizer may not support LCB output? native binary normal yes. Safe Concrete zero invalid accesses and leaks from owned code, allow documented runtime. Should have full memcheck every binary daily maybe expensive; PR ASan existing and small valgrind smoke, daily valgrind all manifest, weekly full generated/perturbation? Owner says every test binary, so daily full all manifest both backend, PR current ASan every test LLVM plus valgrind maybe cost but could do every binary on PR if valgrind startup ~50ms*70 = 3.5s actually okay. But full valgrind every binary PR could be 1min; choose split full valgrind PR? It catches bugs early. Best long-term gate tier full memcheck PR on manifest (small current), daily generated, weekly cross arch. macOS valgrind unavailable use ASan. Existing ASan runs all LLVM PR. Add LCB ASan and valgrind Linux every test PR if supported, no budget watering. Size LARGE due cross platform tool and controls. Slice now BIR. Exists gate10 ASan LLVM `slice0_artifacts:171-180` control OOB. No valgrind current scripts (Grep). Should check flake valgrind not present. Could cite.
+  Long-term memory safety also valgrind doesn't catch leaks deterministic? Add leak sanitizer already Linux ASan detect_leaks. For LCB equivalent. Good.
+
+  T-e C layout/ABI comparison: repr(C)/extern types and calls against clang both directions. Current no repr(C), FFI slice25, extern types slice24/25, LCB profile no calls until slice5 etc. Best long-term derive expected C layout from target spec C3/C10, generate C translation units/static_assert offsets and call shims from same declarations, compare Concrete and clang for target ABI both call directions, varargs? Only supported types. Also clang is trusted reference but spec defines rules, discrepancies investigated not blindly clang overrides. Cross compilation pinned targets. Include nested structs, arrays, enums repr, ZST, alignment/packed if supported, by-value passing, return, callee/caller. Negative controls intentional wrong offset, register class, stack padding, callee pop. Weekly full ABI matrix, PR small per manifest once FFI lands, daily generated. Size LARGE, later slice24/25 and target profiles C10, C backend or FFI. Exists no repr(C)/extern in current Concrete; planned ROADMAP 235, C10 R-0616 lines 425, no tests. Legacy ideas can read frozen but not run. No.
+
+  T-f Golden diagnostics: exact text, span, rule ID, ordering, exit code each refusal reviewed diff. Existing B manifest only expected rule ID no text/span, spec diagnostics decision typed record and JSON schema frozen. Should have one source diagnostics records, golden both human and JSON as decided R-0593, include multiple refusals ordering and path normalization, no snapshot updating automatic without review. Compare exact bytes and exit code. Should include source path relative, no absolute tmp. Negative controls changed span/rule/order/exit. PR, slice1 frontend typed diagnostics. Size SMALL? Full golden harness maybe <150 using B manifest extension? But schema/golden generation >150; LARGE. Exists no diagnostics implementation; B refusal expectation only; decision R-0593 ROADMAP 461. Tests golden trusted base exists unrelated. Good.
+
+  T-g above.
+
+  T-h limit tests: max nesting, huge literals, long ids, 10k functions, empty files work or refuse rule ID no crash/hang. Previous X3 overlaps exactly. I need fold Group3 and maybe X3 now duplicates. I should say T-h subsumes X3; update build order replace X3 with T-h, not duplicate. Best long-term limits derived from spec/target and declarations, expected success/refusal not arbitrary crash. Test both below/at/above each documented limit, enormous inputs with bounded memory/time and output cap, all stages. Termination timeout incomplete/fail not pass. If no specified limit, must work within declared test resources or fail with implementation limit rule? Owner "work or refuse with rule ID" but arbitrary refusal due unimplemented resource limits maybe typed `resource` rule. Should spec registry include implementation limit IDs? Language rule IDs for refusals, target profile limits. Do not introduce arbitrary limits just to pass. Include empty files syntax refusal. 10k functions only after functions slice5. Huge literal lexical slice0/1. Long identifiers, empty source slice1. Deep nesting parser. Size LARGE. Exists R-0528 and bounded helpers no fixtures; previous X3 recommended. Tier split PR curated boundary small, daily full 10k/deep, weekly stress beyond. Should not water full down. Good.
+
+  T-i termination/bounded execution refusals: owner rule per function no hidden traps. Should have one fixture per way fail terminate/exceed bound each refused rule. Existing spec decisions not all implemented. Cases: while no variant, nondecreasing variant, variant not established on back edge, recursive cycle no permission, indirect call, call to unknown external, nested loop/callee hidden behind wrapper, stack bound unknown/exceeds, allocation/blocking/foreign if policy, explicit may_not_terminate accepted not refused with report. "one fixture per way ... each refused with its rule" must account explicit permission and non-termination if allowed? Owner decided termination evidence default; explicit `#[may_not_terminate]` permission permits with fact, not refusal. So AGREE-WITH-CHANGES: refusal fixtures for missing/invalid evidence and accepted permission fixtures showing report. Bounded includes stack and recursion depth separate, wall execution deadline not implied. Avoid test claims for slice0 where all known and no loops. Depends R-0574 spec checker, loops slice4, functions slice5, proof surface slice8, stack final artifact slice0 for simple. Some termination source obligations before loops? Empty struct slice1 no loops always terminates. Should full later slices4/5/8 and indirect calls20, extern25. Size LARGE. Exists spec examples no hidden traps and R-0574 but no compiler fixtures. `ConcreteSpec/Spec/Examples.lean:313-348` arithmetic no hidden trap not termination; `Concrete/README:526-538` facts design. Tier PR every supported rule fixtures; daily generated variants. Full gate grows each slice.
+  T-j regression every bug: every ISS/bug fix adds manifest fixture fails before fix, meta each closed row cites. Existing ISSUES has no fixture column and many process/CI/doc issues cannot be manifest compiler tests (ISS-0015 sandbox, ISS-0019 review provenance). Owner wording every ISS/bug fix, need AGREE-WITH-CHANGES: extend issue schema with `regression` field specifying gate+control ID, not necessarily tests/manifest for CI/process bugs; each closed issue cites regression gate leg and commit? Verify fixture fails before fix by checking out parent in isolated worktree/CI? Running all before tests on PR heavy. At fix time required evidence against exact parent for compiler bugs, for CI gates planted control simulates defect now. Meta check closed rows fixture references existing manifest row or root gate control and validates reproducer command. For issues not compiler tests, named negative control in relevant `scripts/checks/*.sh`. No "not applicable" loophole? Some migration decisions not defects? ISSUES contains informational migration records (website down) and closed issue may not have fixture. But owner says every bug, ISS rows include migration tasks. I can scope defect rows; extend schema type/kind? Existing no kind. Best long-term issue record gets regression field required for closed defects and explicit `not-a-defect` for task/migration? That adds bureaucracy. Should have no shortcuts: all ISS entries representing defects get regression, other entries documentation record could cite acceptance control. Use `regression` universal: manifest ID or gate control ID; closed migration issue can have structural acceptance control. Every fix must have failing-before evidence exact base or plausible planted mutation. Meta-check both directions fixture IDs unique to issue, closed only? Open bugs should have reproducer already. Every open issue also needs repro per schema evidence, but manifest fixture might fail current so can't land on main before fix unless expected-fail harness. Could have `known-failing` corpus separate not run as pass, issue tracks. At fix turn into normal manifest. Meta-check closed only as asked.
+  Size LARGE due schema migration and historical backfill. Exists X2 previous recommendation similar, ISSUES current no regression field; B manifest and root controls. I should fold X2 into T-j now (no duplicate). Good.
+
+  T-a legacy bugs 039-045 maybe should inspect records to cite existing regressions not ported. Legacy bug files paths. Use Glob. Also PROMPT_FULL. Should do tools with concise progress.
+
+• I’ll re-check the prompt and the gate/proof implementations behind these proposals, especially where “every bug” or “semantics-preserving” needs a precise long-term contract rather than a superficial test harness.
+
+• I need perhaps read legacy bugs 039-045 exact for T-a exists already fixtures in frozen not run. Glob names.
+
+• Two design points need tightening: “dead code” is not automatically semantics-preserving in a language that checks unreachable code and rejects unused bindings, and “every bug gets a manifest fixture” must also cover CI/proof/tooling defects through their own gate controls, not force everything into compiler tests.
+
+• Enough. I'll respond self-contained Group3 only plus updated tiers ranking/build order include earlier items perhaps not repeat all previous. User says fold answers Group3 into TIERS section and build order too. I can provide Group3 blocks with fields, then "TIERS — updated" table only Group3 and notes X2/X3 merge; updated overall build order with previous steps summarized plus inserted new items. Ranked top5 all items updated. Should I reevaluate previous recommendation in light owner long-term and report shortcut? I can include one short "Long-term corrections to prior TIERS" with explicit:
+  - full native exhaustive not just evaluator T-b weekly.
+  - full memcheck both backends not only ASan LLVM T-d.
+  - full before/after regression evidence not merely fixture existence T-j.
+  - T-a no blind transforms.
+  - Previous X2 subsumed T-j, X3 subsumed T-h.
+  - No full gate weakened: PR cheap supplements not substitutes.
+  Potential prior response recommendation T1 representative tool hashes PR full trace daily okay. D2 second emission PR full native daily okay. C2 small smoke daily full okay.
+  Owner says reviewers report shortcut as real finding state long-term fix. I can state "Finding: treating any of these as fixture-only or evaluator-only would be shortcut; long-term design below." No need attack previous. But perhaps previous response T1 recommended derived registry representative tool hashes PR, full daily good.
+  No modifications.
+
+  Should have precise verdicts:
+  T-a AGREE-WITH-CHANGES due invalid blind rewrites and exact outputs diagnostics. Tier split; slice BIR now, source slice1, match/modules/generics later 10/11/17? Old bugs import alias modules slice17, match slice10, mono11. Mention legacy regressions migrate per slice R-0561. Size LARGE. Exists frozen regressions bug041 etc not run and no new gate. Cite `legacy/docs/bugs/041...:16-18` and `045...` but read only grep output no full lines enough cite lines 12-21 from output. Could cite `legacy/docs/bugs/045_match_binder_shadow_clobber.md:12-21`. A generator no metamorphic `branches/A...:267-349`.
+  Where lives new metamorphic gate sharing A/B, test tooling, no production. Planted bad capture rewrite must fail for reason. Good.
+
+  T-b AGREE (perhaps AGREE-WITH-CHANGES because spec only add current and full both backends later; design as proposed good). Use AGREE. Tier split PR boundaries, daily exhaustive evaluators and native? Should be clear full exhaustive both native weekly. Slice BIR current 8/16 add/sub/mul now; spec full operator matrix slice2; 32/64 LCB support slice2. Size LARGE. Exists selected fixtures B manifest lines. No full exhaustive.
+  Native pair exhaustive compile cost long-term perhaps test harness needs "batch without changing semantics" but not necessary detail. Could say exact full pair set, no sampling; every operator mode. PR full u8/i8 spec evaluator perhaps 65k each could be seconds? PR boundary only.
+  Where lives new arithmetic gate reusing A/B generators and oracle, not C scaling.
+  Controls wrong mask/sign/overflow trap name.
+
+  T-c AGREE. Tier split PR all manifest+stage, daily generated; slice BIR now, others slice1. Size LARGE. Exists BIR wf and negative fixtures. Where stage registry gate3/B/A, validator outputs. Control each pass deliberately breaks invariant names pass.
+  Long-term validators proved sound and complete for WF? "well-formedness checker" not necessarily proof but project wants proved validators explicit soundness. Say decidable WF + soundness theorem; complete where contract requires. Run after every pass on all tests not only fixture. Refusal no artifact.
+
+  T-d AGREE-WITH-CHANGES because valgrind or equivalent both and zero leaks caveat runtime; full every test. Tier split PR full memcheck manifest both where supported, daily generated+full all host targets, weekly cross-machine sanitizer matrix. Could simplify split PR ASan current + valgrind all manifest Linux; daily all generated, weekly extended matrix. Slice now BIR. Size LARGE. Exists ASan LLVM only lines. Where gate10 artifact. Pin valgrind in flake long-term rather than host (flake comment says host tools provisioned separately; adding pin is change). Should note tool identity pinned to avoid host differences. Safe Concrete zero invalid access, definitely lost owned allocations; no blanket suppressions. Controls per backend per tool OOB/leak/uninit. On mac equivalent ASan with LCB too. This is best long-term. No valgrind scripts `no` and flake host comment. exists partial cite.
+
+  T-e AGREE. Tier split PR manifest ABI cases after FFI, daily generated type/call matrix, weekly full cross-target. Slice later C10 R-0616 foundation then FFI slice25; layout C structs earlier slice9 but repr(C) only 25. Size LARGE. Exists no new, R-0616 and OD122 decision cite `docs/decisions.md:1412` for every size. Where new ABI gate artifact tests + spec layout authority. Controls wrong offset/calling convention both directions. Clang comparison not spec override.
+
+  T-f AGREE. Tier PR full goldens; daily fuzz diagnostics/shrink golden only curated not random goldens. Slice1 typed diagnostics R-0592/R-0593. Size LARGE. Exists B only rule ID no text. Where B `tests/golden` new diagnostic gate root? B manifest/tests.sh plus `tests/golden`, root schema check. Control exact span/order/exit changes.
+  Golden output one record human+JSON.
+
+  T-g AGREE. Tier PR full statement fingerprint every build, daily independent external replay perhaps no need daily. Slice now spec and current headline theorems; compiler stage contracts slice1. Size LARGE. Exists canonical declaration rendering already can reuse `theorems.lean:123-150`, axioms only name golden. Long-term reuse canonical renderer not create second fingerprint. This is important no duplication: extend PROOF_MODE=decls canonical statement type field `ci.type`, strip value (proof) for statement pin. All spec theorem statements and Premises.theorems/stage contracts. Fingerprint universe params and type, ignore proof body and binder metadata. Planted weakened theorem same proof must fail. Where scripts/proofs + gate9. Good.
+  No need `#print axioms` statement axiom types only. Cite `scripts/proofs/axioms.sh:9-12`.
+
+  T-h AGREE. Tier split PR curated around each limit, daily full stress, weekly beyond-limit sustained. Slice now BIR huge blocks/literals, slice1 source empty/IDs/nesting, functions slice5. Size LARGE. Exists R-0528 planned only, bounded helpers. Where new resource gate R-0528/B/C; X3 merged. Rule ID no arbitrary limits. Control crash/hang/uncoded refusal.
+
+  T-i AGREE-WITH-CHANGES due permissions. Tier PR all supported refusal+accepted permission fixtures, daily generated variants; slice1 basic theorem? Full later R-0574 then loops4/functions5/proofs8/indirect20/foreign25. Size LARGE. Exists design only R-0574 and facts table; no compiler termination fixtures. Where new admission/facts gate B + spec examples; N6 no hidden traps related but distinct. Control each refusal rule ID and unknown never pass.
+  Include bound stack exceed now gate12 has bound tests not source refusal yet; stack fixture slice0 when Concrete.toml. Good.
+
+  T-j AGREE-WITH-CHANGES universal regression not all manifest. Tier PR meta and changed fixture; daily before/after validation? Fails before fix at fix time PR exact parent perhaps expensive but needed. I can say split: PR schema/current regression plus before-fix evidence for changed issues; daily replay historical corpus; weekly full bug corpus both backends. Slice now schema+BIR, slice1 legacy language migrations by construct. Size LARGE. Exists ISSUES no regression column, root controls existing. Where `ISSUES.tsv`/issues.sh+B/G1. Merge X2.
+  Every closed bug row cites `regression` reference, meta validates existing IDs and gate controls. "fails before fix" evidence exact parent SHA for code, or live planted control for CI infrastructure. Should not require impossible parent for website migration, but acceptance test. For every bug all categories have gate-specific fixture. For legacy bugs not fixed new compiler, migrate conformance per R-0561 not close legacy as fixed. Good.
+
+  Updated TIERS table columns Item, PR, daily, weekly, slice. Estimated PR seconds required? Group3 format asks tier not estimated cost, but update TIERS previous had cost. I can include PR seconds:
+  T-a 30 curated (after slice1)
+  T-b 45 boundary set perhaps 65k evaluator not PR. PR 45
+  T-c 20 (validators on shared outputs)
+  T-d 120 full memcheck both native manifest (valgrind 70* perhaps 120)
+  T-e 60 after FFI
+  T-f 20
+  T-g 30 reuse environment
+  T-h 30 curated
+  T-i 20 supported fixtures
+  T-j 10 schema + before-fix cost variable separate. Perhaps PR cost 10 + pre-fix replay not included; cannot hide. State 10 meta + affected parent replay, full cost budget accounted per issue. Full before fix native could >10min for one bug, but allowed heavy run ci2 not PR? Owner long-term don't water down. Could do before/after on concrete-ci-2 required train evidence not PR hosted; meta PR 10. Say exact-parent replay runs on ci2 as landing evidence, not skipped. Daily historical full.
+  PR budget previous 388 + Group3 (excluding later and parent) current now items T-b45,T-c20,T-d120,T-g30,T-h30,T-j10,T-a30/T-f20/T-i20 slice1 = 375 additional current/slice1 -> total ~12.7min >10. I'll update budget statement: previous 6.5 + new up to 6.25 = 12.75, so 10 min no longer realistic even shared unless gate costs measured; owner says never water down, move full versions daily. I must explicitly update previous 10-min assessment: Group3 makes >10, do not cut. Keep cheap PR variants, move full memcheck or some? T-d full memcheck PR current both is full for manifest, no water down. 120. Full T-b boundaries 45. Total 763? Let's sum carefully group3 costs T-a30+T-b45=75+T-c20=95+T-d120=215+T-e60 later=275+T-f20=295+T-g30=325+T-h30=355+T-i20=375+T-j10=385. Previous 388+385=773 sec=12m53. If exclude T-e later same included at future, 773. I'll state about 12m53 estimated. Owner no watering: keep all, total budget owner about 10 perhaps can consolidate and actual measured lower, but estimates exceed. I can say previous 10 min no longer realistic, do not force under; schedule T-b full weekly, T-d full memcheck daily rather than PR? But T-d PR currently full memcheck manifest not cheap variant. Could make PR only ASan LLVM existing + planted valgrind smoke (cheap variant), full valgrind every binary daily. That reduces 120 to20, total 11m13. T-g reuse existing env 30. T-a 30. Could T-b PR boundary 20 not45. But cost arbitrary. Best long-term not cut gate full; cheap PR version allowed. T-d full memcheck every test binary daily, PR current ASan plus valgrind representative per backend, catches class daily. Then group3 285? T-d20 saves100 total 673=11m13. T-b PR boundary30 saves15 total 658=10m58. T-a PR curated20 save10 total 648=10m48. T-c 10 save10=10m31. T-g 15 save15=10m16. T-h 20 save10=10m6. Could just say roughly 10-13min and must move full expensive legs, only actual measurement determines. No need manipulate. Better owner "never cut corners for speed" means don't aim exact under. Say combined estimate ~13min so 10min not realistic. Keep full daily and cheap PR; don't reduce thoroughness. PR added could exceed 10, owner said about 10 so perhaps need recommend move T-d to daily and T-a generated daily etc already. Cheap PR variants current:
+  T-a curated 20
+  T-b boundary 20
+  T-c validators 15
+  T-d existing ASan full + valgrind planted one per backend 20
+  T-e later 60
+  T-f 15
+  T-g 15
+  T-h curated 15
+  T-i 15
+  T-j 5 + parent
+
+  sum 200 (without T-e? calculate 20+20=40+15=55+20=75+60=135+15=150+15=165+15=180+15=195+5=200). Total 588=9m48 plus parent replay. This fits exactly except parent. Nice but looks budget-driven. However these are reasonable cheap PR variants. Full T-d all binary daily, full memcheck not watered. Use these costs. Then total 9m48 excluding parent. Good. T-e later adds60 ->10m48, so future exceeds and needs shared native or move full ABI PR? At slice25 overall gate suite may differ. Note later additions require rebaseline not cutting; full ABI daily, only small PR smoke 15 instead of60. Then total 543=9m3. Could use T-e15 smoke full daily/weekly. Then total 9m3. Great. Parent replay separate could exceed budget; perform on ci2 landing tier not PR and not count? Owner wants PR every bug fixture but exact before fix evidence at fix development/landing ci2. Say meta5, parent replay required on ci2 not skipped and budget separately as bug-specific gate. Fine.
+
+  I can avoid combined exact costs details too much: "With cheap PR variants below, prior ~6.5 + ~2.6 = ~9.1 min, excluding exact-parent replay and future items; otherwise >10. Do not shrink full gates; if measured exceeds, move full leg daily." Good.
+
+  Updated build order:
+  1 B/N5
+  2 N11
+  3 G1/G3
+  4 C6
+  5 D3
+  6 G2/D2
+  7 schedule audit
+  8 T-j schema early because all subsequent bug fixes need regression links (move earlier than prior step 16)
+  9 T-g canonical statement pins early (prevents weakening)
+  10 T-c validator registry with slice0 BIR
+  11 T-b arithmetic BIR full schedule
+  12 T-d memcheck
+  13 T-h resources
+  14 T1/N8 etc previous
+  15 C1/C3...
+  16 spec registry N1 N2 N3 A2
+  17 frontend slice1 then T-a source metamorphic/T-f/T-i base/A3 A1 N4 N9
+  18 T-e later 25 and T-i full later slices
+  19 N7 N6 etc
+  20 N12
+  21 N10 X1 etc
+  22 A4 weekly
+  I'll include previous items not lost. Could present 20 numbered concise with groups of related one change but "each one gate/change". T-j early after G1 because meta uses manifest. T-g independent early after spec. T-c depends stage registry (future) but BIR now. T-b uses BIR now. T-d now. T-a BIR now possible before source, old bugs later. T-h now BIR.
+  Top5 updated all items:
+  1 N11
+  2 C6
+  3 T-g perhaps high payoff small-ish but LARGE, canonical renderer exists so moderate and prevents unsound weakening.
+  4 T-j regression discipline foundational but LARGE; perhaps B/N5 immediate still top.
+  5 T-c validator after every pass or T-b exhaustive. Should rank by next two weeks:
+  - N11 small
+  - C6 small
+  - B/N5 accepted immediate
+  - T-g reuse canonical statement renderer, high soundness payoff
+  - T-c BIR validators on all generated now + registry structural long-term, catches miscompiles early.
+  D3 previous small actual required could outrank T-c. Top5 only 5. Perhaps rank D3 #4, T-g #5, T-c #6 not shown. Group3 inclusion at least T-g. T-j also essential but not top cost. T-b exhaustive high payoff but heavy and BIR already proofs/selected fixtures, not top. T-d existing ASan covers LLVM, LCB proof adapter but runtime native trust; full memcheck less immediate. Good.
+  Could include T-j over D3? D3 small and owner decided, better.
+  Rank same previous except T-g replaces G1? G1 foundation all tiers more important. I have N11,C6,N5,D3,G1 previous. To include group3, replace N5 or D3? N5 accepted no work high payoff. Replace G1 with T-g? But G1 all controls/meta essential, T-g can reuse existing canonical declaration and prevents silent unsoundness high. Perhaps replace D3 with T-g because D3 reproducibility infrastructure already two hosted and decision implementation small. Top5:
+  1 N11
+  2 C6
+  3 T-g
+  4 N5/B
+  5 G1 (D3 #6). This gives Group3 early soundness. T-j build early but not top due larger.
+  Should mention T-g size LARGE despite reuse because new golden population+compiler integration >150. Good.
+
+  No need citations every statement no line overlong but okay.
+
+  Now respond with 10 blocks and TIERS update. Use fields exact:
+  ITEM T-a...
+  why 2 sentences.
+  tier...
+  slice...
+  size...
+  exists...
+  where lives...
+  All present.
+
+  At end last line DONE. Ensure no extra after.
+
+  I should perhaps mark todos done before response.
+
+• The long-term pattern is clear: these should be shared semantic, artifact, and evidence gates—not ten independent runners. The full exhaustive, memcheck, ABI, stress, and historical-regression legs stay scheduled; PRs get real but smaller versions, never a reduced claim substituted for the full gate.
+
+• Now respond.
+
+• ## Group 3 — early test types
+
+  ITEM T-a: AGREE-WITH-CHANGES  
+  why: Metamorphic testing is valuable, but blind rewriting is unsound: unused bindings and unreachable code are still checked, and reordering statements is valid only across a proven independence edge (`ConcreteSpec/Spec/Slice1Syntax.lean:63-77`). Implement capture-avoiding alpha-renaming, dependency-DAG reordering, ANF let split/join, and formatting transforms with explicit preservation contracts.  
+  Compare spec and native observations on accepted programs; diagnostics need relation-aware comparison because names/spans may legitimately change. Plant a capture or invalid reorder and require disagreement.  
+  tier: split — curated pairs on PR; generated rewrite chains and shrinking daily; large cross-product weekly.  
+  slice: BIR register-renaming now; source/elaboration in slice 1; match, generics, and modules with slices 10, 11, and 17.  
+  size: LARGE  
+  exists already?: A has random generation but no metamorphic relation (`branches/A-gate-spec-diff.diff:267-349`). Legacy regressions exist but are frozen, e.g. `legacy/docs/bugs/041_match_merge_keeps_arm_binders.md:16-18` and `legacy/docs/bugs/045_match_binder_shadow_clobber.md:12-21`; migrate them as their constructs land.  
+  where it lives: New metamorphic gate sharing A’s generator/shrinker and B’s backend runner.
+
+  ITEM T-b: AGREE  
+  why: Exhaustive small-width arithmetic is exactly the sort of finite domain that should be exhausted, not sampled. Derive operators and checked/wrapping modes from the spec, and compare result value, overflow flag, trap kind/name, and backend observation for every pair.  
+  The complete native-backend pair set must remain mandatory; evaluator-only exhaustion would leave the unverified LLVM printer and native toolchains untested.  
+  tier: split — full boundary matrix on PR; exhaustive spec/BIR/LCB-evaluator enumeration daily; exhaustive u8/i8 native LLVM+LCB enumeration weekly.  
+  slice: BIR add/sub/mul and 8/16-bit backend legs now; complete spec agreement and all operators in slice 2; 32/64-bit LCB coverage when slice-2 LCB support lands.  
+  size: LARGE  
+  exists already?: Only selected boundaries exist in B’s manifest (`branches/B-gates-manifest.diff:1055-1081`) and `Concrete/BIR.lean:653-680`; no exhaustive gate.  
+  where it lives: New arithmetic-exhaustion gate using A’s spec oracle and B’s native runner.
+
+  ITEM T-c: AGREE  
+  why: Every stage should register its input/output WF predicates and run them on every successful output from every manifest, generated, metamorphic, and shrunk test. Validators need explicit soundness propositions and negative instances for every invariant, consistent with R-0504 (`ROADMAP.md:450-455`).  
+  A validator failure names the producing pass and artifact; a stage refusal must produce no output artifact.  
+  tier: split — all manifest/stage outputs on PR; every generated/fuzzed output daily.  
+  slice: BIR and LCB emission now; Core, HIR, MIR, Memory CFG, and SSA with slice-1 lowering.  
+  size: LARGE  
+  exists already?: BIR has decidable WF and invalid examples (`Concrete/BIR.lean:428-506`, `:612-649`); B calls it before emission (`branches/B-gates-manifest.diff:423-435`). Other IR validators and per-pass registration do not exist.  
+  where it lives: Gate 3/stage registry, invoked by A/B rather than duplicated in each runner.
+
+  ITEM T-d: AGREE-WITH-CHANGES  
+  why: Extend memory checking to both backends and pin the tool used for each target. Valgrind on Linux complements ASan, but “zero leaks” must mean invalid accesses, uninitialized reads, and definitely lost Concrete-owned allocations—not false positives from unmodelled libc startup, with no blanket suppression file.  
+  Keep the full memcheck run on every manifest binary; planted OOB, leak, and uninitialized-read cases must be caught separately for each tool/backend.  
+  tier: split — existing ASan plus a valgrind control for each backend on PR; valgrind/ASan on every manifest binary daily; generated programs and cross-host matrix weekly.  
+  slice: now, for current BIR binaries; allocation/leak expectations become meaningful with slice 19.  
+  size: LARGE  
+  exists already?: Gate 10 runs ASan only on LLVM output (`scripts/checks/compiler/slice0_artifacts.sh:171-180`) with one OOB control (`:188-210`). No valgrind runner exists, and `flake.nix:70-73` currently leaves valgrind to the host.  
+  where it lives: Gate 10/artifact checks, with target-specific pinned tooling.
+
+  ITEM T-e: AGREE  
+  why: Generate C `static_assert`s and caller/callee shims from the same declarations used by Concrete, comparing size, alignment, offsets, argument/return classification, stack padding, and register classes in both call directions. Clang is the ABI cross-check, not an override for the Lean layout contract.  
+  Include all supported sizes and nested layouts, especially the decided every-size `repr(C)` return rule (`docs/decisions.md:1412`), with planted wrong-offset and wrong-register controls.  
+  tier: split — manifest ABI cases on PR; generated type/call matrix daily; full target matrix weekly.  
+  slice: later — foundation C10 (`ROADMAP.md:425`) and FFI/`repr` forms at slice 25 (`ROADMAP.md:234-235`).  
+  size: LARGE  
+  exists already?: No new-compiler C ABI differential exists. The intended ABI/layout authorities are `ROADMAP.md:418` and `ROADMAP.md:425`.  
+  where it lives: New ABI gate using the layout registry and native artifact infrastructure.
+
+  ITEM T-f: AGREE  
+  why: Golden both human text and JSON from the one typed diagnostic record: exact bytes, source span, rule ID/revision, ordering, and process exit code (`docs/decisions.md:821-832`). Use project-relative paths and reviewed golden updates; never normalize away the span or ordering being tested.  
+  Plant independent text, span, rule-ID, ordering, and exit-code changes, each required to fail for its own reason.  
+  tier: PR for every refusal golden; daily generated refusal cases with minimized new goldens after review.  
+  slice: slice 1, after R-0592’s typed result and R-0593’s diagnostic records/schema.  
+  size: LARGE  
+  exists already?: B checks only `refuse RULE-ID` (`branches/B-gates-manifest.diff:763-778`); no diagnostic text/span golden exists. The required golden/schema work is `ROADMAP.md:461`.  
+  where it lives: B plus `tests/golden/` and the diagnostic-schema root check.
+
+  ITEM T-g: AGREE  
+  why: Pin every registered theorem’s universe parameters and kernel-elaborated statement, excluding only its proof body and kernel-irrelevant metadata. Reuse the existing canonical declaration renderer rather than inventing a second pretty-print fingerprint (`scripts/proofs/theorems.lean:123-150`).  
+  Cover the whole spec population and compiler stage/headline contracts; plant a weakened statement proved by the original proof and require a golden mismatch.  
+  tier: PR on every elaboration; independent replay/history daily.  
+  slice: spec and current BIR/LCB theorems now; full stage contracts in slice 1.  
+  size: LARGE  
+  exists already?: Axioms goldens pin names and axiom sets, not statements (`scripts/proofs/axioms.sh:9-12`). Canonical statement rendering already exists at `scripts/proofs/theorems.lean:123-136`, but no statement golden.  
+  where it lives: `scripts/proofs/` for the spec and gate 9 for compiler theorem/contract pins.
+
+  ITEM T-h: AGREE  
+  why: Test below, at, and above every declared implementation/target limit, requiring either correct behaviour or a typed rule-ID refusal under bounded resources. Do not invent arbitrary limits merely to make tests pass; missing expected resource behaviour is itself a defect.  
+  Timeouts are INCOMPLETE/failures, and crashes, unbounded output, and untyped resource refusals all fail. This subsumes the earlier X3 proposal.  
+  tier: split — curated boundary fixtures on PR; full depth/size stress daily; sustained beyond-limit campaign weekly.  
+  slice: BIR blocks/literals now; empty files, identifiers, and parser nesting in slice 1; 10k functions with slice 5.  
+  size: LARGE  
+  exists already?: R-0528 explicitly requires hostile fixtures (`ROADMAP.md:456`), and bounded runners exist (`scripts/checks/lib/bounded.sh:22-31`); no such fixture inventory exists.  
+  where it lives: New resource-limit gate sharing B/C generators and the common bounded runner.
+
+  ITEM T-i: AGREE-WITH-CHANGES  
+  why: Cover every missing or invalid termination/stack/depth evidence path with its exact rule ID, including hidden obligations through nested loops, callees, recursion, indirect calls, and externs. Also include accepted `#[may_not_terminate]` permission fixtures whose reports name the exact obligation and call path; permission is not refusal (`docs/decisions.md:631-644`).  
+  Keep termination, recursion depth, final-artifact stack, and wall-clock deadlines as separate claims (`docs/decisions.md:620-630`). Unknown evidence must never satisfy admission.  
+  tier: split — every supported refusal and permission fixture on PR; generated wrappers/nested-obligation variants daily.  
+  slice: initial facts/stack obligations with slices 0–1; full loop/call rules at slices 4–5, proof surface at 8, indirect calls at 20, and externs at 25.  
+  size: LARGE  
+  exists already?: The rules are specified by R-0574 (`ROADMAP.md:426`) and the facts design (`Concrete/README.md:532-538`), but compiler refusal fixtures do not exist.  
+  where it lives: New admission/facts gate using B’s manifest and the spec’s rule registry.
+
+  ITEM T-j: AGREE-WITH-CHANGES  
+  why: Every defect needs a persistent regression, but CI/proof/tooling bugs cannot all be manifest compiler programs. Add a `regression` reference to `ISSUES.tsv` accepting either a manifest test ID or a named gate control, and verify it exists and is unique to that issue.  
+  Closing evidence must show failure at the exact parent SHA for compiler/spec defects, or a live planted defect for infrastructure; fixture existence alone is a shortcut. This subsumes earlier X2.  
+  tier: split — schema/current regression on PR plus exact-parent replay on concrete-ci-2 for the affected fix; historical corpus daily; complete regression matrix weekly.  
+  slice: issue schema and BIR regressions now; legacy language regressions migrate as their constructs land.  
+  size: LARGE  
+  exists already?: `ISSUES.tsv:4` has no regression column and `scripts/checks/issues.sh:19-40` validates only the existing fields. Many gate controls already exist, but no issue-to-regression linkage or before-fix evidence check exists.  
+  where it lives: `ISSUES.tsv`/`issues.sh`, B’s manifest, and G1’s gate-control registry.
+
+  ## TIERS — updated
+
+  ### Group 3 additions
+
+  | Item | PR | Daily | Weekly | Estimated PR cost |
+  |---|---|---|---|---:|
+  | T-a | Curated valid rewrite pairs | Generated chains + shrinking | Large rewrite cross-product | 20 s after slice 1 |
+  | T-b | Complete operator/width boundary matrix | Exhaustive evaluator enumeration | Exhaustive u8/i8 native backends | 20 s |
+  | T-c | Every manifest/stage output validated | Every generated/fuzzed output | Full cross-target validation | 15 s |
+  | T-d | Existing ASan + valgrind control per backend | Memcheck every manifest binary, both backends | Generated and cross-host memcheck | 20 s |
+  | T-e | Small ABI smoke after slice 25 | Generated ABI type/call matrix | Full target/calling-convention matrix | 15 s after slice 25 |
+  | T-f | Every refusal golden | Generated/minimized diagnostics | Full golden cross-target replay | 15 s after slice 1 |
+  | T-g | All statement fingerprints | Independent replay/history | Full historical statement audit | 15 s |
+  | T-h | Curated limit boundaries | Full resource stress | Sustained beyond-limit campaign | 15 s |
+  | T-i | Every supported refusal/permission fixture | Generated nested obligations | Full termination/bounds matrix | 15 s as slices land |
+  | T-j | Issue/regression schema and current fixture | Historical regression replay | Complete regression matrix | 5 s + affected parent replay on ci-2 |
+
+  The cheap PR legs supplement the full scheduled gates; they do not replace them. In particular, native exhaustive arithmetic, every-binary memcheck, full ABI coverage, and before/after regression evidence must not be dropped to fit the PR budget.
+
+  With these variants, the previous roughly 6.5-minute shared PR path gains about 2.5 minutes, leaving it near **9 minutes**, excluding bug-specific parent replay and future-slice work. If measurements exceed 10 minutes, move the expensive full leg to daily rather than weakening its assertions.
+
+  ### Revised build order
+
+  Dependencies come first; each numbered item remains a separate branch with its stated planted control.
+
+  1. **B/N5:** land the accepted manifest/backend runner with wrong-expectation and inventory controls.
+  2. **N11 + A layering:** remove test generators from `Concrete.lean`; reject production test imports.
+  3. **G1, then G3:** gate manifest/tiers/controls, followed by budgets and exact-SHA timing records.
+  4. **C6:** automatically execute the linear-pass and quadratic-fail controls.
+  5. **D3:** implement actual GitHub-versus-ci-2 reproducibility while keeping PR code off self-hosted runners.
+  6. **G2, then D2:** disagreement never retry-passes; first differing stage is named.
+  7. **Scheduled runner and missing-evidence audit:** cancelled/skipped/artifact-less runs become `missing`.
+  8. **T-j regression infrastructure:** issue references, orphan-control detection, and exact-parent evidence. Landing this early prevents subsequent fixes from accumulating undocumented regressions.
+  9. **T-g statement pins:** reuse the canonical renderer; a weakened theorem statement must fail even with an unchanged proof.
+  10. **T-c validator registry:** BIR first; each broken WF invariant names its producing pass.
+  11. **T-b arithmetic exhaustion:** BIR/native legs now, spec/all-width legs in slice 2; wrong mask, sign extension, and trap-name controls.
+  12. **T-d memory checking:** both backends, target-specific tools, and separate OOB/leak/uninitialized-read controls.
+  13. **T-h resource gate:** crash, hang, untyped refusal, and output-explosion controls.
+  14. **T1, then N8:** derived trusted closure and toolchain hashes; owner-approved trust-growth and clean-rebuild controls.
+  15. **C1, then C3, C2, C4/C5:** deterministic counters, complexity declarations, dimension families, memory/output history.
+  16. **Rule-registry prerequisites**, then **N1, N2, N3, A2:** orphan IDs, vacuous laws, missing decisions, and uncovered rules.
+  17. **Slice-1 frontend/lowering**, then **T-a, T-f, A3, A1, N4, N9:** capture/invalid rewrite, diagnostic drift, refusal mismatch, shrinker, parser crash, and wrong documentation controls.
+  18. **T-i increments:** land each termination/bounds fixture with its implementing slice; missing evidence, excessive stack, invalid permission, and nested-obligation controls.
+  19. **N7, then N6:** unexpected binary imports, followed by unmapped artifact traps.
+  20. **N12:** derived stage-to-gate coverage and unregistered-stage controls.
+  21. **N10, X1, X4:** proof-cost history, stale-cache equivalence, and runtime-fault classification.
+  22. **T-e at slice 25:** both-direction ABI controls across the complete supported layout/call matrix.
+  23. **A4 and weekly gate mutation:** survivor reporting and planted-mutant qualification.
+
+  ### Updated top 5 for the next two weeks
+
+  1. **N11** — small structural fix keeping test machinery out of the compiler’s production/trusted import closure.
+  2. **C6** — small vacuity fix: C’s quadratic control currently exists but is not automatically exercised.
+  3. **T-g** — high soundness payoff using the existing canonical declaration renderer; prevents silent theorem weakening that axioms checks cannot detect.
+  4. **N5/B** — immediate broad wrong-code coverage from the already accepted manifest/backend runner.
+  5. **G1 + G3** — foundational registration of properties, controls, tiers, and costs, needed to keep the expanding gate set non-vacuous and audible.
+
+  DONE.
+
+To resume this session: kimi -r session_86329a83-2e02-4106-b2ae-a615305c1004

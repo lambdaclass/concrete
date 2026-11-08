@@ -1,0 +1,13 @@
+All round-1 findings have been verified and resolved cleanly:
+
+- `scripts/checks/landing_script.sh:1016-1024`: controls now mutate `w["jobs"]["tests"]` and match `"landing-tier job not required: Tests (riscv64)"`.
+- `RETENTION.tsv:32`: `tests/manifest.tsv tests/slice0` is now governed under a `retained` `corpus` row.
+- `scripts/checks/compiler/tests.sh:47,65`: `nonexistent_program` appends a new row (`no_such_program`) rather than replacing `answer`, and `manifest_rows` separates the two inventory directions (`program without a manifest row` vs `manifest row names no program`) using `comm`.
+- `scripts/checks/compiler/tests.sh:77-85`: `CONCRETE_TEST_EMIT_ONLY=1` now uses `continue` inside the row loop and `exit 0` after the loop, so emit-only controls check every row (`wrong-trap-expectation` on `overflow` at row 3 is reached and fails in `slice0_bir.lean` for the planted reason).
+- `scripts/checks/lib/test_manifest.py:119-132,167-168` & `scripts/checks/test_manifest.sh:28-32,82-94`: duplicate `bir:` programs and `refuse` expectations on `bir:` rows are rejected, covered by both `self-test` and `test_manifest.sh` controls, and `self-test` is run by the gate.
+- `scripts/checks/lib/slice0_common.sh:101-125` & `scripts/checks/compiler/slice0_artifacts.sh:161`: `manifest_rows` performs the bidirectional `bir:` inventory check in `slice0_common.sh`, covering both `tests.sh` and `slice0_artifacts.sh`.
+- `scripts/checks/test_manifest.sh:6,51-61,71-83`: `set -e` is removed, mutations check their preconditions and return statuses, `control` verifies the target file exists and differs from the original before running the child check, and `exit_256`/`bad_trap` use `bir:other` so they fail specifically for their planted expectation defects rather than duplicate `bir:answer`.
+
+No new issues found in `DELTA.diff` or `REVIEW.diff`.
+
+VERDICT: CLEAN

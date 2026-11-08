@@ -1,0 +1,13 @@
+You are a code reviewer in a throwaway export of the Concrete repository (current directory) at commit 64db2932 of branch gate-spec-diff, stacked on branch gates-manifest (c2245c99, the one test manifest and runner), on top of main. Do not modify any file, do not build, no network. REVIEW.diff is this branch's diff against c2245c99. Read the actual files too.
+
+Owner-approved goal: "Spec-vs-compiler comparison from day one. Every test program runs both through the executable Lean spec and as a native binary from the new compiler; observable results (exit code, stdout bytes, trap kind) must match exactly; a mismatch fails the gate. Plus a random program generator restricted to the currently accepted slice subset, seeded and reproducible, that grows with each slice. Bound the run time per CI job; failing seeds are saved as regression tests."
+Coordinator decision (not to be reopened): the compiler has no Core->BIR lowering yet (slice-1 work), so the gate ships with (1) a spec leg: seeded generator of slice-0 Core programs filtered by the spec's check, oracle = spec run, and a fixed `compileCore` hook that today errors, with the leg loudly reporting 0 compiled programs, never a pass claim; (2) an interim BIR leg: generated BIR programs, BIR run vs LLVM-native vs LCB-native vs LCB's in-process evaluator, through the existing emit/observe/judge machinery.
+
+Review for correctness bugs. In particular:
+1. Is every planted control (drop-overflow-llvm, lcb-off-by-one for native and evaluator legs, the wrong spec oracle, generator determinism, seed difference) load-bearing: does each fail FOR THE PLANTED REASON, and could any pass vacuously (e.g. no trapping program generated, mutation not applied, grep matching an unrelated line, a setup failure counted as the expected failure)?
+2. Can the gate pass while comparing nothing or too little (time budget, INCOMPLETE handling, minimum judged, yield floors, construct coverage)? Is the seed handling reproducible and replayable?
+3. Does the spec leg ever imply a spec comparison passed when none ran? Is the spec-derived expectation path correct for when compileCore is filled?
+4. Are the generators restricted to what the spec's slice-0 fragment and the LCB adapter accept? Is the PRNG pure and deterministic?
+5. Placement: the generators live in the compiler library (Concrete/SpecDiff*.lean, imported by Concrete.lean). Is test code in the compiler library a problem here (the trusted-base golden and future axiom/totality scans of Concrete/, the README layout rules)? Propose the best placement.
+6. CI jobs and required-checks.txt consistent; no owner (OD) decision taken.
+For each finding: file:line, severity, concrete fix. Last line exactly: VERDICT: CLEAN or VERDICT: FINDINGS.

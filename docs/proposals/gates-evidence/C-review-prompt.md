@@ -1,0 +1,12 @@
+You are a code reviewer in a throwaway export of the Concrete repository (current directory) at commit 4ed5b4e1 of branch gate-scaling-determinism, stacked on gates-manifest (c2245c99) on main. Do not modify files, do not build, no network. REVIEW.diff is this branch's diff against c2245c99; read the actual files too.
+
+Owner-approved goal: "Scaling and determinism: (1) generate programs at 1x, 10x, 100x size; fail if compile time grows clearly faster than linear (use a robust ratio test with a noise margin, measured on the same machine in the same job; report the measured exponent); (2) compile every test program twice (also from different working directories/paths) and require byte-identical outputs at every emitted artifact." Planted controls required: an O(n^2) planted pass fails scaling; a nondeterministic output fails determinism.
+
+Known already (do not re-report, but say if the fix direction is wrong): the measurement forces LCB.emit's result with `reprStr f`, which is itself superlinear; it must use a linear structural digest. Separately, LCB.emit really is ~cubic on main (fix owned by the compiler owner).
+
+Review for correctness bugs, in particular:
+1. Scaling: are the timings trustworthy (laziness, CSE/hoisting of the pure call out of the timed region, forcing cost, interleaving, min-of-R, resolution floor, interpreted `lean --run` vs compiled code)? Is the exponent computed and thresholded correctly (10x->100x and/or 1x->10x), with a sound noise margin? Is the native step measured and judged? Can the gate pass vacuously (too-small sizes, zero stages, missing samples)?
+2. Controls: does plant quadratic fail FOR THE PLANTED REASON (naming that stage and its exponent), and plant linear pass? Can an unrelated failure satisfy a control? Are plants impossible to enable on the normal path?
+3. Determinism: are the two runs really different in path, cwd, TMPDIR, HOME and environment order, from ONE compiler build? Is every artifact the emitter and slice0_native.sh write compared (no allow-list that skips new files)? Do the nondeterminism controls fail for the planted reason, naming the artifact? Are gate 8's (slice0_repro.sh) behaviour and controls preserved by the repro_compare.py change?
+4. CI jobs / required-checks consistency; macOS exclusion of scaling justified; no owner (OD) decision taken.
+For each finding: file:line, severity, concrete fix. Last line exactly: VERDICT: CLEAN or VERDICT: FINDINGS.

@@ -1,0 +1,8 @@
+review: round 1, piece 1 of 4 (compiler, 12161 bytes)
+review: round 1, piece 2 of 4 (tests, 2004 bytes)
+review: round 1, piece 3 of 4 (scripts, 38728 bytes)
+review: round 1, piece 4 of 4 (docs, 558 bytes)
+review: round 1 verdict findings (4 piece(s)); raw output: .review/16ef6eb63cad4e69189ea80c76e9e82654ee7ea6-1.md
+[piece 3 of 4: scripts]
+- scripts/checks/compiler/tests.sh:54: The controls copy only the manifest into `$work/ctl`, but the reader resolves every `con:` source relative to the manifest’s parent directory. A valid manifest containing source tests therefore fails with “file does not exist” before reaching the planted expectation or inventory defect, causing these controls to fail for the wrong reason. Copy the test directory as the root manifest gate does.
+pre-push: review-notes push — no source tree, no gates

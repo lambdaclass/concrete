@@ -1,0 +1,3372 @@
+kimi version 2.4.1
+• I need execute substantial Lean task. Should inspect. Must no subagents unless explicit no. Should use todos. First read issue row, files CLAUDE etc. Should have every command bounded timeout. Tool Bash commands prefix timeout likely all. Dedicated Read no commands irrelevant. Should have status perhaps timeout 30 git status allowed. Start progress concise.
+
+• I’ll inspect ISS-0030 and the existing adapter, printer, and proof structure first, then establish a baseline probe before changing the implementation.
+
+## lcb-numbering
+4eabaffa ISS-0030: slice 0's LCB adapter is cubic and the LLVM printer quadratic in program size (scaling gate; Codex confirmed)
+ea212942 train/slice0: merge origin/wip/slice0 (ea5181b535)
+f65b9121 train/shrink: merge origin/wip/landing-shrink (e9b6096a62)
+e9b6096a Merge remote-tracking branch 'origin/main' into wip/landing-shrink
+d3811a74 train/signoff: merge origin/wip/owner-signoff-split (b7f30d3601)
+• I got huge. Should have remaining LCB headline end and BIR structures, Runtime indexed definitions, lake Lean version. Should design carefully. I need baseline probe before modifications. Build maybe current built? check .lake artifacts not need full build initially. Could write probe imports Concrete, generate family. Should understand BIR types constructors WF maybe family. Read BIR sections.Perhaps inspect changelog existing style. Also baseline probe create mktemp. Should run baseline build perhaps existing olean current commit. timeout 3600 lake build Concrete permitted at most few. Do it background? User says never two builds at once. I can run foreground timeout 3600 Bash tool max 300 but command itself can exceed tool gets background automatically. Better run background true with timeout 3600 command and disable? Bash timeout max background 86400. "You may run timeout 3600 lake build Concrete ... at most few". Run background to continue probe writing but cannot run probe until build complete. Could run foreground timeout parameter 300, command bounded 3600 tool may background. I can run background explicit then other light inspect. Use nix develop? AGENTS says gates inside nix develop. User explicitly command lake build perhaps environment direnv. which lake. Baseline likely lake build fast. Run background.
+
+• The proofs are stated directly over `adapt` and `emit`, so I’ll preserve those names and statements, add reference/fast definitions with equality theorems, and route the executable bodies through the prepared data.
+
+• Should design probe. User specifies k=1,10,100,1000 blocks with 2k+1 perhaps family. Baseline k100 LCB 21 sec; k1000 cubic ~6h unacceptable. "measure before and after ... k=1,10,100,1000 ... before and after; report numbers and exponents target ...". Baseline k1000 impossible cubic perhaps timeout and exponent 10->100 only before. Could baseline 1000 with timeout 120? Should not waste. Probe interleaved min 3 baseline huge ~65 sec okay. k1000 skip baseline due projected 6h, mark timeout perhaps use 30 sec confirms nonlinear. Should have evidence exact. I can create probe modes measure max k etc. Use monotonic timing IO.monoMsNow. Structural digest to force result. Should efficient digest linear but string itself large. LLVM output String digest `.length` forces full string computation? Lean String length perhaps UTF8 O(n), okay structural digest could fold bytes. LCB structure digest recursively arrays lists. Avoid reprStr exponential perhaps structural. Should write file under mktemp. Use Bash mktemp -d only way dynamic. Command bounded `timeout 30 mktemp -d /tmp/iss0030-baseline.XXXXXX`. Scratch only mktemp. Then Write known path. I'll do./tmp/iss0030.apR8JG
+Build fast done. Should read output. Probe. Define family exactly WF perhaps 2k+1 body blocks 4 inst. Make sure numberingOk accepts unique registers. LLVM doesn't care WF. LCB adaptation requires register defs. Family:
+  entry block no params insts perhaps [] term br 1 [] (k>=1)
+  body block j 1..2k? 4 instructions using immediate values no dependencies simpler:
+  bin .add .u8 d0 imm 1 imm2, etc unique regs. term if j < 2k br j+1 [] else ret imm u8 0. This yields 2k+1 blocks, four instructions each body. No phis, incoming scans still present adaptPhi zero params means no incoming? Brief adaptPhi scans every block per phi, family no params so no incoming in LCB. Main cubic regId enough. LLVM phis called each block even zero params but edges built regardless due let incoming strict? yes let incoming used inside map over empty params; Lean laziness perhaps not forced if no params => LLVM phis returns join [] without evaluating incoming! To measure LLVM exponent 1.52 they likely each body block param. Should family with param perhaps one each and branches passing immediate. Add body block params [(base,.int .u8)] and br target [imm]. Entry branch to 1 args. Each body four bin instructions using unique defs and imm. term next with arg or ret. This gives incoming one each. WF predecessor etc okay. Entry sites [] trap none.
+
+  Register assignments across 2k blocks each param +4 defs unique. r base = 5*(j-1). inst regs base+1... +4. bin op d, use `.imm` all accepted. block size params1+4*4=17. value count 34k at k1000. LCB output ~4*2000 instructions. Good.
+
+  Digest LCB:
+  def digestOperand : Source.Operand -> Nat local id, literal value toNat.
+  digest op recursively etc. Could easier hash via structural fields without Repr. Define mix n m := n*1000003+m%... but overflow Nat arbitrary precision can grow enormous if no mod. modulo constant.
+  Should force Except error string digest.
+  Source types accessible open. `LCB.emit p` result. digest f combine resultWidth? phis/instructions/terminator. Should traverse all fields including operands and operation. Ensure computation fully forced. Structural digest could count destinations etc enough to force all adaptation operands? To force reg lookup must digest each Source.Operand including all instructions and phi arms and term. Should have operations inspect. I have render functions but digest output render string would linear and structural but adds output conversion, okay linear structural digest requirement likely directly fold. Could define `digestLCB` using `LCB.render f` and digestString => render uses all. But render output concatenation potentially quadratic? Small per blocks string ++ overall may linear. Yet included overhead but linear. "linear structural digest" likely no reprStr. Implement direct with operands, operations perhaps many cases. Should have types Source.Binary etc. Can use LCB.renderOperand gives strings then string digest. Simpler generic digestString (s.toUTF8.foldl...). `digestLCB f` fold blocks digestPhi and instructions using fields. For operation can digest using LCB.renderOperation (linear per op) but not purely direct structure? yes. Or digest destinations + renderOperation. Term render. This forces operands. Output values arrays. `Except` digest error string.
+
+  Time min of 3 interleaved runs. Probe args k values perhaps default all and baseline k1000 skip command list 1 10 100. User wants 1000 after. Implement `main args` parse ks; each k run LCB 3 and LLVM 3 interleaved for each k. For baseline 100 => 65 sec. Use timeout 300. At k1000 baseline skip. Baseline before output times. Could run baseline k1 10 100 (min3). For 1000 run one with `timeout 120 lake env lean --run probe 1000` would do both LCB first timeout and no LLVM. Could arrange LLVM first then LCB to at least LLVM 1000 baseline. But baseline issue only exponents 10→100 enough and after 100→1000. Brief says measure before/after scaled family k=... Could run each separately args and rounds. For k1000 baseline LLVM only perhaps ~160ms. LCB timeout 30 proves too slow but no number. Response transparent.
+
+  Now write probe. IO timer `IO.monoMsNow` available. Force evaluation using `IO.pure digest` might laziness: let start ←; let d := digest; IO.println s after end ensures evaluation? Lean strict evaluator computes let when used at end. `let elapsed := finish-start`; print d and elapsed; digest evaluated as argument print before output, but finish timestamp taken before digest evaluation due laziness! Should force via `IO.force`? Lean `IO.force`? Common `evaluate`? Search existing scaling file not branch. Could use `let d ← IO.pure (digest...)` still pure doesn't force. `IO.println s!"{d}"` before finish forces digest then finish. Should avoid output each run? do `let digestText := toString digest; IO.print ""?` evaluation. `IO.println` per run okay. Sequence:
+  start
+  let result := ...
+  IO.println s!"digest={digest result}" // forces
+  finish
+  return elapsed, digest
+  Then output measurements additional.
+  Could define `timeIt (label) (digest)` where thunk Unit -> α, compute `let value := thunk (); IO.println s!"{label} digest ..."; end`.
+  Use `IO.FS.Handle`? straightforward.
+
+  IO args parse `String.toNat?`.
+  Digest string with `s.fold`? String.fold over chars. `s.toUTF8.foldl` API. use `s.toList.foldl` potentially allocation linear. okay. `digestString s := s.toList.foldl (fun h c => (h*131+c.toNat)%1000000007) 0`. Char.toNat exists.
+
+  LCB digest via render:
+  ```
+  def digestFunction f :=
+   f.blocks.foldl (fun h b =>
+    let h := b.phis.foldl (fun h ph => ... renderOperand ...) h
+    let h := b.instructions.foldl (fun h i => digestString (LCB.renderOperation i.operation) (mix h i.destination)) h
+    digestString (LCB.renderTerminator b.terminator) h) ...
+  ```
+  Array.foldl signature function acc elem. `f.valueWidths.foldl` perhaps width repr no need valueWidths replicate forced by size, include size. resultWidth not relevant. Sites digest list perhaps [].
+  Error emit.
+
+  LLVM string digest.
+
+  Use command `timeout 300 lake env lean --run /tmp/.../Scaling.lean 1 10 100`. Imports Concrete (root) likely path. Write.
+
+• The baseline build passed. I’m using the issue’s 2k+1-block, four-instruction family with block parameters and a structural digest that forces every emitted operand, instruction, phi, and terminator.
+
+• Now design while baseline. Should choose representation. Requirements linear and proofs all malformed cases, equality. HashMap could prove via Std lemmas, but core no mathlib. Arrays indexed by Reg: registers Nat unbounded malformed. Choose `Array (Option Nat)` sized maxReg+1 built in single pass ids. Then lookup if r<size arr[r] else none. Prove equality with List.lookup first wins. Building array by fold over ids preserving first definition requires check existing. But `ids p` itself quadratic to compute. Should fastIds linear running offsets and prove fastIds=ids. Then build lookup array from fastIds. Complexity fold with array set and contains O(1). Could build array of size `maxReg+1`; computing max linear. `List.lookup` equality. Validation linear or nlogn: Since ids occupy distinct slot positions if generated offsets, I can use arrays indexed by id (valueCount) to track registers and slots/intermediates. Validate in single pass using `Array (Option Reg)` for slots of length valueCount and array bool intermediates, plus reg table uniqueness. Could prove equivalent Bool to numberingOk, potentially tricky. Alternative keep `numberingOk` reference, define `numberingOkFast` as decide propositions via `List.Nodup` decided using array? Should have actual linear.
+
+  Could simplify representation prepared:
+  - `fastIds` list linear and prove equality
+  - lookup table Array Option Nat
+  - `numberingOkFast`: compute `idsFast`, `intermediatesFast` linear (need fast intermediates) and use array-based duplicate checks. Prove general boolean list Nodup checker using array indexed by Nat bounded. Values all < valueCount guaranteed by construction? For malformed input (weird out of range? offsets mathematically always < valueCount for actual definitions and intermediates), yes can prove each generated id < valueCount. But numberingOk includes checks. To show equality, easiest build generic `nodupBy` using HashMap? Proving hashmap list Nodup may be manageable. Or use `List.eraseDups` length still quadratic. Should linear. `Std.HashSet` and theorem to List.Nodup maybe core lemmas. Array indexed Nat for dense slot ids. Reg arbitrary so max bound array. Generic `nodupNatBounded` checks all n<bound and no duplicate via array bool. Prove equivalence to `List.Nodup` under bound. Could avoid separately checks by one combined linear validator whose correctness uses numbering structural invariants.
+
+  Alternative build numbering with array annotated by origin then numberingOkFast equality through generic theorem that all fast entries expected and validation tracks:
+  Reference numberingOk =
+  nodup regs && nodup slots && slots all bound && inter all bound && disjoint.
+  Use generic functions:
+  `nodupNat (bound) (xs)` returns bool = `xs.all (< bound) && decide xs.Nodup` implemented array bool single pass. Then numberingOkFast =
+  `(nodupNatSlots regs?)` regs bound `maxReg+1` etc. For regs use bound maxReg+1. Define `natNodupBound bound xs` = all < bound && Nodup. For slots bound valueCount; intermediates bound valueCount and disjoint via combined. Could call `nodupBounded (maxReg+1) regs && nodupBounded valueCount slots && nodupBounded valueCount inter && disjoint`.
+  Disjoint can use array seen slots linear generic `disjointBounded bound xs ys` meaning all elements xs/ys bound and no shared. Combine slots and inter:
+  - `slotsOk := arrayNodup valueCount slots` checks bound & Nodup
+  - `intersOk := arrayNodup valueCount inters` not required Nodup by reference, unnecessary but structural inters unique anyway but if require adds refusal changed on hypothetical? Reference doesn't require inters nodup. Can't.
+  - `interOk` fold array initially mark slots, reject duplicate slots too and bounds; then scan inters check bound and !seen. This verifies slots Nodup, slots bound, inter bound, disjoint in one pass.
+  - regs separately arrayNodup (maxReg+1) regs.
+  Fast numberingOk = regOk && slotInterOk. Equivalent exactly. Generic checker theorem.
+
+  Could instead use array of `Option Reg` and register table from prepared, leveraging no duplicate regs. Generic.
+
+  Incoming grouping: Since targets Nat malformed out of range, `incoming p j` scans all blocks for any j, including out-of-range targets. Array indexed targets size perhaps max target+1 to include all j. Could group via `Array (List (Nat×List Operand))` size max(p.blocks.length, maxTarget+1), append preserving order. Array push lists with `++` can quadratic per target if many edges; use difference lists or prepend reverse. Simpler prepared incoming as `Array (List ...)` built by fold indexed blocks and edges; update target with `prev ++ [edge]` causes quadratic if many predecessors same target. Should linear overall target requirement. Use reversed lists push `edge :: prev`, prove `incomingGroup[j].reverse = incoming p j`, adapt uses `.reverse` per block; total linear. For both conditional arms order yes process `edgesTo j k term` list in order and prepend each sequentially then reverse yields correct. But fold over edges per block with list fold prepend. Could define `incomingRev p : Array (List...)` sized `incomingBound p` = max targets+1 perhaps p.blocks.length not enough malformed j targets. Query adapt only targets block j < length, LLVM same. Theorem only every j requirement including malformed, choose dynamic max target+1. Could use `Std.HashMap Nat (List...)` easier lookup arbitrary, but array bound straightforward.
+  Compute bound once linear: `edgesMax` or maximum targets. `p.blocks.foldl max term targets`. Could define `targetBound p := p.blocks.foldl (fun n b => max n (b.term.targets.foldl max 0 +1)) 0`. BIR Term.targets exists. For empty no edges bound0. incomingRev initialize replicate bound []; iterate indexed blocks and for each `edges p`? I must avoid edges list triples and convert. Use `outEdges k term : List (target, (pred,args))`. Could reuse LLVM edges by shared new module? LCB and LLVM import Runtime only. Could add generic definitions to Runtime? Design no new files perhaps Runtime appropriate? Both `incoming` shapes differ. Could define LLVM `edgeGroups` from its `edges`, then LCB use own incoming groups. Duplicated preparation but each linear. Requirement group once per program and use both respective. Fine.
+
+  Could unify in Runtime `predecessors` but proof perhaps more. Keep separate.
+
+  LCB fast numbering:
+  Define reference `ids` untouched. New `Prepared` structure:
+  ```
+  structure Numbering where
+   ids : List (Reg×Nat)
+   byReg : Array (Option Nat)
+   incomingRev : Array ...
+  ```
+  Could `prepare p` computes fastIds and arrays. But adaptFast uses offsets during block generation, avoid `blockBase` prefix sums. Prepared should have block info:
+  ```
+  structure BlockNumbering where
+   base : Nat
+   instBases : Array Nat -- per inst
+  ```
+  `Prepared` fields `idsTable`, `regIds`, `incoming`, `blockBases : Array Nat`, `instBases : Array (Array Nat)` or block records base and inst offsets. Prove each offsets equal. Then fast adaptBlock indexed uses arrays access. Could simplify compute `fastAdapt` recursively in one pass carrying base and inst base, avoiding arrays of offsets, and prove via recursive equality. Requirement prepared representation computed once per program. Should lookup table and incoming table computed once. Bases could be arrays prepared. Best structure:
+  ```
+  structure Prepared where
+    regs : Array (Option Nat)
+    blocks : Array (Nat × Array Nat) -- base, instBases
+    incomingRev : Array ...
+    numberingOk : Bool? 
+  ```
+  fastIds generated as byproduct. Proofs equality generated list ids and offsets.
+
+  Could avoid Prepared block bases by use `fastIds` only lookup; adaptInst uses `blockBase` and `instBase` causing quadratic per inst, must replace. Use prepared `blocks` entries with base and instBases. `blockBaseFast` arr getD j 0 and `instBaseFast` entry arrays getD. Proven for valid j,i. Fast functions access with `getD`. Since mapping over indexed actual blocks/inst valid. Equality with reference uses these lemmas. For malformed out-of-range functions adaptFast not called except generic equality can prove via ext with valid indexes. Should define fastBlock `base` etc.
+
+  Single pass numbering generation: recursive functions returning list and arrays:
+  ```
+  def instBasesLoop (insts) (n) : List Nat := n :: ... n+width
+  ```
+  List of starts length insts. `blockOffsets b := (b.params.length, scan)`.
+  `prepareBlocks` recursive over p.blocks carrying base returns list `(base, List instBase)` and flat ids/intermediates. Should prove equality to reference using prefix sums. Could define reference-like recursive helper and prove via induction with `blockBase` recurrence. The theorem `fastIds p=ids p` can be proved by defining `idsLoop` such that obvious append. Existing ids uses indexed/flatMap, blockBase/instBase prefix sums. Induction p.blocks general base with equality base = blockBase for position. Inst loop similarly.
+
+  Perhaps easier use library `List.scanl` for running offsets:
+  - `blockSizes := p.blocks.map blockSize`
+  - `blockBases := 0 :: scan?` `List.scanl (·+·) 0 sizes` gives [0, size0,...] including final. Could take. Proving blockBase equality using scanl lemmas perhaps harder.
+  Recursive with accumulator and reverse efficient:
+  ```
+  def numberingLoop (blocks) (base) : List (Reg×Nat) × List BlockInfo ...
+  ```
+  Recursive output concatenation using `++` can quadratic if `(idsBlock) ++ recursive` total each element appended once? List append cost left block sizes, sum = n linear, okay. Recursive blocks construction with `info ::` linear. Inst ids within block similarly flatMap with mapping each defs small. instBase computations carried. Good.
+
+  Define functions structural recursion:
+  ```
+  def instNumbering (base : Nat) : List Inst -> List (Reg×Nat) × List Nat × List Nat
+  | [] => ([],[],[])
+  | ins::rest =>
+    let (ids,bases,inter) := instNumbering (base+width ins) rest
+    ((instDefs ins).map (fun (r,off)=>(r,base+off)) ++ ids,
+     base :: bases,
+     (interOffsets ins).map (base+·) ++ inter)
+  ```
+  Note output order inst bases. For each block base includes params length:
+  ```
+  def blockNumbering (base) (b) :=
+   let paramIds := (indexed b.params).map ...
+   let (instIds, bases, inters) := instNumbering (base+b.params.length) b.insts
+   (paramIds++instIds, bases, inters)
+  ```
+  Then program loop:
+  ```
+  def numberingFrom (base) : List Block -> ...
+  | []...
+  | b::bs =>
+   let current := blockNumbering base b
+   let rest := numberingFrom (base+blockSize b) bs
+   (curIds++restIds, (base,curBases)::restInfos, curInter++restInter)
+  ```
+  `PreparedData` structure ids, blocks, intermediates. Arrays conversion once. Complexity list appends each ids per block linear total, inter same. `indexed b.params` linear. Good.
+
+  Prove ids equality. Establish reference decomposition lemmas:
+  - `ids` equals `programNumbering 0 p.blocks`. Could induction blocks with base = blockBase p j and prefix context. Instead prove generalized reference idsFrom for list prefix.
+  Existing ids p uses global p so induction p.blocks challenging because blockBase references original p. Could prove entry-wise via `List.ext_getElem?` complicated. Better prove general lemma for `idsAppend`:
+  `ids {blocks := bs₁++bs₂, sites} = ids bs₁ ++ map shift? ids bs₂` with base shift. Reference numbering loop with base initial. Could define a reference `idsFrom base bs` analogous but blockBase for local? Then prove fastIds loop = idsFrom by induction easier arithmetic. Then prove ids p = idsFrom 0 p.blocks by showing blockBase_local = original blockBase, instBase. `idsFrom` defined with `localBlockBase` same blockBase on a Program? Can create `idsWithBase base bs` using `blockBase ⟨bs, sites⟩` plus base. For induction tail, blockBase tail j differs original blockBase (b::bs) (j+1) by blockSize b. Prove lemma `blockBase_cons`. Manageable.
+
+  Alternative prove equality using list membership + Nodup? ids fast=ids exact needed; no.
+
+  I can create specification versions for sublist with base:
+  ```
+  def idsSpecFrom (base) (blocks) :=
+   (indexed blocks).flatMap fun (j,b) =>
+   params id base + ((blocks.take j).map blockSize).sum + k...
+  ```
+  This is same shape ids p with base addition and local blockBase. Then induction general base:
+  head j0 base, tail shift. Should lemma indexed cons flatMap = head ++ tail indices shifted; simplification with `indexed` `indexedFrom` and map addition perhaps existing `indexedFrom` tail has indices 1 not 0. Could define reference recursive via `blockBase` globally and prove with original list using recursive `ids`? Define helper `idsGo p base j remaining` using `drop j`, indexed remaining local k and global base + blockBase p (j+k). Then proof recursion arithmetic tough.
+
+  Could use existing `List.flatMap` and indexed plus prove a generic theorem by induction over indexed list where `blockBase` can be expressed as accumulator:
+  ```
+  def idsIndexed (base) : List (Nat×Block) -> ... 
+  | [] => []
+  | (j,b)::rest => idsBlock base j b ++ idsIndexed base rest
+  ```
+  But for rest bases still blockBase p j', not running. Fast loop equality by map over indexed p.blocks with state impossible.
+
+  Perhaps theorem using running offsets helper and prove each block's base via `blockBase_eq_fold` induction and list relation. Standard induction on blocks with an index `j` and base equality, generalizing `j`:
+  ```
+  theorem numberingFrom_ids (p) :
+   ∀ j rest, p.blocks.drop j = rest →
+    (numberingFrom (blockBase p j) rest).ids =
+     (indexed rest).flatMap fun (k,b) => idsAt (blockBase p (j+k)) (local instBase...) ...
+  ```
+  Define RHS reference `idsSuffix p j` using drop j and global positions. Then show `ids p = idsSuffix p 0` by simp indexed indices j same. Induction:
+  head current k0 blockBase p j, tail k+1 global j+(k+1)=(j+1)+k. blockBase p (j+1)=blockBase p j+blockSize b if drop gives head. Should prove `blockBase_drop` using getElem. `blockBase p (j+1) = ...` if p.blocks[j]?=some b via take_add_one. Good. instBase unchanged.
+  This is tractable.
+
+  Define `idsAt base b` with parameter ids and instruction ids computed from reference instBase:
+  ```
+  def idsBlockAt base b :=
+   indexed params ... base+k ++
+   indexed insts flatMap ... base + instBase b i + off
+  ```
+  `interBlockAt`.
+  Then `idsSuffix p j := (indexed (p.blocks.drop j)).flatMap fun (k,b) => idsBlockAt (blockBase p (j+k)) b`
+  `ids p = idsSuffix p 0` should simp [ids, idsSuffix, idsBlockAt] arithmetic `j+0`.
+  Fast `numberingFrom` output blocks info plus ids inter. Theorem induction rest with p,j and drop equality.
+  Could separate three component theorems using whole structure equality to a `specNumberingSuffix` structure. Define `Numbering` data fields. Reference suffix `numberingSpecSuffix` similarly with blocks info `(blockBase, (indexed insts).map instBase)`. Fast numbering equals spec suffix in one induction. Then at j0 get ids etc.
+  ```
+  structure NumberingData where ids; intermediates; blocks : List (Nat×List Nat)
+  ```
+  `numberingSpec` p uses indexed p.blocks map etc. Prove numberingFrom 0 = numberingSpec p using suffix. Could use p drop.
+
+  Fast inst numbering equality to spec per block:
+  ```
+  theorem instNumbering_spec base b:
+   (instNumbering base b.insts) =
+   { ids := (indexed b.insts).flatMap ...
+     intermediates := ...
+     bases := (indexed b.insts).map (fun(i,_)=>base+instBase b i) }
+  ```
+  But instNumbering base expects base includes params. Its instruction ids base+off. Reference base global + instBase. Use instBase b i = params.length + prefix. instNumbering starting `base + params.length`; spec uses `base + instBase b i`. Induction list with index suffix similar. Could instead prove generic local recursive inst list with `instBase` via suffix. Same approach but simpler.
+
+  Potential code/proofs 500 lines. Should manage time.
+
+  Alternative avoid fastIds equality complexity by compute prepared ids via existing `ids p` once: ids p itself Θ(n²), violates linear target exponent <=1.2 10→100 etc. Should fast.
+
+  Validation generic proofs also substantial. Could leverage `decide +kernel`? No, equality universal proof. Should theorem generic array validator. Perhaps Std.HashMap reduces proof complexity? Core hashmap has `contains` lemmas and insert, fold induction. Arrays easier known lemmas but getElem/setIfInBounds.
+
+  Could use association table array indexed by Reg built by `Array.modify`? Implement purely with functions and theorem by induction. Generic `NatTable`:
+  ```
+  def mark (a : Array Bool) (n) : Option (Array Bool) :=
+   if h:n<a.size then
+     if a[n] then none else some (a.setIfInBounds n true)
+   else none
+  ```
+  Checker returns Option array. Proving `natNodupBound bound xs = decide xs.Nodup && xs.all < bound` by induction with `List.all` etc and array get/set lemmas. Could formulate `markNats` returns Option (Array Bool):
+  ```
+  def markNats (xs) (a) : Option (Array Bool) :=
+   match xs with
+   | [] => some a
+   | n::ns =>
+     if h:n<a.size then
+       if a[n] then none else markNats ns (a.setIfInBounds n true)
+     else none
+  ```
+  Then `natNodupBound bound xs := (markNats xs (replicate bound false)).isSome`.
+  Proof by induction general array invariant for indices processed. More generic theorem:
+  if `a` has true exactly elements of `seen` (all seen < size), then markNats xs a succeeds iff xs.Nodup and all <size and disjoint seen, and final marks seen++xs. To only equality Bool can prove success iff no dup and bounds with initial all false, but induction needs tracked seen. Could define accumulator as List seen plus array and relate, still proof.
+
+  Instead validator returns `(Bool × Array Bool)` with false on failure but continues? Then boolean correctness easier via recursive predicate. Define `checkNats` recursive and theorem in terms of array membership and list. Standard.
+
+  Perhaps use `List` plus `Array` as function `a.getD n false`; prove set. Could state theorem:
+  ```
+  markNats_sound: markNats xs (replicate bound false) = some a ->
+   xs.all (<bound) && decide xs.Nodup
+  markNats_complete...
+  ```
+  Induction direct needs IH for tail array not replicate. Generalize initial array all false only gets set after head, cannot IH. Prove generalized with `seen` and initial array `markList seen`. Could establish invariant.
+
+  Could avoid proving checker directly and define fast validation by generic `List.Nodup` via `Decidable` instance using array? Existing `decide` elaborates List.Nodup using quadratic. no.
+
+  HashSet fold theorem might be easier if library provides `List.nodup_iff_count...`. Should inspect core sources for HashSet Nodup. Use Grep .lake/packages? Lean toolchain library path via `lake env lean --print-prefix` command bounded. Could query #check in scratch Lean. I can use `#check Std.HashMap.get?_insert`, etc. But design with arrays familiar.
+
+  Perhaps validation can exploit ids generated structure to prove numbering invariants hold always except duplicate regs? Actually slots are by construction unique and bounded, intermediates unique and disjoint always mathematically. For all programs, reference numberingOk reduces to regs.Nodup, since slots assigned each value exactly once. Prove structural lemmas once (more work than generic checker perhaps). Then fast only need regs duplicate linear via array. But reference numberingOk includes all, can prove always other checks true by generated ids equal and offset properties. This could simplify checker slot/inter entirely. Yet proving all slots Nodup and bounded and inters disjoint perhaps nontrivial but leveraging canonical positions can be established with arithmetic. More proof than generic checker. Generic slot checker straightforward implementation plus equality to original combined using generic theorems independently.
+
+  Could implement generic linear Boolean functions and use `by native_decide` banned. no.
+
+  Perhaps use `Std.TreeSet` nlogn and established nodup theorems. Still proof.
+
+  I need baseline completes soon. While waiting can query library relevant. Use `#check` probe and lean compile fast not build (allowed while probe). Commands bounded. Write Check.lean with HashMap and Array lemmas uncertain errors. Better Grep Lean source path `/home/.../.elan/toolchains` outside cwd dedicated allowed absolute. `Bash timeout 30 lake env lean --print-prefix`.
+
+• The implementation will use arrays only for bounded natural-number lookups; malformed registers and branch targets remain covered by computing their bounds first, and reversed edge buckets preserve the reference order after one reversal per target./nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1
+
+
+• 163 sec likely LCB ~50 sec each due family larger than original. Read.Baseline 53.9s exponent 2.89 exactly. LLVM min0 useless k1/10; use max or median micro timing? Should measure accurate exponent after. Could use `IO.monoNanosNow` perhaps available? `IO.monoMsNow` only. k1000 after expected 100ms. Before k10 <1ms, report <1. Could run repeats within timed to get robust for small k but digest force repeated. Probe scaling gate min3. Fine numbers 0/18 exponent infinite low end but 100->1000 after good. Could measure k10 repeated 10 or 100 and divide but not needed perhaps target 10→100 both require exponent; after k10 0 ms impossible calculate. Use nanosecond `IO.monoNanosNow` check. Lean has `IO.monoNanosNow` likely yes. #check. Later adjust.
+
+  Should baseline LLVM k1000 only to fulfill before. Modify probe support stage args? Could make second file or adjust main args e.g `llvm 1000`. Simpler create separate small wrapper import Scaling impossible module path. Edit probe add if args head "llvm". But keep baseline file copy? I'll later edit for nano. Use Edit to add oneLLVM function and main parse `llvm:1000` etc. Or baseline LCB k1000 projected 15 hours (53.9*1000) not run. Explicit don't run. Baseline LLVM 1000 can run by create probe argument stage. Add:
+  ```
+  if args == ["llvm","1000"] then ...
+  ```
+  Main `match args with | "llvm"::ks => ... | "lcb"...`.
+  Should have `oneLLVM`, `oneLCB`, `one`. Then after run all. Do Edit.Now baseline done LCB 1000 infeasible transparent. Mark done implement.
+
+• Baseline minima are 71 ms → 53,944 ms for `LCB.emit` at k=10→100 (exponent 2.89). I’m not running the baseline k=1000 LCB case: the measured cubic growth projects roughly 15 hours; the optimized run will include k=1000.
+
+• Should implement incrementally. Perhaps separate new file Numbering? Rule stages definitions same file, no new one-file folder but Backend allowed files per backend. Keep LCB/LLVM.
+
+  Could optimize LLVM first small commit. Prepared incoming with array. Prove print equality. I'll do LLVM independently easier and build. Then LCB.
+
+  LLVM definitions:
+  ```
+  structure EdgeBuckets where
+    rev : Array (List (Nat×Nat×List Operand))
+  ```
+  No structure needed.
+  `edgeTarget` triple first.
+  `edgeBound p := (edges p).foldl (fun n e => max n (e.1+1)) 0` but edges p linear (it is linear) yes building edges once. `edgeBuckets p` uses edges p (already computed once ideally pass es).
+  ```
+  def bucketsFrom (es) (bound) :=
+   es.foldl (fun bs e =>
+     if h:e.1<bs.size then bs.setIfInBounds e.1 (e::bs[e.1]) else bs)
+   (Array.replicate bound [])
+  ```
+  Since bound guarantees target < size else branch unreachable but malformed included bound computed all edges. Prove for every j:
+  `(buckets p)[j]?.getD [] |>.reverse = (edges p).filter target`.
+  Could prove generic fold property using filter. Define buckets function recursively on list edges with accumulator. Generic invariant:
+  `bucketGet (fold ...) j = (fold ... j) ++?` Prepends so final bucket = reverse prefix? Theorem:
+  For any initial `bs` and es, if j<size,
+  ```
+  ((addEdges es bs)[j]?) = some ((es.filter target j).reverse ++ bs.getD j [])
+  ```
+  Because each new matching e prepended. Induction es:
+  head e target j -> new list e::old, recursive rest gives restRev ++ (e::old) = (restRev++[e])++old = filter whole reverse ++ old. Nonmatching no change.
+  Should array set get lemmas, size set.
+  At initial empty, gives reverse filter ++ []. Then incoming = reverse bucket = filter. Could formulate getD to avoid dependent h.
+  `bucket (bs) j := (bs[j]?).getD []`.
+  Theorem with `j < bs.size` preserved.
+  `addEdges` recursive not fold to ease induction:
+  ```
+  def addEdges (bound) : List Edge -> Array ... -> Array...
+  | [], bs => bs
+  | e::es,bs =>
+   let bs' := if e.1 < bs.size then bs.set! e.1 (e::bs.getD...) else bs
+   addEdges es bs'
+  ```
+  Using `set!` never out of bound, but theorem requires bound. Array.set! eq setIfInBounds. Access `bs[e.1]!` perhaps get! requires Inhabited. `bs.getD e.1 []` exists? #check. I can use `(bs[e.1]?).getD []` known Option.getD.
+  ```
+  def addEdge (bs) (e) :=
+   if h : e.1 < bs.size then
+     bs.setIfInBounds e.1 (e :: bs[e.1])
+   else bs
+  ```
+  dependent get with h easy. Theorem after set self. For recursive IH initial changed and j<size.
+
+  Bound proof:
+  `target_lt_edgeBound : ∀ e∈edges p, e.1 < edgeBoundFrom edges`. Generic fold bound. Define `edgeBound es := es.foldl (fun n e => max n (e.1+1)) 0`.
+  Theorem `e∈es -> e.1 < edgeBound es`. Induction general accumulator:
+  `fold bound` >= each. Could instead compute maximum via `es.map target |>.foldl max 0`, library `List.le_foldl_max` perhaps. Or avoid arrays bounded by all targets using size = `maxTarget+1` and prove by simple recursive bound:
+  ```
+  def edgeBound : List Edge -> Nat
+  | []=>0
+  | e::es => max (e.1+1) (edgeBound es)
+  ```
+  Computes linear. Proof membership easy induction, Nat.le_max. Buckets initial replicate edgeBound. This is single pass. Great.
+
+  `addEdges` only use list edges, bound known. Prove `edgeBound_cons` etc simp.
+
+  Could define `buckets p := addEdges (edges p) (Array.replicate (edgeBound (edges p)) [])` computes edges p twice due pure expression runtime common let:
+  ```
+  let es := edges p
+  addEdges es (replicate (edgeBound es) [])
+  ```
+  linear.
+  `incomingFast p j := ((buckets p)[j]?).getD [] |>.reverse`
+  But print per block calling `buckets p` each time would rebuild. Should prepared passed:
+  `printWith es buckets` compute once in printFast.
+  ```
+  def phisFast (bs) j b := let incoming := bucket...reverse...
+  def printFast p :=
+   let bs := buckets p
+   ... phisFast bs
+  theorem phisFast_eq: phisFast (buckets p) = phis p
+  ```
+  `printFast_eq` simp [printFast,print,phisFast_eq].
+  Then preserve `print` theorem statement name? Requirement keep existing definitions and theorems reference. LLVM print existing def no theorems here but elsewhere unprint theorems about print. Should make executable `print` fast and reference `printSpec`, prove `print_eq_spec`. Existing theorems `unprint (print b)` remain exact statement with print name but digest changes golden trusted base? The theorem statements visible golden are axioms only perhaps statements? They say exact theorem statements for specific LCB; LLVM unprint statement same name print anyway. Approach:
+  - rename current `phis` to `phisSpec`? User specifically use in LLVM.phis proved equal current printed text. Keep `phis` reference and add `phisFast`.
+  - rename current `print` to `printSpec`, add `print` fast and `print_eq_spec : print p=printSpec p`.
+  This changes definition name original body but reference clear. Existing `print` uses now fast. `module` unchanged calls print.
+  - `printFast` perhaps define explicit and then `print` alias `printFast`. Requirements prove printFast b=print b or module equality. If `print` becomes fast, `printFast=print` rfl not meaningful but `print_eq_spec` does. Good.
+  - existing theorems in other files about print compile unchanged statement.
+  Could leave `print` reference and make `module` call printFast, prove `printFast=print`. This minimizes reference changes, entry module fast. But direct `LLVM.print` used elsewhere compile output? User says executable entry LLVM.module whatever. Premises `llvm` uses LLVM.print at Premises line 283 (actual code perhaps). If leave print slow, other paths perhaps gates call module. Requirement "Define fast ... or replace bodies ... executable entry points (LCB.emit, LLVM.module, whatever slice0_bir.lean and gates call) use fast code." So module fast enough, print reference preserved. Better. `printFast` uses fast phis. `module` change to `printFast p`. Prove `printFast_eq`, `module_eq_spec` perhaps `moduleFast`? Theorem `printFast_eq : printFast p=print p`. Module output unchanged via congrArg. Existing module definition changed but no theorem statements. Good. No need rename.
+
+  Implement with generic lemmas in LLVM namespace. I'll query Array set simplification via Lean file and build errors iterative. I'll insert after phis reference perhaps fast functions after print? `printFast` needs phisFast. Place after print before module. Definitions can refer previous all. Lemmas also there.
+
+  Write edit insert substantial.
+
+• I’ll land the smaller LLVM slice first: build the edge buckets once, prove their lookup equals the filtered reference edge list, and prove the complete fast body text equals `print`.
+
+• I accidentally included impossible `he` with bogus exact Nat.le_refl proving e.1<bs.size generally. Should remove; by_cases enough. Also List.map_congr_left signature perhaps. Build file using `timeout 300 lake env lean Concrete/Backend/LLVM.lean` not full build? User allowed lake build Concrete max few, lake env lean file not proof-heavy full build okay commands bounded. This compiles source imports oleans, output olean? Direct lean no -o no file. Use. First remove he.Concrete/Backend/LLVM.lean:123:4: error: unsolved goals
+case cons.inl
+e : Nat × Nat × List Operand
+es : List (Nat × Nat × List Operand)
+ih : e ∈ es → e.fst < edgeBound es
+⊢ e.fst < max (e.fst + 1) (edgeBound es)
+Concrete/Backend/LLVM.lean:124:39: error: unsolved goals
+e a : Nat × Nat × List Operand
+es : List (Nat × Nat × List Operand)
+ih : e ∈ es → e.fst < edgeBound es
+h : e ∈ es
+⊢ edgeBound es ≤ max (a.fst + 1) (edgeBound es)
+Concrete/Backend/LLVM.lean:144:6: error: unsolved goals
+case pos
+e : Nat × Nat × List Operand
+es : List (Nat × Nat × List Operand)
+bs : Array (List (Nat × Nat × List Operand))
+hlt hj : e.fst < bs.size
+⊢ bs[e.fst] = bs[e.fst]?.getD []
+Concrete/Backend/LLVM.lean:146:10: warning: This simp argument is unused:
+  List.filter_cons
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [bucket, Array.getElem?_setIfInBounds_self_of_lt (by simpa using hlt), List.reverse_cons,
+    List.append_assoc]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Backend/LLVM.lean:148:22: warning: This simp argument is unused:
+  Array.getElem?_setIfInBounds_ne hne
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [bucket, List.filter_cons, h]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Backend/LLVM.lean:148:59: warning: This simp argument is unused:
+  List.filter_cons
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [bucket, Array.getElem?_setIfInBounds_ne hne, h]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Backend/LLVM.lean:152:12: warning: This simp argument is unused:
+  List.filter_cons
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [hne]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Backend/LLVM.lean:159:8: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  (List.filter (fun x => x.fst == j) (edges p)).reverse ++ bucket (Array.replicate (edgeBound (edges p)) []) j
+in the target expression
+  (bucket (edgeBuckets p) j).reverse = List.filter (fun x => x.fst == j) (edges p)
+
+case pos
+p : Program
+j : Nat
+hj : j < (Array.replicate (edgeBound (edges p)) []).size
+h :
+  bucket (addEdges (edges p) (Array.replicate (edgeBound (edges p)) [])) j =
+    (List.filter (fun x => x.fst == j) (edges p)).reverse ++ bucket (Array.replicate (edgeBound (edges p)) []) j
+⊢ (bucket (edgeBuckets p) j).reverse = List.filter (fun x => x.fst == j) (edges p)
+Concrete/Backend/LLVM.lean:198:2: error: Tactic `apply` failed: could not unify the conclusion of `@List.map_congr_left`
+  List.map ?f ?l = List.map ?g ?l
+with the goal
+  String.join
+      (List.map
+        (fun x =>
+          toString "b" ++ toString x.fst ++ toString ":\n" ++ phisFast (edgeBuckets p) x.fst x.snd ++
+              String.join (List.map inst x.snd.insts) ++
+            term x.fst x.snd.term)
+        (indexed p.blocks)) =
+    String.join
+      (List.map
+        (fun x =>
+          toString "b" ++ toString x.fst ++ toString ":\n" ++ phis p x.fst x.snd ++
+              String.join (List.map inst x.snd.insts) ++
+            term x.fst x.snd.term)
+        (indexed p.blocks))
+
+Note: The full type of `@List.map_congr_left` is
+  ∀ {α : Type ?u.5} {l : List α} {α_1 : Type ?u.4} {f g : α → α_1},
+    (∀ (a : α), a ∈ l → f a = g a) → List.map f l = List.map g l
+
+case e_a.e_a
+p : Program
+⊢ String.join
+      (List.map
+        (fun x =>
+          toString "b" ++ toString x.fst ++ toString ":\n" ++ phisFast (edgeBuckets p) x.fst x.snd ++
+              String.join (List.map inst x.snd.insts) ++
+            term x.fst x.snd.term)
+        (indexed p.blocks)) =
+    String.join
+      (List.map
+        (fun x =>
+          toString "b" ++ toString x.fst ++ toString ":\n" ++ phis p x.fst x.snd ++
+              String.join (List.map inst x.snd.insts) ++
+            term x.fst x.snd.term)
+        (indexed p.blocks))
+Warnings errors yes fix. edgeBound omega. bucket pos getElem getD lemma `Array.getElem?_eq_getElem hlt` rewrite. Simp after rw. `congr 1` for String.join perhaps `congr 1; apply map...`. `congr 2` overdid leaves String.join. Add `congr 1`.
+
+  Bucket proof h simplify at h:
+  ```
+  have h ... 
+  simp only [bucket, Array.getElem?_replicate, hj, ...] at h?
+  ```
+   easiest `simp [edgeBuckets, bucket] at h ⊢` perhaps unfolds addEdges undesired? `change (bucket (addEdges...) j).reverse = _; rw [h]; simp [bucket]`. Use `change`.
+  Out of range hnoedge `List.filter_eq_nil_iff` goal likely beq false not equality. Existing intro h works after simp only beq. Fine.
+
+  Edit multiple same file one Edit whole replacements? I can single Edit with several old chunks impossible one call supports one replacement. Should do one combined old region large or sequential Read before each per instructions no consecutive Edit same file. I can do one replacement entire section from edgeBound theorem to print proof, but long. Better one Edit replace exact small all via `replace_all`? No. I need comply read between edits. I just read errors no file changed since Read? Edit occurred after Read. Now Read before Edit mandatory previous Read was before last Edit? Last Edit removed he then compile. I need Read again. Could use Write complete replacement only not appropriate. I'll do one Edit for all using old_string from line116 to203 (~) and new corrected. That's one call, read current region first.Use Edit exact whole from 116-200 new.Concrete/Backend/LLVM.lean:150:22: warning: This simp argument is unused:
+  Array.getElem?_setIfInBounds_ne hne
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [bucket, h]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Backend/LLVM.lean:159:2: error: unsolved goals
+case pos
+p : Program
+j : Nat
+hj : j < (Array.replicate (edgeBound (edges p)) []).size
+h :
+  bucket (addEdges (edges p) (Array.replicate (edgeBound (edges p)) [])) j =
+    (List.filter (fun x => x.fst == j) (edges p)).reverse ++ bucket (Array.replicate (edgeBound (edges p)) []) j
+⊢ (Array.replicate (edgeBound (edges p)) [])[j]?.getD [] = []
+Should replicate get lemma simp requires j bound perhaps `Array.getElem?_replicate` #check. Could prove:
+  ```
+  have hr : (Array.replicate n [])[j]? = some [] := Array.getElem?_eq_getElem (by simpa using hj) then rw getElem_replicate.
+  ```
+  `Array.getElem?_replicate` simp [hj]? Goal after rw h simplified reverse_append etc only bucket initial. `simp [bucket, Array.getElem?_eq_getElem (by simpa using hj)]` rewrite needs dependent value proof. Could have:
+  ```
+  have hinit : bucket (Array.replicate n []) j = [] := by
+    simp only [bucket]
+    rw [Array.getElem?_eq_getElem (by simpa using hj)]
+    simp
+  rw [h, hinit]; simp
+  ```
+  Add. Remove unused arg since simp [bucket,h] solves via hne context perhaps uses local automatically. Read then edit two in one large chunk around bucket_edge and hne? Can one Edit replace from hne line through bucket proof to new. Do read.LLVM compile. Now build full because imported LCB root eventually uses old olean but commit LLVM should build library. I already baseline build one, allowed at most few full builds. Could commit validated file direct compile plus build later all. User small commits. Commit LLVM after direct lean and perhaps `lake build Concrete.Backend.LLVM` is build not full proof heavy? "You may run timeout 3600 lake build Concrete ... at most a few times" targeted module fine. Run timeout 3600 lake build Concrete.Backend.LLVM and check axioms printFast_eq module. Use scratch #print axioms direct file import module needs built updated. Build.
+
+• The LLVM equality proofs now compile: bucket lookup equals the reference filter for every target, `printFast p = print p`, and the module text is unchanged. I’ll validate and commit this slice before the larger LCB change.✔ [7/7] Built Concrete.Backend.LLVM (1.8s)
+Build completed successfully (7 jobs).
+ M Concrete/Backend/LLVM.lean
+
+
+• Should have no test files project has golden but no add tests needed proofs embedded. Axioms scratch after all. Commit small. `timeout 30 git add ... && timeout30 git commit -m`. Commit allowed.[lcb-numbering 141ff1a5] ISS-0030: prepare LLVM predecessor buckets once
+ 1 file changed, 124 insertions(+), 1 deletion(-)
+Now LCB major. Could simplify using LLVM generic buckets? LCB incoming shape different and edgesTo. I can create generic Nat array functions in LCB independent.
+
+  I need consider use fast prepared and reference adapt proofs. Best leave reference `adapt` untouched, define `adaptFast`, theorem `adaptFast_eq`, change `emit` to adaptFast. Then headline `adapter_correct` statement currently `adapt p` reference unchanged. User says executable entry emit fast. `emit_correct` statement emit unchanged, proof `emit_ok` currently gives adapt p = ok; if emit uses fast, use equality to bridge. `adapter_correct` remains exact. artifact etc unchanged. This avoids repoint proofs. Requirements "adaptFast p = adapt p (and emit equality)" yes. Add `emitFast`? I change emit to fast and prove `emit_eq_reference` with reference `emitSpec`? User asks emit equality likely `emitFast p = emit p` if replace? I can define `emitSpec` reference old, `emitFast`, theorem `emitFast_eq`, set `emit=emitFast`? Better:
+  - Keep `adapt` reference.
+  - Define `adaptFast`, `adaptFast_eq`.
+  - Keep `emit` reference? executable uses emit slow if unchanged. Change `emit` body to adaptFast.
+  - Define `emitSpec` old reference and theorem `emit_eq_spec : emit p=emitSpec p` trivial via adaptFast_eq.
+  - Existing emit_correct statement exact same (emit p).
+  - `emit_ok` must return `adaptFast p = .ok f` or keep adapt p using equality. Keep exact statement and proof modify unfold emit then rw adaptFast_eq at h perhaps.
+  No separate `emitFast` name needed. User "adaptFast/emitFast or replace bodies of adapt/emit fast code ... if replace bodies reference under clear name". I replace emit body, reference `emitSpec`. Good.
+
+  Fast definitions can be placed between reference emit and assembly? Prepared functions needed before fast adapt. Could insert after emitSpec? Reference emit currently before assembly. I can rename old emit `emitSpec` and add huge prepared/fast section then new emit. The proofs below see new emit. Fine.
+
+  Fast functions reuse reference `inst`? It takes p and regId slow. Should have new `operandFast table`, `instFast table n` duplicate body. Prove equality to inst p by reg lookup equality. Could generalize existing `inst` to parameter operand? Avoid altering reference proofs. Duplicate and prove via simp [instFast,inst,operandFast,operand,idOfFast,idOf,regTable_lookup]. `idOfFast` error same.
+
+  Fast term similar.
+
+  Fast adaptPhi takes regs table and buckets, base. adaptInst takes regs base list offsets. `blockInfo` arrays for base/inst starts.
+  Prepared structure:
+  ```
+  structure BlockOffsets where base:Nat; insts:Array Nat
+  structure Prepared where
+   regs : Array (Option Nat)
+   offsets : Array BlockOffsets
+   incomingRev : Array (List (Nat×List Operand))
+   ok : Bool
+  ```
+  Should have `valueCount` no precompute? Array.replicate (valueCount p) still reference linear map sum (linear). fine. `numberingOkFast p` may compute fast numbering separately if prepared calls it causing duplicate. Structure include `numberingOk : Bool` computed from data once. `prepare p` constructs data `numbering p`, reg table, buckets, validation. But proofs about numberingOkFast p equality.
+
+  I can define standalone:
+  - `NumberingData`
+  - `number p : NumberingData`
+  - `regTableOf ids`
+  - `numberingOkFastData data`
+  - `prepare p` with `let data := numbering p; ...`
+  For equality adaptFast adapt, unfold prepare as needed.
+
+  Offsets equality from numbering spec:
+  `data.offsets` list converted array. Should theorem:
+  `(numbering p).blocks[j]? = some (blockBase p j, instStarts)` where instStarts list = indexed b.insts map (blockBase+instBase).
+  Rather than full `NumberingData=referenceData p` make referenceData:
+  ```
+  def numberingSpec (p) : NumberingData := {
+   ids := ids p
+   intermediates := intermediates p
+   blocks := (indexed p.blocks).map fun(j,b) =>
+     (blockBase p j, (indexed b.insts).map fun(i,_)=>blockBase p j+instBase b i)
+  }
+  ```
+  Then prove `numbering_eq : numbering p = numberingSpec p`. Great. Fields directly.
+  Fast offsets:
+  `(numbering p).blocks.toArray[j]?` etc. With numbering_eq and Runtime.getElem indexed derive value. For adaptFast equality mapM, could prove a stronger `numberingFast = numberingSpec` and simp getElem.
+  `blockBaseFast data j := ((data.blocks.getD j default).base)` but Array getD. Use `data.blocks[j]?.map ... |>.getD 0`. instBaseFast data j i uses block entry and array. For valid j,i theorem equals.
+  Define `offsetAt data j := (data.blocks[j]?.map (·.1)).getD 0`
+  `instOffsetAt data j i := ((data.blocks[j]?.map (·.2)).getD #[])[i]?.getD 0` types arrays.
+  The fast adaptBlock gets `data` and j,b, uses these functions. Equality with adaptBlock follows offset lemmas valid and reg/incoming equal.
+
+  Could simplify `Prepared` just NumberingData + tables.
+  ```
+  structure Prepared where
+   numbering : NumberingData
+   regs : Array (Option Nat)
+   incoming : Array ...
+  ```
+  `prepare` compute.
+  Validation uses numbering data.
+  The numberingOkFast in prepare field `ok`.
+  Prove `prepare_ok : (prepare p).ok = numberingOk p`.
+  For adaptFast:
+  ```
+  unless (prepare p).ok ...
+  let data := prep.numbering
+  blocks mapM adaptBlockFast prep.regs prep.incoming data ...
+  ```
+  Using prep throughout.
+
+  Prove `adaptFast_eq` by `unfold adaptFast adapt`; rw [prepare_ok]; cases numberingOk; if false rfl; true prove mapM equality. Could establish `adaptBlockFast_prepare (j,b) ∈ indexed blocks` equality then `List.mapM_congr` theorem. Existing `List.mapM_congr_left`? #check. Could use if functions pointwise forall then simp only [funext]? For mapM over same list, prove `fun h` via `List.mapM_congr_left` likely monad. Query #check quickly scratch.
+
+• For LCB I’m keeping `adapt` itself as the reference. `emit` will call `adaptFast`, and the existing correctness proofs will bridge through `adaptFast p = adapt p`, so their statements remain untouched.
+
+/tmp/iss0030.apR8JG/Check.lean:2:7: error(lean.unknownIdentifier): Unknown constant `List.mapM_congr_left`
+/tmp/iss0030.apR8JG/Check.lean:3:7: error(lean.unknownIdentifier): Unknown constant `List.mapM_congr`
+List.map_congr_left.{u_1, u_2} {α✝ : Type u_1} {l : List α✝} {α✝¹ : Type u_2} {f g : α✝ → α✝¹}
+  (h : ∀ (a : α✝), a ∈ l → f a = g a) : List.map f l = List.map g l
+/tmp/iss0030.apR8JG/Check.lean:5:7: error(lean.unknownIdentifier): Unknown constant `Array.getElem?_toArray`
+List.getElem?_toArray.{u} {α : Type u} {xs : List α} {i : Nat} : xs.toArray[i]? = xs[i]?
+Array.getElem?_setIfInBounds_self_of_lt.{u_1} {α : Type u_1} {xs : Array α} {i : Nat} {a : α} (h : i < xs.size) :
+  (xs.setIfInBounds i a)[i]? = some a
+Array.getElem?_setIfInBounds_ne.{u_1} {α : Type u_1} {xs : Array α} {i j : Nat} (h : i ≠ j) {a : α} :
+  (xs.setIfInBounds i a)[j]? = xs[j]?
+Array.getD.{u_1} {α : Type u_1} (a : Array α) (i : Nat) (v₀ : α) : α
+Array.getD_getElem?.{u_1} {α : Type u_1} {xs : Array α} {i : Nat} {d : α} :
+  xs[i]?.getD d = if p : i < xs.size then xs[i] else d
+List.lookup_append.{u_1, u_2} {α : Type u_2} [BEq α] {β : Type u_1} {l₁ l₂ : List (α × β)} {k : α} :
+  List.lookup k (l₁ ++ l₂) = (List.lookup k l₁).or (List.lookup k l₂)
+/tmp/iss0030.apR8JG/Check.lean:12:7: error(lean.unknownIdentifier): Unknown constant `List.lookup_eq_none`
+List.lookup_eq_some_iff.{u_1, u_2} {α : Type u_2} [BEq α] {β : Type u_1} [LawfulBEq α] {l : List (α × β)} {k : α}
+  {b : β} : List.lookup k l = some b ↔ ∃ l₁ l₂, l = l₁ ++ (k, b) :: l₂ ∧ ∀ (p : α × β), p ∈ l₁ → (k != p.fst) = true
+IO.monoNanosNow : BaseIO Nat
+List.nodup_cons.{u_1} {α : Type u_1} {a : α} {l : List α} : (a :: l).Nodup ↔ ¬a ∈ l ∧ l.Nodup
+List.all_cons.{u_1} {α✝ : Type u_1} {a : α✝} {l : List α✝} {f : α✝ → Bool} : (a :: l).all f = (f a && l.all f)
+• MapM pointwise prove via induction custom generic:
+  ```
+  theorem mapM_ext {f g} (h:∀x∈l,f x=g x): l.mapM f=l.mapM g := by induction... simp...
+  ```
+  Can define in LCB fast section.
+
+  Numbering equality proofs perhaps can leverage `List.ext_getElem?` with spec and fast nth formulas instead of recursive suffix? Recursive suffix best.
+
+  I'll build code definitions first no proofs, compile then add proofs. I can insert all fast code with `sorry` temporarily? Constraint no sorry final, can use during development but warning as error prevents compile. Could use `by` incomplete errors. Better write definitions only compile, then theorem proofs sequential. I can put proofs in scratch importing LCB? New definitions not built until file compile. I can add definitions and use `by` attempts.
+
+  First numbering definitions. Insert after emitSpec location before assembly. Rename emit to emitSpec. Then add data and functions. Fast validation functions.
+
+  Generic nat duplicate checker could implement and later proof. Define `mark`:
+  ```
+  def checkUniqueFrom (xs : List Nat) (a : Array Bool) : Option (Array Bool)
+  ...
+  ```
+  For slot+inter combined:
+  ```
+  def checkSlotsInter slots inters :=
+   match markUnique slots (replicate valueCount false) with
+   | none=>false
+   | some a => inters.all fun m => if h:m<a.size then !a[m] else false
+  ```
+  This checks inters bound and disjoint. `markUnique` linear. regs bound `regBound ids` recursive maximum. `numberingOkFastData data := (markUnique regs (replicate (regBound regs) false)).isSome && ...`
+  The fast ids data proven equal ids so regs same.
+  Generic theorem markUnique initial:
+  `markUnique_spec bound xs : (markUnique xs (replicate bound false)).isSome = (decide xs.Nodup && xs.all (·<bound))`.
+  Prove later.
+  `slotsInters_spec`: boolean equals `decide slots.Nodup && slots.all ... && inters.all ... && inters.all (!slots.contains)`.
+  Could prove using mark spec and final array membership characterization:
+  `markUnique_success` gives final `a[m]=true ↔ m∈xs` for m<a.size, and success from spec. Or define `checkDisjoint` using `a` and prove based on marked list. Generic theorem `markUnique_lookup` if success then `a[m]? = some (decide (m∈xs))` for m<bound perhaps Option Bool. Prove induction general array with seen. Again.
+
+  Alternative `markUnique` returns array plus success, use `checkSlotsInter` call `markUnique` and generic final property. Could prove spec via a generic abstraction predicate `Marks a seen bound := a.size=bound ∧ ∀m, m<bound -> a[m]=decide(m∈seen)`. Then theorem:
+  ```
+  markUnique_correct:
+   Marks a seen bound →
+   match markUnique xs a with
+   | none => ¬(xs.all bound && xs.Nodup && disjoint seen xs)
+   | some a' => Marks a' (seen++xs) bound ∧ ...
+  ```
+  Bool isSome equality to conditions and Marks final. State:
+  ```
+  theorem markUnique_ok {a seen xs} (ha:Marks a seen) :
+   (markUnique xs a).isSome =
+    (xs.all (<a.size) && decide xs.Nodup && decide (∀x∈xs,x∉seen))
+  ```
+  and
+  ```
+  theorem markUnique_marks ... (h success) : Marks result (seen++xs)
+  ```
+  Induction manageable using List.Nodup and all disjoint.
+
+  But `Marks` with getD:
+  ```
+  def Marks (a) (seen) : Prop := ∀m, m<a.size → a[m] = decide (m∈seen)
+  ```
+  Should size fixed separately because set preserves.
+  Induction `markUnique_ok` general a seen:
+  - [] isSome true; RHS all true nodup true disjoint true.
+  - x::xs:
+   if out bound false and RHS all false.
+   if in and a[x] true, by Marks x∈seen, RHS disjoint false.
+   if false, x∉seen, recurse with set and seen++[x] or x::seen. Use seen `x::seen` easier final order irrelevant.
+   Marks set for `x::seen` prove get set self/ne.
+   RHS nodup x::xs includes x∉xs, while IH only xs.Nodup and disjoint xs (x::seen) gives x not? IH success requires each y∈xs not in x::seen, ensuring x∉xs? No that's opposite: need x∉xs from checking future elements against seen including x: if x∈xs then disjoint fails. Yes IH disjoint gives ∀y∈xs,y∉x::seen -> y≠x. Good.
+  Formula works.
+
+  Final marks result seen++? Using x::seen yields reverse seen, membership only. For disjoint inter I just need membership slots, order irrelevant. `markUnique_marks` final membership seen++xs perhaps choose `xs ++ seen` by induction after head seen' = x::seen yields final `xs ++ (x::seen)` membership equivalent x::xs++seen. Define Marks only membership and theorem existential finalSeen with membership iff m∈xs∨m∈seen, no order.
+  ```
+  theorem markUnique_marks h success : ∀m<m bound, result[m] = decide(m∈xs ∨ m∈seen)
+  ```
+  IH gives m∈xs_tail ∨ m∈x::seen, equivalent. Good.
+
+  Can combine in one theorem returning:
+  ```
+  theorem markUnique_correct (ha) :
+    (markUnique xs a).isSome = boolExpr ∧
+    ∀ a', markUnique xs a=some a' -> MarksWith ...
+  ```
+  Induction mutual within theorem.
+
+  `Marks` membership decide simplification.
+
+  Then numberingOkFast equality via markUnique_correct initial seen=[]:
+  regs isSome = all && nodup && disjoint [] true.
+  slots success gives conditions and final marks.
+  `checkSlotsInter` definition with `match`; when slots fail reference conjunction false. when success, inter check equivalence via final marks. `inters.all` checker:
+  ```
+  def checkAbsent (a) (m) := if h:m<a.size then !a[m] else false
+  ```
+  If marks slots, `checkAbsent = m<a.size && !slots.contains m` as Bool. Prove by by_cases bound, simp [checkAbsent, Marks, List.contains_eq...].
+  Then all congr.
+
+  Reg bound proof `regBound_lt` similar LLVM.
+  `numberingOkFastData` reference expression ordering differs. Original `decide regs.Nodup && decide slots.Nodup && slots.all && inters.all && inters.all disjoint`. My reg checker gives regs.all<regBound extra always true by bound, can prove `regs.all...=true`. slots mark gives slots.all && nodup && disjoint[] ordering; rearrange Bool and with simp/omega? `simp [numberingOkFastData,..., markUnique_correct, ...]` perhaps `Bool.and_comm` aesop. Use `cases` booleans + simp_all.
+
+  Perhaps simpler define fast expression exactly reference ordering:
+  ```
+  let regCheck := ...
+  let slotCheck := ...
+  regCheck && slotCheck
+  ```
+  Prove regCheck = decide regs.Nodup (since bound all true).
+  slotCheck = decide slots.Nodup && slots.all... etc reorder exact define slotCheck ref same order by Boolean commutativity theorem. `markUnique_correct` output define `(decide xs.Nodup && xs.all bound && disjoint)` match order. Set formula accordingly to simplify.
+  `checkUnique` isSome = decide xs.Nodup && xs.all bound && decide Disjoint. Initial disjoint true.
+  slot checker = decide slots.Nodup && slots.all && inters.all bound && inters.all disjoint exactly. Great.
+
+  Incoming LCB similar generic list pairs `Nat×List Operand`, use edges flattened `allIncoming p := indexed blocks flatMap fun(k,b)=> (targets with edges?)` Existing incoming p j filter over per-block edges. I can define `allEdges p : List (Nat × (Nat×List Operand))` target first:
+  ```
+  (indexed blocks).flatMap fun(k,b)=>
+   match term with br t=>[(t,(k,args))] condbr=>[(t,..),(e,..)]
+  ```
+  Then `incoming p j = (allEdges p).filter (·.1==j) |>.map (·.2)`. Buckets store pair `(Nat×ListOperand)` values. Prove generic bucket equality using same addEdges generalized type? Could move generic functions to Runtime for both LLVM/LCB but already LLVM separate. Duplicate LCB with target lists. Could use `edgeBuckets` returning arrays list `(Nat×List Operand)` and add based on target pair. Same proofs. Then theorem bucket reverse map = incoming. Prove `incoming_eq_filter_map` by induction indexed blocks or directly definitions filter_flatMap/map_flatMap. `simp [incoming, allEdges, List.filter_flatMap, List.map_flatMap]` function conditional. Could prove per block:
+  ```
+  (allEdges p).filter...map = indexed blocks flatMap edgesTo
+  ```
+  by apply List.flatMap_congr? induction indexed list, cases term simp [edgesTo].
+  I'll handle.
+
+  But time perhaps enormous. Could instead reuse `incoming p j` to build buckets by range over p.blocks length: for each j bucket = incoming p j, computation quadratic no. Should be generic.
+
+  I'll insert definitions + numbering reference spec and fast functions. Could be ~300 lines. First rename emit. Read lines180-205 known. Edit one huge insert.
+
+• The LCB prepared data will contain the linearly generated id/intermediate lists, per-block instruction offsets, the register array, reverse-order incoming buckets, and the validated Boolean. Each piece gets a reference equality before the adapter equality is assembled.
+
+• Check instOffset expression weird:
+  `((...getD []).toArray[i]?.getD 0 |>.getD 0` List.toArray on list Nat; `[i]?` Option Nat, `.getD 0` Nat then pipe getD invalid. I added extra. Should `((data.blocks.toArray[j]?.map (·.2)).getD []).toArray[i]?.getD 0` Option getD. Actually `(data.blocks.toArray[j]?.map (·.2)).getD []` returns List Nat, `.toArray[i]?` Option Nat `.getD 0`. Fine remove trailing. `instNumbering.blocks` abuses blocks list pairs: for inst recursion I set `base :: tail.blocks.map (·.2)` expected List(Nat×ListNat) but base Nat mismatch. NumberingData.blocks type List(Nat×ListNat) not appropriate for instruction starts. Should separate structure fields? `instNumbering` return `List Nat` offsets not same blocks. Define `InstNumberingData` structure ids inters offsets. `blockNumbering` should produce NumberingData with blocks field? blockNumbering only needs head info and ids/inter; its `blocks` field could list `(base,tail.offsets)` or tail? numberingFrom expects `head.blocks.map (·.2)` currently. Better structures:
+  ```
+  structure InstNumberingData where ids inters offsets
+  structure BlockNumberingData where ids inters instOffsets
+  ```
+  NumberingData blocks list pairs.
+  `instNumbering : ... InstNumberingData`
+  `blockNumbering : ... BlockNumberingData`
+  numberingFrom uses `(base,head.instOffsets)::tail.blocks`.
+  Do edit after read.Edit definitions chunk 199-222 and instOffset in same old string would need huge span. Do one at a time with read between. First structures.Concrete/Backend/LCB.lean:2214:19: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  adapt p
+in the target expression
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+
+case error
+p : Program
+f : Source.Function
+tbl : SiteTable
+h :
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+e : String
+ha : adapt p = Except.error e
+⊢ Except.error e = Except.ok f ∧ tbl = p.sites
+Concrete/Backend/LCB.lean:2216:8: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  adapt p
+in the target expression
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+
+case ok
+p : Program
+f : Source.Function
+tbl : SiteTable
+h :
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+g : Source.Function
+ha : adapt p = Except.ok g
+⊢ Except.ok g = Except.ok f ∧ tbl = p.sites
+Definitions compile except emit_ok expected. Should have proofs inserted before assembly or before Proof namespace? All new theorems could namespace Proof existing begins later. Best add `namespace Proof` around fast equalities? I need use adaptFast_eq in emit_ok inside existing Proof. Put fast theorems inside existing Proof near beginning after namespace Proof line now ~445, before enc. That way no extra namespace. Definitions outside. Theorems many inserted after `namespace Proof` before value level. `adaptFast_eq` available by emit_ok.
+
+  Should have numbering proof. I'll construct in separate namespace? All inside Proof. Start helper inst numbering.
+
+  Define specification suffix structures:
+  ```
+  def instNumberingSpecFrom (p? no) (b:Block) (base:Nat) (i:Nat) : InstNumberingData :=
+   { ids := (indexed (b.insts.drop i)).flatMap fun(k,ins)=> instDefs map (r, base + instBase b (i+k)+off)
+   ...
+   offsets := indexed drop map (base+instBase...)
+  }
+  ```
+  The `base` should global block base (not param base). Fast instNumbering starts `base + params.length`. Theorem:
+  ```
+  theorem instNumbering_from (b) (base i) :
+   instNumbering (base + instBase b i) (b.insts.drop i) = instNumberingSpecFrom b base i
+  ```
+  For i=0 instBase b0=params length; matches. Induction on list `ins::rest` with drop equality. The theorem as stated induction i/general b not direct structural recursion because fast recurses tail but instBase b (i+1). Prove by induction on list `l = b.insts.drop i` general i:
+  ```
+  ∀ i l, b.insts.drop i=l -> instNumbering ... l = spec...
+  ```
+  For cons head ins:
+  - current inst base correct.
+  - tail start fast `base+instBase b i+width ins`; IH at i+1 has `base+instBase b(i+1)` equal via `instBase_succ` from getElem.
+  - spec head and suffix index arithmetic i+(k+1)=i+1+k.
+  - ids/inter offsets lists equality.
+  Should define spec suffix as structure same.
+  `instBase_zero`: simp [instBase].
+  `instBase_succ_of_get`: similar existing instPos_succ at later line but can't use due defined later (Lean order). Add earlier helper with name instBase_succ.
+  ```
+  theorem instBase_succ {b i ins} (hi:b.insts[i]?=some ins):
+   instBase b(i+1)=instBase b i+width ins := by simp[instBase,List.take_add_one,hi,List.sum_append]
+  ```
+  Same existing instPos proof.
+
+  Spec suffix definitions can simplify `ids` head:
+  ```
+  (instDefs ins).map (fun ... base+instBase b(i+0)+off) ++ ...
+  ```
+  simp arithmetic.
+
+  At i0, `instNumberingSpecFrom b base 0` fields equal reference block tail. Then block numbering equality:
+  `blockNumbering base b = ⟨paramIds ++ referenceInstIds, referenceInter, referenceOffsets⟩`
+  Follow inst theorem and structure congr. Define `blockNumberingSpec base b : BlockNumberingData` with exact reference shapes. `blockNumbering_eq`.
+  Then program suffix:
+  ```
+  def numberingSpecFrom (p) (j) : NumberingData :=
+   { ids := indexed(drop j).flatMap fun(k,b) =>
+        param ids at blockBase p(j+k) ++ inst ids at blockBase... instBase
+     inter...
+     blocks := indexed(drop j).map fun(k,b)=>(blockBase p(j+k), instruction offsets)
+  }
+  ```
+  This is essentially block specs flatMap. Use `blockNumberingSpec (blockBase p(j+k)) b` then fields. `numberingSpecFrom`.
+  Theorem `numberingFrom_correct`:
+  ∀j rest, p.blocks.drop j=rest ->
+   numberingFrom (blockBase p j) rest = numberingSpecFrom p j
+  Induction rest general j.
+  head: blockNumbering_eq.
+  tail: base+blockSize b = blockBase p(j+1) using drop head.
+  spec tails index arithmetic.
+  At j0, numberingSpecFrom p0 = numberingSpec p definitional/simp [drop_zero, Nat.zero_add].
+  This proves numbering_eq.
+
+  Should have Lean induction details. I'll add helpers and attempt.
+
+  The fast equality section inserted after namespace Proof at line? Grep.
+
+• The fast definitions elaborate; the only current failure is the expected `emit_ok` bridge. I’m now proving the generated numbering data equal to the closed prefix-sum specification, including all suffix positions used by the recursive construction.
+
+• Read around then Edit insert numbering proof skeleton full.Insert definitions and theorem attempts. Should avoid declaration names conflict later `instPos_succ` only distinct. `blockBase_succ` no existing. Grep no.
+
+  Write code:
+  ```
+  def instSpecFrom ...
+  ```
+  Use fields projection for pair in lambdas with pattern.
+  The theorem proving structure equality can `apply InstNumberingData.ext <;> simp...` auto generated ext names? `cases` fast/spec and congr? `congr` might. In induction after IH, `simp only [instNumbering, instSpecFrom,...]`; rw [show base equality]; simp [ih,...]. I'll attempt.
+
+  The spec definition:
+  ```
+  def instSpecFrom (b) (base i) : InstNumberingData :=
+   ⟨ (indexed (b.insts.drop i)).flatMap fun(k,ins)=>...,
+  ...
+  ⟩
+  ```
+  At cons with h drop=ins::rest, simp only [h,indexed,indexedFrom,List.flatMap_cons,...]. `indexed` tail uses indexedFrom1 not `indexed` (0) so spec tail not defeq `instSpecFrom` at i+1 due indices shifted. Should lemma `indexedFrom_succ_eq` to rewrite:
+  `Runtime.indexedFrom (n+1) l = (Runtime.indexedFrom n l).map (fun(k,x)=>(k+1,x))` not tail spec base index i+k. Better spec suffix use `Runtime.indexedFrom i l` global instruction indices directly, not indexed drop with local k. Define:
+  ```
+  instSpecFrom b base i := 
+   ids := (Runtime.indexedFrom i (b.insts.drop i)).flatMap fun(q,ins)=>... instBase b q
+   offsets map instBase b q
+  ```
+  Then head q=i and tail indexedFrom(i+1) exactly spec at i+1. Excellent. At initial i0 indexedFrom0=indexed. No arithmetic k. Similarly program spec suffix use `Runtime.indexedFrom j (p.blocks.drop j)` global j, tail indexedFrom(j+1) exact. This simplifies greatly. numberingSpec at 0 matches.
+
+  Block spec references global block base and instBase.
+  The induction simple.
+
+  Define `blockNumberingSpec base b` with indexed params and insts global from0.
+  `instSpecFrom b base 0` exactly tail.
+
+  The theorem inst:
+  ```
+  ∀i l, drop i=l → instNumbering (base+instBase b i) l = instSpecFrom...
+  ```
+  cons:
+  fast tail base current+width, IH i+1 rest, base eq via instBase_succ.
+  spec simp [h, instSpecFrom, Runtime.indexedFrom]
+  `rw [show ...]`
+  `rw [ih ...]`
+  `rfl` perhaps.
+  Should hget current b.insts[i]? from hd congr head.
+  `have hi : b.insts[i]?=some ins := by have := congrArg (·[0]?) hd; simpa [List.getElem?_drop] using this` same existing.
+  hd tail `b.insts.drop(i+1)=rest` by rw[←List.tail_drop,hd];rfl.
+  After simp [instNumbering, instSpecFrom, hd, Runtime.indexedFrom] perhaps instNumbering pattern uses l not hd until subst l? In cons branch l is `ins::rest`, hd. `simp only [instNumbering, instSpecFrom, hd, Runtime.indexedFrom, ...]`.
+  Try.
+
+  blockBase succ same.
+
+  Numbering spec from structure:
+  ```
+  def numberingSpecFrom p j :=
+   let bs := Runtime.indexedFrom j (p.blocks.drop j)
+   ⟨ bs.flatMap fun(q,b)=> (blockNumberingSpec (blockBase p q) b).ids,
+  ...
+   bs.map fun(q,b)=>(blockBase p q,(blockSpec...).instOffsets)⟩
+  ```
+  At head simp.
+
+  numberingSpec p equality to suffix 0 likely rfl after `[numberingSpec, numberingSpecFrom, blockNumberingSpec, instSpecFrom, ids, intermediates, indexed]`? `numberingSpec` ids p uses separate params++inst flatMap. `blockNumberingSpec` fields exactly. `instSpecFrom b base0` uses instBase b0, while instNumbering starts base+params length; theorem handles. numberingSpecFrom fields instSpec global base and q. At j0 exact ids p etc definitional indexed=indexedFrom0. Yes `rfl` perhaps `numberingSpec` blocks inst offsets same.
+
+  blockNumbering_eq uses instNumbering_from at i0 and instBase b0 simplification:
+  ```
+  have h := instNumbering_from b base 0 b.insts (by simp)
+  simp [instBase] at h
+  -- h instNumbering(base+params.length) = instSpecFrom0
+  simp [blockNumbering, blockNumberingSpec, h]
+  ```
+  Structure block spec inst fields defined via `instSpecFrom`. Good.
+
+  I'll insert.
+
+• The suffix specifications use global indices directly (`indexedFrom j`/`indexedFrom i`), which keeps each recursive tail definitionally aligned with its reference prefix sum and avoids arithmetic reindexing in the proofs.
+
+Concrete/Backend/LCB.lean:478:58: error: unsolved goals
+b : Block
+i : Nat
+ins : Inst
+hi : b.insts[i]? = some ins
+⊢ b.params.length + ((List.take i (List.map Inst.width b.insts)).sum + Inst.width ins) =
+    b.params.length + (List.take i (List.map Inst.width b.insts)).sum + Inst.width ins
+Concrete/Backend/LCB.lean:493:8: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  instBase b i + Inst.width ins
+in the target expression
+  instNumbering (base + instBase b (i + 1)) rest = instSpecFrom b base (i + 1)
+
+b : Block
+base i : Nat
+ins : Inst
+rest : List Inst
+hd : List.drop i b.insts = ins :: rest
+hi : b.insts[i]? = some ins
+hd' : List.drop (i + 1) b.insts = rest
+ih : instNumbering (base + instBase b (i + 1)) rest = instSpecFrom b base (i + 1)
+⊢ instNumbering (base + instBase b i) (ins :: rest) = instSpecFrom b base i
+Concrete/Backend/LCB.lean:484:2: error: Type mismatch
+  rfl
+has type
+  ?m.15 = ?m.15
+but is expected to have type
+  instNumbering (base + instBase b x✝¹) [] = instSpecFrom b base x✝¹
+Concrete/Backend/LCB.lean:519:8: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  blockBase p j + blockSize b
+in the target expression
+  numberingFrom (blockBase p (j + 1)) rest = numberingSpecFrom p (j + 1)
+
+p : Program
+j : Nat
+b : Block
+rest : List Block
+hd : List.drop j p.blocks = b :: rest
+hb : p.blocks[j]? = some b
+hd' : List.drop (j + 1) p.blocks = rest
+ih : numberingFrom (blockBase p (j + 1)) rest = numberingSpecFrom p (j + 1)
+⊢ numberingFrom (blockBase p j) (b :: rest) = numberingSpecFrom p j
+Concrete/Backend/LCB.lean:510:2: error: Type mismatch
+  rfl
+has type
+  ?m.11 = ?m.11
+but is expected to have type
+  numberingFrom (blockBase p x✝¹) [] = numberingSpecFrom p x✝¹
+Concrete/Backend/LCB.lean:2285:19: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  adapt p
+in the target expression
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+
+case error
+p : Program
+f : Source.Function
+tbl : SiteTable
+h :
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+e : String
+ha : adapt p = Except.error e
+⊢ Except.error e = Except.ok f ∧ tbl = p.sites
+Concrete/Backend/LCB.lean:2287:8: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  adapt p
+in the target expression
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+
+case ok
+p : Program
+f : Source.Function
+tbl : SiteTable
+h :
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+g : Source.Function
+ha : adapt p = Except.ok g
+⊢ Except.ok g = Except.ok f ∧ tbl = p.sites
+• Fix base nil cases hd needed simplify spec drop:
+  ```
+  | i, [], hd => by simp [instNumbering, instSpecFrom, hd]
+  ```
+  instBase_succ associativity `simp [...]; omega` or `simp only[...] ; omega`. Current simp leaves assoc; `simp [instBase,...,Nat.add_assoc]`.
+  IH rewrite direction wrong: ih has base instBase(i+1), want change to base+(instBase i+width) for matching fast tail. `rw [instBase_succ hi] at ih` (not ←). Then fast tail expression base+instBase i+width vs base+(instBase i+width), rw Nat.add_assoc likely.
+  numbering same rw [blockBase_succ hb] at ih.
+  nil numbering simp.
+  numbering_eq exact h likely spec defeq? not reached yet.
+
+  Read section then single edit all chunk perhaps replacements separate via one large.Edit whole snippets one large exact old all section easier but only changes 5 lines. Can replace entire 477-526 with corrected same. Do.Concrete/Backend/LCB.lean:484:17: error: unsolved goals
+b : Block
+base i : Nat
+hd : List.drop i b.insts = []
+⊢ (∀ (a : Nat) (b : Inst), (a, b) ∈ Runtime.indexedFrom i [] → instDefs b = []) ∧
+    (∀ (a : Nat) (b : Inst), (a, b) ∈ Runtime.indexedFrom i [] → interOffsets b = []) ∧ Runtime.indexedFrom i [] = []
+Concrete/Backend/LCB.lean:485:26: error: unsolved goals
+b : Block
+base i : Nat
+ins : Inst
+rest : List Inst
+hd : List.drop i b.insts = ins :: rest
+hi : b.insts[i]? = some ins
+hd' : List.drop (i + 1) b.insts = rest
+ih : instNumbering (base + (instBase b i + Inst.width ins)) rest = instSpecFrom b base (i + 1)
+⊢ { ids := List.map (fun x => (x.fst, base + instBase b i + x.snd)) (instDefs ins) ++ (instSpecFrom b base (i + 1)).ids,
+      intermediates :=
+        List.map (fun x => base + instBase b i + x) (interOffsets ins) ++ (instSpecFrom b base (i + 1)).intermediates,
+      offsets := (base + instBase b i) :: (instSpecFrom b base (i + 1)).offsets } =
+    {
+      ids :=
+        List.map (fun x => (x.fst, base + instBase b i + x.snd)) (instDefs ins) ++
+          List.flatMap (fun x => List.map (fun x_1 => (x_1.fst, base + instBase b x.fst + x_1.snd)) (instDefs x.snd))
+            (Runtime.indexedFrom (i + 1) rest),
+      intermediates :=
+        List.map (fun x => base + instBase b i + x) (interOffsets ins) ++
+          List.flatMap (fun x => List.map (fun x_1 => base + instBase b x.fst + x_1) (interOffsets x.snd))
+            (Runtime.indexedFrom (i + 1) rest),
+      offsets :=
+        (base + instBase b i) :: List.map (fun x => base + instBase b x.fst) (Runtime.indexedFrom (i + 1) rest) }
+Concrete/Backend/LCB.lean:495:21: warning: This simp argument is unused:
+  List.cons_append
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [instNumbering, instSpecFrom, hd, Runtime.indexedFrom, List.flatMap_cons, List.map_cons,
+    List.nil_append]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Backend/LCB.lean:495:39: warning: This simp argument is unused:
+  List.nil_append
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [instNumbering, instSpecFrom, hd, Runtime.indexedFrom, List.flatMap_cons, List.map_cons,
+    List.cons_append]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Backend/LCB.lean:510:17: error: unsolved goals
+p : Program
+j : Nat
+hd : List.drop j p.blocks = []
+⊢ (∀ (a : Nat) (b : Block), (a, b) ∈ Runtime.indexedFrom j [] → (blockSpec (blockBase p a) b).ids = []) ∧
+    (∀ (a : Nat) (b : Block), (a, b) ∈ Runtime.indexedFrom j [] → (blockSpec (blockBase p a) b).intermediates = []) ∧
+      Runtime.indexedFrom j [] = []
+Concrete/Backend/LCB.lean:511:24: error: unsolved goals
+p : Program
+j : Nat
+b : Block
+rest : List Block
+hd : List.drop j p.blocks = b :: rest
+hb : p.blocks[j]? = some b
+hd' : List.drop (j + 1) p.blocks = rest
+ih : numberingFrom (blockBase p j + blockSize b) rest = numberingSpecFrom p (j + 1)
+⊢ { ids := (blockSpec (blockBase p j) b).ids ++ (numberingSpecFrom p (j + 1)).ids,
+      intermediates := (blockSpec (blockBase p j) b).intermediates ++ (numberingSpecFrom p (j + 1)).intermediates,
+      blocks := (blockBase p j, (blockSpec (blockBase p j) b).instOffsets) :: (numberingSpecFrom p (j + 1)).blocks } =
+    {
+      ids :=
+        (blockSpec (blockBase p j) b).ids ++
+          List.flatMap (fun x => (blockSpec (blockBase p x.fst) x.snd).ids) (Runtime.indexedFrom (j + 1) rest),
+      intermediates :=
+        (blockSpec (blockBase p j) b).intermediates ++
+          List.flatMap (fun x => (blockSpec (blockBase p x.fst) x.snd).intermediates)
+            (Runtime.indexedFrom (j + 1) rest),
+      blocks :=
+        (blockBase p j, (blockSpec (blockBase p j) b).instOffsets) ::
+          List.map (fun x => (blockBase p x.fst, (blockSpec (blockBase p x.fst) x.snd).instOffsets))
+            (Runtime.indexedFrom (j + 1) rest) }
+Concrete/Backend/LCB.lean:521:40: warning: This simp argument is unused:
+  List.cons_append
+
+Hint: Omit it from the simp argument list.
+  [apply] 
+simp only [numberingFrom, numberingSpecFrom, hd, Runtime.indexedFrom, blockNumbering_eq, List.flatMap_cons,
+    List.map_cons, List.nil_append]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Backend/LCB.lean:521:58: warning: This simp argument is unused:
+  List.nil_append
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [numberingFrom, numberingSpecFrom, hd, Runtime.indexedFrom, blockNumbering_eq, List.flatMap_cons,
+    List.map_cons, List.cons_append]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Backend/LCB.lean:2285:19: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  adapt p
+in the target expression
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+
+case error
+p : Program
+f : Source.Function
+tbl : SiteTable
+h :
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+e : String
+ha : adapt p = Except.error e
+⊢ Except.error e = Except.ok f ∧ tbl = p.sites
+Concrete/Backend/LCB.lean:2287:8: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  adapt p
+in the target expression
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+
+case ok
+p : Program
+f : Source.Function
+tbl : SiteTable
+h :
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+g : Source.Function
+ha : adapt p = Except.ok g
+⊢ Except.ok g = Except.ok f ∧ tbl = p.sites
+Simp `hd` doesn't reduce indexedFrom because hd rewrite inside `b.insts.drop i` but simplifier didn't use due let? Goals RHS still indexedFrom ... rest but `(instSpecFrom ... (i+1))` not unfolded after rw ih. Now after rw ih, `rfl` if unfold `instSpecFrom` RHS? Goal shows left projections `(instSpecFrom ... i+1)` vs expanded RHS; rw ih rewrote tail to spec but not unfold spec. Add `rfl`? It ended unsolved so `rw` closes tactic with no following; rw calls rfl reflexivity but not reducible let? Now `rfl` perhaps won't due definitions reducible yes should. Goal left spec projections and RHS expansion definitionally equal (instSpecFrom with drop(i+1)=rest via hd'). But hd' not used after ih. Add `simp only [instSpecFrom, hd']` after rw ih. Nil `simp [instNumbering, instSpecFrom, hd, Runtime.indexedFrom]` explicitly includes indexedFrom; currently simp [instSpecFrom,hd] doesn't unfold Runtime.indexedFrom because not included. Add.
+  Cons after rw `[Nat.add_assoc, ih]`, `simp only [instSpecFrom, hd']` likely closes. But instSpecFrom unfolding also LHS spec projections; good.
+  Numbering similarly add specFrom hd'. Nil include Runtime.indexedFrom.
+  Remove unused args.
+  BlockBase nil.
+
+  Read then edit entire two theorem snippets perhaps one old from theorem inst through numberingFrom all huge but can target `| i, [],...` through end numbering. One edit entire as previous. Could use replacement `simp only...` across two with replace_all? Changes differ. Do one whole chunk again but tokens okay. Alternatively one Edit old string starting `| i, [], hd...` through `rw [Nat.add_assoc, ih]` and separate numbering later read. I'll do first inst.Edit numbering.Concrete/Backend/LCB.lean:2287:19: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  adapt p
+in the target expression
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+
+case error
+p : Program
+f : Source.Function
+tbl : SiteTable
+h :
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+e : String
+ha : adapt p = Except.error e
+⊢ Except.error e = Except.ok f ∧ tbl = p.sites
+Concrete/Backend/LCB.lean:2289:8: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  adapt p
+in the target expression
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+
+case ok
+p : Program
+f : Source.Function
+tbl : SiteTable
+h :
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+g : Source.Function
+ha : adapt p = Except.ok g
+⊢ Except.ok g = Except.ok f ∧ tbl = p.sites
+Great numbering proof done. I'll add reg table equality next. Generic addRegIds theorem similar buckets but first wins. Should account initial table all none. General theorem for arbitrary a:
+  `regIdArray (addRegIds ids a) r = if existing a[r] some then existing else lookup ids r ...` More precise `addRegIds` only fills absent, so final lookup = `(a[r]?).getD none).or (ids.lookup r)` but if r out of bounds a get none and r may not fit after no resize; if r>=size and ids contains r, lookup ids some but final none. Should condition r<a.size. For initial bound all ids in range. General theorem under `r<a.size`:
+  ```
+  regArray (addRegIds ids a) r = ((a[r]?).getD none).or (ids.lookup r)
+  ```
+  Does first existing win, else first ids wins. Option.or. Induction:
+  head (x,n):
+  - if x out bounds: addRegIds tail same, IH r (r<size). Should show lookup ((x,n)::ids) r same as lookup ids r because r≠x (r<size, x>=size). simp [List.lookup,hne].
+  - if x in and a[x] some: array unchanged, but lookup head if r=x then existing some and Option.or existing = existing, lookup head gives n but or existing n = existing; if r≠x lookup tail.
+  - if absent set x=some n. IH on tail with new array. For r=x final some n; initial old none; lookup head some n. for r≠x array same old; lookup tail.
+  Statement Option.or simplifies cases.
+  I can prove by_cases hr:r<a.size for final regTable:
+  - if within, apply general theorem with initial none => `none.or lookup = lookup`.
+  - if out, show no id with register r using regBound. `List.lookup` none if no pair. lemma `lookup_eq_none` by induction or `List.lookup_eq_none_iff` query. #check perhaps. Use theorem:
+  ```
+  theorem lookup_none_of_not_mem {l} (h:r∉l.map fst): l.lookup r=none := by induction...
+  ```
+  Prove simple. Also array get none out.
+  `regBound_lt` for pair membership.
+  `regTable_lookup (data) r: regIdFast {prep with regs=regTable data} r = data.ids.lookup r` or direct `(regTable data)[r]?.getD none = ...`.
+  Theorem `regTable_lookup (data)`.
+  `prepare_regId : regIdFast (prepare p) r = regId p r` via regTable_lookup + numbering_eq fields.
+  General theorem uses `Array.setIfInBounds` size preserve and get lemmas. Should getD array as `(a[r]?).getD none`.
+  Define `arrayReg a r`.
+  Could use regIdFast only Prepared, generic define `lookupRegs a r`.
+
+  ```
+  def lookupRegTable (a) r := ...
+  ```
+  regIdFast def can use it. Add definition outside? Existing regIdFast direct same defeq. Theorem use direct.
+
+  General:
+  ```
+  theorem addRegIds_lookup : ∀ ids a r, r<a.size →
+   ((addRegIds ids a)[r]?).getD none = ((a[r]?).getD none).or (ids.lookup r)
+  ```
+  Nil: simp [addRegIds].
+  Cons:
+  size preservation perhaps by_cases and IH needs r<new.size. If set, `by simpa using hr`.
+  Case a[x].isSome true need obtain val via Option.isSome_iff_exists. Simp cases `hx:a[x]` Option Nat to simplify. Could case hx:a[x] with none/some:
+  - none: a[x].isSome=false.
+  - some: true.
+  By_cases hx:r=x then subst; else.
+  I'll write induction with cases hx : a[x]? Wait `a[x]` dependent requires h x<a.size. I by_cases hx bound first.
+  ```
+  | (x,n)::ids,a,r,hr =>
+   simp only [addRegIds]
+   by_cases hx:x<a.size
+   · simp only [hx,↓reduceDIte]
+     cases ha:a[x] with
+     | none =>
+        simp only [Option.isSome_none, Bool.false...]
+        have ih := addRegIds_lookup ids (a.setIfInBounds x (some n)) r (by simpa using hr)
+        rw [ih]
+        by_cases h:r=x
+        · subst; simp [List.lookup, Array.get...]
+        · have hne:r≠x; simp [List.lookup,hne, Array.get...]
+     | some v =>
+        simp only [Option.isSome_some,...]
+        rw [addRegIds_lookup ids a r hr]
+        by_cases h:r=x...
+        subst; simp [List.lookup,ha]
+        ...
+  ```
+  Array getElem?_eq_getElem hx to relate `(a[x]?).getD none` to `a[x]`; simp [Array.getElem?_eq_getElem hx,ha].
+  For some branch final RHS initial some v or lookup head. `simp [h,List.lookup,Array.getElem?_eq_getElem hx,ha]` likely.
+  Out hx: addRegIds tail same. IH; prove r≠x by omega. `simp [List.lookup, hne]`.
+  At nil Option.or identity simp.
+
+  RegBound:
+  ```
+  theorem regBound_lt {ids r n} (h:(r,n)∈ids):r<regBound ids
+  ```
+  induction ids, head pair, simp regBound; omega.
+  `lookup_none` use not mem map.
+
+  Initial replicate get some none if r< size:
+  `rw [addRegIds_lookup ...]; simp [List.getElem?_toArray?]`
+  For array replicate initial, `(Array.replicate ... none)[r]? = some none` via getElem?_eq_getElem hr and simp.
+  `none.or` simp.
+
+  Out final:
+  `Array.getElem?_eq_none` using size addRegIds theorem needed. Prove `size_addRegIds` induction. Similar size_addIncoming. Could theorem generic:
+  ```
+  size_addRegIds : ∀ ids a, (addRegIds ids a).size=a.size
+  ```
+  simp split.
+  Then out final get none. `regTable` size = regBound. h r≥regBound, no member. lookup_none.
+
+  Add these after numbering_eq. Also offsets lemmas:
+  ```
+  theorem blockOffset_prepare {p j b} hb :
+   blockOffset (prepare p).data j=blockBase p j := by
+   unfold blockOffset prepare; rw[numbering_eq]; simp [numberingSpec,List.getElem?_toArray,List.getElem?_map,Runtime.getElem?_indexedFrom?]
+  ```
+  numberingSpec.blocks = indexed p.blocks map...; toArray get -> list get map; Runtime.getElem?_indexed; hb. `simp [blockOffset,prepare,numbering_eq,numberingSpec,List.getElem?_toArray,List.getElem?_map,Runtime.getElem?_indexed,hb]`.
+  Note `prepare` data projection reduces numbering p. `numbering_eq` rewrite.
+  instOffset similar using hb,hi:
+  `List.getElem?_map` twice and Runtime.getElem?_indexed.
+  Result value `blockBase+instBase`.
+  These meet offsets theorem.
+
+  I'll insert reg+offset before enc.
+
+• `numbering p = numberingSpec p` now compiles, proving the generated ids, intermediates, block bases, and instruction offsets equal the reference definitions. Next are first-definition-wins lookup and validation equivalence.
+
+• Insert.Concrete/Backend/LCB.lean:544:18: error: unsolved goals
+case cons
+r : Reg
+ids : List (Reg × Nat)
+ih : ¬r ∈ List.map Prod.fst ids → List.lookup r ids = none
+q : Reg
+n : Nat
+h : ¬(r = q ∨ r ∈ List.map Prod.fst ids)
+hq : r ≠ q
+⊢ (match r == q with
+    | true => some n
+    | false => none) =
+    none
+Concrete/Backend/LCB.lean:548:23: warning: This simp argument is unused:
+  hq
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [List.lookup, ih (fun hm => h (Or.inr hm))]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Backend/LCB.lean:556:14: error: `simp` made no progress
+Concrete/Backend/LCB.lean:573:8: error: unsolved goals
+case neg
+x : Reg
+n : Nat
+ids : List (Reg × Nat)
+a : Array (Option Nat)
+r : Reg
+hr : r < a.size
+hx : x < a.size
+ha : a[x] = none
+h : ¬r = x
+hne : r ≠ x
+⊢ ((a.setIfInBounds x (some n))[r]?.getD none).or (List.lookup r ids) =
+    (a[r]?.getD none).or
+      (match r == x with
+      | true => some n
+      | false => List.lookup r ids)
+Concrete/Backend/LCB.lean:582:8: error: unsolved goals
+case neg
+x : Reg
+n : Nat
+ids : List (Reg × Nat)
+a : Array (Option Nat)
+r : Reg
+hr : r < a.size
+hx : x < a.size
+v : Nat
+ha : a[x] = some v
+h : ¬r = x
+hne : r ≠ x
+⊢ (a[r]?.getD none).or (List.lookup r ids) =
+    (a[r]?.getD none).or
+      (match r == x with
+      | true => some n
+      | false => List.lookup r ids)
+Concrete/Backend/LCB.lean:586:29: error: omega could not prove the goal:
+No usable constraints found. You may need to unfold definitions so `omega` can see linear arithmetic facts about `Nat` and `Int`, which may also involve multiplication, division, and modular remainder by constants.
+Concrete/Backend/LCB.lean:584:4: error: unsolved goals
+case neg
+x : Reg
+n : Nat
+ids : List (Reg × Nat)
+a : Array (Option Nat)
+r : Reg
+hr : r < a.size
+hx : ¬x < a.size
+hne : r ≠ x
+⊢ (a[r]?.getD none).or (List.lookup r ids) =
+    (a[r]?.getD none).or
+      (match r == x with
+      | true => some n
+      | false => List.lookup r ids)
+Concrete/Backend/LCB.lean:574:29: warning: This simp argument is unused:
+  hne
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [List.lookup, Array.getElem?_setIfInBounds_ne hne, Array.getElem?_eq_getElem hx, ha]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Backend/LCB.lean:574:34: warning: This simp argument is unused:
+  Array.getElem?_setIfInBounds_ne hne
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [List.lookup, hne, Array.getElem?_eq_getElem hx, ha]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Backend/LCB.lean:575:12: warning: This simp argument is unused:
+  Array.getElem?_eq_getElem hx
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [List.lookup, hne, Array.getElem?_setIfInBounds_ne hne, ha]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Backend/LCB.lean:575:42: warning: This simp argument is unused:
+  ha
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [List.lookup, hne, Array.getElem?_setIfInBounds_ne hne, Array.getElem?_eq_getElem hx]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Backend/LCB.lean:583:29: warning: This simp argument is unused:
+  hne
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [List.lookup, Array.getElem?_eq_getElem hx, ha]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Backend/LCB.lean:583:34: warning: This simp argument is unused:
+  Array.getElem?_eq_getElem hx
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [List.lookup, hne, ha]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Backend/LCB.lean:583:64: warning: This simp argument is unused:
+  ha
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [List.lookup, hne, Array.getElem?_eq_getElem hx]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Backend/LCB.lean:587:25: warning: 
+This simp argument is unused:
+  hne
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [List.lookup]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Backend/LCB.lean:604:28: error: Application type mismatch: The argument
+  hm
+has type
+  q ∈ List.map Prod.fst data.ids
+but is expected to have type
+  (q, ?m.133) ∈ data.ids
+in the application
+  regBound_lt hm
+Concrete/Backend/LCB.lean:2380:19: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  adapt p
+in the target expression
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+
+case error
+p : Program
+f : Source.Function
+tbl : SiteTable
+h :
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+e : String
+ha : adapt p = Except.error e
+⊢ Except.error e = Except.ok f ∧ tbl = p.sites
+Concrete/Backend/LCB.lean:2382:8: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  adapt p
+in the target expression
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+
+case ok
+p : Program
+f : Source.Function
+tbl : SiteTable
+h :
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+g : Source.Function
+ha : adapt p = Except.ok g
+⊢ Except.ok g = Except.ok f ∧ tbl = p.sites
+Fix boolean equality simp need `beq_eq_false_iff_ne` or `beq_iff_eq`; `simp [List.lookup, hne]` doesn't rewrite match r==x because simp uses hne only with `beq_eq_false`? Usually `simp [hne]` rewrites `r == x` via `beq_eq_false_iff_ne` perhaps `simp only [beq_iff_eq, hne, ↓reduceIte]`? `simp [hne]` not due `hne : r ≠ x` but BEq Nat has `bne`? In previous code they use `have hb : (r == r') = false := by simpa using hne`. Do same `have hb : (r == x)=false := by simpa using hne; simp [List.lookup,hb]`.
+
+  lookup_none hq same `hb`.
+  size_addRegIds split `split <;> simp` line556 no progress likely branch where no set size already target by rfl, simp made no progress warning error. Use `split <;> rfl`? After rw size_addRegIds goal `(let a := if...).size=a.size` split branches:
+  - set -> Array.size_setIfInBounds perhaps rfl? setIfInBounds size theorem simp. `split <;> simp only [Array.size_setIfInBounds]` second no progress warning. `split <;> first | rfl | simp` perhaps `split <;> simp_all` can no progress? Use `split <;> (try simp) <;> rfl` try avoids warning. Existing size_addEdges `split <;> simp` worked due else simp [size] perhaps progress from assumptions? Here line556 inspect exact. Should Read lines. Also hnot mem_map destruct issue he simplification subst wrong direction left q. `obtain ⟨⟨q,n⟩,hm,he⟩`; he : (q,n).fst = r i.e q=r. `subst r` not `subst he`. `cases he` should substitute r? he reduces q=r, `cases he`; then regBound_lt hm. Current `simp only at he; subst he` weird subst uses variable he not. Use `change q = r at he; subst r`.
+
+  Omega hx `hx : ¬ x<a.size`, hr:r<a.size -> r≠x. `omega` said no constraints because `Nat` not unfolded? `hx` is neg less should omega handles. Perhaps hne goal r≠x, intro e; subst e; omega. Use `intro h; subst r; exact hx hr`. Actually if r=x, hx : ¬r<a.size contradict hr. `fun h => hx (h ▸ hr)` orientation h:r=x, h ▸ hr replaces r with x yes.
+  Array set ne lemma needs index orientation: lemma `Array.getElem?_setIfInBounds_ne (h : i ≠ j)` where i set index, j query. I pass hne:r≠x but need x≠r. In LLVM I used j≠e target query vs set? Earlier compiled simp unused sometimes. Here explicit `Array.getElem?_setIfInBounds_ne hne` not matching, unused. Should have `Ne.symm hne`.
+  After rw IH, goal has set array LHS. simp with correct lemma and hb closes.
+  Some branch only hb needed.
+  Positive branch compiled no errors good.
+
+  Size read.
+
+• The register proof exposed only routine Boolean/array-index details; the first-insert branch itself is proved. I’m correcting those index orientations and the malformed out-of-bounds lookup case before moving on.
+
+• Single edit whole 540-605 corrected. Size:
+  ```
+  split
+  · next h => simp
+  · rfl
+  ```
+  After `split` first condition h:r<a.size and nested if a[r].isSome creates two? `split` only outer dite? `split` tactic splits first if, then inside still if. Existing split <;> simp probably simplifies both but no progress else. Use `repeat' split`? `split <;> split <;> simp` not outer false no inner. `split <;> (try split) <;> simp` `try split` might split match? Should no warnings. `split <;> simp_all [Array.size_setIfInBounds]` else simp_all may no progress. simplest `split <;> (try split) <;> first | rfl | simp` else rfl. First inner no-set rfl; set simp. Syntax:
+  `split <;> (try split) <;> first | rfl | simp`
+  `try split` on no goals okay.
+  Could just `split <;> (try split) <;> simp_all` warnings perhaps. Use `split <;> (try split) <;> first | rfl | simp`.
+
+  lookup hq hb.
+  Negative branches hb.
+  hnot fix.
+
+  Do edit.Concrete/Backend/LCB.lean:577:12: warning: This simp argument is unused:
+  Array.getElem?_eq_getElem hx
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [List.lookup, hb, Array.getElem?_setIfInBounds_ne (Ne.symm hne), ha]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Backend/LCB.lean:577:42: warning: This simp argument is unused:
+  ha
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [List.lookup, hb, Array.getElem?_setIfInBounds_ne (Ne.symm hne), Array.getElem?_eq_getElem hx]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Backend/LCB.lean:608:28: error: Application type mismatch: The argument
+  hm
+has type
+  q ∈ List.map Prod.fst data.ids
+but is expected to have type
+  (q, ?m.137) ∈ data.ids
+in the application
+  regBound_lt hm
+Concrete/Backend/LCB.lean:2384:19: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  adapt p
+in the target expression
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+
+case error
+p : Program
+f : Source.Function
+tbl : SiteTable
+h :
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+e : String
+ha : adapt p = Except.error e
+⊢ Except.error e = Except.ok f ∧ tbl = p.sites
+Concrete/Backend/LCB.lean:2386:8: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  adapt p
+in the target expression
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+
+case ok
+p : Program
+f : Source.Function
+tbl : SiteTable
+h :
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+g : Source.Function
+ha : adapt p = Except.ok g
+⊢ Except.ok g = Except.ok f ∧ tbl = p.sites
+Destructure List.mem_map wrong due pair pattern and hm binder order? `List.mem_map.mp hm` returns ∃ a, a∈ids ∧ f a = r. I `obtain ⟨⟨q,n⟩, hm, he⟩`; error hm q∈map? That means pattern didn't match as expected? Error says hm : q ∈ map... perhaps `⟨⟨q,n⟩,hm,he⟩` q got original pair? I'll inspect goal with set_option trace? The error line indicates hm type q ∈ List.map... weird perhaps obtain parser nested angle interpreted existential witness `⟨q,n⟩` but List.mem_map has `∃ a, a ∈ ... ∧ ...`; should hm:(q,n)∈ids. But error says q ∈ map, perhaps `List.mem_map.mp hm` simplifier picked outer hnot goal after subst? Wait exact hr (regBound_lt hm) expected pair; actual hm `q ∈ List.map...` suggests obtain didn't destructure as thought due `Reg=Nat`, Prod.fst? Could avoid obtain:
+  ```
+  have hb : ∃ n, (r,n)∈data.ids := by
+    rcases List.mem_map.mp hm with ⟨a,ha,har⟩
+    exact ⟨a.2, by simpa using har ▸ ha?⟩
+  ```
+  After `rcases ... with ⟨⟨q,n⟩,hm,rfl⟩` perhaps `rfl` substitutes r directly:
+  ```
+        obtain ⟨⟨q, n⟩, hm, rfl⟩ := List.mem_map.mp hm
+        exact hr (regBound_lt hm)
+  ```
+  Equality is `(q,n).fst = r` defeq q=r; rfl pattern should subst r. Current `change q=r at he; subst r` but hm error after subst perhaps q got r? Still should pair. Wait perhaps `List.mem_map.mp hm` for hm : r∈ map fst ids returns exists a, a ∈ ids ∧ r = fst a? Check List.mem_map theorem orientation earlier existing uses `⟨(r,n), hm, rfl⟩` works. Could do:
+  ```
+        have hp : ∃ n, (r,n)∈data.ids := by
+          simpa using hm
+  ```
+  There is `List.mem_map` simp can convert membership of map to exists pair. `simpa only [List.mem_map, Prod.exists, Prod.fst] using hm` perhaps yields ∃a b,(a,b)∈ids ∧ a=r. Should have exact regBound with pair from witness.
+  ```
+        rcases (List.mem_map.mp hm) with ⟨a, ha, hra⟩
+        have har : a.1 = r := hra
+        have hb : (r,a.2)∈ids := by rwa [←har]
+        exact hr (regBound_lt hb)
+  ```
+  No pair destructure. `hra` orientation check `change a.1 = r at hra`.
+  ```
+  have hb : (r,a.2) ∈ ids := by rwa [← hra]
+  ```
+  If hra a.1=r, ←hra rewrites r to a.1 yes. This robust. Do. Remove unused simp args. Read lines then edit snippet.
+
+• The remaining lookup error is only in converting mapped register membership back to an id-pair witness. I’ll make that witness explicit; the array lookup theorem and both offset theorems otherwise elaborate.
+
+• Now edit hnot read.Concrete/Backend/LCB.lean:2383:19: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  adapt p
+in the target expression
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+
+case error
+p : Program
+f : Source.Function
+tbl : SiteTable
+h :
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+e : String
+ha : adapt p = Except.error e
+⊢ Except.error e = Except.ok f ∧ tbl = p.sites
+Concrete/Backend/LCB.lean:2385:8: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  adapt p
+in the target expression
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+
+case ok
+p : Program
+f : Source.Function
+tbl : SiteTable
+h :
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+g : Source.Function
+ha : adapt p = Except.ok g
+⊢ Except.ok g = Except.ok f ∧ tbl = p.sites
+Good. Incoming proof next easier adapt LLVM. Add after offset lemmas.
+
+  `incomingBound_lt`, size, bucket_addIncoming identical.
+  `targetedEdges_incoming`:
+  ```
+  theorem targetedEdges_filter (p) j:
+   ((targetedEdges p).filter...).map Prod.snd = incoming p j := by
+   unfold targetedEdges incoming
+   rw [List.filter_flatMap, List.map_flatMap]
+   apply List.flatMap_congr_left? no. induction indexed list general.
+  ```
+  Could `apply List.flatMap_congr` unknown. Prove generic pointwise via induction list:
+  ```
+  generalize indexed p.blocks = bs
+  induction bs with
+  nil rfl
+  cons (k,b) bs ih =>
+   simp only [List.flatMap_cons,List.filter_append,List.map_append,ih]
+   cases b.term <;> simp [edgesTo]
+  ```
+  After unfold both, `List.filter_flatMap` rewrite yields flatMap of filter then map_flatMap? I want equality flatMap. Simpler use list induction before unfolding:
+  ```
+  unfold targetedEdges incoming
+  generalize indexed p.blocks = bs
+  induction bs ...
+  ```
+  LHS original `(bs.flatMap f).filter ... |>.map`. simp only [List.flatMap_cons,List.filter_append,List.map_append,ih]. RHS flatMap cons. Per term `cases b.term <;> simp [edgesTo]` should handle conditionals beq j? edgesTo if t=j uses Prop if, filter uses bool `t==j`. `simp [edgesTo]` includes beq_iff_eq perhaps. Test.
+  The current `targetedEdges` term f includes match. Destructure `b`? b term cases `cases ht:b.term` perhaps `cases b.term` cannot because b projection? `rcases b with ⟨params,insts,term⟩; cases term` in cons after pair.
+  Induction `|(k,b)::bs` pattern.
+  Bucket theorem final out of range uses targeted no edges analogous.
+  `prepare_incoming`: reverse bucket = incoming p j via targeted filter.
+
+  Add.
+
+• Register lookup is now proved equal to `List.lookup` for every register, including unbounded malformed registers, and both offset lookups rewrite to `blockBase`/`instBase`. I’m applying the same order-preserving bucket proof to LCB incoming edges.
+
+• Insert code.Compile.Concrete/Backend/LCB.lean:703:17: error: unsolved goals
+case cons.br
+p : Program
+j : Nat
+bs : List (Nat × Block)
+ih :
+  List.map Prod.snd
+      (List.filter (fun x => x.fst == j)
+        (List.flatMap
+          (fun x =>
+            match x with
+            | (k, b) =>
+              match b.term with
+              | Term.br t args => [(t, k, args)]
+              | Term.condbr c t ta e ea => [(t, k, ta), (e, k, ea)]
+              | x => [])
+          bs)) =
+    List.flatMap
+      (fun x =>
+        match x with
+        | (k, b) => edgesTo j k b.term)
+      bs
+k : Nat
+params : List (Reg × Ty)
+insts : List Inst
+target✝ : Nat
+args✝ : List Operand
+⊢ List.map Prod.snd (List.filter (fun x => x.fst == j) [(target✝, k, args✝)]) = if target✝ = j then [(k, args✝)] else []
+
+case cons.condbr
+p : Program
+j : Nat
+bs : List (Nat × Block)
+ih :
+  List.map Prod.snd
+      (List.filter (fun x => x.fst == j)
+        (List.flatMap
+          (fun x =>
+            match x with
+            | (k, b) =>
+              match b.term with
+              | Term.br t args => [(t, k, args)]
+              | Term.condbr c t ta e ea => [(t, k, ta), (e, k, ea)]
+              | x => [])
+          bs)) =
+    List.flatMap
+      (fun x =>
+        match x with
+        | (k, b) => edgesTo j k b.term)
+      bs
+k : Nat
+params : List (Reg × Ty)
+insts : List Inst
+c✝ : Reg
+yes✝ : Nat
+yesArgs✝ : List Operand
+no✝ : Nat
+noArgs✝ : List Operand
+⊢ List.map Prod.snd (List.filter (fun x => x.fst == j) [(yes✝, k, yesArgs✝), (no✝, k, noArgs✝)]) ++
+      List.flatMap
+        (fun x =>
+          match x.snd.term with
+          | Term.br t args => if t = j then [(x.fst, args)] else []
+          | Term.condbr c t ta e ea => (if t = j then [(x.fst, ta)] else []) ++ if e = j then [(x.fst, ea)] else []
+          | x => [])
+        bs =
+    (if yes✝ = j then [(k, yesArgs✝)] else []) ++
+      ((if no✝ = j then [(k, noArgs✝)] else []) ++
+        List.flatMap
+          (fun x =>
+            match x.snd.term with
+            | Term.br t args => if t = j then [(x.fst, args)] else []
+            | Term.condbr c t ta e ea => (if t = j then [(x.fst, ta)] else []) ++ if e = j then [(x.fst, ea)] else []
+            | x => [])
+          bs)
+Concrete/Backend/LCB.lean:2470:19: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  adapt p
+in the target expression
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+
+case error
+p : Program
+f : Source.Function
+tbl : SiteTable
+h :
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+e : String
+ha : adapt p = Except.error e
+⊢ Except.error e = Except.ok f ∧ tbl = p.sites
+Concrete/Backend/LCB.lean:2472:8: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  adapt p
+in the target expression
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+
+case ok
+p : Program
+f : Source.Function
+tbl : SiteTable
+h :
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+g : Source.Function
+ha : adapt p = Except.ok g
+⊢ Except.ok g = Except.ok f ∧ tbl = p.sites
+Should split by target equality in term cases:
+  ```
+  cases tm <;> simp [edgesTo] <;> split <;> split <;> simp_all
+  ```
+  For br one split; cond two. `cases tm <;> simp [edgesTo] <;> (repeat' split) <;> simp_all` perhaps splits all if. Use `cases tm <;> simp [edgesTo] <;> (try split) <;> (try split) <;> simp_all` warnings no. `split` on br goal after simp has if, yes. On ret solved before. `<;> split <;> simp_all` br only one if, cond outer first then still second; repeat `split` perhaps `all_goals` style:
+  ```
+  cases tm <;> simp [edgesTo] <;>
+    (try split) <;> (try split) <;> simp_all
+  ```
+  Try safe. `simp_all` could warning no progress? Usually no.
+  Also ih issue cond RHS tail moved inside due simp `List.append_assoc` not normalized. `simp_all [List.append_assoc]`.
+
+  Edit snippet.Concrete/Backend/LCB.lean:707:78: warning: This simp argument is unused:
+  List.append_assoc
+
+Hint: Omit it from the simp argument list.
+  [apply] simp_all
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Backend/LCB.lean:2470:19: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  adapt p
+in the target expression
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+
+case error
+p : Program
+f : Source.Function
+tbl : SiteTable
+h :
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+e : String
+ha : adapt p = Except.error e
+⊢ Except.error e = Except.ok f ∧ tbl = p.sites
+Concrete/Backend/LCB.lean:2472:8: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  adapt p
+in the target expression
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+
+case ok
+p : Program
+f : Source.Function
+tbl : SiteTable
+h :
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+g : Source.Function
+ha : adapt p = Except.ok g
+⊢ Except.ok g = Except.ok f ∧ tbl = p.sites
+Remove unused later with other edit. Now validation major. I'll formulate Marks and theorem.
+
+  Definitions outside already markUnique. Inside Proof:
+  ```
+  def Marks (a:Array Bool) (seen:List Nat) : Prop :=
+   ∀m (hm:m<a.size), a[m] = decide (m∈seen)
+  ```
+  Perhaps size set theorem simp.
+
+  `markUnique_ok`:
+  ```
+  theorem markUnique_ok : ∀ xs a seen, Marks a seen →
+   (markUnique xs a).isSome =
+    (decide xs.Nodup && xs.all (·<a.size) && decide (∀x∈xs,x∉seen))
+  ```
+  Note result Array size=a.size so RHS initial size. Induction xs general a seen.
+  nil: simp [markUnique]
+  cons x xs:
+   by_cases hx:x<a.size
+   · cases ha:a[x] with
+     true/false Bool cases not Option. `cases ha:a[x]` false/true.
+     false:
+     `simp only [markUnique,hx,↓reduceDIte,ha,Bool.false... ]`
+     set a' and seen' x::seen.
+     have hMarks : Marks (a.set... ) (x::seen) := by
+       intro m hm
+       rw [Array.size_setIfInBounds] at hm? `simp only [Array.size_setIfInBounds] at hm` maybe size defeq.
+       by_cases hmx:m=x
+        subst; simp [Array.getElem_setIfInBounds?] use getElem? easier Marks using getElem? avoids dependent get.
+  Define Marks via `(a[m]?).getD false = decide(m∈seen)` for m<size. Then set get lemmas easier. But `a[x]` in markUnique, relate with getElem.
+  Use Marks:
+  ```
+  ∀m, m<a.size -> a[m] = decide...
+  ```
+  getElem set lemmas #check `Array.getElem_setIfInBounds` perhaps simp handles. Existing uses getElem? all. Could define with getD and convert.
+  ```
+  def Marks a seen := ∀m, (a[m]?).getD false = decide(m∈seen)
+  ```
+  No bound antecedent; for out-of-bounds left false but RHS could true if seen out of range, undesirable. Include `∀m, m<a.size →`.
+  Then hMarks:
+  ```
+  simp only [Array.size_setIfInBounds] at hm
+  by_cases hmx:m=x
+   subst; simp [Array.getElem?_setIfInBounds_self_of_lt hx, ha]
+   else simp [Array.getElem?_setIfInBounds_ne (Ne.symm hmx), Marks h, hmx]
+  ```
+  For self getD some true = decide membership true, simp.
+  Initial ha false gives decide(x∈seen)=false via Marks x hx and Array.getElem?_eq_getElem hx. derive hxnot.
+  IH returns with a'.size=a.size; simplify at result.
+  `rw [markUnique_ok xs a' (x::seen) hMarks]`
+  Goal bool equality. After simp [hx, ha, List.nodup_cons, List.all_cons, ...], use logic relation. Could let `hdisj : (∀y∈xs,y∉x::seen) ↔ x∉xs ∧ ∀y∈xs,y∉seen` prove constructor.
+  Then `simp only [hdisj, decide_and, Bool.and...]`; boolean reassociation `cases` perhaps `simp [Bool.and_assoc, Bool.and_left_comm,...]`.
+  RHS after mark unique:
+  Original Nodup(x::xs) = ¬x∈xs ∧ Nodup xs.
+  all = x<a.size && xs.all
+   disj original = x∉seen ∧ ∀y∈xs,y∉seen.
+  IH = Nodup xs && xs.all && ((x∉xs) ∧ (seen disj)) (depending).
+  All propositions decidable. `simp only [List.nodup_cons, List.all_cons, hx, ...] at *` then `cases` decide variables and rfl via `simp [hdisj, Bool.and_assoc,...]`.
+  Can let `simp [hdisj, hx, ha, List.nodup_cons, Bool.and_assoc, Bool.and_left_comm, Bool.and_comm]` likely normalizes AC if simp with and comm can loop? simp handles ordered rewriting for permutative.
+  Should derive hMarks and hxnot.
+
+  True branch a[x]=true: markUnique none isSome false. Marks gives x∈seen, original disj false. `have hxmem : x∈seen := by have := h x hx; ...`
+  Using Marks getD:
+  ```
+  have hm := hseen x hx
+  rw [Array.getElem?_eq_getElem hx, ha] at hm
+  simp at hm
+  exact of_decide_eq_true hm? 
+  ```
+  `simpa using hm` after rw yields `true = decide(x∈seen)` simplified to decide... =true, `exact of_decide_eq_true hm`.
+  Could `have hxmem : x ∈ seen := by simpa [Marks, Array.getElem?_eq_getElem hx, ha] using hseen x hx` but hseen already Marks.
+  False hxmem:
+  ```
+  have hxnot : x∉seen := by
+   have hm:=hseen x hx
+   rw [Array.getElem?_eq_getElem hx,ha] at hm
+   simpa using hm
+  ```
+  Test.
+
+  False branch hMarks proof:
+  ```
+  intro m hm
+  by_cases hmx:m=x
+  · subst m
+    simp [Array.getElem?_setIfInBounds_self_of_lt hx]
+  · rw [Array.getElem?_setIfInBounds_ne (Ne.symm hmx)]
+    have hm' : m<a.size := by simpa using hm
+    rw [hseen m hm']
+    simp [hmx]
+  ```
+  After set size hm, `simp only [Array.size_setIfInBounds] at hm` perhaps array theorem rewrite. getD simplification self `simp`.
+  True branch:
+  ` simp [markUnique,hx,ha,hxmem]` might original nodup etc and disj decide. Should have `simp [hxmem]` handles ∃ witness for ¬∀. `∀x∈x::xs,x∉seen` false because x. `simp [hxmem]` yes.
+
+  Out of bounds hx: `simp [markUnique,hx]`.
+
+  `markUnique_marks`:
+  ```
+  theorem markUnique_marks : ∀xs a seen a', Marks a seen → markUnique xs a=some a' →
+   Marks a' (xs++seen) maybe choose order.
+  ```
+  With recursion seen' x::seen and final IH gives Marks a' (xs ++ (x::seen)). Desired Marks a' (x::xs++seen) membership equivalent, not definitional list. Could state `∀m,m<a'.size → a'[m]? = decide(m∈xs ∨ m∈seen)`.
+  Define `MarksUnion a xs seen`.
+  ```
+  theorem ... : ∀m,m<a'.size → ... m∈xs ∨ m∈seen
+  ```
+  Induction using IH and simp [or associativity].
+  Nil: h gives some a=a', subst, Marks.
+  Cons false: IH yields `m∈xs ∨ m∈x::seen`; target m∈x::xs ∨ m∈seen. simp only[List.mem_cons] at result; tauto.
+  `simpa [List.mem_cons, or_assoc, or_left_comm, or_comm] using ih m hm`.
+  True/none impossible, out impossible.
+  Also size result = a.size via size_markUnique theorem or from MarksUnion doesn't provide size. Should slotInter final array size count for check. Prove `size_markUnique` successful or generic function option map size:
+  ```
+  theorem size_markUnique {xs a a'} h : a'.size=a.size
+  ```
+  induction, simp markUnique, splits. Easy.
+
+  Actually markUnique_ok RHS uses a.size after recursive a' simplification via Array.size_set; good.
+
+  regCheck_eq:
+  ```
+  theorem regCheck_eq ids:
+   regCheck ids = decide ((ids.map fst).Nodup) := by
+   unfold regCheck
+   rw [markUnique_ok _ _ [] (by simp[Marks])]
+   have hall : regs.all (·<regBound ids)=true := List.all_eq_true.mpr ... regBound_lt membership map
+   simp [hall]
+  ```
+  mark theorem RHS `decide regs.Nodup && regs.all... && decide disjoint[]`; simp hall. For each r∈regs get pair witness and regBound_lt. Same explicit.
+  Initial Marks replicate false: `intro m hm; simp [Marks, Array.getElem?_eq_getElem hm]` perhaps `simp [Marks]` handles replicate getElem? with bounds dependent. State:
+  ```
+  have hm : Marks (Array.replicate n false) [] := by
+   intro m h
+   rw [Array.getElem?_eq_getElem h]; simp
+  ```
+  Array index proof h type m<replicate.size. `rw [Array.getElem?_eq_getElem h]; simp`.
+
+  slotInter_eq:
+  ```
+  unfold slotInterCheck
+  cases h:markUnique slots init with
+  none:
+   have hs : isSome=false from h
+   have ok := markUnique_ok slots init [] hinit
+   rw [h] at ok
+   -- reference conj false because first nodup&&all false
+   simp only [Option.isSome_none, Bool.false_eq_true] at ok
+   have hbad : ¬(slots.Nodup ∧ ∀m∈slots,m<count) ...
+   Bool expression simplify using ok
+   `simp [numbering?]` no.
+  some a:
+   ok gives `(true = expr)` so expr true.
+   marks union slots [] gives array membership slots.
+   check all equivalence:
+  ```
+  have ha : ∀m, m<a.size -> ... decide(m∈slots) from marks, simp at.
+  have hsize : a.size=count from size_markUnique h and replicate.
+  have hcheck : (fun m => if h... then !a[m] else false) = fun m => decide(m<count ∧ m∉slots) perhaps function equality via funext:
+   by_cases hm:m<a.size
+    have hmcount by hsize
+    simp [hm, Array.getElem?_eq_getElem hm, ha m hm, List.contains...]
+   else m>=count; simp [hm,hsize]
+  ```
+  Original slots all and inters all etc. With h success I know slots Nodup and bounds true. Then prove slotInterCheck equals entire slot reference simply hcheck and hs conditions. Original inter predicate `!slots.contains m`. `List.contains` BEq Nat, `List.contains_eq_mem` simp likely `List.contains_eq_true`? In existing code simp [hmem] turns contains into bool. `simp [List.contains]` would unfold recursion no. #check `List.contains_eq_mem`. Query later. Usually `List.contains_eq_mem` theorem? #check scratch.
+
+  I can state hcheck pointwise:
+  ```
+  (fun m => ...) = (fun m => decide (m < count) && !slots.contains m)
+  ```
+  by_cases, simp [hm, hsize, ha, Array..., List.contains_eq_mem]
+  Perhaps `simp [hm, ←hsize, ha m hm]` turns `decide(m∈slots)` and `slots.contains m` both via `decide_eq_true_eq`.
+  `decide(m∈slots)` Prop membership and contains boolean simp theorem `List.contains_eq_decide` likely simp knows `List.contains_eq_true`. Test compile.
+
+  Then:
+  `slotInterCheck` = inters.all (decide<m<count && !contains).
+  Reference `decide slots.Nodup && slots.all... && inters.all bound && inters.all not`. hs says slots checks true, simplify; `List.all_and` theorem transforms `all fun m=>bound&&not` = all bound && all not. #check `List.all_and`. simp [List.all_and].
+  Actually original slotInterCheck doesn't separately include slots checks on success but equality under success hs. Good.
+  None case reference false from slots bad. `ok` boolean false means `decide slots.Nodup && slots.all ... && decide disjoint[]` = false. disjoint[] true. Have `hsbad : (decide slots.Nodup && slots.all ...) = false` by simpa using ok.symm perhaps.
+  Then reference `hsbad && ...` false via Bool.and_assoc.
+  `simp [slotInterCheck,h]` goal after cases? Write theorem proof cases h before simp:
+  ```
+    | none =>
+      have ho := markUnique_ok slots init [] hinit
+      rw [h] at ho
+      have hb : ... = false := by simpa using ho.symm
+      simp [slotInterCheck,h, hb, Bool.and_assoc]
+  ```
+  Goal theorem exact expression I choose `slotInterCheck slots inters count = decide slots.Nodup && slots.all ... && inters...` note association original `&&` left associative. `simp [hb]`.
+  Some:
+  ```
+  have ho ... rw[h] at ho
+  have hs : decide slots.Nodup && slots.all... =true := by simpa using ho.symm
+  have hsize...
+  have hm := markUnique_marks ... h
+  simp only [List.append_nil?]...
+  have heq : (inters.all fun...) = inters.all bound && inters.all not := by
+    rw [←List.all_and]?? apply congrArg...
+  ```
+  Prove function equality then `simp [slotInterCheck,h,hs, ←List.all_and, hfunc]`.
+  Could simply `simp only [slotInterCheck,h]`; `rw [show (fun...) = ... from funext]`, `rw [List.all_and]`; `simp [hs,Bool.and_assoc]`.
+
+  I'll query #check List.all_and, contains.
+
+• Incoming buckets now satisfy `prepare_incoming` for every block index, including out-of-range targets. Validation is the last independent component: I’m proving the linear marker equivalent to duplicate, bound, and disjointness checks, rather than relying on canonical-numbering assumptions.
+
+• Run./tmp/iss0030.apR8JG/Check.lean:2:7: error(lean.unknownIdentifier): Unknown constant `List.all_and`
+List.contains_eq_mem.{u_1} {α : Type u_1} [BEq α] [LawfulBEq α] (a : α) (as : List α) : as.contains a = decide (a ∈ as)
+/tmp/iss0030.apR8JG/Check.lean:4:7: error(lean.unknownIdentifier): Unknown constant `List.contains_eq_true`
+/tmp/iss0030.apR8JG/Check.lean:5:7: error(lean.unknownIdentifier): Unknown constant `List.contains_eq_decide`
+Array.getElem_setIfInBounds.{u_1} {α : Type u_1} {xs : Array α} {i : Nat} {a : α} {j : Nat} (hj : j < xs.size) :
+  (xs.setIfInBounds i a)[j] = if i = j then a else xs[j]
+Array.getElem_setIfInBounds_self.{u_1} {α : Type u_1} {xs : Array α} {i : Nat} {a : α}
+  (h : i < (xs.setIfInBounds i a).size) : (xs.setIfInBounds i a)[i] = a
+Array.getElem_setIfInBounds_ne.{u_1} {α : Type u_1} {xs : Array α} {i : Nat} {a : α} {j : Nat} (hj : j < xs.size)
+  (h : i ≠ j) : (xs.setIfInBounds i a)[j] = xs[j]
+Array.size_setIfInBounds.{u_1} {α : Type u_1} {xs : Array α} {i : Nat} {a : α} : (xs.setIfInBounds i a).size = xs.size
+/tmp/iss0030.apR8JG/Check.lean:10:7: error(lean.unknownIdentifier): Unknown constant `Option.isSome_eq_true`
+Option.isSome_some.{u_1} {α✝ : Type u_1} {a : α✝} : (some a).isSome = true
+Can prove list all_and myself easy:
+  ```
+  theorem all_and {xs} f g : xs.all(fun x=>f x&&g x)=xs.all f&&xs.all g := by induction xs<;>simp_all[Bool.and_assoc,...]
+  ```
+  Insert validation section after prepare_incoming. Also remove unused append_assoc in targeted via same edit? Could include old_string from theorem targeted... huge no. Later clean.
+
+  I'll write Marks and markUnique_ok attempt.Insert big.Potential size_markUnique syntax trans wrong: `exact ih h |>.trans Array.size...` equality a'.size = set.size, trans set.size=a.size yes okay.
+  Compile.Concrete/Backend/LCB.lean:752:67: error(lean.unknownIdentifier): Unknown identifier `decide_and`
+Concrete/Backend/LCB.lean:757:48: error: Tactic `rfl` failed: The left-hand side
+  false && false && decide (¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen)
+is not definitionally equal to the right-hand side
+  decide (¬x ∈ xs ∧ xs.Nodup) && (true && false) && decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen)
+
+case pos.false.false.false.false.false
+x : Nat
+xs : List Nat
+a : Array Bool
+seen : List Nat
+h : Marks a seen
+hx : x < a.size
+ha : a[x] = false
+hxnot : ¬x ∈ seen
+hmarks : Marks (a.setIfInBounds x true) (x :: seen)
+hdisj : (∀ (y : Nat), y ∈ xs → ¬y ∈ x :: seen) ↔ ¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen
+hxb : (decide ¬x ∈ seen) = true
+⊢ (false && false && decide (¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen)) =
+    (decide (¬x ∈ xs ∧ xs.Nodup) && (true && false) && decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen))
+Concrete/Backend/LCB.lean:757:48: error: Tactic `rfl` failed: The left-hand side
+  false && false && decide (¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen)
+is not definitionally equal to the right-hand side
+  decide (¬x ∈ xs ∧ xs.Nodup) && (true && false) && decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen)
+
+case pos.false.false.false.false.true
+x : Nat
+xs : List Nat
+a : Array Bool
+seen : List Nat
+h : Marks a seen
+hx : x < a.size
+ha : a[x] = false
+hxnot : ¬x ∈ seen
+hmarks : Marks (a.setIfInBounds x true) (x :: seen)
+hdisj : (∀ (y : Nat), y ∈ xs → ¬y ∈ x :: seen) ↔ ¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen
+hxb : (decide ¬x ∈ seen) = true
+⊢ (false && false && decide (¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen)) =
+    (decide (¬x ∈ xs ∧ xs.Nodup) && (true && false) && decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen))
+Concrete/Backend/LCB.lean:757:48: error: Tactic `rfl` failed: The left-hand side
+  false && true && decide (¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen)
+is not definitionally equal to the right-hand side
+  decide (¬x ∈ xs ∧ xs.Nodup) && (true && true) && decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen)
+
+case pos.false.false.false.true.false
+x : Nat
+xs : List Nat
+a : Array Bool
+seen : List Nat
+h : Marks a seen
+hx : x < a.size
+ha : a[x] = false
+hxnot : ¬x ∈ seen
+hmarks : Marks (a.setIfInBounds x true) (x :: seen)
+hdisj : (∀ (y : Nat), y ∈ xs → ¬y ∈ x :: seen) ↔ ¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen
+hxb : (decide ¬x ∈ seen) = true
+⊢ (false && true && decide (¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen)) =
+    (decide (¬x ∈ xs ∧ xs.Nodup) && (true && true) && decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen))
+Concrete/Backend/LCB.lean:757:48: error: Tactic `rfl` failed: The left-hand side
+  false && true && decide (¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen)
+is not definitionally equal to the right-hand side
+  decide (¬x ∈ xs ∧ xs.Nodup) && (true && true) && decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen)
+
+case pos.false.false.false.true.true
+x : Nat
+xs : List Nat
+a : Array Bool
+seen : List Nat
+h : Marks a seen
+hx : x < a.size
+ha : a[x] = false
+hxnot : ¬x ∈ seen
+hmarks : Marks (a.setIfInBounds x true) (x :: seen)
+hdisj : (∀ (y : Nat), y ∈ xs → ¬y ∈ x :: seen) ↔ ¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen
+hxb : (decide ¬x ∈ seen) = true
+⊢ (false && true && decide (¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen)) =
+    (decide (¬x ∈ xs ∧ xs.Nodup) && (true && true) && decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen))
+Concrete/Backend/LCB.lean:757:48: error: Tactic `rfl` failed: The left-hand side
+  true && false && decide (¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen)
+is not definitionally equal to the right-hand side
+  decide (¬x ∈ xs ∧ xs.Nodup) && (true && false) && decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen)
+
+case pos.fal
+se.false.true.false.false
+x : Nat
+xs : List Nat
+a : Array Bool
+seen : List Nat
+h : Marks a seen
+hx : x < a.size
+ha : a[x] = false
+hxnot : ¬x ∈ seen
+hmarks : Marks (a.setIfInBounds x true) (x :: seen)
+hdisj : (∀ (y : Nat), y ∈ xs → ¬y ∈ x :: seen) ↔ ¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen
+hxb : (decide ¬x ∈ seen) = true
+⊢ (true && false && decide (¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen)) =
+    (decide (¬x ∈ xs ∧ xs.Nodup) && (true && false) && decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen))
+Concrete/Backend/LCB.lean:757:48: error: Tactic `rfl` failed: The left-hand side
+  true && false && decide (¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen)
+is not definitionally equal to the right-hand side
+  decide (¬x ∈ xs ∧ xs.Nodup) && (true && false) && decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen)
+
+case pos.false.false.true.false.true
+x : Nat
+xs : List Nat
+a : Array Bool
+seen : List Nat
+h : Marks a seen
+hx : x < a.size
+ha : a[x] = false
+hxnot : ¬x ∈ seen
+hmarks : Marks (a.setIfInBounds x true) (x :: seen)
+hdisj : (∀ (y : Nat), y ∈ xs → ¬y ∈ x :: seen) ↔ ¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen
+hxb : (decide ¬x ∈ seen) = true
+⊢ (true && false && decide (¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen)) =
+    (decide (¬x ∈ xs ∧ xs.Nodup) && (true && false) && decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen))
+Concrete/Backend/LCB.lean:757:48: error: Tactic `rfl` failed: The left-hand side
+  true && true && decide (¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen)
+is not definitionally equal to the right-hand side
+  decide (¬x ∈ xs ∧ xs.Nodup) && (true && true) && decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen)
+
+case pos.false.false.true.true.false
+x : Nat
+xs : List Nat
+a : Array Bool
+seen : List Nat
+h : Marks a seen
+hx : x < a.size
+ha : a[x] = false
+hxnot : ¬x ∈ seen
+hmarks : Marks (a.setIfInBounds x true) (x :: seen)
+hdisj : (∀ (y : Nat), y ∈ xs → ¬y ∈ x :: seen) ↔ ¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen
+hxb : (decide ¬x ∈ seen) = true
+⊢ (true && true && decide (¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen)) =
+    (decide (¬x ∈ xs ∧ xs.Nodup) && (true && true) && decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen))
+Concrete/Backend/LCB.lean:757:48: error: Tactic `rfl` failed: The left-hand side
+  true && true && decide (¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen)
+is not definitionally equal to the right-hand side
+  decide (¬x ∈ xs ∧ xs.Nodup) && (true && true) && decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen)
+
+case pos.false.false.true.true.true
+x : Nat
+xs : List Nat
+a : Array Bool
+seen : List Nat
+h : Marks a seen
+hx : x < a.size
+ha : a[x] = false
+hxnot : ¬x ∈ seen
+hmarks : Marks (a.setIfInBounds x true) (x :: seen)
+hdisj : (∀ (y : Nat), y ∈ xs → ¬y ∈ x :: seen) ↔ ¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen
+hxb : (decide ¬x ∈ seen) = true
+⊢ (true && true && decide (¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen)) =
+    (decide (¬x ∈ xs ∧ xs.Nodup) && (true && true) && decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen))
+Concrete/Backend/LCB.lean:757:48: error: Tactic `rfl` failed: The left-hand side
+  false && false && decide (¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen)
+is not definitionally equal to the right-hand side
+  decide (¬x ∈ xs ∧ xs.Nodup) && (true && false) && decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen)
+
+case pos.false.true.false.false.false
+x : Nat
+xs : List Nat
+a : Array Bool
+seen : List Nat
+h : Marks a seen
+hx : x < a.size
+ha : a[x] = false
+hxnot : ¬x ∈ seen
+hmarks : Marks (a.setIfInBounds x true) (x :: seen)
+hdisj : (∀ (y : Nat), y ∈ xs → ¬y ∈ x :: seen) ↔ ¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen
+hxb : (decide ¬x ∈ seen) = true
+⊢ (false && false && decide (¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen)) =
+    (decid
+e (¬x ∈ xs ∧ xs.Nodup) && (true && false) && decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen))
+Concrete/Backend/LCB.lean:757:48: error: Tactic `rfl` failed: The left-hand side
+  false && false && decide (¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen)
+is not definitionally equal to the right-hand side
+  decide (¬x ∈ xs ∧ xs.Nodup) && (true && false) && decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen)
+
+case pos.false.true.false.false.true
+x : Nat
+xs : List Nat
+a : Array Bool
+seen : List Nat
+h : Marks a seen
+hx : x < a.size
+ha : a[x] = false
+hxnot : ¬x ∈ seen
+hmarks : Marks (a.setIfInBounds x true) (x :: seen)
+hdisj : (∀ (y : Nat), y ∈ xs → ¬y ∈ x :: seen) ↔ ¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen
+hxb : (decide ¬x ∈ seen) = true
+⊢ (false && false && decide (¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen)) =
+    (decide (¬x ∈ xs ∧ xs.Nodup) && (true && false) && decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen))
+Concrete/Backend/LCB.lean:757:48: error: Tactic `rfl` failed: The left-hand side
+  false && true && decide (¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen)
+is not definitionally equal to the right-hand side
+  decide (¬x ∈ xs ∧ xs.Nodup) && (true && true) && decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen)
+
+case pos.false.true.false.true.false
+x : Nat
+xs : List Nat
+a : Array Bool
+seen : List Nat
+h : Marks a seen
+hx : x < a.size
+ha : a[x] = false
+hxnot : ¬x ∈ seen
+hmarks : Marks (a.setIfInBounds x true) (x :: seen)
+hdisj : (∀ (y : Nat), y ∈ xs → ¬y ∈ x :: seen) ↔ ¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen
+hxb : (decide ¬x ∈ seen) = true
+⊢ (false && true && decide (¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen)) =
+    (decide (¬x ∈ xs ∧ xs.Nodup) && (true && true) && decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen))
+Concrete/Backend/LCB.lean:757:48: error: Tactic `rfl` failed: The left-hand side
+  false && true && decide (¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen)
+is not definitionally equal to the right-hand side
+  decide (¬x ∈ xs ∧ xs.Nodup) && (true && true) && decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen)
+
+case pos.false.true.false.true.true
+x : Nat
+xs : List Nat
+a : Array Bool
+seen : List Nat
+h : Marks a seen
+hx : x < a.size
+ha : a[x] = false
+hxnot : ¬x ∈ seen
+hmarks : Marks (a.setIfInBounds x true) (x :: seen)
+hdisj : (∀ (y : Nat), y ∈ xs → ¬y ∈ x :: seen) ↔ ¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen
+hxb : (decide ¬x ∈ seen) = true
+⊢ (false && true && decide (¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen)) =
+    (decide (¬x ∈ xs ∧ xs.Nodup) && (true && true) && decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen))
+Concrete/Backend/LCB.lean:757:48: error: Tactic `rfl` failed: The left-hand side
+  true && false && decide (¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen)
+is not definitionally equal to the right-hand side
+  decide (¬x ∈ xs ∧ xs.Nodup) && (true && false) && decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen)
+
+case pos.false.true.true.false.false
+x : Nat
+xs : List Nat
+a : Array Bool
+seen : List Nat
+h : Marks a seen
+hx : x < a.size
+ha : a[x] = false
+hxnot : ¬x ∈ seen
+hmarks : Marks (a.setIfInBounds x true) (x :: seen)
+hdisj : (∀ (y : Nat), y ∈ xs → ¬y ∈ x :: seen) ↔ ¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen
+hxb : (decide ¬x ∈ seen) = true
+⊢ (true && false && decide (¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen)) =
+    (decide (¬x ∈ xs ∧ xs.Nodup) && (true && false) && decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen))
+Concrete/Backend/LCB.lean:757:48: error: Tactic `rfl` failed: The left-hand side
+  true && false && decide (¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen)
+is not definitionally equal to the right-hand side
+  decide (¬x ∈ xs ∧ xs.Nodup) && (true && false) && decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen)
+
+case
+ pos.false.true.true.false.true
+x : Nat
+xs : List Nat
+a : Array Bool
+seen : List Nat
+h : Marks a seen
+hx : x < a.size
+ha : a[x] = false
+hxnot : ¬x ∈ seen
+hmarks : Marks (a.setIfInBounds x true) (x :: seen)
+hdisj : (∀ (y : Nat), y ∈ xs → ¬y ∈ x :: seen) ↔ ¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen
+hxb : (decide ¬x ∈ seen) = true
+⊢ (true && false && decide (¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen)) =
+    (decide (¬x ∈ xs ∧ xs.Nodup) && (true && false) && decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen))
+Concrete/Backend/LCB.lean:757:48: error: Tactic `rfl` failed: The left-hand side
+  true && true && decide (¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen)
+is not definitionally equal to the right-hand side
+  decide (¬x ∈ xs ∧ xs.Nodup) && (true && true) && decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen)
+
+case pos.false.true.true.true.false
+x : Nat
+xs : List Nat
+a : Array Bool
+seen : List Nat
+h : Marks a seen
+hx : x < a.size
+ha : a[x] = false
+hxnot : ¬x ∈ seen
+hmarks : Marks (a.setIfInBounds x true) (x :: seen)
+hdisj : (∀ (y : Nat), y ∈ xs → ¬y ∈ x :: seen) ↔ ¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen
+hxb : (decide ¬x ∈ seen) = true
+⊢ (true && true && decide (¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen)) =
+    (decide (¬x ∈ xs ∧ xs.Nodup) && (true && true) && decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen))
+Concrete/Backend/LCB.lean:757:48: error: Tactic `rfl` failed: The left-hand side
+  true && true && decide (¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen)
+is not definitionally equal to the right-hand side
+  decide (¬x ∈ xs ∧ xs.Nodup) && (true && true) && decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen)
+
+case pos.false.true.true.true.true
+x : Nat
+xs : List Nat
+a : Array Bool
+seen : List Nat
+h : Marks a seen
+hx : x < a.size
+ha : a[x] = false
+hxnot : ¬x ∈ seen
+hmarks : Marks (a.setIfInBounds x true) (x :: seen)
+hdisj : (∀ (y : Nat), y ∈ xs → ¬y ∈ x :: seen) ↔ ¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen
+hxb : (decide ¬x ∈ seen) = true
+⊢ (true && true && decide (¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen)) =
+    (decide (¬x ∈ xs ∧ xs.Nodup) && (true && true) && decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen))
+Concrete/Backend/LCB.lean:752:55: warning: This simp argument is unused:
+  ↓reduceIte
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [List.nodup_cons, List.all_cons, hx, decide_and, hdisj, decide_true, Bool.and_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Backend/LCB.lean:753:23: warning: This simp argument is unused:
+  Bool.and_true
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [List.nodup_cons, List.all_cons, hx, ↓reduceIte, decide_and, hdisj, decide_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Backend/LCB.lean:755:19: warning: This simp argument is unused:
+  hxb
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [Bool.and_true, Array.size_setIfInBounds]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Backend/LCB.lean:755:24: warning: This simp argument is unused:
+  Bool.and_true
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [hxb, Array.size_setIfInBounds]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Backend/LCB.lean:796:44: error: Invalid rewrite argument: Expected an equality or iff proof or definition name, but `ha ?a✝` is a proof of
+  False
+Concrete/Backend/LCB.lean:811:87: error: Tactic `rfl` failed: The left-hand side
+  decide (m ∈ xs ∨ m = x ∨ m ∈ seen)
+is not definitionally equal to the right-hand side
+  decide ((m = x ∨ m ∈ xs) ∨ m ∈ seen)
+
+case false.false.false
+x : Nat
+xs : List Nat
+a a' : Array Bool
+seen : List Nat
+h : Marks a seen
+hx : x < a.size
+ha : ¬a[x] = true
+hm : markUnique xs (a.setIfInBo
+unds x true) = some a'
+hxnot : ¬x ∈ seen
+hmarks : Marks (a.setIfInBounds x true) (x :: seen)
+ih : ∀ (m : Nat), m < a'.size → a'[m]?.getD false = decide (m ∈ xs ∨ m ∈ x :: seen)
+m : Nat
+hlt : m < a'.size
+⊢ decide (m ∈ xs ∨ m = x ∨ m ∈ seen) = decide ((m = x ∨ m ∈ xs) ∨ m ∈ seen)
+Concrete/Backend/LCB.lean:811:87: error: Tactic `rfl` failed: The left-hand side
+  decide (m ∈ xs ∨ m = x ∨ m ∈ seen)
+is not definitionally equal to the right-hand side
+  decide ((m = x ∨ m ∈ xs) ∨ m ∈ seen)
+
+case false.false.true
+x : Nat
+xs : List Nat
+a a' : Array Bool
+seen : List Nat
+h : Marks a seen
+hx : x < a.size
+ha : ¬a[x] = true
+hm : markUnique xs (a.setIfInBounds x true) = some a'
+hxnot : ¬x ∈ seen
+hmarks : Marks (a.setIfInBounds x true) (x :: seen)
+ih : ∀ (m : Nat), m < a'.size → a'[m]?.getD false = decide (m ∈ xs ∨ m ∈ x :: seen)
+m : Nat
+hlt : m < a'.size
+⊢ decide (m ∈ xs ∨ m = x ∨ m ∈ seen) = decide ((m = x ∨ m ∈ xs) ∨ m ∈ seen)
+Concrete/Backend/LCB.lean:811:87: error: Tactic `rfl` failed: The left-hand side
+  decide (m ∈ xs ∨ m = x ∨ m ∈ seen)
+is not definitionally equal to the right-hand side
+  decide ((m = x ∨ m ∈ xs) ∨ m ∈ seen)
+
+case false.true.false
+x : Nat
+xs : List Nat
+a a' : Array Bool
+seen : List Nat
+h : Marks a seen
+hx : x < a.size
+ha : ¬a[x] = true
+hm : markUnique xs (a.setIfInBounds x true) = some a'
+hxnot : ¬x ∈ seen
+hmarks : Marks (a.setIfInBounds x true) (x :: seen)
+ih : ∀ (m : Nat), m < a'.size → a'[m]?.getD false = decide (m ∈ xs ∨ m ∈ x :: seen)
+m : Nat
+hlt : m < a'.size
+⊢ decide (m ∈ xs ∨ m = x ∨ m ∈ seen) = decide ((m = x ∨ m ∈ xs) ∨ m ∈ seen)
+Concrete/Backend/LCB.lean:811:87: error: Tactic `rfl` failed: The left-hand side
+  decide (m ∈ xs ∨ m = x ∨ m ∈ seen)
+is not definitionally equal to the right-hand side
+  decide ((m = x ∨ m ∈ xs) ∨ m ∈ seen)
+
+case false.true.true
+x : Nat
+xs : List Nat
+a a' : Array Bool
+seen : List Nat
+h : Marks a seen
+hx : x < a.size
+ha : ¬a[x] = true
+hm : markUnique xs (a.setIfInBounds x true) = some a'
+hxnot : ¬x ∈ seen
+hmarks : Marks (a.setIfInBounds x true) (x :: seen)
+ih : ∀ (m : Nat), m < a'.size → a'[m]?.getD false = decide (m ∈ xs ∨ m ∈ x :: seen)
+m : Nat
+hlt : m < a'.size
+⊢ decide (m ∈ xs ∨ m = x ∨ m ∈ seen) = decide ((m = x ∨ m ∈ xs) ∨ m ∈ seen)
+Concrete/Backend/LCB.lean:811:87: error: Tactic `rfl` failed: The left-hand side
+  decide (m ∈ xs ∨ m = x ∨ m ∈ seen)
+is not definitionally equal to the right-hand side
+  decide ((m = x ∨ m ∈ xs) ∨ m ∈ seen)
+
+case true.false.false
+x : Nat
+xs : List Nat
+a a' : Array Bool
+seen : List Nat
+h : Marks a seen
+hx : x < a.size
+ha : ¬a[x] = true
+hm : markUnique xs (a.setIfInBounds x true) = some a'
+hxnot : ¬x ∈ seen
+hmarks : Marks (a.setIfInBounds x true) (x :: seen)
+ih : ∀ (m : Nat), m < a'.size → a'[m]?.getD false = decide (m ∈ xs ∨ m ∈ x :: seen)
+m : Nat
+hlt : m < a'.size
+⊢ decide (m ∈ xs ∨ m = x ∨ m ∈ seen) = decide ((m = x ∨ m ∈ xs) ∨ m ∈ seen)
+Concrete/Backend/LCB.lean:811:87: error: Tactic `rfl` failed: The left-hand side
+  decide (m ∈ xs ∨ m = x ∨ m ∈ seen)
+is not definitionally equal to the right-hand side
+  decide ((m = x ∨ m ∈ xs) ∨ m ∈ seen)
+
+case true.false.true
+x : Nat
+xs : List Nat
+a a' : Array Bool
+seen : List Nat
+h : Marks a seen
+hx : x < a.size
+ha : ¬a[x] = true
+hm : markUnique xs (a.setIfInBounds x true) = some a'
+hxnot : ¬x ∈ seen
+hmarks : Marks (a.setIfInBounds x true) (x :: seen)
+ih : ∀ (m : Nat), m < a'.size → a'[m]?.getD false = decide (m ∈ xs ∨ m ∈ x :: seen)
+m : Nat
+hlt : m < a'.size
+⊢ decide (m ∈ xs ∨ m = x ∨ m ∈ seen) = decide ((m = x ∨ m ∈ xs) ∨ m ∈ seen)
+Concrete/Backend/LCB.lean:811:87: error: Tactic `rfl` failed: The left-hand side
+  decide (m ∈ xs ∨ m = x ∨ m ∈ seen)
+is not definitionally equal to the right-hand side
+  decide ((m = x ∨ m ∈ xs) ∨ m ∈ seen)
+
+case true.true.false
+x : Nat
+xs : List Nat
+a a' : Array Bool
+seen : List Nat
+h : Ma
+rks a seen
+hx : x < a.size
+ha : ¬a[x] = true
+hm : markUnique xs (a.setIfInBounds x true) = some a'
+hxnot : ¬x ∈ seen
+hmarks : Marks (a.setIfInBounds x true) (x :: seen)
+ih : ∀ (m : Nat), m < a'.size → a'[m]?.getD false = decide (m ∈ xs ∨ m ∈ x :: seen)
+m : Nat
+hlt : m < a'.size
+⊢ decide (m ∈ xs ∨ m = x ∨ m ∈ seen) = decide ((m = x ∨ m ∈ xs) ∨ m ∈ seen)
+Concrete/Backend/LCB.lean:811:87: error: Tactic `rfl` failed: The left-hand side
+  decide (m ∈ xs ∨ m = x ∨ m ∈ seen)
+is not definitionally equal to the right-hand side
+  decide ((m = x ∨ m ∈ xs) ∨ m ∈ seen)
+
+case true.true.true
+x : Nat
+xs : List Nat
+a a' : Array Bool
+seen : List Nat
+h : Marks a seen
+hx : x < a.size
+ha : ¬a[x] = true
+hm : markUnique xs (a.setIfInBounds x true) = some a'
+hxnot : ¬x ∈ seen
+hmarks : Marks (a.setIfInBounds x true) (x :: seen)
+ih : ∀ (m : Nat), m < a'.size → a'[m]?.getD false = decide (m ∈ xs ∨ m ∈ x :: seen)
+m : Nat
+hlt : m < a'.size
+⊢ decide (m ∈ xs ∨ m = x ∨ m ∈ seen) = decide ((m = x ∨ m ∈ xs) ∨ m ∈ seen)
+Concrete/Backend/LCB.lean:819:4: error: Tactic `generalize` failed: result is not type correct
+  ∀ (x_1 : Bool), (decide ((x_1 && g x && l.all fun x => f x && g x) = (x_1 && l.all f)) && (g x && l.all g)) = true
+
+α : Type
+f g : α → Bool
+x : α
+l : List α
+⊢ (decide ((f x && g x && l.all fun x => f x && g x) = (f x && l.all f)) && (g x && l.all g)) = true
+Concrete/Backend/LCB.lean:818:30: warning: This simp argument is unused:
+  all_and f g l
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [List.all_cons]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Backend/LCB.lean:830:4: error: Type mismatch
+  regBound_lt hb
+has type
+  r < regBound ids
+but is expected to have type
+  decide (r < regBound ids) = true
+Concrete/Backend/LCB.lean:821:99: error: unsolved goals
+ids : List (Reg × Nat)
+h :
+  (markUnique (List.map Prod.fst ids) (Array.replicate (regBound ids) false)).isSome =
+    ((decide (List.map Prod.fst ids).Nodup &&
+        (List.map Prod.fst ids).all fun x => decide (x < (Array.replicate (regBound ids) false).size)) &&
+      decide (∀ (x : Nat), x ∈ List.map Prod.fst ids → ¬x ∈ []))
+hall : ((List.map Prod.fst ids).all fun x => decide (x < regBound ids)) = true
+⊢ (decide (List.map Prod.fst ids).Nodup &&
+      (List.map Prod.fst ids).all fun x => decide (x < (Array.replicate (regBound ids) false).size)) =
+    decide (List.map Prod.fst ids).Nodup
+Concrete/Backend/LCB.lean:831:26: warning: This simp argument is unused:
+  hall
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [regCheck, h, List.not_mem_nil, not_false_eq_true, implies_true, decide_true, Bool.and_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Backend/LCB.lean:860:6: error: unsolved goals
+case pos
+slots inters : List Nat
+count : Nat
+a : Array Bool
+h : markUnique slots (Array.replicate count false) = some a
+ho :
+  (some a).isSome =
+    ((decide slots.Nodup && slots.all fun x => decide (x < (Array.replicate count false).size)) &&
+      decide (∀ (x : Nat), x ∈ slots → ¬x ∈ []))
+hs : (decide slots.Nodup && slots.all fun x => decide (x < count)) = true
+hsize : a.size = count
+hmarks : ∀ (m : Nat), m < a.size → a[m]?.getD false = decide (m ∈ slots ∨ m ∈ [])
+m : Nat
+hm : m < a.size
+hm' : (some a[m]).getD false = decide (m ∈ slots ∨ m ∈ [])
+⊢ (if h : m < count then !a[m] else false) = (decide (m < count) && !decide (m ∈ slots))
+Concrete/Backend/LCB.lean:866:14: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  decide ((List.all ?l fun x => ?f x && ?g x) = List.all ?l ?f) && List.all ?l ?g
+in the target expression
+  (inters.all fun m => decide (m < count) && !slots.contains m) =
+    (((decide slots.Nodup && slots.all fun x => decide (x < count)) && inters.all fun x => decide (x < count)) &&
+      inters.all fun m => !slots.contains m)
+
+case some
+slots inters : List Nat
+count : Nat
+a : Array Bool
+h : markUnique slots (Ar
+ray.replicate count false) = some a
+ho :
+  (some a).isSome =
+    ((decide slots.Nodup && slots.all fun x => decide (x < (Array.replicate count false).size)) &&
+      decide (∀ (x : Nat), x ∈ slots → ¬x ∈ []))
+hs : (decide slots.Nodup && slots.all fun x => decide (x < count)) = true
+hsize : a.size = count
+hmarks : ∀ (m : Nat), m < a.size → a[m]?.getD false = decide (m ∈ slots ∨ m ∈ [])
+hfun : (fun m => if hm : m < a.size then !a[m] else false) = fun m => decide (m < count) && !slots.contains m
+⊢ (inters.all fun m => decide (m < count) && !slots.contains m) =
+    (((decide slots.Nodup && slots.all fun x => decide (x < count)) && inters.all fun x => decide (x < count)) &&
+      inters.all fun m => !slots.contains m)
+Concrete/Backend/LCB.lean:862:14: warning: This simp argument is unused:
+  hm
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [hsize, List.contains_eq_mem, hm']
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Backend/LCB.lean:862:47: warning: This simp argument is unused:
+  hm'
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [hm, hsize, List.contains_eq_mem]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Backend/LCB.lean:2638:19: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  adapt p
+in the target expression
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+
+case error
+p : Program
+f : Source.Function
+tbl : SiteTable
+h :
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+e : String
+ha : adapt p = Except.error e
+⊢ Except.error e = Except.ok f ∧ tbl = p.sites
+Concrete/Backend/LCB.lean:2640:8: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  adapt p
+in the target expression
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+
+case ok
+p : Program
+f : Source.Function
+tbl : SiteTable
+h :
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+g : Source.Function
+ha : adapt p = Except.ok g
+⊢ Except.ok g = Except.ok f ∧ tbl = p.sites
+Many but manageable. Core issue `decide_and` name is `decide_and` unknown; simp theorem `decide_and` perhaps `decide_and` not imported? Existing uses `decide_eq_true_eq`, but `decide_and` #check. Lean simp [List.nodup_cons] automatically rewrites decide of And to && perhaps simp only prevents. Use `simp only [List.nodup_cons, List.all_cons, hx, hdisj, decide_true]` but need convert decide conjunction. Standard theorem `decide_and` not name perhaps `decide_and_eq`. #check via scratch. But easier avoid simp only and use `simp [List.nodup_cons, hdisj, hxnot, Bool.and_assoc, Bool.and_left_comm, Bool.and_comm]` after rw IH. Full simp can transform all and use hdisj? hdisj is forall tail not original disj. Should have original hdisj' for whole:
+  ```
+  have hdisj' : (∀y∈x::xs,y∉seen) ↔ x∉seen ∧ ∀y∈xs,y∉seen := by simp
+  ```
+  Full simp knows List.mem_cons and for all. `simp [List.nodup_cons, hdisj, hxnot, Bool.and_assoc,...]` may rewrite hdisj only tail in IH, and original quantifier simplified automatically. It will likely close proposition bool equality with AC. No manual cases. Replace block after hdisj with `simp [List.nodup_cons, hdisj, hxnot, Bool.and_assoc, Bool.and_left_comm, Bool.and_comm]`. It might use `decide_and` internally known simplification even unknown constant because simp theorem tagged `decide_eq_true_eq` etc. Test.
+
+  `markUnique_marks` ha is proof `¬a[x]=true` due `split` on if a[x] not cases equality false. `rw [Array.getElem?_eq_getElem hx, ha]` invalid ha not equality false. Derive `have ha' : a[x]=false := by simpa using ha` then use. Add.
+  Final decide boolean propositional equivalence easiest `congr 1; aesop` or `simp [or_comm,or_left_comm,or_assoc]`. Instead after rw ih, `congr 1; aesop` (decide inject? `apply decide_congr; aesop`). #check `decide_congr`. `simp only [List.mem_cons]; congr 1; aesop` congr on decide perhaps goal props. `apply congrArg decide; aesop` after rw ih goal decide A=decide B; `congr 1; aesop` likely. Use `congr 1; aesop`.
+
+  all_and error because `simp only [List.all_cons, all_and f g l]` parsed recursive theorem simplification weird rewrites under decide? Actual List.all is decide? Goal after simp shows `decide (equality) &&...` suggests `List.all_cons` theorem simplifier uses `Bool.and_eq_true`? Wait error generalize not type correct from `cases f x` because dependent target contains `l.all (fun...)` rewrite IH failed unused. Why `all_and f g l` unused? The recursive call theorem has implicit `f g` but target `l.all fun x => f x && g x`; should match. However `List.all_cons` simplification reduced `List.all` to `decide`? The displayed goal `(decide ((f x &&...)=...) &&...) =true` bizarre indicates `simp only [List.all_cons, all_and f g l]` applied `List.all_cons` backwards? Actually `List.all_cons` is equality of Bool. Why decide equality? Could be parser `cases f x` generalize fails due `f x` appears inside `decide ((f x && g x && l.all...) = (f x && l.all f))` as equality proposition? This looks `List.all_cons` uses `==`? Wait List.all_cons theorem #check earlier `l.all f = (f a && l.all f)`, no decide equality. The `cases` tactic generalizes f x, but dependent `l.all fun x =>...` depends on f x through IH not rewritten. The target before cases should simply bool. Error generalize result includes decide equality because cases tactic equation generation. Main issue IH unused perhaps due recursive theorem elaboration synthesized f/g not same because explicit arguments? Could use induction direct:
+  ```
+  theorem all_and ... (l) := by
+   induction l with
+   | nil=>rfl
+   | cons x l ih =>
+     simp only [List.all_cons]
+     rw [ih]
+     cases f x <;> cases g x <;> cases l.all f <;> cases l.all g <;> rfl
+  ```
+  Current equation-style recursion `all_and f g l` perhaps Lean recursively calls with `l` but simplifier can't due reducibility? Change tactic induction standard.
+
+  regCheck hall need decide true `simpa using regBound_lt hb` or `exact decide_eq_true (regBound_lt hb)` `by simpa using`. h has replicate size; add `simp only [Array.size_replicate] at h` before simp regCheck. `simp only [regCheck]` after h not rewrite? Better:
+  ```
+    simp only [Array.size_replicate] at h
+    simp only [regCheck, h, hall,...]
+  ```
+  But `regCheck` unfolds markUnique not h because h expression exact isSome, simp uses. Good.
+
+  slot hfun hm' `some a[m]` getD not simplified because dependent hm if uses count after hsize. Do:
+  ```
+  have hma : a[m] = decide(m∈slots) := by simpa using hm'
+  rw [List.contains_eq_mem]
+  simp only [hm, hsize] ??? hsize rewrites a.size to count globally including hm and goal maybe `simp only [hsize] at hm ⊢`; then `simp only [hm, ↓reduceDIte, decide_true,...]`.
+  ```
+  Within branch:
+  ```
+  have hma : a[m] = decide(m∈slots) := by simpa using hm'
+  rw [hsize] at hm -- changes hm m<count, but a.get dependent proof irrelevance
+  simp [hm, hma, List.contains_eq_mem]
+  ```
+  Goal `if h:m<count then !a[m] else false = ...`, hma a[m] still. simp [hm,hma,List.contains_eq_mem].
+  Remove hsize from simp that caused hm unused? Use rw hsize at hm.
+  hm' includes m∈[] simplify.
+
+  rw all_and error because theorem arguments implicit inference f/g weird due `rw [all_and]` interprets all_and first explicit f g missing but metavars. Should `rw [all_and (fun m => decide(m<count)) (fun m => !slots.contains m) inters]`.
+  Then hs.
+
+  markUnique_ok simplify replace.
+
+  Size markUnique maybe compiled no errors.
+
+  I'll read validation lines then one big edit sections separately.
+
+• The validation definitions are sound, but the first proof attempt hit simplifier-shape issues rather than semantic gaps. I’m replacing the fragile Boolean case splits with explicit propositional equivalences and simplifying the recursive `all` lemma.
+
+• One Edit from hdisj through all theorem? Large. Could do sequential with Reads but overhead okay. First hdisj ending.Read next then edit mark marks and all_and/reg in one contiguous from `|x::xs` to reg? I can replace specific block `· next ha` etc only one then read.Edit whole from next ha through regCheck to corrected.Read slot lines then edit.Compile.
+
+• The validation proof now uses explicit array-mark invariants and a simple inductive `all (f && g)` lemma; I’m checking the complete equivalence against the original `numberingOk` expression.Concrete/Backend/LCB.lean:729:14: error: unsolved goals
+case pos.false
+x : Nat
+xs : List Nat
+a : Array Bool
+seen : List Nat
+h : Marks a seen
+hx : x < a.size
+ha : a[x] = false
+hxnot : ¬x ∈ seen
+hmarks : Marks (a.setIfInBounds x true) (x :: seen)
+hdisj : (∀ (y : Nat), y ∈ xs → ¬y ∈ x :: seen) ↔ ¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen
+⊢ (decide xs.Nodup &&
+      ((xs.all fun x => decide (x < a.size)) && decide (∀ (x_1 : Nat), x_1 ∈ xs → ¬x_1 = x ∧ ¬x_1 ∈ seen))) =
+    (decide (x < a.size) &&
+      (decide xs.Nodup &&
+        (!decide (x ∈ xs) && ((xs.all fun x => decide (x < a.size)) && decide (∀ (a : Nat), a ∈ xs → ¬a ∈ seen)))))
+Concrete/Backend/LCB.lean:752:31: warning: This simp argument is unused:
+  hdisj
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [List.nodup_cons, hxnot, Bool.and_assoc, Bool.and_left_comm, Bool.and_comm]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Backend/LCB.lean:808:9: error: unknown tactic
+Concrete/Backend/LCB.lean:788:16: error: unsolved goals
+x : Nat
+xs : List Nat
+a a' : Array Bool
+seen : List Nat
+h : Marks a seen
+hx : x < a.size
+ha : ¬a[x] = true
+hm : markUnique xs (a.setIfInBounds x true) = some a'
+ha' : a[x] = false
+hxnot : ¬x ∈ seen
+hmarks : Marks (a.setIfInBounds x true) (x :: seen)
+ih : ∀ (m : Nat), m < a'.size → a'[m]?.getD false = decide (m ∈ xs ∨ m ∈ x :: seen)
+m : Nat
+hlt : m < a'.size
+⊢ (m ∈ xs ∨ m = x ∨ m ∈ seen) = ((m = x ∨ m ∈ xs) ∨ m ∈ seen)
+Concrete/Backend/LCB.lean:782:35: error: unsolved goals
+case isFalse
+x : Nat
+xs : List Nat
+a a' : Array Bool
+seen : List Nat
+h : Marks a seen
+h✝ : ¬x < a.size
+hm : none = some a'
+⊢ ∀ (m : Nat), m < a'.size → a'[m]?.getD false = decide (m ∈ x :: xs ∨ m ∈ seen)
+Concrete/Backend/LCB.lean:817:8: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  decide ((l.all fun x => f x && g x) = l.all f) && l.all g
+in the target expression
+  (decide ((f x && g x && l.all fun x => f x && g x) = (f x && l.all f)) && (g x && l.all g)) = true
+
+case cons
+α : Type
+f g : α → Bool
+x : α
+l : List α
+ih : (decide ((l.all fun x => f x && g x) = l.all f) && l.all g) = true
+⊢ (decide ((f x && g x && l.all fun x => f x && g x) = (f x && l.all f)) && (g x && l.all g)) = true
+
+Note: The target expression is not type-correct under the `implicit` transparency level, which may have triggered the failure. This is usually caused by unfolding of semireducible definitions in prior tactic steps. Use `set_option linter.tacticCheckInstances true` to investigate the source of the issue.
+Full error:
+  Application type mismatch: The argument
+    instDecidableEqBool ((x :: l).all fun x => f x && g x) ((x :: l).all f)
+  has type
+    Decidable (((x :: l).all fun x => f x && g x) = (x :: l).all f)
+  but is expected to have type
+    Decidable ((f x && g x && l.all fun x => f x && g x) = (f x && l.all f))
+  in the application
+    @decide ((f x && g x && l.all fun x => f x && g x) = (f x && l.all f))
+      (instDecidableEqBool ((x :: l).all fun x => f x && g x) ((x :: l).all f))
+Concrete/Backend/LCB.lean:860:6: error: unsolved goals
+case pos
+slots inters : List Nat
+count : Nat
+a : Array Bool
+h : markUnique slots (Array.replicate count false) = some a
+ho :
+  (some a).isSome =
+    ((decide slots.Nodup && slots.all fun x => decide (x < (Array.replicate count false).size)) &&
+      decide (∀ (x : Nat), x ∈ slots → ¬x ∈ []))
+hs : (decide slots.Nodup && slots.all fun x => decide (x < count)) = true
+hsize : a.size = count
+hmarks : ∀ (m : Nat), m < a.size → a[m]?.getD false = decide (m ∈ slots ∨ m ∈ [])
+m : Nat
+hm✝ : m < a.size
+hm : m < count
+hm' : (some a[m]).getD false = decide (m ∈ slots ∨ m ∈ [])
+hma : a[m] = decide (m ∈ slots)
+⊢ ¬m ∈ slots → m < a.size
+Concrete/Backend/LCB.lean:868:14: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  decide ((inters.all fun x => decide (x < count) && !slots.contains x) = inters.all fun m => decide (m < count)) &
+&
+    inters.all fun m => !slots.contains m
+in the target expression
+  (inters.all fun m => decide (m < count) && !slots.contains m) =
+    (((decide slots.Nodup && slots.all fun x => decide (x < count)) && inters.all fun x => decide (x < count)) &&
+      inters.all fun m => !slots.contains m)
+
+case some
+slots inters : List Nat
+count : Nat
+a : Array Bool
+h : markUnique slots (Array.replicate count false) = some a
+ho :
+  (some a).isSome =
+    ((decide slots.Nodup && slots.all fun x => decide (x < (Array.replicate count false).size)) &&
+      decide (∀ (x : Nat), x ∈ slots → ¬x ∈ []))
+hs : (decide slots.Nodup && slots.all fun x => decide (x < count)) = true
+hsize : a.size = count
+hmarks : ∀ (m : Nat), m < a.size → a[m]?.getD false = decide (m ∈ slots ∨ m ∈ [])
+hfun : (fun m => if hm : m < a.size then !a[m] else false) = fun m => decide (m < count) && !slots.contains m
+⊢ (inters.all fun m => decide (m < count) && !slots.contains m) =
+    (((decide slots.Nodup && slots.all fun x => decide (x < count)) && inters.all fun x => decide (x < count)) &&
+      inters.all fun m => !slots.contains m)
+Concrete/Backend/LCB.lean:2640:19: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  adapt p
+in the target expression
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+
+case error
+p : Program
+f : Source.Function
+tbl : SiteTable
+h :
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+e : String
+ha : adapt p = Except.error e
+⊢ Except.error e = Except.ok f ∧ tbl = p.sites
+Concrete/Backend/LCB.lean:2642:8: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  adapt p
+in the target expression
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+
+case ok
+p : Program
+f : Source.Function
+tbl : SiteTable
+h :
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+g : Source.Function
+ha : adapt p = Except.ok g
+⊢ Except.ok g = Except.ok f ∧ tbl = p.sites
+
+
+• Interesting `all_and` statement elaborates wrong! Display ih `(decide ((l.all ...)=l.all f) && l.all g)=true` means parser precedence of `=` vs `&&`: In Lean, `=` lower/higher? Original `l.all (...) = l.all f && l.all g` parsed `(l.all (...) = l.all f) && l.all g`? Yes equality binds weaker? Should have parentheses RHS `(l.all f && l.all g)`. Same many theorem statements? I wrote markUnique_ok `(mark...).isSome = (decide... &&...)` parentheses okay. all_and no outer parentheses around full RHS? Statement `l.all ... = l.all f && l.all g` indeed parsed equality then &&. Fix `= (l.all f && l.all g)`. This will solve all_and and rw.
+
+  markUnique_ok unsolved: hdisj not used because simplifier transformed y∉x::seen into ¬y=x ∧... rather than hdisj. Avoid simp expanding List.mem_cons before hdisj rewrite. After rw IH, explicitly `rw [hdisj]` first. Then need original whole disj simplify. Do:
+  ```
+  rw [hdisj]
+  simp only [Array.size_setIfInBounds]
+  have hxb : (x<a.size)=true? hx is Prop used decide.
+  simp [List.nodup_cons, hxnot, hx, Bool.and_assoc,...]
+  ```
+  If rw hdisj before simp prevents expansion tail. Original goal still `(x::xs).Nodup`, all etc. simp with List.nodup_cons, List.all_cons might expand tail disj? tail hdisj now conjunction. Good.
+  Perhaps `simp only [List.nodup_cons,List.all_cons]` then `simp [hdisj?]`. Use:
+  ```
+  rw [hdisj]
+  simp [List.nodup_cons, List.all_cons, hx, hxnot, Bool.and_assoc,...]
+  ```
+  hdisj used. Should solve.
+
+  markUnique_marks `congr 1` transformed decide equality to Prop equality then `aesop` unknown tactic (Aesop not imported core? Existing uses no aesop perhaps not available). Use `apply propext?` Wait goal displayed `(m∈xs∨...)=((...))` Prop equality. `apply propext; constructor ...` or `simp [or_comm,or_left_comm,or_assoc]`. At Prop equality `simp [or_comm,or_left_comm,or_assoc]` solves. Replace `congr 1; aesop` with `congr 1; simp [or_comm, or_left_comm, or_assoc]`. But `congr 1` already got Prop equality. `simp [...]` uses propext to prove. Fine.
+  Out of bound case `· cases hm` didn't close because `hm:none=some a'` cases should close, but error isFalse hm none=some and unsolved means my `split at hm` structure has final `· cases hm` associated to inner? It shows case isFalse at theorem after errors line782 perhaps outer false bullet line812 `· cases hm` should. Why cases doesn't close? In Lean `cases hm` on none=some normally noConfusion closes. Perhaps `split at hm` generated `isFalse` but bullet `· cases hm` not enough due markUnique equation? Error suggests unsolved perhaps unknown tactic interrupted branch and outer not executed? It lists separately, so fix `simp at hm` instead. `cases hm` normally. Could `exact Option.noConfusion hm`. Use `· contradiction`? `simp at hm`.
+  Similarly inner true branch `· cases hm` no error perhaps fine. Outer use `· simp at hm`.
+
+  slot hfun unsolved `¬m∈slots → m<a.size` indicates simp using hma and hm created dependent if proof mismatch where hm got rewritten hsize but the `if` condition still a.size and simplifier chose hm? Actually after `rw [hsize] at hm`, goal still if m<a.size. `simp [hm,...]` doesn't know m<a.size unless hsize included. Should not rewrite hm; instead have hmc : m<count := by simpa [hsize] using hm, and have hm preserved. `simp [hm, hsize, hma,...]` previously failed due hm' getD. Now hma direct, use both hm and hsize. It should solve. Current removed hsize simp causing implication. Set:
+  ```
+  have hmc : m<count := by simpa [hsize] using hm
+  simp [hm,hmc,hma,List.contains_eq_mem]
+  ```
+  Proof dependent okay.
+  rw all_and fixed parentheses.
+
+  Also markUnique_ok final true branch perhaps compile.
+  Do edits sequential.
+
+• One parse-level issue was significant: the `all_and` RHS needed parentheses, so Lean had parsed an equality of Booleans followed by `&&`. I’m fixing that statement and the remaining dependent-if bounds explicitly.
+
+• One Edit from line752 through all_and perhaps 60 lines but changes all. Could replace smaller single old `simp...` and use `replace_all` no. Should have one then read. Do markUnique ok.Edit contiguous small.Read slot, then edit.Concrete/Backend/LCB.lean:752:12: error: Tactic `rewrite` failed: motive is not type correct:
+  fun _a =>
+    ((decide xs.Nodup && xs.all fun x_1 => decide (x_1 < (a.setIfInBounds x true).size)) && decide _a) =
+      ((decide (x :: xs).Nodup && (x :: xs).all fun x => decide (x < a.size)) &&
+        decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen))
+Error: Application type mismatch: The argument
+  List.decidableBAll (fun x_1 => ¬x_1 ∈ x :: seen) xs
+has type
+  Decidable (∀ (x_1 : Nat), x_1 ∈ xs → ¬x_1 ∈ x :: seen)
+but is expected to have type
+  Decidable _a
+in the application
+  @decide _a (List.decidableBAll (fun x_1 => ¬x_1 ∈ x :: seen) xs)
+
+Explanation: The rewrite tactic rewrites an expression 'e' using an equality 'a = b' by the following process. First, it looks for all 'a' in 'e'. Second, it tries to abstract these occurrences of 'a' to create a function 'm := fun _a => ...', called the *motive*, with the property that 'm a' is definitionally equal to 'e'. Third, we observe that 'congrArg' implies that 'm a = m b', which can be used with lemmas such as 'Eq.mpr' to change the goal. However, if 'e' depends on specific properties of 'a', then the motive 'm' might not typecheck.
+
+Possible solutions: use rewrite's 'occs' configuration option to limit which occurrences are rewritten, or use 'simp' or 'conv' mode, which have strategies for certain kinds of dependencies (these tactics can handle proofs and 'Decidable' instances whose types depend on the rewritten term, and 'simp' can apply user-defined '@[congr]' theorems as well).
+
+case pos.false
+x : Nat
+xs : List Nat
+a : Array Bool
+seen : List Nat
+h : Marks a seen
+hx : x < a.size
+ha : a[x] = false
+hxnot : ¬x ∈ seen
+hmarks : Marks (a.setIfInBounds x true) (x :: seen)
+hdisj : (∀ (y : Nat), y ∈ xs → ¬y ∈ x :: seen) ↔ ¬x ∈ xs ∧ ∀ (y : Nat), y ∈ xs → ¬y ∈ seen
+⊢ ((decide xs.Nodup && xs.all fun x_1 => decide (x_1 < (a.setIfInBounds x true).size)) &&
+      decide (∀ (x_1 : Nat), x_1 ∈ xs → ¬x_1 ∈ x :: seen)) =
+    ((decide (x :: xs).Nodup && (x :: xs).all fun x => decide (x < a.size)) &&
+      decide (∀ (x_1 : Nat), x_1 ∈ x :: xs → ¬x_1 ∈ seen))
+Concrete/Backend/LCB.lean:810:14: warning: This simp argument is unused:
+  or_comm
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [or_left_comm, or_assoc]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Backend/LCB.lean:2642:19: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  adapt p
+in the target expression
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+
+case error
+p : Program
+f : Source.Function
+tbl : SiteTable
+h :
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+e : String
+ha : adapt p = Except.error e
+⊢ Except.error e = Except.ok f ∧ tbl = p.sites
+Concrete/Backend/LCB.lean:2644:8: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  adapt p
+in the target expression
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+
+case ok
+p : Program
+f : Source.Function
+tbl : SiteTable
+h :
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+g : Source.Function
+ha : adapt p = Except.ok g
+⊢ Except.ok g = Except.ok f ∧ tbl = p.sites
+Only markUnique_ok + warning. rw hdisj motive due dependent decide. `simp only [hdisj]` handles. Replace rw with `simp only [Array.size_setIfInBounds, hdisj]` then full simp without hdisj. Currently rw hdisj then simp. Use `simp only [Array.size_setIfInBounds, hdisj]` should rewrite decide dependent via simp. Then full simp.
+  Warning or_comm unused remove.
+
+  Read lines then edit one contiguous? Separate far but can one old span huge not. Two sequential with read.
+
+• The validation proof is down to one dependent `decide` rewrite; `simp` is required there instead of `rw` because the decidable instance depends on the proposition being rewritten.
+
+• Remove warning read then edit.Concrete/Backend/LCB.lean:2642:19: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  adapt p
+in the target expression
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+
+case error
+p : Program
+f : Source.Function
+tbl : SiteTable
+h :
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+e : String
+ha : adapt p = Except.error e
+⊢ Except.error e = Except.ok f ∧ tbl = p.sites
+Concrete/Backend/LCB.lean:2644:8: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  adapt p
+in the target expression
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+
+case ok
+p : Program
+f : Source.Function
+tbl : SiteTable
+h :
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+g : Source.Function
+ha : adapt p = Except.ok g
+⊢ Except.ok g = Except.ok f ∧ tbl = p.sites
+Great all independent done. Should adapt equality.
+
+  Prove operandFast:
+  ```
+  theorem operandFast_eq p a : operandFast (prepare p) a=operand p a := by
+   cases a <;> simp [operandFast,operand,idOfFast,idOf,prepare_regId,bind,...]
+  ```
+  For reg `simp [operandFast,operand,idOfFast,idOf,prepare_regId]` should rewrite `regIdFast` via theorem. `prepare_regId p r`.
+  `idOfFast_eq`.
+  ```
+  theorem idOfFast_eq p r : idOfFast(prep)r=idOf p r := by simp[idOfFast,idOf,prepare_regId]
+  ```
+  `operandFast_eq`: cases a; simp [operandFast,operand,idOfFast_eq].
+  instFast_eq p n ins: cases ins <;> simp [instFast,inst,operandFast_eq] likely. Both do notation and unless. `simp only [instFast,inst,operandFast_eq]` may rewrite all.
+  term similarly.
+
+  adaptPhiFast_eq p j k:
+  unfold both; rw[prepare_incoming]; simp only [operandFast_eq, blockOffset?]
+  blockOffset needs hb p.blocks[j]? but adaptPhi can be called for arbitrary j, no block requirement. The theorem `blockOffset_prepare` currently requires hb. For adaptPhi within actual block j valid. I can state with hb:
+  ```
+  theorem adaptPhiFast_eq {p j b} hb k : adaptPhiFast(prep) j k=adaptPhi p j k
+  ```
+  unfold, rw prepare_incoming, blockOffset_prepare hb, simp [operandFast_eq].
+  Functions mapping do notation simplification `simp only [adaptPhiFast,adaptPhi,prepare_incoming,operandFast_eq,blockOffset_prepare hb]`.
+  `blockOffset_prepare hb` rewrite uses implicit b.
+  adaptInstFast_eq with hb,hi:
+  `instOffset_prepare hb hi`; instFast_eq.
+  adaptBlockFast_eq with hb:
+  - phis pointwise k valid? adaptPhiFast_eq hb doesn't require param membership, so all map functions equal.
+  - inst fast requires each `(i,ins)∈indexed b.insts`, get hi via Runtime.getElem indexed from membership. Could use generic mapM_ext with membership.
+  Generic mapM_ext:
+  ```
+  theorem mapM_ext {α β ε} {f g:α→Except ε β} :
+   ∀l, (∀x∈l,f x=g x) → l.mapM f=l.mapM g
+   | [],_=>rfl
+   | x::l,h=> by simp only[List.mapM_cons,h x (by simp)]; rw[mapM_ext l ...]
+  ```
+  Simp `List.mapM_cons` rewrite f x then recursive. `rw [h x..., mapM_ext...]`.
+  Then adaptBlock:
+  ```
+  unfold adaptBlockFast adaptBlock
+  have hp : (indexed b.params).mapM ... = ... := mapM_ext _ fun (k,pty) hk => by
+    rcases...; simp [adaptPhiFast_eq hb] 
+  have hi ... := mapM_ext _ fun (i,ins) hi =>
+    adaptInstFast_eq hb (by ... membership to getElem)
+  rw [hp,hi,termFast_eq]
+  ```
+  Should have `adaptInstFast_eq` theorem takes pair perhaps:
+  ```
+  theorem adaptInstFast_eq {p j b} hb {i ins} hi :
+   adaptInstFast prep j (i,ins)=adaptInst p j b (i,ins) := by
+   simp [adaptInstFast,adaptInst,instOffset_prepare hb hi,instFast_eq]
+  ```
+  `instFast_eq` theorem includes n arbitrary so simp.
+
+  For mapM params `adaptPhiFast_eq hb k`.
+
+  Get hi from membership in indexed:
+  List.mem_iff_getElem.mp hi gives ∃i? I already index pair `(i,ins)` membership in indexed b.insts. Use `Runtime.getElem?_indexed` and `List.mem_iff_getElem`:
+  ```
+  obtain ⟨q,hq,he⟩ := List.mem_iff_getElem.mp hm
+  rw [Runtime.getElem?_indexed] at hq
+  ```
+  Wait hm pair membership, `List.mem_iff_getElem.mp hm` yields ∃i, i<length ∧ l[i]=pair (not getElem?). Existing at line1590 `obtain ⟨i,hi,rfl⟩ := List.mem_iff_getElem.mp hm` where hi proof index bound and rfl element. Then:
+  ```
+  obtain ⟨q,hq,rfl⟩ := List.mem_iff_getElem.mp hm
+  have hi : b.insts[i]?=some ins := by
+   have hget : (indexed b.insts)[q]?=some (i,ins) := List.getElem?_eq_getElem hq
+   rw [Runtime.getElem?_indexed] at hget
+   -- hget = b.insts[q]?.map(q,·)=some(i,ins)
+   cases hbix:b.insts[q]?; simp at; some b', map some pair equality gives q=i and b'=ins.
+  ```
+  Simpler theorem `Runtime.mem_indexed` only forward from getElem to membership, need inverse. Prove generic:
+  ```
+  theorem getElem_of_mem_indexed {l} {i x} (h:(i,x)∈indexed l):l[i]?=some x := by
+   induction l generalizing i...
+  ```
+  Could add in Proof:
+  ```
+  theorem mem_indexed_iff ... : (i,x)∈indexed l ↔ l[i]?=some x
+  ```
+  Forward induction using indexedFrom. Existing `getElem?_indexed` plus mem_iff_getElem easiest:
+  ```
+  obtain ⟨q,hq,heq⟩ := List.mem_iff_getElem.mp hm
+  have hget := List.getElem?_eq_getElem hq
+  rw [Runtime.getElem?_indexed] at hget
+  rw [heq] at hget? heq : indexed[q]=(i,x), getElem? uses same.
+  ```
+  Actually `List.mem_iff_getElem.mp hm` returns `∃ i, i < l.length ∧ l[i] = a` with rfl pattern substitutes a? `obtain ⟨q,hq,rfl⟩` sets pair `(i,ins)` to indexed[q] not q? The variable pair names remain? In existing they use it and works. Then hget has `some (indexed[q])`. Rewrite getElem indexed -> map. Cases `b.insts[q]?`, simp at hget yields i=q and ins=element. Could `simpa [Runtime.getElem?_indexed, List.getElem?_eq_getElem hq] using ...` tricky.
+
+  Alternate adaptBlockFast equality prove using function ext globally `adaptInstFast prep j (i,ins)=adaptInst p j b(i,ins)` requires hi only for offset; but offset equality could hold for any i even out-of-range? instOffset spec list out-of-range returns 0, reference instBase b i not zero for out-of-range, so no. Membership necessary.
+
+  I can prove `getElem_of_mem_indexed` generic induction on l with indexedFrom general n:
+  ```
+  theorem mem_indexedFrom_iff {l n i x}:
+   (i,x)∈Runtime.indexedFrom n l ↔ ∃k, i=n+k ∧ l[k]?=some x
+  ```
+  Induction. But overkill.
+
+  Use Runtime.getElem?_indexed and List.mem_iff_getElem:
+  ```
+  have hsome : (indexed b.insts)[q]? = some (i,ins) := List.getElem?_eq_getElem hq
+  rw [Runtime.getElem?_indexed] at hsome
+  cases hi : b.insts[q]? with
+  | none => simp [hi] at hsome
+  | some v =>
+    simp [hi] at hsome
+    -- hsome : q=i ∧ v=ins? Option.some.inj pair
+    obtain ⟨rfl,rfl⟩ := hsome
+    exact hi
+  ```
+  Should `List.mem_iff_getElem` heq orientation use:
+  ```
+  obtain ⟨q,hq,heq⟩ := ...
+  have hsome : ... := by rw [List.getElem?_eq_getElem hq, heq]
+  ```
+  Works regardless heq.
+  Then cases and `simp [hi] at hsome` yields pair equality `q=i ∧ v=ins`, `obtain ⟨rfl,rfl⟩ := hsome` perhaps `Option.some.injEq,Prod.mk.injEq` simp only.
+  This gives hi.
+
+  MapM_ext use in adaptFast too for top blocks:
+  ```
+  adaptBlockFast_eq hb` for each `(j,b)∈indexed p.blocks`, same helper getElem_of_mem_indexed to get hb. Prove generic lemma once:
+  ```
+  theorem getElem_of_mem_indexed {α} {l} {i x} (h...) : l[i]?=some x
+  ```
+  Implement using mem getElem as above. This also params not needed.
+
+  Then `adaptFast_eq`:
+  ```
+  unfold adaptFast adapt
+  rw [prepare_ok]
+  cases hn:numberingOk p
+   false rfl
+   true:
+   simp only [Bool...]? after rw prepare_ok target `unless numberingOk p ...`; `rw[hn]`? cases h then simp.
+   have hblocks := mapM_ext (indexed p.blocks) fun (j,b) hm => adaptBlockFast_eq (getElem_of_mem_indexed hm)
+   simp [hn,hblocks,bind,Except.bind,pure,Except.pure]
+  ```
+  `unfold adaptFast adapt; rw[prepare_ok]; cases hn:numberingOk p <;> simp [hn,hblocks,...]`
+  But hblocks valid regardless numbering. Build before cases.
+  The reference `adapt` has `unless numberingOk p` and fast `unless (prepare p).ok`. rw prepare_ok changes. `simp only [hn,...]` should.
+
+  emit_eq_spec:
+  ```
+  unfold emit emitSpec; rw[adaptFast_eq]
+  ```
+  Then emit_ok modify `unfold emit at h; rw[adaptFast_eq] at h; ...` before cases. That keeps statement.
+
+  Add these after prepare_ok. Compile.
+
+• `prepare_ok p` is now proved definitionally equal to the original `numberingOk p`, so acceptance and refusal are unchanged. I’m assembling the adapter equality from the register, offset, phi, and mapM congruence lemmas.
+
+• Insert.Compile.
+
+• The full adapter equality is now assembled, including malformed-input behavior through the universal register and validation equalities. I’m checking it before repairing the one-line `emit_ok` bridge.Concrete/Backend/LCB.lean:948:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  (prepare ?p).ok
+in the target expression
+  (have prep := prepare p;
+    have __do_jp := fun __r => do
+      let blocks ← List.mapM (adaptBlockFast prep) (indexed p.blocks)
+      pure
+          { resultWidth := Width.word, parameters := #[], valueWidths := Array.replicate (valueCount p) Width.word,
+            blocks := blocks.toArray };
+    if prep.ok = true then __do_jp ()
+    else do
+      let __r ← throw "the numbering is not injective (a register defined twice?)"
+      __do_jp __r) =
+    have __do_jp := fun __r => do
+      let blocks ← List.mapM (adaptBlock p) (indexed p.blocks)
+      pure
+          { resultWidth := Width.word, parameters := #[], valueWidths := Array.replicate (valueCount p) Width.word,
+            blocks := blocks.toArray };
+    if numberingOk p = true then __do_jp ()
+    else do
+      let __r ← throw "the numbering is not injective (a register defined twice?)"
+      __do_jp __r
+
+p : Program
+hblocks : List.mapM (adaptBlockFast (prepare p)) (indexed p.blocks) = List.mapM (adaptBlock p) (indexed p.blocks)
+⊢ (have prep := prepare p;
+    have __do_jp := fun __r => do
+      let blocks ← List.mapM (adaptBlockFast prep) (indexed p.blocks)
+      pure
+          { resultWidth := Width.word, parameters := #[], valueWidths := Array.replicate (valueCount p) Width.word,
+            blocks := blocks.toArray };
+    if prep.ok = true then __do_jp ()
+    else do
+      let __r ← throw "the numbering is not injective (a register defined twice?)"
+      __do_jp __r) =
+    have __do_jp := fun __r => do
+      let blocks ← List.mapM (adaptBlock p) (indexed p.blocks)
+      pure
+          { resultWidth := Width.word, parameters := #[], valueWidths := Array.replicate (valueCount p) Width.word,
+            blocks := blocks.toArray };
+    if numberingOk p = true then __do_jp ()
+    else do
+      let __r ← throw "the numbering is not injective (a register defined twice?)"
+      __do_jp __r
+Concrete/Backend/LCB.lean:2711:19: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  adapt p
+in the target expression
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+
+case error
+p : Program
+f : Source.Function
+tbl : SiteTable
+h :
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+e : String
+ha : adapt p = Except.error e
+⊢ Except.error e = Except.ok f ∧ tbl = p.sites
+Concrete/Backend/LCB.lean:2713:8: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  adapt p
+in the target expression
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+
+case ok
+p : Program
+f : Source.Function
+tbl : SiteTable
+h :
+  (do
+      let f ← adaptFast p
+      pure (f, p.sites)) =
+    Except.ok (f, tbl)
+g : Source.Function
+ha : adapt p = Except.ok g
+⊢ Except.ok g = Except.ok f ∧ tbl = p.sites
+
+
+• `rw prepare_ok` under let not matched because prep let. `simp only [prepare_ok]` will rewrite projection after zeta? `simp only [prepare_ok]` unfolds let perhaps simplifier zeta and rewrites. Use `simp only [prepare_ok]` instead rw. Then cases and hblocks. Could also `dsimp only` unfolds let prep, then rw. At target `have prep :=...`; `dsimp only` might reduce entire do too aggressive but okay. `simp only [prepare_ok]` should zeta. Try replace `rw [prepare_ok]` with `simp only [prepare_ok]`.
+  emit_ok add rw adaptFast_eq at h.
+
+  Read two separate then edit.Compile.
+
+• The fast/reference equalities are complete; I’ve added the `adaptFast_eq` rewrite inside `emit_ok` without changing that theorem’s statement or any downstream contract.Concrete/Backend/LCB.lean:949:37: warning: This simp argument is unused:
+  hn
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [hblocks, bind, Except.bind, pure, Except.pure]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+
+
+• Now remove warning.
