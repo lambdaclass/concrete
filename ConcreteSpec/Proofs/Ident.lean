@@ -764,13 +764,34 @@ example : ∃ zeroEdge oneEdge, zeroEdge ∈ (SpecializationTable.canonicalize
   SpecializationTable.canonicalize_share [requestZero, requestOne] requestZero requestOne
     (by simp) (by simp) rfl
 
-/-- Helper (projection). Mutated implementation used by the following planted example. -/
-def bySite (requests : List (SpecializationRequest Nat String)) : List SiteId := requests.map (·.site)
+/-- Helper (projection). A planted interner parameterized by a lossy request key. It retains
+request edges and entries, so mutations exercise the same observable table contract as the real
+canonicalizer rather than merely projecting fields from identity records. -/
+def canonicalizeByKey {Key : Type} [DecidableEq Key]
+    (key : SpecializationRequest Nat String → Key) :
+    List (SpecializationRequest Nat String) → List Key × SpecializationTable Nat String
+  | [] => ([], ⟨[], []⟩)
+  | request :: rest =>
+    let (keys, table) := canonicalizeByKey key rest
+    let index := keys.idxOf (key request)
+    if index < keys.length then
+      (keys, { table with edges := ⟨request, index⟩ :: table.edges })
+    else
+      (keys ++ [key request], ⟨table.entries ++ [request.specialization],
+        ⟨request, table.entries.length⟩ :: table.edges⟩)
 
-/-- Planted (law `ConcreteSpec.Core.SpecializationTable.canonicalize_share`). Canonicalizing by site
-creates two entries for one specialization. -/
-example : ¬ ((bySite [requestZero, requestOne]).length =
-    (SpecializationTable.canonicalize [requestZero, requestOne]).entries.length) := by decide
+/-- Helper (projection). Canonicalizing by lexical request site incorrectly separates equal
+specializations requested from different sites. -/
+def bySite (requests : List (SpecializationRequest Nat String)) : SpecializationTable Nat String :=
+  (canonicalizeByKey (·.site) requests).2
+
+/-- Planted (law `ConcreteSpec.Core.SpecializationTable.canonicalize_share`). The site-keyed interner
+keeps both request edges but fails to give them one shared entry. -/
+example : ¬ (∃ first second, first ∈ (bySite [requestZero, requestOne]).edges ∧
+    second ∈ (bySite [requestZero, requestOne]).edges ∧ first.request = requestZero ∧
+    second.request = requestOne ∧ first.entry = second.entry) := by
+  have index : List.idxOf (⟨0⟩ : SiteId) [⟨1⟩] = 1 := by decide
+  simp [bySite, canonicalizeByKey, requestZero, requestOne, index]
 
 /-- Instance (law `ConcreteSpec.Core.SpecializationTable.canonicalize_distinct`). Different type
 arguments receive different canonical entries. -/
@@ -790,14 +811,23 @@ example : ∃ capabilityEdge otherEdge, capabilityEdge ∈ (SpecializationTable.
   SpecializationTable.canonicalize_distinct [requestZero, requestOtherCapability] requestZero
     requestOtherCapability (by simp) (by simp) (by decide)
 
-/-- Helper (projection). Mutated implementation used by the following planted example. -/
-def onlyGeneric {Ty Cap : Type} (specialization : SpecializationId Ty Cap) : GenericId :=
-  specialization.generic
+/-- Helper (projection). A generic-only interner drops both argument lists from its key. -/
+def onlyGeneric (requests : List (SpecializationRequest Nat String)) : SpecializationTable Nat String :=
+  (canonicalizeByKey (·.specialization.generic) requests).2
 
-/-- Planted (law `ConcreteSpec.Core.SpecializationTable.canonicalize_distinct`). Canonicalizing by
-generic alone merges both type- and capability-different requests. -/
-example : ¬ (onlyGeneric numeric ≠ onlyGeneric otherType) ∧
-    ¬ (onlyGeneric numeric ≠ onlyGeneric otherCapability) := by decide
+/-- Planted (law `ConcreteSpec.Core.SpecializationTable.canonicalize_distinct`). The generic-only
+interner retains type-different requests but merges their numeric entries. -/
+example : ¬ (∃ first second, first ∈ (onlyGeneric [requestZero, requestOtherType]).edges ∧
+    second ∈ (onlyGeneric [requestZero, requestOtherType]).edges ∧ first.request = requestZero ∧
+    second.request = requestOtherType ∧ first.entry ≠ second.entry) := by
+  simp [onlyGeneric, canonicalizeByKey, requestZero, requestOtherType, numeric, otherType]
+
+/-- Planted (law `ConcreteSpec.Core.SpecializationTable.canonicalize_distinct`). Dropping capability
+arguments also merges distinct requests; retaining type arguments alone would not repair this. -/
+example : ¬ (∃ first second, first ∈ (onlyGeneric [requestZero, requestOtherCapability]).edges ∧
+    second ∈ (onlyGeneric [requestZero, requestOtherCapability]).edges ∧ first.request = requestZero ∧
+    second.request = requestOtherCapability ∧ first.entry ≠ second.entry) := by
+  simp [onlyGeneric, canonicalizeByKey, requestZero, requestOtherCapability, numeric, otherCapability]
 
 /-- Instance (law `ConcreteSpec.Core.SpecializationTable.canonicalize_nodup`). Two equal requests
 produce one entry, not a duplicate. -/
