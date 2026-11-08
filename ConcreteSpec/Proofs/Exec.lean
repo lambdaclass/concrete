@@ -60,11 +60,11 @@ theorem steps_next {P : Program O} {c c' c'' : Config O} {tr : List O.Event}
 
 /-- A primitive operation answered within its contract, followed by more steps. -/
 theorem steps_request {P : Program O} {c c'' : Config O} {p : O.Prim} {vs : List O.Val}
-    {site : SiteId} {st : O.Store} {k : Answer O.Val O.Event O.Store → Config O}
+    {site : SiteId} {st : O.Store} {k : Answer O.Val O.Event O.Store → Option (Config O)}
     {a : Answer O.Val O.Event O.Store} {tr : List O.Event}
     (h : step P c = some (.request p vs site st k)) (ha : O.allows p vs st a = true)
-    (h' : Steps P (k a) tr c'') : Steps P c (a.label.events ++ tr) c'' :=
-  Steps.step (Step.prim h ha) h'
+    {c' : Config O} (hk : k a = some c') (h' : Steps P c' tr c'') : Steps P c (a.label.events ++ tr) c'' :=
+  Steps.step (Step.prim h ha hk) h'
 
 /-! ### Sequencing -/
 
@@ -159,9 +159,12 @@ theorem step_continue_loop (P : Program O) (l : LoopId) (cr b : Stmt O) (t : O.E
 is the one the callee left, with the instrumentation told the activation ended and the result
 bound. -/
 theorem step_return_caller (P : Program O) (v : O.Val) (dst : Option Var)
-    (caller L : AList Var O.Val) (st : O.Store) (k : List (Frame O)) :
+    (caller L : AList Var O.Val) (st : O.Store) (k : List (Frame O))
+    (stLeave stBind : O.Store) (hl : O.life .leave st = some stLeave)
+    (hb : bindLife O dst stLeave = some stBind) :
     step P ⟨.exiting (.ret v), L, st, .ret dst caller :: k⟩ =
-      some (.next ⟨.done, bindDst dst v caller, bindLife O dst (O.life .leave st), k⟩) := rfl
+      some (.next ⟨.done, bindDst dst v caller, stBind, k⟩) := by
+  simp [step, stepExit, hl, hb]
 
 /-! ### Cleanup -/
 
@@ -176,7 +179,7 @@ theorem exit_scope_next {P : Program O} {e : Exit O.Val} {b : BlockId} {dm : Lis
   | silent h =>
     simp only [step, stepExit, startCleanup, Option.some.injEq, Out.next.injEq] at h
     exact ⟨rfl, h.symm⟩
-  | prim h _ => simp [step, stepExit, startCleanup] at h
+  | prim h _ _ => simp [step, stepExit, startCleanup] at h
 
 /-- The same at the normal end of a block. -/
 theorem done_scope_next {P : Program O} {b : BlockId} {dm : List Var} {d : Deferred O}
@@ -187,32 +190,34 @@ theorem done_scope_next {P : Program O} {b : BlockId} {dm : List Var} {d : Defer
   | silent h =>
     simp only [step, startCleanup, Option.some.injEq, Out.next.injEq] at h
     exact ⟨rfl, h.symm⟩
-  | prim h _ => simp [step, startCleanup] at h
+  | prim h _ _ => simp [step, startCleanup] at h
 
 /-- An exit leaving a scope whose calls complete runs them newest first, each with its events and
 its effect on the state, and leaves the scope with its locals restored; the exit, and a returned
 value, are unchanged. -/
 theorem exit_scope_runs_defers (P : Program O) (e : Exit O.Val) (b : BlockId) (dm : List Var)
     (L : AList Var O.Val) (k : List (Frame O)) {ds : List (Deferred O)} {st st' : O.Store}
-    {tr : List O.Event} (h : RunsAll P L ds st tr st') :
+    {tr : List O.Event} (h : RunsAll P L ds st tr st') {stDrop : O.Store}
+    (hd : dropOut O dm L st' = some stDrop) :
     Steps P ⟨.exiting e, L, st, .scope b dm ds :: k⟩ tr
-      ⟨.exiting e, restrict dm L, dropOut O dm L st', k⟩ := by
+      ⟨.exiting e, restrict dm L, stDrop, k⟩ := by
   induction h with
-  | nil st => exact steps_next rfl (Steps.refl _)
-  | @cons d ds st tr₁ st₁ tr₂ st₂ hd _ ih =>
+  | nil st => exact steps_next (by simp [step, stepExit, hd]) (Steps.refl _)
+  | @cons d ds st tr₁ st₁ tr₂ st₂ hcall _ ih =>
     exact steps_next (c := ⟨.exiting e, L, st, .scope b dm (d :: ds) :: k⟩) rfl
-      (Steps.trans (hd _) (steps_next rfl ih))
+      (Steps.trans (hcall _) (steps_next rfl (ih hd)))
 
 /-- The normal end of a block runs its calls the same way. -/
 theorem done_scope_runs_defers (P : Program O) (b : BlockId) (dm : List Var)
     (L : AList Var O.Val) (k : List (Frame O)) {ds : List (Deferred O)} {st st' : O.Store}
-    {tr : List O.Event} (h : RunsAll P L ds st tr st') :
-    Steps P ⟨.done, L, st, .scope b dm ds :: k⟩ tr ⟨.done, restrict dm L, dropOut O dm L st', k⟩ := by
+    {tr : List O.Event} (h : RunsAll P L ds st tr st') {stDrop : O.Store}
+    (hd : dropOut O dm L st' = some stDrop) :
+    Steps P ⟨.done, L, st, .scope b dm ds :: k⟩ tr ⟨.done, restrict dm L, stDrop, k⟩ := by
   induction h with
-  | nil st => exact steps_next rfl (Steps.refl _)
-  | @cons d ds st tr₁ st₁ tr₂ st₂ hd _ ih =>
+  | nil st => exact steps_next (by simp [step, hd]) (Steps.refl _)
+  | @cons d ds st tr₁ st₁ tr₂ st₂ hcall _ ih =>
     exact steps_next (c := ⟨.done, L, st, .scope b dm (d :: ds) :: k⟩) rfl
-      (Steps.trans (hd _) (steps_next rfl ih))
+      (Steps.trans (hcall _) (steps_next rfl (ih hd)))
 
 /-- **Cleanup order.** When the cleanup calls complete (`Cleans`, which runs the calls of
 `plan pre` in that order: the innermost scope first, each scope's newest registration first), an
@@ -224,12 +229,13 @@ theorem unwind_runs_plan (P : Program O) (e : Exit O.Val) (k : List (Frame O))
     Steps P ⟨.exiting e, L, st, pre ++ k⟩ tr ⟨.exiting e, unwindLocals pre L, st', k⟩ := by
   induction h with
   | nil L st => exact Steps.refl _
-  | @scope b dm ds pre L st tr₁ st₁ tr₂ st₂ hr _ ih =>
-    have h1 := exit_scope_runs_defers P e b dm L (pre ++ k) hr
+  | @scope b dm ds pre L st tr₁ st₁ stDrop tr₂ st₂ hr hd _ ih =>
+    have h1 := exit_scope_runs_defers P e b dm L (pre ++ k) hr hd
     have h2 := ih (fun f hf => hp f (List.mem_cons_of_mem _ hf))
     simpa [unwindLocals] using Steps.trans h1 h2
   | seq _ ih => exact steps_next rfl (ih (fun f hf => hp f (List.mem_cons_of_mem _ hf)))
-  | test _ ih => exact steps_next rfl (ih (fun f hf => hp f (List.mem_cons_of_mem _ hf)))
+  | test hd _ ih =>
+    exact steps_next (by simp [step, stepExit, hd]) (ih (fun f hf => hp f (List.mem_cons_of_mem _ hf)))
   | @body l cr t b site pre L st tr st' _ ih =>
     have ih' := ih (fun f hf => hp f (List.mem_cons_of_mem _ hf))
     have hf : Passes e (.body l cr t b site) := hp _ List.mem_cons_self
@@ -252,11 +258,13 @@ locals come back with the value bound, in the state the cleanup left. -/
 theorem return_reaches_caller (P : Program O) (v : O.Val) (dst : Option Var)
     (caller : AList Var O.Val) (k : List (Frame O)) {pre : List (Frame O)}
     {L : AList Var O.Val} {st st' : O.Store} {tr : List O.Event}
-    (h : Cleans P pre L st tr st') (hp : ∀ f ∈ pre, Passes (.ret v) f) :
+    (h : Cleans P pre L st tr st') (hp : ∀ f ∈ pre, Passes (.ret v) f)
+    (stLeave stBind : O.Store) (hl : O.life .leave st' = some stLeave)
+    (hb : bindLife O dst stLeave = some stBind) :
     Steps P ⟨.exiting (.ret v), L, st, pre ++ .ret dst caller :: k⟩ tr
-      ⟨.done, bindDst dst v caller, bindLife O dst (O.life .leave st'), k⟩ := by
+      ⟨.done, bindDst dst v caller, stBind, k⟩ := by
   have := Steps.trans (unwind_runs_plan P (.ret v) (.ret dst caller :: k) h hp)
-    (steps_next rfl (Steps.refl _))
+    (steps_next (step_return_caller P v dst caller _ st' k stLeave stBind hl hb) (Steps.refl _))
   simpa using this
 
 /-- **A `break` reaches its loop** after the cleanup of the scopes inside the loop body, and the
@@ -332,7 +340,8 @@ inductive RunsEach (P : Program O) : List (CleanAct O) → O.Store → List O.Ev
   | nil (st : O.Store) : RunsEach P [] st [] st
   | call {L d rest st tr₁ st₁ tr₂ st₂} : Completes P L d st tr₁ st₁ →
       RunsEach P rest st₁ tr₂ st₂ → RunsEach P (.call L d :: rest) st (tr₁ ++ tr₂) st₂
-  | drop {dm L rest st tr st'} : RunsEach P rest (dropOut O dm L st) tr st' →
+  | drop {dm L rest st stDrop tr st'} : dropOut O dm L st = some stDrop →
+      RunsEach P rest stDrop tr st' →
       RunsEach P (.drop dm L :: rest) st tr st'
 
 theorem RunsAll.each {P : Program O} {L : AList Var O.Val} {ds : List (Deferred O)}
@@ -375,18 +384,18 @@ theorem cleans_iff_runs_plan {P : Program O} :
     constructor
     · intro h
       cases h with
-      | scope hr hc => exact RunsAll.each hr (.drop ((cleans_iff_runs_plan hp').1 hc))
+      | scope hr hd hc => exact RunsAll.each hr (.drop hd ((cleans_iff_runs_plan hp').1 hc))
     · intro h
       obtain ⟨tr₁, st₁, tr₂, rfl, ha, hb⟩ := RunsEach.split_calls h
       cases hb with
-      | drop hb => exact .scope ha ((cleans_iff_runs_plan hp').2 hb)
+      | drop hd hb => exact .scope ha hd ((cleans_iff_runs_plan hp').2 hb)
   | .test l cr t b site dm :: pre, L, st, st', tr, hp => by
     have hp' := fun f hf => hp f (List.mem_cons_of_mem _ hf)
     constructor
     · intro h; cases h with
-      | test hc => exact .drop ((cleans_iff_runs_plan hp').1 hc)
+      | test hd hc => exact .drop hd ((cleans_iff_runs_plan hp').1 hc)
     · intro h; cases h with
-      | drop hb => exact .test ((cleans_iff_runs_plan hp').2 hb)
+      | drop hd hb => exact .test hd ((cleans_iff_runs_plan hp').2 hb)
   | .seq _ :: pre, L, st, st', tr, hp => by
     have hp' := fun f hf => hp f (List.mem_cons_of_mem _ hf)
     constructor
@@ -423,7 +432,7 @@ theorem steps_from_trapped {P : Program O} {kd : TrapKind} {site : SiteId} {L : 
   | step hs _ =>
     cases hs with
     | silent h => simp [step_trapped] at h
-    | prim h _ => simp [step_trapped] at h
+    | prim h _ _ => simp [step_trapped] at h
 
 /-- **`abort()` runs no cleanup.** From `abort()` the only step is to the trap, with the same
 frames and state, and nothing follows: no deferred call runs and no event is emitted. -/
@@ -440,7 +449,7 @@ theorem abort_runs_no_cleanup {P : Program O} {site : SiteId} {L : AList Var O.V
       subst h
       have := steps_from_trapped hrest
       exact ⟨by simpa [Label.events] using this.1, .inr this.2⟩
-    | prim h _ => simp [step] at h
+    | prim h _ _ => simp [step] at h
 
 /-! ### Evaluation order and determinism -/
 
@@ -486,18 +495,18 @@ theorem step_deterministic {P : Program O} {c c₁ c₂ : Config O} {l₁ l₂ :
     (h₁ : Step P c l₁ c₁) (h₂ : Step P c l₂ c₂) :
     (l₁ = l₂ ∧ c₁ = c₂) ∨ ∃ p vs site st k a₁ a₂, step P c = some (.request p vs site st k) ∧
       O.allows p vs st a₁ = true ∧ O.allows p vs st a₂ = true ∧
-      l₁ = a₁.label ∧ l₂ = a₂.label ∧ c₁ = k a₁ ∧ c₂ = k a₂ := by
+      l₁ = a₁.label ∧ l₂ = a₂.label ∧ k a₁ = some c₁ ∧ k a₂ = some c₂ := by
   cases h₁ with
   | silent h =>
     cases h₂ with
     | silent h' => exact .inl ⟨rfl, step_silent_deterministic h h'⟩
-    | prim h' _ => rw [h] at h'; cases h'
-  | prim h ha =>
+    | prim h' _ _ => rw [h] at h'; cases h'
+  | prim h ha hk =>
     cases h₂ with
     | silent h' => rw [h] at h'; cases h'
-    | prim h' ha' =>
+    | prim h' ha' hk' =>
       rw [h] at h'; cases h'
-      exact .inr ⟨_, _, _, _, _, _, _, h, ha, ha', rfl, rfl, rfl, rfl⟩
+      exact .inr ⟨_, _, _, _, _, _, _, h, ha, ha', rfl, rfl, hk, hk'⟩
 
 /-! ### Destruction -/
 
@@ -586,7 +595,7 @@ theorem demo_log_completes (L : AList Var Demo.ops.Val) (st : Demo.ops.Store) :
   intro k
   refine steps_next rfl (steps_request (O := Demo.ops) (P := Demo.prog)
     (a := ⟨some (1 : Int), .ok (0 : Int), Demo.DState.life (.enter [Demo.x]) st⟩) (tr := []) rfl
-    (by simp [Demo.ops, Demo.logFn]) ?_)
+    (by simp [Demo.ops, Demo.logFn]) rfl ?_)
   exact steps_next rfl (steps_next rfl (Steps.refl _))
 
 theorem demo_bump_completes (L : AList Var Demo.ops.Val) (st : Demo.ops.Store) :
@@ -595,7 +604,7 @@ theorem demo_bump_completes (L : AList Var Demo.ops.Val) (st : Demo.ops.Store) :
   refine steps_next rfl (steps_request (O := Demo.ops) (P := Demo.prog)
     (a := ⟨none, .ok (0 : Int),
       { Demo.DState.life (.enter []) st with counter := st.counter + 1 }⟩) (tr := []) rfl
-    (by simp [Demo.ops, Demo.DState.life]) ?_)
+    (by simp [Demo.ops, Demo.DState.life]) rfl ?_)
   exact steps_next rfl (steps_next rfl (Steps.refl _))
 
 /-- So the cleanup law applies to a real scope: the end of a block that registered `log(1)` and
@@ -604,8 +613,8 @@ example (L : AList Var Demo.ops.Val) (st : Demo.DState) (k : List (Frame Demo.op
     (dm : List Var) :
     Steps Demo.prog ⟨.done, L, st, .scope ⟨1⟩ dm [⟨Demo.bumpF, [], Demo.s⟩,
       ⟨Demo.logF, [.lit 1], Demo.s⟩] :: k⟩ [1]
-      ⟨.done, restrict dm L, dropOut Demo.ops dm L { st with counter := st.counter + 1 }, k⟩ :=
+      ⟨.done, restrict dm L, Demo.DState.life (.drop (dead dm L)) { st with counter := st.counter + 1 }, k⟩ :=
   done_scope_runs_defers Demo.prog ⟨1⟩ dm L k
-    (.cons (demo_bump_completes L st) (.cons (demo_log_completes L _) (.nil _)))
+    (.cons (demo_bump_completes L st) (.cons (demo_log_completes L _) (.nil _))) rfl
 
 end ConcreteSpec.Core.Exec
