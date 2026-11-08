@@ -130,6 +130,8 @@
             passthru.trustedPipelineRoots = map builtins.toString
               ([ pkgs.clang pkgs.llvmPackages_21.clang leanRelease ] ++ gatesUserland);
             passthru.trustedLeanRoot = builtins.toString leanRelease;
+            passthru.trustedApprovalVerifier = "${pkgs.openssh}/bin/ssh-keygen";
+            passthru.trustedGit = "${pkgs.git}/bin/git";
             passthru.trustedNativeClang = "${pkgs.llvmPackages_21.clang}/bin/clang";
             # Slice-0 native builds name their compiler explicitly (scripts/checks/lib/slice0_native.sh),
             # pinned here so the shell's general clang can move without changing their identity.

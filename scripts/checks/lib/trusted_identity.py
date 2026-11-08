@@ -35,6 +35,11 @@ def store_evidence():
     native_clang = run("nix", "eval", "--raw", attr + ".trustedNativeClang")
     if os.path.realpath(os.environ.get("CONCRETE_SLICE0_CLANG", "")) != os.path.realpath(native_clang):
         raise ValueError("consumed native clang differs from the lock-derived compiler: " + os.environ.get("CONCRETE_SLICE0_CLANG", "<unset>"))
+    for tool, attribute in (("ssh-keygen", "trustedApprovalVerifier"), ("git", "trustedGit")):
+        expected = run("nix", "eval", "--raw", attr + "." + attribute)
+        actual = os.path.realpath(shutil.which(tool) or "")
+        if actual != os.path.realpath(expected):
+            raise ValueError(f"consumed {tool}: {actual}, expected {expected}")
     closure = json.loads(run("nix", "path-info", "--json", "--recursive", *roots))
     # Nix versions encode path-info as either an object keyed by path or an array.
     if isinstance(closure, list): closure = {r["path"]: r for r in closure}

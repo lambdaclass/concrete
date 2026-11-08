@@ -52,7 +52,8 @@ not record cwd/fd state; they can only be supported with real cwd/fd tracking.
 The flake exposes exact roots for the pipeline, including Lean's fixed-output
 release archive. Gate 9 evaluates those roots from the checked-in flake/lock,
 queries their closure and NAR hashes, checks the consumed Lean/Lake canonical
-paths and version, and requires every Lake checkout clean at its manifest rev.
+paths and version, checks that git and the approval verifier are the lock-derived
+executables, and requires every Lake checkout clean at its manifest rev.
 Successful execs preserve the executed path, canonical path and store hash.
 A different executable called `clang` outside that closure is refused. Local LCB
 is bound to its pinned source checkout, the initial Lake build and a binary hash
