@@ -95,28 +95,36 @@ def endScope (s : State) (scope : BlockId) : Option State :=
     validate { s with binders := s.binders.filter (·.scope != scope) }
   else none
 
+/-- Couple a brand transition to its concrete allocator operation. Brand witnesses and
+lexical dependencies erase; allocator state and failures remain concrete (Q1.1, Q9.10). -/
+def instrument {σ α : Type} (transition : State → Option State)
+    (operation : σ → Option (α × σ)) (s : σ × State) : Option (α × (σ × State)) := do
+  let ghost ← transition s.2
+  let (result, concrete) ← operation s.1
+  pure (result, (concrete, ghost))
+
 namespace Examples
 
 def initial : State := (fresh {} ⟨0⟩).getD {}
 def heap : Dependency := ⟨⟨0⟩, [⟨0⟩], [⟨0⟩]⟩
 def phantom : Dependency := ⟨⟨1⟩, [⟨0⟩], []⟩
 
-/-- Accepted: repeated resets at the same site produce distinct nominal generations. -/
+/-- Accepted (rule `ConcreteSpec.Core.Generative.reset`): repeated resets at the same site produce distinct nominal generations. -/
 example : (do
     let s ← reset initial ⟨0⟩
     let s ← reset s ⟨1⟩
     pure (s.binders.map Binder.brand, s.binders.map Binder.lineage)) =
       some ([⟨2⟩, ⟨1⟩, ⟨0⟩], [⟨0⟩, ⟨0⟩, ⟨0⟩]) := by decide
-/-- Refused: a live allocation prevents its allocator's reset. -/
+/-- Refused (rule `ConcreteSpec.Core.Generative.reset`): a live allocation prevents its allocator's reset. -/
 example : (depend initial heap).bind (fun s => reset s ⟨0⟩) = none := by decide
 /-- Accepted: a phantom tag does not prevent reset, but still constrains lexical scope. -/
 example : ((depend initial phantom).bind (fun s => reset s ⟨0⟩)).isSome = true := by decide
-/-- Refused: zero representation bytes do not end the phantom's linear obligation. -/
+/-- Refused (rule `ConcreteSpec.Core.Generative.endScope`): zero representation bytes do not end the phantom's linear obligation. -/
 example : (do
     let s ← depend initial phantom
     let s ← release s ⟨0⟩
     endScope s ⟨0⟩) = none := by decide
-/-- Accepted: explicitly consume the dependent, then release the allocator and end its binder. -/
+/-- Accepted (rule `ConcreteSpec.Core.Generative.endScope`): explicitly consume the dependent, then release the allocator and end its binder. -/
 example : (do
     let s ← depend initial heap
     let s ← consume s ⟨0⟩
@@ -200,24 +208,29 @@ inductive Steps {H : Type} : State H → State H → Prop where
 namespace Examples
 
 def initial : State Nat := ⟨[(⟨0⟩, ⟨42, [0, 1], .fs, true⟩)], 1⟩
-/-- Accepted: narrowing consumes the parent and intersects rather than replacing rights. -/
+/-- Accepted (rule `ConcreteSpec.Core.Grants.narrow`): narrowing consumes the parent and intersects rather than replacing rights. -/
 example : ((narrow initial ⟨0⟩ [1, 2]).map fun s =>
     ((usable s ⟨0⟩).isNone, (usable s ⟨1⟩).map Resource.rights)) = some (true, some [1]) := by decide
-/-- Accepted: acquisition preserves its parent. -/
+/-- Accepted (rule `ConcreteSpec.Core.Grants.acquire`): acquisition preserves its parent. -/
 example : ((acquire initial ⟨0⟩ [1] [1] [.fs] true 99).map fun s =>
     ((usable s ⟨0⟩).isSome, (usable s ⟨1⟩).map Resource.handle)) = some (true, some 99) := by decide
-/-- Refused: neither a new writable right nor a missing capability may be manufactured. -/
+/-- Refused (rule `ConcreteSpec.Core.Grants.acquire`): neither a new writable right nor a missing capability may be manufactured. -/
 example : acquire initial ⟨0⟩ [2] [2] [.fs] true 99 = none := by decide
 example : acquire initial ⟨0⟩ [1] [1] [] true 99 = none := by decide
 /-- Refused: static permission cannot bypass an atomic dynamic scope check. -/
 example : acquire initial ⟨0⟩ [1] [1] [.fs] false 99 = none := by decide
-/-- Accepted: a failed close still consumes the handle. -/
+/-- Accepted (rule `ConcreteSpec.Core.Grants.close`): a failed close still consumes the handle. -/
 example : ((close initial ⟨0⟩ (.error 5)).map fun (_, s) => (usable s ⟨0⟩).isNone) =
     some true := by decide
-/-- Refused: a consumed resource cannot be used, narrowed or closed again. -/
+/-- Refused (rule `ConcreteSpec.Core.Grants.narrow`): a consumed resource cannot be used, narrowed or closed again. -/
 example : (do
     let (_, s) ← close initial ⟨0⟩ (.ok ())
     narrow s ⟨0⟩ [0]) = none := by decide
+
+/-- Refused (rule `ConcreteSpec.Core.Grants.close`): double close cannot revive a handle. -/
+example : (do
+    let (_, s) ← close initial ⟨0⟩ (.error 5)
+    close s ⟨0⟩ (.ok ())) = none := by decide
 
 end Examples
 end ConcreteSpec.Core.Grants

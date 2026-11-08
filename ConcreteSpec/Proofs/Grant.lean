@@ -101,6 +101,19 @@ theorem allocations_have_live_allocator (s : State) (hs : WellFormed s) (d : Dep
     ∃ b ∈ s.binders, b.brand = i ∧ b.allocatorLive = true :=
   (hs.2.2 d hd).2 i hi |>.2
 
+/-- Successful brand instrumentation preserves exactly the concrete operation's result,
+state and branch. Reset generations cannot influence that result. -/
+theorem instrument_erasure {σ α : Type} (transition : State → Option State)
+    (operation : σ → Option (α × σ)) (s : σ × State) (a : α) (concrete : σ) (ghost : State)
+    (h : instrument transition operation s = some (a, (concrete, ghost))) :
+    operation s.1 = some (a, concrete) := by
+  unfold instrument at h
+  obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp h
+  obtain ⟨r, hr, hh⟩ := Option.bind_eq_some_iff.mp hh
+  cases r
+  cases hh
+  exact hr
+
 end ConcreteSpec.Core.Generative
 
 namespace ConcreteSpec.Core.Grants
@@ -295,5 +308,30 @@ theorem consumed_never_revives (s t : State H) (i : GrantId) (hs : Fresh s) (hd 
     obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp hc
     cases hh
     exact consumed_keeps_dead _ _ _ hd
+
+/-- Narrowing's result is exactly an intersection, with the same opaque resource identity. -/
+theorem narrow_intersection (s t : State H) (i : GrantId) (requested : List Nat)
+    (h : narrow s i requested = some t) : ∃ r,
+      usable s i = some r ∧ AList.lookup t.resources ⟨s.next⟩ =
+        some { r with rights := r.rights.filter (fun x => decide (x ∈ requested)) } := by
+  unfold narrow at h
+  obtain ⟨r, hr, hh⟩ := Option.bind_eq_some_iff.mp h
+  cases hh
+  exact ⟨r, hr, by simp [issue, consumed, AList.lookup]⟩
+
+/-- Acquisition leaves its parent's resource, rights and availability exactly unchanged. -/
+theorem acquire_keeps_parent (s t : State H) (i : GrantId) (requested selected : List Nat)
+    (permissions : List Cap) (allowed : Bool) (handle : H) (hs : Fresh s)
+    (h : acquire s i requested selected permissions allowed handle = some t) :
+    usable t i = usable s i := by
+  unfold acquire at h
+  obtain ⟨r, hr, hh⟩ := Option.bind_eq_some_iff.mp h
+  have hb := hs _ (AList.lookup_mem (usable_some s i r hr).1)
+  have hi : GrantId.mk s.next ≠ i := by
+    intro he; rw [← he] at hb; exact Nat.lt_irrefl _ hb
+  split at hh
+  · cases hh
+    simp [usable, issue, AList.lookup, hi]
+  · contradiction
 
 end ConcreteSpec.Core.Grants
