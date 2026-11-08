@@ -19,9 +19,11 @@ PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `Concret
 - `typed_evalConsts_refusal`: with sufficient fuel for every initializer (used or unused), a
   statically typed list either evaluates to `.ok env` or refuses with `.error (.operation d.id f)`
   for a declared constant `d ∈ ds` and a located failure `f.InExpr d.init`.
-- `admitted_copy`: every declaration in a statically typed list has a `Copy` declared type and
-  evaluated value type, derived from `U.ofC T = d.ty` and `U.ofC_copy` without a runtime `isCopy`
-  guard.
+- `admitted_copy`: every declaration in an admitted list has a `Copy` declared type, static scalar
+  type, and evaluated value type, derived from `U.ofC T = d.ty` and `U.ofC_copy` without a runtime
+  `isCopy` guard.
+- `typeConsts_refuses_nonCopy`: any declaration list containing a non-`Copy` declared type is
+  statically refused by `typeConsts`.
 - `cycle_excludes_dependencyOrder`: a real reference cycle (`CycleChain`) precludes every
   `DependencyOrder`.
 - `DependencySortingComplete`: every name-resolved acyclic declaration list has a `DependencyOrder`,
@@ -1117,21 +1119,21 @@ private theorem evalConsts_sound_inv (U : ConstTypes) (fuel : Nat) (ds : List (C
     simp only [hc, Option.map_some, Option.some.injEq] at hv
     exact ⟨v, rfl, hv ▸ hty, (hm d.id).2 v hc⟩
 
-/-- Law (subject `ConcreteSpec.Core.evalConsts`). When a statically typed declaration list
-evaluates to `env`, every declared constant has a valid value in `env` of its declared type. -/
+/-- Law (subject `ConcreteSpec.Core.evalConsts`). When a declaration list is statically typed and
+evaluates within `fuel`, `evalConsts` produces a value environment `env` in which every declared
+constant has a valid value of its declared type. -/
 theorem evalConsts_sound (U : ConstTypes) (fuel : Nat) (ds : List (ConstDecl U))
-    (ht : ConstsTyped U ds) :
-    match evalConsts U fuel ds [] with
-    | .error _ => True
-    | .ok env => ∀ d ∈ ds, ∃ v, AList.lookup env d.id = some v ∧
-        U.ofC v.ty = d.ty ∧ v.Valid := by
-  cases he : evalConsts U fuel ds [] with
-  | error _ => trivial
-  | ok env =>
-    unfold ConstsTyped at ht
-    cases ht' : typeConsts U ds [] with
-    | none => simp [ht'] at ht
-    | some Γ => exact evalConsts_sound_inv U fuel ds env Γ ht' he
+    (ht : ConstsTyped U ds) (he : ConstsEvaluate U fuel ds) :
+    ∃ env, evalConsts U fuel ds [] = .ok env ∧
+      ∀ d ∈ ds, ∃ v, AList.lookup env d.id = some v ∧ U.ofC v.ty = d.ty ∧ v.Valid := by
+  unfold ConstsTyped at ht
+  unfold ConstsEvaluate at he
+  cases ht' : typeConsts U ds [] with
+  | none => simp [ht'] at ht
+  | some Γ =>
+    cases he' : evalConsts U fuel ds [] with
+    | error _ => rw [he'] at he; cases he
+    | ok env => exact ⟨env, rfl, evalConsts_sound_inv U fuel ds env Γ ht' he'⟩
 
 /-- A broken declaration evaluator that returns `bool` for every declaration. -/
 def boolConstValues (U : ConstTypes) (_fuel : Nat) (ds : List (ConstDecl U))
@@ -1143,28 +1145,28 @@ def divisionDecls : List (ConstDecl ConstDemo.U) :=
   [⟨ConstDemo.cid "Q", .c (.int .i8), .plain .div (.int .i8 100) (.int .i8 7)⟩]
 
 /-- Instance (law `ConcreteSpec.Core.evalConsts_sound`, case `division`). -/
-example : match evalConsts ConstDemo.U 3 divisionDecls [] with
-    | .error _ => True
-    | .ok env => ∀ d ∈ divisionDecls, ∃ v, AList.lookup env d.id = some v ∧
-        ConstDemo.U.ofC v.ty = d.ty ∧ v.Valid :=
-  evalConsts_sound ConstDemo.U 3 divisionDecls (by decide)
+example : ∃ env, evalConsts ConstDemo.U 3 divisionDecls [] = .ok env ∧
+    ∀ d ∈ divisionDecls, ∃ v, AList.lookup env d.id = some v ∧
+      ConstDemo.U.ofC v.ty = d.ty ∧ v.Valid :=
+  evalConsts_sound ConstDemo.U 3 divisionDecls (by decide) (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.evalConsts_sound`, case `division`,
 subject `ConcreteSpec.Core.evalConsts`, mutant `ConcreteSpec.Core.boolConstValues`). -/
 example : ConstsTyped ConstDemo.U divisionDecls ∧
-    ¬ (match boolConstValues ConstDemo.U 3 divisionDecls [] with
-    | .error _ => True
-    | .ok env => ∀ d ∈ divisionDecls, ∃ v, AList.lookup env d.id = some v ∧
+    ConstsEvaluate ConstDemo.U 3 divisionDecls ∧
+    ¬ (∃ env, boolConstValues ConstDemo.U 3 divisionDecls [] = .ok env ∧
+      ∀ d ∈ divisionDecls, ∃ v, AList.lookup env d.id = some v ∧
         ConstDemo.U.ofC v.ty = d.ty ∧ v.Valid) := by
-  constructor
-  · decide
-  · intro h
-    obtain ⟨v, hv, hty, _⟩ := h ⟨ConstDemo.cid "Q", .c (.int .i8), .plain .div (.int .i8 100) (.int .i8 7)⟩ (by simp [divisionDecls])
-    simp only [divisionDecls, List.map, List.append_nil, AList.lookup,
-      ↓reduceIte, Option.some.injEq] at hv
-    change ConstDemo.U.ofC v.ty = .c (.int .i8) at hty
-    subst v
-    cases hty
+  refine ⟨by decide, by decide, ?_⟩
+  rintro ⟨env, he, h⟩
+  cases he
+  obtain ⟨v, hv, hty, _⟩ := h ⟨ConstDemo.cid "Q", .c (.int .i8), .plain .div (.int .i8 100) (.int .i8 7)⟩
+    (by simp [divisionDecls])
+  simp only [divisionDecls, List.map, List.append_nil, AList.lookup,
+    ↓reduceIte, Option.some.injEq] at hv
+  change ConstDemo.U.ofC v.ty = .c (.int .i8) at hty
+  subst v
+  cases hty
 
 /-- Helper (computation). Structural induction for declaration evaluation under sufficient fuel:
 every well-typed list either evaluates to `.ok env'` or stops at a declared constant with a located
@@ -1261,23 +1263,15 @@ example : ConstsTyped ConstDemo.U
   refine ⟨by decide, by decide, ?_⟩
   rintro (⟨env, h⟩ | ⟨d, _, f, h, _⟩) <;> cases h
 
-/-- Helper (inversion). Successful static typing derives Copy structurally from the scalar
-embedding and supplies value agreement via declaration soundness. (approved: PENDING) -/
-private theorem admitted_copy_inv (U : ConstTypes) (fuel : Nat) :
-    ∀ (ds : List (ConstDecl U)) (Γ : AList ConstId CTy),
-      typeConsts U ds [] = some Γ →
-      (∀ d ∈ ds, U.isCopy d.ty = true) ∧
-      ∀ env, evalConsts U fuel ds [] = .ok env →
-        ∀ d ∈ ds, ∃ v, AList.lookup env d.id = some v ∧
-          U.ofC v.ty = d.ty ∧ U.isCopy (U.ofC v.ty) = true := by
-  intro ds Γ ht
-  refine ⟨?_, ?_⟩
-  · intro d hd
-    obtain ⟨T, _, hty⟩ := typeConsts_decls_inv U ds [] Γ ht d hd
-    exact hty ▸ U.ofC_copy T
-  · intro env he d hd
-    obtain ⟨v, hv, hty, _⟩ := evalConsts_sound_inv U fuel ds env Γ ht he d hd
-    exact ⟨v, hv, hty, U.ofC_copy v.ty⟩
+/-- A broken declaration typechecker that binds every declaration to `CTy.unit` without checking
+declared-type agreement `U.ofC T = d.ty`. -/
+def unitTypeConsts (U : ConstTypes) : List (ConstDecl U) → AList ConstId CTy →
+    Option (AList ConstId CTy)
+  | [], Γ => some Γ
+  | d :: ds, Γ =>
+    if AList.lookup Γ d.id = none then
+      unitTypeConsts U ds ((d.id, .unit) :: Γ)
+    else none
 
 /-- A broken declaration typechecker that omits the `U.ofC T = d.ty` check. -/
 def uncheckedTypeConsts (U : ConstTypes) : List (ConstDecl U) → AList ConstId CTy →
@@ -1290,44 +1284,124 @@ def uncheckedTypeConsts (U : ConstTypes) : List (ConstDecl U) → AList ConstId 
       else none
     | none => none
 
-/-- Law (subject `ConcreteSpec.Core.typeConsts`). The typechecker either refuses a list or
-establishes Copy declared types and Copy evaluated values, without testing Copy at runtime. -/
-theorem admitted_copy (U : ConstTypes) (fuel : Nat) (ds : List (ConstDecl U)) :
-    match typeConsts U ds [] with
-    | none => True
-    | some _ => (∀ d ∈ ds, U.isCopy d.ty = true) ∧
-        ∀ env, evalConsts U fuel ds [] = .ok env →
-          ∀ d ∈ ds, ∃ v, AList.lookup env d.id = some v ∧
-            U.ofC v.ty = d.ty ∧ U.isCopy (U.ofC v.ty) = true := by
+/-- Law (subject `ConcreteSpec.Core.typeConsts`, `ConcreteSpec.Core.evalConsts`). Every admitted
+declaration list produces a static type environment `Γ` and value environment `env` in which every
+declaration's declared type, static scalar type, and evaluated value type are `Copy` in `U`,
+derived structurally from `U.ofC T = d.ty` and `U.ofC_copy` without a runtime `isCopy` check. -/
+theorem admitted_copy (U : ConstTypes) (fuel : Nat) (ds : List (ConstDecl U))
+    (ht : ConstsTyped U ds) (he : ConstsEvaluate U fuel ds) :
+    ∃ Γ env, typeConsts U ds [] = some Γ ∧ evalConsts U fuel ds [] = .ok env ∧
+      (∀ d ∈ ds, ∃ T, AList.lookup Γ d.id = some T ∧ U.ofC T = d.ty ∧ U.isCopy d.ty = true) ∧
+      (∀ d ∈ ds, ∃ v, AList.lookup env d.id = some v ∧
+        U.ofC v.ty = d.ty ∧ U.isCopy (U.ofC v.ty) = true) := by
+  unfold ConstsTyped at ht
+  unfold ConstsEvaluate at he
+  cases ht' : typeConsts U ds [] with
+  | none => simp [ht'] at ht
+  | some Γ =>
+    cases he' : evalConsts U fuel ds [] with
+    | error _ => rw [he'] at he; cases he
+    | ok env =>
+      refine ⟨Γ, env, rfl, rfl, ?_, ?_⟩
+      · intro d hd
+        obtain ⟨T, hT, hty⟩ := typeConsts_decls_inv U ds [] Γ ht' d hd
+        exact ⟨T, hT, hty, hty ▸ U.ofC_copy T⟩
+      · intro d hd
+        obtain ⟨v, hv, hty, _⟩ := evalConsts_sound_inv U fuel ds env Γ ht' he' d hd
+        exact ⟨v, hv, hty, U.ofC_copy v.ty⟩
+
+/-- Instance (law `ConcreteSpec.Core.admitted_copy`, case `division_type`). -/
+example : ∃ Γ env, typeConsts ConstDemo.U divisionDecls [] = some Γ ∧
+    evalConsts ConstDemo.U 3 divisionDecls [] = .ok env ∧
+    (∀ d ∈ divisionDecls, ∃ T, AList.lookup Γ d.id = some T ∧
+      ConstDemo.U.ofC T = d.ty ∧ ConstDemo.U.isCopy d.ty = true) ∧
+    (∀ d ∈ divisionDecls, ∃ v, AList.lookup env d.id = some v ∧
+      ConstDemo.U.ofC v.ty = d.ty ∧ ConstDemo.U.isCopy (ConstDemo.U.ofC v.ty) = true) :=
+  admitted_copy ConstDemo.U 3 divisionDecls (by decide) (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.admitted_copy`, case `division_type`,
+subject `ConcreteSpec.Core.typeConsts`, mutant `ConcreteSpec.Core.unitTypeConsts`). -/
+example : ConstsTyped ConstDemo.U divisionDecls ∧
+    ConstsEvaluate ConstDemo.U 3 divisionDecls ∧
+    ¬ (∃ Γ env, unitTypeConsts ConstDemo.U divisionDecls [] = some Γ ∧
+      evalConsts ConstDemo.U 3 divisionDecls [] = .ok env ∧
+      (∀ d ∈ divisionDecls, ∃ T, AList.lookup Γ d.id = some T ∧
+        ConstDemo.U.ofC T = d.ty ∧ ConstDemo.U.isCopy d.ty = true) ∧
+      (∀ d ∈ divisionDecls, ∃ v, AList.lookup env d.id = some v ∧
+        ConstDemo.U.ofC v.ty = d.ty ∧ ConstDemo.U.isCopy (ConstDemo.U.ofC v.ty) = true)) := by
+  refine ⟨by decide, by decide, ?_⟩
+  rintro ⟨Γ, _, ht, _, hdecl, _⟩
+  cases ht
+  obtain ⟨T, hT, hty, _⟩ := hdecl
+    ⟨ConstDemo.cid "Q", .c (.int .i8), .plain .div (.int .i8 100) (.int .i8 7)⟩
+    (by simp [divisionDecls])
+  simp only [AList.lookup, ↓reduceIte, Option.some.injEq] at hT
+  change ConstDemo.U.ofC T = .c (.int .i8) at hty
+  subst T
+  cases hty
+
+/-- Instance (law `ConcreteSpec.Core.admitted_copy`, case `division_value`). -/
+example : ∃ Γ env, typeConsts ConstDemo.U divisionDecls [] = some Γ ∧
+    evalConsts ConstDemo.U 3 divisionDecls [] = .ok env ∧
+    (∀ d ∈ divisionDecls, ∃ T, AList.lookup Γ d.id = some T ∧
+      ConstDemo.U.ofC T = d.ty ∧ ConstDemo.U.isCopy d.ty = true) ∧
+    (∀ d ∈ divisionDecls, ∃ v, AList.lookup env d.id = some v ∧
+      ConstDemo.U.ofC v.ty = d.ty ∧ ConstDemo.U.isCopy (ConstDemo.U.ofC v.ty) = true) :=
+  admitted_copy ConstDemo.U 3 divisionDecls (by decide) (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.admitted_copy`, case `division_value`,
+subject `ConcreteSpec.Core.evalConsts`, mutant `ConcreteSpec.Core.boolConstValues`). -/
+example : ConstsTyped ConstDemo.U divisionDecls ∧
+    ConstsEvaluate ConstDemo.U 3 divisionDecls ∧
+    ¬ (∃ Γ env, typeConsts ConstDemo.U divisionDecls [] = some Γ ∧
+      boolConstValues ConstDemo.U 3 divisionDecls [] = .ok env ∧
+      (∀ d ∈ divisionDecls, ∃ T, AList.lookup Γ d.id = some T ∧
+        ConstDemo.U.ofC T = d.ty ∧ ConstDemo.U.isCopy d.ty = true) ∧
+      (∀ d ∈ divisionDecls, ∃ v, AList.lookup env d.id = some v ∧
+        ConstDemo.U.ofC v.ty = d.ty ∧ ConstDemo.U.isCopy (ConstDemo.U.ofC v.ty) = true)) := by
+  refine ⟨by decide, by decide, ?_⟩
+  rintro ⟨_, env, _, he, _, hval⟩
+  cases he
+  obtain ⟨v, hv, hty, _⟩ := hval
+    ⟨ConstDemo.cid "Q", .c (.int .i8), .plain .div (.int .i8 100) (.int .i8 7)⟩
+    (by simp [divisionDecls])
+  simp only [divisionDecls, List.map, List.append_nil, AList.lookup,
+    ↓reduceIte, Option.some.injEq] at hv
+  change ConstDemo.U.ofC v.ty = .c (.int .i8) at hty
+  subst v
+  cases hty
+
+/-- Law (subject `ConcreteSpec.Core.typeConsts`). Any declaration list containing a non-`Copy`
+declared type is statically refused by `typeConsts`, derived from `U.ofC T = d.ty` and `U.ofC_copy`
+without a runtime `isCopy` check. -/
+theorem typeConsts_refuses_nonCopy (U : ConstTypes) (ds : List (ConstDecl U))
+    (d : ConstDecl U) (hd : d ∈ ds) (hnc : U.isCopy d.ty = false) :
+    typeConsts U ds [] = none := by
   cases ht : typeConsts U ds [] with
-  | none => trivial
-  | some Γ => exact admitted_copy_inv U fuel ds Γ ht
+  | none => rfl
+  | some Γ =>
+    obtain ⟨T, _, hty⟩ := typeConsts_decls_inv U ds [] Γ ht d hd
+    have hcopy : U.isCopy d.ty = true := hty ▸ U.ofC_copy T
+    rw [hnc] at hcopy
+    cases hcopy
 
 /-- Scalar success followed by a mismatched non-Copy declaration. -/
 def copyAuditDecls : List (ConstDecl ConstDemo.U) :=
   [⟨ConstDemo.cid "Q", .c (.int .i8), .int .i8 1⟩,
    ⟨ConstDemo.cid "S", .text, .unit⟩]
 
-/-- Instance (law `ConcreteSpec.Core.admitted_copy`, case `mixed_declarations`). -/
-example : match typeConsts ConstDemo.U copyAuditDecls [] with
-    | none => True
-    | some _ => (∀ d ∈ copyAuditDecls, ConstDemo.U.isCopy d.ty = true) ∧
-        ∀ env, evalConsts ConstDemo.U 20 copyAuditDecls [] = .ok env →
-          ∀ d ∈ copyAuditDecls, ∃ v, AList.lookup env d.id = some v ∧
-            ConstDemo.U.ofC v.ty = d.ty ∧ ConstDemo.U.isCopy (ConstDemo.U.ofC v.ty) = true :=
-  admitted_copy ConstDemo.U 20 copyAuditDecls
+/-- Instance (law `ConcreteSpec.Core.typeConsts_refuses_nonCopy`, case `mixed_declarations`). -/
+example : typeConsts ConstDemo.U copyAuditDecls [] = none :=
+  typeConsts_refuses_nonCopy ConstDemo.U copyAuditDecls
+    ⟨ConstDemo.cid "S", .text, .unit⟩ (by decide) rfl
 
-/-- Planted (law `ConcreteSpec.Core.admitted_copy`, case `mixed_declarations`,
+/-- Planted (law `ConcreteSpec.Core.typeConsts_refuses_nonCopy`, case `mixed_declarations`,
 subject `ConcreteSpec.Core.typeConsts`, mutant `ConcreteSpec.Core.uncheckedTypeConsts`). -/
-example : ¬ (match uncheckedTypeConsts ConstDemo.U copyAuditDecls [] with
-    | none => True
-    | some _ => (∀ d ∈ copyAuditDecls, ConstDemo.U.isCopy d.ty = true) ∧
-        ∀ env, evalConsts ConstDemo.U 20 copyAuditDecls [] = .ok env →
-          ∀ d ∈ copyAuditDecls, ∃ v, AList.lookup env d.id = some v ∧
-            ConstDemo.U.ofC v.ty = d.ty ∧ ConstDemo.U.isCopy (ConstDemo.U.ofC v.ty) = true) := by
-  intro h
-  have bad := h.1 ⟨ConstDemo.cid "S", .text, .unit⟩ (by simp [copyAuditDecls])
-  cases bad
+example : ⟨ConstDemo.cid "S", .text, .unit⟩ ∈ copyAuditDecls ∧
+    ConstDemo.U.isCopy (⟨ConstDemo.cid "S", .text, .unit⟩ : ConstDecl ConstDemo.U).ty = false ∧
+    ¬ (uncheckedTypeConsts ConstDemo.U copyAuditDecls [] = none) := by
+  refine ⟨by decide, rfl, ?_⟩
+  decide
 
 /-- Helper (inversion). Lift primitive-grounded declaration derivations to executable evaluation.
 (approved: PENDING) -/
@@ -1355,9 +1429,10 @@ private theorem evalConsts_append_inv (U : ConstTypes) (fuel : Nat)
     case value v => exact (by simpa [evalConsts, he] using ih _ h)
     all_goals cases h
 
-/-- Law (subject `ConcreteSpec.Core.evalConsts`). A primitive-grounded failing initializer after
-any successful pre refuses the whole list with its identity and failure, even if unused.
-There is no typing or usage guard: evaluation failure alone prevents admission. -/
+/-- Law (subject `ConcreteSpec.Core.evalConsts`, `ConcreteSpec.Core.ConstsAdmitted`). A
+primitive-grounded failing initializer after any successful pre refuses the whole list with its
+identity and failure, even if unused. There is no typing or usage guard: evaluation failure alone
+prevents admission. -/
 theorem semantic_failure_refuses (U : ConstTypes) (fuel : Nat)
     (pre suffix : List (ConstDecl U)) (d : ConstDecl U) (env : AList ConstId CVal)
     (f : ConstFailure) (hp : ConstsRun U fuel pre [] (.ok env))
@@ -1373,6 +1448,31 @@ theorem semantic_failure_refuses (U : ConstTypes) (fuel : Nat)
   unfold ConstsEvaluate at bad
   rw [he] at bad
   cases bad
+
+/-- A demand-driven declaration evaluator that skips intermediate declarations whose identity is
+not referenced by any later declaration in the list. -/
+def skipUnusedEvalConsts (U : ConstTypes) (fuel : Nat) :
+    List (ConstDecl U) → AList ConstId CVal → Except ConstEvalRefusal (AList ConstId CVal)
+  | [], env => .ok env
+  | [d], env => match d.init.eval env fuel with
+    | .value v => .ok ((d.id, v) :: env)
+    | .failure f => .error (.operation d.id f)
+    | .outOfFuel => .error (.outOfFuel d.id)
+    | .invalid e => .error (.invalid d.id e)
+  | d :: ds, env =>
+    if ds.any (fun d' => d'.init.refs.contains d.id) then
+      match d.init.eval env fuel with
+      | .value v => skipUnusedEvalConsts U fuel ds ((d.id, v) :: env)
+      | .failure f => .error (.operation d.id f)
+      | .outOfFuel => .error (.outOfFuel d.id)
+      | .invalid e => .error (.invalid d.id e)
+    else
+      skipUnusedEvalConsts U fuel ds env
+
+/-- A demand-driven admission predicate that ignores evaluation failures in unreferenced
+intermediate declarations. -/
+def skipUnusedConstsAdmitted (U : ConstTypes) (fuel : Nat) (ds : List (ConstDecl U)) : Prop :=
+  ConstsTyped U ds ∧ (skipUnusedEvalConsts U fuel ds []).isOk = true
 
 /-- Failure-swallowing expression evaluator. -/
 def swallowFailure (env : AList ConstId CVal) (fuel : Nat) (e : CExpr) : CEvalResult :=
@@ -1445,16 +1545,39 @@ example : evalConsts ConstDemo.U 3 (failurePrefix ++ unusedFailureDecl :: divisi
     (.plain_failure (.int_ok (by decide)) (.int_ok (by decide)) rfl)
 
 /-- Planted (law `ConcreteSpec.Core.semantic_failure_refuses`, case `unused_after_prefix`,
-subject `ConcreteSpec.Core.evalConsts`, mutant `ConcreteSpec.Core.boolConstValues`). -/
+subject `ConcreteSpec.Core.evalConsts`, mutant `ConcreteSpec.Core.skipUnusedEvalConsts`). -/
 example : ConstsRun ConstDemo.U 3 failurePrefix [] (.ok [(ConstDemo.cid "P", .unit)]) ∧
     ConstEval [(ConstDemo.cid "P", .unit)] 3 unusedFailureDecl.init (.failure zeroFailure) ∧
-    ¬ (boolConstValues ConstDemo.U 3 (failurePrefix ++ unusedFailureDecl :: divisionDecls) [] =
+    ¬ (skipUnusedEvalConsts ConstDemo.U 3 (failurePrefix ++ unusedFailureDecl :: divisionDecls) [] =
       .error (.operation unusedFailureDecl.id zeroFailure) ∧
       ¬ ConstsAdmitted ConstDemo.U 3 (failurePrefix ++ unusedFailureDecl :: divisionDecls)) := by
   refine ⟨.value _ [] [] .unit _ (.unit 2) (.nil _),
     .plain_failure (.int_ok (by decide)) (.int_ok (by decide)) rfl, ?_⟩
   intro h
-  cases h.1
+  have h1 := h.1
+  revert h1
+  decide
+
+/-- Instance (law `ConcreteSpec.Core.semantic_failure_refuses`, case `unused_after_prefix_admitted`). -/
+example : evalConsts ConstDemo.U 3 (failurePrefix ++ unusedFailureDecl :: divisionDecls) [] =
+      .error (.operation unusedFailureDecl.id zeroFailure) ∧
+    ¬ ConstsAdmitted ConstDemo.U 3 (failurePrefix ++ unusedFailureDecl :: divisionDecls) :=
+  semantic_failure_refuses ConstDemo.U 3 failurePrefix divisionDecls unusedFailureDecl
+    [(ConstDemo.cid "P", .unit)] zeroFailure
+    (.value _ [] [] .unit _ (.unit 2) (.nil _))
+    (.plain_failure (.int_ok (by decide)) (.int_ok (by decide)) rfl)
+
+/-- Planted (law `ConcreteSpec.Core.semantic_failure_refuses`, case `unused_after_prefix_admitted`,
+subject `ConcreteSpec.Core.ConstsAdmitted`, mutant `ConcreteSpec.Core.skipUnusedConstsAdmitted`). -/
+example : ConstsRun ConstDemo.U 3 failurePrefix [] (.ok [(ConstDemo.cid "P", .unit)]) ∧
+    ConstEval [(ConstDemo.cid "P", .unit)] 3 unusedFailureDecl.init (.failure zeroFailure) ∧
+    ¬ (evalConsts ConstDemo.U 3 (failurePrefix ++ unusedFailureDecl :: divisionDecls) [] =
+      .error (.operation unusedFailureDecl.id zeroFailure) ∧
+      ¬ skipUnusedConstsAdmitted ConstDemo.U 3 (failurePrefix ++ unusedFailureDecl :: divisionDecls)) := by
+  refine ⟨.value _ [] [] .unit _ (.unit 2) (.nil _),
+    .plain_failure (.int_ok (by decide)) (.int_ok (by decide)) rfl, ?_⟩
+  intro h
+  exact h.2 ⟨by decide, by decide⟩
 
 /-! ### Cycle reflection and mutual exclusion of cycles and dependency orders -/
 

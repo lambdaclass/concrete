@@ -24,7 +24,8 @@ requires, rather than making an operation partial.
 
 **Static admission and kernel checking.** `typeConsts` checks the closed grammar, declared-type
 agreement and freshness; because every scalar constant type in `CTy` is `Copy` (`ofC_copy`),
-declared-type agreement entails `Copy` without a redundant runtime `isCopy` guard (`admitted_copy`).
+declared-type agreement entails `Copy` without a redundant runtime `isCopy` guard (`admitted_copy`,
+`typeConsts_refuses_nonCopy`).
 Independently, `evalConsts` evaluates every declaration, used or unused, and reports the first
 failing constant, operation failure, invalid expression or fuel exhaustion. `ConstsAdmitted` is
 their conjunction and is decidable: concrete admission examples use `decide`, hence Lean's kernel
