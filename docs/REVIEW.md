@@ -176,6 +176,18 @@ findings, and exits 3. Asking for another round exits 3 without calling the
 reviewer. Do not work around the cap: split the branch into smaller branches or
 escalate to a human reviewer, and pass on the open findings.
 
+The owner may then approve one exact commit (R-0618), after Codex, Kimi and agy have all reviewed
+that commit. The cap is the class of the branch's diff against its base, by path, the highest class
+present winning: docs and roadmap 2 rounds, scripts 3, compiler and spec 5 (an unclassified path
+counts as compiler and spec); it counts the rounds used, whatever their verdicts. The approval is
+recorded, from the owner's own words only, with `scripts/land/signoff.sh record <sha> --base <base>
+--rounds-at <the review.sh-noted commit> --date --quote --codex --kimi --agy` (each reviewer's
+transcript: the request naming that commit and the output, ending in `VERDICT: ACCEPT`), which
+refuses a record that does not qualify, and
+pushed to both remotes as `refs/owner-signoff/<sha>`. The
+landing train accepts it as that commit's review provenance ([LANDING.md](LANDING.md)); it approves no
+other commit.
+
 ## verify.sh
 
 ```sh
