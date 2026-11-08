@@ -19,7 +19,8 @@
 #     stack or frame pointer (so the red zone), with external libc calls listed with their entry
 #     depth (their own use, and that _exit and abort do not return, are premises). A run under
 #     gdb (x86-64 Linux, lib/stack_measure.py) or LLDB (aarch64-macos, lib/stack_measure_lldb.py)
-#     must stay within it (the run measures the stack pointer only). REPORT/stack.tsv. Controls: the analysis must refuse an unmodelled
+#     must stay within it (the run measures the stack pointer only). Each analysed disassembly is
+#     kept in REPORT/disassembly/. REPORT/stack.tsv. Controls: the analysis must refuse an unmodelled
 #     stack-pointer write, an indirect call, recursion, a call to an unknown function, two depths
 #     meeting, a stack pointer used as a value or written through a partial register, a partial
 #     frame-pointer write, an indexed stack address, a saved frame pointer popped into another
@@ -108,6 +109,9 @@ stack_check() {
   if ! "${objdump[@]}" "$exe" >"$dis" 2>"$dis.err"; then
     echo "FAIL $name [$backend] stack: disassembly failed: $(head -c 300 "$dis.err")"; fail=1; return
   fi
+  # The disassembly the bound is derived from is kept in the report (audit evidence).
+  mkdir -p "$report/disassembly"
+  cp "$dis" "$report/disassembly/$name.$backend.$target.dis"
   if ! out=$(stack_bound "$arch" "$dis" --ranges | cap_out); then
     echo "FAIL $name [$backend] stack: $out"; fail=1; return
   fi
