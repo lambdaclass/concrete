@@ -1,18 +1,7 @@
-"""Verify owner authority over the trusted-base registry, theorem axiom closure and toolchain pins.
+"""Compute candidate trust digests; owner authorization is not yet established.
 
-Owner decisions live in docs/decisions.md (guarded by the single-writer rule and
-scripts/review/review.sh's owner-decision checks, ISS-0011 and ISS-0013). The
-approval record in tests/golden/slice0_trusted_base_approval.json binds the
-verbatim owner decision records in docs/decisions.md to the content digests of:
-  - the trusted-component and premise registry rows in the report (registry_sha256);
-  - the headline theorem axiom closure rows in the report (theorems_sha256);
-  - the toolchain and dependency pins (flake.nix, flake.lock, lean-toolchain,
-    lake-manifest.json).
-
-Because the record binds content digests rather than a git ancestor SHA or a
-mutable CI variable, rebasing a branch never invalidates an unchanged baseline,
-while any unapproved change to a component, premise, theorem axiom closure,
-toolchain pin, or cited decision record in docs/decisions.md fails closed.
+Historical citations are context, never authentication. The owner must choose
+an authority boundary and approve the initial canonical digest (R-0678/R-0509).
 """
 import hashlib
 import json
@@ -82,7 +71,7 @@ def verify_decisions(decisions_text, entries):
             raise ValueError(f"owner decision record in docs/decisions.md does not match {anchor}")
 
 
-def verify(report, record, decisions_file="docs/decisions.md"):
+def verify_candidate(report, record, decisions_file="docs/decisions.md"):
     record = Path(record)
     if not record.is_file():
         raise ValueError("owner approval record missing")
@@ -102,14 +91,14 @@ def verify(report, record, decisions_file="docs/decisions.md"):
         raise ValueError("trusted-base report has no registry rows")
     reg_digest = hashlib.sha256(reg_bytes).hexdigest()
     if reg_digest != approval["registry_sha256"]:
-        raise ValueError("registry differs from owner-approved digest")
+        raise ValueError("registry differs from candidate digest")
 
     thm_bytes = theorem_rows(report_text)
     if not thm_bytes:
         raise ValueError("trusted-base report has no theorem/axiom rows")
     thm_digest = hashlib.sha256(thm_bytes).hexdigest()
     if thm_digest != approval["theorems_sha256"]:
-        raise ValueError("theorem axiom closure differs from owner-approved digest")
+        raise ValueError("theorem axiom closure differs from candidate digest")
 
     inputs = approval["inputs"]
     if not isinstance(inputs, dict) or set(inputs) != set(INPUT_FILES):
@@ -117,9 +106,32 @@ def verify(report, record, decisions_file="docs/decisions.md"):
     for source in INPUT_FILES:
         actual = hashlib.sha256(Path(source).read_bytes()).hexdigest()
         if actual != inputs[source]:
-            raise ValueError(f"trust input {source} differs from owner-approved digest")
+            raise ValueError(f"trust input {source} differs from candidate digest")
 
-    print(f"ok   owner-approved trusted-base registry ({reg_digest[:12]}) and theorem closure ({thm_digest[:12]})")
+    return {"registry_sha256": reg_digest, "theorems_sha256": thm_digest,
+            "inputs": inputs}
+
+
+def canonical_digest(candidate):
+    """One versioned, deterministic input for the future owner authenticator."""
+    payload = {"schema": 1, **candidate}
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def authenticate_owner(digest):
+    """Single integration point for the OWNER-CHOSEN authenticator.
+
+    Do not accept branch metadata, citations, environment variables or an agent's
+    choice of authentication policy here. No mechanism has been authorized yet.
+    """
+    raise ValueError("owner authorization is not established (T1): authenticator and initial digest await owner decision")
+
+
+def verify(report, record, decisions_file="docs/decisions.md"):
+    candidate = verify_candidate(report, record, decisions_file)
+    digest = canonical_digest(candidate)
+    print(f"trust-candidate sha256:{digest}")
+    authenticate_owner(digest)
 
 
 if __name__ == "__main__":

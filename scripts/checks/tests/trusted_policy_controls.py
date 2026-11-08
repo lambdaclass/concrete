@@ -67,7 +67,7 @@ with tempfile.TemporaryDirectory() as tmp:
         )
         report.write_text(base_report)
         record = tmp / "approval.json"
-        rejects(lambda: approval.verify(report, record), "owner approval record missing")
+        rejects(lambda: approval.verify_candidate(report, record), "owner approval record missing")
 
         def make_record():
             return {
@@ -84,35 +84,45 @@ with tempfile.TemporaryDirectory() as tmp:
             }
 
         record.write_text(json.dumps(make_record()))
-        approval.verify(report, record)
+        approval.verify_candidate(report, record)
+
+        # Reviewer bypass: writer grows report AND regenerates JSON with old citations.
+        report.write_text(base_report + "component growth [fixture]\n")
+        record.write_text(json.dumps(make_record()))
+        rejects(lambda: approval.verify(report, record),
+                "owner authorization is not established (T1): authenticator and initial digest await owner decision")
+        report.write_text(base_report)
+        record.write_text(json.dumps(make_record()))
+        rejects(lambda: approval.verify(report, record),
+                "owner authorization is not established (T1): authenticator and initial digest await owner decision")
 
         # Tampered decision quote or missing anchor in docs/decisions.md must be refused.
         decisions.write_text(decisions_text.replace("ok let's do 1, 2, 3, 4, 5", "forged quote"))
-        rejects(lambda: approval.verify(report, record),
+        rejects(lambda: approval.verify_candidate(report, record),
                 "owner decision record in docs/decisions.md does not match docs/decisions.md#decided-2026-11-07-early-evidence")
         decisions.write_text("# Owner Decisions\n")
-        rejects(lambda: approval.verify(report, record),
+        rejects(lambda: approval.verify_candidate(report, record),
                 "owner decision anchor missing in docs/decisions.md: docs/decisions.md#decided-2026-11-07-early-evidence")
         decisions.write_text(decisions_text)
-        approval.verify(report, record)
+        approval.verify_candidate(report, record)
 
         # Unapproved component/premise growth must be refused.
         report.write_text(base_report + "component growth [fixture]\n")
-        rejects(lambda: approval.verify(report, record), "registry differs from owner-approved digest")
+        rejects(lambda: approval.verify_candidate(report, record), "registry differs from candidate digest")
         report.write_text(base_report)
 
         # Unapproved theorem/axiom closure change must be refused.
         report.write_text(base_report + "axiom extra : Prop\n")
-        rejects(lambda: approval.verify(report, record), "theorem axiom closure differs from owner-approved digest")
+        rejects(lambda: approval.verify_candidate(report, record), "theorem axiom closure differs from candidate digest")
         report.write_text(base_report)
 
         # Toolchain and dependency pin mutations must each be refused.
         for pinned in ("flake.nix", "flake.lock", "lean-toolchain", "lake-manifest.json"):
             orig = Path(pinned).read_text()
             Path(pinned).write_text("changed\n")
-            rejects(lambda: approval.verify(report, record), f"trust input {pinned} differs from owner-approved digest")
+            rejects(lambda: approval.verify_candidate(report, record), f"trust input {pinned} differs from candidate digest")
             Path(pinned).write_text(orig)
-        approval.verify(report, record)
+        approval.verify_candidate(report, record)
 
         # Lake package checkout integrity controls.
         pkg = tmp / ".lake/packages/control"

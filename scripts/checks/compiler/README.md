@@ -1,7 +1,7 @@
 # Compiler gate 9: trusted base
 
 `Concrete/Premises.lean` owns the only component and premise list. Its rendered
-component/premise rows and headline theorem axiom closures are approved together;
+component/premise rows and headline theorem axiom closures form a candidate digest together;
 approval metadata never repeats the component list. Observed declarations,
 example closures, executable identities and pins are separate evidence and cannot
 authorize themselves by updating a golden.
@@ -15,47 +15,28 @@ their removal.
 
 ## Approval authority (T1)
 
-Owner decisions are recorded in `docs/decisions.md`, which is guarded by the
-single-writer rule (`AGENTS.md#rules`) and by `scripts/review/review.sh`'s
-owner-decision checks (`docs/REVIEW.md#owner-decisions-choosing-versus-recording`,
-`ISS-0011`, `ISS-0013`). `scripts/checks/lib/trusted_approval.py` verifies
-`tests/golden/slice0_trusted_base_approval.json` against `docs/decisions.md`
-and the rendered trusted-base report before any golden comparison or `update`:
+Owner authorization is **not established**. Historical citations in
+`tests/golden/slice0_trusted_base_approval.json` do not approve this registry or
+its digests. A writer can regenerate that JSON; neither matching it nor the
+single-writer/review rules authenticates owner approval. Gate 9 reports exactly
+`FAIL approval: owner authorization is not established (T1): authenticator and initial digest await owner decision`
+for a consistent candidate, and cannot pass or update the golden.
 
-```json
-{
-  "schema": 1,
-  "decisions": [
-    {
-      "anchor": "docs/decisions.md#decided-YYYY-MM-DD-...",
-      "date": "YYYY-MM-DD",
-      "quote": "Verbatim owner quote from docs/decisions.md",
-      "scope": "What this decision record approves"
-    }
-  ],
-  "registry_sha256": "SHA256_OF_COMPONENT_AND_PREMISE_LINES",
-  "theorems_sha256": "SHA256_OF_THEOREM_AND_AXIOM_LINES",
-  "inputs": {
-    "flake.lock": "SHA256",
-    "flake.nix": "SHA256",
-    "lake-manifest.json": "SHA256",
-    "lean-toolchain": "SHA256"
-  }
-}
-```
+`trusted_approval.py` separates candidate consistency (`verify_candidate`) from
+`authenticate_owner`, the single integration point for the owner-chosen
+authenticator. Its versioned canonical digest is SHA-256 of compact, sorted-key
+JSON containing `schema: 1`, the component/premise row digest, the theorem/axiom
+closure row digest, and the consumed input digests (`flake.nix`, `flake.lock`,
+`lean-toolchain`, `lake-manifest.json`). It prints `trust-candidate sha256:...`
+as the input for owner approval, never as authorization. Controls include the
+reviewer's bypass: growing the report and regenerating JSON with old citations.
 
-For each entry in `decisions`, `trusted_approval.py` checks that the `<a id="...">`
-anchor exists in `docs/decisions.md` and that its decision block carries both the
-dated `(owner, YYYY-MM-DD:` header and the verbatim quoted owner answer (`"..."`).
-It then verifies that `registry_sha256` matches the report's `component ` and
-`premise ` rows, `theorems_sha256` matches the report's `theorem ` and `axiom `
-rows, and `inputs` matches the SHA-256 digests of `flake.nix`, `flake.lock`,
-`lean-toolchain` and `lake-manifest.json`. Because approval binds content digests
-and `docs/decisions.md` anchors rather than a git ancestor SHA or a mutable CI
-variable, rebasing never breaks an unchanged baseline, while any unapproved
-component/premise growth, theorem axiom change, pin change, or decision tamper
-fails closed. Full bidirectional decision provenance across all gates is tracked
-under `R-0678` (with `R-0509` owning T1/X2/N8 trusted identities and rebuilds).
+Pending owner decision, owned by **R-0678** with **R-0509**: choose authentication
+against authority outside the branch writer's control and explicitly approve the
+initial canonical digest. The coordinator takes this to the owner and maintains
+the roadmap rows. No signature scheme, protected channel, or historical quote is
+selected or inferred here. After that decision, implement its verifier at
+`authenticate_owner` and test tampering and replay against the chosen authority.
 
 ## PR and scheduled evidence (X2 / N8)
 
