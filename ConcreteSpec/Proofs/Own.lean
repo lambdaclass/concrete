@@ -313,11 +313,11 @@ example : WellFormed exclusive ∧ (reborrowTo exclusive ⟨0⟩ [] .mutable 0).
     WellFormed child := by decide
 example : accessOwner shared ⟨0⟩ .shared = some shared ∧ WellFormed shared := by decide
 example : accessLoan child ⟨1⟩ .mutable = some child ∧ WellFormed child := by decide
-/-- Planted move/access mutations destroy an owned root under a live loan. -/
+/-- Malformed move/access observations destroy an owned root under a live loan. -/
 example : ¬ WellFormed { shared with slots := shared.slots.map fun x =>
     { x with status := .moved } } := by decide
 example : ¬ WellFormed { child with slots := [] } := by decide
-/-- Planted borrow mutation reuses the supply; planted reborrow mutation loses its parent. -/
+/-- A malformed borrow reuses the supply; a malformed reborrow loses its parent. -/
 example : ¬ WellFormed { shared with nextLoan := 0 } := by decide
 example : ¬ WellFormed { child with loans := child.loans.filter (·.id != ⟨0⟩) } := by decide
 /-- Negated success with each operational permission violated. -/
@@ -564,9 +564,9 @@ example : WellFormed called ∧ (endLocals 1 called).isSome = true ∧
     WellFormed ((endLocals 1 called).getD initial) := by decide
 example : (leave called).isSome = true ∧ WellFormed ((leave called).getD initial) := by decide
 example : life types (.bind y) shared = bind types y shared := by rfl
-/-- Planted reinitialization/drop/leave mutations lose a borrowed root. -/
+/-- Malformed reinitialization/drop/leave observations lose a borrowed root. -/
 example : ¬ WellFormed { shared with slots := [] } := by decide
-/-- Planted bind mutation reuses the place identity. -/
+/-- A malformed bind reuses the place identity. -/
 example : ¬ WellFormed { initial with slots := initial.slots ++ initial.slots } := by decide
 /-- Planted entry/adoption mutation assigns an unissued activation. -/
 example : ¬ WellFormed { shared with loans := shared.loans.map fun l =>
@@ -966,7 +966,7 @@ example : (passDown waiting ⟨0⟩ y) = none := by decide
 example : callLife types .leave waiting = none := by decide
 example : (callLife types (.enter [y]) waiting).isSome = true := by decide
 example : CallState.WellFormed ((callLife types (.enter [y]) waiting).getD waiting) := by decide
-/-- Planted bookkeeping mutations: duplicate parameters and a dangling identity. -/
+/-- Malformed bookkeeping observations: duplicate parameters and a dangling identity. -/
 example : ¬ CallState.WellFormed { waiting with pending := waiting.pending ++ waiting.pending } := by decide
 example : ¬ CallState.WellFormed { waiting with own := exclusive } := by decide
 /-- Planted leave mutation: discard loans but retain the pending buffer. -/
@@ -3763,6 +3763,9 @@ theorem passOwner_call_preserves (s : CallState) (p : Hybrid.Place) (path : List
   | some t => exact passOwner_call_preserves_result s t p path m x hs he
 
 namespace PreservationEvidence
+/-- A fresh callee with a pending direct owner argument, before adoption. -/
+def adoptionInput : State :=
+  (enter Examples.types [] DirectArgumentWitnesses.waiting.own).getD Examples.initial
 
 /-- A duplicate typed owner identity, as produced by a broken allocator or cleanup.
 The corruption is in instrumentation, not in the expected well-formedness predicate. -/
@@ -3826,144 +3829,144 @@ namespace PreservationEvidence
 open Examples
 
 /-- Instance (law `ConcreteSpec.Core.Own.move_preserves`, case `ConcreteSpec.Core.Own.Examples.initial`). -/
-example : StateResult ((fun (s : State) (p : Hybrid.Place) => move s p) initial ⟨0⟩) :=
+example : StateResult (move (initial) (⟨0⟩)) :=
   @move_preserves initial ⟨0⟩ (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Own.move_preserves`, case `ConcreteSpec.Core.Own.Examples.initial`, subject `ConcreteSpec.Core.Own.move`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.moveCorrupt`). -/
-example : ((fun (s : State) (_p : Hybrid.Place) => WellFormed s) initial ⟨0⟩) ∧ ¬ StateResult ((fun (s : State) (p : Hybrid.Place) => moveCorrupt s p) initial ⟨0⟩) := by decide
+example : (WellFormed (initial)) ∧ ¬ StateResult (moveCorrupt (initial) (⟨0⟩)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.Own.reinitialize_preserves`, case `ConcreteSpec.Core.Own.LifecycleWitnesses.moved`). -/
-example : StateResult ((fun (s : State) (p : Hybrid.Place) => reinitialize s p) LifecycleWitnesses.moved ⟨0⟩) :=
+example : StateResult (reinitialize (LifecycleWitnesses.moved) (⟨0⟩)) :=
   @reinitialize_preserves LifecycleWitnesses.moved ⟨0⟩ (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Own.reinitialize_preserves`, case `ConcreteSpec.Core.Own.LifecycleWitnesses.moved`, subject `ConcreteSpec.Core.Own.reinitialize`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.reinitializeCorrupt`). -/
-example : ((fun (s : State) (_p : Hybrid.Place) => WellFormed s) LifecycleWitnesses.moved ⟨0⟩) ∧ ¬ StateResult ((fun (s : State) (p : Hybrid.Place) => reinitializeCorrupt s p) LifecycleWitnesses.moved ⟨0⟩) := by decide
+example : (WellFormed (LifecycleWitnesses.moved)) ∧ ¬ StateResult (reinitializeCorrupt (LifecycleWitnesses.moved) (⟨0⟩)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.Own.borrow_preserves`, case `ConcreteSpec.Core.Own.Examples.shared`). -/
-example : StateResult ((fun (s : State) (p : Hybrid.Place) (path : List Projection) (m : Mode) => borrow s p path m) shared ⟨0⟩ [.index 1] .shared) :=
+example : StateResult (borrow (shared) (⟨0⟩) ([.index 1]) (.shared)) :=
   @borrow_preserves shared ⟨0⟩ [.index 1] .shared (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Own.borrow_preserves`, case `ConcreteSpec.Core.Own.Examples.shared`, subject `ConcreteSpec.Core.Own.borrow`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.borrowCorrupt`). -/
-example : ((fun (s : State) (_p : Hybrid.Place) (_path : List Projection) (_m : Mode) => WellFormed s) shared ⟨0⟩ [.index 1] .shared) ∧ ¬ StateResult ((fun (s : State) (p : Hybrid.Place) (path : List Projection) (m : Mode) => borrowCorrupt s p path m) shared ⟨0⟩ [.index 1] .shared) := by decide
+example : (WellFormed (shared)) ∧ ¬ StateResult (borrowCorrupt (shared) (⟨0⟩) ([.index 1]) (.shared)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.Own.reborrowTo_preserves`, case `ConcreteSpec.Core.Own.Examples.exclusive`). -/
-example : StateResult ((fun (s : State) (i : LoanId) (path : List Projection) (m : Mode) (a : Nat) => reborrowTo s i path m a) exclusive ⟨0⟩ [.index 1] .mutable 0) :=
+example : StateResult (reborrowTo (exclusive) (⟨0⟩) ([.index 1]) (.mutable) (0)) :=
   @reborrowTo_preserves exclusive ⟨0⟩ [.index 1] .mutable 0 (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Own.reborrowTo_preserves`, case `ConcreteSpec.Core.Own.Examples.exclusive`, subject `ConcreteSpec.Core.Own.reborrowTo`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.reborrowToCorrupt`). -/
-example : ((fun (s : State) (_i : LoanId) (_path : List Projection) (_m : Mode) (_a : Nat) => WellFormed s) exclusive ⟨0⟩ [.index 1] .mutable 0) ∧ ¬ StateResult ((fun (s : State) (i : LoanId) (path : List Projection) (m : Mode) (a : Nat) => reborrowToCorrupt s i path m a) exclusive ⟨0⟩ [.index 1] .mutable 0) := by decide
+example : (WellFormed (exclusive)) ∧ ¬ StateResult (reborrowToCorrupt (exclusive) (⟨0⟩) ([.index 1]) (.mutable) (0)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.Own.reborrow_preserves`, case `ConcreteSpec.Core.Own.Examples.exclusive`). -/
-example : StateResult ((fun (s : State) (i : LoanId) (path : List Projection) (m : Mode) => reborrow s i path m) exclusive ⟨0⟩ [.index 1] .mutable) :=
+example : StateResult (reborrow (exclusive) (⟨0⟩) ([.index 1]) (.mutable)) :=
   @reborrow_preserves exclusive ⟨0⟩ [.index 1] .mutable (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Own.reborrow_preserves`, case `ConcreteSpec.Core.Own.Examples.exclusive`, subject `ConcreteSpec.Core.Own.reborrow`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.reborrowCorrupt`). -/
-example : ((fun (s : State) (_i : LoanId) (_path : List Projection) (_m : Mode) => WellFormed s) exclusive ⟨0⟩ [.index 1] .mutable) ∧ ¬ StateResult ((fun (s : State) (i : LoanId) (path : List Projection) (m : Mode) => reborrowCorrupt s i path m) exclusive ⟨0⟩ [.index 1] .mutable) := by decide
+example : (WellFormed (exclusive)) ∧ ¬ StateResult (reborrowCorrupt (exclusive) (⟨0⟩) ([.index 1]) (.mutable)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.Own.endLoan_preserves`, case `ConcreteSpec.Core.Own.Examples.child`). -/
-example : StateResult ((fun (s : State) (i : LoanId) => endLoan s i) child ⟨1⟩) :=
+example : StateResult (endLoan (child) (⟨1⟩)) :=
   @endLoan_preserves child ⟨1⟩ (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Own.endLoan_preserves`, case `ConcreteSpec.Core.Own.Examples.child`, subject `ConcreteSpec.Core.Own.endLoan`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.endLoanCorrupt`). -/
-example : ((fun (s : State) (_i : LoanId) => WellFormed s) child ⟨1⟩) ∧ ¬ StateResult ((fun (s : State) (i : LoanId) => endLoanCorrupt s i) child ⟨1⟩) := by decide
+example : (WellFormed (child)) ∧ ¬ StateResult (endLoanCorrupt (child) (⟨1⟩)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.Own.bind_preserves`, case `ConcreteSpec.Core.Own.Examples.shared`). -/
-example : StateResult ((fun (types : Var → Option Descriptor) (s : State) (x : Var) => bind types x s) types shared y) :=
+example : StateResult (bind (types) (y) (shared)) :=
   @bind_preserves types shared y (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Own.bind_preserves`, case `ConcreteSpec.Core.Own.Examples.shared`, subject `ConcreteSpec.Core.Own.bind`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.bindCorrupt`). -/
-example : ((fun (_types : Var → Option Descriptor) (s : State) (_x : Var) => WellFormed s) types shared y) ∧ ¬ StateResult ((fun (types : Var → Option Descriptor) (s : State) (x : Var) => bindCorrupt types x s) types shared y) := by decide
+example : (WellFormed (shared)) ∧ ¬ StateResult (bindCorrupt (types) (y) (shared)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.Own.drop_preserves`, case `ConcreteSpec.Core.Own.LifecycleWitnesses.moved`). -/
-example : StateResult ((fun (s : State) (xs : List Var) => drop xs s) LifecycleWitnesses.moved [x]) :=
+example : StateResult (drop ([x]) (LifecycleWitnesses.moved)) :=
   @drop_preserves LifecycleWitnesses.moved [x] (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Own.drop_preserves`, case `ConcreteSpec.Core.Own.LifecycleWitnesses.moved`, subject `ConcreteSpec.Core.Own.drop`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.dropCorrupt`). -/
-example : ((fun (s : State) (_xs : List Var) => WellFormed s) LifecycleWitnesses.moved [x]) ∧ ¬ StateResult ((fun (s : State) (xs : List Var) => dropCorrupt xs s) LifecycleWitnesses.moved [x]) := by decide
+example : (WellFormed (LifecycleWitnesses.moved)) ∧ ¬ StateResult (dropCorrupt ([x]) (LifecycleWitnesses.moved)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.Own.enter_preserves`, case `ConcreteSpec.Core.Own.Examples.shared`). -/
-example : StateResult ((fun (types : Var → Option Descriptor) (s : State) (xs : List Var) => enter types xs s) types shared [y]) :=
+example : StateResult (enter (types) ([y]) (shared)) :=
   @enter_preserves types shared [y] (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Own.enter_preserves`, case `ConcreteSpec.Core.Own.Examples.shared`, subject `ConcreteSpec.Core.Own.enter`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.enterCorrupt`). -/
-example : ((fun (_types : Var → Option Descriptor) (s : State) (_xs : List Var) => WellFormed s) types shared [y]) ∧ ¬ StateResult ((fun (types : Var → Option Descriptor) (s : State) (xs : List Var) => enterCorrupt types xs s) types shared [y]) := by decide
+example : (WellFormed (shared)) ∧ ¬ StateResult (enterCorrupt (types) ([y]) (shared)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.Own.endLocals_preserves`, case `ConcreteSpec.Core.Own.LifecycleWitnesses.called`). -/
-example : StateResult ((fun (s : State) (a : Nat) => endLocals a s) LifecycleWitnesses.called 1) :=
+example : StateResult (endLocals (1) (LifecycleWitnesses.called)) :=
   @endLocals_preserves LifecycleWitnesses.called 1 (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Own.endLocals_preserves`, case `ConcreteSpec.Core.Own.LifecycleWitnesses.called`, subject `ConcreteSpec.Core.Own.endLocals`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.endLocalsCorrupt`). -/
-example : ((fun (s : State) (_a : Nat) => WellFormed s) LifecycleWitnesses.called 1) ∧ ¬ StateResult ((fun (s : State) (a : Nat) => endLocalsCorrupt a s) LifecycleWitnesses.called 1) := by decide
+example : (WellFormed (LifecycleWitnesses.called)) ∧ ¬ StateResult (endLocalsCorrupt (1) (LifecycleWitnesses.called)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.Own.leave_preserves`, case `ConcreteSpec.Core.Own.RoundThreeWitnesses.localLoan`). -/
-example : StateResult ((fun (s : State) => leave s) RoundThreeWitnesses.localLoan) :=
+example : StateResult (leave (RoundThreeWitnesses.localLoan)) :=
   @leave_preserves RoundThreeWitnesses.localLoan (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Own.leave_preserves`, case `ConcreteSpec.Core.Own.RoundThreeWitnesses.localLoan`, subject `ConcreteSpec.Core.Own.leave`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.leaveCorrupt`). -/
-example : ((fun (s : State) => WellFormed s) RoundThreeWitnesses.localLoan) ∧ ¬ StateResult ((fun (s : State) => leaveCorrupt s) RoundThreeWitnesses.localLoan) := by decide
+example : (WellFormed (RoundThreeWitnesses.localLoan)) ∧ ¬ StateResult (leaveCorrupt (RoundThreeWitnesses.localLoan)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.Own.enterDown_preserves`, case `ConcreteSpec.Core.Own.Examples.exclusive`). -/
-example : StateResult ((fun (s : State) (args : List (Var × LoanId)) => enterDown s args) exclusive [(y, ⟨0⟩)]) :=
+example : StateResult (enterDown (exclusive) ([(y, ⟨0⟩)])) :=
   @enterDown_preserves exclusive [(y, ⟨0⟩)] (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Own.enterDown_preserves`, case `ConcreteSpec.Core.Own.Examples.exclusive`, subject `ConcreteSpec.Core.Own.enterDown`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.enterDownCorrupt`). -/
-example : ((fun (s : State) (_args : List (Var × LoanId)) => WellFormed s) exclusive [(y, ⟨0⟩)]) ∧ ¬ StateResult ((fun (s : State) (args : List (Var × LoanId)) => enterDownCorrupt s args) exclusive [(y, ⟨0⟩)]) := by decide
+example : (WellFormed (exclusive)) ∧ ¬ StateResult (enterDownCorrupt (exclusive) ([(y, ⟨0⟩)])) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.Own.life_preserves`, case `ConcreteSpec.Core.Own.Examples.shared`). -/
-example : StateResult ((fun (types : Var → Option Descriptor) (e : Exec.Life) (s : State) => life types e s) types (.bind y) shared) :=
+example : StateResult (life (types) ((.bind y)) (shared)) :=
   @life_preserves types (.bind y) shared (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Own.life_preserves`, case `ConcreteSpec.Core.Own.Examples.shared`, subject `ConcreteSpec.Core.Own.life`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.lifeCorrupt`). -/
-example : ((fun (_types : Var → Option Descriptor) (_e : Exec.Life) (s : State) => WellFormed s) types (.bind y) shared) ∧ ¬ StateResult ((fun (types : Var → Option Descriptor) (e : Exec.Life) (s : State) => lifeCorrupt types e s) types (.bind y) shared) := by decide
+example : (WellFormed (shared)) ∧ ¬ StateResult (lifeCorrupt (types) ((.bind y)) (shared)) := by decide
 
-/-- Instance (law `ConcreteSpec.Core.Own.adoptDown_preserves`, case `ConcreteSpec.Core.Own.DirectArgumentWitnesses.called`). -/
-example : StateResult ((fun (s : State) (args : List (Var × LoanId)) => adoptDown s args) DirectArgumentWitnesses.called.own []) :=
-  @adoptDown_preserves DirectArgumentWitnesses.called.own [] (by decide)
+/-- Instance (law `ConcreteSpec.Core.Own.adoptDown_preserves`, case `ConcreteSpec.Core.Own.PreservationEvidence.adoptionInput`). -/
+example : StateResult (adoptDown (adoptionInput) (DirectArgumentWitnesses.waiting.pending)) :=
+  @adoptDown_preserves adoptionInput DirectArgumentWitnesses.waiting.pending (by decide)
 
-/-- Planted (law `ConcreteSpec.Core.Own.adoptDown_preserves`, case `ConcreteSpec.Core.Own.DirectArgumentWitnesses.called`, subject `ConcreteSpec.Core.Own.adoptDown`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.adoptDownCorrupt`). -/
-example : ((fun (s : State) (_args : List (Var × LoanId)) => WellFormed s) DirectArgumentWitnesses.called.own []) ∧ ¬ StateResult ((fun (s : State) (args : List (Var × LoanId)) => adoptDownCorrupt s args) DirectArgumentWitnesses.called.own []) := by decide
+/-- Planted (law `ConcreteSpec.Core.Own.adoptDown_preserves`, case `ConcreteSpec.Core.Own.PreservationEvidence.adoptionInput`, subject `ConcreteSpec.Core.Own.adoptDown`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.adoptDownCorrupt`). -/
+example : (WellFormed (adoptionInput)) ∧ ¬ StateResult (adoptDownCorrupt (adoptionInput) (DirectArgumentWitnesses.waiting.pending)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.Own.passDown_preserves`, case `ConcreteSpec.Core.Own.Examples.exclusive`). -/
-example : CallOwnResult ((fun (s : CallState) (i : LoanId) (x : Var) => passDown s i x) ⟨exclusive, []⟩ ⟨0⟩ y) :=
+example : CallOwnResult (passDown (⟨exclusive, []⟩) (⟨0⟩) (y)) :=
   @passDown_preserves ⟨exclusive, []⟩ ⟨0⟩ y (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Own.passDown_preserves`, case `ConcreteSpec.Core.Own.Examples.exclusive`, subject `ConcreteSpec.Core.Own.passDown`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.passDownCorrupt`). -/
-example : ((fun (s : CallState) (_i : LoanId) (_x : Var) => WellFormed s.own) ⟨exclusive, []⟩ ⟨0⟩ y) ∧ ¬ CallOwnResult ((fun (s : CallState) (i : LoanId) (x : Var) => passDownCorrupt s i x) ⟨exclusive, []⟩ ⟨0⟩ y) := by decide
+example : (WellFormed (⟨exclusive, []⟩ : CallState).own) ∧ ¬ CallOwnResult (passDownCorrupt (⟨exclusive, []⟩) (⟨0⟩) (y)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.Own.passDown_call_preserves`, case `ConcreteSpec.Core.Own.Examples.exclusive`). -/
-example : CallResult ((fun (s : CallState) (i : LoanId) (x : Var) => passDown s i x) ⟨exclusive, []⟩ ⟨0⟩ y) :=
+example : CallResult (passDown (⟨exclusive, []⟩) (⟨0⟩) (y)) :=
   @passDown_call_preserves ⟨exclusive, []⟩ ⟨0⟩ y (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Own.passDown_call_preserves`, case `ConcreteSpec.Core.Own.Examples.exclusive`, subject `ConcreteSpec.Core.Own.passDown`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.passDownCorrupt`). -/
-example : ((fun (s : CallState) (_i : LoanId) (_x : Var) => CallState.WellFormed s) ⟨exclusive, []⟩ ⟨0⟩ y) ∧ ¬ CallResult ((fun (s : CallState) (i : LoanId) (x : Var) => passDownCorrupt s i x) ⟨exclusive, []⟩ ⟨0⟩ y) := by decide
+example : (CallState.WellFormed (⟨exclusive, []⟩)) ∧ ¬ CallResult (passDownCorrupt (⟨exclusive, []⟩) (⟨0⟩) (y)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.Own.callLife_preserves`, case `ConcreteSpec.Core.Own.CallWitnesses.waiting`). -/
-example : CallOwnResult ((fun (types : Var → Option Descriptor) (e : Exec.Life) (s : CallState) => callLife types e s) types (.enter [y]) CallWitnesses.waiting) :=
+example : CallOwnResult (callLife (types) ((.enter [y])) (CallWitnesses.waiting)) :=
   @callLife_preserves types (.enter [y]) CallWitnesses.waiting (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Own.callLife_preserves`, case `ConcreteSpec.Core.Own.CallWitnesses.waiting`, subject `ConcreteSpec.Core.Own.callLife`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.callLifeCorrupt`). -/
-example : ((fun (_types : Var → Option Descriptor) (_e : Exec.Life) (s : CallState) => WellFormed s.own) types (.enter [y]) CallWitnesses.waiting) ∧ ¬ CallOwnResult ((fun (types : Var → Option Descriptor) (e : Exec.Life) (s : CallState) => callLifeCorrupt types e s) types (.enter [y]) CallWitnesses.waiting) := by decide
+example : (WellFormed (CallWitnesses.waiting).own) ∧ ¬ CallOwnResult (callLifeCorrupt (types) ((.enter [y])) (CallWitnesses.waiting)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.Own.callLife_call_preserves`, case `ConcreteSpec.Core.Own.CallWitnesses.waiting`). -/
-example : CallResult ((fun (types : Var → Option Descriptor) (e : Exec.Life) (s : CallState) => callLife types e s) types (.enter [y]) CallWitnesses.waiting) :=
+example : CallResult (callLife (types) ((.enter [y])) (CallWitnesses.waiting)) :=
   @callLife_call_preserves types (.enter [y]) CallWitnesses.waiting (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Own.callLife_call_preserves`, case `ConcreteSpec.Core.Own.CallWitnesses.waiting`, subject `ConcreteSpec.Core.Own.callLife`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.callLifeCorrupt`). -/
-example : ((fun (_types : Var → Option Descriptor) (_e : Exec.Life) (s : CallState) => CallState.WellFormed s) types (.enter [y]) CallWitnesses.waiting) ∧ ¬ CallResult ((fun (types : Var → Option Descriptor) (e : Exec.Life) (s : CallState) => callLifeCorrupt types e s) types (.enter [y]) CallWitnesses.waiting) := by decide
+example : (CallState.WellFormed (CallWitnesses.waiting)) ∧ ¬ CallResult (callLifeCorrupt (types) ((.enter [y])) (CallWitnesses.waiting)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.Own.passOwner_preserves`, case `ConcreteSpec.Core.Own.DirectArgumentWitnesses.caller`). -/
-example : CallOwnResult ((fun (s : CallState) (p : Hybrid.Place) (path : List Projection) (m : Mode) (x : Var) => passOwner s p path m x) DirectArgumentWitnesses.caller ⟨1⟩ [.index 3] .mutable DirectArgumentWitnesses.z) :=
+example : CallOwnResult (passOwner (DirectArgumentWitnesses.caller) (⟨1⟩) ([.index 3]) (.mutable) (DirectArgumentWitnesses.z)) :=
   @passOwner_preserves DirectArgumentWitnesses.caller ⟨1⟩ [.index 3] .mutable DirectArgumentWitnesses.z (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Own.passOwner_preserves`, case `ConcreteSpec.Core.Own.DirectArgumentWitnesses.caller`, subject `ConcreteSpec.Core.Own.passOwner`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.passOwnerCorrupt`). -/
-example : ((fun (s : CallState) (_p : Hybrid.Place) (_path : List Projection) (_m : Mode) (_x : Var) => WellFormed s.own) DirectArgumentWitnesses.caller ⟨1⟩ [.index 3] .mutable DirectArgumentWitnesses.z) ∧ ¬ CallOwnResult ((fun (s : CallState) (p : Hybrid.Place) (path : List Projection) (m : Mode) (x : Var) => passOwnerCorrupt s p path m x) DirectArgumentWitnesses.caller ⟨1⟩ [.index 3] .mutable DirectArgumentWitnesses.z) := by decide
+example : (WellFormed (DirectArgumentWitnesses.caller).own) ∧ ¬ CallOwnResult (passOwnerCorrupt (DirectArgumentWitnesses.caller) (⟨1⟩) ([.index 3]) (.mutable) (DirectArgumentWitnesses.z)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.Own.passOwner_call_preserves`, case `ConcreteSpec.Core.Own.DirectArgumentWitnesses.caller`). -/
-example : CallResult ((fun (s : CallState) (p : Hybrid.Place) (path : List Projection) (m : Mode) (x : Var) => passOwner s p path m x) DirectArgumentWitnesses.caller ⟨1⟩ [.index 3] .mutable DirectArgumentWitnesses.z) :=
+example : CallResult (passOwner (DirectArgumentWitnesses.caller) (⟨1⟩) ([.index 3]) (.mutable) (DirectArgumentWitnesses.z)) :=
   @passOwner_call_preserves DirectArgumentWitnesses.caller ⟨1⟩ [.index 3] .mutable DirectArgumentWitnesses.z (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Own.passOwner_call_preserves`, case `ConcreteSpec.Core.Own.DirectArgumentWitnesses.caller`, subject `ConcreteSpec.Core.Own.passOwner`, mutant `ConcreteSpec.Core.Own.PreservationEvidence.passOwnerCorrupt`). -/
-example : ((fun (s : CallState) (_p : Hybrid.Place) (_path : List Projection) (_m : Mode) (_x : Var) => CallState.WellFormed s) DirectArgumentWitnesses.caller ⟨1⟩ [.index 3] .mutable DirectArgumentWitnesses.z) ∧ ¬ CallResult ((fun (s : CallState) (p : Hybrid.Place) (path : List Projection) (m : Mode) (x : Var) => passOwnerCorrupt s p path m x) DirectArgumentWitnesses.caller ⟨1⟩ [.index 3] .mutable DirectArgumentWitnesses.z) := by decide
+example : (CallState.WellFormed (DirectArgumentWitnesses.caller)) ∧ ¬ CallResult (passOwnerCorrupt (DirectArgumentWitnesses.caller) (⟨1⟩) ([.index 3]) (.mutable) (DirectArgumentWitnesses.z)) := by decide
 
 end PreservationEvidence
 
@@ -4132,6 +4135,27 @@ example : ResultSatisfies (fun t : State => LiveDestinations t) (leave (RoundThr
 
 /-- Planted (law `ConcreteSpec.Core.Own.leave_live`, case `ConcreteSpec.Core.Own.LifetimeEvidence.leave_liveCase`, subject `ConcreteSpec.Core.Own.leave`, mutant `ConcreteSpec.Core.Own.LifetimeEvidence.leaveStranded`). -/
 example : (LiveDestinations (RoundThreeWitnesses.localLoan)) ∧ ((RoundThreeWitnesses.localLoan).frames.head? = some (⟨1, [(y, ⟨1⟩)], []⟩ : Activation)) ∧ ¬ ResultSatisfies (fun t : State => LiveDestinations t) (leaveStranded (RoundThreeWitnesses.localLoan)) := by decide
+
+/-- The slot inventory remains complete when the variable lookup index is empty. -/
+def unindexedCopy : State :=
+  { initial with
+    slots := initial.slots.map fun x => { x with desc := { x.desc with copy := true } }
+    frames := [⟨0, [], []⟩] }
+
+/-- Instance (law `ConcreteSpec.Core.Own.leave_no_activation_slot`, case `ConcreteSpec.Core.Own.LifetimeEvidence.unindexedCopy`). -/
+example : ResultSatisfies (fun t : State => ∀ x ∈ t.slots, x.activation ≠ 0) (leave unindexedCopy) :=
+  @leave_no_activation_slot unindexedCopy ⟨0, [], []⟩ rfl
+
+/-- Planted (law `ConcreteSpec.Core.Own.leave_no_activation_slot`, case `ConcreteSpec.Core.Own.LifetimeEvidence.unindexedCopy`, subject `ConcreteSpec.Core.Own.leave`, mutant `ConcreteSpec.Core.Own.LifetimeEvidence.leaveIdentity`). -/
+example : unindexedCopy.frames.head? = some (⟨0, [], []⟩ : Activation) ∧
+    ¬ ResultSatisfies (fun t : State => ∀ x ∈ t.slots, x.activation ≠ 0) (leaveIdentity unindexedCopy) := by decide
+
+/-- Accepted: cleanup removes an unindexed Copy owner using the complete slot inventory. -/
+example : (leave unindexedCopy).isSome = true ∧
+    ((leave unindexedCopy).getD initial).slots = [] := by decide
+
+/-- Refused: an unindexed live linear obligation still prevents exit. -/
+example : leave { initial with frames := [⟨0, [], []⟩] } = none := by decide
 
 end LifetimeEvidence
 
