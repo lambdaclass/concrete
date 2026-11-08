@@ -841,10 +841,13 @@ ConcreteSpec.Core.ConstructKind.sequence.sizeOf_spec
 ConcreteSpec.Core.ConstructKind.skip.sizeOf_spec	
 ConcreteSpec.Core.ConstructName.isUnnamed.eq_1	
 ConcreteSpec.Core.ConstructName.isUnnamed.eq_2	
+ConcreteSpec.Core.ConstructName.isUnnamed_pin	
 ConcreteSpec.Core.ConstructName.isUnnamed_rename	
 ConcreteSpec.Core.ConstructName.named.inj	
 ConcreteSpec.Core.ConstructName.named.injEq	propext
 ConcreteSpec.Core.ConstructName.named.sizeOf_spec	
+ConcreteSpec.Core.ConstructName.pin.eq_1	
+ConcreteSpec.Core.ConstructName.pin.eq_2	
 ConcreteSpec.Core.ConstructName.rename.eq_1	
 ConcreteSpec.Core.ConstructName.rename.eq_2	
 ConcreteSpec.Core.ConstructName.unnamed.inj	
@@ -866,13 +869,15 @@ ConcreteSpec.Core.EncodedPremise.mk.injEq	propext
 ConcreteSpec.Core.EncodedPremise.mk.sizeOf_spec	
 ConcreteSpec.Core.EncodedPremise.read.eq_1	
 ConcreteSpec.Core.EncodedPremise.read_encode	
-ConcreteSpec.Core.EncodedPremise.read_unknown	propext
+ConcreteSpec.Core.EncodedPremise.read_unknown	
+ConcreteSpec.Core.EncodedPremise.read_version_mismatch	propext
 ConcreteSpec.Core.EventTag.mk.inj	
 ConcreteSpec.Core.EventTag.mk.injEq	propext
 ConcreteSpec.Core.EventTag.mk.sizeOf_spec	
 ConcreteSpec.Core.EvidenceContext.mk.inj	
 ConcreteSpec.Core.EvidenceContext.mk.injEq	propext
 ConcreteSpec.Core.EvidenceContext.mk.sizeOf_spec	
+ConcreteSpec.Core.EvidenceDemo.evidence._proof_1	
 ConcreteSpec.Core.Exec.Answer.label.eq_1	
 ConcreteSpec.Core.Exec.Answer.mk.inj	
 ConcreteSpec.Core.Exec.Answer.mk.injEq	propext
@@ -1431,24 +1436,57 @@ ConcreteSpec.Core.IntTy.u16.sizeOf_spec
 ConcreteSpec.Core.IntTy.u32.sizeOf_spec	
 ConcreteSpec.Core.IntTy.u64.sizeOf_spec	
 ConcreteSpec.Core.IntTy.u8.sizeOf_spec	
+ConcreteSpec.Core.KeyConstruct.RouteAvoidsKind.eq_1	propext
+ConcreteSpec.Core.KeyConstruct.SubtreeAvoidsKind.eq_1	propext
 ConcreteSpec.Core.KeyConstruct._sizeOf_2_eq	
+ConcreteSpec.Core.KeyConstruct.assignFunctionTable.eq_1	
+ConcreteSpec.Core.KeyConstruct.assignProgramTables.eq_1	
+ConcreteSpec.Core.KeyConstruct.assignProgramTables_outsideEdit	propext
 ConcreteSpec.Core.KeyConstruct.brecOn.eq	
 ConcreteSpec.Core.KeyConstruct.brecOn_1.eq	
+ConcreteSpec.Core.KeyConstruct.childScope.eq_1	
 ConcreteSpec.Core.KeyConstruct.descendantKey.eq_1	propext
 ConcreteSpec.Core.KeyConstruct.descendant_insert_differentKind	Quot.sound propext
+ConcreteSpec.Core.KeyConstruct.descendant_insert_differentKind._simp_1_3	propext
 ConcreteSpec.Core.KeyConstruct.descendant_insert_named	Quot.sound propext
+ConcreteSpec.Core.KeyConstruct.descendant_named_ancestor_resets_scope	propext
+ConcreteSpec.Core.KeyConstruct.descendant_pin_other	Quot.sound propext
 ConcreteSpec.Core.KeyConstruct.descendant_rename_named	propext
 ConcreteSpec.Core.KeyConstruct.descendant_rename_other	Quot.sound propext
 ConcreteSpec.Core.KeyConstruct.key.eq_1	
 ConcreteSpec.Core.KeyConstruct.key_insert_differentKind	Quot.sound propext
 ConcreteSpec.Core.KeyConstruct.key_insert_named	Quot.sound propext
+ConcreteSpec.Core.KeyConstruct.key_pin_other	Quot.sound propext
+ConcreteSpec.Core.KeyConstruct.key_pin_unnamed	propext
 ConcreteSpec.Core.KeyConstruct.key_rename_named	propext
 ConcreteSpec.Core.KeyConstruct.key_rename_other	Quot.sound propext
 ConcreteSpec.Core.KeyConstruct.mk.inj	
 ConcreteSpec.Core.KeyConstruct.mk.injEq	propext
 ConcreteSpec.Core.KeyConstruct.mk.sizeOf_spec	
+ConcreteSpec.Core.KeyConstruct.numberFunctionKeys.eq_1	
+ConcreteSpec.Core.KeyConstruct.numberFunctionKeys.eq_2	
+ConcreteSpec.Core.KeyConstruct.numberFunctionKeys.eq_def	
+ConcreteSpec.Core.KeyConstruct.numberFunctionKeys_snd	propext
+ConcreteSpec.Core.KeyConstruct.pathAt.eq_1	propext
+ConcreteSpec.Core.KeyConstruct.pathAtIn.eq_1	propext
+ConcreteSpec.Core.KeyConstruct.pathAtIn.eq_2	propext
+ConcreteSpec.Core.KeyConstruct.pathAtIn.eq_def	propext
+ConcreteSpec.Core.KeyConstruct.pathAtIn_insert_differentKind	Quot.sound propext
+ConcreteSpec.Core.KeyConstruct.pathAtIn_insert_differentKind._simp_1_6	propext
+ConcreteSpec.Core.KeyConstruct.pathAtIn_insert_named	Quot.sound propext
+ConcreteSpec.Core.KeyConstruct.pathAtIn_replace_same_unnamed	Quot.sound propext
+ConcreteSpec.Core.KeyConstruct.pathAt_at_length	Quot.sound propext
+ConcreteSpec.Core.KeyConstruct.pathAt_insert_after	Quot.sound propext
+ConcreteSpec.Core.KeyConstruct.pathAt_insert_differentKind	Quot.sound propext
+ConcreteSpec.Core.KeyConstruct.pathAt_insert_named	Quot.sound propext
+ConcreteSpec.Core.KeyConstruct.pin.eq_1	
 ConcreteSpec.Core.KeyConstruct.rename.eq_1	
+ConcreteSpec.Core.KeyConstruct.routeAvoidsKind.eq_1	propext
+ConcreteSpec.Core.KeyConstruct.routeAvoidsKind.eq_2	propext
+ConcreteSpec.Core.KeyConstruct.routeAvoidsKind.eq_def	propext
 ConcreteSpec.Core.KeyConstruct.segment.eq_1	
+ConcreteSpec.Core.KeyConstruct.segment_replace_same_unnamed	Quot.sound propext
+ConcreteSpec.Core.KeyConstruct.subtreeAvoidsKind.eq_1	propext
 ConcreteSpec.Core.KeySegment.mk.inj	
 ConcreteSpec.Core.KeySegment.mk.injEq	propext
 ConcreteSpec.Core.KeySegment.mk.sizeOf_spec	
@@ -1839,6 +1877,7 @@ ConcreteSpec.Core.Observe.Terminal.trapped.sizeOf_spec
 ConcreteSpec.Core.Observe.ValidTrace.answer_projection	propext
 ConcreteSpec.Core.Observe.ValidTrace.brecOn	
 ConcreteSpec.Core.Observe.ValidTrace.outputs	propext
+ConcreteSpec.Core.Observe.badTabSpan._proof_1	
 ConcreteSpec.Core.Observe.blocked_silent_internal_steps	propext
 ConcreteSpec.Core.Observe.byteColumn.eq_1	
 ConcreteSpec.Core.Observe.byteColumn_tab	Quot.sound propext
@@ -1863,6 +1902,7 @@ ConcreteSpec.Core.Observe.trapLine.eq_1	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Observe.trapLineChars.eq_1	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Observe.trapLine_injective	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Observe.trapTerminal.eq_1	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Observe.trapTerminal_valid_location	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Observe.trap_line_uses_byte_columns	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Observe.visible.eq_1	
 ConcreteSpec.Core.Observe.visiblePrefix.eq_1	
@@ -1872,8 +1912,6 @@ ConcreteSpec.Core.Observe.visiblePrefix_prefix._proof_1_2	Quot.sound propext
 ConcreteSpec.Core.Observe.visiblePrefix_succ	Quot.sound propext
 ConcreteSpec.Core.OutOfRange.ofNat_ctorIdx	
 ConcreteSpec.Core.OutOfRange.outOfRange.sizeOf_spec	
-ConcreteSpec.Core.OutsideFunctionEdit.keysUnchanged	
-ConcreteSpec.Core.OutsideFunctionEdit.persistentKeys	
 ConcreteSpec.Core.PackageId.mk.inj	
 ConcreteSpec.Core.PackageId.mk.injEq	propext
 ConcreteSpec.Core.PackageId.mk.sizeOf_spec	
@@ -1893,6 +1931,15 @@ ConcreteSpec.Core.PremiseId.mk.inj
 ConcreteSpec.Core.PremiseId.mk.injEq	propext
 ConcreteSpec.Core.PremiseId.mk.sizeOf_spec	
 ConcreteSpec.Core.PremiseKind.assume.sizeOf_spec	
+ConcreteSpec.Core.PremiseKind.decode.eq_1	
+ConcreteSpec.Core.PremiseKind.decode.eq_2	
+ConcreteSpec.Core.PremiseKind.decode.eq_3	
+ConcreteSpec.Core.PremiseKind.decode.eq_4	
+ConcreteSpec.Core.PremiseKind.decode.eq_5	
+ConcreteSpec.Core.PremiseKind.decode.eq_6	
+ConcreteSpec.Core.PremiseKind.decode.eq_7	
+ConcreteSpec.Core.PremiseKind.decode.eq_8	
+ConcreteSpec.Core.PremiseKind.decode_eq_none_of_forall_encode_ne	
 ConcreteSpec.Core.PremiseKind.entropy.sizeOf_spec	
 ConcreteSpec.Core.PremiseKind.foreignFunction.sizeOf_spec	
 ConcreteSpec.Core.PremiseKind.heap.sizeOf_spec	
@@ -2055,11 +2102,13 @@ ConcreteSpec.Core.RuleId.mk.inj
 ConcreteSpec.Core.RuleId.mk.injEq	propext
 ConcreteSpec.Core.RuleId.mk.sizeOf_spec	
 ConcreteSpec.Core.SafetyEvidence.discharge._proof_1	
-ConcreteSpec.Core.SafetyEvidence.discharge.eq_1	Classical.choice Quot.sound propext
-ConcreteSpec.Core.SafetyEvidence.discharge_context_mismatch	Classical.choice Quot.sound propext
-ConcreteSpec.Core.SafetyEvidence.discharge_obligation_mismatch	Classical.choice Quot.sound propext
-ConcreteSpec.Core.SafetyEvidence.discharge_proposition_mismatch	Classical.choice Quot.sound propext
-ConcreteSpec.Core.SafetyEvidence.discharge_sound	Classical.choice Quot.sound propext
+ConcreteSpec.Core.SafetyEvidence.discharge._proof_2	
+ConcreteSpec.Core.SafetyEvidence.discharge.eq_1	propext
+ConcreteSpec.Core.SafetyEvidence.discharge_context_mismatch	propext
+ConcreteSpec.Core.SafetyEvidence.discharge_obligation_mismatch	propext
+ConcreteSpec.Core.SafetyEvidence.discharge_sound	propext
+ConcreteSpec.Core.SafetyEvidence.discharge_target_mismatch	propext
+ConcreteSpec.Core.SafetyEvidence.discharge_unregistered	propext
 ConcreteSpec.Core.SafetyEvidence.mk.inj	
 ConcreteSpec.Core.SafetyEvidence.mk.injEq	propext
 ConcreteSpec.Core.SafetyEvidence.mk.sizeOf_spec	
@@ -2067,12 +2116,15 @@ ConcreteSpec.Core.SafetyEvidence.proof
 ConcreteSpec.Core.SafetyObligation.mk.inj	
 ConcreteSpec.Core.SafetyObligation.mk.injEq	propext
 ConcreteSpec.Core.SafetyObligation.mk.sizeOf_spec	
-ConcreteSpec.Core.SegmentName.label.inj	
-ConcreteSpec.Core.SegmentName.label.injEq	propext
-ConcreteSpec.Core.SegmentName.label.sizeOf_spec	
+ConcreteSpec.Core.SegmentName.named.inj	
+ConcreteSpec.Core.SegmentName.named.injEq	propext
+ConcreteSpec.Core.SegmentName.named.sizeOf_spec	
 ConcreteSpec.Core.SegmentName.ordinal.inj	
 ConcreteSpec.Core.SegmentName.ordinal.injEq	propext
 ConcreteSpec.Core.SegmentName.ordinal.sizeOf_spec	
+ConcreteSpec.Core.SegmentName.pinned.inj	
+ConcreteSpec.Core.SegmentName.pinned.injEq	propext
+ConcreteSpec.Core.SegmentName.pinned.sizeOf_spec	
 ConcreteSpec.Core.SiteId.mk.inj	
 ConcreteSpec.Core.SiteId.mk.injEq	propext
 ConcreteSpec.Core.SiteId.mk.sizeOf_spec	
@@ -2189,11 +2241,11 @@ ConcreteSpec.Core.Vacuity.collidingOrigin._proof_1
 ConcreteSpec.Core.Vacuity.collidingOrigin._proof_2	
 ConcreteSpec.Core.Vacuity.collidingTop._proof_1	
 ConcreteSpec.Core.Vacuity.collidingTop._proof_2	
-ConcreteSpec.Core.Vacuity.discharged._proof_1	propext
-ConcreteSpec.Core.Vacuity.evidence._proof_1	
+ConcreteSpec.Core.Vacuity.demoOwner._proof_1	
+ConcreteSpec.Core.Vacuity.dischargeIgnoringContext._proof_1	
+ConcreteSpec.Core.Vacuity.discharged._proof_1	
 ConcreteSpec.Core.Vacuity.firstModule._proof_1	
 ConcreteSpec.Core.Vacuity.function._proof_1	
-ConcreteSpec.Core.Vacuity.obligation.eq_1	
 ConcreteSpec.Core.Vacuity.samePackageOtherOrigin._proof_1	
 ConcreteSpec.Core.Vacuity.secondModule._proof_1	
 ConcreteSpec.Core.Vacuity.swap._proof_1	
@@ -2496,12 +2548,21 @@ ConcreteSpec.Core.instDecidableEqRes.decEq._proof_9
 ConcreteSpec.Core.instDecidableEqRuleId.decEq._proof_1	
 ConcreteSpec.Core.instDecidableEqRuleId.decEq._proof_2	
 ConcreteSpec.Core.instDecidableEqRuleId.decEq._proof_3	
+ConcreteSpec.Core.instDecidableEqSafetyObligation.decEq._proof_1	
+ConcreteSpec.Core.instDecidableEqSafetyObligation.decEq._proof_2	
+ConcreteSpec.Core.instDecidableEqSafetyObligation.decEq._proof_3	
 ConcreteSpec.Core.instDecidableEqSegmentName.decEq._proof_1	
+ConcreteSpec.Core.instDecidableEqSegmentName.decEq._proof_10	
+ConcreteSpec.Core.instDecidableEqSegmentName.decEq._proof_11	
+ConcreteSpec.Core.instDecidableEqSegmentName.decEq._proof_12	
 ConcreteSpec.Core.instDecidableEqSegmentName.decEq._proof_2	
 ConcreteSpec.Core.instDecidableEqSegmentName.decEq._proof_3	
 ConcreteSpec.Core.instDecidableEqSegmentName.decEq._proof_4	
 ConcreteSpec.Core.instDecidableEqSegmentName.decEq._proof_5	
 ConcreteSpec.Core.instDecidableEqSegmentName.decEq._proof_6	
+ConcreteSpec.Core.instDecidableEqSegmentName.decEq._proof_7	
+ConcreteSpec.Core.instDecidableEqSegmentName.decEq._proof_8	
+ConcreteSpec.Core.instDecidableEqSegmentName.decEq._proof_9	
 ConcreteSpec.Core.instDecidableEqSiteId.decEq._proof_1	
 ConcreteSpec.Core.instDecidableEqSiteId.decEq._proof_2	
 ConcreteSpec.Core.instDecidableEqSliceId.decEq._proof_1	
@@ -3475,8 +3536,18 @@ _private.ConcreteSpec.Proofs.Hybrid.0.Except.toBool.match_1.eq_1
 _private.ConcreteSpec.Proofs.Hybrid.0.Except.toBool.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.AList.lookup.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.AList.lookup.match_1.eq_2	
+_private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.ConstructName.pin.match_1.eq_1	
+_private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.ConstructName.pin.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.ConstructName.rename.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.ConstructName.rename.match_1.eq_2	
+_private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.KeyConstruct.numberFunctionKeys.match_1.eq_1	
+_private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.KeyConstruct.numberFunctionKeys.match_1.eq_2	
+_private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.KeyConstruct.pathAtIn.match_1.eq_1	
+_private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.KeyConstruct.pathAtIn.match_1.eq_2	
+_private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.KeyConstruct.routeAvoidsKind.match_1.eq_1	
+_private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.KeyConstruct.routeAvoidsKind.match_1.eq_2	
+_private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.KeyConstruct.routeAvoidsKind.match_3.eq_1	
+_private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.KeyConstruct.routeAvoidsKind.match_3.eq_2	
 _private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.KeyConstruct.segment.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.KeyConstruct.segment.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.KeyConstruct.segment.match_1.eq_3	
@@ -3488,6 +3559,14 @@ _private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.LoadCollision.withModule.
 _private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.LoadCollision.withModule.match_3.eq_2	
 _private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.LoadedModules.findCollisionFrom.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.LoadedModules.findCollisionFrom.match_1.eq_2	
+_private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.PremiseKind.decode.match_1.eq_1	
+_private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.PremiseKind.decode.match_1.eq_2	
+_private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.PremiseKind.decode.match_1.eq_3	
+_private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.PremiseKind.decode.match_1.eq_4	
+_private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.PremiseKind.decode.match_1.eq_5	
+_private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.PremiseKind.decode.match_1.eq_6	
+_private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.PremiseKind.decode.match_1.eq_7	
+_private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.PremiseKind.decode.match_1.eq_8	
 _private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.SpecializationTable.canonicalize.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.SpecializationTable.canonicalize.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Ident.0.ConcreteSpec.Core.SpecializationTable.entryIndex.match_1.eq_1	
@@ -3621,8 +3700,6 @@ _private.ConcreteSpec.Proofs.Prim.0.ConcreteSpec.Core.Ghost.runStmts.match_5.eq_
 _private.ConcreteSpec.Proofs.Prim.0.ConcreteSpec.Core.Ghost.runStmts.match_5.eq_2	propext
 _private.ConcreteSpec.Proofs.Prim.0.ConcreteSpec.Core.Ghost.runStmts.match_8.eq_1	
 _private.ConcreteSpec.Proofs.Prim.0.ConcreteSpec.Core.Ghost.runStmts.match_8.eq_2	
-_private.ConcreteSpec.Proofs.Prim.0.ConcreteSpec.Core.ObligationTable.lookup.match_1.eq_1	
-_private.ConcreteSpec.Proofs.Prim.0.ConcreteSpec.Core.ObligationTable.lookup.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Prim.0.ConcreteSpec.Core.Prim.Term.eval.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Prim.0.ConcreteSpec.Core.Prim.Term.eval.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Prim.0.ConcreteSpec.Core.Prim.instReprTerm.repr.match_1.eq_1	
@@ -3633,6 +3710,8 @@ _private.ConcreteSpec.Proofs.Prim.0.ConcreteSpec.Core.Prim.instReprTerm.repr.mat
 _private.ConcreteSpec.Proofs.Prim.0.ConcreteSpec.Core.Prim.instReprTerm.repr.match_1.eq_6	
 _private.ConcreteSpec.Proofs.Prim.0.ConcreteSpec.Core.Prim.lookupId.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Prim.0.ConcreteSpec.Core.Prim.lookupId.match_1.eq_2	
+_private.ConcreteSpec.Proofs.Prim.0.ConcreteSpec.Core.SafetyEvidence.discharge.match_1.eq_1	
+_private.ConcreteSpec.Proofs.Prim.0.ConcreteSpec.Core.SafetyEvidence.discharge.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Rep.0.ConcreteSpec.Rep.Ty.size.match_3.eq_1	
 _private.ConcreteSpec.Proofs.Rep.0.ConcreteSpec.Rep.Ty.size.match_3.eq_2	
 _private.ConcreteSpec.Proofs.Rep.0.ConcreteSpec.Rep.decodeNat.match_1.eq_1	
@@ -3783,5 +3862,7 @@ _private.ConcreteSpec.Proofs.Slice1.0.ConcreteSpec.runBody.match_3.eq_2
 _private.ConcreteSpec.Proofs.Slice1.0.ConcreteSpec.runBody.match_3.eq_3	
 _private.ConcreteSpec.Spec.Prim.0.ConcreteSpec.Core.AList.lookup.match_1.eq_1	
 _private.ConcreteSpec.Spec.Prim.0.ConcreteSpec.Core.AList.lookup.match_1.eq_2	
+_private.ConcreteSpec.Spec.Prim.0.ConcreteSpec.Core.ObligationTable.lookup.match_1.eq_1	
+_private.ConcreteSpec.Spec.Prim.0.ConcreteSpec.Core.ObligationTable.lookup.match_1.eq_2	
 _private.ConcreteSpec.Spec.Prim.0.ConcreteSpec.Core.PrimDemo.unitContract.match_1.eq_1	
 _private.ConcreteSpec.Spec.Prim.0.ConcreteSpec.Core.PrimDemo.unitContract.match_1.eq_2	
