@@ -240,6 +240,86 @@ def CExpr.eval (env : AList ConstId CVal) : Nat → CExpr → CEvalResult
       | .error .outOfRange => .failure ⟨.tryConvert t, .tryConvert t a, .outOfRange⟩
     | _ => .invalid (.tryConvert t a)
 
+/-- Independent one-node semantics. Operand answers are supplied by a derivation, rather than
+by the evaluator. Scalar outcomes are grounded directly in the existing primitives. The ordered
+binds specify which operand failure wins, including when both operands fail. -/
+def CExpr.nodeResult (env : AList ConstId CVal) (answers : CExpr → CEvalResult) :
+    CExpr → CEvalResult
+  | .int t n => if t.InRange n then .value (.int t n) else .invalid (.int t n)
+  | .bool b => .value (.bool b)
+  | .unit => .value .unit
+  | .ref c => match AList.lookup env c with
+    | some v => .value v
+    | none => .invalid (.ref c)
+  | .wrapping op a b => (answers a).bind fun va => (answers b).bind fun vb =>
+    match sameInt (some va) (some vb) with
+    | some (t, x, y) => .value (.int t (Core.wrapping t op x y))
+    | none => .invalid (.wrapping op a b)
+  | .saturating op a b => (answers a).bind fun va => (answers b).bind fun vb =>
+    match sameInt (some va) (some vb) with
+    | some (t, x, y) => .value (.int t (Core.saturating t op x y))
+    | none => .invalid (.saturating op a b)
+  | .plain op a b => (answers a).bind fun va => (answers b).bind fun vb =>
+    match sameInt (some va) (some vb) with
+    | some (t, x, y) => match Core.plain t op x y with
+      | .ok n => .value (.int t n)
+      | .trap k => .failure ⟨.plain op, .plain op a b, .arithmetic k⟩
+      | .stuck => .invalid (.plain op a b)
+    | none => .invalid (.plain op a b)
+  | .plainNeg a => (answers a).bind fun va =>
+    match va with
+    | .int t x => match Core.plainNeg t x with
+      | .ok n => .value (.int t n)
+      | .trap k => .failure ⟨.plainNeg, .plainNeg a, .arithmetic k⟩
+      | .stuck => .invalid (.plainNeg a)
+    | _ => .invalid (.plainNeg a)
+  | .bit op a b => (answers a).bind fun va => (answers b).bind fun vb =>
+    match sameInt (some va) (some vb) with
+    | some (t, x, y) => .value (.int t (Core.bitwise t op x y))
+    | none => .invalid (.bit op a b)
+  | .bitNot a => (answers a).bind fun va =>
+    match va with
+    | .int t x => .value (.int t (Core.bitNot t x))
+    | _ => .invalid (.bitNot a)
+  | .cmp op a b => (answers a).bind fun va => (answers b).bind fun vb =>
+    match sameInt (some va) (some vb) with
+    | some (_, x, y) => .value (.bool (op.eval x y))
+    | none => .invalid (.cmp op a b)
+  | .not a => (answers a).bind fun va =>
+    match va with
+    | .bool x => .value (.bool (!x))
+    | _ => .invalid (.not a)
+  | .and a b => (answers a).bind fun va => (answers b).bind fun vb =>
+    match twoBools (some va) (some vb) with
+    | some (x, y) => .value (.bool (x && y))
+    | none => .invalid (.and a b)
+  | .or a b => (answers a).bind fun va => (answers b).bind fun vb =>
+    match twoBools (some va) (some vb) with
+    | some (x, y) => .value (.bool (x || y))
+    | none => .invalid (.or a b)
+  | .convert t a => (answers a).bind fun va =>
+    match va with
+    | .int s x => if Lossless s t then .value (.int t x) else .invalid (.convert t a)
+    | .bool b => .value (.int t (boolToInt b))
+    | .unit => .invalid (.convert t a)
+  | .tryConvert t a => (answers a).bind fun va =>
+    match va with
+    | .int _ x => match Core.tryConvert t x with
+      | .ok n => .value (.int t n)
+      | .error .outOfRange => .failure ⟨.tryConvert t, .tryConvert t a, .outOfRange⟩
+    | _ => .invalid (.tryConvert t a)
+
+/-- Declarative fuel-indexed evaluation. A successor derivation supplies a semantic answer for
+subexpressions at the smaller budget, then applies the independent node rules. Supplying a total
+answer family avoids selecting an evaluation strategy through proof search: `nodeResult` alone
+selects the demanded children in left-to-right order. This relation never mentions `CExpr.eval`.
+Zero fuel is exhaustion even for leaves. -/
+inductive ConstEval (env : AList ConstId CVal) : Nat → CExpr → CEvalResult → Prop where
+  | exhausted (e) : ConstEval env 0 e .outOfFuel
+  | node (fuel) (answers : CExpr → CEvalResult)
+      (children : ∀ e, ConstEval env fuel e (answers e)) (e) :
+      ConstEval env (fuel + 1) e (e.nodeResult env answers)
+
 /-- Two operand types that are one integer type, or `none`. -/
 def sameIntTy : Option CTy → Option CTy → Option IntTy
   | some (.int t), some (.int t') => if t = t' then some t else none
@@ -311,6 +391,22 @@ def evalConsts (U : ConstTypes) (fuel : Nat) : List (ConstDecl U) → AList Cons
     | .failure f => .error (.operation d.id f)
     | .outOfFuel => .error (.outOfFuel d.id)
     | .invalid e => .error (.invalid d.id e)
+
+/-- Independent declaration semantics: all initializers are demanded, including unused ones.
+A successful prefix extends the environment; the first non-value stops the list. -/
+inductive ConstsRun (U : ConstTypes) (fuel : Nat) :
+    List (ConstDecl U) → AList ConstId CVal →
+      Except ConstEvalRefusal (AList ConstId CVal) → Prop where
+  | nil (env) : ConstsRun U fuel [] env (.ok env)
+  | value (d ds env v result) (head : ConstEval env fuel d.init (.value v))
+      (tail : ConstsRun U fuel ds ((d.id, v) :: env) result) :
+      ConstsRun U fuel (d :: ds) env result
+  | failure (d ds env f) (head : ConstEval env fuel d.init (.failure f)) :
+      ConstsRun U fuel (d :: ds) env (.error (.operation d.id f))
+  | exhausted (d ds env) (head : ConstEval env fuel d.init .outOfFuel) :
+      ConstsRun U fuel (d :: ds) env (.error (.outOfFuel d.id))
+  | invalid (d ds env e) (head : ConstEval env fuel d.init (.invalid e)) :
+      ConstsRun U fuel (d :: ds) env (.error (.invalid d.id e))
 
 /-- Type the constants in dependency order, without evaluating. Each initializer is typed with the
 types of earlier constants; its declared type must equal the initializer's scalar type, and a name
