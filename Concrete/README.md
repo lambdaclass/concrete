@@ -554,7 +554,13 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
    - a **totality ban**: no `partial`, `unsafe`, `@[implemented_by]`, `@[extern]` or `opaque` in `Concrete/` outside `Premises.lean`;
    - an external-checker replay (con-leche/nanoda, R-0553) of the compiler's theorems.
 
-   Not yet a job. Until it is, the trusted-base golden (gate 9) fixes each headline theorem's axioms (a `sorryAx` among them fails it), and the trust ban of `scripts/proofs/trust_ban.sh` covers the specification only: it reads the compiler's library entry and its pinned dependency in `lakefile.toml`, not its sources or constants.
+   The trust ban (`scripts/proofs/trust_ban.sh`) checks both `ConcreteSpec` and `Concrete`:
+   sources, every constant, import-closure coverage and examples retained as named declarations.
+   Compiler imports must name an existing module under `ConcreteSpec`, `Concrete`, `Lean` or the
+   pinned `LeanCompilerBackend`; the allow-list comes from those roots' source-module inventories.
+   The trusted-base golden (gate 9) also fixes each headline theorem's axioms (a `sorryAx` fails it).
+   The compiler totality audit and compiler external-checker replay remain with R-0553;
+   `scripts/proofs/external.sh` currently replays the specification.
 3. **Premise registry and stage coverage:** the checks described in the stage registry section above.
 4. **Conformance, both backends:** each `tests/slice0/*.con` example runs through:
    - the Lean `run`;
