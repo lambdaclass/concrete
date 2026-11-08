@@ -395,4 +395,86 @@ theorem decodes_exists_iff_utf8 (bs : List UInt8) :
       subst bs
       exact ⟨c :: cs, .cons enc dec⟩
 
+/-- Removing an allowed scalar preserves the first source failure and shifts its offset. -/
+theorem sourceFailure_cons_inv {c : Nat} {chunk bytes : List UInt8} {offset : Nat}
+    (enc : Utf8.Encodes c chunk) (h0 : c ≠ 0) (hB : c ≠ 0xFEFF)
+    (h : SourceFailure (chunk ++ bytes) offset) :
+    ∃ k, SourceFailure bytes k ∧ offset = chunk.length + k := by
+  generalize he : chunk ++ bytes = input at h
+  cases h with
+  | utf8 hn hf => exact False.elim (scalarFailure_no_head enc (he ▸ hf))
+  | nul other => exact False.elim (h0 (encodes_step_unique enc other he).1)
+  | bom other => exact False.elim (hB (encodes_step_unique enc other he).1)
+  | @cons d other rest k hd _ _ hf =>
+    obtain ⟨_, ht⟩ := encodes_step_unique enc hd he
+    have hc : chunk = other := List.append_cancel_right (by simpa only [ht] using he)
+    exact ⟨k, ht ▸ hf, by rw [hc]⟩
+
+/-- A forbidden first scalar determines offset zero for every source-failure derivation. -/
+theorem sourceFailure_forbidden_offset {c : Nat} {chunk bytes : List UInt8} {k : Nat}
+    (enc : Utf8.Encodes c chunk) (bad : c = 0 ∨ c = 0xFEFF)
+    (h : SourceFailure (chunk ++ bytes) k) : k = 0 := by
+  generalize he : chunk ++ bytes = input at h
+  cases h with
+  | utf8 hn hf => exact False.elim (scalarFailure_no_head enc (he ▸ hf))
+  | nul => rfl
+  | bom => rfl
+  | cons hd h0 hB hf =>
+    have hc := (encodes_step_unique enc hd he).1
+    rcases bad with hz | hz
+    · exact False.elim (h0 (hc ▸ hz))
+    · exact False.elim (hB (hc ▸ hz))
+
+/-- The first source-failure offset is unique, including UTF-8/NUL/BOM alternatives. -/
+theorem sourceFailure_unique {bytes : List UInt8} {k l : Nat}
+    (hk : SourceFailure bytes k) (hl : SourceFailure bytes l) : k = l := by
+  induction hk generalizing l with
+  | utf8 hn hf =>
+    cases hl with
+    | utf8 _ hg => exact scalarFailure_unique hf hg
+    | nul enc => exact False.elim (scalarFailure_no_head enc hf)
+    | bom enc => exact False.elim (scalarFailure_no_head enc hf)
+    | cons enc _ _ _ => exact False.elim (scalarFailure_no_head enc hf)
+  | nul enc => exact (sourceFailure_forbidden_offset enc (Or.inl rfl) hl).symm
+  | bom enc => exact (sourceFailure_forbidden_offset enc (Or.inr rfl) hl).symm
+  | cons enc h0 hB hf ih =>
+    obtain ⟨j, hj, he⟩ := sourceFailure_cons_inv enc h0 hB hl
+    have hh := ih hj
+    omega
+
+/-- A declarative decoding with an encoded prefix starts with its scalar and decodes its suffix. -/
+theorem decodes_head_inv {c : Nat} {chunk bytes : List UInt8} {cs : List Nat}
+    (enc : Utf8.Encodes c chunk) (h : Utf8.Decodes (chunk ++ bytes) cs) :
+    ∃ ds, cs = c :: ds ∧ Utf8.Decodes bytes ds := by
+  generalize he : chunk ++ bytes = input at h
+  cases h with
+  | nil => exact False.elim (encodes_nonempty enc (List.append_eq_nil_iff.mp he).1)
+  | cons hd ht =>
+    obtain ⟨hc, hb⟩ := encodes_step_unique enc hd he
+    exact ⟨_, by rw [hc], hb ▸ ht⟩
+
+/-- No first source failure admits a source-valid declarative decoding. -/
+theorem sourceFailure_not_sourceOk {bytes : List UInt8} {k : Nat}
+    (h : SourceFailure bytes k) : ¬ SourceOk bytes := by
+  induction h with
+  | @utf8 bytes k hn hf =>
+    rintro ⟨cs, hd, _⟩
+    generalize he : bytes = input at hd
+    cases hd with
+    | nil => exact hn he
+    | cons enc tail =>
+      exact scalarFailure_no_head enc (he ▸ hf)
+  | nul enc =>
+    rintro ⟨cs, hd, good⟩
+    obtain ⟨ds, rfl, _⟩ := decodes_head_inv enc hd
+    exact (good 0 (by simp)).1 rfl
+  | bom enc =>
+    rintro ⟨cs, hd, good⟩
+    obtain ⟨ds, rfl, _⟩ := decodes_head_inv enc hd
+    exact (good 0xFEFF (by simp)).2 rfl
+  | cons enc h0 hB hf ih =>
+    rintro ⟨cs, hd, good⟩
+    obtain ⟨ds, rfl, ht⟩ := decodes_head_inv enc hd
+    exact ih ⟨ds, ht, fun c hc => good c (by simp [hc])⟩
+
 end ConcreteSpec.Surface0

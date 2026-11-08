@@ -905,6 +905,7 @@ ConcreteSpec.Surface0.Utf8.two_iff	propext
 ConcreteSpec.Surface0.Utf8.two_iff._simp_1_9	propext
 ConcreteSpec.Surface0.commentBody_unique	propext
 ConcreteSpec.Surface0.decodes_exists_iff_utf8	Quot.sound propext
+ConcreteSpec.Surface0.decodes_head_inv	Classical.choice Quot.sound propext
 ConcreteSpec.Surface0.decodes_unique	Classical.choice Quot.sound propext
 ConcreteSpec.Surface0.decodes_utf8	propext
 ConcreteSpec.Surface0.encodes_determ	Classical.choice Quot.sound propext
@@ -1001,6 +1002,11 @@ ConcreteSpec.Surface0.scalarPrefix_two._simp_1_10	Classical.choice Quot.sound pr
 ConcreteSpec.Surface0.scalarPrefix_two._simp_1_11	Classical.choice Quot.sound propext
 ConcreteSpec.Surface0.scalarPrefix_two._simp_1_9	propext
 ConcreteSpec.Surface0.scalarPrefix_unfinished_no_head	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.sourceFailure_cons_inv	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.sourceFailure_forbidden_offset	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.sourceFailure_not_sourceOk	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.sourceFailure_unique	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.sourceFailure_unique._proof_1_1	Quot.sound propext
 ConcreteSpec.Trap.arithmeticOverflow.sizeOf_spec	
 ConcreteSpec.Trap.ofNat_ctorIdx	
 ConcreteSpec.Ty.scalar.inj	

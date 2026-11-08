@@ -36,7 +36,7 @@ def Four (a b c d : UInt8) : Prop :=
   Borrow.isScalar [a.toNat, b.toNat, c.toNat, d.toNat] = true
 
 /-- Decision: owner-approved language list item 30 (OPEN-1), SYN-5@3 / SYN-6@3.
- A scalar's encoding, expressed as byte ranges and the positional value equation;
+ A scalar's encoding combines Borrow.isScalar with the positional value equation;
 this judgment does not run a decoder. All other lengths are excluded. -/
 def Encodes (s : Nat) (bs : List UInt8) : Prop :=
   match bs with

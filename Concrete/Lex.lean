@@ -545,6 +545,35 @@ theorem checkSource_error_not_sourceOk {bs : List UInt8} {e : DecodeError}
   rw [h] at hs
   cases hs
 
+/-- Successful source checking is exactly source-valid value decoding. -/
+theorem checkSource_ok_iff {bs : List UInt8} {cs : List Nat} :
+    checkSource bs = .ok cs ↔ Utf8.Decodes bs cs ∧ ∀ c ∈ cs, c ≠ 0 ∧ c ≠ 0xFEFF := by
+  constructor
+  · intro h; exact ⟨(checkSource_sound h).1, (checkSource_sound h).2.1⟩
+  · rintro ⟨hd, good⟩; exact checkSource_complete hd good
+
+/-- A source error's offset is exactly the unique declarative source failure. -/
+theorem checkSource_error_offset_iff {bs : List UInt8} {e : DecodeError} {k : Nat}
+    (h : checkSource bs = .error e) : SourceFailure bs k ↔ e.offset = k := by
+  have hf := checkSource_error_first h
+  constructor
+  · exact sourceFailure_unique hf
+  · intro he; exact he ▸ hf
+
+/-- Every declarative source failure is returned at its exact offset. -/
+theorem checkSource_error_complete {bs : List UInt8} {k : Nat} (hf : SourceFailure bs k) :
+    ∃ e, checkSource bs = .error e ∧ e.offset = k := by
+  cases he : checkSource bs with
+  | ok cs => exact False.elim (sourceFailure_not_sourceOk hf (checkSource_sound he).2.2)
+  | error e => exact ⟨e, rfl, sourceFailure_unique (checkSource_error_first he) hf⟩
+
+/-- Source refusal, including its offset, is exactly the declarative first source failure. -/
+theorem checkSource_error_iff {bs : List UInt8} {k : Nat} :
+    (∃ e, checkSource bs = .error e ∧ e.offset = k) ↔ SourceFailure bs k := by
+  constructor
+  · rintro ⟨e, he, hk⟩; exact hk ▸ checkSource_error_first he
+  · exact checkSource_error_complete
+
 /-- Test the settled ASCII identifier-start predicate. -/
 def identStart? (c : Nat) : Bool := decide (IdentStart c)
 
@@ -610,6 +639,19 @@ theorem lineComment_some_iff {cs out : List Nat} :
     lineComment cs = some out ↔ LineComment cs out :=
   ⟨lineComment_sound, lineComment_complete⟩
 
+
+/-- Comment refusal is exactly absence of any declarative line comment. -/
+theorem lineComment_none_iff {cs : List Nat} :
+    lineComment cs = none ↔ ∀ out, ¬ LineComment cs out := by
+  constructor
+  · intro hn out hc
+    have hs := lineComment_complete hc
+    rw [hn] at hs
+    cases hs
+  · intro h
+    cases he : lineComment cs with
+    | none => rfl
+    | some out => exact False.elim (h out (lineComment_sound he))
 
 example : decodeUtf8 [65, 95, 57] = .ok [65, 95, 57] := by
   simp [decodeUtf8, decodeAt, decodeLoop, decodeStep, Utf8.One, Borrow.isScalar]
