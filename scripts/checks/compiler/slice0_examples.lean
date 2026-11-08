@@ -63,12 +63,16 @@ partial def commands (file : String) (csList : List Concrete.Premises.Component)
   setParserState ps
   setMessages msgs
   elabCommandAtFrontend cmd
+  let messages := (← getCommandState).messages
+  if messages.hasErrors then
+    for msg in messages.toList do IO.eprintln (← msg.toString)
+    throw <| IO.userError "source command elaboration failed"
   runCommandElabM do
     let env ← getEnv
     let allowed := Concrete.Premises.allowedAxioms csList
-    for (n, ci) in env.constants.map₂.toList do
+    for (n, ci) in env.constants.toList do
       unless cs.env.contains n || n.isAnonymous do
-        let kinds := Concrete.Premises.trustedDeclarationKinds env n ci
+        let kinds ← liftCoreM <| Concrete.Premises.trustedDeclarationKinds env n ci
         do
           let axs ← liftCoreM (collectAxioms n)
           IO.println <| "example-json " ++ (Json.mkObj [
@@ -101,7 +105,6 @@ def configuredComponents : IO (List Concrete.Premises.Component) := do
       return cs
 
 unsafe def main (files : List String) : IO UInt32 := do
-  enableInitializersExecution
   commandElabAttribute.addBuiltin ``Parser.Command.declaration `retainExample retainExample
   initSearchPath (← findSysroot)
   let csList ← configuredComponents
@@ -109,7 +112,11 @@ unsafe def main (files : List String) : IO UInt32 := do
     let text ← IO.FS.readFile file
     let input := Parser.mkInputContext text file
     let (header, ps, msgs) ← Parser.parseHeader input
+    enableInitializersExecution
     let (env, msgs) ← processHeader header {} msgs input
+    if msgs.hasErrors then
+      for msg in msgs.toList do IO.eprintln (← msg.toString)
+      return 1
     let action : FrontendM Unit := do
       runCommandElabM do elabCommand (← `(command| noncomputable section))
       commands file csList

@@ -326,7 +326,7 @@ import Concrete
 @[extern "x"] opaque Concrete.Control.f : Nat → Nat
 open Lean Elab Command in
 #eval show CommandElabM Unit from do
-  let errors := Concrete.Premises.trustedDeclarationErrors (← getEnv) (some `Concrete.Control)
+  let errors ← liftCoreM <| Concrete.Premises.trustedDeclarationErrors (← getEnv) (some `Concrete.Control)
   for error in errors do IO.println s!"FAIL {error}"
   unless errors.isEmpty do throwError "trusted-base control failed"
 EOF
@@ -404,7 +404,7 @@ unsafe def Concrete.Control.f._unsafe_rec (n : Nat) : Nat := n
 partial def Concrete.Control.p (n : Nat) : Nat := if n = 0 then 0 else Concrete.Control.p (n - 1)
 open Lean Elab Command in
 #eval show CommandElabM Unit from do
-  let errors := Concrete.Premises.trustedDeclarationErrors (← getEnv) (some `Concrete.Control)
+  let errors ← liftCoreM <| Concrete.Premises.trustedDeclarationErrors (← getEnv) (some `Concrete.Control)
   for error in errors do IO.println s!"FAIL {error}"
   unless errors.isEmpty do throwError "trusted-base control failed"
 EOF
@@ -439,6 +439,12 @@ else
   fail=1
 fi
 
+if bounded_run 180 -- bash scripts/checks/tests/trusted_closure_control.sh; then
+  echo "ok   finite trusted declaration closure control"
+else
+  echo "FAIL finite trusted declaration closure control"; fail=1
+fi
+
 cat >"$work/ctl/loop-audit.lean" <<'EOF'
 import Lean.Elab.Command
 import Concrete
@@ -454,7 +460,7 @@ def Concrete.Control.repeatDef : IO Unit := do
 def Concrete.Control.nestedWhileDef : IO Unit := hiddenWhile
 open Lean Elab Command in
 #eval show CommandElabM Unit from do
-  let errors := Concrete.Premises.trustedDeclarationErrors (← getEnv) (some `Concrete.Control)
+  let errors ← liftCoreM <| Concrete.Premises.trustedDeclarationErrors (← getEnv) (some `Concrete.Control)
   for error in errors do IO.println s!"FAIL {error}"
   unless errors.isEmpty do throwError "trusted-base control failed"
 EOF
@@ -518,7 +524,7 @@ open Lean Elab Command in
 #eval show CommandElabM Unit from do
   let components := Concrete.Premises.components.map fun c =>
     if c.id == "bir-lcb-adapter" then { c with declarations := ["Concrete.Control.f"] } else c
-  let errors := Concrete.Premises.trustedDeclarationErrors (← getEnv) (some `Concrete.Control) components
+  let errors ← liftCoreM <| Concrete.Premises.trustedDeclarationErrors (← getEnv) (some `Concrete.Control) components
   for error in errors do IO.println s!"FAIL {error}"
   unless errors.isEmpty do throwError "trusted-base control failed"
 EOF

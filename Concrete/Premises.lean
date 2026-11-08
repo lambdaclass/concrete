@@ -308,7 +308,7 @@ def directTrustedDeclarationKinds (env : Environment) (n : Name) (ci : ConstantI
     kinds := kinds ++ ["partial-loop"]
   return kinds
 
-def trustedDeclarationKinds (env : Environment) (n : Name) (ci : ConstantInfo) : List String := Id.run do
+def trustedDeclarationKinds (env : Environment) (n : Name) (ci : ConstantInfo) : CoreM (List String) := do
   let mut kinds := directTrustedDeclarationKinds env n ci
   let modIdx := env.getModuleIdxFor? n
   let mut queue : Array (Name × ConstantInfo) := #[]
@@ -320,7 +320,12 @@ def trustedDeclarationKinds (env : Environment) (n : Name) (ci : ConstantInfo) :
         if let some cCi := env.find? c then
           queue := queue.push (c, cCi)
   let mut idx := 0
-  for _ in [:1024] do
+  -- Each constant is enqueued once. The environment cardinality is therefore a
+  -- structural bound on this finite graph, not a resource budget. One extra
+  -- iteration observes the empty queue. Fail explicitly if that invariant breaks.
+  let constants := env.constants
+  let cardinality := constants.map₁.size + constants.map₂.toList.length
+  for _ in [:cardinality + 1] do
     if h : idx < queue.size then
       let (c, cCi) := queue[idx]
       idx := idx + 1
@@ -335,13 +340,14 @@ def trustedDeclarationKinds (env : Environment) (n : Name) (ci : ConstantInfo) :
             seen := seen.insert next
             if let some nextCi := env.find? next then
               queue := queue.push (next, nextCi)
-  return kinds
+    else return kinds
+  throwError "trusted declaration closure exhausted environment cardinality with pending constants"
 
 def trustedDeclarations (env : Environment) (localPrefix : Option Name := none) :
-    Array (Name × List String) := Id.run do
+    CoreM (Array (Name × List String)) := do
   let mut out := #[]
   for (n, ci) in concreteDeclarations env localPrefix do
-    let kinds := trustedDeclarationKinds env n ci
+    let kinds ← trustedDeclarationKinds env n ci
     unless kinds.isEmpty do out := out.push (n, kinds)
   return out
 
@@ -359,9 +365,10 @@ def declarationOwners (n : Name) (cs : List Component) (env : Option Environment
 
 /-- Every compiled escape hatch must have exactly one owner, and not a non-trusted component. -/
 def trustedDeclarationErrors (env : Environment) (localPrefix : Option Name := none)
-    (cs : List Component := components) : List String := Id.run do
+    (cs : List Component := components) : CoreM (List String) := do
   let mut errors := []
-  for (n, kinds) in trustedDeclarations env localPrefix do
+  let trusted ← trustedDeclarations env localPrefix
+  for (n, kinds) in trusted do
     match declarationOwners n cs (some env) with
     | [] => errors := errors ++ [s!"unlisted trusted declaration {n} [{", ".intercalate kinds}]"]
     | [owner] =>
@@ -371,7 +378,7 @@ def trustedDeclarationErrors (env : Environment) (localPrefix : Option Name := n
         errors := errors ++ [s!"trusted declaration {n} is owned by {owners.length} components, expected exactly one"]
   for c in cs do
     for m in c.declarations do
-      unless (trustedDeclarations env localPrefix).any (fun (n, _) =>
+      unless trusted.any (fun (n, _) =>
           n.toString == m || ((privateToUserName? n).getD n).toString == m) do
         errors := errors ++ [s!"stale trusted declaration {m} in component {c.id}"]
   return errors

@@ -20,7 +20,7 @@ for invocation in sprout bloom; do
   fi
   rc=0
   bounded_run 90 -- env LEAN_PATH="$work:$(lake env printenv LEAN_PATH)" lake env lean --run \
-    scripts/checks/compiler/slice0_examples.lean "$work/Invoke.lean" "$work/Other.lean" >"$work/out" 2>&1 || rc=$?
+    scripts/checks/compiler/slice0_examples.lean "$work/Other.lean" "$work/Invoke.lean" >"$work/out" 2>&1 || rc=$?
   if bounded_is_incomplete "$rc"; then cat "$work/out"; exit 1; fi
   if [ "$rc" -eq 0 ]; then cat "$work/out"; echo "FAIL control: accepted $invocation"; exit 1; fi
   if [ "$invocation" = sprout ]; then

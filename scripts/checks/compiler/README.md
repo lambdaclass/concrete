@@ -130,7 +130,13 @@ same-module constants transitively reached from `ci.value?` for
 unsafe/partial/extern/implemented_by/csimp/opaque status and `Lean.Loop`
 (`while`/`repeat`) partial-loop use. Lean's recorded recursion tag (`Meta.recExt`)
 licenses total recursive runtime twins; partial runtime twins inherit their
-parent declaration's owner when registered.
+parent declaration's owner when registered. Closure traversal visits each reachable
+constant once. Its total iteration bound is the finite environment cardinality
+plus one empty-queue observation, rather than a fixed resource cap. Pending work
+at that bound throws an audit error through `CoreM`; no partial classification
+can be returned as ordinary evidence. Lean heartbeat exhaustion likewise fails
+the audit. `trusted_closure_control.sh` checks a 1,100-hop alias chain against
+the actual classifier and requires the exact unlisted-loop diagnostic.
 
 `slice0_examples.lean` elaborates every source file through Lean's frontend,
 without source-token filtering. Its declaration elaborator retains anonymous
@@ -138,7 +144,9 @@ examples after command macro expansion, including imported macros, as named
 noncomputable declarations with fresh `line:column` identities. Every newly
 elaborated constant has its axiom closure audited and its trusted declaration
 kinds checked through `effectiveOwners`. Quoted command templates remain data
-until invoked. `example_rows.py` fails closed if zero `example-json` rows are
+until invoked. Initializer execution is enabled independently for each file, and
+header and command errors are checked before later commands can reset their logs.
+`example_rows.py` fails closed if zero `example-json` rows are
 observed. The multi-file imported-macro controls in
 `scripts/checks/tests/trusted_frontend_controls.sh` require exact diagnostics for both an
 unlisted example axiom and a generated unsafe declaration.

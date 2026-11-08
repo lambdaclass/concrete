@@ -10,8 +10,8 @@ open Lean Elab Command Concrete.Premises in
 #eval show CommandElabM Unit from do
   let env ← getEnv
   let axiomErrors ← liftCoreM (Concrete.Premises.axiomErrors env)
-  let trusted := trustedDeclarations env
-  let trustedErrors := trustedDeclarationErrors env
+  let trusted ← liftCoreM <| trustedDeclarations env
+  let trustedErrors ← liftCoreM <| trustedDeclarationErrors env
   for error in axiomErrors ++ trustedErrors do
     IO.println s!"FAIL {error}"
   IO.println s!"trusted declarations: {trusted.size}"

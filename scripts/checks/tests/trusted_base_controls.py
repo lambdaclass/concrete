@@ -1,6 +1,7 @@
 """Light semantic controls; run inside nix develop after building Concrete.Premises."""
 from pathlib import Path
 import os
+import re
 import subprocess
 import tempfile
 
@@ -13,7 +14,7 @@ def lean(path, driver=False, extra_env=None):
         stderr=subprocess.STDOUT, timeout=60)
 
 def require(result, ok, diagnostic):
-    assert (result.returncode == 0) == ok and diagnostic in result.stdout, result.stdout
+    assert (result.returncode == 0) == ok and diagnostic in result.stdout, (result.returncode, result.stdout)
 
 with tempfile.TemporaryDirectory() as d:
     d = Path(d)
@@ -26,9 +27,13 @@ with tempfile.TemporaryDirectory() as d:
     p.write_text('import Lean\nexample : 1 = 1 := by rfl\n')
     require(lean(p, True), True, '"axioms":[]')
     p.write_text('import Lean\nexample : 2 + 2 = 4 := by decide +native\n')
-    require(lean(p, True), False, f'._native.decide.ax_1 in {p}:2')
+    r = lean(p, True)
+    require(r, False, 'FAIL unlisted example axiom ')
+    assert re.search(r'^FAIL unlisted example axiom .*\._native\.decide\.ax_1(?:\._@\.[^ ]+)? in ' + re.escape(str(p)) + r':2$', r.stdout, re.M), r.stdout
     p.write_text('import Lean\n#eval (dbg_trace "{-- \"\n() }" ())\nexample : 2 + 2 = 4 := by decide +native\n-- "\n')
-    require(lean(p, True), False, f'._native.decide.ax_1 in {p}:4')
+    r = lean(p, True)
+    require(r, False, 'FAIL unlisted example axiom ')
+    assert re.search(r'^FAIL unlisted example axiom .*\._native\.decide\.ax_1(?:\._@\.[^ ]+)? in ' + re.escape(str(p)) + r':4$', r.stdout, re.M), r.stdout
     p.write_text('import Lean\nexample : IO Unit := do while true do pure ()\n')
     require(lean(p, True), False, 'FAIL unlisted example trusted declaration ')
     no_kw = d / "loop_no_kw.lean"
@@ -88,7 +93,7 @@ open Lean Elab Command in
  for parent in [`Concrete.Control.wf, `Concrete.Control.even, `Concrete.Control.odd] do
    unless env.contains (Compiler.mkUnsafeRecName parent) && Meta.recExt.isTagged env parent do
      throwError "safe recursion fixture did not produce a recorded runtime twin"
- let errors := Concrete.Premises.trustedDeclarationErrors env (some `Concrete.Control)
+ let errors ← liftCoreM <| Concrete.Premises.trustedDeclarationErrors env (some `Concrete.Control)
  for error in errors do IO.println s!"FAIL {error}"
  if errors.any (fun s => (s.splitOn "Concrete.Control.wf").length > 1 ||
      (s.splitOn "Concrete.Control.even").length > 1 || (s.splitOn "Concrete.Control.odd").length > 1) then
@@ -120,12 +125,12 @@ open Lean Elab Command in
  for kind in [Concrete.Premises.ComponentKind.gateTool, .notTrusted, .system, .axiom] do
    let cs := Concrete.Premises.components.map fun c =>
      if c.id == "gate-analysis-tools" then { c with kind := kind, declarations := ["Concrete.Control.f"] } else c
-   let errors := Concrete.Premises.trustedDeclarationErrors env (some `Concrete.Control) cs
+   let errors ← liftCoreM <| Concrete.Premises.trustedDeclarationErrors env (some `Concrete.Control) cs
    unless errors.contains "trusted declaration Concrete.Control.f belongs to non-code component gate-analysis-tools" do
      throwError "non-code owner escaped"
  let cs := Concrete.Premises.components.map fun c =>
    if c.id == "lexer" then { c with declarations := ["Concrete.Control.missing"] } else c
- unless (Concrete.Premises.trustedDeclarationErrors env (some `Concrete.Control) cs).contains
+ unless (← liftCoreM <| Concrete.Premises.trustedDeclarationErrors env (some `Concrete.Control) cs).contains
      "stale trusted declaration Concrete.Control.missing in component lexer" do
    throwError "stale declaration escaped"
  IO.println "ok non-code owners and stale declarations rejected"
