@@ -189,16 +189,19 @@ structure PrimContract (Val Ty Store Event : Type) where
   termination : List Val → Store → Prop
   answerOk : List Val → Store → Exec.Answer Val Event Store → Bool
 
-/-- Every semantic condition an accepted answer must satisfy. In particular, an implicit trap is
-never accepted: every result is an ordinary value, including every typed failure alternative. -/
+/-- Every semantic condition an accepted answer must satisfy. A successful ordinary value satisfies
+`ensures`; a typed failure instead matches a declared alternative with the contracted result type.
+The common initialization, validity, ownership, dependency and resource conditions apply to both.
+In particular, an implicit trap is never accepted. -/
 def PrimContract.Allowed {Val Ty Store Event : Type} (c : PrimContract Val Ty Store Event)
     (args : List Val) (st : Store) (a : Exec.Answer Val Event Store) : Prop :=
   args.length = c.parameters.length ∧ c.requires args st ∧ c.termination args st ∧
     c.events a.event ∧
     match a.result with
     | .error _ => False
-    | .ok v => c.ensures v a.store ∧ c.initialized v ∧ c.valid v ∧
-        c.ownership args st a.store ∧ c.dependencies args st a.store ∧ c.resources args st a.store
+    | .ok v => (c.ensures v a.store ∨ ∃ f ∈ c.failures, f.errorTy = c.result ∧ f.holds v) ∧
+        c.initialized v ∧ c.valid v ∧ c.ownership args st a.store ∧
+        c.dependencies args st a.store ∧ c.resources args st a.store
 
 /-- A finite registry with no catch-all entry. `answerOk_iff` is the completeness law for every
 registered contract; `contractId` prevents filing one primitive's contract under another's key. -/
@@ -424,7 +427,8 @@ abbrev base : Exec.Operands where
   test := fun v => some (v ≠ 0)
   allows := fun _ _ _ _ => false
 
-/-- A complete nullary contract whose only answer returns `0`, emits no event and preserves state. -/
+/-- A complete nullary contract whose success is `0`, whose sole declared failure is `1`, and whose
+answers emit no event and preserve state. -/
 def unitContract : PrimContract Int Unit Int Int where
   id := ⟨⟨0⟩, 1⟩
   parameters := []
@@ -437,14 +441,14 @@ def unitContract : PrimContract Int Unit Int Int where
   footprint := fun _ _ => []
   initialized := fun _ => True
   valid := fun _ => True
-  failures := []
+  failures := [⟨(), fun v => v = 1⟩]
   events := fun ev => ev = none
   eventTags := fun _ => []
   leakageTags := fun _ => []
   resources := fun _ before after => after = before
   termination := fun _ _ => True
   answerOk := fun args st a => match a.result with
-    | .ok v => decide (args = [] ∧ a.event = none ∧ v = 0 ∧ a.store = st)
+    | .ok v => decide (args = [] ∧ a.event = none ∧ (v = 0 ∨ v = 1) ∧ a.store = st)
     | .error _ => false
 
 /-- The registry containing exactly primitive zero. -/
@@ -472,18 +476,22 @@ def registry : PrimRegistry Int Unit Int Int where
 /-- C1 operands using that registry. -/
 abbrev machine : Exec.Operands := registry.operands base
 
-/-- Accepted: the registered primitive's contracted answer, also through the C1 adapter. -/
+/-- Accepted: the registered primitive's successful answer, also through the C1 adapter. -/
 example : registry.allows ⟨0⟩ [] 7 ⟨none, .ok 0, 7⟩ = true := by decide
 
 example : machine.allows ⟨0⟩ [] (7 : Int)
     (⟨none, .ok (0 : Int), (7 : Int)⟩ : Exec.Answer Int Int Int) = true := by decide
 
+/-- Accepted: `1` is the declared typed failure alternative. -/
+example : registry.allows ⟨0⟩ [] 7 ⟨none, .ok 1, 7⟩ = true := by decide
+
 /-- Refused: no unknown primitive receives the registered primitive's contract. -/
 example : registry.allows ⟨1⟩ [] 7 ⟨none, .ok 0, 7⟩ = false := by decide
 
-/-- Refused: a wrong result, an event or a state change violates the registered contract. -/
-example : registry.allows ⟨0⟩ [] 7 ⟨none, .ok 1, 7⟩ = false := by decide
+/-- Refused: `2` is neither a success nor a declared failure. -/
+example : registry.allows ⟨0⟩ [] 7 ⟨none, .ok 2, 7⟩ = false := by decide
 
+/-- Refused: an event or a state change violates the registered contract. -/
 example : registry.allows ⟨0⟩ [] 7 ⟨some 0, .ok 0, 7⟩ = false := by decide
 
 example : registry.allows ⟨0⟩ [] 7 ⟨none, .ok 0, 8⟩ = false := by decide

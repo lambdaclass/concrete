@@ -187,15 +187,16 @@ theorem PrimRegistry.allows_allowed {O : Exec.Operands}
     simpa [PrimRegistry.operands, PrimRegistry.allows, hc] using ha
   exact (R.answerOk_iff p c hc args st a).1 ha'
 
-/-- **Accepted answers satisfy the postcondition.** The predicate observes only the result and the
-surviving store; neither entry arguments nor an entry-state snapshot is available. -/
+/-- **Accepted answers satisfy the postcondition or a declared failure.** Both predicates observe
+only the result and surviving state; neither entry arguments nor an entry-state snapshot is
+available to `ensures`. A failure alternative must have the contract's result type. -/
 theorem PrimRegistry.allows_postcondition {O : Exec.Operands}
     (R : PrimRegistry O.Val O.Ty O.Store O.Event) (p : PrimId)
     (c : PrimContract O.Val O.Ty O.Store O.Event) (hc : AList.lookup R.entries p = some c)
     (args : List O.Val) (st : O.Store) (a : Exec.Answer O.Val O.Event O.Store)
     (ha : (R.operands O).allows p args st a = true) :
     match a.result with
-    | .ok v => c.ensures v a.store
+    | .ok v => c.ensures v a.store ∨ ∃ f ∈ c.failures, f.errorTy = c.result ∧ f.holds v
     | .error _ => False := by
   have h := R.allows_allowed p c hc args st a ha
   have hm := h.2.2.2.2

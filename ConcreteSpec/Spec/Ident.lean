@@ -34,7 +34,8 @@ namespace ConcreteSpec.Core
 Elaboration gives every local of a function its own number (a local is bound at most once, Q9.1)
 and its source name as the hint, so two locals of one function never share a number. The hint never
 determines binding or evaluation; `Prim.eval_rehint` proves that changing every hint consistently
-changes no result. -/
+changes no result. Rehinting must be applied consistently to binders and occurrences because C1's
+`AList.lookup` compares the whole `Var`, including its hint. -/
 structure Var where
   hint : String
   id : Nat
