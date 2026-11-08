@@ -31,7 +31,8 @@ separate pool of small runners (two on concrete-ci-2, `LIGHT_RUNNERS` in the dot
 Branch health runs on every push to every branch, about 500 runs a day, and on the `concrete` pool
 those runs took 20-92 runner-minutes out of each train's window (measured 2026-10-24). Labels give
 no priority, so the only way to keep a train from queueing behind them is to not share the pool.
-A `concrete-light` runner carries only that label, so CI never lands on it either.
+A `concrete-light` runner does not carry `concrete`, so heavy CI never lands on it. Every runner on
+concrete-ci-2 additionally carries the host-specific `concrete-ci-2` label.
 
 ### Runner pools and their limits (P13, owner-approved 2026-11-05)
 
@@ -70,8 +71,40 @@ release (`scripts/oracle/fetch.sh`: the lock's artifact sha256, install manifest
 oracle rebuild (`oracle.yml`, weekly) runs on either pool.
 
 A job routed to self-hosted waits until a runner with **all four** labels `self-hosted`, `linux`,
-`x64` and its pool label (`concrete`, or `concrete-light` for branch health) is idle. If no runner is online, it waits (up to 24 hours) rather than falling
-back to GitHub-hosted. So turn the variable off before taking the servers down.
+`x64` and its pool label (`concrete`, or `concrete-light` for branch health) is idle. The
+`linux-ci2` reproducibility leg additionally requires `concrete-ci-2`, as specified below. If no
+runner is online, it waits (up to 24 hours) rather than falling back to GitHub-hosted. So turn the
+variable off before taking the servers down.
+
+### CI2 reproducibility attestation (ISS-0029)
+
+Outside `pull_request`, the `linux-ci2` reproducibility leg requires exactly the labels
+`self-hosted`, `linux`, `x64`, `concrete` and `concrete-ci-2`. It therefore uses only the heavy
+runners provisioned on concrete-ci-2, not another machine carrying only the general `concrete`
+label and not the `concrete-light` pool. On `pull_request` it deliberately selects `ubuntu-24.04`
+and its pre-checkout guard fails.
+
+The binding consumed by `compare-linux` is the exact inventory
+`scripts/checks/lib/ci2_runners.txt`:
+
+| `github.repository` | Runner names eligible for `linux-ci2` |
+|---|---|
+| `unbalancedparentheses/concrete2` | `concrete-ci-2-gha1`, `concrete-ci-2-gha2`, `concrete-ci-2-gha3` |
+| `lambdaclass/concrete` | `concrete-ci-2-gha4`, `concrete-ci-2-gha5`, `concrete-ci-2-gha6` |
+
+`concrete-ci-2-gha7` and `concrete-ci-2-gha8` are light runners and are deliberately absent. Each
+manifest records `github.repository`, `runner.environment` and `runner.name`. The comparator
+requires both manifests to name the same inventoried repository and requires the CI2 manifest's
+runner name to equal an inventory entry for that repository. There is no pattern-based fallback.
+**Changing either repository's runner set requires updating this inventory in the same change.**
+
+The trust boundary is precise: runner registration and label assignment on these repositories are
+operator-only administrative operations, and the private dotfiles `servers/` tree records the host
+provisioning. In particular, `servers/runners.sh` registers every runner with its host's short
+hostname as a label, which is how only concrete-ci-2's runners receive `concrete-ci-2`. A runner
+name or label is evidence **only under that registration and provisioning boundary**; neither is an
+independent cryptographic attestation of the host. The exact repository/name check verifies the
+producing job against the committed binding rather than treating a matching name as proof by itself.
 
 ### Switching it on and off
 
@@ -87,9 +120,8 @@ gh variable set CONCRETE_SELF_HOSTED_CAMPAIGN --body true -R unbalancedparenthes
 The variable is read when a run starts. Runs already queued keep the routing they started with.
 
 **lambdaclass/concrete** is a separate repository. Variables and repository-level runners do not
-carry over: it stays on GitHub-hosted runners until it gets its own runners (registered against
-`https://github.com/lambdaclass/concrete`, or through an org runner group that grants that repo the
-`concrete` label) and its own `CONCRETE_SELF_HOSTED` variable. The nightly campaign (`nightly.yml`,
+carry over: it has its own concrete-ci-2 runner registrations and needs its own
+`CONCRETE_SELF_HOSTED` variable for the general landing tier. The nightly campaign (`nightly.yml`,
 which dispatches CI with `campaign=true` on `main`) runs there, so `CONCRETE_SELF_HOSTED_CAMPAIGN`
 matters there for the nightly campaign. On concrete2 the nightly runs only when the variable
 `CONCRETE_NIGHTLY_QUALIFICATION` is `true`; otherwise the campaign variable only affects campaign
@@ -201,15 +233,18 @@ curl -o actions-runner.tar.gz -L https://github.com/actions/runner/releases/down
 tar xzf actions-runner.tar.gz
 # The token is shown on that settings page (or: gh api -X POST repos/unbalancedparentheses/concrete2/actions/runners/registration-token)
 ./config.sh --url https://github.com/unbalancedparentheses/concrete2 --token <TOKEN> \
-  --name "$(hostname)-runner1" --labels concrete --unattended   # add --ephemeral (recommended)
+  --name "$(hostname)-runner1" --labels concrete,"$(hostname -s)" --unattended   # add --ephemeral (recommended)
 exit
 cd /home/runner1/actions-runner
 sudo ./svc.sh install runner1
 sudo ./svc.sh start
 ```
 
-`self-hosted`, `linux` and `x64` are added automatically, and `--labels concrete` adds the fourth
-label the workflow asks for.
+`self-hosted`, `linux` and `x64` are added automatically. `--labels concrete` selects the general
+pool and `"$(hostname -s)"` adds the provisioned host label (`concrete-ci-2` on this host). The
+production registrations are managed by the private dotfiles `servers/runners.sh`; a runner added
+to the reproducibility set must also be added to `scripts/checks/lib/ci2_runners.txt` in the same
+repository change.
 
 ### State between jobs (persistent runners)
 
@@ -260,7 +295,8 @@ already handles, and what the host has to handle.
 ### Checking it works
 
 1. Settings, Actions, Runners lists each runner as Idle, with labels
-   `self-hosted, Linux, X64, concrete`.
+   `self-hosted, Linux, X64, concrete, concrete-ci-2` (or `concrete-light, concrete-ci-2` for a
+   light runner).
 2. `gh variable set CONCRETE_SELF_HOSTED --body true -R unbalancedparentheses/concrete2`.
 3. `gh workflow run CI --ref main -R unbalancedparentheses/concrete2` (landing tier only), then
    check in the run's job pages that "Runner name" is one of yours and that `Install clang` printed

@@ -713,11 +713,17 @@ debug information, path prefix maps, and no ELF build ID or Mach-O UUID (`ZERO_A
 both paths). The printers traverse ordered lists/arrays (including stable first-occurrence
 intrinsic deduplication); site paths are project-relative source data. They emit no clock,
 hostname or temporary path. CI repeats this on x86-64 Linux and AArch64 macOS. The Linux manifests
-record the runner-reported `runner_environment` and `runner_name`; `compare-linux` requires one
-manifest with `runner_environment=github-hosted` and one with `runner_environment=self-hosted` and
-a `concrete-ci-2-gha<N>` runner name, excludes only that provenance, and compares every
-build-identity and artifact-hash line. On `pull_request`, `linux-ci2` uses a GitHub-hosted runner
-and its first step fails rather than accepting a substitute or executing PR code on concrete-ci-2;
+record `github.repository`, `runner_environment` and `runner_name`; `compare-linux` requires one
+manifest with `runner_environment=github-hosted` and one with `runner_environment=self-hosted`.
+Both manifests must name the same repository, whose exact eligible-runner inventory in
+`scripts/checks/lib/ci2_runners.txt` must contain the CI2 runner name. The `linux-ci2` route requires
+`self-hosted`, `linux`, `x64`, `concrete` and the host-specific `concrete-ci-2` label; the light
+`gha7`/`gha8` runners are not eligible for this heavy leg. Only provenance is excluded from the
+payload comparison: every build-identity and artifact-hash line must match. Runner names and labels
+are evidence under the operator-registration and provisioning trust boundary documented in
+[Self-hosted CI runners](../docs/SELF_HOSTED_RUNNERS.md#ci2-reproducibility-attestation-iss-0029),
+not independent machine attestation. On `pull_request`, `linux-ci2` uses a GitHub-hosted runner and
+its first step fails rather than accepting a substitute or executing PR code on concrete-ci-2;
 pushes to main and dispatch runs use concrete-ci-2. Different targets are never compared. Changes to
 these pins change the build identity; no reproducibility claim spans different toolchains or targets.
 

@@ -460,7 +460,7 @@ jobs:
             runner: ubuntu-24.04
             machine: github
           - id: linux-ci2
-            runner: ${{ github.event_name != 'pull_request' && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-24.04' }}
+            runner: ${{ github.event_name != 'pull_request' && fromJSON('["self-hosted","linux","x64","concrete","concrete-ci-2"]') || 'ubuntu-24.04' }}
             machine: concrete-ci-2
           - id: macos
             runner: macos-15
@@ -481,6 +481,7 @@ jobs:
         uses: cachix/install-nix-action@v31
       - name: Compare every stage in distinct build directories
         env:
+          CONCRETE_REPRO_GITHUB_REPOSITORY: ${{ github.repository }}
           CONCRETE_REPRO_RUNNER_ENVIRONMENT: ${{ runner.environment }}
           CONCRETE_REPRO_RUNNER_NAME: ${{ runner.name }}
         run: nix develop --command timeout 3600 bash scripts/checks/compiler/slice0_repro.sh manifest.txt
