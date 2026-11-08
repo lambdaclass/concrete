@@ -135,13 +135,37 @@ def trapLine (kind : TrapKind) (site : SiteId) (sp : Span) : String :=
 /-- The 1-based byte column after source text `before`: its UTF-8 byte length plus one. -/
 def byteColumn (before : String) : Nat := before.utf8ByteSize + 1
 
-/-- Construct an operation's source span from the text preceding it on its source line.
-The caller supplies a positive line number, but cannot supply a column: UTF-8 source bytes
-establish that column, with a tab contributing its single encoded byte (foundation Q10).
-Connecting the elaborator's source offsets to this constructor remains O1. -/
-def sourceSpan (path : String) (line : Nat) (linePositive : 0 < line)
+/-- A source path string is project-relative and uses forward slashes: nonempty, not rooted
+at `/`, and containing no `\`. -/
+def PathOk (path : String) : Prop :=
+  path.toList ≠ [] ∧ path.toList.head? ≠ some '/' ∧ '\\' ∉ path.toList
+
+instance (path : String) : Decidable (PathOk path) := by unfold PathOk; infer_instance
+
+/-- Construct an operation's source span from a validated project-relative forward-slash path,
+a positive 1-based line number, and the text preceding it on its source line.
+The caller cannot supply a column or an invalid path: `pathOk` enforces `Span.PathOk`, and UTF-8
+source bytes establish that column, with a tab contributing its single encoded byte
+(foundation Q10). Connecting the elaborator's source offsets to this constructor remains O1. -/
+def sourceSpan (path : String) (_pathOk : PathOk path) (line : Nat) (linePositive : 0 < line)
     (before : String) : Span :=
   ⟨path, line, before.utf8ByteSize + 1, linePositive, Nat.zero_lt_succ _⟩
+
+/-- Scan the source text preceding an operation from the start of the file, returning the number
+of completed newline breaks and the characters preceding the operation on its own line. -/
+def scanSourcePrefix : List Char → Nat → List Char → Nat × List Char
+  | [], newlines, current => (newlines, current)
+  | c :: cs, newlines, current =>
+    if c = '\n' then scanSourcePrefix cs (newlines + 1) []
+    else scanSourcePrefix cs newlines (current ++ [c])
+
+/-- Construct an operation's `Span` from a validated project-relative forward-slash path and the
+multi-line source text preceding the operation from the beginning of the file. Newlines advance
+the 1-based line number and reset the current line prefix; the column on the final line is its
+1-based UTF-8 byte column (`byteColumn`), with a tab counting one byte. -/
+def sourcePrefixSpan (path : String) (pathOk : PathOk path) (prefixText : String) : Span :=
+  let scanned := scanSourcePrefix prefixText.toList 0 []
+  sourceSpan path pathOk (scanned.1 + 1) (Nat.zero_lt_succ _) (String.ofList scanned.2)
 
 /-- A span's column is the byte column at the operation on its source line. -/
 def Span.HasByteColumn (sp : Span) (before : String) : Prop := sp.col = byteColumn before
@@ -152,11 +176,16 @@ inductive Terminal where
   | startupRefused
   | exited (status : Nat)
   | trapped (kind : TrapKind) (site : SiteId) (sp : Span) (line : String)
+  deriving DecidableEq, Repr
 
-/-- The terminal observation of a trap at a site present in the table. An absent site is not
-assigned an invented source location. -/
+/-- The terminal observation of a trap at a site present in the table whose span satisfies
+`Span.PathOk` (nonempty, project-relative, forward slashes only). An absent site or a site with
+an invalid path is not assigned a trap observation. -/
 def trapTerminal (sites : SiteTable) (kind : TrapKind) (site : SiteId) : Option Terminal :=
-  (AList.lookup sites site).map fun sp => .trapped kind site sp (trapLine kind site sp)
+  match AList.lookup sites site with
+  | some sp =>
+    if decide sp.PathOk then some (.trapped kind site sp (trapLine kind site sp)) else none
+  | none => none
 
 /-- The process status (Q7.10): startup refusal 125, a normal exit's own status, trap 134. -/
 def Terminal.status : Terminal → Nat

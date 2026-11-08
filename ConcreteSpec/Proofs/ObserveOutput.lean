@@ -36,7 +36,7 @@ def adapter : ExecAdapter Exec.Demo.ops Demo.signature where
   request := fun _ _ _ _ => none
   status := fun _ => none
   state := fun st => st.counter
-  sites := [(Exec.Demo.s, sourceSpan "src/main.con" 1 (by decide) "a\té")]
+  sites := [(Exec.Demo.s, sourceSpan "src/main.con" (by decide) 1 (by decide) "a\té")]
 
 def program : Exec.Program Exec.Demo.ops := ⟨[]⟩
 
@@ -90,12 +90,12 @@ theorem output_then_trap (values : List Int) (history : List Int) :
       (Exec.runFrom program Exec.Demo.env (3 * values.length + 1) history (initial values))
       (permitted values history) =
       some (.terminal ⟨(history ++ values).map (fun n => .output (toString n)),
-        .trapped .abort Exec.Demo.s (sourceSpan "src/main.con" 1 (by decide) "a\té")
+        .trapped .abort Exec.Demo.s (sourceSpan "src/main.con" (by decide) 1 (by decide) "a\té")
           "concrete: trap: abort at src/main.con:1:5 (site 0)", 0⟩) := by
   have executed := run_writes values history
   simp only [reportObservation, executed]
   change (some (FullObservation.terminal ⟨(history ++ values).flatMap (fun n => [Event.output (S := Demo.signature) (toString n)]),
-    .trapped .abort Exec.Demo.s (sourceSpan "src/main.con" 1 (by decide) "a\té")
+    .trapped .abort Exec.Demo.s (sourceSpan "src/main.con" (by decide) 1 (by decide) "a\té")
       "concrete: trap: abort at src/main.con:1:5 (site 0)", 0⟩) : Option (FullObservation Demo.signature)) = _
   congr 3
   generalize history ++ values = all
@@ -134,7 +134,7 @@ example : reportObservation program adapter Demo.contract ()
     (Exec.runFrom program Exec.Demo.env (3 * [3, 4].length + 1) [11] (initial [3, 4]))
     (permitted [3, 4] [11]) =
     some (.terminal ⟨[.output "11", .output "3", .output "4"],
-      .trapped .abort Exec.Demo.s (sourceSpan "src/main.con" 1 (by decide) "a\té")
+      .trapped .abort Exec.Demo.s (sourceSpan "src/main.con" (by decide) 1 (by decide) "a\té")
         "concrete: trap: abort at src/main.con:1:5 (site 0)", 0⟩) :=
   output_then_trap [3, 4] [11]
 
@@ -144,7 +144,7 @@ example : ¬ (reportObservation program erasingAdapter Demo.contract ()
     (Exec.runFrom program Exec.Demo.env (3 * [3, 4].length + 1) [11] (initial [3, 4]))
     (permitted [3, 4] [11]) =
     some (.terminal ⟨[.output "11", .output "3", .output "4"],
-      .trapped .abort Exec.Demo.s (sourceSpan "src/main.con" 1 (by decide) "a\té")
+      .trapped .abort Exec.Demo.s (sourceSpan "src/main.con" (by decide) 1 (by decide) "a\té")
         "concrete: trap: abort at src/main.con:1:5 (site 0)", 0⟩)) := by
   intro equal
   have lengths := congrArg (fun r : Option (FullObservation Demo.signature) =>

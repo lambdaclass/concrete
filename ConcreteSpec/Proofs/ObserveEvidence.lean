@@ -122,5 +122,48 @@ example : byteColumn ("é" ++ "\t") = byteColumn "é" + 1 := byteColumn_tab "é"
 subject `ConcreteSpec.Core.Observe.byteColumn`, mutant `ConcreteSpec.Core.Observe.Evidence.doubleTabColumn`). -/
 example : ¬ (doubleTabColumn ("é" ++ "\t") = doubleTabColumn "é" + 1) := by decide
 
+def punctuatedSpan : Span := ⟨"src/a:b (site 9)/main.con", 3, 9, by decide, by decide⟩
+def shiftedColSpan : Span := ⟨"src/a:b (site 9)/main.con", 3, 10, by decide, by decide⟩
+
+/-- Fault: omits the typed site identity when rendering a trap line, so distinct trap sites at
+the same source position collide. -/
+def trapLineWithoutSite (kind : TrapKind) (_site : SiteId) (sp : Span) : String :=
+  String.ofList ("concrete: trap: ".toList ++ kind.name.toList ++ " at ".toList ++
+    sp.path.toList ++ ":".toList ++ (toString sp.line).toList ++ ":".toList ++
+    (toString sp.col).toList)
+
+/-- Fault: omits the byte column when rendering a trap line, so distinct byte columns on the
+same line collide. -/
+def trapLineWithoutCol (kind : TrapKind) (site : SiteId) (sp : Span) : String :=
+  String.ofList ("concrete: trap: ".toList ++ kind.name.toList ++ " at ".toList ++
+    sp.path.toList ++ ":".toList ++ (toString sp.line).toList ++
+    " (site ".toList ++ (toString site.id).toList ++ ")".toList)
+
+/-- Instance (law `ConcreteSpec.Core.Observe.trapLine_injective`, case `distinct_sites_punctuated_path`). -/
+example : trapLine .overflow ⟨7⟩ punctuatedSpan = trapLine .overflow ⟨8⟩ punctuatedSpan ↔
+    TrapKind.overflow = .overflow ∧ (⟨7⟩ : SiteId) = ⟨8⟩ ∧
+      punctuatedSpan = punctuatedSpan :=
+  trapLine_injective .overflow .overflow ⟨7⟩ ⟨8⟩ punctuatedSpan punctuatedSpan
+
+/-- Planted (law `ConcreteSpec.Core.Observe.trapLine_injective`, case `distinct_sites_punctuated_path`,
+subject `ConcreteSpec.Core.Observe.trapLine`, mutant `ConcreteSpec.Core.Observe.Evidence.trapLineWithoutSite`). -/
+example : ¬ (trapLineWithoutSite .overflow ⟨7⟩ punctuatedSpan =
+      trapLineWithoutSite .overflow ⟨8⟩ punctuatedSpan ↔
+    TrapKind.overflow = .overflow ∧ (⟨7⟩ : SiteId) = ⟨8⟩ ∧
+      punctuatedSpan = punctuatedSpan) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Observe.trapLine_injective`, case `distinct_columns_punctuated_path`). -/
+example : trapLine .overflow ⟨7⟩ punctuatedSpan = trapLine .overflow ⟨7⟩ shiftedColSpan ↔
+    TrapKind.overflow = .overflow ∧ (⟨7⟩ : SiteId) = ⟨7⟩ ∧
+      punctuatedSpan = shiftedColSpan :=
+  trapLine_injective .overflow .overflow ⟨7⟩ ⟨7⟩ punctuatedSpan shiftedColSpan
+
+/-- Planted (law `ConcreteSpec.Core.Observe.trapLine_injective`, case `distinct_columns_punctuated_path`,
+subject `ConcreteSpec.Core.Observe.trapLine`, mutant `ConcreteSpec.Core.Observe.Evidence.trapLineWithoutCol`). -/
+example : ¬ (trapLineWithoutCol .overflow ⟨7⟩ punctuatedSpan =
+      trapLineWithoutCol .overflow ⟨7⟩ shiftedColSpan ↔
+    TrapKind.overflow = .overflow ∧ (⟨7⟩ : SiteId) = ⟨7⟩ ∧
+      punctuatedSpan = shiftedColSpan) := by decide
+
 end Evidence
 end ConcreteSpec.Core.Observe

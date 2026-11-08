@@ -391,27 +391,21 @@ private theorem decodeTrapLine_render (kind : TrapKind) (site : SiteId) (sp : Sp
     decodeTrapLine (trapLine kind site sp) = some (kind, site, sp) := by
   simp [decodeTrapLine, trapLine, decodeKind_render, decodeWithKind_render]
 
-/-- Helper (inversion). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
- **Trap-line injectivity.** Equal rendered lines have the same trap kind, typed site and full
-source span (path, 1-based line and byte column). No restriction on punctuation in the path is
-needed. -/
-theorem trapLine_injective {kind₁ kind₂ : TrapKind} {site₁ site₂ : SiteId} {sp₁ sp₂ : Span}
-    (h : trapLine kind₁ site₁ sp₁ = trapLine kind₂ site₂ sp₂) :
-    kind₁ = kind₂ ∧ site₁ = site₂ ∧ sp₁ = sp₂ := by
-  have decoded := congrArg decodeTrapLine h
-  rw [decodeTrapLine_render, decodeTrapLine_render] at decoded
-  cases decoded
-  exact ⟨rfl, rfl, rfl⟩
-
-/-- Helper (computation). Substitutes a caller-supplied column equality. Independent source-construction evidence is provided by the source trap-column law. (approved: PENDING)
- Rendering uses the byte column supplied by elaboration, not a Unicode-scalar column. -/
-theorem trap_line_uses_byte_columns (kind : TrapKind) (site : SiteId) (sp : Span) (before : String)
-    (h : Span.HasByteColumn sp before) :
-    trapLine kind site sp = String.ofList (
-      "concrete: trap: ".toList ++ kind.name.toList ++ " at ".toList ++ sp.path.toList ++
-      ":".toList ++ (toString sp.line).toList ++ ":".toList ++ (toString (byteColumn before)).toList ++
-      " (site ".toList ++ (toString site.id).toList ++ ")".toList) := by
-  rw [trapLine, trapLineChars, h]
+/-- Law (subject `ConcreteSpec.Core.Observe.trapLine`).
+ **Trap-line injectivity.** Two rendered trap lines are equal if and only if they have the same
+trap kind, typed site and full source span (path, 1-based line and byte column). No restriction
+on punctuation in the path is needed. -/
+theorem trapLine_injective (kind₁ kind₂ : TrapKind) (site₁ site₂ : SiteId) (sp₁ sp₂ : Span) :
+    trapLine kind₁ site₁ sp₁ = trapLine kind₂ site₂ sp₂ ↔
+      kind₁ = kind₂ ∧ site₁ = site₂ ∧ sp₁ = sp₂ := by
+  constructor
+  · intro h
+    have decoded := congrArg decodeTrapLine h
+    rw [decodeTrapLine_render, decodeTrapLine_render] at decoded
+    cases decoded
+    exact ⟨rfl, rfl, rfl⟩
+  · rintro ⟨rfl, rfl, rfl⟩
+    rfl
 
 /-- Law (subject `ConcreteSpec.Core.Observe.byteColumn`).
  A tab advances the byte column by exactly one. -/
@@ -556,10 +550,10 @@ and final external state. -/
 theorem output_before_trap_kept (A : ExecAdapter O S) {P : Exec.Program O} {c c' : Exec.Config O}
     {events : List O.Event} (steps : Exec.Steps P c events c') {kind : TrapKind} {site : SiteId}
     {sp : Span} (final : c'.final? = some (.trapped kind site))
-    (resolved : AList.lookup A.sites site = some sp) :
+    (resolved : AList.lookup A.sites site = some sp) (pathOk : sp.PathOk) :
     stepsObservation A steps =
       some ⟨A.project events, .trapped kind site sp (trapLine kind site sp), A.state c'.store⟩ := by
-  simp [stepsObservation, final, ExecAdapter.terminal?, trapTerminal, resolved]
+  simp [stepsObservation, final, ExecAdapter.terminal?, trapTerminal, resolved, pathOk]
 
 /-- Helper (projection). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
  The premise on `reportObservation` really supplies the operation contract's blocking

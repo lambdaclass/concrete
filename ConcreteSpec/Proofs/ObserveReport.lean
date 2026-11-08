@@ -101,26 +101,35 @@ def dropBlockedHistory {O : Exec.Operands} {S : EventSignature}
   | some (.blocked _ q) => some (.blocked [] q)
   | other => other
 
-/-- Helper (inversion). A trap returned by a well-formed adapter resolves to a span whose
-path meets the site-table obligation. This inverts the terminal projection and uses the adapter's
-explicit semantic premise; it is not independent elaboration correctness. (approved: PENDING) -/
-theorem terminal_trap_path_inv {O : Exec.Operands} {S : EventSignature}
-    (A : ExecAdapter O S) (C : OperationContract S) (input : C.Input) (ρ : Exec.Oracle O)
-    (wellFormed : ExecAdapter.WellFormed A C input ρ)
-    {final : Exec.Final O.Val} {kind : TrapKind} {site : SiteId} {sp : Span} {line : String}
-    (observed : A.terminal? final = some (.trapped kind site sp line)) : sp.PathOk := by
-  cases final with
-  | normal => cases observed
-  | returned value =>
-    cases status : A.status value <;> simp [ExecAdapter.terminal?, status] at observed
-  | trapped k s =>
-    cases resolved : AList.lookup A.sites s with
-    | none => simp [ExecAdapter.terminal?, trapTerminal, resolved] at observed
-    | some actual =>
-      simp only [ExecAdapter.terminal?, trapTerminal, resolved, Option.map_some,
-        Option.some.injEq, Terminal.trapped.injEq] at observed
-      obtain ⟨rfl, rfl, rfl, rfl⟩ := observed
-      exact wellFormed.sites_valid s actual resolved
+/-- Law (subject `ConcreteSpec.Core.Observe.trapTerminal`).
+A site-table trap lookup produces a trapped terminal observation if and only if the site resolves
+to `sp`, `sp.PathOk` holds (nonempty, project-relative, forward slashes only), and the diagnostic
+line is `trapLine kind site sp`. -/
+theorem trapTerminal_eq_some_iff (sites : SiteTable) (kind : TrapKind) (site : SiteId)
+    (sp : Span) (line : String) :
+    trapTerminal sites kind site = some (.trapped kind site sp line) ↔
+      AList.lookup sites site = some sp ∧ sp.PathOk ∧ line = trapLine kind site sp := by
+  unfold trapTerminal
+  cases resolved : AList.lookup sites site with
+  | none =>
+    simp
+  | some actual =>
+    constructor
+    · intro h
+      by_cases hpath : actual.PathOk
+      · simp only [hpath, decide_true, ↓reduceIte, Option.some.injEq,
+          Terminal.trapped.injEq] at h
+        obtain ⟨_, _, rfl, rfl⟩ := h
+        exact ⟨rfl, hpath, rfl⟩
+      · simp [hpath] at h
+    · rintro ⟨hsp, hpath, rfl⟩
+      cases hsp
+      simp [hpath]
+
+/-- Fault: resolves trap sites without checking `Span.PathOk`, allowing absolute or backslash
+paths into terminal observations. -/
+def uncheckedTrapTerminal (sites : SiteTable) (kind : TrapKind) (site : SiteId) : Option Terminal :=
+  (AList.lookup sites site).map fun sp => .trapped kind site sp (trapLine kind site sp)
 
 namespace ReportDemo
 open AdapterDemo
@@ -255,26 +264,61 @@ example : (Exec.runFrom program answeringOracle 0 [] (requesting 3)).ending =
         (answeringWellFormed (fun _ _ _ => False)) (fuel := 0) (hist := [])
         (c := requesting 3) .idle) = none := ⟨rfl, rfl⟩
 
+def absSpan : Span := ⟨"/tmp/main.con", 1, 1, by decide, by decide⟩
+def absSites : SiteTable := [(⟨7⟩, absSpan)]
+
+def backslashSpan : Span := ⟨"src\\main.con", 1, 1, by decide, by decide⟩
+def backslashSites : SiteTable := [(⟨7⟩, backslashSpan)]
+
+/-- Instance (law `ConcreteSpec.Core.Observe.trapTerminal_eq_some_iff`, case `reject_absolute_path`). -/
+example : trapTerminal absSites .overflow ⟨7⟩ =
+      some (.trapped .overflow ⟨7⟩ absSpan (trapLine .overflow ⟨7⟩ absSpan)) ↔
+    AList.lookup absSites ⟨7⟩ = some absSpan ∧ absSpan.PathOk ∧
+      trapLine .overflow ⟨7⟩ absSpan = trapLine .overflow ⟨7⟩ absSpan :=
+  trapTerminal_eq_some_iff absSites .overflow ⟨7⟩ absSpan (trapLine .overflow ⟨7⟩ absSpan)
+
+/-- Planted (law `ConcreteSpec.Core.Observe.trapTerminal_eq_some_iff`, case `reject_absolute_path`,
+subject `ConcreteSpec.Core.Observe.trapTerminal`, mutant `ConcreteSpec.Core.Observe.uncheckedTrapTerminal`). -/
+example : ¬ (uncheckedTrapTerminal absSites .overflow ⟨7⟩ =
+      some (.trapped .overflow ⟨7⟩ absSpan (trapLine .overflow ⟨7⟩ absSpan)) ↔
+    AList.lookup absSites ⟨7⟩ = some absSpan ∧ absSpan.PathOk ∧
+      trapLine .overflow ⟨7⟩ absSpan = trapLine .overflow ⟨7⟩ absSpan) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Observe.trapTerminal_eq_some_iff`, case `reject_backslash_path`). -/
+example : trapTerminal backslashSites .overflow ⟨7⟩ =
+      some (.trapped .overflow ⟨7⟩ backslashSpan (trapLine .overflow ⟨7⟩ backslashSpan)) ↔
+    AList.lookup backslashSites ⟨7⟩ = some backslashSpan ∧ backslashSpan.PathOk ∧
+      trapLine .overflow ⟨7⟩ backslashSpan = trapLine .overflow ⟨7⟩ backslashSpan :=
+  trapTerminal_eq_some_iff backslashSites .overflow ⟨7⟩ backslashSpan
+    (trapLine .overflow ⟨7⟩ backslashSpan)
+
+/-- Planted (law `ConcreteSpec.Core.Observe.trapTerminal_eq_some_iff`, case `reject_backslash_path`,
+subject `ConcreteSpec.Core.Observe.trapTerminal`, mutant `ConcreteSpec.Core.Observe.uncheckedTrapTerminal`). -/
+example : ¬ (uncheckedTrapTerminal backslashSites .overflow ⟨7⟩ =
+      some (.trapped .overflow ⟨7⟩ backslashSpan (trapLine .overflow ⟨7⟩ backslashSpan)) ↔
+    AList.lookup backslashSites ⟨7⟩ = some backslashSpan ∧ backslashSpan.PathOk ∧
+      trapLine .overflow ⟨7⟩ backslashSpan = trapLine .overflow ⟨7⟩ backslashSpan) := by decide
+
 /-- An adapter fault resolves a trap to an absolute host path. -/
 def absolutePathAdapter : ExecAdapter ops signature :=
-  { adapter with sites := [(⟨7⟩, ⟨"/tmp/main.con", 1, 1, by decide, by decide⟩)] }
+  { adapter with sites := absSites }
 
 /-- Refused: a blocking policy cannot authorize an invalid trap-site path. This example tests
 site-table validity directly, without relying on an unrelated answer or continuation failure. -/
 example : ¬ ExecAdapter.WellFormed absolutePathAdapter permittingContract () blockingOracle := by
   intro formed
-  have path := formed.sites_valid ⟨7⟩ ⟨"/tmp/main.con", 1, 1, by decide, by decide⟩ rfl
-  exact (by decide : ¬ (⟨"/tmp/main.con", 1, 1, by decide, by decide⟩ : Span).PathOk) path
+  have path := formed.sites_valid ⟨7⟩ absSpan rfl
+  exact (by decide : ¬ absSpan.PathOk) path
 
 /-- An adapter fault uses host-specific backslashes in a relative path. -/
 def backslashPathAdapter : ExecAdapter ops signature :=
-  { adapter with sites := [(⟨7⟩, ⟨"src\\main.con", 1, 1, by decide, by decide⟩)] }
+  { adapter with sites := backslashSites }
 
 /-- Refused: relative spelling alone does not satisfy the forward-slash path requirement. -/
 example : ¬ ExecAdapter.WellFormed backslashPathAdapter permittingContract () blockingOracle := by
   intro formed
-  have path := formed.sites_valid ⟨7⟩ ⟨"src\\main.con", 1, 1, by decide, by decide⟩ rfl
-  exact (by decide : ¬ (⟨"src\\main.con", 1, 1, by decide, by decide⟩ : Span).PathOk) path
+  have path := formed.sites_valid ⟨7⟩ backslashSpan rfl
+  exact (by decide : ¬ backslashSpan.PathOk) path
 
 end ReportDemo
 end ConcreteSpec.Core.Observe
