@@ -332,6 +332,13 @@ that has already started. If a publish must be abandoned, re-check the remote
 AFTER the process tree is gone (`pgrep -f "git push"` clear), and treat the
 remote's actual state as the answer rather than the state you saw before killing.
 
+### Background agent jobs always have a watcher
+
+Start every background writer, reviewer or gate with `scripts/agent/launch.sh start`, then
+immediately run the printed `WAIT` command as your own background task so the job's end re-invokes
+you. Never start a detached unit without its watcher. A writer gets one attempt only: a killed or
+timed-out job is investigated, never automatically re-run.
+
 ### Orchestrating a publish: never infer state from process names
 
 `pgrep -f "push-both"` matches the WAITER'S OWN command line, which contains that
