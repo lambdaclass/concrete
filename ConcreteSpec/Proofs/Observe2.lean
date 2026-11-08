@@ -42,7 +42,9 @@ theorem Responds.matches {C : OperationContract S} {input : C.Input} {hist : Lis
   cases h with
   | response matching _ => exact matching
 
-/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
+/-- Helper (computation). Induction on `SilentInsertion` showing that inserting or keeping `.silent`
+steps preserves `visible`; feeds `silent_internal_steps` and `blocked_silent_internal_steps`.
+(approved: PENDING)
  Inserting silent steps leaves exactly the same visible events, in the same order. -/
 theorem SilentInsertion.visible {before after : List (Step S)} (h : SilentInsertion before after) :
     visible before = visible after := by
@@ -67,13 +69,15 @@ theorem blocked_silent_internal_steps {before after : List (Step S)}
     SameObservation (.blocked before request) (.blocked after request) := by
   exact ⟨h.visible, rfl⟩
 
-/-- Representation lemma. Algebra of the observation representation; not independent semantic soundness evidence. (approved: PENDING)
+/-- Representation lemma. Reflexivity of eventual prefix containment `PrefixEventually` with empty
+suffix `rest = []`; feeds `SameInfiniteObservation.refl`. (approved: PENDING)
  Any finite visible prefix is immediately a prefix of the same execution's prefix. -/
 theorem PrefixEventually.refl (steps : Nat → Step S) : PrefixEventually steps steps := by
   intro n
   exact ⟨n, [], by simp⟩
 
-/-- Representation lemma. Algebra of the observation representation; not independent semantic soundness evidence. (approved: PENDING)
+/-- Representation lemma. Transitivity of eventual prefix containment `PrefixEventually` by
+concatenating suffixes `rest₁ ++ rest₂`; feeds `SameInfiniteObservation.trans`. (approved: PENDING)
  Eventual prefix containment composes; the second execution may need more internal steps. -/
 theorem PrefixEventually.trans {xs ys zs : Nat → Step S}
     (hxy : PrefixEventually xs ys) (hyz : PrefixEventually ys zs) : PrefixEventually xs zs := by
@@ -82,27 +86,35 @@ theorem PrefixEventually.trans {xs ys zs : Nat → Step S}
   obtain ⟨p, rest₂, h₂⟩ := hyz m
   exact ⟨p, rest₁ ++ rest₂, by rw [h₂, h₁, List.append_assoc]⟩
 
-/-- Representation lemma. Algebra of the observation representation; not independent semantic soundness evidence. (approved: PENDING) -/
+/-- Representation lemma. Reflexivity of `SameInfiniteObservation` from `PrefixEventually.refl`;
+feeds `SameObservation.refl` in the `.infinite` branch. (approved: PENDING) -/
 theorem SameInfiniteObservation.refl (steps : Nat → Step S) : SameInfiniteObservation steps steps :=
   ⟨PrefixEventually.refl steps, PrefixEventually.refl steps⟩
 
-/-- Representation lemma. Algebra of the observation representation; not independent semantic soundness evidence. (approved: PENDING) -/
+/-- Representation lemma. Symmetry of `SameInfiniteObservation` by swapping the two
+`PrefixEventually` directions; feeds `SameObservation.symm` and `full_observation_preservation`.
+(approved: PENDING) -/
 theorem SameInfiniteObservation.symm {xs ys : Nat → Step S}
     (h : SameInfiniteObservation xs ys) : SameInfiniteObservation ys xs := ⟨h.2, h.1⟩
 
-/-- Representation lemma. Algebra of the observation representation; not independent semantic soundness evidence. (approved: PENDING) -/
+/-- Representation lemma. Transitivity of `SameInfiniteObservation` from `PrefixEventually.trans`;
+feeds `SameObservation.trans` and `full_observation_preservation`. (approved: PENDING) -/
 theorem SameInfiniteObservation.trans {xs ys zs : Nat → Step S}
     (hxy : SameInfiniteObservation xs ys) (hyz : SameInfiniteObservation ys zs) :
     SameInfiniteObservation xs zs := ⟨hxy.1.trans hyz.1, hyz.2.trans hxy.2⟩
 
-/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
+/-- Helper (computation). Unfolds `visiblePrefix` on `List.range (n + 1)` to append
+`(steps n).event?.toList`; feeds `visiblePrefix_prefix` and `InfiniteStuttering.prefix_indices`.
+(approved: PENDING)
  One more step adds exactly its optional event to the visible prefix. -/
 theorem visiblePrefix_succ (steps : Nat → Step S) (n : Nat) :
     visiblePrefix steps (n + 1) = visiblePrefix steps n ++ (steps n).event?.toList := by
   cases step : steps n <;>
     simp [visiblePrefix, List.range_succ, visible, List.filterMap_append, Step.event?, step]
 
-/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
+/-- Helper (computation). Induction on `n - m` showing `visiblePrefix steps m` is a prefix of
+`visiblePrefix steps n` for `m ≤ n`; feeds the reverse direction of `infinite_stuttering`.
+(approved: PENDING)
  A shorter step prefix's events are a prefix of a longer step prefix's events. -/
 theorem visiblePrefix_prefix (steps : Nat → Step S) {m n : Nat} (h : m ≤ n) :
     ∃ rest, visiblePrefix steps n = visiblePrefix steps m ++ rest := by
@@ -114,7 +126,9 @@ theorem visiblePrefix_prefix (steps : Nat → Step S) {m n : Nat} (h : m ≤ n) 
     refine ⟨rest ++ (steps (m + d)).event?.toList, ?_⟩
     rw [show m + (d + 1) = m + d + 1 by omega, visiblePrefix_succ, pref, List.append_assoc]
 
-/-- Helper (arithmetic). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
+/-- Helper (arithmetic). Induction on `n` lifting one-step `StepIndexIncreasing` (`f n < f (n + 1)`)
+to pairwise monotonicity `m ≤ n → f m ≤ f n`; feeds `StepIndexIncreasing.strict`.
+(approved: PENDING)
  A strictly increasing step-index map is monotone on every pair of indices. -/
 theorem StepIndexIncreasing.monotone {f : Nat → Nat} (increasing : StepIndexIncreasing f)
     {m n : Nat} (h : m ≤ n) : f m ≤ f n := by
@@ -125,7 +139,9 @@ theorem StepIndexIncreasing.monotone {f : Nat → Nat} (increasing : StepIndexIn
     · subst m; exact Nat.le_refl _
     · exact Nat.le_trans (ih (by omega)) (Nat.le_of_lt (increasing n))
 
-/-- Helper (arithmetic). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
+/-- Helper (arithmetic). Combines `increasing m` with `StepIndexIncreasing.monotone` on `m + 1 ≤ n`
+to obtain strict monotonicity `m < n → f m < f n`; feeds `InfiniteStuttering.prefix_indices` and
+`InfiniteStuttering.visiblePrefix_at`. (approved: PENDING)
  A strictly increasing step-index map strictly increases on every ordered pair. -/
 theorem StepIndexIncreasing.strict {f : Nat → Nat} (increasing : StepIndexIncreasing f)
     {m n : Nat} (h : m < n) : f m < f n := by
@@ -133,7 +149,8 @@ theorem StepIndexIncreasing.strict {f : Nat → Nat} (increasing : StepIndexIncr
   have rest := increasing.monotone (show m + 1 ≤ n by omega)
   omega
 
-/-- Helper (arithmetic). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
+/-- Helper (arithmetic). Induction on `n` proving the lower bound `n ≤ f n` for any strictly
+increasing index map `f : Nat → Nat`. (approved: PENDING)
  A strictly increasing map on natural step indices is unbounded. -/
 theorem StepIndexIncreasing.apply_le {f : Nat → Nat} (increasing : StepIndexIncreasing f) (n : Nat) :
     n ≤ f n := by
@@ -141,7 +158,9 @@ theorem StepIndexIncreasing.apply_le {f : Nat → Nat} (increasing : StepIndexIn
   | zero => exact Nat.zero_le _
   | succ n ih => have next := increasing n; omega
 
-/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
+/-- Helper (computation). Induction on stuttered index `m` finding the corresponding unstuttered
+prefix length `n` with `visiblePrefix stutter m = visiblePrefix steps n`; feeds
+`InfiniteStuttering.visiblePrefix_at` and `infinite_stuttering`. (approved: PENDING)
  At every stuttered index `m`, some old prefix `n` has exactly the same events: all retained
 indices below `m` are below `n`, and `f n` is the next retained index at or after `m`. -/
 theorem InfiniteStuttering.prefix_indices {steps : Nat → Step S} {f : Nat → Nat}
@@ -183,7 +202,9 @@ theorem InfiniteStuttering.prefix_indices {steps : Nat → Step S} {f : Nat → 
         have index := before i hi
         omega
 
-/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
+/-- Helper (computation). Specializes `InfiniteStuttering.prefix_indices` at `m = f n` and uses
+`StepIndexIncreasing.strict` to force `k = n`; feeds the forward direction of
+`infinite_stuttering`. (approved: PENDING)
  The stuttered prefix through the position just before `f n` is exactly the old prefix before
 `n`; leading and intermediate silent steps contribute nothing. -/
 theorem InfiniteStuttering.visiblePrefix_at {steps : Nat → Step S} {f : Nat → Nat}
@@ -310,7 +331,8 @@ private def stripPrefix : List Char → List Char → Option (List Char)
   | _ :: _, [] => none
   | c :: cs, d :: ds => if c = d then stripPrefix cs ds else none
 
-/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING) -/
+/-- Helper (computation). Induction on `pre` showing `stripPrefix pre (pre ++ rest) = some rest`;
+feeds `decodeWithKind_render` for `trapLine_injective`. (approved: PENDING) -/
 private theorem stripPrefix_append (pre rest : List Char) :
     stripPrefix pre (pre ++ rest) = some rest := by
   induction pre with
@@ -323,7 +345,9 @@ private def parseRevNat (cs : List Char) : Option (Nat × List Char) :=
   if digits.isEmpty then none
   else some (Nat.ofDigitChars 10 digits.reverse 0, cs.dropWhile Char.isDigit)
 
-/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING) -/
+/-- Helper (computation). Uses `Nat.isDigit_of_mem_toDigits` and `hc : c.isDigit = false` to invert
+reversed decimal rendering before a non-digit delimiter `c`; feeds `decodeWithKind_render`.
+(approved: PENDING) -/
 private theorem parseRevNat_digits (n : Nat) (c : Char) (rest : List Char)
     (hc : c.isDigit = false) :
     parseRevNat ((Nat.toDigits 10 n).reverse ++ c :: rest) = some (n, c :: rest) := by
@@ -343,7 +367,8 @@ private def decodeKinds : List TrapKind → List Char → Option TrapKind
 
 private def decodeKind (cs : List Char) : Option TrapKind := decodeKinds TrapKind.all cs
 
-/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING) -/
+/-- Helper (computation). Case analysis on `TrapKind` showing `decodeKind` recovers `kind` from
+`trapLineChars kind site sp`; feeds `decodeTrapLine_render`. (approved: PENDING) -/
 private theorem decodeKind_render (kind : TrapKind) (site : SiteId) (sp : Span) :
     decodeKind (trapLineChars kind site sp) = some kind := by
   cases kind <;>
@@ -370,14 +395,17 @@ private def decodeTrapLine (line : String) : Option (TrapKind × SiteId × Span)
   let (site, sp) ← decodeWithKind kind line.toList
   some (kind, site, sp)
 
-/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING) -/
+/-- Helper (computation). Reassociates `trapLineChars kind site sp` to isolate `linePrefix kind`
+at the front; feeds `decodeWithKind_render`. (approved: PENDING) -/
 private theorem trapLineChars_prefix (kind : TrapKind) (site : SiteId) (sp : Span) :
     trapLineChars kind site sp = linePrefix kind ++
       (sp.path.toList ++ ":".toList ++ (toString sp.line).toList ++ ":".toList ++
         (toString sp.col).toList ++ " (site ".toList ++ (toString site.id).toList ++ ")".toList) := by
   simp [trapLineChars, linePrefix, List.append_assoc]
 
-/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING) -/
+/-- Helper (computation). Combines `trapLineChars_prefix`, `stripPrefix_append`, and right-to-left
+`parseRevNat_digits` to recover `(site, sp)` from `trapLineChars`; feeds `decodeTrapLine_render`.
+(approved: PENDING) -/
 private theorem decodeWithKind_render (kind : TrapKind) (site : SiteId) (sp : Span) :
     decodeWithKind kind (trapLineChars kind site sp) = some (site, sp) := by
   have hline : 0 < sp.line := sp.line_pos
@@ -386,7 +414,8 @@ private theorem decodeWithKind_render (kind : TrapKind) (site : SiteId) (sp : Sp
   rw [trapLineChars_prefix, stripPrefix_append]
   simp [List.reverse_append, stripPrefix, parseRevNat_digits, hline, hcol]
 
-/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING) -/
+/-- Helper (computation). Left-inverse lemma `decodeTrapLine (trapLine kind site sp) =
+some (kind, site, sp)`; feeds `trapLine_injective`. (approved: PENDING) -/
 private theorem decodeTrapLine_render (kind : TrapKind) (site : SiteId) (sp : Span) :
     decodeTrapLine (trapLine kind site sp) = some (kind, site, sp) := by
   simp [decodeTrapLine, trapLine, decodeKind_render, decodeWithKind_render]
@@ -417,7 +446,9 @@ theorem byteColumn_tab (before : String) : byteColumn (before ++ "\t") = byteCol
 
 variable {O : Exec.Operands}
 
-/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
+/-- Helper (computation). Induction on `outputs` iterating `ValidTrace.output` when no request is
+outstanding (`none`); feeds `ValidTrace.answer_projection` and the internal-answer branch of
+`runFrom_validTrace`. (approved: PENDING)
  Output-only extensions preserve a complete valid trace. -/
 theorem ValidTrace.outputs {C : OperationContract S} {input : C.Input} {hist : List (Event S)}
     (h : ValidTrace C input none hist) (outputs : List S.Output) :
@@ -427,7 +458,9 @@ theorem ValidTrace.outputs {C : OperationContract S} {input : C.Input} {hist : L
   | cons output outputs ih =>
     simpa [List.append_assoc] using ih (ValidTrace.output h)
 
-/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
+/-- Helper (computation). Chains `ValidTrace.outputs`, `ValidTrace.request`, `ValidTrace.response`,
+and `ValidTrace.outputs` for a well-formed answered primitive step; feeds `runFrom_validTrace`.
+(approved: PENDING)
  The adapter's output/request/response/output answer shape extends a complete valid trace. -/
 theorem ValidTrace.answer_projection {C : OperationContract S} {input : C.Input}
     {hist before after : List (Event S)} {q : Request S} {r : Response S}
@@ -443,7 +476,8 @@ theorem ValidTrace.answer_projection {C : OperationContract S} {input : C.Input}
   have answered := ValidTrace.response pending matching allows
   simpa [CompleteTrace, List.append_assoc] using answered.outputs afterOutputs
 
-/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
+/-- Helper (computation). Distributes `ExecAdapter.project` (`List.flatMap`) over list append
+`xs ++ ys`; feeds the recursive step of `runFrom_validTrace`. (approved: PENDING)
  Projection distributes over the C1 event-history append performed by `runFrom`. -/
 theorem ExecAdapter.project_append (A : ExecAdapter O S) (xs ys : List O.Event) :
     A.project (xs ++ ys) = A.project xs ++ A.project ys := by

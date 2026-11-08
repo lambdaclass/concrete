@@ -92,28 +92,28 @@ def singleLinePrefixSpan (path : String) (pathOk : PathOk path) (prefixText : St
   sourceSpan path pathOk 1 (by decide) prefixText
 
 /-- Instance (law `ConcreteSpec.Core.Observe.sourcePrefixSpan_second_line`, case `multiline_utf8_tab`). -/
-example : sourcePrefixSpan "src/main.con" (by decide) ("fn main() {" ++ "\n" ++ "a\té") =
+example : sourcePrefixSpan "src/main.con" (by decide) ("let x = 1;" ++ "\n" ++ "a\té") =
     sourceSpan "src/main.con" (by decide) 2 (by decide) "a\té" :=
-  sourcePrefixSpan_second_line "src/main.con" (by decide) "fn main() {" "a\té"
+  sourcePrefixSpan_second_line "src/main.con" (by decide) "let x = 1;" "a\té"
     (by decide) (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Observe.sourcePrefixSpan_second_line`, case `multiline_utf8_tab`,
 subject `ConcreteSpec.Core.Observe.sourcePrefixSpan`, mutant `ConcreteSpec.Core.Observe.scalarPrefixSpan`). -/
-example : PathOk "src/main.con" ∧ ('\n' ∉ "fn main() {".toList) ∧ ('\n' ∉ "a\té".toList) ∧
-    ¬ (scalarPrefixSpan "src/main.con" (by decide) ("fn main() {" ++ "\n" ++ "a\té") =
+example : PathOk "src/main.con" ∧ ('\n' ∉ "let x = 1;".toList) ∧ ('\n' ∉ "a\té".toList) ∧
+    ¬ (scalarPrefixSpan "src/main.con" (by decide) ("let x = 1;" ++ "\n" ++ "a\té") =
       sourceSpan "src/main.con" (by decide) 2 (by decide) "a\té") := by
   decide
 
 /-- Instance (law `ConcreteSpec.Core.Observe.sourcePrefixSpan_second_line`, case `multiline_newline_reset`). -/
-example : sourcePrefixSpan "src/main.con" (by decide) ("fn main() {" ++ "\n" ++ "a\té") =
+example : sourcePrefixSpan "src/main.con" (by decide) ("let x = 1;" ++ "\n" ++ "a\té") =
     sourceSpan "src/main.con" (by decide) 2 (by decide) "a\té" :=
-  sourcePrefixSpan_second_line "src/main.con" (by decide) "fn main() {" "a\té"
+  sourcePrefixSpan_second_line "src/main.con" (by decide) "let x = 1;" "a\té"
     (by decide) (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Observe.sourcePrefixSpan_second_line`, case `multiline_newline_reset`,
 subject `ConcreteSpec.Core.Observe.sourcePrefixSpan`, mutant `ConcreteSpec.Core.Observe.singleLinePrefixSpan`). -/
-example : PathOk "src/main.con" ∧ ('\n' ∉ "fn main() {".toList) ∧ ('\n' ∉ "a\té".toList) ∧
-    ¬ (singleLinePrefixSpan "src/main.con" (by decide) ("fn main() {" ++ "\n" ++ "a\té") =
+example : PathOk "src/main.con" ∧ ('\n' ∉ "let x = 1;".toList) ∧ ('\n' ∉ "a\té".toList) ∧
+    ¬ (singleLinePrefixSpan "src/main.con" (by decide) ("let x = 1;" ++ "\n" ++ "a\té") =
       sourceSpan "src/main.con" (by decide) 2 (by decide) "a\té") := by
   decide
 
