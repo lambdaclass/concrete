@@ -10,14 +10,14 @@ permissions:
 jobs:
   freshness:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
           persist-credentials: false
-      - name: Observe latest main independently
+      - name: Observe main history independently
         run: |
           set -euo pipefail
           source scripts/checks/lib/bounded.sh
@@ -26,4 +26,14 @@ jobs:
             exists=$(bounded_run 30 -- git ls-remote origin "$ref")
             if [ -n "$exists" ]; then bounded_run 30 -- git fetch origin "$ref:$ref"; fi
           done
-          bounded_run 30 -- python3 scripts/checks/scheduled/observe.py
+          out=$(mktemp)
+          trap 'rm -f "$out"' EXIT
+          rc=0
+          bounded_run 120 -- python3 scripts/checks/scheduled/observe.py > "$out" 2>&1 || rc=$?
+          cat "$out"
+          cat "$out" >> "$GITHUB_STEP_SUMMARY"
+          if bounded_is_incomplete "$rc"; then
+            echo 'INCOMPLETE freshness observer timed out' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          exit "$rc"

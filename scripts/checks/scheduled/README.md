@@ -1,7 +1,7 @@
 # Scheduled tiers and freshness (R-0676)
 
-Authority: [R-0676](../../../ROADMAP.md#r-0676) and the
-[tier decision](../../../docs/decisions.md#decided-2026-11-08-gate-tiers), including
+Authority: [R-0676](https://github.com/unbalancedparentheses/concrete2/blob/81cfa508683fde7d2363284053dbe4405dd34ca3/ROADMAP.md#r-0676) and the
+[tier decision](https://github.com/unbalancedparentheses/concrete2/blob/81cfa508683fde7d2363284053dbe4405dd34ca3/docs/decisions.md#decided-2026-11-08-gate-tiers), including
 “Tier and scheduled-run rules” and “Design and build order”. These anchors are
 currently supplied by `origin/wip/record-chain-fix`, not this branch's main base.
 The scheduling section of `gates-briefs/prop-codex2.md` is the implementation brief.
@@ -65,43 +65,90 @@ in the result-index directory alongside logs and must be registered by G1's sche
 
 The note refs are `refs/notes/concrete-gates-daily` and
 `refs/notes/concrete-gates-weekly`. Each exact-SHA note is JSON Lines with immutable
-`run_id/run_attempt` identities. Publication fetches current history, rejects a
-duplicate attempt, appends, and uses ordinary fast-forward pushes with remote SHA
-readback. Concurrent publication retries from the newly fetched history, never a
-force push. Only the generated workflow publishes; local development does not push.
-A note retains complete structured metadata beyond artifact retention. Artifact
-upload runs even after failure, and publication requires the upload's artifact URL.
+`run_id/run_attempt` identities. Publication fetches current history and appends under
+`--force-with-lease=<ref>:<fetched-sha>` compare-and-swap. An identical existing
+attempt is an idempotent retry; a different payload at that identity is rejected
+with `replay would overwrite attempt`. Remote readback handles a dropped response
+without losing a successful update. No local development command publishes notes.
+A note retains structured metadata beyond artifact retention. Metadata has its own
+small artifact so collection does not download a potentially enormous log archive.
+Missing log uploads make an otherwise successful execution INCOMPLETE.
 Logs expire after 90 days under current GitHub retention: **long-term log/sample
 archival is still required by R-0676**, with a coordinator-selected durable store.
 No secret or storage setting is invented here.
 
-PASS requires all gates and their exact-diagnostic controls. A failure or unavailable
-observation remains FAIL or INCOMPLETE. Cancelled/skipped/queued-too-long/absent
-attempts are MISSING; they never become PASS. A worker killed before writing a note
-is an absent MISSING observation. Recording that cancellation's occurrence in notes,
-including a worker that never starts, still needs a GitHub-hosted completion
-collector using Actions' job provenance (R-0676); worker-owned metadata alone cannot
-attest jobs that never ran. No successful older note at another SHA qualifies main.
+PASS requires all gates and their exact-diagnostic controls. Status/conclusion and
+gate evidence agree in both directions: gate FAIL takes precedence over INCOMPLETE;
+PASS needs nonempty passing gates and controls; INCOMPLETE needs incomplete evidence.
+Cancelled/skipped/queued-too-long/absent attempts are MISSING, allowing empty gates,
+no artifact and no assigned worker. A later PASS never erases a FAIL on that SHA,
+even after the freshness window expires. A late completion cannot overwrite an
+already recorded overdue attempt; replay uses a new Actions run attempt.
 
-The observer runs every four hours on `ubuntu-24.04` and is called from normal CI.
-It reads main and note refs independently of the host and exits nonzero for
-STALE/MISSING/FAIL/INCOMPLETE, reporting each tier. It is not added to
-`required-checks.txt`: defects block dependent work, not every unrelated landing.
-If the watchdog schedule is missed, normal CI invokes the same observation.
-Explicit observer-occurrence history and missed-observer controls remain R-0676
-integration work, rather than treating a current observation as proof of past ones.
+Workers have read-only contents tokens, with checkout credential persistence off.
+They never publish. `gate_publish.yml` runs on GitHub-hosted runners after workflow
+completion (including whole-workflow cancellation), and hourly for queued/unstarted
+attempts older than 26 hours. It checks out only the trusted publisher's default-branch
+revision, never the selected historical SHA, and never executes artifact contents.
+It obtains job status/conclusion and runner name from Actions' attempt-specific
+Jobs API, then applies ISS-0029's inventory for the observing repository. Worker
+runner/repository assertions cannot establish provenance. Selection comes from the
+hosted selector's Actions job log, with one exact `SCHEDULE_SELECTION SHA TIER`
+diagnostic; no worker-supplied selection qualifies. If selection never completed,
+both tiers receive absent records on the trusted workflow event SHA. Worker failures
+without a result index are MISSING, rather than invented gate failures. Collector
+API/inventory errors produce a failing INCOMPLETE collector observation; missing
+notes remain visible to the independent observer. HTTP redirects strip credentials.
+
+`gate_freshness.yml` runs every four hours, on pushes to main, and on manual dispatch.
+It reports exact-SHA defects across main's first-parent history, with FAIL precedence,
+and separately reports fresh ancestor coverage, stale evidence, or absent history.
+Ancestor coverage is operational freshness, never qualification of a different SHA.
+The workflow exits nonzero and surfaces defects through its Actions run, logs and
+job summary. **It is independent of PR and landing CI**, absent from
+`lean_action_ci.yml` and `required-checks.txt`; it cannot block unrelated candidates
+or change the train's required-job classification. Main pushes provide prompt
+visibility without adding a required candidate check. A scheduled failure requires
+immediate triage and a structural repair/regression pinned to its exact SHA; dependent
+work stops. It never becomes a blanket failed check on unrelated landings.
+
+All git subprocesses discard inherited `GIT_*` variables. The executor reads the
+checked-out HEAD back and records it separately from the trusted controller revision.
+Slot and bounded libraries come from the trusted controller ROOT. Exit 125 is reserved
+for controller incompleteness (slot acquisition or bounded double timeout); a gate
+that completes with exit 124 remains a failure. Per-gate exceptions preserve FAIL and
+allow later gates to execute. Inventory/setup errors write indexed INCOMPLETE evidence.
+
+Remaining qualification work belongs to **R-0676**, coordinated with R-0674/R-0675:
+shared X4 dispatch agreement with ISS-0029 (whose referenced branch supplies no
+reusable dispatcher), manifest-owned freshness windows and agreed exporter schema,
+shared cross-user host slots, durable logs/samples, and observer-occurrence history
+with missed-observer controls. No substitute gate list, private semaphore or hosting
+setting is introduced. The coordinator should track “Scheduled evidence integration
+and watchdog qualification”: land these producer interfaces, validate real cancellation,
+queue and remote-note retry scenarios on CI2/GitHub, archive artifacts durably, and
+prove an absent observer is detected independently. This is qualification work, not
+a claim that fixture-only tests have exercised a real campaign.
+
+No GitHub settings, secrets, runner registrations or branch protection changes are
+required by this patch. Its publisher requests job-scoped `contents: write` and
+`actions: read` in workflow YAML; the coordinator must verify repository policy allows
+those scopes. Host slot-directory provisioning and durable archival remain explicit
+operational dependencies; this branch does not make those changes.
 
 ## Focused verification
 
 Inside `nix develop .#gates`:
 
 ```
-bash scripts/checks/lib/bounded.sh 20 python3 scripts/checks/scheduled/test_protocol.py
+bash scripts/checks/scheduled_gates.sh
 bash scripts/checks/lib/bounded.sh 30 bash scripts/checks/workflow_yaml.sh
 ```
 
 Controls assert full diagnostics for stale, absent, wrong-SHA, cancelled, replay
 collision, forged host, missing artifact/control and fail-then-pass disagreement.
-These are protocol controls, not evidence that actual campaign/collector integration
+The root runner requires `scheduled_gates.sh`, which runs protocol, executor,
+collector, publication and history-observer controls through the bounded runner.
+These are controller controls, not evidence that actual campaign/collector integration
 has run. Qualification requires coordinator CI2 checks after the dependencies above
 land; do not run heavy campaigns locally or weaken campaigns to make them cheap.
