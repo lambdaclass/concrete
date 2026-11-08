@@ -1,0 +1,4 @@
+[piece 1 of 2: scripts]
+- scripts/checks/landing_bot.sh:443: The new launcher tests invoke GNU `timeout`, which is unavailable on the macOS job. Both stale-origin cases then fail without exercising the launcher, and the valid-origin case fails too, making this gate fail on macOS. Use the repository’s `bounded_run` helper.
+
+Repository reads failed because the sandbox could not start, so review was limited to the supplied diff; owner-decision compliance could not be fully verified.
