@@ -72,6 +72,7 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 - Language and process decisions: no method calls or receivers, no `as`, always-qualified imports, no `char`, trap names, review sign-off ([row](#decided-2026-11-08-language)).
 - Owner sign-offs of slice 0, record-language and one repository ([row](#decided-2026-11-08-signoffs)).
 - The landing protection redesign: server-side protection of `main` ([row](#decided-2026-11-08-landing-redesign)).
+- Commit and push everything all the time ([row](#decided-2026-11-08-commit-push)).
 - Byte-for-byte sweeps into `legacy/`, and `docs/archive/` moves there ([sweep](#decided-2026-11-08-legacy-sweep), [archive](#decided-2026-11-08-archive-move)).
 - Every branch gets an agy review too ([row](#decided-project-review)).
 - Eleven plan and process decisions: UBSan dropped, a complete adapter theorem, smaller landing scripts, Claude's quota on the critical path, the front end now, one decisions writer, risk-capped reviews, one clones folder, a later no-libc runtime, a compile-speed budget and the termination wording ([row](#decided-2026-11-08-eleven)).
@@ -1384,6 +1385,11 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   4. then a much smaller local guard, as a convenience only (R-0629).
   `wip/remote-guard` (`b60670804`) and `wip/acceptance-shim` (`eca268078`) are superseded and do not
   land.
+- <a id="decided-2026-11-08-commit-push"></a>**Commit and push everything all the time** (owner,
+  2026-11-08: "commit and push everything all the time"). Every piece is committed as soon as it
+  builds and its checks pass, and pushed to `origin` and `lambdaclass` at once: on `wip/` branches,
+  from a full clone, with the hook on, and never force-pushed. `main` changes only through the train.
+  A candidate under review stays fixed; new work goes in new commits or branches.
 - <a id="decided-2026-11-08-legacy-sweep"></a>**Byte-for-byte sweeps into `legacy/`** (owner,
   2026-11-08: "ok to 1", answering legacy sweep question 1). `legacy_frozen.sh` may accept an addition
   under `legacy/` only if it is byte-identical to the same root path at a named commit, and the file
