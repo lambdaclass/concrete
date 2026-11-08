@@ -5,11 +5,13 @@ import ConcreteSpec.Spec.Surface0
 
 Total byte-list UTF-8 decoding and source checking, ASCII identifiers, the four settled whitespace
 scalars, line comments and maximal trivia scanning. String bodies implement only the six decided
-escapes and parameterize all other raw scalars. Longest match uses an arbitrary table, and decimal
-integer lexemes refuse leading zeroes. No keyword, reserved-word, builtin, concrete operator or
-punctuation set, literal suffix, other literal rule, shebang handling or block comment is introduced;
-no other Unicode whitespace is included. Error constructors are internal data, not diagnostic
-wording. Offsets are zero-based byte offsets;
+escapes and refuse raw Unicode Cc scalars with an internal error. Byte literals have printable-ASCII
+raw scalars, a parameterized escape decoder and the six decided SYN-6 escapes; labels are quote plus
+an identifier. Longest match uses an arbitrary table. Integers implement the four decided bases and
+eight suffixes, reject malformed suffixes without splitting them, and retain decimal leading-zero
+refusal. No keyword, reserved-word, builtin, concrete operator or punctuation set, float literal,
+shebang handling or block comment is introduced; no other Unicode whitespace is included. Error
+constructors are internal data, not diagnostic wording. Offsets are zero-based byte offsets;
 truncation points at EOF. TODO: prove the first non-extendible-prefix property of error offsets.
 The success correspondence theorems below do not claim error-position correctness.
 -/
@@ -611,7 +613,7 @@ theorem identifier_unique {cs : List Nat} {out₁ out₂ : List Nat × List Nat}
   have h := (identifier_complete h₁).symm.trans (identifier_complete h₂)
   exact Option.some.inj h
 
-/-- Decode exactly the six settled escapes. -/
+/-- Decode exactly the six settled string escapes. -/
 def decodeEscape : Nat → Option Nat
   | 110 => some 10
   | 116 => some 9
@@ -621,58 +623,59 @@ def decodeEscape : Nat → Option Nat
   | 48 => some 0
   | _ => none
 
-/-- Every scanner-approved escape is in the declarative escape relation. -/
+/-- Every scanner-approved string escape is in the declarative escape relation. -/
 theorem decodeEscape_sound {escaped decoded : Nat} (h : decodeEscape escaped = some decoded) :
     StringEscape escaped decoded := by
   unfold decodeEscape at h
   split at h <;> simp_all [StringEscape]
 
-/-- Every declarative escape is decoded to its settled scalar. -/
+/-- Every declarative string escape is decoded to its settled scalar. -/
 theorem decodeEscape_complete {escaped decoded : Nat} (h : StringEscape escaped decoded) :
     decodeEscape escaped = some decoded := by
   rcases h with (⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩)
   all_goals rfl
 
-/-- Prepend a decoded scalar to a successful string-body result. -/
-def stringPrepend (c : Nat) : Option (List Nat × List Nat) → Option (List Nat × List Nat)
-  | none => none
-  | some (decoded, rest) => some (c :: decoded, rest)
+/-- Internal string-body refusals; their constructor names are not user-visible diagnostics. -/
+inductive StringError where
+  | unterminated | invalidEscape (escaped : Nat) | rawControl (c : Nat)
+  deriving DecidableEq, Repr
 
-/-- Scan a string body after its opening quote. `rawOk` remains an explicit parameter and does
-not choose whether any other raw control scalar is accepted. -/
-def stringBody (rawOk : Nat → Prop) [DecidablePred rawOk] :
-    List Nat → Option (List Nat × List Nat)
-  | [] => none
-  | 34 :: rest => some ([], rest)
+/-- Prepend a decoded scalar to a successful string-body result. -/
+def stringPrepend (c : Nat) : Except StringError (List Nat × List Nat) →
+    Except StringError (List Nat × List Nat)
+  | .error e => .error e
+  | .ok (decoded, rest) => .ok (c :: decoded, rest)
+
+/-- Scan a string body after its opening quote, refusing every raw Unicode Cc scalar. -/
+def stringBody : List Nat → Except StringError (List Nat × List Nat)
+  | [] => .error .unterminated
+  | 34 :: rest => .ok ([], rest)
   | 92 :: escaped :: input =>
     match decodeEscape escaped with
-    | some decoded => stringPrepend decoded (stringBody rawOk input)
-    | none => none
-  | 92 :: [] => none
-  | 10 :: _ => none
-  | 13 :: _ => none
-  | c :: input => if rawOk c then stringPrepend c (stringBody rawOk input) else none
+    | some decoded => stringPrepend decoded (stringBody input)
+    | none => .error (.invalidEscape escaped)
+  | 92 :: [] => .error .unterminated
+  | c :: input => if Control c then .error (.rawControl c) else stringPrepend c (stringBody input)
 
 /-- Successful prepending exposes the successful tail and decoded list. -/
-theorem stringPrepend_ok {c : Nat} {r : Option (List Nat × List Nat)}
-    {out : List Nat × List Nat} (h : stringPrepend c r = some out) :
-    ∃ decoded rest, r = some (decoded, rest) ∧ out = (c :: decoded, rest) := by
+theorem stringPrepend_ok {c : Nat} {r : Except StringError (List Nat × List Nat)}
+    {out : List Nat × List Nat} (h : stringPrepend c r = .ok out) :
+    ∃ decoded rest, r = .ok (decoded, rest) ∧ out = (c :: decoded, rest) := by
   cases r with
-  | none => simp [stringPrepend] at h
-  | some tail =>
+  | error e => simp [stringPrepend] at h
+  | ok tail =>
     cases tail with
     | mk decoded rest =>
-      cases Option.some.inj h
+      cases Except.ok.inj h
       exact ⟨decoded, rest, rfl, rfl⟩
 
-/-- Every scanner result satisfies the independent string-body judgment for the same `rawOk`. -/
-theorem stringBody_sound (rawOk : Nat → Prop) [DecidablePred rawOk]
-    {cs : List Nat} {out : List Nat × List Nat}
-    (h : stringBody rawOk cs = some out) : StringBody rawOk cs out := by
-  induction cs using stringBody.induct (rawOk := rawOk) generalizing out with
+/-- Every scanner result satisfies the independent string-body judgment. -/
+theorem stringBody_sound {cs : List Nat} {out : List Nat × List Nat}
+    (h : stringBody cs = .ok out) : StringBody cs out := by
+  induction cs using stringBody.induct generalizing out with
   | case1 => simp [stringBody] at h
   | case2 rest =>
-    cases Option.some.inj h
+    cases Except.ok.inj h
     exact .close rest
   | case3 escaped input decodedScalar he ih =>
     simp only [stringBody, he] at h
@@ -680,9 +683,7 @@ theorem stringBody_sound (rawOk : Nat → Prop) [DecidablePred rawOk]
     exact .escape (decodeEscape_sound he) (ih ht)
   | case4 escaped input he => simp [stringBody, he] at h
   | case5 => simp [stringBody] at h
-  | case6 rest => simp [stringBody] at h
-  | case7 rest => simp [stringBody] at h
-  | case8 c input hq hb hl hr hc hraw ih =>
+  | case6 c input hq hb hl hraw ih =>
     simp only [stringBody, hraw, ↓reduceIte] at h
     obtain ⟨decoded, rest, ht, rfl⟩ := stringPrepend_ok h
     have hb' : c ≠ 92 := by
@@ -690,23 +691,122 @@ theorem stringBody_sound (rawOk : Nat → Prop) [DecidablePred rawOk]
       cases input with
       | nil => exact hl heq rfl
       | cons escaped tail => exact hb escaped tail heq rfl
-    exact .raw hq hb' hr hc hraw (ih ht)
-  | case9 c input hq hb hl hr hc hraw => simp [stringBody, hraw] at h
+    exact .raw ⟨hq, hb', hraw⟩ (ih ht)
+  | case7 c input hq hb hl hraw => simp [stringBody, hraw] at h
 
 /-- Every declarative string body is recognized with the same decoding and remainder. -/
-theorem stringBody_complete (rawOk : Nat → Prop) [DecidablePred rawOk]
-    {cs : List Nat} {out : List Nat × List Nat}
-    (h : StringBody rawOk cs out) : stringBody rawOk cs = some out := by
+theorem stringBody_complete {cs : List Nat} {out : List Nat × List Nat}
+    (h : StringBody cs out) : stringBody cs = .ok out := by
   induction h with
   | close rest => rfl
-  | raw hq hb hl hr hc _ ih => simp [stringBody, hb, hc, ih, stringPrepend]
+  | raw hraw _ ih => simp [stringBody, hraw.1, hraw.2.1, hraw.2.2, ih, stringPrepend]
   | escape he _ ih => simp [stringBody, decodeEscape_complete he, ih, stringPrepend]
 
-/-- String-body decompositions are unique for every raw-scalar parameter. -/
-theorem stringBody_unique (rawOk : Nat → Prop) [DecidablePred rawOk]
-    {cs : List Nat} {out₁ out₂ : List Nat × List Nat}
-    (h₁ : StringBody rawOk cs out₁) (h₂ : StringBody rawOk cs out₂) : out₁ = out₂ := by
-  have h := (stringBody_complete rawOk h₁).symm.trans (stringBody_complete rawOk h₂)
+/-- String-body decompositions are unique. -/
+theorem stringBody_unique {cs : List Nat} {out₁ out₂ : List Nat × List Nat}
+    (h₁ : StringBody cs out₁) (h₂ : StringBody cs out₂) : out₁ = out₂ := by
+  have h := (stringBody_complete h₁).symm.trans (stringBody_complete h₂)
+  exact Except.ok.inj h
+
+/-- Internal byte-literal refusals; no diagnostic wording is fixed. -/
+inductive ByteError where
+  | invalidRaw (c : Nat) | invalidEscape (escaped : Nat) | outOfRange (decoded : Nat)
+  deriving DecidableEq, Repr
+
+/-- Scan a byte literal for an arbitrary escape decoder. Other quote-led inputs are left for labels. -/
+def byteLiteral (decode : Nat → Option Nat) : List Nat →
+    Except ByteError (Option (List Nat × Nat × List Nat))
+  | 39 :: 92 :: escaped :: 39 :: rest =>
+    match decode escaped with
+    | some decoded =>
+      if decoded < 256 then .ok (some ([39, 92, escaped, 39], decoded, rest))
+      else .error (.outOfRange decoded)
+    | none => .error (.invalidEscape escaped)
+  | 39 :: c :: 39 :: rest =>
+    if ByteRaw c then .ok (some ([39, c, 39], c, rest)) else .error (.invalidRaw c)
+  | _ => .ok none
+
+/-- Successful generic byte scanning satisfies the same generic escape relation. -/
+theorem byteLiteral_sound (escape : Nat → Nat → Prop) (decode : Nat → Option Nat)
+    (hsound : ∀ {escaped decoded : Nat}, decode escaped = some decoded → escape escaped decoded)
+    {cs : List Nat} {out : List Nat × Nat × List Nat}
+    (h : byteLiteral decode cs = .ok (some out)) : ByteLiteral escape cs out := by
+  unfold byteLiteral at h
+  split at h
+  · split at h
+    · rename_i decoded hdecode
+      split at h
+      · cases Except.ok.inj h
+        exact .escaped (hsound hdecode) (by assumption)
+      · cases h
+    · cases h
+  · split at h
+    · cases Except.ok.inj h
+      exact .raw (by assumption)
+    · cases h
+  · cases h
+
+/-- Every generic declarative byte literal is recognized by a corresponding decoder. -/
+theorem byteLiteral_complete (escape : Nat → Nat → Prop) (decode : Nat → Option Nat)
+    (hcomplete : ∀ {escaped decoded : Nat}, escape escaped decoded → decode escaped = some decoded)
+    {cs : List Nat} {out : List Nat × Nat × List Nat}
+    (h : ByteLiteral escape cs out) : byteLiteral decode cs = .ok (some out) := by
+  cases h with
+  | raw hraw => simp [byteLiteral, hraw]
+  | escaped he hd => simp [byteLiteral, hcomplete he, hd]
+
+/-- Decode exactly the byte escapes already decided by SYN-6; this adds no new escape members. -/
+def decodeByteEscape : Nat → Option Nat
+  | 110 => some 10
+  | 116 => some 9
+  | 114 => some 13
+  | 92 => some 92
+  | 39 => some 39
+  | 48 => some 0
+  | _ => none
+
+/-- Every scanner-approved byte escape is in the decided relation. -/
+theorem decodeByteEscape_sound {escaped decoded : Nat}
+    (h : decodeByteEscape escaped = some decoded) : ByteEscape escaped decoded := by
+  unfold decodeByteEscape at h
+  split at h <;> simp_all [ByteEscape]
+
+/-- Every decided byte escape is decoded to its specified value. -/
+theorem decodeByteEscape_complete {escaped decoded : Nat} (h : ByteEscape escaped decoded) :
+    decodeByteEscape escaped = some decoded := by
+  rcases h with (⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩)
+  all_goals rfl
+
+/-- Scan quote followed by an identifier as a label. -/
+def label : List Nat → Option (List Nat × List Nat)
+  | 39 :: input =>
+    match identifier input with
+    | some (name, rest) => some (39 :: name, rest)
+    | none => none
+  | _ => none
+
+/-- Successful label scanning satisfies the independent judgment. -/
+theorem label_sound {cs : List Nat} {out : List Nat × List Nat}
+    (h : label cs = some out) : Label cs out := by
+  unfold label at h
+  split at h
+  · split at h
+    · rename_i name rest hid
+      cases Option.some.inj h
+      exact .intro (identifier_sound hid)
+    · cases h
+  · cases h
+
+/-- Every declarative label is recognized with the same lexeme and remainder. -/
+theorem label_complete {cs : List Nat} {out : List Nat × List Nat}
+    (h : Label cs out) : label cs = some out := by
+  cases h with
+  | intro hi => simp [label, identifier_complete hi]
+
+/-- Label decompositions are unique. -/
+theorem label_unique {cs : List Nat} {out₁ out₂ : List Nat × List Nat}
+    (h₁ : Label cs out₁) (h₂ : Label cs out₂) : out₁ = out₂ := by
+  have h := (label_complete h₁).symm.trans (label_complete h₂)
   exact Option.some.inj h
 
 /-- Strip a token from the front of an input, or report that it is not a prefix. -/
