@@ -160,6 +160,41 @@
                 realpath = map builtins.toString [ pkgs.coreutils pkgs.llvmPackages_21.clang pkgs.clang ];
                 rm = map builtins.toString [ pkgs.coreutils pkgs.llvmPackages_21.clang pkgs.clang ];
               };
+              # Role boundaries are independent of the union pipeline closure.
+              roleToolRoots = let
+                compilerTools = cc: {
+                  clang = [ (builtins.toString cc) ];
+                  clang-21 = [ (builtins.toString cc) ];
+                  ar = [ (builtins.toString cc.bintools) ];
+                  ld = [ (builtins.toString cc.bintools) ];
+                  ld64 = [ (builtins.toString cc.bintools) ];
+                  "ld.lld" = [ (builtins.toString cc.bintools) ];
+                  as = [ (builtins.toString cc.bintools) ];
+                };
+              in {
+                native = (compilerTools pkgs.llvmPackages_21.clang) // {
+                  lean = []; leanc = []; lake = []; git = [];
+                };
+                # leanc uses the shell C compiler for headers/libc; Lean's
+                # bundled toolchain also serves Lean-generated code, never native IR.
+                lean-build = pkgs.lib.mapAttrs (_: roots: roots ++ [ (builtins.toString leanRelease) ])
+                  (compilerTools pkgs.clang);
+                lean-emit = pkgs.lib.mapAttrs (_: _: []) (compilerTools pkgs.clang);
+              };
+              roleLinkers = {
+                native = map builtins.toString [ pkgs.llvmPackages_21.clang.bintools
+                  pkgs.llvmPackages_21.clang.bintools.bintools ];
+                lean-build = map builtins.toString [ pkgs.clang.bintools
+                  pkgs.clang.bintools.bintools leanRelease ];
+                lean-emit = [];
+              };
+              roleCompilers = {
+                native = [ "${pkgs.llvmPackages_21.clang}/bin/clang"
+                  "${pkgs.llvmPackages_21.clang.cc}/bin/clang" ];
+                lean-build = [ "${pkgs.clang}/bin/clang" "${pkgs.clang.cc}/bin/clang"
+                  "${leanRelease}/bin/clang" ];
+                lean-emit = [];
+              };
               lean = builtins.toString leanRelease;
               git = "${pkgs.git}/bin/git";
               nativeClang = "${pkgs.llvmPackages_21.clang}/bin/clang";

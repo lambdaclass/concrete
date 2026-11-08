@@ -78,7 +78,7 @@ tool_names() {
   bounded 30 python3 -I "$root/scripts/checks/lib/execve_names.py" "$@" | cap_out >"$out"
 }
 
-# check_tools ALLOWED MODE LOG [LOG ...]: every successfully executed program in each trace
+# check_tools ALLOWED ROLE LOG [LOG ...]: every successfully executed program in each trace
 # session must be named by a non-gate component and resolve to its lock-derived store identity.
 check_tools() {
   local allowed=$1 mode=$2 names="$work/check-tools.names"
@@ -94,7 +94,7 @@ check_tools() {
   fi
   if [ "$mode" != parser-only ]; then
     bounded 120 python3 -I "$root/scripts/checks/lib/trusted_identity.py" check \
-      "$@" "$allowed" "$work/identity.json" "$lcb" || return 1
+      "$mode" "$@" "$allowed" "$work/identity.json" "$lcb" || return 1
   fi
   echo "ok   tools: every exec'd program is listed with verified identity"
 }
@@ -150,11 +150,11 @@ EOF
   (cd "$d"; LAKE_ARTIFACT_CACHE=false LAKE_CACHE_DIR="$d/.cache" \
     bounded 180 strace -f -qq -s 4096 -e trace=execve,execveat \
     -o "$work/fresh-pr.execve" lake build) || return 1
-  check_tools "$work/pipeline-tools" full "$work/fresh-pr.execve" || return 1
+  check_tools "$work/pipeline-tools" lean-build "$work/fresh-pr.execve" || return 1
   (cd "$control"; LAKE_ARTIFACT_CACHE=false LAKE_CACHE_DIR="$control/.cache" \
     bounded 180 strace -f -qq -s 4096 -e trace=execve,execveat \
     -o "$work/build-control.execve" lake build) || return 1
-  if check_tools "$work/pipeline-tools" full "$work/build-control.execve" >"$work/build-control.out" 2>&1; then
+  if check_tools "$work/pipeline-tools" lean-build "$work/build-control.execve" >"$work/build-control.out" 2>&1; then
     echo "FAIL control: fresh Lake build accepts objcopy"; return 1
   fi
   grep -qxF "FAIL tools: unlisted program 'objcopy'" "$work/build-control.out" || {
@@ -503,9 +503,9 @@ EOF
     cp "$(command -v bash)" "$work/ctl/wrong-path/clang"
     bounded 30 strace -f -qq -s 4096 -e trace=execve,execveat \
       -o "$work/ctl/wrong-path.execve" "$work/ctl/wrong-path/clang" --version >/dev/null
-    if check_tools "$work/pipeline-tools" full "$work/ctl/wrong-path.execve" >"$work/ctl/wrong-path.out" 2>&1; then
+    if check_tools "$work/pipeline-tools" native "$work/ctl/wrong-path.execve" >"$work/ctl/wrong-path.out" 2>&1; then
       echo "FAIL control: identity audit accepts a different executable named clang"; fail=1
-    elif grep -qxF "FAIL tools: unexpected executable 'clang': $work/ctl/wrong-path/clang" "$work/ctl/wrong-path.out"; then
+    elif grep -qxF "FAIL tools: identity-mismatch role 'native' program 'clang': $work/ctl/wrong-path/clang" "$work/ctl/wrong-path.out"; then
       echo "ok   control: identity audit rejects the wrong-path clang"
     else
       echo "FAIL control: wrong-path clang did not fail for the planted identity reason"; fail=1
@@ -515,9 +515,9 @@ EOF
     ln -s "$(command -v bash)" "$work/ctl/symlink-path/clang"
     bounded 30 strace -f -qq -s 4096 -e trace=execve,execveat \
       -o "$work/ctl/symlink-path.execve" "$work/ctl/symlink-path/clang" --version >/dev/null
-    if check_tools "$work/pipeline-tools" full "$work/ctl/symlink-path.execve" >"$work/ctl/symlink-path.out" 2>&1; then
+    if check_tools "$work/pipeline-tools" native "$work/ctl/symlink-path.execve" >"$work/ctl/symlink-path.out" 2>&1; then
       echo "FAIL control: identity audit accepts a symlink named clang to a store binary"; fail=1
-    elif grep -qxF "FAIL tools: unexpected executable 'clang': $(realpath "$(command -v bash)")" "$work/ctl/symlink-path.out"; then
+    elif grep -qxF "FAIL tools: identity-mismatch role 'native' program 'clang': $(realpath "$(command -v bash)")" "$work/ctl/symlink-path.out"; then
       echo "ok   control: identity audit rejects a symlink named clang to a store binary"
     else
       echo "FAIL control: symlink-path clang did not fail for the planted identity reason"
@@ -534,7 +534,9 @@ EOF
       mapfile -t emitter_logs <"$work/emitter.logs"
       mapfile -t native_logs <"$work/native.logs"
       all_logs=("$work/build.execve" "${emitter_logs[@]}" "${native_logs[@]}")
-      check_tools "$work/pipeline-tools" full "${all_logs[@]}" || fail=1
+      check_tools "$work/pipeline-tools" lean-build "$work/build.execve" || fail=1
+      check_tools "$work/pipeline-tools" lean-emit "${emitter_logs[@]}" || fail=1
+      check_tools "$work/pipeline-tools" native "${native_logs[@]}" || fail=1
       tool_names "$work/build.tools" "$work/build.execve" || fail=1
       tool_names "$work/emitter.tools" "${emitter_logs[@]}" || fail=1
       tool_names "$work/native.tools" "${native_logs[@]}" || fail=1
@@ -551,7 +553,7 @@ EOF
       if ! trace_emit "${program#bir:}" "$d" "${expectation[@]}" ||
          ! trace_native "$d" "$work/ctl/native-with-objcopy.sh"; then
         echo "FAIL control: the unlisted-tool native build did not complete"; fail=1
-      elif check_tools "$work/pipeline-tools" full "$d/native.execve" >"$work/ctl/unlisted-tool.log" 2>&1; then
+      elif check_tools "$work/pipeline-tools" native "$d/native.execve" >"$work/ctl/unlisted-tool.log" 2>&1; then
         echo "FAIL control: the tool audit accepts objcopy"; fail=1
       elif grep -qF "FAIL tools: unlisted program 'objcopy'" "$work/ctl/unlisted-tool.log"; then
         echo "ok   control: the tool audit names objcopy"
@@ -563,7 +565,7 @@ EOF
 
       if ! pipeline_tools "$work/tools-without-clang" clang-llvm; then
         echo "FAIL control: rendering the list without clang failed"; fail=1
-      elif check_tools "$work/tools-without-clang" full "${all_logs[@]}" >"$work/ctl/without-clang.log" 2>&1; then
+      elif check_tools "$work/tools-without-clang" native "${native_logs[@]}" >"$work/ctl/without-clang.log" 2>&1; then
         echo "FAIL control: the tool audit accepts a list without clang"; fail=1
       elif grep -Eq "FAIL tools: unlisted program 'clang(-[0-9]+)?'" "$work/ctl/without-clang.log"; then
         echo "ok   control: removing clang makes the real native-helper trace fail"

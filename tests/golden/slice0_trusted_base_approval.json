@@ -15,7 +15,7 @@
   ],
   "inputs": {
     "flake.lock": "d0a75387719c81fc35e16c0242b7b099f896235959d3936ec510cd2e9c0d9a3d",
-    "flake.nix": "bbe472b67f4bffbbbe8b994497ce8677cff35ed5d1fee2bdb62565fc1a027b14",
+    "flake.nix": "fe10967407474bbec139f69ebb33c16eddb5c34b8db91be0f2909cf4b152d5e0",
     "lake-manifest.json": "2aedd85285d989bc0a6d8ee249787140cf7e9ab3edf1e9abef7f28a1f99e5c15",
     "lean-toolchain": "d5edba4e4b8faad9c1baeadb265716d20d03be4d1a2647dc5e35b0c0325bea7b"
   },

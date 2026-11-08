@@ -58,13 +58,36 @@ flake derivation mappings `derivations`, and exact `lean`, `git` and `nativeClan
 paths). `trusted_identity.py` evaluates `trustedIdentity` in one call, verifies
 NAR hashes on the closure, checks the consumed `lean`, `lake`, `git` and
 `CONCRETE_SLICE0_CLANG` realpaths and the Lean toolchain version, and requires
-every Lake package checkout clean at its `lake-manifest.json` revision. Every
-observed `execve` must have both its invoked store root and its resolved store
-root inside that tool name's own `tool_closures[name]` set and resolve to an
-expected binary basename (`RESOLVED_NAMES`), while local `lcb` is restricted to
-`name == "lcb"` and `realpath == lcb` with a pinned SHA-256. Both a wrong-path
-`clang` binary and a symlink named `clang` pointing to a store binary (`bash`)
-inside the closure are tested as live negative controls and refused.
+every Lake package checkout clean at its `lake-manifest.json` revision.
+Each trace is checked under an explicit role: `native` (native compilation and
+linking, both using the selected LLVM 21 compiler/bintools), `lean-build`
+(initial and fresh Lake builds), or `lean-emit` (interpreter-only emission, no
+compiler/linker permitted). Role assignments are made by the tracing caller,
+never inferred from an executable's name or its own claimed identity. Every
+execution must satisfy its role's per-tool invoked AND resolved root sets;
+missing tool policies admit nothing. Native compiler execution additionally
+requires the exact resolved wrapper or underlying compiler identity of
+`llvmPackages_21.clang`, rejecting both the shell's other clang package and
+Lean's bundled clang with `FAIL tools: identity-mismatch role 'native' program
+'clang': ...`. Native linker/assembler/archive tools are bound to that selected
+compiler's bintools closure AND exact resolved bin endpoints from its wrapper
+and underlying bintools packages, independently of Lean's toolchain.
+
+Lean builds have a separate justification: `leanc` compiles Lean-generated C and
+links Lean executables; the shell's `pkgs.clang` supplies C headers/libc that the
+Lean release's bundled toolchain lacks. Those builds may use that compiler and
+Lean's bundled compiler, with their own bintools/Lean roots. This permission
+does not extend to native manifest builds. With today's lock, `pkgs.clang` and
+`llvmPackages_21.clang` evaluate to the same store identity on x86_64-linux;
+identical bytes/paths are one identity, not a detectable substitution. The
+other-package control uses distinct store identities so a future divergence
+cannot silently widen native permissions. Compiler wrapper and underlying
+binary realpaths are both pinned. Other tools retain their component policies;
+local `lcb` requires its exact path and pinned SHA-256. The focused controls
+reject Lean/other-clang substitution in the native role, accept them only in
+`lean-build`, and model a cross-component symlink with BOTH paths inside
+`/nix/store`: its invoked root passes, but its resolved component fails. These
+synthetic immutable-store paths avoid mutating the shared Nix store.
 
 The scheduled scripts `scripts/checks/compiler/slice0_trusted_fresh.sh` (daily)
 and `scripts/checks/compiler/slice0_trusted_store.sh` (weekly) are standalone

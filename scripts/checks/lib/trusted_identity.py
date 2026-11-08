@@ -78,6 +78,24 @@ def store_evidence():
         tool: sorted({p for r in r_list for p in root_closures.get(r, [])})
         for tool, r_list in identity["toolRoots"].items()
     }
+    # Role roots may include bintools outputs outside the top-level package list.
+    role_closures = {}
+    for role, overrides in identity["roleToolRoots"].items():
+        role_closures[role] = dict(tool_closures)
+        for tool, packages in overrides.items():
+            paths = set()
+            for package in packages:
+                paths.update(run("nix", "path-info", "--recursive", package).splitlines())
+            role_closures[role][tool] = sorted(paths)
+    role_compilers = {role: sorted({os.path.realpath(p) for p in paths})
+                      for role, paths in identity["roleCompilers"].items()}
+    role_linkers = {
+        role: {tool: sorted({os.path.realpath(str(Path(root) / "bin" / alias))
+                            for root in roots for alias in RESOLVED_NAMES[tool]
+                            if (Path(root) / "bin" / alias).is_file()})
+               for tool in ("ar", "ld", "ld64", "ld.lld", "as")}
+        for role, roots in identity["roleLinkers"].items()
+    }
     for tool in ("lean", "lake"):
         actual = os.path.realpath(shutil.which(tool) or "")
         expected = os.path.realpath(lean + "/bin/" + tool)
@@ -85,7 +103,8 @@ def store_evidence():
     pin = Path("lean-toolchain").read_text().strip().split(":")[-1].removeprefix("v")
     if f"version {pin}," not in run(lean + "/bin/lean", "--version"):
         raise ValueError("Lean version differs from lean-toolchain")
-    return {"closure": closure, "tool_closures": tool_closures, "lean": lean,
+    return {"closure": closure, "tool_closures": tool_closures, "role_closures": role_closures,
+            "role_compilers": role_compilers, "role_linkers": role_linkers, "lean": lean,
             "inputs": {p: hashlib.sha256(Path(p).read_bytes()).hexdigest()
                        for p in ("flake.nix", "flake.lock", "lean-toolchain", "lake-manifest.json")}}
 
@@ -98,7 +117,7 @@ def prepare(output):
     Path(output).write_text(json.dumps(evidence, sort_keys=True) + "\n")
 
 
-def check(logs, allowed, evidence, lcb):
+def check(logs, allowed, evidence, lcb, role):
     if isinstance(logs, (str, Path)):
         logs = [logs]
     allowed = set(Path(allowed).read_text().splitlines())
@@ -110,7 +129,9 @@ def check(logs, allowed, evidence, lcb):
     paths = parse_many(logs, paths=True)
     if not paths: raise ValueError("no successful exec records")
     lcb_real = os.path.realpath(lcb)
-    tool_closures = evidence.get("tool_closures", {})
+    if role not in evidence["role_closures"]:
+        raise ValueError(f"unknown pipeline role: {role}")
+    tool_closures = evidence["role_closures"][role]
     for path in paths:
         name = os.path.basename(path)
         if name not in allowed:
@@ -125,7 +146,7 @@ def check(logs, allowed, evidence, lcb):
                 hashlib.sha256(Path(real).read_bytes()).hexdigest() != evidence.get("lcb_sha256")):
             print(f"FAIL tools: changed local LCB executable: {real}")
             failed = True
-        allowed_roots = set(tool_closures.get(name, evidence["closure"].keys()))
+        allowed_roots = set(tool_closures.get(name, []))
         valid_store = (
             not local
             and name != "lcb"
@@ -135,13 +156,21 @@ def check(logs, allowed, evidence, lcb):
             and root in evidence["closure"]
             and real_name in RESOLVED_NAMES.get(name, {name})
         )
+        if name in {"clang", "clang-21"} and real not in evidence["role_compilers"][role]:
+            print(f"FAIL tools: identity-mismatch role '{role}' program '{name}': {real}")
+            failed = True
+            continue
+        if name in {"ar", "ld", "ld64", "ld.lld", "as"} and real not in evidence["role_linkers"][role][name]:
+            print(f"FAIL tools: identity-mismatch role '{role}' program '{name}': {real}")
+            failed = True
+            continue
         if not local and not valid_store:
-            print(f"FAIL tools: unexpected executable '{name}': {real}")
+            print(f"FAIL tools: identity-mismatch role '{role}' program '{name}': {real}")
             failed = True
         else:
             info = evidence["closure"].get(root, {})
             print("tool-identity " + json.dumps({"executed": path, "resolved": real,
-                  "narHash": info.get("narHash"), "local": local}, sort_keys=True))
+                  "narHash": info.get("narHash"), "local": local, "role": role}, sort_keys=True))
     return 1 if failed else 0
 
 
@@ -149,9 +178,9 @@ if __name__ == "__main__":
     try:
         if sys.argv[1] == "prepare": prepare(sys.argv[2])
         elif sys.argv[1] == "check":
-            if len(sys.argv) < 6:
-                raise ValueError("usage: trusted_identity.py check LOG [LOG ...] ALLOWED EVIDENCE LCB")
-            sys.exit(check(sys.argv[2:-3], sys.argv[-3], sys.argv[-2], sys.argv[-1]))
+            if len(sys.argv) < 7:
+                raise ValueError("usage: trusted_identity.py check ROLE LOG [LOG ...] ALLOWED EVIDENCE LCB")
+            sys.exit(check(sys.argv[3:-3], sys.argv[-3], sys.argv[-2], sys.argv[-1], sys.argv[2]))
         else: raise ValueError("unknown identity operation")
     except (ValueError, OSError, subprocess.SubprocessError) as e:
         sys.exit(f"FAIL identity: {e}")

@@ -9,6 +9,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -33,11 +34,11 @@ def run(*a):
     return subprocess.run(a, env=env, check=True, capture_output=True, text=True, timeout=15).stdout.strip()
 
 
-def rejects(call, expected):
+def rejects(call, expected, exact=False):
     try:
         call()
     except ValueError as e:
-        assert str(e).startswith(expected), f"expected prefix {expected!r}, got {str(e)!r}"
+        assert (str(e) == expected if exact else str(e).startswith(expected)), f"expected prefix {expected!r}, got {str(e)!r}"
     else:
         raise AssertionError("accepted " + expected)
 
@@ -90,11 +91,11 @@ with tempfile.TemporaryDirectory() as tmp:
         report.write_text(base_report + "component growth [fixture]\n")
         record.write_text(json.dumps(make_record()))
         rejects(lambda: approval.verify(report, record),
-                "owner authorization is not established (T1): authenticator and initial digest await owner decision")
+                "owner authorization is not established (T1): authenticator and initial digest await owner decision", exact=True)
         report.write_text(base_report)
         record.write_text(json.dumps(make_record()))
         rejects(lambda: approval.verify(report, record),
-                "owner authorization is not established (T1): authenticator and initial digest await owner decision")
+                "owner authorization is not established (T1): authenticator and initial digest await owner decision", exact=True)
 
         # Tampered decision quote or missing anchor in docs/decisions.md must be refused.
         decisions.write_text(decisions_text.replace("ok let's do 1, 2, 3, 4, 5", "forged quote"))
@@ -143,7 +144,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
         # Tool identity controls: wrong-path binary, symlink-to-store-binary, and symlink-to-lcb.
         allowed = tmp / "allowed"
-        allowed.write_text("clang\nbash\nlcb\n")
+        allowed.write_text("clang\nbash\nlcb\nld\n")
         lcb_bin = tmp / "lcb"
         shutil.copyfile(shutil.which("true"), lcb_bin)
         real_bash = os.path.realpath(shutil.which("bash"))
@@ -156,6 +157,11 @@ with tempfile.TemporaryDirectory() as tmp:
                 "clang": ["/nix/store/00000000000000000000000000000000-clang"],
                 "bash": [bash_root],
             },
+            "role_closures": {"native": {
+                "clang": ["/nix/store/00000000000000000000000000000000-clang"],
+                "bash": [bash_root],
+            }},
+            "role_compilers": {"native": ["/nix/store/00000000000000000000000000000000-clang/bin/clang"]},
             "lcb": str(lcb_bin.resolve()),
             "lcb_sha256": hashlib.sha256(lcb_bin.read_bytes()).hexdigest(),
         }))
@@ -167,8 +173,8 @@ with tempfile.TemporaryDirectory() as tmp:
         log.write_text(f'1 execve("{fake}", ["clang"], 0x0) = 0\n')
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            rc = identity.check(log, allowed, evidence, lcb_bin)
-        assert rc == 1 and out.getvalue().splitlines() == [f"FAIL tools: unexpected executable 'clang': {fake.resolve()}"], out.getvalue()
+            rc = identity.check(log, allowed, evidence, lcb_bin, "native")
+        assert rc == 1 and out.getvalue().splitlines() == [f"FAIL tools: identity-mismatch role 'native' program 'clang': {fake.resolve()}"], out.getvalue()
 
         # 2. Symlink named clang pointing to a store binary (bash) in the closure.
         sym_store = tmp / "sym-store"
@@ -178,8 +184,8 @@ with tempfile.TemporaryDirectory() as tmp:
         log.write_text(f'1 execve("{clang_to_bash}", ["clang"], 0x0) = 0\n')
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            rc = identity.check(log, allowed, evidence, lcb_bin)
-        assert rc == 1 and out.getvalue().splitlines() == [f"FAIL tools: unexpected executable 'clang': {real_bash}"], out.getvalue()
+            rc = identity.check(log, allowed, evidence, lcb_bin, "native")
+        assert rc == 1 and out.getvalue().splitlines() == [f"FAIL tools: identity-mismatch role 'native' program 'clang': {real_bash}"], out.getvalue()
 
         # 3. Symlink named clang pointing to the local lcb binary.
         sym_lcb = tmp / "sym-lcb"
@@ -189,8 +195,63 @@ with tempfile.TemporaryDirectory() as tmp:
         log.write_text(f'1 execve("{clang_to_lcb}", ["clang"], 0x0) = 0\n')
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            rc = identity.check(log, allowed, evidence, lcb_bin)
-        assert rc == 1 and out.getvalue().splitlines() == [f"FAIL tools: unexpected executable 'clang': {lcb_bin.resolve()}"], out.getvalue()
+            rc = identity.check(log, allowed, evidence, lcb_bin, "native")
+        assert rc == 1 and out.getvalue().splitlines() == [f"FAIL tools: identity-mismatch role 'native' program 'clang': {lcb_bin.resolve()}"], out.getvalue()
+        # Synthetic immutable-store paths: no writes to /nix/store. Only realpath
+        # is modeled, so the invoked and resolved roots independently exercise
+        # the production per-component policy (path_root alone would accept).
+        native_root = "/nix/store/00000000000000000000000000000000-native"
+        lean_root = "/nix/store/11111111111111111111111111111111-lean"
+        other_root = "/nix/store/22222222222222222222222222222222-other-clang"
+        native = native_root + "/bin/clang"
+        data = {
+            "inputs": {},
+            "closure": {r: {"narHash": "sha256-fixture"}
+                        for r in (native_root, lean_root, other_root)},
+            "role_closures": {
+                "native": {"clang": [native_root], "bash": [native_root], "ld": [native_root]},
+                "lean-build": {"clang": [lean_root, other_root]},
+            },
+            "role_linkers": {"native": {"ld": [native_root + "/bin/ld"]}},
+            "role_compilers": {"native": [native],
+                               "lean-build": [r + "/bin/clang" for r in (lean_root, other_root)]},
+        }
+        evidence.write_text(json.dumps(data))
+
+        def check_trace(path, role, resolved=None):
+            log.write_text(f'1 execve("{path}", ["tool"], 0x0) = 0\n')
+            out = io.StringIO()
+            original = os.path.realpath
+            with patch.object(identity.os.path, "realpath",
+                              side_effect=lambda p: resolved if str(p) == path and resolved else original(p)):
+                with contextlib.redirect_stdout(out):
+                    rc = identity.check(log, allowed, evidence, lcb_bin, role)
+            return rc, out.getvalue().splitlines()
+
+        assert check_trace(native, "native")[0] == 0
+        for root in (lean_root, other_root):
+            substitution = root + "/bin/clang"
+            rc, lines = check_trace(substitution, "native")
+            assert rc == 1 and lines == [
+                f"FAIL tools: identity-mismatch role 'native' program 'clang': {substitution}"], lines
+            assert check_trace(substitution, "lean-build")[0] == 0
+        assert check_trace(native_root + "/bin/ld", "native")[0] == 0
+        rc, lines = check_trace(lean_root + "/bin/ld", "native")
+        assert rc == 1 and lines == [
+            f"FAIL tools: identity-mismatch role 'native' program 'ld': {lean_root}/bin/ld"], lines
+        # Same component closure, different linker identity must also fail.
+        data["role_closures"]["native"]["ld"].append(other_root)
+        evidence.write_text(json.dumps(data))
+        rc, lines = check_trace(other_root + "/bin/ld", "native")
+        assert rc == 1 and lines == [
+            f"FAIL tools: identity-mismatch role 'native' program 'ld': {other_root}/bin/ld"], lines
+        # Both roots belong to the union closure and the invoked root belongs to
+        # bash's component. Its resolved root alone violates that component.
+        invoked = native_root + "/bin/bash"
+        resolved = other_root + "/bin/bash"
+        rc, lines = check_trace(invoked, "native", resolved)
+        assert rc == 1 and lines == [
+            f"FAIL tools: identity-mismatch role 'native' program 'bash': {resolved}"], lines
     finally:
         os.chdir(old)
-print("PASS owner decision approval, trust growth, pin mutation and tool-identity spoofing controls")
+print("PASS candidate consistency, pending owner authentication, writer-regeneration bypass, pins and role identity controls")
