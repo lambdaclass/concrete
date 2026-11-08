@@ -114,7 +114,9 @@
             # failed in this shell while passing on CI, whose elan puts no clang on PATH.
             clang
             leanRelease
-          ] ++ gatesUserland;
+          ] ++ gatesUserland ++ lib.optionals stdenv.isLinux [
+            strace               # gate 9 inventories exec'd compilation-pipeline tools
+          ];
         in {
           # Default shell stays light: the pre-existing toolchain only. The
           # second-kernel drivers (Rocq, Isabelle) are an opt-in spike and Isabelle

@@ -1,18 +1,14 @@
 #!/usr/bin/env bash
-# Slice-0 trusted-base golden (PROVISIONAL, Concrete/README.md gate 9). The trusted base, printed
-# by scripts/checks/compiler/slice0_trusted_base.lean (until `concrete facts` exists): the premise registry
-# Concrete/Premises.lean (the one list of open premises), each headline theorem's axioms and each
-# axiom's type, followed by the Lean toolchain and every Lake pin, must equal
-# tests/golden/slice0_trusted_base.txt byte for byte. A premise added, removed or reworded (id,
-# trust class, what retires it, statement), a headline theorem gaining an axiom (sorryAx
-# included), an axiom restated, or a toolchain or pin change fails until the golden is updated.
-# The README's open-premise table is a generated view: it must equal the registry's rendering
-# (scripts/checks/compiler/slice0_premise_table.lean).
+# Slice-0 trusted base (PROVISIONAL, Concrete/README.md gate 9). Concrete/Premises.lean is the one
+# registry of trusted components and open premises. The golden contains components, premises,
+# headline theorem axioms and axiom types, the Lean toolchain and every Lake pin. The README's two
+# tables are generated views. Environment audits reject an unlisted axiom in ANY Concrete
+# declaration's closure and any unlisted extern, implemented_by, opaque, unsafe or partial
+# declaration. On Linux, strace checks every successfully exec'd program in every manifest bir:
+# emission and native build against the registry; other hosts report the tool check as not run.
 #
-# Controls: the comparison must reject the golden with a premise line removed, reworded, or with an
-# extra axiom; the printer must fail on a Lean file that prints and then errors; the report must
-# list a theorem's own axiom with its type (a control file declaring one); the table check must
-# reject a drifted table.
+# Controls cover golden and table drift, a failing printer, theorem axiom reporting, an unlisted
+# extern, an extra library axiom and its user, an unlisted objcopy and removal of clang.
 #
 # usage: slice0_trusted_base.sh [update]. Run inside the nix devshell, from the repository root;
 # `update` rewrites the golden (review the diff before committing it).
@@ -42,6 +38,72 @@ current() {
   python3 -I -c 'import json,sys
 for p in json.load(open(sys.argv[1]))["packages"]: print("pin", p["name"], p["rev"])' \
     lake-manifest.json | cap_out >>"$1" || return 1
+}
+
+# pipeline_tools OUT [WITHOUT]: render the executable names from the component registry, optionally
+# with one component removed (the removed-entry control uses exactly the same renderer).
+pipeline_tools() {
+  if [ "$#" = 2 ]; then
+    CONCRETE_TRUSTED_BASE_WITHOUT="$2" print_lean scripts/checks/compiler/slice0_pipeline_tools.lean "$1" || return 1
+  else
+    print_lean scripts/checks/compiler/slice0_pipeline_tools.lean "$1" || return 1
+  fi
+  LC_ALL=C sort -u "$1" >"$1.sorted" || return 1
+  mv "$1.sorted" "$1"
+}
+
+# tool_names LOG OUT: basenames of successful execve calls only. Failed execs and strace's own
+# process are not compilation tools; python3 and the bounded runner sit outside the traced command.
+tool_names() {
+  bounded 30 python3 -I -c 'import os, re, sys
+names = set()
+pattern = re.compile(r"execve\(\"((?:[^\"\\]|\\.)*)\".*\)\s+=\s+0\s*$")
+with open(sys.argv[1], encoding="utf-8", errors="replace") as log:
+    for line in log:
+        match = pattern.search(line.rstrip("\n"))
+        if match:
+            names.add(os.path.basename(match.group(1)))
+for name in sorted(names):
+    print(name)' "$1" | cap_out >"$2"
+}
+
+# check_tools LOG ALLOWED: every successfully executed program must be named by a non-gate component.
+check_tools() {
+  tool_names "$1" "$1.names" || return 1
+  [ -s "$1.names" ] || { echo "FAIL tools: no successful execve records"; return 1; }
+  local unlisted
+  unlisted=$(comm -23 "$1.names" "$2")
+  if [ -n "$unlisted" ]; then
+    local tool
+    while IFS= read -r tool; do echo "FAIL tools: unlisted program '$tool'"; done <<<"$unlisted"
+    return 1
+  fi
+  echo "ok   tools: every exec'd program is listed"
+}
+
+trace_emit() { # trace_emit NAME DIR EXPECT...
+  local name=$1 d=$2
+  shift 2
+  mkdir -p "$d"
+  bounded "$emit_secs" strace -f -qq -s 4096 -e trace=execve -o "$d/emit.execve" \
+    lake env lean --run scripts/checks/compiler/slice0_bir.lean emit "$name" "$d" "$target" "$@"
+}
+
+trace_native() { # trace_native DIR HELPER
+  bounded "$native_secs" strace -f -qq -s 4096 -e trace=execve -o "$1/native.execve" \
+    bash "$2" "$1" "$lcb"
+}
+
+trace_all() {
+  local rows name program expect d
+  rows=$(manifest_rows bir) || return 1
+  while IFS=$'\t' read -r name program expect; do
+    d="$work/trace/$name"
+    read -r -a expectation <<<"$expect"
+    trace_emit "${program#bir:}" "$d" "${expectation[@]}" || return 1
+    trace_native "$d" "$root/scripts/checks/lib/slice0_native.sh" || return 1
+    cat "$d/emit.execve" "$d/native.execve"
+  done <<<"$rows"
 }
 
 if ! current "$work/current"; then
@@ -84,13 +146,46 @@ else
   fail=1
 fi
 
+readme_component_rows() {
+  awk '/^\*\*The trusted components\*\*/{h=1; next}
+       h==1 && /^\| Component \| Kind \| Added by \| Premises \| What \| Why trusted \/ not trusted \| Removal \| Matches \|$/{h=2; next}
+       h==2 && /^\|---|---\|---|---\|---|---\|---|---\|---\|$/{h=3; next}
+       h==3 && /^\|/{print; n++; next}
+       h==3{exit}
+       END{if (n == 0) exit 1}' "$1"
+}
+if ! print_lean scripts/checks/compiler/slice0_component_table.lean "$work/component_rows"; then
+  echo "FAIL printing the registry's component table rows"; fail=1
+elif readme_component_rows Concrete/README.md >"$work/readme_component_rows" &&
+     cmp -s "$work/component_rows" "$work/readme_component_rows"; then
+  echo "ok   README's trusted-component table equals the registry"
+else
+  echo "FAIL README's trusted-component table differs from the registry (Concrete/Premises.lean):"
+  diff "$work/readme_component_rows" "$work/component_rows" | head -c 20000 || true
+  fail=1
+fi
+
+if print_lean scripts/checks/compiler/slice0_trusted_base_audit.lean "$work/audit"; then
+  if grep -Eq '^trusted declarations: [0-9]+$' "$work/audit"; then
+    echo "ok   axioms and trusted code: $(grep '^trusted declarations: ' "$work/audit")"
+  else
+    echo "FAIL environment audit did not report its trusted-declaration total"; fail=1
+  fi
+else
+  echo "FAIL environment audit found an unlisted axiom or trusted declaration:"
+  head -c 20000 "$work/audit" "$work/audit.err" >&2 || true
+  fail=1
+fi
+
 # Controls.
 differs() { # differs NAME FILE: FILE must not equal the current trusted base
   if cmp -s "$2" "$work/current"; then echo "FAIL control: comparison accepts $1"; fail=1
   else echo "ok   control: comparison rejects $1"; fi
 }
-sed '1d' "$work/current" >"$work/c1"; differs "a premise removed" "$work/c1"
-sed '1s/$/ (reworded)/' "$work/current" >"$work/c2"; differs "a premise reworded" "$work/c2"
+awk '!done && /^premise / {done = 1; next} {print}' "$work/current" >"$work/c1"
+differs "a premise removed" "$work/c1"
+awk '!done && /^premise / {$0 = $0 " (reworded)"; done = 1} {print}' "$work/current" >"$work/c2"
+differs "a premise reworded" "$work/c2"
 # POSIX awk, not GNU sed's `0,/re/` range (BSD sed has none): the first theorem line gains an axiom.
 awk '!done && /^theorem / { $0 = $0 ", sorryAx"; done = 1 } { print }' "$work/current" >"$work/c3"
 differs "an extra axiom" "$work/c3"
@@ -114,9 +209,96 @@ if print_lean "$work/ctl/axiom.lean" "$work/ctl/axiom.out" &&
   echo "ok   control: the report lists a theorem's axiom with its type"
 else echo "FAIL control: the report misses a theorem's axiom: $(head -c 2000 "$work/ctl/axiom.out" 2>/dev/null)"; fail=1; fi
 
+cat >"$work/ctl/extern.lean" <<'EOF'
+import Lean.Elab.Command
+import Concrete
+@[extern "x"] opaque Concrete.Control.f : Nat → Nat
+open Lean Elab Command in
+#eval show CommandElabM Unit from do
+  let errors := Concrete.Premises.trustedDeclarationErrors (← getEnv) (some `Concrete.Control)
+  for error in errors do IO.println s!"FAIL {error}"
+  unless errors.isEmpty do throwError "trusted-base control failed"
+EOF
+if print_lean "$work/ctl/extern.lean" "$work/ctl/extern.out"; then
+  echo "FAIL control: the trusted-code audit accepts an unlisted extern"; fail=1
+elif grep -qxF 'FAIL unlisted trusted declaration Concrete.Control.f [extern, opaque]' "$work/ctl/extern.out"; then
+  echo "ok   control: the trusted-code audit names an unlisted extern"
+else
+  echo "FAIL control: the trusted-code audit did not reject the extern for the planted reason"
+  cat "$work/ctl/extern.out" "$work/ctl/extern.out.err" >&2
+  fail=1
+fi
+
+cat >"$work/ctl/library-axiom.lean" <<'EOF'
+import Lean.Elab.Command
+import Concrete
+axiom Concrete.Control.ax : False
+def Concrete.Control.usesAx : False := Concrete.Control.ax
+open Lean Elab Command in
+#eval show CommandElabM Unit from do
+  let errors ← liftCoreM (Concrete.Premises.axiomErrors (← getEnv) (some `Concrete.Control))
+  for error in errors do IO.println s!"FAIL {error}"
+  unless errors.isEmpty do throwError "trusted-base control failed"
+EOF
+if print_lean "$work/ctl/library-axiom.lean" "$work/ctl/library-axiom.out"; then
+  echo "FAIL control: the axiom audit accepts an unlisted library axiom"; fail=1
+elif grep -qxF 'FAIL unlisted axiom Concrete.Control.ax in Concrete.Control.ax' "$work/ctl/library-axiom.out" &&
+     grep -qxF 'FAIL unlisted axiom Concrete.Control.ax in Concrete.Control.usesAx' "$work/ctl/library-axiom.out"; then
+  echo "ok   control: the axiom audit names an extra axiom and its user"
+else
+  echo "FAIL control: the axiom audit did not reject the extra axiom for the planted reason"
+  cat "$work/ctl/library-axiom.out" "$work/ctl/library-axiom.out.err" >&2
+  fail=1
+fi
+
 sed 's/^| P_rt | implementation | /| P_rt | toolchain | /' Concrete/README.md >"$work/ctl/readme"
 if readme_rows "$work/ctl/readme" >"$work/ctl/rows" && cmp -s "$work/rows" "$work/ctl/rows"; then
   echo "FAIL control: the table check accepts a drifted table"; fail=1
 else echo "ok   control: the table check rejects a drifted table"; fi
+
+if [ "$(uname -s)" = Linux ]; then
+  if ! command -v strace >/dev/null 2>&1; then
+    echo "FAIL tools: strace is required on Linux"; fail=1
+  elif ! pipeline_tools "$work/pipeline-tools"; then
+    echo "FAIL tools: rendering the pipeline tool list failed"; fail=1
+  elif ! trace_all >"$work/all.execve"; then
+    echo "FAIL tools: tracing the manifest's native builds failed"; fail=1
+  else
+    check_tools "$work/all.execve" "$work/pipeline-tools" || fail=1
+
+    first=$(manifest_rows bir | head -n 1)
+    IFS=$'\t' read -r name program expect <<<"$first"
+    read -r -a expectation <<<"$expect"
+    d="$work/ctl/unlisted-tool"
+    cp scripts/checks/lib/slice0_native.sh "$work/ctl/native-with-objcopy.sh"
+    printf '\nobjcopy --version >/dev/null\n' >>"$work/ctl/native-with-objcopy.sh"
+    if ! trace_emit "${program#bir:}" "$d" "${expectation[@]}" ||
+       ! trace_native "$d" "$work/ctl/native-with-objcopy.sh"; then
+      echo "FAIL control: the unlisted-tool native build did not complete"; fail=1
+    elif check_tools "$d/native.execve" "$work/pipeline-tools" >"$work/ctl/unlisted-tool.log" 2>&1; then
+      echo "FAIL control: the tool audit accepts objcopy"; fail=1
+    elif grep -qF "FAIL tools: unlisted program 'objcopy'" "$work/ctl/unlisted-tool.log"; then
+      echo "ok   control: the tool audit names objcopy"
+    else
+      echo "FAIL control: the tool audit did not reject objcopy for the planted reason"
+      cat "$work/ctl/unlisted-tool.log" >&2
+      fail=1
+    fi
+
+    if ! pipeline_tools "$work/tools-without-clang" clang-llvm; then
+      echo "FAIL control: rendering the list without clang failed"; fail=1
+    elif check_tools "$work/all.execve" "$work/tools-without-clang" >"$work/ctl/without-clang.log" 2>&1; then
+      echo "FAIL control: the tool audit accepts a list without clang"; fail=1
+    elif grep -Eq "FAIL tools: unlisted program 'clang(-[0-9]+)?'" "$work/ctl/without-clang.log"; then
+      echo "ok   control: removing clang makes the real native-helper trace fail"
+    else
+      echo "FAIL control: removing clang did not fail for the planted reason"
+      cat "$work/ctl/without-clang.log" >&2
+      fail=1
+    fi
+  fi
+else
+  echo "tools: not checked on this host (Linux only)"
+fi
 
 [ "$fail" = 0 ] && echo "PASS slice0_trusted_base" || { echo "FAIL slice0_trusted_base"; exit 1; }
