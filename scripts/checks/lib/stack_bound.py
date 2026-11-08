@@ -607,7 +607,7 @@ def analyse(funcs, stubs):
                     sub_deep, sub_ext = fn_bound(callee)
                     deepest = max(deepest, d + ret_push + sub_deep)
                     add_ext(ext, sub_ext, d + ret_push)
-                elif base in stubs["names"] and base.endswith("@plt"):
+                elif base in stubs["names"] or base.endswith("@plt"):
                     # An ELF PLT entry, `write@plt`.
                     name = base.removesuffix("@plt")
                     add_ext(ext, {name: 0}, d + ret_push)
