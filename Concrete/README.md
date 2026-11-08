@@ -147,7 +147,7 @@ phi-payload (including a short second conditional arm) and out-of-profile refusa
 conditional-arm order and multiplicity, malformed huge branch targets, `adapt = adaptSpec` /
 `emit = emitSpec` / `LLVM.print = LLVM.printSpec` reference equality, and a non-timed stack-depth
 check over deep single-block instruction lists (`sparse`) and many blocks (`deepBlocks`). ISS-0030's
-backend scaling and deep-stack coverage lives in Gate C
+backend scaling and deep-stack coverage now lives in Gate C on this branch
 ([`scripts/checks/compiler/scaling.sh`](../scripts/checks/compiler/scaling.sh),
 [`scripts/checks/compiler/scaling.lean`](../scripts/checks/compiler/scaling.lean), and
 [`scripts/checks/lib/scaling_report.py`](../scripts/checks/lib/scaling_report.py)): `wide_phi` (two
@@ -155,9 +155,34 @@ predecessor blocks passing $n$ arguments to $n$ parameters), `sparse_registers` 
 register lookups at stride $10^{12}$), `dense_registers` (chained live register lookups at stride
 $1$), `many_blocks` (a well-formed $n$-block chain with block parameters, instructions and branch
 edges), and the `1,000`-entry PR / `100,000`-entry daily depth probes (`wide_phi_depth`,
-`deep_instructions`, `deep_dense_registers`, `deep_blocks`). Because Gate C owns ISS-0030's ongoing
-scaling regression coverage (`R-0550` / `R-0563`), `wip/lcb-numbering` (`cea8af594b287a6b8442005db122cd08d0669755`)
-is merged into `gate-scaling-determinism` and the coordinator lands them together.
+`deep_instructions`, `deep_dense_registers`, `deep_blocks`). The owning roadmap row is
+[R-0550](../ROADMAP.md) (compiler speed, scaling and binary-size tracking, with scheduled-tier
+infrastructure under `R-0563`). Because Gate C owns ISS-0030's ongoing scaling regression coverage,
+the ISS-0030 branch (`wip/lcb-numbering`) is merged into this Gate C branch
+(`gate-scaling-determinism` / `wip/gate-scaling-determinism`) and the two must land together, never
+alone. Gate C retains meaningful cheap PR coverage (`SCALING_TIER=pr`, `check-small` across all five
+families at `1, 10, 100` plus `1,000`-entry depth probes) and full scheduled scaling assertions
+(`SCALING_TIER=daily`, `--mode backend` at `100, 1000, 10000`) and `100,000`-entry instruction and
+block depth probes (`check-depth`, with `wide_phi_depth` at `10,000`) on `concrete-ci-2` (see gate
+13 below). ISS-0030 remains open until those families pass on `concrete-ci-2` for the integrated
+candidate's exact SHA.
+
+Interim qualification on `concrete-ci-2` (coordinator records in `gates-briefs/RESULTS.md`; Gate C's
+own `221ec15c82b0dd3bb87014170568fa3d119aebbd` and `bcfe3338087014abc3506e018d1d5d4c6d018b0f` runs
+are recorded under gate 13 below): `ee2d82528fe84b2da2d69eec9756e168e29a1ecd` and
+`ef3fed56ab78f1adb04778d099091c6c57c8d2fe` passed build, trusted base, backends, artifacts,
+repro and root checks. Their throwaway integrations with Gate C `1f5457c9` on `concrete-ci-2`
+(full scaling driver, base size `1`, sizes `1/10/100`, 10 ms resolution floor; throwaway merge SHAs
+and sampling-window/repetition details were not retained in the qualification record) measured
+backend 10→100 exponents at most 1.08, but failed the timing-resolution floor; these are interim
+scaling evidence, not passing integrated scaling gates. At
+`ef3fed56ab78f1adb04778d099091c6c57c8d2fe` on `concrete-ci-2`, `lcb_numbering.sh --full` passed
+(stress-family sizes `100/1000/10000`, three sampling windows of at least 50 ms, including wide
+phis and `100,000`-entry depth probes). At `cea8af594b287a6b8442005db122cd08d0669755` on
+`concrete-ci-2`, a fresh server clone passed build, trusted base, backends (including the moved
+numbering regressions), artifacts, repro and root checks (11/11). The coordinator must qualify Gate
+C's merged candidate on `concrete-ci-2` and record its exact SHA and family results before closure;
+earlier runs do not qualify that integrated candidate.
 
 
 LCB's own lowering, assembler and linker are LCB's named trust boundaries, carried as `P_toolchain[lcb]` until LCB's preservation theorem covers the slice-0 domain.

@@ -31,24 +31,28 @@ non-timed stack-depth check on `sparse` and `deepBlocks`) run in
 `scripts/checks/compiler/slice0_bir.lean` (`numbering`, invoked by
 `scripts/checks/compiler/tests.sh`). Ongoing backend scaling and deep-stack regression coverage
 (`wide_phi`, `sparse_registers`, `dense_registers`, `many_blocks`, and the `1,000`-entry PR /
-`100,000`-entry daily depth probes) lives in Gate C (`scripts/checks/compiler/scaling.sh` and
-`scripts/checks/compiler/scaling.lean`, `R-0550` / `R-0563`), so `wip/lcb-numbering` and
-`gate-scaling-determinism` are merged and land together.
+`100,000`-entry daily depth probes) now lives in Gate C on this branch
+(`scripts/checks/compiler/scaling.sh`, `scripts/checks/compiler/scaling.lean`, and
+`scripts/checks/lib/scaling_report.py`).
 
-Measured on the ISS-0030 reproducer family ($2k+1$ blocks, one parameter and four instructions per
-body block) at `ee2d8252` on the shared Linux host with a linear structural digest (milliseconds,
-minimum of three runs; `—` is the baseline `LCB.emit` $k=1000$ run omitted because cubic growth
-projects ~15 hours):
+Landing dependency: the ISS-0030 branch (`wip/lcb-numbering`) and Gate C
+(`gate-scaling-determinism` / `wip/gate-scaling-determinism`) are merged here and land **together**,
+never alone. [R-0550](ROADMAP.md) owns backend scaling (with scheduled-tier infrastructure under
+`R-0563`). Gate C provides meaningful cheap PR coverage (`SCALING_TIER=pr`, `check-small` across all
+five families at `1, 10, 100` plus `1,000`-entry depth probes) plus full scheduled scaling
+assertions (`SCALING_TIER=daily`, `--mode backend` at `100, 1000, 10000`) and `100,000`-entry
+instruction and block depth probes (`check-depth`, with `wide_phi_depth` at `10,000`) on
+`concrete-ci-2`, as recorded in `Concrete/README.md`. ISS-0030 remains open until Gate C's families
+pass on `concrete-ci-2` against the integrated candidate's exact SHA.
 
-| stage | k=1 before / after | k=10 before / after | k=100 before / after | k=1000 before / after | 10→100 before / after | 100→1000 after |
-|---|---:|---:|---:|---:|---:|---:|
-| `LCB.emit` | 0.394 / 0.144 | 69.929 / 1.339 | 53944 / 13.528 | — / 141.896 | 2.887 / 1.004 | 1.021 |
-| `LLVM.module` | 0.203 / 0.213 | 0.776 / 0.683 | 18.621 / 5.727 | 1437.992 / 60.883 | 1.380 / 0.923 | 1.027 |
-
-Focused local measurement at `1103b54c4f9e5e60605ce96c0d1e7576b82e5657` on the shared Linux host
-(`nix develop --command lake env lean --run scripts/checks/compiler/lcb_numbering_cases.lean`, sizes
-`10/100/1000`, milliseconds per operation, minimum average of three sampling windows
-$\ge 10\text{ ms}$, including a linear structural output digest):
+Local stress-family measurements below are from commit
+`1103b54c4f9e5e60605ce96c0d1e7576b82e5657`, on the Linux shared development host
+(hostname was not retained in the original record; these are not server measurements).
+Method: `nix develop --command lake env lean --run scripts/checks/compiler/lcb_numbering_cases.lean`,
+interpreter execution at sizes 10/100/1000, milliseconds per operation, minimum average of three
+sampling windows of at least 10 ms, including a linear structural output digest. Exponents use
+100→1000. The older reproducer before/after table is omitted because its exact measured revisions
+and host were not recorded; it cannot supply reproducible benchmark provenance.
 
 | Family | Stage | n=10 ms | n=100 ms | n=1000 ms | 100→1000 exponent |
 |---|---|---:|---:|---:|---:|
@@ -61,9 +65,25 @@ $\ge 10\text{ ms}$, including a linear structural output digest):
 | `many_blocks` | `lcb_emit` | 0.071261 | 0.635718 | 6.228520 | 0.991 |
 | `many_blocks` | `llvm_module` | 0.027513 | 0.210669 | 2.069792 | 0.992 |
 
-Separate server runs on `concrete-ci-2` (`RESULTS.md`): at
-`ef3fed56ab78f1adb04778d099091c6c57c8d2fe`, `lcb_numbering.sh --full` (`100/1000/10000`,
-$\ge 50\text{ ms}$ windows, plus `100,000`-entry depth probes) and the backend/repro/trusted-base
-gates passed; at `cea8af594b287a6b8442005db122cd08d0669755`, `slice0_backends` (including the
-migrated `numbering` regressions), `slice0_trusted_base`, `slice0_artifacts`, `slice0_repro` and
-root checks `11/11` passed.
+Server qualification, separately from the local table (coordinator's `gates-briefs/RESULTS.md`):
+
+- Host `concrete-ci-2`, commit `ee2d82528fe84b2da2d69eec9756e168e29a1ecd`: build,
+  trusted base, backends, artifacts, repro and root checks passed. A throwaway integration with
+  Gate C `1f5457c9` used its full scaling driver, base size 1 (sizes 1/10/100)
+  and a 10 ms resolution floor (the sampling-window/repetition details were not retained in the
+  qualification record). Backend 10→100 exponents were at most 1.08;
+  the scaling gate failed the resolution floor. The throwaway merge SHA was not retained,
+  so this is evidence associated with those inputs, not qualification of an exact merged candidate.
+- Host `concrete-ci-2`, commit `ef3fed56ab78f1adb04778d099091c6c57c8d2fe`: build,
+  trusted base, backends, artifacts, repro and root checks passed; `lcb_numbering.sh --full`
+  passed (stress-family sizes 100/1000/10000, three sampling windows of at least 50 ms,
+  and 100000-entry depth probes). The separate throwaway integration with Gate C `1f5457c9`
+  again had backend exponents at most 1.08 but failed its resolution floor at base size 1;
+  its merge SHA was not retained. Neither floor failure is a passing scaling qualification.
+- Host `concrete-ci-2`, exact commit `cea8af594b287a6b8442005db122cd08d0669755`, fresh
+  clone: build, trusted base, backends (including moved numbering regressions), artifacts, repro
+  and root checks (11/11) passed. This pre-merge run does not qualify the integrated Gate C
+  scaling families on this branch.
+
+The coordinator must run the integrated Gate C families on `concrete-ci-2` and record the exact
+merged SHA, sizes, sampling method and results before closing ISS-0030.
