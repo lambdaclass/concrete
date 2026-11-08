@@ -32,7 +32,7 @@ theorem runFrom_report_trace {O : Exec.Operands} {S : EventSignature}
     (valid : CompleteTrace C input (A.project hist)) :
     ReportTraceValid C input (reportObservation P A C input (Exec.runFrom P ρ fuel hist c)
       (runFrom_blockingPermitted P A C input ρ wellFormed valid)) := by
-  have history := (runFrom_validTrace P A C input ρ wellFormed fuel hist c valid).1
+  obtain ⟨history, _⟩ := runFrom_validTrace P A C input ρ wellFormed fuel hist c valid
   generalize ending : (Exec.runFrom P ρ fuel hist c).ending = e
   cases e with
   | final f =>
@@ -54,6 +54,42 @@ theorem runFrom_report_trace {O : Exec.Operands} {S : EventSignature}
   | stuck _ => simp [reportObservation, ending, ReportTraceValid]
   | badAnswer _ => simp [reportObservation, ending, ReportTraceValid]
   | outOfFuel _ => simp [reportObservation, ending, ReportTraceValid]
+
+/-- Law (subject `ConcreteSpec.Core.Observe.reportObservation`).
+An actual run ending at a typed unanswered request produces exactly the pending observation,
+including every prior projected event. The evaluator induction also establishes the pending
+trace and its independently specified blocking policy. Returning no observation, truncating
+prior history, or reordering that history violates the result. -/
+theorem runFrom_blocked_report {O : Exec.Operands} {S : EventSignature}
+    (P : Exec.Program O) (A : ExecAdapter O S) (C : OperationContract S) (input : C.Input)
+    (ρ : Exec.Oracle O) (wellFormed : ExecAdapter.WellFormed A C input ρ)
+    (fuel : Nat) (hist : List O.Event) (c : Exec.Config O)
+    (valid : CompleteTrace C input (A.project hist))
+    (pendingConfig : Exec.Config O) (p : O.Prim) (vs : List O.Val) (site : SiteId)
+    (store : O.Store) (k : Exec.Answer O.Val O.Event O.Store → Option (Exec.Config O))
+    (q : Request S)
+    (ending : (Exec.runFrom P ρ fuel hist c).ending = .noAnswer pendingConfig)
+    (pending : Exec.step P pendingConfig = some (.request p vs site store k))
+    (typed : A.request p vs site store = some q) :
+    reportObservation P A C input (Exec.runFrom P ρ fuel hist c)
+      (runFrom_blockingPermitted P A C input ρ wellFormed valid) =
+        some (.blocked (A.project (Exec.runFrom P ρ fuel hist c).events ++ [.request q]) q) ∧
+    ValidTrace C input (some q)
+      (A.project (Exec.runFrom P ρ fuel hist c).events ++ [.request q]) ∧
+    C.mayBlock input (A.project (Exec.runFrom P ρ fuel hist c).events ++ [.request q]) q := by
+  constructor
+  · simp [reportObservation, ending, pending, typed]
+  · exact runFrom_noAnswer_pending_valid P A C input ρ wellFormed valid ending pending typed
+
+/-- A report adapter fault drops only the prior history, retaining the correctly typed pending
+request. Its result can remain a valid permitted pending trace, while violating preservation. -/
+def onlyPendingHistory {O : Exec.Operands} {S : EventSignature}
+    (P : Exec.Program O) (A : ExecAdapter O S) (C : OperationContract S) (input : C.Input)
+    (r : Exec.Report O) (permitted : ExecAdapter.BlockingPermitted P A C input r) :
+    Option (FullObservation S) :=
+  match reportObservation P A C input r permitted with
+  | some (.blocked _ q) => some (.blocked [.request q] q)
+  | other => other
 
 /-- A report adapter fault: a blocked result drops its history, including the pending request.
 The environment, evaluator and all admission premises are unchanged. -/
@@ -119,6 +155,66 @@ example : ExecAdapter.WellFormed adapter permittingContract () blockingOracle �
   generalize empty : ([] : List (Event signature)) = events at pending
   cases pending with
   | request previous => simp at empty
+
+/-- The independently reached request's continuation, exposed so every instance argument is
+closed, including the continuation in the step premise. -/
+def continuation (a : Exec.Answer Int Int Unit) : Option (Exec.Config ops) :=
+  match a.result with
+  | .ok _ => some ⟨.done, [], a.store, []⟩
+  | .error kind => some ⟨.trapped kind ⟨0⟩, [], a.store, []⟩
+
+/-- Helper (computation). Exposes the actual evaluator continuation for the closed report
+instance; no observation property is assumed. (approved: PENDING) -/
+theorem pending_step : Exec.step program (requesting 3) =
+    some (.request 3 [] ⟨0⟩ () continuation) := by
+  change some (Exec.Out.request (O := ops) 3 [] ⟨0⟩ () _) = _
+  congr 2
+  funext a
+  cases a with
+  | mk event result store =>
+    cases result <;> rfl
+
+/-- Instance (law `ConcreteSpec.Core.Observe.runFrom_blocked_report`, case `preserve_prior_exchange`). -/
+example : reportObservation program adapter permittingContract ()
+      (Exec.runFrom program blockingOracle 1 [1] (requesting 3))
+      (runFrom_blockingPermitted program adapter permittingContract () blockingOracle
+        blockingWellFormed prior_complete) =
+      some (.blocked (adapter.project
+        (Exec.runFrom program blockingOracle 1 [1] (requesting 3)).events ++ [request 3]) (query 3)) ∧
+    ValidTrace permittingContract () (some (query 3))
+      (adapter.project (Exec.runFrom program blockingOracle 1 [1] (requesting 3)).events ++ [request 3]) ∧
+    permittingContract.mayBlock ()
+      (adapter.project (Exec.runFrom program blockingOracle 1 [1] (requesting 3)).events ++ [request 3])
+      (query 3) :=
+  runFrom_blocked_report program adapter permittingContract () blockingOracle blockingWellFormed
+    1 [1] (requesting 3) prior_complete (requesting 3) 3 [] ⟨0⟩ () continuation (query 3) rfl pending_step rfl
+
+/-- Planted (law `ConcreteSpec.Core.Observe.runFrom_blocked_report`, case `preserve_prior_exchange`,
+subject `ConcreteSpec.Core.Observe.reportObservation`, mutant `ConcreteSpec.Core.Observe.onlyPendingHistory`). -/
+example : ExecAdapter.WellFormed adapter permittingContract () blockingOracle ∧
+    CompleteTrace permittingContract () (adapter.project [1]) ∧
+    (Exec.runFrom program blockingOracle 1 [1] (requesting 3)).ending = .noAnswer (requesting 3) ∧
+    Exec.step program (requesting 3) = some (.request 3 [] ⟨0⟩ () continuation) ∧
+    adapter.request 3 [] ⟨0⟩ () = some (query 3) ∧
+    ¬ (onlyPendingHistory program adapter permittingContract ()
+      (Exec.runFrom program blockingOracle 1 [1] (requesting 3))
+      (runFrom_blockingPermitted program adapter permittingContract () blockingOracle
+        blockingWellFormed prior_complete) =
+        some (.blocked (adapter.project
+          (Exec.runFrom program blockingOracle 1 [1] (requesting 3)).events ++ [request 3]) (query 3)) ∧
+      ValidTrace permittingContract () (some (query 3))
+        (adapter.project (Exec.runFrom program blockingOracle 1 [1] (requesting 3)).events ++ [request 3]) ∧
+      permittingContract.mayBlock ()
+        (adapter.project (Exec.runFrom program blockingOracle 1 [1] (requesting 3)).events ++ [request 3])
+        (query 3)) := by
+  refine ⟨blockingWellFormed, prior_complete, rfl, pending_step, rfl, ?_⟩
+  intro invalid
+  have equal := invalid.1
+  change (some (.blocked [request 3] (query 3)) : Option (FullObservation signature)) =
+    some (.blocked [request 1, response 2, request 3] (query 3)) at equal
+  have lengths := congrArg (fun r : Option (FullObservation signature) =>
+    match r with | some (.blocked events _) => events.length | _ => 0) equal
+  contradiction
 
 /-- A concrete adapter resolving the decided project-relative path. -/
 def relativePathAdapter : ExecAdapter ops signature :=

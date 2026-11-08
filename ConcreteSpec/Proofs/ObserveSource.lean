@@ -21,7 +21,7 @@ theorem source_trap_column (path : String) (line : Nat) (linePositive : 0 < line
     trapLine kind site (sourceSpan path line linePositive before) ≠
       trapLine kind site ⟨path, line, column, linePositive, columnPositive⟩ := by
   intro equal
-  have spanEqual := (trapLine_injective equal).2.2
+  obtain ⟨_, _, spanEqual⟩ := trapLine_injective equal
   have columnEqual := congrArg Span.col spanEqual
   exact wrong columnEqual.symm
 
