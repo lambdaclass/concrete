@@ -301,10 +301,10 @@ order, its calls are `plan`'s (`planWith_calls`), and a cleanup is a run of exac
 (`cleans_iff_runs_plan_inv`). -/
 
 /-- One action of a cleanup: a call, with the locals it runs with, or leaving a scope entered with
-`dm`, from locals `L`. -/
+`dm`, from locals `L` to restored locals `L'`. -/
 inductive CleanAct (O : Operands) where
   | call (L : AList Var O.Val) (d : Deferred O)
-  | drop (dm : List Var) (L : AList Var O.Val)
+  | drop (dm : List Var) (L L' : AList Var O.Val)
 
 /-- The call of an action, if it is one. -/
 def CleanAct.call? : CleanAct O → Option (Deferred O)
@@ -314,8 +314,9 @@ def CleanAct.call? : CleanAct O → Option (Deferred O)
 /-- The actions an exit through frames `pre` performs, from locals `L`, in order. -/
 def planWith : List (Frame O) → AList Var O.Val → List (CleanAct O)
   | [], _ => []
-  | .scope _ dm ds :: k, L => ds.map (.call L) ++ .drop dm L :: planWith k (restrict dm L)
-  | .test _ _ _ _ _ dm :: k, L => .drop dm L :: planWith k (restrict dm L)
+  | .scope _ dm ds :: k, L =>
+    ds.map (.call L) ++ .drop dm L (restrict dm L) :: planWith k (restrict dm L)
+  | .test _ _ _ _ _ dm :: k, L => .drop dm L (restrict dm L) :: planWith k (restrict dm L)
   | _ :: k, L => planWith k L
 
 theorem planWith_calls : ∀ (pre : List (Frame O)) (L : AList Var O.Val),
@@ -344,7 +345,7 @@ inductive RunsEach (P : Program O) : List (CleanAct O) → O.Store → List O.Ev
       RunsEach P rest st₁ tr₂ st₂ → RunsEach P (.call L d :: rest) st (tr₁ ++ tr₂) st₂
   | drop {dm L rest st stDrop tr st'} : dropOut O dm L st = some stDrop →
       RunsEach P rest stDrop tr st' →
-      RunsEach P (.drop dm L :: rest) st tr st'
+      RunsEach P (.drop dm L (restrict dm L) :: rest) st tr st'
 
 theorem RunsAll.each {P : Program O} {L : AList Var O.Val} {ds : List (Deferred O)}
     {st st₁ st₂ : O.Store} {tr₁ tr₂ : List O.Event} {rest : List (CleanAct O)}
@@ -442,12 +443,13 @@ theorem FirstSteps.steps_inv {P : Program O} {stop : Config O → Prop} {c c' : 
   | stop => exact .refl _
   | step _ hs _ ih => exact .step hs ih
 
-/-- The local-lifetime action observed when an exit directly leaves its current frame.
-Calls, including any nested cleanup inside them, are recorded separately. -/
-def leaving : List (Frame O) → AList Var O.Val → List (CleanAct O)
-  | .scope _ dm [] :: _, L => [.drop dm L]
-  | .test _ _ _ _ _ dm :: _, L => [.drop dm L]
-  | _, _ => []
+/-- The local-lifetime action observed when an exit directly leaves its current frame:
+it records both the pre-step locals `L` and the actual post-step locals `L'` produced by the
+transition. Calls and their nested cleanup are recorded separately. -/
+def leaving : List (Frame O) → AList Var O.Val → AList Var O.Val → List (CleanAct O)
+  | .scope _ dm [] :: _, L, L' => [.drop dm L L']
+  | .test _ _ _ _ _ dm :: _, L, L' => [.drop dm L L']
+  | _, _, _ => []
 
 /-- An observer of a successful exit to a fixed boundary, using a supplied outer transition
 relation `R`. Call bodies use actual first-return executions. The parameter permits planted
@@ -462,56 +464,44 @@ inductive BoundaryRun (P : Program O) (R : Config O → Label O → Config O →
   | pass {pre pre' L L' st st' acts tr Lend stEnd} : pre ≠ [] →
       R ⟨.exiting e, L, st, pre ++ k⟩ .silent ⟨.exiting e, L', st', pre' ++ k⟩ →
       BoundaryRun P R e k pre' L' st' acts tr Lend stEnd →
-      BoundaryRun P R e k pre L st (leaving pre L ++ acts) tr Lend stEnd
-  | call {pre rest L st st' d acts tr₁ tr₂ Lend stEnd} : pre ≠ [] →
+      BoundaryRun P R e k pre L st (leaving pre L L' ++ acts) tr Lend stEnd
+  | call {pre rest L st st' d acts tr₁ tr₂ Lend stEnd q} : pre ≠ [] →
       R ⟨.exiting e, L, st, pre ++ k⟩ .silent
         ⟨.exec d.stmt, L, st, .resume (.exit e) :: rest ++ k⟩ →
-      FirstSteps (Step P) (fun c => c.ctrl = .done ∧ c.frames = .resume (.exit e) :: rest ++ k)
-        ⟨.exec d.stmt, L, st, .resume (.exit e) :: rest ++ k⟩ tr₁
-        ⟨.done, L, st', .resume (.exit e) :: rest ++ k⟩ →
+      FirstSteps (Step P) (fun c => c.ctrl = .done ∧ c.frames = q)
+        ⟨.exec d.stmt, L, st, q⟩ tr₁
+        ⟨.done, L, st', q⟩ →
       R ⟨.done, L, st', .resume (.exit e) :: rest ++ k⟩ .silent
         ⟨.exiting e, L, st', rest ++ k⟩ →
       BoundaryRun P R e k rest L st' acts tr₂ Lend stEnd →
       BoundaryRun P R e k pre L st (.call L d :: acts) (tr₁ ++ tr₂) Lend stEnd
 
-/-- Representation lemma. A boundary observation is an actual execution to the stated suffix;
-its segments do not add any transitions to the machine. -/
-theorem BoundaryRun.steps {P : Program O} {e : Exit O.Val} {k pre : List (Frame O)}
-    {L L' : AList Var O.Val} {st st' : O.Store} {acts : List (CleanAct O)} {tr : List O.Event}
-    (h : BoundaryRun P (Step P) e k pre L st acts tr L' st') :
-    Steps P ⟨.exiting e, L, st, pre ++ k⟩ tr ⟨.exiting e, L', st', k⟩ := by
-  induction h with
-  | stop => exact .refl _
-  | pass _ hs _ ih => simpa [Label.events] using Steps.step hs ih
-  | call _ hs hc hr _ ih =>
-    have tail := Steps.step hr ih
-    have middle := Steps.trans hc.steps_inv tail
-    simpa [Label.events] using Steps.step hs middle
-
-/-- Execute an action list independently of the cleanup dispatcher. Calls must actually return
-on some continuation; drops must actually perform the lifecycle update. This weaker, per-run
-notion replaces `RunsEach`'s universal call-completion premise for observed executions. -/
+/-- Execute an action list independently of the cleanup dispatcher, threading both the local
+environment and the store: calls must complete their first-return execution preserving the
+caller's locals, and drops must perform both `dropOut` on the store and `restrict` on the locals. -/
 inductive Performed (P : Program O) :
-    List (CleanAct O) → O.Store → List O.Event → O.Store → Prop where
-  | nil {st} : Performed P [] st [] st
-  | call {L d rest st tr₁ st₁ tr₂ st₂ k} :
-      Steps P ⟨.exec d.stmt, L, st, k⟩ tr₁ ⟨.done, L, st₁, k⟩ →
-      Performed P rest st₁ tr₂ st₂ →
-      Performed P (.call L d :: rest) st (tr₁ ++ tr₂) st₂
-  | drop {dm L rest st stDrop tr st'} : dropOut O dm L st = some stDrop →
-      Performed P rest stDrop tr st' → Performed P (.drop dm L :: rest) st tr st'
+    List (CleanAct O) → AList Var O.Val → O.Store → List O.Event → AList Var O.Val → O.Store → Prop where
+  | nil {L st} : Performed P [] L st [] L st
+  | call {L d rest st tr₁ st₁ tr₂ L₂ st₂ q} :
+      FirstSteps (Step P) (fun c => c.ctrl = .done ∧ c.frames = q)
+        ⟨.exec d.stmt, L, st, q⟩ tr₁ ⟨.done, L, st₁, q⟩ →
+      Performed P rest L st₁ tr₂ L₂ st₂ →
+      Performed P (.call L d :: rest) L st (tr₁ ++ tr₂) L₂ st₂
+  | drop {dm L rest st stDrop tr L' st'} : dropOut O dm L st = some stDrop →
+      Performed P rest (restrict dm L) stDrop tr L' st' →
+      Performed P (.drop dm L (restrict dm L) :: rest) L st tr L' st'
 
-/-- Helper (inversion). Compose independent action executions. -/
+/-- Helper (inversion). Compose independent action executions (approved: PENDING). -/
 private theorem performed_append_inv {P : Program O} {as bs : List (CleanAct O)}
-    {st st₁ st₂ : O.Store} {tr₁ tr₂ : List O.Event}
-    (ha : Performed P as st tr₁ st₁) (hb : Performed P bs st₁ tr₂ st₂) :
-    Performed P (as ++ bs) st (tr₁ ++ tr₂) st₂ := by
+    {L L₁ L₂ : AList Var O.Val} {st st₁ st₂ : O.Store} {tr₁ tr₂ : List O.Event}
+    (ha : Performed P as L st tr₁ L₁ st₁) (hb : Performed P bs L₁ st₁ tr₂ L₂ st₂) :
+    Performed P (as ++ bs) L st (tr₁ ++ tr₂) L₂ st₂ := by
   induction ha with
   | nil => simpa using hb
   | call hc _ ih => simpa [List.append_assoc] using Performed.call hc (ih hb)
   | drop hd _ ih => exact .drop hd (ih hb)
 
-/-- Helper (inversion). Unwinding a frame never itself makes a primitive request. -/
+/-- Helper (inversion). Unwinding a frame never itself makes a primitive request (approved: PENDING). -/
 private theorem stepExit_no_request_inv (L : AList Var O.Val) (st : O.Store) (e : Exit O.Val)
     (frames : List (Frame O)) (p : O.Prim) (vs : List O.Val) (site : SiteId) (st' : O.Store)
     (cont : Answer O.Val O.Event O.Store → Option (Config O)) :
@@ -543,7 +533,7 @@ private theorem stepExit_no_request_inv (L : AList Var O.Val) (st : O.Store) (e 
         | some stLeave =>
           cases hb : bindLife O dst stLeave <;> simp [stepExit, hl, hb]
 
-/-- Helper (inversion). Every actual exit transition is a machine step. -/
+/-- Helper (inversion). Every actual exit transition is a machine step (approved: PENDING). -/
 private theorem exit_step_next_inv {P : Program O} {e : Exit O.Val} {L : AList Var O.Val}
     {st : O.Store} {frames : List (Frame O)} {label : Label O} {c : Config O}
     (h : Step P ⟨.exiting e, L, st, frames⟩ label c) :
@@ -552,14 +542,16 @@ private theorem exit_step_next_inv {P : Program O} {e : Exit O.Val} {L : AList V
   | silent h => exact h
   | prim h _ _ => exact False.elim (stepExit_no_request_inv L st e frames _ _ _ _ _ h)
 
-/-- Helper (inversion). A directly passing exit step removes precisely the top frame and
-performs its local drop, if any. This is a rule-sensitive inversion, not a contract law. -/
+/-- Helper (inversion). A directly passing exit step removes precisely the top frame,
+restores its saved locals, and performs its local drop (approved: PENDING). -/
 private theorem exit_pass_plan_inv {P : Program O} {e : Exit O.Val} {k pre pre' : List (Frame O)}
     {L L' : AList Var O.Val} {st st' : O.Store} {label : Label O}
     (h : Step P ⟨.exiting e, L, st, pre ++ k⟩ label
       ⟨.exiting e, L', st', pre' ++ k⟩) (hne : pre ≠ []) :
-    planWith pre L = leaving pre L ++ planWith pre' L' ∧
-      Performed P (leaving pre L) st [] st' := by
+    ((∀ f ∈ pre', Passes e f) → ∀ f ∈ pre, Passes e f) ∧
+      planWith pre L = leaving pre L L' ++ planWith pre' L' ∧
+      unwindLocals pre L = unwindLocals pre' L' ∧
+      Performed P (leaving pre L L') L st [] L' st' := by
   cases pre with
   | nil => exact False.elim (hne rfl)
   | cons f pre =>
@@ -573,7 +565,11 @@ private theorem exit_pass_plan_inv {P : Program O} {e : Exit O.Val} {k pre pre' 
       obtain ⟨_, hL, hst, hk⟩ := next
       subst st'
       obtain ⟨rfl, rfl⟩ := finish hL hk
-      exact ⟨rfl, .nil⟩
+      refine ⟨?_, rfl, rfl, .nil⟩
+      intro hp f₀ hf₀
+      cases hf₀ with
+      | head => trivial
+      | tail _ hf₀ => exact hp f₀ hf₀
     | scope b dm ds =>
       cases ds with
       | cons d ds => simp [step, stepExit, startCleanup] at next
@@ -588,7 +584,11 @@ private theorem exit_pass_plan_inv {P : Program O} {e : Exit O.Val} {k pre pre' 
           subst pre'
           subst L'
           subst st'
-          exact ⟨rfl, .drop hd .nil⟩
+          refine ⟨?_, rfl, rfl, .drop hd .nil⟩
+          intro hp f₀ hf₀
+          cases hf₀ with
+          | head => trivial
+          | tail _ hf₀ => exact hp f₀ hf₀
     | test l cr t body site dm =>
       cases hd : dropOut O dm L st with
       | none => simp [step, stepExit, hd] at next
@@ -600,7 +600,11 @@ private theorem exit_pass_plan_inv {P : Program O} {e : Exit O.Val} {k pre pre' 
         subst pre'
         subst L'
         subst st'
-        exact ⟨rfl, .drop hd .nil⟩
+        refine ⟨?_, rfl, rfl, .drop hd .nil⟩
+        intro hp f₀ hf₀
+        cases hf₀ with
+        | head => trivial
+        | tail _ hf₀ => exact hp f₀ hf₀
     | body l cr t body site =>
       cases e with
       | ret v =>
@@ -608,7 +612,11 @@ private theorem exit_pass_plan_inv {P : Program O} {e : Exit O.Val} {k pre pre' 
         obtain ⟨_, hL, hst, hk⟩ := next
         obtain ⟨rfl, rfl⟩ := finish hL hk
         subst st'
-        exact ⟨rfl, .nil⟩
+        refine ⟨?_, rfl, rfl, .nil⟩
+        intro hp f₀ hf₀
+        cases hf₀ with
+        | head => trivial
+        | tail _ hf₀ => exact hp f₀ hf₀
       | brk l' =>
         by_cases he : l' = l
         · simp [step, stepExit, he] at next
@@ -617,7 +625,11 @@ private theorem exit_pass_plan_inv {P : Program O} {e : Exit O.Val} {k pre pre' 
           obtain ⟨_, hL, hst, hk⟩ := next
           obtain ⟨rfl, rfl⟩ := finish hL hk
           subst st'
-          exact ⟨rfl, .nil⟩
+          refine ⟨?_, rfl, rfl, .nil⟩
+          intro hp f₀ hf₀
+          cases hf₀ with
+          | head => exact he
+          | tail _ hf₀ => exact hp f₀ hf₀
       | cont l' =>
         by_cases he : l' = l
         · simp [step, stepExit, he] at next
@@ -626,7 +638,11 @@ private theorem exit_pass_plan_inv {P : Program O} {e : Exit O.Val} {k pre pre' 
           obtain ⟨_, hL, hst, hk⟩ := next
           obtain ⟨rfl, rfl⟩ := finish hL hk
           subst st'
-          exact ⟨rfl, .nil⟩
+          refine ⟨?_, rfl, rfl, .nil⟩
+          intro hp f₀ hf₀
+          cases hf₀ with
+          | head => exact he
+          | tail _ hf₀ => exact hp f₀ hf₀
     | resume p => simp [step, stepExit] at next
     | ret dst caller =>
       cases e <;> simp [step, stepExit] at next
@@ -634,13 +650,15 @@ private theorem exit_pass_plan_inv {P : Program O} {e : Exit O.Val} {k pre pre' 
         cases hl : O.life .leave st <;> simp [hl] at next
 
 
-/-- Helper (inversion). A cleanup dispatch step selects exactly the head registration, preserving
-its scope with the remaining registrations. -/
+/-- Helper (inversion). A cleanup dispatch step selects the head registration and preserves
+its scope with the remaining registrations (approved: PENDING). -/
 private theorem exit_call_plan_inv {P : Program O} {e : Exit O.Val} {k pre rest : List (Frame O)}
     {L : AList Var O.Val} {st : O.Store} {d : Deferred O} {label : Label O}
     (h : Step P ⟨.exiting e, L, st, pre ++ k⟩ label
       ⟨.exec d.stmt, L, st, .resume (.exit e) :: rest ++ k⟩) (hne : pre ≠ []) :
-    planWith pre L = .call L d :: planWith rest L := by
+    ((∀ f ∈ rest, Passes e f) → ∀ f ∈ pre, Passes e f) ∧
+      planWith pre L = .call L d :: planWith rest L ∧
+      unwindLocals pre L = unwindLocals rest L := by
   cases pre with
   | nil => exact False.elim (hne rfl)
   | cons f pre =>
@@ -672,7 +690,11 @@ private theorem exit_call_plan_inv {P : Program O} {e : Exit O.Val} {k pre rest 
           apply List.append_cancel_right (bs := k)
           exact List.cons.inj hk |>.2
         subst rest
-        simp [planWith]
+        refine ⟨?_, by simp [planWith], rfl⟩
+        intro hp f₀ hf₀
+        cases hf₀ with
+        | head => trivial
+        | tail _ hf₀ => exact hp f₀ (List.mem_cons_of_mem _ hf₀)
     | seq t => simp [step, stepExit] at h
     | test l cr t body site dm =>
       cases hd : dropOut O dm L st <;> simp [step, stepExit, hd] at h
@@ -686,20 +708,108 @@ private theorem exit_call_plan_inv {P : Program O} {e : Exit O.Val} {k pre rest 
       | brk l' => by_cases he : l' = l <;> simp [step, stepExit, he] at h
       | cont l' => by_cases he : l' = l <;> simp [step, stepExit, he, Deferred.stmt] at h
 
-/-- A successful actual unwind, stopped on first arrival at the selected stack boundary, dispatches
-exactly the planned calls and drops in order. The observed actions are read from actual transitions,
-not required by the execution certificate. No extra or missing cleanup action is possible. -/
-theorem cleanup_runs_exact_plan {P : Program O} {e : Exit O.Val} {k pre : List (Frame O)}
-    {L L' : AList Var O.Val} {st st' : O.Store} {acts : List (CleanAct O)} {tr : List O.Event}
-    (h : BoundaryRun P (Step P) e k pre L st acts tr L' st') :
-    acts = planWith pre L ∧ Performed P acts st tr st' := by
-  induction h with
-  | stop => exact ⟨rfl, .nil⟩
-  | pass hne hs _ ih =>
-    obtain ⟨he, hp⟩ := exit_pass_plan_inv hs hne
-    exact ⟨by rw [ih.1, ← he], by simpa using performed_append_inv hp ih.2⟩
-  | call hne hs hc _ _ ih =>
-    exact ⟨by rw [ih.1, ← exit_call_plan_inv hs hne], .call hc.steps_inv ih.2⟩
+/-- Helper (inversion). Dispatches each planned deferred call of a scope in order before its
+final scope drop (approved: PENDING). -/
+private theorem boundary_scope_calls_inv {P : Program O} {e : Exit O.Val} {k : List (Frame O)}
+    (b : BlockId) (dm : List Var) (pre : List (Frame O)) (ds : List (Deferred O))
+    {L L' : AList Var O.Val} {st st' : O.Store}
+    {acts : List (CleanAct O)} {tr : List O.Event}
+    (hperf : Performed P (ds.map (.call L) ++ acts) L st tr L' st')
+    (hbase : ∀ st₁ tr₂, Performed P acts L st₁ tr₂ L' st' →
+      BoundaryRun P (Step P) e k (.scope b dm [] :: pre) L st₁ acts tr₂ L' st') :
+    BoundaryRun P (Step P) e k (.scope b dm ds :: pre) L st (ds.map (.call L) ++ acts) tr L' st' := by
+  induction ds generalizing st tr with
+  | nil => exact hbase st tr hperf
+  | cons d ds ih =>
+    cases hperf with
+    | call hc hrest =>
+      have hr := ih hrest
+      simpa [List.append_assoc] using
+        BoundaryRun.call (pre := .scope b dm (d :: ds) :: pre)
+          (rest := .scope b dm ds :: pre) (by simp) (.silent rfl) hc (.silent rfl) hr
+
+/-- Helper (inversion). Reconstructs an observed boundary run from a performed action plan
+through passable frames (approved: PENDING). -/
+private theorem boundary_of_performed_inv {P : Program O} {e : Exit O.Val} {k : List (Frame O)}
+    (pre : List (Frame O)) {L L' : AList Var O.Val} {st st' : O.Store} {tr : List O.Event}
+    (hp : ∀ f ∈ pre, Passes e f)
+    (hperf : Performed P (planWith pre L) L st tr L' st') :
+    BoundaryRun P (Step P) e k pre L st (planWith pre L) tr L' st' := by
+  induction pre generalizing L st tr with
+  | nil =>
+    cases hperf
+    exact .stop
+  | cons f pre ih =>
+    have hp' : ∀ f₀ ∈ pre, Passes e f₀ := fun f₀ hf₀ => hp f₀ (List.mem_cons_of_mem _ hf₀)
+    have hpf : Passes e f := hp f List.mem_cons_self
+    cases f with
+    | seq t =>
+      simpa [leaving, planWith] using BoundaryRun.pass (pre := .seq t :: pre) (pre' := pre)
+        (by simp) (.silent rfl) (ih hp' hperf)
+    | scope b dm ds =>
+      simp only [planWith] at hperf ⊢
+      refine boundary_scope_calls_inv b dm pre ds hperf ?_
+      intro st₁ tr₂ hdrop
+      cases hdrop with
+      | drop hd hrest =>
+        have hs : Step P ⟨.exiting e, L, st₁, .scope b dm [] :: (pre ++ k)⟩ .silent
+            ⟨.exiting e, restrict dm L, _, pre ++ k⟩ :=
+          .silent (by simp only [step, stepExit, hd]; rfl)
+        simpa [leaving] using BoundaryRun.pass (pre := .scope b dm [] :: pre) (pre' := pre)
+          (by simp) hs (ih hp' hrest)
+    | test l cr t body site dm =>
+      simp only [planWith] at hperf ⊢
+      cases hperf with
+      | drop hd hrest =>
+        have hs : Step P ⟨.exiting e, L, st, .test l cr t body site dm :: (pre ++ k)⟩ .silent
+            ⟨.exiting e, restrict dm L, _, pre ++ k⟩ :=
+          .silent (by simp only [step, stepExit, hd]; rfl)
+        simpa [leaving] using BoundaryRun.pass (pre := .test l cr t body site dm :: pre)
+          (pre' := pre) (by simp) hs (ih hp' hrest)
+    | body l cr t body site =>
+      cases e with
+      | ret v =>
+        simpa [leaving, planWith] using BoundaryRun.pass
+          (pre := .body l cr t body site :: pre) (pre' := pre) (by simp) (.silent rfl) (ih hp' hperf)
+      | brk l' =>
+        have hne : l' ≠ l := hpf
+        have hs : Step P ⟨.exiting (.brk l'), L, st, .body l cr t body site :: (pre ++ k)⟩ .silent
+            ⟨.exiting (.brk l'), L, st, pre ++ k⟩ :=
+          .silent (by simp [step, stepExit, hne])
+        simpa [leaving, planWith] using BoundaryRun.pass
+          (pre := .body l cr t body site :: pre) (pre' := pre) (by simp) hs (ih hp' hperf)
+      | cont l' =>
+        have hne : l' ≠ l := hpf
+        have hs : Step P ⟨.exiting (.cont l'), L, st, .body l cr t body site :: (pre ++ k)⟩ .silent
+            ⟨.exiting (.cont l'), L, st, pre ++ k⟩ :=
+          .silent (by simp [step, stepExit, hne])
+        simpa [leaving, planWith] using BoundaryRun.pass
+          (pre := .body l cr t body site :: pre) (pre' := pre) (by simp) hs (ih hp' hperf)
+    | resume p => exact False.elim hpf
+    | ret dst caller => exact False.elim hpf
+
+/-- Law (subject `ConcreteSpec.Core.Exec.Step`). A successful actual unwind, stopped on first
+arrival at the selected stack boundary, occurs if and only if every frame in `pre` passes the
+exit, the observed actions are `planWith pre L`, the final locals are `unwindLocals pre L`, and
+all planned calls and drops are performed in order. -/
+theorem cleanup_runs_exact_plan (P : Program O) (e : Exit O.Val) (k pre : List (Frame O))
+    (L L' : AList Var O.Val) (st st' : O.Store) (acts : List (CleanAct O)) (tr : List O.Event) :
+    BoundaryRun P (Step P) e k pre L st acts tr L' st' ↔
+      (∀ (f : Frame O), f ∈ pre → Passes e f) ∧ acts = planWith pre L ∧
+        L' = unwindLocals pre L ∧ Performed P acts L st tr L' st' := by
+  constructor
+  · intro h
+    induction h with
+    | stop => exact ⟨(by intro _ hf; cases hf), rfl, rfl, Performed.nil⟩
+    | pass hne hs _ ih =>
+      obtain ⟨hpp, he, hu, hp⟩ := exit_pass_plan_inv hs hne
+      exact ⟨hpp ih.1, by rw [ih.2.1, ← he], by rw [ih.2.2.1, ← hu],
+        by simpa using performed_append_inv hp ih.2.2.2⟩
+    | call hne hs hc _ _ ih =>
+      obtain ⟨hpp, he, hu⟩ := exit_call_plan_inv hs hne
+      exact ⟨hpp ih.1, by rw [ih.2.1, ← he], by rw [ih.2.2.1, ← hu], Performed.call hc ih.2.2.2⟩
+  · rintro ⟨hp, rfl, _, hperf⟩
+    exact boundary_of_performed_inv pre hp hperf
 
 /-! ### Traps are terminal -/
 
@@ -1013,7 +1123,7 @@ private theorem resume_step_inv {P : Program O} {e : Exit O.Val} {L : AList Var 
     exact ⟨rfl, h.symm⟩
   | prim h _ _ => simp [step] at h
 
-/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
+/-- Helper (inversion). Decomposes a raw execution using the machine stack rules (approved: PENDING). -/
 private theorem boundary_complete_inv {P : Program O} {e : Exit O.Val} {k pre : List (Frame O)}
     {L Lend : AList Var O.Val} {st stEnd : O.Store} {tr : List O.Event} {n : Nat} {endC : Config O}
     (h : FirstStepsN (Step P) (fun c => c.frames.length ≤ k.length)
@@ -1049,7 +1159,7 @@ private theorem boundary_complete_inv {P : Program O} {e : Exit O.Val} {k pre : 
               (Label.silent.events ++ tr₀) Lend stEnd := by
           rw [hc] at ht hs
           obtain ⟨acts, hr⟩ := ih m (by omega) ht he hpp
-          exact ⟨leaving (f :: pre) L ++ acts,
+          exact ⟨leaving (f :: pre) L L' ++ acts,
             by simpa [Label.events] using BoundaryRun.pass (by simp) hs hr⟩
         cases f with
         | seq t =>
@@ -1108,19 +1218,28 @@ private theorem boundary_complete_inv {P : Program O} {e : Exit O.Val} {k pre : 
         | resume p => exact False.elim hpf
         | ret dst caller => exact False.elim hpf
 
-/-- Every raw first-boundary unwind through passable frames has an observation; the observer
-cannot silently exclude an execution with an unexpected dispatcher shape. The proof derives
-call-return segmentation from stack protection, rather than requiring it of the raw run. -/
-theorem raw_cleanup_runs_plan {P : Program O} {e : Exit O.Val} {k pre : List (Frame O)}
-    {L Lend : AList Var O.Val} {st stEnd : O.Store} {tr : List O.Event}
-    (h : FirstSteps (Step P) (fun c => c.frames.length ≤ k.length)
-      ⟨.exiting e, L, st, pre ++ k⟩ tr ⟨.exiting e, Lend, stEnd, k⟩)
-    (hp : ∀ f ∈ pre, Passes e f) :
-    ∃ acts, BoundaryRun P (Step P) e k pre L st acts tr Lend stEnd ∧
-      acts = planWith pre L ∧ Performed P acts st tr stEnd := by
-  obtain ⟨n, hn⟩ := h.sized_inv
-  obtain ⟨acts, ha⟩ := boundary_complete_inv hn rfl hp
-  exact ⟨acts, ha, cleanup_runs_exact_plan ha⟩
+/-- Law (subject `ConcreteSpec.Core.Exec.Step`). Every raw first-boundary unwind through
+passable frames has a segmented `BoundaryRun` observation that runs `planWith pre L`, restores
+`Lend = unwindLocals pre L`, and performs every planned call and drop in order. -/
+theorem raw_cleanup_runs_plan (P : Program O) (e : Exit O.Val) (k pre : List (Frame O))
+    (L Lend : AList Var O.Val) (st stEnd : O.Store) (tr : List O.Event) :
+    ((∀ (f : Frame O), f ∈ pre → Passes e f) ∧
+      FirstSteps (Step P) (fun c => c.frames.length ≤ k.length)
+        ⟨.exiting e, L, st, pre ++ k⟩ tr ⟨.exiting e, Lend, stEnd, k⟩) ↔
+      ((∀ (f : Frame O), f ∈ pre → Passes e f) ∧
+        FirstSteps (Step P) (fun c => c.frames.length ≤ k.length)
+          ⟨.exiting e, L, st, pre ++ k⟩ tr ⟨.exiting e, Lend, stEnd, k⟩ ∧
+        ∃ acts, BoundaryRun P (Step P) e k pre L st acts tr Lend stEnd ∧
+          acts = planWith pre L ∧ Lend = unwindLocals pre L ∧ Performed P acts L st tr Lend stEnd) := by
+  constructor
+  · rintro ⟨hp, h⟩
+    obtain ⟨n, hn⟩ := h.sized_inv
+    obtain ⟨acts, ha⟩ := boundary_complete_inv hn rfl hp
+    obtain ⟨_, hacts, hL, hperf⟩ :=
+      (cleanup_runs_exact_plan P e k pre L Lend st stEnd acts tr).mp ha
+    exact ⟨hp, h, acts, ha, hacts, hL, hperf⟩
+  · rintro ⟨hp, h, _⟩
+    exact ⟨hp, h⟩
 
 
 /-- **`abort()` runs no cleanup.** From `abort()` the only step is to the trap, with the same
@@ -1467,12 +1586,12 @@ example (L : AList Var Demo.ops.Val) (st : Demo.DState) (k : List (Frame Demo.op
 namespace CleanupEvidence
 open Demo
 
-/-- Representation lemma. A concrete first-return segment for an ordinary deferred call. This certificate is also used
-inside the planted dispatchers: the mutation changes only selection, not the call's behavior. -/
+/-- Representation lemma. A concrete first-return segment for an ordinary deferred call
+(approved: PENDING). -/
 private theorem logSegment (n : Int) (e : Exit Int) (L : AList Var Int)
     (rest : List (Frame ops)) :
     FirstSteps (Step prog) (fun c => c.ctrl = .done ∧ c.frames = .resume (.exit e) :: rest)
-      ⟨.exec (.call none logF [.lit n] s), L, .init, .resume (.exit e) :: rest⟩ [n]
+      ⟨.exec (⟨logF, [.lit n], s⟩ : Deferred ops).stmt, L, .init, .resume (.exit e) :: rest⟩ [n]
       ⟨.done, L, .init, .resume (.exit e) :: rest⟩ := by
   let q : List (Frame ops) := .resume (.exit e) :: rest
   let entered : DState := DState.life (.enter [x]) .init
@@ -1489,86 +1608,181 @@ private theorem logSegment (n : Int) (e : Exit Int) (L : AList Var Int)
     (by intro h; cases h.2) (.silent rfl) ?_
   exact .stop ⟨rfl, rfl⟩
 
-private def d (n : Int) : Deferred ops := ⟨logF, [.lit n], s⟩
-private def inner : Frame ops := .scope ⟨1⟩ [] [d 1]
-private def outer : Frame ops := .scope ⟨2⟩ [] [d 2]
-private def actions : List (CleanAct ops) :=
-  [.call [] (d 1), .drop [] [], .call [] (d 2), .drop [] []]
+def d (n : Int) : Deferred ops := ⟨logF, [.lit n], s⟩
+def inner : Frame ops := .scope ⟨1⟩ [] [d 1]
+def outer : Frame ops := .scope ⟨2⟩ [] [d 2]
+def emptyScope : Frame ops := .scope ⟨1⟩ [] []
+def actions : List (CleanAct ops) :=
+  [.call [] (d 1), .drop [] [] [], .call [] (d 2), .drop [] [] []]
 
-/-- Instance (law `ConcreteSpec.Core.Exec.cleanup_runs_exact_plan`). Two real calls on nested
-scopes emit `[1,2]`, with each scope drop between calls. The exit's value is carried to the
-boundary without executing anything below it. -/
-example : BoundaryRun prog (Step prog) (.ret 7) [] [inner, outer] [] .init actions [1, 2] [] .init ∧
-    actions = planWith [inner, outer] [] ∧ Performed prog actions .init [1, 2] .init := by
-  have h : BoundaryRun prog (Step prog) (.ret 7) [] [inner, outer] [] .init actions [1, 2] [] .init := by
-    refine BoundaryRun.call (P := prog) (R := Step prog) (pre := [inner, outer])
-      (d := d 1) (rest := [.scope ⟨1⟩ [] [], outer])
-      (by intro h; cases h) (.silent rfl)
-      (logSegment 1 (.ret 7) [] [.scope ⟨1⟩ [] [], outer]) (.silent rfl) ?_
-    refine BoundaryRun.pass (pre' := [outer]) (by intro h; cases h) (.silent rfl) ?_
-    refine BoundaryRun.call (P := prog) (R := Step prog) (pre := [outer])
-      (d := d 2) (rest := [.scope ⟨2⟩ [] []]) (by intro h; cases h) (.silent rfl)
-      (logSegment 2 (.ret 7) [] [.scope ⟨2⟩ [] []]) (.silent rfl) ?_
-    exact BoundaryRun.pass (pre' := []) (by intro h; cases h) (.silent rfl) .stop
-  exact ⟨h, cleanup_runs_exact_plan h⟩
+/-- Planted mutant of `Step`: deletes a scope's pending deferred calls and drops the scope directly. -/
+inductive MissingStep (P : Program O) : Config O → Label O → Config O → Prop where
+  | skip {e L st b dm ds k stDrop} :
+      dropOut O dm L st = some stDrop →
+      MissingStep P ⟨.exiting e, L, st, .scope b dm ds :: k⟩ .silent
+        ⟨.exiting e, restrict dm L, stDrop, k⟩
 
-/-- A planted dispatcher deleting a scope's pending call (and performing its drop). -/
-private inductive Missing : Config ops → Label ops → Config ops → Prop where
-  | skip : Missing ⟨.exiting (.ret 7), [], .init, [inner]⟩ .silent
-      ⟨.exiting (.ret 7), [], .init, []⟩
+/-- Planted mutant of `Step`: injects an unregistered call at an empty scope before dropping it. -/
+inductive ExtraStep (P : Program O) : Config O → Label O → Config O → Prop where
+  | inject {e L st b dm k} {callD : Deferred O} :
+      ExtraStep P ⟨.exiting e, L, st, .scope b dm [] :: k⟩ .silent
+        ⟨.exec callD.stmt, L, st, .resume (.exit e) :: .scope b dm [] :: k⟩
+  | resume {e L st k} :
+      ExtraStep P ⟨.done, L, st, .resume (.exit e) :: k⟩ .silent
+        ⟨.exiting e, L, st, k⟩
+  | drop {e L st b dm k stDrop} :
+      dropOut O dm L st = some stDrop →
+      ExtraStep P ⟨.exiting e, L, st, .scope b dm [] :: k⟩ .silent
+        ⟨.exiting e, restrict dm L, stDrop, k⟩
 
-/-- Planted (law `ConcreteSpec.Core.Exec.cleanup_runs_exact_plan`). A mutated rule deletes a
-registered call. The observer admits the actual mutated execution but its actions disagree with
-the independent plan; the law is therefore false for this rule. -/
-example : ¬ (∀ acts tr L st, BoundaryRun prog Missing (.ret 7) [] [inner] [] .init acts tr L st →
-    acts = planWith [inner] [] ∧ Performed prog acts .init tr st) := by
+/-- Planted mutant of `Step`: pops an empty scope and restricts locals, but forgets `dropOut`. -/
+inductive MissingDropStep (P : Program O) : Config O → Label O → Config O → Prop where
+  | skip {e L st b dm k} :
+      MissingDropStep P ⟨.exiting e, L, st, .scope b dm [] :: k⟩ .silent
+        ⟨.exiting e, restrict dm L, st, k⟩
+
+/-- Planted mutant of `Step`: pops an empty scope and updates the store via `dropOut`, but
+forgets to restore locals via `restrict`. -/
+inductive MissingRestrictStep (P : Program O) : Config O → Label O → Config O → Prop where
+  | skip {e L st b dm k stDrop} :
+      dropOut O dm L st = some stDrop →
+      MissingRestrictStep P ⟨.exiting e, L, st, .scope b dm [] :: k⟩ .silent
+        ⟨.exiting e, L, stDrop, k⟩
+
+/-- Instance (law `ConcreteSpec.Core.Exec.cleanup_runs_exact_plan`, case `nested`). Two real
+calls on nested scopes emit `[1, 2]`, with each scope drop between calls and locals restored. -/
+example : BoundaryRun prog (Step prog) (.ret 7) [] [inner, outer] [] .init actions [1, 2] [] .init ↔
+    (∀ (f : Frame ops), f ∈ ([inner, outer] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
+      actions = planWith [inner, outer] [] ∧
+      ([] : AList Var Int) = unwindLocals [inner, outer] [] ∧
+      Performed prog actions [] .init [1, 2] [] .init :=
+  cleanup_runs_exact_plan prog (.ret 7) [] [inner, outer] [] [] .init .init actions [1, 2]
+
+/-- Planted (law `ConcreteSpec.Core.Exec.cleanup_runs_exact_plan`, case `nested`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.CleanupEvidence.ExtraStep`).
+At the nested-scope plan `actions`, `ExtraStep` only acts on empty scopes and cannot dispatch the
+pending deferred calls on `[inner, outer]`, falsifying the equivalence at the positive instance's
+exact arguments. -/
+example : ¬ (BoundaryRun prog (ExtraStep prog) (.ret 7) [] [inner, outer] [] .init actions [1, 2] [] .init ↔
+    (∀ (f : Frame ops), f ∈ ([inner, outer] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
+      actions = planWith [inner, outer] [] ∧
+      ([] : AList Var Int) = unwindLocals [inner, outer] [] ∧
+      Performed prog actions [] .init [1, 2] [] .init) := by
   intro h
-  have hr : BoundaryRun prog Missing (.ret 7) [] [inner] [] .init [] [] [] .init :=
-    BoundaryRun.pass (pre' := []) (by intro hn; cases hn) .skip .stop
-  have he := (h _ _ _ _ hr).1
-  change ([] : List (CleanAct ops)) = [.call [] (d 1), .drop [] []] at he
+  have hp : ∀ (f : Frame ops), f ∈ ([inner, outer] : List (Frame ops)) → Passes (O := ops) (.ret 7) f := by
+    intro f hf
+    cases hf with
+    | head => trivial
+    | tail _ hf =>
+      cases hf with
+      | head => trivial
+      | tail _ hf => cases hf
+  have hperf : Performed prog actions [] .init [1, 2] [] .init :=
+    Performed.call (logSegment 1 (.ret 7) [] [.scope ⟨1⟩ [] [], outer])
+      (Performed.drop (P := prog) (dm := []) (L := []) rfl
+        (Performed.call (logSegment 2 (.ret 7) [] [.scope ⟨2⟩ [] []])
+          (Performed.drop (P := prog) (dm := []) (L := []) rfl Performed.nil)))
+  have hrun := h.mpr ⟨hp, rfl, rfl, hperf⟩
+  generalize hacts : actions = acts₀ at hrun
+  generalize htr : ([1, 2] : List Int) = tr₀ at hrun
+  cases hrun with
+  | pass _ hs _ =>
+    generalize hc : (⟨.exiting (.ret 7), _, _, _⟩ : Config ops) = c' at hs
+    cases hs <;> simp [inner] at hc
+  | call _ hs _ _ _ =>
+    cases hs
+
+/-- Instance (law `ConcreteSpec.Core.Exec.cleanup_runs_exact_plan`, case `missing`). Skipping a
+registered call produces `[]` actions, which `cleanup_runs_exact_plan` characterizes as
+impossible under `Step`. -/
+example : BoundaryRun prog (Step prog) (.ret 7) [] [inner] [] .init [] [] [] .init ↔
+    (∀ (f : Frame ops), f ∈ ([inner] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
+      ([] : List (CleanAct ops)) = planWith [inner] [] ∧
+      ([] : AList Var Int) = unwindLocals [inner] [] ∧
+      Performed prog [] [] .init [] [] .init :=
+  cleanup_runs_exact_plan prog (.ret 7) [] [inner] [] [] .init .init [] []
+
+/-- Planted (law `ConcreteSpec.Core.Exec.cleanup_runs_exact_plan`, case `missing`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.CleanupEvidence.MissingStep`).
+A mutated rule deletes a registered call: the observer admits the mutated execution with `[]`
+actions, which disagrees with `planWith [inner] []`. -/
+example : ¬ (BoundaryRun prog (MissingStep prog) (.ret 7) [] [inner] [] .init [] [] [] .init ↔
+    (∀ (f : Frame ops), f ∈ ([inner] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
+      ([] : List (CleanAct ops)) = planWith [inner] [] ∧
+      ([] : AList Var Int) = unwindLocals [inner] [] ∧
+      Performed prog [] [] .init [] [] .init) := by
+  intro h
+  have hr : BoundaryRun prog (MissingStep prog) (.ret 7) [] [inner] [] .init [] [] [] .init := by
+    have hp := BoundaryRun.pass (P := prog) (R := MissingStep prog) (e := .ret 7) (k := [])
+      (pre := [inner]) (pre' := []) (L := []) (L' := []) (st := .init) (st' := .init)
+      (by intro hn; cases hn) (.skip rfl) .stop
+    simpa [inner, leaving, restrict] using hp
+  have he := (h.mp hr).2.1
+  change ([] : List (CleanAct ops)) = [.call [] (d 1), .drop [] [] []] at he
   cases he
 
-/-- A planted dispatcher inserting an unregistered call at a scope with no registrations. -/
-private inductive Extra : Config ops → Label ops → Config ops → Prop where
-  | inject : Extra ⟨.exiting (.ret 7), [], .init, [.scope ⟨1⟩ [] []]⟩ .silent
-      ⟨.exec (d 9).stmt, [], .init, [.resume (.exit (.ret 7)), .scope ⟨1⟩ [] []]⟩
-  | resume : Extra ⟨.done, [], .init, [.resume (.exit (.ret 7)), .scope ⟨1⟩ [] []]⟩ .silent
-      ⟨.exiting (.ret 7), [], .init, [.scope ⟨1⟩ [] []]⟩
-  | drop : Extra ⟨.exiting (.ret 7), [], .init, [.scope ⟨1⟩ [] []]⟩ .silent
-      ⟨.exiting (.ret 7), [], .init, []⟩
+/-- Instance (law `ConcreteSpec.Core.Exec.cleanup_runs_exact_plan`, case `extra`). An empty
+scope cannot dispatch an unregistered `log(9)` call under `Step`. -/
+example : BoundaryRun prog (Step prog) (.ret 7) [] [emptyScope] [] .init
+      [.call [] (d 9), .drop [] [] []] [9] [] .init ↔
+    (∀ (f : Frame ops), f ∈ ([emptyScope] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
+      ([.call [] (d 9), .drop [] [] []] : List (CleanAct ops)) = planWith [emptyScope] [] ∧
+      ([] : AList Var Int) = unwindLocals [emptyScope] [] ∧
+      Performed prog [.call [] (d 9), .drop [] [] []] [] .init [9] [] .init :=
+  cleanup_runs_exact_plan prog (.ret 7) [] [emptyScope] [] [] .init .init
+    [.call [] (d 9), .drop [] [] []] [9]
 
-/-- Planted (law `ConcreteSpec.Core.Exec.cleanup_runs_exact_plan`). A mutated rule adds a real
-`log(9)` not registered in the scope. Its first-return execution emits `9`, and the law rejects
-the extra observed call. -/
-example : ¬ (∀ acts tr L st, BoundaryRun prog Extra (.ret 7) [] [.scope ⟨1⟩ [] []]
-    [] .init acts tr L st → acts = planWith [.scope ⟨1⟩ [] []] [] ∧ Performed prog acts .init tr st) := by
+/-- Planted (law `ConcreteSpec.Core.Exec.cleanup_runs_exact_plan`, case `extra`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.CleanupEvidence.ExtraStep`).
+A mutated rule adds a real `log(9)` not registered in the scope; its execution emits `9` and
+disagrees with `planWith`. -/
+example : ¬ (BoundaryRun prog (ExtraStep prog) (.ret 7) [] [emptyScope] [] .init
+      [.call [] (d 9), .drop [] [] []] [9] [] .init ↔
+    (∀ (f : Frame ops), f ∈ ([emptyScope] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
+      ([.call [] (d 9), .drop [] [] []] : List (CleanAct ops)) = planWith [emptyScope] [] ∧
+      ([] : AList Var Int) = unwindLocals [emptyScope] [] ∧
+      Performed prog [.call [] (d 9), .drop [] [] []] [] .init [9] [] .init) := by
   intro h
-  have hr : BoundaryRun prog Extra (.ret 7) [] [.scope ⟨1⟩ [] []] [] .init
-      [.call [] (d 9), .drop [] []] [9] [] .init :=
-    BoundaryRun.call (P := prog) (R := Extra) (pre := [.scope ⟨1⟩ [] []])
-      (d := d 9) (rest := [.scope ⟨1⟩ [] []]) (by intro hn; cases hn) Extra.inject (logSegment 9 (.ret 7) [] [.scope ⟨1⟩ [] []])
-      Extra.resume (BoundaryRun.pass (pre' := []) (by intro hn; cases hn) Extra.drop .stop)
-  have he := (h _ _ _ _ hr).1
-  change ([.call [] (d 9), .drop [] []] : List (CleanAct ops)) = [.drop [] []] at he
+  have hdrop : BoundaryRun prog (ExtraStep prog) (.ret 7) [] [emptyScope] [] .init
+      [.drop [] [] []] [] [] .init := by
+    have hp := BoundaryRun.pass (P := prog) (R := ExtraStep prog) (e := .ret 7) (k := [])
+      (pre := [emptyScope]) (pre' := []) (L := []) (L' := []) (st := .init) (st' := .init)
+      (by intro hn; cases hn) (.drop rfl) .stop
+    simpa [emptyScope, leaving, restrict] using hp
+  have hr : BoundaryRun prog (ExtraStep prog) (.ret 7) [] [emptyScope] [] .init
+      [.call [] (d 9), .drop [] [] []] [9] [] .init :=
+    BoundaryRun.call (P := prog) (R := ExtraStep prog) (pre := [emptyScope])
+      (d := d 9) (rest := [emptyScope]) (by intro hn; cases hn) ExtraStep.inject
+      (logSegment 9 (.ret 7) [] [emptyScope]) ExtraStep.resume hdrop
+  have he := (h.mp hr).2.1
+  change ([.call [] (d 9), .drop [] [] []] : List (CleanAct ops)) = [.drop [] [] []] at he
   cases he
 
-/-- A planted dispatcher that forgets the lifecycle effect while popping a scope. -/
-private inductive MissingDrop : Config ops → Label ops → Config ops → Prop where
-  | skip : MissingDrop ⟨.exiting (.ret 7), [(x, 1)], ⟨0, [[x]]⟩, [.scope ⟨1⟩ [] []]⟩ .silent
-      ⟨.exiting (.ret 7), [], ⟨0, [[x]]⟩, []⟩
+/-- Instance (law `ConcreteSpec.Core.Exec.cleanup_runs_exact_plan`, case `missing_drop`).
+Leaving a scope without updating the store via `dropOut` is rejected by `cleanup_runs_exact_plan`. -/
+example : BoundaryRun prog (Step prog) (.ret 7) [] [emptyScope] [(x, 1)] ⟨0, [[x]]⟩
+      [.drop [] [(x, 1)] []] [] [] ⟨0, [[x]]⟩ ↔
+    (∀ (f : Frame ops), f ∈ ([emptyScope] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
+      ([.drop [] [(x, 1)] []] : List (CleanAct ops)) = planWith [emptyScope] [(x, 1)] ∧
+      ([] : AList Var Int) = unwindLocals [emptyScope] [(x, 1)] ∧
+      Performed prog [.drop [] [(x, 1)] []] [(x, 1)] ⟨0, [[x]]⟩ [] [] ⟨0, [[x]]⟩ :=
+  cleanup_runs_exact_plan prog (.ret 7) [] [emptyScope] [(x, 1)] [] ⟨0, [[x]]⟩ ⟨0, [[x]]⟩
+    [.drop [] [(x, 1)] []] []
 
-/-- Planted (law `ConcreteSpec.Core.Exec.cleanup_runs_exact_plan`). Popping the scope but
-forgetting its lifecycle update leaves `x` marked moved. Although the action list and event
-trace look right, independently executing the drop cannot produce this final store. -/
-example : ¬ (∀ acts tr L st, BoundaryRun prog MissingDrop (.ret 7) [] [.scope ⟨1⟩ [] []]
-    [(x, 1)] ⟨0, [[x]]⟩ acts tr L st →
-      acts = planWith (O := ops) [.scope ⟨1⟩ [] []] [(x, 1)] ∧ Performed prog acts ⟨0, [[x]]⟩ tr st) := by
+/-- Planted (law `ConcreteSpec.Core.Exec.cleanup_runs_exact_plan`, case `missing_drop`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.CleanupEvidence.MissingDropStep`).
+Popping the scope and restricting locals while forgetting the store lifecycle update leaves `x`
+marked moved, violating `Performed`. -/
+example : ¬ (BoundaryRun prog (MissingDropStep prog) (.ret 7) [] [emptyScope] [(x, 1)] ⟨0, [[x]]⟩
+      [.drop [] [(x, 1)] []] [] [] ⟨0, [[x]]⟩ ↔
+    (∀ (f : Frame ops), f ∈ ([emptyScope] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
+      ([.drop [] [(x, 1)] []] : List (CleanAct ops)) = planWith [emptyScope] [(x, 1)] ∧
+      ([] : AList Var Int) = unwindLocals [emptyScope] [(x, 1)] ∧
+      Performed prog [.drop [] [(x, 1)] []] [(x, 1)] ⟨0, [[x]]⟩ [] [] ⟨0, [[x]]⟩) := by
   intro h
-  have hr : BoundaryRun prog MissingDrop (.ret 7) [] [.scope ⟨1⟩ [] []] [(x, 1)] ⟨0, [[x]]⟩
-      [.drop [] [(x, 1)]] [] [] ⟨0, [[x]]⟩ :=
-    BoundaryRun.pass (pre' := []) (by intro hn; cases hn) .skip .stop
-  have hp := (h _ _ _ _ hr).2
+  have hr : BoundaryRun prog (MissingDropStep prog) (.ret 7) [] [emptyScope] [(x, 1)] ⟨0, [[x]]⟩
+      [.drop [] [(x, 1)] []] [] [] ⟨0, [[x]]⟩ := by
+    have hp := BoundaryRun.pass (P := prog) (R := MissingDropStep prog) (e := .ret 7) (k := [])
+      (pre := [emptyScope]) (pre' := []) (L := [(x, 1)]) (L' := [])
+      (st := ⟨0, [[x]]⟩) (st' := ⟨0, [[x]]⟩) (by intro hn; cases hn) .skip .stop
+    simpa [emptyScope, leaving, restrict] using hp
+  have hp := (h.mp hr).2.2.2
   cases hp with
   | drop hd hr =>
     cases hr
@@ -1576,8 +1790,40 @@ example : ¬ (∀ acts tr L st, BoundaryRun prog MissingDrop (.ret 7) [] [.scope
     have hm := congrArg DState.moved he
     cases hm
 
-/-- Representation lemma. Extend a raw run with a concrete deferred log's complete execution.
-The outer boundary remains untouched throughout the call; only the supplied tail reaches it. -/
+/-- Instance (law `ConcreteSpec.Core.Exec.cleanup_runs_exact_plan`, case `missing_restrict`).
+Leaving a scope that updates the store via `dropOut` but fails to restrict `L'` is rejected by
+`cleanup_runs_exact_plan`. -/
+example : BoundaryRun prog (Step prog) (.ret 7) [] [emptyScope] [(x, 1)] ⟨0, [[x]]⟩
+      [.drop [] [(x, 1)] [(x, 1)]] [] [(x, 1)] ⟨0, [[]]⟩ ↔
+    (∀ (f : Frame ops), f ∈ ([emptyScope] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
+      ([.drop [] [(x, 1)] [(x, 1)]] : List (CleanAct ops)) = planWith [emptyScope] [(x, 1)] ∧
+      ([(x, 1)] : AList Var Int) = unwindLocals [emptyScope] [(x, 1)] ∧
+      Performed prog [.drop [] [(x, 1)] [(x, 1)]] [(x, 1)] ⟨0, [[x]]⟩ [] [(x, 1)] ⟨0, [[]]⟩ :=
+  cleanup_runs_exact_plan prog (.ret 7) [] [emptyScope] [(x, 1)] [(x, 1)] ⟨0, [[x]]⟩ ⟨0, [[]]⟩
+    [.drop [] [(x, 1)] [(x, 1)]] []
+
+/-- Planted (law `ConcreteSpec.Core.Exec.cleanup_runs_exact_plan`, case `missing_restrict`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.CleanupEvidence.MissingRestrictStep`).
+Popping the scope and performing `dropOut` on the store while failing to restrict `L'` to
+`restrict [] [(x, 1)] = []` violates `acts = planWith`, `L' = unwindLocals`, and `Performed`. -/
+example : ¬ (BoundaryRun prog (MissingRestrictStep prog) (.ret 7) [] [emptyScope] [(x, 1)] ⟨0, [[x]]⟩
+      [.drop [] [(x, 1)] [(x, 1)]] [] [(x, 1)] ⟨0, [[]]⟩ ↔
+    (∀ (f : Frame ops), f ∈ ([emptyScope] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
+      ([.drop [] [(x, 1)] [(x, 1)]] : List (CleanAct ops)) = planWith [emptyScope] [(x, 1)] ∧
+      ([(x, 1)] : AList Var Int) = unwindLocals [emptyScope] [(x, 1)] ∧
+      Performed prog [.drop [] [(x, 1)] [(x, 1)]] [(x, 1)] ⟨0, [[x]]⟩ [] [(x, 1)] ⟨0, [[]]⟩) := by
+  intro h
+  have hr : BoundaryRun prog (MissingRestrictStep prog) (.ret 7) [] [emptyScope] [(x, 1)] ⟨0, [[x]]⟩
+      [.drop [] [(x, 1)] [(x, 1)]] [] [(x, 1)] ⟨0, [[]]⟩ := by
+    have hp := BoundaryRun.pass (P := prog) (R := MissingRestrictStep prog) (e := .ret 7) (k := [])
+      (pre := [emptyScope]) (pre' := []) (L := [(x, 1)]) (L' := [(x, 1)])
+      (st := ⟨0, [[x]]⟩) (st' := ⟨0, [[]]⟩) (by intro hn; cases hn) (.skip rfl) .stop
+    simpa [emptyScope, leaving, restrict] using hp
+  have hL := (h.mp hr).2.2.1
+  change ([(x, 1)] : AList Var Int) = [] at hL
+  cases hL
+
+/-- Representation lemma. Extend a raw run with a concrete deferred log's complete execution
+(approved: PENDING). -/
 private theorem logContinue_inv (n : Int) (e : Exit Int) (L : AList Var Int)
     (rest : List (Frame ops)) {tr : List Int} {endC : Config ops}
     (tail : FirstSteps (Step prog) (fun c => c.frames.length ≤ 0)
@@ -1599,49 +1845,175 @@ private theorem logContinue_inv (n : Int) (e : Exit Int) (L : AList Var Int)
   simpa [Label.events] using FirstSteps.step (R := Step prog) (by simp [q])
     (Step.silent (P := prog) (c' := ⟨.done, L, .init, q⟩) rfl) tail
 
-/-- Instance (law `ConcreteSpec.Core.Exec.raw_cleanup_runs_plan`). The premise is a raw
-first-arrival execution, with no action list or call segmentation supplied: a registered `log(1)`
-runs and its scope drops before the exit first reaches the empty boundary. -/
-example : ∃ acts, BoundaryRun prog (Step prog) (.ret 7) [] [inner] [] .init acts [1] [] .init ∧
-    acts = planWith [inner] [] ∧ Performed prog acts .init [1] .init := by
-  have h : FirstSteps (Step prog) (fun c => c.frames.length ≤ 0)
-      ⟨.exiting (.ret 7), [], .init, [inner]⟩ [1] ⟨.exiting (.ret 7), [], .init, []⟩ := by
-    refine FirstSteps.step (R := Step prog)
-      (c' := ⟨.exec (d 1).stmt, [], .init, [.resume (.exit (.ret 7)), .scope ⟨1⟩ [] []]⟩)
-      (by simp [inner]) (.silent rfl) ?_
-    apply logContinue_inv 1 (.ret 7) [] [.scope ⟨1⟩ [] []]
-    refine FirstSteps.step (R := Step prog)
-      (c' := ⟨.exiting (.ret 7), [], .init, [.scope ⟨1⟩ [] []]⟩) (by simp) (.silent rfl) ?_
-    refine FirstSteps.step (R := Step prog)
-      (c' := ⟨.exiting (.ret 7), [], .init, []⟩) (by simp) (.silent rfl) ?_
-    exact .stop (by simp)
-  exact raw_cleanup_runs_plan h (by intro f hf; cases hf with | head => trivial | tail _ hf => cases hf)
+/-- Representation lemma. Concrete raw first-arrival execution of `inner` (approved: PENDING). -/
+private theorem inner_raw_run : FirstSteps (Step prog) (fun c => c.frames.length ≤ 0)
+    ⟨.exiting (.ret 7), [], .init, [inner]⟩ [1] ⟨.exiting (.ret 7), [], .init, []⟩ := by
+  refine FirstSteps.step (R := Step prog)
+    (c' := ⟨.exec (d 1).stmt, [], .init, [.resume (.exit (.ret 7)), .scope ⟨1⟩ [] []]⟩)
+    (by simp [inner]) (.silent rfl) ?_
+  apply logContinue_inv 1 (.ret 7) [] [.scope ⟨1⟩ [] []]
+  refine FirstSteps.step (R := Step prog)
+    (c' := ⟨.exiting (.ret 7), [], .init, [.scope ⟨1⟩ [] []]⟩) (by simp) (.silent rfl) ?_
+  refine FirstSteps.step (R := Step prog)
+    (c' := ⟨.exiting (.ret 7), [], .init, []⟩) (by simp) (.silent rfl) ?_
+  exact .stop (by simp)
 
-/-- A different missing-call mutation: it jumps through a normal resume instead of dispatching
-a call. This path has the same boundary as a real unwind, but an unexpected intermediate control. -/
-private inductive Escape : Config ops → Label ops → Config ops → Prop where
-  | skip : Escape ⟨.exiting (.ret 7), [], .init, [inner]⟩ .silent
-      ⟨.done, [], .init, [.resume (.exit (.ret 7))]⟩
-  | resume : Escape ⟨.done, [], .init, [.resume (.exit (.ret 7))]⟩ .silent
-      ⟨.exiting (.ret 7), [], .init, []⟩
+/-- Planted mutant of `Step` for `raw_cleanup_runs_plan`: jumps directly from `.exiting` to
+`.done` while emitting an event from `O.eval`, bypassing call dispatch. -/
+inductive EscapeEmitStep (P : Program O) : Config O → Label O → Config O → Prop where
+  | skip {e L st b dm d ds k ev ev' st' l} :
+      d.args = [ev] →
+      O.eval L st ev = .ok (ev', st') →
+      EscapeEmitStep P ⟨.exiting e, L, st, .scope b dm (d :: ds) :: k⟩ l
+        ⟨.done, L, st', .resume (.exit e) :: k⟩
+  | resume {e L st k} :
+      EscapeEmitStep P ⟨.done, L, st, .resume (.exit e) :: k⟩ .silent
+        ⟨.exiting e, L, st, k⟩
 
-/-- Planted (law `ConcreteSpec.Core.Exec.raw_cleanup_runs_plan`). A raw first-boundary path
-which skips the call via `.done`/`.resume` cannot escape the contract: it falsifies the extraction
-obligation itself, even though the earlier observer-only law would have excluded this path. -/
-example : ¬ (∀ tr L st, FirstSteps Escape (fun c => c.frames.length ≤ 0)
-    ⟨.exiting (.ret 7), [], .init, [inner]⟩ tr ⟨.exiting (.ret 7), L, st, []⟩ →
-      ∃ acts, BoundaryRun prog Escape (.ret 7) [] [inner] [] .init acts tr L st ∧
-        acts = planWith [inner] [] ∧ Performed prog acts .init tr st) := by
+/-- Planted mutant of `Step` for `raw_cleanup_runs_plan`: jumps silently through `.done` /
+`.resume` instead of dispatching a call. -/
+inductive EscapeStep (P : Program O) : Config O → Label O → Config O → Prop where
+  | skip {e L st b dm ds k} :
+      EscapeStep P ⟨.exiting e, L, st, .scope b dm ds :: k⟩ .silent
+        ⟨.done, L, st, .resume (.exit e) :: k⟩
+  | resume {e L st k} :
+      EscapeStep P ⟨.done, L, st, .resume (.exit e) :: k⟩ .silent
+        ⟨.exiting e, L, st, k⟩
+
+/-- Instance (law `ConcreteSpec.Core.Exec.raw_cleanup_runs_plan`, case `single`). A raw
+first-arrival execution through `[inner]` emits `[1]`, restores `[]`, and yields a segmented
+`BoundaryRun`. -/
+example : ((∀ (f : Frame ops), f ∈ ([inner] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
+      FirstSteps (Step prog) (fun c => c.frames.length ≤ ([] : List (Frame ops)).length)
+        ⟨.exiting (.ret 7), [], .init, [inner] ++ []⟩ [1] ⟨.exiting (.ret 7), [], .init, []⟩) ↔
+    ((∀ (f : Frame ops), f ∈ ([inner] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
+      FirstSteps (Step prog) (fun c => c.frames.length ≤ ([] : List (Frame ops)).length)
+        ⟨.exiting (.ret 7), [], .init, [inner] ++ []⟩ [1] ⟨.exiting (.ret 7), [], .init, []⟩ ∧
+      ∃ acts, BoundaryRun prog (Step prog) (.ret 7) [] [inner] [] .init acts [1] [] .init ∧
+        acts = planWith [inner] [] ∧
+        ([] : AList Var Int) = unwindLocals [inner] [] ∧
+        Performed prog acts [] .init [1] [] .init) :=
+  raw_cleanup_runs_plan prog (.ret 7) [] [inner] [] [] .init .init [1]
+
+/-- Planted (law `ConcreteSpec.Core.Exec.raw_cleanup_runs_plan`, case `single`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.CleanupEvidence.EscapeEmitStep`).
+Jumping from `.exiting` directly to `.done` while emitting `1` reaches the boundary with `[1]`
+but has no valid `BoundaryRun` observation. -/
+example : ¬ (((∀ (f : Frame ops), f ∈ ([inner] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
+      FirstSteps (EscapeEmitStep prog) (fun c => c.frames.length ≤ ([] : List (Frame ops)).length)
+        ⟨.exiting (.ret 7), [], .init, [inner] ++ []⟩ [1] ⟨.exiting (.ret 7), [], .init, []⟩) ↔
+    ((∀ (f : Frame ops), f ∈ ([inner] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
+      FirstSteps (EscapeEmitStep prog) (fun c => c.frames.length ≤ ([] : List (Frame ops)).length)
+        ⟨.exiting (.ret 7), [], .init, [inner] ++ []⟩ [1] ⟨.exiting (.ret 7), [], .init, []⟩ ∧
+      ∃ acts, BoundaryRun prog (EscapeEmitStep prog) (.ret 7) [] [inner] [] .init acts [1] [] .init ∧
+        acts = planWith [inner] [] ∧
+        ([] : AList Var Int) = unwindLocals [inner] [] ∧
+        Performed prog acts [] .init [1] [] .init)) := by
   intro h
-  have raw : FirstSteps Escape (fun c => c.frames.length ≤ 0)
+  have hp : ∀ (f : Frame ops), f ∈ ([inner] : List (Frame ops)) → Passes (O := ops) (.ret 7) f := by
+    intro f hf
+    cases hf with
+    | head => trivial
+    | tail _ hf => cases hf
+  have raw : FirstSteps (EscapeEmitStep prog) (fun c => c.frames.length ≤ 0)
+      ⟨.exiting (.ret 7), [], .init, [inner]⟩ [1] ⟨.exiting (.ret 7), [], .init, []⟩ :=
+    FirstSteps.step (R := EscapeEmitStep prog) (l := .emit 1) (by simp)
+      (EscapeEmitStep.skip (O := ops) (ev := .lit 1) (ev' := 1) rfl rfl)
+      (FirstSteps.step (R := EscapeEmitStep prog) (by simp) EscapeEmitStep.resume (.stop (by simp)))
+  obtain ⟨_, _, _, observed, _⟩ := h.mp ⟨hp, raw⟩
+  generalize htr : ([1] : List Int) = trace at observed
+  cases observed with
+  | pass _ hs _ => cases hs
+  | call _ hs _ _ _ => cases hs
+
+/-- Instance (law `ConcreteSpec.Core.Exec.raw_cleanup_runs_plan`, case `escape`). A raw run
+through `[inner]` with empty trace `[]` is characterized by `raw_cleanup_runs_plan`. -/
+example : ((∀ (f : Frame ops), f ∈ ([inner] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
+      FirstSteps (Step prog) (fun c => c.frames.length ≤ ([] : List (Frame ops)).length)
+        ⟨.exiting (.ret 7), [], .init, [inner] ++ []⟩ [] ⟨.exiting (.ret 7), [], .init, []⟩) ↔
+    ((∀ (f : Frame ops), f ∈ ([inner] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
+      FirstSteps (Step prog) (fun c => c.frames.length ≤ ([] : List (Frame ops)).length)
+        ⟨.exiting (.ret 7), [], .init, [inner] ++ []⟩ [] ⟨.exiting (.ret 7), [], .init, []⟩ ∧
+      ∃ acts, BoundaryRun prog (Step prog) (.ret 7) [] [inner] [] .init acts [] [] .init ∧
+        acts = planWith [inner] [] ∧
+        ([] : AList Var Int) = unwindLocals [inner] [] ∧
+        Performed prog acts [] .init [] [] .init) :=
+  raw_cleanup_runs_plan prog (.ret 7) [] [inner] [] [] .init .init []
+
+/-- Planted (law `ConcreteSpec.Core.Exec.raw_cleanup_runs_plan`, case `escape`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.CleanupEvidence.EscapeStep`).
+A raw first-boundary path which skips the call via `.done`/`.resume` cannot escape the
+contract: it falsifies the extraction obligation itself. -/
+example : ¬ (((∀ (f : Frame ops), f ∈ ([inner] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
+      FirstSteps (EscapeStep prog) (fun c => c.frames.length ≤ ([] : List (Frame ops)).length)
+        ⟨.exiting (.ret 7), [], .init, [inner] ++ []⟩ [] ⟨.exiting (.ret 7), [], .init, []⟩) ↔
+    ((∀ (f : Frame ops), f ∈ ([inner] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
+      FirstSteps (EscapeStep prog) (fun c => c.frames.length ≤ ([] : List (Frame ops)).length)
+        ⟨.exiting (.ret 7), [], .init, [inner] ++ []⟩ [] ⟨.exiting (.ret 7), [], .init, []⟩ ∧
+      ∃ acts, BoundaryRun prog (EscapeStep prog) (.ret 7) [] [inner] [] .init acts [] [] .init ∧
+        acts = planWith [inner] [] ∧
+        ([] : AList Var Int) = unwindLocals [inner] [] ∧
+        Performed prog acts [] .init [] [] .init)) := by
+  intro h
+  have hp : ∀ (f : Frame ops), f ∈ ([inner] : List (Frame ops)) → Passes (O := ops) (.ret 7) f := by
+    intro f hf
+    cases hf with
+    | head => trivial
+    | tail _ hf => cases hf
+  have raw : FirstSteps (EscapeStep prog) (fun c => c.frames.length ≤ 0)
       ⟨.exiting (.ret 7), [], .init, [inner]⟩ [] ⟨.exiting (.ret 7), [], .init, []⟩ :=
-    FirstSteps.step (by simp [inner]) Escape.skip
-      (FirstSteps.step (by simp) Escape.resume (.stop (by simp)))
-  obtain ⟨_, observed, _⟩ := h [] [] .init raw
+    FirstSteps.step (R := EscapeStep prog) (by simp) EscapeStep.skip
+      (FirstSteps.step (R := EscapeStep prog) (by simp) EscapeStep.resume (.stop (by simp)))
+  obtain ⟨_, _, _, observed, _⟩ := h.mp ⟨hp, raw⟩
   generalize htr : ([] : List Int) = trace at observed
   cases observed with
   | pass _ hs _ => cases hs
   | call _ hs _ _ _ => cases hs
+
+/-- Instance (law `ConcreteSpec.Core.Exec.raw_cleanup_runs_plan`, case `missing_restrict`). A raw
+unwind that fails to restore `Lend` to `unwindLocals` is rejected by `raw_cleanup_runs_plan`. -/
+example : ((∀ (f : Frame ops), f ∈ ([emptyScope] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
+      FirstSteps (Step prog) (fun c => c.frames.length ≤ ([] : List (Frame ops)).length)
+        ⟨.exiting (.ret 7), [(x, 1)], ⟨0, [[x]]⟩, [emptyScope] ++ []⟩ []
+        ⟨.exiting (.ret 7), [(x, 1)], ⟨0, [[]]⟩, []⟩) ↔
+    ((∀ (f : Frame ops), f ∈ ([emptyScope] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
+      FirstSteps (Step prog) (fun c => c.frames.length ≤ ([] : List (Frame ops)).length)
+        ⟨.exiting (.ret 7), [(x, 1)], ⟨0, [[x]]⟩, [emptyScope] ++ []⟩ []
+        ⟨.exiting (.ret 7), [(x, 1)], ⟨0, [[]]⟩, []⟩ ∧
+      ∃ acts, BoundaryRun prog (Step prog) (.ret 7) [] [emptyScope] [(x, 1)] ⟨0, [[x]]⟩
+          acts [] [(x, 1)] ⟨0, [[]]⟩ ∧
+        acts = planWith [emptyScope] [(x, 1)] ∧
+        ([(x, 1)] : AList Var Int) = unwindLocals [emptyScope] [(x, 1)] ∧
+        Performed prog acts [(x, 1)] ⟨0, [[x]]⟩ [] [(x, 1)] ⟨0, [[]]⟩) :=
+  raw_cleanup_runs_plan prog (.ret 7) [] [emptyScope] [(x, 1)] [(x, 1)] ⟨0, [[x]]⟩ ⟨0, [[]]⟩ []
+
+/-- Planted (law `ConcreteSpec.Core.Exec.raw_cleanup_runs_plan`, case `missing_restrict`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.CleanupEvidence.MissingRestrictStep`).
+A raw first-boundary path that pops the scope and updates the store via `dropOut` while
+failing to restrict `Lend` violates `Lend = unwindLocals`. -/
+example : ¬ (((∀ (f : Frame ops), f ∈ ([emptyScope] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
+      FirstSteps (MissingRestrictStep prog) (fun c => c.frames.length ≤ ([] : List (Frame ops)).length)
+        ⟨.exiting (.ret 7), [(x, 1)], ⟨0, [[x]]⟩, [emptyScope] ++ []⟩ []
+        ⟨.exiting (.ret 7), [(x, 1)], ⟨0, [[]]⟩, []⟩) ↔
+    ((∀ (f : Frame ops), f ∈ ([emptyScope] : List (Frame ops)) → Passes (O := ops) (.ret 7) f) ∧
+      FirstSteps (MissingRestrictStep prog) (fun c => c.frames.length ≤ ([] : List (Frame ops)).length)
+        ⟨.exiting (.ret 7), [(x, 1)], ⟨0, [[x]]⟩, [emptyScope] ++ []⟩ []
+        ⟨.exiting (.ret 7), [(x, 1)], ⟨0, [[]]⟩, []⟩ ∧
+      ∃ acts, BoundaryRun prog (MissingRestrictStep prog) (.ret 7) [] [emptyScope] [(x, 1)] ⟨0, [[x]]⟩
+          acts [] [(x, 1)] ⟨0, [[]]⟩ ∧
+        acts = planWith [emptyScope] [(x, 1)] ∧
+        ([(x, 1)] : AList Var Int) = unwindLocals [emptyScope] [(x, 1)] ∧
+        Performed prog acts [(x, 1)] ⟨0, [[x]]⟩ [] [(x, 1)] ⟨0, [[]]⟩)) := by
+  intro h
+  have hp : ∀ (f : Frame ops), f ∈ ([emptyScope] : List (Frame ops)) → Passes (O := ops) (.ret 7) f := by
+    intro f hf
+    cases hf with
+    | head => trivial
+    | tail _ hf => cases hf
+  have raw : FirstSteps (MissingRestrictStep prog) (fun c => c.frames.length ≤ 0)
+      ⟨.exiting (.ret 7), [(x, 1)], ⟨0, [[x]]⟩, [emptyScope]⟩ []
+      ⟨.exiting (.ret 7), [(x, 1)], ⟨0, [[]]⟩, []⟩ :=
+    FirstSteps.step (R := MissingRestrictStep prog) (by simp) (.skip rfl) (.stop (by simp))
+  obtain ⟨_, _, _, _, _, hL, _⟩ := h.mp ⟨hp, raw⟩
+  change ([(x, 1)] : AList Var Int) = [] at hL
+  cases hL
 
 end CleanupEvidence
 
