@@ -49,30 +49,30 @@ def leakageCatalog : List (Leakage Nat Nat Nat) :=
   [.branch ⟨0⟩ true, .address ⟨1⟩ 4096, .allocation ⟨2⟩ ⟨3⟩ 8,
     .loop ⟨4⟩ 3, .variableTime ⟨5⟩ [1, 2], .publicLength ⟨6⟩ 2, .external 7]
 
-/-- Representation lemma. Concrete length check showing `leakageCatalog` covers all seven `Leakage` constructors (approved: PENDING). -/
+/-- Representation lemma. Concrete length check showing `leakageCatalog` covers all seven `Leakage` constructors (approved: REVIEW5-codex.md). -/
 example : leakageCatalog.length = 7 := by decide
 
-/-- Representation lemma. Concrete inequality check distinguishing `Leakage.branch` true and false decisions at the same site (approved: PENDING).
+/-- Representation lemma. Concrete inequality check distinguishing `Leakage.branch` true and false decisions at the same site (approved: REVIEW5-codex.md).
 
 Planted changed-event controls for every constructor. -/
 example : (show Leakage Nat Nat Nat from .branch ⟨0⟩ true) ≠ .branch ⟨0⟩ false := by simp
 
-/-- Representation lemma. Concrete inequality check distinguishing `Leakage.address` entries with different addresses (approved: PENDING). -/
+/-- Representation lemma. Concrete inequality check distinguishing `Leakage.address` entries with different addresses (approved: REVIEW5-codex.md). -/
 example : (show Leakage Nat Nat Nat from .address ⟨1⟩ 4096) ≠ .address ⟨1⟩ 8192 := by simp
 
-/-- Representation lemma. Concrete inequality check distinguishing `Leakage.allocation` entries with different byte counts (approved: PENDING). -/
+/-- Representation lemma. Concrete inequality check distinguishing `Leakage.allocation` entries with different byte counts (approved: REVIEW5-codex.md). -/
 example : (show Leakage Nat Nat Nat from .allocation ⟨2⟩ ⟨3⟩ 8) ≠ .allocation ⟨2⟩ ⟨3⟩ 9 := by simp
 
-/-- Representation lemma. Concrete inequality check distinguishing `Leakage.loop` entries with different iteration counts (approved: PENDING). -/
+/-- Representation lemma. Concrete inequality check distinguishing `Leakage.loop` entries with different iteration counts (approved: REVIEW5-codex.md). -/
 example : (show Leakage Nat Nat Nat from .loop ⟨4⟩ 3) ≠ .loop ⟨4⟩ 4 := by simp
 
-/-- Representation lemma. Concrete inequality check distinguishing `Leakage.variableTime` entries with different operand values (approved: PENDING). -/
+/-- Representation lemma. Concrete inequality check distinguishing `Leakage.variableTime` entries with different operand values (approved: REVIEW5-codex.md). -/
 example : (show Leakage Nat Nat Nat from .variableTime ⟨5⟩ [1]) ≠ .variableTime ⟨5⟩ [2] := by simp
 
-/-- Representation lemma. Concrete inequality check distinguishing `Leakage.publicLength` entries with different container lengths (approved: PENDING). -/
+/-- Representation lemma. Concrete inequality check distinguishing `Leakage.publicLength` entries with different container lengths (approved: REVIEW5-codex.md). -/
 example : (show Leakage Nat Nat Nat from .publicLength ⟨6⟩ 2) ≠ .publicLength ⟨6⟩ 3 := by simp
 
-/-- Representation lemma. Concrete inequality check distinguishing `Leakage.external` entries with different effect payloads (approved: PENDING). -/
+/-- Representation lemma. Concrete inequality check distinguishing `Leakage.external` entries with different effect payloads (approved: REVIEW5-codex.md). -/
 example : (show Leakage Nat Nat Nat from .external 7) ≠ .external 8 := by simp
 
 /-- A typed release site. The site identifies the operation in the facts; `ty` is the type of the
@@ -110,22 +110,22 @@ def ReleasePolicy.Authorized {Ty Val : Type} (policy : ReleasePolicy Ty)
     (rs : List (Release Ty Val)) : Prop :=
   ∀ r ∈ rs, policy.Permits r
 
-/-- Representation lemma. Concrete acceptance check that a single release at the listed site satisfies `ReleasePolicy.Authorized` (approved: PENDING).
+/-- Representation lemma. Concrete acceptance check that a single release at the listed site satisfies `ReleasePolicy.Authorized` (approved: REVIEW5-codex.md).
 
 Accepted: a release at the one listed site is authorized. Refused: another typed site is not. -/
 example : (ReleasePolicy.mk [⟨⟨0⟩, ()⟩]).Authorized
     [⟨⟨⟨0⟩, ()⟩, 7, "answer", []⟩] := by
   simp [ReleasePolicy.Authorized, ReleasePolicy.Permits]
 
-/-- Representation lemma. Concrete refusal check that a release at an unlisted site fails `ReleasePolicy.Authorized` (approved: PENDING). -/
+/-- Representation lemma. Concrete refusal check that a release at an unlisted site fails `ReleasePolicy.Authorized` (approved: REVIEW5-codex.md). -/
 example : ¬ (ReleasePolicy.mk [⟨⟨0⟩, ()⟩]).Authorized
     [⟨⟨⟨1⟩, ()⟩, 7, "not declared", []⟩] := by
   simp [ReleasePolicy.Authorized, ReleasePolicy.Permits]
 
-/-- Representation lemma. Concrete unfolding check that an empty allowed-site list satisfies `ReleasePolicy.ForbidsRelease` (approved: PENDING). -/
+/-- Representation lemma. Concrete unfolding check that an empty allowed-site list satisfies `ReleasePolicy.ForbidsRelease` (approved: REVIEW5-codex.md). -/
 example : (ReleasePolicy.mk ([] : List (ReleaseSite Unit))).ForbidsRelease := rfl
 
-/-- Representation lemma. Concrete refusal check that a nonempty release trace fails `ReleasePolicy.Authorized` under the empty policy (approved: PENDING).
+/-- Representation lemma. Concrete refusal check that a nonempty release trace fails `ReleasePolicy.Authorized` under the empty policy (approved: REVIEW5-codex.md).
 
 A concrete nonempty release trace is unauthorized under the empty policy; the general law
 `forbidsRelease_not_authorized` is proved in `ConcreteSpec/Proofs/Leak.lean`. -/
@@ -138,18 +138,18 @@ def typedRelease (ty : String) (value : Nat) : Release String Nat :=
   ⟨⟨⟨0⟩, ty⟩, value, "example", []⟩
 def typedReleasePolicy : ReleasePolicy String := ⟨[⟨⟨0⟩, "public"⟩]⟩
 
-/-- Representation lemma. Concrete check that `typedReleasePolicy` permits a release at site 0 with matching type `"public"` (approved: PENDING). -/
+/-- Representation lemma. Concrete check that `typedReleasePolicy` permits a release at site 0 with matching type `"public"` (approved: REVIEW5-codex.md). -/
 example : typedReleasePolicy.Permits (typedRelease "public" 7) := by
   simp [typedReleasePolicy, ReleasePolicy.Permits, typedRelease]
 
-/-- Representation lemma. Concrete check that `typedReleasePolicy` rejects a release at site 0 with mismatched type `"secret"` (approved: PENDING). -/
+/-- Representation lemma. Concrete check that `typedReleasePolicy` rejects a release at site 0 with mismatched type `"secret"` (approved: REVIEW5-codex.md). -/
 example : ¬ typedReleasePolicy.Permits (typedRelease "secret" 7) := by
   simp [typedReleasePolicy, ReleasePolicy.Permits, typedRelease]
 
-/-- Representation lemma. Concrete inequality check showing `Release` records with distinct released values are not equal (approved: PENDING). -/
+/-- Representation lemma. Concrete inequality check showing `Release` records with distinct released values are not equal (approved: REVIEW5-codex.md). -/
 example : typedRelease "public" 7 ≠ typedRelease "public" 8 := by decide
 
-/-- Representation lemma. Concrete inequality check showing ordered release traces with swapped elements are not equal (approved: PENDING). -/
+/-- Representation lemma. Concrete inequality check showing ordered release traces with swapped elements are not equal (approved: REVIEW5-codex.md). -/
 example : [typedRelease "public" 7, typedRelease "public" 8] ≠
     [typedRelease "public" 8, typedRelease "public" 7] := by decide
 
@@ -400,14 +400,14 @@ def LineageReport.Sound (lineage : LineageId) (entry exit : Account) (footprint 
     Bound.Sound ((exit.live : Int) - (entry.live : Int)) r.netChange ∧
     Bound.Sound exit.functionPeak r.peak ∧ Bound.SoundOptional footprint r.footprint
 
-/-- Representation lemma. Concrete execution check evaluating `run` on an allocate/free/reset sequence from `Memory.empty` (approved: PENDING).
+/-- Representation lemma. Concrete execution check evaluating `run` on an allocate/free/reset sequence from `Memory.empty` (approved: REVIEW5-codex.md).
 
 Accepted: a valid allocate/free/reset sequence. Refused: freeing a byte not owned by the
 lineage has no accounting transition. -/
 example : (run Memory.empty
     [.alloc ⟨0⟩ 8, .free ⟨0⟩ 3, .reset ⟨0⟩]).map (· ⟨0⟩) = some ⟨8, 0, 8, 8⟩ := by decide
 
-/-- Representation lemma. Concrete refusal check showing `apply` returns `none` when freeing more bytes than are live (approved: PENDING). -/
+/-- Representation lemma. Concrete refusal check showing `apply` returns `none` when freeing more bytes than are live (approved: REVIEW5-codex.md). -/
 example : apply Memory.empty (.free ⟨0⟩ 1) = none := by decide
 
 /-! ## Wipes as preserved effects -/
