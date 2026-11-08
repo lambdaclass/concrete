@@ -259,7 +259,11 @@ inductive ExternType (H : Type) where
   | receipt (h : H)
   | enum
 
-/-- Extern retention: call-only by default, or `kept` for an owned allocation. -/
+/-- Extern retention: call-only by default, or `kept` for an owned allocation. Call-only pointers
+permit reads, and writes only from a mutable borrow or owned allocation, during the call only;
+borrow-derived pointers are never `kept`. That foreign code does not access call-only memory after
+return, or kept memory before its paired completion returns, is a named trusted-base premise of
+Q3.12, not a theorem proved by this transition interface. -/
 inductive Retention where
   | callOnly
   | kept
