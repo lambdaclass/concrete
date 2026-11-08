@@ -75,13 +75,17 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
   are recorded against `legacy-compiler-final`, never repaired, under
   [ROADMAP's defect disposition and frozen-compiler rule](ROADMAP.md#defect-disposition-rule).
 
-**Who works on what** (owner, 2026-11-08, [decision](docs/decisions.md#decided-2026-11-08-eleven)).
-- Claude's quota goes to the critical path: the spec, slice 0 and the front end. Codex, Kimi and agy
-  write in their own fresh full clones on their own `wip/` branches. Claude briefs, reviews, runs the
-  gates and lands. The other two models cross-review each diff; a writer never reviews its own work
+**Who works on what.**
+- Claude's quota goes to the critical path: the spec, slice 0 and the front end (owner, 2026-11-08,
+  [decision](docs/decisions.md#decided-2026-11-08-eleven)). Codex, Kimi and agy implement; Claude
+  briefs, reviews, runs the gates and lands
   ([decision](docs/decisions.md#decided-2026-11-08-writers)).
+- Writer process: each writer works in its own fresh full clone on its own `wip/` branch. The other
+  two models cross-review each diff; a writer never reviews its own work. Run each writer through
+  `bounded_run`, never GNU `timeout`.
 - One writer edits `docs/decisions.md` and `ROADMAP.md` at a time; other workers send that writer
-  their records instead of editing those files.
+  their records instead of editing those files (owner, 2026-11-08,
+  [decision](docs/decisions.md#decided-2026-11-08-one-writer)).
 
 **Branches.**
 - Every branch's full clone is `~/projects/clones/<branch>`, removed after the branch lands (owner,
@@ -92,8 +96,10 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
   depends on it waits or rebases onto it.
 - Rebase onto `origin/main` after every landing (`/rebase`), not only before your own landing, so a
   conflict or a changed rule shows up while the branch is small.
-- Commit each validated slice. Push the branch to `wip/<branch>` at least every 5 minutes of work
-  (`git push origin HEAD:refs/heads/wip/<branch>`); the hook's wip tier only scans for conflict
+- Commit each validated slice. Push the branch to `wip/<branch>` at least every 5 minutes of work,
+  to the push remotes in force ([decision](docs/decisions.md#decided-2026-11-08-commit-push)), today
+  both `origin` and `lambdaclass`: `git push origin HEAD:refs/heads/wip/<branch>` and
+  `git push lambdaclass HEAD:refs/heads/wip/<branch>`. The hook's wip tier only scans for conflict
   markers.
 - Never push to `main`, `ci/*` or the remote `fork`. Landings go to both `origin` and
   `lambdaclass`, only through the landing script (`scripts/land/train.sh`).

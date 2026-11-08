@@ -9,10 +9,12 @@
   real boundary (R-0628), and a much smaller local guard follows as a convenience (R-0629).
   `wip/remote-guard` and `wip/acceptance-shim` are superseded.
 - **Commit and push everything all the time** ("commit and push everything all the time"):
-  every piece is committed when it builds and its checks pass, and pushed to both remotes at once.
+  every piece is committed when it builds and its checks pass, and pushed at once to the push remotes
+  in force. Today those are `origin` and `lambdaclass`; after one repository lands, only
+  `lambdaclass/concrete`.
 - **Codex, Kimi and agy write; Claude reviews** ("can you have kimi, codex and agy implement things and
-  we just review it"): the writers use their own clones and branches. Claude briefs, reviews, runs the
-  gates and lands. The other two models cross-review each diff; a writer never reviews its own work.
+  we just review it"): Codex, Kimi and agy implement. Claude briefs, reviews, runs the gates and
+  lands.
 - **Byte-for-byte sweeps into `legacy/`** ("ok to 1"): an addition under `legacy/` is accepted only
   if it is byte-identical to the same root path at a named commit and is gone from the root. P5 and
   the restart row are revised.
