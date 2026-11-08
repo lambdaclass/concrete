@@ -1,34 +1,22 @@
 ---
-description: Codex review of this branch through scripts/review/review.sh (max 5 rounds, delta-only after the first)
+description: Review this branch through scripts/review/review.sh, with delta rounds and the policy cap
 argument-hint: "[base ref, default origin/main]"
 ---
 
-Review this branch against: $ARGUMENTS (`origin/main` when empty; written `<base>` below).
+Review this branch against $ARGUMENTS (`origin/main` by default).
 
-Rules: [AGENTS.md](../../AGENTS.md) ("Review").
+Rules and the required reviewers: [AGENTS.md](../../AGENTS.md#rules).
+The procedure, options, policy caps and verdict meanings are in [REVIEW.md](../../docs/REVIEW.md).
 
-**Dependency.** `scripts/review/review.sh` is being built on its own branch. Read its usage header
-before the first call and follow it; it owns the prompt, the round count and the delta between
-rounds. Until it is on your base, run the equivalent by hand:
+1. Commit the candidate and note its exact SHA. Run the applicable checks first.
+2. Run `scripts/review/review.sh --base <base> --head <sha>`. It owns diff selection,
+   delta rounds, notes and the review record; do not substitute an unrecorded manual review.
+3. Address findings with a fix or a supported rejection reason. Commit fixes, then run the next
+   round over the delta. Follow the risk cap in AGENTS.md and REVIEW.md; the script's current
+   default is not permission to exceed that policy.
+4. Obtain the other reviewers required by AGENTS.md, retaining their exact candidate SHA and
+   verdicts; record unavailable reviewers explicitly.
+5. Verify the note with `scripts/review/verify.sh <sha>`. Follow REVIEW.md for cap handling;
+   never report findings, blocked or missing evidence as clean.
 
-```sh
-git diff <base>...HEAD | GIT_OPTIONAL_LOCKS=0 codex exec --sandbox read-only "$(cat .claude/codex-review-prompt.md)"   # round 1
-git diff <sha reviewed last round>..HEAD | GIT_OPTIONAL_LOCKS=0 codex exec --sandbox read-only "<same prompt; say it is a delta>"   # rounds 2-5
-```
-
-The prompt is neutral: it states what the change claims and asks Codex to refute it. Do not tell
-Codex what you believe is correct.
-
-1. Commit everything first; review a commit, not a dirty tree. Note the reviewed SHA.
-2. **Round 1** over the whole diff from the merge base. For each finding: fix it (a commit per
-   round), or answer it with the reason it does not hold, citing the code or a command you ran.
-   Verify a claim before accepting or rejecting it; Codex is sometimes wrong, and so is prose.
-3. **Rounds 2 to 5** see only the delta since the last reviewed SHA, plus the open findings.
-4. Stop when a round reports no remaining findings, or after round 5. Never exceed 5 rounds; list
-   whatever is still open as follow-ups in the report and, when it matters, in the record or roadmap.
-5. Always run Codex with `GIT_OPTIONAL_LOCKS=0` (bug 209): its sandboxed `git status` otherwise
-   takes the worktree's `index.lock`, and a command stopped mid-refresh leaves it behind. If a lock
-   is still found, remove it only when no process owns it.
-
-Report: the rounds run, each round's findings with the fix commit or the rejection reason, the
-final verdict, and the head SHA reviewed.
+Report the reviewed SHA, checks, each reviewer's verdict, and any remaining findings.

@@ -33,6 +33,7 @@ required-checks.txt
 scripts
 tests
 docs/LANDING.md
+docs/README.md
 docs/PHILOSOPHY.md
 docs/REVIEW.md
 docs/SELF_HOSTED_RUNNERS.md

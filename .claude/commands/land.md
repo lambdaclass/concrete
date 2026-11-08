@@ -18,7 +18,7 @@ pushing `main` by hand.
 
 **Preconditions** (stop and report the missing one):
 - the branch is pushed as `wip/<branch>` and that SHA is the one you validated;
-- `/creview` finished (clean, or 5 rounds with follow-ups recorded);
+- `/creview` finished (clean, or an owner sign-off satisfying the risk cap and provenance rules in docs/REVIEW.md);
 - the fast and area gates passed at that SHA; a full set ran on the server or in CI if the change
   is broad;
 - bug records, `changelog.d/` fragment and regenerated views are in the branch;
@@ -31,7 +31,7 @@ scripts/land/train.sh build <name> origin/wip/<branch> [more refs]   # train/<na
 scripts/land/train.sh check <name>     # hook selection; full set on the server via concrete-remote
 scripts/land/train.sh ci    <name>     # push ci/<name>, dispatch CI
 scripts/land/train.sh watch <name>     # verdict, failing job log tails
-scripts/land/train.sh land --dry-run <name> && scripts/land/train.sh land <name>
+scripts/land/train.sh --dry-run land <name> && scripts/land/train.sh land <name>
 ```
 
 Each step stops on any failure; a conflict outside generated views exits 3 and names the files,

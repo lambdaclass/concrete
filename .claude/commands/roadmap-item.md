@@ -14,7 +14,8 @@ Rules: [AGENTS.md](../../AGENTS.md).
    not decided goes to the owner; never decide it by implementing it.
 2. **Check nobody has it**: `git branch -r | grep -i <id or topic>`. Continue an existing `wip/*`
    branch rather than starting a second one.
-3. **Branch**: `scripts/worktree-new.sh <r-nnnn-slug> origin/main`. One rule per branch; a
+3. **Branch**: create a full clone at `~/projects/clones/<r-nnnn-slug>` and a fresh branch
+   from `origin/main`, following [AGENTS.md](../../AGENTS.md#concurrent-work-one-worktree-per-writer). One rule per branch; a
    language-rule change lands first and stays small, so split the task into slices that each land.
 4. **Done-when first.** Turn the task's acceptance test into a failing check, example or theorem
    statement before implementing. Assert properties, not counts.
