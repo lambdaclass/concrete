@@ -4,9 +4,11 @@
 #
 # writes BIN-DIR/git: a git that refuses a push which could move main on a protected repository and
 # passes everything else to REAL-GIT. The PROTECTED-URLs are the clone's real remotes (origin and the
-# mirror). A local one is resolved, relative to the caller's directory, to its repository identity
+# mirror). A local one, in any spelling git accepts (path, file://, file://localhost, ~, relative to
+# the caller's directory), is resolved to its repository identity
 # (the absolute, symlink-free git common directory) when the shim is made; both its spelling and its
-# identity are baked into the shim, so nothing a leg sets later can change them.
+# identity are baked into the shim, so nothing a leg sets later can change them. A protected local
+# URL that names no repository is an error: the shim is not made.
 #
 # The root checks the train's impact leg runs (landing_bot.sh, landing_script.sh, review_tool.sh)
 # push main to throwaway local fixture repositories; refusing those made every acceptance run fail
@@ -20,7 +22,8 @@
 # A push "could move main" when it names --all or --mirror, no refspec, ":", a glob, or a refspec whose
 # destination (or lone source) is main, refs/heads/main, any */main, HEAD or @.
 #
-# The subcommand is found the way git finds it (after the global options), and an alias is expanded
+# The subcommand is found the way git finds it (after the global options; an unknown one is refused),
+# and an alias is expanded
 # the way git would run it: a builtin or a git-<name> command is never an alias; any other alias is
 # expanded and judged again. A shell alias ("!...") is refused: git runs it with its own exec path
 # first on PATH, so the git inside it would not be this shim. So is a quoted alias, which the shim
@@ -39,15 +42,42 @@ repo_identity() {
   [ -n "$d" ] && (cd "$d" 2>/dev/null && pwd -P)
 }
 
+# local_url_path URL: the absolute path git would open for a local URL, as git spells them (an
+# absolute or relative path, file:///p, file://localhost/p, ~/p, ~user/p; relative to $PWD); nothing
+# for a remote URL (scheme://, or host:path with no slash before the colon); exit 1 when it is local
+# but cannot be resolved (file://otherhost/, an unknown ~user).
+local_url_path() {
+  local u="$1" user home
+  case "$u" in
+    file://localhost/*) u="/${u#file://localhost/}" ;;
+    file:///*) u="${u#file://}" ;;
+    file://*) return 1 ;;
+    *://*) return 0 ;;
+  esac
+  case "$u" in
+    '~'|'~/'*) u="$HOME${u#\~}" ;;
+    '~'*) user="${u%%/*}"; user="${user#\~}"; home="$(getent passwd "$user" | cut -d: -f6)"
+          [ -n "$home" ] || return 1
+          case "$u" in */*) u="$home/${u#*/}" ;; *) u="$home" ;; esac ;;
+  esac
+  case "$u" in
+    /*) ;;
+    *) case "${u%%/*}" in *:*) return 0 ;; esac; u="$PWD/$u" ;;
+  esac
+  printf '%s\n' "$u"
+}
+
 make_git_shim() {
   local dir="$1" real="$2"; shift 2
   local p raw="" ids="" id abs
   for p in "$@"; do
     [ -n "$p" ] || continue
     raw+="$(printf '%q ' "$p")"
-    abs="${p#file://}"
-    case "$abs" in /*|*://*|*@*:*) ;; *) abs="$PWD/$abs" ;; esac
-    id="$(repo_identity "$real" "$abs")"; [ -n "$id" ] && ids+="$(printf '%q ' "$id")"
+    abs="$(local_url_path "$p")" || { echo "make_git_shim: cannot resolve the protected local URL $p" >&2; return 1; }
+    [ -n "$abs" ] || continue
+    id="$(repo_identity "$real" "$abs")"
+    [ -n "$id" ] || { echo "make_git_shim: the protected local URL $p names no repository" >&2; return 1; }
+    ids+="$(printf '%q ' "$id")"
   done
   mkdir -p "$dir"
   {
@@ -60,12 +90,19 @@ make_git_shim() {
     cat <<'SHIM'
 refuse() { echo "acceptance git shim: refusing $1 (git $ARGS)" >&2; exit 1; }
 ARGS="$*"; args=("$@"); pre=(); i=0
-# Global options, as git reads them; the first other argument is the subcommand.
+# Global options, as git reads them; the first other argument is the subcommand. An option the
+# shim does not know is refused: it might take a value the shim would read as the subcommand.
 while [ "$i" -lt "${#args[@]}" ]; do
   a="${args[$i]}"
   case "$a" in
-    -C|-c|--git-dir|--work-tree|--namespace) pre+=("$a" "${args[$((i+1))]:-}"); i=$((i+2)) ;;
-    -*) pre+=("$a"); i=$((i+1)) ;;
+    -C|-c|--git-dir|--work-tree|--namespace|--config-env|--attr-source)
+      pre+=("$a" "${args[$((i+1))]:-}"); i=$((i+2)) ;;
+    --git-dir=*|--work-tree=*|--namespace=*|--config-env=*|--attr-source=*|--exec-path|--exec-path=*|\
+    --super-prefix=*|--list-cmds=*|-p|--paginate|-P|--no-pager|--bare|--no-replace-objects|--no-lazy-fetch|\
+    --no-optional-locks|--no-advice|--literal-pathspecs|--glob-pathspecs|--noglob-pathspecs|--icase-pathspecs|\
+    --html-path|--man-path|--info-path|-v|--version|-h|--help)
+      pre+=("$a"); i=$((i+1)) ;;
+    -*) refuse "an unknown global option $a" ;;
     *) break ;;
   esac
 done

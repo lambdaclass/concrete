@@ -1086,7 +1086,19 @@ MB="$HM"
     elif ! grep -q 'acceptance git shim: refusing' "$S/err"; then bad="$bad [git $a failed but not by the shim: $(cat "$S/err")]"; fi
   done
   GIT_CONFIG_PARAMETERS="'alias.e=push'" "$G" -C w e origin main 2>"$S/err" && bad="$bad [an alias from the environment passed]"
-  for r in prot.git nb; do
+  CFG=push "$G" --config-env alias.e=CFG -C w e origin main 2>"$S/err" && bad="$bad [an alias from --config-env passed]"
+  CFG=push "$G" --config-env=alias.e=CFG -C w e origin main 2>"$S/err" && bad="$bad [an alias from --config-env= passed]"
+  "$G" --no-such-option -C w push origin main 2>"$S/err" && bad="$bad [an unknown global option passed]"
+  # Protected local URLs in the other spellings git accepts: file://localhost/ and ~/.
+  git init -q --bare p2.git; git init -q --bare p3.git
+  HOME="$S" make_git_shim "$S/bin2" "$(command -v git)" "file://localhost$S/p2.git" "~/p3.git" || bad="$bad [shim with file://localhost and ~ URLs not made]"
+  for r in p2.git p3.git; do
+    "$S/bin2/git" -C w push -q "$S/$r" main 2>"$S/err" && bad="$bad [a push to the protected $r by its absolute path passed]"
+  done
+  "$S/bin2/git" -C w push -q "$S/fix.git" main 2>"$S/err" || bad="$bad [a fixture push refused by the second shim: $(cat "$S/err")]"
+  make_git_shim "$S/bin3" "$(command -v git)" "$S/no-such.git" 2>/dev/null && bad="$bad [a shim was made for a protected URL naming no repository]"
+  make_git_shim "$S/bin3" "$(command -v git)" "file://otherhost/x.git" 2>/dev/null && bad="$bad [a shim was made for an unresolvable file:// URL]"
+  for r in prot.git nb p2.git p3.git; do
     [ -z "$(git -C "$r" rev-parse -q --verify refs/heads/main)" ] || bad="$bad [the protected $r gained a main]"
   done
   [ -n "$(git -C fix.git rev-parse -q --verify refs/heads/main)" ] || bad="$bad [the local fixture has no main]"
