@@ -6,18 +6,21 @@ import ConcreteSpec.Spec.Basics
 PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). Part of `ConcreteSpec.Spec`;
 see `ConcreteSpec/README.md`.
 
-Core names everything by a typed identity, never by a bare string or number: a local, a
-declaration, a constant, a field, a function, a module, an instance, a loop label, a brand, an allocator
-lineage, a loan, a grant, a block, a capability variable and a theorem each have their own type,
-so one can never stand for another, and two declarations with the same source name in different
-modules are different declarations (the facts decision: no bare-name collisions). A declaration,
-field, variant or function is named by its module (or owner) and its source name, and both are
-part of its identity. A local is numbered by elaboration and keeps its source name as a hint for
-diagnostics. Equality of identities is what the rules use.
+Core names everything by a typed identity, never by a bare string or number: locals, declarations,
+constants, fields, functions, packages, modules, trait instances, specializations, loop labels,
+brands, allocator lineages, loans, grants, blocks, capability variables, theorems, obligations and
+premises each have their own type. A module contains its package and package-rooted path, so a
+declaration, field, variant, function or constant carries that complete identity. A local is numbered
+by elaboration and keeps its source name only as a diagnostic hint. Equality of identities is what
+the rules use (the facts decision: no bare-name collisions).
 
 A *site* (`SiteId`) is one per operation and per refusable statement. Diagnostics, facts, traps
-and discharge tokens are keyed by site; a program's site table maps each site to its source
-`Span`, which elaboration produces (README obligation O1).
+and discharge tokens are keyed by site; a program's site table maps each site to its byte-ranged
+source `Span`, which elaboration produces (README obligation O1). Lexical site and trait-instance
+numbers are distinct from persistent `StableKey`s, which pair an enclosing function with an opaque
+function-relative key. Specialization request edges retain their sites separately from identities
+keyed by generic arguments. Obligations carry site, kind and a same-site discriminator; conditional
+facts carry typed premise identities.
 
 A rule is cited by `RuleId`: the Lean name of the declaration that states it and that rule's own
 revision. Every output carries one `specVersion`. Which rules exist is the registry in `Rules`;
@@ -301,18 +304,44 @@ structure TheoremId where
   name : Lean.Name
   deriving DecidableEq, Repr
 
-/-- A position in source text (the trap-line decision, R-0496): the file's path relative to the
-project root, with forward slashes, and a line and a column, both counted from 1. The type keeps
-line and column positive; that the path is relative with forward slashes is `Span.PathOk`, which
-the program's site table must satisfy (elaboration, README obligation O1). A column counts UTF-8
-bytes, with a tab counting one byte (foundation question 10, 2026-11-08). -/
+/-- Source text as its actual bytes, before any Unicode-scalar interpretation. -/
+abbrev SourceText := List UInt8
+
+/-- The 1-based line at a byte offset: one plus the number of newline bytes before it. -/
+def SourceText.lineAt (source : SourceText) (offset : Nat) : Nat :=
+  (source.take offset).count 10 + 1
+
+/-- The 1-based byte column at an offset: one plus the number of bytes since the last newline.
+Every byte advances one column; in particular a tab (`9`) counts one byte, as decided by foundation
+question 10 (2026-11-08). -/
+def SourceText.columnAt (source : SourceText) (offset : Nat) : Nat :=
+  ((source.take offset).reverse.takeWhile (fun byte => byte != 10)).length + 1
+
+/-- A source range and the start position used by the trap-line decision (R-0496). The path is
+relative to the project root with forward slashes; `startOffset` and `endOffset` are byte offsets
+with `startOffset ≤ endOffset`. Line and column are 1-based and describe the start. They are stored
+for diagnostics and rendering, while `Span.LocationOk` checks them against the actual source bytes.
+The path constraint is `Span.PathOk`; elaboration's normalized-path obligation remains O1. -/
 structure Span where
   path : String
+  startOffset : Nat
+  endOffset : Nat
+  range_ok : startOffset ≤ endOffset
   line : Nat
   col : Nat
   line_pos : 0 < line
   col_pos : 0 < col
   deriving DecidableEq, Repr
+
+/-- A span's range is in bounds and its stored start line and byte column are exactly those
+determined by its start offset in the source bytes. -/
+def Span.LocationOk (sp : Span) (source : SourceText) : Prop :=
+  sp.endOffset ≤ source.length ∧ sp.line = source.lineAt sp.startOffset ∧
+    sp.col = source.columnAt sp.startOffset
+
+instance (sp : Span) (source : SourceText) : Decidable (sp.LocationOk source) := by
+  unfold Span.LocationOk
+  infer_instance
 
 /-- A span's path is relative to the project root and uses forward slashes: it is not empty,
 does not start with `/`, and holds no `\`. This is the minimal syntactic check; that the path is
@@ -369,11 +398,21 @@ example : FieldId.mk (.variant ⟨⟨ModuleId.mk ⟨"p"⟩ [], "E"⟩, "A"⟩) "
 example : (SliceId.mk 0).n.val = 0 ∧ (SliceId.mk 28).n.val = 28 := ⟨rfl, rfl⟩
 
 /-- A span path is relative, with forward slashes. -/
-example : (Span.mk "src/main.con" 3 5 (by decide) (by decide)).PathOk := by decide
+example : (Span.mk "src/main.con" 0 0 (by decide) 3 5 (by decide) (by decide)).PathOk := by decide
 
-example : ¬ (Span.mk "/abs/main.con" 3 5 (by decide) (by decide)).PathOk := by decide
+example : ¬ (Span.mk "/abs/main.con" 0 0 (by decide) 3 5 (by decide) (by decide)).PathOk := by decide
 
-example : ¬ (Span.mk "src\\main.con" 3 5 (by decide) (by decide)).PathOk := by decide
+example : ¬ (Span.mk "src\\main.con" 0 0 (by decide) 3 5 (by decide) (by decide)).PathOk := by decide
+
+/-- Bytes for `a`, a tab, and `b`. After the tab, the range starts at line 1, byte column 3. -/
+def tabSource : SourceText := [97, 9, 98]
+def tabSpan : Span := ⟨"src/main.con", 2, 3, by decide, 1, 3, by decide, by decide⟩
+
+/-- Accepted: the tab advances exactly one byte column. -/
+example : tabSpan.LocationOk tabSource := by decide
+
+/-- Refused: treating the tab as zero-width does not satisfy the location relation. -/
+example : ¬ ({ tabSpan with col := 2, col_pos := by decide }.LocationOk tabSource) := by decide
 
 /-- Two locals named `x` that elaboration numbered differently (in two separate blocks, say) are
 different locals. -/

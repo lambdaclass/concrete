@@ -42,6 +42,17 @@ theorem SpecializationId.ne_of_capabilityArguments_ne {Ty Cap : Type}
   intro he
   exact h (congrArg (fun s : SpecializationId Ty Cap => s.capabilityArguments) he)
 
+/-- **Source bytes determine a span's start position.** Valid spans over the same source with the
+same start offset have the same 1-based line and byte column. -/
+theorem Span.location_determines_line_col (source : SourceText) (first second : Span)
+    (firstOk : first.LocationOk source) (secondOk : second.LocationOk source)
+    (start : first.startOffset = second.startOffset) : first.line = second.line ∧ first.col = second.col := by
+  rcases firstOk with ⟨_, firstLine, firstCol⟩
+  rcases secondOk with ⟨_, secondLine, secondCol⟩
+  constructor
+  · rw [firstLine, secondLine, start]
+  · rw [firstCol, secondCol, start]
+
 namespace Vacuity
 
 /-- An enclosing function used by the persistent-key examples. -/
@@ -154,6 +165,22 @@ def conclusionOnly (first second : ConditionalFact String) : Prop :=
 
 example : conclusionOnly conditional unconditional ∧ conditional ≠ unconditional := by
   exact ⟨rfl, by decide⟩
+
+/-- The same start with a different end, and a bad state with a wrong byte column. -/
+def tabPointSpan : Span := { tabSpan with endOffset := 2, range_ok := by decide }
+def wrongTabSpan : Span := { tabSpan with col := 2, col_pos := by decide }
+
+/-- Non-trivial instance for `Span.location_determines_line_col`: distinct ranges share the start,
+so their source-derived line and column agree. -/
+example : tabSpan.endOffset ≠ tabPointSpan.endOffset ∧
+    tabSpan.line = tabPointSpan.line ∧ tabSpan.col = tabPointSpan.col := by
+  exact ⟨by decide, Span.location_determines_line_col tabSource tabSpan tabPointSpan
+    (by decide) (by decide) rfl⟩
+
+/-- Planted counter-example: the bad span has the same start but a different column, and the real
+location predicate rejects it. -/
+example : wrongTabSpan.startOffset = tabSpan.startOffset ∧ wrongTabSpan.line = tabSpan.line ∧
+    wrongTabSpan.col ≠ tabSpan.col ∧ ¬ wrongTabSpan.LocationOk tabSource := by decide
 
 end Vacuity
 end ConcreteSpec.Core

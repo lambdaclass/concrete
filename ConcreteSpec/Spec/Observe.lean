@@ -397,7 +397,7 @@ example : ¬ SameObservation (S := signature) (.infinite (fun _ => Step.silent))
   simp [SameObservation]
 
 def site : SiteId := ⟨7⟩
-def sp : Span := ⟨"src/main.con", 3, 9, by decide, by decide⟩
+def sp : Span := ⟨"src/main.con", 40, 50, by decide, 3, 9, by decide, by decide⟩
 def sites : SiteTable := [(site, sp)]
 
 /-- The exact decided line, including the byte column and typed site identity. -/
@@ -418,7 +418,8 @@ example : (Terminal.exited 134).status = 134 ∧ Terminal.exited 134 ≠
 `a`, tab and `é`, not four after three Unicode scalar values. -/
 example : byteColumn "a\té" = 5 := by decide
 
-example : Span.HasByteColumn (Span.mk "src/main.con" 1 5 (by decide) (by decide)) "a\té" := rfl
+example : Span.HasByteColumn
+    (Span.mk "src/main.con" 4 4 (by decide) 1 5 (by decide) (by decide)) "a\té" := rfl
 
 /-- Refusing result binding through lifecycle instrumentation; all other demo operations are
 unchanged. -/
