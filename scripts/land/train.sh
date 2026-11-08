@@ -472,7 +472,9 @@ review_cmd() {
 # overridden by its members. Prints what qualified; on failure prints why and returns 1.
 #
 # OWNER SIGN-OFF (R-0618). A member without a clean note qualifies instead by a valid owner sign-off
-# at its exact SHA (scripts/land/signoff.sh verify, on $REMOTE's refs/owner-signoff/*, fetched first).
+# at its exact SHA (scripts/land/signoff.sh verify --base <the train's base>, on $REMOTE's
+# refs/owner-signoff/*, fetched first): the member reached the review cap of its diff's class and all
+# three reviewers accepted that commit.
 # A sign-off approves that commit only, never what the train did with it, so a train with a signed-off
 # member must be exactly the clean merge of its members onto its base: one --no-ff merge per member,
 # in order, each merge's tree the conflict-free `git merge-tree --write-tree` of its two parents, and
@@ -490,7 +492,8 @@ pure_merge() {
     if [ "${#p[@]}" != 3 ] || [ "${p[2]}" != "${shas[i]}" ]; then
       echo "${head:0:10} is not the clean merge of its members onto ${base:0:10}: ${cur:0:10} is not the merge of ${shas[i]:0:10}"; return 0
     fi
-    if ! t="$(git merge-tree --write-tree "${p[1]}" "${shas[i]}" 2>/dev/null | head -1)" || [ -z "$t" ]; then
+    # No pipe: a conflicted merge-tree exits 1 (after printing a tree), whether or not pipefail is set.
+    if ! t="$(git merge-tree --write-tree "${p[1]}" "${shas[i]}" 2>/dev/null)" || ! [[ "$t" =~ ^[0-9a-f]{40}$ ]]; then
       echo "${head:0:10} is not the clean merge of its members onto ${base:0:10}: merging ${shas[i]:0:10} conflicts"; return 0
     fi
     want="$(git rev-parse "$cur^{tree}")"
@@ -516,7 +519,7 @@ review_provenance() { # name head
   for m in $(state_get_soft "$name" members | tr ',' ' '); do
     n=$((n + 1)); shas+=("${m##*@}")
     out="$(bash "$VERIFY" "${m##*@}" 2>&1)" && continue
-    if so="$(bash "$SIGNOFF" verify "${m##*@}" 2>&1)"; then signed=$((signed + 1)); continue; fi
+    if so="$(bash "$SIGNOFF" verify "${m##*@}" --base "$(state_get_soft "$name" base)" 2>&1)"; then signed=$((signed + 1)); continue; fi
     bad="$bad; member ${m%@*}: ${out//$'\n'/ }; ${so//$'\n'/ }"
   done
   [ "$n" -gt 0 ] || { echo "the head ${head:0:10} has no review note and the train records no members"; return 1; }

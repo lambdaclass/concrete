@@ -4,8 +4,9 @@
 # approval is recorded"). A sign-off is review provenance for that one commit, as a clean
 # refs/notes/concrete-review note is (scripts/review/verify.sh); train.sh accepts either for a member.
 #
-#   signoff.sh record <commit> --date YYYY-MM-DD --quote TEXT --codex FILE --kimi FILE --agy FILE
-#   signoff.sh verify <commit>
+#   signoff.sh record <commit> --base BASE --rounds-at NOTED --date YYYY-MM-DD --quote TEXT
+#                     --codex FILE --kimi FILE --agy FILE
+#   signoff.sh verify <commit> --base BASE
 #
 # THE RECORD is the ref refs/owner-signoff/<full sha>, a commit whose tree holds record.txt and the
 # three reviewers' verdict outputs, copied in byte for byte (codex.txt, kimi.txt, agy.txt), so any
@@ -14,79 +15,115 @@
 #   commit: <the 40-hex SHA approved>
 #   date: YYYY-MM-DD
 #   quote: <the owner's words, verbatim; they name the commit by a prefix of at least 7 hex digits>
+#   rounds-at: <the 40-hex SHA of the commit whose scripts/review/review.sh note records the rounds used>
 #   verdict-codex: codex.txt <sha256>
 #   verdict-kimi: kimi.txt <sha256>
 #   verdict-agy: agy.txt <sha256>
-# `record` writes the ref locally and pushes nothing (push it to both remotes: the pre-push hook takes
-# refs/owner-signoff/* in its no-source-tree tier). Only the owner's recorded words go in a quote.
+# `record` builds the record, verifies it, and only then writes the ref locally; it pushes nothing
+# (push the ref to both remotes: the pre-push hook takes refs/owner-signoff/* in its no-source-tree
+# tier). Only the owner's recorded words go in a quote.
+#
+# THE CAP (R-0618) comes from the class of the member's diff against its base, classified by path,
+# the highest class present winning: docs and roadmap 2, scripts 3, compiler and spec 5; a path in no
+# class counts as compiler and spec. A sign-off qualifies only when the review rounds recorded on the
+# member's own commits reach that cap: `rounds-at` must be the commit itself or one of its ancestors
+# not on BASE, and carry a review.sh note whose `rounds` is at least the cap, whatever its verdict
+# (the cap counts rounds used: the other reviewers' rejections are why a branch reaches it).
 #
 # `verify` accepts the record only if the ref exists, the tree holds exactly those four files, every
-# key is present once and well formed, `commit` is the commit asked about, the quote names it, each
-# file's sha256 is the recorded one, and each output's last VERDICT line is `VERDICT: ACCEPT`. It
-# judges the exact commit: a sign-off says nothing about any other commit.
+# key is present once and well formed, `commit` is the commit asked about, the quote names it, the
+# cap was reached, each file's sha256 is the recorded one, and each output's last VERDICT line is
+# `VERDICT: ACCEPT` (all three reviewed the signed commit and accepted it). It judges the exact
+# commit: a sign-off says nothing about any other commit.
 #
 # Exit codes: 0 a valid sign-off; 1 a sign-off that does not qualify (the reason is printed);
 #             2 no sign-off, or a usage error.
 set -euo pipefail
 PREFIX=refs/owner-signoff
+NOTES_REF=refs/notes/concrete-review
 REVIEWERS="codex kimi agy"
 
 usage() { awk 'NR > 1 { if (!/^#/) exit; sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}"; }
 die() { echo "signoff: $*" >&2; exit 2; }
 sha256() { if command -v sha256sum >/dev/null 2>&1; then sha256sum | cut -d' ' -f1; else shasum -a 256 | cut -d' ' -f1; fi; }
 
+# path_class PATH → docs | scripts | compiler (anything unlisted is compiler: the highest class)
+path_class() {
+  case "$1" in
+    docs/*|changelog.d/*|ROADMAP.md|CHANGELOG.md|README.md|AGENTS.md|CLAUDE.md) echo docs ;;
+    scripts/*|.githooks/*|.github/*|.claude/*|required-checks.txt|required-checks-transition.tsv) echo scripts ;;
+    *) echo compiler ;;
+  esac
+}
+class_cap() { case "$1" in docs) echo 2 ;; scripts) echo 3 ;; *) echo 5 ;; esac; }
+# diff_class SHA BASE → the highest class among the paths SHA changes against its merge base with BASE
+diff_class() {
+  local mb p c best=docs
+  mb="$(git merge-base "$2" "$1")" || return 1
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    c="$(path_class "$p")"
+    case "$c" in compiler) best=compiler ;; scripts) [ "$best" = compiler ] || best=scripts ;; esac
+  done < <(git diff --no-renames --name-only "$mb" "$1")
+  echo "$best"
+}
+
 cmd_record() {
   [ $# -ge 1 ] || die "record: name the commit"
-  local sha date="" quote="" r f v; sha="$(git rev-parse -q --verify "$1^{commit}")" || die "record: not a commit: $1"; shift
+  local sha date="" quote="" base="" at="" r f v; sha="$(git rev-parse -q --verify "$1^{commit}")" || die "record: not a commit: $1"; shift
   local codex="" kimi="" agy=""
   while [ $# -gt 0 ]; do
     [ $# -ge 2 ] || die "record: $1 needs a value"
     case "$1" in
-      --date) date="$2" ;; --quote) quote="$2" ;;
+      --date) date="$2" ;; --quote) quote="$2" ;; --base) base="$2" ;; --rounds-at) at="$2" ;;
       --codex) codex="$2" ;; --kimi) kimi="$2" ;; --agy) agy="$2" ;;
       *) die "record: unknown option $1" ;;
     esac; shift 2
   done
   [[ "$date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || die "record: --date YYYY-MM-DD is required"
   [ -n "$quote" ] && [[ "$quote" != *$'\n'* ]] || die "record: --quote is required, on one line"
+  [ -n "$base" ] || die "record: --base BASE is required"
+  at="$(git rev-parse -q --verify "$at^{commit}")" || die "record: --rounds-at must name the noted commit"
   local rec="signoff: owner
 commit: $sha
 date: $date
-quote: $quote" entries=""
+quote: $quote
+rounds-at: $at" entries=""
   for r in $REVIEWERS; do
     f="${!r}"; [ -f "$f" ] || die "record: --$r FILE is required (the reviewer's verdict output)"
-    v="$(git hash-object -w -- "$f")"
+    v="$(git hash-object -w --no-filters -- "$f")"
     rec="$rec
 verdict-$r: $r.txt $(sha256 < "$f")"
     entries="${entries}100644 blob $v	$r.txt
 "
   done
-  v="$(printf '%s\n' "$rec" | git hash-object -w --stdin)"
+  v="$(printf '%s\n' "$rec" | git hash-object -w --no-filters --stdin)"
   local tree commit
   tree="$(printf '%s100644 blob %s\trecord.txt\n' "$entries" "$v" | git mktree)"
   commit="$(git commit-tree "$tree" -m "owner sign-off of $sha ($date)")"
+  local out
+  out="$( check "$sha" "$commit" "$base" )" || { printf '%s\nsignoff: not recorded (nothing written)\n' "$out" >&2; exit 1; }
   git update-ref "$PREFIX/$sha" "$commit"
-  echo "signoff: recorded $PREFIX/$sha -> ${commit:0:10}; verify, then push it to both remotes"
-  cmd_verify "$sha"
+  echo "$out"
+  echo "signoff: recorded $PREFIX/$sha -> ${commit:0:10}; push it to both remotes"
 }
 
-cmd_verify() {
-  [ $# -eq 1 ] || die "usage: signoff.sh verify <commit>"
-  local sha ref; sha="$(git rev-parse -q --verify "$1^{commit}")" || die "verify: not a commit: $1"
-  ref="$PREFIX/$sha"
-  git rev-parse -q --verify "$ref^{commit}" >/dev/null || { echo "$sha has no owner sign-off ($ref)"; exit 2; }
+# check SHA RECORD BASE: judge the record commit RECORD as a sign-off of SHA (exit 1 with the reason)
+check() {
+  local sha="$1" obj="$2" base="$3"
   bad() { echo "$sha owner sign-off does not qualify: $*"; exit 1; }
-  local rec line k v seen=" " F_signoff="" F_commit="" F_date="" F_quote="" F_verdict_codex="" F_verdict_kimi="" F_verdict_agy=""
-  rec="$(git cat-file blob "$ref:record.txt")"
+  [ "$(git cat-file -t "$obj:record.txt" 2>/dev/null)" = blob ] || bad "the record holds no record.txt"
+  local rec line k v seen=" " F_signoff="" F_commit="" F_date="" F_quote="" F_rounds_at="" F_verdict_codex="" F_verdict_kimi="" F_verdict_agy=""
+  rec="$(git cat-file blob "$obj:record.txt")"
   while IFS= read -r line; do
     [[ "$line" =~ ^([a-z-]+):\ (.*)$ ]] || bad "record.txt line is not key: value: '$line'"
     k="${BASH_REMATCH[1]}" v="${BASH_REMATCH[2]}"
     case "$seen" in *" $k "*) bad "record.txt repeats $k" ;; esac
     seen="$seen$k "
-    case "$k" in signoff|commit|date|quote|verdict-codex|verdict-kimi|verdict-agy) ;; *) bad "record.txt has the unknown key $k" ;; esac
+    case "$k" in signoff|commit|date|quote|rounds-at|verdict-codex|verdict-kimi|verdict-agy) ;; *) bad "record.txt has the unknown key $k" ;; esac
     printf -v "F_${k//-/_}" '%s' "$v"
   done <<< "$rec"
-  for k in signoff commit date quote; do case "$seen" in *" $k "*) ;; *) bad "record.txt has no $k" ;; esac; done
+  for k in signoff commit date quote rounds-at; do case "$seen" in *" $k "*) ;; *) bad "record.txt has no $k" ;; esac; done
   [ "$F_signoff" = owner ] || bad "signoff is '$F_signoff', not owner"
   [ "$F_commit" = "$sha" ] || bad "the record is for $F_commit, not $sha"
   [[ "$F_date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || bad "date '$F_date' is not YYYY-MM-DD"
@@ -95,21 +132,47 @@ cmd_verify() {
     [ "${#w}" -ge 7 ] && [ "${sha#"$w"}" != "$sha" ] && named=1
   done
   [ "$named" = 1 ] || bad "the quote does not name ${sha:0:10} (a prefix of at least 7 hex digits): '$F_quote'"
+  # The cap: the class of the member's diff, and the rounds review.sh recorded on its own commits.
+  local cls cap at rounds
+  cls="$(diff_class "$sha" "$base")" || bad "no merge base of ${sha:0:10} and ${base:0:10}"
+  cap="$(class_cap "$cls")"
+  at="$F_rounds_at"
+  [[ "$at" =~ ^[0-9a-f]{40}$ ]] || bad "rounds-at '$at' is not a full commit SHA"
+  { git merge-base --is-ancestor "$at" "$sha" 2>/dev/null && ! git merge-base --is-ancestor "$at" "$base" 2>/dev/null; } \
+    || bad "rounds-at ${at:0:10} is not one of ${sha:0:10}'s own commits (an ancestor or itself, not on ${base:0:10})"
+  rounds="$(git notes --ref="$NOTES_REF" show "$at" 2>/dev/null | sed -n 's/^rounds: \([1-9][0-9]*\)$/\1/p' | head -1)" || true
+  [ -n "$rounds" ] || bad "rounds-at ${at:0:10} carries no review.sh note with a round count"
+  [ "$rounds" -ge "$cap" ] \
+    || bad "the review cap was not reached: a $cls change has cap $cap, and ${at:0:10} records $rounds round(s)"
   local r n entry file hash got verdict
   for r in $REVIEWERS; do n="F_verdict_$r"; [ -n "${!n}" ] || bad "the record has no $r verdict"; done
   local want="agy.txt codex.txt kimi.txt record.txt" have
-  have="$(git ls-tree --name-only "$ref" | sort | tr '\n' ' ')"
+  have="$(git ls-tree --name-only "$obj" | sort | tr '\n' ' ')"
   [ "$have" = "$want " ] || bad "the record holds [${have% }], not exactly [$want]"
   for r in $REVIEWERS; do
     n="F_verdict_$r"; entry="${!n}"
     file="${entry%% *}" hash="${entry#* }"
     [ "$file" = "$r.txt" ] && [[ "$hash" =~ ^[0-9a-f]{64}$ ]] || bad "verdict-$r is '$entry', not '$r.txt <sha256>'"
-    got="$(git cat-file blob "$ref:$file" | sha256)"
+    [ "$(git cat-file -t "$obj:$file" 2>/dev/null)" = blob ] || bad "$file is not a file"
+    got="$(git cat-file blob "$obj:$file" | sha256)"
     [ "$got" = "$hash" ] || bad "the sha256 of $file is $got, not the recorded $hash"
-    verdict="$(git cat-file blob "$ref:$file" | grep -E '^[[:space:]]*VERDICT: (ACCEPT|REJECT)[[:space:]]*$' | tail -1 | tr -d '[:space:]')" || true
+    verdict="$(git cat-file blob "$obj:$file" | grep -E '^[[:space:]]*VERDICT: (ACCEPT|REJECT)[[:space:]]*$' | tail -1 | tr -d '[:space:]')" || true
     [ "$verdict" = "VERDICT:ACCEPT" ] || bad "the $r output's last verdict is '${verdict:-none}', not VERDICT: ACCEPT"
   done
-  echo "$sha signed off by the owner ($F_date; codex, kimi and agy accepted): \"$F_quote\""
+  echo "$sha signed off by the owner ($F_date; $cls change, cap $cap reached at ${at:0:10} with $rounds round(s); codex, kimi and agy accepted): \"$F_quote\""
+}
+
+cmd_verify() {
+  local sha base=""
+  [ $# -ge 1 ] || die "usage: signoff.sh verify <commit> --base BASE"
+  sha="$(git rev-parse -q --verify "$1^{commit}")" || die "verify: not a commit: $1"; shift
+  while [ $# -gt 0 ]; do
+    case "$1" in --base) [ $# -ge 2 ] || die "verify: --base needs a value"; base="$2"; shift 2 ;; *) die "verify: unknown option $1" ;; esac
+  done
+  [ -n "$base" ] || die "verify: --base BASE is required (the cap is the class of the diff against it)"
+  base="$(git rev-parse -q --verify "$base^{commit}")" || die "verify: --base is not a commit"
+  git rev-parse -q --verify "$PREFIX/$sha^{commit}" >/dev/null || { echo "$sha has no owner sign-off ($PREFIX/$sha)"; exit 2; }
+  check "$sha" "$(git rev-parse "$PREFIX/$sha^{commit}")" "$base"
 }
 
 case "${1:-}" in

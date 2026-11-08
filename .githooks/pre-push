@@ -46,7 +46,18 @@ while read -r _localref localsha remoteref _remotesha; do
         *[!0]*) wip_refs=$((wip_refs+1)); wip_shas="$wip_shas $localsha" ;;
         *) wip_dels=$((wip_dels+1)) ;;
       esac ;;
-    refs/notes/concrete-review|refs/notes/concrete-review-findings|refs/owner-signoff/*)
+    refs/owner-signoff/*)
+      # Only a record takes the notes tier: a parentless commit, under its subject's 40-hex name, whose
+      # tree is exactly the sign-off's four files (scripts/land/signoff.sh). Anything else pushed here,
+      # a source commit included, takes the full tier, as does a deletion.
+      if [[ "${remoteref#refs/owner-signoff/}" =~ ^[0-9a-f]{40}$ ]] && [ "$(git rev-list --parents -n 1 "$localsha" 2>/dev/null)" = "$localsha" ] \
+         && [ "$(git ls-tree --name-only "$localsha" 2>/dev/null | LC_ALL=C sort | tr '\n' ' ')" = "agy.txt codex.txt kimi.txt record.txt " ]; then
+        note_refs=$((note_refs+1))
+      else
+        other_refs=$((other_refs+1))
+        case "$localsha" in *[!0]*) full_shas="$full_shas $localsha" ;; esac
+      fi ;;
+    refs/notes/concrete-review|refs/notes/concrete-review-findings)
       case "$localsha" in
         *[!0]*) note_refs=$((note_refs+1)) ;;
         *) other_refs=$((other_refs+1)) ;;   # deleting a review note takes the full tier

@@ -92,8 +92,8 @@ verdict; any failing leg fails the check (see [Pipelining](#pipelining)).
   `scripts/review/verify.sh` on origin's notes; an absent, malformed, blocked or findings note
   qualifies nothing, and a head note that is not clean is not overridden by the members. A member
   without a clean note qualifies instead by an **owner sign-off** at its exact SHA (R-0618: a branch
-  at its review-round cap, approved by the owner after Codex, Kimi and agy all reviewed that commit;
-  `scripts/land/signoff.sh verify`, on origin's `refs/owner-signoff/*`). A sign-off approves that
+  at the review-round cap of its diff's class, approved by the owner after Codex, Kimi and agy all
+  reviewed that commit; `scripts/land/signoff.sh verify --base`, on origin's `refs/owner-signoff/*`). A sign-off approves that
   commit only, so a train with a signed-off member must be exactly the clean merge of its members
   onto its base: one conflict-free merge per member and nothing else. Otherwise
   the leg runs `LAND_REVIEW_CMD`, else `scripts/review/review.sh`, with `--base --head`, and then
