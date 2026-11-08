@@ -8,3 +8,5 @@ import ConcreteSpec.Proofs.Slice0
 import ConcreteSpec.Proofs.Exec
 import ConcreteSpec.Proofs.Scalar
 import ConcreteSpec.Proofs.Const
+
+import ConcreteSpec.Proofs.Memory
