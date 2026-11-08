@@ -69,16 +69,29 @@ def owned_name(sym):
 
 
 def parse(path):
-    """Functions: name -> list of (addr, mnemonic, operands). Also the stubs: ELF PLT symbol names
+    """Functions, stubs and the ELF PT_TLS p_memsz recorded in the disassembly.
+
+    Functions map names to (addr, mnemonic, operands). Stubs are ELF PLT symbol names
     (`write@plt`), and Mach-O stub entries, address -> imported symbol, from `stub ADDR SYMBOL`
     lines the gate appends (from `llvm-objdump --macho --indirect-symbols`, since the Mach-O
-    disassembly names only the whole `__stubs` section)."""
+    disassembly names only the whole `__stubs` section). On x86 the gate also appends exactly one
+    `tls_memsz N` line from the linked executable's program headers (zero with no PT_TLS)."""
     funcs, cur, stubs, section = {}, None, {"names": set(), "addrs": {}}, ""
+    tls_memsz = None
     head = re.compile(r"^([0-9a-f]+) <([^>]+)>:$")
     inst = re.compile(r"^\s*([0-9a-f]+):\s*(\S+)\s*(.*)$")
     stub = re.compile(r"^stub 0x([0-9a-f]+) (\S+)$")
     for line in open(path, encoding="utf-8", errors="replace"):
         line = line.rstrip("\n")
+        if line.startswith("tls_memsz"):
+            m = re.fullmatch(r"tls_memsz (0x[0-9a-f]+|\d+)", line)
+            if not m or tls_memsz is not None:
+                raise Refuse(f"malformed or duplicate PT_TLS metadata: {line}")
+            tls_memsz = int(m.group(1), 0)
+            if tls_memsz > (1 << 64) - 1:
+                raise Refuse(f"PT_TLS p_memsz does not fit in 64 bits: {line}")
+            cur = None
+            continue
         m = stub.match(line)
         if m:
             addr = int(m.group(1), 16)
@@ -108,7 +121,7 @@ def parse(path):
         if m and cur is not None:
             ops = m.group(3).split("#", 1)[0] if ARCH == "x86_64" else m.group(3).split("//")[0]
             funcs[cur].append((int(m.group(1), 16), m.group(2).lower(), ops.strip()))
-    return funcs, stubs
+    return funcs, stubs, tls_memsz
 
 
 def target_of(ops):
