@@ -456,8 +456,9 @@ gates_host() {
 }
 
 # The review command: LAND_REVIEW_CMD, else scripts/review/review.sh, called with --base --head.
-# The default gets its mandatory writer from LAND_REVIEW_WRITER; a custom command carries its own
-# reviewer/writer options. Empty when there is no command, which `check` refuses (never silently).
+# review.sh derives writer provenance from base..head; LAND_REVIEW_WRITER is an optional assertion;
+# a custom command carries its own reviewer/writer options. Empty when there is no command, which
+# `check` refuses (never silently).
 review_cmd() {
   if [ -n "${LAND_REVIEW_CMD:-}" ]; then echo "$LAND_REVIEW_CMD"
   elif [ -f scripts/review/review.sh ]; then
@@ -513,6 +514,7 @@ review_provenance() { # name head
   [ -f "$VERIFY" ] || { echo "no review verifier ($VERIFY is missing)"; return 1; }
   git fetch -q "$REMOTE" "+refs/notes/concrete-review:refs/notes/concrete-review" 2>/dev/null \
     || { echo "could not fetch refs/notes/concrete-review from $REMOTE"; return 1; }
+  git fetch -q "$REMOTE" "+refs/notes/concrete-writer:refs/notes/concrete-writer" 2>/dev/null || true
   if out="$(bash "$VERIFY" --required-base "$base" "$head" 2>&1)"; then echo "the head ${head:0:10} carries a clean review note covering ${base:0:10}"; return 0; fi
   if git notes --ref=refs/notes/concrete-review show "$head" >/dev/null 2>&1; then
     echo "the head's review note does not qualify: ${out//$'\n'/ }"; return 1

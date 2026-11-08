@@ -5,12 +5,13 @@
 #
 # Run in a clean checkout at the branch head, after pushing it (origin/<branch> must be HEAD). Three
 # independent legs run AT THE SAME TIME, and every one is collected before the verdict:
-#   review  LAND_REVIEW_CMD or scripts/review/review.sh, with --base --head (the default also takes
-#           LAND_REVIEW_WRITER; a custom command carries its reviewer/writer options)
+#   review  LAND_REVIEW_CMD or scripts/review/review.sh, with --base --head (writer provenance is
+#           derived from base..HEAD; LAND_REVIEW_WRITER is an optional assertion)
 #   impact  scripts/land/impact_gates.sh over merge-base(<base>, HEAD)..HEAD
 #   remote  the full gate set via LAND_REMOTE_RUNNER (default ~/bin/concrete-remote) at <branch>
 # Then the gates note is published at HEAD: `gates: pass` only when every leg that ran passed
-# (a failed review leg also fails it). Exit 0 iff the head is ready (review note clean, gates pass). The wall time and the
+# (a failed review leg also fails it). Exit 0 iff the head is ready (verify.sh accepts the review note
+# covering <base>..HEAD, and gates is pass). The wall time and the
 # sequential sum of the legs go to <git-common-dir>/concrete-landing/ready.tsv.
 set -euo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -94,5 +95,13 @@ kv=(gates="$gates" selected="${selected:-unknown}" remote="$rstate" runner=ready
 bash "$SELF_DIR/notes.sh" put gates "$head" "${kv[@]}"
 bash "$SELF_DIR/notes.sh" fetch
 verdict="$(bash "$SELF_DIR/notes.sh" get review "$head" verdict)"
-echo "ready: ${head:0:10} gates=$gates review=${verdict:-none}"
-[ "$gates" = pass ] && [ "$verdict" = clean ]
+if bash "$SELF_DIR/notes.sh" ready --base "$base" "$head"; then
+  echo "ready: ${head:0:10} gates=$gates review=clean"
+  exit 0
+fi
+if [ "$verdict" = clean ] && [ "$gates" = pass ]; then
+  echo "ready: ${head:0:10} gates=$gates review=invalid-clean (rejected by verify.sh)"
+else
+  echo "ready: ${head:0:10} gates=$gates review=${verdict:-none}"
+fi
+exit 1

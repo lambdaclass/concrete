@@ -82,7 +82,7 @@ kind=standard
 grep -q "routine code review" "$FAKE_LOG/prompt.$n" && kind=neutral
 files="$(grep '^diff --git ' "$FAKE_LOG/stdin.$n" | sed 's#.* b/##' | sort -u | tr '\n' ',')"
 archive=no
-[ ! -e .git ] && [ "$(cat README.md 2>/dev/null)" = base ] && archive=yes
+[ ! -e .git ] && [ "$(cat README.md 2>/dev/null)" = base ] && [ ! -w README.md ] && [ ! -w . ] && archive=yes
 echo "$n $kind sandbox=$sandbox bytes=$(wc -c <"$FAKE_LOG/stdin.$n" | tr -d ' ') archive=$archive skip_git_check=$skip stdin_bytes=$(wc -c <"$FAKE_LOG/actual-stdin.$n" | tr -d ' ') files=$files" >>"$FAKE_LOG/calls"
 echo "$n optional_locks=${GIT_OPTIONAL_LOCKS:-unset}" >>"$FAKE_LOG/locks"
 added="$(grep '^+' "$FAKE_LOG/stdin.$n" || true)"
@@ -90,38 +90,76 @@ has() { grep -q "$1" <<<"$added"; }
 reply() { printf '%s\n' "$1" >"$out"; }
 if has MARK_REFUSE_ALWAYS || { has MARK_REFUSE_STANDARD && [ "$kind" = standard ]; }; then
   reply "I'm sorry, but I can't help with that request because it was flagged by our cybersecurity policy."
+elif has MARK_DOUBLE_TIMEOUT; then
+  sleep 1; exit 0
 elif has MARK_ERROR; then
   echo "stream error: 500" >&2; exit 1
+elif has MARK_MUTATE_TREE; then
+  chmod u+w README.md 2>/dev/null && printf 'mutated\n' > README.md
+  reply "READ: README.md
+REPOSITORY: readable
+VERDICT: clean"
 elif has MARK_REPOSITORY_UNREADABLE; then
-  reply "REPOSITORY: unreadable
+  reply "READ: README.md
+REPOSITORY: unreadable
 VERDICT: clean"
 elif has MARK_SANDBOX_FAILURE; then
-  reply "sandbox could not start
+  reply "READ: README.md
+sandbox could not start
 REPOSITORY: readable
 VERDICT: clean"
 elif has MARK_NO_REPOSITORY; then
+  reply "READ: README.md
+Nothing to report.
+VERDICT: clean"
+elif has MARK_REPO_WRONG_POS; then
+  reply "READ: README.md
+REPOSITORY: readable
+One more remark after REPOSITORY.
+VERDICT: clean"
+elif has MARK_NO_READ; then
   reply "Nothing to report.
+REPOSITORY: readable
+VERDICT: clean"
+elif has MARK_BAD_READ; then
+  reply "READ: does-not-exist-in-tree.txt
+REPOSITORY: readable
+VERDICT: clean"
+elif has MARK_READ_DIR; then
+  reply "READ: p
+REPOSITORY: readable
+VERDICT: clean"
+elif has MARK_READ_ABS; then
+  reply "READ: /README.md
+REPOSITORY: readable
 VERDICT: clean"
 elif has MARK_FINDING; then
   reply "- a.txt:1: the counter is never reset
+READ: README.md
 REPOSITORY: readable
 VERDICT: findings"
 elif has MARK_NOVERDICT; then
-  reply "I looked at it and it seems fine."
+  reply "READ: README.md
+REPOSITORY: readable
+I looked at it and it seems fine."
 elif has MARK_TRAILING; then
-  reply "REPOSITORY: readable
+  reply "READ: README.md
+REPOSITORY: readable
 VERDICT: clean
 Also, one more thought."
 elif has MARK_BOLD; then
   reply "Nothing to report.
+**READ: README.md**
 **REPOSITORY: readable**
 **VERDICT: clean**"
 elif has MARK_MENTION_FILTER; then
   reply "The content filter detection and the cybersecurity wording look right.
+READ: README.md
 REPOSITORY: readable
 VERDICT: clean"
 else
   reply "Nothing to report.
+READ: README.md
 REPOSITORY: readable
 VERDICT: clean"
 fi
@@ -145,14 +183,25 @@ prompt="$2"
 n=$(( $(ls "$FAKE_LOG" | grep -c '^stdin\.' || true) + 1 ))
 cat >"$FAKE_LOG/actual-stdin.$n"
 printf '%s' "$prompt" >"$FAKE_LOG/prompt.$n"
+awk 'found { print } /^--- supplied diff: / { found=1 }' "$FAKE_LOG/prompt.$n" >"$FAKE_LOG/stdin.$n"
 archive=no
-[ ! -e .git ] && [ "$(cat README.md 2>/dev/null)" = base ] && archive=yes
+[ ! -e .git ] && [ "$(cat README.md 2>/dev/null)" = base ] && [ ! -w README.md ] && [ ! -w . ] && archive=yes
 echo "$n $reviewer archive=$archive stdin_bytes=$(wc -c <"$FAKE_LOG/actual-stdin.$n" | tr -d ' ')" >>"$FAKE_LOG/calls"
 echo "$n optional_locks=${GIT_OPTIONAL_LOCKS:-unset}" >>"$FAKE_LOG/locks"
 case "$prompt" in
-  *MARK_REPOSITORY_UNREADABLE*) printf 'REPOSITORY: unreadable\nVERDICT: clean\n' ;;
-  *MARK_NO_REPOSITORY*) printf 'Nothing to report.\nVERDICT: clean\n' ;;
-  *) printf 'Nothing to report.\nREPOSITORY: readable\nVERDICT: clean\n' ;;
+  *MARK_REFUSE_ALWAYS*) printf "I'm sorry, but I can't help with that request because it was flagged by our cybersecurity policy.\n" ;;
+  *MARK_DOUBLE_TIMEOUT*) sleep 1; exit 0 ;;
+  *MARK_ERROR*) echo "stream error: 500" >&2; exit 1 ;;
+  *MARK_REPOSITORY_UNREADABLE*) printf 'READ: README.md\nREPOSITORY: unreadable\nVERDICT: clean\n' ;;
+  *MARK_SANDBOX_FAILURE*) printf 'READ: README.md\nbwrap: operation not permitted\nREPOSITORY: readable\nVERDICT: clean\n' ;;
+  *MARK_NO_REPOSITORY*) printf 'READ: README.md\nNothing to report.\nVERDICT: clean\n' ;;
+  *MARK_REPO_WRONG_POS*) printf 'READ: README.md\nREPOSITORY: readable\nRemark after REPOSITORY.\nVERDICT: clean\n' ;;
+  *MARK_NO_READ*) printf 'Nothing to report.\nREPOSITORY: readable\nVERDICT: clean\n' ;;
+  *MARK_BAD_READ*) printf 'READ: missing-file.txt\nREPOSITORY: readable\nVERDICT: clean\n' ;;
+  *MARK_FINDING*) printf -- '- a.txt:1: the counter is never reset\nREAD: README.md\nREPOSITORY: readable\nVERDICT: findings\n' ;;
+  *MARK_NOVERDICT*) printf 'READ: README.md\nREPOSITORY: readable\nI looked at it and it seems fine.\n' ;;
+  *MARK_TRAILING*) printf 'READ: README.md\nREPOSITORY: readable\nVERDICT: clean\nTrailing line.\n' ;;
+  *) printf 'Nothing to report.\nREAD: README.md\nREPOSITORY: readable\nVERDICT: clean\n' ;;
 esac
 EOF
   chmod +x "$T/bin/$reviewer"
@@ -176,7 +225,15 @@ commit_file README.md "base" "base"
 printf '.review/\n' >"$W/.gitignore"
 g add .gitignore && g commit -qm "ignore .review"
 g push -q origin main
-review() { (cd "$W" && bash "$REVIEW" --writer "${REVIEW_TEST_WRITER:-claude}" "$@"); }
+review() { (cd "$W" && bash "$REVIEW" ${REVIEW_TEST_WRITER:+--writer "$REVIEW_TEST_WRITER"} "$@"); }
+stamp_writer() { # stamp_writer <model> [round] [branch]
+  local m="$1" r="${2:-1}" b="${3:-feature}" extra=()
+  [ "$m" = agy ] && extra=(--agy-diff-sha256 "1111111111111111111111111111111111111111111111111111111111111111")
+  python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" stamp-commit --repo "$W" \
+    --model "$m" --round "$r" --branch "$b" \
+    --brief-sha256 "2222222222222222222222222222222222222222222222222222222222222222" \
+    "${extra[@]}" >/dev/null
+}
 note() { g notes --ref=refs/notes/concrete-review show "${1:-HEAD}" 2>/dev/null; }
 field() { note "${2:-HEAD}" | sed -n "s/^$1: //p"; }
 sha256_file() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
@@ -187,13 +244,14 @@ commit_file old.txt "MARK_FINDING in the first change" "first change"
 review >"$T/out1" 2>&1; rc=$?
 check "findings exit 1 (got $rc)" test "$rc" -eq 1
 check "one reviewer call" test "$(calls)" -eq 1
-check "reviewer has full access only to an archived tree, with stdin closed" \
+check "reviewer has full access only to a read-only archived tree, with stdin closed" \
   grep -q "sandbox=danger-full-access .*archive=yes skip_git_check=1 stdin_bytes=0" "$FAKE_LOG/calls"
 # Bug 209: every reviewer call runs without git's optional locks, so a reviewer command stopped
 # mid-`git status` cannot leave the caller's worktree with a stale index.lock.
 check "reviewer runs with GIT_OPTIONAL_LOCKS=0" grep -q " optional_locks=0$" "$FAKE_LOG/locks"
 check "no reviewer call ran with optional locks" bash -c '! grep -v " optional_locks=0$" "$1" | has_match .' _ "$FAKE_LOG/locks"
 check "round 1 prompt carries the verdict rule" grep -q "^VERDICT: findings$" "$FAKE_LOG/prompt.1"
+check "round 1 prompt requires READ: <path> evidence" grep -q "READ: <path>" "$FAKE_LOG/prompt.1"
 check "round 1 prompt requires repository readability evidence" grep -q "REPOSITORY: readable.*REPOSITORY: unreadable" "$FAKE_LOG/prompt.1"
 check "the standard prompt carries the permanent owner rule" \
   grep -Fq 'OWNER RULE (2026-11-08, verbatim: "ALWAYS tell the reviewrs to do the best long term thing rather than cuitting corners"): judge and fix by the best long-term design. Never cut corners for speed, a smaller diff or fewer rounds. As a reviewer, report any shortcut, containment patch or corner cut as a real finding and say what the long-term fix is. As a writer, implement the structural fix, not a containment patch; if staging is truly unavoidable, record the long-term design and name its roadmap row.' "$FAKE_LOG/prompt.1"
@@ -282,12 +340,18 @@ repository: readable" HEAD
 out="$(cd "$W" && bash "$VERIFY" HEAD 2>&1)"; rc=$?
 check "a readable clean note without writer is legacy, not clean (exit 1, got $rc)" test "$rc" -eq 1
 check "the legacy-writer refusal names the missing key" grep -q "missing writer (legacy note)" <<<"$out"
-# A current note notes.sh put wrote (keys in its own order, writer and repository after utc) verifies.
+# A current note notes.sh put wrote (keys in its own order, writer and repository after utc) verifies
+# when its base is an ancestor of HEAD, and is refused when its base is not an ancestor of HEAD.
+VALID_BASE="$(g rev-parse main)"
+g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nbase: %s\npieces: 1\nutc: 2026-10-22T00:00:00Z\nwriter: claude\nrepository: readable' "$VALID_BASE")" HEAD
+(cd "$W" && bash "$VERIFY" HEAD >"$T/vc" 2>&1); rc=$?
+check "a readable independent clean note with utc before writer verifies (exit 0, got $rc)" test "$rc" -eq 0
 g notes --ref=refs/notes/concrete-review add -f -m "$LEGACY_NOTE
 writer: claude
 repository: readable" HEAD
-(cd "$W" && bash "$VERIFY" HEAD >"$T/vc" 2>&1); rc=$?
-check "a readable independent clean note with utc before writer verifies (exit 0, got $rc)" test "$rc" -eq 0
+out="$(cd "$W" && bash "$VERIFY" HEAD 2>&1)"; rc=$?
+check "a clean note whose base is not an ancestor of HEAD is refused without --required-base (exit 1, got $rc)" test "$rc" -eq 1
+check "non-ancestor base refusal names base and commit" grep -q "base $B40 is not an ancestor-or-equal of" <<<"$out"
 g notes --ref=refs/notes/concrete-review add -f -m "$LEGACY_NOTE" HEAD
 review >"$T/legacy-rerun" 2>&1; rc=$?
 check "review.sh re-reviews a legacy clean HEAD instead of short-circuiting (exit $rc)" \
@@ -307,48 +371,177 @@ g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: findings\
 check "a repeated key is malformed: exit 2 (got $rc)" test "$rc" -eq 2
 g notes --ref=refs/notes/concrete-review remove HEAD 2>/dev/null
 
-echo "=== verify.sh: required base coverage (A -> B -> C) ==="
+echo "=== note schema transition: old main verify.sh vs new verify.sh ==="
+# Obtain main's pre-transition verify.sh from origin/main when available and pre-transition;
+# otherwise reconstruct main's 6-key verify.sh from legacy/scripts/review/verify.sh (identical
+# except for dropping carried-from|order per 2026-11-08-landing-shrink).
+OLD_VERIFY="$T/old-verify.sh"
+if git -C "$ROOT_DIR" show origin/main:scripts/review/verify.sh >"$OLD_VERIFY" 2>/dev/null \
+   && ! grep -q "writer_provenance" "$OLD_VERIFY"; then
+  :
+else
+  sed -e '/carried-from|order/d' "$ROOT_DIR/legacy/scripts/review/verify.sh" >"$OLD_VERIFY"
+fi
+chmod +x "$OLD_VERIFY"
+TRANS_HEAD="$(g rev-parse HEAD)"
+OLD_BOOTSTRAP_NOTE="$(printf 'verdict: clean\nrounds: 1\nreviewer: codex\nutc: 2026-11-08T00:00:00Z\nbase: %s\npieces: 1' "$VALID_BASE")"
+g notes --ref=refs/notes/concrete-review add -f -m "$OLD_BOOTSTRAP_NOTE" "$TRANS_HEAD"
+(cd "$W" && bash "$OLD_VERIFY" "$TRANS_HEAD" >/dev/null 2>&1); rc=$?
+check "transition: main's old verify.sh accepts main's 6-key clean bootstrap note (exit 0, got $rc)" test "$rc" -eq 0
+out="$(cd "$W" && bash "$VERIFY" "$TRANS_HEAD" 2>&1)"; rc=$?
+check "transition: new verify.sh refuses the 6-key note as clean provenance (exit 1, got $rc)" test "$rc" -eq 1
+check "transition: new verify.sh explains the 6-key note lacks repository: readable" grep -q "missing repository: readable" <<<"$out"
+NEW_SCHEMA_NOTE="$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nwriter: claude\nutc: 2026-11-08T00:00:00Z\nbase: %s\npieces: 1\nrepository: readable' "$VALID_BASE")"
+g notes --ref=refs/notes/concrete-review add -f -m "$NEW_SCHEMA_NOTE" "$TRANS_HEAD"
+(cd "$W" && bash "$VERIFY" "$TRANS_HEAD" >/dev/null 2>&1); rc=$?
+check "transition: new verify.sh accepts the 8-key note with writer and repository: readable (exit 0, got $rc)" test "$rc" -eq 0
+(cd "$W" && bash "$OLD_VERIFY" "$TRANS_HEAD" >/dev/null 2>&1); rc=$?
+check "transition: main's old verify.sh rejects the 8-key note (exit 2, got $rc), why bootstrap uses main's review.sh" test "$rc" -eq 2
+g notes --ref=refs/notes/concrete-review remove "$TRANS_HEAD" 2>/dev/null
+
+echo "=== verify.sh and review.sh: required base coverage & delta base-widening prevention (A -> B -> C) ==="
 COV_A="$(g rev-parse main)"
+g checkout -q main && g checkout -qb coverage-sibling
+commit_file sibling.txt "sibling commit S" "S"
+COV_S="$(g rev-parse HEAD)"
 g checkout -q main && g checkout -qb coverage
-commit_file coverage.txt "unreviewed intermediate B" "B"
+commit_file b_only.txt "unreviewed intermediate B" "B"
 COV_B="$(g rev-parse HEAD)"
-commit_file coverage.txt "reviewed head C" "C"
+commit_file c_only.txt "reviewed head C" "C"
 COV_C="$(g rev-parse HEAD)"
 coverage_note() { # base: a current clean note on C whose review began at this base
   g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 1\nreviewer: codex\nwriter: claude\nutc: 2026-11-08T00:00:00Z\nbase: %s\npieces: 1\nrepository: readable' "$1")" "$COV_C"
 }
+coverage_note "$COV_S"
+out="$(cd "$W" && bash "$VERIFY" "$COV_C" 2>&1)"; rc=$?
+check "a note based at sibling commit S (not an ancestor of C) is refused by verify.sh (exit 1, got $rc)" test "$rc" -eq 1
+check "sibling-base refusal names S and C" grep -q "base $COV_S is not an ancestor-or-equal of $COV_C" <<<"$out"
 coverage_note "$COV_B"
 (cd "$W" && bash "$VERIFY" "$COV_C" >/dev/null 2>&1); rc=$?
-check "without a coverage requirement the clean note verifies (exit 0, got $rc)" test "$rc" -eq 0
+check "without a coverage requirement the clean note at B verifies (exit 0, got $rc)" test "$rc" -eq 0
 out="$(cd "$W" && bash "$VERIFY" --required-base "$COV_A" "$COV_C" 2>&1)"; rc=$?
 check "a note based at unreviewed B does not cover required base A (exit 1, got $rc)" test "$rc" -eq 1
 check "the coverage refusal names both bases" bash -c "grep -q 'base $COV_B.*required base $COV_A' <<<'$out'"
 coverage_note "$COV_A"
 (cd "$W" && bash "$VERIFY" --required-base "$COV_A" "$COV_C" >/dev/null 2>&1); rc=$?
 check "a note based at main A covers required base A (exit 0, got $rc)" test "$rc" -eq 0
+g notes --ref=refs/notes/concrete-review remove "$COV_C" 2>/dev/null
+
+# Delta base-widening reproducer (A -> B -> C): if B carries a prior note (findings or clean) whose
+# base is B (so A..B was never reviewed), running review.sh on C with base A must NOT start the delta
+# at B and stamp base: A over B..C alone; it must review the full A..C diff.
+for b_verdict in findings clean; do
+  reset_fake
+  b_repo=""
+  [ "$b_verdict" = clean ] && b_repo=$'\nrepository: readable'
+  g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: %s\nrounds: 1\nreviewer: codex\nwriter: claude\nutc: 2026-11-08T00:00:00Z\nbase: %s\npieces: 1%s' "$b_verdict" "$COV_B" "$b_repo")" "$COV_B"
+  review --base "$COV_A" >"$T/widen-$b_verdict" 2>&1; rc=$?
+  check "delta base-widening ($b_verdict on B with base B): review on C against A exits 0 (got $rc)" test "$rc" -eq 0
+  check "delta base-widening ($b_verdict on B with base B): reviews full A..C (both b_only.txt and c_only.txt)" \
+    grep -q "files=b_only.txt,c_only.txt,$" "$FAKE_LOG/calls"
+  check "delta base-widening ($b_verdict on B with base B): prompt states complete change against A, not delta from B" \
+    grep -q "complete change of a branch against its base commit $COV_A" "$FAKE_LOG/prompt.1"
+  check "delta base-widening ($b_verdict on B with base B): round increments to 2 and note base is A" \
+    test "$(field rounds "$COV_C")/$(field base "$COV_C")" = "2/$COV_A"
+  g notes --ref=refs/notes/concrete-review remove "$COV_C" 2>/dev/null
+done
+g notes --ref=refs/notes/concrete-review remove "$COV_B" 2>/dev/null
 
 echo "=== independent reviewers and writer provenance ==="
 for reviewer in kimi agy; do
   reset_fake
   g checkout -q main && g checkout -qb "reviewer-$reviewer"
   commit_file "$reviewer.txt" "clean review by $reviewer" "Codex-written branch"
-  REVIEW_TEST_WRITER=codex review --reviewer "$reviewer" >"$T/reviewer-$reviewer" 2>&1; rc=$?
-  check "Codex-written branch reviewed clean by $reviewer (exit $rc)" test "$rc" -eq 0
-  check "$reviewer note records reviewer $reviewer and writer codex" \
+  stamp_writer codex 1 "reviewer-$reviewer"
+  review --reviewer "$reviewer" >"$T/reviewer-$reviewer" 2>&1; rc=$?
+  check "Codex-stamped branch reviewed clean by $reviewer without --writer flag (exit $rc)" test "$rc" -eq 0
+  check "$reviewer note records reviewer $reviewer and derived writer codex" \
     test "$(field reviewer)/$(field writer)" = "$reviewer/codex"
-  check "verify accepts the independent $reviewer note" \
+  check "verify accepts the independent $reviewer note and cross-checks writer provenance" \
     bash -c "cd '$W' && bash '$VERIFY' HEAD >/dev/null 2>&1"
-  check "$reviewer runs in the archive with stdin closed" grep -q "$reviewer archive=yes stdin_bytes=0" "$FAKE_LOG/calls"
+  check "$reviewer runs in the read-only archive with stdin closed" grep -q "$reviewer archive=yes stdin_bytes=0" "$FAKE_LOG/calls"
   check "$reviewer runs with optional locks off" grep -q " optional_locks=0$" "$FAKE_LOG/locks"
 done
+# --writer is an optional assertion checked against derived writer provenance.
+reset_fake
+g checkout -q main && g checkout -qb writer-assert
+commit_file assert.txt "agy-written" "agy commit"
+stamp_writer agy 1 writer-assert
+REVIEW_TEST_WRITER=codex review --reviewer kimi >"$T/writer-mismatch" 2>&1; rc=$?
+check "mismatched --writer assertion is refused (exit 2, got $rc)" test "$rc" -eq 2
+check "mismatched --writer error names the derived writer" grep -q "does not match derived writer provenance 'agy'" "$T/writer-mismatch"
 before="$(calls)"
-REVIEW_TEST_WRITER=agy review --reviewer agy >"$T/self-review" 2>&1; rc=$?
-check "reviewer == writer is a usage refusal (exit 2, got $rc)" test "$rc" -eq 2
+review --reviewer agy >"$T/self-review" 2>&1; rc=$?
+check "reviewer == derived writer is refused without --writer flag (exit 2, got $rc)" test "$rc" -eq 2
 check "self-review refusal calls no reviewer" test "$(calls)" = "$before"
-(cd "$W" && bash "$REVIEW" --reviewer codex >"$T/missing-writer" 2>&1); rc=$?
-check "missing --writer is a usage error (exit 2, got $rc)" test "$rc" -eq 2
-check "missing-writer error says it is required" grep -q -- "--writer is required" "$T/missing-writer"
+REVIEW_TEST_WRITER=agy review --reviewer kimi >"$T/writer-match" 2>&1; rc=$?
+check "matching --writer assertion succeeds (exit $rc)" test "$rc" -eq 0
+# Multi-writer branch across rounds (round 1 codex, round 2 agy): reviewer must be none of them.
+reset_fake
+g checkout -q main && g checkout -qb multi-writer
+commit_file mw1.txt "round 1 by codex" "mw1"
+stamp_writer codex 1 multi-writer
+commit_file mw2.txt "round 2 by agy" "mw2"
+stamp_writer agy 2 multi-writer
+review --reviewer codex >"$T/mw-codex" 2>&1; rc=$?
+check "multi-writer branch (codex,agy) refuses codex as reviewer (exit 2, got $rc)" test "$rc" -eq 2
+review --reviewer agy >"$T/mw-agy" 2>&1; rc=$?
+check "multi-writer branch (codex,agy) refuses agy as reviewer (exit 2, got $rc)" test "$rc" -eq 2
+review --reviewer kimi >"$T/mw-kimi" 2>&1; rc=$?
+check "multi-writer branch (codex,agy) accepts kimi as independent reviewer (exit 0, got $rc)" test "$rc" -eq 0
+check "multi-writer note records writer: codex,agy" test "$(field writer)" = "codex,agy"
+(cd "$W" && bash "$VERIFY" HEAD >/dev/null 2>&1); rc=$?
+check "verify.sh accepts clean note on multi-writer branch (exit 0, got $rc)" test "$rc" -eq 0
+LOG_BLOB="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" export-log --repo "$W" --base "$(g merge-base HEAD main)" --head HEAD --write-blob)"
+check "export-log --write-blob writes a git blob that verifies multi-writer provenance" \
+  python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" verify --repo "$W" --base "$(g merge-base HEAD main)" --head HEAD --claimed-writer "codex,agy" --reviewer kimi --log-object "$LOG_BLOB"
+# Unstamped human/pre-harness commit + stamped codex commit -> derived writer is claude,codex
+# (unstamped commits are explicitly attributed to claude, never silently treated as written by nobody).
+reset_fake
+g checkout -q main && g checkout -qb human-plus-codex
+commit_file human.txt "unstamped human commit" "human commit"
+commit_file bot.txt "stamped codex commit" "bot commit"
+stamp_writer codex 1 human-plus-codex
+review --reviewer codex >"$T/hc-codex" 2>&1; rc=$?
+check "unstamped+codex branch derives claude,codex and refuses codex reviewer (exit 2, got $rc)" test "$rc" -eq 2
+review --reviewer kimi >"$T/hc-kimi" 2>&1; rc=$?
+check "unstamped+codex branch reviewed clean by kimi records writer: claude,codex (exit $rc)" \
+  test "$rc" -eq 0 -a "$(field writer)" = "claude,codex"
+# Negative controls for incomplete or forged writer stamps:
+# 1. Writer: trailer alone without a matching writer-log entry in refs/notes/concrete-writer is refused.
+reset_fake
+g checkout -q main && g checkout -qb trailer-only
+commit_file t.txt "trailer only" "$(printf 'forged stamp\n\nWriter: codex')"
+review --reviewer kimi >"$T/trailer-only" 2>&1; rc=$?
+check "a commit with a Writer: trailer but no author stamp or log entry is refused (exit 2, got $rc)" test "$rc" -eq 2
+g checkout -q main && g checkout -qb author-and-trailer-no-log
+commit_file t2.txt "no log" "no log"
+stamp_writer codex 1 author-and-trailer-no-log
+g notes --ref=refs/notes/concrete-writer remove HEAD
+review --reviewer kimi >"$T/no-log" 2>&1; rc=$?
+check "a commit with writer author and Writer: trailer but no writer-log entry is refused by review.sh (exit 2, got $rc)" test "$rc" -eq 2
+check "no-log refusal says a Writer: trailer alone is never enough" grep -q "Writer: trailer alone is never enough" "$T/no-log"
+NO_LOG_BASE="$(g merge-base HEAD main)"
+g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 1\nreviewer: kimi\nwriter: codex\nutc: 2026-11-08T00:00:00Z\nbase: %s\npieces: 1\nrepository: readable' "$NO_LOG_BASE")" HEAD
+out="$(cd "$W" && bash "$VERIFY" HEAD 2>&1)"; rc=$?
+check "verify.sh also refuses a clean note when the commit's writer-log entry is missing (exit 1, got $rc)" test "$rc" -eq 1
+check "verify.sh no-log refusal names the missing writer-log entry" grep -q "no matching writer-log entry" <<<"$out"
+# 2. agy commit with mismatched agy-diff-sha256 in writer-log is refused.
+g checkout -q main && g checkout -qb agy-bad-hash
+commit_file abh.txt "agy" "agy"
+stamp_writer agy 1 agy-bad-hash
+ABH_SHA="$(g rev-parse HEAD)"
+g notes --ref=refs/notes/concrete-writer show "$ABH_SHA" | sed 's/^agy-diff-sha256: .*/agy-diff-sha256: 9999999999999999999999999999999999999999999999999999999999999999/' >"$T/bad-agy-log"
+g notes --ref=refs/notes/concrete-writer add -f -F "$T/bad-agy-log" "$ABH_SHA"
+review --reviewer kimi >"$T/agy-bad-out" 2>&1; rc=$?
+check "agy commit whose writer-log agy-diff-sha256 mismatches its trailer is refused (exit 2, got $rc)" test "$rc" -eq 2
+# 3. Clean note whose writer: claims claude on a codex-stamped branch is refused by verify.sh.
+g checkout -q reviewer-kimi
 SELF_BASE="$(g merge-base HEAD main)"
+g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 1\nreviewer: agy\nwriter: claude\nutc: 2026-11-08T00:00:00Z\nbase: %s\npieces: 1\nrepository: readable' "$SELF_BASE")" HEAD
+out="$(cd "$W" && bash "$VERIFY" HEAD 2>&1)"; rc=$?
+check "verify.sh refuses a clean note whose writer field disagrees with commit provenance (exit 1, got $rc)" test "$rc" -eq 1
+check "provenance-mismatch refusal names both claimed and derived writers" grep -q "note writer 'claude' does not match derived writer provenance 'codex'" <<<"$out"
 g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 1\nreviewer: agy\nwriter: agy\nutc: 2026-11-08T00:00:00Z\nbase: %s\npieces: 1\nrepository: readable' "$SELF_BASE")" HEAD
 out="$(cd "$W" && bash "$VERIFY" HEAD 2>&1)"; rc=$?
 check "verify refuses a clean note whose reviewer equals writer (exit 1, got $rc)" test "$rc" -eq 1
@@ -358,23 +551,47 @@ out="$(cd "$W" && bash "$VERIFY" HEAD 2>&1)"; rc=$?
 check "verify refuses a clean note without writer as legacy (exit 1, got $rc)" test "$rc" -eq 1
 check "missing-writer note refusal says legacy" grep -q "missing writer (legacy note)" <<<"$out"
 
-echo "=== verdict parsing ==="
-parse_case() { # parse_case <marker> <want-exit> <want-verdict> <label>
-  local marker="$1" want="$2" wantv="$3" label="$4" rc
+echo "=== verdict and reviewer-output contract parsing ==="
+parse_case() { # parse_case <marker> <want-exit> <want-verdict> <label> [reviewer]
+  local marker="$1" want="$2" wantv="$3" label="$4" rev="${5:-codex}" rc tmo="${REVIEW_TIMEOUT:-1500}"
+  [ "$marker" = MARK_DOUBLE_TIMEOUT ] && tmo=0.05
   reset_fake
-  g checkout -q main && g checkout -qb "parse-$marker"
-  commit_file "p/$marker.txt" "$marker" "case $marker"
-  review >/dev/null 2>&1; rc=$?
+  g checkout -q main && g checkout -qb "parse-$rev-$marker"
+  commit_file "p/$marker.txt" "$(printf 'line %s\n' $(seq 1 20))
+$marker" "case $marker"
+  [ "$rev" = codex ] || stamp_writer codex 1 "parse-$rev-$marker"
+  REVIEW_TIMEOUT="$tmo" review --reviewer "$rev" >/dev/null 2>&1; rc=$?
   check "$label (exit $rc, verdict $(field verdict))" test "$rc" = "$want" -a "$(field verdict)" = "$wantv"
 }
-parse_case MARK_BOLD 0 clean "markdown-emphasised verdict line is accepted"
+parse_case MARK_BOLD 0 clean "markdown-emphasised READ/REPOSITORY/VERDICT lines are accepted"
 parse_case MARK_TRAILING 5 blocked "text after the verdict line is not a verdict"
 parse_case MARK_NOVERDICT 5 blocked "a reply with no verdict line is blocked, not clean"
 parse_case MARK_ERROR 5 blocked "a reviewer that exits nonzero is blocked"
 parse_case MARK_REPOSITORY_UNREADABLE 5 blocked "an unreadable repository is blocked, never clean"
 parse_case MARK_SANDBOX_FAILURE 5 blocked "a sandbox failure text overrides VERDICT: clean"
 parse_case MARK_NO_REPOSITORY 5 blocked "a clean verdict without a REPOSITORY line is blocked"
+parse_case MARK_REPO_WRONG_POS 5 blocked "REPOSITORY: readable not on the penultimate non-empty line is blocked"
+parse_case MARK_NO_READ 5 blocked "a clean verdict without any READ: <path> line is blocked"
+parse_case MARK_BAD_READ 5 blocked "a READ: <path> naming a file not in the reviewed commit is blocked"
+parse_case MARK_READ_DIR 5 blocked "a READ: <path> naming a directory instead of a file is blocked"
+parse_case MARK_READ_ABS 5 blocked "a READ: <path> with an absolute path is blocked"
+parse_case MARK_MUTATE_TREE 5 blocked "a reviewer that mutates the read-only archived tree is blocked"
 parse_case MARK_MENTION_FILTER 0 clean "a real review that mentions content filters is not a refusal"
+# Double timeout under bounded_run (exit 124) must block immediately without halving retry:
+# bounded_run makes its 2 standard attempts, and review.sh makes 0 neutral halving-retry calls.
+parse_case MARK_DOUBLE_TIMEOUT 5 blocked "a bounded_run double-timeout blocks immediately without halving retry"
+check "double-timeout made only bounded_run's 2 standard attempts and 0 neutral halving retries" \
+  bash -c "[ '$(calls)' -eq 2 ] && ! grep -q ' neutral ' '$FAKE_LOG/calls'"
+# Kimi and agy negative controls across the shared reviewer-output contract.
+for r in kimi agy; do
+  parse_case MARK_REPOSITORY_UNREADABLE 5 blocked "$r: REPOSITORY: unreadable is blocked" "$r"
+  parse_case MARK_NO_REPOSITORY 5 blocked "$r: missing REPOSITORY: readable is blocked" "$r"
+  parse_case MARK_REPO_WRONG_POS 5 blocked "$r: non-penultimate REPOSITORY: readable is blocked" "$r"
+  parse_case MARK_NO_READ 5 blocked "$r: missing READ: <path> is blocked" "$r"
+  parse_case MARK_BAD_READ 5 blocked "$r: nonexistent READ: <path> is blocked" "$r"
+  parse_case MARK_ERROR 5 blocked "$r: nonzero exit is blocked" "$r"
+  parse_case MARK_DOUBLE_TIMEOUT 5 blocked "$r: double-timeout is blocked in 1 call" "$r"
+done
 
 echo "=== content-filter refusal: one neutral retry on smaller pieces ==="
 reset_fake
@@ -438,9 +655,10 @@ echo "=== pre-push hook: a review-notes push runs no gates ==="
 HOOK="$ROOT_DIR/.githooks/pre-push"
 Z=0000000000000000000000000000000000000000
 NOTES_SHA="$(g rev-parse refs/notes/concrete-review)"
-hook_out="$(cd "$W" && printf 'refs/notes/concrete-review %s refs/notes/concrete-review %s\nrefs/notes/concrete-review-findings %s refs/notes/concrete-review-findings %s\n' \
-  "$NOTES_SHA" "$Z" "$(g rev-parse refs/notes/concrete-review-findings)" "$Z" | bash "$HOOK" 2>&1)"; rc=$?
-check "notes-only push: hook exits 0 (got $rc)" test "$rc" -eq 0
+WRITER_NOTES_SHA="$(g rev-parse refs/notes/concrete-writer)"
+hook_out="$(cd "$W" && printf 'refs/notes/concrete-review %s refs/notes/concrete-review %s\nrefs/notes/concrete-review-findings %s refs/notes/concrete-review-findings %s\nrefs/notes/concrete-writer %s refs/notes/concrete-writer %s\n' \
+  "$NOTES_SHA" "$Z" "$(g rev-parse refs/notes/concrete-review-findings)" "$Z" "$WRITER_NOTES_SHA" "$Z" | bash "$HOOK" 2>&1)"; rc=$?
+check "notes-only push (review, findings, writer): hook exits 0 (got $rc)" test "$rc" -eq 0
 check "notes-only push: hook takes the review-notes tier" grep -q "review-notes push" <<<"$hook_out"
 # Owner sign-off refs: only a record (parentless, its subject's 40-hex name, exactly the seven files)
 # takes the notes tier. Anything else takes the full tier, which a linked worktree refuses before it

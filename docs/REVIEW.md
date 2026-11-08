@@ -26,21 +26,26 @@ it the same way every time, and its note is the record the landing train checks.
 ## Usage
 
 ```sh
-scripts/review/review.sh --writer codex|kimi|agy|claude [--reviewer codex|kimi|agy] [--base <ref>] [--head <ref>] [--max-rounds 5] [--pieces auto|N] [--prompt-extra "..."]
+scripts/review/review.sh [--writer codex|kimi|agy|claude[,...]] [--reviewer codex|kimi|agy] [--base <ref>] [--head <ref>] [--max-rounds 5] [--pieces auto|N] [--prompt-extra "..."]
 scripts/review/verify.sh [--fetch] [--required-base <ref>] <commit>
 ```
 
 One invocation runs **one round** on `HEAD`. Commit fixes between rounds; the
 uncommitted tree is never reviewed, and the script warns when it is dirty.
-The writer is mandatory and the reviewer defaults to Codex. The writer never
-reviews their own work: reviewer equal to writer is a usage error (exit 2). In
-particular, a Codex-written branch must be reviewed by Kimi or agy, never Codex.
+Writer provenance is derived from the commits in `base..HEAD` by
+`scripts/review/writer_provenance.py` (`refs/notes/concrete-writer` plus commit
+stamps; unstamped human or pre-harness commits are explicitly attributed to
+`claude`). `--writer` is optional and, when passed, checked as an assertion that
+must match the derived writer set. `--reviewer` defaults to Codex. The writer
+never reviews their own work: reviewer equal to any writer of `base..HEAD` is a
+usage error (exit 2). In particular, a branch with any Codex-written commit must
+be reviewed by Kimi or agy, never Codex.
 
 | option | meaning |
 | --- | --- |
-| `--writer <model>` | required: who wrote the branch, `codex`, `kimi`, `agy` or `claude`. |
-| `--reviewer <model>` | independent reviewer: `codex` (default), `kimi` or `agy`; it must differ from the writer. |
-| `--base <ref>` | base of round 1. Default: the merge-base of `HEAD` with `origin/main`. |
+| `--writer <model[,...]>` | optional assertion: who wrote the branch (`codex`, `kimi`, `agy`, `claude`, or a comma-separated list across rounds); must match derived provenance. |
+| `--reviewer <model>` | independent reviewer: `codex` (default), `kimi` or `agy`; it must not be any writer of `base..HEAD`. |
+| `--base <ref>` | base of round 1. Default: the merge-base of `HEAD` with `origin/main`; must be an ancestor of `HEAD`. |
 | `--head <ref>` | the commit the caller means to review; it must be the checkout's HEAD, or nothing runs (exit 2). `train.sh` and `ready.sh` pass it. |
 | `--max-rounds N` | the round cap (default 5). |
 | `--pieces auto\|N` | `auto` splits at 60000 bytes per piece (`REVIEW_PIECE_BYTES`); `N` aims for N pieces. File groups are never merged, so a diff touching more groups than N still gets one piece per group. |
@@ -59,10 +64,14 @@ particular, a Codex-written branch must be reviewed by Kimi or agy, never Codex.
 ## What each round reviews
 
 - **Round 1** reviews the full diff from the base to `HEAD`.
-- **Round N > 1** reviews only the delta since the last reviewed commit. The
+- **Round N > 1** reviews only the delta since the last reviewed commit whose
+  note is well-formed, carries valid independent writer provenance, and whose
+  recorded `base` is an ancestor-or-equal of the current round's `BASE_SHA` (so a
+  delta review never widens base coverage across an unreviewed `A..B` range). The
   script finds that commit by walking the branch (`base..HEAD`) for the newest
-  note under `refs/notes/concrete-review`. The prompt includes the previous
-  round's findings and asks the reviewer to list each one that is still open.
+  qualifying note under `refs/notes/concrete-review`. The prompt includes the
+  previous round's findings and asks the reviewer to list each one that is still
+  open.
 - A `blocked` round does not count as having reviewed its diff, so the next
   round starts from the last `clean` or `findings` round, or from the base.
   Running again on a blocked `HEAD` is allowed and counts as a round. A round
@@ -98,28 +107,78 @@ reviewer there, never in the live clone:
   That permission bypass exists only inside this disposable archive.
 
 The reviewer can read the complete tree at the reviewed commit but has no
-checkout, refs or notes of its own. The diff piece is included in the prompt and
-every reviewer's stdin is closed. Each attempt is bounded by `bounded_run` with
-`REVIEW_TIMEOUT` (default 1500 seconds, with one longer retry).
-`GIT_OPTIONAL_LOCKS=0` remains set so a reviewer command cannot leave an
-`index.lock` behind (bug 209). The same verdict, repository-evidence and
-failure-text rules apply to all three reviewers.
+checkout, refs or notes of its own. The extracted archive is marked read-only
+(`chmod -R a-w`) and hashed before and after every reviewer call; if a reviewer
+modifies the archived tree, the piece is `blocked` and the archive is restored
+from `HEAD` before the next piece runs. The diff piece is included in the prompt
+and every reviewer's stdin is closed. Each attempt is bounded by `bounded_run`
+with `REVIEW_TIMEOUT` (default 1500 seconds, with one longer retry). A double
+timeout under `bounded_run` (exit 124 or 137) is recorded as `blocked` at once
+without a halving retry. `GIT_OPTIONAL_LOCKS=0` remains set so a reviewer
+command cannot leave an `index.lock` behind (bug 209).
 
-The reply's penultimate line must be exactly `REPOSITORY: readable` or
-`REPOSITORY: unreadable`, and its last line exactly `VERDICT: clean` or
-`VERDICT: findings`. Markdown emphasis around them is tolerated; anything after
-the verdict is not. `readable` means the reviewer successfully opened repository
-files for context. A verdict without exactly one readable marker is `blocked`,
-never clean. Known repository-access failures (a sandbox that could not start or
-initialize, `bwrap: Operation not permitted`, failed repository reads, or an
-explicit unreadable marker) are `blocked` even when the reply says clean.
+### Shared reviewer-output contract (`scripts/review/output_contract.py`)
+
+Every automated reviewer output — branch reviews (`scripts/review/review.sh`),
+owner sign-off reviewer outputs (`scripts/land/signoff.sh`), and review-evidence
+records — is validated by `scripts/review/output_contract.py`:
+
+1. At least one `READ: <path>` line naming a clean relative file path that
+   exists as a file (blob) in the reviewed commit's tree must appear before the
+   final two lines.
+2. The penultimate non-empty line must be `REPOSITORY: readable`. Any
+   `REPOSITORY: unreadable` line anywhere in the output, any `REPOSITORY:`
+   directive before the penultimate line, or any known sandbox/repository
+   failure text (`sandbox could not start`, `bwrap: Operation not permitted`,
+   `repository reads failed`, `could not read the repository`,
+   `repository verification failed`) immediately marks the output `blocked`.
+3. The last non-empty line must be `VERDICT: <value>` (where `<value>` is
+   `clean` or `findings` for `review.sh`, and `ACCEPT` or `REJECT` for
+   `signoff.sh`), with nothing after it. Markdown emphasis around directive
+   lines is tolerated; trailing text after the verdict is not.
 
 **Refusals.** A piece that comes back refused, with no verdict line, or with a
-reviewer error is retried **once**: the piece is halved and each half is sent
-with a more neutral prompt that leaves out the project framing. If any half
-fails again, the piece is `blocked` and the script moves on. It does not loop.
-Refusal text is matched only when the reply has no verdict line, so a real
-review that discusses content filters still parses.
+non-timeout reviewer error is retried **once**: the piece is halved and each
+half is sent with a more neutral prompt that leaves out the project framing. If
+any half fails again, the piece is `blocked` and the script moves on. It does
+not loop. Refusal text is matched only when the reply has no verdict line, so a
+real review that discusses content filters still parses.
+
+## Writer provenance and the writer log (`scripts/review/writer_provenance.py`)
+
+Writer identity comes from the writer harness, not from a caller flag or a
+commit trailer alone:
+
+- Each harness-written commit is stamped with author
+  `<Model> (writer) <model@writers.concrete>` (while the committer remains the
+  project owner's identity), a `Writer: <model>` trailer, and for `agy` an
+  `Agy-Diff-SHA256: <64-hex>` trailer recording the sha256 of the diff
+  transported from its throwaway archive copy.
+- Each stamped commit carries a matching writer-log entry under
+  `refs/notes/concrete-writer` (and exportable as a self-contained multi-stanza
+  git blob via `writer_provenance.py export-log --write-blob` so review-evidence
+  records can embed it unchanged):
+  ```
+  model: codex|kimi|agy|claude
+  round: <positive integer>
+  branch: <branch-name>
+  brief-sha256: <64-hex>
+  start-sha: <40-hex>
+  end-sha: <40-hex>
+  commit: <40-hex>
+  agy-diff-sha256: <64-hex>        # present iff model == agy
+  ```
+- `scripts/review/writer_provenance.py` derives and cross-checks the ordered
+  unique writer set of `base..HEAD`. Any commit carrying a partial or mismatched
+  stamp (such as a `Writer:` trailer with no matching writer-log entry, a writer
+  author without trailer/log, or a mismatched `agy-diff-sha256`) is refused.
+- Unstamped non-merge commits (human or pre-harness commits with no writer
+  author, no writer trailer, and no writer-log entry) have an explicit,
+  documented treatment: they are attributed to `claude` and never silently
+  treated as written by nobody.
+- A branch written by multiple models across rounds records all of them in order
+  (for example `writer: codex,agy` or `writer: claude,codex`); the reviewer must
+  be none of them.
 
 ## Permanent owner rule
 
@@ -159,7 +218,7 @@ After each round the script writes this note on `HEAD` under
 verdict: clean|findings|blocked
 rounds: N
 reviewer: codex|kimi|agy
-writer: codex|kimi|agy|claude
+writer: codex|kimi|agy|claude[,...]
 utc: 2026-10-22T14:03:11Z
 base: <40-hex sha>
 pieces: K
@@ -167,14 +226,35 @@ repository: readable             # clean notes only
 ```
 
 **The format is an interface.** `verify.sh` parses it, and the train's review
-leg reads it through `verify.sh`. The original six common keys remain mandatory;
-new notes add `writer`. A missing writer makes a note legacy: it stays readable
-for round counting but is not clean provenance. Any repeated or unknown key is
-malformed. Keys are matched by name, not position. A clean note must carry
-`repository: readable` and a valid writer different from its reviewer; legacy
-and self-reviewed clean notes exit 1. Running `review.sh` on such a `HEAD`
+leg, `ready.sh`, and `notes.sh ready` read it through `verify.sh`. The original
+six common keys remain mandatory; new notes add `writer`. A missing writer makes
+a note legacy: it stays readable for round counting (`verify.sh` exits 1, not 2)
+but is not clean provenance. Any repeated or unknown key is malformed (exit 2).
+Keys are matched by name, not position. A clean note must carry
+`repository: readable`, a `base` that is an ancestor-or-equal of the reviewed
+commit, and a `writer` list that matches `writer_provenance.py` over `base..HEAD`
+and excludes `reviewer`; legacy, self-reviewed, provenance-mismatched and
+non-ancestor-base clean notes exit 1. Running `review.sh` on such a `HEAD`
 performs a new round rather than short-circuiting. Change the format only
 together with `verify.sh`.
+
+### Schema transition
+
+1. **Bootstrap of `wip/review-access`:** While `main` still carries the 6-key
+   `verify.sh` (`verdict`, `rounds`, `reviewer`, `utc`, `base`, `pieces`),
+   `wip/review-access` itself is reviewed on `concrete-ci-2` with full
+   repository access and lands on a 6-key clean note written by `main`'s
+   `review.sh` (which `main`'s `verify.sh` accepts).
+2. **After `wip/review-access` lands on `main`:** `main`'s `verify.sh` is the
+   new verifier. Every pre-existing 6-key clean note (lacking
+   `repository: readable` and `writer:`) and any self-reviewed clean note stops
+   qualifying as clean provenance (`verify.sh` exits 1, while still counting its
+   rounds for `review.sh` and `signoff.sh`).
+3. **Re-reviewing an open branch:** On any open branch whose head carries a
+   legacy 6-key clean note, run `scripts/review/review.sh [--reviewer <model>]`
+   at the branch head; `review.sh` treats the legacy note as `legacy-clean`,
+   increments the round counter, reviews the full `base..HEAD` diff in the
+   read-only archive, and writes a new 8-key note.
 
 The `writer:` key and its `codex|kimi|agy|claude` vocabulary deliberately match
 the key owner sign-off records use, so all provenance names the branch writer in
@@ -203,8 +283,10 @@ fetches and merges the remote notes before each round, so it counts rounds that
 were run elsewhere.
 
 The pre-push hook (`.githooks/pre-push`) runs no gates for a push that updates
-only these two notes refs: a notes commit holds one blob per annotated commit and
-no source tree. A push that also carries a branch takes that branch's tier.
+only the review and writer notes refs (`refs/notes/concrete-review`,
+`refs/notes/concrete-review-findings`, `refs/notes/concrete-writer`): a notes
+commit holds one blob per annotated commit and no source tree. A push that also
+carries a branch takes that branch's tier.
 Until this hook reaches `main`, a hook installed from an older `main` still runs
 the gates on a note push, and the push fails outside `nix develop`.
 
@@ -224,8 +306,10 @@ recorded, from the owner's own words only, with `scripts/land/signoff.sh record 
 --rounds-at <the review.sh-noted commit> --date --quote`, plus `--codex-request <request> --codex
 <output>` and the corresponding kimi and agy options. For each reviewer `r`, the recorder stores the
 verbatim request as `r-request.txt` after prepending `reviewed: <sha>`, and the output separately as
-`r.txt`. The request body must name that commit by an unambiguous prefix, and only the output's last
-verdict line counts; it must be `VERDICT: ACCEPT`. Recording refuses a record that does not qualify.
+`r.txt`. The request body must name that commit by an unambiguous prefix, and the output must pass
+`scripts/review/output_contract.py` (at least one valid `READ: <path>` from `<sha>`'s tree,
+`REPOSITORY: readable` as the penultimate non-empty line, and `VERDICT: ACCEPT` as the last
+non-empty line). Recording refuses a record that does not qualify.
 Push the resulting `refs/owner-signoff/<sha>` to both remotes. The landing train accepts it as that
 commit's review provenance ([LANDING.md](LANDING.md)); it approves no other commit.
 

@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # R-0544 — one review procedure for every agent. See docs/REVIEW.md.
 #
-#   scripts/review/review.sh --writer codex|kimi|agy|claude [--reviewer codex|kimi|agy]
+#   scripts/review/review.sh [--writer codex|kimi|agy|claude[,...]] [--reviewer codex|kimi|agy]
 #                            [--base <ref>] [--head <ref>] [--max-rounds 5]
 #                            [--pieces auto|N] [--prompt-extra "..."]
 #
-# --writer is required and names who wrote the branch; --reviewer defaults to codex. The reviewer
-# must differ from the writer: nobody reviews their own work.
+# Writer provenance is derived from the commits in base..HEAD (via scripts/review/writer_provenance.py
+# and refs/notes/concrete-writer; unstamped human/pre-harness commits are attributed to claude).
+# --writer is optional: when supplied, it is checked as an assertion against the derived writer set.
+# --reviewer defaults to codex and must not be any writer of base..HEAD: nobody reviews their own work.
 #
 # --head names the commit the caller means to review (train.sh and ready.sh pass it); it must be
 # the checkout's HEAD, or nothing runs (exit 2): the review always reads HEAD's tree.
@@ -61,7 +63,9 @@ PIECE_BYTES="${REVIEW_PIECE_BYTES:-60000}"
 TIMEOUT="${REVIEW_TIMEOUT:-1500}"
 NOTES_REF="refs/notes/concrete-review"
 FINDINGS_REF="refs/notes/concrete-review-findings"
+WRITER_NOTES_REF="refs/notes/concrete-writer"
 REVIEWER="codex"
+ASSERT_WRITER=""
 WRITER=""
 
 BASE=""
@@ -72,6 +76,17 @@ EXTRA=""
 usage() { awk 'NR > 1 { if (!/^#/) exit; sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}"; }  # the header, whatever its length
 die() { echo "review: $*" >&2; exit 2; }
 
+valid_writer_csv() {
+  [[ "$1" =~ ^(codex|kimi|agy|claude)(,(codex|kimi|agy|claude))*$ ]] || return 1
+  local w seen=","
+  local IFS=,
+  for w in $1; do
+    case "$seen" in *",$w,"*) return 1 ;; esac
+    seen="$seen$w,"
+  done
+  return 0
+}
+
 while [ $# -gt 0 ]; do
   case "$1" in
     --base) [ $# -ge 2 ] || die "--base needs a ref"; BASE="$2"; shift 2 ;;
@@ -80,14 +95,18 @@ while [ $# -gt 0 ]; do
     --pieces) [ $# -ge 2 ] || die "--pieces needs auto or a number"; PIECES="$2"; shift 2 ;;
     --prompt-extra) [ $# -ge 2 ] || die "--prompt-extra needs text"; EXTRA="$2"; shift 2 ;;
     --reviewer) [ $# -ge 2 ] || die "--reviewer needs codex, kimi or agy"; REVIEWER="$2"; shift 2 ;;
-    --writer) [ $# -ge 2 ] || die "--writer needs codex, kimi, agy or claude"; WRITER="$2"; shift 2 ;;
+    --writer) [ $# -ge 2 ] || die "--writer needs codex, kimi, agy or claude"; ASSERT_WRITER="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) die "unknown argument: $1 (see --help)" ;;
   esac
 done
 case "$REVIEWER" in codex|kimi|agy) ;; *) die "--reviewer must be codex, kimi or agy" ;; esac
-case "$WRITER" in codex|kimi|agy|claude) ;; "") die "--writer is required: name who wrote the branch (codex, kimi, agy or claude)" ;; *) die "--writer must be codex, kimi, agy or claude" ;; esac
-[ "$REVIEWER" != "$WRITER" ] || die "reviewer $REVIEWER cannot review its own work (writer $WRITER)"
+if [ -n "$ASSERT_WRITER" ]; then
+  valid_writer_csv "$ASSERT_WRITER" || die "--writer must be codex, kimi, agy or claude (or comma-separated unique models)"
+  case ",$ASSERT_WRITER," in
+    *,"$REVIEWER",*) die "reviewer $REVIEWER cannot review its own work (writer $ASSERT_WRITER)" ;;
+  esac
+fi
 [[ "$MAX_ROUNDS" =~ ^[1-9][0-9]*$ ]] || die "--max-rounds must be a positive integer"
 [[ "$PIECES" == auto || "$PIECES" =~ ^[1-9][0-9]*$ ]] || die "--pieces must be auto or a positive integer"
 if [ -n "${WANT_HEAD:-}" ]; then
@@ -101,7 +120,11 @@ case "$REVIEWER" in codex) REVIEWER_BIN="$CODEX_BIN" ;; kimi) REVIEWER_BIN="$KIM
 command -v "$REVIEWER_BIN" >/dev/null 2>&1 || die "reviewer binary not found: $REVIEWER_BIN"
 
 WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
+cleanup() {
+  chmod -R u+w "$WORK" 2>/dev/null || true
+  rm -rf "$WORK"
+}
+trap cleanup EXIT
 BOUNDED_PARENT="$WORK" source "$SCRIPT_DIR/../checks/lib/bounded.sh" || exit 2
 sha256_file() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
 
@@ -111,7 +134,7 @@ sha256_file() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | c
 sync_notes() {
   [ "$PUSH" = 1 ] || return 0
   local ref tmp
-  for ref in "$NOTES_REF" "$FINDINGS_REF"; do
+  for ref in "$NOTES_REF" "$FINDINGS_REF" "$WRITER_NOTES_REF"; do
     tmp="refs/notes/review-sync-${ref##*/}"
     if git fetch -q "$REMOTE" "+$ref:$tmp" 2>/dev/null; then
       if git show-ref -q --verify "$ref"; then
@@ -125,11 +148,12 @@ sync_notes() {
   done
 }
 
-# Push both notes refs; on a non-fast-forward, fetch + merge and retry.
+# Push the notes refs; on a non-fast-forward, fetch + merge and retry.
 push_notes() {
   [ "$PUSH" = 1 ] || return 0
   local attempt refs=("$NOTES_REF")
   git show-ref -q --verify "$FINDINGS_REF" && refs+=("$FINDINGS_REF")
+  git show-ref -q --verify "$WRITER_NOTES_REF" && refs+=("$WRITER_NOTES_REF")
   for attempt in 1 2 3; do
     if git push -q "$REMOTE" "${refs[@]}" 2>"$WORK/push.err"; then
       return 0
@@ -175,7 +199,16 @@ if [ -z "$BASE" ]; then
   BASE_SHA="$(git merge-base HEAD "$MAIN_REF")" || die "no merge-base with $MAIN_REF"
 else
   BASE_SHA="$(git rev-parse -q --verify "$BASE^{commit}")" || die "bad --base: $BASE"
+  git merge-base --is-ancestor "$BASE_SHA" "$HEAD_SHA" 2>/dev/null \
+    || die "--base $BASE ($BASE_SHA) is not an ancestor of HEAD ($HEAD_SHA)"
 fi
+
+if ! WRITER="$(python3 -I "$SCRIPT_DIR/writer_provenance.py" derive --repo "$ROOT" --base "$BASE_SHA" --head "$HEAD_SHA" ${ASSERT_WRITER:+--assert-writer "$ASSERT_WRITER"} 2>"$WORK/prov.err")"; then
+  die "$(cat "$WORK/prov.err")"
+fi
+case ",$WRITER," in
+  *,"$REVIEWER",*) die "reviewer $REVIEWER cannot review its own work (writer $WRITER)" ;;
+esac
 
 if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
   echo "review: warning: uncommitted changes are not reviewed; only HEAD is" >&2
@@ -184,19 +217,29 @@ fi
 # Latest note on the branch (round count), and the latest note whose round
 # actually reviewed its diff (delta start). A `blocked` round reviewed only part
 # of its diff, so it does not advance the delta start. Neither does a legacy clean
-# note without readable-repository and independent-writer evidence.
+# note, a note with invalid writer provenance, or a note whose base does not cover
+# BASE_SHA (never widen base coverage across a delta).
 PREV_SHA="" PREV_ROUNDS=0 PREV_VERDICT="" REVIEWED_SHA="" REVIEWED_ROUNDS=0 REVIEWED_VERDICT=""
 while read -r c; do
   [ -n "$c" ] || continue
   n="$(git notes --ref="$NOTES_REF" show "$c" 2>/dev/null)" || continue
+  vrc=0
+  bash "$SCRIPT_DIR/verify.sh" --required-base "$BASE_SHA" "$c" >/dev/null 2>&1 || vrc=$?
+  [ "$vrc" -ne 2 ] || continue
   v="$(note_field "$n" verdict)"
   r="$(note_field "$n" rounds)"
-  [[ "$r" =~ ^[0-9]+$ ]] || continue
-  if [ "$v" = clean ]; then
-    nr="$(note_field "$n" reviewer)"; nw="$(note_field "$n" writer)"
-    case "$nr" in codex|kimi|agy) ;; *) nr="" ;; esac
-    case "$nw" in codex|kimi|agy|claude) ;; *) nw="" ;; esac
-    if [ "$(note_field "$n" repository)" != readable ] || [ -z "$nr" ] || [ -z "$nw" ] || [ "$nr" = "$nw" ]; then v=legacy-clean; fi
+  nb="$(note_field "$n" base)"
+  nr="$(note_field "$n" reviewer)"
+  nw="$(note_field "$n" writer)"
+  if [ "$v" = clean ] && [ "$vrc" -ne 0 ]; then
+    v=legacy-clean
+  elif [ "$v" = findings ]; then
+    if [ -z "$nw" ] \
+      || ! git merge-base --is-ancestor "$nb" "$BASE_SHA" 2>/dev/null \
+      || ! git merge-base --is-ancestor "$nb" "$c" 2>/dev/null \
+      || ! python3 -I "$SCRIPT_DIR/writer_provenance.py" verify --repo "$ROOT" --base "$nb" --head "$c" --claimed-writer "$nw" --reviewer "$nr" >/dev/null 2>&1; then
+      v=unverified-findings
+    fi
   fi
   if [ -z "$PREV_SHA" ]; then PREV_SHA="$c" PREV_ROUNDS="$r" PREV_VERDICT="$v"; fi
   if [ "$v" = clean ] || [ "$v" = findings ]; then REVIEWED_SHA="$c" REVIEWED_ROUNDS="$r" REVIEWED_VERDICT="$v"; break; fi
@@ -208,7 +251,7 @@ if [ "$PREV_SHA" = "$HEAD_SHA" ]; then
       echo "review: HEAD $HEAD_SHA already reviewed clean (round $PREV_ROUNDS)"
       exit 0
       ;;
-    blocked|legacy-clean) ;;
+    blocked|legacy-clean|unverified-findings) ;;
     *)
       if [ "$PREV_ROUNDS" -ge "$MAX_ROUNDS" ]; then
         cap_message "$PREV_ROUNDS" "$(findings_for "$PREV_SHA" "$PREV_ROUNDS")"
@@ -235,14 +278,42 @@ if [ ! -s "$WORK/full.diff" ]; then
 fi
 
 REVIEW_TREE="$WORK/reviewed-tree"
-mkdir -p "$REVIEW_TREE"
-git archive "$HEAD_SHA" | tar -x -C "$REVIEW_TREE"
+extract_review_tree() {
+  chmod -R u+w "$REVIEW_TREE" 2>/dev/null || true
+  rm -rf "$REVIEW_TREE"
+  mkdir -p "$REVIEW_TREE"
+  git archive "$HEAD_SHA" | tar -x -C "$REVIEW_TREE"
+  chmod -R a-w "$REVIEW_TREE"
+}
+snapshot_review_tree() {
+  python3 -I - "$REVIEW_TREE" <<'PY'
+import hashlib, os, sys
+root = sys.argv[1]
+for dirpath, dirnames, filenames in os.walk(root):
+    dirnames.sort()
+    filenames.sort()
+    rel_d = os.path.relpath(dirpath, root)
+    print(f"D\t{rel_d}\t{os.stat(dirpath, follow_symlinks=False).st_mode & 0o777}")
+    for fn in filenames:
+        p = os.path.join(dirpath, fn)
+        rel = os.path.relpath(p, root)
+        st = os.stat(p, follow_symlinks=False)
+        if os.path.islink(p):
+            h = os.readlink(p)
+        else:
+            with open(p, "rb") as f:
+                h = hashlib.sha256(f.read()).hexdigest()
+        print(f"F\t{rel}\t{st.st_mode & 0o777}\t{h}")
+PY
+}
+extract_review_tree
+snapshot_review_tree >"$WORK/tree.manifest"
 
 # Open findings to carry forward: those of the latest round, and, when that
 # round was blocked, also those of the last fully reviewed round (the blocked
 # round may not have seen the code they are about).
 PREV_FINDINGS=""
-if [ -n "$PREV_SHA" ] && { [ "$PREV_VERDICT" = findings ] || [ "$PREV_VERDICT" = blocked ]; }; then
+if [ -n "$PREV_SHA" ] && { [ "$PREV_VERDICT" = findings ] || [ "$PREV_VERDICT" = unverified-findings ] || [ "$PREV_VERDICT" = blocked ]; }; then
   PREV_FINDINGS="$(findings_for "$PREV_SHA" "$PREV_ROUNDS")"
 fi
 if [ "$REVIEWED_VERDICT" = findings ] && [ "$REVIEWED_SHA" != "$PREV_SHA" ]; then
@@ -271,8 +342,9 @@ fi
 SCOPE_ROUND1="The patch below is the complete change of a branch against its base commit $BASE_SHA."
 SCOPE_DELTA="The patch below is only the change since commit $FROM, which was reviewed in round $REVIEWED_ROUNDS. Earlier rounds covered the rest of the branch."
 VERDICT_RULE='For each finding write one bullet: `- path:line: what is wrong and why`.
-Your penultimate line must be exactly `REPOSITORY: readable` or `REPOSITORY: unreadable`. Use readable only after you have successfully opened repository files for context; if the sandbox or any repository read failed, use unreadable.
-The last line of your reply must be exactly one of these two lines, with nothing after it:
+For every repository file you opened for context, write a line `READ: <path>` (using its path relative to the repository root; at least one such line is required) before the final two lines.
+Your penultimate non-empty line must be exactly `REPOSITORY: readable` or `REPOSITORY: unreadable`. Use readable only after you have successfully opened repository files for context; if the sandbox or any repository read failed, use unreadable.
+The last non-empty line of your reply must be exactly one of these two lines, with nothing after it:
 VERDICT: clean
 VERDICT: findings
 Use `VERDICT: findings` when you report any finding, including an earlier finding that is still open.'
@@ -314,11 +386,6 @@ EOF
   printf '\n%s\n' "$VERDICT_RULE"
 }
 
-# A refusal is recognized only when there is no verdict line: a real review that
-# merely discusses content filters (as a review of this tool does) still parses.
-REFUSAL_RE="(I can.?t|I cannot|I won.?t|I.?m (not able|unable)|unable to) (help|assist|comply|review|continue|provide)|cyber ?security|content (filter|policy)|usage polic|safety (system|filter|policy)|flagged (as|for)|potentially (harmful|malicious)|invalid_prompt|violat(es|ion of) .*polic"
-REPOSITORY_FAILURE_RE='sandbox (could not|failed to) (start|initialize)|bwrap: operation not permitted|repository reads failed|could not read the repository|repository verification failed'
-
 RAW_DIR="$ROOT/.review"
 mkdir -p "$RAW_DIR"
 RAW="$RAW_DIR/$HEAD_SHA-$ROUND.md"
@@ -330,7 +397,7 @@ RUN_N=0
 # run_one <prompt-kind> <piece-file> <label> <group> <paths>; sets LAST_RESULT to
 # clean|findings|blocked|refused|noverdict|error and LAST_BODY to the reviewer's message.
 run_one() {
-  local kind="$1" piece="$2" label="$3" group="$4" paths="$5" rc=0 msg last repository prompt_arg
+  local kind="$1" piece="$2" label="$3" group="$4" paths="$5" rc=0 msg prompt_arg contract_out reason
   RUN_N=$((RUN_N + 1))
   local out="$WORK/out.$RUN_N.txt" log="$WORK/log.$RUN_N.txt" prompt="$WORK/prompt.$RUN_N.txt"
   LAST_PROMPT="$RAW_DIR/$HEAD_SHA-$ROUND.prompt.$RUN_N.txt"
@@ -361,22 +428,32 @@ run_one() {
   msg="$(cat "$out")"
   [ -n "$msg" ] || [ "$rc" -ne 0 ] || msg="$(cat "$log")"
   LAST_BODY="$msg"
-  last="$(printf '%s\n' "$msg" | sed -e 's/[`*]//g' -e 's/[[:space:]]*$//' | awk 'NF { l = $0 } END { print l }')"
-  repository="$(printf '%s\n' "$msg" | sed -e 's/[`*]//g' -e 's/[[:space:]]*$//' | awk '/^REPOSITORY:/ { print }')"
-  if [ "$repository" = "REPOSITORY: unreadable" ] || { printf '%s\n' "$msg"; cat "$log"; } | has_match -iE "$REPOSITORY_FAILURE_RE"; then
+  snapshot_review_tree >"$WORK/tree.after"
+  if ! cmp -s "$WORK/tree.manifest" "$WORK/tree.after"; then
+    extract_review_tree
     LAST_RESULT=blocked
-  elif [ "$rc" -ne 0 ]; then
-    LAST_RESULT=error
+    LAST_BODY="${msg:+$msg
+}(reviewer modified the read-only archived review tree; tree restored)"
+    return 0
+  fi
+  local incomplete_flag=()
+  if bounded_is_incomplete "$rc"; then
+    incomplete_flag=(--incomplete)
+  fi
+  printf '%s' "$msg" >"$WORK/msg.$RUN_N.txt"
+  contract_out="$(python3 -I "$SCRIPT_DIR/output_contract.py" \
+    --repo "$ROOT" --commit "$HEAD_SHA" --verdicts clean,findings \
+    --rc "$rc" "${incomplete_flag[@]}" --log "$log" "$WORK/msg.$RUN_N.txt")"
+  LAST_RESULT="$(note_field "$contract_out" status)"
+  reason="$(note_field "$contract_out" reason)"
+  if [ "$LAST_RESULT" = error ]; then
     LAST_BODY="$msg
 (reviewer exited $rc; last lines of its log:)
 $(tail -n 20 "$log")"
-  elif [ "$last" = "VERDICT: clean" ] || [ "$last" = "VERDICT: findings" ]; then
-    if [ "$repository" != "REPOSITORY: readable" ]; then LAST_RESULT=blocked
-    elif [ "$last" = "VERDICT: clean" ]; then LAST_RESULT=clean
-    else LAST_RESULT=findings
-    fi
-  elif { printf '%s\n' "$msg"; cat "$log"; } | has_match -iE "$REFUSAL_RE"; then LAST_RESULT=refused
-  else LAST_RESULT=noverdict
+  elif [ "$LAST_RESULT" = blocked ] && bounded_is_incomplete "$rc"; then
+    LAST_BODY="$msg
+($reason; last lines of its log:)
+$(tail -n 20 "$log")"
   fi
 }
 
@@ -429,7 +506,7 @@ $LAST_BODY" ;;
       esac
     done <"$half_dir/manifest.tsv"
   fi
-  stripped="$(printf '%s\n' "$body" | grep -vE '^[`*[:space:]]*(VERDICT|REPOSITORY):' || true)"
+  stripped="$(printf '%s\n' "$body" | python3 -I "$SCRIPT_DIR/output_contract.py" --strip)"
   case "$result" in
     findings)
       N_FINDINGS=$((N_FINDINGS + 1))

@@ -1192,9 +1192,10 @@ CONCRETE_SKIP_GATES=1 git push -q origin ":$R/$sha" 2>/dev/null || true
 # The member's own review.sh note: the rounds it used (any verdict), which the cap is judged against.
 bash "$(dirname "$0")/put-review" "$sha" "findings@$rounds"
 d="$(mktemp -d)"
+first_path="$(git ls-tree -r --name-only "$sha" | head -1)"
 for r in codex kimi agy; do
   printf 'review of %s by %s\n' "$sha" "$r" > "$d/$r-request"
-  printf '  VERDICT: ACCEPT\n' > "$d/$r"
+  printf 'READ: %s\nREPOSITORY: readable\n  VERDICT: ACCEPT\n' "$first_path" > "$d/$r"
 done
 bash "$SIGNOFF" record "$sha" --base "$base" --rounds-at "$sha" --date 2026-11-08 --quote "sign off ${sha:0:8}, yes" \
   --codex-request "$d/codex-request" --codex "$d/codex" \
@@ -1241,7 +1242,22 @@ case "$mode" in
     variant "s/^request-agy: .*/request-agy: agy-request.txt $(sha256sum < "$d/agy-q" | cut -d' ' -f1)/;s/^verdict-agy: .*/verdict-agy: agy.txt $(sha256sum < "$d/agy-o" | cut -d' ' -f1)/" \
       "set:agy-request.txt:$(git hash-object -w "$d/agy-q")" "set:agy.txt:$(git hash-object -w "$d/agy-o")" ;;
   noagy) variant "/^verdict-agy:/d" "drop:agy.txt" ;;
-  reject) printf 'VERDICT: REJECT\n' > "$d/agy-r"
+  reject) printf 'READ: %s\nREPOSITORY: readable\nVERDICT: REJECT\n' "$first_path" > "$d/agy-r"
+    variant "s/^verdict-agy: .*/verdict-agy: agy.txt $(sha256sum < "$d/agy-r" | cut -d' ' -f1)/" \
+      "set:agy.txt:$(git hash-object -w "$d/agy-r")" ;;
+  noread) printf 'REPOSITORY: readable\nVERDICT: ACCEPT\n' > "$d/agy-r"
+    variant "s/^verdict-agy: .*/verdict-agy: agy.txt $(sha256sum < "$d/agy-r" | cut -d' ' -f1)/" \
+      "set:agy.txt:$(git hash-object -w "$d/agy-r")" ;;
+  badread) printf 'READ: does-not-exist-in-commit.txt\nREPOSITORY: readable\nVERDICT: ACCEPT\n' > "$d/agy-r"
+    variant "s/^verdict-agy: .*/verdict-agy: agy.txt $(sha256sum < "$d/agy-r" | cut -d' ' -f1)/" \
+      "set:agy.txt:$(git hash-object -w "$d/agy-r")" ;;
+  norepo) printf 'READ: %s\nVERDICT: ACCEPT\n' "$first_path" > "$d/agy-r"
+    variant "s/^verdict-agy: .*/verdict-agy: agy.txt $(sha256sum < "$d/agy-r" | cut -d' ' -f1)/" \
+      "set:agy.txt:$(git hash-object -w "$d/agy-r")" ;;
+  unreadable) printf 'READ: %s\nREPOSITORY: unreadable\nVERDICT: ACCEPT\n' "$first_path" > "$d/agy-r"
+    variant "s/^verdict-agy: .*/verdict-agy: agy.txt $(sha256sum < "$d/agy-r" | cut -d' ' -f1)/" \
+      "set:agy.txt:$(git hash-object -w "$d/agy-r")" ;;
+  trailing) printf 'READ: %s\nREPOSITORY: readable\nVERDICT: ACCEPT\ntrailing remark\n' "$first_path" > "$d/agy-r"
     variant "s/^verdict-agy: .*/verdict-agy: agy.txt $(sha256sum < "$d/agy-r" | cut -d' ' -f1)/" \
       "set:agy.txt:$(git hash-object -w "$d/agy-r")" ;;
   *) echo "put-signoff: unknown mode $mode" >&2; exit 2 ;;
@@ -1352,6 +1368,11 @@ so_leg "F2: ACCEPT in agy's request but no verdict in its output" requestverdict
 so_leg "a request body that names no commit" unnamedbody refuse "the kimi request body does not name ${R2:0:10}"
 so_leg "a sign-off without agy's verdict" noagy refuse "the record has no agy verdict"
 so_leg "a sign-off whose agy output ends in REJECT" reject refuse "the agy output's last verdict is 'VERDICT:REJECT'"
+so_leg "a sign-off whose agy output has no READ: <path> line" noread refuse "the agy output fails the reviewer-output contract: reviewer output has no 'READ: <path>' line"
+so_leg "a sign-off whose agy output names a nonexistent READ: path" badread refuse "the agy output fails the reviewer-output contract: READ: path 'does-not-exist-in-commit.txt' does not exist"
+so_leg "a sign-off whose agy output omits REPOSITORY: readable" norepo refuse "the agy output fails the reviewer-output contract: penultimate non-empty line is"
+so_leg "a sign-off whose agy output reports REPOSITORY: unreadable" unreadable refuse "the agy output fails the reviewer-output contract: reviewer reported REPOSITORY: unreadable"
+so_leg "a sign-off whose agy output has trailing text after VERDICT: ACCEPT" trailing refuse "the agy output has no verdict"
 so_leg "a sign-off whose quote names no commit" unnamed refuse "the quote does not name ${R2:0:10}"
 so_leg "a member with neither a note nor a sign-off" none refuse "$R2 has no owner sign-off"
 # The cap is the class of the member's diff: docs 2, scripts 3, compiler and spec 5, the highest wins.

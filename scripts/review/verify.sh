@@ -18,7 +18,10 @@
 
 set -euo pipefail
 
-NOTES_REF="refs/notes/concrete-review"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+NOTES_REF="${REVIEW_NOTES_REF:-refs/notes/concrete-review}"
+WRITER_NOTES_REF="${REVIEW_WRITER_NOTES_REF:-refs/notes/concrete-writer}"
+export REVIEW_WRITER_NOTES_REF="$WRITER_NOTES_REF"
 REMOTE="${REVIEW_REMOTE:-origin}"
 FETCH=0
 REQUIRED_BASE=""
@@ -42,6 +45,7 @@ fi
 if [ "$FETCH" = 1 ]; then
   git fetch -q "$REMOTE" "+$NOTES_REF:$NOTES_REF" \
     || { echo "verify: could not fetch $NOTES_REF from $REMOTE" >&2; exit 2; }
+  git fetch -q "$REMOTE" "+$WRITER_NOTES_REF:$WRITER_NOTES_REF" 2>/dev/null || true
 fi
 
 SHA="$(git rev-parse -q --verify "$1^{commit}")" || { echo "verify: not a commit: $1" >&2; exit 2; }
@@ -60,6 +64,16 @@ malformed() {
   printf '%s\n' "$NOTE" | sed 's/^/  /'
   exit 2
 }
+valid_writer_field() {
+  [[ "$1" =~ ^(codex|kimi|agy|claude)(,(codex|kimi|agy|claude))*$ ]] || return 1
+  local w seen=","
+  local IFS=,
+  for w in $1; do
+    case "$seen" in *",$w,"*) return 1 ;; esac
+    seen="$seen$w,"
+  done
+  return 0
+}
 # Plain variables F_<key>, not an associative array: macOS /bin/bash is 3.2.
 SEEN=" "
 while IFS= read -r line; do
@@ -72,7 +86,7 @@ while IFS= read -r line; do
     verdict)      [[ "$v" =~ ^(clean|findings|blocked)$ ]] ;;
     rounds)       [[ "$v" =~ ^[1-9][0-9]*$ ]] ;;
     reviewer)     [[ "$v" =~ ^(codex|kimi|agy)$ ]] ;;
-    writer)       [[ "$v" =~ ^(codex|kimi|agy|claude)$ ]] ;;
+    writer)       valid_writer_field "$v" ;;
     utc)          [[ "$v" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] ;;
     base)         [[ "$v" =~ ^[0-9a-f]{40}$ ]] ;;
     pieces)       [[ "$v" =~ ^[0-9]+$ ]] ;;
@@ -87,6 +101,7 @@ done
 field() { local n="F_${1//-/_}"; printf '%s' "${!n:-}"; }
 VERDICT="$(field verdict)"
 WRITER="$(field writer)"
+REVIEWER="$(field reviewer)"
 if [ "$VERDICT" = clean ]; then
   if [ "$(field repository)" != readable ]; then
     echo "$SHA clean review note is not clean provenance: missing repository: readable"
@@ -96,12 +111,21 @@ if [ "$VERDICT" = clean ]; then
     echo "$SHA clean review note is not clean provenance: missing writer (legacy note)"
     exit 1
   fi
-  if [ "$(field reviewer)" = "$WRITER" ]; then
-    echo "$SHA clean review note is not clean provenance: reviewer $WRITER reviewed its own work"
+  case ",$WRITER," in
+    *,"$REVIEWER",*)
+      echo "$SHA clean review note is not clean provenance: reviewer $REVIEWER reviewed its own work"
+      exit 1 ;;
+  esac
+  if ! git merge-base --is-ancestor "$(field base)" "$SHA" 2>/dev/null; then
+    echo "$SHA clean review note is not clean provenance: base $(field base) is not an ancestor-or-equal of $SHA"
     exit 1
   fi
   if [ -n "$REQUIRED_BASE" ] && ! git merge-base --is-ancestor "$(field base)" "$REQUIRED_BASE" 2>/dev/null; then
     echo "$SHA clean review note is not clean provenance: base $(field base) is not an ancestor-or-equal of required base $REQUIRED_BASE"
+    exit 1
+  fi
+  if ! prov_out="$(python3 -I "$SCRIPT_DIR/writer_provenance.py" verify --base "$(field base)" --head "$SHA" --claimed-writer "$WRITER" --reviewer "$REVIEWER" 2>&1)"; then
+    echo "$SHA clean review note is not clean provenance: ${prov_out//$'\n'/ }"
     exit 1
   fi
 fi

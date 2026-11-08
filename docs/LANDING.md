@@ -98,9 +98,10 @@ verdict; any failing leg fails the check (see [Pipelining](#pipelining)).
   reviewed that commit; `scripts/land/signoff.sh verify --base`, on origin's `refs/owner-signoff/*`). A sign-off approves that
   commit only, so a train with a signed-off member must be exactly the clean merge of its members
   onto its base: one conflict-free merge per member and nothing else. Otherwise
-  the leg runs `LAND_REVIEW_CMD`, else `scripts/review/review.sh`, with `--base --head`; the default
-  also takes `LAND_REVIEW_WRITER`, while a custom command carries its reviewer and writer options.
-  The reviewer must differ from the writer. The leg then requires provenance: a non-zero exit fails,
+  the leg runs `LAND_REVIEW_CMD`, else `scripts/review/review.sh`, with `--base --head`; `review.sh`
+  derives the writer set from `base..head` (and checks `LAND_REVIEW_WRITER` when set), while a custom
+  command carries its reviewer and writer options.
+  The reviewer must not be any writer of the range. The leg then requires provenance: a non-zero exit fails,
   and so does a zero exit that leaves no clean covering note at the head. With no review command,
   `check` fails; it never disables the leg silently. `--no-review` skips the leg explicitly, and
   `land` still requires review provenance. A review that refuses a patch recording an owner decision
@@ -324,12 +325,14 @@ A branch is **ready** when all of the following hold:
 
 | notes ref | lines | writer |
 |---|---|---|
-| `refs/notes/concrete-review` | `verdict: clean\|findings\|blocked`, `rounds: N`, `reviewer: codex\|kimi\|agy`, `writer: codex\|kimi\|agy\|claude`, `utc: ...`, `base: <sha>`, `pieces: N`, plus `repository: readable` on clean | `scripts/review/review.sh` (`scripts/review/verify.sh` reads it) |
+| `refs/notes/concrete-review` | `verdict: clean\|findings\|blocked`, `rounds: N`, `reviewer: codex\|kimi\|agy`, `writer: codex\|kimi\|agy\|claude[,...]`, `utc: ...`, `base: <sha>`, `pieces: N`, plus `repository: readable` on clean | `scripts/review/review.sh` (`scripts/review/verify.sh` validates it) |
+| `refs/notes/concrete-writer` | per-commit writer-log entry (`model`, `round`, `branch`, `brief-sha256`, `start-sha`, `end-sha`, `commit`, plus `agy-diff-sha256` for `agy`) | writer harness / `scripts/review/writer_provenance.py` |
 | `refs/notes/concrete-gates` | `gates: pass\|fail`, `selected: N`, `utc: ...` | `scripts/land/ready.sh` |
 
 One `key: value` per line; `notes.sh get` takes the last when a key repeats, while `verify.sh`
 refuses a repeated key in a review note. `scripts/land/notes.sh` reads and
-writes the notes (`get`, `put`, `ready`). `put` builds each write on its own temporary ref on top
+writes the notes (`get`, `put`, `ready`), and `notes.sh ready` validates the review note through
+`scripts/review/verify.sh --required-base`. `put` builds each write on its own temporary ref on top
 of the remote's notes tip, pushes that commit without force, and retries on a race. Concurrent
 writers therefore never drop each other's notes, including writers that share one clone or its
 worktrees.

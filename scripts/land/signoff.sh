@@ -52,7 +52,9 @@ set -euo pipefail
 PREFIX=refs/owner-signoff
 NOTES_REF=refs/notes/concrete-review
 REVIEWERS="codex kimi agy"
-VERIFY="$(cd "$(dirname "${BASH_SOURCE[0]}")/../review" && pwd)/verify.sh"
+REVIEW_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../review" && pwd)"
+VERIFY="$REVIEW_DIR/verify.sh"
+OUTPUT_CONTRACT="$REVIEW_DIR/output_contract.py"
 
 usage() { awk 'NR > 1 { if (!/^#/) exit; sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}"; }
 die() { echo "signoff: $*" >&2; exit 2; }
@@ -199,9 +201,17 @@ check() {
     [ "$file" = "$r.txt" ] && [[ "$hash" =~ ^[0-9a-f]{64}$ ]] || bad "verdict-$r is '$entry', not '$r.txt <sha256>'"
     got="$(git cat-file blob "$obj:$file" | sha256)"
     [ "$got" = "$hash" ] || bad "the sha256 of $file is $got, not the recorded $hash"
-    verdict="$(git cat-file blob "$obj:$file" | grep -E '^[[:space:]]*VERDICT: (ACCEPT|REJECT)[[:space:]]*$' | tail -1 | tr -d '[:space:]')" || true
-    [ -n "$verdict" ] || bad "the $r output has no verdict"
-    [ "$verdict" = "VERDICT:ACCEPT" ] || bad "the $r output's last verdict is '$verdict', not VERDICT: ACCEPT"
+    local c_out c_status c_reason
+    c_out="$(git cat-file blob "$obj:$file" | python3 -I "$OUTPUT_CONTRACT" --commit "$sha" --verdicts ACCEPT,REJECT)" \
+      || bad "the $r output could not be parsed by output_contract.py"
+    c_status="$(printf '%s\n' "$c_out" | sed -n 's/^status: //p' | head -1)"
+    c_reason="$(printf '%s\n' "$c_out" | sed -n 's/^reason: //p' | head -1)"
+    case "$c_status" in
+      ACCEPT) ;;
+      REJECT) bad "the $r output's last verdict is 'VERDICT:REJECT', not VERDICT: ACCEPT" ;;
+      noverdict|refused) bad "the $r output has no verdict ($c_reason)" ;;
+      *) bad "the $r output fails the reviewer-output contract: $c_reason" ;;
+    esac
   done
   echo "$sha signed off by the owner ($F_date; $cls change, cap $cap reached at ${at:0:10} with $rounds round(s); codex, kimi and agy accepted): \"$F_quote\""
 }

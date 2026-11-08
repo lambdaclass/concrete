@@ -152,9 +152,11 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
 **Review.** The writer never reviews their own work. Every branch gets independent review before it
 is published or brought to the owner; a reviewer's absence is recorded, never assumed
 ([decision](docs/decisions.md#decided-project-review)). When Codex wrote the branch, Kimi or agy
-reviews it, never Codex. Run `scripts/review/review.sh --writer <who-wrote-it> --reviewer
-<codex|kimi|agy>` (`--reviewer` defaults to Codex); reviewer equal to writer is refused. Reviewers run
-with full read access only in the script's disposable archive, agy's permission bypass included,
+reviews it, never Codex. Run `scripts/review/review.sh [--writer <who-wrote-it>] --reviewer
+<codex|kimi|agy>` (`--reviewer` defaults to Codex; writer provenance is derived from the commits and
+`refs/notes/concrete-writer` via `scripts/review/writer_provenance.py`, and `--writer` is an optional
+assertion); reviewer equal to any writer of the branch is refused. Reviewers run
+with full read access only in the script's read-only disposable archive, agy's permission bypass included,
 with stdin closed and the diff in the prompt. Every slice gets that independent review before it
 lands: at most 2 rounds for docs and the roadmap, 3 for scripts and 5 for the compiler and the spec
 (owner, 2026-11-08; `review.sh` enforces 5 until R-0618 lands), the first over the whole diff and
@@ -365,13 +367,15 @@ itself via the bracket, but a ref check is still the better answer.
 
 ### Reviewing a branch
 
-Every agent reviews the same way: `scripts/review/review.sh --writer <model> [--reviewer <model>]`,
-one round per invocation, with the verdict recorded as a git note on the reviewed commit. Writer is
-required and reviewer must differ. The note is shared through `origin`, so rounds run in another
-worktree or by another agent count toward the same cap, and the next round reviews only the delta.
-Codex, Kimi and agy run with full access only in a temporary `git archive` of the reviewed commit,
-never in the live clone, with stdin closed and the diff in the prompt. Every prompt is saved under
-`.review/` with its sha256 in the raw output. A clean note carries `repository: readable` and an
+Every agent reviews the same way: `scripts/review/review.sh [--writer <model>] [--reviewer <model>]`,
+one round per invocation, with the verdict recorded as a git note on the reviewed commit. Writer
+provenance is derived from `base..HEAD` (`scripts/review/writer_provenance.py`, `refs/notes/concrete-writer`),
+and the reviewer must not be any writer of the branch. The note is shared through `origin`, so rounds run in another
+worktree or by another agent count toward the same cap, and the next round reviews only the delta when the prior note's base covers the branch base.
+Codex, Kimi and agy run with full access only in a read-only temporary `git archive` of the reviewed commit,
+never in the live clone, with stdin closed and the diff in the prompt, and their output is validated by
+`scripts/review/output_contract.py` (`READ: <path>`, `REPOSITORY: readable`, `VERDICT: <value>`). Every prompt is saved under
+`.review/` with its sha256 in the raw output. A clean note carries `repository: readable` and a verified
 independent `writer`; legacy and self-reviewed clean notes are not provenance and are re-reviewed.
-The landing train also requires the note's base to cover its recorded base. See
+The landing train, `ready.sh` and `notes.sh ready` require the note's base to cover the branch/train base. See
 [REVIEW.md](docs/REVIEW.md).

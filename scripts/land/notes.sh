@@ -15,18 +15,21 @@
 #   notes.sh get <kind> <sha> [<key>]       print the published note (or one key) of <sha>
 #   notes.sh put <kind> <sha> key=value...  replace <sha>'s note on the remote, keeping every other
 #                                           commit's note (fetch, rewrite, fast-forward push, retry)
-#   notes.sh ready <sha>                    exit 0 iff verdict is clean and gates is pass
+#   notes.sh ready [--base <ref>] <sha>     exit 0 iff verify.sh accepts the review note (covering
+#                                           merge-base(<base>, <sha>)) and gates is pass
 #
-# <kind> is review or gates. LAND_REMOTE (default origin) names the remote; `fork` is refused.
-# Writers: scripts/review/review.sh (review) and scripts/land/ready.sh (gates).
+# <kind> is review, gates or writer. LAND_REMOTE (default origin) names the remote; `fork` is refused.
+# Writers: scripts/review/review.sh (review, writer) and scripts/land/ready.sh (gates).
 # `put` never force-pushes: it rewrites on top of the remote's notes tip and retries on a race.
 set -euo pipefail
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VERIFY="$SELF_DIR/../review/verify.sh"
 REMOTE="${LAND_REMOTE:-origin}"
 DRY="${LAND_NOTES_DRY:-0}"
 die() { echo "notes: $*" >&2; exit 1; }
 [ "$REMOTE" != fork ] || die "refusing the remote named 'fork'"
 
-kind_ok() { case "$1" in review|gates) ;; *) die "kind must be review or gates, not '$1'" ;; esac; }
+kind_ok() { case "$1" in review|gates|writer) ;; *) die "kind must be review, gates or writer, not '$1'" ;; esac; }
 
 fetch_kind() { # kind
   local out
@@ -85,12 +88,28 @@ put_note() { # kind sha key=value...
 
 sub="${1:-}"; [ $# -gt 0 ] && shift
 case "$sub" in
-  fetch) fetch_kind review; fetch_kind gates ;;
+  fetch) fetch_kind review; fetch_kind gates; fetch_kind writer ;;
   get) kind_ok "${1:-}"; [ -n "${2:-}" ] || die "get <kind> <sha> [key]"; get_note "$1" "$(git rev-parse "$2")" "${3:-}" ;;
   put) kind_ok "${1:-}"; [ $# -ge 3 ] || die "put <kind> <sha> key=value..."; put_note "$@" ;;
   ready)
-    [ -n "${1:-}" ] || die "ready <sha>"
+    baseref=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --base) [ $# -ge 2 ] || die "ready: --base needs a ref"; baseref="$2"; shift 2 ;;
+        *) break ;;
+      esac
+    done
+    [ -n "${1:-}" ] || die "ready [--base <ref>] <sha>"
     s="$(git rev-parse "$1")"
-    [ "$(get_note review "$s" verdict)" = clean ] && [ "$(get_note gates "$s" gates)" = pass ] ;;
-  *) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+    req_base=""
+    if [ -n "$baseref" ]; then
+      req_base="$(git merge-base "$baseref" "$s")"
+    elif git rev-parse -q --verify "$REMOTE/main^{commit}" >/dev/null 2>&1; then
+      req_base="$(git merge-base "$REMOTE/main" "$s" 2>/dev/null || true)"
+    fi
+    REVIEW_NOTES_REF="refs/notes/remote/concrete-review" \
+    REVIEW_WRITER_NOTES_REF="refs/notes/remote/concrete-writer" \
+      bash "$VERIFY" ${req_base:+--required-base "$req_base"} "$s" >/dev/null 2>&1 \
+      && [ "$(get_note gates "$s" gates)" = pass ] ;;
+  *) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

@@ -149,6 +149,46 @@ mk wip/rv2 rv2 src/rv2.txt rv2; mark wip/rv2 clean fail
 out="$(cd "$A" && LAND_REVIEW_CMD=true bash "$ROOT_DIR/scripts/land/ready.sh" wip/rv2 2>&1)"; rc=$?
 [ "$rc" = 0 ] && [ "$(cd "$A" && bash "$NOTES" get gates "$(sha_of wip/rv2)" gates)" = pass ] \
   && ok "passing legs publish gates: pass and the head becomes ready" || { no "ready.sh pass: exit $rc"; echo "$out" | sed 's/^/      /'; }
+# Readiness is judged through scripts/review/verify.sh (including --required-base): a legacy clean
+# note, a self-reviewed note, a mismatched writer note, or a note based at an unreviewed intermediate
+# commit B is refused by both notes.sh ready and ready.sh.
+RV2_SHA="$(sha_of wip/rv2)"
+( cd "$A" && bash "$NOTES" put review "$RV2_SHA" verdict=clean rounds=1 reviewer=codex writer=claude base="$BASE" pieces=1 >/dev/null && bash "$NOTES" fetch )
+( cd "$A" && bash "$NOTES" ready "$RV2_SHA" ) && no "notes.sh ready accepted legacy clean note without repository: readable" || ok "notes.sh ready refuses a clean note without repository: readable"
+out="$(cd "$A" && LAND_REVIEW_CMD=true bash "$ROOT_DIR/scripts/land/ready.sh" wip/rv2 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "rejected by verify.sh" && ok "ready.sh refuses a clean note without repository: readable" || { no "ready.sh legacy clean note: exit $rc"; echo "$out" | sed 's/^/      /'; }
+( cd "$A" && bash "$NOTES" put review "$RV2_SHA" verdict=clean rounds=1 reviewer=codex writer=codex base="$BASE" pieces=1 repository=readable >/dev/null && bash "$NOTES" fetch )
+( cd "$A" && bash "$NOTES" ready "$RV2_SHA" ) && no "notes.sh ready accepted self-reviewed clean note" || ok "notes.sh ready refuses a self-reviewed clean note"
+out="$(cd "$A" && LAND_REVIEW_CMD=true bash "$ROOT_DIR/scripts/land/ready.sh" wip/rv2 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "rejected by verify.sh" && ok "ready.sh refuses a self-reviewed clean note" || { no "ready.sh self-reviewed clean note: exit $rc"; echo "$out" | sed 's/^/      /'; }
+( cd "$A" && bash "$NOTES" put review "$RV2_SHA" verdict=clean rounds=1 reviewer=codex writer=agy base="$BASE" pieces=1 repository=readable >/dev/null && bash "$NOTES" fetch )
+( cd "$A" && bash "$NOTES" ready "$RV2_SHA" ) && no "notes.sh ready accepted mismatched writer provenance" || ok "notes.sh ready refuses a note whose writer mismatches commit provenance"
+mk wip/rvcov-b rvcov-b src/b.txt b
+COV_B_SHA="$(sha_of wip/rvcov-b)"
+mk wip/rvcov-c rvcov-c src/c.txt c wip/rvcov-b
+COV_C_SHA="$(sha_of wip/rvcov-c)"
+( cd "$A" && bash "$NOTES" put review "$COV_C_SHA" verdict=clean rounds=1 reviewer=codex writer=claude base="$COV_B_SHA" pieces=1 repository=readable >/dev/null \
+  && bash "$NOTES" put gates "$COV_C_SHA" gates=pass selected=3 >/dev/null && bash "$NOTES" fetch )
+( cd "$A" && bash "$NOTES" ready "$COV_C_SHA" ) && no "notes.sh ready accepted unreviewed intermediate B base" || ok "notes.sh ready refuses a note based at unreviewed intermediate commit B"
+out="$(cd "$A" && LAND_REVIEW_CMD=true bash "$ROOT_DIR/scripts/land/ready.sh" wip/rvcov-c 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "rejected by verify.sh" && ok "ready.sh refuses a note based at unreviewed intermediate commit B" || { no "ready.sh unreviewed B base: exit $rc"; echo "$out" | sed 's/^/      /'; }
+# Default review command in ready.sh succeeds when LAND_REVIEW_CMD and LAND_REVIEW_WRITER are unset.
+cat > "$TMP/fake-codex" <<'EOF'
+#!/usr/bin/env bash
+out=""
+while [ $# -gt 0 ]; do
+  case "$1" in -o) out="$2"; shift 2 ;; *) shift ;; esac
+done
+printf 'READ: required-checks.txt\nREPOSITORY: readable\nVERDICT: clean\n' > "$out"
+EOF
+chmod +x "$TMP/fake-codex"
+( cd "$A" && git checkout -q -B wip/rv-default origin/main \
+  && mkdir -p scripts/checks && cp -R "$ROOT_DIR/scripts/review" scripts/review && cp -R "$ROOT_DIR/scripts/checks/lib" scripts/checks/lib \
+  && git add -A && git commit -qm rv-default && git push -q -f origin HEAD:refs/heads/wip/rv-default )
+out="$(cd "$A" && unset LAND_REVIEW_CMD LAND_REVIEW_WRITER && REVIEW_CODEX_BIN="$TMP/fake-codex" bash "$ROOT_DIR/scripts/land/ready.sh" wip/rv-default 2>&1)"; rc=$?
+[ "$rc" = 0 ] && has "$out" "gates=pass review=clean" \
+  && ok "ready.sh default review command succeeds with LAND_REVIEW_WRITER unset" || { no "ready.sh default review command: exit $rc"; echo "$out" | sed 's/^/      /'; }
+for b in wip/rvcov-b wip/rvcov-c wip/rv-default; do git --git-dir="$TMP/origin.git" update-ref -d "refs/heads/$b" 2>/dev/null || true; done
 
 echo "=== bisect --ci: a red CI run names the culprit, each probe its own run ==="
 mk wip/cired cired CIRED red; mark wip/cired

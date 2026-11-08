@@ -22,6 +22,7 @@ git_sandbox() { # [gitconfig-file]
   [ -n "$vars" ] || { echo "git_sandbox: git listed no repository-local variables" >&2; return 2; }
   for v in $vars; do unset "$v"; done
   if [ $# -ge 1 ]; then
+    unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_AUTHOR_DATE GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL GIT_COMMITTER_DATE
     export GIT_CONFIG_GLOBAL="$1" GIT_CONFIG_NOSYSTEM=1
   fi
   return 0
