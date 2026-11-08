@@ -68,8 +68,12 @@ git fetch -q origin
 sha="\$(git rev-parse --verify "\${BOT_SOURCE_REF:-$REF}^{commit}")"
 snaps="\$HOME/.local/state/concrete-landing-bot/snap"
 snap="\$snaps/\$sha"
+# Complete means every FILE the commit has under the SNAPSHOT paths is there (not only the listed
+# directories): a snapshot missing scripts/land/bot.sh, say, is rebuilt, not run.
 complete=1
-for p in $SNAPSHOT; do [ -e "\$snap/\$p" ] || complete=0; done
+files="\$(git ls-tree -r --name-only "\$sha" -- $SNAPSHOT)"
+[ -n "\$files" ] || { echo "concrete-landing-bot: \$sha has none of the snapshot paths" >&2; exit 1; }
+while IFS= read -r p; do [ -f "\$snap/\$p" ] || { complete=0; break; }; done <<< "\$files"
 if [ "\$complete" = 0 ]; then
   rm -rf "\${snap:?}" "\$snap.tmp"; mkdir -p "\$snap.tmp"
   git archive "\$sha" $SNAPSHOT | tar -x -C "\$snap.tmp"
