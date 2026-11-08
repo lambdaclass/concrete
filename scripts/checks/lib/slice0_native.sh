@@ -27,7 +27,7 @@ if [ "${3:-}" = sanitize ]; then
   [ "$(grep -c '^define ' llvm.san.ll)" = "$(grep -c '^define .* sanitize_address {$' llvm.san.ll)" ] ||
     { echo 'slice0_native: a definition lacks sanitize_address' >&2; exit 1; }
   "${cc[@]}" "${san[@]}" -c llvm.san.ll -o llvm.san.o
-  link_native llvm.san.exe "${sanlink[@]}" llvm.san.o
+  link_native llvm.san.exe --sanitize llvm.san.o
   exit
 fi
 if [ "$control" = 1 ]; then

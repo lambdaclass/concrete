@@ -18,8 +18,8 @@ exe, trace, *args = sys.argv[1:]
 objects = {}
 for arg in args:
     if arg.endswith('.o'):
-        allowed(os.path.abspath(arg), local=True)
-        objects[os.path.abspath(arg)] = str(Path(arg).resolve())
+        allowed(arg, local=True)
+        objects[str(Path.cwd() / arg)] = str(Path(arg).resolve())
 
 lines = Path(trace).read_text().splitlines()
 seen = set()
@@ -34,7 +34,12 @@ for line in lines:
         sys.exit('link purity: unrecognized linker trace: ' + line[:500])
     path = match[1]
     try:
-        allowed(path, local=os.path.abspath(path) in objects)
+        if path in args:
+            allowed(path, local=True)
+        elif path in objects:
+            allowed(Path(path).name, local=True)
+        else:
+            allowed(path)
         if not Path(path).is_file():
             sys.exit('link purity: missing traced input: ' + path)
         seen.add(str(Path(path).resolve()))

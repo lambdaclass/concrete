@@ -19,11 +19,15 @@ def verify_policy():
 
 if __name__ == '__main__':
     policy = verify_policy()
-    if sys.argv[1:] == ['--shell']:
+    if sys.argv[1:2] in (['--shell'], ['--driver']):
         def expand(s):
-            return s.replace('@CWD@', os.getcwd()).replace('@TMPDIR@', os.environ.get('TMPDIR', '/tmp'))
+            return s.replace('@CWD@', os.getcwd()).replace('@TMPDIR@', os.environ['CONCRETE_NATIVE_TMP'])
         arrays = {'clean': ['env', '-i'] + [k + '=' + expand(v) for k, v in policy['environment'].items()],
                   'driver': [expand(v) for v in policy['compile']],
                   'link': policy['link'], 'san': policy['sanitize'], 'sanlink': policy['sanitizeLink']}
+        if sys.argv[1] == '--driver':
+            if sys.argv[2:] != arrays['clean'] + arrays['driver']:
+                sys.exit('link command: driver differs from flake policy')
+            sys.exit(0)
         for name, values in arrays.items():
             print(name + '=(' + ' '.join(shlex.quote(v) for v in values) + ')')

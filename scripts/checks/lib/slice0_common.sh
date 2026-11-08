@@ -52,12 +52,7 @@ bounded() {
 bounded 1800 lake build Concrete lean-compiler-backend/lcb >"$work/lake-build.log" 2>&1 \
   || { tail -n 200 "$work/lake-build.log" >&2; echo "slice0: lake build Concrete failed" >&2; exit 1; }
 lcb="$root/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
-case "$(uname -s)-$(uname -m)" in
-  Linux-x86_64) target=x86_64-linux ;;
-  Linux-aarch64) target=aarch64-linux ;;
-  Darwin-arm64) target=aarch64-macos ;;
-  *) echo "slice0: unsupported host $(uname -s)-$(uname -m)" >&2; exit 2 ;;
-esac
+target=$(bash "$root/scripts/checks/lib/slice0_native.sh" target)
 # The time bounds of the emit step (the Lean emitter) and the native step (slice0_native.sh).
 emit_secs=120
 native_secs=300

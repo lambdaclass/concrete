@@ -106,10 +106,28 @@
           # One owner for native link search policy and its complete pinned closure.
           nativeCC = pkgs.llvmPackages_21.clang;
           nativeLD = nativeCC.bintools;
+          realLD = nativeLD.bintools;
+          rt = "${nativeCC}/resource-root/lib/linux";
+          cpu = pkgs.stdenv.hostPlatform.parsed.cpu.name;
+          libcLib = "${pkgs.lib.getLib nativeCC.libc}/lib";
           nativeSysroot = if pkgs.stdenv.isDarwin then pkgs.apple-sdk
             else pkgs.lib.getDev nativeCC.libc;
-          nativeClosure = pkgs.closureInfo {
-            rootPaths = [ nativeCC nativeLD nativeSysroot pkgs.llvmPackages_21.llvm pkgs.llvmPackages_21.compiler-rt pkgs.llvmPackages_21.libunwind ];
+          # Closure metadata needs no stdenv. In particular stdenvNoCC on Darwin
+          # introduces an uncached locale -> bmake build just to enumerate paths.
+          nativeClosure = builtins.derivation {
+            name = "slice0-link-closure";
+            system = pkgs.stdenv.hostPlatform.system;
+            builder = "${pkgs.bash}/bin/bash";
+            args = [ "-euc" ''
+              source "$NIX_ATTRS_SH_FILE"
+              out="''${outputs[out]}"
+              ${pkgs.coreutils}/bin/mkdir "$out"
+              ${pkgs.jq}/bin/jq -r '.closure[].path' "$NIX_ATTRS_JSON_FILE" > "$out/store-paths"
+            '' ];
+            __structuredAttrs = true;
+            exportReferencesGraph.closure = [ nativeCC nativeLD realLD nativeSysroot
+              pkgs.llvmPackages_21.llvm pkgs.llvmPackages_21.compiler-rt ]
+              ++ pkgs.lib.optionals pkgs.stdenv.isLinux [ pkgs.llvmPackages_21.libunwind ];
           };
           nativeSettings = {
             CONCRETE_SLICE0_TARGET = {
@@ -122,13 +140,23 @@
             CONCRETE_SLICE0_CLANG = "${nativeCC}/bin/clang";
             CONCRETE_SLICE0_LINK_CLOSURE = "${nativeClosure}/store-paths";
             CONCRETE_SLICE0_LINKER_BIN = "${nativeLD}/bin";
+            CONCRETE_SLICE0_REAL_LD = "${realLD}/bin/ld";
             CONCRETE_SLICE0_LLVM = "${pkgs.llvmPackages_21.llvm}/bin";
             CONCRETE_SLICE0_SYSROOT = if pkgs.stdenv.isDarwin
               then "${nativeSysroot}/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk"
               else "${nativeSysroot}";
             CONCRETE_SLICE0_TOOL_PATH = pkgs.lib.makeBinPath [ nativeLD pkgs.coreutils pkgs.gnugrep pkgs.gnused ];
           };
-          nativePolicy = pkgs.writeText "slice0-link-policy-v1" (builtins.toJSON {
+          nativePolicy = builtins.derivation {
+            name = "slice0-link-policy-v1";
+            system = pkgs.stdenv.hostPlatform.system;
+            builder = "${pkgs.bash}/bin/bash";
+            args = [ "-euc" ''
+              source "$NIX_ATTRS_SH_FILE"
+              ${pkgs.jq}/bin/jq -r .text "$NIX_ATTRS_JSON_FILE" > "''${outputs[out]}"
+            '' ];
+            __structuredAttrs = true;
+            text = builtins.toJSON {
             version = 1;
             settings = nativeSettings;
             # Startup objects and GCC/compiler runtimes are references of the
@@ -137,7 +165,7 @@
             compilerRuntime = "${pkgs.llvmPackages_21.compiler-rt}";
             environment = {
               PATH = nativeSettings.CONCRETE_SLICE0_TOOL_PATH;
-              NIX_STORE = "/nix/store"; NIX_ENFORCE_PURITY = "1";
+              NIX_STORE = "/nix/store"; NIX_ENFORCE_PURITY = "0";
               NIX_BUILD_TOP = "/nonexistent"; TMPDIR = "@TMPDIR@";
               LC_ALL = "C"; TZ = "UTC"; SOURCE_DATE_EPOCH = "1"; ZERO_AR_DATE = "1";
             };
@@ -147,16 +175,39 @@
               "-fdebug-compilation-dir=." ]
               ++ (if pkgs.stdenv.isDarwin then [ "-mmacosx-version-min=15.0" ]
                   else [ "-rtlib=compiler-rt" "-unwindlib=none" ]);
-            link = if pkgs.stdenv.isDarwin then [ "-Wl,-no_uuid" ] else [ "-Wl,--build-id=none" ];
+            # These are real-linker templates, not compiler-driver flags. The only
+            # substitutions are a local output basename and explicit local objects.
+            # Grammar: binutils 2.44 ld/ld.texi; Apple ld64-954.16 doc/man/man1/ld-classic.1.
+            link = if pkgs.stdenv.isDarwin then [
+              nativeSettings.CONCRETE_SLICE0_REAL_LD "-dynamic" "-arch" "arm64"
+              "-platform_version" "macos" "15.0" "15.0" "-syslibroot"
+              nativeSettings.CONCRETE_SLICE0_SYSROOT "-no_uuid" "-w" "-Z" "-t"
+              "-o" "@OUTPUT@" "@OBJECTS@" "-L${nativeSettings.CONCRETE_SLICE0_SYSROOT}/usr/lib" "-lSystem"
+            ] else [
+              nativeSettings.CONCRETE_SLICE0_REAL_LD "--sysroot=${nativeSettings.CONCRETE_SLICE0_SYSROOT}"
+              "-z" "relro" "--hash-style=gnu" "--eh-frame-hdr" "-nostdlib" "-pie" "--build-id=none" "-t"
+              "-dynamic-linker" "${libcLib}/${builtins.baseNameOf pkgs.stdenv.cc.bintools.dynamicLinker}"
+              "-o" "@OUTPUT@" "${libcLib}/Scrt1.o" "${libcLib}/crti.o"
+              "${rt}/clang_rt.crtbegin-${cpu}.o" "@OBJECTS@"
+              "-L${libcLib}" "-rpath" libcLib
+              "${rt}/libclang_rt.builtins-${cpu}.a" "-lc"
+              "${rt}/clang_rt.crtend-${cpu}.o" "${libcLib}/crtn.o"
+            ];
             sanitize = [ "-fsanitize=address" "-fno-sanitize-recover=all" ];
-            sanitizeLink = [ "-fsanitize=address" "-fno-sanitize-recover=all" ]
-              ++ pkgs.lib.optionals pkgs.stdenv.isLinux [ "${pkgs.lib.getLib pkgs.llvmPackages_21.libunwind}/lib/libunwind.a" ]
-              ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [ "-fno-sanitize-link-runtime"
-                "${pkgs.llvmPackages_21.compiler-rt}/lib/darwin/libclang_rt.asan_osx_dynamic.dylib"
-                "-Wl,-rpath,${pkgs.llvmPackages_21.compiler-rt}/lib/darwin" ];
+            sanitizeLink = if pkgs.stdenv.isDarwin then [
+              "${pkgs.llvmPackages_21.compiler-rt}/lib/darwin/libclang_rt.asan_osx_dynamic.dylib"
+              "-rpath" "${pkgs.llvmPackages_21.compiler-rt}/lib/darwin"
+            ] else [
+              "--whole-archive" "${rt}/libclang_rt.asan_static-${cpu}.a"
+              "${rt}/libclang_rt.asan-${cpu}.a" "--no-whole-archive"
+              "--dynamic-list=${rt}/libclang_rt.asan-${cpu}.a.syms"
+              "${pkgs.lib.getLib pkgs.llvmPackages_21.libunwind}/lib/libunwind.a"
+              "--no-as-needed" "-lpthread" "-lrt" "-lm" "-ldl" "-lresolv"
+            ];
             validation = "lexical and resolved closure containment; trace and recursive loader dependency resolution without host cache";
             darwin = "native wrapper default target (no multi-target override), deployment 15.0; SDK-backed OS dylibs and /usr/lib/dyld ABI; explicit ASan runtime without executable-relative RPATH";
-          });
+            };
+          };
           nativeEnv = nativeSettings // { CONCRETE_SLICE0_LINK_POLICY = nativePolicy; };
 
           # Every gate refuses to run without this (scripts/tests/lib/gate_env.sh). Each shell

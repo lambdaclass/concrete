@@ -1,79 +1,103 @@
 #!/usr/bin/env python3
-"""Parse clang -###'s quoted linker command, rejecting unknown syntax/options.
+"""Validate and execute an exact real-linker template from the pinned policy.
 
-This validates active searches, including unused directories, before the real link.
-The pinned wrapper runs in the policy environment; no caller flags are inherited.
+There is no wrapper after this check, no driver discovery, and no general purpose
+option parser. The policy owns the complete grammar and operand ordering; callers
+can supply only local objects and choose the declared sanitizer variant.
 """
+import json
 import os
+import re
 from pathlib import Path
-import shlex
 import sys
 from link_policy import verify_policy
 from link_paths import allowed
 
-verify_policy()
-if sys.argv[1] == '--inputs':
-    permitted = set(verify_policy()['sanitizeLink']) | set(verify_policy()['link'])
-    for arg in sys.argv[2:]:
-        if arg in permitted:
-            continue
-        if arg.endswith('.o') and not arg.startswith('-'):
-            allowed(os.path.abspath(arg), local=True)
+
+def check_grammar(actual, objects, output, target):
+    """Closed subset used by the templates, with operand arity from pinned manuals.
+
+    GNU ld 2.44 ld/ld.texi and ld64-954.16 doc/man/man1/ld-classic.1
+    describe these options. We never parse arbitrary clang diagnostics or accept
+    extra options merely because they are known to a linker.
+    """
+    allowed(actual[0])
+    darwin = target == 'aarch64-macos'
+    flags = ({'-dynamic', '-no_uuid', '-w', '-Z', '-t'} if darwin else
+             {'--eh-frame-hdr', '-nostdlib', '-pie', '--build-id=none',
+              '--hash-style=gnu', '-t', '--whole-archive', '--no-whole-archive', '--no-as-needed'})
+    paths = {'-syslibroot', '-L', '-F', '-rpath'} if darwin else {'--sysroot', '-L', '-rpath', '-dynamic-linker', '--dynamic-list'}
+    args = iter(actual[1:])
+    try:
+        for arg in args:
+            if arg == '-o':
+                if next(args) != output:
+                    sys.exit('link command: unexpected output')
+            elif arg in paths:
+                allowed(next(args))
+            elif any(arg.startswith(p + '=') for p in paths):
+                allowed(arg.split('=', 1)[1])
+            elif arg.startswith(('-L', '-F')) and len(arg) > 2:
+                if arg[:2] not in paths:
+                    sys.exit('link command: unsupported search option: ' + arg)
+                allowed(arg[2:])
+            elif arg == '-arch' and darwin:
+                if next(args) != 'arm64':
+                    sys.exit('link command: unexpected architecture')
+            elif arg == '-platform_version' and darwin:
+                if next(args) != 'macos' or any(not re.fullmatch(r'[0-9]+(?:[.][0-9]+){0,2}', next(args)) for _ in range(2)):
+                    sys.exit('link command: invalid platform version')
+            elif arg == '-z' and not darwin:
+                if next(args) != 'relro':
+                    sys.exit('link command: unsupported -z operand')
+            elif arg in flags or re.fullmatch(r'-l[A-Za-z0-9_+.-]+', arg):
+                pass
+            elif arg in objects:
+                allowed(arg, local=True)
+            elif arg.startswith('/'):
+                allowed(arg)
+            else:
+                sys.exit('link command: unsupported linker argument: ' + arg)
+    except StopIteration:
+        sys.exit('link command: missing option operand')
+
+
+def command(policy, output, objects, sanitize=False):
+    if not output or Path(output).name != output or output in ('.', '..'):
+        sys.exit('link command: output must be a local basename')
+    if not objects:
+        sys.exit('link command: no objects')
+    for obj in objects:
+        allowed(obj, local=True)
+    result = []
+    for arg in policy['link']:
+        if arg == '@OUTPUT@':
+            result.append(output)
+        elif arg == '@OBJECTS@':
+            result.extend(objects)
+            if sanitize:
+                result.extend(policy['sanitizeLink'])
         else:
-            sys.exit('link command: unapproved caller argument: ' + arg)
-    sys.exit(0)
-commands = []
-for line in Path(sys.argv[1]).read_text().splitlines():
-    if line.startswith(' "'):
-        try:
-            commands.append(shlex.split(line))
-        except ValueError:
-            sys.exit('link command: malformed quoted command')
-    elif not line.startswith(('clang version ', 'Target: ', 'Thread model: ', 'InstalledDir: ')):
-        sys.exit('link command: unexpected driver diagnostic: ' + line[:500])
-if len(commands) != 1:
-    sys.exit('link command: expected exactly one linker invocation')
-command = commands[0]
-expected = os.environ['CONCRETE_SLICE0_LINKER_BIN'] + '/ld'
-if command[0] != expected:
-    sys.exit('link command: unexpected linker: ' + command[0])
-allowed(command[0])
-args = iter(command[1:])
-# Closed grammar for the pinned GNU/Darwin linker invocation, not arbitrary driver flags.
-path_options = {'--sysroot', '-syslibroot', '-L', '-F', '-rpath', '-rpath-link',
-                '-dynamic-linker', '--dynamic-linker', '-plugin', '--dynamic-list', '-lto_library'}
-value_options = {'-z', '-m', '-arch', '-macosx_version_min', '-sdk_version',
-                 '-platform_version'}
-flags = {'-pie', '-no_uuid', '-t', '--eh-frame-hdr', '--as-needed', '--no-as-needed',
-         '--push-state', '--pop-state', '--whole-archive', '--no-whole-archive',
-         '-static', '-Bstatic', '-Bdynamic', '-export-dynamic', '--export-dynamic',
-         '-dead_strip', '-demangle', '-dynamic', '-search_paths_first',
-         '-no_deduplicate', '-headerpad_max_install_names', '-adhoc_codesign'}
-try:
-    for arg in args:
-        if arg == '-o':
-            output = next(args)
-            if Path(output).name != output:
-                sys.exit('link command: output must be a local basename')
-        elif arg in path_options:
-            allowed(os.path.normpath(next(args)))
-        elif any(arg.startswith(p + '=') for p in path_options):
-            allowed(os.path.normpath(arg.split('=', 1)[1]))
-        elif arg.startswith(('-L', '-F')) and len(arg) > 2:
-            allowed(os.path.normpath(arg[2:]))
-        elif arg in value_options:
-            count = 3 if arg == '-platform_version' else 1
-            for _ in range(count):
-                value = next(args)
-                if not value or '/' in value or value.startswith('-'):
-                    sys.exit('link command: invalid option value: ' + value)
-        elif arg in flags or arg in {'--build-id=none', '--hash-style=gnu'}:
-            pass
-        elif arg.startswith('-l') and len(arg) > 2 and '/' not in arg:
-            pass
-        elif not arg.startswith('-'):
-            allowed(arg, local=True)
-        else:
-            sys.exit('link command: unsupported linker argument: ' + arg)
-except StopIteration:
-    sys.exit('link command: missing option operand')
+            result.append(arg)
+    check_grammar(result, objects, output, policy['settings']['CONCRETE_SLICE0_TARGET'])
+    if result[0] != os.environ['CONCRETE_SLICE0_REAL_LD']:
+        sys.exit('link command: unexpected real linker')
+    return result
+
+
+def validate(policy, actual, output, objects, sanitize=False):
+    expected = command(policy, output, objects, sanitize)
+    if actual != expected:
+        sys.exit('link command: invocation differs from declared real-linker template')
+    return actual
+
+
+if __name__ == '__main__':
+    policy = verify_policy()
+    record, output, variant, *objects = sys.argv[1:]
+    if variant not in ('normal', 'sanitize'):
+        sys.exit('link command: unknown variant')
+    actual = command(policy, output, objects, variant == 'sanitize')
+    Path(record).write_text(json.dumps(actual) + '\n')
+    validate(policy, json.loads(Path(record).read_text()), output, objects, variant == 'sanitize')
+    os.execve(actual[0], actual, {'LC_ALL': 'C', 'TZ': 'UTC', 'ZERO_AR_DATE': '1'})
