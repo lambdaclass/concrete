@@ -130,7 +130,7 @@ end Prim
 
 /-- Helper (computation). Computes the context-guard refusal branch for `SafetyEvidence.discharge_sound`,
 `SafetyEvidence.discharge_target_mismatch`, and `SafetyEvidence.discharge_unregistered`.
-(approved: PENDING). -/
+(approved: REVIEW7-codex). -/
 theorem SafetyEvidence.discharge_context_mismatch {claim : ObligationId → Prop}
     (e : SafetyEvidence claim) (obligations : ObligationTable) (current : EvidenceContext)
     (requested : ObligationId) (mismatch : ¬ e.Usable current) :
@@ -139,7 +139,7 @@ theorem SafetyEvidence.discharge_context_mismatch {claim : ObligationId → Prop
 
 /-- Helper (computation). Computes the requested-identity guard branch for `SafetyEvidence.discharge_sound`,
 `SafetyEvidence.discharge_target_mismatch`, and `SafetyEvidence.discharge_unregistered`.
-(approved: PENDING). -/
+(approved: REVIEW7-codex). -/
 theorem SafetyEvidence.discharge_obligation_mismatch {claim : ObligationId → Prop}
     (e : SafetyEvidence claim) (obligations : ObligationTable) (current : EvidenceContext)
     (requested : ObligationId) (mismatch : current.obligation ≠ requested) :
@@ -223,8 +223,9 @@ theorem SafetyEvidence.discharge_unregistered {claim : ObligationId → Prop}
     · exact SafetyEvidence.discharge_obligation_mismatch e obligations current requested identity
   · exact SafetyEvidence.discharge_context_mismatch e obligations current requested usable
 
-/-- Law (subject `ConcreteSpec.Core.PrimRegistry.allows`).
-An unregistered primitive has no allowed answer. -/
+/-- Helper (computation). Computes the absent-registry branch of `PrimRegistry.allows`;
+execution safety is established by `PrimRegistry.unknown_primitive_stuck`.
+(approved: PENDING). -/
 theorem PrimRegistry.allows_unknown {Val Ty Store Event : Type} (R : PrimRegistry Val Ty Store Event)
     (p : PrimId) (hnone : AList.lookup R.entries p = none) (args : List Val) (st : Store)
     (a : Exec.Answer Val Event Store) : R.allows p args st a = false := by
@@ -361,7 +362,7 @@ theorem drive_steps_result (P : Exec.Program O) (ρ : Exec.Oracle O)
   exact sound fuel hist c _ rfl
 
 /-- Helper (computation). Exposes the non-normal guard branch for the erasure induction. The terminal report and drive-step laws carry execution evidence.
-(approved: PENDING). -/
+(approved: REVIEW7-codex). -/
 theorem runStmts_of_not_normal (P : Exec.Program O) (ρ : Exec.Oracle O)
     (fuel : Nat) (hist : List O.Event) (ss : List (Exec.Stmt O)) (c : Exec.Config O)
     (hf : c.final? ≠ some .normal) : runStmts P ρ fuel hist ss c = drive P ρ fuel hist c := by
@@ -421,8 +422,9 @@ theorem ghost_erasure_run (G : Language O) (P : Exec.Program O) (ρ : Exec.Oracl
           | outOfFuel c' => simp [runPieces, runStmts, erase, erasePiece, List.filterMap, hn, hr]
       · simp [runPieces, erase, erasePiece, List.filterMap, hn, runStmts_of_not_normal]
 
-/-- Law (subject `ConcreteSpec.Core.Ghost.runPieces`, `ConcreteSpec.Core.Ghost.erase`).
-In particular, ghost erasure preserves public events and the exact C1 ending classification. -/
+/-- Helper (projection). Projects event and ending equality from the complete-report
+soundness law `Ghost.ghost_erasure_run`; supplies no independent erasure evidence.
+(approved: PENDING). -/
 theorem ghost_erasure_ending (G : Language O) (P : Exec.Program O) (ρ : Exec.Oracle O)
     (fuel : Nat) (hist : List O.Event) (ps : List (Piece G)) (Γ : AList Var G.Val)
     (c : Exec.Config O) :
@@ -755,11 +757,11 @@ def uncheckedPrimStep {O : Exec.Operands} (P : Exec.Program O) (c : Exec.Config 
     Exec.step P c = some (.request p vs site st k) ∧
     l = a.label ∧ k a = some c'
 
-/-- Instance (law `ConcreteSpec.Core.PrimRegistry.allows_unknown`, case `ConcreteSpec.Core.Vacuity.successAnswer`). -/
+/-- Regression example (not independent soundness evidence). -/
 example : PrimDemo.registry.allows ⟨1⟩ [] 7 successAnswer = false :=
   PrimRegistry.allows_unknown PrimDemo.registry ⟨1⟩ rfl [] 7 successAnswer
 
-/-- Planted (law `ConcreteSpec.Core.PrimRegistry.allows_unknown`, case `ConcreteSpec.Core.Vacuity.successAnswer`, subject `ConcreteSpec.Core.PrimRegistry.allows`, mutant `ConcreteSpec.Core.Vacuity.catchAllAllows`). -/
+/-- Regression example (not independent soundness evidence). -/
 example : AList.lookup PrimDemo.registry.entries ⟨1⟩ = none ∧
     ¬ (catchAllAllows PrimDemo.registry ⟨1⟩ [] 7 successAnswer = false) :=
   ⟨rfl, by decide⟩
@@ -900,7 +902,7 @@ example : ¬ (Ghost.runPieces GhostDemo.language GhostDemo.program GhostDemo.ora
   revert hrem
   decide
 
-/-- Instance (law `ConcreteSpec.Core.Ghost.ghost_erasure_ending`, case `ConcreteSpec.Core.Vacuity.abortPieces`). -/
+/-- Regression example (not independent soundness evidence). -/
 example : (Ghost.runPieces GhostDemo.language GhostDemo.program GhostDemo.oracle 20 []
     abortPieces [] GhostDemo.start).events =
     (Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] (Ghost.erase abortPieces)
@@ -912,7 +914,7 @@ example : (Ghost.runPieces GhostDemo.language GhostDemo.program GhostDemo.oracle
   Ghost.ghost_erasure_ending GhostDemo.language GhostDemo.program GhostDemo.oracle 20 []
     abortPieces [] GhostDemo.start
 
-/-- Planted (law `ConcreteSpec.Core.Ghost.ghost_erasure_ending`, case `ConcreteSpec.Core.Vacuity.abortPieces`, subject `ConcreteSpec.Core.Ghost.erase`, mutant `ConcreteSpec.Core.Vacuity.eraseAllPieces`). -/
+/-- Regression example (not independent soundness evidence). -/
 example : ¬ ((Ghost.runPieces GhostDemo.language GhostDemo.program GhostDemo.oracle 20 []
     abortPieces [] GhostDemo.start).events =
     (Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] (eraseAllPieces abortPieces)

@@ -405,7 +405,7 @@ example : ¬ (∀ kind site sp,
   exact different equal.2.2.2.2
 
 /-- Helper (inversion). Recovers the validated span and the renderer equation from a returned
-trap. This is lookup plumbing, never independent soundness evidence. (approved: PENDING). -/
+trap. This is lookup plumbing, never independent soundness evidence. (approved: REVIEW7-codex). -/
 theorem trapTerminal_valid_location_inv (sources : SourceTable) (sites : SiteTable)
     (valid : SiteTable.Valid sources sites) (kind : TrapKind) (site : SiteId)
     (sp : Span) (line : String)
@@ -472,7 +472,7 @@ theorem trapTerminal_valid_location (sources : SourceTable) (sites : SiteTable)
     rw [decodeTrapLine_render, line, col]
 
 /-- Helper (computation). The concrete tab source and site table satisfy the table invariant.
-(approved: PENDING). -/
+(approved: REVIEW7-codex). -/
 theorem validSites_valid : SiteTable.Valid validSources validSites := by
   intro site sp hlookup
   by_cases h : (⟨0⟩ : SiteId) = site

@@ -68,7 +68,7 @@ theorem KeyConstruct.numberFunctionKeys_snd (f : FnId) :
 
 /-- Helper (computation). Resolves the lexical site numbered for an indexed relative key;
 this arithmetic correspondence is used to connect occurrence coverage to actual lookup.
-(approved: PENDING). -/
+(approved: REVIEW7-codex). -/
 theorem KeyConstruct.numberFunctionKeys_lookup (f : FnId) (keys : List FunctionRelativeKey)
     (startSite index : Nat) :
     AList.lookup (numberFunctionKeys f startSite keys) ⟨startSite + index⟩ =
@@ -91,7 +91,7 @@ theorem KeyConstruct.numberFunctionKeys_lookup (f : FnId) (keys : List FunctionR
       exact ih (startSite + 1) index
 
 /-- Helper (computation). Moving past a root extends precisely the preceding scope.
-(approved: PENDING). -/
+(approved: REVIEW7-codex). -/
 theorem KeyConstruct.pathAtIn_succ (scope : List KeyConstruct) (root : KeyConstruct)
     (rest : List KeyConstruct) (index : Nat) (route : List Nat) :
     pathAtIn scope (root :: rest) ((index + 1) :: route) =
@@ -290,7 +290,7 @@ def KeyConstruct.under (preceding : List KeyConstruct) (construct : KeyConstruct
   ⟨construct.segment preceding :: descendant.path⟩
 
 /-- Helper (computation). Computes the renamed root construct's own key for
-`KeyConstruct.assignFunctionTable_rename_named`. (approved: PENDING). -/
+`KeyConstruct.assignFunctionTable_rename_named`. (approved: REVIEW7-codex). -/
 theorem KeyConstruct.key_rename_named (preceding : List KeyConstruct) (kind : ConstructKind)
     (old : String) (children : List KeyConstruct) (name : String) :
     ((KeyConstruct.mk kind (.named old) children).rename name).key preceding =
@@ -298,7 +298,7 @@ theorem KeyConstruct.key_rename_named (preceding : List KeyConstruct) (kind : Co
   simp [KeyConstruct.key, KeyConstruct.segment, KeyConstruct.rename, ConstructName.rename]
 
 /-- Helper (computation). Computes the pinned root construct's own key for
-`KeyConstruct.assignFunctionTable_pin`. (approved: PENDING). -/
+`KeyConstruct.assignFunctionTable_pin`. (approved: REVIEW7-codex). -/
 theorem KeyConstruct.key_pin_unnamed (preceding : List KeyConstruct) (kind : ConstructKind)
     (old : Option String) (children : List KeyConstruct) (label : String) :
     ((KeyConstruct.mk kind (.unnamed old) children).pin (some label)).key preceding =
@@ -479,7 +479,7 @@ theorem KeyConstruct.pathAt_insert_differentKind (before mid after : List KeyCon
   exact KeyConstruct.descendant_insert_differentKind before mid inserted target route avoids
 
 /-- Helper (computation). Computes the scope reset of a named root for
-`KeyConstruct.pathAt_named_ancestor_resets_scope`. (approved: PENDING). -/
+`KeyConstruct.pathAt_named_ancestor_resets_scope`. (approved: REVIEW7-codex). -/
 theorem KeyConstruct.descendant_named_ancestor_resets_scope
     (preceding₁ preceding₂ : List KeyConstruct) (kind : ConstructKind) (name : String)
     (children : List KeyConstruct) (route : List Nat) :
@@ -538,7 +538,7 @@ theorem KeyConstruct.descendant_pin_other (before after : List KeyConstruct)
     simp [KeyConstruct.descendantKey, KeyConstruct.childScope, hname, hseg, hrec]
 
 /-- Helper (computation). Computes the renamed prefix over a descendant route for
-`KeyConstruct.assignFunctionTable_rename_named`. (approved: PENDING). -/
+`KeyConstruct.assignFunctionTable_rename_named`. (approved: REVIEW7-codex). -/
 theorem KeyConstruct.descendant_rename_named (preceding : List KeyConstruct)
     (kind : ConstructKind) (old name : String) (children : List KeyConstruct) (route : List Nat) :
     ((KeyConstruct.mk kind (.named old) children).rename name).descendantKey preceding route =
@@ -548,7 +548,7 @@ theorem KeyConstruct.descendant_rename_named (preceding : List KeyConstruct)
     KeyConstruct.segment, KeyConstruct.childScope, KeyConstruct.pathAt]
 
 /-- Helper (computation). Transports a located descendant through the occurrence/table
-correspondence; supplies no independent soundness evidence. (approved: PENDING). -/
+correspondence; supplies no independent soundness evidence. (approved: REVIEW7-codex). -/
 theorem KeyConstruct.assignFunctionTable_descendant_mem (f : FnId) (startSite : Nat)
     (before after : List KeyConstruct) (root : KeyConstruct) (route : List Nat)
     (key : FunctionRelativeKey) (found : root.descendantKey before route = some key) :
@@ -1031,7 +1031,7 @@ theorem EncodedPremise.read_unknown (reader : SpecVersion) (record : EncodedPrem
   · rfl
 
 /-- Helper (computation). Computes the writer/reader version guards for `EncodedPremise.read_iff`.
-(approved: PENDING). -/
+(approved: REVIEW7-codex). -/
 theorem EncodedPremise.read_version_mismatch (reader : SpecVersion) (record : EncodedPremise)
     (mismatch : record.spec ≠ reader ∨ reader ≠ specVersion) :
     record.read reader = none := by
