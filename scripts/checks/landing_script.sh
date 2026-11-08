@@ -577,7 +577,7 @@ dec="$( cd "$RI" && source "$ROOT_DIR/scripts/checks/lib/prepush_record.sh" && p
 has "$dec" "refused:changed:env" && ok "a push in another CONCRETE_* environment than the host's run does not reuse it" || no "e2e env mismatch: $dec"
 # A git shim on the "host" logs every fetch: a gate clone at another repository must log none.
 mkdir -p "$TMP/hostgit"
-printf '#!/bin/sh\nfor a in "$@"; do case "$a" in fetch|ls-remote) echo "$*" >> "%s"; break ;; esac; done\nexec "%s" "$@"\n' "$TMP/hostgit.log" "$(command -v git)" > "$TMP/hostgit/git"
+printf '#!/bin/sh\nfor a in "$@"; do case "$a" in fetch|ls-remote) case " $* " in *" --get-url "*) ;; *) echo "$*" >> "%s" ;; esac; break ;; esac; done\nexec "%s" "$@"\n' "$TMP/hostgit.log" "$(command -v git)" > "$TMP/hostgit/git"
 chmod +x "$TMP/hostgit/git"; : > "$TMP/hostgit.log"
 git -C "$HH/concrete2" remote set-url origin https://github.com/someone/else.git
 PATH="$TMP/hostgit:$PATH" e2e
@@ -629,7 +629,7 @@ runjson "$HEAD1" success failure
 # The project's-repositories guard: refused before any push or GitHub read. A git shim logs every
 # network operation and the fake gh logs every call: a refused command must log neither.
 mkdir -p "$TMP/netshim"
-printf '#!/bin/sh\nfor a in "$@"; do case "$a" in fetch|push|ls-remote|clone) echo "$*" >> "%s"; break ;; esac; done\nexec "%s" "$@"\n' "$TMP/netshim.log" "$(command -v git)" > "$TMP/netshim/git"
+printf '#!/bin/sh\nfor a in "$@"; do case "$a" in fetch|push|ls-remote|clone) case " $* " in *" --get-url "*) ;; *) echo "$*" >> "%s" ;; esac; break ;; esac; done\nexec "%s" "$@"\n' "$TMP/netshim.log" "$(command -v git)" > "$TMP/netshim/git"
 chmod +x "$TMP/netshim/git"
 refused_offline(){ # label expect-text cmd... -> ok/no, with no network git and no gh call
   local label="$1" want="$2"; shift 2
@@ -729,7 +729,7 @@ git remote remove gh-secret
 # Every script that fetches or pushes on its own refuses another repository before touching it: a git
 # shim logs every fetch and push, and must log none.
 REALGIT="$(command -v git)"; mkdir -p "$TMP/gitshim"
-printf '#!/bin/sh\nfor a in "$@"; do case "$a" in fetch|push|ls-remote|clone) echo "$*" >> "%s"; break ;; esac; done\nexec "%s" "$@"\n' "$TMP/gitshim.log" "$REALGIT" > "$TMP/gitshim/git"
+printf '#!/bin/sh\nfor a in "$@"; do case "$a" in fetch|push|ls-remote|clone) case " $* " in *" --get-url "*) ;; *) echo "$*" >> "%s" ;; esac; break ;; esac; done\nexec "%s" "$@"\n' "$TMP/gitshim.log" "$REALGIT" > "$TMP/gitshim/git"
 chmod +x "$TMP/gitshim/git"
 for ep in "LAND_REMOTE=gh-other bash $ROOT_DIR/scripts/land/notes.sh fetch" \
           "LAND_REMOTE=gh-other bash $ROOT_DIR/scripts/land/notes.sh put review HEAD verdict=clean" \

@@ -410,7 +410,7 @@ echo "=== the bot refuses a remote that is not one of the project's repositories
 heads_before="$(git --git-dir="$ORIGIN_GIT" for-each-ref --format='%(refname) %(objectname)')"
 # A git shim logs every network operation and the fake gh every call: a refused pass logs neither.
 mkdir -p "$TMP/netshim"
-printf '#!/bin/sh\nfor a in "$@"; do case "$a" in fetch|push|ls-remote|clone) echo "$*" >> "%s"; break ;; esac; done\nexec "%s" "$@"\n' "$TMP/netshim.log" "$(command -v git)" > "$TMP/netshim/git"
+printf '#!/bin/sh\nfor a in "$@"; do case "$a" in fetch|push|ls-remote|clone) case " $* " in *" --get-url "*) ;; *) echo "$*" >> "%s" ;; esac; break ;; esac; done\nexec "%s" "$@"\n' "$TMP/netshim.log" "$(command -v git)" > "$TMP/netshim/git"
 chmod +x "$TMP/netshim/git"
 for sub in tick rebase list; do
   : > "$TMP/netshim.log"; g0="$(cat "$FAKE_GH_DIR/calls.log" 2>/dev/null | wc -l)"
@@ -451,7 +451,7 @@ out="$(HOME="$IB/home2" PATH="$IB/nonet:$PATH" INSTALL_ORIGIN_URL='https://x-acc
   && ok "a fresh install logs its origin with the credentials redacted" || { no "fresh install credential output: exit $rc"; echo "$out" | sed 's/^/      /'; }
 # The installer checks every URL before it clones or fetches: a foreign origin or mirror URL, and an
 # existing clone whose remote is another repository, are refused with no clone and no fetch.
-printf '#!/bin/sh\nfor a in "$@"; do case "$a" in fetch|push|ls-remote|clone) echo "$*" >> "%s"; break ;; esac; done\nexec "%s" "$@"\n' "$IB/inst.log" "$(command -v git)" > "$IB/nonet/git"; chmod +x "$IB/nonet/git"
+printf '#!/bin/sh\nfor a in "$@"; do case "$a" in fetch|push|ls-remote|clone) case " $* " in *" --get-url "*) ;; *) echo "$*" >> "%s" ;; esac; break ;; esac; done\nexec "%s" "$@"\n' "$IB/inst.log" "$(command -v git)" > "$IB/nonet/git"; chmod +x "$IB/nonet/git"
 for env in "INSTALL_ORIGIN_URL=https://github.com/someone/else.git" "INSTALL_ORIGIN_URL=$IB/origin.git INSTALL_MIRROR_URL=https://attacker.example/lambdaclass/concrete.git"; do
   rm -rf "$IB/home3"; mkdir -p "$IB/home3"; : > "$IB/inst.log"
   out="$(env HOME="$IB/home3" PATH="$IB/nonet:$PATH" $env bash "$ROOT_DIR/scripts/land/install-bot.sh" 2>&1)"; rc=$?
@@ -464,7 +464,7 @@ git -C "$BC" remote set-url origin "$IB/origin.git"
 [ "$rc" != 0 ] && has "$out" "refusing to fetch" && [ ! -s "$IB/inst.log" ] \
   && ok "an install over a clone whose origin is another repository is refused before it fetches" || { no "installer existing foreign clone: exit $rc"; echo "$out" | sed 's/^/      /'; sed 's/^/      net: /' "$IB/inst.log"; }
 # A git shim logs every fetch: a refused launcher must log none.
-printf '#!/bin/sh\nfor a in "$@"; do case "$a" in fetch|push|ls-remote) echo "$*" >> "%s"; break ;; esac; done\nexec "%s" "$@"\n' "$IB/git.log" "$(command -v git)" > "$IB/stub/git"
+printf '#!/bin/sh\nfor a in "$@"; do case "$a" in fetch|push|ls-remote) case " $* " in *" --get-url "*) ;; *) echo "$*" >> "%s" ;; esac; break ;; esac; done\nexec "%s" "$@"\n' "$IB/git.log" "$(command -v git)" > "$IB/stub/git"
 chmod +x "$IB/stub/git"
 for bad in https://github.com/someone/else.git git@github-old:someone/else.git https://attacker.example/lambdaclass/concrete.git; do
   git -C "$BC" remote set-url origin "$bad"
