@@ -1563,4 +1563,101 @@ example : (do
 example : ¬ (called.own.loans = caller.own.loans) := by decide
 end DirectArgumentWitnesses
 
+/-- Reborrowing preserves actual active destinations, rather than just the supply bound. -/
+theorem reborrowTo_live (s t : State) (i : LoanId) (path : List Projection)
+    (m : Mode) (activation : Nat) (hs : LiveDestinations s)
+    (h : reborrowTo s i path m activation = some t) : LiveDestinations t := by
+  obtain ⟨f, hf, he, _⟩ := reborrowTo_current s t i path m activation h
+  have live : activation ∈ s.frames.map Activation.id :=
+    List.mem_map.mpr ⟨f, hf, he⟩
+  unfold reborrowTo at h
+  obtain ⟨a, _, h⟩ := Option.bind_eq_some_iff.mp h
+  split at h
+  · cases h
+    intro l hl
+    rcases List.mem_cons.mp hl with rfl | hl
+    · exact live
+    · exact hs l hl
+  · contradiction
+
+/-- Adopting pending arguments preserves active destinations: adopted loans target the
+current callee, and other loans retain their active caller destinations. -/
+theorem adoptDown_live (s t : State) (args : List (Var × LoanId))
+    (hs : LiveDestinations s) (h : adoptDown s args = some t) : LiveDestinations t := by
+  unfold adoptDown at h
+  obtain ⟨f, hf, h⟩ := Option.bind_eq_some_iff.mp h
+  cases hframes : s.frames with
+  | nil => simp [hframes] at hf
+  | cons a rest =>
+    simp only [hframes, List.head?_cons, Option.some.injEq] at hf
+    subst a
+    split at h
+    · cases h
+      intro l hl
+      obtain ⟨a, ha, rfl⟩ := List.mem_map.mp hl
+      split
+      · simp
+      · simpa [hframes] using hs a ha
+    · contradiction
+
+/-- Helper (projection). Successful return pops exactly the current activation frame. -/
+private theorem leave_frames_proj (s t : State) (f : Activation)
+    (hf : s.frames.head? = some f) (h : leave s = some t) :
+    t.frames = s.frames.tail := by
+  unfold leave at h
+  rw [hf] at h
+  dsimp at h
+  obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
+  have frames := fold_frames _ (fun s l t hh => endLoan_frames s t l.id hh) _ s u hu
+  obtain ⟨v, hv, h⟩ := Option.bind_eq_some_iff.mp h
+  unfold drop at hv
+  rw [frames, hf] at hv
+  dsimp at hv
+  split at hv
+  · cases hv
+    split at h
+    · contradiction
+    · cases h
+      simp
+  · contradiction
+
+/-- Successful return cannot strand a loan targeting the departed frame. Together with
+active destinations on entry, this preserves the lifetime invariant across the pop. -/
+theorem leave_live (s t : State) (f : Activation) (hs : LiveDestinations s)
+    (hf : s.frames.head? = some f) (h : leave s = some t) : LiveDestinations t := by
+  intro l hl
+  have old := life_subset (fun _ => none) .leave s t h l hl
+  have live := hs l old
+  have other := leave_no_activation_loan s t f hf h l hl
+  rw [leave_frames_proj s t f hf h]
+  cases frames : s.frames with
+  | nil => simp [frames] at hf
+  | cons a rest =>
+    simp only [frames, List.head?_cons, Option.some.injEq] at hf
+    subst a
+    simpa [frames, other] using live
+
+namespace LiveDestinationWitnesses
+open ConcreteSpec.Core.Own.Examples
+/-- Instance (law `ConcreteSpec.Core.Own.reborrowTo_live`). A mutable loan and child target their active caller frame. -/
+example : LiveDestinations exclusive ∧ LiveDestinations child ∧
+    reborrowTo exclusive ⟨0⟩ [.index 1] .mutable 0 = some child := by decide
+/-- Planted (law `ConcreteSpec.Core.Own.reborrowTo_live`). Targeting an inactive but previously issued activation breaks actual liveness. -/
+example : ¬ LiveDestinations { child with
+    nextActivation := 3
+    loans := child.loans.map fun l => { l with activation := 2 } } := by decide
+/-- Instance (law `ConcreteSpec.Core.Own.adoptDown_live`). A pending direct root becomes a loan of the active callee. -/
+example : LiveDestinations DirectArgumentWitnesses.waiting.own ∧
+    LiveDestinations DirectArgumentWitnesses.called.own := by decide
+/-- Planted (law `ConcreteSpec.Core.Own.adoptDown_live`). Adoption into an inactive destination violates the conclusion. -/
+example : ¬ LiveDestinations { DirectArgumentWitnesses.called.own with
+    loans := DirectArgumentWitnesses.called.own.loans.map fun l => { l with activation := 7 } } := by decide
+/-- Instance (law `ConcreteSpec.Core.Own.leave_live`). Return retains the caller loan and its live destination. -/
+example : LiveDestinations DirectArgumentWitnesses.called.own ∧
+    LiveDestinations DirectArgumentWitnesses.returned.own := by decide
+/-- Planted (law `ConcreteSpec.Core.Own.leave_live`). Popping the callee without ending its root loan strands that loan. -/
+example : ¬ LiveDestinations { DirectArgumentWitnesses.called.own with
+    frames := DirectArgumentWitnesses.called.own.frames.tail } := by decide
+end LiveDestinationWitnesses
+
 end ConcreteSpec.Core.Own

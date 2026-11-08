@@ -114,6 +114,15 @@ instance (s : State) : Decidable (WellFormed s) := by
   unfold WellFormed
   infer_instance
 
+/-- Representation lemma. Loan destinations refer to frames still active in the call stack.
+This lifetime invariant is independent of the monotonically increasing activation supply. -/
+def LiveDestinations (s : State) : Prop :=
+  ∀ l ∈ s.loans, l.activation ∈ s.frames.map Activation.id
+
+instance (s : State) : Decidable (LiveDestinations s) := by
+  unfold LiveDestinations
+  infer_instance
+
 /-- Owner accesses cannot bypass whole-root loans. Reads may coexist with shared loans (Q3.4, OD15). -/
 def ownerAccess (s : State) (p : Hybrid.Place) (m : Mode) : Bool :=
   (slot s p).any fun x => x.status == .owned &&
