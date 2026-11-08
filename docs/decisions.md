@@ -24,6 +24,10 @@ Links only; each item's text lives where it is linked.
    ([row](#decided-2026-11-08-spelling-round)).
 3. Where a decided proposal is kept once `docs/archive/` is under `legacy/`
    ([archive move](#decided-2026-11-08-archive-move)).
+4. K3’s allow-list versus R-0630’s ban on `sorry` and `partial def` in `Concrete/`
+   ([open question](../ROADMAP.md#open-k3-allow-list)).
+5. The slice at which the complementary suffix rule applies, R-0493
+   ([open question](../ROADMAP.md#open-suffix-slice)).
 
 A decided proposal moves to `docs/archive/<topic>-<date>/` until the [archive move](#decided-2026-11-08-archive-move) lands; after that, waiting item 3 decides where it goes.
 
