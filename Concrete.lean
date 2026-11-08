@@ -6,6 +6,3 @@ import Concrete.Backend.Runtime
 import Concrete.Backend.LLVM
 import Concrete.Backend.LCB
 import Concrete.Premises
-import Concrete.SpecDiffRandom
-import Concrete.SpecDiffSpecGen
-import Concrete.SpecDiffBirGen

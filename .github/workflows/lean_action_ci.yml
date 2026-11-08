@@ -8,8 +8,8 @@ name: CI
 #   Spec build   lake build of the specification, warnings refused.
 #   Proof axioms, Proof trust ban (sorry, native_decide), Kernel replay (leanchecker), External
 #                re-check (con-leche, nanoda)  the proof-integrity checks of scripts/proofs.
-#   Slice 0 backends, artifacts, trusted base, reproducibility (x86-64 Linux and AArch64 macOS)
-#                the compiler's gates (scripts/checks/compiler), each in the compiler's devshell.
+#   Tests, Spec differential, Slice 0 artifacts, trusted base, reproducibility (x86-64 Linux and
+#                AArch64 macOS)  the compiler's gates (scripts/checks/compiler), in its devshell.
 #   Oracle (GitHub-hosted fetch + smoke)  the published oracle fetched, verified and run on a
 #                GitHub-hosted runner (ISS-0005, P13; R-0564), kept from the base unchanged.
 # legacy/ is never built or run here: its gates were qualified at tag legacy-compiler-final. The old
@@ -406,6 +406,12 @@ jobs:
         uses: cachix/install-nix-action@v31
       - name: Seeded spec and BIR differentials (gates 5 and 6)
         run: nix develop --command bash scripts/checks/compiler/spec_diff.sh
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: spec-diff-regressions-${{ matrix.arch }}
+          path: .lake/concrete/spec_diff/regressions/
+          if-no-files-found: ignore
 
   artifacts:
     name: Slice 0 artifacts (${{ matrix.arch }})
