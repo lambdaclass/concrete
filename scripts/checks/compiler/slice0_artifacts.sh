@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Slice-0 artifact gates (PROVISIONAL, Concrete/README.md gates 10, 11 and 12), over every
-# hand-written BIR example, on the executables slice0_native.sh links:
+# Slice-0 artifact gates (PROVISIONAL, Concrete/README.md gates 10, 11 and 12), over every bir:
+# row in tests/manifest.tsv, on the executables slice0_native.sh links:
 #
 # 10. Sanitizers: the LLVM example also built with ASan (slice0_native.sh sanitize: ASan
 #     instruments the printed IR once every definition carries sanitize_address; no UBSan: its
@@ -158,12 +158,15 @@ size_report() { # size_report NAME BACKEND EXE
   printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$target" "$bytes" "${text:-unavailable}" >>"$sizes"
 }
 
-names=$(emit_examples)
+rows=$(manifest_rows bir)
 mkdir -p "$work/ctl"
-for name in $names; do
+first_name= first_program= first_expect=
+while IFS=$'\t' read -r name program expect; do
+  if [ -z "$first_name" ]; then first_name=$name first_program=$program first_expect=$expect; fi
   d="$work/ex/$name"
   t0=$(now_ms)
-  "${emitter[@]}" emit "$name" "$d" "$target"
+  read -r -a expectation <<<"$expect"
+  "${emitter[@]}" emit "${program#bir:}" "$d" "$target" "${expectation[@]}"
   t1=$(now_ms)
   build "$name" "$d/build.log" bounded "$native_secs" bash "$root/scripts/checks/lib/slice0_native.sh" "$d" "$lcb"
   t2=$(now_ms)
@@ -183,11 +186,12 @@ for name in $names; do
     stack_check "$name" "$backend" "$d/$backend.exe"
   done
   examples=$((examples + 1))
-done
+done <<<"$rows"
 
 # Control (gate 10): an out-of-bounds load in the body must be reported by ASan.
 c="$work/ctl/asan"
-"${emitter[@]}" emit "${names%%$'\n'*}" "$c" "$target"
+read -r -a first_expectation <<<"$first_expect"
+"${emitter[@]}" emit "${first_program#bir:}" "$c" "$target" "${first_expectation[@]}"
 sed -i.orig 's/^define i32 @concrete_body() {$/define i32 @concrete_body_orig() {/' "$c/llvm.ll"
 cat >>"$c/llvm.ll" <<'LL'
 
