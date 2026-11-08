@@ -207,11 +207,17 @@ g notes --ref=refs/notes/concrete-review add -f -m "verdict: clean" HEAD
 (cd "$W" && bash "$VERIFY" HEAD >/dev/null 2>&1); rc=$?
 check "malformed note (verdict line alone): exit 2 (got $rc)" test "$rc" -eq 2
 B40="$(printf '%040d' 0 | tr 0 a)"
-# The landing bot's carried note (notes.sh put: keys in its own order, utc last) is well formed.
-g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nbase: %s\npieces: 1\ncarried-from: %s\nutc: 2026-10-22T00:00:00Z' "$B40" "$B40")" HEAD
+# A note notes.sh put wrote (keys in its own order, utc last) is well formed.
+g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nbase: %s\npieces: 1\nutc: 2026-10-22T00:00:00Z' "$B40")" HEAD
 (cd "$W" && bash "$VERIFY" HEAD >"$T/vc" 2>&1); rc=$?
-check "the landing bot's carried note verifies clean (exit 0, got $rc)" test "$rc" -eq 0
-check "a carried verdict says where it came from" grep -q "carried from $B40" "$T/vc"
+check "a note with utc last verifies clean (exit 0, got $rc)" test "$rc" -eq 0
+# The landing bot's keys went with it: a verdict carried across a rebase, or a landing order, is no
+# longer a key a review note may hold.
+for extra in "carried-from: $B40" "order: 1"; do
+  g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nbase: %s\npieces: 1\nutc: 2026-10-22T00:00:00Z\n%s' "$B40" "$extra")" HEAD
+  out="$(cd "$W" && bash "$VERIFY" HEAD 2>&1)"; rc=$?
+  check "a note with '${extra%%:*}' is malformed: exit 2, bad ${extra%%:*} (got $rc)" test "$rc" -eq 2 -a -n "$(printf '%s' "$out" | grep -F "malformed review note (bad ${extra%%:*})")"
+done
 g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nutc: 2026-10-22T00:00:00Z\nbase: %s\npieces: 1\nsurprise: 1' "$B40")" HEAD
 (cd "$W" && bash "$VERIFY" HEAD >/dev/null 2>&1); rc=$?
 check "an unknown key is malformed: exit 2 (got $rc)" test "$rc" -eq 2

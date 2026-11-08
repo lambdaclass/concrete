@@ -3,7 +3,7 @@
 Status: operational procedure. How work is done in this repository: the agent playbooks, the
 rules they share, and [concurrent work](#concurrent-work-one-worktree-per-writer) (one worktree per
 writer, the server gate runs, publishing). It absorbed `CONCURRENT_WORK.md` on 2026-10-29. The
-tool manuals it points to stay separate: [LANDING.md](docs/LANDING.md) (landing trains and the bot),
+tool manuals it points to stay separate: [LANDING.md](docs/LANDING.md) (landing trains),
 [REVIEW.md](docs/REVIEW.md) (`scripts/review/review.sh`), [WORK_QUEUE.md](legacy/docs/archive/roadmap-2026-11/WORK_QUEUE.md) (the agent work
 queue), [STATUS_PAGE.md](legacy/docs/project/STATUS_PAGE.md) and [PROMOTION_PIPELINE.md](legacy/docs/project/PROMOTION_PIPELINE.md) (the
 validation stages, CI tiers and result vocabulary).
@@ -94,7 +94,7 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
   (`git push origin HEAD:refs/heads/wip/<branch>`); the hook's wip tier only scans for conflict
   markers.
 - Never push to `main`, `ci/*` or the remote `fork`. Landings go to both `origin` and
-  `lambdaclass`, only through the landing script (`scripts/land/train.sh`) or the landing bot.
+  `lambdaclass`, only through the landing script (`scripts/land/train.sh`).
   `train.sh check` runs the checks before the push, and the push runs the root hook's full set again;
   the train's push to `ci/<name>` and both pushes of `land` are read back with `ls-remote` and
   retried when they did not move the ref (GitHub drops the connection during long hooks); `land` checks that both remotes are at
