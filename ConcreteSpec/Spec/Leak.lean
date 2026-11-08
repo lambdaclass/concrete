@@ -132,10 +132,12 @@ inductive InstrumentedSteps {O : Operands} (I : Instrumentation O) (P : Program 
       InstrumentedSteps I P c (I.observeStep c l c' ++ obs) (I.leakage c l c' ++ leaks)
         (I.releases c l c' ++ rs) (I.choices c l c' ++ choices) c''
 
-/-- One finite instrumented execution, possibly a prefix. Its proof is a C1 execution, not a separate
-semantics. -/
+/-- One complete finite instrumented execution. Its proof is a C1 execution, not a separate
+semantics, and `ending` is its C1 final outcome. -/
 structure Run {O : Operands} (I : Instrumentation O) (P : Program O) (initial : Config O) where
   final : Config O
+  ending : Final O.Val
+  finalEnding : final.final? = some ending
   observations : List I.Observation
   leakage : List (Leakage O.Val I.Address I.Effect)
   releases : List (Release O.Ty O.Val)
@@ -147,20 +149,21 @@ def Run.publicObservations {O : Operands} {I : Instrumentation O} {P : Program O
     (r : Run I P c) : List I.Observation :=
   r.observations ++ (I.observeFinal r.final).toList
 
-/-- Delimited-release noninterference. For low-equivalent initial states, matched external choices
-and equal ordered release traces, every pair of runs has equal public observations. No equality of
-leakage is asserted. -/
+/-- Delimited-release noninterference between two entry configurations of one program. For
+low-equivalent initial states, matched external choices and equal ordered release traces, every
+pair of complete finite runs has equal public observations. No equality of leakage is asserted. -/
 def DelimitedReleaseNI {O : Operands} (I : Instrumentation O) (P : Program O)
-    (L : Labelling O) : Prop :=
-  ∀ {c₁ c₂ : Config O} (r₁ : Run I P c₁) (r₂ : Run I P c₂),
+    (L : Labelling O) (c₁ c₂ : Config O) : Prop :=
+  ∀ (r₁ : Run I P c₁) (r₂ : Run I P c₂),
     LowEquivalent L c₁ c₂ → r₁.choices = r₂.choices → r₁.releases = r₂.releases →
       r₁.publicObservations = r₂.publicObservations
 
-/-- Constant time under the same delimited-release premises: the complete baseline leakage traces
-are equal. This is a separate claim from `DelimitedReleaseNI`, not a consequence of authorization. -/
+/-- Constant time between the same entries and under the same delimited-release premises: the
+complete baseline leakage traces are equal. This is separate from `DelimitedReleaseNI`, not a
+consequence of authorization. -/
 def ConstantTime {O : Operands} (I : Instrumentation O) (P : Program O)
-    (L : Labelling O) : Prop :=
-  ∀ {c₁ c₂ : Config O} (r₁ : Run I P c₁) (r₂ : Run I P c₂),
+    (L : Labelling O) (c₁ c₂ : Config O) : Prop :=
+  ∀ (r₁ : Run I P c₁) (r₂ : Run I P c₂),
     LowEquivalent L c₁ c₂ → r₁.choices = r₂.choices → r₁.releases = r₂.releases →
       r₁.leakage = r₂.leakage
 
