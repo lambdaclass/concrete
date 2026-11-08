@@ -1214,6 +1214,7 @@ ConcreteSpec.Core.FnId.mk.sizeOf_spec
 ConcreteSpec.Core.GrantId.mk.inj	
 ConcreteSpec.Core.GrantId.mk.injEq	propext
 ConcreteSpec.Core.GrantId.mk.sizeOf_spec	
+ConcreteSpec.Core.Hybrid.Audit.Frame.observedStart.eq_1	
 ConcreteSpec.Core.Hybrid.Audit.after._proof_1	propext
 ConcreteSpec.Core.Hybrid.Audit.before.eq_1	
 ConcreteSpec.Core.Hybrid.Audit.structState.eq_1	
@@ -1386,6 +1387,7 @@ ConcreteSpec.Core.Mem.access_success	propext
 ConcreteSpec.Core.Mem.access_valid	Quot.sound propext
 ConcreteSpec.Core.Mem.access_valid._proof_1_3	Quot.sound propext
 ConcreteSpec.Core.Mem.access_zero	propext
+ConcreteSpec.Core.Mem.access_zero_valid_inv	propext
 ConcreteSpec.Core.Mem.alloc_block	propext
 ConcreteSpec.Core.Mem.alloc_failure	propext
 ConcreteSpec.Core.Mem.alloc_fresh	propext
@@ -1422,8 +1424,15 @@ ConcreteSpec.Core.Mem.encodeInt.eq_1
 ConcreteSpec.Core.Mem.encodeInt_length	propext
 ConcreteSpec.Core.Mem.encodePtr.eq_1	
 ConcreteSpec.Core.Mem.eqAddr_provenance	propext
+ConcreteSpec.Core.Mem.eqAddr_separation	Quot.sound propext
+ConcreteSpec.Core.Mem.eqAddr_separation._proof_1_3	Quot.sound propext
+ConcreteSpec.Core.Mem.eqAddr_separation._proof_1_4	Quot.sound propext
+ConcreteSpec.Core.Mem.eqAddr_separation._proof_1_5	Quot.sound propext
+ConcreteSpec.Core.Mem.eqAddr_separation._simp_1_2	propext
 ConcreteSpec.Core.Mem.expose_frame	propext
+ConcreteSpec.Core.Mem.expose_frame_inv	propext
 ConcreteSpec.Core.Mem.expose_geometry	
+ConcreteSpec.Core.Mem.expose_geometry_inv	
 ConcreteSpec.Core.Mem.expose_load	Quot.sound propext
 ConcreteSpec.Core.Mem.expose_result	
 ConcreteSpec.Core.Mem.expose_success	propext
@@ -1431,6 +1440,7 @@ ConcreteSpec.Core.Mem.expose_wellFormed	Quot.sound propext
 ConcreteSpec.Core.Mem.free_alloc_ne_existing	Quot.sound propext
 ConcreteSpec.Core.Mem.free_alloc_ne_existing._proof_1_1	Quot.sound propext
 ConcreteSpec.Core.Mem.free_retains	propext
+ConcreteSpec.Core.Mem.free_retains_inv	propext
 ConcreteSpec.Core.Mem.free_wellFormed	Quot.sound propext
 ConcreteSpec.Core.Mem.fromExposed_contains	Quot.sound propext
 ConcreteSpec.Core.Mem.fromExposed_exists	Quot.sound propext
@@ -1493,6 +1503,7 @@ ConcreteSpec.Core.Mem.splice_frame._proof_1_3	Quot.sound propext
 ConcreteSpec.Core.Mem.splice_frame._proof_1_4	Quot.sound propext
 ConcreteSpec.Core.Mem.splice_read	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Mem.store_geometry	propext
+ConcreteSpec.Core.Mem.store_geometry_inv	propext
 ConcreteSpec.Core.Mem.store_load	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Mem.store_load._proof_1_4	Quot.sound propext
 ConcreteSpec.Core.Mem.store_load._proof_1_6	Quot.sound propext
@@ -2853,8 +2864,12 @@ _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.unwindLocals.match_1.
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Res.bind.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Res.bind.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Res.bind.match_1.eq_3	
-_private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.Audit.before_disjoint	propext
-_private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.Audit.before_sep	propext
+_private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.Audit.Frame.before_disjoint	propext
+_private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.Audit.Frame.before_sep	propext
+_private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.Audit.Frame.before_wf	Quot.sound propext
+_private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.Audit.Frame.observedStart_wf	Quot.sound propext
+_private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.Audit.Frame.observed_wf	Quot.sound propext
+_private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.Audit.Frame.structState_wf	Quot.sound propext
 _private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.Audit.before_wf	Quot.sound propext
 _private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.Audit.not_badState_wf	propext
 _private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.Audit.structState_wf	Quot.sound propext
