@@ -119,21 +119,31 @@ if sys.platform == 'darwin':
 else:
     tool = os.environ['CONCRETE_SLICE0_LINKER_BIN'] + '/readelf'
     headers = subprocess.check_output([tool, '-W', '-l', '-d', exe], text=True)
-    if re.search(r'\((?:FILTER|AUXILIARY|AUDIT|DEPAUDIT)\)', headers):
-        sys.exit('link purity: unsupported ELF dependency injection tag')
+    def elf_dynamic(headers, image):
+        if re.search(r'\((?:FILTER|AUXILIARY|AUDIT|DEPAUDIT)\)', headers):
+            sys.exit('link purity: unsupported ELF dependency injection tag')
+        for paths in re.findall(r'\((?:RUNPATH|RPATH)\).*?\[([^\]]*)\]', headers):
+            # glibc disables an entirely empty tag; an empty component of a
+            # nonempty colon list instead searches cwd and is rejected below.
+            if not paths:
+                continue
+            for path in paths.split(':'):
+                if '$ORIGIN' in path or '${ORIGIN}' in path:
+                    path = os.path.normpath(path.replace('${ORIGIN}', str(Path(image).resolve().parent))
+                                            .replace('$ORIGIN', str(Path(image).resolve().parent)))
+                if not path.startswith('/') or '$' in path:
+                    sys.exit(f'link purity: relative, empty or unresolved runtime search path in {image}: {path!r}')
+                allowed(path)
+        for path in re.findall(r'\(NEEDED\).*?\[([^\]]*)\]', headers):
+            if '/' in path:
+                allowed(path)
+
+    elf_dynamic(headers, exe)
     loaders = re.findall(r'Requesting program interpreter: ([^\]]+)', headers)
     if len(loaders) != 1:
         sys.exit('link purity: expected one ELF interpreter')
     for path in loaders:
         allowed(path)
-    for paths in re.findall(r'\((?:RUNPATH|RPATH)\).*?\[([^\]]*)\]', headers):
-        for path in paths.split(':'):
-            if not path.startswith('/'):
-                sys.exit('link purity: relative or empty runtime search path')
-            allowed(path)
-    for path in re.findall(r'\(NEEDED\).*?\[([^\]]*)\]', headers):
-        if '/' in path:
-            allowed(path)
     # Ask the declared loader to resolve the complete dependency graph, including
     # transitive bare DT_NEEDED names. --list does not execute the program. Empty
     # environment removes LD_PRELOAD/LD_LIBRARY_PATH and other loader injections.
@@ -148,5 +158,4 @@ else:
             sys.exit('link purity: unresolved loader output: ' + line)
         allowed(match[1])
         dynamic = subprocess.check_output([tool, '-W', '-d', match[1]], text=True)
-        if re.search(r'\((?:FILTER|AUXILIARY|AUDIT|DEPAUDIT)\)', dynamic):
-            sys.exit('link purity: unsupported transitive ELF dependency injection tag')
+        elf_dynamic(dynamic, match[1])
