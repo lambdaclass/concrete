@@ -34,9 +34,13 @@ fi
 # Before the CONCRETE_SKIP_GATES exit: that skips gates, never the destination.
 # shellcheck source=scripts/land/lib.sh
 . "$(dirname "$HOOK_SELF")/../scripts/land/lib.sh" || { echo "pre-push: cannot read scripts/land/lib.sh; refusing" >&2; exit 1; }
-if dest="$(land_url_target "${2:-}")" && { [ "${dest%% *}" != github.com ] || ! land_known_repo "${dest#* }"; }; then
-  echo "pre-push: refusing to push to $(land_url_redact "${2:-}"): it is not one of the project's repositories ($LAND_REPOSITORIES on github.com)" >&2
-  exit 1
+# The URL git pushes to, and, when the push names a configured remote, every fetch and push URL of
+# that remote (a remote that fetches one project repository and pushes the other is refused too).
+if ! why="$(land_url_bad "${2:-}")"; then
+  echo "pre-push: refusing to push: $why" >&2; exit 1
+fi
+if [ -n "${1:-}" ] && [ "${1:-}" != "${2:-}" ] && git remote get-url "$1" >/dev/null 2>&1 && ! why="$(land_remote_bad "$1")"; then
+  echo "pre-push: refusing to push: $why" >&2; exit 1
 fi
 ROOT_DIR="$(git rev-parse --show-toplevel)"
 cd "$ROOT_DIR"

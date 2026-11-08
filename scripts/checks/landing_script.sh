@@ -574,7 +574,7 @@ dec="$( cd "$RI" && source "$ROOT_DIR/scripts/checks/lib/prepush_record.sh" && p
 has "$dec" "refused:changed:env" && ok "a push in another CONCRETE_* environment than the host's run does not reuse it" || no "e2e env mismatch: $dec"
 # A git shim on the "host" logs every fetch: the stale gate clone must log none.
 mkdir -p "$TMP/hostgit"
-printf '#!/bin/sh\nfor a in "$@"; do case "$a" in fetch|ls-remote) echo "$*" >> "%s"; break ;; esac; done\nexec "%s" "$@"\n' "$TMP/hostgit.log" "$(command -v git)" > "$TMP/hostgit/git"
+printf '#!/bin/sh\nfor a in "$@"; do case "$a" in fetch|ls-remote) case " $* " in *" --get-url "*) ;; *) echo "$*" >> "%s" ;; esac; break ;; esac; done\nexec "%s" "$@"\n' "$TMP/hostgit.log" "$(command -v git)" > "$TMP/hostgit/git"
 chmod +x "$TMP/hostgit/git"; : > "$TMP/hostgit.log"
 git -C "$HH/concrete2" remote set-url origin https://github.com/unbalancedparentheses/concrete2.git
 PATH="$TMP/hostgit:$PATH" e2e
@@ -623,27 +623,70 @@ runjson "$(git rev-parse b1)" success success
 out="$(bash "$TRAIN" land t1 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "not the train HEAD" && ok "land refuses a run at another SHA" || no "land accepted a head-SHA mismatch (exit $rc)"
 runjson "$HEAD1" success failure
+# The project's-repositories guard: refused before any push or GitHub read. A git shim logs every
+# network operation and the fake gh logs every call: a refused command must log neither.
+mkdir -p "$TMP/netshim"
+printf '#!/bin/sh\nfor a in "$@"; do case "$a" in fetch|push|ls-remote|clone) case " $* " in *" --get-url "*) ;; *) echo "$*" >> "%s" ;; esac; break ;; esac; done\nexec "%s" "$@"\n' "$TMP/netshim.log" "$(command -v git)" > "$TMP/netshim/git"
+chmod +x "$TMP/netshim/git"
+refused_offline(){ # label expect-text cmd... -> ok/no, with no network git and no gh call
+  local label="$1" want="$2"; shift 2
+  : > "$TMP/netshim.log"; local g0; g0="$(cat "$FAKE_GH_DIR/calls.log" 2>/dev/null | wc -l)"
+  out="$(PATH="$TMP/netshim:$PATH" "$@" 2>&1)"; rc=$?
+  [ "$rc" != 0 ] && has "$out" "$want" && [ ! -s "$TMP/netshim.log" ] && [ "$(cat "$FAKE_GH_DIR/calls.log" 2>/dev/null | wc -l)" = "$g0" ] \
+    && ok "$label (refused before any fetch, push or gh call)" || { no "$label: exit $rc"; echo "$out" | sed 's/^/      /'; sed 's/^/      net: /' "$TMP/netshim.log"; }
+}
 out="$(LAND_REMOTE=fork bash "$TRAIN" land t1 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "named 'fork'" && ok "land refuses the remote named fork as primary" || no "fork accepted as primary (exit $rc)"
-out="$(LAND_REMOTE=gh-stale bash "$TRAIN" land t1 2>&1)"; rc=$?
-[ "$rc" != 0 ] && has "$out" "points at another repository" && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$BASE" ] \
-  && ok "land refuses a remote that is another GitHub repository, before pushing anything" || no "land accepted a stale GitHub remote (exit $rc)"
-out="$(LAND_REMOTE=gh-push bash "$TRAIN" land t1 2>&1)"; rc=$?
-[ "$rc" != 0 ] && has "$out" "points at another repository" && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$BASE" ] \
-  && ok "land refuses a remote whose push URL is another GitHub repository" || no "land accepted a stale push URL (exit $rc)"
-out="$(LAND_REMOTE=gh-stale bash "$TRAIN" ci t1 2>&1)"; rc=$?
-[ "$rc" != 0 ] && has "$out" "points at another repository" && ok "ci refuses a remote that is another GitHub repository" || no "ci accepted a stale GitHub remote (exit $rc)"
-out="$(LAND_REMOTE=gh-stale bash "$TRAIN" check t1 2>&1)"; rc=$?
-[ "$rc" != 0 ] && has "$out" "points at another repository" && ok "check refuses a remote that is another GitHub repository (its remote leg pushes)" || no "check accepted a stale GitHub remote (exit $rc)"
-out="$(LAND_REMOTE=gh-stale LAND_REPO=unbalancedparentheses/concrete2 bash "$TRAIN" land t1 2>&1)"; rc=$?
-[ "$rc" != 0 ] && has "$out" "points at another repository" && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$BASE" ] \
-  && ok "land refuses an old origin even when LAND_REPO still names the old repository" || no "land accepted an old origin with an old LAND_REPO (exit $rc)"
-out="$(LAND_REMOTE=gh-alias bash "$TRAIN" land t1 2>&1)"; rc=$?
-[ "$rc" != 0 ] && has "$out" "points at another repository" && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$BASE" ] \
-  && ok "land refuses an ssh host alias for another repository (the host is not what is checked)" || no "land accepted an ssh alias for concrete2 (exit $rc)"
+for c in "land t1" "ci t1" "check t1" "watch t1 --interval 1" "--dry-run build tother --no-fetch b1"; do
+  refused_offline "train.sh ${c%% *} refuses the old repository" "points at another repository" env LAND_REMOTE=gh-stale bash "$TRAIN" $c
+done
+[ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$BASE" ] && ok "no refused command moved origin/main" || no "a refused command moved origin/main"
+refused_offline "land refuses a remote whose push URL is another GitHub repository" "points at another repository" env LAND_REMOTE=gh-push bash "$TRAIN" land t1
+refused_offline "land refuses an old origin even when LAND_REPO still names the old repository" "points at another repository" env LAND_REMOTE=gh-stale LAND_REPO=unbalancedparentheses/concrete2 bash "$TRAIN" land t1
+refused_offline "land refuses an ssh host alias for another repository (the host is not what is checked)" "points at another repository" env LAND_REMOTE=gh-alias bash "$TRAIN" land t1
+# git's own ssh command decides where an ssh URL goes: the guard asks it. An override that changes the
+# host is refused; one that only adds options passes; one that is not ssh cannot be asked and is refused.
+ovr_ok=1
+recip(){ GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=url.https://attacker.example/.insteadOf GIT_CONFIG_VALUE_0=https://github.com/ \
+  GIT_CONFIG_KEY_1=url.https://github.com/.insteadOf GIT_CONFIG_VALUE_1=https://attacker.example/ "$@"; }
+git init -q "$TMP/recip" && git -C "$TMP/recip" remote add origin https://github.com/lambdaclass/concrete.git
+while read -r want how url; do
+  ( . "$ROOT_DIR/scripts/land/lib.sh"; case "$how" in
+      plain) land_url_bad "$url" ;;
+      cmd-host) GIT_SSH_COMMAND='ssh -o HostName=attacker.example' land_url_bad "$url" ;;
+      cmd-alive) GIT_SSH_COMMAND='ssh -o ServerAliveInterval=20' land_url_bad "$url" ;;
+      cmd-other) GIT_SSH_COMMAND='plink -batch' land_url_bad "$url" ;;
+      prog) GIT_SSH=/usr/local/bin/ssh-wrapper land_url_bad "$url" ;;
+      config-over-prog) GIT_SSH=ssh GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.sshCommand GIT_CONFIG_VALUE_0='ssh -o HostName=attacker.example' land_url_bad "$url" ;;
+      insteadof) export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=url.https://github.com/someone/else.git.insteadOf GIT_CONFIG_VALUE_0=https://github.com/lambdaclass/concrete.git
+                 land_url_bad "$(land_url_expand "$url")" ;;
+      # Reciprocal rewrites: git resolves the GitHub URL to attacker.example once; checking the
+      # resolved URL must not rewrite it back (land_url_bad never expands; get-url already did).
+      recip-resolved) recip land_url_bad "$url" ;;
+      recip-remote) cd "$TMP/recip" && recip land_remote_bad origin ;;
+      remote) cd "$TMP/recip" && land_remote_bad origin ;;
+      config) GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.sshCommand GIT_CONFIG_VALUE_0='ssh -o HostName=attacker.example' land_url_bad "$url" ;;
+    esac ) >/dev/null; got=$?
+  [ "$got" = "$want" ] || { ovr_ok=0; echo "      $how $url: exit $got, want $want"; }
+done <<'OVR'
+0 plain git@github.com:lambdaclass/concrete.git
+1 cmd-host git@github.com:lambdaclass/concrete.git
+0 cmd-alive git@github.com:lambdaclass/concrete.git
+1 cmd-other git@github.com:lambdaclass/concrete.git
+1 prog ssh://git@github.com/lambdaclass/concrete.git
+1 config git@github.com:lambdaclass/concrete.git
+0 cmd-host https://github.com/lambdaclass/concrete.git
+1 config-over-prog git@github.com:lambdaclass/concrete.git
+1 insteadof https://github.com/lambdaclass/concrete.git
+1 recip-resolved https://attacker.example/lambdaclass/concrete.git
+1 recip-remote -
+0 remote -
+0 plain https://github.com/lambdaclass/concrete.git
+OVR
+[ "$ovr_ok" = 1 ] && ok "the guard resolves URLs as git does: its own ssh command (GIT_SSH_COMMAND, core.sshCommand, GIT_SSH, in that order) and url.insteadOf, applied once" || no "the guard ignored an ssh override"
 # The URL table, read through the same function: every network form of the one repository passes,
 # every network form of another fails, local paths pass and leave LAND_REPO free.
-# ssh -G is stubbed: github-lambdaclass is an alias for github.com, every other name is itself.
+# ssh -G is stubbed: github-lambdaclass and github_work are aliases for github.com, every other name is itself.
 mkdir -p "$TMP/sshstub"
 cat > "$TMP/sshstub/ssh" <<'SSH'
 #!/bin/sh
@@ -693,15 +736,13 @@ out2="$(cd "$W" && printf 'refs/heads/x %s refs/heads/wip/dst %s\n' "$(git rev-p
 git remote remove gh-secret
 [ "$rc" != 0 ] && [ "$rc2" = 1 ] && has "$out" "https://***@github.com" && has "$out2" "https://***@github.com" \
   && ! has "$out$out2" "SENTINEL" && [ "$(. "$ROOT_DIR/scripts/land/lib.sh"; land_url_redact 'https://u:a@b@github.com/x/y@z')" = 'https://***@github.com/x/y@z' ] \
-  && [ "$(printf '%s\n' 'https://u:a@SENTINEL@github.com/x' | sed -E "$(sed -n "s/^redact() { sed -E '\(.*\)' |.*/\1/p" "$ROOT_DIR/scripts/land/install-bot.sh")")" = 'https://***@github.com/x' ] \
-  && ok "refusals redact a URL's credentials (through the last @ of the authority, in lib.sh and install-bot.sh)" || no "a refusal printed credentials or did not refuse ($rc/$rc2): $out $out2"
+  && ok "refusals redact a URL's credentials (through the authority's last @)" || no "a refusal printed credentials or did not refuse ($rc/$rc2): $out $out2"
 [ "$url_ok" = 1 ] && ok "the one-repository guard accepts only github.com/lambdaclass/concrete, in every URL form and through ssh aliases" || no "the one-repository guard misjudged a URL form"
-out="$(LAND_REMOTE=gh-canon bash "$TRAIN" ci t1 2>&1)"; rc=$?
-[ "$rc" != 0 ] && has "$out" "gh would read another repository" && ok "ci refuses a LAND_REPO that is not the one repository the remote names" || no "ci accepted LAND_REPO=test/repo on the canonical remote (exit $rc)"
+refused_offline "ci refuses a LAND_REPO that is not the one repository the remote names" "gh would read another repository" env LAND_REMOTE=gh-canon bash "$TRAIN" ci t1
 # Every script that fetches or pushes on its own refuses a stale remote before touching it: a git shim
 # logs every fetch and push, and must log none.
 REALGIT="$(command -v git)"; mkdir -p "$TMP/gitshim"
-printf '#!/bin/sh\nfor a in "$@"; do case "$a" in fetch|push|ls-remote|clone) echo "$*" >> "%s"; break ;; esac; done\nexec "%s" "$@"\n' "$TMP/gitshim.log" "$REALGIT" > "$TMP/gitshim/git"
+printf '#!/bin/sh\nfor a in "$@"; do case "$a" in fetch|push|ls-remote|clone) case " $* " in *" --get-url "*) ;; *) echo "$*" >> "%s" ;; esac; break ;; esac; done\nexec "%s" "$@"\n' "$TMP/gitshim.log" "$REALGIT" > "$TMP/gitshim/git"
 chmod +x "$TMP/gitshim/git"
 for ep in "LAND_REMOTE=gh-stale bash $ROOT_DIR/scripts/land/notes.sh fetch" \
           "LAND_REMOTE=gh-stale bash $ROOT_DIR/scripts/land/notes.sh put review HEAD verdict=clean" \
@@ -1330,6 +1371,9 @@ for u in https://github.com/unbalancedparentheses/concrete2.git git@github-old:u
     | CONCRETE_SKIP_GATES=1 bash "$ROOT_DIR/.githooks/pre-push" origin "$u" 2>&1)"; rc=$?
   [ "$rc" = 1 ] && has "$out" "not one of the project's repositories" && ok "the hook refuses a push to $u, even with CONCRETE_SKIP_GATES=1" || no "hook pushed to $u: exit $rc, $out"
 done
+out="$(cd "$W" && printf 'refs/heads/x %s refs/heads/wip/dst %s\n' "$(git rev-parse main)" 0000000000000000000000000000000000000000 \
+  | bash "$ROOT_DIR/.githooks/pre-push" gh-stale https://github.com/lambdaclass/concrete.git 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "points at another repository" && ok "the hook checks a named remote's every URL (gh-stale fetches the old repository) as well as the one it pushes to" || no "hook accepted a stale named remote: exit $rc, $out"
 for u in git@github-lambdaclass:lambdaclass/concrete.git https://github.com/LambdaClass/concrete; do
   out="$(cd "$W" && printf 'refs/heads/x %s refs/heads/wip/dst %s\n' "$(git rev-parse main)" 0000000000000000000000000000000000000000 \
     | PATH="$TMP/sshstub:$PATH" bash "$ROOT_DIR/.githooks/pre-push" origin "$u" 2>&1)"; rc=$?

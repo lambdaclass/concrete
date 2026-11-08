@@ -9,6 +9,7 @@
 #   LAND_CANONICAL_REPO         the one GitHub repository (owner/name), a constant
 #   LAND_REPOSITORIES           the project's GitHub repositories (owner/name): LAND_CANONICAL_REPO alone
 #   land_url_target url             "<host> <owner/name>" of a network URL; returns 1 for a local one
+#   land_url_bad url                print why <url> is outside LAND_REPOSITORIES and return 1 (local: 0)
 #   land_url_redact url             the URL with a scheme URL's userinfo replaced by ***
 #   land_remote_bad remote [repo]   print why <remote> is not one of LAND_REPOSITORIES (or not <repo>), return 1
 #
@@ -95,13 +96,29 @@ land_known_repo() { # owner/name (lowercase) -> 0 iff it is one of LAND_REPOSITO
 # and prints "<host> <owner/name>", both lowercased, the host without user, port or trailing dot and
 # resolved through the ssh config for ssh transports; "? ?" for a scheme other than
 # http(s)/ssh/git/git+ssh/ssh+git or a host, user or port that is not plain.
-land_ssh_host() { # host [user] [port] -> the HostName the ssh config gives it (itself without one,
-  # or without ssh). The URL's user and port are passed as git's ssh would, so a `Match user` or
-  # `Match` on the port resolves as it does for the real connection.
-  local h args=()
+# land_ssh_host host [user] [port]: the HostName ssh resolves <host> to, asking the ssh command git
+# itself would run here (git's order, connect.c: GIT_SSH_COMMAND, else core.sshCommand, else
+# GIT_SSH, else ssh) with -G, which reads the configuration and connects nowhere; the URL's user and port are
+# passed as git's ssh would, so a `Match user` or one on the port resolves as for the real
+# connection, and so does an override such as GIT_SSH_COMMAND='ssh -o HostName=...'. An override
+# that is not ssh (a wrapper program, plink, ...) cannot be asked: returns 1 and the URL is
+# refused. Without ssh installed, the host is itself.
+land_ssh_host() {
+  local cmd prog h args=()
   [ -z "${2:-}" ] || args+=(-l "$2")
   [ -z "${3:-}" ] || args+=(-p "$3")
-  h="$(ssh -G ${args[@]+"${args[@]}"} "$1" 2>/dev/null | awk '$1 == "hostname" { print $2; exit }')" || h=""
+  if [ -n "${GIT_SSH_COMMAND:-}" ]; then cmd="$GIT_SSH_COMMAND"
+  elif cmd="$(git config --get core.sshCommand 2>/dev/null)" && [ -n "$cmd" ]; then :
+  elif [ -n "${GIT_SSH:-}" ]; then
+    [ "${GIT_SSH##*/}" = ssh ] || return 1
+    h="$("$GIT_SSH" -G ${args[@]+"${args[@]}"} "$1" 2>/dev/null | awk '$1 == "hostname" { print $2; exit }')" || h=""
+    printf '%s\n' "${h:-$1}"; return 0
+  else cmd=ssh
+  fi
+  prog="${cmd%%[[:space:]]*}"; prog="${prog##*/}"
+  [ "$prog" = ssh ] || return 1
+  # As git runs it: the command through the shell, with git's arguments appended.
+  h="$(sh -c "$cmd -G \"\$@\"" land-ssh-G ${args[@]+"${args[@]}"} "$1" 2>/dev/null | awk '$1 == "hostname" { print $2; exit }')" || h=""
   printf '%s\n' "${h:-$1}"
 }
 land_url_target() {
@@ -126,7 +143,8 @@ land_url_target() {
       # Only an ssh user reaches ssh -G, so only it must be plain (http userinfo may be percent-encoded
       # and is never passed on).
       case "$user" in -*|*[!A-Za-z0-9._-]*) echo "? ?"; return 0 ;; esac
-      h="$(land_ssh_host "$h" "$user" "$port" | tr 'A-Z' 'a-z')" ;;
+      h="$(land_ssh_host "$h" "$user" "$port")" || { echo "? ?"; return 0; }
+      h="$(printf '%s' "$h" | tr 'A-Z' 'a-z')" ;;
     https|http|git) ;;
     *) echo "? ?"; return 0 ;;
   esac
@@ -145,6 +163,27 @@ land_url_redact() {
              case "$auth" in *@*) printf '%s://***@%s%s\n' "${1%%://*}" "${auth##*@}" "$path"; return 0 ;; esac ;;
   esac
   printf '%s\n' "$1"
+}
+# land_url_expand url: <url> as git will use it, url.*.insteadOf applied once (`git ls-remote
+# --get-url`, which connects nowhere), for a URL taken as typed or as stored in remote.<r>.url.
+# Git applies the rewrite exactly once, so a URL git already resolved (`git remote get-url`, the
+# pre-push hook's $2) must not pass through here again: reciprocal rewrites would turn it back.
+land_url_expand() {
+  local u
+  u="$(git ls-remote --get-url "$1" 2>/dev/null)" && [ -n "$u" ] || u="$1"
+  printf '%s\n' "$u"
+}
+# land_url_bad url: print why <url> is not a URL of one of the project's repositories and return 1;
+# 0 for such a URL and for a local one. <url> is the URL git connects to, already rewritten (the
+# hook's $2; land_url_expand for a raw one); it is not expanded again.
+land_url_bad() {
+  local target
+  target="$(land_url_target "$1")" || return 0
+  if [ "${target%% *}" != github.com ] || ! land_known_repo "${target#* }"; then
+    echo "$(land_url_redact "$1") is not one of the project's repositories ($LAND_REPOSITORIES on github.com): it points at another repository"
+    return 1
+  fi
+  return 0
 }
 # land_remote_bad remote [repo]: every fetch and push URL of <remote> (git pushes to
 # remote.<r>.pushurl when one is set, and to each of several; get-url applies url.*.insteadOf) that

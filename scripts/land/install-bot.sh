@@ -18,8 +18,15 @@
 set -euo pipefail
 if [ "${1:-}" = --ssh ]; then
   host="${2:?--ssh needs user@host}"; shift 2
+  # lib.sh first, on the same stdin: the host has no copy of the landing scripts yet, and the
+  # installer checks every URL with lib.sh's guard before it clones or fetches.
   exec ssh -i "${CONCRETE_REMOTE_KEY:-$HOME/.ssh/concrete_ci}" -o StrictHostKeyChecking=accept-new "$host" \
-    bash -s -- "$@" < "$0"
+    bash -s -- "$@" < <(cat "$(dirname "$0")/lib.sh" "$0")
+fi
+# Run from a checkout: lib.sh next to this file (over --ssh it came first on stdin, above).
+if ! declare -F land_remote_bad >/dev/null; then
+  # shellcheck source=scripts/land/lib.sh
+  . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh" || { echo "install-bot: cannot read scripts/land/lib.sh" >&2; exit 1; }
 fi
 REF="origin/main"; CLONE="$HOME/concrete-bot"
 while [ $# -gt 0 ]; do
@@ -30,30 +37,32 @@ while [ $# -gt 0 ]; do
   esac; shift
 done
 say() { echo "install-bot: $*"; }
-# URLs on one line, with a scheme URL's userinfo (https://user:TOKEN@host) replaced by *** (as
-# land_url_redact in lib.sh, which this script, run over ssh as a single file, cannot source).
-redact() { sed -E 's#^([A-Za-z][A-Za-z0-9+.-]*://)[^/]*@#\1***@#' | tr '\n' ' '; }   # through the authority's last @
+# URLs on one line, each with a scheme URL's userinfo replaced by *** (land_url_redact, lib.sh).
+redact() { local u; while IFS= read -r u; do printf '%s ' "$(land_url_redact "$u")"; done; }
 [ "$(id -un)" = dev ] || say "WARNING: running as $(id -un), not dev"
 ORIGIN_URL="${INSTALL_ORIGIN_URL:-git@github.com:lambdaclass/concrete.git}"
 
-# 1. the dedicated clone
+# 1. the dedicated clone. The URL, rewritten as git clone will rewrite it (url.*.insteadOf, once), is
+# the project's repository (lib.sh) before anything is cloned or fetched.
+why="$(land_url_bad "$(land_url_expand "$ORIGIN_URL")")" || { say "refusing: $why"; exit 1; }
 if [ ! -d "$CLONE/.git" ]; then
   say "cloning $(echo "$ORIGIN_URL" | redact)into $CLONE"
   git clone -q "$ORIGIN_URL" "$CLONE"
 fi
 cd "$CLONE"
 if [ "$(git config --get-all remote.origin.url)" != "$ORIGIN_URL" ]; then
-  say "repointing origin from $(git config --get-all remote.origin.url | redact) to $(echo "$ORIGIN_URL" | redact)"
+  say "repointing origin from $(git config --get-all remote.origin.url | redact)to $(echo "$ORIGIN_URL" | redact)"
   git config --replace-all remote.origin.url "$ORIGIN_URL"
 fi
-# A push URL would send pushes somewhere other than the fetch URL (train.sh refuses one that names
-# another repository); the bot pushes where it fetches, so it keeps none.
+if git remote get-url lambdaclass >/dev/null 2>&1; then say "removing the old mirror remote 'lambdaclass' (origin is that repository now)"; git remote remove lambdaclass; fi
+if git remote get-url fork >/dev/null 2>&1; then say "the clone has a remote named 'fork'; the bot refuses it, removing it"; git remote remove fork; fi
+# A push URL would send pushes somewhere other than the fetch URL (the bot and train.sh refuse a
+# remote whose URLs name two repositories); the bot pushes where it fetches, so it keeps none.
 if git config --get-all remote.origin.pushurl >/dev/null 2>&1; then
   say "removing origin's push URL(s): $(git config --get-all remote.origin.pushurl | redact)"
   git config --unset-all remote.origin.pushurl
 fi
-if git remote get-url lambdaclass >/dev/null 2>&1; then say "removing the old mirror remote 'lambdaclass' (origin is that repository now)"; git remote remove lambdaclass; fi
-if git remote get-url fork >/dev/null 2>&1; then say "the clone has a remote named 'fork'; the bot refuses it, removing it"; git remote remove fork; fi
+why="$(land_remote_bad origin "$LAND_CANONICAL_REPO")" || { say "refusing to fetch in $CLONE: $why"; exit 1; }
 git config core.hooksPath .githooks
 git config user.name >/dev/null || git config user.name "Concrete landing bot"
 git config user.email >/dev/null || git config user.email "landing-bot@concrete-ci-1.invalid"
@@ -65,7 +74,7 @@ SHA="$(git rev-parse "$REF^{commit}")"
 # 2. the launcher
 mkdir -p "$HOME/.local/libexec" "$HOME/.local/state/concrete-landing-bot" "$HOME/.config/systemd/user"
 # The launcher fetches before it runs the snapshot's bot.sh, so it checks the remote itself first,
-# with the lib.sh of the installed commit (the one-repository guard, land_remote_bad).
+# with the lib.sh of the installed commit (land_remote_bad: one of the project's repositories).
 git show "$SHA:scripts/land/lib.sh" > "$HOME/.local/libexec/concrete-landing-bot.lib.sh"
 cat > "$HOME/.local/libexec/concrete-landing-bot" <<EOF
 #!/usr/bin/env bash
@@ -110,9 +119,10 @@ else
   say "kept the existing $ENVF"
   # An older install set LAND_REPO=unbalancedparentheses/concrete2; train.sh and the bot refuse a
   # LAND_REPO that is not the one repository, so the installer migrates the line rather than warn.
+  # Written through a copy that keeps the file's mode (the file may hold other secrets).
   if grep -q '^LAND_REPO=' "$ENVF" && ! grep -qx 'LAND_REPO=lambdaclass/concrete' "$ENVF"; then
-    say "migrating $ENVF: $(grep '^LAND_REPO=' "$ENVF" | tr '\n' ' ') -> LAND_REPO=lambdaclass/concrete"
-    sed 's|^LAND_REPO=.*|LAND_REPO=lambdaclass/concrete|' "$ENVF" > "$ENVF.new" && mv "$ENVF.new" "$ENVF"
+    say "migrating $ENVF: $(grep '^LAND_REPO=' "$ENVF" | tr '\n' ' ')-> LAND_REPO=lambdaclass/concrete"
+    cp -p "$ENVF" "$ENVF.new" && sed 's|^LAND_REPO=.*|LAND_REPO=lambdaclass/concrete|' "$ENVF" > "$ENVF.new" && mv "$ENVF.new" "$ENVF"
   fi
 fi
 for u in concrete-landing-bot.service concrete-landing-bot.timer; do
