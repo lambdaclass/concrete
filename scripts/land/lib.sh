@@ -120,10 +120,13 @@ land_url_target() {
   h="$(printf '%s' "$h" | tr 'A-Z' 'a-z')"
   # A plain name (ssh aliases may carry an underscore); the RESOLVED name is compared, not this one.
   case "$h" in ""|-*|*[!a-z0-9._-]*) echo "? ?"; return 0 ;; esac
-  case "$user" in -*|*[!A-Za-z0-9._-]*) echo "? ?"; return 0 ;; esac
   case "$port" in *[!0-9]*) echo "? ?"; return 0 ;; esac
   case "$scheme" in
-    scp|ssh|git+ssh|ssh+git) h="$(land_ssh_host "$h" "$user" "$port" | tr 'A-Z' 'a-z')" ;;
+    scp|ssh|git+ssh|ssh+git)
+      # Only an ssh user reaches ssh -G, so only it must be plain (http userinfo may be percent-encoded
+      # and is never passed on).
+      case "$user" in -*|*[!A-Za-z0-9._-]*) echo "? ?"; return 0 ;; esac
+      h="$(land_ssh_host "$h" "$user" "$port" | tr 'A-Z' 'a-z')" ;;
     https|http|git) ;;
     *) echo "? ?"; return 0 ;;
   esac

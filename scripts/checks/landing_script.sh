@@ -669,6 +669,8 @@ done <<'URLS'
 0 git@GITHUB.COM.:lambdaclass/concrete lambdaclass/concrete
 0 git@github_work:lambdaclass/concrete.git lambdaclass/concrete
 0 https://user:token@github.com:443/lambdaclass/concrete lambdaclass/concrete
+0 https://alice%40example.com:TOKEN@github.com/lambdaclass/concrete.git lambdaclass/concrete
+1 ssh://-oProxyCommand=x@github.com/lambdaclass/concrete lambdaclass/concrete
 0 /tmp/x.git test/repo
 0 file:///tmp/x.git test/repo
 0 repos/concrete:backup.git test/repo
