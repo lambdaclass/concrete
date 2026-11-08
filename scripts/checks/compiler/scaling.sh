@@ -4,17 +4,20 @@
 # Repetitions are interleaved across sizes and the minimum is used. The 10x->100x exponent must be
 # at most SCALING_MAX_EXPONENT (default 1.35); 100x in-process stages must be at least
 # SCALING_MIN_STAGE_NS (default 10 ms), and native at least SCALING_MIN_NATIVE_NS (default 100 ms).
-# k0=1 gives 201 blocks and about 58 KiB of LLVM at 100x; smoke measurements put all real in-process
-# stages above 10 ms there, so k0=2 is unnecessary and would make the currently slow adapter exceed
-# the approximately ten-minute budget. scaling.tsv records every minimum and both exponents.
+# After ISS-0030 made LCB.emit and LLVM.module linear, concrete-ci-2 measured lcb_emit = 3.7 ms and
+# llvm_module = 4.2 ms at 100x with k0=1 (below the 10 ms floor). Requiring at least 2x the 10 ms
+# floor (>= 20 ms) for the fastest stage gives k0 = ceil(20 ms / 3.7 ms) = 6 (1201 blocks and about
+# 350 KiB of LLVM text at 100x, k=600), clearing the floor with margin. scaling.tsv records every
+# minimum and both exponents.
 # Hosted macOS runners are shared VMs; exponents there are not comparable, so x86-64-only is a decision.
 # lean --run measures the interpreted compiler, the only compiler available until concrete exists.
 #
 # usage: scaling.sh [REPORT_DIR] [--allow-planted-failure --plant linear|quadratic]
 # SCALING_IN_PROCESS_ONLY=1 omits native timing for local smoke runs. Every normal run automatically
-# checks linear PASS and quadratic FAIL controls without rebuilding; they measure/analyze only their
-# planted stage, so independent pipeline scaling defects (ISS-0030) cannot mask them. A control's
-# validation, timeout, resolution, inventory or unexpected verdict is a "control setup" failure.
+# checks linear PASS, quadratic FAIL and plant-without-authorization refusal controls without
+# rebuilding; they measure/analyze only their planted stage, so independent pipeline scaling defects
+# cannot mask them. A control's validation, timeout, resolution, inventory or unexpected verdict is
+# a "control setup" failure.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/../../.." && pwd)
 cd "$root"
@@ -50,7 +53,7 @@ if [ "$#" -gt 0 ]; then
     { echo "scaling: plants require --allow-planted-failure --plant linear|quadratic" >&2; exit 2; }
   plant=$3
 fi
-k0=${SCALING_K0:-1}
+k0=${SCALING_K0:-6}
 repetitions=${SCALING_REPETITIONS:-5}
 max_exponent=${SCALING_MAX_EXPONENT:-1.35}
 min_stage_ns=${SCALING_MIN_STAGE_NS:-10000000}
@@ -178,9 +181,26 @@ control_quadratic() {
   echo "ok scaling control quadratic: refused for planted reason (exponent $value)"
 }
 
+control_refusal() {
+  local log=$work/control-refusal.log rc=0
+  bounded 60 "${driver[@]}" measure "$k0" "$repetitions" "$target" --plant quadratic >"$log" 2>&1 || rc=$?
+  if [ "$rc" != 2 ] || ! grep -qF 'plants require --allow-planted-failure --plant linear|quadratic' "$log"; then
+    control_setup refusal "driver did not refuse --plant without --allow-planted-failure (status $rc)" "$log"
+    return 1
+  fi
+  rc=0
+  bounded 60 bash "$root/scripts/checks/compiler/scaling.sh" "$work/refusal-report" --plant quadratic >"$log" 2>&1 || rc=$?
+  if [ "$rc" != 2 ] || ! grep -qF 'scaling: plants require --allow-planted-failure --plant linear|quadratic' "$log"; then
+    control_setup refusal "gate did not refuse --plant without --allow-planted-failure (status $rc)" "$log"
+    return 1
+  fi
+  echo 'ok scaling control refusal: explicit flag required'
+}
+
 controls_rc=0
 control_linear || controls_rc=1
 control_quadratic || controls_rc=1
+control_refusal || controls_rc=1
 if [ "$controls_rc" != 0 ]; then
   echo 'FAIL scaling: automatic planted controls failed' >&2
   [ "$clean_rc" != 0 ] || clean_rc=1

@@ -4,7 +4,13 @@ import Concrete
 Deterministic BIR scaling family and in-process stage timer. This is test machinery, not a
 compiler stage. `scaled k rep` has one checked operation and trap branch, one wrapping operation
 and one truncation per repetition; block arguments carry every result into the next repetition.
-The repetition number changes only source-site metadata, preventing hoisting/CSE across timings.
+The repetition number varies both immediate operands inside `blocks` (via an add/sub pair that
+preserves the value `1` without overflowing) and source-site metadata, preventing hoisting/CSE
+across timings even for stages that inspect only `blocks`.
+
+All forcing functions and planted stages use fixed-width 64-bit wrapping arithmetic (`UInt64`), so
+digest accumulation and sample formatting are O(1) per visited element and never allocate unbounded
+`Nat` values or large strings.
 
 `lean --run` measures the interpreted compiler. That is the compiler available today (the `concrete`
 executable does not exist yet), and exponents over the same interpreted stages are the useful signal
@@ -13,66 +19,83 @@ until an executable exists; absolute times are not claimed to predict a future n
 
 open Concrete.BIR Concrete.Backend
 
+@[noinline] private def opaqueIdentity (x : α) : α := x
+
+private def mix64 (acc x : UInt64) : UInt64 :=
+  (acc ^^^ x) * 1099511628211
+
 private def site (rep i : Nat) : SiteEntry :=
   ⟨.arithmeticOverflow, ⟨i⟩, ⟨rep + 4 * i, rep + 4 * i + 3⟩,
     ⟨"tests/slice0/scaled.con", rep + i + 1, 1⟩⟩
 
-private def bodyBlock (k i : Nat) : Block :=
+private def bodyBlock (k rep i : Nat) : Block :=
   let base := 6 * i
+  let salt : Int := Int.ofNat ((rep + i) % 256)
   let previous : Operand := if i = 0 then .imm .u8 1 else .reg base
   let next := if i + 1 = k then 2 * k else 2 * (i + 1)
   { params := if i = 0 then [] else [(base, .int .u8)]
     insts := [
       .trunc .u8 .u16 (base + 1) previous,
-      .binOvf .add .u16 (base + 2) (base + 3) (.reg (base + 1)) (.imm .u16 0),
-      .bin .add .u16 (base + 4) (.reg (base + 2)) (.imm .u16 0),
+      .binOvf .add .u16 (base + 2) (base + 3) (.reg (base + 1)) (.imm .u16 salt),
+      .bin .sub .u16 (base + 4) (.reg (base + 2)) (.imm .u16 salt),
       .trunc .u16 .u8 (base + 5) (.reg (base + 4))]
     term := .condbr (base + 3) (2 * i + 1) [] next [.reg (base + 5)] }
 
 /-- A linear-size, non-dead family whose expected result is always `exited 1`. -/
 def scaled (k rep : Nat) : Program :=
   { blocks := (List.range k).flatMap (fun i =>
-        [bodyBlock k i, { params := [], insts := [], term := .trap i }]) ++
+        [bodyBlock k rep i, { params := [], insts := [], term := .trap i }]) ++
       [{ params := [(6 * k, .int .u8)], insts := [], term := .ret (.reg (6 * k)) }]
     sites := (List.range k).map (site rep) }
 
 private def instructions (p : Program) : List Inst := p.blocks.flatMap (·.insts)
 
-private def scan (is : List Inst) : Nat := is.foldl (fun n i => n + i.defs.length) 0
+private def scan (is : List Inst) (salt : UInt64) : UInt64 :=
+  is.foldl (fun acc i => mix64 acc (i.defs.length.toUInt64 + salt)) salt
 
-private def plantLinear (p : Program) : Nat :=
+private def plantLinear (p : Program) : UInt64 :=
   let is := instructions p
-  (List.range 16384).foldl (fun n _ => n + scan is) 0
+  (List.range 256).foldl
+    (fun acc j => mix64 acc (scan (opaqueIdentity is) (opaqueIdentity j.toUInt64 + acc))) 0
 
-private def plantQuadratic (p : Program) : Nat :=
+private def plantQuadratic (p : Program) : UInt64 :=
   let is := instructions p
-  (List.range (256 * is.length)).foldl (fun n _ => n + scan is) 0
+  (List.range is.length).foldl
+    (fun acc j => mix64 acc (scan (opaqueIdentity is) (opaqueIdentity j.toUInt64 + acc))) 0
 
-private def terminatorDigest : LeanCompilerBackend.Verified.Source.Terminator → Nat
+private def terminatorDigest : LeanCompilerBackend.Verified.Source.Terminator → UInt64
   | .ret _ => 1
-  | .jump target => target + 2
-  | .branch _ yes no => yes + no + 3
+  | .jump target => target.toUInt64 + 2
+  | .branch _ yes no => yes.toUInt64 + no.toUInt64 + 3
 
-private def blockDigest (b : LeanCompilerBackend.Verified.Source.Block) : Nat :=
-  b.instructions.size + b.phis.foldl (fun n phi => n + phi.incoming.size) 0 +
+private def blockDigest (b : LeanCompilerBackend.Verified.Source.Block) : UInt64 :=
+  b.instructions.size.toUInt64 +
+    b.phis.foldl (fun n phi => n + phi.incoming.size.toUInt64) 0 +
     terminatorDigest b.terminator
 
-/-- Linear structural forcing: every block, phi arm, instruction count and terminator is visited,
-with no `repr` or string construction. -/
-private def forceEmit : Except String (LeanCompilerBackend.Verified.Source.Function × SiteTable) → Nat
+/-- Linear structural forcing: every block, phi arm, instruction count and terminator is visited
+using fixed-width 64-bit wrapping arithmetic (`UInt64`), with no `repr`, no string construction and
+no unbounded `Nat` growth. -/
+private def forceEmit : Except String (LeanCompilerBackend.Verified.Source.Function × SiteTable) → UInt64
   | .ok (f, sites) =>
-    f.blocks.foldl (fun n b => 33 * n + blockDigest b) (f.valueWidths.size + sites.length)
-  | .error msg => msg.length
+    f.blocks.foldl (fun n b => mix64 n (blockDigest b))
+      (f.valueWidths.size.toUInt64 + sites.length.toUInt64)
+  | .error msg => msg.utf8ByteSize.toUInt64
 
-@[noinline] private def opaqueIdentity (x : α) : α := x
+private def forceString (s : String) : UInt64 :=
+  s.length.toUInt64
+
+private def forceAssemble : Except String String → UInt64
+  | .ok asm => asm.length.toUInt64
+  | .error msg => msg.length.toUInt64
 
 /-- Evaluate `force result` in a branch BEFORE reading the second clock, so laziness cannot move the
 stage's work past the measurement. Returning the result lets the next measured stage consume it. -/
-private def timedPure (value : Unit → α) (force : α → Nat) : IO (α × Nat × Nat) := do
+private def timedPure (value : Unit → α) (force : α → UInt64) : IO (α × Nat × UInt64) := do
   let start ← IO.monoNanosNow
   let result := value ()
   let digest := force result
-  match digest % 2 with
+  match digest &&& 1 with
   | 0 =>
     let stop ← IO.monoNanosNow
     return (result, stop - start, digest)
@@ -80,7 +103,7 @@ private def timedPure (value : Unit → α) (force : α → Nat) : IO (α × Nat
     let stop ← IO.monoNanosNow
     return (result, stop - start, digest)
 
-private def sample (rep k : Nat) (stage : String) (measurement : α × Nat × Nat) : IO Unit :=
+private def sample (rep k : Nat) (stage : String) (measurement : α × Nat × UInt64) : IO Unit :=
   IO.println s!"sample\t{rep}\t{k}\t{stage}\t{measurement.2.1}\t{measurement.2.2}"
 
 private def measureOne (rep k : Nat) (t : LCB.Target) (p : Program) (plant : Option String) :
@@ -96,16 +119,14 @@ private def measureOne (rep k : Nat) (t : LCB.Target) (p : Program) (plant : Opt
     return true
   | some _ => IO.eprintln "unknown plant"; return false
   | none =>
-    let llvm ← timedPure (fun _ => LLVM.module (opaqueIdentity p)) String.length
+    let llvm ← timedPure (fun _ => LLVM.module (opaqueIdentity p)) forceString
     sample rep k "llvm_module" llvm
     let emitted ← timedPure (fun _ => LCB.emit (opaqueIdentity p)) forceEmit
     sample rep k "lcb_emit" emitted
     match emitted.1 with
     | .error msg => IO.eprintln s!"scaled {k}: LCB emit: {msg}"; return false
     | .ok (f, _) =>
-      let assembly ← timedPure (fun _ => LCB.assemble t (opaqueIdentity f)) (fun
-        | .ok asm => asm.length
-        | .error msg => msg.length)
+      let assembly ← timedPure (fun _ => LCB.assemble t (opaqueIdentity f)) forceAssemble
       sample rep k "lcb_assemble" assembly
       match assembly.1 with
       | .error msg => IO.eprintln s!"scaled {k}: LCB assemble: {msg}"; return false
@@ -122,7 +143,9 @@ private def runMeasurement (k0 repetitions : Nat) (targetName : String) (plant :
   let some target := LCB.Target.ofName targetName
     | IO.eprintln s!"unknown target {targetName}"; return 2
   let sizes := [k0, 10 * k0, 100 * k0]
-  for k in sizes do unless ← validate k (scaled k 0) do return 1
+  for rep in List.range repetitions do
+    for k in sizes do
+      unless ← validate k (scaled k rep) do return 1
   IO.println s!"family\tk0={k0}\trepetitions={repetitions}\ttarget={targetName}\texpected=exit-1"
   for rep in List.range repetitions do
     for k in sizes do
