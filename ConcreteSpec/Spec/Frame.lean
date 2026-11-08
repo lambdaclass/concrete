@@ -120,6 +120,16 @@ def accessFootprint : Option (Option (MemBlockId × Nat)) → Nat → Footprint
   | some (some (b, off)), n => .byte ⟨b, off, n⟩
   | _, _ => .empty
 
+/-- The footprint of a Hybrid typed write: structured writes touch the place, while materialized
+writes touch the underlying byte range. -/
+def writeFootprint (tgt : Target) (before : State) (place : Place) (value : Value) : Footprint :=
+  match before.places place with
+  | some ⟨_, .structured _⟩ => .place place
+  | some ⟨_, .materialized r⟩ =>
+    accessFootprint (before.memory.access tgt r.ptr (encode tgt value).length r.align)
+      (encode tgt value).length
+  | none => .empty
+
 /-- A complete C1 call of `f`, from its `.call` statement to the caller continuation. The `Steps`
 premise reaches this call's own `.ret` frame, either at an explicit return or at normal Unit
 fall-through. The final silent step performs `.leave`, result binding and restoration. A matching
@@ -150,8 +160,23 @@ inductive EffectCommand where
   | expose (pointer : Ptr)
   | alloc (space : AddrSpace) (base size alignment : Nat)
   | set (place : Place) (cell : Cell)
+  | write (place : Place) (value : Value)
+  | rawWrite (pointer : Ptr) (bytes : List MByte) (alignment : Nat)
 
-/-- Execute one C4 instruction and report its exact computed permission set. -/
+/-- Whether a C4 or Hybrid effect command is defined on the given state. -/
+def EffectCommand.Defined (tgt : Target) (before : State) : EffectCommand → Prop
+  | .store pointer bytes alignment => (before.memory.store tgt pointer bytes alignment).isSome
+  | .free block => (before.memory.free block).isSome
+  | .expose pointer => (pointer.prov.bind fun _ => before.memory.expose pointer).isSome
+  | .alloc space base size alignment =>
+    match before.memory.alloc tgt space base size alignment with
+    | .ok _ => True
+    | .error _ => False
+  | .set _ _ => True
+  | .write place value => (before.write tgt place value).isSome
+  | .rawWrite pointer bytes alignment => (before.rawWrite tgt pointer bytes alignment).isSome
+
+/-- Execute one C4 or Hybrid instruction and report its exact computed permission set. -/
 def runEffect (tgt : Target) (before : State) : EffectCommand → Option (State × Footprint)
   | .store pointer bytes alignment =>
     (before.memory.store tgt pointer bytes alignment).map fun memory =>
@@ -167,11 +192,20 @@ def runEffect (tgt : Target) (before : State) : EffectCommand → Option (State 
     | .ok (block, memory) => some ({ before with memory := memory }, .byte (fullBlock block size))
     | _ => none
   | .set place cell => some (before.set place cell, .place place)
+  | .write place value =>
+    (before.write tgt place value).map fun after =>
+      (after, writeFootprint tgt before place value)
+  | .rawWrite pointer bytes alignment =>
+    (before.rawWrite tgt pointer bytes alignment).map fun after =>
+      (after, accessFootprint (before.memory.access tgt pointer bytes.length alignment) bytes.length)
 
-/-- The specification of a successful effect's frame behavior. Rejected operations make no claim. -/
-def EffectResult (before : State) : Option (State × Footprint) → Prop
-  | none => True
-  | some (after, footprint) => footprint.Preserves before after
+/-- The specification of an effect's definedness and frame behavior: rejection is permitted only
+when the underlying C4/Hybrid operation is undefined, and every defined execution preserves all
+state outside its computed footprint. -/
+def EffectResult (tgt : Target) (before : State) (command : EffectCommand) :
+    Option (State × Footprint) → Prop
+  | none => ¬ command.Defined tgt before
+  | some (after, footprint) => command.Defined tgt before ∧ footprint.Preserves before after
 
 /-- Operand implementation for a concrete modifying callee: evaluating its return operand
 executes one authorized C4 byte store. Lifecycle events have no memory effects. -/
@@ -200,35 +234,6 @@ def storingProgram (tgt : Target) (pointer : Ptr) (bytes : List MByte) (alignmen
     Exec.Program (storingOperands tgt pointer bytes alignment) :=
   ⟨[(storingFn, ⟨[], (), ⟨0⟩, .ret () ⟨0⟩⟩)]⟩
 
-/-- Advance by actual C1 silent steps. A primitive request or stuck configuration has no result;
-no frame property or ABI invariant is tested. -/
-def silentSteps {O : Exec.Operands} (P : Exec.Program O) : Nat → Exec.Config O → Option (Exec.Config O)
-  | 0, configuration => some configuration
-  | n + 1, configuration =>
-    match Exec.step P configuration with
-    | some (.next next) => silentSteps P n next
-    | _ => none
-
-/-- Execute a complete modifying C1 call: enter, evaluate return, leave scope, pop return frame. -/
-def runStoringCall (tgt : Target) (before : State) (pointer : Ptr) (bytes : List MByte)
-    (alignment : Nat) : Option State :=
-  (silentSteps (storingProgram tgt pointer bytes alignment) 4
-    ⟨.exec (.call none storingFn [] ⟨0⟩), [], before, []⟩).map Exec.Config.store
-
-/-- A successful call must preserve the state outside its advertised footprint. -/
-def CallFrameResult (before : State) (footprint : Footprint) : Option State → Prop
-  | none => True
-  | some after => footprint.Preserves before after
-
-/-- The full caller-restoration contract for complete C1 calls. Keeping the quantification here
-allows an incomplete-call mutant to challenge the actual operational restoration theorem. -/
-def CallerRestoration (O : Exec.Operands) (f : FnId) (P : Exec.Program O) : Prop :=
-  ∀ entry exit, C1Call O f P entry exit →
-    ∃ (dst : Option Var) (result : O.Val) (caller : AList Var O.Val)
-      (k : List (Exec.Frame O)) (args : List O.Expr) (site : SiteId) (st : O.Store),
-      entry = ⟨.exec (.call dst f args site), caller, st, k⟩ ∧
-      exit.ctrl = .done ∧ exit.locals = Exec.bindDst dst result caller ∧ exit.frames = k
-
 /-- Static inclusion of effect permissions, expressed on the protected locations. This relates
 footprints only; it asserts nothing about the states of an execution. -/
 def Footprint.Covers (outer inner : Footprint) : Prop :=
@@ -236,9 +241,9 @@ def Footprint.Covers (outer inner : Footprint) : Prop :=
   (∀ b, outer.BlockOutside b → inner.BlockOutside b) ∧
   (∀ p, outer.PlaceOutside p → inner.PlaceOutside p)
 
-/-- Independently described C4 effects. Constructors record successful operations, including
-argument evaluation and lifecycle effects when used to implement a C1 transition. No constructor
-assumes a frame property. Sequential effects retain their individual footprints. -/
+/-- Independently described C4 and Hybrid effects. Constructors record successful operations,
+including argument evaluation and lifecycle effects when used to implement a C1 transition. No
+constructor assumes a frame property. Sequential effects retain their individual footprints. -/
 inductive C4Effects (tgt : Target) : State → Footprint → State → Prop where
   | idle (st : State) : C4Effects tgt st .empty st
   | set (st : State) (p : Place) (cell : Cell) :
@@ -257,6 +262,20 @@ inductive C4Effects (tgt : Target) : State → Footprint → State → Prop wher
   | alloc (st : State) (space : AddrSpace) (base size align : Nat) (b : MemBlockId) (m' : Memory) :
       st.memory.WellFormed tgt → st.memory.alloc tgt space base size align = .ok (b, m') →
       C4Effects tgt st (.byte (fullBlock b size)) { st with memory := m' }
+  | writeStructured (st st' : State) (p : Place) (c : Cell) (old v : Value) :
+      st.places p = some c → c.storage = .structured old → st.write tgt p v = some st' →
+      C4Effects tgt st (.place p) st'
+  | writeMaterialized (st st' : State) (p : Place) (c : Cell) (r : Range) (v : Value)
+      (access : Option (Option (MemBlockId × Nat))) :
+      st.memory.WellFormed tgt → st.places p = some c → c.storage = .materialized r →
+      st.memory.access tgt r.ptr (encode tgt v).length r.align = access →
+      st.write tgt p v = some st' →
+      C4Effects tgt st (accessFootprint access (encode tgt v).length) st'
+  | rawWrite (st st' : State) (p : Ptr) (bs : List MByte) (align : Nat)
+      (access : Option (Option (MemBlockId × Nat))) :
+      st.memory.WellFormed tgt → st.memory.access tgt p bs.length align = access →
+      st.rawWrite tgt p bs align = some st' →
+      C4Effects tgt st (accessFootprint access bs.length) st'
   | seq {before middle after : State} {f g : Footprint} :
       C4Effects tgt before f middle → C4Effects tgt middle g after →
       C4Effects tgt before (f.union g) after
@@ -265,30 +284,25 @@ inductive C4Effects (tgt : Target) : State → Footprint → State → Prop wher
 def c4Execution (tgt : Target) (before : State) (f : Footprint) (after : State) : Prop :=
   C4Effects tgt before f after
 
-/-- A local implementation certificate for every actual C1 transition, including primitive
-answers, argument evaluation, lifecycle instrumentation, cleanup and result binding. The evidence
-is a finite decomposition into C4 operations, with static permission inclusion. It does not
-assume preservation or the conclusion of any complete-call law. -/
+/-- A local implementation certificate for every reachable C1 transition from a well-formed
+entry state, including primitive answers, argument evaluation, lifecycle instrumentation,
+cleanup and result binding. The evidence is a finite decomposition into C4 operations, with
+static permission inclusion in the body or leave footprint. It does not assume preservation
+or the conclusion of any complete-call law. -/
 def C1EffectImplementation (O : Exec.Operands) (P : Exec.Program O) (project : O.Store → State)
-    (tgt : Target) (advertised : Footprint) : Prop :=
-  ∀ before label after, Exec.Step P before label after →
+    (tgt : Target) (bodyFootprint leaveFootprint : Footprint) (entry : Exec.Config O) : Prop :=
+  ∀ trace before label after,
+    Exec.Steps P entry trace before →
+    (project before.store).memory.WellFormed tgt →
+    Exec.Step P before label after →
     ∃ effectFootprint, c4Execution tgt (project before.store) effectFootprint (project after.store) ∧
-      advertised.Covers effectFootprint
+      (bodyFootprint.Covers effectFootprint ∨ leaveFootprint.Covers effectFootprint)
 
 /-- The specification of complete-call framing, distinct from local implementation evidence. -/
 def C1Frames (O : Exec.Operands) (f : FnId) (P : Exec.Program O)
     (project : O.Store → State) (advertised : Footprint) : Prop :=
   ∀ entry exit, C1Call O f P entry exit →
     advertised.Preserves (project entry.store) (project exit.store)
-
-/-- The footprint contract of one C1 callee. `project` exposes the hybrid part of the operand
-instance's shared state; ownership instrumentation need not have a footprint. Every complete call of
-`f` must satisfy the stated frame law. -/
-structure C1CallContract (O : Exec.Operands) (f : FnId) (P : Exec.Program O)
-    (project : O.Store → State) where
-  footprint : Footprint
-  frame : ∀ {entry exit}, C1Call O f P entry exit →
-    footprint.Preserves (project entry.store) (project exit.store)
 
 /-! ### Examples -/
 

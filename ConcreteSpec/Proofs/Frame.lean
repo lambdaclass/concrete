@@ -325,14 +325,36 @@ example : ¬ Footprint.Preserves metadataStoreBefore metadataStoreBadAfter (.byt
   simp [metadataStoreBadAfter, metadataStoreAfter, metadataStoreBefore, metadataStoreBlock,
     blockMetadata, Memory.block, Memory.modify, AList.update, AList.lookup] at hm
 
-/-- Helper (inversion). Extracts allocation-identity freshness from successful C4 allocation. (approved: PENDING)
- The allocated identity is disjoint from every range whose block existed before allocation. -/
-theorem alloc_fresh_disjoint (tgt : Target) (st : State) (hw : st.memory.WellFormed tgt)
+/-- Law (subject `ConcreteSpec.Core.Frame.fullBlock`).
+The allocated identity is disjoint from every range whose block existed before allocation. -/
+theorem alloc_fresh_disjoint (tgt : Target) (st : State)
     (space : AddrSpace) (base size align : Nat) (b : MemBlockId) (m' : Memory)
+    (r : ByteRange) (x : Block)
+    (hw : st.memory.WellFormed tgt)
     (h : st.memory.alloc tgt space base size align = .ok (b, m'))
-    (r : ByteRange) (x : Block) (hx : st.memory.block r.block = some x) :
+    (hx : st.memory.block r.block = some x) :
     (fullBlock b size).Disjoint r :=
   .inl (alloc_ne_existing tgt st.memory hw space base size align b r.block m' x h hx)
+
+private def metadataAllocMemory : Memory :=
+  ⟨[(⟨1⟩, candidate ⟨0⟩ 8192 2 1), (⟨0⟩, metadataStoreBlock)], 2⟩
+
+/-- Instance (law `ConcreteSpec.Core.Frame.alloc_fresh_disjoint`, case `fresh_block`). -/
+example : (fullBlock ⟨1⟩ 2).Disjoint ⟨⟨0⟩, 0, 1⟩ :=
+  alloc_fresh_disjoint linuxX8664 metadataStoreBefore ⟨0⟩ 8192 2 1 ⟨1⟩ metadataAllocMemory
+    ⟨⟨0⟩, 0, 1⟩ metadataStoreBlock metadataStoreWellFormed rfl rfl
+
+/-- A planted allocation range constructor reuses the existing block identity `⟨0⟩` instead of
+recording the newly allocated block identity. -/
+def aliasingFullBlock (_b : MemBlockId) (size : Nat) : ByteRange := ⟨⟨0⟩, 0, size⟩
+
+/-- Planted (law `ConcreteSpec.Core.Frame.alloc_fresh_disjoint`, case `fresh_block`,
+subject `ConcreteSpec.Core.Frame.fullBlock`, mutant `ConcreteSpec.Core.Frame.aliasingFullBlock`). -/
+example : metadataStoreBefore.memory.WellFormed linuxX8664 ∧
+    metadataStoreBefore.memory.alloc linuxX8664 ⟨0⟩ 8192 2 1 = .ok (⟨1⟩, metadataAllocMemory) ∧
+    metadataStoreBefore.memory.block (⟨⟨0⟩, 0, 1⟩ : ByteRange).block = some metadataStoreBlock ∧
+    ¬ (aliasingFullBlock ⟨1⟩ 2).Disjoint ⟨⟨0⟩, 0, 1⟩ :=
+  ⟨metadataStoreWellFormed, rfl, rfl, by decide⟩
 
 /-- Helper (computation). Computes the C1 call-entry step used by caller restoration. (approved: PENDING)
  Entering a C1 call saves the caller's locals in a `.ret` frame, binds the evaluated arguments to
@@ -360,32 +382,27 @@ theorem step_return_restores_caller {O : Exec.Operands} (P : Exec.Program O) (v 
       some (.next ⟨.done, Exec.bindDst dst v caller, stBind, k⟩) :=
   Exec.step_return_caller P v dst caller callee st k stLeave stBind hl hb
 
-/-- Helper (inversion). Reduces completed scope cleanup to the C1 return step. (approved: PENDING)
- Successful cleanup does not disturb call-frame ownership: after every exited scope has run its
-deferred calls, return restores the caller and binds its result at any requested destination. -/
-theorem return_cleanup_restores_caller {O : Exec.Operands} (P : Exec.Program O) (v : O.Val)
-    (dst : Option Var) (caller : AList Var O.Val) (k pre : List (Exec.Frame O)) {L : AList Var O.Val}
-    {st stClean stLeave stBind : O.Store} {tr : List O.Event}
-    (h : Exec.Cleans P pre L st tr stClean) (hp : ∀ f ∈ pre, Exec.Passes (.ret v) f)
-    (hl : O.life .leave stClean = some stLeave)
-    (hb : Exec.bindLife O dst stLeave = some stBind) :
-    Exec.Steps P ⟨.exiting (.ret v), L, st, pre ++ .ret dst caller :: k⟩ tr
-      ⟨.done, Exec.bindDst dst v caller, stBind, k⟩ :=
-  Exec.return_reaches_caller P v dst caller k h hp stLeave stBind hl hb
-
-/-- Helper (inversion). Inverts the complete-call derivation for the caller-restoration law. (approved: PENDING)
- Every complete `C1Call` ends with its result bound into the caller locals and at the caller
-continuation saved by its entry statement. The conclusion follows from the actual final return or
-Unit fall-through step, including successful leave and destination-bind instrumentation. -/
+/-- Helper (inversion). Inverts the complete-call derivation for the caller-restoration law,
+connecting the entry `.call` step that pushes `.ret dst caller :: k` to the final return step
+that pops it and binds `dst` in `caller`. (approved: PENDING) -/
 theorem c1Call_restores_caller {O : Exec.Operands} {f : FnId} {P : Exec.Program O}
     {entry exit : Exec.Config O} (h : C1Call O f P entry exit) :
-    ∃ (dst : Option Var) (result : O.Val) (caller : AList Var O.Val)
-      (k : List (Exec.Frame O)) (args : List O.Expr) (site : SiteId) (st : O.Store),
+    ∃ (fn : Exec.Fn O) (dst : Option Var) (result : O.Val) (caller : AList Var O.Val)
+      (k : List (Exec.Frame O)) (args : List O.Expr) (site : SiteId)
+      (vs : List O.Val) (st stEnter : O.Store),
       entry = ⟨.exec (.call dst f args site), caller, st, k⟩ ∧
+      Exec.step P entry =
+        some (.next ⟨.exec fn.body, (fn.params.map Prod.fst).zip vs, stEnter,
+          .scope fn.block (fn.params.map Prod.fst) [] :: .ret dst caller :: k⟩) ∧
       exit.ctrl = .done ∧ exit.locals = Exec.bindDst dst result caller ∧ exit.frames = k := by
   obtain ⟨fn, dst, caller, k, args, site, vs, st, stArgs, stEnter, stReturn, callee, tr, result,
     hf, he, hv, hlen, hl, hreturn⟩ := h
-  refine ⟨dst, result, caller, k, args, site, st, he, ?_⟩
+  have hCallStep : Exec.step P entry =
+      some (.next ⟨.exec fn.body, (fn.params.map Prod.fst).zip vs, stEnter,
+        .scope fn.block (fn.params.map Prod.fst) [] :: .ret dst caller :: k⟩) := by
+    rw [he]
+    exact step_call_saves_caller P dst f args site caller st stArgs stEnter k vs fn hv hf hlen hl
+  refine ⟨fn, dst, result, caller, k, args, site, vs, st, stEnter, he, hCallStep, ?_⟩
   cases hreturn with
   | inl hexplicit =>
     obtain ⟨hs, hr⟩ := hexplicit
@@ -395,8 +412,9 @@ theorem c1Call_restores_caller {O : Exec.Operands} {f : FnId} {P : Exec.Program 
       cases hb : Exec.bindLife O dst stLeave with
       | none => simp [Exec.step, Exec.stepExit, hl', hb] at hr
       | some stBind =>
-        simp only [Exec.step, Exec.stepExit, hl', Option.bind_some, hb, Option.map_some,
-          Option.some.injEq, Exec.Out.next.injEq] at hr
+        have hRet := step_return_restores_caller P result dst caller callee stReturn stLeave stBind k hl' hb
+        rw [hRet] at hr
+        simp only [Option.some.injEq, Exec.Out.next.injEq] at hr
         cases hr
         exact ⟨rfl, rfl, rfl⟩
   | inr hfall =>
@@ -434,13 +452,20 @@ private def c1Fn : Exec.Fn c1Operands := ⟨[], (), ⟨0⟩, .ret (7 : Nat) ⟨0
 
 private def c1Program : Exec.Program c1Operands := ⟨[(c1FnId, c1Fn)]⟩
 
+private def c1SavedVar : Var := ⟨"caller_saved", 0⟩
+
+private def c1DstVar : Var := ⟨"out", 1⟩
+
+private def c1CallerLocals : AList Var Nat := [(c1SavedVar, (42 : Nat))]
+
 private def c1Entry : Exec.Config c1Operands :=
-  ⟨.exec (.call none c1FnId [] ⟨0⟩), [], (), []⟩
+  ⟨.exec (.call (some c1DstVar) c1FnId [] ⟨0⟩), c1CallerLocals, (), []⟩
 
 private def c1Boundary : Exec.Config c1Operands :=
-  ⟨.exiting (.ret (7 : Nat)), [], (), [.ret none []]⟩
+  ⟨.exiting (.ret (7 : Nat)), [], (), [.ret (some c1DstVar) c1CallerLocals]⟩
 
-private def c1Exit : Exec.Config c1Operands := ⟨.done, [], (), []⟩
+private def c1Exit : Exec.Config c1Operands :=
+  ⟨.done, [(c1DstVar, (7 : Nat)), (c1SavedVar, (42 : Nat))], (), []⟩
 
 /-- Helper (computation). Constructs the closed explicit-return execution witness. (approved: PENDING) -/
 private theorem c1ExplicitCall : C1Call c1Operands c1FnId c1Program c1Entry c1Exit := by
@@ -449,22 +474,12 @@ private theorem c1ExplicitCall : C1Call c1Operands c1FnId c1Program c1Entry c1Ex
     apply Exec.steps_next rfl
     apply Exec.steps_next rfl
     exact Exec.Steps.refl _
-  exact ⟨c1Fn, none, [], [], [], ⟨0⟩, [], (), (), (), (), [], [], (7 : Nat),
+  exact ⟨c1Fn, some c1DstVar, c1CallerLocals, [], [], ⟨0⟩, [], (), (), (), (), [], [], (7 : Nat),
     rfl, rfl, rfl, rfl, rfl, .inl ⟨hs, rfl⟩⟩
 
 /-- Accepted: an explicit return reaches its own `.ret` frame after evaluating and cleaning up the
 callee, then takes the final return step. -/
 example : C1Call c1Operands c1FnId c1Program c1Entry c1Exit := c1ExplicitCall
-
-/-- Accepted: caller restoration has a non-vacuous explicit-return instance with the caller's empty
-locals and continuation restored. -/
-example : c1Exit.locals = [] ∧ c1Exit.frames = [] := by
-  obtain ⟨dst, result, caller, k, args, site, st, he, hctrl, hlocals, hframes⟩ :=
-    c1Call_restores_caller c1ExplicitCall
-  have hk : k = [] := (congrArg Exec.Config.frames he).symm
-  rw [hk] at hframes
-  refine ⟨?_, hframes⟩
-  cases dst <;> simp [c1Exit, Exec.bindDst] at hlocals ⊢
 
 private def c1UnitFnId : FnId := ⟨⟨[]⟩, "unit"⟩
 
@@ -478,9 +493,11 @@ private def c1UnitEntry : Exec.Config c1Operands :=
 private def c1UnitBoundary : Exec.Config c1Operands :=
   ⟨.done, [], (), [.ret none []]⟩
 
+private def c1UnitExit : Exec.Config c1Operands := ⟨.done, [], (), []⟩
+
 /-- Accepted: a Unit body can reach its `.ret` frame by falling through; the actual final step then
 binds `unitVal` and restores the caller. -/
-example : C1Call c1Operands c1UnitFnId c1UnitProgram c1UnitEntry c1Exit := by
+example : C1Call c1Operands c1UnitFnId c1UnitProgram c1UnitEntry c1UnitExit := by
   have hs : Exec.Steps c1UnitProgram c1UnitEntry [] c1UnitBoundary := by
     apply Exec.steps_next rfl
     apply Exec.steps_next rfl
@@ -489,80 +506,142 @@ example : C1Call c1Operands c1UnitFnId c1UnitProgram c1UnitEntry c1Exit := by
   exact ⟨c1UnitFn, none, [], [], [], ⟨0⟩, [], (), (), (), (), [], [], (0 : Nat),
     rfl, rfl, rfl, rfl, rfl, .inr ⟨rfl, hs, rfl⟩⟩
 
-private def c1BadExit : Exec.Config c1Operands := ⟨.done, [], (), [.ret none []]⟩
-
-/-- Law (subject `ConcreteSpec.Core.Frame.C1Call`).
-Complete calls restore the exact caller saved by entry, by evaluating their actual return step. -/
-theorem caller_restoration (O : Exec.Operands) (f : FnId) (P : Exec.Program O) :
-    CallerRestoration O f P := by
-  intro entry exit call
-  exact c1Call_restores_caller call
+/-- Law (subject `ConcreteSpec.Core.Exec.bindDst`).
+Complete calls push the caller's locals and continuation on entry and restore them with the
+returned value bound at `dst` on exit. -/
+theorem caller_restoration (O : Exec.Operands) (f : FnId) (P : Exec.Program O)
+    (entry exit : Exec.Config O) (call : C1Call O f P entry exit) :
+    ∃ (fn : Exec.Fn O) (dst : Option Var) (result : O.Val) (caller : AList Var O.Val)
+      (k : List (Exec.Frame O)) (args : List O.Expr) (site : SiteId)
+      (vs : List O.Val) (st stEnter : O.Store),
+      entry = ⟨.exec (.call dst f args site), caller, st, k⟩ ∧
+      Exec.step P entry =
+        some (.next ⟨.exec fn.body, (fn.params.map Prod.fst).zip vs, stEnter,
+          .scope fn.block (fn.params.map Prod.fst) [] :: .ret dst caller :: k⟩) ∧
+      exit.ctrl = .done ∧ exit.locals = Exec.bindDst dst result caller ∧ exit.frames = k :=
+  c1Call_restores_caller call
 
 /-- Instance (law `ConcreteSpec.Core.Frame.caller_restoration`, case `explicit_return`). -/
-example : CallerRestoration c1Operands c1FnId c1Program :=
-  caller_restoration c1Operands c1FnId c1Program
+example :
+    ∃ (fn : Exec.Fn c1Operands) (dst : Option Var) (result : Nat) (caller : AList Var Nat)
+      (k : List (Exec.Frame c1Operands)) (args : List Nat) (site : SiteId)
+      (vs : List Nat) (st stEnter : Unit),
+      c1Entry = ⟨.exec (.call dst c1FnId args site), caller, st, k⟩ ∧
+      Exec.step c1Program c1Entry =
+        some (.next ⟨.exec fn.body, (fn.params.map Prod.fst).zip vs, stEnter,
+          .scope fn.block (fn.params.map Prod.fst) [] :: .ret dst caller :: k⟩) ∧
+      c1Exit.ctrl = .done ∧ c1Exit.locals = Exec.bindDst dst result caller ∧ c1Exit.frames = k :=
+  caller_restoration c1Operands c1FnId c1Program c1Entry c1Exit c1ExplicitCall
 
-/-- A planted completion rule accepts calls before their return frame is popped. -/
-def incompleteC1Call (_O : Exec.Operands) (_f : FnId) (_P : Exec.Program _O)
-    (_entry _exit : Exec.Config _O) : Prop := True
+/-- A planted destination binder drops the caller's saved locals upon return instead of restoring
+them alongside the bound destination. -/
+def dropCallerBindDst {V : Type} (dst : Option Var) (v : V) (_caller : AList Var V) :
+    AList Var V :=
+  match dst with
+  | none => []
+  | some x => [(x, v)]
 
 /-- Planted (law `ConcreteSpec.Core.Frame.caller_restoration`, case `explicit_return`,
-subject `ConcreteSpec.Core.Frame.C1Call`, mutant `ConcreteSpec.Core.Frame.incompleteC1Call`). -/
-example : ¬ (∀ entry exit, incompleteC1Call c1Operands c1FnId c1Program entry exit →
-    ∃ (dst : Option Var) (result : Nat) (caller : AList Var Nat)
-      (k : List (Exec.Frame c1Operands)) (args : List Nat) (site : SiteId) (st : Unit),
-      entry = ⟨.exec (.call dst c1FnId args site), caller, st, k⟩ ∧
-      exit.ctrl = .done ∧ exit.locals = Exec.bindDst dst result caller ∧ exit.frames = k) := by
+subject `ConcreteSpec.Core.Exec.bindDst`, mutant `ConcreteSpec.Core.Frame.dropCallerBindDst`). -/
+example : C1Call c1Operands c1FnId c1Program c1Entry c1Exit ∧
+    ¬ (∃ (fn : Exec.Fn c1Operands) (dst : Option Var) (result : Nat) (caller : AList Var Nat)
+      (k : List (Exec.Frame c1Operands)) (args : List Nat) (site : SiteId)
+      (vs : List Nat) (st stEnter : Unit),
+      c1Entry = ⟨.exec (.call dst c1FnId args site), caller, st, k⟩ ∧
+      Exec.step c1Program c1Entry =
+        some (.next ⟨.exec fn.body, (fn.params.map Prod.fst).zip vs, stEnter,
+          .scope fn.block (fn.params.map Prod.fst) [] :: .ret dst caller :: k⟩) ∧
+      c1Exit.ctrl = .done ∧
+      c1Exit.locals = dropCallerBindDst dst result caller ∧
+      c1Exit.frames = k) := by
+  refine ⟨c1ExplicitCall, ?_⟩
   intro h
-  obtain ⟨dst, result, caller, k, args, site, st, he, _ctrl, _locals, hframes⟩ :=
-    h c1Entry c1BadExit trivial
-  have hk : k = [] := (congrArg Exec.Config.frames he).symm
-  rw [hk] at hframes
-  simp [c1BadExit] at hframes
+  obtain ⟨fn, dst, result, caller, k, args, site, vs, st, stEnter,
+    he, _hstep, _hctrl, hlocals, _hframes⟩ := h
+  have hdst : dst = some c1DstVar := by
+    have := congrArg Exec.Config.ctrl he
+    cases this
+    rfl
+  subst dst
+  have hlen := congrArg List.length hlocals
+  change 2 = 1 at hlen
+  contradiction
 
 /-- Law (subject `ConcreteSpec.Core.Frame.runEffect`).
-Actual C4 instruction execution preserves bytes, metadata and places outside its computed effects. -/
+Actual C4 and Hybrid instruction execution matches definedness and preserves bytes, metadata and
+places outside its computed effects. -/
 theorem runEffect_frame (tgt : Target) (before : State) (command : EffectCommand)
-    (wellFormed : before.memory.WellFormed tgt) : EffectResult before (runEffect tgt before command) := by
+    (wellFormed : before.memory.WellFormed tgt) :
+    EffectResult tgt before command (runEffect tgt before command) := by
   cases command with
   | store pointer bytes alignment =>
     cases hs : before.memory.store tgt pointer bytes alignment with
-    | none => simp [runEffect, hs, EffectResult]
+    | none => simp [runEffect, EffectResult, EffectCommand.Defined, hs]
     | some memory =>
-      simp only [runEffect, hs, Option.map_some, EffectResult]
-      exact store_frame tgt before wellFormed memory pointer bytes alignment _ rfl hs
+      simp only [runEffect, hs, Option.map_some, EffectResult, EffectCommand.Defined, Option.isSome]
+      exact ⟨ trivial, store_frame tgt before wellFormed memory pointer bytes alignment _ rfl hs ⟩
   | free block =>
     cases hb : before.memory.block block with
-    | none => simp [runEffect, Memory.free, hb, EffectResult]
+    | none => simp [runEffect, Memory.free, hb, EffectResult, EffectCommand.Defined]
     | some x =>
       cases hs : before.memory.free block with
-      | none => simp [runEffect, hs, EffectResult]
+      | none => simp [runEffect, hs, EffectResult, EffectCommand.Defined]
       | some memory =>
-        simp only [runEffect, hs, Option.map_some, EffectResult]
-        exact free_frame before block x memory hb hs
+        simp only [runEffect, hs, Option.map_some, EffectResult, EffectCommand.Defined, Option.isSome]
+        exact ⟨ trivial, free_frame before block x memory hb hs ⟩
   | expose pointer =>
     cases hp : pointer.prov with
-    | none => simp [runEffect, hp, EffectResult]
+    | none => simp [runEffect, hp, EffectResult, EffectCommand.Defined]
     | some block =>
       cases hb : before.memory.block block with
-      | none => simp [runEffect, hp, Memory.expose, hb, EffectResult]
+      | none => simp [runEffect, hp, Memory.expose, hb, EffectResult, EffectCommand.Defined]
       | some x =>
         cases hs : before.memory.expose pointer with
-        | none => simp [runEffect, hp, hs, EffectResult]
+        | none => simp [runEffect, hp, hs, EffectResult, EffectCommand.Defined]
         | some memory =>
-          simp only [runEffect, hp, Option.bind_some, hs, Option.map_some, EffectResult]
-          exact expose_frame before memory pointer block x hp hb hs
+          simp only [runEffect, hp, Option.bind_some, hs, Option.map_some, EffectResult,
+            EffectCommand.Defined, Option.isSome]
+          exact ⟨ trivial, expose_frame before memory pointer block x hp hb hs ⟩
   | alloc space base size alignment =>
     cases ha : before.memory.alloc tgt space base size alignment with
-    | error _ => simp [runEffect, ha, EffectResult]
+    | error _ => simp [runEffect, ha, EffectResult, EffectCommand.Defined]
     | ok output =>
       obtain ⟨block, memory⟩ := output
-      simp only [runEffect, ha, EffectResult]
-      exact alloc_frame tgt before wellFormed space base size alignment block memory ha
-  | set place cell => exact set_frame before place cell
+      simp only [runEffect, ha, EffectResult, EffectCommand.Defined]
+      exact ⟨ trivial, alloc_frame tgt before wellFormed space base size alignment block memory ha ⟩
+  | set place cell =>
+    exact ⟨ trivial, set_frame before place cell ⟩
+  | write place value =>
+    cases hw : before.write tgt place value with
+    | none => simp [runEffect, hw, EffectResult, EffectCommand.Defined]
+    | some after =>
+      simp only [runEffect, hw, Option.map_some, EffectResult, EffectCommand.Defined, Option.isSome]
+      refine ⟨ trivial, ?_ ⟩
+      have hplaces : ∃ c, before.places place = some c := by
+        unfold State.write at hw
+        cases hc : before.places place with
+        | none => simp [hc] at hw
+        | some c => exact ⟨c, rfl⟩
+      obtain ⟨c, hc⟩ := hplaces
+      cases c with
+      | mk ty storage =>
+        cases storage with
+        | structured old =>
+          simp only [writeFootprint, hc]
+          exact write_structured_frame tgt before after place ⟨ty, .structured old⟩ old value hc rfl hw
+        | materialized r =>
+          simp only [writeFootprint, hc]
+          exact write_materialized_frame tgt before after wellFormed place ⟨ty, .materialized r⟩ r value hc rfl _ rfl hw
+  | rawWrite pointer bytes alignment =>
+    cases hr : before.rawWrite tgt pointer bytes alignment with
+    | none => simp [runEffect, hr, EffectResult, EffectCommand.Defined]
+    | some after =>
+      simp only [runEffect, hr, Option.map_some, EffectResult, EffectCommand.Defined, Option.isSome]
+      exact ⟨ trivial, rawWrite_frame tgt before after wellFormed pointer bytes alignment _ rfl hr ⟩
 
 /-- Instance (law `ConcreteSpec.Core.Frame.runEffect_frame`, case `byte_store`). -/
-example : EffectResult metadataStoreBefore
+example : EffectResult linuxX8664 metadataStoreBefore
+    (.store metadataStorePtr [.init 7 none] 1)
     (runEffect linuxX8664 metadataStoreBefore (.store metadataStorePtr [.init 7 none] 1)) :=
   runEffect_frame linuxX8664 metadataStoreBefore (.store metadataStorePtr [.init 7 none] 1)
     metadataStoreWellFormed
@@ -576,62 +655,29 @@ def corruptEffect (tgt : Target) (before : State) (command : EffectCommand) :
 /-- Planted (law `ConcreteSpec.Core.Frame.runEffect_frame`, case `byte_store`,
 subject `ConcreteSpec.Core.Frame.runEffect`, mutant `ConcreteSpec.Core.Frame.corruptEffect`). -/
 example : metadataStoreBefore.memory.WellFormed linuxX8664 ∧
-    ¬ EffectResult metadataStoreBefore
+    ¬ EffectResult linuxX8664 metadataStoreBefore
+      (.store metadataStorePtr [.init 7 none] 1)
       (corruptEffect linuxX8664 metadataStoreBefore (.store metadataStorePtr [.init 7 none] 1)) := by
   refine ⟨metadataStoreWellFormed, ?_⟩
   intro h
-  have hm := h.2.1 ⟨0⟩ metadataStoreBlock (by decide) (by decide)
+  have hm := h.2.2.1 ⟨0⟩ metadataStoreBlock (by decide) (by decide)
   simp [metadataStoreBefore, metadataStoreBlock,
     metadataStorePtr, blockMetadata, Memory.modify, Memory.block,
     AList.update, AList.lookup] at hm
 
-/-- Helper (computation). The actual four C1 steps implement the successful C4 store, ending
-with `.done` and an empty caller continuation. (approved: PENDING) -/
-theorem runStoringCall_result (tgt : Target) (before : State) (pointer : Ptr)
-    (bytes : List MByte) (alignment : Nat) :
-    runStoringCall tgt before pointer bytes alignment =
-      (before.memory.store tgt pointer bytes alignment).map fun memory => { before with memory := memory } := by
-  cases hs : before.memory.store tgt pointer bytes alignment <;>
-    simp [runStoringCall, silentSteps, storingProgram, storingOperands, storingFn, Exec.step,
-      Exec.stepExit, Exec.onRes, Exec.evalArgs, Exec.dropOut, Exec.bindLife, Exec.dead, Exec.dom,
-      Exec.restrict, Exec.bindDst, AList.lookup, hs]
+/-- A planted executor refuses every command, even when the underlying C4 operation is defined. -/
+def droppingEffect (_tgt : Target) (_before : State) (_command : EffectCommand) :
+    Option (State × Footprint) := none
 
-/-- Law (subject `ConcreteSpec.Core.Frame.runStoringCall`).
-A complete C1 callee really modifies the requested byte range, while its actual entry, return,
-scope cleanup and return-frame pop preserve unrelated state. The proof uses the C4 execution,
-not a frame contract supplied as a premise. -/
-theorem storingCall_frame (tgt : Target) (before : State) (pointer : Ptr) (bytes : List MByte)
-    (alignment : Nat) (wellFormed : before.memory.WellFormed tgt) :
-    CallFrameResult before
-      (accessFootprint (before.memory.access tgt pointer bytes.length alignment) bytes.length)
-      (runStoringCall tgt before pointer bytes alignment) := by
-  rw [runStoringCall_result]
-  cases hs : before.memory.store tgt pointer bytes alignment with
-  | none => trivial
-  | some memory => exact store_frame tgt before wellFormed memory pointer bytes alignment _ rfl hs
-
-/-- Instance (law `ConcreteSpec.Core.Frame.storingCall_frame`, case `modifying_callee`). -/
-example : CallFrameResult metadataStoreBefore (.byte ⟨⟨0⟩, 0, 1⟩)
-    (runStoringCall linuxX8664 metadataStoreBefore metadataStorePtr [.init 7 none] 1) :=
-  storingCall_frame linuxX8664 metadataStoreBefore metadataStorePtr [.init 7 none] 1 metadataStoreWellFormed
-
-/-- A planted C1 execution corrupts unrelated metadata after returning from the real callee. -/
-def corruptStoringCall (tgt : Target) (before : State) (pointer : Ptr) (bytes : List MByte)
-    (alignment : Nat) : Option State :=
-  (runStoringCall tgt before pointer bytes alignment).map fun after =>
-    { after with memory := after.memory.modify ⟨0⟩ fun block => { block with live := false } }
-
-/-- Planted (law `ConcreteSpec.Core.Frame.storingCall_frame`, case `modifying_callee`,
-subject `ConcreteSpec.Core.Frame.runStoringCall`, mutant `ConcreteSpec.Core.Frame.corruptStoringCall`). -/
+/-- Planted (law `ConcreteSpec.Core.Frame.runEffect_frame`, case `byte_store`,
+subject `ConcreteSpec.Core.Frame.runEffect`, mutant `ConcreteSpec.Core.Frame.droppingEffect`). -/
 example : metadataStoreBefore.memory.WellFormed linuxX8664 ∧
-    ¬ CallFrameResult metadataStoreBefore (.byte ⟨⟨0⟩, 0, 1⟩)
-      (corruptStoringCall linuxX8664 metadataStoreBefore metadataStorePtr [.init 7 none] 1) := by
+    ¬ EffectResult linuxX8664 metadataStoreBefore
+      (.store metadataStorePtr [.init 7 none] 1)
+      (droppingEffect linuxX8664 metadataStoreBefore (.store metadataStorePtr [.init 7 none] 1)) := by
   refine ⟨metadataStoreWellFormed, ?_⟩
   intro h
-  rw [corruptStoringCall, runStoringCall_result] at h
-  have hm := h.2.1 ⟨0⟩ metadataStoreBlock (by decide) (by decide)
-  simp [metadataStoreBefore, metadataStoreBlock, metadataStorePtr, blockMetadata,
-    Memory.modify, Memory.block, AList.update, AList.lookup] at hm
+  exact h rfl
 
 /-- Helper (congruence). Widen static permissions without changing an execution.
 (approved: PENDING) -/
@@ -661,12 +707,12 @@ theorem preserves_trans {before middle after : State} {f : Footprint}
   · intro p h
     simpa [Footprint.PlaceOutside, Footprint.union] using h
 
-/-- Law (subject `ConcreteSpec.Core.Frame.c4Execution`).
-An independently described C4 execution preserves everything outside its computed footprint. -/
-theorem c4_effects_frame (tgt : Target) :
-    ∀ before f after, c4Execution tgt before f after → f.Preserves before after := by
-  intro before f after h
-  induction h with
+/-- Helper (inversion). Structural induction over `C4Effects` proves that every derived effect
+step or sequence preserves state outside its footprint. (approved: PENDING) -/
+theorem c4Execution_frame (tgt : Target) (before : State) (f : Footprint) (after : State)
+    (effects : c4Execution tgt before f after) :
+    f.Preserves before after := by
+  induction effects with
   | idle st => exact preserves_refl st
   | set st p cell => exact set_frame st p cell
   | store st m' p bs align access hw ha hs =>
@@ -675,117 +721,309 @@ theorem c4_effects_frame (tgt : Target) :
   | expose st m' p b block hp hb he => exact expose_frame st m' p b block hp hb he
   | alloc st space base size align b m' hw ha =>
     exact alloc_frame tgt st hw space base size align b m' ha
+  | writeStructured st st' p c old v hc hs hw =>
+    exact write_structured_frame tgt st st' p c old v hc hs hw
+  | writeMaterialized st st' p c r v access hw hc hs ha hwrite =>
+    exact write_materialized_frame tgt st st' hw p c r v hc hs access ha hwrite
+  | rawWrite st st' p bs align access hw ha hraw =>
+    exact rawWrite_frame tgt st st' hw p bs align access ha hraw
   | seq _ _ ih₁ ih₂ => exact preserves_seq ih₁ ih₂
 
-/-- Instance (law `ConcreteSpec.Core.Frame.c4_effects_frame`, case `byte_store`). -/
-example : ∀ before f after, c4Execution linuxX8664 before f after →
-    f.Preserves before after := c4_effects_frame linuxX8664
+/-- Helper (inversion). Every C4 effect derivation preserves `Memory.WellFormed`.
+(approved: PENDING) -/
+theorem c4Execution_wellFormed (tgt : Target) (before : State) (f : Footprint) (after : State)
+    (effects : c4Execution tgt before f after) (hw : before.memory.WellFormed tgt) :
+    after.memory.WellFormed tgt := by
+  induction effects with
+  | idle _ => exact hw
+  | set _ _ _ => exact hw
+  | store st m' p bs align _ _ _ hs =>
+    exact store_wellFormed tgt st.memory m' hw p bs align hs
+  | free st b _ m' _ hf =>
+    exact free_wellFormed tgt st.memory m' hw b hf
+  | expose st m' p _ _ _ _ he =>
+    exact expose_wellFormed tgt st.memory m' hw p he
+  | alloc st space base size align b m' _ ha =>
+    exact alloc_wellFormed tgt st.memory hw space base size align b m' ha
+  | writeStructured st st' p c old v hc hs hwrite =>
+    unfold State.write at hwrite
+    simp only [hc] at hwrite
+    dsimp at hwrite
+    rw [hs] at hwrite
+    split at hwrite
+    · simp only [Option.some.injEq] at hwrite
+      subst st'
+      exact hw
+    · simp at hwrite
+  | writeMaterialized st st' p c r v _ _ hc hs _ hwrite =>
+    unfold State.write at hwrite
+    simp only [hc] at hwrite
+    dsimp at hwrite
+    rw [hs] at hwrite
+    split at hwrite
+    · cases hm : st.memory.store tgt r.ptr (encode tgt v) r.align with
+      | none => simp [hm] at hwrite
+      | some m' =>
+        simp only [hm, Option.bind_some, Option.some.injEq] at hwrite
+        subst st'
+        exact store_wellFormed tgt st.memory m' hw r.ptr (encode tgt v) r.align hm
+    · simp at hwrite
+  | rawWrite st st' p bs align _ _ _ hraw =>
+    unfold State.rawWrite at hraw
+    cases hm : st.memory.store tgt p bs align with
+    | none => simp [hm] at hraw
+    | some m' =>
+      simp [hm] at hraw
+      subst st'
+      exact store_wellFormed tgt st.memory m' hw p bs align hm
+  | seq _ _ ih₁ ih₂ => exact ih₂ (ih₁ hw)
 
-/-- Accepted: a nonempty C4 execution changes byte 0 and keeps the unrelated byte 1. -/
-example : c4Execution linuxX8664 metadataStoreBefore (.byte ⟨⟨0⟩, 0, 1⟩)
-    metadataStoreAfter :=
+/-- Law (subject `ConcreteSpec.Core.Frame.Footprint.union`).
+Two consecutive C4 effect derivations preserve every byte, block metadata entry and structured
+place outside the union of their footprints. -/
+theorem c4_effects_frame (tgt : Target) (before middle after : State) (f g : Footprint)
+    (first : c4Execution tgt before f middle) (second : c4Execution tgt middle g after) :
+    (f.union g).Preserves before after :=
+  preserves_seq (c4Execution_frame tgt before f middle first)
+    (c4Execution_frame tgt middle g after second)
+
+private def metadataStoreAndSetAfter : State :=
+  metadataStoreAfter.set ⟨0⟩ ⟨.bool, .structured (.bool true)⟩
+
+/-- Helper (computation). Constructs the closed C4 byte-store execution step for composition
+and C1 call witnesses. (approved: PENDING) -/
+private theorem metadataStoreExecution :
+    c4Execution linuxX8664 metadataStoreBefore (.byte ⟨⟨0⟩, 0, 1⟩) metadataStoreAfter :=
   C4Effects.store metadataStoreBefore metadataStoreAfter.memory metadataStorePtr [.init 7 none]
     1 (some (some (⟨0⟩, 0))) metadataStoreWellFormed (by decide) rfl
 
-/-- A planted effect rule admits an undeclared mutation. -/
-def unframedExecution (_tgt : Target) (_before : State) (_f : Footprint) (_after : State) : Prop :=
-  True
+/-- Helper (computation). Constructs the closed C4 place-update execution step for sequential
+composition witnesses. (approved: PENDING) -/
+private theorem metadataSetExecution :
+    c4Execution linuxX8664 metadataStoreAfter (.place ⟨0⟩) metadataStoreAndSetAfter :=
+  C4Effects.set metadataStoreAfter ⟨0⟩ ⟨.bool, .structured (.bool true)⟩
 
-/-- Planted (law `ConcreteSpec.Core.Frame.c4_effects_frame`, case `byte_store`,
-subject `ConcreteSpec.Core.Frame.c4Execution`, mutant `ConcreteSpec.Core.Frame.unframedExecution`). -/
-example : ¬ (∀ before f after, unframedExecution linuxX8664 before f after →
-    f.Preserves before after) := by
+/-- Instance (law `ConcreteSpec.Core.Frame.c4_effects_frame`, case `store_then_set`). -/
+example : ((Footprint.byte ⟨⟨0⟩, 0, 1⟩).union (.place ⟨0⟩)).Preserves
+    metadataStoreBefore metadataStoreAndSetAfter :=
+  c4_effects_frame linuxX8664 metadataStoreBefore metadataStoreAfter metadataStoreAndSetAfter
+    (.byte ⟨⟨0⟩, 0, 1⟩) (.place ⟨0⟩) metadataStoreExecution metadataSetExecution
+
+/-- A planted footprint combiner drops the second operation's footprint. -/
+def leftOnlyUnion (f _g : Footprint) : Footprint := f
+
+/-- Planted (law `ConcreteSpec.Core.Frame.c4_effects_frame`, case `store_then_set`,
+subject `ConcreteSpec.Core.Frame.Footprint.union`,
+mutant `ConcreteSpec.Core.Frame.leftOnlyUnion`). -/
+example :
+    c4Execution linuxX8664 metadataStoreBefore (.byte ⟨⟨0⟩, 0, 1⟩) metadataStoreAfter ∧
+    c4Execution linuxX8664 metadataStoreAfter (.place ⟨0⟩) metadataStoreAndSetAfter ∧
+    ¬ (leftOnlyUnion (.byte ⟨⟨0⟩, 0, 1⟩) (.place ⟨0⟩)).Preserves
+      metadataStoreBefore metadataStoreAndSetAfter := by
+  refine ⟨metadataStoreExecution, metadataSetExecution, ?_⟩
   intro h
-  have hm := (h metadataStoreBefore (.byte ⟨⟨0⟩, 0, 1⟩) metadataStoreBadAfter trivial).2.1
-    ⟨0⟩ metadataStoreBlock (by decide) (by decide)
-  simp [metadataStoreBadAfter, metadataStoreAfter, metadataStoreBefore, metadataStoreBlock,
-    blockMetadata, Memory.block, Memory.modify, AList.update, AList.lookup] at hm
+  have hp := h.2.2 ⟨0⟩ (by decide)
+  simp [metadataStoreAndSetAfter, metadataStoreAfter, metadataStoreBefore,
+    State.set, State.places, AList.lookup] at hp
 
-/-- Helper (inversion). Induction over actual C1 steps composes their independently justified
-C4 effects, including request/answer transitions. (approved: PENDING) -/
+/-- Helper (congruence). A footprint covered by either side of a union is covered by the union.
+(approved: PENDING) -/
+theorem covers_of_or {body leave inner : Footprint}
+    (h : body.Covers inner ∨ leave.Covers inner) :
+    (body.union leave).Covers inner := by
+  rcases h with hb | hl
+  · exact ⟨fun b i ho => hb.1 b i (byteOutside_union ho).1,
+      fun b ho => hb.2.1 b (blockOutside_union ho).1,
+      fun p ho => hb.2.2 p (placeOutside_union ho).1⟩
+  · exact ⟨fun b i ho => hl.1 b i (byteOutside_union ho).2,
+      fun b ho => hl.2.1 b (blockOutside_union ho).2,
+      fun p ho => hl.2.2 p (placeOutside_union ho).2⟩
+
+/-- Helper (inversion). Induction over actual C1 steps threads memory well-formedness and
+reachability from `entry`, composing each step's C4 effect derivation. (approved: PENDING) -/
 theorem c1_steps_frame {O : Exec.Operands} {P : Exec.Program O} {project : O.Store → State}
-    {tgt : Target} {f : Footprint} (implementation : C1EffectImplementation O P project tgt f)
-    {entry exit : Exec.Config O} {trace : List O.Event} (steps : Exec.Steps P entry trace exit) :
-    f.Preserves (project entry.store) (project exit.store) := by
-  induction steps with
-  | refl entry =>
-    apply preserves_covers (preserves_refl (project entry.store))
+    {tgt : Target} {bodyFootprint leaveFootprint : Footprint} {entry : Exec.Config O}
+    (implementation : C1EffectImplementation O P project tgt bodyFootprint leaveFootprint entry)
+    {middle exit : Exec.Config O} {prefixTrace trace : List O.Event}
+    (reached : Exec.Steps P entry prefixTrace middle)
+    (wellFormed : (project middle.store).memory.WellFormed tgt)
+    (steps : Exec.Steps P middle trace exit) :
+    (bodyFootprint.union leaveFootprint).Preserves (project middle.store) (project exit.store) ∧
+      (project exit.store).memory.WellFormed tgt := by
+  induction steps generalizing prefixTrace with
+  | refl middle =>
+    refine ⟨?_, wellFormed⟩
+    apply preserves_covers (preserves_refl (project middle.store))
     refine ⟨?_, ?_, ?_⟩
-    · intro b i ho r hr
+    · intro b i _ r hr
       cases hr
-    · intro b ho hr
+    · intro b _ hr
       cases hr
-    · intro p ho hr
+    · intro p _ hr
       cases hr
-  | @step before label middle trace after step _ ih =>
-    obtain ⟨effectFootprint, effects, cover⟩ := implementation before label middle step
-    exact preserves_trans (preserves_covers (c4_effects_frame tgt _ _ _ effects) cover) ih
+  | @step before label next trace after step _ ih =>
+    obtain ⟨effectFootprint, effects, cover⟩ :=
+      implementation prefixTrace before label next reached wellFormed step
+    have hFrameStep : (bodyFootprint.union leaveFootprint).Preserves
+        (project before.store) (project next.store) :=
+      preserves_covers (c4Execution_frame tgt _ _ _ effects) (covers_of_or cover)
+    have hWfNext : (project next.store).memory.WellFormed tgt :=
+      c4Execution_wellFormed tgt _ _ _ effects wellFormed
+    have hReachedNext : Exec.Steps P entry (prefixTrace ++ label.events) next :=
+      Exec.Steps.trans reached (Exec.Steps.single step)
+    obtain ⟨hFrameRest, hWfAfter⟩ := ih hReachedNext hWfNext
+    exact ⟨preserves_trans hFrameStep hFrameRest, hWfAfter⟩
 
-/-- Helper (inversion). Lifts step soundness through the complete-call derivation.
-(approved: PENDING)
-Complete-call framing follows from the callee's actual steps and their C4 decompositions,
-including its final return/pop. The call contract is the conclusion, never a premise. -/
+/-- Helper (inversion). Lifts step soundness and well-formedness preservation through the
+complete-call derivation, including its final return/pop step. (approved: PENDING) -/
 theorem c1_call_frame_of_implementation {O : Exec.Operands} {f : FnId} {P : Exec.Program O}
-    {project : O.Store → State} {tgt : Target} {advertised : Footprint}
-    (implementation : C1EffectImplementation O P project tgt advertised) :
-    C1Frames O f P project advertised := by
-  intro entry exit call
+    {project : O.Store → State} {tgt : Target} {bodyFootprint leaveFootprint : Footprint}
+    {entry exit : Exec.Config O}
+    (wellFormed : (project entry.store).memory.WellFormed tgt)
+    (implementation : C1EffectImplementation O P project tgt bodyFootprint leaveFootprint entry)
+    (call : C1Call O f P entry exit) :
+    (bodyFootprint.union leaveFootprint).Preserves (project entry.store) (project exit.store) := by
   obtain ⟨fn, dst, caller, k, args, site, vs, st, stArgs, stEnter, stReturn, callee, tr, result,
     _hf, _he, _hv, _hlen, _hl, returned⟩ := call
   rcases returned with ⟨steps, pop⟩ | ⟨_unit, steps, pop⟩
   all_goals
-    have framedPrefix := c1_steps_frame implementation steps
-    obtain ⟨effectFootprint, effects, cover⟩ := implementation _ _ _ (.silent pop)
-    exact preserves_trans framedPrefix (preserves_covers (c4_effects_frame tgt _ _ _ effects) cover)
+    obtain ⟨framedPrefix, wfBoundary⟩ :=
+      c1_steps_frame implementation (Exec.Steps.refl entry) wellFormed steps
+    obtain ⟨effectFootprint, effects, cover⟩ :=
+      implementation tr _ .silent exit steps wfBoundary (.silent pop)
+    exact preserves_trans framedPrefix
+      (preserves_covers (c4Execution_frame tgt _ _ _ effects) (covers_of_or cover))
 
+/-- Law (subject `ConcreteSpec.Core.Frame.Footprint.union`).
+Local decompositions of actual reachable C1 steps from a well-formed entry state into
+independently executed C4 effects establish complete-call framing across the union of the
+callee body and leave footprints. -/
+theorem c1_call_frame (tgt : Target) (O : Exec.Operands) (f : FnId) (P : Exec.Program O)
+    (project : O.Store → State) (bodyFootprint leaveFootprint : Footprint)
+    (entry exit : Exec.Config O)
+    (wellFormed : (project entry.store).memory.WellFormed tgt)
+    (implementation : C1EffectImplementation O P project tgt bodyFootprint leaveFootprint entry)
+    (call : C1Call O f P entry exit) :
+    (bodyFootprint.union leaveFootprint).Preserves (project entry.store) (project exit.store) :=
+  c1_call_frame_of_implementation wellFormed implementation call
 
-/-- Law (subject `ConcreteSpec.Core.Frame.c4Execution`).
-Local decompositions of actual C1 steps into independently executed C4 effects establish
-complete-call framing. Quantifying the implementation certificate here lets a mutant effect
-semantics be challenged without changing the C1 execution or advertised permission set. -/
-theorem c1_call_frame (tgt : Target) :
-    ∀ (O : Exec.Operands) (f : FnId) (P : Exec.Program O) (project : O.Store → State)
-      (advertised : Footprint), C1EffectImplementation O P project tgt advertised →
-      C1Frames O f P project advertised := by
-  intro O f P project advertised implementation
-  exact c1_call_frame_of_implementation implementation
+private abbrev StoringOp := storingOperands linuxX8664 metadataStorePtr [.init 7 none] 1
 
-/-- Instance (law `ConcreteSpec.Core.Frame.c1_call_frame`, case `complete_calls`). -/
-example : ∀ (O : Exec.Operands) (f : FnId) (P : Exec.Program O) (project : O.Store → State)
-    (advertised : Footprint), C1EffectImplementation O P project linuxX8664 advertised →
-    C1Frames O f P project advertised := c1_call_frame linuxX8664
+private def storingProg : Exec.Program StoringOp :=
+  storingProgram linuxX8664 metadataStorePtr [.init 7 none] 1
 
-/-- Planted (law `ConcreteSpec.Core.Frame.c1_call_frame`, case `complete_calls`,
-subject `ConcreteSpec.Core.Frame.c4Execution`, mutant `ConcreteSpec.Core.Frame.unframedExecution`). -/
-example : ¬ (∀ (O : Exec.Operands) (f : FnId) (P : Exec.Program O)
-    (project : O.Store → State) (advertised : Footprint),
-    (∀ before label after, Exec.Step P before label after →
-      ∃ effectFootprint, unframedExecution linuxX8664 (project before.store) effectFootprint
-        (project after.store) ∧ advertised.Covers effectFootprint) →
-    C1Frames O f P project advertised) := by
-  intro unsound
-  let O := storingOperands linuxX8664 metadataStorePtr [.init 7 none] 1
-  let P := storingProgram linuxX8664 metadataStorePtr [.init 7 none] 1
-  let entry : Exec.Config O := ⟨.exec (.call none storingFn [] ⟨0⟩), [], metadataStoreBefore, []⟩
-  let boundary : Exec.Config O :=
-    ⟨.exiting (.ret (7 : Nat)), [], metadataStoreAfter, [.ret none []]⟩
-  let exit : Exec.Config O := ⟨.done, [], metadataStoreAfter, []⟩
-  have steps : Exec.Steps P entry [] boundary := by
+private def storingEntry : Exec.Config StoringOp :=
+  ⟨.exec (.call none storingFn [] ⟨0⟩), [], metadataStoreBefore, []⟩
+
+private def storingEntered : Exec.Config StoringOp :=
+  ⟨.exec (.ret () ⟨0⟩), [], metadataStoreBefore, [.scope ⟨0⟩ [] [], .ret none []]⟩
+
+private def storingReturning : Exec.Config StoringOp :=
+  ⟨.exiting (.ret (7 : Nat)), [], metadataStoreAfter, [.scope ⟨0⟩ [] [], .ret none []]⟩
+
+private def storingBoundary : Exec.Config StoringOp :=
+  ⟨.exiting (.ret (7 : Nat)), [], metadataStoreAfter, [.ret none []]⟩
+
+private def storingExit : Exec.Config StoringOp :=
+  ⟨.done, [], metadataStoreAfter, []⟩
+
+private def StoringReachable (c : Exec.Config StoringOp) : Prop :=
+  c = storingEntry ∨ c = storingEntered ∨ c = storingReturning ∨
+    c = storingBoundary ∨ c = storingExit
+
+/-- Helper (inversion). One step of `storingProg` from a reachable configuration stays within
+the 5-state trajectory and either leaves the store idle or performs the authorized C4 byte store.
+(approved: PENDING) -/
+private theorem storing_step_inv {before after : Exec.Config StoringOp}
+    {label : Exec.Label StoringOp}
+    (hr : StoringReachable before) (hstep : Exec.Step storingProg before label after) :
+    StoringReachable after ∧
+      (after.store = before.store ∨
+        (before.store = metadataStoreBefore ∧ after.store = metadataStoreAfter)) := by
+  cases hstep with
+  | prim _ ha _ => cases ha
+  | silent hs =>
+    rcases hr with rfl | rfl | rfl | rfl | rfl
+    · change some (Exec.Out.next storingEntered) = some (.next after) at hs
+      cases hs
+      exact ⟨.inr (.inl rfl), .inl rfl⟩
+    · change some (Exec.Out.next storingReturning) = some (.next after) at hs
+      cases hs
+      exact ⟨.inr (.inr (.inl rfl)), .inr ⟨rfl, rfl⟩⟩
+    · change some (Exec.Out.next storingBoundary) = some (.next after) at hs
+      cases hs
+      exact ⟨.inr (.inr (.inr (.inl rfl))), .inl rfl⟩
+    · change some (Exec.Out.next storingExit) = some (.next after) at hs
+      cases hs
+      exact ⟨.inr (.inr (.inr (.inr rfl))), .inl rfl⟩
+    · change (none : Option (Exec.Out StoringOp)) = some (.next after) at hs
+      cases hs
+
+/-- Helper (inversion). Multi-step reachability in `storingProg` preserves `StoringReachable`.
+(approved: PENDING) -/
+private theorem storing_steps_reachable {c before : Exec.Config StoringOp}
+    {trace : List Unit} (hr : StoringReachable c)
+    (hsteps : Exec.Steps storingProg c trace before) :
+    StoringReachable before := by
+  induction hsteps with
+  | refl => exact hr
+  | step hstep _ ih => exact ih (storing_step_inv hr hstep).1
+
+/-- Helper (computation). Constructs the closed `C1EffectImplementation` witness for
+`storingProg` from `storingEntry`. (approved: PENDING) -/
+private theorem storingImplementation :
+    C1EffectImplementation StoringOp storingProg id linuxX8664
+      (.byte ⟨⟨0⟩, 0, 1⟩) .empty storingEntry := by
+  intro trace before label after hsteps _hw hstep
+  have hr : StoringReachable before := storing_steps_reachable (.inl rfl) hsteps
+  obtain ⟨_, hstore⟩ := storing_step_inv hr hstep
+  rcases hstore with heq | ⟨hbef, haft⟩
+  · refine ⟨.empty, ?_, .inr ⟨fun _ _ h => h, fun _ h => h, fun _ h => h⟩⟩
+    dsimp [id]
+    rw [heq]
+    exact C4Effects.idle before.store
+  · refine ⟨.byte ⟨⟨0⟩, 0, 1⟩, ?_, .inl ⟨fun _ _ h => h, fun _ h => h, fun _ h => h⟩⟩
+    dsimp [id]
+    rw [hbef, haft]
+    exact metadataStoreExecution
+
+/-- Helper (computation). Constructs the closed `C1Call` witness for `storingProg`.
+(approved: PENDING) -/
+private theorem storingExplicitCall :
+    C1Call StoringOp storingFn storingProg storingEntry storingExit := by
+  have hs : Exec.Steps storingProg storingEntry [] storingBoundary := by
     apply Exec.steps_next rfl
     apply Exec.steps_next rfl
     apply Exec.steps_next rfl
     exact Exec.Steps.refl _
-  have call : C1Call O storingFn P entry exit :=
-    ⟨⟨[], (), ⟨0⟩, .ret () ⟨0⟩⟩, none, [], [], [], ⟨0⟩, [],
-      metadataStoreBefore, metadataStoreBefore, metadataStoreBefore, metadataStoreAfter,
-      [], [], (7 : Nat), rfl, rfl, rfl, rfl, rfl, .inl ⟨steps, rfl⟩⟩
-  have bad := unsound O storingFn P (fun st => st) .empty (by
-    intro before label after step
-    refine ⟨.empty, trivial, ?_⟩
-    exact ⟨fun _ _ h => h, fun _ h => h, fun _ h => h⟩) entry exit call
-  have byte := bad.1 ⟨0⟩ 0 metadataStoreBlock (by decide) (by
-    intro range member
-    cases member)
+  exact ⟨⟨[], (), ⟨0⟩, .ret () ⟨0⟩⟩, none, [], [], [], ⟨0⟩, [],
+    metadataStoreBefore, metadataStoreBefore, metadataStoreBefore, metadataStoreAfter,
+    [], [], (7 : Nat), rfl, rfl, rfl, rfl, rfl, .inl ⟨hs, rfl⟩⟩
+
+/-- Instance (law `ConcreteSpec.Core.Frame.c1_call_frame`, case `storing_callee`). -/
+example : ((Footprint.byte ⟨⟨0⟩, 0, 1⟩).union .empty).Preserves
+    (id storingEntry.store) (id storingExit.store) :=
+  c1_call_frame linuxX8664 StoringOp storingFn storingProg id
+    (.byte ⟨⟨0⟩, 0, 1⟩) .empty storingEntry storingExit
+    metadataStoreWellFormed storingImplementation storingExplicitCall
+
+/-- A planted call-footprint combiner ignores the callee body's footprint and accounts only for
+the final return step. -/
+def droppingBodyUnion (_body leave : Footprint) : Footprint := leave
+
+/-- Planted (law `ConcreteSpec.Core.Frame.c1_call_frame`, case `storing_callee`,
+subject `ConcreteSpec.Core.Frame.Footprint.union`,
+mutant `ConcreteSpec.Core.Frame.droppingBodyUnion`). -/
+example :
+    (id storingEntry.store).memory.WellFormed linuxX8664 ∧
+    C1EffectImplementation StoringOp storingProg id linuxX8664
+      (.byte ⟨⟨0⟩, 0, 1⟩) .empty storingEntry ∧
+    C1Call StoringOp storingFn storingProg storingEntry storingExit ∧
+    ¬ (droppingBodyUnion (.byte ⟨⟨0⟩, 0, 1⟩) .empty).Preserves
+      (id storingEntry.store) (id storingExit.store) := by
+  refine ⟨metadataStoreWellFormed, storingImplementation, storingExplicitCall, ?_⟩
+  intro h
+  have byte := h.1 ⟨0⟩ 0 metadataStoreBlock (by decide) (by decide)
   have different : (metadataStoreAfter.memory.block ⟨0⟩).map (fun b => b.bytes[0]?) ≠
       some (metadataStoreBlock.bytes[0]?) := by decide
   exact different byte
