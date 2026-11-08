@@ -118,4 +118,68 @@ theorem eval_operands_rehint (h : Var → String) (L : AList Var Int) (st : Unit
   simp [operands, eval_rehint, Res.map]
 
 end Prim
+
+/-- An unregistered primitive has no allowed answer. -/
+theorem PrimRegistry.allows_unknown {Val Ty Store Event : Type} (R : PrimRegistry Val Ty Store Event)
+    (p : PrimId) (hnone : AList.lookup R.entries p = none) (args : List Val) (st : Store)
+    (a : Exec.Answer Val Event Store) : R.allows p args st a = false := by
+  simp [PrimRegistry.allows, hnone]
+
+/-- **Unknown primitives are stuck.** A C1 request for a primitive absent from the registry has no
+small-step transition for any answer: the machine never invents a catch-all contract. -/
+theorem PrimRegistry.unknown_primitive_stuck {O : Exec.Operands}
+    (R : PrimRegistry O.Val O.Ty O.Store O.Event) (P : Exec.Program (R.operands O))
+    {c : Exec.Config (R.operands O)} {p : PrimId} {vs : List O.Val} {site : SiteId} {st : O.Store}
+    {k : Exec.Answer O.Val O.Event O.Store → Option (Exec.Config (R.operands O))}
+    (hstep : Exec.step P c = some (.request p vs site st k))
+    (hnone : AList.lookup R.entries p = none) (l : Exec.Label (R.operands O))
+    (c' : Exec.Config (R.operands O)) : ¬ Exec.Step P c l c' := by
+  intro hs
+  cases hs with
+  | silent h => rw [hstep] at h; cases h
+  | prim h ha hk =>
+    rw [hstep] at h
+    cases h
+    simp [PrimRegistry.operands, PrimRegistry.allows, hnone] at ha
+
+/-- Every answer accepted through a registered primitive satisfies that primitive's complete
+contract, via C1's `allows` check. -/
+theorem PrimRegistry.allows_allowed {O : Exec.Operands}
+    (R : PrimRegistry O.Val O.Ty O.Store O.Event) (p : PrimId)
+    (c : PrimContract O.Val O.Ty O.Store O.Event) (hc : AList.lookup R.entries p = some c)
+    (args : List O.Val) (st : O.Store) (a : Exec.Answer O.Val O.Event O.Store)
+    (ha : (R.operands O).allows p args st a = true) : c.Allowed args st a := by
+  have ha' : c.answerOk args st a = true := by
+    simpa [PrimRegistry.operands, PrimRegistry.allows, hc] using ha
+  exact (R.answerOk_iff p c hc args st a).1 ha'
+
+/-- **Accepted answers satisfy the postcondition.** The predicate observes arguments, the result
+and the surviving store; no entry-state snapshot is available. -/
+theorem PrimRegistry.allows_postcondition {O : Exec.Operands}
+    (R : PrimRegistry O.Val O.Ty O.Store O.Event) (p : PrimId)
+    (c : PrimContract O.Val O.Ty O.Store O.Event) (hc : AList.lookup R.entries p = some c)
+    (args : List O.Val) (st : O.Store) (a : Exec.Answer O.Val O.Event O.Store)
+    (ha : (R.operands O).allows p args st a = true) :
+    match a.result with
+    | .ok v => c.ensures args v a.store
+    | .error _ => False := by
+  have h := R.allows_allowed p c hc args st a ha
+  have hm := h.2.2.2.2
+  cases hr : a.result with
+  | error kd => simp [hr] at hm
+  | ok v =>
+    rw [hr] at hm
+    exact hm.1
+
+/-- An accepted answer is always an ordinary result value, never an implicit trap. -/
+theorem PrimRegistry.allows_no_implicit_trap {O : Exec.Operands}
+    (R : PrimRegistry O.Val O.Ty O.Store O.Event) (p : PrimId)
+    (c : PrimContract O.Val O.Ty O.Store O.Event) (hc : AList.lookup R.entries p = some c)
+    (args : List O.Val) (st : O.Store) (a : Exec.Answer O.Val O.Event O.Store)
+    (ha : (R.operands O).allows p args st a = true) : ∃ v, a.result = .ok v := by
+  have hp := R.allows_postcondition p c hc args st a ha
+  cases hr : a.result with
+  | ok v => exact ⟨v, rfl⟩
+  | error kd => simp [hr] at hp
+
 end ConcreteSpec.Core
