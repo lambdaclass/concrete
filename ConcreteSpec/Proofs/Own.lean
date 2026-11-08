@@ -34,15 +34,35 @@ private theorem fold_preserves {α : Type} (f : State → α → Option State)
     | none => simp [he] at h
     | some u => simp only [he] at h <;> dsimp at h; exact ih u (hf s a u he) h
 
-/-- Every primitive transition ends at the same finite invariant check. -/
-theorem move_preserves (s t : State) (p : Hybrid.Place) (h : move s p = some t) :
-    WellFormed t := by
+/-- Move changes only the selected slot's status, after excluding every loan of its root. -/
+theorem move_preserves (s t : State) (p : Hybrid.Place) (hs : WellFormed s)
+    (h : move s p = some t) : WellFormed t := by
   unfold move at h
-  cases he : slot s p <;> simp only [he] at h <;> dsimp at h
+  obtain ⟨x, _, h⟩ := Option.bind_eq_some_iff.mp h
+  split at h
   · contradiction
-  · split at h
-    · contradiction
-    · exact validate_wf h
+  · rename_i hg
+    cases h
+    let change := fun x : Slot => if x.place = p then { x with status := .moved } else x
+    have place (x : Slot) : (change x).place = x.place := by simp [change]; split <;> rfl
+    have activation (x : Slot) : (change x).activation = x.activation := by simp [change]; split <;> rfl
+    have clear : ∀ l ∈ s.loans, l.root ≠ p := by
+      intro l hl he
+      apply hg
+      simp only [Bool.or_eq_true, List.any_eq_true]
+      exact Or.inr ⟨l, hl, by simp [he]⟩
+    refine ⟨?_, hs.2.1, ?_, ?_, hs.2.2.2.2⟩
+    · change (s.slots.map change |>.map Slot.place).Nodup
+      simpa only [List.map_map, Function.comp_def, place] using hs.1
+    · intro a ha
+      obtain ⟨b, hb, rfl⟩ := List.mem_map.mp ha
+      change (change b).place.id < s.nextPlace ∧ (change b).activation < s.nextActivation
+      simpa only [place, activation] using hs.2.2.1 b hb
+    · intro l hl
+      obtain ⟨hid, hact, ⟨a, ha, he, ho⟩, hp, hpend⟩ := hs.2.2.2.1 l hl
+      refine ⟨hid, hact, ⟨change a, List.mem_map.mpr ⟨a, ha, rfl⟩, (place a).trans he, ?_⟩, hp, hpend⟩
+      have hn : a.place ≠ p := fun h => clear l hl (he.symm.trans h)
+      simpa [change, hn] using ho
 
 theorem reinitialize_preserves (s t : State) (p : Hybrid.Place)
     (h : reinitialize s p = some t) : WellFormed t := by
@@ -53,30 +73,134 @@ theorem reinitialize_preserves (s t : State) (p : Hybrid.Place)
     · exact validate_wf h
     · contradiction
 
+private theorem compatible_symm (a b : Loan) (h : Compatible a b) : Compatible b a := by
+  unfold Compatible at *
+  rcases h with h | h | h | h | h
+  · exact Or.inl (Ne.symm h)
+  · exact Or.inr (Or.inl h.symm)
+  · exact Or.inr (Or.inr (Or.inr (Or.inl h)))
+  · exact Or.inr (Or.inr (Or.inl h))
+  · exact Or.inr (Or.inr (Or.inr (Or.inr h.symm)))
+
+private theorem insert_loan (s : State) (a : Loan) (hs : WellFormed s)
+    (hid : a.id = ⟨s.nextLoan⟩) (hact : a.activation < s.nextActivation)
+    (hroot : ∃ x ∈ s.slots, x.place = a.root ∧ x.status = .owned)
+    (hparent : ParentValid s a) (hpending : a.pendingArgument = true → a.parent.isSome = true)
+    (hcompat : ∀ b ∈ s.loans, Compatible a b) :
+    WellFormed { s with loans := a :: s.loans, nextLoan := s.nextLoan + 1 } := by
+  have fresh : a.id ∉ s.loans.map Loan.id := by
+    intro hm
+    obtain ⟨b, hb, he⟩ := List.mem_map.mp hm
+    have hn := (hs.2.2.2.1 b hb).1
+    rw [he, hid] at hn
+    exact Nat.lt_irrefl _ hn
+  have parent (l : Loan) (hl : ParentValid s l) :
+      ParentValid { s with loans := a :: s.loans, nextLoan := s.nextLoan + 1 } l := by
+    unfold ParentValid at hl ⊢
+    cases he : l.parent with
+    | none => simpa only [he] using hl
+    | some p =>
+      simp only [he] at hl ⊢
+      obtain ⟨b, hb, rest⟩ := hl
+      exact ⟨b, List.mem_cons_of_mem _ hb, rest⟩
+  refine ⟨hs.1, ?_, hs.2.2.1, ?_, ?_⟩
+  · simpa only [List.map_cons, List.nodup_cons] using And.intro fresh hs.2.1
+  · intro l hl
+    rcases List.mem_cons.mp hl with he | hl
+    · subst l
+      refine ⟨?_, hact, hroot, parent a hparent, hpending⟩
+      simp [hid]
+    · obtain ⟨hb, ha, hr, hp, hpend⟩ := hs.2.2.2.1 l hl
+      exact ⟨Nat.lt_succ_of_lt hb, ha, hr, parent l hp, hpend⟩
+  · intro b hb c hc
+    change b ∈ a :: s.loans at hb
+    change c ∈ a :: s.loans at hc
+    rcases List.mem_cons.mp hb with he | hb
+    · subst b
+      rcases List.mem_cons.mp hc with he | hc
+      · subst c; exact Or.inr (Or.inl rfl)
+      · exact hcompat c hc
+    · rcases List.mem_cons.mp hc with he | hc
+      · subst c; exact compatible_symm a b (hcompat b hb)
+      · exact hs.2.2.2.2 b hb c hc
+
+private theorem owner_guard (s : State) (p : Hybrid.Place) (m : Mode)
+    (h : ownerAccess s p m = true) :
+    (∃ x ∈ s.slots, x.place = p ∧ x.status = .owned) ∧
+    ∀ l ∈ s.loans, l.root ≠ p ∨ (m = .shared ∧ l.mode = .shared) := by
+  unfold ownerAccess at h
+  cases hx : slot s p with
+  | none => simp [hx] at h
+  | some x =>
+    simp only [hx, Option.any_some] at h
+    have hm : x ∈ s.slots := List.mem_of_find?_eq_some hx
+    have hp : x.place = p := by simpa using List.find?_some hx
+    simp only [Bool.and_eq_true, beq_iff_eq] at h
+    refine ⟨⟨x, hm, hp, h.1.1⟩, ?_⟩
+    intro l hl
+    have := List.all_eq_true.mp h.2 l hl
+    simpa only [Bool.or_eq_true, bne_iff_ne, Bool.and_eq_true, beq_iff_eq] using this
+
 theorem borrow_preserves (s t : State) (p : Hybrid.Place) (path : List Projection)
-    (m : Mode) (h : borrow s p path m = some t) : WellFormed t := by
+    (m : Mode) (hs : WellFormed s) (h : borrow s p path m = some t) : WellFormed t := by
   unfold borrow at h
-  cases he : s.frames.head? <;> simp only [he] at h <;> dsimp at h
+  obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
+  split at h
+  · rename_i hg
+    cases h
+    obtain ⟨hg, hact⟩ := Bool.and_eq_true_iff.mp hg
+    obtain ⟨hroot, hconf⟩ := owner_guard s p m hg
+    apply insert_loan s ⟨⟨s.nextLoan⟩, p, path, m, none, [], f.id, false⟩ hs rfl
+      (of_decide_eq_true hact) hroot (by rfl) (by simp)
+    intro b hb
+    rcases hconf b hb with hn | hm
+    · exact Or.inl (Ne.symm hn)
+    · exact Or.inr (Or.inr (Or.inr (Or.inr hm)))
   · contradiction
-  · split at h
-    · exact validate_wf h
-    · contradiction
 
 theorem reborrowAt_preserves (s t : State) (i : LoanId) (path : List Projection)
-    (m : Mode) (a : Nat) (h : reborrowAt s i path m a = some t) : WellFormed t := by
+    (m : Mode) (activation : Nat) (hs : WellFormed s)
+    (h : reborrowAt s i path m activation = some t) : WellFormed t := by
   unfold reborrowAt at h
-  cases he : loan s i <;> simp only [he] at h <;> dsimp at h
+  obtain ⟨a, ha, h⟩ := Option.bind_eq_some_iff.mp h
+  have hmem : a ∈ s.loans := List.mem_of_find?_eq_some ha
+  have hi : a.id = i := by simpa using List.find?_some ha
+  split at h
+  · rename_i hg
+    cases h
+    obtain ⟨hg, hact⟩ := Bool.and_eq_true_iff.mp hg
+    unfold loanAccess at hg
+    rw [ha] at hg
+    simp only [Option.any_some, Bool.and_eq_true, Bool.not_eq_true', Bool.or_eq_true,
+      beq_iff_eq] at hg
+    obtain ⟨⟨_, hmode⟩, hconf⟩ := hg
+    have upgrade : a.mode = .shared → m = .shared := by
+      intro he
+      rcases hmode with hm | hm
+      · exact hm
+      · simp [he] at hm
+    apply insert_loan s ⟨⟨s.nextLoan⟩, a.root, a.path ++ path, m, some i,
+      i :: a.ancestors, activation, false⟩ hs rfl (of_decide_eq_true hact)
+      (hs.2.2.2.1 a hmem).2.2.1 ?_ (by simp) ?_
+    · unfold ParentValid
+      exact ⟨a, hmem, hi, rfl, by simpa [hi] using (hs.2.2.2.1 a hmem).1,
+        by simp [hi], upgrade, by simp⟩
+    · intro b hb
+      have hc := List.all_eq_true.mp hconf b hb
+      simp only [Bool.or_eq_true, beq_iff_eq, decide_eq_true_eq, bne_iff_ne,
+        Bool.and_eq_true] at hc
+      rcases hc with ((he | he) | he) | he
+      · exact Or.inr (Or.inr (Or.inr (Or.inl (by simp [he]))))
+      · exact Or.inr (Or.inr (Or.inr (Or.inl (List.mem_cons_of_mem _ he))))
+      · exact Or.inl (Ne.symm he)
+      · exact Or.inr (Or.inr (Or.inr (Or.inr he)))
   · contradiction
-  · split at h
-    · exact validate_wf h
-    · contradiction
 
 theorem reborrow_preserves (s t : State) (i : LoanId) (path : List Projection)
-    (m : Mode) (h : reborrow s i path m = some t) : WellFormed t := by
+    (m : Mode) (hs : WellFormed s) (h : reborrow s i path m = some t) : WellFormed t := by
   unfold reborrow at h
-  cases he : s.frames.head? <;> simp only [he] at h <;> dsimp at h
-  · contradiction
-  · exact reborrowAt_preserves _ _ _ _ _ _ h
+  obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
+  exact reborrowAt_preserves s t i path m f.id hs h
 
 theorem endLoan_preserves (s t : State) (i : LoanId) (h : endLoan s i = some t) :
     WellFormed t := by
@@ -88,18 +212,85 @@ theorem endLoan_preserves (s t : State) (i : LoanId) (h : endLoan s i = some t) 
     · exact validate_wf h
 
 theorem accessOwner_preserves (s t : State) (p : Hybrid.Place) (m : Mode)
-    (h : accessOwner s p m = some t) : WellFormed t := by
+    (hs : WellFormed s) (h : accessOwner s p m = some t) : WellFormed t := by
   unfold accessOwner at h
   split at h
-  · exact validate_wf h
+  · cases h; exact hs
   · contradiction
 
 theorem accessLoan_preserves (s t : State) (i : LoanId) (m : Mode)
-    (h : accessLoan s i m = some t) : WellFormed t := by
+    (hs : WellFormed s) (h : accessLoan s i m = some t) : WellFormed t := by
   unfold accessLoan at h
   split at h
-  · exact validate_wf h
+  · cases h; exact hs
   · contradiction
+
+/-- A movable non-Copy slot with no outstanding loan always moves; unrelated invariant
+checks cannot make this transition stuck. -/
+theorem move_progress (s : State) (p : Hybrid.Place) (x : Slot)
+    (found : slot s p = some x) (linear : x.desc.copy = false)
+    (owned : x.status = .owned) (clear : ∀ l ∈ s.loans, l.root ≠ p) :
+    ∃ t, move s p = some t := by
+  have hc : s.loans.any (·.root == p) = false := by
+    apply Bool.eq_false_iff.mpr
+    intro hg
+    obtain ⟨l, hl, he⟩ := List.any_eq_true.mp hg
+    exact clear l hl (by simpa using he)
+  simp [move, found, linear, owned, hc]
+
+theorem borrow_progress (s : State) (p : Hybrid.Place) (path : List Projection) (m : Mode)
+    (f : Activation) (frame : s.frames.head? = some f)
+    (issued : f.id < s.nextActivation) (allowed : ownerAccess s p m = true) :
+    ∃ t, borrow s p path m = some t := by
+  simp [borrow, frame, issued, allowed]
+
+theorem reborrowAt_progress (s : State) (i : LoanId) (path : List Projection) (m : Mode)
+    (activation : Nat) (a : Loan) (found : loan s i = some a)
+    (issued : activation < s.nextActivation) (allowed : loanAccess s i m = true) :
+    ∃ t, reborrowAt s i path m activation = some t := by
+  simp [reborrowAt, found, issued, allowed]
+
+theorem reborrow_progress (s : State) (i : LoanId) (path : List Projection) (m : Mode)
+    (f : Activation) (frame : s.frames.head? = some f) (issued : f.id < s.nextActivation)
+    (a : Loan) (found : loan s i = some a) (allowed : loanAccess s i m = true) :
+    ∃ t, reborrow s i path m = some t := by
+  simpa [reborrow, frame] using
+    reborrowAt_progress s i path m f.id a found issued allowed
+
+theorem accessOwner_progress (s : State) (p : Hybrid.Place) (m : Mode)
+    (allowed : ownerAccess s p m = true) : accessOwner s p m = some s := by
+  simp [accessOwner, allowed]
+
+theorem accessLoan_progress (s : State) (i : LoanId) (m : Mode)
+    (allowed : loanAccess s i m = true) : accessLoan s i m = some s := by
+  simp [accessLoan, allowed]
+
+namespace PrimitiveWitnesses
+open ConcreteSpec.Core.Own.Examples
+/-- Positive preservation/progress instances use live, nonempty owner/loan states. -/
+example : WellFormed initial ∧ (move initial ⟨0⟩).isSome = true ∧
+    WellFormed ((move initial ⟨0⟩).getD initial) := by decide
+example : WellFormed shared ∧ (borrow shared ⟨0⟩ [] .shared).isSome = true ∧
+    WellFormed ((borrow shared ⟨0⟩ [] .shared).getD initial) := by decide
+example : WellFormed exclusive ∧ (reborrowAt exclusive ⟨0⟩ [] .mutable 0).isSome = true ∧
+    WellFormed child := by decide
+example : accessOwner shared ⟨0⟩ .shared = some shared ∧ WellFormed shared := by decide
+example : accessLoan child ⟨1⟩ .mutable = some child ∧ WellFormed child := by decide
+/-- Planted move/access mutations destroy an owned root under a live loan. -/
+example : ¬ WellFormed { shared with slots := shared.slots.map fun x =>
+    { x with status := .moved } } := by decide
+example : ¬ WellFormed { child with slots := [] } := by decide
+/-- Planted borrow mutation reuses the supply; planted reborrow mutation loses its parent. -/
+example : ¬ WellFormed { shared with nextLoan := 0 } := by decide
+example : ¬ WellFormed { child with loans := child.loans.filter (·.id != ⟨0⟩) } := by decide
+/-- Negated success with each operational permission violated. -/
+example : ¬ (move shared ⟨0⟩).isSome = true := by decide
+example : ¬ (borrow exclusive ⟨0⟩ [] .shared).isSome = true := by decide
+example : ¬ (reborrowAt shared ⟨0⟩ [] .mutable 0).isSome = true := by decide
+example : ¬ (reborrow shared ⟨0⟩ [] .mutable).isSome = true := by decide
+example : ¬ (accessOwner shared ⟨0⟩ .mutable).isSome = true := by decide
+example : ¬ (accessLoan child ⟨0⟩ .mutable).isSome = true := by decide
+end PrimitiveWitnesses
 
 theorem bind_preserves (types : Var → Option Descriptor) (s t : State) (x : Var)
     (h : bind types x s = some t) : WellFormed t := by
@@ -252,8 +443,7 @@ theorem passDown_call_preserves (s t : CallState) (i : LoanId) (parameter : Var)
     rw [ha] at hu
     dsimp at hu
     split at hu
-    · obtain ⟨hu, _⟩ := (validate_iff _ _).mp hu
-      subst u
+    · cases hu
       have fresh : ∀ l ∈ s.own.loans, l.id.id ≠ s.own.nextLoan := by
         intro l hl he
         have := (hs.1.2.2.2.1 l hl).1
@@ -570,8 +760,7 @@ theorem borrow_birth (s t : State) (p : Hybrid.Place) (path : List Projection)
   unfold borrow at h
   obtain ⟨f, _, hh⟩ := Option.bind_eq_some_iff.mp h
   split at hh
-  · obtain ⟨he, _⟩ := (validate_iff _ _).mp hh
-    subst t
+  · cases hh
     exact ⟨rfl, _, List.mem_cons_self, rfl, rfl, rfl⟩
   · contradiction
 
@@ -583,8 +772,7 @@ theorem reborrow_birth (s t : State) (i : LoanId) (suffix : List Projection)
   unfold reborrowAt at h
   obtain ⟨a, ha, hh⟩ := Option.bind_eq_some_iff.mp h
   split at hh
-  · obtain ⟨he, _⟩ := (validate_iff _ _).mp hh
-    subst t
+  · cases hh
     exact ⟨rfl, a, _, ha, List.mem_cons_self, rfl, rfl, rfl, rfl⟩
   · contradiction
 

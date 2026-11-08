@@ -133,7 +133,7 @@ def loanAccess (s : State) (i : LoanId) (m : Mode) : Bool :=
 def move (s : State) (p : Hybrid.Place) : Option State := do
   let x ← slot s p
   if x.desc.copy || x.status != .owned || s.loans.any (·.root == p) then none else
-    validate { s with slots := s.slots.map fun x =>
+    some { s with slots := s.slots.map fun x =>
       if x.place = p then { x with status := .moved } else x }
 
 /-- Reinitialization requires no active loan. Replacing an owned linear value is refused:
@@ -146,26 +146,28 @@ def reinitialize (s : State) (p : Hybrid.Place) : Option State := do
       if x.place = p then { x with status := .owned } else x }
   else none
 
-/-- Open an owner loan. The fresh identity is the old counter. -/
+/-- Open an owner loan. The fresh identity is the old counter. The frame identity must
+have been issued by `enter`; this is an identity guard, not an invariant recheck. -/
 def borrow (s : State) (p : Hybrid.Place) (path : List Projection) (m : Mode) :
     Option State := do
   let f ← s.frames.head?
-  if ownerAccess s p m then
-    validate { s with
+  if ownerAccess s p m && decide (f.id < s.nextActivation) then
+    some { s with
       nextLoan := s.nextLoan + 1
       loans := ⟨⟨s.nextLoan⟩, p, path, m, none, [], f.id, false⟩ :: s.loans }
   else none
 
 /-- Reborrow appends a projection, never changes the original root and never upgrades shared.
 The explicit activation is the destination activation for a downward call.
+The destination identity must be below the issued activation supply.
 PENDING (round-two boundary): arbitrary destinations are still admitted here. Q3.2 rules
 out upward parameter passing, but does not specify which activation identities this standalone
 helper may target. Do not treat this helper as an enforced downward-only interface. -/
 def reborrowAt (s : State) (i : LoanId) (suffix : List Projection) (m : Mode)
     (activation : Nat) : Option State := do
   let a ← loan s i
-  if loanAccess s i m then
-    validate { s with
+  if loanAccess s i m && decide (activation < s.nextActivation) then
+    some { s with
       nextLoan := s.nextLoan + 1
       loans := ⟨⟨s.nextLoan⟩, a.root, a.path ++ suffix, m, some i,
         i :: a.ancestors, activation, false⟩ :: s.loans }
@@ -185,10 +187,10 @@ def endLoan (s : State) (i : LoanId) : Option State := do
 /-- Read/write permissions are partial identity transitions on the instrumentation. Concrete
 reads/writes are supplied separately by `instrument`; they cannot manufacture permission. -/
 def accessOwner (s : State) (p : Hybrid.Place) (m : Mode) : Option State :=
-  if ownerAccess s p m then validate s else none
+  if ownerAccess s p m then some s else none
 
 def accessLoan (s : State) (i : LoanId) (m : Mode) : Option State :=
-  if loanAccess s i m then validate s else none
+  if loanAccess s i m then some s else none
 
 /-- A descriptor is supplied by the checked operand language. A fresh binding gets a fresh place;
 an assignment to an existing binding must discharge/reinitialize its previous obligation. -/
