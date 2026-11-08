@@ -1,0 +1,2 @@
+[piece 1 of 2: scripts]
+- scripts/checks/landing_bot.sh:422: `git archive HEAD` checks committed scripts rather than the working tree being validated. An edit that adds a landing-script dependency without updating `SNAPSHOT` therefore passes this check until committed; mutation probes likewise check the original committed files. Archive or copy the current files so the gate detects missing dependencies in the actual candidate.
