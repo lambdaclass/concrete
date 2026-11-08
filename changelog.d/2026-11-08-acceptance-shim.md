@@ -13,11 +13,12 @@ push that could move main passes only to an existing local repository that is ne
 Git's global options and push's options are parsed from fixed lists, spelled in full; an unknown,
 abbreviated or bundled option is refused. A missing repository, a relative, remote or non-repository
 URL, an insteadOf rewrite, submodule recursion (by option, `push.recurseSubmodules` or
-`submodule.recurse`) and a shell, quoted or multi-line alias fail closed, a push to a symbolic ref
-on a protected local repository is refused, a colon-less refspec counts as moving main when
-`remote.<repo>.push` maps it, and plain aliases (from config, `-c`, `--config-env` or the
-environment) are expanded and judged. "Could move main" now also covers `--branches`, `--prune`,
-`@`, `:`, globs, `*/main` and a push with no refspec. `landing_script.sh` drives the shim with 52
-refused invocations, three more protected URL spellings, two refused shim creations and 19 allowed
-fixture pushes and commands. A script that runs the real git by absolute path is outside the shim;
-acceptance's pre-push guard and its before/after read of main still stop it.
+`submodule.recurse`) and a shell, quoted or multi-line alias fail closed, a push to a protected
+local repository that holds a symbolic ref, or whose destination resolves to one under git's
+short-name rules, is refused, a colon-less refspec counts as moving main when `remote.<repo>.push`
+maps it, and plain aliases (from config, `-c`, `--config-env` or the environment) are expanded and
+judged. "Could move main" now also covers `--branches`, `--prune`, `@`, `:`, globs, `*/main` and a
+push with no refspec. `landing_script.sh` drives the shim with 52 refused invocations, three more
+protected URL spellings, two refused shim creations and 19 allowed fixture pushes and commands. A
+script that runs the real git by absolute path is outside the shim; acceptance's pre-push guard and
+its before/after read of main still stop it.

@@ -180,8 +180,9 @@ for s in "${specs[@]}"; do
 done
 if [ "$moves_main" = 0 ]; then
   # A push that names no main can still move it through a symbolic ref on the destination
-  # (refs/heads/alias -> refs/heads/main). On a protected local repository, a destination that is a
-  # symbolic ref is refused. (The real remotes are GitHub repositories, which have no branch symrefs.)
+  # (refs/heads/alias -> refs/heads/main, or a tag). A push to a protected local repository that
+  # holds any symbolic ref under refs/ is refused. (The real remotes are GitHub repositories, which
+  # have no symbolic refs under refs/.)
   [ -n "$repo" ] || exec "$REAL" "$@"
   urls="$("$REAL" "${pre[@]}" remote get-url --push --all "$repo" 2>/dev/null)" || urls="$repo"
   while IFS= read -r u; do
@@ -189,12 +190,18 @@ if [ "$moves_main" = 0 ]; then
     id="$(repo_identity "$REAL" "$abs")"; [ -n "$id" ] || continue
     for p in "${PROTECTED_ID[@]}"; do
       [ "$id" = "$p" ] || continue
+      # git resolves a short destination against the remote's existing refs (branches, tags, ...),
+      # so any symbolic ref under refs/ could be the one a push lands on: refuse them all.
+      sym="$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR "$REAL" --git-dir="$id" for-each-ref --format='%(refname) -> %(symref)' 2>/dev/null | grep -v ' -> $' | head -1)"
+      [ -z "$sym" ] || refuse "a push to the protected repository $id, which holds a symbolic ref ($sym)"
+      # for-each-ref skips a dangling symbolic ref (alias -> a main that does not exist yet), so each
+      # destination is also tried under git's short-name rules.
       for s in "${specs[@]}"; do
         t="${s#+}"; d="${t##*:}"; [ -n "$d" ] || d="${t%%:*}"
-        case "$d" in refs/*) ;; *) d="refs/heads/$d" ;; esac
-        if env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR "$REAL" --git-dir="$id" symbolic-ref -q "$d" >/dev/null 2>&1; then
-          refuse "a push to $d, a symbolic ref on the protected repository $id"
-        fi
+        for c in "$d" "refs/$d" "refs/tags/$d" "refs/heads/$d" "refs/remotes/$d" "refs/remotes/$d/HEAD"; do
+          env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR "$REAL" --git-dir="$id" symbolic-ref -q "$c" >/dev/null 2>&1 \
+            && refuse "a push to $c, a symbolic ref on the protected repository $id"
+        done
       done
     done
   done <<< "$urls"

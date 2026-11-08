@@ -1105,6 +1105,10 @@ MB="$HM"
   git -C prot.git symbolic-ref refs/heads/alias refs/heads/main
   shimref "a push to a symbolic ref for main" "$G" -C w push "$S/prot.git" wip/x:refs/heads/alias
   shimref "a push to a short symbolic ref for main" "$G" -C w push origin wip/x:alias
+  git -C prot.git symbolic-ref -d refs/heads/alias; git -C prot.git symbolic-ref refs/tags/talias refs/heads/main
+  shimref "a push to a short name that is a tag symbolic ref for main" "$G" -C w push --force origin wip/x:talias
+  git -C prot.git symbolic-ref -d refs/tags/talias
+  "$G" -C w push -q origin wip/x 2>"$S/err" || bad="$bad [a wip push to the protected origin with no symbolic refs refused: $(cat "$S/err")]"
   "$G" -C w push -q "$S/fix" main 2>"$S/err" || bad="$bad [a fixture push spelled without .git refused: $(cat "$S/err")]"
   # Protected local URLs in the other spellings git accepts: file://localhost/ and ~/.
   # And an absolute path holding "://", reached through a symlink.
