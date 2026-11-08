@@ -1,4 +1,5 @@
 import ConcreteSpec.Spec.Prim
+import ConcreteSpec.Proofs.Exec
 
 /-!
 # Laws of identities, primitive contracts, evidence and ghost erasure
@@ -215,4 +216,127 @@ theorem PrimRegistry.allows_no_implicit_trap {O : Exec.Operands}
   | ok v => exact ⟨v, rfl⟩
   | error kd => simp [hr] at hp
 
+namespace Ghost
+variable {O : Exec.Operands}
+
+/-- **Concrete-step soundness.** Every run of `drive` has a C1 `Steps` derivation from its initial
+to its retained final configuration, emitting exactly the events added to the history. -/
+theorem drive_steps (P : Exec.Program O) (ρ : Exec.Oracle O) :
+    ∀ (fuel : Nat) (hist : List O.Event) (c : Exec.Config O) (r : SegmentReport O),
+      drive P ρ fuel hist c = r → ∃ tr, r.events = hist ++ tr ∧ Exec.Steps P c tr r.config := by
+  intro fuel
+  induction fuel with
+  | zero =>
+    intro hist c r h
+    cases hf : c.final? with
+    | some f =>
+      simp [drive, hf] at h
+      cases h
+      exact ⟨[], by simp, .refl _⟩
+    | none =>
+      simp [drive, hf] at h
+      cases h
+      exact ⟨[], by simp, .refl _⟩
+  | succ n ih =>
+    intro hist c r h
+    cases hf : c.final? with
+    | some f =>
+      simp [drive, hf] at h
+      cases h
+      exact ⟨[], by simp, .refl _⟩
+    | none =>
+      cases hs : Exec.step P c with
+      | none =>
+        simp [drive, hf, hs] at h
+        cases h
+        exact ⟨[], by simp, .refl _⟩
+      | some out =>
+        cases out with
+        | next c' =>
+          simp [drive, hf, hs] at h
+          obtain ⟨tr, he, hc⟩ := ih hist c' r h
+          exact ⟨tr, he, Exec.steps_next hs hc⟩
+        | request p vs site st k =>
+          cases ha : ρ hist p vs site st with
+          | none =>
+            simp [drive, hf, hs, ha] at h
+            cases h
+            exact ⟨[], by simp, .refl _⟩
+          | some a =>
+            by_cases hallow : O.allows p vs st a = true
+            · cases hk : k a with
+              | none =>
+                simp [drive, hf, hs, ha, hallow, hk] at h
+                cases h
+                exact ⟨[], by simp, .refl _⟩
+              | some c' =>
+                simp [drive, hf, hs, ha, hallow, hk] at h
+                obtain ⟨tr, he, hc⟩ := ih (hist ++ a.event.toList) c' r h
+                refine ⟨a.label.events ++ tr, ?_, Exec.Steps.step (.prim hs hallow hk) hc⟩
+                cases hev : a.event with
+                | none =>
+                  simpa [Exec.Answer.label, Exec.Label.events, hev, List.append_assoc] using he
+                | some ev =>
+                  simpa [Exec.Answer.label, Exec.Label.events, hev, List.append_assoc] using he
+            · simp [drive, hf, hs, ha, hallow] at h
+              cases h
+              exact ⟨[], by simp, .refl _⟩
+
+/-- Once a configuration is not ordinarily completed, no later statement restarts it. -/
+theorem runStmts_of_not_normal (P : Exec.Program O) (ρ : Exec.Oracle O)
+    (fuel : Nat) (hist : List O.Event) (ss : List (Exec.Stmt O)) (c : Exec.Config O)
+    (hf : c.final? ≠ some .normal) : runStmts P ρ fuel hist ss c = drive P ρ fuel hist c := by
+  cases ss with
+  | nil => rfl
+  | cons s ss =>
+    cases h : c.final? with
+    | none => simp [runStmts, h]
+    | some f => cases f <;> simp [runStmts, h] at hf ⊢
+
+/-- **Ghost erasure preserves concrete execution.** Removing every ghost statement leaves the same
+complete report: identical events, C1 `Ending`, final configuration and remaining fuel. Ghost
+computations may update ghost locals and read the concrete configuration, but cannot change it. -/
+theorem ghost_erasure_run (G : Language O) (P : Exec.Program O) (ρ : Exec.Oracle O) :
+    ∀ (fuel : Nat) (hist : List O.Event) (ps : List (Piece G)) (Γ : AList Var G.Val)
+      (c : Exec.Config O), runPieces G P ρ fuel hist ps Γ c =
+        runStmts P ρ fuel hist (erase ps) c := by
+  intro fuel hist ps
+  induction ps generalizing fuel hist with
+  | nil => intro Γ c; rfl
+  | cons piece ps ih =>
+    intro Γ c
+    cases piece with
+    | ghost g =>
+      by_cases hn : c.final? = some .normal
+      · have h := ih fuel hist (evalStmt G c.locals c.store g Γ) c
+        simpa [runPieces, erase, erasePiece, List.filterMap, hn] using h
+      · simp [runPieces, erase, erasePiece, List.filterMap, hn, runStmts_of_not_normal]
+    | concrete s =>
+      by_cases hn : c.final? = some .normal
+      · cases hr : drive P ρ fuel hist ⟨.exec s, c.locals, c.store, c.frames⟩ with
+        | mk events ending config remaining =>
+          cases ending with
+          | final f =>
+            cases f with
+            | normal =>
+              have h := ih remaining events Γ config
+              simpa [runPieces, runStmts, erase, erasePiece, List.filterMap, hn, hr] using h
+            | returned v => simp [runPieces, runStmts, erase, erasePiece, List.filterMap, hn, hr]
+            | trapped k site => simp [runPieces, runStmts, erase, erasePiece, List.filterMap, hn, hr]
+          | stuck c' => simp [runPieces, runStmts, erase, erasePiece, List.filterMap, hn, hr]
+          | noAnswer c' => simp [runPieces, runStmts, erase, erasePiece, List.filterMap, hn, hr]
+          | badAnswer c' => simp [runPieces, runStmts, erase, erasePiece, List.filterMap, hn, hr]
+          | outOfFuel c' => simp [runPieces, runStmts, erase, erasePiece, List.filterMap, hn, hr]
+      · simp [runPieces, erase, erasePiece, List.filterMap, hn, runStmts_of_not_normal]
+
+/-- In particular, ghost erasure preserves public events and the exact C1 ending classification. -/
+theorem ghost_erasure_ending (G : Language O) (P : Exec.Program O) (ρ : Exec.Oracle O)
+    (fuel : Nat) (hist : List O.Event) (ps : List (Piece G)) (Γ : AList Var G.Val)
+    (c : Exec.Config O) :
+    (runPieces G P ρ fuel hist ps Γ c).events = (runStmts P ρ fuel hist (erase ps) c).events ∧
+    (runPieces G P ρ fuel hist ps Γ c).ending = (runStmts P ρ fuel hist (erase ps) c).ending := by
+  rw [ghost_erasure_run]
+  exact ⟨rfl, rfl⟩
+
+end Ghost
 end ConcreteSpec.Core

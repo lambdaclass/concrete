@@ -290,10 +290,125 @@ example : ¬ evidence.Usable { current with checker := ⟨0, 2, 0⟩ } ∧
 
 end EvidenceDemo
 
+/-! ## Ghost statements and erasure
+
+Ghost evaluation is total (OD115) and returns only ghost locals. It may read concrete locals and
+store but has no way to return a concrete store, emit an event or request a primitive. Assertions
+are propositions erased without execution (OD125). A ghost conditional's branches are themselves
+only ghost statements, so no concrete branch depends on ghost state (OD81, Q9.10, Q9.11).
+
+`Piece` composes these pure ghost statements with arbitrary C1 statements. The drivers below retain
+the final configuration and remaining fuel that C1's `Report` does not expose. `drive` otherwise
+has exactly C1's `runFrom` cases, including request refusal and all `Ending` classifications.
+-/
+
+namespace Ghost
+variable {O : Exec.Operands}
+
+/-- A total ghost expression language over one C1 operand language. `eval` can read ghost locals,
+concrete locals and concrete store, but its result contains only a ghost value. -/
+structure Language (O : Exec.Operands) where
+  Val : Type
+  Expr : Type
+  eval : AList Var Val → AList Var O.Val → O.Store → Expr → Val
+  test : Val → Bool
+
+/-- Pure ghost statements. There is no concrete assignment, primitive request or authority field. -/
+inductive Stmt {O : Exec.Operands} (G : Language O) where
+  | assert (obligation : ObligationId) (fact : Prop)
+  | bind (x : Var) (e : G.Expr) (site : SiteId)
+  | seq (s t : Stmt G)
+  | cond (e : G.Expr) (s t : Stmt G) (site : SiteId)
+
+/-- Evaluate ghost statements, changing only ghost locals. Assertions disappear. -/
+def evalStmt (G : Language O) (L : AList Var O.Val) (st : O.Store) :
+    Stmt G → AList Var G.Val → AList Var G.Val
+  | .assert .., Γ => Γ
+  | .bind x e _, Γ => (x, G.eval Γ L st e) :: Γ
+  | .seq s t, Γ => evalStmt G L st t (evalStmt G L st s Γ)
+  | .cond e s t _, Γ => if G.test (G.eval Γ L st e) then evalStmt G L st s Γ else evalStmt G L st t Γ
+
+/-- One component of a straight-line program: an arbitrary C1 statement or a pure ghost statement. -/
+inductive Piece {O : Exec.Operands} (G : Language O) where
+  | concrete (s : Exec.Stmt O)
+  | ghost (s : Stmt G)
+
+/-- A C1 run report together with the final configuration and unused fuel. -/
+structure SegmentReport (O : Exec.Operands) where
+  events : List O.Event
+  ending : Exec.Ending O
+  config : Exec.Config O
+  remaining : Nat
+
+/-- C1's `runFrom` with the final configuration and remaining fuel retained. -/
+def drive (P : Exec.Program O) (ρ : Exec.Oracle O) :
+    Nat → List O.Event → Exec.Config O → SegmentReport O
+  | fuel, hist, c =>
+    match c.final?, fuel with
+    | some f, _ => ⟨hist, .final f, c, fuel⟩
+    | none, 0 => ⟨hist, .outOfFuel c, c, 0⟩
+    | none, n + 1 =>
+      match Exec.step P c with
+      | none => ⟨hist, .stuck c, c, n + 1⟩
+      | some (.next c') => drive P ρ n hist c'
+      | some (.request p vs site st k) =>
+        match ρ hist p vs site st with
+        | none => ⟨hist, .noAnswer c, c, n + 1⟩
+        | some a =>
+          if O.allows p vs st a then
+            match k a with
+            | some c' => drive P ρ n (hist ++ a.event.toList) c'
+            | none => ⟨hist, .stuck c, c, n + 1⟩
+          else ⟨hist, .badAnswer c, c, n + 1⟩
+
+/-- Run a list of C1 statements, continuing only after ordinary completion. -/
+def runStmts (P : Exec.Program O) (ρ : Exec.Oracle O) (fuel : Nat) (hist : List O.Event) :
+    List (Exec.Stmt O) → Exec.Config O → SegmentReport O
+  | [], c => drive P ρ fuel hist c
+  | s :: ss, c =>
+    match c.final? with
+    | some .normal =>
+      let r := drive P ρ fuel hist ⟨.exec s, c.locals, c.store, c.frames⟩
+      match r.ending with
+      | .final .normal => runStmts P ρ r.remaining r.events ss r.config
+      | _ => r
+    | _ => drive P ρ fuel hist c
+
+/-- Run mixed ghost/concrete statements. Ghost evaluation consumes no concrete fuel and leaves the
+C1 configuration untouched. -/
+def runPieces (G : Language O) (P : Exec.Program O) (ρ : Exec.Oracle O)
+    (fuel : Nat) (hist : List O.Event) :
+    List (Piece G) → AList Var G.Val → Exec.Config O → SegmentReport O
+  | [], _, c => drive P ρ fuel hist c
+  | .ghost g :: ps, Γ, c =>
+    match c.final? with
+    | some .normal => runPieces G P ρ fuel hist ps (evalStmt G c.locals c.store g Γ) c
+    | _ => drive P ρ fuel hist c
+  | .concrete s :: ps, Γ, c =>
+    match c.final? with
+    | some .normal =>
+      let r := drive P ρ fuel hist ⟨.exec s, c.locals, c.store, c.frames⟩
+      match r.ending with
+      | .final .normal => runPieces G P ρ r.remaining r.events ps Γ r.config
+      | _ => r
+    | _ => drive P ρ fuel hist c
+
+variable {G : Language O}
+
+/-- The concrete content of one piece: ghost statements have none. -/
+def erasePiece : Piece G → Option (Exec.Stmt O)
+  | .concrete s => some s
+  | .ghost _ => none
+
+/-- Erase every ghost statement, preserving every concrete statement in order. -/
+def erase (ps : List (Piece G)) : List (Exec.Stmt O) := ps.filterMap erasePiece
+
+end Ghost
+
 namespace PrimDemo
 
 /-- A minimal base language used to exercise registry admission, not a concrete language primitive. -/
-def base : Exec.Operands where
+abbrev base : Exec.Operands where
   Val := Int
   Expr := Unit
   Ty := Unit
@@ -376,4 +491,37 @@ example : registry.allows ⟨0⟩ [] 7 ⟨none, .ok 0, 8⟩ = false := by decide
 example : registry.allows ⟨0⟩ [] 7 ⟨none, .error .abort, 7⟩ = false := by decide
 
 end PrimDemo
+
+namespace GhostDemo
+
+/-- Ghost integer expressions read the concrete counter but never return a concrete store. -/
+abbrev language : Ghost.Language PrimDemo.base where
+  Val := Int
+  Expr := Int
+  eval := fun _ _ st n => n + st
+  test := fun n => n ≠ 0
+
+/-- An empty C1 program is enough for concrete statements that make no calls. -/
+abbrev program : Exec.Program PrimDemo.base := ⟨[]⟩
+
+/-- No environment answers are needed by this example. -/
+abbrev oracle : Exec.Oracle PrimDemo.base := fun _ _ _ _ _ => none
+
+/-- A completed concrete configuration with counter `5`. -/
+abbrev start : Exec.Config PrimDemo.base := ⟨.done, [], 5, []⟩
+
+/-- Ghost computation, concrete `skip`, a ghost-only conditional, and an erased assertion. -/
+def pieces : List (Ghost.Piece language) :=
+  [.ghost (.bind ⟨"g", 0⟩ 1 ⟨0⟩), .concrete .skip,
+   .ghost (.cond 0 (.assert ⟨0⟩ True) (.bind ⟨"h", 1⟩ 2 ⟨1⟩) ⟨2⟩),
+   .ghost (.assert ⟨1⟩ (1 + 1 = 2))]
+
+/-- Accepted: erasure preserves the complete run, including its concrete store and ending. -/
+example : Ghost.runPieces language program oracle 20 [] pieces [] start =
+    Ghost.runStmts program oracle 20 [] [.skip] start := rfl
+
+/-- The ghost computation read the counter but did not write it. -/
+example : (Ghost.runPieces language program oracle 20 [] pieces [] start).config.store = 5 := rfl
+
+end GhostDemo
 end ConcreteSpec.Core
