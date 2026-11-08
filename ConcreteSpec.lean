@@ -15,3 +15,4 @@ import ConcreteSpec.Proofs.Memory
 import ConcreteSpec.Proofs.Hybrid
 
 import ConcreteSpec.Proofs.ObserveSource
+import ConcreteSpec.Proofs.ObserveReport
