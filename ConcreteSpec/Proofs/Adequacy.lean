@@ -438,4 +438,26 @@ theorem runFrom_final_sound {fuel : Nat} {events : List O.Event} {c : Config O} 
     refine ⟨tr, pos.config, hsteps, hf, ?_⟩
     rw [he, hepos]
 
+/-! ### Fuel exhaustion is only a budget report -/
+
+namespace Demo
+
+/-- A whole-program configuration that needs one silent step before it is final. -/
+def finishingConfig : Config ops := ⟨.exec .skip, [], .init, []⟩
+
+/-- The demo's silent, nonterminating loop. -/
+def spinConfig : Config ops :=
+  start ⟨[], .int, ⟨0⟩, .loop ⟨0⟩ .skip (.lit 1) .skip s⟩ [] .init
+
+/-- `outOfFuel` does not imply divergence: this run only needed one more unit of fuel. -/
+example :
+    isOutOfFuel (run prog env 0 finishingConfig) = true ∧
+      brief (run prog env 1 finishingConfig) = ([], some .normal) := by decide
+
+/-- `outOfFuel` is not a program failure either: the silent loop exhausts its simulation budget
+without trapping or becoming stuck. The infinite-execution witness is `spin_infinite` below. -/
+example : isOutOfFuel (run prog env 50 spinConfig) = true := by decide
+
+end Demo
+
 end ConcreteSpec.Core.Exec
