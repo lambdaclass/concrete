@@ -513,6 +513,22 @@ inductive Cleans (P : Program O) :
 
 /-! ## Destruction and receivers -/
 
+/-- Whether function `f` in `P` is a valid `Destroy` implementation for type `T` (OD60, Q2.7,
+Q2.8, owner decision 2026-11-08 item 7): `T` is not `Copy`, and `f` takes a single ordinary
+parameter of type `T` and returns `Unit`. -/
+def validDestroyFn [DecidableEq O.Ty] (P : Program O) (T : O.Ty) (f : FnId) : Bool :=
+  !O.isCopy T && match AList.lookup P.fns f with
+    | some fn => match fn.params with
+      | [(_, paramTy)] => decide (paramTy = T) && decide (fn.result = O.unitTy)
+      | _ => false
+    | none => false
+
+/-- The cleanup call that destroys a value of type `T`, given by the operand that moves it, when
+the candidate table `impl` assigns `T` a valid `Destroy` implementation in `P`. -/
+def checkedDestroyCall [DecidableEq O.Ty] (P : Program O) (impl : O.Ty → Option FnId) (T : O.Ty)
+    (arg : O.Expr) (site : SiteId) : Option (Deferred O) :=
+  (impl T).bind fun f => if validDestroyFn P T f then some ⟨f, [arg], site⟩ else none
+
 /-- The one consuming destruction protocol (OD60, Q2.7, owner decision 2026-11-08 item 7). For each
 type with `Destroy`, `impl` names the function that destroys it. That function's only parameter
 is an ordinary parameter of that type, taken by value (it consumes the value), and it returns
@@ -618,6 +634,12 @@ def runFrom (P : Program O) (ρ : Oracle O) : Nat → List O.Event → Config O 
 /-- Run from `c` with no events yet. -/
 def run (P : Program O) (ρ : Oracle O) (fuel : Nat) (c : Config O) : Report O :=
   runFrom P ρ fuel [] c
+
+/-- Enter `fn` on argument values `vs` in state `st` and run for at most `fuel` steps, when the
+argument count matches `fn.params` and initial activation succeeds. -/
+def runFn (P : Program O) (ρ : Oracle O) (fuel : Nat) (fn : Fn O) (vs : List O.Val)
+    (st : O.Store) : Option (Report O) :=
+  if fn.params.length = vs.length then (enter fn vs st).map (run P ρ fuel) else none
 
 /-! ## Examples
 

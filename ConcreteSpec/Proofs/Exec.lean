@@ -1324,23 +1324,25 @@ successful drops, so their existing plan and unwinding laws keep the same meanin
 those successful continuations explicitly. All other laws retain their premises.
 -/
 
-/-- No labeled transition is available. This is about the operational relation, including
-primitive answers, rather than the optional result of the implementation. -/
-def Blocked (P : Program O) (c : Config O) : Prop := ∀ l c', ¬ Step P c l c'
+/-- No labeled transition is available under `R`. Parameterized by the transition relation so
+contract laws and planted mutants share the same predicate. -/
+def Blocked (R : Config O → Label O → Config O → Prop) (c : Config O) : Prop :=
+  ∀ l c', ¬ R c l c'
 
-/-- Helper (inversion). A missing implementation result has no relational transition. -/
+/-- Helper (inversion). A missing implementation result has no relational transition
+(approved: PENDING). -/
 private theorem no_step_of_none_inv {P : Program O} {c : Config O} (h : step P c = none) :
-    Blocked P c := by
+    Blocked (Step P) c := by
   intro l c' hs
   cases hs with
   | silent hs => rw [h] at hs; cases hs
   | prim hs _ _ => rw [h] at hs; cases hs
 
 /-- Helper (inversion). For a silent lifecycle operation, absence of all transitions is exactly
-refusal. The operation's configuration transformer is unrestricted. -/
+refusal (approved: PENDING). -/
 private theorem blocked_map_inv {P : Program O} {c : Config O} (r : Option O.Store)
     (f : O.Store → Config O) (h : step P c = r.map (fun st => .next (f st))) :
-    Blocked P c ↔ r = none := by
+    Blocked (Step P) c ↔ r = none := by
   cases hr : r with
   | none => exact ⟨fun _ => rfl, fun _ => no_step_of_none_inv (by simpa [hr] using h)⟩
   | some st =>
@@ -1349,77 +1351,85 @@ private theorem blocked_map_inv {P : Program O} {c : Config O} (r : Option O.Sto
       exact False.elim (hb .silent (f st) (.silent (by simpa [hr] using h)))
     · intro hn; cases hn
 
-/-- Initialization is the sole obstruction after successful operand evaluation: refusal is
-necessary and sufficient for the absence of every labeled transition. -/
+/-- Law (subject `ConcreteSpec.Core.Exec.Step`). Initialization is the sole obstruction after
+successful operand evaluation: refusal is necessary and sufficient for the absence of every
+labeled transition. -/
 theorem bind_refused (P : Program O) (x : Var) (e : O.Expr) (site : SiteId)
     (L : AList Var O.Val) (st st' : O.Store) (v : O.Val) (k : List (Frame O))
     (he : O.eval L st e = .ok (v, st')) :
-    Blocked P ⟨.exec (.bind x e site), L, st, k⟩ ↔ O.life (.bind x) st' = none :=
+    Blocked (Step P) ⟨.exec (.bind x e site), L, st, k⟩ ↔ O.life (.bind x) st' = none :=
   blocked_map_inv _ (fun st => ⟨.done, (x, v) :: L, st, k⟩) (by simp [step, onRes, he])
 
-/-- For an existing destination and successful RHS, only lifecycle refusal blocks assignment. -/
+/-- Law (subject `ConcreteSpec.Core.Exec.Step`). For an existing destination and successful RHS,
+only lifecycle refusal blocks assignment. -/
 theorem assign_refused (P : Program O) (x : Var) (e : O.Expr) (site : SiteId)
     (L : AList Var O.Val) (st st' : O.Store) (v old : O.Val) (k : List (Frame O))
     (he : O.eval L st e = .ok (v, st')) (hx : AList.lookup L x = some old) :
-    Blocked P ⟨.exec (.assign x e site), L, st, k⟩ ↔ O.life (.bind x) st' = none :=
+    Blocked (Step P) ⟨.exec (.assign x e site), L, st, k⟩ ↔ O.life (.bind x) st' = none :=
   blocked_map_inv _ (fun st => ⟨.done, AList.update L x (fun _ => v), st, k⟩)
     (by simp [step, onRes, he, hx])
 
-/-- Helper (inversion). Initial entry projects the partial activation handler. Internal entry's
-operational contract is `call_refused`; this helper is not a contract law. -/
-theorem enter_refused_inv (fn : Fn O) (vs : List O.Val) (st : O.Store) :
-    enter fn vs st = none ↔ O.life (.enter (fn.params.map Prod.fst)) st = none := by
-  simp [enter]
+/-- Law (subject `ConcreteSpec.Core.Exec.runFn`). Top-level function entry from matching
+arguments is refused if and only if the `.enter` lifecycle hook refuses the parameter list. -/
+theorem enter_refused (P : Program O) (ρ : Oracle O) (fuel : Nat) (fn : Fn O)
+    (vs : List O.Val) (st : O.Store) (hlen : fn.params.length = vs.length) :
+    runFn P ρ fuel fn vs st = none ↔ O.life (.enter (fn.params.map Prod.fst)) st = none := by
+  simp [runFn, enter, hlen]
 
-/-- After successful arguments, lookup and arity, activation refusal is exactly what blocks a call. -/
+/-- Law (subject `ConcreteSpec.Core.Exec.Step`). After successful argument evaluation, function
+lookup, and arity check (`fn.params.length = vs.length`, which `step` verifies before calling
+`enter`), activation refusal is necessary and sufficient to block a call. -/
 theorem call_refused (P : Program O) (dst : Option Var) (f : FnId) (args : List O.Expr)
     (site : SiteId) (L : AList Var O.Val) (st st' : O.Store) (vs : List O.Val)
     (fn : Fn O) (k : List (Frame O)) (he : evalArgs O L st args = .ok (vs, st'))
     (hf : AList.lookup P.fns f = some fn) (hlen : fn.params.length = vs.length) :
-    Blocked P ⟨.exec (.call dst f args site), L, st, k⟩ ↔
+    Blocked (Step P) ⟨.exec (.call dst f args site), L, st, k⟩ ↔
       O.life (.enter (fn.params.map Prod.fst)) st' = none :=
   blocked_map_inv _ (fun st => ⟨.exec fn.body, (fn.params.map Prod.fst).zip vs, st,
     .scope fn.block (fn.params.map Prod.fst) [] :: .ret dst L :: k⟩)
     (by simp [step, onRes, he, hf, hlen])
 
-/-- A normal scope end with no remaining calls is blocked exactly when dropping its locals refuses. -/
+/-- Law (subject `ConcreteSpec.Core.Exec.Step`). A normal scope end with no remaining calls is
+blocked if and only if dropping its locals refuses. -/
 theorem scope_drop_refused (P : Program O) (b : BlockId) (dm : List Var)
     (L : AList Var O.Val) (st : O.Store) (k : List (Frame O)) :
-    Blocked P ⟨.done, L, st, .scope b dm [] :: k⟩ ↔ dropOut O dm L st = none :=
+    Blocked (Step P) ⟨.done, L, st, .scope b dm [] :: k⟩ ↔ dropOut O dm L st = none :=
   blocked_map_inv _ _ rfl
 
-/-- A structured exit through an empty scope is blocked exactly when its drop refuses. -/
+/-- Law (subject `ConcreteSpec.Core.Exec.Step`). A structured exit through an empty scope is
+blocked if and only if its drop refuses. -/
 theorem exit_drop_refused (P : Program O) (e : Exit O.Val) (b : BlockId) (dm : List Var)
     (L : AList Var O.Val) (st : O.Store) (k : List (Frame O)) :
-    Blocked P ⟨.exiting e, L, st, .scope b dm [] :: k⟩ ↔ dropOut O dm L st = none :=
+    Blocked (Step P) ⟨.exiting e, L, st, .scope b dm [] :: k⟩ ↔ dropOut O dm L st = none :=
   blocked_map_inv _ _ rfl
 
-/-- The test-frame drop during an exit is also necessary and sufficient for progress. -/
+/-- Law (subject `ConcreteSpec.Core.Exec.Step`). The test-frame drop during an exit is necessary
+and sufficient for progress. -/
 theorem exit_test_drop_refused (P : Program O) (e : Exit O.Val) (dm : List Var)
     (l : LoopId) (cr body : Stmt O) (t : O.Expr) (site : SiteId)
     (L : AList Var O.Val) (st : O.Store) (k : List (Frame O)) :
-    Blocked P ⟨.exiting e, L, st, .test l cr t body site dm :: k⟩ ↔ dropOut O dm L st = none :=
+    Blocked (Step P) ⟨.exiting e, L, st, .test l cr t body site dm :: k⟩ ↔ dropOut O dm L st = none :=
   blocked_map_inv _ _ rfl
 
-/-- After a successful boolean test, either branch progresses exactly when its temporary drop
-succeeds. Non-boolean operands cannot masquerade as lifecycle refusals. -/
+/-- Law (subject `ConcreteSpec.Core.Exec.Step`). After a successful boolean test, either branch
+progresses if and only if its temporary drop succeeds. -/
 theorem test_drop_refused (P : Program O) (l : LoopId) (cr body : Stmt O) (t : O.Expr)
     (site : SiteId) (dm : List Var) (L : AList Var O.Val) (st st' : O.Store)
     (v : O.Val) (go : Bool) (k : List (Frame O)) (he : O.eval L st t = .ok (v, st'))
     (ht : O.test v = some go) :
-    Blocked P ⟨.done, L, st, .test l cr t body site dm :: k⟩ ↔ dropOut O dm L st' = none := by
+    Blocked (Step P) ⟨.done, L, st, .test l cr t body site dm :: k⟩ ↔ dropOut O dm L st' = none := by
   apply blocked_map_inv _ (fun st => if go then
     ⟨.exec body, restrict dm L, st, .body l cr t body site :: k⟩ else
     ⟨.done, restrict dm L, st, k⟩)
   cases go <;> simp [step, onRes, he, ht]
 
-/-- Explicit returns are blocked exactly by refusal of activation end or result initialization.
-The analogous implicit Unit return has the same obstruction. -/
+/-- Law (subject `ConcreteSpec.Core.Exec.Step`). Explicit returns and implicit Unit returns are
+blocked if and only if activation end or result initialization refuses. -/
 theorem return_refused (P : Program O) (dst : Option Var) (v : O.Val)
     (caller L : AList Var O.Val) (st : O.Store) (k : List (Frame O)) :
-    (Blocked P ⟨.exiting (.ret v), L, st, .ret dst caller :: k⟩ ↔
+    (Blocked (Step P) ⟨.exiting (.ret v), L, st, .ret dst caller :: k⟩ ↔
       (O.life .leave st).bind (bindLife O dst) = none) ∧
-    (Blocked P ⟨.done, L, st, .ret dst caller :: k⟩ ↔
+    (Blocked (Step P) ⟨.done, L, st, .ret dst caller :: k⟩ ↔
       (O.life .leave st).bind (bindLife O dst) = none) := by
   constructor
   · apply blocked_map_inv _ (fun st => ⟨.done, bindDst dst v caller, st, k⟩)
@@ -1427,34 +1437,87 @@ theorem return_refused (P : Program O) (dst : Option Var) (v : O.Val)
   · apply blocked_map_inv _ (fun st => ⟨.done, bindDst dst O.unitVal caller, st, k⟩)
     cases hl : O.life .leave st <;> simp [step, hl]
 
-/-- The selected allowed answer cannot be committed when its continuation refuses: the driver
-ends stuck at the request, preserving the entire history (including no response event). This is
-per answer: another allowed answer may still have a transition. -/
-theorem continuation_refused (P : Program O) (ρ : Oracle O) (n : Nat)
+/-- Helper (inversion). A zero-fuel run never reports `.stuck` (approved: PENDING). -/
+private theorem runFrom_zero_ne_stuck_inv (P : Program O) (ρ : Oracle O)
+    (hist' hist : List O.Event) (c' c : Config O) :
+    runFrom P ρ 0 hist' c' ≠ ⟨hist, .stuck c⟩ := by
+  intro h
+  cases hf : c'.final? <;> simp [runFrom, hf] at h
+
+/-- Law (subject `ConcreteSpec.Core.Exec.runFrom`). At a primitive request with an allowed
+oracle answer, a one-step run is stuck at the requesting configuration with unchanged history
+if and only if the answer continuation refuses. -/
+theorem continuation_refused (P : Program O) (ρ : Oracle O)
     (hist : List O.Event) (c : Config O) (p : O.Prim) (vs : List O.Val)
     (site : SiteId) (st : O.Store) (cont : Answer O.Val O.Event O.Store → Option (Config O))
     (a : Answer O.Val O.Event O.Store) (hf : c.final? = none)
     (hr : step P c = some (.request p vs site st cont))
-    (ho : ρ hist p vs site st = some a) (ha : O.allows p vs st a = true)
-    (hk : cont a = none) : runFrom P ρ (n + 1) hist c = ⟨hist, .stuck c⟩ := by
-  simp [runFrom, hf, hr, ho, ha, hk]
+    (ho : ρ hist p vs site st = some a) (ha : O.allows p vs st a = true) :
+    runFrom P ρ 1 hist c = ⟨hist, .stuck c⟩ ↔ cont a = none := by
+  cases hk : cont a with
+  | none =>
+    simp [runFrom, hf, hr, ho, ha, hk]
+  | some c' =>
+    constructor
+    · intro h
+      simp only [runFrom, hf, hr, ho, ha, ↓reduceIte, hk] at h
+      exact False.elim (runFrom_zero_ne_stuck_inv P ρ (hist ++ a.event.toList) hist c' c h)
+    · intro h; cases h
 
-/-- A successful primitive answer whose binding refuses stops the actual run at its requesting
-configuration, without accepting its event. All argument evaluation and answer validation succeed. -/
-theorem prim_bind_refused (P : Program O) (ρ : Oracle O) (n : Nat) (hist : List O.Event)
+/-- Law (subject `ConcreteSpec.Core.Exec.runFrom`). A one-step run from a primitive call with a
+destination variable and an allowed successful oracle answer is stuck at the requesting
+configuration if and only if binding the destination variable is refused by `O.life`. -/
+theorem prim_bind_refused (P : Program O) (ρ : Oracle O) (hist : List O.Event)
     (x : Var) (p : O.Prim) (args : List O.Expr) (site : SiteId)
     (L : AList Var O.Val) (st st' : O.Store) (vs : List O.Val) (k : List (Frame O))
     (a : Answer O.Val O.Event O.Store) (v : O.Val)
     (he : evalArgs O L st args = .ok (vs, st'))
     (ho : ρ hist p vs site st' = some a) (ha : O.allows p vs st' a = true)
-    (hv : a.result = .ok v) (hl : O.life (.bind x) a.store = none) :
-    runFrom P ρ (n + 1) hist ⟨.exec (.prim (some x) p args site), L, st, k⟩ =
-      ⟨hist, .stuck ⟨.exec (.prim (some x) p args site), L, st, k⟩⟩ := by
-  exact continuation_refused P ρ n hist _ p vs site st' _ a rfl
-    (by simp [step, onRes, he]; rfl) ho ha (by simp [hv, bindLife, hl])
+    (hv : a.result = .ok v) :
+    runFrom P ρ 1 hist ⟨.exec (.prim (some x) p args site), L, st, k⟩ =
+      ⟨hist, .stuck ⟨.exec (.prim (some x) p args site), L, st, k⟩⟩ ↔
+      O.life (.bind x) a.store = none := by
+  rw [continuation_refused P ρ hist _ p vs site st' _ a rfl (by simp [step, onRes, he]; rfl) ho ha]
+  simp [hv, bindLife]
 
-/-- Error answers bypass result initialization even when that initialization would refuse:
-the actual labeled transition traps, retaining the answer's store and event. -/
+/-- Law (subject `ConcreteSpec.Core.Exec.Step`). Relational primitive-bind refusal: after
+successful argument evaluation, a primitive call with destination `some x` is blocked in `Step`
+if and only if every allowed answer succeeds with a value whose `.bind x` lifecycle hook refuses. -/
+theorem prim_bind_step (P : Program O) (x : Var) (p : O.Prim) (args : List O.Expr)
+    (site : SiteId) (L : AList Var O.Val) (st st' : O.Store) (vs : List O.Val)
+    (k : List (Frame O)) (he : evalArgs O L st args = .ok (vs, st')) :
+    Blocked (Step P) ⟨.exec (.prim (some x) p args site), L, st, k⟩ ↔
+      ∀ a, O.allows p vs st' a = true → ∃ v, a.result = .ok v ∧ O.life (.bind x) a.store = none := by
+  constructor
+  · intro hb a ha
+    cases hr : a.result with
+    | error kd =>
+      have hs : Step P ⟨.exec (.prim (some x) p args site), L, st, k⟩ a.label
+          ⟨.trapped kd site, L, a.store, k⟩ :=
+        Step.prim (by simp only [step, onRes, he]; rfl) ha (by simp [hr])
+      exact False.elim (hb a.label _ hs)
+    | ok v =>
+      refine ⟨v, rfl, ?_⟩
+      cases hl : O.life (.bind x) a.store with
+      | none => rfl
+      | some stBind =>
+        have hs : Step P ⟨.exec (.prim (some x) p args site), L, st, k⟩ a.label
+            ⟨.done, (x, v) :: L, stBind, k⟩ :=
+          Step.prim (by simp only [step, onRes, he]; rfl) ha (by simp [hr, bindLife, hl, bindDst])
+        exact False.elim (hb a.label _ hs)
+  · intro Hall l c' hs
+    cases hs with
+    | silent h => simp [step, onRes, he] at h
+    | prim h ha hk =>
+      simp only [step, onRes, he, Option.some.injEq, Out.request.injEq] at h
+      obtain ⟨rfl, hp, rfl, hst, hcont⟩ := h
+      cases hp; cases hst; cases hcont
+      obtain ⟨v, hv, hl⟩ := Hall _ ha
+      simp [hv, bindLife, hl] at hk
+
+/-- Law (subject `ConcreteSpec.Core.Exec.Step`). Error answers bypass result initialization even
+when that initialization would refuse: the actual labeled transition traps, retaining the
+answer's store and event. -/
 theorem prim_error_bypasses_bind (P : Program O) (x : Var) (p : O.Prim) (args : List O.Expr)
     (site : SiteId) (L : AList Var O.Val) (st st' : O.Store) (vs : List O.Val)
     (k : List (Frame O)) (a : Answer O.Val O.Event O.Store) (kd : TrapKind)
@@ -2031,209 +2094,585 @@ abbrev ops : Operands := { Demo.ops with life := fun _ _ => none }
 def fn : Fn ops := ⟨[], .unit, ⟨0⟩, .skip⟩
 def prog : Program ops := ⟨[(bumpF, fn)]⟩
 
-/-- Planted outer rules, on the same refusing operand language. Each rule performs the
-otherwise valid local/control update while ignoring the refused lifecycle callback. -/
-private inductive Bypass : Config ops → Label ops → Config ops → Prop where
-  | bind : Bypass ⟨.exec (.bind x (.lit 1) s), [], .init, []⟩ .silent
-      ⟨.done, [(x, 1)], .init, []⟩
-  | assign : Bypass ⟨.exec (.assign x (.lit 1) s), [(x, 0)], .init, []⟩ .silent
-      ⟨.done, [(x, 1)], .init, []⟩
-  | enter : Bypass ⟨.exec (.call none bumpF [] s), [], .init, []⟩ .silent
-      ⟨.exec .skip, [], .init, [.scope ⟨0⟩ [] [], .ret none []]⟩
-  | scope : Bypass ⟨.done, [(x, 1)], .init, [.scope ⟨0⟩ [] []]⟩ .silent
-      ⟨.done, [], .init, []⟩
-  | exitScope : Bypass ⟨.exiting (.ret 7), [(x, 1)], .init, [.scope ⟨0⟩ [] []]⟩ .silent
-      ⟨.exiting (.ret 7), [], .init, []⟩
-  | exitTest : Bypass ⟨.exiting (.ret 7), [(x, 1)], .init, [.test ⟨0⟩ .skip (.lit 1) .skip s []]⟩ .silent
-      ⟨.exiting (.ret 7), [], .init, []⟩
-  | test : Bypass ⟨.done, [(x, 1)], .init, [.test ⟨0⟩ .skip (.lit 1) .skip s []]⟩ .silent
-      ⟨.exec .skip, [], .init, [.body ⟨0⟩ .skip (.lit 1) .skip s]⟩
-  | ret : Bypass ⟨.exiting (.ret 7), [], .init, [.ret (some x) [(y, 2)]]⟩ .silent
-      ⟨.done, [(x, 7), (y, 2)], .init, []⟩
+/-- Planted mutant of `Step`: performs the local/control transition while ignoring the refused
+lifecycle callback. -/
+inductive BypassStep (P : Program O) : Config O → Label O → Config O → Prop where
+  | bind {x e site L st st' v k} :
+      O.eval L st e = .ok (v, st') →
+      BypassStep P ⟨.exec (.bind x e site), L, st, k⟩ .silent
+        ⟨.done, (x, v) :: L, st', k⟩
+  | assign {x e site L st st' v old k} :
+      O.eval L st e = .ok (v, st') →
+      AList.lookup L x = some old →
+      BypassStep P ⟨.exec (.assign x e site), L, st, k⟩ .silent
+        ⟨.done, AList.update L x (fun _ => v), st', k⟩
+  | enter {dst f args site L st st' vs fn k} :
+      evalArgs O L st args = .ok (vs, st') →
+      AList.lookup P.fns f = some fn →
+      fn.params.length = vs.length →
+      BypassStep P ⟨.exec (.call dst f args site), L, st, k⟩ .silent
+        ⟨.exec fn.body, (fn.params.map Prod.fst).zip vs, st',
+          .scope fn.block (fn.params.map Prod.fst) [] :: .ret dst L :: k⟩
+  | scope {b dm L st k} :
+      BypassStep P ⟨.done, L, st, .scope b dm [] :: k⟩ .silent
+        ⟨.done, restrict dm L, st, k⟩
+  | exitScope {e b dm L st k} :
+      BypassStep P ⟨.exiting e, L, st, .scope b dm [] :: k⟩ .silent
+        ⟨.exiting e, restrict dm L, st, k⟩
+  | exitTest {e l cr t body site dm L st k} :
+      BypassStep P ⟨.exiting e, L, st, .test l cr t body site dm :: k⟩ .silent
+        ⟨.exiting e, restrict dm L, st, k⟩
+  | test {l cr t body site dm L st st' v go k} :
+      O.eval L st t = .ok (v, st') →
+      O.test v = some go →
+      BypassStep P ⟨.done, L, st, .test l cr t body site dm :: k⟩ .silent
+        (if go then ⟨.exec body, restrict dm L, st', .body l cr t body site :: k⟩
+         else ⟨.done, restrict dm L, st', k⟩)
+  | ret {dst v caller L st k} :
+      BypassStep P ⟨.exiting (.ret v), L, st, .ret dst caller :: k⟩ .silent
+        ⟨.done, bindDst dst v caller, st, k⟩
+  | retImplicit {dst caller L st k} :
+      BypassStep P ⟨.done, L, st, .ret dst caller :: k⟩ .silent
+        ⟨.done, bindDst dst O.unitVal caller, st, k⟩
+  | prim {x p args site L st st' vs k a v} :
+      evalArgs O L st args = .ok (vs, st') →
+      O.allows p vs st' a = true →
+      a.result = .ok v →
+      BypassStep P ⟨.exec (.prim (some x) p args site), L, st, k⟩ a.label
+        ⟨.done, (x, v) :: L, a.store, k⟩
 
-private inductive BypassImplicit : Config ops → Label ops → Config ops → Prop where
-  | ret : BypassImplicit ⟨.done, [], .init, [.ret none []]⟩ .silent ⟨.done, [], .init, []⟩
+/-- Planted mutant of `Step`: refuses every transition even when lifecycle hooks succeed. -/
+inductive StuckStep (P : Program O) : Config O → Label O → Config O → Prop
 
-/-- Instance (law `ConcreteSpec.Core.Exec.bind_refused`). Only the lifecycle callback refuses. -/
-example : Blocked prog ⟨.exec (.bind x (.lit 1) s), [], .init, []⟩ :=
-  (bind_refused prog x (.lit 1) s [] .init .init 1 [] rfl).2 rfl
+/-- Planted mutant of `runFn`: enters the function body without consulting `O.life (.enter ...)`. -/
+def bypassRunFn (P : Program O) (ρ : Oracle O) (fuel : Nat) (fn : Fn O) (vs : List O.Val)
+    (st : O.Store) : Option (Report O) :=
+  some (run P ρ fuel ⟨.exec fn.body, (fn.params.map Prod.fst).zip vs, st,
+    [.scope fn.block (fn.params.map Prod.fst) []]⟩)
 
-/-- Planted (law `ConcreteSpec.Core.Exec.bind_refused`). The mutated transition ignores the
-refusal while preserving the preceding successful checks, in the very same operand language. -/
-example : ¬ ((∀ l c', ¬ Bypass ⟨.exec (.bind x (.lit 1) s), [], .init, []⟩ l c') ↔
-    ops.life (.bind x) DState.init = none) := by
-  intro h
-  exact h.mpr rfl .silent _ .bind
+/-- Planted mutant of `runFn`: always refuses entry even when `O.life (.enter ...)` succeeds. -/
+def stuckRunFn (_ : Program O) (_ : Oracle O) (_ : Nat) (_ : Fn O) (_ : List O.Val)
+    (_ : O.Store) : Option (Report O) :=
+  none
 
-/-- Instance (law `ConcreteSpec.Core.Exec.assign_refused`). Only the lifecycle callback refuses. -/
-example : Blocked prog ⟨.exec (.assign x (.lit 1) s), [(x, 0)], .init, []⟩ :=
-  (assign_refused prog x (.lit 1) s [(x, 0)] .init .init 1 0 [] rfl rfl).2 rfl
+/-- Instance (law `ConcreteSpec.Core.Exec.bind_refused`, case `refused`). Under `Refusal.ops`,
+`.bind x` is blocked because `ops.life (.bind x)` refuses. -/
+example : Blocked (Step prog) ⟨.exec (.bind x (.lit 1) s), [], .init, []⟩ ↔
+    ops.life (.bind x) DState.init = none :=
+  bind_refused prog x (.lit 1) s [] .init .init 1 [] rfl
 
-/-- Planted (law `ConcreteSpec.Core.Exec.assign_refused`). The mutated transition ignores the
-refusal while preserving the preceding successful checks, in the very same operand language. -/
-example : ¬ ((∀ l c', ¬ Bypass ⟨.exec (.assign x (.lit 1) s), [(x, 0)], .init, []⟩ l c') ↔
-    ops.life (.bind x) DState.init = none) := by
-  intro h
-  exact h.mpr rfl .silent _ .assign
+/-- Planted (law `ConcreteSpec.Core.Exec.bind_refused`, case `refused`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.Refusal.BypassStep`).
+`BypassStep` updates locals despite the refused `.bind x` lifecycle hook. -/
+example : ops.eval [] DState.init (.lit 1) = .ok (1, DState.init) ∧
+    ¬ (Blocked (BypassStep prog) ⟨.exec (.bind x (.lit 1) s), [], .init, []⟩ ↔
+      ops.life (.bind x) DState.init = none) := by
+  refine ⟨rfl, fun h => ?_⟩
+  exact h.mpr rfl .silent _ (.bind rfl)
 
-/-- Instance (law `ConcreteSpec.Core.Exec.call_refused`). Only the lifecycle callback refuses. -/
-example : Blocked prog ⟨.exec (.call none bumpF [] s), [], .init, []⟩ :=
-  (call_refused prog none bumpF [] s [] .init .init [] fn [] rfl rfl rfl).2 rfl
+/-- Instance (law `ConcreteSpec.Core.Exec.bind_refused`, case `accepted`). Under `Demo.ops`,
+`.bind x` succeeds so the configuration is not blocked. -/
+example : Blocked (Step Demo.prog) ⟨.exec (.bind x (.lit 1) s), [], .init, []⟩ ↔
+    Demo.ops.life (.bind x) DState.init = none :=
+  bind_refused Demo.prog x (.lit 1) s [] .init .init 1 [] rfl
 
-/-- Planted (law `ConcreteSpec.Core.Exec.call_refused`). The mutated transition ignores the
-refusal while preserving the preceding successful checks, in the very same operand language. -/
-example : ¬ ((∀ l c', ¬ Bypass ⟨.exec (.call none bumpF [] s), [], .init, []⟩ l c') ↔
-    ops.life (.enter []) DState.init = none) := by
-  intro h
-  exact h.mpr rfl .silent _ .enter
+/-- Planted (law `ConcreteSpec.Core.Exec.bind_refused`, case `accepted`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.Refusal.StuckStep`).
+`StuckStep` blocks even when `Demo.ops.life (.bind x)` succeeds. -/
+example : Demo.ops.eval [] DState.init (.lit 1) = .ok (1, DState.init) ∧
+    ¬ (Blocked (StuckStep Demo.prog) ⟨.exec (.bind x (.lit 1) s), [], .init, []⟩ ↔
+      Demo.ops.life (.bind x) DState.init = none) := by
+  refine ⟨rfl, fun h => ?_⟩
+  have hnone := h.mp (fun _ _ hs => nomatch hs)
+  cases hnone
 
-/-- Instance (law `ConcreteSpec.Core.Exec.scope_drop_refused`). Only the lifecycle callback refuses. -/
-example : Blocked prog ⟨.done, [(x, 1)], .init, [.scope ⟨0⟩ [] []]⟩ :=
-  (scope_drop_refused prog ⟨0⟩ [] [(x, 1)] .init []).2 rfl
+/-- Instance (law `ConcreteSpec.Core.Exec.assign_refused`, case `refused`). Under `Refusal.ops`,
+`.assign x` is blocked because `ops.life (.bind x)` refuses. -/
+example : Blocked (Step prog) ⟨.exec (.assign x (.lit 1) s), [(x, 0)], .init, []⟩ ↔
+    ops.life (.bind x) DState.init = none :=
+  assign_refused prog x (.lit 1) s [(x, 0)] .init .init 1 0 [] rfl rfl
 
-/-- Planted (law `ConcreteSpec.Core.Exec.scope_drop_refused`). The mutated transition ignores the
-refusal while preserving the preceding successful checks, in the very same operand language. -/
-example : ¬ ((∀ l c', ¬ Bypass ⟨.done, [(x, 1)], .init, [.scope ⟨0⟩ [] []]⟩ l c') ↔
+/-- Planted (law `ConcreteSpec.Core.Exec.assign_refused`, case `refused`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.Refusal.BypassStep`).
+`BypassStep` updates locals despite the refused `.bind x` lifecycle hook. -/
+example : ops.eval [(x, 0)] DState.init (.lit 1) = .ok (1, DState.init) ∧
+    AList.lookup [(x, 0)] x = some 0 ∧
+    ¬ (Blocked (BypassStep prog) ⟨.exec (.assign x (.lit 1) s), [(x, 0)], .init, []⟩ ↔
+      ops.life (.bind x) DState.init = none) := by
+  refine ⟨rfl, rfl, fun h => ?_⟩
+  exact h.mpr rfl .silent _ (.assign rfl rfl)
+
+/-- Instance (law `ConcreteSpec.Core.Exec.assign_refused`, case `accepted`). Under `Demo.ops`,
+`.assign x` succeeds so the configuration is not blocked. -/
+example : Blocked (Step Demo.prog) ⟨.exec (.assign x (.lit 1) s), [(x, 0)], .init, []⟩ ↔
+    Demo.ops.life (.bind x) DState.init = none :=
+  assign_refused Demo.prog x (.lit 1) s [(x, 0)] .init .init 1 0 [] rfl rfl
+
+/-- Planted (law `ConcreteSpec.Core.Exec.assign_refused`, case `accepted`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.Refusal.StuckStep`).
+`StuckStep` blocks even when `Demo.ops.life (.bind x)` succeeds. -/
+example : Demo.ops.eval [(x, 0)] DState.init (.lit 1) = .ok (1, DState.init) ∧
+    AList.lookup [(x, 0)] x = some 0 ∧
+    ¬ (Blocked (StuckStep Demo.prog) ⟨.exec (.assign x (.lit 1) s), [(x, 0)], .init, []⟩ ↔
+      Demo.ops.life (.bind x) DState.init = none) := by
+  refine ⟨rfl, rfl, fun h => ?_⟩
+  have hnone := h.mp (fun _ _ hs => nomatch hs)
+  cases hnone
+
+/-- Instance (law `ConcreteSpec.Core.Exec.enter_refused`, case `refused`). Under `Refusal.ops`,
+top-level `runFn` is refused because `ops.life (.enter ...)` returns `none`. -/
+example : runFn prog Demo.env 1 fn [] .init = none ↔
+    ops.life (.enter (fn.params.map Prod.fst)) DState.init = none :=
+  enter_refused prog Demo.env 1 fn [] .init rfl
+
+/-- Planted (law `ConcreteSpec.Core.Exec.enter_refused`, case `refused`, subject `ConcreteSpec.Core.Exec.runFn`, mutant `ConcreteSpec.Core.Exec.Refusal.bypassRunFn`).
+`bypassRunFn` enters the function despite the refused `.enter` lifecycle hook. -/
+example : fn.params.length = ([] : List Int).length ∧
+    ¬ (bypassRunFn prog Demo.env 1 fn [] .init = none ↔
+      ops.life (.enter (fn.params.map Prod.fst)) DState.init = none) := by
+  refine ⟨rfl, fun h => ?_⟩
+  have hnone := h.mpr rfl
+  cases hnone
+
+/-- Instance (law `ConcreteSpec.Core.Exec.enter_refused`, case `accepted`). Under `Demo.ops`,
+top-level `runFn` succeeds when `.enter` succeeds. -/
+example : runFn Demo.prog Demo.env 1 Demo.bumpFn [] .init = none ↔
+    Demo.ops.life (.enter (Demo.bumpFn.params.map Prod.fst)) DState.init = none :=
+  enter_refused Demo.prog Demo.env 1 Demo.bumpFn [] .init rfl
+
+/-- Planted (law `ConcreteSpec.Core.Exec.enter_refused`, case `accepted`, subject `ConcreteSpec.Core.Exec.runFn`, mutant `ConcreteSpec.Core.Exec.Refusal.stuckRunFn`).
+`stuckRunFn` returns `none` even when `Demo.ops.life (.enter ...)` succeeds. -/
+example : Demo.bumpFn.params.length = ([] : List Int).length ∧
+    ¬ (stuckRunFn Demo.prog Demo.env 1 Demo.bumpFn [] .init = none ↔
+      Demo.ops.life (.enter (Demo.bumpFn.params.map Prod.fst)) DState.init = none) := by
+  refine ⟨rfl, fun h => ?_⟩
+  have hnone := h.mp rfl
+  cases hnone
+
+/-- Instance (law `ConcreteSpec.Core.Exec.call_refused`, case `refused`). Under `Refusal.ops`,
+calling `bumpF` is blocked because `ops.life (.enter [])` refuses. -/
+example : Blocked (Step prog) ⟨.exec (.call none bumpF [] s), [], .init, []⟩ ↔
+    ops.life (.enter (fn.params.map Prod.fst)) DState.init = none :=
+  call_refused prog none bumpF [] s [] .init .init [] fn [] rfl rfl rfl
+
+/-- Planted (law `ConcreteSpec.Core.Exec.call_refused`, case `refused`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.Refusal.BypassStep`).
+`BypassStep` enters the callee despite the refused `.enter` lifecycle hook. -/
+example : evalArgs ops [] DState.init [] = .ok ([], DState.init) ∧
+    AList.lookup prog.fns bumpF = some fn ∧
+    fn.params.length = ([] : List Int).length ∧
+    ¬ (Blocked (BypassStep prog) ⟨.exec (.call none bumpF [] s), [], .init, []⟩ ↔
+      ops.life (.enter (fn.params.map Prod.fst)) DState.init = none) := by
+  refine ⟨rfl, rfl, rfl, fun h => ?_⟩
+  exact h.mpr rfl .silent _ (.enter rfl rfl rfl)
+
+/-- Instance (law `ConcreteSpec.Core.Exec.call_refused`, case `accepted`). Under `Demo.ops`,
+calling `bumpF` is not blocked when `Demo.ops.life (.enter [])` succeeds. -/
+example : Blocked (Step Demo.prog) ⟨.exec (.call none bumpF [] s), [], .init, []⟩ ↔
+    Demo.ops.life (.enter (Demo.bumpFn.params.map Prod.fst)) DState.init = none :=
+  call_refused Demo.prog none bumpF [] s [] .init .init [] Demo.bumpFn [] rfl rfl rfl
+
+/-- Planted (law `ConcreteSpec.Core.Exec.call_refused`, case `accepted`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.Refusal.StuckStep`).
+`StuckStep` blocks the call even when `Demo.ops.life (.enter [])` succeeds. -/
+example : evalArgs Demo.ops [] DState.init [] = .ok ([], DState.init) ∧
+    AList.lookup Demo.prog.fns bumpF = some Demo.bumpFn ∧
+    Demo.bumpFn.params.length = ([] : List Int).length ∧
+    ¬ (Blocked (StuckStep Demo.prog) ⟨.exec (.call none bumpF [] s), [], .init, []⟩ ↔
+      Demo.ops.life (.enter (Demo.bumpFn.params.map Prod.fst)) DState.init = none) := by
+  refine ⟨rfl, rfl, rfl, fun h => ?_⟩
+  have hnone := h.mp (fun _ _ hs => nomatch hs)
+  cases hnone
+
+/-- Instance (law `ConcreteSpec.Core.Exec.scope_drop_refused`, case `refused`). Under `Refusal.ops`,
+normal scope end is blocked because `dropOut` refuses. -/
+example : Blocked (Step prog) ⟨.done, [(x, 1)], .init, [.scope ⟨0⟩ [] []]⟩ ↔
+    dropOut ops [] [(x, 1)] DState.init = none :=
+  scope_drop_refused prog ⟨0⟩ [] [(x, 1)] .init []
+
+/-- Planted (law `ConcreteSpec.Core.Exec.scope_drop_refused`, case `refused`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.Refusal.BypassStep`).
+`BypassStep` pops the scope despite the refused `dropOut`. -/
+example : ¬ (Blocked (BypassStep prog) ⟨.done, [(x, 1)], .init, [.scope ⟨0⟩ [] []]⟩ ↔
     dropOut ops [] [(x, 1)] DState.init = none) := by
   intro h
   exact h.mpr rfl .silent _ .scope
 
-/-- Instance (law `ConcreteSpec.Core.Exec.exit_drop_refused`). Only the lifecycle callback refuses. -/
-example : Blocked prog ⟨.exiting (.ret 7), [(x, 1)], .init, [.scope ⟨0⟩ [] []]⟩ :=
-  (exit_drop_refused prog (.ret 7) ⟨0⟩ [] [(x, 1)] .init []).2 rfl
+/-- Instance (law `ConcreteSpec.Core.Exec.scope_drop_refused`, case `accepted`). Under `Demo.ops`,
+normal scope end is not blocked when `dropOut` succeeds. -/
+example : Blocked (Step Demo.prog) ⟨.done, [(x, 1)], .init, [.scope ⟨0⟩ [] []]⟩ ↔
+    dropOut Demo.ops [] [(x, 1)] DState.init = none :=
+  scope_drop_refused Demo.prog ⟨0⟩ [] [(x, 1)] .init []
 
-/-- Planted (law `ConcreteSpec.Core.Exec.exit_drop_refused`). The mutated transition ignores the
-refusal while preserving the preceding successful checks, in the very same operand language. -/
-example : ¬ ((∀ l c', ¬ Bypass ⟨.exiting (.ret 7), [(x, 1)], .init, [.scope ⟨0⟩ [] []]⟩ l c') ↔
+/-- Planted (law `ConcreteSpec.Core.Exec.scope_drop_refused`, case `accepted`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.Refusal.StuckStep`).
+`StuckStep` blocks scope exit even when `dropOut` succeeds. -/
+example : ¬ (Blocked (StuckStep Demo.prog) ⟨.done, [(x, 1)], .init, [.scope ⟨0⟩ [] []]⟩ ↔
+    dropOut Demo.ops [] [(x, 1)] DState.init = none) := by
+  intro h
+  have hnone := h.mp (fun _ _ hs => nomatch hs)
+  cases hnone
+
+/-- Instance (law `ConcreteSpec.Core.Exec.exit_drop_refused`, case `refused`). Under `Refusal.ops`,
+structured exit through an empty scope is blocked because `dropOut` refuses. -/
+example : Blocked (Step prog) ⟨.exiting (.ret 7), [(x, 1)], .init, [.scope ⟨0⟩ [] []]⟩ ↔
+    dropOut ops [] [(x, 1)] DState.init = none :=
+  exit_drop_refused prog (.ret 7) ⟨0⟩ [] [(x, 1)] .init []
+
+/-- Planted (law `ConcreteSpec.Core.Exec.exit_drop_refused`, case `refused`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.Refusal.BypassStep`).
+`BypassStep` pops the scope on exit despite the refused `dropOut`. -/
+example : ¬ (Blocked (BypassStep prog) ⟨.exiting (.ret 7), [(x, 1)], .init, [.scope ⟨0⟩ [] []]⟩ ↔
     dropOut ops [] [(x, 1)] DState.init = none) := by
   intro h
   exact h.mpr rfl .silent _ .exitScope
 
-/-- Instance (law `ConcreteSpec.Core.Exec.exit_test_drop_refused`). Only the lifecycle callback refuses. -/
-example : Blocked prog ⟨.exiting (.ret 7), [(x, 1)], .init, [.test ⟨0⟩ .skip (.lit 1) .skip s []]⟩ :=
-  (exit_test_drop_refused prog (.ret 7) [] ⟨0⟩ .skip .skip (.lit 1) s [(x, 1)] .init []).2 rfl
+/-- Instance (law `ConcreteSpec.Core.Exec.exit_drop_refused`, case `accepted`). Under `Demo.ops`,
+structured exit through an empty scope is not blocked when `dropOut` succeeds. -/
+example : Blocked (Step Demo.prog) ⟨.exiting (.ret 7), [(x, 1)], .init, [.scope ⟨0⟩ [] []]⟩ ↔
+    dropOut Demo.ops [] [(x, 1)] DState.init = none :=
+  exit_drop_refused Demo.prog (.ret 7) ⟨0⟩ [] [(x, 1)] .init []
 
-/-- Planted (law `ConcreteSpec.Core.Exec.exit_test_drop_refused`). The mutated transition ignores the
-refusal while preserving the preceding successful checks, in the very same operand language. -/
-example : ¬ ((∀ l c', ¬ Bypass ⟨.exiting (.ret 7), [(x, 1)], .init, [.test ⟨0⟩ .skip (.lit 1) .skip s []]⟩ l c') ↔
+/-- Planted (law `ConcreteSpec.Core.Exec.exit_drop_refused`, case `accepted`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.Refusal.StuckStep`).
+`StuckStep` blocks scope exit even when `dropOut` succeeds. -/
+example : ¬ (Blocked (StuckStep Demo.prog) ⟨.exiting (.ret 7), [(x, 1)], .init, [.scope ⟨0⟩ [] []]⟩ ↔
+    dropOut Demo.ops [] [(x, 1)] DState.init = none) := by
+  intro h
+  have hnone := h.mp (fun _ _ hs => nomatch hs)
+  cases hnone
+
+/-- Instance (law `ConcreteSpec.Core.Exec.exit_test_drop_refused`, case `refused`). Under
+`Refusal.ops`, structured exit through a test frame is blocked because `dropOut` refuses. -/
+example : Blocked (Step prog) ⟨.exiting (.ret 7), [(x, 1)], .init, [.test ⟨0⟩ .skip (.lit 1) .skip s []]⟩ ↔
+    dropOut ops [] [(x, 1)] DState.init = none :=
+  exit_test_drop_refused prog (.ret 7) [] ⟨0⟩ .skip .skip (.lit 1) s [(x, 1)] .init []
+
+/-- Planted (law `ConcreteSpec.Core.Exec.exit_test_drop_refused`, case `refused`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.Refusal.BypassStep`).
+`BypassStep` pops the test frame on exit despite the refused `dropOut`. -/
+example : ¬ (Blocked (BypassStep prog) ⟨.exiting (.ret 7), [(x, 1)], .init, [.test ⟨0⟩ .skip (.lit 1) .skip s []]⟩ ↔
     dropOut ops [] [(x, 1)] DState.init = none) := by
   intro h
   exact h.mpr rfl .silent _ .exitTest
 
-/-- Instance (law `ConcreteSpec.Core.Exec.test_drop_refused`). Only the lifecycle callback refuses. -/
-example : Blocked prog ⟨.done, [(x, 1)], .init, [.test ⟨0⟩ .skip (.lit 1) .skip s []]⟩ :=
-  (test_drop_refused prog ⟨0⟩ .skip .skip (.lit 1) s [] [(x, 1)] .init .init 1 true [] rfl rfl).2 rfl
+/-- Instance (law `ConcreteSpec.Core.Exec.exit_test_drop_refused`, case `accepted`). Under
+`Demo.ops`, structured exit through a test frame is not blocked when `dropOut` succeeds. -/
+example : Blocked (Step Demo.prog) ⟨.exiting (.ret 7), [(x, 1)], .init, [.test ⟨0⟩ .skip (.lit 1) .skip s []]⟩ ↔
+    dropOut Demo.ops [] [(x, 1)] DState.init = none :=
+  exit_test_drop_refused Demo.prog (.ret 7) [] ⟨0⟩ .skip .skip (.lit 1) s [(x, 1)] .init []
 
-/-- Planted (law `ConcreteSpec.Core.Exec.test_drop_refused`). The mutated transition ignores the
-refusal while preserving the preceding successful checks, in the very same operand language. -/
-example : ¬ ((∀ l c', ¬ Bypass ⟨.done, [(x, 1)], .init, [.test ⟨0⟩ .skip (.lit 1) .skip s []]⟩ l c') ↔
-    dropOut ops [] [(x, 1)] DState.init = none) := by
+/-- Planted (law `ConcreteSpec.Core.Exec.exit_test_drop_refused`, case `accepted`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.Refusal.StuckStep`).
+`StuckStep` blocks test-frame exit even when `dropOut` succeeds. -/
+example : ¬ (Blocked (StuckStep Demo.prog) ⟨.exiting (.ret 7), [(x, 1)], .init, [.test ⟨0⟩ .skip (.lit 1) .skip s []]⟩ ↔
+    dropOut Demo.ops [] [(x, 1)] DState.init = none) := by
   intro h
-  exact h.mpr rfl .silent _ .test
+  have hnone := h.mp (fun _ _ hs => nomatch hs)
+  cases hnone
 
-/-- Instance (law `ConcreteSpec.Core.Exec.return_refused`). Only the lifecycle callback refuses. -/
-example : Blocked prog ⟨.exiting (.ret 7), [], .init, [.ret (some x) [(y, 2)]]⟩ :=
-  (return_refused prog (some x) 7 [(y, 2)] [] .init []).1.2 rfl
+/-- Instance (law `ConcreteSpec.Core.Exec.test_drop_refused`, case `refused`). Under `Refusal.ops`,
+loop test evaluation is blocked after boolean test when `dropOut` refuses. -/
+example : Blocked (Step prog) ⟨.done, [(x, 1)], .init, [.test ⟨0⟩ .skip (.lit 1) .skip s []]⟩ ↔
+    dropOut ops [] [(x, 1)] DState.init = none :=
+  test_drop_refused prog ⟨0⟩ .skip .skip (.lit 1) s [] [(x, 1)] .init .init 1 true [] rfl rfl
 
-/-- Planted (law `ConcreteSpec.Core.Exec.return_refused`). The mutated transition ignores the
-refusal while preserving the preceding successful checks, in the very same operand language. -/
-example : ¬ ((∀ l c', ¬ Bypass ⟨.exiting (.ret 7), [], .init, [.ret (some x) [(y, 2)]]⟩ l c') ↔
-    (ops.life .leave DState.init).bind (bindLife ops (some x)) = none) := by
+/-- Planted (law `ConcreteSpec.Core.Exec.test_drop_refused`, case `refused`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.Refusal.BypassStep`).
+`BypassStep` enters the loop body despite the refused `dropOut`. -/
+example : ops.eval [(x, 1)] DState.init (.lit 1) = .ok (1, DState.init) ∧
+    ops.test (1 : Int) = some true ∧
+    ¬ (Blocked (BypassStep prog) ⟨.done, [(x, 1)], .init, [.test ⟨0⟩ .skip (.lit 1) .skip s []]⟩ ↔
+      dropOut ops [] [(x, 1)] DState.init = none) := by
+  refine ⟨rfl, rfl, fun h => ?_⟩
+  exact h.mpr rfl .silent _ (.test rfl rfl)
+
+/-- Instance (law `ConcreteSpec.Core.Exec.test_drop_refused`, case `accepted`). Under `Demo.ops`,
+loop test evaluation is not blocked when `dropOut` succeeds. -/
+example : Blocked (Step Demo.prog) ⟨.done, [(x, 1)], .init, [.test ⟨0⟩ .skip (.lit 1) .skip s []]⟩ ↔
+    dropOut Demo.ops [] [(x, 1)] DState.init = none :=
+  test_drop_refused Demo.prog ⟨0⟩ .skip .skip (.lit 1) s [] [(x, 1)] .init .init 1 true [] rfl rfl
+
+/-- Planted (law `ConcreteSpec.Core.Exec.test_drop_refused`, case `accepted`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.Refusal.StuckStep`).
+`StuckStep` blocks loop test progress even when `dropOut` succeeds. -/
+example : Demo.ops.eval [(x, 1)] DState.init (.lit 1) = .ok (1, DState.init) ∧
+    Demo.ops.test (1 : Int) = some true ∧
+    ¬ (Blocked (StuckStep Demo.prog) ⟨.done, [(x, 1)], .init, [.test ⟨0⟩ .skip (.lit 1) .skip s []]⟩ ↔
+      dropOut Demo.ops [] [(x, 1)] DState.init = none) := by
+  refine ⟨rfl, rfl, fun h => ?_⟩
+  have hnone := h.mp (fun _ _ hs => nomatch hs)
+  cases hnone
+
+/-- Instance (law `ConcreteSpec.Core.Exec.return_refused`, case `explicit_refused`). Under
+`Refusal.ops`, explicit return is blocked because `.leave` refuses. -/
+example : (Blocked (Step prog) ⟨.exiting (.ret 7), [], .init, [.ret (some x) [(y, 2)]]⟩ ↔
+      (ops.life .leave DState.init).bind (bindLife ops (some x)) = none) ∧
+    (Blocked (Step prog) ⟨.done, [], .init, [.ret (some x) [(y, 2)]]⟩ ↔
+      (ops.life .leave DState.init).bind (bindLife ops (some x)) = none) :=
+  return_refused prog (some x) 7 [(y, 2)] [] .init []
+
+/-- Planted (law `ConcreteSpec.Core.Exec.return_refused`, case `explicit_refused`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.Refusal.BypassStep`).
+`BypassStep` returns to the caller despite the refused `.leave` lifecycle hook. -/
+example : ¬ ((Blocked (BypassStep prog) ⟨.exiting (.ret 7), [], .init, [.ret (some x) [(y, 2)]]⟩ ↔
+      (ops.life .leave DState.init).bind (bindLife ops (some x)) = none) ∧
+    (Blocked (BypassStep prog) ⟨.done, [], .init, [.ret (some x) [(y, 2)]]⟩ ↔
+      (ops.life .leave DState.init).bind (bindLife ops (some x)) = none)) := by
   intro h
-  exact h.mpr rfl .silent _ .ret
+  exact h.1.mpr rfl .silent _ .ret
 
-/-- Instance (law `ConcreteSpec.Core.Exec.return_refused`). Implicit Unit return also refuses leave. -/
-example : Blocked prog ⟨.done, [], .init, [.ret none []]⟩ :=
-  (return_refused prog none 7 [] [] .init []).2.2 rfl
+/-- Instance (law `ConcreteSpec.Core.Exec.return_refused`, case `implicit_refused`). Under
+`Refusal.ops`, implicit Unit return is also blocked when `.leave` refuses. -/
+example : (Blocked (Step prog) ⟨.exiting (.ret 7), [], .init, [.ret none []]⟩ ↔
+      (ops.life .leave DState.init).bind (bindLife ops none) = none) ∧
+    (Blocked (Step prog) ⟨.done, [], .init, [.ret none []]⟩ ↔
+      (ops.life .leave DState.init).bind (bindLife ops none) = none) :=
+  return_refused prog none 7 [] [] .init []
 
-/-- Planted (law `ConcreteSpec.Core.Exec.return_refused`). The implicit-return mutation
-ignores refused leave in the same operand language and falsifies the second refusal iff. -/
-example : ¬ ((∀ l c', ¬ BypassImplicit ⟨.done, [], .init, [.ret none []]⟩ l c') ↔
-    (ops.life .leave DState.init).bind (bindLife ops none) = none) := by
+/-- Planted (law `ConcreteSpec.Core.Exec.return_refused`, case `implicit_refused`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.Refusal.BypassStep`).
+`BypassStep` performs the implicit return despite the refused `.leave` lifecycle hook. -/
+example : ¬ ((Blocked (BypassStep prog) ⟨.exiting (.ret 7), [], .init, [.ret none []]⟩ ↔
+      (ops.life .leave DState.init).bind (bindLife ops none) = none) ∧
+    (Blocked (BypassStep prog) ⟨.done, [], .init, [.ret none []]⟩ ↔
+      (ops.life .leave DState.init).bind (bindLife ops none) = none)) := by
   intro h
-  exact h.mpr rfl .silent _ .ret
+  exact h.2.mpr rfl .silent _ .retImplicit
 
 /-- Only result initialization refuses; activation leave succeeds independently. -/
-private abbrev bindOnlyOps : Operands := { Demo.ops with life := fun e st => match e with
+abbrev bindOnlyOps : Operands := { Demo.ops with life := fun e st => match e with
     | .bind _ => none
     | _ => some (DState.life e st) }
+def bindOnlyProg : Program bindOnlyOps := ⟨[]⟩
 
-/-- Instance (law `ConcreteSpec.Core.Exec.return_refused`). The law itself proves blockage
-when leave succeeds and result initialization alone refuses. -/
-example : bindOnlyOps.life .leave DState.init = some DState.init ∧
-    Blocked (O := bindOnlyOps) ⟨[]⟩ ⟨.exiting (.ret 7), [], .init, [.ret (some x) []]⟩ :=
-  ⟨rfl, (return_refused (O := bindOnlyOps) ⟨[]⟩ (some x) 7 [] [] .init []).1.2 rfl⟩
+/-- Instance (law `ConcreteSpec.Core.Exec.return_refused`, case `bind_only_refused`). When `.leave`
+succeeds and `.bind x` alone refuses, return is still blocked. -/
+example : (Blocked (Step bindOnlyProg) ⟨.exiting (.ret 7), [], .init, [.ret (some x) []]⟩ ↔
+      (bindOnlyOps.life .leave DState.init).bind (bindLife bindOnlyOps (some x)) = none) ∧
+    (Blocked (Step bindOnlyProg) ⟨.done, [], .init, [.ret (some x) []]⟩ ↔
+      (bindOnlyOps.life .leave DState.init).bind (bindLife bindOnlyOps (some x)) = none) :=
+  return_refused bindOnlyProg (some x) 7 [] [] .init []
 
-private inductive BypassResultBind : Config bindOnlyOps → Label bindOnlyOps → Config bindOnlyOps → Prop where
-  | ret : BypassResultBind ⟨.exiting (.ret 7), [], .init, [.ret (some x) []]⟩ .silent
-      ⟨.done, [(x, 7)], .init, []⟩
-
-/-- Planted (law `ConcreteSpec.Core.Exec.return_refused`). Successful leave does not permit
-bypassing the separately refused result bind; the mutated return violates the explicit-return iff. -/
-example : ¬ ((∀ l c', ¬ BypassResultBind
-    ⟨.exiting (.ret 7), [], .init, [.ret (some x) []]⟩ l c') ↔
-      (bindOnlyOps.life .leave DState.init).bind (bindLife bindOnlyOps (some x)) = none) := by
+/-- Planted (law `ConcreteSpec.Core.Exec.return_refused`, case `bind_only_refused`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.Refusal.BypassStep`).
+Successful `.leave` does not permit bypassing the refused result bind `.bind x`. -/
+example : ¬ ((Blocked (BypassStep bindOnlyProg) ⟨.exiting (.ret 7), [], .init, [.ret (some x) []]⟩ ↔
+      (bindOnlyOps.life .leave DState.init).bind (bindLife bindOnlyOps (some x)) = none) ∧
+    (Blocked (BypassStep bindOnlyProg) ⟨.done, [], .init, [.ret (some x) []]⟩ ↔
+      (bindOnlyOps.life .leave DState.init).bind (bindLife bindOnlyOps (some x)) = none)) := by
   intro h
-  exact h.mpr rfl .silent _ .ret
+  exact h.1.mpr rfl .silent _ .ret
 
-/-- Instance (law `ConcreteSpec.Core.Exec.prim_bind_refused`). Instance (law `ConcreteSpec.Core.Exec.continuation_refused`). The allowed log answer would emit `1`, but only
-its result initialization refuses. A pre-existing history must survive unchanged. -/
-example : runFrom prog Demo.env 10 [9] ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩ =
-    ⟨[9], .stuck ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩⟩ :=
-  prim_bind_refused prog Demo.env 9 [9] x .log [.lit 1] s [] .init .init [1] []
-    ⟨some 1, .ok 0, .init⟩ 0 rfl rfl (by decide) rfl rfl
+/-- Instance (law `ConcreteSpec.Core.Exec.return_refused`, case `accepted`). Under `Demo.ops`,
+both `.leave` and `.bind x` succeed so return is not blocked. -/
+example : (Blocked (Step Demo.prog) ⟨.exiting (.ret 7), [], .init, [.ret (some x) [(y, 2)]]⟩ ↔
+      (Demo.ops.life .leave DState.init).bind (bindLife Demo.ops (some x)) = none) ∧
+    (Blocked (Step Demo.prog) ⟨.done, [], .init, [.ret (some x) [(y, 2)]]⟩ ↔
+      (Demo.ops.life .leave DState.init).bind (bindLife Demo.ops (some x)) = none) :=
+  return_refused Demo.prog (some x) 7 [(y, 2)] [] .init []
 
-/-- Planted response rule: continue an allowed successful answer without consulting `bindLife`.
-This uses the same refusing instrumentation and oracle as the production instance above. -/
-private def uncheckedResponse (hist : List Int) (a : Answer Int Int DState) : Report ops :=
+/-- Planted (law `ConcreteSpec.Core.Exec.return_refused`, case `accepted`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.Refusal.StuckStep`).
+`StuckStep` blocks return even when both `.leave` and `.bind x` succeed. -/
+example : ¬ ((Blocked (StuckStep Demo.prog) ⟨.exiting (.ret 7), [], .init, [.ret (some x) [(y, 2)]]⟩ ↔
+      (Demo.ops.life .leave DState.init).bind (bindLife Demo.ops (some x)) = none) ∧
+    (Blocked (StuckStep Demo.prog) ⟨.done, [], .init, [.ret (some x) [(y, 2)]]⟩ ↔
+      (Demo.ops.life .leave DState.init).bind (bindLife Demo.ops (some x)) = none)) := by
+  intro h
+  have hnone := h.1.mp (fun _ _ hs => nomatch hs)
+  cases hnone
+
+/-- Concrete request continuation for `.prim (some x) .log [.lit 1] s` with empty locals/frames. -/
+def logCont (O : Operands) (a : Answer O.Val O.Event O.Store) : Option (Config O) :=
   match a.result with
-  | .ok v => runFrom prog Demo.env 9 (hist ++ a.event.toList)
-      ⟨.done, [(x, v)], a.store, []⟩
-  | .error kd => runFrom prog Demo.env 9 (hist ++ a.event.toList)
-      ⟨.trapped kd s, [], a.store, []⟩
+  | .ok v => (bindLife O (some x) a.store).map fun st => ⟨.done, bindDst (some x) v [], st, []⟩
+  | .error kd => some ⟨.trapped kd s, [], a.store, []⟩
 
-/-- Planted (law `ConcreteSpec.Core.Exec.prim_bind_refused`). Planted (law `ConcreteSpec.Core.Exec.continuation_refused`).
-Ignoring the refused bind on the same allowed answer accepts its event and finishes, violating
-both the stuck outcome and unchanged history. -/
-example : ¬ uncheckedResponse [9] ⟨some 1, .ok 0, .init⟩ =
-    ⟨[9], .stuck ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩⟩ := by
-  intro h
-  have he := congrArg Report.events h
-  change [9, 1] = [9] at he
-  cases he
+/-- Planted mutant of `runFrom`: commits an allowed answer's event and finishes even when
+its continuation `cont a` returns `none`. -/
+def bypassRunFrom (P : Program O) (ρ : Oracle O) (fuel : Nat) (hist : List O.Event)
+    (c : Config O) : Report O :=
+  match c.final?, fuel with
+  | some f, _ => ⟨hist, .final f⟩
+  | none, 0 => ⟨hist, .outOfFuel c⟩
+  | none, n + 1 =>
+    match step P c with
+    | none => ⟨hist, .stuck c⟩
+    | some (.next c') => runFrom P ρ n hist c'
+    | some (.request p vs site st cont) =>
+      match ρ hist p vs site st with
+      | none => ⟨hist, .noAnswer c⟩
+      | some a =>
+        if O.allows p vs st a then
+          match cont a with
+          | some c' => runFrom P ρ n (hist ++ a.event.toList) c'
+          | none => ⟨hist ++ a.event.toList, .final (.returned O.unitVal)⟩
+        else
+          ⟨hist, .badAnswer c⟩
+
+/-- Planted mutant of `runFrom`: always reports `.stuck c` without executing the continuation. -/
+def stuckRunFrom (_ : Program O) (_ : Oracle O) (_ : Nat) (hist : List O.Event)
+    (c : Config O) : Report O :=
+  ⟨hist, .stuck c⟩
+
+/-- Instance (law `ConcreteSpec.Core.Exec.continuation_refused`, case `refused`). Under
+`Refusal.ops`, `logCont` returns `none` so a one-step run is stuck with unchanged history `[9]`. -/
+example : runFrom prog Demo.env 1 [9] ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩ =
+      ⟨[9], .stuck ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩⟩ ↔
+    logCont ops ⟨some 1, .ok 0, .init⟩ = none :=
+  continuation_refused prog Demo.env [9]
+    ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩ .log [1] s .init
+    (logCont ops) ⟨some 1, .ok 0, .init⟩ rfl rfl rfl (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Exec.continuation_refused`, case `refused`, subject `ConcreteSpec.Core.Exec.runFrom`, mutant `ConcreteSpec.Core.Exec.Refusal.bypassRunFrom`).
+`bypassRunFrom` accepts the answer event `1` despite `logCont ops` returning `none`. -/
+example : (⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩ : Config ops).final? = none ∧
+    step prog ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩ =
+      some (.request .log [1] s .init (logCont ops)) ∧
+    Demo.env [9] .log [1] s .init = some ⟨some 1, .ok 0, .init⟩ ∧
+    ops.allows .log [1] .init ⟨some 1, .ok 0, .init⟩ = true ∧
+    ¬ (bypassRunFrom prog Demo.env 1 [9] ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩ =
+        ⟨[9], .stuck ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩⟩ ↔
+      logCont ops ⟨some 1, .ok 0, .init⟩ = none) := by
+  refine ⟨rfl, rfl, rfl, by decide, fun h => ?_⟩
+  have hrep := h.mpr rfl
+  have hev := congrArg Report.events hrep
+  change [9, 1] = [9] at hev
+  cases hev
+
+/-- Instance (law `ConcreteSpec.Core.Exec.continuation_refused`, case `accepted`). Under
+`Demo.ops`, `logCont` returns `some ...` so a one-step run is not stuck. -/
+example : runFrom Demo.prog Demo.env 1 [9] ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩ =
+      ⟨[9], .stuck ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩⟩ ↔
+    logCont Demo.ops ⟨some 1, .ok 0, .init⟩ = none :=
+  continuation_refused Demo.prog Demo.env [9]
+    ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩ .log [1] s .init
+    (logCont Demo.ops) ⟨some 1, .ok 0, .init⟩ rfl rfl rfl (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Exec.continuation_refused`, case `accepted`, subject `ConcreteSpec.Core.Exec.runFrom`, mutant `ConcreteSpec.Core.Exec.Refusal.stuckRunFrom`).
+`stuckRunFrom` reports `.stuck` even when `logCont Demo.ops` succeeds. -/
+example : (⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩ : Config Demo.ops).final? = none ∧
+    step Demo.prog ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩ =
+      some (.request .log [1] s .init (logCont Demo.ops)) ∧
+    Demo.env [9] .log [1] s .init = some ⟨some 1, .ok 0, .init⟩ ∧
+    Demo.ops.allows .log [1] .init ⟨some 1, .ok 0, .init⟩ = true ∧
+    ¬ (stuckRunFrom Demo.prog Demo.env 1 [9] ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩ =
+        ⟨[9], .stuck ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩⟩ ↔
+      logCont Demo.ops ⟨some 1, .ok 0, .init⟩ = none) := by
+  refine ⟨rfl, rfl, rfl, by decide, fun h => ?_⟩
+  have hnone := h.mp rfl
+  cases hnone
+
+/-- Instance (law `ConcreteSpec.Core.Exec.prim_bind_refused`, case `refused`). Under
+`Refusal.ops`, `.prim (some x) .log` is stuck on one step because `ops.life (.bind x)` refuses. -/
+example : runFrom prog Demo.env 1 [9] ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩ =
+      ⟨[9], .stuck ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩⟩ ↔
+    ops.life (.bind x) (⟨some 1, .ok 0, .init⟩ : Answer Int Int DState).store = none :=
+  prim_bind_refused prog Demo.env [9] x .log [.lit 1] s [] .init .init [1] []
+    ⟨some 1, .ok 0, .init⟩ 0 rfl rfl (by decide) rfl
+
+/-- Planted (law `ConcreteSpec.Core.Exec.prim_bind_refused`, case `refused`, subject `ConcreteSpec.Core.Exec.runFrom`, mutant `ConcreteSpec.Core.Exec.Refusal.bypassRunFrom`).
+`bypassRunFrom` accepts the primitive answer's event `1` despite the refused `.bind x` hook. -/
+example : evalArgs ops [] DState.init [.lit 1] = .ok ([1], DState.init) ∧
+    Demo.env [9] .log [1] s DState.init = some ⟨some 1, .ok 0, .init⟩ ∧
+    ops.allows .log [1] DState.init ⟨some 1, .ok 0, .init⟩ = true ∧
+    (⟨some 1, .ok 0, .init⟩ : Answer Int Int DState).result = .ok 0 ∧
+    ¬ (bypassRunFrom prog Demo.env 1 [9] ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩ =
+        ⟨[9], .stuck ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩⟩ ↔
+      ops.life (.bind x) (⟨some 1, .ok 0, .init⟩ : Answer Int Int DState).store = none) := by
+  refine ⟨rfl, rfl, by decide, rfl, fun h => ?_⟩
+  have hrep := h.mpr rfl
+  have hev := congrArg Report.events hrep
+  change [9, 1] = [9] at hev
+  cases hev
+
+/-- Instance (law `ConcreteSpec.Core.Exec.prim_bind_refused`, case `accepted`). Under
+`Demo.ops`, `.prim (some x) .log` is not stuck because `Demo.ops.life (.bind x)` succeeds. -/
+example : runFrom Demo.prog Demo.env 1 [9] ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩ =
+      ⟨[9], .stuck ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩⟩ ↔
+    Demo.ops.life (.bind x) (⟨some 1, .ok 0, .init⟩ : Answer Int Int DState).store = none :=
+  prim_bind_refused Demo.prog Demo.env [9] x .log [.lit 1] s [] .init .init [1] []
+    ⟨some 1, .ok 0, .init⟩ 0 rfl rfl (by decide) rfl
+
+/-- Planted (law `ConcreteSpec.Core.Exec.prim_bind_refused`, case `accepted`, subject `ConcreteSpec.Core.Exec.runFrom`, mutant `ConcreteSpec.Core.Exec.Refusal.stuckRunFrom`).
+`stuckRunFrom` reports `.stuck` even when `Demo.ops.life (.bind x)` succeeds. -/
+example : evalArgs Demo.ops [] DState.init [.lit 1] = .ok ([1], DState.init) ∧
+    Demo.env [9] .log [1] s DState.init = some ⟨some 1, .ok 0, .init⟩ ∧
+    Demo.ops.allows .log [1] DState.init ⟨some 1, .ok 0, .init⟩ = true ∧
+    (⟨some 1, .ok 0, .init⟩ : Answer Int Int DState).result = .ok 0 ∧
+    ¬ (stuckRunFrom Demo.prog Demo.env 1 [9] ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩ =
+        ⟨[9], .stuck ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩⟩ ↔
+      Demo.ops.life (.bind x) (⟨some 1, .ok 0, .init⟩ : Answer Int Int DState).store = none) := by
+  refine ⟨rfl, rfl, by decide, rfl, fun h => ?_⟩
+  have hnone := h.mp rfl
+  cases hnone
+
+/-- Instance (law `ConcreteSpec.Core.Exec.prim_bind_step`, case `refused`). Under `Refusal.ops`,
+the relational primitive call is blocked because every allowed `.log` answer succeeds with `.ok`
+and `ops.life (.bind x)` refuses. -/
+example : Blocked (Step prog) ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩ ↔
+    ∀ a, ops.allows .log [1] DState.init a = true →
+      ∃ v, a.result = .ok v ∧ ops.life (.bind x) a.store = none :=
+  prim_bind_step prog x .log [.lit 1] s [] .init .init [1] [] rfl
+
+/-- Planted (law `ConcreteSpec.Core.Exec.prim_bind_step`, case `refused`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.Refusal.BypassStep`).
+`BypassStep.prim` commits the primitive answer despite the refused `.bind x` lifecycle hook. -/
+example : evalArgs ops [] DState.init [.lit 1] = .ok ([1], DState.init) ∧
+    ¬ (Blocked (BypassStep prog) ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩ ↔
+      ∀ a, ops.allows .log [1] DState.init a = true →
+        ∃ v, a.result = .ok v ∧ ops.life (.bind x) a.store = none) := by
+  refine ⟨rfl, fun h => ?_⟩
+  have hall : ∀ a, ops.allows .log [1] DState.init a = true →
+      ∃ v, a.result = .ok v ∧ ops.life (.bind x) a.store = none := by
+    intro a ha
+    cases hev : a.event with
+    | none => simp [ops, Demo.ops, hev] at ha
+    | some ev =>
+      cases hres : a.result with
+      | error _ => simp [ops, Demo.ops, hev, hres] at ha
+      | ok v => exact ⟨v, rfl, rfl⟩
+  exact h.mpr hall (.emit 1) _
+    (BypassStep.prim (P := prog) (a := ⟨some 1, .ok 0, .init⟩) rfl (by decide) rfl)
+
+/-- Instance (law `ConcreteSpec.Core.Exec.prim_bind_step`, case `accepted`). Under `Demo.ops`,
+the relational primitive call is not blocked because `Demo.ops.life (.bind x)` succeeds. -/
+example : Blocked (Step Demo.prog) ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩ ↔
+    ∀ a, Demo.ops.allows .log [1] DState.init a = true →
+      ∃ v, a.result = .ok v ∧ Demo.ops.life (.bind x) a.store = none :=
+  prim_bind_step Demo.prog x .log [.lit 1] s [] .init .init [1] [] rfl
+
+/-- Planted (law `ConcreteSpec.Core.Exec.prim_bind_step`, case `accepted`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.Refusal.StuckStep`).
+`StuckStep` blocks the relational primitive call even when `Demo.ops.life (.bind x)` succeeds. -/
+example : evalArgs Demo.ops [] DState.init [.lit 1] = .ok ([1], DState.init) ∧
+    ¬ (Blocked (StuckStep Demo.prog) ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩ ↔
+      ∀ a, Demo.ops.allows .log [1] DState.init a = true →
+        ∃ v, a.result = .ok v ∧ Demo.ops.life (.bind x) a.store = none) := by
+  refine ⟨rfl, fun h => ?_⟩
+  obtain ⟨_, _, hnone⟩ := h.mp (fun _ _ hs => nomatch hs) ⟨some 1, .ok 0, .init⟩ (by decide)
+  cases hnone
 
 /-- Error-capable operand contract: the environment may trap instead of producing a value. -/
 abbrev errorOps : Operands := { ops with allows := fun _ _ _ _ => true }
+def errorProg : Program errorOps := ⟨[]⟩
+def errAns : Answer errorOps.Val errorOps.Event errorOps.Store := ⟨some 1, .error .abort, .init⟩
 
-/-- Instance (law `ConcreteSpec.Core.Exec.prim_error_bypasses_bind`). The bind callback refuses,
-but an allowed error answer still produces a real labeled trap transition. -/
-example : Step (O := errorOps) ⟨[]⟩
-    ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩ (.emit 1)
-    ⟨.trapped .abort s, [], .init, []⟩ :=
-  prim_error_bypasses_bind (O := errorOps) ⟨[]⟩ x .log [.lit 1] s [] .init .init [1] []
-    ⟨some 1, .error .abort, .init⟩ .abort rfl rfl rfl
+/-- Planted mutant of `Step`: incorrectly requires `O.life (.bind x)` even on error answers. -/
+inductive BindErrorsStep (P : Program O) : Config O → Label O → Config O → Prop where
+  | prim {x p args site L st st' vs k a stBind c'} :
+      evalArgs O L st args = .ok (vs, st') →
+      O.allows p vs st' a = true →
+      O.life (.bind x) a.store = some stBind →
+      c' = (match a.result with
+        | .ok v => ⟨.done, (x, v) :: L, stBind, k⟩
+        | .error kd => ⟨.trapped kd site, L, stBind, k⟩) →
+      BindErrorsStep P ⟨.exec (.prim (some x) p args site), L, st, k⟩ a.label c'
 
-/-- Planted continuation: it incorrectly requires initialization even for error answers. -/
-private def bindErrorContinuation (a : Answer Int Int DState) : Option (Config errorOps) :=
-  (errorOps.life (.bind x) a.store).map fun st => match a.result with
-    | .ok v => ⟨.done, [(x, v)], st, []⟩
-    | .error kd => ⟨.trapped kd s, [], st, []⟩
+/-- Instance (law `ConcreteSpec.Core.Exec.prim_error_bypasses_bind`, case `error_trap`). The bind
+callback refuses, but an allowed error answer still produces a real labeled trap transition. -/
+example : Step errorProg
+    ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩
+    errAns.label
+    ⟨.trapped .abort s, [], errAns.store, []⟩ :=
+  prim_error_bypasses_bind errorProg x .log [.lit 1] s [] .init .init [1] []
+    errAns .abort rfl rfl rfl
 
-/-- The bad response rule retains argument evaluation, the environment contract and the answer
-label, replacing only the continuation. -/
-private inductive BindErrors : Config errorOps → Label errorOps → Config errorOps → Prop where
-  | prim {a c'} : errorOps.allows .log [1] DState.init a = true →
-      bindErrorContinuation a = some c' →
-      BindErrors ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩ a.label c'
-
-/-- Planted (law `ConcreteSpec.Core.Exec.prim_error_bypasses_bind`). The same request and
-allowed error answer cannot take the law's required labeled trap transition under the bad rule. -/
-example : ¬ BindErrors ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩ (.emit 1)
-    ⟨.trapped .abort s, [], .init, []⟩ := by
-  intro h
-  generalize hl : (Label.emit (O := errorOps) 1) = label at h
+/-- Planted (law `ConcreteSpec.Core.Exec.prim_error_bypasses_bind`, case `error_trap`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.Refusal.BindErrorsStep`).
+`BindErrorsStep` consults `errorOps.life (.bind x)` on error answers and therefore cannot take
+the trap transition when `.bind x` refuses. -/
+example : evalArgs errorOps [] DState.init [.lit 1] = .ok ([1], DState.init) ∧
+    errorOps.allows .log [1] DState.init errAns = true ∧
+    errAns.result = .error .abort ∧
+    ¬ BindErrorsStep errorProg
+      ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩
+      errAns.label
+      ⟨.trapped .abort s, [], errAns.store, []⟩ := by
+  refine ⟨rfl, rfl, rfl, fun h => ?_⟩
+  generalize hl : errAns.label = label at h
   cases h with
-  | prim _ hk => simp [bindErrorContinuation] at hk
+  | prim _ _ hb _ => cases hb
 
 end Refusal
 
