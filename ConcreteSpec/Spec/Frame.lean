@@ -733,7 +733,7 @@ def encodeToyExit : Nat → Nat → Nat
 number of loaded modules and exit encodes the result with the root's observation prefix.
 This supplies conformance evidence without choosing a native ABI or native launcher policy. -/
 def toyLauncher : Launcher (Nat × List Nat) Nat Nat Nat where
-  retainedClosure := fun artifact => ∀ dependency, dependency ≤ artifact.1 → dependency ∈ artifact.2
+  retainedClosure := fun artifact => ∀ dependency, dependency ∈ artifact.2 ↔ dependency ≤ artifact.1
   entry := fun artifact input => input = artifact.1 + 1
   exit := fun artifact result observation => observation = result + artifact.1
   stackBound := fun _ => 8

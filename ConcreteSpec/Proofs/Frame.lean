@@ -1291,6 +1291,16 @@ theorem retainChain_complete (root : Nat) : ∀ dependency, dependency ≤ root 
     · have hd : dependency ≤ root := by omega
       simp [retainChain, ih dependency hd]
 
+/-- Helper (computation). The loader retains all and only reachable modules, so
+extra retained modules cannot satisfy the exact closure contract. (approved: PENDING) -/
+theorem retainChain_membership (root dependency : Nat) :
+    dependency ∈ retainChain root ↔ dependency ≤ root := by
+  induction root with
+  | zero => simp [retainChain]
+  | succ root ih =>
+    simp only [retainChain, List.mem_cons, ih]
+    omega
+
 /-- Helper (computation). The loader's module count agrees with the independent entry contract.
 (approved: PENDING) -/
 theorem retainChain_length (root : Nat) : (retainChain root).length = root + 1 := by
@@ -1312,7 +1322,7 @@ theorem toyLaunch_conforms (root reserved result : Nat) (adequate : 8 ≤ reserv
     ToyLaunchCorrect reserved (toyLaunch root reserved result) := by
   have hadmit : stackAdmission 8 reserved () = .entered () := stack_adequate 8 reserved () adequate
   simp only [toyLaunch, hadmit, ToyLaunchCorrect]
-  exact ⟨retainChain_complete root, retainChain_length root,
+  exact ⟨retainChain_membership root, retainChain_length root,
     encodeToyExit_correct root result, adequate⟩
 
 /-- Instance (law `ConcreteSpec.Core.Frame.ABI.toyLaunch_conforms`, case `dependency_chain`). -/
@@ -1332,6 +1342,41 @@ example : 8 ≤ (8 : Nat) ∧ ¬ ToyLaunchCorrect 8 (wrongToyLaunch 2 8 7) := by
   intro h
   have bad := h.exit
   change 10 = 9 at bad
+  contradiction
+
+
+/-- A planted loader retains an unrelated module while leaving entry and exit unchanged. -/
+def overRetainingToyLaunch (root reserved result : Nat) :
+    Startup ((Nat × List Nat) × Nat × Nat × Nat) :=
+  match toyLaunch root reserved result with
+  | .refused125 => .refused125
+  | .entered ((module, loaded), input, returned, observation) =>
+    .entered ((module, (root + 1) :: loaded), input, returned, observation)
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyLaunch_conforms`, case `dependency_chain`,
+subject `ConcreteSpec.Core.Frame.ABI.toyLaunch`,
+mutant `ConcreteSpec.Core.Frame.ABI.overRetainingToyLaunch`). -/
+example : 8 ≤ (8 : Nat) ∧ ¬ ToyLaunchCorrect 8 (overRetainingToyLaunch 2 8 7) := by
+  refine ⟨by decide, ?_⟩
+  intro h
+  have bad : 3 ≤ 2 := (h.closure 3).mp (by decide)
+  omega
+
+/-- A planted loader keeps only the root, omitting its transitive dependencies. -/
+def underRetainingToyLaunch (root reserved result : Nat) :
+    Startup ((Nat × List Nat) × Nat × Nat × Nat) :=
+  match toyLaunch root reserved result with
+  | .refused125 => .refused125
+  | .entered ((module, _loaded), input, returned, observation) =>
+    .entered ((module, [root]), input, returned, observation)
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyLaunch_conforms`, case `dependency_chain`,
+subject `ConcreteSpec.Core.Frame.ABI.toyLaunch`,
+mutant `ConcreteSpec.Core.Frame.ABI.underRetainingToyLaunch`). -/
+example : 8 ≤ (8 : Nat) ∧ ¬ ToyLaunchCorrect 8 (underRetainingToyLaunch 2 8 7) := by
+  refine ⟨by decide, ?_⟩
+  intro h
+  have bad : 0 ∈ ([2] : List Nat) := (h.closure 0).mpr (by decide)
   contradiction
 
 
