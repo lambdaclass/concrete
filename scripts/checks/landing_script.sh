@@ -578,11 +578,17 @@ chmod +x "$TMP/hostgit/git" "$TMP/hostroot/id" "$TMP/hostnoid/id"
 : > "$TMP/hostgit.log"; PATH="$TMP/hostnoid:$TMP/hostgit:$PATH" e2e
 [ "$rc" = 3 ] && has "$out" "INCOMPLETE" && has "$out" "cannot read the gate host login" && [ ! -s "$TMP/hostgit.log" ] && [ ! -f "$RIATT" ] \
   && ok "a gate host login that id cannot read is refused, not taken as non-root (INCOMPLETE)" || { no "unreadable gate login: exit $rc"; echo "$out" | sed 's/^/      /'; }
-mv "$HH/concrete2" "$HH/concrete2.away"; : > "$TMP/hostgit.log"
+mv "$HH/concrete2" "$HH/concrete2.away"; mkdir "$HH/concrete2"; : > "$TMP/hostgit.log"
 PATH="$TMP/hostgit:$PATH" e2e
-mv "$HH/concrete2.away" "$HH/concrete2"
+rmdir "$HH/concrete2"; mv "$HH/concrete2.away" "$HH/concrete2"
 [ "$rc" = 3 ] && has "$out" "INCOMPLETE" && has "$out" "no gate clone at $HH/concrete2 for " && [ ! -s "$TMP/hostgit.log" ] && [ ! -f "$RIATT" ] \
   && ok "a gate login without its gate clone is INCOMPLETE and names the account and path" || { no "missing gate clone: exit $rc"; echo "$out" | sed 's/^/      /'; }
+# A gate clone that is a linked worktree (its .git a file) is a gate clone.
+mv "$HH/concrete2" "$HH/concrete2.main"; git -C "$HH/concrete2.main" worktree add -q --detach "$HH/concrete2" 2>/dev/null
+e2e
+git -C "$HH/concrete2.main" worktree remove --force "$HH/concrete2"; mv "$HH/concrete2.main" "$HH/concrete2"
+[ "$rc" = 0 ] && has "$out" "stub gates passed" \
+  && ok "a gate clone that is a linked worktree runs the gates" || { no "worktree gate clone: exit $rc"; echo "$out" | sed 's/^/      /'; }
 touch "$HH/unreachable"; e2e; rm -f "$HH/unreachable"
 [ "$rc" = 3 ] && has "$out" "INCOMPLETE" && [ ! -f "$RIATT" ] && ok "the real transport to an unreachable host is INCOMPLETE (exit 3), attests nothing" || { no "e2e unreachable: exit $rc"; echo "$out" | sed 's/^/      /'; }
 hook="$ROOT_DIR/.githooks/pre-push"
