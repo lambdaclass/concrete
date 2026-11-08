@@ -952,7 +952,7 @@ theorem register_protected (d : Deferred O) (caller : AList Var O.Val)
       | body l cr t body site => simp [register] at h
       | resume p => simp [register] at h
       | ret dst L => simp [register] at h
-  
+
   exact go
 
 /-- Law (subject `ConcreteSpec.Core.Exec.Step`). Each transition preserves the saved caller boundary or returns to it with caller locals restored. -/

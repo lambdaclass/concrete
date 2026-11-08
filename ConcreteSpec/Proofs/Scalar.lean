@@ -652,7 +652,7 @@ def offsetBits (t : IntTy) (n : Int) : Nat := toBits t n + 1
 
 /-- Instance (law `ConcreteSpec.Core.TrapKind.name_injective`, case `concrete`). -/
 example : ∀ (a b : TrapKind), a.name = b.name → a = b :=
-  TrapKind.name_injective 
+  TrapKind.name_injective
 
 /-- Planted (law `ConcreteSpec.Core.TrapKind.name_injective`, case `concrete`, subject `ConcreteSpec.Core.TrapKind.name`, mutant `ConcreteSpec.Core.ScalarLawEvidence.sameName`). -/
 example : ¬ (∀ (a b : TrapKind), sameName a = sameName b → a = b) := by
@@ -662,7 +662,7 @@ example : ¬ (∀ (a b : TrapKind), sameName a = sameName b → a = b) := by
 
 /-- Instance (law `ConcreteSpec.Core.ArithmeticError.trapKind_injective`, case `concrete`). -/
 example : ∀ (a b : ArithmeticError), a.trapKind = b.trapKind → a = b :=
-  ArithmeticError.trapKind_injective 
+  ArithmeticError.trapKind_injective
 
 /-- Planted (law `ConcreteSpec.Core.ArithmeticError.trapKind_injective`, case `concrete`, subject `ConcreteSpec.Core.ArithmeticError.trapKind`, mutant `ConcreteSpec.Core.ScalarLawEvidence.sameTrap`). -/
 example : ¬ (∀ (a b : ArithmeticError), sameTrap a = sameTrap b → a = b) := by
