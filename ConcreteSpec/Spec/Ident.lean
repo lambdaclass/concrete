@@ -139,6 +139,41 @@ structure InstanceId where
   id : Nat
   deriving DecidableEq, Repr
 
+/-- An opaque key relative to one enclosing function. Its token carries stable source-relative data;
+whether that data is a syntactic path, an ordinal per construct kind, a user label, or another
+representation is deliberately not fixed here (R-0492). -/
+structure FunctionRelativeKey where
+  token : String
+  deriving DecidableEq, Repr
+
+/-- A persistent evidence key: the enclosing function plus a key relative to that function. This is
+distinct from lexical identities such as `SiteId` and `InstanceId`, which elaboration may renumber. -/
+structure StableKey where
+  function : FnId
+  relative : FunctionRelativeKey
+  deriving DecidableEq, Repr
+
+/-- The persistent key associated with one lexical site. -/
+structure StableSiteKey where
+  site : SiteId
+  key : StableKey
+  deriving DecidableEq, Repr
+
+/-- The persistent key associated with one lexical trait instance. -/
+structure StableInstanceKey where
+  instanceId : InstanceId
+  key : StableKey
+  deriving DecidableEq, Repr
+
+/-- An injective renumbering of lexical site numbers. -/
+structure SiteRenumbering where
+  apply : Nat → Nat
+  injective : Function.Injective apply
+
+/-- Renumber a site's lexical identity while retaining its persistent evidence key. -/
+def StableSiteKey.renumber (r : SiteRenumbering) (k : StableSiteKey) : StableSiteKey :=
+  { k with site := ⟨r.apply k.site.id⟩ }
+
 /-- A loop label (Q9.3): `break L` and `continue L` name the loop they leave. -/
 structure LoopId where
   id : Nat
