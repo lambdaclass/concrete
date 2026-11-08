@@ -460,10 +460,11 @@ out="$(HOME="$IB/home2" PATH="$IB/nonet:$PATH" INSTALL_ORIGIN_URL='https://x-acc
 BC="$IB/home/concrete-bot"
 git -C "$BC" remote set-url origin https://github.com/unbalancedparentheses/concrete2.git
 git -C "$BC" config --add remote.origin.url https://github.com/unbalancedparentheses/concrete2.git
-git -C "$BC" remote set-url --push origin https://github.com/unbalancedparentheses/concrete2.git
+git -C "$BC" remote set-url --push origin https://x-access-token:pre@SENTINEL-SECRET@github.com/unbalancedparentheses/concrete2.git
 out="$(ib)"; rc=$?
 [ "$rc" = 0 ] && [ "$(git -C "$BC" config --get-all remote.origin.url)" = "$IB/origin.git" ] && ! git -C "$BC" config --get remote.origin.pushurl >/dev/null \
-  && ok "the installer repoints every origin url and drops a stale push URL" || { no "installer repoint: exit $rc, urls '$(git -C "$BC" config --get-all remote.origin.url | tr '\n' ' ')'"; echo "$out" | sed 's/^/      /'; }
+  && has "$out" "https://***@github.com/unbalancedparentheses/concrete2.git" && ! has "$out" "SENTINEL" \
+  && ok "the installer repoints every origin url and drops a stale push URL, logging it redacted" || { no "installer repoint: exit $rc, urls '$(git -C "$BC" config --get-all remote.origin.url | tr '\n' ' ')'"; echo "$out" | sed 's/^/      /'; }
 # A fresh install checks its URL before it clones: a foreign origin URL (also one that
 # url.*.insteadOf rewrites, as git clone would, to another repository) is refused with no clone and
 # no fetch. (An existing clone is repointed, as above, and then guarded before it fetches.)
@@ -478,7 +479,7 @@ done
 # A git shim logs every fetch: a refused launcher must log none.
 printf '#!/bin/sh\nfor a in "$@"; do case "$a" in fetch|push|ls-remote) case " $* " in *" --get-url "*) ;; *) echo "$*" >> "%s" ;; esac; break ;; esac; done\nexec "%s" "$@"\n' "$IB/git.log" "$(command -v git)" > "$IB/stub/git"
 chmod +x "$IB/stub/git"
-for stale in https://github.com/unbalancedparentheses/concrete2.git git@github-old:unbalancedparentheses/concrete2.git; do
+for stale in https://github.com/unbalancedparentheses/concrete2.git git@github-old:lambdaclass/concrete.git; do
   git -C "$BC" remote set-url origin "$stale"
   : > "$IB/git.log"
   out="$(bounded_run -i /dev/null 60 -- env HOME="$IB/home" PATH="$IB/stub:$PATH" "$IB/home/.local/libexec/concrete-landing-bot" status 2>&1)"; rc=$?

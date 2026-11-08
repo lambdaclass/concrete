@@ -9,6 +9,7 @@
 #   LAND_CANONICAL_REPO         the one GitHub repository (owner/name), a constant
 #   LAND_REPOSITORIES           the project's GitHub repositories (owner/name): LAND_CANONICAL_REPO alone
 #   land_url_target url             "<host> <owner/name>" of a network URL; returns 1 for a local one
+#   land_url_expand url             <url> with url.*.insteadOf applied once (for a raw, unresolved URL)
 #   land_url_bad url                print why <url> is outside LAND_REPOSITORIES and return 1 (local: 0)
 #   land_url_redact url             the URL with a scheme URL's userinfo replaced by ***
 #   land_remote_bad remote [repo]   print why <remote> is not one of LAND_REPOSITORIES (or not <repo>), return 1
@@ -102,8 +103,7 @@ land_known_repo() { # owner/name (lowercase) -> 0 iff it is one of LAND_REPOSITO
 # passed as git's ssh would, so a `Match user` or one on the port resolves as for the real
 # connection, and so does an override such as GIT_SSH_COMMAND='ssh -o HostName=...'. An override
 # that is not ssh (a wrapper program, plink, ...) cannot be asked: returns 1 and the URL is
-# refused, and so is any query that fails or names no host. Only when no override is set and ssh
-# is not installed (git could not connect over ssh either) is the host itself.
+# refused, and so is any query that fails or names no host (ssh not installed included).
 land_ssh_host() {
   local cmd prog h args=()
   [ -z "${2:-}" ] || args+=(-l "$2")
@@ -118,7 +118,6 @@ land_ssh_host() {
     [ -n "$h" ] || return 1
     printf '%s\n' "$h"; return 0
   else
-    command -v ssh >/dev/null 2>&1 || { printf '%s\n' "$1"; return 0; }
     cmd=ssh
   fi
   prog="${cmd%%[[:space:]]*}"; prog="${prog##*/}"
@@ -140,7 +139,8 @@ land_url_target() {
     *) return 1 ;;
   esac
   h="${auth##*@}"
-  case "$auth" in *@*) user="${auth%@*}"; user="${user%%:*}" ;; esac
+  local has_user=0
+  case "$auth" in *@*) has_user=1; user="${auth%@*}" ;; esac
   case "$scheme" in scp) ;; *) case "$h" in *:*) port="${h#*:}"; h="${h%%:*}" ;; esac ;; esac
   h="$(printf '%s' "$h" | tr 'A-Z' 'a-z')"
   # A plain name (ssh aliases may carry an underscore); the RESOLVED name is compared, not this one.
@@ -150,6 +150,8 @@ land_url_target() {
     scp|ssh|git+ssh|ssh+git)
       # Only an ssh user reaches ssh -G, so only it must be plain (http userinfo may be percent-encoded
       # and is never passed on).
+      # The whole userinfo, as git hands it to ssh: an empty one or one with ':' is not plain.
+      [ "$has_user" = 0 ] || [ -n "$user" ] || { echo "? ?"; return 0; }
       case "$user" in -*|*[!A-Za-z0-9._-]*) echo "? ?"; return 0 ;; esac
       h="$(land_ssh_host "$h" "$user" "$port")" || { echo "? ?"; return 0; }
       h="$(printf '%s' "$h" | tr 'A-Z' 'a-z')" ;;
@@ -158,8 +160,8 @@ land_url_target() {
   esac
   h="${h%.}"
   while :; do case "$p" in /*) p="${p#/}" ;; *) break ;; esac; done
-  p="${p%/}"; p="${p%.git}"
-  printf '%s %s\n' "$h" "$(printf '%s' "$p" | tr 'A-Z' 'a-z')"
+  p="$(printf '%s' "$p" | tr 'A-Z' 'a-z')"; p="${p%/}"; p="${p%.git}"
+  printf '%s %s\n' "$h" "$p"
 }
 # land_url_redact url: the URL with any userinfo of a scheme URL (https://user:TOKEN@host) replaced
 # by "***", for messages; an scp-like user@ (no secret) is kept.

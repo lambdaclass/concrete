@@ -185,12 +185,12 @@ else, it stops at once. A retry to main is still a plain push, a fast-forward or
 hook runs the full root set again. The reset of `ci/<name>` to the base skips the hook and is
 not retried; a failure there stops `ci` before anything is dispatched.
 
-A remote named `fork` is refused. `build`, `check`, `ci`, `watch` and `land`, the bot and its
-launcher, `push-both.sh`, `ready.sh`, `notes.sh fetch|put`, `review.sh` and `verify.sh --fetch` also
+A remote named `fork` is refused. `build`, `check`, `ci`, `watch`, `land` and `record`, the bot
+and its launcher, `acceptance.sh`, `push-both.sh`, `ready.sh`, `notes.sh fetch|put`, `review.sh` and `verify.sh --fetch` also
 refuse a remote any of whose fetch or push URLs is a network URL other than
 github.com/lambdaclass/concrete (`LAND_CANONICAL_REPO` in `scripts/land/lib.sh`, a constant, not
-`LAND_REPO`; an ssh host alias is resolved through the ssh config with `ssh -G`, which connects
-nowhere), and a `LAND_REPO` other than lambdaclass/concrete on such a remote, before anything is
+`LAND_REPO`; an ssh host alias is resolved with the ssh command git would run and `-G`, which connects
+nowhere; a query that fails is a refusal), and a `LAND_REPO` other than lambdaclass/concrete on such a remote, before anything is
 fetched or pushed. The pre-push hook applies the same rule to the URL of every push, so a push by
 hand is refused too. A clone that still points at the archived unbalancedparentheses/concrete2 is repointed
 with `git remote set-url origin https://github.com/lambdaclass/concrete.git`. `push-both.sh`, the

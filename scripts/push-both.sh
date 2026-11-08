@@ -109,7 +109,7 @@ fi
 if [ "$CI_WAIT" -eq 1 ]; then
   if ! command -v gh >/dev/null 2>&1; then
     echo "push-both: gh not available, cannot confirm CI for ${LOCAL:0:8}." >&2
-      exit 1
+    exit 1
   fi
   echo "push-both: waiting for $CI_WORKFLOW on ${LOCAL:0:8} (timeout ${CI_TIMEOUT}s)"
   deadline=$(( $(date +%s) + CI_TIMEOUT ))
