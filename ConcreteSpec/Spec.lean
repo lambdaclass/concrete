@@ -19,6 +19,7 @@ import ConcreteSpec.Spec.Exec
 import ConcreteSpec.Spec.Scalar
 import ConcreteSpec.Spec.Const
 import ConcreteSpec.Spec.Memory
+import ConcreteSpec.Spec.Hybrid
 import ConcreteSpec.Spec.Rules
 
 /-!
