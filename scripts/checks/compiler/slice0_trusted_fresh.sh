@@ -8,6 +8,9 @@ root=$(pwd)
 work=$(mktemp -d)
 trap 'rm -rf "${work:?}"' EXIT
 source scripts/checks/lib/bounded.sh
+# Hooks export repository-local Git variables; clear them before creating the clone.
+source scripts/checks/lib/git_sandbox.sh
+git_sandbox
 bounded_run 120 -- git clone --shared --no-hardlinks "$root" "$work/source"
 cd "$work/source"
 export LAKE_CACHE_DIR="$work/cache"
