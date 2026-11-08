@@ -94,8 +94,8 @@ land_known_repo() { # owner/name (lowercase) -> 0 iff it is one of LAND_REPOSITO
 # resolved through the ssh config for ssh transports; "? ?" for a scheme other than
 # http(s)/ssh/git/git+ssh/ssh+git or a host, user or port that is not plain.
 # land_ssh_host host [user] [port]: the HostName ssh resolves <host> to, asking the ssh command git
-# itself would run here (git's order: GIT_SSH_COMMAND, else GIT_SSH, else core.sshCommand, else
-# ssh) with -G, which reads the configuration and connects nowhere; the URL's user and port are
+# itself would run here (git's order, connect.c: GIT_SSH_COMMAND, else core.sshCommand, else
+# GIT_SSH, else ssh) with -G, which reads the configuration and connects nowhere; the URL's user and port are
 # passed as git's ssh would, so a `Match user` or one on the port resolves as for the real
 # connection, and so does an override such as GIT_SSH_COMMAND='ssh -o HostName=...'. An override
 # that is not ssh (a wrapper program, plink, ...) cannot be asked: returns 1 and the URL is
@@ -105,11 +105,12 @@ land_ssh_host() {
   [ -z "${2:-}" ] || args+=(-l "$2")
   [ -z "${3:-}" ] || args+=(-p "$3")
   if [ -n "${GIT_SSH_COMMAND:-}" ]; then cmd="$GIT_SSH_COMMAND"
+  elif cmd="$(git config --get core.sshCommand 2>/dev/null)" && [ -n "$cmd" ]; then :
   elif [ -n "${GIT_SSH:-}" ]; then
     [ "${GIT_SSH##*/}" = ssh ] || return 1
     h="$("$GIT_SSH" -G ${args[@]+"${args[@]}"} "$1" 2>/dev/null | awk '$1 == "hostname" { print $2; exit }')" || h=""
     printf '%s\n' "${h:-$1}"; return 0
-  else cmd="$(git config --get core.sshCommand 2>/dev/null)" || cmd=""; [ -n "$cmd" ] || cmd=ssh
+  else cmd=ssh
   fi
   prog="${cmd%%[[:space:]]*}"; prog="${prog##*/}"
   [ "$prog" = ssh ] || return 1
@@ -161,10 +162,12 @@ land_url_redact() {
   printf '%s\n' "$1"
 }
 # land_url_bad url: print why <url> is not a URL of one of the project's repositories and return 1;
-# 0 for such a URL and for a local one.
+# 0 for such a URL and for a local one. The URL is first expanded as git would (url.*.insteadOf,
+# through `git ls-remote --get-url`, which connects nowhere), as `git remote get-url` does for a remote.
 land_url_bad() {
-  local target
-  target="$(land_url_target "$1")" || return 0
+  local target u
+  u="$(git ls-remote --get-url "$1" 2>/dev/null)" && [ -n "$u" ] || u="$1"
+  target="$(land_url_target "$u")" || return 0
   if [ "${target%% *}" != github.com ] || ! land_known_repo "${target#* }"; then
     echo "$(land_url_redact "$1") is not one of the project's repositories ($LAND_REPOSITORIES on github.com): it points at another repository"
     return 1

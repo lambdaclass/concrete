@@ -657,6 +657,8 @@ while read -r want how url; do
       cmd-alive) GIT_SSH_COMMAND='ssh -o ServerAliveInterval=20' land_url_bad "$url" ;;
       cmd-other) GIT_SSH_COMMAND='plink -batch' land_url_bad "$url" ;;
       prog) GIT_SSH=/usr/local/bin/ssh-wrapper land_url_bad "$url" ;;
+      config-over-prog) GIT_SSH=ssh GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.sshCommand GIT_CONFIG_VALUE_0='ssh -o HostName=attacker.example' land_url_bad "$url" ;;
+      insteadof) GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=url.https://github.com/someone/else.git.insteadOf GIT_CONFIG_VALUE_0=https://github.com/lambdaclass/concrete.git land_url_bad "$url" ;;
       config) GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.sshCommand GIT_CONFIG_VALUE_0='ssh -o HostName=attacker.example' land_url_bad "$url" ;;
     esac ) >/dev/null; got=$?
   [ "$got" = "$want" ] || { ovr_ok=0; echo "      $how $url: exit $got, want $want"; }
@@ -668,8 +670,10 @@ done <<'OVR'
 1 prog ssh://git@github.com/lambdaclass/concrete.git
 1 config git@github.com:lambdaclass/concrete.git
 0 cmd-host https://github.com/lambdaclass/concrete.git
+1 config-over-prog git@github.com:lambdaclass/concrete.git
+1 insteadof https://github.com/lambdaclass/concrete.git
 OVR
-[ "$ovr_ok" = 1 ] && ok "the guard resolves ssh URLs with git's own ssh command (GIT_SSH_COMMAND, GIT_SSH, core.sshCommand)" || no "the guard ignored an ssh override"
+[ "$ovr_ok" = 1 ] && ok "the guard resolves URLs as git does: its own ssh command (GIT_SSH_COMMAND, core.sshCommand, GIT_SSH, in that order) and url.insteadOf" || no "the guard ignored an ssh override"
 # The URL table, read through the same function: both project repositories pass in every network
 # form while the migration is under way, anything else fails, local paths pass and leave LAND_REPO free.
 # ssh -G is stubbed: github-lambdaclass and github_work are aliases for github.com, every other name is itself.
