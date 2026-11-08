@@ -48,6 +48,7 @@ def main():
         # Use the real hook for every allocator push, including concurrent reservations.
         (writer / 'scripts/ids').mkdir(parents=True)
         shutil.copy(SOURCE / 'allocate.py', writer / 'scripts/ids/allocate.py')
+        shutil.copy(SOURCE / 'branch.py', writer / 'scripts/ids/branch.py')
         hooks = writer / '.githooks'
         hooks.mkdir()
         shutil.copy(SOURCE.parents[1] / '.githooks/pre-push', hooks / 'pre-push')
@@ -74,6 +75,7 @@ def main():
         a.git(writer, 'worktree', 'add', '--detach', str(wt))
         (wt / 'scripts/ids').mkdir(parents=True, exist_ok=True)
         shutil.copy(SOURCE / 'allocate.py', wt / 'scripts/ids/allocate.py')
+        shutil.copy(SOURCE / 'branch.py', wt / 'scripts/ids/branch.py')
         head = a.git(writer, 'rev-parse', 'HEAD').stdout.strip()
         zero = '0' * 40
         for key in ('ISS-0088', 'BUG-088'):
@@ -291,6 +293,8 @@ def main():
         run(writer, 'check')
         print('PASS: landed IDs survive owner branch deletion and detached integration')
 
+    result = subprocess.run(['python3', '-I', str(SOURCE / 'round3_controls.py')])
+    assert result.returncode == 0, 'round 3 regression controls failed'
     print('ID reservation controls: PASS')
 
 

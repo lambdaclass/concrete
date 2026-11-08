@@ -16,33 +16,7 @@ trap 'rm -rf "$TMP"' EXIT
 PASS=0; FAIL=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
-problems(){ python3 -I -c '
-import re, sys
-errors = []
-def problem(message): errors.append(message)
-HDR = ["id", "title", "date", "area", "evidence", "owner", "severity", "closure_condition", "status"]
-AREA = {"spec", "proof", "compiler", "launcher", "ci", "migration"}
-SEV = {"high", "medium", "low"}; STATUS = {"open", "closed"}
-lines = [l.rstrip("\n") for l in open(sys.argv[1]) if not l.startswith("#") and l.strip()]
-if not lines or lines[0].split("\t") != HDR:
-    problem("header is not: " + "\t".join(HDR)); print("\n".join(errors)); sys.exit(1)
-last = 0
-for n, l in enumerate(lines[1:], 2):
-    f = l.split("\t")
-    if len(f) != len(HDR) or any(not x.strip() for x in f):
-        problem(f"row {n}: needs {len(HDR)} non-empty tab-separated fields"); continue
-    m = re.fullmatch(r"ISS-(\d{4})", f[0])
-    if not m: problem(f"row {n}: id {f[0]!r} is not ISS-NNNN")
-    elif int(m.group(1)) <= last: problem(f"row {n}: id {f[0]} is not greater than the previous id")
-    else: last = int(m.group(1))
-    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", f[2]): problem(f"row {n}: date {f[2]!r} is not YYYY-MM-DD")
-    if f[3] not in AREA: problem(f"row {n}: area {f[3]!r} is not one of {sorted(AREA)}")
-    if f[6] not in SEV: problem(f"row {n}: severity {f[6]!r} is not one of {sorted(SEV)}")
-    if f[8] not in STATUS: problem(f"row {n}: status {f[8]!r} is not one of {sorted(STATUS)}")
-
-print("\n".join(errors), end="\n" if errors else "")
-sys.exit(1 if errors else 0)
-' "$1"; }
+problems(){ python3 -I scripts/ids/issues.py "$1"; }
 
 echo "=== ISSUES.tsv ==="
 rc=0; out="$(problems ISSUES.tsv)" || rc=$?

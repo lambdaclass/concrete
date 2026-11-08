@@ -7,6 +7,8 @@
 Run from the repository root while a merge is stopped on conflicts. Only three kinds of path are
 resolved; everything else is reported as a REAL conflict and nothing is written for it:
 
+  issue ledger       ISSUES.tsv is merged by ID with the gate's shared schema, sorted numerically,
+                     and validated before staging; competing changes to one row are real conflicts.
   union ledgers      append-only ledgers (UNION below), and only when every conflict hunk is an
                      INSERTION on both sides (its diff3 base is empty): `git merge-file --union` then
                      keeps both sides' lines. Two edits of one existing line are a real conflict. In a
@@ -33,11 +35,14 @@ names them; resolved paths are still written but the caller aborts the merge); 2
 """
 import os
 import re
+import runpy
+from pathlib import Path
 import subprocess
 import sys
 
+merge_issues = runpy.run_path(str(Path(__file__).resolve().parents[1] / 'ids/issues.py'))['merge']
+
 UNION = {
-    "ISSUES.tsv",
     "scripts/tests/audit_bug_corpus.sh",
     "CHANGELOG.md",
     "docs/bugs/discovery.tsv",
@@ -243,6 +248,18 @@ def resolve(paths):
             continue
         if ours is None or theirs is None:
             real.append((path, "deleted on one side (modify/delete)"))
+            continue
+        if path == 'ISSUES.tsv':
+            if base is None:
+                real.append((path, 'issue ledger has no common schema ancestor'))
+                continue
+            try:
+                merged = merge_issues(ours, base, theirs)
+            except ValueError as error:
+                real.append((path, str(error)))
+                continue
+            write_and_stage(path, merged)
+            print(f'  resolved {path}: validated three-way issue rows in canonical ID order')
             continue
         if path in UNION:
             b = base if base is not None else b""

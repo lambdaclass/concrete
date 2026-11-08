@@ -9,7 +9,8 @@ python3 -I scripts/ids/allocate.py reserve iss 'Short immutable title'
 python3 -I scripts/ids/allocate.py reserve bug 'Short immutable title'
 ```
 
-Run from the writer's `wip/*` branch. Copy the returned ID and exact reserved title into the
+Run from the writer's local worktree branch (`NAME` or `wip/NAME`). The shared
+`scripts/ids/branch.py` policy used by `worktree-new.sh` records it as `wip/NAME`. Copy the returned ID and exact reserved title into the
 `ISSUES.tsv` title column or `# Bug NNN: Title` heading. The reservation binds ID, title and
 reserving branch. The branch is immutable provenance, not an ancestry requirement: derived,
 stacked, rebased, cherry-picked and detached train checkouts all carry the same identity. Status,
@@ -48,12 +49,16 @@ global/system config, including when invoked from a hook. Origin must be reachab
 
 ## Enforcement and remote audit
 
-`allocate.py check` validates reservation namespace integrity and every record introduced or
-modified by the current work tree relative to its merge base with fresh origin/main. Issue row
-comparison includes all columns; editing evidence on an old unreserved issue requires reserving
-it first. Bug content edits likewise activate enforcement. Unchanged historical rows do not force
-a flag day. An activated record must have a schema-1 reservation with the exact title; there is
-no exemption for newly introduced IDs. Deleted tracked files are treated as absent.
+`allocate.py check` validates every reservation ref as schema-1, every record on fresh
+origin/main (including the frozen bug ledger), every record committed in HEAD, and every record
+in the working tree independently. All must have reservations with exact titles. Local main
+cannot replace the origin/main snapshot, and unstaged edits cannot mask committed records.
+Legacy bug reservation commits are accepted only as backfill inputs, never as passing gate state.
+
+The tools enforce rollout order: backfill and metadata publication work before enforcement lands;
+the enforcement branch cannot pass its landing gate until origin/main and its own complete records
+are reserved. Main's old tools keep operating during preparation. After activation there are no
+unreserved historical-ID exemptions. Deleted files are absent only from the tree being checked.
 
 The normal gate does not judge unrelated wip branches. `reserve` takes the next number above all
 advertised records and reservations but does not require unrelated drafts to pass validation.
@@ -88,10 +93,10 @@ changes. The five ISS-0018 copies represent one evolving issue, not five introdu
    set, uses atomic exact leases and verifies all remote OIDs. Preserve the plan and receipts.
 4. Run the separate whole-remote audit and the branch gates. Reconcile any remaining conflicting
    active heads before declaring the inventory migrated. Old draft heads may remain unreserved
-   without blocking other branches, but their introduced/modified records cannot pass a landing
-   gate until corrected. Regenerate plans after remote head changes.
+   without blocking other branches, but all records on a branch must be reserved before it can pass a landing
+   gate. Regenerate plans after remote head changes.
 5. Only after backfill and verification, land this enforcement branch through the normal train.
-   Thereafter every newly introduced or modified identity is checked immediately. Writers reserve
+   Thereafter every identity in main, HEAD and the working tree is checked on every run. Writers reserve
    before filing; run the independent audit periodically to discover stale/manual draft records.
 
 ```sh
@@ -109,3 +114,7 @@ were pushed by the round-2 writer; bootstrap publication remains an explicit ope
 Round-2 read-only inventory on 2026-11-08: backfill exited 0 with 357 planned reservations and
 zero conflicts, including the five ISS-0018 heads. This plan was not published and must be
 regenerated if the advertised heads change.
+
+ISSUES.tsv conflicts in landing trains use a three-way merge by ID with the same schema validator
+as `issues.sh`. Independent row changes are preserved, competing changes are refused, and the
+result is sorted and validated before staging. Comments are merged as a separate document value.
