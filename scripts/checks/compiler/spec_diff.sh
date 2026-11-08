@@ -33,6 +33,9 @@ done
 printf 'spec_diff seed: %s\n' "$seed"
 printf 'replay: SPEC_DIFF_REPLAY=bir:%s:INDEX bash scripts/checks/compiler/spec_diff.sh\n' "$seed"
 
+driver_imports=$(awk '/^import / {for (i = 2; i <= NF; i++) printf "%s ", $i}' scripts/checks/compiler/spec_diff.lean)
+[ -n "$driver_imports" ] || { echo "spec_diff: no imports found in spec_diff.lean" >&2; exit 2; }
+SLICE0_BUILD_TARGETS="Concrete $driver_imports"
 # shellcheck source=scripts/checks/lib/slice0_common.sh
 source scripts/checks/lib/slice0_common.sh
 

@@ -50,8 +50,15 @@ bounded() {
 }
 # The build's output is kept and shown on failure: lake prints only "error: build failed" last.
 # SLICE0_BUILD_SECS lets a gate with a total deadline include this build in that deadline.
-bounded "${SLICE0_BUILD_SECS:-1800}" lake build Concrete lean-compiler-backend/lcb >"$work/lake-build.log" 2>&1 \
-  || { tail -n 200 "$work/lake-build.log" >&2; echo "slice0: lake build Concrete failed" >&2; exit 1; }
+# SLICE0_BUILD_TARGETS lets a gate name every library or module its driver imports (default:
+# Concrete and ConcreteSpec.Spec.Slice0, so fresh checkouts have the complete import closure).
+read -r -a slice0_build_targets <<<"${SLICE0_BUILD_TARGETS:-Concrete ConcreteSpec.Spec.Slice0}"
+bounded "${SLICE0_BUILD_SECS:-1800}" lake build "${slice0_build_targets[@]}" lean-compiler-backend/lcb >"$work/lake-build.log" 2>&1 \
+  || { tail -n 200 "$work/lake-build.log" >&2; echo "slice0: lake build ${slice0_build_targets[*]} failed" >&2; exit 1; }
+for slice0_mod in "${slice0_build_targets[@]}"; do
+  slice0_olean="$root/.lake/build/lib/lean/${slice0_mod//.//}.olean"
+  [ -f "$slice0_olean" ] || { echo "slice0: missing built olean $slice0_olean for target $slice0_mod" >&2; exit 1; }
+done
 lcb="$root/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
 case "$(uname -s)-$(uname -m)" in
   Linux-x86_64) target=x86_64-linux ;;
