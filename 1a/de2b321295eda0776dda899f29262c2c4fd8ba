@@ -1,0 +1,2 @@
+[piece 1 of 1: scripts]
+- scripts/land/lib.sh:109: A relative local path such as `repos/concrete:backup.git` is incorrectly rejected as another repository. `land_url_path` correctly recognizes the slash before the colon as a local path and returns nothing, but this fallback then matches `*:*` and sets `path="?"`. This regresses valid local remotes and contradicts the stated exemption for local paths.
