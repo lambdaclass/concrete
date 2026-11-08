@@ -7,8 +7,9 @@ PROPOSED: not normative until the owner freezes Core. Part of `ConcreteSpec.Spec
 `ConcreteSpec/README.md`. This module states interfaces and laws, not a concrete target ABI.
 
 A logical footprint names byte ranges by allocation identity, not by numeric address, together with
-structured places. `Footprint.Preserves` is the frame law: every byte of an old block outside the
-footprint, all metadata of every block outside it, and every place outside it are exactly unchanged.
+block metadata and structured places as separate permissions. `Footprint.Preserves` is the frame
+law: every byte of an old block outside its byte ranges, all metadata of every block outside its
+block set, and every place outside it are exactly unchanged.
 A fresh allocation has no old bytes to preserve; its fresh identity makes it disjoint from every
 range in an old block. Byte contents include initialization and pointer fragments, so preserving a
 byte preserves all three.
@@ -58,36 +59,37 @@ def fullBlock (b : MemBlockId) (size : Nat) : ByteRange := ⟨b, 0, size⟩
 def blockMetadata (x : Block) : AddrSpace × Nat × Nat × Nat × Bool × Bool :=
   (x.space, x.base, x.size, x.align, x.live, x.exposed)
 
-/-- An operation's permitted effects on hybrid state. Byte ranges and places are sets represented by
-lists; membership, not list order or duplication, is semantic. -/
+/-- An operation's permitted effects on hybrid state. Byte ranges, block metadata and places are
+sets represented by lists; membership, not list order or duplication, is semantic. A byte write does
+not claim permission to change its block's metadata. -/
 structure Footprint where
   bytes : List ByteRange
+  blocks : List MemBlockId
   places : List Place
   deriving DecidableEq, Repr
 
 /-- The empty footprint. -/
-def Footprint.empty : Footprint := ⟨[], []⟩
+def Footprint.empty : Footprint := ⟨[], [], []⟩
 
-/-- Only one byte range is touched. -/
-def Footprint.byte (r : ByteRange) : Footprint := ⟨[r], []⟩
+/-- Only one byte range is touched; every block's metadata remains outside the footprint. -/
+def Footprint.byte (r : ByteRange) : Footprint := ⟨[r], [], []⟩
 
-/-- The metadata of one allocation may change. The nonempty marker range also covers a zero-sized
-allocation, whose lifecycle can change even though it contains no bytes. -/
-def Footprint.block (b : MemBlockId) : Footprint := .byte ⟨b, 0, 1⟩
+/-- Only the metadata of one allocation may change, including for a zero-sized allocation. -/
+def Footprint.block (b : MemBlockId) : Footprint := ⟨[], [b], []⟩
 
 /-- Only one structured place is touched. -/
-def Footprint.place (p : Place) : Footprint := ⟨[], [p]⟩
+def Footprint.place (p : Place) : Footprint := ⟨[], [], [p]⟩
 
 /-- The combined permission of two operations run in sequence. -/
-def Footprint.union (f g : Footprint) : Footprint := ⟨f.bytes ++ g.bytes, f.places ++ g.places⟩
+def Footprint.union (f g : Footprint) : Footprint :=
+  ⟨f.bytes ++ g.bytes, f.blocks ++ g.blocks, f.places ++ g.places⟩
 
 /-- This byte is outside every range in the footprint. -/
 def Footprint.ByteOutside (f : Footprint) (b : MemBlockId) (i : Nat) : Prop :=
   ∀ r ∈ f.bytes, ¬ r.Contains b i
 
-/-- No nonempty range in the footprint belongs to this block, so all of its metadata is outside. -/
-def Footprint.BlockOutside (f : Footprint) (b : MemBlockId) : Prop :=
-  ∀ r ∈ f.bytes, r.block ≠ b ∨ r.extent = 0
+/-- This block's metadata is outside the footprint, independently of its byte ranges. -/
+def Footprint.BlockOutside (f : Footprint) (b : MemBlockId) : Prop := b ∉ f.blocks
 
 /-- This place is outside the footprint. -/
 def Footprint.PlaceOutside (f : Footprint) (p : Place) : Prop := p ∉ f.places
@@ -103,9 +105,9 @@ instance (f : Footprint) (p : Place) : Decidable (f.PlaceOutside p) := by
 
 /-- The frame law for one operation. Only bytes of blocks that existed before the operation are
 quantified: allocation creates bytes rather than changing old ones. The whole `MByte` is compared,
-including initialization and provenance fragments. For a block outside every nonempty range, its
-space, base, size, alignment, liveness and exposure are also exactly unchanged. Place cells are
-compared exactly. -/
+including initialization and provenance fragments. For every block outside the metadata footprint,
+its space, base, size, alignment, liveness and exposure are exactly unchanged, even when one of its
+byte ranges is written. Place cells are compared exactly. -/
 def Footprint.Preserves (before after : State) (f : Footprint) : Prop :=
   (∀ b i x, before.memory.block b = some x → f.ByteOutside b i →
     (after.memory.block b).map (fun y => y.bytes[i]?) = some (x.bytes[i]?)) ∧
@@ -159,6 +161,12 @@ example : ¬ (⟨⟨0⟩, 4, 4⟩ : ByteRange).Disjoint ⟨⟨0⟩, 7, 2⟩ ∧
 
 /-- Accepted: a zero-extent range is disjoint from every range, including itself. -/
 example : (⟨⟨0⟩, 4, 0⟩ : ByteRange).Disjoint ⟨⟨0⟩, 4, 0⟩ := by decide
+
+/-- Accepted: a nonempty byte footprint still leaves the written block's metadata framed. -/
+example : (Footprint.byte ⟨⟨0⟩, 4, 4⟩).BlockOutside ⟨0⟩ := by decide
+
+/-- Refused: a lifecycle footprint claims its block's metadata even though it writes no bytes. -/
+example : ¬ (Footprint.block ⟨0⟩).BlockOutside ⟨0⟩ := by decide
 
 /-- Accepted: returning without a destination restores exactly the caller's association list. -/
 example {V : Type} (v : V) (caller : AList Var V) : Exec.bindDst none v caller = caller := rfl

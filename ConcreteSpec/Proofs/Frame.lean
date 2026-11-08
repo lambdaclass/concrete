@@ -25,16 +25,6 @@ theorem preserves_refl (st : State) : Footprint.empty.Preserves st st := by
   · intro p hp
     rfl
 
-/-- A block outside every nonempty range has every individual byte outside the footprint. -/
-theorem byteOutside_of_blockOutside {f : Footprint} {b : MemBlockId}
-    (h : f.BlockOutside b) (i : Nat) : f.ByteOutside b i := by
-  intro r hr hc
-  rcases h r hr with hne | he
-  · exact hne hc.1
-  · have hi := hc.2.2
-    rw [he, Nat.add_zero] at hi
-    exact (Nat.not_lt_of_ge hc.2.1) hi
-
 /-- Membership outside a union is membership outside both components. -/
 theorem byteOutside_union {f g : Footprint} {b : MemBlockId} {i : Nat}
     (h : (f.union g).ByteOutside b i) : f.ByteOutside b i ∧ g.ByteOutside b i := by
@@ -43,7 +33,9 @@ theorem byteOutside_union {f g : Footprint} {b : MemBlockId} {i : Nat}
 /-- Block metadata outside a union is outside both components. -/
 theorem blockOutside_union {f g : Footprint} {b : MemBlockId}
     (h : (f.union g).BlockOutside b) : f.BlockOutside b ∧ g.BlockOutside b := by
-  constructor <;> intro r hr <;> apply h r <;> simp [Footprint.union, hr]
+  have hb : b ∉ f.blocks ++ g.blocks := h
+  simp only [List.mem_append, not_or] at hb
+  exact hb
 
 /-- Place membership outside a union is membership outside both components. -/
 theorem placeOutside_union {f g : Footprint} {p : Place}
@@ -57,8 +49,7 @@ zero-sized. -/
 theorem blockOutside_block {b c : MemBlockId} (h : (Footprint.block b).BlockOutside c) : c ≠ b := by
   intro hcb
   subst c
-  have h' := h ⟨b, 0, 1⟩ (by simp [Footprint.block, Footprint.byte])
-  simp at h'
+  exact h (by simp [Footprint.block])
 
 /-- Sequential composition frames the union of the two operations' footprints. -/
 theorem preserves_seq {st st' st'' : State} {f g : Footprint}
@@ -75,11 +66,10 @@ theorem preserves_seq {st st' st'' : State} {f g : Footprint}
       exact he₂.trans (congrArg some he₁)
   · intro b x hx ho
     obtain ⟨hf, hg⟩ := blockOutside_union ho
-    have he₁ := h₁.1 b 0 x hx (byteOutside_of_blockOutside hf 0)
+    have hm₁ := h₁.2.1 b x hx hf
     cases hy : st'.memory.block b with
-    | none => simp [hy] at he₁
+    | none => simp [hy] at hm₁
     | some y =>
-      have hm₁ := h₁.2.1 b x hx hf
       simp only [hy, Option.map_some, Option.some.injEq] at hm₁
       have hm₂ := h₂.2.1 b y hy hg
       exact hm₂.trans (congrArg some hm₁)
@@ -87,9 +77,9 @@ theorem preserves_seq {st st' st'' : State} {f g : Footprint}
     obtain ⟨hf, hg⟩ := placeOutside_union hp
     exact (h₂.2.2 p hg).trans (h₁.2.2 p hf)
 
-/-- A successful byte store preserves every old byte outside the exact access range, all metadata
-outside a nonempty access range, and every structured place. A zero-byte store has the empty
-footprint. -/
+/-- A successful byte store preserves every old byte outside the exact access range, every block's
+metadata (including the written block's), and every structured place. A zero-byte store has the
+empty footprint. -/
 theorem store_frame (tgt : Target) (st : State) (hw : st.memory.WellFormed tgt) (m' : Memory)
     (p : Ptr) (bs : List MByte) (a : Nat) (access : Option (Option (MemBlockId × Nat)))
     (ha : st.memory.access tgt p bs.length a = access)
@@ -119,16 +109,56 @@ theorem store_frame (tgt : Target) (st : State) (hw : st.memory.WellFormed tgt) 
       · intro c x hx ho
         by_cases hc : c = b
         · subst c
-          have hn : bs.length ≠ 0 := by
-            intro hn
-            simp [Memory.access, hn] at ha
-          rcases ho ⟨b, off, bs.length⟩ (by simp [accessFootprint, Footprint.byte]) with hne | he
-          · exact (hne rfl).elim
-          · exact (hn he).elim
+          simp only [Memory.store, ha, Option.some.injEq] at h
+          subst m'
+          simp [blockMetadata, block_modify, hx]
         · rw [store_other_block tgt st.memory m' p bs a b off c ha h hc, hx]
           rfl
       · intro q hq
         rfl
+
+private def metadataStoreBlock : Block :=
+  ⟨⟨0⟩, 4096, 2, 1, true, false, [.uninit, .uninit]⟩
+
+private def metadataStoreBefore : State :=
+  ⟨[], ⟨[(⟨0⟩, metadataStoreBlock)], 1⟩⟩
+
+private theorem metadataStoreWellFormed : metadataStoreBefore.memory.WellFormed linuxX8664 :=
+  alloc_wellFormed linuxX8664 Memory.empty (empty_wellFormed _) ⟨0⟩ 4096 2 1 ⟨0⟩
+    metadataStoreBefore.memory rfl
+
+private def metadataStorePtr : Ptr := ⟨⟨0⟩, 4096, some ⟨0⟩⟩
+
+private def metadataStoreAfter : State :=
+  { metadataStoreBefore with memory := metadataStoreBefore.memory.modify ⟨0⟩ fun x =>
+    { x with bytes := [.init 7 none, .uninit] } }
+
+private def metadataStoreBadAfter : State :=
+  { metadataStoreAfter with memory := metadataStoreAfter.memory.modify ⟨0⟩ fun x =>
+    { x with live := false } }
+
+/-- Accepted: an actual nonempty store and its composition with an empty footprint preserve the
+written block's metadata as well as the unwritten byte. -/
+example :
+    Footprint.Preserves metadataStoreBefore metadataStoreAfter (.byte ⟨⟨0⟩, 0, 1⟩) ∧
+    Footprint.Preserves metadataStoreBefore metadataStoreAfter
+      (Footprint.union .empty (.byte ⟨⟨0⟩, 0, 1⟩)) := by
+  have hs : Footprint.Preserves metadataStoreBefore metadataStoreAfter (.byte ⟨⟨0⟩, 0, 1⟩) :=
+    store_frame linuxX8664 metadataStoreBefore metadataStoreWellFormed metadataStoreAfter.memory
+      metadataStorePtr [.init 7 none] 1 (some (some (⟨0⟩, 0))) (by decide) rfl
+  exact ⟨hs, preserves_seq (preserves_refl _) hs⟩
+
+/-- Refused: changing the written block's liveness violates the store and sequence frame laws;
+their byte footprints do not excuse a metadata mutation. -/
+example :
+    ¬ Footprint.Preserves metadataStoreBefore metadataStoreBadAfter (.byte ⟨⟨0⟩, 0, 1⟩) ∧
+    ¬ Footprint.Preserves metadataStoreBefore metadataStoreBadAfter
+      (Footprint.union .empty (.byte ⟨⟨0⟩, 0, 1⟩)) := by
+  constructor <;> intro h
+  all_goals
+    have hm := h.2.1 ⟨0⟩ metadataStoreBlock (by decide) (by decide)
+    simp [metadataStoreBadAfter, metadataStoreAfter, metadataStoreBefore, metadataStoreBlock,
+      blockMetadata, Memory.block, Memory.modify, AList.update, AList.lookup] at hm
 
 /-- Releasing a block may change its lifecycle metadata, but frames all bytes and all metadata of
 other blocks and every structured place. -/
@@ -266,6 +296,19 @@ theorem rawWrite_frame (tgt : Target) (st st' : State) (hw : st.memory.WellForme
     simp [hm] at h
     subst st'
     exact store_frame tgt st hw m p bs align access ha hm
+
+/-- Accepted: the same actual byte store, through the raw Hybrid interface, preserves the written
+block's metadata. -/
+example : Footprint.Preserves metadataStoreBefore metadataStoreAfter (.byte ⟨⟨0⟩, 0, 1⟩) :=
+  rawWrite_frame linuxX8664 metadataStoreBefore metadataStoreAfter metadataStoreWellFormed
+    metadataStorePtr [.init 7 none] 1 (some (some (⟨0⟩, 0))) (by decide) rfl
+
+/-- Refused: the raw-write frame law rejects the same planted liveness mutation. -/
+example : ¬ Footprint.Preserves metadataStoreBefore metadataStoreBadAfter (.byte ⟨⟨0⟩, 0, 1⟩) := by
+  intro h
+  have hm := h.2.1 ⟨0⟩ metadataStoreBlock (by decide) (by decide)
+  simp [metadataStoreBadAfter, metadataStoreAfter, metadataStoreBefore, metadataStoreBlock,
+    blockMetadata, Memory.block, Memory.modify, AList.update, AList.lookup] at hm
 
 /-- The allocated identity is disjoint from every range whose block existed before allocation. -/
 theorem alloc_fresh_disjoint (tgt : Target) (st : State) (hw : st.memory.WellFormed tgt)
