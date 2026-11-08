@@ -1116,14 +1116,124 @@ theorem MatchesProjectedHistory.sameObservation {S : Observe.EventSignature}
     obtain ⟨m, t, hm⟩ := hx.1 i
     exact ⟨m, r ++ t, by rw [hm, hi, List.append_assoc]⟩
 
-/-- Helper (computation). **Finite projected behavior agrees with C6.** A finite external history
-determines the
-canonical eventually silent C6 execution with exactly the same prefixes and a `finiteDivergence`
-observation. (approved: PENDING). -/
-theorem finite_projected_canonical {S : Observe.EventSignature} {A : Observe.ExecAdapter O S}
-    {X : InfiniteExecution P ρ c} (hf : FiniteEvents A X) :
-    ∃ steps events, MatchesProjectedHistory A X steps ∧
-      Observe.HasFullObservation (.infinite steps) (.finiteDivergence events) := by
+/-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than
+independent execution evidence (approved: PENDING).
+After `n` transitions, the induced C6 step stream has emitted at most the projected events
+available at position `n`. -/
+theorem InfiniteExecution.emittedCount_le {S : Observe.EventSignature}
+    (A : Observe.ExecAdapter O S) (X : InfiniteExecution P ρ c) (n : Nat) :
+    X.emittedCount A n ≤ (A.project (X.states n).events).length := by
+  induction n with
+  | zero => exact Nat.zero_le _
+  | succ n ih =>
+    have hlen : (A.project (X.states n).events).length ≤
+        (A.project (X.states (n + 1)).events).length := by
+      obtain ⟨rest, hr⟩ := X.projected_prefix A (Nat.le_succ n)
+      rw [← hr, List.length_append]
+      omega
+    simp only [InfiniteExecution.emittedCount]
+    split <;> omega
+
+/-- Helper (computation). The first `n` steps of the induced C6 step stream emit the prefix of
+length `X.emittedCount A n` of the projected event history at position `n`. (approved: PENDING). -/
+theorem InfiniteExecution.visiblePrefix_toObserveSteps {S : Observe.EventSignature}
+    (A : Observe.ExecAdapter O S) (X : InfiniteExecution P ρ c) (n : Nat) :
+    Observe.visiblePrefix (X.toObserveSteps A) n =
+      (A.project (X.states n).events).take (X.emittedCount A n) := by
+  induction n with
+  | zero =>
+    simp [Observe.visiblePrefix, Observe.visible, InfiniteExecution.emittedCount]
+  | succ n ih =>
+    rw [Observe.visiblePrefix_succ, ih]
+    have hpref : A.project (X.states n).events <+: A.project (X.states (n + 1)).events :=
+      X.projected_prefix A (Nat.le_succ n)
+    have hle : X.emittedCount A n ≤ (A.project (X.states n).events).length :=
+      X.emittedCount_le A n
+    have htake : (A.project (X.states n).events).take (X.emittedCount A n) =
+        (A.project (X.states (n + 1)).events).take (X.emittedCount A n) := by
+      obtain ⟨rest, hr⟩ := hpref
+      rw [← hr, List.take_append_of_le_length hle]
+    rw [htake]
+    dsimp [InfiniteExecution.toObserveSteps, InfiniteExecution.emittedCount]
+    by_cases hk : X.emittedCount A n < (A.project (X.states (n + 1)).events).length
+    · simp only [hk, ↓reduceDIte, ↓reduceIte, Observe.Step.event?, List.take_add_one,
+        List.getElem?_eq_getElem hk, Option.toList]
+    · simp only [hk, ↓reduceDIte, ↓reduceIte, Observe.Step.event?, Option.toList, List.append_nil]
+
+/-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than
+independent execution evidence (approved: PENDING).
+From position `n`, each subsequent machine step advances `emittedCount` until all projected
+events already present at position `n` have been emitted. -/
+theorem InfiniteExecution.emittedCount_reach {S : Observe.EventSignature}
+    (A : Observe.ExecAdapter O S) (X : InfiniteExecution P ρ c) (n d : Nat)
+    (hd : d ≤ (A.project (X.states n).events).length) :
+    d ≤ X.emittedCount A (n + d) := by
+  induction d with
+  | zero => exact Nat.zero_le _
+  | succ d ih =>
+    have ih' := ih (by omega)
+    have hlen : (A.project (X.states n).events).length ≤
+        (A.project (X.states (n + d + 1)).events).length := by
+      obtain ⟨rest, hr⟩ := X.projected_prefix A (show n ≤ n + d + 1 by omega)
+      rw [← hr, List.length_append]
+      omega
+    rw [show n + (d + 1) = (n + d) + 1 by omega]
+    simp only [InfiniteExecution.emittedCount]
+    split <;> omega
+
+/-- Law (subject `InfiniteExecution.toObserveSteps`).
+Every infinite execution matches its own adapter-induced C6 step stream: every projected position
+history is a prefix of a later C6 visible prefix, and every C6 visible prefix is a prefix of the
+projected position history at the same step index. -/
+theorem InfiniteExecution.toObserveSteps_matches {S : Observe.EventSignature}
+    (A : Observe.ExecAdapter O S) (X : InfiniteExecution P ρ c) :
+    MatchesProjectedHistory A X (X.toObserveSteps A) := by
+  constructor
+  · intro n
+    let len := (A.project (X.states n).events).length
+    have hreach : len ≤ X.emittedCount A (n + len) :=
+      X.emittedCount_reach A n len (Nat.le_refl _)
+    obtain ⟨rest, hr⟩ := X.projected_prefix A (Nat.le_add_right n len)
+    refine ⟨n + len, rest.take (X.emittedCount A (n + len) - len), ?_⟩
+    rw [X.visiblePrefix_toObserveSteps, ← hr,
+      List.take_append (l₁ := A.project (X.states n).events),
+      List.take_of_length_le hreach]
+  · intro m
+    refine ⟨m, (A.project (X.states m).events).drop (X.emittedCount A m), ?_⟩
+    rw [X.visiblePrefix_toObserveSteps, List.take_append_drop]
+
+/-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness
+(approved: PENDING).
+Every finite prefix of an infinite execution under a well-formed adapter and C1 oracle has a
+complete valid C6 event trace. -/
+theorem InfiniteExecution.projected_completeTrace {S : Observe.EventSignature}
+    {C : Observe.OperationContract S} {input : C.Input} {ρ₀ : Oracle O}
+    {A : Observe.ExecAdapter O S} (X : InfiniteExecution P ρ₀.toQueryOracle c)
+    (wellFormed : Observe.ExecAdapter.WellFormed A C input ρ₀) (n : Nat) :
+    Observe.CompleteTrace C input (A.project (X.states n).events) := by
+  have hrep : (run P ρ₀ n c).events = (X.states n).events := by
+    have hto := congrArg Report.events (runFromQ_toReport (P := P) (ρ₀ := ρ₀) n [] [] c)
+    have hpref := congrArg QueryReport.events (X.evaluator_prefix n)
+    simpa [run, runQ, QueryReport.toReport] using hto.symm.trans hpref
+  rw [← hrep]
+  exact (Observe.runFrom_validTrace P A C input ρ₀ wellFormed n [] c .idle).1
+
+/-- Law (subject `InfiniteExecution.toObserveSteps`).
+For a well-formed execution adapter, an infinite execution with finitely many projected events
+stabilizes to a complete valid C6 trace `events`, and its induced C6 step stream has
+`.finiteDivergence events` as its full C6 observation (and any other history-matching C6 stream has
+the same observation). -/
+theorem finite_projected_observation {S : Observe.EventSignature}
+    {C : Observe.OperationContract S} {input : C.Input} {ρ₀ : Oracle O}
+    {A : Observe.ExecAdapter O S} {X : InfiniteExecution P ρ₀.toQueryOracle c}
+    (wellFormed : Observe.ExecAdapter.WellFormed A C input ρ₀)
+    (hf : FiniteEvents A X) :
+    ∃ events,
+      (∃ start, ∀ n, start ≤ n → A.project (X.states n).events = events) ∧
+      Observe.CompleteTrace C input events ∧
+      Observe.HasFullObservation (.infinite (X.toObserveSteps A)) (.finiteDivergence events) ∧
+      ∀ steps, MatchesProjectedHistory A X steps →
+        Observe.HasFullObservation (.infinite steps) (.finiteDivergence events) := by
   obtain ⟨bound, bounded⟩ := hf
   let lengths : Nat → Nat := fun n => (A.project (X.states n).events).length
   have mono : ∀ {m n}, m ≤ n → lengths m ≤ lengths n := by
@@ -1134,39 +1244,58 @@ theorem finite_projected_canonical {S : Observe.EventSignature} {A : Observe.Exe
     exact Nat.le_add_right _ _
   obtain ⟨start, stable⟩ := eventually_constant_of_bounded mono bound bounded
   let events := A.project (X.states start).events
-  let steps := Observe.finiteDivergenceSteps events
-  refine ⟨steps, events, ⟨?_, ?_⟩, Observe.SameInfiniteObservation.refl _⟩
-  · intro n
-    have pref : A.project (X.states n).events <+: events := by
-      by_cases h : n ≤ start
-      · exact X.projected_prefix A h
-      · have hs : start ≤ n := Nat.le_of_not_ge h
-        have heq : A.project (X.states n).events = events := by
-          have sameLength := stable n hs
-          obtain ⟨rest, hr⟩ := X.projected_prefix A hs
-          have hnil : rest = [] := by
-            have hl := congrArg List.length hr
-            simp only [List.length_append] at hl
-            change (A.project (X.states n).events).length =
-              (A.project (X.states start).events).length at sameLength
-            exact List.eq_nil_of_length_eq_zero (by omega)
-          simpa [events, hnil] using hr.symm
-        exact heq ▸ List.prefix_rfl
-    obtain ⟨rest, hr⟩ := pref
-    refine ⟨events.length, rest, ?_⟩
-    rw [visiblePrefix_finiteDivergenceSteps, List.take_of_length_le (Nat.le_refl _), hr]
-  · intro n
-    refine ⟨start, events.drop n, ?_⟩
-    rw [visiblePrefix_finiteDivergenceSteps, List.take_append_drop]
+  have hstable : ∀ n, start ≤ n → A.project (X.states n).events = events := by
+    intro n hs
+    have sameLength := stable n hs
+    obtain ⟨rest, hr⟩ := X.projected_prefix A hs
+    have hnil : rest = [] := by
+      have hl := congrArg List.length hr
+      simp only [List.length_append] at hl
+      change (A.project (X.states n).events).length =
+        (A.project (X.states start).events).length at sameLength
+      exact List.eq_nil_of_length_eq_zero (by omega)
+    simpa [events, hnil] using hr.symm
+  have hpref_events : ∀ n, A.project (X.states n).events <+: events := by
+    intro n
+    by_cases h : n ≤ start
+    · exact X.projected_prefix A h
+    · rw [hstable n (Nat.le_of_not_ge h)]
+      exact List.prefix_rfl
+  have hm := X.toObserveSteps_matches A
+  have hobs : Observe.HasFullObservation (.infinite (X.toObserveSteps A))
+      (.finiteDivergence events) := by
+    constructor
+    · intro m
+      obtain ⟨n, rest₁, hn⟩ := hm.2 m
+      obtain ⟨rest₂, hev⟩ := hpref_events n
+      refine ⟨events.length, rest₁ ++ rest₂, ?_⟩
+      rw [visiblePrefix_finiteDivergenceSteps, List.take_of_length_le (Nat.le_refl _),
+        ← hev, hn, List.append_assoc]
+    · intro m
+      obtain ⟨k, rest, hk⟩ := hm.1 start
+      refine ⟨k, events.drop m ++ rest, ?_⟩
+      rw [visiblePrefix_finiteDivergenceSteps, ← List.append_assoc, List.take_append_drop, hk]
+  refine ⟨events, ⟨start, hstable⟩, X.projected_completeTrace wellFormed start, hobs, ?_⟩
+  intro steps hs
+  exact Observe.SameInfiniteObservation.trans (hs.sameObservation hm) hobs
 
-/-- Helper (computation). **Infinite projected behavior agrees with C6.** An unbounded projected
-history determines an
-infinite C6 trace with exactly the same finite prefixes and an `infiniteDivergence` observation.
-(approved: PENDING). -/
-theorem infinite_projected_canonical {S : Observe.EventSignature} {A : Observe.ExecAdapter O S}
-    {X : InfiniteExecution P ρ c} (hi : InfiniteEvents A X) :
-    ∃ steps trace, MatchesProjectedHistory A X steps ∧
-      Observe.HasFullObservation (.infinite steps) (.infiniteDivergence trace) := by
+/-- Law (subject `InfiniteExecution.toObserveSteps`).
+For a well-formed execution adapter, an infinite execution with infinitely many projected events
+determines an infinite C6 trace `trace` whose prefixes are complete valid C6 traces and match every
+projected position history, and its induced C6 step stream has `.infiniteDivergence trace` as its
+full C6 observation (and any other history-matching C6 stream has the same observation). -/
+theorem infinite_projected_observation {S : Observe.EventSignature}
+    {C : Observe.OperationContract S} {input : C.Input} {ρ₀ : Oracle O}
+    {A : Observe.ExecAdapter O S} {X : InfiniteExecution P ρ₀.toQueryOracle c}
+    (wellFormed : Observe.ExecAdapter.WellFormed A C input ρ₀)
+    (hi : InfiniteEvents A X) :
+    ∃ trace : Observe.InfiniteTrace S,
+      (∀ n, A.project (X.states n).events =
+        (List.range (A.project (X.states n).events).length).map trace ∧
+        Observe.CompleteTrace C input (A.project (X.states n).events)) ∧
+      Observe.HasFullObservation (.infinite (X.toObserveSteps A)) (.infiniteDivergence trace) ∧
+      ∀ steps, MatchesProjectedHistory A X steps →
+        Observe.HasFullObservation (.infinite steps) (.infiniteDivergence trace) := by
   classical
   let first : Nat → Nat := fun i => Classical.choose (hi i)
   have first_spec (i : Nat) : i < (A.project (X.states (first i)).events).length :=
@@ -1201,42 +1330,22 @@ theorem infinite_projected_canonical {S : Observe.EventSignature} {A : Observe.E
       rw [List.range_succ, List.map_append, List.take_add_one, ih (by omega),
         trace_get m (by omega)]
       rfl
-  let steps : Nat → Observe.Step S := fun i => .emit (trace i)
-  refine ⟨steps, trace, ⟨?_, ?_⟩, Observe.SameInfiniteObservation.refl _⟩
-  · intro n
-    refine ⟨(A.project (X.states n).events).length, [], ?_⟩
-    rw [visiblePrefix_emitTrace, ← history_eq_range]
-    simp
-  · intro n
-    refine ⟨first n, (A.project (X.states (first n)).events).drop n, ?_⟩
-    rw [visiblePrefix_emitTrace, take_eq_range _ _ (Nat.le_of_lt (first_spec n)),
-      List.take_append_drop]
-
-/-- Law (subject `MatchesProjectedHistory`).
-A finite projected history has a matching C6 stream, and every matching stream has the
-same finite-divergence observation. Soundness does not depend on choosing the canonical stream. -/
-theorem finite_projected_observation {S : Observe.EventSignature} {A : Observe.ExecAdapter O S}
-    {X : InfiniteExecution P ρ c} (hf : FiniteEvents A X) :
-    ∃ events, (∃ steps, MatchesProjectedHistory A X steps) ∧
-      ∀ steps, MatchesProjectedHistory A X steps →
-        Observe.HasFullObservation (.infinite steps) (.finiteDivergence events) := by
-  obtain ⟨canonical, events, hm, ho⟩ := finite_projected_canonical hf
-  refine ⟨events, ⟨canonical, hm⟩, ?_⟩
+  have hm := X.toObserveSteps_matches A
+  have hobs : Observe.HasFullObservation (.infinite (X.toObserveSteps A))
+      (.infiniteDivergence trace) := by
+    constructor
+    · intro m
+      obtain ⟨n, rest, hn⟩ := hm.2 m
+      refine ⟨(A.project (X.states n).events).length, rest, ?_⟩
+      rw [visiblePrefix_emitTrace, ← history_eq_range n, hn]
+    · intro m
+      obtain ⟨k, rest, hk⟩ := hm.1 (first m)
+      refine ⟨k, (A.project (X.states (first m)).events).drop m ++ rest, ?_⟩
+      rw [visiblePrefix_emitTrace, take_eq_range _ _ (Nat.le_of_lt (first_spec m)),
+        ← List.append_assoc, List.take_append_drop, hk]
+  refine ⟨trace, fun n => ⟨history_eq_range n, X.projected_completeTrace wellFormed n⟩, hobs, ?_⟩
   intro steps hs
-  exact Observe.SameInfiniteObservation.trans (hs.sameObservation hm) ho
-
-/-- Law (subject `MatchesProjectedHistory`).
-An unbounded projected history has a matching C6 stream, and every matching stream has
-the same infinite trace. Soundness preserves the trace under arbitrary silent-step scheduling. -/
-theorem infinite_projected_observation {S : Observe.EventSignature} {A : Observe.ExecAdapter O S}
-    {X : InfiniteExecution P ρ c} (hi : InfiniteEvents A X) :
-    ∃ trace, (∃ steps, MatchesProjectedHistory A X steps) ∧
-      ∀ steps, MatchesProjectedHistory A X steps →
-        Observe.HasFullObservation (.infinite steps) (.infiniteDivergence trace) := by
-  obtain ⟨canonical, trace, hm, ho⟩ := infinite_projected_canonical hi
-  refine ⟨trace, ⟨canonical, hm⟩, ?_⟩
-  intro steps hs
-  exact Observe.SameInfiniteObservation.trans (hs.sameObservation hm) ho
+  exact Observe.SameInfiniteObservation.trans (hs.sameObservation hm) hobs
 
 /-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than
 independent execution evidence (approved: PENDING).
@@ -1603,6 +1712,21 @@ theorem erasingWellFormed : Observe.ExecAdapter.WellFormed erasingAdapter Observ
   · intro hist p vs site store q answer typed
     simp [erasingAdapter] at typed
 
+/-- Helper (computation). Retaining raw events as public output satisfies C6's internal-answer rule.
+(approved: PENDING). -/
+theorem keepingWellFormed : Observe.ExecAdapter.WellFormed keepingAdapter Observe.Demo.contract () env := by
+  constructor
+  · intro hist p vs site store a answer typed
+    cases a with
+    | mk ev res st =>
+      cases ev with
+      | none => exact ⟨[], rfl⟩
+      | some n => exact ⟨[toString n], rfl⟩
+  · intro hist p vs site store a q answer typed
+    simp [keepingAdapter] at typed
+  · intro hist p vs site store q answer typed
+    simp [keepingAdapter] at typed
+
 /-- Helper (computation). Externally the erasing run is silent divergence. (approved: PENDING). -/
 theorem erasing_silent_divergence : SilentDivergence prog erasingAdapter env eventConfig :=
   ⟨event_infinite, ⟨0, fun n => by simp [event_infinite, eventPosition, erasing_project]⟩⟩
@@ -1620,17 +1744,29 @@ theorem keeping_infinite_interaction : InfiniteInteraction prog keepingAdapter e
   simp [event_infinite, eventPosition, eventCount, keeping_project_rawEvents]
 
 /-- Non-vacuity for `finite_projected_observation`: the erasing adapter has a real C6 finite
-observation even though the raw execution interacts forever. -/
-example : ∃ steps events, MatchesProjectedHistory erasingAdapter event_infinite steps ∧
-    Observe.HasFullObservation (.infinite steps) (.finiteDivergence events) :=
-  finite_projected_canonical (show FiniteEvents erasingAdapter event_infinite from
-    ⟨0, fun n => by simp [erasing_project]⟩)
+observation on its induced step stream even though the raw execution interacts forever. -/
+example : ∃ events,
+    (∃ start, ∀ n, start ≤ n → erasingAdapter.project (event_infinite.states n).events = events) ∧
+    Observe.CompleteTrace Observe.Demo.contract () events ∧
+    Observe.HasFullObservation (.infinite (event_infinite.toObserveSteps erasingAdapter))
+      (.finiteDivergence events) ∧
+    ∀ steps, MatchesProjectedHistory erasingAdapter event_infinite steps →
+      Observe.HasFullObservation (.infinite steps) (.finiteDivergence events) :=
+  finite_projected_observation erasingWellFormed (show FiniteEvents erasingAdapter event_infinite from
+    ⟨0, fun _ => by simp [erasing_project]⟩)
 
 /-- Non-vacuity for `infinite_projected_observation`: the keeping adapter has a real infinite C6
-trace. -/
-example : ∃ steps trace, MatchesProjectedHistory keepingAdapter event_infinite steps ∧
-    Observe.HasFullObservation (.infinite steps) (.infiniteDivergence trace) :=
-  infinite_projected_canonical (show InfiniteEvents keepingAdapter event_infinite from by
+trace on its induced step stream. -/
+example : ∃ trace : Observe.InfiniteTrace Observe.Demo.signature,
+    (∀ n, keepingAdapter.project (event_infinite.states n).events =
+      (List.range (keepingAdapter.project (event_infinite.states n).events).length).map trace ∧
+      Observe.CompleteTrace Observe.Demo.contract ()
+        (keepingAdapter.project (event_infinite.states n).events)) ∧
+    Observe.HasFullObservation (.infinite (event_infinite.toObserveSteps keepingAdapter))
+      (.infiniteDivergence trace) ∧
+    ∀ steps, MatchesProjectedHistory keepingAdapter event_infinite steps →
+      Observe.HasFullObservation (.infinite steps) (.infiniteDivergence trace) :=
+  infinite_projected_observation keepingWellFormed (show InfiniteEvents keepingAdapter event_infinite from by
     intro bound
     refine ⟨5 * (bound + 1), ?_⟩
     simp [event_infinite, eventPosition, eventCount, keeping_project_rawEvents])
@@ -2066,71 +2202,172 @@ theorem keptInfinite : InfiniteEvents keepingAdapter event_infinite := by
   refine ⟨5 * (bound + 1), ?_⟩
   simp [event_infinite, eventPosition, eventCount, keeping_project_rawEvents]
 
-/-- Instance (law `finite_projected_observation`, case `erasingAdapter`). -/
-example : ∃ events, (∃ steps, MatchesProjectedHistory erasingAdapter event_infinite steps) ∧
-    ∀ steps, MatchesProjectedHistory erasingAdapter event_infinite steps →
+/-- A configuration that logs once and then enters the silent loop. -/
+def logThenSpinConfig : Config ops :=
+  ⟨.exec eventBody, [], spinStore,
+    [.seq (.loop ⟨0⟩ .skip (.lit 1) .skip s), spinScope]⟩
+
+def logThenSpinConfig1 : Config ops :=
+  ⟨.done, [], spinStore,
+    [.seq (.loop ⟨0⟩ .skip (.lit 1) .skip s), spinScope]⟩
+
+def logThenSpinPosition : Nat → Position ops
+  | 0 => ⟨logThenSpinConfig, [], []⟩
+  | 1 => ⟨logThenSpinConfig1, [1], [eventQuery 0]⟩
+  | n + 2 => ⟨spinConfigAt (n % 5), [1], [eventQuery 0]⟩
+
+/-- Helper (computation). Every adjacent pair of positions in `logThenSpinPosition` is one machine
+transition. (approved: PENDING). -/
+theorem logThenSpin_move : ∀ n, Move prog env (logThenSpinPosition n) (logThenSpinPosition (n + 1))
+  | 0 =>
+    Move.prim (P := prog) (ρ := env) (c := logThenSpinConfig) (c' := logThenSpinConfig1)
+      (events := []) (issued := []) (p := .log) (vs := [1]) (site := s) (st := spinStore)
+      (a := ⟨some 1, .ok 0, spinStore⟩) rfl rfl rfl rfl
+  | 1 => .silent rfl
+  | n + 2 => by
+    have hlt : n % 5 < 5 := Nat.mod_lt _ (by decide)
+    have hc : n % 5 = 0 ∨ n % 5 = 1 ∨ n % 5 = 2 ∨ n % 5 = 3 ∨ n % 5 = 4 := by omega
+    rcases hc with h | h | h | h | h
+    · have hn : (n + 1) % 5 = 1 := by omega
+      simpa [logThenSpinPosition, spinConfigAt, h, hn] using
+        (Move.silent rfl : Move prog env ⟨spinConfig, [1], [eventQuery 0]⟩
+          ⟨spinConfig1, [1], [eventQuery 0]⟩)
+    · have hn : (n + 1) % 5 = 2 := by omega
+      simpa [logThenSpinPosition, spinConfigAt, h, hn] using
+        (Move.silent rfl : Move prog env ⟨spinConfig1, [1], [eventQuery 0]⟩
+          ⟨spinConfig2, [1], [eventQuery 0]⟩)
+    · have hn : (n + 1) % 5 = 3 := by omega
+      simpa [logThenSpinPosition, spinConfigAt, h, hn] using
+        (Move.silent rfl : Move prog env ⟨spinConfig2, [1], [eventQuery 0]⟩
+          ⟨spinConfig3, [1], [eventQuery 0]⟩)
+    · have hn : (n + 1) % 5 = 4 := by omega
+      simpa [logThenSpinPosition, spinConfigAt, h, hn] using
+        (Move.silent rfl : Move prog env ⟨spinConfig3, [1], [eventQuery 0]⟩
+          ⟨spinConfig4, [1], [eventQuery 0]⟩)
+    · have hn : (n + 1) % 5 = 0 := by omega
+      simpa [logThenSpinPosition, spinConfigAt, h, hn] using
+        (Move.silent rfl : Move prog env ⟨spinConfig4, [1], [eventQuery 0]⟩
+          ⟨spinConfig, [1], [eventQuery 0]⟩)
+
+/-- An infinite execution that emits one visible event and then spins silently forever. -/
+def logThenSpin_infinite : InfiniteExecution prog env logThenSpinConfig where
+  states := logThenSpinPosition
+  initial := rfl
+  step := logThenSpin_move
+
+/-- Helper (computation). The one-event-then-spin execution has bounded projected history under the
+keeping adapter. (approved: PENDING). -/
+theorem logThenSpinFinite : FiniteEvents keepingAdapter logThenSpin_infinite := by
+  refine ⟨1, fun n => ?_⟩
+  cases n with
+  | zero => decide
+  | succ m =>
+    cases m with
+    | zero => decide
+    | succ k => exact Nat.le_refl 1
+
+/-- A step-stream mutation that turns every machine transition into a silent C6 step, dropping all
+emitted projected events. -/
+def silentObserveSteps {O : Operands} {S : Observe.EventSignature} {P : Program O}
+    {ρ : QueryOracle O} {c : Config O} (_ : Observe.ExecAdapter O S)
+    (_ : InfiniteExecution P ρ c) (_ : Nat) : Observe.Step S := .silent
+
+/-- Helper (computation). Every visible prefix of `silentObserveSteps` is empty. (approved:
+PENDING). -/
+theorem visiblePrefix_silentObserveSteps {O : Operands} {S : Observe.EventSignature}
+    {P : Program O} {ρ : QueryOracle O} {c : Config O}
+    (A : Observe.ExecAdapter O S) (X : InfiniteExecution P ρ c) (n : Nat) :
+    Observe.visiblePrefix (silentObserveSteps A X) n = [] := by
+  induction n with
+  | zero => rfl
+  | succ n ih => simp [Observe.visiblePrefix_succ, silentObserveSteps, Observe.Step.event?, ih]
+
+/-- Instance (law `InfiniteExecution.toObserveSteps_matches`, case `keepingAdapter`). -/
+example : MatchesProjectedHistory keepingAdapter event_infinite
+    (event_infinite.toObserveSteps keepingAdapter) :=
+  InfiniteExecution.toObserveSteps_matches keepingAdapter event_infinite
+
+/-- Planted (law `InfiniteExecution.toObserveSteps_matches`, case `keepingAdapter`,
+subject `InfiniteExecution.toObserveSteps`, mutant `silentObserveSteps`). -/
+example : ¬ MatchesProjectedHistory keepingAdapter event_infinite
+    (silentObserveSteps keepingAdapter event_infinite) := by
+  intro hm
+  obtain ⟨m, rest, h⟩ := hm.1 5
+  rw [visiblePrefix_silentObserveSteps] at h
+  have h5 : keepingAdapter.project (event_infinite.states 5).events = [.output "1"] := rfl
+  rw [h5] at h
+  cases h
+
+/-- Instance (law `finite_projected_observation`, case `logThenSpin`). -/
+example : ∃ events,
+    (∃ start, ∀ n, start ≤ n →
+      keepingAdapter.project (logThenSpin_infinite.states n).events = events) ∧
+    Observe.CompleteTrace Observe.Demo.contract () events ∧
+    Observe.HasFullObservation (.infinite (logThenSpin_infinite.toObserveSteps keepingAdapter))
+      (.finiteDivergence events) ∧
+    ∀ steps, MatchesProjectedHistory keepingAdapter logThenSpin_infinite steps →
       Observe.HasFullObservation (.infinite steps) (.finiteDivergence events) :=
-  finite_projected_observation (O := ops) (P := prog) (ρ := env.toQueryOracle)
-  (c := eventConfig) (S := Observe.Demo.signature) (A := erasingAdapter)
-  (X := event_infinite) erasedFinite
+  finite_projected_observation (O := ops) (P := prog) (ρ₀ := env) (c := logThenSpinConfig)
+    (S := Observe.Demo.signature) (C := Observe.Demo.contract) (input := ())
+    (A := keepingAdapter) (X := logThenSpin_infinite) keepingWellFormed logThenSpinFinite
+
+/-- Planted (law `finite_projected_observation`, case `logThenSpin`,
+subject `InfiniteExecution.toObserveSteps`, mutant `silentObserveSteps`). -/
+example : Observe.ExecAdapter.WellFormed keepingAdapter Observe.Demo.contract () env ∧
+    FiniteEvents keepingAdapter logThenSpin_infinite ∧
+    ¬ (∃ events,
+      (∃ start, ∀ n, start ≤ n →
+        keepingAdapter.project (logThenSpin_infinite.states n).events = events) ∧
+      Observe.CompleteTrace Observe.Demo.contract () events ∧
+      Observe.HasFullObservation (.infinite (silentObserveSteps keepingAdapter logThenSpin_infinite))
+        (.finiteDivergence events) ∧
+      ∀ steps, MatchesProjectedHistory keepingAdapter logThenSpin_infinite steps →
+        Observe.HasFullObservation (.infinite steps) (.finiteDivergence events)) := by
+  refine ⟨keepingWellFormed, logThenSpinFinite, ?_⟩
+  rintro ⟨events, ⟨start, hstable⟩, _, hobs, _⟩
+  have hev : events = [.output "1"] := by
+    have h1 := hstable (start + 1) (Nat.le_succ start)
+    have hproj :
+        keepingAdapter.project (logThenSpin_infinite.states (start + 1)).events = [.output "1"] := by
+      cases start <;> rfl
+    exact h1.symm.trans hproj
+  subst events
+  obtain ⟨m, rest, hr⟩ := hobs.2 1
+  rw [visiblePrefix_silentObserveSteps, visiblePrefix_finiteDivergenceSteps] at hr
+  cases hr
 
 /-- Instance (law `infinite_projected_observation`, case `keepingAdapter`). -/
-example : ∃ trace, (∃ steps, MatchesProjectedHistory keepingAdapter event_infinite steps) ∧
+example : ∃ trace : Observe.InfiniteTrace Observe.Demo.signature,
+    (∀ n, keepingAdapter.project (event_infinite.states n).events =
+      (List.range (keepingAdapter.project (event_infinite.states n).events).length).map trace ∧
+      Observe.CompleteTrace Observe.Demo.contract ()
+        (keepingAdapter.project (event_infinite.states n).events)) ∧
+    Observe.HasFullObservation (.infinite (event_infinite.toObserveSteps keepingAdapter))
+      (.infiniteDivergence trace) ∧
     ∀ steps, MatchesProjectedHistory keepingAdapter event_infinite steps →
       Observe.HasFullObservation (.infinite steps) (.infiniteDivergence trace) :=
-  infinite_projected_observation (O := ops) (P := prog) (ρ := env.toQueryOracle)
-  (c := eventConfig) (S := Observe.Demo.signature) (A := keepingAdapter)
-  (X := event_infinite) keptInfinite
-
-/-- A matching-relation mutation that fails to check either direction of prefix coverage. -/
-def uncheckedHistory {O : Operands} {S : Observe.EventSignature} {P : Program O}
-    {ρ : QueryOracle O} {c : Config O} (_ : Observe.ExecAdapter O S)
-    (_ : InfiniteExecution P ρ c) (_ : Nat → Observe.Step S) : Prop := True
-
-/-- Helper (computation). A constantly emitting stream exceeds every finite observed history; the
-prefix lengths
-contradict any proposed finite observation. (approved: PENDING). -/
-theorem alwaysEmit_not_finite (events : List (Observe.Event Observe.Demo.signature)) :
-    ¬ Observe.HasFullObservation
-      (.infinite (fun _ => .emit (.output "invented"))) (.finiteDivergence events) := by
-  intro h
-  obtain ⟨m, rest, hr⟩ := h.1 (events.length + 1)
-  have hl := congrArg List.length hr
-  rw [visiblePrefix_finiteDivergenceSteps,
-    visiblePrefix_emitTrace (S := Observe.Demo.signature) (fun _ => .output "invented")] at hl
-  simp only [List.length_take, List.length_append, List.length_map, List.length_range] at hl
-  have := Nat.min_le_right m events.length
-  omega
-
-/-- Planted (law `finite_projected_observation`, case `erasingAdapter`,
-subject `MatchesProjectedHistory`, mutant `uncheckedHistory`). -/
-example : FiniteEvents erasingAdapter event_infinite ∧
-    ¬ (∃ events, (∃ steps, uncheckedHistory erasingAdapter event_infinite steps) ∧
-      ∀ steps, uncheckedHistory erasingAdapter event_infinite steps →
-        Observe.HasFullObservation (.infinite steps) (.finiteDivergence events)) := by
-  refine ⟨erasedFinite, ?_⟩
-  rintro ⟨events, _, sound⟩
-  exact alwaysEmit_not_finite events (sound (fun _ => .emit (.output "invented")) True.intro)
+  infinite_projected_observation (O := ops) (P := prog) (ρ₀ := env) (c := eventConfig)
+    (S := Observe.Demo.signature) (C := Observe.Demo.contract) (input := ())
+    (A := keepingAdapter) (X := event_infinite) keepingWellFormed keptInfinite
 
 /-- Planted (law `infinite_projected_observation`, case `keepingAdapter`,
-subject `MatchesProjectedHistory`, mutant `uncheckedHistory`). -/
-example : InfiniteEvents keepingAdapter event_infinite ∧
-    ¬ (∃ trace, (∃ steps, uncheckedHistory keepingAdapter event_infinite steps) ∧
-      ∀ steps, uncheckedHistory keepingAdapter event_infinite steps →
+subject `InfiniteExecution.toObserveSteps`, mutant `silentObserveSteps`). -/
+example : Observe.ExecAdapter.WellFormed keepingAdapter Observe.Demo.contract () env ∧
+    InfiniteEvents keepingAdapter event_infinite ∧
+    ¬ (∃ trace : Observe.InfiniteTrace Observe.Demo.signature,
+      (∀ n, keepingAdapter.project (event_infinite.states n).events =
+        (List.range (keepingAdapter.project (event_infinite.states n).events).length).map trace ∧
+        Observe.CompleteTrace Observe.Demo.contract ()
+          (keepingAdapter.project (event_infinite.states n).events)) ∧
+      Observe.HasFullObservation (.infinite (silentObserveSteps keepingAdapter event_infinite))
+        (.infiniteDivergence trace) ∧
+      ∀ steps, MatchesProjectedHistory keepingAdapter event_infinite steps →
         Observe.HasFullObservation (.infinite steps) (.infiniteDivergence trace)) := by
-  refine ⟨keptInfinite, ?_⟩
-  rintro ⟨trace, _, sound⟩
-  have h := sound (fun _ => .silent) True.intro
-  obtain ⟨m, rest, hr⟩ := h.2 1
-  have hl := congrArg List.length hr
-  have silent : ∀ n, Observe.visiblePrefix
-      (fun _ => (Observe.Step.silent : Observe.Step Observe.Demo.signature)) n = [] := by
-    intro n
-    induction n with
-    | zero => rfl
-    | succ n ih => simp [Observe.visiblePrefix_succ, Observe.Step.event?, ih]
-  rw [visiblePrefix_emitTrace, silent] at hl
-  simp at hl
+  refine ⟨keepingWellFormed, keptInfinite, ?_⟩
+  rintro ⟨trace, _, hobs, _⟩
+  obtain ⟨m, rest, hr⟩ := hobs.2 1
+  rw [visiblePrefix_silentObserveSteps, visiblePrefix_emitTrace] at hr
+  cases hr
 
 /-- A wrong-history evaluator resets every occurrence before querying the supplied oracle. -/
 def wrongHistoryRun {O : Operands} (P : Program O) (ρ : QueryOracle O) (fuel : Nat)

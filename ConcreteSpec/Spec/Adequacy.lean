@@ -298,6 +298,28 @@ def MatchesProjectedHistory {S : Observe.EventSignature} {P : Program O} {ρ : Q
   (∀ n, ∃ m rest, Observe.visiblePrefix steps m = A.project (X.states n).events ++ rest) ∧
     (∀ m, ∃ n rest, A.project (X.states n).events = Observe.visiblePrefix steps m ++ rest)
 
+/-- The number of projected C6 events emitted by the first `n` steps of an infinite execution's
+induced C6 step stream. Each step emits at most one projected event from the history reached after
+that machine transition, and stutters with `.silent` when no unemitted projected event is
+available. -/
+def InfiniteExecution.emittedCount {S : Observe.EventSignature} {P : Program O}
+    {ρ : QueryOracle O} {c : Config O} (A : Observe.ExecAdapter O S)
+    (X : InfiniteExecution P ρ c) : Nat → Nat
+  | 0 => 0
+  | n + 1 =>
+    let k := X.emittedCount A n
+    if k < (A.project (X.states (n + 1)).events).length then k + 1 else k
+
+/-- The C6 step stream induced by an infinite execution under an execution adapter. Silent machine
+transitions and transitions whose raw events are erased by `A` become `Observe.Step.silent`;
+emitted visible events become `Observe.Step.emit`. -/
+def InfiniteExecution.toObserveSteps {S : Observe.EventSignature} {P : Program O}
+    {ρ : QueryOracle O} {c : Config O} (A : Observe.ExecAdapter O S)
+    (X : InfiniteExecution P ρ c) (n : Nat) : Observe.Step S :=
+  let k := X.emittedCount A n
+  let projected := A.project (X.states (n + 1)).events
+  if h : k < projected.length then .emit projected[k] else .silent
+
 /-- Once `fuel` reaches a blocked request, every larger budget retains C1's `noAnswer` ending.
 This is C8's blocking classification over C1; it is not divergence and has no infinite `Move`. -/
 def EndlesslyBlocked (P : Program O) (ρ : Oracle O) (fuel : Nat) (c blocked : Config O) : Prop :=
