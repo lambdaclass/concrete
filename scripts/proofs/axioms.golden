@@ -1207,9 +1207,81 @@ ConcreteSpec.Core.FieldOwner.variant.sizeOf_spec
 ConcreteSpec.Core.FnId.mk.inj	
 ConcreteSpec.Core.FnId.mk.injEq	propext
 ConcreteSpec.Core.FnId.mk.sizeOf_spec	
+ConcreteSpec.Core.Generative.Binder.mk.inj	
+ConcreteSpec.Core.Generative.Binder.mk.injEq	propext
+ConcreteSpec.Core.Generative.Binder.mk.sizeOf_spec	
+ConcreteSpec.Core.Generative.Dependency.mk.inj	
+ConcreteSpec.Core.Generative.Dependency.mk.injEq	propext
+ConcreteSpec.Core.Generative.Dependency.mk.sizeOf_spec	
+ConcreteSpec.Core.Generative.State.mk.inj	
+ConcreteSpec.Core.Generative.State.mk.injEq	propext
+ConcreteSpec.Core.Generative.State.mk.sizeOf_spec	
+ConcreteSpec.Core.Generative.allocations_have_live_allocator	
+ConcreteSpec.Core.Generative.consume_preserves	propext
+ConcreteSpec.Core.Generative.depend_preserves	propext
+ConcreteSpec.Core.Generative.endScope_non_escape	Quot.sound propext
+ConcreteSpec.Core.Generative.endScope_preserves	propext
+ConcreteSpec.Core.Generative.fresh_generation	propext
+ConcreteSpec.Core.Generative.fresh_preserves	propext
+ConcreteSpec.Core.Generative.instDecidableEqBinder.decEq._proof_1	
+ConcreteSpec.Core.Generative.instDecidableEqBinder.decEq._proof_2	
+ConcreteSpec.Core.Generative.instDecidableEqBinder.decEq._proof_3	
+ConcreteSpec.Core.Generative.instDecidableEqBinder.decEq._proof_4	
+ConcreteSpec.Core.Generative.instDecidableEqBinder.decEq._proof_5	
+ConcreteSpec.Core.Generative.instDecidableEqDependency.decEq._proof_1	
+ConcreteSpec.Core.Generative.instDecidableEqDependency.decEq._proof_2	
+ConcreteSpec.Core.Generative.instDecidableEqDependency.decEq._proof_3	
+ConcreteSpec.Core.Generative.instDecidableEqDependency.decEq._proof_4	
+ConcreteSpec.Core.Generative.instDecidableEqState.decEq._proof_1	
+ConcreteSpec.Core.Generative.instDecidableEqState.decEq._proof_2	
+ConcreteSpec.Core.Generative.instDecidableEqState.decEq._proof_3	
+ConcreteSpec.Core.Generative.instDecidableEqState.decEq._proof_4	
+ConcreteSpec.Core.Generative.instDecidableEqState.decEq._proof_5	
+ConcreteSpec.Core.Generative.instrument_erasure	Quot.sound propext
+ConcreteSpec.Core.Generative.nextBrand_fresh	
+ConcreteSpec.Core.Generative.release_preserves	propext
+ConcreteSpec.Core.Generative.reset_generation	Quot.sound propext
+ConcreteSpec.Core.Generative.reset_preserves	Quot.sound propext
+ConcreteSpec.Core.Generative.validate_iff	propext
 ConcreteSpec.Core.GrantId.mk.inj	
 ConcreteSpec.Core.GrantId.mk.injEq	propext
 ConcreteSpec.Core.GrantId.mk.sizeOf_spec	
+ConcreteSpec.Core.Grants.Resource.mk.inj	
+ConcreteSpec.Core.Grants.Resource.mk.injEq	propext
+ConcreteSpec.Core.Grants.Resource.mk.sizeOf_spec	
+ConcreteSpec.Core.Grants.State.mk.inj	
+ConcreteSpec.Core.Grants.State.mk.injEq	propext
+ConcreteSpec.Core.Grants.State.mk.sizeOf_spec	
+ConcreteSpec.Core.Grants.Steps.brecOn	Quot.sound propext
+ConcreteSpec.Core.Grants.acquire_bounded	Quot.sound propext
+ConcreteSpec.Core.Grants.acquire_fresh	Quot.sound propext
+ConcreteSpec.Core.Grants.acquire_keeps_parent	Quot.sound propext
+ConcreteSpec.Core.Grants.close_bounded	Quot.sound propext
+ConcreteSpec.Core.Grants.close_consumes	Quot.sound propext
+ConcreteSpec.Core.Grants.close_fresh	Quot.sound propext
+ConcreteSpec.Core.Grants.consumed.eq_1	
+ConcreteSpec.Core.Grants.consumed_bounded	Quot.sound propext
+ConcreteSpec.Core.Grants.consumed_dead	propext
+ConcreteSpec.Core.Grants.consumed_fresh	Quot.sound propext
+ConcreteSpec.Core.Grants.consumed_keeps_dead	propext
+ConcreteSpec.Core.Grants.consumed_never_revives	Quot.sound propext
+ConcreteSpec.Core.Grants.dead_unusable	propext
+ConcreteSpec.Core.Grants.instDecidableEqResource.decEq._proof_1	
+ConcreteSpec.Core.Grants.instDecidableEqResource.decEq._proof_2	
+ConcreteSpec.Core.Grants.instDecidableEqResource.decEq._proof_3	
+ConcreteSpec.Core.Grants.instDecidableEqResource.decEq._proof_4	
+ConcreteSpec.Core.Grants.instDecidableEqResource.decEq._proof_5	
+ConcreteSpec.Core.Grants.issue.eq_1	
+ConcreteSpec.Core.Grants.issue_bounded	propext
+ConcreteSpec.Core.Grants.issue_fresh	propext
+ConcreteSpec.Core.Grants.issue_keeps_dead	propext
+ConcreteSpec.Core.Grants.narrow_bounded	Quot.sound propext
+ConcreteSpec.Core.Grants.narrow_consumes	Quot.sound propext
+ConcreteSpec.Core.Grants.narrow_fresh	Quot.sound propext
+ConcreteSpec.Core.Grants.narrow_intersection	Quot.sound propext
+ConcreteSpec.Core.Grants.rights_never_grow	Quot.sound propext
+ConcreteSpec.Core.Grants.usable.eq_1	
+ConcreteSpec.Core.Grants.usable_some	Quot.sound propext
 ConcreteSpec.Core.Hybrid.Cell.Projected.eq_1	
 ConcreteSpec.Core.Hybrid.Cell.mk.inj	
 ConcreteSpec.Core.Hybrid.Cell.mk.injEq	propext
@@ -1497,6 +1569,154 @@ ConcreteSpec.Core.ModuleId.mk.injEq	propext
 ConcreteSpec.Core.ModuleId.mk.sizeOf_spec	
 ConcreteSpec.Core.OutOfRange.ofNat_ctorIdx	
 ConcreteSpec.Core.OutOfRange.outOfRange.sizeOf_spec	
+ConcreteSpec.Core.Own.Activation.mk.inj	
+ConcreteSpec.Core.Own.Activation.mk.injEq	propext
+ConcreteSpec.Core.Own.Activation.mk.sizeOf_spec	
+ConcreteSpec.Core.Own.CallState.mk.inj	
+ConcreteSpec.Core.Own.CallState.mk.injEq	propext
+ConcreteSpec.Core.Own.CallState.mk.sizeOf_spec	
+ConcreteSpec.Core.Own.Descriptor.mk.inj	
+ConcreteSpec.Core.Own.Descriptor.mk.injEq	propext
+ConcreteSpec.Core.Own.Descriptor.mk.sizeOf_spec	
+ConcreteSpec.Core.Own.Examples.CE.argument.inj	
+ConcreteSpec.Core.Own.Examples.CE.argument.injEq	propext
+ConcreteSpec.Core.Own.Examples.CE.argument.sizeOf_spec	
+ConcreteSpec.Core.Own.Examples.CE.useView.inj	
+ConcreteSpec.Core.Own.Examples.CE.useView.injEq	propext
+ConcreteSpec.Core.Own.Examples.CE.useView.sizeOf_spec	
+ConcreteSpec.Core.Own.Examples.CE.value.inj	
+ConcreteSpec.Core.Own.Examples.CE.value.injEq	propext
+ConcreteSpec.Core.Own.Examples.CE.value.sizeOf_spec	
+ConcreteSpec.Core.Own.Examples.E.endLoan.inj	
+ConcreteSpec.Core.Own.Examples.E.endLoan.injEq	propext
+ConcreteSpec.Core.Own.Examples.E.endLoan.sizeOf_spec	
+ConcreteSpec.Core.Own.Examples.E.lend.inj	
+ConcreteSpec.Core.Own.Examples.E.lend.injEq	propext
+ConcreteSpec.Core.Own.Examples.E.lend.sizeOf_spec	
+ConcreteSpec.Core.Own.Examples.E.lit.inj	
+ConcreteSpec.Core.Own.Examples.E.lit.injEq	propext
+ConcreteSpec.Core.Own.Examples.E.lit.sizeOf_spec	
+ConcreteSpec.Core.Own.Examples.E.move.inj	
+ConcreteSpec.Core.Own.Examples.E.move.injEq	propext
+ConcreteSpec.Core.Own.Examples.E.move.sizeOf_spec	
+ConcreteSpec.Core.Own.Examples.E.read.inj	
+ConcreteSpec.Core.Own.Examples.E.read.injEq	propext
+ConcreteSpec.Core.Own.Examples.E.read.sizeOf_spec	
+ConcreteSpec.Core.Own.Examples.E.reborrow.inj	
+ConcreteSpec.Core.Own.Examples.E.reborrow.injEq	propext
+ConcreteSpec.Core.Own.Examples.E.reborrow.sizeOf_spec	
+ConcreteSpec.Core.Own.Examples.E.use.inj	
+ConcreteSpec.Core.Own.Examples.E.use.injEq	propext
+ConcreteSpec.Core.Own.Examples.E.use.sizeOf_spec	
+ConcreteSpec.Core.Own.Loan.mk.inj	
+ConcreteSpec.Core.Own.Loan.mk.injEq	propext
+ConcreteSpec.Core.Own.Loan.mk.sizeOf_spec	
+ConcreteSpec.Core.Own.Mode.mutable.sizeOf_spec	
+ConcreteSpec.Core.Own.Mode.ofNat_ctorIdx	
+ConcreteSpec.Core.Own.Mode.shared.sizeOf_spec	
+ConcreteSpec.Core.Own.Projection.field.inj	
+ConcreteSpec.Core.Own.Projection.field.injEq	propext
+ConcreteSpec.Core.Own.Projection.field.sizeOf_spec	
+ConcreteSpec.Core.Own.Projection.index.inj	
+ConcreteSpec.Core.Own.Projection.index.injEq	propext
+ConcreteSpec.Core.Own.Projection.index.sizeOf_spec	
+ConcreteSpec.Core.Own.Slot.mk.inj	
+ConcreteSpec.Core.Own.Slot.mk.injEq	propext
+ConcreteSpec.Core.Own.Slot.mk.sizeOf_spec	
+ConcreteSpec.Core.Own.State.mk.inj	
+ConcreteSpec.Core.Own.State.mk.injEq	propext
+ConcreteSpec.Core.Own.State.mk.sizeOf_spec	
+ConcreteSpec.Core.Own.Status.moved.sizeOf_spec	
+ConcreteSpec.Core.Own.Status.ofNat_ctorIdx	
+ConcreteSpec.Core.Own.Status.owned.sizeOf_spec	
+ConcreteSpec.Core.Own.Store.mk.inj	
+ConcreteSpec.Core.Own.Store.mk.injEq	propext
+ConcreteSpec.Core.Own.Store.mk.sizeOf_spec	
+ConcreteSpec.Core.Own.accessLoan_preserves	Quot.sound propext
+ConcreteSpec.Core.Own.accessOwner_preserves	Quot.sound propext
+ConcreteSpec.Core.Own.adoptDown_only_arguments	Quot.sound propext
+ConcreteSpec.Core.Own.adoptDown_preserves	Quot.sound propext
+ConcreteSpec.Core.Own.bind_preserves	Quot.sound propext
+ConcreteSpec.Core.Own.borrow_birth	Quot.sound propext
+ConcreteSpec.Core.Own.borrow_preserves	Quot.sound propext
+ConcreteSpec.Core.Own.callLife._sparseCasesOn_1.else_eq	propext
+ConcreteSpec.Core.Own.callLife.eq_1	Quot.sound propext
+ConcreteSpec.Core.Own.callLife.eq_2	Quot.sound propext
+ConcreteSpec.Core.Own.callLife_erasure	Quot.sound propext
+ConcreteSpec.Core.Own.callLife_preserves	Quot.sound propext
+ConcreteSpec.Core.Own.drop_preserves	Quot.sound propext
+ConcreteSpec.Core.Own.endLoan_preserves	Quot.sound propext
+ConcreteSpec.Core.Own.endLoan_supply	Quot.sound propext
+ConcreteSpec.Core.Own.endLocals_preserves	Quot.sound propext
+ConcreteSpec.Core.Own.enterDown_preserves	Quot.sound propext
+ConcreteSpec.Core.Own.enter_preserves	Quot.sound propext
+ConcreteSpec.Core.Own.instDecidableEqActivation.decEq._proof_1	
+ConcreteSpec.Core.Own.instDecidableEqActivation.decEq._proof_2	
+ConcreteSpec.Core.Own.instDecidableEqActivation.decEq._proof_3	
+ConcreteSpec.Core.Own.instDecidableEqActivation.decEq._proof_4	
+ConcreteSpec.Core.Own.instDecidableEqCallState.decEq._proof_1	
+ConcreteSpec.Core.Own.instDecidableEqCallState.decEq._proof_2	
+ConcreteSpec.Core.Own.instDecidableEqCallState.decEq._proof_3	
+ConcreteSpec.Core.Own.instDecidableEqDescriptor.decEq._proof_1	
+ConcreteSpec.Core.Own.instDecidableEqDescriptor.decEq._proof_2	
+ConcreteSpec.Core.Own.instDecidableEqDescriptor.decEq._proof_3	
+ConcreteSpec.Core.Own.instDecidableEqDescriptor.decEq._proof_4	
+ConcreteSpec.Core.Own.instDecidableEqLoan.decEq._proof_1	
+ConcreteSpec.Core.Own.instDecidableEqLoan.decEq._proof_2	
+ConcreteSpec.Core.Own.instDecidableEqLoan.decEq._proof_3	
+ConcreteSpec.Core.Own.instDecidableEqLoan.decEq._proof_4	
+ConcreteSpec.Core.Own.instDecidableEqLoan.decEq._proof_5	
+ConcreteSpec.Core.Own.instDecidableEqLoan.decEq._proof_6	
+ConcreteSpec.Core.Own.instDecidableEqLoan.decEq._proof_7	
+ConcreteSpec.Core.Own.instDecidableEqLoan.decEq._proof_8	
+ConcreteSpec.Core.Own.instDecidableEqLoan.decEq._proof_9	
+ConcreteSpec.Core.Own.instDecidableEqMode._proof_1	
+ConcreteSpec.Core.Own.instDecidableEqMode._proof_2	
+ConcreteSpec.Core.Own.instDecidableEqProjection.decEq._proof_1	
+ConcreteSpec.Core.Own.instDecidableEqProjection.decEq._proof_2	
+ConcreteSpec.Core.Own.instDecidableEqProjection.decEq._proof_3	
+ConcreteSpec.Core.Own.instDecidableEqProjection.decEq._proof_4	
+ConcreteSpec.Core.Own.instDecidableEqProjection.decEq._proof_5	
+ConcreteSpec.Core.Own.instDecidableEqProjection.decEq._proof_6	
+ConcreteSpec.Core.Own.instDecidableEqSlot.decEq._proof_1	
+ConcreteSpec.Core.Own.instDecidableEqSlot.decEq._proof_2	
+ConcreteSpec.Core.Own.instDecidableEqSlot.decEq._proof_3	
+ConcreteSpec.Core.Own.instDecidableEqSlot.decEq._proof_4	
+ConcreteSpec.Core.Own.instDecidableEqSlot.decEq._proof_5	
+ConcreteSpec.Core.Own.instDecidableEqState.decEq._proof_1	
+ConcreteSpec.Core.Own.instDecidableEqState.decEq._proof_2	
+ConcreteSpec.Core.Own.instDecidableEqState.decEq._proof_3	
+ConcreteSpec.Core.Own.instDecidableEqState.decEq._proof_4	
+ConcreteSpec.Core.Own.instDecidableEqState.decEq._proof_5	
+ConcreteSpec.Core.Own.instDecidableEqState.decEq._proof_6	
+ConcreteSpec.Core.Own.instDecidableEqState.decEq._proof_7	
+ConcreteSpec.Core.Own.instDecidableEqStatus._proof_1	
+ConcreteSpec.Core.Own.instDecidableEqStatus._proof_2	
+ConcreteSpec.Core.Own.instDecidableParentValid._proof_1	
+ConcreteSpec.Core.Own.instDecidableParentValid._proof_2	
+ConcreteSpec.Core.Own.instDecidableParentValid._proof_3	
+ConcreteSpec.Core.Own.instrument_erasure	propext
+ConcreteSpec.Core.Own.instrument_preserves	Quot.sound propext
+ConcreteSpec.Core.Own.leave_no_activation_slot	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Own.leave_no_local_loan	Quot.sound propext
+ConcreteSpec.Core.Own.leave_preserves	Quot.sound propext
+ConcreteSpec.Core.Own.life_erasure	Quot.sound propext
+ConcreteSpec.Core.Own.life_preserves	Quot.sound propext
+ConcreteSpec.Core.Own.loan_has_owned_root	
+ConcreteSpec.Core.Own.move_preserves	Quot.sound propext
+ConcreteSpec.Core.Own.moved_no_loan	Quot.sound propext
+ConcreteSpec.Core.Own.nextLoan_fresh	
+ConcreteSpec.Core.Own.passDown_preserves	Quot.sound propext
+ConcreteSpec.Core.Own.readLoan_erasure	Quot.sound propext
+ConcreteSpec.Core.Own.readOwner_erasure	Quot.sound propext
+ConcreteSpec.Core.Own.reborrowAt_preserves	Quot.sound propext
+ConcreteSpec.Core.Own.reborrow_birth	Quot.sound propext
+ConcreteSpec.Core.Own.reborrow_preserves	Quot.sound propext
+ConcreteSpec.Core.Own.reinitialize_preserves	Quot.sound propext
+ConcreteSpec.Core.Own.validate_iff	Quot.sound propext
+ConcreteSpec.Core.Own.validate_wf	Quot.sound propext
+ConcreteSpec.Core.Own.writeLoan_erasure	Quot.sound propext
+ConcreteSpec.Core.Own.writeOwner_erasure	Quot.sound propext
 ConcreteSpec.Core.Res.bind.eq_1	
 ConcreteSpec.Core.Res.bind.eq_2	
 ConcreteSpec.Core.Res.bind.eq_3	
@@ -2676,6 +2896,12 @@ _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.unwindLocals.match_1.
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Res.bind.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Res.bind.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Res.bind.match_1.eq_3	
+_private.ConcreteSpec.Proofs.Grant.0.ConcreteSpec.Core.AList.lookup.match_1.eq_1	
+_private.ConcreteSpec.Proofs.Grant.0.ConcreteSpec.Core.AList.lookup.match_1.eq_2	
+_private.ConcreteSpec.Proofs.Grant.0.ConcreteSpec.Core.AList.update.match_1.eq_1	
+_private.ConcreteSpec.Proofs.Grant.0.ConcreteSpec.Core.AList.update.match_1.eq_2	
+_private.ConcreteSpec.Proofs.Grant.0.ConcreteSpec.Core.Grants.update_all	Quot.sound propext
+_private.ConcreteSpec.Proofs.Grant.0.ConcreteSpec.Core.Grants.update_all._simp_1_4	propext
 _private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.State.materialize.match_3.eq_1	
 _private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.State.materialize.match_3.eq_2	
 _private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.decode.match_1.eq_1	
@@ -2746,6 +2972,18 @@ _private.ConcreteSpec.Proofs.Observe.0.ConcreteSpec.retOutcome.match_1.eq_4	prop
 _private.ConcreteSpec.Proofs.Observe.0.ConcreteSpec.runBody.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Observe.0.ConcreteSpec.runBody.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Observe.0.ConcreteSpec.runBody.match_1.eq_3	
+_private.ConcreteSpec.Proofs.Own.0.ConcreteSpec.Core.Own.bind.match_1.eq_1	
+_private.ConcreteSpec.Proofs.Own.0.ConcreteSpec.Core.Own.bind.match_1.eq_2	
+_private.ConcreteSpec.Proofs.Own.0.ConcreteSpec.Core.Own.callLife.match_1.eq_1	propext
+_private.ConcreteSpec.Proofs.Own.0.ConcreteSpec.Core.Own.callLife.match_1.eq_2	propext
+_private.ConcreteSpec.Proofs.Own.0.ConcreteSpec.Core.Own.drop_absent	Quot.sound propext
+_private.ConcreteSpec.Proofs.Own.0.ConcreteSpec.Core.Own.drop_absent._simp_1_1	propext
+_private.ConcreteSpec.Proofs.Own.0.ConcreteSpec.Core.Own.endLoan_frames	Quot.sound propext
+_private.ConcreteSpec.Proofs.Own.0.ConcreteSpec.Core.Own.fold_frames	Quot.sound propext
+_private.ConcreteSpec.Proofs.Own.0.ConcreteSpec.Core.Own.fold_preserves	propext
+_private.ConcreteSpec.Proofs.Own.0.ConcreteSpec.Core.Own.slot_unique	Quot.sound propext
+_private.ConcreteSpec.Proofs.Own.0.ConcreteSpec.Core.Own.slot_unique._simp_1_1	propext
+_private.ConcreteSpec.Proofs.Own.0.ConcreteSpec.Core.Own.slot_unique._simp_1_2	propext
 _private.ConcreteSpec.Proofs.Rep.0.ConcreteSpec.Rep.Ty.size.match_3.eq_1	
 _private.ConcreteSpec.Proofs.Rep.0.ConcreteSpec.Rep.Ty.size.match_3.eq_2	
 _private.ConcreteSpec.Proofs.Rep.0.ConcreteSpec.Rep.decodeNat.match_1.eq_1	
@@ -2896,3 +3134,5 @@ _private.ConcreteSpec.Proofs.Slice1.0.ConcreteSpec.runBody.match_1.eq_3
 _private.ConcreteSpec.Proofs.Slice1.0.ConcreteSpec.runBody.match_3.eq_1	
 _private.ConcreteSpec.Proofs.Slice1.0.ConcreteSpec.runBody.match_3.eq_2	
 _private.ConcreteSpec.Proofs.Slice1.0.ConcreteSpec.runBody.match_3.eq_3	
+_private.ConcreteSpec.Spec.Own.0.ConcreteSpec.Core.Own.ParentValid.match_1.eq_1	
+_private.ConcreteSpec.Spec.Own.0.ConcreteSpec.Core.Own.ParentValid.match_1.eq_2	
