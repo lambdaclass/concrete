@@ -526,6 +526,10 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     by the owner: the LCB joins slice 0 as a second unverified backend, and its adapter is the first
     backend proof target (*Backend order* above). This revises the new-compiler row's single
     slice-0 BIR → LLVM printer in the same way.
+    *Revised 2026-11-08* by [foundation question 17](#foundation-q17): the backend-order equality
+    stays, with a per-native-trace Core refinement check; allocation-dependent observations are
+    decided at slice 24. The [complete adapter theorem](#decided-2026-11-08-adapter) says an adapter
+    error produces no artifact and success implies correctness, retiring the adapter premise (R-0579).
 - <a id="decided-project-long-term-2026-11-06"></a>**Long-term changes to the plan** (owner, 2026-11-06:
   after asking "is this the best long term design", the owner was asked whether to accept all five
   changes below (A2i before the freeze, the LP0 LCB pilot, certificates, the modular specification
@@ -958,7 +962,11 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   yes then as you said right", approving the recorded recommendation). This answers when performance
   is measured and how it is reported. Flagship runtime is tracked from slice 2. Compiler wall time,
   per-stage time and memory are tracked from slice 0. Every measurement is recorded by exact SHA,
-  backend and target, and is report-only until the noise is understood.
+  backend and target, and is report-only until the noise is understood. Revised 2026-11-08 by the
+  [compile-speed budget](#decided-2026-11-08-compile-budget) and
+  [speed target](#decided-2026-11-08-speed-target): the compile-speed budget is tracked per example;
+  speed and size stay report-only until the owner sets a target against C from measured data at
+  the first real showcase (grep, slice 16).
 - <a id="decided-2026-11-07-stack-randomness"></a>**Early stack bounds and randomness** (owner,
   2026-11-07: "1 and 2 should be done early too", referring to stack-overflow bounds and randomness
   in the coordinator's "what are we forgetting" list; then "ok let's add it", approving the
@@ -981,7 +989,11 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     ([UBSan](#decided-2026-11-08-ubsan)): UBSan is dropped, since it instruments C at clang's front
     end and checks nothing on LLVM IR input; ASan stays.
   - *Binary size.* From slice 0, binary size is tracked per example per commit next to speed
-    tracking, report-only.
+    tracking, report-only. Revised 2026-11-08 by the
+    [compile-speed budget](#decided-2026-11-08-compile-budget) and
+    [speed target](#decided-2026-11-08-speed-target): the compile-speed budget is also tracked per
+    example; speed and size stay report-only until the owner sets a target against C from measured
+    data at the first real showcase (grep, slice 16).
   - *JSON schema.* A frozen, versioned JSON schema for diagnostics and facts output, with golden
     tests, starts with the first front-end output.
 - <a id="decided-2026-11-07-tracking"></a>**Where these decisions and their work are tracked** (owner,
@@ -1409,7 +1421,9 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   (Kimi, Grok or agy/Gemini) reviews as well when one is available, as the owner required for cleanup
   branches on 2026-10-28; when none is (quota, credit or sign-in), its absence is recorded with the
   review and never assumed. A review never replaces the gates. Extended 2026-11-08 (owner: "also
-  remember we have agy not only codex kimi and claude"): every branch gets an agy review beside the
+  remember we have agy not only codex kimi and claude"; also on 2026-11-08: "ok but review the
+  foundation with all the models right? agy, kimi and codex apart from claude that is us"; "use agy laso";
+  "have everything reviewed by the other llms"): every branch gets an agy review beside the
   Codex and Kimi reviews. agy cannot read files, so its prompt carries the diff and the context it
   needs and ends with a required verdict line. (The coordinator's relay added that agy can also act
   as a writer.)

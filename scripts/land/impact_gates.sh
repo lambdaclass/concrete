@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The impact-selected gates for exactly the range base..head, run in the current checkout (which must
-# be at head). Shared by train.sh check, ready.sh and the landing bot's auto-rebase.
+# be at head). Shared by train.sh check and ready.sh.
 #
 #   impact_gates.sh --base <sha> --head <sha> [--src-ref R] [--dst-ref R] [--report FILE]
 #

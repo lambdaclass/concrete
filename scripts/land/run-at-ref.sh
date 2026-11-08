@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # run-at-ref.sh <ref-or-sha> <command...>
-# The server-local twin of the laptop's ~/bin/concrete-remote, for the landing bot running ON the
-# gate host: fetch <ref> into the gate clone, run <command> in a fresh CLONE of it at that commit,
+# The server-local twin of the laptop's ~/bin/concrete-remote, run ON the gate host (by
+# scripts/land/gates_remote.sh): fetch <ref> into the gate clone, run <command> in a fresh CLONE of it at that commit,
 # inside `nix develop`, print `[concrete-remote] ... sha=<sha>` lines, exit with the command's status.
 #
 # A clone, not a worktree: some gates refuse to run in a linked worktree (the mutation campaign and
@@ -11,8 +11,8 @@
 #
 # Env: RUN_AT_REF_REPO (gate clone, default ~/concrete2), RUN_AT_REF_RUNS (default ~/runs),
 #      RUN_AT_REF_SOURCE (what to fetch from: a remote name, a path to a clone or a git bundle,
-#      default origin; the bot passes its own clone and scripts/land/gates_remote.sh a bundle so an
-#      unpublished train SHA can run), RUN_AT_REF_KEEP=1, RUN_AT_REF_NO_NIX=1 (run the command
+#      default origin; scripts/land/gates_remote.sh passes a bundle so an unpublished train SHA can
+#      run), RUN_AT_REF_KEEP=1, RUN_AT_REF_NO_NIX=1 (run the command
 #      without `nix develop`: the landing gate's sandbox only).
 set -euo pipefail
 # The clone below is a sandbox: no repository variable of the caller may reach it (ISS-0015). The

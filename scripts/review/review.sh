@@ -382,8 +382,8 @@ fi
 { echo; echo "## verdict: $VERDICT ($N_FINDINGS piece(s) with findings, $N_BLOCKED blocked)"; } >>"$RAW"
 
 # ---------------------------------------------------------------- record
-# THE NOTE FORMAT IS AN INTERFACE: the landing bot and scripts/review/verify.sh
-# parse it. Change it only together with them.
+# THE NOTE FORMAT IS AN INTERFACE: scripts/review/verify.sh parses it (train.sh's review leg reads
+# it through verify.sh). Change it only together with verify.sh.
 cat >"$WORK/note" <<EOF
 verdict: $VERDICT
 rounds: $ROUND

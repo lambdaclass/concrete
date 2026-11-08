@@ -90,12 +90,16 @@ verdict; any failing leg fails the check (see [Pipelining](#pipelining)).
   provenance**: a clean review note at its head or, when the head has no note, a clean note on every
   member at its exact recorded SHA (each member was reviewed at its own head). Each note is judged by
   `scripts/review/verify.sh` on origin's notes; an absent, malformed, blocked or findings note
-  qualifies nothing, and a head note that is not clean is not overridden by the members. Otherwise
+  qualifies nothing, and a head note that is not clean is not overridden by the members. A member
+  without a clean note qualifies instead by an **owner sign-off** at its exact SHA (R-0618: a branch
+  at the review-round cap of its diff's class, approved by the owner after Codex, Kimi and agy all
+  reviewed that commit; `scripts/land/signoff.sh verify --base`, on origin's `refs/owner-signoff/*`). A sign-off approves that
+  commit only, so a train with a signed-off member must be exactly the clean merge of its members
+  onto its base: one conflict-free merge per member and nothing else. Otherwise
   the leg runs `LAND_REVIEW_CMD`, else `scripts/review/review.sh`, with `--base --head`, and then
   requires provenance: a non-zero exit fails, and so does a zero exit that leaves no clean note at the
   head. With no review command at all, `check` fails; it never disables the leg silently.
-  `--no-review` skips the leg explicitly (the landing bot does, its members being reviewed), and
-  `land` still requires review provenance. A review that refuses a patch recording an owner
+  `--no-review` skips the leg explicitly, and `land` still requires review provenance. A review that refuses a patch recording an owner
   decision is answered in the review ([REVIEW.md](REVIEW.md#owner-decisions-choosing-versus-recording)),
   never by `--no-review`.
 - The per-leg durations, the wall time and their sum go to the log as a `check-legs` row.
@@ -242,7 +246,7 @@ exit line from `run-at-ref.sh`, and both must name the head.
 
 INCOMPLETE is never a pass. It does not fall back to running the gates here. With a gate host
 configured, running them on this machine takes the explicit `train.sh check <name> --local-gates`.
-A clone with no gate host (CI, the landing gate's sandbox, a bot that runs on the gate host itself)
+A clone with no gate host (CI, the landing gate's sandbox, a clone on the gate host itself)
 runs them here, says so, and logs `impact here`.
 
 **Reuse at the `ci` push.** The root hook (`.githooks/pre-push`) writes no validation record and
@@ -316,11 +320,10 @@ A branch is **ready** when all of the following hold:
 
 | notes ref | lines | writer |
 |---|---|---|
-| `refs/notes/concrete-review` | `verdict: clean\|findings\|blocked`, `rounds: N`, `reviewer: codex`, `utc: ...`, `base: <sha>`, `pieces: N` (and `carried-from: <sha>` on a verdict the bot carried across a rebase) | `scripts/review/review.sh` (`scripts/review/verify.sh` reads it) |
-| `refs/notes/concrete-gates` | `gates: pass\|fail`, `selected: N`, `utc: ...` | `scripts/land/ready.sh`, the bot |
+| `refs/notes/concrete-review` | `verdict: clean\|findings\|blocked`, `rounds: N`, `reviewer: codex`, `utc: ...`, `base: <sha>`, `pieces: N` | `scripts/review/review.sh` (`scripts/review/verify.sh` reads it) |
+| `refs/notes/concrete-gates` | `gates: pass\|fail`, `selected: N`, `utc: ...` | `scripts/land/ready.sh` |
 
-One `key: value` per line; when a key repeats, the last line wins. Either note may carry
-`order: N` to place the branch explicitly (lower first). `scripts/land/notes.sh` reads and
+One `key: value` per line; when a key repeats, the last line wins. `scripts/land/notes.sh` reads and
 writes the notes (`get`, `put`, `ready`). `put` builds each write on its own temporary ref on top
 of the remote's notes tip, pushes that commit without force, and retries on a race. Concurrent
 writers therefore never drop each other's notes, including writers that share one clone or its
@@ -342,117 +345,6 @@ checkout at its head. It runs the review, the impact gates and the remote full s
 then publishes the gates note: `gates: pass` only when every leg that ran passed. A failed review
 leg also publishes `gates: fail`, so an older clean verdict cannot keep the head ready. It exits 0
 when the head is ready.
-
-## The landing bot
-
-`scripts/land/bot.sh tick` does one pass of the whole loop. On the server, a systemd user timer runs
-it every 10 minutes after the previous tick ends (`scripts/land/systemd/`).
-
-1. **Resume.** If the state file says a train is in CI, the bot watches that run instead of
-   dispatching again. The phase `dispatching` is written, with its time, before the dispatch. A
-   restart in that phase, or a dispatch whose run could not be found, makes the bot look up the
-   run at the train's head SHA:
-   - a failed lookup (network, auth, bad JSON) is no answer, and the bot asks again next tick;
-   - an empty answer within `BOT_DISPATCH_GRACE` (900 s) of the dispatch waits;
-   - only an empty answer after that discards the train and dispatches again. A train interrupted while it was being built or checked is discarded and
-   rebuilt. A `blocked` state waits for a human (`bot.sh status`, then `bot.sh reset`).
-2. **Auto-rebase** (below).
-3. **Collect and order.** It lists the ready heads (`bot.sh list` shows them with their keys):
-   - every explicit `order: N` comes first, whatever its value, in decimal order (`08` is 8);
-   - then **language-rule branches**. A rule branch touches `Concrete/Check/` or
-     `Concrete/Elab/` (CoreCheck lives in Check) and adds an `E` code that main's `Concrete/`
-     does not contain;
-   - then everything else;
-   - ties go to the smaller diff, then the name.
-
-   Rule changes land first and small, so they break other branches' fixtures before those
-   branches land rather than after.
-4. **Train.** The bot pins each member's SHA (`refs/bot/<branch>`) and runs
-   `train.sh build` → `check` → `ci` → `watch` → `land`. Landing pushes to origin and lambdaclass
-   and never to a remote named `fork`.
-5. **Red train.** It bisects and ejects the culprit:
-   - a build conflict ejects the member that conflicted;
-   - another build failure, or a red check, bisects with that same step as the test;
-   - a red landing tier bisects with `--ci`.
-
-   The culprit is recorded at its SHA (`gates: fail`, with the reason), the event is notified, and
-   the bot retries with the rest. A culprit that is green on its own is still ejected, and the
-   event says it is an interaction. A new push of that branch makes it eligible again. A watch with
-   no verdict keeps the train in CI for the next tick. A moved main rebuilds the train. A failed
-   land, or a bisection that names no culprit, blocks the bot, and the block survives later ticks
-   until `bot.sh reset`.
-6. At most `BOT_MAX_TRAINS` (4) trains run per tick.
-
-**Safety.**
-
-- **One instance.** A kernel lock on every platform. The bot opens `lock.flock` on a file
-  descriptor and takes `flock(2)` on it, through `flock(1)` or, where that is missing (macOS),
-  Python's `fcntl.flock`. The lock belongs to the open file, so it lasts as long as the bot and is
-  released by the kernel on any exit, and nothing stale is ever left. A second instance exits 0.
-- **State in a file.** `<git-common-dir>/concrete-landing/bot/bot.env` holds the phase, the train
-  and the ejected heads. `events.tsv` beside it is the event log.
-- **Kill switch.** `touch ~/.concrete-bot-paused` stops the bot before its next stage:
-  - no tick starts;
-  - no train is checked and no CI is dispatched;
-  - a green train waits in CI without landing;
-  - bisection reads `LAND_PAUSE_FILE` before and after every operation of every probe (build,
-    test or check, dispatch, watch), whatever the operation returned, and once more before
-    attribution. A probe that sees the switch gives no verdict and nothing is attributed. A red
-    train in CI waits there;
-  - the rebase pass stops before the next branch, and a gated rebase is not pushed.
-
-  The switch is the file's presence, read between operations. Leave it until the bot has logged a
-  `paused` event (`bot.sh status`, or the notification): the instance holding the lock writes it
-  once per pause file, at the next stage it reaches. A file created and removed within one
-  operation is not seen. Remove it to
-  resume; the train is picked up where it stopped.
-- **Dry run.** `--dry-run` prints the ready list, the order and the train, and changes nothing on
-  the remotes or in the bot's state.
-- **main.** main is pushed only by `train.sh land`, as a fast-forward.
-- **Notification.** Every event calls `scripts/land/notify.sh <level> "landing bot: <event>" <message>` when that file
-  exists (`BOT_NOTIFY` overrides). A notifier that fails never stops the bot.
-
-**Running it.** The bot needs a **dedicated clone**, because it checks out trains there. The
-launcher that `scripts/land/install-bot.sh` writes runs the bot from an immutable snapshot of
-`scripts/land` at `BOT_SOURCE_REF` (default `origin/main`), so a checkout never rewrites the
-script while it runs. On the server, the remote leg runs locally (`run-at-ref.sh`), fetching the
-train SHA from the bot's clone. The bot also needs two credentials:
-
-- `gh` authentication, to dispatch CI;
-- write access to both repositories, to push main, `ci/*` and the notes.
-
-```sh
-scripts/land/install-bot.sh --ssh dev@<server> [--source-ref <ref>]
-# then, when the maintainers decide (install-bot.sh never enables it):
-sudo loginctl enable-linger dev                                   # once, as ubuntu
-systemctl --user daemon-reload && systemctl --user enable --now concrete-landing-bot.timer   # as dev
-```
-
-## Auto-rebase
-
-When main moves, every ready head that does not contain main is rebased onto it.
-
-- **Skip rules.** A head with activity in the last `BOT_ACTIVE_SECONDS` (600) is never rebased;
-  an agent may still be pushing to it. Activity is the latest of:
-  - the head's commit time;
-  - the time this clone first saw it (the remote-tracking reflog);
-  - the notes' `utc`.
-
-  A (head, main) pair is tried once. Branches outside `wip/` are never rewritten.
-- **Procedure.** The rebase runs in a scratch clone (`clone --local` of the bot's clone, with its
-  remotes and hook; not a worktree, because the pre-push hook refuses a linked worktree) and is never piped. After it, the bot
-  checks that no rebase or merge is still in progress. Then:
-  1. `scripts/gen/refresh_generated.sh` runs when the tree has it (branch `ledgers`), and its
-     result is committed.
-  2. The impact gates run over `main..new-head`.
-  3. The result is pushed to the same `wip/` branch with `--force-with-lease=<old head>`. If the
-     agent pushed meanwhile, the push is refused and the branch is left alone. An agent whose
-     branch was rebased resets its local branch to the new head before continuing.
-- **Notes.** The new head gets a gates note and the **carried** review verdict. The carried note
-  names the SHA that was reviewed (`carried-from:`). A carry happens only for a rebase without
-  conflicts; generated-view commits are the only new content.
-- **Conflict.** A real conflict aborts the rebase and is notified with the branch and the files.
-  The branch is not touched.
 
 ## Pipelining
 
@@ -492,13 +384,6 @@ The server was shared with other full runs at a load average of 15 to 32.
   gates and the remote set by hand in sequence, and each hand-off waited for someone to notice
   the previous result. The scripts remove that wait, and this table does not measure it.
 
-## Watching trains
-
-`scripts/status/status.py` renders the landing log, the `ci/*` runs in flight, both mains and the
-ready branches as one phone-friendly page. `scripts/land/notify.sh <level> <title> <body>` pushes
-a message to ntfy or Slack, falling back to stdout, and drops duplicates. Setup and the
-publishing decision are in docs/project/STATUS_PAGE.md.
-
 ## Configuration
 | variable | default | meaning |
 |---|---|---|
@@ -516,7 +401,6 @@ publishing decision are in docs/project/STATUS_PAGE.md.
 | `LAND_FULL_GATES_CMD` | `lake build && bash scripts/checks/run.sh` | the remote leg's command |
 | `LAND_REVIEW_CMD` | `scripts/review/review.sh` when present | the review leg's command (`--base --head` appended); with neither, `check` fails |
 | `LAND_PUSH_ATTEMPTS`, `LAND_PUSH_RETRY_SLEEP` | `3`, `15` | attempts and pause for a verified push |
-| `BOT_*` | see the header of `scripts/land/bot.sh` | the landing bot's state, pause file, prefix, intervals and limits |
 ## Tests
 
 `scripts/checks/landing_script.sh` runs in CI's build-free grammar job. It drives the real
@@ -547,29 +431,14 @@ script against a throwaway repository with bare-repo remotes and a fake `gh`. It
 - bisection;
 - the report.
 
-`scripts/checks/landing_bot.sh` runs in the same job. It drives the real bot, and `train.sh`
-under it, against a throwaway repository with bare-repo origin, lambdaclass and fork remotes. Its
-fake `gh` reports CI red exactly when the candidate contains `CIRED`, and its fake hook fails
-exactly when the checkout contains `BAD`. It covers:
+`scripts/checks/landing_ready.sh` runs in the same job. It drives the real `ready.sh` and
+`train.sh` against a throwaway repository with bare-repo remotes, a fake `gh`, a fake remote runner
+and a fake hook that fails exactly when the checkout contains `BAD`. It covers:
 
-- ready detection: a stale note, a `findings` verdict, a failed gate, `wip/land-*` and a branch
-  outside `wip/` are not ready;
-- ordering: explicit first (including `order: 0800`, above the old fixed keys), then a new E-code
-  under Check/Elab; reusing an existing code is not a rule change;
-- the dry run and the kill switch;
-- the lock: a live holder of the kernel lock stops a second instance, and its release lets the
-  next tick run;
-- the remote leg on a per-run `wip/land-*` ref that is gone afterwards (with a control that the
-  probe sees a planted ref), and an existing ref at the same SHA that is refused, not adopted;
-- a four-member train landing in order on both remotes, with fork untouched;
-- red-check and red-CI bisection that ejects exactly the culprit and lands the rest;
-- the kill switch stopping a bisection before it starts, during a halving probe, during the red
-  culprit probe, and between a `--ci` probe's check and its dispatch; a culprit-less bisection blocking the bot until `reset`;
-- resuming a train held in CI without a second dispatch, and reconciling a `dispatching` restart
-  with the run at the train's head; a failed lookup and an empty one within the grace period keep
-  the train dispatching;
+- the remote leg: an existing ref at the candidate's SHA is refused, not adopted; the runner runs
+  once, on a fresh `wip/land-*` ref, and only the run's own ref is deleted;
+- `bisect --ci`: a member whose CI is red is named, each probe dispatching its own run, and nothing
+  lands;
 - `ready.sh`: a failed review leg publishing `gates: fail` over an older clean verdict, and
   passing legs making a head ready;
-- the auto-rebase skip rules, a clean rebase with carried notes, and a conflict notified with its
-  files that leaves the branch and the clone untouched;
 - a static check that nothing under `scripts/land` force-pushes main.

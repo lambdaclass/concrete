@@ -465,12 +465,45 @@ review_cmd() {
 
 # REVIEW PROVENANCE (fail closed; docs/LANDING.md, "check" and "land"). A train is reviewed when its
 # head carries a clean review note, or when its head carries no review note and every member carries
-# one at its exact recorded SHA (each member was reviewed at its own head: the landing bot's trains,
-# and a train rebuilt from reviewed branches). Every note is judged by scripts/review/verify.sh, on
+# one at its exact recorded SHA (each member was reviewed at its own head: a train
+# built or rebuilt from reviewed branches). Every note is judged by scripts/review/verify.sh, on
 # $REMOTE's notes (fetched first, replacing the local copy, as verify.sh --fetch does): an absent,
 # malformed, blocked or findings note qualifies nothing, and a head note that is not clean is not
 # overridden by its members. Prints what qualified; on failure prints why and returns 1.
+#
+# OWNER SIGN-OFF (R-0618). A member without a clean note qualifies instead by a valid owner sign-off
+# at its exact SHA (scripts/land/signoff.sh verify --base <the train's base>, on $REMOTE's
+# refs/owner-signoff/*, fetched first): the member reached the review cap of its diff's class and all
+# three reviewers accepted that commit.
+# A sign-off approves that commit only, never what the train did with it, so a train with a signed-off
+# member must be exactly the clean merge of its members onto its base: one --no-ff merge per member,
+# in order, each merge's tree the conflict-free `git merge-tree --write-tree` of its two parents, and
+# nothing else (no resolved conflict, no regenerated view, no extra commit).
 VERIFY="$SELF_DIR/../review/verify.sh"
+SIGNOFF="$SELF_DIR/signoff.sh"
+
+# pure_merge BASE HEAD SHA... → empty when HEAD is BASE plus exactly one clean merge of each SHA, in
+# order; otherwise prints why.
+pure_merge() {
+  local base="$1" head="$2" cur="$2" i p t want; shift 2
+  local shas=("$@")
+  for ((i = ${#shas[@]} - 1; i >= 0; i--)); do
+    read -r -a p <<< "$(git rev-list --parents -n 1 "$cur")"
+    if [ "${#p[@]}" != 3 ] || [ "${p[2]}" != "${shas[i]}" ]; then
+      echo "${head:0:10} is not the clean merge of its members onto ${base:0:10}: ${cur:0:10} is not the merge of ${shas[i]:0:10}"; return 0
+    fi
+    # No pipe: a conflicted merge-tree exits 1 (after printing a tree), whether or not pipefail is set.
+    if ! t="$(git merge-tree --write-tree "${p[1]}" "${shas[i]}" 2>/dev/null)" || ! [[ "$t" =~ ^[0-9a-f]{40}$ ]]; then
+      echo "${head:0:10} is not the clean merge of its members onto ${base:0:10}: merging ${shas[i]:0:10} conflicts"; return 0
+    fi
+    want="$(git rev-parse "$cur^{tree}")"
+    if [ "$t" != "$want" ]; then
+      echo "${head:0:10} is not the clean merge of its members onto ${base:0:10}: ${cur:0:10} differs from the clean merge of ${shas[i]:0:10}"; return 0
+    fi
+    cur="${p[1]}"
+  done
+  [ "$cur" = "$base" ] || echo "${head:0:10} is not the clean merge of its members onto ${base:0:10}: the merges start at ${cur:0:10}"
+}
 review_provenance() { # name head
   local name="$1" head="$2" out m n=0 bad=""
   [ -f "$VERIFY" ] || { echo "no review verifier ($VERIFY is missing)"; return 1; }
@@ -480,12 +513,23 @@ review_provenance() { # name head
   if git notes --ref=refs/notes/concrete-review show "$head" >/dev/null 2>&1; then
     echo "the head's review note does not qualify: ${out//$'\n'/ }"; return 1
   fi
+  local signed=0 shas=() so impure
+  git fetch -q --prune "$REMOTE" "+refs/owner-signoff/*:refs/owner-signoff/*" 2>/dev/null \
+    || { echo "could not fetch refs/owner-signoff/* from $REMOTE"; return 1; }
   for m in $(state_get_soft "$name" members | tr ',' ' '); do
-    n=$((n + 1))
-    out="$(bash "$VERIFY" "${m##*@}" 2>&1)" || bad="$bad; member ${m%@*}: ${out//$'\n'/ }"
+    n=$((n + 1)); shas+=("${m##*@}")
+    out="$(bash "$VERIFY" "${m##*@}" 2>&1)" && continue
+    if so="$(bash "$SIGNOFF" verify "${m##*@}" --base "$(state_get_soft "$name" base)" 2>&1)"; then signed=$((signed + 1)); continue; fi
+    bad="$bad; member ${m%@*}: ${out//$'\n'/ }; ${so//$'\n'/ }"
   done
   [ "$n" -gt 0 ] || { echo "the head ${head:0:10} has no review note and the train records no members"; return 1; }
-  [ -z "$bad" ] || { echo "the head ${head:0:10} has no review note, and not every member has a clean one$bad"; return 1; }
+  [ -z "$bad" ] || { echo "the head ${head:0:10} has no review note, and not every member has a clean one or an owner sign-off$bad"; return 1; }
+  if [ "$signed" -gt 0 ]; then
+    impure="$(pure_merge "$(state_get_soft "$name" base)" "$head" "${shas[@]}")"
+    [ -z "$impure" ] || { echo "$signed member(s) signed off by the owner, but $impure"; return 1; }
+    echo "the head has no review note; every member ($n) carries a clean one or an owner sign-off ($signed) at its exact SHA, and the head is their clean merge"
+    return 0
+  fi
   echo "the head has no review note; every member ($n) carries a clean one at its exact SHA"
 }
 
@@ -1030,12 +1074,6 @@ cmd_land() {
 # result is recorded against that train's SHA. Attribution assumes one culprit; an interaction
 # between members shows up as a culprit that is green alone, and the report says to check it.
 
-# The landing bot's kill switch (LAND_PAUSE_FILE) is read before and after every operation of every
-# probe (each --ci probe checks and dispatches a run). A probe that sees it answers `paused`, never
-# green or red. The switch is a file that stays until the bot has acknowledged it: one created and
-# removed inside a single operation is not seen.
-bisect_paused() { [ -n "${LAND_PAUSE_FILE:-}" ] && [ -e "$LAND_PAUSE_FILE" ]; }
-
 subset_red() { # sub-name test-cmd|"" members...
   local sub="$1" test="$2"; shift 2
   local refs=() m
@@ -1047,27 +1085,19 @@ subset_red() { # sub-name test-cmd|"" members...
     git update-ref "refs/landing-bisect/$sub/$i" "${m##*@}"
     pinned+=("refs/landing-bisect/$sub/$i"); i=$((i+1))
   done
-  if bisect_paused; then echo paused; return 0; fi
   local brc=0
   "$SELF_DIR/train.sh" build "$sub" --force --no-fetch "${pinned[@]}" >/dev/null || brc=$?
-  if bisect_paused; then echo paused; return 0; fi
   if [ "$brc" != 0 ]; then echo build-failed; return 0; fi
   local rc=0
-  # The switch is read again after EVERY operation, whatever it returned: a probe that ran while
-  # the switch was pulled gives no verdict, so nothing is attributed from it.
   if [ -n "$test" ]; then
     bash -c "$test" >/dev/null 2>&1 || rc=$?
-    if bisect_paused; then echo paused; return 0; fi
   else
     "$SELF_DIR/train.sh" check "$sub" --no-remote >/dev/null 2>&1 || rc=$?
-    if bisect_paused; then echo paused; return 0; fi
     if [ "$rc" = 0 ]; then
       "$SELF_DIR/train.sh" ci "$sub" >/dev/null 2>&1 || rc=$?
-      if bisect_paused; then echo paused; return 0; fi
     fi
     if [ "$rc" = 0 ]; then
       "$SELF_DIR/train.sh" watch "$sub" >/dev/null 2>&1 || rc=$?
-      if bisect_paused; then echo paused; return 0; fi
     fi
   fi
   STAGE_T0="$(date +%s)"
@@ -1099,21 +1129,12 @@ cmd_bisect() {
     verdict="$(subset_red "$name-b$step" "$test" "${first[@]}")"
     note "step $step: first half [$(printf '%s ' "${first[@]%@*}")] -> $verdict"
     case "$verdict" in
-      paused) log_row "$name" bisect incomplete "paused ($LAND_PAUSE_FILE) at step $step"; die "bisect: paused by $LAND_PAUSE_FILE at step $step; no culprit attributed" ;;
       red|build-failed) list=("${first[@]}") ;;
       green) list=("${second[@]}") ;;
     esac
   done
   local culprit="${list[0]}"
   verdict="$(subset_red "$name-bc" "$test" "$culprit")"
-  if [ "$verdict" = paused ]; then
-    log_row "$name" bisect incomplete "paused ($LAND_PAUSE_FILE) during the culprit probe"
-    die "bisect: paused by $LAND_PAUSE_FILE while probing ${culprit%@*} alone; no culprit attributed"
-  fi
-  if bisect_paused; then
-    log_row "$name" bisect incomplete "paused ($LAND_PAUSE_FILE) before attribution"
-    die "bisect: paused by $LAND_PAUSE_FILE before attribution; no culprit attributed"
-  fi
   local rest=() ; for m in $(printf '%s\n' "${members//,/ }"); do [ "$m" = "$culprit" ] || rest+=("${m%@*}"); done
   STAGE_T0="$(date +%s)"
   state_set "$name" bisect_culprit "$culprit"
