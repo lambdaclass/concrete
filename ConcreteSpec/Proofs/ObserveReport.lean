@@ -120,6 +120,45 @@ example : ExecAdapter.WellFormed adapter permittingContract () blockingOracle �
   cases pending with
   | request previous => simp at empty
 
+/-- A concrete adapter resolving the decided project-relative path. -/
+def relativePathAdapter : ExecAdapter ops signature :=
+  { adapter with sites := Demo.sites }
+
+/-- Helper (computation). A concrete well-formedness witness, including a nonempty valid site
+table. This is not independent evidence about elaboration. (approved: PENDING) -/
+theorem relativePathWellFormed :
+    ExecAdapter.WellFormed relativePathAdapter permittingContract () blockingOracle := by
+  refine ⟨blockingWellFormed.internal, blockingWellFormed.answered,
+    blockingWellFormed.blocked, ?_⟩
+  intro site sp resolved
+  simp only [relativePathAdapter, Demo.sites, AList.lookup] at resolved
+  split at resolved
+  · cases resolved
+    decide
+  · cases resolved
+
+/-- Accepted: a reachable hosted trap projection uses the valid path. -/
+example : (relativePathAdapter.terminal? (.trapped .overflow Demo.site)) =
+    some (.trapped .overflow Demo.site Demo.sp (trapLine .overflow Demo.site Demo.sp)) := rfl
+
+/-- Refused: the missing-answer oracle violates a nonblocking environment contract, even though
+its request remains a valid pending request. -/
+example : ¬ ExecAdapter.WellFormed adapter forbiddingContract () blockingOracle := by
+  intro formed
+  exact formed.blocked (hist := [1]) (p := 3) (vs := []) (site := ⟨0⟩) (store := ())
+    (q := query 3) rfl rfl
+
+/-- Fuel-zero computation at an actual requesting configuration. The driver reports fuel
+exhaustion and the reporter fabricates no observation; this is a computation example, not an
+independent contract law. -/
+example : (Exec.runFrom program answeringOracle 0 [] (requesting 3)).ending =
+      .outOfFuel (requesting 3) ∧
+    reportObservation program adapter forbiddingContract ()
+      (Exec.runFrom program answeringOracle 0 [] (requesting 3))
+      (runFrom_blockingPermitted program adapter forbiddingContract () answeringOracle
+        (answeringWellFormed (fun _ _ _ => False)) (fuel := 0) (hist := [])
+        (c := requesting 3) .idle) = none := ⟨rfl, rfl⟩
+
 /-- An adapter fault resolves a trap to an absolute host path. -/
 def absolutePathAdapter : ExecAdapter ops signature :=
   { adapter with sites := [(⟨7⟩, ⟨"/tmp/main.con", 1, 1, by decide, by decide⟩)] }
