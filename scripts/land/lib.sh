@@ -80,27 +80,41 @@ dryland_only_move_gate() { # rc out
 # environment would otherwise pass a check that only compares the two.
 LAND_CANONICAL_REPO=lambdaclass/concrete
 # Every fetch URL and every push URL of <remote> (git pushes to remote.<r>.pushurl when one is set,
-# and to each of several) that is a GitHub URL must name LAND_CANONICAL_REPO, and then <repo>, the
-# repository gh reads, must be it too. A URL that is not GitHub (the test fixtures' bare
-# repositories) passes, and leaves <repo> free for a fake gh. Prints why and returns 1.
+# and to each of several; get-url applies url.*.insteadOf) that is a NETWORK URL must name
+# LAND_CANONICAL_REPO as its owner/name path, whatever the host: an ssh host alias
+# (git@github-lambdaclass:lambdaclass/concrete.git, used on the servers) is a network URL too, and
+# an alias for concrete2 must not pass as "not GitHub". When the remote has one, <repo>, the
+# repository gh reads, must be LAND_CANONICAL_REPO as well. A local path or file:// URL (the test
+# fixtures' bare repositories) passes and leaves <repo> free for a fake gh. Prints why, returns 1.
+land_url_path() { # url -> lowercased owner/name of a network URL; nothing for a local one
+  local u="$1" p
+  case "$u" in
+    file://*) return 0 ;;
+    *://*) p="${u#*://}"; case "$p" in */*) p="${p#*/}" ;; *) p="" ;; esac ;;
+    *:*) case "${u%%:*}" in */*) return 0 ;; esac; p="${u#*:}" ;;   # scp-like host:path (git's rule)
+    *) return 0 ;;
+  esac
+  while :; do case "$p" in /*) p="${p#/}" ;; *) break ;; esac; done
+  p="${p%/}"; p="${p%.git}"
+  printf '%s\n' "$p" | tr 'A-Z' 'a-z'
+}
 land_remote_bad() { # remote repo
-  local r="$1" want u path urls github=0
+  local r="$1" want u path urls net=0
   want="$(printf '%s' "$LAND_CANONICAL_REPO" | tr 'A-Z' 'a-z')"
   urls="$(git remote get-url --all "$r" 2>/dev/null)" || { echo "the remote '$r' is not configured"; return 1; }
   urls="$urls"$'\n'"$(git remote get-url --push --all "$r" 2>/dev/null)"
   while IFS= read -r u; do
-    case "$u" in
-      *github.com[:/]*)
-        github=1
-        path="${u#*github.com[:/]}"; path="${path%/}"; path="${path%.git}"
-        if [ "$(printf '%s' "$path" | tr 'A-Z' 'a-z')" != "$want" ]; then
-          echo "$r uses $u, not github.com/$LAND_CANONICAL_REPO: this clone points at another repository. Repoint it: git remote set-url $r https://github.com/$LAND_CANONICAL_REPO.git (and drop any other url or pushurl of $r)"
-          return 1
-        fi ;;
-    esac
+    [ -n "$u" ] || continue
+    path="$(land_url_path "$u")"
+    [ -n "$path" ] || case "$u" in file://*|/*|./*|../*) continue ;; *://*|*:*) path="?" ;; *) continue ;; esac
+    net=1
+    if [ "$path" != "$want" ]; then
+      echo "$r uses $u, not $LAND_CANONICAL_REPO: this clone points at another repository. Repoint it: git remote set-url $r https://github.com/$LAND_CANONICAL_REPO.git (and drop any other url or pushurl of $r)"
+      return 1
+    fi
   done <<< "$urls"
-  if [ "$github" = 1 ] && [ "$(printf '%s' "$2" | tr 'A-Z' 'a-z')" != "$want" ]; then
-    echo "LAND_REPO is '$2' but $r is github.com/$LAND_CANONICAL_REPO: gh would read another repository. Set LAND_REPO=$LAND_CANONICAL_REPO or unset it"
+  if [ "$net" = 1 ] && [ "$(printf '%s' "$2" | tr 'A-Z' 'a-z')" != "$want" ]; then
+    echo "LAND_REPO is '$2' but $r is $LAND_CANONICAL_REPO: gh would read another repository. Set LAND_REPO=$LAND_CANONICAL_REPO or unset it"
     return 1
   fi
   return 0

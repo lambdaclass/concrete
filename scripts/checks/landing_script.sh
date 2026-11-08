@@ -147,6 +147,7 @@ git remote add gh-stale https://github.com/unbalancedparentheses/concrete2.git
 git remote add gh-push "$TMP/origin.git"
 git remote set-url --push gh-push https://github.com/unbalancedparentheses/concrete2.git
 git remote add gh-canon https://github.com/lambdaclass/concrete.git
+git remote add gh-alias git@github-old:unbalancedparentheses/concrete2.git
 
 # --- the toy repository: a ledger, a corpus map, a generated block, a generated file ---------------
 mkdir -p scripts/gen scripts/tests docs/project src Concrete
@@ -627,6 +628,33 @@ out="$(LAND_REMOTE=gh-stale bash "$TRAIN" check t1 2>&1)"; rc=$?
 out="$(LAND_REMOTE=gh-stale LAND_REPO=unbalancedparentheses/concrete2 bash "$TRAIN" land t1 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "points at another repository" && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$BASE" ] \
   && ok "land refuses an old origin even when LAND_REPO still names the old repository" || no "land accepted an old origin with an old LAND_REPO (exit $rc)"
+out="$(LAND_REMOTE=gh-alias bash "$TRAIN" land t1 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "points at another repository" && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$BASE" ] \
+  && ok "land refuses an ssh host alias for another repository (the host is not what is checked)" || no "land accepted an ssh alias for concrete2 (exit $rc)"
+# The URL table, read through the same function: every network form of the one repository passes,
+# every network form of another fails, local paths pass and leave LAND_REPO free.
+url_ok=1
+while read -r want url repo; do
+  git remote add url-probe "$url"
+  ( . "$ROOT_DIR/scripts/land/lib.sh"; land_remote_bad url-probe "$repo" >/dev/null ); got=$?
+  git remote remove url-probe
+  [ "$got" = "$want" ] || { url_ok=0; echo "      $url (LAND_REPO=$repo): exit $got, want $want"; }
+done <<'URLS'
+0 https://github.com/lambdaclass/concrete.git lambdaclass/concrete
+0 https://GitHub.com/LambdaClass/Concrete/ lambdaclass/concrete
+0 git@github.com:lambdaclass/concrete.git lambdaclass/concrete
+0 git@github-lambdaclass:lambdaclass/concrete.git lambdaclass/concrete
+0 ssh://git@github.com/lambdaclass/concrete.git lambdaclass/concrete
+0 ssh://git@github.com:22/lambdaclass/concrete.git lambdaclass/concrete
+0 /tmp/x.git test/repo
+0 file:///tmp/x.git test/repo
+1 git@github-lambdaclass:lambdaclass/concrete.git test/repo
+1 git@github-old:unbalancedparentheses/concrete2.git lambdaclass/concrete
+1 ssh://git@github.com:22/unbalancedparentheses/concrete2.git lambdaclass/concrete
+1 https://github.com/unbalancedparentheses/concrete2.git unbalancedparentheses/concrete2
+1 ssh://host lambdaclass/concrete
+URLS
+[ "$url_ok" = 1 ] && ok "the one-repository guard reads the owner/name path of every network URL form" || no "the one-repository guard misjudged a URL form"
 out="$(LAND_REMOTE=gh-canon bash "$TRAIN" ci t1 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "gh would read another repository" && ok "ci refuses a LAND_REPO that is not the one repository the remote names" || no "ci accepted LAND_REPO=test/repo on the canonical remote (exit $rc)"
 out="$(LAND_REMOTE=gh-stale bash "$TRAIN" --dry-run build tstale --no-fetch b1 2>&1)"; rc=$?
