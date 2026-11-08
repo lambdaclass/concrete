@@ -147,6 +147,50 @@ theorem runFromQ_interleaved_site (fuel : Nat) (events : List O.Event)
   rw [validRun j q' hq', ← site, occurrenceAt_take_interval _ _ hij,
     ← validRun i q hq]
 
+/-- Helper (arithmetic). An interval containing its first query and no further query at that
+site contributes exactly one to the prefix count (approved: PENDING). -/
+theorem occurrenceAt_take_no_other (qs : List (Query O)) {i j : Nat} {q : Query O}
+    (hq : qs[i]? = some q)
+    (separate : ∀ k r, i < k → k < j → qs[k]? = some r → r.site ≠ q.site) :
+    ∀ n, i < n → n ≤ j →
+      occurrenceAt (qs.take n) q.site = occurrenceAt (qs.take i) q.site + 1 := by
+  intro n
+  induction n with
+  | zero => intro h; omega
+  | succ n ih =>
+    intro hin hnj
+    rw [List.take_add_one]
+    by_cases hi : i = n
+    · subst n
+      rw [hq]
+      simp only [Option.toList_some]
+      rw [issue_next_occurrence]
+      simp
+    · have hin' : i < n := by omega
+      cases hn : qs[n]? with
+      | none => simpa only [Option.toList_none, List.append_nil] using ih hin' (by omega)
+      | some r =>
+        simp only [Option.toList_some]
+        rw [issue_next_occurrence]
+        have ne := separate n r hin' (by omega) hn
+        simp [ne, ih hin' (by omega)]
+
+/-- Helper (arithmetic). Two requests to the same site separated only by other sites differ
+by exactly one occurrence, regardless of silent machine work or unrelated queries
+(approved: PENDING). -/
+theorem runFromQ_interleaved_other_sites (fuel : Nat) (events : List O.Event)
+    (issued : List (Query O)) (c : Config O) (valid : QueryHistoryValid issued)
+    {i j : Nat} {q q' : Query O} (hij : i < j)
+    (hq : (runFromQ P ρ fuel events issued c).queries[i]? = some q)
+    (hq' : (runFromQ P ρ fuel events issued c).queries[j]? = some q')
+    (site : q.site = q'.site)
+    (separate : ∀ k r, i < k → k < j →
+      (runFromQ P ρ fuel events issued c).queries[k]? = some r → r.site ≠ q.site) :
+    q'.occurrence = q.occurrence + 1 := by
+  have history := runFromQ_queryHistoryValid (P := P) (ρ := ρ) fuel events issued c valid
+  rw [history j q' hq', ← site, occurrenceAt_take_no_other _ hq separate j hij (Nat.le_refl j),
+    ← history i q hq]
+
 /-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than independent execution evidence (approved: PENDING).
 **Repeated requests at one site advance their occurrences.** These are consecutive queries in
 the actual run history; arbitrarily many silent machine transitions may separate the requests. -/
@@ -1898,22 +1942,22 @@ example : RequestResolution prog env.toQueryOracle 0 ⟨terminalConfig, [], []�
   (fuel := 0) (events := []) (issued := []) (c := terminalConfig) (p := .log) (vs := [1])
   (site := s) (st := .init) (k := terminalK) rfl terminalRequest
 
-/-- A mutation substitutes the demo's successful oracle answer for the supplied oracle's answer.
-It also demonstrates that a query to the wrong history cannot be justified by transition inversion. -/
-def substitutedAnswerRun (O : Operands) (P : Program O) (ρ : QueryOracle O) (fuel : Nat)
+/-- A mutation fabricates successful termination after an unanswered request.
+This tests report soundness separately from the wrong-history oracle mutation. -/
+def fabricatedFinalRun (O : Operands) (P : Program O) (ρ : QueryOracle O) (fuel : Nat)
     (events : List O.Event) (issued : List (Query O)) (c : Config O) : QueryReport O :=
   { runFromQ P ρ fuel events issued c with ending := .final .normal }
 
 /-- Planted (law `runFromQ_request_correspondence`, case `terminalConfig`,
-subject `runFromQ`, mutant `substitutedAnswerRun`). The issuance premises remain true. -/
+subject `runFromQ`, mutant `fabricatedFinalRun`). The issuance premises remain true. -/
 example : terminalConfig.final? = none ∧
     step prog terminalConfig = some (.request .log [1] s .init terminalK) ∧
     ¬ RequestResolution prog noAnswerOracle 0 ⟨terminalConfig, [], []⟩ .log [1] s .init terminalK
-      (substitutedAnswerRun ops prog noAnswerOracle 1 [] [] terminalConfig) := by
+      (fabricatedFinalRun ops prog noAnswerOracle 1 [] [] terminalConfig) := by
   refine ⟨rfl, terminalRequest, ?_⟩
-  generalize he : substitutedAnswerRun ops prog noAnswerOracle 1 [] [] terminalConfig = report
+  generalize he : fabricatedFinalRun ops prog noAnswerOracle 1 [] [] terminalConfig = report
   intro h
-  cases h <;> simp_all [answer, noAnswerOracle, substitutedAnswerRun, terminalConfig]
+  cases h <;> simp_all [answer, noAnswerOracle, fabricatedFinalRun, terminalConfig]
 
 /-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
 Finite projected histories of the erasing execution. -/
@@ -2149,13 +2193,13 @@ theorem unanswered_no_move {pos : Position ops} :
   | prim _ ha _ _ => simp [answer, noAnswerOracle] at ha
 
 /-- Planted (law `runFromQ_sound`, case `terminalConfig`,
-subject `runFromQ`, mutant `substitutedAnswerRun`). -/
+subject `runFromQ`, mutant `fabricatedFinalRun`). -/
 example : ¬ (∃ n pos, Moves prog noAnswerOracle n ⟨terminalConfig, [], []⟩ pos ∧
-    (substitutedAnswerRun ops prog noAnswerOracle 1 [] [] terminalConfig).events = pos.events ∧
+    (fabricatedFinalRun ops prog noAnswerOracle 1 [] [] terminalConfig).events = pos.events ∧
     ∃ hc : Conclusion prog noAnswerOracle
-        (substitutedAnswerRun ops prog noAnswerOracle 1 [] [] terminalConfig).ending pos,
+        (fabricatedFinalRun ops prog noAnswerOracle 1 [] [] terminalConfig).ending pos,
       ReportedQueries prog noAnswerOracle hc
-        (substitutedAnswerRun ops prog noAnswerOracle 1 [] [] terminalConfig).queries) := by
+        (fabricatedFinalRun ops prog noAnswerOracle 1 [] [] terminalConfig).queries) := by
   rintro ⟨n, pos, path, _, hc, _⟩
   cases path with
   | refl => cases hc with | final hf => cases hf
@@ -2217,6 +2261,27 @@ example : terminatingDomain.calls env [] .init ∧
   refine ⟨⟨rfl, rfl, rfl⟩, by decide, ?_⟩
   rintro ⟨fn, c, f, _, _, h⟩
   simp [earlyStopRun] at h
+
+/-- The no-intervening-same-site specialization is exercised by the same three-query run. -/
+example : thirdQuery.occurrence = interleavedQuery0.occurrence + 1 :=
+  runFromQ_interleaved_other_sites (O := ops) (P := prog) (ρ := env.toQueryOracle)
+    7 [] [] threeRequestConfig QueryHistoryValid.nil (i := 0) (j := 2)
+    (q := interleavedQuery0) (q' := thirdQuery) (by decide) rfl rfl rfl (by
+      intro k r hik hkj hkr
+      have hk : k = 1 := by omega
+      subst k
+      have hr : some interleavedQuery1 = some r := hkr
+      cases hr
+      decide)
+
+/-- A reconstruction mutation skips every second transition. Its state sequence cannot satisfy
+fuel-prefix compatibility: already its one-step prefix claims the wrong configuration. -/
+example : ¬ (∀ n, runQ prog env n eventConfig =
+    ⟨(eventPosition (2 * n)).events, (eventPosition (2 * n)).queries,
+      .outOfFuel (eventPosition (2 * n)).config⟩) := by
+  intro h
+  have wrong := congrArg QueryReport.ending (h 1)
+  cases wrong
 
 end Demo
 
