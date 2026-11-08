@@ -57,6 +57,7 @@ structure Loan where
   parent : Option LoanId
   ancestors : List LoanId
   activation : Nat
+  pendingArgument : Bool := false
   deriving DecidableEq, Repr
 
 structure Activation where
@@ -105,7 +106,7 @@ def WellFormed (s : State) : Prop :=
   (∀ l ∈ s.loans,
     l.id.id < s.nextLoan ∧ l.activation < s.nextActivation ∧
     (∃ x ∈ s.slots, x.place = l.root ∧ x.status = .owned) ∧
-    ParentValid s l) ∧
+    ParentValid s l ∧ (l.pendingArgument = true → l.parent.isSome = true)) ∧
   (∀ a ∈ s.loans, ∀ b ∈ s.loans, Compatible a b)
 
 instance (s : State) : Decidable (WellFormed s) := by
@@ -124,7 +125,7 @@ def ownerAccess (s : State) (p : Hybrid.Place) (m : Mode) : Bool :=
 /-- Access through a loan ignores its suspended ancestors. A conflicting child suspends access
 through the parent until it ends; unrelated accesses still obey whole-root exclusion (Q3.2, Q3.4). -/
 def loanAccess (s : State) (i : LoanId) (m : Mode) : Bool :=
-  (loan s i).any fun a => (m == .shared || a.mode == .mutable) &&
+  (loan s i).any fun a => !a.pendingArgument && (m == .shared || a.mode == .mutable) &&
     s.loans.all (fun b => b.id == i || decide (b.id ∈ a.ancestors) || b.root != a.root ||
       (m == .shared && b.mode == .shared))
 
@@ -152,7 +153,7 @@ def borrow (s : State) (p : Hybrid.Place) (path : List Projection) (m : Mode) :
   if ownerAccess s p m then
     validate { s with
       nextLoan := s.nextLoan + 1
-      loans := ⟨⟨s.nextLoan⟩, p, path, m, none, [], f.id⟩ :: s.loans }
+      loans := ⟨⟨s.nextLoan⟩, p, path, m, none, [], f.id, false⟩ :: s.loans }
   else none
 
 /-- Reborrow appends a projection, never changes the original root and never upgrades shared.
@@ -164,7 +165,7 @@ def reborrowAt (s : State) (i : LoanId) (suffix : List Projection) (m : Mode)
     validate { s with
       nextLoan := s.nextLoan + 1
       loans := ⟨⟨s.nextLoan⟩, a.root, a.path ++ suffix, m, some i,
-        i :: a.ancestors, activation⟩ :: s.loans }
+        i :: a.ancestors, activation, false⟩ :: s.loans }
   else none
 
 def reborrow (s : State) (i : LoanId) (suffix : List Projection) (m : Mode) :
@@ -225,12 +226,14 @@ def endLocals (activation : Nat) (s : State) : Option State :=
   (s.loans.filter (·.activation == activation)).foldlM (fun s l => endLoan s l.id) s
 
 /-- Leave consumes no resource implicitly: all remaining local owners must be Copy or moved.
-Local loans end before local roots are removed. -/
+Local loans end before local roots are removed. Every slot of the departing activation must
+be gone, including any slot an incomplete locals table failed to name. -/
 def leave (s : State) : Option State := do
   let f ← s.frames.head?
   let s ← endLocals f.id s
   let s ← drop (List.map Prod.fst f.locals) s
-  validate { s with frames := s.frames.tail }
+  if s.slots.any (·.activation == f.id) then none else
+    validate { s with frames := s.frames.tail }
 
 /-- Downward-only lending: each parameter gets a new child loan. Views never become owner slots,
 so cannot be returned/stored/moved by the owner operations. This standalone call-boundary transition supports the preservation laws. C1 uses `callLife`
@@ -257,11 +260,11 @@ callee activation; do not reborrow again or move the caller's original view. -/
 def adoptDown (s : State) (args : List (Var × LoanId)) : Option State := do
   let f ← s.frames.head?
   if (args.map Prod.fst).Nodup ∧ (args.map Prod.snd).Nodup ∧
-      (∀ e ∈ args, ∃ l ∈ s.loans, l.id = e.2) ∧
+      (∀ e ∈ args, ∃ l ∈ s.loans, l.id = e.2 ∧ l.pendingArgument = true) ∧
       (∀ e ∈ args, AList.lookup f.locals e.1 = none) then
     validate { s with
       loans := s.loans.map fun l =>
-        if l.id ∈ args.map Prod.snd then { l with activation := f.id } else l
+        if l.id ∈ args.map Prod.snd then { l with activation := f.id, pendingArgument := false } else l
       frames := { f with views := args ++ f.views } :: s.frames.tail }
   else none
 
@@ -278,6 +281,8 @@ loan; a mutable view's first lending freezes it immediately. -/
 def passDown (s : CallState) (source : LoanId) (parameter : Var) : Option CallState := do
   let l ← loan s.own source
   let own ← reborrow s.own source [] l.mode
+  let own ← validate { own with loans := own.loans.map fun l =>
+    if l.id.id = s.own.nextLoan then { l with pendingArgument := true } else l }
   pure ⟨own, s.pending ++ [(parameter, ⟨s.own.nextLoan⟩)]⟩
 
 /-- A C1 lifecycle adapter for mixed owning/view parameters. Owning parameters use descriptors;
@@ -486,6 +491,17 @@ example : (match (runBody
             (.cond (.endLoan ⟨0⟩) .skip .skip ⟨0⟩) ⟨0⟩) ⟨0⟩) ⟨0⟩) ⟨0⟩)).ending with
     | .final .normal => true
     | _ => false) = true := by decide
+
+/-- Refused: an existing owner loan or reborrow is not a pending argument child and cannot
+be adopted into a callee, even when all supplied loan identities exist. -/
+example : (do
+    let s ← enter types [] exclusive
+    adoptDown s [(y, ⟨0⟩)]) = none := by decide
+example : (do
+    let s ← enter types [] child
+    adoptDown s [(y, ⟨1⟩)]) = none := by decide
+/-- Refused: even an incomplete locals table cannot hide an activation's linear obligation. -/
+example : leave { initial with frames := [⟨0, [], []⟩] } = none := by decide
 
 /-- The following C1 instance exercises actual calls with downward view parameters. -/
 inductive CE where

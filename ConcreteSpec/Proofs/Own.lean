@@ -137,7 +137,9 @@ theorem leave_preserves (s t : State) (h : leave s = some t) : WellFormed t := b
   obtain ⟨f, _, hh⟩ := Option.bind_eq_some_iff.mp h
   obtain ⟨u, _, hh⟩ := Option.bind_eq_some_iff.mp hh
   obtain ⟨v, _, hh⟩ := Option.bind_eq_some_iff.mp hh
-  exact validate_wf hh
+  split at hh
+  · contradiction
+  · exact validate_wf hh
 
 theorem enterDown_preserves (s t : State) (args : List (Var × LoanId))
     (h : enterDown s args = some t) : WellFormed t := by
@@ -219,10 +221,11 @@ theorem adoptDown_preserves (s t : State) (args : List (Var × LoanId))
 theorem passDown_preserves (s t : CallState) (i : LoanId) (parameter : Var)
     (h : passDown s i parameter = some t) : WellFormed t.own := by
   unfold passDown at h
-  obtain ⟨a, _, hh⟩ := Option.bind_eq_some_iff.mp h
+  obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp h
+  obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp hh
   obtain ⟨own, ho, hh⟩ := Option.bind_eq_some_iff.mp hh
   cases hh
-  exact reborrow_preserves s.own own i [] a.mode ho
+  exact validate_wf ho
 
 /-- C1's actual call/lifecycle callback preserves ownership, for both owner and view parameters. -/
 theorem callLife_preserves (types : Var → Option Descriptor) (e : Exec.Life)
@@ -416,6 +419,9 @@ theorem leave_no_local_loan (s t : State) (f : Activation)
   obtain ⟨u, hu, hh⟩ := Option.bind_eq_some_iff.mp h
   have hframes := fold_frames _ (fun s l t hh => endLoan_frames s t l.id hh) _ s u hu
   obtain ⟨v, hv, hh⟩ := Option.bind_eq_some_iff.mp hh
+  split at hh
+  · contradiction
+  rename_i _
   obtain ⟨heq, _⟩ := (validate_iff _ _).mp hh
   have hp : entry.2 ∈ List.map Prod.snd (f.locals.filter fun e =>
       decide (e.1 ∈ List.map Prod.fst f.locals)) := by
