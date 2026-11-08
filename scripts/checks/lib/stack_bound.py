@@ -16,7 +16,8 @@ internal callee's own bound and the depth at which each external function (libc'
 `_exit`, `abort`) is entered; the external functions' own use is outside it (a premise, listed),
 and so is that `_exit` and `abort` do not return (a path ends at a call to one).
 
-Fail closed: any instruction that writes the stack pointer in a way not modelled here, an indirect
+Fail closed: an instruction outside the modelled set (X86_PLAIN, A64_PLAIN and the control
+transfers), any instruction that writes the stack pointer in a way not modelled here, an indirect
 branch or call, a branch leaving its function, two different depths at one address, a return at a
 nonzero depth, recursion, or a call to a function that is neither Concrete-owned nor a PLT/stub
 symbol is an error (exit 1), never a bound.
@@ -163,8 +164,6 @@ def a64_access(mn, ops, d, fp):
         if parts[0] == "x29":
             if fp is None:
                 raise Refuse(f"frame-relative address with an unknown frame pointer: {mn} {ops}")
-            if re.search(r"\[x29[^\]]*\]!", ops):
-                raise Refuse(f"writeback on the frame pointer: {mn} {ops}")
             depth = fp - k
         else:
             depth = d - k
@@ -185,6 +184,8 @@ def a64_step(mn, ops, d, fp):
     """New (d, fp) after a non-control AArch64 instruction."""
     args = [a.strip() for a in re.split(r",(?![^\[]*\])", ops)] if ops else []
     dst = args[0] if args else ""
+    if re.search(r"\[x29\],|\[x29[^\]]*\]!", ops):
+        raise Refuse(f"writeback on the frame pointer: {mn} {ops}")
     m = SPWB_PRE.search(ops)
     if m:
         d = d - (imm(m.group(1)) if m.group(1) else 0)
@@ -220,6 +221,22 @@ def a64_step(mn, ops, d, fp):
 
 X86_JCC = re.compile(r"^j(?!mp$)[a-z]+$")
 A64_COND = re.compile(r"^b\.[a-z]+$")
+
+# The data-processing instructions whose only effect on the stack is what x86_access/x86_step and
+# a64_access/a64_step model (memory operands, and writes to the stack or frame pointer). Any other
+# instruction on a reachable path is refused: an unknown one may move the stack pointer or
+# transfer control (x86 `loop`, a `rep` prefix), so the analysis never treats it as a fallthrough.
+X86_PLAIN = re.compile(
+    r"^(mov|movabs|movzx|movsx|movsxd|lea|add|sub|adc|sbb|imul|mul|and|or|xor|not|neg|inc|dec"
+    r"|cmp|test|shl|shr|sar|sal|rol|ror|cdq|cqo|cdqe|cwde|cbw|cwd|nop|endbr64"
+    r"|push|pop|leave|set[a-z]+|cmov[a-z]+)$")
+A64_PLAIN = re.compile(
+    r"^(mov|movz|movk|movn|add|adds|sub|subs|neg|negs|mul|madd|msub|mneg|smull|umull|smulh|umulh"
+    r"|smaddl|umaddl|sdiv|udiv|and|ands|orr|orn|eor|eon|bic|bics|mvn|lsl|lsr|asr|ror|lslv|lsrv"
+    r"|asrv|cmp|cmn|tst|ccmp|ccmn|cset|csetm|csel|csinc|csinv|csneg|cinc|cneg|sxtb|sxth|sxtw"
+    r"|uxtb|uxth|ubfx|sbfx|ubfm|sbfm|bfi|bfxil|extr|adr|adrp|nop"
+    r"|ldr|ldrb|ldrh|ldrsb|ldrsh|ldrsw|ldur|ldurb|ldurh|ldursb|ldursh|ldursw"
+    r"|str|strb|strh|stur|sturb|sturh|ldp|stp|ldpsw)$")
 
 
 def control(mn, ops):
@@ -261,6 +278,7 @@ def analyse(funcs, stubs):
     ret_push = 8 if ARCH == "x86_64" else 0
     step = x86_step if ARCH == "x86_64" else a64_step
     access = x86_access if ARCH == "x86_64" else a64_access
+    plain = X86_PLAIN if ARCH == "x86_64" else A64_PLAIN
 
     def add_ext(ext, sub, base):
         for name, depth in sub.items():
@@ -291,6 +309,8 @@ def analyse(funcs, stubs):
                 seen[addr] = (d, fp)
                 kind, arg = control(mn, ops)
                 if kind is None:
+                    if not plain.match(mn):
+                        raise Refuse(f"{key}+{addr:#x}: unmodelled instruction: {mn} {ops}")
                     touched = access(mn, ops, d, fp)
                     if touched is not None:
                         deepest = max(deepest, touched)

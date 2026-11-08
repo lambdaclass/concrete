@@ -8,17 +8,18 @@
 #     a limit is always allowed; a limit already below the requested one is kept. Lake reserves
 #     far more address space than it uses (a cold `lake build` fails to create threads under
 #     32 GiB), so gates pass 64 here and bound the executables under test tightly, through
-#     lib/limited_exec.sh. The address-space cap is the SOFT limit: it binds every process, and
-#     only limited_exec.sh 0 (a sanitizer build, whose shadow reservation needs terabytes of
-#     address space; slice0_artifacts.sh) raises it back to the hard limit for one executable.
+#     lib/limited_exec.sh. MEM_GB 0 sets no address-space cap for the gate itself: only for a gate
+#     whose executables under test need an unbounded reservation (a sanitizer build's shadow
+#     memory; slice0_artifacts.sh), which then caps every other command it starts through
+#     lib/limited_exec.sh. The caps are hard limits: no descendant can raise them.
 #
 # Per-command time bounds are separate: bounded_run (lib/bounded.sh) for executables under test,
 # `timeout -k` for builds.
 gate_limits() {
   local mem_kb=$(($1 * 1024 * 1024)) nproc=$2 cur
-  if [ "$(uname -s)" = Linux ]; then
-    cur=$(ulimit -S -v)
-    if [ "$cur" = unlimited ] || [ "$cur" -gt "$mem_kb" ]; then ulimit -S -v "$mem_kb"; fi
+  if [ "$(uname -s)" = Linux ] && [ "$mem_kb" -gt 0 ]; then
+    cur=$(ulimit -v)
+    if [ "$cur" = unlimited ] || [ "$cur" -gt "$mem_kb" ]; then ulimit -v "$mem_kb"; fi
   fi
   cur=$(ulimit -u)
   if [ "$cur" = unlimited ] || [ "$cur" -gt "$nproc" ]; then ulimit -u "$nproc"; fi

@@ -7,7 +7,7 @@
 #     come from clang's C front end, so on IR only its runtime is linked) must
 #     give the same observation as the BIR semantics (status, exact fd-2 bytes, empty fd 1), so no
 #     sanitizer report. Its memory is bounded by ASan's hard_rss_limit_mb (the shadow reservation
-#     rules out an address-space cap). Control: a body with an out-of-bounds load must be reported.
+#     rules out an address-space cap; every other command is capped, see SLICE0_GATE_MEM_GB). Control: a body with an out-of-bounds load must be reported.
 # 11. Binary size (report-only, never fails on a size): bytes and text size of each executable,
 #     per backend and target, in REPORT/sizes.tsv.
 # 12. Stack bound: lib/stack_bound.py derives, from the linked executable's disassembly, a bound on
@@ -17,17 +17,21 @@
 #     Linux, a run under gdb (lib/stack_measure.py) must stay within it (the run measures the
 #     stack pointer only). REPORT/stack.tsv. Controls: the analysis must refuse an unmodelled
 #     stack-pointer write, an indirect call, recursion, a call to an unknown function, two depths
-#     meeting, a stack pointer used as a value and an indexed stack address, and give the
+#     meeting, a stack pointer used as a value, an indexed stack address, an unmodelled
+#     instruction (x86 `loop`) and frame-pointer writeback (AArch64), and give the
 #     expected bound on a known function and on a red-zone store; the comparison must reject a
 #     measurement above the bound.
 #
 # usage: slice0_artifacts.sh [REPORT_DIR]. Run inside the nix devshell, from the repository root.
 set -euo pipefail
 report=${1:-}
+# The sanitizer executions need an unbounded address-space reservation, so the gate sets no cap of
+# its own and caps every other command it starts (`capped`, and limited_exec.sh for executables).
+SLICE0_GATE_MEM_GB=0
 # shellcheck source=scripts/checks/lib/slice0_common.sh
 source scripts/checks/lib/slice0_common.sh
 : "${CONCRETE_SLICE0_LLVM:?run inside nix develop}"
-objdump=("$CONCRETE_SLICE0_LLVM/llvm-objdump" -d --no-show-raw-insn)
+objdump=("${capped[@]}" "$CONCRETE_SLICE0_LLVM/llvm-objdump" -d --no-show-raw-insn)
 case "$target" in
   x86_64-linux) arch=x86_64; objdump+=(--x86-asm-syntax=intel) ;;
   aarch64-*) arch=aarch64 ;;
@@ -45,36 +49,45 @@ printf 'example\tbackend\ttarget\tbound\tmeasured\texternals\n' >"$stack"
 asan=abort_on_error=0:symbolize=0
 [ "$(uname -s)" != Linux ] || asan="$asan:hard_rss_limit_mb=1024:detect_leaks=1"
 san_env=("ASAN_OPTIONS=$asan" UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=0:symbolize=0)
-analyse=(timeout -k 10 60 python3 -I "$root/scripts/checks/lib/stack_bound.py" "$arch")
+# stack_bound ARCH DISASM [--ranges]: the analysis, capped and bounded in time.
+stack_bound() { "${capped[@]}" timeout -k 10 60 python3 -I "$root/scripts/checks/lib/stack_bound.py" "$@"; }
 fail=0
 examples=0
+last_exe= last_analysis=
 
 # within MEASURED BOUND: the run stayed within the static bound (and actually ran).
 within() { [ "$1" -gt 0 ] && [ "$1" -le "$2" ]; }
 
+# measure EXE ANALYSIS EXPECT: the gdb run check's output (`measured N` or `error ...`), given the
+# analysis output (its `range` lines) and the expected exit status.
+measure() {
+  local ranges main
+  ranges=$(awk '$1 == "range" {printf "%s%s:%s", sep, $3, $4; sep=","}' <<<"$2")
+  main=$(awk '$1 == "range" && $2 == "main" {print $3}' <<<"$2")
+  STACK_RANGES=$ranges STACK_MAIN=$main STACK_EXPECT=$3 \
+    "${capped[@]}" timeout -k 10 300 "$gdb" -batch -nx -x "$root/scripts/checks/lib/stack_measure.py" \
+    "$1" 2>"$1.gdb.err" | awk '$1 == "measured" || $1 == "error" {print}' || true
+}
+
 # stack_check NAME BACKEND EXE: derive the bound, measure a run where supported, record both.
 stack_check() {
-  local name=$1 backend=$2 exe=$3 dis="$3.dis" out bound ext measured=not-run
+  local name=$1 backend=$2 exe=$3 dis="$3.dis" out bound ext m measured=not-run
   if ! timeout -k 10 60 "${objdump[@]}" "$exe" >"$dis" 2>"$dis.err"; then
     echo "FAIL $name [$backend] stack: disassembly failed: $(head -c 300 "$dis.err")"; fail=1; return
   fi
-  if ! out=$("${analyse[@]}" "$dis" --ranges); then
+  if ! out=$(stack_bound "$arch" "$dis" --ranges); then
     echo "FAIL $name [$backend] stack: $out"; fail=1; return
   fi
   bound=$(awk '$1 == "bound" {print $2}' <<<"$out")
   ext=$(awk '$1 == "external" {printf "%s%s@%s", sep, $2, $3; sep=","}' <<<"$out")
   if [ -n "$gdb" ]; then
-    local ranges main m
-    ranges=$(awk '$1 == "range" {printf "%s%s:%s", sep, $3, $4; sep=","}' <<<"$out")
-    main=$(awk '$1 == "range" && $2 == "main" {print $3}' <<<"$out")
-    m=$(STACK_RANGES=$ranges STACK_MAIN=$main timeout -k 10 300 \
-      "$gdb" -batch -nx -x "$root/scripts/checks/lib/stack_measure.py" "$exe" 2>"$exe.gdb.err" |
-      awk '$1 == "measured" || $1 == "error" {print}') || true
+    m=$(measure "$exe" "$out" "$(cat "$(dirname "$exe")/status")")
     measured=$(awk '$1 == "measured" {print $2}' <<<"$m")
     if [ -z "$measured" ] || ! within "$measured" "$bound"; then
       echo "FAIL $name [$backend] stack: bound $bound, run: ${m:-no measurement} $(head -c 300 "$exe.gdb.err")"
-      fail=1
+      fail=1; return
     fi
+    last_exe=$exe last_analysis=$out
   fi
   printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$name" "$backend" "$target" "$bound" "$measured" "$ext" >>"$stack"
   echo "ok   $name [$backend] stack: bound $bound, measured $measured, externals ${ext:-none}"
@@ -83,7 +96,7 @@ stack_check() {
 size_report() { # size_report NAME BACKEND EXE
   local bytes text
   bytes=$(wc -c <"$3" | tr -d ' ')
-  text=$(timeout -k 10 60 "$CONCRETE_SLICE0_LLVM/llvm-size" "$3" 2>/dev/null | awk 'NR == 2 {print $1}') || true
+  text=$("${capped[@]}" timeout -k 10 60 "$CONCRETE_SLICE0_LLVM/llvm-size" "$3" 2>/dev/null | awk 'NR == 2 {print $1}') || true
   printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$target" "$bytes" "${text:-unavailable}" >>"$sizes"
 }
 
@@ -92,9 +105,9 @@ mkdir -p "$work/ctl"
 for name in $names; do
   d="$work/ex/$name"
   "${emitter[@]}" emit "$name" "$d" "$target"
-  build "$name" "$d/build.log" timeout -k 10 300 bash "$root/scripts/checks/slice0_native.sh" "$d" "$lcb"
+  build "$name" "$d/build.log" "${capped[@]}" timeout -k 10 300 bash "$root/scripts/checks/slice0_native.sh" "$d" "$lcb"
   build "$name" "$d/build-san.log" \
-    timeout -k 10 300 bash "$root/scripts/checks/slice0_native.sh" "$d" "$lcb" sanitize
+    "${capped[@]}" timeout -k 10 300 bash "$root/scripts/checks/slice0_native.sh" "$d" "$lcb" sanitize
   observe "$d/llvm.san.exe" "$d/san" 30 30 0 "${san_env[@]}"
   if judge "$d" "$d/san"; then
     echo "ok   $name [llvm+asan+ubsan]: status $(cat "$d/san.status")"
@@ -125,9 +138,9 @@ entry:
   ret i32 %r
 }
 LL
-build control-asan "$c/build.log" timeout -k 10 300 bash "$root/scripts/checks/slice0_native.sh" "$c" "$lcb"
+build control-asan "$c/build.log" "${capped[@]}" timeout -k 10 300 bash "$root/scripts/checks/slice0_native.sh" "$c" "$lcb"
 build control-asan "$c/build-san.log" \
-  timeout -k 10 300 bash "$root/scripts/checks/slice0_native.sh" "$c" "$lcb" sanitize
+  "${capped[@]}" timeout -k 10 300 bash "$root/scripts/checks/slice0_native.sh" "$c" "$lcb" sanitize
 observe "$c/llvm.san.exe" "$c/san" 30 30 0 "${san_env[@]}"
 if ! judge "$c" "$c/san" && grep -q 'AddressSanitizer' "$c/san.stderr"; then
   echo "ok   control: ASan reports an out-of-bounds load"
@@ -162,28 +175,30 @@ known=$(ctl_dis known <<'D'
 D
 )
 # main: 8 + 0x20 = 40 deep; the call pushes 8; the body goes 8 + 0x10 = 24 deeper: 72.
-if [ "$(python3 -I scripts/checks/lib/stack_bound.py x86_64 "$known")" = "$(printf 'bound 72\nexternal write 48')" ]; then
+if [ "$(stack_bound x86_64 "$known")" = "$(printf 'bound 72\nexternal write 48')" ]; then
   echo "ok   control: stack bound of a known function"
 else
-  echo "FAIL control: stack bound of a known function: $(python3 -I scripts/checks/lib/stack_bound.py x86_64 "$known")"
+  echo "FAIL control: stack bound of a known function: $(stack_bound x86_64 "$known")"
   fail=1
 fi
-refuse() { # refuse NAME: stdin is the main function's body after its header
+refuse() { # refuse NAME BODY [ARCH [MAIN]]: BODY (printf format) follows the main header
   local f
-  f=$(ctl_dis "$1" <<<"$(printf '\n0000000000001010 <main>:\n'; cat)")
-  if python3 -I scripts/checks/lib/stack_bound.py x86_64 "$f" >"$f.out"; then
+  f=$(ctl_dis "$1" <<<"$(printf "\n0000000000001010 <${4:-main}>:\n$2")")
+  if stack_bound "${3:-x86_64}" "$f" >"$f.out"; then
     echo "FAIL control: stack analysis accepts $1: $(cat "$f.out")"; fail=1
   else
     echo "ok   control: stack analysis refuses $1"
   fi
 }
-printf '    1010:\tsub\trsp, rax\n    1013:\tret\n' | refuse dynamic-sp
-printf '    1010:\tcall\trax\n    1012:\tret\n' | refuse indirect-call
-printf '    1010:\tpush\trbp\n    1011:\tcall\t0x1010 <main>\n    1016:\tpop\trbp\n    1017:\tret\n' | refuse recursion
-printf '    1010:\tcall\t0x3000 <helper>\n    1015:\tret\n' | refuse unknown-call
-printf '    1010:\tje\t0x1014 <main+0x4>\n    1012:\tpush\trax\n    1013:\tnop\n    1014:\tret\n' | refuse depths-meet
-printf '    1010:\tmov\trax, rsp\n    1013:\tret\n' | refuse stack-pointer-escape
-printf '    1010:\tmov\teax, dword ptr [rsp + 4*rcx - 0x8]\n    1014:\tret\n' | refuse indexed-stack-address
+refuse dynamic-sp '    1010:\tsub\trsp, rax\n    1013:\tret\n'
+refuse indirect-call '    1010:\tcall\trax\n    1012:\tret\n'
+refuse recursion '    1010:\tpush\trbp\n    1011:\tcall\t0x1010 <main>\n    1016:\tpop\trbp\n    1017:\tret\n'
+refuse unknown-call '    1010:\tcall\t0x3000 <helper>\n    1015:\tret\n'
+refuse depths-meet '    1010:\tje\t0x1014 <main+0x4>\n    1012:\tpush\trax\n    1013:\tnop\n    1014:\tret\n'
+refuse stack-pointer-escape '    1010:\tmov\trax, rsp\n    1013:\tret\n'
+refuse indexed-stack-address '    1010:\tmov\teax, dword ptr [rsp + 4*rcx - 0x8]\n    1014:\tret\n'
+refuse loop-instruction '    1010:\tmov\tecx, 0x2\n    1015:\tloop\t0x1018 <main+0x8>\n    1017:\tret\n    1018:\tsub\trsp, 0x100\n    101f:\tadd\trsp, 0x100\n    1026:\tret\n'
+refuse a64-frame-writeback '    1010:\tmov\tx29, sp\n    1014:\tstr\tx0, [x29], #-0x100\n    1018:\tstr\tx0, [x29]\n    101c:\tadd\tx29, x29, #0x100\n    1020:\tret\n' aarch64 _main
 # A leaf's red-zone store, below the stack pointer, is inside the bound: 8 + 0x30.
 redzone=$(ctl_dis redzone <<'D'
 
@@ -195,11 +210,20 @@ redzone=$(ctl_dis redzone <<'D'
     1018:	ret
 D
 )
-if [ "$(python3 -I scripts/checks/lib/stack_bound.py x86_64 "$redzone")" = "bound 56" ]; then
+if [ "$(stack_bound x86_64 "$redzone")" = "bound 56" ]; then
   echo "ok   control: a red-zone store is inside the bound"
 else
-  echo "FAIL control: red-zone bound: $(python3 -I scripts/checks/lib/stack_bound.py x86_64 "$redzone")"
+  echo "FAIL control: red-zone bound: $(stack_bound x86_64 "$redzone")"
   fail=1
+fi
+if [ -n "$gdb" ]; then
+  # A run that does not end as expected gives no measurement.
+  wrong=$(( ($(cat "$(dirname "$last_exe")/status") + 1) % 256 ))
+  if grep -q '^measured' <<<"$(measure "$last_exe" "$last_analysis" "$wrong")"; then
+    echo "FAIL control: a run with an unexpected exit status is measured"; fail=1
+  else
+    echo "ok   control: a run with an unexpected exit status gives no measurement"
+  fi
 fi
 if within 73 72; then echo "FAIL control: a measurement above the bound is accepted"; fail=1
 else echo "ok   control: a measurement above the bound is rejected"; fi

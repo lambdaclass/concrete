@@ -2,7 +2,10 @@
 # Shared machinery of the slice-0 example gates (PROVISIONAL): slice0_backends.sh (gates 4, 6, 6a)
 # and slice0_artifacts.sh (gates 10, 11, 12). Source it from the repository root, inside the nix
 # devshell, with `set -euo pipefail`. It builds the compiler and LCB's command line under the
-# gate's limits and defines:
+# gate's limits (lib/limits.sh: an address-space cap of SLICE0_GATE_MEM_GB GiB, default 64; 0 for
+# a gate whose executables under test need no cap, slice0_artifacts.sh) and defines:
+#   capped (a command prefix, an array): run under a 64 GiB address-space cap of its own, so
+#     every build and analysis command is capped whatever the gate's cap;
 #   root, work (removed on exit), lcb, target, emitter (the Lean emitter command, an array);
 #   observe EXE OUT SECS RETRY [MEM_MB [ENV...]]: run EXE under bounded_run (and limited_exec.sh
 #     MEM_MB, default 1024) with ENV assignments; OUT.status (status or "incomplete"),
@@ -19,8 +22,9 @@ source scripts/checks/lib/bounded.sh
 [ "$BOUNDED_HAVE_WATCHDOG" = 1 ] || { echo "slice0: python3 is required for bounded runs" >&2; exit 2; }
 # shellcheck source=scripts/checks/lib/limits.sh
 source scripts/checks/lib/limits.sh
-gate_limits 64 40000
-timeout -k 30 1800 lake build Concrete lean-compiler-backend/lcb >/dev/null
+gate_limits "${SLICE0_GATE_MEM_GB:-64}" 40000
+capped=(bash "$root/scripts/checks/lib/limited_exec.sh" 65536)
+"${capped[@]}" timeout -k 30 1800 lake build Concrete lean-compiler-backend/lcb >/dev/null
 lcb="$root/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
 case "$(uname -s)-$(uname -m)" in
   Linux-x86_64) target=x86_64-linux ;;
@@ -28,7 +32,7 @@ case "$(uname -s)-$(uname -m)" in
   Darwin-arm64) target=aarch64-macos ;;
   *) echo "slice0: unsupported host $(uname -s)-$(uname -m)" >&2; exit 2 ;;
 esac
-emitter=(timeout -k 10 120 lake env lean --run scripts/checks/slice0_bir.lean)
+emitter=("${capped[@]}" timeout -k 10 120 lake env lean --run scripts/checks/slice0_bir.lean)
 
 observe() {
   local rc=0 mem=${5:-1024}
