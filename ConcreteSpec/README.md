@@ -61,8 +61,9 @@ Open obligations, by name:
   `used`, `live`, `known` and `kfields` fields of `Entry`) is stated as intent, with no erasure
   definition or theorem yet. (Brand erasure, part 5, is done.)
 - **O4 Trap diagnostics** (Q7.10, OD101): C6 defines the exact trap-line bytes and their
-  injectivity. Producing each operation's source span remains O1; the startup refusal's bytes are
-  not yet defined.
+  injectivity. `Observe.sourceSpan` constructs byte columns from source prefixes; the operational
+  source-column law rejects scalar counting on `"a\té"`. Connecting elaborated operations to
+  that constructor remains O1; the startup refusal's bytes are not yet defined.
 - **O5 Target observations** (the launcher contract): every result here is about the model's
   outcomes; a claim about an executable needs a transport to the approved launcher contract.
 - **O6 Launch validation** (part 6): `ProgOk` assumes a valid launch: instance limits, the target
@@ -86,7 +87,17 @@ Open obligations, by name:
   (`Target`), C1 (`Exec`: the machine, its step, cleanup order, traps; parametric in the operand
   language), C2 (`Scalar`, `Const`), C4 (`Memory`, `Hybrid`) and C6 (`Observe`: typed requests,
   responses and output, finite and infinite observations, environment contracts, terminal
-  observations and the C1 adapter). C4 covers byte memory, scalar
+  observations and the C1 adapter). **C6 remains reopened, not accepted.** Its audit repair now
+  includes source-derived byte columns, independently checked response production and routing,
+  exact reachable blocked reports with prior history, physical-output correspondence and an
+  output-then-trap execution, execution-delay classification, and valid adapter trap paths.
+  Inversion, projection and representation helpers carry pending independent-review approvals;
+  they are not contract evidence. Final external-state observation is still absent: the C1 final
+  report omits the final store. R-0571 must connect observations to actual terminal stores (for
+  example through a store-retaining evaluator refinement proved to erase to C1), include the
+  complete abstract external projection in observation equivalence, and establish its relationship
+  to operation effects. An arbitrary state field supplied independently of the run would not
+  discharge that obligation. The source-to-span connection remains O1. C4 covers byte memory, scalar
   representation and structured/materialized places, with trailing padding preserved by typed
   writes; struct field layouts, enums, pointers in structs and the C8 padding oracle remain out
   of its scalar slice. The old slice-1 `Spec/Rep.lean` still has its own `MByte` and integer

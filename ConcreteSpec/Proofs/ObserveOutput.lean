@@ -120,6 +120,14 @@ example : ExecAdapter.OutputCorrespondence adapter (fun n => [toString n]) ∧
 def erasingAdapter : ExecAdapter Exec.Demo.ops Demo.signature :=
   { adapter with events := fun _ => [] }
 
+/-- Refused: erasing physical output violates the independently supplied correspondence
+obligation, even though an empty projected history could pass request/response trace checks. -/
+example : ¬ ExecAdapter.OutputCorrespondence erasingAdapter (fun n => [toString n]) := by
+  intro correspondence
+  have output := correspondence 3
+  change [] = ["3"] at output
+  cases output
+
 /-- Instance (law `ConcreteSpec.Core.Observe.OutputDemo.output_then_trap`, case `two_outputs_then_trap`). -/
 example : reportObservation program adapter Demo.contract ()
     (Exec.runFrom program Exec.Demo.env (3 * [3, 4].length + 1) [11] (initial [3, 4]))
