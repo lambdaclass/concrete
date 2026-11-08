@@ -1232,6 +1232,7 @@ ConcreteSpec.Core.Hybrid.State.memory_set
 ConcreteSpec.Core.Hybrid.State.mk.inj	
 ConcreteSpec.Core.Hybrid.State.mk.injEq	propext
 ConcreteSpec.Core.Hybrid.State.mk.sizeOf_spec	
+ConcreteSpec.Core.Hybrid.State.places.eq_1	
 ConcreteSpec.Core.Hybrid.State.places_memory	
 ConcreteSpec.Core.Hybrid.State.places_set	
 ConcreteSpec.Core.Hybrid.State.read.eq_1	propext
@@ -1376,8 +1377,10 @@ ConcreteSpec.Core.Mem.Ptr.mk.injEq	propext
 ConcreteSpec.Core.Mem.Ptr.mk.sizeOf_spec	
 ConcreteSpec.Core.Mem.access_after_free	propext
 ConcreteSpec.Core.Mem.access_no_provenance	propext
-ConcreteSpec.Core.Mem.access_some	propext
-ConcreteSpec.Core.Mem.access_valid	propext
+ConcreteSpec.Core.Mem.access_some_inv	propext
+ConcreteSpec.Core.Mem.access_success	propext
+ConcreteSpec.Core.Mem.access_valid	Quot.sound propext
+ConcreteSpec.Core.Mem.access_valid._proof_1_3	Quot.sound propext
 ConcreteSpec.Core.Mem.access_zero	propext
 ConcreteSpec.Core.Mem.alloc_block	propext
 ConcreteSpec.Core.Mem.alloc_failure	propext
@@ -1402,18 +1405,18 @@ ConcreteSpec.Core.Mem.decodeBool_encodeBool	propext
 ConcreteSpec.Core.Mem.decodeBool_valid	propext
 ConcreteSpec.Core.Mem.decodeInt_encodeInt	Quot.sound propext
 ConcreteSpec.Core.Mem.decodeInt_inRange	Classical.choice Quot.sound propext
-ConcreteSpec.Core.Mem.decodePtr._sparseCasesOn_1.else_eq	propext
+ConcreteSpec.Core.Mem.decodePtr._sparseCasesOn_3.else_eq	propext
 ConcreteSpec.Core.Mem.decodePtr.eq_1	propext
 ConcreteSpec.Core.Mem.decodePtr.eq_2	propext
 ConcreteSpec.Core.Mem.decodePtr_encodePtr	Quot.sound propext
 ConcreteSpec.Core.Mem.decodePtr_encodePtr._proof_1_1	Quot.sound propext
-ConcreteSpec.Core.Mem.decodePtr_valid	propext
+ConcreteSpec.Core.Mem.decodePtr_some	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Mem.decodePtr_valid_inv	propext
 ConcreteSpec.Core.Mem.empty_wellFormed	Quot.sound propext
 ConcreteSpec.Core.Mem.encodeBool._proof_1	
 ConcreteSpec.Core.Mem.encodeBool.eq_1	
 ConcreteSpec.Core.Mem.encodeInt.eq_1	
 ConcreteSpec.Core.Mem.encodeInt_length	propext
-ConcreteSpec.Core.Mem.encodePtr.congr_simp	
 ConcreteSpec.Core.Mem.encodePtr.eq_1	
 ConcreteSpec.Core.Mem.eqAddr_provenance	propext
 ConcreteSpec.Core.Mem.expose_frame	propext
@@ -2847,6 +2850,9 @@ _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.unwindLocals.match_1.
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Res.bind.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Res.bind.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Res.bind.match_1.eq_3	
+_private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.Audit.after._proof_1	propext
+_private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.Audit.before.eq_1	
+_private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.Audit.before_wf	Quot.sound propext
 _private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.State.materialize.match_3.eq_1	
 _private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.State.materialize.match_3.eq_2	
 _private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.decode.match_1.eq_1	
@@ -2869,6 +2875,8 @@ _private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.AList.lookup.match_1.eq_
 _private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.AList.lookup.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.AList.update.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.AList.update.match_1.eq_2	
+_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.Audit.bytes._proof_1	propext
+_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.Audit.memory_wf	Quot.sound propext
 _private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.Memory.access.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.Memory.access.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.Memory.access.match_3.eq_1	
@@ -2882,16 +2890,21 @@ _private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.Memory.load.match_1.
 _private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.Memory.load.match_1.eq_3	
 _private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.canonical_of_unique	Quot.sound propext
 _private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.canonical_of_unique._simp_1_2	propext
-_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.decodePtr.match_1.eq_1	propext
-_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.decodePtr.match_1.eq_2	propext
+_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.decodePtr.match_1.eq_1	
+_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.decodePtr.match_1.eq_2	
+_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.decodePtr.match_3.eq_1	propext
+_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.decodePtr.match_3.eq_2	propext
+_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.decodePtr_checks_inv	propext
 _private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.keys_update	propext
 _private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.leBytes.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.leBytes.match_1.eq_2	
+_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.leBytes_leValue	Classical.choice Quot.sound propext
 _private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.leValue.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.leValue.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.octets.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.octets.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.octets.match_1.eq_3	
+_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.octets_fragments	propext
 _private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.ordered.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.ordered.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.overlaps_symm	
