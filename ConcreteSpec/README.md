@@ -93,6 +93,8 @@ Open obligations, by name:
   C5–C10 remain. C1 leaves to later slices the source-level
   evaluation orders (elaboration, O1), counted loops (slice 4), and ownership of moved values
   (C5), the split of a request from its response (C6) and the oracle's query record (C8); its
-  storage can use C4's hybrid state; C5 must still supply ownership instrumentation. C2 leaves
-  floats (slice 26), and two owner questions: whether a failing operation may appear in a constant
+  storage can use C4's hybrid state; C5 must still supply ownership instrumentation. Lifecycle
+  instrumentation may refuse an event (`Option.none`), making execution stuck, including initial
+  activation and primitive result binding; cleanup laws require successful lifecycle events. C2
+  leaves floats (slice 26), and two owner questions: whether a failing operation may appear in a constant
   initializer, and whether the source may name a constant written later in the file.

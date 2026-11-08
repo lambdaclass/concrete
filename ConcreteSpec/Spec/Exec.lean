@@ -107,7 +107,7 @@ statements keep their meaning whatever the instance.
 - `Store`: the shared state, threaded through operands, calls and cleanup.
 - `life`: how a change in the life of locals (`Life`) changes the state. Like the state an
   operand returns, it may change only instrumentation; an instance without instrumentation
-  ignores it.
+  ignores it by returning `some st`. `none` refuses the event: execution is stuck.
 - `test`: the truth value of a condition (`none`: not a condition; unsafe stuckness).
 - `Ty`, `unitTy`, `unitVal`, `isCopy`: the types, `Unit` and its value, and which types are `Copy`
   (a declared and checked instance; the checker owns that check, C9).
@@ -128,7 +128,7 @@ structure Operands where
   unitTy : Ty
   isCopy : Ty → Bool
   eval : AList Var Val → Store → Expr → Res (Val × Store)
-  life : Life → Store → Store
+  life : Life → Store → Option Store
   test : Val → Option Bool
   allows : Prim → List Val → Store → Answer Val Event Store → Bool
 
@@ -270,9 +270,9 @@ def bindDst (dst : Option Var) (v : V) (L : AList Var V) : AList Var V :=
   | some x => (x, v) :: L
 
 /-- The state after `bindDst`: the instrumentation hears of the new local, if there is one. -/
-def bindLife (O : Operands) (dst : Option Var) (st : O.Store) : O.Store :=
+def bindLife (O : Operands) (dst : Option Var) (st : O.Store) : Option O.Store :=
   match dst with
-  | none => st
+  | none => some st
   | some x => O.life (.bind x) st
 
 /-- The locals of `L` that leaving a scope entered with `dm` drops. -/
@@ -280,7 +280,7 @@ def dead (dm : List Var) (L : AList Var V) : List Var := (dom L).filter (fun x =
 
 /-- The state after leaving a scope entered with `dm`: the instrumentation hears which locals
 went out of scope. -/
-def dropOut (O : Operands) (dm : List Var) (L : AList Var O.Val) (st : O.Store) : O.Store :=
+def dropOut (O : Operands) (dm : List Var) (L : AList Var O.Val) (st : O.Store) : Option O.Store :=
   O.life (.drop (dead dm L)) st
 
 /-- Evaluate arguments left to right, each in the state the one before it left; the first that
@@ -299,12 +299,17 @@ def register (d : Deferred O) : List (Frame O) → Option (List (Frame O))
   | .scope b dom ds :: k => some (.scope b dom (d :: ds) :: k)
   | _ => none
 
-/-- What one step does: move to a configuration, or make a request of a primitive operation (its
+/-- Request continuations are partial: `none` refuses result binding through lifecycle
+instrumentation. This is unsafe stuckness, not a different primitive answer or a trap;
+`Step.prim` requires success, and `runFrom` reports the requesting configuration as stuck
+without accepting the response event when continuation fails.
+
+What one step does: move to a configuration, or make a request of a primitive operation (its
 arguments, its site, the state it is made in, and the configuration each answer leads to). -/
 inductive Out (O : Operands) where
   | next (c : Config O)
   | request (p : O.Prim) (args : List O.Val) (site : SiteId) (st : O.Store)
-      (k : Answer O.Val O.Event O.Store → Config O)
+      (k : Answer O.Val O.Event O.Store → Option (Config O))
 
 /-- Continue with an operand's value and the state after it; a trap stops at `site` in the state
 before the operand (a trap is terminal, so nothing reads that state's instrumentation again),
@@ -327,8 +332,8 @@ def stepExit (L : AList Var O.Val) (st : O.Store) (e : Exit O.Val) :
     List (Frame O) → Option (Out O)
   | .seq _ :: k => some (.next ⟨.exiting e, L, st, k⟩)
   | .scope b dm (d :: ds) :: k => some (startCleanup L st b dm d ds (.exit e) k)
-  | .scope _ dm [] :: k => some (.next ⟨.exiting e, restrict dm L, dropOut O dm L st, k⟩)
-  | .test _ _ _ _ _ dm :: k => some (.next ⟨.exiting e, restrict dm L, dropOut O dm L st, k⟩)
+  | .scope _ dm [] :: k => (dropOut O dm L st).map fun st' => .next ⟨.exiting e, restrict dm L, st', k⟩
+  | .test _ _ _ _ _ dm :: k => (dropOut O dm L st).map fun st' => .next ⟨.exiting e, restrict dm L, st', k⟩
   | .body l cr t b site :: k => match e with
     | .brk l' =>
       if l' = l then some (.next ⟨.done, L, st, k⟩) else some (.next ⟨.exiting e, L, st, k⟩)
@@ -337,7 +342,8 @@ def stepExit (L : AList Var O.Val) (st : O.Store) (e : Exit O.Val) :
       else some (.next ⟨.exiting e, L, st, k⟩)
     | .ret _ => some (.next ⟨.exiting e, L, st, k⟩)
   | .ret dst caller :: k => match e with
-    | .ret v => some (.next ⟨.done, bindDst dst v caller, bindLife O dst (O.life .leave st), k⟩)
+    | .ret v => (O.life .leave st).bind fun st' =>
+        (bindLife O dst st').map fun st'' => .next ⟨.done, bindDst dst v caller, st'', k⟩
     | _ => none
   | .resume _ :: _ => none
   | [] => none
@@ -351,10 +357,11 @@ def step (P : Program O) (c : Config O) : Option (Out O) :=
   -- running a statement
   | .exec .skip, k => some (.next ⟨.done, L, st, k⟩)
   | .exec (.bind x e site), k => onRes (O.eval L st e) site L st k fun v st' =>
-      some (.next ⟨.done, (x, v) :: L, O.life (.bind x) st', k⟩)
+      (O.life (.bind x) st').map fun st'' => .next ⟨.done, (x, v) :: L, st'', k⟩
   | .exec (.assign x e site), k => onRes (O.eval L st e) site L st k fun v st' =>
-      (AList.lookup L x).map fun _ =>
-        .next ⟨.done, AList.update L x (fun _ => v), O.life (.bind x) st', k⟩
+      (AList.lookup L x).bind fun _ =>
+        (O.life (.bind x) st').map fun st'' =>
+          .next ⟨.done, AList.update L x (fun _ => v), st'', k⟩
   | .exec (.seq s t), k => some (.next ⟨.exec s, L, st, .seq t :: k⟩)
   | .exec (.block b s), k => some (.next ⟨.exec s, L, st, .scope b (dom L) [] :: k⟩)
   | .exec (.defer f args site), k =>
@@ -370,30 +377,32 @@ def step (P : Program O) (c : Config O) : Option (Out O) :=
   | .exec (.call dst f args site), k => onRes (evalArgs O L st args) site L st k fun vs st' =>
       (AList.lookup P.fns f).bind fun fn =>
         if fn.params.length = vs.length then
-          some (.next ⟨.exec fn.body, (fn.params.map Prod.fst).zip vs,
-            O.life (.enter (fn.params.map Prod.fst)) st',
-            .scope fn.block (fn.params.map Prod.fst) [] :: .ret dst L :: k⟩)
+          (O.life (.enter (fn.params.map Prod.fst)) st').map fun st'' =>
+            .next ⟨.exec fn.body, (fn.params.map Prod.fst).zip vs, st'',
+              .scope fn.block (fn.params.map Prod.fst) [] :: .ret dst L :: k⟩
         else none
   | .exec (.prim x p args site), k => onRes (evalArgs O L st args) site L st k fun vs st' =>
       some (.request p vs site st' fun a => match a.result with
-        | .ok v => ⟨.done, bindDst x v L, bindLife O x a.store, k⟩
-        | .error kd => ⟨.trapped kd site, L, a.store, k⟩)
+        | .ok v => (bindLife O x a.store).map fun st' => ⟨.done, bindDst x v L, st', k⟩
+        | .error kd => some ⟨.trapped kd site, L, a.store, k⟩)
   | .exec (.abort site), k => some (.next ⟨.trapped .abort site, L, st, k⟩)
   -- a statement completed normally
   | .done, .seq t :: k => some (.next ⟨.exec t, L, st, k⟩)
   | .done, .scope b dm (d :: ds) :: k => some (startCleanup L st b dm d ds .fall k)
-  | .done, .scope _ dm [] :: k => some (.next ⟨.done, restrict dm L, dropOut O dm L st, k⟩)
+  | .done, .scope _ dm [] :: k => (dropOut O dm L st).map fun st' => .next ⟨.done, restrict dm L, st', k⟩
   | .done, .test l cr t b site dm :: k => onRes (O.eval L st t) site L st k fun v st' =>
-      (O.test v).map fun go =>
-        if go then .next ⟨.exec b, restrict dm L, dropOut O dm L st', .body l cr t b site :: k⟩
-        else .next ⟨.done, restrict dm L, dropOut O dm L st', k⟩
+      (O.test v).bind fun go =>
+        (dropOut O dm L st').map fun st'' =>
+          if go then .next ⟨.exec b, restrict dm L, st'', .body l cr t b site :: k⟩
+          else .next ⟨.done, restrict dm L, st'', k⟩
   | .done, .body l cr t b site :: k => some (.next ⟨.exec (.loop l cr t b site), L, st, k⟩)
   | .done, .resume .fall :: k => some (.next ⟨.done, L, st, k⟩)
   | .done, .resume (.exit e) :: k => some (.next ⟨.exiting e, L, st, k⟩)
   -- a function body that ends without `return`: only a `Unit` function may (the checker refuses
   -- any other, C9), and its result is `()`
   | .done, .ret dst caller :: k =>
-      some (.next ⟨.done, bindDst dst O.unitVal caller, bindLife O dst (O.life .leave st), k⟩)
+      (O.life .leave st).bind fun st' =>
+        (bindLife O dst st').map fun st'' => .next ⟨.done, bindDst dst O.unitVal caller, st'', k⟩
   | .done, [] => none
   -- an exit unwinding
   | .exiting e, k => stepExit L st e k
@@ -420,8 +429,8 @@ def Label.events : Label O → List O.Event
 operation answered within its contract (labeled with the answer's event, if any). -/
 inductive Step (P : Program O) : Config O → Label O → Config O → Prop where
   | silent {c c'} : step P c = some (.next c') → Step P c .silent c'
-  | prim {c p vs site st k a} : step P c = some (.request p vs site st k) →
-      O.allows p vs st a = true → Step P c a.label (k a)
+  | prim {c c' p vs site st k a} : step P c = some (.request p vs site st k) →
+      O.allows p vs st a = true → k a = some c' → Step P c a.label c'
 
 /-- Many steps, with the events they emitted in order. -/
 inductive Steps (P : Program O) : Config O → List O.Event → Config O → Prop where
@@ -431,9 +440,10 @@ inductive Steps (P : Program O) : Config O → List O.Event → Config O → Pro
 /-- The configuration that runs function `fn` on argument values `vs`, in state `st`, as the whole
 program: its `return` ends the run with the returned value (`Final.returned`), and a body that ends
 without one ends it normally (`Final.normal`). How either becomes the process's exit is C6. -/
-def enter (fn : Fn O) (vs : List O.Val) (st : O.Store) : Config O :=
-  ⟨.exec fn.body, (fn.params.map Prod.fst).zip vs, O.life (.enter (fn.params.map Prod.fst)) st,
-    [.scope fn.block (fn.params.map Prod.fst) []]⟩
+def enter (fn : Fn O) (vs : List O.Val) (st : O.Store) : Option (Config O) :=
+  (O.life (.enter (fn.params.map Prod.fst)) st).map fun st' =>
+    ⟨.exec fn.body, (fn.params.map Prod.fst).zip vs, st',
+      [.scope fn.block (fn.params.map Prod.fst) []]⟩
 
 /-! ## Cleanup plans
 
@@ -482,18 +492,20 @@ inductive RunsAll (P : Program O) (L : AList Var O.Val) :
   | cons {d ds st tr₁ st₁ tr₂ st₂} : Completes P L d st tr₁ st₁ → RunsAll P L ds st₁ tr₂ st₂ →
       RunsAll P L (d :: ds) st (tr₁ ++ tr₂) st₂
 
-/-- The cleanup an exit through frames `pre` performs, from locals `L` and state `st`: each scope's
+/-- The successful cleanup an exit through frames `pre` performs, from locals `L` and state `st`: each scope's
 calls run in turn (`RunsAll`), with the locals that scope restores passed on to the next, the
 innermost scope first. The calls it runs are exactly `plan pre`, in that order
 (`cleans_iff_runs_plan`, `planWith_calls`). -/
 inductive Cleans (P : Program O) :
     List (Frame O) → AList Var O.Val → O.Store → List O.Event → O.Store → Prop where
   | nil (L : AList Var O.Val) (st : O.Store) : Cleans P [] L st [] st
-  | scope {b dm ds pre L st tr₁ st₁ tr₂ st₂} : RunsAll P L ds st tr₁ st₁ →
-      Cleans P pre (restrict dm L) (dropOut O dm L st₁) tr₂ st₂ →
+  | scope {b dm ds pre L st tr₁ st₁ stDrop tr₂ st₂} : RunsAll P L ds st tr₁ st₁ →
+      dropOut O dm L st₁ = some stDrop →
+      Cleans P pre (restrict dm L) stDrop tr₂ st₂ →
       Cleans P (.scope b dm ds :: pre) L st (tr₁ ++ tr₂) st₂
   | seq {t pre L st tr st'} : Cleans P pre L st tr st' → Cleans P (.seq t :: pre) L st tr st'
-  | test {l cr t b site dm pre L st tr st'} : Cleans P pre (restrict dm L) (dropOut O dm L st) tr st' →
+  | test {l cr t b site dm pre L st stDrop tr st'} : dropOut O dm L st = some stDrop →
+      Cleans P pre (restrict dm L) stDrop tr st' →
       Cleans P (.test l cr t b site dm :: pre) L st tr st'
   | body {l cr t b site pre L st tr st'} : Cleans P pre L st tr st' →
       Cleans P (.body l cr t b site :: pre) L st tr st'
@@ -596,7 +608,10 @@ def runFrom (P : Program O) (ρ : Oracle O) : Nat → List O.Event → Config O 
         match ρ hist p vs site st with
         | none => ⟨hist, .noAnswer c⟩
         | some a =>
-          if O.allows p vs st a then runFrom P ρ n (hist ++ a.event.toList) (k a)
+          if O.allows p vs st a then
+            match k a with
+            | some c' => runFrom P ρ n (hist ++ a.event.toList) c'
+            | none => ⟨hist, .stuck c⟩
           else ⟨hist, .badAnswer c⟩
 
 /-- Run from `c` with no events yet. -/
@@ -692,7 +707,7 @@ abbrev ops : Operands where
   unitTy := .unit
   isCopy := fun t => t == .int
   eval := evalE
-  life := DState.life
+  life := fun e st => some (DState.life e st)
   test := fun v => some (v ≠ 0)
   allows := fun p vs st a => match p, vs, a.event, a.result with
     | .log, [v], some ev, .ok 0 => decide (ev = v) && decide (a.store = st)
@@ -736,8 +751,36 @@ def prog : Program ops := ⟨[(logF, logFn), (boomF, boomFn), (bumpF, bumpFn), (
 def dlog (n : Int) : Stmt ops := .defer logF [.lit n] s
 def callLog (n : Int) : Stmt ops := .call none logF [.lit n] s
 
+/-- Demo entry: its instrumentation always accepts the initial activation. -/
+def start (fn : Fn ops) (vs : List Int) (st : DState) : Config ops :=
+  ⟨.exec fn.body, (fn.params.map Prod.fst).zip vs,
+    DState.life (.enter (fn.params.map Prod.fst)) st,
+    [.scope fn.block (fn.params.map Prod.fst) []]⟩
+
+example (fn : Fn ops) (vs : List Int) (st : DState) :
+    enter fn vs st = some (start fn vs st) := rfl
+
 /-- Run a body as `main`. -/
-def go (body : Stmt ops) : Report ops := run prog env 200 (enter ⟨[], .int, ⟨0⟩, body⟩ [] .init)
+def go (body : Stmt ops) : Report ops := run prog env 200 (start ⟨[], .int, ⟨0⟩, body⟩ [] .init)
+
+/-- Refusing instrumentation: a local flagged by identity `x` may not be dropped.
+This only illustrates C1's refusal channel; C5 supplies the actual loan discipline. -/
+abbrev refusingOps : Operands := { ops with
+  life := fun e st => match e with
+    | .drop xs => if x ∈ xs then none else some (DState.life e st)
+    | _ => some (DState.life e st) }
+
+/-- Accepted: unflagged locals leave scope normally. Refused: dropping the flagged local
+ends in unsafe stuckness, including at the final scope exit. -/
+example : (match (run (O := refusingOps) ⟨[]⟩ (fun _ _ _ _ _ => none) 10
+    ⟨.exec (.block ⟨0⟩ (.bind x (.lit 1) s)), [], .init, []⟩).ending with
+    | .stuck _ => true
+    | _ => false) = true := by decide
+
+example : (match (run (O := refusingOps) ⟨[]⟩ (fun _ _ _ _ _ => none) 10
+    ⟨.exec (.block ⟨0⟩ (.bind y (.lit 1) s)), [], .init, []⟩).ending with
+    | .final .normal => true
+    | _ => false) = true := by decide
 
 /-- A report's events and, if the program finished, how. -/
 def brief (r : Report ops) : List Int × Option (Final Int) :=
@@ -851,12 +894,12 @@ example : brief (run prog env 0 ⟨.done, [], .init, []⟩) = ([], some .normal)
 
 /-- An oracle that does not answer leaves the run waiting, which is not a refused answer; an answer
 outside the contract is refused. -/
-example : (match (run prog (fun _ _ _ _ _ => none) 10 (enter ⟨[], .int, ⟨0⟩, callLog 1⟩ [] .init)).ending with
+example : (match (run prog (fun _ _ _ _ _ => none) 10 (start ⟨[], .int, ⟨0⟩, callLog 1⟩ [] .init)).ending with
     | .noAnswer _ => true
     | _ => false) = true := by decide
 
 example : (match (run prog (fun _ _ _ _ st => some ⟨some 5, .ok 0, st⟩) 10
-    (enter ⟨[], .int, ⟨0⟩, callLog 1⟩ [] .init)).ending with
+    (start ⟨[], .int, ⟨0⟩, callLog 1⟩ [] .init)).ending with
     | .badAnswer _ => true
     | _ => false) = true := by decide
 
@@ -901,7 +944,7 @@ example : isStuck (go (.seq (.loop ⟨0⟩ (.bind t (.lit 0) s) (.var t) .skip s
     = true := by decide
 
 /-- Running out of fuel is reported as such: a loop that never ends is not a result. -/
-example : isOutOfFuel (run prog env 50 (enter ⟨[], .int, ⟨0⟩, .loop ⟨0⟩ .skip (.lit 1) .skip s⟩ [] .init))
+example : isOutOfFuel (run prog env 50 (start ⟨[], .int, ⟨0⟩, .loop ⟨0⟩ .skip (.lit 1) .skip s⟩ [] .init))
     = true := by decide
 
 end Demo
