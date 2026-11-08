@@ -23,6 +23,25 @@
 # require the precise planted effect and return a dedicated planted-failure status (99).
 set -euo pipefail
 
+# Shared by normal replay and the saved-command round-trip controls.
+parse_replay() {
+  local value=$1
+  replay_leg=bir
+  case "$value" in
+    bir:*) value=${value#bir:} ;;
+    spec:*) replay_leg=spec; value=${value#spec:} ;;
+  esac
+  case "$value" in
+    *:*) replay_seed=${value%:*}; replay_index=${value##*:} ;;
+    *) echo "spec_diff: SPEC_DIFF_REPLAY must be [bir:|spec:]SEED:INDEX" >&2; return 2 ;;
+  esac
+  [[ "$replay_index" =~ ^[0-9]+$ ]] || { echo "spec_diff: replay index is not a natural" >&2; return 2; }
+}
+
+replay_command() {
+  printf 'SPEC_DIFF_REPLAY=%q bash scripts/checks/compiler/spec_diff.sh' "$1:$2:$3"
+}
+
 seed=${SPEC_DIFF_SEED:-$(git rev-parse HEAD)}
 candidate_count=${SPEC_DIFF_N:-300}
 budget=${SPEC_DIFF_SECS:-600}
@@ -35,7 +54,7 @@ for value in "$candidate_count" "$budget" "$minimum_judged" "$minimum_spec_judge
     { echo "spec_diff: N, SECS and minimum judged counts must be positive integers" >&2; exit 2; }
 done
 printf 'spec_diff seed: %s\n' "$seed"
-printf 'replay: SPEC_DIFF_REPLAY=bir:%s:INDEX bash scripts/checks/compiler/spec_diff.sh\n' "$seed"
+printf 'replay: %s\n' "$(replay_command bir "$seed" INDEX)"
 
 driver_imports=$(awk '/^import / {for (i = 2; i <= NF; i++) printf "%s ", $i}' scripts/checks/compiler/spec_diff.lean)
 [ -n "$driver_imports" ] || { echo "spec_diff: no imports found in spec_diff.lean" >&2; exit 2; }
@@ -327,7 +346,7 @@ report_mismatch() { # report_mismatch LEG CAND_SEED INDEX DIR BACKEND: persist b
       printf '\n-- Add to Examples.all:\n("%s", %s),\n' "$name" "$name"
     } >"$bundle/examples.lean"
   fi
-  replay_text="SPEC_DIFF_REPLAY='$leg:$cand_seed:$index' bash scripts/checks/compiler/spec_diff.sh"
+  replay_text=$(replay_command "$leg" "$cand_seed" "$index")
   printf '%s\n' "$replay_text" >"$bundle/replay.sh"
   echo "FAIL $leg seed $cand_seed index $index [$backend]: observation mismatch" >&2
   echo "  expected status $(cat "$d/status"), observed $(cat "$d/$backend.status")" >&2
@@ -583,7 +602,7 @@ EOF
 control_report_mismatch() {
   local regressions="$work/control-regressions"
   local bir_dir_a="$work/control-mm-bir-a" bir_dir_b="$work/control-mm-bir-b" spec_dir="$work/control-mm-spec"
-  local seed_a="Replay-Seed:A" seed_b="Replay_Seed_A"
+  local seed_a="Replay-Seed:A's" seed_b="Replay_Seed_A_s"
   local safe_a safe_b bir_bundle_a bir_bundle_b spec_bundle spec_name mdir rc=0
   control_bounded "${driver[@]}" replay "$seed_a" 0 "$bir_dir_a" "$target" || return $?
   control_bounded "${driver[@]}" replay "$seed_b" 0 "$bir_dir_b" "$target" || return $?
@@ -625,10 +644,19 @@ control_report_mismatch() {
     { echo "control setup: multi-backend mismatch did not preserve both llvm and lcb in backends" >&2; return 1; }
   [ -f "$bir_bundle_a/observed-llvm/status" ] && [ -f "$bir_bundle_a/observed-lcb/status" ] ||
     { echo "control setup: multi-backend observations missing" >&2; return 1; }
-  grep -qF "SPEC_DIFF_REPLAY='bir:${seed_a}:0'" "$bir_bundle_a/replay.sh" ||
-    { echo "control setup: bir replay.sh lacks exact candidate seed" >&2; return 1; }
-  grep -qF "SPEC_DIFF_REPLAY='spec:${seed_a}:0'" "$spec_bundle/replay.sh" ||
-    { echo "control setup: spec replay.sh lacks exact candidate seed" >&2; return 1; }
+  for replay_bundle in "$bir_bundle_a" "$spec_bundle"; do
+    (
+      # Execute the saved shell command, intercepting only the expensive gate launch.
+      # This exercises shell quoting and the production replay parser together.
+      bash() {
+        [ "$*" = scripts/checks/compiler/spec_diff.sh ] || return 1
+        parse_replay "$SPEC_DIFF_REPLAY" || return $?
+        [ "$replay_seed" = "$seed_a" ] && [ "$replay_index" = 0 ] &&
+          [ "$replay_leg" = "$(cat "$replay_bundle/leg")" ]
+      }
+      source "$replay_bundle/replay.sh"
+    ) || { echo "control setup: saved replay command failed to round-trip" >&2; return 1; }
+  done
   spec_name=$(cat "$spec_dir/regression-name.txt")
   [ -f "$spec_bundle/tests/slice0/$spec_name.con" ] ||
     { echo "control setup: spec bundle missing tests/slice0/$spec_name.con" >&2; return 1; }
@@ -683,16 +711,7 @@ control_determinism() {
 }
 
 if [ -n "$replay" ]; then
-  replay_leg=bir
-  case "$replay" in
-    bir:*) replay=${replay#bir:} ;;
-    spec:*) replay_leg=spec; replay=${replay#spec:} ;;
-  esac
-  case "$replay" in
-    *:*) replay_seed=${replay%%:*}; replay_index=${replay#*:} ;;
-    *) echo "spec_diff: SPEC_DIFF_REPLAY must be [bir:|spec:]SEED:INDEX" >&2; exit 2 ;;
-  esac
-  [[ "$replay_index" =~ ^[0-9]+$ ]] || { echo "spec_diff: replay index is not a natural" >&2; exit 2; }
+  parse_replay "$replay"
   d="$work/replay"
   if [ "$replay_leg" = spec ]; then
     require_bounded "${driver[@]}" replay-spec "$replay_seed" "$replay_index" "$d" "$target"
@@ -729,7 +748,7 @@ run_control partial-lowering \
   '^FAIL partial-lowering: driver and gate rejected partial lowering \(4 of 10 compiled\)$' \
   control_partial_lowering
 run_control report-mismatch \
-  '^FAIL report-mismatch: persisted distinct bir and spec bundles for Replay-Seed:A index 0 and validated manifest rows$' \
+  "^FAIL report-mismatch: persisted distinct bir and spec bundles for Replay-Seed:A's index 0 and validated manifest rows$" \
   control_report_mismatch
 
 bir_accepted=$(summary_value "$work/bir/summary.tsv" accepted)
