@@ -266,7 +266,7 @@ roadmap owns the repair. These rules apply to every writer now:
   nothing else. A branch that needs two rules is two branches.
 - **Review per slice, delta after the first pass** (R-0544). After the first full
   review, each round reviews only the diff since the previous round. Past the risk
-  cap (2 rounds for docs and the roadmap, 3 for scripts, 5 for the compiler and the spec),
+  cap (the round caps under **Review** above),
   split the slice. Review ownership and memory-safety work with neutral prompts and
   piecewise diffs.
 - **At most 2 heavy local runs per machine** (R-0543). Full gate sets, closure-mode

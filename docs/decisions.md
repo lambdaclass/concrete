@@ -68,7 +68,7 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 - The Lean foundation, contracts C1–C10, and the answers to its sixteen questions ([row](#decided-2026-11-08-foundation)).
 - A std-per-slice table in the roadmap; no user-guide chapter per slice for now; the written grammar before the parser; a speed target against C at slice 16 ([row](#decided-2026-11-08-std-table)).
 - Every branch gets an agy review too ([row](#decided-project-review)).
-- Eleven plan and process decisions: UBSan dropped, a complete adapter theorem, smaller landing scripts, the front end now, one decisions writer, risk-capped reviews, one clones folder, a later no-libc runtime, a compile-speed budget and the termination wording ([row](#decided-2026-11-08-eleven)).
+- Eleven plan and process decisions: UBSan dropped, a complete adapter theorem, smaller landing scripts, Claude's quota on the critical path, the front end now, one decisions writer, risk-capped reviews, one clones folder, a later no-libc runtime, a compile-speed budget and the termination wording ([row](#decided-2026-11-08-eleven)).
 
 <a id="rules-a-decision-changed"></a>
 ## Rules a decision has changed
@@ -254,7 +254,7 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 - **Q7.7** What are network scopes? — Connect and listen grants with numeric scopes; a separate Resolver grant with explicit server, transport, suffixes and record types.
 - **Q7.8** Is grant policy enforced statically or dynamically? — Static authority checks plus atomic dynamic scope checks.
 - **Q7.9** How are blocking, terminal actions and delivery observed? — Split request/response events; logical terminal observations.
-- **Q7.10** Do you approve the linux-x86_64-hosted grant table? — Approve R4 F6's complete grant table below as part of this row: every launch configuration, operation signature, permission, narrowing rule and ending contract. Standard-stream operations require Console (Q7.11), not Device; where the R4 F6 table says with(Device) for StdIn/StdOut/StdErr, read with(Console). A missing configured grant refuses startup with exit 125; a trap exits 134. *Revises or adds: New target contract: owner decision.* *Extended 2026-11-06 by [no hidden traps](#decided-project-no-hidden-traps): the stack target contract (adequate stack excludes exhaustion, launch refusal 125 when the reservation is smaller than the bound; then a defined outcome for inadequate stack) is a future target-contract obligation, not a current guarantee.* *Revised 2026-11-08 by the [foundation decision](#foundation-q16): the grant table is a lawful extensible registry; the existing grant contracts are preserved, an unknown operation is refused, and the Entropy grant's shape waits for slice 6.*
+- **Q7.10** Do you approve the linux-x86_64-hosted grant table? — Approve R4 F6's complete grant table below as part of this row: every launch configuration, operation signature, permission, narrowing rule and ending contract. Standard-stream operations require Console (Q7.11), not Device; where the R4 F6 table says with(Device) for StdIn/StdOut/StdErr, read with(Console). A missing configured grant refuses startup with exit 125; a trap exits 134. *Revises or adds: New target contract: owner decision.* *Extended 2026-11-06 by [no hidden traps](#decided-project-no-hidden-traps): the stack target contract (adequate stack excludes exhaustion, launch refusal 125 when the reservation is smaller than the bound; then a defined outcome for inadequate stack) is a future target-contract obligation, not a current guarantee.* *Revised 2026-11-08 by the [foundation decision](#foundation-q16): the grant table is a lawful extensible registry; the existing grant contracts are preserved, an unknown operation is refused, and the Entropy grant's shape waits for slice 6 ([question 14](#foundation-q14)).*
 - **Q7.11** Which permission do the standard streams use? — Add a Console capability for StdIn/StdOut/StdErr operations; keep Device for device grants. *Revises or adds: Authority rule 13 (adds Console); rules 5 and 7 lists include it.*
 - **Q8.1** What is the first proof endpoint? — Proved source→BIR; qualified native; conditional image claim.
 - **Q8.2** What exact source subset is admitted? — A1 minimal `u8`/linear-struct component subset. <a id="q8-2-revision"></a>Confirmed 2026-11-06 by [vertical slices](#decided-project-vertical-slices-2026-11-06): this is slice 1; its defined trap is an explicit `abort()`, with the refused `200 + 56` as its known-violation control; integers are complete at slice 2.
@@ -1117,7 +1117,9 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   4. <a id="decided-2026-11-08-quota"></a>*Claude's quota goes to the critical path:* the spec, slice 0
      and the front end. Mechanical work goes to Codex and Kimi as writers.
   5. <a id="decided-2026-11-08-front-end"></a>*The front end starts now.* The lexer and the LL(1)
-     parser are written now, in parallel with the foundation (R-0620).
+     parser are written now, in parallel with the foundation (R-0620); since the later answer "ok do
+     the written grammar", the parser waits for the owner-approved written grammar and its Lean
+     judgment ([written grammar](#decided-2026-11-08-written-grammar), R-0622).
   6. <a id="decided-2026-11-08-one-writer"></a>*One writer for `docs/decisions.md` and `ROADMAP.md`
      at a time;* other workers send it their records.
   7. <a id="decided-2026-11-08-review-caps"></a>*Review rounds capped by risk:* docs and roadmap 2,
@@ -1133,7 +1135,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
       unresolved obligations". It replaces "termination is known beforehand", which overstated what a
       d-site permission establishes, in the [no-hidden-traps row](#decided-project-no-hidden-traps),
       README.md, PHILOSOPHY.md and the pending no-hidden-traps changelog fragment.
-- <a id="decided-2026-11-08-std-table"></a>**A std-per-slice table; no user-guide chapters for now**
+- <a id="decided-2026-11-08-std-table"></a>**A std-per-slice table, no user-guide chapters for now, the written grammar and the speed target**
   (owner, 2026-11-08: "ok let's do 2, for now let's not do 3"). Item 2 is approved: `ROADMAP.md`
   gets a table of which standard-library module arrives in which slice, with its spec contract, its
   std source, its proof status and the showcases that need it

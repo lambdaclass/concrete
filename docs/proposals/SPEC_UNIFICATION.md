@@ -1,11 +1,11 @@
 # A2i: unifying the Concrete Lean spec into one Core (plan, draft 3)
 
-Status: proposal, accepted by Codex and Kimi in review round 3 (agy accepted round 2; its round-3 rerun on this text is pending); the spec worker carries it out as stage A2i (R-0571). The Lean spec stays the only home of the rules: this file is the work plan and is retired when A2i is done. Draft 3 folds in **Revised 2026-11-08** for the owner's foundation decisions: the summary's build order, S1 (5.1), the module graph (2.2) and section 6 from step 3 on now write the foundation C1–C10 of [FOUNDATION.md](FOUNDATION.md) first and the slices on top of it.
+Status: proposal, accepted by Codex and Kimi in review round 3 (agy accepted round 2; its round-3 rerun on this text is pending); the spec worker carries it out as stage A2i (R-0571). The Lean spec stays the only home of the rules: this file is the work plan and is retired when A2i is done. Draft 3 folds in
 the Codex, agy and Kimi delta reviews of draft 2 (section 7), the agreed slice order
 (the [vertical slices](../../ROADMAP.md#vertical-slices), all four reviewers, 2026-11-06) and the owner decisions of 2026-11-06 relayed by
 the coordinator (section 4), and the coordinator's answers to draft 3's questions S1–S3 (section
 5.1). Drafts 1 and 2, the archive copies of the inputs and the raw review outputs are not kept in
-the repository; the exact revisions below are the inputs. I checked each kept reviewer claim against the files.
+the repository; the exact revisions below are the inputs. I checked each kept reviewer claim against the files. **Revised 2026-11-08** for the owner's foundation decisions: the summary's build order, S1 (5.1), the module graph (2.2) and section 6 from step 3 on now write the foundation C1–C10 of [FOUNDATION.md](FOUNDATION.md) first and the slices on top of it.
 
 **Inputs read (exact revisions):**
 
@@ -265,7 +265,7 @@ fragment predicates, and `Spec/Slice0.lean`'s syntax and `toCore` are deleted.
 **Unified** in `Spec/Semantics.lean`, following Q6.7, `dec:1224` and the no-hidden-traps decision:
 
 ```
-inductive TrapKind | arith (e : ArithmeticError) | index | range | byteAt | abort | …
+inductive TrapKind | arith (e : ArithmeticError) | index | range | byteAt | abort | …   -- placeholder names: the owner's (question 9)
 def TrapKind.implicit : TrapKind → Bool          -- every kind except `abort`
 inductive Outcome
   | exit (code : Nat) (h : code < 256)   -- or Fin 256; keep what wip/slice0 consumes
@@ -679,7 +679,7 @@ The import rules:
 - `ConcreteSpec/Spec.lean` remains the public import (R-0560).
 
 These are 33 modules, replacing 13 (the foundation of 2026-11-08 adds `Rules`, `Target`, `Scalar`,
-`Store`, `Leakage` and `Frame`, and takes `Layout` out of `Values`). agy recommended about 17; the
+`Store`, `Leakage`, `Frame` and `Brand`, and takes `Layout` out of `Values`). agy recommended about 17; the
 plan keeps one module per concept the owner reads. Folded: observation into `Contract`.
 
 ---
@@ -786,8 +786,8 @@ step cites the row once it is on main; a step that needs a row not yet on main w
 | D8 | The attribute-prefix production, LL(1) (R-0574) | `Grammar`, `Syntax` | the production in the grammar data; `ll1_sound`; attachment by kind (OD82) | 0 (grammar), used from 4 |
 | D9 | Facts vocabulary, statuses, coverage, strength, vacuity, dependency flow (facts decision; R-0585) | `Facts` | 2.1 item 8; every kind present from phase B, `notApplicable` until its slice | B |
 | D10 | Diagnostics are typed checker results; rule ID = Lean rule name plus that rule's own revision (R-0593, R-0603); one `spec_version` per output, 0.x before the freeze and 1.0 at A2c ([runtime row](../decisions.md#decided-project-runtime-2026-11-06)) | `Ident`, `Checker` | `RuleId` and `spec_version` (step 2); `Rule`, `Subject`, `CheckResult`, the retired-ID registry and the lifecycle checks (1.10) with `incomplete`, `check_correspond`, `check_refused` | A (steps 2, 11) |
-| D11 | Byte accounting (R-0592) | `Ident`, `Values`, `Semantics` | `LineageId`, the ghost-log alloc and destroy records, the derived quantities, with examples over hand-written logs at B; the semantics and `ghost_log_adequate` at 19 | B, 19 |
-| D12 | The leakage-trace interface (R-0592): `Secret<T>`, `classify`, `declassify`, `ct_select`, `ct_eq` | `Types`, `Primitives`, `Semantics` | leakage records in the ghost log and a variable-time flag per primitive at B (with examples); `Secret<T>` on scalars, `classify` (the pure classify of a value passed in, no wrapper duplicating it), the entropy capability's `Secret<T>` output from slice 7 ([decision](../decisions.md#decided-2026-11-07-stack-randomness)), `declassify(x, "reason")`, `ct_select`, the closed CT operation table and the Q2.2-revised scalar Copy rule at 7; fill-bytes from entropy at 15; grant-backed sources at 16, 18, 27 | B, 6, 7, 15 |
+| D11 | Byte accounting (R-0592) | `Ident`, `Values`, `Semantics`, `Leakage` | `LineageId`, the ghost-log alloc and destroy records, the derived quantities, with examples over hand-written logs at B; the semantics and `ghost_log_adequate` in phase B (step 17); source-level allocation at slice 19 | B, 19 |
+| D12 | The leakage-trace interface (R-0592): `Secret<T>`, `classify`, `declassify`, `ct_select`, `ct_eq` | `Types`, `Primitives`, `Semantics`, `Leakage` | leakage records in the ghost log and a variable-time flag per primitive at B (with examples); `Secret<T>` on scalars, `classify` (the pure classify of a value passed in, no wrapper duplicating it), the entropy capability's `Secret<T>` output from slice 7 ([decision](../decisions.md#decided-2026-11-07-stack-randomness)), `declassify(x, "reason")`, `ct_select`, the closed CT operation table and the Q2.2-revised scalar Copy rule at 7; fill-bytes from entropy at 15; grant-backed sources at 16, 18, 27 | B, 6, 7, 15 |
 | D13 | Q4.6 and Q4.7 revised | `Primitives`, `Borrow`, `Evidence` | `byte_at` needs an in-range offset; a range without `else` needs evidence of validity | 15, 16 |
 | D14 | Closed evidence (Q9.11, OD125 qualified, CON-2); `assume` never admits safety (OD80, CON-6); vacuous preconditions (OD120) | `Evidence`, `Obligations`, `Admission` | evidence sources; `assume` excluded; vacuity refusal | 5, 8 |
 | D15 | Policies and `Concrete.toml` | not Core, except the stack budget | compiler data over `Facts`; the spec defines `Fact.Holds` and the mandatory stack-budget refusal (D32) | — |
@@ -796,7 +796,7 @@ step cites the row once it is on main; a step that needs a row not yet on main w
 | D18 | Q9.4 flat data and matches; Q9.5 heap open; Q1.3 pack and unpack; Q9.7 one inventory | `Types`, `Syntax`, `Primitives` | 1.3, 1.5, 1.11 | 9, 10, 19 |
 | D19 | Slice-0 surface: a distinct "not supported in this slice" refusal; leading zeros refused | `Lexical`, `Grammar`, `Fragments` | `Rule.fragment`, kind `unsupported`; the lexical rule | A (steps 8, 9) |
 | D20 | Thin vertical slices, integers first ([row](../decisions.md#decided-project-vertical-slices-2026-11-06)); the agreed order ([vertical slices](../../ROADMAP.md#vertical-slices)) | `Fragments`; the step order (6) | one `SliceId` per slice; each slice a pair of fragment predicates | all |
-| D21 | Abort is the same terminal trap (`dec:1224`); may-abort is a separate fact | `Semantics`, `Facts` | `TrapKind.abort`, not `implicit`; explicit `abort()` in slice 1 (slice plan owner question 6) | 1 |
+| D21 | Abort is the same terminal trap (`dec:1224`); may-abort is a separate fact | `Semantics`, `Facts` | abort is a trap kind, not `implicit` (its name is the owner's, question 9); explicit `abort()` in slice 1 (slice plan owner question 6) | 1 |
 | D22 | Allocation failure is a value (Q1.8, Q1.9) | `Primitives` | `AllocFailure<T>`; `exhausted` is target-only | 19 |
 | D23 | Default struct layout (SPARK or runtime row, 2026-11-06): declaration order, natural alignment, size rounded up to the alignment, a zero-sized type has no bytes | `Values` (`Layout`) | `Layout.size`, `Layout.align`, field offsets; the empty struct of slice 1 has size 0 | 1 (ZST), 9 |
 | D24 | An extensible observable-event kind in Core ([SPARK row](../decisions.md#decided-project-spark-2026-11-06); R-0602: it also protects secret wipes) | `Semantics`, `Contract` | `Event.kind`; only these feed `observe` (1.7); wipe events made observable-protected at 7 | B |
@@ -906,7 +906,8 @@ builds.
 1. `Basics`: `AList` (`lookup`, `update`, `erase`, `map`) and its lemmas. Migrate the lookups one
    fragment per commit and delete the duplicate lemmas.
 2. `Ident`: the typed identities, `SiteId`, `Span`, `SliceId`, `RuleId` (a Lean name and a revision,
-   1.10) and `spec_version`. No rule type lives here, so `Ident` depends on nothing downstream.
+   1.10) and `spec_version`; `Rules`, the rule registry, and its gate (`scripts/spec/rules.sh`). No
+   rule type lives in `Ident`, so it depends on nothing downstream.
 **The foundation (owner, 2026-11-07 and 2026-11-08).** The owner chose to write and freeze the
 shared foundation before slice 1 builds on it, and then to add each slice's rules on top of it
 without rewriting it ([foundation first](../decisions.md#decided-2026-11-07-foundation-first)). The
@@ -920,15 +921,15 @@ that writes it. Steps that edit a contract written earlier are sequential.
 
 | contract | written in | module |
 |---|---|---|
-| C1 execution, calls and cleanup | steps 7 (syntax), 14 (step relation, cleanup) | `Syntax`, `Semantics` |
+| C1 execution, calls and cleanup | steps 7 (syntax), 14 (step relation, cleanup) | `Syntax`, `Semantics`, `Cleanup` |
 | C2 scalars, failure and arithmetic | steps 3 (types, errors, outcome), 4 (operations) | `Types`, `Outcome`, `Scalar` |
 | C3 target, layout and representation | steps 3 (profile), 5 (layout) | `Target`, `Layout`, `Values` |
 | C4 byte memory and value validity | step 13 | `Store` |
-| C5 dynamic borrow, brands and authority | steps 10 (static), 16 (dynamic invariant, ports) | `Ownership`, `Borrow`, `Brand`, `Authority` |
+| C5 dynamic borrow, brands and authority | steps 10 (static), 16 (dynamic invariant, ports) | `Ownership`, `Borrow`, `Brand`, `Authority` (static rules); the invariant over `Store` and `Semantics` in `Proofs/` |
 | C6 observations and environment | step 12 | `Contract` |
 | C7 secret leakage and accounting | step 17 | `Leakage` |
-| C8 evaluator adequacy and termination | step 15 | `Semantics` |
-| C9 identities, primitive contracts, evidence and erasure | steps 2 (on `wip/spec-core`), 6, 11, 19 | `Ident`, `Rules`, `Primitives`, `Evidence`, `Checker`, `Facts` |
+| C8 evaluator adequacy and termination | step 15 | `Semantics`, `Termination` |
+| C9 identities, primitive contracts, evidence and erasure | steps 2 (on `wip/spec-core`), 6, 10, 11, 19 | `Ident`, `Rules`, `Primitives`, `Evidence`, `Obligations`, `Checker`, `EvidenceSem`, `Facts`, `erase` in `Semantics` |
 | C10 frames and ABI | step 18 | `Frame` |
 
 3. `Target` and `Types` (C3's profile, C2's classification). `Target`: the read-only target profile
@@ -953,7 +954,8 @@ that writes it. Steps that edit a contract written earlier are sequential.
    ([question 18](../decisions.md#foundation-q18)).
 6. `Primitives` (C9's contract interface): one primitive-contract interface (types, authority,
    ownership and dependencies, pre- and postconditions, footprint, failures, events and leakage,
-   resource effects, termination) and the lawful extensible registry that refuses an unknown
+   resource effects, termination), parameterized over the event and leakage records that steps 12
+   and 17 define, so no step uses a later definition and the lawful extensible registry that refuses an unknown
    operation ([question 16](../decisions.md#foundation-q16)), with the instances slices 0 and 1 and
    the old kernel need. A prerequisite of `Syntax` (2.2).
 7. `Syntax` (C1's commands): the one Core syntax, with `SiteId`s, a site table and attributes as
@@ -985,8 +987,10 @@ that writes it. Steps that edit a contract written earlier are sequential.
 
 Admission (step 11) covers slices 0 and 1 and the old kernel. Each port of phase B extends it in
 the same step with the premises of the fragment it ports, creating the static module it needs
-(`Cleanup` at step 14; `Borrow`, `Brand`, `Authority` and `Memory` at step 16; `Termination` with
-slice 4, step 27), so no step reads a judgment a later step defines.
+(`Cleanup` at step 14; `Termination` at step 15, with C8's termination evidence: per-function
+permissions and evidence dependencies; `Borrow`, `Brand`, `Authority` and `Memory` at step 16), and
+each slice step adds its forms as instances (slice 4's loop forms of `Termination` at step 27),
+so no step reads a judgment a later step defines.
 
 **Every phase-A step, like every later one,** gives each new rule a readable doc comment citing its
 decision row and at least one accepted and one refused example (`RM:331`). The per-rule gate landed
@@ -1018,7 +1022,10 @@ registered rule.
     fragment's run takes an oracle, the port follows the realizable direction below.
 15. `Semantics`, the evaluator (C8): `run` and `Eval` over the hybrid state, choices as oracles
     checked against the operation contracts, soundness, completeness, fuel monotonicity,
-    trace-prefix consistency and infinite-behaviour adequacy against step 14's relation; the rest of
+    trace-prefix consistency and infinite-behaviour adequacy against step 14's relation; the static
+    module `Termination` with C8's termination evidence (per-function termination permissions and
+    evidence dependencies, a theorem about all allowed runs under named premises), so that step 20's
+    `checked_exits` has its premise; the rest of
     `Primitives` (every existing operation's contract, pure and stateful). The bridge
     `Core.run (embed p) n ≈ run p n`.
 16. C5's dynamic half: the preservation invariant over owner slots, moves, roots and projections,
@@ -1076,6 +1083,7 @@ that would change a foundation definition stops and goes to the owner.
 
 24. Slices 0 and 1 (Q8.2): the zero-sized empty struct, move, explicit `abort()` with the trap line
     (D5, D21) and the trap kinds the owner chose ([question 9](../decisions.md#foundation-q9)),
+    which complete step 12's trap line and discharge README obligation O4,
     `checked_never_stuck`, `checked_no_implicit_traps`, `checked_exits`, over the new admission and
     semantics. The slice-0 theorems over `Fragment.core s0`, and the slice-0 stack fact and its
     budget refusal (D32). The old kernel and every bridge lemma are deleted; the observation
@@ -1088,8 +1096,8 @@ that would change a foundation definition stops and goes to the owner.
     assignment, no shadowing, `discard`; the octagon checker through branches and joins (D2); the
     may-abort fact.
 27. Slice 4: `while`, `for … from … until`, labels, `break`, `continue`, `#[invariant]`,
-    `#[variant]`, `#[may_not_terminate("r")]` on loops; the loop rule (D3); `Termination` and
-    `checked_terminates` (D4); the step-counting cost model for loops (D33).
+    `#[variant]`, `#[may_not_terminate("r")]` on loops; the loop rule (D3); the loop instances of
+    step 15's `Termination` and `checked_terminates` (D4); the step-counting cost model for loops (D33).
 28. Slice 5: functions, parameters, calls, recursion with one `#[variant]` or permission per
     recursive component, `#[requires]` and `#[ensures]` with call-site obligation schemas, closed
     call evidence (D14); the always-aborts fact and path pruning after an always-aborting call
@@ -1100,7 +1108,7 @@ that would change a foundation definition stops and goes to the owner.
     here ([question 14](../decisions.md#foundation-q14)). Explicit capability arguments and
     capability-variable substitution stay outside `Fragment.surface` until slice 11.
 30. Slice 7: `Secret<T>` on scalars over step 17's leakage semantics (D12), with entropy output as
-    `Secret<T>`; the wipe event kind.
+    `Secret<T>`; scalar `Secret<T>` connected to step 17's wipe events.
 31. Slice 8: `assert`, `assume`, `ghost let`, `spec fn`, `#[proof(path)]` (D7),
     `assert(e) by thm(...)` (D27), vacuity refusal and strength labels, `#[test]`; step-bound
     proofs (D33).
@@ -1110,7 +1118,7 @@ that would change a foundation definition stops and goes to the owner.
 33. Slice 10: enums and `match`. Slice 11: generics, `CapVarId`, Mono re-admission as a statement.
     Slice 12: `Option`, `Result`, `checked_*` (D6), `try_convert`. One step per slice.
 34. Slices 13–15: references and borrow blocks, traits, `Destroy` and `defer`, arrays and range
-    views with entropy fill-bytes (D13), each over the Core of steps 14 and 16; one step per slice.
+    views with entropy fill-bytes (D12, D13), each over the Core of steps 14 and 16; one step per slice.
 35. Slices 16–18: text and Console (with the UTF-8 failure classification, [question 11](../decisions.md#foundation-q11)),
     modules and constants (with `pub`, field privacy and the struct-invariant source feature, D26),
     Fs and Environment; one step per slice.

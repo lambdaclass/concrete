@@ -24,11 +24,11 @@
 - "ok go ahead with all the decisions": UBSan leaves the slice-0 gates (it checks nothing on LLVM IR
   input; ASan stays); the BIR → LCB-IR adapter theorem is complete (an error produces no artifact,
   success implies correctness); the landing scripts shrink (R-0617); Claude's quota goes to the
-  critical path; the lexer and LL(1) parser start now (R-0620); one writer for `docs/decisions.md`
+  critical path; the lexer and LL(1) parser start now (R-0620; the parser waits for the approved written grammar, R-0622); one writer for `docs/decisions.md`
   and `ROADMAP.md`; review rounds are capped by risk, 2, 3 and 5 (R-0618); one clones folder
   (R-0619); a no-libc runtime around slices 24–25 (R-0621); a report-only compile-speed budget
-  (R-0550); and the ISS-0014 F7 termination wording, applied in `docs/decisions.md`, `README.md`
-  and `docs/PHILOSOPHY.md` (ISS-0014 closed). The process rules are in `AGENTS.md`.
+  (R-0550); and the ISS-0014 F7 termination wording, applied in `docs/decisions.md`, `README.md`,
+  `docs/PHILOSOPHY.md` and the no-hidden-traps changelog fragment (ISS-0014 closed). The process rules are in `AGENTS.md`.
 
 ### Owner decisions: agy reviews, the std-per-slice table, the written grammar and a speed target (2026-11-08)
 
