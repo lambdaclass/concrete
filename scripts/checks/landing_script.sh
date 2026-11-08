@@ -1167,17 +1167,13 @@ inv_leg tin3 binv-legacy 5456
   && ok "a change under legacy/ (inventory untouched) still needs a rehearsal" || { no "legacy change: dry-run land exit $rc"; echo "$out" | sed 's/^/      /'; }
 
 # An owner sign-off record (scripts/land/signoff.sh), published to origin. put-signoff <sha> <mode>
-# [<other sha>]: valid; none removes it; othersha records <other sha> and files it under <sha>;
-# tampered changes kimi.txt after recording; otherreview makes kimi's request body name <other sha>;
-# otherreviewed gives that request a reviewed line for <other sha> while its body and output name
-# <sha>; noreviewed removes its reviewed line; requestverdict puts ACCEPT only in agy's request;
-# unnamedbody gives kimi's request no commit name; noagy drops agy's verdict; reject ends agy's output
-# with VERDICT: REJECT; unnamed has a quote that names no commit.
+# [<other sha>]: valid; none removes it; variants preserve a valid record except for the named fault.
+# SO_ROUNDS_AT can replace the note with a review-evidence commit; SO_QUOTE replaces the quote.
 printf '#!/usr/bin/env bash\nSIGNOFF=%q\n' "$ROOT_DIR/scripts/land/signoff.sh" > "$TMP/put-signoff"
 cat >> "$TMP/put-signoff" <<'SIGNOFF_EOF'
 set -e
 sha="$(git rev-parse "$1")"; mode="$2"; R=refs/owner-signoff; tab="$(printf '\t')"
-base="${SO_BASE:-$(git rev-parse origin/main)}"; rounds="${SO_ROUNDS:-5}"
+base="${SO_BASE:-$(git rev-parse origin/main)}"; rounds="${SO_ROUNDS:-5}"; at="${SO_ROUNDS_AT:-$sha}"
 git update-ref -d "$R/$sha" 2>/dev/null || true
 CONCRETE_SKIP_GATES=1 git push -q origin ":$R/$sha" 2>/dev/null || true
 [ "$mode" = none ] && exit 0
@@ -1185,10 +1181,10 @@ CONCRETE_SKIP_GATES=1 git push -q origin ":$R/$sha" 2>/dev/null || true
 bash "$(dirname "$0")/put-review" "$sha" "findings@$rounds"
 d="$(mktemp -d)"
 for r in codex kimi agy; do
-  printf 'review of %s by %s\n' "$sha" "$r" > "$d/$r-request"
+  printf 'reviewed: %s\nreview of %s by %s\n' "$sha" "$sha" "$r" > "$d/$r-request"
   printf '  VERDICT: ACCEPT\n' > "$d/$r"
 done
-bash "$SIGNOFF" record "$sha" --base "$base" --rounds-at "$sha" --date 2026-11-08 --quote "sign off ${sha:0:8}, yes" \
+bash "$SIGNOFF" record "$sha" --base "$base" --rounds-at "$at" --date 2026-11-08 --quote "sign off $sha, yes" \
   --codex-request "$d/codex-request" --codex "$d/codex" \
   --kimi-request "$d/kimi-request" --kimi "$d/kimi" \
   --agy-request "$d/agy-request" --agy "$d/agy" >/dev/null
@@ -1215,10 +1211,18 @@ set_request() { # reviewer stored-request-file
   variant "s/^request-$r: .*/request-$r: $r-request.txt $(sha256sum < "$q" | cut -d' ' -f1)/" \
     "set:$r-request.txt:$(git hash-object -w "$q")"
 }
+parented=0
 case "$mode" in
   valid) ;;
   othersha) variant "s/^commit: .*/commit: $(git rev-parse "$3")/" ;;
   unnamed) variant "s/^quote: .*/quote: sign off the branch/" ;;
+  ambiguous) variant "s/^quote: .*/quote: $SO_QUOTE/" ;;
+  parented) parented=1 ;;
+  blockedlast) printf 'VERDICT: ACCEPT\nVERDICT: BLOCKED\n' > "$d/agy-r"
+    variant "s/^verdict-agy: .*/verdict-agy: agy.txt $(sha256sum < "$d/agy-r" | cut -d' ' -f1)/" \
+      "set:agy.txt:$(git hash-object -w "$d/agy-r")" ;;
+  wrongtarget) printf 'reviewed: %s\nReview exact commit %s. Do not review %s; that is a later unreviewed change.\n' "$sha" "$(git rev-parse "$3")" "$sha" > "$d/kimi-q"
+    set_request kimi "$d/kimi-q" ;;
   tampered) variant "" "set:kimi.txt:$(printf 'edited output\n  VERDICT: ACCEPT\n' | git hash-object -w --stdin)" ;;
   otherreview) printf 'reviewed: %s\nreview of %s by kimi\n' "$sha" "$(git rev-parse "$3")" > "$d/kimi-o"
     set_request kimi "$d/kimi-o" ;;
@@ -1238,6 +1242,7 @@ case "$mode" in
       "set:agy.txt:$(git hash-object -w "$d/agy-r")" ;;
   *) echo "put-signoff: unknown mode $mode" >&2; exit 2 ;;
 esac
+[ "$parented" = 0 ] || git update-ref "$R/$sha" "$(git commit-tree "$(git rev-parse "$R/$sha^{tree}")" -p "$sha" -m parented)"
 rm -rf "$d"
 CONCRETE_SKIP_GATES=1 git push -q -f origin "$R/$sha"
 SIGNOFF_EOF
@@ -1307,6 +1312,9 @@ so_leg "F1: a reviewed line for another commit despite body and output naming th
 so_leg "F1b: a request without a reviewed first line" noreviewed refuse "the kimi request's first line is not a 'reviewed: <full 40-hex SHA>' line"
 so_leg "F2: ACCEPT in agy's request but no verdict in its output" requestverdict refuse "the agy output has no verdict"
 so_leg "a request body that names no commit" unnamedbody refuse "the kimi request body does not name ${R2:0:10}"
+so_leg "ISS-0026/F3: a request that names another exact commit under review" wrongtarget refuse "as the exact commit under review"
+so_leg "ISS-0027/F4: ACCEPT followed by a final BLOCKED verdict" blockedlast refuse "the agy output's last verdict is 'BLOCKED'"
+so_leg "ISS-0025/G3: a valid record tree re-committed with a parent" parented refuse "the record commit is not parentless"
 so_leg "a sign-off without agy's verdict" noagy refuse "the record has no agy verdict"
 so_leg "a sign-off whose agy output ends in REJECT" reject pass "owner sign-off (1) at its exact SHA, and the head is their clean merge"
 o="$(bash "$ROOT_DIR/scripts/land/signoff.sh" verify "$R2" --base "$MR" 2>&1)"; r=$?
@@ -1340,6 +1348,93 @@ o="$(bash "$ROOT_DIR/scripts/land/signoff.sh" verify "$R2" --base "$MR" 2>&1)"; 
   && ok "verify refuses cap evidence that is not a well-formed review.sh note" || { no "malformed cap note (exit $r)"; echo "$o" | sed 's/^/      /'; }
 bash "$TMP/put-review" "$R2" none; bash "$TMP/put-signoff" "$R2" none
 bash "$TMP/put-signoff" "$SD" none
+
+echo "=== owner sign-off hardening: object names, writer substitution and manual evidence ==="
+# ISS-0023/G1: two commit objects share a prefix, and a branch with that name selects one under
+# ref-aware resolution. Object-only disambiguation must reject the quote with or without the branch.
+python3 - "$(git rev-parse "$R2^{tree}")" "$MR" "$TMP/prefix-pair" <<'PY'
+import hashlib, sys, subprocess
+tree, base, out = sys.argv[1:]
+seen = {}
+for i in range(200000):
+    raw = (f"tree {tree}\nparent {base}\nauthor Test <test@example.invalid> 1794096000 +0000\ncommitter Test <test@example.invalid> 1794096000 +0000\n\n{i}\n").encode()
+    h = hashlib.sha1(b"commit " + str(len(raw)).encode() + b"\0" + raw).hexdigest()
+    p = h[:7]
+    if p in seen:
+        old, oldraw = seen[p]
+        for data in (oldraw, raw):
+            subprocess.run(["git", "hash-object", "-w", "-t", "commit", "--stdin"], input=data, check=True, stdout=subprocess.DEVNULL)
+        open(out, "w").write(f"{old} {h} {p}\n")
+        break
+    seen[p] = (h, raw)
+else:
+    raise RuntimeError("no collision")
+PY
+read -r COLL_A COLL_B COLL_PREFIX < "$TMP/prefix-pair"
+git branch "$COLL_PREFIX" "$COLL_A"
+SO_QUOTE="approve $COLL_PREFIX" bash "$TMP/put-signoff" "$COLL_A" ambiguous
+o="$(bash "$ROOT_DIR/scripts/land/signoff.sh" verify "$COLL_A" --base "$MR" 2>&1)"; r=$?
+[ "$r" = 1 ] && has "$o" "the quote does not name ${COLL_A:0:10}" \
+  && ok "ISS-0023/G1: an ambiguous object prefix is refused even when a branch selects one object" || { no "ambiguous quote (exit $r)"; echo "$o" | sed 's/^/      /'; }
+git branch -D "$COLL_PREFIX" >/dev/null; bash "$TMP/put-signoff" "$COLL_A" none
+
+# Owner item 1: kimi wrote SD, so codex and agy are the required reviewers. Their full-access ACCEPTs
+# are mandatory; kimi cannot review, and a diff-only or non-ACCEPT review does not substitute.
+WD="$TMP/writer"; mkdir -p "$WD"
+for r in codex kimi agy; do printf 'reviewed: %s\nReview exact commit %s by %s.\n' "$SD" "$SD" "$r" > "$WD/$r-request"; done
+for r in codex kimi agy; do printf 'READ: docs/so.md\nREPOSITORY: readable\nVERDICT: ACCEPT\n' > "$WD/$r"; done
+WRITER_EVIDENCE="author:$(git show -s --format='%an <%ae>' "$SD")"
+writer_record() {
+  bash "$ROOT_DIR/scripts/land/signoff.sh" record "$SD" --base "$MR" --rounds-at "$SD" --date 2026-11-08 \
+    --quote "approve $SD" --writer kimi --writer-evidence "$WRITER_EVIDENCE" "$@"
+}
+o="$(writer_record --codex-request "$WD/codex-request" --codex "$WD/codex" --agy-request "$WD/agy-request" --agy "$WD/agy" 2>&1 && \
+  bash "$ROOT_DIR/scripts/land/signoff.sh" verify "$SD" --base "$MR" 2>&1)"; r=$?
+[ "$r" = 0 ] && has "$o" "verdicts: codex ACCEPT, agy ACCEPT" && has "$(git show "refs/owner-signoff/$SD:record.txt")" "absent-kimi: writer" \
+  && ok "a valid writer-substituted reviewer set records and verifies" || { no "valid writer substitution (exit $r)"; echo "$o" | sed 's/^/      /'; }
+git update-ref -d "refs/owner-signoff/$SD"
+o="$(writer_record --codex-request "$WD/codex-request" --codex "$WD/codex" --kimi-request "$WD/kimi-request" --kimi "$WD/kimi" --agy-request "$WD/agy-request" --agy "$WD/agy" 2>&1)"; r=$?
+[ "$r" != 0 ] && has "$o" "writer kimi can never be a reviewer" \
+  && ok "the writer listed as a reviewer is refused" || { no "writer as reviewer (exit $r)"; echo "$o" | sed 's/^/      /'; }
+printf 'READ: docs/so.md\nREPOSITORY: readable\nVERDICT: REJECT\n' > "$WD/agy"
+o="$(writer_record --codex-request "$WD/codex-request" --codex "$WD/codex" --agy-request "$WD/agy-request" --agy "$WD/agy" 2>&1)"; r=$?
+[ "$r" != 0 ] && has "$o" "writer-substituted records require ACCEPT" \
+  && ok "a missing non-writer ACCEPT is refused" || { no "non-writer REJECT (exit $r)"; echo "$o" | sed 's/^/      /'; }
+printf 'VERDICT: ACCEPT\n' > "$WD/agy"
+o="$(writer_record --codex-request "$WD/codex-request" --codex "$WD/codex" --agy-request "$WD/agy-request" --agy "$WD/agy" 2>&1)"; r=$?
+[ "$r" != 0 ] && has "$o" "has no REPOSITORY: readable line" \
+  && ok "a diff-only review is refused for a writer-substituted record" || { no "diff-only writer review (exit $r)"; echo "$o" | sed 's/^/      /'; }
+git update-ref -d "refs/owner-signoff/$SD"
+
+# Manual rounds: two complete, readable rounds satisfy SD's docs cap. The builder refuses a diff-only
+# output, and a manifest changed to repository: unreadable cannot qualify a sign-off.
+EV_ARGS=()
+for n in 1 2; do
+  for r in codex kimi agy; do
+    printf 'READ: docs/so.md\nREPOSITORY: readable\nVERDICT: ACCEPT\n' > "$WD/$r"
+    EV_ARGS+=(--round "$n" --reviewer "$r" --request "$WD/$r-request" --output "$WD/$r")
+  done
+done
+bash "$ROOT_DIR/scripts/land/signoff.sh" evidence build "$SD" "${EV_ARGS[@]}" >/dev/null
+EV="$(git rev-parse "refs/review-evidence/$SD")"
+SO_ROUNDS_AT="$EV" bash "$TMP/put-signoff" "$SD" valid
+o="$(bash "$ROOT_DIR/scripts/land/signoff.sh" verify "$SD" --base "$MR" 2>&1)"; r=$?
+[ "$r" = 0 ] && has "$o" "docs change, cap 2 reached at ${EV:0:10} with 2 round(s)" \
+  && ok "readable review-evidence rounds count toward the cap" || { no "readable evidence cap (exit $r)"; echo "$o" | sed 's/^/      /'; }
+printf 'VERDICT: ACCEPT\n' > "$WD/codex"
+o="$(bash "$ROOT_DIR/scripts/land/signoff.sh" evidence build "$SD" --round 1 --reviewer codex --request "$WD/codex-request" --output "$WD/codex" 2>&1)"; r=$?
+[ "$r" != 0 ] && has "$o" "has no REPOSITORY: readable line" \
+  && ok "the evidence builder refuses a diff-only review" || { no "diff-only evidence (exit $r)"; echo "$o" | sed 's/^/      /'; }
+MF=round-1-codex-manifest.txt
+MB="$(git cat-file blob "refs/review-evidence/$SD:$MF" | sed 's/^repository: readable$/repository: unreadable/' | git hash-object -w --stdin)"
+BT="$(git ls-tree "refs/review-evidence/$SD" | while read -r mode type blob path; do [ "$path" != "$MF" ] || blob="$MB"; printf '%s %s %s\t%s\n' "$mode" "$type" "$blob" "$path"; done | git mktree)"
+BE="$(git commit-tree "$BT" -m unreadable)"
+git update-ref "refs/review-evidence/$SD" "$BE"
+o="$(SO_ROUNDS_AT="$BE" bash "$TMP/put-signoff" "$SD" valid 2>&1)"; r=$?
+[ "$r" != 0 ] && has "$o" "does not say repository: readable" \
+  && ok "evidence without repository: readable does not count toward the cap" || { no "unreadable evidence cap (exit $r)"; echo "$o" | sed 's/^/      /'; }
+git update-ref -d "refs/review-evidence/$SD"; bash "$TMP/put-signoff" "$SD" none
+
 git checkout -q train/trv
 # The same valid sign-off, but a head beyond the clean merge of its members. train.sh already refuses
 # a head that is not the built train; pure_merge is the provenance's own check, run here on heads that
