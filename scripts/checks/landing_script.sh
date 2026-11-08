@@ -572,6 +572,11 @@ dec="$( cd "$RI" && export CONCRETE_TEST_OUT="$TMP" CONCRETE_TEST_LIB="$ROOT_DIR
 dec="$( cd "$RI" && source "$ROOT_DIR/scripts/checks/lib/prepush_record.sh" && ppr_remote_components "$RI" "$RIH" "$TMP/ri.changed" "$TMP/ri.plan" "$TMP/ri.comp" \
   && ppr_remote_check "$RI" "$TMP/ri.comp" && echo REUSE || echo "refused:$PPR_REASON" )"
 has "$dec" "refused:changed:env" && ok "a push in another CONCRETE_* environment than the host's run does not reuse it" || no "e2e env mismatch: $dec"
+git -C "$HH/concrete2" remote set-url origin https://github.com/unbalancedparentheses/concrete2.git
+e2e
+git -C "$HH/concrete2" remote set-url origin "$TMP/ri-origin.git"
+[ "$rc" = 3 ] && has "$out" "INCOMPLETE" && has "$out" "the gate clone" && has "$out" "points at another repository" \
+  && ok "a gate clone whose origin is the archived repository is refused on the host before it fetches (INCOMPLETE)" || { no "stale gate clone: exit $rc"; echo "$out" | sed 's/^/      /'; }
 touch "$HH/unreachable"; e2e; rm -f "$HH/unreachable"
 [ "$rc" = 3 ] && has "$out" "INCOMPLETE" && [ ! -f "$RIATT" ] && ok "the real transport to an unreachable host is INCOMPLETE (exit 3), attests nothing" || { no "e2e unreachable: exit $rc"; echo "$out" | sed 's/^/      /'; }
 hook="$ROOT_DIR/.githooks/pre-push"
@@ -639,7 +644,7 @@ cat > "$TMP/sshstub/ssh" <<'SSH'
 #!/bin/sh
 [ "$1" = -G ] || { echo "ssh stub: only -G" >&2; exit 255; }
 for host; do :; done
-case "$host" in github-lambdaclass) echo "hostname github.com" ;; *) echo "hostname $host" ;; esac
+case "$host" in github-lambdaclass|github_work) echo "hostname github.com" ;; *) echo "hostname $host" ;; esac
 SSH
 chmod +x "$TMP/sshstub/ssh"
 url_ok=1
@@ -657,6 +662,7 @@ done <<'URLS'
 0 ssh://git@github.com:22/lambdaclass/concrete.git lambdaclass/concrete
 0 ssh://git@github-lambdaclass/lambdaclass/concrete lambdaclass/concrete
 0 git@GITHUB.COM.:lambdaclass/concrete lambdaclass/concrete
+0 git@github_work:lambdaclass/concrete.git lambdaclass/concrete
 0 https://user:token@github.com:443/lambdaclass/concrete lambdaclass/concrete
 0 /tmp/x.git test/repo
 0 file:///tmp/x.git test/repo
@@ -672,6 +678,14 @@ done <<'URLS'
 1 foo::https://github.com/lambdaclass/concrete lambdaclass/concrete
 1 ftp://github.com/lambdaclass/concrete lambdaclass/concrete
 URLS
+# A refusal never prints a URL's credentials: the hook and the guard redact userinfo.
+git remote add gh-secret https://x-access-token:SENTINEL-SECRET@github.com/unbalancedparentheses/concrete2.git
+out="$(LAND_REMOTE=gh-secret bash "$TRAIN" ci t1 2>&1)"; rc=$?
+out2="$(cd "$W" && printf 'refs/heads/x %s refs/heads/wip/dst %s\n' "$(git rev-parse main)" 0000000000000000000000000000000000000000 \
+  | bash "$ROOT_DIR/.githooks/pre-push" gh-secret https://x-access-token:SENTINEL-SECRET@github.com/unbalancedparentheses/concrete2.git 2>&1)"; rc2=$?
+git remote remove gh-secret
+[ "$rc" != 0 ] && [ "$rc2" = 1 ] && has "$out" "https://***@github.com" && has "$out2" "https://***@github.com" \
+  && ! has "$out$out2" "SENTINEL" && ok "refusals redact a URL's credentials" || no "a refusal printed credentials or did not refuse ($rc/$rc2): $out $out2"
 [ "$url_ok" = 1 ] && ok "the one-repository guard accepts only github.com/lambdaclass/concrete, in every URL form and through ssh aliases" || no "the one-repository guard misjudged a URL form"
 out="$(LAND_REMOTE=gh-canon bash "$TRAIN" ci t1 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "gh would read another repository" && ok "ci refuses a LAND_REPO that is not the one repository the remote names" || no "ci accepted LAND_REPO=test/repo on the canonical remote (exit $rc)"

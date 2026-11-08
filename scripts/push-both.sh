@@ -87,7 +87,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-echo "push-both: ${LOCAL:0:8} to $REMOTE/$BRANCH ($URL)"
+echo "push-both: ${LOCAL:0:8} to $REMOTE/$BRANCH ($(land_url_redact "$URL"))"
 # Push the RECORDED SHA, not `HEAD`. `HEAD` is a moving ref: everything below —
 # the primary verification, the CI wait, the parity check — is about $LOCAL, so
 # pushing HEAD means publishing something other than what was checked.

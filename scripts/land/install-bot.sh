@@ -30,6 +30,9 @@ while [ $# -gt 0 ]; do
   esac; shift
 done
 say() { echo "install-bot: $*"; }
+# URLs on one line, with a scheme URL's userinfo (https://user:TOKEN@host) replaced by *** (as
+# land_url_redact in lib.sh, which this script, run over ssh as a single file, cannot source).
+redact() { sed -E 's#^([A-Za-z][A-Za-z0-9+.-]*://)[^/@]*@#\1***@#' | tr '\n' ' '; }
 [ "$(id -un)" = dev ] || say "WARNING: running as $(id -un), not dev"
 ORIGIN_URL="${INSTALL_ORIGIN_URL:-git@github.com:lambdaclass/concrete.git}"
 
@@ -40,13 +43,13 @@ if [ ! -d "$CLONE/.git" ]; then
 fi
 cd "$CLONE"
 if [ "$(git config --get-all remote.origin.url)" != "$ORIGIN_URL" ]; then
-  say "repointing origin from $(git config --get-all remote.origin.url | tr '\n' ' ') to $ORIGIN_URL"
+  say "repointing origin from $(git config --get-all remote.origin.url | redact) to $(echo "$ORIGIN_URL" | redact)"
   git config --replace-all remote.origin.url "$ORIGIN_URL"
 fi
 # A push URL would send pushes somewhere other than the fetch URL (train.sh refuses one that names
 # another repository); the bot pushes where it fetches, so it keeps none.
 if git config --get-all remote.origin.pushurl >/dev/null 2>&1; then
-  say "removing origin's push URL(s): $(git config --get-all remote.origin.pushurl | tr '\n' ' ')"
+  say "removing origin's push URL(s): $(git config --get-all remote.origin.pushurl | redact)"
   git config --unset-all remote.origin.pushurl
 fi
 if git remote get-url lambdaclass >/dev/null 2>&1; then say "removing the old mirror remote 'lambdaclass' (origin is that repository now)"; git remote remove lambdaclass; fi

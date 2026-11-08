@@ -8,6 +8,7 @@
 #   dryland_only_move_gate rc out   0 iff a dry-run land exited 5 with MOVE_GATE_MARKER as a whole line
 #   LAND_CANONICAL_REPO         the one GitHub repository (owner/name); not overridable
 #   land_url_target url             "<host> <owner/name>" of a network URL; returns 1 for a local one
+#   land_url_redact url             the URL with a scheme URL's userinfo replaced by ***
 #   land_remote_bad remote repo     print why <remote> or <repo> is not LAND_CANONICAL_REPO and return 1, else 0
 #
 # A LEG is one independent validation (impact gates, remote full gates, Codex review). Legs of one
@@ -117,7 +118,8 @@ land_url_target() {
   case "$auth" in *@*) user="${auth%@*}"; user="${user%%:*}" ;; esac
   case "$scheme" in scp) ;; *) case "$h" in *:*) port="${h#*:}"; h="${h%%:*}" ;; esac ;; esac
   h="$(printf '%s' "$h" | tr 'A-Z' 'a-z')"
-  case "$h" in ""|-*|*[!a-z0-9.-]*) echo "? ?"; return 0 ;; esac
+  # A plain name (ssh aliases may carry an underscore); the RESOLVED name is compared, not this one.
+  case "$h" in ""|-*|*[!a-z0-9._-]*) echo "? ?"; return 0 ;; esac
   case "$user" in -*|*[!A-Za-z0-9._-]*) echo "? ?"; return 0 ;; esac
   case "$port" in *[!0-9]*) echo "? ?"; return 0 ;; esac
   case "$scheme" in
@@ -130,6 +132,14 @@ land_url_target() {
   p="${p%/}"; p="${p%.git}"
   printf '%s %s\n' "$h" "$(printf '%s' "$p" | tr 'A-Z' 'a-z')"
 }
+# land_url_redact url: the URL with any userinfo of a scheme URL (https://user:TOKEN@host) replaced
+# by "***", for messages; an scp-like user@ (no secret) is kept.
+land_url_redact() {
+  case "$1" in
+    *://*@*) local rest="${1#*://}"; case "${rest%%/*}" in *@*) printf '%s://***@%s\n' "${1%%://*}" "${rest#*@}"; return 0 ;; esac ;;
+  esac
+  printf '%s\n' "$1"
+}
 land_remote_bad() { # remote repo
   local r="$1" want u target urls net=0
   want="github.com $(printf '%s' "$LAND_CANONICAL_REPO" | tr 'A-Z' 'a-z')"
@@ -140,7 +150,7 @@ land_remote_bad() { # remote repo
     target="$(land_url_target "$u")" || continue
     net=1
     if [ "$target" != "$want" ]; then
-      echo "$r uses $u, not github.com/$LAND_CANONICAL_REPO: this clone points at another repository. Repoint it: git remote set-url $r https://github.com/$LAND_CANONICAL_REPO.git (and drop any other url or pushurl of $r)"
+      echo "$r uses $(land_url_redact "$u"), not github.com/$LAND_CANONICAL_REPO: this clone points at another repository. Repoint it: git remote set-url $r https://github.com/$LAND_CANONICAL_REPO.git (and drop any other url or pushurl of $r)"
       return 1
     fi
   done <<< "$urls"
