@@ -7,28 +7,42 @@ ARCH is x86_64 or aarch64; DISASM is `llvm-objdump -d --no-show-raw-insn` output
 executable (x86-64 in Intel syntax).
 
 The Concrete-owned code is `main` (the runtime entry), `concrete_rt_write_all` and the body
-(`concrete_body`), with or without the Mach-O underscore. From `main`'s entry, every path through
-them is followed over the control-flow graph, tracking the stack pointer's depth below its value
-at `main`'s entry (and the frame pointer's). The bound is the deepest point reached, by the stack
-pointer or by any byte addressed relative to it or the frame pointer (the red zone below the
-stack pointer is used without moving it), counting each
-internal callee's own bound and the depth at which each external function (libc's `write`,
-`_exit`, `abort`) is entered; the external functions' own use is outside it (a premise, listed),
-and so is that `_exit` and `abort` do not return (a path ends at a call to one) and that external
-functions preserve the frame pointer (the ABI's callee-saved rule; every owned function's return
-is checked to restore it).
+(`concrete_body`), with or without the Mach-O underscore. Each owned function is analysed over its
+control-flow graph, from its entry, as a dataflow fixpoint over an abstract state (St): the stack
+pointer's depth below the entry stack pointer, the frame pointer's value, the saved slots and the
+link register (equal on every path into an instruction), and the stack bytes the function has
+written (the intersection over those paths). A byte at depth n lies n bytes below the entry stack
+pointer.
 
-Stack addresses never leave the stack and frame pointers: taking one as a value, storing or
-loading a saved frame pointer other than through the modelled frame save and restore, touching
-bytes at or above the entry stack pointer (the return address, the caller's frame) and returning
-through a link register that does not hold the return address are all refused (St, x86_inst,
-a64_inst).
+The bound is the deepest byte the function's stack pointer reaches or any of its instructions
+addresses through the stack or frame pointer (so the red zone, used below the stack pointer without
+moving it, is covered), with each owned callee's own bound added at its call, and each external
+function (libc's `write`, `_exit`, `abort`) counted at its entry depth.
+
+Why addresses cannot escape this accounting: memory is addressed only through the stack or frame
+pointer (accounted), PC-relatively within a fixed reach of the code (x86 `rip` with a displacement
+up to PC_REACH; on AArch64 a register holding an adrp/adr result within PC_REACH, plus at most one
+add immediate, on every path since the last call, with a bounded offset and no writeback) or
+through the x86 thread-pointer segments. Any other register may hold a stack address (main's argv
+and envp, a value an external function left), so no access goes through one. The analysis also refuses taking a stack address as a value (`lea` of one, the stack or frame
+pointer copied, stored or used in arithmetic, except the modelled frame setup), so only the frame
+save (`push rbp`, `stp x29, x30`) puts one in memory. Saved slots may be read only
+by the modelled restore (`pop rbp`, `leave`, `ldp x29, x30` with base sp). Any other stack read
+must be of bytes the function itself wrote, on every path, since its last call: so no stale value
+(a callee's or the caller's saved frame pointer, libc's scratch) is ever loaded. Accesses must lie
+below the entry stack pointer (never the return address or the caller's frame), returns must be at
+depth 0 with the caller's frame pointer restored and, on AArch64, with the link register holding
+the return address.
+
+The premises (outside the bound, listed in the gate's report): the stack lies farther than
+PC_REACH + 4095 + A64_OFF_REACH bytes from the image's code, and the thread-pointer block (fs/gs)
+is not on the stack; the external functions' own stack use; that `_exit` and `abort` do not return (a path ends at a call to one); that external
+functions follow the ABI's callee-saved rule (the frame pointer and stack pointer preserved).
 
 Fail closed: an instruction outside the modelled set (X86_PLAIN, A64_PLAIN and the control
-transfers), any instruction that writes the stack pointer in a way not modelled here, an indirect
-branch or call, a branch leaving its function, two different depths at one address, a return at a
-nonzero depth, recursion, or a call to a function that is neither Concrete-owned nor a PLT/stub
-symbol is an error (exit 1), never a bound.
+transfers), any of the refusals above, an unmodelled stack-pointer write, an indirect branch, call
+or return, a branch leaving its function, two different states meeting, recursion, or a call to a
+function that is neither Concrete-owned nor a PLT/stub symbol is an error (exit 1), never a bound.
 """
 import re
 import sys
@@ -36,6 +50,7 @@ import sys
 OWNED = ("main", "concrete_body", "concrete_rt_write_all")
 # External functions that do not return (part of the libc premise): a path ends at a call to one.
 NORETURN = ("exit", "_exit", "_Exit", "abort")
+ENTRY = "entry"
 
 
 class Refuse(Exception):
@@ -76,13 +91,8 @@ def parse(path):
 
 
 def target_of(ops):
-    m = re.search(r"0x([0-9a-f]+)\s*<([^>]+)>", ops)
-    if not m:
-        m2 = re.search(r"\b([0-9a-f]+)\s*<([^>]+)>", ops)
-        if not m2:
-            return None, None
-        m = m2
-    return int(m.group(1), 16), m.group(2)
+    m = re.search(r"0x([0-9a-f]+)\s*<([^>]+)>", ops) or re.search(r"\b([0-9a-f]+)\s*<([^>]+)>", ops)
+    return (int(m.group(1), 16), m.group(2)) if m else (None, None)
 
 
 def imm(s):
@@ -91,6 +101,67 @@ def imm(s):
         return int(t, 16) if t.lower().startswith(("0x", "-0x")) else int(t)
     except ValueError:
         raise Refuse(f"not an immediate: {s}") from None
+
+
+class St:
+    """`d`: the stack pointer's depth. `fp`: the frame pointer's value: a depth (int), ENTRY (the
+    caller's, which every return must restore) or None (unknown). `saved`: slots holding a saved
+    frame pointer or link register, (lowest, highest, tag) in byte depths, tag ("fp", value) or
+    ("lr", whether it is this function's return address); kept after the stack pointer moves past
+    them and after a restore (memory keeps them) until an exact overwrite. `lr`: whether the
+    AArch64 link register holds this function's return address. `w`: the stack bytes this
+    function has written since its last call, on every path (not part of the equality key). `g`
+    (AArch64): the registers holding a PC-relative address (adrp/adr, plus an immediate), on every
+    path since the last call (not part of the key): the only registers memory may be addressed
+    through besides the stack and frame pointers."""
+
+    __slots__ = ("d", "fp", "saved", "lr", "w", "g")
+
+    def __init__(self, d=0, fp=ENTRY, saved=frozenset(), lr=True, w=frozenset(), g=frozenset()):
+        self.d, self.fp, self.saved, self.lr, self.w, self.g = d, fp, saved, lr, w, g
+
+    def key(self):
+        return (self.d, self.fp, self.saved, self.lr)
+
+    def but(self, **kw):
+        s = St(self.d, self.fp, self.saved, self.lr, self.w, self.g)
+        for k, v in kw.items():
+            setattr(s, k, v)
+        return s
+
+
+def frame_depth(fp, what):
+    """The frame pointer as a depth, for addressing; refused unless it is this frame's."""
+    if not isinstance(fp, int):
+        raise Refuse(f"frame-relative use of a frame pointer that is not this frame's: {what}")
+    return fp
+
+
+def slot_at(saved, lo, hi):
+    return next((x for x in saved if x[:2] == (lo, hi)), None)
+
+
+def touch(st, lo, hi, mode, what, restore=()):
+    """Check an access of the bytes [lo, hi] (depths) in `mode` ("r", "w" or "rw") and return the
+    new written set. The bytes must be the function's own (depth >= 1). A saved slot may be read
+    only by a restore (`restore`: the slots being restored), and written only by an exact
+    overwrite (which clears it; the caller removes it from `saved`). A read needs every byte
+    written by this function on every path since its last call."""
+    if lo < 1:
+        raise Refuse(f"touches the return address or the caller's frame: {what}")
+    for slot in st.saved:
+        if slot[0] <= hi and lo <= slot[1] and slot not in restore:
+            exact = (slot[0], slot[1]) == (lo, hi) or (lo <= slot[0] and slot[1] <= hi and mode == "w")
+            if "r" in mode or not exact:
+                raise Refuse(f"touches a saved frame pointer or link register: {what}")
+    if "r" in mode and not all(b in st.w for b in range(lo, hi + 1)):
+        raise Refuse(f"reads stack bytes this function has not written: {what}")
+    return st.w | frozenset(range(lo, hi + 1)) if "w" in mode else st.w
+
+
+def cleared(saved, lo, hi):
+    """`saved` without the slots a write of [lo, hi] overwrote."""
+    return frozenset(x for x in saved if not (lo <= x[0] and x[1] <= hi))
 
 
 X86_SP = ("rsp", "esp", "sp", "spl")
@@ -102,72 +173,35 @@ X86_SIZE = {"byte": 1, "word": 2, "dword": 4, "qword": 8, "tbyte": 10, "xmmword"
 MEM = re.compile(r"\[([^\]]*)\]")
 
 
-ENTRY = "entry"
+# PC-relative addressing reaches at most PC_REACH bytes from the instruction (x86 rip
+# displacement; AArch64 adrp/adr target) plus, on AArch64, one add immediate (at most 4095) and
+# the access's own offset (at most A64_OFF_REACH): the premise that the stack lies farther than
+# that from the image's code makes such an access never a stack access.
+PC_REACH = 16 << 20
+A64_OFF_REACH = 32760
 
 
-class St:
-    """The abstract state at an instruction: `d`, the stack pointer's depth below the function's
-    entry; `fp`, the frame pointer's value: a depth (an int), ENTRY (the caller's frame pointer,
-    which every return must restore) or None (unknown); `saved`, the stack slots holding a saved
-    frame pointer or link register, as (lowest, highest) byte depths with a tag (("fp", value) or
-    ("lr", whether it holds the function's own return address)), kept after the stack pointer
-    moves past them and after the register is restored from them, since the memory keeps their
-    contents, until an exact overwrite (`overwrite`); `lr`, whether the AArch64 link
-    register holds the function's own return address. A byte at depth n lies n bytes below the
-    entry stack pointer; the function's own bytes have depth >= 1."""
-
-    __slots__ = ("d", "fp", "saved", "lr")
-
-    def __init__(self, d=0, fp=ENTRY, saved=frozenset(), lr=True):
-        self.d, self.fp, self.saved, self.lr = d, fp, saved, lr
-
-    def key(self):
-        return (self.d, self.fp, self.saved, self.lr)
-
-    def but(self, **kw):
-        s = St(self.d, self.fp, self.saved, self.lr)
-        for k, v in kw.items():
-            setattr(s, k, v)
-        return s
-
-
-def frame_depth(fp, what):
-    """The frame pointer as a depth, for addressing; refused unless it is one."""
-    if not isinstance(fp, int):
-        raise Refuse(f"frame-relative use of a frame pointer that is not this frame's: {what}")
-    return fp
-
-
-def slot_at(saved, lo, hi):
-    return next((x for x in saved if x[:2] == (lo, hi)), None)
-
-
-def check_bytes(st, lo, hi, what, allowed=()):
-    """The bytes [lo, hi] (depths) are the function's own and overlap no saved slot, except the
-    slots `allowed` (the frame-record save/restore itself)."""
-    if lo < 1:
-        raise Refuse(f"touches the return address or the caller's frame: {what}")
-    for slot in st.saved:
-        if slot not in allowed and slot[0] <= hi and lo <= slot[1]:
-            raise Refuse(f"touches a saved frame pointer or link register: {what}")
-
-
-def x86_inst(mn, ops, st):
-    """(new state, deepest byte touched or None) after a non-control x86 instruction. Fails closed:
-    a stack or frame pointer read as a value (other than the modelled frame setup), a stack
-    address taken (`lea`), an indexed or partial-register stack address, an access of unknown size,
-    an access at or above the entry stack pointer or into a saved frame pointer, a stack-pointer
-    write that is not modelled, a push or pop of other than a 64-bit general register."""
+def x86_inst(mn, ops, st, addr=0):
+    """(new state, deepest byte touched or None) after a non-control x86 instruction."""
     what = f"{mn} {ops}"
     args = [a.strip() for a in ops.split(",")] if ops else []
     dst = args[0] if args else ""
-    deepest = None
+    deepest, w, saved = None, st.w, st.saved
     for m in MEM.finditer(ops):
-        inner = m.group(1)
-        terms = re.findall(r"[+-]?\s*[^+\-\s]+", inner)
+        terms = re.findall(r"[+-]?\s*[^+\-\s]+", m.group(1))
         regs = [t.strip(" +-") for t in terms if not re.fullmatch(r"[+-]?\s*(0x[0-9a-f]+|\d+)", t)]
         base = [r for r in regs if r in X86_STACK]
         if not base:
+            # Any other register may hold a stack address (main's argv and envp, a value an
+            # external function left), so memory is addressed only PC-relative or absolutely
+            # (a segment offset: the thread pointer's block).
+            k = sum(int(t.replace(" ", ""), 0) for t in terms if t.strip(" +-") not in regs)
+            if regs == ["rip"]:
+                if abs(k) > PC_REACH:
+                    raise Refuse(f"PC-relative access beyond the premise's reach: {what}")
+            elif regs or not re.search(r"\b[fg]s:\s*$", ops[:m.start()]):
+                raise Refuse(f"memory addressed through a register that may hold a stack address, "
+                             f"or absolutely: {what}")
             continue
         if base[0] not in ("rsp", "rbp"):
             raise Refuse(f"stack address through a partial register: {what}")
@@ -179,27 +213,40 @@ def x86_inst(mn, ops, st):
         if not size or size.group(1) not in X86_SIZE:
             raise Refuse(f"stack access of unknown size: {what}")
         k = sum(int(t.replace(" ", ""), 0) for t in terms if t.strip(" +-") not in regs)
-        if base[0] == "rbp":
-            top = frame_depth(st.fp, what) - k
+        top = (frame_depth(st.fp, what) if base[0] == "rbp" else st.d) - k
+        lo = top - X86_SIZE[size.group(1)] + 1
+        # The memory operand is the destination when it comes first: written only by mov and
+        # setcc, read and written by the others, read only by cmp and test.
+        first = ops.lstrip().find("[") < ops.find(",") if "," in ops else True
+        if not first or mn in ("cmp", "test"):
+            mode = "r"
+        elif mn in ("mov", "movabs") or mn.startswith("set"):
+            mode = "w"
         else:
-            top = st.d - k
-        check_bytes(st, top - X86_SIZE[size.group(1)] + 1, top, what)
+            mode = "rw"
+        w = touch(st.but(w=w, saved=saved), lo, top, mode, what)
+        if "w" in mode:
+            saved = cleared(saved, lo, top)
         deepest = top if deepest is None else max(deepest, top)
+    st = st.but(w=w, saved=saved)
     outside = MEM.sub("", ops)
     modelled = (mn, ops) in (("push", "rbp"), ("pop", "rbp"), ("mov", "rbp, rsp"),
                              ("mov", "rsp, rbp"), ("leave", "")) or (
-        mn in ("sub", "add") and dst == "rsp" and re.fullmatch(r"rsp, (0x[0-9a-f]+|\d+)", ops))
+        mn in ("sub", "add") and re.fullmatch(r"rsp, (0x[0-9a-f]+|\d+)", ops))
     if not modelled and any(re.search(rf"\b{r}\b", outside) for r in X86_STACK):
         raise Refuse(f"stack or frame pointer used as a value: {what}")
-    if mn in ("push", "pop"):
+    if mn == "push":
         if not X86_GPR64.match(dst):
-            raise Refuse(f"push/pop of other than a 64-bit general register: {what}")
-        if mn == "push":
-            d = st.d + 8
-            saved = overwrite(st, ((d - 7, d),), what)
-            if dst == "rbp":
-                saved = saved | {(d - 7, d, ("fp", st.fp))}
-            return st.but(d=d, saved=saved), d
+            raise Refuse(f"push of other than a 64-bit general register: {what}")
+        d = st.d + 8
+        w = touch(st, d - 7, d, "w", what)
+        saved = cleared(st.saved, d - 7, d)
+        if dst == "rbp":
+            saved = saved | {(d - 7, d, ("fp", st.fp))}
+        return st.but(d=d, saved=saved, w=w), d
+    if mn == "pop":
+        if not X86_GPR64.match(dst):
+            raise Refuse(f"pop of other than a 64-bit general register: {what}")
         return x86_pop(st, dst, st.d, what), None
     if mn == "leave":
         return x86_pop(st, "rbp", frame_depth(st.fp, what), what), None
@@ -217,26 +264,16 @@ def x86_inst(mn, ops, st):
     return st, deepest
 
 
-def overwrite(st, spans, what):
-    """`saved` after a write of exactly the 8-byte spans (lo, hi): a saved slot at exactly one of
-    them is overwritten (its stack address is gone); a partial overlap is refused."""
-    for lo, hi in spans:
-        check_bytes(st, lo, hi, what, allowed=tuple(x for x in st.saved if x[:2] == (lo, hi)))
-    return frozenset(x for x in st.saved if x[:2] not in spans)
-
-
 def x86_pop(st, dst, at, what):
     """Pop the 8 bytes whose deepest is at depth `at` into `dst`: a saved frame pointer only into
-    rbp, which then holds the saved value again (any other pop into rbp makes it unknown). The slot
-    stays saved: its memory still holds the stack address."""
+    rbp, which then holds the saved value again (any other pop into rbp makes it unknown)."""
     slot = slot_at(st.saved, at - 7, at)
     if slot and dst != "rbp":
         raise Refuse(f"a saved frame pointer popped into {dst}: {what}")
-    check_bytes(st, at - 7, at, what, allowed=(slot,) if slot else ())
+    touch(st, at - 7, at, "r", what, restore=(slot,) if slot else ())
     if dst != "rbp":
         return st.but(d=at - 8)
-    fp = slot[2][1] if slot and slot[2][0] == "fp" else None
-    return st.but(d=at - 8, fp=fp)
+    return st.but(d=at - 8, fp=slot[2][1] if slot and slot[2][0] == "fp" else None)
 
 
 A64_SP = ("sp", "wsp")
@@ -245,47 +282,88 @@ A64_LR = ("x30", "w30")
 A64_REGSIZE = {"x": 8, "w": 4, "q": 16, "d": 8, "s": 4, "h": 2, "b": 1}
 
 
-def a64_inst(mn, ops, st):
-    """(new state, deepest byte touched or None) after a non-control AArch64 instruction. Fails
-    closed as x86_inst does, and on: writeback on x29; a register offset from sp or x29; sp or
-    x29 stored or read as a value other than the frame record (`stp x29, x30` / `ldp x29, x30`
-    with base sp) and the modelled frame setup; a write to x30 other than the frame-record
-    restore."""
+def a64_size(mn, data, what):
+    if mn in ("ldrb", "strb", "ldrsb", "ldurb", "sturb", "ldursb"):
+        return 1
+    if mn in ("ldrh", "strh", "ldrsh", "ldurh", "sturh", "ldursh"):
+        return 2
+    if mn in ("ldrsw", "ldursw", "ldpsw"):
+        return 4 * len(data)
+    if not data or data[0][0] not in A64_REGSIZE:
+        raise Refuse(f"stack access of unknown size: {what}")
+    return A64_REGSIZE[data[0][0]] * len(data)
+
+
+def a64_reg(r):
+    """The 64-bit name of a general register (w8 -> x8)."""
+    return "x" + r[1:] if re.fullmatch(r"w([0-9]|[12][0-9]|30)", r) else r
+
+
+A64_FLAGS_ONLY = ("cmp", "cmn", "tst", "ccmp", "ccmn", "nop")
+
+
+def a64_inst(mn, ops, st, addr=0):
+    """(new state, deepest byte touched or None) after a non-control AArch64 instruction, with `g`
+    (the PC-relative address registers, as (register, level) pairs) updated: every register the
+    instruction writes leaves it; adrp/adr with a target within PC_REACH of the instruction puts
+    its destination in at level 0, and one add of an immediate up to 4095 to a level-0 register
+    puts its destination in at level 1 (so the address stays within a fixed reach of the code)."""
+    new, deepest = a64_core(mn, ops, st)
+    args = [a.strip() for a in re.split(r",(?![^\[]*\])", ops)] if ops else []
+    first_mem = next((i for i, a in enumerate(args) if a.startswith("[")), len(args))
+    if mn.startswith(("ld", "st")):
+        written = list(args[:first_mem]) if mn.startswith("ld") else []
+        if first_mem < len(args) and (args[first_mem].endswith("!") or first_mem + 1 < len(args)):
+            written.append(re.match(r"\[(\w+)", args[first_mem]).group(1))
+    else:
+        written = [] if mn in A64_FLAGS_ONLY or not args else [args[0]]
+    out = {a64_reg(r) for r in written}
+    g = {x for x in new.g if x[0] not in out}
+    if mn in ("adrp", "adr") and len(args) == 2 and args[0].startswith("x"):
+        t = re.fullmatch(r"(0x[0-9a-f]+)(?:\s*<[^>]*>)?", args[1])
+        if t and abs(int(t.group(1), 16) - addr) <= PC_REACH:
+            g.add((args[0], 0))
+    elif (mn == "add" and len(args) == 3 and args[0].startswith("x") and (args[1], 0) in st.g
+          and re.fullmatch(r"#(0x[0-9a-f]+|\d+)", args[2]) and imm(args[2]) <= 4095):
+        g.add((args[0], 1))
+    return new.but(g=frozenset(g)), deepest
+
+
+def a64_core(mn, ops, st):
+    """(new state, deepest byte touched or None) after a non-control AArch64 instruction."""
     what = f"{mn} {ops}"
     args = [a.strip() for a in re.split(r",(?![^\[]*\])", ops)] if ops else []
     first_mem = next((i for i, a in enumerate(args) if a.startswith("[")), len(args))
     data = args[:first_mem]
     is_load, is_store = mn.startswith("ld"), mn.startswith("st")
-    d, deepest, saved, fp, lr = st.d, None, st.saved, st.fp, st.lr
-    base, record, restored = None, False, False
+    deepest = None
+    record = restored = False
     if first_mem < len(args):
         mem = args[first_mem]
         post = args[first_mem + 1] if first_mem + 1 < len(args) else None
         m = re.fullmatch(r"\[(\w+)(?:,\s*(#?-?(?:0x)?[0-9a-f]+))?\](!?)", mem)
         if not m:
-            if re.search(r"\b(sp|x29|w29|wsp)\b", mem):
-                raise Refuse(f"register-offset stack address: {what}")
-            base = None
+            raise Refuse(f"unmodelled address form: {what}")
         else:
             base, off, pre = m.group(1), m.group(2), m.group(3) == "!"
-        # The frame record: stp/ldp of x29 and x30, with base sp only.
-        record = mn in ("stp", "ldp") and data == ["x29", "x30"] and base == "sp"
-        if base in A64_FP and (pre or post is not None):
-            raise Refuse(f"writeback on the frame pointer: {what}")
+            if base in A64_FP and (pre or post is not None):
+                raise Refuse(f"writeback on the frame pointer: {what}")
+            if base in A64_LR and (pre or post is not None):
+                raise Refuse(f"writeback on the link register: {what}")
+            if base not in ("sp", "x29") + A64_SP + A64_FP:
+                # Any other register may hold a stack address (main's argv, envp and apple
+                # vector, a value an external function left): only a PC-relative one is used.
+                if base not in {x[0] for x in st.g}:
+                    raise Refuse(f"memory addressed through a register that may hold a stack address: {what}")
+                if pre or post is not None or (off and abs(imm(off)) > A64_OFF_REACH):
+                    raise Refuse(f"PC-relative access beyond the premise's reach: {what}")
         if base in ("sp", "x29"):
-            if mn in ("ldrb", "strb", "ldrsb", "ldurb", "sturb", "ldursb"):
-                size = 1
-            elif mn in ("ldrh", "strh", "ldrsh", "ldurh", "sturh", "ldursh"):
-                size = 2
-            elif mn in ("ldrsw", "ldursw", "ldpsw"):
-                size = 4 * len(data)
-            else:
-                if not data or data[0][0] not in A64_REGSIZE:
-                    raise Refuse(f"stack access of unknown size: {what}")
-                size = A64_REGSIZE[data[0][0]] * len(data)
+            record = mn in ("stp", "ldp") and data == ["x29", "x30"] and base == "sp"
+            size = a64_size(mn, data, what)
             k = imm(off) if off else 0
+            d = st.d
             if base == "x29":
-                top = frame_depth(fp, what) - k
+                top = frame_depth(st.fp, what) - k
             elif pre:
                 d = d - k
                 top = d
@@ -297,53 +375,56 @@ def a64_inst(mn, ops, st):
                 top = st.d
                 d = d - imm(post)
             lo = top - size + 1
-            if record:
-                # x29 at the lower address (the deeper half), x30 above it.
+            saved, fp, lr = st.saved, st.fp, st.lr
+            if record and is_store:
+                # The frame record: x29 at the lower address (the deeper half), x30 above it.
+                w = touch(st, lo, top, "w", what)
+                saved = cleared(saved, lo, top) | {(lo + 8, lo + 15, ("fp", fp)), (lo, lo + 7, ("lr", lr))}
+            elif record:
+                fp_slot, lr_slot = slot_at(saved, lo + 8, lo + 15), slot_at(saved, lo, lo + 7)
+                w = touch(st, lo, top, "r", what, restore=tuple(x for x in (fp_slot, lr_slot) if x))
+                lr = bool(lr_slot and lr_slot[2] == ("lr", True))
+                fp = fp_slot[2][1] if fp_slot and fp_slot[2][0] == "fp" else None
+                restored = True
+            elif is_load or is_store:
+                w = touch(st, lo, top, "r" if is_load else "w", what)
                 if is_store:
-                    saved = overwrite(st, ((lo, lo + 7), (lo + 8, lo + 15)), what)
-                    saved = saved | {(lo + 8, lo + 15, ("fp", fp)), (lo, lo + 7, ("lr", lr))}
-                else:
-                    fp_slot, lr_slot = slot_at(saved, lo + 8, lo + 15), slot_at(saved, lo, lo + 7)
-                    inside = tuple(x for x in saved if x[0] >= lo and x[1] <= top)
-                    check_bytes(st, lo, top, what, allowed=inside)
-                    lr = bool(lr_slot and lr_slot[2] == ("lr", True))
-                    fp = fp_slot[2][1] if fp_slot and fp_slot[2][0] == "fp" else None
-                    restored = True  # the slots stay saved: memory still holds the addresses
+                    saved = cleared(saved, lo, top)
             else:
-                check_bytes(st, lo, top, what)
+                raise Refuse(f"unmodelled stack memory instruction: {what}")
+            st = st.but(d=d, saved=saved, fp=fp, lr=lr, w=w)
             deepest = top
-        elif base is not None and (pre or post is not None) and base in A64_SP:
-            raise Refuse(f"unmodelled stack writeback: {what}")
-    if is_store and not record and any(a in A64_SP + A64_FP for a in data):
-        raise Refuse(f"stack or frame pointer stored as a value: {what}")
+        elif base in A64_SP + A64_FP:
+            raise Refuse(f"unmodelled stack address: {what}")
+    if is_store:
+        if not record and any(a in A64_SP + A64_FP for a in data):
+            raise Refuse(f"stack or frame pointer stored as a value: {what}")
+        return st, deepest
     if is_load:
         if any(a in A64_SP for a in data):
             raise Refuse(f"stack pointer loaded: {what}")
         if any(a in A64_LR for a in data) and not record:
             raise Refuse(f"link register overwritten: {what}")
         if any(a in A64_FP for a in data) and not restored:
-            fp = None
-        return st.but(d=d, fp=fp, saved=frozenset(saved), lr=lr), deepest
-    if is_store:
-        return st.but(d=d, fp=fp, saved=frozenset(saved), lr=lr), deepest
+            st = st.but(fp=None)
+        return st, deepest
     # Not a memory instruction.
     dst, srcs = (args[0] if args else ""), args[1:]
     if dst in A64_SP:
         if mn in ("sub", "add") and len(args) == 3 and args[1] == "sp" and args[2].startswith("#"):
             n = imm(args[2])
-            return st.but(d=d + n if mn == "sub" else d - n), None
-        if (mn, args[1:]) == ("mov", ["x29"]):
-            return st.but(d=frame_depth(fp, what)), None
+            return st.but(d=st.d + n if mn == "sub" else st.d - n), None
+        if (mn, srcs) == ("mov", ["x29"]):
+            return st.but(d=frame_depth(st.fp, what)), None
         if mn in ("sub", "add") and len(args) == 3 and args[1] == "x29" and args[2].startswith("#"):
-            n = imm(args[2])
-            f = frame_depth(fp, what)
+            n, f = imm(args[2]), frame_depth(st.fp, what)
             return st.but(d=f + n if mn == "sub" else f - n), None
         raise Refuse(f"unmodelled stack-pointer write: {what}")
     if dst in A64_FP:
         if (mn, srcs) == ("mov", ["sp"]):
-            return st.but(fp=d), None
+            return st.but(fp=st.d), None
         if mn == "add" and len(args) == 3 and args[1] == "sp" and args[2].startswith("#"):
-            return st.but(fp=d - imm(args[2])), None
+            return st.but(fp=st.d - imm(args[2])), None
         if any(a in A64_SP + A64_FP for a in srcs):
             raise Refuse(f"stack or frame pointer used as a value: {what}")
         return st.but(fp=None), None
@@ -384,9 +465,7 @@ def control(mn, ops):
         if X86_JCC.match(mn):
             return "jcc", ops
         if mn == "ret":
-            if ops:
-                return "indirect", ops
-            return "ret", None
+            return ("indirect", ops) if ops else ("ret", None)
         if mn in ("ud2", "hlt", "int3"):
             return "stop", None
         return None, None
@@ -396,12 +475,10 @@ def control(mn, ops):
         return "jmp", ops
     if A64_COND.match(mn) or mn in ("cbz", "cbnz", "tbz", "tbnz"):
         return "jcc", ops
-    if mn in ("blr", "br", "braa", "blraa", "braaz", "blraaz"):
+    if mn in ("blr", "br", "braa", "blraa", "braaz", "blraaz", "retaa", "retab"):
         return "indirect", ops
-    if mn == "ret" and not ops:
-        return "ret", None
-    if mn in ("ret", "retaa", "retab"):
-        return "indirect", ops
+    if mn == "ret":
+        return ("indirect", ops) if ops else ("ret", None)
     if mn in ("brk", "udf", "hlt"):
         return "stop", None
     return None, None
@@ -433,78 +510,82 @@ def analyse(funcs, stubs):
         if not code:
             raise Refuse(f"{key}: no instructions")
         index = {a: i for i, (a, _, _) in enumerate(code)}
-        seen, work, deepest, ext = {}, [(0, St())], 0, {}
+        states, work, deepest, ext = {0: St()}, [0], 0, {}
+
+        def flow(j, st, addr):
+            """Propagate `st` into instruction j: the keys must agree, the written sets meet."""
+            if j >= len(code):
+                raise Refuse(f"{key}: runs off its end")
+            if j not in states:
+                states[j] = st
+                work.append(j)
+                return
+            old = states[j]
+            if old.key() != st.key():
+                raise Refuse(f"{key}+{addr:#x}: states {old.key()} and {st.key()} meet")
+            if not (old.w <= st.w and old.g <= st.g):
+                states[j] = old.but(w=old.w & st.w, g=old.g & st.g)
+                work.append(j)
+
         while work:
-            i, st = work.pop()
-            while True:
-                if i >= len(code):
-                    raise Refuse(f"{key}: runs off its end")
-                addr, mn, ops = code[i]
-                if addr in seen:
-                    if seen[addr] != st.key():
-                        raise Refuse(f"{key}+{addr:#x}: states {seen[addr]} and {st.key()} meet")
-                    break
-                seen[addr] = st.key()
-                kind, arg = control(mn, ops)
-                if kind is None:
-                    if not plain.match(mn):
-                        raise Refuse(f"{key}+{addr:#x}: unmodelled instruction: {mn} {ops}")
-                    try:
-                        st, touched = inst(mn, ops, st)
-                    except Refuse as e:
-                        raise Refuse(f"{key}+{addr:#x}: {e}") from None
-                    if st.d < 0:
-                        raise Refuse(f"{key}+{addr:#x}: stack above the entry")
-                    deepest = max(deepest, st.d, touched or 0)
-                    i += 1
-                    continue
-                if kind == "indirect":
-                    raise Refuse(f"{key}+{addr:#x}: indirect branch {mn} {ops}")
-                if kind == "ret":
-                    if st.d != 0:
-                        raise Refuse(f"{key}+{addr:#x}: return at depth {st.d}")
-                    if not st.lr:
-                        raise Refuse(f"{key}+{addr:#x}: return through a link register not restored")
-                    if st.fp != ENTRY:
-                        raise Refuse(f"{key}+{addr:#x}: return without the caller's frame pointer restored")
-                    break
-                if kind == "stop":
-                    break
-                tgt, sym = target_of(arg)
-                if tgt is None:
-                    raise Refuse(f"{key}+{addr:#x}: indirect {mn} {ops}")
-                if kind == "call":
-                    base = sym.split("+")[0]
-                    callee = owned_name(base)
-                    d = st.d
-                    if any(x[0] > d for x in st.saved):
-                        # The callee's frame lies below d, where a freed saved slot still holds
-                        # a stack address the callee could read.
-                        raise Refuse(f"{key}+{addr:#x}: call over a freed saved frame slot")
-                    if callee and "+" not in sym:
-                        sub_deep, sub_ext = fn_bound(callee)
-                        deepest = max(deepest, d + ret_push + sub_deep)
-                        add_ext(ext, sub_ext, d + ret_push)
-                    elif base in stubs or base.endswith("@plt"):
-                        # ELF `write@plt`; Mach-O stubs carry one extra leading underscore.
-                        name = base.removesuffix("@plt") if base.endswith("@plt") else base[1:]
-                        add_ext(ext, {name: 0}, d + ret_push)
-                        deepest = max(deepest, d + ret_push)
-                        if name in NORETURN:
-                            break
-                    else:
-                        raise Refuse(f"{key}+{addr:#x}: call to {sym}, neither owned nor a stub")
-                    if ARCH == "aarch64":
-                        st = st.but(lr=False)  # bl wrote x30: this function's return address is gone
-                    i += 1
-                    continue
-                if tgt not in index:
-                    raise Refuse(f"{key}+{addr:#x}: branch leaves the function: {mn} {ops}")
-                if kind == "jmp":
-                    i = index[tgt]
-                    continue
-                work.append((index[tgt], st))
-                i += 1
+            i = work.pop()
+            st = states[i]
+            addr, mn, ops = code[i]
+            kind, arg = control(mn, ops)
+            if kind is None:
+                if not plain.match(mn):
+                    raise Refuse(f"{key}+{addr:#x}: unmodelled instruction: {mn} {ops}")
+                try:
+                    st, touched = inst(mn, ops, st, addr)
+                except Refuse as e:
+                    raise Refuse(f"{key}+{addr:#x}: {e}") from None
+                if st.d < 0:
+                    raise Refuse(f"{key}+{addr:#x}: stack above the entry")
+                deepest = max(deepest, st.d, touched or 0)
+                flow(i + 1, st, addr)
+                continue
+            if kind == "indirect":
+                raise Refuse(f"{key}+{addr:#x}: indirect control transfer {mn} {ops}")
+            if kind == "ret":
+                if st.d != 0:
+                    raise Refuse(f"{key}+{addr:#x}: return at depth {st.d}")
+                if not st.lr:
+                    raise Refuse(f"{key}+{addr:#x}: return through a link register not restored")
+                if st.fp != ENTRY:
+                    raise Refuse(f"{key}+{addr:#x}: return without the caller's frame pointer restored")
+                continue
+            if kind == "stop":
+                continue
+            tgt, sym = target_of(arg)
+            if tgt is None:
+                raise Refuse(f"{key}+{addr:#x}: indirect {mn} {ops}")
+            if kind == "call":
+                base = sym.split("+")[0]
+                callee, d = owned_name(base), st.d
+                if callee and "+" not in sym:
+                    sub_deep, sub_ext = fn_bound(callee)
+                    deepest = max(deepest, d + ret_push + sub_deep)
+                    add_ext(ext, sub_ext, d + ret_push)
+                elif base in stubs or base.endswith("@plt"):
+                    # ELF `write@plt`; Mach-O stubs carry one extra leading underscore.
+                    name = base.removesuffix("@plt") if base.endswith("@plt") else base[1:]
+                    add_ext(ext, {name: 0}, d + ret_push)
+                    deepest = max(deepest, d + ret_push)
+                    if name in NORETURN:
+                        continue
+                else:
+                    raise Refuse(f"{key}+{addr:#x}: call to {sym}, neither owned nor a stub")
+                # The callee may have written anything below the stack pointer; on AArch64, bl
+                # replaced the link register.
+                st = st.but(w=frozenset(b for b in st.w if b <= d), g=frozenset(),
+                           lr=st.lr if ARCH == "x86_64" else False)
+                flow(i + 1, st, addr)
+                continue
+            if tgt not in index:
+                raise Refuse(f"{key}+{addr:#x}: branch leaves the function: {mn} {ops}")
+            flow(index[tgt], st, addr)
+            if kind == "jcc":
+                flow(i + 1, st, addr)
         active.discard(key)
         memo[key] = (deepest, ext)
         return memo[key]
