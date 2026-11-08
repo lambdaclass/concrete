@@ -120,7 +120,21 @@
           # second-kernel drivers (Rocq, Isabelle) are an opt-in spike and Isabelle
           # is a multi-GB closure, so they live in a separate shell — no contributor
           # pays for them unless they run `--report multi-kernel`.
-          default = pkgs.mkShell ({ packages = base; } // gatesMarker);
+          default = pkgs.mkShell ({
+            packages = base;
+            # Slice-0 native builds name their compiler explicitly (scripts/checks/slice0_native.sh),
+            # pinned here so the shell's general clang can move without changing their identity.
+            CONCRETE_SLICE0_CLANG = "${pkgs.llvmPackages_21.clang}/bin/clang";
+            # The artifact gates (scripts/checks/slice0_artifacts.sh) read the linked executables
+            # with the same LLVM release's llvm-objdump and llvm-size, and measure a run under gdb
+            # (Linux, pinned) or LLDB (macOS: Apple's /usr/bin/lldb, whose signed debugserver is
+            # the only one allowed to attach; not pinned, its identity is recorded in the report).
+            CONCRETE_SLICE0_LLVM = "${pkgs.llvmPackages_21.llvm}/bin";
+          } // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+            CONCRETE_SLICE0_GDB = "${pkgs.gdb}/bin/gdb";
+          } // pkgs.lib.optionalAttrs pkgs.stdenv.isDarwin {
+            CONCRETE_SLICE0_LLDB = "/usr/bin/lldb";
+          } // gatesMarker);
 
           # `nix develop .#gates` — what CI runs every gate step in: the gate userland, the marker,
           # and no compiler toolchain (mkShellNoCC, so not even stdenv's cc). Lean and the C
