@@ -1,0 +1,40 @@
+Committed the evidence, activation-target and direct-owner call changes. **Item 6 remains unresolved:** unconditional preservation of `stuck` contradicts the required moved-owner counterexample.
+
+Commits:
+
+- `d8302c63` — property-specific evidence and progress controls.
+- `0349d0ab` — restrict reborrow destinations to the current active frame.
+- `0fb0a6ab` — direct owner arguments use call-duration root loans.
+- `e0d0d7a6` — prove exact caller restoration and parent retention.
+- `f8d9a0a9` — preserve live destinations through lending, adoption and return.
+
+Changes and witnesses:
+
+| Item / laws | Positive instances (a) | Planted controls (b) |
+|---|---|---|
+| `fresh_progress`; fresh/reset generation | Allocation with an existing binder; successful allocator reset | Always-refusing allocator; unchanged generation |
+| Borrow/reborrow birth; ending supply | Projected loan and child; nonzero supply after ending | Wrong counter/path/parent; decremented supply |
+| Parent retention | Reborrow retains the original parent record | Removing that parent falsifies the strengthened conclusion |
+| Local-loan and activation-slot exclusion | Callee owns and borrows a local; caller loan survives exit | Exit retains the local loan or departing slot |
+| Argument-only adoption | Pending child is successfully adopted | Ordinary caller loan lacks the required pending witness |
+| Progress controls | Successful enter/depend/consume/release/endScope/reset | Direct negated success with violated guards |
+| Current/live destinations | Lending targets the active callee; adoption and return preserve liveness | Upward request refused; inactive destination or stranded callee loan |
+| Direct-owner preservation and birth | Mutable root argument coexists with a caller loan; synchronized metadata remains valid | Reused supply; child substituted for a parentless root |
+| Owner freezing and call return | Argument freezes access; return ends callee loans and restores owner access | Premature loan removal; call loan retained forever |
+| Caller-loan retention | Pre-existing caller loan survives unchanged | Mutated return deletes it |
+| Deferred registration | Actual C1 registration preserves the entire store | Registration prematurely ends the call loan |
+| Exact direct-call round trip | Two caller owners and an existing loan are restored exactly | Lingering call loan prevents restoration |
+
+The new theorems establish those preservation, lifetime and restoration properties. `directOwner_roundtrip` restores the complete caller slot/loan tables, advancing only identity supplies. Actual C1 examples exercise direct and deferred calls followed by successful owner reads. Witnesses carry fully qualified law tags in the proof sources.
+
+README O3 now mentions `Generative.run_erasure`. C1 execution-level simulation remains explicitly outstanding.
+
+Validation at `f8d9a0a95ec77f1b0d615ad87c70f0e6d0f370d7`:
+
+- `lake build ConcreteSpec`: passed.
+- Rules: **32 passed, 0 failed**.
+- Trust ban: **23 passed, 0 failed**.
+
+Worktree clean; nothing pushed. Heavy gates and `axioms.golden` were untouched.
+
+**QUESTIONS:** Should item 6 require unconditional preservation of successful steps/final results, with stuckness equivalence only for checker-accepted programs? The retained counterexample has an instrumented run stuck while erasure returns 7, so unconditional equality of all outcomes is false. The execution-level simulation and checker-acceptance interface remain unimplemented pending that clarification; their long-term home is the C9/A2i integration work, R-0571.
