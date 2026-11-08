@@ -109,7 +109,7 @@ def components : List Component := [
     what := "the Lean compiler, runtime and interpreter executing Concrete via lake env lean --run and the compiled lean binary"
     why := "the compiler's executable behaviour is produced by Lean code outside its kernel proofs"
     removal := "not planned; per-compilation certificates attest the emitted output" },
-  { id := "lake", kind := .buildTool, slice := "slice0", premises := [], «matches» := ["lake", "git", "ar"]
+  { id := "lake", kind := .buildTool, slice := "slice0", premises := [], «matches» := ["lake", "git", "git-remote-https", "ar"]
     what := "Lake dependency resolution and builds, including the pinned lean-compiler-backend revision"
     why := "Lake selects and builds the code that the compiler and gates execute"
     removal := "not planned; replace with another pinned, reproducible dependency and build mechanism" },
@@ -180,9 +180,9 @@ def components : List Component := [
     why := "they select targets, construct the reduced environment, manage scratch files and resolve wrapper paths"
     removal := "replace the shell helper and Nix shell wrappers with a pinned, attested driver using direct filesystem APIs" },
   { id := "gate-analysis-tools", kind := .gateTool, slice := "slice0", premises := []
-    «matches» := ["gdb", "lldb", "llvm-objdump", "llvm-size", "python3", "strace"]
-    what := "gdb, lldb, llvm-objdump, llvm-size, python3 and strace used only by gates"
-    why := "trusted only for the gates' analyses and verdicts, not as compilation-pipeline components"
+    «matches» := ["gdb", "lldb", "llvm-objdump", "llvm-size", "python3", "strace", "ssh-keygen"]
+    what := "analysis tools, strace and the pinned ssh-keygen owner-signature verifier used only by gates"
+    why := "trusted only for gate analyses, trace evidence and approval-signature verification, not compilation"
     removal := "remove or replace the corresponding gate analyses; these tools are not needed to compile a program" }
 ]
 
@@ -198,6 +198,10 @@ def registryErrors (cs : List Component := components) : List String := Id.run d
       errors := errors ++ [s!"component id {c.id} occurs {idOwners} times, expected exactly one"]
     for p in c.premises do
       unless all.any (·.id == p) do errors := errors ++ [s!"component {c.id} names unknown premise {p}"]
+    for m in c.declarations do
+      let owners := cs.foldl (fun n c => n + (c.declarations.filter (· == m)).length) 0
+      unless owners == 1 do
+        errors := errors ++ [s!"declaration match {m} occurs {owners} times, expected exactly one"]
     for m in c.«matches» do
       let owners := cs.foldl (fun n c => n + (c.«matches».filter (· == m)).length) 0
       unless owners == 1 do
@@ -215,13 +219,15 @@ def Premise.line (p : Premise) : String :=
 
 def Component.tableRow (c : Component) : String :=
   let premises := if c.premises.isEmpty then "—" else ", ".intercalate c.premises
-  let toolNames := if (c.«matches» ++ c.declarations).isEmpty then "—" else ", ".intercalate (c.«matches» ++ c.declarations)
+  let names := c.«matches» ++ c.declarations.map ("declaration: " ++ ·)
+  let toolNames := if names.isEmpty then "—" else ", ".intercalate names
   s!"| {c.id} | {c.kind.name} | {c.slice} | {premises} | {c.what} | {c.why} | {c.removal} | {toolNames} |"
 
 def Component.line (c : Component) : String :=
   let premises := if c.premises.isEmpty then "-" else ", ".intercalate c.premises
-  let toolNames := if (c.«matches» ++ c.declarations).isEmpty then "-" else ", ".intercalate (c.«matches» ++ c.declarations)
-  s!"component {c.id} [{c.kind.name}] slice: {c.slice} premises: {premises} matches: {toolNames} :: {c.what} :: why: {c.why} :: removal: {c.removal}"
+  let toolNames := if c.«matches».isEmpty then "-" else ", ".intercalate c.«matches»
+  let declarations := if c.declarations.isEmpty then "-" else ", ".intercalate c.declarations
+  s!"component {c.id} [{c.kind.name}] slice: {c.slice} premises: {premises} matches: {toolNames} declarations: {declarations} :: {c.what} :: why: {c.why} :: removal: {c.removal}"
 
 /-- Names executable by the compilation pipeline; gate-only tools are deliberately excluded. -/
 def pipelineMatches (cs : List Component := components) : List String :=

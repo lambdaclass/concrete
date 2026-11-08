@@ -17,6 +17,11 @@ partial def retainExamples (stx : Syntax) (file : String) (map : FileMap) :
     let id := mkIdent n
     let replacement ← `(command| noncomputable def $id:ident $sig:optDeclSig $val:declVal)
     return (replacement.raw[1], #[n])
+  -- Declaration bodies may contain quoted command syntax. Those are data, not
+  -- source commands; never rewrite an example inside a macro/template literal.
+  if stx.getKind == ``Parser.Command.declaration &&
+      stx[1].getKind != ``Parser.Command.example then return (stx, #[])
+  if stx.getKind.toString.startsWith "Lean.Parser.Term." then return (stx, #[])
   let mut names := #[]
   let mut out := stx
   for i in [:stx.getNumArgs] do
@@ -28,9 +33,7 @@ partial def retainExamples (stx : Syntax) (file : String) (map : FileMap) :
 partial def hasPartialModifier (stx : Syntax) : Bool :=
   if stx.getKind == ``Parser.Command.declaration then
     stx[0].find? (fun s => s.isAtom && s.getAtomVal == "partial") |>.isSome
-  else if stx.getKind == ``Parser.Command.mutual then
-    stx.getArgs.any hasPartialModifier
-  else false
+  else stx.getArgs.any hasPartialModifier
 
 partial def commands (file : String) : FrontendM Unit := do
   updateCmdPos

@@ -50,7 +50,14 @@ bounded() {
   return "$rc"
 }
 # The build's output is kept and shown on failure: lake prints only "error: build failed" last.
-bounded 1800 lake build Concrete lean-compiler-backend/lcb >"$work/lake-build.log" 2>&1 \
+slice0_initial_build() {
+  if declare -F slice0_audit_initial_build >/dev/null; then
+    slice0_audit_initial_build
+  else
+    bounded 1800 lake build Concrete lean-compiler-backend/lcb
+  fi
+}
+slice0_initial_build >"$work/lake-build.log" 2>&1 \
   || { tail -n 200 "$work/lake-build.log" >&2; echo "slice0: lake build Concrete failed" >&2; exit 1; }
 lcb="$root/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
 case "$(uname -s)-$(uname -m)" in

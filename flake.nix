@@ -88,6 +88,7 @@
             file
             gnumake
             git
+            openssh            # gate 9 verifies detached owner approval signatures with ssh-keygen
             jq
             xxd                # check_hexdump_differential.sh skips its format legs without it
             # perl for `shasum`: the checker identity hashes the Lean images with it
@@ -124,6 +125,12 @@
           # pays for them unless they run `--report multi-kernel`.
           default = pkgs.mkShell ({
             packages = base;
+            # Gate 9 evaluates this from the checked-in flake/lock, rather than trusting PATH
+            # or caller-supplied store roots. Descendant wrappers live in these closures.
+            passthru.trustedPipelineRoots = map builtins.toString
+              ([ pkgs.clang pkgs.llvmPackages_21.clang leanRelease ] ++ gatesUserland);
+            passthru.trustedLeanRoot = builtins.toString leanRelease;
+            passthru.trustedNativeClang = "${pkgs.llvmPackages_21.clang}/bin/clang";
             # Slice-0 native builds name their compiler explicitly (scripts/checks/lib/slice0_native.sh),
             # pinned here so the shell's general clang can move without changing their identity.
             CONCRETE_SLICE0_CLANG = "${pkgs.llvmPackages_21.clang}/bin/clang";

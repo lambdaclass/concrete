@@ -36,10 +36,16 @@ namespace Concrete.Control
  end
  unsafe def fake._unsafe_rec (n : Nat) := n
  unsafe inductive U where | mk
+ def original (n : Nat) := n + 0
+ def replacement (n : Nat) := n
+ @[csimp] theorem replace : original = replacement := by funext n; simp [original, replacement]
 end Concrete.Control
 open Lean Elab Command in
 #eval show CommandElabM Unit from do
  let env ← getEnv
+ for parent in [`Concrete.Control.wf, `Concrete.Control.even, `Concrete.Control.odd] do
+   unless env.contains (Compiler.mkUnsafeRecName parent) && Meta.recExt.isTagged env parent do
+     throwError "safe recursion fixture did not produce a recorded runtime twin"
  let errors := Concrete.Premises.trustedDeclarationErrors env (some `Concrete.Control)
  for error in errors do IO.println s!"FAIL {error}"
  if errors.any (fun s => (s.splitOn "Concrete.Control.wf").length > 1 ||
@@ -49,6 +55,8 @@ open Lean Elab Command in
    throwError "hand-written twin escaped"
  unless errors.contains "unlisted trusted declaration Concrete.Control.U [unsafe]" do
    throwError "unsafe inductive escaped"
+ unless errors.contains "unlisted trusted declaration Concrete.Control.replace [csimp]" do
+   throwError "csimp escaped"
  IO.println "ok safe recursion and unsafe controls"
 ''')
     require(lean(p), True, "ok safe recursion and unsafe controls")

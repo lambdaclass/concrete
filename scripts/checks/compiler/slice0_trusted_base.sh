@@ -4,9 +4,9 @@
 # headline theorem axioms and axiom types, the Lean toolchain and every Lake pin. The README's two
 # tables are generated views. Environment audits reject an unlisted axiom in ANY Concrete
 # declaration's closure and any unlisted extern, implemented_by, opaque, unsafe or partial
-# declaration. Every source module must be imported; the proof gate's shared lexer retains examples
-# in scratch copies so their axiom closures are audited too. On Linux, strace checks an incremental
-# Lake build (a fresh build is the daily tier's job), every manifest bir: emission and every native
+# declaration. Every source module must be imported; Lean retains anonymous examples
+# in Lean's frontend so their axiom closures and auxiliaries are audited too. Linux strace checks the initial
+# Lake build and a real small fresh PR build (the complete fresh build is scheduled daily), every manifest bir: emission and every native
 # build, reconstructing split unfinished/resumed execve records; other hosts report tools not run.
 #
 # Controls cover golden and table drift, a failing printer, theorem axiom reporting, an unlisted
@@ -17,6 +17,15 @@
 # `update` rewrites the golden (review the diff before committing it).
 set -euo pipefail
 export LC_ALL=C
+# This callback runs INSIDE common initialization, before any Lake build.
+slice0_audit_initial_build() {
+  if [ "$(uname -s)" = Linux ]; then
+    bounded 1800 strace -f -qq -s 4096 -e trace=execve,execveat -o "$work/build.execve" \
+      lake build Concrete lean-compiler-backend/lcb
+  else
+    bounded 1800 lake build Concrete lean-compiler-backend/lcb
+  fi
+}
 # shellcheck source=scripts/checks/lib/slice0_common.sh
 source scripts/checks/lib/slice0_common.sh
 golden=tests/golden/slice0_trusted_base.txt
@@ -75,7 +84,11 @@ check_tools() {
     while IFS= read -r tool; do echo "FAIL tools: unlisted program '$tool'"; done <<<"$unlisted"
     return 1
   fi
-  echo "ok   tools: every exec'd program is listed"
+  if [ "${3:-}" != parser-only ]; then
+    bounded 120 python3 -I "$root/scripts/checks/lib/trusted_identity.py" check \
+      "$1" "$2" "$work/identity.json" "$lcb" || return 1
+  fi
+  echo "ok   tools: every exec'd program is listed with verified identity"
 }
 
 trace_emit() { # trace_emit NAME DIR EXPECT...
@@ -101,15 +114,46 @@ trace_all() {
     read -r -a expectation <<<"$expect"
     trace_emit "${program#bir:}" "$d" "${expectation[@]}" || return 1
     trace_native "$d" "$root/scripts/checks/lib/slice0_native.sh" || return 1
+    tool_names "$d/emit.execve" "$d/emit.names" || return 1
+    tool_names "$d/native.execve" "$d/native.names" || return 1
     cat "$d/emit.execve" >>"$work/emitter.execve"
     cat "$d/native.execve" >>"$work/native.execve"
     cat "$d/emit.execve" "$d/native.execve"
   done <<<"$rows"
 }
 
+# Always compile/link a tiny clean Lake project in the PR tier. The build-only
+# control executes objcopy during Lake configuration, not in the emitted program.
 trace_build() {
-  bounded 1800 strace -f -qq -s 4096 -e trace=execve,execveat -o "$work/build.execve" \
-    lake build Concrete lean-compiler-backend/lcb
+  local d="$work/fresh-pr" control="$work/fresh-pr-control"
+  mkdir -p "$d" "$control"
+  printf 'def main : IO Unit := IO.println "audit"\n' >"$d/Main.lean"
+  cp lean-toolchain "$d/lean-toolchain"
+  cat >"$d/lakefile.lean" <<'EOF'
+import Lake
+open Lake DSL
+package audit
+@[default_target] lean_exe audit where
+  root := `Main
+EOF
+  cp "$d/"* "$control/"
+  cat >>"$control/lakefile.lean" <<'EOF'
+#eval do
+  let result ← IO.Process.output { cmd := "objcopy", args := #["--version"] }
+  unless result.exitCode == 0 do throw <| IO.userError "planted build tool failed"
+EOF
+  (cd "$d"; bounded 180 strace -f -qq -s 4096 -e trace=execve,execveat \
+    -o "$work/fresh-pr.execve" lake build) || return 1
+  check_tools "$work/fresh-pr.execve" "$work/pipeline-tools" || return 1
+  (cd "$control"; bounded 180 strace -f -qq -s 4096 -e trace=execve,execveat \
+    -o "$work/build-control.execve" lake build) || return 1
+  if check_tools "$work/build-control.execve" "$work/pipeline-tools" >"$work/build-control.out" 2>&1; then
+    echo "FAIL control: fresh Lake build accepts objcopy"; return 1
+  fi
+  grep -qxF "FAIL tools: unlisted program 'objcopy'" "$work/build-control.out" || {
+    echo "FAIL control: build-only tool did not fail for its planted reason"; return 1;
+  }
+  echo "ok   control: fresh Lake build names the build-only objcopy"
 }
 
 concrete_source_files() {
@@ -117,60 +161,32 @@ concrete_source_files() {
 }
 
 concrete_modules() {
-  concrete_source_files | sed -E 's#\.lean$##; s#/#.#g'
+  concrete_source_files | sed -E 's#\.lean$##; s#/#.#g' | sort -u
 }
 
-# check_examples ROOT OUT: rewrite examples with the proof gate's shared lexer, elaborate every
-# rewritten module, and require every retained example's axiom closure to be registered.
+# check_examples ROOT OUT: Lean parses/retains example commands in their own header context;
+# both their axiom closures and generated trusted declarations must be registered.
 check_examples() {
-  local source_root=$1 out=$2 rel count
+  local source_root=$1 out=$2 rel
   local sources=()
-  while IFS= read -r rel; do sources+=("$rel"); done < <(concrete_source_files)
-  mkdir -p "$out/src"
-  count=$(bounded 60 python3 -I "$root/scripts/proofs/lean_lex.py" compiler-examples \
-    "$source_root" "$out/src" "${sources[@]}" | cap_out) || return 1
-  : >"$out/examples"
-  for rel in "${sources[@]}"; do
-    {
-      printf 'import Lean.Elab.Command\nimport Lean.Util.CollectAxioms\n'
-      cat "$out/src/$rel"
-      cat <<'EOF'
+  while IFS= read -r rel; do sources+=("$source_root/$rel"); done < <(concrete_source_files)
+  mkdir -p "$out"
+  bounded 600 lake env lean --run "$root/scripts/checks/compiler/slice0_examples.lean" "${sources[@]}" |
+    cap_out >"$out/examples" || { cat "$out/examples"; return 1; }
+  bounded 30 python3 -I "$root/scripts/checks/lib/example_rows.py" "$out/examples"
 
-open Lean Elab Command in
-#eval show CommandElabM Unit from do
-  let env ← getEnv
-  for (n, _) in env.constants.toList do
-    if let .str _ s := n then
-      if s.startsWith "⟪example⟫" then
-        let axioms := (← liftCoreM (collectAxioms n)).qsort Name.lt
-        IO.println s!"example {n} axioms: {" ".intercalate (axioms.map toString).toList}"
-EOF
-    } >"$out/src/$rel.audit"
-    mv "$out/src/$rel.audit" "$out/src/$rel"
-    print_lean "$out/src/$rel" "$out/$(basename "$rel").out" || return 1
-    grep '^example ' "$out/$(basename "$rel").out" >>"$out/examples" || true
-  done
-  print_lean scripts/checks/compiler/slice0_allowed_axioms.lean "$out/allowed" || return 1
-  bounded 30 python3 -I -c 'import sys
-allowed = {line.strip() for line in open(sys.argv[1], encoding="utf-8") if line.strip()}
-rows = [line.strip() for line in open(sys.argv[2], encoding="utf-8") if line.startswith("example ")]
-bad = False
-for row in rows:
-    name, axioms = row[len("example "):].split(" axioms: ", 1)
-    for axiom in axioms.split():
-        if axiom not in allowed:
-            print(f"FAIL unlisted example axiom {axiom} in {name}")
-            bad = True
-if len(rows) != int(sys.argv[3]):
-    print(f"FAIL examples: {sys.argv[3]} rewritten, {len(rows)} present in Lean environments")
-    bad = True
-sys.exit(1 if bad else 0)' "$out/allowed" "$out/examples" "$count" | cap_out || return 1
 }
 
+bounded 30 python3 -I "$root/scripts/checks/tests/test_execve_names.py"
+bounded 90 python3 -I "$root/scripts/checks/tests/trusted_policy_controls.py"
+bounded 90 python3 -I "$root/scripts/checks/tests/trusted_base_controls.py"
+bounded 180 python3 -I "$root/scripts/checks/lib/trusted_identity.py" prepare "$work/identity.json"
 if ! current "$work/current"; then
   echo "FAIL slice0_trusted_base: printing the trusted base failed"
   exit 1
 fi
+bounded 60 python3 -I "$root/scripts/checks/lib/trusted_approval.py" \
+  "$work/current" "$root/tests/trusted-base-approval.json"
 if [ "${1:-}" = update ]; then
   mkdir -p "$(dirname "$golden")"
   cp "$work/current" "$golden"
@@ -273,7 +289,11 @@ mkdir -p "$work/ctl"
 printf '#eval IO.println "premise"\n#eval (throw (IO.userError "control") : IO Unit)\n' >"$work/ctl/fails.lean"
 if print_lean "$work/ctl/fails.lean" "$work/ctl/fails.out" 2>/dev/null; then
   echo "FAIL control: the printer accepts a Lean file that errors"; fail=1
-else echo "ok   control: the printer fails on a Lean file that errors"; fi
+elif grep -qF 'error: control' "$work/ctl/fails.out"; then
+  echo "ok   control: the printer fails on the planted control error"
+else
+  echo "FAIL control: printer failed without the planted control diagnostic"; fail=1
+fi
 cat >"$work/ctl/axiom.lean" <<'EOF'
 import Lean.Elab.Command
 import Concrete
@@ -375,9 +395,8 @@ EOF
 if print_lean "$work/ctl/unsafe-twin.lean" "$work/ctl/unsafe-twin.out"; then
   echo "FAIL control: the trusted-code audit accepts a hand-written unsafe twin"; fail=1
 elif grep -qxF 'FAIL unlisted trusted declaration Concrete.Control.f._unsafe_rec [unsafe]' "$work/ctl/unsafe-twin.out" &&
-     grep -qxF 'FAIL unlisted trusted declaration Concrete.Control.p [partial]' "$work/ctl/unsafe-twin.out" &&
-     ! grep -q 'Concrete.Control.p._unsafe_rec' "$work/ctl/unsafe-twin.out"; then
-  echo "ok   control: a hand-written unsafe twin and partial parent are named, its genuine twin is not duplicated"
+     grep -qxF 'FAIL unlisted trusted declaration Concrete.Control.p [partial]' "$work/ctl/unsafe-twin.out" ; then
+  echo "ok   control: a hand-written unsafe twin and partial parent are named, its partial runtime twin is audited too"
 else
   echo "FAIL control: the unsafe-twin check did not fail for the planted reason"
   cat "$work/ctl/unsafe-twin.out" "$work/ctl/unsafe-twin.out.err" >&2
@@ -429,14 +448,14 @@ import Concrete
 open Lean Elab Command in
 #eval show CommandElabM Unit from do
   let components := Concrete.Premises.components.map fun c =>
-    if c.id == "bir-lcb-adapter" then { c with «matches» := ["Concrete.Control.f"] } else c
+    if c.id == "bir-lcb-adapter" then { c with declarations := ["Concrete.Control.f"] } else c
   let errors := Concrete.Premises.trustedDeclarationErrors (← getEnv) (some `Concrete.Control) components
   for error in errors do IO.println s!"FAIL {error}"
   unless errors.isEmpty do throwError "trusted-base control failed"
 EOF
 if print_lean "$work/ctl/not-trusted-owner.lean" "$work/ctl/not-trusted-owner.out"; then
   echo "FAIL control: a non-trusted component can own a trusted declaration"; fail=1
-elif grep -qxF 'FAIL trusted declaration Concrete.Control.f belongs to non-trusted component bir-lcb-adapter' "$work/ctl/not-trusted-owner.out"; then
+elif grep -qxF 'FAIL trusted declaration Concrete.Control.f belongs to non-code component bir-lcb-adapter' "$work/ctl/not-trusted-owner.out"; then
   echo "ok   control: a trusted declaration cannot belong to the non-trusted adapter entry"
 else
   echo "FAIL control: non-trusted ownership did not fail for the planted reason"; fail=1
@@ -460,7 +479,7 @@ if [ "$(uname -s)" = Linux ]; then
 102 execve("/missing/objcopy", ["objcopy"], 0x0 <unfinished ...>
 102 <... execve resumed>) = -1 ENOENT (No such file or directory)
 EOF
-    if check_tools "$work/ctl/split-execve.log" "$work/pipeline-tools" >"$work/ctl/split-execve.out" 2>&1; then
+    if check_tools "$work/ctl/split-execve.log" "$work/pipeline-tools" parser-only >"$work/ctl/split-execve.out" 2>&1; then
       echo "FAIL control: the parser accepts a split successful execve of objcopy"; fail=1
     elif [ "$(grep -cF "FAIL tools: unlisted program 'objcopy'" "$work/ctl/split-execve.out")" = 1 ]; then
       echo "ok   control: a split successful execve is named; failed PATH lookups are ignored"
@@ -470,11 +489,25 @@ EOF
       fail=1
     fi
 
+    mkdir -p "$work/ctl/wrong-path"
+    cp "$(command -v bash)" "$work/ctl/wrong-path/clang"
+    bounded 30 strace -f -qq -s 4096 -e trace=execve,execveat \
+      -o "$work/ctl/wrong-path.execve" "$work/ctl/wrong-path/clang" --version >/dev/null
+    if check_tools "$work/ctl/wrong-path.execve" "$work/pipeline-tools" >"$work/ctl/wrong-path.out" 2>&1; then
+      echo "FAIL control: identity audit accepts a different executable named clang"; fail=1
+    elif grep -qxF "FAIL tools: unexpected executable 'clang': $work/ctl/wrong-path/clang" "$work/ctl/wrong-path.out"; then
+      echo "ok   control: identity audit rejects the wrong-path clang"
+    else
+      echo "FAIL control: wrong-path clang did not fail for the planted identity reason"; fail=1
+    fi
+
     if ! trace_build; then
-      echo "FAIL tools: tracing the incremental Lake build failed"; fail=1
-    elif ! trace_all >"$work/manifest.execve"; then
+      echo "FAIL tools: fresh PR build audit"; fail=1
+    fi
+    if ! trace_all >"$work/manifest.execve"; then
       echo "FAIL tools: tracing the manifest's native builds failed"; fail=1
     else
+      tool_names "$work/build.execve" "$work/build.tools" || fail=1
       cat "$work/build.execve" "$work/manifest.execve" >"$work/all.execve"
       check_tools "$work/all.execve" "$work/pipeline-tools" || fail=1
       for phase in build emitter native; do
