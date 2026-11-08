@@ -6,5 +6,6 @@ import ConcreteSpec.Proofs.Authority
 import ConcreteSpec.Proofs.Observe
 import ConcreteSpec.Proofs.Slice0
 import ConcreteSpec.Proofs.Exec
+import ConcreteSpec.Proofs.Adequacy
 import ConcreteSpec.Proofs.Scalar
 import ConcreteSpec.Proofs.Const
