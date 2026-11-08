@@ -20,6 +20,7 @@ import ConcreteSpec.Spec.Scalar
 import ConcreteSpec.Spec.Const
 import ConcreteSpec.Spec.Memory
 import ConcreteSpec.Spec.Hybrid
+import ConcreteSpec.Spec.Frame
 import ConcreteSpec.Spec.Rules
 
 /-!
