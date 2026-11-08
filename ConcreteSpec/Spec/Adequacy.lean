@@ -80,4 +80,52 @@ def runFromQ (P : Program O) (ρ : Oracle O) :
 def runQ (P : Program O) (ρ : Oracle O) (fuel : Nat) (c : Config O) : QueryReport O :=
   runFromQ P ρ fuel [] [] c
 
+/-- A position in an execution: its configuration and the complete event and query histories before
+it. Carrying all three makes finite prefixes compose into one infinite execution, rather than merely
+supplying unrelated finite witnesses. -/
+structure Position (O : Operands) where
+  config : Config O
+  events : List O.Event
+  queries : List (Query O)
+
+/-- One transition under a fixed oracle. A request records its query before the answer is used. -/
+inductive Move (P : Program O) (ρ : Oracle O) : Position O → Position O → Prop where
+  | silent {c c' events issued} : step P c = some (.next c') →
+      Move P ρ ⟨c, events, issued⟩ ⟨c', events, issued⟩
+  | prim {c c' events issued p vs site st k a} :
+      step P c = some (.request p vs site st k) →
+      answer ρ (Query.issue events p vs site st issued) = some a →
+      O.allows p vs st a = true → k a = some c' →
+      Move P ρ ⟨c, events, issued⟩
+        ⟨c', events ++ a.event.toList, issued ++ [Query.issue events p vs site st issued]⟩
+
+/-- Exactly `n` consecutive oracle-checked transitions. -/
+inductive Moves (P : Program O) (ρ : Oracle O) : Nat → Position O → Position O → Prop where
+  | refl (pos : Position O) : Moves P ρ 0 pos pos
+  | step {n pos pos' pos''} : Move P ρ pos pos' → Moves P ρ n pos' pos'' →
+      Moves P ρ (n + 1) pos pos''
+
+/-- Why an evaluator report is justified at the final position of its finite path. The `stuck`
+constructors distinguish a refused machine rule from a refused request continuation. -/
+inductive Conclusion (P : Program O) (ρ : Oracle O) : Ending O → Position O → Prop where
+  | final {f pos} : pos.config.final? = some f → Conclusion P ρ (.final f) pos
+  | stuck {c events issued} : step P c = none →
+      Conclusion P ρ (.stuck c) ⟨c, events, issued⟩
+  | stuckContinuation {c events issued p vs site st k a} :
+      step P c = some (.request p vs site st k) →
+      answer ρ (Query.issue events p vs site st issued) = some a →
+      O.allows p vs st a = true → k a = none →
+      Conclusion P ρ (.stuck c) ⟨c, events, issued⟩
+  | noAnswer {c events issued p vs site st k} :
+      step P c = some (.request p vs site st k) →
+      answer ρ (Query.issue events p vs site st issued) = none →
+      Conclusion P ρ (.noAnswer c) ⟨c, events, issued⟩
+  | badAnswer {c events issued p vs site st k a} :
+      step P c = some (.request p vs site st k) →
+      answer ρ (Query.issue events p vs site st issued) = some a →
+      O.allows p vs st a = false →
+      Conclusion P ρ (.badAnswer c) ⟨c, events, issued⟩
+  | outOfFuel {c events issued} : c.final? = none →
+      Conclusion P ρ (.outOfFuel c) ⟨c, events, issued⟩
+
 end ConcreteSpec.Core.Exec
