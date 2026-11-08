@@ -1,0 +1,30 @@
+Completed C4 in the current branch. Working tree clean; nothing pushed.
+
+Commits:
+
+- `25dcd36e9`: Decode pointer octets; derive access validity from block geometry.
+- `718ba4559`: Add geometric refusal laws; frame typed `State.write`.
+- `b35d293a3`: Add concrete instances and counterexamples.
+- `d74b47dc7`: Cover typed padding and decoded validity.
+- `ff15fd504`: Reconstruct pointer encoding from independent checks.
+- `a6cef2206`: Plant omitted-check and byte-order mutations.
+
+Each changed law has tagged evidence:
+
+| Law | Statement; instance / planted case |
+|---|---|
+| `decodePtr_encodePtr` | Valid pointers round-trip; whole pointer / wrong byte order. |
+| `decodePtr_some` | Success implies exact encoding and validity; whole pointer / first-fragment-only decoder and invalid pointer. |
+| `access_valid` | Well-formed block bounds imply pointer validity; allocated block / out-of-target bad block. |
+| `access_success` | Independent access obligations imply success; interior access / mutation requiring an extra byte. |
+| `alloc_failure` | Misalignment, boundary crossing or live overlap causes failure; isolated requests / three omitted-check mutants. |
+| `access_zero` | Empty load/store success exactly matches alignment, non-nullness and validity; provenance-free address / omitted null check. |
+| `typed_store_frame` | `State.write` preserves inactive bytes; typed bool write / padding-clobbering mutation. |
+
+`access_some` and `decodePtr_valid` became explicitly documented helpers. All six requested malformed-pointer cases are refused.
+
+Validation passed at `a6cef22061bda69188aef9daeee16adec2adf235`: build, rules **32/32**, trust-ban **23/23**.
+
+Nothing required was deferred. Heavy checks remain for the reviewer, as instructed. No independent review was run here.
+
+QUESTIONS: none.

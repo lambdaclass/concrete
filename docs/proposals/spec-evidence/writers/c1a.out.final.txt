@@ -1,0 +1,43 @@
+Completed C1 at `99de1cadf`. Working tree clean; nothing pushed.
+
+Build, rules gate (**32/32**), and trust gate (**23/23**, including 309 examples) pass. Codex and independent Kimi reviews are clean.
+
+The laws and their tagged evidence are in [Proofs/Exec.lean](/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c1a/ConcreteSpec/Proofs/Exec.lean).
+
+| Law | Statement; instance → planted counterexample |
+|---|---|
+| `bind_refused` | After operand success, no transition iff initialization refuses; literal binding → `Bypass.bind`. |
+| `assign_refused` | After RHS and destination lookup succeed, blockage iff initialization refuses; existing local → `Bypass.assign`. |
+| `call_refused` | After arguments, lookup and arity succeed, blockage iff entry refuses; zero-argument call → `Bypass.enter`. |
+| `scope_drop_refused` | Normal scope completion blocks iff dropping refuses; flagged local → `Bypass.scope`. |
+| `exit_drop_refused` | Scope unwinding blocks iff dropping refuses; return exit → `Bypass.exitScope`. |
+| `exit_test_drop_refused` | Test-frame unwinding blocks iff dropping refuses; return exit → `Bypass.exitTest`. |
+| `test_drop_refused` | After successful boolean testing, blockage iff temporary dropping refuses; true test → `Bypass.test`. |
+| `return_refused` | Explicit and implicit returns block exactly on leave/result-binding refusal; separate leave and bind-only instances → corresponding return bypass mutants. |
+| `continuation_refused`, `prim_bind_refused` | The driver stops stuck at the request, preserving history; allowed `log(1)` with history `[9]` → `uncheckedResponse`. |
+| `prim_error_bypasses_bind` | An allowed error answer takes the labeled trap transition despite bind refusal; error instance → `BindErrors`. |
+| `cleanup_runs_exact_plan` | Observed cleanup actions equal the plan and produce the actual trace/state; nested logs → missing-call, extra-call and missing-drop mutants. |
+| `raw_cleanup_runs_plan` | Arbitrary raw first-boundary unwinds yield cleanup observations without supplied segmentation; raw log execution → `Escape`, which skips cleanup through `.done`/`.resume`. |
+
+Initial-entry unfolding, function-backed determinism, destruction-field projection, and certificate equivalence are explicitly classified as helpers. Stack-protection and path-decomposition helpers establish raw-path coverage. `Demo.destroyProtocol` checks the concrete destruction obligations.
+
+Where reviewers disagreed, I adopted the stricter Codex/agy assessment: function congruence, field projection, and certificate equivalence do not independently constrain machine behavior. Machine rules remain unchanged; the partial-lifecycle documentation now cites owner item 21.
+
+Commits, in order:
+
+- `8f0b69afd` — Operational lifecycle blockage laws.
+- `36cba84ad` — Isolated refusal witnesses and destruction protocol.
+- `fe61b9dcc` — Exact cleanup actions and effects.
+- `59b030c9d` — Nested cleanup and missing/extra-action witnesses.
+- `46a9598e0` — Refusal mutants sharing production hypotheses.
+- `0e3b5ca4e` — Contract documentation and primitive negative controls.
+- `0c55c7439` — Independent-review fixes for return/error evidence.
+- `a0e16541c` — Raw-path completeness through stack protection.
+- `289d89625` — Raw execution witness and resume-path mutation.
+- `1c557730c` — Raw-path completeness documentation.
+- `1a9e79e0c` — Standard proof budget.
+- `99de1cadf` — Accurate arithmetic-helper descriptions.
+
+Nothing is staged or left unfinished. Heavy gates were omitted as instructed.
+
+QUESTIONS: none.
