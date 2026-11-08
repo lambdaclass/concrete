@@ -648,6 +648,8 @@ done <<'URLS'
 0 ssh://git@github.com:22/lambdaclass/concrete.git lambdaclass/concrete
 0 /tmp/x.git test/repo
 0 file:///tmp/x.git test/repo
+0 repos/concrete:backup.git test/repo
+0 ./a:b.git test/repo
 1 git@github-lambdaclass:lambdaclass/concrete.git test/repo
 1 git@github-old:unbalancedparentheses/concrete2.git lambdaclass/concrete
 1 ssh://git@github.com:22/unbalancedparentheses/concrete2.git lambdaclass/concrete

@@ -86,13 +86,15 @@ LAND_CANONICAL_REPO=lambdaclass/concrete
 # an alias for concrete2 must not pass as "not GitHub". When the remote has one, <repo>, the
 # repository gh reads, must be LAND_CANONICAL_REPO as well. A local path or file:// URL (the test
 # fixtures' bare repositories) passes and leaves <repo> free for a fake gh. Prints why, returns 1.
-land_url_path() { # url -> lowercased owner/name of a network URL; nothing for a local one
+# land_url_path url: returns 1 for a local URL (a path, or file://); for a network URL returns 0 and
+# prints its lowercased path after the host (and port), empty when it has none.
+land_url_path() {
   local u="$1" p
   case "$u" in
-    file://*) return 0 ;;
+    file://*) return 1 ;;
     *://*) p="${u#*://}"; case "$p" in */*) p="${p#*/}" ;; *) p="" ;; esac ;;
-    *:*) case "${u%%:*}" in */*) return 0 ;; esac; p="${u#*:}" ;;   # scp-like host:path (git's rule)
-    *) return 0 ;;
+    *:*) case "${u%%:*}" in */*) return 1 ;; esac; p="${u#*:}" ;;   # scp-like host:path (git's rule)
+    *) return 1 ;;
   esac
   while :; do case "$p" in /*) p="${p#/}" ;; *) break ;; esac; done
   p="${p%/}"; p="${p%.git}"
@@ -105,8 +107,7 @@ land_remote_bad() { # remote repo
   urls="$urls"$'\n'"$(git remote get-url --push --all "$r" 2>/dev/null)"
   while IFS= read -r u; do
     [ -n "$u" ] || continue
-    path="$(land_url_path "$u")"
-    [ -n "$path" ] || case "$u" in file://*|/*|./*|../*) continue ;; *://*|*:*) path="?" ;; *) continue ;; esac
+    path="$(land_url_path "$u")" || continue
     net=1
     if [ "$path" != "$want" ]; then
       echo "$r uses $u, not $LAND_CANONICAL_REPO: this clone points at another repository. Repoint it: git remote set-url $r https://github.com/$LAND_CANONICAL_REPO.git (and drop any other url or pushurl of $r)"
