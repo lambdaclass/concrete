@@ -38,9 +38,7 @@ if [ -z "$NAME" ]; then
   echo "usage: scripts/worktree-new.sh <name> [base-committish]" >&2
   exit 2
 fi
-case "$NAME" in
-  */*|.*) echo "error: <name> must be a plain directory name" >&2; exit 2 ;;
-esac
+python3 -I "$ROOT_DIR/scripts/ids/branch.py" worktree-name "$NAME" >/dev/null || exit 2
 
 # Worktrees live beside each other under .claude/worktrees/ when we are already
 # in one; otherwise under .claude/worktrees/ from the repo root.

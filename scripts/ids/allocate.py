@@ -8,11 +8,15 @@ import functools
 import os
 from pathlib import Path
 import re
+import runpy
 import socket
 import subprocess
 import sys
 import tempfile
 import uuid
+
+
+canonical_branch = runpy.run_path(str(Path(__file__).with_name("branch.py")))["canonical_branch"]
 
 
 class Refused(Exception):
@@ -161,46 +165,56 @@ class Snapshot:
                 self.tree_errors[branch] = str(error)
 
         self.remote_heads = dict(self.heads)
-        local_branch = git(root, 'symbolic-ref', '--short', 'HEAD', check=False).stdout.strip()
         git(self.repo, 'fetch', '--quiet', '--no-tags', str(root), 'HEAD:refs/local/head')
-        if local_branch:
-            self.heads[local_branch] = git(root, 'rev-parse', 'HEAD').stdout.strip()
+        self.local_head = git(root, 'rev-parse', 'HEAD').stdout.strip()
 
     def reservation(self, key):
         ref = ref_for(key)
         oid = self.refs.get(ref)
         if oid is None:
             return None
-        # Legacy commits may be imported by backfill, but never count as new-schema reservations.
-        if git(self.repo, 'cat-file', '-t', oid).stdout.strip() != 'commit':
-            raise Refused(f'{ref}: not a commit')
-        parents = git(self.repo, 'rev-list', '--parents', '-n', '1', oid).stdout.split()
-        if len(parents) != 1 or git(self.repo, 'ls-tree', oid).stdout:
-            raise Refused(f'{ref}: reservation must be a parentless empty-tree commit')
-        message = git(self.repo, 'show', '-s', '--format=%B', oid).stdout
-        try:
-            value = json.loads(message)
-        except ValueError:
+        return reservation_commit(self.repo, key, oid, allow_legacy=key.startswith('BUG-'))
+
+
+def validate_metadata(value, key):
+    required = {'schema', 'id', 'title', 'branch', 'who', 'when', 'nonce'}
+    if not isinstance(value, dict) or not required <= value.keys() or type(value['schema']) is not int or value['schema'] != 1:
+        raise Refused('malformed reservation schema')
+    if value['id'] != valid_key(key) or any(not isinstance(value[k], str) or not value[k].strip()
+                                           for k in required - {'schema'}):
+        raise Refused('invalid reservation identity or metadata')
+    if any(c in value['title'] for c in '\n\r\t'):
+        raise Refused('title must be one nonempty line without tabs')
+    if canonical_branch(value['branch']) != value['branch']:
+        raise Refused('reservation branch must be canonical main or wip/NAME')
+    if 'legacy_oid' in value and (not key.startswith('BUG-') or
+                                 not isinstance(value['legacy_oid'], str) or
+                                 not re.fullmatch(r'[0-9a-f]{40}|[0-9a-f]{64}', value['legacy_oid'])):
+        raise Refused('legacy_oid is only valid for a legacy bug import')
+    return value
+
+
+def reservation_commit(repo, key, oid, allow_legacy=False):
+    """One validator for fetched metadata, pre-push verification and legacy imports."""
+    if git(repo, 'cat-file', '-t', oid).stdout.strip() != 'commit':
+        raise Refused('reservation is not a commit')
+    if git(repo, 'rev-list', '--parents', '-n', '1', oid).stdout.split() != [oid] or git(repo, 'ls-tree', oid).stdout:
+        raise Refused('reservation must be a parentless empty-tree commit')
+    try:
+        value = json.loads(git(repo, 'show', '-s', '--format=%B', oid).stdout)
+    except ValueError:
+        if allow_legacy and key.startswith('BUG-'):
             return {'legacy_oid': oid}
-        required = {'schema', 'id', 'title', 'branch', 'who', 'when', 'nonce'}
-        if not isinstance(value, dict) or not required <= value.keys() or value['schema'] != 1:
-            raise Refused(f'{ref}: malformed reservation')
-        if value['id'] != key or any(not isinstance(value[k], str) or not value[k].strip()
-                                     for k in required - {'schema'}):
-            raise Refused(f'{ref}: invalid reservation identity')
-        return value
+        raise Refused('non-JSON reservation is not a schema-1 identity')
+    return validate_metadata(value, key)
 
 
 def metadata(root, key, title, branch):
-    if not title.strip() or any(c in title for c in '\n\r\t'):
-        raise Refused('title must be one nonempty line without tabs')
-    if branch != 'main' and not branch.startswith('wip/'):
-        raise Refused('branch must be main or wip/*')
-    git(root, 'check-ref-format', 'refs/heads/' + branch)
-    return dict(schema=1, id=valid_key(key), title=title, branch=branch,
-                who=(git(root, 'config', 'user.email', check=False).stdout.strip() or
-                     os.environ.get('GIT_AUTHOR_EMAIL', '')) + '@' + socket.gethostname(),
-                when=datetime.datetime.now(datetime.timezone.utc).isoformat(), nonce=str(uuid.uuid4()))
+    value = dict(schema=1, id=valid_key(key), title=title, branch=canonical_branch(branch),
+                 who=(git(root, 'config', 'user.email', check=False).stdout.strip() or
+                      os.environ.get('GIT_AUTHOR_EMAIL', '')) + '@' + socket.gethostname(),
+                 when=datetime.datetime.now(datetime.timezone.utc).isoformat(), nonce=str(uuid.uuid4()))
+    return validate_metadata(value, key)
 
 
 def commit(root, value):
@@ -249,26 +263,13 @@ def check_snapshot(snapshot):
 
 
 def check_change(root, snapshot):
-    head = git(root, 'rev-parse', 'HEAD').stdout.strip()
-    base = git(snapshot.repo, 'merge-base', snapshot.heads['main'], head).stdout.strip()
-    # Compare complete rows/content, not just titles: edits to an old identity activate enforcement.
-    listing = git(snapshot.repo, 'ls-tree', '-r', '--format=%(objectname) %(path)', base).stdout
-    old = dict(line.split(' ', 1)[::-1] for line in listing.splitlines())
-    local = work_records(root)
-    old_records = tree_records(snapshot.repo, base)
-    changed = {}
-    for key, value in local.items():
-        title, path = value
-        if key not in old_records or path not in old:
-            changed[key] = value
-        elif path == 'ISSUES.tsv':
-            before = next((x for x in blob(snapshot.repo, old[path]).splitlines() if x.startswith(key + '\t')), None)
-            after = next((x for x in (Path(root) / path).read_text().splitlines() if x.startswith(key + '\t')), None)
-            if before != after:
-                changed[key] = value
-        elif blob(snapshot.repo, old[path]) != (Path(root) / path).read_text():
-            changed[key] = value
-    check_entries(snapshot, changed, 'change')
+    # Enforcement is activated by landing the tools only AFTER the metadata backfill.
+    # There are no historical exemptions once active, and unstaged edits cannot hide HEAD.
+    if 'main' in snapshot.tree_errors:
+        raise Refused('origin/main: ' + snapshot.tree_errors['main'])
+    check_entries(snapshot, snapshot.trees['main'], 'origin/main')
+    check_entries(snapshot, tree_records(snapshot.repo, 'refs/local/head'), 'HEAD')
+    check_entries(snapshot, work_records(root), 'worktree')
 
 
 def legacy_signature(repo, sha, key):
@@ -280,7 +281,11 @@ def legacy_signature(repo, sha, key):
 
 
 def make_plan(root, snapshot, local, branch):
-    trees = list(snapshot.trees.items()) + [(branch, local)]
+    trees = list(snapshot.trees.items())
+    if branch:
+        trees.append((canonical_branch(branch), local))
+    elif local != tree_records(snapshot.repo, 'refs/local/head'):
+        raise Refused('detached backfill with local edits requires id.branch')
     uses = {}
     for name, entries in trees:
         for key, (title, _) in entries.items():
@@ -371,24 +376,19 @@ def main():
             raise Refused(f'reservation ref {ref} may not be deleted')
         if set(old) != {'0'} and git(root, 'cat-file', '-e', old, check=False).returncode:
             git(root, 'fetch', '--no-tags', '--no-write-fetch-head', 'origin', ref)
-        message = git(root, 'show', '-s', '--format=%B', oid).stdout
-        value = json.loads(message)
-        if ref != ref_for(valid_key(value['id'])) or value['schema'] != 1:
-            raise Refused('invalid reservation ref or schema')
-        for field in ('title', 'branch', 'who', 'when', 'nonce'):
-            if not isinstance(value[field], str) or not value[field].strip():
-                raise Refused('missing reservation metadata')
-        if git(root, 'rev-list', '--parents', '-n', '1', oid).stdout.split() != [oid] or git(root, 'ls-tree', oid).stdout:
-            raise Refused('reservation must be an empty orphan commit')
+        # The ref determines the identity; never trust payload fields before validation.
+        key = ('ISS-' if ref.startswith('refs/reserved/iss/') else 'BUG-') + ref.rsplit('/', 1)[1]
+        if ref != ref_for(valid_key(key)):
+            raise Refused('invalid reservation ref')
+        value = reservation_commit(root, key, oid)
         if set(old) != {'0'}:
-            if value.get('legacy_oid') != old:
-                raise Refused('reservations are immutable; only explicit legacy import is allowed')
-            try:
-                json.loads(git(root, 'show', '-s', '--format=%B', old).stdout)
-            except ValueError:
-                pass
-            else:
+            if not key.startswith('BUG-') or value.get('legacy_oid') != old:
+                raise Refused('reservations are immutable; only explicit legacy bug import is allowed')
+            previous = reservation_commit(root, key, old, allow_legacy=True)
+            if 'schema' in previous:
                 raise Refused('cannot replace a schema reservation')
+        elif 'legacy_oid' in value:
+            raise Refused('legacy import requires the existing legacy ref')
         return
     with tempfile.TemporaryDirectory(prefix='concrete-ids-') as temp:
         snapshot = Snapshot(root, temp)
@@ -400,7 +400,8 @@ def main():
                     valid_key(key)
                     if ref != ref_for(key):
                         raise Refused(f'malformed reservation ref: {ref}')
-                    snapshot.reservation(key)
+                    if snapshot.reservation(key).get('schema') != 1:
+                        raise Refused(f'{ref}: legacy reservation requires backfill before enforcement')
             if args.command == 'audit-wip':
                 check_snapshot(snapshot)
             else:
@@ -421,6 +422,7 @@ def main():
             updates = []
             for row in plan['updates']:
                 value = row['value']
+                validate_metadata(value, value['id'])
                 if row['ref'] != ref_for(valid_key(value['id'])):
                     raise Refused('plan ref/ID mismatch')
                 current = snapshot.reservation(value['id'])
