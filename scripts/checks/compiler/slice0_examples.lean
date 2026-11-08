@@ -42,22 +42,6 @@ def retainExample : CommandElab := fun stx => do
   let (replacement, _) ← makeExampleDef stx (← getFileName) (← getFileMap)
   elabCommand replacement
 
-partial def hasPartialModifier (stx : Syntax) : Bool :=
-  if stx.getKind == ``Parser.Command.declaration then
-    stx[0].find? (fun s => s.isAtom && s.getAtomVal == "partial") |>.isSome
-  else stx.getArgs.any hasPartialModifier
-
-def effectiveOwners (env : Environment) (n : Name)
-    (cs : List Concrete.Premises.Component) : List Concrete.Premises.Component :=
-  let direct := Concrete.Premises.declarationOwners n cs
-  if !direct.isEmpty then direct
-  else match Compiler.isUnsafeRecName? n with
-    | some parent =>
-        if (env.find? n).any (·.isPartial) && (env.find? parent).isSome then
-          Concrete.Premises.declarationOwners parent cs
-        else []
-    | none => []
-
 def checkOwnerKind (n : Name) (owners : List Concrete.Premises.Component) : CommandElabM Bool := do
   match owners with
   | [] => return false
@@ -93,25 +77,19 @@ partial def commands (file : String) (csList : List Concrete.Premises.Component)
       unless cs.env.contains n || n.isAnonymous do
         added := added.push (n, ci)
     for (n, ci) in sortAdded added do
-      do
-        let kinds ← liftCoreM <| Concrete.Premises.trustedDeclarationKinds env n ci
-        do
-          let axs ← liftCoreM (collectAxioms n)
-          IO.println <| "example-json " ++ (Json.mkObj [
-            ("name", toJson n.toString), ("axioms", toJson (axs.map toString))]).compress
-          for ax in axs do
-            unless allowed.contains ax do
-              IO.println s!"FAIL unlisted example axiom {ax} in {file}:{(input.fileMap.toPosition (cmd.getPos?.getD 0)).line}"
-              throwError "example axiom audit failed"
-        let owners := effectiveOwners env n csList
-        if hasPartialModifier cmd && !n.isInternalDetail && (n.toString.splitOn "⟪example⟫").length == 1 && (Compiler.isUnsafeRecName? n).isNone then
-          unless (← checkOwnerKind n owners) do
-            IO.println s!"FAIL unlisted partial declaration {n} in {file}"
-            throwError "partial modifier audit failed"
-        unless kinds.isEmpty do
-          unless (← checkOwnerKind n owners) do
-            IO.println s!"FAIL unlisted example trusted declaration {n} [{", ".intercalate kinds}]"
-            throwError "example trusted declaration audit failed"
+      let axs ← liftCoreM (collectAxioms n)
+      IO.println <| "example-json " ++ (Json.mkObj [
+        ("name", toJson n.toString), ("axioms", toJson (axs.map toString))]).compress
+      for ax in axs do
+        unless allowed.contains ax do
+          IO.println s!"FAIL unlisted example axiom {ax} in {file}:{(input.fileMap.toPosition (cmd.getPos?.getD 0)).line}"
+          throwError "example axiom audit failed"
+      let kinds ← liftCoreM <| Concrete.Premises.trustedDeclarationKinds env n ci
+      unless kinds.isEmpty do
+        let owners := Concrete.Premises.declarationOwners n csList (some env)
+        unless (← checkOwnerKind n owners) do
+          IO.println s!"FAIL unlisted example trusted declaration {n} [{", ".intercalate kinds}]"
+          throwError "example trusted declaration audit failed"
   unless Parser.isTerminalCommand cmd do commands file csList
 
 def configuredComponents : IO (List Concrete.Premises.Component) := do

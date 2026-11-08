@@ -75,11 +75,27 @@ with tempfile.TemporaryDirectory() as d:
             text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=60,
         )
         require(r_multi, False, expected_decl)
-    p.write_text('import Lean\npartial def loops : IO Unit := do while true do pure ()\npartial def nonrec : Nat := 0\n')
-    require(lean(p, True), False, 'FAIL unlisted partial declaration loops')
-    require(lean(p, True, {"CONCRETE_TRUSTED_DECLARATIONS": "lexer:loops,nonrec"}), True, '"name":"loops"')
-    require(lean(p, True, {"CONCRETE_TRUSTED_DECLARATIONS": "bir-lcb-adapter:loops,nonrec"}), False,
+    p.write_text(
+        'import Lean\n'
+        'macro "quotedPartial" : command => `(partial def neverCalled (n : Nat) : Nat := neverCalled n)\n'
+        'partial def loops : IO Unit := do while true do pure ()\n'
+        'partial def recPartial (n : Nat) : Nat := recPartial n\n'
+        'example : 1 = 1 := rfl\n'
+    )
+    require(lean(p, True), False, 'FAIL unlisted example trusted declaration loops [partial-loop]')
+    require(lean(p, True, {"CONCRETE_TRUSTED_DECLARATIONS": "lexer:loops"}), False,
+        'FAIL unlisted example trusted declaration recPartial [partial]')
+    require(lean(p, True, {"CONCRETE_TRUSTED_DECLARATIONS": "lexer:loops,recPartial"}), True, '⟪example⟫')
+    require(lean(p, True, {"CONCRETE_TRUSTED_DECLARATIONS": "bir-lcb-adapter:loops,recPartial"}), False,
         'FAIL trusted declaration loops belongs to non-code component bir-lcb-adapter')
+    p.write_text(
+        'import Lean\n'
+        'macro "localHygPartial" : command => `(partial def hygP (n : Nat) : Nat := hygP n)\n'
+        'localHygPartial\n'
+    )
+    r_hyg = lean(p, True)
+    require(r_hyg, False, 'FAIL unlisted example trusted declaration ')
+    assert re.search(r'^FAIL unlisted example trusted declaration hygP\._@\.[^ ]+ \[partial\]$', r_hyg.stdout, re.M), r_hyg.stdout
     p = d / "declarations.lean"
     p.write_text('''import Concrete.Premises
 import Lean.Elab.Command
