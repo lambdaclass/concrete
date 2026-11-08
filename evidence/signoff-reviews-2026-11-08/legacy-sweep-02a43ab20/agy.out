@@ -1,0 +1,91 @@
+I could read the repository in full.
+
+READ: .github/workflows/oracle.yml
+READ: AGENTS.md
+READ: ISSUES.tsv
+READ: README.md
+READ: RETENTION.tsv
+READ: REVIEW.diff
+READ: ROADMAP.md
+READ: changelog.d/2026-11-06-landing-audit.md
+READ: changelog.d/2026-11-08-legacy-sweep.md
+READ: docs/archive/roadmap-2026-11/README.md
+READ: docs/decisions.md
+READ: docs/proposals/SPEC_UNIFICATION.md
+READ: legacy/docs/archive/bugs-2026-11/README.md
+READ: legacy/docs/archive/landing-audit-2026-11-06/README.md
+READ: legacy/docs/archive/site-down.md
+READ: legacy/docs/proposals/IDEAS.md
+READ: legacy/docs/proposals/MERGED.md
+READ: legacy/scripts/land/legacy_move.sh
+READ: legacy/scripts/land/move_prereqs.py
+READ: scripts/checks/doc_links.sh
+READ: scripts/checks/issues.sh
+READ: scripts/checks/legacy.lock
+READ: scripts/checks/legacy_frozen.sh
+READ: scripts/checks/lib/bounded.sh
+READ: scripts/checks/lib/bounded_exec.py
+READ: scripts/checks/lib/doc_links.py
+READ: scripts/checks/lib/gate_env.sh
+READ: scripts/checks/lib/git_sandbox.sh
+READ: scripts/checks/lib/legacy_lock.py
+READ: scripts/checks/oracle_fetch.sh
+READ: scripts/checks/retention_manifest.sh
+READ: scripts/checks/review_tool.sh
+READ: scripts/checks/root_inventory.sh
+READ: scripts/checks/root_inventory.txt
+READ: scripts/checks/run.sh
+READ: scripts/checks/sandbox_isolation.sh
+READ: scripts/checks/workflow_yaml.sh
+READ: scripts/land/retention.py
+
+### Controls run and results
+
+All commands were run outside the source directory in temporary directories under `/tmp`, bounded via [bounded.sh](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-legacy/src/scripts/checks/lib/bounded.sh) (`bounded_run`), without touching the archive checkout or any remote:
+
+1. **Direct tree-hash verification on the archive copy**:
+   - Computed `git write-tree --prefix=legacy/` on the archive state: `ac06c6c3e8f0858d67b5bfcb1f90afd2df02b08b` (matches sweep 2 in [legacy.lock](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-legacy/src/scripts/checks/legacy.lock#L4)).
+   - Removed `legacy/docs/archive/bugs-2026-11/README.md`: `b582b773bfee2730c5df868eb9a353cb0a4422e3` (matches sweep 1 in [legacy.lock](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-legacy/src/scripts/checks/legacy.lock#L3)).
+   - Removed all 11 swept files: `2b6b53678b6d953331f35295caf9ad00cafd359b` (matches the frozen `tree` in [legacy.lock](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-legacy/src/scripts/checks/legacy.lock#L2)).
+
+2. **[legacy_frozen.sh](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-legacy/src/scripts/checks/legacy_frozen.sh) on a single-commit temporary repository**:
+   - All 77 negative and structural controls in `legacy_frozen.sh` ran and passed (`PASS=77`); the final repository leg failed closed as expected (`FAIL=1`) because the commit object `9186ca4c9f301ec34b97e66a3677b5eb24bd06d6` is not present in a plain `git archive`.
+
+3. **Full root runner ([run.sh](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-legacy/src/scripts/checks/run.sh)) on a reconstructed clone-like temporary repository**:
+   - Reconstructed the exact tree chain in a temporary git repository (`2b6b53678b6d953331f35295caf9ad00cafd359b` as base, `git apply -R REVIEW.diff` for the merge-base state with `origin/main` pointing to it, the pre-sweep link update of `docs/archive/bugs-2026-11/README.md` as the second sweep source, and the archive tree as `HEAD`):
+   - [legacy_frozen.sh](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-legacy/src/scripts/checks/legacy_frozen.sh): `PASS=81 FAIL=0`
+   - [doc_links.sh](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-legacy/src/scripts/checks/doc_links.sh): `PASS=18 FAIL=0 INCOMPLETE=0` (`DOC-LINKS: PASS CHECKED=918 ANCHORS=718`)
+   - [root_inventory.sh](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-legacy/src/scripts/checks/root_inventory.sh): `PASS=5 FAIL=0`
+   - [workflow_yaml.sh](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-legacy/src/scripts/checks/workflow_yaml.sh): `PASS=2 FAIL=0`
+   - [retention_manifest.sh](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-legacy/src/scripts/checks/retention_manifest.sh): `PASS=10 FAIL=0`
+   - [issues.sh](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-legacy/src/scripts/checks/issues.sh): `PASS=5 FAIL=0`
+   - [oracle_fetch.sh](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-legacy/src/scripts/checks/oracle_fetch.sh): `19 passed, 0 failed`
+   - [landing_bot.sh](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-legacy/src/scripts/checks/landing_bot.sh): `PASS=59 FAIL=0`
+   - [landing_script.sh](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-legacy/src/scripts/checks/landing_script.sh): `PASS=208 FAIL=0`
+   - [review_tool.sh](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-legacy/src/scripts/checks/review_tool.sh): `PASS=99 FAIL=0`
+   - [sandbox_isolation.sh](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-legacy/src/scripts/checks/sandbox_isolation.sh): `PASS=15 FAIL=0` (under a `systemd-run --user --scope` with `TasksMax=512, MemoryMax=8G`, including live linked-worktree hook probes of `review_tool.sh` and `legacy_frozen.sh` with `LEGACY_TRUSTED_REF`).
+   - Overall [run.sh](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-legacy/src/scripts/checks/run.sh): `root checks: all 11 pass`.
+
+4. **What could not be run**:
+   - Because this directory is a `git archive` without the original `.git` object store, the commit objects `9186ca4c9f301ec34b97e66a3677b5eb24bd06d6`, `3bd7bc41511e0a0ba247b53231b5dc8589533d2f`, and `02011ffea0c09e7d425aadb2a7ad85cacf1b8702` themselves (their commit headers/timestamps/parent chains prior to `3bd7bc4151`) are not present locally; their trees (`2b6b53678b6d953331f35295caf9ad00cafd359b`, `b582b773bfee2730c5df868eb9a353cb0a4422e3`, `ac06c6c3e8f0858d67b5bfcb1f90afd2df02b08b`, and the reversed `REVIEW.diff` root tree) were verified directly and through the reconstructed commit chain.
+
+### Assessment of the change at `02a43ab20`
+
+- **Freeze, sweep chain, and trusted-history invariants ([legacy_frozen.sh](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-legacy/src/scripts/checks/legacy_frozen.sh#L60-L204))**:
+  - `chain()` verifies each transition `frozen -> sweep 1 -> ... -> HEAD:legacy`, requiring each sweep commit to be an ancestor of `HEAD` and its target to be a tree object, allowing additions only when the exact mode and blob match at that step's sweep commit and the path no longer exists at `HEAD`'s root, refusing all modifications and control-character paths, using `git diff-tree -z` and `GIT_LITERAL_PATHSPECS=1` so C-quoted or pathspec-magic paths cannot bypass lookups, and allowing deletions only when every covering row in `RETENTION.tsv` has `status = resolved`.
+  - `lock_history()` and `history_identity()` enforce append-only lock history and path-version immutability across `main`'s trusted first-parent chain (`trusted_base`), preventing lock-row rewrites/removals and delete-then-re-add attacks with altered bytes or modes.
+  - Every helper runs through `checked()`, which fails closed if a subprocess exits nonzero even when stdout is empty.
+- **Single strict lock reader ([legacy_lock.py](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-legacy/src/scripts/checks/lib/legacy_lock.py#L35-L90))**:
+  - Validates raw bytes before decoding (refusing empty files, NUL bytes, CR bytes, non-ASCII bytes, missing final LF, `--preview` markers, duplicate lines, missing `tree` line, wrong record kinds/field counts, non-single-space separators, and non-40/64-char lowercase hex OIDs).
+  - Structural controls `named_readers()` and `lock_uses()` in [legacy_frozen.sh](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-legacy/src/scripts/checks/legacy_frozen.sh#L211-L229) verify that no other active script names or parses `legacy.lock`.
+- **Swept-file link checking and fail-closed discovery ([doc_links.py](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-legacy/src/scripts/checks/lib/doc_links.py#L167-L260), [doc_links.sh](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-legacy/src/scripts/checks/doc_links.sh#L126-L190))**:
+  - `swept_files()` uses `legacy_lock.load()` and checks all Markdown files in `HEAD:legacy` that were not in the frozen tree (`now - frozen`), failing closed on malformed locks, lock read errors, `ls-tree` failures, or `ls-files` failures without falling back to `rglob` when `.git` is present.
+- **Sweep scope and restored dated archives ([RETENTION.tsv](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-legacy/src/RETENTION.tsv#L45-L47), [docs/decisions.md](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-legacy/src/docs/decisions.md#L201))**:
+  - Sweeps only the completed records (`bugs-2026-11`, `landing-audit-2026-11-06`, `legacy_move.sh`, `move_prereqs.py`, `IDEAS.md`, `MERGED.md`), removes the duplicate root copy of `site-down.md`, and keeps the dated decision archives (`roadmap-2026-11`, `decisions-2026-11-05`, `crucial-2026-11-06`, `no-hidden-traps-2026-11-06`) at the root until `docs/decisions.md` consolidates all of their decisions and verbatim quotes, matching P21 as revised on 2026-11-08.
+
+### Findings
+
+None.
+
+REPOSITORY: readable
+VERDICT: ACCEPT

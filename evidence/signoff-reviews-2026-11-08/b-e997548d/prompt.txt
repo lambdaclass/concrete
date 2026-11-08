@@ -1,0 +1,14 @@
+reviewed: e997548d93482f37181dc0a523a2a06bca40a77c
+
+Read-only review. Do not modify, create or delete any file in this directory, do not push, and do not contact any git remote or network service. You may read files, run read-only git commands, and run the repository's own checks and controls (they build temporary git repositories outside this directory) under timeout and memory bounds (scripts/checks/lib/bounded.sh); temporary files only outside this directory. Say which controls you ran and their results.
+
+The current directory is a plain copy (git archive) of the Concrete repository at commit e997548d93482f37181dc0a523a2a06bca40a77c. REVIEW.diff holds the change under review (ea212942f4b890710ba864d0c5cb846db72cc777..e997548d93482f37181dc0a523a2a06bca40a77c). Review it against the repository as a whole: read the files it touches and the code, docs, checks and decisions (docs/decisions.md, ROADMAP.md) it relies on.
+
+OWNER RULE (2026-11-08, verbatim: "ALWAYS tell the reviewrs to do the best long term thing rather than cuitting corners"): judge and fix by the best long-term design. Never cut corners for speed, a smaller diff or fewer rounds. As a reviewer, report any shortcut, containment patch or corner cut as a real finding and say what the long-term fix is. As a writer, implement the structural fix, not a containment patch; if staging is truly unavoidable, record the long-term design and name its roadmap row.
+
+Review exact commit e997548d93482f37181dc0a523a2a06bca40a77c (head of wip/one-repository-2) for an owner sign-off. It was written by Kimi, so Codex and agy are the reviewers. REVIEW.diff holds its full change against main's merge base ea212942f: 119381451 "one repository: land on lambdaclass/concrete only" and e997548d9 "docs: correct one-repository decision status" (16 files). Check that the landing tools, hooks, CI workflow, docs and checks consistently implement landing on lambdaclass/concrete only (no remaining path that pushes main elsewhere or treats the other remote as authoritative, no silent fallback), that the decision status in the docs is stated exactly as decided, that the controls are load-bearing, and that nothing is a containment patch. Run the root checks bounded where the archive allows (create temporary repositories if needed; never touch a remote) and say what you could not run.
+
+
+Report findings with file:line, severity and the long-term fix. Start your answer by stating whether you could read the repository, then list every file you read, one per line, each as `READ: <path relative to the repository root>`. End with exactly two lines:
+REPOSITORY: readable   (or REPOSITORY: unreadable)
+VERDICT: ACCEPT   (or VERDICT: REJECT)

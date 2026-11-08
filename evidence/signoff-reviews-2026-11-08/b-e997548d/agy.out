@@ -1,0 +1,137 @@
+I could read the repository at commit `e997548d93482f37181dc0a523a2a06bca40a77c` (`wip/one-repository-2` over merge base `ea212942f4b890710ba864d0c5cb846db72cc777`).
+
+READ: .claude/codex-review-prompt.md
+READ: .claude/commands/creview.md
+READ: .claude/commands/cstatus.md
+READ: .claude/commands/land.md
+READ: .claude/commands/rebase.md
+READ: .claude/commands/roadmap-item.md
+READ: .githooks/pre-push
+READ: .github/workflows/lean_action_ci.yml
+READ: .github/workflows/oracle.yml
+READ: AGENTS.md
+READ: CLAUDE.md
+READ: Concrete/README.md
+READ: ConcreteSpec/README.md
+READ: ISSUES.tsv
+READ: README.md
+READ: RETENTION.tsv
+READ: REVIEW.diff
+READ: ROADMAP.md
+READ: changelog.d/2026-11-04-legacy-move.md
+READ: changelog.d/2026-11-06-landing-machinery.md
+READ: changelog.d/2026-11-07-owner-decisions.md
+READ: changelog.d/2026-11-08-bot-snapshot-files.md
+READ: changelog.d/2026-11-08-gate-host-login.md
+READ: changelog.d/2026-11-08-iss-0019.md
+READ: changelog.d/2026-11-08-landing-shrink.md
+READ: changelog.d/2026-11-08-one-repository.md
+READ: changelog.d/2026-11-08-owner-signoff.md
+READ: changelog.d/2026-11-08-record-foundation.md
+READ: changelog.d/2026-11-08-review-blockers.md
+READ: changelog.d/2026-11-08-slice0.md
+READ: docs/LANDING.md
+READ: docs/PHILOSOPHY.md
+READ: docs/REVIEW.md
+READ: docs/SELF_HOSTED_RUNNERS.md
+READ: docs/archive/landing-audit-2026-11-06/README.md
+READ: docs/archive/site-down.md
+READ: docs/decisions.md
+READ: docs/proposals/SPEC_UNIFICATION.md
+READ: flake.nix
+READ: required-checks-transition.tsv
+READ: required-checks.txt
+READ: scripts/checks/doc_links.sh
+READ: scripts/checks/issues.sh
+READ: scripts/checks/landing_ready.sh
+READ: scripts/checks/landing_script.sh
+READ: scripts/checks/legacy.lock
+READ: scripts/checks/legacy_frozen.sh
+READ: scripts/checks/lib/bounded.sh
+READ: scripts/checks/lib/bounded_exec.py
+READ: scripts/checks/lib/changelog.py
+READ: scripts/checks/lib/doc_links.py
+READ: scripts/checks/lib/gate_env.sh
+READ: scripts/checks/lib/git_sandbox.sh
+READ: scripts/checks/lib/has_match.sh
+READ: scripts/checks/lib/limited_exec.sh
+READ: scripts/checks/lib/limits.sh
+READ: scripts/checks/lib/prepush_record.sh
+READ: scripts/checks/lib/treestate.sh
+READ: scripts/checks/oracle_fetch.sh
+READ: scripts/checks/retention_manifest.sh
+READ: scripts/checks/review_tool.sh
+READ: scripts/checks/root_inventory.sh
+READ: scripts/checks/root_inventory.txt
+READ: scripts/checks/run.sh
+READ: scripts/checks/sandbox_isolation.sh
+READ: scripts/checks/workflow_yaml.sh
+READ: scripts/land/acceptance.sh
+READ: scripts/land/gates_remote.sh
+READ: scripts/land/gates_transport_ssh.sh
+READ: scripts/land/impact_gates.sh
+READ: scripts/land/legacy_move.sh
+READ: scripts/land/lib.sh
+READ: scripts/land/move_prereqs.py
+READ: scripts/land/notes.sh
+READ: scripts/land/ready.sh
+READ: scripts/land/report.sh
+READ: scripts/land/required_checks.py
+READ: scripts/land/resolve_conflicts.py
+READ: scripts/land/retention.py
+READ: scripts/land/run-at-ref.sh
+READ: scripts/land/signoff.sh
+READ: scripts/land/train.sh
+READ: scripts/oracle/ORACLE.lock
+READ: scripts/oracle/build.sh
+READ: scripts/oracle/ci_check.sh
+READ: scripts/oracle/fetch.sh
+READ: scripts/oracle/lib.sh
+READ: scripts/oracle/publish.sh
+READ: scripts/oracle/run.sh
+READ: scripts/oracle/smoke.con
+READ: scripts/push-both.sh
+READ: scripts/review/review.sh
+READ: scripts/review/split_diff.py
+READ: scripts/review/verify.sh
+READ: scripts/worktree-new.sh
+
+### Findings
+
+No defects, corner cuts, or containment patches found.
+
+### Verification Summary
+
+1. **Consistent single-repository implementation (`lambdaclass/concrete` only, no fallback or dual-remote path):**
+   - [`scripts/land/train.sh`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/scripts/land/train.sh#L176-L209): `REPO` defaults to `lambdaclass/concrete` and `REMOTE` to `origin`. [`github_slug`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/scripts/land/train.sh#L194-L200) and [`check_remote`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/scripts/land/train.sh#L201-L209) require `$REMOTE` to be configured and fail closed if its GitHub URL resolves to any repository other than `$REPO` (refusing `unbalancedparentheses/concrete2` or any other GitHub slug). [`cmd_land`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/scripts/land/train.sh#L984-L1028) pushes `refs/heads/main` only to `$REMOTE` via [`push_retry`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/scripts/land/train.sh#L221-L237), verifies the remote SHA with `git ls-remote`, and removes `LAND_MIRROR` and `mirror_url` completely.
+   - [`scripts/land/signoff.sh`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/scripts/land/signoff.sh#L34-L45) and [`scripts/push-both.sh`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/scripts/push-both.sh#L40-L79) enforce the same `github_slug` check against `lambdaclass/concrete` and remove all secondary-remote pushing.
+   - [`scripts/land/acceptance.sh`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/scripts/land/acceptance.sh#L189-L335) rehearses landing against `origin` only, with `LAND_MIRROR` and `lambdaclass.git` removed.
+   - [`scripts/oracle/ORACLE.lock`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/scripts/oracle/ORACLE.lock#L32-L34) and [`scripts/oracle/build.sh`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/scripts/oracle/build.sh#L106-L114) point `release_repo` and `artifact_url` to `lambdaclass/concrete` and verify that the lock's `artifact_url` equals `https://github.com/$RREPO/releases/download/$RTAG/$ANAME` (matching P5 in [`scripts/land/legacy_move.sh`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/scripts/land/legacy_move.sh#L158-L159)).
+   - [`.github/workflows/lean_action_ci.yml`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/.github/workflows/lean_action_ci.yml#L60-L64), [`.claude/commands/land.md`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/.claude/commands/land.md#L21-L45), [`AGENTS.md`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/AGENTS.md#L96-L103), [`README.md`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/README.md#L54-L62), [`docs/LANDING.md`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/docs/LANDING.md#L50-L51), [`docs/REVIEW.md`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/docs/REVIEW.md#L54), [`docs/SELF_HOSTED_RUNNERS.md`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/docs/SELF_HOSTED_RUNNERS.md#L56-L59), and [`docs/proposals/SPEC_UNIFICATION.md`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/docs/proposals/SPEC_UNIFICATION.md#L1207-L1213) consistently name `lambdaclass/concrete` (`origin`) as the one repository.
+
+2. **Decision status in the docs:**
+   - [`docs/decisions.md`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/docs/decisions.md#L576) (`decided-2026-11-08-eleven`, item 3) and [`ROADMAP.md`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/ROADMAP.md#L208) (`R-0617`) record the 2026-11-08 decision to switch to the one repository first and then add server-side branch protection on `main`. Because `docs/decisions.md` is edited by one writer at a time ([`AGENTS.md`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/AGENTS.md#L83-L84)), [`changelog.d/2026-11-08-one-repository.md`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/changelog.d/2026-11-08-one-repository.md#L3-L5), [`docs/LANDING.md`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/docs/LANDING.md#L50-L51), and [`docs/SELF_HOSTED_RUNNERS.md`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/docs/SELF_HOSTED_RUNNERS.md#L56-L58) state that the 2026-11-06 one-repository decision is pending its record in `docs/decisions.md` rather than linking to a nonexistent anchor.
+
+3. **Load-bearing controls:**
+   - [`scripts/checks/landing_script.sh`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/scripts/checks/landing_script.sh#L261-L290) exercises `train.sh`, `push-both.sh`, and `signoff.sh` against an unconfigured remote, `origin` pointing at `https://github.com/unbalancedparentheses/concrete2.git`, `origin` pointing at `git@github.com:other/repo.git` (all refused), and `origin` pointing at `https://github.com/lambdaclass/concrete.git` (accepted), and checks that no `LAND_MIRROR`, `mirror_url`, or `MIRROR` remains in the landing scripts or `acceptance.sh`.
+
+### Controls Run and Results
+
+All controls were run under [`scripts/checks/lib/bounded.sh`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/scripts/checks/lib/bounded.sh) (`bounded_run -i /dev/null 180`) and [`scripts/checks/lib/limits.sh`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/scripts/checks/lib/limits.sh) (`gate_limits 16 2048`), with temporary directories and throwaway git repositories strictly outside the workspace directory and no network or remote access:
+
+- [`scripts/checks/workflow_yaml.sh`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/scripts/checks/workflow_yaml.sh): **PASS** (`WORKFLOW-YAML: PASS=2 FAIL=0`)
+- [`scripts/checks/issues.sh`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/scripts/checks/issues.sh): **PASS** (`check_issues: PASS=5 FAIL=0`)
+- [`scripts/checks/oracle_fetch.sh`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/scripts/checks/oracle_fetch.sh): **PASS** (`check_oracle_fetch: 19 passed, 0 failed`)
+- [`scripts/checks/review_tool.sh`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/scripts/checks/review_tool.sh): **PASS** (`check_review_tool: PASS=90 FAIL=0`)
+- [`scripts/checks/landing_ready.sh`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/scripts/checks/landing_ready.sh): **PASS** (`check_landing_ready: PASS=8 FAIL=0`)
+- [`scripts/checks/landing_script.sh`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/scripts/checks/landing_script.sh): **PASS** (`check_landing_script: PASS=236 FAIL=0`, including all new one-repository and remote-slug controls)
+- [`scripts/checks/doc_links.sh`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/scripts/checks/doc_links.sh) (run in a temporary git repository outside the workspace initialized from the archive): **PASS** (`DOC-LINKS-GATE: PASS=12 FAIL=0 INCOMPLETE=0`, `CHECKED=1104 ANCHORS=892`)
+- [`scripts/checks/retention_manifest.sh`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/scripts/checks/retention_manifest.sh) (run in the temporary git repository): **PASS** (`check_retention_manifest: PASS=10 FAIL=0`, 5038 tracked files governed)
+- [`scripts/checks/root_inventory.sh`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/scripts/checks/root_inventory.sh) (run in the temporary git repository): **PASS** (`root_inventory: PASS=5 FAIL=0`)
+- [`scripts/checks/legacy_frozen.sh`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/scripts/checks/legacy_frozen.sh) and [`scripts/checks/sandbox_isolation.sh`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/scripts/checks/sandbox_isolation.sh):
+  - In `legacy_frozen.sh`, all 8 negative controls and the non-preview check **PASS** (`PASS=9`), and staging the archive's `legacy/` directory with `git add -f -A` produces tree `2b6b53678b6d953331f35295caf9ad00cafd359b`, matching [`scripts/checks/legacy.lock`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-so-b/src/scripts/checks/legacy.lock#L1-L2) byte-for-byte.
+  - In `sandbox_isolation.sh`, the structural scan over all 8 repository-making scripts, the 3 structural controls, the leak-detection control, and the live `review_tool.sh` linked-worktree probe under a systemd user scope (`TasksMax=512, MemoryMax=8G`) all **PASS** (`PASS=14`).
+  - **What could not be run:** The `git rev-parse -q --verify "$base^{tree}"` history lookup in `legacy_frozen.sh` (and the `legacy_frozen.sh` live sub-probe inside `sandbox_isolation.sh` that calls it) could not resolve commit `9186ca4c9f301ec34b97e66a3677b5eb24bd06d6` because the workspace is a commitless `git archive` without git history objects. Also, `scripts/oracle/build.sh` (which fetches the tag from a remote and runs a full nix build of the legacy compiler) and live `gh` / remote operations were not run under the read-only, no-network/no-remote review constraints.
+
+REPOSITORY: readable
+VERDICT: ACCEPT
