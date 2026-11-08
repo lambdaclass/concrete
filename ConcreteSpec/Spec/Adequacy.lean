@@ -128,4 +128,57 @@ inductive Conclusion (P : Program O) (ρ : Oracle O) : Ending O → Position O �
   | outOfFuel {c events issued} : c.final? = none →
       Conclusion P ρ (.outOfFuel c) ⟨c, events, issued⟩
 
+/-- An infinite maximal execution under one fixed oracle. Every adjacent pair is a successful
+transition, so this excludes final, stuck, blocked, and bad-answer endpoints. -/
+structure InfiniteExecution (P : Program O) (ρ : Oracle O) (c : Config O) where
+  states : Nat → Position O
+  initial : states 0 = ⟨c, [], []⟩
+  step : ∀ n, Move P ρ (states n) (states (n + 1))
+
+/-- A compatible limit of fuel-indexed prefixes. The `n`-step run is exactly the `n`-th position;
+these are not independently chosen finite witnesses. -/
+structure FuelLimit (P : Program O) (ρ : Oracle O) (c : Config O) where
+  states : Nat → Position O
+  prefixes : ∀ n, runQ P ρ n c =
+    ⟨(states n).events, (states n).queries, .outOfFuel (states n).config⟩
+
+/-- An infinite execution emits only finitely many events exactly when its event-history length has
+one finite bound. -/
+def FiniteEvents {P : Program O} {ρ : Oracle O} {c : Config O}
+    (X : InfiniteExecution P ρ c) : Prop :=
+  ∃ bound, ∀ n, (X.states n).events.length ≤ bound
+
+/-- An infinite execution interacts forever when its event history outgrows every finite bound. -/
+def InfiniteEvents {P : Program O} {ρ : Oracle O} {c : Config O}
+    (X : InfiniteExecution P ρ c) : Prop :=
+  ∀ bound, ∃ n, bound < (X.states n).events.length
+
+/-- Silent divergence: infinitely many steps but only finitely many externally visible events. -/
+def SilentDivergence (P : Program O) (ρ : Oracle O) (c : Config O) : Prop :=
+  ∃ X : InfiniteExecution P ρ c, FiniteEvents X
+
+/-- Infinite interaction: an infinite execution with infinitely many events. -/
+def InfiniteInteraction (P : Program O) (ρ : Oracle O) (c : Config O) : Prop :=
+  ∃ X : InfiniteExecution P ρ c, InfiniteEvents X
+
+/-- Once `fuel` reaches a blocked request, every larger budget retains C1's `noAnswer` ending.
+This is C8's blocking classification over C1; it is not divergence and has no infinite `Move`. -/
+def EndlesslyBlocked (P : Program O) (ρ : Oracle O) (fuel : Nat) (c blocked : Config O) : Prop :=
+  ∀ n, fuel ≤ n → (run P ρ n c).ending = .noAnswer blocked
+
+/-- Per-function termination evidence. `Premises` names the trusted premises; `admits` selects the
+allowed oracles, arguments, and stores. `dependencies` names the other function identities whose
+termination evidence this certificate uses. The final field is a theorem over every allowed run:
+entry succeeds and the fixed fuel budget reports a final outcome. Concrete variants and cost models
+are deliberately not part of this interface. -/
+structure TerminationEvidence (O : Operands) (P : Program O) where
+  function : FnId
+  Premises : Type
+  dependencies : List FnId
+  admits : Premises → Oracle O → List O.Val → O.Store → Prop
+  fuel : Premises → Oracle O → List O.Val → O.Store → Nat
+  terminates : ∀ premises ρ args st fn c,
+    AList.lookup P.fns function = some fn → admits premises ρ args st →
+    enter fn args st = some c → ∃ f, (run P ρ (fuel premises ρ args st) c).ending = .final f
+
 end ConcreteSpec.Core.Exec
