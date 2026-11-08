@@ -1660,6 +1660,92 @@ example : ¬ ∃ hc : Conclusion refusingBindProgram refusingBindOracle (.stuck 
     simp_all [refusingBindConfig, refusingBindOps, ops, step, evalArgs, evalE, onRes,
       Res.bind, Res.map]
 
+/-! ### Usable termination certificates and rejected certificates -/
+
+/-- A declared singleton call domain, independent of its termination proof. -/
+def terminatingDomain : CallDomain ops :=
+  ⟨boomF, fun ρ args st => ρ = env ∧ args = [] ∧ st = .init⟩
+
+/-- This aborting function terminates with a trapped outcome; termination does not promise success. -/
+def terminatingConditional : ConditionalTermination ops prog terminatingDomain where
+  Premises := Unit
+  dependencies := []
+  fuel := fun _ _ _ _ => 10
+  terminates := by
+    intro _ ρ args st h
+    obtain ⟨rfl, rfl, rfl⟩ := h
+    exact ⟨boomFn, start boomFn [] .init, .trapped .abort ⟨9⟩,
+      rfl, rfl, rfl⟩
+
+/-- An inhabited certificate for a declared function and an actual successful entry. -/
+def terminatingEvidence : TerminationEvidence ops prog terminatingDomain :=
+  ⟨terminatingConditional, (), env, [], .init, rfl, rfl, rfl⟩
+
+/-- The empty declared domain has no usable certificate, even though its conditional coverage
+can be proved with no executions. -/
+example : ¬ Nonempty (TerminationEvidence ops prog ⟨boomF, fun _ _ _ => False⟩) := by
+  rintro ⟨E⟩
+  obtain ⟨ρ, args, st, h⟩ := E.admitted
+  exact h
+
+/-- A missing function cannot be certified by restricting the certificate's admission filter. -/
+example : ¬ Nonempty (TerminationEvidence ops (⟨[]⟩ : Program ops) terminatingDomain) := by
+  rintro ⟨E⟩
+  obtain ⟨fn, c, f, hf, _, _⟩ := E.conditional.terminates E.premises env [] .init ⟨rfl, rfl, rfl⟩
+  cases hf
+
+/-- The domain of a call whose entry lifecycle is refused. -/
+def refusedEntryOps : Operands := { ops with life := fun _ _ => none }
+def refusedEntryFn : Fn refusedEntryOps := ⟨[], .unit, ⟨101⟩, .skip⟩
+def refusedEntryProgram : Program refusedEntryOps := ⟨[(boomF, refusedEntryFn)]⟩
+def refusedEntryDomain : CallDomain refusedEntryOps := ⟨boomF, fun _ _ _ => True⟩
+
+/-- Entry failure is a failed certificate obligation, not a premise silently excluding the call. -/
+example : ¬ Nonempty (TerminationEvidence refusedEntryOps refusedEntryProgram refusedEntryDomain) := by
+  rintro ⟨E⟩
+  obtain ⟨ρ, args, st, h⟩ := E.admitted
+  obtain ⟨fn, c, f, hf, he, _⟩ := E.conditional.terminates E.premises ρ args st h
+  have eqfn : fn = refusedEntryFn := by simpa [refusedEntryProgram, refusedEntryDomain, AList.lookup] using hf.symm
+  subst fn
+  simp [enter, refusedEntryOps] at he
+
+/-- A declared looping function, with the same scope as `spinConfig`. -/
+def spinningFn : Fn ops := ⟨[], .int, ⟨0⟩, .loop ⟨0⟩ .skip (.lit 1) .skip s⟩
+def spinningProgram : Program ops := ⟨[(mainF, spinningFn)]⟩
+def spinningDomain : CallDomain ops :=
+  ⟨mainF, fun ρ args st => ρ = env ∧ args = [] ∧ st = .init⟩
+
+/-- Program lookup is irrelevant to this call-free loop. -/
+def admittedSpin : InfiniteExecution spinningProgram env (start spinningFn [] .init) where
+  states := spinPosition
+  initial := rfl
+  step := by
+    intro n
+    have spin_move_01 : Move spinningProgram env ⟨spinConfig, [], []⟩ ⟨spinConfig1, [], []⟩ := .silent rfl
+    have spin_move_12 : Move spinningProgram env ⟨spinConfig1, [], []⟩ ⟨spinConfig2, [], []⟩ := .silent rfl
+    have spin_move_23 : Move spinningProgram env ⟨spinConfig2, [], []⟩ ⟨spinConfig3, [], []⟩ := .silent rfl
+    have spin_move_34 : Move spinningProgram env ⟨spinConfig3, [], []⟩ ⟨spinConfig4, [], []⟩ := .silent rfl
+    have spin_move_40 : Move spinningProgram env ⟨spinConfig4, [], []⟩ ⟨spinConfig, [], []⟩ := .silent rfl
+    have hlt : n % 5 < 5 := Nat.mod_lt _ (by decide)
+    have hc : n % 5 = 0 ∨ n % 5 = 1 ∨ n % 5 = 2 ∨ n % 5 = 3 ∨ n % 5 = 4 := by omega
+    rcases hc with h | h | h | h | h
+    · have hn : (n + 1) % 5 = 1 := by omega
+      simpa [spinPosition, spinConfigAt, h, hn] using spin_move_01
+    · have hn : (n + 1) % 5 = 2 := by omega
+      simpa [spinPosition, spinConfigAt, h, hn] using spin_move_12
+    · have hn : (n + 1) % 5 = 3 := by omega
+      simpa [spinPosition, spinConfigAt, h, hn] using spin_move_23
+    · have hn : (n + 1) % 5 = 4 := by omega
+      simpa [spinPosition, spinConfigAt, h, hn] using spin_move_34
+    · have hn : (n + 1) % 5 = 0 := by omega
+      simpa [spinPosition, spinConfigAt, h, hn] using spin_move_40
+
+/-- A domain containing the spinning call cannot acquire usable evidence. -/
+example : ¬ Nonempty (TerminationEvidence ops spinningProgram spinningDomain) := by
+  rintro ⟨E⟩
+  exact E.excludes_infinite env [] .init spinningFn (start spinningFn [] .init)
+    rfl ⟨rfl, rfl, rfl⟩ rfl admittedSpin
+
 end Demo
 
 end ConcreteSpec.Core.Exec
