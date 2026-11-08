@@ -236,40 +236,48 @@ theorem final?_none_of_step {c : Config O} {out : Out O} (h : step P c = some ou
     | trapped kd site => simp [step] at h
 
 /-- **Soundness.** Every instrumented report has a finite oracle-checked path to a position that
-justifies its ending. `ReportedQueries` identifies the reported history exactly: it is the final
-position's history, plus the terminal query for a request-stopping ending. -/
+justifies its ending. `ReportedQueries` is indexed by that justification and identifies the
+reported history exactly: the final position's history, plus the authenticated terminal query for
+a request-stopping ending. -/
 theorem runFromQ_sound : ∀ (fuel : Nat) (events : List O.Event) (issued : List (Query O))
     (c : Config O), ∃ n pos, Moves P ρ n ⟨c, events, issued⟩ pos ∧
       (runFromQ P ρ fuel events issued c).events = pos.events ∧
-      Conclusion P ρ (runFromQ P ρ fuel events issued c).ending pos ∧
-      ReportedQueries (runFromQ P ρ fuel events issued c).ending pos
-        (runFromQ P ρ fuel events issued c).queries := by
+      ∃ hc : Conclusion P ρ (runFromQ P ρ fuel events issued c).ending pos,
+        ReportedQueries P ρ hc (runFromQ P ρ fuel events issued c).queries := by
   intro fuel
   induction fuel with
   | zero =>
     intro events issued c
     cases hf : c.final? with
-    | some f => exact ⟨0, ⟨c, events, issued⟩, .refl _, by simp [runFromQ, hf],
-        by simpa [runFromQ, hf] using (Conclusion.final (P := P) (ρ := ρ) hf),
-        by simpa [runFromQ, hf] using
-          (ReportedQueries.final (f := f) (pos := (⟨c, events, issued⟩ : Position O)))⟩
-    | none => exact ⟨0, ⟨c, events, issued⟩, .refl _, by simp [runFromQ, hf],
-        by simpa [runFromQ, hf] using (Conclusion.outOfFuel (P := P) (ρ := ρ) hf),
-        by simpa [runFromQ, hf] using
-          (ReportedQueries.outOfFuel (c := c) (events := events) (issued := issued))⟩
+    | some f =>
+      refine ⟨0, ⟨c, events, issued⟩, .refl _, by simp [runFromQ, hf], ?_⟩
+      simpa [runFromQ, hf] using
+        (show ∃ hc : Conclusion P ρ (.final f) (⟨c, events, issued⟩ : Position O),
+            ReportedQueries P ρ hc issued from
+          ⟨Conclusion.final hf, ReportedQueries.final hf⟩)
+    | none =>
+      refine ⟨0, ⟨c, events, issued⟩, .refl _, by simp [runFromQ, hf], ?_⟩
+      simpa [runFromQ, hf] using
+        (show ∃ hc : Conclusion P ρ (.outOfFuel c) (⟨c, events, issued⟩ : Position O),
+            ReportedQueries P ρ hc issued from
+          ⟨Conclusion.outOfFuel hf, ReportedQueries.outOfFuel (events := events) hf⟩)
   | succ n ih =>
     intro events issued c
     cases hf : c.final? with
-    | some f => exact ⟨0, ⟨c, events, issued⟩, .refl _, by simp [runFromQ, hf],
-        by simpa [runFromQ, hf] using (Conclusion.final (P := P) (ρ := ρ) hf),
-        by simpa [runFromQ, hf] using
-          (ReportedQueries.final (f := f) (pos := (⟨c, events, issued⟩ : Position O)))⟩
+    | some f =>
+      refine ⟨0, ⟨c, events, issued⟩, .refl _, by simp [runFromQ, hf], ?_⟩
+      simpa [runFromQ, hf] using
+        (show ∃ hc : Conclusion P ρ (.final f) (⟨c, events, issued⟩ : Position O),
+            ReportedQueries P ρ hc issued from
+          ⟨Conclusion.final hf, ReportedQueries.final hf⟩)
     | none =>
       cases hs : step P c with
-      | none => exact ⟨0, ⟨c, events, issued⟩, .refl _, by simp [runFromQ, hf, hs],
-          by simpa [runFromQ, hf, hs] using (Conclusion.stuck (P := P) (ρ := ρ) hs),
-          by simpa [runFromQ, hf, hs] using
-            (ReportedQueries.stuck (c := c) (events := events) (issued := issued))⟩
+      | none =>
+        refine ⟨0, ⟨c, events, issued⟩, .refl _, by simp [runFromQ, hf, hs], ?_⟩
+        simpa [runFromQ, hf, hs] using
+          (show ∃ hc : Conclusion P ρ (.stuck c) (⟨c, events, issued⟩ : Position O),
+              ReportedQueries P ρ hc issued from
+            ⟨Conclusion.stuck hs, ReportedQueries.stuck (events := events) hs⟩)
       | some out =>
         cases out with
         | next c' =>
@@ -279,29 +287,31 @@ theorem runFromQ_sound : ∀ (fuel : Nat) (events : List O.Event) (issued : List
         | request p vs site st k =>
           let q := Query.issue events p vs site st issued
           cases ha : answer ρ q with
-          | none => exact ⟨0, ⟨c, events, issued⟩, .refl _, by simp [runFromQ, hf, hs, q, ha],
-              by simpa [runFromQ, hf, hs, q, ha] using
-                (Conclusion.noAnswer (P := P) (ρ := ρ) hs ha),
-              by simpa [runFromQ, hf, hs, q, ha] using
-                (ReportedQueries.noAnswer (c := c) (events := events) (issued := issued) (q := q))⟩
+          | none =>
+            refine ⟨0, ⟨c, events, issued⟩, .refl _, by simp [runFromQ, hf, hs, q, ha], ?_⟩
+            simpa [runFromQ, hf, hs, q, ha] using
+              (show ∃ hc : Conclusion P ρ (.noAnswer c) (⟨c, events, issued⟩ : Position O),
+                  ReportedQueries P ρ hc (issued ++ [q]) from
+                ⟨Conclusion.noAnswer hs ha, ReportedQueries.noAnswer hs ha⟩)
           | some a =>
             cases hallow : O.allows p vs st a with
-            | false => exact ⟨0, ⟨c, events, issued⟩, .refl _,
-                by simp [runFromQ, hf, hs, q, ha, hallow],
-                by simpa [runFromQ, hf, hs, q, ha, hallow] using
-                  (Conclusion.badAnswer (P := P) (ρ := ρ) hs ha hallow),
-                by simpa [runFromQ, hf, hs, q, ha, hallow] using
-                  (ReportedQueries.badAnswer (c := c) (events := events) (issued := issued)
-                    (q := q))⟩
+            | false =>
+              refine ⟨0, ⟨c, events, issued⟩, .refl _,
+                by simp [runFromQ, hf, hs, q, ha, hallow], ?_⟩
+              simpa [runFromQ, hf, hs, q, ha, hallow] using
+                (show ∃ hc : Conclusion P ρ (.badAnswer c) (⟨c, events, issued⟩ : Position O),
+                    ReportedQueries P ρ hc (issued ++ [q]) from
+                  ⟨Conclusion.badAnswer hs ha hallow, ReportedQueries.badAnswer hs ha hallow⟩)
             | true =>
               cases hk : k a with
-              | none => exact ⟨0, ⟨c, events, issued⟩, .refl _,
-                  by simp [runFromQ, hf, hs, q, ha, hallow, hk],
-                  by simpa [runFromQ, hf, hs, q, ha, hallow, hk] using
-                    (Conclusion.stuckContinuation (P := P) (ρ := ρ) hs ha hallow hk),
-                  by simpa [runFromQ, hf, hs, q, ha, hallow, hk] using
-                    (ReportedQueries.stuckContinuation (c := c) (events := events)
-                      (issued := issued) (q := q))⟩
+              | none =>
+                refine ⟨0, ⟨c, events, issued⟩, .refl _,
+                  by simp [runFromQ, hf, hs, q, ha, hallow, hk], ?_⟩
+                simpa [runFromQ, hf, hs, q, ha, hallow, hk] using
+                  (show ∃ hc : Conclusion P ρ (.stuck c) (⟨c, events, issued⟩ : Position O),
+                      ReportedQueries P ρ hc (issued ++ [q]) from
+                    ⟨Conclusion.stuckContinuation hs ha hallow hk,
+                      ReportedQueries.stuckContinuation hs ha hallow hk⟩)
               | some c' =>
                 obtain ⟨m, pos, hpath, he, hc, hr⟩ :=
                   ih (events ++ a.event.toList) (issued ++ [q]) c'

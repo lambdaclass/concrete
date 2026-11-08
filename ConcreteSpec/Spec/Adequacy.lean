@@ -140,18 +140,36 @@ inductive Conclusion (P : Program O) (ρ : QueryOracle O) : Ending O → Positio
   | outOfFuel {c events issued} : c.final? = none →
       Conclusion P ρ (.outOfFuel c) ⟨c, events, issued⟩
 
-/-- The exact query history reported for a conclusion. Terminal requests append their query to the
-pre-step position; other endings append nothing. -/
-inductive ReportedQueries : Ending O → Position O → List (Query O) → Prop where
-  | final {f pos} : ReportedQueries (.final f) pos pos.queries
-  | stuck {c events issued} : ReportedQueries (.stuck c) ⟨c, events, issued⟩ issued
-  | stuckContinuation {c events issued q} :
-      ReportedQueries (.stuck c) ⟨c, events, issued⟩ (issued ++ [q])
-  | noAnswer {c events issued q} :
-      ReportedQueries (.noAnswer c) ⟨c, events, issued⟩ (issued ++ [q])
-  | badAnswer {c events issued q} :
-      ReportedQueries (.badAnswer c) ⟨c, events, issued⟩ (issued ++ [q])
-  | outOfFuel {c events issued} : ReportedQueries (.outOfFuel c) ⟨c, events, issued⟩ issued
+/-- The exact query history reported for a conclusion, indexed by that conclusion's justification.
+Terminal requests append the query constructed from the request in `step`; other endings append
+nothing. Indexing by `Conclusion` also keeps a machine-stuck report distinct from a request whose
+continuation was refused. -/
+inductive ReportedQueries (P : Program O) (ρ : QueryOracle O) :
+    {ending : Ending O} → {pos : Position O} → Conclusion P ρ ending pos →
+      List (Query O) → Prop where
+  | final {f} {pos : Position O} (hf : pos.config.final? = some f) :
+      ReportedQueries P ρ (Conclusion.final hf) pos.queries
+  | stuck {c : Config O} {events : List O.Event} {issued : List (Query O)}
+      (hs : step P c = none) : ReportedQueries P ρ (Conclusion.stuck hs) issued
+  | stuckContinuation {c : Config O} {events : List O.Event} {issued : List (Query O)}
+      {p vs site st k a} (hs : step P c = some (.request p vs site st k))
+      (ha : answer ρ (Query.issue events p vs site st issued) = some a)
+      (hallow : O.allows p vs st a = true) (hk : k a = none) :
+      ReportedQueries P ρ (Conclusion.stuckContinuation hs ha hallow hk)
+        (issued ++ [Query.issue events p vs site st issued])
+  | noAnswer {c : Config O} {events : List O.Event} {issued : List (Query O)}
+      {p vs site st k} (hs : step P c = some (.request p vs site st k))
+      (ha : answer ρ (Query.issue events p vs site st issued) = none) :
+      ReportedQueries P ρ (Conclusion.noAnswer hs ha)
+        (issued ++ [Query.issue events p vs site st issued])
+  | badAnswer {c : Config O} {events : List O.Event} {issued : List (Query O)}
+      {p vs site st k a} (hs : step P c = some (.request p vs site st k))
+      (ha : answer ρ (Query.issue events p vs site st issued) = some a)
+      (hallow : O.allows p vs st a = false) :
+      ReportedQueries P ρ (Conclusion.badAnswer hs ha hallow)
+        (issued ++ [Query.issue events p vs site st issued])
+  | outOfFuel {c : Config O} {events : List O.Event} {issued : List (Query O)}
+      (hf : c.final? = none) : ReportedQueries P ρ (Conclusion.outOfFuel hf) issued
 
 /-- An infinite maximal execution under one fixed query-level oracle. Every adjacent pair is a
 successful transition, so this excludes final, stuck, blocked, and bad-answer endpoints. -/
