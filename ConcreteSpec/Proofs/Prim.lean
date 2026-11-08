@@ -128,39 +128,8 @@ theorem eval_operands_rehint (h : Var → String) (L : AList Var Int) (st : Unit
 
 end Prim
 
-/-- Law (subject `ConcreteSpec.Core.SafetyEvidence.discharge`).
-The output of evidence consumption names the requested registered obligation in the current context. -/
-theorem SafetyEvidence.discharge_sound {claim : ObligationId → Prop} (e : SafetyEvidence claim)
-    (obligations : ObligationTable) (current : EvidenceContext) (requested : ObligationId) :
-    match e.discharge obligations current requested with
-    | none => True
-    | some discharged => e.Usable current ∧ current.obligation = requested ∧
-        ObligationTable.lookup obligations requested = some discharged.obligation ∧
-        discharged.obligation.id = requested := by
-  have sound : ∀ discharged : DischargedFact claim,
-      e.discharge obligations current requested = some discharged →
-      e.Usable current ∧ current.obligation = requested ∧
-        ObligationTable.lookup obligations requested = some discharged.obligation ∧
-        discharged.obligation.id = requested := by
-    intro discharged success
-    by_cases usable : e.Usable current
-    · by_cases identity : current.obligation = requested
-      · unfold SafetyEvidence.discharge at success
-        simp only [usable, identity, ↓reduceDIte] at success
-        split at success
-        · cases success
-        · rename_i obligation found
-          simp only [Option.some.injEq] at success
-          subst discharged
-          exact ⟨usable, identity, found,
-            ObligationTable.lookup_id obligations requested obligation found⟩
-      · simp [SafetyEvidence.discharge, usable, identity] at success
-    · simp [SafetyEvidence.discharge, usable] at success
-  cases result : e.discharge obligations current requested with
-  | none => trivial
-  | some discharged => exact sound discharged result
-
-/-- Helper (computation). Computes the context-guard refusal branch. The public output contract carries soundness evidence.
+/-- Helper (computation). Computes the context-guard refusal branch for `SafetyEvidence.discharge_sound`,
+`SafetyEvidence.discharge_target_mismatch`, and `SafetyEvidence.discharge_unregistered`.
 (approved: PENDING). -/
 theorem SafetyEvidence.discharge_context_mismatch {claim : ObligationId → Prop}
     (e : SafetyEvidence claim) (obligations : ObligationTable) (current : EvidenceContext)
@@ -168,7 +137,8 @@ theorem SafetyEvidence.discharge_context_mismatch {claim : ObligationId → Prop
     e.discharge obligations current requested = none := by
   simp [SafetyEvidence.discharge, mismatch]
 
-/-- Helper (computation). Computes the requested-identity guard branch; this guard equation is not independent soundness evidence.
+/-- Helper (computation). Computes the requested-identity guard branch for `SafetyEvidence.discharge_sound`,
+`SafetyEvidence.discharge_target_mismatch`, and `SafetyEvidence.discharge_unregistered`.
 (approved: PENDING). -/
 theorem SafetyEvidence.discharge_obligation_mismatch {claim : ObligationId → Prop}
     (e : SafetyEvidence claim) (obligations : ObligationTable) (current : EvidenceContext)
@@ -177,6 +147,43 @@ theorem SafetyEvidence.discharge_obligation_mismatch {claim : ObligationId → P
   by_cases usable : e.Usable current
   · simp [SafetyEvidence.discharge, usable, mismatch]
   · simp [SafetyEvidence.discharge, usable]
+
+/-- Law (subject `ConcreteSpec.Core.SafetyEvidence.discharge`).
+Every evidence consumption output satisfies its complete contract: a refusal corresponds to a stale
+context, a mismatched requested obligation identity, or an unregistered obligation, while a
+discharged result names the requested registered obligation in a usable context. -/
+theorem SafetyEvidence.discharge_sound {claim : ObligationId → Prop} (e : SafetyEvidence claim)
+    (obligations : ObligationTable) (current : EvidenceContext) (requested : ObligationId) :
+    match e.discharge obligations current requested with
+    | none => ¬ e.Usable current ∨ current.obligation ≠ requested ∨
+        ObligationTable.lookup obligations requested = none
+    | some discharged => e.Usable current ∧ current.obligation = requested ∧
+        ObligationTable.lookup obligations requested = some discharged.obligation ∧
+        discharged.obligation.id = requested := by
+  by_cases usable : e.Usable current
+  · by_cases identity : current.obligation = requested
+    · split
+      · rename_i hnone
+        unfold SafetyEvidence.discharge at hnone
+        simp only [usable, identity, ↓reduceDIte] at hnone
+        split at hnone
+        · rename_i hlookup
+          exact Or.inr (Or.inr hlookup)
+        · cases hnone
+      · rename_i discharged hsome
+        unfold SafetyEvidence.discharge at hsome
+        simp only [usable, identity, ↓reduceDIte] at hsome
+        split at hsome
+        · cases hsome
+        · rename_i obligation hlookup
+          simp only [Option.some.injEq] at hsome
+          subst discharged
+          exact ⟨usable, identity, hlookup,
+            ObligationTable.lookup_id obligations requested obligation hlookup⟩
+    · rw [SafetyEvidence.discharge_obligation_mismatch e obligations current requested identity]
+      exact Or.inr (Or.inl identity)
+  · rw [SafetyEvidence.discharge_context_mismatch e obligations current requested usable]
+    exact Or.inl usable
 
 /-- Law (subject `ConcreteSpec.Core.SafetyEvidence.discharge`).
 Evidence for one obligation identity cannot discharge a retrieved obligation with a different
@@ -195,8 +202,8 @@ theorem SafetyEvidence.discharge_target_mismatch {claim : ObligationId → Prop}
       have ctxObl : e.context.obligation = current.obligation :=
         congrArg EvidenceContext.obligation usable
       exact (ctxObl.trans identity).trans found.symm
-    · simp [SafetyEvidence.discharge, usable, identity]
-  · simp [SafetyEvidence.discharge, usable]
+    · exact SafetyEvidence.discharge_obligation_mismatch e obligations current requested identity
+  · exact SafetyEvidence.discharge_context_mismatch e obligations current requested usable
 
 /-- Law (subject `ConcreteSpec.Core.SafetyEvidence.discharge`).
 An obligation absent from the authoritative table cannot be discharged. -/
@@ -213,8 +220,8 @@ theorem SafetyEvidence.discharge_unregistered {claim : ObligationId → Prop}
       · rename_i obligation hlookup
         rw [absent] at hlookup
         cases hlookup
-    · simp [SafetyEvidence.discharge, usable, identity]
-  · simp [SafetyEvidence.discharge, usable]
+    · exact SafetyEvidence.discharge_obligation_mismatch e obligations current requested identity
+  · exact SafetyEvidence.discharge_context_mismatch e obligations current requested usable
 
 /-- Law (subject `ConcreteSpec.Core.PrimRegistry.allows`).
 An unregistered primitive has no allowed answer. -/
@@ -565,9 +572,16 @@ def dischargeWrongKey {claim : ObligationId → Prop} (e : SafetyEvidence claim)
     (_obligations : ObligationTable) (_current : EvidenceContext) (_requested : ObligationId) :
     Option (DischargedFact claim) := some ⟨⟨e.context.obligation, otherKey⟩, e.proof⟩
 
+/-- Mutant consumer that always refuses even when the context, obligation, and table match. -/
+def alwaysRefuseDischarge {claim : ObligationId → Prop} (_e : SafetyEvidence claim)
+    (_obligations : ObligationTable) (_current : EvidenceContext) (_requested : ObligationId) :
+    Option (DischargedFact claim) := none
+
 /-- Instance (law `ConcreteSpec.Core.SafetyEvidence.discharge_sound`, case `ConcreteSpec.Core.Vacuity.obligation`). -/
 example : match evidence.discharge obligations EvidenceDemo.current obligation.id with
-    | none => True
+    | none => ¬ evidence.Usable EvidenceDemo.current ∨
+        EvidenceDemo.current.obligation ≠ obligation.id ∨
+        ObligationTable.lookup obligations obligation.id = none
     | some result => evidence.Usable EvidenceDemo.current ∧
         EvidenceDemo.current.obligation = obligation.id ∧
         ObligationTable.lookup obligations obligation.id = some result.obligation ∧
@@ -576,7 +590,9 @@ example : match evidence.discharge obligations EvidenceDemo.current obligation.i
 
 /-- Planted (law `ConcreteSpec.Core.SafetyEvidence.discharge_sound`, case `ConcreteSpec.Core.Vacuity.obligation`, subject `ConcreteSpec.Core.SafetyEvidence.discharge`, mutant `ConcreteSpec.Core.Vacuity.dischargeWrongKey`). -/
 example : ¬ (match dischargeWrongKey evidence obligations EvidenceDemo.current obligation.id with
-    | none => True
+    | none => ¬ evidence.Usable EvidenceDemo.current ∨
+        EvidenceDemo.current.obligation ≠ obligation.id ∨
+        ObligationTable.lookup obligations obligation.id = none
     | some result => evidence.Usable EvidenceDemo.current ∧
         EvidenceDemo.current.obligation = obligation.id ∧
         ObligationTable.lookup obligations obligation.id = some result.obligation ∧
@@ -585,10 +601,17 @@ example : ¬ (match dischargeWrongKey evidence obligations EvidenceDemo.current 
   have equal := congrArg (fun result => result.map (fun ob => ob.key)) h.2.2.1
   contradiction
 
-/-- Regression example (not independent soundness evidence). -/
-example : evidence.discharge mismatchedObligations EvidenceDemo.current mismatchedObligation.id = none :=
-  SafetyEvidence.discharge_obligation_mismatch evidence mismatchedObligations
-    EvidenceDemo.current mismatchedObligation.id (by decide)
+/-- Planted (law `ConcreteSpec.Core.SafetyEvidence.discharge_sound`, case `ConcreteSpec.Core.Vacuity.obligation`, subject `ConcreteSpec.Core.SafetyEvidence.discharge`, mutant `ConcreteSpec.Core.Vacuity.alwaysRefuseDischarge`). -/
+example : ¬ (match alwaysRefuseDischarge evidence obligations EvidenceDemo.current obligation.id with
+    | none => ¬ evidence.Usable EvidenceDemo.current ∨
+        EvidenceDemo.current.obligation ≠ obligation.id ∨
+        ObligationTable.lookup obligations obligation.id = none
+    | some result => evidence.Usable EvidenceDemo.current ∧
+        EvidenceDemo.current.obligation = obligation.id ∧
+        ObligationTable.lookup obligations obligation.id = some result.obligation ∧
+        result.obligation.id = obligation.id) := by
+  dsimp [alwaysRefuseDischarge]
+  decide
 
 /-- Mutant consumer that ignores the requested `ObligationId` and discharges `e.context.obligation`. -/
 def dischargeIgnoringObligation {claim : ObligationId → Prop} (e : SafetyEvidence claim)
@@ -596,20 +619,34 @@ def dischargeIgnoringObligation {claim : ObligationId → Prop} (e : SafetyEvide
     Option (DischargedFact claim) :=
   if e.Usable current then some ⟨⟨e.context.obligation, obligationKey⟩, e.proof⟩ else none
 
-/-- Regression example (not independent soundness evidence). -/
-example : EvidenceDemo.current.obligation ≠ mismatchedObligation.id ∧
-    ¬ (dischargeIgnoringObligation evidence mismatchedObligations EvidenceDemo.current
-      mismatchedObligation.id = none) := by
-  refine ⟨by decide, ?_⟩
+/-- Instance (law `ConcreteSpec.Core.SafetyEvidence.discharge_sound`, case `ConcreteSpec.Core.Vacuity.mismatchedObligations`). -/
+example : match evidence.discharge mismatchedObligations EvidenceDemo.current mismatchedObligation.id with
+    | none => ¬ evidence.Usable EvidenceDemo.current ∨
+        EvidenceDemo.current.obligation ≠ mismatchedObligation.id ∨
+        ObligationTable.lookup mismatchedObligations mismatchedObligation.id = none
+    | some result => evidence.Usable EvidenceDemo.current ∧
+        EvidenceDemo.current.obligation = mismatchedObligation.id ∧
+        ObligationTable.lookup mismatchedObligations mismatchedObligation.id = some result.obligation ∧
+        result.obligation.id = mismatchedObligation.id :=
+  SafetyEvidence.discharge_sound evidence mismatchedObligations EvidenceDemo.current mismatchedObligation.id
+
+/-- Planted (law `ConcreteSpec.Core.SafetyEvidence.discharge_sound`, case `ConcreteSpec.Core.Vacuity.mismatchedObligations`, subject `ConcreteSpec.Core.SafetyEvidence.discharge`, mutant `ConcreteSpec.Core.Vacuity.dischargeIgnoringObligation`). -/
+example : ¬ (match dischargeIgnoringObligation evidence mismatchedObligations EvidenceDemo.current
+      mismatchedObligation.id with
+    | none => ¬ evidence.Usable EvidenceDemo.current ∨
+        EvidenceDemo.current.obligation ≠ mismatchedObligation.id ∨
+        ObligationTable.lookup mismatchedObligations mismatchedObligation.id = none
+    | some result => evidence.Usable EvidenceDemo.current ∧
+        EvidenceDemo.current.obligation = mismatchedObligation.id ∧
+        ObligationTable.lookup mismatchedObligations mismatchedObligation.id = some result.obligation ∧
+        result.obligation.id = mismatchedObligation.id) := by
   intro h
-  simp [dischargeIgnoringObligation, SafetyEvidence.Usable, evidence, EvidenceDemo.evidence] at h
+  have equal : EvidenceDemo.current.obligation = mismatchedObligation.id := h.2.1
+  revert equal
+  decide
 
 /-- Only the contract revision changes in this stale context. -/
 def contractChanged : EvidenceContext := { EvidenceDemo.current with contract := ⟨⟨0⟩, 2⟩ }
-
-/-- Regression example (not independent soundness evidence). -/
-example : evidence.discharge obligations contractChanged obligation.id = none :=
-  SafetyEvidence.discharge_context_mismatch evidence obligations contractChanged obligation.id (by decide)
 
 /-- Mutant consumer that omits the `Usable` context check. -/
 def dischargeIgnoringContext {claim : ObligationId → Prop} (e : SafetyEvidence claim)
@@ -622,13 +659,53 @@ def dischargeIgnoringContext {claim : ObligationId → Prop} (e : SafetyEvidence
       some ⟨found, same ▸ e.proof⟩
     else none
 
-/-- Regression example (not independent soundness evidence). -/
-example : ¬ evidence.Usable contractChanged ∧
-    ¬ (dischargeIgnoringContext evidence obligations contractChanged obligation.id = none) := by
-  refine ⟨by decide, ?_⟩
+/-- Instance (law `ConcreteSpec.Core.SafetyEvidence.discharge_sound`, case `ConcreteSpec.Core.Vacuity.contractChanged`). -/
+example : match evidence.discharge obligations contractChanged obligation.id with
+    | none => ¬ evidence.Usable contractChanged ∨
+        contractChanged.obligation ≠ obligation.id ∨
+        ObligationTable.lookup obligations obligation.id = none
+    | some result => evidence.Usable contractChanged ∧
+        contractChanged.obligation = obligation.id ∧
+        ObligationTable.lookup obligations obligation.id = some result.obligation ∧
+        result.obligation.id = obligation.id :=
+  SafetyEvidence.discharge_sound evidence obligations contractChanged obligation.id
+
+/-- Planted (law `ConcreteSpec.Core.SafetyEvidence.discharge_sound`, case `ConcreteSpec.Core.Vacuity.contractChanged`, subject `ConcreteSpec.Core.SafetyEvidence.discharge`, mutant `ConcreteSpec.Core.Vacuity.dischargeIgnoringContext`). -/
+example : ¬ (match dischargeIgnoringContext evidence obligations contractChanged obligation.id with
+    | none => ¬ evidence.Usable contractChanged ∨
+        contractChanged.obligation ≠ obligation.id ∨
+        ObligationTable.lookup obligations obligation.id = none
+    | some result => evidence.Usable contractChanged ∧
+        contractChanged.obligation = obligation.id ∧
+        ObligationTable.lookup obligations obligation.id = some result.obligation ∧
+        result.obligation.id = obligation.id) := by
   intro h
-  simp [dischargeIgnoringContext, obligations, obligation, ObligationTable.lookup, evidence,
-    EvidenceDemo.evidence] at h
+  have usable : evidence.Usable contractChanged := h.1
+  revert usable
+  decide
+
+/-- Instance (law `ConcreteSpec.Core.SafetyEvidence.discharge_sound`, case `ConcreteSpec.Core.Vacuity.obligations`). -/
+example : match evidence.discharge [] EvidenceDemo.current obligation.id with
+    | none => ¬ evidence.Usable EvidenceDemo.current ∨
+        EvidenceDemo.current.obligation ≠ obligation.id ∨
+        ObligationTable.lookup [] obligation.id = none
+    | some result => evidence.Usable EvidenceDemo.current ∧
+        EvidenceDemo.current.obligation = obligation.id ∧
+        ObligationTable.lookup [] obligation.id = some result.obligation ∧
+        result.obligation.id = obligation.id :=
+  SafetyEvidence.discharge_sound evidence [] EvidenceDemo.current obligation.id
+
+/-- Planted (law `ConcreteSpec.Core.SafetyEvidence.discharge_sound`, case `ConcreteSpec.Core.Vacuity.obligations`, subject `ConcreteSpec.Core.SafetyEvidence.discharge`, mutant `ConcreteSpec.Core.Vacuity.dischargeWithoutTable`). -/
+example : ¬ (match dischargeWithoutTable evidence [] EvidenceDemo.current obligation.id with
+    | none => ¬ evidence.Usable EvidenceDemo.current ∨
+        EvidenceDemo.current.obligation ≠ obligation.id ∨
+        ObligationTable.lookup [] obligation.id = none
+    | some result => evidence.Usable EvidenceDemo.current ∧
+        EvidenceDemo.current.obligation = obligation.id ∧
+        ObligationTable.lookup [] obligation.id = some result.obligation ∧
+        result.obligation.id = obligation.id) := by
+  intro h
+  cases h.2.2.1
 
 /-- Instance (law `ConcreteSpec.Core.SafetyEvidence.discharge_target_mismatch`, case `ConcreteSpec.Core.Vacuity.mismatchedObligation`).
 Both `EvidenceDemo.claim obligation.id` (`1 + 1 = 2`) and `EvidenceDemo.claim mismatchedObligation.id`
