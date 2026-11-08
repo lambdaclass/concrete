@@ -1,0 +1,8 @@
+### Record-chain second fix pass (2026-11-08)
+
+- Correct the language revision register, illustrative foundation spellings and R-0625 dependencies, review caps and verdict recording, exact-SHA sign-offs, commit/push attribution and ISS-0018's gate path.
+- Record all gate improvements, new gates and test types as approved: "ok add all the gates but we should run some of them in every pr and others every day and others every week?", "ok let's add the tiers when you get back" and "ok let's add all this". Record the approved 1×/10×/100× scaling and identical-bytes checks. R-0647–R-0649 and R-0652 own the additions; tier assignment stays open.
+- Record the 29 final picks: "ok but i said already all yes based on the best long term reviews of each agent and what we said before right?" Revise the lexer, constant initializers, slice-1 brief, slice-5 always-aborts placement, NaNs, CLI, C1 lifecycle and std placements. Add review tooling R-0650 and pre-freeze showcase sketches R-0651. Record legacy-sweep approval and owner-only GitHub settings. B's later sign-off is exact-SHA only.
+- Apply the writer/reviewer rule: "ALWAYS tell the reviewrs to do the best long term thing rather than cuitting corners". Reviewers read the repository and name the files read. Structural fixes and recorded long-term staging are required.
+
+The durable decision records are [the 29 picks](../docs/decisions.md#decided-2026-11-08-twenty-nine), [gate tiers](../docs/decisions.md#decided-2026-11-08-gate-tiers) and [long-term reviews](../docs/decisions.md#decided-2026-11-08-long-term-reviews). This records decisions and planned enforcement, not implemented gates.

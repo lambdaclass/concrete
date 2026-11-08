@@ -543,7 +543,7 @@ Human output, JSON and future policies all render the same `Report`.
 - the digests of the compiler, spec, target, backend (LLVM or LCB, with the pinned LCB rev) and artifact. Artifact facts are per backend artifact, and their premise identities are per backend;
 - the replay command.
 
-The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2026-11-06).
+The CLI is `concrete facts FILE [FN]`, `concrete build FILE -o OUT` and `concrete help`. There is no `run` command: build, then execute the binary (revised 2026-11-08, [item 14](../docs/decisions.md#decided-2026-11-08-twenty-nine)).
 
 ## Gates (CI jobs, added to `required-checks.txt`)
 
@@ -608,7 +608,7 @@ Heavy runs (native builds, differentials, certificates) run on concrete-ci-2 or 
 
 ## Owner decisions (2026-11-06)
 
-1. The CLI is `concrete build FILE -o OUT` and `concrete facts FILE [FN]`.
+1. The CLI is `concrete build FILE -o OUT`, `concrete facts FILE [FN]` and `concrete help`. There is no `run` command: build, then execute the binary (revised 2026-11-08, [item 14](../docs/decisions.md#decided-2026-11-08-twenty-nine)).
 2. A decided form outside slice 0 (`0x2A`, `let mut`, `if`) gets a distinct "not supported in slice 0" refusal, separate from a syntax error.
 3. Leading-zero literals such as `007` are refused: one form per number. This is recorded in `Surface0.lean`.
 4. The trap site that the executable reports is a named premise now, `P_trap_site`, which a proof retires later.

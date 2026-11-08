@@ -25,7 +25,7 @@ runs the same procedure by name instead of receiving a long prompt:
 | `/fix-bug <N or description>` | reproduce, classify, repair or contain one bug on its own branch |
 | `/roadmap-item <R-NNNN>` | carry one roadmap task to a landable candidate |
 | `/file-bug <title>` | file a new bug with `scripts/gen/new_bug.sh` |
-| `/creview` | Codex review of the branch through `scripts/review/review.sh` |
+| `/creview` | Independent review through `scripts/review/review.sh`; when Codex wrote the branch, use Kimi or agy (revised 2026-11-08, [item 1](docs/decisions.md#decided-2026-11-08-twenty-nine)) |
 | `/rebase` | the safe rebase onto `origin/main` |
 | `/land` | hand a validated branch to the landing train (`scripts/land/train.sh`) |
 | `/cstatus` | where this worktree, its branch, its CI and this machine stand |
@@ -47,7 +47,7 @@ agent, orchestrator or reviewer chooses, encodes, implements or provisionally sh
 of them, inside a bug fix or anywhere else. Agents present options and a recommendation to the owner
 and wait for an explicit answer. Behaviour already on main that took a side stays as it is, recorded
 as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
-- The Codex review of every fix (`scripts/review/review.sh` asks it) also answers: "does this fix
+- The independent review of every fix (`scripts/review/review.sh` asks it) also answers: "does this fix
   pick a side on any OD in docs/decisions.md?" If yes, or if the fix cannot be made without picking
   one, stop and report to the owner; do not land it. Recording an answer the owner explicitly gave
   is not picking a side; what the review checks then is in
@@ -76,12 +76,14 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
   [ROADMAP's defect disposition and frozen-compiler rule](ROADMAP.md#defect-disposition-rule).
 
 **Who works on what.**
+
+Owner rule (2026-11-08), verbatim: "ALWAYS tell the reviewrs to do the best long term thing rather than cuitting corners". Every prompt to Codex, Kimi or agy, as writer or reviewer, explicitly says to judge and fix by the best long-term design, never cutting corners for speed, a smaller diff or fewer rounds. Reviewers report shortcuts as real findings and name the long-term fix. Writers implement the structural fix, not a containment patch. If staging is unavoidable, they record the long-term design and its roadmap row ([decision](docs/decisions.md#decided-2026-11-08-long-term-reviews)).
+
 - Claude's quota goes to the critical path: the spec, slice 0 and the front end (owner, 2026-11-08,
   [decision](docs/decisions.md#decided-2026-11-08-eleven)). Codex, Kimi and agy implement across the
   codebase, not only mechanical work; Claude briefs, reviews, runs the gates and lands
   ([decision](docs/decisions.md#decided-2026-11-08-writers)).
-- Writer process: each writer works in its own fresh full clone on its own `wip/` branch. The other
-  two models cross-review each diff; a writer never reviews its own work. Run each writer through
+- Writer process: each writer works in its own fresh full clone on its own `wip/` branch. The three models minus the writer cross-review each diff; a writer never reviews its own work. Revised 2026-11-08 by [item 1](docs/decisions.md#decided-2026-11-08-twenty-nine): when Codex wrote a branch, the review leg uses Kimi or agy, never Codex, and records the reviewer model in the note. On record-foundation, Codex wrote the round-2 fixes and the Codex leg ran; that overlap is recorded. Run each writer through
   `bounded_run`, never GNU `timeout`.
 - One writer edits `docs/decisions.md` and `ROADMAP.md` at a time; other workers send that writer
   their records instead of editing those files (owner, 2026-11-08,
@@ -151,16 +153,11 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
 - Have Codex confirm each bug is real (a reproducer and a verdict line in the record) before
   filing it.
 
-**Review.** Codex reviews everything before it is published or brought to the owner, and Kimi and
-agy (Gemini) review every branch too; a reviewer's absence is recorded, never assumed
-([decision](docs/decisions.md#decided-project-review)). agy cannot read files: run it as
-`bounded_run 1500 -- agy -p "<prompt>"` with the diff and the context it needs in the prompt, ending with a
-required verdict line. Every slice gets a Codex review before it lands, through `scripts/review/review.sh`:
-at most 2 rounds for docs and the roadmap, 3 for scripts and 5 for the compiler and the spec
-(owner, 2026-11-08; `review.sh` enforces 5 until R-0618 lands), the first over the whole diff and each later round over the delta since the
-previous one. Answer each finding with a fix or a stated reason. Run Codex by hand only with
-`GIT_OPTIONAL_LOCKS=0` (and `</dev/null`): its sandboxed `git status` otherwise takes the
-worktree's `index.lock` and can leave it behind (bug 209).
+**Review.** Revised 2026-11-08 by [item 1](docs/decisions.md#decided-2026-11-08-twenty-nine): the three models minus the writer review each branch; absence is recorded. When Codex wrote the branch, `scripts/review/review.sh` uses Kimi or agy, never Codex, and records the reviewer model in the note. R-0650 applies this in tooling. On record-foundation, Codex wrote the round-2 fixes and the Codex leg ran; the overlap is recorded. Every reviewer, agy included, runs where it can read the repository and names the files it read (ISS-0021). Use `bounded_run` for each review invocation.
+
+Owner rule (2026-11-08), verbatim: "ALWAYS tell the reviewrs to do the best long term thing rather than cuitting corners". Every prompt to Codex, Kimi or agy, as writer or reviewer, explicitly says to judge and fix by the best long-term design, never cutting corners for speed, a smaller diff or fewer rounds. Reviewers report shortcuts as real findings and name the long-term fix. Writers implement the structural fix, not a containment patch. If staging is unavoidable, they record the long-term design and its roadmap row ([decision](docs/decisions.md#decided-2026-11-08-long-term-reviews)).
+
+Review caps are docs/roadmap 2, scripts 3, compiler/spec 5. Mixed-class diffs take the highest class's cap. At the cap, split the slice or obtain the owner's sign-off of the exact SHA, with outstanding findings and verdicts recorded; sign-off never replaces a gate or proof obligation ([review caps](docs/decisions.md#decided-2026-11-08-review-caps), [sign-offs](docs/decisions.md#decided-2026-11-08-signoffs); revised 2026-11-08). The first round covers the whole diff; later rounds cover the delta. Answer each finding with a fix or a stated reason. Run Codex by hand only with `GIT_OPTIONAL_LOCKS=0` and `</dev/null` (bug 209).
 
 **Git safety.**
 - Never pipe `git rebase` (or `git merge`, `git cherry-pick`) into anything: a pipe hides the stop.
@@ -275,8 +272,7 @@ roadmap owns the repair. These rules apply to every writer now:
   nothing else. A branch that needs two rules is two branches.
 - **Review per slice, delta after the first pass** (R-0544). After the first full
   review, each round reviews only the diff since the previous round. Past the risk
-  cap (the round caps under **Review** above),
-  split the slice. Review ownership and memory-safety work with neutral prompts and
+  cap (the round caps under **Review** above), split the slice or obtain exact-SHA owner sign-off. Mixed-class diffs take the highest cap (revised 2026-11-08, [review caps](docs/decisions.md#decided-2026-11-08-review-caps), [sign-offs](docs/decisions.md#decided-2026-11-08-signoffs)). Review ownership and memory-safety work with neutral prompts and
   piecewise diffs.
 - **At most 2 heavy local runs per machine** (R-0543). Full gate sets, closure-mode
   runs and mutation campaigns count as heavy. Agents run the fast and
@@ -365,7 +361,7 @@ itself via the bracket, but a ref check is still the better answer.
 
 ### Reviewing a branch
 
-Every agent reviews the same way: `scripts/review/review.sh`, one round per
+Revised 2026-11-08 by [item 1](docs/decisions.md#decided-2026-11-08-twenty-nine): the review leg uses Kimi or agy when Codex wrote the branch and records the reviewer model. Every agent reviews the same way: `scripts/review/review.sh`, one round per
 invocation, with the verdict recorded as a git note on the reviewed commit. The
 note is shared through `origin`, so rounds run in another worktree or by another
 agent count toward the same cap, and the next round reviews only the delta. See
