@@ -134,5 +134,26 @@ def onlyGeneric {Ty Cap : Type} (s : SpecializationId Ty Cap) : GenericId := s.g
 example : onlyGeneric numeric = onlyGeneric otherType ∧ numeric ≠ otherType := by
   exact ⟨rfl, SpecializationId.ne_of_typeArguments_ne numeric otherType (by decide)⟩
 
+/-- A source `assume` and a package-level stack assumption with stable, typed identities. -/
+def sourceAssume : PremiseId := ⟨.assume, .function ⟨function, ⟨"assume/0"⟩⟩⟩
+def stackAssumption : PremiseId := ⟨.stack, .package ⟨"p1"⟩ "defaultStack"⟩
+
+/-- Accepted: both decided premise scopes are represented without bare-string keys. -/
+example : sourceAssume.kind = .assume ∧ stackAssumption.kind = .stack := ⟨rfl, rfl⟩
+
+/-- Refused as an identity match: changing the premise kind changes the premise identity. -/
+example : sourceAssume ≠ { sourceAssume with kind := .trustedSurface } := by decide
+
+/-- Two facts with the same conclusion but different premise dependencies. -/
+def conditional : ConditionalFact String := ⟨"bounded", [sourceAssume]⟩
+def unconditional : ConditionalFact String := ⟨"bounded", []⟩
+
+/-- Planted counter-example: comparing only conclusions loses the conditional fact's premise debt. -/
+def conclusionOnly (first second : ConditionalFact String) : Prop :=
+  first.conclusion = second.conclusion
+
+example : conclusionOnly conditional unconditional ∧ conditional ≠ unconditional := by
+  exact ⟨rfl, by decide⟩
+
 end Vacuity
 end ConcreteSpec.Core

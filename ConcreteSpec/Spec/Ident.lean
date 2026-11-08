@@ -205,6 +205,39 @@ structure StableKey where
   relative : FunctionRelativeKey
   deriving DecidableEq, Repr
 
+/-- The premise and declared-assumption kinds named by decided rows: the five `Concrete.toml`
+assumption sections, entropy's named source, and a source `assume`. No solver or trusted-computation
+premise is introduced here. -/
+inductive PremiseKind where
+  | target
+  | heap
+  | stack
+  | foreignFunction
+  | trustedSurface
+  | entropy
+  | assume
+  deriving DecidableEq, Repr
+
+/-- The scope that makes a premise identity unique. Project assumptions use their package and a
+key within its `Concrete.toml`; a source `assume` uses its function-relative stable key. -/
+inductive PremiseScope where
+  | package (package : PackageId) (relative : String)
+  | function (key : StableKey)
+  deriving DecidableEq, Repr
+
+/-- A typed premise identity. Conditional facts, declared assumptions and source `assume` debt key
+on this record rather than on a display string. -/
+structure PremiseId where
+  kind : PremiseKind
+  scope : PremiseScope
+  deriving DecidableEq, Repr
+
+/-- A fact together with the exact typed premises on which it is conditional. -/
+structure ConditionalFact (Fact : Type) where
+  conclusion : Fact
+  premises : List PremiseId
+  deriving DecidableEq, Repr
+
 /-- The persistent key associated with one lexical site. -/
 structure StableSiteKey where
   site : SiteId
