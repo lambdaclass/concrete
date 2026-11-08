@@ -33,6 +33,23 @@ class Controls(unittest.TestCase):
             new["attempt"] = "1/0"
             self.rejected(f"{status} daily {SHA}: recorded attempt", lambda: observe([old, new], SHA, "daily", NOW, RUNNERS))
 
+    def test_malformed_shapes(self):
+        for value in (None, []):
+            self.rejected("invalid record shape", lambda: observe([value], SHA, "daily", NOW, RUNNERS))
+        for gates, diagnostic in (([None], "invalid gate shape"), ([dict(record()["gates"][0], id=[])], "invalid gate id"), ([dict(record()["gates"][0], controls=[None])], "invalid controls shape")):
+            r = record(); r["gates"] = gates
+            self.rejected(diagnostic, lambda: observe([r], SHA, "daily", NOW, RUNNERS))
+
+    def test_missing_contradictions(self):
+        r = record(); r.update(status="MISSING", conclusion="cancelled")
+        self.rejected("MISSING must have empty gates", lambda: observe([r], SHA, "daily", NOW, RUNNERS))
+        r.update(gates=[], runner_name="forged")
+        self.rejected("MISSING has uninventoried runner", lambda: observe([r], SHA, "daily", NOW, RUNNERS))
+
+    def test_repository_inventory_required(self):
+        r = record(); r["repository"] = "invented/repo"
+        self.rejected("wrong repository", lambda: observe([r], SHA, "daily", NOW, RUNNERS))
+
     def test_pass(self):
         self.assertEqual(observe([record()], SHA, "daily", NOW, RUNNERS), "PASS daily " + SHA)
 

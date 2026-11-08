@@ -43,6 +43,28 @@ class History(unittest.TestCase):
         messages = observe.observe_main([TIP, SHA], {SHA: [r], TIP: [corrupt]}, "daily", NOW, RUNNERS)
         self.assertEqual(messages, [f"FAIL daily {SHA}: recorded attempt", f"INCOMPLETE daily {TIP}: 'completed'"])
 
+    def test_malformed_note_does_not_hide_fail(self):
+        r = record(); r.update(status="FAIL", conclusion="failure"); r["gates"][0]["status"] = "FAIL"
+        for malformed in (None, [], {"gates": [None]}):
+            messages = observe.observe_main([TIP, SHA], {TIP: [malformed], SHA: [r]}, "daily", NOW, RUNNERS)
+            diagnostic = "invalid record shape" if not isinstance(malformed, dict) else "wrong SHA"
+            self.assertEqual(messages, [f"FAIL daily {SHA}: recorded attempt", f"INCOMPLETE daily {TIP}: {diagnostic}"])
+
+    def test_empty_note(self):
+        from protocol import read_note, EvidenceError
+        with patch("protocol.git", return_value=""):
+            with self.assertRaisesRegex(EvidenceError, "^empty annotated note$"):
+                read_note(SHA, "daily", listed=True)
+
+    def test_all_malformed_no_false_absence(self):
+        def fake_git(*args):
+            if args[0] == "rev-list": return SHA
+            if args[0] == "for-each-ref": return args[-1]
+            return "blob " + SHA
+        with patch.object(observe, "git", side_effect=fake_git), patch.object(observe, "read_note", side_effect=ValueError("planted malformed note")), patch("builtins.print") as output:
+            self.assertEqual(observe.main(), 1)
+            self.assertEqual([c.args[0] for c in output.call_args_list], [f"INCOMPLETE {tier} {SHA}: planted malformed note" for tier in ("daily", "weekly")])
+
     def test_git_timeout_explicit(self):
         with patch.object(observe, "git", side_effect=subprocess.TimeoutExpired("git", 60)), patch("builtins.print") as output:
             self.assertEqual(observe.main(), 1)

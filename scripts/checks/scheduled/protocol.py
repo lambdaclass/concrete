@@ -45,18 +45,22 @@ def inventory():
         raise EvidenceError(f"INCOMPLETE runner inventory: {error}") from error
 
 def validate(record, sha, tier, runners, repository=None):
+    require(isinstance(record, dict), "invalid record shape")
     require(re.fullmatch(r"[0-9a-f]{40}", sha) is not None, "invalid full SHA")
     require(record.get("sha") == sha, "wrong SHA")
     require(record.get("tier") == tier and tier in WINDOWS, "wrong tier")
-    require(record.get("repository") == (repository or os.environ.get("GITHUB_REPOSITORY") or record.get("repository")), "wrong repository")
+    target = repository or os.environ.get("GITHUB_REPOSITORY")
+    repo = record.get("repository")
+    require(isinstance(repo, str) and (repo == target if target else repo in runners), "wrong repository")
     missing = record.get("status") == "MISSING"
-    require(missing or (record.get("runner_environment") == "self-hosted" and
+    dependency = (record.get("status") == "INCOMPLETE" and record.get("gate_revision") is None)
+    require(missing or dependency or (record.get("runner_environment") == "self-hosted" and
             record.get("runner_name") in runners.get(record.get("repository"), set())),
             "forged runner: not inventoried concrete-ci-2")
-    require(re.fullmatch(r"[0-9]+/[0-9]+", record.get("attempt", "")) is not None,
+    require(isinstance(record.get("attempt"), str) and re.fullmatch(r"[0-9]+/[0-9]+", record["attempt"]) is not None,
             "invalid attempt identity")
-    require(record.get("status") in STATUSES, "invalid status")
-    require(record.get("conclusion") in {"success", "failure", "cancelled", "skipped", "queued-too-long", "absent", "incomplete"}, "invalid conclusion")
+    require(isinstance(record.get("status"), str) and record["status"] in STATUSES, "invalid status")
+    require(isinstance(record.get("conclusion"), str) and record["conclusion"] in {"success", "failure", "cancelled", "skipped", "queued-too-long", "absent", "incomplete"}, "invalid conclusion")
     if record["conclusion"] in {"cancelled", "skipped", "queued-too-long", "absent"}:
         require(record["status"] == "MISSING", "cancelled/skipped/overdue/absent must be MISSING")
     start, end = timestamp(record["started"]), timestamp(record["completed"])
@@ -67,6 +71,18 @@ def validate(record, sha, tier, runners, repository=None):
             (record.get("status") == "INCOMPLETE" and record.get("gate_revision") is None), "wrong gate revision")
     gates = record.get("gates")
     require(isinstance(gates, list) and (missing or gates), "missing gate evidence")
+    require(not missing or gates == [], "MISSING must have empty gates")
+    require(not missing or record.get("runner_name") is None or
+            record.get("runner_name") in runners.get(repo, set()), "MISSING has uninventoried runner")
+    for gate in gates:
+        require(isinstance(gate, dict), "invalid gate shape")
+        require(isinstance(gate.get("id"), str) and bool(gate["id"]), "invalid gate id")
+        require(isinstance(gate.get("status"), str), "invalid gate status")
+        require(isinstance(gate.get("controls"), list) and all(isinstance(c, dict) for c in gate["controls"]), "invalid controls shape")
+        require(all(isinstance(c.get("status"), str) and c["status"] in STATUSES for c in gate["controls"]), "invalid control status")
+        require(isinstance(gate.get("command"), list) and all(isinstance(v, str) for v in gate["command"]) and
+                isinstance(gate.get("tools"), dict) and isinstance(gate.get("resources"), dict) and
+                isinstance(gate.get("log"), str), "invalid gate metadata shape")
     require(len({g["id"] for g in gates}) == len(gates), "duplicate gate evidence")
     for gate in gates:
         require(gate.get("status") in STATUSES, "invalid gate status")
@@ -109,4 +125,6 @@ def read_note(sha, tier, listed=False):
         listing = git("notes", "--ref=" + ref, "list")
         if not any(line.split()[-1] == sha for line in listing.splitlines()):
             return []
-    return [json.loads(line) for line in git("notes", "--ref=" + ref, "show", sha).splitlines()]
+    lines = git("notes", "--ref=" + ref, "show", sha).splitlines()
+    require(lines, "empty annotated note")
+    return [json.loads(line) for line in lines]
