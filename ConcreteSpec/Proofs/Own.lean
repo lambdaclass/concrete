@@ -7,7 +7,7 @@ an arbitrary checker/elaborator enforces these transitions; that is C9's corresp
 -/
 namespace ConcreteSpec.Core.Own
 
-/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
+/-- Helper (congruence). Lifts a supplied one-step preservation proof through a monadic list fold. (approved: PENDING). -/
 private theorem fold_preserves {α : Type} (f : State → α → Option State)
     (hf : ∀ s a t, WellFormed s → f s a = some t → WellFormed t) (xs : List α)
     (s t : State) (hs : WellFormed s) (h : xs.foldlM f s = some t) : WellFormed t := by
@@ -75,7 +75,7 @@ theorem reinitialize_preserves_result (s t : State) (p : Hybrid.Place) (hs : Wel
       · exact ho
   · contradiction
 
-/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
+/-- Helper (computation). Reorders the disjunction defining symmetric loan compatibility. (approved: PENDING). -/
 private theorem compatible_symm (a b : Loan) (h : Compatible a b) : Compatible b a := by
   unfold Compatible at *
   rcases h with h | h | h | h | h
@@ -85,7 +85,7 @@ private theorem compatible_symm (a b : Loan) (h : Compatible a b) : Compatible b
   · exact Or.inr (Or.inr (Or.inl h))
   · exact Or.inr (Or.inr (Or.inr (Or.inr h.symm)))
 
-/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
+/-- Helper (congruence). Repackages freshness, parent validity and compatibility proofs for a single loan insertion. (approved: PENDING). -/
 private theorem insert_loan (s : State) (a : Loan) (hs : WellFormed s)
     (hid : a.id = ⟨s.nextLoan⟩) (hact : a.activation < s.nextActivation)
     (hroot : ∃ x ∈ s.slots, x.place = a.root ∧ x.status = .owned)
@@ -128,7 +128,7 @@ private theorem insert_loan (s : State) (a : Loan) (hs : WellFormed s)
       · subst c; exact compatible_symm a b (hcompat b hb)
       · exact hs.2.2.2.2 b hb c hc
 
-/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
+/-- Helper (inversion). Extracts owned-root and whole-root permission facts from the owner access guard. (approved: PENDING). -/
 private theorem owner_guard (s : State) (p : Hybrid.Place) (m : Mode)
     (h : ownerAccess s p m = true) :
     (∃ x ∈ s.slots, x.place = p ∧ x.status = .owned) ∧
@@ -239,7 +239,7 @@ theorem endLoan_preserves_result (s t : State) (i : LoanId) (hs : WellFormed s)
     · intro b hb c hc
       exact hs.2.2.2.2 b (List.mem_filter.mp hb).1 c (List.mem_filter.mp hc).1
 
-/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). -/
+/-- Helper (congruence). Owner access returns the identical state after its permission guard succeeds. (approved: PENDING). -/
 theorem accessOwner_preserves (s t : State) (p : Hybrid.Place) (m : Mode)
     (hs : WellFormed s) (h : accessOwner s p m = some t) : WellFormed t := by
   unfold accessOwner at h
@@ -247,7 +247,7 @@ theorem accessOwner_preserves (s t : State) (p : Hybrid.Place) (m : Mode)
   · cases h; exact hs
   · contradiction
 
-/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). -/
+/-- Helper (congruence). Loan access returns the identical state after its permission guard succeeds. (approved: PENDING). -/
 theorem accessLoan_preserves (s t : State) (i : LoanId) (m : Mode)
     (hs : WellFormed s) (h : accessLoan s i m = some t) : WellFormed t := by
   unfold accessLoan at h
@@ -479,7 +479,7 @@ theorem bind_fresh_progress (types : Var → Option Descriptor) (s : State) (x :
     (descriptor : types x = some d) : ∃ t, bind types x s = some t := by
   simp [bind, frame, issued, fresh, descriptor]
 
-/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
+/-- Helper (congruence). Composes fresh typed bindings by induction over the parameter list. (approved: PENDING). -/
 private theorem bind_params_progress (types : Var → Option Descriptor) (xs : List Var)
     (s : State) (f : Activation) (frame : s.frames.head? = some f)
     (issued : f.id < s.nextActivation) (unique : xs.Nodup)
@@ -580,11 +580,11 @@ example : ¬ (bind (fun _ => none) y shared).isSome = true := by decide
 example : ¬ (drop [x] initial).isSome = true := by decide
 end LifecycleWitnesses
 
-/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). No active loan can outlive its original owned root, including across calls. -/
+/-- Helper (projection). Projects the owned-root clause of the well-formedness invariant. (approved: PENDING). -/
 theorem loan_has_owned_root (s : State) (hs : WellFormed s) (l : Loan) (hl : l ∈ s.loans) :
     ∃ x ∈ s.slots, x.place = l.root ∧ x.status = .owned := (hs.2.2.2.1 l hl).2.2.1
 
-/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
+/-- Helper (inversion). Uses a duplicate-free place index to identify two slot records. (approved: PENDING). -/
 private theorem slot_unique (xs : List Slot) (hn : (xs.map Slot.place).Nodup)
     (x y : Slot) (hx : x ∈ xs) (hy : y ∈ xs) (he : x.place = y.place) : x = y := by
   induction xs with
@@ -632,7 +632,7 @@ theorem life_erasure {σ : Type} (types : Var → Option Descriptor) (e : Exec.L
   subst t
   rfl
 
-/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
+/-- Helper (congruence). Transports the invariant through a loan map that retains semantic identity fields. (approved: PENDING). -/
 private theorem map_metadata_preserves (s : State) (hs : WellFormed s)
     (act : Loan → Nat) (pending : Loan → Bool)
     (issued : ∀ l ∈ s.loans, act l < s.nextActivation)
@@ -820,7 +820,7 @@ theorem callLife_preserves_result (types : Var → Option Descriptor) (e : Exec.
       exact life_preserves_result types (.drop xs) s.own own hs ho
     · contradiction
 
-/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
+/-- Helper (computation). Reinitialization changes slot status while leaving the loan table unchanged. (approved: PENDING). -/
 private theorem reinitialize_loans (s t : State) (p : Hybrid.Place)
     (h : reinitialize s p = some t) : t.loans = s.loans := by
   unfold reinitialize at h
@@ -829,7 +829,7 @@ private theorem reinitialize_loans (s t : State) (p : Hybrid.Place)
   · cases h; rfl
   · contradiction
 
-/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
+/-- Helper (computation). Both binding branches leave the loan table unchanged. (approved: PENDING). -/
 private theorem bind_loans (types : Var → Option Descriptor) (s t : State) (x : Var)
     (h : bind types x s = some t) : t.loans = s.loans := by
   unfold bind at h
@@ -841,7 +841,7 @@ private theorem bind_loans (types : Var → Option Descriptor) (s t : State) (x 
     · cases h; rfl
     · contradiction
 
-/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
+/-- Helper (congruence). Lifts a supplied loan-table equality through a monadic fold. (approved: PENDING). -/
 private theorem fold_loans {α : Type} (f : State → α → Option State)
     (hf : ∀ s a t, f s a = some t → ∀ l ∈ t.loans, l ∈ s.loans)
     (xs : List α) (s t : State) (h : xs.foldlM f s = some t) :
@@ -853,7 +853,7 @@ private theorem fold_loans {α : Type} (f : State → α → Option State)
     obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
     exact fun l hl => hf s a u hu l (ih u h l hl)
 
-/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
+/-- Helper (congruence). Composes binding loan-table equalities through parameter entry. (approved: PENDING). -/
 private theorem enter_loans (types : Var → Option Descriptor) (s t : State) (xs : List Var)
     (h : enter types xs s = some t) : t.loans = s.loans := by
   unfold enter at h
@@ -872,7 +872,7 @@ private theorem enter_loans (types : Var → Option Descriptor) (s t : State) (x
     obtain ⟨w, hw, h⟩ := Option.bind_eq_some_iff.mp h
     exact (ih w v h).trans (bind_loans types u w x hw)
 
-/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
+/-- Helper (computation). Dropping slots does not edit the loan table. (approved: PENDING). -/
 private theorem drop_loans (s t : State) (xs : List Var) (h : drop xs s = some t) :
     t.loans = s.loans := by
   unfold drop at h
@@ -882,7 +882,7 @@ private theorem drop_loans (s t : State) (xs : List Var) (h : drop xs s = some t
   · cases h; rfl
   · contradiction
 
-/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
+/-- Helper (inversion). Inverts membership in the filtered loan table. (approved: PENDING). -/
 private theorem endLoan_subset (s t : State) (i : LoanId) (h : endLoan s i = some t) :
     ∀ l ∈ t.loans, l ∈ s.loans := by
   unfold endLoan at h
@@ -892,7 +892,7 @@ private theorem endLoan_subset (s t : State) (i : LoanId) (h : endLoan s i = som
   · cases h
     exact fun _ hl => (List.mem_filter.mp hl).1
 
-/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
+/-- Helper (inversion). Combines lifecycle branch inversions to trace surviving loans to their input. (approved: PENDING). -/
 private theorem life_subset (types : Var → Option Descriptor) (e : Exec.Life) (s t : State)
     (h : life types e s = some t) : ∀ l ∈ t.loans, l ∈ s.loans := by
   cases e with
@@ -1081,7 +1081,7 @@ theorem reborrow_birth (s t : State) (i : LoanId) (suffix : List Projection)
       List.mem_cons_of_mem _ (List.mem_of_find?_eq_some ha)⟩
   · contradiction
 
-/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
+/-- Helper (computation). Ending a loan leaves activation frames unchanged. (approved: PENDING). -/
 private theorem endLoan_frames (s t : State) (i : LoanId) (h : endLoan s i = some t) :
     t.frames = s.frames := by
   unfold endLoan at h
@@ -1101,7 +1101,7 @@ theorem endLoan_supply (s t : State) (i : LoanId) (h : endLoan s i = some t) :
   · cases hh
     rfl
 
-/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
+/-- Helper (congruence). Lifts a supplied frame equality through a monadic fold. (approved: PENDING). -/
 private theorem fold_frames {α : Type} (f : State → α → Option State)
     (hf : ∀ s a t, f s a = some t → t.frames = s.frames) (xs : List α)
     (s t : State) (h : xs.foldlM f s = some t) : t.frames = s.frames := by
@@ -1112,7 +1112,7 @@ private theorem fold_frames {α : Type} (f : State → α → Option State)
     obtain ⟨u, hu, hh⟩ := Option.bind_eq_some_iff.mp h
     exact (ih u hh).trans (hf s a u hu)
 
-/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
+/-- Helper (inversion). Inverts the slot-removal filter for a selected local place. (approved: PENDING). -/
 private theorem drop_absent (s t : State) (xs : List Var) (f : Activation)
     (hf : s.frames.head? = some f) (h : drop xs s = some t)
     (p : Hybrid.Place) (hp : p ∈ List.map Prod.snd (f.locals.filter fun e => decide (e.1 ∈ xs))) :
@@ -1155,8 +1155,7 @@ theorem leave_no_local_loan_result (s t : State) (f : Activation)
     exact (List.mem_filter.mp hx).1
   exact habsent x hxv (hxroot.trans hroot)
 
-/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). Adoption cannot transfer ordinary caller loans: every adopted identity must have been
-marked as a pending argument by the argument-opening transition. -/
+/-- Helper (projection). Extracts exactly the pending-argument witness checked by adoption. (approved: PENDING). -/
 theorem adoptDown_only_arguments (s t : State) (args : List (Var × LoanId))
     (h : adoptDown s args = some t) (e : Var × LoanId) (he : e ∈ args) :
     ∃ l ∈ s.loans, l.id = e.2 ∧ l.pendingArgument = true := by
@@ -1182,8 +1181,7 @@ theorem leave_no_activation_slot_result (s t : State) (f : Activation)
     intro x hx
     simpa using (List.mem_filter.mp hx).2
 
-/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). Successful lending targets a real active frame, specifically the current frame.
-This includes a callee only after entry has made it current (owner Q1, 2026-11-08). -/
+/-- Helper (projection). Extracts exactly the active-current-frame destination checked by reborrowing. (approved: PENDING). -/
 theorem reborrowTo_current (s t : State) (i : LoanId) (suffix : List Projection)
     (m : Mode) (activation : Nat) (h : reborrowTo s i suffix m activation = some t) :
     ∃ f ∈ s.frames, f.id = activation ∧ s.frames.head? = some f := by
@@ -1845,8 +1843,7 @@ theorem instrumentLife_erasure (ev : Exec.Life) (s t : Store O.Store)
       cases h
       exact hc
 
-/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). Primitive-contract forward simulation: an allowed instrumented answer satisfies the
-erased primitive contract and preserves the ownership state across the request. -/
+/-- Helper (projection). Extracts the two defining conjuncts of the instrumented answer guard. (approved: PENDING). -/
 theorem allows_erasure (p : O.Prim) (vs : List O.Val) (s : Store O.Store)
     (a : Exec.Answer O.Val O.Event (Store O.Store))
     (h : (instrumentOperands O types permit).allows p vs s a = true) :
