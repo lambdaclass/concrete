@@ -1,4 +1,4 @@
-import ConcreteSpec.Spec.Exec
+import ConcreteSpec.Spec.Observe
 
 /-!
 # Evaluator adequacy and termination
@@ -190,24 +190,52 @@ structure FuelLimit (P : Program O) (ρ : QueryOracle O) (c : Config O) where
   prefixes : ∀ n, runQ P ρ n c =
     ⟨(states n).events, (states n).queries, .outOfFuel (states n).config⟩
 
-/-- An infinite execution emits only finitely many events exactly when its event-history length has
-one finite bound. -/
-def FiniteEvents {P : Program O} {ρ : QueryOracle O} {c : Config O}
+/-- The raw C1 event history has a finite bound. This is an internal classification: an adapter
+may erase some or all of these events. -/
+def InternalFiniteEvents {P : Program O} {ρ : QueryOracle O} {c : Config O}
     (X : InfiniteExecution P ρ c) : Prop :=
   ∃ bound, ∀ n, (X.states n).events.length ≤ bound
 
-/-- An infinite execution interacts forever when its event history outgrows every finite bound. -/
-def InfiniteEvents {P : Program O} {ρ : QueryOracle O} {c : Config O}
+/-- The raw C1 event history outgrows every finite bound. This need not be external interaction. -/
+def InternalInfiniteEvents {P : Program O} {ρ : QueryOracle O} {c : Config O}
     (X : InfiniteExecution P ρ c) : Prop :=
   ∀ bound, ∃ n, bound < (X.states n).events.length
 
-/-- Silent divergence: infinitely many steps but only finitely many externally visible events. -/
-def SilentDivergence (P : Program O) (ρ : QueryOracle O) (c : Config O) : Prop :=
-  ∃ X : InfiniteExecution P ρ c, FiniteEvents X
+/-- The projected C6 history has a finite bound. Events erased by the adapter do not count. -/
+def FiniteEvents {S : Observe.EventSignature} {P : Program O} {ρ : QueryOracle O} {c : Config O}
+    (A : Observe.ExecAdapter O S) (X : InfiniteExecution P ρ c) : Prop :=
+  ∃ bound, ∀ n, (A.project (X.states n).events).length ≤ bound
 
-/-- Infinite interaction: an infinite execution with infinitely many events. -/
-def InfiniteInteraction (P : Program O) (ρ : QueryOracle O) (c : Config O) : Prop :=
-  ∃ X : InfiniteExecution P ρ c, InfiniteEvents X
+/-- The projected C6 history outgrows every finite bound. -/
+def InfiniteEvents {S : Observe.EventSignature} {P : Program O} {ρ : QueryOracle O} {c : Config O}
+    (A : Observe.ExecAdapter O S) (X : InfiniteExecution P ρ c) : Prop :=
+  ∀ bound, ∃ n, bound < (A.project (X.states n).events).length
+
+/-- Internal silent divergence, classified by the raw C1 history rather than C6 observations. -/
+def InternalSilentDivergence (P : Program O) (ρ : QueryOracle O) (c : Config O) : Prop :=
+  ∃ X : InfiniteExecution P ρ c, InternalFiniteEvents X
+
+/-- Internal infinite interaction, explicitly retaining the raw-event classification. -/
+def InternalInfiniteInteraction (P : Program O) (ρ : QueryOracle O) (c : Config O) : Prop :=
+  ∃ X : InfiniteExecution P ρ c, InternalInfiniteEvents X
+
+/-- External silent divergence: infinitely many steps but only finitely many projected C6 events. -/
+def SilentDivergence {S : Observe.EventSignature} (P : Program O) (A : Observe.ExecAdapter O S)
+    (ρ : QueryOracle O) (c : Config O) : Prop :=
+  ∃ X : InfiniteExecution P ρ c, FiniteEvents A X
+
+/-- External infinite interaction: an infinite execution with infinitely many projected C6 events. -/
+def InfiniteInteraction {S : Observe.EventSignature} (P : Program O)
+    (A : Observe.ExecAdapter O S) (ρ : QueryOracle O) (c : Config O) : Prop :=
+  ∃ X : InfiniteExecution P ρ c, InfiniteEvents A X
+
+/-- A C6 step sequence has exactly the same event history as the adapter-projected C1 positions.
+Both directions are required: C6 may stutter arbitrarily, but may neither invent nor lose an event. -/
+def MatchesProjectedHistory {S : Observe.EventSignature} {P : Program O} {ρ : QueryOracle O}
+    {c : Config O} (A : Observe.ExecAdapter O S) (X : InfiniteExecution P ρ c)
+    (steps : Nat → Observe.Step S) : Prop :=
+  (∀ n, ∃ m rest, Observe.visiblePrefix steps m = A.project (X.states n).events ++ rest) ∧
+    (∀ m, ∃ n rest, A.project (X.states n).events = Observe.visiblePrefix steps m ++ rest)
 
 /-- Once `fuel` reaches a blocked request, every larger budget retains C1's `noAnswer` ending.
 This is C8's blocking classification over C1; it is not divergence and has no infinite `Move`. -/

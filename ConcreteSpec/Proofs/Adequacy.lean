@@ -1,5 +1,6 @@
 import ConcreteSpec.Spec.Adequacy
 import ConcreteSpec.Proofs.Exec
+import ConcreteSpec.Proofs.Observe2
 
 /-!
 # Evaluator adequacy and termination (`Spec/Adequacy.lean`, foundation contract C8)
@@ -691,12 +692,181 @@ theorem InfiniteExecution.unique (X Y : InfiniteExecution P ρ c) : X = Y := by
       congrArg (fun L : FuelLimit P ρ c => L.toInfiniteExecution) h
     _ = Y := toFuelLimit_toInfiniteExecution Y
 
-/-- Every infinite execution has either finitely many events or infinitely many; these are the two
-distinct classes `SilentDivergence` and `InfiniteInteraction`. -/
-theorem finite_or_infinite_events (X : InfiniteExecution P ρ c) :
-    FiniteEvents X ∨ InfiniteEvents X := by
+/-- One transition extends, and never changes, the raw event history. -/
+theorem Move.events_prefix {pos pos' : Position O} (h : Move P ρ pos pos') :
+    pos.events <+: pos'.events := by
+  cases h with
+  | silent => exact ⟨[], by simp⟩
+  | prim => exact ⟨_, rfl⟩
+
+/-- Every later position of an infinite execution extends every earlier raw history. -/
+theorem InfiniteExecution.events_prefix (X : InfiniteExecution P ρ c) {m n : Nat} (h : m ≤ n) :
+    (X.states m).events <+: (X.states n).events := by
+  obtain ⟨d, rfl⟩ := Nat.exists_eq_add_of_le h
+  induction d with
+  | zero => exact ⟨[], by simp⟩
+  | succ d ih =>
+    obtain ⟨rest, hrest⟩ := ih (Nat.le_add_right m d)
+    obtain ⟨next, hnext⟩ := (X.step (m + d)).events_prefix
+    refine ⟨rest ++ next, ?_⟩
+    rw [← List.append_assoc, hrest, show m + (d + 1) = m + d + 1 by omega, hnext]
+
+/-- Adapter projection preserves the execution's history-prefix order. -/
+theorem InfiniteExecution.projected_prefix {S : Observe.EventSignature}
+    (A : Observe.ExecAdapter O S) (X : InfiniteExecution P ρ c) {m n : Nat} (h : m ≤ n) :
+    A.project (X.states m).events <+: A.project (X.states n).events := by
+  obtain ⟨rest, hrest⟩ := X.events_prefix h
+  exact ⟨A.project rest, by rw [← Observe.ExecAdapter.project_append, hrest]⟩
+
+/-- A prefix determines every list entry that lies in the shorter list. -/
+theorem getElem?_eq_of_prefix {α : Type} {xs ys : List α} (h : xs <+: ys) {i : Nat}
+    (hi : i < xs.length) : ys[i]? = xs[i]? := by
+  obtain ⟨rest, rfl⟩ := h
+  exact List.getElem?_append_left hi
+
+/-- The canonical eventually silent C6 execution has exactly `events.take n` events after `n`
+steps. -/
+theorem visiblePrefix_finiteDivergenceSteps {S : Observe.EventSignature}
+    (events : List (Observe.Event S)) (n : Nat) :
+    Observe.visiblePrefix (Observe.finiteDivergenceSteps events) n = events.take n := by
+  induction n with
+  | zero => rfl
+  | succ n ih =>
+    rw [Observe.visiblePrefix_succ, ih, List.take_add_one]
+    by_cases h : n < events.length
+    · simp [Observe.finiteDivergenceSteps, Observe.Step.event?, h]
+    · simp [Observe.finiteDivergenceSteps, Observe.Step.event?, h]
+
+/-- An emitting C6 execution has exactly the first `n` trace events after `n` steps. -/
+theorem visiblePrefix_emitTrace {S : Observe.EventSignature} (trace : Observe.InfiniteTrace S)
+    (n : Nat) : Observe.visiblePrefix (fun i => Observe.Step.emit (trace i)) n =
+      (List.range n).map trace := by
+  induction n with
+  | zero => rfl
+  | succ n ih => simp [Observe.visiblePrefix_succ, ih, Observe.Step.event?, List.range_succ]
+
+/-- A bounded monotone sequence of natural numbers is eventually constant. -/
+theorem eventually_constant_of_bounded {f : Nat → Nat} (mono : ∀ {m n}, m ≤ n → f m ≤ f n) :
+    ∀ bound, (∀ n, f n ≤ bound) → ∃ start, ∀ n, start ≤ n → f n = f start := by
+  intro bound
+  induction bound with
+  | zero =>
+    intro bounded
+    exact ⟨0, fun n _ => by rw [Nat.eq_zero_of_le_zero (bounded n), Nat.eq_zero_of_le_zero (bounded 0)]⟩
+  | succ bound ih =>
+    intro bounded
+    by_cases reached : ∃ n, f n = bound + 1
+    · obtain ⟨start, hs⟩ := reached
+      refine ⟨start, fun n hn => ?_⟩
+      apply Nat.le_antisymm
+      · rw [hs]
+        exact bounded n
+      · exact mono hn
+    · apply ih
+      intro n
+      have hn := bounded n
+      have hne : f n ≠ bound + 1 := fun h => reached ⟨n, h⟩
+      omega
+
+/-- **Finite projected behavior agrees with C6.** A finite external history determines the
+canonical eventually silent C6 execution with exactly the same prefixes and a `finiteDivergence`
+observation. -/
+theorem finite_projected_observation {S : Observe.EventSignature} {A : Observe.ExecAdapter O S}
+    {X : InfiniteExecution P ρ c} (hf : FiniteEvents A X) :
+    ∃ steps events, MatchesProjectedHistory A X steps ∧
+      Observe.HasFullObservation (.infinite steps) (.finiteDivergence events) := by
+  obtain ⟨bound, bounded⟩ := hf
+  let lengths : Nat → Nat := fun n => (A.project (X.states n).events).length
+  have mono : ∀ {m n}, m ≤ n → lengths m ≤ lengths n := by
+    intro m n h
+    obtain ⟨rest, hr⟩ := X.projected_prefix A h
+    change (A.project (X.states m).events).length ≤ (A.project (X.states n).events).length
+    rw [← hr, List.length_append]
+    exact Nat.le_add_right _ _
+  obtain ⟨start, stable⟩ := eventually_constant_of_bounded mono bound bounded
+  let events := A.project (X.states start).events
+  let steps := Observe.finiteDivergenceSteps events
+  refine ⟨steps, events, ⟨?_, ?_⟩, Observe.SameInfiniteObservation.refl _⟩
+  · intro n
+    have pref : A.project (X.states n).events <+: events := by
+      by_cases h : n ≤ start
+      · exact X.projected_prefix A h
+      · have hs : start ≤ n := Nat.le_of_not_ge h
+        have heq : A.project (X.states n).events = events := by
+          have sameLength := stable n hs
+          obtain ⟨rest, hr⟩ := X.projected_prefix A hs
+          have hnil : rest = [] := by
+            have hl := congrArg List.length hr
+            simp only [List.length_append] at hl
+            change (A.project (X.states n).events).length =
+              (A.project (X.states start).events).length at sameLength
+            exact List.eq_nil_of_length_eq_zero (by omega)
+          simpa [events, hnil] using hr.symm
+        exact heq ▸ List.prefix_rfl
+    obtain ⟨rest, hr⟩ := pref
+    refine ⟨events.length, rest, ?_⟩
+    rw [visiblePrefix_finiteDivergenceSteps, List.take_of_length_le (Nat.le_refl _), hr]
+  · intro n
+    refine ⟨start, events.drop n, ?_⟩
+    rw [visiblePrefix_finiteDivergenceSteps, List.take_append_drop]
+
+/-- **Infinite projected behavior agrees with C6.** An unbounded projected history determines an
+infinite C6 trace with exactly the same finite prefixes and an `infiniteDivergence` observation. -/
+theorem infinite_projected_observation {S : Observe.EventSignature} {A : Observe.ExecAdapter O S}
+    {X : InfiniteExecution P ρ c} (hi : InfiniteEvents A X) :
+    ∃ steps trace, MatchesProjectedHistory A X steps ∧
+      Observe.HasFullObservation (.infinite steps) (.infiniteDivergence trace) := by
   classical
-  by_cases h : ∃ bound, ∀ n, (X.states n).events.length ≤ bound
+  let first : Nat → Nat := fun i => Classical.choose (hi i)
+  have first_spec (i : Nat) : i < (A.project (X.states (first i)).events).length :=
+    Classical.choose_spec (hi i)
+  let trace : Observe.InfiniteTrace S := fun i =>
+    (A.project (X.states (first i)).events)[i]'(first_spec i)
+  have trace_get (i : Nat) {n : Nat} (hn : i < (A.project (X.states n).events).length) :
+      (A.project (X.states n).events)[i]? = some (trace i) := by
+    rw [List.getElem?_eq_getElem hn]
+    by_cases h : n ≤ first i
+    · have he := getElem?_eq_of_prefix (X.projected_prefix A h) hn
+      rw [List.getElem?_eq_getElem (first_spec i), List.getElem?_eq_getElem hn] at he
+      exact he.symm
+    · have hf : first i ≤ n := Nat.le_of_not_ge h
+      have he := getElem?_eq_of_prefix (X.projected_prefix A hf) (first_spec i)
+      rw [List.getElem?_eq_getElem (first_spec i), List.getElem?_eq_getElem hn] at he
+      exact he
+  have history_eq_range (n : Nat) : A.project (X.states n).events =
+      (List.range ((A.project (X.states n).events).length)).map trace := by
+    apply List.ext_getElem?
+    intro i
+    by_cases h : i < (A.project (X.states n).events).length
+    · rw [trace_get i h]
+      simp [List.getElem?_map, List.getElem?_range h]
+    · have hn : (A.project (X.states n).events).length ≤ i := by omega
+      simp [hn]
+  have take_eq_range (n m : Nat) (hm : m ≤ (A.project (X.states n).events).length) :
+      (List.range m).map trace = (A.project (X.states n).events).take m := by
+    induction m with
+    | zero => rfl
+    | succ m ih =>
+      rw [List.range_succ, List.map_append, List.take_add_one, ih (by omega),
+        trace_get m (by omega)]
+      rfl
+  let steps : Nat → Observe.Step S := fun i => .emit (trace i)
+  refine ⟨steps, trace, ⟨?_, ?_⟩, Observe.SameInfiniteObservation.refl _⟩
+  · intro n
+    refine ⟨(A.project (X.states n).events).length, [], ?_⟩
+    rw [visiblePrefix_emitTrace, ← history_eq_range]
+    simp
+  · intro n
+    refine ⟨first n, (A.project (X.states (first n)).events).drop n, ?_⟩
+    rw [visiblePrefix_emitTrace, take_eq_range _ _ (Nat.le_of_lt (first_spec n)),
+      List.take_append_drop]
+
+/-- Every infinite execution has either finitely many or infinitely many projected events; these
+are the two external classes `SilentDivergence` and `InfiniteInteraction`. -/
+theorem finite_or_infinite_events {S : Observe.EventSignature} (A : Observe.ExecAdapter O S)
+    (X : InfiniteExecution P ρ c) : FiniteEvents A X ∨ InfiniteEvents A X := by
+  classical
+  by_cases h : ∃ bound, ∀ n, (A.project (X.states n).events).length ≤ bound
   · exact .inl h
   · refine .inr (fun bound => ?_)
     apply Classical.byContradiction
@@ -705,21 +875,33 @@ theorem finite_or_infinite_events (X : InfiniteExecution P ρ c) :
     refine ⟨bound, fun n => ?_⟩
     exact Nat.le_of_not_gt (fun hlt => hn ⟨n, hlt⟩)
 
-/-- One infinite execution cannot have both finitely many and infinitely many events. -/
-theorem finite_not_infinite_events {X : InfiniteExecution P ρ c}
-    (hf : FiniteEvents X) (hi : InfiniteEvents X) : False := by
+/-- One infinite execution cannot have both finitely many and infinitely many projected events. -/
+theorem finite_not_infinite_events {S : Observe.EventSignature} {A : Observe.ExecAdapter O S}
+    {X : InfiniteExecution P ρ c} (hf : FiniteEvents A X) (hi : InfiniteEvents A X) : False := by
   obtain ⟨bound, hb⟩ := hf
   obtain ⟨n, hn⟩ := hi bound
   exact Nat.not_lt_of_ge (hb n) hn
 
-/-- Silent divergence and infinite interaction are mutually exclusive classifications of the same
-initial run. -/
-theorem silentDivergence_not_infiniteInteraction :
-    SilentDivergence P ρ c → InfiniteInteraction P ρ c → False := by
+/-- External silent divergence and infinite interaction are mutually exclusive on the same run. -/
+theorem silentDivergence_not_infiniteInteraction {S : Observe.EventSignature}
+    (A : Observe.ExecAdapter O S) :
+    SilentDivergence P A ρ c → InfiniteInteraction P A ρ c → False := by
   rintro ⟨X, hf⟩ ⟨Y, hi⟩
   have hxy : X = Y := InfiniteExecution.unique X Y
   subst Y
   exact finite_not_infinite_events hf hi
+
+/-- The raw classification has the same finite/infinite dichotomy, explicitly internally. -/
+theorem internal_finite_or_infinite_events (X : InfiniteExecution P ρ c) :
+    InternalFiniteEvents X ∨ InternalInfiniteEvents X := by
+  classical
+  by_cases h : ∃ bound, ∀ n, (X.states n).events.length ≤ bound
+  · exact .inl h
+  · refine .inr (fun bound => ?_)
+    apply Classical.byContradiction
+    intro hn
+    apply h
+    exact ⟨bound, fun n => Nat.le_of_not_gt (fun hlt => hn ⟨n, hlt⟩)⟩
 
 /-- A final report excludes an infinite execution from the same initial configuration. -/
 theorem not_infinite_of_final {ρ₀ : Oracle O} {fuel : Nat} {c : Config O} {f : Final O.Val}
@@ -874,9 +1056,190 @@ def spin_infinite : InfiniteExecution prog env spinConfig where
   initial := rfl
   step := spin_move
 
-/-- In particular it is silent divergence: infinitely many steps and no events at all. -/
-theorem spin_silent_divergence : SilentDivergence prog env spinConfig :=
+/-- In particular it is internal silent divergence: infinitely many steps and no raw events. -/
+theorem spin_internal_silent_divergence : InternalSilentDivergence prog env spinConfig :=
   ⟨spin_infinite, ⟨0, fun n => by simp [spin_infinite, spinPosition]⟩⟩
+
+/-! ### Raw events need not be externally visible -/
+
+/-- The same loop as `spinConfig`, except that its body logs one raw event per iteration. -/
+def eventBody : Stmt ops := .prim none .log [.lit 1] s
+def eventConfig : Config ops :=
+  start ⟨[], .int, ⟨0⟩, .loop ⟨0⟩ .skip (.lit 1) eventBody s⟩ [] .init
+
+def eventTest : Frame ops := .test ⟨0⟩ .skip (.lit 1) eventBody s []
+def eventBodyFrame : Frame ops := .body ⟨0⟩ .skip (.lit 1) eventBody s
+def eventConfig1 : Config ops := ⟨.exec .skip, [], spinStore, [eventTest, spinScope]⟩
+def eventConfig2 : Config ops := ⟨.done, [], spinStore, [eventTest, spinScope]⟩
+def eventConfig3 : Config ops := ⟨.exec eventBody, [], spinStore, [eventBodyFrame, spinScope]⟩
+def eventConfig4 : Config ops := ⟨.done, [], spinStore, [eventBodyFrame, spinScope]⟩
+
+def eventConfigAt : Nat → Config ops
+  | 0 => eventConfig
+  | 1 => eventConfig1
+  | 2 => eventConfig2
+  | 3 => eventConfig3
+  | 4 => eventConfig4
+  | _ => eventConfig
+
+/-- The raw history after `n` completed logging requests. -/
+def rawEvents (n : Nat) : List Int := (List.range n).map fun _ => 1
+
+/-- The query issued by iteration `n`, including its actual occurrence and prior raw history. -/
+def eventQuery (n : Nat) : Query ops := ⟨rawEvents n, .log, [1], s, spinStore, n⟩
+
+/-- One event is emitted on the transition from phase three to phase four. -/
+def eventCount (n : Nat) : Nat := n / 5 + if 3 < n % 5 then 1 else 0
+
+def eventPosition (n : Nat) : Position ops :=
+  ⟨eventConfigAt (n % 5), rawEvents (eventCount n),
+    (List.range (eventCount n)).map eventQuery⟩
+
+theorem event_move_01 (n : Nat) : Move prog env
+    ⟨eventConfig, rawEvents n, (List.range n).map eventQuery⟩
+    ⟨eventConfig1, rawEvents n, (List.range n).map eventQuery⟩ := .silent rfl
+theorem event_move_12 (n : Nat) : Move prog env
+    ⟨eventConfig1, rawEvents n, (List.range n).map eventQuery⟩
+    ⟨eventConfig2, rawEvents n, (List.range n).map eventQuery⟩ := .silent rfl
+theorem event_move_23 (n : Nat) : Move prog env
+    ⟨eventConfig2, rawEvents n, (List.range n).map eventQuery⟩
+    ⟨eventConfig3, rawEvents n, (List.range n).map eventQuery⟩ := .silent rfl
+theorem event_move_40 (n : Nat) : Move prog env
+    ⟨eventConfig4, rawEvents n, (List.range n).map eventQuery⟩
+    ⟨eventConfig, rawEvents n, (List.range n).map eventQuery⟩ := .silent rfl
+
+/-- The logging transition appends exactly its raw event and its next per-site query. -/
+theorem event_move_34 (n : Nat) : Move prog env
+    ⟨eventConfig3, rawEvents n, (List.range n).map eventQuery⟩
+    ⟨eventConfig4, rawEvents (n + 1), (List.range (n + 1)).map eventQuery⟩ := by
+  have hocc : occurrenceAt ((List.range n).map eventQuery) s = n := by
+    induction n with
+    | zero => rfl
+    | succ n ih =>
+      rw [List.range_succ, List.map_append]
+      simp only [List.map_cons, List.map_nil]
+      rw [issue_next_occurrence, ih]
+      simp [eventQuery]
+  have hq : Query.issue (O := ops) (rawEvents n) .log [1] s spinStore
+      ((List.range n).map eventQuery) = eventQuery n := by
+    simp [Query.issue, eventQuery, hocc]
+  have hm : Move prog env ⟨eventConfig3, rawEvents n, (List.range n).map eventQuery⟩
+      ⟨eventConfig4, rawEvents n ++ [1], (List.range n).map eventQuery ++ [eventQuery n]⟩ := by
+    rw [← hq]
+    exact Move.prim (P := prog) (ρ := env) (c := eventConfig3) (c' := eventConfig4)
+      (events := rawEvents n) (issued := (List.range n).map eventQuery) (p := .log) (vs := [1])
+      (site := s) (st := spinStore) (a := ⟨some 1, .ok 0, spinStore⟩) rfl rfl rfl rfl
+  simpa [rawEvents, List.range_succ] using hm
+
+/-- Every adjacent pair of positions in the logging loop is one real machine transition. -/
+theorem event_move (n : Nat) : Move prog env (eventPosition n) (eventPosition (n + 1)) := by
+  have hlt : n % 5 < 5 := Nat.mod_lt _ (by decide)
+  have hc : n % 5 = 0 ∨ n % 5 = 1 ∨ n % 5 = 2 ∨ n % 5 = 3 ∨ n % 5 = 4 := by omega
+  rcases hc with h | h | h | h | h
+  · have hn : (n + 1) % 5 = 1 := by omega
+    have hd : (n + 1) / 5 = n / 5 := by omega
+    simpa [eventPosition, eventCount, eventConfigAt, h, hn, hd] using event_move_01 (eventCount n)
+  · have hn : (n + 1) % 5 = 2 := by omega
+    have hd : (n + 1) / 5 = n / 5 := by omega
+    simpa [eventPosition, eventCount, eventConfigAt, h, hn, hd] using event_move_12 (eventCount n)
+  · have hn : (n + 1) % 5 = 3 := by omega
+    have hd : (n + 1) / 5 = n / 5 := by omega
+    simpa [eventPosition, eventCount, eventConfigAt, h, hn, hd] using event_move_23 (eventCount n)
+  · have hn : (n + 1) % 5 = 4 := by omega
+    have hd : (n + 1) / 5 = n / 5 := by omega
+    simpa [eventPosition, eventCount, eventConfigAt, h, hn, hd] using event_move_34 (eventCount n)
+  · have hn : (n + 1) % 5 = 0 := by omega
+    have hd : (n + 1) / 5 = n / 5 + 1 := by omega
+    simpa [eventPosition, eventCount, eventConfigAt, h, hn, hd] using event_move_40 (eventCount n)
+
+/-- The logging loop is a genuine infinite execution with one raw event per iteration. -/
+def event_infinite : InfiniteExecution prog env eventConfig where
+  states := eventPosition
+  initial := rfl
+  step := event_move
+
+/-- An adapter that erases every raw event and gives every primitive an internal contract. -/
+def erasingAdapter : Observe.ExecAdapter ops Observe.Demo.signature where
+  events := fun _ => []
+  request := fun _ _ _ _ => none
+  status := fun _ => none
+  sites := []
+
+/-- An adapter that retains every raw event as public output. -/
+def keepingAdapter : Observe.ExecAdapter ops Observe.Demo.signature where
+  events := fun n => [.output (toString n)]
+  request := fun _ _ _ _ => none
+  status := fun _ => none
+  sites := []
+
+theorem erasing_project (events : List Int) : erasingAdapter.project events = [] := by
+  induction events with
+  | nil => rfl
+  | cons event events ih => simp [Observe.ExecAdapter.project, erasingAdapter]
+
+theorem keeping_project_rawEvents (n : Nat) : keepingAdapter.project (rawEvents n) =
+    (List.range n).map fun _ => Observe.Event.output "1" := by
+  induction n with
+  | zero => rfl
+  | succ n ih =>
+    rw [show rawEvents (n + 1) = rawEvents n ++ [1] by simp [rawEvents, List.range_succ],
+      Observe.ExecAdapter.project_append, ih]
+    simp [Observe.ExecAdapter.project, keepingAdapter, List.range_succ] <;> decide
+
+/-- Empty output satisfies C6's internal-answer rule even though C1 emits a raw event. -/
+theorem erasingWellFormed : Observe.ExecAdapter.WellFormed erasingAdapter Observe.Demo.contract () env := by
+  constructor
+  · intro hist p vs site store a answer typed
+    exact ⟨[], erasing_project _⟩
+  · intro hist p vs site store a q answer typed
+    simp [erasingAdapter] at typed
+  · intro hist p vs site store q answer typed
+    simp [erasingAdapter] at typed
+
+/-- Externally the erasing run is silent divergence. -/
+theorem erasing_silent_divergence : SilentDivergence prog erasingAdapter env eventConfig :=
+  ⟨event_infinite, ⟨0, fun n => by simp [event_infinite, eventPosition, erasing_project]⟩⟩
+
+/-- Internally that same run has infinitely many raw events. -/
+theorem erasing_internal_infinite : InternalInfiniteInteraction prog env eventConfig := by
+  refine ⟨event_infinite, fun bound => ⟨5 * (bound + 1), ?_⟩⟩
+  simp [event_infinite, eventPosition, eventCount, rawEvents]
+
+/-- Retaining the raw events turns the same execution into external infinite interaction. -/
+theorem keeping_infinite_interaction : InfiniteInteraction prog keepingAdapter env eventConfig := by
+  refine ⟨event_infinite, fun bound => ⟨5 * (bound + 1), ?_⟩⟩
+  simp [event_infinite, eventPosition, eventCount, keeping_project_rawEvents]
+
+/-- Non-vacuity for `finite_projected_observation`: the erasing adapter has a real C6 finite
+observation even though the raw execution interacts forever. -/
+example : ∃ steps events, MatchesProjectedHistory erasingAdapter event_infinite steps ∧
+    Observe.HasFullObservation (.infinite steps) (.finiteDivergence events) :=
+  finite_projected_observation (show FiniteEvents erasingAdapter event_infinite from
+    ⟨0, fun n => by simp [erasing_project]⟩)
+
+/-- Non-vacuity for `infinite_projected_observation`: the keeping adapter has a real infinite C6
+trace. -/
+example : ∃ steps trace, MatchesProjectedHistory keepingAdapter event_infinite steps ∧
+    Observe.HasFullObservation (.infinite steps) (.infiniteDivergence trace) :=
+  infinite_projected_observation (show InfiniteEvents keepingAdapter event_infinite from by
+    intro bound
+    refine ⟨5 * (bound + 1), ?_⟩
+    simp [event_infinite, eventPosition, eventCount, keeping_project_rawEvents])
+
+/-- Planted raw-event classification: it disagrees with C6 on the erasing adapter. The run has
+infinite internal interaction but no external infinite interaction. -/
+example : InternalInfiniteInteraction prog env eventConfig ∧
+    ¬ InfiniteInteraction prog erasingAdapter env eventConfig :=
+  ⟨erasing_internal_infinite,
+    silentDivergence_not_infiniteInteraction erasingAdapter erasing_silent_divergence⟩
+
+/-- Planted invented C6 history: a constantly emitting step sequence cannot match the erasing
+adapter's empty projected history. -/
+example : ¬ MatchesProjectedHistory erasingAdapter event_infinite
+    (fun _ => Observe.Step.emit (Observe.Event.output "invented")) := by
+  intro matched
+  obtain ⟨n, rest, history⟩ := matched.2 1
+  simp [erasing_project, Observe.visiblePrefix_succ, Observe.Step.event?] at history
 
 /-! ### Exact terminal-query witnesses -/
 
