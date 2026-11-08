@@ -44,21 +44,23 @@ def run(sha, tier, output):
     record = dict(sha=sha, tier=tier, repository=os.environ["GITHUB_REPOSITORY"],
                   runner_name=os.environ["RUNNER_NAME"], runner_environment="self-hosted",
                   attempt=attempt, occurrence=os.environ.get("OCCURRENCE", tier) + "/" + os.environ["GITHUB_RUN_ID"],
-                  controller_revision=git("rev-parse", "HEAD"),
+                  controller_revision=None,
                   gate_revision=None, started=now(), status="INCOMPLETE", conclusion="incomplete",
                   artifact=os.environ["GITHUB_SERVER_URL"] + "/" + os.environ["GITHUB_REPOSITORY"] +
                   "/actions/runs/" + os.environ["GITHUB_RUN_ID"], gates=[])
     with tempfile.TemporaryDirectory(prefix="concrete-scheduled-") as scratch:
         checkout = Path(scratch) / "source"
         try:
+            record["controller_revision"] = git("rev-parse", "HEAD")
             require(git("rev-parse", sha + "^{commit}") == sha, "wrong SHA")
             runners = inventory()
             require(os.environ.get("RUNNER_NAME") in runners.get(os.environ.get("GITHUB_REPOSITORY"), set()),
                     "forged runner: not inventoried concrete-ci-2")
             call(["git", "clone", "--shared", "--no-checkout", str(ROOT), str(checkout)], check=True)
             call(["git", "-C", str(checkout), "checkout", "--detach", sha], check=True)
-            record["gate_revision"] = git("-C", str(checkout), "rev-parse", "HEAD")
-            require(record["gate_revision"] == sha, "wrong checked-out revision")
+            record["checkout_revision"] = git("-C", str(checkout), "rev-parse", "HEAD")
+            require(record["checkout_revision"] == sha, "wrong checked-out revision")
+            record["gate_revision"] = record["checkout_revision"]
             exporter = checkout / "scripts/checks/lib/gate_manifest.py"
             slots = ROOT / "scripts/checks/lib/heavy_slots.sh"
             require(exporter.is_file(), "INCOMPLETE dependency: G1 tier registry unavailable")
@@ -99,11 +101,11 @@ def run(sha, tier, output):
                         gate["controls"].append(dict(id=control["id"], status=status, diagnostic=diagnostic))
                         if status == "FAIL" or (status == "INCOMPLETE" and gate["status"] != "FAIL"):
                             gate["status"] = status
-                except (EvidenceError, OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
+                except (EvidenceError, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
                     gate["error"] = str(error)
                     if gate["status"] != "FAIL":
                         gate["status"] = "INCOMPLETE"
-        except (EvidenceError, OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
+        except (EvidenceError, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
             (output / "incomplete.log").write_text(str(error) + "\n")
             print(error, file=sys.stderr)
             # A dependency failure is evidence about availability, never a dummy passed gate.

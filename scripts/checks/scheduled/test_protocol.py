@@ -79,6 +79,16 @@ class Controls(unittest.TestCase):
         history = append([r], record(), SHA, "daily", RUNNERS)
         self.rejected("FAIL daily " + SHA + ": recorded attempt", lambda: observe(history, SHA, "daily", NOW, RUNNERS))
 
+    def test_contradictory_statuses(self):
+        for status, conclusion in (("FAIL", "failure"), ("INCOMPLETE", "incomplete")):
+            r = record(); r.update(status=status, conclusion=conclusion)
+            self.rejected("status/conclusion contradicts evidence",
+                          lambda: observe([r], SHA, "daily", NOW, RUNNERS))
+        for status in ("FAIL", "INCOMPLETE"):
+            r = record(); r["gates"][0]["status"] = status
+            self.rejected("status/conclusion contradicts evidence",
+                          lambda: observe([r], SHA, "daily", NOW, RUNNERS))
+
     def test_old_failure_cannot_age_out(self):
         r = record(); r.update(status="FAIL", conclusion="failure")
         r["gates"][0]["status"] = "FAIL"
