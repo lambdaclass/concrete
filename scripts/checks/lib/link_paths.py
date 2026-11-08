@@ -1,5 +1,6 @@
 """Closure membership without lexical erasure of filesystem traversal."""
 import os
+from collections import deque
 from pathlib import Path
 import sys
 
@@ -20,17 +21,34 @@ def allowed(path, local=False):
         return any(p == root or p.startswith(root + '/') for root in closure)
     if not member(path):
         sys.exit('link purity: undeclared path: ' + path)
+    def prefix(p):
+        # The store's ancestors are needed to reach a declared root, but an
+        # undeclared sibling is rejected before even probing its filesystem.
+        return member(p) or p == '/' or any(root.startswith(p + '/') for root in closure)
     try:
-        # Each symlink prefix must stay in the closure, even if a later symlink
-        # would return to it. resolve() alone checks only the final destination.
         current = Path('/')
-        for part in path.split('/')[1:]:
-            if not part:
+        pending = deque(path.split('/')[1:])
+        links = 0
+        while pending:
+            part = pending.popleft()
+            if part in ('', '.'):
                 continue
-            current = current / part
-            if current.is_symlink() and not member(str(current.resolve())):
-                sys.exit('link purity: undeclared symlink prefix: ' + str(current))
-        if member(str(Path(path).resolve())):
+            candidate = current.parent if part == '..' else current / part
+            if not prefix(str(candidate)):
+                sys.exit('link purity: undeclared symlink traversal: ' + str(candidate))
+            if part != '..' and candidate.is_symlink():
+                links += 1
+                if links > 40:
+                    sys.exit('link purity: excessive symlink traversal: ' + path)
+                # Do not resolve a target wholesale: that erases intermediate
+                # symlinks and directories that can leave and re-enter closure.
+                target = os.readlink(candidate)
+                if target.startswith('/'):
+                    current = Path('/')
+                pending.extendleft(reversed(target.split('/')))
+            else:
+                current = candidate
+        if member(str(current)):
             return
     except (OSError, RuntimeError, ValueError) as error:
         sys.exit('link purity: invalid path: ' + str(error)[:500])

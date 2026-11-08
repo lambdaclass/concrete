@@ -75,8 +75,13 @@ with tempfile.TemporaryDirectory() as scratch:
     (outside / 'return').symlink_to(declared / 'safe', target_is_directory=True)
     closure = Path(scratch) / 'closure'
     closure.write_text(str(declared) + '\n')
+    (declared / 'chain').symlink_to(outside / 'return', target_is_directory=True)
+    (declared / 'safe' / 'inside').write_text('fixture')
+    (declared / 'internal').symlink_to('safe/../safe/inside')
     with patch.dict(os.environ, {'CONCRETE_SLICE0_LINK_CLOSURE': str(closure)}):
+        allowed(str(declared / 'internal'))
         refuse('symlink prefix leaves and reenters closure', lambda: allowed(str(declared / 'leave' / 'return')))
+        refuse('symlink target chain leaves and reenters closure', lambda: allowed(str(declared / 'chain')))
     # Each Mach-O fixture begins with the legitimate fixed loader. Fixtures test
     # production handling of all path-bearing failure modes, not a duplicate parser.
     def header(commands):
@@ -97,4 +102,4 @@ with tempfile.TemporaryDirectory() as scratch:
         ('unparsed load command', loader + [('LC_RPATH', '')]),
     ]:
         refuse('Mach-O ' + label, lambda commands=commands: macho(commands))
-print(f'PASS parser controls: negative={count} positive=5')
+print(f'PASS parser controls: negative={count} positive=6')
