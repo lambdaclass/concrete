@@ -1,0 +1,34 @@
+Implemented and committed substantial work, but **the round remains incomplete**: item 19’s acyclic-order existence and order-independence proofs are still unproved. They are explicit `Prop` obligations under R-0555 and R-0571, not claimed laws.
+
+Per brief:
+
+- **Item 18 — completed by me:** fallible operations, fuel-bounded evaluation, located refusals, decidable admission, old-fragment totality, declaration soundness, and requested examples.
+- **Item 19 — partially completed by me:** reference extraction, prefix-based dependency-order certificates, cycle chains and their correctness law, forward-reference and refusal examples, README updates. The two global proofs remain unfinished.
+- **Vacuity fixes — implemented:** Kimi supplied the negation arithmetic characterizations; I migrated their evidence, strengthened `admitted_copy`, demoted projections, separated admission checks, and isolated the non-Copy refusal. Exemption approvals remain `PENDING`.
+
+Law evidence:
+
+| Law | Statement | Instance / planted case |
+|---|---|---|
+| `eval_total` | Old fragment evaluates with sufficient fuel | `wrap` / evaluator returning no values |
+| `evalConsts_sound` | Admitted values have declared types and are valid | `division` / wrong Boolean values |
+| `admitted_copy` | Computed values have Copy types | `noncopy_universe` / non-Copy unit values |
+| `cycle_chain_real` | Chain checking matches actual references | `two_constants`, `malformed` / reject-all, accept-all |
+| `checkedNeg_ok_arithmetic` | Success returns representable mathematical negation | `signed` / identity negation |
+| `checkedNeg_error_iff` | Overflow exactly characterizes unrepresentable negation | `minimum` / unchecked negation |
+
+Supporting helpers establish operand inversion, environment preservation, typing/evaluation agreement, admission projections, and refusal characterization.
+
+Commits:
+
+- `28559b7d1` — Kimi: negation arithmetic characterization.
+- `09adc6eaa` — fallible initializer evaluation and admission.
+- `0e3189733` — final scalar evidence convention.
+- `9bf1ca4a1` — separate checks and cycle-edge validation.
+- `dba47eff2` — stronger dependency certificates and explicit obligations.
+- `4c7064377` — admission-rule decision provenance.
+- `ce447ebbd` — Copy projection naming.
+
+Validation: build passes at `ce447ebbd`; rules passed at `4c7064377`; trust-ban passed at `dba47eff2`. Review reports the missing global proofs; scripted repository inspection also encountered sandbox failures. Working tree is clean. Nothing pushed; `_scratch.lean` deleted; `axioms.golden` untouched.
+
+**QUESTIONS:** Checked forms in initializers need a Result constant type. `CTy` remains unchanged pending that separate owner decision.

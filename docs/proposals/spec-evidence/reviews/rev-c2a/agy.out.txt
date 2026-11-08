@@ -1,0 +1,110 @@
+### 1. Executive Check: Owner Decisions, Unfinished Proofs, and Writer Question
+
+1. **Item 18 (fallible primitive operations in closed grammar, compile-time evaluation of all constants used or unused, failure/fuel refusal, kernel `decide`):**
+   - **Spec encoding (`ConcreteSpec/Spec/Const.lean`):** Encoded in `CExpr` (`.plain`, `.plainNeg`, `.tryConvert`), `CExpr.eval` (fuel-bounded, returning `CEvalResult` with located `ConstFailure`), `evalConsts` (evaluates all declarations in order whether referenced or not), and `ConstsAdmitted` (`Decidable`, checked via `by decide`).
+   - **Writer question on `checked` forms and `CTy`:** **Confirmed.** Keeping `CTy` restricted to scalars (`IntTy`, `bool`, `unit`) and excluding `Result<T, ArithmeticError>`-returning `checked` constructors pending a separate owner decision is the right design; `plain`, `plainNeg`, and `tryConvert` already cover every fallible scalar operation in constant initializers by turning failures into compile-time refusals.
+   - **Gap in proofs:** `Proofs/Const.lean` never proves total progress / refusal soundness for well-typed expressions in the new fallible fragment (`eval_total` switches off the new constructors with `e.fallibleFree = true`, and `evalConsts_sound` assumes `ConstsAdmitted`, which assumes `evalConsts` succeeded). See Finding 2.
+
+2. **Item 19 (forward references allowed in source, cycle refusal with chain shown):**
+   - **Judgment on unfinished proofs (`DependencySortingComplete` and `ConstOrderIndependent`):** **Must be proved now (`REAL DEFECT`).** Leaving the two core correctness theorems of Item 19 as unproved `def ... : Prop` definitions in `Spec/Const.lean` (punted to A2i) is not acceptable. Furthermore, `ConstOrderIndependent` is stated with a weakened premise that assumes *both* orders are admitted, and no theorem proves that a `CycleChain` excludes a `DependencyOrder`. See Findings 1, 3, and 4.
+
+3. **C2 vacuity-audit fixes (`admitted_copy`, `ofC_copy`, `ConstsAdmitted`, non-`Copy` Refused example, `checkedNeg_inRange`):**
+   - `checkedNeg_ok_arithmetic` and `checkedNeg_error_iff` in `Proofs/Scalar.lean` are genuine, non-vacuous arithmetic laws with valid `Instance` and `Planted` witnesses.
+   - However, `admitted_copy` in `Proofs/Const.lean` still relies on the explicit `U.isCopy d.ty = true` guard in `typeConsts`, while `ofC_copy` was removed from `ConstTypes` so `NonCopyU` could map `CVal.unit` (`()`) to a non-`Copy` type `.text`. In addition, 38 pre-existing theorems in `Proofs/Scalar.lean` were blanket-tagged `Helper ... (approved: PENDING)` to bypass C1 law auditing. See Findings 5, 6, and 7.
+
+---
+
+### 2. Findings
+
+1. **`ConcreteSpec/Spec/Const.lean:397-412` & `ConcreteSpec/README.md:59-61` — [blocker] [REAL DEFECT] Item 19's two global theorems (`DependencySortingComplete` and `ConstOrderIndependent`) are left as unproved `def ... : Prop` obligations.**
+   - **Problem:** Item 19 is decided for C2 in this round. Encoding `DependencySortingComplete` and `ConstOrderIndependent` as unproved `Prop` definitions in `Spec/Const.lean` defers the core metatheory of forward references to A2i.
+   - **Concrete fix:** Prove both as theorems in `ConcreteSpec/Proofs/Const.lean` (with `Law` tags, closed `Instance`s, and `Planted` counterexamples) and remove the deferred-obligation note from `ConcreteSpec/README.md`.
+
+2. **`ConcreteSpec/Proofs/Const.lean:230-363, 610-616` — [blocker] [REAL DEFECT] No law governs `CExpr.eval` or `evalConsts` on the new fallible fragment when evaluation fails or runs with sufficient fuel (`e.fallibleFree = true` switches off Item 18).**
+   - **Problem:** `eval_total` adds the premise `e.fallibleFree = true`, excluding `.plain`, `.plainNeg`, and `.tryConvert`. `evalConsts_sound` assumes `ConstsAdmitted`, which assumes `(evalConsts U fuel ds []).isOk = true`. `typed_not_admitted_iff_refused_proj` is a trivial boolean projection that does not even rule out `.error (.invalid _ _)` on well-typed declarations. Consequently, `plain_not_stuck` is never used in `Proofs/Const.lean`, `plainNeg_not_stuck` is missing from `Proofs/Scalar.lean`, and a mutant `CExpr.eval` that returns `.invalid` or `.outOfFuel` on `1 / 0` still satisfies every theorem in `Proofs/Const.lean`.
+   - **Concrete fix:** Add `plainNeg_not_stuck` to `Proofs/Scalar.lean`, and prove a `Law` in `Proofs/Const.lean` (e.g., `eval_wellTyped_progress` / `typed_evalConsts_refusal`) showing that for `e.ty? Γ = some T`, `Agree env Γ`, and `e.height ≤ fuel`, `e.eval env fuel` is never `.invalid` and never `.outOfFuel`—it is either `.value v` (with `v.ty = T ∧ v.Valid`) or `.failure f` for a failing fallible operation in `e`—and hence for `ConstsTyped U ds` with sufficient fuel, `evalConsts U fuel ds []` is either `.ok env` or `.error (.operation id f)` with `id ∈ ds.map ConstDecl.id`.
+
+3. **`ConcreteSpec/Spec/Const.lean:406-412` — [blocker] [REAL DEFECT] `ConstOrderIndependent` assumes both permutations are admitted, switching off order-independence of admission.**
+   - **Problem:** `ConstOrderIndependent` takes both `ConstsAdmitted U fuel first` and `ConstsAdmitted U fuel second` as premises. If one topological sort of `source` were admitted and another refused, the implication would hold vacuously.
+   - **Concrete fix:** State and prove that for `DependencyOrder U source first` and `DependencyOrder U source second`:
+     1. `ConstsTyped U first ↔ ConstsTyped U second` (with `∀ c, AList.lookup Γ₁ c = AList.lookup Γ₂ c`),
+     2. `ConstsEvaluate U fuel first ↔ ConstsEvaluate U fuel second` (and when `.ok env₁` and `.ok env₂`, `∀ c, AList.lookup env₁ c = AList.lookup env₂ c`),
+     3. Hence `ConstsAdmitted U fuel first ↔ ConstsAdmitted U fuel second`.
+
+4. **`ConcreteSpec/Spec/Const.lean:388-395` & `ConcreteSpec/Proofs/Const.lean:544-605` — [major] [REAL DEFECT] `cycle_chain_real` is a `Bool`/`Prop` reflection helper, and no law proves that a `CycleChain` precludes a `DependencyOrder`.**
+   - **Problem:** `ActualRefChain` (`Spec/Const.lean:363-366`) is an exact structural copy of `refChain` (`Spec/Const.lean:348-351`) in `Prop`, so `cycle_chain_real` only reflects `&&`/`List.any` into `∧`/`∃`. Meanwhile, `ElaboratedConsts` (`Spec/Const.lean:393-395`) pairs `DependencyOrder` and `CycleChain` without proving that they are mutually exclusive (`CycleChain U source chain → ∀ order, ¬ DependencyOrder U source order`).
+   - **Concrete fix:** Reclassify `cycle_chain_real` as a `Representation` helper, and prove the semantic law `cycle_excludes_dependencyOrder : CycleChain U source chain → ∀ order, ¬ DependencyOrder U source order` (equivalently `DependencyOrder U source order → Acyclic U source`) with an `Instance` and a `Planted` mutant.
+
+5. **`ConcreteSpec/Spec/Const.lean:261-267, 302, 436-444, 509-512` & `ConcreteSpec/Proofs/Const.lean:480-540` — [blocker] [REAL DEFECT] `admitted_copy` still depends on the runtime `U.isCopy d.ty = true` guard in `typeConsts`, while `ofC_copy` was dropped from `ConstTypes` so `NonCopyU` could treat `()` as non-`Copy`.**
+   - **Problem:** In Concrete, every scalar in `CTy` (`IntTy`, `bool`, `unit`) is `Copy`. Removing `ofC_copy : ∀ c, isCopy (ofC c) = true` from `ConstTypes` allowed defining `NonCopyU` where `ofC .unit = .text` (`isCopy .text = false`), which falsifies `admitted_copy` only by claiming `()` has a non-`Copy` type. Meanwhile, `typeConsts` still has the explicit runtime guard `U.isCopy d.ty = true` (`Spec/Const.lean:302`), and `admitted_copy` (`Proofs/Const.lean:501-509`) merely rewrites `admitted_copy_proj` (that guard) along `U.ofC v.ty = d.ty`.
+   - **Concrete fix:**
+     1. Restore `ofC_copy : ∀ c, isCopy (ofC c) = true` to `ConstTypes` (and remove `NonCopyU` and `ofC_copy_proj`).
+     2. Remove the redundant `U.isCopy d.ty = true` check from `typeConsts` (`Spec/Const.lean:302`), leaving `if U.ofC T = d.ty ∧ AList.lookup Γ d.id = none`.
+     3. Prove `admitted_copy` (for `d.ty` and `U.ofC v.ty`) from `U.ofC T = d.ty` and `U.ofC_copy`—with zero runtime `isCopy` check in `typeConsts` or `evalConsts`.
+     4. Use a mutant of `typeConsts` that drops `U.ofC T = d.ty` on `[⟨cid "S", .text, .unit⟩]` in `ConstDemo.U` for the `Planted` counterexample, and keep `¬ ConstsAdmitted U 20 [⟨cid "S", .text, .unit⟩]` in `ConstDemo.U`.
+
+6. **`ConcreteSpec/Proofs/Scalar.lean:37-360, 447-534` — [blocker] [REAL DEFECT] Blanket tagging of all 38 pre-existing theorems in `Proofs/Scalar.lean` as `Helper (...) (approved: PENDING)`.**
+   - **Problem:** To satisfy tag checks while editing `checkedNeg`, all 38 pre-existing theorems in `Proofs/Scalar.lean`—including C1's headline contract laws (`eval_toExact`, `machine_plain_eq_exact`, `toBits_shl`, `toBits_shr_unsigned`, `toBits_bitwise`, `toBits_bitNot`, `checked_inRange`, `lossless_iff`, `saturate_below`, `saturate_above`, etc.)—were tagged `Helper (arithmetic)` / `Helper (inversion)` with `(approved: PENDING)`. Many of these theorems are never used in `Proofs/Const.lean`; they are C1's contract laws.
+   - **Concrete fix:** Do not classify C1's contract laws as `Helper`s. Either scope the C2 branch diff in `Proofs/Scalar.lean` strictly to `checkedNeg` (`neg_inRange_iff`, `checkedNeg_ok_arithmetic`, `checkedNeg_error_iff`, plus `plainNeg_not_stuck`), or if `Proofs/Scalar.lean` is being audited under the convention in this change, tag C1's contract laws as `Law` with `Instance` and `Planted` witnesses and remove/demote the vacuous C1 restatements listed in Section 3.
+
+7. **`ConcreteSpec/Proofs/Const.lean:440-452, 480-498, 501-509, 610-616` — [minor] [REAL DEFECT] Redundant conclusion conjunct in `evalConsts_sound` / `admitted_copy` and dead `_proj` lemmas.**
+   - **Problem:**
+     - `evalConsts_sound` and `admitted_copy` assume `h : ConstsAdmitted U fuel ds` (whose second conjunct is `(evalConsts U fuel ds []).isOk = true`) and conclude `∃ env, evalConsts U fuel ds [] = .ok env ∧ ...`, repeating the hypothesis in the conclusion and placing the subject `evalConsts` in both hypothesis and conclusion.
+     - `admitted_iff_typed_evaluates_proj` (`Iff.rfl`), `ofC_copy_proj`, and `typed_not_admitted_iff_refused_proj` have zero callers in `Proofs/Const.lean`.
+   - **Concrete fix:** State `evalConsts_sound` with hypotheses `(ht : ConstsTyped U ds) (he : evalConsts U fuel ds [] = .ok env)` (promoting `evalConsts_sound_inv`) or conclude `∀ env, evalConsts U fuel ds [] = .ok env → ...`; delete unused `_proj` restatements.
+
+---
+
+### 3. Complete Law-by-Law Vacuity and Convention Audit
+
+#### A. `ConcreteSpec/Proofs/Const.lean`
+
+| Theorem / Definition | Tag in Diff | Vacuity & Convention Verdict | Witness (`Instance` / `Planted`) & Notes |
+| :--- | :--- | :--- | :--- |
+| `eval_total` (`:230`) | `Law` | **PARTIAL DEFECT** (switches off fallible ops via `e.fallibleFree = true`) | Non-vacuous on the `fallibleFree` fragment (`Instance` at `:369`, `Planted` with `noConstValues` at `:375` follow the convention), but needs a companion progress/refusal `Law` for the fallible constructors of Item 18 (Finding 2). |
+| `evalConsts_sound` (`:440`) | `Law` | **MINOR DEFECT** (first conjunct of conclusion projects `h.2`) | Core soundness property (`evalConsts_sound_inv`) is non-vacuous; `Instance` (`:458`) and `Planted` (`:467`, mutant `boolConstValues`) are valid, but conclusion should not re-assert `∃ env, evalConsts ... = .ok env` from `ConstsAdmitted` (Finding 7). |
+| `admitted_copy` (`:501`) | `Law` | **VACUOUS / REAL DEFECT** | Holds via `admitted_copy_proj` (the explicit `U.isCopy d.ty = true` guard in `typeConsts`) and requires the bogus `NonCopyU` (`ofC .unit = .text`) for its `Planted` witness (`:526`). Fix per Finding 5. |
+| `cycle_chain_real` (`:547`) | `Law` | **VACUOUS AS LAW / REAL DEFECT** | Pure `Bool`/`Prop` reflection between identical recursive definitions `refChain` and `ActualRefChain`. Reclassify as `Representation` and prove `cycle_excludes_dependencyOrder` as the `Law` (Finding 4). |
+| `admitted_copy_proj` (`:482`) | `Helper (projection)` | **REJECT EXEMPTION** | Projects the runtime `U.isCopy d.ty = true` guard in `typeConsts`. Replace with structural `admitted_copy` once `ofC_copy` is restored and the guard is removed from `typeConsts` (Finding 5). |
+| `ofC_copy_proj` (`:491`) | `Representation` | **REJECT EXEMPTION** | Unused lemma specialized to toy `ConstDemo.U`; restore `ofC_copy` to `ConstTypes` (Finding 5). |
+| `admitted_iff_typed_evaluates_proj` (`:496`) | `Helper (projection)` | **REJECT EXEMPTION** | Dead `Iff.rfl` restatement of `ConstsAdmitted` with no callers (Finding 7). |
+| `typed_not_admitted_iff_refused_proj` (`:610`) | `Helper (projection)` | **REJECT EXEMPTION** | Dead boolean tautology (`¬(True ∧ r.isOk) ↔ ∃ e, r = .error e`) with no callers; replace with a real refusal law that rules out `.invalid` on `ConstsTyped` (Finding 2). |
+| `DependencySortingComplete` (`Spec/Const.lean:399`) | Unproved `def : Prop` | **MISSING PROOF / REAL DEFECT** | Must be proved as a `Law` in `Proofs/Const.lean` with `Instance` and `Planted` witness (Finding 1). |
+| `ConstOrderIndependent` (`Spec/Const.lean:406`) | Unproved `def : Prop` | **MISSING PROOF & WEAKENED PREMISE / REAL DEFECT** | Assumes both orders are admitted; must prove `ConstsAdmitted U fuel first ↔ ConstsAdmitted U fuel second` and lookup equality in `Proofs/Const.lean` (Findings 1 & 3). |
+
+#### B. `ConcreteSpec/Proofs/Scalar.lean` (touched by diff)
+
+| Theorem | Tag in Diff | Vacuity & Convention Verdict | Witness / Notes |
+| :--- | :--- | :--- | :--- |
+| `checkedNeg_ok_arithmetic` (`:376`) | `Law` | **PASS (Non-vacuous)** | Valid closed `Instance` (`:425`) and `Planted` (`:430`, mutant `identityNeg`). |
+| `checkedNeg_error_iff` (`:396`) | `Law` | **PASS (Non-vacuous)** | Valid closed `Instance` (`:435`) and `Planted` (`:440`, mutant `uncheckedNeg`). |
+| `checkedNeg_inRange_proj` (`:365`) | `Helper (projection)` | **REJECT EXEMPTION (Dead)** | Private and never called anywhere in `Scalar.lean` or `Const.lean`; delete it. |
+| `ofBits_toBits` (`:59`), `toBits_ofBits` (`:467`), `wrap_of_inRange` (`:68`), `saturate_of_inRange` (`:84`), `saturate_below` (`:531`), `saturate_above` (`:535`), `shr_inRange` (`:118`), `tmod_inRange` (`:138`), `checked_inRange` (`:151`), `plain_not_stuck` (`:187`), `wrapping_of_checked` (`:203`), `saturating_of_checked` (`:212`), `lossless_iff` (`:224`), `machine_plain_eq_exact` (`:255`), `machine_inRange` (`:296`), `eval_toExact` (`:321`), `boolOfBits_boolToBits` (`:447`), `boolOfBits_some_iff` (`:451`), `toBits_wrap` (`:472`), `toBits_shl` (`:479`), `toBits_shr_unsigned` (`:488`), `toBits_bitwise` (`:511`), `toBits_bitNot` (`:524`) | `Helper (arithmetic)` `(approved: PENDING)` | **REAL DEFECT (Misclassified C1 Laws)** | Non-vacuous C1 contract laws blanket-tagged `Helper` without `Instance`/`Planted` witnesses (Finding 6). |
+| `inRangeOr_inRange` (`:111`), `plain_ok_iff` (`:175`), `plain_trap_iff` (`:181`), `checked_wrapOp` (`:198`), `tryConvert_ok_iff` (`:237`), `exact_defined` (`:247`), `plainNeg_ok_iff` (`:353`), `plainNeg_trap_iff` (`:358`), `lossyConvert_inRange` (`:458`), `lossyConvert_of_inRange` (`:461`), `toBits_wrapping` (`:475`) | `Helper (...)` `(approved: PENDING)` | **VACUOUS IF COUNTED AS LAWS** | Direct definitional unfoldings / guard projections (`inRangeOr`, `plain`, `plainNeg`, `tryConvert`, `CTerm.eval`) or 1-line aliases of `wrap` (`lossyConvert_*`, `toBits_wrapping`). Only acceptable as private internal helpers where actually used by a downstream proof. |
+
+---
+
+### 4. Exemption Decisions for `(approved: PENDING)` Lemmas
+
+- **Approved (`ConcreteSpec/Proofs/Const.lean`):**
+  - `bind_value_inv` (`:22`) — **APPROVE** (private monadic bind inversion used in `eval_sound_inv`).
+  - `sameInt_some_inv` (`:27`) — **APPROVE** (private operand extraction used in `eval_sound_inv`).
+  - `twoBools_some_inv` (`:35`) — **APPROVE** (private operand extraction used in `eval_sound_inv`).
+  - `eval_sound_inv` (`:44`) — **APPROVE** (private structural induction lemma used in `typed_eval_matches_inv`).
+  - `CVal.int_of_ty` (`:198`), `CVal.bool_of_ty` (`:205`), `sameIntTy_some` (`:212`), `bothBool_true` (`:222`) — **APPROVE** (private typing inversions used in `eval_total`).
+  - `typeConsts_mono_inv` (`:389`), `typeConsts_decls_inv` (`:406`), `typed_eval_matches_inv` (`:427`), `evalConsts_sound_inv` (`:458`) — **APPROVE** (private induction helpers used in `evalConsts_sound`).
+  - `dependsOn_reference_inv` (`:541`) — **APPROVE** (private `Bool`/`Prop` bridge for `dependsOn`).
+- **Rejected (`ConcreteSpec/Proofs/Const.lean`):**
+  - `admitted_copy_proj` (`:482`) — **REJECT** (projects runtime `isCopy` guard; see Finding 5).
+  - `ofC_copy_proj` (`:491`) — **REJECT** (unused demo-only lemma; restore `ofC_copy` to `ConstTypes`).
+  - `admitted_iff_typed_evaluates_proj` (`:496`) — **REJECT** (unused `Iff.rfl` restatement).
+  - `typed_not_admitted_iff_refused_proj` (`:610`) — **REJECT** (unused projection; replace with well-typed refusal law).
+- **Approved (`ConcreteSpec/Proofs/Scalar.lean`):**
+  - `neg_inRange_iff` (`:370`) — **APPROVE** (private arithmetic helper used by `checkedNeg_ok_arithmetic` and `checkedNeg_error_iff`).
+  - Internal lemmas actually used by `Proofs/Const.lean` or `Proofs/Scalar.lean` (`IntTy.min_le_max`, `toBits_lt`, `ofBits_inRange`, `inRangeOr_inRange`, `machine_operands_inv`, `exactOf?_some`, `plain_ok_iff`, `plainNeg_ok_iff`, `wrap_inRange`, `saturate_inRange`, `bitwise_inRange`, `bitNot_inRange`, `boolToInt_inRange`) may be kept as helpers *only* insofar as they support downstream `Law`s, not as a substitute for C1's `Law`s.
+- **Rejected (`ConcreteSpec/Proofs/Scalar.lean`):**
+  - `checkedNeg_inRange_proj` (`:365`) — **REJECT** (unused private projection; delete).
+  - Blanket `Helper (arithmetic)` exemptions on C1's standalone contract laws (`eval_toExact`, `machine_plain_eq_exact`, `toBits_shl`, `toBits_shr_unsigned`, `toBits_bitwise`, `toBits_bitNot`, `saturate_below`, `saturate_above`, `boolOfBits_boolToBits`, `boolOfBits_some_iff`, etc.) — **REJECT** (see Finding 6).
+
+VERDICT: CHANGES
+rc=0

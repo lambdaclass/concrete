@@ -1,0 +1,37 @@
+Completed all ten items. Kept and repaired Kimi’s unfinished `Observe.lean` examples. Working tree is clean; nothing was pushed; `axioms.golden` is unchanged.
+
+| Item | Completed by | Laws and witnesses |
+|---|---|---|
+| 1 | Kimi + me | `nodup_renumber` and `lookup_renumber` preserve table uniqueness and lookup under injective renumbering. Successor witnesses success; constant renumbering merges sites. Strengthened the outside-function edit instance to actually change another function and renumber sites; global-number-derived keys violate `OutsideFunctionEdit`. |
+| 2 | Kimi + me | Canonicalization laws establish unique entries, sound and retained edges, sharing, and distinct arguments. Instances cover equal requests and differing type/capability arguments. I added actual faulty interners keyed by site or generic alone; they fail sharing or merge distinct requests. |
+| 3 | Kimi + me | Byte-step laws cover line advancement, ordinary bytes, newline resets and tabs. Witnesses include UTF-8 and EOF; mutants count tabs or characters incorrectly. Completed accepted/refused source-backed site-table examples. Removed the rejected record-shape location theorem. |
+| 4 | Kimi + me | Discharge soundness binds context, requested identity, authoritative lookup and proposition. I made lookup use each obligation’s intrinsic ID and proved the returned ID matches. Instances exercise successful consumption and each context mismatch; planted consumers omit identity, context or proposition checks. |
+| 5 | Kimi + me | Load soundness, completeness and admission laws check actual loading and retain both collision participants. Instances cover collision refusal and valid admission; planted checks drop a participant or admit collisions. Module paths are nonempty. |
+| 6 | Kimi; tags completed by me | `trapLine_injective` recovers rendered fields. Different ranges witness its intended scope; a renderer omitting the column makes distinct rendered tuples collide. |
+| 7 | Kimi; citations completed by me | Added non-function stable owners and opaque `PackageRelativeKey`. Generic coverage follows OD77/OD148; no unsupported generic trait-item constructor was added. |
+| 8 | Kimi + me | Structured segments use kinds, labels and per-kind ordinals. I added full nested-path assignment. Root and descendant laws preserve keys across different-kind/named insertions and unrelated renaming, while ancestor renaming updates its prefix. Nested-body instances and raw-index, shared-ordinal and stale-prefix mutants exercise these laws. |
+| 9 | Kimi + me | Structured package name/version and separate origin are implemented. The load instance explicitly verifies both participants when equal package identities arrive from different origins; the admit-all mutant violates refusal. Version syntax remains opaque. |
+| 10 | Kimi + me | `read_encode` round-trips known categories; `read_unknown` refuses unknown ones. A category-dropping encoder fails the current-version round trip; a catch-all reader accepts an unknown category and violates refusal. |
+
+The law witnesses carry the required fully qualified `Instance`/`Planted` tags directly on examples. Projection helpers are marked separately.
+
+Commits:
+
+- `65aafb86f` — Kimi’s operational identity and evidence contracts.
+- `d24559d6c` — complete source-backed site-validation examples.
+- `0ec62eda5` — nested stable paths and descendant edit laws.
+- `e8dc5325a` — authoritative lookup uses intrinsic obligation identity.
+- `ec2cb6501` — align witnesses and remove the shape-only location claim.
+- `d30274cea` — operational specialization-interner mutants.
+- `fc9911053` — category-dropping premise encoder counterexample.
+
+Validation on final commit `fc9911053f3bf9fc75b048a3f14c0fc6dc6104b3`:
+
+- Build: **passed**.
+- Rules: **32 passed, 0 failed**.
+- Trust ban: **23 passed, 0 failed**, covering 419 examples.
+- Diff whitespace check: **passed**.
+
+The named elaboration obligation remains `OutsideFunctionEdit`, assigned to R-0492/O1. Actual surface elaboration and span production remain O1 work. Heavy gates and an independent second review were not run.
+
+QUESTIONS: package-version syntax remains undecided. Future generic associated-item categories remain omitted pending a decision. No implementation item 1–10 is left unfinished.

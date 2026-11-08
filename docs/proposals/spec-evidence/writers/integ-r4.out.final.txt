@@ -1,0 +1,28 @@
+Implemented the round-four fixes:
+
+- Evaluator-level oracle correspondence covers all four request outcomes.
+- Termination certificates cover an independently declared, inhabited call domain.
+- Observation soundness holds for every matching C6 stream.
+- Interleaved requests have exact per-site occurrence accounting.
+- Pointwise evaluator correspondence supplies the infinite-execution evidence; round trips are representation lemmas.
+
+[Full report](/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/_review/ROUND4_RESULT.md) lists each finding’s changes, all Instance/Planted witnesses, and every one of the **86 PENDING exemptions**.
+
+Commits:
+
+- `b27323c9c` — projected streams and interval counts
+- `c39dce34d` — close request computation equality
+- `43a2f5df0` — separate conditional termination from usable certificates
+- `0e0c79795` — certificate examples and rejection controls
+- `ae69d2192` — evaluator request-resolution correspondence
+- `b9c18fa1b` — closed request and observation controls
+- `3f1ae5ed8` — wrong-history and interleaving controls
+- `88a2029f1` — theorem classifications and interval mutation
+- `6f8741f8f` — pointwise infinite correspondence
+- `78e62b1a4` — core adequacy and termination controls
+- `6349df47e` — separated-site specialization and reconstruction control
+- `ed98a8476` — classification explanations
+
+At `ed98a8476`, build **PASS**, rules **32/0**, trust ban **23/0**. Protected files are unchanged; nothing was pushed. The first commit mistakenly preceded a successful build; the immediately following commit fixed it, preserving history.
+
+QUESTIONS: None.

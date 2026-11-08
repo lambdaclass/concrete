@@ -1,0 +1,9 @@
+# C2 round, continued (Codex takes over from Kimi, whose weekly quota ran out mid-round)
+
+Kimi committed 28559b7d1 ("proof C2: characterize checked negation arithmetic") and left an uncommitted edit to ConcreteSpec/Spec/Const.lean and an untracked `_scratch.lean` (delete `_scratch.lean`; never commit it). Kimi stopped while a Const.lean build was failing on an item-19 forward-reference example (`A = B + 1` with `B` later). Read _review/BRIEF.md (the whole task: owner decisions 18 and 19, then the vacuity audit fixes) and _review/COMMON.md, inspect `git diff 07c16bb5f..HEAD` and the working-tree change, keep or discard the uncommitted edit, and complete every part of the brief, committing each piece after the build passes (do not push; do not edit scripts/proofs/axioms.golden). In your final message say per brief item whether it was done by Kimi's commit, by you, or is left (with why).
+
+## Best long-term design (owner rule, binding)
+Judge and fix everything by the best long-term design. Never cut corners for speed, a smaller diff or fewer rounds. Implement the structural fix, not a containment patch. If staging is truly unavoidable, record the long-term design and its roadmap row in your final message.
+
+## Evidence tags (vacuity gate N2, FINAL convention, binding)
+Read _review/VACUITY_CONVENTION_FINAL.md and follow it exactly. Every theorem of the files you touch gets exactly one class tag (`Law (subject ...)`, `Helper (...)`, `Representation lemma.`), every Law gets `Instance (law `L`, case `c`)` examples that are full closed applications of the law and `Planted (law `L`, case `c`, subject `S`, mutant `M`)` examples whose type is the law's hypotheses with the subject replaced by the mutant at the instance's arguments, conjoined with the negated conclusion. Obligations are `def ... : Prop`, never theorems. Leave exemption approvals as `(approved: PENDING)`; reviewers fill them. All names fully qualified.

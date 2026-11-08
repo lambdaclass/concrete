@@ -1,0 +1,54 @@
+**C6 is still incomplete and reopened.** Final external-state preservation remains unimplemented; the other repairs below are committed. Nothing was pushed.
+
+At `8dd47d36e`, validation passed:
+
+- `lake build ConcreteSpec`
+- `scripts/spec/rules.sh` — 32 passed
+- `scripts/proofs/trust_ban.sh` — 23 passed
+- Clean working tree; no Git operation in progress.
+
+The second reviewer found no new concrete defect in the revised report, source, routing, and output proofs. Generated-proof N2 inspection remains unverified; helper approvals remain `PENDING`.
+
+Each law has paired Instance/Planted examples under the case shown:
+
+| Law | Statement and evidence case |
+|---|---|
+| `silent_internal_steps` | Finite silence preserves events; `leading_silence` rejects first-step-only observation. |
+| `blocked_silent_internal_steps` | Silence preserves blocked observations; `pending_silence` rejects lost output. |
+| `infinite_stuttering` | Infinite stuttering preserves visible prefixes; `delayed_emissions` rejects first-step-only prefixes. |
+| `byteColumn_tab` | A tab adds one byte; `utf8_then_tab` rejects double-counting tabs. |
+| `source_trap_column` | Source-derived diagnostics distinguish wrong byte columns; `utf8_tab` rejects scalar counting. |
+| `doubling_reply_correct` | An independent addition-based producer satisfies doubling; `double_three` rejects an arithmetic fault. |
+| `RoutingDemo.reply_correct` | Two-kind dispatch satisfies arithmetic and routing; `typed_route` rejects a mismatched kind. |
+| `runFrom_report_trace` | Actual runs produce trace-valid observations; `prior_exchange_block` rejects missing pending history. |
+| `runFrom_blocked_report` | Actual blocked reports retain the exact prior history; `preserve_prior_exchange` rejects dropping only that history. |
+| `delay_preserves_observation` | Execution delay preserves classification and observations; `silent_divergence` rejects conversion to termination. |
+| `project_physical_outputs` | Independent per-event output correspondence lifts over histories; `ordered_physical_outputs` rejects projection erasure. |
+| `OutputDemo.output_then_trap` | Executed logging retains ordered output before the exact trap; `two_outputs_then_trap` rejects an output-erasing adapter. |
+
+Additional repairs require valid adapter trap paths, reject absolute/backslash paths, and expose the exact allowed-answer/failed-continuation refusal alongside a successful binding case. Existing projection and representation statements remain available with explicit classifications.
+
+I agreed with the vacuity findings where statements merely extract admission premises or unfold definitions. `runFrom_validTrace` contains substantive evaluator induction; it now supports the operational report laws rather than claiming independent environment-policy correctness.
+
+Commits, chronologically:
+
+```text
+069098cb0 Construct byte columns from source prefixes
+3c5cd894f Isolate continuation refusal in examples
+58a7d111a Prove actual-run report trace validity
+38325bd2e Verify independent response production
+4564acf72 Verify execution-delay classification
+d4cae77ed Require valid trap paths; classify proof infrastructure
+5fc4303ed Derive observed path validity; reject host paths
+a98419736 Cover valid paths, forbidden blocking and exhaustion
+25b4ba9b7 Require exact blocked reports retaining prior history
+867db80e2 Remove projection from source-column law proof
+52e49c45c Reject mismatched response routing
+0974e2977 Prove operational output-before-trap correspondence
+fa7df94af Lift independent physical-output obligations
+8dd47d36e Record remaining state obligation; reject output erasure
+```
+
+**Remaining:** observations still omit final external state. A correct repair must retain the terminal store, prove correspondence with C1 execution, and connect its abstract external projection to operation effects and observation equivalence. That unfinished design requirement is recorded under R-0571 in the README. Source-to-span elaboration remains O1.
+
+**QUESTIONS:** None; no unresolved owner decision was identified.

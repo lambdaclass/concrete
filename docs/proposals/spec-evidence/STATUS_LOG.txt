@@ -19,3 +19,19 @@ C9 owner answers (keys/PackageId/premises) added to C9 ROUND4 items 8-10. Suffix
 OWNER RULE push-often: backup-loop pushes every writer wip/spec-* tip (ff-only) every 10 min + evidence snapshot branch wip/spec-evidence-2026-11-08 (docs/proposals/spec-evidence/, first 0dcffd0bf).
 OWNER RULE writers-only: Claude writes no file content (no golden commits, no evidence snapshots). Retired evidence-sync; backup-loop pushes only. Evidence snapshot 0dcffd0bf was produced by Claude script before the rule -> Kimi to redo/own branch.
 Goldens: golden-and-gates retired; golden-flow.sh = coordinator runs generator on ci-2, Kimi inspects+commits, coordinator verifies byte-equal then gates.
+18:45 RESUME: Kimi 429 (weekly) killed: spec-c9-kimi-r4 (after commit 65aafb86f, uncommitted Observe.lean), spec-c2a-kimi (after 28559b7d1, uncommitted Const.lean + _scratch.lean), spec-c6a-kimi (no work), spec-c10-kimi-r5 (no work), evid-kimi-loop (stopped). Re-briefed: c9 r4b Codex, c2a 1b Codex, c6a Codex, c10 r5 Codex, C5 r4 agy (Codex wrote r2/r3). Goldens + evidence now Codex. Acceptances recorded as 'pending Kimi'. Lanes: intg3, c1ag1 / c7g3, c4ag1. Reviews: intg3, c7r3 (codex+agy), c1a, c4a (agy).
+18:54 intg3 fcb18d67 + c7g3 e13f0f27: 7 gates PASS; reviews CHANGES (intg3 codex 3 major + agy blocker; c7r3 codex 4 major + agy blocker). c1a agy CHANGES (6, blockers); c4a agy CHANGES (1 minor + nit). Fix rounds: integ r4, c7 r4 (Codex); c1a r2, c4a r2 (agy). C9 r4 fc991105 done (Codex) -> golden/gates c9g4 + agy review. c1ag1/c4ag1 gates relaunched (missing origin/main ref). No contract accepted.
+19:05 c1ag1 10e87b5d, c4ag1 c8c76ade, c9g4 4d11dabc: 7 gates PASS each. C9 r4 agy CHANGES (3 blockers) -> C9 r5 (agy) queued after C4 r2.
+19:23 C2 r1b cf203a6df gates 7/7 pass; agy CHANGES (5 blocker,1 major,1 minor); round 2 (agy) queued as queue-c2a2 after queue-c9r5
+19:26 C5 r4 cd2d4e29 (agy) done; lane-c5 (c5g4) + rev-c5r4 (codex) launched
+19:30 C5 r4 gates c5g4 running at fb205bc4; codex CHANGES (4 major, evidence/classification; Q3 statements OK); r5 codex queued after c10r5c. integ r4 ed98a8476 done; lane intg4 + agy rev-intg4 launched
+19:37 C5 c5g4 gates 7/7 PASS at fb205bc4. integ r4 agy CHANGES (2 blocker, 2 major, 2 minor; 76 approve / 10 reject exemptions); r5 agy queued after c2a2
+19:38 C7 r4 224ccfb3f (codex) done; lane c7g4 + agy rev-c7r4 launched; intg4 gates running at fd589aad0
+19:40 intg4 gates 7/7 PASS at fd589aad0 (agy CHANGES stands; r5 queued). c7g4 golden refused (establishedReport.eq_1 on-demand eq lemma); rule amended, relaunched as c7g4b
+19:45 hourly check: all units alive; c7 golden refused twice (eq_1), rule refined, relaunched c7g4c; briefs got no-reviewers/no-notes rule
+19:55 C7 r4 gates 7/7 PASS at f81d146b7; agy CHANGES (3 blocker, 2 major); r5 agy queued after integ5
+19:55 C6 audit 8dd47d36e (codex) done, final external state deferred; lane c6ag1 + agy rev-c6a launched; c5 r5 codex running
+20:05 C6 audit gates 7/7 PASS at 425ee14b5; agy CHANGES (2 blocker incl. final external state, 6 major, 1 minor); r2 agy queued after c7r5
+20:15 C5 r5 8e11b786 (codex) done; lane c5g5 + agy rev-c5r5 launched; c1a agy r2 running
+20:26 C5 r5 gates c5g5 7/7 PASS at a8fd5384; rev-c5r5 failed (argv too long), rev.sh fixed for large diffs, relaunched
+20:36 C5 r5 agy CHANGES (3 major: 29 demoted contract laws, frame-local completeness, roundtrip mutant; 2 minor); r6 agy queued after c6a2

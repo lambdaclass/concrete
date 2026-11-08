@@ -1,0 +1,141 @@
+### Overview of Round 4 Items (1–10)
+
+- **Item 1 (Site-key table & renumbering)**: `SiteKeyTable.nodup_renumber` and `SiteKeyTable.lookup_renumber` are real laws over `SiteKeyTable.renumber`. However, `OutsideFunctionEdit.persistentKeys` is a projection law over a 1-field propositional structure (`OutsideFunctionEdit`) rather than a theorem over an operation that assigns keys per function.
+- **Item 2 (Specialization canonicalization)**: `SpecializationTable.canonicalize` and its five laws (`canonicalize_nodup`, `canonicalize_edge_sound`, `canonicalize_complete`, `canonicalize_share`, `canonicalize_distinct`) are genuine operational laws.
+- **Item 3 (Load check refusing collisions naming both)**: `LoadedModules.load`, `load_refusal_sound`, `load_refusal_complete`, and `load_admitted` operate on `List LoadedModule` and refuse both cross-package top-level collisions (OD44) and same-package/different-origin collisions.
+- **Item 4 (`SourceText` line/column step laws)**: `lineAt_append*` and `columnAt_append*` prove byte-step equations on `SourceText`, and `SiteTable.Valid` now checks `LocationOk` against `SourceTable`, though `SiteTable.Valid` has no theorem connecting it to `trapLine` / `Span.LocationOk`, and the `SourceText` vacuity witnesses do not follow the closed-application / mutant-subject convention.
+- **Item 5 (Evidence discharge consuming context and obligation identity)**: `SafetyEvidence.discharge` checks context, obligation ID, table lookup, and proposition equality, **but** uses `classical` propositional equality `e.fact = obligation.fact` (`propext`), which collapses all true propositions into one and makes `discharge_proposition_mismatch`'s hypothesis unsatisfiable for any true obligation.
+- **Item 6 (`trapLine` planted)**: `Observe2.lean` adds `trapLineWithoutColumn` and `spDifferentColumn` as a planted counter-example for `trapLine_injective`.
+- **Item 7 & Item 10 (Premise schema completeness, closed enum, versioned schema, unknown categories refused)**: `PremiseKind` is a closed enum for the decided rows and `EncodedPremise.read` is versioned, **but** `EncodedPremise.read_unknown` takes `PremiseKind.decode reader record.category = none` (the internal guard of `read`) as a premise, which switches off the obligation if `decode` has a catch-all, and there is no law for version-mismatch refusal.
+- **Item 8 (Owner Decision: `FunctionRelativeKey`)**: `FunctionRelativeKey` is a structured path of `(ConstructKind, SegmentName)` segments without raw child indices, **but** (a) `key_insert_*` and `descendant_insert_*` pass `before ++ inserted :: after` as the `preceding` list (so `after` is still *before* `target`, and insertion of any sibling *after* `target` in a forest is never stated or proved), (b) `KeyConstruct.pathAt` computes ordinals only among immediate parent children rather than same-kind siblings under the nearest named ancestor, and (c) `ConstructName.rename` conflates renaming a `.named` construct with pinning an `.unnamed` construct while `SegmentName.label` erases the distinction between them.
+- **Item 9 (Owner Decision: `PackageId`)**: `PackageId` is structured `name : String` + `version : PackageVersion` with no content hash, and `PackageOrigin` is separate and checked at load time.
+
+---
+
+### Findings
+
+1. **`ConcreteSpec/Spec/Prim.lean:296-309` & `ConcreteSpec/Proofs/Prim.lean:173-181, 567-595` — BLOCKER — REAL DEFECT: `SafetyEvidence.discharge` uses `classical` equality on `Prop` (`e.fact = obligation.fact`), which identifies all true propositions by `propext` and makes `discharge_proposition_mismatch` vacuous on true obligations**
+   - **Problem**: `SafetyEvidence` carries `proof : e.fact`, so `e.fact` is always a true `Prop`. In Lean 4, `if fact : e.fact = obligation.fact` under `classical` uses `propext` and excluded middle: for *any* `obligation` whose `obligation.fact` is true (e.g., `2 + 2 = 4`), `(1 + 1 = 2) = (2 + 2 = 4)` holds by `propext`, so `evidence.discharge` succeeds and fabricates a proof of `2 + 2 = 4` from `1 + 1 = 2`! Conversely, the premise `mismatch : e.fact ≠ obligation.fact` in `SafetyEvidence.discharge_proposition_mismatch` is equivalent to `¬ obligation.fact` and can **never** hold for two distinct true propositions (the Vacuity instance at line 568 only works because `1 + 1 = 3` is false).
+   - **Long-term fix**: Do not compare raw `Prop`s with `classical` `propext`. Give obligations and evidence a decidable statement representation (e.g., a typed/syntactic proposition descriptor or statement key `stmt : ObligationStmt` with an interpretation ` ObligationStmt.Interp : ObligationStmt → Prop`, where `SafetyEvidence` carries `stmt : ObligationStmt` and `proof : stmt.Interp`, and `SafetyObligation` carries `stmt : ObligationStmt`). Check `if h : e.stmt = obligation.stmt` computably (making `SafetyEvidence.discharge` computable without `classical`), transport `e.proof` along `congrArg ObligationStmt.Interp h`, and prove `discharge_proposition_mismatch` for two distinct *true* statements (e.g., `1 + 1 = 2` vs `2 + 2 = 4`). Also remove the now-dead `SafetyEvidence.Usable` (`ConcreteSpec/Spec/Prim.lean:275, 311`) or wire `discharge` through it.
+
+2. **`ConcreteSpec/Proofs/Ident.lean:509-512, 915-925` — BLOCKER — REAL DEFECT: `EncodedPremise.read_unknown` takes the internal `decode` result as a premise, switching off the law against a catch-all decoder, and lacks a version-mismatch refusal law**
+   - **Problem**: `EncodedPremise.read_unknown` states:
+     ```lean
+     theorem EncodedPremise.read_unknown (reader : SpecVersion) (record : EncodedPremise)
+         (current : record.spec = reader) (unknown : PremiseKind.decode reader record.category = none) :
+         record.read reader = none
+     ```
+     Because `EncodedPremise.read` is defined by `if record.spec = reader then match PremiseKind.decode reader record.category with | none => none ...`, this theorem merely restates the `none` branch of `read`. Worse, if `PremiseKind.decode` had a catch-all branch (`| _ => some .assume`), the premise `PremiseKind.decode reader record.category = none` would be `False`, switching off the theorem instead of catching the bug! In addition, there is no theorem proving that version mismatches (`record.spec ≠ reader` or `reader ≠ specVersion`) are refused.
+   - **Long-term fix**: State `EncodedPremise.read_unknown` against the closed `PremiseKind` enumeration rather than `decode = none`:
+     ```lean
+     theorem EncodedPremise.read_unknown (reader : SpecVersion) (record : EncodedPremise)
+         (unknown : ∀ kind : PremiseKind, kind.encode ≠ record.category) :
+         record.read reader = none
+     ```
+     (which holds without even assuming `record.spec = reader`), and add `EncodedPremise.read_version_mismatch (reader : SpecVersion) (record : EncodedPremise) (mismatch : record.spec ≠ reader ∨ reader ≠ specVersion) : record.read reader = none`.
+
+3. **`ConcreteSpec/Spec/Ident.lean:519-520` & `ConcreteSpec/Proofs/Ident.lean:53-55, 526-548` — BLOCKER — REAL DEFECT: `OutsideFunctionEdit.persistentKeys` is a projection law that restates its structure field**
+   - **Problem**: `OutsideFunctionEdit` is a 1-field `Prop` structure:
+     ```lean
+     structure OutsideFunctionEdit (before after : FnId → SiteKeyTable) (edited : FnId) : Prop where
+       keysUnchanged : ∀ f, f ≠ edited → List.map Prod.snd (after f) = List.map Prod.snd (before f)
+     ```
+     And `theorem OutsideFunctionEdit.persistentKeys` is `edit.keysUnchanged f outside`. That is a pure projection law (forbidden by both the owner's vacuity rule and `VACUITY_CONVENTION_FINAL.md`).
+   - **Long-term fix**: Define the actual per-function key-table assignment operation over a program's function bodies (e.g., `assignProgramKeys (bodies : FnId → List KeyConstruct) (sites : FnId → List SiteId) : FnId → SiteKeyTable` or `KeyConstruct.assignTable (owner : StableOwner) (forest : List KeyConstruct)`), and prove as a real theorem that updating `bodies` at `edited` (and arbitrary lexical site renumbering across functions) leaves `List.map Prod.snd` unchanged for every `f ≠ edited`.
+
+4. **`ConcreteSpec/Spec/Ident.lean:333-420` & `ConcreteSpec/Proofs/Ident.lean:59-150` — MAJOR — REAL DEFECT: `KeyConstruct` insertion laws only test insertion inside `preceding`, `pathAt` does not scope ordinals to the nearest named ancestor, and `rename` conflates naming with pinning**
+   - **Problem**:
+     1. In `KeyConstruct.key_insert_differentKind`, `key_insert_named`, `descendant_insert_differentKind`, and `descendant_insert_named`, the argument `before ++ inserted :: after` is passed as `preceding : List KeyConstruct`. That means `before`, `inserted`, and `after` are **all before `target`**! There is no law for `KeyConstruct.pathAt` showing that inserting *any* sibling (including an unnamed sibling of the *same* kind) **after** `target` in a forest preserves `target`'s key, nor that inserting a named or different-kind sibling *before* `target` in a forest shifts `target`'s route index from `i` to `i + 1` while preserving `pathAt`:
+        `KeyConstruct.pathAt (before ++ inserted :: target :: after) ((before.length + 1) :: route) = KeyConstruct.pathAt (before ++ target :: after) (before.length :: route)`.
+     2. Owner Decision 8 specifies: *"unnamed items by ordinal among same-kind siblings under the nearest named ancestor with an optional pinning label"*. `KeyConstruct.pathAt` instead resets ordinal counting at every unnamed intermediate node (`forest.take index`) rather than accumulating or scoping under the nearest named ancestor.
+     3. `ConstructName.rename` (`Ident.lean:382`) rewrites `.unnamed _` to `.unnamed (some name)`, conflating renaming a named declaration/item with attaching a pinning label to an unnamed item, and providing no unpin operation. Furthermore, `KeyConstruct.segment` maps both `.named name` and `.unnamed (some name)` to `.label name`, so a named sibling and a pinned unnamed sibling of the same kind with the same string produce identical `KeySegment`s.
+   - **Long-term fix**: Separate renaming a `.named` construct from pinning/unpinning an `.unnamed` construct; distinguish named segments from pinned-label segments (or enforce disjointness in well-formed scopes); state the forest-level insertion-stability laws on `KeyConstruct.pathAt` for both insertions before `target` (same-kind named, different-kind unnamed) and arbitrary insertions after `target`; and align ancestor scoping with Owner Decision 8.
+
+5. **`ConcreteSpec/Proofs/Ident.lean:595-925` & `ConcreteSpec/Proofs/Prim.lean:490-502` — MAJOR — REAL DEFECT: Multiple `Instance` and `Planted` vacuity witnesses violate `VACUITY_CONVENTION_FINAL.md` (missing theorem applications, unused mutants, negating hypotheses instead of conclusions, or omitting mutant subjects)**
+   - **Problem**:
+     - **Planted witnesses with no mutant subject at all (testing inequality on the real function)**:
+       - `KeyConstruct.key_rename_named` (`Proofs/Ident.lean:603-609`): defines `rawChildUnder` at line 603 and **never uses it**; line 609 just proves `¬ (namedCall.key [] = (namedCall.rename "renamed").key [])` on the real `key`.
+       - `KeyConstruct.descendant_rename_named` (`Proofs/Ident.lean:655-658`): no mutant defined; proves `¬ (namedNested.descendantKey [] [0, 0] = (namedNested.rename "renamed").descendantKey [] [0, 0])`.
+       - `SourceText.lineAt_append_newline` (`Proofs/Ident.lean:828`), `lineAt_append_other` (`Proofs/Ident.lean:836`), `columnAt_append_newline` (`Proofs/Ident.lean:855`): no mutant subject; just test inequalities on the real `lineAt`/`columnAt`.
+     - **Planted witnesses that negate the theorem's *hypothesis* on the real operation instead of proving the hypothesis on a mutant and negating the conclusion**:
+       - `LoadedModules.load_admitted` (`Proofs/Ident.lean:811`): proves `LoadedModules.load [firstModule, collidingModule] ≠ .admitted [firstModule, collidingModule]`, which negates the *hypothesis* `result : load modules = .admitted admitted` on the real `load` instead of applying a mutant loader (`admitAll`) where `admitAll modules = .admitted modules` holds and `WellFormed modules` fails.
+       - `SafetyEvidence.discharge_sound` (`Proofs/Prim.lean:499`): proves `¬ (evidence.discharge [] EvidenceDemo.current obligation.id = some discharged)`, which negates the *hypothesis* `success : e.discharge ... = some discharged` on the real `discharge` instead of defining a mutant `discharge` that returns `some discharged` while violating the conclusion.
+     - **Planted witnesses whose mutant does not match the theorem's subject/conclusion**:
+       - `LoadedModules.load_refusal_sound` (`Proofs/Ident.lean:779-785`): `oneSided` has return type `LoadedModule` (not `LoadResult`) and line 785 just checks `firstModule ≠ collidingModule`. It should define a mutant loader returning `.refused fakeCollision` where `¬ HasCollision modules fakeCollision`.
+       - `KeyConstruct.descendant_insert_differentKind` (`Proofs/Ident.lean:625`), `descendant_insert_named` (`Proofs/Ident.lean:636`), `descendant_rename_other` (`Proofs/Ident.lean:646`): reuse root-only `allKindsOrdinal` / `rawOrdinalKey` / `labelOnlyOrdinal` without a `route : List Nat` argument instead of a mutant `descendantKey`.
+       - `SourceText.columnAt_append_tab` (`Proofs/Ident.lean:847`), `lineAt_append` (`Proofs/Ident.lean:866`), `columnAt_append` (`Proofs/Ident.lean:877`): compare the mutant at one point to the *real* `lineAt`/`columnAt` (`constantLine aNewline 2 ≠ aNewline.lineAt 2`) instead of showing the mutant violates the theorem's step equation between `source` and `source ++ [byte]`.
+     - **`Instance` witnesses that do not apply the theorem (`Instance` = full closed application)**:
+       - `Proofs/Ident.lean` lines 601 (`key_rename_named`), 651 (`descendant_rename_named`), 686 (`canonicalize_edge_sound`), 756 (`canonicalize_nodup`), 773 (`load_refusal_sound`), 789 (`load_refusal_complete`), 805 (`load_admitted`), 824 (`lineAt_append_newline`), 832 (`lineAt_append_other`), 840 (`columnAt_append_tab`), 851 (`columnAt_append_newline`), 859 (`lineAt_append`), 870 (`columnAt_append`), 903 (`read_encode`), 917 (`read_unknown`), and `Proofs/Prim.lean` line 494 (`discharge_sound`) prove their examples by `decide`, `rfl`, or `simp` without calling the theorem.
+     - **Theorem classification tags**:
+       - Theorems in `Proofs/Ident.lean` and `Proofs/Prim.lean` omit `Law` tags on law theorems, use `/-- Helper (projection). -/` on helper theorems without `approved:` metadata, and erroneously attach `/-- Helper (projection). -/` to 38 `def` fixtures inside `namespace Vacuity`.
+   - **Long-term fix**: Make every `Instance` a closed application of its named theorem, make every `Planted` example establish the theorem's hypotheses under the mutant subject and negate the theorem's conclusion, remove `Helper (projection)` from `Vacuity` `def` fixtures, and tag theorems per `VACUITY_CONVENTION_FINAL.md`.
+
+6. **`ConcreteSpec/Spec/Observe.lean:121-123` — MINOR — REAL DEFECT: `SiteTable.Valid` has no theorem connecting validated site lookups to `Span.LocationOk` or `trapLine_uses_byte_columns`**
+   - **Problem**: `SiteTable.Valid` was updated to take `sources : SourceTable` and require `∃ source, AList.lookup sources sp.path = some source ∧ sp.LocationOk source`, but no theorem in `Observe2.lean` or `Ident.lean` connects `SiteTable.Valid` to `Span.LocationOk` / `trapLine`.
+   - **Long-term fix**: Add a law on `SiteTable.Valid` showing that looking up any site in a valid `(sources, sites)` table yields a span whose `line` and `col` equal `source.lineAt sp.startOffset` and `source.columnAt sp.startOffset`.
+
+---
+
+### Vacuity Audit of Every Law in Touched Contracts
+
+| File:Line | Theorem / Law | Verdict | Witness Audit (`Instance` & `Planted`) |
+| :--- | :--- | :--- | :--- |
+| `Proofs/Ident.lean:13` | `SiteKeyTable.nodup_renumber` | **Non-vacuous** | `Instance` (L511) applies theorem on `siteTable` and `successor`. `Planted` (L521) uses non-injective `collapse` (`siteTable.NoDupSites` should be conjoined explicitly). |
+| `Proofs/Ident.lean:36` | `SiteKeyTable.lookup_renumber` | **Non-vacuous** | `Instance` (L504) rewrites with `lookup_renumber`. `Planted` (L516) uses non-injective `collapse` and negates lookup equivariance. |
+| `Proofs/Ident.lean:53` | `OutsideFunctionEdit.persistentKeys` | **VACUOUS (REAL DEFECT)** | Pure projection law (`edit.keysUnchanged f outside`) of a 1-field structure; must be replaced by a theorem on a key-assignment operation. |
+| `Proofs/Ident.lean:59` | `KeyConstruct.key_insert_differentKind` | **Partial (Defect #4)** | Non-vacuous on `preceding`, but `after` is still inside `preceding`. `Instance` (L556) and `Planted` (L570, `allKindsOrdinal`) work for `preceding`. |
+| `Proofs/Ident.lean:67` | `KeyConstruct.key_insert_named` | **Partial (Defect #4)** | Non-vacuous on `preceding`, same `preceding`-only limitation. `Instance` (L575) and `Planted` (L584, `countNamedKey`) valid. |
+| `Proofs/Ident.lean:81` | `KeyConstruct.key_rename_other` | **Non-vacuous** | `Instance` (L589) applies theorem. `Planted` (L599, `labelOnlyOrdinal`) fails when a sibling is pinned. |
+| `Proofs/Ident.lean:105` | `KeyConstruct.key_rename_named` | **Witness defect (#5)** | Law is non-vacuous, but `Instance` (L601) uses `by decide` instead of applying the theorem, and `Planted` (L609) leaves mutant `rawChildUnder` unused and tests `namedCall.key [] ≠ (namedCall.rename "renamed").key []` on the real function. |
+| `Proofs/Ident.lean:113` | `KeyConstruct.descendant_insert_differentKind` | **Witness defect (#4, #5)** | `Instance` (L619) applies theorem, but `Planted` (L625) tests root-only `allKindsOrdinal` without a `route`. |
+| `Proofs/Ident.lean:121` | `KeyConstruct.descendant_insert_named` | **Witness defect (#4, #5)** | `Instance` (L630) applies theorem, but `Planted` (L636) tests root-only `rawOrdinalKey` without a `route`. |
+| `Proofs/Ident.lean:131` | `KeyConstruct.descendant_rename_other` | **Witness defect (#5)** | `Instance` (L640) applies theorem, but `Planted` (L646) tests root-only `labelOnlyOrdinal` without a `route`. |
+| `Proofs/Ident.lean:143` | `KeyConstruct.descendant_rename_named` | **Witness defect (#5)** | `Instance` (L651) uses `by decide` without applying the theorem; `Planted` (L657) has no mutant subject. |
+| `Proofs/Ident.lean:210` | `SpecializationTable.canonicalize_nodup` | **Witness defect (#5)** | Law is non-vacuous; `Instance` (L756) uses `by decide` rather than applying `canonicalize_nodup`; `Planted` (L760) uses un-interned list `[numeric, numeric]`. |
+| `Proofs/Ident.lean:230` | `SpecializationTable.canonicalize_edge_sound` | **Witness defect (#5)** | Law is non-vacuous; `Instance` (L686) uses `by decide` without applying the theorem; `Planted` (L691) tests out-of-bounds index `9`. |
+| `Proofs/Ident.lean:246` | `SpecializationTable.canonicalize_complete` | **Non-vacuous** | `Instance` (L670) applies theorem to both requests; `Planted` (L682, `dropFirstEdges`) fails completeness. |
+| `Proofs/Ident.lean:278` | `SpecializationTable.canonicalize_share` | **Non-vacuous** | `Instance` (L696) applies theorem; `Planted` (L725, `bySite`) keeps edges but assigns distinct entries. |
+| `Proofs/Ident.lean:295` | `SpecializationTable.canonicalize_distinct` | **Non-vacuous** | `Instance`s (L732, L741) apply theorem for type and capability diffs; `Planted` (L749, L752, `onlyGeneric`) merges distinct specializations. |
+| `Proofs/Ident.lean:369` | `LoadedModules.load_refusal_sound` | **Witness defect (#5)** | Law is non-vacuous, but `Instance` (L773) does not apply `load_refusal_sound` and `Planted` (L785, `oneSided`) does not test a mutant loader returning `.refused` outside `HasCollision`. |
+| `Proofs/Ident.lean:414` | `LoadedModules.load_refusal_complete` | **Witness defect (#5)** | Law is non-vacuous; `Planted` (L797, `admitAll`) is valid, but `Instance` (L789) uses `rfl` instead of applying `load_refusal_complete`. |
+| `Proofs/Ident.lean:440` | `LoadedModules.load_admitted` | **Witness defect (#5)** | Law is non-vacuous, but `Instance` (L805) does not apply `load_admitted` and `Planted` (L811) negates the *hypothesis* on the real `load` instead of using `admitAll` on a colliding input. |
+| `Proofs/Ident.lean:454` | `SourceText.lineAt_append` | **Witness defect (#5)** | Law is non-vacuous; `Instance` (L859) does not apply the theorem and `Planted` (L866, `constantLine`) compares against `lineAt` instead of negating the step equation on `constantLine`. |
+| `Proofs/Ident.lean:464` | `SourceText.lineAt_append_newline` | **Witness defect (#5)** | Corollary of `lineAt_append`; `Instance` (L824) does not apply the theorem and `Planted` (L828) has no mutant subject. |
+| `Proofs/Ident.lean:469` | `SourceText.lineAt_append_other` | **Witness defect (#5)** | Corollary of `lineAt_append`; `Instance` (L832) does not apply the theorem and `Planted` (L836) has no mutant subject. |
+| `Proofs/Ident.lean:475` | `SourceText.columnAt_append` | **Witness defect (#5)** | Law is non-vacuous; `Instance` (L870) does not apply the theorem and `Planted` (L877, `scalarColumn`) compares against `columnAt` instead of negating the step equation on `scalarColumn`. |
+| `Proofs/Ident.lean:485` | `SourceText.columnAt_append_tab` | **Witness defect (#5)** | Corollary of `columnAt_append`; `Instance` (L840) does not apply the theorem and `Planted` (L847) compares `tabStopFour` to `aTab.columnAt 2`. |
+| `Proofs/Ident.lean:490` | `SourceText.columnAt_append_newline` | **Witness defect (#5)** | Corollary of `columnAt_append`; `Instance` (L851) does not apply the theorem and `Planted` (L855) has no mutant subject. |
+| `Proofs/Ident.lean:500` | `EncodedPremise.read_encode` | **Witness defect (#5)** | Law is non-vacuous; `Planted` (L913, `encodeDroppingKind`) is valid, but `Instance` (L903) uses `by decide` instead of applying `read_encode`. |
+| `Proofs/Ident.lean:509` | `EncodedPremise.read_unknown` | **VACUOUS (REAL DEFECT #2)** | Premise `PremiseKind.decode reader record.category = none` restates the internal guard of `read` and switches off the law if `decode` has a catch-all. `Instance` (L917) also does not apply the theorem. |
+| `Proofs/Observe2.lean:373` | `Observe.trapLine_injective` | **Non-vacuous** | `Instance` (L378) applies `trapLine_injective`; `Planted` (L399, `trapLineWithoutColumn` on `spDifferentColumn`) satisfies equal rendered lines while `Demo.sp.col ≠ spDifferentColumn.col`. |
+| `Proofs/Observe2.lean:404` | `Observe.trap_line_uses_byte_columns` | **Non-vacuous** | Pre-existing law in `Observe2.lean`; unaffected by diff. |
+| `Proofs/Prim.lean:120` | `Prim.eval_operands_rehint` | **Non-vacuous** | Pre-existing law in `Prim.lean`; unaffected by diff. |
+| `Proofs/Prim.lean:139` | `SafetyEvidence.discharge_sound` | **Witness defect (#1, #5)** | `Instance` (L494) uses `simp` without applying `discharge_sound`; `Planted` (L499) negates the *hypothesis* `discharge = some discharged` on the real `discharge` instead of using a mutant consumer. |
+| `Proofs/Prim.lean:159` | `SafetyEvidence.discharge_context_mismatch` | **Non-vacuous** | `Instance`s (L539, L545) apply theorem across all context fields; `Planted` (L564, `dischargeIgnoringContext`) accepts stale context. |
+| `Proofs/Prim.lean:165` | `SafetyEvidence.discharge_obligation_mismatch` | **Non-vacuous** | `Instance` (L510) applies theorem; `Planted` (L527, `dischargeIgnoringObligation`) accepts mismatched obligation ID. |
+| `Proofs/Prim.lean:173` | `SafetyEvidence.discharge_proposition_mismatch` | **VACUOUS on true obligations (REAL DEFECT #1)** | Premise `e.fact ≠ obligation.fact` is `False` for any true `obligation.fact` by `propext`; only holds when `obligation.fact` is false (`1 + 1 = 3`). |
+| `Proofs/Prim.lean:183` | `PrimRegistry.allows_unknown` | **Non-vacuous** | Pre-existing law in `Prim.lean`; unaffected by diff. |
+
+---
+
+### Helper / Representation Lemma Exemption Decisions
+
+Once tagged per `VACUITY_CONVENTION_FINAL.md` (and with `Helper (projection)` removed from the `def` fixtures in `Vacuity`), I **approve** the `Helper` / `Representation` exemptions for all 14 support lemmas in the diff:
+
+1. `ConstructName.isUnnamed_rename` (`Proofs/Ident.lean:74`) — **APPROVED** (`Helper`, used by `key_rename_other`).
+2. `SpecializationTable.entryAt_lt_length` (`Proofs/Ident.lean:152`) — **APPROVED** (`Helper`, used by `intern_preserves` and `entry_unique`).
+3. `SpecializationTable.entryIndex_sound` (`Proofs/Ident.lean:158`) — **APPROVED** (`Helper`, used by `intern_sound`).
+4. `SpecializationTable.intern_sound` (`Proofs/Ident.lean:174`) — **APPROVED** (`Helper`, used by `canonicalize_edge_sound` and `canonicalize_complete`).
+5. `SpecializationTable.intern_preserves` (`Proofs/Ident.lean:183`) — **APPROVED** (`Helper`, used by `canonicalize_edge_sound` and `canonicalize_complete`).
+6. `SpecializationTable.entryIndex_none_not_mem` (`Proofs/Ident.lean:198`) — **APPROVED** (`Helper`, used by `canonicalize_nodup`).
+7. `SpecializationTable.entry_unique` (`Proofs/Ident.lean:268`) — **APPROVED** (`Helper`, used by `canonicalize_share`).
+8. `LoadCollision.between?_sound` (`Proofs/Ident.lean:314`) — **APPROVED** (`Helper`, used by `withModule_sound`).
+9. `LoadCollision.withModule_sound` (`Proofs/Ident.lean:330`) — **APPROVED** (`Helper`, used by `findCollisionFrom_sound`).
+10. `LoadedModules.findCollisionFrom_sound` (`Proofs/Ident.lean:350`) — **APPROVED** (`Helper`, used by `load_refusal_sound`).
+11. `LoadCollision.between?_complete` (`Proofs/Ident.lean:380`) — **APPROVED** (`Helper`, used by `withModule_complete`).
+12. `LoadCollision.withModule_complete` (`Proofs/Ident.lean:395`) — **APPROVED** (`Helper`, used by `load_refusal_complete`).
+13. `Span.locationOk_iff` (`Proofs/Ident.lean:495`) — **APPROVED** (`Representation`, unfolds `Span.LocationOk`).
+14. `ObligationTable.lookup_id` (`Proofs/Prim.lean:124`) — **APPROVED** (`Helper`, used by `SafetyEvidence.discharge_sound`).
+
+VERDICT: CHANGES
+rc=0

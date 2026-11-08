@@ -1,0 +1,86 @@
+### Part A & Part B Audit Summary
+
+1. **Item 20 (`decodePtr` / `encodePtr`)**:
+   - `encodePtr` is now total (drops `_valid : p.Valid tgt`), encoding `(ordered tgt.byteOrder (leBytes tgt.ptrSize p.addr)).zipIdx.map (fun (v, i) => .init v (some (p, i)))`.
+   - `decodePtr` does **not** compare against `encodePtr`; it independently verifies:
+     1. Head byte carries fragment `(p, 0)`.
+     2. `bs.length = tgt.ptrSize`.
+     3. `octets bs = some os` (all bytes initialized).
+     4. `bs = os.zipIdx.map (fun (v, i) => .init v (some (p, i)))` (every byte `i` in `0 ..< ptrSize` carries fragment `(p, i)` of that exact same pointer `p`).
+     5. `leValue (ordered tgt.byteOrder os) = p.addr` (octets numerically decode to `p.addr`).
+     6. `p.Valid tgt` (target validity).
+   - All other byte patterns return `none`.
+   - `decodePtr_encodePtr` and `decodePtr_some` prove the round-trip and converse by genuine numeric octet algebra (`octets_fragments`, `leBytes_leValue`, `leValue_leBytes`, `ordered_ordered`), not by `if bs = encodePtr ...` tautology.
+
+2. **Re-check removal (`Memory.access`)**:
+   - The redundant `p.Valid tgt` check in the non-empty branch of `Memory.access` is removed.
+   - `access_valid` proves `p.Valid tgt` for non-empty accesses from `m.WellFormed tgt` (`hw.fits` and `hw.spaces`) and the block bounds (`x.base ≤ p.addr`, `p.addr + n ≤ x.base + x.size`, `n ≠ 0`, `x.base + x.size ≤ 2 ^ tgt.addrBits - 1`).
+   - Together with `access_success` and `access_some_inv`, removing the re-check preserves the exact set of operations that succeed on well-formed states.
+
+---
+
+### Findings
+
+1. **`ConcreteSpec/Proofs/Memory.lean:252` — `alloc_failure` omits four failure branches of `Memory.alloc` (minor, REAL DEFECT)**
+   - **Problem**: `alloc_failure` was refactored from `¬ m.Fits tgt (candidate s base size align)` to an explicit disjunction of three geometric conditions (`base % align ≠ 0 ∨ 2 ^ tgt.addrBits - 1 < base + size ∨ ∃ e ∈ m.blocks, e.2.live = true ∧ e.2.Overlaps (candidate s base size align)`). While those three are now non-tautological relative to `Fits`, `Memory.Fits` has four additional failure clauses (`¬ IsPow2 align`, `target.maxObject < size`, `0 < size ∧ base = tgt.null`, `s ∉ tgt.spaces`) that are no longer covered by `alloc_failure`. A mutant allocator that drops the `IsPow2 align`, `maxObject`, `null`, or `s ∉ tgt.spaces` check still satisfies `alloc_failure`.
+   - **Concrete fix**: Include all seven raw failure disjuncts in `alloc_failure` (written directly in terms of `align`, `base`, `size`, `s`, `tgt`, and `m.blocks` without mentioning `Fits`):
+     ```lean
+     theorem alloc_failure (tgt : Target) (m : Memory) (s : AddrSpace) (base size align : Nat)
+         (h : ¬ IsPow2 align ∨ base % align ≠ 0 ∨ 2 ^ tgt.addrBits - 1 < base + size ∨
+           tgt.maxObject < size ∨ (0 < size ∧ base = tgt.null) ∨
+           (∃ e ∈ m.blocks, e.2.live = true ∧ e.2.Overlaps (candidate s base size align)) ∨
+           s ∉ tgt.spaces) :
+         m.alloc tgt s base size align = .error .unavailable
+     ```
+     and add corresponding `mutatedAlloc` cases in `Audit`.
+
+2. **`ConcreteSpec/Proofs/Memory.lean:561` — `decodePtr_valid_inv` is a dead projection of `decodePtr_some` (nit, PREFERENCE)**
+   - **Problem**: `decodePtr_valid_inv` is strictly `(decodePtr_some tgt bs p h).2` and is not used anywhere else in the diff.
+   - **Concrete fix**: Either remove `decodePtr_valid_inv` or prove it as a one-line projection `(decodePtr_some tgt bs p h).2`.
+
+---
+
+### Vacuity Audit of C4 Laws
+
+#### `ConcreteSpec/Proofs/Memory.lean` (Raw Store & Representation)
+
+| Law | Verdict | Non-trivial Instance | Planted Counter-example (Fails Law) |
+| :--- | :--- | :--- | :--- |
+| `decodeInt_encodeInt` | **Non-vacuous** | `tgt = linuxX8664`, `t = .i32`, `n = -42` (`InRange .i32 (-42)`): `decodeInt` reconstructs `-42` from `toBits`/`fromBits` and `leBytes`/`leValue`. | Mutant decoder omitting `fromBits` sign extension returns `2^32 - 42 ≠ -42`. |
+| `decodeInt_valid` | **Non-vacuous** | `decodeInt linuxX8664 .u8 [.init 200 none] = some 200` with `InRange .u8 200` and initialized byte witness. | Mutant `decodeInt` returning `some 0` on `[.uninit]` has no initialized byte list `os` with `octets [.uninit] = some os`. |
+| `decodeBool_encodeBool` | **Non-vacuous** | `b = true`: `encodeBool true = [.init 1 none]`, `decodeBool [.init 1 none] = some true`. | Mutant `encodeBool _ = [.init 2 none]` decodes to `none ≠ some true`. |
+| `decodeBool_valid` | **Non-vacuous** | `bs = [.init 1 none]`, `b = true`: witnesses `v = 1`, `f = none`, `boolOfBits 1 = some true`. | Mutant `decodeBool` mapping `.init 2 none` to `some true` fails `v = 0 ∨ v = 1`. |
+| `decodePtr_encodePtr` | **Non-vacuous** | `Audit` (`Memory.lean:895`): `target` (8-bit, 2-byte LE), `ptr = ⟨⟨0⟩, 40, some ⟨0⟩⟩`, `decodePtr target (encodePtr target ptr) = some ptr`. | `Audit` (`Memory.lean:903`): flipping decoder byte order to `.big` yields `none ≠ some ptr`. |
+| `decodePtr_some` | **Non-vacuous** | `Audit` (`Memory.lean:900`): `bytes = [.init 40 (some (ptr, 0)), .init 0 (some (ptr, 1))]` decodes to `some ptr` and equals `encodePtr target ptr` with `ptr.Valid target`. | `Audit` (`Memory.lean:911`, `935`): `firstFragment` mutant accepts `[.init 40 (some (ptr, 0))]`, which is `≠ encodePtr target ptr`; skipping `p.Valid tgt` accepts `addr = 256` where `¬ p.Valid target`. |
+| `decodePtr_valid_inv` | **Non-vacuous** (corollary of `decodePtr_some`) | Same instance as `decodePtr_some` (`ptr = ⟨⟨0⟩, 40, some ⟨0⟩⟩`). | Same validity mutant (`addr = 256` with 8-bit `target`). |
+| `empty_wellFormed` | **Non-vacuous** | `Memory.empty` has `blocks = []`, `next = 0`, satisfying `WellFormed`. | Mutant `empty` with a pre-populated out-of-range block at `id = 0`, `next = 0` violates `ids` (`0 < 0`). |
+| `alloc_result` / `alloc_block` | **Non-vacuous** | Allocating `(⟨0⟩, 40, 8, 1)` on `Memory.empty` produces `b = ⟨0⟩` and `m'.block ⟨0⟩ = some (candidate ⟨0⟩ 40 8 1)`. | Mutant `alloc` that forgets to prepend `(⟨m.next⟩, x)` to `m.blocks` yields `m'.block b = none`. |
+| `alloc_failure` | **Non-vacuous** (for the 3 stated clauses; incomplete per Finding 1) | `Audit` (`Memory.lean:960`): misaligned (`41 % 2 ≠ 0`), out-of-bounds (`255 < 254 + 2`), and overlapping (`44..46` vs `40..48`) each return `.error .unavailable`. | `Audit` (`Memory.lean:981-987`): `mutatedAlloc 0/1/2` skipping each respective check returns `.ok _ ≠ .error .unavailable`. |
+| `alloc_wellFormed` | **Non-vacuous** | `Audit` (`Memory.lean:932`): `memory_wf` constructs `WellFormed` after allocating `(⟨0⟩, 40, 8, 1)` in `Memory.empty`. | Mutant `alloc` that leaves `next` unchanged (`next := m.next`) violates `WellFormed.ids` (`b.id < m'.next`). |
+| `free_wellFormed` | **Non-vacuous** | Freeing block `⟨0⟩` in `memory` flips `live := false` while preserving `Fits`, `sized`, `ids`, `nodup`, `disjoint`. | Mutant `free` that doubles `x.size` on free violates `WellFormed.sized` (`x.bytes.length = x.size`). |
+| `free_load_none` / `free_store_none` | **Non-vacuous** | After `memory.free ⟨0⟩ = .ok m'`, `m'.load target ptr 1 1 = none` and `m'.store target ptr [b] 1 = none`. | Mutant `free` that does not set `live := false` still permits `load`/`store` on `⟨0⟩`. |
+| `free_other_block` | **Non-vacuous** | With blocks `⟨0⟩` and `⟨1⟩`, freeing `⟨0⟩` preserves `m'.block ⟨1⟩ = m.block ⟨1⟩`. | Mutant `free` that clears all blocks (`blocks := []`) changes `m'.block ⟨1⟩` to `none`. |
+| `free_alloc_ne_existing` | **Non-vacuous** | Allocate `⟨0⟩`, free `⟨0⟩`, allocate `⟨1⟩`: new id `⟨1⟩ ≠ ⟨0⟩`. | Mutant allocator reusing freed block IDs returns `⟨0⟩ = ⟨0⟩`. |
+| `access_zero` | **Non-vacuous** | `Audit` (`Memory.lean:991`): `p = ⟨⟨0⟩, 40, none⟩` (no provenance) in `Memory.empty` has `load target p 0 2 = some []` and `store target p [] 2 = some Memory.empty`. | `Audit` (`Memory.lean:999`, `1010`): `p = ⟨⟨0⟩, 0, none⟩` (null) fails `p.addr ≠ target.null`; mutant omitting null check returns `some []`. |
+| `access_no_provenance` | **Non-vacuous** | `p = ⟨⟨0⟩, 40, none⟩`, `n = 1`: `memory.access target p 1 1 = none`. | Mutant `access` that looks up blocks by address when `p.prov = none` returns `some (some _)`. |
+| `access_some_inv` / `access_success` | **Non-vacuous** | `Audit` (`Memory.lean:948`): `ptr = ⟨⟨0⟩, 40, some ⟨0⟩⟩`, `n = 2, a = 1` in `memory` succeeds with `(⟨0⟩, 0)` and satisfies all 8 obligations. | `Audit` (`Memory.lean:955`): `n = 9` exceeds block size `8` (`40 + 9 > 40 + 8`), returning `none`. |
+| `access_valid` | **Non-vacuous** (re-check removed) | `Audit` (`Memory.lean:937`): `memory_wf`, `memory.access target ptr 2 1 = some (some (⟨0⟩, 0))`, and `ptr.Valid target` derived from `hw.fits`/`hw.spaces`. | `Audit` (`Memory.lean:942`): ill-formed `bad` memory with block at `base = 256` admits `bad.access target p 1 1 = some (some (⟨0⟩, 0))` while `¬ p.Valid target`. |
+| `expose_wellFormed` / `fromExposed_some` / `fromExposed_none` | **Non-vacuous** | Exposing `ptr` marks block `⟨0⟩` exposed (`exposed = true`) and `fromExposed` reconstructs `ptr` for in-bounds addresses and `none` outside. | Mutant `expose` that leaves `exposed = false` causes `fromExposed` to return `none` for `ptr.addr`. |
+| `store_wellFormed` | **Non-vacuous** | Storing 2 bytes at `ptr` in `memory` preserves `x.bytes.length` and all block metadata, so `m'.WellFormed target` holds. | Mutant `store` that appends `bs` without dropping `bs.length` bytes violates `WellFormed.sized`. |
+| `store_load` | **Non-vacuous** | Storing `[.init 7 none, .init 8 none]` at `ptr` (align 1) in `memory` and loading 2 bytes at `ptr` returns `some [.init 7 none, .init 8 none]`. | Mutant `store` that writes at offset `0` regardless of `off = p.addr - x.base` fails `store_load` at `p.addr = 42` (`off = 2`). |
+| `store_same_block_frame` | **Non-vacuous** | Storing 1 byte at `off = 0` in `memory` preserves `bytes[1]? = some .uninit`. | Mutant `store` that zeroes the entire block on write changes `bytes[1]?` from `some .uninit` to `some (.init 0 none)`. |
+| `store_other_block` / `store_load_other` | **Non-vacuous** | Storing to block `⟨0⟩` leaves block `⟨1⟩` and loads through `q` (`q.prov = some ⟨1⟩`) unchanged. | Mutant `store` that modifies every block in `m.blocks` clobbers `⟨1⟩`. |
+| `load_prefix` | **Non-vacuous** | Loading `n = 4` bytes at `ptr` gives `bs`; loading `k = 2 ≤ 4` bytes at `ptr` gives `some (bs.take 2)`. | Mutant `load` returning `bs.drop (n - k)` instead of `bs.take k` fails for `k < n` on distinct bytes. |
+
+#### `ConcreteSpec/Proofs/Hybrid.lean` (Hybrid State)
+
+| Law | Verdict | Non-trivial Instance | Planted Counter-example (Fails Law) |
+| :--- | :--- | :--- | :--- |
+| `write_read` | **Non-vacuous** | Writing `.bool true` to a virtual or materialized `.bool` place `p` and reading `p` returns `some (.bool true)`. | Mutant `State.write` on materialized places that skips `memory.store` leaves `.uninit` in memory, so `State.read` returns `none`. |
+| `typed_store_frame` | **Non-vacuous** (lifted to `State.write`) | `Audit` (`Hybrid.lean:520`): `before.write linuxX8664 ⟨0⟩ (.bool true) = some after` updates byte 0 to `.init 1 none` and preserves trailing padding `bytes[1]? = some .uninit`. | `Audit` (`Hybrid.lean:530`): `clobbered` state that zeroes trailing padding (`bytes[1] := .init 0 none`) violates `(clobbered.memory.block ⟨0⟩).map (·.bytes[1]?) = (before.memory.block ⟨0⟩).map (·.bytes[1]?)`. |
+| `materialize_projection` | **Non-vacuous** | Materializing virtual place `⟨0⟩` sets `st'.places ⟨0⟩ = some ⟨t, .materialized r⟩`. | Mutant `materialize` leaving the place `.virtual v` fails the postcondition. |
+| `materialize_wellFormed` | **Non-vacuous** | Materializing a virtual `.bool true` place at `base = 40, size = 3, align = 1` allocates a block of size `3 ≥ sizeof .bool` and preserves `State.WellFormed`. | Mutant `materialize` that accepts `size < sizeof t` violates the materialized place invariant `sizeof t ≤ r.size`. |
+| `materialize_read` | **Non-vacuous** | Materializing `.virtual (some (.bool true))` writes `encode tgt (.bool true)` into the new block; subsequent `st'.read tgt p` decodes it from memory and returns `some (.bool true)`. | Mutant `materialize` that allocates the block without storing `encode tgt v` leaves `.uninit` bytes, so `st'.read` returns `none ≠ some v`. |
+
+VERDICT: CHANGES
+rc=0

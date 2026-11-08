@@ -1,0 +1,120 @@
+The projection and occurrence fixes are substantive. The oracle fix still uses a theorem whose conclusion is already required by its `Move` premise. The termination interface also permits certificates with no admitted executions.
+
+This was a static, read-only review. I ran no builds, gates, network operations, or Git commands. Counterexamples below are inspection-level mutation targets unless identified as existing examples; I did not execute them.
+
+**Findings**
+
+1. **ConcreteSpec/Proofs/Adequacy.lean:181 — major — REAL DEFECT: the replacement oracle law still holds by construction.**
+
+   `Move.toQueryOracle_answer` eliminates `Move.prim` and returns its constructor premises. `Move.prim` already requires the oracle answer, contract check, continuation result, and exact event append. Unfolding `toQueryOracle` supplies the remaining equality. An implementation that answers incorrectly cannot satisfy the premise, so this law cannot detect that implementation.
+
+   `bumpedMove` supplies a satisfiable instance, but the occurrence-sensitive oracle example at line 1446 tests `runFromQ_toReport`, not this law: it changes the oracle and compares evaluator reports.
+
+   **Concrete fix:** prove an evaluator-level request/answer correspondence from an actual issued query and the evaluator’s resulting report or execution segment. Its premise must not already assert the selected answer and resulting transition. Include successful, unanswered, invalid-answer, and refused-continuation cases. Plant an evaluator mutation that substitutes an answer or queries the wrong history, and demonstrate that the correspondence rejects it.
+
+2. **ConcreteSpec/Spec/Adequacy.lean:254 — major — REAL DEFECT: termination certificates can disable every obligation.**
+
+   `Premises := Empty` makes `terminates` unconditionally dischargeable. With inhabited premises, `admits := fun _ _ _ _ => False` does the same. Neither construction requires a real function, successful entry, or terminating execution. Both exported laws at `Proofs/Adequacy.lean:1055` and `:1071` then have unavailable admission hypotheses. There is no concrete `TerminationEvidence` witness in this module.
+
+   **Concrete fix:** distinguish a conditional termination theorem from a usable certificate for a declared call domain. Fix that domain independently of the certificate, prove coverage of it, and carry an inhabited admitted-call witness where a usable certificate is claimed. Add a real function certificate and negative controls for an empty domain, missing function, failed entry, and admitted spinning call. Do not require all conditional theorems to have inhabitants; prevent empty conditional theorems from masquerading as usable evidence.
+
+3. **ConcreteSpec/Proofs/Adequacy.lean:756,760 — major — REAL DEFECT under the supplied vacuity rule: the round-trip laws are construction identities.**
+
+   Both conversions retain exactly the supplied `states` function. The round-trip equalities are `rfl`; proof irrelevance removes differences between their proof fields. Consequently these equalities cannot independently detect an incorrect execution correspondence. The substantive correspondence is established in the conversion constructors through evaluator-prefix proofs, not by these round-trip laws.
+
+   **Concrete fix:** identify the constructor proofs and pointwise evaluator/transition correspondence as the adequacy obligations, and provide positive and planted negative controls for those obligations. Keep the round trips explicitly classified as representation helpers, without counting them as independent contract evidence.
+
+**Assessment of the requested fixes**
+
+- **Projected divergence:** fixed. `FiniteEvents` and `InfiniteEvents` measure `A.project`, which uses `ExecAdapter.events`. The erasing and keeping adapters distinguish the same raw infinite execution correctly. The two projection-observation proofs establish mutual prefix coverage; their substantive part is `MatchesProjectedHistory`, even though the final `HasFullObservation` witness is canonical.
+- **Occurrence accounting:** fixed. `runFromQ_queryHistoryValid` examines all evaluator branches and includes terminal unanswered, invalid-answer, and refused-continuation queries. The consecutive-site laws are consequences of an execution invariant, rather than merely `Query.issue` unfolding.
+- **Oracle preservation:** `runFromQ_toReport` remains substantive, but the newly advertised replacement law has finding 1’s circular premise.
+- Relabeling `issue_occurrence`, `answer_deterministic`, and `answer_toQueryOracle` as helpers honestly describes them. It does not make them non-vacuous execution laws.
+
+**Law-by-law vacuity audit**
+
+“Pass” means the statement constrains behavior beyond merely restating its premise or definition. Each row supplies a positive instance and a counterexample target. For exclusion laws, the positive instance satisfies the classification premise; the prohibited simultaneous classification is necessarily impossible.
+
+| Law | Verdict | Positive witness; planted counterexample |
+|---|---|---|
+| `issue_occurrence` | Definitional helper; vacuous as contract evidence | First request has occurrence zero; change `Query.issue` to constant zero and the generic law fails on a repeated site. |
+| `issue_next_occurrence` | Pass, list-count helper | Append at the counted site; count all sites instead and a different-site append breaks it. |
+| `answer_deterministic` | Congruence helper; vacuous as execution evidence | Equal queries; no unequal answer is expressible for the same pure function application. An execution mutation is outside this statement. |
+| `answer_toQueryOracle` | Definitional helper; vacuous as contract evidence | Lift `env`; substitute the wrong store in the adapter. |
+| `QueryHistoryValid.append` | Pass, preservation helper | Append occurrence one after occurrence zero; append the frozen occurrence zero. |
+| `runFromQ_queryHistoryValid` | Pass | `silentRequests`, including both requests; `frozenQueries` and `sharedQueries` reject wrong counters. |
+| `runFromQ_consecutive_same_site` | Pass | `silentQuery0`, `silentQuery1`; frozen second counter. |
+| `runFromQ_consecutive_other_site` | Pass | `interleavedQuery0`, `interleavedQuery1`; shared counter advances the new site. |
+| `runFromQ_toReport` | Pass | Lifted `env` on the two-request run; existing occurrence-sensitive oracle changes its report. |
+| `Move.toQueryOracle_answer` | **Vacuous as replacement contract evidence** | `bumpedMove`; a wrong-answer move is excluded by its premise—finding 1. |
+| `runFromQ_queries_from` | Pass | Nonempty supplied history followed by `bumpConfig`; evaluator drops the supplied history. |
+| `runFromQ_queries_prefix` | Pass | Fuel just before/after a request; larger budget replaces the previous query. |
+| `runFromQ_queries_prefix_le` | Pass | Two-request run with increasing budgets; larger budget resets occurrences/history. |
+| `runFromQ_query_fuel_independent` | Pass | Query zero at budgets reaching one and two requests; include fuel in query construction. |
+| `Move.toStep` | Pass, erasure helper | `bumpedMove` or emitting `event_move_34`; erase a primitive with the wrong event label. |
+| `Moves.toSteps` | Pass | Several logging-loop moves; reverse or omit an emitted label. |
+| `final?_none_of_step` | Pass | `finishingConfig` has a step; modify final recognition to classify it as final. |
+| `runFromQ_sound` | Pass | Existing terminal-query examples; report a fabricated terminal occurrence or omit a refused-continuation query. |
+| `runFrom_sound` | Pass | Finishing or logging run; report an unsupported final outcome/event. |
+| `runFrom_events_from` | Pass | Run with an existing nonempty event history; erase that history. |
+| `runFromQ_complete` | Pass | Finite path through `bumpConfig` to final; charge an extra unit of fuel or lose its query. |
+| `runFrom_complete` | Pass | Lifted ordinary-oracle finite path; evaluator stops one step early. |
+| `runFrom_mono` | Pass | Completed finishing run at larger budgets; restart or alter a completed report. |
+| `runFrom_complete_le` | Pass | Same final path with surplus fuel; surplus fuel changes the outcome. |
+| `runFrom_trace_prefix_le` | Pass | Logging loop across several iterations; larger budget retracts an event. |
+| `runFrom_trace_prefix` | Pass | Logging transition across adjacent budgets; overwrite the earlier event prefix. |
+| `runFrom_final_sound` | Pass | `finishingConfig` after its step; invent a final report without a matching finite path. |
+| `runFromQ_add_of_outOfFuel` | Pass | Split a logging execution at a nonfinal position; restart its event/query history on resumption. |
+| `eq_of_runFromQ_zero_out` | Pass, inversion helper | Zero fuel at `spinConfig`; return a different configuration or history. |
+| `Move.runFromQ_one` | Pass | A nonfinal logging-loop transition; evaluator consumes the wrong number of steps. |
+| `Move.not_final` | Pass | Any spin-loop move; final recognition incorrectly accepts its source. |
+| `move_of_fuel_succ` | Pass | Adjacent prefixes of `event_infinite`; evaluator skips a machine transition. |
+| `InfiniteExecution.not_final` | Pass | Every `spin_infinite` position; change final recognition at a reachable phase. |
+| `InfiniteExecution.toFuelLimit` | Pass, substantive construction | `event_infinite`; evaluator omits a logging event/query in a prefix. |
+| `FuelLimit.toInfiniteExecution` | Pass, substantive construction | Logging fuel limit; evaluator jumps across a transition between adjacent prefixes. |
+| `infinite_iff_fuelLimit` | Pass, correspondence packaging | Spin/logging execution and its limit; incorrect prefix/transition correspondence breaks a direction. |
+| `InfiniteExecution.toFuelLimit_toInfiniteExecution` | **Construction identity** | Any `spin_infinite`; no independent behavioral negative control—finding 3. |
+| `FuelLimit.toInfiniteExecution_toFuelLimit` | **Construction identity** | Spin fuel limit; no independent behavioral negative control—finding 3. |
+| `fuelLimit_states_unique` | Pass | Two valid limits of the logging run; a second limit with an altered event fails its prefix obligation. |
+| `FuelLimit.unique` | Pass, uniqueness packaging | Same valid limit twice; differing valid state sequences are rejected by evaluator equality. |
+| `InfiniteExecution.unique` | Pass | Same logging execution via independent presentations; a divergent successor cannot satisfy the fixed-oracle transition/prefix obligations. |
+| `Move.events_prefix` | Construction-derived helper | Logging append; a transition relation allowing history replacement violates it. |
+| `InfiniteExecution.events_prefix` | Pass, iterated invariant | Logging positions across iterations; a later position retracts an event. |
+| `InfiniteExecution.projected_prefix` | Pass | Keeping adapter on logging positions; reorder projection across appended histories. |
+| `getElem?_eq_of_prefix` | Pass, list helper | `[a]` prefix of `[a,b]`; change the retained first element. |
+| `visiblePrefix_finiteDivergenceSteps` | Pass, canonical-sequence helper | Two events followed by silence; emit an extra event after the finite history. |
+| `visiblePrefix_emitTrace` | Pass, canonical-sequence helper | Nonconstant trace; emit `trace (i+1)` instead. |
+| `eventually_constant_of_bounded` | Pass, arithmetic helper | Increasing sequence that saturates; a bounded oscillating sequence demonstrates why monotonicity matters. |
+| `finite_projected_observation` | Pass | Existing erasing-adapter example; existing constantly emitting invented history fails matching. A nonempty finite projected prefix additionally exercises preservation before silence. |
+| `infinite_projected_observation` | Pass | Existing keeping-adapter example; empty or altered C6 trace fails mutual prefix coverage. |
+| `finite_or_infinite_events` | Pass, logical classification | Erasing and keeping adapters exercise opposite branches; raw-event classification misclassifies the erasing run. |
+| `finite_not_infinite_events` | Pass, logical exclusion | Erasing finite witness; incorrectly classify its raw infinity as projected infinity. |
+| `silentDivergence_not_infiniteInteraction` | Pass | Existing erasing silent-divergence witness; raw-based external infinity would violate exclusion. |
+| `internal_finite_or_infinite_events` | Pass, logical classification | Spin and logging executions; classify logging as bounded raw history. |
+| `not_infinite_of_final` | Pass | Completed finishing run; evaluator falsely reports final on the genuine spin execution. |
+| `not_infinite_of_noAnswer` | Pass | Terminal unanswered request; evaluator falsely reports `noAnswer` on the answered logging loop. |
+| `endlesslyBlocked_of_noAnswer` | Pass | Terminal request under the never-answering oracle; extra fuel resumes or changes the blocked report. |
+| `TerminationEvidence.terminates` | **Admission-vacuity vulnerability** | No concrete certificate supplied; `Premises := Empty` or `admits := False` switches it off. |
+| `TerminationEvidence.all_allowed_runs` | **Admission-vacuity vulnerability** | Needs a real admitted terminating function; empty premises/admissions prevent any instance. |
+| `TerminationEvidence.excludes_infinite` | **Admission-vacuity vulnerability** | Needs the same admitted function; a certificate excluding a spinning call from `admits` never checks that call. |
+
+The demo laws also have the following witnesses and negative controls:
+
+| Demo laws | Verdict and witness |
+|---|---|
+| `spin_move_01`, `spin_move_12`, `spin_move_23`, `spin_move_34`, `spin_move_40`, `spin_move` | Pass as concrete transition witnesses; changing a destination phase breaks the corresponding machine-step obligation. |
+| `spin_internal_silent_divergence` | Pass; genuine infinite spin with empty histories. Insert unbounded raw emissions to break finiteness. |
+| `event_move_01`, `event_move_12`, `event_move_23`, `event_move_40` | Pass as concrete transitions; change a destination configuration. |
+| `event_move_34` | Pass; actual logging transition. Wrong event, query occurrence, or destination breaks it. |
+| `event_move` | Pass; covers all five phases. Move the event-count increment to the wrong phase. |
+| `erasing_project` | Definitional projection helper; retaining one event breaks it. |
+| `keeping_project_rawEvents` | Pass, projection helper; erase or duplicate one projected output. |
+| `erasingWellFormed` | Its internal-answer branch is exercised; answered/blocked typed-request branches are intentionally unavailable because this adapter declares no typed requests. It is not evidence for those branches. |
+| `erasing_silent_divergence` | Pass; same genuine logging execution with zero projected events. Retain its outputs to break boundedness. |
+| `erasing_internal_infinite` | Pass; unbounded raw logging history. Freeze the raw history. |
+| `keeping_infinite_interaction` | Pass; unbounded retained outputs. Erase all outputs. |
+| `bumpedMove` | Pass as a concrete transition witness; wrong result store or oracle answer breaks construction. It does not repair finding 1. |
+
+The anonymous terminal-query examples supply useful positive and negative controls for unanswered, invalid-answer, machine-stuck, and continuation-refused endings. The anonymous occurrence examples likewise reject frozen and shared counters. These controls are substantive; they do not cover the empty termination-certificate case or turn constructor inversion into an independent oracle-execution law.
+
+VERDICT: CHANGES

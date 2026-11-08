@@ -1,0 +1,27 @@
+ROUND5 completed.
+
+1. **Done:** classified all 156 named theorems; removed the classification from `LiveDestinations`; replaced invalid evidence tags with closed applications.
+2. **Done:** added premise-preserving, same-typed mutants. Ordinary rejection observations remain untagged.
+3. **Done:** explicitly refuted the unconditional converse; retained `NotStuck` and `CheckerAccepted` in controls for the actual laws.
+4. **Done:** reclassified computation/projection helpers. Cleanup now removes activation slots structurally from the complete slot inventory.
+5. **Done:** 43 Instance/Planted pairs cover 41 retained laws. `moved_no_loan` is classified as an invariant-consequence helper.
+6. **Done:** all helper approvals remain `PENDING`.
+
+Preservation and lifetime laws now describe actual operation results. Argument laws preserve values, storage and traps; the Q3 simulation statements remain intact.
+
+Commits:
+
+- `484014c5` — classification and structural cleanup
+- `0462afd2` — Q3 run controls
+- `a0ba7a12` — operation-result preservation laws
+- `dc1fa87d` — lifetime laws and controls
+- `ae438559` — step/trace controls
+- `444bb71e` — argument, entry and roundtrip evidence
+- `5b008f5a` — nonempty adoption and complete cleanup cases
+- `72b06536` — specific helper exemption reasons
+- `2ba08a25` — whitespace cleanup
+- `8e11b786` — full ordered `[7, 3]` trace pair
+
+At `8e11b786`: build passed; rules **32/32**; trust ban **23/23**; diff check clean. Working tree clean, nothing pushed. Coordinator approvals and separate review remain.
+
+**QUESTIONS:** None.

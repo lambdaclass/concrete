@@ -1,0 +1,51 @@
+Completed ROUND4 in five commits. Worktree clean; nothing pushed; axioms golden unchanged.
+
+| Commit | Change |
+|---|---|
+| `afebffa2c` | Require exact reset outflow and zero remaining live bytes. |
+| `9f3b86ca4` | Add independent unreleased secrets to secure execution pairs. |
+| `6ed32d2fa` | Bind reports to account lineage; remove the vacuous unestablished-report theorem. |
+| `37a888efe` | Derive peak reports from the live-state trajectory and name the allocator footprint contract. |
+| `224ccfb3f` | Classify proofs and add exact Instance/Planted controls. |
+
+All REAL DEFECT findings are addressed:
+
+- **Reset conservation:** rejects understated and overstated outflows, partial resets, and corrupted history.
+- **Report evidence:** peak bounds concern an independently computed maximum including entry. Footprint evidence remains an explicit named allocator-contract premise. Fixed-result transport proofs are classified as helpers.
+- **Lineage:** soundness requires the report’s lineage to match the certified accounts. Two-lineage controls reject relabelling and incorrect bounds.
+- **Vacuity audit:** definition-level proofs are helpers; reset WF has a genuinely invalid reset-result control; setter control uses a defective setter at the original same-value arguments.
+- **Distinct-secret NI/CT:** secure configurations retain unequal unreleased locals while satisfying all relational premises.
+- **Unestablished report:** removed. Mixed-status evidence remains.
+
+For the reviewer disagreements, I adopted the distinct-secret repair because the previous secure pair constrained all secret input through release equality. I removed the all-unestablished theorem because mixed-status controls cover unknown evidence without advertising a vacuous soundness theorem.
+
+The 12 laws each have a full closed Instance and matching Planted control:
+
+| Law | Statement / Instance | Planted subject |
+|---|---|---|
+| `secure_ni` | Equal public observations; released `7`, hidden `1/2` | `exposingStart` violates NI |
+| `secure_ct` | Equal leakage for that distinct-secret pair | `exposingStart` violates CT |
+| `timing_ni` | Equal public observations for secrets `1/2` | `leakyStart` |
+| `timing_not_ct` | Timing runs violate CT | `secureUnary` satisfies CT |
+| `Account.alloc_zero` | Zero allocation preserves `accountA` | `allocInventsByte`, with WF preserved |
+| `apply_alloc_zero` | Zero allocation preserves all of `memoryA` | `applyCorruptsOther`, with entry WF preserved |
+| `sequence_wf` | Successful sequences preserve WF | `brokenRun` returns invalid accounting |
+| `sequence_conservation` | Exact requested/live conservation | `brokenRun` corrupts totals |
+| `sequence_peaks` | Both maxima are retained | `brokenRun` lowers maxima |
+| `sequence_peak_exact` | Recorded peak matches observed trajectory | `brokenRun` reports the wrong peak |
+| `report_certified` | Independent analysis certifies successful results | `brokenRun`, with valid analysis premises |
+| `erasePure_preserves_wipes` | Ordered wipes survive erasure | `observationRelated` permits dropped wipes |
+
+Accounting sequence instances use the nonempty allocation/free/reset fixture; report instances use the independent `8/5/10/12` report.
+
+All exemptions remain **PENDING**, without writer approval: `InstrumentedSteps.toSteps`, `allowed_unique`, `step_unique`, `secure_run_unique`, `timing_run_unique`, `permissive_step_not_unique`, `leaky_low`, `release_authorized`, both `authorized_release_not_*`, `Memory.set_same`, the four `Account.*_wf` helpers, `apply_wf`, `run_wf`, `free_conservation`, `reset_conservation`, `resetBytes_cons`, `run_conservation`, `apply_peak_monotone`, `run_peak_monotone`, `apply_peak_exact`, `run_peak_exact`, `memoryA_wf`, `run_report_transport`, `established_report_sound`, `reportExitMemory_lineage`, `independent_report_sound`, `mixed_status_report_sound`, `empty_function_report_sound`, and `reportEntry_wf`; also all 85 anonymous proof controls and 18 specification representation controls.
+
+Validation on **`224ccfb3f1fd9056238e126eb24d01abbf2cc52a`**:
+
+- Build: PASS.
+- Rules: **32 passed, 0 failed**.
+- Trust ban: **23 passed, 0 failed**.
+- Annotation audit: **12 Laws / 12 Instances / 12 Planted controls**.
+- Prohibited heavy checks were not run.
+
+QUESTIONS: **None**.

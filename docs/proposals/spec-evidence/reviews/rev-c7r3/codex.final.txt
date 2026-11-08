@@ -1,0 +1,106 @@
+Read-only, offline review completed. No files were modified, no git commands were run, and no builds or gates were executed.
+
+The merge resolution is correct: `ConcreteSpec.lean` retains `Proofs.Leak`, `Proofs.Memory`, and `Proofs.Hybrid`. `ConcreteSpec/Spec.lean` also retains their specification imports. No merge-resolution defect found.
+
+Four REAL DEFECTS remain.
+
+1. **ConcreteSpec/Spec/Leak.lean:308 — major — REAL DEFECT: reset conservation accepts overstated outflows.**
+
+   Natural subtraction truncates. With `before = ⟨100,5,12,5⟩` and `after = before.reset`, `ResetConservation before after 6` is true: `0 = 5 - 6`. Every recorded outflow greater than five passes too.
+
+   The planted control at `Proofs/Leak.lean:632` tests only an *understated* outflow of four, hiding this defect. Removing the runtime guard is a real improvement, but the replacement predicate does not establish exact conservation.
+
+   **Fix:** express conservation as `after.live + recordedOutflow = before.live`, or use integer subtraction. For reset, additionally require `after.live = 0`. Plant both understated and overstated records, and a partial-reset target.
+
+2. **ConcreteSpec/Proofs/Leak.lean:879,898 — major — REAL DEFECT: report soundness still assumes part of its conclusion.**
+
+   `run_report_sound` receives precisely its peak and footprint conclusions as `hpeak` and `hfootprint`. `established_report_sound` repackages those same assumptions. Requested and net-change fields now gain genuine transport through `run_conservation`; peak and footprint do not.
+
+   The independent concrete report and four underbound controls are useful, substantive fixes. They do not turn the generic theorems into independent evidence for all four fields.
+
+   **Fix:** identify these theorems as transport helpers. Establish the substantive peak law against an independently computed maximum of intermediate live-byte states, initialized at function entry. Obtain footprint evidence from a named allocator contract, keeping that premise explicit. Prove report soundness from those results rather than assuming the exit-account obligations themselves.
+
+3. **ConcreteSpec/Proofs/Leak.lean:873 — major — REAL DEFECT: report lineage is disconnected from the accounting being certified.**
+
+   The theorem has independent parameters `lineage` and `r`, with no requirement that `r.lineage = lineage`. `LineageReport.Sound` at `Spec/Leak.lean:347` ignores the report’s lineage entirely.
+
+   Consequently, changing only `establishedReport.lineage` from zero to one leaves `independent_report_sound` true against lineage-zero accounts. More generally, the theorem can certify an empty lineage’s zero bounds in a report labelled with another lineage that allocated bytes.
+
+   **Fix:** define report soundness against entry/exit memories and select accounts using `r.lineage`. Alternatively, explicitly bind the account identity in the predicate. Add a two-lineage control proving that relabelling a report cannot certify another lineage’s accounting.
+
+4. **ConcreteSpec/Proofs/Leak.lean:546,798 — major — REAL DEFECT: the full-contract vacuity/control audit remains incomplete.**
+
+   `Account.reset_wf` remains true solely because reset writes zero live bytes. Its advertised negative control, `badResetPeaks ≠ accountA.reset`, does not fail WF: `badResetPeaks.WF` is true. It tests implementation equality instead of the law.
+
+   Similar gaps remain:
+   
+   - `allowed_unique` is enforced by equality to one answer; it is not documented as a representation helper.
+   - `free_conservation` directly unfolds the update definition; it is not identified as a helper.
+   - `resetBytes_cons` restates its definition and has no helper doc comment.
+   - The `Memory.set_same` negative control changes the value being written, rather than exhibiting a defective setter violating the same-value law.
+   - `reportExitMemory_lineage` is explicitly `rfl`, without identifying its limited role as a calculation helper.
+
+   **Fix:** explicitly classify definition-level lemmas as helpers and exclude them from substantive contract evidence. For each substantive obligation, plant a bad transition or result that fails that exact obligation. In particular, use a nonzero-live reset result to challenge reset WF, and use the strengthened independent conservation predicate to challenge corrupted reset history.
+
+The following ledger covers every named C7 theorem. Locations below are in `ConcreteSpec/Proofs/Leak.lean`. **N** means substantive evidence; **H** means helper/calculation only; **D** means defective or incomplete under the binding audit rule.
+
+| Law | Verdict | Positive witness / planted control |
+|---|---|---|
+| `InstrumentedSteps.toSteps` :27 | N; control incomplete | `secureRun 1` projects at :334; no explicit malformed-projection control |
+| `allowed_unique` :186 | H, unmarked | Allowed answers in explicit runs; permissive oracle at :449–467 |
+| `step_unique` :200 | N | Explicit primitive steps; `permissive_step_not_unique` |
+| `secure_run_unique` :224 | N | `secureRun`; leaky run and reversed-trace control :470 |
+| `secure_ni` :258 | N | Actual secret release/output; equal releases derive equal secrets; leaky pair :505 fails NI |
+| `secure_ct` :271 | N | Nonempty secret-dependent traces; leaky pair :515 fails CT |
+| `timing_run_unique` :338 | N | `timingRun`; secrets one/two produce distinct work leakage |
+| `timing_ni` :427 | N | Different secrets, equal nonempty public observations; leaky pair supplies failure |
+| `timing_not_ct` :436 | N | Complete runs one/two satisfy premises and differ in leakage; secure CT supplies passing contrast |
+| `permissive_step_not_unique` :453 | N | Two allowed output labels; restrictive demo supplies uniqueness contrast |
+| `leaky_low` :497 | H | Empty-local calculation; mixed-local and store-sensitive controls :484–495 exercise the general predicate |
+| `release_authorized` :500 | N | Nonempty release; unauthorized site/type controls in `Spec/Leak.lean` |
+| `authorized_release_not_ni` :505 | N | Actual matched-choice/release runs with unequal observations; secure NI contrast |
+| `authorized_release_not_ct` :515 | N | Actual matched-choice/release runs with unequal leakage; secure CT contrast |
+| `Account.alloc_zero` :528 | N | Nonempty `accountA`; ill-formed account and nonzero allocation controls :767–769 |
+| `Memory.set_same` :532 | H; control incomplete | Nonconstant memory :772; :774 changes the input rather than violating the setter law |
+| `Account.enter_wf` :537 | N | Five live bytes on entry; local peak four fails WF |
+| `Account.alloc_wf` :540 | H, by construction | Allocate ten; `badPeakAccount` fails WF |
+| `Account.free_wf` :543 | N | Free three; corrupted live thirteen fails WF |
+| `Account.reset_wf` :546 | D | Nonempty reset; planted cleared peaks still satisfy WF |
+| `apply_wf` :550 | N | Allocation in two-lineage memory; touched/untouched invalid-account controls |
+| `run_wf` :580 | N | Alloc/free/reset sequence; invalid final-account control |
+| `apply_alloc_zero` :592 | N | Entire nonempty memory unchanged; other-lineage corruption control |
+| `free_conservation` :598 | H, unmarked | Actual free; requested/local-peak corruption controls :817–819 |
+| `reset_conservation` :617 | D | Five-byte reset; four-byte record fails, six-byte record incorrectly passes |
+| `resetBytes_cons` :635 | H, unmarked | Definition unfolding; no distinct substantive control |
+| `run_conservation` :645 | N | Integer conservation across nonempty run; lost allocation, double free, and wrong reset totals :825–828 |
+| `apply_peak_monotone` :691 | N | Alloc/free/reset retain both peaks; lowered/cleared peaks fail |
+| `run_peak_monotone` :718 | N | Nonempty conservation run; lowered final peaks fail |
+| `memoryA_wf` :749 | H | Concrete two-lineage WF calculation; invalid accounts nearby |
+| `run_report_sound` :873 | D | Actual report run; peak/footprint assumed and lineage unbound |
+| `established_report_sound` :893 | D | Independent limits replace old `x ≤ x`; remaining issues above |
+| `reportExitMemory_lineage` :923 | H, unmarked | Concrete reduction only |
+| `independent_report_sound` :942 | N | Historical requests 100, entry live two, alloc eight/free three; each field’s underbound fails |
+| `mixed_status_report_sound` :953 | N | Three established fields constrain actual values; unknown net field makes no numeric claim; established underbounds fail |
+| `empty_function_report_sound` :965 | N | Actual empty run distinguishes local zero bounds from historical 100; established absent-footprint mutation fails |
+| `unestablished_report_sound` :1009 | H, explicitly vacuous | Correctly documented as representation only; mixed-status report supplies substantive evidence |
+| `erasePure_preserves_wipes` :1055 | N | Two ordered nonzero wipes survive a real erasure pass; observation-related dropped/changed/reordered targets fail wipe equality |
+
+The remaining specification-level guarantees were also checked:
+
+| Contract | Verdict and witnesses |
+|---|---|
+| All seven `Leakage` constructors | Nonempty catalog and changed-event controls now present; these test representation, not execution coverage of every constructor |
+| Typed release, value and ordering | Positive authorization, wrong site/type, changed value, and reordered releases covered |
+| Empty release policy | Nonempty unauthorized-trace proof now replaces the previous definition-only evidence |
+| `publicLocals` / `LowEquivalent` | Mixed secret/public locals and public-store mismatch controls now present |
+| `Instrumentation` / `InstrumentedSteps` | Explicit nonempty traces, reversed leakage, and C1 projection present |
+| Complete `Run` / final observation | Nonfinal-prefix refusal and omitted-final-observation control present |
+| Account initialization / WF / entry / operations | Nonempty witnesses present; reset and helper qualifications above apply |
+| Allocation/free/reset counters | Interleaved two-lineage, multiple-reset totals and wrong-total controls present |
+| `Bound.Sound` / `SoundOptional` | Established upper/underbounds and absent established footprint covered; unknown status intentionally asserts nothing |
+| `LineageReport.Sound` | Independent and mixed reports improve numeric coverage; lineage identity remains unchecked |
+| `WipePreservation` | Real positive pass and observation-preserving negative relation present; this fix is substantive |
+
+The secret-release example, NI/CT separation, mixed-status report, function-local peak preservation fields, and wipe-preservation instance are real improvements. No new owner decision is needed for the identified repairs.
+
+VERDICT: CHANGES

@@ -1,0 +1,19 @@
+C7 (leakage, information flow, lineage accounting) round 3 = vacuity audit fix round, written by Kimi. Base 72b35810b (C7 round 2 merged with the integrated spec core) -> head 73f2a7bc. Fixes the full-contract vacuity audit (Codex + agy, files _review/codex-vacuity-audit.md and agy-vacuity-audit.md in the tree): established_report_sound was x<=x, unestablished_report_sound guard-vacuous, reset_conservation enforced by the transition guard, WipePreservation had no instance, most laws lacked planted controls. Audit EVERY C7 law for vacuity and check each fix is real; also check the merge resolution (remerge diff below).
+diff --git a/ConcreteSpec.lean b/ConcreteSpec.lean
+remerge CONFLICT (content): Merge conflict in ConcreteSpec.lean
+index 96cbc7396..b6fdf8f8c 100644
+--- a/ConcreteSpec.lean
++++ b/ConcreteSpec.lean
+@@ -9,12 +9,8 @@ import ConcreteSpec.Proofs.Exec
+ import ConcreteSpec.Proofs.Observe2
+ import ConcreteSpec.Proofs.Scalar
+ import ConcreteSpec.Proofs.Const
+-<<<<<<< 4d1469925 (axioms.golden: C7 round 2 (regenerated on concrete-ci-2))
+ import ConcreteSpec.Proofs.Leak
+-||||||| d8f89ea75
+-=======
+ 
+ import ConcreteSpec.Proofs.Memory
+ 
+ import ConcreteSpec.Proofs.Hybrid
+->>>>>>> 07c16bb5f (axioms.golden: A2i integration of C1 partial lifecycle, C4 and C6 (regenerated on concrete-ci-2))

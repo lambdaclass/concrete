@@ -1,0 +1,68 @@
+### Review of `e115d8be..4f4486ab` (C8 over C6 integration round 3)
+
+#### Verification of Round 2 Fixes
+1. **Fix (1) — Projected vs. raw infinite histories:** Partially fixed, with a **blocker shortcut** in the C6 observation bridge. `FiniteEvents`, `InfiniteEvents`, `SilentDivergence`, and `InfiniteInteraction` now take `A : Observe.ExecAdapter O S` and measure `A.project (X.states n).events`, while raw C1 counts are separated into `Internal*`. `Demo.event_infinite` with `erasingAdapter` and `keepingAdapter` witnesses that raw infinite interaction can erase to external `SilentDivergence`. However, `finite_projected_observation` and `infinite_projected_observation` short-circuit `Observe.HasFullObservation` by existentially choosing C6's canonical normal-form step sequences (`finiteDivergenceSteps events` and `fun i => .emit (trace i)`), discharging `HasFullObservation` by `SameInfiniteObservation.refl _`.
+2. **Fix (2) — Execution-level query-occurrence and lifted-oracle laws:** Mostly fixed, with one **major** design weakness. `issue_occurrence`, `answer_deterministic`, and `answer_toQueryOracle` are now explicitly marked as helpers, and `runFromQ_queryHistoryValid` is a genuine execution-level invariant over `runFromQ`. However, `runFromQ_consecutive_other_site` does not express occurrence preservation across interleaved requests at the same site, and `Move.toQueryOracle_answer` omits the query-history field of `Position` and only inverts an already-given `Move`.
+
+---
+
+### Findings
+
+1. **`ConcreteSpec/Proofs/Adequacy.lean:881-969` & `ConcreteSpec/Spec/Adequacy.lean:238-243` — [blocker] [REAL DEFECT] `finite_projected_observation` and `infinite_projected_observation` discharge `Observe.HasFullObservation` by `SameInfiniteObservation.refl _` via existential choice of `steps`**
+   - **Problem:** Both theorems state `∃ steps ..., MatchesProjectedHistory A X steps ∧ Observe.HasFullObservation (.infinite steps) ...` and instantiate `steps` to the canonical C6 target (`Observe.finiteDivergenceSteps events` at line 895 and `fun i => .emit (trace i)` at line 960). Consequently, the entire C6 observation obligation `Observe.HasFullObservation` is proved by `Observe.SameInfiniteObservation.refl _` (lines 896 and 961). The theorems never exercise `SameInfiniteObservation` across non-identical step sequences and never prove that *any* C6 step sequence matching `(A, X)` has observation `.finiteDivergence events` / `.infiniteDivergence trace`.
+   - **Concrete fix:**
+     1. Prove that `MatchesProjectedHistory A X steps` characterizes the C6 observation for **every** matching `steps`:
+        ```lean
+        theorem MatchesProjectedHistory.hasFullObservation_finite
+            (hmatch : MatchesProjectedHistory A X steps)
+            (hstable : ∀ n, start ≤ n → A.project (X.states n).events = events) :
+            Observe.HasFullObservation (.infinite steps) (.finiteDivergence events)
+
+        theorem MatchesProjectedHistory.hasFullObservation_infinite
+            (hmatch : MatchesProjectedHistory A X steps)
+            (htrace : ∀ i n, i < (A.project (X.states n).events).length →
+              (A.project (X.states n).events)[i]? = some (trace i)) :
+            Observe.HasFullObservation (.infinite steps) (.infiniteDivergence trace)
+        ```
+     2. Strengthen `finite_projected_observation` and `infinite_projected_observation` so they provide both existence of a matching C6 step stream and soundness for **all** `steps` satisfying `MatchesProjectedHistory A X steps` (i.e., `∃ events, (∃ steps, MatchesProjectedHistory A X steps) ∧ ∀ steps, MatchesProjectedHistory A X steps → Observe.HasFullObservation (.infinite steps) (.finiteDivergence events)`, and analogously for `infinite_projected_observation`).
+
+2. **`ConcreteSpec/Proofs/Adequacy.lean:125-136` — [major] [REAL DEFECT] `runFromQ_consecutive_other_site` does not prove counter invariance across interleaved sites**
+   - **Problem:** The docstring claims *"A query at another site does not advance the current query's occurrence count, even when the requests are consecutive in an actual run"*, but the conclusion is only:
+     `q'.occurrence = occurrenceAt ((runFromQ P ρ fuel events issued c).queries.take i) q'.site`
+     Because `q'` is at index `i + 1`, `runFromQ_queryHistoryValid` already gives `q'.occurrence = occurrenceAt (queries.take (i + 1)) q'.site`. The theorem merely strips the single element `queries[i]` from `occurrenceAt` rather than relating two queries at the *same* site separated by queries at other sites. In addition, there is no top-level `runQ_queryHistoryValid` corollary for `issued = []`, forcing callers (lines 1381, 1391) to prove `QueryHistoryValid []` inline.
+   - **Concrete fix:**
+     1. Add `theorem QueryHistoryValid.nil : QueryHistoryValid ([] : List (Query O))` and `theorem runQ_queryHistoryValid : QueryHistoryValid (runQ P ρ fuel c).queries`.
+     2. Prove the true interleaved-site law between two queries `q` (at index `i`) and `q'` (at index `j`, `i < j`) at the same site (`q.site = q'.site`) when all intervening queries `k` (`i < k < j`) have `queries[k].site ≠ q.site`: then `q'.occurrence = q.occurrence + 1` (and more generally, for any `i ≤ j`, `q'.occurrence = q.occurrence + count of intervening queries at q.site`).
+
+3. **`ConcreteSpec/Proofs/Adequacy.lean:181-194` — [minor] [REAL DEFECT] `Move.toQueryOracle_answer` drops the query-history component of `Position` and only states one direction**
+   - **Problem:** `Move.toQueryOracle_answer` inverts `Move P ρ₀.toQueryOracle pos pos'` on a `.request` step, but omits `pos'.queries = pos.queries ++ [Query.issue pos.events p vs site st pos.queries]` from its conclusion and does not state the converse construction (or an `iff`) characterizing primitive moves under `ρ₀.toQueryOracle`.
+   - **Concrete fix:** Upgrade `Move.toQueryOracle_answer` to an `iff` (or pair with its constructor direction) and include `pos'.queries = pos.queries ++ [Query.issue pos.events p vs site st pos.queries]` in the characterization of `pos'`.
+
+---
+
+### C8 Law-by-Law Vacuity Audit (`Spec/Adequacy.lean`, `Proofs/Adequacy.lean`)
+
+| Law | Verdict | Non-trivial instance | Planted counter-example |
+| :--- | :--- | :--- | :--- |
+| `issue_occurrence`, `issue_next_occurrence`, `answer_deterministic`, `answer_toQueryOracle` | **Helper (demoted)** | Used in `QueryHistoryValid.append` and `event_move_34`. | Marked explicitly as non-contract helpers in docstrings. |
+| `QueryHistoryValid.append` | **Non-vacuous** | `silentQuery0` followed by `silentQuery1`. | `frozenQueries` (`occurrence := 0` on second query at same site). |
+| `runFromQ_queryHistoryValid` | **Non-vacuous** | `silentRequests` (`runQ prog env 4 silentRequestConfig`) and `interleavedRequests`. | `frozenQueries` and `sharedQueries` (`¬ QueryHistoryValid`). |
+| `runFromQ_consecutive_same_site` | **Non-vacuous** | `silentRequestConfig`: `silentQuery1.occurrence = silentQuery0.occurrence + 1`. | `frozenQueries`: second query keeps `occurrence = 0`. |
+| `runFromQ_consecutive_other_site` | **Weakened statement (REAL DEFECT)** | `interleavedRequestConfig`: `interleavedQuery1.occurrence = 0`. | `sharedQueries`: second site wrongly gets `occurrence = 1`. (See Finding 2: only peels one step of `occurrenceAt` instead of relating same-site queries across intervening other-site requests.) |
+| `runFromQ_toReport` / `runQ_toReport` | **Non-vacuous** | `runQ prog env.toQueryOracle 4 silentRequestConfig` erases to `run prog env 4 silentRequestConfig`. | `occurrenceSensitiveOracle` on `silentRequestConfig` (`toReport ≠ run`). |
+| `Move.toQueryOracle_answer` | **Incomplete statement (REAL DEFECT)** | `bumpedMove` on `bumpConfig`. | `occurrenceSensitiveOracle` on second request; silent move on `spinConfig`. (See Finding 3: omits `pos'.queries` and converse.) |
+| `runFromQ_queries_from` | **Non-vacuous** | `silentRequests` extends `[]` with `[silentQuery0, silentQuery1]`. | Any history that drops or mutates an earlier prefix entry fails `issued ++ later`. |
+| `runFrom_mono` / `run_mono` | **Non-vacuous** | Terminating demo runs (`bumpConfig`, `silentRequestConfig`) stay identical for all `fuel ≥ 4`. | Out-of-fuel report at `fuel = 1` vs completed report at `fuel = 4` (cannot drop non-`.outOfFuel` hypothesis). |
+| `runFrom_trace_prefix_le` | **Non-vacuous** | Multi-step logging loop `eventConfig` at `fuel = 4` vs `fuel = 9`. | Reversing fuel order (`9 ≤ 4` fails; longer trace is not a prefix of shorter trace). |
+| `InfiniteExecution.toFuelLimit` / `FuelLimit.toInfiniteExecution` / `toFuelLimit_toInfiniteExecution` / `toInfiniteExecution_toFuelLimit` | **Non-vacuous** | `Demo.spin_infinite` and `Demo.event_infinite`. | Perturbing any position breaks `Move` / `prefixes`. |
+| `InfiniteExecution.unique` | **Non-vacuous** | `Demo.spin_infinite` and `Demo.event_infinite`. | Two distinct initial configs `spinConfig ≠ eventConfig` have distinct executions. |
+| `Move.events_prefix`, `InfiniteExecution.events_prefix`, `InfiniteExecution.projected_prefix` | **Non-vacuous** | `Demo.event_infinite` with `keepingAdapter` (strictly growing prefixes every 5 steps). | Non-prefix list (e.g. `[Observe.Event.output "2"]` is not a prefix of `keepingAdapter.project (rawEvents n)`). |
+| `finite_projected_observation` | **Vacuous on `HasFullObservation` (REAL DEFECT)** | `Demo.event_infinite` with `erasingAdapter`. | Constant emitting stream `fun _ => .emit (.output "invented")` fails `MatchesProjectedHistory`. (See Finding 1: `HasFullObservation` is proved by `SameInfiniteObservation.refl _` by choosing `steps := finiteDivergenceSteps events`.) |
+| `infinite_projected_observation` | **Vacuous on `HasFullObservation` (REAL DEFECT)** | `Demo.event_infinite` with `keepingAdapter`. | `erasingAdapter` on `event_infinite` fails `InfiniteEvents`. (See Finding 1: `HasFullObservation` is proved by `SameInfiniteObservation.refl _` by choosing `steps := fun i => .emit (trace i)`.) |
+| `finite_or_infinite_events`, `finite_not_infinite_events`, `silentDivergence_not_infiniteInteraction`, `internal_finite_or_infinite_events` | **Non-vacuous** | `erasing_silent_divergence`, `keeping_infinite_interaction`, `erasing_internal_infinite`, `spin_internal_silent_divergence`. | `eventConfig` under `erasingAdapter`: satisfies `InternalInfiniteInteraction` and `SilentDivergence`, refuting `InfiniteInteraction prog erasingAdapter env eventConfig`. |
+| `not_infinite_of_final` | **Non-vacuous** | Terminating demo run (`bumpConfig`) reaches `.final` and has no `InfiniteExecution`. | `spinConfig` never reaches `.final` and has `spin_infinite`. |
+| `endlesslyBlocked_of_noAnswer`, `not_infinite_of_noAnswer` | **Non-vacuous** | Blocked request config under empty/`none` oracle stays `.noAnswer` for all larger fuels and excludes `InfiniteExecution`. | Answered request (`bumpConfig` under `env`) steps past the request and is not blocked. |
+| `TerminationEvidence.excludes_infinite` | **Non-vacuous** | Total demo function termination evidence excludes `InfiniteExecution` on all admitted entry runs. | `spinConfig` / `eventConfig` admit `InfiniteExecution` and therefore cannot satisfy `TerminationEvidence`. |
+
+VERDICT: CHANGES
+rc=0

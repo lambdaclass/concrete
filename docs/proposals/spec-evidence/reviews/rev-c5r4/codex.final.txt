@@ -1,0 +1,124 @@
+Changes required. The simulation statements follow Q3, but the contract does not meet the binding vacuity and evidence requirements.
+
+This was a read-only source review. I changed no files, ran no builds or gates, used no network, and ran no writing git commands.
+
+1. **ConcreteSpec/Proofs/Own.lean:3109 — major, REAL DEFECT: the planted evidence does not test the stated laws.**  
+   The `eval_ok_erasure` control changes the expected value from `7` to `8`; it neither defines a mutant nor preserves the instrumented-success hypothesis. The same problem recurs throughout the evidence. At :3182, the `allows_erasure` control negates its **premise**. At :3229 and :3250, the controls concern label events and an evaluator report, rather than the respective `Step` and `Steps` conclusions.
+
+   **Long-term fix:** name each semantic subject and define a same-typed mutant. At the positive instance’s exact arguments, prove all mutated hypotheses together with the negation of the complete mutated conclusion. Keep ordinary rejection examples separately.
+
+2. **ConcreteSpec/Proofs/Own.lean:3276 — major, REAL DEFECT: the moved-owner example is not a valid Planted case for its tagged laws.**  
+   The execution genuinely becomes stuck while erasure returns `7`. However, :3277 violates `runFrom_erasure`’s `NotStuck` premise. The controls at :3318, :3343 and :3366 lack the required `CheckerAccepted` premise and use different configurations from their positive examples. They refute stronger, unpremised statements; they do not falsify the tagged conditional laws under a mutant.
+
+   **Long-term fix:** retain this execution as the owner-required refutation of the unconditional converse, with an explicitly identified candidate statement and appropriate classification. Separately provide premise-preserving mutants for the actual forward and accepted-program laws.
+
+3. **ConcreteSpec/Proofs/Own.lean:541 — major, REAL DEFECT: several advertised laws are invariant projections, guard restatements, or construction facts.**  
+   `loan_has_owned_root` directly returns `(hs.2.2.2.1 l hl).2.2.1`. `accessOwner_preserves` and `accessLoan_preserves` return the original invariant after identifying an identity transition. `test_erasure` at :1775 is literally `rfl`. `allows_erasure` at :1797 unpacks the conjunction used to define `instrumentAllows`. `adoptDown_only_arguments` at :1097 returns the exact existential checked by the operation. `leave_no_activation_slot` at :1109 follows from the final runtime scan for precisely that condition.
+
+   **Long-term fix:** classify genuine projection/computation facts as reviewed helpers or representation lemmas, without presenting them as soundness evidence. State independent semantic obligations and prove their preservation structurally. In particular, make activation-local ownership complete by representation/invariant and prove cleanup removes those slots; do not use a concluding invariant recheck as the proof of cleanup correctness.
+
+4. **ConcreteSpec/Proofs/Own.lean:22 — major, REAL DEFECT: the final classification and Instance convention is not implemented.**  
+   No public theorem in this file has a `Law (subject …)` classification. Earlier private theorems are also unclassified. Tagged helpers lack approval references. Instance/Planted tags omit `case`; Planted tags also omit `subject` and `mutant`. Most Instance bodies prove conjunctions or existentials containing a law application, rather than being a full closed application with exactly the instantiated conclusion. The older `by decide` examples do not apply their claimed laws.
+
+   For example, :3102 existentially packages a successful evaluation and its erasure; :3303 combines two acceptance proofs, rejection, and two equivalences. Neither is an Instance under the final convention. The `passOwner_birth` example at :1510 does have the required full-application body, but its tag still lacks `case`.
+
+   **Long-term fix:** classify every authored theorem exactly once, split combined examples, and supply separate closed applications and matching mutant controls for each remaining Law.
+
+The Q3 statements themselves pass the premise audit:
+
+- `step_next_erasure`, `step_request_erasure`, `Step_erasure` and `Steps_erasure` have no checker or invariant premise that disables forward simulation.
+- `runFrom_erasure` and `run_erasure` exclude exactly instrumented `stuck` through `Ending.NotStuck`. They cover normal/returned/trapped finals, `noAnswer`, `badAnswer`, and `outOfFuel`.
+- The converse theorems require the named `CheckerAccepted` interface. Its definition at `ConcreteSpec/Spec/Own.lean:632` is a reachable-state obligation over local permissions, rather than an assumed simulation equality.
+- Acceptance is nonempty and nontrivial: :3062 proves the move-to-`y`/read-`y` program accepted; :3093 proves a common-stuck assignment accepted; :3050 proves the moved-owner program rejected. These are substantive source proofs, although their evidence packaging needs correction.
+- The current-frame restriction and upward-loan refusal remain present. I found no unrestricted arbitrary-destination helper introduced by this round.
+
+The following is the complete public-law audit for `ConcreteSpec.Core.Own`. Locations and witness locations are in `ConcreteSpec/Proofs/Own.lean`. **N** means a substantive property with no premise-vacuity found, but **not certified** because final-convention evidence fails. **D** means a definitional, guard, or construction shortcut requiring reformulation/reclassification. **H** means an invariant/arithmetic or generic proof helper rather than independent soundness evidence. Witnesses listed are existing candidates; **none supplies a convention-valid Planted pair**.
+
+| Law | Verdict | Existing witness candidates |
+|---|---|---|
+| `move_preserves` :22 | N | :292; bad borrowed root :301 |
+| `reinitialize_preserves` :51 | N | :509; bad root :525 |
+| `borrow_preserves` :144 | N | :294; reused supply :305 |
+| `reborrowTo_preserves` :161 | N | :296; missing parent :306 |
+| `reborrow_preserves` :199 | N | `child` examples :296; :306 |
+| `endLoan_preserves` :205 | N | :510; removed parent :532 |
+| `accessOwner_preserves` :233 | D | Identity-transition example :298 |
+| `accessLoan_preserves` :240 | D | Identity-transition example :299 |
+| `move_progress` :249 | D: enumerated guards | :292; refusal :308 |
+| `borrow_progress` :260 | D: enumerated guards | :294; refusal :309 |
+| `reborrowTo_progress` :266 | D: enumerated guards | :296; refusal :310 |
+| `reborrow_progress` :274 | D: enumerated guards | `child`; refusal :311 |
+| `accessOwner_progress` :281 | D: definition | :298; refusal :312 negates premise |
+| `accessLoan_progress` :285 | D: definition | :299; refusal :313 negates premise |
+| `bind_preserves` :316 | N | :512; duplicate place :527 |
+| `drop_preserves` :343 | N | :514; removed root :525 |
+| `enter_preserves` :361 | N | :516; unissued activation :529 |
+| `endLocals_preserves` :374 | N | :517; removed parent :532 |
+| `leave_preserves` :378 | N | :519; removed root :525 |
+| `enterDown_preserves` :389 | N | `LifecycleWitnesses.called`; :529 |
+| `life_preserves` :401 | N | :520 is only adapter equality |
+| `reinitialize_progress` :409 | D: enumerated guards | :509; refusal :534 |
+| `endLoan_progress` :425 | D: enumerated guards | :510; refusal :535 |
+| `bind_fresh_progress` :435 | D: enumerated guards | :512; refusal :536 |
+| `enter_progress` :467 | N | :1398; :1396 changes typing premise |
+| `drop_progress` :476 | D: enumerated guards | :514; refusal :537 |
+| `loan_has_owned_root` :541 | D: explicit projection | No dedicated law application/control |
+| `moved_no_loan` :560 | N | No dedicated law application/control |
+| `instrument_erasure` :571 | D: wrapper computation | No dedicated pair |
+| `life_erasure` :583 | D: wrapper construction | No dedicated pair |
+| `adoptDown_preserves` :615 | N | Call witnesses :906–913; :529 |
+| `passDown_preserves` :638 | N | `CallWitnesses.waiting`; no matched control |
+| `passDown_call_preserves` :679 | N | :907; metadata failures :915–918 |
+| `callLife_preserves` :741 | N | :911–913; no matched control |
+| `callLife_call_preserves` :861 | N | :913; metadata failures :915–918 |
+| `callLife_erasure` :922 | D: wrapper construction | No dedicated pair |
+| `instrument_preserves` :931 | H: applies supplied preservation hypothesis | No dedicated pair |
+| `readOwner_erasure` :942 | D: wrapper computation | No dedicated pair |
+| `writeOwner_erasure` :951 | D: wrapper computation | No dedicated pair |
+| `readLoan_erasure` :960 | D: wrapper/guard extraction | No dedicated pair |
+| `writeLoan_erasure` :976 | D: wrapper/guard extraction | No dedicated pair |
+| `nextLoan_fresh` :993 | H: arithmetic from invariant bound | No dedicated pair |
+| `borrow_birth` :1001 | D: constructor fields | :1348; :1352/:1409 change conclusion/state |
+| `reborrow_birth` :1013 | D: constructor fields | :1355/:1414 are partial conclusions; :1362/:1411/:1418 |
+| `endLoan_supply` :1035 | D: unchanged record field | :1368; :1370 |
+| `leave_no_local_loan` :1070 | N | :1378; :1385 lacks mutated transition |
+| `adoptDown_only_arguments` :1097 | D: returned guard | :1389; :1393 |
+| `leave_no_activation_slot` :1109 | D: final invariant recheck | :1378; :1387 |
+| `reborrowTo_current` :1126 | D: returned destination guard | :1400; :1406 lacks upward mutant |
+| `passOwner_preserves` :1139 | N | :1505; :1508 |
+| `passOwner_call_preserves` :1159 | N | :1505; :1508 negates only ownership component |
+| `passOwner_freezes` :1210 | N | :1517; :1520 negates partial conclusion |
+| `passOwner_birth` :1224 | D: constructor fields | :1510 full application; :1515 changes case/conclusion |
+| `leave_retains_caller` :1272 | N | :1530; :1533 |
+| `leave_no_activation_loan` :1317 | N | :1522; :1528 |
+| `defer_keeps_store` :1335 | D: step construction | :1536; :1541 |
+| `directOwner_roundtrip` :1427 | N | :1557; :1563 negates only loan-table equality |
+| `reborrowTo_live` :1567 | N | :1643; :1646 |
+| `adoptDown_live` :1585 | N | :1650; :1653 |
+| `leave_live` :1626 | N | :1656; :1659 |
+| `eval_ok_erasure` :1670 | D: adapter computation | :3102; :3110 |
+| `eval_trap_erasure` :1689 | D: adapter computation | :3114; :3120 changes trap conclusion to success |
+| `evalArgs_ok_erasure` :1704 | N | :3124; :3133 |
+| `evalArgs_trap_erasure` :1739 | N | :3138; :3145 |
+| `test_erasure` :1775 | D: `rfl` | :3150; :3158 |
+| `instrumentLife_erasure` :1780 | D: adapter computation | :3161; :3169 |
+| `allows_erasure` :1797 | D: defining conjunction | :3173; :3182 negates premise |
+| `step_next_erasure` :1917 | N | :3187; :3195 |
+| `step_request_erasure` :2128 | N | :3201; :3211 negates a different statement |
+| `Step_erasure` :2280 | N | :3216; :3229 concerns only label events |
+| `Steps_erasure` :2296 | N | :3234; :3250 concerns `run`, not `Steps` |
+| `runFrom_erasure` :2332 | N | :3254; :3277 drops `NotStuck` |
+| `run_erasure` :2396 | N | :3286; :3296 drops `NotStuck` |
+| `step_stuck_iff_of_accepted` :2892 | N | :3303; :3318 drops acceptance |
+| `runFrom_erasure_of_accepted` :2916 | N | :3331; :3343 drops acceptance |
+| `run_stuck_iff_of_accepted` :2999 | N | :3352; :3366 drops acceptance |
+
+For exemption approvals: **there are no literal `approved: PENDING` entries in the touched Own files**. Approval fields are absent instead. Under the read-only instruction, these are my review verdicts for the explicitly tagged helpers:
+
+- **Approve as internal helpers, not soundness evidence:** `loan_unique`, `endLoans_retains`, `endLoans_removed`, `leave_frames_proj`; `bindLife_erasure_proj`, `dropOut_erasure_proj`, `register_erasure_proj`, `lookup_eraseProgram_proj`, `stepExit_erasure_proj`; `eraseLabel_events_proj`, `eraseLabel_answer_proj`, `final?_eraseConfig_proj`, `allows_liftAnswer_proj`; `eval_stuck_of_permitted_inv`, `evalArgs_stuck_of_permitted_inv`, `life_none_of_permitted_inv`, `bindLife_none_of_permitted_inv`, `dropOut_none_of_permitted_inv`, `register_none_proj`, `stepExit_none_of_permitted_inv`, `step_none_of_permitted_inv`, `request_none_of_permitted_inv`, `checkerAccepted_step_inv`, `isStuck_eraseEnding_proj`, `step_det_next_inv`, `step_det_none_inv`.
+- **Approve the closed acceptance/rejection proofs as supporting lemmas:** `move_not_checkerAccepted_inv`, `acceptedMove_checkerAccepted_inv`, `acceptedStuck_checkerAccepted_inv`. They do not replace the required law evidence.
+- `LiveDestinations` at `ConcreteSpec/Spec/Own.lean:119` is a **definition**, not a representation lemma. Remove that theorem-classification tag from the definition.
+
+These approvals can be recorded by the coordinator with this review as their reference. Unclassified private theorems still need explicit classification.
+
+VERDICT: CHANGES

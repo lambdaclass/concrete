@@ -1,0 +1,168 @@
+### Executive Summary: Audit of the Five Round-4 Claims
+
+1. **Evaluator-level oracle correspondence for all four request outcomes (`RequestResolution`, `runFromQ_request_correspondence`) — BROKEN (Shortcut / Holds by construction)**:
+   [`RequestResolution`](file:///home/unbalancedparen/ConcreteSpec/Spec/Adequacy.lean#L109-L131) is a verbatim transcription of the four `match` arms of [`runFromQ`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L309-L323) on a `.request` step. Worse, its `.continued` constructor ([`Spec/Adequacy.lean:126-131`](file:///home/unbalancedparen/ConcreteSpec/Spec/Adequacy.lean#L126-L131)) embeds the recursive call `runFromQ P ρ fuel (pos.events ++ a.event.toList) (pos.queries ++ [q]) c'` directly into the target index of the specification predicate. Thus any bug in `runFromQ` after the request step is shared by both sides and discharged by `rfl`. Furthermore, of the four outcome branches (`unanswered`, `invalid`, `refused`, `continued`), only `unanswered` has `Planted` counterexamples; `invalid`, `refused`, and `continued` have **zero** `Planted` witnesses.
+2. **Observation soundness for every matching C6 stream (`finite_projected_observation`, `infinite_projected_observation`) — BROKEN (Shortcut / Reflexivity hidden in helper + Vacuous Planted witness)**:
+   - C8 still never defines the actual C6 step stream `Nat → Observe.Step S` induced step-by-step by `X : InfiniteExecution P ρ c` and `A : Observe.ExecAdapter O S` (where silent machine transitions or erased events become `Observe.Step.silent` and emitted visible events become `Observe.Step.emit e`), nor does it ever use `Observe.ExecAdapter.WellFormed` (leaving `erasingWellFormed` as dead code).
+   - Instead, [`finite_projected_canonical`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1108-L1146) and [`infinite_projected_canonical`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1151-L1198) were demoted to `Helper (computation) (approved: PENDING)` and still instantiate `∃ steps` with the synthetic canonical C6 streams (`Observe.finiteDivergenceSteps events` and `fun i => .emit (trace i)`) for which `Observe.HasFullObservation` holds **by reflexivity**.
+   - [`finite_projected_observation`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1200-L1211) and [`infinite_projected_observation`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1213-L1225) then wrap those helpers in `∀ steps, MatchesProjectedHistory A X steps → Observe.HasFullObservation (.infinite steps) ...`, which is just transitivity of prefix cofinality (`MatchesProjectedHistory.sameObservation`), and declare `MatchesProjectedHistory`—the **hypothesis** guarding `steps`—as the law's `subject`. Their `Planted` counterexamples ([`Proofs/Adequacy.lean:2028-2059`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L2028-L2059)) mutate that hypothesis to `uncheckedHistory := True`, merely proving that not *every* arbitrary C6 stream has the same observation.
+3. **Termination certificates over an independently declared, inhabited call domain (`CallDomain`, `ConditionalTermination`, `TerminationEvidence`) — PARTIAL**:
+   Splitting [`CallDomain`](file:///home/unbalancedparen/ConcreteSpec/Spec/Adequacy.lean#L278-L280) from [`TerminationEvidence`](file:///home/unbalancedparen/ConcreteSpec/Spec/Adequacy.lean#L297-L300) and requiring `premises : conditional.Premises` and `admitted : ∃ ρ args st, domain.calls ρ args st` fixes the uninhabited-premise and certificate-local false-filter loopholes. However, [`TerminationEvidence.excludes_infinite`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1339-L1350)—cited in the module docstring as a headline C8 contract law—was demoted to `Helper (projection) (approved: PENDING)`, and `dependencies : List FnId` in [`ConditionalTermination`](file:///home/unbalancedparen/ConcreteSpec/Spec/Adequacy.lean#L287) remains unconstrained dead metadata unrelated to `Premises` or `P`.
+4. **Exact per-site occurrence accounting for interleaved requests (`runFromQ_interleaved_site`) — REAL FIX**:
+   [`runFromQ_interleaved_site`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L140-L154) is a valid law with a closed `Instance` and a genuine `Planted` counterexample (`sharedSiteRun`).
+5. **Pointwise evaluator correspondence as infinite-execution evidence (`InfiniteExecution.evaluator_prefix`) — HALF-COVERED**:
+   [`InfiniteExecution.evaluator_prefix`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L907-L922) covers the truncation direction (`InfiniteExecution → FuelLimit`), but the converse reconstruction step ([`move_of_fuel_succ`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L861-L898)) and determinism ([`InfiniteExecution.unique`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L989-L995)) were demoted to `Helper (computation) (approved: PENDING)`.
+
+---
+
+### Findings
+
+1. **[`ConcreteSpec/Spec/Adequacy.lean:109-131`](file:///home/unbalancedparen/ConcreteSpec/Spec/Adequacy.lean#L109-L131), [`ConcreteSpec/Proofs/Adequacy.lean:309-346`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L309-L346) — BLOCKER — REAL DEFECT**
+   - **Problem**: `RequestResolution` is not an independent specification of a primitive request transition; its four constructors are a direct transcription of the four `match` arms of `runFromQ` in `runFromQ_request`. In `.continued`, `RequestResolution` hardcodes `runFromQ P ρ fuel (pos.events ++ a.event.toList) (pos.queries ++ [q]) c'` as its target `QueryReport O`, referencing the subject `runFromQ` inside its own specification and making multi-step continuation correspondence hold by `rfl`.
+   - **Fix**: Define `RequestResolution` purely in terms of the single step (relating the 1-fuel report `runFromQ P ρ 1 pos.events pos.queries pos.config` or relating `runFromQ P ρ (fuel + 1)` to an existential intermediate `pos'` with `Move P ρ pos pos'` and `report = runFromQ P ρ fuel pos'.events pos'.queries pos'.config` where `pos'` is constrained by `Move`, not hardcoded into the constructor index without `Move`), and provide `Planted` counterexamples for all four outcome branches (`unanswered`, `invalid`, `refused`, `continued`).
+
+2. **[`ConcreteSpec/Proofs/Adequacy.lean:1946-1983`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1946-L1983), [`ConcreteSpec/Proofs/Adequacy.lean:2065-2114`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L2065-L2114) — MAJOR — REAL DEFECT**
+   - **Problem**: `runFromQ_request_correspondence` has five `Instance` blocks (`terminalConfig`, `badAnswerOracle`, `env`, `occurrenceSensitiveOracle`, `refusingBindConfig`), but only two `Planted` blocks (`terminalConfig` and `occurrenceSensitiveOracle`), both of which test the `.unanswered` (`.noAnswer`) branch. The `.invalid` (`badAnswerOracle`), `.refused` (`refusingBindConfig`), and `.continued` (`env`) cases have no `Planted` counterexamples.
+   - **Fix**: Add closed `Planted` counterexamples for the `badAnswerOracle`, `refusingBindConfig`, and `env` cases under `_review/VACUITY_CONVENTION_FINAL.md`.
+
+3. **[`ConcreteSpec/Proofs/Adequacy.lean:1104-1225`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1104-L1225), [`ConcreteSpec/Proofs/Adequacy.lean:1995-2059`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1995-L2059) — BLOCKER — REAL DEFECT**
+   - **Problem**:
+     1. `finite_projected_observation` and `infinite_projected_observation` still do not bridge an actual step-by-step C8 execution `X : InfiniteExecution P ρ c` to its induced C6 step stream `Nat → Observe.Step S`. Instead, `finite_projected_canonical` and `infinite_projected_canonical` construct the synthetic canonical streams `Observe.finiteDivergenceSteps events` and `fun i => .emit (trace i)` (for which `Observe.HasFullObservation` holds by reflexivity) and were demoted to `Helper (computation) (approved: PENDING)`.
+     2. In `finite_projected_observation` and `infinite_projected_observation`, the existential witness `events` / `trace` is not even directly related to `A.project (X.states n).events` in the theorem statement (only indirectly via `MatchesProjectedHistory`).
+     3. Both theorems tag the specification premise `MatchesProjectedHistory` as their `subject`, and their `Planted` witnesses (`Proofs/Adequacy.lean:2028-2059`) replace `MatchesProjectedHistory` with `uncheckedHistory := fun _ _ _ => True` inside the antecedent of `∀ steps, MatchesProjectedHistory A X steps → ...`, which falsifies the implication only because an unrestricted `∀ steps` includes streams completely unrelated to `X`.
+   - **Fix**: Define the actual C6 step stream `X.toObserveSteps A : Nat → Observe.Step S` induced by the transitions `X.step n` of `X : InfiniteExecution P ρ c` under `A : Observe.ExecAdapter O S`, prove `MatchesProjectedHistory A X (X.toObserveSteps A)`, and make `X.toObserveSteps` (or `A.project`) the subject of the observation laws, while also stating in the conclusion that `events` / `trace` matches the stabilized projected prefixes of `X`.
+
+4. **[`ConcreteSpec/Proofs/Adequacy.lean:654-755`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L654-L755), [`ConcreteSpec/Proofs/Adequacy.lean:861-898`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L861-L898), [`ConcreteSpec/Proofs/Adequacy.lean:1251-1350`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1251-L1350) — MAJOR — REAL DEFECT**
+   - **Problem**: Multiple core C8 contract laws—including three explicitly named as headline laws in the module docstring (`endlesslyBlocked_of_noAnswer`, `not_infinite_of_noAnswer`, `TerminationEvidence.excludes_infinite`)—were misclassified as `Helper (computation)`, `Helper (arithmetic)`, or `Helper (projection)` with `(approved: PENDING)` instead of `Law` with `Instance` and `Planted` witnesses:
+     - `runFrom_mono` (line 656)
+     - `runFrom_trace_prefix_le` (line 718)
+     - `move_of_fuel_succ` (line 863, the converse fuel-limit reconstruction law)
+     - `InfiniteExecution.unique` (line 989)
+     - `silentDivergence_not_infiniteInteraction` (line 1254)
+     - `not_infinite_of_final` (line 1276)
+     - `not_infinite_of_noAnswer` (line 1290)
+     - `endlesslyBlocked_of_noAnswer` (line 1305)
+     - `TerminationEvidence.excludes_infinite` (line 1339)
+   - **Fix**: Tag these contract theorems as `Law` with their proper subjects and provide closed `Instance` and `Planted` witnesses (for negation laws like `excludes_infinite`, state the conclusion as `¬ Nonempty (InfiniteExecution P ρ.toQueryOracle c)` so a closed `Instance` can inhabit the hypotheses).
+
+5. **[`ConcreteSpec/Spec/Adequacy.lean:284-292`](file:///home/unbalancedparen/ConcreteSpec/Spec/Adequacy.lean#L284-L292) — MINOR — REAL DEFECT**
+   - **Problem**: `ConditionalTermination.dependencies : List FnId` is unconstrained dead metadata with no connection to `Premises` or `P`.
+   - **Fix**: Either remove `dependencies` until the composition layer connects it to `Premises`, or index `Premises` over `dependencies`.
+
+6. **[`ConcreteSpec/Proofs/Adequacy.lean:1607-1622`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1607-L1622), [`ConcreteSpec/Proofs/Adequacy.lean:2121-2140`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L2121-L2140), [`ConcreteSpec/Proofs/Adequacy.lean:2292-2299`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L2292-L2299) — MINOR — REAL DEFECT**
+   - **Problem**:
+     - `interleaved_execution` (lines 2121-2129) is an exact duplicate of the `Instance (law runFromQ_interleaved_site, case threeRequestConfig)` at lines 2135-2140, given a redundant `Helper (arithmetic) (approved: PENDING)` tag.
+     - Lines 1607-1622 have stale docstrings claiming `Non-vacuity for finite_projected_observation` and `infinite_projected_observation` while calling `finite_projected_canonical` and `infinite_projected_canonical`.
+     - Lines 2292-2299 contain an untagged orphan `example` for reconstruction mutation instead of a proper `Planted` witness for `move_of_fuel_succ`.
+   - **Fix**: Delete `interleaved_execution` (keep the `Instance`), remove or update the stale examples at lines 1607-1622, and turn lines 2292-2299 into the `Planted` witness for `move_of_fuel_succ`.
+
+---
+
+### Vacuity Audit of Every C8 Law
+
+| Law | Location | Subject | Vacuity Verdict | Witness Assessment |
+| :--- | :--- | :--- | :--- | :--- |
+| [`runFromQ_queryHistoryValid`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L81-L115) | `Proofs/Adequacy.lean:81` | `runFromQ` | **PASS (Non-vacuous)** | Valid closed `Instance` (`threeRequestConfig`, line 2256) and `Planted` (`sharedSiteRun`, line 2262). |
+| [`runFromQ_interleaved_site`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L140-L154) | `Proofs/Adequacy.lean:140` | `runFromQ` | **PASS (Non-vacuous)** | Valid closed `Instance` (`threeRequestConfig`, line 2136) and `Planted` (`sharedSiteRun`, line 2152). |
+| [`runFromQ_toReport`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L234-L273) | `Proofs/Adequacy.lean:234` | `runFromQ` | **PASS (Non-vacuous)** | Valid closed `Instance` (`terminalConfig`, line 2167) and `Planted` (`droppedAnswerRun`, line 2173). |
+| [`runFromQ_request_correspondence`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L325-L346) | `Proofs/Adequacy.lean:325` | `runFromQ` | **FAIL (Vacuous / Restated Def)** | Restates `runFromQ_request`; `.continued` calls `runFromQ` inside `RequestResolution`; missing `Planted` for `badAnswerOracle`, `refusingBindConfig`, and `env`. |
+| [`runFromQ_sound`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L507-L591) | `Proofs/Adequacy.lean:507` | `runFromQ` | **PASS (Non-vacuous)** | Valid closed `Instance` (`terminalConfig`, line 2205) and `Planted` (`fabricatedFinalRun`, line 2223). |
+| [`runFromQ_complete`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L623-L639) | `Proofs/Adequacy.lean:623` | `runFromQ` | **PASS (Non-vacuous)** | Valid closed `Instance` (`terminalConfig`, line 2190) and `Planted` (`droppedAnswerRun`, line 2198). |
+| [`InfiniteExecution.evaluator_prefix`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L907-L922) | `Proofs/Adequacy.lean:907` | `runQ` | **PASS (Partial coverage)** | Valid closed `Instance` (`event_infinite`, line 2239) and `Planted` (`forgetfulRunQ`, line 2247), but converse `move_of_fuel_succ` is missing as a Law. |
+| [`finite_projected_observation`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1200-L1211) | `Proofs/Adequacy.lean:1200` | `MatchesProjectedHistory` | **FAIL (Vacuous Planted / Shortcut)** | Base case in `finite_projected_canonical` is still `rfl` on synthetic `finiteDivergenceSteps`; `Planted` (line 2030) mutates the guarding premise `MatchesProjectedHistory` to `True`. |
+| [`infinite_projected_observation`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1213-L1225) | `Proofs/Adequacy.lean:1213` | `MatchesProjectedHistory` | **FAIL (Vacuous Planted / Shortcut)** | Base case in `infinite_projected_canonical` is still `rfl` on synthetic `Step.emit (trace i)`; `Planted` (line 2041) mutates the guarding premise `MatchesProjectedHistory` to `True`. |
+| [`TerminationEvidence.all_allowed_runs`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1319-L1334) | `Proofs/Adequacy.lean:1319` | `run` | **PASS (Non-vacuous)** | Valid closed `Instance` (`terminatingEvidence`, line 2277) and `Planted` (`earlyStopRun`, line 2284). |
+
+---
+
+### Verdict on All 86 `(approved: PENDING)` Exemptions in `ConcreteSpec/Proofs/Adequacy.lean`
+
+1. `issue_occurrence` (line 30, `Helper (projection)`): **APPROVE**
+2. `issue_next_occurrence` (line 38, `Helper (arithmetic)`): **APPROVE**
+3. `answer_deterministic` (line 47, `Helper (congruence)`): **APPROVE**
+4. `answer_toQueryOracle` (line 53, `Helper (projection)`): **APPROVE**
+5. `QueryHistoryValid.append` (line 60, `Helper (arithmetic)`): **APPROVE**
+6. `QueryHistoryValid.nil` (line 117, `Helper (computation)`): **APPROVE**
+7. `runQ_queryHistoryValid` (line 122, `Helper (projection)`): **APPROVE**
+8. `occurrenceAt_take_interval` (line 128, `Helper (arithmetic)`): **APPROVE**
+9. `occurrenceAt_take_no_other` (line 155, `Helper (arithmetic)`): **APPROVE**
+10. `runFromQ_interleaved_other_sites` (line 183, `Helper (arithmetic)`): **APPROVE**
+11. `runFromQ_consecutive_same_site` (line 199, `Helper (arithmetic)`): **APPROVE**
+12. `runFromQ_consecutive_other_site` (line 217, `Helper (arithmetic)`): **APPROVE**
+13. `Move.toQueryOracle_answer` (line 275, `Helper (projection)`): **APPROVE**
+14. `runFromQ_request` (line 305, `Helper (computation)`): **APPROVE** (once `RequestResolution` is decoupled from `runFromQ_request`)
+15. `runFromQ_queries_from` (line 348, `Helper (computation)`): **APPROVE**
+16. `runFromQ_queries_prefix` (line 382, `Helper (computation)`): **APPROVE**
+17. `runFromQ_queries_prefix_le` (line 422, `Helper (computation)`): **APPROVE**
+18. `runFromQ_query_fuel_independent` (line 438, `Helper (computation)`): **APPROVE**
+19. `Move.toStep` (line 458, `Helper (projection)`): **APPROVE**
+20. `Moves.toSteps` (line 470, `Helper (projection)`): **APPROVE**
+21. `final?_none_of_step` (line 485, `Helper (computation)`): **APPROVE**
+22. `runFrom_sound` (line 593, `Helper (projection)`): **APPROVE** (direct projection of `runFromQ_sound`)
+23. `runFrom_events_from` (line 614, `Helper (computation)`): **APPROVE**
+24. `runFrom_complete` (line 641, `Helper (projection)`): **APPROVE** (direct projection of `runFromQ_complete`)
+25. `runFrom_mono` (line 654, `Helper (computation)`): **REJECT** — Core fuel-monotonicity law for `runFrom`; must be `Law (subject runFrom)`.
+26. `runFrom_complete_le` (line 700, `Helper (computation)`): **APPROVE** (once `runFrom_mono` is a `Law`)
+27. `runFrom_trace_prefix_le` (line 715, `Helper (computation)`): **REJECT** — Core trace-prefix consistency law across fuel budgets; must be `Law (subject runFrom)`.
+28. `runFrom_trace_prefix` (line 757, `Helper (computation)`): **APPROVE**
+29. `runFrom_final_sound` (line 763, `Helper (computation)`): **APPROVE**
+30. `runFromQ_add_of_outOfFuel` (line 780, `Helper (computation)`): **APPROVE**
+31. `eq_of_runFromQ_zero_out` (line 829, `Helper (computation)`): **APPROVE**
+32. `Move.runFromQ_one` (line 844, `Helper (computation)`): **APPROVE**
+33. `Move.not_final` (line 854, `Helper (computation)`): **APPROVE**
+34. `move_of_fuel_succ` (line 861, `Helper (computation)`): **REJECT** — Converse fuel-limit reconstruction law powering `FuelLimit.toInfiniteExecution`; must be `Law (subject runFromQ)`.
+35. `InfiniteExecution.not_final` (line 900, `Helper (projection)`): **APPROVE**
+36. `infinite_iff_fuelLimit` (line 937, `Representation lemma`): **APPROVE** (once `move_of_fuel_succ` is a `Law`)
+37. `InfiniteExecution.toFuelLimit_toInfiniteExecution` (line 943, `Representation lemma`): **APPROVE**
+38. `FuelLimit.toInfiniteExecution_toFuelLimit` (line 949, `Representation lemma`): **APPROVE**
+39. `fuelLimit_states_unique` (line 955, `Helper (computation)`): **APPROVE**
+40. `FuelLimit.unique` (line 975, `Helper (computation)`): **APPROVE**
+41. `InfiniteExecution.unique` (line 987, `Helper (computation)`): **REJECT** — Determinism of infinite execution is a contract property of `InfiniteExecution`, not a computation helper.
+42. `Move.events_prefix` (line 997, `Helper (projection)`): **APPROVE**
+43. `InfiniteExecution.events_prefix` (line 1006, `Helper (arithmetic)`): **APPROVE**
+44. `InfiniteExecution.projected_prefix` (line 1020, `Helper (arithmetic)`): **APPROVE**
+45. `getElem?_eq_of_prefix` (line 1029, `Helper (arithmetic)`): **APPROVE**
+46. `visiblePrefix_finiteDivergenceSteps` (line 1037, `Helper (computation)`): **APPROVE**
+47. `visiblePrefix_emitTrace` (line 1051, `Helper (computation)`): **APPROVE**
+48. `eventually_constant_of_bounded` (line 1060, `Helper (arithmetic)`): **APPROVE**
+49. `MatchesProjectedHistory.sameObservation` (line 1085, `Helper (computation)`): **APPROVE**
+50. `finite_projected_canonical` (line 1104, `Helper (computation)`): **REJECT** — Not a computation helper; this is the existential construction of the finite-divergence observation where `HasFullObservation` is discharged by reflexivity on `finiteDivergenceSteps`.
+51. `infinite_projected_canonical` (line 1147, `Helper (computation)`): **REJECT** — Not a computation helper; this is the existential construction of the infinite-divergence trace where `HasFullObservation` is discharged by reflexivity on `Step.emit (trace i)`.
+52. `finite_or_infinite_events` (line 1226, `Helper (arithmetic)`): **APPROVE**
+53. `finite_not_infinite_events` (line 1242, `Helper (arithmetic)`): **APPROVE**
+54. `silentDivergence_not_infiniteInteraction` (line 1251, `Helper (arithmetic)`): **REJECT** — Semantic mutual-exclusion law between `SilentDivergence` and `InfiniteInteraction` (uses `InfiniteExecution.unique`), not an arithmetic helper.
+55. `internal_finite_or_infinite_events` (line 1262, `Helper (arithmetic)`): **APPROVE**
+56. `not_infinite_of_final` (line 1274, `Helper (computation)`): **REJECT** — Semantic exclusion law between finite termination and `InfiniteExecution`, not a computation helper.
+57. `not_infinite_of_noAnswer` (line 1287, `Helper (computation)`): **REJECT** — Headline C8 contract law cited in module docstring (line 20) excluding `InfiniteExecution` when blocked on `noAnswer`; must be `Law`.
+58. `endlesslyBlocked_of_noAnswer` (line 1302, `Helper (computation)`): **REJECT** — Headline C8 contract law cited in module docstring (line 20) establishing `EndlesslyBlocked` across all larger fuel budgets; must be `Law (subject run)`.
+59. `TerminationEvidence.excludes_infinite` (line 1336, `Helper (projection)`): **REJECT** — Headline C8 contract law cited in module docstring (line 22) excluding `InfiniteExecution` for certified calls; neither a projection nor a helper; must be `Law`.
+60. `spin_move_01` (line 1407, `Helper (computation)`): **APPROVE**
+61. `spin_move_12` (line 1409, `Helper (computation)`): **APPROVE**
+62. `spin_move_23` (line 1411, `Helper (computation)`): **APPROVE**
+63. `spin_move_34` (line 1413, `Helper (computation)`): **APPROVE**
+64. `spin_move_40` (line 1415, `Helper (computation)`): **APPROVE**
+65. `spin_move` (line 1418, `Helper (computation)`): **APPROVE**
+66. `spin_internal_silent_divergence` (line 1441, `Helper (computation)`): **APPROVE**
+67. `event_move_01` (line 1481, `Helper (computation)`): **APPROVE**
+68. `event_move_12` (line 1485, `Helper (computation)`): **APPROVE**
+69. `event_move_23` (line 1489, `Helper (computation)`): **APPROVE**
+70. `event_move_40` (line 1493, `Helper (computation)`): **APPROVE**
+71. `event_move_34` (line 1498, `Helper (computation)`): **APPROVE**
+72. `event_move` (line 1522, `Helper (computation)`): **APPROVE**
+73. `erasing_project` (line 1564, `Helper (computation)`): **APPROVE**
+74. `keeping_project_rawEvents` (line 1570, `Helper (computation)`): **APPROVE**
+75. `erasingWellFormed` (line 1580, `Helper (computation)`): **APPROVE**
+76. `erasing_silent_divergence` (line 1591, `Helper (computation)`): **APPROVE**
+77. `erasing_internal_infinite` (line 1595, `Helper (computation)`): **APPROVE**
+78. `keeping_infinite_interaction` (line 1601, `Helper (computation)`): **APPROVE**
+79. `bumpedMove` (line 1712, `Helper (computation)`): **APPROVE**
+80. `terminalRequest` (line 1940, `Helper (computation)`): **APPROVE**
+81. `erasedFinite` (line 1985, `Helper (computation)`): **APPROVE**
+82. `keptInfinite` (line 1988, `Helper (computation)`): **APPROVE**
+83. `alwaysEmit_not_finite` (line 2015, `Helper (computation)`): **APPROVE**
+84. `interleaved_execution` (line 2121, `Helper (arithmetic)`): **REJECT** — Exact duplicate of the `Instance` declaration at lines 2135-2140; delete the duplicate theorem.
+85. `terminalPath` (line 2181, `Helper (computation)`): **APPROVE**
+86. `unanswered_no_move` (line 2211, `Helper (inversion)`): **APPROVE**
+
+VERDICT: CHANGES
+rc=0
