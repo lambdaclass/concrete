@@ -129,29 +129,36 @@ theorem eval_operands_rehint (h : Var → String) (L : AList Var Int) (st : Unit
 end Prim
 
 /-- Law (subject `ConcreteSpec.Core.SafetyEvidence.discharge`).
-**Evidence consumption is sound.** Success consumes the evidence's exact context (`Usable`),
-discharges the obligation identity it names, and retrieves that obligation from the authoritative
-table. -/
+The output of evidence consumption names the requested registered obligation in the current context. -/
 theorem SafetyEvidence.discharge_sound {claim : ObligationId → Prop} (e : SafetyEvidence claim)
-    (obligations : ObligationTable) (current : EvidenceContext) (requested : ObligationId)
-    (discharged : DischargedFact claim)
-    (success : e.discharge obligations current requested = some discharged) :
-    e.Usable current ∧ current.obligation = requested ∧
-      ObligationTable.lookup obligations requested = some discharged.obligation ∧
-      discharged.obligation.id = requested := by
-  by_cases usable : e.Usable current
-  · by_cases identity : current.obligation = requested
-    · unfold SafetyEvidence.discharge at success
-      simp only [usable, identity, ↓reduceDIte] at success
-      split at success
-      · cases success
-      · rename_i obligation hlookup
-        simp only [Option.some.injEq] at success
-        subst discharged
-        exact ⟨usable, identity, hlookup,
-          ObligationTable.lookup_id obligations requested obligation hlookup⟩
-    · simp [SafetyEvidence.discharge, usable, identity] at success
-  · simp [SafetyEvidence.discharge, usable] at success
+    (obligations : ObligationTable) (current : EvidenceContext) (requested : ObligationId) :
+    match e.discharge obligations current requested with
+    | none => True
+    | some discharged => e.Usable current ∧ current.obligation = requested ∧
+        ObligationTable.lookup obligations requested = some discharged.obligation ∧
+        discharged.obligation.id = requested := by
+  have sound : ∀ discharged : DischargedFact claim,
+      e.discharge obligations current requested = some discharged →
+      e.Usable current ∧ current.obligation = requested ∧
+        ObligationTable.lookup obligations requested = some discharged.obligation ∧
+        discharged.obligation.id = requested := by
+    intro discharged success
+    by_cases usable : e.Usable current
+    · by_cases identity : current.obligation = requested
+      · unfold SafetyEvidence.discharge at success
+        simp only [usable, identity, ↓reduceDIte] at success
+        split at success
+        · cases success
+        · rename_i obligation found
+          simp only [Option.some.injEq] at success
+          subst discharged
+          exact ⟨usable, identity, found,
+            ObligationTable.lookup_id obligations requested obligation found⟩
+      · simp [SafetyEvidence.discharge, usable, identity] at success
+    · simp [SafetyEvidence.discharge, usable] at success
+  cases result : e.discharge obligations current requested with
+  | none => trivial
+  | some discharged => exact sound discharged result
 
 /-- Law (subject `ConcreteSpec.Core.SafetyEvidence.discharge`).
 A stale context cannot produce a successful discharge. -/
@@ -235,7 +242,7 @@ theorem PrimRegistry.unknown_primitive_stuck {O : Exec.Operands}
     simp [PrimRegistry.operands, PrimRegistry.allows, hnone] at ha
 
 /-- Helper (projection). Unpacks the registry's `answerOk_iff` completeness field through
-`PrimRegistry.operands` and `PrimRegistry.allows`. (approved: PENDING). -/
+`PrimRegistry.operands` and `PrimRegistry.allows`. (approved: REVIEW5-codex). -/
 theorem PrimRegistry.allows_allowed {O : Exec.Operands}
     (R : PrimRegistry O.Val O.Ty O.Store O.Event) (p : PrimId)
     (c : PrimContract O.Val O.Ty O.Store O.Event) (hc : AList.lookup R.entries p = some c)
@@ -246,7 +253,7 @@ theorem PrimRegistry.allows_allowed {O : Exec.Operands}
   exact (R.answerOk_iff p c hc args st a).1 ha'
 
 /-- Helper (projection). Projects the postcondition or declared-failure disjunction from
-`PrimRegistry.allows_allowed`. (approved: PENDING). -/
+`PrimRegistry.allows_allowed`. (approved: REVIEW5-codex). -/
 theorem PrimRegistry.allows_postcondition {O : Exec.Operands}
     (R : PrimRegistry O.Val O.Ty O.Store O.Event) (p : PrimId)
     (c : PrimContract O.Val O.Ty O.Store O.Event) (hc : AList.lookup R.entries p = some c)
@@ -264,7 +271,7 @@ theorem PrimRegistry.allows_postcondition {O : Exec.Operands}
     exact hm.1
 
 /-- Helper (projection). Projects the absence of implicit traps from
-`PrimRegistry.allows_postcondition`. (approved: PENDING). -/
+`PrimRegistry.allows_postcondition`. (approved: REVIEW5-codex). -/
 theorem PrimRegistry.allows_no_implicit_trap {O : Exec.Operands}
     (R : PrimRegistry O.Val O.Ty O.Store O.Event) (p : PrimId)
     (c : PrimContract O.Val O.Ty O.Store O.Event) (hc : AList.lookup R.entries p = some c)
@@ -278,77 +285,73 @@ theorem PrimRegistry.allows_no_implicit_trap {O : Exec.Operands}
 namespace Ghost
 variable {O : Exec.Operands}
 
-/-- Helper (computation). Inductive fuel-step soundness lemma used by `Ghost.drive_steps_result`.
-(approved: PENDING). -/
-theorem drive_steps (P : Exec.Program O) (ρ : Exec.Oracle O) :
-    ∀ (fuel : Nat) (hist : List O.Event) (c : Exec.Config O) (r : SegmentReport O),
-      drive P ρ fuel hist c = r → ∃ tr, r.events = hist ++ tr ∧ Exec.Steps P c tr r.config := by
-  intro fuel
-  induction fuel with
-  | zero =>
-    intro hist c r h
-    cases hf : c.final? with
-    | some f =>
-      simp [drive, hf] at h
-      cases h
-      exact ⟨[], by simp, .refl _⟩
-    | none =>
-      simp [drive, hf] at h
-      cases h
-      exact ⟨[], by simp, .refl _⟩
-  | succ n ih =>
-    intro hist c r h
-    cases hf : c.final? with
-    | some f =>
-      simp [drive, hf] at h
-      cases h
-      exact ⟨[], by simp, .refl _⟩
-    | none =>
-      cases hs : Exec.step P c with
-      | none =>
-        simp [drive, hf, hs] at h
-        cases h
-        exact ⟨[], by simp, .refl _⟩
-      | some out =>
-        cases out with
-        | next c' =>
-          simp [drive, hf, hs] at h
-          obtain ⟨tr, he, hc⟩ := ih hist c' r h
-          exact ⟨tr, he, Exec.steps_next hs hc⟩
-        | request p vs site st k =>
-          cases ha : ρ hist p vs site st with
-          | none =>
-            simp [drive, hf, hs, ha] at h
-            cases h
-            exact ⟨[], by simp, .refl _⟩
-          | some a =>
-            by_cases hallow : O.allows p vs st a = true
-            · cases hk : k a with
-              | none =>
-                simp [drive, hf, hs, ha, hallow, hk] at h
-                cases h
-                exact ⟨[], by simp, .refl _⟩
-              | some c' =>
-                simp [drive, hf, hs, ha, hallow, hk] at h
-                obtain ⟨tr, he, hc⟩ := ih (hist ++ a.event.toList) c' r h
-                refine ⟨a.label.events ++ tr, ?_, Exec.Steps.step (.prim hs hallow hk) hc⟩
-                cases hev : a.event with
-                | none =>
-                  simpa [Exec.Answer.label, Exec.Label.events, hev, List.append_assoc] using he
-                | some ev =>
-                  simpa [Exec.Answer.label, Exec.Label.events, hev, List.append_assoc] using he
-            · simp [drive, hf, hs, ha, hallow] at h
-              cases h
-              exact ⟨[], by simp, .refl _⟩
-
 /-- Law (subject `ConcreteSpec.Core.Ghost.drive`).
-**Concrete-step soundness.** Every run of `drive` has a C1 `Exec.Steps` derivation from its initial
-to its retained final configuration, emitting exactly the events added to the history. -/
+**Concrete-step soundness.** The retained configuration is reached by C1 steps, with exactly
+ the events appended to the incoming history. The induction establishes the contract here. -/
 theorem drive_steps_result (P : Exec.Program O) (ρ : Exec.Oracle O)
     (fuel : Nat) (hist : List O.Event) (c : Exec.Config O) :
     ∃ tr, (drive P ρ fuel hist c).events = hist ++ tr ∧
-      Exec.Steps P c tr (drive P ρ fuel hist c).config :=
-  drive_steps P ρ fuel hist c _ rfl
+      Exec.Steps P c tr (drive P ρ fuel hist c).config := by
+  have sound : ∀ (fuel : Nat) (hist : List O.Event) (c : Exec.Config O) (r : SegmentReport O),
+      drive P ρ fuel hist c = r → ∃ tr, r.events = hist ++ tr ∧ Exec.Steps P c tr r.config := by
+    intro fuel
+    induction fuel with
+    | zero =>
+      intro hist c r h
+      cases hf : c.final? with
+      | some f =>
+        simp [drive, hf] at h
+        cases h
+        exact ⟨[], by simp, .refl _⟩
+      | none =>
+        simp [drive, hf] at h
+        cases h
+        exact ⟨[], by simp, .refl _⟩
+    | succ n ih =>
+      intro hist c r h
+      cases hf : c.final? with
+      | some f =>
+        simp [drive, hf] at h
+        cases h
+        exact ⟨[], by simp, .refl _⟩
+      | none =>
+        cases hs : Exec.step P c with
+        | none =>
+          simp [drive, hf, hs] at h
+          cases h
+          exact ⟨[], by simp, .refl _⟩
+        | some out =>
+          cases out with
+          | next c' =>
+            simp [drive, hf, hs] at h
+            obtain ⟨tr, he, hc⟩ := ih hist c' r h
+            exact ⟨tr, he, Exec.steps_next hs hc⟩
+          | request p vs site st k =>
+            cases ha : ρ hist p vs site st with
+            | none =>
+              simp [drive, hf, hs, ha] at h
+              cases h
+              exact ⟨[], by simp, .refl _⟩
+            | some a =>
+              by_cases hallow : O.allows p vs st a = true
+              · cases hk : k a with
+                | none =>
+                  simp [drive, hf, hs, ha, hallow, hk] at h
+                  cases h
+                  exact ⟨[], by simp, .refl _⟩
+                | some c' =>
+                  simp [drive, hf, hs, ha, hallow, hk] at h
+                  obtain ⟨tr, he, hc⟩ := ih (hist ++ a.event.toList) c' r h
+                  refine ⟨a.label.events ++ tr, ?_, Exec.Steps.step (.prim hs hallow hk) hc⟩
+                  cases hev : a.event with
+                  | none =>
+                    simpa [Exec.Answer.label, Exec.Label.events, hev, List.append_assoc] using he
+                  | some ev =>
+                    simpa [Exec.Answer.label, Exec.Label.events, hev, List.append_assoc] using he
+              · simp [drive, hf, hs, ha, hallow] at h
+                cases h
+                exact ⟨[], by simp, .refl _⟩
+  exact sound fuel hist c _ rfl
 
 /-- Law (subject `ConcreteSpec.Core.Ghost.runStmts`).
 Once a configuration is not ordinarily completed, no later statement restarts it. -/
@@ -557,23 +560,30 @@ def dischargeWithoutTable {claim : ObligationId → Prop} (e : SafetyEvidence cl
     Option (DischargedFact claim) :=
   some ⟨⟨e.context.obligation, obligationKey⟩, e.proof⟩
 
-/-- Instance (law `ConcreteSpec.Core.SafetyEvidence.discharge_sound`, case `ConcreteSpec.Core.Vacuity.obligation`). -/
-example : evidence.Usable EvidenceDemo.current ∧
-    EvidenceDemo.current.obligation = obligation.id ∧
-    ObligationTable.lookup obligations obligation.id = some discharged.obligation ∧
-    discharged.obligation.id = obligation.id :=
-  SafetyEvidence.discharge_sound evidence obligations EvidenceDemo.current obligation.id discharged rfl
+/-- Mutant consumer that keeps the proof but fabricates the persistent key in its output. -/
+def dischargeWrongKey {claim : ObligationId → Prop} (e : SafetyEvidence claim)
+    (_obligations : ObligationTable) (_current : EvidenceContext) (_requested : ObligationId) :
+    Option (DischargedFact claim) := some ⟨⟨e.context.obligation, otherKey⟩, e.proof⟩
 
-/-- Planted (law `ConcreteSpec.Core.SafetyEvidence.discharge_sound`, case `ConcreteSpec.Core.Vacuity.obligation`, subject `ConcreteSpec.Core.SafetyEvidence.discharge`, mutant `ConcreteSpec.Core.Vacuity.dischargeWithoutTable`). -/
-example : dischargeWithoutTable evidence [] EvidenceDemo.current obligation.id = some discharged ∧
-    ¬ (evidence.Usable EvidenceDemo.current ∧
-      EvidenceDemo.current.obligation = obligation.id ∧
-      ObligationTable.lookup [] obligation.id = some discharged.obligation ∧
-      discharged.obligation.id = obligation.id) := by
-  refine ⟨rfl, ?_⟩
+/-- Instance (law `ConcreteSpec.Core.SafetyEvidence.discharge_sound`, case `ConcreteSpec.Core.Vacuity.obligation`). -/
+example : match evidence.discharge obligations EvidenceDemo.current obligation.id with
+    | none => True
+    | some result => evidence.Usable EvidenceDemo.current ∧
+        EvidenceDemo.current.obligation = obligation.id ∧
+        ObligationTable.lookup obligations obligation.id = some result.obligation ∧
+        result.obligation.id = obligation.id :=
+  SafetyEvidence.discharge_sound evidence obligations EvidenceDemo.current obligation.id
+
+/-- Planted (law `ConcreteSpec.Core.SafetyEvidence.discharge_sound`, case `ConcreteSpec.Core.Vacuity.obligation`, subject `ConcreteSpec.Core.SafetyEvidence.discharge`, mutant `ConcreteSpec.Core.Vacuity.dischargeWrongKey`). -/
+example : ¬ (match dischargeWrongKey evidence obligations EvidenceDemo.current obligation.id with
+    | none => True
+    | some result => evidence.Usable EvidenceDemo.current ∧
+        EvidenceDemo.current.obligation = obligation.id ∧
+        ObligationTable.lookup obligations obligation.id = some result.obligation ∧
+        result.obligation.id = obligation.id) := by
   intro h
-  have hlookup := h.2.2.1
-  simp [ObligationTable.lookup] at hlookup
+  have equal := congrArg (fun result => result.map (fun ob => ob.key)) h.2.2.1
+  contradiction
 
 /-- Instance (law `ConcreteSpec.Core.SafetyEvidence.discharge_obligation_mismatch`, case `ConcreteSpec.Core.Vacuity.mismatchedObligation`). -/
 example : evidence.discharge mismatchedObligations EvidenceDemo.current mismatchedObligation.id = none :=

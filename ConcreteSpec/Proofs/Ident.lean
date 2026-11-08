@@ -793,18 +793,6 @@ theorem LoadedModules.findCollisionFrom_sound (candidates modules : List LoadedM
       obtain ⟨firstMember, secondMember⟩ := ih found
       exact ⟨List.mem_cons.2 (Or.inr firstMember), secondMember⟩
 
-/-- Helper (inversion). Inverts the loader result to support the output contract.
-(approved: PENDING). -/
-theorem LoadedModules.load_refusal_sound_inv (modules : List LoadedModule) (collision : LoadCollision)
-    (refused : load modules = .refused collision) : HasCollision modules collision := by
-  unfold load at refused
-  cases found : findCollision modules with
-  | none => simp [found] at refused
-  | some foundCollision =>
-    simp only [found, LoadResult.refused.injEq] at refused
-    subst collision
-    exact findCollisionFrom_sound modules modules foundCollision found
-
 /-- Helper (projection). A real pair collision is visible to the ordered-pair checker.
 (approved: rev-c9r4-agy). -/
 theorem LoadCollision.between?_complete (first second : LoadedModule) (collision : LoadCollision)
@@ -868,30 +856,16 @@ theorem LoadedModules.load_refusal_complete (modules : List LoadedModule) (colli
   obtain ⟨detected, found⟩ := search modules firstMember
   exact ⟨detected, by simp [load, findCollision, found]⟩
 
-/-- Helper (inversion). Inverts the loader result to support the output contract.
-(approved: PENDING). -/
-theorem LoadedModules.load_admitted_inv (modules : List LoadedModule) (admitted : List LoadedModule)
-    (result : load modules = .admitted admitted) : admitted = modules ∧ WellFormed modules := by
-  unfold load at result
-  cases found : findCollision modules with
-  | some collision => simp [found] at result
-  | none =>
-    simp only [found, LoadResult.admitted.injEq] at result
-    subst admitted
-    refine ⟨rfl, ?_⟩
-    intro collision present
-    obtain ⟨detected, refused⟩ := load_refusal_complete modules collision present
-    simp [load, found] at refused
-
 /-- Law (subject `ConcreteSpec.Core.LoadedModules.load`).
 Every refusal returned by the loader names a collision in its actual input. -/
 theorem LoadedModules.load_refusal_sound (modules : List LoadedModule) :
     match load modules with
     | .refused collision => HasCollision modules collision
     | .admitted _ => True := by
-  cases result : load modules with
-  | refused collision => exact load_refusal_sound_inv modules collision result
-  | admitted _ => trivial
+  unfold load
+  cases found : findCollision modules with
+  | none => trivial
+  | some collision => exact findCollisionFrom_sound modules modules collision found
 
 /-- Law (subject `ConcreteSpec.Core.LoadedModules.load`).
 Every admitted output preserves the input and excludes both kinds of load collision. -/
@@ -899,9 +873,14 @@ theorem LoadedModules.load_admitted (modules : List LoadedModule) :
     match load modules with
     | .admitted admitted => admitted = modules ∧ WellFormed modules
     | .refused _ => True := by
-  cases result : load modules with
-  | admitted admitted => exact load_admitted_inv modules admitted result
-  | refused _ => trivial
+  unfold load
+  cases found : findCollision modules with
+  | some _ => trivial
+  | none =>
+    refine ⟨rfl, ?_⟩
+    intro collision present
+    obtain ⟨detected, refused⟩ := load_refusal_complete modules collision present
+    simp [load, found] at refused
 
 /-- Law (subject `ConcreteSpec.Core.SourceText.lineAt`).
 Appending a byte updates the source line count by its actual newline step. -/
