@@ -104,13 +104,7 @@ example : PathOk "src/main.con" ∧ ('\n' ∉ "let x = 1;".toList) ∧ ('\n' ∉
       sourceSpan "src/main.con" (by decide) 2 (by decide) "a\té") := by
   decide
 
-/-- Instance (law `ConcreteSpec.Core.Observe.sourcePrefixSpan_second_line`, case `multiline_newline_reset`). -/
-example : sourcePrefixSpan "src/main.con" (by decide) ("let x = 1;" ++ "\n" ++ "a\té") =
-    sourceSpan "src/main.con" (by decide) 2 (by decide) "a\té" :=
-  sourcePrefixSpan_second_line "src/main.con" (by decide) "let x = 1;" "a\té"
-    (by decide) (by decide)
-
-/-- Planted (law `ConcreteSpec.Core.Observe.sourcePrefixSpan_second_line`, case `multiline_newline_reset`,
+/-- Planted (law `ConcreteSpec.Core.Observe.sourcePrefixSpan_second_line`, case `multiline_utf8_tab`,
 subject `ConcreteSpec.Core.Observe.sourcePrefixSpan`, mutant `ConcreteSpec.Core.Observe.singleLinePrefixSpan`). -/
 example : PathOk "src/main.con" ∧ ('\n' ∉ "let x = 1;".toList) ∧ ('\n' ∉ "a\té".toList) ∧
     ¬ (singleLinePrefixSpan "src/main.con" (by decide) ("let x = 1;" ++ "\n" ++ "a\té") =

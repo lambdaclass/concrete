@@ -209,16 +209,24 @@ def sourcePrefixSpan (path : String) (pathOk : PathOk path) (prefixText : String
   let scanned := scanSourcePrefix prefixText.toList 0 []
   sourceSpan path pathOk (scanned.1 + 1) (Nat.zero_lt_succ _) (String.ofList scanned.2)
 
-/-- Source input for one elaborated operation. The source file owns its project path; the
-site producer derives positions from source text rather than accepting a precomputed span. -/
+/-- Source input for one elaborated operation: the file's raw path string and the source text
+preceding the operation from the start of the file. No precomputed span or `PathOk` proof is
+bundled in the input data; the site producer validates paths and derives positions from the
+source text. -/
 structure SourcePosition where
   path : String
-  pathOk : PathOk path
   prefixText : String
 
-/-- Produce a diagnostic site table from source inputs, preserving typed site identities. -/
-def sourceSites (sources : AList SiteId SourcePosition) : SiteTable :=
-  AList.map (fun src => sourcePrefixSpan src.path src.pathOk src.prefixText) sources
+/-- Produce a diagnostic site table from source inputs, admitting only valid project-relative
+forward-slash paths (`PathOk`) and deriving 1-based line numbers and UTF-8 byte columns from the
+source prefix text while preserving typed site identities. -/
+def sourceSites : AList SiteId SourcePosition → SiteTable
+  | [] => []
+  | (site, src) :: rest =>
+    if h : PathOk src.path then
+      (site, sourcePrefixSpan src.path h src.prefixText) :: sourceSites rest
+    else
+      sourceSites rest
 
 /-- A span's column is the byte column at the operation on its source line. -/
 def Span.HasByteColumn (sp : Span) (before : String) : Prop := sp.col = byteColumn before

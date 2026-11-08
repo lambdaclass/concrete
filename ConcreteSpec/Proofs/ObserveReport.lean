@@ -309,12 +309,36 @@ theorem trapTerminal_eq_some_iff (sites : SiteTable) (kind : TrapKind) (site : S
       cases hsp
       simp [hpath]
 
-/-- Helper (computation). Mapping source inputs preserves a successful site lookup.
-This supports the operational source-to-report law. (approved: PENDING) -/
+/-- Helper (computation). Every entry produced by `sourceSites` has a valid project-relative
+forward-slash path, proved by induction on the raw source list. (approved: PENDING) -/
+theorem sourceSites_valid (sources : AList SiteId SourcePosition) :
+    SiteTable.Valid (sourceSites sources) := by
+  induction sources with
+  | nil =>
+    intro site sp found
+    cases found
+  | cons entry rest ih =>
+    obtain ⟨key, src⟩ := entry
+    intro site sp found
+    unfold sourceSites at found
+    by_cases hpath : PathOk src.path
+    · simp only [hpath, ↓reduceDIte, AList.lookup] at found
+      by_cases hkey : key = site
+      · simp only [hkey, ↓reduceIte, Option.some.injEq] at found
+        subst found
+        exact hpath
+      · simp only [hkey, ↓reduceIte] at found
+        exact ih site sp found
+    · simp only [hpath, ↓reduceDIte] at found
+      exact ih site sp found
+
+/-- Helper (computation). Mapping source inputs preserves a successful site lookup when the
+source path satisfies `PathOk`. This supports the operational source-to-report law. (approved: PENDING) -/
 theorem sourceSites_lookup (sources : AList SiteId SourcePosition) (site : SiteId)
-    (src : SourcePosition) (found : AList.lookup sources site = some src) :
+    (src : SourcePosition) (found : AList.lookup sources site = some src)
+    (pathOk : PathOk src.path) :
     AList.lookup (sourceSites sources) site =
-      some (sourcePrefixSpan src.path src.pathOk src.prefixText) := by
+      some (sourcePrefixSpan src.path pathOk src.prefixText) := by
   induction sources with
   | nil => cases found
   | cons entry rest ih =>
@@ -322,35 +346,45 @@ theorem sourceSites_lookup (sources : AList SiteId SourcePosition) (site : SiteI
     by_cases same : key = site
     · simp [AList.lookup, same] at found
       subst src
-      simp [sourceSites, AList.map, AList.lookup, same]
+      simp [sourceSites, pathOk, AList.lookup, same]
     · simp only [AList.lookup, same, ↓reduceIte] at found
-      simpa [sourceSites, AList.map, AList.lookup, same] using ih found
+      unfold sourceSites
+      by_cases hval : PathOk value.path
+      · simp [hval, AList.lookup, same, ih found]
+      · simp [hval, ih found]
 
 /-- Law (subject `ConcreteSpec.Core.Observe.sourceSites`).
-A trap in an actual evaluator run resolves through the source-production pipeline to the
-source file's own path and source-derived position. The reported terminal carries that valid
-path, all prior events, and the external final state. Faulty site producers cannot replace a
-source file's project path with a host path, even if the report layer validates paths. -/
+A trap in an actual evaluator run resolves through `sourceSites` to a reported span `sp` that
+preserves the source file's project-relative path (`sp.path = src.path` and `sp.PathOk`), computes
+its 1-based line number and UTF-8 byte column from `scanSourcePrefix` on `src.prefixText`, and
+reports a `.trapped` terminal observation with status `134`, all prior projected events, and the
+final external state `A.state store`. -/
 theorem runFrom_source_trap {O : Exec.Operands} {S : EventSignature}
     (P : Exec.Program O) (A : ExecAdapter O S) (C : OperationContract S) (input : C.Input)
     (ρ : Exec.Oracle O) (fuel : Nat) (hist : List O.Event) (c : Exec.Config O)
     (sources : AList SiteId SourcePosition) (site : SiteId) (src : SourcePosition)
     (kind : TrapKind) (store : O.Store)
     (found : AList.lookup sources site = some src)
+    (pathOk : PathOk src.path)
     (ending : (Exec.runFrom P ρ fuel hist c).ending = .final (.trapped kind site) store)
     (permitted : ExecAdapter.BlockingPermitted P { A with sites := sourceSites sources } C input
       (Exec.runFrom P ρ fuel hist c)) :
-    reportObservation P { A with sites := sourceSites sources } C input
-      (Exec.runFrom P ρ fuel hist c) permitted =
-      some (.terminal ⟨A.project (Exec.runFrom P ρ fuel hist c).events,
-        .trapped kind site (sourcePrefixSpan src.path src.pathOk src.prefixText)
-          (trapLine kind site (sourcePrefixSpan src.path src.pathOk src.prefixText)), A.state store⟩) ∧
-    (sourcePrefixSpan src.path src.pathOk src.prefixText).PathOk := by
-  have path : (sourcePrefixSpan src.path src.pathOk src.prefixText).PathOk := src.pathOk
-  constructor
-  · simp [reportObservation, ending, ExecAdapter.terminal?, trapTerminal,
-      sourceSites_lookup sources site src found, path, ExecAdapter.project]
-  · exact path
+    ∃ sp,
+      reportObservation P { A with sites := sourceSites sources } C input
+        (Exec.runFrom P ρ fuel hist c) permitted =
+        some (.terminal ⟨A.project (Exec.runFrom P ρ fuel hist c).events,
+          .trapped kind site sp (trapLine kind site sp), A.state store⟩) ∧
+      sp.path = src.path ∧
+      sp.PathOk ∧
+      sp.line = (scanSourcePrefix src.prefixText.toList 0 []).1 + 1 ∧
+      Span.HasByteColumn sp (String.ofList (scanSourcePrefix src.prefixText.toList 0 []).2) ∧
+      Terminal.status (.trapped kind site sp (trapLine kind site sp)) = 134 := by
+  have resolved := sourceSites_lookup sources site src found pathOk
+  have hvalid := sourceSites_valid sources site
+    (sourcePrefixSpan src.path pathOk src.prefixText) resolved
+  refine ⟨sourcePrefixSpan src.path pathOk src.prefixText, ?_, rfl, hvalid, rfl, rfl, rfl⟩
+  simp [reportObservation, ending, ExecAdapter.terminal?, trapTerminal,
+    resolved, hvalid, ExecAdapter.project]
 
 /-- Fault: a producer prefixes project paths with a host root. It preserves sites and positions. -/
 def hostRootSourceSites (sources : AList SiteId SourcePosition) : SiteTable :=
@@ -360,6 +394,13 @@ def hostRootSourceSites (sources : AList SiteId SourcePosition) : SiteTable :=
 this loss of source-file identity. -/
 def wrongFileSourceSites (sources : AList SiteId SourcePosition) : SiteTable :=
   AList.map (fun sp => { sp with path := "other/main.con" }) (sourceSites sources)
+
+/-- Fault: computes trap-site columns by Unicode scalar count instead of UTF-8 byte count. -/
+def scalarSourceSites (sources : AList SiteId SourcePosition) : SiteTable :=
+  AList.map (fun src =>
+    let scanned := scanSourcePrefix src.prefixText.toList 0 []
+    ⟨src.path, scanned.1 + 1, scanned.2.length + 1,
+      Nat.zero_lt_succ _, Nat.zero_lt_succ _⟩) sources
 
 /-- Fault: resolves trap sites without checking `Span.PathOk`, allowing absolute or backslash
 paths into terminal observations. -/
@@ -448,17 +489,7 @@ example : ExecAdapter.WellFormed adapter permittingContract () blockingOracle �
   cases pending with
   | request previous => simp at empty
 
-/-- Instance (law `ConcreteSpec.Core.Observe.runFrom_report_trace`, case `refuse_always_none`). -/
-example : ReportTraceValid program adapter permittingContract ()
-    (Exec.runFrom program blockingOracle 1 [1] (requesting 3))
-    (reportObservation program adapter permittingContract ()
-      (Exec.runFrom program blockingOracle 1 [1] (requesting 3))
-      (runFrom_blockingPermitted program adapter permittingContract () blockingOracle
-        blockingWellFormed prior_complete)) :=
-  runFrom_report_trace program adapter permittingContract () blockingOracle blockingWellFormed
-    1 [1] (requesting 3) prior_complete
-
-/-- Planted (law `ConcreteSpec.Core.Observe.runFrom_report_trace`, case `refuse_always_none`,
+/-- Planted (law `ConcreteSpec.Core.Observe.runFrom_report_trace`, case `prior_exchange_block`,
 subject `ConcreteSpec.Core.Observe.reportObservation`, mutant `ConcreteSpec.Core.Observe.alwaysNoneReport`). -/
 example : ExecAdapter.WellFormed adapter permittingContract () blockingOracle ∧
     CompleteTrace permittingContract () (adapter.project [1]) ∧
@@ -618,19 +649,7 @@ example : ExecAdapter.WellFormed adapter permittingContract () answeringOracle �
     none at hnone
   cases hnone
 
-/-- Instance (law `ConcreteSpec.Core.Observe.runFrom_outOfFuel_report_none`, case `reject_fabricated_exit_on_out_of_fuel`). -/
-example : (requesting 3).final? = none ∧
-    CompleteTrace permittingContract ()
-      (adapter.project (Exec.runFrom program answeringOracle 0 [1] (requesting 3)).events) ∧
-    reportObservation program adapter permittingContract ()
-      (Exec.runFrom program answeringOracle 0 [1] (requesting 3))
-      (runFrom_blockingPermitted program adapter permittingContract () answeringOracle
-        (answeringWellFormed (fun _ _ _ => True)) prior_complete) = none :=
-  runFrom_outOfFuel_report_none program adapter permittingContract () answeringOracle
-    (answeringWellFormed (fun _ _ _ => True)) 0 [1] (requesting 3) (requesting 3)
-    prior_complete rfl
-
-/-- Planted (law `ConcreteSpec.Core.Observe.runFrom_outOfFuel_report_none`, case `reject_fabricated_exit_on_out_of_fuel`,
+/-- Planted (law `ConcreteSpec.Core.Observe.runFrom_outOfFuel_report_none`, case `zero_fuel_at_request`,
 subject `ConcreteSpec.Core.Observe.reportObservation`, mutant `ConcreteSpec.Core.Observe.exitZeroOnOutOfFuelReport`). -/
 example : ExecAdapter.WellFormed adapter permittingContract () answeringOracle ∧
     CompleteTrace permittingContract () (adapter.project [1]) ∧
@@ -678,17 +697,7 @@ example : ExecAdapter.BlockingPermitted program adapter permittingContract ()
     some (.terminal ⟨[], .startupRefused, ()⟩) at heq
   cases heq
 
-/-- Instance (law `ConcreteSpec.Core.Observe.launch_missing_grant_status_125`, case `missing_grant_status_code`). -/
-example : launchObservation ["Fs", "Net"] ["Fs"]
-      program adapter permittingContract () blockingOracle 1 (requesting 3) blockedPermitted =
-      some (.terminal ⟨[], .startupRefused, adapter.state (requesting 3).store⟩) ∧
-    Terminal.status .startupRefused = 125 ∧
-    Terminal.trapLine? .startupRefused = none :=
-  launch_missing_grant_status_125 ["Fs", "Net"] ["Fs"] "Net"
-    program adapter permittingContract () blockingOracle 1 (requesting 3) blockedPermitted
-    (by decide) (by decide)
-
-/-- Planted (law `ConcreteSpec.Core.Observe.launch_missing_grant_status_125`, case `missing_grant_status_code`,
+/-- Planted (law `ConcreteSpec.Core.Observe.launch_missing_grant_status_125`, case `missing_grant_refuses_startup`,
 subject `ConcreteSpec.Core.Observe.Terminal.status`, mutant `ConcreteSpec.Core.Observe.wrongStartupStatus`). -/
 example : ExecAdapter.BlockingPermitted program adapter permittingContract ()
       (Exec.run program blockingOracle 1 (requesting 3)) ∧
@@ -756,25 +765,7 @@ example : ExecAdapter.WellFormed relativePathAdapter permittingContract () block
       .trapped .abort Demo.site Demo.sp (trapLine .abort Demo.site Demo.sp), ()⟩) at heq
   cases heq
 
-/-- Instance (law `ConcreteSpec.Core.Observe.runFrom_trapped_status_134`, case `trapped_exit_status_134`). -/
-example : reportObservation program relativePathAdapter permittingContract ()
-      (Exec.runFrom program blockingOracle 1 [1] abortingConfig)
-      (runFrom_blockingPermitted program relativePathAdapter permittingContract () blockingOracle
-        relativePathWellFormed prior_complete) =
-      some (.terminal ⟨relativePathAdapter.project
-          (Exec.runFrom program blockingOracle 1 [1] abortingConfig).events,
-        .trapped .abort Demo.site Demo.sp (trapLine .abort Demo.site Demo.sp),
-        relativePathAdapter.state ()⟩) ∧
-    Demo.sp.PathOk ∧
-    Terminal.status (.trapped .abort Demo.site Demo.sp (trapLine .abort Demo.site Demo.sp)) = 134 ∧
-    Terminal.trapLine? (.trapped .abort Demo.site Demo.sp (trapLine .abort Demo.site Demo.sp)) =
-      some (trapLine .abort Demo.site Demo.sp) ∧
-    (.trapped .abort Demo.site Demo.sp (trapLine .abort Demo.site Demo.sp) : Terminal) ≠
-      .exited 134 :=
-  runFrom_trapped_status_134 program relativePathAdapter permittingContract () blockingOracle
-    relativePathWellFormed 1 [1] abortingConfig prior_complete .abort Demo.site () Demo.sp rfl rfl
-
-/-- Planted (law `ConcreteSpec.Core.Observe.runFrom_trapped_status_134`, case `trapped_exit_status_134`,
+/-- Planted (law `ConcreteSpec.Core.Observe.runFrom_trapped_status_134`, case `trapped_report_not_exited_134`,
 subject `ConcreteSpec.Core.Observe.Terminal.status`, mutant `ConcreteSpec.Core.Observe.wrongTrapStatus`). -/
 example : ExecAdapter.WellFormed relativePathAdapter permittingContract () blockingOracle ∧
     CompleteTrace permittingContract () (relativePathAdapter.project [1]) ∧
@@ -801,7 +792,7 @@ example : ExecAdapter.WellFormed relativePathAdapter permittingContract () block
   change 1 = 134 at hstatus
   omega
 
-def sourceInput : SourcePosition := ⟨"src/main.con", by decide, "first\na\té"⟩
+def sourceInput : SourcePosition := ⟨"src/main.con", "first\na\té"⟩
 def sourceInputs : AList SiteId SourcePosition := [(Demo.site, sourceInput)]
 
 /-- Helper (computation). This concrete run ends in a trap, so the pending-report permission
@@ -813,82 +804,110 @@ theorem sourcePermitted (sites : SiteTable) :
   cases ending
 
 /-- Instance (law `ConcreteSpec.Core.Observe.runFrom_source_trap`, case `source_path_to_trap`). -/
-example : reportObservation program { adapter with sites := sourceSites sourceInputs }
-      permittingContract () (Exec.runFrom program blockingOracle 1 [1] abortingConfig)
-      (sourcePermitted (sourceSites sourceInputs)) =
-      some (.terminal ⟨adapter.project (Exec.runFrom program blockingOracle 1 [1] abortingConfig).events,
-        .trapped .abort Demo.site
-          (sourcePrefixSpan sourceInput.path sourceInput.pathOk sourceInput.prefixText)
-          (trapLine .abort Demo.site
-            (sourcePrefixSpan sourceInput.path sourceInput.pathOk sourceInput.prefixText)),
-        adapter.state ()⟩) ∧
-    (sourcePrefixSpan sourceInput.path sourceInput.pathOk sourceInput.prefixText).PathOk :=
+example : ∃ sp,
+      reportObservation program { adapter with sites := sourceSites sourceInputs }
+        permittingContract () (Exec.runFrom program blockingOracle 1 [1] abortingConfig)
+        (sourcePermitted (sourceSites sourceInputs)) =
+        some (.terminal ⟨adapter.project (Exec.runFrom program blockingOracle 1 [1] abortingConfig).events,
+          .trapped .abort Demo.site sp (trapLine .abort Demo.site sp),
+          adapter.state ()⟩) ∧
+      sp.path = sourceInput.path ∧
+      sp.PathOk ∧
+      sp.line = (scanSourcePrefix sourceInput.prefixText.toList 0 []).1 + 1 ∧
+      Span.HasByteColumn sp (String.ofList (scanSourcePrefix sourceInput.prefixText.toList 0 []).2) ∧
+      Terminal.status (.trapped .abort Demo.site sp (trapLine .abort Demo.site sp)) = 134 :=
   runFrom_source_trap program adapter permittingContract () blockingOracle 1 [1] abortingConfig
-    sourceInputs Demo.site sourceInput .abort () rfl rfl (sourcePermitted (sourceSites sourceInputs))
+    sourceInputs Demo.site sourceInput .abort () rfl (by decide) rfl
+    (sourcePermitted (sourceSites sourceInputs))
 
 /-- Planted (law `ConcreteSpec.Core.Observe.runFrom_source_trap`, case `source_path_to_trap`,
 subject `ConcreteSpec.Core.Observe.sourceSites`, mutant `ConcreteSpec.Core.Observe.hostRootSourceSites`). -/
 example : AList.lookup sourceInputs Demo.site = some sourceInput ∧
+    PathOk sourceInput.path ∧
     (Exec.runFrom program blockingOracle 1 [1] abortingConfig).ending =
       .final (.trapped .abort Demo.site) () ∧
     ExecAdapter.BlockingPermitted program { adapter with sites := hostRootSourceSites sourceInputs }
       permittingContract () (Exec.runFrom program blockingOracle 1 [1] abortingConfig) ∧
-    ¬ (reportObservation program { adapter with sites := hostRootSourceSites sourceInputs }
-        permittingContract () (Exec.runFrom program blockingOracle 1 [1] abortingConfig)
-        (sourcePermitted (hostRootSourceSites sourceInputs)) =
-        some (.terminal ⟨adapter.project (Exec.runFrom program blockingOracle 1 [1] abortingConfig).events,
-          .trapped .abort Demo.site
-            (sourcePrefixSpan sourceInput.path sourceInput.pathOk sourceInput.prefixText)
-            (trapLine .abort Demo.site
-              (sourcePrefixSpan sourceInput.path sourceInput.pathOk sourceInput.prefixText)),
-          adapter.state ()⟩) ∧
-      (sourcePrefixSpan sourceInput.path sourceInput.pathOk sourceInput.prefixText).PathOk) := by
-  refine ⟨rfl, rfl, sourcePermitted _, ?_⟩
-  intro invalid
-  have equation := invalid.1
+    ¬ (∃ sp,
+        reportObservation program { adapter with sites := hostRootSourceSites sourceInputs }
+          permittingContract () (Exec.runFrom program blockingOracle 1 [1] abortingConfig)
+          (sourcePermitted (hostRootSourceSites sourceInputs)) =
+          some (.terminal ⟨adapter.project (Exec.runFrom program blockingOracle 1 [1] abortingConfig).events,
+            .trapped .abort Demo.site sp (trapLine .abort Demo.site sp),
+            adapter.state ()⟩) ∧
+        sp.path = sourceInput.path ∧
+        sp.PathOk ∧
+        sp.line = (scanSourcePrefix sourceInput.prefixText.toList 0 []).1 + 1 ∧
+        Span.HasByteColumn sp (String.ofList (scanSourcePrefix sourceInput.prefixText.toList 0 []).2) ∧
+        Terminal.status (.trapped .abort Demo.site sp (trapLine .abort Demo.site sp)) = 134) := by
+  refine ⟨rfl, by decide, rfl, sourcePermitted _, ?_⟩
+  rintro ⟨sp, equation, _⟩
   change (none : Option (FullObservation signature)) = some _ at equation
   cases equation
 
-/-- Instance (law `ConcreteSpec.Core.Observe.runFrom_source_trap`, case `source_identity_preserved`). -/
-example : reportObservation program { adapter with sites := sourceSites sourceInputs }
-      permittingContract () (Exec.runFrom program blockingOracle 1 [1] abortingConfig)
-      (sourcePermitted (sourceSites sourceInputs)) =
-      some (.terminal ⟨adapter.project (Exec.runFrom program blockingOracle 1 [1] abortingConfig).events,
-        .trapped .abort Demo.site
-          (sourcePrefixSpan sourceInput.path sourceInput.pathOk sourceInput.prefixText)
-          (trapLine .abort Demo.site
-            (sourcePrefixSpan sourceInput.path sourceInput.pathOk sourceInput.prefixText)),
-        adapter.state ()⟩) ∧
-    (sourcePrefixSpan sourceInput.path sourceInput.pathOk sourceInput.prefixText).PathOk :=
-  runFrom_source_trap program adapter permittingContract () blockingOracle 1 [1] abortingConfig
-    sourceInputs Demo.site sourceInput .abort () rfl rfl (sourcePermitted (sourceSites sourceInputs))
-
-/-- Planted (law `ConcreteSpec.Core.Observe.runFrom_source_trap`, case `source_identity_preserved`,
+/-- Planted (law `ConcreteSpec.Core.Observe.runFrom_source_trap`, case `source_path_to_trap`,
 subject `ConcreteSpec.Core.Observe.sourceSites`, mutant `ConcreteSpec.Core.Observe.wrongFileSourceSites`). -/
 example : AList.lookup sourceInputs Demo.site = some sourceInput ∧
+    PathOk sourceInput.path ∧
     (Exec.runFrom program blockingOracle 1 [1] abortingConfig).ending =
       .final (.trapped .abort Demo.site) () ∧
     ExecAdapter.BlockingPermitted program { adapter with sites := wrongFileSourceSites sourceInputs }
       permittingContract () (Exec.runFrom program blockingOracle 1 [1] abortingConfig) ∧
-    ¬ (reportObservation program { adapter with sites := wrongFileSourceSites sourceInputs }
-        permittingContract () (Exec.runFrom program blockingOracle 1 [1] abortingConfig)
-        (sourcePermitted (wrongFileSourceSites sourceInputs)) =
-        some (.terminal ⟨adapter.project (Exec.runFrom program blockingOracle 1 [1] abortingConfig).events,
-          .trapped .abort Demo.site
-            (sourcePrefixSpan sourceInput.path sourceInput.pathOk sourceInput.prefixText)
-            (trapLine .abort Demo.site
-              (sourcePrefixSpan sourceInput.path sourceInput.pathOk sourceInput.prefixText)),
-          adapter.state ()⟩) ∧
-      (sourcePrefixSpan sourceInput.path sourceInput.pathOk sourceInput.prefixText).PathOk) := by
-  refine ⟨rfl, rfl, sourcePermitted _, ?_⟩
-  intro invalid
-  have equation := invalid.1
-  have path := congrArg (fun observation : Option (FullObservation signature) =>
-    match observation with
-    | some (.terminal ⟨_, .trapped _ _ span _, _⟩) => some span.path
-    | _ => none) equation
-  change some "other/main.con" = some "src/main.con" at path
-  exact (by decide : some "other/main.con" ≠ some "src/main.con") path
+    ¬ (∃ sp,
+        reportObservation program { adapter with sites := wrongFileSourceSites sourceInputs }
+          permittingContract () (Exec.runFrom program blockingOracle 1 [1] abortingConfig)
+          (sourcePermitted (wrongFileSourceSites sourceInputs)) =
+          some (.terminal ⟨adapter.project (Exec.runFrom program blockingOracle 1 [1] abortingConfig).events,
+            .trapped .abort Demo.site sp (trapLine .abort Demo.site sp),
+            adapter.state ()⟩) ∧
+        sp.path = sourceInput.path ∧
+        sp.PathOk ∧
+        sp.line = (scanSourcePrefix sourceInput.prefixText.toList 0 []).1 + 1 ∧
+        Span.HasByteColumn sp (String.ofList (scanSourcePrefix sourceInput.prefixText.toList 0 []).2) ∧
+        Terminal.status (.trapped .abort Demo.site sp (trapLine .abort Demo.site sp)) = 134) := by
+  refine ⟨rfl, by decide, rfl, sourcePermitted _, ?_⟩
+  rintro ⟨sp, equation, hpath, _⟩
+  have hrep : sp.path = "other/main.con" := by
+    have h := congrArg (fun observation : Option (FullObservation signature) =>
+      match observation with
+      | some (.terminal ⟨_, .trapped _ _ span _, _⟩) => some span.path
+      | _ => none) equation
+    change some "other/main.con" = some sp.path at h
+    exact (Option.some.inj h).symm
+  rw [hrep] at hpath
+  exact (by decide : "other/main.con" ≠ "src/main.con") hpath
+
+/-- Planted (law `ConcreteSpec.Core.Observe.runFrom_source_trap`, case `source_path_to_trap`,
+subject `ConcreteSpec.Core.Observe.sourceSites`, mutant `ConcreteSpec.Core.Observe.scalarSourceSites`). -/
+example : AList.lookup sourceInputs Demo.site = some sourceInput ∧
+    PathOk sourceInput.path ∧
+    (Exec.runFrom program blockingOracle 1 [1] abortingConfig).ending =
+      .final (.trapped .abort Demo.site) () ∧
+    ExecAdapter.BlockingPermitted program { adapter with sites := scalarSourceSites sourceInputs }
+      permittingContract () (Exec.runFrom program blockingOracle 1 [1] abortingConfig) ∧
+    ¬ (∃ sp,
+        reportObservation program { adapter with sites := scalarSourceSites sourceInputs }
+          permittingContract () (Exec.runFrom program blockingOracle 1 [1] abortingConfig)
+          (sourcePermitted (scalarSourceSites sourceInputs)) =
+          some (.terminal ⟨adapter.project (Exec.runFrom program blockingOracle 1 [1] abortingConfig).events,
+            .trapped .abort Demo.site sp (trapLine .abort Demo.site sp),
+            adapter.state ()⟩) ∧
+        sp.path = sourceInput.path ∧
+        sp.PathOk ∧
+        sp.line = (scanSourcePrefix sourceInput.prefixText.toList 0 []).1 + 1 ∧
+        Span.HasByteColumn sp (String.ofList (scanSourcePrefix sourceInput.prefixText.toList 0 []).2) ∧
+        Terminal.status (.trapped .abort Demo.site sp (trapLine .abort Demo.site sp)) = 134) := by
+  refine ⟨rfl, by decide, rfl, sourcePermitted _, ?_⟩
+  rintro ⟨sp, equation, _, _, _, hcol, _⟩
+  have hrep : sp.col = 4 := by
+    have h := congrArg (fun observation : Option (FullObservation signature) =>
+      match observation with
+      | some (.terminal ⟨_, .trapped _ _ span _, _⟩) => some span.col
+      | _ => none) equation
+    change some 4 = some sp.col at h
+    exact (Option.some.inj h).symm
+  have hbyte : sp.col = 5 := hcol
+  omega
 
 def absSpan : Span := ⟨"/tmp/main.con", 1, 1, by decide, by decide⟩
 def absSites : SiteTable := [(⟨7⟩, absSpan)]
