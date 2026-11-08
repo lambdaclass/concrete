@@ -15,7 +15,8 @@ namespace ConcreteSpec.Core.Frame
 open ConcreteSpec.Core.Mem
 open ConcreteSpec.Core.Hybrid
 
-/-- The empty footprint frames every operation. -/
+/-- Helper (congruence). Reflexivity of the preservation relation; used for idle execution. (approved: PENDING)
+ The empty footprint frames every operation. -/
 theorem preserves_refl (st : State) : Footprint.empty.Preserves st st := by
   refine ⟨?_, ?_, ?_⟩
   · intro b i x hx ho
@@ -25,33 +26,38 @@ theorem preserves_refl (st : State) : Footprint.empty.Preserves st st := by
   · intro p hp
     rfl
 
-/-- Membership outside a union is membership outside both components. -/
+/-- Helper (inversion). Decomposes byte nonmembership in a footprint union. (approved: PENDING)
+ Membership outside a union is membership outside both components. -/
 theorem byteOutside_union {f g : Footprint} {b : MemBlockId} {i : Nat}
     (h : (f.union g).ByteOutside b i) : f.ByteOutside b i ∧ g.ByteOutside b i := by
   constructor <;> intro r hr <;> apply h r <;> simp [Footprint.union, hr]
 
-/-- Block metadata outside a union is outside both components. -/
+/-- Helper (inversion). Decomposes metadata nonmembership in a footprint union. (approved: PENDING)
+ Block metadata outside a union is outside both components. -/
 theorem blockOutside_union {f g : Footprint} {b : MemBlockId}
     (h : (f.union g).BlockOutside b) : f.BlockOutside b ∧ g.BlockOutside b := by
   have hb : b ∉ f.blocks ++ g.blocks := h
   simp only [List.mem_append, not_or] at hb
   exact hb
 
-/-- Place membership outside a union is membership outside both components. -/
+/-- Helper (inversion). Decomposes place nonmembership in a footprint union. (approved: PENDING)
+ Place membership outside a union is membership outside both components. -/
 theorem placeOutside_union {f g : Footprint} {p : Place}
     (h : (f.union g).PlaceOutside p) : f.PlaceOutside p ∧ g.PlaceOutside p := by
   have hp : p ∉ f.places ++ g.places := h
   simp only [List.mem_append, not_or] at hp
   exact hp
 
-/-- A lifecycle footprint excludes metadata framing for its own block, even when that block is
+/-- Helper (inversion). Extracts identity inequality from singleton nonmembership. (approved: PENDING)
+ A lifecycle footprint excludes metadata framing for its own block, even when that block is
 zero-sized. -/
 theorem blockOutside_block {b c : MemBlockId} (h : (Footprint.block b).BlockOutside c) : c ≠ b := by
   intro hcb
   subst c
   exact h (by simp [Footprint.block])
 
-/-- Sequential composition frames the union of the two operations' footprints. -/
+/-- Helper (congruence). Transitivity under footprint union, used by execution induction. (approved: PENDING)
+ Sequential composition frames the union of the two operations' footprints. -/
 theorem preserves_seq {st st' st'' : State} {f g : Footprint}
     (h₁ : f.Preserves st st') (h₂ : g.Preserves st' st'') : (f.union g).Preserves st st'' := by
   refine ⟨?_, ?_, ?_⟩
@@ -77,7 +83,8 @@ theorem preserves_seq {st st' st'' : State} {f g : Footprint}
     obtain ⟨hf, hg⟩ := placeOutside_union hp
     exact (h₂.2.2 p hg).trans (h₁.2.2 p hf)
 
-/-- A successful byte store preserves every old byte outside the exact access range, every block's
+/-- Helper (inversion). Decomposes successful C4 stores for the instruction and execution soundness laws. (approved: PENDING)
+ A successful byte store preserves every old byte outside the exact access range, every block's
 metadata (including the written block's), and every structured place. A zero-byte store has the
 empty footprint. -/
 theorem store_frame (tgt : Target) (st : State) (hw : st.memory.WellFormed tgt) (m' : Memory)
@@ -123,6 +130,7 @@ private def metadataStoreBlock : Block :=
 private def metadataStoreBefore : State :=
   ⟨[], ⟨[(⟨0⟩, metadataStoreBlock)], 1⟩⟩
 
+/-- Helper (computation). Constructs the closed memory fixture used by the execution witnesses. (approved: PENDING) -/
 private theorem metadataStoreWellFormed : metadataStoreBefore.memory.WellFormed linuxX8664 :=
   alloc_wellFormed linuxX8664 Memory.empty (empty_wellFormed _) ⟨0⟩ 4096 2 1 ⟨0⟩
     metadataStoreBefore.memory rfl
@@ -160,7 +168,8 @@ example :
     simp [metadataStoreBadAfter, metadataStoreAfter, metadataStoreBefore, metadataStoreBlock,
       blockMetadata, Memory.block, Memory.modify, AList.update, AList.lookup] at hm
 
-/-- Releasing a block may change its lifecycle metadata, but frames all bytes and all metadata of
+/-- Helper (inversion). Decomposes successful C4 release for the instruction and execution soundness laws. (approved: PENDING)
+ Releasing a block may change its lifecycle metadata, but frames all bytes and all metadata of
 other blocks and every structured place. -/
 theorem free_frame (st : State) (b : MemBlockId) (x : Block) (m' : Memory)
     (hx : st.memory.block b = some x) (h : st.memory.free b = some m') :
@@ -185,7 +194,8 @@ theorem free_frame (st : State) (b : MemBlockId) (x : Block) (m' : Memory)
       rfl
   · simp [hl] at h
 
-/-- Exposure may change only the exposed flag of the provenance block; every byte and all metadata
+/-- Helper (inversion). Decomposes successful C4 exposure for the instruction and execution soundness laws. (approved: PENDING)
+ Exposure may change only the exposed flag of the provenance block; every byte and all metadata
 of other blocks and every place are preserved. -/
 theorem expose_frame (st : State) (m' : Memory) (p : Ptr) (b : MemBlockId) (x : Block)
     (hp : p.prov = some b) (hx : st.memory.block b = some x) (h : st.memory.expose p = some m') :
@@ -209,7 +219,8 @@ theorem expose_frame (st : State) (m' : Memory) (p : Ptr) (b : MemBlockId) (x : 
   · intro q hq
     rfl
 
-/-- Fresh allocation preserves every old byte, every old block's metadata and every place. The
+/-- Helper (inversion). Decomposes successful C4 allocation for the instruction and execution soundness laws. (approved: PENDING)
+ Fresh allocation preserves every old byte, every old block's metadata and every place. The
 footprint is the complete new block; old bytes are necessarily outside it because their allocation
 identities differ. -/
 theorem alloc_frame (tgt : Target) (st : State) (hw : st.memory.WellFormed tgt)
@@ -233,7 +244,8 @@ theorem alloc_frame (tgt : Target) (st : State) (hw : st.memory.WellFormed tgt)
   · intro p hp
     rfl
 
-/-- Replacing one structured place has exactly that place's footprint; bytes and block metadata are
+/-- Helper (computation). Computes the protected observations of a single structured-place update. (approved: PENDING)
+ Replacing one structured place has exactly that place's footprint; bytes and block metadata are
 untouched. -/
 theorem set_frame (st : State) (p : Place) (c : Cell) :
     (Footprint.place p).Preserves st (st.set p c) := by
@@ -247,7 +259,8 @@ theorem set_frame (st : State) (p : Place) (c : Cell) :
     have hpq : p ≠ q := Ne.symm hqp
     simp [hpq]
 
-/-- A successful typed write to structured storage has exactly the written place's footprint. -/
+/-- Helper (inversion). Reduces a successful Hybrid structured write to the place-update case. (approved: PENDING)
+ A successful typed write to structured storage has exactly the written place's footprint. -/
 theorem write_structured_frame (tgt : Target) (st st' : State) (p : Place) (c : Cell)
     (old v : Value) (hc : st.places p = some c) (hs : c.storage = .structured old)
     (h : st.write tgt p v = some st') : (Footprint.place p).Preserves st st' := by
@@ -261,7 +274,8 @@ theorem write_structured_frame (tgt : Target) (st st' : State) (p : Place) (c : 
     exact set_frame st p { c with storage := .structured v }
   · simp at h
 
-/-- A successful typed write to materialized storage has the byte footprint of its actual store. -/
+/-- Helper (inversion). Reduces a successful Hybrid materialized write to its C4 store. (approved: PENDING)
+ A successful typed write to materialized storage has the byte footprint of its actual store. -/
 theorem write_materialized_frame (tgt : Target) (st st' : State) (hw : st.memory.WellFormed tgt)
     (p : Place) (c : Cell) (r : Range) (v : Value)
     (hc : st.places p = some c) (hs : c.storage = .materialized r)
@@ -282,7 +296,8 @@ theorem write_materialized_frame (tgt : Target) (st st' : State) (hw : st.memory
       exact store_frame tgt st hw m r.ptr (encode tgt v) r.align access ha hm
   · simp at h
 
-/-- A raw Hybrid write has the byte footprint of its underlying memory store and touches no place. -/
+/-- Helper (inversion). Reduces a successful Hybrid raw write to its C4 store. (approved: PENDING)
+ A raw Hybrid write has the byte footprint of its underlying memory store and touches no place. -/
 theorem rawWrite_frame (tgt : Target) (st st' : State) (hw : st.memory.WellFormed tgt)
     (p : Ptr) (bs : List MByte) (align : Nat)
     (access : Option (Option (MemBlockId × Nat)))
@@ -310,7 +325,8 @@ example : ¬ Footprint.Preserves metadataStoreBefore metadataStoreBadAfter (.byt
   simp [metadataStoreBadAfter, metadataStoreAfter, metadataStoreBefore, metadataStoreBlock,
     blockMetadata, Memory.block, Memory.modify, AList.update, AList.lookup] at hm
 
-/-- The allocated identity is disjoint from every range whose block existed before allocation. -/
+/-- Helper (inversion). Extracts allocation-identity freshness from successful C4 allocation. (approved: PENDING)
+ The allocated identity is disjoint from every range whose block existed before allocation. -/
 theorem alloc_fresh_disjoint (tgt : Target) (st : State) (hw : st.memory.WellFormed tgt)
     (space : AddrSpace) (base size align : Nat) (b : MemBlockId) (m' : Memory)
     (h : st.memory.alloc tgt space base size align = .ok (b, m'))
@@ -318,7 +334,8 @@ theorem alloc_fresh_disjoint (tgt : Target) (st : State) (hw : st.memory.WellFor
     (fullBlock b size).Disjoint r :=
   .inl (alloc_ne_existing tgt st.memory hw space base size align b r.block m' x h hx)
 
-/-- Entering a C1 call saves the caller's locals in a `.ret` frame, binds the evaluated arguments to
+/-- Helper (computation). Computes the C1 call-entry step used by caller restoration. (approved: PENDING)
+ Entering a C1 call saves the caller's locals in a `.ret` frame, binds the evaluated arguments to
 callee parameters, and preserves the caller's continuation below that frame. -/
 theorem step_call_saves_caller {O : Exec.Operands} (P : Exec.Program O) (dst : Option Var)
     (f : FnId) (args : List O.Expr) (site : SiteId) (caller : AList Var O.Val)
@@ -331,7 +348,8 @@ theorem step_call_saves_caller {O : Exec.Operands} (P : Exec.Program O) (dst : O
         .scope fn.block (fn.params.map Prod.fst) [] :: .ret dst caller :: k⟩) := by
   simp [Exec.step, Exec.onRes, hv, hf, hlen, hl]
 
-/-- A returned value reaching a `.ret` frame restores the caller's locals and continuation, binding
+/-- Helper (computation). Computes the C1 final return step used by caller restoration. (approved: PENDING)
+ A returned value reaching a `.ret` frame restores the caller's locals and continuation, binding
 the result at any requested destination. Leave and destination-bind instrumentation thread the shared
 state through the same step. -/
 theorem step_return_restores_caller {O : Exec.Operands} (P : Exec.Program O) (v : O.Val)
@@ -342,7 +360,8 @@ theorem step_return_restores_caller {O : Exec.Operands} (P : Exec.Program O) (v 
       some (.next ⟨.done, Exec.bindDst dst v caller, stBind, k⟩) :=
   Exec.step_return_caller P v dst caller callee st k stLeave stBind hl hb
 
-/-- Successful cleanup does not disturb call-frame ownership: after every exited scope has run its
+/-- Helper (inversion). Reduces completed scope cleanup to the C1 return step. (approved: PENDING)
+ Successful cleanup does not disturb call-frame ownership: after every exited scope has run its
 deferred calls, return restores the caller and binds its result at any requested destination. -/
 theorem return_cleanup_restores_caller {O : Exec.Operands} (P : Exec.Program O) (v : O.Val)
     (dst : Option Var) (caller : AList Var O.Val) (k pre : List (Exec.Frame O)) {L : AList Var O.Val}
@@ -354,7 +373,8 @@ theorem return_cleanup_restores_caller {O : Exec.Operands} (P : Exec.Program O) 
       ⟨.done, Exec.bindDst dst v caller, stBind, k⟩ :=
   Exec.return_reaches_caller P v dst caller k h hp stLeave stBind hl hb
 
-/-- Every complete `C1Call` ends with its result bound into the caller locals and at the caller
+/-- Helper (inversion). Inverts the complete-call derivation for the caller-restoration law. (approved: PENDING)
+ Every complete `C1Call` ends with its result bound into the caller locals and at the caller
 continuation saved by its entry statement. The conclusion follows from the actual final return or
 Unit fall-through step, including successful leave and destination-bind instrumentation. -/
 theorem c1Call_restores_caller {O : Exec.Operands} {f : FnId} {P : Exec.Program O}
@@ -422,6 +442,7 @@ private def c1Boundary : Exec.Config c1Operands :=
 
 private def c1Exit : Exec.Config c1Operands := ⟨.done, [], (), []⟩
 
+/-- Helper (computation). Constructs the closed explicit-return execution witness. (approved: PENDING) -/
 private theorem c1ExplicitCall : C1Call c1Operands c1FnId c1Program c1Entry c1Exit := by
   have hs : Exec.Steps c1Program c1Entry [] c1Boundary := by
     apply Exec.steps_next rfl
@@ -700,10 +721,11 @@ theorem c1_steps_frame {O : Exec.Operands} {P : Exec.Program O} {project : O.Sto
     obtain ⟨effectFootprint, effects, cover⟩ := implementation before label middle step
     exact preserves_trans (preserves_covers (c4_effects_frame tgt _ _ _ effects) cover) ih
 
-/-- Law (subject `ConcreteSpec.Core.Frame.C1Call`).
+/-- Helper (inversion). Lifts step soundness through the complete-call derivation.
+(approved: PENDING)
 Complete-call framing follows from the callee's actual steps and their C4 decompositions,
 including its final return/pop. The call contract is the conclusion, never a premise. -/
-theorem c1_call_frame {O : Exec.Operands} {f : FnId} {P : Exec.Program O}
+theorem c1_call_frame_of_implementation {O : Exec.Operands} {f : FnId} {P : Exec.Program O}
     {project : O.Store → State} {tgt : Target} {advertised : Footprint}
     (implementation : C1EffectImplementation O P project tgt advertised) :
     C1Frames O f P project advertised := by
@@ -715,6 +737,58 @@ theorem c1_call_frame {O : Exec.Operands} {f : FnId} {P : Exec.Program O}
     have framedPrefix := c1_steps_frame implementation steps
     obtain ⟨effectFootprint, effects, cover⟩ := implementation _ _ _ (.silent pop)
     exact preserves_trans framedPrefix (preserves_covers (c4_effects_frame tgt _ _ _ effects) cover)
+
+
+/-- Law (subject `ConcreteSpec.Core.Frame.c4Execution`).
+Local decompositions of actual C1 steps into independently executed C4 effects establish
+complete-call framing. Quantifying the implementation certificate here lets a mutant effect
+semantics be challenged without changing the C1 execution or advertised permission set. -/
+theorem c1_call_frame (tgt : Target) :
+    ∀ (O : Exec.Operands) (f : FnId) (P : Exec.Program O) (project : O.Store → State)
+      (advertised : Footprint), C1EffectImplementation O P project tgt advertised →
+      C1Frames O f P project advertised := by
+  intro O f P project advertised implementation
+  exact c1_call_frame_of_implementation implementation
+
+/-- Instance (law `ConcreteSpec.Core.Frame.c1_call_frame`, case `complete_calls`). -/
+example : ∀ (O : Exec.Operands) (f : FnId) (P : Exec.Program O) (project : O.Store → State)
+    (advertised : Footprint), C1EffectImplementation O P project linuxX8664 advertised →
+    C1Frames O f P project advertised := c1_call_frame linuxX8664
+
+/-- Planted (law `ConcreteSpec.Core.Frame.c1_call_frame`, case `complete_calls`,
+subject `ConcreteSpec.Core.Frame.c4Execution`, mutant `ConcreteSpec.Core.Frame.unframedExecution`). -/
+example : ¬ (∀ (O : Exec.Operands) (f : FnId) (P : Exec.Program O)
+    (project : O.Store → State) (advertised : Footprint),
+    (∀ before label after, Exec.Step P before label after →
+      ∃ effectFootprint, unframedExecution linuxX8664 (project before.store) effectFootprint
+        (project after.store) ∧ advertised.Covers effectFootprint) →
+    C1Frames O f P project advertised) := by
+  intro unsound
+  let O := storingOperands linuxX8664 metadataStorePtr [.init 7 none] 1
+  let P := storingProgram linuxX8664 metadataStorePtr [.init 7 none] 1
+  let entry : Exec.Config O := ⟨.exec (.call none storingFn [] ⟨0⟩), [], metadataStoreBefore, []⟩
+  let boundary : Exec.Config O :=
+    ⟨.exiting (.ret (7 : Nat)), [], metadataStoreAfter, [.ret none []]⟩
+  let exit : Exec.Config O := ⟨.done, [], metadataStoreAfter, []⟩
+  have steps : Exec.Steps P entry [] boundary := by
+    apply Exec.steps_next rfl
+    apply Exec.steps_next rfl
+    apply Exec.steps_next rfl
+    exact Exec.Steps.refl _
+  have call : C1Call O storingFn P entry exit :=
+    ⟨⟨[], (), ⟨0⟩, .ret () ⟨0⟩⟩, none, [], [], [], ⟨0⟩, [],
+      metadataStoreBefore, metadataStoreBefore, metadataStoreBefore, metadataStoreAfter,
+      [], [], (7 : Nat), rfl, rfl, rfl, rfl, rfl, .inl ⟨steps, rfl⟩⟩
+  have bad := unsound O storingFn P (fun st => st) .empty (by
+    intro before label after step
+    refine ⟨.empty, trivial, ?_⟩
+    exact ⟨fun _ _ h => h, fun _ h => h, fun _ h => h⟩) entry exit call
+  have byte := bad.1 ⟨0⟩ 0 metadataStoreBlock (by decide) (by
+    intro range member
+    cases member)
+  have different : (metadataStoreAfter.memory.block ⟨0⟩).map (fun b => b.bytes[0]?) ≠
+      some (metadataStoreBlock.bytes[0]?) := by decide
+  exact different byte
 
 
 
@@ -865,7 +939,8 @@ example : ¬ toySignature.Call (toyInput toyBase 11) (wrongToyResult toyBase 11 
   simp [toySignature, Binding.Holds, Location.read, wrongToyResult, toyCall,
     toyInput, toyBody, toyBase, runToy] at bad
 
-/-- Preserved machine state composes across sequential calls with the same saved-register set. -/
+/-- Helper (congruence). Transitivity of protected machine observations across calls. (approved: PENDING)
+ Preserved machine state composes across sequential calls with the same saved-register set. -/
 theorem machine_preserved_trans {Reg Word : Type} {before middle after : Machine Reg Word}
     {saved : List Reg} (h₁ : Machine.Preserved before middle saved)
     (h₂ : Machine.Preserved middle after saved) : Machine.Preserved before after saved := by
@@ -877,7 +952,8 @@ theorem machine_preserved_trans {Reg Word : Type} {before middle after : Machine
     exact (h₂.2.1 slot hs').trans (h₁.2.1 slot hs)
   · exact h₂.2.2.trans h₁.2.2
 
-/-- Sequential calls preserve every register outside the union of their clobber sets. -/
+/-- Helper (congruence). Transitivity of register observations outside combined clobber sets. (approved: PENDING)
+ Sequential calls preserve every register outside the union of their clobber sets. -/
 theorem machine_registerFrame_union {Reg Word : Type} {before middle after : Machine Reg Word}
     {clobbers₁ clobbers₂ : List Reg} (h₁ : Machine.RegisterFrame before middle clobbers₁)
     (h₂ : Machine.RegisterFrame middle after clobbers₂) :
@@ -1064,12 +1140,14 @@ theorem kept_receipt_rejects_other_extern {F H : Type} (pair : KeptPair F H) (h 
   cases he
   exact hf rfl
 
-/-- A reservation below the final artifact bound refuses startup with status 125. -/
+/-- Helper (computation). Computes the refusal branch of the launcher admission specification. (approved: PENDING)
+ A reservation below the final artifact bound refuses startup with status 125. -/
 theorem stack_under_reservation {Input : Type} (bound reserved : Nat) (input : Input)
     (h : reserved < bound) : stackAdmission bound reserved input = .refused125 := by
   simp [stackAdmission, h]
 
-/-- A reservation at least the bound admits the same launcher input. -/
+/-- Helper (computation). Computes the entry branch of the launcher admission specification. (approved: PENDING)
+ A reservation at least the bound admits the same launcher input. -/
 theorem stack_adequate {Input : Type} (bound reserved : Nat) (input : Input)
     (h : bound ≤ reserved) : stackAdmission bound reserved input = .entered input := by
   simp [stackAdmission, Nat.not_lt_of_ge h]
