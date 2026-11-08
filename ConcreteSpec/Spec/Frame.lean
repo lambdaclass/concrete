@@ -388,6 +388,37 @@ instance {F H : Type} [DecidableEq F] [DecidableEq H] (pair : KeptPair F H)
     Decidable (KeptStep pair before event after) := by
   cases before <;> cases event <;> cases after <;> unfold KeptStep <;> infer_instance
 
+/-- Check declarations by destructuring their types and comparing handle identities. The result
+is an extracted protocol, with no proof fields and no call to a specification predicate. -/
+def checkKeptPair {F H : Type} [DecidableEq F] [DecidableEq H]
+    (submit complete : F) (sp : ExternParam H) (sr cp cr : ExternType H) :
+    Option (KeptPair F H) :=
+  match sp, sr, cp, cr with
+  | ⟨.owned h, .kept⟩, .receipt a, .receipt b, .owned c =>
+    if submit = complete then none
+    else if h = a ∧ h = b ∧ h = c then some ⟨submit, complete, h⟩ else none
+  | _, _, _, _ => none
+
+/-- Retention instructions are ownership transfers, not assertions of `KeptStep`. -/
+inductive RetentionInstruction where
+  | submit
+  | complete
+  deriving DecidableEq
+
+/-- Execute a transfer and emit the foreign call it requires. Endpoint dispatch comes from the
+instruction; the input token supplies the transferred handle. There is no validity re-check. -/
+def transferKept {F H : Type} (pair : KeptPair F H) :
+    RetentionInstruction → RetentionState H → Option (ForeignEvent F H × RetentionState H)
+  | .submit, .owned h => some (.call pair.submit h, .kept h)
+  | .complete, .kept h => some (.call pair.complete h, .owned h)
+  | _, _ => none
+
+/-- The returned transfer, if any, meets the retention contract. This is a specification over
+an independently executable transfer implementation. -/
+def TransferCorrect {F H : Type} (pair : KeptPair F H) (before : RetentionState H)
+    (out : Option (ForeignEvent F H × RetentionState H)) : Prop :=
+  ∀ event after, out = some (event, after) → KeptStep pair before event after
+
 /-! ### Launcher entry and exit (Q8.5–Q8.6) -/
 
 /-- The launcher contract binds an exact retained artifact closure, entry inputs, exit observations

@@ -586,7 +586,9 @@ theorem artifact_stack_account {Ty Val Reg Word : Type} (launcherRuntime callerF
       launcherRuntime + callerFrame + sig.stackBound := by
   simp [artifactStack, callStack, Nat.add_assoc]
 
-/-- An extern unrelated to both sides of a pair cannot validly return either retention value. -/
+/-- Helper (computation). Characterizes the retention specification; execution evidence is
+`ConcreteSpec.Core.Frame.ABI.transferKept_sound`. (approved: PENDING)
+ An extern unrelated to both sides of a pair cannot validly return either retention value. -/
 theorem extern_result_rejects_unrelated_retention {F H : Type} (pair : KeptPair F H) (f : F) (h : H)
     (hfs : f ≠ pair.submit) (hfc : f ≠ pair.complete) :
     ¬ ExternResult.Valid pair f (.receipt h) ∧ ¬ ExternResult.Valid pair f (.owned h) := by
@@ -596,7 +598,9 @@ theorem extern_result_rejects_unrelated_retention {F H : Type} (pair : KeptPair 
   · intro ho
     exact hfc ho.1
 
-/-- A well-formed kept pair validly returns its submission receipt and completion-owned handle.
+/-- Helper (computation). Characterizes the retention specification; execution evidence is
+`ConcreteSpec.Core.Frame.ABI.transferKept_sound`. (approved: PENDING)
+ A well-formed kept pair validly returns its submission receipt and completion-owned handle.
 The exact result constraints already imply both `ExternResult.Valid` facts. -/
 theorem keptPair_results_valid {F H : Type} (pair : KeptPair F H)
     (submitParam : ExternParam H) (submitResult completeParam completeResult : ExternType H)
@@ -614,18 +618,9 @@ example : ExternResult.Valid (⟨0, 1, 7⟩ : KeptPair Nat Nat) 0 (.receipt 7) �
   exact keptPair_results_valid ⟨0, 1, 7⟩ ⟨.owned 7, .kept⟩
     (.receipt 7) (.receipt 7) (.owned 7) ⟨by decide, rfl, rfl, rfl, rfl⟩
 
-/-- Refused: changing the submission receipt's handle makes both the exact pairing premise and the
-endpoint's independent validity check fail. -/
-example : ¬ (⟨0, 1, 7⟩ : KeptPair Nat Nat).WellFormed
-    ⟨.owned 7, .kept⟩ (.receipt 8) (.receipt 7) (.owned 7) ∧
-    ¬ ExternResult.Valid (⟨0, 1, 7⟩ : KeptPair Nat Nat) 0 (.receipt 8) := by
-  constructor <;> intro h
-  · have hr := h.2.2.1
-    cases hr
-  · have hh := h.2
-    cases hh
-
-/-- A kept receipt has exactly one retention transition: the paired completion returns the same
+/-- Helper (computation). Characterizes the retention specification; execution evidence is
+`ConcreteSpec.Core.Frame.ABI.transferKept_sound`. (approved: PENDING)
+ A kept receipt has exactly one retention transition: the paired completion returns the same
 handle to Concrete ownership. -/
 theorem kept_only_paired_completion {F H : Type} (pair : KeptPair F H) (h : H)
     (event : ForeignEvent F H) (after : RetentionState H)
@@ -643,7 +638,9 @@ theorem kept_only_paired_completion {F H : Type} (pair : KeptPair F H) (h : H)
       exact ⟨rfl, rfl⟩
     | kept h'' => cases hs
 
-/-- Submission of an owned handle calls the paired submitting extern and produces a receipt for the
+/-- Helper (computation). Characterizes the retention specification; execution evidence is
+`ConcreteSpec.Core.Frame.ABI.transferKept_sound`. (approved: PENDING)
+ Submission of an owned handle calls the paired submitting extern and produces a receipt for the
 same handle. -/
 theorem submit_produces_paired_receipt {F H : Type} (pair : KeptPair F H) (h : H)
     (event : ForeignEvent F H) (after : RetentionState H)
@@ -661,7 +658,9 @@ theorem submit_produces_paired_receipt {F H : Type} (pair : KeptPair F H) (h : H
       cases hh''
       exact ⟨rfl, rfl⟩
 
-/-- The submitting extern cannot consume its own receipt, even though it is the other member of the
+/-- Helper (computation). Characterizes the retention specification; execution evidence is
+`ConcreteSpec.Core.Frame.ABI.transferKept_sound`. (approved: PENDING)
+ The submitting extern cannot consume its own receipt, even though it is the other member of the
 pair: completion requires a distinct extern identity. -/
 theorem kept_receipt_rejects_submission {F H : Type} (pair : KeptPair F H) (h h' : H)
     (after : RetentionState H) : ¬ KeptStep pair (.kept h) (.call pair.submit h') after := by
@@ -670,7 +669,9 @@ theorem kept_receipt_rejects_submission {F H : Type} (pair : KeptPair F H) (h h'
   | owned h'' => exact hs.2.1 hs.1
   | kept h'' => cases hs
 
-/-- No other extern can consume a kept receipt. -/
+/-- Helper (computation). Characterizes the retention specification; execution evidence is
+`ConcreteSpec.Core.Frame.ABI.transferKept_sound`. (approved: PENDING)
+ No other extern can consume a kept receipt. -/
 theorem kept_receipt_rejects_other_extern {F H : Type} (pair : KeptPair F H) (h h' : H)
     (f : F) (after : RetentionState H) (hf : f ≠ pair.complete) :
     ¬ KeptStep pair (.kept h) (.call f h') after := by
@@ -704,6 +705,104 @@ theorem launcher_run_admitted {Artifact Input Result Observation : Type}
     (run : l.Run artifact reserved input result observation) :
     stackAdmission (l.stackBound artifact) reserved input = .entered input :=
   stack_adequate _ _ _ run.adequateStack
+
+/-- Law (subject `ConcreteSpec.Core.Frame.ABI.checkKeptPair`).
+Declaration checking extracts a protocol whose four descriptors satisfy the specification. -/
+theorem checkKeptPair_sound {F H : Type} [DecidableEq F] [DecidableEq H]
+    (submit complete : F) (sp : ExternParam H) (sr cp cr : ExternType H) :
+    ∀ pair, checkKeptPair submit complete sp sr cp cr = some pair →
+      pair.WellFormed sp sr cp cr := by
+  intro pair hp
+  cases sp with
+  | mk t retention =>
+    cases t <;> cases retention <;> cases sr <;> cases cp <;> cases cr <;>
+      simp only [checkKeptPair] at hp <;> try contradiction
+    split at hp <;> try contradiction
+    next hne =>
+      split at hp <;> try contradiction
+      next hh =>
+        cases hp
+        obtain ⟨ha, hb, hc⟩ := hh
+        subst_vars
+        exact ⟨hne, rfl, rfl, rfl, rfl⟩
+
+/-- Law (subject `ConcreteSpec.Core.Frame.ABI.transferKept`).
+Executing a transfer of the tracked token follows the paired retention protocol. -/
+theorem transferKept_sound {F H : Type} (pair : KeptPair F H)
+    (instruction : RetentionInstruction) (before : RetentionState H)
+    (distinct : pair.submit ≠ pair.complete)
+    (tracked : before = .owned pair.handle ∨ before = .kept pair.handle) :
+    TransferCorrect pair before (transferKept pair instruction before) := by
+  rcases tracked with rfl | rfl <;> cases instruction <;>
+    intro event after h <;> simp only [transferKept] at h
+  · cases h
+    exact ⟨rfl, rfl, rfl, rfl⟩
+  · contradiction
+  · contradiction
+  · cases h
+    exact ⟨rfl, distinct, rfl, rfl, rfl⟩
+
+/-- Instance (law `ConcreteSpec.Core.Frame.ABI.checkKeptPair_sound`, case `paired`). -/
+example : ∀ pair, checkKeptPair (0 : Nat) 1 ⟨.owned (7 : Nat), .kept⟩
+    (.receipt 7) (.receipt 7) (.owned 7) = some pair →
+    pair.WellFormed ⟨.owned 7, .kept⟩ (.receipt 7) (.receipt 7) (.owned 7) :=
+  @checkKeptPair_sound Nat Nat inferInstance inferInstance 0 1
+    ⟨.owned 7, .kept⟩ (.receipt 7) (.receipt 7) (.owned 7)
+
+/-- A planted declaration extractor aliases the two endpoint identities. -/
+def wrongKeptChecker {F H : Type} [DecidableEq F] [DecidableEq H]
+    (submit complete : F) (sp : ExternParam H) (sr cp cr : ExternType H) :
+    Option (KeptPair F H) :=
+  (checkKeptPair submit complete sp sr cp cr).map fun pair =>
+    { pair with complete := pair.submit }
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.checkKeptPair_sound`, case `paired`,
+subject `ConcreteSpec.Core.Frame.ABI.checkKeptPair`, mutant `ConcreteSpec.Core.Frame.ABI.wrongKeptChecker`). -/
+example : ¬ (∀ pair, wrongKeptChecker 0 1 ⟨.owned 7, .kept⟩
+    (.receipt 7) (.receipt 7) (.owned 7) = some pair →
+    pair.WellFormed ⟨.owned 7, .kept⟩ (.receipt 7) (.receipt 7) (.owned 7)) := by
+  intro h
+  have bad := (h ⟨0, 0, 7⟩ rfl).1
+  exact bad rfl
+
+/-- Instance (law `ConcreteSpec.Core.Frame.ABI.transferKept_sound`, case `completion`). -/
+example : TransferCorrect (⟨0, 1, 7⟩ : KeptPair Nat Nat) (.kept 7)
+    (transferKept ⟨0, 1, 7⟩ .complete (.kept 7)) :=
+  @transferKept_sound Nat Nat ⟨0, 1, 7⟩ .complete (.kept 7)
+    (by decide) (Or.inr rfl)
+
+/-- A planted transfer dispatches completion to the submitting endpoint. -/
+def wrongKeptEndpoint {F H : Type} (pair : KeptPair F H) :
+    RetentionInstruction → RetentionState H → Option (ForeignEvent F H × RetentionState H)
+  | .complete, .kept h => some (.call pair.submit h, .owned h)
+  | instruction, before => transferKept pair instruction before
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.transferKept_sound`, case `completion`,
+subject `ConcreteSpec.Core.Frame.ABI.transferKept`, mutant `ConcreteSpec.Core.Frame.ABI.wrongKeptEndpoint`). -/
+example : (0 : Nat) ≠ 1 ∧
+    ((.kept 7 : RetentionState Nat) = .owned 7 ∨ (.kept 7 : RetentionState Nat) = .kept 7) ∧
+    ¬ TransferCorrect (⟨0, 1, 7⟩ : KeptPair Nat Nat) (.kept 7)
+      (wrongKeptEndpoint ⟨0, 1, 7⟩ .complete (.kept 7)) := by
+  refine ⟨by decide, Or.inr rfl, ?_⟩
+  intro h
+  have bad := (h (.call 0 7) (.owned 7) rfl).1
+  cases bad
+
+/-- A planted transfer returns a receipt after completion instead of ownership. -/
+def wrongKeptHandle {F H : Type} (pair : KeptPair F H) :
+    RetentionInstruction → RetentionState H → Option (ForeignEvent F H × RetentionState H)
+  | .complete, .kept h => some (.call pair.complete h, .kept h)
+  | instruction, before => transferKept pair instruction before
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.transferKept_sound`, case `completion`,
+subject `ConcreteSpec.Core.Frame.ABI.transferKept`, mutant `ConcreteSpec.Core.Frame.ABI.wrongKeptHandle`). -/
+example : (0 : Nat) ≠ 1 ∧
+    ((.kept 7 : RetentionState Nat) = .owned 7 ∨ (.kept 7 : RetentionState Nat) = .kept 7) ∧
+    ¬ TransferCorrect (⟨0, 1, 7⟩ : KeptPair Nat Nat) (.kept 7)
+      (wrongKeptHandle ⟨0, 1, 7⟩ .complete (.kept 7)) := by
+  refine ⟨by decide, Or.inr rfl, ?_⟩
+  intro h
+  exact h (.call 1 7) (.kept 7) rfl
 
 end ABI
 
