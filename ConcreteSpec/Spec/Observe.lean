@@ -5,7 +5,9 @@ import ConcreteSpec.Spec.Exec
 
 PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). Part of `ConcreteSpec.Spec`;
 see `ConcreteSpec/README.md`. Foundation contract C6 (the foundation proposal approved by the
-owner on 2026-11-08, "ok all recommended").
+owner on 2026-11-08, "ok all recommended"). `ConcreteSpec.Core.Observe` is the C6 foundation
+replacement for the pre-foundation `ConcreteSpec.Spec.Observation`; A2i integration step 12 retires
+the old module and moves its remaining observation theorems.
 
 An `EventSignature` is the extension point for external operations. Each operation kind has its
 own request and response types; public output has its own type. Requests and responses are separate
@@ -83,10 +85,10 @@ inductive Responds (C : OperationContract S) (input : C.Input) :
       Responds C input hist q (.response r)
   | blocked {hist q} : C.mayBlock input hist q → Responds C input hist q .blocked
 
-/-- A sequential request/response trace. At most one request is outstanding. An output may occur
-at any point; a response must match the outstanding request and satisfy its contract in the
-history ending in that request. The final state `none` means that no request is outstanding;
-`some q` is a prefix waiting for `q`'s response. -/
+/-- A sequential request/response trace. At most one request is outstanding. Output occurs only
+while no request is outstanding; a response must match the outstanding request and satisfy its
+contract in the history ending in that request. The final state `none` means that no request is
+outstanding; `some q` is a prefix waiting for `q`'s response. -/
 inductive ValidTrace (C : OperationContract S) (input : C.Input) :
     Option (Request S) → List (Event S) → Prop where
   | idle : ValidTrace C input none []
@@ -94,8 +96,8 @@ inductive ValidTrace (C : OperationContract S) (input : C.Input) :
       ValidTrace C input (some q) (hist ++ [.request q])
   | response {hist q r} : ValidTrace C input (some q) hist → RequestResponse q r →
       C.allows input hist q r → ValidTrace C input none (hist ++ [.response r])
-  | output {pending hist o} : ValidTrace C input pending hist →
-      ValidTrace C input pending (hist ++ [.output o])
+  | output {hist o} : ValidTrace C input none hist →
+      ValidTrace C input none (hist ++ [.output o])
 
 /-- A complete finite trace has no outstanding request. -/
 def CompleteTrace (C : OperationContract S) (input : C.Input) (events : List (Event S)) : Prop :=
@@ -161,7 +163,9 @@ structure Observation (S : EventSignature) where
   terminal : Terminal
 
 /-- Every externally visible behavior: finite termination, an explicitly blocked request, silent
-or eventually silent divergence with a finite event history, or an infinite event history. -/
+or eventually silent divergence with a finite event history, or an infinite event history. In
+`blocked events request`, `events` ends in `.request request`: this is the history passed to the
+operation contract, and the pending state of a `ValidTrace`. -/
 inductive FullObservation (S : EventSignature) where
   | terminal (observation : Observation S)
   | blocked (events : FiniteTrace S) (request : Request S)
@@ -185,6 +189,21 @@ inductive Execution (S : EventSignature) where
   | finite (steps : List (Step S)) (terminal : Terminal)
   | blocked (steps : List (Step S)) (request : Request S)
   | infinite (steps : Nat → Step S)
+
+/-- Any finite number of silent steps inserted anywhere in a finite execution. -/
+inductive SilentInsertion : List (Step S) → List (Step S) → Prop where
+  | nil : SilentInsertion [] []
+  | silent {before after} : SilentInsertion before after → SilentInsertion before (.silent :: after)
+  | emit {before after} event : SilentInsertion before after →
+      SilentInsertion (.emit event :: before) (.emit event :: after)
+
+/-- A strictly increasing map from old step indices to new step indices. -/
+def StepIndexIncreasing (f : Nat → Nat) : Prop := ∀ n, f n < f (n + 1)
+
+/-- Infinite stuttering retains old step `n` at new index `f n`; every other new step is silent. -/
+def InfiniteStuttering (steps : Nat → Step S) (f : Nat → Nat) (stutter : Nat → Step S) : Prop :=
+  StepIndexIncreasing f ∧ (∀ n, stutter (f n) = steps n) ∧
+    ∀ m, (∀ n, f n ≠ m) → stutter m = .silent
 
 /-- The event contributed by a step, if any. -/
 def Step.event? : Step S → Option (Event S)
@@ -220,6 +239,25 @@ def SameObservation : Execution S → Execution S → Prop
   | .infinite xs, .infinite ys => SameInfiniteObservation xs ys
   | _, _ => False
 
+/-- The canonical infinite execution that emits a finite history and then is silent forever. -/
+def finiteDivergenceSteps (events : FiniteTrace S) (n : Nat) : Step S :=
+  if h : n < events.length then .emit events[n] else .silent
+
+/-- An execution has a particular full observation. Finite and blocked runs project exactly their
+visible history and ending. An infinite run with finite divergence has the same history as the
+canonical eventually silent execution; infinite divergence retains every event of an infinite
+trace. This is a projection relation, not merely a restatement of `SameObservation`. -/
+def HasFullObservation : Execution S → FullObservation S → Prop
+  | .finite steps terminal, .terminal observation =>
+      observation = ⟨visible steps, terminal⟩
+  | .blocked steps request, .blocked events request' =>
+      visible steps ++ [.request request] = events ∧ request = request'
+  | .infinite steps, .finiteDivergence events =>
+      SameInfiniteObservation steps (finiteDivergenceSteps events)
+  | .infinite steps, .infiniteDivergence events =>
+      SameInfiniteObservation steps (fun n => .emit (events n))
+  | _, _ => False
+
 /-! ## C1 adapter -/
 
 /-- How a C1 operand instance appears in C6. An answer's C1 event may project to several typed C6
@@ -238,6 +276,26 @@ variable {O : Exec.Operands}
 def ExecAdapter.project (A : ExecAdapter O S) (events : List O.Event) : List (Event S) :=
   events.flatMap A.events
 
+/-- Adapter and oracle well-formedness against a C6 operation contract. An internal answer emits
+only output. If a C1 request has typed request `q`, its answer projects to any output, then
+`.request q`, then a matching `.response r`, then any output; output cannot intervene while `q` is
+pending. The response satisfies `C.allows` in the history ending in that request. An unanswered
+typed request is blocking, not an evaluator result, only when `C.mayBlock` permits it. -/
+structure ExecAdapter.WellFormed (A : ExecAdapter O S) (C : OperationContract S) (input : C.Input)
+    (ρ : Exec.Oracle O) : Prop where
+  internal {hist p vs site store a} : ρ hist p vs site store = some a →
+    A.request p vs site store = none →
+    ∃ outputs : List S.Output, A.project a.event.toList = outputs.map Event.output
+  answered {hist p vs site store a q} : ρ hist p vs site store = some a →
+    A.request p vs site store = some q →
+    ∃ before r after, A.project a.event.toList = before ++ [.request q, .response r] ++ after ∧
+      (∃ outputs : List S.Output, before = outputs.map Event.output) ∧
+      (∃ outputs : List S.Output, after = outputs.map Event.output) ∧
+      RequestResponse q r ∧ C.allows input (A.project hist ++ before ++ [.request q]) q r
+  blocked {hist p vs site store q} : ρ hist p vs site store = none →
+    A.request p vs site store = some q →
+    C.mayBlock input (A.project hist ++ [.request q]) q
+
 /-- Turn a C1 final configuration into a logical terminal observation, if it is a valid hosted
 `main` ending with a known trap site. -/
 def ExecAdapter.terminal? (A : ExecAdapter O S) : Exec.Final O.Val → Option Terminal
@@ -251,17 +309,27 @@ def stepsObservation (A : ExecAdapter O S) {P : Exec.Program O} {c c' : Exec.Con
     {events : List O.Event} (_steps : Exec.Steps P c events c') : Option (Observation S) :=
   (c'.final?.bind A.terminal?).map fun terminal => ⟨A.project events, terminal⟩
 
-/-- The observation of a C1 evaluator report. `noAnswer` becomes an explicitly blocked observation
-only when the configuration really is a request and the adapter types that request. Unsafe
-stuckness, a bad answer and fuel exhaustion remain evaluator/premise reports, not external events. -/
-def reportObservation (P : Exec.Program O) (A : ExecAdapter O S) (r : Exec.Report O) :
+/-- Every `noAnswer` projection in a report is permitted to block. The history ends in the typed
+request, exactly as required by `OperationContract.mayBlock` and `ValidTrace`. -/
+def ExecAdapter.BlockingPermitted (P : Exec.Program O) (A : ExecAdapter O S)
+    (C : OperationContract S) (input : C.Input) (r : Exec.Report O) : Prop :=
+  ∀ {c p vs site store k q}, r.ending = .noAnswer c →
+    Exec.step P c = some (.request p vs site store k) → A.request p vs site store = some q →
+    C.mayBlock input (A.project r.events ++ [.request q]) q
+
+/-- The observation of a C1 evaluator report. The `BlockingPermitted` premise prevents an
+unanswered request from becoming a program observation when its operation forbids blocking.
+A blocked observation retains the earlier events and ends in its pending request. Unsafe stuckness,
+a bad answer and fuel exhaustion remain evaluator/premise reports, not external events. -/
+def reportObservation (P : Exec.Program O) (A : ExecAdapter O S) (C : OperationContract S)
+    (input : C.Input) (r : Exec.Report O) (_permitted : ExecAdapter.BlockingPermitted P A C input r) :
     Option (FullObservation S) :=
   match r.ending with
   | .final final => (A.terminal? final).map fun terminal =>
       .terminal ⟨A.project r.events, terminal⟩
   | .noAnswer c => match Exec.step P c with
     | some (.request p vs site store _) => (A.request p vs site store).map fun request =>
-        .blocked (A.project r.events) request
+        .blocked (A.project r.events ++ [.request request]) request
     | _ => none
   | .stuck _ | .badAnswer _ | .outOfFuel _ => none
 

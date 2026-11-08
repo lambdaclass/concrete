@@ -39,10 +39,24 @@ theorem Responds.matches {C : OperationContract S} {input : C.Input} {hist : Lis
   cases h with
   | response matching _ => exact matching
 
-/-- Silent steps do not change a finite observation. -/
-theorem silent_internal_steps (steps : List (Step S)) (terminal : Terminal) :
-    SameObservation (.finite (.silent :: steps) terminal) (.finite steps terminal) := by
-  exact ⟨rfl, rfl⟩
+/-- Inserting silent steps leaves exactly the same visible events, in the same order. -/
+theorem SilentInsertion.visible {before after : List (Step S)} (h : SilentInsertion before after) :
+    visible before = visible after := by
+  induction h with
+  | nil => rfl
+  | silent _ ih => exact ih
+  | emit event _ ih => exact congrArg (List.cons event) ih
+
+/-- Any finite number of silent steps may be inserted anywhere in a finite terminated run. -/
+theorem silent_internal_steps {before after : List (Step S)} (h : SilentInsertion before after)
+    (terminal : Terminal) : SameObservation (.finite before terminal) (.finite after terminal) := by
+  exact ⟨h.visible, rfl⟩
+
+/-- The same arbitrary finite stuttering preserves a blocked run and its pending request. -/
+theorem blocked_silent_internal_steps {before after : List (Step S)}
+    (h : SilentInsertion before after) (request : Request S) :
+    SameObservation (.blocked before request) (.blocked after request) := by
+  exact ⟨h.visible, rfl⟩
 
 /-- Any finite visible prefix is immediately a prefix of the same execution's prefix. -/
 theorem PrefixEventually.refl (steps : Nat → Step S) : PrefixEventually steps steps := by
@@ -86,35 +100,47 @@ theorem SameObservation.trans {x y z : Execution S}
   all_goals first | exact hxy.elim | exact hyz.elim |
     exact ⟨hxy.1.trans hyz.1, hxy.2.trans hyz.2⟩ | exact hxy.trans hyz
 
-private theorem observation_congr {xs ys : List (Event S)} {terminal terminal' : Terminal}
-    (hxs : xs = ys) (ht : terminal = terminal') :
-    (Observation.mk xs terminal : Observation S) = Observation.mk ys terminal' := by
-  subst ys
-  subst terminal'
-  rfl
-
-private theorem blocked_congr {xs ys : List (Event S)} {request request' : Request S}
-    (hxs : xs = ys) (hr : request = request') :
-    (FullObservation.blocked xs request : FullObservation S) = .blocked ys request' := by
-  subst ys
-  subst request'
-  rfl
-
-/-- **Full-observation preservation.** Silent internal steps may differ freely, but finite runs
-have identical events and terminal actions, blocked runs also have the same request, and infinite
-runs have the same complete event history. Every mixed finite/infinite case is impossible. -/
-theorem full_observation_preservation {x y : Execution S} (h : SameObservation x y) :
-    (match x, y with
-      | .finite xs terminal, .finite ys terminal' =>
-          (⟨visible xs, terminal⟩ : Observation S) = ⟨visible ys, terminal'⟩
-      | .blocked xs request, .blocked ys request' =>
-          (FullObservation.blocked (S := S) (visible xs) request) =
-            .blocked (visible ys) request'
-      | .infinite xs, .infinite ys => SameInfiniteObservation xs ys
-      | _, _ => False) := by
-  cases x <;> cases y <;> simp only [SameObservation] at h
-  all_goals first | exact h.elim | exact h | exact observation_congr h.1 h.2 |
-    exact blocked_congr h.1 h.2
+/-- **Full-observation preservation.** An observation projected from `x` is also an observation of
+every `y` equivalent to `x`. Finite runs preserve their events and terminal action, blocked runs
+also preserve their pending request, and infinite runs transport both eventually silent and
+infinitely emitting histories. No infinite run is related to a finite termination. -/
+theorem full_observation_preservation {x y : Execution S} {observation : FullObservation S}
+    (h : SameObservation x y) (hx : HasFullObservation x observation) :
+    HasFullObservation y observation := by
+  cases x with
+  | finite xs terminal =>
+    cases y with
+    | finite ys terminal' =>
+      cases observation with
+      | terminal observation =>
+        simp only [HasFullObservation] at hx ⊢
+        exact hx.trans (by rw [h.1, h.2])
+      | blocked events request => exact hx.elim
+      | finiteDivergence events => exact hx.elim
+      | infiniteDivergence events => exact hx.elim
+    | blocked ys request => exact h.elim
+    | infinite ys => exact h.elim
+  | blocked xs request =>
+    cases y with
+    | blocked ys request' =>
+      cases observation with
+      | blocked events request'' =>
+        exact ⟨by rw [← h.1, ← h.2]; exact hx.1, h.2.symm.trans hx.2⟩
+      | terminal observation => exact hx.elim
+      | finiteDivergence events => exact hx.elim
+      | infiniteDivergence events => exact hx.elim
+    | finite ys terminal => exact h.elim
+    | infinite ys => exact h.elim
+  | infinite xs =>
+    cases y with
+    | infinite ys =>
+      cases observation with
+      | finiteDivergence events => exact SameInfiniteObservation.trans (SameInfiniteObservation.symm h) hx
+      | infiniteDivergence events => exact SameInfiniteObservation.trans (SameInfiniteObservation.symm h) hx
+      | terminal observation => exact hx.elim
+      | blocked events request => exact hx.elim
+    | finite ys terminal => exact h.elim
+    | blocked ys request => exact h.elim
 
 /-- In particular, an infinite silent run never acquires a terminal observation. -/
 theorem infinite_silent_not_termination (terminal : Terminal) :
@@ -241,19 +267,35 @@ theorem output_before_trap_kept (A : ExecAdapter O S) {P : Exec.Program O} {c c'
     stepsObservation A steps = some ⟨A.project events, .trapped kind site sp (trapLine kind site sp)⟩ := by
   simp [stepsObservation, final, ExecAdapter.terminal?, trapTerminal, resolved]
 
-/-- A pending C1 request observed through `noAnswer` retains the earlier event history and the
-request itself; it is not mistaken for termination or divergence. -/
-theorem report_noAnswer_blocked (P : Exec.Program O) (A : ExecAdapter O S)
-    (events : List O.Event) (c : Exec.Config O) (p : O.Prim) (vs : List O.Val) (site : SiteId)
-    (store : O.Store) (k : Exec.Answer O.Val O.Event O.Store → Exec.Config O) (request : Request S)
+/-- The premise on `reportObservation` really supplies the operation contract's blocking
+permission, in the history ending in the current request. -/
+theorem report_noAnswer_mayBlock (P : Exec.Program O) (A : ExecAdapter O S)
+    (C : OperationContract S) (input : C.Input) (events : List O.Event) (c : Exec.Config O)
+    (permitted : ExecAdapter.BlockingPermitted P A C input ⟨events, .noAnswer c⟩)
+    {p : O.Prim} {vs : List O.Val} {site : SiteId} {store : O.Store}
+    {k : Exec.Answer O.Val O.Event O.Store → Exec.Config O} {request : Request S}
     (pending : Exec.step P c = some (.request p vs site store k))
     (typed : A.request p vs site store = some request) :
-    reportObservation P A ⟨events, .noAnswer c⟩ = some (.blocked (A.project events) request) := by
+    C.mayBlock input (A.project events ++ [.request request]) request :=
+  permitted rfl pending typed
+
+/-- A permitted pending C1 request observed through `noAnswer` retains the earlier event history
+and ends in the request itself; it is not mistaken for termination or divergence. -/
+theorem report_noAnswer_blocked (P : Exec.Program O) (A : ExecAdapter O S)
+    (C : OperationContract S) (input : C.Input)
+    (events : List O.Event) (c : Exec.Config O) (p : O.Prim) (vs : List O.Val) (site : SiteId)
+    (store : O.Store) (k : Exec.Answer O.Val O.Event O.Store → Exec.Config O) (request : Request S)
+    (permitted : ExecAdapter.BlockingPermitted P A C input ⟨events, .noAnswer c⟩)
+    (pending : Exec.step P c = some (.request p vs site store k))
+    (typed : A.request p vs site store = some request) :
+    reportObservation P A C input ⟨events, .noAnswer c⟩ permitted =
+      some (.blocked (A.project events ++ [.request request]) request) := by
   simp [reportObservation, pending, typed]
 
 /-- Fuel exhaustion produces no fabricated external observation or event. -/
 theorem report_outOfFuel_none (P : Exec.Program O) (A : ExecAdapter O S)
-    (events : List O.Event) (c : Exec.Config O) :
-    reportObservation P A ⟨events, .outOfFuel c⟩ = none := rfl
+    (C : OperationContract S) (input : C.Input) (events : List O.Event) (c : Exec.Config O)
+    (permitted : ExecAdapter.BlockingPermitted P A C input ⟨events, .outOfFuel c⟩) :
+    reportObservation P A C input ⟨events, .outOfFuel c⟩ permitted = none := rfl
 
 end ConcreteSpec.Core.Observe
