@@ -22,29 +22,34 @@ sub-expression, never a trap. Checked arithmetic forms are not constructors here
 a separate owner decision. Every operation terminates; fuel bounds the evaluator as item 18
 requires, rather than making an operation partial.
 
-**Static admission and kernel checking.** `typeConsts` checks the closed grammar, types, `Copy` and
-freshness. Independently, `evalConsts` evaluates every declaration, used or unused, and reports the
-first failing constant, operation failure, invalid expression or fuel exhaustion. `ConstsAdmitted`
-is their conjunction and is decidable: concrete admission examples use `decide`, hence Lean's
-kernel reduction, never `native_decide` (item 18). The old fallible-free fragment remains total
-(`eval_total`); admitted declarations have valid values of their declared types
+**Static admission and kernel checking.** `typeConsts` checks the closed grammar, declared-type
+agreement and freshness; because every scalar constant type in `CTy` is `Copy` (`ofC_copy`),
+declared-type agreement entails `Copy` without a redundant runtime `isCopy` guard (`admitted_copy`).
+Independently, `evalConsts` evaluates every declaration, used or unused, and reports the first
+failing constant, operation failure, invalid expression or fuel exhaustion. `ConstsAdmitted` is
+their conjunction and is decidable: concrete admission examples use `decide`, hence Lean's kernel
+reduction, never `native_decide` (item 18). With sufficient fuel, well-typed initializers either
+compute a valid value of their static type or report a located failure of a fallible sub-expression
+(`eval_wellTyped_progress`, `typed_evalConsts_refusal`); the old fallible-free fragment remains
+total (`eval_total`); admitted declarations have valid values of their declared types
 (`evalConsts_sound`).
 
 **Source order and elaboration** (owner decision 2026-11-08, item 19). A source initializer may
 name a later declaration. `dependsOn` extracts the actual reference relation, including references
 nested in operands. `DependencyOrder` is README obligation O1: elaboration supplies a permutation
-of the source list in which every referenced declaration occurs earlier. `ElaboratedConsts`
-requires either such an order or a cycle refusal whose chain is `c₀ → c₁ → … → c₀`, with every edge
-an actual reference. The source elaboration obligation includes existence of an order for acyclic sources and
-order-independence of admitted results. These two global proof obligations remain explicit below;
-the chain law proves that a reported cycle consists of real references. Core continues to receive only the
-ordered form.
+of the source list in which every referenced declaration occurs earlier (`sortConsts`).
+`ElaboratedConsts` requires either such an order or a cycle refusal whose chain is
+`c₀ → c₁ → … → c₀`, with every edge an actual reference (`cycle_chain_real`). In `Proofs/Const.lean`,
+`cycle_excludes_dependencyOrder` proves that a cycle precludes every dependency order,
+`DependencySortingComplete` proves constructively via `sortConsts` that every resolved acyclic
+source list has a dependency order, and `ConstOrderIndependent` proves that any two dependency
+orders of a source list agree on typing, evaluation, admission and the values of all constants. Core
+continues to receive only the ordered form.
 
 The constant types are an interface (`ConstTypes`): the language's type universe, a `Copy`
-predicate and an embedding of the scalar types. A concrete language instance proves separately
-that this embedding classifies every scalar type as `Copy`; keeping that proof out of the interface
-allows admission examples to isolate a non-`Copy` declared type without making the example
-ill-typed. Widening `CTy`, `CVal` and `CExpr` to other values remains an owner decision.
+predicate and an injective embedding of the scalar types (`ofC`), which are all `Copy`
+(`ofC_copy`), while `Ty` may also contain non-`Copy` types outside `ofC`. Widening `CTy`, `CVal`
+and `CExpr` to other values remains an owner decision.
 -/
 
 namespace ConcreteSpec.Core
@@ -120,6 +125,20 @@ structure ConstFailure where
   expression : CExpr
   error : ConstFailureError
   deriving DecidableEq, Repr
+
+/-- A located failure belongs to `e`: its expression is a fallible sub-expression of `e` whose
+constructor matches the reported `operation` and `error` category. -/
+def ConstFailure.InExpr (f : ConstFailure) : CExpr → Prop
+  | .int _ _ | .bool _ | .unit | .ref _ => False
+  | .wrapping _ a b | .saturating _ a b | .bit _ a b | .cmp _ a b
+  | .and a b | .or a b => f.InExpr a ∨ f.InExpr b
+  | .bitNot a | .not a | .convert _ a => f.InExpr a
+  | .plain op a b =>
+    (∃ k, f = ⟨.plain op, .plain op a b, .arithmetic k⟩) ∨ f.InExpr a ∨ f.InExpr b
+  | .plainNeg a =>
+    (∃ k, f = ⟨.plainNeg, .plainNeg a, .arithmetic k⟩) ∨ f.InExpr a
+  | .tryConvert t a =>
+    f = ⟨.tryConvert t, .tryConvert t a, .outOfRange⟩ ∨ f.InExpr a
 
 /-- The result of fuel-bounded initializer evaluation. `invalid` is static refusal (bad typing, an
 out-of-range literal or an unknown reference), distinct from a successfully typed operation that
@@ -256,14 +275,15 @@ def CExpr.ty? (Γ : AList ConstId CTy) : CExpr → Option CTy
     | some (.int _) => some (.int t)
     | _ => none
 
-/-- The language's types as far as constants need them. A concrete instance separately proves that
-`ofC` maps every scalar type to a `Copy` type. -/
+/-- The language's types as far as constants need them. Every scalar constant type in `CTy` is
+`Copy` (`ofC_copy`), while the surrounding type universe `Ty` may also contain non-`Copy` types. -/
 structure ConstTypes where
   Ty : Type
   deq : DecidableEq Ty
   isCopy : Ty → Bool
   ofC : CTy → Ty
   ofC_inj : ∀ a b, ofC a = ofC b → a = b
+  ofC_copy : ∀ c, isCopy (ofC c) = true
 
 attribute [instance] ConstTypes.deq
 
@@ -272,6 +292,7 @@ structure ConstDecl (U : ConstTypes) where
   id : ConstId
   ty : U.Ty
   init : CExpr
+  deriving DecidableEq
 
 /-- The first evaluation refusal, including the identity of the constant being checked. -/
 inductive ConstEvalRefusal where
@@ -280,8 +301,8 @@ inductive ConstEvalRefusal where
   | invalid (id : ConstId) (expression : CExpr)
   deriving DecidableEq, Repr
 
-/-- Evaluate every declaration in Core dependency order, used or unused. Typing and `Copy` are not
-rechecked here; they are the separate `typeConsts` judgment. -/
+/-- Evaluate every declaration in Core dependency order, used or unused. Typing is not rechecked
+here; it is the separate `typeConsts` judgment. -/
 def evalConsts (U : ConstTypes) (fuel : Nat) : List (ConstDecl U) → AList ConstId CVal →
     Except ConstEvalRefusal (AList ConstId CVal)
   | [], env => .ok env
@@ -292,14 +313,15 @@ def evalConsts (U : ConstTypes) (fuel : Nat) : List (ConstDecl U) → AList Cons
     | .invalid e => .error (.invalid d.id e)
 
 /-- Type the constants in dependency order, without evaluating. Each initializer is typed with the
-types of earlier constants; its declared type must be `Copy` and equal to the initializer type, and
-a name may be declared once. -/
+types of earlier constants; its declared type must equal the initializer's scalar type, and a name
+may be declared once. Because every scalar type in `CTy` is `Copy` (`U.ofC_copy`), `U.ofC T = d.ty`
+already entails `U.isCopy d.ty = true` without a separate runtime `isCopy` check. -/
 def typeConsts (U : ConstTypes) : List (ConstDecl U) → AList ConstId CTy →
     Option (AList ConstId CTy)
   | [], Γ => some Γ
   | d :: ds, Γ => match d.init.ty? Γ with
     | some T =>
-      if U.isCopy d.ty = true ∧ U.ofC T = d.ty ∧ AList.lookup Γ d.id = none then
+      if U.ofC T = d.ty ∧ AList.lookup Γ d.id = none then
         typeConsts U ds ((d.id, T) :: Γ)
       else none
     | none => none
@@ -375,6 +397,11 @@ def SourceNamesResolved (U : ConstTypes) (source : List (ConstDecl U)) : Prop :=
   (source.map ConstDecl.id).Nodup ∧
     ∀ d ∈ source, ∀ c ∈ d.init.refs, c ∈ source.map ConstDecl.id
 
+instance (U : ConstTypes) (source : List (ConstDecl U)) :
+    Decidable (SourceNamesResolved U source) := by
+  unfold SourceNamesResolved
+  infer_instance
+
 /-- Every initializer reference occurs in the earlier prefix. This includes nested operands and
 rejects unresolved names as well as self-reference. -/
 def ReferencesEarlier (U : ConstTypes) : List (ConstDecl U) → List ConstId → Prop
@@ -382,10 +409,55 @@ def ReferencesEarlier (U : ConstTypes) : List (ConstDecl U) → List ConstId →
   | d :: ds, earlier => (∀ c ∈ d.init.refs, c ∈ earlier) ∧
     ReferencesEarlier U ds (d.id :: earlier)
 
+instance instDecidableReferencesEarlier (U : ConstTypes) :
+    ∀ (ds : List (ConstDecl U)) (earlier : List ConstId),
+      Decidable (ReferencesEarlier U ds earlier)
+  | [], _ => isTrue trivial
+  | d :: ds, earlier =>
+    have := instDecidableReferencesEarlier U ds (d.id :: earlier)
+    inferInstanceAs (Decidable ((∀ c ∈ d.init.refs, c ∈ earlier) ∧
+      ReferencesEarlier U ds (d.id :: earlier)))
+
 /-- README obligation O1: elaboration supplies a permutation with unique identities and with
 all initializer references in the earlier prefix. Source order itself imposes no restriction. -/
 def DependencyOrder (U : ConstTypes) (source order : List (ConstDecl U)) : Prop :=
   order.Perm source ∧ (source.map ConstDecl.id).Nodup ∧ ReferencesEarlier U order []
+
+instance (U : ConstTypes) (source order : List (ConstDecl U)) :
+    Decidable (DependencyOrder U source order) := by
+  unfold DependencyOrder
+  infer_instance
+
+/-- Ready when every referenced constant has already been emitted into `earlier`. -/
+def readyDecl (U : ConstTypes) (earlier : List ConstId) (d : ConstDecl U) : Bool :=
+  d.init.refs.all (fun c => earlier.contains c)
+
+/-- Extract the first declaration whose references are all in `earlier`, returning it together
+with the remaining declarations in their relative order. -/
+def takeReady (U : ConstTypes) (earlier : List ConstId) :
+    List (ConstDecl U) → Option (ConstDecl U × List (ConstDecl U))
+  | [] => none
+  | d :: ds =>
+    if readyDecl U earlier d then
+      some (d, ds)
+    else
+      (takeReady U earlier ds).map fun (picked, rest) => (picked, d :: rest)
+
+/-- Repeatedly emit the first ready declaration; if a cycle blocks progress, append the remaining
+declarations unchanged so the function always returns a permutation of the input. -/
+def sortConstsAux (U : ConstTypes) :
+    Nat → List ConstId → List (ConstDecl U) → List (ConstDecl U)
+  | 0, _, remaining => remaining
+  | fuel + 1, earlier, remaining =>
+    match takeReady U earlier remaining with
+    | some (d, rest) => d :: sortConstsAux U fuel (d.id :: earlier) rest
+    | none => remaining
+
+/-- Canonical fuel-free topological sort of `source` (Kahn's algorithm with source tie-breaking).
+When `source` is name-resolved and acyclic, `sortConsts U source` is a certified `DependencyOrder`
+(`DependencySortingComplete` in `Proofs/Const.lean`). -/
+def sortConsts (U : ConstTypes) (source : List (ConstDecl U)) : List (ConstDecl U) :=
+  sortConstsAux U source.length [] source
 
 /-- After source name resolution, elaboration's required result (owner decision 2026-11-08, item 19): a dependency order for Core,
 or refusal with a real cycle chain. This is an O1 obligation on the source elaborator, not an
@@ -393,24 +465,6 @@ additional evaluator. -/
 inductive ElaboratedConsts (U : ConstTypes) (source : List (ConstDecl U)) where
   | ordered (order : List (ConstDecl U)) (sorted : DependencyOrder U source order)
   | cycle (chain : List ConstId) (realCycle : CycleChain U source chain)
-
-/-- Obligation (discharged at slice A2i, R-0555). The finite source graph has a dependency
-order whenever it has no real reference cycle. This global graph theorem is not yet proved. -/
-def DependencySortingComplete : Prop :=
-  ∀ (U : ConstTypes) (source : List (ConstDecl U)), SourceNamesResolved U source →
-    Acyclic U source →
-    ∃ order, DependencyOrder U source order
-
-/-- Obligation (discharged at slice A2i, R-0571). All admitted dependency orders give equal values
-by identity, even though their association-list representations can have different orders.
-This requires a permutation/lookup proof, not function determinism, and is not yet proved. -/
-def ConstOrderIndependent : Prop :=
-  ∀ (U : ConstTypes) (fuel : Nat) (source first second : List (ConstDecl U)),
-    DependencyOrder U source first → DependencyOrder U source second →
-    ConstsAdmitted U fuel first → ConstsAdmitted U fuel second →
-    ∀ env₁ env₂, evalConsts U fuel first [] = .ok env₁ →
-      evalConsts U fuel second [] = .ok env₂ →
-      ∀ c, AList.lookup env₁ c = AList.lookup env₂ c
 
 /-! ### Examples
 
@@ -421,7 +475,7 @@ namespace ConstDemo
 inductive T where
   | c (t : CTy)
   | text
-  deriving DecidableEq
+  deriving DecidableEq, Repr
 
 def U : ConstTypes where
   Ty := T
@@ -431,17 +485,7 @@ def U : ConstTypes where
     | .text => false
   ofC := .c
   ofC_inj := fun _ _ h => by cases h; rfl
-
-/-- A deliberately non-`Copy` scalar classification used only to isolate the admission check. -/
-def NonCopyU : ConstTypes where
-  Ty := T
-  deq := inferInstance
-  isCopy := U.isCopy
-  ofC := fun
-    | .int t => .c (.int t)
-    | .bool => .c .bool
-    | .unit => .text
-  ofC_inj := fun a b h => by cases a <;> cases b <;> cases h <;> rfl
+  ofC_copy := fun _ => rfl
 
 def cid (n : String) : ConstId := ⟨⟨["m"]⟩, n⟩
 
@@ -504,12 +548,12 @@ example : ConstsAdmitted U 5 [⟨cid "DEEP", .c (.int .u8),
 example : ¬ ConstsAdmitted U 20 [⟨cid "BAD", .c (.int .u8),
     .tryConvert .u8 (.int .i16 256)⟩] := by decide
 
-/-- Refused (rule `ConcreteSpec.Core.ConstsAdmitted`): types agree exactly (`unit` maps to `text`),
-and only `isCopy text = false` prevents admission. -/
-example : (CExpr.unit.ty? [] = some .unit) ∧ NonCopyU.ofC .unit = .text ∧
-    NonCopyU.isCopy .text = false ∧
-    ¬ ConstsAdmitted NonCopyU 20 [⟨cid "S", .text, .unit⟩] := by
-  exact ⟨rfl, rfl, rfl, by decide⟩
+/-- Refused (rule `ConcreteSpec.Core.ConstsAdmitted`): a non-`Copy` declared type (`text`) lies
+outside the `Copy` scalar constant universe (`U.ofC_copy`), so no constant initializer can inhabit
+it. -/
+example : U.isCopy .text = false ∧
+    ¬ ConstsAdmitted U 20 [⟨cid "S", .text, .unit⟩] := by
+  exact ⟨rfl, by decide⟩
 
 /-- Refused: a reference later in an already supplied Core dependency order is invalid. -/
 example : ¬ ConstsAdmitted U 20 [⟨cid "A", .c (.int .u8), .ref (cid "B")⟩,
@@ -526,16 +570,18 @@ example : ¬ ConstsAdmitted U 20 [⟨cid "A", .c .bool, .bool true⟩,
     ⟨cid "A", .c .bool, .bool false⟩] := by decide
 
 /-- Accepted (rule `ConcreteSpec.Core.ConstsAdmitted`): source `A = B + 1` before `B = 2` is sorted
-to `[B, A]` by elaboration; this is item 19's forward reference. -/
+to `[B, A]` by `sortConsts`; this is item 19's forward reference. -/
 example : DependencyOrder U [⟨cid "A", .c (.int .u8),
       .plain .add (.ref (cid "B")) (.int .u8 1)⟩,
     ⟨cid "B", .c (.int .u8), .int .u8 2⟩]
-    [⟨cid "B", .c (.int .u8), .int .u8 2⟩,
-    ⟨cid "A", .c (.int .u8), .plain .add (.ref (cid "B")) (.int .u8 1)⟩] ∧
-    ConstsAdmitted U 20 [⟨cid "B", .c (.int .u8), .int .u8 2⟩,
-    ⟨cid "A", .c (.int .u8), .plain .add (.ref (cid "B")) (.int .u8 1)⟩] := by
+    (sortConsts U [⟨cid "A", .c (.int .u8),
+      .plain .add (.ref (cid "B")) (.int .u8 1)⟩,
+    ⟨cid "B", .c (.int .u8), .int .u8 2⟩]) ∧
+    ConstsAdmitted U 20 (sortConsts U [⟨cid "A", .c (.int .u8),
+      .plain .add (.ref (cid "B")) (.int .u8 1)⟩,
+    ⟨cid "B", .c (.int .u8), .int .u8 2⟩]) := by
   refine ⟨⟨List.Perm.swap _ _ [], by decide, ?_⟩, by decide⟩
-  simp [ReferencesEarlier, CExpr.refs]
+  simp [sortConsts, sortConstsAux, takeReady, readyDecl, ReferencesEarlier, CExpr.refs, cid]
 
 /-- Refused (rule `ConcreteSpec.Core.ConstsAdmitted`): elaboration reports the real two-constant
 cycle `A → B → A`, and neither declaration order is admissible. -/

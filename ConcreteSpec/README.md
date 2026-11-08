@@ -57,8 +57,9 @@ Open obligations, by name:
   identities, how nested expressions and grouping become A-normal form, source positions, and that
   acceptance of a source program does not depend on how the elaborator names temporaries.
   For constants, item 19 (2026-11-08) requires a permutation into dependency order, allowing
-  source forward references, or a refusal with a closed chain of actual references. The remaining
-  C2 global proofs are acyclic-order existence and value equality across admitted orders.
+  source forward references, or a refusal with a closed chain of actual references (`Proofs/Const.lean`
+  proves cycle exclusion, acyclic-order completeness via `sortConsts`, and order-independence of
+  admission and values).
 - **O2 The lexer, model-translation and native-image obligations.**
 - **O3 Instrumentation erasure** (Q9.10): the ownership instrumentation (`Slot.moved`, the
   `used`, `live`, `known` and `kfields` fields of `Entry`) is stated as intent, with no erasure
