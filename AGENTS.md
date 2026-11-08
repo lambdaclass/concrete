@@ -337,7 +337,10 @@ remote's actual state as the answer rather than the state you saw before killing
 Start every background writer, reviewer or gate with `scripts/agent/launch.sh start`, then
 immediately run the printed `WAIT` command as your own background task so the job's end re-invokes
 you. Never start a detached unit without its watcher. A writer gets one attempt only: a killed or
-timed-out job is investigated, never automatically re-run.
+timed-out job is investigated, never automatically re-run. Each start exclusively creates a new job
+directory (an existing `--dir` is refused) and preserves argv through a file rather than systemd's
+command expansion. A missing status returns 125 with systemd's retained result when known; a bus or
+`systemctl` query failure is an operational error (2), not a completed job.
 
 ### Orchestrating a publish: never infer state from process names
 

@@ -2,13 +2,13 @@
 # AGENT JOBS HAVE ONE ATTEMPT AND A BOUNDED WATCHER.
 #
 # CI has no systemd user session. These controls put systemd-run and systemctl
-# stubs on PATH: systemd-run records every argument and runs the wrapped command
-# in the background, while systemctl reads the stub unit's active/result files.
-# The real launcher is then checked for its exact three-line start output,
-# resource and environment properties, working directory, command record and
-# log, normal statuses 0 and 3 (without a retry), a lost unit (125), a deadline
-# overrun (124), the non-waiting status view, and exit-2 input/environment
-# refusals. Every invocation of the launcher is bounded.
+# stubs on PATH. The stubs reproduce dollar/percent command expansion, runtime
+# kills, --collect unloading, result queries and collection, and user-bus errors.
+# Controls cover exact argv bytes, the status/inactive race, retained timeout
+# results, exclusive job directories, eval-safe WAIT output, normal statuses 0
+# and 3, lost units (125), deadline overruns (124), query failures (2), resource
+# properties, logs, one attempt, and input/environment refusals. Every launcher
+# invocation is bounded. AGENT_LAUNCHER selects a mutant for mutation testing.
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -41,15 +41,20 @@ cat > "$TMP/bin/systemd-run" <<'STUB'
 set -u
 raw="$STUB_STATE_DIR/args.$$"
 printf '%s\n' "$@" > "$raw" || exit 2
-unit="" workdir="$PWD" job_path="$PATH" job_home="$HOME"
+unit="" workdir="$PWD" job_path="$PATH" job_home="$HOME" job_dir="" launch_self=""
+runtime=30 collect=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --user|--collect) shift ;;
+    --user) shift ;;
+    --collect) collect=1; shift ;;
     --unit=*) unit="${1#--unit=}"; shift ;;
     --property=WorkingDirectory=*) workdir="${1#--property=WorkingDirectory=}"; shift ;;
+    --property=RuntimeMaxSec=*) runtime="${1#--property=RuntimeMaxSec=}"; shift ;;
     --property=*) shift ;;
     --setenv=PATH=*) job_path="${1#--setenv=PATH=}"; shift ;;
     --setenv=HOME=*) job_home="${1#--setenv=HOME=}"; shift ;;
+    --setenv=AGENT_JOB_DIR=*) job_dir="${1#--setenv=AGENT_JOB_DIR=}"; shift ;;
+    --setenv=AGENT_LAUNCH_SELF=*) launch_self="${1#--setenv=AGENT_LAUNCH_SELF=}"; shift ;;
     --setenv=*) shift ;;
     *) break ;;
   esac
@@ -58,14 +63,64 @@ done
 state="$STUB_STATE_DIR/$unit"
 mkdir -p "$state" || exit 2
 mv "$raw" "$state/args" || exit 2
+printf '%s\n' "$job_dir" > "$state/jobdir"
 : > "$state/active"
 (
   export PATH="$job_path" HOME="$job_home" STUB_UNIT="$unit"
-  if cd "$workdir"; then "$@"; rc=$?; else rc=1; fi
+  export AGENT_JOB_DIR="$job_dir" AGENT_LAUNCH_SELF="$launch_self"
+  expand_arg() {
+    local rest="$1" out="" prefix="" name=""
+    while [[ "$rest" == *[\$%]* ]]; do
+      prefix="${rest%%[\$%]*}"
+      out+="$prefix"
+      rest="${rest:${#prefix}}"
+      case "$rest" in
+        \$\$*) out+='$'; rest="${rest:2}" ;;
+        %%*) out+='%'; rest="${rest:2}" ;;
+        %n*) out+="$unit"; rest="${rest:2}" ;;
+        \$\{*)
+          name="${rest:2}"
+          if [[ "$name" == *'}'* ]]; then
+            prefix="${name%%\}*}"
+            if [[ "$prefix" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+              out+="${!prefix-}"; rest="${name:${#prefix}+1}"
+            else out+='$'; rest="${rest:1}"; fi
+          else out+='$'; rest="${rest:1}"; fi ;;
+        \$[A-Za-z_]*)
+          name="${rest:1}"; prefix="${name%%[^A-Za-z0-9_]*}"
+          out+="${!prefix-}"; rest="${rest:${#prefix}+1}" ;;
+        \$[0-9]*)
+          name="${rest:1}"; prefix="${name%%[^0-9]*}"
+          rest="${rest:${#prefix}+1}" ;;
+        \$*) out+='$'; rest="${rest:1}" ;;
+        %*) out+='%'; rest="${rest:1}" ;;
+      esac
+    done
+    printf '%s' "$out$rest"
+  }
+  expanded=()
+  for arg in "$@"; do expanded+=("$(expand_arg "$arg")"); done
+  rc=1
+  if cd "$workdir"; then
+    "${expanded[@]}" & command_pid=$!
+    (
+      sleep "$runtime"
+      if kill -0 "$command_pid" 2>/dev/null; then
+        : > "$state/timed-out"
+        kill -TERM "$command_pid" 2>/dev/null || :
+      fi
+    ) & watchdog_pid=$!
+    wait "$command_pid"; rc=$?
+    kill "$watchdog_pid" 2>/dev/null || :
+    wait "$watchdog_pid" 2>/dev/null || :
+  fi
   printf '%s\n' "$rc" > "$state/exit"
-  if [ "$rc" -eq 0 ]; then result=success; else result=exit-code; fi
+  if [ -f "$state/timed-out" ]; then result=timeout
+  elif [ "$rc" -eq 0 ]; then result=success
+  else result=exit-code; fi
   printf '%s\n' "$result" > "$state/result"
   rm -f "$state/active"
+  if [ "$collect" -eq 1 ]; then rm -f "$state/result"; : > "$state/collected"; fi
   exit "$rc"
 ) &
 printf '%s\n' "$!" > "$state/pid"
@@ -79,10 +134,25 @@ action="${2:-}"; unit="${3:-}"
 state="$STUB_STATE_DIR/$unit"
 case "$action" in
   is-active)
+    if [ -f "$state/no-bus" ]; then
+      echo 'Failed to connect to bus: No medium found' >&2
+      exit 1
+    fi
+    [ ! -f "$state/no-bus-empty" ] || exit 1
+    if [ -f "$state/finish-on-is-active" ]; then
+      jobdir="$(cat "$state/jobdir")"
+      tmp="$jobdir/.status.systemd"
+      cp "$state/finish-on-is-active" "$tmp" && mv "$tmp" "$jobdir/status"
+      rm -f "$state/active"
+    fi
     if [ -f "$state/active" ]; then echo active; exit 0; fi
     echo inactive; exit 1 ;;
   show)
     [ -r "$state/result" ] && cat "$state/result"
+    exit 0 ;;
+  reset-failed)
+    : > "$state/reset-failed"
+    [ -f "$state/active" ] || rm -f "$state/result"
     exit 0 ;;
   *) exit 2 ;;
 esac
@@ -109,13 +179,17 @@ file_line() { # file exact-line label
 parse_start() {
   UNIT="$(printf '%s\n' "$OUT" | sed -n 's/^UNIT=//p')"
   JOBDIR="$(printf '%s\n' "$OUT" | sed -n 's/^DIR=//p')"
-  EXPECTED="$(printf 'UNIT=%s\nDIR=%s\nWAIT=bash %s wait %s' "$UNIT" "$JOBDIR" "$LAUNCH" "$JOBDIR")"
+  WAIT="$(printf '%s\n' "$OUT" | sed -n 's/^WAIT=//p')"
+  EXPECTED="$(printf 'UNIT=%s\nDIR=%s\nWAIT=bash %q wait %q' "$UNIT" "$JOBDIR" "$LAUNCH" "$JOBDIR")"
 }
 release_job() { # release a stub-blocked command and observe its wrapper finishing
   local n=0
   touch "$STUB_RELEASE_DIR/$UNIT"
-  while [ ! -f "$JOBDIR/status" ] && [ "$n" -lt 50 ]; do sleep 0.1; n=$((n+1)); done
-  [ -f "$JOBDIR/status" ] && ok "$1 cleaned up" || no "$1 did not finish after its release"
+  while { [ ! -f "$JOBDIR/status" ] || [ -f "$STUB_STATE_DIR/$UNIT/active" ]; } && [ "$n" -lt 50 ]; do
+    sleep 0.1; n=$((n+1))
+  done
+  [ -f "$JOBDIR/status" ] && [ ! -f "$STUB_STATE_DIR/$UNIT/active" ] \
+    && ok "$1 cleaned up" || no "$1 did not finish after its release"
 }
 
 echo "=== start: exact output, properties and one job directory ==="
@@ -132,7 +206,7 @@ case "$(cat "$JOBDIR/deadline")" in ''|*[!0-9]*) no "deadline is not an epoch se
 has_match -F 'line-%s' < "$JOBDIR/cmd" && ok "cmd records the command line" || no "cmd does not record the command"
 ARGS="$STUB_STATE_DIR/$UNIT/args"
 file_line "$ARGS" --user "systemd-run uses the user manager"
-file_line "$ARGS" --collect "--collect is passed"
+if has_match -F -x -- --collect < "$ARGS"; then no "--collect must not unload the result"; else ok "--collect is absent"; fi
 file_line "$ARGS" "--unit=$UNIT" "the sanitised unique unit is passed"
 file_line "$ARGS" --property=MemoryMax=8G "MemoryMax defaults to 8G"
 file_line "$ARGS" --property=TasksMax=1024 "TasksMax defaults to 1024"
@@ -187,16 +261,89 @@ expect_out "JOB $UNIT ENDED without a status (killed, timed out or OOM): killed"
 release_job "the lost-unit fixture"
 
 echo "=== still active past deadline plus grace is 124 ==="
-capture 10 bash "$LAUNCH" start overrun 1 -- bash -c 'while [ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]; do sleep 0.1; done'
+capture 10 bash "$LAUNCH" start overrun 30 -- bash -c 'while [ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]; do sleep 0.1; done'
 expect_rc 0 "start of the overrun job"
 parse_start
 capture 10 bash "$LAUNCH" status "$JOBDIR"
 expect_rc 0 "status of a running job is a successful observation"
 expect_out "JOB $UNIT RUNNING" "status does not wait for a running job"
+printf '1\n' > "$JOBDIR/deadline"
 capture 10 bash "$LAUNCH" wait "$JOBDIR"
 expect_rc 124 "deadline plus grace returns 124"
 expect_out "JOB $UNIT STILL RUNNING past its deadline" "overrun output is INCOMPLETE, never a pass"
 release_job "the overrun fixture"
+
+echo "=== argv survives systemd dollar and percent expansion ==="
+literal='prefix ${HOME} $1 %n and a space'
+capture 10 bash "$LAUNCH" start literal 10 -- bash -c 'printf %s "$1"' _ "$literal"
+expect_rc 0 "start of the literal-argv job"
+parse_start
+capture 15 bash "$LAUNCH" wait "$JOBDIR"
+expect_rc 0 "literal-argv job exits normally"
+expect_out "JOB $UNIT ENDED status=0
+$literal" 'an argument containing ${HOME}, $1, %n and a space reaches the job byte for byte'
+[ "$(cat "$JOBDIR/out.log")" = "$literal" ] && ok "out.log preserves the exact literal bytes" || no "out.log corrupted the literal argument"
+
+echo "=== timeout result is read before explicit collection ==="
+capture 10 bash "$LAUNCH" start timeout-result 1 -- bash -c 'while [ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]; do sleep 0.1; done'
+expect_rc 0 "start of the timed-out job"
+parse_start
+capture 15 bash "$LAUNCH" wait "$JOBDIR"
+expect_rc 125 "a systemd timeout without status returns 125"
+expect_out "JOB $UNIT ENDED without a status (killed, timed out or OOM): timeout" "125 reports the retained timeout result, not unknown"
+[ "$(cat "$JOBDIR/result")" = timeout ] && ok "the result is cached in the job directory" || no "the timeout result was not cached"
+[ -f "$STUB_STATE_DIR/$UNIT/reset-failed" ] && ok "reset-failed collects only after the result was read" || no "the unit was not explicitly collected"
+
+echo "=== status appearing at the inactive observation wins the TOCTOU race ==="
+capture 10 bash "$LAUNCH" start race 30 -- bash -c 'while [ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]; do sleep 0.1; done'
+expect_rc 0 "start of the status-race job"
+parse_start
+printf '0\n' > "$STUB_STATE_DIR/$UNIT/finish-on-is-active"
+capture 10 bash "$LAUNCH" wait "$JOBDIR"
+expect_rc 0 "a status written before is-active returns is not declared lost"
+expect_out "JOB $UNIT ENDED status=0" "inactive triggers a second status-file check"
+release_job "the status-race fixture"
+
+echo "=== job directories are reserved exclusively ==="
+capture 10 bash "$LAUNCH" start --dir "$TMP/exclusive" exclusive 30 -- bash -c 'while [ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]; do sleep 0.1; done'
+expect_rc 0 "start in a new explicit job directory"
+parse_start
+before="$(cd "$JOBDIR" && sha256sum unit deadline cmd argv)"
+capture 10 bash "$LAUNCH" start --dir "$TMP/exclusive" duplicate 30 -- true
+expect_rc 2 "a second start on the same directory is refused"
+expect_out "" "duplicate directory refusal has no stdout"
+has_match -F 'job directory already exists' <<<"$ERR" && ok "duplicate directory has a clear error" || no "duplicate directory error is unclear: $ERR"
+after="$(cd "$JOBDIR" && sha256sum unit deadline cmd argv)"
+[ "$after" = "$before" ] && ok "the refused start leaves the first job's files untouched" || no "the refused start changed the first job's files"
+release_job "the exclusive-directory fixture"
+
+echo "=== the printed WAIT value is safe to eval ==="
+special="$TMP/job ; touch pwned ; #"
+capture 10 bash "$LAUNCH" start --dir "$special" quoted 10 -- true
+expect_rc 0 "start in a directory with spaces and shell metacharacters"
+parse_start
+expect_out "$EXPECTED" "both WAIT paths are shell-quoted with printf %q"
+capture 15 bash -c 'cd "$1" && eval "$2"' _ "$TMP/work" "$WAIT"
+expect_rc 0 "eval of the printed WAIT value waits on the right job"
+expect_out "JOB $UNIT ENDED status=0" "eval prints the intended job result"
+[ ! -e "$TMP/work/pwned" ] && ok "eval executes nothing else" || no "eval injected the pwned command"
+
+echo "=== systemd query failures are not lost units ==="
+capture 10 bash "$LAUNCH" start no-bus 30 -- bash -c 'while [ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]; do sleep 0.1; done'
+expect_rc 0 "start of the no-user-bus job"
+parse_start
+: > "$STUB_STATE_DIR/$UNIT/no-bus"
+capture 10 bash "$LAUNCH" wait "$JOBDIR"
+expect_rc 2 "a user-bus query error returns 2, not 125"
+expect_out "" "a user-bus query error has no job result on stdout"
+has_match -F 'cannot query systemd' <<<"$ERR" && has_match -F 'Failed to connect to bus' <<<"$ERR" \
+  && ok "the query error includes systemctl's bus error" || no "the query error is unclear: $ERR"
+rm -f "$STUB_STATE_DIR/$UNIT/no-bus"
+: > "$STUB_STATE_DIR/$UNIT/no-bus-empty"
+capture 10 bash "$LAUNCH" wait "$JOBDIR"
+expect_rc 2 "a silent user-bus query failure also returns 2"
+has_match -F 'no output' <<<"$ERR" && ok "a silent query failure is identified" || no "silent query failure is unclear: $ERR"
+release_job "the no-user-bus fixture"
 
 echo "=== invalid input and unavailable systemd are exit 2 ==="
 capture 10 bash "$LAUNCH" start bad/name 1 -- true
