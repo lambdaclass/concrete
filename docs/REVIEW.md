@@ -26,15 +26,20 @@ it the same way every time, and its note is the record the landing train checks.
 ## Usage
 
 ```sh
-scripts/review/review.sh [--base <ref>] [--head <ref>] [--max-rounds 5] [--pieces auto|N] [--prompt-extra "..."]
-scripts/review/verify.sh [--fetch] <commit>
+scripts/review/review.sh --writer codex|kimi|agy|claude [--reviewer codex|kimi|agy] [--base <ref>] [--head <ref>] [--max-rounds 5] [--pieces auto|N] [--prompt-extra "..."]
+scripts/review/verify.sh [--fetch] [--required-base <ref>] <commit>
 ```
 
 One invocation runs **one round** on `HEAD`. Commit fixes between rounds; the
 uncommitted tree is never reviewed, and the script warns when it is dirty.
+The writer is mandatory and the reviewer defaults to Codex. The writer never
+reviews their own work: reviewer equal to writer is a usage error (exit 2). In
+particular, a Codex-written branch must be reviewed by Kimi or agy, never Codex.
 
 | option | meaning |
 | --- | --- |
+| `--writer <model>` | required: who wrote the branch, `codex`, `kimi`, `agy` or `claude`. |
+| `--reviewer <model>` | independent reviewer: `codex` (default), `kimi` or `agy`; it must differ from the writer. |
 | `--base <ref>` | base of round 1. Default: the merge-base of `HEAD` with `origin/main`. |
 | `--head <ref>` | the commit the caller means to review; it must be the checkout's HEAD, or nothing runs (exit 2). `train.sh` and `ready.sh` pass it. |
 | `--max-rounds N` | the round cap (default 5). |
@@ -84,13 +89,21 @@ well-formed diff. `scripts/review/split_diff.py` does the splitting.
 The prompt describes the repository as a compiler and asks for correctness
 findings: wrong behaviour, logic errors, regressions, unhandled cases, tests that
 do not check what they claim, and docs that contradict the code. The script
-extracts `HEAD` with `git archive` into a temporary directory and runs
-`codex exec --skip-git-repo-check -s danger-full-access` there, never in the
-live clone. The reviewer can read the complete tree at the reviewed commit but
-has no checkout, refs or notes of its own. The diff piece is included in the
-prompt and Codex's stdin is closed. Each attempt is bounded by `REVIEW_TIMEOUT`
-(default 1500 seconds, with one longer retry). `GIT_OPTIONAL_LOCKS=0` remains set
-so a reviewer command cannot leave an `index.lock` behind (bug 209).
+extracts `HEAD` with `git archive` into a temporary directory and runs the chosen
+reviewer there, never in the live clone:
+
+- Codex: `codex exec --skip-git-repo-check -s danger-full-access` with `-C` naming the archive.
+- Kimi: `kimi -p "<prompt>"` with the archive as its working directory, never `--yolo` or `--auto`.
+- agy: `agy --dangerously-skip-permissions -p "<prompt>"` with the archive as its working directory.
+  That permission bypass exists only inside this disposable archive.
+
+The reviewer can read the complete tree at the reviewed commit but has no
+checkout, refs or notes of its own. The diff piece is included in the prompt and
+every reviewer's stdin is closed. Each attempt is bounded by `bounded_run` with
+`REVIEW_TIMEOUT` (default 1500 seconds, with one longer retry).
+`GIT_OPTIONAL_LOCKS=0` remains set so a reviewer command cannot leave an
+`index.lock` behind (bug 209). The same verdict, repository-evidence and
+failure-text rules apply to all three reviewers.
 
 The reply's penultimate line must be exactly `REPOSITORY: readable` or
 `REPOSITORY: unreadable`, and its last line exactly `VERDICT: clean` or
@@ -107,6 +120,14 @@ with a more neutral prompt that leaves out the project framing. If any half
 fails again, the piece is `blocked` and the script moves on. It does not loop.
 Refusal text is matched only when the reply has no verdict line, so a real
 review that discusses content filters still parses.
+
+## Permanent owner rule
+
+Both the standard and neutral prompts carry this rule permanently. The reviewer
+must report every shortcut, containment patch or corner cut as a finding and
+name the long-term fix:
+
+> OWNER RULE (2026-11-08, verbatim: "ALWAYS tell the reviewrs to do the best long term thing rather than cuitting corners"): judge and fix by the best long-term design. Never cut corners for speed, a smaller diff or fewer rounds. As a reviewer, report any shortcut, containment patch or corner cut as a real finding and say what the long-term fix is. As a writer, implement the structural fix, not a containment patch; if staging is truly unavoidable, record the long-term design and name its roadmap row.
 
 ## Owner decisions: choosing versus recording
 
@@ -137,7 +158,8 @@ After each round the script writes this note on `HEAD` under
 ```
 verdict: clean|findings|blocked
 rounds: N
-reviewer: codex
+reviewer: codex|kimi|agy
+writer: codex|kimi|agy|claude
 utc: 2026-10-22T14:03:11Z
 base: <40-hex sha>
 pieces: K
@@ -145,16 +167,22 @@ repository: readable             # clean notes only
 ```
 
 **The format is an interface.** `verify.sh` parses it, and the train's review
-leg reads it through `verify.sh`, which rejects any note that lacks one of the
-six common keys, repeats a key, or carries any other key. Keys are matched by
-name, not position. A clean note must also carry `repository: readable`; a
-legacy clean note without it is well formed but exits 1, not clean, so old
-diff-only reviews are not landing provenance. Running `review.sh` on such a
-`HEAD` performs a new round rather than short-circuiting. Change the format only
+leg reads it through `verify.sh`. The original six common keys remain mandatory;
+new notes add `writer`. A missing writer makes a note legacy: it stays readable
+for round counting but is not clean provenance. Any repeated or unknown key is
+malformed. Keys are matched by name, not position. A clean note must carry
+`repository: readable` and a valid writer different from its reviewer; legacy
+and self-reviewed clean notes exit 1. Running `review.sh` on such a `HEAD`
+performs a new round rather than short-circuiting. Change the format only
 together with `verify.sh`.
+
+The `writer:` key and its `codex|kimi|agy|claude` vocabulary deliberately match
+the key owner sign-off records use, so all provenance names the branch writer in
+the same way.
 
 - `rounds` is this round's number, which is also the number of rounds run on the
   branch so far.
+- `reviewer` and `writer` record the independent review relationship.
 - `base` is the branch base (the merge-base), not the start of the delta.
 - `pieces` counts the pieces before any refusal retry.
 - `repository` records that every piece's reviewer could read the archived tree.
@@ -204,21 +232,32 @@ commit's review provenance ([LANDING.md](LANDING.md)); it approves no other comm
 ## verify.sh
 
 ```sh
-scripts/review/verify.sh <commit>          # 0 readable clean; 1 findings/blocked/legacy clean; 2 none/malformed
-scripts/review/verify.sh --fetch <commit>  # fetch the notes ref from origin first
+scripts/review/verify.sh <commit>                              # 0 clean provenance; 1 not clean; 2 none/malformed
+scripts/review/verify.sh --fetch <commit>                     # fetch the notes ref from origin first
+scripts/review/verify.sh --required-base <base> <commit>      # also require review coverage from base
 ```
 
 It judges the exact commit. A clean note on an ancestor says nothing about the
 commits after it, so a branch that gains a commit after its clean round needs
-another round. A legacy clean note without `repository: readable` exits 1 with
-a message naming the missing key.
+another round. A legacy clean note without `repository: readable` or `writer`,
+and a clean note whose reviewer equals its writer, exits 1.
+
+With `--required-base BASE`, a clean note qualifies only when its `base` is an
+ancestor of `BASE`, or `BASE` itself. Thus the note's reviewed range covers
+`BASE..commit`. For history A→B→C and required base A, a clean note on C based
+at unreviewed B is refused; one based at A passes. The landing train passes its
+recorded base for both head and member notes. Owner sign-off's `rounds-at` check
+deliberately omits this option: it counts rounds used, not landing coverage.
 
 ## Tests
 
 `scripts/checks/review_tool.sh` runs the scripts against throwaway
-repositories, with a bare repository as `origin` and a fake `codex` that answers
-according to markers in the diff. It needs no API key or network. It covers delta
-selection, splitting, the refusal retry, the cap, note writing and pushing
-(including the non-fast-forward merge), verdict parsing, archived-tree access,
-prompt persistence and hashes, blocked repository-access failures, and
-`verify.sh`'s refusal of legacy clean notes.
+repositories, with a bare repository as `origin` and fake Codex, Kimi and agy
+binaries. It needs no API key or network. It covers delta selection, splitting,
+the refusal retry, the cap, note writing and pushing (including the
+non-fast-forward merge), verdict parsing, archived-tree access for every
+reviewer, independent reviewer/writer provenance and its refusal cases, both
+prompts' permanent owner rule, prompt persistence and hashes, blocked
+repository-access failures, legacy clean-note refusal, and required-base
+coverage. `scripts/checks/landing_script.sh` repeats the A→B→C reproducer
+through the landing train for both head and member notes.

@@ -7,7 +7,7 @@
 #   MOVE_GATE_MARKER            the line train.sh's dry-run land prints when only the move gate refused
 #   dryland_only_move_gate rc out   0 iff a dry-run land exited 5 with MOVE_GATE_MARKER as a whole line
 #
-# A LEG is one independent validation (impact gates, remote full gates, Codex review). Legs of one
+# A LEG is one independent validation (impact gates, remote full gates, independent review). Legs of one
 # candidate run at the same time and are all collected: one failing leg fails the whole, and no
 # leg is abandoned while another is still running. LEGS_SUM is the sequential cost (the sum of the
 # legs' durations); the caller compares it with the wall time to record what pipelining saved.

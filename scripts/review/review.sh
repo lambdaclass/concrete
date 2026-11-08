@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 # R-0544 — one review procedure for every agent. See docs/REVIEW.md.
 #
-#   scripts/review/review.sh [--base <ref>] [--head <ref>] [--max-rounds 5]
+#   scripts/review/review.sh --writer codex|kimi|agy|claude [--reviewer codex|kimi|agy]
+#                            [--base <ref>] [--head <ref>] [--max-rounds 5]
 #                            [--pieces auto|N] [--prompt-extra "..."]
+#
+# --writer is required and names who wrote the branch; --reviewer defaults to codex. The reviewer
+# must differ from the writer: nobody reviews their own work.
 #
 # --head names the commit the caller means to review (train.sh and ready.sh pass it); it must be
 # the checkout's HEAD, or nothing runs (exit 2): the review always reads HEAD's tree.
@@ -31,7 +35,9 @@
 #   6  result recorded locally but the notes ref could not be pushed
 #
 # Environment (mostly for the test gate, scripts/checks/review_tool.sh):
-#   REVIEW_CODEX_BIN    reviewer binary (default: codex)
+#   REVIEW_CODEX_BIN    Codex binary (default: codex)
+#   REVIEW_KIMI_BIN     Kimi binary (default: kimi)
+#   REVIEW_AGY_BIN      agy binary (default: agy)
 #   REVIEW_REMOTE       remote for notes and the default base (default: origin)
 #   REVIEW_MAIN_REF     ref the default base is computed against (default: $REVIEW_REMOTE/main)
 #   REVIEW_PUSH         1 to fetch/push the notes refs (default: 1)
@@ -46,6 +52,8 @@ ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 
 CODEX_BIN="${REVIEW_CODEX_BIN:-codex}"
+KIMI_BIN="${REVIEW_KIMI_BIN:-kimi}"
+AGY_BIN="${REVIEW_AGY_BIN:-agy}"
 REMOTE="${REVIEW_REMOTE:-origin}"
 MAIN_REF="${REVIEW_MAIN_REF:-$REMOTE/main}"
 PUSH="${REVIEW_PUSH:-1}"
@@ -54,6 +62,7 @@ TIMEOUT="${REVIEW_TIMEOUT:-1500}"
 NOTES_REF="refs/notes/concrete-review"
 FINDINGS_REF="refs/notes/concrete-review-findings"
 REVIEWER="codex"
+WRITER=""
 
 BASE=""
 MAX_ROUNDS=5
@@ -70,10 +79,15 @@ while [ $# -gt 0 ]; do
     --max-rounds) [ $# -ge 2 ] || die "--max-rounds needs a number"; MAX_ROUNDS="$2"; shift 2 ;;
     --pieces) [ $# -ge 2 ] || die "--pieces needs auto or a number"; PIECES="$2"; shift 2 ;;
     --prompt-extra) [ $# -ge 2 ] || die "--prompt-extra needs text"; EXTRA="$2"; shift 2 ;;
+    --reviewer) [ $# -ge 2 ] || die "--reviewer needs codex, kimi or agy"; REVIEWER="$2"; shift 2 ;;
+    --writer) [ $# -ge 2 ] || die "--writer needs codex, kimi, agy or claude"; WRITER="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) die "unknown argument: $1 (see --help)" ;;
   esac
 done
+case "$REVIEWER" in codex|kimi|agy) ;; *) die "--reviewer must be codex, kimi or agy" ;; esac
+case "$WRITER" in codex|kimi|agy|claude) ;; "") die "--writer is required: name who wrote the branch (codex, kimi, agy or claude)" ;; *) die "--writer must be codex, kimi, agy or claude" ;; esac
+[ "$REVIEWER" != "$WRITER" ] || die "reviewer $REVIEWER cannot review its own work (writer $WRITER)"
 [[ "$MAX_ROUNDS" =~ ^[1-9][0-9]*$ ]] || die "--max-rounds must be a positive integer"
 [[ "$PIECES" == auto || "$PIECES" =~ ^[1-9][0-9]*$ ]] || die "--pieces must be auto or a positive integer"
 if [ -n "${WANT_HEAD:-}" ]; then
@@ -83,7 +97,8 @@ fi
 [[ "$PIECE_BYTES" =~ ^[1-9][0-9]*$ ]] || die "REVIEW_PIECE_BYTES must be a positive integer"
 { [[ "$TIMEOUT" =~ ^[0-9]+(\.[0-9]+)?$ ]] && awk -v s="$TIMEOUT" 'BEGIN { exit !(s + 0 > 0) }'; } \
   || die "REVIEW_TIMEOUT must be a positive number of seconds"
-command -v "$CODEX_BIN" >/dev/null 2>&1 || die "reviewer binary not found: $CODEX_BIN"
+case "$REVIEWER" in codex) REVIEWER_BIN="$CODEX_BIN" ;; kimi) REVIEWER_BIN="$KIMI_BIN" ;; agy) REVIEWER_BIN="$AGY_BIN" ;; esac
+command -v "$REVIEWER_BIN" >/dev/null 2>&1 || die "reviewer binary not found: $REVIEWER_BIN"
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -168,8 +183,8 @@ fi
 
 # Latest note on the branch (round count), and the latest note whose round
 # actually reviewed its diff (delta start). A `blocked` round reviewed only part
-# of its diff, so it does not advance the delta start. Neither does a legacy
-# clean note without evidence that the reviewer could read the repository.
+# of its diff, so it does not advance the delta start. Neither does a legacy clean
+# note without readable-repository and independent-writer evidence.
 PREV_SHA="" PREV_ROUNDS=0 PREV_VERDICT="" REVIEWED_SHA="" REVIEWED_ROUNDS=0 REVIEWED_VERDICT=""
 while read -r c; do
   [ -n "$c" ] || continue
@@ -177,7 +192,12 @@ while read -r c; do
   v="$(note_field "$n" verdict)"
   r="$(note_field "$n" rounds)"
   [[ "$r" =~ ^[0-9]+$ ]] || continue
-  if [ "$v" = clean ] && [ "$(note_field "$n" repository)" != readable ]; then v=legacy-clean; fi
+  if [ "$v" = clean ]; then
+    nr="$(note_field "$n" reviewer)"; nw="$(note_field "$n" writer)"
+    case "$nr" in codex|kimi|agy) ;; *) nr="" ;; esac
+    case "$nw" in codex|kimi|agy|claude) ;; *) nw="" ;; esac
+    if [ "$(note_field "$n" repository)" != readable ] || [ -z "$nr" ] || [ -z "$nw" ] || [ "$nr" = "$nw" ]; then v=legacy-clean; fi
+  fi
   if [ -z "$PREV_SHA" ]; then PREV_SHA="$c" PREV_ROUNDS="$r" PREV_VERDICT="$v"; fi
   if [ "$v" = clean ] || [ "$v" = findings ]; then REVIEWED_SHA="$c" REVIEWED_ROUNDS="$r" REVIEWED_VERDICT="$v"; break; fi
 done < <(git rev-list --topo-order HEAD "^$BASE_SHA")
@@ -256,6 +276,7 @@ The last line of your reply must be exactly one of these two lines, with nothing
 VERDICT: clean
 VERDICT: findings
 Use `VERDICT: findings` when you report any finding, including an earlier finding that is still open.'
+OWNER_RULE='OWNER RULE (2026-11-08, verbatim: "ALWAYS tell the reviewrs to do the best long term thing rather than cuitting corners"): judge and fix by the best long-term design. Never cut corners for speed, a smaller diff or fewer rounds. As a reviewer, report any shortcut, containment patch or corner cut as a real finding and say what the long-term fix is. As a writer, implement the structural fix, not a containment patch; if staging is truly unavoidable, record the long-term design and name its roadmap row.'
 
 prompt_for() { # prompt_for <standard|neutral> <piece label> <group> <paths>
   local scope="$SCOPE_ROUND1"
@@ -279,6 +300,7 @@ This is $2 (files: $4). $scope
 Also report as a finding any change that picks a side on an owner decision listed in docs/decisions.md (OD1 - OD157) or an undecided project question without the owner's explicit answer. Writing down a decision the owner explicitly approved is allowed; report it only when it lacks the owner's quoted, dated answer (or the quoted owner rule that decides it under the recording rule in docs/decisions.md), changes that answer's meaning, goes beyond it, or adds something the owner did not approve.
 EOF
   fi
+  printf '\n%s\n' "$OWNER_RULE"
   if [ -n "$PREV_FINDINGS" ]; then
     cat <<EOF
 
@@ -320,12 +342,22 @@ run_one() {
   # Command substitution strips trailing newlines; the sentinel preserves the exact saved bytes.
   prompt_arg="$(cat "$prompt"; printf .)"; prompt_arg="${prompt_arg%.}"
   : >"$out"
-  # The archive has no .git and is disposable: full access lets Codex read the whole reviewed tree
-  # without giving it access to the caller's worktree, refs or notes. Keep stdin closed; the diff is
-  # part of the prompt. Optional locks remain off in case a reviewer invokes git elsewhere (bug 209).
-  bounded_run -i /dev/null "$TIMEOUT" -- env GIT_OPTIONAL_LOCKS=0 "$CODEX_BIN" exec \
-    --skip-git-repo-check -s danger-full-access --ephemeral --color never -C "$REVIEW_TREE" -o "$out" \
-    "$prompt_arg" >"$log" 2>&1 || rc=$?
+  # The archive has no .git and is disposable: every reviewer reads the whole reviewed tree without
+  # access to the caller's worktree, refs or notes. agy's permission bypass is used only here. Keep
+  # stdin closed; the diff is in the prompt. Optional locks stay off in case a reviewer invokes git
+  # elsewhere (bug 209). Kimi and agy write their reply to stdout; Codex writes it to -o.
+  case "$REVIEWER" in
+    codex)
+      bounded_run -i /dev/null "$TIMEOUT" -- env GIT_OPTIONAL_LOCKS=0 "$REVIEWER_BIN" exec \
+        --skip-git-repo-check -s danger-full-access --ephemeral --color never -C "$REVIEW_TREE" -o "$out" \
+        "$prompt_arg" >"$log" 2>&1 || rc=$? ;;
+    kimi)
+      (cd "$REVIEW_TREE" && bounded_run -i /dev/null "$TIMEOUT" -- env GIT_OPTIONAL_LOCKS=0 \
+        "$REVIEWER_BIN" -p "$prompt_arg") >"$out" 2>"$log" || rc=$? ;;
+    agy)
+      (cd "$REVIEW_TREE" && bounded_run -i /dev/null "$TIMEOUT" -- env GIT_OPTIONAL_LOCKS=0 \
+        "$REVIEWER_BIN" --dangerously-skip-permissions -p "$prompt_arg") >"$out" 2>"$log" || rc=$? ;;
+  esac
   msg="$(cat "$out")"
   [ -n "$msg" ] || [ "$rc" -ne 0 ] || msg="$(cat "$log")"
   LAST_BODY="$msg"
@@ -355,7 +387,7 @@ UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 {
   echo "# review of $HEAD_SHA, round $ROUND"
   echo
-  echo "reviewer: $REVIEWER; utc: $UTC; base: $BASE_SHA; diff from: $FROM; pieces: $K; diff bytes: $TOTAL"
+  echo "reviewer: $REVIEWER; writer: $WRITER; utc: $UTC; base: $BASE_SHA; diff from: $FROM; pieces: $K; diff bytes: $TOTAL"
 } >"$RAW"
 
 N_FINDINGS=0 N_BLOCKED=0
@@ -431,6 +463,7 @@ cat >"$WORK/note" <<EOF
 verdict: $VERDICT
 rounds: $ROUND
 reviewer: $REVIEWER
+writer: $WRITER
 utc: $UTC
 base: $BASE_SHA
 pieces: $K

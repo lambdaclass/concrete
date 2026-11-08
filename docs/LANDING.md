@@ -87,21 +87,24 @@ verdict; any failing leg fails the check (see [Pipelining](#pipelining)).
   concurrent checks never share or delete each other's refs. The run counts only if the runner reports
   `sha=<head>`. `--no-remote` skips this leg.
 - **review** (fails closed): the leg passes at once when the train already has **review
-  provenance**: a clean review note at its head or, when the head has no note, a clean note on every
-  member at its exact recorded SHA (each member was reviewed at its own head). Each note is judged by
-  `scripts/review/verify.sh` on origin's notes; an absent, malformed, blocked or findings note
-  qualifies nothing, and neither does a legacy clean note without `repository: readable`. A head note
-  that is not clean is not overridden by the members. A member
+  provenance**: a clean independent review note at its head or, when the head has no note, one on
+  every member at its exact recorded SHA. Each note's `base` must be an ancestor-or-equal of the
+  train's recorded base, so its reviewed range covers the entire train diff; a note based at an
+  unreviewed intermediate commit is refused. `scripts/review/verify.sh --required-base <train-base>`
+  judges origin's notes. Absent, malformed, blocked, findings, legacy and self-reviewed clean notes
+  qualify nothing, and a non-clean head note is not overridden by the members. A member
   without a clean note qualifies instead by an **owner sign-off** at its exact SHA (R-0618: a branch
   at the review-round cap of its diff's class, approved by the owner after Codex, Kimi and agy all
   reviewed that commit; `scripts/land/signoff.sh verify --base`, on origin's `refs/owner-signoff/*`). A sign-off approves that
   commit only, so a train with a signed-off member must be exactly the clean merge of its members
   onto its base: one conflict-free merge per member and nothing else. Otherwise
-  the leg runs `LAND_REVIEW_CMD`, else `scripts/review/review.sh`, with `--base --head`, and then
-  requires provenance: a non-zero exit fails, and so does a zero exit that leaves no clean note at the
-  head. With no review command at all, `check` fails; it never disables the leg silently.
-  `--no-review` skips the leg explicitly, and `land` still requires review provenance. A review that refuses a patch recording an owner
-  decision is answered in the review ([REVIEW.md](REVIEW.md#owner-decisions-choosing-versus-recording)),
+  the leg runs `LAND_REVIEW_CMD`, else `scripts/review/review.sh`, with `--base --head`; the default
+  also takes `LAND_REVIEW_WRITER`, while a custom command carries its reviewer and writer options.
+  The reviewer must differ from the writer. The leg then requires provenance: a non-zero exit fails,
+  and so does a zero exit that leaves no clean covering note at the head. With no review command,
+  `check` fails; it never disables the leg silently. `--no-review` skips the leg explicitly, and
+  `land` still requires review provenance. A review that refuses a patch recording an owner decision
+  is answered in the review ([REVIEW.md](REVIEW.md#owner-decisions-choosing-versus-recording)),
   never by `--no-review`.
 - The per-leg durations, the wall time and their sum go to the log as a `check-legs` row.
 - Runs inside `nix develop` unless already in the dev shell. `LAND_NO_NIX=1` disables this.
@@ -148,8 +151,8 @@ before anything is pushed:
 - `origin/main`, read with `ls-remote`, is still the train's base;
 - the mirror's main is an ancestor of the train, so no half-landing happens;
 - the train has review provenance (as in `check`'s review leg), read again from origin's notes
-  rather than trusted from `check`: a check run with `--no-review` lands only on a clean note at the
-  train head or, when the head has none, clean notes on every member;
+  rather than trusted from `check`: a check run with `--no-review` lands only on a clean independent
+  note covering the train base at its head or, when the head has none, on every member;
 - a legacy/ move candidate (a change under `legacy/`, a `legacy` that is not a directory, or a change
   to the set of top-level entries `scripts/checks/root_inventory.txt` lists; comments, order and
   nested `docs/...` or `scripts/...` entries do not count) has an accepted rehearsal of its exact
@@ -321,10 +324,11 @@ A branch is **ready** when all of the following hold:
 
 | notes ref | lines | writer |
 |---|---|---|
-| `refs/notes/concrete-review` | `verdict: clean\|findings\|blocked`, `rounds: N`, `reviewer: codex`, `utc: ...`, `base: <sha>`, `pieces: N`, plus `repository: readable` on clean | `scripts/review/review.sh` (`scripts/review/verify.sh` reads it) |
+| `refs/notes/concrete-review` | `verdict: clean\|findings\|blocked`, `rounds: N`, `reviewer: codex\|kimi\|agy`, `writer: codex\|kimi\|agy\|claude`, `utc: ...`, `base: <sha>`, `pieces: N`, plus `repository: readable` on clean | `scripts/review/review.sh` (`scripts/review/verify.sh` reads it) |
 | `refs/notes/concrete-gates` | `gates: pass\|fail`, `selected: N`, `utc: ...` | `scripts/land/ready.sh` |
 
-One `key: value` per line; when a key repeats, the last line wins. `scripts/land/notes.sh` reads and
+One `key: value` per line; `notes.sh get` takes the last when a key repeats, while `verify.sh`
+refuses a repeated key in a review note. `scripts/land/notes.sh` reads and
 writes the notes (`get`, `put`, `ready`). `put` builds each write on its own temporary ref on top
 of the remote's notes tip, pushes that commit without force, and retries on a race. Concurrent
 writers therefore never drop each other's notes, including writers that share one clone or its
@@ -400,7 +404,8 @@ The server was shared with other full runs at a load average of 15 to 32.
 | `LAND_REMOTE_RUNNER` | `~/bin/concrete-remote` | `<runner> <ref> <command>` for the remote leg; empty disables it |
 | `LAND_REMOTE_PUSH` | `1` | `0`: the runner fetches the SHA from this clone, nothing is published |
 | `LAND_FULL_GATES_CMD` | `lake build && bash scripts/checks/run.sh` | the remote leg's command |
-| `LAND_REVIEW_CMD` | `scripts/review/review.sh` when present | the review leg's command (`--base --head` appended); with neither, `check` fails |
+| `LAND_REVIEW_CMD` | `scripts/review/review.sh` when present | the review leg's command (`--base --head` appended); a custom command carries its reviewer/writer options; with no command, `check` fails |
+| `LAND_REVIEW_WRITER` | unset | mandatory writer passed to the default `review.sh`; the chosen reviewer must differ |
 | `LAND_PUSH_ATTEMPTS`, `LAND_PUSH_RETRY_SLEEP` | `3`, `15` | attempts and pause for a verified push |
 ## Tests
 
@@ -412,6 +417,8 @@ script against a throwaway repository with bare-repo remotes and a fake `gh`. It
   or rebase already in progress, a dirty tree, an existing train, a head-SHA mismatch, a red
   landing job, a moved main and a remote named `fork`;
 - the check → ci → watch → land pipeline, with both dry-runs;
+- review coverage on A→B→C: head and member notes based at unreviewed B are refused, while notes
+  based at main A pass;
 - `ci` dispatches with the train's base; `land` cancels no run; `record` names the qualifying run
   only for the newest completed dispatch of CI at exactly the head and the base with every
   landing-tier and required job green, and refuses each of: no run, a run at another SHA or base, a

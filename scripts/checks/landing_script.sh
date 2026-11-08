@@ -103,12 +103,14 @@ esac
 GH
 chmod +x "$TMP/fake-gh"
 
-# A review note as scripts/review/review.sh writes it (six common keys, plus repository on clean),
-# published to origin. put-review <sha> <clean|findings|blocked|malformed|none>[@rounds]; none removes it.
+# A current review note as scripts/review/review.sh writes it (seven common keys, plus repository on
+# clean), published to origin. put-review <sha> <clean|findings|blocked|malformed|none>[@rounds]
+# [review-base]; the base defaults to origin/main, and none removes the note.
 cat > "$TMP/put-review" <<'EOF'
 #!/usr/bin/env bash
 set -e
 sha="$(git rev-parse "$1")"; R=refs/notes/concrete-review
+base="${3:-$(git rev-parse origin/main)}"
 git fetch -q origin "+$R:$R" 2>/dev/null || true
 case "$2" in
   none) git notes --ref=$R remove --ignore-missing "$sha" 2>/dev/null ;;
@@ -117,8 +119,9 @@ case "$2" in
     note="verdict: ${2%@*}
 rounds: $(case "$2" in *@*) echo "${2#*@}" ;; *) echo 1 ;; esac)
 reviewer: codex
+writer: claude
 utc: 2026-11-06T00:00:00Z
-base: $sha
+base: $base
 pieces: 1"
     [ "${2%@*}" != clean ] || note="$note
 repository: readable"
@@ -136,7 +139,7 @@ cat > "$TMP/fake-review" <<'EOF'
 mode="$(cat "$FAKE_GH_DIR/review.mode" 2>/dev/null || echo clean)"
 echo "$4 $mode" >> "$FAKE_GH_DIR/review.log"
 case "$mode" in none) exit 0 ;; fail) exit 1 ;; esac
-bash "$(dirname "$0")/put-review" "$4" "$mode"
+bash "$(dirname "$0")/put-review" "$4" "$mode" "$2"
 EOF
 export LAND_REVIEW_CMD="bash $TMP/fake-review"
 
@@ -1296,6 +1299,41 @@ bash "$TMP/put-review" "$HR" none; bash "$TMP/put-review" "$R1" clean; bash "$TM
 out="$(bash "$TRAIN" check trv --no-remote 2>&1)"; rc=$?
 [ "$rc" = 0 ] && [ ! -s "$FAKE_GH_DIR/review.log" ] \
   && ok "check over members reviewed clean passes the review leg without running the reviewer" || { no "check over reviewed members: exit $rc, reviewer calls '$(cat "$FAKE_GH_DIR/review.log")'"; echo "$out" | sed 's/^/      /'; }
+
+echo "=== review: notes cover the train base (ISS-0019, A -> B -> C) ==="
+git checkout -q -b brvcov "$MR"
+printf 'unreviewed intermediate B\n' > rvcov.txt; commit_all B; COV_B="$(git rev-parse HEAD)"
+printf 'reviewed head C\n' > rvcov.txt; commit_all C; COV_C="$(git rev-parse HEAD)"
+bash "$TRAIN" build trvcov brvcov >/dev/null 2>&1 || no "coverage train build"
+git checkout -q train/trvcov; COV_H="$(git rev-parse HEAD)"
+bash "$TRAIN" check trvcov --no-remote --no-review >/dev/null 2>&1 || no "coverage train check"
+printf '[{"databaseId": 6262, "headSha": "%s", "createdAt": "9999-01-01T00:00:00Z"}]' "$COV_H" > "$FAKE_GH_DIR/list.json"
+bash "$TRAIN" ci trvcov >/dev/null 2>&1 || no "coverage train ci"
+runjson "$COV_H" success success
+cov_leg(){ # label head-base(member-base if head is -) expected(pass|refuse)
+  local label="$1" hb="$2" mb="$3" want="$4" o r bad="$2"
+  [ "$hb" != - ] || bad="$mb"
+  if [ "$hb" = - ]; then
+    bash "$TMP/put-review" "$COV_H" none
+    bash "$TMP/put-review" "$COV_C" clean "$mb"
+  else
+    bash "$TMP/put-review" "$COV_H" clean "$hb"
+    bash "$TMP/put-review" "$COV_C" none
+  fi
+  o="$(bash "$TRAIN" --dry-run land trvcov 2>&1)"; r=$?
+  if [ "$want" = pass ]; then
+    [ "$r" = 0 ] && has "$o" "covering ${MR:0:10}" && ok "land accepts $label" || { no "land with $label (exit $r)"; echo "$o" | sed 's/^/      /'; }
+  else
+    [ "$r" = 1 ] && has "$o" "base $bad is not an ancestor-or-equal of required base $MR" && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$MR" ] \
+      && ok "land refuses $label" || { no "land with $label (exit $r)"; echo "$o" | sed 's/^/      /'; }
+  fi
+}
+cov_leg "a head note based at unreviewed intermediate B" "$COV_B" "" refuse
+cov_leg "a head note based at main A" "$MR" "" pass
+cov_leg "a member note based at unreviewed intermediate B" - "$COV_B" refuse
+cov_leg "a member note based at main A" - "$MR" pass
+git checkout -q train/trv
+runjson "$HR" success success
 
 echo "=== review: an owner sign-off at a member's exact SHA is its review provenance (R-0618) ==="
 # brv1 is reviewed clean. brv2 used its rounds (a findings note, round 5: rv2.txt is in no class, so

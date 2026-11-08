@@ -25,7 +25,7 @@ runs the same procedure by name instead of receiving a long prompt:
 | `/fix-bug <N or description>` | reproduce, classify, repair or contain one bug on its own branch |
 | `/roadmap-item <R-NNNN>` | carry one roadmap task to a landable candidate |
 | `/file-bug <title>` | file a new bug with `scripts/gen/new_bug.sh` |
-| `/creview` | Codex review of the branch through `scripts/review/review.sh` |
+| `/creview` | independent review of the branch through `scripts/review/review.sh` |
 | `/rebase` | the safe rebase onto `origin/main` |
 | `/land` | hand a validated branch to the landing train (`scripts/land/train.sh`) |
 | `/cstatus` | where this worktree, its branch, its CI and this machine stand |
@@ -41,13 +41,20 @@ rule changes in one place.
 **Design questions** are decided by [PHILOSOPHY.md](docs/PHILOSOPHY.md). Any important design decision is
 put to the owner by Claude or Codex, with a recommendation reasoned from docs/PHILOSOPHY.md.
 
+**Owner rule (2026-11-08), verbatim:** "ALWAYS tell the reviewrs to do the best long term thing
+rather than cuitting corners". Judge and fix by the best long-term design. Never cut corners for
+speed, a smaller diff or fewer rounds. As a reviewer, report any shortcut, containment patch or
+corner cut as a real finding and say what the long-term fix is. As a writer, implement the structural
+fix, not a containment patch; if staging is truly unavoidable, record the long-term design and name
+its roadmap row. Both `review.sh` prompt templates carry this rule permanently.
+
 **Owner decisions: never decide one.** The language decisions OD1 – OD157
 ([decisions.md](docs/decisions.md#owner-decisions)) are decided only by the project owner. No
 agent, orchestrator or reviewer chooses, encodes, implements or provisionally ships any side of any
 of them, inside a bug fix or anywhere else. Agents present options and a recommendation to the owner
 and wait for an explicit answer. Behaviour already on main that took a side stays as it is, recorded
 as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
-- The Codex review of every fix (`scripts/review/review.sh` asks it) also answers: "does this fix
+- The independent review of every fix (`scripts/review/review.sh` asks it) also answers: "does this fix
   pick a side on any OD in docs/decisions.md?" If yes, or if the fix cannot be made without picking
   one, stop and report to the owner; do not land it. Recording an answer the owner explicitly gave
   is not picking a side; what the review checks then is in
@@ -142,16 +149,18 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
 - Have Codex confirm each bug is real (a reproducer and a verdict line in the record) before
   filing it.
 
-**Review.** Codex reviews everything before it is published or brought to the owner, and Kimi and
-agy (Gemini) review every branch too; a reviewer's absence is recorded, never assumed
-([decision](docs/decisions.md#decided-project-review)). agy cannot read files: run it as
-`bounded_run 1500 -- agy -p "<prompt>"` with the diff and the context it needs in the prompt, ending with a
-required verdict line. Every slice gets a Codex review before it lands, through `scripts/review/review.sh`:
-at most 2 rounds for docs and the roadmap, 3 for scripts and 5 for the compiler and the spec
-(owner, 2026-11-08; `review.sh` enforces 5 until R-0618 lands), the first over the whole diff and each later round over the delta since the
-previous one. Answer each finding with a fix or a stated reason. Run Codex by hand only with
-`GIT_OPTIONAL_LOCKS=0` (and `</dev/null`): its sandboxed `git status` otherwise takes the
-worktree's `index.lock` and can leave it behind (bug 209).
+**Review.** The writer never reviews their own work. Every branch gets independent review before it
+is published or brought to the owner; a reviewer's absence is recorded, never assumed
+([decision](docs/decisions.md#decided-project-review)). When Codex wrote the branch, Kimi or agy
+reviews it, never Codex. Run `scripts/review/review.sh --writer <who-wrote-it> --reviewer
+<codex|kimi|agy>` (`--reviewer` defaults to Codex); reviewer equal to writer is refused. Reviewers run
+with full read access only in the script's disposable archive, agy's permission bypass included,
+with stdin closed and the diff in the prompt. Every slice gets that independent review before it
+lands: at most 2 rounds for docs and the roadmap, 3 for scripts and 5 for the compiler and the spec
+(owner, 2026-11-08; `review.sh` enforces 5 until R-0618 lands), the first over the whole diff and
+each later round over the delta since the previous one. Answer each finding with a fix or a stated
+reason. Run Codex by hand only with `GIT_OPTIONAL_LOCKS=0` (and `</dev/null`): its sandboxed `git
+status` otherwise takes the worktree's `index.lock` and can leave it behind (bug 209).
 
 **Git safety.**
 - Never pipe `git rebase` (or `git merge`, `git cherry-pick`) into anything: a pipe hides the stop.
@@ -356,13 +365,13 @@ itself via the bracket, but a ref check is still the better answer.
 
 ### Reviewing a branch
 
-Every agent reviews the same way: `scripts/review/review.sh`, one round per
-invocation, with the verdict recorded as a git note on the reviewed commit. The
-note is shared through `origin`, so rounds run in another worktree or by another
-agent count toward the same cap, and the next round reviews only the delta.
-Codex runs with full access only in a temporary `git archive` of the reviewed
-commit, never in the live clone, with its stdin closed and the diff in the
-prompt. Every prompt is saved under `.review/` with its sha256 in the raw output.
-A clean note must carry `repository: readable`; legacy clean notes without it
-are not provenance and `review.sh` re-reviews their commits. See
+Every agent reviews the same way: `scripts/review/review.sh --writer <model> [--reviewer <model>]`,
+one round per invocation, with the verdict recorded as a git note on the reviewed commit. Writer is
+required and reviewer must differ. The note is shared through `origin`, so rounds run in another
+worktree or by another agent count toward the same cap, and the next round reviews only the delta.
+Codex, Kimi and agy run with full access only in a temporary `git archive` of the reviewed commit,
+never in the live clone, with stdin closed and the diff in the prompt. Every prompt is saved under
+`.review/` with its sha256 in the raw output. A clean note carries `repository: readable` and an
+independent `writer`; legacy and self-reviewed clean notes are not provenance and are re-reviewed.
+The landing train also requires the note's base to cover its recorded base. See
 [REVIEW.md](docs/REVIEW.md).

@@ -2,18 +2,18 @@
 # R-0544 — the review tool (scripts/review/review.sh, verify.sh, split_diff.py)
 # does what docs/REVIEW.md says it does.
 #
-# No API key or network is needed: the reviewer is a fake `codex` that answers according to
-# MARK_* markers on the ADDED lines of the diff in its prompt, and logs every call (prompt kind,
-# closed stdin, files, archived tree) so the legs can check what was sent. All git work happens in
-# throwaway repositories with a bare repository as `origin`, so the notes push, including the
-# non-fast-forward path, runs for real.
+# No API key or network is needed: fake Codex, Kimi and agy reviewers answer according to MARK_*
+# markers or clean, and log every call (prompt kind, closed stdin, files, archived tree) so the legs
+# can check what was sent. All git work happens in throwaway repositories with a bare repository as
+# `origin`, so the notes push, including the non-fast-forward path, runs for real.
 #
-# Legs: verdict and repository-access parsing, exact prompt persistence and hashes, note writing
-# and its format, notes push and the non-fast-forward merge, delta selection (round 2 sees only the
-# delta and previous findings), splitting (file groups, size limit, hunk split, --pieces N), the
+# Legs: verdict and repository-access parsing, exact prompt persistence and hashes, both prompts'
+# permanent owner rule, independent reviewer/writer selection and refusal, note writing and its
+# format, notes push and the non-fast-forward merge, delta selection (round 2 sees only the delta
+# and previous findings), splitting (file groups, size limit, hunk split, --pieces N), the
 # content-filter refusal retry (once, neutral, smaller, then `blocked`), the round cap (distinct
-# exit code, no extra round), verify.sh including legacy clean-note refusal, and the pre-push
-# hook's review-notes tier (a notes-only push runs no gates).
+# exit code, no extra round), verify.sh including legacy clean-note and required-base refusal, and
+# the pre-push hook's review-notes tier (a notes-only push runs no gates).
 
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
@@ -129,6 +129,36 @@ EOF
 chmod +x "$T/bin/codex"
 export REVIEW_CODEX_BIN="$T/bin/codex"
 
+# Kimi and agy have one-argument prompt interfaces and answer on stdout. Their fakes pin the exact
+# permission flags, archived cwd and closed stdin; the production result parser is the Codex one.
+for reviewer in kimi agy; do
+  cat >"$T/bin/$reviewer" <<'EOF'
+#!/usr/bin/env bash
+set -uo pipefail
+reviewer="$(basename "$0")"
+if [ "$reviewer" = agy ]; then
+  [ "${1:-}" = --dangerously-skip-permissions ] || { echo "fake agy: missing permission flag" >&2; exit 64; }
+  shift
+fi
+[ "${1:-}" = -p ] && [ $# -eq 2 ] || { echo "fake $reviewer: expected -p PROMPT" >&2; exit 64; }
+prompt="$2"
+n=$(( $(ls "$FAKE_LOG" | grep -c '^stdin\.' || true) + 1 ))
+cat >"$FAKE_LOG/actual-stdin.$n"
+printf '%s' "$prompt" >"$FAKE_LOG/prompt.$n"
+archive=no
+[ ! -e .git ] && [ "$(cat README.md 2>/dev/null)" = base ] && archive=yes
+echo "$n $reviewer archive=$archive stdin_bytes=$(wc -c <"$FAKE_LOG/actual-stdin.$n" | tr -d ' ')" >>"$FAKE_LOG/calls"
+echo "$n optional_locks=${GIT_OPTIONAL_LOCKS:-unset}" >>"$FAKE_LOG/locks"
+case "$prompt" in
+  *MARK_REPOSITORY_UNREADABLE*) printf 'REPOSITORY: unreadable\nVERDICT: clean\n' ;;
+  *MARK_NO_REPOSITORY*) printf 'Nothing to report.\nVERDICT: clean\n' ;;
+  *) printf 'Nothing to report.\nREPOSITORY: readable\nVERDICT: clean\n' ;;
+esac
+EOF
+  chmod +x "$T/bin/$reviewer"
+done
+export REVIEW_KIMI_BIN="$T/bin/kimi" REVIEW_AGY_BIN="$T/bin/agy"
+
 calls() { [ -f "$FAKE_LOG/calls" ] && wc -l <"$FAKE_LOG/calls" | tr -d ' ' || echo 0; }
 reset_fake() { rm -f "$FAKE_LOG"/*; }
 
@@ -146,7 +176,7 @@ commit_file README.md "base" "base"
 printf '.review/\n' >"$W/.gitignore"
 g add .gitignore && g commit -qm "ignore .review"
 g push -q origin main
-review() { (cd "$W" && bash "$REVIEW" "$@"); }
+review() { (cd "$W" && bash "$REVIEW" --writer "${REVIEW_TEST_WRITER:-claude}" "$@"); }
 note() { g notes --ref=refs/notes/concrete-review show "${1:-HEAD}" 2>/dev/null; }
 field() { note "${2:-HEAD}" | sed -n "s/^$1: //p"; }
 sha256_file() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
@@ -165,17 +195,20 @@ check "reviewer runs with GIT_OPTIONAL_LOCKS=0" grep -q " optional_locks=0$" "$F
 check "no reviewer call ran with optional locks" bash -c '! grep -v " optional_locks=0$" "$1" | has_match .' _ "$FAKE_LOG/locks"
 check "round 1 prompt carries the verdict rule" grep -q "^VERDICT: findings$" "$FAKE_LOG/prompt.1"
 check "round 1 prompt requires repository readability evidence" grep -q "REPOSITORY: readable.*REPOSITORY: unreadable" "$FAKE_LOG/prompt.1"
+check "the standard prompt carries the permanent owner rule" \
+  grep -Fq 'OWNER RULE (2026-11-08, verbatim: "ALWAYS tell the reviewrs to do the best long term thing rather than cuitting corners"): judge and fix by the best long-term design. Never cut corners for speed, a smaller diff or fewer rounds. As a reviewer, report any shortcut, containment patch or corner cut as a real finding and say what the long-term fix is. As a writer, implement the structural fix, not a containment patch; if staging is truly unavoidable, record the long-term design and name its roadmap row.' "$FAKE_LOG/prompt.1"
 check "round 1 reviews the full diff from the merge-base" grep -q "files=old.txt,$" "$FAKE_LOG/calls"
 R1="$(g rev-parse HEAD)"
 BASE="$(g merge-base HEAD origin/main)"
 FORMAT_RE='^verdict: (clean|findings|blocked)
 rounds: [0-9]+
 reviewer: codex
+writer: claude
 utc: [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z
 base: [0-9a-f]{40}
 pieces: [0-9]+$'
 n1="$(note "$R1")"
-if [[ "$n1" =~ $FORMAT_RE ]]; then ok "note has exactly the six fields, in order"; else no "note format: $n1"; fi
+if [[ "$n1" =~ $FORMAT_RE ]]; then ok "note has exactly the seven common fields, in order"; else no "note format: $n1"; fi
 check "note: verdict findings" test "$(field verdict)" = findings
 check "note: rounds 1" test "$(field rounds)" = 1
 check "note: base is the merge-base" test "$(field base)" = "$BASE"
@@ -243,15 +276,22 @@ g notes --ref=refs/notes/concrete-review add -f -m "$LEGACY_NOTE" HEAD
 out="$(cd "$W" && bash "$VERIFY" HEAD 2>&1)"; rc=$?
 check "a legacy clean note without repository: readable is not clean (exit 1, got $rc)" test "$rc" -eq 1
 check "the legacy-note refusal names the missing key" grep -q "missing repository: readable" <<<"$out"
-# A note notes.sh put wrote (keys in its own order, repository after utc) is well formed.
+# Even with repository evidence, a note without writer is legacy, never clean provenance.
 g notes --ref=refs/notes/concrete-review add -f -m "$LEGACY_NOTE
 repository: readable" HEAD
+out="$(cd "$W" && bash "$VERIFY" HEAD 2>&1)"; rc=$?
+check "a readable clean note without writer is legacy, not clean (exit 1, got $rc)" test "$rc" -eq 1
+check "the legacy-writer refusal names the missing key" grep -q "missing writer (legacy note)" <<<"$out"
+# A current note notes.sh put wrote (keys in its own order, writer and repository after utc) verifies.
+g notes --ref=refs/notes/concrete-review add -f -m "$LEGACY_NOTE
+writer: claude
+repository: readable" HEAD
 (cd "$W" && bash "$VERIFY" HEAD >"$T/vc" 2>&1); rc=$?
-check "a readable clean note with utc last verifies clean (exit 0, got $rc)" test "$rc" -eq 0
+check "a readable independent clean note with utc before writer verifies (exit 0, got $rc)" test "$rc" -eq 0
 g notes --ref=refs/notes/concrete-review add -f -m "$LEGACY_NOTE" HEAD
 review >"$T/legacy-rerun" 2>&1; rc=$?
 check "review.sh re-reviews a legacy clean HEAD instead of short-circuiting (exit $rc)" \
-  test "$rc" -eq 0 -a "$(field repository)" = readable -a "$(field rounds)" = 3
+  test "$rc" -eq 0 -a "$(field repository)" = readable -a "$(field writer)" = claude -a "$(field rounds)" = 3
 # The landing bot's keys went with it: a verdict carried across a rebase, or a landing order, is no
 # longer a key a review note may hold.
 for extra in "carried-from: $B40" "order: 1"; do
@@ -266,6 +306,57 @@ g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: findings\
 (cd "$W" && bash "$VERIFY" HEAD >/dev/null 2>&1); rc=$?
 check "a repeated key is malformed: exit 2 (got $rc)" test "$rc" -eq 2
 g notes --ref=refs/notes/concrete-review remove HEAD 2>/dev/null
+
+echo "=== verify.sh: required base coverage (A -> B -> C) ==="
+COV_A="$(g rev-parse main)"
+g checkout -q main && g checkout -qb coverage
+commit_file coverage.txt "unreviewed intermediate B" "B"
+COV_B="$(g rev-parse HEAD)"
+commit_file coverage.txt "reviewed head C" "C"
+COV_C="$(g rev-parse HEAD)"
+coverage_note() { # base: a current clean note on C whose review began at this base
+  g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 1\nreviewer: codex\nwriter: claude\nutc: 2026-11-08T00:00:00Z\nbase: %s\npieces: 1\nrepository: readable' "$1")" "$COV_C"
+}
+coverage_note "$COV_B"
+(cd "$W" && bash "$VERIFY" "$COV_C" >/dev/null 2>&1); rc=$?
+check "without a coverage requirement the clean note verifies (exit 0, got $rc)" test "$rc" -eq 0
+out="$(cd "$W" && bash "$VERIFY" --required-base "$COV_A" "$COV_C" 2>&1)"; rc=$?
+check "a note based at unreviewed B does not cover required base A (exit 1, got $rc)" test "$rc" -eq 1
+check "the coverage refusal names both bases" bash -c "grep -q 'base $COV_B.*required base $COV_A' <<<'$out'"
+coverage_note "$COV_A"
+(cd "$W" && bash "$VERIFY" --required-base "$COV_A" "$COV_C" >/dev/null 2>&1); rc=$?
+check "a note based at main A covers required base A (exit 0, got $rc)" test "$rc" -eq 0
+
+echo "=== independent reviewers and writer provenance ==="
+for reviewer in kimi agy; do
+  reset_fake
+  g checkout -q main && g checkout -qb "reviewer-$reviewer"
+  commit_file "$reviewer.txt" "clean review by $reviewer" "Codex-written branch"
+  REVIEW_TEST_WRITER=codex review --reviewer "$reviewer" >"$T/reviewer-$reviewer" 2>&1; rc=$?
+  check "Codex-written branch reviewed clean by $reviewer (exit $rc)" test "$rc" -eq 0
+  check "$reviewer note records reviewer $reviewer and writer codex" \
+    test "$(field reviewer)/$(field writer)" = "$reviewer/codex"
+  check "verify accepts the independent $reviewer note" \
+    bash -c "cd '$W' && bash '$VERIFY' HEAD >/dev/null 2>&1"
+  check "$reviewer runs in the archive with stdin closed" grep -q "$reviewer archive=yes stdin_bytes=0" "$FAKE_LOG/calls"
+  check "$reviewer runs with optional locks off" grep -q " optional_locks=0$" "$FAKE_LOG/locks"
+done
+before="$(calls)"
+REVIEW_TEST_WRITER=agy review --reviewer agy >"$T/self-review" 2>&1; rc=$?
+check "reviewer == writer is a usage refusal (exit 2, got $rc)" test "$rc" -eq 2
+check "self-review refusal calls no reviewer" test "$(calls)" = "$before"
+(cd "$W" && bash "$REVIEW" --reviewer codex >"$T/missing-writer" 2>&1); rc=$?
+check "missing --writer is a usage error (exit 2, got $rc)" test "$rc" -eq 2
+check "missing-writer error says it is required" grep -q -- "--writer is required" "$T/missing-writer"
+SELF_BASE="$(g merge-base HEAD main)"
+g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 1\nreviewer: agy\nwriter: agy\nutc: 2026-11-08T00:00:00Z\nbase: %s\npieces: 1\nrepository: readable' "$SELF_BASE")" HEAD
+out="$(cd "$W" && bash "$VERIFY" HEAD 2>&1)"; rc=$?
+check "verify refuses a clean note whose reviewer equals writer (exit 1, got $rc)" test "$rc" -eq 1
+check "self-reviewed-note refusal names the rule" grep -q "agy reviewed its own work" <<<"$out"
+g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 1\nreviewer: agy\nutc: 2026-11-08T00:00:00Z\nbase: %s\npieces: 1\nrepository: readable' "$SELF_BASE")" HEAD
+out="$(cd "$W" && bash "$VERIFY" HEAD 2>&1)"; rc=$?
+check "verify refuses a clean note without writer as legacy (exit 1, got $rc)" test "$rc" -eq 1
+check "missing-writer note refusal says legacy" grep -q "missing writer (legacy note)" <<<"$out"
 
 echo "=== verdict parsing ==="
 parse_case() { # parse_case <marker> <want-exit> <want-verdict> <label>
@@ -298,6 +389,8 @@ first_bytes="$(awk 'NR==1 { sub("bytes=", "", $4); print $4 }' "$FAKE_LOG/calls"
 retry_max="$(awk 'NR>1 { sub("bytes=", "", $4); if ($4 + 0 > m) m = $4 + 0 } END { print m + 0 }' "$FAKE_LOG/calls")"
 check "retry pieces are smaller ($retry_max < $first_bytes)" test "$retry_max" -lt "$first_bytes"
 check "neutral prompt avoids the project framing" bash -c "! grep -q 'Concrete, a compiler' '$FAKE_LOG/prompt.2'"
+check "the neutral prompt carries the permanent owner rule" \
+  grep -Fq 'OWNER RULE (2026-11-08, verbatim: "ALWAYS tell the reviewrs to do the best long term thing rather than cuitting corners"): judge and fix by the best long-term design. Never cut corners for speed, a smaller diff or fewer rounds. As a reviewer, report any shortcut, containment patch or corner cut as a real finding and say what the long-term fix is. As a writer, implement the structural fix, not a containment patch; if staging is truly unavoidable, record the long-term design and name its roadmap row.' "$FAKE_LOG/prompt.2"
 check "raw output records the refusal" grep -q ": refused" "$W/.review/$(g rev-parse HEAD)-1.md"
 
 reset_fake
@@ -481,6 +574,7 @@ OTHER_SHA="$(git -C "$T/other" rev-parse HEAD)"
 git -C "$T/other" notes --ref=refs/notes/concrete-review add -f -m "verdict: clean
 rounds: 1
 reviewer: codex
+writer: claude
 utc: 2026-10-22T00:00:00Z
 base: $OTHER_SHA
 pieces: 1

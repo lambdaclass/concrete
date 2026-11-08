@@ -456,21 +456,23 @@ gates_host() {
 }
 
 # The review command: LAND_REVIEW_CMD, else scripts/review/review.sh, called with --base --head.
-# Empty when there is neither, which `check` refuses (it never skips the leg silently).
+# The default gets its mandatory writer from LAND_REVIEW_WRITER; a custom command carries its own
+# reviewer/writer options. Empty when there is no command, which `check` refuses (never silently).
 review_cmd() {
   if [ -n "${LAND_REVIEW_CMD:-}" ]; then echo "$LAND_REVIEW_CMD"
-  elif [ -f scripts/review/review.sh ]; then echo "bash scripts/review/review.sh"; fi
+  elif [ -f scripts/review/review.sh ]; then
+    echo "bash scripts/review/review.sh${LAND_REVIEW_WRITER:+ --writer $LAND_REVIEW_WRITER}"
+  fi
   return 0
 }
 
 # REVIEW PROVENANCE (fail closed; docs/LANDING.md, "check" and "land"). A train is reviewed when its
-# head carries a clean review note, or when its head carries no review note and every member carries
-# one at its exact recorded SHA (each member was reviewed at its own head: a train
-# built or rebuilt from reviewed branches). Every note is judged by scripts/review/verify.sh, on
-# $REMOTE's notes (fetched first, replacing the local copy, as verify.sh --fetch does): an absent,
-# malformed, blocked or findings note qualifies nothing; nor does a legacy clean note without
-# repository: readable. A head note that is not clean is not overridden by its members. Prints what
-# qualified; on failure prints why and returns 1.
+# head carries a clean independent review note, or when its head has no note and every member carries
+# one at its exact recorded SHA. Each note's base must be an ancestor-or-equal of the train base, so
+# the reviewed range covers the whole train diff. Notes are judged by scripts/review/verify.sh on
+# $REMOTE's notes (fetched first, replacing the local copy): absent, malformed, blocked, findings,
+# legacy or self-reviewed clean notes qualify nothing. A non-clean head note is not overridden by
+# members. Prints what qualified; on failure prints why and returns 1.
 #
 # OWNER SIGN-OFF (R-0618). A member without a clean note qualifies instead by a valid owner sign-off
 # at its exact SHA (scripts/land/signoff.sh verify --base <the train's base>, on $REMOTE's
@@ -507,10 +509,11 @@ pure_merge() {
 }
 review_provenance() { # name head
   local name="$1" head="$2" out m n=0 bad=""
+  local base; base="$(state_get_soft "$name" base)"
   [ -f "$VERIFY" ] || { echo "no review verifier ($VERIFY is missing)"; return 1; }
   git fetch -q "$REMOTE" "+refs/notes/concrete-review:refs/notes/concrete-review" 2>/dev/null \
     || { echo "could not fetch refs/notes/concrete-review from $REMOTE"; return 1; }
-  if out="$(bash "$VERIFY" "$head" 2>&1)"; then echo "the head ${head:0:10} carries a clean review note"; return 0; fi
+  if out="$(bash "$VERIFY" --required-base "$base" "$head" 2>&1)"; then echo "the head ${head:0:10} carries a clean review note covering ${base:0:10}"; return 0; fi
   if git notes --ref=refs/notes/concrete-review show "$head" >/dev/null 2>&1; then
     echo "the head's review note does not qualify: ${out//$'\n'/ }"; return 1
   fi
@@ -519,24 +522,24 @@ review_provenance() { # name head
     || { echo "could not fetch refs/owner-signoff/* from $REMOTE"; return 1; }
   for m in $(state_get_soft "$name" members | tr ',' ' '); do
     n=$((n + 1)); shas+=("${m##*@}")
-    out="$(bash "$VERIFY" "${m##*@}" 2>&1)" && continue
-    if so="$(bash "$SIGNOFF" verify "${m##*@}" --base "$(state_get_soft "$name" base)" 2>&1)"; then signed=$((signed + 1)); continue; fi
+    out="$(bash "$VERIFY" --required-base "$base" "${m##*@}" 2>&1)" && continue
+    if so="$(bash "$SIGNOFF" verify "${m##*@}" --base "$base" 2>&1)"; then signed=$((signed + 1)); continue; fi
     bad="$bad; member ${m%@*}: ${out//$'\n'/ }; ${so//$'\n'/ }"
   done
   [ "$n" -gt 0 ] || { echo "the head ${head:0:10} has no review note and the train records no members"; return 1; }
   [ -z "$bad" ] || { echo "the head ${head:0:10} has no review note, and not every member has a clean one or an owner sign-off$bad"; return 1; }
   if [ "$signed" -gt 0 ]; then
-    impure="$(pure_merge "$(state_get_soft "$name" base)" "$head" "${shas[@]}")"
+    impure="$(pure_merge "$base" "$head" "${shas[@]}")"
     [ -z "$impure" ] || { echo "$signed member(s) signed off by the owner, but $impure"; return 1; }
     echo "the head has no review note; every member ($n) carries a clean one or an owner sign-off ($signed) at its exact SHA, and the head is their clean merge"
     return 0
   fi
-  echo "the head has no review note; every member ($n) carries a clean one at its exact SHA"
+  echo "the head has no review note; every member ($n) carries a clean one covering ${base:0:10} at its exact SHA"
 }
 
-# Codex review leg. It passes without running the reviewer when the train already has review
+# Independent review leg. It passes without running the reviewer when the train already has review
 # provenance. Otherwise it runs the review command; a non-zero exit fails, and so does a zero exit
-# that leaves no provenance (no note, or a malformed, blocked or findings note at the head).
+# that leaves no provenance (no note, or a malformed, blocked, findings or non-covering note).
 review_leg() { # name base head
   local why
   if why="$(review_provenance "$1" "$3")"; then echo "review: $why; not reviewed again"; return 0; fi
@@ -579,7 +582,7 @@ cmd_check() {
   # The legs are independent, so they run AT THE SAME TIME and are all collected (LANDING.md,
   # "Pipelining"): the impact selection over exactly the range the `ci` push will present
   # (base..head on ci/<name>, so that push reuses the hook's record), the remote full set, and the
-  # Codex review. Any failing leg fails the check.
+  # Independent review. Any failing leg fails the check.
   if [ "$DRY" = 1 ]; then
     note "(dry-run) would run in parallel: impact gates $impact_where (hook line 'refs/heads/train/$name $head refs/heads/ci/$name $base')"
     if [ "$remote" = 1 ]; then note "(dry-run)   + remote full gates: $(remote_runner) <ref of ${head:0:10}> '${LAND_FULL_GATES_CMD:-lake build && bash scripts/checks/run.sh}'"; fi

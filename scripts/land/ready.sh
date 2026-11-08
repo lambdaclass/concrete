@@ -5,7 +5,8 @@
 #
 # Run in a clean checkout at the branch head, after pushing it (origin/<branch> must be HEAD). Three
 # independent legs run AT THE SAME TIME, and every one is collected before the verdict:
-#   review  LAND_REVIEW_CMD or scripts/review/review.sh, with --base --head (it writes the review note)
+#   review  LAND_REVIEW_CMD or scripts/review/review.sh, with --base --head (the default also takes
+#           LAND_REVIEW_WRITER; a custom command carries its reviewer/writer options)
 #   impact  scripts/land/impact_gates.sh over merge-base(<base>, HEAD)..HEAD
 #   remote  the full gate set via LAND_REMOTE_RUNNER (default ~/bin/concrete-remote) at <branch>
 # Then the gates note is published at HEAD: `gates: pass` only when every leg that ran passed
@@ -40,7 +41,9 @@ pushed="$(git rev-parse -q --verify "refs/remotes/$REMOTE/$branch" || true)"
 base="$(git merge-base "${baseref:-$REMOTE/main}" "$head")"
 
 rcmd="${LAND_REVIEW_CMD:-}"
-if [ -z "$rcmd" ] && [ -f scripts/review/review.sh ]; then rcmd="bash scripts/review/review.sh"; fi
+if [ -z "$rcmd" ] && [ -f scripts/review/review.sh ]; then
+  rcmd="bash scripts/review/review.sh${LAND_REVIEW_WRITER:+ --writer $LAND_REVIEW_WRITER}"
+fi
 [ -n "$rcmd" ] || review=0
 runner="${LAND_REMOTE_RUNNER-$HOME/bin/concrete-remote}"
 { [ -n "$runner" ] && [ -x "$runner" ]; } || remote=0
