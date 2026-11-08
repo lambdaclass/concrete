@@ -1066,6 +1066,9 @@ MB="$HM"
   git -C w config alias.p push; git -C w config alias.pp p; git -C w config alias.q "push -q"
   git -C w config alias.qq "push 'origin' main"; git -C w config alias.sh '!git push -q origin main'
   bad=""
+  # shimref LABEL CMD...: CMD must fail, refused by the shim itself (not by git for another reason).
+  shimref() { local l="$1"; shift; if "$@" 2>"$S/err"; then bad="$bad [$l passed]"
+    elif ! grep -q 'acceptance git shim: refusing' "$S/err"; then bad="$bad [$l failed but not by the shim: $(cat "$S/err")]"; fi; }
   for a in "push -q fix main" "push -q $S/fix.git main" "push -q file://$S/fix.git main" "push -q fix HEAD:refs/heads/main" \
            "push -q fix :" "push -q origin wip/x" "push -q -o main origin wip/x" "push -q --repo=fix fix main" \
            "p -q fix main" "pp -q fix main" "q fix main" "-c alias.z=push z -q fix main" "status --short" \
@@ -1089,21 +1092,27 @@ MB="$HM"
     if "$G" -C w $a >/dev/null 2>"$S/err"; then bad="$bad [refused passed: git $a]"
     elif ! grep -q 'acceptance git shim: refusing' "$S/err"; then bad="$bad [git $a failed but not by the shim: $(cat "$S/err")]"; fi
   done
-  GIT_CONFIG_PARAMETERS="'alias.e=push'" "$G" -C w e origin main 2>"$S/err" && bad="$bad [an alias from the environment passed]"
-  CFG=push "$G" --config-env alias.e=CFG -C w e origin main 2>"$S/err" && bad="$bad [an alias from --config-env passed]"
-  CFG=push "$G" --config-env=alias.e=CFG -C w e origin main 2>"$S/err" && bad="$bad [an alias from --config-env= passed]"
-  "$G" --no-such-option -C w push origin main 2>"$S/err" && bad="$bad [an unknown global option passed]"
-  "$G" -C w -c submodule.recurse=true push fix wip/x 2>"$S/err" && bad="$bad [a push with submodule.recurse passed]"
+  GIT_CONFIG_PARAMETERS="'alias.e=push'" shimref "an alias from the environment" "$G" -C w e origin main
+  CFG=push shimref "an alias from --config-env" "$G" --config-env alias.e=CFG -C w e origin main
+  CFG=push shimref "an alias from --config-env=" "$G" --config-env=alias.e=CFG -C w e origin main
+  shimref "an unknown global option" "$G" --no-such-option -C w push origin main
+  shimref "a push with submodule.recurse" "$G" -C w -c submodule.recurse=true push fix wip/x
+  shimref "a bare --recurse-submodules before a remote named check" "$G" -C w -c remote.check.url="$S/prot.git" push --recurse-submodules check main wip/x
+  shimref "a multi-line alias" "$G" -C w -c alias.ml="$(printf 'status\npush origin main')" ml
+  shimref "a colon-less refspec mapped to main by remote.origin.push" "$G" -C w -c remote.origin.push=refs/heads/wip/x:refs/heads/main push origin wip/x
+  mkdir -p w/target; ln -s "$S/prot.git" w/target.git
+  shimref "a push to a path whose .git sibling is protected" "$G" -C w push "$S/w/target" main
   git -C prot.git symbolic-ref refs/heads/alias refs/heads/main
-  "$G" -C w push "$S/prot.git" wip/x:refs/heads/alias 2>"$S/err" && bad="$bad [a push to a symbolic ref for main passed]"
-  "$G" -C w push origin wip/x:alias 2>"$S/err" && bad="$bad [a push to a short symbolic ref for main passed]"
+  shimref "a push to a symbolic ref for main" "$G" -C w push "$S/prot.git" wip/x:refs/heads/alias
+  shimref "a push to a short symbolic ref for main" "$G" -C w push origin wip/x:alias
+  "$G" -C w push -q "$S/fix" main 2>"$S/err" || bad="$bad [a fixture push spelled without .git refused: $(cat "$S/err")]"
   # Protected local URLs in the other spellings git accepts: file://localhost/ and ~/.
   # And an absolute path holding "://", reached through a symlink.
   git init -q --bare p2.git; git init -q --bare p3.git; git init -q --bare "$S/store://p4.git"; ln -s "store:/p4.git" p4.git
   HOME="$S" make_git_shim "$S/bin2" "$(command -v git)" "file://localhost$S/p2.git" "~/p3.git" "$S/store://p4.git" \
     || bad="$bad [shim with file://localhost, ~ and :// path URLs not made]"
   for r in p2.git p3.git p4.git; do
-    "$S/bin2/git" -C w push -q "$S/$r" main 2>"$S/err" && bad="$bad [a push to the protected $r by its absolute path passed]"
+    shimref "a push to the protected $r by its absolute path" "$S/bin2/git" -C w push -q "$S/$r" main
   done
   "$S/bin2/git" -C w push -q "$S/fix.git" main 2>"$S/err" || bad="$bad [a fixture push refused by the second shim: $(cat "$S/err")]"
   make_git_shim "$S/bin3" "$(command -v git)" "$S/no-such.git" 2>/dev/null && bad="$bad [a shim was made for a protected URL naming no repository]"

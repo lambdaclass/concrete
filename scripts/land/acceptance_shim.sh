@@ -35,14 +35,18 @@
 # stopped by acceptance's other two guards (the pre-push guard and the before/after read of main).
 
 # repo_identity REAL-GIT ABSOLUTE-PATH: the absolute git common directory of the repository git would
-# open at this path, or nothing (no such path, not absolute, not a repository).
+# open at this path, or nothing (not absolute, not a repository). Like receive-pack's enter_repo, it
+# tries PATH/.git, PATH, PATH.git/.git and PATH.git in that order and never walks up the tree.
 repo_identity() {
-  local real="$1" u="$2" d
+  local real="$1" u="${2%/}" c d
   case "$u" in /*) ;; *) return 0 ;; esac
-  [ -e "$u" ] || return 0
-  d="$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY \
-        "$real" -C "$u" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 0
-  [ -n "$d" ] && (cd "$d" 2>/dev/null && pwd -P)
+  for c in "$u/.git" "$u" "$u.git/.git" "$u.git"; do
+    [ -e "$c" ] || continue
+    d="$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY \
+          "$real" --git-dir="$c" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || continue
+    [ -n "$d" ] && (cd "$d" 2>/dev/null && pwd -P)
+    return 0
+  done
 }
 
 # local_url_path URL [dest]: the absolute path git would open for a local URL, as git spells them (an
@@ -119,7 +123,7 @@ if [ "$sub" != push ]; then
   [ -x "$("$REAL" --exec-path 2>/dev/null)/git-$sub" ] && exec "$REAL" "$@"
   al="$("$REAL" "${pre[@]}" config --get "alias.$sub" 2>/dev/null)" || exec "$REAL" "$@"
   case "$al" in '!'*) refuse "a shell alias '$sub' (git runs it with its own exec path first, so its git is not this shim)" ;; esac
-  case "$al" in *[\'\"\\]*) refuse "a quoted alias '$sub' (the shim cannot split it as git does)" ;; esac
+  case "$al" in *[\'\"\\]*|*$'\n'*) refuse "a quoted or multi-line alias '$sub' (the shim cannot split it as git does)" ;; esac
   depth="${ACCEPT_SHIM_DEPTH:-0}"; case "$depth" in ''|*[!0-9]*) depth=10 ;; esac
   [ "$depth" -lt 10 ] || refuse "an alias nested past 10 levels"
   read -r -a words <<< "$al"
@@ -143,7 +147,7 @@ while [ "$j" -lt "${#rest[@]}" ]; do
     -o|--push-option|--receive-pack|--exec) j=$((j+1)) ;;
     --push-option=*|--receive-pack=*|--exec=*|--force-with-lease=*|--signed=*) ;;
     --recurse-submodules=*) submod "${a#--recurse-submodules=}" ;;
-    --recurse-submodules) j=$((j+1)); submod "${rest[$j]:-}" ;;
+    --recurse-submodules) submod on-demand ;;   # bare, it takes no value and means on-demand
     --no-recurse-submodules) ;;
     -4|-6|--ipv4|--ipv6|-n|--dry-run|--porcelain|-q|--quiet|-v|--verbose|--progress|--no-progress|\
     -f|--force|--no-force|--force-with-lease|--no-force-with-lease|--force-if-includes|--no-force-if-includes|\
@@ -163,10 +167,14 @@ case "$("$REAL" "${pre[@]}" config --type=bool --get submodule.recurse 2>/dev/nu
           || refuse "a push while submodule.recurse is true: the submodules' remotes are not judged" ;;
 esac
 [ "$have_repo" = 1 ] || repo="$optrepo"
+# A refspec with no colon is mapped through remote.<repo>.push when that is set, so its destination
+# is not its name: with such a mapping, a colon-less refspec could move main.
+remote_push_map=""; [ -n "$repo" ] && remote_push_map="$("$REAL" "${pre[@]}" config --get-all "remote.$repo.push" 2>/dev/null)"
 moves_main=$flagall
 [ "${#specs[@]}" = 0 ] && moves_main=1
 for s in "${specs[@]}"; do
   t="${s#+}"; d="${t##*:}"; [ -n "$d" ] || d="${t%%:*}"
+  case "$t" in *:*) ;; *) [ -n "$remote_push_map" ] && moves_main=1 ;; esac
   case "$t" in *'*'*|:) moves_main=1 ;; esac
   case "$d" in main|*/main|HEAD|@) moves_main=1 ;; esac
 done
