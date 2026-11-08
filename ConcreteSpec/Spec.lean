@@ -18,6 +18,7 @@ import ConcreteSpec.Spec.Outcome
 import ConcreteSpec.Spec.Exec
 import ConcreteSpec.Spec.Scalar
 import ConcreteSpec.Spec.Const
+import ConcreteSpec.Spec.Leak
 import ConcreteSpec.Spec.Memory
 import ConcreteSpec.Spec.Rules
 
