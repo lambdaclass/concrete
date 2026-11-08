@@ -137,7 +137,21 @@ class Snapshot:
             self.repo, 'for-each-ref', '--format=%(objectname) %(refname)').stdout.splitlines())
         self.heads = {r.removeprefix('refs/heads/'): sha for r, sha in self.refs.items()
                       if r.startswith('refs/heads/')}
-        self.trees = {branch: tree_records(self.repo, sha) for branch, sha in self.heads.items()}
+        self.trees = {}
+        self.tree_errors = {}
+        self.occupied = set()
+        for branch, sha in self.heads.items():
+            # Allocation inventory must remain available even for a malformed draft.
+            text = git(self.repo, 'show', f'{sha}:ISSUES.tsv', check=False).stdout
+            self.occupied.update(re.findall(r'^ISS-\d{4}(?=\t)', text, re.M))
+            listing = git(self.repo, 'ls-tree', '-r', '--name-only', sha).stdout
+            self.occupied.update('BUG-' + m for m in re.findall(
+                r'^(?:legacy/)?docs/bugs/(\d{3,})[^/]*\.md$', listing, re.M))
+            try:
+                self.trees[branch] = tree_records(self.repo, sha)
+            except (Refused, KeyError, ValueError) as error:
+                self.tree_errors[branch] = str(error)
+
         self.remote_heads = dict(self.heads)
         local_branch = git(root, 'symbolic-ref', '--short', 'HEAD', check=False).stdout.strip()
         git(self.repo, 'fetch', '--quiet', '--no-tags', str(root), 'HEAD:refs/local/head')
@@ -219,6 +233,8 @@ def check_entries(snapshot, entries, label):
 
 def check_snapshot(snapshot):
     # Operator audit only; ordinary gates never couple unrelated draft branches.
+    if snapshot.tree_errors:
+        raise Refused('remote record audit: ' + repr(snapshot.tree_errors))
     for branch, entries in snapshot.trees.items():
         check_entries(snapshot, entries, branch)
 
@@ -260,7 +276,7 @@ def make_plan(root, snapshot, local, branch):
     for name, entries in trees:
         for key, (title, _) in entries.items():
             uses.setdefault(key, []).append((name, title))
-    conflicts = []
+    conflicts = [f'{b}: {error}' for b, error in snapshot.tree_errors.items()]
     updates = []
     for key, rows in sorted(uses.items()):
         titles = {title for _, title in rows}
@@ -397,16 +413,16 @@ def main():
             publish(root, updates)
             print('backfill reservations published and read back')
         else:
-            # Enforce migration and all visible conflicts before taking any fresh number.
+            # Inventory draft numbers without requiring unrelated branches to pass an audit.
             kind = args.kind.upper()
-            used = [int(k.split('-')[1]) for entries in snapshot.trees.values() for k in entries if k.startswith(kind + '-')]
+            used = [int(k.split('-')[1]) for k in snapshot.occupied if k.startswith(kind + '-')]
             prefix = 'refs/reserved/iss/' if kind == 'ISS' else 'refs/bug-reservations/'
             used += [int(r.rsplit('/', 1)[1]) for r in snapshot.refs if r.startswith(prefix)]
             number = args.number if args.number is not None else max(used, default=0) + 1
             if number <= 0 or (kind == 'ISS' and number > 9999):
                 raise Refused('number out of range')
             key = f'{kind}-{number:04d}' if kind == 'ISS' else f'{kind}-{number:03d}'
-            if ref_for(key) in snapshot.refs or any(key in t for t in snapshot.trees.values()):
+            if ref_for(key) in snapshot.refs or key in snapshot.occupied:
                 raise Refused(f'{key} already taken')
             value = metadata(root, key, args.title, branch)
             publish(root, [(ref_for(key), '', commit(root, value))])

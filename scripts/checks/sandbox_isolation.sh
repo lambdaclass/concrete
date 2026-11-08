@@ -61,12 +61,31 @@ scan_makers() {
     [ "$f" = scripts/checks/sandbox_isolation.sh ] && continue
     case "$EXEMPT" in *" $f "*) continue ;; esac
     if [[ "$f" = *.py ]]; then
-      grep -qE "['\"](init|clone)['\"]" "$dir/$f" || continue
-      if grep -q 'sandbox_environment()' "$dir/$f"; then
-        printf 'ok\t%s\tuses Python sandbox_environment\n' "$f"
-      else
-        printf 'FAIL\t%s\tPython repository maker lacks sandbox_environment\n' "$f"
-      fi
+      # Parse executable calls: comments or an unused helper definition do not isolate a script.
+      python3 - "$dir/$f" <<'PYSCAN'
+import ast
+import sys
+module = ast.parse(open(sys.argv[1]).read())
+def name(call):
+    return call.func.id if isinstance(call.func, ast.Name) else getattr(call.func, 'attr', '')
+def sandbox(statement):
+    return (isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Call)
+            and name(statement.value) == 'sandbox_environment')
+makers = [node for node in ast.walk(module) if isinstance(node, ast.Call)
+          and any(isinstance(arg, ast.Constant) and arg.value in ('init', 'clone')
+                  for arg in ast.walk(node) if isinstance(arg, ast.Constant))]
+if not makers:
+    sys.exit(0)
+# Scripts may isolate at module entry, or as the first action in their main function.
+entry = next((n for n in module.body if isinstance(n, ast.FunctionDef) and n.name == 'main'), None)
+isolated = any(sandbox(n) for n in module.body) or bool(entry and entry.body and sandbox(entry.body[0]))
+sys.exit(3 if isolated else 1)
+PYSCAN
+      case "$?" in
+        0) continue ;;
+        3) printf 'ok\t%s\tPython entry calls sandbox_environment\n' "$f" ;;
+        *) printf 'FAIL\t%s\tPython repository maker lacks sandbox_environment at entry\n' "$f" ;;
+      esac
       continue
     fi
     grep -qE "$MAKES" "$dir/$f" || continue

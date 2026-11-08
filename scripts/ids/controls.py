@@ -89,6 +89,9 @@ def main():
         print('PASS: title mismatch refused; evidence remains editable')
         a.git(writer, 'restore', 'ISSUES.tsv')
         a.git(writer, 'switch', '-qc', 'wip/duplicate', 'main')
+        save(writer, 'ISS-0001', 'first')
+        run(writer, 'check')
+        print('PASS: rebased/cherry-picked same identity needs no shared introduction ancestry')
         save(writer, 'ISS-0001', 'different identity')
         a.git(writer, 'push', '-q', 'origin', 'HEAD:refs/heads/wip/duplicate')
         run(writer, 'check', expect=1)
@@ -100,6 +103,19 @@ def main():
         run(writer, 'publish-plan', str(conflict_plan), expect=1)
         assert a.git(writer, 'ls-remote', 'origin').stdout == before
         print('PASS: collision backfill records conflict and refuses publication without moving refs')
+        a.git(writer, 'switch', '-qc', 'wip/legacy-evolved', 'main')
+        (writer / 'ISSUES.tsv').write_text('id\tdate\tarea\tevidence\towner\tstatus\n'
+            'ISS-0001\t2026-11-08\tci\trewritten evidence after squash\tR-0542\topen\n')
+        a.git(writer, 'add', 'ISSUES.tsv')
+        a.git(writer, 'commit', '-qm', 'legacy evolving identity')
+        a.git(writer, 'push', '-q', 'origin', ':refs/heads/wip/duplicate')
+        a.git(writer, 'push', '-q', 'origin', 'HEAD:refs/heads/wip/legacy-evolved')
+        a.git(writer, 'switch', '-q', 'wip/a')
+        run(writer, 'backfill', '--output', str(base / 'evolved-plan.json'))
+        assert not json.loads((base / 'evolved-plan.json').read_text())['conflicts']
+        print('PASS: legacy evolving evidence maps to canonical reserved title across a squash')
+        a.git(writer, 'push', '-q', 'origin', ':refs/heads/wip/legacy-evolved')
+
 
         a.git(writer, 'push', '-q', 'origin', ':refs/heads/wip/duplicate')
         a.git(writer, 'switch', '-q', 'wip/a')
@@ -122,7 +138,20 @@ def main():
         # The stale head cannot block allocations either.
         run(writer, 'reserve', 'iss', 'unrelated allocation', '--number', '80')
         a.git(writer, 'push', '-q', 'origin', ':refs/heads/wip/stale')
-        print('PASS: unrelated stale branch cannot poison checks or reservations')
+        # A malformed draft is audit material, not a global allocation lock.
+        a.git(writer, 'switch', '-qc', 'wip/malformed')
+        malformed = writer / 'docs/bugs/42_bad.md'
+        malformed.parent.mkdir(parents=True, exist_ok=True)
+        malformed.write_text('# Bad draft')
+        a.git(writer, 'add', str(malformed))
+        a.git(writer, 'commit', '-qm', 'malformed draft')
+        a.git(writer, 'push', '-q', 'origin', 'HEAD:refs/heads/wip/malformed')
+        a.git(writer, 'switch', '-qc', 'wip/clean', 'main')
+        run(writer, 'check')
+        run(writer, 'reserve', 'iss', 'another unrelated allocation', '--number', '81')
+        run(writer, 'audit-wip', expect=1)
+        a.git(writer, 'push', '-q', 'origin', ':refs/heads/wip/malformed')
+        print('PASS: unrelated stale/malformed branches cannot poison checks or reservations')
         # Recreate clean branch so the race is about reservation, not local filing.
         a.git(writer, 'switch', '-qc', 'wip/race', 'main')
         clone = base / 'other'
