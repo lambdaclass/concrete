@@ -3,7 +3,8 @@
 #
 # legacy/ is a byte-for-byte copy of main's tree at the move's base commit, plus the files later
 # sweeps moved into it byte for byte. scripts/checks/legacy.lock records that commit and its tree, and
-# each sweep. This check holds five things:
+# each sweep; its format, and its one reader, is lib/legacy_lock.py (no code here reads the lock's
+# bytes itself). This check holds five things:
 #   1. the recorded tree is the recorded commit's tree (legacy/ is that snapshot, nothing else);
 #   2. HEAD:legacy differs from it only by deletions and by sweeps: a modified path is refused, and an
 #      added path is refused unless a sweep moved it (below);
@@ -38,6 +39,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SELF="$ROOT_DIR/scripts/checks/${BASH_SOURCE[0]##*/}"
 cd "$ROOT_DIR"
 LOCK=scripts/checks/legacy.lock
+LOCKPY="$ROOT_DIR/scripts/checks/lib/legacy_lock.py"
 PASS=0; FAIL=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
@@ -93,18 +95,20 @@ for st, raw in zip(f[0::2], f[1::2]):
 }
 
 chain() { # LOCK FROZEN CUR RETENTION HEAD-COMMIT: judges frozen -> each sweep tree -> CUR; prints refusals
-  local lock="$1" prev="$2" cur="$3" ret="$4" head="$5" root sw st extra n=0 step
+  local lock="$1" prev="$2" cur="$3" ret="$4" head="$5" root rows kind sw st n=0 step
+  rows="$(lock_rows "$lock")" || { printf '%s\n' "$rows"; return 0; }
   root="$(git rev-parse "$head^{tree}")"
-  while read -r sw st extra || [ -n "$sw" ]; do # a last row without a newline is a row
+  while read -r kind sw st || [ -n "$kind" ]; do # rows are the parser's, one per line
+    [ "$kind" = sweep ] || continue
     n=$((n+1))
-    if [ -n "$extra" ] || [ -z "$st" ] || ! git rev-parse -q --verify "$sw^{commit}" >/dev/null \
+    if ! git rev-parse -q --verify "$sw^{commit}" >/dev/null \
        || ! git merge-base --is-ancestor "$sw" "$head" || [ "$(git cat-file -t "$st" 2>/dev/null)" != tree ]; then
-      echo "sweep line $n: needs a commit of HEAD's history and a tree: $sw $st $extra"; continue
+      echo "sweep line $n: needs a commit of HEAD's history and a tree: $sw $st"; continue
     fi
     step="$(judge "$prev" "$st" "$ret" "$root" "$sw" 2>&1)"
     [ -z "$step" ] || printf 'sweep %s (%s):\n%s\n' "$n" "${sw:0:10}" "$step"
     prev="$st"
-  done < <(sed -n 's/^sweep //p' "$lock")
+  done <<<"$rows"
   step="$(judge "$prev" "$cur" "$ret" "$root" 2>&1)"
   [ -z "$step" ] || printf 'since the last sweep:\n%s\n' "$step"
 }
@@ -119,19 +123,13 @@ trusted_base() {
   fi
 }
 
-# lock_history LOCK-FILE LOCK-PATH TRUSTED: every base/tree/sweep line of every version of LOCK-PATH in
-# TRUSTED's history is still a line of LOCK-FILE. Prints one refusal per missing line, naming the
-# newest trusted commit that has it. A last line without a newline is a line.
-lock_history() {
-  local lock="$1" lpath="$2" trusted="$3" c l
-  for c in $(git log --first-parent --diff-merges=first-parent --no-patch --format=%H "$trusted" -- "$lpath"); do
-    git cat-file -e "$c:$lpath" 2>/dev/null || continue
-    while IFS= read -r l || [ -n "$l" ]; do
-      case "$l" in base\ *|tree\ *|sweep\ *) ;; *) continue ;; esac
-      grep -qxF -- "$l" "$lock" || printf '%s\t%s\n' "$l" "$c"
-    done < <(git show "$c:$lpath")
-  done | awk -F'\t' '!seen[$1]++ { printf "lock: '"'"'%s'"'"' (in %s, trusted history) is not in the lock: recorded lines are only ever added, never rewritten or removed\n", $1, substr($2, 1, 10) }'
-}
+# lock_rows LOCK-FILE: the lock's rows, from its one parser (lib/legacy_lock.py); exit 1 with one
+# diagnostic per problem. No code here reads the lock's bytes itself.
+lock_rows() { python3 -I "$LOCKPY" rows "$1"; }
+# lock_history LOCK-FILE LOCK-PATH TRUSTED: every row of every version of LOCK-PATH in TRUSTED's
+# first-parent history is still a row of LOCK-FILE; a malformed trusted version is refused. Prints
+# one refusal per problem, naming the newest trusted commit that has a missing row.
+lock_history() { python3 -I "$LOCKPY" history "$1" "$2" "$3"; }
 
 # history_identity PREFIX HEAD-COMMIT TRUSTED: every version PREFIX/<path> had in TRUSTED's history is
 # the version it has at HEAD-COMMIT, for each path HEAD-COMMIT still has. Prints one refusal per path.
@@ -234,27 +232,40 @@ H="$(git commit-tree "$R0" -p "$S" -m head)"
 # X has the would-be moved file (tree RS), so only its ancestry can refuse it.
 X="$(git commit-tree "$RS" -m unrelated)"
 [ -n "$H" ] && [ -n "$X" ] || { echo "FATAL: chain control commits"; exit 2; }
-printf 'sweep %s %s\n' "$S" "$SW1" > "$TMP/l_ok"
+# A control lock: its base and tree rows, then the sweep rows given.
+HDR="base $S"$'\n'"tree $F"
+printf '%s\nsweep %s %s\n' "$HDR" "$S" "$SW1" > "$TMP/l_ok"
 [ -z "$(chain "$TMP/l_ok" "$F" "$SW1" "$TMP/r_ok.tsv" "$H")" ] && ok "control: a lock chaining the frozen tree through a sweep to HEAD:legacy passes" || no "control: valid chain refused: $(chain "$TMP/l_ok" "$F" "$SW1" "$TMP/r_ok.tsv" "$H")"
-printf 'sweep %s %s\n' "$X" "$SW1" > "$TMP/l_x"
+printf '%s\nsweep %s %s\n' "$HDR" "$X" "$SW1" > "$TMP/l_x"
 o="$(chain "$TMP/l_x" "$F" "$SW1" "$TMP/r_ok.tsv" "$H")"
-case "$o" in "sweep line 1: needs a commit of HEAD's history and a tree: $X $SW1 "*) ok "control: a sweep commit outside HEAD's history is refused, as such" ;; *) no "control: non-ancestor sweep: '$o'" ;; esac
-printf 'sweep %s\n' "$S" > "$TMP/l_short"
-o="$(chain "$TMP/l_short" "$F" "$SW1" "$TMP/r_ok.tsv" "$H")"
-case "$o" in "sweep line 1: needs a commit of HEAD's history and a tree: $S "*) ok "control: a sweep line without its tree is refused, as such" ;; *) no "control: tree-less sweep line: '$o'" ;; esac
+# The refused row is skipped, so its addition is then refused too, as an unoriginated one.
+[ "$o" = "sweep line 1: needs a commit of HEAD's history and a tree: $X $SW1"$'\n'"since the last sweep:"$'\n'"A legacy/p/moved: no sweep commit in the lock has p/moved with this content; legacy/ admits only byte-for-byte moves" ] && ok "control: a sweep commit outside HEAD's history is refused, as such" || no "control: non-ancestor sweep: '$o'"
 [ -n "$(chain "$TMP/l_ok" "$F" "$F" "$TMP/r_popen.tsv" "$H")" ] && ok "control: deleting a swept file after its sweep, under an open row, is refused" || no "control: post-sweep deletion accepted"
-# The same lock with no newline after its last row: the row is still read, so the deletion is still
-# judged against the sweep tree (skipping the row would compare against the frozen tree and pass).
-printf 'sweep %s %s' "$S" "$SW1" > "$TMP/l_nonl"
-[ -z "$(chain "$TMP/l_nonl" "$F" "$SW1" "$TMP/r_ok.tsv" "$H")" ] && ok "control: a valid lock whose last row has no newline passes" || no "control: unterminated valid lock refused: $(chain "$TMP/l_nonl" "$F" "$SW1" "$TMP/r_ok.tsv" "$H")"
-o="$(chain "$TMP/l_nonl" "$F" "$F" "$TMP/r_popen.tsv" "$H")"
-[ "$o" = "since the last sweep:"$'\n'"D legacy/p/moved: no resolved RETENTION.tsv row allows this deletion" ] \
-  && ok "control: a last sweep row without a newline still protects its files" || no "control: unterminated last sweep row: '$o'"
+# The lock's one parser (lib/legacy_lock.py). Each malformed lock is refused by chain() with the
+# parser's exact diagnostic, before any sweep is judged: no byte is a row to one reader and not to another.
+ROW="is not a lock row: line 3 must be 'sweep <commit> <tree>', one space between fields, each oid 40 or 64 lowercase hex digits"
+refused_lock() { # NAME CONTENT-PRINTF-FORMAT EXPECTED [ARGS...]: chain() on that lock prints EXPECTED exactly
+  local name="$1" fmt="$2" want="$3"; shift 3
+  printf "$fmt" "$@" > "$TMP/$name"
+  o="$(chain "$TMP/$name" "$F" "$F" "$TMP/r_popen.tsv" "$H")"
+  [ "$o" = "$want" ] && ok "control: $name is refused by the lock parser, as such" || no "control: $name: '$o'"
+}
+# A landed sweep row with a NUL in front: GNU grep -x matches the row behind the NUL, sed skips it.
+refused_lock "a NUL-prefixed sweep row" '%s\n\0sweep %s %s\n' "$TMP/a NUL-prefixed sweep row:3: holds a NUL byte: the lock is text" "$HDR" "$S" "$SW1"
+refused_lock "a CR line ending" '%s\nsweep %s %s\r\n' "$TMP/a CR line ending:3: holds a carriage return: a line ends with a newline (LF) alone" "$HDR" "$S" "$SW1"
+refused_lock "a sweep row without its tree" '%s\nsweep %s\n' "$TMP/a sweep row without its tree:3: $ROW" "$HDR" "$S"
+refused_lock "a sweep row with a trailing space" '%s\nsweep %s %s \n' "$TMP/a sweep row with a trailing space:3: $ROW" "$HDR" "$S" "$SW1"
+refused_lock "a sweep row with a third field" '%s\nsweep %s %s %s\n' "$TMP/a sweep row with a third field:3: $ROW" "$HDR" "$S" "$SW1" "$SW1"
+refused_lock "a blank line" '%s\n\nsweep %s %s\n' "$TMP/a blank line:3: $ROW" "$HDR" "$S" "$SW1"
+refused_lock "a repeated sweep row" '%s\nsweep %s %s\nsweep %s %s\n' "$TMP/a repeated sweep row:4: repeats line 3: a row is recorded once" "$HDR" "$S" "$SW1" "$S" "$SW1"
+refused_lock "a last row without its newline" '%s\nsweep %s %s' "$TMP/a last row without its newline:3: has no newline: every line, the last too, ends with one" "$HDR" "$S" "$SW1"
+refused_lock "a lock without its base row" 'tree %s\n' "$TMP/a lock without its base row:1: is not a lock row: line 1 must be 'base <commit>', one space between fields, each oid 40 or 64 lowercase hex digits" "$F"
+refused_lock "a preview lock" '%s\npreview missing: P2\n' "$TMP/a preview lock:3: the move is a --preview build (preview missing: P2); a lock may only record a move generated with its landing prerequisites met (the generator is legacy/scripts/land/legacy_move.sh since the 2026-11-08 sweep)" "$HDR"
 S2="$(git commit-tree "$(tree_with 'mkdir -p p; echo m2 > p/moved')" -p "$S" -m sweep-2)"
 H2="$(git commit-tree "$R0" -p "$S2" -m head2)"
 [ -n "$S2" ] && [ -n "$H2" ] || { echo "FATAL: second sweep control commits"; exit 2; }
 SW2="$(tree_with 'mkdir -p p; echo m2 > p/moved')"
-printf 'sweep %s %s\nsweep %s %s\n' "$S" "$SW1" "$S2" "$SW2" > "$TMP/l_two"
+printf '%s\nsweep %s %s\nsweep %s %s\n' "$HDR" "$S" "$SW1" "$S2" "$SW2" > "$TMP/l_two"
 [ -n "$(chain "$TMP/l_two" "$F" "$SW2" "$TMP/r_ok.tsv" "$H2")" ] && ok "control: a later sweep cannot rewrite a file an earlier sweep moved" || no "control: second sweep rewrote a swept file"
 T="$(tree_with 'mkdir -p p; printf m > "p/odd\\name"')"
 [ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$R0" "$S")" ] && ok "control: an added path git would C-quote is refused when it has no original" || no "control: C-quoted path accepted"
@@ -267,7 +278,7 @@ T="$(tree_with 'mkdir -p p ":(literal)p"; echo m > p/moved; echo m > ":(literal)
 commit_of() { # parent tree-of-legacy root-file-content lock-text -> commit
   local idx="$TMP/idx.$$" t
   rm -f "$idx"; GIT_INDEX_FILE="$idx" git read-tree --prefix=legacy/ "$2"
-  printf '%s' "$3" > "$TMP/rootf"; printf '%s' "$4" > "$TMP/lockf"
+  printf '%s' "$3" > "$TMP/rootf"; printf '%s\n' "$4" > "$TMP/lockf"
   GIT_INDEX_FILE="$idx" git update-index --add --cacheinfo "100644,$(git hash-object -w "$TMP/rootf"),rootfile" \
     --cacheinfo "100644,$(git hash-object -w "$TMP/lockf"),L"
   t="$(GIT_INDEX_FILE="$idx" git write-tree)"; rm -f "$idx"
@@ -278,9 +289,6 @@ M1="$(commit_of "" "$F" r "$LK1")"
 M2="$(commit_of "$M1" "$SW1" r "$LK1"$'\n'"sweep $S $SW1")"
 [ -n "$M1" ] && [ -n "$M2" ] || { echo "FATAL: trusted-history control commits"; exit 2; }
 git show "$M2:L" > "$TMP/lock_same"
-# commit_of writes the lock without a final newline, so M2's sweep row is an unterminated last line:
-# the rewritten and removed controls below refuse it only because lock_history reads that line.
-[ -n "$(git show "$M2:L" | tail -c1 | tr -d '\n')" ] || { echo "FATAL: M2's lock must end without a newline"; exit 2; }
 [ -z "$(lock_history "$TMP/lock_same" L "$M2")" ] && ok "control: a lock that keeps every trusted line passes" || no "control: unchanged lock refused: $(lock_history "$TMP/lock_same" L "$M2")"
 printf '%s\nsweep %s %s\n' "$LK1" "$S2" "$SW2" > "$TMP/lock_rewritten"   # the M2 row replaced
 o="$(lock_history "$TMP/lock_rewritten" L "$M2")"
@@ -294,6 +302,17 @@ printf 'base %s\ntree %s\nsweep %s %s\n' "$S2" "$F" "$S" "$SW1" > "$TMP/lock_reb
 o="$(lock_history "$TMP/lock_rebased" L "$M2")"
 [ "$o" = "lock: 'base $S' (in ${M2:0:10}, trusted history) is not in the lock: recorded lines are only ever added, never rewritten or removed" ] \
   && ok "control: changing the trusted base line is refused, naming the line" || no "control: changed base line: '$o'"
+# The NUL attack on history: the landed row kept behind a NUL. The parser refuses the lock itself,
+# so no row of it can match a trusted row.
+printf '%s\n\0sweep %s %s\n' "$LK1" "$S" "$SW1" > "$TMP/lock_nul"
+o="$(lock_history "$TMP/lock_nul" L "$M2")"
+[ "$o" = "$TMP/lock_nul:3: holds a NUL byte: the lock is text" ] \
+  && ok "control: a trusted sweep row kept behind a NUL byte is refused by trusted history" || no "control: NUL-prefixed trusted row: '$o'"
+# A malformed version in trusted history is refused, not skipped.
+MB="$(commit_of "$M2" "$SW1" r "$LK1"$'\n'"sweep $S $SW1"$'\r')"
+o="$(lock_history "$TMP/lock_same" L "$MB")"
+[ "$o" = "lock: a trusted version is malformed: ${MB:0:10}:L:3: holds a carriage return: a line ends with a newline (LF) alone" ] \
+  && ok "control: a malformed lock in trusted history is refused, not skipped" || no "control: malformed trusted lock: '$o'"
 [ -z "$(history_identity legacy "$M2" "$M2")" ] && ok "control: a legacy/ that kept every trusted version passes" || no "control: unchanged history refused: $(history_identity legacy "$M2" "$M2")"
 # The attacks. (1) the row rewrite: the candidate replaces M2's row and p/moved's bytes together.
 C1="$(commit_of "$M2" "$SW2" r "$LK1"$'\n'"sweep $S2 $SW2")"
@@ -327,19 +346,31 @@ loops="$(grep -nE '^[^#]*while[^#]*[[:space:]]read[[:space:]]' "$SELF")" || { ec
 bad="$(printf '%s\n' "$loops" | grep -vF '|| [ -n "$' | grep -vF 'grep -nE')"
 [ "$(printf '%s\n' "$loops" | grep -cF '|| [ -n "$')" -ge 3 ] && [ -z "$bad" ] && ok "control: every read loop in this check reads a last line without a newline" || no "control: a read loop drops an unterminated last line: $bad"
 cd "$ROOT_DIR"
+# The parser is the lock's one reader. Outside legacy/ (frozen, never run) and comments, the lock's
+# path is named only by the parser and by this check's LOCK=, and every use of LOCK here hands it to
+# the parser (lock_rows, lock_history) or only tests or names it.
+named="$(git ls-files -z -- scripts .githooks .github | xargs -0 grep -nIE 'legacy[.]lock' -- 2>/dev/null \
+  | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' | grep -vE '^scripts/checks/lib/legacy_lock[.]py:' \
+  | grep -vE '^scripts/checks/legacy_frozen[.]sh:[0-9]+:LOCK=scripts/checks/legacy[.]lock$')"
+uses="$(grep -nE '"\$(LOCK|lock)"' "$SELF" | grep -vE '^[0-9]+:[[:space:]]*#' \
+  | grep -vE '(lock_rows|lock_history|chain) "\$(LOCK|lock)"|\[ -f "\$LOCK" \]|echo "=== |no "\$LOCK |local lock="\$1"')"
+[ -z "$named" ] && [ -z "$uses" ] && [ "$(grep -c '' "$SELF")" -gt 0 ] \
+  && ok "control: lib/legacy_lock.py is the lock's one reader: no other code names or reads the lock" \
+  || no "control: another reader of the lock: ${named}${uses:+ / in this check: $uses}"
 
 echo "=== legacy/ against $LOCK ==="
 [ -f "$LOCK" ] || { no "$LOCK is missing"; echo "legacy_frozen: PASS=$PASS FAIL=$FAIL"; exit 1; }
-base="$(sed -n 's/^base //p' "$LOCK")"; frozen="$(sed -n 's/^tree //p' "$LOCK")"
-pv="$(sed -n 's/^preview //p' "$LOCK")"
-[ -z "$pv" ] && ok "the move was generated with its landing prerequisites met" \
-  || no "the move is a --preview build ($pv); a lock may only record a move generated with its landing prerequisites met (the generator is legacy/scripts/land/legacy_move.sh since the 2026-11-08 sweep)"
-if [ -z "$base" ] || [ -z "$frozen" ]; then
-  no "$LOCK needs a 'base <commit>' and a 'tree <oid>' line"
+rows="$(lock_rows "$LOCK")" && lock_ok=1 || lock_ok=""
+base="" frozen="" nsw=0
+while read -r kind a _ || [ -n "$kind" ]; do
+  case "$kind" in base) base="$a" ;; tree) frozen="$a" ;; sweep) nsw=$((nsw+1)) ;; esac
+done <<<"$rows"
+if [ -z "$lock_ok" ]; then
+  no "$LOCK is malformed (lib/legacy_lock.py is its format):"; printf '%s\n' "$rows" | sed 's/^/      /'
 elif [ "$(git rev-parse -q --verify "$base^{tree}" 2>/dev/null)" != "$frozen" ]; then
   no "the recorded tree $frozen is not the tree of the recorded base $base (or the base is not in this clone's history)"
 else
-  ok "legacy.lock: tree ${frozen:0:10} is the tree of base ${base:0:10}"
+  ok "the lock parses (base, tree, $nsw sweep row(s), nothing else), and tree ${frozen:0:10} is the tree of base ${base:0:10}"
   cur="$(git rev-parse -q --verify HEAD:legacy 2>/dev/null)"
   if [ -z "$cur" ]; then
     no "HEAD has no legacy/ directory"
@@ -350,7 +381,6 @@ else
     hist="$(lock_history "$LOCK" "$LOCK" "$tb"; history_identity legacy HEAD "$tb")"
     [ -z "$hist" ] && ok "trusted history (through ${tb:0:10}): every lock line kept, no legacy/ file rewritten" \
       || { no "legacy/ or its lock rewrote trusted history (through ${tb:0:10}):"; echo "$hist" | sed 's/^/      /'; }
-    nsw="$(grep -c '^sweep ' "$LOCK")"
     [ "$nsw" = 0 ] || [ -n "$out" ] || ok "the lock's $nsw sweep line(s) name commits of HEAD's history and chain to HEAD:legacy"
     if [ -z "$out" ]; then
       [ "$cur" = "$frozen" ] && ok "legacy/ is byte-identical to the frozen tree" \

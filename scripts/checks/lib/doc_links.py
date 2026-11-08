@@ -163,14 +163,18 @@ def folded_changelog(root):
 
 
 def swept_files(root):
-    """legacy/ paths not in the frozen tree that scripts/checks/legacy.lock records (its `tree` line):
-    the files sweeps moved there. Empty without a lock or a git repository."""
-    lock = root / "scripts" / "checks" / "legacy.lock"
+    """legacy/ paths not in the frozen tree the lock records (its `tree` row): the files sweeps moved
+    there. The lock is read by its one parser, legacy_lock.py; a malformed lock raises its LockError.
+    Empty without a lock or a git repository."""
+    sys.path.insert(0, str(DEFAULT_ROOT / "scripts" / "checks" / "lib"))
+    try:
+        import legacy_lock
+    finally:
+        sys.path.pop(0)
+    lock = root / legacy_lock.LOCK_PATH
     if not lock.is_file():
         return set()
-    tree = next((l.split()[1] for l in lock.read_text().splitlines() if l.startswith("tree ")), None)
-    if not tree:
-        return set()
+    tree = next(r.split()[1] for r in legacy_lock.read(str(lock)) if r.startswith("tree "))
     def ls(spec):
         r = subprocess.run(["git", "-C", str(root), "ls-tree", "-r", "-z", "--name-only", spec],
                            capture_output=True)
@@ -214,7 +218,13 @@ def main():
         return cache[p]
 
     failures, links, frags = [], 0, 0
-    for path in markdown_files(root):
+    try:
+        files = markdown_files(root)
+    except ValueError as e:  # legacy_lock.LockError: which legacy/ files to read is unknown
+        print(f"FAIL the legacy lock is malformed:\n{e}")
+        print("DOC-LINKS: FAIL=1 CHECKED=0 ANCHORS=0")
+        return 1
+    for path in files:
         rel = path.relative_to(root)
         text = path.read_text(errors="replace")
         scan = blank_code(text)

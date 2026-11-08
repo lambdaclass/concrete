@@ -10,6 +10,13 @@ file with no root original, an edit of a frozen file, a later edit or open-row d
 file, a sweep commit outside HEAD's history, a sweep line without its tree, a path spelled as pathspec
 magic and a path git would C-quote.
 
+The check also judges trusted history, main's first-parent chain: a lock row that landed is never
+rewritten or removed, and a `legacy/` file never changes from a version it had there, so neither a
+replaced sweep row nor a deletion and re-addition can rewrite a file. The lock has one reader,
+`scripts/checks/lib/legacy_lock.py`, which refuses a NUL, a CR, a repeated row, a last line without
+its newline and any line that is not exactly a `base`, `tree` or `sweep` row; `legacy_frozen.sh` and
+`doc_links.py` take its rows from there, and a control refuses any other reader.
+
 This sweep moved the old bug ledger's disposition, the landing audit, the finished move tooling
 (`legacy_move.sh`, `move_prereqs.py`) and the answered proposals `IDEAS.md` and `MERGED.md`; the site
 takedown record's root copy was a link-rewrite duplicate of its frozen copy and was removed. "ok to
