@@ -35,6 +35,7 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 
 - The 29 final picks on process, lexer, slice 1, floats, CLI, foundation, std, sign-offs and planning ([row](#decided-2026-11-08-twenty-nine)).
 - Best long-term writer and reviewer design ([row](#decided-2026-11-08-long-term-reviews)).
+- C5 Q1–Q3, architecture items K1–K13 and the dedicated `concrete-ci-2` runner label ([row](#decided-2026-11-08-yes-to-everything)).
 - Approved gate additions and three tiers; assignments remain open ([row](#decided-2026-11-08-gate-tiers)).
 - The core statement ([row](#decided-project-core-statement)).
 - Proof infrastructure from the first commit ([row](#decided-project-proof-infrastructure)).
@@ -82,102 +83,6 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 - Byte-for-byte sweeps into `legacy/`, and `docs/archive/` moves there ([sweep](#decided-2026-11-08-legacy-sweep), [archive](#decided-2026-11-08-archive-move)).
 - Every branch gets an agy review too ([row](#decided-project-review)).
 - Eleven plan and process decisions: UBSan dropped, a complete adapter theorem, smaller landing scripts, Claude's quota on the critical path, the front end now, one decisions writer, risk-capped reviews, one clones folder, a later no-libc runtime, a compile-speed budget and the termination wording ([row](#decided-2026-11-08-eleven)).
-
-- <a id="decided-2026-11-08-twenty-nine"></a>**The 29 owner decisions** (owner, 2026-11-08, 15:08 UTC): "ok but i said already all yes based on the best long term reviews of each agent and what we said before right?" All 29 final picks are decided, including the second rounds on items 3, 14 and 18. The wording below records those picks. Exact spellings otherwise remain subject to R-0625.
-
-  **A. Process**
-
-  1. When Codex wrote a branch, the review leg uses Kimi or agy as the reviewer, never Codex. The reviewer model is recorded in the note.
-
-  **B. Lexer and syntax**
-
-  2. The operator and punctuation token list from the grammar sheet is closed. A token added later needs an explicit revision.
-  3. `'a'` is an ASCII byte literal of type u8 (equal to 97u8), with its own small escape list. Non-ASCII content is refused. The lexer tells it apart from `'label` by looking for the closing quote. Tests pin down both the literal and the label distinction.
-  4. No raw tab or other control character inside a string. Write `\t`.
-  5. Numbers allow:
-     - suffixes such as 200u8;
-     - the prefixes 0x, 0b and 0o.
-
-     They refuse:
-     - `_` separators;
-     - malformed suffixes such as 123u9, instead of splitting them into tokens.
-
-  **C. Slice 1**
-
-  6. Slice 1 admits a stated part of the existing spec, with proofs. The spec is not cut down.
-  7. Consuming a linear value is written `move t`.
-  8. `abort()` appears only as `return abort();`. It never produces a value and runs no cleanup.
-  9. Concrete.toml:
-     - each table has its own version;
-     - the policy is chosen by name, for example `profile = "predictable"`;
-     - trusted assumptions have an explicit setting;
-     - version 1 fixes exactly what each named policy means.
-  10. R-0600, the "always aborts" fact, belongs to slice 5, not slice 1.
-
-  **D. Floats**
-
-  11. NaN, following the Codex/Kimi version:
-     - operations that can create NaN need a proof, or a checked form;
-     - arithmetic that does produce NaN gives the one canonical bit pattern;
-     - bit conversions, abs, neg and copysign preserve the exact bits;
-     - `==` follows IEEE, and a separate `bit_eq` compares bits.
-
-     This also answers STD_COVERAGE S5 as option (a).
-
-  **E. CLI**
-
-  12. Each file is checked separately, and checking within a file stops at its first error.
-  13. The exit codes are the same for every command:
-     - 0: OK;
-     - 1: refused;
-     - 2: incomplete;
-     - 3: usage error;
-     - 4: internal error.
-
-     `concrete facts` doubles as the check mode.
-  14. `help` exists now. `emit`, `trace` and `interp` each arrive once their data exists. There is no `run` command: build, then execute the binary, is the one way to run a program. `interp` runs the spec's evaluator.
-  15. Formatter modes are `--check`, `--write` and `--stdin`, and combining them is refused.
-  16. `concrete schema` and `concrete capabilities` exist, for agent discovery.
-  17. A `[policy]` key sets the minimum proof strength for the user's own contracts and rejects vacuous proofs.
-
-  **F. Foundation**
-
-  18. Q1, constant initializers:
-     - an initializer may contain fallible primitive operations, inside a closed initializer grammar with no calls, loops or effects;
-     - every initializer is evaluated at compile time, and the kernel checks that it succeeded;
-     - a failure, or running out of fuel, refuses the constant;
-     - `1 + 2` is admitted;
-     - there is one operation set, shared with runtime code.
-
-
-  19. Q2: a constant may refer to one declared later. Cycles are refused, and the error shows the chain.
-  20. Q3: bytes that are not one whole stored pointer have no pointer meaning. A named bytes-to-address conversion is added only when a workload needs it.
-  21. The C1 change is confirmed: a cleanup step can be refused, and a refused step ends the run stuck.
-
-  **G. Std**
-
-  22. The std placement plan (STD_PLACEMENT.md) and O1-O12, as recommended.
-  23. S1 (a): a safe place-level `replace(p: &mut T, x: T) -> T` at slice 13, and a two-index view `swap` at slice 15.
-  24. S2: a view may lend several of its elements at once as shared, read-only borrows. Two mutable borrows at once: never.
-  25. S3, the stream interface, staged as recommended in STD_COVERAGE §6 S3:
-     - slice 18: per-family functions for StdOut and File, with one partial-write law stated once in Lean over an abstract writer;
-     - slice 20: one generic function with an explicit capability parameter, taking the write operation as a function value;
-     - the two are compared in probe D4, and the Socket case comes at slice 27;
-     - an associated-capability trait only if both fail.
-  26. S4: a borrowing traversal uses the decided function pointer plus explicit context. Probe D3 (slices 20-21) compares it with a coordinate cursor, and that probe has the final say.
-
-  **H. Sign-offs and settings**
-
-  27. Sign-off of the LEGACY sweep 35b489e4 (wip/legacy-sweep-2), "the legacy sweep" in the original question. It is not the roadmap sweep.
-  28. The main protection proposal d6159bf6 is approved. The owner applies it on GitHub personally, and agents never apply GitHub settings.
-
-  **I. Planning**
-
-  29. The showcase programs are sketched before the C1-C10 freeze, to test the design.
-
-  Operating rule from ISS-0021: every reviewer, agy included, runs where it can read the repository and names the files it read. On record-foundation, Codex wrote the round-2 fixes and the Codex leg ran; that writer/reviewer overlap is recorded. R-0650 fixes the tooling. The owner sign-offs of legacy sweep `35b489e4` and B `e997548d` are recorded once that work lands; the former is the legacy sweep, not the roadmap sweep.
-  Item 30 was answered separately at 15:11:33 UTC: "sign off e997548d i amn gonna grab a coffee, gonna come back in an hour". This approves only `e997548d93482f37181dc0a523a2a06bca40a77c` on `wip/one-repository-2`: Codex ACCEPT (fix check, full access), agy ACCEPT; Kimi wrote it and did not review. The three C5 questions and the gate-tier assignment remain open.
-- <a id="decided-2026-11-08-long-term-reviews"></a>**Best long-term design** (owner, 2026-11-08): "ALWAYS tell the reviewrs to do the best long term thing rather than cuitting corners". Every writer and reviewer prompt to Codex, Kimi or agy explicitly says to judge and fix by the best long-term design, never cutting corners for speed, a smaller diff or fewer rounds. Reviewers report shortcuts as real findings and name the long-term fix. Writers implement the structural fix. If staging is unavoidable, they record the long-term design and its roadmap row.
 
 <a id="rules-a-decision-changed"></a>
 ## Rules a decision has changed
@@ -1619,6 +1524,122 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   sweep above (R-0631), and P21 is revised to match. `docs/decisions.md` stays the one home of
   decisions and their verbatim quotes. Git history keeps the originals, and the final ideas sweep
   before LD checks them.
+- <a id="decided-2026-11-08-twenty-nine"></a>**The 29 owner decisions** (owner, 2026-11-08, 15:08 UTC): "ok but i said already all yes based on the best long term reviews of each agent and what we said before right?" All 29 final picks are decided, including the second rounds on items 3, 14 and 18. The wording below records those picks. Exact spellings otherwise remain subject to R-0625.
+
+  **A. Process**
+
+  1. When Codex wrote a branch, the review leg uses Kimi or agy as the reviewer, never Codex. The reviewer model is recorded in the note.
+
+  **B. Lexer and syntax**
+
+  2. The operator and punctuation token list from the grammar sheet is closed. A token added later needs an explicit revision.
+  3. `'a'` is an ASCII byte literal of type u8 (equal to 97u8), with its own small escape list. Non-ASCII content is refused. The lexer tells it apart from `'label` by looking for the closing quote. Tests pin down both the literal and the label distinction.
+  4. No raw tab or other control character inside a string. Write `\t`.
+  5. Numbers allow:
+     - suffixes such as 200u8;
+     - the prefixes 0x, 0b and 0o.
+
+     They refuse:
+     - `_` separators;
+     - malformed suffixes such as 123u9, instead of splitting them into tokens.
+
+  **C. Slice 1**
+
+  6. Slice 1 admits a stated part of the existing spec, with proofs. The spec is not cut down.
+  7. Consuming a linear value is written `move t`.
+  8. `abort()` appears only as `return abort();`. It never produces a value and runs no cleanup.
+  9. Concrete.toml:
+     - each table has its own version;
+     - the policy is chosen by name, for example `profile = "predictable"`;
+     - trusted assumptions have an explicit setting;
+     - version 1 fixes exactly what each named policy means.
+  10. R-0600, the "always aborts" fact, belongs to slice 5, not slice 1.
+
+  **D. Floats**
+
+  11. NaN, following the Codex/Kimi version:
+     - operations that can create NaN need a proof, or a checked form;
+     - arithmetic that does produce NaN gives the one canonical bit pattern;
+     - bit conversions, abs, neg and copysign preserve the exact bits;
+     - `==` follows IEEE, and a separate `bit_eq` compares bits.
+
+     This also answers STD_COVERAGE S5 as option (a).
+
+  **E. CLI**
+
+  12. Each file is checked separately, and checking within a file stops at its first error.
+  13. The exit codes are the same for every command:
+     - 0: OK;
+     - 1: refused;
+     - 2: incomplete;
+     - 3: usage error;
+     - 4: internal error.
+
+     `concrete facts` doubles as the check mode.
+  14. `help` exists now. `emit`, `trace` and `interp` each arrive once their data exists. There is no `run` command: build, then execute the binary, is the one way to run a program. `interp` runs the spec's evaluator.
+  15. Formatter modes are `--check`, `--write` and `--stdin`, and combining them is refused.
+  16. `concrete schema` and `concrete capabilities` exist, for agent discovery.
+  17. A `[policy]` key sets the minimum proof strength for the user's own contracts and rejects vacuous proofs.
+
+  **F. Foundation**
+
+  18. Q1, constant initializers:
+     - an initializer may contain fallible primitive operations, inside a closed initializer grammar with no calls, loops or effects;
+     - every initializer is evaluated at compile time, and the kernel checks that it succeeded;
+     - a failure, or running out of fuel, refuses the constant;
+     - `1 + 2` is admitted;
+     - there is one operation set, shared with runtime code.
+
+
+  19. Q2: a constant may refer to one declared later. Cycles are refused, and the error shows the chain.
+  20. Q3: bytes that are not one whole stored pointer have no pointer meaning. A named bytes-to-address conversion is added only when a workload needs it.
+  21. The C1 change is confirmed: a cleanup step can be refused, and a refused step ends the run stuck.
+
+  **G. Std**
+
+  22. The std placement plan (STD_PLACEMENT.md) and O1-O12, as recommended.
+  23. S1 (a): a safe place-level `replace(p: &mut T, x: T) -> T` at slice 13, and a two-index view `swap` at slice 15.
+  24. S2: a view may lend several of its elements at once as shared, read-only borrows. Two mutable borrows at once: never.
+  25. S3, the stream interface, staged as recommended in STD_COVERAGE §6 S3:
+     - slice 18: per-family functions for StdOut and File, with one partial-write law stated once in Lean over an abstract writer;
+     - slice 20: one generic function with an explicit capability parameter, taking the write operation as a function value;
+     - the two are compared in probe D4, and the Socket case comes at slice 27;
+     - an associated-capability trait only if both fail.
+  26. S4: a borrowing traversal uses the decided function pointer plus explicit context. Probe D3 (slices 20-21) compares it with a coordinate cursor, and that probe has the final say.
+
+  **H. Sign-offs and settings**
+
+  27. Sign-off of the LEGACY sweep 35b489e4 (wip/legacy-sweep-2), "the legacy sweep" in the original question. It is not the roadmap sweep.
+  28. The main protection proposal d6159bf6 is approved. The owner applies it on GitHub personally, and agents never apply GitHub settings.
+
+  **I. Planning**
+
+  29. The showcase programs are sketched before the C1-C10 freeze, to test the design.
+
+  Operating rule from ISS-0021: every reviewer, agy included, runs where it can read the repository and names the files it read. On record-foundation, Codex wrote the round-2 fixes and the Codex leg ran; that writer/reviewer overlap is recorded. R-0650 fixes the tooling. The owner sign-offs of legacy sweep `35b489e4` and B `e997548d` are recorded once that work lands; the former is the legacy sweep, not the roadmap sweep.
+  Item 30 was answered separately at 15:11:33 UTC: "sign off e997548d i amn gonna grab a coffee, gonna come back in an hour". This approves only `e997548d93482f37181dc0a523a2a06bca40a77c` on `wip/one-repository-2`: Codex ACCEPT (fix check, full access), agy ACCEPT; Kimi wrote it and did not review. The three C5 questions and the gate-tier assignment remain open.
+- <a id="decided-2026-11-08-long-term-reviews"></a>**Best long-term design** (owner, 2026-11-08): "ALWAYS tell the reviewrs to do the best long term thing rather than cuitting corners". Every writer and reviewer prompt to Codex, Kimi or agy explicitly says to judge and fix by the best long-term design, never cutting corners for speed, a smaller diff or fewer rounds. Reviewers report shortcuts as real findings and name the long-term fix. Writers implement the structural fix. If staging is unavoidable, they record the long-term design and its roadmap row.
+
+- <a id="decided-2026-11-08-yes-to-everything"></a>**C5, architecture items K1–K13 and the runner label** (owner, 2026-11-08, 15:21:26 UTC): "yes to everythiong". The owner confirmed at 15:21:44 UTC: "yes to adding all the 12" / "add all 12" / "the three things are all good". The three pending asks are decided as follows. This supersedes the earlier note in the 29-decisions row that the C5 questions remained open; the gate-tier assignment remains open.
+  1. **C5 Q1–Q3, all as recommended** (R-0611):
+     - Q1: loans target only the current activation or the entered callee; upward loans are refused.
+     - Q2: an owner passed directly as an argument gets a call-duration root loan. A deferred call holds the loan until it runs; there is no implicit ending of an existing loan.
+     - Q3: the C1 erasure contract is unconditional simulation, plus stuck-iff-stuck only for programs the checker accepts.
+  2. **The dedicated `concrete-ci-2` runner label** (R-0666): add the label to the concrete-ci-2 runners, origin gha1–3 and lambdaclass gha4–8, and record it in the private dotfiles `servers/` provisioning. This repository-settings change is approved and owner-authorized.
+  3. **Architecture items K1–K12 are added on the plan below** (R-0653–R-0665). The survey agent's three-model round settles how each is built and its final placement. Every placement below is a proposal, not a final scheduling decision. K5's optimization architecture choice stays an **OPEN owner question**, after the three-model round and before slice 1 sets passes.
+     - **K1. Source provenance through every IR** (R-0653). Every node in HIR, Core, MIR, CFG, SSA and BIR carries its origin span and a stable ID. Diagnostics, trap-site accounting, debug info and facts depend on this. Proposed placement: identity work (C9 U1-U13 / B0).
+     - **K2. A textual printer and parser for every IR** (R-0654), with a round-trip law, so each pass can be tested in isolation. Proposed placement: with the B0 printers (U5/U11).
+     - **K3. A compiler with no panics** (R-0655). No panic!, unreachable!, partial def or sorry in compiler code, except entries on an allow-list enforced by a gate. Proposed placement: a PR-tier gate.
+     - **K4. Generated-code quality benchmarks** (R-0656). Runtime and code size of the showcases compared with C at -O2, on both the LCB and LLVM paths, with history on concrete-ci-2. Proposed placement: daily tier, once the showcases run.
+     - **K5. An optimization architecture, decided early** (R-0657). The options are verified BIR passes, translation validation, or LLVM on the printer path only. Also decided here: what the LCB path promises about performance. Proposed placement: before slice 1; the choice itself remains an open owner question.
+     - **K6. Translation validation or a differential check for the unproven LLVM printer path** (R-0658), until it is replaced or proven. Proposed placement: alongside the backend-agreement gate.
+     - **K7. Readiness for incremental and parallel compilation** (R-0659). Per-function units and content-addressed caching keyed by input hashes. Proposed placement: units and keys are designed now with K1; built with per-function compilation.
+     - **K8. Compile-speed targets** (R-0660), measured as absolute lines per second on reference workloads. Proposed placement: with the scaling gate's history.
+     - **K9. A proof-engineering style guide, with a gate** (R-0661). No large decide terms, pinned simp sets, a proof module per stage, and lemma reuse. Proposed placement: now.
+     - **K10. An architecture document per stage** (R-0662). Each states the stage's input invariant, output invariant, linking theorem and trusted pieces, kept in sync by the traceability gate. Proposed placement: now.
+     - **K11. Debug info (DWARF) and source maps** (R-0663), built from K1's spans. Proposed placement: its own slice.
+     - **K12. A versioned stable output schema for facts, diagnostics and CLI JSON** (R-0664). Extends owner item 16. Proposed placement: identity work.
+     - **K13. Elm-quality diagnostics** (R-0665) is the owner's direction (2026-11-08, 15:20:52 UTC): "i want to have elm like errors for item 1 so we need to make sure they are good". Diagnostics are structured data with one renderer. Each carries a title, a rule ID, a primary span, labelled secondary spans, a plain explanation, and a fix hint only when it is certain. They render as Elm-style text and as JSON. Provenance supplies full spans, related spans across passes, and type-origin tracking. Every rule ID gets an explanation page with a failing example and its fix. A message style guide applies. There are no cascades (owner item 12). A quality gate checks the golden diagnostics (T-f), plus a model-reviewer score against the style guide. Proposed placement: before slice 1, since the lexer and parser are emitting refusals now. Any new CLI surface for K13, for example `concrete explain`, stays an **OPEN owner question**.
 - <a id="decided-project-spark-2026-11-06"></a>**What Concrete takes from SPARK** (owner, 2026-11-06: "ok do everything", after Claude, Codex, agy and Kimi chose unanimously; the
   [review](proposals/SPARK.md) items 1, 2, 3, 6, 7, 9 and 10).
   - *Function values with safety preconditions.* A function whose `#[requires]` is a safety
