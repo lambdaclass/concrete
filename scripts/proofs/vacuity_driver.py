@@ -4,6 +4,8 @@ No inventory is reconstructed here: theorems.lean is the sole population authori
 The lexical rewrite only retains anonymous examples, exactly as for the trust gate.
 """
 import argparse
+import contextlib
+import io
 import os
 from pathlib import Path
 import subprocess
@@ -23,19 +25,21 @@ def command(args, cwd, env, seconds=120):
                           stderr=subprocess.STDOUT)
 
 
-def run(source, scope, fixture=None, budget=64, inventory=False):
+def run(source, scope, fixture=None, budget=64, inventory=False, *, driver_text=None, proof_mode=None):
     with tempfile.TemporaryDirectory(prefix="vacuity-") as temp:
         work = Path(temp)
         if fixture is None:
             paths = ["ConcreteSpec.lean", *sorted(str(p.relative_to(source))
                      for p in (source / "ConcreteSpec").rglob("*.lean"))]
-            examples(source, work, paths)
+            with contextlib.redirect_stdout(io.StringIO()):
+                examples(source, work, paths)
         else:
             (work / "ConcreteSpec.lean").write_text(fixture)
-            examples(work, work, ["ConcreteSpec.lean"])
+            with contextlib.redirect_stdout(io.StringIO()):
+                examples(work, work, ["ConcreteSpec.lean"])
         (work / "ROADMAP.md").write_text((source / "ROADMAP.md").read_text())
         env = dict(os.environ, LEAN_PATH=str(work), VACUITY_SCOPE=scope,
-                   VACUITY_BUDGET=str(budget), PROOF_MODE="theorems" if inventory else "vacuity")
+                   VACUITY_BUDGET=str(budget), PROOF_MODE=proof_mode or ("theorems" if inventory else "vacuity"))
         visited = set()
 
         def build(module):
@@ -60,12 +64,13 @@ def run(source, scope, fixture=None, budget=64, inventory=False):
                     break
                 for dependency in words:
                     build(dependency)
-            result = command(["lean", "-o", path.with_suffix(".olean"), path], work, env)
+            result = command(["lean", "-DautoImplicit=false", "-DwarningAsError=true",
+                              "-Dlinter.defProp=false", "-o", path.with_suffix(".olean"), path], work, env)
             if result.returncode:
                 raise RuntimeError(f"INCOMPLETE elaboration {module}\n{result.stdout}")
 
         build(scope or "ConcreteSpec")
-        driver = (HERE / "theorems.lean").read_text()
+        driver = driver_text if driver_text is not None else (HERE / "theorems.lean").read_text()
         if scope:
             driver = driver.replace("import ConcreteSpec\n", f"import {scope}\n")
         if not inventory:
@@ -113,6 +118,7 @@ def main():
     if args.controls:
         from vacuity_controls import controls
         return controls(run, args.source)
+    print("N2 SCOPE " + (args.scope or "ALL ConcreteSpec authored theorems"))
     code, output = run(args.source, args.scope)
     print(output, end="")
     return code

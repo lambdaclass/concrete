@@ -16,11 +16,14 @@ structure Finding where
   code : String
   name : Name
   detail : String
+  deriving BEq
 
 abbrev Audit := StateRefT (Array Finding) MetaM
 
 def emit (status code : String) (n : Name) (detail : String := "") : Audit Unit :=
-  modify (·.push ⟨status, code, n, detail⟩)
+  modify fun found =>
+    let f := { status, code, name := n, detail : Finding }
+    if found.contains f then found else found.push f
 
 def fail (code : String) (n : Name) (detail : String := "") : Audit Unit := emit "FAIL" code n detail
 
@@ -28,28 +31,55 @@ def between (s left right : String) : Option String := do
   let tail ← (s.splitOn left)[1]?
   return (tail.splitOn right).head!
 
-def quoted (s : String) : Array String :=
-  ((s.splitOn "`").zipIdx.filterMap fun (p, i) => if i % 2 == 1 then some p else none).toArray
+/-- Backticks inside Lean's quoted identifiers are name characters, not doc delimiters. -/
+def docNames (s : String) : Array String × Bool := Id.run do
+  let mut active := false
+  let mut quotedIdent := false
+  let mut buffer := ""
+  let mut names := #[]
+  for c in s.toList do
+    if !active then
+      if c == '`' then active := true; buffer := ""
+    else if c == '`' && !quotedIdent then
+      names := names.push buffer
+      active := false
+    else
+      if c == '«' then quotedIdent := true
+      if c == '»' then quotedIdent := false
+      buffer := buffer.push c
+  return (names, active || quotedIdent)
 
-def field (doc key : String) : Option String := between doc (key ++ " `") "`"
+def quoted (s : String) : Array String := (docNames s).1
+
+def fields (doc key : String) : Array String :=
+  ((doc.splitOn (key ++ " `")).drop 1).filterMap (fun tail => (quoted ("`" ++ tail))[0]?) |>.toArray
+
+def field (doc key : String) : Option String := (fields doc key)[0]?
 
 def closed (e : Expr) : Bool :=
   !e.hasFVar && !e.hasMVar && !e.hasLooseBVars &&
     !e.hasLevelParam && !e.hasLevelMVar
 
 def resolve (all : List (Name × ConstantInfo)) (owner : Name) (s : String) : Audit (Option Name) := do
-  let hits := all.filter fun (n, _) => toString n == s || toString (privateToUserName n) == s ||
-    toString (privateToUserName n) == toString owner.getPrefix ++ "." ++ s
+  let .ok stx := Parser.runParserCategory (← getEnv) `term s
+    | fail "unknown-name" owner s; return none
+  unless stx.isIdent do fail "unknown-name" owner s; return none
+  let requested := stx.getId.replacePrefix (Name.mkSimple "_root_") .anonymous
+  let hits := all.filter fun (n, _) => n == requested || privateToUserName n == requested ||
+    privateToUserName n == (privateToUserName owner).getPrefix ++ requested
   match hits with
   | [(n, _)] => return some n
   | [] => fail "unknown-name" owner s; return none
   | _ => fail "ambiguous-name" owner s; return none
 
 /-- Provenance: the selection range must spell this declaration, not its generated parent.
-    An absent range is incomplete, never permission to drop a theorem. -/
+    Fresh source compilation emits selection ranges for authored declarations. Generated
+    proof/equation auxiliaries have no source selection (or inherit a different name).
+    vacuity_driver.py compiles the sources afresh, including their range extension;
+    no pre-existing (possibly stripped) environment is accepted. -/
 def authored (n : Name) : MetaM (Option Bool) := do
   if (← getProjectionFnInfo? n).isSome then return some false
-  let some r ← findDeclarationRanges? n | return none
+  let some r ← findDeclarationRanges? n | return some false
   let env ← getEnv
   let path ← match env.getModuleIdxFor? n with
     | some i => pure ((toString env.header.moduleNames[i.toNat]!).replace "." "/" ++ ".lean")
@@ -61,15 +91,21 @@ def authored (n : Name) : MetaM (Option Bool) := do
   if a.line != b.line then return some false
   let line := (lines[a.line - 1]!).toList
   let token := String.ofList ((line.drop a.column).take (b.column - a.column))
-  let user := toString (privateToUserName n)
-  return some (user == token || user.endsWith ("." ++ token) ||
-    user.endsWith ("." ++ String.ofList (token.toList.drop 1 |>.reverse.drop 1 |>.reverse)))
+  let .ok stx := Parser.runParserCategory env `term token | return some false
+  unless stx.isIdent do return some false
+  let selected := stx.getId
+  let root := Name.mkSimple "_root_"
+  let user := privateToUserName n
+  return some (if root.isPrefixOf selected then user == selected.replacePrefix root .anonymous
+    else selected.isSuffixOf user)
 
 /-- Only the proof head and constructor fields are inspected. Each normalization spends a
     separate explicit unit; the Meta heartbeat additionally bounds whnfR itself. -/
 partial def direct (n : Name) (e : Expr) (fuel : Nat) : Audit Bool := do
   if fuel == 0 then emit "INCOMPLETE" "projection-budget" n; return false
   let e := e.consumeMData
+  if e.getAppFn.isFVar then return true
+  if e.getAppFn matches .proj .. then return true
   match e with
   | .lam _ _ _ _ => lambdaTelescope e fun _ body => direct n body (fuel - 1)
   | .letE _ _ v b _ => direct n (b.instantiate1 v) (fuel - 1)
@@ -81,17 +117,20 @@ partial def direct (n : Name) (e : Expr) (fuel : Nat) : Audit Bool := do
       if [``Eq.refl, ``rfl, ``HEq.refl, ``Iff.refl].contains h then return true
       if let some (.ctorInfo c) := (← getEnv).find? h then
         let mut all := true
+        let mut hasProof := false
         for arg in e.getAppArgs[c.numParams:] do
           if ← isProof arg then
+            hasProof := true
             if !(← direct n arg (fuel - 1)) then all := false
-          else if !arg.isFVar then all := false
-        return all
+        return hasProof && all
     let reduced ← withTransparency .reducible (whnfR e)
     if reduced != e then direct n reduced (fuel - 1) else return false
 
 partial def falseDischarge (e : Expr) : MetaM Bool := do
   if let .const n _ := e.getAppFn then
     if [``False.elim, ``absurd].contains n then return true
+    if let some matcher ← getMatcherInfo? n then
+      if matcher.numAlts == 0 then return true
     if let some (.recInfo r) := (← getEnv).find? n then
       if r.rules.isEmpty then return true
   match e with
@@ -143,15 +182,17 @@ structure InstanceCase where
   args : Array Expr
   levels : List Level
 
-/-- Consume the written telescope, without unfolding the conclusion: a law may conclude a
-    defined universally quantified contract. Proof arguments are hypotheses; other arguments
-    are parameters. The original telescope determines this split before mutation. -/
+/-- Consume the complete telescope, exposing definition aliases as necessary. Proof arguments
+    are hypotheses; other arguments are parameters. Mutate the statement before substituting
+    the closed Instance arguments, preserving their exact values. -/
 def counterexample (law : ConstantInfo) (ic : InstanceCase) (s m : Name) : MetaM Expr := do
   let mut original := law.type.instantiateLevelParams law.levelParams ic.levels
   let (changed, _) ← (mutate original s m).run 20000
   let mut mutated := changed
   let mut hyps : Array Expr := #[]
   for arg in ic.args do
+    original ← whnfD original
+    mutated ← whnfD mutated
     let .forallE _ domain body _ := original | throwError "instance telescope mismatch"
     let .forallE _ domainM bodyM _ := mutated | throwError "mutated telescope mismatch"
     if ← isProp domain then hyps := hyps.push domainM
@@ -163,12 +204,18 @@ def counterexample (law : ConstantInfo) (ic : InstanceCase) (s m : Name) : MetaM
 
 def approval (t : Tagged) : Audit Unit := do
   let some ref := between t.doc "(approved: " ")" | fail "missing-approval" t.name; return
-  if ref.trimAscii.toString == "" || ref == "PENDING" then fail "unresolved-approval" t.name ref
+  let reference := ref.trimAscii.toString.toLower
+  if ["", "pending", "todo", "tbd"].contains reference then fail "unresolved-approval" t.name ref
+  if reference == "self" then fail "self-approved" t.name ref
   let writer := between t.doc "(writer: " ")"
   let reviewer := between t.doc "(reviewer: " ")"
   -- References must bind an independent reviewer, rather than trusting a bare approval word.
   match writer, reviewer with
-  | some w, some r => if w == r then fail "self-approved" t.name w
+  | some w, some r =>
+    let w := w.trimAscii.toString.toLower
+    let r := r.trimAscii.toString.toLower
+    if w == "" || r == "" then fail "approval-identity-missing" t.name
+    else if w == r then fail "self-approved" t.name w
   | _, _ => fail "approval-identity-missing" t.name "need (writer: identity) and (reviewer: identity)"
 
 def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := do
@@ -179,6 +226,7 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
   let roadmap ← IO.FS.readFile "ROADMAP.md"
   let run : Audit Unit := do
     let mut tags : Array Tagged := #[]
+    let mut hasAuthored := false
     for (n, ci) in population do
       let module := (env.getModuleIdxFor? n).map fun i => toString env.header.moduleNames[i.toNat]!
       if scope != "" && module != some scope && !(toString n).startsWith "ConcreteSpecControl." then continue
@@ -187,33 +235,75 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
       if ci.isTheorem then
         match ← authored n with
         | none => emit "INCOMPLETE" "missing-provenance" n
-        | some false => continue
+        | some false =>
+          unless (doc.splitOn "Obligation (").length > 1 do continue
         | some true =>
+          hasAuthored := true
           let classes := ["Law (subject ", "Helper (", "Representation lemma.", "Obligation ("]
           let count := classes.foldl (fun k c => k + (doc.splitOn c).length - 1) 0
           if count != 1 then fail "classification-count" n (toString count)
-      if !ci.isTheorem && !isExample && !((doc.splitOn "Obligation (").length > 1) then continue
+      let annotated := ["Law (subject ", "Helper (", "Representation lemma.", "Obligation (",
+        "Instance (", "Planted (", "Exemption", "Exempt:", "Manual-audit", "Manual audit", "manual-audit"].any
+        fun tag => (doc.splitOn tag).length > 1
+      if !ci.isTheorem && !isExample && !annotated then continue
+      if !ci.isTheorem && ((doc.splitOn "Helper (").length > 1 || (doc.splitOn "Representation lemma.").length > 1) then
+        fail "classification-kind" n
       tags := tags.push ⟨n, ci, doc⟩
+      if (docNames doc).2 then fail "malformed-backticks" n
       -- Cases are labels, not declarations. Every other backtick resolves, including prose.
       for q in quoted doc do
-        if field doc "case" == some q then continue
+        if (fields doc "case").contains q then continue
         discard <| resolve all n q
-      for label in ["Helper (", "Representation lemma.", "Exemption", "Manual-audit", "Manual audit"] do
+      if (doc.splitOn "Helper (").length > 1 then
+        let category := (between doc "Helper (" ")").getD ""
+        unless ["inversion", "projection", "congruence", "arithmetic", "computation"].contains category do
+          fail "helper-kind" n category
+        let reason := ((between doc ")." "(approved:").getD "").trimAscii.toString
+        if reason == "" then fail "classification-reason" n
+      if (doc.splitOn "Representation lemma.").length > 1 then
+        let reason := ((between doc "Representation lemma." "(approved:").getD "").trimAscii.toString
+        if reason == "" then fail "classification-reason" n
+      for label in ["Helper (", "Representation lemma.", "Exemption", "Exempt:", "Manual-audit", "Manual audit", "manual-audit"] do
         if (doc.splitOn label).length > 1 then
           emit "REPORT" label n doc
-          if label != "Manual-audit" && label != "Manual audit" then approval ⟨n, ci, doc⟩
+          approval ⟨n, ci, doc⟩
       if (doc.splitOn "Obligation (").length > 1 then
         emit "REPORT" "Obligation" n doc
         let propDef ← match ci with
-          | .defnInfo _ => isDefEq ci.type (mkSort .zero)
+          | .defnInfo _ => forallTelescopeReducing ci.type fun _ t => isDefEq t (mkSort .zero)
           | _ => pure false
         let projection := (← getProjectionFnInfo? n).isSome
-        unless propDef || (projection && (← forallTelescopeReducing ci.type fun _ t => isDefEq t (mkSort .zero))) do
+        unless propDef || (projection && (← forallTelescopeReducing ci.type fun _ t => do
+          return (← isProp t) || (← isDefEq t (mkSort .zero)))) do
           fail "obligation-kind" n
         let some row := between doc ", R-" ")" | fail "obligation-roadmap" n; continue
         unless (roadmap.splitOn ("| R-" ++ row ++ " |")).length > 1 do fail "obligation-roadmap" n ("R-" ++ row)
-    let mut instances : Array InstanceCase := #[]
+    unless hasAuthored do fail "empty-authored-scope" .anonymous scope
+    let mut evidence : Array Tagged := #[]
     for t in tags do
+      for tag in ["Instance (", "Planted ("] do
+        for part in (t.doc.splitOn tag).drop 1 do
+          let doc := tag ++ (part.splitOn ").").head! ++ ")."
+          evidence := evidence.push { t with doc := doc }
+    for t in evidence do
+      unless ((toString t.name).splitOn "⟪example⟫").length > 1 do
+        fail "evidence-not-example" t.name
+      let some lt := field t.doc "law" | fail "evidence-tag" t.name; continue
+      let some target ← resolve all t.name lt | continue
+      let candidate := tags.find? (·.name == target)
+      match candidate with
+      | some l =>
+        unless l.info.isTheorem && ((l.doc.splitOn "Law (subject ").length > 1 || l.doc == "") do
+          fail "evidence-law-kind" t.name lt
+      | none => fail "evidence-law-kind" t.name lt
+      if (t.doc.splitOn "Planted (").length > 1 then
+        let subjects := tags.filter fun l => l.name == target && (l.doc.splitOn "Law (subject ").length > 1
+        if subjects.isEmpty then continue
+        let some st := field t.doc "subject" | fail "planted-tag" t.name; continue
+        unless subjects.any (fun l => (quoted ((between l.doc "Law (subject " ").").getD "")).contains st) do
+          fail "planted-subject" t.name st
+    let mut instances : Array InstanceCase := #[]
+    for t in evidence do
       if !(t.doc.splitOn "Instance (").length > 1 then continue
       let some lawText := field t.doc "law" | fail "instance-tag" t.name; continue
       let some law ← resolve all t.name lawText | continue
@@ -228,13 +318,21 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
       let mut ty := lawInfo.type.instantiateLevelParams lawInfo.levelParams levels
       let mut valid := true
       for arg in args do
+        ty ← whnfD ty
         if let .forallE _ _ body _ := ty then ty := body.instantiate1 arg
         else valid := false
-      if ty matches .forallE .. then valid := false
+      let finalType ← whnfD ty
+      if finalType matches .forallE .. then valid := false
       unless valid && (← isDefEq ty t.info.type) do fail "instance-application" t.name; continue
-      if ← falseDischarge value then fail "instance-false-discharge" t.name
+      if ← falseDischarge value then
+        fail "instance-false-discharge" t.name
+        continue
       if instances.any (fun i => i.law == law && i.key == key) then fail "duplicate-instance" t.name
       instances := instances.push ⟨t.name, law, key, args, levels⟩
+    for p in evidence do
+      if (p.doc.splitOn "Planted (").length > 1 then
+        unless instances.any (fun i => field p.doc "law" == some (toString i.law) && field p.doc "case" == some i.key) do
+          fail "unpaired-planted" p.name
     for law in tags do
       unless (law.doc.splitOn "Law (subject ").length > 1 do continue
       unless law.info.isTheorem do fail "law-kind" law.name; continue
@@ -250,7 +348,7 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
         let (occurs, _) ← (mentions law.info.type subject).run (20000, {})
         unless occurs do fail "subject-absent" law.name st
         for ic in cases do
-          let planted := tags.filter fun t => field t.doc "law" == some (toString law.name) &&
+          let planted := evidence.filter fun t => field t.doc "law" == some (toString law.name) &&
             field t.doc "case" == some ic.key && field t.doc "subject" == some st &&
             (t.doc.splitOn "Planted (").length > 1
           if planted.isEmpty then fail "missing-planted" law.name (ic.key ++ "/" ++ st)
@@ -265,9 +363,13 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
             let mt := mi.type.instantiateLevelParams mi.levelParams (si.levelParams.map Level.param)
             unless ← isDefEq si.type mt do fail "mutant-type" p.name; continue
             let expected ← counterexample law.info ic subject mutant
+            Lean.Meta.check expected
             unless closed p.info.type && (← isDefEq p.info.type expected) do
               fail "planted-proposition" p.name s!"law={law.name} case={ic.key}"
-  let (_, findings) ← run.run #[]
+  let safe : Audit Unit := do
+    try run
+    catch e => emit "INCOMPLETE" "analysis-budget-or-error" .anonymous (← e.toMessageData.toString)
+  let (_, findings) ← safe.run #[]
   return findings
 
 end Vacuity

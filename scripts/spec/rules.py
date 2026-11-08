@@ -1,0 +1,167 @@
+#!/usr/bin/env python3
+"""The rule gate's checks (scripts/spec/rules.sh): the registered rules against the sources.
+
+  rules.py RULES.jsonl SRC_DIR ROWS...
+      RULES.jsonl is scripts/spec/rules.lean's output; SRC_DIR holds the specification's .lean
+      sources (searched recursively, at least one); each ROWS file is a decision inventory
+      (docs/decisions.md, ROADMAP.md) in which a cited decision row must appear.
+
+Prints `ok`/`FAIL` lines; exits 1 on any failure, 3 when an input cannot be read or lexed.
+A rule's doc comment must cite a decision row that an inventory declares (a list item starting
+with the row in bold, or a table row whose first cell is it; a mention in prose does not count); each rule needs one
+example whose doc comment says ``Accepted (rule `Name`)`` and a different one whose doc comment
+says ``Refused (rule `Name`)``; a verdict doc comment holds no nested comment and no rule's two
+verdicts at once; every ``(rule `Name`)`` anywhere in a source (either kind of comment, or a
+literal) must name a registered rule; no rule is registered twice; revisions are >= 1.
+"""
+import json, os, re, sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "proofs"))
+import lean_lex  # noqa: E402
+
+ROW = re.compile(r"\b(Q\d+(?:\.\d+)+|OD\d+|P\d+[a-z]?|R-\d{4})\b")
+# A rule name is a Lean name as `toString` prints it: dotted components, a component that needs
+# quoting written «…» (which may hold spaces and backticks). The name runs to the first backtick
+# outside a «…» component.
+NAME = r"((?:«[^»\n]*»|[^`«\n])+)"
+CITE_START = re.compile(r"\(rule `")
+CITE = re.compile(r"\(rule `" + NAME + r"`\)")
+VERDICT_BEFORE = re.compile(r"\b(Accepted|Refused) \Z")
+MODIFIERS = re.compile(r"(?:(?:noncomputable|private|protected|unsafe|partial)\s+)*example(?![\w'!?])")
+# A declared decision row: a list item that starts with the row in bold (`- **Q9.1** …`), or a table
+# row whose first cell is the row (`| OD101 | …`, `| R-0607 | …`). A mention in prose is not one.
+DECLARED = re.compile(r"^\s*(?:- \*\*(\S+?)\*\*|\| *(\S+?) *\|)", re.M)
+
+
+def example_follows(code, i):
+    """What stands between a doc comment ending at `i` and the `example` it documents: attributes
+    and modifiers. `code` is the source with every comment and literal blanked (`lean_lex`, at the
+    same offsets), so no string, raw string, quoted name or comment can close an attribute or
+    supply the `example`."""
+    while True:
+        while i < len(code) and code[i].isspace(): i += 1
+        if not code.startswith("@[", i): break
+        depth, i = 0, i + 1
+        while i < len(code):
+            if code[i] == "[": depth += 1
+            elif code[i] == "]":
+                depth -= 1
+                if depth == 0: break
+            i += 1
+        if i >= len(code): return False
+        i += 1
+    return MODIFIERS.match(code, i) is not None
+
+
+def citations(src):
+    """Every rule citation in `src`, left to right, as (start, end, name, verdict-or-None), and the
+    offsets of every malformed one. A complete citation is consumed whole, so the text of a quoted
+    name inside it is never read as another citation; a citation is a verdict when `Accepted ` or
+    `Refused ` stands directly before it."""
+    found, bad, i = [], [], 0
+    while True:
+        m = CITE_START.search(src, i)
+        if not m: return found, bad
+        c = CITE.match(src, m.start())
+        if not c:
+            bad.append(m.start()); i = m.end(); continue
+        v = VERDICT_BEFORE.search(src[max(0, m.start() - 10):m.start()])
+        found.append((m.start(), c.end(), c.group(1), v.group(1) if v else None))
+        i = c.end()
+
+
+def declared_rows(inventories):
+    return {a or b for t in inventories for a, b in DECLARED.findall(t)}
+
+
+def main(rules_path, src_dir, row_paths):
+    fails = []
+    try:
+        rules = [json.loads(l) for l in open(rules_path, encoding="utf-8") if l.strip()]
+        inventories = [open(p, encoding="utf-8").read() for p in row_paths]
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as e:
+        print(f"error: {e}", file=sys.stderr); return 3
+    if not rules or rules[-1] != {"end": True}:
+        print("error: the rule listing is truncated (no end record)", file=sys.stderr); return 3
+    if not inventories:
+        print("error: no decision inventory given", file=sys.stderr); return 3
+    if not os.path.isdir(src_dir):
+        print(f"error: {src_dir}: not a directory", file=sys.stderr); return 3
+    rules = rules[:-1]
+    declared = declared_rows(inventories)
+    names = [r["name"] for r in rules]
+    for n in sorted({n for n in names if names.count(n) > 1}):
+        fails.append(f"rule {n} is registered more than once")
+    for r in rules:
+        if not r["exists"]: fails.append(f"rule {r['name']} names no declaration")
+        if r["rev"] < 1: fails.append(f"rule {r['name']} has revision {r['rev']} (revisions start at 1)")
+        if not r["doc"].strip(): fails.append(f"rule {r['name']} has no doc comment")
+        else:
+            rows = [m.group(1) for m in ROW.finditer(r["doc"])]
+            if not rows: fails.append(f"rule {r['name']}'s doc comment cites no decision row")
+            elif not any(x in declared for x in rows):
+                fails.append(f"rule {r['name']}'s doc comment cites no existing decision row ({', '.join(rows)})")
+    seen = {n: set() for n in names}
+    scanned = 0
+
+    def walk_error(e):
+        raise e
+    try:
+        tree = sorted(os.walk(src_dir, onerror=walk_error))
+    except OSError as e:
+        print(f"error: {src_dir}: {e}", file=sys.stderr); return 3
+    for dirpath, _, files in tree:
+        for f in sorted(files):
+            if not f.endswith(".lean"): continue
+            path = os.path.join(dirpath, f)
+            try:
+                src = open(path, encoding="utf-8").read(); spans = []
+                lean_lex.lex(src, spans)
+                code = lean_lex.lex(src, literals=False)
+            except (OSError, UnicodeDecodeError, lean_lex.LexError) as e:
+                print(f"error: {path}: {e}", file=sys.stderr); return 3
+            scanned += 1
+            # citations anywhere in the file (comments of both kinds, and literals: fail closed)
+            cites, bad = citations(src)
+            for k in bad:
+                fails.append(f"{path}:{src.count(chr(10), 0, k) + 1}: a malformed rule citation")
+            for k, _, n, v in cites:
+                line = src.count("\n", 0, k) + 1
+                if n not in seen: fails.append(f"{path}:{line}: cites unregistered rule {n}")
+                # a verdict anywhere outside a doc comment (code, a string literal) is stray too
+                if v and not any(a <= k < b and src.startswith("/--", a) for a, b in spans):
+                    fails.append(f"{path}:{line}: a verdict citation outside an example's doc comment")
+            for a, b in spans:
+                text, line = src[a:b], src.count("\n", 0, a) + 1
+                verdicts = [(v, n) for k, _, n, v in cites if v and a <= k < b]
+                if not verdicts: continue
+                if not (text.startswith("/--") and example_follows(code, b)):
+                    fails.append(f"{path}:{line}: a verdict citation outside an example's doc comment")
+                    continue
+                if "/-" in text[3:]:
+                    fails.append(f"{path}:{line}: a verdict doc comment holds a nested comment")
+                    continue
+                kinds = {}
+                for v, n in verdicts: kinds.setdefault(n, set()).add(v)
+                both = sorted(n for n, k in kinds.items() if len(k) > 1)
+                if both:
+                    fails.append(f"{path}:{line}: one example is both accepted and refused by {', '.join(both)}")
+                    continue
+                for n, k in kinds.items():
+                    if n in seen: seen[n] |= k
+    if scanned == 0:
+        print(f"error: {src_dir}: no .lean source", file=sys.stderr); return 3
+    for n in names:
+        for v in ("Accepted", "Refused"):
+            if v not in seen[n]: fails.append(f"rule {n} has no example marked {v} (rule `{n}`)")
+    for f in fails: print(f"  FAIL {f}")
+    if not fails: print(f"  ok   {len(rules)} registered rules in {scanned} sources, each documented with an"
+                        " existing decision row and an accepted and a refused example; every citation"
+                        " names a registered rule")
+    return 1 if fails else 0
+
+
+if __name__ == "__main__":
+    if len(sys.argv) < 4:
+        print(f"usage: {sys.argv[0]} RULES.jsonl SRC_DIR ROWS...", file=sys.stderr); sys.exit(2)
+    sys.exit(main(sys.argv[1], sys.argv[2], sys.argv[3:]))

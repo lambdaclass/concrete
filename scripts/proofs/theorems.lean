@@ -15,6 +15,10 @@ source): every constant the `ConcreteSpec` library declares. The proof-integrity
       one line per constant of ANY kind: `<name>\t<kind>\t<axioms>`. A definition, instance or
       generated helper can carry `sorryAx` or a native axiom without any theorem being about it, so
       the trust ban reads every constant.
+  PROOF_MODE=rules …
+      the existing registered-rule JSONL view (scripts/spec/rules.sh), unchanged.
+  PROOF_MODE=vacuity …
+      internal to vacuity.sh, which appends the N2 consumer to this shared driver.
   PROOF_MODE=modules …
       the modules that declare at least one theorem of the population, one per line.
   PROOF_MODE=imported …
@@ -173,12 +177,31 @@ def rowSafe : Name → Bool
   | .str p s => rowSafe p && ctrlFree s
   | .num p _ => rowSafe p
 
+/-- The registered-rule view lives beside the theorem population, so rules.sh has no second
+    environment driver. Resolve the registry structurally: pre-migration main has no RuleId.
+    The resulting JSON is byte-compatible with the original rules.lean consumer. -/
+unsafe def registryRows : Lean.Meta.MetaM Unit := do
+  let env ← getEnv
+  let registry ← getConstInfo `ConcreteSpec.Core.registeredRules
+  let .app _ elemType := registry.type | throwError "registeredRules must be a List"
+  let mapper ← Lean.Meta.withLocalDeclD `rule elemType fun rule => do
+    let name ← Lean.Meta.mkAppM `ConcreteSpec.Core.RuleId.name #[rule]
+    let rev ← Lean.Meta.mkAppM `ConcreteSpec.Core.RuleId.rev #[rule]
+    Lean.Meta.mkLambdaFVars #[rule] (← Lean.Meta.mkAppM ``Prod.mk #[name, rev])
+  let mapped ← Lean.Meta.mkAppM ``List.map #[mapper, mkConst registry.name]
+  let rows ← Lean.Meta.evalExpr (List (Name × Nat)) (← Lean.Meta.inferType mapped) mapped
+  for (name, rev) in rows do
+    let doc := (← findDocString? env name).getD ""
+    IO.println (Json.compress (Json.mkObj [("name", toJson (toString name)), ("rev", toJson rev),
+      ("exists", toJson (env.contains name)), ("doc", toJson doc)]))
+  IO.println (Json.compress (Json.mkObj [("end", toJson true)]))
+
 -- CONTROL DECLARATIONS (negative controls are inserted here, in a temporary copy only)
 
 #eval show CoreM Unit from do
   let env ← getEnv
   let mode := (← IO.getEnv "PROOF_MODE").getD "theorems"
-  unless ["theorems", "encoded", "constants", "modules", "imported", "decls", "heads", "examples", "vacuity"].contains mode do
+  unless ["theorems", "encoded", "constants", "modules", "imported", "decls", "heads", "examples", "vacuity", "rules"].contains mode do
     throwError s!"unknown PROOF_MODE '{mode}'"
   if mode == "vacuity" then return -- the injected N2 consumer uses populationConstants below
   -- Fail closed, once, before any mode writes a row: every constant and module name of the
@@ -211,6 +234,9 @@ def rowSafe : Name → Bool
     -- Written to a file: `#eval` turns what it prints into a message, and a message of 400k lines
     -- took minutes to emit.
     IO.FS.writeFile out ("\n".intercalate st.out.toList ++ "\n")
+    return
+  if mode == "rules" then
+    Lean.Meta.MetaM.run' registryRows
     return
   let mut rows : Array String := #[]
   if mode == "examples" then

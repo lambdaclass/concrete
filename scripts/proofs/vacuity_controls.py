@@ -24,13 +24,13 @@ def controls(run, source):
     add("double", BASE.replace("Law (subject", "Helper (computation). reason (approved: independent:r1) (writer: writer) (reviewer: reviewer). Law (subject"),
         {("FAIL", "classification-count", "ConcreteSpecControl.growth")})
     add("unknown", BASE.replace("ConcreteSpecControl.S`", "ConcreteSpecControl.missing`", 1),
-        {("FAIL", "unknown-name", "ConcreteSpecControl.growth")})
+        {("FAIL", "unknown-name", "ConcreteSpecControl.growth"), ("FAIL", "planted-subject", "EXAMPLE")})
     # These keep a valid paired case; the isolated bad example must add only its own diagnostic.
     prefix, suffix = BASE.rsplit("end ConcreteSpecControl", 1)
     def extra(doc, decl):
         return prefix + doc + "\n" + decl + "\nend ConcreteSpecControl\n"
     tag = "/-- Instance (law `ConcreteSpecControl.growth`, case `bad`). -/"
-    add("partial", extra(tag, "example : ∀ h : 2 = 2, 2 < S 2 := growth 2"),
+    add("partial", extra(tag, "example : ∀ _h : 2 = 2, 2 < S 2 := growth 2"),
         {("FAIL", "instance-application", "EXAMPLE")})
     add("restated", extra(tag, "example : 2 < S 2 := Nat.lt_succ_self 2"),
         {("FAIL", "instance-application", "EXAMPLE")})
@@ -42,6 +42,8 @@ def controls(run, source):
         {("FAIL", "mutant-type", "EXAMPLE")})
     for label, declaration in [
         ("returned-hypothesis", "theorem projection (p : Prop) (h : p) : p := h"),
+        ("applied-hypothesis", "theorem projection (p : Nat → Prop) (h : ∀ n, p n) : p 0 := h 0"),
+        ("repacked-witness", "theorem projection (p : Nat → Prop) (h : p 0) : ∃ n, p n := ⟨0, h⟩"),
         ("and-left", "theorem projection (p q : Prop) (h : p ∧ q) : p := And.left h"),
         ("and-right", "theorem projection (p q : Prop) (h : p ∧ q) : q := And.right h"),
         ("expr-proj", "structure Box (p : Prop) : Prop where\n  proof : p\n/-- Law (subject `ConcreteSpecControl.S`). -/\ntheorem projection (p : Prop) (h : Box p) : p := h.proof"),
@@ -63,6 +65,24 @@ def controls(run, source):
         {("FAIL", "obligation-roadmap", "ConcreteSpecControl.owed")})
     add("self-approved", extra("/-- Helper (computation). reason (approved: r1) (writer: alice) (reviewer: alice). -/", "theorem helper : True := trivial"),
         {("FAIL", "self-approved", "ConcreteSpecControl.helper")})
+    add("authored-generated-suffix", extra("", "theorem authored.eq_1 : True := trivial"),
+        {("FAIL", "classification-count", "ConcreteSpecControl.authored.eq_1")})
+    add("generated-provenance", extra("", "def recursive : Nat → Nat\n  | 0 => 0\n  | n + 1 => recursive n + 1"), set(), status=0)
+    add("hidden-partial", extra("", "def OpenCase : Prop := ∀ _h : 2 = 2, 2 < S 2\n/-- Instance (law `ConcreteSpecControl.growth`, case `hidden`). -/\nexample : OpenCase := growth 2"),
+        {("FAIL", "instance-application", "EXAMPLE")})
+    add("false-discharge", extra("", "axiom impossible : False\n/-- Instance (law `ConcreteSpecControl.growth`, case `exfalso`). -/\nexample : 2 < S 2 := growth 2 (False.elim impossible)"),
+        {("FAIL", "instance-false-discharge", "EXAMPLE")})
+    add("missing-planted", BASE.replace("/-- Planted (law `ConcreteSpecControl.growth`, case `two`, subject `ConcreteSpecControl.S`, mutant `ConcreteSpecControl.mutant`). -/", ""),
+        {("FAIL", "missing-planted", "ConcreteSpecControl.growth")})
+    approved = "(approved: independent:r1) (writer: writer) (reviewer: reviewer)."
+    positive = extra("/-- Helper (computation). Computes reflexivity. " + approved + " -/", "private theorem helper : 1 = 1 := rfl")
+    positive = positive.replace("end ConcreteSpecControl", "/-- Representation lemma. Encoding reflexivity. " + approved + " -/\ntheorem representation : 2 = 2 := rfl\n/-- Obligation (discharged at slice 9, R-0219). -/\ndef owed (n : Nat) : Prop := n = n\nend ConcreteSpecControl")
+    positive = positive.replace("end ConcreteSpecControl", "structure OwedFields : Prop where\n  /-- Obligation (discharged at slice 9, R-0219). -/\n  checked : 1 = 1\nend ConcreteSpecControl")
+    add("non-law-positive", positive, set(), status=0)
+    for label, proof in [("absurd-discharge", "absurd (rfl : 2 = 2) (fun _ => impossible)"),
+                         ("nomatch-discharge", "by nomatch impossible")]:
+        add(label, extra("", "axiom impossible : False\n/-- Instance (law `ConcreteSpecControl.growth`, case `exfalso`). -/\nexample : 2 < S 2 := growth 2 (" + proof + ")"),
+            {("FAIL", "instance-false-discharge", "EXAMPLE")})
     failed = 0
     for label, fixture, budget, expected, status in cases:
         code, output = run(source, "", fixture, budget)
