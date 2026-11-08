@@ -682,20 +682,45 @@ inductive RetentionInstruction where
   | complete
   deriving DecidableEq
 
+/-- Whether a retention instruction and token state match the tracked handle of `pair`. -/
+def RetentionInstruction.Matches {F H : Type} (instruction : RetentionInstruction)
+    (pair : KeptPair F H) (before : RetentionState H) : Prop :=
+  match instruction, before with
+  | .submit, .owned h => h = pair.handle
+  | .complete, .kept h => h = pair.handle
+  | _, _ => False
+
 /-- Execute a transfer and emit the foreign call it requires. Endpoint dispatch comes from the
-instruction; the input token supplies the transferred handle. There is no validity re-check. -/
-def transferKept {F H : Type} (pair : KeptPair F H) :
+instruction; the input token must match the tracked handle of `pair`. -/
+def transferKept {F H : Type} [DecidableEq H] (pair : KeptPair F H) :
     RetentionInstruction → RetentionState H → Option (ForeignEvent F H × RetentionState H)
-  | .submit, .owned h => some (.call pair.submit h, .kept h)
-  | .complete, .kept h => some (.call pair.complete h, .owned h)
+  | .submit, .owned h =>
+    if h = pair.handle then some (.call pair.submit h, .kept h) else none
+  | .complete, .kept h =>
+    if h = pair.handle then some (.call pair.complete h, .owned h) else none
   | _, _ => none
 
-/-- The returned transfer, if any, meets the retention contract. This is a specification over
-an independently executable transfer implementation. -/
-def TransferCorrect {F H : Type} (pair : KeptPair F H) (before : RetentionState H) :
+/-- The returned transfer meets the complete retention contract: it rejects iff the instruction and
+state do not match the tracked handle, and when it succeeds it satisfies `KeptStep` together with
+endpoint and receipt exclusivity. -/
+def TransferCorrect {F H : Type} (pair : KeptPair F H)
+    (instruction : RetentionInstruction) (before : RetentionState H) :
     Option (ForeignEvent F H × RetentionState H) → Prop
-  | none => True
-  | some (event, after) => KeptStep pair before event after
+  | none => ¬ instruction.Matches pair before
+  | some (event, after) =>
+    instruction.Matches pair before ∧
+    KeptStep pair before event after ∧
+    (∀ h, before = .owned h →
+      event = .call pair.submit h ∧ after = .kept pair.handle) ∧
+    (∀ h, before = .kept h →
+      event = .call pair.complete h ∧ after = .owned pair.handle ∧
+      (∀ h' after', ¬ KeptStep pair (.kept h) (.call pair.submit h') after') ∧
+      (∀ f h' after', f ≠ pair.complete → ¬ KeptStep pair (.kept h) (.call f h') after'))
+
+/-- Relational view of executable transfers for `RetentionConforms`. -/
+def transferTransition {F H : Type} [DecidableEq H] (pair : KeptPair F H)
+    (before : RetentionState H) (event : ForeignEvent F H) (after : RetentionState H) : Prop :=
+  ∃ instruction, transferKept pair instruction before = some (event, after)
 
 /-- Obligation (discharged at slice 25, R-0580).
 Obligation on the code generator: relate actual foreign-boundary ownership transfers to the
@@ -705,12 +730,19 @@ def RetentionConforms {F H : Type} (pair : KeptPair F H)
     (transition : RetentionState H → ForeignEvent F H → RetentionState H → Prop) : Prop :=
   ∀ before event after, transition before event after → KeptStep pair before event after
 
-/-- Correctness of the protocol extracted by declaration checking. Rejection makes no validity
-claim; a returned protocol must implement the original four descriptors. -/
-def CheckedPairCorrect {F H : Type} (sp : ExternParam H) (sr cp cr : ExternType H) :
+/-- Correctness of the protocol extracted by declaration checking: rejection means no handle
+satisfies `KeptPair.WellFormed` for the given endpoints and descriptors, while acceptance preserves
+the endpoint identities, establishes `WellFormed`, validates the endpoint result types, and rejects
+retention results from unrelated externs. -/
+def CheckedPairCorrect {F H : Type} (submit complete : F)
+    (sp : ExternParam H) (sr cp cr : ExternType H) :
     Option (KeptPair F H) → Prop
-  | none => True
-  | some pair => pair.WellFormed sp sr cp cr
+  | none => ∀ h, ¬ (⟨submit, complete, h⟩ : KeptPair F H).WellFormed sp sr cp cr
+  | some pair =>
+    pair.submit = submit ∧ pair.complete = complete ∧ pair.WellFormed sp sr cp cr ∧
+    (ExternResult.Valid pair pair.submit sr ∧ ExternResult.Valid pair pair.complete cr) ∧
+    (∀ f h, f ≠ pair.submit → f ≠ pair.complete →
+      ¬ ExternResult.Valid pair f (.receipt h) ∧ ¬ ExternResult.Valid pair f (.owned h))
 
 /-! ### Launcher entry and exit (Q8.5–Q8.6) -/
 
@@ -782,11 +814,15 @@ def toyLaunch (root reserved result : Nat) : Startup ((Nat × List Nat) × Nat �
     let loaded := retainChain root
     .entered ((root, loaded), loaded.length, result, encodeToyExit root result)
 
-/-- Conformance of successful outputs, including exact closure, entry, exit and reservation.
-This predicate is the specification, not evidence in the executable launcher. -/
+/-- Relational view of admitted `toyLaunch` runs for `LauncherConforms`. -/
+def toyLaunchExecution (artifact : Nat × List Nat) (reserved input result observation : Nat) : Prop :=
+  toyLaunch artifact.1 reserved result = .entered (artifact, input, result, observation)
+
+/-- Conformance of `toyLaunch` across both startup outcomes: `.refused125` occurs only when the
+reservation is below the required 8-byte bound, and `.entered` establishes `toyLauncher.Run`. -/
 def ToyLaunchCorrect (reserved : Nat) :
     Startup ((Nat × List Nat) × Nat × Nat × Nat) → Prop
-  | .refused125 => True
+  | .refused125 => reserved < 8
   | .entered (artifact, input, result, observation) =>
     toyLauncher.Run artifact reserved input result observation
 

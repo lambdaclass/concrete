@@ -1401,33 +1401,12 @@ theorem stack_adequate {Input : Type} (bound reserved : Nat) (input : Input)
     (h : bound ≤ reserved) : stackAdmission bound reserved input = .entered input := by
   simp [stackAdmission, Nat.not_lt_of_ge h]
 
-/-- Helper (projection). Describes the contract or its arithmetic; independent execution
-evidence must be supplied separately. (approved: PENDING)
- A launcher run relates its exact retained closure to the stated entry and exit observations. -/
-theorem launcher_entry_exit {Artifact Input Result Observation : Type}
-    {l : Launcher Artifact Input Result Observation} {artifact : Artifact} {reserved : Nat}
-    {input : Input} {result : Result} {observation : Observation}
-    (run : l.Run artifact reserved input result observation) :
-    l.retainedClosure artifact ∧ l.entry artifact input ∧ l.exit artifact result observation :=
-  ⟨run.closure, run.entry, run.exit⟩
-
-/-- Helper (projection). Describes the contract or its arithmetic; independent execution
-evidence must be supplied separately. (approved: PENDING)
- Every launched run passes stack admission with its recorded reservation. -/
-theorem launcher_run_admitted {Artifact Input Result Observation : Type}
-    {l : Launcher Artifact Input Result Observation} {artifact : Artifact} {reserved : Nat}
-    {input : Input} {result : Result} {observation : Observation}
-    (run : l.Run artifact reserved input result observation) :
-    stackAdmission (l.stackBound artifact) reserved input = .entered input :=
-  stack_adequate _ _ _ run.adequateStack
-
-/-- Helper (inversion). An accepted declaration-check result meets the descriptor contract.
-(approved: PENDING)
-Declaration checking extracts a protocol whose four descriptors satisfy the specification. -/
+/-- Helper (inversion). An accepted declaration-check result preserves the endpoint identities and
+meets the descriptor contract. (approved: PENDING) -/
 theorem checkKeptPair_result {F H : Type} [DecidableEq F] [DecidableEq H]
     (submit complete : F) (sp : ExternParam H) (sr cp cr : ExternType H) :
     ∀ pair, checkKeptPair submit complete sp sr cp cr = some pair →
-      pair.WellFormed sp sr cp cr := by
+      pair.submit = submit ∧ pair.complete = complete ∧ pair.WellFormed sp sr cp cr := by
   intro pair hp
   cases sp with
   | mk t retention =>
@@ -1440,32 +1419,116 @@ theorem checkKeptPair_result {F H : Type} [DecidableEq F] [DecidableEq H]
         cases hp
         obtain ⟨ha, hb, hc⟩ := hh
         subst_vars
-        exact ⟨hne, rfl, rfl, rfl, rfl⟩
+        exact ⟨rfl, rfl, hne, rfl, rfl, rfl, rfl⟩
+
+/-- Helper (inversion). If `checkKeptPair` rejects a declaration tuple, no handle witnesses a
+well-formed `KeptPair` for those endpoints and descriptors. (approved: PENDING) -/
+theorem checkKeptPair_complete {F H : Type} [DecidableEq F] [DecidableEq H]
+    (submit complete : F) (sp : ExternParam H) (sr cp cr : ExternType H)
+    (hnone : checkKeptPair submit complete sp sr cp cr = none) :
+    ∀ h, ¬ (⟨submit, complete, h⟩ : KeptPair F H).WellFormed sp sr cp cr := by
+  intro h ⟨hne, hsp, hsr, hcp, hcr⟩
+  dsimp at hne hsp hsr hcp hcr
+  subst hsp hsr hcp hcr
+  simp [checkKeptPair, hne] at hnone
 
 /-- Law (subject `ConcreteSpec.Core.Frame.ABI.checkKeptPair`).
-Declaration checking produces a protocol satisfying its independent descriptor contract. -/
+Declaration checking is sound and complete for its descriptor contract, and any accepted protocol
+validates its endpoint results while rejecting retention results from unrelated externs. -/
 theorem checkKeptPair_sound {F H : Type} [DecidableEq F] [DecidableEq H]
     (submit complete : F) (sp : ExternParam H) (sr cp cr : ExternType H) :
-    CheckedPairCorrect sp sr cp cr (checkKeptPair submit complete sp sr cp cr) := by
+    CheckedPairCorrect submit complete sp sr cp cr
+      (checkKeptPair submit complete sp sr cp cr) := by
   cases checked : checkKeptPair submit complete sp sr cp cr with
-  | none => trivial
-  | some pair => exact checkKeptPair_result submit complete sp sr cp cr pair checked
+  | none =>
+    exact checkKeptPair_complete submit complete sp sr cp cr checked
+  | some pair =>
+    obtain ⟨hsub, hcomp, hwf⟩ := checkKeptPair_result submit complete sp sr cp cr pair checked
+    exact ⟨hsub, hcomp, hwf, keptPair_results_valid pair sp sr cp cr hwf,
+      fun f h hfs hfc => extern_result_rejects_unrelated_retention pair f h hfs hfc⟩
+
+/-- Helper (inversion). Connects executable retention transfers to the `RetentionConforms`
+codegen obligation. (approved: PENDING) -/
+theorem transferTransition_conforms {F H : Type} [DecidableEq H] (pair : KeptPair F H)
+    (distinct : pair.submit ≠ pair.complete) :
+    RetentionConforms pair (transferTransition pair) := by
+  intro before event after ⟨instruction, htr⟩
+  cases instruction with
+  | submit =>
+    cases before with
+    | owned h =>
+      simp only [transferKept] at htr
+      split at htr <;> try contradiction
+      next hh =>
+        cases htr
+        exact ⟨rfl, hh, rfl, rfl⟩
+    | kept h =>
+      simp only [transferKept] at htr
+      contradiction
+  | complete =>
+    cases before with
+    | owned h =>
+      simp only [transferKept] at htr
+      contradiction
+    | kept h =>
+      simp only [transferKept] at htr
+      split at htr <;> try contradiction
+      next hh =>
+        cases htr
+        exact ⟨rfl, distinct, hh, rfl, rfl⟩
 
 /-- Law (subject `ConcreteSpec.Core.Frame.ABI.transferKept`).
-Executing a transfer of the tracked token follows the paired retention protocol. -/
-theorem transferKept_sound {F H : Type} (pair : KeptPair F H)
+Executing a transfer accepts all and only matching tracked tokens and transitions according to
+the paired retention protocol, including endpoint and receipt exclusivity. -/
+theorem transferKept_sound {F H : Type} [DecidableEq H] (pair : KeptPair F H)
     (instruction : RetentionInstruction) (before : RetentionState H)
-    (distinct : pair.submit ≠ pair.complete)
-    (tracked : before = .owned pair.handle ∨ before = .kept pair.handle) :
-    TransferCorrect pair before (transferKept pair instruction before) := by
-  rcases tracked with rfl | rfl <;> cases instruction
-  · exact ⟨rfl, rfl, rfl, rfl⟩
-  · trivial
-  · trivial
-  · exact ⟨rfl, distinct, rfl, rfl, rfl⟩
+    (distinct : pair.submit ≠ pair.complete) :
+    TransferCorrect pair instruction before (transferKept pair instruction before) := by
+  cases instruction with
+  | submit =>
+    cases before with
+    | owned h =>
+      by_cases hh : h = pair.handle
+      · have htr : transferKept pair .submit (.owned h) =
+            some (.call pair.submit h, .kept h) := by
+          simp [transferKept, hh]
+        have hstep : KeptStep pair (.owned h) (.call pair.submit h) (.kept h) :=
+          transferTransition_conforms pair distinct (.owned h) _ _ ⟨.submit, htr⟩
+        rw [htr]
+        refine ⟨hh, hstep, ?_, ?_⟩
+        · intro h₀ heq
+          cases heq
+          exact submit_produces_paired_receipt pair h (.call pair.submit h) (.kept h) hstep
+        · intro h₀ heq
+          cases heq
+      · simp [transferKept, hh, TransferCorrect, RetentionInstruction.Matches]
+    | kept h =>
+      simp [transferKept, TransferCorrect, RetentionInstruction.Matches]
+  | complete =>
+    cases before with
+    | owned h =>
+      simp [transferKept, TransferCorrect, RetentionInstruction.Matches]
+    | kept h =>
+      by_cases hh : h = pair.handle
+      · have htr : transferKept pair .complete (.kept h) =
+            some (.call pair.complete h, .owned h) := by
+          simp [transferKept, hh]
+        have hstep : KeptStep pair (.kept h) (.call pair.complete h) (.owned h) :=
+          transferTransition_conforms pair distinct (.kept h) _ _ ⟨.complete, htr⟩
+        rw [htr]
+        refine ⟨hh, hstep, ?_, ?_⟩
+        · intro h₀ heq
+          cases heq
+        · intro h₀ heq
+          cases heq
+          have hcomp := kept_only_paired_completion pair h (.call pair.complete h) (.owned h) hstep
+          exact ⟨hcomp.1, hcomp.2,
+            fun h' after' => kept_receipt_rejects_submission pair h h' after',
+            fun f h' after' hf => kept_receipt_rejects_other_extern pair h h' f after' hf⟩
+      · simp [transferKept, hh, TransferCorrect, RetentionInstruction.Matches]
 
 /-- Instance (law `ConcreteSpec.Core.Frame.ABI.checkKeptPair_sound`, case `paired`). -/
-example : CheckedPairCorrect ⟨.owned (7 : Nat), .kept⟩ (.receipt 7) (.receipt 7) (.owned 7)
+example : CheckedPairCorrect (0 : Nat) 1 ⟨.owned (7 : Nat), .kept⟩ (.receipt 7) (.receipt 7) (.owned 7)
     (checkKeptPair (0 : Nat) 1 ⟨.owned 7, .kept⟩ (.receipt 7) (.receipt 7) (.owned 7)) :=
   @checkKeptPair_sound Nat Nat inferInstance inferInstance 0 1
     ⟨.owned 7, .kept⟩ (.receipt 7) (.receipt 7) (.owned 7)
@@ -1479,66 +1542,101 @@ def wrongKeptChecker {F H : Type} [DecidableEq F] [DecidableEq H]
 
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.checkKeptPair_sound`, case `paired`,
 subject `ConcreteSpec.Core.Frame.ABI.checkKeptPair`, mutant `ConcreteSpec.Core.Frame.ABI.wrongKeptChecker`). -/
-example : ¬ CheckedPairCorrect ⟨.owned (7 : Nat), .kept⟩ (.receipt 7) (.receipt 7) (.owned 7)
+example : ¬ CheckedPairCorrect (0 : Nat) 1 ⟨.owned (7 : Nat), .kept⟩ (.receipt 7) (.receipt 7) (.owned 7)
     (wrongKeptChecker (0 : Nat) 1 ⟨.owned 7, .kept⟩ (.receipt 7) (.receipt 7) (.owned 7)) := by
   intro h
-  exact h.1 rfl
+  exact h.2.2.1.1 rfl
+
+/-- A planted declaration extractor unconditionally rejects even valid paired declarations. -/
+def rejectingKeptChecker {F H : Type}
+    (_submit _complete : F) (_sp : ExternParam H) (_sr _cp _cr : ExternType H) :
+    Option (KeptPair F H) :=
+  none
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.checkKeptPair_sound`, case `paired`,
+subject `ConcreteSpec.Core.Frame.ABI.checkKeptPair`,
+mutant `ConcreteSpec.Core.Frame.ABI.rejectingKeptChecker`). -/
+example : ¬ CheckedPairCorrect (0 : Nat) 1 ⟨.owned (7 : Nat), .kept⟩ (.receipt 7) (.receipt 7) (.owned 7)
+    (rejectingKeptChecker (0 : Nat) 1 ⟨.owned 7, .kept⟩ (.receipt 7) (.receipt 7) (.owned 7)) := by
+  intro h
+  exact h 7 ⟨by decide, rfl, rfl, rfl, rfl⟩
 
 /-- Instance (law `ConcreteSpec.Core.Frame.ABI.transferKept_sound`, case `completion`). -/
-example : TransferCorrect (⟨0, 1, 7⟩ : KeptPair Nat Nat) (.kept 7)
+example : TransferCorrect (⟨0, 1, 7⟩ : KeptPair Nat Nat) .complete (.kept 7)
     (transferKept ⟨0, 1, 7⟩ .complete (.kept 7)) :=
-  @transferKept_sound Nat Nat ⟨0, 1, 7⟩ .complete (.kept 7)
-    (by decide) (Or.inr rfl)
+  @transferKept_sound Nat Nat inferInstance ⟨0, 1, 7⟩ .complete (.kept 7) (by decide)
+
+/-- Instance (law `ConcreteSpec.Core.Frame.ABI.transferKept_sound`, case `untracked_handle`). -/
+example : TransferCorrect (⟨0, 1, 7⟩ : KeptPair Nat Nat) .complete (.kept 8)
+    (transferKept ⟨0, 1, 7⟩ .complete (.kept 8)) :=
+  @transferKept_sound Nat Nat inferInstance ⟨0, 1, 7⟩ .complete (.kept 8) (by decide)
 
 /-- A planted transfer dispatches completion to the submitting endpoint. -/
-def wrongKeptEndpoint {F H : Type} (pair : KeptPair F H) :
+def wrongKeptEndpoint {F H : Type} [DecidableEq H] (pair : KeptPair F H) :
     RetentionInstruction → RetentionState H → Option (ForeignEvent F H × RetentionState H)
-  | .complete, .kept h => some (.call pair.submit h, .owned h)
+  | .complete, .kept h =>
+    if h = pair.handle then some (.call pair.submit h, .owned h) else none
   | instruction, before => transferKept pair instruction before
 
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.transferKept_sound`, case `completion`,
 subject `ConcreteSpec.Core.Frame.ABI.transferKept`, mutant `ConcreteSpec.Core.Frame.ABI.wrongKeptEndpoint`). -/
 example : (0 : Nat) ≠ 1 ∧
-    ((.kept 7 : RetentionState Nat) = .owned 7 ∨ (.kept 7 : RetentionState Nat) = .kept 7) ∧
-    ¬ TransferCorrect (⟨0, 1, 7⟩ : KeptPair Nat Nat) (.kept 7)
+    ¬ TransferCorrect (⟨0, 1, 7⟩ : KeptPair Nat Nat) .complete (.kept 7)
       (wrongKeptEndpoint ⟨0, 1, 7⟩ .complete (.kept 7)) := by
-  refine ⟨by decide, Or.inr rfl, ?_⟩
+  refine ⟨by decide, ?_⟩
   intro h
-  have bad : (0 : Nat) = 1 := h.1
+  have bad : (0 : Nat) = 1 := h.2.1.1
   cases bad
 
 /-- A planted transfer returns a receipt after completion instead of ownership. -/
-def wrongKeptHandle {F H : Type} (pair : KeptPair F H) :
+def wrongKeptHandle {F H : Type} [DecidableEq H] (pair : KeptPair F H) :
     RetentionInstruction → RetentionState H → Option (ForeignEvent F H × RetentionState H)
-  | .complete, .kept h => some (.call pair.complete h, .kept h)
+  | .complete, .kept h =>
+    if h = pair.handle then some (.call pair.complete h, .kept h) else none
   | instruction, before => transferKept pair instruction before
 
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.transferKept_sound`, case `completion`,
 subject `ConcreteSpec.Core.Frame.ABI.transferKept`, mutant `ConcreteSpec.Core.Frame.ABI.wrongKeptHandle`). -/
 example : (0 : Nat) ≠ 1 ∧
-    ((.kept 7 : RetentionState Nat) = .owned 7 ∨ (.kept 7 : RetentionState Nat) = .kept 7) ∧
-    ¬ TransferCorrect (⟨0, 1, 7⟩ : KeptPair Nat Nat) (.kept 7)
+    ¬ TransferCorrect (⟨0, 1, 7⟩ : KeptPair Nat Nat) .complete (.kept 7)
       (wrongKeptHandle ⟨0, 1, 7⟩ .complete (.kept 7)) := by
-  refine ⟨by decide, Or.inr rfl, ?_⟩
+  refine ⟨by decide, ?_⟩
   intro h
-  exact h
+  exact h.2.1
 
-/-- Helper (computation). The dependency-chain traversal visits every reachable module.
-(approved: PENDING) -/
-theorem retainChain_complete (root : Nat) : ∀ dependency, dependency ≤ root →
-    dependency ∈ retainChain root := by
-  induction root with
-  | zero =>
-    intro dependency h
-    have he : dependency = 0 := by omega
-    subst dependency
-    simp [retainChain]
-  | succ root ih =>
-    intro dependency h
-    by_cases he : dependency = root + 1
-    · simp [retainChain, he]
-    · have hd : dependency ≤ root := by omega
-      simp [retainChain, ih dependency hd]
+/-- A planted transfer skips the handle-identity check and transfers an untracked handle. -/
+def untrackedKeptTransfer {F H : Type} (pair : KeptPair F H) :
+    RetentionInstruction → RetentionState H → Option (ForeignEvent F H × RetentionState H)
+  | .submit, .owned h => some (.call pair.submit h, .kept h)
+  | .complete, .kept h => some (.call pair.complete h, .owned h)
+  | _, _ => none
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.transferKept_sound`, case `untracked_handle`,
+subject `ConcreteSpec.Core.Frame.ABI.transferKept`,
+mutant `ConcreteSpec.Core.Frame.ABI.untrackedKeptTransfer`). -/
+example : (0 : Nat) ≠ 1 ∧
+    ¬ TransferCorrect (⟨0, 1, 7⟩ : KeptPair Nat Nat) .complete (.kept 8)
+      (untrackedKeptTransfer ⟨0, 1, 7⟩ .complete (.kept 8)) := by
+  refine ⟨by decide, ?_⟩
+  intro h
+  have bad : (8 : Nat) = 7 := h.1
+  cases bad
+
+/-- A planted transfer always returns `none`, refusing even valid tracked transfers. -/
+def droppingKeptTransfer {F H : Type} (_pair : KeptPair F H)
+    (_instruction : RetentionInstruction) (_before : RetentionState H) :
+    Option (ForeignEvent F H × RetentionState H) :=
+  none
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.transferKept_sound`, case `completion`,
+subject `ConcreteSpec.Core.Frame.ABI.transferKept`,
+mutant `ConcreteSpec.Core.Frame.ABI.droppingKeptTransfer`). -/
+example : (0 : Nat) ≠ 1 ∧
+    ¬ TransferCorrect (⟨0, 1, 7⟩ : KeptPair Nat Nat) .complete (.kept 7)
+      (droppingKeptTransfer ⟨0, 1, 7⟩ .complete (.kept 7)) := by
+  refine ⟨by decide, ?_⟩
+  intro h
+  exact h rfl
 
 /-- Helper (computation). The loader retains all and only reachable modules, so
 extra retained modules cannot satisfy the exact closure contract. (approved: PENDING) -/
@@ -1564,18 +1662,43 @@ theorem encodeToyExit_correct (root result : Nat) : encodeToyExit root result = 
   | zero => simp [encodeToyExit]
   | succ root ih => simp [encodeToyExit, ih, Nat.add_assoc]
 
+/-- Helper (inversion). Connects admitted `toyLaunch` runs to the `LauncherConforms` obligation.
+(approved: PENDING) -/
+theorem toyLaunchExecution_conforms : LauncherConforms toyLauncher toyLaunchExecution := by
+  intro ⟨root, loaded⟩ reserved input result observation hexec
+  dsimp [toyLaunchExecution, toyLaunch] at hexec
+  by_cases hlt : reserved < 8
+  · rw [stack_under_reservation 8 reserved () hlt] at hexec
+    contradiction
+  · have hadq : 8 ≤ reserved := Nat.le_of_not_lt hlt
+    rw [stack_adequate 8 reserved () hadq] at hexec
+    cases hexec
+    exact ⟨retainChain_membership root, retainChain_length root,
+      encodeToyExit_correct root result, hadq⟩
+
 /-- Law (subject `ConcreteSpec.Core.Frame.ABI.toyLaunch`).
-Independent loading and launch execution establish the closure, entry/exit correspondence and
-stack admission contract. No resulting relation is carried as an execution premise. -/
-theorem toyLaunch_conforms (root reserved result : Nat) (adequate : 8 ≤ reserved) :
+Independent loading and launch execution establish both the status-125 refusal contract below the
+8-byte bound and the closure, entry/exit correspondence, and stack-admission contract when admitted. -/
+theorem toyLaunch_conforms (root reserved result : Nat) :
     ToyLaunchCorrect reserved (toyLaunch root reserved result) := by
-  have hadmit : stackAdmission 8 reserved () = .entered () := stack_adequate 8 reserved () adequate
-  simp only [toyLaunch, hadmit, ToyLaunchCorrect]
-  exact ⟨retainChain_membership root, retainChain_length root,
-    encodeToyExit_correct root result, adequate⟩
+  by_cases hlt : reserved < 8
+  · have href : stackAdmission 8 reserved () = .refused125 :=
+      stack_under_reservation 8 reserved () hlt
+    simp [toyLaunch, href, ToyLaunchCorrect, hlt]
+  · have hadq : 8 ≤ reserved := Nat.le_of_not_lt hlt
+    have hadm : stackAdmission 8 reserved () = .entered () :=
+      stack_adequate 8 reserved () hadq
+    have hrun : toyLauncher.Run (root, retainChain root) reserved
+        (retainChain root).length result (encodeToyExit root result) := by
+      apply toyLaunchExecution_conforms
+      simp [toyLaunchExecution, toyLaunch, hadm]
+    simpa [toyLaunch, hadm, ToyLaunchCorrect] using hrun
 
 /-- Instance (law `ConcreteSpec.Core.Frame.ABI.toyLaunch_conforms`, case `dependency_chain`). -/
-example : ToyLaunchCorrect 8 (toyLaunch 2 8 7) := toyLaunch_conforms 2 8 7 (by decide)
+example : ToyLaunchCorrect 8 (toyLaunch 2 8 7) := toyLaunch_conforms 2 8 7
+
+/-- Instance (law `ConcreteSpec.Core.Frame.ABI.toyLaunch_conforms`, case `under_reserved`). -/
+example : ToyLaunchCorrect 4 (toyLaunch 2 4 7) := toyLaunch_conforms 2 4 7
 
 /-- A planted launcher appends one spurious byte to the exit encoding. -/
 def wrongToyLaunch (root reserved result : Nat) : Startup ((Nat × List Nat) × Nat × Nat × Nat) :=
@@ -1586,13 +1709,11 @@ def wrongToyLaunch (root reserved result : Nat) : Startup ((Nat × List Nat) × 
 
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyLaunch_conforms`, case `dependency_chain`,
 subject `ConcreteSpec.Core.Frame.ABI.toyLaunch`, mutant `ConcreteSpec.Core.Frame.ABI.wrongToyLaunch`). -/
-example : 8 ≤ (8 : Nat) ∧ ¬ ToyLaunchCorrect 8 (wrongToyLaunch 2 8 7) := by
-  refine ⟨by decide, ?_⟩
+example : ¬ ToyLaunchCorrect 8 (wrongToyLaunch 2 8 7) := by
   intro h
   have bad := h.exit
   change 10 = 9 at bad
   contradiction
-
 
 /-- A planted loader retains an unrelated module while leaving entry and exit unchanged. -/
 def overRetainingToyLaunch (root reserved result : Nat) :
@@ -1605,8 +1726,7 @@ def overRetainingToyLaunch (root reserved result : Nat) :
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyLaunch_conforms`, case `dependency_chain`,
 subject `ConcreteSpec.Core.Frame.ABI.toyLaunch`,
 mutant `ConcreteSpec.Core.Frame.ABI.overRetainingToyLaunch`). -/
-example : 8 ≤ (8 : Nat) ∧ ¬ ToyLaunchCorrect 8 (overRetainingToyLaunch 2 8 7) := by
-  refine ⟨by decide, ?_⟩
+example : ¬ ToyLaunchCorrect 8 (overRetainingToyLaunch 2 8 7) := by
   intro h
   have bad : 3 ≤ 2 := (h.closure 3).mp (by decide)
   omega
@@ -1622,11 +1742,37 @@ def underRetainingToyLaunch (root reserved result : Nat) :
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyLaunch_conforms`, case `dependency_chain`,
 subject `ConcreteSpec.Core.Frame.ABI.toyLaunch`,
 mutant `ConcreteSpec.Core.Frame.ABI.underRetainingToyLaunch`). -/
-example : 8 ≤ (8 : Nat) ∧ ¬ ToyLaunchCorrect 8 (underRetainingToyLaunch 2 8 7) := by
-  refine ⟨by decide, ?_⟩
+example : ¬ ToyLaunchCorrect 8 (underRetainingToyLaunch 2 8 7) := by
   intro h
   have bad : 0 ∈ ([2] : List Nat) := (h.closure 0).mpr (by decide)
   contradiction
+
+/-- A planted launcher unconditionally refuses with status 125 even when stack reservation is adequate. -/
+def alwaysRefusingToyLaunch (_root _reserved _result : Nat) :
+    Startup ((Nat × List Nat) × Nat × Nat × Nat) :=
+  .refused125
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyLaunch_conforms`, case `dependency_chain`,
+subject `ConcreteSpec.Core.Frame.ABI.toyLaunch`,
+mutant `ConcreteSpec.Core.Frame.ABI.alwaysRefusingToyLaunch`). -/
+example : ¬ ToyLaunchCorrect 8 (alwaysRefusingToyLaunch 2 8 7) := by
+  intro h
+  change 8 < 8 at h
+  omega
+
+/-- A planted launcher skips stack admission and enters even when reservation is below the bound. -/
+def unboundedToyLaunch (root _reserved result : Nat) :
+    Startup ((Nat × List Nat) × Nat × Nat × Nat) :=
+  let loaded := retainChain root
+  .entered ((root, loaded), loaded.length, result, encodeToyExit root result)
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyLaunch_conforms`, case `under_reserved`,
+subject `ConcreteSpec.Core.Frame.ABI.toyLaunch`,
+mutant `ConcreteSpec.Core.Frame.ABI.unboundedToyLaunch`). -/
+example : ¬ ToyLaunchCorrect 4 (unboundedToyLaunch 2 4 7) := by
+  intro h
+  have bad : 8 ≤ 4 := h.adequateStack
+  omega
 
 
 end ABI
