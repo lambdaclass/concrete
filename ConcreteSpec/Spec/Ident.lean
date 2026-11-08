@@ -91,10 +91,35 @@ structure ObligationId where
   discriminator : Nat
   deriving DecidableEq, Repr
 
-/-- A module, by its path from the package root (`["std", "bytes"]`). -/
+/-- A package identity. The token is opaque here: whether it is derived from a name, a name and
+version, or a content hash is an interface choice not yet fixed by a decided row. -/
+structure PackageId where
+  token : String
+  deriving DecidableEq, Repr
+
+/-- A module: its package and its path from that package's root (`["std", "bytes"]`). -/
 structure ModuleId where
+  package : PackageId
   path : List String
   deriving DecidableEq, Repr
+
+/-- A load-time collision: two modules from different packages have the same top-level module name.
+The two complete identities retain both package names for the required diagnostic (OD44). -/
+structure ModuleCollision where
+  first : ModuleId
+  second : ModuleId
+  sameTopLevel : first.path.head? = second.path.head?
+  differentPackages : first.package ≠ second.package
+
+/-- Program well-formedness under OD44: until R-0440, distinct packages in one loaded program may
+not define the same top-level module name. This is refusal, not package-qualified coexistence. -/
+def LoadedModules.WellFormed (modules : List ModuleId) : Prop :=
+  ∀ first ∈ modules, ∀ second ∈ modules,
+    first.path.head? = second.path.head? → first.package = second.package
+
+/-- A collision witness whose two modules are both in the loaded program. -/
+def LoadedModules.HasCollision (modules : List ModuleId) (collision : ModuleCollision) : Prop :=
+  collision.first ∈ modules ∧ collision.second ∈ modules
 
 /-- A type declaration (a struct or an enum): its module and its name there. Declaration names are
 nominal (Q9.2): two declarations are the same exactly when their identities are equal. -/
@@ -265,15 +290,20 @@ def specVersion : SpecVersion := ⟨0, 1⟩
 /-! ### Examples -/
 
 /-- Two declarations named `Pair` in different modules are different declarations. -/
-example : DeclId.mk ⟨["a"]⟩ "Pair" ≠ DeclId.mk ⟨["b"]⟩ "Pair" := by decide
+example : DeclId.mk (ModuleId.mk ⟨"p"⟩ ["a"]) "Pair" ≠
+    DeclId.mk (ModuleId.mk ⟨"p"⟩ ["b"]) "Pair" := by decide
+
+/-- The same module path in two packages also yields different declarations. -/
+example : DeclId.mk (ModuleId.mk ⟨"p1"⟩ ["a"]) "Pair" ≠
+    DeclId.mk (ModuleId.mk ⟨"p2"⟩ ["a"]) "Pair" := by decide
 
 /-- A field belongs to its owner: `a` of `Pair` is not `a` of `Point`, and `value` of variant
 `E.A` is not `value` of variant `E.B`. -/
-example : FieldId.mk (.struct ⟨⟨[]⟩, "Pair"⟩) "a" ≠ FieldId.mk (.struct ⟨⟨[]⟩, "Point"⟩) "a" := by
-  decide
+example : FieldId.mk (.struct ⟨ModuleId.mk ⟨"p"⟩ [], "Pair"⟩) "a" ≠
+    FieldId.mk (.struct ⟨ModuleId.mk ⟨"p"⟩ [], "Point"⟩) "a" := by decide
 
-example : FieldId.mk (.variant ⟨⟨⟨[]⟩, "E"⟩, "A"⟩) "value" ≠
-    FieldId.mk (.variant ⟨⟨⟨[]⟩, "E"⟩, "B"⟩) "value" := by decide
+example : FieldId.mk (.variant ⟨⟨ModuleId.mk ⟨"p"⟩ [], "E"⟩, "A"⟩) "value" ≠
+    FieldId.mk (.variant ⟨⟨ModuleId.mk ⟨"p"⟩ [], "E"⟩, "B"⟩) "value" := by decide
 
 /-- The first and the last slice. -/
 example : (SliceId.mk 0).n.val = 0 ∧ (SliceId.mk 28).n.val = 28 := ⟨rfl, rfl⟩
