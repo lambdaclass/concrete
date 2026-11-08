@@ -19,7 +19,8 @@
 #     stack or frame pointer (so the red zone), with external libc calls listed with their entry
 #     depth (their own use, and that _exit and abort do not return, are premises). A run under
 #     gdb (x86-64 Linux, lib/stack_measure.py) or LLDB (aarch64-macos, lib/stack_measure_lldb.py)
-#     must stay within it (the run measures the stack pointer only). Each analysed disassembly is
+#     must stay within it (the run counts the stack pointer and every stack byte a stepped
+#     instruction addresses, lib/stack_access.py, so the red zone). Each analysed disassembly is
 #     kept in REPORT/disassembly/. REPORT/stack.tsv. Controls: the analysis must refuse an unmodelled
 #     stack-pointer write, an indirect call, recursion, a call to an unknown function, two depths
 #     meeting, a stack pointer used as a value or written through a partial register, a partial
@@ -36,7 +37,9 @@
 #     save with a Mach-O stub call in a loop); also refuse the link register loaded from another
 #     slot, a stub call with no indirect-symbol entry, into a stub entry's middle or to the bare stub
 #     section; the comparison must reject a
-#     measurement above the bound.
+#     measurement above the bound; refuse an access beyond the target's red zone (x86-64, Apple
+#     arm64) and any below the stack pointer on aarch64-linux; and a linked main storing at the red
+#     zone's edge must be measured at 128 (bound 128), and with a 120-byte red zone not at all.
 #
 # usage: slice0_artifacts.sh [REPORT_DIR]. Run inside the nix devshell, from the repository root.
 set -euo pipefail
@@ -78,7 +81,7 @@ printf 'example\tbackend\ttarget\tbound\tmeasured\texternals\n' >"$stack"
 asan=abort_on_error=0:symbolize=0
 [ "$(uname -s)" != Linux ] || asan="$asan:hard_rss_limit_mb=1024:detect_leaks=1"
 san_env=("ASAN_OPTIONS=$asan")
-# stack_bound ARCH DISASM [--ranges]: the analysis, capped and bounded in time.
+# stack_bound TARGET DISASM [--ranges]: the analysis, capped and bounded in time.
 stack_bound() { bounded 60 python3 -I "$root/scripts/checks/lib/stack_bound.py" "$@"; }
 fail=0
 examples=0
@@ -92,15 +95,19 @@ within() { [ "$1" -gt 0 ] && [ "$1" -le "$2" ]; }
 # LLDB (lib/stack_measure_lldb.py, the same contract; Apple's LLDB runs its own Python, so the
 # shell's Python variables are removed).
 measure() {
-  local ranges main
+  local ranges main redzone
   ranges=$(awk '$1 == "range" {printf "%s%s:%s", sep, $3, $4; sep=","}' <<<"$2")
   main=$(awk '$1 == "range" && $2 == "main" {print $3}' <<<"$2")
+  redzone=$(awk '$1 == "redzone" {print $2}' <<<"$2")
+  [ -n "$redzone" ] || { echo "error the analysis names no red zone"; return; }
   if [ -n "$gdb" ]; then
-    STACK_RANGES=$ranges STACK_MAIN=$main STACK_EXPECT=$3 \
+    STACK_RANGES=$ranges STACK_MAIN=$main STACK_EXPECT=$3 STACK_RED_ZONE=$redzone \
+      STACK_LIB="$root/scripts/checks/lib" \
       bounded 300 "$gdb" -batch -nx -x "$root/scripts/checks/lib/stack_measure.py" \
       "$1" 2>"$1.gdb.err" | awk '$1 == "measured" || $1 == "error" {print}' | cap_out || true
   else
-    STACK_EXE=$1 STACK_RANGES=$ranges STACK_MAIN=$main STACK_EXPECT=$3 \
+    STACK_EXE=$1 STACK_RANGES=$ranges STACK_MAIN=$main STACK_EXPECT=$3 STACK_RED_ZONE=$redzone \
+      STACK_LIB="$root/scripts/checks/lib" \
       bounded 300 env -u PYTHONPATH -u PYTHONHOME "$lldb" --batch --no-lldbinit \
       -o "command script import $root/scripts/checks/lib/stack_measure_lldb.py" \
       2>"$1.gdb.err" | awk '$1 == "measured" || $1 == "error" {print}' | cap_out || true
@@ -125,7 +132,7 @@ stack_check() {
   # The disassembly the bound is derived from is kept in the report (audit evidence).
   mkdir -p "$report/disassembly"
   cp "$dis" "$report/disassembly/$name.$backend.$target.dis"
-  if ! out=$(stack_bound "$arch" "$dis" --ranges | cap_out); then
+  if ! out=$(stack_bound "$target" "$dis" --ranges | cap_out); then
     echo "FAIL $name [$backend] stack: $out"; fail=1; return
   fi
   bound=$(awk '$1 == "bound" {print $2}' <<<"$out")
@@ -230,16 +237,16 @@ known=$(ctl_dis known <<'D'
 D
 )
 # main: 8 + 0x20 = 40 deep; the call pushes 8; the body goes 8 + 0x10 = 24 deeper: 72.
-if [ "$(stack_bound x86_64 "$known")" = "$(printf 'bound 72\nexternal write 48')" ]; then
+if [ "$(stack_bound x86_64-linux "$known")" = "$(printf 'bound 72\nexternal write 48')" ]; then
   echo "ok   control: stack bound of a known function"
 else
-  echo "FAIL control: stack bound of a known function: $(stack_bound x86_64 "$known")"
+  echo "FAIL control: stack bound of a known function: $(stack_bound x86_64-linux "$known")"
   fail=1
 fi
-refuse() { # refuse NAME BODY [ARCH [MAIN]]: BODY (printf format) follows the main header
+refuse() { # refuse NAME BODY [TARGET [MAIN]]: BODY (printf format) follows the main header
   local f
   f=$(ctl_dis "$1" <<<"$(printf "\n0000000000001010 <${4:-main}>:\n$2")")
-  if stack_bound "${3:-x86_64}" "$f" >"$f.out"; then
+  if stack_bound "${3:-x86_64-linux}" "$f" >"$f.out"; then
     echo "FAIL control: stack analysis accepts $1: $(head -c 2000 "$f.out")"; fail=1
   else
     echo "ok   control: stack analysis refuses $1"
@@ -258,36 +265,36 @@ refuse loop-instruction '    1010:\tmov\tecx, 0x2\n    1015:\tloop\t0x1018 <main
 refuse saved-frame-pointer-popped '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tpush\trbp\n    1015:\tpop\trax\n    1016:\tmov\tdword ptr [rax - 0x100], ecx\n    101c:\tpop\trbp\n    101d:\tret\n'
 refuse stack-address-taken '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tlea\trax, [rbp - 0x10]\n    1018:\tpop\trbp\n    1019:\tret\n'
 refuse return-address-overwrite '    1010:\tmov\tqword ptr [rsp], rax\n    1014:\tret\n'
-refuse a64-frame-pointer-stored '    1010:\tmov\tx29, sp\n    1014:\tstr\tx29, [x0]\n    1018:\tret\n' aarch64 _main
-refuse a64-ret-register '    1010:\tret\tx0\n' aarch64 _main
-refuse a64-link-register-lost '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tbl\t0x1020 <_concrete_body>\n    1018:\tadd\tsp, sp, #0x10\n    101c:\tret\n\n0000000000001020 <_concrete_body>:\n    1020:\tret\n' aarch64 _main
+refuse a64-frame-pointer-stored '    1010:\tmov\tx29, sp\n    1014:\tstr\tx29, [x0]\n    1018:\tret\n' aarch64-macos _main
+refuse a64-ret-register '    1010:\tret\tx0\n' aarch64-macos _main
+refuse a64-link-register-lost '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tbl\t0x1020 <_concrete_body>\n    1018:\tadd\tsp, sp, #0x10\n    101c:\tret\n\n0000000000001020 <_concrete_body>:\n    1020:\tret\n' aarch64-macos _main
 refuse freed-slot-reread '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tpush\trbp\n    1015:\tadd\trsp, 0x8\n    1019:\tmov\trax, qword ptr [rsp - 0x8]\n    101e:\tmov\tdword ptr [rax - 0x100], ecx\n    1024:\tpop\trbp\n    1025:\tret\n'
 refuse callee-clobbers-frame-pointer '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tcall\t0x1040 <concrete_body>\n    1019:\tmov\tdword ptr [rbp - 0x100], ecx\n    101f:\tpop\trbp\n    1020:\tret\n\n0000000000001040 <concrete_body>:\n    1040:\tsub\trsp, 0x1000\n    1047:\tmov\trbp, rsp\n    104a:\tadd\trsp, 0x1000\n    1051:\tret\n'
-refuse a64-frame-record-elsewhere '    1010:\tldp\tx29, x30, [x0]\n    1014:\tret\n' aarch64 _main
+refuse a64-frame-record-elsewhere '    1010:\tldp\tx29, x30, [x0]\n    1014:\tret\n' aarch64-macos _main
 refuse restored-slot-reread '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tpush\trbp\n    1015:\tpop\trbp\n    1016:\tmov\trax, qword ptr [rsp - 0x8]\n    101b:\tmov\tdword ptr [rax - 0x1000], ecx\n    1021:\tpop\trbp\n    1022:\tret\n'
-refuse a64-restored-record-reread '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tmov\tx29, sp\n    1018:\tstp\tx29, x30, [sp, #-0x10]!\n    101c:\tldp\tx29, x30, [sp], #0x10\n    1020:\tldr\tx0, [sp, #-0x10]\n    1024:\tstr\tx1, [x0, #-0x1000]\n    1028:\tldp\tx29, x30, [sp], #0x10\n    102c:\tret\n' aarch64 _main
-refuse a64-w29-writeback-load '    1010:\tsub\tsp, sp, #0x10\n    1014:\tmov\tx29, sp\n    1018:\tldr\tw29, [sp], #0x10\n    101c:\tstr\tx0, [x29, #-0x100]\n    1020:\tret\n' aarch64 _main
-refuse a64-frame-writeback '    1010:\tmov\tx29, sp\n    1014:\tstr\tx0, [x29], #-0x100\n    1018:\tstr\tx0, [x29]\n    101c:\tadd\tx29, x29, #0x100\n    1020:\tret\n' aarch64 _main
+refuse a64-restored-record-reread '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tmov\tx29, sp\n    1018:\tstp\tx29, x30, [sp, #-0x10]!\n    101c:\tldp\tx29, x30, [sp], #0x10\n    1020:\tldr\tx0, [sp, #-0x10]\n    1024:\tstr\tx1, [x0, #-0x1000]\n    1028:\tldp\tx29, x30, [sp], #0x10\n    102c:\tret\n' aarch64-macos _main
+refuse a64-w29-writeback-load '    1010:\tsub\tsp, sp, #0x10\n    1014:\tmov\tx29, sp\n    1018:\tldr\tw29, [sp], #0x10\n    101c:\tstr\tx0, [x29, #-0x100]\n    1020:\tret\n' aarch64-macos _main
+refuse a64-frame-writeback '    1010:\tmov\tx29, sp\n    1014:\tstr\tx0, [x29], #-0x100\n    1018:\tstr\tx0, [x29]\n    101c:\tadd\tx29, x29, #0x100\n    1020:\tret\n' aarch64-macos _main
 # A callee's saved frame pointer, left below the caller's stack pointer, reread by the caller.
 refuse callee-residual-reread '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tcall\t0x1040 <concrete_body>\n    1019:\tmov\trax, qword ptr [rsp - 0x10]\n    101e:\tmov\tdword ptr [rax - 0x1000], ecx\n    1024:\tpop\trbp\n    1025:\tret\n\n0000000000001040 <concrete_body>:\n    1040:\tpush\trbp\n    1041:\tpop\trbp\n    1042:\tret\n'
 # Writeback through the link register changes the return address.
-refuse a64-link-register-writeback '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tbl\t0x1040 <_concrete_body>\n    1018:\tldp\tx29, x30, [sp], #0x10\n    101c:\tret\n\n0000000000001040 <_concrete_body>:\n    1040:\tldr\tx0, [x30], #-0x8\n    1044:\tret\n' aarch64 _main
-refuse a64-link-register-store-writeback '    1010:\tstr\tx0, [x30, #0x8]!\n    1014:\tret\n' aarch64 _main
+refuse a64-link-register-writeback '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tbl\t0x1040 <_concrete_body>\n    1018:\tldp\tx29, x30, [sp], #0x10\n    101c:\tret\n\n0000000000001040 <_concrete_body>:\n    1040:\tldr\tx0, [x30], #-0x8\n    1044:\tret\n' aarch64-macos _main
+refuse a64-link-register-store-writeback '    1010:\tstr\tx0, [x30, #0x8]!\n    1014:\tret\n' aarch64-macos _main
 # main's argv (rsi, x1) points into the stack: memory is not addressed through it.
 refuse argv-store '    1010:\tmov\tbyte ptr [rsi - 0x1000], 0x0\n    1017:\txor\teax, eax\n    1019:\tret\n'
-refuse a64-argv-store '    1010:\tstrb\twzr, [x1, #-0x100]\n    1014:\tret\n' aarch64 _main
-refuse a64-pc-relative-after-call '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tadrp\tx8, 0x2000 <_main+0xff0>\n    1018:\tbl\t0x1040 <_concrete_body>\n    101c:\tldr\tw0, [x8, #0x10]\n    1020:\tldp\tx29, x30, [sp], #0x10\n    1024:\tret\n\n0000000000001040 <_concrete_body>:\n    1040:\tret\n' aarch64 _main
+refuse a64-argv-store '    1010:\tstrb\twzr, [x1, #-0x100]\n    1014:\tret\n' aarch64-macos _main
+refuse a64-pc-relative-after-call '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tadrp\tx8, 0x2000 <_main+0xff0>\n    1018:\tbl\t0x1040 <_concrete_body>\n    101c:\tldr\tw0, [x8, #0x10]\n    1020:\tldp\tx29, x30, [sp], #0x10\n    1024:\tret\n\n0000000000001040 <_concrete_body>:\n    1040:\tret\n' aarch64-macos _main
 # PC-relative provenance through repeated adds (a loop walking toward the stack).
-refuse a64-pc-relative-walk '    1010:\tadr\tx8, 0x1010 <_main>\n    1014:\tsub\tx2, x1, #0xfff\n    1018:\tadd\tx8, x8, #0x8\n    101c:\tcmp\tx8, x2\n    1020:\tb.lo\t0x1018 <_main+0x8>\n    1024:\tstrb\twzr, [x8]\n    1028:\tret\n' aarch64 _main
-refuse a64-pc-relative-far '    1010:\tadrp\tx8, 0x7fff0000\n    1014:\tstrb\twzr, [x8]\n    1018:\tret\n' aarch64 _main
+refuse a64-pc-relative-walk '    1010:\tadr\tx8, 0x1010 <_main>\n    1014:\tsub\tx2, x1, #0xfff\n    1018:\tadd\tx8, x8, #0x8\n    101c:\tcmp\tx8, x2\n    1020:\tb.lo\t0x1018 <_main+0x8>\n    1024:\tstrb\twzr, [x8]\n    1028:\tret\n' aarch64-macos _main
+refuse a64-pc-relative-far '    1010:\tadrp\tx8, 0x7fff0000\n    1014:\tstrb\twzr, [x8]\n    1018:\tret\n' aarch64-macos _main
 refuse absolute-address '    1010:\tmov\tbyte ptr [0x7fffffd0], 0x0\n    1018:\tret\n'
 # The link register loaded from a slot that does not hold it, and a stub call with no stub entry.
-refuse a64-lr-from-other-slot '    1010:\tsub\tsp, sp, #0x20\n    1014:\tstr\tx30, [sp, #0x10]\n    1018:\tstr\tx0, [sp, #0x8]\n    101c:\tldr\tx30, [sp, #0x8]\n    1020:\tadd\tsp, sp, #0x20\n    1024:\tret\n' aarch64 _main
-refuse a64-unmapped-stub '    1010:\tstr\tx30, [sp, #-0x10]!\n    1014:\tbl\t0x1040 <_write+0x1040>\n    1018:\tldr\tx30, [sp], #0x10\n    101c:\tret\n' aarch64 _main
+refuse a64-lr-from-other-slot '    1010:\tsub\tsp, sp, #0x20\n    1014:\tstr\tx30, [sp, #0x10]\n    1018:\tstr\tx0, [sp, #0x8]\n    101c:\tldr\tx30, [sp, #0x8]\n    1020:\tadd\tsp, sp, #0x20\n    1024:\tret\n' aarch64-macos _main
+refuse a64-unmapped-stub '    1010:\tstr\tx30, [sp, #-0x10]!\n    1014:\tbl\t0x1040 <_write+0x1040>\n    1018:\tldr\tx30, [sp], #0x10\n    101c:\tret\n' aarch64-macos _main
 # A call into the middle of a Mach-O stub entry, and to the stub section with no entry mapped.
-refuse a64-mid-stub-call '    1010:\tstr\tx30, [sp, #-0x10]!\n    1014:\tbl\t0x1044 <__stubs+0x4>\n    1018:\tldr\tx30, [sp], #0x10\n    101c:\tret\n\nDisassembly of section __TEXT,__stubs:\n\n0000000000001040 <__stubs>:\n    1040:\tadrp\tx16, 0x2000\n    1044:\tldr\tx16, [x16]\n    1048:\tbr\tx16\nstub 0x0000000000001040 _write\n' aarch64 _main
-refuse a64-unmapped-stub-section '    1010:\tstr\tx30, [sp, #-0x10]!\n    1014:\tbl\t0x1040 <__stubs>\n    1018:\tldr\tx30, [sp], #0x10\n    101c:\tret\n\nDisassembly of section __TEXT,__stubs:\n\n0000000000001040 <__stubs>:\n    1040:\tadrp\tx16, 0x2000\n    1044:\tldr\tx16, [x16]\n    1048:\tbr\tx16\n' aarch64 _main
-refuse a64-callee-residual-reread '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tmov\tx29, sp\n    1018:\tbl\t0x1040 <_concrete_body>\n    101c:\tldr\tx0, [sp, #-0x10]\n    1020:\tstr\tx1, [x0, #-0x100]\n    1024:\tldp\tx29, x30, [sp], #0x10\n    1028:\tret\n\n0000000000001040 <_concrete_body>:\n    1040:\tstp\tx29, x30, [sp, #-0x10]!\n    1044:\tldp\tx29, x30, [sp], #0x10\n    1048:\tret\n' aarch64 _main
+refuse a64-mid-stub-call '    1010:\tstr\tx30, [sp, #-0x10]!\n    1014:\tbl\t0x1044 <__stubs+0x4>\n    1018:\tldr\tx30, [sp], #0x10\n    101c:\tret\n\nDisassembly of section __TEXT,__stubs:\n\n0000000000001040 <__stubs>:\n    1040:\tadrp\tx16, 0x2000\n    1044:\tldr\tx16, [x16]\n    1048:\tbr\tx16\nstub 0x0000000000001040 _write\n' aarch64-macos _main
+refuse a64-unmapped-stub-section '    1010:\tstr\tx30, [sp, #-0x10]!\n    1014:\tbl\t0x1040 <__stubs>\n    1018:\tldr\tx30, [sp], #0x10\n    101c:\tret\n\nDisassembly of section __TEXT,__stubs:\n\n0000000000001040 <__stubs>:\n    1040:\tadrp\tx16, 0x2000\n    1044:\tldr\tx16, [x16]\n    1048:\tbr\tx16\n' aarch64-macos _main
+refuse a64-callee-residual-reread '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tmov\tx29, sp\n    1018:\tbl\t0x1040 <_concrete_body>\n    101c:\tldr\tx0, [sp, #-0x10]\n    1020:\tstr\tx1, [x0, #-0x100]\n    1024:\tldp\tx29, x30, [sp], #0x10\n    1028:\tret\n\n0000000000001040 <_concrete_body>:\n    1040:\tstp\tx29, x30, [sp, #-0x10]!\n    1044:\tldp\tx29, x30, [sp], #0x10\n    1048:\tret\n' aarch64-macos _main
 # A read of a byte written on only one path into it.
 refuse one-path-write '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tje\t0x101e <main+0xe>\n    1016:\tmov\tqword ptr [rbp - 0x8], rax\n    101e:\tmov\trax, qword ptr [rbp - 0x8]\n    1022:\tpop\trbp\n    1023:\tret\n'
 # A read never written (stale bytes of whatever ran before).
@@ -303,10 +310,10 @@ redzone=$(ctl_dis redzone <<'D'
     1018:	ret
 D
 )
-if [ "$(stack_bound x86_64 "$redzone")" = "bound 56" ]; then
+if [ "$(stack_bound x86_64-linux "$redzone")" = "bound 56" ]; then
   echo "ok   control: a red-zone store is inside the bound"
 else
-  echo "FAIL control: red-zone bound: $(stack_bound x86_64 "$redzone")"
+  echo "FAIL control: red-zone bound: $(stack_bound x86_64-linux "$redzone")"
   fail=1
 fi
 # bound_is NAME ARCH EXPECTED BODY: the analysis of the synthetic function(s) BODY (printf format,
@@ -318,15 +325,15 @@ bound_is() {
   if [ "$got" = "$3 " ]; then echo "ok   control: stack bound of $1"
   else echo "FAIL control: stack bound of $1: ${got:-refused}, expected $3"; fail=1; fi
 }
-bound_is a64-framed-main-and-leaf aarch64 'bound 32' '0000000000001000 <_main>:\n    1000:\tstp\tx29, x30, [sp, #-0x10]!\n    1004:\tmov\tx29, sp\n    1008:\tbl\t0x1020 <_concrete_body>\n    100c:\tldp\tx29, x30, [sp], #0x10\n    1010:\tret\n\n0000000000001020 <_concrete_body>:\n    1020:\tsub\tsp, sp, #0x10\n    1024:\tstr\tw0, [sp, #0xc]\n    1028:\tadd\tsp, sp, #0x10\n    102c:\tret\n'
-bound_is a64-offset-frame-record aarch64 'bound 32' '0000000000001000 <_main>:\n    1000:\tsub\tsp, sp, #0x20\n    1004:\tstp\tx29, x30, [sp, #0x10]\n    1008:\tadd\tx29, sp, #0x10\n    100c:\tstur\twzr, [x29, #-0x4]\n    1010:\tldp\tx29, x30, [sp, #0x10]\n    1014:\tadd\tsp, sp, #0x20\n    1018:\tret\n'
+bound_is a64-framed-main-and-leaf aarch64-macos 'bound 32' '0000000000001000 <_main>:\n    1000:\tstp\tx29, x30, [sp, #-0x10]!\n    1004:\tmov\tx29, sp\n    1008:\tbl\t0x1020 <_concrete_body>\n    100c:\tldp\tx29, x30, [sp], #0x10\n    1010:\tret\n\n0000000000001020 <_concrete_body>:\n    1020:\tsub\tsp, sp, #0x10\n    1024:\tstr\tw0, [sp, #0xc]\n    1028:\tadd\tsp, sp, #0x10\n    102c:\tret\n'
+bound_is a64-offset-frame-record aarch64-macos 'bound 32' '0000000000001000 <_main>:\n    1000:\tsub\tsp, sp, #0x20\n    1004:\tstp\tx29, x30, [sp, #0x10]\n    1008:\tadd\tx29, sp, #0x10\n    100c:\tstur\twzr, [x29, #-0x4]\n    1010:\tldp\tx29, x30, [sp, #0x10]\n    1014:\tadd\tsp, sp, #0x20\n    1018:\tret\n'
 # A load PC-relative through adrp + add is not a stack access.
-bound_is a64-pc-relative-load aarch64 'bound 0' '0000000000001000 <_main>:\n    1000:\tadrp\tx8, 0x2000 <_main+0x1000>\n    1004:\tadd\tx8, x8, #0x10\n    1008:\tldr\tw0, [x8, #0x4]\n    100c:\tret\n'
+bound_is a64-pc-relative-load aarch64-macos 'bound 0' '0000000000001000 <_main>:\n    1000:\tadrp\tx8, 0x2000 <_main+0x1000>\n    1004:\tadd\tx8, x8, #0x10\n    1008:\tldr\tw0, [x8, #0x4]\n    100c:\tret\n'
 # LCB's frame: the link register saved and restored by a single str/ldr; a Mach-O stub entry named
 # by the indirect symbol table (a `stub` line); a call made in a loop (the link register meets).
-bound_is a64-single-lr-save-and-stub aarch64 'bound 48 external write 48' '0000000000001000 <_main>:\n    1000:\tsub\tsp, sp, #0x30\n    1004:\tstr\tx30, [sp, #0x20]\n    1008:\tmov\tw0, #0x2\n    100c:\tbl\t0x1040 <_write+0x1040>\n    1010:\tcbnz\tw0, 0x1008 <_main+0x8>\n    1014:\tldr\tx30, [sp, #0x20]\n    1018:\tadd\tsp, sp, #0x30\n    101c:\tret\n\nDisassembly of section __TEXT,__stubs:\n\n0000000000001040 <__stubs>:\n    1040:\tadrp\tx16, 0x2000\n    1044:\tldr\tx16, [x16]\n    1048:\tbr\tx16\nstub 0x0000000000001040 _write\n'
+bound_is a64-single-lr-save-and-stub aarch64-macos 'bound 48 external write 48' '0000000000001000 <_main>:\n    1000:\tsub\tsp, sp, #0x30\n    1004:\tstr\tx30, [sp, #0x20]\n    1008:\tmov\tw0, #0x2\n    100c:\tbl\t0x1040 <_write+0x1040>\n    1010:\tcbnz\tw0, 0x1008 <_main+0x8>\n    1014:\tldr\tx30, [sp, #0x20]\n    1018:\tadd\tsp, sp, #0x30\n    101c:\tret\n\nDisassembly of section __TEXT,__stubs:\n\n0000000000001040 <__stubs>:\n    1040:\tadrp\tx16, 0x2000\n    1044:\tldr\tx16, [x16]\n    1048:\tbr\tx16\nstub 0x0000000000001040 _write\n'
 # A read of bytes the function wrote on both paths into it is accepted.
-bound_is both-path-write x86_64 'bound 16' '0000000000001010 <main>:\n    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tje\t0x101c <main+0xc>\n    1016:\tmov\tqword ptr [rbp - 0x8], rax\n    101a:\tjmp\t0x1020 <main+0x10>\n    101c:\tmov\tqword ptr [rbp - 0x8], rcx\n    1020:\tmov\trax, qword ptr [rbp - 0x8]\n    1024:\tpop\trbp\n    1025:\tret\n'
+bound_is both-path-write x86_64-linux 'bound 16' '0000000000001010 <main>:\n    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tje\t0x101c <main+0xc>\n    1016:\tmov\tqword ptr [rbp - 0x8], rax\n    101a:\tjmp\t0x1020 <main+0x10>\n    101c:\tmov\tqword ptr [rbp - 0x8], rcx\n    1020:\tmov\trax, qword ptr [rbp - 0x8]\n    1024:\tpop\trbp\n    1025:\tret\n'
 if [ -n "$measuring" ]; then
   # A run that does not end as expected gives no measurement.
   wrong=$(( ($(head -c 16 "$(dirname "$last_exe")/status") + 1) % 256 ))
@@ -338,6 +345,43 @@ if [ -n "$measuring" ]; then
 fi
 if within 73 72; then echo "FAIL control: a measurement above the bound is accepted"; fail=1
 else echo "ok   control: a measurement above the bound is rejected"; fi
+
+# The red zone (stack_bound.py TARGETS: 128 bytes on x86-64 System V and Apple arm64, none under
+# AAPCS64 on Linux): a store at its edge is in the bound, one past it is refused.
+refuse x86-beyond-red-zone '    1010:\tmov\tqword ptr [rsp - 0x88], 0x0\n    101c:\tret\n'
+bound_is x86-red-zone-edge x86_64-linux 'bound 128' '0000000000001010 <main>:\n    1010:\tmov\tqword ptr [rsp - 0x80], 0x0\n    1019:\tret\n'
+refuse a64-beyond-red-zone '    1010:\tstur\txzr, [sp, #-0x88]\n    1014:\tret\n' aarch64-macos _main
+bound_is a64-red-zone-edge aarch64-macos 'bound 128' '0000000000001010 <_main>:\n    1010:\tstur\txzr, [sp, #-0x80]\n    1014:\tret\n'
+refuse a64-linux-no-red-zone '    1010:\tstur\txzr, [sp, #-0x8]\n    1014:\tret\n' aarch64-linux main
+if [ -n "$measuring" ]; then
+  # The run check counts the bytes an instruction addresses below the stack pointer, not only the
+  # stack pointer: a main that stores at the red zone's edge without moving the stack pointer
+  # (built like the examples, slice0_native.sh control) is measured at 128 bytes, not 0. With a
+  # smaller red zone the same run is an error, not a measurement.
+  rz="$work/ctl/redzone"; mkdir -p "$rz"
+  case "$target" in
+    x86_64-linux) printf '\t.intel_syntax noprefix\n\t.text\n\t.globl\tmain\n\t.type\tmain,@function\nmain:\n\tmov\tqword ptr [rsp - 0x80], 0\n\tmov\teax, 7\n\tret\n\t.size\tmain, .-main\n\t.section\t.note.GNU-stack,"",@progbits\n' ;;
+    aarch64-macos) printf '\t.text\n\t.globl\t_main\n\t.p2align\t2\n_main:\n\tstur\txzr, [sp, #-0x80]\n\tmov\tw0, #7\n\tret\n' ;;
+  esac >"$rz/control.s"
+  if ! bounded "$native_secs" bash "$root/scripts/checks/slice0_native.sh" control "$rz" >"$rz/build.log" 2>&1; then
+    echo "FAIL control: the red-zone executable does not build: $(head -c 1000 "$rz/build.log")"; fail=1
+  else
+    "${objdump[@]}" "$rz/control.exe" >"$rz/control.exe.dis"
+    rza=$(stack_bound "$target" "$rz/control.exe.dis" --ranges | cap_out) || true
+    rzm=$(measure "$rz/control.exe" "$rza" 7)
+    if [ "$(awk '$1 == "bound" {print $2}' <<<"$rza")" = 128 ] && [ "$rzm" = "measured 128" ]; then
+      echo "ok   control: a red-zone store is measured (bound 128, measured 128)"
+    else
+      echo "FAIL control: red-zone run: analysis ${rza:-none}; run ${rzm:-none} $(head -c 300 "$rz/control.exe.gdb.err")"; fail=1
+    fi
+    rzm=$(measure "$rz/control.exe" "$(sed 's/^redzone .*/redzone 120/' <<<"$rza")" 7)
+    if grep -q '^error .*beyond the 120-byte red zone' <<<"$rzm"; then
+      echo "ok   control: a run beyond the red zone gives no measurement"
+    else
+      echo "FAIL control: a run beyond the red zone: ${rzm:-none}"; fail=1
+    fi
+  fi
+fi
 
 [ "$examples" -gt 0 ] || { echo "slice0_artifacts: no examples ran" >&2; exit 1; }
 echo "slice0_artifacts: $examples examples; sizes in $sizes, compile times in $times, stack bounds in $stack"

@@ -91,7 +91,8 @@ differs() { # differs NAME FILE: FILE must not equal the current trusted base
 }
 sed '1d' "$work/current" >"$work/c1"; differs "a premise removed" "$work/c1"
 sed '1s/$/ (reworded)/' "$work/current" >"$work/c2"; differs "a premise reworded" "$work/c2"
-sed '0,/^theorem /s/^\(theorem .*\)$/\1, sorryAx/' "$work/current" >"$work/c3"
+# POSIX awk, not GNU sed's `0,/re/` range (BSD sed has none): the first theorem line gains an axiom.
+awk '!done && /^theorem / { $0 = $0 ", sorryAx"; done = 1 } { print }' "$work/current" >"$work/c3"
 differs "an extra axiom" "$work/c3"
 mkdir -p "$work/ctl"
 printf '#eval IO.println "premise"\n#eval (throw (IO.userError "control") : IO Unit)\n' >"$work/ctl/fails.lean"

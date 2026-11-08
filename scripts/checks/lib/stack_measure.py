@@ -1,7 +1,9 @@
 # gdb -batch -nx -x stack_measure.py EXE (README gate 12, x86-64 Linux). PROVISIONAL.
 #
 # Measures the stack depth one complete run of EXE reaches, below the stack pointer at `main`'s
-# entry, by single-stepping every instruction of the Concrete-owned functions (STACK_RANGES:
+# entry: the lowest of the stack pointer and every stack byte an instruction addresses (so the red
+# zone, used below the stack pointer without moving it; lib/stack_access.py), by single-stepping
+# every instruction of the Concrete-owned functions (STACK_RANGES:
 # "LO:HI,..." in the executable's link-time addresses, from stack_bound.py --ranges; STACK_MAIN:
 # main's LO). An external function (entered through a call, so its return address is at the stack
 # pointer) runs at full speed to that return address; its own use is outside the bound, as in
@@ -10,16 +12,23 @@
 #
 # Fail closed: the measurement counts only for a run that stopped first at main's runtime address,
 # stopped after each external call exactly at its return address (or exited inside it), received
-# no signal, and exited normally with status STACK_EXPECT. Prints `measured N` and `steps N`, or
+# no signal, exited normally with status STACK_EXPECT, and addressed no stack byte deeper than the
+# target's red zone (STACK_RED_ZONE, from stack_bound.py) below the stack pointer. Prints `measured N` and `steps N`, or
 # `error ...` (the gate fails on anything but a measurement).
 import os
+import sys
 
 import gdb
+
+sys.path.insert(0, os.environ["STACK_LIB"])
+import stack_access  # noqa: E402 - the path is the gate's lib directory
 
 LIMIT = 2_000_000
 ranges = [tuple(int(x, 16) for x in r.split(":")) for r in os.environ["STACK_RANGES"].split(",")]
 main_lo = int(os.environ["STACK_MAIN"], 16)
 expect = int(os.environ["STACK_EXPECT"])
+red_zone = int(os.environ["STACK_RED_ZONE"])
+SPAN = 8 << 20  # stack bytes counted below main's entry (stack_access.lowest_stack)
 state = {"exit": None, "signal": None}
 
 
@@ -37,6 +46,7 @@ gdb.events.stop.connect(on_stop)
 gdb.execute("set pagination off")
 gdb.execute("set confirm off")
 gdb.execute("set disable-randomization on")
+gdb.execute("set disassembly-flavor intel")
 
 
 def reg(name):
@@ -61,6 +71,7 @@ try:
     sp0 = reg("sp")
     low, steps = sp0, 0
     inferior = gdb.selected_inferior()
+    arch = gdb.selected_frame().architecture()
     gdb.execute("delete", to_string=True)
     while live():
         pc, sp = reg("pc"), reg("sp")
@@ -69,6 +80,15 @@ try:
             continue
         low = min(low, sp)
         if any(lo + offset <= pc <= hi + offset for lo, hi in ranges):
+            insn = arch.disassemble(pc)[0]
+            try:
+                touched = stack_access.lowest_stack(
+                    stack_access.x86_addresses(insn["asm"], reg, pc + insn["length"]),
+                    sp, sp0, red_zone, SPAN)
+            except ValueError as e:
+                raise RuntimeError(f"at {pc:#x} ({insn['asm']}): {e}") from None
+            if touched is not None:
+                low = min(low, touched)
             gdb.execute("stepi", to_string=True)
             steps += 1
             if steps > LIMIT:

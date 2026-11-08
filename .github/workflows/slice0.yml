@@ -67,8 +67,16 @@ jobs:
           if-no-files-found: error
 
   trusted-base:
-    name: Slice 0 trusted base (gate 9)
-    runs-on: ubuntu-latest
+    name: Slice 0 trusted base (gate 9, ${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86-64
+            runner: ubuntu-latest
+          - arch: aarch64-macos
+            runner: macos-15
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     permissions:
       contents: read
