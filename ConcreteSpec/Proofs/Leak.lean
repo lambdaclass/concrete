@@ -895,13 +895,14 @@ example : ¬ Bound.SoundOptional none ⟨12, .boundEstablished⟩ := by
 obtained independently from the action sequence and function entry. Requested and net-change bounds
 are translated to entry/exit accounts by `run_conservation`; unestablished fields assert nothing. -/
 theorem run_report_sound {m m' : Memory} {actions : List Action} {lineage : LineageId}
-    {footprint : Option Nat} {r : LineageReport} (h : run m actions = some m')
+    {footprint : Option Nat} {r : LineageReport} (hlineage : r.lineage = lineage)
+    (h : run m actions = some m')
     (hrequested : Bound.Sound (allocated lineage actions) r.requested)
     (hnet : Bound.Sound ((allocated lineage actions : Int) - freed lineage actions -
       resetBytes lineage m actions) r.netChange)
     (hpeak : Bound.Sound (m' lineage).functionPeak r.peak)
     (hfootprint : Bound.SoundOptional footprint r.footprint) :
-    LineageReport.Sound (m lineage) (m' lineage) footprint r := by
+    LineageReport.Sound lineage (m lineage) (m' lineage) footprint r := by
   have hc := run_conservation h lineage
   have hreqEq : (m' lineage).requested - (m lineage).requested = allocated lineage actions := by
     omega
@@ -910,7 +911,7 @@ theorem run_report_sound {m m' : Memory} {actions : List Action} {lineage : Line
     omega
   simp only [LineageReport.Sound]
   rw [hreqEq, hnetEq]
-  exact ⟨hrequested, hnet, hpeak, hfootprint⟩
+  exact ⟨hlineage, hrequested, hnet, hpeak, hfootprint⟩
 
 /-- Independent numeric limits establish all four fields of a report for an actual run. The limits
 are parameters, not expressions copied from the exit account. -/
@@ -921,10 +922,10 @@ theorem established_report_sound {m m' : Memory} {actions : List Action} {lineag
       resetBytes lineage m actions ≤ netLimit)
     (hpeak : (m' lineage).functionPeak ≤ peakLimit)
     (hfootprint : ∃ bytes, footprint = some bytes ∧ bytes ≤ footprintLimit) :
-    LineageReport.Sound (m lineage) (m' lineage) footprint
+    LineageReport.Sound lineage (m lineage) (m' lineage) footprint
       ⟨lineage, ⟨requestedLimit, .boundEstablished⟩, ⟨netLimit, .boundEstablished⟩,
         ⟨peakLimit, .boundEstablished⟩, ⟨footprintLimit, .boundEstablished⟩⟩ := by
-  apply run_report_sound h
+  apply run_report_sound rfl h
   · intro _; exact hrequested
   · intro _; exact hnet
   · intro _; exact hpeak
@@ -964,7 +965,7 @@ def establishedReportWith (requested : Nat) (net : Int) (peak footprint : Nat) :
 /-- The independent report 8/5/10/12 is sound for the actual 100+8 requested bytes, two-byte entry,
 allocation of eight and free of three. -/
 theorem independent_report_sound :
-    LineageReport.Sound reportEntry reportExit (some 10) establishedReport := by
+    LineageReport.Sound ⟨0⟩ reportEntry reportExit (some 10) establishedReport := by
   have h := established_report_sound (m := reportEntryMemory) (m' := reportExitMemory)
     (actions := reportActions) (lineage := ⟨0⟩) (requestedLimit := 8) (netLimit := 5)
     (peakLimit := 10) (footprintLimit := 12) (footprint := some 10) rfl
@@ -975,9 +976,9 @@ theorem independent_report_sound :
 /-- The established fields of the mixed-status report constrain the same actual run; its unknown
 net-change field makes no numeric claim. -/
 theorem mixed_status_report_sound :
-    LineageReport.Sound reportEntry reportExit (some 10) mixedStatusReport := by
+    LineageReport.Sound ⟨0⟩ reportEntry reportExit (some 10) mixedStatusReport := by
   have h := run_report_sound (m := reportEntryMemory) (m' := reportExitMemory)
-    (actions := reportActions) (lineage := ⟨0⟩) (r := mixedStatusReport) (footprint := some 10) rfl
+    (actions := reportActions) (lineage := ⟨0⟩) (r := mixedStatusReport) (footprint := some 10) rfl rfl
     (by simp [mixedStatusReport, Bound.Sound, reportActions, allocated])
     (by simp [mixedStatusReport, Bound.Sound])
     (by simp [mixedStatusReport, Bound.Sound, reportExitMemory_lineage, reportExit])
@@ -987,55 +988,57 @@ theorem mixed_status_report_sound :
 /-- A function with an empty actual run establishes zero local request and peak bounds even when
 earlier execution requested 100 bytes. -/
 theorem empty_function_report_sound :
-    LineageReport.Sound (Account.enter ⟨100, 0, 100, 0⟩) (Account.enter ⟨100, 0, 100, 0⟩) none
+    LineageReport.Sound ⟨0⟩ (Account.enter ⟨100, 0, 100, 0⟩) (Account.enter ⟨100, 0, 100, 0⟩) none
       ⟨⟨0⟩, ⟨0, .boundEstablished⟩, ⟨0, .boundEstablished⟩,
         ⟨0, .boundEstablished⟩, ⟨0, .notEstablished⟩⟩ := by
   apply run_report_sound
     (m := Memory.set Memory.empty ⟨0⟩ (Account.enter ⟨100, 0, 100, 0⟩))
     (m' := Memory.set Memory.empty ⟨0⟩ (Account.enter ⟨100, 0, 100, 0⟩))
-    (actions := []) (lineage := ⟨0⟩) rfl
+    (actions := []) (lineage := ⟨0⟩) rfl rfl
   · simp [Bound.Sound, allocated]
   · simp [Bound.Sound, allocated, freed, resetBytes]
   · simp [Bound.Sound, Memory.set, Account.enter]
   · simp [Bound.SoundOptional]
 
 /-- Planted empty-report mutation: established footprint evidence is impossible with no footprint. -/
-example : ¬ LineageReport.Sound (Account.enter ⟨100, 0, 100, 0⟩)
+example : ¬ LineageReport.Sound ⟨0⟩ (Account.enter ⟨100, 0, 100, 0⟩)
     (Account.enter ⟨100, 0, 100, 0⟩) none
     ⟨⟨0⟩, ⟨0, .boundEstablished⟩, ⟨0, .boundEstablished⟩,
       ⟨0, .boundEstablished⟩, ⟨0, .boundEstablished⟩⟩ := by
   simp [LineageReport.Sound, Bound.SoundOptional]
 
 /-- Planted underbounds: each established field independently rejects an understated limit. -/
-example : ¬ LineageReport.Sound reportEntry reportExit (some 10)
+example : ¬ LineageReport.Sound ⟨0⟩ reportEntry reportExit (some 10)
     (establishedReportWith 7 5 10 12) := by
   simp [LineageReport.Sound, Bound.Sound, establishedReportWith, reportEntry, reportExit]
 
-example : ¬ LineageReport.Sound reportEntry reportExit (some 10)
+example : ¬ LineageReport.Sound ⟨0⟩ reportEntry reportExit (some 10)
     (establishedReportWith 8 4 10 12) := by
   simp [LineageReport.Sound, Bound.Sound, establishedReportWith, reportEntry, reportExit]
 
-example : ¬ LineageReport.Sound reportEntry reportExit (some 10)
+example : ¬ LineageReport.Sound ⟨0⟩ reportEntry reportExit (some 10)
     (establishedReportWith 8 5 9 12) := by
   simp [LineageReport.Sound, Bound.Sound, establishedReportWith, reportEntry, reportExit]
 
-example : ¬ LineageReport.Sound reportEntry reportExit (some 10)
+example : ¬ LineageReport.Sound ⟨0⟩ reportEntry reportExit (some 10)
     (establishedReportWith 8 5 10 9) := by
   simp [LineageReport.Sound, Bound.Sound, Bound.SoundOptional, establishedReportWith,
     reportEntry, reportExit]
 
 /-- Established footprint evidence cannot certify an absent allocator-defined footprint. -/
-example : ¬ LineageReport.Sound reportEntry reportExit none establishedReport := by
+example : ¬ LineageReport.Sound ⟨0⟩ reportEntry reportExit none establishedReport := by
   simp [LineageReport.Sound, Bound.SoundOptional, establishedReport]
 
-/-- Representation helper only, not soundness evidence: unestablished fields make no claim, so this
-lemma is intentionally vacuous about the actual accounting values. -/
-theorem unestablished_report_sound (lineage : LineageId) (entry exit : Account)
-    (footprint : Option Nat) (requested : Nat) (net : Int) (peak footprintLimit : Nat) :
-    LineageReport.Sound entry exit footprint
-      ⟨lineage, ⟨requested, .notEstablished⟩, ⟨net, .notEstablished⟩,
-        ⟨peak, .notEstablished⟩, ⟨footprintLimit, .notEstablished⟩⟩ := by
-  simp [LineageReport.Sound, Bound.Sound, Bound.SoundOptional]
+/-- Relabelling cannot certify another lineage's accounts, even with ample numeric limits.
+The second lineage allocates four bytes while the first allocates fourteen. -/
+example : ¬ LineageReport.Sound ⟨0⟩ (memoryA ⟨0⟩)
+    ⟨114, 0, 13, 13⟩ (some 10) { establishedReport with lineage := ⟨1⟩ } := by
+  simp [LineageReport.Sound, establishedReport]
+example : ¬ LineageReport.Sound ⟨1⟩ (memoryA ⟨1⟩)
+    ⟨11, 0, 6, 6⟩ (some 10)
+    ⟨⟨1⟩, ⟨0, .boundEstablished⟩, ⟨0, .notEstablished⟩,
+      ⟨0, .notEstablished⟩, ⟨0, .notEstablished⟩⟩ := by
+  simp [LineageReport.Sound, Bound.Sound, memoryA, Memory.set, accountB]
 
 /-! ## Wipe-preservation witnesses -/
 

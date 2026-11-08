@@ -344,9 +344,10 @@ structure LineageReport where
 requests made before entry. The peak is the maximum live bytes reached since `Account.enter`, not
 the historical maximum of the whole program. The caller applies `Account.enter` at function entry
 and does not reset the local peak again before the function exits. -/
-def LineageReport.Sound (entry exit : Account) (footprint : Option Nat)
+def LineageReport.Sound (lineage : LineageId) (entry exit : Account) (footprint : Option Nat)
     (r : LineageReport) : Prop :=
-  Bound.Sound (exit.requested - entry.requested) r.requested ∧
+  r.lineage = lineage ∧
+    Bound.Sound (exit.requested - entry.requested) r.requested ∧
     Bound.Sound ((exit.live : Int) - (entry.live : Int)) r.netChange ∧
     Bound.Sound exit.functionPeak r.peak ∧ Bound.SoundOptional footprint r.footprint
 
