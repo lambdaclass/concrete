@@ -59,10 +59,36 @@ structure ContractId where
   rev : Nat
   deriving DecidableEq, Repr
 
-/-- One proof obligation. Facts, discharge evidence and diagnostics name this identity, never a
-source string or a position in a generated list. -/
-structure ObligationId where
+/-- A site: one operation or one refusable statement. Its number is lexical, assigned afresh by
+elaboration; persistent evidence keys are defined separately below. -/
+structure SiteId where
   id : Nat
+  deriving DecidableEq, Repr
+
+/-- The kinds of proof obligation named by the Core rules. `safety` covers an operation's residual
+safety condition; the other constructors name the contract, invariant, assertion, resource-bound
+and information-flow obligations explicitly stated by the spec. -/
+inductive ObligationKind where
+  | safety
+  | termination
+  | requires
+  | ensures
+  | loopInvariant
+  | structInvariant
+  | assertion
+  | stepBound
+  | stackBound
+  | noninterference
+  | constantTime
+  deriving DecidableEq, Repr
+
+/-- One proof obligation: its originating site, its kind, and a local discriminator that keeps two
+obligations of the same kind at one site distinct. Facts and discharge evidence name this identity,
+never a source string or a position in a generated list. -/
+structure ObligationId where
+  site : SiteId
+  kind : ObligationKind
+  discriminator : Nat
   deriving DecidableEq, Repr
 
 /-- A module, by its path from the package root (`["std", "bytes"]`). -/
@@ -155,11 +181,6 @@ structure TheoremId where
   name : Lean.Name
   deriving DecidableEq, Repr
 
-/-- A site: one operation or one refusable statement. -/
-structure SiteId where
-  id : Nat
-  deriving DecidableEq, Repr
-
 /-- A position in source text (the trap-line decision, R-0496): the file's path relative to the
 project root, with forward slashes, and a line and a column, both counted from 1. The type keeps
 line and column positive; that the path is relative with forward slashes is `Span.PathOk`, which
@@ -238,9 +259,13 @@ elaboration never gives two locals of one function one number, and evaluation is
 consistent rehinting. -/
 example : Var.mk "x" 0 ≠ Var.mk "y" 0 := by decide
 
-/-- Places, primitives, contract revisions and obligations have distinct typed identities. -/
+/-- Places, primitives and contract revisions have distinct typed identities. -/
 example : PlaceId.mk 0 ≠ PlaceId.mk 1 ∧ PrimId.mk 0 ≠ PrimId.mk 1 ∧
-    ContractId.mk ⟨0⟩ 1 ≠ ContractId.mk ⟨0⟩ 2 ∧ ObligationId.mk 0 ≠ ObligationId.mk 1 := by decide
+    ContractId.mk ⟨0⟩ 1 ≠ ContractId.mk ⟨0⟩ 2 := by decide
+
+/-- Two obligations at one site differ by kind; two of one kind differ by their local discriminator. -/
+example : ObligationId.mk ⟨0⟩ .safety 0 ≠ ObligationId.mk ⟨0⟩ .termination 0 ∧
+    ObligationId.mk ⟨0⟩ .safety 0 ≠ ObligationId.mk ⟨0⟩ .safety 1 := by decide
 
 /-- A revised rule is a different rule identity. -/
 example : RuleId.mk `ConcreteSpec.Core.example 1 ≠ RuleId.mk `ConcreteSpec.Core.example 2 := by

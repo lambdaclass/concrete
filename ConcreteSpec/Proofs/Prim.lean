@@ -465,7 +465,8 @@ example : (operands.eval [(x0, (10 : Int))] () (.var ⟨"renamed", 1⟩) : Res (
 /-- A non-trivial proved fact and its exact evidence context. -/
 def evidence : SafetyEvidence := ⟨1 + 1 = 2, EvidenceDemo.current, by decide⟩
 
-def obligationChanged : EvidenceContext := { EvidenceDemo.current with obligation := ⟨1⟩ }
+def obligationChanged : EvidenceContext :=
+  { EvidenceDemo.current with obligation := ⟨⟨0⟩, .safety, 1⟩ }
 def targetChanged : EvidenceContext :=
   { EvidenceDemo.current with target := { linuxX8664 with byteOrder := .big } }
 def contractChanged : EvidenceContext := { EvidenceDemo.current with contract := ⟨⟨0⟩, 2⟩ }
@@ -482,7 +483,8 @@ example : ¬ evidence.Usable contractChanged := by decide
 def obligation : SafetyObligation := ⟨EvidenceDemo.current.obligation, 1 + 1 = 2⟩
 
 /-- The same proposition under a different typed obligation identity. -/
-def mismatchedObligation : SafetyObligation := { obligation with id := ⟨1⟩ }
+def mismatchedObligation : SafetyObligation :=
+  { obligation with id := ⟨⟨0⟩, .safety, 1⟩ }
 
 /-- Non-trivial instance for `SafetyEvidence.discharge_fact`: consuming the arithmetic evidence
 proves the obligation's proposition, and the evidence and proof both participate in the discharge. -/
@@ -788,7 +790,7 @@ example : (Ghost.runPieces GhostDemo.language GhostDemo.program GhostDemo.oracle
 /-- Planted counter-example: erasing a concrete `abort` changes the ending, so only ghost code is
 removable. -/
 example : (Ghost.runPieces GhostDemo.language GhostDemo.program GhostDemo.oracle 20 []
-    [.ghost (.assert ⟨0⟩ True), .concrete (.abort ⟨3⟩)] [] GhostDemo.start).ending ≠
+    [.ghost (.assert ⟨⟨0⟩, .assertion, 0⟩ True), .concrete (.abort ⟨3⟩)] [] GhostDemo.start).ending ≠
     (Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] [] GhostDemo.start).ending := by
   intro h
   cases h

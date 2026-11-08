@@ -288,7 +288,8 @@ instance (e : SafetyEvidence) (current : EvidenceContext) : Decidable (e.Usable 
 namespace EvidenceDemo
 
 /-- One current evidence context. -/
-def current : EvidenceContext := ⟨⟨0⟩, linuxX8664, ⟨⟨0⟩, 1⟩, ⟨0, 1, 0⟩, specVersion⟩
+def current : EvidenceContext :=
+  ⟨⟨⟨0⟩, .safety, 0⟩, linuxX8664, ⟨⟨0⟩, 1⟩, ⟨0, 1, 0⟩, specVersion⟩
 
 /-- A proof of a trivial safety fact in exactly that context. -/
 def evidence : SafetyEvidence := ⟨True, current, trivial⟩
@@ -533,8 +534,8 @@ abbrev start : Exec.Config PrimDemo.base := ⟨.done, [], 5, []⟩
 /-- Ghost computation, concrete `skip`, a ghost-only conditional, and an erased assertion. -/
 def pieces : List (Ghost.Piece language) :=
   [.ghost (.bind ⟨"g", 0⟩ 1 ⟨0⟩), .concrete .skip,
-   .ghost (.cond 0 (.assert ⟨0⟩ True) (.bind ⟨"h", 1⟩ 2 ⟨1⟩) ⟨2⟩),
-   .ghost (.assert ⟨1⟩ (1 + 1 = 2))]
+   .ghost (.cond 0 (.assert ⟨⟨0⟩, .assertion, 0⟩ True) (.bind ⟨"h", 1⟩ 2 ⟨1⟩) ⟨2⟩),
+   .ghost (.assert ⟨⟨1⟩, .assertion, 0⟩ (1 + 1 = 2))]
 
 /-- Accepted: erasure preserves the complete run, including its concrete store and ending. -/
 example : Ghost.runPieces language program oracle 20 [] pieces [] start =
