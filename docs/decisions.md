@@ -34,7 +34,7 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 
 - The core statement ([row](#decided-project-core-statement)).
 - Proof infrastructure from the first commit ([row](#decided-project-proof-infrastructure)).
-- No hidden traps, and termination known beforehand ([row](#decided-project-no-hidden-traps)).
+- No hidden traps, and termination evidence or a report of the permitted unresolved obligations ([row](#decided-project-no-hidden-traps)).
 - The `checked_*`, `#[proof]` and `#[may_not_terminate]` spellings ([row](#decided-project-no-hidden-traps)).
 - The per-function facts report and query ([row](#decided-project-facts-report)).
 - The predictable policy ([row](#decided-project-predictable-policy)).
@@ -66,6 +66,7 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 - The documentation and tooling cleanup is approved, not performed by that record ([row](#decided-2026-11-07-cleanup)).
 - The shared foundation is written and frozen in Lean first, then each slice adds its rules ([row](#decided-2026-11-07-foundation-first)).
 - The Lean foundation, contracts C1–C10, and the answers to its sixteen questions ([row](#decided-2026-11-08-foundation)).
+- Eleven plan and process decisions: UBSan dropped, a complete adapter theorem, smaller landing scripts, the front end now, one decisions writer, risk-capped reviews, one clones folder, a later no-libc runtime, a compile-speed budget and the termination wording ([row](#decided-2026-11-08-eleven)).
 
 <a id="rules-a-decision-changed"></a>
 ## Rules a decision has changed
@@ -620,7 +621,9 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     cycle; a loop or cycle terminates only when its bounds, guards, bodies, callees and cleanup
     terminate too. A Lean termination theorem (row P18) closes termination only; depth and stack
     need their own evidence.
-  - *Termination is known beforehand (Q13, "d-site").* Termination evidence is required by default.
+  - *Every function has termination evidence with its premises, or a report naming the explicitly
+    permitted unresolved obligations (Q13, "d-site"; wording revised 2026-11-08,
+    [ISS-0014 F7](#decided-2026-11-08-f7)).* Termination evidence is required by default.
     Every undischarged termination obligation must carry an explicit permission at its source: the
     loop, the recursive cycle, the indirect call, or the external, foreign or blocking boundary;
     otherwise the program is refused. A permission covers only its identified obligation and never
@@ -971,7 +974,9 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   - *Differential fuzzer.* A random-program fuzzer runs against the Lean evaluator, starting with
     the slice-0 front end and growing one feature per slice. It runs on concrete-ci-2.
   - *Sanitizers.* From slice 0, every example's LLVM output is also built and run under
-    AddressSanitizer and UndefinedBehaviorSanitizer in CI.
+    AddressSanitizer and UndefinedBehaviorSanitizer in CI. Revised 2026-11-08
+    ([UBSan](#decided-2026-11-08-ubsan)): UBSan is dropped, since it instruments C at clang's front
+    end and checks nothing on LLVM IR input; ASan stays.
   - *Binary size.* From slice 0, binary size is tracked per example per commit next to speed
     tracking, report-only.
   - *JSON schema.* A frozen, versioned JSON schema for diagnostics and facts output, with golden
@@ -990,7 +995,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     enforce it.
   The gates are: reproducibility (two directories, two machines, hashes compared); stack (the
   final-artifact bound against the claim); a trusted-base golden; the fuzzer (short in CI, long
-  nightly on concrete-ci-2); ASan and UBSan; speed and size, report-only; and the JSON schema
+  nightly on concrete-ci-2); ASan (UBSan dropped 2026-11-08, [row](#decided-2026-11-08-ubsan)); speed and size, report-only; and the JSON schema
   generated from the Lean types, with goldens. All of them join `required-checks.txt` when the
   compiler lands on main.
 - <a id="decided-2026-11-07-cleanup"></a>**The documentation and tooling cleanup** (owner,
@@ -1092,6 +1097,40 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     FFI-7's `i32` enum tags (question 4); Q8.1, the early-evidence decision and R-0505 (question 8);
     the natural native struct layout of the [runtime decision](#decided-project-runtime-2026-11-06),
     which supersedes FFI-7/10's unspecified-layout prose, with the `repr` restrictions retained.
+- <a id="decided-2026-11-08-eleven"></a>**Eleven plan and process decisions** (owner, 2026-11-08: "ok
+  go ahead with all the decisions", approving the coordinator's list of eleven, each as
+  recommended). The process rules (items 4, 6, 7 and 8) are stated in [AGENTS.md](../AGENTS.md#rules);
+  the work is in ROADMAP.
+  1. <a id="decided-2026-11-08-ubsan"></a>*UBSan leaves the slice-0 gates; ASan stays.*
+     UndefinedBehaviorSanitizer instruments C at clang's front end, so on LLVM IR input it checks
+     nothing; a gate that cannot fail is not kept. This revises the
+     [early-evidence](#decided-2026-11-07-early-evidence) and [tracking](#decided-2026-11-07-tracking)
+     rows (R-0301).
+  2. <a id="decided-2026-11-08-adapter"></a>*A complete adapter theorem.* The BIR → LCB-IR adapter
+     theorem is complete: an adapter error produces no artifact, and success implies correctness.
+     This retires the adapter premise (R-0579).
+  3. <a id="decided-2026-11-08-landing-shrink"></a>*Smaller landing scripts.* Keep the train, its
+     review leg, the gates and the `legacy/` protection; drop the landing bot, notify, install-bot,
+     the systemd units and duplicate helpers; the old copies move to `legacy/` (R-0617).
+  4. <a id="decided-2026-11-08-quota"></a>*Claude's quota goes to the critical path:* the spec, slice 0
+     and the front end. Mechanical work goes to Codex and Kimi as writers.
+  5. <a id="decided-2026-11-08-front-end"></a>*The front end starts now.* The lexer and the LL(1)
+     parser are written now, in parallel with the foundation (R-0620).
+  6. <a id="decided-2026-11-08-one-writer"></a>*One writer for `docs/decisions.md` and `ROADMAP.md`
+     at a time;* other workers send it their records.
+  7. <a id="decided-2026-11-08-review-caps"></a>*Review rounds capped by risk:* docs and roadmap 2,
+     scripts 3, compiler and spec 5 (R-0618).
+  8. <a id="decided-2026-11-08-clones"></a>*One clones folder:* every branch's clone is
+     `~/projects/clones/<branch>`, removed after the branch lands (R-0619).
+  9. <a id="decided-2026-11-08-no-libc"></a>*A no-libc runtime* on the proven path comes as a later
+     slice, around slices 24–25; until then libc stays a named premise (R-0621).
+  10. <a id="decided-2026-11-08-compile-budget"></a>*A compile-speed budget,* tracked per example and
+      report-only like binary size (R-0550).
+  11. <a id="decided-2026-11-08-f7"></a>*The termination wording* (ISS-0014 F7): "every function has
+      termination evidence with its premises, or a report naming the explicitly permitted
+      unresolved obligations". It replaces "termination is known beforehand", which overstated what a
+      d-site permission establishes, in the [no-hidden-traps row](#decided-project-no-hidden-traps),
+      README.md and PHILOSOPHY.md.
 - <a id="decided-project-spark-2026-11-06"></a>**What Concrete takes from SPARK** (owner, 2026-11-06: "ok do everything", after Claude, Codex, agy and Kimi chose unanimously; the
   [review](proposals/SPARK.md) items 1, 2, 3, 6, 7, 9 and 10).
   - *Function values with safety preconditions.* A function whose `#[requires]` is a safety

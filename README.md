@@ -18,8 +18,9 @@ and evidence ([decision](docs/decisions.md#decided-project-facts-report)).
 
 Accepted safe code has no hidden traps: an index, a division, a shift or an arithmetic operation
 is either proven safe when the program is compiled or has its failure handled in the code. Before a
-program runs, every function's termination is known: proved, or traced to a written permission at the
-loop or boundary responsible, and the compiler reports recursion depth, stack use, allocation,
+program runs, every function has termination evidence with its premises, or a report naming the
+explicitly permitted unresolved obligations, each traced to a written permission at the loop or
+boundary responsible, and the compiler reports recursion depth, stack use, allocation,
 blocking and foreign calls per function, SPARK-style. Each guarantee holds as its evidence lands
 ([decision](docs/decisions.md#decided-project-no-hidden-traps)).
 

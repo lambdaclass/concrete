@@ -75,7 +75,15 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
   are recorded against `legacy-compiler-final`, never repaired, under
   [ROADMAP's defect disposition and frozen-compiler rule](ROADMAP.md#defect-disposition-rule).
 
+**Who works on what** (owner, 2026-11-08, [decision](docs/decisions.md#decided-2026-11-08-eleven)).
+- Claude's quota goes to the critical path: the spec, slice 0 and the front end. Mechanical work
+  goes to Codex and Kimi as writers, and Claude reviews it.
+- One writer edits `docs/decisions.md` and `ROADMAP.md` at a time; other workers send that writer
+  their records instead of editing those files.
+
 **Branches.**
+- Every branch's full clone is `~/projects/clones/<branch>`, removed after the branch lands (owner,
+  2026-11-08; R-0619).
 - One bug or one rule per branch, in its own worktree (`scripts/worktree-new.sh`,
   [concurrent work](#concurrent-work-one-worktree-per-writer)). This applies to all agent work now, not only once
   R-0545 closes. A branch that changes a language rule lands first and stays small; work that
@@ -137,7 +145,9 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
 **Review.** Codex reviews everything before it is published or brought to the owner, and a second
 independent reviewer reviews too when one is available; its absence is recorded, never assumed
 ([decision](docs/decisions.md#decided-project-review)). Every slice gets a Codex review before it lands, through `scripts/review/review.sh`:
-at most 5 rounds, the first over the whole diff and each later round over the delta since the
+at most 2 rounds for docs and the roadmap, 3 for scripts and 5 for the compiler and the spec, the
+highest class the diff touches governing (owner, 2026-11-08; `review.sh` enforces 5 until R-0618
+lands), the first over the whole diff and each later round over the delta since the
 previous one. Answer each finding with a fix or a stated reason. Run Codex by hand only with
 `GIT_OPTIONAL_LOCKS=0` (and `</dev/null`): its sandboxed `git status` otherwise takes the
 worktree's `index.lock` and can leave it behind (bug 209).
@@ -254,7 +264,8 @@ roadmap owns the repair. These rules apply to every writer now:
   checker rule lands first and small, with the migrations of main's fixtures and
   nothing else. A branch that needs two rules is two branches.
 - **Review per slice, delta after the first pass** (R-0544). After the first full
-  review, each round reviews only the diff since the previous round. Past 5 rounds,
+  review, each round reviews only the diff since the previous round. Past the risk
+  cap (2 rounds for docs and the roadmap, 3 for scripts, 5 for the compiler and the spec),
   split the slice. Review ownership and memory-safety work with neutral prompts and
   piecewise diffs.
 - **At most 2 heavy local runs per machine** (R-0543). Full gate sets, closure-mode
