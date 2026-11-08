@@ -629,10 +629,33 @@ example : ∃ tr, (Ghost.drive requestProgram answerOracle 2 [] registeredStart)
       (Ghost.drive requestProgram answerOracle 2 [] registeredStart).config :=
   Ghost.drive_steps requestProgram answerOracle 2 [] registeredStart _ rfl
 
-/-- Planted counter-example: the silent primitive step cannot emit the fabricated event `99`. -/
-example : (Ghost.drive requestProgram answerOracle 2 [] registeredStart).events ≠ [(99 : Int)] := by
-  intro h
-  cases h
+/-- A real completed report and two planted fabrications of its observations and retained state. -/
+def completedReport : Ghost.SegmentReport PrimDemo.base :=
+  Ghost.drive GhostDemo.program GhostDemo.oracle 20 [] GhostDemo.start
+
+def fabricatedEventReport : Ghost.SegmentReport PrimDemo.base :=
+  { completedReport with events := [99] }
+
+def fabricatedStoreReport : Ghost.SegmentReport PrimDemo.base :=
+  { completedReport with config := ⟨.done, [], 8, []⟩ }
+
+/-- Planted counter-example for `Ghost.drive_steps`: no trace has the fabricated event and reaches
+the report's configuration, even though the report itself was obtained by mutating a real run. -/
+example : ¬ ∃ tr, fabricatedEventReport.events = [] ++ tr ∧
+    Exec.Steps GhostDemo.program GhostDemo.start tr fabricatedEventReport.config := by
+  have inv : ∀ {tr : List Int} {c' : Exec.Config PrimDemo.base},
+      Exec.Steps GhostDemo.program GhostDemo.start tr c' → tr = [] ∧ c' = GhostDemo.start := by
+    intro tr c' hs
+    cases hs with
+    | refl => exact ⟨rfl, rfl⟩
+    | step h hs =>
+      cases h with
+      | silent hstep => simp [Exec.step] at hstep
+      | prim hstep ha hk => simp [Exec.step] at hstep
+  rintro ⟨tr, he, hs⟩
+  obtain ⟨ht, hc⟩ := inv hs
+  subst tr
+  simp [fabricatedEventReport] at he
 
 /-- Non-trivial instance for `Ghost.drive_steps_result`, with no auxiliary report argument. -/
 example : ∃ tr, (Ghost.drive requestProgram answerOracle 2 [] registeredStart).events = [] ++ tr ∧
@@ -640,10 +663,23 @@ example : ∃ tr, (Ghost.drive requestProgram answerOracle 2 [] registeredStart)
       (Ghost.drive requestProgram answerOracle 2 [] registeredStart).config :=
   Ghost.drive_steps_result requestProgram answerOracle 2 [] registeredStart
 
-/-- Planted counter-example: the retained final store is `7`, not a fabricated successor state. -/
-example : (Ghost.drive requestProgram answerOracle 2 [] registeredStart).config.store ≠ (8 : Int) := by
-  intro h
-  cases h
+/-- Planted counter-example for `Ghost.drive_steps_result`: no trace reaches the fabricated store,
+so changing only `config` is enough to falsify the full soundness property. -/
+example : ¬ ∃ tr, fabricatedStoreReport.events = [] ++ tr ∧
+    Exec.Steps GhostDemo.program GhostDemo.start tr fabricatedStoreReport.config := by
+  have inv : ∀ {tr : List Int} {c' : Exec.Config PrimDemo.base},
+      Exec.Steps GhostDemo.program GhostDemo.start tr c' → tr = [] ∧ c' = GhostDemo.start := by
+    intro tr c' hs
+    cases hs with
+    | refl => exact ⟨rfl, rfl⟩
+    | step h hs =>
+      cases h with
+      | silent hstep => simp [Exec.step] at hstep
+      | prim hstep ha hk => simp [Exec.step] at hstep
+  rintro ⟨tr, he, hs⟩
+  obtain ⟨ht, hc⟩ := inv hs
+  have hstore := congrArg Exec.Config.store hc
+  simp [fabricatedStoreReport] at hstore
 
 abbrev returnedStart : Exec.Config PrimDemo.base := ⟨.exiting (.ret 1), [], 5, []⟩
 abbrev trappedStart : Exec.Config PrimDemo.base := ⟨.trapped .abort ⟨3⟩, [], 5, []⟩
