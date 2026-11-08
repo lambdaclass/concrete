@@ -4,3 +4,7 @@ record driver, native-build and observer plants explicitly; the verifier execute
 command in a fresh shell and checks the same failure kind, exact diagnostic and durable bundle.
 The structural cause was lifecycle registration after generation and replay state held in test
 functions; gate A owns both registration and scenario reconstruction.
+
+The follow-up lifecycle audit makes timeout sleepers explicit replay inputs, checks standalone
+replay of all three mismatch/timeout combinations, judges baseline observations before a control
+can acknowledge them, and isolates bundles by scenario with complete snapshot replacement.

@@ -18,7 +18,7 @@ class Orchestration(unittest.TestCase):
             regressions = pathlib.Path(tmp) / 'regressions'
             work.mkdir()
             functions = '\n'.join(function(n) for n in (
-                'parse_replay', 'replay_command', 'register_candidate', 'register_generation', 'persist_candidate_bundle',
+                'parse_replay', 'replay_command', 'register_candidate', 'register_generation', 'candidate_bundle_path', 'persist_candidate_bundle',
                 'record_candidate_failure', 'report_mismatch', 'judge_evaluator',
                 'judge_available', 'reset_observations', 'control_candidate', 'native_one', 'absorb_native_result', 'collect_available',
                 'finish_diff', 'run_control', 'run_replay', 'first_outcome_index',
@@ -41,6 +41,7 @@ record_judged() {{ :; }}
             result = subprocess.run(['bash', '-c', setup + body], text=True,
                                     capture_output=True, timeout=5)
             self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
+            self.assertNotIn('orchestration assertion failed', result.stdout + result.stderr)
             diagnostics = diagnostic if isinstance(diagnostic, tuple) else (diagnostic,)
             for line in diagnostics:
                 self.assertIn(line, (result.stdout + result.stderr).splitlines())
@@ -48,7 +49,9 @@ record_judged() {{ :; }}
                 check_fn(work, regressions)
 
     def assert_bundle(self, regressions, leg, seed, index, kind, diag_lines, artifacts=()):
-        bundle = regressions / leg / f'{seed}-{index}'
+        matches = [p for p in regressions.rglob(f'{seed}-{index}') if p.parent.name == leg]
+        self.assertEqual(len(matches), 1, matches)
+        bundle = matches[0]
         self.assertTrue(bundle.is_dir(), f'missing bundle {bundle}')
         self.assertEqual((bundle / 'leg').read_text().strip(), leg)
         self.assertEqual((bundle / 'seed').read_text().strip(), seed)
@@ -123,7 +126,7 @@ observe_remaining() {
 }
 rc=0
 ''' + invocation + ''' || rc=$?
-[ "$rc" -eq 1 ] && [ "$native_failed" -eq 1 ] && [ "$native_incomplete" -eq 1 ] || exit 9
+[ "$rc" -eq 1 ] && [ "$native_failed" -eq 1 ] && [ "$native_incomplete" -eq 1 ] || { echo 'orchestration assertion failed' >&2; exit 9; }
 exit "$rc"
 ''', 1, (diag, 'INCOMPLETE: planted later leg'), check)
 
@@ -138,7 +141,7 @@ trap 'finish_diff $?' EXIT
 mkdir -p "$work/control-interrupted"
 d="$work/control-interrupted"
 echo bir >"$d/leg"; echo test >"$d/seed"; echo 0 >"$d/index"
-echo 0 >"$d/status"; echo 9 >"$d/llvm.status"
+echo 0 >"$d/status"; : >"$d/stderr"; echo 9 >"$d/llvm.status"
 echo term >"$d/program.lean.txt"
 printf '%s\\n' "$d" >"$work/lifecycle-dirs"
 # Simulate an exit between observer completion and normal judgment.
@@ -170,11 +173,11 @@ control_generation() {
  echo 0 >"$d/status"; : >"$d/stderr"
  echo term >"$d/program.lean.txt"
 ''' + plant + '''
- echo 'INCOMPLETE: planted generation deadline'
- return 3
-}
+''' + (" return 1\n" if mode == 'failure' else
+       " echo 'INCOMPLETE: planted generation deadline'\n return 3\n") + '''}
 run_control generation '^unused$' control_generation
-''', 1, (diag, 'INCOMPLETE: planted generation deadline'), check)
+''', 1, (diag,) if mode == 'failure' else
+         (diag, 'INCOMPLETE: planted generation deadline'), check)
 
     def test_build_failure_both_loops(self):
         start = SOURCE.index('bir_accepted=$(summary_value')
@@ -229,15 +232,79 @@ for leg in bir spec; do
 ) + ('' if mode == 'missing_eval' else ' echo 0 >"$work/$leg/p0/lcb_eval.status"\n : >"$work/$leg/p0/lcb_eval.stderr"\n : >"$work/$leg/p0/lcb_eval.stdout"\n') + '''done
 native_build() { echo 'planted compiler error'; return 7; }
 ''' + SOURCE[start:end] + '''
-[ "$fail" -eq 1 ] && [ "$deadline_stopped" -eq 0 ] || exit 9
+[ "$fail" -eq 1 ] && [ "$deadline_stopped" -eq 0 ] || { echo 'orchestration assertion failed' >&2; exit 9; }
 exit "$fail"
 ''', 1, expected_diags, check)
+
+    def test_successful_control_cannot_exempt_baseline_mismatch(self):
+        diag = 'FAIL bir seed test index 0 [lcb_eval]: observation mismatch'
+        def check(work, regressions):
+            self.assertFalse(work.exists())
+            self.assert_bundle(regressions, 'bir', 'test', 0, 'mismatch', (diag,))
+        self.run_shell('''
+trap 'finish_diff $?' EXIT
+control_baseline() {
+ register_generation lake env lean --run scripts/checks/compiler/spec_diff.lean replay test 0 "$work/control-baseline" stub
+ d="$work/control-baseline"
+ echo 0 >"$d/status"; : >"$d/stderr"; echo 9 >"$d/lcb_eval.status"
+ echo 'FAIL planted: verified distinct effect'
+ return 99
+}
+run_control baseline '^FAIL planted: verified distinct effect$' control_baseline
+exit "$fail"
+''', 1, diag, check)
+
+    def test_oracle_publication_and_native_setup_are_distinct(self):
+        diag = 'FAIL bir-0: missing oracle observation'
+        def check(work, regressions):
+            self.assertFalse(work.exists())
+            self.assert_bundle(regressions, 'bir', 'test', 0, 'native_setup', (diag,))
+            bundle = regressions / 'bir/test-0'
+            self.assertNotIn('mismatch', (bundle / 'failure-kinds.txt').read_text().splitlines())
+        self.run_shell('''
+trap 'finish_diff $?' EXIT
+d="$work/control-oracle"
+register_candidate bir test 0 "$d"
+echo 0 >"$d/lcb_eval.status"
+# A completed evaluator result is not a mismatch against an unpublished oracle.
+collect_available
+[ "$fail" -eq 0 ] || { echo 'orchestration assertion failed' >&2; exit 9; }
+# Once native execution starts, absence of that oracle is a setup failure.
+native_build() { echo 'orchestration assertion failed: unexpected build'; return 9; }
+rc=0
+native_one bir test 0 "$d" || rc=$?
+[ "$rc" -eq 4 ] && [ "$native_failed" -eq 1 ] || { echo 'orchestration assertion failed' >&2; exit 9; }
+exit 1
+''', 1, diag, check)
+
+    def test_scenarios_keep_distinct_bundle_snapshots(self):
+        def check(work, regressions):
+            self.assertFalse(work.exists())
+            for scenario in ('emission', 'assembly'):
+                bundle = regressions / f'controls/{scenario}/bir/test-0'
+                self.assertTrue(bundle.is_dir())
+                self.assertEqual((bundle / 'failure-kinds.txt').read_text().strip(), scenario)
+                self.assertIn(f'SPEC_DIFF_REPLAY_CONTROL={scenario}',
+                              (bundle / 'replay.sh').read_text())
+                self.assertFalse((bundle / 'stale-artifact').exists())
+        self.run_shell('''
+trap 'finish_diff $?' EXIT
+for scenario in emission assembly; do
+ d="$work/control-$scenario"
+ register_candidate bir test 0 "$d" "$scenario"
+ echo test >"$d/safe-seed.txt"
+ old=$(candidate_bundle_path bir "$d")
+ mkdir -p "$old"; touch "$old/stale-artifact"
+ record_candidate_failure bir test 0 "$d" "$scenario" stage "FAIL planted $scenario"
+done
+exit 1
+''', 1, ('FAIL planted emission', 'FAIL planted assembly'), check)
 
     def test_failure_log_cannot_claim_timeout(self):
         self.run_shell('''
 control_error() { echo 'INCOMPLETE: planted misleading compiler output'; return 1; }
 run_control error '^unused$' control_error
-[ "$fail" -eq 1 ] && [ "$deadline_stopped" -eq 0 ] || exit 9
+[ "$fail" -eq 1 ] && [ "$deadline_stopped" -eq 0 ] || { echo 'orchestration assertion failed' >&2; exit 9; }
 exit "$fail"
 ''', 1, "INCOMPLETE: planted misleading compiler output")
 
@@ -264,7 +331,7 @@ observe_remaining() { echo 'FAIL planted observer setup' >&2; return 4; }
 rc=0
 native_one bir test 0 "$work/bir/p0" || rc=$?
 absorb_native_result "$rc"
-[ "$fail" -eq 1 ] && [ "$native_complete" -eq 0 ] && [ "$deadline_stopped" -eq 0 ] || exit 9
+[ "$fail" -eq 1 ] && [ "$native_complete" -eq 0 ] && [ "$deadline_stopped" -eq 0 ] || { echo 'orchestration assertion failed' >&2; exit 9; }
 exit "$fail"
 ''', 1, ('FAIL planted observer setup',
          'FAIL bir seed test index 0 [llvm]: observation failed'), check)

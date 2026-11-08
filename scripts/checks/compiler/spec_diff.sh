@@ -42,7 +42,7 @@ parse_replay() {
 }
 
 replay_command() {
-  printf 'SPEC_DIFF_REPLAY=%q bash scripts/checks/compiler/spec_diff.sh' "$1:$2:$3"
+  printf 'SPEC_DIFF_REPLAY=%q SPEC_DIFF_REPLAY_CONTROL= bash scripts/checks/compiler/spec_diff.sh' "$1:$2:$3"
 }
 
 seed=${SPEC_DIFF_SEED:-$(git rev-parse HEAD)}
@@ -108,7 +108,7 @@ register_candidate() { # LEG SEED INDEX DIR [SCENARIO]
       printf '%s\n' "$d" >>"$control_registry"
     fi
   fi
-  [ -z "$scenario" ] || printf '%s\n' "$scenario" >"$d/control-replay"
+  [ -z "$scenario" ] || [ -f "$d/control-replay" ] || printf '%s\n' "$scenario" >"$d/control-replay"
 }
 
 register_generation() { # Driver argv, called before the bounded launch (and any timeout).
@@ -149,7 +149,7 @@ register_generation() { # Driver argv, called before the bounded launch (and any
 # the monotonic deadline.
 bounded_remaining() {
   local total grace usable first retry rc=0
-  register_generation "$@"
+  register_generation "$@" || return $?
   total=$(remaining)
   grace=$((2 * BOUNDED_KILL_AFTER))
   usable=$((total - grace))
@@ -366,6 +366,17 @@ check_judged() { # check_judged LEG COUNT MIN EXPECTED_TOTAL OUTCOME-GUARD REQUI
   [ "$missing" -eq 0 ] || coverage_fail=1
 }
 
+candidate_bundle_path() { # LEG DIR: plant scenarios are separate regression identities.
+  local leg=$1 d=$2 scenario=""
+  if [ -f "$d/control-replay" ]; then
+    scenario=$(LC_ALL=C tr -c 'a-z0-9+_-' '_' <"$d/control-replay")
+    scenario=${scenario%_}
+    printf '%s/controls/%s/%s/%s-%s\n' "$regressions" "$scenario" "$leg" "$(cat "$d/safe-seed.txt")" "$(cat "$d/index")"
+  else
+    printf '%s/%s/%s-%s\n' "$regressions" "$leg" "$(cat "$d/safe-seed.txt")" "$(cat "$d/index")"
+  fi
+}
+
 persist_candidate_bundle() { # persist_candidate_bundle LEG CAND_SEED INDEX DIR
   local leg=$1 cand_seed=$2 index=$3 d=$4 cand_safe_seed name bundle backend replay_text
   [ -d "$d" ] || return 0
@@ -394,7 +405,8 @@ persist_candidate_bundle() { # persist_candidate_bundle LEG CAND_SEED INDEX DIR
       "$leg:$cand_seed:$index" "$(cat "$d/control-replay")")
   fi
   printf '%s\n' "$replay_text" >"$d/replay.sh"
-  bundle="$regressions/$leg/${cand_safe_seed}-$index"
+  bundle=$(candidate_bundle_path "$leg" "$d")
+  rm -rf "${bundle:?}"
   mkdir -p "$bundle"
   cp -R "$d/." "$bundle/"
   printf '%s\n' "$cand_seed" >"$bundle/seed"
@@ -485,7 +497,7 @@ record_candidate_failure() { # record_candidate_failure LEG CAND_SEED INDEX DIR 
   : >"$d/bundle-reported"
   persist_candidate_bundle "$leg" "$cand_seed" "$index" "$d"
   cand_safe_seed=$(cat "$d/safe-seed.txt")
-  bundle="$regressions/$leg/${cand_safe_seed}-$index"
+  bundle=$(candidate_bundle_path "$leg" "$d")
   replay_text=$(cat "$bundle/replay.sh")
   echo "$diagnostic" >&2
   [ -z "$status_line" ] || echo "$status_line" >&2
@@ -520,6 +532,9 @@ judge_evaluator() { # judge_evaluator LEG CAND_SEED INDEX DIR: judge in-process 
 judge_available() { # LEG SEED INDEX DIR BACKEND
   local leg=$1 cand_seed=$2 index=$3 d=$4 backend=$5 rc=0
   [ -f "$d/$backend.status" ] || return 0
+  # Generation can commit an observation before committing its oracle. That is
+  # not yet a comparison; collection must not invent a mismatch against no oracle.
+  [ -f "$d/status" ] && [ -f "$d/stderr" ] || return 0
   [ ! -f "$d/$backend.judged" ] || return "$(cat "$d/$backend.judged")"
   if [ "$(cat "$d/$backend.status")" = incomplete ]; then return 3; fi
   if judge "$d" "$d/$backend"; then
@@ -545,7 +560,14 @@ native_build() {
   if [ "$(cat "$1/control-replay" 2>/dev/null)" = native-compilation ]; then
     echo 'planted native compiler error'; return 7
   fi
-  bounded_remaining bash "$root/scripts/checks/lib/slice0_native.sh" "$1" "$lcb"
+  local rc=0 scenario
+  bounded_remaining bash "$root/scripts/checks/lib/slice0_native.sh" "$1" "$lcb" || rc=$?
+  [ "$rc" -eq 0 ] || return "$rc"
+  scenario=$(cat "$1/control-replay" 2>/dev/null || true)
+  case "$scenario" in
+    *+llvm-timeout) printf '#!/usr/bin/env bash\nexec sleep 30\n' >"$1/llvm.exe"; chmod +x "$1/llvm.exe" ;;
+    *+lcb-timeout) printf '#!/usr/bin/env bash\nexec sleep 30\n' >"$1/lcb.exe"; chmod +x "$1/lcb.exe" ;;
+  esac
 }
 
 native_one() { # Result axes: native_failed (sticky), native_incomplete, native_complete
@@ -563,6 +585,12 @@ native_one() { # Result axes: native_failed (sticky), native_incomplete, native_
   native_incomplete=0
   native_complete=0
   name=$leg-$index
+  if [ ! -f "$d/status" ] || [ ! -f "$d/stderr" ]; then
+    record_candidate_failure "$leg" "$cand_seed" "$index" "$d" native_setup oracle \
+      "FAIL $name: missing oracle observation"
+    native_failed=1
+    return 4
+  fi
   judge_evaluator "$leg" "$cand_seed" "$index" "$d" || eval_rc=$?
   if [ "$eval_rc" -eq 1 ]; then
     bad=1
@@ -658,7 +686,7 @@ collect_available() {
       if [ -f "$d/failure-kinds.txt" ]; then
         persist_candidate_bundle "$cand_leg" "$cand_seed" "$index" "$d"
         cand_safe_seed=$(cat "$d/safe-seed.txt")
-        bundle="$regressions/$cand_leg/${cand_safe_seed}-$index"
+        bundle=$(candidate_bundle_path "$cand_leg" "$d")
         replay_text=$(cat "$bundle/replay.sh")
         if [ ! -f "$d/bundle-reported" ]; then
           : >"$d/bundle-reported"
@@ -717,7 +745,21 @@ run_control() { # fn runs under set -euo pipefail and must return PLANTED_FAIL_R
      grep -qE -- "$expected_regex" "$log"; then
     # Only a fully verified planted effect is exempt from the outer failure verdict.
     while IFS= read -r d; do
-      [ ! -d "$d" ] || : >"$d/control-verified"
+      [ -d "$d" ] || continue
+      [ "$(cat "$d/control-owner" 2>/dev/null)" = "$control_registry" ] || continue
+      # Only the explicitly planted scenarios may carry expected failures. Judge
+      # generated baseline observations too, even if no native run was requested.
+      if [ ! -f "$d/control-replay" ]; then
+        local backend baseline_rc=0
+        for backend in lcb_eval llvm lcb; do
+          local verdict=0
+          judge_available "$(cat "$d/leg")" "$(cat "$d/seed")" "$(cat "$d/index")" "$d" "$backend" || verdict=$?
+          case "$verdict" in 0) ;; 3) deadline_stopped=1; baseline_rc=3 ;; *) fail=1; baseline_rc=1 ;; esac
+        done
+        if [ -f "$d/failure-kinds.txt" ]; then fail=1; fi
+        [ "$baseline_rc" -eq 0 ] && [ ! -f "$d/failure-kinds.txt" ] || continue
+      fi
+      : >"$d/control-verified"
     done <"$control_registry"
     echo "ok   control $label: failed for the planted reason"
   elif [ "$rc" -eq 3 ]; then
@@ -781,8 +823,11 @@ run_replay() {
     ""|spec-oracle|native-compilation|observation|report-mismatch) ;;
     emission|assembly|native-setup|lowering)
       driver_extra_args=(--plant-failure "$SPEC_DIFF_REPLAY_CONTROL" --control SPEC_DIFF_PLANTED_CONTROL) ;;
-    drop-overflow-llvm|lcb-off-by-one)
-      driver_extra_args=(--mutate "$SPEC_DIFF_REPLAY_CONTROL" --control SPEC_DIFF_PLANTED_CONTROL) ;;
+    drop-overflow-llvm|lcb-off-by-one|drop-overflow-llvm+lcb-timeout|lcb-off-by-one+llvm-timeout|lcb-off-by-one+lcb-timeout)
+      driver_extra_args=(--mutate "${SPEC_DIFF_REPLAY_CONTROL%%+*}" --control SPEC_DIFF_PLANTED_CONTROL)
+      case "$SPEC_DIFF_REPLAY_CONTROL" in
+        *+*-timeout) obs_first_cap=1; obs_retry_cap=1; BOUNDED_KILL_AFTER=0 ;;
+      esac ;;
     *) echo "FAIL unknown replay control: $SPEC_DIFF_REPLAY_CONTROL" >&2; exit 1 ;;
   esac
   if [ "${SPEC_DIFF_REPLAY_CONTROL:-}" = spec-oracle ]; then
@@ -819,6 +864,40 @@ run_replay() {
   exit "$rc"
 }
 
+# Replay verification has exactly one launch path. Only the destination for newly
+# produced bundles is supplied externally; all failure state comes from replay.sh.
+verify_saved_replay() { # BUNDLE OUTPUT_ROOT LOG
+  local saved=$1 out=$2 log=$3 rc=0 reproduced kind subject diagnostic scenario
+  bounded_remaining env -u BASH_ENV -u ENV SPEC_DIFF_REGRESSIONS="$out" \
+    bash --noprofile --norc "$saved/replay.sh" >"$log" 2>&1 || rc=$?
+  [ "$rc" -ne 3 ] || { cat "$log" >&2; return 3; }
+  reproduced=$(regressions=$out candidate_bundle_path "$(cat "$saved/leg")" "$saved")
+  if [ "$rc" -ne 1 ] || [ ! -d "$reproduced" ]; then
+    echo "control setup: standalone replay did not fail and persist $reproduced (rc=$rc)" >&2
+    cat "$log" >&2
+    return 1
+  fi
+  while IFS=$'\t' read -r kind subject diagnostic; do
+    grep -qxF "$kind" "$reproduced/failure-kinds.txt" &&
+      grep -qxF "$diagnostic" "$log" &&
+      grep -qxF "$diagnostic" "$reproduced/diagnostics.txt" || {
+        echo "control setup: standalone replay lost $kind diagnostic '$diagnostic'" >&2
+        cat "$log" >&2
+        return 1
+      }
+  done <"$saved/failure-record.tsv"
+  scenario=$(cat "$saved/control-replay" 2>/dev/null || true)
+  case "$scenario" in
+    *+llvm-timeout|*+lcb-timeout)
+      local backend=${scenario##*+}; backend=${backend%-timeout}
+      grep -qxE "INCOMPLETE: observation timed out for /.+/$backend.exe" "$log" || {
+        echo "control setup: standalone replay did not reproduce planted $backend timeout" >&2
+        cat "$log" >&2
+        return 1
+      } ;;
+  esac
+}
+
 # Execute a candidate failure path through finish_diff (including scratch deletion), verify the
 # durable failure bundle and every available stage artifact survived exit, then execute the saved
 # replay.sh through the production replay parser and run_replay and verify the same failure and
@@ -827,7 +906,6 @@ verify_failure_bundle_and_replay() {
   local label=$1 leg=$2 cand_seed=$3 index=$4 kind=$5 expected_diag=$6 extra_diag=$7
   local required_csv=$8 forbidden_csv=$9 first_fn=${10}
   local ctl_dir="$work/ctl-bundle-$label" sub_work="$work/ctl-bundle-$label/work-1"
-  local replay_work="$work/ctl-bundle-$label/work-2"
   local regressions_1="$work/ctl-bundle-$label/reg-1" regressions_2="$work/ctl-bundle-$label/reg-2"
   local log_1="$work/ctl-bundle-$label/run-1.log" log_2="$work/ctl-bundle-$label/run-2.log"
   local rc=0 safe_seed bundle_1="" bundle_2 art
@@ -857,14 +935,15 @@ verify_failure_bundle_and_replay() {
     cat "$log_1" >&2
     return 1
   fi
-  for bundle_1 in "$regressions_1/$leg"/*; do break; done
+  bundle_1=$(find "$regressions_1" -type f -name failure-kinds.txt -print | sed -n '1p')
+  bundle_1=${bundle_1%/failure-kinds.txt}
   if [ ! -d "$bundle_1" ] || [ ! -f "$bundle_1/safe-seed" ]; then
     echo "control setup: $label did not persist a regression bundle under $regressions_1/$leg" >&2
     cat "$log_1" >&2
     return 1
   fi
   safe_seed=$(cat "$bundle_1/safe-seed")
-  [ "$bundle_1" = "$regressions_1/$leg/${safe_seed}-$index" ] &&
+  [ "${bundle_1##*/}" = "${safe_seed}-$index" ] &&
     [ "$(cat "$bundle_1/leg")" = "$leg" ] &&
     [ "$(cat "$bundle_1/seed")" = "$cand_seed" ] &&
     [ "$(cat "$bundle_1/index")" = "$index" ] &&
@@ -903,11 +982,9 @@ verify_failure_bundle_and_replay() {
   rc=0
   # A new shell executes only the saved command; no functions, driver arguments,
   # plants or observations are supplied by the verifier. Output routing is not a plant.
-  bounded_remaining env SPEC_DIFF_REGRESSIONS="$regressions_2" \
-    bash --noprofile --norc "$bundle_1/replay.sh" >"$log_2" 2>&1 || rc=$?
-  [ "$rc" -ne 3 ] || { cat "$log_2" >&2; return 3; }
-  bundle_2="$regressions_2/$leg/${safe_seed}-$index"
-  if [ "$rc" -ne 1 ] || [ -e "$replay_work" ] || ! grep -qxF "$expected_diag" "$log_2" || [ ! -d "$bundle_2" ]; then
+  verify_saved_replay "$bundle_1" "$regressions_2" "$log_2" || return $?
+  bundle_2="$regressions_2/${bundle_1#"$regressions_1/"}"
+  if ! grep -qxF "$expected_diag" "$log_2" || [ ! -d "$bundle_2" ]; then
     echo "control setup: $label replay did not reproduce failure '$expected_diag' and persist $bundle_2 (rc=$rc)" >&2
     cat "$log_2" >&2
     return 1
@@ -1003,12 +1080,13 @@ control_drop_overflow() {
     rm -rf "$sub" "$regressions"
     cp -R "$mutated" "$sub"
     reset_observations "$sub"
+    echo drop-overflow-llvm+lcb-timeout >"$sub/control-replay"
     native_build() { return 0; }
     printf '#!/usr/bin/env bash\nexec sleep 30\n' >"$sub/lcb.exe"
     chmod +x "$sub/lcb.exe"
     native_one bir "$seed" "$index" "$sub" >"$work/mismatch-timeout.log" 2>&1 || rc=$?
     safe_seed=$(cat "$sub/safe-seed.txt")
-    bundle="$regressions/bir/${safe_seed}-$index"
+    bundle=$(candidate_bundle_path bir "$sub")
     [ "$rc" -eq 1 ] && [ "$native_failed" -eq 1 ] && [ "$native_complete" -eq 0 ] &&
       grep -qxF "FAIL bir seed $seed index $index [llvm]: observation mismatch" "$work/mismatch-timeout.log" &&
       grep -qxF "INCOMPLETE: observation timed out for $sub/lcb.exe" "$work/mismatch-timeout.log" &&
@@ -1017,6 +1095,7 @@ control_drop_overflow() {
         cat "$work/mismatch-timeout.log" >&2
         return 1
       }
+    verify_saved_replay "$bundle" "$work/replay-drop-timeout" "$work/replay-drop-timeout.log" || return $?
     echo 'FAIL mismatch-timeout: LLVM mismatch retained with incomplete LCB observation'
   ) || return $?
   echo "FAIL drop-overflow-llvm: planted LLVM trap became exact exit $actual; LCB retained trap"
@@ -1062,13 +1141,14 @@ control_lcb_off_by_one() {
     rm -rf "$sub" "$regressions"
     cp -R "$mutated" "$sub"
     reset_observations "$sub"
+    echo lcb-off-by-one+llvm-timeout >"$sub/control-replay"
     native_build() { return 0; }
     printf '#!/usr/bin/env bash\nexec sleep 30\n' >"$sub/llvm.exe"
     chmod +x "$sub/llvm.exe"
     log="$work/eval-llvm-timeout.log"
     native_one bir "$seed" "$index" "$sub" >"$log" 2>&1 || rc=$?
     safe_seed=$(cat "$sub/safe-seed.txt")
-    bundle="$regressions/bir/${safe_seed}-$index"
+    bundle=$(candidate_bundle_path bir "$sub")
     [ "$rc" -eq 1 ] && [ "$native_failed" -eq 1 ] && [ "$native_complete" -eq 0 ] &&
       grep -qxF "FAIL bir seed $seed index $index [lcb_eval]: observation mismatch" "$log" &&
       grep -qxF "INCOMPLETE: observation timed out for $sub/llvm.exe" "$log" &&
@@ -1082,6 +1162,7 @@ control_lcb_off_by_one() {
         cat "$log" >&2
         return 1
       }
+    verify_saved_replay "$bundle" "$work/replay-eval-llvm-timeout" "$work/replay-eval-llvm-timeout.log" || return $?
     echo 'FAIL eval-llvm-timeout: evaluator and LCB mismatches retained and bundled despite LLVM timeout'
   ) || return $?
   (
@@ -1092,13 +1173,14 @@ control_lcb_off_by_one() {
     rm -rf "$sub" "$regressions"
     cp -R "$mutated" "$sub"
     reset_observations "$sub"
+    echo lcb-off-by-one+lcb-timeout >"$sub/control-replay"
     native_build() { return 0; }
     printf '#!/usr/bin/env bash\nexec sleep 30\n' >"$sub/lcb.exe"
     chmod +x "$sub/lcb.exe"
     log="$work/eval-lcb-timeout.log"
     native_one bir "$seed" "$index" "$sub" >"$log" 2>&1 || rc=$?
     safe_seed=$(cat "$sub/safe-seed.txt")
-    bundle="$regressions/bir/${safe_seed}-$index"
+    bundle=$(candidate_bundle_path bir "$sub")
     [ "$rc" -eq 1 ] && [ "$native_failed" -eq 1 ] && [ "$native_complete" -eq 0 ] &&
       grep -qxF "FAIL bir seed $seed index $index [lcb_eval]: observation mismatch" "$log" &&
       grep -qxF "ok   bir-$index [llvm]: status $(cat "$original/status")" "$log" &&
@@ -1110,6 +1192,7 @@ control_lcb_off_by_one() {
         cat "$log" >&2
         return 1
       }
+    verify_saved_replay "$bundle" "$work/replay-eval-lcb-timeout" "$work/replay-eval-lcb-timeout.log" || return $?
     echo 'FAIL eval-lcb-timeout: evaluator mismatch retained and bundled despite LCB timeout'
   ) || return $?
   echo "FAIL lcb-off-by-one: native LCB and evaluator both returned exact exit $actual"
@@ -1215,9 +1298,9 @@ control_report_mismatch() {
     echo "control setup: safe-seed collided between '$seed_a' and '$seed_b'" >&2
     return 1
   fi
-  bir_bundle_a="$regressions/bir/${safe_a}-0"
-  bir_bundle_b="$regressions/bir/${safe_b}-0"
-  spec_bundle="$regressions/spec/${safe_a}-0"
+  bir_bundle_a=$(candidate_bundle_path bir "$bir_dir_a")
+  bir_bundle_b=$(candidate_bundle_path bir "$bir_dir_b")
+  spec_bundle=$(candidate_bundle_path spec "$spec_dir")
   [ -d "$bir_bundle_a" ] && [ -d "$bir_bundle_b" ] && [ -d "$spec_bundle" ] ||
     { echo "control setup: expected distinct bir and spec regression bundle directories" >&2; return 1; }
   [ "$(cat "$bir_bundle_a/seed")" = "$seed_a" ] ||
@@ -1230,18 +1313,8 @@ control_report_mismatch() {
     { echo "control setup: multi-backend observations missing" >&2; return 1; }
   for replay_bundle in "$bir_bundle_a" "$bir_bundle_b" "$spec_bundle"; do
     local replay_reg="$work/report-replay-$(cat "$replay_bundle/leg")-$(cat "$replay_bundle/safe-seed")"
-    local replay_log="$replay_reg.log" replay_rc=0 replay_result
-    bounded_remaining env SPEC_DIFF_REGRESSIONS="$replay_reg" \
-      bash --noprofile --norc "$replay_bundle/replay.sh" >"$replay_log" 2>&1 || replay_rc=$?
-    [ "$replay_rc" -ne 3 ] || return 3
-    replay_result="$replay_reg/$(cat "$replay_bundle/leg")/$(cat "$replay_bundle/safe-seed")-0"
-    [ "$replay_rc" -eq 1 ] && [ -d "$replay_result" ] &&
-      grep -qxF "$(head -n 1 "$replay_bundle/diagnostics.txt")" "$replay_result/diagnostics.txt" &&
-      grep -qxF mismatch "$replay_result/failure-kinds.txt" || {
-        echo "control setup: standalone saved report command did not reproduce its mismatch" >&2
-        cat "$replay_log" >&2
-        return 1
-      }
+    local replay_log="$replay_reg.log"
+    verify_saved_replay "$replay_bundle" "$replay_reg" "$replay_log" || return $?
   done
   spec_name=$(cat "$spec_dir/regression-name.txt")
   [ -f "$spec_bundle/tests/slice0/$spec_name.con" ] ||
