@@ -120,46 +120,51 @@ theorem eval_operands_rehint (h : Var → String) (L : AList Var Int) (st : Unit
 
 end Prim
 
-/-- Evidence is usable in its own exact context. -/
-theorem SafetyEvidence.usable_current (e : SafetyEvidence) : e.Usable e.context := rfl
+/-- **Evidence consumption is sound.** Success consumes the evidence's exact context, discharges
+the obligation identity it names, and retrieves that obligation from the authoritative table. The
+returned dependent record contains a proof of the retrieved proposition. -/
+theorem SafetyEvidence.discharge_sound (e : SafetyEvidence) (obligations : ObligationTable)
+    (current : EvidenceContext) (requested : ObligationId) (discharged : DischargedFact)
+    (success : e.discharge obligations current requested = some discharged) :
+    e.context = current ∧ current.obligation = requested ∧
+      AList.lookup obligations requested = some discharged.obligation := by
+  by_cases context : e.context = current
+  · by_cases identity : current.obligation = requested
+    · cases lookup : AList.lookup obligations requested with
+      | none => simp [SafetyEvidence.discharge, context, identity, lookup] at success
+      | some obligation =>
+        by_cases fact : e.fact = obligation.fact
+        · simp [SafetyEvidence.discharge, context, identity, lookup, fact] at success
+          cases success
+          exact ⟨context, identity, by simp⟩
+        · simp [SafetyEvidence.discharge, context, identity, lookup, fact] at success
+    · simp [SafetyEvidence.discharge, context, identity] at success
+  · simp [SafetyEvidence.discharge, context] at success
 
-/-- **Evidence consumption is sound.** A discharge for the current context and the obligation named
-by that context supplies a proof of that obligation's actual proposition, not merely a context
-equality. -/
-theorem SafetyEvidence.discharge_fact (e : SafetyEvidence) (current : EvidenceContext)
-    (obligation : SafetyObligation) (h : e.Discharges current obligation) : obligation.fact := by
-  have hf : e.fact = obligation.fact := h.2.2
-  exact hf ▸ e.proof
+/-- A stale context cannot produce a successful discharge. -/
+theorem SafetyEvidence.discharge_context_mismatch (e : SafetyEvidence)
+    (obligations : ObligationTable) (current : EvidenceContext) (requested : ObligationId)
+    (mismatch : e.context ≠ current) : e.discharge obligations current requested = none := by
+  simp [SafetyEvidence.discharge, mismatch]
 
-/-- Changing the typed obligation identity invalidates evidence. -/
-theorem SafetyEvidence.obligation_mismatch (e : SafetyEvidence) (current : EvidenceContext)
-    (h : e.context.obligation ≠ current.obligation) : ¬ e.Usable current := by
-  intro hu
-  exact h (congrArg EvidenceContext.obligation hu)
+/-- Evidence cannot discharge an obligation identity different from the one it names. -/
+theorem SafetyEvidence.discharge_obligation_mismatch (e : SafetyEvidence)
+    (obligations : ObligationTable) (current : EvidenceContext) (requested : ObligationId)
+    (mismatch : current.obligation ≠ requested) : e.discharge obligations current requested = none := by
+  by_cases context : e.context = current
+  · simp [SafetyEvidence.discharge, context, mismatch]
+  · simp [SafetyEvidence.discharge, context]
 
-/-- Changing the target invalidates evidence. -/
-theorem SafetyEvidence.target_mismatch (e : SafetyEvidence) (current : EvidenceContext)
-    (h : e.context.target ≠ current.target) : ¬ e.Usable current := by
-  intro hu
-  exact h (congrArg EvidenceContext.target hu)
-
-/-- Changing the primitive contract or its revision invalidates evidence. -/
-theorem SafetyEvidence.contract_mismatch (e : SafetyEvidence) (current : EvidenceContext)
-    (h : e.context.contract ≠ current.contract) : ¬ e.Usable current := by
-  intro hu
-  exact h (congrArg EvidenceContext.contract hu)
-
-/-- Changing the checker version invalidates evidence. -/
-theorem SafetyEvidence.checker_mismatch (e : SafetyEvidence) (current : EvidenceContext)
-    (h : e.context.checker ≠ current.checker) : ¬ e.Usable current := by
-  intro hu
-  exact h (congrArg EvidenceContext.checker hu)
-
-/-- Changing the specification version invalidates evidence. -/
-theorem SafetyEvidence.spec_mismatch (e : SafetyEvidence) (current : EvidenceContext)
-    (h : e.context.spec ≠ current.spec) : ¬ e.Usable current := by
-  intro hu
-  exact h (congrArg EvidenceContext.spec hu)
+/-- A proof of a different proposition cannot discharge the retrieved obligation. -/
+theorem SafetyEvidence.discharge_proposition_mismatch (e : SafetyEvidence)
+    (obligations : ObligationTable) (current : EvidenceContext) (requested : ObligationId)
+    (obligation : SafetyObligation) (lookup : AList.lookup obligations requested = some obligation)
+    (mismatch : e.fact ≠ obligation.fact) : e.discharge obligations current requested = none := by
+  by_cases context : e.context = current
+  · by_cases identity : current.obligation = requested
+    · simp [SafetyEvidence.discharge, context, identity, lookup, mismatch]
+    · simp [SafetyEvidence.discharge, context, identity]
+  · simp [SafetyEvidence.discharge, context]
 
 /-- An unregistered primitive has no allowed answer. -/
 theorem PrimRegistry.allows_unknown {Val Ty Store Event : Type} (R : PrimRegistry Val Ty Store Event)
@@ -462,94 +467,106 @@ example : (operands.eval [(x0, (10 : Int))] () (.var ⟨"renamed", 1⟩) : Res (
   intro h
   cases h
 
-/-- A non-trivial proved fact and its exact evidence context. -/
+/-- Helper (projection). A non-trivial proved fact and its exact evidence context. -/
 def evidence : SafetyEvidence := ⟨1 + 1 = 2, EvidenceDemo.current, by decide⟩
 
-def obligationChanged : EvidenceContext :=
-  { EvidenceDemo.current with obligation := ⟨⟨0⟩, .safety, 1⟩ }
-def targetChanged : EvidenceContext :=
-  { EvidenceDemo.current with target := { linuxX8664 with byteOrder := .big } }
-def contractChanged : EvidenceContext := { EvidenceDemo.current with contract := ⟨⟨0⟩, 2⟩ }
-def checkerChanged : EvidenceContext := { EvidenceDemo.current with checker := ⟨0, 2, 0⟩ }
-def specChanged : EvidenceContext := { EvidenceDemo.current with spec := ⟨0, 2⟩ }
-
-/-- Non-trivial instance for `SafetyEvidence.usable_current`: the proved arithmetic fact is usable. -/
-example : evidence.Usable evidence.context := by decide
-
-/-- Planted counter-example: an otherwise identical context with a new contract is not current. -/
-example : ¬ evidence.Usable contractChanged := by decide
-
-/-- The arithmetic obligation named by the evidence context. -/
+/-- Helper (projection). The arithmetic obligation named by the evidence context. -/
 def obligation : SafetyObligation := ⟨EvidenceDemo.current.obligation, 1 + 1 = 2⟩
+def obligations : ObligationTable := [(obligation.id, obligation)]
+def discharged : DischargedFact := ⟨obligation, by simp [obligation]⟩
 
-/-- The same proposition under a different typed obligation identity. -/
+/-- Instance (law `ConcreteSpec.Core.SafetyEvidence.discharge_sound`). Real consumption returns the
+authoritative arithmetic obligation under the exact context and identity. -/
+example : evidence.discharge obligations EvidenceDemo.current obligation.id = some discharged ∧
+    AList.lookup obligations obligation.id = some discharged.obligation := by
+  simp [SafetyEvidence.discharge, obligations, discharged, obligation, evidence, AList.lookup]
+
+/-- Planted (law `ConcreteSpec.Core.SafetyEvidence.discharge_sound`). A fabricated result for an
+obligation absent from the table is not a successful consumption. -/
+example : evidence.discharge [] EvidenceDemo.current obligation.id = none := rfl
+
+/-- Helper (projection). The same proposition under a different typed obligation identity. -/
 def mismatchedObligation : SafetyObligation :=
   { obligation with id := ⟨⟨0⟩, .safety, 1⟩ }
+def mismatchedObligations : ObligationTable := [(mismatchedObligation.id, mismatchedObligation)]
 
-/-- Non-trivial instance for `SafetyEvidence.discharge_fact`: consuming the arithmetic evidence
-proves the obligation's proposition, and the evidence and proof both participate in the discharge. -/
-example : evidence.Discharges EvidenceDemo.current obligation ∧ 1 + 1 = 2 := by
-  have h : evidence.Discharges EvidenceDemo.current obligation := ⟨rfl, rfl, rfl⟩
-  exact ⟨h, evidence.discharge_fact EvidenceDemo.current obligation h⟩
+/-- Instance (law `ConcreteSpec.Core.SafetyEvidence.discharge_obligation_mismatch`). Even though the
+proposition and the rest of the context match, the differently identified request is refused. -/
+example : evidence.discharge mismatchedObligations EvidenceDemo.current mismatchedObligation.id = none := by
+  apply SafetyEvidence.discharge_obligation_mismatch
+  decide
 
-/-- Planted counter-example: the same proved fact cannot discharge a differently identified
-obligation, even though its proposition is unchanged. -/
-example : obligation.id ≠ mismatchedObligation.id ∧
-    ¬ evidence.Discharges EvidenceDemo.current mismatchedObligation := by
+/-- Planted (law `ConcreteSpec.Core.SafetyEvidence.discharge_obligation_mismatch`). A consumer that
+omits the evidence's obligation identity accepts that exact mismatch. -/
+noncomputable def dischargeIgnoringObligation (e : SafetyEvidence) (obligations : ObligationTable)
+    (current : EvidenceContext) (requested : ObligationId) : Option SafetyObligation := by
+  classical
+  exact
+    if e.context = current then
+      match AList.lookup obligations requested with
+      | some found => if e.fact = found.fact then some found else none
+      | none => none
+    else none
+
+example : evidence.context.obligation ≠ mismatchedObligation.id ∧
+    dischargeIgnoringObligation evidence mismatchedObligations EvidenceDemo.current
+      mismatchedObligation.id = some mismatchedObligation := by
   refine ⟨by decide, ?_⟩
-  intro h
-  cases h.2.1
+  simp [dischargeIgnoringObligation, evidence, mismatchedObligations, mismatchedObligation,
+    obligation, AList.lookup]
 
-/-- Non-trivial instance for `SafetyEvidence.obligation_mismatch`. -/
-example : ¬ evidence.Usable obligationChanged := by decide
+/-- Helper (projection). Only the contract revision changes in this stale context. -/
+def contractChanged : EvidenceContext := { EvidenceDemo.current with contract := ⟨⟨0⟩, 2⟩ }
 
-/-- Planted counter-example: only the obligation changed, and a matcher omitting the obligation
-accepts it; the real law above rejects it. -/
-example : evidence.context.obligation ≠ obligationChanged.obligation ∧
-    (evidence.context.target = obligationChanged.target ∧
-     evidence.context.contract = obligationChanged.contract ∧
-     evidence.context.checker = obligationChanged.checker ∧
-     evidence.context.spec = obligationChanged.spec) := by decide
+/-- Instance (law `ConcreteSpec.Core.SafetyEvidence.discharge_context_mismatch`). A changed contract
+revision prevents consumption even for the original obligation and proposition. -/
+example : evidence.discharge obligations contractChanged obligation.id = none := by
+  apply SafetyEvidence.discharge_context_mismatch
+  decide
 
-/-- Non-trivial instance for `SafetyEvidence.target_mismatch`. -/
-example : ¬ evidence.Usable targetChanged := by decide
+/-- Planted (law `ConcreteSpec.Core.SafetyEvidence.discharge_context_mismatch`). A consumer omitting
+the context check accepts stale contract evidence. -/
+noncomputable def dischargeIgnoringContext (e : SafetyEvidence) (obligations : ObligationTable)
+    (requested : ObligationId) : Option SafetyObligation := by
+  classical
+  exact
+    match AList.lookup obligations requested with
+    | some found => if e.context.obligation = requested ∧ e.fact = found.fact then some found else none
+    | none => none
 
-/-- Planted counter-example: only the target changed, and a matcher omitting the target accepts it. -/
-example : evidence.context.target ≠ targetChanged.target ∧
-    (evidence.context.obligation = targetChanged.obligation ∧
-     evidence.context.contract = targetChanged.contract ∧
-     evidence.context.checker = targetChanged.checker ∧
-     evidence.context.spec = targetChanged.spec) := by decide
+example : evidence.context ≠ contractChanged ∧
+    dischargeIgnoringContext evidence obligations obligation.id = some obligation := by
+  refine ⟨by decide, ?_⟩
+  simp [dischargeIgnoringContext, evidence, obligations, obligation, AList.lookup]
 
-/-- Non-trivial instance for `SafetyEvidence.contract_mismatch`. -/
-example : ¬ evidence.Usable contractChanged := by decide
+/-- Helper (projection). A different proposition under the evidence's obligation identity. -/
+def differentObligation : SafetyObligation := ⟨obligation.id, 1 + 1 = 3⟩
+def differentObligations : ObligationTable := [(obligation.id, differentObligation)]
 
-/-- Planted counter-example: only the contract changed, and a matcher omitting the contract accepts it. -/
-example : evidence.context.contract ≠ contractChanged.contract ∧
-    (evidence.context.obligation = contractChanged.obligation ∧
-     evidence.context.target = contractChanged.target ∧
-     evidence.context.checker = contractChanged.checker ∧
-     evidence.context.spec = contractChanged.spec) := by decide
+/-- Instance (law `ConcreteSpec.Core.SafetyEvidence.discharge_proposition_mismatch`). Context and
+identity match, but the arithmetic proof is for a different proposition and cannot be consumed. -/
+example : evidence.discharge differentObligations EvidenceDemo.current obligation.id = none := by
+  apply SafetyEvidence.discharge_proposition_mismatch (obligation := differentObligation)
+  · rfl
+  · intro equal
+    change (1 + 1 = 2) = (1 + 1 = 3) at equal
+    have valid : 1 + 1 = 2 := by decide
+    have invalid : 1 + 1 = 3 := equal ▸ valid
+    omega
 
-/-- Non-trivial instance for `SafetyEvidence.checker_mismatch`. -/
-example : ¬ evidence.Usable checkerChanged := by decide
+/-- Planted (law `ConcreteSpec.Core.SafetyEvidence.discharge_proposition_mismatch`). Looking up the
+obligation while ignoring the evidence proposition returns the mismatched obligation successfully. -/
+def lookupIgnoringEvidence (obligations : ObligationTable) (requested : ObligationId) :
+    Option SafetyObligation := AList.lookup obligations requested
 
-/-- Planted counter-example: only the checker changed, and a matcher omitting the checker accepts it. -/
-example : evidence.context.checker ≠ checkerChanged.checker ∧
-    (evidence.context.obligation = checkerChanged.obligation ∧
-     evidence.context.target = checkerChanged.target ∧
-     evidence.context.contract = checkerChanged.contract ∧
-     evidence.context.spec = checkerChanged.spec) := by decide
-
-/-- Non-trivial instance for `SafetyEvidence.spec_mismatch`. -/
-example : ¬ evidence.Usable specChanged := by decide
-
-/-- Planted counter-example: only the specification changed, and a matcher omitting it accepts it. -/
-example : evidence.context.spec ≠ specChanged.spec ∧
-    (evidence.context.obligation = specChanged.obligation ∧
-     evidence.context.target = specChanged.target ∧
-     evidence.context.contract = specChanged.contract ∧
-     evidence.context.checker = specChanged.checker) := by decide
+example : evidence.fact ≠ differentObligation.fact ∧
+    lookupIgnoringEvidence differentObligations obligation.id = some differentObligation := by
+  refine ⟨?_, rfl⟩
+  intro equal
+  change (1 + 1 = 2) = (1 + 1 = 3) at equal
+  have valid : 1 + 1 = 2 := by decide
+  have invalid : 1 + 1 = 3 := equal ▸ valid
+  omega
 
 def successAnswer : Exec.Answer Int Int Int := ⟨none, .ok 0, 7⟩
 def failureAnswer : Exec.Answer Int Int Int := ⟨none, .ok 1, 7⟩

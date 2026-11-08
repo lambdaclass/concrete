@@ -112,10 +112,15 @@ abbrev InfiniteTrace (S : EventSignature) := Nat → Event S
 /-- A program's mapping from typed source sites to source spans. -/
 abbrev SiteTable := AList SiteId Span
 
-/-- A well-formed site table gives every resolved site a project-relative, forward-slash path.
-Elaboration's stronger normalized-path obligation remains O1. -/
-def SiteTable.Valid (sites : SiteTable) : Prop :=
-  ∀ site sp, AList.lookup sites site = some sp → sp.PathOk
+/-- Source files by their project-relative paths, used to validate stored diagnostic coordinates. -/
+abbrev SourceTable := AList String SourceText
+
+/-- A well-formed site table gives every resolved site a project-relative, forward-slash path and
+checks its range, line and byte column against that path's actual source bytes. Elaboration's
+stronger normalized-path obligation remains O1. -/
+def SiteTable.Valid (sources : SourceTable) (sites : SiteTable) : Prop :=
+  ∀ site sp, AList.lookup sites site = some sp → sp.PathOk ∧
+    ∃ source, AList.lookup sources sp.path = some source ∧ sp.LocationOk source
 
 /-- The character form of the decided trap line (OD101, Q7.10, runtime decision 2026-11-06).
 Keeping the append structure explicit also makes the exact delimiter bytes auditable. -/

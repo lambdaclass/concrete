@@ -220,7 +220,7 @@ def U : ConstTypes where
   ofC_inj := fun _ _ h => by cases h; rfl
   ofC_copy := fun _ => rfl
 
-def cid (n : String) : ConstId := ConstId.mk (ModuleId.mk ⟨"const"⟩ ["m"]) n
+def cid (n : String) : ConstId := ConstId.mk (ModuleId.mk ⟨"const", ⟨"0"⟩⟩ ["m"] (by decide)) n
 
 /-- Accepted (rule `ConcreteSpec.Core.ConstsAdmitted`):
 ```

@@ -385,6 +385,21 @@ example : Demo.sp.path = spDifferentRange.path ∧ Demo.sp.line = spDifferentRan
 example : trapLine .overflow Demo.site Demo.sp = trapLine .overflow Demo.site spDifferentRange ∧
     Demo.sp ≠ spDifferentRange := by decide
 
+/-- Helper (projection). A renderer mutant that omits the byte column while retaining every other
+rendered field. -/
+def trapLineWithoutColumn (kind : TrapKind) (site : SiteId) (sp : Span) : String :=
+  "concrete: trap: " ++ kind.name ++ " at " ++ sp.path ++ ":" ++ toString sp.line ++
+    " (site " ++ toString site.id ++ ")"
+
+/-- Helper (projection). A span differing from the demo only in its rendered byte column. -/
+def spDifferentColumn : Span := { Demo.sp with col := Demo.sp.col + 1, col_pos := by omega }
+
+/-- Planted (law `ConcreteSpec.Core.Observe.trapLine_injective`). Omitting the column makes distinct
+rendered tuples collide, so this mutant violates the revised injectivity law. -/
+example : trapLineWithoutColumn .overflow Demo.site Demo.sp =
+    trapLineWithoutColumn .overflow Demo.site spDifferentColumn ∧ Demo.sp.col ≠ spDifferentColumn.col := by
+  exact ⟨by decide, by decide⟩
+
 /-- Rendering uses the byte column supplied by elaboration, not a Unicode-scalar column. -/
 theorem trap_line_uses_byte_columns (kind : TrapKind) (site : SiteId) (sp : Span) (before : String)
     (h : Span.HasByteColumn sp before) :

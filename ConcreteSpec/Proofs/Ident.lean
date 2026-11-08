@@ -8,39 +8,459 @@ PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `Concret
 
 namespace ConcreteSpec.Core
 
-/-- **Lexical renumbering preserves persistent identity.** Every injective renumbering of `SiteId`s
-leaves the function-relative stable key of every site unchanged (R-0492). -/
-theorem StableSiteKey.stable_renumber (r : SiteRenumbering) (k : StableSiteKey) :
-    (k.renumber r).key = k.key := rfl
+/-- **Injective renumbering preserves site-table well-formedness.** No two distinct old sites can
+become one new site, so the renamed table still has no duplicate sites. -/
+theorem SiteKeyTable.nodup_renumber (r : SiteRenumbering) (table : SiteKeyTable)
+    (distinct : table.NoDupSites) : (table.renumber r).NoDupSites := by
+  induction table with
+  | nil => exact distinct
+  | cons entry rest ih =>
+    rcases entry with ⟨site, key⟩
+    simp only [SiteKeyTable.NoDupSites, SiteKeyTable.renumber, SiteKeyTable.renumberSites,
+      List.map_cons, List.nodup_cons] at distinct ⊢
+    constructor
+    · intro member
+      simp only [List.map_map, Function.comp_def] at member
+      obtain ⟨oldSite, oldMember, equal⟩ := List.mem_map.1 member
+      apply distinct.1
+      apply List.mem_map.2
+      refine ⟨oldSite, oldMember, ?_⟩
+      have ids : oldSite.1.id = site.id := r.injective (congrArg SiteId.id equal)
+      rcases oldSite with ⟨oldSite, oldValue⟩
+      cases site with
+      | mk siteId =>
+        cases oldSite with
+        | mk oldId => simp_all
+    · exact ih distinct.2
 
-/-- **OD44 refuses a named collision.** If both modules of a cross-package top-level collision are
-loaded, the program is not well-formed; the witness retains both module and package identities. -/
-theorem LoadedModules.collision_refuses (modules : List ModuleId) (collision : ModuleCollision)
-    (h : LoadedModules.HasCollision modules collision) : ¬ LoadedModules.WellFormed modules := by
-  intro hwf
-  exact collision.differentPackages
-    (hwf collision.first h.1 collision.second h.2 collision.sameTopLevel)
+/-- **Lookup is equivariant under injective renumbering.** Looking up the renamed site in the
+renamed table returns exactly the original persistent key; no entry is merged or lost. -/
+theorem SiteKeyTable.lookup_renumber (r : SiteRenumbering) :
+    ∀ (table : SiteKeyTable) (site : SiteId),
+      AList.lookup (table.renumber r) ⟨r.apply site.id⟩ = AList.lookup table site
+  | [], _ => rfl
+  | (entrySite, key) :: rest, site => by
+    by_cases same : entrySite = site
+    · subst site
+      simp [SiteKeyTable.renumber, SiteKeyTable.renumberSites, AList.lookup]
+    · have renamed : (⟨r.apply entrySite.id⟩ : SiteId) ≠ ⟨r.apply site.id⟩ := by
+        intro equal
+        apply same
+        have ids : entrySite.id = site.id := r.injective (congrArg SiteId.id equal)
+        cases entrySite
+        cases site
+        simp_all
+      simp only [SiteKeyTable.renumber, SiteKeyTable.renumberSites, List.map_cons,
+        AList.lookup, renamed, same, ↓reduceIte]
+      exact SiteKeyTable.lookup_renumber r rest site
 
-/-- **Specialization identity is request-site independent.** Equal generic and argument lists name
-the same specialization no matter which call sites request it. -/
-theorem SpecializationRequest.site_independent {Ty Cap : Type} (first second : SiteId)
-    (generic : GenericId) (typeArguments : List Ty) (capabilityArguments : List Cap) :
-    (SpecializationRequest.for first generic typeArguments capabilityArguments).specialization =
-      (SpecializationRequest.for second generic typeArguments capabilityArguments).specialization := rfl
+/-- **An outside-function edit preserves that function's persistent-key sequence.** This is the
+consequence consumers use from elaboration's named `OutsideFunctionEdit` obligation. -/
+theorem OutsideFunctionEdit.persistentKeys {before after : FnId → SiteKeyTable} {edited : FnId}
+    (edit : OutsideFunctionEdit before after edited) (f : FnId) (outside : f ≠ edited) :
+    List.map Prod.snd (after f) = List.map Prod.snd (before f) := edit.keysUnchanged f outside
 
-/-- Different type arguments name different specializations. -/
-theorem SpecializationId.ne_of_typeArguments_ne {Ty Cap : Type}
-    (first second : SpecializationId Ty Cap) (h : first.typeArguments ≠ second.typeArguments) :
-    first ≠ second := by
-  intro he
-  exact h (congrArg (fun s : SpecializationId Ty Cap => s.typeArguments) he)
+/-- **A different-kind insertion does not rekey an existing sibling.** The per-kind ordinal filter
+is the actual key-assignment operation, not an invariant rechecked by the theorem. -/
+theorem KeyConstruct.key_insert_differentKind (before after : List KeyConstruct)
+    (inserted target : KeyConstruct) (different : inserted.kind ≠ target.kind) :
+    target.key (before ++ inserted :: after) = target.key (before ++ after) := by
+  simp [KeyConstruct.key, KeyConstruct.segment, List.filter_append, different]
 
-/-- Different capability arguments also name different specializations. -/
-theorem SpecializationId.ne_of_capabilityArguments_ne {Ty Cap : Type}
-    (first second : SpecializationId Ty Cap)
-    (h : first.capabilityArguments ≠ second.capabilityArguments) : first ≠ second := by
-  intro he
-  exact h (congrArg (fun s : SpecializationId Ty Cap => s.capabilityArguments) he)
+/-- **A named insertion does not consume an unnamed ordinal.** Every existing sibling key is
+therefore unchanged, independently of where the named sibling is inserted. -/
+theorem KeyConstruct.key_insert_named (before after : List KeyConstruct)
+    (label : String) (kind : ConstructKind) (children : List KeyConstruct) (target : KeyConstruct) :
+    target.key (before ++ KeyConstruct.mk kind (.named label) children :: after) =
+      target.key (before ++ after) := by
+  simp [KeyConstruct.key, KeyConstruct.segment, List.filter_append, ConstructName.isUnnamed]
+
+/-- Helper (projection). Renaming preserves participation in unnamed-sibling ordinals. -/
+theorem ConstructName.isUnnamed_rename (constructName : ConstructName) (name : String) :
+    (constructName.rename name).isUnnamed = constructName.isUnnamed := by
+  cases constructName <;> rfl
+
+/-- **Renaming one item leaves every sibling key unchanged.** Renaming preserves the item's kind
+and named/unnamed status, so it cannot change any sibling's ordinal. -/
+theorem KeyConstruct.key_rename_other (before after : List KeyConstruct)
+    (target other : KeyConstruct) (name : String) :
+    other.key (before ++ target.rename name :: after) = other.key (before ++ target :: after) := by
+  cases target with
+  | mk kind constructName children =>
+    cases constructName with
+    | named old =>
+      simp [KeyConstruct.key, KeyConstruct.segment, KeyConstruct.rename,
+        ConstructName.rename, ConstructName.isUnnamed, List.filter_append]
+    | unnamed label =>
+      cases label <;>
+        by_cases same : kind = other.kind <;>
+          simp [KeyConstruct.key, KeyConstruct.segment, KeyConstruct.rename,
+            ConstructName.rename, ConstructName.isUnnamed, List.filter_append, same]
+
+/-- Prefix a descendant's relative path by its enclosing item's segment. -/
+def KeyConstruct.under (preceding : List KeyConstruct) (construct : KeyConstruct)
+    (descendant : FunctionRelativeKey) : FunctionRelativeKey :=
+  ⟨construct.segment preceding :: descendant.path⟩
+
+/-- **Renaming a named item recomputes its assigned key to the new label.** Together with
+`key_rename_other`, this confines the effect of renaming to the item and its descendants. -/
+theorem KeyConstruct.key_rename_named (preceding : List KeyConstruct) (kind : ConstructKind)
+    (old : String) (children : List KeyConstruct) (name : String) :
+    ((KeyConstruct.mk kind (.named old) children).rename name).key preceding =
+      ⟨[⟨kind, .label name⟩]⟩ := by
+  simp [KeyConstruct.key, KeyConstruct.segment, KeyConstruct.rename, ConstructName.rename]
+
+/-- Helper (projection). A successful table lookup is in bounds. -/
+theorem SpecializationTable.entryAt_lt_length {Ty Cap : Type}
+    {entries : List (SpecializationId Ty Cap)} {index : Nat} {requested : SpecializationId Ty Cap}
+    (present : entryAt entries index = some requested) : index < entries.length :=
+  (List.getElem?_eq_some_iff.1 present).1
+
+/-- Helper (projection). A successful entry search resolves to the requested specialization. -/
+theorem SpecializationTable.entryIndex_sound {Ty Cap : Type} [DecidableEq Ty] [DecidableEq Cap] :
+    ∀ (entries : List (SpecializationId Ty Cap)) (requested : SpecializationId Ty Cap) (index : Nat),
+      entryIndex entries requested = some index → entryAt entries index = some requested
+  | [], requested, index, found => by simp [entryIndex] at found
+  | entry :: rest, requested, index, found => by
+    by_cases same : entry = requested
+    · subst requested
+      simp [entryIndex] at found
+      subst index
+      rfl
+    · simp only [entryIndex, same, ↓reduceIte, Option.map_eq_some_iff] at found
+      obtain ⟨old, oldIndex, equal⟩ := found
+      subst index
+      exact entryIndex_sound rest requested old oldIndex
+
+/-- Helper (projection). Interning resolves its requested specialization at the returned index. -/
+theorem SpecializationTable.intern_sound {Ty Cap : Type} [DecidableEq Ty] [DecidableEq Cap]
+    (entries : List (SpecializationId Ty Cap)) (requested : SpecializationId Ty Cap) :
+    entryAt (intern entries requested).1 (intern entries requested).2 = some requested := by
+  unfold intern
+  cases found : entryIndex entries requested with
+  | none => simp [entryAt]
+  | some index => exact entryIndex_sound entries requested index found
+
+/-- Helper (projection). Interning preserves every old numeric entry. -/
+theorem SpecializationTable.intern_preserves {Ty Cap : Type} [DecidableEq Ty] [DecidableEq Cap]
+    (entries : List (SpecializationId Ty Cap)) (requested : SpecializationId Ty Cap)
+    (index : Nat) (old : SpecializationId Ty Cap)
+    (present : entryAt entries index = some old) :
+    entryAt (intern entries requested).1 index = some old := by
+  unfold intern
+  cases found : entryIndex entries requested with
+  | some existing => exact present
+  | none =>
+    have bounded : index < entries.length := entryAt_lt_length present
+    unfold entryAt at present ⊢
+    rw [List.getElem?_append_left bounded]
+    exact present
+
+/-- Helper (projection). A failed entry search really means the specialization is absent. -/
+theorem SpecializationTable.entryIndex_none_not_mem {Ty Cap : Type} [DecidableEq Ty]
+    [DecidableEq Cap] : ∀ (entries : List (SpecializationId Ty Cap))
+    (requested : SpecializationId Ty Cap), entryIndex entries requested = none → requested ∉ entries
+  | [], requested, found => by simp
+  | entry :: rest, requested, found => by
+    by_cases same : entry = requested
+    · subst requested
+      simp [entryIndex] at found
+    · simp only [entryIndex, same, ↓reduceIte, Option.map_eq_none_iff] at found
+      simp only [List.mem_cons, not_or]
+      exact ⟨Ne.symm same, entryIndex_none_not_mem rest requested found⟩
+
+/-- Canonicalization never creates duplicate specialization entries. -/
+theorem SpecializationTable.canonicalize_nodup {Ty Cap : Type} [DecidableEq Ty] [DecidableEq Cap] :
+    ∀ requests : List (SpecializationRequest Ty Cap), (canonicalize requests).entries.Nodup
+  | [] => by simp [canonicalize]
+  | request :: rest => by
+    have tail := canonicalize_nodup rest
+    simp only [canonicalize]
+    unfold intern
+    cases found : entryIndex (canonicalize rest).entries request.specialization with
+    | some index => simpa [found] using tail
+    | none =>
+      simp only [List.nodup_append]
+      refine ⟨tail, by simp, ?_⟩
+      intro old oldMember new newMember
+      simp only [List.mem_singleton] at newMember
+      subst new
+      intro equal
+      subst old
+      exact entryIndex_none_not_mem (canonicalize rest).entries request.specialization found oldMember
+
+/-- **Every canonical request edge resolves to its own specialization.** Edges inherited from the
+tail remain valid whether the new head reuses an entry or appends one. -/
+theorem SpecializationTable.canonicalize_edge_sound {Ty Cap : Type} [DecidableEq Ty]
+    [DecidableEq Cap] : ∀ (requests : List (SpecializationRequest Ty Cap))
+    (edge : SpecializationEdge Ty Cap), edge ∈ (canonicalize requests).edges →
+      entryAt (canonicalize requests).entries edge.entry = some edge.request.specialization
+  | [], edge, member => by simp [canonicalize] at member
+  | request :: rest, edge, member => by
+    simp only [canonicalize, List.mem_cons] at member
+    cases member with
+    | inl head =>
+      subst edge
+      exact intern_sound (canonicalize rest).entries request.specialization
+    | inr tail =>
+      exact intern_preserves (canonicalize rest).entries request.specialization edge.entry
+        edge.request.specialization (canonicalize_edge_sound rest edge tail)
+
+/-- **Every request keeps an edge.** No request is dropped during canonicalization, and its edge
+resolves to the requested entry. -/
+theorem SpecializationTable.canonicalize_complete {Ty Cap : Type} [DecidableEq Ty]
+    [DecidableEq Cap] : ∀ (requests : List (SpecializationRequest Ty Cap))
+    (request : SpecializationRequest Ty Cap), request ∈ requests →
+      ∃ edge ∈ (canonicalize requests).edges, edge.request = request ∧
+        entryAt (canonicalize requests).entries edge.entry = some request.specialization
+  | [], request, member => by simp at member
+  | head :: rest, request, member => by
+    simp only [List.mem_cons] at member
+    cases member with
+    | inl equal =>
+      subst request
+      let assigned := intern (canonicalize rest).entries head.specialization
+      exact ⟨⟨head, assigned.2⟩, by simp [canonicalize, assigned], rfl,
+        intern_sound (canonicalize rest).entries head.specialization⟩
+    | inr tail =>
+      obtain ⟨edge, kept, identity, resolved⟩ := canonicalize_complete rest request tail
+      refine ⟨edge, ?_, identity, intern_preserves (canonicalize rest).entries head.specialization
+        edge.entry request.specialization resolved⟩
+      simp only [canonicalize, List.mem_cons]
+      exact Or.inr kept
+
+/-- Helper (projection). Two numeric entries holding one specialization in a duplicate-free table
+are one entry. -/
+theorem SpecializationTable.entry_unique {Ty Cap : Type}
+    {entries : List (SpecializationId Ty Cap)} (distinct : entries.Nodup)
+    {first second : Nat} {requested : SpecializationId Ty Cap}
+    (atFirst : entryAt entries first = some requested) (atSecond : entryAt entries second = some requested) :
+    first = second := by
+  apply distinct.eq_of_getElem?_eq (entryAt_lt_length atFirst)
+  exact atFirst.trans atSecond.symm
+
+/-- **Equal generic and argument lists share one canonical entry even at distinct request sites.**
+The proof compares the actual edges produced by canonicalization. -/
+theorem SpecializationTable.canonicalize_share {Ty Cap : Type} [DecidableEq Ty]
+    [DecidableEq Cap] (requests : List (SpecializationRequest Ty Cap))
+    (first second : SpecializationRequest Ty Cap) (firstMember : first ∈ requests)
+    (secondMember : second ∈ requests)
+    (same : first.specialization = second.specialization) :
+    ∃ firstEdge secondEdge, firstEdge ∈ (canonicalize requests).edges ∧
+      secondEdge ∈ (canonicalize requests).edges ∧ firstEdge.request = first ∧
+      secondEdge.request = second ∧ firstEdge.entry = secondEdge.entry := by
+  obtain ⟨firstEdge, firstKept, firstIdentity, firstResolved⟩ :=
+    canonicalize_complete requests first firstMember
+  obtain ⟨secondEdge, secondKept, secondIdentity, secondResolved⟩ :=
+    canonicalize_complete requests second secondMember
+  refine ⟨firstEdge, secondEdge, firstKept, secondKept, firstIdentity, secondIdentity, ?_⟩
+  apply entry_unique (canonicalize_nodup requests) firstResolved
+  rw [secondResolved, same]
+
+/-- **Different arguments cannot be coalesced.** The canonical edges of requests with different
+specialization identities point to different numeric entries. -/
+theorem SpecializationTable.canonicalize_distinct {Ty Cap : Type} [DecidableEq Ty]
+    [DecidableEq Cap] (requests : List (SpecializationRequest Ty Cap))
+    (first second : SpecializationRequest Ty Cap) (firstMember : first ∈ requests)
+    (secondMember : second ∈ requests) (different : first.specialization ≠ second.specialization) :
+    ∃ firstEdge secondEdge, firstEdge ∈ (canonicalize requests).edges ∧
+      secondEdge ∈ (canonicalize requests).edges ∧ firstEdge.request = first ∧
+      secondEdge.request = second ∧ firstEdge.entry ≠ secondEdge.entry := by
+  obtain ⟨firstEdge, firstKept, firstIdentity, firstResolved⟩ :=
+    canonicalize_complete requests first firstMember
+  obtain ⟨secondEdge, secondKept, secondIdentity, secondResolved⟩ :=
+    canonicalize_complete requests second secondMember
+  refine ⟨firstEdge, secondEdge, firstKept, secondKept, firstIdentity, secondIdentity, ?_⟩
+  intro sameEntry
+  apply different
+  apply Option.some.inj
+  rw [← firstResolved, ← secondResolved, sameEntry]
+
+/-- Helper (projection). A collision returned by the pair check has exactly the checked modules as its two sides. -/
+theorem LoadCollision.between?_sound (first second : LoadedModule) (collision : LoadCollision)
+    (found : between? first second = some collision) :
+    collision.first = first ∧ collision.second = second := by
+  by_cases package : first.module.package = second.module.package
+  · by_cases origin : first.origin = second.origin
+    · simp [between?, package, origin] at found
+    · simp [between?, package, origin] at found
+      subst collision
+      exact ⟨rfl, rfl⟩
+  · by_cases top : first.module.topLevel = second.module.topLevel
+    · simp [between?, package, top] at found
+      subst collision
+      exact ⟨rfl, rfl⟩
+    · simp [between?, package, top] at found
+
+/-- Helper (projection). A collision returned by the one-module scan names that module and a member of the scanned list. -/
+theorem LoadCollision.withModule_sound (first : LoadedModule) :
+    ∀ (modules : List LoadedModule) (collision : LoadCollision),
+      withModule first modules = some collision →
+        collision.first = first ∧ collision.second ∈ modules
+  | [], collision, found => by simp [withModule] at found
+  | second :: rest, collision, found => by
+    unfold withModule at found
+    cases pair : between? first second with
+    | some direct =>
+      rw [pair] at found
+      simp only [Option.some.injEq] at found
+      subst collision
+      exact ⟨(between?_sound first second direct pair).1,
+        List.mem_cons.2 (Or.inl (between?_sound first second direct pair).2)⟩
+    | none =>
+      rw [pair] at found
+      obtain ⟨same, member⟩ := withModule_sound first rest collision found
+      exact ⟨same, List.mem_cons.2 (Or.inr member)⟩
+
+/-- Helper (projection). Soundness of the complete ordered-pair search. -/
+theorem LoadedModules.findCollisionFrom_sound (candidates modules : List LoadedModule)
+    (collision : LoadCollision) (found : findCollisionFrom candidates modules = some collision) :
+    collision.first ∈ candidates ∧ collision.second ∈ modules := by
+  induction candidates with
+  | nil => simp [findCollisionFrom] at found
+  | cons first rest ih =>
+    unfold findCollisionFrom at found
+    cases pair : LoadCollision.withModule first modules with
+    | some direct =>
+      rw [pair] at found
+      simp only [Option.some.injEq] at found
+      subst collision
+      obtain ⟨same, member⟩ := LoadCollision.withModule_sound first modules direct pair
+      exact ⟨List.mem_cons.2 (Or.inl same), member⟩
+    | none =>
+      rw [pair] at found
+      obtain ⟨firstMember, secondMember⟩ := ih found
+      exact ⟨List.mem_cons.2 (Or.inr firstMember), secondMember⟩
+
+/-- **Load refusal is sound.** A refused collision names two modules that really occur in the
+loaded input; neither package identity nor origin is discarded from the diagnostic. -/
+theorem LoadedModules.load_refusal_sound (modules : List LoadedModule) (collision : LoadCollision)
+    (refused : load modules = .refused collision) : HasCollision modules collision := by
+  unfold load at refused
+  cases found : findCollision modules with
+  | none => simp [found] at refused
+  | some foundCollision =>
+    simp only [found, LoadResult.refused.injEq] at refused
+    subst collision
+    exact findCollisionFrom_sound modules modules foundCollision found
+
+/-- Helper (projection). A real pair collision is visible to the ordered-pair checker. -/
+theorem LoadCollision.between?_complete (first second : LoadedModule) (collision : LoadCollision)
+    (sides : collision.first = first ∧ collision.second = second) :
+    ∃ detected, between? first second = some detected := by
+  cases collision with
+  | topLevel a b sameTop differentPackage =>
+    obtain ⟨rfl, rfl⟩ := sides
+    exact ⟨.topLevel a b sameTop differentPackage, by
+      simp [between?, LoadCollision.first, LoadCollision.second, sameTop, differentPackage]⟩
+  | packageOrigin a b samePackage differentOrigins =>
+    obtain ⟨rfl, rfl⟩ := sides
+    exact ⟨.packageOrigin a b samePackage differentOrigins, by
+      simp [between?, LoadCollision.first, LoadCollision.second, samePackage, differentOrigins]⟩
+
+/-- Helper (projection). The one-module scan finds every collision with a member of its input list. -/
+theorem LoadCollision.withModule_complete (first : LoadedModule) :
+    ∀ (modules : List LoadedModule) (collision : LoadCollision),
+      collision.first = first → collision.second ∈ modules →
+        ∃ detected, withModule first modules = some detected
+  | [], collision, same, member => by simp at member
+  | second :: rest, collision, same, member => by
+    simp only [List.mem_cons] at member
+    cases member with
+    | inl equal =>
+      obtain ⟨detected, found⟩ := between?_complete first second collision ⟨same, equal⟩
+      exact ⟨detected, by simp [withModule, found]⟩
+    | inr later =>
+      cases pair : between? first second with
+      | some detected => exact ⟨detected, by simp [withModule, pair]⟩
+      | none =>
+        obtain ⟨detected, found⟩ := withModule_complete first rest collision same later
+        exact ⟨detected, by simp [withModule, pair, found]⟩
+
+/-- **Load refusal is complete.** Every top-level or same-package/different-origin collision in the
+input causes refusal with a two-sided diagnostic. -/
+theorem LoadedModules.load_refusal_complete (modules : List LoadedModule) (collision : LoadCollision)
+    (present : HasCollision modules collision) : ∃ detected, load modules = .refused detected := by
+  obtain ⟨firstMember, secondMember⟩ := present
+  have search : ∀ candidates : List LoadedModule, collision.first ∈ candidates →
+      ∃ detected, findCollisionFrom candidates modules = some detected := by
+    intro candidates candidateMember
+    induction candidates with
+    | nil => simp at candidateMember
+    | cons first rest ih =>
+      simp only [List.mem_cons] at candidateMember
+      cases candidateMember with
+      | inl equal =>
+        subst first
+        obtain ⟨detected, found⟩ := LoadCollision.withModule_complete collision.first modules collision
+          rfl secondMember
+        exact ⟨detected, by simp [findCollisionFrom, found]⟩
+      | inr later =>
+        cases pair : LoadCollision.withModule first modules with
+        | some detected => exact ⟨detected, by simp [findCollisionFrom, pair]⟩
+        | none =>
+          obtain ⟨detected, found⟩ := ih later
+          exact ⟨detected, by simp [findCollisionFrom, pair, found]⟩
+  obtain ⟨detected, found⟩ := search modules firstMember
+  exact ⟨detected, by simp [load, findCollision, found]⟩
+
+/-- Admission is exactly the absence of a collision, not a second coexisting interpretation. -/
+theorem LoadedModules.load_admitted (modules : List LoadedModule) (admitted : List LoadedModule)
+    (result : load modules = .admitted admitted) : admitted = modules ∧ WellFormed modules := by
+  unfold load at result
+  cases found : findCollision modules with
+  | some collision => simp [found] at result
+  | none =>
+    simp only [found, LoadResult.admitted.injEq] at result
+    subst admitted
+    refine ⟨rfl, ?_⟩
+    intro collision present
+    obtain ⟨detected, refused⟩ := load_refusal_complete modules collision present
+    simp [load, found] at refused
+
+/-- Appending a byte updates the source line count by its actual newline step. -/
+theorem SourceText.lineAt_append (source : SourceText) (byte : UInt8) :
+    (source ++ [byte]).lineAt (source.length + 1) = source.lineAt source.length + if byte = 10 then 1 else 0 := by
+  have whole : (source ++ [byte]).take (source.length + 1) = source ++ [byte] :=
+    List.take_of_length_le (by simp)
+  simp only [SourceText.lineAt]
+  rw [whole]
+  by_cases newline : byte = 10 <;> simp [newline]
+
+/-- A newline starts a new line. -/
+theorem SourceText.lineAt_append_newline (source : SourceText) :
+    (source ++ [10]).lineAt (source.length + 1) = source.lineAt source.length + 1 := by
+  simpa using SourceText.lineAt_append source 10
+
+/-- A non-newline byte leaves the line unchanged. -/
+theorem SourceText.lineAt_append_other (source : SourceText) (byte : UInt8) (other : byte ≠ 10) :
+    (source ++ [byte]).lineAt (source.length + 1) = source.lineAt source.length := by
+  simpa [other] using SourceText.lineAt_append source byte
+
+/-- Appending a byte updates the byte column: newline resets to one, every other byte adds one. -/
+theorem SourceText.columnAt_append (source : SourceText) (byte : UInt8) :
+    (source ++ [byte]).columnAt (source.length + 1) =
+      if byte = 10 then 1 else source.columnAt source.length + 1 := by
+  have whole : (source ++ [byte]).take (source.length + 1) = source ++ [byte] :=
+    List.take_of_length_le (by simp)
+  simp only [SourceText.columnAt]
+  rw [whole]
+  by_cases newline : byte = 10 <;> simp [newline]
+
+/-- A tab is one byte and therefore advances exactly one column. -/
+theorem SourceText.columnAt_append_tab (source : SourceText) :
+    (source ++ [9]).columnAt (source.length + 1) = source.columnAt source.length + 1 := by
+  simpa using SourceText.columnAt_append source 9
+
+/-- A newline resets the byte column to one. -/
+theorem SourceText.columnAt_append_newline (source : SourceText) :
+    (source ++ [10]).columnAt (source.length + 1) = 1 := by
+  simpa using SourceText.columnAt_append source 10
+
+/-- Helper (projection). `LocationOk` projects to bounds and the two computed coordinates. -/
+theorem Span.locationOk_iff (source : SourceText) (sp : Span) :
+    sp.LocationOk source ↔ sp.endOffset ≤ source.length ∧
+      sp.line = source.lineAt sp.startOffset ∧ sp.col = source.columnAt sp.startOffset := Iff.rfl
 
 /-- **Source bytes determine a span's start position.** Valid spans over the same source with the
 same start offset have the same 1-based line and byte column. -/
@@ -53,107 +473,409 @@ theorem Span.location_determines_line_col (source : SourceText) (first second : 
   · rw [firstLine, secondLine, start]
   · rw [firstCol, secondCol, start]
 
+/-- A known category survives encoding and reading at the same specification version. -/
+theorem EncodedPremise.read_encode (record : PremiseRecord) (current : record.spec = specVersion) :
+    record.encode.read specVersion = some record := by
+  cases record with
+  | mk kind scope spec =>
+    simp only at current
+    subst spec
+    cases kind <;> rfl
+
+/-- An unknown category is refused rather than assigned a catch-all meaning. -/
+theorem EncodedPremise.read_unknown (reader : SpecVersion) (record : EncodedPremise)
+    (current : record.spec = reader) (unknown : PremiseKind.decode reader record.category = none) :
+    record.read reader = none := by
+  simp [EncodedPremise.read, current, unknown]
+
 namespace Vacuity
 
-/-- An enclosing function used by the persistent-key examples. -/
-def function : FnId := FnId.mk (ModuleId.mk ⟨"demo"⟩ ["demo"]) "f"
+/-- Helper (projection). A package and module used by the identity examples. -/
+def package (name : String := "demo") : PackageId := ⟨name, ⟨"1"⟩⟩
 
-/-- A site whose lexical and persistent identities are deliberately different representations. -/
-def site : StableSiteKey := ⟨⟨0⟩, ⟨function, ⟨"body/add/left"⟩⟩⟩
+/-- Helper (projection). An enclosing function used by the persistent-key examples. -/
+def function : FnId := FnId.mk (ModuleId.mk package ["demo"] (by decide)) "f"
 
-/-- Successor is an injective lexical renumbering. -/
+/-- Helper (projection). A second enclosing function. -/
+def otherFunction : FnId := FnId.mk (ModuleId.mk package ["demo"] (by decide)) "g"
+
+/-- Helper (projection). A declaration and constant that own obligations outside function bodies. -/
+def declaration : DeclId := ⟨function.module, "S"⟩
+def constant : ConstId := ⟨function.module, "N"⟩
+
+/-- Helper (projection). Structured paths for a binding, a call and a struct invariant. -/
+def bindingKey : StableKey := ⟨.function function, ⟨[⟨.binding, .ordinal 0⟩]⟩⟩
+def callKey : StableKey := ⟨.function function, ⟨[⟨.call, .ordinal 0⟩]⟩⟩
+def invariantKey : StableKey := ⟨.declaration declaration, ⟨[]⟩⟩
+def initializerKey : StableKey := ⟨.constant constant, ⟨[⟨.return, .ordinal 0⟩]⟩⟩
+
+/-- Helper (projection). Two entries whose lexical and persistent identities differ. -/
+def siteTable : SiteKeyTable := [(⟨0⟩, bindingKey), (⟨1⟩, callKey)]
+
+/-- Helper (projection). Successor is an injective lexical renumbering. -/
 def successor : SiteRenumbering := ⟨Nat.succ, fun _ _ h => Nat.succ.inj h⟩
 
-/-- Non-trivial instance for `StableSiteKey.stable_renumber`: the lexical site changes from zero to
-one while its exact stable key is retained. -/
-example : (site.renumber successor).site ≠ site.site ∧
-    (site.renumber successor).key = site.key := by decide
+/-- Helper (projection). A non-injective site function that merges both sites. -/
+def collapse : Nat → Nat := fun _ => 0
 
-/-- A planted mutant that renumbers the persistent token together with the lexical site. -/
-def renumberAndMutate (r : SiteRenumbering) (k : StableSiteKey) : StableSiteKey :=
-  { k.renumber r with key := { k.key with relative := ⟨k.key.relative.token ++ "/renumbered"⟩ } }
+/-- Instance (law `ConcreteSpec.Core.SiteKeyTable.lookup_renumber`). The second site's key survives
+successor renumbering and is found at site two. -/
+example : AList.lookup (siteTable.renumber successor) ⟨2⟩ = some callKey := by
+  rw [show (⟨2⟩ : SiteId) = ⟨successor.apply (⟨1⟩ : SiteId).id⟩ from rfl,
+    SiteKeyTable.lookup_renumber]
+  decide
 
-/-- Planted counter-example: changing persistent data during renumbering violates the stability law. -/
-example : (renumberAndMutate successor site).key ≠ site.key := by decide
+/-- Instance (law `ConcreteSpec.Core.SiteKeyTable.nodup_renumber`). The input has two distinct
+sites and the renamed table remains duplicate-free. -/
+example : siteTable.NoDupSites ∧ (siteTable.renumber successor).NoDupSites := by
+  exact ⟨by decide, SiteKeyTable.nodup_renumber successor siteTable (by decide)⟩
 
-/-- Trait instances use the same separate lexical/persistent binding without changing `InstanceId`. -/
-example : StableInstanceKey.mk ⟨0⟩ ⟨function, ⟨"instances/0"⟩⟩ ≠
-    StableInstanceKey.mk ⟨1⟩ ⟨function, ⟨"instances/0"⟩⟩ := by decide
+/-- Planted (law `ConcreteSpec.Core.SiteKeyTable.lookup_renumber`). A constant renumbering merges
+site one's lookup with site zero's, so the equivariance equation fails. -/
+example : AList.lookup (siteTable.renumberSites collapse) ⟨collapse (⟨1⟩ : SiteId).id⟩ ≠
+    AList.lookup siteTable ⟨1⟩ := by decide
 
-/-- Two modules in one package, with distinct top-level names. -/
-def firstModule : ModuleId := ⟨⟨"p1"⟩, ["first"]⟩
-def secondModule : ModuleId := ⟨⟨"p1"⟩, ["second"]⟩
+/-- Planted (law `ConcreteSpec.Core.SiteKeyTable.nodup_renumber`). The same constant renumbering
+produces duplicate sites. -/
+example : ¬ (siteTable.renumberSites collapse).NoDupSites := by decide
 
-/-- A different package defining the first module's top-level name. -/
-def collidingModule : ModuleId := ⟨⟨"p2"⟩, ["first"]⟩
+/-- Helper (projection). An assignment outside `otherFunction` leaves `function` untouched. -/
+def stableBefore : FnId → SiteKeyTable := fun f => if f = function then siteTable else []
+def stableAfter : FnId → SiteKeyTable := stableBefore
 
-def collision : ModuleCollision := ⟨firstModule, collidingModule, rfl, by decide⟩
+/-- Instance (law `ConcreteSpec.Core.OutsideFunctionEdit.persistentKeys`). The concrete structured
+assignment satisfies the outside-edit obligation and preserves both keys. -/
+example : OutsideFunctionEdit stableBefore stableAfter otherFunction ∧
+    List.map Prod.snd (stableAfter function) = [bindingKey, callKey] := by
+  refine ⟨⟨?_⟩, rfl⟩
+  intro f outside
+  rfl
 
-/-- Accepted: distinct top-level names in one package are well-formed. -/
-example : LoadedModules.WellFormed [firstModule, secondModule] := by
-  intro a ha b hb htop
-  simp only [List.mem_cons, List.not_mem_nil, or_false] at ha hb
-  rcases ha with rfl | rfl <;> rcases hb with rfl | rfl <;> rfl
+/-- Helper (projection). Global-site-derived keys change when another function gains a site. -/
+def globalBefore : FnId → SiteKeyTable := fun f =>
+  if f = function then [(⟨0⟩, ⟨.function f, ⟨[⟨.binding, .ordinal 3⟩]⟩⟩)] else []
+def globalAfter : FnId → SiteKeyTable := fun f =>
+  if f = function then [(⟨0⟩, ⟨.function f, ⟨[⟨.binding, .ordinal 4⟩]⟩⟩)] else []
 
-/-- Non-trivial instance for `LoadedModules.collision_refuses`: the collision witness is in the load
-set and the real predicate refuses it, naming both packages. -/
-example : LoadedModules.HasCollision [firstModule, collidingModule] collision ∧
-    ¬ LoadedModules.WellFormed [firstModule, collidingModule] := by
-  have hc : LoadedModules.HasCollision [firstModule, collidingModule] collision :=
-    ⟨by decide, by decide⟩
-  exact ⟨hc, LoadedModules.collision_refuses [firstModule, collidingModule] collision hc⟩
+/-- Planted (law `ConcreteSpec.Core.OutsideFunctionEdit.persistentKeys`). Assigning keys by global
+site number violates the outside-edit obligation even though the function's own body is unchanged. -/
+example : ¬ OutsideFunctionEdit globalBefore globalAfter otherFunction := by
+  intro edit
+  have changed := edit.persistentKeys function (by decide)
+  simp [globalBefore, globalAfter, function] at changed
 
-/-- The rejected OD44 option (b): a planted coexistence rule accepts the same collision. -/
-def Coexistence (_modules : List ModuleId) : Prop := True
+/-- Helper (projection). An unnamed binding and a named call used by edit-stability examples. -/
+def unnamedBinding : KeyConstruct := KeyConstruct.mk .binding (.unnamed none) []
+def namedCall : KeyConstruct := KeyConstruct.mk .call (.named "work") []
+def labelledBlock : KeyConstruct := KeyConstruct.mk .block (.unnamed (some "outer")) []
 
-example : ¬ LoadedModules.WellFormed [firstModule, collidingModule] ∧
-    Coexistence [firstModule, collidingModule] := by
-  have hc : LoadedModules.HasCollision [firstModule, collidingModule] collision :=
-    ⟨by decide, by decide⟩
-  exact ⟨LoadedModules.collision_refuses [firstModule, collidingModule] collision hc, trivial⟩
+/-- Instance (law `ConcreteSpec.Core.KeyConstruct.key_insert_differentKind`). Inserting a call before
+an unnamed binding leaves the binding's zero ordinal unchanged. -/
+example : unnamedBinding.key [namedCall] = unnamedBinding.key [] ∧
+    unnamedBinding.key [] = ⟨[⟨.binding, .ordinal 0⟩]⟩ := by
+  exact ⟨KeyConstruct.key_insert_differentKind [] [] namedCall unnamedBinding (by decide), rfl⟩
 
-/-- Three specializations of one generic, differing only in one argument list at a time. -/
+/-- Planted (law `ConcreteSpec.Core.KeyConstruct.key_insert_differentKind`). A single ordinal across
+all construct kinds changes the binding key after that same insertion. -/
+def rawOrdinalKey (preceding : List KeyConstruct) (target : KeyConstruct) : FunctionRelativeKey :=
+  ⟨[⟨target.kind, .ordinal preceding.length⟩]⟩
+
+example : rawOrdinalKey [namedCall] unnamedBinding ≠ rawOrdinalKey [] unnamedBinding := by decide
+
+/-- Instance (law `ConcreteSpec.Core.KeyConstruct.key_insert_named`). A named binding inserted before
+an unnamed binding does not consume its ordinal. -/
+example : unnamedBinding.key [KeyConstruct.mk .binding (.named "x") []] =
+    unnamedBinding.key [] := by
+  exact KeyConstruct.key_insert_named [] [] "x" .binding [] unnamedBinding
+
+/-- Planted (law `ConcreteSpec.Core.KeyConstruct.key_insert_named`). Counting named siblings in the
+ordinal changes the unrelated key. -/
+def countNamedKey (preceding : List KeyConstruct) (target : KeyConstruct) : FunctionRelativeKey :=
+  ⟨[⟨target.kind, .ordinal (preceding.filter fun sibling => sibling.kind == target.kind).length⟩]⟩
+
+example : countNamedKey [KeyConstruct.mk .binding (.named "x") []] unnamedBinding ≠
+    countNamedKey [] unnamedBinding := by decide
+
+/-- Instance (law `ConcreteSpec.Core.KeyConstruct.key_rename_other`). Renaming the first binding
+leaves the second binding's ordinal key unchanged. -/
+example : unnamedBinding.key [unnamedBinding.rename "x", unnamedBinding] =
+    unnamedBinding.key [unnamedBinding, unnamedBinding] := by
+  exact KeyConstruct.key_rename_other [] [unnamedBinding] unnamedBinding unnamedBinding "x"
+
+/-- Planted (law `ConcreteSpec.Core.KeyConstruct.key_rename_other`). Recomputing ordinals from
+labels rather than stable named/unnamed status can change a sibling key. -/
+def labelOnlyOrdinal (preceding : List KeyConstruct) (target : KeyConstruct) : FunctionRelativeKey :=
+  let count := (preceding.filter fun sibling => sibling.kind == target.kind &&
+    match sibling.name with | .named _ => false | .unnamed label => label.isNone).length
+  ⟨[⟨target.kind, .ordinal count⟩]⟩
+
+example : labelOnlyOrdinal [KeyConstruct.mk .binding (.unnamed (some "x")) []] unnamedBinding ≠
+    labelOnlyOrdinal [KeyConstruct.mk .binding (.unnamed none) []] unnamedBinding := by decide
+
+/-- Instance (law `ConcreteSpec.Core.KeyConstruct.key_rename_named`). The real assignment changes
+the named call's key to the new label. -/
+example : (namedCall.rename "renamed").key [] = ⟨[⟨.call, .label "renamed"⟩]⟩ := by decide
+
+/-- Planted (law `ConcreteSpec.Core.KeyConstruct.key_rename_named`). Rebuilding the key from a raw
+child index leaves the old parent label, so it is not the renaming law. -/
+def rawChildUnder (preceding : List KeyConstruct) (construct : KeyConstruct) (childIndex : Nat) :
+    FunctionRelativeKey := ⟨construct.segment preceding :: [⟨.call, .ordinal childIndex⟩]⟩
+
+example : rawChildUnder [] namedCall 0 ≠ (namedCall.rename "renamed").key [] := by decide
+
+/-- Helper (projection). Three specializations of one generic, differing one argument list at a time. -/
 def numeric : SpecializationId Nat String := ⟨.function function, [0], ["Fs"]⟩
 def otherType : SpecializationId Nat String := ⟨.function function, [1], ["Fs"]⟩
 def otherCapability : SpecializationId Nat String := ⟨.function function, [0], ["Console"]⟩
 
-/-- Non-trivial instance for `SpecializationRequest.site_independent`: distinct sites request the
-same numeric specialization and obtain equal identities. -/
-example : (⟨0⟩ : SiteId) ≠ ⟨1⟩ ∧
-    (SpecializationRequest.for ⟨0⟩ (.function function) [0] ["Fs"]).specialization =
-      (SpecializationRequest.for ⟨1⟩ (.function function) [0] ["Fs"]).specialization := by
-  exact ⟨by decide, SpecializationRequest.site_independent ⟨0⟩ ⟨1⟩ (.function function) [0] ["Fs"]⟩
+/-- Helper (projection). Distinct request sites for the same specialization. -/
+def requestZero : SpecializationRequest Nat String := ⟨⟨0⟩, numeric⟩
+def requestOne : SpecializationRequest Nat String := ⟨⟨1⟩, numeric⟩
+def requestOtherType : SpecializationRequest Nat String := ⟨⟨2⟩, otherType⟩
+def requestOtherCapability : SpecializationRequest Nat String := ⟨⟨3⟩, otherCapability⟩
 
-/-- Non-trivial instances for the argument-difference laws. -/
-example : numeric ≠ otherType :=
-  SpecializationId.ne_of_typeArguments_ne numeric otherType (by decide)
+/-- Instance (law `ConcreteSpec.Core.SpecializationTable.canonicalize_complete`). Both requests have
+real edges, and both resolve to the numeric specialization. -/
+example : ∃ zeroEdge oneEdge, zeroEdge ∈ (SpecializationTable.canonicalize
+    [requestZero, requestOne]).edges ∧ oneEdge ∈ (SpecializationTable.canonicalize
+    [requestZero, requestOne]).edges ∧ zeroEdge.request = requestZero ∧ oneEdge.request = requestOne := by
+  obtain ⟨zeroEdge, zeroKept, zeroIdentity, _⟩ :=
+    SpecializationTable.canonicalize_complete [requestZero, requestOne] requestZero (by simp)
+  obtain ⟨oneEdge, oneKept, oneIdentity, _⟩ :=
+    SpecializationTable.canonicalize_complete [requestZero, requestOne] requestOne (by simp)
+  exact ⟨zeroEdge, oneEdge, zeroKept, oneKept, zeroIdentity, oneIdentity⟩
 
-example : numeric ≠ otherCapability :=
-  SpecializationId.ne_of_capabilityArguments_ne numeric otherCapability (by decide)
+/-- Planted (law `ConcreteSpec.Core.SpecializationTable.canonicalize_complete`). Dropping the first
+request's edge leaves no edge for it. -/
+def dropFirstEdges {Ty Cap : Type} [DecidableEq Ty] [DecidableEq Cap]
+    (requests : List (SpecializationRequest Ty Cap)) : SpecializationTable Ty Cap :=
+  { SpecializationTable.canonicalize requests with edges := (SpecializationTable.canonicalize requests).edges.tail }
 
-/-- Planted counter-example for site independence: adding the request site to the identity splits
-one specialization into two. -/
-def withRequestSite {Ty Cap : Type} (site : SiteId) (s : SpecializationId Ty Cap) :=
-  (s, site)
+example : ¬ ∃ edge ∈ (dropFirstEdges [requestZero, requestOne]).edges, edge.request = requestZero := by decide
 
-example : withRequestSite ⟨0⟩ numeric ≠ withRequestSite ⟨1⟩ numeric := by decide
+/-- Instance (law `ConcreteSpec.Core.SpecializationTable.canonicalize_edge_sound`). The concrete
+second edge resolves through the actual table to `numeric`. -/
+example : SpecializationTable.entryAt (SpecializationTable.canonicalize
+    [requestZero, requestOne]).entries 0 = some numeric := by decide
 
-/-- Planted counter-example for the argument laws: keeping only the generic equates identities that
-the real rules distinguish. -/
-def onlyGeneric {Ty Cap : Type} (s : SpecializationId Ty Cap) : GenericId := s.generic
+/-- Planted (law `ConcreteSpec.Core.SpecializationTable.canonicalize_edge_sound`). Pointing that edge
+beyond the table does not resolve to its request. -/
+example : SpecializationTable.entryAt (SpecializationTable.canonicalize
+    [requestZero, requestOne]).entries 9 ≠ some numeric := by decide
 
-example : onlyGeneric numeric = onlyGeneric otherType ∧ numeric ≠ otherType := by
-  exact ⟨rfl, SpecializationId.ne_of_typeArguments_ne numeric otherType (by decide)⟩
+/-- Instance (law `ConcreteSpec.Core.SpecializationTable.canonicalize_share`). Requests at sites zero
+and one share canonical entry zero. -/
+example : ∃ zeroEdge oneEdge, zeroEdge ∈ (SpecializationTable.canonicalize
+    [requestZero, requestOne]).edges ∧ oneEdge ∈ (SpecializationTable.canonicalize
+    [requestZero, requestOne]).edges ∧ zeroEdge.request = requestZero ∧
+    oneEdge.request = requestOne ∧ zeroEdge.entry = oneEdge.entry :=
+  SpecializationTable.canonicalize_share [requestZero, requestOne] requestZero requestOne
+    (by simp) (by simp) rfl
 
-/-- A source `assume` and a package-level stack assumption with stable, typed identities. -/
-def sourceAssume : PremiseId := ⟨.assume, .function ⟨function, ⟨"assume/0"⟩⟩⟩
-def stackAssumption : PremiseId := ⟨.stack, .package ⟨"p1"⟩ "defaultStack"⟩
+/-- Planted (law `ConcreteSpec.Core.SpecializationTable.canonicalize_share`). Canonicalizing by site
+creates two entries for one specialization. -/
+def bySite (requests : List (SpecializationRequest Nat String)) : List SiteId := requests.map (·.site)
 
-/-- Accepted: both decided premise scopes are represented without bare-string keys. -/
-example : sourceAssume.kind = .assume ∧ stackAssumption.kind = .stack := ⟨rfl, rfl⟩
+example : (bySite [requestZero, requestOne]).length = 2 ∧
+    (SpecializationTable.canonicalize [requestZero, requestOne]).entries.length = 1 := by decide
 
-/-- Refused as an identity match: changing the premise kind changes the premise identity. -/
-example : sourceAssume ≠ { sourceAssume with kind := .trustedSurface } := by decide
+/-- Instance (law `ConcreteSpec.Core.SpecializationTable.canonicalize_distinct`). Different type
+arguments receive different canonical entries. -/
+example : ∃ typeEdge otherEdge, typeEdge ∈ (SpecializationTable.canonicalize
+    [requestZero, requestOtherType]).edges ∧ otherEdge ∈ (SpecializationTable.canonicalize
+    [requestZero, requestOtherType]).edges ∧ typeEdge.request = requestZero ∧
+    otherEdge.request = requestOtherType ∧ typeEdge.entry ≠ otherEdge.entry :=
+  SpecializationTable.canonicalize_distinct [requestZero, requestOtherType] requestZero requestOtherType
+    (by simp) (by simp) (by decide)
+
+/-- Instance (law `ConcreteSpec.Core.SpecializationTable.canonicalize_distinct`). Different capability
+arguments also receive different entries. -/
+example : ∃ capabilityEdge otherEdge, capabilityEdge ∈ (SpecializationTable.canonicalize
+    [requestZero, requestOtherCapability]).edges ∧ otherEdge ∈ (SpecializationTable.canonicalize
+    [requestZero, requestOtherCapability]).edges ∧ capabilityEdge.request = requestZero ∧
+    otherEdge.request = requestOtherCapability ∧ capabilityEdge.entry ≠ otherEdge.entry :=
+  SpecializationTable.canonicalize_distinct [requestZero, requestOtherCapability] requestZero
+    requestOtherCapability (by simp) (by simp) (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.SpecializationTable.canonicalize_distinct`). Canonicalizing by
+generic alone merges both type- and capability-different requests. -/
+def onlyGeneric {Ty Cap : Type} (specialization : SpecializationId Ty Cap) : GenericId :=
+  specialization.generic
+
+example : onlyGeneric numeric = onlyGeneric otherType ∧ onlyGeneric numeric = onlyGeneric otherCapability := by
+  exact ⟨rfl, rfl⟩
+
+/-- Instance (law `ConcreteSpec.Core.SpecializationTable.canonicalize_nodup`). Two equal requests
+produce one entry, not a duplicate. -/
+example : (SpecializationTable.canonicalize [requestZero, requestOne]).entries.Nodup := by decide
+
+/-- Planted (law `ConcreteSpec.Core.SpecializationTable.canonicalize_nodup`). Concatenating request
+identities without interning produces a duplicate entry. -/
+example : ¬ ([numeric, numeric] : List (SpecializationId Nat String)).Nodup := by decide
+
+/-- Helper (projection). Loaded modules with explicit package versions and origins. -/
+def firstModule : LoadedModule := ⟨⟨package "p1", ["first"], by decide⟩, ⟨"registry-a"⟩⟩
+def secondModule : LoadedModule := ⟨⟨package "p1", ["second"], by decide⟩, ⟨"registry-a"⟩⟩
+def collidingModule : LoadedModule := ⟨⟨package "p2", ["first"], by decide⟩, ⟨"registry-b"⟩⟩
+def samePackageOtherOrigin : LoadedModule := ⟨⟨package "p1", ["other"], by decide⟩, ⟨"mirror"⟩⟩
+def collidingTop : LoadCollision := .topLevel firstModule collidingModule rfl (by decide)
+def collidingOrigin : LoadCollision := .packageOrigin firstModule samePackageOtherOrigin (by decide) (by decide)
+
+/-- Instance (law `ConcreteSpec.Core.LoadedModules.load_refusal_sound`). The real loader refuses the
+OD44 collision and its diagnostic names both loaded modules. -/
+example : ∃ collision, LoadedModules.load [firstModule, collidingModule] = .refused collision ∧
+    collision.first = firstModule ∧ collision.second = collidingModule := by
+  exact ⟨collidingTop, rfl, rfl, rfl⟩
+
+/-- Planted (law `ConcreteSpec.Core.LoadedModules.load_refusal_sound`). A one-sided diagnostic drops
+the second package and therefore is not the collision returned by the real load check. -/
+def oneSided (_modules : List LoadedModule) (first : LoadedModule) : LoadedModule := first
+
+example : oneSided [firstModule, collidingModule] firstModule ≠ collidingModule := by decide
+
+/-- Instance (law `ConcreteSpec.Core.LoadedModules.load_refusal_complete`). Equal package name/version
+from a second origin is refused even though the module paths differ. -/
+example : ∃ detected, LoadedModules.load [firstModule, samePackageOtherOrigin] = .refused detected := by
+  exact LoadedModules.load_refusal_complete [firstModule, samePackageOtherOrigin] collidingOrigin
+    ⟨by decide, by decide⟩
+
+/-- Planted (law `ConcreteSpec.Core.LoadedModules.load_refusal_complete`). A loader that admits equal
+name/version from different origins violates the package-origin refusal rule. -/
+def admitAll (modules : List LoadedModule) : LoadResult := .admitted modules
+
+example : LoadedModules.HasCollision [firstModule, samePackageOtherOrigin] collidingOrigin ∧
+    admitAll [firstModule, samePackageOtherOrigin] = .admitted [firstModule, samePackageOtherOrigin] := by
+  exact ⟨⟨by decide, by decide⟩, rfl⟩
+
+/-- Instance (law `ConcreteSpec.Core.LoadedModules.load_admitted`). Distinct top-level names from one
+package and origin are admitted unchanged. -/
+example : LoadedModules.load [firstModule, secondModule] = .admitted [firstModule, secondModule] := rfl
+
+/-- Planted (law `ConcreteSpec.Core.LoadedModules.load_admitted`). Adding the top-level collision
+makes the same admission result impossible. -/
+example : LoadedModules.load [firstModule, collidingModule] ≠ .admitted [firstModule, collidingModule] := by
+  intro admitted
+  cases admitted
+
+/-- Helper (projection). Typed byte strings for newline, tab, EOF and multibyte examples. -/
+def aSource : SourceText := [97]
+def aNewline : SourceText := aSource ++ [10]
+def aTab : SourceText := aSource ++ [9]
+def aTabNewline : SourceText := aTab ++ [10]
+def utf8Source : SourceText := [195, 169]
+def otherTabSource : SourceText := [10, 97, 98]
+
+/-- Instance (law `ConcreteSpec.Core.SourceText.lineAt_append_newline`). Appending a newline after a
+non-newline byte advances from line one to line two. -/
+example : aNewline.lineAt 2 = aSource.lineAt 1 + 1 ∧ aNewline.lineAt 2 = 2 := by decide
+
+/-- Planted (law `ConcreteSpec.Core.SourceText.lineAt_append_newline`). Leaving the line unchanged
+would compute line one, contradicting the byte law. -/
+example : aNewline.lineAt 2 ≠ aSource.lineAt 1 := by decide
+
+/-- Instance (law `ConcreteSpec.Core.SourceText.lineAt_append_other`). A tab does not start a line. -/
+example : aTab.lineAt 2 = aSource.lineAt 1 := by decide
+
+/-- Planted (law `ConcreteSpec.Core.SourceText.lineAt_append_other`). Treating a tab as a newline
+would advance the line. -/
+example : aTab.lineAt 2 ≠ aSource.lineAt 1 + 1 := by decide
+
+/-- Instance (law `ConcreteSpec.Core.SourceText.columnAt_append_tab`). The tab advances column two to
+column three. -/
+example : aTab.columnAt 2 = aSource.columnAt 1 + 1 ∧ aTab.columnAt 2 = 3 := by decide
+
+/-- Planted (law `ConcreteSpec.Core.SourceText.columnAt_append_tab`). A four-column tab stop violates
+the one-byte step law. -/
+def tabStopFour (source : SourceText) (offset : Nat) : Nat := source.columnAt offset + 3
+
+example : tabStopFour aSource 1 ≠ aTab.columnAt 2 := by decide
+
+/-- Instance (law `ConcreteSpec.Core.SourceText.columnAt_append_newline`). A newline resets to column
+one after preceding bytes. -/
+example : aTabNewline.columnAt 3 = 1 := by decide
+
+/-- Planted (law `ConcreteSpec.Core.SourceText.columnAt_append_newline`). Advancing instead of
+resetting would produce the old column plus one. -/
+example : aTabNewline.columnAt 3 ≠ aTab.columnAt 2 + 1 := by decide
+
+/-- Instance (law `ConcreteSpec.Core.SourceText.lineAt_append`). The generic line step computes the
+newline branch and the ordinary-byte branch on real bytes. -/
+example : aNewline.lineAt 2 = 2 ∧ aTab.lineAt 2 = 1 := by decide
+
+/-- Planted (law `ConcreteSpec.Core.SourceText.lineAt_append`). A constant line function fails on a
+source ending in a newline. -/
+def constantLine (_source : SourceText) (_offset : Nat) : Nat := 1
+
+example : constantLine aNewline 2 ≠ aNewline.lineAt 2 := by decide
+
+/-- Instance (law `ConcreteSpec.Core.SourceText.columnAt_append`). UTF-8 continuation bytes each count
+one column, exactly as tabs do; offset two is also the UTF-8 EOF boundary. -/
+example : utf8Source.columnAt 2 = 3 ∧ aTab.columnAt 2 = aSource.columnAt 1 + 1 := by decide
+
+/-- Planted (law `ConcreteSpec.Core.SourceText.columnAt_append`). Counting Unicode scalar values
+instead of bytes gives column two after `é`, not the required column three. -/
+def scalarColumn (_source : SourceText) (_offset : Nat) : Nat := 2
+
+example : scalarColumn utf8Source 2 ≠ utf8Source.columnAt 2 := by decide
+
+/-- Helper (projection). The same start with a different end, and a bad state with a wrong column. -/
+def tabPointSpan : Span := { tabSpan with endOffset := 2, range_ok := by decide }
+def wrongTabSpan : Span := { tabSpan with col := 2, col_pos := by decide }
+
+/-- Instance (law `ConcreteSpec.Core.Span.location_determines_line_col`). Distinct valid ranges share
+the start, so source bytes determine the same coordinates. -/
+example : tabSpan.endOffset ≠ tabPointSpan.endOffset ∧
+    tabSpan.line = tabPointSpan.line ∧ tabSpan.col = tabPointSpan.col := by
+  exact ⟨by decide, Span.location_determines_line_col tabSource tabSpan tabPointSpan
+    (by decide) (by decide) rfl⟩
+
+/-- Planted (law `ConcreteSpec.Core.Span.location_determines_line_col`). The wrong-column span fails
+source validation, so no valid span can carry that coordinate. -/
+example : wrongTabSpan.startOffset = tabSpan.startOffset ∧ wrongTabSpan.line = tabSpan.line ∧
+    wrongTabSpan.col ≠ tabSpan.col ∧ ¬ wrongTabSpan.LocationOk tabSource := by decide
+
+/-- Accepted: the tab span satisfies the `LocationOk` projection at a real in-bounds range. -/
+example : tabSpan.LocationOk tabSource ↔ tabSpan.endOffset ≤ tabSource.length ∧
+    tabSpan.line = tabSource.lineAt tabSpan.startOffset ∧
+      tabSpan.col = tabSource.columnAt tabSpan.startOffset := Span.locationOk_iff tabSource tabSpan
+
+/-- Refused: the same stored coordinates do not satisfy `LocationOk` for a source with a different
+line structure. -/
+example : ¬ tabSpan.LocationOk otherTabSource ∧
+    ¬ (tabSpan.endOffset ≤ otherTabSource.length ∧
+      tabSpan.line = otherTabSource.lineAt tabSpan.startOffset ∧
+      tabSpan.col = otherTabSource.columnAt tabSpan.startOffset) := by decide
+
+/-- Helper (projection). A source `assume`, a package stack assumption, and their wire records. -/
+def sourceAssume : PremiseId :=
+  ⟨.assume, .function (StableKey.mk (.function function) ⟨[⟨.assumption, .ordinal 0⟩]⟩)⟩
+def stackAssumption : PremiseId := ⟨.stack, .package package ⟨"defaultStack"⟩⟩
+def stackRecord : PremiseRecord := ⟨stackAssumption.kind, stackAssumption.scope, specVersion⟩
+def unknownRecord : EncodedPremise := ⟨99, stackAssumption.scope, specVersion⟩
+
+/-- Instance (law `ConcreteSpec.Core.EncodedPremise.read_encode`). A known stack premise round-trips
+with its typed scope and writer version. -/
+example : stackRecord.encode.read specVersion = some stackRecord := by decide
+
+/-- Planted (law `ConcreteSpec.Core.EncodedPremise.read_encode`). Changing the writer version makes
+this reader reject rather than reinterpret the record. -/
+example : ({ stackRecord with spec := ⟨0, 2⟩ }.encode.read specVersion) ≠
+    some ({ stackRecord with spec := ⟨0, 2⟩ }) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.EncodedPremise.read_unknown`). Category 99 has no meaning in the
+closed schema and is refused. -/
+example : unknownRecord.read specVersion = none := by decide
+
+/-- Planted (law `ConcreteSpec.Core.EncodedPremise.read_unknown`). A catch-all reader accepts the
+unknown category by silently calling it `assume`. -/
+def catchAllRead (reader : SpecVersion) (record : EncodedPremise) : Option PremiseRecord :=
+  if record.spec = reader then some ⟨.assume, record.scope, record.spec⟩ else none
+
+example : catchAllRead specVersion unknownRecord = some ⟨.assume, unknownRecord.scope, specVersion⟩ := by decide
+
+/-- Accepted: declaration and constant owners cover non-function obligations without fake functions. -/
+example : invariantKey.owner = .declaration declaration ∧ initializerKey.owner = .constant constant := by
+  exact ⟨rfl, rfl⟩
 
 /-- Two facts with the same conclusion but different premise dependencies. -/
 def conditional : ConditionalFact String := ⟨"bounded", [sourceAssume]⟩
@@ -165,22 +887,6 @@ def conclusionOnly (first second : ConditionalFact String) : Prop :=
 
 example : conclusionOnly conditional unconditional ∧ conditional ≠ unconditional := by
   exact ⟨rfl, by decide⟩
-
-/-- The same start with a different end, and a bad state with a wrong byte column. -/
-def tabPointSpan : Span := { tabSpan with endOffset := 2, range_ok := by decide }
-def wrongTabSpan : Span := { tabSpan with col := 2, col_pos := by decide }
-
-/-- Non-trivial instance for `Span.location_determines_line_col`: distinct ranges share the start,
-so their source-derived line and column agree. -/
-example : tabSpan.endOffset ≠ tabPointSpan.endOffset ∧
-    tabSpan.line = tabPointSpan.line ∧ tabSpan.col = tabPointSpan.col := by
-  exact ⟨by decide, Span.location_determines_line_col tabSource tabSpan tabPointSpan
-    (by decide) (by decide) rfl⟩
-
-/-- Planted counter-example: the bad span has the same start but a different column, and the real
-location predicate rejects it. -/
-example : wrongTabSpan.startOffset = tabSpan.startOffset ∧ wrongTabSpan.line = tabSpan.line ∧
-    wrongTabSpan.col ≠ tabSpan.col ∧ ¬ wrongTabSpan.LocationOk tabSource := by decide
 
 end Vacuity
 end ConcreteSpec.Core

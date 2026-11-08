@@ -275,11 +275,31 @@ structure SafetyObligation where
 def SafetyEvidence.Usable (e : SafetyEvidence) (current : EvidenceContext) : Prop :=
   e.context = current
 
-/-- Evidence discharges an obligation only when its context is current, its typed identity names
-that obligation, and the proved fact is the obligation's proposition. -/
-def SafetyEvidence.Discharges (e : SafetyEvidence) (current : EvidenceContext)
-    (obligation : SafetyObligation) : Prop :=
-  e.Usable current ∧ current.obligation = obligation.id ∧ e.fact = obligation.fact
+/-- The authoritative obligations available to evidence consumption, by typed obligation identity. -/
+abbrev ObligationTable := AList ObligationId SafetyObligation
+
+/-- A successfully discharged authoritative obligation and a proof of its actual proposition. -/
+structure DischargedFact where
+  obligation : SafetyObligation
+  proof : obligation.fact
+
+/-- Consume evidence against the current context and an authoritative obligation table. Every
+component of the evidence context must match, the evidence must name the requested obligation, and
+its proved proposition must be the proposition retrieved for that obligation. -/
+noncomputable def SafetyEvidence.discharge (e : SafetyEvidence) (obligations : ObligationTable)
+    (current : EvidenceContext) (requested : ObligationId) : Option DischargedFact := by
+  classical
+  exact
+    if context : e.context = current then
+      if identity : current.obligation = requested then
+        match AList.lookup obligations requested with
+        | none => none
+        | some obligation =>
+          if fact : e.fact = obligation.fact then
+            some ⟨obligation, fact ▸ e.proof⟩
+          else none
+      else none
+    else none
 
 instance (e : SafetyEvidence) (current : EvidenceContext) : Decidable (e.Usable current) := by
   unfold SafetyEvidence.Usable
