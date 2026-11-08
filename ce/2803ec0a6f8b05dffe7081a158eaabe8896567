@@ -1,0 +1,2 @@
+[piece 1 of 2: scripts]
+- scripts/land/signoff.sh:143: The cap check accepts any note containing `rounds: 5`, without validating that it is a review.sh record. Even a malformed note consisting solely of that line qualifies, allowing a sign-off without valid evidence that the member exhausted its review rounds. Validate the note’s required fields and structure before using its round count.
