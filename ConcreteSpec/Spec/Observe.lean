@@ -390,44 +390,79 @@ def ExecAdapter.project (A : ExecAdapter O S) (events : List O.Event) : List (Ev
 def publicOutputs (events : List (Event S)) : List S.Output :=
   events.filterMap (fun event => match event with | .output value => some value | _ => none)
 
-/-- Independent output interpretation supplied by an operand/environment instance. `physical`
-specifies which public outputs a C1 event physically performs. This obligation is separate from
-request/response admission: a trace-valid adapter can still erase or reorder physical output.
-The adapter does not check this obligation at runtime. -/
-def ExecAdapter.OutputCorrespondence (A : ExecAdapter O S)
-    (physical : O.Event → List S.Output) : Prop :=
-  ∀ event, publicOutputs (A.events event) = physical event
-
-/-- Primitive-level physical semantics, supplied by the operand instance independently of an
+/-- Primitive-level physical semantics fixed by the operand and output types independently of any
 observation adapter. `emit` describes the effect of executing an accepted primitive answer;
-`past` interprets the incoming history, including effects before the current evaluator call. -/
-structure PhysicalEffects (O : Exec.Operands) (Output : Type) where
+`past` interprets recorded C1 events, including effects before the current evaluator call. -/
+class PhysicalEffects (O : Exec.Operands) (Output : Type) where
   emit : O.Prim → List O.Val → O.Store → Exec.Answer O.Val O.Event O.Store → List Output
   past : O.Event → List Output
 
-/-- A lawful oracle records exactly the physical effects specified for its primitive answers.
-This obligation is about primitive execution, not the adapter's public projection. -/
-def PhysicalEffects.OracleFaithful {Output : Type} (F : PhysicalEffects O Output) (ρ : Exec.Oracle O) : Prop :=
+/-- Adapter output correspondence against the operand language's fixed `PhysicalEffects` instance.
+Because `PhysicalEffects O S.Output` is fixed by `(O, S.Output)` rather than chosen per adapter,
+an output-erasing adapter cannot satisfy `OutputCorrespondence` by swapping in a zero-effect
+interpretation. The adapter does not check this obligation at runtime. -/
+def ExecAdapter.OutputCorrespondence [F : PhysicalEffects O S.Output]
+    (A : ExecAdapter O S) : Prop :=
+  ∀ event, publicOutputs (A.events event) = F.past event
+
+/-- A lawful oracle records in `a.event` the physical effects specified by the operand language's
+`PhysicalEffects` instance for its accepted primitive answers. This obligation is about primitive
+execution, not the adapter's public projection. -/
+def PhysicalEffects.OracleFaithful (Output : Type) [F : PhysicalEffects O Output]
+    (ρ : Exec.Oracle O) : Prop :=
   ∀ hist p vs site store a, ρ hist p vs site store = some a →
     O.allows p vs store a = true →
     a.event.toList.flatMap F.past = F.emit p vs store a
 
-/-- Independent physical execution semantics. Each transition carries its primitive effect,
-with the actual oracle answer and continuation as witnesses. Unlike the fuel driver, this is
-an unbounded relation over executions; it neither computes nor validates public projections. -/
-inductive PhysicalEffects.Execution {Output : Type} (F : PhysicalEffects O Output)
+/-- Independent physical execution semantics from `(hist, c)` to a stopped or budget-exhausted
+evaluator ending `Exec.Ending O`. Every stopping constructor is guarded by the exact machine
+condition (`final?`, `step`, oracle answer, primitive contract, or continuation) that stops
+execution, and stepping constructors require `c.final? = none`, so an execution reaching `.final`,
+`.noAnswer`, `.stuck`, or `.badAnswer` cannot stop early at an intermediate step. -/
+inductive PhysicalEffects.Execution (Output : Type) [F : PhysicalEffects O Output]
     (P : Exec.Program O) (ρ : Exec.Oracle O) :
-    List O.Event → Exec.Config O → List Output → List O.Event → Exec.Config O → Prop where
-  | refl (hist c) : F.Execution P ρ hist c [] hist c
-  | silent {hist c next outputs finalHist finalConfig} :
-      Exec.step P c = some (.next next) →
-      F.Execution P ρ hist next outputs finalHist finalConfig →
-      F.Execution P ρ hist c outputs finalHist finalConfig
-  | answer {hist c p vs site store k a next outputs finalHist finalConfig} :
+    List O.Event → Exec.Config O → List Output → List O.Event → Exec.Ending O → Prop where
+  | final {hist c f} :
+      c.final? = some f →
+      PhysicalEffects.Execution Output P ρ hist c [] hist (.final f c.store)
+  | outOfFuel {hist c} :
+      c.final? = none →
+      PhysicalEffects.Execution Output P ρ hist c [] hist (.outOfFuel c)
+  | stuckStep {hist c} :
+      c.final? = none →
+      Exec.step P c = none →
+      PhysicalEffects.Execution Output P ρ hist c [] hist (.stuck c)
+  | stuckCont {hist c p vs site store k a} :
+      c.final? = none →
       Exec.step P c = some (.request p vs site store k) →
-      ρ hist p vs site store = some a → O.allows p vs store a = true → k a = some next →
-      F.Execution P ρ (hist ++ a.event.toList) next outputs finalHist finalConfig →
-      F.Execution P ρ hist c (F.emit p vs store a ++ outputs) finalHist finalConfig
+      ρ hist p vs site store = some a →
+      O.allows p vs store a = true →
+      k a = none →
+      PhysicalEffects.Execution Output P ρ hist c [] hist (.stuck c)
+  | noAnswer {hist c p vs site store k} :
+      c.final? = none →
+      Exec.step P c = some (.request p vs site store k) →
+      ρ hist p vs site store = none →
+      PhysicalEffects.Execution Output P ρ hist c [] hist (.noAnswer c)
+  | badAnswer {hist c p vs site store k a} :
+      c.final? = none →
+      Exec.step P c = some (.request p vs site store k) →
+      ρ hist p vs site store = some a →
+      O.allows p vs store a = false →
+      PhysicalEffects.Execution Output P ρ hist c [] hist (.badAnswer c)
+  | silent {hist c next outputs finalHist ending} :
+      c.final? = none →
+      Exec.step P c = some (.next next) →
+      PhysicalEffects.Execution Output P ρ hist next outputs finalHist ending →
+      PhysicalEffects.Execution Output P ρ hist c outputs finalHist ending
+  | answer {hist c p vs site store k a next outputs finalHist ending} :
+      c.final? = none →
+      Exec.step P c = some (.request p vs site store k) →
+      ρ hist p vs site store = some a →
+      O.allows p vs store a = true →
+      k a = some next →
+      PhysicalEffects.Execution Output P ρ (hist ++ a.event.toList) next outputs finalHist ending →
+      PhysicalEffects.Execution Output P ρ hist c (F.emit p vs store a ++ outputs) finalHist ending
 
 /-- Adapter and oracle well-formedness against a C6 operation contract. An internal answer emits
 only output. If a C1 request has typed request `q`, its answer projects to any output, then
