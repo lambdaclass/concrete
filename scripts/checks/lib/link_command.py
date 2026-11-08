@@ -48,7 +48,7 @@ def check_grammar(actual, objects, output, target):
                 if next(args) != 'macos' or any(not re.fullmatch(r'[0-9]+(?:[.][0-9]+){0,2}', next(args)) for _ in range(2)):
                     sys.exit('link command: invalid platform version')
             elif arg == '-z' and not darwin:
-                if next(args) != 'relro':
+                if next(args) not in ('relro', 'now'):
                     sys.exit('link command: unsupported -z operand')
             elif arg in flags or re.fullmatch(r'-l[A-Za-z0-9_+.-]+', arg):
                 pass
@@ -92,6 +92,11 @@ def validate(policy, actual, output, objects, sanitize=False):
     return actual
 
 
+def linker_environment():
+    return {'LC_ALL': 'C', 'TZ': 'UTC', 'ZERO_AR_DATE': '1',
+            'TMPDIR': os.environ['CONCRETE_NATIVE_TMP']}
+
+
 if __name__ == '__main__':
     policy = verify_policy()
     record, output, variant, *objects = sys.argv[1:]
@@ -100,5 +105,4 @@ if __name__ == '__main__':
     actual = command(policy, output, objects, variant == 'sanitize')
     Path(record).write_text(json.dumps(actual) + '\n')
     validate(policy, json.loads(Path(record).read_text()), output, objects, variant == 'sanitize')
-    os.execve(actual[0], actual, {'LC_ALL': 'C', 'TZ': 'UTC', 'ZERO_AR_DATE': '1',
-                                   'TMPDIR': os.environ['CONCRETE_NATIVE_TMP']})
+    os.execve(actual[0], actual, linker_environment())

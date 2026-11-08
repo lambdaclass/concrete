@@ -183,9 +183,10 @@
               "-platform_version" "macos" "15.0" nativeSysroot.version "-syslibroot"
               nativeSettings.CONCRETE_SLICE0_SYSROOT "-no_uuid" "-w" "-Z" "-t"
               "-o" "@OUTPUT@" "@OBJECTS@" "-L${nativeSettings.CONCRETE_SLICE0_SYSROOT}/usr/lib" "-lSystem"
+              "${pkgs.llvmPackages_21.compiler-rt}/lib/darwin/libclang_rt.osx.a"
             ] else [
               nativeSettings.CONCRETE_SLICE0_REAL_LD "--sysroot=${nativeSettings.CONCRETE_SLICE0_SYSROOT}"
-              "-z" "relro" "--hash-style=gnu" "--eh-frame-hdr" "-nostdlib" "-pie" "--build-id=none" "-t"
+              "-z" "relro" "-z" "now" "--hash-style=gnu" "--eh-frame-hdr" "-nostdlib" "-pie" "--build-id=none" "-t"
               "-dynamic-linker" "${libcLib}/${builtins.baseNameOf pkgs.stdenv.cc.bintools.dynamicLinker}"
               "-o" "@OUTPUT@" "${libcLib}/Scrt1.o" "${libcLib}/crti.o"
               "${rt}/clang_rt.crtbegin-${cpu}.o" "@OBJECTS@"
@@ -193,6 +194,14 @@
               "${rt}/libclang_rt.builtins-${cpu}.a" "-lc"
               "${rt}/clang_rt.crtend-${cpu}.o" "${libcLib}/crtn.o"
             ];
+            # LLVM 21 clang/lib/Driver/ToolChains/Darwin.cpp,
+            # DarwinClang::AddLinkRuntimeLibArgs appends osx builtins after System.
+            # Linux bindnow + relro mirror pinned nixpkgs bintools-wrapper
+            # add-hardening.sh (the driver wrapper's default hardening).
+            sdkInstallNames = {
+              normal = [ "/usr/lib/libSystem.B.dylib" ];
+              sanitize = [ "/usr/lib/libSystem.B.dylib" "/usr/lib/libc++.1.dylib" ];
+            };
             sanitize = [ "-fsanitize=address" "-fno-sanitize-recover=all" ];
             sanitizeLink = if pkgs.stdenv.isDarwin then [
               "${pkgs.llvmPackages_21.compiler-rt}/lib/darwin/libclang_rt.asan_osx_dynamic.dylib"

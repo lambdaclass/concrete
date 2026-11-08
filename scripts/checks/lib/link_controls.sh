@@ -36,7 +36,9 @@ for side in a different/b; do
       [ -n "${CONCRETE_LINK_CONTROL_NATIVE_HELPER:-}" ] || { echo "FAIL link controls: missing $trace" >&2; exit 1; }
       printf '%s\n' "$product.o" > "$trace"
     fi
-    if (cd "$work/$side"; python3 "$root/scripts/checks/lib/link_purity.py" "$product.exe" "$trace" "$product.o"); then
+    purity_mode=()
+    if [ "$product" = llvm.san ]; then purity_mode=(--sanitize); fi
+    if (cd "$work/$side"; python3 "$root/scripts/checks/lib/link_purity.py" "$product.exe" "$trace" "${purity_mode[@]}" "$product.o"); then
       echo "ok link controls: $side/$product executable purity"
     else
       echo "FAIL link controls: $side/$product executable purity" >&2
@@ -45,20 +47,32 @@ for side in a different/b; do
   done
 done
 [ "$product_failures" = 0 ] || exit 1
+if [ "$(uname -s)" = Linux ]; then
+  for product in control llvm.san; do
+    "$CONCRETE_SLICE0_LINKER_BIN/readelf" -W -l -d "$work/a/$product.exe" > "$work/hardening"
+    grep -F GNU_RELRO "$work/hardening"
+    grep -E 'BIND_NOW|FLAGS_1.*NOW' "$work/hardening"
+  done
+fi
 for exe in control.exe llvm.san.exe; do
   cmp "$work/a/$exe" "$work/different/b/$exe"
   echo "ok link controls: $exe unchanged by host layout, cwd and TMPDIR"
 done
-# Deliberately bypass policy construction to create an impure executable. The validator
-# must reject its metadata even though the consumed objects and trace are declared.
+# Expand the production vector, then append only the metadata perturbation.
 unset NIX_LDFLAGS LIBRARY_PATH LD_RUN_PATH
 cd "$work/a"
+control_link() {
+  local output=$1; shift
+  CONCRETE_NATIVE_TMP="$work/tmp-a" PYTHONPATH="$root/scripts/checks/lib" python3 - "$output" "$@" <<'LINK'
+import os, sys
+from link_command import command, linker_environment
+from link_policy import verify_policy
+actual = command(verify_policy(), sys.argv[1], ['control.o']) + sys.argv[2:]
+os.execve(actual[0], actual, linker_environment())
+LINK
+}
 mkdir -p "$work/host space/lib"
-if [ "$(uname -s)" = Linux ]; then
-  "$CONCRETE_SLICE0_CLANG" -Wl,-t -Wl,--build-id=none -Wl,-rpath,"$work/host space/lib" control.o -o impure.exe >impure.trace 2>&1
-else
-  "$CONCRETE_SLICE0_CLANG" -Wl,-t -Wl,-no_uuid -Wl,-rpath,"$work/host space/lib" control.o -o impure.exe >impure.trace 2>&1
-fi
+control_link impure.exe -rpath "$work/host space/lib" >impure.trace 2>&1
 if python3 "$root/scripts/checks/lib/link_purity.py" impure.exe impure.trace control.o >refusal 2>&1; then
   echo 'FAIL link controls: host RUNPATH accepted' >&2; exit 1
 fi
@@ -71,7 +85,7 @@ print(next(p for p in paths if p.startswith('/') and Path(p).is_file()))
 INPUT
 )
 ln -s "$(dirname "$libc")" "$work/host/alias"
-"$CONCRETE_SLICE0_CLANG" -w -Wl,-t -Wl,-rpath,"$work/host/alias" control.o -o alias.exe >alias.trace 2>&1
+control_link alias.exe -rpath "$work/host/alias" >alias.trace 2>&1
 if python3 "$root/scripts/checks/lib/link_purity.py" alias.exe alias.trace control.o >refusal 2>&1; then
   echo 'FAIL link controls: host alias RUNPATH accepted' >&2; exit 1
 fi
@@ -99,14 +113,13 @@ fi
 grep -F 'link purity: unrecognized linker trace:' refusal
 if grep -q 'Traceback' refusal; then cat refusal >&2; exit 1; fi
 if [ "$(uname -s)" = Linux ]; then
-  # Construct empty runtime tags using the declared driver, then bypass only the
-  # caller-argument check. The executable metadata checker must reject them.
+  # Construct both runtime tag kinds using the production real-linker template. The executable metadata checker must reject them.
   (
     policy_root="$root/scripts/checks/lib"
     source "$policy_root/native_toolchain.sh"
     for mode in --enable-new-dtags --disable-new-dtags; do
-      "${cc[@]}" -Wl,-t "-Wl,$mode" control.o -o empty.exe >empty.trace 2>&1
-      # The Nix wrapper appends its own nonempty RPATH. Empty the actual
+      control_link empty.exe "$mode" >empty.trace 2>&1
+      # Empty the declared runtime path string after linking to test the actual
       # dynamic string after linking to test both tag kinds independently.
       python3 - "$CONCRETE_SLICE0_LINKER_BIN/readelf" empty.exe <<'EMPTY'
 import pathlib, re, subprocess, sys
