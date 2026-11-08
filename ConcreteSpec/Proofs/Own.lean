@@ -208,6 +208,58 @@ theorem life_erasure {σ : Type} (types : Var → Option Descriptor) (e : Exec.L
   subst t
   rfl
 
+theorem adoptDown_preserves (s t : State) (args : List (Var × LoanId))
+    (h : adoptDown s args = some t) : WellFormed t := by
+  unfold adoptDown at h
+  obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp h
+  split at hh
+  · exact validate_wf hh
+  · contradiction
+
+theorem passDown_preserves (s t : CallState) (i : LoanId) (parameter : Var)
+    (h : passDown s i parameter = some t) : WellFormed t.own := by
+  unfold passDown at h
+  obtain ⟨a, _, hh⟩ := Option.bind_eq_some_iff.mp h
+  obtain ⟨own, ho, hh⟩ := Option.bind_eq_some_iff.mp hh
+  cases hh
+  exact reborrow_preserves s.own own i [] a.mode ho
+
+/-- C1's actual call/lifecycle callback preserves ownership, for both owner and view parameters. -/
+theorem callLife_preserves (types : Var → Option Descriptor) (e : Exec.Life)
+    (s t : CallState) (h : callLife types e s = some t) : WellFormed t.own := by
+  cases e with
+  | enter params =>
+    simp only [callLife] at h
+    split at h
+    · obtain ⟨u, _, hh⟩ := Option.bind_eq_some_iff.mp h
+      obtain ⟨v, hv, hh⟩ := Option.bind_eq_some_iff.mp hh
+      cases hh
+      exact adoptDown_preserves u v s.pending hv
+    · contradiction
+  | bind x =>
+    simp only [callLife] at h
+    obtain ⟨own, ho, hh⟩ := Option.map_eq_some_iff.mp h
+    subst t
+    exact life_preserves types (.bind x) s.own own ho
+  | leave =>
+    simp only [callLife] at h
+    obtain ⟨own, ho, hh⟩ := Option.map_eq_some_iff.mp h
+    subst t
+    exact life_preserves types .leave s.own own ho
+  | drop xs =>
+    simp only [callLife] at h
+    obtain ⟨own, ho, hh⟩ := Option.map_eq_some_iff.mp h
+    subst t
+    exact life_preserves types (.drop xs) s.own own ho
+
+/-- Passing loans changes only instrumentation, including at mixed-parameter call entry. -/
+theorem callLife_erasure {σ : Type} (types : Var → Option Descriptor) (e : Exec.Life)
+    (s t : σ × CallState) (h : callLifeStore types e s = some t) : t.1 = s.1 := by
+  unfold callLifeStore at h
+  obtain ⟨_, _, hh⟩ := Option.map_eq_some_iff.mp h
+  subst t
+  rfl
+
 /-- Any successful instrumented operation preserves the invariant when its permission
 transition does. Concrete values and concrete branch choices are irrelevant to this proof. -/
 theorem instrument_preserves {σ α : Type} (permit : State → Option State)
@@ -307,6 +359,17 @@ theorem reborrow_birth (s t : State) (i : LoanId) (suffix : List Projection)
 
 private theorem endLoan_frames (s t : State) (i : LoanId) (h : endLoan s i = some t) :
     t.frames = s.frames := by
+  unfold endLoan at h
+  obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp h
+  split at hh
+  · contradiction
+  · obtain ⟨he, _⟩ := (validate_iff _ _).mp hh
+    subst t
+    rfl
+
+/-- Ending any loan leaves the freshness supply unchanged; an ended identity is not recycled. -/
+theorem endLoan_supply (s t : State) (i : LoanId) (h : endLoan s i = some t) :
+    t.nextLoan = s.nextLoan := by
   unfold endLoan at h
   obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp h
   split at hh

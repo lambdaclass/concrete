@@ -230,8 +230,8 @@ def leave (s : State) : Option State := do
   validate { s with frames := s.frames.tail }
 
 /-- Downward-only lending: each parameter gets a new child loan. Views never become owner slots,
-so cannot be returned/stored/moved by the owner operations. C1 operand instances can prepare this
-transition while evaluating typed call arguments; its `Life.enter` adapter is for owner parameters.
+so cannot be returned/stored/moved by the owner operations. This standalone call-boundary transition supports the preservation laws. C1 uses `callLife`
+below to adopt loans that were opened earlier, during typed argument evaluation.
 No reference-valued concrete storage is introduced. -/
 def enterDown (s : State) (args : List (Var × LoanId)) : Option State := do
   let s ← enter (fun _ => none) [] s
@@ -288,6 +288,11 @@ def callLife (types : Var → Option Descriptor) : Exec.Life → CallState → O
       pure ⟨own, []⟩
     else none
   | e, s => (life types e s.own).map fun own => { s with own := own }
+
+/-- The call adapter also carries an arbitrary concrete memory/resource store unchanged. -/
+def callLifeStore {σ : Type} (types : Var → Option Descriptor) (e : Exec.Life)
+    (s : σ × CallState) : Option (σ × CallState) :=
+  (callLife types e s.2).map fun own => (s.1, own)
 
 /-- Erasure forgets the instrumentation, keeping exactly the operand instance's concrete store. -/
 structure Store (σ : Type) where
