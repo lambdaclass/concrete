@@ -492,7 +492,7 @@ inductive RunsAll (P : Program O) (L : AList Var O.Val) :
   | cons {d ds st tr₁ st₁ tr₂ st₂} : Completes P L d st tr₁ st₁ → RunsAll P L ds st₁ tr₂ st₂ →
       RunsAll P L (d :: ds) st (tr₁ ++ tr₂) st₂
 
-/-- The cleanup an exit through frames `pre` performs, from locals `L` and state `st`: each scope's
+/-- The successful cleanup an exit through frames `pre` performs, from locals `L` and state `st`: each scope's
 calls run in turn (`RunsAll`), with the locals that scope restores passed on to the next, the
 innermost scope first. The calls it runs are exactly `plan pre`, in that order
 (`cleans_iff_runs_plan`, `planWith_calls`). -/
@@ -762,6 +762,25 @@ example (fn : Fn ops) (vs : List Int) (st : DState) :
 
 /-- Run a body as `main`. -/
 def go (body : Stmt ops) : Report ops := run prog env 200 (start ⟨[], .int, ⟨0⟩, body⟩ [] .init)
+
+/-- Refusing instrumentation: a local flagged by identity `x` may not be dropped.
+This only illustrates C1's refusal channel; C5 supplies the actual loan discipline. -/
+abbrev refusingOps : Operands := { ops with
+  life := fun e st => match e with
+    | .drop xs => if x ∈ xs then none else some (DState.life e st)
+    | _ => some (DState.life e st) }
+
+/-- Accepted: unflagged locals leave scope normally. Refused: dropping the flagged local
+ends in unsafe stuckness, including at the final scope exit. -/
+example : (match (run (O := refusingOps) ⟨[]⟩ (fun _ _ _ _ _ => none) 10
+    ⟨.exec (.block ⟨0⟩ (.bind x (.lit 1) s)), [], .init, []⟩).ending with
+    | .stuck _ => true
+    | _ => false) = true := by decide
+
+example : (match (run (O := refusingOps) ⟨[]⟩ (fun _ _ _ _ _ => none) 10
+    ⟨.exec (.block ⟨0⟩ (.bind y (.lit 1) s)), [], .init, []⟩).ending with
+    | .final .normal => true
+    | _ => false) = true := by decide
 
 /-- A report's events and, if the program finished, how. -/
 def brief (r : Report ops) : List Int × Option (Final Int) :=

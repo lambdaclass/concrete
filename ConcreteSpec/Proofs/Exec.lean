@@ -508,6 +508,114 @@ theorem step_deterministic {P : Program O} {c c₁ c₂ : Config O} {l₁ l₂ :
       rw [h] at h'; cases h'
       exact .inr ⟨_, _, _, _, _, _, _, h, ha, ha', rfl, rfl, hk, hk'⟩
 
+/-! ### Lifecycle refusal
+
+No law assumes that `life` is total. `step_return_caller` and `return_reaches_caller`
+now require successful leave and result binding; `exit_scope_runs_defers` and
+`done_scope_runs_defers` require a successful drop. `Cleans` and `RunsEach` carry
+successful drops, so their existing plan and unwinding laws keep the same meaning.
+`steps_request` requires successful continuation, and `step_deterministic` records
+those successful continuations explicitly. All other laws retain their premises.
+-/
+
+/-- A refused machine step has no transition, silent or primitive. -/
+theorem no_step_of_none {P : Program O} {c : Config O} (h : step P c = none)
+    (l : Label O) (c' : Config O) : ¬ Step P c l c' := by
+  intro hs
+  cases hs with
+  | silent hs => rw [h] at hs; cases hs
+  | prim hs _ _ => rw [h] at hs; cases hs
+
+/-- Refusing initialization makes a binding stuck after its operand succeeds. -/
+theorem bind_refused (P : Program O) (x : Var) (e : O.Expr) (site : SiteId)
+    (L : AList Var O.Val) (st st' : O.Store) (v : O.Val) (k : List (Frame O))
+    (he : O.eval L st e = .ok (v, st')) (hl : O.life (.bind x) st' = none) :
+    step P ⟨.exec (.bind x e site), L, st, k⟩ = none := by
+  simp [step, onRes, he, hl]
+
+/-- Assignment also propagates refused initialization, even for an existing local. -/
+theorem assign_refused (P : Program O) (x : Var) (e : O.Expr) (site : SiteId)
+    (L : AList Var O.Val) (st st' : O.Store) (v : O.Val) (k : List (Frame O))
+    (he : O.eval L st e = .ok (v, st')) (hl : O.life (.bind x) st' = none) :
+    step P ⟨.exec (.assign x e site), L, st, k⟩ = none := by
+  simp only [step, onRes, he]
+  cases AList.lookup L x <;> simp [hl]
+
+/-- Initial entry, including main, cannot produce a configuration if activation is refused. -/
+theorem enter_refused (fn : Fn O) (vs : List O.Val) (st : O.Store)
+    (hl : O.life (.enter (fn.params.map Prod.fst)) st = none) :
+    enter fn vs st = none := by
+  simp [enter, hl]
+
+/-- Internal call entry refuses the step after evaluating all arguments. -/
+theorem call_refused (P : Program O) (dst : Option Var) (f : FnId) (args : List O.Expr)
+    (site : SiteId) (L : AList Var O.Val) (st st' : O.Store) (vs : List O.Val)
+    (fn : Fn O) (k : List (Frame O)) (he : evalArgs O L st args = .ok (vs, st'))
+    (hf : AList.lookup P.fns f = some fn)
+    (hl : O.life (.enter (fn.params.map Prod.fst)) st' = none) :
+    step P ⟨.exec (.call dst f args site), L, st, k⟩ = none := by
+  simp [step, onRes, he, hf, hl]
+
+/-- A normal scope exit cannot drop locals when instrumentation refuses. -/
+theorem scope_drop_refused (P : Program O) (b : BlockId) (dm : List Var)
+    (L : AList Var O.Val) (st : O.Store) (k : List (Frame O))
+    (hl : O.life (.drop (dead dm L)) st = none) :
+    step P ⟨.done, L, st, .scope b dm [] :: k⟩ = none := by
+  simp [step, dropOut, hl]
+
+/-- The same refusal stops a structured exit through a scope or a test frame. -/
+theorem exit_drop_refused (P : Program O) (e : Exit O.Val) (b : BlockId) (dm : List Var)
+    (l : LoopId) (cr body : Stmt O) (t : O.Expr) (site : SiteId)
+    (L : AList Var O.Val) (st : O.Store) (k : List (Frame O))
+    (hl : O.life (.drop (dead dm L)) st = none) :
+    step P ⟨.exiting e, L, st, .scope b dm [] :: k⟩ = none ∧
+    step P ⟨.exiting e, L, st, .test l cr t body site dm :: k⟩ = none := by
+  simp [step, stepExit, dropOut, hl]
+
+/-- After a successful loop test evaluation, refusal to drop its temporaries stops either branch. -/
+theorem test_drop_refused (P : Program O) (l : LoopId) (cr body : Stmt O) (t : O.Expr)
+    (site : SiteId) (dm : List Var) (L : AList Var O.Val) (st st' : O.Store)
+    (v : O.Val) (k : List (Frame O)) (he : O.eval L st t = .ok (v, st'))
+    (hl : O.life (.drop (dead dm L)) st' = none) :
+    step P ⟨.done, L, st, .test l cr t body site dm :: k⟩ = none := by
+  simp only [step, onRes, he]
+  cases O.test v <;> simp [dropOut, hl]
+
+/-- Refusing either activation end or result binding stops both explicit and Unit returns. -/
+theorem return_refused (P : Program O) (dst : Option Var) (v : O.Val)
+    (caller L : AList Var O.Val) (st : O.Store) (k : List (Frame O))
+    (hl : (O.life .leave st).bind (bindLife O dst) = none) :
+    step P ⟨.exiting (.ret v), L, st, .ret dst caller :: k⟩ = none ∧
+    step P ⟨.done, L, st, .ret dst caller :: k⟩ = none := by
+  cases he : O.life .leave st with
+  | none => simp [step, stepExit, he]
+  | some st' =>
+    have hb : bindLife O dst st' = none := by simpa [he] using hl
+    simp [step, stepExit, he, hb]
+
+/-- Refusing a primitive result binding refuses its request continuation. Error answers bypass
+binding and remain traps. The oracle's answer kind is unchanged. -/
+theorem prim_bind_refused (P : Program O) (x : Var) (p : O.Prim) (args : List O.Expr)
+    (site : SiteId) (L : AList Var O.Val) (st st' : O.Store) (vs : List O.Val)
+    (k : List (Frame O)) (a : Answer O.Val O.Event O.Store) (v : O.Val)
+    (he : evalArgs O L st args = .ok (vs, st')) (ha : a.result = .ok v)
+    (hl : O.life (.bind x) a.store = none) :
+    ∃ cont, step P ⟨.exec (.prim (some x) p args site), L, st, k⟩ =
+      some (.request p vs site st' cont) ∧ cont a = none := by
+  refine ⟨(fun ans => match ans.result with
+    | .ok w => (bindLife O (some x) ans.store).map fun st'' =>
+        ⟨.done, bindDst (some x) w L, st'', k⟩
+    | .error kd => some ⟨.trapped kd site, L, ans.store, k⟩), ?_, ?_⟩
+  · simp [step, onRes, he]
+    rfl
+  · simp [ha, bindLife, hl]
+
+/-- A refused continuation admits no successful response transition for that answer. -/
+theorem continuation_refused (cont : Answer O.Val O.Event O.Store → Option (Config O))
+    (a : Answer O.Val O.Event O.Store) (h : cont a = none) :
+    ¬ ∃ c', cont a = some c' := by
+  simp [h]
+
 /-! ### Destruction -/
 
 /-- The cleanup call that destroys a value calls the type's one `Destroy` function, which takes the
