@@ -330,12 +330,35 @@ theorem c1_call_frame {O : Exec.Operands} {f : FnId} {P : Exec.Program O}
 
 namespace ABI
 
-/-- A returning ABI call restores every callee-saved register exactly. -/
+/-- Preserved machine state composes across sequential calls with the same saved-register set. -/
+theorem machine_preserved_trans {Reg Word : Type} {before middle after : Machine Reg Word}
+    {saved : List Reg} (h₁ : Machine.Preserved before middle saved)
+    (h₂ : Machine.Preserved middle after saved) : Machine.Preserved before after saved := by
+  refine ⟨?_, ?_, ?_⟩
+  · intro r hr
+    exact (h₂.1 r hr).trans (h₁.1 r hr)
+  · intro slot hs
+    have hs' : slot < middle.stackPointer := by rwa [h₁.2.2]
+    exact (h₂.2.1 slot hs').trans (h₁.2.1 slot hs)
+  · exact h₂.2.2.trans h₁.2.2
+
+/-- Sequential calls preserve every register outside the union of their clobber sets. -/
+theorem machine_registerFrame_union {Reg Word : Type} {before middle after : Machine Reg Word}
+    {clobbers₁ clobbers₂ : List Reg} (h₁ : Machine.RegisterFrame before middle clobbers₁)
+    (h₂ : Machine.RegisterFrame middle after clobbers₂) :
+    Machine.RegisterFrame before after (clobbers₁ ++ clobbers₂) := by
+  intro r hr
+  have hr' : r ∉ clobbers₁ ∧ r ∉ clobbers₂ := by
+    simpa only [List.mem_append, not_or] using hr
+  exact (h₂ r hr'.2).trans (h₁ r hr'.1)
+
+/-- A well-formed returning ABI call restores every callee-saved register exactly: well-formedness
+puts those registers outside the clobber set, and the call's register frame preserves that set. -/
 theorem callee_saved_registers_equal {Ty Val Reg Word : Type} {sig : Signature Ty Val Reg Word}
     {before after : Machine Reg Word} {args : List Val} {result : Val}
-    (h : sig.Call before after args result) :
+    (hw : sig.WellFormed) (h : sig.Call before after args result) :
     ∀ r ∈ sig.calleeSaved, after.regs r = before.regs r :=
-  h.preserved.1
+  fun r hr => h.clobbers r (hw.2.2.2 r hr)
 
 /-- Registers outside the clobber set are unchanged; equivalently, clobbers are the only registers
 permitted to differ after return. -/
@@ -392,6 +415,16 @@ theorem artifact_stack_account {Ty Val Reg Word : Type} (launcherRuntime callerF
       launcherRuntime + callerFrame + sig.stackBound := by
   simp [artifactStack, callStack, Nat.add_assoc]
 
+/-- An extern unrelated to both sides of a pair cannot validly return either retention value. -/
+theorem extern_result_rejects_unrelated_retention {F H : Type} (pair : KeptPair F H) (f : F) (h : H)
+    (hfs : f ≠ pair.submit) (hfc : f ≠ pair.complete) :
+    ¬ ExternResult.Valid pair f (.receipt h) ∧ ¬ ExternResult.Valid pair f (.owned h) := by
+  constructor
+  · intro hr
+    exact hfs hr.1
+  · intro ho
+    exact hfc ho.1
+
 /-- A kept receipt has exactly one retention transition: the paired completion returns the same
 handle to Concrete ownership. -/
 theorem kept_only_paired_completion {F H : Type} (pair : KeptPair F H) (h : H)
@@ -402,7 +435,7 @@ theorem kept_only_paired_completion {F H : Type} (pair : KeptPair F H) (h : H)
   | call f h' =>
     cases after with
     | owned h'' =>
-      obtain ⟨hf, hh, hh', hh''⟩ := hs
+      obtain ⟨hf, _hne, hh, hh', hh''⟩ := hs
       cases hf
       cases hh
       cases hh'
@@ -427,6 +460,15 @@ theorem submit_produces_paired_receipt {F H : Type} (pair : KeptPair F H) (h : H
       cases hh'
       cases hh''
       exact ⟨rfl, rfl⟩
+
+/-- The submitting extern cannot consume its own receipt, even though it is the other member of the
+pair: completion requires a distinct extern identity. -/
+theorem kept_receipt_rejects_submission {F H : Type} (pair : KeptPair F H) (h h' : H)
+    (after : RetentionState H) : ¬ KeptStep pair (.kept h) (.call pair.submit h') after := by
+  intro hs
+  cases after with
+  | owned h'' => exact hs.2.1 hs.1
+  | kept h'' => cases hs
 
 /-- No other extern can consume a kept receipt. -/
 theorem kept_receipt_rejects_other_extern {F H : Type} (pair : KeptPair F H) (h h' : H)

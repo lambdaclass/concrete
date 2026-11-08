@@ -311,28 +311,35 @@ instance {H : Type} (p : ExternParam H) : Decidable p.Valid := by
   | mk ty retention =>
     cases ty <;> cases retention <;> unfold ExternParam.Valid <;> infer_instance
 
-/-- Valid extern results are direct FFI values, an owned allocation returned by completion, or its
-linear receipt returned by submission. An enum result is refused. -/
-def ExternResult.Valid {H : Type} : ExternType H → Prop
-  | .enum => False
-  | _ => True
-
-instance {H : Type} (t : ExternType H) : Decidable (ExternResult.Valid t) := by
-  cases t <;> unfold ExternResult.Valid <;> infer_instance
-
-/-- The two typed extern identities paired for one kept handle `H`. -/
+/-- The two distinct extern identities paired for one tracked handle instance. `H` is the handle
+identity type; `handle` is the instance tracked by this single-handle retention trace. -/
 structure KeptPair (F H : Type) where
   submit : F
   complete : F
   handle : H
 
-/-- The signature-pairing law of Q3.12: submission takes `kept h: H` and returns `Kept<H>`;
-completion takes exactly that receipt and returns `H`. The four descriptors are the declaration's
-actual parameter/result types, so this is an interface validity check, not just a naming convention. -/
+/-- Valid extern results are direct FFI values, the paired owned allocation returned by its
+completion, or its linear receipt returned by its submission. Checking the extern identity prevents
+an unrelated declaration from manufacturing either retention value. An enum result is refused. -/
+def ExternResult.Valid {F H : Type} (pair : KeptPair F H) (f : F) : ExternType H → Prop
+  | .ffi _ => True
+  | .owned h => f = pair.complete ∧ h = pair.handle
+  | .receipt h => f = pair.submit ∧ h = pair.handle
+  | .enum => False
+
+instance {F H : Type} [DecidableEq F] [DecidableEq H] (pair : KeptPair F H) (f : F)
+    (t : ExternType H) : Decidable (ExternResult.Valid pair f t) := by
+  cases t <;> unfold ExternResult.Valid <;> infer_instance
+
+/-- The signature-pairing law of Q3.12: distinct submission and completion take `kept h: H` and its
+receipt respectively; only submission returns `Kept<H>` and only completion returns `H`. The four
+descriptors are the declaration's actual parameter/result types, so this is an interface validity
+check, not just a naming convention. -/
 def KeptPair.WellFormed {F H : Type} (pair : KeptPair F H)
     (submitParam : ExternParam H) (submitResult completeParam completeResult : ExternType H) : Prop :=
-  submitParam = ⟨.owned pair.handle, .kept⟩ ∧ submitResult = .receipt pair.handle ∧
-    completeParam = .receipt pair.handle ∧ completeResult = .owned pair.handle
+  pair.submit ≠ pair.complete ∧ submitParam = ⟨.owned pair.handle, .kept⟩ ∧
+    ExternResult.Valid pair pair.submit submitResult ∧ completeParam = .receipt pair.handle ∧
+    ExternResult.Valid pair pair.complete completeResult
 
 /-- The ownership state of one handle: the Concrete owner has it, or foreign code retains it and
 Concrete has only the linear `Kept<H>` receipt. There is no discard transition for a receipt. -/
@@ -345,14 +352,15 @@ inductive ForeignEvent (F H : Type) where
   | call (f : F) (h : H)
 
 /-- The complete retention transition relation. Submission consumes `H` and returns `Kept<H>`;
-only the paired completion consumes that receipt and returns the same `H`. No other call changes
-retention. The receipt keeps the allocator dependency in `H` and has no operations of its own. -/
+only the distinct paired completion consumes that receipt and returns the same `H`. No other call
+changes retention. The receipt keeps the allocator dependency in `H` and has no operations of its
+own. -/
 def KeptStep {F H : Type} (pair : KeptPair F H) :
     RetentionState H → ForeignEvent F H → RetentionState H → Prop
   | .owned h, .call f h', .kept h'' =>
     f = pair.submit ∧ h = pair.handle ∧ h' = h ∧ h'' = h
   | .kept h, .call f h', .owned h'' =>
-    f = pair.complete ∧ h = pair.handle ∧ h' = h ∧ h'' = h
+    f = pair.complete ∧ pair.submit ≠ pair.complete ∧ h = pair.handle ∧ h' = h ∧ h'' = h
   | _, _, _ => False
 
 instance {F H : Type} [DecidableEq F] [DecidableEq H] (pair : KeptPair F H)
@@ -414,19 +422,29 @@ example : (⟨.ffi (.rawPointer .int), .callOnly⟩ : ExternParam Nat).Valid ∧
 /-- Refused: enums never cross an extern boundary, and a raw pointer cannot be marked `kept`. -/
 example : ¬ (⟨.enum, .callOnly⟩ : ExternParam Nat).Valid ∧
     ¬ (⟨.ffi (.rawPointer .int), .kept⟩ : ExternParam Nat).Valid ∧
-    ¬ (ExternResult.Valid (.enum : ExternType Nat)) := by decide
+    ¬ (ExternResult.Valid ⟨0, 1, 7⟩ 0 (.enum : ExternType Nat)) := by decide
+
+/-- Refused: an unrelated extern can return neither the paired receipt nor the paired owned handle. -/
+example : ¬ ExternResult.Valid (⟨0, 1, 7⟩ : KeptPair Nat Nat) 2 (.receipt 7) ∧
+    ¬ ExternResult.Valid (⟨0, 1, 7⟩ : KeptPair Nat Nat) 2 (.owned 7) := by decide
 
 /-- Accepted: the paired declarations have exactly the owned/receipt types of the same handle. -/
 example : (⟨0, 1, 7⟩ : KeptPair Nat Nat).WellFormed
     ⟨.owned 7, .kept⟩ (.receipt 7) (.receipt 7) (.owned 7) := by
-  exact ⟨rfl, rfl, rfl, rfl⟩
+  exact ⟨by decide, rfl, ⟨rfl, rfl⟩, rfl, ⟨rfl, rfl⟩⟩
 
 /-- Refused: a completion for a different handle's receipt does not satisfy the pairing law. -/
 example : ¬ (⟨0, 1, 7⟩ : KeptPair Nat Nat).WellFormed
     ⟨.owned 7, .kept⟩ (.receipt 7) (.receipt 8) (.owned 7) := by
   intro h
-  have hc := h.2.2.1
+  have hc := h.2.2.2.1
   cases hc
+
+/-- Refused: submission and completion cannot be the same extern identity. -/
+example : ¬ (⟨0, 0, 7⟩ : KeptPair Nat Nat).WellFormed
+    ⟨.owned 7, .kept⟩ (.receipt 7) (.receipt 7) (.owned 7) := by
+  intro h
+  exact h.1 rfl
 
 /-- Accepted: submitting handle 7 to the paired extern turns ownership into its receipt. -/
 example : KeptStep ⟨0, 1, 7⟩ (.owned 7) (.call 0 7) (.kept 7) := by decide
