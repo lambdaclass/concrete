@@ -525,7 +525,7 @@ end Demo
 
 /-! ## Accounting conservation -/
 
-theorem Account.alloc_zero (a : Account) (_h : a.WF) : a.alloc 0 = a := by
+theorem Account.alloc_zero (a : Account) (h : a.WF) : a.alloc 0 = a := by
   cases a
   simp_all [Account.alloc, Account.WF]
 
@@ -537,7 +537,7 @@ theorem Memory.set_same (m : Memory) (lineage : LineageId) :
 theorem Account.enter_wf (a : Account) (h : a.WF) : a.enter.WF := by
   exact ⟨h.1, Nat.le_refl _⟩
 
-theorem Account.alloc_wf (a : Account) (bytes : Nat) (_h : a.WF) : (a.alloc bytes).WF := by
+theorem Account.alloc_wf (a : Account) (bytes : Nat) : (a.alloc bytes).WF := by
   exact ⟨Nat.le_max_right _ _, Nat.le_max_right _ _⟩
 
 theorem Account.free_wf (a : Account) (bytes : Nat) (h : a.WF) : (a.free bytes).WF := by
@@ -555,7 +555,7 @@ theorem apply_wf {m : Memory} {action : Action} {m' : Memory}
     intro l
     by_cases hl : l = lineage
     · subst l
-      simpa [Memory.set] using Account.alloc_wf (m lineage) bytes (hwf lineage)
+      simpa [Memory.set] using Account.alloc_wf (m lineage) bytes
     · simpa [Memory.set, hl] using hwf l
   | free lineage bytes =>
     simp only [apply] at h
@@ -729,6 +729,143 @@ theorem run_peak_monotone {m m' : Memory} {actions : List Action}
       have ha' := apply_peak_monotone ha lineage
       have hr' := ih hr
       exact ⟨Nat.le_trans ha'.1 hr'.1, Nat.le_trans ha'.2 hr'.2⟩
+
+/-! ## Concrete accounting controls -/
+
+/-- A nonempty well-formed account and a second lineage with independent accounting. -/
+def accountA : Account := ⟨100, 5, 12, 9⟩
+def accountB : Account := ⟨7, 2, 2, 2⟩
+def memoryA : Memory := Memory.set (Memory.set Memory.empty ⟨0⟩ accountA) ⟨1⟩ accountB
+
+def conservationActions : List Action := [.alloc ⟨0⟩ 8, .free ⟨0⟩ 3, .reset ⟨0⟩]
+def twoLineageActions : List Action :=
+  [.alloc ⟨0⟩ 8, .alloc ⟨1⟩ 4, .free ⟨0⟩ 3, .reset ⟨0⟩,
+    .alloc ⟨0⟩ 6, .reset ⟨1⟩, .reset ⟨0⟩]
+
+/-- Peaks lowered below live bytes, and a reset that incorrectly clears both peaks. -/
+def badPeakAccount : Account := { accountA.alloc 10 with peak := 14, functionPeak := 14 }
+def badResetPeaks : Account := { accountA.reset with peak := 0, functionPeak := 0 }
+
+theorem memoryA_wf : ∀ l, (memoryA l).WF := by
+  intro l
+  by_cases h₀ : l = ⟨0⟩
+  · subst l
+    simp [memoryA, Memory.set, Account.WF, accountA]
+  · by_cases h₁ : l = ⟨1⟩
+    · subst l
+      simp [memoryA, Memory.set, Account.WF, accountB]
+    · simp [memoryA, Memory.set, h₀, h₁, Account.WF, Memory.empty, Account.empty]
+
+/-- Empty initialization and explicit well-formedness controls. -/
+example : Account.empty.WF ∧ Memory.empty ⟨0⟩ = Account.empty := by
+  simp [Account.WF, Memory.empty, Account.empty]
+example : Memory.empty ⟨0⟩ ≠ accountA := by decide
+example : accountA.WF := by simp [Account.WF, accountA]
+example : ¬ (⟨0, 5, 0, 0⟩ : Account).WF := by simp [Account.WF]
+
+/-- `alloc_zero`: a well-formed nonzero-history instance and an ill-formed planted counterexample. -/
+example : accountA.alloc 0 = accountA := Account.alloc_zero _ (by simp [Account.WF, accountA])
+example : (⟨0, 5, 0, 0⟩ : Account).alloc 0 ≠ ⟨0, 5, 0, 0⟩ := by decide
+example : accountA.alloc 1 ≠ accountA := by decide
+
+/-- `Memory.set_same` and two-lineage setter isolation; a planted second-lineage change fails. -/
+example : Memory.set memoryA ⟨0⟩ (memoryA ⟨0⟩) = memoryA := Memory.set_same _ _
+example : Memory.set memoryA ⟨0⟩ (accountA.alloc 1) ⟨1⟩ = accountB := rfl
+example : Memory.set memoryA ⟨1⟩ (accountB.alloc 1) ⟨1⟩ ≠ accountB := by decide
+
+/-- `enter_wf`: nonzero live-on-entry starts the local peak at five, not below it. -/
+example : accountA.enter = ⟨100, 5, 12, 5⟩ ∧ accountA.enter.WF :=
+  ⟨rfl, Account.enter_wf _ (by simp [Account.WF, accountA])⟩
+example : ¬ ({ accountA.enter with functionPeak := 4 } : Account).WF := by
+  simp [Account.WF, accountA, Account.enter]
+
+/-- `alloc_wf`: cumulative requests, peak growth, and retention of already-greater peaks. -/
+example : accountA.alloc 10 = ⟨110, 15, 15, 15⟩ ∧ (accountA.alloc 10).WF :=
+  ⟨rfl, Account.alloc_wf _ _⟩
+example : accountA.alloc 1 = ⟨101, 6, 12, 9⟩ := rfl
+example : ¬ badPeakAccount.WF := by
+  simp [badPeakAccount, Account.WF, accountA, Account.alloc]
+
+/-- `free_wf`: history and both peaks survive; a planted live/peak inconsistency fails. -/
+example : accountA.free 3 = ⟨100, 2, 12, 9⟩ ∧ (accountA.free 3).WF :=
+  ⟨rfl, Account.free_wf _ _ (by simp [Account.WF, accountA])⟩
+example : ¬ ({ accountA.free 3 with live := 13 } : Account).WF := by
+  simp [Account.WF, accountA, Account.free]
+
+/-- `reset_wf`: zero live bytes satisfy the inequalities; a separate control rejects cleared history. -/
+example : accountA.reset = ⟨100, 0, 12, 9⟩ ∧ accountA.reset.WF :=
+  ⟨rfl, Account.reset_wf _⟩
+example : badResetPeaks ≠ accountA.reset := by decide
+
+/-- `apply_wf`: a nonzero allocation and independent controls for touched/untouched corruption. -/
+example : (apply memoryA (.alloc ⟨0⟩ 10)).map (· ⟨0⟩) = some ⟨110, 15, 15, 15⟩ := by decide
+example : ¬ ({ accountB with peak := 1 } : Account).WF := by
+  simp [Account.WF, accountB]
+
+/-- `apply_alloc_zero`: the whole nonempty memory is unchanged; another lineage cannot be changed. -/
+example : apply memoryA (.alloc ⟨0⟩ 0) = some memoryA := apply_alloc_zero memoryA_wf _
+example : Memory.set memoryA ⟨1⟩ (accountB.alloc 1) ⟨1⟩ ≠ memoryA ⟨1⟩ := by decide
+
+/-- `run_wf` and `run`: the actual 8/3/reset run and a successful prefix followed by refusal. -/
+example : (run memoryA conservationActions).map (· ⟨0⟩) = some ⟨108, 0, 13, 13⟩ := by decide
+example : (run memoryA conservationActions).map (· ⟨1⟩) = some accountB := by decide
+example : run Memory.empty [.alloc ⟨0⟩ 8, .free ⟨0⟩ 9, .alloc ⟨0⟩ 1] = none := by decide
+example : ¬ badPeakAccount.WF := by simp [badPeakAccount, Account.WF, accountA, Account.alloc]
+
+/-- `free_conservation`: the actual free and planted requested/history/local-peak corruption. -/
+example : (apply memoryA (.free ⟨0⟩ 3)).map (· ⟨0⟩) = some ⟨100, 2, 12, 9⟩ := by decide
+example : ¬ (99 = accountA.requested ∧ 2 = accountA.live - 3 ∧
+    12 = accountA.peak ∧ 9 = accountA.functionPeak) := by decide
+example : ¬ (8 = accountA.functionPeak) := by decide
+
+/-- `run_conservation`: the actual run and lost-allocation/double-free/bad-reset mutations. -/
+example : 108 = accountA.requested + allocated ⟨0⟩ conservationActions ∧
+    (0 : Int) = accountA.live + allocated ⟨0⟩ conservationActions -
+      freed ⟨0⟩ conservationActions - resetBytes ⟨0⟩ memoryA conservationActions := by decide
+example : ¬ (108 = accountA.requested + 7) := by decide
+example : ¬ ((0 : Int) = 5 + 7 - 3 - 10) := by decide
+example : ¬ ((0 : Int) = 5 + 8 - 6 - 10) := by decide
+example : ¬ ((0 : Int) = 5 + 8 - 3 - 9) := by decide
+
+/-- `apply_peak_monotone` and `run_peak_monotone`: free/reset preserve both peaks; clearing or
+lowering either peak in a planted target rejects the monotonicity claim. -/
+example : accountA.peak ≤ (accountA.alloc 10).peak ∧
+    accountA.functionPeak ≤ (accountA.alloc 10).functionPeak := by decide
+example : accountA.peak ≤ (accountA.free 3).peak ∧
+    accountA.functionPeak ≤ (accountA.free 3).functionPeak := by decide
+example : accountA.peak ≤ accountA.reset.peak ∧
+    accountA.functionPeak ≤ accountA.reset.functionPeak := by decide
+example : ¬ (accountA.peak ≤ badResetPeaks.peak ∧
+    accountA.functionPeak ≤ badResetPeaks.functionPeak) := by decide
+example : ¬ (accountA.peak ≤ 11 ∧ accountA.functionPeak ≤ 8) := by decide
+
+/-- Live bytes, unlike peaks, decrease on a real free. -/
+example : ∃ m m' : Memory, ∃ l : LineageId,
+    apply m (.free l 3) = some m' ∧ ¬ (m l).live ≤ (m' l).live := by
+  refine ⟨memoryA, Memory.set memoryA ⟨0⟩ (accountA.free 3), ⟨0⟩, rfl, ?_⟩
+  decide
+
+/-- Interleaved two-lineage allocation/free and multi-reset counting controls. -/
+example : allocated ⟨0⟩ twoLineageActions = 14 ∧ allocated ⟨1⟩ twoLineageActions = 4 := by decide
+example : freed ⟨0⟩ twoLineageActions = 3 ∧ freed ⟨1⟩ twoLineageActions = 0 := by decide
+example : resetBytes ⟨0⟩ memoryA twoLineageActions = 16 ∧
+    resetBytes ⟨1⟩ memoryA twoLineageActions = 6 := by decide
+example : allocated ⟨0⟩ twoLineageActions ≠ 4 := by decide
+example : freed ⟨0⟩ twoLineageActions ≠ 16 := by decide
+example : resetBytes ⟨0⟩ memoryA twoLineageActions ≠ 10 := by decide
+example : resetBytes ⟨1⟩ memoryA twoLineageActions ≠ 0 := by decide
+example : (run memoryA twoLineageActions).map (· ⟨0⟩) = some ⟨114, 0, 13, 13⟩ := by decide
+example : (run memoryA twoLineageActions).map (· ⟨1⟩) = some ⟨11, 0, 6, 6⟩ := by decide
+
+/-- Established and unestablished bound controls, including optional footprint evidence. -/
+example : Bound.Sound 10 ⟨12, .boundEstablished⟩ := by simp [Bound.Sound]
+example : ¬ Bound.Sound 10 ⟨9, .boundEstablished⟩ := by simp [Bound.Sound]
+example : Bound.SoundOptional (some 10) ⟨12, .boundEstablished⟩ := by
+  simp [Bound.SoundOptional]
+example : ¬ Bound.SoundOptional (some 10) ⟨9, .boundEstablished⟩ := by
+  simp [Bound.SoundOptional]
+example : ¬ Bound.SoundOptional none ⟨12, .boundEstablished⟩ := by
+  simp [Bound.SoundOptional]
 
 /-- An arbitrary report is sound for an actual run when its established limits bound quantities
 obtained independently from the action sequence and function entry. Requested and net-change bounds
