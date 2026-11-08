@@ -257,6 +257,28 @@ theorem runFromQ_request {fuel : Nat} {events : List O.Event} {issued : List (Qu
   simp only [runFromQ, hf, hs]
   rfl
 
+/-- Law (subject `runFromQ`). An actually issued request is answered at its exact event and query
+history. The report obeys that answer, the contract, and the partial continuation, in every branch. -/
+theorem runFromQ_request_correspondence {fuel : Nat} {events : List O.Event}
+    {issued : List (Query O)} {c : Config O} {p : O.Prim} {vs : List O.Val} {site : SiteId}
+    {st : O.Store} {k : Answer O.Val O.Event O.Store → Option (Config O)}
+    (hf : c.final? = none) (hs : step P c = some (.request p vs site st k)) :
+    RequestResolution P ρ fuel ⟨c, events, issued⟩ p vs site st k
+      (runFromQ P ρ (fuel + 1) events issued c) := by
+  rw [runFromQ_request hf hs]
+  dsimp only
+  cases ha : answer ρ (Query.issue events p vs site st issued) with
+  | none => exact RequestResolution.unanswered (pos := ⟨c, events, issued⟩) ha
+  | some a =>
+    cases hl : O.allows p vs st a with
+    | false => simpa only [hl, Bool.false_eq_true, ↓reduceIte] using
+        (RequestResolution.invalid (pos := ⟨c, events, issued⟩) (k := k) ha hl)
+    | true =>
+      simp only [hl, ↓reduceIte]
+      cases hk : k a with
+      | none => exact RequestResolution.refused (pos := ⟨c, events, issued⟩) ha hl hk
+      | some c' => exact RequestResolution.continued (pos := ⟨c, events, issued⟩) ha hl hk
+
 /-- Every instrumented run extends the query history with which it started. -/
 theorem runFromQ_queries_from : ∀ (fuel : Nat) (events : List O.Event) (issued : List (Query O))
     (c : Config O), ∃ later, (runFromQ P ρ fuel events issued c).queries = issued ++ later := by

@@ -103,6 +103,33 @@ structure Position (O : Operands) where
   events : List O.Event
   queries : List (Query O)
 
+/-- The independent oracle/contract specification of a single issued request. Successful answers
+produce an oracle-checked transition and its residual report; terminal answers preserve the old
+event history and record exactly this query. No answer or continuation is assumed by callers. -/
+inductive RequestResolution (P : Program O) (ρ : QueryOracle O) (fuel : Nat)
+    (pos : Position O) (p : O.Prim) (vs : List O.Val) (site : SiteId) (st : O.Store)
+    (k : Answer O.Val O.Event O.Store → Option (Config O)) : QueryReport O → Prop where
+  | unanswered (ha : answer ρ (Query.issue pos.events p vs site st pos.queries) = none) :
+      RequestResolution P ρ fuel pos p vs site st k
+        ⟨pos.events, pos.queries ++ [Query.issue pos.events p vs site st pos.queries],
+          .noAnswer pos.config⟩
+  | invalid {a} (ha : answer ρ (Query.issue pos.events p vs site st pos.queries) = some a)
+      (hl : O.allows p vs st a = false) :
+      RequestResolution P ρ fuel pos p vs site st k
+        ⟨pos.events, pos.queries ++ [Query.issue pos.events p vs site st pos.queries],
+          .badAnswer pos.config⟩
+  | refused {a} (ha : answer ρ (Query.issue pos.events p vs site st pos.queries) = some a)
+      (hl : O.allows p vs st a = true) (hk : k a = none) :
+      RequestResolution P ρ fuel pos p vs site st k
+        ⟨pos.events, pos.queries ++ [Query.issue pos.events p vs site st pos.queries],
+          .stuck pos.config⟩
+  | continued {a c'}
+      (ha : answer ρ (Query.issue pos.events p vs site st pos.queries) = some a)
+      (hl : O.allows p vs st a = true) (hk : k a = some c') :
+      RequestResolution P ρ fuel pos p vs site st k
+        (runFromQ P ρ fuel (pos.events ++ a.event.toList)
+          (pos.queries ++ [Query.issue pos.events p vs site st pos.queries]) c')
+
 /-- One transition under a fixed query-level oracle. A request records its query before the answer is
 used. -/
 inductive Move (P : Program O) (ρ : QueryOracle O) : Position O → Position O → Prop where
