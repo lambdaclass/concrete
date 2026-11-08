@@ -85,7 +85,7 @@ def declarations (p : Program) : String :=
 
 /-- `main`'s body as LLVM text. -/
 def print (p : Program) : String :=
-  declarations p ++ "\ndefine i32 @concrete_body() {\n" ++
+  declarations p ++ s!"\ndefine i32 @concrete_body() \{\n" ++
   String.join ((indexed p.blocks).map fun (j, b) =>
     s!"b{j}:\n" ++ phis p j b ++ String.join (b.insts.map inst) ++ term j b.term) ++
   "}\n"

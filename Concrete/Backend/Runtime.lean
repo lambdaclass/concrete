@@ -38,7 +38,7 @@ def invalidLine : String := "concrete: runtime: invalid result word"
 
 /-- The decided form, checked against a literal (not against `trapLine` itself). -/
 example : trapLine ⟨.arithmeticOverflow, ⟨9⟩, ⟨40, 47⟩, ⟨"src/main.con", 4, 12⟩⟩ =
-    "concrete: trap: overflow at src/main.con:4:12 (site 9)" := by decide +kernel
+    "concrete: trap: overflow at src/main.con:4:12 (site 9)" := by decide
 
 /-- Pair every element with its index. -/
 def indexedFrom {α : Type} (n : Nat) : List α → List (Nat × α)
@@ -104,7 +104,7 @@ def llvm (tbl : SiteTable) : String :=
   "declare i64 @write(i32, ptr, i64)\n" ++
   "declare void @_exit(i32)\n" ++
   "declare void @abort()\n\n" ++
-  "define internal void @concrete_rt_write_all(ptr %p, i64 %n) {\n" ++
+  s!"define internal void @concrete_rt_write_all(ptr %p, i64 %n) \{\n" ++
   "entry:\n  br label %loop\n" ++
   "loop:\n  %pp = phi ptr [ %p, %entry ], [ %np, %more ]\n" ++
   "  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]\n" ++
@@ -113,7 +113,7 @@ def llvm (tbl : SiteTable) : String :=
   "  %bad = icmp sle i64 %k, 0\n  br i1 %bad, label %out, label %more\n" ++
   "more:\n  %np = getelementptr i8, ptr %pp, i64 %k\n  %rest = sub i64 %nn, %k\n  br label %loop\n" ++
   "out:\n  ret void\n}\n\n" ++
-  "define i32 @main() {\n" ++
+  s!"define i32 @main() \{\n" ++
   "entry:\n  %w = call i32 @concrete_body()\n  %ok = icmp ult i32 %w, 256\n" ++
   "  br i1 %ok, label %exit, label %trap\n" ++
   "exit:\n  ret i32 %w\n" ++
@@ -137,13 +137,13 @@ def qbe (tbl : SiteTable) : String :=
     "    call $_exit(w 134)\n    ret 0\n"
   String.join datas ++
   s!"data $bad = \{ {qbeBytes (invalidLine ++ "\n")} }\n" ++
-  "function $concrete_rt_write_all(l %p, l %n) {\n" ++
+  s!"function $concrete_rt_write_all(l %p, l %n) \{\n" ++
   "@start\n    jmp @loop\n" ++
   "@loop\n    %done =w ceql %n, 0\n    jnz %done, @out, @wr\n" ++
   "@wr\n    %k =l call $write(w 2, l %p, l %n)\n    %bad =w cslel %k, 0\n    jnz %bad, @out, @more\n" ++
   "@more\n    %p =l add %p, %k\n    %n =l sub %n, %k\n    jmp @loop\n" ++
   "@out\n    ret\n}\n\n" ++
-  "export function w $main() {\n" ++
+  s!"export function w $main() \{\n" ++
   "@start\n    %w =w call $concrete_body()\n    %ok =w cultw %w, 256\n    jnz %ok, @exit, @trap\n" ++
   "@exit\n    ret %w\n" ++
   "@trap\n    %i =w sub %w, 256\n    jmp @c0\n" ++

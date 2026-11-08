@@ -2096,7 +2096,7 @@ def render (f : Source.Function) : String :=
     String.join (b.instructions.toList.map fun i =>
       s!"    %v{i.destination} ={renderWidth i.width} {renderOperation i.operation}\n") ++
     renderTerminator b.terminator
-  "export function w $concrete_body() {\n" ++ String.join blocks ++ "}\n"
+  s!"export function w $concrete_body() \{\n" ++ String.join blocks ++ "}\n"
 
 /-! ## The in-process leg: LCB's own evaluator against BIR -/
 
