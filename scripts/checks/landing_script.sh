@@ -654,6 +654,7 @@ recip(){ GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=url.https://attacker.example/.inste
   GIT_CONFIG_KEY_1=url.https://github.com/.insteadOf GIT_CONFIG_VALUE_1=https://attacker.example/ "$@"; }
 git init -q "$TMP/recip" && git -C "$TMP/recip" remote add origin https://github.com/lambdaclass/concrete.git
 mkdir -p "$TMP/sshfail" && printf '#!/bin/sh\nexit 255\n' > "$TMP/sshfail/ssh" && chmod +x "$TMP/sshfail/ssh"
+mkdir -p "$TMP/sshlies" && printf '#!/bin/sh\necho "hostname github.com"\nexit 255\n' > "$TMP/sshlies/ssh" && chmod +x "$TMP/sshlies/ssh"
 while read -r want how url; do
   ( . "$ROOT_DIR/scripts/land/lib.sh"; case "$how" in
       plain) land_url_bad "$url" ;;
@@ -672,6 +673,9 @@ while read -r want how url; do
       # An ssh that cannot answer -G (fails, or names no host) leaves the destination unknown: refused.
       g-fails) PATH="$TMP/sshfail:$PATH" land_url_bad "$url" ;;
       g-fails-cmd) PATH="$TMP/sshfail:$PATH" GIT_SSH_COMMAND='ssh -o ServerAliveInterval=20' land_url_bad "$url" ;;
+      # One that names github.com and then fails is still a failed query (callers may lack pipefail).
+      g-lies) set +o pipefail; PATH="$TMP/sshlies:$PATH" land_url_bad "$url" ;;
+      g-lies-prog) set +o pipefail; GIT_SSH="$TMP/sshlies/ssh" land_url_bad "$url" ;;
       config) GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.sshCommand GIT_CONFIG_VALUE_0='ssh -o HostName=attacker.example' land_url_bad "$url" ;;
     esac ) >/dev/null; got=$?
   [ "$got" = "$want" ] || { ovr_ok=0; echo "      $how $url: exit $got, want $want"; }
@@ -691,6 +695,8 @@ done <<'OVR'
 1 g-fails git@github.com:lambdaclass/concrete.git
 1 g-fails-cmd git@github.com:lambdaclass/concrete.git
 0 g-fails https://github.com/lambdaclass/concrete.git
+1 g-lies git@github.com:lambdaclass/concrete.git
+1 g-lies-prog git@github.com:lambdaclass/concrete.git
 0 plain https://github.com/lambdaclass/concrete.git
 OVR
 [ "$ovr_ok" = 1 ] && ok "the guard resolves URLs as git does: its own ssh command (GIT_SSH_COMMAND, core.sshCommand, GIT_SSH, in that order) and url.insteadOf, applied once" || no "the guard ignored an ssh override"
@@ -847,7 +853,8 @@ mkdir -p scripts/land && cp "$ROOT_DIR/scripts/land/lib.sh" scripts/land/lib.sh 
 before="$(git ls-remote origin refs/heads/main | cut -f1)"
 out="$(PRIMARY=gh-other bash scripts/push-both.sh 2>&1)"; rc=$?
 [ "$rc" = 1 ] && has "$out" "not one of the project's repositories" && ok "push-both refuses a PRIMARY that is another repository" || no "push-both PRIMARY=gh-other: exit $rc"
-refused_offline "push-both refuses a PRIMARY that is a literal URL, not a configured remote" "is not a configured remote" env PRIMARY=https://github.com/someone/else.git bash scripts/push-both.sh
+refused_offline "push-both refuses a PRIMARY that is a literal URL, not a configured remote" "is not a configured remote" env PRIMARY=https://x-access-token:SENTINEL-SECRET@github.com/someone/else.git bash scripts/push-both.sh
+! has "$out" "SENTINEL" && has "$out" "https://***@github.com/someone/else.git" && ok "the literal-PRIMARY refusal redacts the URL's credentials" || no "push-both printed a literal PRIMARY's credentials: $out"
 out="$(MIRROR=gh-push bash scripts/push-both.sh 2>&1)"; rc=$?
 [ "$rc" = 1 ] && has "$out" "not one of the project's repositories" && ok "push-both refuses a MIRROR whose push URL is another repository" || no "push-both MIRROR=gh-push: exit $rc"
 out="$(PRIMARY=fork bash scripts/push-both.sh 2>&1)"; rc=$?
@@ -1373,6 +1380,11 @@ done
 out="$(cd "$W" && printf 'refs/heads/x %s refs/heads/wip/dst %s\n' "$(git rev-parse main)" 0000000000000000000000000000000000000000 \
   | bash "$ROOT_DIR/.githooks/pre-push" gh-mixed https://github.com/unbalancedparentheses/concrete2.git 2>&1)"; rc=$?
 [ "$rc" = 1 ] && has "$out" "fetches or pushes both" && ok "the hook refuses a push through a remote that fetches one project repository and pushes the other" || no "hook accepted the mixed remote: exit $rc, $out"
+# git hands the hook the URL it already rewrote: with reciprocal rewrites a direct push to the GitHub
+# URL goes to attacker.example, and the hook must check that, not rewrite it back.
+out="$(cd "$W" && printf 'refs/heads/x %s refs/heads/wip/dst %s\n' "$(git rev-parse main)" 0000000000000000000000000000000000000000 \
+  | recip bash "$ROOT_DIR/.githooks/pre-push" https://github.com/lambdaclass/concrete.git https://attacker.example/lambdaclass/concrete.git 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "not one of the project's repositories" && ok "the hook checks the rewritten URL git hands it as is (reciprocal insteadOf rules)" || no "hook accepted a reciprocally rewritten URL: exit $rc, $out"
 for u in git@github-lambdaclass:lambdaclass/concrete.git https://github.com/LambdaClass/concrete https://github.com/unbalancedparentheses/concrete2.git; do
   out="$(cd "$W" && printf 'refs/heads/x %s refs/heads/wip/dst %s\n' "$(git rev-parse main)" 0000000000000000000000000000000000000000 \
     | PATH="$TMP/sshstub:$PATH" bash "$ROOT_DIR/.githooks/pre-push" origin "$u" 2>&1)"; rc=$?

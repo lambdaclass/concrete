@@ -109,7 +109,9 @@ land_ssh_host() {
   elif cmd="$(git config --get core.sshCommand 2>/dev/null)" && [ -n "$cmd" ]; then :
   elif [ -n "${GIT_SSH:-}" ]; then
     [ "${GIT_SSH##*/}" = ssh ] || return 1
-    h="$("$GIT_SSH" -G ${args[@]+"${args[@]}"} "$1" 2>/dev/null | awk '$1 == "hostname" { print $2; exit }')" || h=""
+    # The query's own status counts (no pipe: a caller may not set pipefail).
+    h="$("$GIT_SSH" -G ${args[@]+"${args[@]}"} "$1" 2>/dev/null)" || return 1
+    h="$(printf '%s\n' "$h" | awk '$1 == "hostname" { print $2; exit }')"
     [ -n "$h" ] || return 1
     printf '%s\n' "$h"; return 0
   else
@@ -119,7 +121,8 @@ land_ssh_host() {
   prog="${cmd%%[[:space:]]*}"; prog="${prog##*/}"
   [ "$prog" = ssh ] || return 1
   # As git runs it: the command through the shell, with git's arguments appended.
-  h="$(sh -c "$cmd -G \"\$@\"" land-ssh-G ${args[@]+"${args[@]}"} "$1" 2>/dev/null | awk '$1 == "hostname" { print $2; exit }')" || h=""
+  h="$(sh -c "$cmd -G \"\$@\"" land-ssh-G ${args[@]+"${args[@]}"} "$1" 2>/dev/null)" || return 1
+  h="$(printf '%s\n' "$h" | awk '$1 == "hostname" { print $2; exit }')"
   [ -n "$h" ] || return 1
   printf '%s\n' "$h"
 }
