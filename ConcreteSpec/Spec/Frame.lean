@@ -481,6 +481,24 @@ def runToy : List ToyInstruction → Machine Nat Nat → Machine Nat Nat
       | .release bytes => { st with stackPointer := st.stackPointer - bytes }
     runToy rest next
 
+/-- Each sample records the current stack pointer and the address accessed by the next
+instruction, if any. Transitions execute the very same `runToy` instruction semantics, including
+reserves and releases; the terminal sample records the final pointer. -/
+def toyTrace : List ToyInstruction → Machine Nat Nat → List (Nat × Option Nat)
+  | [], st => [(st.stackPointer, none)]
+  | instruction :: rest, st =>
+    let address := match instruction with
+      | .save _ offset | .restore _ offset | .slot offset _ => some (st.stackPointer - offset)
+      | _ => none
+    (st.stackPointer, address) :: toyTrace rest (runToy [instruction] st)
+
+/-- Every operational sample stays within the budget, and each read or write addresses a slot
+inside the currently allocated callee frame. Caller slots and the first slot above the active
+allocation are excluded, including during intermediate execution. -/
+def ToyTraceSafe (origin bound : Nat) (samples : List (Nat × Option Nat)) : Prop :=
+  ∀ sample ∈ samples, origin ≤ sample.1 ∧ sample.1 ≤ origin + bound ∧
+    ∀ address, sample.2 = some address → origin ≤ address ∧ address < sample.1
+
 /-- This toy convention passes one natural word in register 0 and returns one in register 1.
 It is an example implementation, not the linux-x86_64 ABI table. -/
 def toySignature : Signature Unit Nat Nat Nat :=
@@ -501,14 +519,24 @@ def toyBodyAt (resultReg result : Nat) : List ToyInstruction :=
 def toyBody (result : Nat) : List ToyInstruction :=
   toyBodyAt 1 result
 
-/-- Execute a full toy call, including input packing. -/
-def toyCall (base : Machine Nat Nat) (arg result : Nat) : Machine Nat Nat :=
-  runToy (toyBody result) (toyInput base arg)
+/-- An observed execution carries its final machine and operational stack/access trace. -/
+structure ToyRun where
+  machine : Machine Nat Nat
+  samples : List (Nat × Option Nat)
+
+/-- Run the selected instruction stream and observe its intermediate stack accesses. Both
+components execute the same instructions from the same initial machine. -/
+def executeToy (code : List ToyInstruction) (before : Machine Nat Nat) : ToyRun :=
+  ⟨runToy code before, toyTrace code before⟩
+
+/-- Execute a full toy call, including input packing and its body execution trace. -/
+def toyCall (base : Machine Nat Nat) (arg result : Nat) : ToyRun :=
+  executeToy (toyBody result) (toyInput base arg)
 
 /-- Execute two sequential toy calls writing their results to registers 1 and 2 while both save,
 clobber, and restore callee-saved register 0 in their private stack frames. -/
 def toyCallSeq (base : Machine Nat Nat) (arg result₁ result₂ : Nat) : Machine Nat Nat :=
-  runToy (toyBodyAt 2 result₂) (toyCall base arg result₁)
+  runToy (toyBodyAt 2 result₂) (toyCall base arg result₁).machine
 
 /-- Independent execution relation for the toy convention. The witnesses describe input
 packing and actual instructions; they contain none of the ABI equalities being proved. -/

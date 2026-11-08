@@ -1192,6 +1192,17 @@ theorem toyTransition_conforms : TransitionConforms toySignature toyTransition :
   · simp [toySignature, ArgumentsHold, Binding.Holds, Location.read, toyInput, runToy]
   · simp [toySignature, Binding.Holds, Location.read, toyBody, toyBodyAt, toyInput, runToy]
 
+/-- Law (subject `ConcreteSpec.Core.Frame.ABI.toyBodyAt`).
+The actual instruction trace stays within the signature budget and all spill reads and writes
+stay inside the active allocation, for any initial pointer and return register. -/
+theorem toyBody_stack_safe (before : Machine Nat Nat) (resultReg result : Nat) :
+    ToyTraceSafe before.stackPointer toySignature.stackBound
+      (toyTrace (toyBodyAt resultReg result) before) := by
+  intro sample hs
+  simp [toyTrace, toyBodyAt, runToy] at hs
+  rcases hs with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
+    simp [toySignature] <;> omega
+
 /-- A populated base machine, including a caller-owned stack slot. -/
 def toyBase : Machine Nat Nat := ⟨fun r => 10 + r, fun slot => 20 + slot, 1⟩
 
@@ -1200,59 +1211,128 @@ Executing input packing and the independent toy body establishes a well-formed s
 complete ABI contract, including in-frame spilling and restoration of callee-saved register 0. -/
 theorem toyCall_conforms (base : Machine Nat Nat) (arg result : Nat) :
     toySignature.WellFormed ∧
-      toySignature.Call (toyInput base arg) (toyCall base arg result) [arg] result :=
-  ⟨toySignature_wellFormed, toyTransition_conforms _ _ _ _ ⟨base, arg, rfl, rfl, rfl⟩⟩
+      toySignature.Call (toyInput base arg) (toyCall base arg result).machine [arg] result ∧
+      ToyTraceSafe base.stackPointer toySignature.stackBound
+        (toyCall base arg result).samples := by
+  exact ⟨toySignature_wellFormed,
+    toyTransition_conforms _ _ _ _ ⟨base, arg, rfl, rfl, rfl⟩,
+    toyBody_stack_safe (toyInput base arg) 1 result⟩
 
 /-- Instance (law `ConcreteSpec.Core.Frame.ABI.toyCall_conforms`, case `spill`). -/
 example : toySignature.WellFormed ∧
-    toySignature.Call (toyInput toyBase 11) (toyCall toyBase 11 7) [11] 7 :=
+    toySignature.Call (toyInput toyBase 11) (toyCall toyBase 11 7).machine [11] 7 ∧
+      ToyTraceSafe toyBase.stackPointer toySignature.stackBound
+        (toyCall toyBase 11 7).samples :=
   toyCall_conforms toyBase 11 7
 
+/-- Instance (law `ConcreteSpec.Core.Frame.ABI.toyBody_stack_safe`, case `spill`). -/
+example : ToyTraceSafe (toyInput toyBase 11).stackPointer toySignature.stackBound
+    (toyTrace (toyBodyAt 1 7) (toyInput toyBase 11)) :=
+  toyBody_stack_safe (toyInput toyBase 11) 1 7
+
+/-- A planted body writes exactly one slot above its allocation. -/
+def outsideToyBodyAt (resultReg result : Nat) : List ToyInstruction :=
+  [.reserve 8, .slot 0 99, .register resultReg result, .release 8]
+
+/-- A planted body temporarily exceeds the stack budget before restoring its pointer. -/
+def overBudgetToyBodyAt (resultReg result : Nat) : List ToyInstruction :=
+  [.reserve 16, .register resultReg result, .release 16]
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyBody_stack_safe`, case `spill`,
+subject `ConcreteSpec.Core.Frame.ABI.toyBodyAt`, mutant `ConcreteSpec.Core.Frame.ABI.outsideToyBodyAt`). -/
+example : ¬ ToyTraceSafe (toyInput toyBase 11).stackPointer toySignature.stackBound
+    (toyTrace (outsideToyBodyAt 1 7) (toyInput toyBase 11)) := by
+  intro h
+  have bad := (h (9, some 9) (by decide)).2.2 9 rfl
+  omega
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyBody_stack_safe`, case `spill`,
+subject `ConcreteSpec.Core.Frame.ABI.toyBodyAt`, mutant `ConcreteSpec.Core.Frame.ABI.overBudgetToyBodyAt`). -/
+example : ¬ ToyTraceSafe (toyInput toyBase 11).stackPointer toySignature.stackBound
+    (toyTrace (overBudgetToyBodyAt 1 7) (toyInput toyBase 11)) := by
+  intro h
+  have bad : 17 ≤ 9 := (h (17, none) (by decide)).2.1
+  omega
+
 /-- A planted call clobbers a callee-saved register without restoring it. -/
-def wrongToySaved (base : Machine Nat Nat) (arg result : Nat) : Machine Nat Nat :=
-  runToy [.register 0 99] (toyCall base arg result)
+def wrongToySaved (base : Machine Nat Nat) (arg result : Nat) : ToyRun :=
+  executeToy (toyBody result ++ [.register 0 99]) (toyInput base arg)
 /-- A planted call overwrites a caller-owned stack slot below `base.stackPointer`. -/
-def wrongToySlot (base : Machine Nat Nat) (arg result : Nat) : Machine Nat Nat :=
-  runToy [.slot 1 99] (toyCall base arg result)
+def wrongToySlot (base : Machine Nat Nat) (arg result : Nat) : ToyRun :=
+  executeToy (toyBody result ++ [.slot 1 99]) (toyInput base arg)
 /-- A planted call leaks its frame. -/
-def wrongToyPointer (base : Machine Nat Nat) (arg result : Nat) : Machine Nat Nat :=
-  runToy [.reserve 8] (toyCall base arg result)
+def wrongToyPointer (base : Machine Nat Nat) (arg result : Nat) : ToyRun :=
+  executeToy (toyBody result ++ [.reserve 8]) (toyInput base arg)
 /-- A planted call overwrites the returned value. -/
-def wrongToyResult (base : Machine Nat Nat) (arg result : Nat) : Machine Nat Nat :=
-  runToy [.register 1 99] (toyCall base arg result)
+def wrongToyResult (base : Machine Nat Nat) (arg result : Nat) : ToyRun :=
+  executeToy (toyBody result ++ [.register 1 99]) (toyInput base arg)
 
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyCall_conforms`, case `spill`,
 subject `ConcreteSpec.Core.Frame.ABI.toyCall`, mutant `ConcreteSpec.Core.Frame.ABI.wrongToySaved`). -/
 example : ¬ (toySignature.WellFormed ∧
-    toySignature.Call (toyInput toyBase 11) (wrongToySaved toyBase 11 7) [11] 7) := by
-  intro ⟨_, h⟩
+    toySignature.Call (toyInput toyBase 11) (wrongToySaved toyBase 11 7).machine [11] 7 ∧
+      ToyTraceSafe toyBase.stackPointer toySignature.stackBound
+        (wrongToySaved toyBase 11 7).samples) := by
+  intro ⟨_, h, _⟩
   have bad := h.preserved.1 0 (by simp [toySignature])
-  simp [wrongToySaved, toyCall, toyInput, toyBody, toyBodyAt, toyBase, runToy] at bad
+  simp [wrongToySaved, executeToy, toyInput, toyBody, toyBodyAt, toyBase, runToy] at bad
 
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyCall_conforms`, case `spill`,
 subject `ConcreteSpec.Core.Frame.ABI.toyCall`, mutant `ConcreteSpec.Core.Frame.ABI.wrongToySlot`). -/
 example : ¬ (toySignature.WellFormed ∧
-    toySignature.Call (toyInput toyBase 11) (wrongToySlot toyBase 11 7) [11] 7) := by
-  intro ⟨_, h⟩
+    toySignature.Call (toyInput toyBase 11) (wrongToySlot toyBase 11 7).machine [11] 7 ∧
+      ToyTraceSafe toyBase.stackPointer toySignature.stackBound
+        (wrongToySlot toyBase 11 7).samples) := by
+  intro ⟨_, h, _⟩
   have bad := h.preserved.2.1 0 (by decide)
-  simp [wrongToySlot, toyCall, toyInput, toyBody, toyBodyAt, toyBase, runToy] at bad
+  simp [wrongToySlot, executeToy, toyInput, toyBody, toyBodyAt, toyBase, runToy] at bad
 
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyCall_conforms`, case `spill`,
 subject `ConcreteSpec.Core.Frame.ABI.toyCall`, mutant `ConcreteSpec.Core.Frame.ABI.wrongToyPointer`). -/
 example : ¬ (toySignature.WellFormed ∧
-    toySignature.Call (toyInput toyBase 11) (wrongToyPointer toyBase 11 7) [11] 7) := by
-  intro ⟨_, h⟩
+    toySignature.Call (toyInput toyBase 11) (wrongToyPointer toyBase 11 7).machine [11] 7 ∧
+      ToyTraceSafe toyBase.stackPointer toySignature.stackBound
+        (wrongToyPointer toyBase 11 7).samples) := by
+  intro ⟨_, h, _⟩
   have bad := h.preserved.2.2
-  simp [wrongToyPointer, toyCall, toyInput, toyBody, toyBodyAt, toyBase, runToy] at bad
+  simp [wrongToyPointer, executeToy, toyInput, toyBody, toyBodyAt, toyBase, runToy] at bad
 
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyCall_conforms`, case `spill`,
 subject `ConcreteSpec.Core.Frame.ABI.toyCall`, mutant `ConcreteSpec.Core.Frame.ABI.wrongToyResult`). -/
 example : ¬ (toySignature.WellFormed ∧
-    toySignature.Call (toyInput toyBase 11) (wrongToyResult toyBase 11 7) [11] 7) := by
-  intro ⟨_, h⟩
+    toySignature.Call (toyInput toyBase 11) (wrongToyResult toyBase 11 7).machine [11] 7 ∧
+      ToyTraceSafe toyBase.stackPointer toySignature.stackBound
+        (wrongToyResult toyBase 11 7).samples) := by
+  intro ⟨_, h, _⟩
   have bad := h.result
-  simp [toySignature, Binding.Holds, Location.read, wrongToyResult, toyCall,
+  simp [toySignature, Binding.Holds, Location.read, wrongToyResult, executeToy,
     toyInput, toyBody, toyBodyAt, toyBase, runToy] at bad
+
+/-- A planted call executes an out-of-frame spill while returning with a restored pointer. -/
+def outsideToyCall (base : Machine Nat Nat) (arg result : Nat) : ToyRun :=
+  executeToy (outsideToyBodyAt 1 result) (toyInput base arg)
+
+/-- A planted call exceeds its budget temporarily while restoring the final pointer. -/
+def overBudgetToyCall (base : Machine Nat Nat) (arg result : Nat) : ToyRun :=
+  executeToy (overBudgetToyBodyAt 1 result) (toyInput base arg)
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyCall_conforms`, case `spill`,
+subject `ConcreteSpec.Core.Frame.ABI.toyCall`, mutant `ConcreteSpec.Core.Frame.ABI.outsideToyCall`). -/
+example : ¬ (toySignature.WellFormed ∧
+    toySignature.Call (toyInput toyBase 11) (outsideToyCall toyBase 11 7).machine [11] 7 ∧
+    ToyTraceSafe toyBase.stackPointer toySignature.stackBound (outsideToyCall toyBase 11 7).samples) := by
+  intro h
+  have bad := (h.2.2 (9, some 9) (by decide)).2.2 9 rfl
+  omega
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyCall_conforms`, case `spill`,
+subject `ConcreteSpec.Core.Frame.ABI.toyCall`, mutant `ConcreteSpec.Core.Frame.ABI.overBudgetToyCall`). -/
+example : ¬ (toySignature.WellFormed ∧
+    toySignature.Call (toyInput toyBase 11) (overBudgetToyCall toyBase 11 7).machine [11] 7 ∧
+    ToyTraceSafe toyBase.stackPointer toySignature.stackBound (overBudgetToyCall toyBase 11 7).samples) := by
+  intro h
+  have bad : 17 ≤ 9 := (h.2.2 (17, none) (by decide)).2.1
+  omega
 
 /-- Helper (congruence). Transitivity of protected machine observations across calls. (approved: PENDING)
  Preserved machine state composes across sequential calls with the same saved-register set. -/
@@ -1284,8 +1364,8 @@ across both calls while confining register modifications to the union of their c
 theorem toyCallSeq_conforms (base : Machine Nat Nat) (arg result₁ result₂ : Nat) :
     Machine.Preserved (toyInput base arg) (toyCallSeq base arg result₁ result₂) [0] ∧
       Machine.RegisterFrame (toyInput base arg) (toyCallSeq base arg result₁ result₂) ([1] ++ [2]) := by
-  have h₁ := (toyCall_conforms base arg result₁).2
-  have h₂ := toyBodyAt_preserved (toyCall base arg result₁) 2 result₂ (by decide)
+  have h₁ := (toyCall_conforms base arg result₁).2.1
+  have h₂ := toyBodyAt_preserved (toyCall base arg result₁).machine 2 result₂ (by decide)
   exact ⟨machine_preserved_trans h₁.preserved h₂.1, machine_registerFrame_union h₁.clobbers h₂.2⟩
 
 /-- Instance (law `ConcreteSpec.Core.Frame.ABI.toyCallSeq_conforms`, case `two_calls`). -/
@@ -1305,7 +1385,7 @@ example : ¬ (Machine.Preserved (toyInput toyBase 11) (clobberingSavedToyCallSeq
     Machine.RegisterFrame (toyInput toyBase 11) (clobberingSavedToyCallSeq toyBase 11 7 9) ([1] ++ [2])) := by
   intro ⟨hp, _⟩
   have bad := hp.1 0 (by decide)
-  simp [clobberingSavedToyCallSeq, toyCallSeq, toyCall, toyInput, toyBody, toyBodyAt, toyBase, runToy] at bad
+  simp [clobberingSavedToyCallSeq, toyCallSeq, toyCall, executeToy, toyInput, toyBody, toyBodyAt, toyBase, runToy] at bad
 
 /-- A planted sequential call clobbers register 3 outside the combined clobber set `[1] ++ [2]`. -/
 def undeclaredClobberToyCallSeq (base : Machine Nat Nat) (arg result₁ result₂ : Nat) : Machine Nat Nat :=
@@ -1318,7 +1398,7 @@ example : ¬ (Machine.Preserved (toyInput toyBase 11) (undeclaredClobberToyCallS
     Machine.RegisterFrame (toyInput toyBase 11) (undeclaredClobberToyCallSeq toyBase 11 7 9) ([1] ++ [2])) := by
   intro ⟨_, hf⟩
   have bad := hf 3 (by decide)
-  simp [undeclaredClobberToyCallSeq, toyCallSeq, toyCall, toyInput, toyBody, toyBodyAt, toyBase, runToy] at bad
+  simp [undeclaredClobberToyCallSeq, toyCallSeq, toyCall, executeToy, toyInput, toyBody, toyBodyAt, toyBase, runToy] at bad
 
 /-- Helper (computation). Characterizes the retention specification; execution evidence is
 `ConcreteSpec.Core.Frame.ABI.transferKept_sound`. (approved: PENDING)
