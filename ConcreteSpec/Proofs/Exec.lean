@@ -1053,6 +1053,121 @@ example (L : AList Var Demo.ops.Val) (st : Demo.DState) (k : List (Frame Demo.op
   done_scope_runs_defers Demo.prog ⟨1⟩ dm L k
     (.cons (demo_bump_completes L st) (.cons (demo_log_completes L _) (.nil _))) rfl
 
+/-! ### Cleanup evidence and planted dispatcher mutations -/
+namespace CleanupEvidence
+open Demo
+
+/-- Representation lemma. A concrete first-return segment for an ordinary deferred call. This certificate is also used
+inside the planted dispatchers: the mutation changes only selection, not the call's behavior. -/
+private theorem logSegment (n : Int) (e : Exit Int) (L : AList Var Int)
+    (rest : List (Frame ops)) :
+    FirstSteps prog (fun c => c.ctrl = .done ∧ c.frames = .resume (.exit e) :: rest)
+      ⟨.exec (.call none logF [.lit n] s), L, .init, .resume (.exit e) :: rest⟩ [n]
+      ⟨.done, L, .init, .resume (.exit e) :: rest⟩ := by
+  let q : List (Frame ops) := .resume (.exit e) :: rest
+  let entered : DState := DState.life (.enter [x]) .init
+  refine FirstSteps.step (P := prog) (c' := ⟨.exec logFn.body, [(x, n)], entered,
+      .scope logFn.block [x] [] :: .ret none L :: q⟩)
+    (by intro h; cases h.1) (.silent rfl) ?_
+  refine FirstSteps.step (P := prog) (c' := ⟨.done, [(x, n)], entered,
+      .scope logFn.block [x] [] :: .ret none L :: q⟩)
+    (by intro h; cases h.1)
+    (Step.prim (P := prog) (p := .log) (vs := [n]) (site := s) (st := entered) (a := ⟨some n, .ok 0, entered⟩) rfl (by simp [ops]) rfl) ?_
+  refine FirstSteps.step (P := prog) (c' := ⟨.done, [(x, n)], entered, .ret none L :: q⟩)
+    (by intro h; cases h.2) (.silent rfl) ?_
+  refine FirstSteps.step (P := prog) (c' := ⟨.done, L, .init, q⟩)
+    (by intro h; cases h.2) (.silent rfl) ?_
+  exact .stop ⟨rfl, rfl⟩
+
+private def d (n : Int) : Deferred ops := ⟨logF, [.lit n], s⟩
+private def inner : Frame ops := .scope ⟨1⟩ [] [d 1]
+private def outer : Frame ops := .scope ⟨2⟩ [] [d 2]
+private def actions : List (CleanAct ops) :=
+  [.call [] (d 1), .drop [] [], .call [] (d 2), .drop [] []]
+
+/-- Instance (law `ConcreteSpec.Core.Exec.cleanup_runs_exact_plan`). Two real calls on nested
+scopes emit `[1,2]`, with each scope drop between calls. The exit's value is carried to the
+boundary without executing anything below it. -/
+example : BoundaryRun prog (Step prog) (.ret 7) [] [inner, outer] [] .init actions [1, 2] [] .init ∧
+    actions = planWith [inner, outer] [] ∧ Performed prog actions .init [1, 2] .init := by
+  have h : BoundaryRun prog (Step prog) (.ret 7) [] [inner, outer] [] .init actions [1, 2] [] .init := by
+    refine BoundaryRun.call (P := prog) (R := Step prog) (pre := [inner, outer])
+      (d := d 1) (rest := [.scope ⟨1⟩ [] [], outer])
+      (by intro h; cases h) (.silent rfl)
+      (logSegment 1 (.ret 7) [] [.scope ⟨1⟩ [] [], outer]) (.silent rfl) ?_
+    refine BoundaryRun.pass (pre' := [outer]) (by intro h; cases h) (.silent rfl) ?_
+    refine BoundaryRun.call (P := prog) (R := Step prog) (pre := [outer])
+      (d := d 2) (rest := [.scope ⟨2⟩ [] []]) (by intro h; cases h) (.silent rfl)
+      (logSegment 2 (.ret 7) [] [.scope ⟨2⟩ [] []]) (.silent rfl) ?_
+    exact BoundaryRun.pass (pre' := []) (by intro h; cases h) (.silent rfl) .stop
+  exact ⟨h, cleanup_runs_exact_plan h⟩
+
+/-- A planted dispatcher deleting a scope's pending call (and performing its drop). -/
+private inductive Missing : Config ops → Label ops → Config ops → Prop where
+  | skip : Missing ⟨.exiting (.ret 7), [], .init, [inner]⟩ .silent
+      ⟨.exiting (.ret 7), [], .init, []⟩
+
+/-- Planted (law `ConcreteSpec.Core.Exec.cleanup_runs_exact_plan`). A mutated rule deletes a
+registered call. The observer admits the actual mutated execution but its actions disagree with
+the independent plan; the law is therefore false for this rule. -/
+example : ¬ (∀ acts tr L st, BoundaryRun prog Missing (.ret 7) [] [inner] [] .init acts tr L st →
+    acts = planWith [inner] [] ∧ Performed prog acts .init tr st) := by
+  intro h
+  have hr : BoundaryRun prog Missing (.ret 7) [] [inner] [] .init [] [] [] .init :=
+    BoundaryRun.pass (pre' := []) (by intro hn; cases hn) .skip .stop
+  have he := (h _ _ _ _ hr).1
+  change ([] : List (CleanAct ops)) = [.call [] (d 1), .drop [] []] at he
+  cases he
+
+/-- A planted dispatcher inserting an unregistered call at a scope with no registrations. -/
+private inductive Extra : Config ops → Label ops → Config ops → Prop where
+  | inject : Extra ⟨.exiting (.ret 7), [], .init, [.scope ⟨1⟩ [] []]⟩ .silent
+      ⟨.exec (d 9).stmt, [], .init, [.resume (.exit (.ret 7)), .scope ⟨1⟩ [] []]⟩
+  | resume : Extra ⟨.done, [], .init, [.resume (.exit (.ret 7)), .scope ⟨1⟩ [] []]⟩ .silent
+      ⟨.exiting (.ret 7), [], .init, [.scope ⟨1⟩ [] []]⟩
+  | drop : Extra ⟨.exiting (.ret 7), [], .init, [.scope ⟨1⟩ [] []]⟩ .silent
+      ⟨.exiting (.ret 7), [], .init, []⟩
+
+/-- Planted (law `ConcreteSpec.Core.Exec.cleanup_runs_exact_plan`). A mutated rule adds a real
+`log(9)` not registered in the scope. Its first-return execution emits `9`, and the law rejects
+the extra observed call. -/
+example : ¬ (∀ acts tr L st, BoundaryRun prog Extra (.ret 7) [] [.scope ⟨1⟩ [] []]
+    [] .init acts tr L st → acts = planWith [.scope ⟨1⟩ [] []] [] ∧ Performed prog acts .init tr st) := by
+  intro h
+  have hr : BoundaryRun prog Extra (.ret 7) [] [.scope ⟨1⟩ [] []] [] .init
+      [.call [] (d 9), .drop [] []] [9] [] .init :=
+    BoundaryRun.call (P := prog) (R := Extra) (pre := [.scope ⟨1⟩ [] []])
+      (d := d 9) (rest := [.scope ⟨1⟩ [] []]) (by intro hn; cases hn) Extra.inject (logSegment 9 (.ret 7) [] [.scope ⟨1⟩ [] []])
+      Extra.resume (BoundaryRun.pass (pre' := []) (by intro hn; cases hn) Extra.drop .stop)
+  have he := (h _ _ _ _ hr).1
+  change ([.call [] (d 9), .drop [] []] : List (CleanAct ops)) = [.drop [] []] at he
+  cases he
+
+/-- A planted dispatcher that forgets the lifecycle effect while popping a scope. -/
+private inductive MissingDrop : Config ops → Label ops → Config ops → Prop where
+  | skip : MissingDrop ⟨.exiting (.ret 7), [(x, 1)], ⟨0, [[x]]⟩, [.scope ⟨1⟩ [] []]⟩ .silent
+      ⟨.exiting (.ret 7), [], ⟨0, [[x]]⟩, []⟩
+
+/-- Planted (law `ConcreteSpec.Core.Exec.cleanup_runs_exact_plan`). Popping the scope but
+forgetting its lifecycle update leaves `x` marked moved. Although the action list and event
+trace look right, independently executing the drop cannot produce this final store. -/
+example : ¬ (∀ acts tr L st, BoundaryRun prog MissingDrop (.ret 7) [] [.scope ⟨1⟩ [] []]
+    [(x, 1)] ⟨0, [[x]]⟩ acts tr L st →
+      acts = planWith (O := ops) [.scope ⟨1⟩ [] []] [(x, 1)] ∧ Performed prog acts ⟨0, [[x]]⟩ tr st) := by
+  intro h
+  have hr : BoundaryRun prog MissingDrop (.ret 7) [] [.scope ⟨1⟩ [] []] [(x, 1)] ⟨0, [[x]]⟩
+      [.drop [] [(x, 1)]] [] [] ⟨0, [[x]]⟩ :=
+    BoundaryRun.pass (pre' := []) (by intro hn; cases hn) .skip .stop
+  have hp := (h _ _ _ _ hr).2
+  cases hp with
+  | drop hd hr =>
+    cases hr
+    have he : (⟨0, [[]]⟩ : DState) = ⟨0, [[x]]⟩ := Option.some.inj hd
+    have hm := congrArg DState.moved he
+    cases hm
+
+end CleanupEvidence
+
 /-! ### Lifecycle evidence and planted refusal bypasses
 
 `Refusal.ops` refuses every lifecycle event. Each configuration below reaches exactly one
