@@ -40,9 +40,11 @@ evaluating: a list is admitted exactly when it types (`admitted_iff_typed`), so 
 an admitted list cannot fail, and every constant then has a valid value of its declared type
 (`evalConsts_sound`).
 
-This module does not decide when a use of a constant is replaced by its value, or revise TYPE-22's
-evaluation-at-each-use: per item 26 that revision of Q6.4/TYPE-22 comes after this subset is
-defined and the decided compile-time-evaluation reopening conditions (P17b) are checked.
+**Compile-time evaluation** (owner decision 2026-11-08, item 26, revising Q6.4/TYPE-22's
+evaluation at each use). A constant's value is computed once, at compile time, from this closed
+subset, and its type must be `Copy`; a use of the constant is that value. The decided compile-time
+evaluation reopening conditions (P17b) are still to be checked against this subset: that check is
+a task recorded in the report, not an open question.
 
 The constant types are an interface (`ConstTypes`): the language's type universe, a `Copy`
 predicate on it, and the embedding of the scalar types the subset computes with, which must all be
