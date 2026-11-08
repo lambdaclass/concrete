@@ -1014,7 +1014,7 @@ theorem decodeByteEscape_complete {escaped decoded : Nat} (h : ByteEscape escape
 
 /-- Internal byte-literal refusals; no diagnostic wording is fixed. -/
 inductive ByteError where
-  | invalidRaw (c : Nat) | invalidEscape (escaped : Nat)
+  | invalidRaw (c : Nat) | invalidEscape (escaped : Nat) | unterminated
   deriving DecidableEq, Repr
 
 /-- Scan exactly the decided byte literal. Other quote-led inputs are left for labels. -/
@@ -1025,8 +1025,9 @@ def byteLiteral : List Nat → Except ByteError (Option (List Nat × Nat × List
     | none => .error (.invalidEscape escaped)
   | 39 :: 92 :: escaped :: _ =>
     match decodeByteEscape escaped with
-    | some _ => .ok none
+    | some _ => .error .unterminated
     | none => .error (.invalidEscape escaped)
+  | 39 :: 92 :: [] => .error .unterminated
   | 39 :: c :: 39 :: rest =>
     if ByteRaw c then .ok (some ([39, c, 39], c, rest)) else .error (.invalidRaw c)
   | _ => .ok none
@@ -1045,6 +1046,7 @@ theorem byteLiteral_sound {cs : List Nat} {out : List Nat × Nat × List Nat}
         ⟨rfl, rfl⟩) <;> decide
     · cases h
   · split at h <;> cases h
+  · cases h
   · split at h
     · cases Except.ok.inj h
       exact .raw (by assumption)
@@ -1057,6 +1059,43 @@ theorem byteLiteral_complete {cs : List Nat} {out : List Nat × Nat × List Nat}
   cases h with
   | raw hraw => simp [byteLiteral, hraw, hraw.2.2.2]
   | escaped he _ => simp [byteLiteral, decodeByteEscape_complete he]
+
+/-- Byte literal decompositions, including decoded values, are unique. -/
+theorem byteLiteral_unique {cs : List Nat} {out₁ out₂ : List Nat × Nat × List Nat}
+    (h₁ : ByteLiteral cs out₁) (h₂ : ByteLiteral cs out₂) : out₁ = out₂ := by
+  exact Option.some.inj (Except.ok.inj
+    ((byteLiteral_complete h₁).symm.trans (byteLiteral_complete h₂)))
+
+/-- Only inputs lacking both an escape opener and a one-scalar closing quote can be
+left for another token class. In particular, escape-led inputs can never be labels. -/
+theorem byteLiteral_none_iff {cs : List Nat} :
+    byteLiteral cs = .ok none ↔
+      (∀ tail, cs ≠ 39 :: 92 :: tail) ∧
+      (∀ c rest, cs ≠ 39 :: c :: 39 :: rest) := by
+  unfold byteLiteral
+  split
+  · rename_i e rest
+    cases decodeByteEscape e <;> simp
+  · rename_i e tail _
+    cases decodeByteEscape e <;> simp
+  · simp
+  · rename_i c rest _
+    split <;> simp
+  · rename_i hescape hbad hshort hraw
+    simp only [true_iff]
+    constructor
+    · intro tail heq
+      subst cs
+      cases tail with
+      | nil => exact hshort rfl
+      | cons e rest => exact hbad e rest rfl
+    · intro c rest heq
+      exact hraw c rest heq
+
+example : byteLiteral [39,92,39] = .error .unterminated := by rfl
+example : byteLiteral [39,92,110] = .error .unterminated := by rfl
+example : byteLiteral [39,92] = .error .unterminated := by rfl
+example : byteLiteral [39,92,110,97,39] = .error .unterminated := by rfl
 
 /-- Scan quote followed by an identifier as a label. -/
 def label : List Nat → Option (List Nat × List Nat)
@@ -1591,9 +1630,9 @@ example : stringBody [92,110,34,65] = .ok ([10], [65]) := by decide
 example : stringBody [92,110,92,116,92,114,92,92,92,34,92,48,34,65] =
     .ok ([10,9,13,92,34,0], [65]) := by decide
 example : stringBody [92,113,34] = .error (.invalidEscape 113) := by decide
-example : stringBody [] = .error .unterminated := by decide
-example : stringBody [92,110] = .error .unterminated := by decide
-example : stringBody [92] = .error .unterminated := by decide
+example : stringBody [] = .error .unterminated := by rfl
+example : stringBody [92,110] = .error .unterminated := by rfl
+example : stringBody [92] = .error .unterminated := by rfl
 example : stringBody [32,126,160,34] = .ok ([32,126,160], []) := by decide
 
 example :

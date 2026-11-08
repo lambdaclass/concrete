@@ -113,6 +113,8 @@ def theorems : List Lean.Name := [
   ``Concrete.Lex.decodeByteEscape_complete,
   ``Concrete.Lex.byteLiteral_sound,
   ``Concrete.Lex.byteLiteral_complete,
+  ``Concrete.Lex.byteLiteral_unique,
+  ``Concrete.Lex.byteLiteral_none_iff,
   ``Concrete.Lex.label_sound,
   ``Concrete.Lex.label_complete,
   ``Concrete.Lex.label_unique,

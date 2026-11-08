@@ -63,6 +63,8 @@ theorem Concrete.Lex.decodeByteEscape_sound axioms: propext
 theorem Concrete.Lex.decodeByteEscape_complete axioms: 
 theorem Concrete.Lex.byteLiteral_sound axioms: propext
 theorem Concrete.Lex.byteLiteral_complete axioms: propext, Quot.sound
+theorem Concrete.Lex.byteLiteral_unique axioms: propext, Quot.sound
+theorem Concrete.Lex.byteLiteral_none_iff axioms: propext, Quot.sound
 theorem Concrete.Lex.label_sound axioms: propext
 theorem Concrete.Lex.label_complete axioms: propext
 theorem Concrete.Lex.label_unique axioms: propext
@@ -76,7 +78,7 @@ theorem Concrete.Lex.longestMatch_complete axioms: propext
 theorem Concrete.Lex.scanDigits_sound axioms: propext
 theorem Concrete.Lex.scanDigits_complete axioms: propext
 theorem Concrete.Lex.decodeSuffix_sound axioms: propext
-theorem Concrete.Lex.decodeSuffix_complete axioms: propext
+theorem Concrete.Lex.decodeSuffix_complete axioms: 
 theorem Concrete.Lex.splitRadix_spec axioms: propext
 theorem Concrete.Lex.integerDigits_sound axioms: propext, Quot.sound
 theorem Concrete.Lex.integerDigits_complete axioms: propext, Quot.sound
