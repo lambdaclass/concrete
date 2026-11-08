@@ -97,8 +97,11 @@ Jobs API, then applies ISS-0029's inventory for the observing repository. Worker
 runner/repository assertions cannot establish provenance. Selection comes from the
 hosted selector's Actions job log, with one exact `SCHEDULE_SELECTION SHA TIER`
 diagnostic; no worker-supplied selection qualifies. If selection never completed,
-both tiers receive absent records on the trusted workflow event SHA. Worker failures
-without a result index are MISSING, rather than invented gate failures. Collector
+the trusted workflow run title identifies the cron tier on the workflow event SHA;
+rejected manual selections never annotate main. Active execution is never treated
+as an overdue queue. Queued observations use observation time; a recorded overdue
+attempt remains immutable and subsequent collection is idempotent. Completed worker
+executions without an index are INCOMPLETE and partial logs remain uploadable. Collector
 API/inventory errors produce a failing INCOMPLETE collector observation; missing
 notes remain visible to the independent observer. HTTP redirects strip credentials.
 
@@ -126,8 +129,8 @@ shared X4 dispatch agreement with ISS-0029 (whose referenced branch supplies no
 reusable dispatcher), manifest-owned freshness windows and agreed exporter schema,
 shared cross-user host slots, durable logs/samples, and observer-occurrence history
 with missed-observer controls. No substitute gate list, private semaphore or hosting
-setting is introduced. The coordinator should track “Scheduled evidence integration
-and watchdog qualification”: land these producer interfaces, validate real cancellation,
+setting is introduced. The allocated **R-0690 — Scheduled evidence integration
+and watchdog qualification** owns live qualification of the watchdog on the real schedule: land these producer interfaces, validate real cancellation,
 queue and remote-note retry scenarios on CI2/GitHub, archive artifacts durably, and
 prove an absent observer is detected independently. This is qualification work, not
 a claim that fixture-only tests have exercised a real campaign.

@@ -13,6 +13,12 @@ class Publication(unittest.TestCase):
             publish.publish(r, RUNNERS)
             push.assert_not_called()
 
+    def test_overdue_attempt_closes_idempotently(self):
+        old = record(); old.update(status="MISSING", conclusion="queued-too-long", gates=[], runner_name=None)
+        with patch.object(publish, "git", side_effect=["remote ref", "", "remote"]), patch.object(publish, "read_note", return_value=[old]), patch.object(publish.subprocess, "run") as push:
+            publish.publish(record(), RUNNERS)
+            push.assert_not_called()
+
     def test_collision_has_exact_diagnostic(self):
         r = record(); old = record(); old["occurrence"] = "different"
         with patch.object(publish, "git", side_effect=["remote ref", "", "remote"]), patch.object(publish, "read_note", return_value=[old]):

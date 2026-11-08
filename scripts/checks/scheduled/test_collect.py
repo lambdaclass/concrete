@@ -9,8 +9,10 @@ from test_protocol import SHA, RUNNERS, record
 class Collector(unittest.TestCase):
     def setUp(self):
         self.payload = record()
+        clock = patch.object(collect, "stamp", return_value=self.payload["completed"])
+        clock.start(); self.addCleanup(clock.stop)
         self.run = dict(id=1, run_attempt=1, event="schedule", head_sha=SHA,
-                        created_at=self.payload["started"], updated_at=self.payload["completed"], head_branch="main")
+                        created_at=self.payload["started"], updated_at=self.payload["completed"], head_branch="main", display_title="scheduled-daily")
         self.job = dict(name="campaign", status="completed", conclusion="success", runner_name="ci2-heavy",
                         started_at=self.payload["started"], completed_at=self.payload["completed"])
 
@@ -46,14 +48,14 @@ class Collector(unittest.TestCase):
     def test_unstarted_workflow_publishes_real_missing_notes(self):
         with patch.object(collect, "pages", return_value=[]), patch.object(collect, "publish") as publish:
             collect.collect(self.run, "example/repo", RUNNERS)
-            self.assertEqual(publish.call_count, 2)
+            self.assertEqual(publish.call_count, 1)
             for call in publish.call_args_list:
                 r = call.args[0]
                 self.assertEqual((r["sha"], r["status"], r["conclusion"], r["gates"], r["artifact"], r["runner_name"]),
                                  (SHA, "MISSING", "absent", [], None, None))
 
     def test_queued_job_collection_needs_no_worker_artifact(self):
-        self.job.update(status="queued", conclusion=None, runner_name=None, completed_at=None)
+        self.job.update(status="queued", conclusion=None, runner_name=None, completed_at=None, created_at="2027-01-01T00:00:00+00:00")
         jobs = [dict(name="select", conclusion="success", id=42), self.job]
         with patch.object(collect, "pages", return_value=jobs) as pages, patch.object(collect, "request", return_value=("SCHEDULE_SELECTION " + SHA + " daily\n").encode()), patch.object(collect, "publish") as publish:
             collect.collect(self.run, "example/repo", RUNNERS)
@@ -62,12 +64,65 @@ class Collector(unittest.TestCase):
             self.assertEqual((r["status"], r["conclusion"], r["gates"], r["artifact"]),
                              ("MISSING", "queued-too-long", [], None))
 
+    def test_rejected_dispatch_does_not_poison_main(self):
+        self.run["event"] = "workflow_dispatch"
+        self.assertEqual(collect.selected("/base", [], self.run), [])
+
+    def test_active_execution_is_not_overdue_queue(self):
+        self.job["status"] = "in_progress"
+        with patch.object(collect, "pages", return_value=[self.job]), patch.object(collect, "publish") as publish:
+            collect.collect(self.run, "example/repo", RUNNERS)
+            publish.assert_not_called()
+
+    def test_overdue_observation_time(self):
+        self.job.update(status="queued", completed_at=None)
+        with patch.object(collect, "stamp", return_value="2027-01-16T00:00:00+00:00"):
+            r = collect.record_for(self.run, self.job, (SHA, "daily"), None, None, "example/repo", {})
+        self.assertEqual(r["completed"], "2027-01-16T00:00:00+00:00")
+        from protocol import observe, timestamp
+        with self.assertRaisesRegex(EvidenceError, f"^MISSING daily {SHA}: recorded attempt$"):
+            observe([r], SHA, "daily", timestamp(r["completed"]), RUNNERS)
+
+    def test_crashed_execution_without_index(self):
+        self.job["conclusion"] = "failure"
+        r = collect.record_for(self.run, self.job, (SHA, "daily"), None, None, "example/repo", {})
+        self.assertEqual((r["status"], r["conclusion"]), ("INCOMPLETE", "incomplete"))
+        self.assertEqual(r["gates"][0]["log"], "Actions execution completed without index.json")
+        from protocol import observe
+        from test_protocol import NOW
+        with self.assertRaisesRegex(EvidenceError, f"^INCOMPLETE daily {SHA}: recorded attempt$"):
+            observe([r], SHA, "daily", NOW, RUNNERS)
+
+    def test_decompressed_index_bound(self):
+        import io
+        from unittest.mock import Mock
+        archive = Mock()
+        archive.open.return_value = io.BytesIO(b"x" * (1024 * 1024 + 1))
+        with self.assertRaisesRegex(EvidenceError, "^index too large$"):
+            collect.read_index(archive)
+        for data in (b"null", b"[]", b'{"gates":[null]}'):
+            archive.open.return_value = io.BytesIO(data)
+            with self.assertRaisesRegex(EvidenceError, "^invalid worker index shape$"):
+                collect.read_index(archive)
+
+    def test_absent_inventory_still_collects(self):
+        import os
+        import tempfile
+        import json
+        self.run["status"] = "completed"
+        with tempfile.NamedTemporaryFile(mode="w") as event:
+            json.dump({"workflow_run": self.run}, event); event.flush()
+            with patch.dict(os.environ, GITHUB_REPOSITORY="example/repo", GITHUB_EVENT_PATH=event.name), patch.object(collect, "inventory", side_effect=EvidenceError("planted absent inventory")), patch.object(collect, "pages", return_value=[]), patch.object(collect, "publish") as publish:
+                self.assertEqual(collect.collect_event(), 0)
+                self.assertEqual(publish.call_args.args[0]["status"], "MISSING")
+
     def test_authoritative_selection(self):
         jobs = [dict(name="select", conclusion="success", id=42)]
         with patch.object(collect, "request", return_value=("2026-11-08T00:00:00Z SCHEDULE_SELECTION " + SHA + " weekly\n").encode()):
             self.assertEqual(collect.selected("/base", jobs, self.run), [(SHA, "weekly")])
+        self.run["display_title"] = "unknown"
         with patch.object(collect, "request", return_value=b"some other failure"):
-            with self.assertRaisesRegex(EvidenceError, "^INCOMPLETE: missing trusted selection diagnostic$"):
+            with self.assertRaisesRegex(EvidenceError, "^INCOMPLETE: missing trusted schedule tier$"):
                 collect.selected("/base", jobs, self.run)
 
 if __name__ == "__main__":

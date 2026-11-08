@@ -1,4 +1,5 @@
 name: Scheduled gate tiers
+run-name: scheduled-${{ github.event_name == 'schedule' && (github.event.schedule == '43 3 * * 0' && 'weekly' || 'daily') || 'replay' }}
 on:
   schedule:
     - cron: '17 2 * * *'
@@ -39,6 +40,14 @@ jobs:
         run: |
           set -euo pipefail
           source scripts/checks/lib/bounded.sh
+          if [ "$EVENT" = schedule ]; then
+            tier=daily
+            if [ "$CRON" = '43 3 * * 0' ]; then tier=weekly; fi
+            echo "SCHEDULE_SELECTION $GITHUB_SHA $tier"
+            echo "sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+            echo "tier=$tier" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           main_sha=$(bounded_run 30 -- git rev-parse refs/remotes/origin/main)
           sha="$main_sha"
           tier=daily
@@ -83,7 +92,6 @@ jobs:
           OCCURRENCE: ${{ github.event.schedule || format('replay/{0}', github.run_id) }}
         run: |
           set -euo pipefail
-          source scripts/checks/lib/bounded.sh
           state=$(mktemp -d)
           trap 'rm -rf "$state"' EXIT
           python3 scripts/checks/lib/bounded_exec.py --timeout 80000 --kill-after 10 --status "$state/outcome" -- nix develop --command python3 scripts/checks/scheduled/run.py "$SELECTED_SHA" "$SELECTED_TIER" result-index

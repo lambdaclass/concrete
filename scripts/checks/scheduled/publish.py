@@ -6,7 +6,14 @@ from protocol import EvidenceError, append, clean_env, git, inventory, read_note
 
 def publish(record, runners=None):
     sha, tier = record["sha"], record["tier"]
-    runners = inventory() if runners is None else runners
+    if runners is None:
+        try:
+            runners = inventory()
+        except EvidenceError:
+            # Only non-qualifying records can survive absent provenance inventory.
+            import os
+            require(bool(os.environ.get("GITHUB_REPOSITORY")), "missing target repository")
+            runners = {os.environ["GITHUB_REPOSITORY"]: set()}
     validate(record, sha, tier, runners)
     ref = "refs/notes/concrete-gates-" + tier
     for retry in range(4):
@@ -22,6 +29,8 @@ def publish(record, runners=None):
         for old in history:
             validate(old, sha, tier, runners)
             if old["attempt"] == record["attempt"]:
+                if old["status"] == "MISSING" and old["conclusion"] == "queued-too-long":
+                    return  # The first overdue observation permanently closes this attempt.
                 require(old == record, "replay would overwrite attempt")
                 return  # Lost response after successful push, or identical collector retry.
         history = append(history, record, sha, tier, runners)
