@@ -133,7 +133,8 @@ refuse_fork() {
 
 # The remote is the one repository and gh reads it (since 2026-11-06): every fetch and push URL that
 # is GitHub names LAND_CANONICAL_REPO, and so does $REPO (land_remote_bad, lib.sh). Every command
-# that can push or read GitHub (build, check, ci, land) checks it before anything else.
+# that can push or read GitHub (build, check, ci, watch, land) checks it before anything else; record
+# runs inside the repository's own CI, whose checkout is that repository by construction.
 require_remote_repo() {
   local why
   why="$(land_remote_bad "$REMOTE" "$REPO")" || die "$why"
@@ -707,6 +708,7 @@ cmd_watch() {
     esac; shift
   done
   valid_name "$name"
+  require_remote_repo
   stage_start
   local id; id="$(state_get "$name" run_id)"
   [ -n "$id" ] || die "watch: no CI run recorded for $name (train.sh ci $name)"

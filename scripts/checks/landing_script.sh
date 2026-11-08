@@ -659,6 +659,9 @@ URLS
 [ "$url_ok" = 1 ] && ok "the one-repository guard reads the owner/name path of every network URL form" || no "the one-repository guard misjudged a URL form"
 out="$(LAND_REMOTE=gh-canon bash "$TRAIN" ci t1 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "gh would read another repository" && ok "ci refuses a LAND_REPO that is not the one repository the remote names" || no "ci accepted LAND_REPO=test/repo on the canonical remote (exit $rc)"
+out="$(LAND_REMOTE=gh-stale LAND_REPO=unbalancedparentheses/concrete2 bash "$TRAIN" watch t1 --interval 1 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "points at another repository" && ! grep -q 'unbalancedparentheses/concrete2' "$FAKE_GH_DIR/calls.log" 2>/dev/null \
+  && ok "watch refuses an old origin with an old LAND_REPO before reading any run" || no "watch read CI through a stale remote (exit $rc)"
 out="$(LAND_REMOTE=gh-stale bash "$TRAIN" --dry-run build tstale --no-fetch b1 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "points at another repository" && ok "build refuses a remote that is another GitHub repository" || no "build accepted a stale GitHub remote (exit $rc)"
 [ "$(git ls-remote fork refs/heads/main | cut -f1)" = "$BASE" ] && ok "fork untouched" || no "fork was pushed"
@@ -1254,6 +1257,18 @@ out="$(cd "$W" && printf 'refs/heads/x %s refs/heads/wip/idn %s\n' "$(git rev-pa
   | CONCRETE_PREPUSH_IDENTIFY=1 bash "$ROOT_DIR/.githooks/pre-push" origin "$TMP/origin.git" 2>&1)"; rc=$?
 ! has "$out" "concrete-pre-push /" && has "$out" "wip/* backup push" \
   && ok "a real push never takes the identify answer (no environment switch exists)" || { no "identify leaked into a push: $out"; }
+# The hook refuses a push to any network URL that is not the one repository, before any tier (and
+# CONCRETE_SKIP_GATES does not skip it); the canonical URL in any form reaches the wip tier.
+for u in https://github.com/unbalancedparentheses/concrete2.git git@github-old:unbalancedparentheses/concrete2.git; do
+  out="$(cd "$W" && printf 'refs/heads/x %s refs/heads/wip/dst %s\n' "$(git rev-parse main)" 0000000000000000000000000000000000000000 \
+    | CONCRETE_SKIP_GATES=1 bash "$ROOT_DIR/.githooks/pre-push" origin "$u" 2>&1)"; rc=$?
+  [ "$rc" = 1 ] && has "$out" "is not lambdaclass/concrete" && ok "the hook refuses a push to $u, even with CONCRETE_SKIP_GATES=1" || no "hook pushed to $u: exit $rc, $out"
+done
+for u in git@github-lambdaclass:lambdaclass/concrete.git https://github.com/LambdaClass/concrete; do
+  out="$(cd "$W" && printf 'refs/heads/x %s refs/heads/wip/dst %s\n' "$(git rev-parse main)" 0000000000000000000000000000000000000000 \
+    | bash "$ROOT_DIR/.githooks/pre-push" origin "$u" 2>&1)"; rc=$?
+  [ "$rc" = 0 ] && has "$out" "wip/* backup push" && ok "the hook lets a push to $u through to its tier" || no "hook refused $u: exit $rc, $out"
+done
 standin_hook
 [ ! -e "$TMP/state/tnh" ] && ok "no refused run left train state behind" || no "a refused run left state"
 

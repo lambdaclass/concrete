@@ -9,9 +9,12 @@ accounts) reaches the self-hosted runners through branch pushes and `workflow_di
   `origin` only (`LAND_MIRROR` and `land --no-mirror` are gone), `LAND_REPO` defaults to
   lambdaclass/concrete, and the bot, `acceptance.sh` and `install-bot.sh` follow. `push-both.sh`
   keeps its name and lock and pushes one remote.
-- **Stale clones fail closed.** `build`, `ci`, `land` and `push-both.sh` refuse a remote whose URL is
-  a GitHub repository other than `LAND_REPO`, before anything is pushed
-  (`scripts/checks/landing_script.sh` covers each).
+- **Stale clones fail closed.** `build`, `check`, `ci`, `watch`, `land`, the bot (and its launcher,
+  before its first fetch) and `push-both.sh` refuse a remote any of whose fetch or push URLs is a
+  network URL whose owner/name is not lambdaclass/concrete (a constant in `scripts/land/lib.sh`, not
+  `LAND_REPO`; any host or ssh alias), and a `LAND_REPO` that is not it. The pre-push hook refuses a
+  push to any such URL, which covers `notes.sh`, `review.sh`, `ready.sh` and pushes by hand
+  (`scripts/checks/landing_script.sh` and `landing_bot.sh` cover each).
 - **CI.** The Landing record job reads runs from `github.repository`. The concrete-ci-2 runners are
   registered on lambdaclass/concrete, with `CONCRETE_SELF_HOSTED=true` there.
 - **Oracle.** The release `oracle-legacy-compiler-final` is republished on lambdaclass/concrete with

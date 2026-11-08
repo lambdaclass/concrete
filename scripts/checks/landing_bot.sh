@@ -417,6 +417,37 @@ out="$(LAND_REPO=unbalancedparentheses/concrete2 LAND_REMOTE=gh-stale bot rebase
   && ok "no branch or note moved on a refused pass" || no "a refused bot pass moved refs on origin"
 ( cd "$W" && git remote remove gh-stale )
 
+echo "=== the installer migrates a stale clone and its launcher checks the remote before fetching ==="
+# The real install-bot.sh, in a sandboxed HOME, with a local origin holding scripts/land and stubs for
+# ssh, gh and systemctl (nothing here reaches the network or the user manager).
+IB="$TMP/ib"; mkdir -p "$IB/home/.config" "$IB/stub" "$IB/src/scripts/checks/lib"
+for c in ssh gh systemctl; do printf '#!/bin/sh\nexit 1\n' > "$IB/stub/$c"; chmod +x "$IB/stub/$c"; done
+cp -r "$ROOT_DIR/scripts/land" "$IB/src/scripts/"; cp "$ROOT_DIR/scripts/checks/lib/git_sandbox.sh" "$IB/src/scripts/checks/lib/"
+( cd "$IB/src" && git init -q && git add -A && git commit -qm src ) && git clone -q --bare "$IB/src" "$IB/origin.git"
+printf 'LAND_REPO=unbalancedparentheses/concrete2\n' > "$IB/home/.config/concrete-landing-bot.env"
+ib(){ HOME="$IB/home" PATH="$IB/stub:$PATH" INSTALL_ORIGIN_URL="$IB/origin.git" bash "$ROOT_DIR/scripts/land/install-bot.sh" 2>&1; }
+out="$(ib)"; rc=$?
+[ "$rc" = 0 ] && grep -qx 'LAND_REPO=lambdaclass/concrete' "$IB/home/.config/concrete-landing-bot.env" \
+  && ! grep -q 'concrete2' "$IB/home/.config/concrete-landing-bot.env" \
+  && ok "the installer migrates an old LAND_REPO line in an existing environment file" || { no "installer env migration: exit $rc"; echo "$out" | sed 's/^/      /'; }
+BC="$IB/home/concrete-bot"
+git -C "$BC" remote set-url origin https://github.com/unbalancedparentheses/concrete2.git
+git -C "$BC" config --add remote.origin.url https://github.com/unbalancedparentheses/concrete2.git
+git -C "$BC" remote set-url --push origin https://github.com/unbalancedparentheses/concrete2.git
+out="$(ib)"; rc=$?
+[ "$rc" = 0 ] && [ "$(git -C "$BC" config --get-all remote.origin.url)" = "$IB/origin.git" ] && ! git -C "$BC" config --get remote.origin.pushurl >/dev/null \
+  && ok "the installer repoints every origin url and drops a stale push URL" || { no "installer repoint: exit $rc, urls '$(git -C "$BC" config --get-all remote.origin.url | paste -sd' ')'"; echo "$out" | sed 's/^/      /'; }
+for stale in https://github.com/unbalancedparentheses/concrete2.git git@github-old:unbalancedparentheses/concrete2.git; do
+  git -C "$BC" remote set-url origin "$stale"
+  rm -f "$BC/.git/FETCH_HEAD"
+  out="$(HOME="$IB/home" PATH="$IB/stub:$PATH" GIT_TRACE=0 timeout 60 "$IB/home/.local/libexec/concrete-landing-bot" status 2>&1)"; rc=$?
+  [ "$rc" != 0 ] && has "$out" "refusing to fetch" && has "$out" "points at another repository" && [ ! -e "$BC/.git/FETCH_HEAD" ] \
+    && ok "the launcher refuses origin=$stale before its first fetch" || { no "launcher with origin=$stale: exit $rc"; echo "$out" | sed 's/^/      /'; }
+done
+git -C "$BC" remote set-url origin "$IB/origin.git"
+out="$(HOME="$IB/home" PATH="$IB/stub:$PATH" timeout 60 "$IB/home/.local/libexec/concrete-landing-bot" status 2>&1)"; rc=$?
+[ "$rc" = 0 ] && has "$out" "state (" && ok "the launcher runs the bot when origin is a local repository" || { no "launcher with a good origin: exit $rc"; echo "$out" | sed 's/^/      /'; }
+
 echo "=== main is never force-pushed ==="
 bad="$(grep -nE 'git push[^#]*(--force|[[:space:]]-f[[:space:]])[^#]*refs/heads/main' "$ROOT_DIR"/scripts/land/*.sh || true)"
 [ -z "$bad" ] && ok "no forced push of refs/heads/main in scripts/land" || { no "forced push of main:"; echo "$bad" | sed 's/^/      /'; }
