@@ -194,6 +194,8 @@ inductive Execution (S : EventSignature) where
 inductive SilentInsertion : List (Step S) → List (Step S) → Prop where
   | nil : SilentInsertion [] []
   | silent {before after} : SilentInsertion before after → SilentInsertion before (.silent :: after)
+  | keepSilent {before after} : SilentInsertion before after →
+      SilentInsertion (.silent :: before) (.silent :: after)
   | emit {before after} event : SilentInsertion before after →
       SilentInsertion (.emit event :: before) (.emit event :: after)
 
@@ -383,6 +385,11 @@ example : InfiniteTrace signature := fun _ => .output "tick"
 example : SameObservation (.finite [.silent, .emit (request 1), .silent] (.exited 0))
     (.finite [.emit (request 1)] (.exited 0)) := by
   exact ⟨rfl, rfl⟩
+
+/-- Accepted: an existing silent step is retained while another is inserted. -/
+example : SilentInsertion (S := signature) [.silent, .emit (request 1)]
+    [.silent, .silent, .emit (request 1)] :=
+  .keepSilent (.silent (.emit (request 1) .nil))
 
 /-- An infinite silent execution is not a successful empty termination. -/
 example : ¬ SameObservation (S := signature) (.infinite (fun _ => Step.silent))

@@ -45,6 +45,7 @@ theorem SilentInsertion.visible {before after : List (Step S)} (h : SilentInsert
   induction h with
   | nil => rfl
   | silent _ ih => exact ih
+  | keepSilent _ ih => exact ih
   | emit event _ ih => exact congrArg (List.cons event) ih
 
 /-- Any finite number of silent steps may be inserted anywhere in a finite terminated run. -/
