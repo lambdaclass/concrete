@@ -98,6 +98,12 @@ Open obligations, by name:
   (C5) and the oracle's query record (C8); its
   storage can use C4's hybrid state; C5 must still supply ownership instrumentation. Lifecycle
   instrumentation may refuse an event (`Option.none`), making execution stuck, including initial
-  activation and primitive result binding; cleanup laws require successful lifecycle events. C2
+  activation and primitive result binding (owner decision 2026-11-08, 15:08 UTC, item 21).
+  C1 characterizes lifecycle blockage over actual transitions after successful predecessor checks;
+  its primitive-refusal laws cover the driver and event history. Successful first-boundary cleanup
+  executions select exactly the independently computed plan and perform its state updates
+  (`cleanup_runs_exact_plan`), with planted extra/missing calls and a skipped-drop update.
+  Function-backed determinism and destruction-interface projections are helpers, not independent
+  contract laws; the demo destruction protocol discharges its admission obligations by cases. C2
   leaves floats (slice 26), and two owner questions: whether a failing operation may appear in a constant
   initializer, and whether the source may name a constant written later in the file.

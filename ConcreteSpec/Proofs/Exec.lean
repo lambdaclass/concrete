@@ -20,7 +20,9 @@ What these prove, for every operand language:
   first, threading the state, and then restores the scope (`exit_scope_runs_defers`,
   `done_scope_runs_defers`); an exit through several frames runs the calls of `plan`, innermost
   scope first, and arrives unchanged (`unwind_runs_plan`); the cleanup runs exactly the calls of
-  `plan`, in order (`cleans_iff_runs_plan_inv`, `planWith_calls`); a `return` then reaches its caller with
+  `plan`, in order. Actual first-boundary executions dispatch exactly `planWith` and perform its
+  state updates (`cleanup_runs_exact_plan`); `cleans_iff_runs_plan_inv` only relates abstract
+  certificates. A `return` then reaches its caller with
   the value bound (`return_reaches_caller`), and a `break` or `continue` its loop
   (`break_reaches_loop`, `continue_reaches_loop`).
 - **Exit values**: a `return` evaluates its value before any cleanup (`step_ret`).
@@ -28,9 +30,8 @@ What these prove, for every operand language:
   (`steps_from_trapped`); `abort()` runs no cleanup (`abort_runs_no_cleanup`), and so neither does a
   cleanup call that traps.
 - **Evaluation order**: the first argument that traps decides the trap (`evalArgs_first_trap`).
-- Steps of the machine itself are deterministic (`step_silent_deterministic_inv`): only the answers of
-  primitive operations, each allowed by its contract, can make two runs differ
-  (`step_deterministic_inv`).
+- Function-backed determinism is classified as representation inversion
+  (`step_silent_deterministic_inv`, `step_deterministic_inv`), not an independent rule law.
 - **Destruction order** (Q2.3): a sequence's element `i` is visited `i`-th and the backing last; a
   map's `i`-th entry has its key at `2i` and its value at `2i+1`, and the nodes come last.
 -/
@@ -794,7 +795,7 @@ No law assumes that `life` is total. `step_return_caller` and `return_reaches_ca
 now require successful leave and result binding; `exit_scope_runs_defers` and
 `done_scope_runs_defers` require a successful drop. `Cleans` and `RunsEach` carry
 successful drops, so their existing plan and unwinding laws keep the same meaning.
-`steps_request` requires successful continuation, and `step_deterministic_inv` records
+`steps_request` requires successful continuation, and the inversion helper `step_deterministic_inv` records
 those successful continuations explicitly. All other laws retain their premises.
 -/
 
@@ -1172,8 +1173,8 @@ end CleanupEvidence
 
 `Refusal.ops` refuses every lifecycle event. Each configuration below reaches exactly one
 lifecycle callback: operands, destination lookup, callee lookup, arity, and boolean testing all
-succeed first. `Demo.ops` is the planted replacement handler: it accepts the same callback instead
-of propagating refusal. These are executable rules, not contradictory hypotheses.
+succeed first. `Bypass` plants transitions which ignore the refused callback on the same operand language.
+The production and mutant therefore share all predecessor-success and refusal hypotheses.
 -/
 namespace Refusal
 open Demo
@@ -1317,10 +1318,19 @@ example : runFrom prog Demo.env 10 [9] ⟨.exec (.prim (some x) .log [.lit 1] s)
   prim_bind_refused prog Demo.env 9 [9] x .log [.lit 1] s [] .init .init [1] []
     ⟨some 1, .ok 0, .init⟩ 0 rfl rfl (by decide) rfl rfl
 
-/-- Planted (law `ConcreteSpec.Core.Exec.prim_bind_refused`). Planted (law `ConcreteSpec.Core.Exec.continuation_refused`). Ignoring the refused bind accepts the event
-and finishes, so it violates the required stuck report and unchanged history. -/
-example : ¬ runFrom Demo.prog Demo.env 10 [9]
-    ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩ =
+/-- Planted response rule: continue an allowed successful answer without consulting `bindLife`.
+This uses the same refusing instrumentation and oracle as the production instance above. -/
+private def uncheckedResponse (hist : List Int) (a : Answer Int Int DState) : Report ops :=
+  match a.result with
+  | .ok v => runFrom prog Demo.env 9 (hist ++ a.event.toList)
+      ⟨.done, [(x, v)], a.store, []⟩
+  | .error kd => runFrom prog Demo.env 9 (hist ++ a.event.toList)
+      ⟨.trapped kd s, [], a.store, []⟩
+
+/-- Planted (law `ConcreteSpec.Core.Exec.prim_bind_refused`). Planted (law `ConcreteSpec.Core.Exec.continuation_refused`).
+Ignoring the refused bind on the same allowed answer accepts its event and finishes, violating
+both the stuck outcome and unchanged history. -/
+example : ¬ uncheckedResponse [9] ⟨some 1, .ok 0, .init⟩ =
     ⟨[9], .stuck ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩⟩ := by
   intro h
   have he := congrArg Report.events h
