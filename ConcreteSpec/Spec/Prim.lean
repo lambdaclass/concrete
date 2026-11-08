@@ -142,9 +142,10 @@ A primitive is admitted only by its `PrimId` in a finite registry. Its contract 
 semantic predicates and an executable answer checker. The registry's completeness law proves the
 checker accepts exactly the answers satisfying every predicate (Q9.7, Q9.13).
 
-`ensures` deliberately receives arguments, the result value and the *surviving* store, not an entry
-store or a snapshot. At a function boundary it is evaluated after all deferred cleanup (Q9.11,
-OD117, OD144). A consumed or cleaned parameter has no representation in that surviving store.
+`ensures` deliberately receives only the result value and the *surviving* store, not entry
+arguments, an entry store or a snapshot. At a function boundary it is evaluated after all deferred
+cleanup (Q9.11, OD117, OD144). A consumed or cleaned parameter has no representation in that
+surviving store.
 Failures named by `failures` are values of the contracted result; C1's implicit trap answer is not
 an allowed primitive result. Explicit `abort()` remains C1's separate terminal statement.
 -/
@@ -176,7 +177,7 @@ structure PrimContract (Val Ty Store Event : Type) where
   ownership : List Val → Store → Store → Prop
   dependencies : List Val → Store → Store → Prop
   requires : List Val → Store → Prop
-  ensures : List Val → Val → Store → Prop
+  ensures : Val → Store → Prop
   footprint : List Val → Store → List PlaceId
   initialized : Val → Prop
   valid : Val → Prop
@@ -196,7 +197,7 @@ def PrimContract.Allowed {Val Ty Store Event : Type} (c : PrimContract Val Ty St
     c.events a.event ∧
     match a.result with
     | .error _ => False
-    | .ok v => c.ensures args v a.store ∧ c.initialized v ∧ c.valid v ∧
+    | .ok v => c.ensures v a.store ∧ c.initialized v ∧ c.valid v ∧
         c.ownership args st a.store ∧ c.dependencies args st a.store ∧ c.resources args st a.store
 
 /-- A finite registry with no catch-all entry. `answerOk_iff` is the completeness law for every
@@ -432,7 +433,7 @@ def unitContract : PrimContract Int Unit Int Int where
   ownership := fun _ before after => after = before
   dependencies := fun _ _ _ => True
   requires := fun _ _ => True
-  ensures := fun _ v _ => v = 0
+  ensures := fun v _ => v = 0
   footprint := fun _ _ => []
   initialized := fun _ => True
   valid := fun _ => True
