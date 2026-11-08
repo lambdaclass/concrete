@@ -41,33 +41,437 @@ private theorem agree_nil : Agree [] [] := by
   intro _ _ h
   cases h
 
-/-- Helper (computation). Structural agreement of executable recursion with one-node rules;
-used only to construct and invert independent semantic derivations. (approved: PENDING) -/
-private theorem eval_node_inv (env : AList ConstId CVal) (fuel : Nat) (e : CExpr) :
-    e.eval env (fuel + 1) = e.nodeResult env (fun a => a.eval env fuel) := by
-  cases e <;> rfl
+/-- Helper (computation). Every evaluator result has an independent syntax-directed derivation,
+proved by induction on fuel and case analysis on the expression and primitive outcomes.
+(approved: PENDING) -/
+private theorem eval_derivation_inv (env : AList ConstId CVal) :
+    ∀ (fuel : Nat) (e : CExpr), ConstEval env fuel e (e.eval env fuel)
+  | 0, e => .exhausted e
+  | fuel + 1, .int t n => by
+    simp only [CExpr.eval]
+    split
+    · rename_i h; exact .int_ok h
+    · rename_i h; exact .int_outOfRange h
+  | fuel + 1, .bool b => .bool fuel b
+  | fuel + 1, .unit => .unit fuel
+  | fuel + 1, .ref c => by
+    simp only [CExpr.eval]
+    split
+    · rename_i v h; exact .ref_ok h
+    · rename_i h; exact .ref_missing h
+  | fuel + 1, .plainNeg a => by
+    have iha := eval_derivation_inv env fuel a
+    cases ha : a.eval env fuel with
+    | value va =>
+      rw [ha] at iha
+      cases va with
+      | int t x =>
+        cases hop : Core.plainNeg t x with
+        | ok n =>
+          simp only [CExpr.eval, ha, CEvalResult.bind, hop]
+          exact .plainNeg_ok iha hop
+        | trap k =>
+          simp only [CExpr.eval, ha, CEvalResult.bind, hop]
+          exact .plainNeg_failure iha hop
+        | stuck => exact (plainNeg_not_stuck t x hop).elim
+      | bool _ | unit =>
+        simp only [CExpr.eval, ha, CEvalResult.bind]
+        exact .intUnary_invalid (.plainNeg a) iha (by intro _ _ h; cases h)
+    | failure _ | outOfFuel | invalid _ =>
+      rw [ha] at iha
+      simp only [CExpr.eval, ha, CEvalResult.bind]
+      exact .unary_nonValue (.plainNeg a) iha trivial
+  | fuel + 1, .bitNot a => by
+    have iha := eval_derivation_inv env fuel a
+    cases ha : a.eval env fuel with
+    | value va =>
+      rw [ha] at iha
+      cases va with
+      | int t x =>
+        simp only [CExpr.eval, ha, CEvalResult.bind]
+        exact .bitNot_ok iha
+      | bool _ | unit =>
+        simp only [CExpr.eval, ha, CEvalResult.bind]
+        exact .intUnary_invalid (.bitNot a) iha (by intro _ _ h; cases h)
+    | failure _ | outOfFuel | invalid _ =>
+      rw [ha] at iha
+      simp only [CExpr.eval, ha, CEvalResult.bind]
+      exact .unary_nonValue (.bitNot a) iha trivial
+  | fuel + 1, .not a => by
+    have iha := eval_derivation_inv env fuel a
+    cases ha : a.eval env fuel with
+    | value va =>
+      rw [ha] at iha
+      cases va with
+      | bool x =>
+        simp only [CExpr.eval, ha, CEvalResult.bind]
+        exact .not_ok iha
+      | int _ _ | unit =>
+        simp only [CExpr.eval, ha, CEvalResult.bind]
+        exact .not_invalid iha (by intro _ h; cases h)
+    | failure _ | outOfFuel | invalid _ =>
+      rw [ha] at iha
+      simp only [CExpr.eval, ha, CEvalResult.bind]
+      exact .unary_nonValue (.not a) iha trivial
+  | fuel + 1, .convert t a => by
+    have iha := eval_derivation_inv env fuel a
+    cases ha : a.eval env fuel with
+    | value va =>
+      rw [ha] at iha
+      cases va with
+      | int s x =>
+        by_cases hloss : Lossless s t
+        · simp only [CExpr.eval, ha, CEvalResult.bind, hloss, ↓reduceIte]
+          exact .convert_int_ok iha hloss
+        · simp only [CExpr.eval, ha, CEvalResult.bind, hloss, ↓reduceIte]
+          exact .convert_int_invalid iha hloss
+      | bool b =>
+        simp only [CExpr.eval, ha, CEvalResult.bind]
+        exact .convert_bool_ok iha
+      | unit =>
+        simp only [CExpr.eval, ha, CEvalResult.bind]
+        exact .convert_unit_invalid iha
+    | failure _ | outOfFuel | invalid _ =>
+      rw [ha] at iha
+      simp only [CExpr.eval, ha, CEvalResult.bind]
+      exact .unary_nonValue (.convert t a) iha trivial
+  | fuel + 1, .tryConvert t a => by
+    have iha := eval_derivation_inv env fuel a
+    cases ha : a.eval env fuel with
+    | value va =>
+      rw [ha] at iha
+      cases va with
+      | int s x =>
+        cases hop : Core.tryConvert t x with
+        | ok n =>
+          simp only [CExpr.eval, ha, CEvalResult.bind, hop]
+          exact .tryConvert_ok iha hop
+        | error err =>
+          cases err
+          simp only [CExpr.eval, ha, CEvalResult.bind, hop]
+          exact .tryConvert_failure iha hop
+      | bool _ | unit =>
+        simp only [CExpr.eval, ha, CEvalResult.bind]
+        exact .intUnary_invalid (.tryConvert t a) iha (by intro _ _ h; cases h)
+    | failure _ | outOfFuel | invalid _ =>
+      rw [ha] at iha
+      simp only [CExpr.eval, ha, CEvalResult.bind]
+      exact .unary_nonValue (.tryConvert t a) iha trivial
+  | fuel + 1, .wrapping op a b => by
+    have iha := eval_derivation_inv env fuel a
+    have ihb := eval_derivation_inv env fuel b
+    cases ha : a.eval env fuel with
+    | value va =>
+      rw [ha] at iha
+      cases hb : b.eval env fuel with
+      | value vb =>
+        rw [hb] at ihb
+        cases va with
+        | int t x =>
+          cases vb with
+          | int t' y =>
+            by_cases htt : t = t'
+            · subst htt
+              simp only [CExpr.eval, ha, hb, CEvalResult.bind, sameInt, ↓reduceIte]
+              exact .wrapping_ok iha ihb
+            · simp only [CExpr.eval, ha, hb, CEvalResult.bind, sameInt, htt, ↓reduceIte]
+              exact .intBinary_invalid (.wrapping op a b) iha ihb (by
+                intro t₀ x₀ y₀
+                by_cases h1 : t = t₀
+                · right; intro h2; cases h2; exact htt h1
+                · left; intro h2; cases h2; exact h1 rfl)
+          | bool _ | unit =>
+            simp only [CExpr.eval, ha, hb, CEvalResult.bind, sameInt]
+            exact .intBinary_invalid (.wrapping op a b) iha ihb (by intro _ _ _; right; intro h; cases h)
+        | bool _ | unit =>
+          simp only [CExpr.eval, ha, hb, CEvalResult.bind, sameInt]
+          exact .intBinary_invalid (.wrapping op a b) iha ihb (by intro _ _ _; left; intro h; cases h)
+      | failure _ | outOfFuel | invalid _ =>
+        rw [hb] at ihb
+        simp only [CExpr.eval, ha, hb, CEvalResult.bind]
+        exact .binary_nonValue_right (.wrapping op a b) iha ihb trivial
+    | failure _ | outOfFuel | invalid _ =>
+      rw [ha] at iha
+      simp only [CExpr.eval, ha, CEvalResult.bind]
+      exact .binary_nonValue_left (.wrapping op a b) iha trivial
+  | fuel + 1, .saturating op a b => by
+    have iha := eval_derivation_inv env fuel a
+    have ihb := eval_derivation_inv env fuel b
+    cases ha : a.eval env fuel with
+    | value va =>
+      rw [ha] at iha
+      cases hb : b.eval env fuel with
+      | value vb =>
+        rw [hb] at ihb
+        cases va with
+        | int t x =>
+          cases vb with
+          | int t' y =>
+            by_cases htt : t = t'
+            · subst htt
+              simp only [CExpr.eval, ha, hb, CEvalResult.bind, sameInt, ↓reduceIte]
+              exact .saturating_ok iha ihb
+            · simp only [CExpr.eval, ha, hb, CEvalResult.bind, sameInt, htt, ↓reduceIte]
+              exact .intBinary_invalid (.saturating op a b) iha ihb (by
+                intro t₀ x₀ y₀
+                by_cases h1 : t = t₀
+                · right; intro h2; cases h2; exact htt h1
+                · left; intro h2; cases h2; exact h1 rfl)
+          | bool _ | unit =>
+            simp only [CExpr.eval, ha, hb, CEvalResult.bind, sameInt]
+            exact .intBinary_invalid (.saturating op a b) iha ihb (by intro _ _ _; right; intro h; cases h)
+        | bool _ | unit =>
+          simp only [CExpr.eval, ha, hb, CEvalResult.bind, sameInt]
+          exact .intBinary_invalid (.saturating op a b) iha ihb (by intro _ _ _; left; intro h; cases h)
+      | failure _ | outOfFuel | invalid _ =>
+        rw [hb] at ihb
+        simp only [CExpr.eval, ha, hb, CEvalResult.bind]
+        exact .binary_nonValue_right (.saturating op a b) iha ihb trivial
+    | failure _ | outOfFuel | invalid _ =>
+      rw [ha] at iha
+      simp only [CExpr.eval, ha, CEvalResult.bind]
+      exact .binary_nonValue_left (.saturating op a b) iha trivial
+  | fuel + 1, .plain op a b => by
+    have iha := eval_derivation_inv env fuel a
+    have ihb := eval_derivation_inv env fuel b
+    cases ha : a.eval env fuel with
+    | value va =>
+      rw [ha] at iha
+      cases hb : b.eval env fuel with
+      | value vb =>
+        rw [hb] at ihb
+        cases va with
+        | int t x =>
+          cases vb with
+          | int t' y =>
+            by_cases htt : t = t'
+            · subst htt
+              cases hop : Core.plain t op x y with
+              | ok n =>
+                simp only [CExpr.eval, ha, hb, CEvalResult.bind, sameInt, ↓reduceIte, hop]
+                exact .plain_ok iha ihb hop
+              | trap k =>
+                simp only [CExpr.eval, ha, hb, CEvalResult.bind, sameInt, ↓reduceIte, hop]
+                exact .plain_failure iha ihb hop
+              | stuck => exact (plain_not_stuck t op x y hop).elim
+            · simp only [CExpr.eval, ha, hb, CEvalResult.bind, sameInt, htt, ↓reduceIte]
+              exact .intBinary_invalid (.plain op a b) iha ihb (by
+                intro t₀ x₀ y₀
+                by_cases h1 : t = t₀
+                · right; intro h2; cases h2; exact htt h1
+                · left; intro h2; cases h2; exact h1 rfl)
+          | bool _ | unit =>
+            simp only [CExpr.eval, ha, hb, CEvalResult.bind, sameInt]
+            exact .intBinary_invalid (.plain op a b) iha ihb (by intro _ _ _; right; intro h; cases h)
+        | bool _ | unit =>
+          simp only [CExpr.eval, ha, hb, CEvalResult.bind, sameInt]
+          exact .intBinary_invalid (.plain op a b) iha ihb (by intro _ _ _; left; intro h; cases h)
+      | failure _ | outOfFuel | invalid _ =>
+        rw [hb] at ihb
+        simp only [CExpr.eval, ha, hb, CEvalResult.bind]
+        exact .binary_nonValue_right (.plain op a b) iha ihb trivial
+    | failure _ | outOfFuel | invalid _ =>
+      rw [ha] at iha
+      simp only [CExpr.eval, ha, CEvalResult.bind]
+      exact .binary_nonValue_left (.plain op a b) iha trivial
+  | fuel + 1, .bit op a b => by
+    have iha := eval_derivation_inv env fuel a
+    have ihb := eval_derivation_inv env fuel b
+    cases ha : a.eval env fuel with
+    | value va =>
+      rw [ha] at iha
+      cases hb : b.eval env fuel with
+      | value vb =>
+        rw [hb] at ihb
+        cases va with
+        | int t x =>
+          cases vb with
+          | int t' y =>
+            by_cases htt : t = t'
+            · subst htt
+              simp only [CExpr.eval, ha, hb, CEvalResult.bind, sameInt, ↓reduceIte]
+              exact .bit_ok iha ihb
+            · simp only [CExpr.eval, ha, hb, CEvalResult.bind, sameInt, htt, ↓reduceIte]
+              exact .intBinary_invalid (.bit op a b) iha ihb (by
+                intro t₀ x₀ y₀
+                by_cases h1 : t = t₀
+                · right; intro h2; cases h2; exact htt h1
+                · left; intro h2; cases h2; exact h1 rfl)
+          | bool _ | unit =>
+            simp only [CExpr.eval, ha, hb, CEvalResult.bind, sameInt]
+            exact .intBinary_invalid (.bit op a b) iha ihb (by intro _ _ _; right; intro h; cases h)
+        | bool _ | unit =>
+          simp only [CExpr.eval, ha, hb, CEvalResult.bind, sameInt]
+          exact .intBinary_invalid (.bit op a b) iha ihb (by intro _ _ _; left; intro h; cases h)
+      | failure _ | outOfFuel | invalid _ =>
+        rw [hb] at ihb
+        simp only [CExpr.eval, ha, hb, CEvalResult.bind]
+        exact .binary_nonValue_right (.bit op a b) iha ihb trivial
+    | failure _ | outOfFuel | invalid _ =>
+      rw [ha] at iha
+      simp only [CExpr.eval, ha, CEvalResult.bind]
+      exact .binary_nonValue_left (.bit op a b) iha trivial
+  | fuel + 1, .cmp op a b => by
+    have iha := eval_derivation_inv env fuel a
+    have ihb := eval_derivation_inv env fuel b
+    cases ha : a.eval env fuel with
+    | value va =>
+      rw [ha] at iha
+      cases hb : b.eval env fuel with
+      | value vb =>
+        rw [hb] at ihb
+        cases va with
+        | int t x =>
+          cases vb with
+          | int t' y =>
+            by_cases htt : t = t'
+            · subst htt
+              simp only [CExpr.eval, ha, hb, CEvalResult.bind, sameInt, ↓reduceIte]
+              exact .cmp_ok iha ihb
+            · simp only [CExpr.eval, ha, hb, CEvalResult.bind, sameInt, htt, ↓reduceIte]
+              exact .intBinary_invalid (.cmp op a b) iha ihb (by
+                intro t₀ x₀ y₀
+                by_cases h1 : t = t₀
+                · right; intro h2; cases h2; exact htt h1
+                · left; intro h2; cases h2; exact h1 rfl)
+          | bool _ | unit =>
+            simp only [CExpr.eval, ha, hb, CEvalResult.bind, sameInt]
+            exact .intBinary_invalid (.cmp op a b) iha ihb (by intro _ _ _; right; intro h; cases h)
+        | bool _ | unit =>
+          simp only [CExpr.eval, ha, hb, CEvalResult.bind, sameInt]
+          exact .intBinary_invalid (.cmp op a b) iha ihb (by intro _ _ _; left; intro h; cases h)
+      | failure _ | outOfFuel | invalid _ =>
+        rw [hb] at ihb
+        simp only [CExpr.eval, ha, hb, CEvalResult.bind]
+        exact .binary_nonValue_right (.cmp op a b) iha ihb trivial
+    | failure _ | outOfFuel | invalid _ =>
+      rw [ha] at iha
+      simp only [CExpr.eval, ha, CEvalResult.bind]
+      exact .binary_nonValue_left (.cmp op a b) iha trivial
+  | fuel + 1, .and a b => by
+    have iha := eval_derivation_inv env fuel a
+    have ihb := eval_derivation_inv env fuel b
+    cases ha : a.eval env fuel with
+    | value va =>
+      rw [ha] at iha
+      cases hb : b.eval env fuel with
+      | value vb =>
+        rw [hb] at ihb
+        cases va with
+        | bool x =>
+          cases vb with
+          | bool y =>
+            simp only [CExpr.eval, ha, hb, CEvalResult.bind, twoBools]
+            exact .and_ok iha ihb
+          | int _ _ | unit =>
+            simp only [CExpr.eval, ha, hb, CEvalResult.bind, twoBools]
+            exact .boolBinary_invalid (.and a b) iha ihb (by intro _ _; right; intro h; cases h)
+        | int _ _ | unit =>
+          simp only [CExpr.eval, ha, hb, CEvalResult.bind, twoBools]
+          exact .boolBinary_invalid (.and a b) iha ihb (by intro _ _; left; intro h; cases h)
+      | failure _ | outOfFuel | invalid _ =>
+        rw [hb] at ihb
+        simp only [CExpr.eval, ha, hb, CEvalResult.bind]
+        exact .binary_nonValue_right (.and a b) iha ihb trivial
+    | failure _ | outOfFuel | invalid _ =>
+      rw [ha] at iha
+      simp only [CExpr.eval, ha, CEvalResult.bind]
+      exact .binary_nonValue_left (.and a b) iha trivial
+  | fuel + 1, .or a b => by
+    have iha := eval_derivation_inv env fuel a
+    have ihb := eval_derivation_inv env fuel b
+    cases ha : a.eval env fuel with
+    | value va =>
+      rw [ha] at iha
+      cases hb : b.eval env fuel with
+      | value vb =>
+        rw [hb] at ihb
+        cases va with
+        | bool x =>
+          cases vb with
+          | bool y =>
+            simp only [CExpr.eval, ha, hb, CEvalResult.bind, twoBools]
+            exact .or_ok iha ihb
+          | int _ _ | unit =>
+            simp only [CExpr.eval, ha, hb, CEvalResult.bind, twoBools]
+            exact .boolBinary_invalid (.or a b) iha ihb (by intro _ _; right; intro h; cases h)
+        | int _ _ | unit =>
+          simp only [CExpr.eval, ha, hb, CEvalResult.bind, twoBools]
+          exact .boolBinary_invalid (.or a b) iha ihb (by intro _ _; left; intro h; cases h)
+      | failure _ | outOfFuel | invalid _ =>
+        rw [hb] at ihb
+        simp only [CExpr.eval, ha, hb, CEvalResult.bind]
+        exact .binary_nonValue_right (.or a b) iha ihb trivial
+    | failure _ | outOfFuel | invalid _ =>
+      rw [ha] at iha
+      simp only [CExpr.eval, ha, CEvalResult.bind]
+      exact .binary_nonValue_left (.or a b) iha trivial
 
-/-- Helper (computation). Every evaluator result has an independent derivation, by induction on
-fuel rather than by a constructor containing evaluator equality. (approved: PENDING) -/
-private theorem eval_derivation_inv (env : AList ConstId CVal) (fuel : Nat) :
-    ∀ e, ConstEval env fuel e (e.eval env fuel) := by
-  induction fuel with
-  | zero => intro e; exact .exhausted e
-  | succ fuel ih =>
-    intro e
-    rw [eval_node_inv]
-    exact .node fuel (fun a => a.eval env fuel) ih e
-
-/-- Helper (inversion). Independent derivations determine the evaluator result; the induction
-identifies every child answer before using the primitive node rules. (approved: PENDING) -/
+/-- Helper (inversion). Independent syntax-directed derivations determine the evaluator result.
+(approved: PENDING) -/
 private theorem eval_derivation_unique_inv {env : AList ConstId CVal} {fuel : Nat}
     {e : CExpr} {r : CEvalResult} (h : ConstEval env fuel e r) : e.eval env fuel = r := by
   induction h with
   | exhausted e => rfl
-  | node fuel answers children e ih =>
-    have ha : answers = fun a => a.eval env fuel := funext (fun a => (ih a).symm)
-    subst answers
-    exact eval_node_inv env fuel e
+  | int_ok h => simp [CExpr.eval, h]
+  | int_outOfRange h => simp [CExpr.eval, h]
+  | bool fuel b => rfl
+  | unit fuel => rfl
+  | ref_ok h => simp [CExpr.eval, h]
+  | ref_missing h => simp [CExpr.eval, h]
+  | @unary_nonValue fuel e a r hchild ha hr iha =>
+    cases hchild <;> cases r <;> simp_all [CExpr.eval, CEvalResult.bind, CEvalResult.NonValue]
+  | @binary_nonValue_left fuel e a b r hchild ha hr iha =>
+    cases hchild <;> cases r <;> simp_all [CExpr.eval, CEvalResult.bind, CEvalResult.NonValue]
+  | @binary_nonValue_right fuel e a b va r hchild ha hb hr iha ihb =>
+    cases hchild <;> cases r <;> simp_all [CExpr.eval, CEvalResult.bind, CEvalResult.NonValue]
+  | wrapping_ok _ _ iha ihb => simp [CExpr.eval, CEvalResult.bind, sameInt, iha, ihb]
+  | saturating_ok _ _ iha ihb => simp [CExpr.eval, CEvalResult.bind, sameInt, iha, ihb]
+  | plain_ok _ _ hop iha ihb => simp [CExpr.eval, CEvalResult.bind, sameInt, iha, ihb, hop]
+  | plain_failure _ _ hop iha ihb => simp [CExpr.eval, CEvalResult.bind, sameInt, iha, ihb, hop]
+  | plainNeg_ok _ hop iha => simp [CExpr.eval, CEvalResult.bind, iha, hop]
+  | plainNeg_failure _ hop iha => simp [CExpr.eval, CEvalResult.bind, iha, hop]
+  | bit_ok _ _ iha ihb => simp [CExpr.eval, CEvalResult.bind, sameInt, iha, ihb]
+  | bitNot_ok _ iha => simp [CExpr.eval, CEvalResult.bind, iha]
+  | cmp_ok _ _ iha ihb => simp [CExpr.eval, CEvalResult.bind, sameInt, iha, ihb]
+  | not_ok _ iha => simp [CExpr.eval, CEvalResult.bind, iha]
+  | and_ok _ _ iha ihb => simp [CExpr.eval, CEvalResult.bind, twoBools, iha, ihb]
+  | or_ok _ _ iha ihb => simp [CExpr.eval, CEvalResult.bind, twoBools, iha, ihb]
+  | convert_int_ok _ hloss iha => simp [CExpr.eval, CEvalResult.bind, iha, hloss]
+  | convert_int_invalid _ hloss iha => simp [CExpr.eval, CEvalResult.bind, iha, hloss]
+  | convert_bool_ok _ iha => simp [CExpr.eval, CEvalResult.bind, iha]
+  | convert_unit_invalid _ iha => simp [CExpr.eval, CEvalResult.bind, iha]
+  | tryConvert_ok _ hop iha => simp [CExpr.eval, CEvalResult.bind, iha, hop]
+  | tryConvert_failure _ hop iha => simp [CExpr.eval, CEvalResult.bind, iha, hop]
+  | @intUnary_invalid fuel e a va hchild ha hnot iha =>
+    cases hchild <;> cases va with
+    | int t x => exact (hnot t x rfl).elim
+    | bool _ | unit => simp [CExpr.eval, CEvalResult.bind, iha]
+  | @not_invalid fuel a va ha hnot iha =>
+    cases va with
+    | bool b => exact (hnot b rfl).elim
+    | int _ _ | unit => simp [CExpr.eval, CEvalResult.bind, iha]
+  | @intBinary_invalid fuel e a b va vb hchild ha hb hnot iha ihb =>
+    have hnone : sameInt (some va) (some vb) = none := by
+      cases va with
+      | int t x =>
+        cases vb with
+        | int t' y =>
+          by_cases htt : t = t'
+          · subst htt; rcases hnot t x y with h | h <;> exact (h rfl).elim
+          · simp [sameInt, htt]
+        | bool _ | unit => rfl
+      | bool _ | unit => rfl
+    cases hchild <;> simp [CExpr.eval, CEvalResult.bind, iha, ihb, hnone]
+  | @boolBinary_invalid fuel e a b va vb hchild ha hb hnot iha ihb =>
+    have hnone : twoBools (some va) (some vb) = none := by
+      cases va with
+      | bool x =>
+        cases vb with
+        | bool y => rcases hnot x y with h | h <;> exact (h rfl).elim
+        | int _ _ | unit => rfl
+      | int _ _ | unit => rfl
+    cases hchild <;> simp [CExpr.eval, CEvalResult.bind, iha, ihb, hnone]
 
 /-- Law (subject `ConcreteSpec.Core.CExpr.eval`). The evaluator agrees exactly with independent
 primitive-grounded semantics, including failures, invented failures, and fuel exhaustion. -/
@@ -993,8 +1397,12 @@ subject `ConcreteSpec.Core.CExpr.eval`, mutant `ConcreteSpec.Core.swallowFailure
 example : ¬ (ConstEval [] 3 zeroDivision (swallowFailure [] 3 zeroDivision) ∧
     ∀ r, ConstEval [] 3 zeroDivision r → swallowFailure [] 3 zeroDivision = r) := by
   intro h
-  have bad := eval_derivation_unique_inv h.1
-  contradiction
+  have hderiv : ConstEval [] 3 zeroDivision
+      (.failure ⟨.plain .div, zeroDivision, .arithmetic .divisionByZero⟩) :=
+    .plain_failure (.int_ok (by decide)) (.int_ok (by decide)) rfl
+  have bad := h.2 _ hderiv
+  revert bad
+  decide
 
 /-- Instance (law `ConcreteSpec.Core.eval_agrees`, case `division_success`). -/
 example : ConstEval [] 3 (.plain .div (.int .i8 100) (.int .i8 7))
@@ -1010,8 +1418,12 @@ example : ¬ (ConstEval [] 3 (.plain .div (.int .i8 100) (.int .i8 7))
     ∀ r, ConstEval [] 3 (.plain .div (.int .i8 100) (.int .i8 7)) r →
       fabricateFailure [] 3 (.plain .div (.int .i8 100) (.int .i8 7)) = r) := by
   intro h
-  have bad := eval_derivation_unique_inv h.1
-  contradiction
+  have hderiv : ConstEval [] 3 (.plain .div (.int .i8 100) (.int .i8 7))
+      (.value (.int .i8 14)) :=
+    .plain_ok (.int_ok (by decide)) (.int_ok (by decide)) rfl
+  have bad := h.2 _ hderiv
+  revert bad
+  decide
 
 /-- A preceding successful declaration. -/
 def failurePrefix : List (ConstDecl ConstDemo.U) :=
@@ -1023,24 +1435,14 @@ def unusedFailureDecl : ConstDecl ConstDemo.U :=
 def zeroFailure : ConstFailure :=
   ⟨.plain .div, zeroDivision, .arithmetic .divisionByZero⟩
 
-/-- Helper (computation). Closed successful prefix derivation for failure propagation evidence.
-(approved: PENDING) -/
-private theorem failurePrefix_run_inv : ConstsRun ConstDemo.U 3 failurePrefix []
-    (.ok [(ConstDemo.cid "P", .unit)]) :=
-  .value _ [] [] .unit _ (eval_derivation_inv [] 3 .unit) (.nil _)
-
-/-- Helper (computation). Closed failing primitive derivation; the scalar division result reduces
-in the kernel, independently of usage. (approved: PENDING) -/
-private theorem unusedFailure_run_inv :
-    ConstEval [(ConstDemo.cid "P", .unit)] 3 unusedFailureDecl.init (.failure zeroFailure) :=
-  eval_derivation_inv [(ConstDemo.cid "P", .unit)] 3 zeroDivision
-
 /-- Instance (law `ConcreteSpec.Core.semantic_failure_refuses`, case `unused_after_prefix`). -/
 example : evalConsts ConstDemo.U 3 (failurePrefix ++ unusedFailureDecl :: divisionDecls) [] =
       .error (.operation unusedFailureDecl.id zeroFailure) ∧
     ¬ ConstsAdmitted ConstDemo.U 3 (failurePrefix ++ unusedFailureDecl :: divisionDecls) :=
   semantic_failure_refuses ConstDemo.U 3 failurePrefix divisionDecls unusedFailureDecl
-    [(ConstDemo.cid "P", .unit)] zeroFailure failurePrefix_run_inv unusedFailure_run_inv
+    [(ConstDemo.cid "P", .unit)] zeroFailure
+    (.value _ [] [] .unit _ (.unit 2) (.nil _))
+    (.plain_failure (.int_ok (by decide)) (.int_ok (by decide)) rfl)
 
 /-- Planted (law `ConcreteSpec.Core.semantic_failure_refuses`, case `unused_after_prefix`,
 subject `ConcreteSpec.Core.evalConsts`, mutant `ConcreteSpec.Core.boolConstValues`). -/
@@ -1049,7 +1451,8 @@ example : ConstsRun ConstDemo.U 3 failurePrefix [] (.ok [(ConstDemo.cid "P", .un
     ¬ (boolConstValues ConstDemo.U 3 (failurePrefix ++ unusedFailureDecl :: divisionDecls) [] =
       .error (.operation unusedFailureDecl.id zeroFailure) ∧
       ¬ ConstsAdmitted ConstDemo.U 3 (failurePrefix ++ unusedFailureDecl :: divisionDecls)) := by
-  refine ⟨failurePrefix_run_inv, unusedFailure_run_inv, ?_⟩
+  refine ⟨.value _ [] [] .unit _ (.unit 2) (.nil _),
+    .plain_failure (.int_ok (by decide)) (.int_ok (by decide)) rfl, ?_⟩
   intro h
   cases h.1
 

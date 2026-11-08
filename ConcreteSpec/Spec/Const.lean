@@ -244,85 +244,167 @@ def CExpr.eval (env : AList ConstId CVal) : Nat → CExpr → CEvalResult
       | .error .outOfRange => .failure ⟨.tryConvert t, .tryConvert t a, .outOfRange⟩
     | _ => .invalid (.tryConvert t a)
 
-/-- Independent one-node semantics. Operand answers are supplied by a derivation, rather than
-by the evaluator. Scalar outcomes are grounded directly in the existing primitives. The ordered
-binds specify which operand failure wins, including when both operands fail. -/
-def CExpr.nodeResult (env : AList ConstId CVal) (answers : CExpr → CEvalResult) :
-    CExpr → CEvalResult
-  | .int t n => if t.InRange n then .value (.int t n) else .invalid (.int t n)
-  | .bool b => .value (.bool b)
-  | .unit => .value .unit
-  | .ref c => match AList.lookup env c with
-    | some v => .value v
-    | none => .invalid (.ref c)
-  | .wrapping op a b => (answers a).bind fun va => (answers b).bind fun vb =>
-    match sameInt (some va) (some vb) with
-    | some (t, x, y) => .value (.int t (Core.wrapping t op x y))
-    | none => .invalid (.wrapping op a b)
-  | .saturating op a b => (answers a).bind fun va => (answers b).bind fun vb =>
-    match sameInt (some va) (some vb) with
-    | some (t, x, y) => .value (.int t (Core.saturating t op x y))
-    | none => .invalid (.saturating op a b)
-  | .plain op a b => (answers a).bind fun va => (answers b).bind fun vb =>
-    match sameInt (some va) (some vb) with
-    | some (t, x, y) => match Core.plain t op x y with
-      | .ok n => .value (.int t n)
-      | .trap k => .failure ⟨.plain op, .plain op a b, .arithmetic k⟩
-      | .stuck => .invalid (.plain op a b)
-    | none => .invalid (.plain op a b)
-  | .plainNeg a => (answers a).bind fun va =>
-    match va with
-    | .int t x => match Core.plainNeg t x with
-      | .ok n => .value (.int t n)
-      | .trap k => .failure ⟨.plainNeg, .plainNeg a, .arithmetic k⟩
-      | .stuck => .invalid (.plainNeg a)
-    | _ => .invalid (.plainNeg a)
-  | .bit op a b => (answers a).bind fun va => (answers b).bind fun vb =>
-    match sameInt (some va) (some vb) with
-    | some (t, x, y) => .value (.int t (Core.bitwise t op x y))
-    | none => .invalid (.bit op a b)
-  | .bitNot a => (answers a).bind fun va =>
-    match va with
-    | .int t x => .value (.int t (Core.bitNot t x))
-    | _ => .invalid (.bitNot a)
-  | .cmp op a b => (answers a).bind fun va => (answers b).bind fun vb =>
-    match sameInt (some va) (some vb) with
-    | some (_, x, y) => .value (.bool (op.eval x y))
-    | none => .invalid (.cmp op a b)
-  | .not a => (answers a).bind fun va =>
-    match va with
-    | .bool x => .value (.bool (!x))
-    | _ => .invalid (.not a)
-  | .and a b => (answers a).bind fun va => (answers b).bind fun vb =>
-    match twoBools (some va) (some vb) with
-    | some (x, y) => .value (.bool (x && y))
-    | none => .invalid (.and a b)
-  | .or a b => (answers a).bind fun va => (answers b).bind fun vb =>
-    match twoBools (some va) (some vb) with
-    | some (x, y) => .value (.bool (x || y))
-    | none => .invalid (.or a b)
-  | .convert t a => (answers a).bind fun va =>
-    match va with
-    | .int s x => if Lossless s t then .value (.int t x) else .invalid (.convert t a)
-    | .bool b => .value (.int t (boolToInt b))
-    | .unit => .invalid (.convert t a)
-  | .tryConvert t a => (answers a).bind fun va =>
-    match va with
-    | .int _ x => match Core.tryConvert t x with
-      | .ok n => .value (.int t n)
-      | .error .outOfRange => .failure ⟨.tryConvert t, .tryConvert t a, .outOfRange⟩
-    | _ => .invalid (.tryConvert t a)
+/-- A non-value evaluation outcome (`.failure`, `.outOfFuel`, or `.invalid`), which propagates
+immediately left-to-right through enclosing operations. -/
+def CEvalResult.NonValue : CEvalResult → Prop
+  | .value _ => False
+  | .failure _ | .outOfFuel | .invalid _ => True
 
-/-- Declarative fuel-indexed evaluation. A successor derivation supplies a semantic answer for
-subexpressions at the smaller budget, then applies the independent node rules. Supplying a total
-answer family avoids selecting an evaluation strategy through proof search: `nodeResult` alone
-selects the demanded children in left-to-right order. This relation never mentions `CExpr.eval`.
-Zero fuel is exhaustion even for leaves. -/
+/-- Immediate child of a unary initializer form. -/
+inductive CExpr.UnaryChild : CExpr → CExpr → Prop where
+  | plainNeg (a) : UnaryChild (.plainNeg a) a
+  | bitNot (a) : UnaryChild (.bitNot a) a
+  | not (a) : UnaryChild (.not a) a
+  | convert (t a) : UnaryChild (.convert t a) a
+  | tryConvert (t a) : UnaryChild (.tryConvert t a) a
+
+/-- Immediate left and right children of a binary initializer form. -/
+inductive CExpr.BinaryChildren : CExpr → CExpr → CExpr → Prop where
+  | wrapping (op a b) : BinaryChildren (.wrapping op a b) a b
+  | saturating (op a b) : BinaryChildren (.saturating op a b) a b
+  | plain (op a b) : BinaryChildren (.plain op a b) a b
+  | bit (op a b) : BinaryChildren (.bit op a b) a b
+  | cmp (op a b) : BinaryChildren (.cmp op a b) a b
+  | and (a b) : BinaryChildren (.and a b) a b
+  | or (a b) : BinaryChildren (.or a b) a b
+
+/-- Unary forms that require an integer operand value. -/
+inductive CExpr.IntUnaryChild : CExpr → CExpr → Prop where
+  | plainNeg (a) : IntUnaryChild (.plainNeg a) a
+  | bitNot (a) : IntUnaryChild (.bitNot a) a
+  | tryConvert (t a) : IntUnaryChild (.tryConvert t a) a
+
+/-- Binary forms that require two integer operand values of the same integer type. -/
+inductive CExpr.IntBinaryChildren : CExpr → CExpr → CExpr → Prop where
+  | wrapping (op a b) : IntBinaryChildren (.wrapping op a b) a b
+  | saturating (op a b) : IntBinaryChildren (.saturating op a b) a b
+  | plain (op a b) : IntBinaryChildren (.plain op a b) a b
+  | bit (op a b) : IntBinaryChildren (.bit op a b) a b
+  | cmp (op a b) : IntBinaryChildren (.cmp op a b) a b
+
+/-- Binary forms that require two boolean operand values. -/
+inductive CExpr.BoolBinaryChildren : CExpr → CExpr → CExpr → Prop where
+  | and (a b) : BoolBinaryChildren (.and a b) a b
+  | or (a b) : BoolBinaryChildren (.or a b) a b
+
+/-- Independent syntax-directed, fuel-indexed evaluation semantics. Each constructor specifies
+an inference rule over immediate sub-expressions at the smaller budget `fuel` and grounds scalar
+outcomes directly in `Core.wrapping`, `Core.saturating`, `Core.plain`, `Core.plainNeg`,
+`Core.bitwise`, `Core.bitNot`, `CmpOp.eval`, `Lossless`, `boolToInt` and `Core.tryConvert`,
+without calling `CExpr.eval`, `CEvalResult.bind`, `sameInt` or `twoBools`. -/
 inductive ConstEval (env : AList ConstId CVal) : Nat → CExpr → CEvalResult → Prop where
   | exhausted (e) : ConstEval env 0 e .outOfFuel
-  | node (fuel) (answers : CExpr → CEvalResult)
-      (children : ∀ e, ConstEval env fuel e (answers e)) (e) :
-      ConstEval env (fuel + 1) e (e.nodeResult env answers)
+  | int_ok {fuel t n} (h : t.InRange n) :
+      ConstEval env (fuel + 1) (.int t n) (.value (.int t n))
+  | int_outOfRange {fuel t n} (h : ¬ t.InRange n) :
+      ConstEval env (fuel + 1) (.int t n) (.invalid (.int t n))
+  | bool (fuel b) : ConstEval env (fuel + 1) (.bool b) (.value (.bool b))
+  | unit (fuel) : ConstEval env (fuel + 1) .unit (.value .unit)
+  | ref_ok {fuel c v} (h : AList.lookup env c = some v) :
+      ConstEval env (fuel + 1) (.ref c) (.value v)
+  | ref_missing {fuel c} (h : AList.lookup env c = none) :
+      ConstEval env (fuel + 1) (.ref c) (.invalid (.ref c))
+  | unary_nonValue {fuel e a r} (hchild : CExpr.UnaryChild e a)
+      (ha : ConstEval env fuel a r) (hr : r.NonValue) :
+      ConstEval env (fuel + 1) e r
+  | binary_nonValue_left {fuel e a b r} (hchild : CExpr.BinaryChildren e a b)
+      (ha : ConstEval env fuel a r) (hr : r.NonValue) :
+      ConstEval env (fuel + 1) e r
+  | binary_nonValue_right {fuel e a b va r} (hchild : CExpr.BinaryChildren e a b)
+      (ha : ConstEval env fuel a (.value va))
+      (hb : ConstEval env fuel b r) (hr : r.NonValue) :
+      ConstEval env (fuel + 1) e r
+  | wrapping_ok {fuel op a b t x y}
+      (ha : ConstEval env fuel a (.value (.int t x)))
+      (hb : ConstEval env fuel b (.value (.int t y))) :
+      ConstEval env (fuel + 1) (.wrapping op a b) (.value (.int t (Core.wrapping t op x y)))
+  | saturating_ok {fuel op a b t x y}
+      (ha : ConstEval env fuel a (.value (.int t x)))
+      (hb : ConstEval env fuel b (.value (.int t y))) :
+      ConstEval env (fuel + 1) (.saturating op a b) (.value (.int t (Core.saturating t op x y)))
+  | plain_ok {fuel op a b t x y n}
+      (ha : ConstEval env fuel a (.value (.int t x)))
+      (hb : ConstEval env fuel b (.value (.int t y)))
+      (hop : Core.plain t op x y = .ok n) :
+      ConstEval env (fuel + 1) (.plain op a b) (.value (.int t n))
+  | plain_failure {fuel op a b t x y k}
+      (ha : ConstEval env fuel a (.value (.int t x)))
+      (hb : ConstEval env fuel b (.value (.int t y)))
+      (hop : Core.plain t op x y = .trap k) :
+      ConstEval env (fuel + 1) (.plain op a b)
+        (.failure ⟨.plain op, .plain op a b, .arithmetic k⟩)
+  | plainNeg_ok {fuel a t x n}
+      (ha : ConstEval env fuel a (.value (.int t x)))
+      (hop : Core.plainNeg t x = .ok n) :
+      ConstEval env (fuel + 1) (.plainNeg a) (.value (.int t n))
+  | plainNeg_failure {fuel a t x k}
+      (ha : ConstEval env fuel a (.value (.int t x)))
+      (hop : Core.plainNeg t x = .trap k) :
+      ConstEval env (fuel + 1) (.plainNeg a)
+        (.failure ⟨.plainNeg, .plainNeg a, .arithmetic k⟩)
+  | bit_ok {fuel op a b t x y}
+      (ha : ConstEval env fuel a (.value (.int t x)))
+      (hb : ConstEval env fuel b (.value (.int t y))) :
+      ConstEval env (fuel + 1) (.bit op a b) (.value (.int t (Core.bitwise t op x y)))
+  | bitNot_ok {fuel a t x}
+      (ha : ConstEval env fuel a (.value (.int t x))) :
+      ConstEval env (fuel + 1) (.bitNot a) (.value (.int t (Core.bitNot t x)))
+  | cmp_ok {fuel op a b t x y}
+      (ha : ConstEval env fuel a (.value (.int t x)))
+      (hb : ConstEval env fuel b (.value (.int t y))) :
+      ConstEval env (fuel + 1) (.cmp op a b) (.value (.bool (op.eval x y)))
+  | not_ok {fuel a x}
+      (ha : ConstEval env fuel a (.value (.bool x))) :
+      ConstEval env (fuel + 1) (.not a) (.value (.bool (!x)))
+  | and_ok {fuel a b x y}
+      (ha : ConstEval env fuel a (.value (.bool x)))
+      (hb : ConstEval env fuel b (.value (.bool y))) :
+      ConstEval env (fuel + 1) (.and a b) (.value (.bool (x && y)))
+  | or_ok {fuel a b x y}
+      (ha : ConstEval env fuel a (.value (.bool x)))
+      (hb : ConstEval env fuel b (.value (.bool y))) :
+      ConstEval env (fuel + 1) (.or a b) (.value (.bool (x || y)))
+  | convert_int_ok {fuel t a s x}
+      (ha : ConstEval env fuel a (.value (.int s x)))
+      (hloss : Lossless s t) :
+      ConstEval env (fuel + 1) (.convert t a) (.value (.int t x))
+  | convert_int_invalid {fuel t a s x}
+      (ha : ConstEval env fuel a (.value (.int s x)))
+      (hloss : ¬ Lossless s t) :
+      ConstEval env (fuel + 1) (.convert t a) (.invalid (.convert t a))
+  | convert_bool_ok {fuel t a b}
+      (ha : ConstEval env fuel a (.value (.bool b))) :
+      ConstEval env (fuel + 1) (.convert t a) (.value (.int t (boolToInt b)))
+  | convert_unit_invalid {fuel t a}
+      (ha : ConstEval env fuel a (.value .unit)) :
+      ConstEval env (fuel + 1) (.convert t a) (.invalid (.convert t a))
+  | tryConvert_ok {fuel t a s x n}
+      (ha : ConstEval env fuel a (.value (.int s x)))
+      (hop : Core.tryConvert t x = .ok n) :
+      ConstEval env (fuel + 1) (.tryConvert t a) (.value (.int t n))
+  | tryConvert_failure {fuel t a s x}
+      (ha : ConstEval env fuel a (.value (.int s x)))
+      (hop : Core.tryConvert t x = .error .outOfRange) :
+      ConstEval env (fuel + 1) (.tryConvert t a)
+        (.failure ⟨.tryConvert t, .tryConvert t a, .outOfRange⟩)
+  | intUnary_invalid {fuel e a va} (hchild : CExpr.IntUnaryChild e a)
+      (ha : ConstEval env fuel a (.value va))
+      (hnot : ∀ t x, va ≠ .int t x) :
+      ConstEval env (fuel + 1) e (.invalid e)
+  | not_invalid {fuel a va}
+      (ha : ConstEval env fuel a (.value va))
+      (hnot : ∀ b, va ≠ .bool b) :
+      ConstEval env (fuel + 1) (.not a) (.invalid (.not a))
+  | intBinary_invalid {fuel e a b va vb} (hchild : CExpr.IntBinaryChildren e a b)
+      (ha : ConstEval env fuel a (.value va))
+      (hb : ConstEval env fuel b (.value vb))
+      (hnot : ∀ t x y, va ≠ .int t x ∨ vb ≠ .int t y) :
+      ConstEval env (fuel + 1) e (.invalid e)
+  | boolBinary_invalid {fuel e a b va vb} (hchild : CExpr.BoolBinaryChildren e a b)
+      (ha : ConstEval env fuel a (.value va))
+      (hb : ConstEval env fuel b (.value vb))
+      (hnot : ∀ x y, va ≠ .bool x ∨ vb ≠ .bool y) :
+      ConstEval env (fuel + 1) e (.invalid e)
 
 /-- Two operand types that are one integer type, or `none`. -/
 def sameIntTy : Option CTy → Option CTy → Option IntTy
