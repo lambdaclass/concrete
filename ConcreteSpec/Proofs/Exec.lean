@@ -20,7 +20,7 @@ What these prove, for every operand language:
   first, threading the state, and then restores the scope (`exit_scope_runs_defers`,
   `done_scope_runs_defers`); an exit through several frames runs the calls of `plan`, innermost
   scope first, and arrives unchanged (`unwind_runs_plan`); the cleanup runs exactly the calls of
-  `plan`, in order (`cleans_iff_runs_plan`, `planWith_calls`); a `return` then reaches its caller with
+  `plan`, in order (`cleans_iff_runs_plan_inv`, `planWith_calls`); a `return` then reaches its caller with
   the value bound (`return_reaches_caller`), and a `break` or `continue` its loop
   (`break_reaches_loop`, `continue_reaches_loop`).
 - **Exit values**: a `return` evaluates its value before any cleanup (`step_ret`).
@@ -28,9 +28,9 @@ What these prove, for every operand language:
   (`steps_from_trapped`); `abort()` runs no cleanup (`abort_runs_no_cleanup`), and so neither does a
   cleanup call that traps.
 - **Evaluation order**: the first argument that traps decides the trap (`evalArgs_first_trap`).
-- Steps of the machine itself are deterministic (`step_silent_deterministic`): only the answers of
+- Steps of the machine itself are deterministic (`step_silent_deterministic_inv`): only the answers of
   primitive operations, each allowed by its contract, can make two runs differ
-  (`step_deterministic`).
+  (`step_deterministic_inv`).
 - **Destruction order** (Q2.3): a sequence's element `i` is visited `i`-th and the backing last; a
   map's `i`-th entry has its key at `2i` and its value at `2i+1`, and the nodes come last.
 -/
@@ -296,7 +296,7 @@ theorem continue_reaches_loop (P : Program O) (l : LoopId) (cr b : Stmt O) (t : 
 `Cleans` runs the calls of `plan`, each with the locals of its scope's point in the unwinding, and
 tells the instrumentation which locals each scope it leaves drops: `planWith` lists those actions in
 order, its calls are `plan`'s (`planWith_calls`), and a cleanup is a run of exactly those actions
-(`cleans_iff_runs_plan`). -/
+(`cleans_iff_runs_plan_inv`). -/
 
 /-- One action of a cleanup: a call, with the locals it runs with, or leaving a scope entered with
 `dm`, from locals `L`. -/
@@ -369,9 +369,8 @@ def Frame.passable : Frame O → Bool
   | .resume _ | .ret .. => false
   | _ => true
 
-/-- **A cleanup runs exactly the plan**: through frames an exit can pass, the calls of `plan pre`,
-in order, each with its scope's locals, with each scope's drop between them, and nothing else. -/
-theorem cleans_iff_runs_plan {P : Program O} :
+/-- Helper (inversion). Relates two cleanup certificates; not a law about actual runs. -/
+theorem cleans_iff_runs_plan_inv {P : Program O} :
     ∀ {pre : List (Frame O)} {L : AList Var O.Val} {st st' : O.Store} {tr : List O.Event},
     (∀ f ∈ pre, f.passable = true) →
     (Cleans P pre L st tr st' ↔ RunsEach P (planWith pre L) st tr st')
@@ -384,30 +383,30 @@ theorem cleans_iff_runs_plan {P : Program O} :
     constructor
     · intro h
       cases h with
-      | scope hr hd hc => exact RunsAll.each hr (.drop hd ((cleans_iff_runs_plan hp').1 hc))
+      | scope hr hd hc => exact RunsAll.each hr (.drop hd ((cleans_iff_runs_plan_inv hp').1 hc))
     · intro h
       obtain ⟨tr₁, st₁, tr₂, rfl, ha, hb⟩ := RunsEach.split_calls h
       cases hb with
-      | drop hd hb => exact .scope ha hd ((cleans_iff_runs_plan hp').2 hb)
+      | drop hd hb => exact .scope ha hd ((cleans_iff_runs_plan_inv hp').2 hb)
   | .test l cr t b site dm :: pre, L, st, st', tr, hp => by
     have hp' := fun f hf => hp f (List.mem_cons_of_mem _ hf)
     constructor
     · intro h; cases h with
-      | test hd hc => exact .drop hd ((cleans_iff_runs_plan hp').1 hc)
+      | test hd hc => exact .drop hd ((cleans_iff_runs_plan_inv hp').1 hc)
     · intro h; cases h with
-      | drop hd hb => exact .test hd ((cleans_iff_runs_plan hp').2 hb)
+      | drop hd hb => exact .test hd ((cleans_iff_runs_plan_inv hp').2 hb)
   | .seq _ :: pre, L, st, st', tr, hp => by
     have hp' := fun f hf => hp f (List.mem_cons_of_mem _ hf)
     constructor
     · intro h; cases h with
-      | seq hc => exact (cleans_iff_runs_plan hp').1 hc
-    · intro h; exact .seq ((cleans_iff_runs_plan hp').2 h)
+      | seq hc => exact (cleans_iff_runs_plan_inv hp').1 hc
+    · intro h; exact .seq ((cleans_iff_runs_plan_inv hp').2 h)
   | .body .. :: pre, L, st, st', tr, hp => by
     have hp' := fun f hf => hp f (List.mem_cons_of_mem _ hf)
     constructor
     · intro h; cases h with
-      | body hc => exact (cleans_iff_runs_plan hp').1 hc
-    · intro h; exact .body ((cleans_iff_runs_plan hp').2 h)
+      | body hc => exact (cleans_iff_runs_plan_inv hp').1 hc
+    · intro h; exact .body ((cleans_iff_runs_plan_inv hp').2 h)
   | .resume _ :: _, _, _, _, _, hp => absurd (hp _ List.mem_cons_self) (by simp [Frame.passable])
   | .ret .. :: _, _, _, _, _, hp => absurd (hp _ List.mem_cons_self) (by simp [Frame.passable])
 
@@ -482,16 +481,14 @@ theorem evalArgs_first_trap (L : AList Var O.Val) (e : O.Expr) (kd : TrapKind)
     | trap _ => simp [evalArgs, h₁, Res.bind] at h
     | stuck => simp [evalArgs, h₁, Res.bind] at h
 
-/-- Steps of the machine itself are deterministic. -/
-theorem step_silent_deterministic {P : Program O} {c c₁ c₂ : Config O}
+/-- Helper (congruence). Function injectivity, not a contract law about machine rules. -/
+theorem step_silent_deterministic_inv {P : Program O} {c c₁ c₂ : Config O}
     (h₁ : step P c = some (.next c₁)) (h₂ : step P c = some (.next c₂)) : c₁ = c₂ := by
   rw [h₁] at h₂; cases h₂; rfl
 
-/-- **Determinism up to the environment.** Two steps from one configuration reach the same
-configuration with the same label, unless the configuration requests a primitive operation: then
-each step takes an answer the contract allows, is labeled by it and continues with it, so only the
-environment's answers can differ, and equal answers give equal steps. -/
-theorem step_deterministic {P : Program O} {c c₁ c₂ : Config O} {l₁ l₂ : Label O}
+/-- Helper (inversion). The function-backed representation of `Step` separates machine steps
+from answers. This is not an independent determinism contract law. -/
+theorem step_deterministic_inv {P : Program O} {c c₁ c₂ : Config O} {l₁ l₂ : Label O}
     (h₁ : Step P c l₁ c₁) (h₂ : Step P c l₂ c₂) :
     (l₁ = l₂ ∧ c₁ = c₂) ∨ ∃ p vs site st k a₁ a₂, step P c = some (.request p vs site st k) ∧
       O.allows p vs st a₁ = true ∧ O.allows p vs st a₂ = true ∧
@@ -499,7 +496,7 @@ theorem step_deterministic {P : Program O} {c c₁ c₂ : Config O} {l₁ l₂ :
   cases h₁ with
   | silent h =>
     cases h₂ with
-    | silent h' => exact .inl ⟨rfl, step_silent_deterministic h h'⟩
+    | silent h' => exact .inl ⟨rfl, step_silent_deterministic_inv h h'⟩
     | prim h' _ _ => rw [h] at h'; cases h'
   | prim h ha hk =>
     cases h₂ with
@@ -514,107 +511,154 @@ No law assumes that `life` is total. `step_return_caller` and `return_reaches_ca
 now require successful leave and result binding; `exit_scope_runs_defers` and
 `done_scope_runs_defers` require a successful drop. `Cleans` and `RunsEach` carry
 successful drops, so their existing plan and unwinding laws keep the same meaning.
-`steps_request` requires successful continuation, and `step_deterministic` records
+`steps_request` requires successful continuation, and `step_deterministic_inv` records
 those successful continuations explicitly. All other laws retain their premises.
 -/
 
-/-- A refused machine step has no transition, silent or primitive. -/
-theorem no_step_of_none {P : Program O} {c : Config O} (h : step P c = none)
-    (l : Label O) (c' : Config O) : ¬ Step P c l c' := by
-  intro hs
+/-- No labeled transition is available. This is about the operational relation, including
+primitive answers, rather than the optional result of the implementation. -/
+def Blocked (P : Program O) (c : Config O) : Prop := ∀ l c', ¬ Step P c l c'
+
+/-- Helper (inversion). A missing implementation result has no relational transition. -/
+private theorem no_step_of_none_inv {P : Program O} {c : Config O} (h : step P c = none) :
+    Blocked P c := by
+  intro l c' hs
   cases hs with
   | silent hs => rw [h] at hs; cases hs
   | prim hs _ _ => rw [h] at hs; cases hs
 
-/-- Refusing initialization makes a binding stuck after its operand succeeds. -/
+/-- Helper (inversion). For a silent lifecycle operation, absence of all transitions is exactly
+refusal. The operation's configuration transformer is unrestricted. -/
+private theorem blocked_map_inv {P : Program O} {c : Config O} (r : Option O.Store)
+    (f : O.Store → Config O) (h : step P c = r.map (fun st => .next (f st))) :
+    Blocked P c ↔ r = none := by
+  cases hr : r with
+  | none => exact ⟨fun _ => rfl, fun _ => no_step_of_none_inv (by simpa [hr] using h)⟩
+  | some st =>
+    constructor
+    · intro hb
+      exact False.elim (hb .silent (f st) (.silent (by simpa [hr] using h)))
+    · intro hn; cases hn
+
+/-- Initialization is the sole obstruction after successful operand evaluation: refusal is
+necessary and sufficient for the absence of every labeled transition. -/
 theorem bind_refused (P : Program O) (x : Var) (e : O.Expr) (site : SiteId)
     (L : AList Var O.Val) (st st' : O.Store) (v : O.Val) (k : List (Frame O))
-    (he : O.eval L st e = .ok (v, st')) (hl : O.life (.bind x) st' = none) :
-    step P ⟨.exec (.bind x e site), L, st, k⟩ = none := by
-  simp [step, onRes, he, hl]
+    (he : O.eval L st e = .ok (v, st')) :
+    Blocked P ⟨.exec (.bind x e site), L, st, k⟩ ↔ O.life (.bind x) st' = none :=
+  blocked_map_inv _ (fun st => ⟨.done, (x, v) :: L, st, k⟩) (by simp [step, onRes, he])
 
-/-- Assignment also propagates refused initialization, even for an existing local. -/
+/-- For an existing destination and successful RHS, only lifecycle refusal blocks assignment. -/
 theorem assign_refused (P : Program O) (x : Var) (e : O.Expr) (site : SiteId)
-    (L : AList Var O.Val) (st st' : O.Store) (v : O.Val) (k : List (Frame O))
-    (he : O.eval L st e = .ok (v, st')) (hl : O.life (.bind x) st' = none) :
-    step P ⟨.exec (.assign x e site), L, st, k⟩ = none := by
-  simp only [step, onRes, he]
-  cases AList.lookup L x <;> simp [hl]
+    (L : AList Var O.Val) (st st' : O.Store) (v old : O.Val) (k : List (Frame O))
+    (he : O.eval L st e = .ok (v, st')) (hx : AList.lookup L x = some old) :
+    Blocked P ⟨.exec (.assign x e site), L, st, k⟩ ↔ O.life (.bind x) st' = none :=
+  blocked_map_inv _ (fun st => ⟨.done, AList.update L x (fun _ => v), st, k⟩)
+    (by simp [step, onRes, he, hx])
 
-/-- Initial entry, including main, cannot produce a configuration if activation is refused. -/
-theorem enter_refused (fn : Fn O) (vs : List O.Val) (st : O.Store)
-    (hl : O.life (.enter (fn.params.map Prod.fst)) st = none) :
-    enter fn vs st = none := by
-  simp [enter, hl]
+/-- Helper (inversion). Initial entry projects the partial activation handler. Internal entry's
+operational contract is `call_refused`; this helper is not a contract law. -/
+theorem enter_refused_inv (fn : Fn O) (vs : List O.Val) (st : O.Store) :
+    enter fn vs st = none ↔ O.life (.enter (fn.params.map Prod.fst)) st = none := by
+  simp [enter]
 
-/-- Internal call entry refuses the step after evaluating all arguments. -/
+/-- After successful arguments, lookup and arity, activation refusal is exactly what blocks a call. -/
 theorem call_refused (P : Program O) (dst : Option Var) (f : FnId) (args : List O.Expr)
     (site : SiteId) (L : AList Var O.Val) (st st' : O.Store) (vs : List O.Val)
     (fn : Fn O) (k : List (Frame O)) (he : evalArgs O L st args = .ok (vs, st'))
-    (hf : AList.lookup P.fns f = some fn)
-    (hl : O.life (.enter (fn.params.map Prod.fst)) st' = none) :
-    step P ⟨.exec (.call dst f args site), L, st, k⟩ = none := by
-  simp [step, onRes, he, hf, hl]
+    (hf : AList.lookup P.fns f = some fn) (hlen : fn.params.length = vs.length) :
+    Blocked P ⟨.exec (.call dst f args site), L, st, k⟩ ↔
+      O.life (.enter (fn.params.map Prod.fst)) st' = none :=
+  blocked_map_inv _ (fun st => ⟨.exec fn.body, (fn.params.map Prod.fst).zip vs, st,
+    .scope fn.block (fn.params.map Prod.fst) [] :: .ret dst L :: k⟩)
+    (by simp [step, onRes, he, hf, hlen])
 
-/-- A normal scope exit cannot drop locals when instrumentation refuses. -/
+/-- A normal scope end with no remaining calls is blocked exactly when dropping its locals refuses. -/
 theorem scope_drop_refused (P : Program O) (b : BlockId) (dm : List Var)
-    (L : AList Var O.Val) (st : O.Store) (k : List (Frame O))
-    (hl : O.life (.drop (dead dm L)) st = none) :
-    step P ⟨.done, L, st, .scope b dm [] :: k⟩ = none := by
-  simp [step, dropOut, hl]
+    (L : AList Var O.Val) (st : O.Store) (k : List (Frame O)) :
+    Blocked P ⟨.done, L, st, .scope b dm [] :: k⟩ ↔ dropOut O dm L st = none :=
+  blocked_map_inv _ _ rfl
 
-/-- The same refusal stops a structured exit through a scope or a test frame. -/
+/-- A structured exit through an empty scope is blocked exactly when its drop refuses. -/
 theorem exit_drop_refused (P : Program O) (e : Exit O.Val) (b : BlockId) (dm : List Var)
-    (l : LoopId) (cr body : Stmt O) (t : O.Expr) (site : SiteId)
-    (L : AList Var O.Val) (st : O.Store) (k : List (Frame O))
-    (hl : O.life (.drop (dead dm L)) st = none) :
-    step P ⟨.exiting e, L, st, .scope b dm [] :: k⟩ = none ∧
-    step P ⟨.exiting e, L, st, .test l cr t body site dm :: k⟩ = none := by
-  simp [step, stepExit, dropOut, hl]
+    (L : AList Var O.Val) (st : O.Store) (k : List (Frame O)) :
+    Blocked P ⟨.exiting e, L, st, .scope b dm [] :: k⟩ ↔ dropOut O dm L st = none :=
+  blocked_map_inv _ _ rfl
 
-/-- After a successful loop test evaluation, refusal to drop its temporaries stops either branch. -/
+/-- The test-frame drop during an exit is also necessary and sufficient for progress. -/
+theorem exit_test_drop_refused (P : Program O) (e : Exit O.Val) (dm : List Var)
+    (l : LoopId) (cr body : Stmt O) (t : O.Expr) (site : SiteId)
+    (L : AList Var O.Val) (st : O.Store) (k : List (Frame O)) :
+    Blocked P ⟨.exiting e, L, st, .test l cr t body site dm :: k⟩ ↔ dropOut O dm L st = none :=
+  blocked_map_inv _ _ rfl
+
+/-- After a successful boolean test, either branch progresses exactly when its temporary drop
+succeeds. Non-boolean operands cannot masquerade as lifecycle refusals. -/
 theorem test_drop_refused (P : Program O) (l : LoopId) (cr body : Stmt O) (t : O.Expr)
     (site : SiteId) (dm : List Var) (L : AList Var O.Val) (st st' : O.Store)
-    (v : O.Val) (k : List (Frame O)) (he : O.eval L st t = .ok (v, st'))
-    (hl : O.life (.drop (dead dm L)) st' = none) :
-    step P ⟨.done, L, st, .test l cr t body site dm :: k⟩ = none := by
-  simp only [step, onRes, he]
-  cases O.test v <;> simp [dropOut, hl]
+    (v : O.Val) (go : Bool) (k : List (Frame O)) (he : O.eval L st t = .ok (v, st'))
+    (ht : O.test v = some go) :
+    Blocked P ⟨.done, L, st, .test l cr t body site dm :: k⟩ ↔ dropOut O dm L st' = none := by
+  apply blocked_map_inv _ (fun st => if go then
+    ⟨.exec body, restrict dm L, st, .body l cr t body site :: k⟩ else
+    ⟨.done, restrict dm L, st, k⟩)
+  cases go <;> simp [step, onRes, he, ht]
 
-/-- Refusing either activation end or result binding stops both explicit and Unit returns. -/
+/-- Explicit returns are blocked exactly by refusal of activation end or result initialization.
+The analogous implicit Unit return has the same obstruction. -/
 theorem return_refused (P : Program O) (dst : Option Var) (v : O.Val)
-    (caller L : AList Var O.Val) (st : O.Store) (k : List (Frame O))
-    (hl : (O.life .leave st).bind (bindLife O dst) = none) :
-    step P ⟨.exiting (.ret v), L, st, .ret dst caller :: k⟩ = none ∧
-    step P ⟨.done, L, st, .ret dst caller :: k⟩ = none := by
-  cases he : O.life .leave st with
-  | none => simp [step, stepExit, he]
-  | some st' =>
-    have hb : bindLife O dst st' = none := by simpa [he] using hl
-    simp [step, stepExit, he, hb]
+    (caller L : AList Var O.Val) (st : O.Store) (k : List (Frame O)) :
+    (Blocked P ⟨.exiting (.ret v), L, st, .ret dst caller :: k⟩ ↔
+      (O.life .leave st).bind (bindLife O dst) = none) ∧
+    (Blocked P ⟨.done, L, st, .ret dst caller :: k⟩ ↔
+      (O.life .leave st).bind (bindLife O dst) = none) := by
+  constructor
+  · apply blocked_map_inv _ (fun st => ⟨.done, bindDst dst v caller, st, k⟩)
+    cases hl : O.life .leave st <;> simp [step, stepExit, hl]
+  · apply blocked_map_inv _ (fun st => ⟨.done, bindDst dst O.unitVal caller, st, k⟩)
+    cases hl : O.life .leave st <;> simp [step, hl]
 
-/-- Refusing a primitive result binding refuses its request continuation. Error answers bypass
-binding and remain traps. The oracle's answer kind is unchanged. -/
-theorem prim_bind_refused (P : Program O) (x : Var) (p : O.Prim) (args : List O.Expr)
+/-- The selected allowed answer cannot be committed when its continuation refuses: the driver
+ends stuck at the request, preserving the entire history (including no response event). This is
+per answer: another allowed answer may still have a transition. -/
+theorem continuation_refused (P : Program O) (ρ : Oracle O) (n : Nat)
+    (hist : List O.Event) (c : Config O) (p : O.Prim) (vs : List O.Val)
+    (site : SiteId) (st : O.Store) (cont : Answer O.Val O.Event O.Store → Option (Config O))
+    (a : Answer O.Val O.Event O.Store) (hf : c.final? = none)
+    (hr : step P c = some (.request p vs site st cont))
+    (ho : ρ hist p vs site st = some a) (ha : O.allows p vs st a = true)
+    (hk : cont a = none) : runFrom P ρ (n + 1) hist c = ⟨hist, .stuck c⟩ := by
+  simp [runFrom, hf, hr, ho, ha, hk]
+
+/-- A successful primitive answer whose binding refuses stops the actual run at its requesting
+configuration, without accepting its event. All argument evaluation and answer validation succeed. -/
+theorem prim_bind_refused (P : Program O) (ρ : Oracle O) (n : Nat) (hist : List O.Event)
+    (x : Var) (p : O.Prim) (args : List O.Expr) (site : SiteId)
+    (L : AList Var O.Val) (st st' : O.Store) (vs : List O.Val) (k : List (Frame O))
+    (a : Answer O.Val O.Event O.Store) (v : O.Val)
+    (he : evalArgs O L st args = .ok (vs, st'))
+    (ho : ρ hist p vs site st' = some a) (ha : O.allows p vs st' a = true)
+    (hv : a.result = .ok v) (hl : O.life (.bind x) a.store = none) :
+    runFrom P ρ (n + 1) hist ⟨.exec (.prim (some x) p args site), L, st, k⟩ =
+      ⟨hist, .stuck ⟨.exec (.prim (some x) p args site), L, st, k⟩⟩ := by
+  exact continuation_refused P ρ n hist _ p vs site st' _ a rfl
+    (by simp [step, onRes, he]; rfl) ho ha (by simp [hv, bindLife, hl])
+
+/-- Error answers bypass result initialization even when that initialization would refuse:
+the actual labeled transition traps, retaining the answer's store and event. -/
+theorem prim_error_bypasses_bind (P : Program O) (x : Var) (p : O.Prim) (args : List O.Expr)
     (site : SiteId) (L : AList Var O.Val) (st st' : O.Store) (vs : List O.Val)
-    (k : List (Frame O)) (a : Answer O.Val O.Event O.Store) (v : O.Val)
-    (he : evalArgs O L st args = .ok (vs, st')) (ha : a.result = .ok v)
-    (hl : O.life (.bind x) a.store = none) :
-    ∃ cont, step P ⟨.exec (.prim (some x) p args site), L, st, k⟩ =
-      some (.request p vs site st' cont) ∧ cont a = none := by
-  refine ⟨(fun ans => match ans.result with
-    | .ok w => (bindLife O (some x) ans.store).map fun st'' =>
-        ⟨.done, bindDst (some x) w L, st'', k⟩
-    | .error kd => some ⟨.trapped kd site, L, ans.store, k⟩), ?_, ?_⟩
-  · simp [step, onRes, he]
-    rfl
-  · simp [ha, bindLife, hl]
-
-/-- A refused continuation admits no successful response transition for that answer. -/
-theorem continuation_refused (cont : Answer O.Val O.Event O.Store → Option (Config O))
-    (a : Answer O.Val O.Event O.Store) (h : cont a = none) :
-    ¬ ∃ c', cont a = some c' := by
-  simp [h]
+    (k : List (Frame O)) (a : Answer O.Val O.Event O.Store) (kd : TrapKind)
+    (he : evalArgs O L st args = .ok (vs, st')) (ha : O.allows p vs st' a = true)
+    (hv : a.result = .error kd) :
+    Step P ⟨.exec (.prim (some x) p args site), L, st, k⟩ a.label
+      ⟨.trapped kd site, L, a.store, k⟩ := by
+  apply Step.prim (a := a) (p := p) (vs := vs) (site := site) (st := st')
+    (k := fun a => match a.result with
+      | .ok v => (bindLife O (some x) a.store).map fun st => ⟨.done, bindDst (some x) v L, st, k⟩
+      | .error kd => some ⟨.trapped kd site, L, a.store, k⟩)
+    (by simp [step, onRes, he]; rfl) ha
+  simp [hv]
 
 /-! ### Destruction -/
 
@@ -631,8 +675,9 @@ theorem destroyCall_sig {P : Program O} (D : DestroyProtocol P) (T : O.Ty) (arg 
     rw [hi] at h; cases h
     exact ⟨rfl, D.sig T f hi⟩
 
-/-- A type with a `Destroy` function is not `Copy`. -/
-theorem destroy_not_copy {P : Program O} (D : DestroyProtocol P) (T : O.Ty) (f : FnId)
+/-- Helper (projection). Extracts the protocol admission obligation, not a contract law.
+The concrete demo protocol below discharges that obligation by type cases. -/
+theorem destroy_not_copy_proj {P : Program O} (D : DestroyProtocol P) (T : O.Ty) (f : FnId)
     (h : D.impl T = some f) : O.isCopy T = false := D.notCopy T f h
 
 /-- A sequence's element `i` is visited at position `i`: in increasing index order. -/

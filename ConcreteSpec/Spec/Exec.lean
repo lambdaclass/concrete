@@ -107,7 +107,8 @@ statements keep their meaning whatever the instance.
 - `Store`: the shared state, threaded through operands, calls and cleanup.
 - `life`: how a change in the life of locals (`Life`) changes the state. Like the state an
   operand returns, it may change only instrumentation; an instance without instrumentation
-  ignores it by returning `some st`. `none` refuses the event: execution is stuck.
+  ignores it by returning `some st`. `none` refuses the event: execution is stuck, including
+  cleanup steps (owner decision 2026-11-08, 15:08 UTC, item 21).
 - `test`: the truth value of a condition (`none`: not a condition; unsafe stuckness).
 - `Ty`, `unitTy`, `unitVal`, `isCopy`: the types, `Unit` and its value, and which types are `Copy`
   (a declared and checked instance; the checker owns that check, C9).
@@ -495,7 +496,7 @@ inductive RunsAll (P : Program O) (L : AList Var O.Val) :
 /-- The successful cleanup an exit through frames `pre` performs, from locals `L` and state `st`: each scope's
 calls run in turn (`RunsAll`), with the locals that scope restores passed on to the next, the
 innermost scope first. The calls it runs are exactly `plan pre`, in that order
-(`cleans_iff_runs_plan`, `planWith_calls`). -/
+(certificate helper `cleans_iff_runs_plan_inv`, `planWith_calls`). -/
 inductive Cleans (P : Program O) :
     List (Frame O) → AList Var O.Val → O.Store → List O.Event → O.Store → Prop where
   | nil (L : AList Var O.Val) (st : O.Store) : Cleans P [] L st [] st
