@@ -41,7 +41,6 @@ def main(argv):
     if len(argv) == 5:
         provenance = [
             f"runner_environment={os.environ.get('CONCRETE_REPRO_RUNNER_ENVIRONMENT', 'unknown')}",
-            f"runner_host={os.environ.get('CONCRETE_REPRO_RUNNER_HOST', 'unknown')}",
             f"runner_name={os.environ.get('CONCRETE_REPRO_RUNNER_NAME', 'unknown')}",
         ]
         Path(argv[4]).write_text('\n'.join(provenance + lines) + '\n')

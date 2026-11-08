@@ -460,7 +460,7 @@ jobs:
             runner: ubuntu-24.04
             machine: github
           - id: linux-ci2
-            runner: ${{ fromJSON('["self-hosted","linux","x64","concrete"]') }}
+            runner: ${{ github.event_name != 'pull_request' && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-24.04' }}
             machine: concrete-ci-2
           - id: macos
             runner: macos-15
@@ -470,6 +470,11 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Refuse a substitute for concrete-ci-2
+        if: matrix.machine == 'concrete-ci-2' && runner.environment != 'self-hosted'
+        run: |
+          echo "::error::linux-ci2 requires self-hosted concrete-ci-2; pull_request cannot use it, so this leg is intentionally red"
+          exit 1
       - uses: actions/checkout@v4
       - name: Install Nix (GitHub-hosted only)
         if: runner.environment != 'self-hosted'
@@ -477,7 +482,6 @@ jobs:
       - name: Compare every stage in distinct build directories
         env:
           CONCRETE_REPRO_RUNNER_ENVIRONMENT: ${{ runner.environment }}
-          CONCRETE_REPRO_RUNNER_HOST: ${{ matrix.machine }}
           CONCRETE_REPRO_RUNNER_NAME: ${{ runner.name }}
         run: nix develop --command timeout 3600 bash scripts/checks/compiler/slice0_repro.sh manifest.txt
       - uses: actions/upload-artifact@v4

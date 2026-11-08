@@ -11,7 +11,8 @@ import re
 import sys
 from pathlib import Path
 
-PROVENANCE = ('runner_environment', 'runner_host', 'runner_name')
+PROVENANCE = ('runner_environment', 'runner_name')
+CI2_RUNNER_NAME = re.compile(r'^concrete-ci-2-gha[0-9]+$')
 ARTIFACT = re.compile(r'[0-9a-f]{64}  .+')
 
 
@@ -47,11 +48,10 @@ def read_manifest(argument):
     return fields, payload
 
 
-def check_provenance(path, fields, environment, host):
-    expected = {'runner_environment': environment, 'runner_host': host}
-    for key, value in expected.items():
-        if fields[key] != value:
-            fail(f'{path}: expected {key}={value}, got {fields[key]}')
+def check_provenance(path, fields, environment):
+    if fields['runner_environment'] != environment:
+        fail(f"{path}: expected runner_environment={environment}, "
+             f"got {fields['runner_environment']}")
     if fields['runner_name'] == 'unknown':
         fail(f'{path}: runner_name was not recorded')
 
@@ -61,8 +61,11 @@ def main(argv):
         sys.exit(__doc__)
     github, github_payload = read_manifest(argv[1])
     ci2, ci2_payload = read_manifest(argv[2])
-    check_provenance(argv[1], github, 'github-hosted', 'github')
-    check_provenance(argv[2], ci2, 'self-hosted', 'concrete-ci-2')
+    check_provenance(argv[1], github, 'github-hosted')
+    check_provenance(argv[2], ci2, 'self-hosted')
+    if not CI2_RUNNER_NAME.fullmatch(ci2['runner_name']):
+        fail(f"{argv[2]}: expected runner_name matching {CI2_RUNNER_NAME.pattern}, "
+             f"got {ci2['runner_name']}")
     if github_payload != ci2_payload:
         diff = difflib.unified_diff(github_payload, ci2_payload,
                                     fromfile=argv[1], tofile=argv[2], lineterm='')

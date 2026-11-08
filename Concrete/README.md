@@ -713,11 +713,13 @@ debug information, path prefix maps, and no ELF build ID or Mach-O UUID (`ZERO_A
 both paths). The printers traverse ordered lists/arrays (including stable first-occurrence
 intrinsic deduplication); site paths are project-relative source data. They emit no clock,
 hostname or temporary path. CI repeats this on x86-64 Linux and AArch64 macOS. The Linux manifests
-record `runner_environment`, `runner_host` and `runner_name`; `compare-linux` requires one manifest
-from GitHub-hosted `ubuntu-24.04` and one from self-hosted concrete-ci-2, excludes only that runner
-provenance, and compares every build-identity and artifact-hash line. Different targets are never
-compared. Changes to these pins change the build identity; no reproducibility claim spans different
-toolchains or targets.
+record the runner-reported `runner_environment` and `runner_name`; `compare-linux` requires one
+manifest with `runner_environment=github-hosted` and one with `runner_environment=self-hosted` and
+a `concrete-ci-2-gha<N>` runner name, excludes only that provenance, and compares every
+build-identity and artifact-hash line. On `pull_request`, `linux-ci2` uses a GitHub-hosted runner
+and its first step fails rather than accepting a substitute or executing PR code on concrete-ci-2;
+pushes to main and dispatch runs use concrete-ci-2. Different targets are never compared. Changes to
+these pins change the build identity; no reproducibility claim spans different toolchains or targets.
 
 Every slice-0 gate runs under `scripts/checks/lib/limits.sh` (per-process address space 64 GiB on
 Linux, since Lake reserves far more than it uses; at most 40000 processes for the user), with
