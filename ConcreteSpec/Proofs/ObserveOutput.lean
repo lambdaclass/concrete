@@ -11,7 +11,7 @@ requires case analysis rather than `fun _ => rfl`.
 namespace ConcreteSpec.Core.Observe
 open ConcreteSpec.Core
 
-/-- Helper (induction). By induction on an event list `history`, `publicOutputs (A.project history)`
+/-- Helper (computation). By induction on an event list `history`, `publicOutputs (A.project history)`
 equals `history.flatMap physical` whenever `A` satisfies `ExecAdapter.OutputCorrespondence A physical`;
 feeds the operational laws `project_physical_outputs` and `output_before_trap_kept`.
 (approved: PENDING) -/

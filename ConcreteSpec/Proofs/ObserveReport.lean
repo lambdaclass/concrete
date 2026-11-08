@@ -15,7 +15,7 @@ reported observation. `none` is permitted only for evaluator/premise reports (`s
 `badAnswer`, `outOfFuel`) or unmapped `final` states (`A.terminal? final = none`), never for a
 valid terminal run or a well-formed blocked request; a mutant that always returns `none`
 violates `ReportTraceValid`. -/
-def ReportTraceValid {O : Exec.Operands} {S : EventSignature} (A : ExecAdapter O S)
+def ReportTraceValid {O : Exec.Operands} {S : EventSignature} (P : Exec.Program O) (A : ExecAdapter O S)
     (C : OperationContract S) (input : C.Input) (r : Exec.Report O) :
     Option (FullObservation S) → Prop
   | none =>
@@ -31,7 +31,10 @@ def ReportTraceValid {O : Exec.Operands} {S : EventSignature} (A : ExecAdapter O
       obs.state = A.state store
   | some (.blocked events q) =>
     ValidTrace C input (some q) events ∧ C.mayBlock input events q ∧
-    events = A.project r.events ++ [.request q]
+    events = A.project r.events ++ [.request q] ∧
+    ∃ c p vs site store k, r.ending = .noAnswer c ∧
+      Exec.step P c = some (.request p vs site store k) ∧
+      A.request p vs site store = some q
   | some (.finiteDivergence _) | some (.infiniteDivergence _) => False
 
 /-- Law (subject `ConcreteSpec.Core.Observe.reportObservation`).
@@ -43,7 +46,7 @@ theorem runFrom_report_trace {O : Exec.Operands} {S : EventSignature}
     (ρ : Exec.Oracle O) (wellFormed : ExecAdapter.WellFormed A C input ρ)
     (fuel : Nat) (hist : List O.Event) (c : Exec.Config O)
     (valid : CompleteTrace C input (A.project hist)) :
-    ReportTraceValid A C input (Exec.runFrom P ρ fuel hist c)
+    ReportTraceValid P A C input (Exec.runFrom P ρ fuel hist c)
       (reportObservation P A C input (Exec.runFrom P ρ fuel hist c)
         (runFrom_blockingPermitted P A C input ρ wellFormed valid)) := by
   obtain ⟨history, hnoAnswer⟩ := runFrom_validTrace P A C input ρ wellFormed fuel hist c valid
@@ -60,7 +63,7 @@ theorem runFrom_report_trace {O : Exec.Operands} {S : EventSignature}
     obtain ⟨p, vs, site, store, k, q, step, typed, _⟩ := hnoAnswer ending
     simp only [reportObservation, ending, step, typed, Option.map_some, ReportTraceValid]
     have hvalid := runFrom_noAnswer_pending_valid P A C input ρ wellFormed valid ending step typed
-    exact ⟨hvalid.1, hvalid.2, trivial⟩
+    exact ⟨hvalid.1, hvalid.2, trivial, pending, p, vs, site, store, k, rfl, step, typed⟩
   | stuck _ => simp [reportObservation, ending, ReportTraceValid]
   | badAnswer _ => simp [reportObservation, ending, ReportTraceValid]
   | outOfFuel _ => simp [reportObservation, ending, ReportTraceValid]
@@ -119,7 +122,7 @@ def alwaysNoneReport {O : Exec.Operands} {S : EventSignature}
     Option (FullObservation S) :=
   none
 
-/-- Helper (induction). By induction on evaluator fuel, an `.outOfFuel c'` ending occurs only at a
+/-- Helper (computation). By induction on evaluator fuel, an `.outOfFuel c'` ending occurs only at a
 non-final configuration `c'.final? = none`, feeding `runFrom_outOfFuel_report_none`.
 (approved: PENDING) -/
 theorem runFrom_outOfFuel_not_final {O : Exec.Operands}
@@ -313,6 +316,19 @@ paths into terminal observations. -/
 def uncheckedTrapTerminal (sites : SiteTable) (kind : TrapKind) (site : SiteId) : Option Terminal :=
   (AList.lookup sites site).map fun sp => .trapped kind site sp (trapLine kind site sp)
 
+/-- Fault: mistakes a request waiting at the fuel boundary for an unanswered oracle call. -/
+def fabricatedBlockingReport {O : Exec.Operands} {S : EventSignature}
+    (P : Exec.Program O) (A : ExecAdapter O S) (C : OperationContract S) (input : C.Input)
+    (r : Exec.Report O) (permitted : ExecAdapter.BlockingPermitted P A C input r) :
+    Option (FullObservation S) :=
+  match r.ending with
+  | .outOfFuel c =>
+    match Exec.step P c with
+    | some (.request p vs site store _) =>
+      (A.request p vs site store).map fun q => .blocked (A.project r.events ++ [.request q]) q
+    | _ => none
+  | _ => reportObservation P A C input r permitted
+
 namespace ReportDemo
 open AdapterDemo
 
@@ -322,7 +338,7 @@ theorem prior_complete : CompleteTrace permittingContract () (adapter.project [1
   .response (.request .idle) (RequestResponse.matched (S := signature) Op.double 1 2) rfl
 
 /-- Instance (law `ConcreteSpec.Core.Observe.runFrom_report_trace`, case `prior_exchange_block`). -/
-example : ReportTraceValid adapter permittingContract ()
+example : ReportTraceValid program adapter permittingContract ()
     (Exec.runFrom program blockingOracle 1 [1] (requesting 3))
     (reportObservation program adapter permittingContract ()
       (Exec.runFrom program blockingOracle 1 [1] (requesting 3))
@@ -335,7 +351,7 @@ example : ReportTraceValid adapter permittingContract ()
 subject `ConcreteSpec.Core.Observe.reportObservation`, mutant `ConcreteSpec.Core.Observe.dropBlockedHistory`). -/
 example : ExecAdapter.WellFormed adapter permittingContract () blockingOracle ∧
     CompleteTrace permittingContract () (adapter.project [1]) ∧
-    ¬ ReportTraceValid adapter permittingContract ()
+    ¬ ReportTraceValid program adapter permittingContract ()
       (Exec.runFrom program blockingOracle 1 [1] (requesting 3))
       (dropBlockedHistory program adapter permittingContract ()
         (Exec.runFrom program blockingOracle 1 [1] (requesting 3))
@@ -350,7 +366,7 @@ example : ExecAdapter.WellFormed adapter permittingContract () blockingOracle �
   | request previous => simp at empty
 
 /-- Instance (law `ConcreteSpec.Core.Observe.runFrom_report_trace`, case `refuse_always_none`). -/
-example : ReportTraceValid adapter permittingContract ()
+example : ReportTraceValid program adapter permittingContract ()
     (Exec.runFrom program blockingOracle 1 [1] (requesting 3))
     (reportObservation program adapter permittingContract ()
       (Exec.runFrom program blockingOracle 1 [1] (requesting 3))
@@ -363,7 +379,7 @@ example : ReportTraceValid adapter permittingContract ()
 subject `ConcreteSpec.Core.Observe.reportObservation`, mutant `ConcreteSpec.Core.Observe.alwaysNoneReport`). -/
 example : ExecAdapter.WellFormed adapter permittingContract () blockingOracle ∧
     CompleteTrace permittingContract () (adapter.project [1]) ∧
-    ¬ ReportTraceValid adapter permittingContract ()
+    ¬ ReportTraceValid program adapter permittingContract ()
       (Exec.runFrom program blockingOracle 1 [1] (requesting 3))
       (alwaysNoneReport program adapter permittingContract ()
         (Exec.runFrom program blockingOracle 1 [1] (requesting 3))
@@ -461,6 +477,31 @@ example : ¬ ExecAdapter.WellFormed adapter forbiddingContract () blockingOracle
   obtain ⟨_, _, hblock⟩ :=
     formed.blocked (hist := [1]) (p := 3) (vs := []) (site := ⟨0⟩) (store := ()) rfl
   exact hblock
+
+/-- Instance (law `ConcreteSpec.Core.Observe.runFrom_report_trace`, case `fuel_is_not_blocking`). -/
+example : ReportTraceValid program adapter permittingContract ()
+    (Exec.runFrom program blockingOracle 0 [] (requesting 3))
+    (reportObservation program adapter permittingContract ()
+      (Exec.runFrom program blockingOracle 0 [] (requesting 3))
+      (runFrom_blockingPermitted program adapter permittingContract () blockingOracle
+        blockingWellFormed (show CompleteTrace permittingContract () (adapter.project []) from .idle))) :=
+  runFrom_report_trace program adapter permittingContract () blockingOracle blockingWellFormed
+    0 [] (requesting 3) ValidTrace.idle
+
+/-- Planted (law `ConcreteSpec.Core.Observe.runFrom_report_trace`, case `fuel_is_not_blocking`,
+subject `ConcreteSpec.Core.Observe.reportObservation`, mutant `ConcreteSpec.Core.Observe.fabricatedBlockingReport`). -/
+example : ExecAdapter.WellFormed adapter permittingContract () blockingOracle ∧
+    CompleteTrace permittingContract () (adapter.project []) ∧
+    ¬ ReportTraceValid program adapter permittingContract ()
+      (Exec.runFrom program blockingOracle 0 [] (requesting 3))
+      (fabricatedBlockingReport program adapter permittingContract ()
+        (Exec.runFrom program blockingOracle 0 [] (requesting 3))
+        (runFrom_blockingPermitted program adapter permittingContract () blockingOracle
+          blockingWellFormed (show CompleteTrace permittingContract () (adapter.project []) from .idle))) := by
+  refine ⟨blockingWellFormed, .idle, ?_⟩
+  intro invalid
+  obtain ⟨c, p, vs, site, store, k, ending, _, _⟩ := invalid.2.2.2
+  cases ending
 
 /-- Instance (law `ConcreteSpec.Core.Observe.runFrom_outOfFuel_report_none`, case `zero_fuel_at_request`). -/
 example : (requesting 3).final? = none ∧
