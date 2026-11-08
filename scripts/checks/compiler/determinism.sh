@@ -185,7 +185,16 @@ done <"$work/rows"
 
 required=$all
 [ "$emit_only" = 0 ] || required=$emitted
-"${compare[@]}" --required "$required" "$a" "$b" "$work/identity"
+"${compare[@]}" --required "$required" "$a" "$b" "$work/identity" "$work/manifest.txt"
+awk -v first="$first_name/" '
+  /^[0-9a-f]{64}  / {
+    is_first = (index($2, first) == 1)
+    if (seen_other && is_first) exit 1
+    if (!is_first) seen_other = 1
+    if (is_first) count++
+  }
+  END { if (count < 2 || !seen_other) exit 1 }
+' "$work/manifest.txt" || { echo "FAIL slice0_determinism: manifest is not in example-major order" >&2; exit 1; }
 echo 'ok slice0_determinism: clean double run'
 
 control_compare() { # control_compare LABEL EXPECTED_REGEX SIDE_A SIDE_B REQUIRED

@@ -9,7 +9,7 @@ Each SIDE holds `names` (the example inventory) and `out/NAME/STAGE` for every s
 directories fail closed. Every selected file is read once on both sides in pipeline stage order,
 comparing existence and bytes together per stage so the earliest differing stage is always reported
 first. With MANIFEST, writes the identity lines followed by one `SHA256  NAME/STAGE` line per
-artifact. --inventory recursively compares every file and directory below each program's output
+artifact in example-major (`NAME`, then `STAGE`) order, preserving gate 8's manifest layout. --inventory recursively compares every file and directory below each program's output
 directory (ordered by registered pipeline stage first, then discovered files lexicographically),
 and --required adds assertions for files that must not be missing from both sides. --stages selects
 gate 8's original explicit-list mode and preserves its declared stage sequence; its default is
@@ -152,6 +152,7 @@ def main(argv):
 
     all_stages = ordered_inventory_stages(required, [],
         [stage for _, _, selected, _, _ in records for stage in selected]) if args.inventory else selected
+    hashes_by_artifact = {}
     for stage in all_stages:
         for name, roots, selected, present_a, present_b in records:
             if stage not in selected:
@@ -167,10 +168,12 @@ def main(argv):
                 sys.exit(f'FAIL {args.label}: {name}: {stage}: missing ({error.filename})')
             if hashes[0] != hashes[1]:
                 sys.exit(f'FAIL {args.label}: {name}: {stage}: {hashes[0]} != {hashes[1]}')
-            lines.append(f'{hashes[0]}  {name}/{stage}')
+            hashes_by_artifact[(name, stage)] = hashes[0]
     if defects:
         sys.exit(defects[0])
-    for name in example_names:
+    for name, _, selected, _, _ in records:
+        for stage in selected:
+            lines.append(f'{hashes_by_artifact[(name, stage)]}  {name}/{stage}')
         print(f'ok {args.label}: {name}: all stages byte-identical')
     if args.manifest:
         Path(args.manifest).write_text('\n'.join(lines) + '\n')
