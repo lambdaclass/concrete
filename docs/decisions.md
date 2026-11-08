@@ -64,6 +64,7 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 - Where the decisions and their work are tracked, with a home and a gate per item ([row](#decided-2026-11-07-tracking)).
 - The trusted-base statement, differential fuzzer, sanitizers, binary-size tracking and frozen JSON schema ([row](#decided-2026-11-07-early-evidence)).
 - The documentation and tooling cleanup is approved, not performed by that record ([row](#decided-2026-11-07-cleanup)).
+- Only the new things at the root, and how files enter the frozen `legacy/` ([row](#decided-2026-11-08-legacy-sweep)).
 
 <a id="rules-a-decision-changed"></a>
 ## Rules a decision has changed
@@ -301,7 +302,7 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 - **P18** Phase E: contracts and termination within OD115–OD117 — Phase E: no source old, quantifier, implication or snapshot construct (OD117); entry/exit and frame properties are Lean theorems (a source frame clause would be a new decision for you); spec functions have a body and are total (OD115); ordinary functions have no total category (OD116) and get per-function termination theorems where wanted. R-0524 becomes 'Frame and entry/exit theorems in Lean, no old'; R-0526 stays 'checked totality of spec functions'.
 - **P19** Mutation testing for the new compiler — Retire the old mutation-harness defect work (R-0518). The new compiler gets its own mutation harness under R-0498, not a port of the old one.
 - **P20** One home for binding decisions — Move the still-binding roadmap decisions (new compiler, retention contract, authority, allocation, Lean as the spec) into docs/decisions.md beside your language answers. The dated log becomes history; ROADMAP.md links to decisions.md and restates nothing.
-- **P21** Retention records outlive legacy/ — RETENTION.tsv, ISSUES.tsv, required-checks.txt, scripts/oracle/ and docs/archive/roadmap-2026-11/ (with task_disposition.tsv) are part of the day-one root, outside legacy/, so they survive deleting it. *Revised 2026-11-06 (owner, verbatim: "do the whole movement"): of docs/archive/roadmap-2026-11/, the files that are decision sources or disposition records stay at the root (task_disposition.tsv, the decision log ROADMAP_DECISIONS.md, the task register ROADMAP_TASKS.md, ROADMAP_RECONCILIATION.md, ROADMAP_RESTRUCTURE.md with its table, and the archive README); the old control plane ROADMAP.md, ROADMAP_BACKLOG.md, ROADMAP_DIRECTION.md and WORK_QUEUE.md were duplicates of their frozen legacy/ copies apart from the move's mechanical rewrites, and nothing cites them as a decision source, so their root copies were removed and links point at the legacy/ copies, which stay until the legacy deletion point. The other docs/archive/ records (the site takedown record, the old bug ledger's disposition, the landing audit and the dated decision archives) stay at the root.*
+- **P21** Retention records outlive legacy/ — RETENTION.tsv, ISSUES.tsv, required-checks.txt, scripts/oracle/ and docs/archive/roadmap-2026-11/ (with task_disposition.tsv) are part of the day-one root, outside legacy/, so they survive deleting it. *Revised 2026-11-06 (owner, verbatim: "do the whole movement"): of docs/archive/roadmap-2026-11/, the files that are decision sources or disposition records stay at the root (task_disposition.tsv, the decision log ROADMAP_DECISIONS.md, the task register ROADMAP_TASKS.md, ROADMAP_RECONCILIATION.md, ROADMAP_RESTRUCTURE.md with its table, and the archive README); the old control plane ROADMAP.md, ROADMAP_BACKLOG.md, ROADMAP_DIRECTION.md and WORK_QUEUE.md were duplicates of their frozen legacy/ copies apart from the move's mechanical rewrites, and nothing cites them as a decision source, so their root copies were removed and links point at the legacy/ copies, which stay until the legacy deletion point. The other docs/archive/ records (the site takedown record, the old bug ledger's disposition, the landing audit and the dated decision archives) stay at the root.* *Revised 2026-11-08 (owner, verbatim: "ok to 2", answering whether all of docs/archive/ moves under legacy/, the decision sources included, after "i want only to keep the new things under the root"): all of docs/archive/ moves to legacy/, with docs/decisions.md kept the one home of decisions and verbatim quotes, so an archive file that holds a decision or quote decisions.md lacks moves only once its content is there. The 2026-11-08 sweep moved the old bug ledger's disposition, the landing audit and the site takedown record; the rest of docs/archive/ waits for that consolidation ([sweep](#decided-2026-11-08-legacy-sweep)).*
 - **P22** The work-queue dispatcher — Stop the dispatcher for the lean start. Agents are started by hand from the roadmap; bring the dispatcher back only when there is enough parallel work to need it.
 - **P23** Precedence between decisions, rows and drafts — Recorded decisions govern. An accepted row supersedes a recorded rule only through an explicitly identified, owner-approved revision (Q5.1/Q5.4 for OD45/OD87, Q6.4 for TYPE-22, Q2.8 for TRAIT-1, Q9.15/P3 for generated chapters). R4's replacements govern conflicting draft recommendations. Before your acceptance is recorded, every passage R4 F18 lists is reconciled (capability inference, generated chapters, roadmap authority, assurance wording, restart order and retention, Phase E, freeze dependencies, superseded Core recommendations), and historical conflicting text is marked superseded.
 
@@ -853,7 +854,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   the Codex, agy and Kimi pipeline review was reported, "did we also log that we will have the new
   compiler pipeline that we designed in this session?" and "ok decisions is fine"; the open set was
   then approved with "ok do everything"; reviewed by Claude, Codex, agy and Kimi,
-  [review](proposals/MERGED.md)). It
+  [review](../legacy/docs/proposals/MERGED.md)). It
   supersedes the pipeline of [VERIFIED_PIPELINE.md](../legacy/docs/compiler/VERIFIED_PIPELINE.md).
   The slice-0 design (`Concrete/README.md`, on branch `wip/slice0`) becomes the detailed
   description once it lands.
@@ -989,6 +990,21 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   nightly on concrete-ci-2); ASan and UBSan; speed and size, report-only; and the JSON schema
   generated from the Lean types, with goldens. All of them join `required-checks.txt` when the
   compiler lands on main.
+- <a id="decided-2026-11-08-legacy-sweep"></a>**Only the new things at the root; frozen-legacy sweeps** (owner,
+  2026-11-07: "ok move to the old anythign that is old right? including scripts" and "i want only to
+  keep the new things under the root"; 2026-11-08: "ok to 1" and "ok to 2"). A file stays at the root
+  only if it belongs to the new compiler, the new spec or the current project docs, or if landing or
+  CI on main would break without it; everything else moves under `legacy/` at the same path. "ok to
+  1" approves how a file enters the frozen `legacy/`: `scripts/checks/legacy.lock` gains one line per
+  sweep naming its source commit, and `legacy_frozen.sh` admits an addition `legacy/P` only if `P`
+  has the same mode and content at a sweep commit and no longer exists at the root; every other
+  addition, and every edit of a `legacy/` file, is still refused. So that a swept file is held to
+  the same rule after its sweep, the line (`sweep <commit> <tree>`) also records the `legacy/` tree
+  the sweep produced, and the check judges each step from the frozen tree through each sweep tree to
+  the current `legacy/`: a later edit of a swept file is refused, and its deletion needs a resolved
+  RETENTION.tsv row, as for a frozen file. A root file whose frozen `legacy/`
+  copy differs only by the move's mechanical link and path rewrites is removed from the root
+  instead, as on 2026-11-06. "ok to 2" is recorded under P21.
 - <a id="decided-2026-11-07-cleanup"></a>**The documentation and tooling cleanup** (owner,
   2026-11-07: "ok go ahead all yes then as you said right", approving the Codex/Kimi cleanup list).
   This answers whether that cleanup may proceed; it does not perform it. The approved scope is:
