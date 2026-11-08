@@ -470,7 +470,40 @@ review_cmd() {
 # $REMOTE's notes (fetched first, replacing the local copy, as verify.sh --fetch does): an absent,
 # malformed, blocked or findings note qualifies nothing, and a head note that is not clean is not
 # overridden by its members. Prints what qualified; on failure prints why and returns 1.
+#
+# OWNER SIGN-OFF (R-0618). A member without a clean note qualifies instead by a valid owner sign-off
+# at its exact SHA (scripts/land/signoff.sh verify --base <the train's base>, on $REMOTE's
+# refs/owner-signoff/*, fetched first): the member reached the review cap of its diff's class and all
+# three reviewers accepted that commit.
+# A sign-off approves that commit only, never what the train did with it, so a train with a signed-off
+# member must be exactly the clean merge of its members onto its base: one --no-ff merge per member,
+# in order, each merge's tree the conflict-free `git merge-tree --write-tree` of its two parents, and
+# nothing else (no resolved conflict, no regenerated view, no extra commit).
 VERIFY="$SELF_DIR/../review/verify.sh"
+SIGNOFF="$SELF_DIR/signoff.sh"
+
+# pure_merge BASE HEAD SHA... → empty when HEAD is BASE plus exactly one clean merge of each SHA, in
+# order; otherwise prints why.
+pure_merge() {
+  local base="$1" head="$2" cur="$2" i p t want; shift 2
+  local shas=("$@")
+  for ((i = ${#shas[@]} - 1; i >= 0; i--)); do
+    read -r -a p <<< "$(git rev-list --parents -n 1 "$cur")"
+    if [ "${#p[@]}" != 3 ] || [ "${p[2]}" != "${shas[i]}" ]; then
+      echo "${head:0:10} is not the clean merge of its members onto ${base:0:10}: ${cur:0:10} is not the merge of ${shas[i]:0:10}"; return 0
+    fi
+    # No pipe: a conflicted merge-tree exits 1 (after printing a tree), whether or not pipefail is set.
+    if ! t="$(git merge-tree --write-tree "${p[1]}" "${shas[i]}" 2>/dev/null)" || ! [[ "$t" =~ ^[0-9a-f]{40}$ ]]; then
+      echo "${head:0:10} is not the clean merge of its members onto ${base:0:10}: merging ${shas[i]:0:10} conflicts"; return 0
+    fi
+    want="$(git rev-parse "$cur^{tree}")"
+    if [ "$t" != "$want" ]; then
+      echo "${head:0:10} is not the clean merge of its members onto ${base:0:10}: ${cur:0:10} differs from the clean merge of ${shas[i]:0:10}"; return 0
+    fi
+    cur="${p[1]}"
+  done
+  [ "$cur" = "$base" ] || echo "${head:0:10} is not the clean merge of its members onto ${base:0:10}: the merges start at ${cur:0:10}"
+}
 review_provenance() { # name head
   local name="$1" head="$2" out m n=0 bad=""
   [ -f "$VERIFY" ] || { echo "no review verifier ($VERIFY is missing)"; return 1; }
@@ -480,12 +513,23 @@ review_provenance() { # name head
   if git notes --ref=refs/notes/concrete-review show "$head" >/dev/null 2>&1; then
     echo "the head's review note does not qualify: ${out//$'\n'/ }"; return 1
   fi
+  local signed=0 shas=() so impure
+  git fetch -q --prune "$REMOTE" "+refs/owner-signoff/*:refs/owner-signoff/*" 2>/dev/null \
+    || { echo "could not fetch refs/owner-signoff/* from $REMOTE"; return 1; }
   for m in $(state_get_soft "$name" members | tr ',' ' '); do
-    n=$((n + 1))
-    out="$(bash "$VERIFY" "${m##*@}" 2>&1)" || bad="$bad; member ${m%@*}: ${out//$'\n'/ }"
+    n=$((n + 1)); shas+=("${m##*@}")
+    out="$(bash "$VERIFY" "${m##*@}" 2>&1)" && continue
+    if so="$(bash "$SIGNOFF" verify "${m##*@}" --base "$(state_get_soft "$name" base)" 2>&1)"; then signed=$((signed + 1)); continue; fi
+    bad="$bad; member ${m%@*}: ${out//$'\n'/ }; ${so//$'\n'/ }"
   done
   [ "$n" -gt 0 ] || { echo "the head ${head:0:10} has no review note and the train records no members"; return 1; }
-  [ -z "$bad" ] || { echo "the head ${head:0:10} has no review note, and not every member has a clean one$bad"; return 1; }
+  [ -z "$bad" ] || { echo "the head ${head:0:10} has no review note, and not every member has a clean one or an owner sign-off$bad"; return 1; }
+  if [ "$signed" -gt 0 ]; then
+    impure="$(pure_merge "$(state_get_soft "$name" base)" "$head" "${shas[@]}")"
+    [ -z "$impure" ] || { echo "$signed member(s) signed off by the owner, but $impure"; return 1; }
+    echo "the head has no review note; every member ($n) carries a clean one or an owner sign-off ($signed) at its exact SHA, and the head is their clean merge"
+    return 0
+  fi
   echo "the head has no review note; every member ($n) carries a clean one at its exact SHA"
 }
 
