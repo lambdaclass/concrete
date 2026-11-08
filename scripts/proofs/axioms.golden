@@ -1317,6 +1317,7 @@ ConcreteSpec.Core.Frame.ABI.instDecidableValid._proof_4
 ConcreteSpec.Core.Frame.ABI.instDecidableValid._proof_5	
 ConcreteSpec.Core.Frame.ABI.instDecidableValid._proof_6	
 ConcreteSpec.Core.Frame.ABI.instDecidableValid._proof_7	
+ConcreteSpec.Core.Frame.ABI.keptPair_results_valid	
 ConcreteSpec.Core.Frame.ABI.kept_only_paired_completion	propext
 ConcreteSpec.Core.Frame.ABI.kept_receipt_rejects_other_extern	propext
 ConcreteSpec.Core.Frame.ABI.kept_receipt_rejects_submission	propext
@@ -3024,6 +3025,7 @@ _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Res.bind.match_1.eq_2
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Res.bind.match_1.eq_3	
 _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.accessFootprint.match_1.eq_1	propext
 _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.accessFootprint.match_1.eq_2	propext
+_private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.c1ExplicitCall	propext
 _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.metadataStoreAfter._proof_1	propext
 _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.metadataStoreWellFormed	Quot.sound propext
 _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Hybrid.instReprStorage.repr.match_1.eq_1	
