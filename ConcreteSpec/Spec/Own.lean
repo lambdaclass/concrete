@@ -9,8 +9,8 @@ not addresses or a third place identity. The monotonically increasing place supp
 recursive activations. A slot carries its type and checked Copy/mutability facts; C9 must bind
 those facts to its richer type identity when the scalar-only Hybrid universe is extended.
 
-This executable reference model validates a candidate transition against the finite invariant.
-Validation refuses the entire transition; it never repairs slots, ends loans or changes values.
+Transitions check operational permissions, resource status and issued identities only.
+Preservation is proved from a well-formed input, without a run-time invariant recheck.
 Parent links record lending dependencies only: no stacked/tree borrow validity model is assumed.
 Projection paths are logical selectors; resolving their types/values belongs to aggregate slices.
 -/
@@ -113,9 +113,6 @@ instance (s : State) : Decidable (WellFormed s) := by
   unfold WellFormed
   infer_instance
 
-/-- The reference transition checker: accept the candidate unchanged, or refuse it. -/
-def validate (s : State) : Option State := if WellFormed s then some s else none
-
 /-- Owner accesses cannot bypass whole-root loans. Reads may coexist with shared loans (Q3.4, OD15). -/
 def ownerAccess (s : State) (p : Hybrid.Place) (m : Mode) : Bool :=
   (slot s p).any fun x => x.status == .owned &&
@@ -142,7 +139,7 @@ def reinitialize (s : State) (p : Hybrid.Place) : Option State := do
   let x ← slot s p
   if (x.status == .moved || (x.desc.copy && x.desc.mutable)) &&
       s.loans.all (·.root != p) then
-    validate { s with slots := s.slots.map fun x =>
+    some { s with slots := s.slots.map fun x =>
       if x.place = p then { x with status := .owned } else x }
   else none
 
@@ -182,7 +179,7 @@ def reborrow (s : State) (i : LoanId) (suffix : List Projection) (m : Mode) :
 def endLoan (s : State) (i : LoanId) : Option State := do
   let _ ← loan s i
   if s.loans.any (·.parent == some i) then none else
-    validate { s with loans := s.loans.filter (·.id != i) }
+    some { s with loans := s.loans.filter (·.id != i) }
 
 /-- Read/write permissions are partial identity transitions on the instrumentation. Concrete
 reads/writes are supplied separately by `instrument`; they cannot manufacture permission. -/
@@ -193,17 +190,19 @@ def accessLoan (s : State) (i : LoanId) (m : Mode) : Option State :=
   if loanAccess s i m then some s else none
 
 /-- A descriptor is supplied by the checked operand language. A fresh binding gets a fresh place;
-an assignment to an existing binding must discharge/reinitialize its previous obligation. -/
+an assignment to an existing binding must discharge/reinitialize its previous obligation.
+New slots require an activation issued by `enter` (Q3.2's activation/lifetime boundary). -/
 def bind (types : Var → Option Descriptor) (x : Var) (s : State) : Option State := do
   let f ← s.frames.head?
   match AList.lookup f.locals x with
   | some p => reinitialize s p
   | none =>
     let d ← types x
-    validate { s with
+    if f.id < s.nextActivation then some { s with
       nextPlace := s.nextPlace + 1
       slots := ⟨⟨s.nextPlace⟩, f.id, d, .owned⟩ :: s.slots
       frames := { f with locals := (x, ⟨s.nextPlace⟩) :: f.locals } :: s.frames.tail }
+    else none
 
 /-- A local can leave scope only after its linear obligation is discharged and all its loans
 end. Copy permits duplication, and does not justify discarding a non-Copy value (Q3.8). -/
@@ -212,14 +211,14 @@ def drop (xs : List Var) (s : State) : Option State := do
   let ps := List.map Prod.snd (f.locals.filter fun e => decide (e.1 ∈ xs))
   if s.slots.all (fun x => decide (x.place ∉ ps) || x.desc.copy || x.status == .moved) &&
       s.loans.all (fun l => decide (l.root ∉ ps)) then
-    validate { s with
+    some { s with
       slots := s.slots.filter (fun x => decide (x.place ∉ ps))
       frames := { f with locals := f.locals.filter (fun e => decide (e.1 ∉ xs)) } :: s.frames.tail }
   else none
 
 /-- Enter owns a new activation. Downward loans use `enterDown` below; ordinary values use bind. -/
 def enter (types : Var → Option Descriptor) (params : List Var) (s : State) : Option State := do
-  let s ← validate { s with
+  let s := { s with
     nextActivation := s.nextActivation + 1
     frames := ⟨s.nextActivation, [], []⟩ :: s.frames }
   params.foldlM (fun s x => bind types x s) s
@@ -238,7 +237,7 @@ def leave (s : State) : Option State := do
   let s ← endLocals f.id s
   let s ← drop (List.map Prod.fst f.locals) s
   if s.slots.any (·.activation == f.id) then none else
-    validate { s with frames := s.frames.tail }
+    some { s with frames := s.frames.tail }
 
 /-- Downward-only lending: each parameter gets a new child loan. Views never become owner slots,
 so cannot be returned/stored/moved by the owner operations. This standalone call-boundary transition supports the preservation laws. C1 uses `callLife`
@@ -250,7 +249,7 @@ def enterDown (s : State) (args : List (Var × LoanId)) : Option State := do
     let a ← loan s i
     let f ← s.frames.head?
     let s ← reborrowAt s i [] a.mode f.id
-    validate { s with frames := { f with views := (x, ⟨s.nextLoan - 1⟩) :: f.views } :: s.frames.tail }) s
+    some { s with frames := { f with views := (x, ⟨s.nextLoan - 1⟩) :: f.views } :: s.frames.tail }) s
 
 /-- The C1-compatible lifecycle callback. -/
 def life (types : Var → Option Descriptor) : Exec.Life → State → Option State
@@ -261,13 +260,14 @@ def life (types : Var → Option Descriptor) : Exec.Life → State → Option St
 
 /-- A call's view arguments have already opened their loans while arguments were evaluated,
 so later arguments observe their freezes (OD23). Transfer only those fresh children to the
-callee activation; do not reborrow again or move the caller's original view. -/
+callee activation; do not reborrow again or move the caller's original view.
+The current activation must have been issued by `enter` (Q3.2, OD23). -/
 def adoptDown (s : State) (args : List (Var × LoanId)) : Option State := do
   let f ← s.frames.head?
-  if (args.map Prod.fst).Nodup ∧ (args.map Prod.snd).Nodup ∧
+  if f.id < s.nextActivation ∧ (args.map Prod.fst).Nodup ∧ (args.map Prod.snd).Nodup ∧
       (∀ e ∈ args, ∃ l ∈ s.loans, l.id = e.2 ∧ l.pendingArgument = true) ∧
       (∀ e ∈ args, AList.lookup f.locals e.1 = none) then
-    validate { s with
+    some { s with
       loans := s.loans.map fun l =>
         if l.id ∈ args.map Prod.snd then { l with activation := f.id, pendingArgument := false } else l
       frames := { f with views := args ++ f.views } :: s.frames.tail }
@@ -301,7 +301,7 @@ def passDown (s : CallState) (source : LoanId) (parameter : Var) : Option CallSt
   if parameter ∈ s.pending.map Prod.fst then none else do
   let l ← loan s.own source
   let own ← reborrow s.own source [] l.mode
-  let own ← validate { own with loans := own.loans.map fun l =>
+  let own := { own with loans := own.loans.map fun l =>
     if l.id.id = s.own.nextLoan then { l with pendingArgument := true } else l }
   pure ⟨own, s.pending ++ [(parameter, ⟨s.own.nextLoan⟩)]⟩
 

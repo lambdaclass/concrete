@@ -94,7 +94,7 @@ Open obligations, by name:
   encoding over the old type universe. The slice-1-to-Core integration slice must port that
   layer to `Mem.MByte`/`Mem.encodeInt` and retire the old encoders while preserving its proofs;
   C4 has not completed that port. Core constants and Hybrid share `CTy`/`CVal` from `Scalar`.
-  C5 (`Own`, `Grant`) now supplies ownership/loan transitions, finite preservation checks,
+  C5 (`Own`, `Grant`) now supplies ownership/loan transitions with structural preservation proofs,
   C1 lifecycle and downward-call adapters, scalar C4 access erasure, generative brand lifetimes,
   and grant attenuation/consumption laws. Nonempty projection resolution, semantic type/Copy
   admission, existential package elaboration and concrete grant instances remain integration

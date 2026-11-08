@@ -1,30 +1,14 @@
 import ConcreteSpec.Spec.Own
 
 /-! # C5 preservation and erasure
-The executable model checks a finite invariant on candidates. These laws prove successful
-transitions preserve it and expose the concrete operation unchanged. They do not claim that
+These laws derive preservation structurally from well-formed inputs and local operational
+guards, and expose the concrete operation unchanged. They do not claim that
 an arbitrary checker/elaborator enforces these transitions; that is C9's correspondence duty.
 -/
 namespace ConcreteSpec.Core.Own
 
-/-- Validation returns exactly its candidate, never a repaired state. -/
-theorem validate_iff (s t : State) : validate s = some t ↔ s = t ∧ WellFormed t := by
-  unfold validate
-  split
-  · rename_i hs
-    constructor
-    · intro h; cases h; exact ⟨rfl, hs⟩
-    · rintro ⟨rfl, _⟩; rfl
-  · rename_i hs
-    constructor
-    · intro h; cases h
-    · rintro ⟨rfl, ht⟩; exact False.elim (hs ht)
-
-theorem validate_wf {s t : State} (h : validate s = some t) : WellFormed t :=
-  (validate_iff s t).mp h |>.2
-
 private theorem fold_preserves {α : Type} (f : State → α → Option State)
-    (hf : ∀ s a t, f s a = some t → WellFormed t) (xs : List α)
+    (hf : ∀ s a t, WellFormed s → f s a = some t → WellFormed t) (xs : List α)
     (s t : State) (hs : WellFormed s) (h : xs.foldlM f s = some t) : WellFormed t := by
   induction xs generalizing s with
   | nil => simp at h; subst t; exact hs
@@ -32,7 +16,7 @@ private theorem fold_preserves {α : Type} (f : State → α → Option State)
     simp only [List.foldlM_cons] at h
     cases he : f s a with
     | none => simp [he] at h
-    | some u => simp only [he] at h <;> dsimp at h; exact ih u (hf s a u he) h
+    | some u => simp only [he] at h <;> dsimp at h; exact ih u (hf s a u hs he) h
 
 /-- Move changes only the selected slot's status, after excluding every loan of its root. -/
 theorem move_preserves (s t : State) (p : Hybrid.Place) (hs : WellFormed s)
@@ -64,14 +48,30 @@ theorem move_preserves (s t : State) (p : Hybrid.Place) (hs : WellFormed s)
       have hn : a.place ≠ p := fun h => clear l hl (he.symm.trans h)
       simpa [change, hn] using ho
 
-theorem reinitialize_preserves (s t : State) (p : Hybrid.Place)
+theorem reinitialize_preserves (s t : State) (p : Hybrid.Place) (hs : WellFormed s)
     (h : reinitialize s p = some t) : WellFormed t := by
   unfold reinitialize at h
-  cases he : slot s p <;> simp only [he] at h <;> dsimp at h
+  obtain ⟨x, _, h⟩ := Option.bind_eq_some_iff.mp h
+  split at h
+  · cases h
+    let change := fun x : Slot => if x.place = p then { x with status := .owned } else x
+    have place (x : Slot) : (change x).place = x.place := by simp [change]; split <;> rfl
+    have activation (x : Slot) : (change x).activation = x.activation := by simp [change]; split <;> rfl
+    refine ⟨?_, hs.2.1, ?_, ?_, hs.2.2.2.2⟩
+    · change (s.slots.map change |>.map Slot.place).Nodup
+      simpa only [List.map_map, Function.comp_def, place] using hs.1
+    · intro a ha
+      obtain ⟨b, hb, rfl⟩ := List.mem_map.mp ha
+      change (change b).place.id < s.nextPlace ∧ (change b).activation < s.nextActivation
+      simpa only [place, activation] using hs.2.2.1 b hb
+    · intro l hl
+      obtain ⟨hid, hact, ⟨a, ha, he, ho⟩, hp, hpend⟩ := hs.2.2.2.1 l hl
+      refine ⟨hid, hact, ⟨change a, List.mem_map.mpr ⟨a, ha, rfl⟩, (place a).trans he, ?_⟩, hp, hpend⟩
+      change (if a.place = p then { a with status := .owned } else a).status = .owned
+      split
+      · rfl
+      · exact ho
   · contradiction
-  · split at h
-    · exact validate_wf h
-    · contradiction
 
 private theorem compatible_symm (a b : Loan) (h : Compatible a b) : Compatible b a := by
   unfold Compatible at *
@@ -202,14 +202,33 @@ theorem reborrow_preserves (s t : State) (i : LoanId) (path : List Projection)
   obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
   exact reborrowAt_preserves s t i path m f.id hs h
 
-theorem endLoan_preserves (s t : State) (i : LoanId) (h : endLoan s i = some t) :
-    WellFormed t := by
+theorem endLoan_preserves (s t : State) (i : LoanId) (hs : WellFormed s)
+    (h : endLoan s i = some t) : WellFormed t := by
   unfold endLoan at h
-  cases he : loan s i <;> simp only [he] at h <;> dsimp at h
+  obtain ⟨a, _, h⟩ := Option.bind_eq_some_iff.mp h
+  split at h
   · contradiction
-  · split at h
-    · contradiction
-    · exact validate_wf h
+  · rename_i clear
+    cases h
+    refine ⟨hs.1, hs.2.1.sublist (List.Sublist.map _ List.filter_sublist), hs.2.2.1, ?_, ?_⟩
+    · intro l hl
+      have hl' := (List.mem_filter.mp hl).1
+      obtain ⟨hb, ha, hr, hp, hpend⟩ := hs.2.2.2.1 l hl'
+      refine ⟨hb, ha, hr, ?_, hpend⟩
+      unfold ParentValid at hp ⊢
+      cases he : l.parent with
+      | none => simpa only [he] using hp
+      | some p =>
+        simp only [he] at hp ⊢
+        obtain ⟨b, hbm, hid, rest⟩ := hp
+        refine ⟨b, List.mem_filter.mpr ⟨hbm, ?_⟩, hid, rest⟩
+        have hn : b.id ≠ i := by
+          intro hbi
+          apply clear
+          exact List.any_eq_true.mpr ⟨l, hl', by simp [he, ← hid, hbi]⟩
+        simpa using hn
+    · intro b hb c hc
+      exact hs.2.2.2.2 b (List.mem_filter.mp hb).1 c (List.mem_filter.mp hc).1
 
 theorem accessOwner_preserves (s t : State) (p : Hybrid.Place) (m : Mode)
     (hs : WellFormed s) (h : accessOwner s p m = some t) : WellFormed t := by
@@ -293,63 +312,228 @@ example : ¬ (accessLoan child ⟨0⟩ .mutable).isSome = true := by decide
 end PrimitiveWitnesses
 
 theorem bind_preserves (types : Var → Option Descriptor) (s t : State) (x : Var)
-    (h : bind types x s = some t) : WellFormed t := by
+    (hs : WellFormed s) (h : bind types x s = some t) : WellFormed t := by
   unfold bind at h
-  cases he : s.frames.head? <;> simp only [he] at h <;> dsimp at h
-  · contradiction
-  · split at h
-    · exact reinitialize_preserves _ _ _ h
-    · cases hd : types x <;> simp only [hd] at h <;> dsimp at h
-      · contradiction
-      · exact validate_wf h
-
-theorem drop_preserves (s t : State) (xs : List Var) (h : drop xs s = some t) :
-    WellFormed t := by
-  unfold drop at h
-  cases he : s.frames.head? <;> simp only [he] at h <;> dsimp at h
-  · contradiction
-  · split at h
-    · exact validate_wf h
+  obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
+  split at h
+  · exact reinitialize_preserves _ _ _ hs h
+  · obtain ⟨d, _, h⟩ := Option.bind_eq_some_iff.mp h
+    split at h
+    · rename_i hact
+      cases h
+      refine ⟨?_, hs.2.1, ?_, ?_, hs.2.2.2.2⟩
+      · simp only [List.map_cons, List.nodup_cons]
+        refine ⟨?_, hs.1⟩
+        intro hm
+        obtain ⟨a, ha, he⟩ := List.mem_map.mp hm
+        have hb := (hs.2.2.1 a ha).1
+        rw [he] at hb
+        exact Nat.lt_irrefl _ hb
+      · intro a ha
+        rcases List.mem_cons.mp ha with he | ha
+        · subst a; exact ⟨Nat.lt_succ_self _, hact⟩
+        · exact ⟨Nat.lt_succ_of_lt (hs.2.2.1 a ha).1, (hs.2.2.1 a ha).2⟩
+      · intro l hl
+        obtain ⟨hb, ha, ⟨a, ham, he, ho⟩, hp, hpend⟩ := hs.2.2.2.1 l hl
+        exact ⟨hb, ha, ⟨a, List.mem_cons_of_mem _ ham, he, ho⟩, hp, hpend⟩
     · contradiction
 
+theorem drop_preserves (s t : State) (xs : List Var) (hs : WellFormed s)
+    (h : drop xs s = some t) : WellFormed t := by
+  unfold drop at h
+  obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
+  dsimp at h
+  split at h
+  · rename_i hg
+    cases h
+    refine ⟨hs.1.sublist (List.Sublist.map _ List.filter_sublist), hs.2.1, ?_, ?_, hs.2.2.2.2⟩
+    · intro a ha
+      exact hs.2.2.1 a (List.mem_filter.mp ha).1
+    · intro l hl
+      obtain ⟨hb, ha, ⟨a, ham, he, ho⟩, hp, hpend⟩ := hs.2.2.2.1 l hl
+      refine ⟨hb, ha, ⟨a, List.mem_filter.mpr ⟨ham, ?_⟩, he, ho⟩, hp, hpend⟩
+      have hc := List.all_eq_true.mp (Bool.and_eq_true_iff.mp hg).2 l hl
+      simpa [he] using hc
+  · contradiction
+
 theorem enter_preserves (types : Var → Option Descriptor) (s t : State) (xs : List Var)
-    (h : enter types xs s = some t) : WellFormed t := by
-  unfold enter at h
-  obtain ⟨u, hu, hh⟩ := Option.bind_eq_some_iff.mp h
-  exact fold_preserves _ (fun s x t h => bind_preserves types s t x h) xs u t
-    (validate_wf hu) hh
+    (hs : WellFormed s) (h : enter types xs s = some t) : WellFormed t := by
+  have hw : WellFormed { s with
+      nextActivation := s.nextActivation + 1
+      frames := ⟨s.nextActivation, [], []⟩ :: s.frames } := by
+    refine ⟨hs.1, hs.2.1, ?_, ?_, hs.2.2.2.2⟩
+    · intro a ha
+      exact ⟨(hs.2.2.1 a ha).1, Nat.lt_succ_of_lt (hs.2.2.1 a ha).2⟩
+    · intro l hl
+      obtain ⟨hb, ha, hr, hp, hpend⟩ := hs.2.2.2.1 l hl
+      exact ⟨hb, Nat.lt_succ_of_lt ha, hr, hp, hpend⟩
+  exact fold_preserves _ (fun s x t hs h => bind_preserves types s t x hs h) xs _ t hw h
 
 theorem endLocals_preserves (s t : State) (a : Nat) (hs : WellFormed s)
     (h : endLocals a s = some t) : WellFormed t :=
-  fold_preserves _ (fun s l t h => endLoan_preserves s t l.id h) _ _ _ hs h
+  fold_preserves _ (fun s l t hs h => endLoan_preserves s t l.id hs h) _ _ _ hs h
 
-theorem leave_preserves (s t : State) (h : leave s = some t) : WellFormed t := by
+theorem leave_preserves (s t : State) (hs : WellFormed s)
+    (h : leave s = some t) : WellFormed t := by
   unfold leave at h
-  obtain ⟨f, _, hh⟩ := Option.bind_eq_some_iff.mp h
-  obtain ⟨u, _, hh⟩ := Option.bind_eq_some_iff.mp hh
-  obtain ⟨v, _, hh⟩ := Option.bind_eq_some_iff.mp hh
-  split at hh
+  obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
+  obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
+  obtain ⟨v, hv, h⟩ := Option.bind_eq_some_iff.mp h
+  split at h
   · contradiction
-  · exact validate_wf hh
+  · cases h
+    exact drop_preserves u v _ (endLocals_preserves s u f.id hs hu) hv
 
-theorem enterDown_preserves (s t : State) (args : List (Var × LoanId))
+theorem enterDown_preserves (s t : State) (args : List (Var × LoanId)) (hs : WellFormed s)
     (h : enterDown s args = some t) : WellFormed t := by
   unfold enterDown at h
   obtain ⟨u, hu, hh⟩ := Option.bind_eq_some_iff.mp h
-  refine fold_preserves _ ?_ args u t (enter_preserves _ _ _ _ hu) hh
-  intro s arg t hh
+  refine fold_preserves _ ?_ args u t (enter_preserves _ _ _ _ hs hu) hh
+  intro s arg t hs hh
   obtain ⟨a, _, hh⟩ := Option.bind_eq_some_iff.mp hh
   obtain ⟨f, _, hh⟩ := Option.bind_eq_some_iff.mp hh
-  obtain ⟨v, _, hh⟩ := Option.bind_eq_some_iff.mp hh
-  exact validate_wf hh
+  obtain ⟨v, hv, hh⟩ := Option.bind_eq_some_iff.mp hh
+  cases hh
+  exact reborrowAt_preserves s v arg.2 [] a.mode f.id hs hv
 
 theorem life_preserves (types : Var → Option Descriptor) (e : Exec.Life) (s t : State)
-    (h : life types e s = some t) : WellFormed t := by
+    (hs : WellFormed s) (h : life types e s = some t) : WellFormed t := by
   cases e with
-  | bind x => exact bind_preserves types s t x h
-  | enter ps => exact enter_preserves types s t ps h
-  | leave => exact leave_preserves s t h
-  | drop xs => exact drop_preserves s t xs h
+  | bind x => exact bind_preserves types s t x hs h
+  | enter ps => exact enter_preserves types s t ps hs h
+  | leave => exact leave_preserves s t hs h
+  | drop xs => exact drop_preserves s t xs hs h
+
+theorem reinitialize_progress (s : State) (p : Hybrid.Place) (x : Slot)
+    (found : slot s p = some x)
+    (available : x.status = .moved ∨ (x.desc.copy = true ∧ x.desc.mutable = true))
+    (clear : ∀ l ∈ s.loans, l.root ≠ p) : ∃ t, reinitialize s p = some t := by
+  have hc : s.loans.all (·.root != p) = true := by
+    apply List.all_eq_true.mpr
+    intro l hl
+    simpa using clear l hl
+  have ha : (x.status == .moved || (x.desc.copy && x.desc.mutable)) = true := by
+    simpa only [Bool.or_eq_true, beq_iff_eq, Bool.and_eq_true] using available
+  unfold reinitialize
+  rw [found]
+  dsimp
+  rw [ha, hc]
+  exact ⟨_, rfl⟩
+
+theorem endLoan_progress (s : State) (i : LoanId) (a : Loan)
+    (found : loan s i = some a) (children : ∀ b ∈ s.loans, b.parent ≠ some i) :
+    ∃ t, endLoan s i = some t := by
+  have hc : s.loans.any (·.parent == some i) = false := by
+    apply Bool.eq_false_iff.mpr
+    intro hg
+    obtain ⟨b, hb, he⟩ := List.any_eq_true.mp hg
+    exact children b hb (by simpa using he)
+  simp [endLoan, found, hc]
+
+theorem bind_fresh_progress (types : Var → Option Descriptor) (s : State) (x : Var)
+    (f : Activation) (d : Descriptor) (frame : s.frames.head? = some f)
+    (issued : f.id < s.nextActivation) (fresh : AList.lookup f.locals x = none)
+    (descriptor : types x = some d) : ∃ t, bind types x s = some t := by
+  simp [bind, frame, issued, fresh, descriptor]
+
+private theorem bind_params_progress (types : Var → Option Descriptor) (xs : List Var)
+    (s : State) (f : Activation) (frame : s.frames.head? = some f)
+    (issued : f.id < s.nextActivation) (unique : xs.Nodup)
+    (fresh : ∀ x ∈ xs, AList.lookup f.locals x = none)
+    (typed : ∀ x ∈ xs, ∃ d, types x = some d) :
+    ∃ t, xs.foldlM (fun s x => bind types x s) s = some t := by
+  induction xs generalizing s f with
+  | nil => exact ⟨s, rfl⟩
+  | cons x xs ih =>
+    obtain ⟨d, hd⟩ := typed x List.mem_cons_self
+    let u : State := { s with
+      nextPlace := s.nextPlace + 1
+      slots := ⟨⟨s.nextPlace⟩, f.id, d, .owned⟩ :: s.slots
+      frames := { f with locals := (x, ⟨s.nextPlace⟩) :: f.locals } :: s.frames.tail }
+    have hb : bind types x s = some u := by
+      simp [bind, frame, fresh x List.mem_cons_self, hd, issued, u]
+    obtain ⟨t, ht⟩ := ih u { f with locals := (x, ⟨s.nextPlace⟩) :: f.locals } rfl issued
+      (List.nodup_cons.mp unique).2
+      (by
+        intro y hy
+        have hn : x ≠ y := fun he => (List.nodup_cons.mp unique).1 (he ▸ hy)
+        simpa [AList.lookup, hn] using fresh y (List.mem_cons_of_mem _ hy))
+      (fun y hy => typed y (List.mem_cons_of_mem _ hy))
+    exact ⟨t, by simp [List.foldlM_cons, hb, ht]⟩
+
+/-- Fresh, distinct, typed parameters always enter: no global invariant scan can refuse them. -/
+theorem enter_progress (types : Var → Option Descriptor) (s : State) (params : List Var)
+    (unique : params.Nodup) (typed : ∀ x ∈ params, ∃ d, types x = some d) :
+    ∃ t, enter types params s = some t :=
+  bind_params_progress types params
+    { s with nextActivation := s.nextActivation + 1
+             frames := ⟨s.nextActivation, [], []⟩ :: s.frames }
+    ⟨s.nextActivation, [], []⟩ rfl (Nat.lt_succ_self _) unique
+    (fun _ _ => rfl) typed
+
+theorem drop_progress (s : State) (xs : List Var) (f : Activation)
+    (frame : s.frames.head? = some f)
+    (discharged : ∀ a ∈ s.slots,
+      a.place ∈ (f.locals.filter (fun e => decide (e.1 ∈ xs))).map Prod.snd →
+      a.desc.copy = true ∨ a.status = .moved)
+    (clear : ∀ l ∈ s.loans,
+      l.root ∉ (f.locals.filter (fun e => decide (e.1 ∈ xs))).map Prod.snd) :
+    ∃ t, drop xs s = some t := by
+  have hd : (s.slots.all (fun a =>
+      decide (a.place ∉ (f.locals.filter (fun e => decide (e.1 ∈ xs))).map Prod.snd) ||
+      a.desc.copy || a.status == .moved)) = true := by
+    apply List.all_eq_true.mpr
+    intro a ha
+    by_cases hm : a.place ∈ (f.locals.filter (fun e => decide (e.1 ∈ xs))).map Prod.snd
+    · rcases discharged a ha hm with hc | hs
+      · simp [hc]
+      · simp [hs]
+    · simp [hm]
+  have hc : (s.loans.all (fun l =>
+      decide (l.root ∉ (f.locals.filter (fun e => decide (e.1 ∈ xs))).map Prod.snd))) = true := by
+    apply List.all_eq_true.mpr
+    intro l hl
+    simp [clear l hl]
+  unfold drop
+  rw [frame]
+  dsimp
+  rw [hd, hc]
+  exact ⟨_, rfl⟩
+
+namespace LifecycleWitnesses
+open ConcreteSpec.Core.Own.Examples
+
+def moved : State := (move initial ⟨0⟩).getD initial
+def entered : State := (enter types [y] shared).getD initial
+def called : State := (enterDown exclusive [(y, ⟨0⟩)]).getD initial
+/-- Each lifecycle/loan-ending law has a live-state success instance. -/
+example : WellFormed moved ∧ reinitialize moved ⟨0⟩ = some initial := by decide
+example : WellFormed child ∧ (endLoan child ⟨1⟩).isSome = true ∧
+    WellFormed ((endLoan child ⟨1⟩).getD initial) := by decide
+example : WellFormed shared ∧ (bind types y shared).isSome = true ∧
+    WellFormed ((bind types y shared).getD initial) := by decide
+example : WellFormed moved ∧ (drop [x] moved).isSome = true ∧
+    WellFormed ((drop [x] moved).getD initial) := by decide
+example : WellFormed entered ∧ (enter types [y] shared).isSome = true := by decide
+example : WellFormed called ∧ (endLocals 1 called).isSome = true ∧
+    WellFormed ((endLocals 1 called).getD initial) := by decide
+example : (leave called).isSome = true ∧ WellFormed ((leave called).getD initial) := by decide
+example : life types (.bind y) shared = bind types y shared := by rfl
+/-- Planted reinitialization/drop/leave mutations lose a borrowed root. -/
+example : ¬ WellFormed { shared with slots := [] } := by decide
+/-- Planted bind mutation reuses the place identity. -/
+example : ¬ WellFormed { initial with slots := initial.slots ++ initial.slots } := by decide
+/-- Planted entry/adoption mutation assigns an unissued activation. -/
+example : ¬ WellFormed { shared with loans := shared.loans.map fun l =>
+    { l with activation := shared.nextActivation } } := by decide
+/-- Planted endLoan/endLocals mutation removes the parent before the child. -/
+example : ¬ WellFormed { child with loans := child.loans.filter (·.id != ⟨0⟩) } := by decide
+/-- Progress counterexamples: live linear replacement, a child and a live local obligation. -/
+example : ¬ (reinitialize initial ⟨0⟩).isSome = true := by decide
+example : ¬ (endLoan child ⟨0⟩).isSome = true := by decide
+example : ¬ (bind (fun _ => none) y shared).isSome = true := by decide
+example : ¬ (drop [x] initial).isSome = true := by decide
+end LifecycleWitnesses
 
 /-- No active loan can outlive its original owned root, including across calls. -/
 theorem loan_has_owned_root (s : State) (hs : WellFormed s) (l : Loan) (hl : l ∈ s.loans) :
@@ -401,42 +585,106 @@ theorem life_erasure {σ : Type} (types : Var → Option Descriptor) (e : Exec.L
   subst t
   rfl
 
+private theorem map_metadata_preserves (s : State) (hs : WellFormed s)
+    (act : Loan → Nat) (pending : Loan → Bool)
+    (issued : ∀ l ∈ s.loans, act l < s.nextActivation)
+    (parents : ∀ l ∈ s.loans, pending l = true → l.parent.isSome = true) :
+    WellFormed { s with loans := s.loans.map fun l =>
+      { l with activation := act l, pendingArgument := pending l } } := by
+  let change := fun l : Loan => { l with activation := act l, pendingArgument := pending l }
+  refine ⟨hs.1, ?_, hs.2.2.1, ?_, ?_⟩
+  · simpa only [List.map_map, Function.comp_def] using hs.2.1
+  · intro l hl
+    obtain ⟨a, ha, rfl⟩ := List.mem_map.mp hl
+    obtain ⟨hb, _, hr, hp, _⟩ := hs.2.2.2.1 a ha
+    refine ⟨hb, issued a ha, hr, ?_, parents a ha⟩
+    unfold ParentValid at hp ⊢
+    cases he : a.parent with
+    | none => simpa only [he] using hp
+    | some p =>
+      simp only [he] at hp ⊢
+      obtain ⟨b, hb, rest⟩ := hp
+      exact ⟨change b, List.mem_map.mpr ⟨b, hb, rfl⟩, rest⟩
+  · intro a ha b hb
+    obtain ⟨x, hx, rfl⟩ := List.mem_map.mp ha
+    obtain ⟨y, hy, rfl⟩ := List.mem_map.mp hb
+    exact hs.2.2.2.2 x hx y hy
+
 theorem adoptDown_preserves (s t : State) (args : List (Var × LoanId))
-    (h : adoptDown s args = some t) : WellFormed t := by
+    (hs : WellFormed s) (h : adoptDown s args = some t) : WellFormed t := by
   unfold adoptDown at h
-  obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp h
-  split at hh
-  · exact validate_wf hh
+  obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
+  split at h
+  · rename_i hg
+    cases h
+    have hw := map_metadata_preserves s hs
+      (fun l => if l.id ∈ args.map Prod.snd then f.id else l.activation)
+      (fun l => if l.id ∈ args.map Prod.snd then false else l.pendingArgument)
+      (by intro l hl; split; exact hg.1; exact (hs.2.2.2.1 l hl).2.1)
+      (by intro l hl; split; simp; exact (hs.2.2.2.1 l hl).2.2.2.2)
+    have eq : (fun l : Loan => if l.id ∈ args.map Prod.snd then
+        { l with activation := f.id, pendingArgument := false } else l) =
+        (fun l : Loan => { l with
+          activation := if l.id ∈ args.map Prod.snd then f.id else l.activation
+          pendingArgument := if l.id ∈ args.map Prod.snd then false else l.pendingArgument }) := by
+      funext l
+      split <;> rfl
+    rw [eq]
+    exact hw
   · contradiction
 
 theorem passDown_preserves (s t : CallState) (i : LoanId) (parameter : Var)
-    (h : passDown s i parameter = some t) : WellFormed t.own := by
+    (hs : WellFormed s.own) (h : passDown s i parameter = some t) : WellFormed t.own := by
   unfold passDown at h
   split at h
   · contradiction
-  · next =>
-    obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp h
-    obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp hh
-    obtain ⟨own, ho, hh⟩ := Option.bind_eq_some_iff.mp hh
-    cases hh
-    exact validate_wf ho
-
+  · obtain ⟨a, ha, h⟩ := Option.bind_eq_some_iff.mp h
+    obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
+    cases h
+    have hw := reborrow_preserves s.own u i [] a.mode hs hu
+    have shape := hu
+    unfold reborrow at shape
+    obtain ⟨f, _, shape⟩ := Option.bind_eq_some_iff.mp shape
+    unfold reborrowAt at shape
+    rw [ha] at shape
+    dsimp at shape
+    split at shape
+    · cases shape
+      have hh := map_metadata_preserves _ hw (fun l => l.activation)
+        (fun l => if l.id.id = s.own.nextLoan then true else l.pendingArgument)
+        (fun l hl => (hw.2.2.2.1 l hl).2.1)
+        (by
+          intro l hl
+          rcases List.mem_cons.mp hl with he | hl
+          · subst l; simp
+          · have hn : l.id.id ≠ s.own.nextLoan := by
+              have := (hs.2.2.2.1 l hl).1
+              omega
+            simpa [hn] using (hs.2.2.2.1 l hl).2.2.2.2)
+      have eq : (fun l : Loan => if l.id.id = s.own.nextLoan then
+          { l with pendingArgument := true } else l) =
+          (fun l : Loan => { l with
+            activation := l.activation
+            pendingArgument := if l.id.id = s.own.nextLoan then true else l.pendingArgument }) := by
+        funext l
+        split <;> rfl
+      dsimp only
+      rw [eq]
+      exact hh
+    · contradiction
 
 /-- Pending metadata stays synchronized when argument evaluation adds a fresh child. -/
 theorem passDown_call_preserves (s t : CallState) (i : LoanId) (parameter : Var)
     (hs : CallState.WellFormed s) (h : passDown s i parameter = some t) :
     CallState.WellFormed t := by
-  have hw := passDown_preserves s t i parameter h
+  have hw := passDown_preserves s t i parameter hs.1 h
   unfold passDown at h
   split at h
   · contradiction
   · rename_i unique
     obtain ⟨a, ha, hh⟩ := Option.bind_eq_some_iff.mp h
     obtain ⟨u, hu, hh⟩ := Option.bind_eq_some_iff.mp hh
-    obtain ⟨v, hv, hh⟩ := Option.bind_eq_some_iff.mp hh
     cases hh
-    obtain ⟨hv, _⟩ := (validate_iff _ _).mp hv
-    subst v
     unfold reborrow at hu
     obtain ⟨f, hf, hu⟩ := Option.bind_eq_some_iff.mp hu
     unfold reborrowAt at hu
@@ -489,36 +737,37 @@ theorem passDown_call_preserves (s t : CallState) (i : LoanId) (parameter : Var)
 
 /-- C1's actual call/lifecycle callback preserves ownership, for both owner and view parameters. -/
 theorem callLife_preserves (types : Var → Option Descriptor) (e : Exec.Life)
-    (s t : CallState) (h : callLife types e s = some t) : WellFormed t.own := by
+    (s t : CallState) (hs : WellFormed s.own)
+    (h : callLife types e s = some t) : WellFormed t.own := by
   cases e with
   | enter params =>
     simp only [callLife] at h
     split at h
-    · obtain ⟨u, _, hh⟩ := Option.bind_eq_some_iff.mp h
+    · obtain ⟨u, hu, hh⟩ := Option.bind_eq_some_iff.mp h
       obtain ⟨v, hv, hh⟩ := Option.bind_eq_some_iff.mp hh
       cases hh
-      exact adoptDown_preserves u v s.pending hv
+      exact adoptDown_preserves u v s.pending (enter_preserves types s.own u _ hs hu) hv
     · contradiction
   | bind x =>
     simp only [callLife] at h
     split at h
     · obtain ⟨own, ho, hh⟩ := Option.map_eq_some_iff.mp h
       subst t
-      exact life_preserves types (.bind x) s.own own ho
+      exact life_preserves types (.bind x) s.own own hs ho
     · contradiction
   | leave =>
     simp only [callLife] at h
     split at h
     · obtain ⟨own, ho, hh⟩ := Option.map_eq_some_iff.mp h
       subst t
-      exact life_preserves types .leave s.own own ho
+      exact life_preserves types .leave s.own own hs ho
     · contradiction
   | drop xs =>
     simp only [callLife] at h
     split at h
     · obtain ⟨own, ho, hh⟩ := Option.map_eq_some_iff.mp h
       subst t
-      exact life_preserves types (.drop xs) s.own own ho
+      exact life_preserves types (.drop xs) s.own own hs ho
     · contradiction
 
 private theorem reinitialize_loans (s t : State) (p : Hybrid.Place)
@@ -526,8 +775,7 @@ private theorem reinitialize_loans (s t : State) (p : Hybrid.Place)
   unfold reinitialize at h
   obtain ⟨x, _, h⟩ := Option.bind_eq_some_iff.mp h
   split at h
-  · obtain ⟨h, _⟩ := (validate_iff _ _).mp h
-    cases h; rfl
+  · cases h; rfl
   · contradiction
 
 private theorem bind_loans (types : Var → Option Descriptor) (s t : State) (x : Var)
@@ -537,8 +785,9 @@ private theorem bind_loans (types : Var → Option Descriptor) (s t : State) (x 
   split at h
   · exact reinitialize_loans _ _ _ h
   · obtain ⟨d, _, h⟩ := Option.bind_eq_some_iff.mp h
-    obtain ⟨h, _⟩ := (validate_iff _ _).mp h
-    cases h; rfl
+    split at h
+    · cases h; rfl
+    · contradiction
 
 private theorem fold_loans {α : Type} (f : State → α → Option State)
     (hf : ∀ s a t, f s a = some t → ∀ l ∈ t.loans, l ∈ s.loans)
@@ -554,9 +803,7 @@ private theorem fold_loans {α : Type} (f : State → α → Option State)
 private theorem enter_loans (types : Var → Option Descriptor) (s t : State) (xs : List Var)
     (h : enter types xs s = some t) : t.loans = s.loans := by
   unfold enter at h
-  obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
-  obtain ⟨hu, _⟩ := (validate_iff _ _).mp hu
-  subst u
+  dsimp at h
   suffices ∀ (xs : List Var) (u v : State),
       xs.foldlM (fun s x => bind types x s) u = some v → v.loans = u.loans by
     exact this xs { s with
@@ -577,8 +824,7 @@ private theorem drop_loans (s t : State) (xs : List Var) (h : drop xs s = some t
   obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
   dsimp at h
   split at h
-  · obtain ⟨h, _⟩ := (validate_iff _ _).mp h
-    cases h; rfl
+  · cases h; rfl
   · contradiction
 
 private theorem endLoan_subset (s t : State) (i : LoanId) (h : endLoan s i = some t) :
@@ -587,8 +833,7 @@ private theorem endLoan_subset (s t : State) (i : LoanId) (h : endLoan s i = som
   obtain ⟨a, _, h⟩ := Option.bind_eq_some_iff.mp h
   split at h
   · contradiction
-  · obtain ⟨h, _⟩ := (validate_iff _ _).mp h
-    cases h
+  · cases h
     exact fun _ hl => (List.mem_filter.mp hl).1
 
 private theorem life_subset (types : Var → Option Descriptor) (e : Exec.Life) (s t : State)
@@ -604,8 +849,7 @@ private theorem life_subset (types : Var → Option Descriptor) (e : Exec.Life) 
     obtain ⟨v, hv, h⟩ := Option.bind_eq_some_iff.mp h
     split at h
     · contradiction
-    · obtain ⟨h, _⟩ := (validate_iff _ _).mp h
-      cases h
+    · cases h
       intro l hl
       rw [drop_loans u v _ hv] at hl
       exact fold_loans _ (fun s l t h => endLoan_subset s t l.id h) _ s u hu l hl
@@ -615,7 +859,7 @@ empty argument buffer, so they cannot leave dangling argument identities. -/
 theorem callLife_call_preserves (types : Var → Option Descriptor) (e : Exec.Life)
     (s t : CallState) (hs : CallState.WellFormed s) (h : callLife types e s = some t) :
     CallState.WellFormed t := by
-  have hw := callLife_preserves types e s t h
+  have hw := callLife_preserves types e s t hs.1 h
   cases e with
   | enter params =>
     simp only [callLife] at h
@@ -627,8 +871,7 @@ theorem callLife_call_preserves (types : Var → Option Descriptor) (e : Exec.Li
       unfold adoptDown at hv
       obtain ⟨f, _, hv⟩ := Option.bind_eq_some_iff.mp hv
       split at hv
-      · obtain ⟨hv, _⟩ := (validate_iff _ _).mp hv
-        subst v
+      · cases hv
         refine ⟨hw, by simp, by simp, by simp, ?_⟩
         intro l hl
         obtain ⟨b, hb, rfl⟩ := List.mem_map.mp hl
@@ -782,8 +1025,7 @@ private theorem endLoan_frames (s t : State) (i : LoanId) (h : endLoan s i = som
   obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp h
   split at hh
   · contradiction
-  · obtain ⟨he, _⟩ := (validate_iff _ _).mp hh
-    subst t
+  · cases hh
     rfl
 
 /-- Ending any loan leaves the freshness supply unchanged; an ended identity is not recycled. -/
@@ -793,8 +1035,7 @@ theorem endLoan_supply (s t : State) (i : LoanId) (h : endLoan s i = some t) :
   obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp h
   split at hh
   · contradiction
-  · obtain ⟨he, _⟩ := (validate_iff _ _).mp hh
-    subst t
+  · cases hh
     rfl
 
 private theorem fold_frames {α : Type} (f : State → α → Option State)
@@ -815,8 +1056,7 @@ private theorem drop_absent (s t : State) (xs : List Var) (f : Activation)
   rw [hf] at h
   dsimp at h
   split at h
-  · obtain ⟨he, _⟩ := (validate_iff _ _).mp h
-    subst t
+  · cases h
     intro x hx he
     simp only [List.mem_filter, decide_eq_true_eq] at hx
     exact hx.2 (he ▸ hp)
@@ -825,10 +1065,10 @@ private theorem drop_absent (s t : State) (xs : List Var) (f : Activation)
 /-- On leaving a call, no active loan remains rooted at any of that callee's locals.
 Outer owners passed downward are not locals; their parent loans remain usable after return. -/
 theorem leave_no_local_loan (s t : State) (f : Activation)
-    (hf : s.frames.head? = some f) (h : leave s = some t)
+    (hf : s.frames.head? = some f) (hs : WellFormed s) (h : leave s = some t)
     (entry : Var × Hybrid.Place) (he : entry ∈ f.locals)
     (l : Loan) (hl : l ∈ t.loans) : l.root ≠ entry.2 := by
-  have ht := leave_preserves s t h
+  have ht := leave_preserves s t hs h
   unfold leave at h
   rw [hf] at h
   dsimp at h
@@ -838,7 +1078,7 @@ theorem leave_no_local_loan (s t : State) (f : Activation)
   split at hh
   · contradiction
   rename_i _
-  obtain ⟨heq, _⟩ := (validate_iff _ _).mp hh
+  have heq := Option.some.inj hh
   have hp : entry.2 ∈ List.map Prod.snd (f.locals.filter fun e =>
       decide (e.1 ∈ List.map Prod.fst f.locals)) := by
     apply List.mem_map.mpr
@@ -858,7 +1098,7 @@ theorem adoptDown_only_arguments (s t : State) (args : List (Var × LoanId))
   obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp h
   split at hh
   · rename_i guard
-    exact guard.2.2.1 e he
+    exact guard.2.2.2.1 e he
   · contradiction
 
 /-- Exit accounts for every slot of the departing activation, independently of whether its
@@ -874,8 +1114,7 @@ theorem leave_no_activation_slot (s t : State) (f : Activation)
   split at hh
   · contradiction
   · rename_i guard
-    obtain ⟨heq, _⟩ := (validate_iff _ _).mp hh
-    subst t
+    cases hh
     intro x hx he
     exact guard (List.any_eq_true.mpr ⟨x, hx, by simp [he]⟩)
 
