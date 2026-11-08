@@ -305,7 +305,7 @@ account transition, so a wrong record makes this predicate false rather than mak
 inadmissible. Cumulative history and both peaks must be conserved. -/
 def ResetConservation (before after : Account) (recordedOutflow : Nat) : Prop :=
   after.requested = before.requested ∧
-    after.live = before.live - recordedOutflow ∧
+    after.live = 0 ∧ after.live + recordedOutflow = before.live ∧
     after.peak = before.peak ∧ after.functionPeak = before.functionPeak
 
 /-- Evidence for a reported bound. A bound is either established, with its stated limit, or not

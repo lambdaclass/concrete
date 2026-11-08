@@ -616,11 +616,11 @@ theorem free_conservation {m m' : Memory} {lineage : LineageId} {bytes : Nat}
 before the transition as its outflow. Other lineages are unchanged. -/
 theorem reset_conservation {m m' : Memory} {lineage : LineageId}
     (h : apply m (.reset lineage) = some m') :
-    ResetConservation (m lineage) (m' lineage) (m lineage).live ∧
+    ResetConservation (m lineage) (m' lineage) (resetOutflow lineage m (.reset lineage)) ∧
       ∀ l, l ≠ lineage → m' l = m l := by
   cases h
   constructor
-  · simp [ResetConservation, Memory.set, Account.reset]
+  · simp [ResetConservation, resetOutflow, Memory.set, Account.reset]
   · intro l hl
     simp [Memory.set, hl]
 
@@ -631,6 +631,12 @@ example : ResetConservation ⟨100, 5, 12, 5⟩ (Account.reset ⟨100, 5, 12, 5�
 /-- Planted bad reset record: four bytes cannot account for the five bytes actually released. -/
 example : ¬ ResetConservation ⟨100, 5, 12, 5⟩ (Account.reset ⟨100, 5, 12, 5⟩) 4 := by
   simp [ResetConservation, Account.reset]
+
+/-- Over-recording and a partial reset both violate exact reset conservation. -/
+example : ¬ ResetConservation ⟨100, 5, 12, 5⟩ (Account.reset ⟨100, 5, 12, 5⟩) 6 := by
+  simp [ResetConservation, Account.reset]
+example : ¬ ResetConservation ⟨100, 5, 12, 5⟩ ⟨100, 1, 12, 5⟩ 4 := by
+  simp [ResetConservation]
 
 @[simp] theorem resetBytes_cons {m m' : Memory} {action : Action} {rest : List Action}
     (lineage : LineageId) (h : apply m action = some m') :
