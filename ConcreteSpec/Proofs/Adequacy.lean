@@ -74,7 +74,7 @@ theorem QueryHistoryValid.append {issued : List (Query O)} {q : Query O}
     subst q'
     simpa [List.take_append, List.take_of_length_le] using occurrence
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
+/-- Law (subject `runFromQ`).
 **Execution-level occurrence invariant.** Every query reported by an actual instrumented run
 counts exactly the earlier queries at its own site, including terminal unanswered queries. -/
 theorem runFromQ_queryHistoryValid : ∀ (fuel : Nat) (events : List O.Event)
@@ -1238,7 +1238,7 @@ theorem endlesslyBlocked_of_noAnswer {ρ₀ : Oracle O} {fuel : Nat} {c blocked 
     simp
   exact (congrArg Report.ending hm).trans h
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
+/-- Law (subject `run`).
 Every admitted call has a successful lookup and entry and reaches a final outcome. The same
 outcome is reported at every fuel budget above the certificate's witness budget. -/
 theorem TerminationEvidence.all_allowed_runs {domain : CallDomain O} (E : TerminationEvidence O P domain)
@@ -2160,6 +2160,63 @@ example : ¬ (∃ n pos, Moves prog noAnswerOracle n ⟨terminalConfig, [], []�
   cases path with
   | refl => cases hc with | final hf => cases hf
   | step hm _ => exact unanswered_no_move hm
+
+/-- An infinite-prefix mutation loses accumulated histories and restarts the configuration. -/
+def forgetfulRunQ (O : Operands) (_ : Program O) (_ : QueryOracle O) (_ : Nat)
+    (c : Config O) : QueryReport O := ⟨[], [], .outOfFuel c⟩
+
+/-- Instance (law `InfiniteExecution.evaluator_prefix`, case `event_infinite`). -/
+example : runQ prog env 4 eventConfig =
+    ⟨(event_infinite.states 4).events, (event_infinite.states 4).queries,
+      .outOfFuel (event_infinite.states 4).config⟩ :=
+  InfiniteExecution.evaluator_prefix (O := ops) (P := prog) (ρ := env.toQueryOracle)
+    (c := eventConfig) event_infinite 4
+
+/-- Planted (law `InfiniteExecution.evaluator_prefix`, case `event_infinite`,
+subject `runQ`, mutant `forgetfulRunQ`). -/
+example : forgetfulRunQ ops prog env 4 eventConfig ≠
+    ⟨(event_infinite.states 4).events, (event_infinite.states 4).queries,
+      .outOfFuel (event_infinite.states 4).config⟩ := by
+  intro h
+  have he := congrArg QueryReport.events h
+  cases he
+
+/-- Instance (law `runFromQ_queryHistoryValid`, case `threeRequestConfig`). -/
+example : QueryHistoryValid (runFromQ prog env 7 [] [] threeRequestConfig).queries :=
+  runFromQ_queryHistoryValid (O := ops) (P := prog) (ρ := env.toQueryOracle)
+    7 [] [] threeRequestConfig QueryHistoryValid.nil
+
+/-- Planted (law `runFromQ_queryHistoryValid`, case `threeRequestConfig`,
+subject `runFromQ`, mutant `sharedSiteRun`). -/
+example : QueryHistoryValid ([] : List (Query ops)) ∧
+    ¬ QueryHistoryValid (sharedSiteRun ops prog env 7 [] [] threeRequestConfig).queries := by
+  refine ⟨QueryHistoryValid.nil, ?_⟩
+  intro h
+  have wrong := h 1 { interleavedQuery1 with site := s } rfl
+  have impossible : (0 : Nat) = 1 := wrong
+  cases impossible
+
+/-- A budget-specific evaluator defect preserves the certificate's witness budget (10), but
+incorrectly reports exhaustion at the larger budget used by the exported law (11). -/
+def earlyStopRun (O : Operands) (P : Program O) (ρ : Oracle O) (fuel : Nat)
+    (c : Config O) : Report O :=
+  if fuel = 11 then ⟨[], .outOfFuel c⟩ else run P ρ fuel c
+
+/-- Instance (law `TerminationEvidence.all_allowed_runs`, case `terminatingEvidence`). -/
+example : ∃ fn c f, AList.lookup prog.fns terminatingDomain.function = some fn ∧
+    enter fn [] .init = some c ∧ (run prog env 11 c).ending = .final f :=
+  TerminationEvidence.all_allowed_runs (O := ops) (P := prog) (domain := terminatingDomain)
+    terminatingEvidence env [] .init ⟨rfl, rfl, rfl⟩ 11 (by decide)
+
+/-- Planted (law `TerminationEvidence.all_allowed_runs`, case `terminatingEvidence`,
+subject `run`, mutant `earlyStopRun`). -/
+example : terminatingDomain.calls env [] .init ∧
+    terminatingEvidence.conditional.fuel terminatingEvidence.premises env [] .init ≤ 11 ∧
+    ¬ (∃ fn c f, AList.lookup prog.fns terminatingDomain.function = some fn ∧
+      enter fn [] .init = some c ∧ (earlyStopRun ops prog env 11 c).ending = .final f) := by
+  refine ⟨⟨rfl, rfl, rfl⟩, by decide, ?_⟩
+  rintro ⟨fn, c, f, _, _, h⟩
+  simp [earlyStopRun] at h
 
 end Demo
 
