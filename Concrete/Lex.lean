@@ -4,12 +4,15 @@ import ConcreteSpec.Spec.Surface0
 # Settled lexer components
 
 Total byte-list UTF-8 decoding and source checking, ASCII identifiers, the four settled whitespace
-scalars, line comments and maximal trivia scanning. String bodies implement only the six decided
-escapes and parameterize all other raw scalars. Longest match uses an arbitrary table, and decimal
-integer lexemes refuse leading zeroes. No keyword, reserved-word, builtin, concrete operator or
-punctuation set, literal suffix, other literal rule, shebang handling or block comment is introduced;
-no other Unicode whitespace is included. Error constructors are internal data, not diagnostic
-wording. Offsets are zero-based byte offsets;
+scalars, line comments and maximal trivia scanning. Strings and comments refuse raw Cc,
+U+2028/U+2029 and bidi controls with internal errors; comments alone permit raw TAB. Byte literals
+have printable-ASCII raw scalars and exactly the six decided escapes; labels are quote plus an
+identifier. Longest match uses an arbitrary table. Integers implement decimal and the lowercase
+`0x`/`0b`/`0o` bases, lowercase hexadecimal digits and eight suffixes. Malformed adjacent text is
+one refused token, and decimal leading-zero refusal is retained. No keyword, reserved-word,
+builtin, concrete operator or punctuation set, float literal, shebang handling or block comment is
+introduced; no other Unicode whitespace is included. Error constructors are internal data, not
+diagnostic wording. Offsets are zero-based byte offsets;
 truncation points at EOF. TODO: prove the first non-extendible-prefix property of error offsets.
 The success correspondence theorems below do not claim error-position correctness.
 -/
@@ -355,54 +358,91 @@ def whitespace? (c : Nat) : Bool := decide (Whitespace c)
 theorem whitespace?_iff (c : Nat) : whitespace? c = true ↔ Whitespace c := by
   simp [whitespace?]
 
-/-- Scan a comment body, retaining its first LF or CR in the remainder. -/
-def scanLine : List Nat → List Nat × List Nat
-  | [] => ([], [])
+/-- Internal comment refusals; constructor names are not user-visible diagnostics. -/
+inductive CommentError where
+  | rawForbidden (c : Nat)
+  deriving DecidableEq, Repr
+
+/-- Prepend a scalar to a successful comment-body result. -/
+def commentPrepend (c : Nat) : Except CommentError (List Nat × List Nat) →
+    Except CommentError (List Nat × List Nat)
+  | .error e => .error e
+  | .ok (body, rest) => .ok (c :: body, rest)
+
+/-- Scan a comment body, retaining its first LF or CR and refusing forbidden raw scalars. -/
+def scanLine : List Nat → Except CommentError (List Nat × List Nat)
+  | [] => .ok ([], [])
   | c :: cs =>
-    if c = 10 ∨ c = 13 then ([], c :: cs)
-    else let (body, rest) := scanLine cs; (c :: body, rest)
+    if c = 10 ∨ c = 13 then .ok ([], c :: cs)
+    else if CommentRaw c then commentPrepend c (scanLine cs)
+    else .error (.rawForbidden c)
 
 /-- Scan a line comment only when the input begins with two slashes. -/
-def lineComment : List Nat → Option (List Nat × List Nat)
+def lineComment : List Nat → Except CommentError (Option (List Nat × List Nat))
   | 47 :: 47 :: cs =>
-      let (body, rest) := scanLine cs
-      some (47 :: 47 :: body, rest)
-  | _ => none
+    match scanLine cs with
+    | .ok (body, rest) => .ok (some (47 :: 47 :: body, rest))
+    | .error e => .error e
+  | _ => .ok none
 
-/-- Scanning a body satisfies the declarative stopping rule. -/
-theorem scanLine_sound (cs : List Nat) :
-    CommentBody cs (scanLine cs).1 (scanLine cs).2 := by
-  induction cs with
-  | nil => exact .eof
+/-- A successful body scan satisfies the declarative stopping and raw-scalar rules. -/
+theorem scanLine_sound {cs : List Nat} {out : List Nat × List Nat}
+    (h : scanLine cs = .ok out) : CommentBody cs out.1 out.2 := by
+  induction cs generalizing out with
+  | nil =>
+    cases Except.ok.inj h
+    exact .eof
   | cons c cs ih =>
     by_cases hl : c = 10
-    · subst c; simpa [scanLine] using CommentBody.lf cs
+    · subst c
+      simp only [scanLine, true_or, ↓reduceIte] at h
+      cases Except.ok.inj h
+      exact .lf cs
     · by_cases hr : c = 13
-      · subst c; simpa [scanLine] using CommentBody.cr cs
-      · simpa [scanLine, hl, hr] using CommentBody.cons hl hr ih
+      · subst c
+        simp only [scanLine, hl, false_or, ↓reduceIte] at h
+        cases Except.ok.inj h
+        exact .cr cs
+      · by_cases hc : CommentRaw c
+        · simp only [scanLine, hl, hr, hc, ↓reduceIte] at h
+          cases hrec : scanLine cs with
+          | error e => rw [hrec] at h; cases h
+          | ok tail =>
+            cases tail with
+            | mk body rest =>
+              rw [hrec] at h
+              cases Except.ok.inj h
+              exact .cons hl hr hc (ih hrec)
+        · simp [scanLine, hl, hr, hc] at h
 
-/-- Every declarative body decomposition is the scanner's result. -/
+/-- Every declarative body decomposition is the scanner's successful result. -/
 theorem scanLine_complete {cs body rest : List Nat} (h : CommentBody cs body rest) :
-    scanLine cs = (body, rest) := by
+    scanLine cs = .ok (body, rest) := by
   induction h with
   | eof => rfl
   | lf rest => simp [scanLine]
   | cr rest => simp [scanLine]
-  | cons hl hr _ ih => simp [scanLine, hl, hr, ih]
+  | cons hl hr hc _ ih => simp [scanLine, hl, hr, hc, ih, commentPrepend]
 
 /-- Successful line-comment scanning satisfies the independent judgment. -/
 theorem lineComment_sound {cs : List Nat} {out : List Nat × List Nat}
-    (h : lineComment cs = some out) : LineComment cs out := by
+    (h : lineComment cs = .ok (some out)) : LineComment cs out := by
   unfold lineComment at h
   split at h
-  · rename_i body
-    cases Option.some.inj h
-    exact .intro (scanLine_sound body)
+  · rename_i input
+    cases hscan : scanLine input with
+    | error e => simp [hscan] at h
+    | ok scanned =>
+      cases scanned with
+      | mk body rest =>
+        simp only [hscan, Except.ok.injEq, Option.some.injEq] at h
+        cases h
+        exact .intro (scanLine_sound hscan)
   · cases h
 
 /-- Every declarative line comment is recognized, with the same body and remainder. -/
 theorem lineComment_complete {cs : List Nat} {out : List Nat × List Nat}
-    (h : LineComment cs out) : lineComment cs = some out := by
+    (h : LineComment cs out) : lineComment cs = .ok (some out) := by
   cases h with
   | intro hb => simp [lineComment, scanLine_complete hb]
 
@@ -413,7 +453,7 @@ theorem commentBody_rest_length_le {input body rest : List Nat}
   | eof => simp
   | lf rest => simp
   | cr rest => simp
-  | cons _ _ _ ih => simp only [List.length_cons]; omega
+  | cons _ _ _ _ ih => simp only [List.length_cons]; omega
 
 /-- Scanning a line comment consumes at least its two slashes. -/
 theorem lineComment_rest_length_lt {input comment rest : List Nat}
@@ -424,81 +464,122 @@ theorem lineComment_rest_length_lt {input comment rest : List Nat}
     simp only [List.length_cons]
     omega
 
-/-- Structural scanner used with fuel at least the input length. -/
-def skipTriviaAux : Nat → List Nat → List Nat × List Nat
-  | _, [] => ([], [])
-  | 0, cs => ([], cs)
+/-- Prepend whitespace to a successful trivia result. -/
+def triviaPrepend (c : Nat) : Except CommentError (List Nat × List Nat) →
+    Except CommentError (List Nat × List Nat)
+  | .error e => .error e
+  | .ok (trivia, rest) => .ok (c :: trivia, rest)
+
+/-- Prepend a comment to a successful trivia result. -/
+def triviaAppend (comment : List Nat) : Except CommentError (List Nat × List Nat) →
+    Except CommentError (List Nat × List Nat)
+  | .error e => .error e
+  | .ok (trivia, rest) => .ok (comment ++ trivia, rest)
+
+/-- Structural scanner used with fuel at least the input length. Errors in comments propagate. -/
+def skipTriviaAux : Nat → List Nat → Except CommentError (List Nat × List Nat)
+  | _, [] => .ok ([], [])
+  | 0, cs => .ok ([], cs)
   | fuel + 1, c :: input =>
-    if _h : Whitespace c then
-      let out := skipTriviaAux fuel input
-      (c :: out.1, out.2)
+    if _h : Whitespace c then triviaPrepend c (skipTriviaAux fuel input)
     else
       match _hline : lineComment (c :: input) with
-      | some (comment, rest) =>
-        let out := skipTriviaAux fuel rest
-        (comment ++ out.1, out.2)
-      | none => ([], c :: input)
+      | .ok (some (comment, rest)) => triviaAppend comment (skipTriviaAux fuel rest)
+      | .ok none => .ok ([], c :: input)
+      | .error e => .error e
 
-/-- Skip a maximal run of whitespace scalars and line comments. -/
-def skipTrivia (cs : List Nat) : List Nat × List Nat := skipTriviaAux cs.length cs
+/-- Skip a maximal run of whitespace scalars and valid line comments. -/
+def skipTrivia (cs : List Nat) : Except CommentError (List Nat × List Nat) :=
+  skipTriviaAux cs.length cs
 
-/-- With enough fuel, the structural scanner satisfies the maximal-trivia judgment. -/
-theorem skipTriviaAux_sound (cs : List Nat) (fuel : Nat) (hfuel : cs.length ≤ fuel) :
-    Trivia cs (skipTriviaAux fuel cs) := by
-  induction fuel generalizing cs with
+/-- With enough fuel, a successful structural scan satisfies the maximal-trivia judgment. -/
+theorem skipTriviaAux_sound {cs : List Nat} {out : List Nat × List Nat}
+    (fuel : Nat) (hfuel : cs.length ≤ fuel) (h : skipTriviaAux fuel cs = .ok out) :
+    Trivia cs out := by
+  induction fuel generalizing cs out with
   | zero =>
     cases cs with
     | nil =>
-      rw [skipTriviaAux.eq_def]
+      simp only [skipTriviaAux] at h
+      cases Except.ok.inj h
       exact .stop [] (by intro c cs h; cases h) (by intro cs h; cases h)
     | cons c input => simp at hfuel
   | succ fuel ih =>
     cases cs with
     | nil =>
-      rw [skipTriviaAux.eq_def]
+      simp only [skipTriviaAux] at h
+      cases Except.ok.inj h
       exact .stop [] (by intro c cs h; cases h) (by intro cs h; cases h)
     | cons c input =>
       by_cases hw : Whitespace c
-      · rw [skipTriviaAux.eq_def]
-        simp only [hw]
-        apply Trivia.whitespace hw
-        apply ih
-        simp only [List.length_cons] at hfuel
-        omega
-      · cases hline : lineComment (c :: input) with
-        | none =>
-          rw [skipTriviaAux.eq_def]
-          simp only [hw]
-          rw [hline]
-          apply Trivia.stop
-          · intro d ds heq
-            cases heq
-            exact hw
-          · intro tail heq
-            cases heq
-            simp [lineComment] at hline
-        | some out =>
-          cases out with
-          | mk comment rest =>
-            rw [skipTriviaAux.eq_def]
-            simp only [hw]
-            rw [hline]
-            apply Trivia.comment (lineComment_sound hline)
+      · rw [skipTriviaAux.eq_def] at h
+        simp only [hw] at h
+        cases hrec : skipTriviaAux fuel input with
+        | error e => rw [hrec] at h; cases h
+        | ok tail =>
+          cases tail with
+          | mk trivia rest =>
+            rw [hrec] at h
+            cases Except.ok.inj h
+            apply Trivia.whitespace hw
             apply ih
-            have hlt := lineComment_rest_length_lt (lineComment_sound hline)
-            simp only [List.length_cons] at hfuel hlt
-            omega
+            · simp only [List.length_cons] at hfuel; omega
+            · exact hrec
+      · cases hline : lineComment (c :: input) with
+        | error e =>
+          rw [skipTriviaAux.eq_def] at h
+          simp only [hw] at h
+          rw [hline] at h
+          simp at h
+        | ok scanned =>
+          cases scanned with
+          | none =>
+            rw [skipTriviaAux.eq_def] at h
+            simp only [hw] at h
+            rw [hline] at h
+            simp at h
+            cases h
+            apply Trivia.stop
+            · intro d ds heq
+              cases heq
+              exact hw
+            · intro tail heq
+              cases heq
+              cases hs : scanLine tail with
+              | error e => simp [lineComment, hs] at hline
+              | ok out => simp [lineComment, hs] at hline
+          | some commentOut =>
+            cases commentOut with
+            | mk comment rest =>
+              rw [skipTriviaAux.eq_def] at h
+              simp only [hw] at h
+              rw [hline] at h
+              simp at h
+              cases hrec : skipTriviaAux fuel rest with
+              | error e => rw [hrec] at h; cases h
+              | ok tail =>
+                cases tail with
+                | mk trivia final =>
+                  rw [hrec] at h
+                  cases Except.ok.inj h
+                  have hcomment := lineComment_sound hline
+                  apply Trivia.comment hcomment
+                  apply ih
+                  · have hlt := lineComment_rest_length_lt hcomment
+                    simp only [List.length_cons] at hfuel hlt
+                    omega
+                  · exact hrec
 
 /-- With enough fuel, every declarative decomposition is the structural scanner's result. -/
 theorem skipTriviaAux_complete {cs : List Nat} {out : List Nat × List Nat}
     (h : Trivia cs out) (fuel : Nat) (hfuel : cs.length ≤ fuel) :
-    skipTriviaAux fuel cs = out := by
+    skipTriviaAux fuel cs = .ok out := by
   induction h generalizing fuel with
   | stop rest hw hc =>
     cases rest with
     | nil => cases fuel <;> rfl
     | cons c input =>
-      have hline : lineComment (c :: input) = none := by
+      have hline : lineComment (c :: input) = .ok none := by
         unfold lineComment
         split
         · rename_i tail heq
@@ -510,16 +591,16 @@ theorem skipTriviaAux_complete {cs : List Nat} {out : List Nat × List Nat}
         rw [skipTriviaAux.eq_def]
         simp only [hw c input rfl]
         rw [hline]
-        simp
+        rfl
   | whitespace hw _ ih =>
     cases fuel with
     | zero => simp at hfuel
     | succ fuel =>
+      have hrec := ih fuel (by simp only [List.length_cons] at hfuel; omega)
       rw [skipTriviaAux.eq_def]
       simp only [hw]
-      simp
-      have hrec := ih fuel (by simp only [List.length_cons] at hfuel; omega)
-      exact ⟨congrArg Prod.fst hrec, congrArg Prod.snd hrec⟩
+      rw [hrec]
+      rfl
   | comment hl _ ih =>
     cases hl with
     | intro hb =>
@@ -527,27 +608,28 @@ theorem skipTriviaAux_complete {cs : List Nat} {out : List Nat × List Nat}
       | zero => simp at hfuel
       | succ fuel =>
         have hline := lineComment_complete (LineComment.intro hb)
+        have hlt := lineComment_rest_length_lt (LineComment.intro hb)
+        have hrec := ih fuel (by simp only [List.length_cons] at hfuel hlt; omega)
         rw [skipTriviaAux.eq_def]
         simp only [show ¬ Whitespace 47 from by decide]
         rw [hline]
-        simp
-        have hlt := lineComment_rest_length_lt (LineComment.intro hb)
-        have hrec := ih fuel (by simp only [List.length_cons] at hfuel hlt; omega)
-        exact ⟨congrArg Prod.fst hrec, congrArg Prod.snd hrec⟩
+        simp [hrec, triviaAppend]
 
-/-- The scanner's result satisfies the independent maximal-trivia judgment. -/
-theorem skipTrivia_sound (cs : List Nat) : Trivia cs (skipTrivia cs) :=
-  skipTriviaAux_sound cs cs.length (Nat.le_refl _)
+/-- A successful public trivia scan satisfies the independent maximal-trivia judgment. -/
+theorem skipTrivia_sound {cs : List Nat} {out : List Nat × List Nat}
+    (h : skipTrivia cs = .ok out) : Trivia cs out :=
+  skipTriviaAux_sound cs.length (Nat.le_refl _) h
 
 /-- Every declarative maximal-trivia decomposition is the scanner's result. -/
 theorem skipTrivia_complete {cs : List Nat} {out : List Nat × List Nat}
-    (h : Trivia cs out) : skipTrivia cs = out :=
+    (h : Trivia cs out) : skipTrivia cs = .ok out :=
   skipTriviaAux_complete h cs.length (Nat.le_refl _)
 
 /-- Maximal-trivia decompositions are unique. -/
 theorem trivia_unique {cs : List Nat} {out₁ out₂ : List Nat × List Nat}
     (h₁ : Trivia cs out₁) (h₂ : Trivia cs out₂) : out₁ = out₂ := by
-  rw [← skipTrivia_complete h₁, ← skipTrivia_complete h₂]
+  have h := (skipTrivia_complete h₁).symm.trans (skipTrivia_complete h₂)
+  exact Except.ok.inj h
 
 /-- Scan the longest identifier-continuation run. -/
 def scanIdentBody : List Nat → List Nat × List Nat
@@ -611,7 +693,7 @@ theorem identifier_unique {cs : List Nat} {out₁ out₂ : List Nat × List Nat}
   have h := (identifier_complete h₁).symm.trans (identifier_complete h₂)
   exact Option.some.inj h
 
-/-- Decode exactly the six settled escapes. -/
+/-- Decode exactly the six settled string escapes. -/
 def decodeEscape : Nat → Option Nat
   | 110 => some 10
   | 116 => some 9
@@ -621,58 +703,60 @@ def decodeEscape : Nat → Option Nat
   | 48 => some 0
   | _ => none
 
-/-- Every scanner-approved escape is in the declarative escape relation. -/
+/-- Every scanner-approved string escape is in the declarative escape relation. -/
 theorem decodeEscape_sound {escaped decoded : Nat} (h : decodeEscape escaped = some decoded) :
     StringEscape escaped decoded := by
   unfold decodeEscape at h
   split at h <;> simp_all [StringEscape]
 
-/-- Every declarative escape is decoded to its settled scalar. -/
+/-- Every declarative string escape is decoded to its settled scalar. -/
 theorem decodeEscape_complete {escaped decoded : Nat} (h : StringEscape escaped decoded) :
     decodeEscape escaped = some decoded := by
   rcases h with (⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩)
   all_goals rfl
 
-/-- Prepend a decoded scalar to a successful string-body result. -/
-def stringPrepend (c : Nat) : Option (List Nat × List Nat) → Option (List Nat × List Nat)
-  | none => none
-  | some (decoded, rest) => some (c :: decoded, rest)
+/-- Internal string-body refusals; their constructor names are not user-visible diagnostics. -/
+inductive StringError where
+  | unterminated | invalidEscape (escaped : Nat) | rawForbidden (c : Nat)
+  deriving DecidableEq, Repr
 
-/-- Scan a string body after its opening quote. `rawOk` remains an explicit parameter and does
-not choose whether any other raw control scalar is accepted. -/
-def stringBody (rawOk : Nat → Prop) [DecidablePred rawOk] :
-    List Nat → Option (List Nat × List Nat)
-  | [] => none
-  | 34 :: rest => some ([], rest)
+/-- Prepend a decoded scalar to a successful string-body result. -/
+def stringPrepend (c : Nat) : Except StringError (List Nat × List Nat) →
+    Except StringError (List Nat × List Nat)
+  | .error e => .error e
+  | .ok (decoded, rest) => .ok (c :: decoded, rest)
+
+/-- Scan a string body after its opening quote, refusing every owner-forbidden raw scalar. -/
+def stringBody : List Nat → Except StringError (List Nat × List Nat)
+  | [] => .error .unterminated
+  | 34 :: rest => .ok ([], rest)
   | 92 :: escaped :: input =>
     match decodeEscape escaped with
-    | some decoded => stringPrepend decoded (stringBody rawOk input)
-    | none => none
-  | 92 :: [] => none
-  | 10 :: _ => none
-  | 13 :: _ => none
-  | c :: input => if rawOk c then stringPrepend c (stringBody rawOk input) else none
+    | some decoded => stringPrepend decoded (stringBody input)
+    | none => .error (.invalidEscape escaped)
+  | 92 :: [] => .error .unterminated
+  | c :: input =>
+    if ForbiddenRaw c then .error (.rawForbidden c) else stringPrepend c (stringBody input)
 
 /-- Successful prepending exposes the successful tail and decoded list. -/
-theorem stringPrepend_ok {c : Nat} {r : Option (List Nat × List Nat)}
-    {out : List Nat × List Nat} (h : stringPrepend c r = some out) :
-    ∃ decoded rest, r = some (decoded, rest) ∧ out = (c :: decoded, rest) := by
+theorem stringPrepend_ok {c : Nat} {r : Except StringError (List Nat × List Nat)}
+    {out : List Nat × List Nat} (h : stringPrepend c r = .ok out) :
+    ∃ decoded rest, r = .ok (decoded, rest) ∧ out = (c :: decoded, rest) := by
   cases r with
-  | none => simp [stringPrepend] at h
-  | some tail =>
+  | error e => simp [stringPrepend] at h
+  | ok tail =>
     cases tail with
     | mk decoded rest =>
-      cases Option.some.inj h
+      cases Except.ok.inj h
       exact ⟨decoded, rest, rfl, rfl⟩
 
-/-- Every scanner result satisfies the independent string-body judgment for the same `rawOk`. -/
-theorem stringBody_sound (rawOk : Nat → Prop) [DecidablePred rawOk]
-    {cs : List Nat} {out : List Nat × List Nat}
-    (h : stringBody rawOk cs = some out) : StringBody rawOk cs out := by
-  induction cs using stringBody.induct (rawOk := rawOk) generalizing out with
+/-- Every scanner result satisfies the independent string-body judgment. -/
+theorem stringBody_sound {cs : List Nat} {out : List Nat × List Nat}
+    (h : stringBody cs = .ok out) : StringBody cs out := by
+  induction cs using stringBody.induct generalizing out with
   | case1 => simp [stringBody] at h
   | case2 rest =>
-    cases Option.some.inj h
+    cases Except.ok.inj h
     exact .close rest
   | case3 escaped input decodedScalar he ih =>
     simp only [stringBody, he] at h
@@ -680,9 +764,8 @@ theorem stringBody_sound (rawOk : Nat → Prop) [DecidablePred rawOk]
     exact .escape (decodeEscape_sound he) (ih ht)
   | case4 escaped input he => simp [stringBody, he] at h
   | case5 => simp [stringBody] at h
-  | case6 rest => simp [stringBody] at h
-  | case7 rest => simp [stringBody] at h
-  | case8 c input hq hb hl hr hc hraw ih =>
+  | case6 c input hq hb hl hraw => simp [stringBody, hraw] at h
+  | case7 c input hq hb hl hraw ih =>
     simp only [stringBody, hraw, ↓reduceIte] at h
     obtain ⟨decoded, rest, ht, rfl⟩ := stringPrepend_ok h
     have hb' : c ≠ 92 := by
@@ -690,23 +773,120 @@ theorem stringBody_sound (rawOk : Nat → Prop) [DecidablePred rawOk]
       cases input with
       | nil => exact hl heq rfl
       | cons escaped tail => exact hb escaped tail heq rfl
-    exact .raw hq hb' hr hc hraw (ih ht)
-  | case9 c input hq hb hl hr hc hraw => simp [stringBody, hraw] at h
+    exact .raw ⟨hq, hb', hraw⟩ (ih ht)
 
 /-- Every declarative string body is recognized with the same decoding and remainder. -/
-theorem stringBody_complete (rawOk : Nat → Prop) [DecidablePred rawOk]
-    {cs : List Nat} {out : List Nat × List Nat}
-    (h : StringBody rawOk cs out) : stringBody rawOk cs = some out := by
+theorem stringBody_complete {cs : List Nat} {out : List Nat × List Nat}
+    (h : StringBody cs out) : stringBody cs = .ok out := by
   induction h with
   | close rest => rfl
-  | raw hq hb hl hr hc _ ih => simp [stringBody, hb, hc, ih, stringPrepend]
+  | raw hraw _ ih => simp [stringBody, hraw.1, hraw.2.1, hraw.2.2, ih, stringPrepend]
   | escape he _ ih => simp [stringBody, decodeEscape_complete he, ih, stringPrepend]
 
-/-- String-body decompositions are unique for every raw-scalar parameter. -/
-theorem stringBody_unique (rawOk : Nat → Prop) [DecidablePred rawOk]
-    {cs : List Nat} {out₁ out₂ : List Nat × List Nat}
-    (h₁ : StringBody rawOk cs out₁) (h₂ : StringBody rawOk cs out₂) : out₁ = out₂ := by
-  have h := (stringBody_complete rawOk h₁).symm.trans (stringBody_complete rawOk h₂)
+/-- String-body decompositions are unique. -/
+theorem stringBody_unique {cs : List Nat} {out₁ out₂ : List Nat × List Nat}
+    (h₁ : StringBody cs out₁) (h₂ : StringBody cs out₂) : out₁ = out₂ := by
+  have h := (stringBody_complete h₁).symm.trans (stringBody_complete h₂)
+  exact Except.ok.inj h
+
+/-- Decode exactly the six byte escapes decided by the owner on 2026-11-08. -/
+def decodeByteEscape : Nat → Option Nat
+  | 110 => some 10
+  | 116 => some 9
+  | 114 => some 13
+  | 92 => some 92
+  | 39 => some 39
+  | 48 => some 0
+  | _ => none
+
+/-- Every scanner-approved byte escape is in the decided relation. -/
+theorem decodeByteEscape_sound {escaped decoded : Nat}
+    (h : decodeByteEscape escaped = some decoded) : ByteEscape escaped decoded := by
+  unfold decodeByteEscape at h
+  split at h <;> simp_all [ByteEscape]
+
+/-- Every decided byte escape is decoded to its specified value. -/
+theorem decodeByteEscape_complete {escaped decoded : Nat} (h : ByteEscape escaped decoded) :
+    decodeByteEscape escaped = some decoded := by
+  rcases h with (⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩)
+  all_goals rfl
+
+/-- Internal byte-literal refusals; no diagnostic wording is fixed. -/
+inductive ByteError where
+  | invalidRaw (c : Nat) | invalidEscape (escaped : Nat)
+  deriving DecidableEq, Repr
+
+/-- Scan exactly the decided byte literal. Other quote-led inputs are left for labels. -/
+def byteLiteral : List Nat → Except ByteError (Option (List Nat × Nat × List Nat))
+  | 39 :: 92 :: escaped :: 39 :: rest =>
+    match decodeByteEscape escaped with
+    | some decoded => .ok (some ([39, 92, escaped, 39], decoded, rest))
+    | none => .error (.invalidEscape escaped)
+  | 39 :: 92 :: escaped :: _ =>
+    match decodeByteEscape escaped with
+    | some _ => .ok none
+    | none => .error (.invalidEscape escaped)
+  | 39 :: c :: 39 :: rest =>
+    if ByteRaw c then .ok (some ([39, c, 39], c, rest)) else .error (.invalidRaw c)
+  | _ => .ok none
+
+/-- Successful byte scanning satisfies the independent literal judgment. -/
+theorem byteLiteral_sound {cs : List Nat} {out : List Nat × Nat × List Nat}
+    (h : byteLiteral cs = .ok (some out)) : ByteLiteral cs out := by
+  unfold byteLiteral at h
+  split at h
+  · split at h
+    · rename_i decoded hdecode
+      cases Except.ok.inj h
+      apply ByteLiteral.escaped (decodeByteEscape_sound hdecode)
+      have he := decodeByteEscape_sound hdecode
+      rcases he with (⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ |
+        ⟨rfl, rfl⟩) <;> decide
+    · cases h
+  · split at h <;> cases h
+  · split at h
+    · cases Except.ok.inj h
+      exact .raw (by assumption)
+    · cases h
+  · cases h
+
+/-- Every declarative byte literal is recognized with the same value and remainder. -/
+theorem byteLiteral_complete {cs : List Nat} {out : List Nat × Nat × List Nat}
+    (h : ByteLiteral cs out) : byteLiteral cs = .ok (some out) := by
+  cases h with
+  | raw hraw => simp [byteLiteral, hraw, hraw.2.2.2]
+  | escaped he _ => simp [byteLiteral, decodeByteEscape_complete he]
+
+/-- Scan quote followed by an identifier as a label. -/
+def label : List Nat → Option (List Nat × List Nat)
+  | 39 :: input =>
+    match identifier input with
+    | some (name, rest) => some (39 :: name, rest)
+    | none => none
+  | _ => none
+
+/-- Successful label scanning satisfies the independent judgment. -/
+theorem label_sound {cs : List Nat} {out : List Nat × List Nat}
+    (h : label cs = some out) : Label cs out := by
+  unfold label at h
+  split at h
+  · split at h
+    · rename_i name rest hid
+      cases Option.some.inj h
+      exact .intro (identifier_sound hid)
+    · cases h
+  · cases h
+
+/-- Every declarative label is recognized with the same lexeme and remainder. -/
+theorem label_complete {cs : List Nat} {out : List Nat × List Nat}
+    (h : Label cs out) : label cs = some out := by
+  cases h with
+  | intro hi => simp [label, identifier_complete hi]
+
+/-- Label decompositions are unique. -/
+theorem label_unique {cs : List Nat} {out₁ out₂ : List Nat × List Nat}
+    (h₁ : Label cs out₁) (h₂ : Label cs out₂) : out₁ = out₂ := by
+  have h := (label_complete h₁).symm.trans (label_complete h₂)
   exact Option.some.inj h
 
 /-- Strip a token from the front of an input, or report that it is not a prefix. -/
@@ -882,37 +1062,27 @@ theorem longestMatch_complete {table : List (List Nat)} {input : List Nat}
     longestMatch table input = out :=
   longestMatch_unique (longestMatch_sound table input) h
 
-/-- Scan the maximal ASCII decimal-digit run. -/
-def scanDigits : List Nat → List Nat × List Nat
+/-- Scan the maximal valid digit run for a base. -/
+def scanDigits (radix : Radix) : List Nat → List Nat × List Nat
   | [] => ([], [])
   | c :: cs =>
-    if DecimalDigit c then let (digits, rest) := scanDigits cs; (c :: digits, rest)
+    if BaseDigit radix c then let (digits, rest) := scanDigits radix cs; (c :: digits, rest)
     else ([], c :: cs)
 
-/-- Scan an accepted decimal lexeme and its positional value. The remainder is only the suffix
-left by maximal digit scanning; no suffix, base prefix, separator or type-range rule is added. -/
-def decimalInteger (cs : List Nat) : Option (List Nat × Nat × List Nat) :=
-  let out := scanDigits cs
-  match out.1 with
-  | [] => none
-  | [48] => some (out.1, decimalValue out.1, out.2)
-  | 48 :: _ => none
-  | _ :: _ => some (out.1, decimalValue out.1, out.2)
-
 /-- The digit scanner satisfies the independent maximal-run judgment. -/
-theorem scanDigits_sound (cs : List Nat) :
-    DigitRun cs (scanDigits cs).1 (scanDigits cs).2 := by
+theorem scanDigits_sound (radix : Radix) (cs : List Nat) :
+    DigitRun radix cs (scanDigits radix cs).1 (scanDigits radix cs).2 := by
   induction cs with
   | nil => exact .stop [] (by intro c cs h; cases h)
   | cons c cs ih =>
-    by_cases hc : DecimalDigit c
+    by_cases hc : BaseDigit radix c
     · simpa [scanDigits, hc] using DigitRun.cons hc ih
     · simpa [scanDigits, hc] using
         DigitRun.stop (c :: cs) (by intro d ds h; cases h; exact hc)
 
 /-- Every declarative digit decomposition is the scanner's result. -/
-theorem scanDigits_complete {cs digits rest : List Nat} (h : DigitRun cs digits rest) :
-    scanDigits cs = (digits, rest) := by
+theorem scanDigits_complete {radix : Radix} {cs digits rest : List Nat}
+    (h : DigitRun radix cs digits rest) : scanDigits radix cs = (digits, rest) := by
   induction h with
   | stop rest hc =>
     cases rest with
@@ -920,53 +1090,198 @@ theorem scanDigits_complete {cs digits rest : List Nat} (h : DigitRun cs digits 
     | cons c cs => simp [scanDigits, hc c cs rfl]
   | cons hc _ ih => simp [scanDigits, hc, ih]
 
-/-- Successful decimal scanning satisfies the independent judgment. -/
-theorem decimalInteger_sound {cs : List Nat} {out : List Nat × Nat × List Nat}
-    (h : decimalInteger cs = some out) : DecimalInteger cs out := by
-  unfold decimalInteger at h
-  generalize heq : scanDigits cs = scanned at h
-  cases scanned with
-  | mk digits rest =>
-    have hrun : DigitRun cs digits rest := by
-      have hs := scanDigits_sound cs
-      rw [heq] at hs
-      simpa using hs
-    cases digits with
-    | nil => simp at h
-    | cons d ds =>
-      by_cases hd : d = 48
-      · subst d
-        cases ds with
-        | nil =>
-          cases h
-          exact DecimalInteger.intro (digits := [48]) (rest := rest)
-            (value := decimalValue [48]) hrun (by decide) rfl
-        | cons e ds => simp at h
-      · simp [hd] at h
-        cases h
-        exact .intro hrun (by simp [DigitsAccepted, hd]) rfl
+/-- Decode the empty suffix or exactly one of the eight integer-type suffixes. -/
+def decodeSuffix : List Nat → Option (Option ConcreteSpec.IntTy)
+  | [] => some none
+  | [105, 56] => some (some .i8)
+  | [105, 49, 54] => some (some .i16)
+  | [105, 50, 51] => some (some .i32)
+  | [105, 54, 52] => some (some .i64)
+  | [117, 56] => some (some .u8)
+  | [117, 49, 54] => some (some .u16)
+  | [117, 50, 51] => some (some .u32)
+  | [117, 54, 52] => some (some .u64)
+  | _ => none
 
-/-- Every declarative decimal integer is recognized with the same lexeme, value and remainder. -/
-theorem decimalInteger_complete {cs : List Nat} {out : List Nat × Nat × List Nat}
-    (h : DecimalInteger cs out) : decimalInteger cs = some out := by
+/-- Every scanner-approved suffix is in the declarative suffix relation. -/
+theorem decodeSuffix_sound {suffix : List Nat} {typeSuffix : Option ConcreteSpec.IntTy}
+    (h : decodeSuffix suffix = some typeSuffix) : SuffixAccepted suffix typeSuffix := by
+  unfold decodeSuffix at h
+  split at h <;> simp_all [SuffixAccepted, intTySpelling]
+
+/-- Every declarative suffix is decoded to its specified optional type. -/
+theorem decodeSuffix_complete {suffix : List Nat} {typeSuffix : Option ConcreteSpec.IntTy}
+    (h : SuffixAccepted suffix typeSuffix) : decodeSuffix suffix = some typeSuffix := by
+  rcases h with (⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ |
+    ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩) <;> rfl
+
+/-- Internal integer-literal refusals; constructor names are not user-visible diagnostics. -/
+inductive IntegerError where
+  | missingDigits (radix : Radix) | leadingZero | invalidSuffix (suffix : List Nat)
+  deriving DecidableEq, Repr
+
+/-- Scan digits and the complete adjacent suffix candidate after a selected radix. -/
+def integerDigits (radix : Radix) (input : List Nat) : Except IntegerError (Option IntegerToken) :=
+  let digitOut := scanDigits radix input
+  let suffixOut := scanIdentBody digitOut.2
+  match digitOut.1 with
+  | [] => if radix = .decimal then .ok none else .error (.missingDigits radix)
+  | digits =>
+    if DigitsAccepted radix digits then
+      match decodeSuffix suffixOut.1 with
+      | some typeSuffix =>
+        .ok (some ⟨radix.basePrefix ++ digits ++ suffixOut.1,
+          positionalValue radix digits, typeSuffix, suffixOut.2⟩)
+      | none => .error (.invalidSuffix suffixOut.1)
+    else .error .leadingZero
+
+/-- Select exactly a lowercase non-decimal prefix, or decimal with no consumed prefix. -/
+def splitRadix : List Nat → Radix × List Nat
+  | 48 :: 98 :: rest => (.binary, rest)
+  | 48 :: 111 :: rest => (.octal, rest)
+  | 48 :: 120 :: rest => (.hexadecimal, rest)
+  | input => (.decimal, input)
+
+/-- The selected radix and digit input reassemble the original input. -/
+theorem splitRadix_spec (cs : List Nat) :
+    cs = (splitRadix cs).1.basePrefix ++ (splitRadix cs).2 := by
+  unfold splitRadix
+  split <;> rfl
+
+/-- Scan an integer, leaving nonnumeric input for other token scanners. -/
+def integerLiteral (cs : List Nat) : Except IntegerError (Option IntegerToken) :=
+  integerDigits (splitRadix cs).1 (splitRadix cs).2
+
+/-- Successful based-digit scanning satisfies the independent integer judgment. -/
+theorem integerDigits_sound {radix : Radix} {input : List Nat} {out : IntegerToken}
+    (h : integerDigits radix input = .ok (some out)) :
+    IntegerLiteral (radix.basePrefix ++ input) out := by
+  unfold integerDigits at h
+  generalize hd : scanDigits radix input = digitOut at h
+  cases digitOut with
+  | mk digits suffixInput =>
+    generalize hi : scanIdentBody suffixInput = suffixOut at h
+    cases suffixOut with
+    | mk suffix rest =>
+      have hrun : DigitRun radix input digits suffixInput := by
+        have hs := scanDigits_sound radix input
+        rw [hd] at hs
+        exact hs
+      have hident : IdentBody suffixInput suffix rest := by
+        have hs := scanIdentBody_sound suffixInput
+        rw [hi] at hs
+        exact hs
+      simp only [hi] at h
+      cases digits with
+      | nil =>
+        by_cases hr : radix = .decimal
+        · subst radix; simp at h
+        · simp [hr] at h
+      | cons d ds =>
+        by_cases hacc : DigitsAccepted radix (d :: ds)
+        · simp only [hacc, ↓reduceIte] at h
+          cases hs : decodeSuffix suffix with
+          | none => simp [hs] at h
+          | some typeSuffix =>
+            simp only [hs] at h
+            cases Except.ok.inj h
+            exact .intro rfl hrun hacc hident (decodeSuffix_sound hs)
+        · simp [hacc] at h
+
+/-- Every declarative based-digit decomposition is recognized by its radix scanner. -/
+theorem integerDigits_complete {radix : Radix} {input digits suffixInput suffix rest : List Nat}
+    {typeSuffix : Option ConcreteSpec.IntTy}
+    (hrun : DigitRun radix input digits suffixInput) (hacc : DigitsAccepted radix digits)
+    (hident : IdentBody suffixInput suffix rest) (hsuffix : SuffixAccepted suffix typeSuffix) :
+    integerDigits radix input = .ok (some ⟨radix.basePrefix ++ digits ++ suffix,
+      positionalValue radix digits, typeSuffix, rest⟩) := by
+  simp only [integerDigits, scanDigits_complete hrun, scanIdentBody_complete hident]
+  cases digits with
+  | nil => simp [DigitsAccepted] at hacc
+  | cons d ds => simp only [hacc, ↓reduceIte, decodeSuffix_complete hsuffix]
+
+/-- Successful integer scanning satisfies the independent judgment. -/
+theorem integerLiteral_sound {cs : List Nat} {out : IntegerToken}
+    (h : integerLiteral cs = .ok (some out)) : IntegerLiteral cs out := by
+  unfold integerLiteral at h
+  generalize hs : splitRadix cs = split at h
+  cases split with
+  | mk radix input =>
+    have hspec := splitRadix_spec cs
+    rw [hs] at hspec
+    rw [hspec]
+    exact integerDigits_sound h
+
+/-- A decimal judgment cannot have a lowercase base prefix: its suffix candidate begins with
+that prefix's letter, which none of the eight accepted suffixes starts with. -/
+theorem decimal_prefixed_refused {c : Nat} {tail digits suffixInput suffix rest : List Nat}
+    {typeSuffix : Option ConcreteSpec.IntTy} (hdigit : ¬ BaseDigit .decimal c)
+    (hcontinue : IdentContinue c) (hci : c ≠ 105) (hcu : c ≠ 117)
+    (hrun : DigitRun .decimal (48 :: c :: tail) digits suffixInput)
+    (hident : IdentBody suffixInput suffix rest) (hsuffix : SuffixAccepted suffix typeSuffix) :
+    False := by
+  have hd := scanDigits_complete hrun
+  simp [scanDigits, hdigit] at hd
+  cases hd
+  have hi := scanIdentBody_complete hident
+  have hfirst : scanIdentBody (c :: tail) =
+      (c :: (scanIdentBody tail).1, (scanIdentBody tail).2) := by
+    simp [scanIdentBody, hcontinue]
+  rw [hfirst] at hi
+  cases hi
+  rcases hsuffix with (⟨hs, _⟩ | ⟨hs, _⟩ | ⟨hs, _⟩ | ⟨hs, _⟩ | ⟨hs, _⟩ |
+    ⟨hs, _⟩ | ⟨hs, _⟩ | ⟨hs, _⟩ | ⟨hs, _⟩) <;>
+    simp [intTySpelling, hci, hcu] at hs
+
+/-- Every declarative integer is recognized with the same token and remainder. -/
+theorem integerLiteral_complete {cs : List Nat} {out : IntegerToken}
+    (h : IntegerLiteral cs out) : integerLiteral cs = .ok (some out) := by
   cases h with
-  | @intro digits rest value hrun hacc hval =>
-    simp only [decimalInteger, scanDigits_complete hrun]
-    cases digits with
-    | nil => simp [DigitsAccepted] at hacc
-    | cons d ds =>
-      by_cases hd : d = 48
-      · subst d
-        cases ds with
-        | nil => simp [hval]
-        | cons e ds => simp [DigitsAccepted] at hacc
-      · simp [hd, hval]
+  | @intro radix input digitInput digits suffixInput suffix rest typeSuffix hinput
+      hrun hacc hident hsuffix =>
+    cases hinput
+    cases radix with
+    | binary =>
+      simpa [integerLiteral, splitRadix, Radix.basePrefix] using
+        (integerDigits_complete hrun hacc hident hsuffix)
+    | octal =>
+      simpa [integerLiteral, splitRadix, Radix.basePrefix] using
+        (integerDigits_complete hrun hacc hident hsuffix)
+    | hexadecimal =>
+      simpa [integerLiteral, splitRadix, Radix.basePrefix] using
+        (integerDigits_complete hrun hacc hident hsuffix)
+    | decimal =>
+      have hsplit : splitRadix digitInput = (.decimal, digitInput) := by
+        cases digitInput with
+        | nil => rfl
+        | cons c tail =>
+          by_cases hc : c = 48
+          · subst c
+            cases tail with
+            | nil => rfl
+            | cons d rest =>
+              by_cases hb : d = 98
+              · subst d
+                exact (decimal_prefixed_refused (by decide) (by decide) (by decide) (by decide)
+                  hrun hident hsuffix).elim
+              · by_cases ho : d = 111
+                · subst d
+                  exact (decimal_prefixed_refused (by decide) (by decide) (by decide) (by decide)
+                    hrun hident hsuffix).elim
+                · by_cases hx : d = 120
+                  · subst d
+                    exact (decimal_prefixed_refused (by decide) (by decide) (by decide) (by decide)
+                      hrun hident hsuffix).elim
+                  · simp [splitRadix, hb, ho, hx]
+          · simp [splitRadix, hc]
+      simpa [integerLiteral, hsplit, Radix.basePrefix] using
+        (integerDigits_complete hrun hacc hident hsuffix)
 
-/-- Decimal-integer decompositions are unique. -/
-theorem decimalInteger_unique {cs : List Nat} {out₁ out₂ : List Nat × Nat × List Nat}
-    (h₁ : DecimalInteger cs out₁) (h₂ : DecimalInteger cs out₂) : out₁ = out₂ := by
-  have h := (decimalInteger_complete h₁).symm.trans (decimalInteger_complete h₂)
-  exact Option.some.inj h
+/-- Integer-literal decompositions are unique. -/
+theorem integerLiteral_unique {cs : List Nat} {out₁ out₂ : IntegerToken}
+    (h₁ : IntegerLiteral cs out₁) (h₂ : IntegerLiteral cs out₂) : out₁ = out₂ := by
+  have h := (integerLiteral_complete h₁).symm.trans (integerLiteral_complete h₂)
+  exact Option.some.inj (Except.ok.inj h)
 
 /-! ## Kernel-checked conformance cases -/
 
@@ -974,8 +1289,9 @@ section Conformance
 -- The raised limit is for these `decide` cases only.
 set_option maxRecDepth 100000
 
-/-- Equality of decoder results for kernel-evaluated conformance cases. -/
-local instance : DecidableEq (Except DecodeError (List Nat)) := by
+/-- Equality of `Except` results for kernel-evaluated conformance cases. -/
+local instance {error ok : Type} [DecidableEq error] [DecidableEq ok] :
+    DecidableEq (Except error ok) := by
   intro x y
   cases x with
   | error e => cases y with
@@ -1004,28 +1320,51 @@ example : checkSource [65] = .ok [65] := by decide
 example : identStart? 0xE9 = false ∧ identContinue? 0xE9 = false := by decide
 
 example : lineComment [47,47,32,120,10,114,101,115,116] =
-    some ([47,47,32,120], [10,114,101,115,116]) := by decide
-example : lineComment [47,47,32,120,13] = some ([47,47,32,120], [13]) := by decide
-example : lineComment [47,47,32,120] = some ([47,47,32,120], []) := by decide
-example : lineComment [47,42,32,120,32,42,47] = none := by decide
+    .ok (some ([47,47,32,120], [10,114,101,115,116])) := by decide
+example : lineComment [47,47,32,120,13] = .ok (some ([47,47,32,120], [13])) := by decide
+example : lineComment [47,47,32,120] = .ok (some ([47,47,32,120], [])) := by decide
+example : lineComment [47,47,9,120,10] = .ok (some ([47,47,9,120], [10])) := by decide
+example : lineComment [47,42,32,120,32,42,47] = .ok none := by decide
 
-example : skipTrivia [32,65] = ([32], [65]) := by decide
-example : skipTrivia [9,65] = ([9], [65]) := by decide
-example : skipTrivia [10,65] = ([10], [65]) := by decide
-example : skipTrivia [13,65] = ([13], [65]) := by decide
-example : skipTrivia [13,10,65] = ([13,10], [65]) := by decide
-example : skipTrivia [47,47,120,10,65] = ([47,47,120,10], [65]) := by decide
-example : skipTrivia [47,47,120,13,65] = ([47,47,120,13], [65]) := by decide
-example : skipTrivia [47,47,120] = ([47,47,120], []) := by decide
+example : lineComment [47,47,0] = .error (.rawForbidden 0) := by decide
+example : lineComment [47,47,8] = .error (.rawForbidden 8) := by decide
+example : lineComment [47,47,11] = .error (.rawForbidden 11) := by decide
+example : lineComment [47,47,31] = .error (.rawForbidden 31) := by decide
+example : lineComment [47,47,127] = .error (.rawForbidden 127) := by decide
+example : lineComment [47,47,159] = .error (.rawForbidden 159) := by decide
+example : lineComment [47,47,0x2028] = .error (.rawForbidden 0x2028) := by decide
+example : lineComment [47,47,0x2029] = .error (.rawForbidden 0x2029) := by decide
+example : lineComment [47,47,0x061C] = .error (.rawForbidden 0x061C) := by decide
+example : lineComment [47,47,0x200E] = .error (.rawForbidden 0x200E) := by decide
+example : lineComment [47,47,0x200F] = .error (.rawForbidden 0x200F) := by decide
+example : lineComment [47,47,0x202A] = .error (.rawForbidden 0x202A) := by decide
+example : lineComment [47,47,0x202E] = .error (.rawForbidden 0x202E) := by decide
+example : lineComment [47,47,0x2066] = .error (.rawForbidden 0x2066) := by decide
+example : lineComment [47,47,0x2069] = .error (.rawForbidden 0x2069) := by decide
+example :
+    CommentRaw 9 ∧ CommentRaw 32 ∧ CommentRaw 126 ∧ CommentRaw 160 ∧
+    CommentRaw 0x061B ∧ CommentRaw 0x061D ∧ CommentRaw 0x200D ∧ CommentRaw 0x2010 ∧
+    CommentRaw 0x2027 ∧ CommentRaw 0x202F ∧ CommentRaw 0x2065 ∧ CommentRaw 0x206A := by decide
+
+example : skipTrivia [32,65] = .ok ([32], [65]) := by decide
+example : skipTrivia [9,65] = .ok ([9], [65]) := by decide
+example : skipTrivia [10,65] = .ok ([10], [65]) := by decide
+example : skipTrivia [13,65] = .ok ([13], [65]) := by decide
+example : skipTrivia [13,10,65] = .ok ([13,10], [65]) := by decide
+example : skipTrivia [47,47,120,10,65] = .ok ([47,47,120,10], [65]) := by decide
+example : skipTrivia [47,47,9,120,10,65] = .ok ([47,47,9,120,10], [65]) := by decide
+example : skipTrivia [47,47,120,13,65] = .ok ([47,47,120,13], [65]) := by decide
+example : skipTrivia [47,47,120] = .ok ([47,47,120], []) := by decide
+example : skipTrivia [47,47,0] = .error (.rawForbidden 0) := by decide
 example : skipTrivia [9,32,47,47,120,13,10,65] =
-    ([9,32,47,47,120,13,10], [65]) := by decide
+    .ok ([9,32,47,47,120,13,10], [65]) := by decide
 
-example : skipTrivia [47,42,32,42,47] = ([], [47,42,32,42,47]) := by decide
-example : skipTrivia [35,33,65] = ([], [35,33,65]) := by decide
-example : skipTrivia [0xA0,32] = ([], [0xA0,32]) := by decide
-example : skipTrivia [0xFEFF,32] = ([], [0xFEFF,32]) := by decide
-example : skipTrivia [47] = ([], [47]) := by decide
-example : skipTrivia [65,32] = ([], [65,32]) := by decide
+example : skipTrivia [47,42,32,42,47] = .ok ([], [47,42,32,42,47]) := by decide
+example : skipTrivia [35,33,65] = .ok ([], [35,33,65]) := by decide
+example : skipTrivia [0xA0,32] = .ok ([], [0xA0,32]) := by decide
+example : skipTrivia [0xFEFF,32] = .ok ([], [0xFEFF,32]) := by decide
+example : skipTrivia [47] = .ok ([], [47]) := by decide
+example : skipTrivia [65,32] = .ok ([], [65,32]) := by decide
 
 example : identifier [65,98,99,33] = some ([65,98,99], [33]) := by decide
 example : identifier [97,98,99] = some ([97,98,99], []) := by decide
@@ -1034,18 +1373,57 @@ example : ([65,98,99] : List Nat) ≠ [97,98,99] := by decide
 example : identifier [48,98,99] = none := by decide
 example : identifier [0xE9,65] = none := by decide
 
--- `False` is only a trivial test parameter that excludes raw scalars while exercising escapes
--- and refusals. These cases choose nothing about raw tabs or other raw control scalars.
-example : stringBody (fun _ => False) [92,110,34,65] = some ([10], [65]) := by decide
-example : stringBody (fun _ => False)
-    [92,110,92,116,92,114,92,92,92,34,92,48,34,65] =
-    some ([10,9,13,92,34,0], [65]) := by decide
-example : stringBody (fun _ => False) [92,113,34] = none := by decide
-example : stringBody (fun _ => False) [10,34] = none := by decide
-example : stringBody (fun _ => False) [13,34] = none := by decide
-example : stringBody (fun _ => False) [] = none := by decide
-example : stringBody (fun _ => False) [92,110] = none := by decide
-example : stringBody (fun _ => False) [92] = none := by decide
+example : stringBody [92,110,34,65] = .ok ([10], [65]) := by decide
+example : stringBody [92,110,92,116,92,114,92,92,92,34,92,48,34,65] =
+    .ok ([10,9,13,92,34,0], [65]) := by decide
+example : stringBody [92,113,34] = .error (.invalidEscape 113) := by decide
+example : stringBody [] = .error .unterminated := by decide
+example : stringBody [92,110] = .error .unterminated := by decide
+example : stringBody [92] = .error .unterminated := by decide
+example : stringBody [32,126,160,34] = .ok ([32,126,160], []) := by decide
+
+example :
+    stringBody [0,34] = .error (.rawForbidden 0) ∧
+    stringBody [9,34] = .error (.rawForbidden 9) ∧
+    stringBody [10,34] = .error (.rawForbidden 10) ∧
+    stringBody [13,34] = .error (.rawForbidden 13) ∧
+    stringBody [31,34] = .error (.rawForbidden 31) ∧
+    stringBody [127,34] = .error (.rawForbidden 127) ∧
+    stringBody [159,34] = .error (.rawForbidden 159) := by decide
+example :
+    stringBody [0x2028,34] = .error (.rawForbidden 0x2028) ∧
+    stringBody [0x2029,34] = .error (.rawForbidden 0x2029) ∧
+    stringBody [0x061C,34] = .error (.rawForbidden 0x061C) ∧
+    stringBody [0x200E,34] = .error (.rawForbidden 0x200E) ∧
+    stringBody [0x200F,34] = .error (.rawForbidden 0x200F) ∧
+    stringBody [0x202A,34] = .error (.rawForbidden 0x202A) ∧
+    stringBody [0x202E,34] = .error (.rawForbidden 0x202E) ∧
+    stringBody [0x2066,34] = .error (.rawForbidden 0x2066) ∧
+    stringBody [0x2069,34] = .error (.rawForbidden 0x2069) := by decide
+example :
+    StringRaw 32 ∧ StringRaw 126 ∧ StringRaw 160 ∧
+    StringRaw 0x061B ∧ StringRaw 0x061D ∧ StringRaw 0x200D ∧ StringRaw 0x2010 ∧
+    StringRaw 0x2027 ∧ StringRaw 0x202F ∧ StringRaw 0x2065 ∧ StringRaw 0x206A := by decide
+
+example : byteLiteral [39,97,39,65] = .ok (some ([39,97,39], 97, [65])) := by decide
+example : byteLiteral [39,32,39] = .ok (some ([39,32,39], 32, [])) := by decide
+example : byteLiteral [39,126,39] = .ok (some ([39,126,39], 126, [])) := by decide
+example : byteLiteral [39,31,39] = .error (.invalidRaw 31) := by decide
+example : byteLiteral [39,127,39] = .error (.invalidRaw 127) := by decide
+example : byteLiteral [39,0xE9,39] = .error (.invalidRaw 0xE9) := by decide
+example : ¬ ByteRaw 39 ∧ ¬ ByteRaw 92 := by decide
+example : byteLiteral [39,92,110,39] = .ok (some ([39,92,110,39], 10, [])) := by decide
+example : byteLiteral [39,92,116,39] = .ok (some ([39,92,116,39], 9, [])) := by decide
+example : byteLiteral [39,92,114,39] = .ok (some ([39,92,114,39], 13, [])) := by decide
+example : byteLiteral [39,92,48,39] = .ok (some ([39,92,48,39], 0, [])) := by decide
+example : byteLiteral [39,92,92,39] = .ok (some ([39,92,92,39], 92, [])) := by decide
+example : byteLiteral [39,92,39,39] = .ok (some ([39,92,39,39], 39, [])) := by decide
+example : byteLiteral [39,92,34,39] = .error (.invalidEscape 34) := by decide
+example : byteLiteral [39,92,120,52,49,39] = .error (.invalidEscape 120) := by decide
+example : byteLiteral [39,97] = .ok none := by decide
+example : byteLiteral [39,97,98] = .ok none := by decide
+example : label [39,97] = some ([39,97], []) := by decide
+example : label [39,97,98] = some ([39,97,98], []) := by decide
 
 -- Arbitrary numeric lists only: this is deliberately not a Concrete token table.
 example : longestMatch [[1], [1,2,3], [1,2], [9]] [1,2,4] = some ([1,2], [4]) := by decide
@@ -1053,13 +1431,65 @@ example : longestMatch [[1,2], [1,2]] [1,2,3] = some ([1,2], [3]) := by decide
 example : longestMatch [[], [1,2], [3]] [1,9] = none := by decide
 example : longestMatch [[1], []] [] = none := by decide
 
-example : decimalInteger [48,65] = some ([48], 0, [65]) := by decide
-example : decimalInteger [55] = some ([55], 7, []) := by decide
-example : decimalInteger [50,48,48,32] = some ([50,48,48], 200, [32]) := by decide
-example : decimalInteger [50,53,53] = some ([50,53,53], 255, []) := by decide
-example : decimalInteger [48,48,55] = none := by decide
-example : decimalInteger [48,48] = none := by decide
-example : decimalInteger [65] = none := by decide
+example : integerLiteral [48,32] = .ok (some ⟨[48], 0, none, [32]⟩) := by decide
+example : integerLiteral [48,65] = .error (.invalidSuffix [65]) := by decide
+example : integerLiteral [55] = .ok (some ⟨[55], 7, none, []⟩) := by decide
+example : integerLiteral [50,48,48,32] = .ok (some ⟨[50,48,48], 200, none, [32]⟩) := by decide
+example : integerLiteral [50,48,48,117,56] =
+    .ok (some ⟨[50,48,48,117,56], 200, some .u8, []⟩) := by decide
+example : integerLiteral [49,105,56] = .ok (some ⟨[49,105,56], 1, some .i8, []⟩) := by decide
+example : integerLiteral [48,98,49,48,49] = .ok (some ⟨[48,98,49,48,49], 5, none, []⟩) := by decide
+example : integerLiteral [48,111,49,55] = .ok (some ⟨[48,111,49,55], 15, none, []⟩) := by decide
+example : integerLiteral [48,120,102,102] = .ok (some ⟨[48,120,102,102], 255, none, []⟩) := by decide
+example : integerLiteral [48,120,49,102] = .ok (some ⟨[48,120,49,102], 31, none, []⟩) := by decide
+example : integerLiteral [48,98,48,48] = .ok (some ⟨[48,98,48,48], 0, none, []⟩) := by decide
+example : integerLiteral [48,111,48,55] = .ok (some ⟨[48,111,48,55], 7, none, []⟩) := by decide
+example : integerLiteral [48,120,48,102] = .ok (some ⟨[48,120,48,102], 15, none, []⟩) := by decide
+
+example : integerLiteral [48,98,49,48,49,105,49,54] =
+    .ok (some ⟨[48,98,49,48,49,105,49,54], 5, some .i16, []⟩) := by decide
+example : integerLiteral [48,111,49,55,105,50,51] =
+    .ok (some ⟨[48,111,49,55,105,50,51], 15, some .i32, []⟩) := by decide
+example : integerLiteral [48,120,102,102,105,54,52] =
+    .ok (some ⟨[48,120,102,102,105,54,52], 255, some .i64, []⟩) := by decide
+example : integerLiteral [48,98,49,117,49,54] =
+    .ok (some ⟨[48,98,49,117,49,54], 1, some .u16, []⟩) := by decide
+example : integerLiteral [48,111,55,117,50,51] =
+    .ok (some ⟨[48,111,55,117,50,51], 7, some .u32, []⟩) := by decide
+example : integerLiteral [48,120,102,117,54,52] =
+    .ok (some ⟨[48,120,102,117,54,52], 15, some .u64, []⟩) := by decide
+example : integerLiteral [48,120,102,102,117,56] =
+    .ok (some ⟨[48,120,102,102,117,56], 255, some .u8, []⟩) := by decide
+
+example : integerLiteral [48,48,55] = .error .leadingZero := by decide
+example : integerLiteral [48,48] = .error .leadingZero := by decide
+example : integerLiteral [48,120] = .error (.missingDigits .hexadecimal) := by decide
+example : integerLiteral [48,98] = .error (.missingDigits .binary) := by decide
+example : integerLiteral [48,111] = .error (.missingDigits .octal) := by decide
+example : integerLiteral [65] = .ok none := by decide
+
+example :
+    integerLiteral [48,88,102,102] = .error (.invalidSuffix [88,102,102]) ∧
+    integerLiteral [48,66,49] = .error (.invalidSuffix [66,49]) ∧
+    integerLiteral [48,79,55] = .error (.invalidSuffix [79,55]) ∧
+    integerLiteral [48,120,65] = .error (.missingDigits .hexadecimal) ∧
+    integerLiteral [48,120,70] = .error (.missingDigits .hexadecimal) ∧
+    integerLiteral [48,120,49,65] = .error (.invalidSuffix [65]) ∧
+    integerLiteral [48,120,49,70] = .error (.invalidSuffix [70]) := by decide
+example :
+    integerLiteral [49,50,51,117,57] = .error (.invalidSuffix [117,57]) ∧
+    integerLiteral [50,48,48,85,56] = .error (.invalidSuffix [85,56]) ∧
+    integerLiteral [49,102,51,50] = .error (.invalidSuffix [102,51,50]) ∧
+    integerLiteral [48,120,102,102,117,57] = .error (.invalidSuffix [117,57]) ∧
+    integerLiteral [50,48,48,117,56,102,111,111] =
+      .error (.invalidSuffix [117,56,102,111,111]) ∧
+    integerLiteral [49,117,56,117,56] = .error (.invalidSuffix [117,56,117,56]) := by decide
+example :
+    integerLiteral [49,95,50] = .error (.invalidSuffix [95,50]) ∧
+    integerLiteral [49,50,97,98,99] = .error (.invalidSuffix [97,98,99]) ∧
+    integerLiteral [48,98,49,48,50] = .error (.invalidSuffix [50]) ∧
+    integerLiteral [48,111,55,56] = .error (.invalidSuffix [56]) ∧
+    integerLiteral [48,120,49,103] = .error (.invalidSuffix [103]) := by decide
 
 end Conformance
 
