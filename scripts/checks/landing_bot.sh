@@ -432,11 +432,13 @@ for c in ssh gh systemctl; do printf '#!/bin/sh\nexit 1\n' > "$IB/stub/$c"; chmo
 cp -r "$ROOT_DIR/scripts/land" "$IB/src/scripts/"; cp "$ROOT_DIR/scripts/checks/lib/git_sandbox.sh" "$IB/src/scripts/checks/lib/"
 ( cd "$IB/src" && git init -q && git add -A && git commit -qm src ) && git clone -q --bare "$IB/src" "$IB/origin.git"
 printf 'LAND_REPO=unbalancedparentheses/concrete2\n' > "$IB/home/.config/concrete-landing-bot.env"
+chmod 600 "$IB/home/.config/concrete-landing-bot.env"   # it may hold secrets: migration keeps the mode
 ib(){ HOME="$IB/home" PATH="$IB/stub:$PATH" INSTALL_ORIGIN_URL="$IB/origin.git" bash "$ROOT_DIR/scripts/land/install-bot.sh" 2>&1; }
 out="$(ib)"; rc=$?
 [ "$rc" = 0 ] && grep -qx 'LAND_REPO=lambdaclass/concrete' "$IB/home/.config/concrete-landing-bot.env" \
   && ! grep -q 'concrete2' "$IB/home/.config/concrete-landing-bot.env" \
-  && ok "the installer migrates an old LAND_REPO line in an existing environment file" || { no "installer env migration: exit $rc"; echo "$out" | sed 's/^/      /'; }
+  && [ "$(ls -l "$IB/home/.config/concrete-landing-bot.env" | cut -c1-10)" = "-rw-------" ] \
+  && ok "the installer migrates an old LAND_REPO line in an existing environment file, keeping its mode (0600)" || { no "installer env migration: exit $rc"; echo "$out" | sed 's/^/      /'; }
 # A fresh install logs its origin redacted (the clone itself is refused by a git that does no network).
 mkdir -p "$IB/home2" "$IB/nonet"
 printf '#!/bin/sh\n[ "$1" = clone ] && { echo "git shim: no network" >&2; exit 1; }\nexec "%s" "$@"\n' "$(command -v git)" > "$IB/nonet/git"; chmod +x "$IB/nonet/git"

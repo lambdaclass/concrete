@@ -89,6 +89,11 @@ bad_env="$(compgen -e | grep -E '^(LAND_|CONCRETE_SKIP_)' || true)"
 BUILD_CMD="${ACCEPT_BUILD_CMD:-nix develop --command lake build}"
 
 SRC_REPO="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "acceptance: run inside a clone" >&2; exit 2; }
+# origin is the one repository, and gh reads it, before anything is cloned (land_remote_bad, lib.sh).
+# The clone takes the raw configured URL (git clone applies url.*.insteadOf to it once); the hook
+# control is handed the resolved one, as git hands it to a pre-push hook.
+why="$(cd "$SRC_REPO" && land_remote_bad origin "$LAND_CANONICAL_REPO")" || { echo "acceptance: $why" >&2; exit 2; }
+CLONE_URL="$(git -C "$SRC_REPO" config --get remote.origin.url)"
 ORIGIN_URL="$(git -C "$SRC_REPO" remote get-url origin)"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/acceptance.XXXXXX")"
 [ "$KEEP" = 1 ] || trap 'rm -rf "$WORK"' EXIT
@@ -187,7 +192,7 @@ GUARD
   chmod +x "$WORK/guard-hooks/pre-push"
 }
 do_clone() {
-  git clone --quiet "$ORIGIN_URL" "$C" && cd "$C" || return 1
+  git clone --quiet "$CLONE_URL" "$C" && cd "$C" || return 1
   make_guard
   git config core.hooksPath "$WORK/guard-hooks"
   MAIN_BEFORE="$(main_heads)"
@@ -301,7 +306,7 @@ do_negative() {
   if [ -n "${SKIP[negative]:-}" ]; then row negative skipped "--skip"; SKIPPED=1; return 0; fi
   local rid rsha
   rid="$(cd "$C" && sed -n 's/^run_id=//p' "$(git rev-parse --git-common-dir)/concrete-landing/$NAME/train.env" | tail -1)"
-  rsha="$(gh run view "$rid" -R "${ACCEPT_REPO:-lambdaclass/concrete}" --json headSha 2>/dev/null | python3 -I -c 'import json,sys; print(json.load(sys.stdin).get("headSha",""))' 2>/dev/null)"
+  rsha="$(gh run view "$rid" -R "$LAND_CANONICAL_REPO" --json headSha 2>/dev/null | python3 -I -c 'import json,sys; print(json.load(sys.stdin).get("headSha",""))' 2>/dev/null)"
   if [ "$rsha" != "$HEAD" ]; then row neg:run failed "run ${rid:-?} is at ${rsha:-?}, not the train head $HEAD: the controls would test another SHA"; FAILED=1; return 0; fi
   row neg:run passed "run $rid is at the train head ${HEAD:0:10}"
   make_tamper_gh

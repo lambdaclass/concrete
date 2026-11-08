@@ -644,6 +644,7 @@ done
 refused_offline "land refuses a remote whose push URL is another GitHub repository" "points at another repository" env LAND_REMOTE=gh-push bash "$TRAIN" land t1
 refused_offline "land refuses an old origin even when LAND_REPO still names the old repository" "points at another repository" env LAND_REMOTE=gh-stale LAND_REPO=unbalancedparentheses/concrete2 bash "$TRAIN" land t1
 refused_offline "land refuses an ssh host alias for another repository (the host is not what is checked)" "points at another repository" env LAND_REMOTE=gh-alias bash "$TRAIN" land t1
+refused_offline "record refuses the old repository" "points at another repository" env LAND_REMOTE=gh-stale bash "$TRAIN" record "$BASE" --base "$BASE"
 # git's own ssh command decides where an ssh URL goes: the guard asks it. An override that changes the
 # host is refused; one that only adds options passes; one that is not ssh cannot be asked and is refused.
 ovr_ok=1
@@ -858,6 +859,15 @@ out="$(PUSH_REMOTE=gh-push bash scripts/push-both.sh 2>&1)"; rc=$?
 [ "$rc" = 1 ] && has "$out" "points at another repository" && ok "push-both refuses a remote whose push URL is another GitHub repository" || no "push-both stale push URL: exit $rc"
 [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$before" ] && [ "$(git ls-remote fork refs/heads/main | cut -f1)" = "$BASE" ] \
   && ok "no refused push-both moved origin or fork" || no "a refused push-both pushed something"
+# CONTROL: the same script, through the guard, publishes to the one repository's remote (a local
+# origin here, which the guard accepts), so the refusals above are the guard's and not a broken push.
+# A scratch bare repository whose main is one commit behind HEAD stands in for it.
+git clone -q --bare "$PWD" "$TMP/pbok.git" && git -C "$TMP/pbok.git" update-ref refs/heads/main "$(git rev-parse HEAD~1)"
+git remote add pb-ok "$TMP/pbok.git"
+out="$(PUSH_REMOTE=pb-ok bash scripts/push-both.sh 2>&1)"; rc=$?
+git remote remove pb-ok
+[ "$rc" = 0 ] && [ "$(git -C "$TMP/pbok.git" rev-parse refs/heads/main)" = "$(git rev-parse HEAD)" ] \
+  && ok "CONTROL: push-both publishes HEAD to an accepted remote" || { no "push-both control: exit $rc"; echo "$out" | sed 's/^/      /'; }
 rm -f scripts/push-both.sh scripts/land/lib.sh
 [ "$had_land" = 1 ] || rmdir scripts/land 2>/dev/null || true
 
@@ -1214,6 +1224,12 @@ for bad in "--name x"$'\n'"y" "--ref wip/a"$'\t'"b"; do
   [ "$r" = 2 ] && has "$o" "${bad%% *} must" && [ ! -e "$TMP/reh.forged" ] && [ ! -e "$TMP/acc.forged" ] \
     && ok "acceptance refuses ${bad%% *} with a record delimiter and writes no row" || { no "acceptance ${bad%% *} delimiter: exit $r"; echo "$o" | sed 's/^/      /'; }
 done
+# acceptance.sh refuses a source clone whose origin is another repository before it clones anything.
+git init -q "$TMP/accstale" && git -C "$TMP/accstale" remote add origin https://github.com/unbalancedparentheses/concrete2.git
+refused_offline "acceptance refuses a clone whose origin is the old repository, writing no row" "points at another repository" \
+  sh -c 'cd "$1" && for v in $(env | sed -n "s/^\(LAND_[A-Za-z0-9_]*\)=.*/\1/p;s/^\(CONCRETE_SKIP_[A-Za-z0-9_]*\)=.*/\1/p"); do unset "$v"; done
+         ACCEPT_REHEARSALS="$2/reh.stale" ACCEPT_RECORD="$2/acc.stale" exec bash "$3" --ref wip/x' - "$TMP/accstale" "$TMP" "$ROOT_DIR/scripts/land/acceptance.sh"
+[ ! -e "$TMP/reh.stale" ] && [ ! -e "$TMP/acc.stale" ] && ok "a refused acceptance run wrote no record" || no "a refused acceptance run wrote a record"
 # acceptance.sh's check leg keeps the review leg (it never passes --no-review), and its build leg and
 # broken-build control run the one build command, the root's.
 ACC="$ROOT_DIR/scripts/land/acceptance.sh"

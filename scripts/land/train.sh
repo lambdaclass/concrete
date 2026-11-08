@@ -133,8 +133,8 @@ refuse_fork() {
 
 # The remote is the one repository and gh reads it (since 2026-11-06): every fetch and push URL that
 # is GitHub names LAND_CANONICAL_REPO, and so does $REPO (land_remote_bad, lib.sh). Every command
-# that can push or read GitHub (build, check, ci, watch, land) checks it before anything else; record
-# runs inside the repository's own CI, whose checkout is that repository by construction.
+# that can push or read GitHub (build, check, ci, watch, land, record) checks it before anything
+# else. In CI a refused record is no record, so every job runs: the guard can only add checks there.
 require_remote_repo() {
   local why
   why="$(land_remote_bad "$REMOTE" "$REPO")" || die "$why"
@@ -808,6 +808,7 @@ cmd_record() {
       *) head="$1" ;;
     esac; shift
   done
+  require_remote_repo
   [[ "$head" =~ ^[0-9a-f]{40}$ ]] || die "record: <head> must be a full 40-hex SHA, not '$head'"
   [[ "$base" =~ ^[0-9a-f]{40}$ ]] && [ "$base" != 0000000000000000000000000000000000000000 ] \
     || die "record: --base must be the full SHA main had before the push, not '$base'"
