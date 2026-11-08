@@ -17,8 +17,15 @@
 set -euo pipefail
 if [ "${1:-}" = --ssh ]; then
   host="${2:?--ssh needs user@host}"; shift 2
+  # lib.sh first, on the same stdin: the host has no copy of the landing scripts yet, and the
+  # installer checks every URL with lib.sh's guard before it clones or fetches.
   exec ssh -i "${CONCRETE_REMOTE_KEY:-$HOME/.ssh/concrete_ci}" -o StrictHostKeyChecking=accept-new "$host" \
-    bash -s -- "$@" < "$0"
+    bash -s -- "$@" < <(cat "$(dirname "$0")/lib.sh" "$0")
+fi
+# Run from a checkout: lib.sh next to this file (over --ssh it came first on stdin, above).
+if ! declare -F land_remote_bad >/dev/null; then
+  # shellcheck source=scripts/land/lib.sh
+  . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh" || { echo "install-bot: cannot read scripts/land/lib.sh" >&2; exit 1; }
 fi
 REF="origin/main"; CLONE="$HOME/concrete-bot"
 while [ $# -gt 0 ]; do
@@ -29,15 +36,17 @@ while [ $# -gt 0 ]; do
   esac; shift
 done
 say() { echo "install-bot: $*"; }
-# URLs on one line, with a scheme URL's userinfo (https://user:TOKEN@host) replaced by *** through
-# the authority's last @ (as land_url_redact in lib.sh, which this script, run over ssh as a single
-# file, cannot source).
-redact() { sed -E 's#^([A-Za-z][A-Za-z0-9+.-]*://)[^/]*@#\1***@#' | tr '\n' ' '; }
+# URLs on one line, each with a scheme URL's userinfo replaced by *** (land_url_redact, lib.sh).
+redact() { local u; while IFS= read -r u; do printf '%s ' "$(land_url_redact "$u")"; done; }
 [ "$(id -un)" = dev ] || say "WARNING: running as $(id -un), not dev"
 ORIGIN_URL="${INSTALL_ORIGIN_URL:-$(git -C "$HOME/concrete2" remote get-url origin 2>/dev/null || echo git@github.com:unbalancedparentheses/concrete2.git)}"
 MIRROR_URL="${INSTALL_MIRROR_URL:-git@github.com:lambdaclass/concrete.git}"
 
-# 1. the dedicated clone
+# 1. the dedicated clone. Every URL is one of the project's repositories (lib.sh) before anything is
+# cloned or fetched.
+for u in "$ORIGIN_URL" "$MIRROR_URL"; do
+  why="$(land_url_bad "$u")" || { say "refusing: $why"; exit 1; }
+done
 if [ ! -d "$CLONE/.git" ]; then
   say "cloning $(echo "$ORIGIN_URL" | redact)into $CLONE"
   git clone -q "$ORIGIN_URL" "$CLONE"
@@ -52,6 +61,10 @@ for r in origin lambdaclass; do
     say "removing $r's push URL(s): $(git config --get-all "remote.$r.pushurl" | redact)"
     git config --unset-all "remote.$r.pushurl"
   fi
+done
+for r in origin lambdaclass; do
+  git remote get-url "$r" >/dev/null 2>&1 || continue
+  why="$(land_remote_bad "$r")" || { say "refusing to fetch in $CLONE: $why"; exit 1; }
 done
 git config core.hooksPath .githooks
 git config user.name >/dev/null || git config user.name "Concrete landing bot"

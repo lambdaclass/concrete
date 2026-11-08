@@ -933,6 +933,10 @@ cmd_land() {
   done
   valid_name "$name"
   require_remote_repo
+  # The mirror too, before anything reads either remote (a missing mirror is refused below).
+  if [ "$mirror_on" = 1 ] && [ -n "$MIRROR" ] && git remote get-url "$MIRROR" >/dev/null 2>&1; then
+    local mwhy; mwhy="$(land_remote_bad "$MIRROR")" || die "land: mirror: $mwhy"
+  fi
   require_train_checkout "$name"
   refuse_fork "$REMOTE"
   stage_start
@@ -990,7 +994,6 @@ cmd_land() {
     refuse_fork "$MIRROR"
     git remote get-url "$MIRROR" >/dev/null 2>&1 \
       || die "land: mirror remote '$MIRROR' is not configured; both remotes are required (add it, or pass --no-mirror deliberately)"
-    local mwhy; mwhy="$(land_remote_bad "$MIRROR")" || die "land: mirror: $mwhy"
     mirror="$MIRROR"
     mmain="$(git ls-remote "$mirror" refs/heads/main | cut -f1)"
     if [ -n "$mmain" ] && ! git merge-base --is-ancestor "$mmain" "$head" 2>/dev/null; then
