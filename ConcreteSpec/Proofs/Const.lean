@@ -649,68 +649,92 @@ example : ((typeConsts ConstDemo.NonCopyU
     subst v
     cases hc
 
-/-- Helper (computation). Boolean dependency testing agrees with actual source membership.
+/-- Helper (computation). Boolean dependency testing agrees with source membership.
 (approved: PENDING) -/
-private theorem dependsOn_reference_inv (U : ConstTypes) (ds : List (ConstDecl U)) (a b : ConstId)
-    (h : dependsOn U ds a b = true) : SourceReference U ds a b := by
-  simpa [dependsOn, SourceReference, List.any_eq_true, Bool.and_eq_true,
-    List.contains_iff_mem] using h
+private theorem dependsOn_reference_inv (U : ConstTypes) (ds : List (ConstDecl U)) (a b : ConstId) :
+    dependsOn U ds a b = true ↔ SourceReference U ds a b := by
+  simp [dependsOn, SourceReference, List.any_eq_true, Bool.and_eq_true]
 
-/-- Helper (computation). Structural chain checking implies real edges, by induction on the
-chain rather than assuming an edge certificate. (approved: PENDING) -/
-private theorem refChain_actual_inv (U : ConstTypes) (ds : List (ConstDecl U)) :
-    ∀ chain, refChain U ds chain = true → ActualRefChain U ds chain
-  | [], h => by cases h
-  | [c], h => by
-    simpa [refChain, ActualRefChain, List.contains_iff_mem, List.mem_map] using h
-  | a :: b :: rest, h => by
-    have hh : dependsOn U ds a b = true ∧ refChain U ds (b :: rest) = true := by
-      simpa only [refChain, Bool.and_eq_true] using h
-    obtain ⟨hab, hrest⟩ := hh
-    exact ⟨dependsOn_reference_inv U ds a b hab, refChain_actual_inv U ds (b :: rest) hrest⟩
-
-/-- Law (subject `ConcreteSpec.Core.refChain`). A reported cycle closes at its starting identity
-and every edge is an actual reference in a source initializer. -/
+/-- Law (subject `ConcreteSpec.Core.refChain`). Diagnostic chain checking agrees with independent
+source-reference membership, including every edge and the final declared identity. The closed
+endpoints of a cycle are separately represented by `CycleChain`. -/
 theorem cycle_chain_real (U : ConstTypes) (ds : List (ConstDecl U)) :
-    ∀ chain, CycleChain U ds chain →
-      ∃ c rest, chain = c :: rest ++ [c] ∧ ActualRefChain U ds chain := by
-  intro chain h
-  obtain ⟨c, rest, he, hc⟩ := h
-  exact ⟨c, rest, he, refChain_actual_inv U ds chain hc⟩
+    ∀ chain, refChain U ds chain = true ↔ ActualRefChain U ds chain
+  | [] => by simp [refChain, ActualRefChain]
+  | [c] => by simp [refChain, ActualRefChain, List.mem_map]
+  | a :: b :: rest => by
+    simp only [refChain, ActualRefChain, Bool.and_eq_true,
+      dependsOn_reference_inv, cycle_chain_real U ds (b :: rest)]
 
 /-- A faulty diagnostic checker accepting every chain. -/
 def acceptsEveryChain (_U : ConstTypes) (_ds : List (ConstDecl _U))
     (_chain : List ConstId) : Bool := true
 
+/-- A faulty diagnostic checker rejecting real cycles. -/
+def rejectsEveryChain (_U : ConstTypes) (_ds : List (ConstDecl _U))
+    (_chain : List ConstId) : Bool := false
+
 /-- Instance (law `ConcreteSpec.Core.cycle_chain_real`, case `two_constants`). -/
-example : ∀ chain, CycleChain ConstDemo.U
+example : refChain ConstDemo.U
       [⟨ConstDemo.cid "A", .c .bool, .ref (ConstDemo.cid "B")⟩,
-       ⟨ConstDemo.cid "B", .c .bool, .ref (ConstDemo.cid "A")⟩] chain →
-    ∃ c rest, chain = c :: rest ++ [c] ∧ ActualRefChain ConstDemo.U
+       ⟨ConstDemo.cid "B", .c .bool, .ref (ConstDemo.cid "A")⟩]
+      [ConstDemo.cid "A", ConstDemo.cid "B", ConstDemo.cid "A"] = true ↔
+    ActualRefChain ConstDemo.U
       [⟨ConstDemo.cid "A", .c .bool, .ref (ConstDemo.cid "B")⟩,
-       ⟨ConstDemo.cid "B", .c .bool, .ref (ConstDemo.cid "A")⟩] chain :=
+       ⟨ConstDemo.cid "B", .c .bool, .ref (ConstDemo.cid "A")⟩]
+      [ConstDemo.cid "A", ConstDemo.cid "B", ConstDemo.cid "A"] :=
   cycle_chain_real ConstDemo.U
     [⟨ConstDemo.cid "A", .c .bool, .ref (ConstDemo.cid "B")⟩,
      ⟨ConstDemo.cid "B", .c .bool, .ref (ConstDemo.cid "A")⟩]
+    [ConstDemo.cid "A", ConstDemo.cid "B", ConstDemo.cid "A"]
 
 /-- Planted (law `ConcreteSpec.Core.cycle_chain_real`, case `two_constants`,
-subject `ConcreteSpec.Core.refChain`, mutant `ConcreteSpec.Core.acceptsEveryChain`). The mutant
-accepts `A → A` in the same source, although the source has no self-reference. -/
-example : ¬ (∀ chain,
-    (∃ c rest, chain = c :: rest ++ [c] ∧ acceptsEveryChain ConstDemo.U
+subject `ConcreteSpec.Core.refChain`, mutant `ConcreteSpec.Core.rejectsEveryChain`). -/
+example : ¬ (rejectsEveryChain ConstDemo.U
       [⟨ConstDemo.cid "A", .c .bool, .ref (ConstDemo.cid "B")⟩,
-       ⟨ConstDemo.cid "B", .c .bool, .ref (ConstDemo.cid "A")⟩] chain = true) →
-    ∃ c rest, chain = c :: rest ++ [c] ∧ ActualRefChain ConstDemo.U
+       ⟨ConstDemo.cid "B", .c .bool, .ref (ConstDemo.cid "A")⟩]
+      [ConstDemo.cid "A", ConstDemo.cid "B", ConstDemo.cid "A"] = true ↔
+    ActualRefChain ConstDemo.U
       [⟨ConstDemo.cid "A", .c .bool, .ref (ConstDemo.cid "B")⟩,
-       ⟨ConstDemo.cid "B", .c .bool, .ref (ConstDemo.cid "A")⟩] chain) := by
+       ⟨ConstDemo.cid "B", .c .bool, .ref (ConstDemo.cid "A")⟩]
+      [ConstDemo.cid "A", ConstDemo.cid "B", ConstDemo.cid "A"]) := by
   intro h
-  obtain ⟨_, _, _, hc⟩ := h [ConstDemo.cid "A", ConstDemo.cid "A"]
-    ⟨ConstDemo.cid "A", [], rfl, rfl⟩
-  obtain ⟨d, hd, he, href⟩ := hc.1
+  have hc : refChain ConstDemo.U
+      [⟨ConstDemo.cid "A", .c .bool, .ref (ConstDemo.cid "B")⟩,
+       ⟨ConstDemo.cid "B", .c .bool, .ref (ConstDemo.cid "A")⟩]
+      [ConstDemo.cid "A", ConstDemo.cid "B", ConstDemo.cid "A"] = true := by decide
+  have hc' := (cycle_chain_real _ _ _).1 hc
+  exact Bool.noConfusion (h.mpr hc')
+
+/-- Instance (law `ConcreteSpec.Core.cycle_chain_real`, case `malformed`). -/
+example : refChain ConstDemo.U [⟨ConstDemo.cid "A", .c .bool, .bool true⟩]
+      [ConstDemo.cid "A", ConstDemo.cid "A"] = true ↔
+    ActualRefChain ConstDemo.U [⟨ConstDemo.cid "A", .c .bool, .bool true⟩]
+      [ConstDemo.cid "A", ConstDemo.cid "A"] :=
+  cycle_chain_real ConstDemo.U [⟨ConstDemo.cid "A", .c .bool, .bool true⟩]
+    [ConstDemo.cid "A", ConstDemo.cid "A"]
+
+/-- Planted (law `ConcreteSpec.Core.cycle_chain_real`, case `malformed`,
+subject `ConcreteSpec.Core.refChain`, mutant `ConcreteSpec.Core.acceptsEveryChain`). -/
+example : ¬ (acceptsEveryChain ConstDemo.U [⟨ConstDemo.cid "A", .c .bool, .bool true⟩]
+      [ConstDemo.cid "A", ConstDemo.cid "A"] = true ↔
+    ActualRefChain ConstDemo.U [⟨ConstDemo.cid "A", .c .bool, .bool true⟩]
+      [ConstDemo.cid "A", ConstDemo.cid "A"]) := by
+  intro h
+  obtain ⟨d, hd, _, href⟩ := (h.mp rfl).1
   cases hd with
-  | head => simp [CExpr.refs, ConstDemo.cid] at href
-  | tail _ hd => cases hd with
-    | head => exact (by decide : ConstDemo.cid "B" ≠ ConstDemo.cid "A") he
-    | tail _ hm => cases hm
+  | head => cases href
+  | tail _ hm => cases hm
+
+/-- Helper (projection). For a typed list, the refusal side of admission names exactly the
+first failing constant and its operation, invalid initializer, or exhausted fuel.
+(approved: PENDING) -/
+theorem typed_not_admitted_iff_refused_proj (U : ConstTypes) (fuel : Nat)
+    (ds : List (ConstDecl U)) (ht : ConstsTyped U ds) :
+    ¬ ConstsAdmitted U fuel ds ↔ ∃ refusal, evalConsts U fuel ds [] = .error refusal := by
+  unfold ConstsAdmitted ConstsEvaluate
+  cases he : evalConsts U fuel ds [] with
+  | ok env => simp [ht, Except.isOk, Except.toBool]
+  | error refusal => simp [ht, Except.isOk, Except.toBool]
 
 end ConcreteSpec.Core

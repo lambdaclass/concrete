@@ -316,6 +316,15 @@ This is independent of static typing and Copy classification. -/
 def ConstsEvaluate (U : ConstTypes) (fuel : Nat) (ds : List (ConstDecl U)) : Prop :=
   (evalConsts U fuel ds []).isOk = true
 
+instance (U : ConstTypes) (ds : List (ConstDecl U)) : Decidable (ConstsTyped U ds) := by
+  unfold ConstsTyped
+  infer_instance
+
+instance (U : ConstTypes) (fuel : Nat) (ds : List (ConstDecl U)) :
+    Decidable (ConstsEvaluate U fuel ds) := by
+  unfold ConstsEvaluate
+  infer_instance
+
 /-- **Rule: constant declarations are admitted** by both independent checks. -/
 def ConstsAdmitted (U : ConstTypes) (fuel : Nat) (ds : List (ConstDecl U)) : Prop :=
   ConstsTyped U ds ∧ ConstsEvaluate U fuel ds
@@ -357,21 +366,48 @@ def ActualRefChain (U : ConstTypes) (ds : List (ConstDecl U)) : List ConstId →
 def Acyclic (U : ConstTypes) (ds : List (ConstDecl U)) : Prop :=
   ∀ chain, ¬ CycleChain U ds chain
 
-/-- README obligation O1: elaboration permutes the source declarations into dependency order. The
-`Pairwise` condition says that no declaration occurs before one it references; the separate
-self-edge condition refuses self-reference even in a singleton list. References to undeclared
-identities and duplicate declarations are independently rejected by static typing. -/
-def DependencyOrder (U : ConstTypes) (source order : List (ConstDecl U)) : Prop :=
-  order.Perm source ∧
-    (∀ a ∈ order, dependsOn U source a.id a.id = false) ∧
-    order.Pairwise fun a b => dependsOn U source a.id b.id = false
+/-- Source name resolution: identities are unique and every reference denotes a declaration in
+this module. An unresolved name is a static refusal, independently of reference cycles. -/
+def SourceNamesResolved (U : ConstTypes) (source : List (ConstDecl U)) : Prop :=
+  (source.map ConstDecl.id).Nodup ∧
+    ∀ d ∈ source, ∀ c ∈ d.init.refs, c ∈ source.map ConstDecl.id
 
-/-- Elaboration's required result (owner decision 2026-11-08, item 19): a dependency order for Core,
+/-- Every initializer reference occurs in the earlier prefix. This includes nested operands and
+rejects unresolved names as well as self-reference. -/
+def ReferencesEarlier (U : ConstTypes) : List (ConstDecl U) → List ConstId → Prop
+  | [], _ => True
+  | d :: ds, earlier => (∀ c ∈ d.init.refs, c ∈ earlier) ∧
+    ReferencesEarlier U ds (d.id :: earlier)
+
+/-- README obligation O1: elaboration supplies a permutation with unique identities and with
+all initializer references in the earlier prefix. Source order itself imposes no restriction. -/
+def DependencyOrder (U : ConstTypes) (source order : List (ConstDecl U)) : Prop :=
+  order.Perm source ∧ (source.map ConstDecl.id).Nodup ∧ ReferencesEarlier U order []
+
+/-- After source name resolution, elaboration's required result (owner decision 2026-11-08, item 19): a dependency order for Core,
 or refusal with a real cycle chain. This is an O1 obligation on the source elaborator, not an
 additional evaluator. -/
 inductive ElaboratedConsts (U : ConstTypes) (source : List (ConstDecl U)) where
   | ordered (order : List (ConstDecl U)) (sorted : DependencyOrder U source order)
   | cycle (chain : List ConstId) (realCycle : CycleChain U source chain)
+
+/-- Obligation (discharged at slice A2i, R-0555). The finite source graph has a dependency
+order whenever it has no real reference cycle. This global graph theorem is not yet proved. -/
+def DependencySortingComplete : Prop :=
+  ∀ (U : ConstTypes) (source : List (ConstDecl U)), SourceNamesResolved U source →
+    Acyclic U source →
+    ∃ order, DependencyOrder U source order
+
+/-- Obligation (discharged at slice A2i, R-0571). All admitted dependency orders give equal values
+by identity, even though their association-list representations can have different orders.
+This requires a permutation/lookup proof, not function determinism, and is not yet proved. -/
+def ConstOrderIndependent : Prop :=
+  ∀ (U : ConstTypes) (fuel : Nat) (source first second : List (ConstDecl U)),
+    DependencyOrder U source first → DependencyOrder U source second →
+    ConstsAdmitted U fuel first → ConstsAdmitted U fuel second →
+    ∀ env₁ env₂, evalConsts U fuel first [] = .ok env₁ →
+      evalConsts U fuel second [] = .ok env₂ →
+      ∀ c, AList.lookup env₁ c = AList.lookup env₂ c
 
 /-! ### Examples
 
@@ -495,8 +531,8 @@ example : DependencyOrder U [⟨cid "A", .c (.int .u8),
     ⟨cid "A", .c (.int .u8), .plain .add (.ref (cid "B")) (.int .u8 1)⟩] ∧
     ConstsAdmitted U 20 [⟨cid "B", .c (.int .u8), .int .u8 2⟩,
     ⟨cid "A", .c (.int .u8), .plain .add (.ref (cid "B")) (.int .u8 1)⟩] := by
-  refine ⟨⟨List.Perm.swap _ _ [], ?_⟩, by decide⟩
-  simp [List.pairwise_cons, dependsOn, CExpr.refs, cid]
+  refine ⟨⟨List.Perm.swap _ _ [], by decide, ?_⟩, by decide⟩
+  simp [ReferencesEarlier, CExpr.refs]
 
 /-- Refused (rule `ConcreteSpec.Core.ConstsAdmitted`): elaboration reports the real two-constant
 cycle `A → B → A`, and neither declaration order is admissible. -/
@@ -519,6 +555,48 @@ example : ¬ CycleChain U [⟨cid "A", .c (.int .u8), .int .u8 1⟩,
       ⟨cid "B", .c (.int .u8), .ref (cid "A")⟩] [cid "A", cid "B", cid "A"] = false := by decide
   rw [this] at href
   cases href
+
+/-- Accepted (rule `ConcreteSpec.Core.ConstsAdmitted`): the sorted forward reference computes
+`A = 3`, rather than merely accepting a sorting certificate. -/
+example : (evalConsts U 3
+    [⟨cid "B", .c (.int .u8), .int .u8 2⟩,
+     ⟨cid "A", .c (.int .u8), .plain .add (.ref (cid "B")) (.int .u8 1)⟩] []).toOption.bind
+    (fun env => AList.lookup env (cid "A")) = some (.int .u8 3) := by decide
+
+/-- Refused (rule `ConcreteSpec.Core.ConstsAdmitted`): neither order of a two-constant cycle
+passes the independent static and evaluation checks. -/
+example : ¬ ConstsAdmitted U 3
+    [⟨cid "A", .c .bool, .ref (cid "B")⟩, ⟨cid "B", .c .bool, .ref (cid "A")⟩] ∧
+    ¬ ConstsAdmitted U 3
+    [⟨cid "B", .c .bool, .ref (cid "A")⟩, ⟨cid "A", .c .bool, .ref (cid "B")⟩] := by decide
+
+/-- Refused (rule `ConcreteSpec.Core.ConstsAdmitted`): self-reference has no Core value. -/
+example : ¬ ConstsAdmitted U 3 [⟨cid "A", .c .bool, .ref (cid "A")⟩] := by decide
+
+/-- Self-reference also fails the dependency-order contract, even for a singleton list. -/
+example : ¬ DependencyOrder U [⟨cid "A", .c .bool, .ref (cid "A")⟩]
+    [⟨cid "A", .c .bool, .ref (cid "A")⟩] := by
+  intro h
+  have hs := h.2.2
+  simp [ReferencesEarlier, CExpr.refs] at hs
+
+/-- Fuel refusal carries the identity of the constant, including an unused one. -/
+example : evalConsts U 1 [⟨cid "UNUSED", .c (.int .u8),
+    .plain .add (.int .u8 1) (.int .u8 2)⟩] [] = .error (.outOfFuel (cid "UNUSED")) := by decide
+
+/-- An unresolved reference is not a dependency-order certificate, even for an acyclic singleton. -/
+example : ¬ DependencyOrder U [⟨cid "A", .c .bool, .ref (cid "MISSING")⟩]
+    [⟨cid "A", .c .bool, .ref (cid "MISSING")⟩] := by
+  intro h
+  have hs := h.2.2
+  simp [ReferencesEarlier, CExpr.refs] at hs
+
+/-- The evaluation check is independent: this list types but division by zero refuses it. -/
+example : ConstsTyped U [⟨cid "BAD", .c (.int .i8),
+    .plain .div (.int .i8 1) (.int .i8 0)⟩] ∧
+    ¬ ConstsEvaluate U 3 [⟨cid "BAD", .c (.int .i8),
+    .plain .div (.int .i8 1) (.int .i8 0)⟩] := by
+  exact ⟨by decide, by decide⟩
 
 end ConstDemo
 

@@ -17,7 +17,7 @@ PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `Concret
 - **Conversions**: `Lossless` is exactly the value-domain rule (`lossless_iff`); `tryConvert`
   succeeds exactly in range and keeps the value (`tryConvert_ok_iff`).
 - **Machine and exact arithmetic**: an exact term is defined whenever its operands are
-  (`exact_defined`); a defined machine term has operands of its width (`machine_operands`); where a
+  (`exact_defined`); a defined machine term has operands of its width (`machine_operands_inv`); where a
   plain machine term is defined, it equals the exact one (`machine_plain_eq_exact`), and so does a
   whole term read in exact arithmetic (`eval_toExact`).
 - **Bits**: wrapping keeps the bit pattern (`toBits_wrap`, `toBits_wrapping`), a valid left shift
@@ -272,7 +272,7 @@ theorem machine_plain_eq_exact (ρ : Var → Option Int) (t : IntTy) (op : WrapO
         · simp [hr] at h
 
 /-- Helper (inversion). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) A defined machine term has operands that are values of its width (a shift count excepted). -/
-theorem machine_operands (ρ : Var → Option Int) (t : IntTy) (op : MachineOp) (a b : CTerm)
+theorem machine_operands_inv (ρ : Var → Option Int) (t : IntTy) (op : MachineOp) (a b : CTerm)
     (r : Int) (h : (CTerm.machine t op a b).eval ρ = some r) :
     ∃ x y, a.eval ρ = some x ∧ b.eval ρ = some y ∧ t.InRange x ∧
       (op.countOperand = true ∨ t.InRange y) := by
@@ -295,7 +295,7 @@ theorem machine_operands (ρ : Var → Option Int) (t : IntTy) (op : MachineOp) 
 /-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) A defined machine term's value is a value of its width. -/
 theorem machine_inRange (ρ : Var → Option Int) (t : IntTy) (op : MachineOp) (a b : CTerm)
     (r : Int) (h : (CTerm.machine t op a b).eval ρ = some r) : t.InRange r := by
-  obtain ⟨x, y, ha, hb, hx, _⟩ := machine_operands ρ t op a b r h
+  obtain ⟨x, y, ha, hb, hx, _⟩ := machine_operands_inv ρ t op a b r h
   simp only [CTerm.eval, ha, hb, Option.bind_some] at h
   split at h
   · cases h
@@ -323,7 +323,7 @@ theorem eval_toExact (ρ : Var → Option Int) : ∀ (e : CTerm) (r : Int),
   | .lit _, _, h => h
   | .var _, _, h => h
   | .machine t op a b, r, h => by
-    obtain ⟨x, y, ha, hb, _, _⟩ := machine_operands ρ t op a b r h
+    obtain ⟨x, y, ha, hb, _, _⟩ := machine_operands_inv ρ t op a b r h
     have ha' := eval_toExact ρ a x ha
     have hb' := eval_toExact ρ b y hb
     simp only [CTerm.toExact]
