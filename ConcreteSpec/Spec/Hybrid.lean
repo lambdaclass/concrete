@@ -17,7 +17,7 @@ are left out. Pointer decoding stays exactly as in Memory; no new pointer meanin
 
 `State` is an `Exec.Operands.Store` shape: instantiate `Store := State`, use `read`/`write` in
 operand evaluation and `rawWrite` for authorized primitive writes; turn `none` into `Res.stuck`.
-C5 supplies lifecycle ownership and permissions; C6 supplies primitive contracts. No change to
+C5 supplies lifecycle ownership and permissions; C6 supplies the request/response interface. No change to
 Exec is needed. Local variable identities and place identities are separate; the operand instance
 must resolve a local's place before using these operations.
 -/

@@ -83,10 +83,12 @@ Open obligations, by name:
   `σ k`, and the results hold for every `σ`.
 - **O11 Foundation contracts** (owner decision 2026-11-08, C1–C10): written so far are C3
   (`Target`), C1 (`Exec`: the machine, its step, cleanup order, traps; parametric in the operand
-  language) and C2 (`Scalar`, `Const`). C4–C10 remain. C1 leaves to later slices the source-level
+  language) and C2 (`Scalar`, `Const`). C4 (`Memory`, `Hybrid`) now covers byte memory, scalar
+  representation and structured/materialized places, with trailing padding preserved by typed
+  writes; struct field layouts, enums, pointers in structs and the C8 padding oracle remain out
+  of its scalar slice. C5–C10 remain. C1 leaves to later slices the source-level
   evaluation orders (elaboration, O1), counted loops (slice 4), and ownership of moved values
   (C5), the split of a request from its response (C6) and the oracle's query record (C8); its
-  shared state is abstract until C4 and C5 instantiate it. C2 leaves floats (slice 26), the
-  representation of scalars in bytes (C4, which ports `Rep` onto `Core.IntTy` so one scalar model
-  remains), and two owner questions: whether a failing operation may appear in a constant
+  storage can use C4's hybrid state; C5 must still supply ownership instrumentation. C2 leaves
+  floats (slice 26), and two owner questions: whether a failing operation may appear in a constant
   initializer, and whether the source may name a constant written later in the file.

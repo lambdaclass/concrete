@@ -54,8 +54,9 @@ theorems need (R4 F8). Unifying them into one Core is A2i work (R-0571).
 The foundation (owner decision 2026-11-08, "ok all recommended": the shared interfaces and their
 laws, written, proved and tested before the freeze) is in the namespace `ConcreteSpec.Core`, from
 `Target` on: `Target` (C3, target profiles), `Outcome` (trap kinds and the ways a run stops),
-`Exec` (C1, execution, calls and cleanup), `Scalar` (C2, scalars and arithmetic) and `Const` (C2,
-the constant initializer subset). Each module's header says which contract it states and what it
+`Exec` (C1, execution, calls and cleanup), `Scalar` (C2, scalars and arithmetic), `Const` (C2,
+the constant initializer subset), `Memory` (C4, byte memory and scalar representation), and
+`Hybrid` (C4, structured places and stable materialized ranges). Each module's header says which contract it states and what it
 leaves to a later slice.
 
 Only Lean core is imported (Q9.16). No proof uses `native_decide` or `sorry` (Q9.17).
