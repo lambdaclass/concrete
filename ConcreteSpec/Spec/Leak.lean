@@ -49,30 +49,30 @@ def leakageCatalog : List (Leakage Nat Nat Nat) :=
   [.branch ⟨0⟩ true, .address ⟨1⟩ 4096, .allocation ⟨2⟩ ⟨3⟩ 8,
     .loop ⟨4⟩ 3, .variableTime ⟨5⟩ [1, 2], .publicLength ⟨6⟩ 2, .external 7]
 
-/-- Representation lemma. Concrete control calculation, not independent soundness evidence (approved: PENDING). -/
+/-- Representation lemma. Concrete length check showing `leakageCatalog` covers all seven `Leakage` constructors (approved: PENDING). -/
 example : leakageCatalog.length = 7 := by decide
 
-/-- Representation lemma. Concrete control calculation, not independent soundness evidence (approved: PENDING).
+/-- Representation lemma. Concrete inequality check distinguishing `Leakage.branch` true and false decisions at the same site (approved: PENDING).
 
 Planted changed-event controls for every constructor. -/
 example : (show Leakage Nat Nat Nat from .branch ⟨0⟩ true) ≠ .branch ⟨0⟩ false := by simp
 
-/-- Representation lemma. Concrete control calculation, not independent soundness evidence (approved: PENDING). -/
+/-- Representation lemma. Concrete inequality check distinguishing `Leakage.address` entries with different addresses (approved: PENDING). -/
 example : (show Leakage Nat Nat Nat from .address ⟨1⟩ 4096) ≠ .address ⟨1⟩ 8192 := by simp
 
-/-- Representation lemma. Concrete control calculation, not independent soundness evidence (approved: PENDING). -/
+/-- Representation lemma. Concrete inequality check distinguishing `Leakage.allocation` entries with different byte counts (approved: PENDING). -/
 example : (show Leakage Nat Nat Nat from .allocation ⟨2⟩ ⟨3⟩ 8) ≠ .allocation ⟨2⟩ ⟨3⟩ 9 := by simp
 
-/-- Representation lemma. Concrete control calculation, not independent soundness evidence (approved: PENDING). -/
+/-- Representation lemma. Concrete inequality check distinguishing `Leakage.loop` entries with different iteration counts (approved: PENDING). -/
 example : (show Leakage Nat Nat Nat from .loop ⟨4⟩ 3) ≠ .loop ⟨4⟩ 4 := by simp
 
-/-- Representation lemma. Concrete control calculation, not independent soundness evidence (approved: PENDING). -/
+/-- Representation lemma. Concrete inequality check distinguishing `Leakage.variableTime` entries with different operand values (approved: PENDING). -/
 example : (show Leakage Nat Nat Nat from .variableTime ⟨5⟩ [1]) ≠ .variableTime ⟨5⟩ [2] := by simp
 
-/-- Representation lemma. Concrete control calculation, not independent soundness evidence (approved: PENDING). -/
+/-- Representation lemma. Concrete inequality check distinguishing `Leakage.publicLength` entries with different container lengths (approved: PENDING). -/
 example : (show Leakage Nat Nat Nat from .publicLength ⟨6⟩ 2) ≠ .publicLength ⟨6⟩ 3 := by simp
 
-/-- Representation lemma. Concrete control calculation, not independent soundness evidence (approved: PENDING). -/
+/-- Representation lemma. Concrete inequality check distinguishing `Leakage.external` entries with different effect payloads (approved: PENDING). -/
 example : (show Leakage Nat Nat Nat from .external 7) ≠ .external 8 := by simp
 
 /-- A typed release site. The site identifies the operation in the facts; `ty` is the type of the
@@ -110,47 +110,46 @@ def ReleasePolicy.Authorized {Ty Val : Type} (policy : ReleasePolicy Ty)
     (rs : List (Release Ty Val)) : Prop :=
   ∀ r ∈ rs, policy.Permits r
 
-/-- Representation lemma. Concrete control calculation, not independent soundness evidence (approved: PENDING).
+/-- Representation lemma. Concrete acceptance check that a single release at the listed site satisfies `ReleasePolicy.Authorized` (approved: PENDING).
 
 Accepted: a release at the one listed site is authorized. Refused: another typed site is not. -/
 example : (ReleasePolicy.mk [⟨⟨0⟩, ()⟩]).Authorized
     [⟨⟨⟨0⟩, ()⟩, 7, "answer", []⟩] := by
   simp [ReleasePolicy.Authorized, ReleasePolicy.Permits]
 
-/-- Representation lemma. Concrete control calculation, not independent soundness evidence (approved: PENDING). -/
+/-- Representation lemma. Concrete refusal check that a release at an unlisted site fails `ReleasePolicy.Authorized` (approved: PENDING). -/
 example : ¬ (ReleasePolicy.mk [⟨⟨0⟩, ()⟩]).Authorized
     [⟨⟨⟨1⟩, ()⟩, 7, "not declared", []⟩] := by
   simp [ReleasePolicy.Authorized, ReleasePolicy.Permits]
 
-/-- Representation lemma. Concrete control calculation, not independent soundness evidence (approved: PENDING). -/
+/-- Representation lemma. Concrete unfolding check that an empty allowed-site list satisfies `ReleasePolicy.ForbidsRelease` (approved: PENDING). -/
 example : (ReleasePolicy.mk ([] : List (ReleaseSite Unit))).ForbidsRelease := rfl
 
-/-- Representation lemma. Concrete control calculation, not independent soundness evidence (approved: PENDING).
+/-- Representation lemma. Concrete refusal check that a nonempty release trace fails `ReleasePolicy.Authorized` under the empty policy (approved: PENDING).
 
-Every nonempty release trace is unauthorized under the empty policy. -/
-example (r : Release Unit Nat) (rs : List (Release Unit Nat)) :
-    ¬ (ReleasePolicy.mk []).Authorized (r :: rs) := by
-  intro h
-  have hr := h r (by simp)
-  simp [ReleasePolicy.Permits] at hr
+A concrete nonempty release trace is unauthorized under the empty policy; the general law
+`forbidsRelease_not_authorized` is proved in `ConcreteSpec/Proofs/Leak.lean`. -/
+example : ¬ (ReleasePolicy.mk ([] : List (ReleaseSite Unit))).Authorized
+    [⟨⟨⟨0⟩, ()⟩, 7, "answer", []⟩] := by
+  simp [ReleasePolicy.Authorized, ReleasePolicy.Permits]
 
 /-- Typed-site, value and ordering controls for release comparison and authorization. -/
 def typedRelease (ty : String) (value : Nat) : Release String Nat :=
   ⟨⟨⟨0⟩, ty⟩, value, "example", []⟩
 def typedReleasePolicy : ReleasePolicy String := ⟨[⟨⟨0⟩, "public"⟩]⟩
 
-/-- Representation lemma. Concrete control calculation, not independent soundness evidence (approved: PENDING). -/
+/-- Representation lemma. Concrete check that `typedReleasePolicy` permits a release at site 0 with matching type `"public"` (approved: PENDING). -/
 example : typedReleasePolicy.Permits (typedRelease "public" 7) := by
   simp [typedReleasePolicy, ReleasePolicy.Permits, typedRelease]
 
-/-- Representation lemma. Concrete control calculation, not independent soundness evidence (approved: PENDING). -/
+/-- Representation lemma. Concrete check that `typedReleasePolicy` rejects a release at site 0 with mismatched type `"secret"` (approved: PENDING). -/
 example : ¬ typedReleasePolicy.Permits (typedRelease "secret" 7) := by
   simp [typedReleasePolicy, ReleasePolicy.Permits, typedRelease]
 
-/-- Representation lemma. Concrete control calculation, not independent soundness evidence (approved: PENDING). -/
+/-- Representation lemma. Concrete inequality check showing `Release` records with distinct released values are not equal (approved: PENDING). -/
 example : typedRelease "public" 7 ≠ typedRelease "public" 8 := by decide
 
-/-- Representation lemma. Concrete control calculation, not independent soundness evidence (approved: PENDING). -/
+/-- Representation lemma. Concrete inequality check showing ordered release traces with swapped elements are not equal (approved: PENDING). -/
 example : [typedRelease "public" 7, typedRelease "public" 8] ≠
     [typedRelease "public" 8, typedRelease "public" 7] := by decide
 
@@ -212,6 +211,11 @@ structure Run {O : Operands} (I : Instrumentation O) (P : Program O) (initial : 
 def Run.publicObservations {O : Operands} {I : Instrumentation O} {P : Program O} {c : Config O}
     (r : Run I P c) : List I.Observation :=
   r.observations ++ (I.observeFinal r.final).toList
+
+/-- Every complete finite run from `c` emits only release records permitted by `policy`. -/
+def ReleasePolicy.RunsAuthorized {O : Operands} (policy : ReleasePolicy O.Ty)
+    (I : Instrumentation O) (P : Program O) (c : Config O) : Prop :=
+  ∀ r : Run I P c, policy.Authorized r.releases
 
 /-- Delimited-release noninterference between two entry configurations of one program. For
 low-equivalent initial states, matched external choices and equal ordered release traces, every
@@ -396,56 +400,14 @@ def LineageReport.Sound (lineage : LineageId) (entry exit : Account) (footprint 
     Bound.Sound ((exit.live : Int) - (entry.live : Int)) r.netChange ∧
     Bound.Sound exit.functionPeak r.peak ∧ Bound.SoundOptional footprint r.footprint
 
-/-- Whole-run WF obligation, including every possible successful result. -/
-def PreservesWF (execute : Memory → List Action → Option Memory) (m : Memory)
-    (actions : List Action) : Prop :=
-  (∀ l, (m l).WF) → ∀ m', execute m actions = some m' → ∀ l, (m' l).WF
-
-/-- Whole-run exact conservation, independently for each lineage. -/
-def Conserves (execute : Memory → List Action → Option Memory) (m : Memory)
-    (actions : List Action) (lineage : LineageId) : Prop :=
-  ∀ m', execute m actions = some m' →
-    (m' lineage).requested = (m lineage).requested + allocated lineage actions ∧
-    ((m' lineage).live : Int) = (m lineage).live + allocated lineage actions -
-      freed lineage actions - resetBytes lineage m actions
-
-/-- Whole-run retention of both recorded maxima. -/
-def RetainsPeaks (execute : Memory → List Action → Option Memory) (m : Memory)
-    (actions : List Action) (lineage : LineageId) : Prop :=
-  ∀ m', execute m actions = some m' →
-    (m lineage).peak ≤ (m' lineage).peak ∧
-    (m lineage).functionPeak ≤ (m' lineage).functionPeak
-
-/-- Whole-run agreement with the independently observed live-byte trajectory. -/
-def TracksPeak (execute : Memory → List Action → Option Memory) (m : Memory)
-    (actions : List Action) (lineage : LineageId) : Prop :=
-  (∀ l, (m l).WF) → ∀ m', execute m actions = some m' →
-    (m' lineage).functionPeak = max (m lineage).functionPeak (observedPeak lineage m actions)
-
-/-- Report contract from independent analysis and a named allocator footprint. The executor's exit
-is quantified inside the obligation, rather than fixed by a test's arguments. -/
-def CertifiesReport (execute : Memory → List Action → Option Memory) (m : Memory)
-    (actions : List Action) (allocator : AllocatorContract) (lineage : LineageId)
-    (requestedLimit : Nat) (netLimit : Int) (peakLimit footprintLimit : Nat) : Prop :=
-  (∀ l, (m l).WF) → (m lineage).functionPeak = (m lineage).live →
-  allocated lineage actions ≤ requestedLimit →
-  (allocated lineage actions : Int) - freed lineage actions -
-    resetBytes lineage m actions ≤ netLimit →
-  observedPeak lineage m actions ≤ peakLimit →
-  (∃ bytes, allocator.footprint lineage m actions = some bytes ∧ bytes ≤ footprintLimit) →
-  ∀ m', execute m actions = some m' →
-    LineageReport.Sound lineage (m lineage) (m' lineage) (allocator.footprint lineage m actions)
-      ⟨lineage, ⟨requestedLimit, .boundEstablished⟩, ⟨netLimit, .boundEstablished⟩,
-        ⟨peakLimit, .boundEstablished⟩, ⟨footprintLimit, .boundEstablished⟩⟩
-
-/-- Representation lemma. Concrete control calculation, not independent soundness evidence (approved: PENDING).
+/-- Representation lemma. Concrete execution check evaluating `run` on an allocate/free/reset sequence from `Memory.empty` (approved: PENDING).
 
 Accepted: a valid allocate/free/reset sequence. Refused: freeing a byte not owned by the
 lineage has no accounting transition. -/
 example : (run Memory.empty
     [.alloc ⟨0⟩ 8, .free ⟨0⟩ 3, .reset ⟨0⟩]).map (· ⟨0⟩) = some ⟨8, 0, 8, 8⟩ := by decide
 
-/-- Representation lemma. Concrete control calculation, not independent soundness evidence (approved: PENDING). -/
+/-- Representation lemma. Concrete refusal check showing `apply` returns `none` when freeing more bytes than are live (approved: PENDING). -/
 example : apply Memory.empty (.free ⟨0⟩ 1) = none := by decide
 
 /-! ## Wipes as preserved effects -/
