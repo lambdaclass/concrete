@@ -1013,12 +1013,13 @@ theorem borrow_birth (s t : State) (p : Hybrid.Place) (path : List Projection)
 theorem reborrow_birth (s t : State) (i : LoanId) (suffix : List Projection)
     (m : Mode) (activation : Nat) (h : reborrowTo s i suffix m activation = some t) :
     t.nextLoan = s.nextLoan + 1 ∧ ∃ a l, loan s i = some a ∧ l ∈ t.loans ∧
-      l.id = ⟨s.nextLoan⟩ ∧ l.root = a.root ∧ l.path = a.path ++ suffix ∧ l.parent = some i := by
+      l.id = ⟨s.nextLoan⟩ ∧ l.root = a.root ∧ l.path = a.path ++ suffix ∧ l.parent = some i ∧ a ∈ t.loans := by
   unfold reborrowTo at h
   obtain ⟨a, ha, hh⟩ := Option.bind_eq_some_iff.mp h
   split at hh
   · cases hh
-    exact ⟨rfl, a, _, ha, List.mem_cons_self, rfl, rfl, rfl, rfl⟩
+    exact ⟨rfl, a, _, ha, List.mem_cons_self, rfl, rfl, rfl, rfl,
+      List.mem_cons_of_mem _ (List.mem_of_find?_eq_some ha)⟩
   · contradiction
 
 private theorem endLoan_frames (s t : State) (i : LoanId) (h : endLoan s i = some t) :
@@ -1404,7 +1405,89 @@ example : reborrowTo LifecycleWitnesses.called ⟨1⟩ [] .shared 0 = none := by
 /-- Planted (law `ConcreteSpec.Core.Own.reborrowTo_current`). The former arbitrary-destination rule admits upward lending, whose destination is not current. -/
 example : ¬ (∃ f ∈ LifecycleWitnesses.called.frames, f.id = 0 ∧
     LifecycleWitnesses.called.frames.head? = some f) := by decide
+/-- Planted (law `ConcreteSpec.Core.Own.borrow_birth`). A rule that issues the wrong birth counter fails the supply conclusion. -/
+example : ¬ (({ shared with nextLoan := 7 } : State).nextLoan = initial.nextLoan + 1) := by decide
+/-- Planted (law `ConcreteSpec.Core.Own.reborrow_birth`). Failing to append the requested suffix falsifies the path conclusion. -/
+example : ¬ (∃ l ∈ child.loans, l.id = LoanId.mk exclusive.nextLoan ∧
+    l.path = [.index 0, .index 99]) := by decide
+/-- Instance (law `ConcreteSpec.Core.Own.reborrow_birth`). Reborrowing retains the original parent record. -/
+example : ∃ a, loan exclusive ⟨0⟩ = some a ∧ a ∈ child.loans := by
+  simp [Examples.exclusive, Examples.child, Examples.initial, reborrow, reborrowTo,
+    borrow, ownerAccess, loanAccess, slot, loan]
+/-- Planted (law `ConcreteSpec.Core.Own.reborrow_birth`). Removing the parent now falsifies the strengthened retention conclusion. -/
+example : ¬ (∃ a, loan exclusive ⟨0⟩ = some a ∧
+    a ∈ child.loans.filter (·.id != LoanId.mk 0)) := by
+  simp [Examples.exclusive, Examples.child, Examples.initial, reborrow, reborrowTo,
+    borrow, ownerAccess, loanAccess, slot, loan]
 end RoundThreeWitnesses
+
+/-- A direct owner call with no intervening operation restores the caller's complete slot
+and loan tables. Only the fresh identity supplies advance. Thus every owner permission and
+every pre-existing caller loan is exactly as before the call. -/
+theorem directOwner_roundtrip (s : State) (p : Hybrid.Place) (path : List Projection)
+    (m : Mode) (x : Var) (types : Var → Option Descriptor) (f : Activation)
+    (hs : WellFormed s) (hf : s.frames.head? = some f)
+    (issued : f.id < s.nextActivation) (allowed : ownerAccess s p m = true) :
+    (do
+      let waiting ← passOwner ⟨s, []⟩ p path m x
+      let called ← callLife types (.enter [x]) waiting
+      callLife types .leave called) =
+    some ⟨{ s with nextLoan := s.nextLoan + 1, nextActivation := s.nextActivation + 1 }, []⟩ := by
+  have fresh : ∀ l ∈ s.loans, l.id ≠ LoanId.mk s.nextLoan := by
+    intro l hl he
+    have hb := (hs.2.2.2.1 l hl).1
+    rw [he] at hb
+    exact Nat.lt_irrefl _ hb
+  have oldAct : ∀ l ∈ s.loans, l.activation ≠ s.nextActivation := by
+    intro l hl he
+    have hb := (hs.2.2.2.1 l hl).2.1
+    omega
+  have oldSlots : ∀ a ∈ s.slots, a.activation ≠ s.nextActivation := by
+    intro a ha he
+    have hb := (hs.2.2.1 a ha).2
+    omega
+  have noChild : ∀ l ∈ s.loans, l.parent ≠ some (LoanId.mk s.nextLoan) := by
+    intro l hl he
+    have hp := (hs.2.2.2.1 l hl).2.2.2.1
+    unfold ParentValid at hp
+    rw [he] at hp
+    obtain ⟨a, ha, hid, _⟩ := hp
+    exact fresh a ha hid
+  have noChildBool : s.loans.any (·.parent == some (LoanId.mk s.nextLoan)) = false := by
+    apply Bool.eq_false_iff.mpr
+    intro h
+    obtain ⟨l, hl, he⟩ := List.any_eq_true.mp h
+    exact noChild l hl (by simpa using he)
+  have filterId : s.loans.filter (·.id != LoanId.mk s.nextLoan) = s.loans := by
+    apply List.filter_eq_self.mpr
+    intro l hl
+    simpa using fresh l hl
+  have filterAct : s.loans.filter (·.activation == s.nextActivation) = [] := by
+    apply List.filter_eq_nil_iff.mpr
+    intro l hl
+    simpa using oldAct l hl
+  have slotsBool : s.slots.any (·.activation == s.nextActivation) = false := by
+    apply Bool.eq_false_iff.mpr
+    intro h
+    obtain ⟨a, ha, he⟩ := List.any_eq_true.mp h
+    exact oldSlots a ha (by simpa using he)
+  have mapOld : (s.loans.map fun l => if l.id = LoanId.mk s.nextLoan then
+      { l with activation := s.nextActivation, pendingArgument := false } else l) = s.loans := by
+    calc
+      _ = s.loans.map id := by
+        apply List.map_congr_left
+        intro l hl
+        simp [fresh l hl]
+      _ = s.loans := List.map_id _
+  have noChildExists : ¬ ∃ l ∈ s.loans, l.parent = some (LoanId.mk s.nextLoan) := by
+    rintro ⟨l, hl, he⟩
+    exact noChild l hl he
+  have noSlotExists : ¬ ∃ a ∈ s.slots, a.activation = s.nextActivation := by
+    rintro ⟨a, ha, he⟩
+    exact oldSlots a ha he
+  simp [passOwner, hf, issued, allowed, callLife, enter, adoptDown, life, leave,
+    endLocals, endLoan, drop, loan, AList.lookup, mapOld, filterAct, noChildExists,
+    filterId, noSlotExists]
 
 namespace DirectArgumentWitnesses
 open ConcreteSpec.Core.Own.Examples
@@ -1470,6 +1553,14 @@ example : (match (Exec.run callProgram (fun _ p => nomatch p) 100
       (.cond (.value (.read x)) .skip .skip ⟨0⟩)), [(x, 7)], ⟨initial, []⟩, []⟩).ending with
     | .final .normal => true
     | _ => false) = true := by decide
+/-- Instance (law `ConcreteSpec.Core.Own.directOwner_roundtrip`). A call restores two caller owners and a pre-existing caller loan. -/
+example : (do
+    let waiting ← passOwner caller ⟨1⟩ [.index 3] .mutable z
+    let called ← callLife types (.enter [z]) waiting
+    callLife types .leave called) = some returned ∧
+    returned = ⟨{ caller.own with nextLoan := caller.own.nextLoan + 1, nextActivation := caller.own.nextActivation + 1 }, []⟩ := by decide
+/-- Planted (law `ConcreteSpec.Core.Own.directOwner_roundtrip`). Keeping the call loan forever fails exact restoration of the caller tables. -/
+example : ¬ (called.own.loans = caller.own.loans) := by decide
 end DirectArgumentWitnesses
 
 end ConcreteSpec.Core.Own
