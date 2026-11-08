@@ -157,6 +157,11 @@ done
 case "$("$REAL" "${pre[@]}" config --get push.recurseSubmodules 2>/dev/null)" in
   ''|no|false|check) ;; *) refuse "a push while push.recurseSubmodules is set: the submodules' remotes are not judged" ;;
 esac
+# With push.recurseSubmodules unset, submodule.recurse=true means on-demand recursion.
+case "$("$REAL" "${pre[@]}" config --type=bool --get submodule.recurse 2>/dev/null)" in
+  true) [ -n "$("$REAL" "${pre[@]}" config --get push.recurseSubmodules 2>/dev/null)" ] \
+          || refuse "a push while submodule.recurse is true: the submodules' remotes are not judged" ;;
+esac
 [ "$have_repo" = 1 ] || repo="$optrepo"
 moves_main=$flagall
 [ "${#specs[@]}" = 0 ] && moves_main=1
@@ -165,7 +170,28 @@ for s in "${specs[@]}"; do
   case "$t" in *'*'*|:) moves_main=1 ;; esac
   case "$d" in main|*/main|HEAD|@) moves_main=1 ;; esac
 done
-[ "$moves_main" = 1 ] || exec "$REAL" "$@"
+if [ "$moves_main" = 0 ]; then
+  # A push that names no main can still move it through a symbolic ref on the destination
+  # (refs/heads/alias -> refs/heads/main). On a protected local repository, a destination that is a
+  # symbolic ref is refused. (The real remotes are GitHub repositories, which have no branch symrefs.)
+  [ -n "$repo" ] || exec "$REAL" "$@"
+  urls="$("$REAL" "${pre[@]}" remote get-url --push --all "$repo" 2>/dev/null)" || urls="$repo"
+  while IFS= read -r u; do
+    abs="$(local_url_path "$u" dest 2>/dev/null)" || continue
+    id="$(repo_identity "$REAL" "$abs")"; [ -n "$id" ] || continue
+    for p in "${PROTECTED_ID[@]}"; do
+      [ "$id" = "$p" ] || continue
+      for s in "${specs[@]}"; do
+        t="${s#+}"; d="${t##*:}"; [ -n "$d" ] || d="${t%%:*}"
+        case "$d" in refs/*) ;; *) d="refs/heads/$d" ;; esac
+        if env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR "$REAL" --git-dir="$id" symbolic-ref -q "$d" >/dev/null 2>&1; then
+          refuse "a push to $d, a symbolic ref on the protected repository $id"
+        fi
+      done
+    done
+  done <<< "$urls"
+  exec "$REAL" "$@"
+fi
 [ -n "$repo" ] || refuse "a push to the default remote that could move main"
 [ -z "$("$REAL" "${pre[@]}" config --get-regexp '^url\..*\.(push)?insteadof$' 2>/dev/null)" ] \
   || refuse "a push that could move main while a url insteadOf rewrite is in effect"

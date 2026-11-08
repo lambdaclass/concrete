@@ -11,10 +11,12 @@ protected local URL that names no repository stops the shim from being made. A p
 move main passes only to an existing local repository that is neither real remote. Git's global
 options and push's options are parsed from fixed lists, spelled in full; an unknown, abbreviated
 or bundled option is refused. A missing repository, a relative, remote or non-repository URL, an
-insteadOf rewrite, submodule recursion and a shell or quoted alias fail closed, and plain aliases
-(from config, `-c`, `--config-env` or the environment) are expanded and judged. "Could move main"
+insteadOf rewrite, submodule recursion (by option, `push.recurseSubmodules` or `submodule.recurse`)
+and a shell or quoted alias fail closed, a push to a symbolic ref on a protected local repository
+is refused, and plain aliases (from config, `-c`, `--config-env` or the environment) are expanded
+and judged. "Could move main"
 now also covers `--branches`, `--prune`, `@`, `:`, globs, `*/main` and a push with no refspec.
-`landing_script.sh` drives the shim with 45 refused invocations, three more protected URL
+`landing_script.sh` drives the shim with 48 refused invocations, three more protected URL
 spellings, two refused shim creations and 18 allowed fixture pushes and commands. A script that
 runs the real git by absolute path is outside the shim; acceptance's pre-push guard and its
 before/after read of main still stop it.

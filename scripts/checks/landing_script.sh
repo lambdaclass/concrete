@@ -1093,6 +1093,10 @@ MB="$HM"
   CFG=push "$G" --config-env alias.e=CFG -C w e origin main 2>"$S/err" && bad="$bad [an alias from --config-env passed]"
   CFG=push "$G" --config-env=alias.e=CFG -C w e origin main 2>"$S/err" && bad="$bad [an alias from --config-env= passed]"
   "$G" --no-such-option -C w push origin main 2>"$S/err" && bad="$bad [an unknown global option passed]"
+  "$G" -C w -c submodule.recurse=true push fix wip/x 2>"$S/err" && bad="$bad [a push with submodule.recurse passed]"
+  git -C prot.git symbolic-ref refs/heads/alias refs/heads/main
+  "$G" -C w push "$S/prot.git" wip/x:refs/heads/alias 2>"$S/err" && bad="$bad [a push to a symbolic ref for main passed]"
+  "$G" -C w push origin wip/x:alias 2>"$S/err" && bad="$bad [a push to a short symbolic ref for main passed]"
   # Protected local URLs in the other spellings git accepts: file://localhost/ and ~/.
   # And an absolute path holding "://", reached through a symlink.
   git init -q --bare p2.git; git init -q --bare p3.git; git init -q --bare "$S/store://p4.git"; ln -s "store:/p4.git" p4.git
