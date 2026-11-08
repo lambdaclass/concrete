@@ -801,10 +801,8 @@ theorem Memory.set_same (m : Memory) (lineage : LineageId) :
   funext l
   by_cases h : l = lineage <;> simp [Memory.set, h]
 
-/-- Law (subject `Account.enter`).
-
-Marking function entry preserves account well-formedness while resetting the local peak to the
-bytes currently live on entry. -/
+/-- Helper (arithmetic). Initializes the local peak at live bytes and retains the historical
+peak bound; used to initialize `function_entry_peak` (approved: PENDING). -/
 theorem Account.enter_wf (a : Account) (h : a.WF) : a.enter.WF := by
   cases a
   simp_all [Account.enter, Account.WF]
@@ -1085,6 +1083,31 @@ theorem run_peak_exact (m : Memory) (actions : List Action) (lineage : LineageId
           · exact Nat.le_max_left _ _
       rw [Nat.max_eq_right hrest, ← Nat.max_assoc, Nat.max_eq_left (hwf lineage).2]
 
+/-- Law (subject `Account.enter`).
+
+Initializing function accounting and then executing a successful action sequence records exactly
+its independently observed live-byte maximum, with no contribution from a caller's local peak. -/
+theorem function_entry_peak (m : Memory) (actions : List Action) (lineage : LineageId)
+    (hwf : ∀ l, (m l).WF)
+    (hrun : (run (fun l => (m l).enter) actions).isSome = true) :
+    ∃ m', run (fun l => (m l).enter) actions = some m' ∧
+      (m' lineage).functionPeak = observedPeak lineage (fun l => (m l).enter) actions := by
+  obtain ⟨m', h, hp⟩ := run_peak_exact (fun l => (m l).enter) actions lineage
+    (fun l => Account.enter_wf (m l) (hwf l)) hrun
+  refine ⟨m', h, ?_⟩
+  have hentry : (m lineage).live ≤ observedPeak lineage (fun l => (m l).enter) actions := by
+    cases actions with
+    | nil => exact Nat.le_refl _
+    | cons a xs =>
+      simp only [observedPeak]
+      split
+      · exact Nat.le_refl _
+      · exact Nat.le_max_left _ _
+  change (m' lineage).functionPeak =
+    max (m lineage).live (observedPeak lineage (fun l => (m l).enter) actions) at hp
+  rw [Nat.max_eq_right hentry] at hp
+  exact hp
+
 /-- Law (subject `run`).
 
 Independent analysis bounds certify any `LineageReport` (whether all bounds are established, some
@@ -1306,15 +1329,22 @@ example : ¬ (corruptSetter memoryA ⟨0⟩ (memoryA ⟨0⟩) = memoryA) := by
 def enterLowersPeak (a : Account) : Account :=
   { a.enter with functionPeak := 0 }
 
-/-- Instance (law `Account.enter_wf`, case `accountA`). -/
-example : accountA.enter.WF :=
-  Account.enter_wf accountA (by simp [Account.WF, accountA])
+/-- Instance (law `function_entry_peak`, case `freeAfterEntry`). -/
+example : ∃ m', run (fun l => (memoryA l).enter) [.free ⟨0⟩ 3] = some m' ∧
+    (m' ⟨0⟩).functionPeak = observedPeak ⟨0⟩ (fun l => (memoryA l).enter) [.free ⟨0⟩ 3] :=
+  function_entry_peak memoryA [.free ⟨0⟩ 3] ⟨0⟩ memoryA_wf rfl
 
-/-- Planted (law `Account.enter_wf`, case `accountA`, subject `Account.enter`, mutant `enterLowersPeak`). -/
-example : accountA.WF ∧ ¬ (enterLowersPeak accountA).WF := by
-  constructor
-  · simp [Account.WF, accountA]
-  · simp [enterLowersPeak, Account.enter, Account.WF, accountA]
+/-- Planted (law `function_entry_peak`, case `freeAfterEntry`, subject `Account.enter`, mutant `enterLowersPeak`). -/
+example : (∀ l, (memoryA l).WF) ∧
+    (run (fun l => enterLowersPeak (memoryA l)) [.free ⟨0⟩ 3]).isSome = true ∧
+    ¬ (∃ m', run (fun l => enterLowersPeak (memoryA l)) [.free ⟨0⟩ 3] = some m' ∧
+      (m' ⟨0⟩).functionPeak =
+        observedPeak ⟨0⟩ (fun l => enterLowersPeak (memoryA l)) [.free ⟨0⟩ 3]) := by
+  refine ⟨memoryA_wf, rfl, ?_⟩
+  rintro ⟨m', hm', hp⟩
+  cases hm'
+  change (0 : Nat) = 5 at hp
+  omega
 
 /-- A mutant transition corrupts an unrelated lineage on any action. -/
 def applyCorruptsOther (m : Memory) (_ : Action) : Option Memory :=
