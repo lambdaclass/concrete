@@ -108,6 +108,9 @@ trap 'rm -rf "$TMP"' EXIT
   git add -A; git -c user.name=t -c user.email=t@t commit -qm frozen
 ) || { echo "FATAL: control repository"; exit 2; }
 cd "$TMP/c"
+# The sweep controls make commits: give the control repository its own identity, so they do not
+# depend on the host's git config (a CI runner has none).
+git config user.name t; git config user.email t@t
 F="$(git rev-parse HEAD^{tree})"
 tree_with() { # shell snippet applied to a copy of the frozen tree; prints the new tree
   git read-tree "$F"; git checkout-index -a -f; git clean -fdq; eval "$1"; git add -A >/dev/null; git write-tree; }
@@ -132,6 +135,7 @@ T="$(tree_with 'rm -f a/x')"
 # moves p/moved into legacy/ byte for byte. R0 is a root tree without p/moved, RS one that still has it.
 S="$(git commit-tree "$(tree_with 'mkdir -p p; echo m > p/moved; echo changed > a/x')" -m sweep-source)"
 R0="$(tree_with 'rm -rf a b top; echo r > rootfile')"
+[ -n "$S" ] && [ -n "$R0" ] || { echo "FATAL: sweep control commit"; exit 2; }
 RS="$(git rev-parse "$S^{tree}")"
 T="$(tree_with 'mkdir -p p; echo m > p/moved')"
 [ -z "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$R0" "$S")" ] && ok "control: a byte-for-byte move from a sweep commit, gone from the root, passes" || no "control: a valid sweep was refused: $(judge "$F" "$T" "$TMP/r_ok.tsv" "$R0" "$S")"
@@ -154,6 +158,7 @@ printf 'path\tstatus\np\topen\n' > "$TMP/r_popen.tsv"; printf 'path\tstatus\np\t
 # Lock-chain controls: H is a commit with S in its history; X is a commit outside it.
 H="$(git commit-tree "$R0" -p "$S" -m head)"
 X="$(git commit-tree "$R0" -m unrelated)"
+[ -n "$H" ] && [ -n "$X" ] || { echo "FATAL: chain control commits"; exit 2; }
 printf 'sweep %s %s\n' "$S" "$SW1" > "$TMP/l_ok"
 [ -z "$(chain "$TMP/l_ok" "$F" "$SW1" "$TMP/r_ok.tsv" "$H")" ] && ok "control: a lock chaining the frozen tree through a sweep to HEAD:legacy passes" || no "control: valid chain refused: $(chain "$TMP/l_ok" "$F" "$SW1" "$TMP/r_ok.tsv" "$H")"
 printf 'sweep %s %s\n' "$X" "$SW1" > "$TMP/l_x"
@@ -163,6 +168,7 @@ printf 'sweep %s\n' "$S" > "$TMP/l_short"
 [ -n "$(chain "$TMP/l_ok" "$F" "$F" "$TMP/r_popen.tsv" "$H")" ] && ok "control: deleting a swept file after its sweep, under an open row, is refused" || no "control: post-sweep deletion accepted"
 S2="$(git commit-tree "$(tree_with 'mkdir -p p; echo m2 > p/moved')" -p "$S" -m sweep-2)"
 H2="$(git commit-tree "$R0" -p "$S2" -m head2)"
+[ -n "$S2" ] && [ -n "$H2" ] || { echo "FATAL: second sweep control commits"; exit 2; }
 SW2="$(tree_with 'mkdir -p p; echo m2 > p/moved')"
 printf 'sweep %s %s\nsweep %s %s\n' "$S" "$SW1" "$S2" "$SW2" > "$TMP/l_two"
 [ -n "$(chain "$TMP/l_two" "$F" "$SW2" "$TMP/r_ok.tsv" "$H2")" ] && ok "control: a later sweep cannot rewrite a file an earlier sweep moved" || no "control: second sweep rewrote a swept file"
