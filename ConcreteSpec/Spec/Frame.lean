@@ -358,9 +358,8 @@ check, not just a naming convention. -/
 def KeptPair.WellFormed {F H : Type} (pair : KeptPair F H)
     (submitParam : ExternParam H) (submitResult completeParam completeResult : ExternType H) : Prop :=
   pair.submit ≠ pair.complete ∧ submitParam = ⟨.owned pair.handle, .kept⟩ ∧
-    submitResult = .receipt pair.handle ∧ ExternResult.Valid pair pair.submit submitResult ∧
-    completeParam = .receipt pair.handle ∧ completeResult = .owned pair.handle ∧
-    ExternResult.Valid pair pair.complete completeResult
+    submitResult = .receipt pair.handle ∧ completeParam = .receipt pair.handle ∧
+    completeResult = .owned pair.handle
 
 /-- The ownership state of one handle: the Concrete owner has it, or foreign code retains it and
 Concrete has only the linear `Kept<H>` receipt. There is no discard transition for a receipt. -/
@@ -452,7 +451,7 @@ example : ¬ ExternResult.Valid (⟨0, 1, 7⟩ : KeptPair Nat Nat) 2 (.receipt 7
 /-- Accepted: the paired declarations have exactly the owned/receipt types of the same handle. -/
 example : (⟨0, 1, 7⟩ : KeptPair Nat Nat).WellFormed
     ⟨.owned 7, .kept⟩ (.receipt 7) (.receipt 7) (.owned 7) := by
-  exact ⟨by decide, rfl, rfl, ⟨rfl, rfl⟩, rfl, rfl, ⟨rfl, rfl⟩⟩
+  exact ⟨by decide, rfl, rfl, rfl, rfl⟩
 
 /-- Refused: ordinary FFI results cannot stand in for the submission receipt or completion's owned
 handle, even though each is individually a valid extern result. -/
@@ -463,14 +462,14 @@ example : ¬ (⟨0, 1, 7⟩ : KeptPair Nat Nat).WellFormed
   constructor <;> intro h
   · have hr := h.2.2.1
     cases hr
-  · have hr := h.2.2.2.2.2.1
+  · have hr := h.2.2.2.2
     cases hr
 
 /-- Refused: a completion for a different handle's receipt does not satisfy the pairing law. -/
 example : ¬ (⟨0, 1, 7⟩ : KeptPair Nat Nat).WellFormed
     ⟨.owned 7, .kept⟩ (.receipt 7) (.receipt 8) (.owned 7) := by
   intro h
-  have hc := h.2.2.2.2.1
+  have hc := h.2.2.2.1
   cases hc
 
 /-- Refused: submission and completion cannot be the same extern identity. -/

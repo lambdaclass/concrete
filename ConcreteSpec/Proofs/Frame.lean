@@ -596,6 +596,35 @@ theorem extern_result_rejects_unrelated_retention {F H : Type} (pair : KeptPair 
   · intro ho
     exact hfc ho.1
 
+/-- A well-formed kept pair validly returns its submission receipt and completion-owned handle.
+The exact result constraints already imply both `ExternResult.Valid` facts. -/
+theorem keptPair_results_valid {F H : Type} (pair : KeptPair F H)
+    (submitParam : ExternParam H) (submitResult completeParam completeResult : ExternType H)
+    (h : pair.WellFormed submitParam submitResult completeParam completeResult) :
+    ExternResult.Valid pair pair.submit submitResult ∧
+      ExternResult.Valid pair pair.complete completeResult := by
+  obtain ⟨hne, hsp, hsr, hcp, hcr⟩ := h
+  subst submitResult
+  subst completeResult
+  exact ⟨⟨rfl, rfl⟩, ⟨rfl, rfl⟩⟩
+
+/-- Accepted: the correctly paired declarations are a non-trivial instance of endpoint validity. -/
+example : ExternResult.Valid (⟨0, 1, 7⟩ : KeptPair Nat Nat) 0 (.receipt 7) ∧
+    ExternResult.Valid ⟨0, 1, 7⟩ 1 (.owned 7) := by
+  exact keptPair_results_valid ⟨0, 1, 7⟩ ⟨.owned 7, .kept⟩
+    (.receipt 7) (.receipt 7) (.owned 7) ⟨by decide, rfl, rfl, rfl, rfl⟩
+
+/-- Refused: changing the submission receipt's handle makes both the exact pairing premise and the
+endpoint's independent validity check fail. -/
+example : ¬ (⟨0, 1, 7⟩ : KeptPair Nat Nat).WellFormed
+    ⟨.owned 7, .kept⟩ (.receipt 8) (.receipt 7) (.owned 7) ∧
+    ¬ ExternResult.Valid (⟨0, 1, 7⟩ : KeptPair Nat Nat) 0 (.receipt 8) := by
+  constructor <;> intro h
+  · have hr := h.2.2.1
+    cases hr
+  · have hh := h.2
+    cases hh
+
 /-- A kept receipt has exactly one retention transition: the paired completion returns the same
 handle to Concrete ownership. -/
 theorem kept_only_paired_completion {F H : Type} (pair : KeptPair F H) (h : H)
