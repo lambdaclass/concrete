@@ -13,6 +13,7 @@ import ConcreteSpec.Spec.Borrow
 import ConcreteSpec.Spec.Brand
 import ConcreteSpec.Spec.Authority
 import ConcreteSpec.Spec.Observation
+import ConcreteSpec.Spec.Rules
 
 /-!
 # The Concrete specification
