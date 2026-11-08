@@ -12,7 +12,7 @@ imports instead of sed-generated variants. Orphan cleanup checks both libraries'
 and removes orphan library/IR artifacts before building both targets. Controls exercise the compiler
 CLI's import and trust bans, literal spoofing, and orphan deletion/preservation in private scratch.
 The README now distinguishes this coverage from the remaining compiler totality and external replay
-work (R-0553). ISS-0017 records the structural cause and owner.
+work (R-0553). ISS-0032 records the structural cause and owner.
 
 No Concrete or ConcreteSpec declaration name or signature changes in this round. The APIs used by
 wip/slice0-lexer-ws and wip/lexer-literals remain stable. Existing lean_lex.py public entry points
