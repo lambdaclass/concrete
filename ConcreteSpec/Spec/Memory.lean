@@ -31,15 +31,15 @@ compares addresses only and grants nothing (Q3.10).
 
 **Access validity** (Q3.7). A nonzero access needs provenance, a live block, bounds, alignment;
 a read also needs initialized bytes (checked when the bytes are decoded), and a write needs write
-permission, which is authority (C5) and is a premise here, not a check. All accesses require a target-valid pointer. A zero-byte access additionally needs
-only alignment and a non-null address. A violated premise is a failed proof obligation of the
+permission, which is authority (C5) and is a premise here, not a check. All accesses require a
+target-valid pointer. A zero-byte access additionally needs only alignment and a non-null address. A violated premise is a failed proof obligation of the
 `Unsafe` code that made the access: here, the operation has no result (unsafe stuckness), never a
 fabricated value.
 
 **Allocation** (Q1.8–Q1.11, Q3.10). `alloc` takes the address the allocator chose (an environment
 choice, C8) and either creates a fresh block there, uninitialized, or fails with an ordinary
 failure that leaves memory unchanged; an address that would overlap a live block, misalign, or not
-fit is a failure, not a trap. The allocator's own availability laws are its contract (slices
+fit in a target space is a failure, not a trap. The allocator's own availability laws are its contract (slices
 19–23), not this module's.
 
 **Scalar representation** (OD126, TYPE-19). An integer of type `t` occupies `bits / 8` bytes in the
@@ -115,7 +115,8 @@ def Block.Overlaps (x y : Block) : Prop :=
 instance (x y : Block) : Decidable (x.Overlaps y) := by unfold Block.Overlaps; infer_instance
 
 /-- What every memory satisfies: identities below `next` (so `next` is fresh), each block's
-bytes as many as its size, its one-past address an address of the target, its base aligned, and no
+bytes as many as its size, its space among the target spaces, its one-past address an address
+of the target, its base aligned, and no
 two live blocks overlapping. -/
 structure Memory.WellFormed (tgt : Target) (m : Memory) : Prop where
   /-- Every stored entry agrees with lookup; shadowed contradictory blocks are forbidden. -/
@@ -172,7 +173,7 @@ def Memory.free (m : Memory) (b : MemBlockId) : Option Memory :=
 
 /-! ## Access validity, reads and writes -/
 
-/-- A pointer `p` may access `n` bytes aligned to `a`: for `n = 0`, an aligned non-null address
+/-- A target-valid pointer `p` may access `n` bytes aligned to `a`: for `n = 0`, an aligned non-null address
 (Q3.7's exception); otherwise a live block of `p`'s provenance, in `p`'s space, holding all `n`
 bytes, with `p` aligned. The block and the offset of the first byte, or `none`. -/
 def Memory.access (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat) : Option (Option (MemBlockId × Nat)) :=
@@ -337,7 +338,7 @@ example : (do
       m.load tgt ⟨⟨0⟩, 4096, none⟩ 4 4)) = some (some 7, none, none) := by decide
 
 /-- After release, the old pointer reaches nothing, and the next block has a new identity even at
-the same address. A zero-byte access needs only an aligned non-null address. -/
+the same address. A zero-byte access needs a target-valid, aligned non-null address. -/
 example : (do
     let (b, m) ← (Memory.empty.alloc tgt ⟨0⟩ 4096 4 4).toOption
     let m ← m.free b

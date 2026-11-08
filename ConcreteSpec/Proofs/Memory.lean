@@ -8,7 +8,10 @@ import ConcreteSpec.Proofs.Basics
 Representation round trips, range and bool validity; allocation freshness and initialization;
 retained identities on release; access failure without provenance or after release; store/load
 and frame laws; exposed reconstruction soundness and uniqueness; address equality ignores
-provenance. Target-dependent pointer round trips require a well-formed target.
+provenance. Empty memory is well-formed; geometry-preserving updates, store, free and exposure
+preserve well-formedness. Exposure preserves byte reads. Reconstruction is complete at both
+priorities, with no containing or one-past ties. Pointer round trips require a well-formed
+target and a target-valid pointer.
 -/
 namespace ConcreteSpec.Core.Mem
 open ConcreteSpec
@@ -475,6 +478,28 @@ theorem access_some (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat) (b : MemBl
         next hv => cases h; exact ⟨x, rfl, hx, hn, hv.1, hv.2.1, hv.2.2.1,
           hv.2.2.2.1, hv.2.2.2.2.1, rfl, hv.2.2.2.2.2⟩
         next => cases h
+
+/-- Every successful access, including a zero-byte one, uses a target-valid pointer. -/
+theorem access_valid (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat)
+    (r : Option (MemBlockId × Nat)) (h : m.access tgt p n a = some r) : p.Valid tgt := by
+  unfold Memory.access at h
+  split at h
+  · split at h
+    next hv => exact hv.2.2
+    next => cases h
+  · split at h
+    next => cases h
+    next =>
+      split at h
+      next => cases h
+      next =>
+        split at h
+        next hv => exact hv.2.2.2.2.2
+        next => cases h
+
+/-- An invalid pointer has no byte encoding. -/
+theorem encodePtr_invalid (tgt : Target) (p : Ptr) (h : ¬ p.Valid tgt) :
+    encodePtr tgt p = [] := by simp [encodePtr, h]
 
 /-- Replacing a range reads back exactly that range. -/
 theorem splice_read (xs bs : List MByte) (off : Nat) (h : off ≤ xs.length) :

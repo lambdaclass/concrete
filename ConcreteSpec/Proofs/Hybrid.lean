@@ -6,7 +6,10 @@ import ConcreteSpec.Proofs.Memory
 
 Scalar representation round trip and decode validity; structured reads; materialization reuses
 its stable projection; typed writes read back the value and frame inactive bytes. No theorem
-assumes a materialized typed cache, and no write selects padding again.
+assumes a materialized typed cache, and no write selects padding again. The memory and
+projection invariants survive every state operation. First materialization preserves the
+read value. Typed writes frame disjoint byte intervals; materialization and exposure frame
+every other place without an extra separation premise.
 -/
 namespace ConcreteSpec.Core.Hybrid
 open ConcreteSpec.Core.Mem
