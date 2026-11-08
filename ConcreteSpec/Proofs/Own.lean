@@ -3429,6 +3429,96 @@ example :
 example : ¬ (Ending.IsStuck instrumentedMoveRun.ending = Ending.IsStuck erasedMoveRun.ending) := by
   decide
 
+/-- Candidate unconditional converse, deliberately without checker acceptance. The moved-owner
+execution below refutes this stronger statement; it is not a control for a conditional law. -/
+def UnconditionalRunConverse : Prop :=
+  ∀ (fuel : Nat) (c : Exec.Config instrumentedOps),
+    Exec.run (eraseProgram emptyProg) erasedOracle fuel (eraseConfig c) =
+      eraseReport (Exec.run emptyProg (liftOracle erasedOps types permitE erasedOracle) fuel c)
+
+/-- Helper (computation). The owner-required moved-owner execution refutes the explicitly
+unconditional candidate. This makes no claim against the checker-accepted converse.
+(approved: PENDING). -/
+theorem unconditionalRunConverse_refuted : ¬ UnconditionalRunConverse := by
+  intro h
+  have he := congrArg (fun r => Ending.IsStuck r.ending) (h 100 moveConfig)
+  revert he
+  decide
+
+/-- A same-typed faulty erasure that discards control and continuations. It changes an
+implementation of erasure, keeping the concrete operand semantics and expected result fixed. -/
+def eraseConfigDone {O : Exec.Operands} {types : Var → Option Descriptor}
+    {permit : AList Var O.Val → O.Expr → State → Option State}
+    (c : Exec.Config (instrumentOperands O types permit)) : Exec.Config O :=
+  { eraseConfig c with ctrl := .done, frames := [] }
+
+/-- A same-typed faulty erasure that invents a runnable skip at a stuck configuration. -/
+def eraseConfigSkip {O : Exec.Operands} {types : Var → Option Descriptor}
+    {permit : AList Var O.Val → O.Expr → State → Option State}
+    (c : Exec.Config (instrumentOperands O types permit)) : Exec.Config O :=
+  { eraseConfig c with ctrl := .exec .skip, frames := [] }
+
+/-- Instance (law `ConcreteSpec.Core.Own.runFrom_erasure`, case `ConcreteSpec.Core.Own.Examples.primTraceConfig`). -/
+example : Exec.runFrom (eraseProgram emptyProg) erasedOracle 100 [] (eraseConfig primTraceConfig) =
+    eraseReport (Exec.runFrom emptyProg (liftOracle erasedOps types permitE erasedOracle) 100 [] primTraceConfig) :=
+  @runFrom_erasure erasedOps types permitE emptyProg erasedOracle 100 [] primTraceConfig rfl
+
+/-- Planted (law `ConcreteSpec.Core.Own.runFrom_erasure`, case `ConcreteSpec.Core.Own.Examples.primTraceConfig`, subject `ConcreteSpec.Core.Own.eraseConfig`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.eraseConfigDone`). -/
+example : Ending.NotStuck (Exec.runFrom emptyProg
+      (liftOracle erasedOps types permitE erasedOracle) 100 [] primTraceConfig).ending ∧
+    ¬ (Exec.runFrom (eraseProgram emptyProg) erasedOracle 100 [] (eraseConfigDone primTraceConfig) =
+      eraseReport (Exec.runFrom emptyProg (liftOracle erasedOps types permitE erasedOracle) 100 [] primTraceConfig)) := by
+  exact ⟨rfl, by intro h; have he := congrArg (fun r => r.events) h; cases he⟩
+
+/-- Instance (law `ConcreteSpec.Core.Own.run_erasure`, case `ConcreteSpec.Core.Own.Examples.primTraceConfig`). -/
+example : Exec.run (eraseProgram emptyProg) erasedOracle 100 (eraseConfig primTraceConfig) =
+    eraseReport (Exec.run emptyProg (liftOracle erasedOps types permitE erasedOracle) 100 primTraceConfig) :=
+  @run_erasure erasedOps types permitE emptyProg erasedOracle 100 primTraceConfig rfl
+
+/-- Planted (law `ConcreteSpec.Core.Own.run_erasure`, case `ConcreteSpec.Core.Own.Examples.primTraceConfig`, subject `ConcreteSpec.Core.Own.eraseConfig`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.eraseConfigDone`). -/
+example : Ending.NotStuck (Exec.run emptyProg
+      (liftOracle erasedOps types permitE erasedOracle) 100 primTraceConfig).ending ∧
+    ¬ (Exec.run (eraseProgram emptyProg) erasedOracle 100 (eraseConfigDone primTraceConfig) =
+      eraseReport (Exec.run emptyProg (liftOracle erasedOps types permitE erasedOracle) 100 primTraceConfig)) := by
+  exact ⟨rfl, by intro h; have he := congrArg (fun r => r.events) h; cases he⟩
+
+/-- Instance (law `ConcreteSpec.Core.Own.step_stuck_iff_of_accepted`, case `ConcreteSpec.Core.Own.Examples.acceptedStuckConfig`). -/
+example : Exec.step emptyProg acceptedStuckConfig = none ↔
+    Exec.step (eraseProgram emptyProg) (eraseConfig acceptedStuckConfig) = none :=
+  @step_stuck_iff_of_accepted erasedOps types permitE emptyProg acceptedStuckConfig
+    acceptedStuck_checkerAccepted_inv
+
+/-- Planted (law `ConcreteSpec.Core.Own.step_stuck_iff_of_accepted`, case `ConcreteSpec.Core.Own.Examples.acceptedStuckConfig`, subject `ConcreteSpec.Core.Own.eraseConfig`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.eraseConfigSkip`). -/
+example : CheckerAccepted erasedOps types permitE emptyProg acceptedStuckConfig ∧
+    ¬ (Exec.step emptyProg acceptedStuckConfig = none ↔
+      Exec.step (eraseProgram emptyProg) (eraseConfigSkip acceptedStuckConfig) = none) := by
+  exact ⟨acceptedStuck_checkerAccepted_inv, fun h => by cases h.mp rfl⟩
+
+/-- Instance (law `ConcreteSpec.Core.Own.runFrom_erasure_of_accepted`, case `ConcreteSpec.Core.Own.Examples.acceptedMoveConfig`). -/
+example : Exec.runFrom (eraseProgram emptyProg) erasedOracle 100 [] (eraseConfig acceptedMoveConfig) =
+    eraseReport (Exec.runFrom emptyProg (liftOracle erasedOps types permitE erasedOracle) 100 [] acceptedMoveConfig) :=
+  @runFrom_erasure_of_accepted erasedOps types permitE emptyProg erasedOracle 100 []
+    acceptedMoveConfig acceptedMove_checkerAccepted_inv
+
+/-- Planted (law `ConcreteSpec.Core.Own.runFrom_erasure_of_accepted`, case `ConcreteSpec.Core.Own.Examples.acceptedMoveConfig`, subject `ConcreteSpec.Core.Own.eraseConfig`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.eraseConfigDone`). -/
+example : CheckerAccepted erasedOps types permitE emptyProg acceptedMoveConfig ∧
+    ¬ (Exec.runFrom (eraseProgram emptyProg) erasedOracle 100 [] (eraseConfigDone acceptedMoveConfig) =
+      eraseReport (Exec.runFrom emptyProg (liftOracle erasedOps types permitE erasedOracle) 100 [] acceptedMoveConfig)) := by
+  exact ⟨acceptedMove_checkerAccepted_inv,
+    by intro h; have he := congrArg (fun r => r.ending) h; cases he⟩
+
+/-- Instance (law `ConcreteSpec.Core.Own.run_stuck_iff_of_accepted`, case `ConcreteSpec.Core.Own.Examples.acceptedStuckConfig`). -/
+example : Ending.IsStuck (Exec.run emptyProg (liftOracle erasedOps types permitE erasedOracle) 100 acceptedStuckConfig).ending =
+    Ending.IsStuck (Exec.run (eraseProgram emptyProg) erasedOracle 100 (eraseConfig acceptedStuckConfig)).ending :=
+  @run_stuck_iff_of_accepted erasedOps types permitE emptyProg erasedOracle 100
+    acceptedStuckConfig acceptedStuck_checkerAccepted_inv
+
+/-- Planted (law `ConcreteSpec.Core.Own.run_stuck_iff_of_accepted`, case `ConcreteSpec.Core.Own.Examples.acceptedStuckConfig`, subject `ConcreteSpec.Core.Own.eraseConfig`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.eraseConfigDone`). -/
+example : CheckerAccepted erasedOps types permitE emptyProg acceptedStuckConfig ∧
+    ¬ (Ending.IsStuck (Exec.run emptyProg (liftOracle erasedOps types permitE erasedOracle) 100 acceptedStuckConfig).ending =
+      Ending.IsStuck (Exec.run (eraseProgram emptyProg) erasedOracle 100 (eraseConfigDone acceptedStuckConfig)).ending) := by
+  exact ⟨acceptedStuck_checkerAccepted_inv, by decide⟩
+
 end ExecErasureWitnesses
 
 end ConcreteSpec.Core.Own
