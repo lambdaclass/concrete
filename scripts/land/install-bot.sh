@@ -30,7 +30,7 @@ while [ $# -gt 0 ]; do
   esac; shift
 done
 say() { echo "install-bot: $*"; }
-# The snapshot: every path the landing scripts read outside scripts/land (each `$SELF_DIR/../X` in
+# The snapshot: every path the landing scripts read outside scripts/land (each path above SELF_DIR in
 # scripts/land/*.sh, and what those files source), so a snapshot is the scripts' whole closure.
 # scripts/checks/landing_bot.sh fails when a landing script reads a path this list does not cover.
 # (Until 2026-11-08 it held only scripts/land and git_sandbox.sh: train.sh's review_provenance found
