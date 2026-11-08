@@ -1,8 +1,6 @@
-# Concrete Lean foundation
+# Concrete Lean foundation proposal — draft 3
 
 Status: approved by the owner 2026-11-08; the plan for PLAN steps 3+; the Lean spec stays the only home of rules.
-
-The owner approved writing the shared foundation before the freeze on 2026-11-07, **"ok to option b then for freeze the foundation>?"**, and answered every question of section 5 with its recommendation on 2026-11-08, **"ok all recommended"**. Both answers are recorded in [decisions.md](../decisions.md#decided-2026-11-08-foundation), which is the home of the decisions; ROADMAP R-0607 to R-0616 hold the work. The text below is the approved draft 3: where it says a recommendation, proposal or question, the recommendation is what the owner approved, and the revisions of section 4 are enacted as decisions.md records them. Questions 12 and 13 were removed as already decided. This document states no rule of its own: each contract becomes Lean definitions and theorems in [ConcreteSpec](../../ConcreteSpec/README.md).
 
 The [A2i decision](../decisions.md#decided-project-long-term-2026-11-06) freezes integrated scopes, "not an untested whole-language architecture". Here the frozen foundation means interfaces and laws implemented, proved and tested together, with representative interactions. It does not mean designing every future slice before slice 1. Later slices supply lawful instances; changes to decided rules return to the owner.
 

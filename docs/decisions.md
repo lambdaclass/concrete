@@ -66,6 +66,8 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 - The documentation and tooling cleanup is approved, not performed by that record ([row](#decided-2026-11-07-cleanup)).
 - The shared foundation is written and frozen in Lean first, then each slice adds its rules ([row](#decided-2026-11-07-foundation-first)).
 - The Lean foundation, contracts C1–C10, and the answers to its sixteen questions ([row](#decided-2026-11-08-foundation)).
+- A std-per-slice table in the roadmap; no user-guide chapter per slice for now; the written grammar before the parser; a speed target against C at slice 16 ([row](#decided-2026-11-08-std-table)).
+- Every branch gets an agy review too ([row](#decided-project-review)).
 - Eleven plan and process decisions: UBSan dropped, a complete adapter theorem, smaller landing scripts, the front end now, one decisions writer, risk-capped reviews, one clones folder, a later no-libc runtime, a compile-speed budget and the termination wording ([row](#decided-2026-11-08-eleven)).
 
 <a id="rules-a-decision-changed"></a>
@@ -1130,7 +1132,21 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
       termination evidence with its premises, or a report naming the explicitly permitted
       unresolved obligations". It replaces "termination is known beforehand", which overstated what a
       d-site permission establishes, in the [no-hidden-traps row](#decided-project-no-hidden-traps),
-      README.md and PHILOSOPHY.md.
+      README.md, PHILOSOPHY.md and the pending no-hidden-traps changelog fragment.
+- <a id="decided-2026-11-08-std-table"></a>**A std-per-slice table; no user-guide chapters for now**
+  (owner, 2026-11-08: "ok let's do 2, for now let's not do 3"). Item 2 is approved: `ROADMAP.md`
+  gets a table of which standard-library module arrives in which slice, with its spec contract, its
+  std source, its proof status and the showcases that need it
+  ([table](../ROADMAP.md#std-per-slice)). Item 3, a user-guide chapter per slice, is not done for
+  now; it has no roadmap item. Item 1 was then approved (owner, 2026-11-08: "ok do the written
+  grammar"): <a id="decided-2026-11-08-written-grammar"></a>before the parser is built, the full
+  surface grammar is written down for the owner's review, every construct with its decided row and
+  the open spellings flagged; after approval it is encoded in Lean as the independent grammar
+  judgment (row Q8.3), and only then is the parser built against it (R-0622). Item 4 was approved
+  too (owner, 2026-11-08: "and yes speed target is fine"):
+  <a id="decided-2026-11-08-speed-target"></a>speed and size stay report-only until the first real
+  showcase (grep, slice 16); then a performance target against C is set from measured data, as an
+  owner decision (R-0623).
 - <a id="decided-project-spark-2026-11-06"></a>**What Concrete takes from SPARK** (owner, 2026-11-06: "ok do everything", after Claude, Codex, agy and Kimi chose unanimously; the
   [review](proposals/SPARK.md) items 1, 2, 3, 6, 7, 9 and 10).
   - *Function values with safety preconditions.* A function whose `#[requires]` is a safety
@@ -1194,7 +1210,11 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   of infrastructure before it is published or brought to the owner. A second, independent reviewer
   (Kimi, Grok or agy/Gemini) reviews as well when one is available, as the owner required for cleanup
   branches on 2026-10-28; when none is (quota, credit or sign-in), its absence is recorded with the
-  review and never assumed. A review never replaces the gates.
+  review and never assumed. A review never replaces the gates. Extended 2026-11-08 (owner: "also
+  remember we have agy not only codex kimi and claude"): every branch gets an agy review beside the
+  Codex and Kimi reviews. agy cannot read files, so its prompt carries the diff and the context it
+  needs and ends with a required verdict line; it may also write self-contained pieces whose inputs
+  fit in the prompt.
 - <a id="decided-project-throughput"></a>**Development throughput** (2026-10-22). The development
   feedback loop (landing, review, CI) is a priority track beside the main sequence
   ([record](archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-10-22--development-throughput-priority)).

@@ -276,7 +276,8 @@ inductive Outcome
 ```
 
 `ArithmeticError { Overflow, DivisionByZero, InvalidShift }` is defined once, in `Spec/Types.lean`.
-It is the error payload of the `checked_*` operations and the payload of the `arith` trap kind.
+It is the error payload of the `checked_*` operations. Whether a trap kind wraps it, and the trap
+kinds' names and renderings, wait for the owner (foundation question 9).
 Allocation failure is a value, `AllocFailure<T>` (Q1.8, Q1.9), not an outcome.
 
 One result type replaces `R`, `GR`, `ER`, `VR` and `Cleanup.Result`. Primitives return a
@@ -332,7 +333,7 @@ Each old evaluator is migrated with a correspondence lemma, proved in the commit
 deleted with the old evaluator. For an oracle-free evaluator it relates the old run to the new run
 of the embedded program. For an oracle-driven one (`Brand`, `Cleanup`) it goes only in the
 realizable direction: every integrated run determines an oracle under which the old run agrees with
-it (section 6, phase C). The oracles `σ` and
+it (section 6, "Porting a feature fragment"). The oracles `σ` and
 `ok` disappear: conditions and deferred calls actually run. Every fuel-relating lemma is stated once,
 at the evaluator.
 
@@ -650,7 +651,7 @@ Syntax → Evidence                          (octagon facts, entails, sources, t
 Evidence → Obligations                     (generated obligation schemas; #[proof] roles; TheoremId targets)
 Semantics, Obligations → EvidenceSem       (satisfaction of evidence facts, tokens and obligations)
 Obligations → Typing → Ownership           (static feature modules; each also imports Evidence)
-Typing → Termination, Authority, Borrow, Memory, Cleanup
+Typing → Termination, Authority, Borrow, Brand, Memory, Cleanup
 all static feature modules, Fragments → Admission
 Admission → Checker
 Admission, EvidenceSem, Contract → Facts    (Fact.Holds; post-Mono re-admission and R-0588 as statements)
@@ -732,8 +733,8 @@ plan keeps one module per concept the owner reads. Folded: observation into `Con
     grammar.
 12. **R-0588**: stated in `Facts`, not proved, at A2i.
 13. **O8 and O10.** Deferred calls run in the integrated semantics, so the `ok` oracle of part 3 goes
-    (O8, discharged at slice 14). Loop conditions are evaluated, so the `σ` oracle of part 5 goes
-    (O10, discharged when the allocation fragment is ported at slice 19; loops exist from slice 4).
+    (O8, discharged when `Cleanup` is ported, step 14). Loop conditions are evaluated, so the `σ`
+    oracle of part 5 goes (O10, discharged when `Brand` is ported, step 16).
 14. **Examples:** the leakage and accounting interfaces are kernel-checked against examples (R-0592), from phase B, before the slices that give them semantics.
 
 ### 3.2 Existing theorems restated on the integrated Core
@@ -780,20 +781,20 @@ step cites the row once it is on main; a step that needs a row not yet on main w
 | D3 | Loops (Q5; OD47–49, OD105) | `Admission`, `Evidence` | footprint forgotten at the head, bounds snapshot, invariant before the loop and after every iteration, exit join | 4 |
 | D4 | Termination (Q11–Q13; OD82 extended) | `Syntax`, `Termination`, `Obligations` | `#[variant]` on loops and functions (one measure per recursive cycle); `#[may_not_terminate("reason")]` with a non-empty reason, on loops at 4, on one designated function per recursive component at 5, on extern and blocking declarations at the slices that introduce them, as an expression prefix on indirect calls at 20; `checked_terminates`; termination facts | 4, 5, 20 |
 | D5 | Trap sites and the trap line ([row](../decisions.md#decided-project-runtime-2026-11-06); R-0496: `concrete: trap: <kind> at <path>:<line>:<col> (site <id>)`, path relative to the project root with forward slashes, 1-based) | `Semantics`, `Contract` | `Outcome.trap k site`; the trap line as a function of kind and span; closes README O4 | 1 |
-| D6 | `checked_*` with `ArithmeticError` | `Types`, `Primitives` | `ArithmeticError` from phase A (it is also the `arith` trap payload); the `checked_*` operations returning `Result<T, ArithmeticError>`; signed `MIN / -1` and `MIN % -1` give `Overflow` | type at A; operations at 12 |
+| D6 | `checked_*` with `ArithmeticError` | `Types`, `Primitives` | `ArithmeticError` from phase A (whether a trap kind wraps it is foundation question 9); the `checked_*` operations returning `Result<T, ArithmeticError>`; signed `MIN / -1` and `MIN % -1` give `Overflow` | type at A; operations at 12 |
 | D7 | `#[proof(path)]`, four roles | `Syntax`, `Obligations`, `Admission`, `EvidenceSem` | a `TheoremId`; obligation schemas generated before admission; roles (a), (b), (d) are admission discharges and refusals, role (c) a fact; one discharge edge per obligation | 8 |
 | D8 | The attribute-prefix production, LL(1) (R-0574) | `Grammar`, `Syntax` | the production in the grammar data; `ll1_sound`; attachment by kind (OD82) | 0 (grammar), used from 4 |
 | D9 | Facts vocabulary, statuses, coverage, strength, vacuity, dependency flow (facts decision; R-0585) | `Facts` | 2.1 item 8; every kind present from phase B, `notApplicable` until its slice | B |
-| D10 | Diagnostics are typed checker results; rule ID = Lean rule name plus that rule's own revision (R-0593, R-0603); one `spec_version` per output, 0.x before the freeze and 1.0 at A2c ([runtime row](../decisions.md#decided-project-runtime-2026-11-06)) | `Ident`, `Checker` | `RuleId` and `spec_version` (step 2); `Rule`, `Subject`, `CheckResult`, the retired-ID registry and the lifecycle checks (1.10) with `incomplete`, `check_correspond`, `check_refused` | A (steps 2, 9) |
+| D10 | Diagnostics are typed checker results; rule ID = Lean rule name plus that rule's own revision (R-0593, R-0603); one `spec_version` per output, 0.x before the freeze and 1.0 at A2c ([runtime row](../decisions.md#decided-project-runtime-2026-11-06)) | `Ident`, `Checker` | `RuleId` and `spec_version` (step 2); `Rule`, `Subject`, `CheckResult`, the retired-ID registry and the lifecycle checks (1.10) with `incomplete`, `check_correspond`, `check_refused` | A (steps 2, 11) |
 | D11 | Byte accounting (R-0592) | `Ident`, `Values`, `Semantics` | `LineageId`, the ghost-log alloc and destroy records, the derived quantities, with examples over hand-written logs at B; the semantics and `ghost_log_adequate` at 19 | B, 19 |
 | D12 | The leakage-trace interface (R-0592): `Secret<T>`, `classify`, `declassify`, `ct_select`, `ct_eq` | `Types`, `Primitives`, `Semantics` | leakage records in the ghost log and a variable-time flag per primitive at B (with examples); `Secret<T>` on scalars, `classify` (the pure classify of a value passed in, no wrapper duplicating it), the entropy capability's `Secret<T>` output from slice 7 ([decision](../decisions.md#decided-2026-11-07-stack-randomness)), `declassify(x, "reason")`, `ct_select`, the closed CT operation table and the Q2.2-revised scalar Copy rule at 7; fill-bytes from entropy at 15; grant-backed sources at 16, 18, 27 | B, 6, 7, 15 |
 | D13 | Q4.6 and Q4.7 revised | `Primitives`, `Borrow`, `Evidence` | `byte_at` needs an in-range offset; a range without `else` needs evidence of validity | 15, 16 |
 | D14 | Closed evidence (Q9.11, OD125 qualified, CON-2); `assume` never admits safety (OD80, CON-6); vacuous preconditions (OD120) | `Evidence`, `Obligations`, `Admission` | evidence sources; `assume` excluded; vacuity refusal | 5, 8 |
 | D15 | Policies and `Concrete.toml` | not Core, except the stack budget | compiler data over `Facts`; the spec defines `Fact.Holds` and the mandatory stack-budget refusal (D32) | — |
-| D16 | The semantic contract (R-0496) | `Contract` | 2.1 item 9, stated before `Semantics` (step 12) and refined per slice | B |
+| D16 | The semantic contract (R-0496) | `Contract` | 2.1 item 9, stated in step 12, before `Semantics` (steps 14–15), and refined per slice | B |
 | D17 | Q6.7, Q9.9, Q9.10 | `Semantics` | 1.6, 1.8, 1.9 | B |
 | D18 | Q9.4 flat data and matches; Q9.5 heap open; Q1.3 pack and unpack; Q9.7 one inventory | `Types`, `Syntax`, `Primitives` | 1.3, 1.5, 1.11 | 9, 10, 19 |
-| D19 | Slice-0 surface: a distinct "not supported in this slice" refusal; leading zeros refused | `Lexical`, `Grammar`, `Fragments` | `Rule.fragment`, kind `unsupported`; the lexical rule | A (steps 6, 7) |
+| D19 | Slice-0 surface: a distinct "not supported in this slice" refusal; leading zeros refused | `Lexical`, `Grammar`, `Fragments` | `Rule.fragment`, kind `unsupported`; the lexical rule | A (steps 8, 9) |
 | D20 | Thin vertical slices, integers first ([row](../decisions.md#decided-project-vertical-slices-2026-11-06)); the agreed order ([vertical slices](../../ROADMAP.md#vertical-slices)) | `Fragments`; the step order (6) | one `SliceId` per slice; each slice a pair of fragment predicates | all |
 | D21 | Abort is the same terminal trap (`dec:1224`); may-abort is a separate fact | `Semantics`, `Facts` | `TrapKind.abort`, not `implicit`; explicit `abort()` in slice 1 (slice plan owner question 6) | 1 |
 | D22 | Allocation failure is a value (Q1.8, Q1.9) | `Primitives` | `AllocFailure<T>`; `exhausted` is target-only | 19 |
@@ -840,7 +841,8 @@ ethlambda are audited before acceptance (D31); `abort()` is in slice 1 (D21).
 - **I1.** Everything in sections 1.1–1.15.
 - **I2.** The fuel convention, and the adequacy lemmas of 1.8.
 - **I3.** One Core syntax; the slice-0 syntax and `toCore` are deleted (D28).
-- **I4.** `ArithmeticError` shared by `checked_*` and the `arith` trap kind.
+- **I4.** `ArithmeticError` is the `checked_*` error payload; whether a trap kind shares it waits
+  for the owner (foundation question 9).
 - **I5.** Retiring `knownViolates`, `RangeFacts`, `knownInvalid` and `Agrees`.
 - **I6.** A deferred call's loans end after the call (R-0511, OD2 (4)).
 - **I7.** Abort is a trap with status 134 (`dec:1224`).
@@ -926,7 +928,7 @@ that writes it. Steps that edit a contract written earlier are sequential.
 | C6 observations and environment | step 12 | `Contract` |
 | C7 secret leakage and accounting | step 17 | `Leakage` |
 | C8 evaluator adequacy and termination | step 15 | `Semantics` |
-| C9 identities, primitive contracts, evidence and erasure | steps 2 (done), 6, 11, 19 | `Ident`, `Rules`, `Primitives`, `Evidence`, `Checker`, `Facts` |
+| C9 identities, primitive contracts, evidence and erasure | steps 2 (on `wip/spec-core`), 6, 11, 19 | `Ident`, `Rules`, `Primitives`, `Evidence`, `Checker`, `Facts` |
 | C10 frames and ABI | step 18 | `Frame` |
 
 3. `Target` and `Types` (C3's profile, C2's classification). `Target`: the read-only target profile
@@ -955,9 +957,11 @@ that writes it. Steps that edit a contract written earlier are sequential.
    operation ([question 16](../decisions.md#foundation-q16)), with the instances slices 0 and 1 and
    the old kernel need. A prerequisite of `Syntax` (2.2).
 7. `Syntax` (C1's commands): the one Core syntax, with `SiteId`s, a site table and attributes as
-   data, covering slices 0 and 1 and the old kernel's constructs, and the command forms C1 needs
-   (labeled exits, deferred-call registration, calls by typed identity); `embed`. Later constructs
-   are added by their slice; old feature fragments keep their own statement types until ported.
+   data, covering slices 0 and 1, the old kernel's constructs, the command forms C1 needs (labeled
+   exits, deferred-call registration, calls by typed identity) and every construct the old feature
+   fragments use (loops, deferred calls, brand binders, allocation, heap open, range views and text
+   views, capability arguments and grants), all outside every slice's `Fragment.surface` until
+   their slice; `embed`. Constructs no old fragment uses are added by their slice.
 8. `Lexical` (the lexical rules, leading zeros refused, D19) and `Grammar` (the grammar as data,
    `ll1`, `ll1_sound`, the attribute-prefix production, D8, ARITH-9's attribute absent, D29). A
    `Span`'s column counts bytes and a tab counts one byte ([question 10](../decisions.md#foundation-q10)).
@@ -978,6 +982,11 @@ that writes it. Steps that edit a contract written earlier are sequential.
     `Checked p` for every old program, abort-free since the old kernel has no `abort`. Source-level
     `Checked` (lexing, parsing, the fragment predicate, then admission) is what `check_correspond`
     is about; it is not bridged.
+
+Admission (step 11) covers slices 0 and 1 and the old kernel. Each port of phase B extends it in
+the same step with the premises of the fragment it ports, creating the static module it needs
+(`Cleanup` at step 14; `Borrow`, `Brand`, `Authority` and `Memory` at step 16; `Termination` with
+slice 4, step 27), so no step reads a judgment a later step defines.
 
 **Every phase-A step, like every later one,** gives each new rule a readable doc comment citing its
 decision row and at least one accepted and one refused example (`RM:331`). The per-rule gate landed
@@ -1004,7 +1013,8 @@ registered rule.
     left-to-right evaluation order, calls by typed identity, cleanup on every structured exit;
     sequencing, scope restoration and cleanup preservation. Port `Cleanup` whole: frames, exits,
     late reads, `defer_cleanup_releases` with all five conclusions (its dependency order uses
-    `Ty.brands`, present since step 3), `abort_no_cleanup`; O8. Delete `Cleanup.*`. When an old
+    `Ty.brands`, present since step 3), `abort_no_cleanup`; O8. Delete the old fragment's `Cleanup.*` (in the old `ConcreteSpec` namespace;
+    the new `ConcreteSpec.Core` module `Cleanup` now holds its rules). When an old
     fragment's run takes an oracle, the port follows the realizable direction below.
 15. `Semantics`, the evaluator (C8): `run` and `Eval` over the hybrid state, choices as oracles
     checked against the operation contracts, soundness, completeness, fuel monotonicity,
@@ -1018,8 +1028,8 @@ registered rule.
     (brands, lineages, `pack`/`unpack`, child backing dependencies, reset and release, heap open,
     `AllocFailure<T>`, `reset_fresh`; its `.free` maps to `destroy(h)`, OD59; O10) and `Authority`
     (`with(...)`, the primitive effect table, `main`'s grant parameters, launcher minting,
-    `authority_contained`; `sub_iff` and `equiv_iff` move unchanged), each whole, and delete
-    `Borrow.*`, `Brand.*` and `Authority.*`. Release-context erasure is allowed only with its proof
+    `authority_contained`; `sub_iff` and `equiv_iff` move unchanged), each whole into the `ConcreteSpec.Core` modules of
+    those names, and delete the old fragments' `Borrow.*`, `Brand.*` and `Authority.*`. Release-context erasure is allowed only with its proof
     ([question 6](../decisions.md#foundation-q6)). Each port brings Core ahead of the slice that
     introduces its source forms, with `Fragment.surface` excluding them, so no old proof is dropped
     and no source feature arrives early.

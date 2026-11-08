@@ -29,3 +29,16 @@
   (R-0619); a no-libc runtime around slices 24–25 (R-0621); a report-only compile-speed budget
   (R-0550); and the ISS-0014 F7 termination wording, applied in `docs/decisions.md`, `README.md`
   and `docs/PHILOSOPHY.md` (ISS-0014 closed). The process rules are in `AGENTS.md`.
+
+### Owner decisions: agy reviews, the std-per-slice table, the written grammar and a speed target (2026-11-08)
+
+- "also remember we have agy not only codex kimi and claude": every branch gets an agy review beside
+  Codex and Kimi (AGENTS.md, the review row).
+- "ok let's do 2, for now let's not do 3": `ROADMAP.md` gains the std-per-slice table (each module's
+  slice, spec home, std source, evidence due and the showcases that need it, with the stages that
+  need a module before it arrives flagged for the owner); a user-guide chapter per slice is not done
+  for now.
+- "ok do the written grammar": the full surface grammar is written down for the owner's review
+  before the parser, then encoded in Lean as the grammar judgment (R-0622; R-0620 waits for it).
+- "and yes speed target is fine": speed and size stay report-only until grep at slice 16, when the
+  owner sets a target against C from measured data (R-0623).

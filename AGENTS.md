@@ -77,7 +77,7 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
 
 **Who works on what** (owner, 2026-11-08, [decision](docs/decisions.md#decided-2026-11-08-eleven)).
 - Claude's quota goes to the critical path: the spec, slice 0 and the front end. Mechanical work
-  goes to Codex and Kimi as writers, and Claude reviews it.
+  goes to Codex and Kimi as writers.
 - One writer edits `docs/decisions.md` and `ROADMAP.md` at a time; other workers send that writer
   their records instead of editing those files.
 
@@ -142,12 +142,13 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
 - Have Codex confirm each bug is real (a reproducer and a verdict line in the record) before
   filing it.
 
-**Review.** Codex reviews everything before it is published or brought to the owner, and a second
-independent reviewer reviews too when one is available; its absence is recorded, never assumed
-([decision](docs/decisions.md#decided-project-review)). Every slice gets a Codex review before it lands, through `scripts/review/review.sh`:
-at most 2 rounds for docs and the roadmap, 3 for scripts and 5 for the compiler and the spec, the
-highest class the diff touches governing (owner, 2026-11-08; `review.sh` enforces 5 until R-0618
-lands), the first over the whole diff and each later round over the delta since the
+**Review.** Codex reviews everything before it is published or brought to the owner, and Kimi and
+agy (Gemini) review every branch too; a reviewer's absence is recorded, never assumed
+([decision](docs/decisions.md#decided-project-review)). agy cannot read files: run it as
+`timeout 1500 agy -p "<prompt>"` with the diff and the context it needs in the prompt, ending with a
+required verdict line. Every slice gets a Codex review before it lands, through `scripts/review/review.sh`:
+at most 2 rounds for docs and the roadmap, 3 for scripts and 5 for the compiler and the spec
+(owner, 2026-11-08; `review.sh` enforces 5 until R-0618 lands), the first over the whole diff and each later round over the delta since the
 previous one. Answer each finding with a fix or a stated reason. Run Codex by hand only with
 `GIT_OPTIONAL_LOCKS=0` (and `</dev/null`): its sandboxed `git status` otherwise takes the
 worktree's `index.lock` and can leave it behind (bug 209).
