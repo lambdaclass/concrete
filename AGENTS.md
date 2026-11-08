@@ -93,11 +93,13 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
 - Commit each validated slice. Push the branch to `wip/<branch>` at least every 5 minutes of work
   (`git push origin HEAD:refs/heads/wip/<branch>`); the hook's wip tier only scans for conflict
   markers.
-- Never push to `main`, `ci/*` or the remote `fork`. Landings go to both `origin` and
-  `lambdaclass`, only through the landing script (`scripts/land/train.sh`).
+- The one repository is lambdaclass/concrete (owner, 2026-11-06), and `origin` is it in every
+  clone; unbalancedparentheses/concrete2 is archived (after the first landing here).
+- Never push to `main`, `ci/*` or the remote `fork`. Landings go to `origin` only through the
+  landing script (`scripts/land/train.sh`).
   `train.sh check` runs the checks before the push, and the push runs the root hook's full set again;
-  the train's push to `ci/<name>` and both pushes of `land` are read back with `ls-remote` and
-  retried when they did not move the ref (GitHub drops the connection during long hooks); `land` checks that both remotes are at
+  the train's push to `ci/<name>` and the push of `land` are read back with `ls-remote` and
+  retried when they did not move the ref (GitHub drops the connection during long hooks); `land` checks that main is at
   the head ([LANDING.md](docs/LANDING.md#land)).
 - After any push of your own whose hook ran gates, check that the remote ref moved
   (`git ls-remote origin refs/heads/<branch>`) and push again if it did not.

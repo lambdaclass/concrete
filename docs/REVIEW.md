@@ -183,7 +183,7 @@ recorded, from the owner's own words only, with `scripts/land/signoff.sh record 
 verbatim request as `r-request.txt` after prepending `reviewed: <sha>`, and the output separately as
 `r.txt`. The request body must name that commit by an unambiguous prefix, and only the output's last
 verdict line counts; it must be `VERDICT: ACCEPT`. Recording refuses a record that does not qualify.
-Push the resulting `refs/owner-signoff/<sha>` to both remotes. The landing train accepts it as that
+Push the resulting `refs/owner-signoff/<sha>` to origin. The landing train accepts it as that
 commit's review provenance ([LANDING.md](LANDING.md)); it approves no other commit.
 
 ## verify.sh
