@@ -357,9 +357,29 @@ report_mismatch() { # report_mismatch LEG CAND_SEED INDEX DIR BACKEND: persist b
   echo "  replay: $replay_text" >&2
 }
 
+judge_evaluator() { # judge_evaluator LEG CAND_SEED INDEX DIR: judge in-process evaluator before native build/runs
+  local leg=$1 cand_seed=$2 index=$3 d=$4 name=$1-$3
+  if [ ! -f "$d/lcb_eval.status" ]; then
+    echo "FAIL $name [lcb_eval]: missing evaluator observation" >&2
+    return 4
+  fi
+  if [ "$(cat "$d/lcb_eval.status")" = incomplete ]; then
+    echo "INCOMPLETE: evaluator timed out/exhausted fuel for $name" >&2
+    return 3
+  fi
+  if judge "$d" "$d/lcb_eval"; then
+    echo "ok   $name [lcb-eval]: status $(cat "$d/lcb_eval.status")"
+    return 0
+  else
+    report_mismatch "$leg" "$cand_seed" "$index" "$d" lcb_eval
+    return 1
+  fi
+}
+
 native_one() { # Result axes: native_mismatch (sticky), native_complete; rc describes completion
   # 0 match, 1 mismatch (possibly incomplete), 3 incomplete, 4 build/setup. Inspect BOTH axes.
-  local leg cand_seed index d name backend bad=0 rc=0
+  # Judges every available observation independently of whether later builds/runs complete.
+  local leg cand_seed index d name backend bad=0 eval_rc=0 build_rc=0 obs_rc=0 incomplete=0
   leg=$1
   cand_seed=$2
   index=$3
@@ -367,21 +387,36 @@ native_one() { # Result axes: native_mismatch (sticky), native_complete; rc desc
   native_mismatch=0
   native_complete=0
   name=$leg-$index
+  judge_evaluator "$leg" "$cand_seed" "$index" "$d" || eval_rc=$?
+  if [ "$eval_rc" -eq 1 ]; then
+    bad=1
+    native_mismatch=1
+  elif [ "$eval_rc" -eq 3 ]; then
+    incomplete=1
+  elif [ "$eval_rc" -ne 0 ]; then
+    return 4
+  fi
   if [ "$(remaining)" -lt "$min_candidate_secs" ]; then
     echo "INCOMPLETE: remaining time ($(remaining)s) below candidate build threshold (${min_candidate_secs}s)" >&2
+    [ "$native_mismatch" -eq 0 ] || return 1
     return 3
   fi
-  ( build "$name" "$d/build.log" bounded_remaining bash "$root/scripts/checks/lib/slice0_native.sh" "$d" "$lcb" ) || rc=$?
-  if [ "$rc" -ne 0 ]; then
-    if grep -q 'INCOMPLETE:' "$d/build.log"; then return 3; fi
+  ( build "$name" "$d/build.log" bounded_remaining bash "$root/scripts/checks/lib/slice0_native.sh" "$d" "$lcb" ) || build_rc=$?
+  if [ "$build_rc" -ne 0 ]; then
+    if grep -q 'INCOMPLETE:' "$d/build.log"; then
+      [ "$native_mismatch" -eq 0 ] || return 1
+      return 3
+    fi
     echo "FAIL $name: native build/setup failed" >&2
     return 4
   fi
   for backend in llvm lcb; do
-    observe_remaining "$d/$backend.exe" "$d/$backend" || {
-      [ "$native_mismatch" -eq 0 ] || return 1
-      return 3
-    }
+    obs_rc=0
+    observe_remaining "$d/$backend.exe" "$d/$backend" || obs_rc=$?
+    if [ "$obs_rc" -ne 0 ]; then
+      incomplete=1
+      continue
+    fi
     if judge "$d" "$d/$backend"; then
       echo "ok   $name [$backend]: status $(cat "$d/$backend.status")"
     else
@@ -390,12 +425,9 @@ native_one() { # Result axes: native_mismatch (sticky), native_complete; rc desc
       native_mismatch=1
     fi
   done
-  if judge "$d" "$d/lcb_eval"; then
-    echo "ok   $name [lcb-eval]: status $(cat "$d/lcb_eval.status")"
-  else
-    report_mismatch "$leg" "$cand_seed" "$index" "$d" lcb_eval
-    bad=1
-    native_mismatch=1
+  if [ "$incomplete" -ne 0 ]; then
+    [ "$native_mismatch" -eq 0 ] || return 1
+    return 3
   fi
   native_complete=1
   return "$bad"
@@ -510,16 +542,19 @@ control_drop_overflow() {
   # Reuse the proven mutated LLVM binary, then force a real LCB observation timeout.
   # The build is already complete; do not regenerate the planted sleeper away.
   (
-    local rc=0 obs_first_cap=1 obs_retry_cap=1
+    local rc=0 obs_first_cap=1 obs_retry_cap=1 safe_seed bundle
     local BOUNDED_KILL_AFTER=0 BOUNDED_LOG="$work/expected-timeouts.log"
     local regressions="$work/mismatch-timeout-regressions"
     build() { return 0; }
     printf '#!/usr/bin/env bash\nexec sleep 30\n' >"$mutated/lcb.exe"
     chmod +x "$mutated/lcb.exe"
     native_one bir "$seed" "$index" "$mutated" >"$work/mismatch-timeout.log" 2>&1 || rc=$?
+    safe_seed=$(cat "$mutated/safe-seed.txt")
+    bundle="$regressions/bir/${safe_seed}-$index"
     [ "$rc" -eq 1 ] && [ "$native_mismatch" -eq 1 ] && [ "$native_complete" -eq 0 ] &&
       grep -qxF "FAIL bir seed $seed index $index [llvm]: observation mismatch" "$work/mismatch-timeout.log" &&
-      grep -qxF "INCOMPLETE: observation timed out for $mutated/lcb.exe" "$work/mismatch-timeout.log" || {
+      grep -qxF "INCOMPLETE: observation timed out for $mutated/lcb.exe" "$work/mismatch-timeout.log" &&
+      [ -f "$bundle/observed-llvm/status" ] && grep -qxF llvm "$bundle/backends" || {
         echo "control setup: mismatch was lost or timeout did not occur for the planted reason" >&2
         cat "$work/mismatch-timeout.log" >&2
         return 1
@@ -565,6 +600,64 @@ control_lcb_off_by_one() {
   control_match "$mutated/control-lcb" "$mutated/lcb_eval" "evaluator did not return exactly word+1" || return 1
   actual=$(cat "$mutated/control-lcb/status")
   [[ "$actual" =~ ^[0-9]+$ ]] || { echo "control setup: invalid control-lcb/status '$actual'" >&2; return 1; }
+  # Prove that an evaluator mismatch is judged and persisted even when LLVM or LCB native
+  # observation times out, and that the surviving native backend is still observed and judged.
+  (
+    local rc=0 obs_first_cap=1 obs_retry_cap=1 safe_seed bundle log
+    local BOUNDED_KILL_AFTER=0 BOUNDED_LOG="$work/expected-timeouts.log"
+    local regressions="$work/eval-llvm-timeout-regressions"
+    local sub="$work/control-lcb-llvm-timeout"
+    rm -rf "$sub" "$regressions"
+    cp -R "$mutated" "$sub"
+    build() { return 0; }
+    printf '#!/usr/bin/env bash\nexec sleep 30\n' >"$sub/llvm.exe"
+    chmod +x "$sub/llvm.exe"
+    log="$work/eval-llvm-timeout.log"
+    native_one bir "$seed" "$index" "$sub" >"$log" 2>&1 || rc=$?
+    safe_seed=$(cat "$sub/safe-seed.txt")
+    bundle="$regressions/bir/${safe_seed}-$index"
+    [ "$rc" -eq 1 ] && [ "$native_mismatch" -eq 1 ] && [ "$native_complete" -eq 0 ] &&
+      grep -qxF "FAIL bir seed $seed index $index [lcb_eval]: observation mismatch" "$log" &&
+      grep -qxF "INCOMPLETE: observation timed out for $sub/llvm.exe" "$log" &&
+      grep -qxF "FAIL bir seed $seed index $index [lcb]: observation mismatch" "$log" &&
+      [ -f "$bundle/observed-lcb_eval/status" ] &&
+      [ "$(cat "$bundle/observed-lcb_eval/status")" = "$actual" ] &&
+      [ -f "$bundle/observed-lcb/status" ] &&
+      [ "$(cat "$bundle/observed-lcb/status")" = "$actual" ] &&
+      grep -qxF lcb_eval "$bundle/backends" && grep -qxF lcb "$bundle/backends" || {
+        echo "control setup: evaluator/LCB mismatch or bundle lost under LLVM timeout" >&2
+        cat "$log" >&2
+        return 1
+      }
+    echo 'FAIL eval-llvm-timeout: evaluator and LCB mismatches retained and bundled despite LLVM timeout'
+  ) || return $?
+  (
+    local rc=0 obs_first_cap=1 obs_retry_cap=1 safe_seed bundle log
+    local BOUNDED_KILL_AFTER=0 BOUNDED_LOG="$work/expected-timeouts.log"
+    local regressions="$work/eval-lcb-timeout-regressions"
+    local sub="$work/control-lcb-lcb-timeout"
+    rm -rf "$sub" "$regressions"
+    cp -R "$mutated" "$sub"
+    build() { return 0; }
+    printf '#!/usr/bin/env bash\nexec sleep 30\n' >"$sub/lcb.exe"
+    chmod +x "$sub/lcb.exe"
+    log="$work/eval-lcb-timeout.log"
+    native_one bir "$seed" "$index" "$sub" >"$log" 2>&1 || rc=$?
+    safe_seed=$(cat "$sub/safe-seed.txt")
+    bundle="$regressions/bir/${safe_seed}-$index"
+    [ "$rc" -eq 1 ] && [ "$native_mismatch" -eq 1 ] && [ "$native_complete" -eq 0 ] &&
+      grep -qxF "FAIL bir seed $seed index $index [lcb_eval]: observation mismatch" "$log" &&
+      grep -qxF "ok   bir-$index [llvm]: status $(cat "$original/status")" "$log" &&
+      grep -qxF "INCOMPLETE: observation timed out for $sub/lcb.exe" "$log" &&
+      [ -f "$bundle/observed-lcb_eval/status" ] &&
+      [ "$(cat "$bundle/observed-lcb_eval/status")" = "$actual" ] &&
+      grep -qxF lcb_eval "$bundle/backends" && [ ! -e "$bundle/observed-lcb" ] || {
+        echo "control setup: evaluator mismatch or bundle lost under LCB timeout" >&2
+        cat "$log" >&2
+        return 1
+      }
+    echo 'FAIL eval-lcb-timeout: evaluator mismatch retained and bundled despite LCB timeout'
+  ) || return $?
   echo "FAIL lcb-off-by-one: native LCB and evaluator both returned exact exit $actual"
   return "$PLANTED_FAIL_RC"
 }
@@ -784,14 +877,20 @@ run_control report-mismatch \
 bir_accepted=$(summary_value "$work/bir/summary.tsv" accepted)
 while IFS=$'\t' read -r tag index outcome production; do
   [ "$tag" = program ] || continue
-  if [ "$(remaining)" -lt "$min_candidate_secs" ]; then deadline_stopped=1; break; fi
   d="$work/bir/p$index"
+  if [ "$(remaining)" -lt "$min_candidate_secs" ]; then
+    deadline_stopped=1
+    eval_rc=0
+    judge_evaluator bir "$seed" "$index" "$d" || eval_rc=$?
+    [ "$eval_rc" -eq 0 ] || [ "$eval_rc" -eq 3 ] || fail=1
+    continue
+  fi
   rc=0
   native_one bir "$seed" "$index" "$d" || rc=$?
   [ "$native_mismatch" -eq 0 ] || fail=1
-  if [ "$rc" -eq 3 ] || { [ "$native_mismatch" -eq 1 ] && [ "$native_complete" -eq 0 ]; }; then
+  if [ "$rc" -eq 3 ] || [ "$native_complete" -eq 0 ]; then
     deadline_stopped=1
-    break
+    continue
   fi
   if [ "$rc" -le 1 ]; then
     record_judged bir "$outcome" "$d"
@@ -808,19 +907,25 @@ spec_supported_accepted=$(summary_value "$work/spec/summary.tsv" supported_accep
 while IFS=$'\t' read -r tag index outcome compiled; do
   [ "$tag" = program ] || continue
   [ "$compiled" = true ] || continue
-  if [ "$(remaining)" -lt "$min_candidate_secs" ]; then deadline_stopped=1; break; fi
   d="$work/spec/p$index"
   if [ ! -f "$d/native-ready" ]; then
     echo "FAIL spec leg: compiled program lacks native-ready marker" >&2
     fail=1
     continue
   fi
+  if [ "$(remaining)" -lt "$min_candidate_secs" ]; then
+    deadline_stopped=1
+    eval_rc=0
+    judge_evaluator spec "$seed" "$index" "$d" || eval_rc=$?
+    [ "$eval_rc" -eq 0 ] || [ "$eval_rc" -eq 3 ] || fail=1
+    continue
+  fi
   rc=0
   native_one spec "$seed" "$index" "$d" || rc=$?
   [ "$native_mismatch" -eq 0 ] || fail=1
-  if [ "$rc" -eq 3 ] || { [ "$native_mismatch" -eq 1 ] && [ "$native_complete" -eq 0 ]; }; then
+  if [ "$rc" -eq 3 ] || [ "$native_complete" -eq 0 ]; then
     deadline_stopped=1
-    break
+    continue
   fi
   if [ "$rc" -le 1 ]; then
     record_judged spec "$outcome" "$d"
