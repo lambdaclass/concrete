@@ -8,6 +8,8 @@
   repository lands, before the foundation freeze. Then server-side protection of `main` becomes the
   real boundary (R-0628), and a much smaller local guard follows as a convenience (R-0629).
   `wip/remote-guard` and `wip/acceptance-shim` are superseded.
+- **Commit and push everything all the time** ("commit and push everything all the time"):
+  every piece is committed when it builds and its checks pass, and pushed to both remotes at once.
 - **Byte-for-byte sweeps into `legacy/`** ("ok to 1"): an addition under `legacy/` is accepted only
   if it is byte-identical to the same root path at a named commit and is gone from the root. P5 and
   the restart row are revised.
