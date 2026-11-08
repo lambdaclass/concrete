@@ -145,7 +145,7 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
 **Review.** Codex reviews everything before it is published or brought to the owner, and Kimi and
 agy (Gemini) review every branch too; a reviewer's absence is recorded, never assumed
 ([decision](docs/decisions.md#decided-project-review)). agy cannot read files: run it as
-`timeout 1500 agy -p "<prompt>"` with the diff and the context it needs in the prompt, ending with a
+`bounded_run 1500 -- agy -p "<prompt>"` with the diff and the context it needs in the prompt, ending with a
 required verdict line. Every slice gets a Codex review before it lands, through `scripts/review/review.sh`:
 at most 2 rounds for docs and the roadmap, 3 for scripts and 5 for the compiler and the spec
 (owner, 2026-11-08; `review.sh` enforces 5 until R-0618 lands), the first over the whole diff and each later round over the delta since the

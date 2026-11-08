@@ -1215,8 +1215,8 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   review and never assumed. A review never replaces the gates. Extended 2026-11-08 (owner: "also
   remember we have agy not only codex kimi and claude"): every branch gets an agy review beside the
   Codex and Kimi reviews. agy cannot read files, so its prompt carries the diff and the context it
-  needs and ends with a required verdict line; it may also write self-contained pieces whose inputs
-  fit in the prompt.
+  needs and ends with a required verdict line. (The coordinator's relay added that agy can also act
+  as a writer.)
 - <a id="decided-project-throughput"></a>**Development throughput** (2026-10-22). The development
   feedback loop (landing, review, CI) is a priority track beside the main sequence
   ([record](archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-10-22--development-throughput-priority)).

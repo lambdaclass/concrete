@@ -678,7 +678,7 @@ The import rules:
 - `Proofs/` mirrors the modules and adds `Proofs/Interactions.lean`.
 - `ConcreteSpec/Spec.lean` remains the public import (R-0560).
 
-These are 33 modules, replacing 13 (the foundation of 2026-11-08 adds `Rules`, `Target`, `Scalar`,
+These are 34 modules, replacing 13 (the foundation of 2026-11-08 adds `Rules`, `Target`, `Scalar`,
 `Store`, `Leakage`, `Frame` and `Brand`, and takes `Layout` out of `Values`). agy recommended about 17; the
 plan keeps one module per concept the owner reads. Folded: observation into `Contract`.
 
@@ -1024,9 +1024,9 @@ registered rule.
     checked against the operation contracts, soundness, completeness, fuel monotonicity,
     trace-prefix consistency and infinite-behaviour adequacy against step 14's relation; the static
     module `Termination` with C8's termination evidence (per-function termination permissions and
-    evidence dependencies, a theorem about all allowed runs under named premises), so that step 20's
-    `checked_exits` has its premise; the rest of
-    `Primitives` (every existing operation's contract, pure and stateful). The bridge
+    evidence dependencies, a theorem about all allowed runs under named premises), so that
+    `checked_exits` (steps 20 and 24) has its premise; the rest of `Primitives` except the leakage
+    parts of the contracts, which step 17 adds once the leakage record exists (every existing operation's contract, pure and stateful). The bridge
     `Core.run (embed p) n ≈ run p n`.
 16. C5's dynamic half: the preservation invariant over owner slots, moves, roots and projections,
     loans, brands, dependencies and grants, proved for each step and across calls. Port `Borrow`
