@@ -1,10 +1,11 @@
 name: CI
 
-# The root's CI after the legacy/ move. Eighteen jobs, all required (required-checks.txt):
+# The root's CI after the legacy/ move. Twenty jobs, all required (required-checks.txt):
 #   Landing record  main's push run names the run that qualified its exact SHA (R-0570), kept from
 #                the base unchanged; when it finds one, the jobs below are skipped on main.
 #   Root checks  every check of scripts/checks/run.sh: legacy/ frozen, the day-one root inventory,
-#                workflow YAML, Markdown links, the landing script and readiness, the review tool.
+#                import layering, workflow YAML, Markdown links, the landing script and readiness,
+#                the review tool.
 #   Spec build   lake build of the specification, warnings refused.
 #   Proof axioms, Proof trust ban (sorry, native_decide), Kernel replay (leanchecker), External
 #                re-check (con-leche, nanoda)  the proof-integrity checks of scripts/proofs.
