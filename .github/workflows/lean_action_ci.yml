@@ -8,7 +8,7 @@ name: CI
 #   Spec build   lake build of the specification, warnings refused.
 #   Proof axioms, Proof trust ban (sorry, native_decide), Kernel replay (leanchecker), External
 #                re-check (con-leche, nanoda)  the proof-integrity checks of scripts/proofs.
-#   Slice 0 backends, artifacts, trusted base, reproducibility (x86-64 Linux and AArch64 macOS)
+#   Tests, determinism, scaling, Slice 0 artifacts, trusted base, reproducibility (x86-64 Linux and AArch64 macOS)
 #                the compiler's gates (scripts/checks/compiler), each in the compiler's devshell.
 #   Oracle (GitHub-hosted fetch + smoke)  the published oracle fetched, verified and run on a
 #                GitHub-hosted runner (ISS-0005, P13; R-0564), kept from the base unchanged.
@@ -405,7 +405,7 @@ jobs:
       - name: Install Nix
         uses: cachix/install-nix-action@v31
       - name: Per-test determinism (one compiler build, two native builds per test)
-        run: nix develop --command timeout 3000 bash scripts/checks/compiler/determinism.sh
+        run: nix develop --command bash scripts/checks/lib/bounded.sh 3000 bash scripts/checks/compiler/determinism.sh
 
   scaling:
     name: Scaling (x86-64)
@@ -414,19 +414,31 @@ jobs:
     defaults:
       run:
         shell: bash
-    # Scaling measurements are confined to one x86-64 Linux job; hosted macOS is too noisy.
-    runs-on: ubuntu-latest
+    # Heavy scaling runs only on provisioned concrete-ci-2 self-hosted runners (ISS-0029 / X4),
+    # never on GitHub-hosted VMs or macOS shared VMs, and never executes pull_request code on
+    # concrete-ci-2. On pull_request it selects ubuntu-24.04 and fails before checkout.
+    runs-on: ${{ github.event_name != 'pull_request' && fromJSON('["self-hosted","linux","x64","concrete","concrete-ci-2"]') || 'ubuntu-24.04' }}
     timeout-minutes: 15
     permissions:
       contents: read
     steps:
+      - name: Refuse a substitute for concrete-ci-2
+        if: runner.environment != 'self-hosted'
+        run: |
+          echo "::error::Scaling (x86-64) requires self-hosted concrete-ci-2; pull_request cannot use it, so this job is intentionally red"
+          exit 1
       - uses: actions/checkout@v4
-      - name: Install Nix
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
         uses: cachix/install-nix-action@v31
       - name: Interleaved 1x, 10x and 100x backend scaling
-        run: nix develop --command timeout 600 bash scripts/checks/compiler/scaling.sh scaling-report
+        env:
+          CONCRETE_SCALING_GITHUB_REPOSITORY: ${{ github.repository }}
+          CONCRETE_SCALING_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          CONCRETE_SCALING_RUNNER_NAME: ${{ runner.name }}
+        run: nix develop --command bash scripts/checks/lib/bounded.sh 600 bash scripts/checks/compiler/scaling.sh scaling-report
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && runner.environment == 'self-hosted'
         with:
           name: scaling-x86-64
           path: scaling-report/scaling.tsv
@@ -458,7 +470,7 @@ jobs:
       - name: Install Nix
         uses: cachix/install-nix-action@v31
       - name: Sanitizers, binary size (report-only) and stack bound (gates 10, 11, 12)
-        run: nix develop --command timeout 3000 bash scripts/checks/compiler/slice0_artifacts.sh report
+        run: nix develop --command bash scripts/checks/lib/bounded.sh 3000 bash scripts/checks/compiler/slice0_artifacts.sh report
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -492,7 +504,7 @@ jobs:
       - name: Install Nix
         uses: cachix/install-nix-action@v31
       - name: Trusted-base golden (premises, axioms, toolchain and LCB pin)
-        run: nix develop --command timeout 3000 bash scripts/checks/compiler/slice0_trusted_base.sh
+        run: nix develop --command bash scripts/checks/lib/bounded.sh 3000 bash scripts/checks/compiler/slice0_trusted_base.sh
 
   reproducibility:
     name: Reproducibility (${{ matrix.id }})
@@ -521,7 +533,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
       - name: Compare every stage in distinct build directories
-        run: nix develop --command timeout 3600 bash scripts/checks/compiler/slice0_repro.sh manifest.txt
+        run: nix develop --command bash scripts/checks/lib/bounded.sh 3600 bash scripts/checks/compiler/slice0_repro.sh manifest.txt
       - uses: actions/upload-artifact@v4
         with:
           name: reproducibility-${{ matrix.id }}

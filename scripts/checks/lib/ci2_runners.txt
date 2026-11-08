@@ -1,0 +1,9 @@
+# Exact runners eligible for the linux-ci2 reproducibility leg, by github.repository.
+# The concrete-light runners concrete-ci-2-gha7 and concrete-ci-2-gha8 are intentionally excluded.
+# Update this inventory in the same change as any runner-set change.
+unbalancedparentheses/concrete2	concrete-ci-2-gha1
+unbalancedparentheses/concrete2	concrete-ci-2-gha2
+unbalancedparentheses/concrete2	concrete-ci-2-gha3
+lambdaclass/concrete	concrete-ci-2-gha4
+lambdaclass/concrete	concrete-ci-2-gha5
+lambdaclass/concrete	concrete-ci-2-gha6

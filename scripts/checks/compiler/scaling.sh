@@ -66,6 +66,54 @@ case "$(uname -s)-$(uname -m)" in
 esac
 case "$in_process_only" in 0|1) ;; *) echo "scaling: SCALING_IN_PROCESS_ONLY must be 0 or 1" >&2; exit 2 ;; esac
 mkdir -p "$report"
+
+check_ci2_runner() { # check_ci2_runner REPOSITORY ENVIRONMENT RUNNER_NAME INVENTORY_PATH
+  python3 -I - "$1" "$2" "$3" "$4" <<'PY'
+import sys
+from pathlib import Path
+
+repo, env, name, inv_path = sys.argv[1:]
+for key, val in (("github_repository", repo), ("runner_environment", env), ("runner_name", name)):
+    if not val or val == "unknown":
+        sys.exit(f"FAIL scaling: missing or unknown {key}")
+if env != "self-hosted":
+    sys.exit(f"FAIL scaling: expected runner_environment=self-hosted, got {env}")
+path = Path(inv_path)
+try:
+    lines = path.read_text(encoding="utf-8").splitlines()
+except OSError as error:
+    sys.exit(f"FAIL scaling: {path}: cannot read runner inventory ({error})")
+runners = {}
+pairs = set()
+for number, raw in enumerate(lines, 1):
+    line = raw.strip()
+    if not line or line.startswith("#"):
+        continue
+    fields = line.split()
+    if len(fields) != 2:
+        sys.exit(f"FAIL scaling: {path}:{number}: expected repository and one runner name")
+    r, n = fields
+    if (r, n) in pairs:
+        sys.exit(f"FAIL scaling: {path}:{number}: duplicate {r} {n}")
+    pairs.add((r, n))
+    runners.setdefault(r, set()).add(n)
+if not runners:
+    sys.exit(f"FAIL scaling: {path}: empty runner inventory")
+eligible = runners.get(repo)
+if eligible is None:
+    sys.exit(f"FAIL scaling: {path}: no concrete-ci-2 runner inventory for {repo}")
+if name not in eligible:
+    sys.exit(f"FAIL scaling: runner_name={name} is not eligible for {repo} in {path}")
+PY
+}
+
+if [ -n "${CONCRETE_SCALING_GITHUB_REPOSITORY:-}${CONCRETE_SCALING_RUNNER_ENVIRONMENT:-}${CONCRETE_SCALING_RUNNER_NAME:-}" ]; then
+  check_ci2_runner \
+    "${CONCRETE_SCALING_GITHUB_REPOSITORY:-}" \
+    "${CONCRETE_SCALING_RUNNER_ENVIRONMENT:-}" \
+    "${CONCRETE_SCALING_RUNNER_NAME:-}" \
+    "$root/scripts/checks/lib/ci2_runners.txt"
+fi
 driver=(lake env lean --run "$root/scripts/checks/compiler/scaling.lean")
 if [ "$in_process_only" = 1 ]; then
   bounded 1800 lake build Concrete >"$work/lake-build.log" 2>&1 ||
@@ -197,10 +245,34 @@ control_refusal() {
   echo 'ok scaling control refusal: explicit flag required'
 }
 
+control_ci2_provenance() {
+  local inv=$root/scripts/checks/lib/ci2_runners.txt log=$work/control-ci2.log rc=0
+  if ! check_ci2_runner unbalancedparentheses/concrete2 self-hosted concrete-ci-2-gha1 "$inv" >"$log" 2>&1 ||
+      ! check_ci2_runner lambdaclass/concrete self-hosted concrete-ci-2-gha4 "$inv" >"$log" 2>&1; then
+    control_setup ci2-provenance "eligible concrete-ci-2 runner was rejected" "$log"
+    return 1
+  fi
+  for case_spec in \
+      "github-hosted|unbalancedparentheses/concrete2|github-hosted|github-actions|expected runner_environment=self-hosted" \
+      "light-pool|lambdaclass/concrete|self-hosted|concrete-ci-2-gha7|runner_name=concrete-ci-2-gha7 is not eligible for lambdaclass/concrete" \
+      "wrong-repo|unbalancedparentheses/concrete2|self-hosted|concrete-ci-2-gha4|runner_name=concrete-ci-2-gha4 is not eligible for unbalancedparentheses/concrete2" \
+      "unregistered|unbalancedparentheses/concrete2|self-hosted|concrete-ci-2-gha999|runner_name=concrete-ci-2-gha999 is not eligible for unbalancedparentheses/concrete2"; do
+    IFS='|' read -r label repo env name expected <<<"$case_spec"
+    rc=0
+    check_ci2_runner "$repo" "$env" "$name" "$inv" >"$log" 2>&1 || rc=$?
+    if [ "$rc" = 0 ] || ! grep -qF "$expected" "$log"; then
+      control_setup "ci2-provenance-$label" "did not refuse with '$expected' (status $rc)" "$log"
+      return 1
+    fi
+  done
+  echo 'ok scaling control ci2-provenance: eligible runners accepted and substitutes refused'
+}
+
 controls_rc=0
 control_linear || controls_rc=1
 control_quadratic || controls_rc=1
 control_refusal || controls_rc=1
+control_ci2_provenance || controls_rc=1
 if [ "$controls_rc" != 0 ]; then
   echo 'FAIL scaling: automatic planted controls failed' >&2
   [ "$clean_rc" != 0 ] || clean_rc=1
