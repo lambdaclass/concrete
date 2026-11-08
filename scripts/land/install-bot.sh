@@ -120,7 +120,8 @@ else
   # An older install set LAND_REPO=unbalancedparentheses/concrete2; train.sh and the bot refuse a
   # LAND_REPO that is not the one repository, so the installer migrates the line rather than warn.
   # Written through a copy that keeps the file's mode (the file may hold other secrets).
-  if grep -q '^LAND_REPO=' "$ENVF" && ! grep -qx 'LAND_REPO=lambdaclass/concrete' "$ENVF"; then
+  # Any LAND_REPO line that is not the one repository (systemd takes the last of several).
+  if grep '^LAND_REPO=' "$ENVF" | grep -Fvxq 'LAND_REPO=lambdaclass/concrete'; then
     say "migrating $ENVF: $(grep '^LAND_REPO=' "$ENVF" | tr '\n' ' ')-> LAND_REPO=lambdaclass/concrete"
     cp -p "$ENVF" "$ENVF.new" && sed 's|^LAND_REPO=.*|LAND_REPO=lambdaclass/concrete|' "$ENVF" > "$ENVF.new" && mv "$ENVF.new" "$ENVF"
   fi

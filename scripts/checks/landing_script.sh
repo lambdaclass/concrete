@@ -875,7 +875,9 @@ git remote add pb-ok "$TMP/pbok.git"
 out="$(PUSH_REMOTE=pb-ok bash scripts/push-both.sh 2>&1)"; rc=$?
 git remote remove pb-ok
 [ "$rc" = 0 ] && [ "$(git -C "$TMP/pbok.git" rev-parse refs/heads/main)" = "$(git rev-parse HEAD)" ] \
-  && ok "CONTROL: push-both publishes HEAD to an accepted remote" || { no "push-both control: exit $rc"; echo "$out" | sed 's/^/      /'; }
+  && has "$out" "push-both: published $(git rev-parse HEAD | cut -c1-8) on pb-ok/main" \
+  && [ "$(git ls-remote fork refs/heads/main | cut -f1)" = "$BASE" ] \
+  && ok "CONTROL: push-both publishes HEAD to an accepted remote, and only there" || { no "push-both control: exit $rc"; echo "$out" | sed 's/^/      /'; }
 rm -f scripts/push-both.sh scripts/land/lib.sh
 [ "$had_land" = 1 ] || rmdir scripts/land 2>/dev/null || true
 

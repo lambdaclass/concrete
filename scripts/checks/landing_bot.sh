@@ -442,6 +442,14 @@ out="$(ib)"; rc=$?
   && ! grep -q 'concrete2' "$IB/home/.config/concrete-landing-bot.env" \
   && [ "$(ls -l "$IB/home/.config/concrete-landing-bot.env" | cut -c1-10)" = "-rw-------" ] \
   && ok "the installer migrates an old LAND_REPO line in an existing environment file, keeping its mode (0600)" || { no "installer env migration: exit $rc"; echo "$out" | sed 's/^/      /'; }
+# A stale line beside a canonical one is migrated too, in either order (systemd takes the last).
+for lines in 'LAND_REPO=lambdaclass/concrete\nLAND_REPO=unbalancedparentheses/concrete2\n' 'LAND_REPO=unbalancedparentheses/concrete2\nLAND_REPO=lambdaclass/concrete\n'; do
+  printf "$lines" > "$IB/home/.config/concrete-landing-bot.env"
+  out="$(ib)"; rc=$?
+  [ "$rc" = 0 ] && [ "$(grep -c '^LAND_REPO=' "$IB/home/.config/concrete-landing-bot.env")" = 2 ] \
+    && [ -z "$(grep '^LAND_REPO=' "$IB/home/.config/concrete-landing-bot.env" | grep -Fvx 'LAND_REPO=lambdaclass/concrete')" ] \
+    && ok "the installer migrates a stale LAND_REPO line beside a canonical one ($(printf "$lines" | head -n 1 | cut -d/ -f2) first)" || { no "installer duplicate LAND_REPO: exit $rc"; echo "$out" | sed 's/^/      /'; }
+done
 # A fresh install logs its origin redacted (the clone itself is refused by a git that does no network).
 mkdir -p "$IB/home2" "$IB/nonet"
 printf '#!/bin/sh\n[ "$1" = clone ] && { echo "git shim: no network" >&2; exit 1; }\nexec "%s" "$@"\n' "$(command -v git)" > "$IB/nonet/git"; chmod +x "$IB/nonet/git"
@@ -456,9 +464,9 @@ git -C "$BC" remote set-url --push origin https://github.com/unbalancedparenthes
 out="$(ib)"; rc=$?
 [ "$rc" = 0 ] && [ "$(git -C "$BC" config --get-all remote.origin.url)" = "$IB/origin.git" ] && ! git -C "$BC" config --get remote.origin.pushurl >/dev/null \
   && ok "the installer repoints every origin url and drops a stale push URL" || { no "installer repoint: exit $rc, urls '$(git -C "$BC" config --get-all remote.origin.url | tr '\n' ' ')'"; echo "$out" | sed 's/^/      /'; }
-# The installer checks its URL before it clones or fetches: a foreign origin URL (also one that
-# url.*.insteadOf rewrites, as git clone would, to another repository), and an existing clone whose
-# remote is another repository, are refused with no clone and no fetch.
+# A fresh install checks its URL before it clones: a foreign origin URL (also one that
+# url.*.insteadOf rewrites, as git clone would, to another repository) is refused with no clone and
+# no fetch. (An existing clone is repointed, as above, and then guarded before it fetches.)
 printf '#!/bin/sh\nfor a in "$@"; do case "$a" in fetch|push|ls-remote|clone) case " $* " in *" --get-url "*) ;; *) echo "$*" >> "%s" ;; esac; break ;; esac; done\nexec "%s" "$@"\n' "$IB/inst.log" "$(command -v git)" > "$IB/nonet/git"; chmod +x "$IB/nonet/git"
 for env in "INSTALL_ORIGIN_URL=https://github.com/someone/else.git" "INSTALL_ORIGIN_URL=https://github.com/unbalancedparentheses/concrete2.git" \
            "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=url.https://github.com/someone/else.git.insteadOf GIT_CONFIG_VALUE_0=https://github.com/lambdaclass/concrete.git INSTALL_ORIGIN_URL=https://github.com/lambdaclass/concrete.git"; do
