@@ -884,6 +884,14 @@ ConcreteSpec.Stuck.wrongMode.sizeOf_spec
 ConcreteSpec.Surface0.CommentBody.brecOn	
 ConcreteSpec.Surface0.DigitRun.brecOn	
 ConcreteSpec.Surface0.IdentBody.brecOn	
+ConcreteSpec.Surface0.IntegerToken.mk.inj	
+ConcreteSpec.Surface0.IntegerToken.mk.injEq	propext
+ConcreteSpec.Surface0.IntegerToken.mk.sizeOf_spec	
+ConcreteSpec.Surface0.Radix.binary.sizeOf_spec	
+ConcreteSpec.Surface0.Radix.decimal.sizeOf_spec	
+ConcreteSpec.Surface0.Radix.hexadecimal.sizeOf_spec	
+ConcreteSpec.Surface0.Radix.octal.sizeOf_spec	
+ConcreteSpec.Surface0.Radix.ofNat_ctorIdx	
 ConcreteSpec.Surface0.StringBody.brecOn	
 ConcreteSpec.Surface0.Trivia.brecOn	
 ConcreteSpec.Surface0.Utf8.Decodes.brecOn	propext
@@ -903,6 +911,13 @@ ConcreteSpec.Surface0.instDecidableEncodes._proof_3
 ConcreteSpec.Surface0.instDecidableEncodes._proof_4	
 ConcreteSpec.Surface0.instDecidableEncodes._proof_5	propext
 ConcreteSpec.Surface0.instDecidableEncodes._proof_6	
+ConcreteSpec.Surface0.instDecidableEqIntegerToken.decEq._proof_1	
+ConcreteSpec.Surface0.instDecidableEqIntegerToken.decEq._proof_2	
+ConcreteSpec.Surface0.instDecidableEqIntegerToken.decEq._proof_3	
+ConcreteSpec.Surface0.instDecidableEqIntegerToken.decEq._proof_4	
+ConcreteSpec.Surface0.instDecidableEqIntegerToken.decEq._proof_5	
+ConcreteSpec.Surface0.instDecidableEqRadix._proof_1	
+ConcreteSpec.Surface0.instDecidableEqRadix._proof_2	
 ConcreteSpec.Trap.arithmeticOverflow.sizeOf_spec	
 ConcreteSpec.Trap.ofNat_ctorIdx	
 ConcreteSpec.Ty.scalar.inj	
@@ -1467,3 +1482,7 @@ _private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.Utf8.Encodes.match_1
 _private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.Utf8.Encodes.match_1.eq_3	propext
 _private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.Utf8.Encodes.match_1.eq_4	propext
 _private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.Utf8.Encodes.match_1.eq_5	propext
+_private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.instReprRadix.repr.match_1.eq_1	
+_private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.instReprRadix.repr.match_1.eq_2	
+_private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.instReprRadix.repr.match_1.eq_3	
+_private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.instReprRadix.repr.match_1.eq_4	
