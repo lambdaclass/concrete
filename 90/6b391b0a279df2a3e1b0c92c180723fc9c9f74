@@ -1,0 +1,2 @@
+[piece 1 of 1: docs]
+- docs/proposals/SLICE1_BRIEF.md:64: Giving the coordinator the choice between narrowing the spec and defining a compiler-subset predicate delegates an unresolved spec design decision without an explicit owner answer. AGENTS.md requires important design decisions to go to the owner with a recommendation grounded in PHILOSOPHY.md; §6 repeats this unauthorized assignment. Present these options to the owner and make the answer a launch dependency.
