@@ -122,7 +122,7 @@
           # pays for them unless they run `--report multi-kernel`.
           default = pkgs.mkShell ({
             packages = base;
-            # Slice-0 native builds name their compiler explicitly (scripts/checks/slice0_native.sh),
+            # Slice-0 native builds name their compiler explicitly (scripts/checks/lib/slice0_native.sh),
             # pinned here so the shell's general clang can move without changing their identity.
             CONCRETE_SLICE0_CLANG = "${pkgs.llvmPackages_21.clang}/bin/clang";
             # The artifact gates (scripts/checks/slice0_artifacts.sh) read the linked executables

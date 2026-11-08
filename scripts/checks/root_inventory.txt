@@ -31,6 +31,7 @@ legacy
 required-checks-transition.tsv
 required-checks.txt
 scripts
+tests
 docs/LANDING.md
 docs/PHILOSOPHY.md
 docs/REVIEW.md

@@ -704,7 +704,7 @@ all objects and both executables. Negative controls check that the comparator re
 byte, a missing artifact and a differing inventory. The slice-0 front end is not implemented yet, so
 this gate starts at the hand-written BIR contract.
 
-Both native gates use `slice0_native.sh`: the Nix-pinned clang 21 (`CONCRETE_SLICE0_CLANG`; the
+Both native gates use `scripts/checks/lib/slice0_native.sh` (a build helper, not a check: every `scripts/checks/*.sh` is a root check): the Nix-pinned clang 21 (`CONCRETE_SLICE0_CLANG`; the
 shell's general `clang` is unchanged), an environment reduced to `PATH`, `HOME` and `TMPDIR`
 (reduced, not hermetic), fixed relative object names and link order, epoch 1, UTC/C locale, no
 debug information, path prefix maps, and no ELF build ID or Mach-O UUID (`ZERO_AR_DATE=1` on

@@ -24,7 +24,7 @@ h=hashlib.sha256()
 for p in paths:
     h.update(hashlib.sha256(open(p,"rb").read()).hexdigest().encode()+b"  "+p+b"\n")
 print("source_sha256="+h.hexdigest())'
-printf 'target=%s\n' "$(bash scripts/checks/slice0_native.sh target)"
+printf 'target=%s\n' "$(bash scripts/checks/lib/slice0_native.sh target)"
 printf 'lean_pin=%s\n' "$(cat lean-toolchain)"
 printf 'lean_version=%s\n' "$(lean --version)"
 printf 'clang_version=%s\n' "$("$CONCRETE_SLICE0_CLANG" --version | head -1)"

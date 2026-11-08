@@ -48,7 +48,7 @@ compare=(python3 "$root/scripts/checks/lib/repro_compare.py")
 # which build_identity.sh checks before anything is built.
 bounded 600 lake env true
 bash scripts/checks/build_identity.sh > "$work/identity"
-target=$(bash scripts/checks/slice0_native.sh target)
+target=$(bash scripts/checks/lib/slice0_native.sh target)
 # Working source edits are included (the identity records their digest); no build product is.
 for side in first second; do
   d="$work/$side/checkout-with-$side-path"
@@ -74,7 +74,7 @@ for side in first second; do
     [ -s names ] || { echo 'slice0_repro: no examples' >&2; exit 1; }
     while read -r name; do
       bounded 120 lake env lean --run scripts/checks/slice0_bir.lean emit "$name" "$d/out/$name" "$target"
-      bounded 120 bash scripts/checks/slice0_native.sh "$d/out/$name" "$lcb"
+      bounded 120 bash scripts/checks/lib/slice0_native.sh "$d/out/$name" "$lcb"
     done < names
   )
 done

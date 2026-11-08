@@ -165,11 +165,11 @@ for name in $names; do
   t0=$(now_ms)
   "${emitter[@]}" emit "$name" "$d" "$target"
   t1=$(now_ms)
-  build "$name" "$d/build.log" bounded "$native_secs" bash "$root/scripts/checks/slice0_native.sh" "$d" "$lcb"
+  build "$name" "$d/build.log" bounded "$native_secs" bash "$root/scripts/checks/lib/slice0_native.sh" "$d" "$lcb"
   t2=$(now_ms)
   printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$name" "$target" $((t1 - t0)) $((emit_secs * 1000)) $((t2 - t1)) $((native_secs * 1000)) >>"$times"
   build "$name" "$d/build-san.log" \
-    bounded "$native_secs" bash "$root/scripts/checks/slice0_native.sh" "$d" "$lcb" sanitize
+    bounded "$native_secs" bash "$root/scripts/checks/lib/slice0_native.sh" "$d" "$lcb" sanitize
   observe "$d/llvm.san.exe" "$d/san" 30 30 0 "${san_env[@]}"
   if judge "$d" "$d/san"; then
     echo "ok   $name [llvm+asan]: status $(cat "$d/san.status")"
@@ -200,9 +200,9 @@ entry:
   ret i32 %r
 }
 LL
-build control-asan "$c/build.log" bounded "$native_secs" bash "$root/scripts/checks/slice0_native.sh" "$c" "$lcb"
+build control-asan "$c/build.log" bounded "$native_secs" bash "$root/scripts/checks/lib/slice0_native.sh" "$c" "$lcb"
 build control-asan "$c/build-san.log" \
-  bounded "$native_secs" bash "$root/scripts/checks/slice0_native.sh" "$c" "$lcb" sanitize
+  bounded "$native_secs" bash "$root/scripts/checks/lib/slice0_native.sh" "$c" "$lcb" sanitize
 observe "$c/llvm.san.exe" "$c/san" 30 30 0 "${san_env[@]}"
 if ! judge "$c" "$c/san" && grep -q 'AddressSanitizer' "$c/san.stderr"; then
   echo "ok   control: ASan reports an out-of-bounds load"
@@ -365,7 +365,7 @@ if [ -n "$measuring" ]; then
     x86_64-linux) rzdepth=128; printf '\t.intel_syntax noprefix\n\t.text\n\t.globl\tmain\n\t.type\tmain,@function\nmain:\n\tmov\tqword ptr [rsp - 0x80], 0\n\tmov\teax, 7\n\tret\n\t.size\tmain, .-main\n\t.section\t.note.GNU-stack,"",@progbits\n' ;;
     aarch64-macos) rzdepth=144; printf '\t.text\n\t.globl\t_main\n\t.p2align\t2\n_main:\n\tstp\tx29, x30, [sp, #-0x90]!\n\tldp\tx29, x30, [sp], #0x90\n\tstur\txzr, [sp, #-0x80]\n\tmov\tw0, #7\n\tret\n' ;;
   esac >"$rz/control.s"
-  if ! bounded "$native_secs" bash "$root/scripts/checks/slice0_native.sh" control "$rz" >"$rz/build.log" 2>&1; then
+  if ! bounded "$native_secs" bash "$root/scripts/checks/lib/slice0_native.sh" control "$rz" >"$rz/build.log" 2>&1; then
     echo "FAIL control: the red-zone executable does not build: $(head -c 1000 "$rz/build.log")"; fail=1
   else
     "${objdump[@]}" "$rz/control.exe" >"$rz/control.exe.dis"
