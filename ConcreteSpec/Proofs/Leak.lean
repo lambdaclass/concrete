@@ -876,11 +876,9 @@ theorem apply_alloc_zero {m : Memory} (hwf : ∀ l, (m l).WF) (lineage : Lineage
     apply m (.alloc lineage 0) = some m := by
   simp only [apply, Account.alloc_zero (m lineage) (hwf lineage), Memory.set_same]
 
-/-- Law (subject `apply`).
-
-A successful free conserves cumulative requested bytes and both peaks, changes live bytes by
-exactly the freed amount, and leaves every other lineage unchanged. -/
-theorem free_conservation (m : Memory) (lineage : LineageId) (bytes : Nat)
+/-- Helper (computation). Exposes the fields of a successful free and its frame for the
+independent byte-balance theorem `free_conservation` (approved: PENDING). -/
+theorem free_update (m : Memory) (lineage : LineageId) (bytes : Nat)
     (hle : bytes ≤ (m lineage).live) :
     ∃ m', apply m (.free lineage bytes) = some m' ∧
       (m' lineage).requested = (m lineage).requested ∧
@@ -894,6 +892,22 @@ theorem free_conservation (m : Memory) (lineage : LineageId) (bytes : Nat)
     refine ⟨rfl, rfl, rfl, rfl, ?_⟩
     intro l hl
     simp [hl]
+
+/-- Law (subject `apply`).
+
+A successful free balances the remaining bytes plus its outflow against the bytes owned before
+it, while retaining request history, both peaks, and all other lineages. -/
+theorem free_conservation (m : Memory) (lineage : LineageId) (bytes : Nat)
+    (hle : bytes ≤ (m lineage).live) :
+    ∃ m', apply m (.free lineage bytes) = some m' ∧
+      (m' lineage).requested = (m lineage).requested ∧
+      (m' lineage).live + bytes = (m lineage).live ∧
+      (m' lineage).peak = (m lineage).peak ∧
+      (m' lineage).functionPeak = (m lineage).functionPeak ∧
+      ∀ l, l ≠ lineage → m' l = m l := by
+  obtain ⟨m', h, hreq, hlive, hp, hfp, hframe⟩ := free_update m lineage bytes hle
+  refine ⟨m', h, hreq, ?_, hp, hfp, hframe⟩
+  omega
 
 /-- Law (subject `apply`).
 
@@ -1365,7 +1379,7 @@ example : (∀ l, (memoryA l).WF) ∧ ¬ (applyCorruptsOther memoryA (.alloc ⟨
 /-- Instance (law `free_conservation`, case `memoryA`). -/
 example : ∃ m', apply memoryA (.free ⟨0⟩ 3) = some m' ∧
     (m' ⟨0⟩).requested = (memoryA ⟨0⟩).requested ∧
-    (m' ⟨0⟩).live = (memoryA ⟨0⟩).live - 3 ∧
+    (m' ⟨0⟩).live + 3 = (memoryA ⟨0⟩).live ∧
     (m' ⟨0⟩).peak = (memoryA ⟨0⟩).peak ∧
     (m' ⟨0⟩).functionPeak = (memoryA ⟨0⟩).functionPeak ∧
     ∀ l, l ≠ ⟨0⟩ → m' l = memoryA l :=
@@ -1375,14 +1389,14 @@ example : ∃ m', apply memoryA (.free ⟨0⟩ 3) = some m' ∧
 example : 3 ≤ (memoryA ⟨0⟩).live ∧
     ¬ (∃ m', applyCorruptsOther memoryA (.free ⟨0⟩ 3) = some m' ∧
       (m' ⟨0⟩).requested = (memoryA ⟨0⟩).requested ∧
-      (m' ⟨0⟩).live = (memoryA ⟨0⟩).live - 3 ∧
+      (m' ⟨0⟩).live + 3 = (memoryA ⟨0⟩).live ∧
       (m' ⟨0⟩).peak = (memoryA ⟨0⟩).peak ∧
       (m' ⟨0⟩).functionPeak = (memoryA ⟨0⟩).functionPeak ∧
       ∀ l, l ≠ ⟨0⟩ → m' l = memoryA l) := by
   refine ⟨by decide, ?_⟩
   rintro ⟨m', hm', _, hlive, _, _, _⟩
   cases hm'
-  change (5 : Nat) = 5 - 3 at hlive
+  change (5 : Nat) + 3 = 5 at hlive
   omega
 
 /-- Mutant transition that clears `peak` and `functionPeak` on a reset instead of retaining them. -/
