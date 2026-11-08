@@ -22,6 +22,17 @@ class Controls(unittest.TestCase):
             fn()
         self.assertEqual(str(caught.exception), diagnostic)
 
+    def test_operational_recovery(self):
+        for status, conclusion in (("MISSING", "cancelled"), ("INCOMPLETE", "incomplete")):
+            old = record(); old.update(status=status, conclusion=conclusion)
+            if status == "MISSING": old.update(gates=[], runner_name=None)
+            else: old["gates"][0]["status"] = status
+            self.rejected(f"{status} daily {SHA}: recorded attempt", lambda: observe([old], SHA, "daily", NOW, RUNNERS))
+            new = record(); new["attempt"] = "1/2"
+            self.assertEqual(observe([old, new], SHA, "daily", NOW, RUNNERS), f"PASS daily {SHA}")
+            new["attempt"] = "1/0"
+            self.rejected(f"{status} daily {SHA}: recorded attempt", lambda: observe([old, new], SHA, "daily", NOW, RUNNERS))
+
     def test_pass(self):
         self.assertEqual(observe([record()], SHA, "daily", NOW, RUNNERS), "PASS daily " + SHA)
 

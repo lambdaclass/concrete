@@ -8,6 +8,18 @@ from test_protocol import SHA, NOW, RUNNERS, record
 TIP = "b" * 40
 
 class History(unittest.TestCase):
+    def test_tip_exact_pass(self):
+        r = record(); r.update(sha=TIP, gate_revision=TIP)
+        self.assertEqual(observe.observe_main([TIP, SHA], {TIP: [r]}, "daily", NOW, RUNNERS), [f"PASS daily {TIP}"])
+
+    def test_new_tip_recovers_operational_ancestor(self):
+        for status, conclusion in (("MISSING", "cancelled"), ("INCOMPLETE", "incomplete")):
+            old = record(); old.update(status=status, conclusion=conclusion)
+            if status == "MISSING": old.update(gates=[], runner_name=None)
+            else: old["gates"][0]["status"] = status
+            tip = record(); tip.update(sha=TIP, gate_revision=TIP)
+            self.assertEqual(observe.observe_main([TIP, SHA], {TIP: [tip], SHA: [old]}, "daily", NOW, RUNNERS), [f"PASS daily {TIP}"])
+
     def test_ancestor_coverage(self):
         self.assertEqual(observe.observe_main([TIP, SHA], {SHA: [record()]}, "daily", NOW, RUNNERS),
                          [f"PASS daily {SHA}: ancestor coverage; tip {TIP} requires its own evidence"])

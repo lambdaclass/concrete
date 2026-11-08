@@ -41,7 +41,9 @@ contract awaiting agreement with G1, **not a claim that its exporter exists**.
 The registry must also own freshness windows; the protocol's current 36-hour daily
 and eight-day weekly recovery windows are initial operational defaults requiring
 integration into that registry before qualification. Prior failed attempts remain
-visible; recovery never rewrites their occurrence.
+visible; recovery never rewrites their occurrence. The latest fresh attempt recovers
+operational MISSING/INCOMPLETE on its SHA; FAIL remains permanent. Newer main
+coverage recovers older operational gaps, while malformed evidence always surfaces.
 
 The executor also requires the root `scripts/checks/lib/heavy_slots.sh` interface
 `heavy_slot_acquire` / `heavy_slot_release`. The frozen legacy helper is not run.

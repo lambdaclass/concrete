@@ -99,10 +99,8 @@ def observe(history, sha, tier, now, runners):
     require(not any(r["status"] == "FAIL" for r in history), f"FAIL {tier} {sha}: recorded attempt")
     recent = [r for r in history if now - timestamp(r["completed"]) <= WINDOWS[tier]]
     require(recent, f"STALE {tier} {sha}: no fresh PASS")
-    # G2: a retry never erases disagreement in a fresh window.
-    for status in ("FAIL", "INCOMPLETE", "MISSING"):
-        require(not any(r["status"] == status for r in recent), f"{status} {tier} {sha}: recorded attempt")
-    require(any(r["status"] == "PASS" for r in recent), f"MISSING {tier} {sha}: no PASS")
+    latest = max(recent, key=lambda r: (timestamp(r["completed"]), timestamp(r["started"]), tuple(map(int, r["attempt"].split("/")))))
+    require(latest["status"] == "PASS", f"{latest['status']} {tier} {sha}: recorded attempt")
     return f"PASS {tier} {sha}"
 
 def read_note(sha, tier, listed=False):
