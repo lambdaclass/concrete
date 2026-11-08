@@ -119,6 +119,39 @@ theorem eval_operands_rehint (h : Var → String) (L : AList Var Int) (st : Unit
 
 end Prim
 
+/-- Evidence is usable in its own exact context. -/
+theorem SafetyEvidence.usable_current (e : SafetyEvidence) : e.Usable e.context := rfl
+
+/-- Changing the typed obligation identity invalidates evidence. -/
+theorem SafetyEvidence.obligation_mismatch (e : SafetyEvidence) (current : EvidenceContext)
+    (h : e.context.obligation ≠ current.obligation) : ¬ e.Usable current := by
+  intro hu
+  exact h (congrArg EvidenceContext.obligation hu)
+
+/-- Changing the target invalidates evidence. -/
+theorem SafetyEvidence.target_mismatch (e : SafetyEvidence) (current : EvidenceContext)
+    (h : e.context.target ≠ current.target) : ¬ e.Usable current := by
+  intro hu
+  exact h (congrArg EvidenceContext.target hu)
+
+/-- Changing the primitive contract or its revision invalidates evidence. -/
+theorem SafetyEvidence.contract_mismatch (e : SafetyEvidence) (current : EvidenceContext)
+    (h : e.context.contract ≠ current.contract) : ¬ e.Usable current := by
+  intro hu
+  exact h (congrArg EvidenceContext.contract hu)
+
+/-- Changing the checker version invalidates evidence. -/
+theorem SafetyEvidence.checker_mismatch (e : SafetyEvidence) (current : EvidenceContext)
+    (h : e.context.checker ≠ current.checker) : ¬ e.Usable current := by
+  intro hu
+  exact h (congrArg EvidenceContext.checker hu)
+
+/-- Changing the specification version invalidates evidence. -/
+theorem SafetyEvidence.spec_mismatch (e : SafetyEvidence) (current : EvidenceContext)
+    (h : e.context.spec ≠ current.spec) : ¬ e.Usable current := by
+  intro hu
+  exact h (congrArg EvidenceContext.spec hu)
+
 /-- An unregistered primitive has no allowed answer. -/
 theorem PrimRegistry.allows_unknown {Val Ty Store Event : Type} (R : PrimRegistry Val Ty Store Event)
     (p : PrimId) (hnone : AList.lookup R.entries p = none) (args : List Val) (st : Store)

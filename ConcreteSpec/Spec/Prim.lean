@@ -232,6 +232,64 @@ def PrimRegistry.operands (O : Exec.Operands) (R : PrimRegistry O.Val O.Ty O.Sto
   test := O.test
   allows := R.allows
 
+/-! ## Evidence binding
+
+Evidence is accepted only for the exact context it was proved against. A context contains the typed
+obligation identity, target profile, primitive-contract revision, checker version and specification
+version (Q6.3, Q9.12, the pipeline's one evidence graph). The fact and its proof are present in the
+record; matching a display name or a contract's current meaning is not enough.
+-/
+
+/-- The version of the checker that produced evidence. -/
+structure CheckerVersion where
+  major : Nat
+  minor : Nat
+  patch : Nat
+  deriving DecidableEq, Repr
+
+/-- Every independently changeable input to a safety proof. -/
+structure EvidenceContext where
+  obligation : ObligationId
+  target : Target
+  contract : ContractId
+  checker : CheckerVersion
+  spec : SpecVersion
+  deriving DecidableEq, Repr
+
+/-- A safety fact with its proof and the exact context in which that proof is valid. -/
+structure SafetyEvidence where
+  fact : Prop
+  context : EvidenceContext
+  proof : fact
+
+/-- A fact is usable only when every component of its context matches the current one. -/
+def SafetyEvidence.Usable (e : SafetyEvidence) (current : EvidenceContext) : Prop :=
+  e.context = current
+
+instance (e : SafetyEvidence) (current : EvidenceContext) : Decidable (e.Usable current) := by
+  unfold SafetyEvidence.Usable
+  infer_instance
+
+namespace EvidenceDemo
+
+/-- One current evidence context. -/
+def current : EvidenceContext := ⟨⟨0⟩, linuxX8664, ⟨⟨0⟩, 1⟩, ⟨0, 1, 0⟩, specVersion⟩
+
+/-- A proof of a trivial safety fact in exactly that context. -/
+def evidence : SafetyEvidence := ⟨True, current, trivial⟩
+
+/-- Accepted: every component matches. -/
+example : evidence.Usable current := rfl
+
+/-- Refused: a different contract revision invalidates the old evidence. -/
+example : ¬ evidence.Usable { current with contract := ⟨⟨0⟩, 2⟩ } := by decide
+
+/-- Refused: a different checker or specification also invalidates it. -/
+example : ¬ evidence.Usable { current with checker := ⟨0, 2, 0⟩ } ∧
+    ¬ evidence.Usable { current with spec := ⟨0, 2⟩ } := by decide
+
+end EvidenceDemo
+
 namespace PrimDemo
 
 /-- A minimal base language used to exercise registry admission, not a concrete language primitive. -/
