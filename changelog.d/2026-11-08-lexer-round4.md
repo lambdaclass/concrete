@@ -1,6 +1,6 @@
 ### Lexer round 4: canonical spellings and recognition boundaries
 
-Repairs agy's four findings on 5b0e63189 (ISS-0033 through ISS-0036).
+Repairs agy's four findings on 5b0e63189 (ISS-0035 through ISS-0038).
 The intended owner-decided spellings stay unchanged: `i32` and `u32` replace their erroneous
 codepoint transcriptions. Suffix decoding derives from `intTySpelling`. Kernel-checked
 readable-literal comparisons cover every suffix and radix prefix and both complete escape
