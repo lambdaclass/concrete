@@ -325,7 +325,10 @@ instance (U : ConstTypes) (fuel : Nat) (ds : List (ConstDecl U)) :
   unfold ConstsEvaluate
   infer_instance
 
-/-- **Rule: constant declarations are admitted** by both independent checks. -/
+/-- **Rule: constant declarations are admitted** by both independent checks: statically known
+module constants (Q6.2), within the fixed closed evaluator (P17b). Owner decision 2026-11-08,
+item 18 revises TYPE-22 to require successful kernel-checked evaluation within fuel, including
+unused constants; item 26 requires Copy declared types. -/
 def ConstsAdmitted (U : ConstTypes) (fuel : Nat) (ds : List (ConstDecl U)) : Prop :=
   ConstsTyped U ds ∧ ConstsEvaluate U fuel ds
 
