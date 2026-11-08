@@ -881,6 +881,16 @@ ConcreteSpec.Stuck.ofNat_ctorIdx
 ConcreteSpec.Stuck.typeError.sizeOf_spec	
 ConcreteSpec.Stuck.unbound.sizeOf_spec	
 ConcreteSpec.Stuck.wrongMode.sizeOf_spec	
+ConcreteSpec.Surface0.CommentBody.brecOn	
+ConcreteSpec.Surface0.Utf8.Decodes.brecOn	propext
+ConcreteSpec.Surface0.Utf8.Encodes._sparseCasesOn_1.else_eq	propext
+ConcreteSpec.Surface0.Utf8.Encodes._sparseCasesOn_2.else_eq	propext
+ConcreteSpec.Surface0.instDecidableEncodes._proof_1	
+ConcreteSpec.Surface0.instDecidableEncodes._proof_2	
+ConcreteSpec.Surface0.instDecidableEncodes._proof_3	
+ConcreteSpec.Surface0.instDecidableEncodes._proof_4	
+ConcreteSpec.Surface0.instDecidableEncodes._proof_5	propext
+ConcreteSpec.Surface0.instDecidableEncodes._proof_6	
 ConcreteSpec.Trap.arithmeticOverflow.sizeOf_spec	
 ConcreteSpec.Trap.ofNat_ctorIdx	
 ConcreteSpec.Ty.scalar.inj	
@@ -1436,3 +1446,8 @@ _private.ConcreteSpec.Proofs.Slice1.0.ConcreteSpec.runBody.match_1.eq_3
 _private.ConcreteSpec.Proofs.Slice1.0.ConcreteSpec.runBody.match_3.eq_1	
 _private.ConcreteSpec.Proofs.Slice1.0.ConcreteSpec.runBody.match_3.eq_2	
 _private.ConcreteSpec.Proofs.Slice1.0.ConcreteSpec.runBody.match_3.eq_3	
+_private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.Utf8.Encodes.match_1.eq_1	propext
+_private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.Utf8.Encodes.match_1.eq_2	propext
+_private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.Utf8.Encodes.match_1.eq_3	propext
+_private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.Utf8.Encodes.match_1.eq_4	propext
+_private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.Utf8.Encodes.match_1.eq_5	propext
