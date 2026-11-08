@@ -1,6 +1,6 @@
 name: CI
 
-# The root's CI after the legacy/ move. Eighteen jobs, all required (required-checks.txt):
+# The root's CI after the legacy/ move. Twenty-one jobs, all required (required-checks.txt):
 #   Landing record  main's push run names the run that qualified its exact SHA (R-0570), kept from
 #                the base unchanged; when it finds one, the jobs below are skipped on main.
 #   Root checks  every check of scripts/checks/run.sh: legacy/ frozen, the day-one root inventory,
@@ -345,14 +345,14 @@ jobs:
       - name: "Fetch the published oracle, verify it, run smoke.con through it (exit 42)"
         run: bash scripts/oracle/ci_check.sh
 
-  # THE COMPILER'S GATES (Concrete/README.md gates 4, 6, 6a, 8, 9, 10, 11 and 12; slice 0, provisional),
+  # THE COMPILER'S GATES (Concrete/README.md gates 4, 6, 6a, 8–14; slice 0, provisional),
   # scripts/checks/compiler/: not root checks (run.sh runs only scripts/checks/*.sh), because they need
   # the compiler's devshell, a native macOS runner and minutes each. Every bir: row in the test manifest
   # through the LLVM path and the LCB path, each executable's observation compared with the manifest
-  # expectation; sanitizers, binary size (report-only) and the stack bound; the trusted-base golden; and
-  # every build stage reproduced in distinct directories and on distinct machines. Each runs natively
-  # on x86-64 Linux and on AArch64 macOS (LCB's first native proof profile is Apple AArch64), and every
-  # matrix leg is a required job of its own name.
+  # expectation; sanitizers, binary size (report-only) and the stack bound; the trusted-base golden;
+  # every build stage reproduced in distinct directories and on distinct machines; per-test determinism
+  # from one compiler build; and interleaved scaling. Scaling runs only on x86-64 Linux; the other native
+  # matrix gates run on x86-64 Linux and AArch64 macOS, and every matrix leg is a required job of its own.
   tests:
     name: Tests (${{ matrix.arch }})
     needs: landing-record
@@ -380,6 +380,57 @@ jobs:
         uses: cachix/install-nix-action@v31
       - name: Manifest tests (LLVM and LCB, native)
         run: nix develop --command bash scripts/checks/compiler/tests.sh
+
+  determinism:
+    name: Determinism (${{ matrix.arch }})
+    needs: landing-record
+    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86-64
+            runner: ubuntu-latest
+          - arch: aarch64-macos
+            runner: macos-15
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+      - name: Per-test determinism (one compiler build, two native builds per test)
+        run: nix develop --command timeout 3000 bash scripts/checks/compiler/determinism.sh
+
+  scaling:
+    name: Scaling (x86-64)
+    needs: landing-record
+    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
+    defaults:
+      run:
+        shell: bash
+    # Scaling measurements are confined to one x86-64 Linux job; hosted macOS is too noisy.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+      - name: Interleaved 1x, 10x and 100x backend scaling
+        run: nix develop --command timeout 600 bash scripts/checks/compiler/scaling.sh scaling-report
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scaling-x86-64
+          path: scaling-report/scaling.tsv
+          if-no-files-found: error
 
   artifacts:
     name: Slice 0 artifacts (${{ matrix.arch }})
