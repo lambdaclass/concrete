@@ -100,7 +100,9 @@ instance (s : State) (l : Loan) : Decidable (ParentValid s l) := by
 
 /-- Every live loan has an owned root; every parent exists, predates its child and has the
 same root. Shared access cannot be upgraded. Cached chains agree exactly. Distinct competing
-loans are compatible. Supplies bound all issued identities, including moved slots. -/
+loans are compatible. Supplies bound all issued identities, including moved slots. Active
+frames have distinct issued identities and their `locals` tables index every slot belonging
+to an active frame's activation. -/
 def WellFormed (s : State) : Prop :=
   (s.slots.map Slot.place).Nodup ∧ (s.loans.map Loan.id).Nodup ∧
   (∀ x ∈ s.slots, x.place.id < s.nextPlace ∧ x.activation < s.nextActivation) ∧
@@ -108,7 +110,10 @@ def WellFormed (s : State) : Prop :=
     l.id.id < s.nextLoan ∧ l.activation < s.nextActivation ∧
     (∃ x ∈ s.slots, x.place = l.root ∧ x.status = .owned) ∧
     ParentValid s l ∧ (l.pendingArgument = true → (l.parent.isSome = true ∨ l.callRoot = true))) ∧
-  (∀ a ∈ s.loans, ∀ b ∈ s.loans, Compatible a b)
+  (∀ a ∈ s.loans, ∀ b ∈ s.loans, Compatible a b) ∧
+  (s.frames.map Activation.id).Nodup ∧
+  (∀ f ∈ s.frames, f.id < s.nextActivation ∧
+    ∀ x ∈ s.slots, x.activation = f.id → x.place ∈ List.map Prod.snd f.locals)
 
 instance (s : State) : Decidable (WellFormed s) := by
   unfold WellFormed
@@ -239,19 +244,14 @@ def endLocals (activation : Nat) (s : State) : Option State :=
   (s.loans.filter (·.activation == activation)).foldlM (fun s l => endLoan s l.id) s
 
 /-- Leave consumes no resource implicitly: all remaining local owners must be Copy or moved.
-Local loans end before local roots are removed. `Slot.activation` is the authoritative,
-complete inventory of activation ownership; `Activation.locals` is only the variable lookup
-index. After named locals are dropped, cleanup checks the linear discharge and loan guards
-for any remaining activation slots, then removes them by filtering that inventory. It never
-checks its own postcondition at run time. -/
+Local loans end before local roots are removed. By the frame-local completeness clause of
+`WellFormed`, every slot belonging to the departing activation is indexed in `f.locals`, so
+dropping `List.map Prod.fst f.locals` discharges and removes all slots of `f.id`. -/
 def leave (s : State) : Option State := do
   let f ← s.frames.head?
   let s ← endLocals f.id s
   let s ← drop (List.map Prod.fst f.locals) s
-  if !(s.slots.all (fun x => x.activation != f.id || x.desc.copy || x.status == .moved) &&
-      s.loans.all (fun l => s.slots.all (fun x => x.activation != f.id || x.place != l.root)))
-    then none else
-    some { s with slots := s.slots.filter (·.activation != f.id), frames := s.frames.tail }
+  some { s with frames := s.frames.tail }
 
 /-- Downward-only lending: each parameter gets a new child loan. Views never become owner slots,
 so cannot be returned/stored/moved by the owner operations. This standalone call-boundary transition supports the preservation laws. C1 uses `callLife`
@@ -901,8 +901,8 @@ example : (do
 example : (do
     let s ← enter types [] child
     adoptDown s [(y, ⟨1⟩)]) = none := by decide
-/-- Refused: even an incomplete locals table cannot hide an activation's linear obligation. -/
-example : leave { initial with frames := [⟨0, [], []⟩] } = none := by decide
+/-- Refused: an incomplete locals table that omits an active frame's slot violates `WellFormed`. -/
+example : ¬ WellFormed { initial with frames := [⟨0, [], []⟩] } := by decide
 
 /-- The following C1 instance exercises actual calls with downward view parameters. -/
 inductive CE where

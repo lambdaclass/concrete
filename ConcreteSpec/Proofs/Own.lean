@@ -36,7 +36,7 @@ theorem move_preserves_result (s t : State) (p : Hybrid.Place) (hs : WellFormed 
       apply hg
       simp only [Bool.or_eq_true, List.any_eq_true]
       exact Or.inr ⟨l, hl, by simp [he]⟩
-    refine ⟨?_, hs.2.1, ?_, ?_, hs.2.2.2.2⟩
+    refine ⟨?_, hs.2.1, ?_, ?_, hs.2.2.2.2.1, hs.2.2.2.2.2.1, ?_⟩
     · change (s.slots.map change |>.map Slot.place).Nodup
       simpa only [List.map_map, Function.comp_def, place] using hs.1
     · intro a ha
@@ -48,6 +48,12 @@ theorem move_preserves_result (s t : State) (p : Hybrid.Place) (hs : WellFormed 
       refine ⟨hid, hact, ⟨change a, List.mem_map.mpr ⟨a, ha, rfl⟩, (place a).trans he, ?_⟩, hp, hpend⟩
       have hn : a.place ≠ p := fun h => clear l hl (he.symm.trans h)
       simpa [change, hn] using ho
+    · intro f hf
+      refine ⟨(hs.2.2.2.2.2.2 f hf).1, ?_⟩
+      intro a ha hact
+      obtain ⟨b, hb, rfl⟩ := List.mem_map.mp ha
+      rw [place]
+      exact (hs.2.2.2.2.2.2 f hf).2 b hb ((activation b).symm.trans hact)
 
 /-- Helper (inversion). Structural successful-result proof used by the operation-result law. (approved: PENDING).  -/
 theorem reinitialize_preserves_result (s t : State) (p : Hybrid.Place) (hs : WellFormed s)
@@ -59,7 +65,7 @@ theorem reinitialize_preserves_result (s t : State) (p : Hybrid.Place) (hs : Wel
     let change := fun x : Slot => if x.place = p then { x with status := .owned } else x
     have place (x : Slot) : (change x).place = x.place := by simp [change]; split <;> rfl
     have activation (x : Slot) : (change x).activation = x.activation := by simp [change]; split <;> rfl
-    refine ⟨?_, hs.2.1, ?_, ?_, hs.2.2.2.2⟩
+    refine ⟨?_, hs.2.1, ?_, ?_, hs.2.2.2.2.1, hs.2.2.2.2.2.1, ?_⟩
     · change (s.slots.map change |>.map Slot.place).Nodup
       simpa only [List.map_map, Function.comp_def, place] using hs.1
     · intro a ha
@@ -73,6 +79,12 @@ theorem reinitialize_preserves_result (s t : State) (p : Hybrid.Place) (hs : Wel
       split
       · rfl
       · exact ho
+    · intro f hf
+      refine ⟨(hs.2.2.2.2.2.2 f hf).1, ?_⟩
+      intro a ha hact
+      obtain ⟨b, hb, rfl⟩ := List.mem_map.mp ha
+      rw [place]
+      exact (hs.2.2.2.2.2.2 f hf).2 b hb ((activation b).symm.trans hact)
   · contradiction
 
 /-- Helper (computation). Reorders the disjunction defining symmetric loan compatibility. (approved: PENDING). -/
@@ -107,7 +119,7 @@ private theorem insert_loan (s : State) (a : Loan) (hs : WellFormed s)
       simp only [he] at hl ⊢
       obtain ⟨b, hb, rest⟩ := hl
       exact ⟨b, List.mem_cons_of_mem _ hb, rest⟩
-  refine ⟨hs.1, ?_, hs.2.2.1, ?_, ?_⟩
+  refine ⟨hs.1, ?_, hs.2.2.1, ?_, ?_, hs.2.2.2.2.2⟩
   · simpa only [List.map_cons, List.nodup_cons] using And.intro fresh hs.2.1
   · intro l hl
     rcases List.mem_cons.mp hl with he | hl
@@ -126,7 +138,7 @@ private theorem insert_loan (s : State) (a : Loan) (hs : WellFormed s)
       · exact hcompat c hc
     · rcases List.mem_cons.mp hc with he | hc
       · subst c; exact compatible_symm a b (hcompat b hb)
-      · exact hs.2.2.2.2 b hb c hc
+      · exact hs.2.2.2.2.1 b hb c hc
 
 /-- Helper (inversion). Extracts owned-root and whole-root permission facts from the owner access guard. (approved: PENDING). -/
 private theorem owner_guard (s : State) (p : Hybrid.Place) (m : Mode)
@@ -219,7 +231,7 @@ theorem endLoan_preserves_result (s t : State) (i : LoanId) (hs : WellFormed s)
   · contradiction
   · rename_i clear
     cases h
-    refine ⟨hs.1, hs.2.1.sublist (List.Sublist.map _ List.filter_sublist), hs.2.2.1, ?_, ?_⟩
+    refine ⟨hs.1, hs.2.1.sublist (List.Sublist.map _ List.filter_sublist), hs.2.2.1, ?_, ?_, hs.2.2.2.2.2⟩
     · intro l hl
       have hl' := (List.mem_filter.mp hl).1
       obtain ⟨hb, ha, hr, hp, hpend⟩ := hs.2.2.2.1 l hl'
@@ -237,7 +249,7 @@ theorem endLoan_preserves_result (s t : State) (i : LoanId) (hs : WellFormed s)
           exact List.any_eq_true.mpr ⟨l, hl', by simp [he, ← hid, hbi]⟩
         simpa using hn
     · intro b hb c hc
-      exact hs.2.2.2.2 b (List.mem_filter.mp hb).1 c (List.mem_filter.mp hc).1
+      exact hs.2.2.2.2.1 b (List.mem_filter.mp hb).1 c (List.mem_filter.mp hc).1
 
 /-- Helper (congruence). Owner access returns the identical state after its permission guard succeeds. (approved: PENDING). -/
 theorem accessOwner_preserves (s t : State) (p : Hybrid.Place) (m : Mode)
@@ -333,47 +345,99 @@ end PrimitiveWitnesses
 theorem bind_preserves_result (types : Var → Option Descriptor) (s t : State) (x : Var)
     (hs : WellFormed s) (h : bind types x s = some t) : WellFormed t := by
   unfold bind at h
-  obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
+  obtain ⟨f, hf, h⟩ := Option.bind_eq_some_iff.mp h
   split at h
   · exact reinitialize_preserves_result _ _ _ hs h
   · obtain ⟨d, _, h⟩ := Option.bind_eq_some_iff.mp h
     split at h
     · rename_i hact
       cases h
-      refine ⟨?_, hs.2.1, ?_, ?_, hs.2.2.2.2⟩
-      · simp only [List.map_cons, List.nodup_cons]
-        refine ⟨?_, hs.1⟩
-        intro hm
-        obtain ⟨a, ha, he⟩ := List.mem_map.mp hm
-        have hb := (hs.2.2.1 a ha).1
-        rw [he] at hb
-        exact Nat.lt_irrefl _ hb
-      · intro a ha
-        rcases List.mem_cons.mp ha with he | ha
-        · subst a; exact ⟨Nat.lt_succ_self _, hact⟩
-        · exact ⟨Nat.lt_succ_of_lt (hs.2.2.1 a ha).1, (hs.2.2.1 a ha).2⟩
-      · intro l hl
-        obtain ⟨hb, ha, ⟨a, ham, he, ho⟩, hp, hpend⟩ := hs.2.2.2.1 l hl
-        exact ⟨hb, ha, ⟨a, List.mem_cons_of_mem _ ham, he, ho⟩, hp, hpend⟩
+      cases hframes : s.frames with
+      | nil => simp [hframes] at hf
+      | cons f₀ tail =>
+        simp only [hframes, List.head?_cons, Option.some.injEq] at hf
+        subst f₀
+        have hnodup : (s.frames.map Activation.id).Nodup := hs.2.2.2.2.2.1
+        rw [hframes] at hnodup
+        refine ⟨?_, hs.2.1, ?_, ?_, hs.2.2.2.2.1, hnodup, ?_⟩
+        · simp only [List.map_cons, List.nodup_cons]
+          refine ⟨?_, hs.1⟩
+          intro hm
+          obtain ⟨a, ha, he⟩ := List.mem_map.mp hm
+          have hb := (hs.2.2.1 a ha).1
+          rw [he] at hb
+          exact Nat.lt_irrefl _ hb
+        · intro a ha
+          rcases List.mem_cons.mp ha with he | ha
+          · subst a; exact ⟨Nat.lt_succ_self _, hact⟩
+          · exact ⟨Nat.lt_succ_of_lt (hs.2.2.1 a ha).1, (hs.2.2.1 a ha).2⟩
+        · intro l hl
+          obtain ⟨hb, ha, ⟨a, ham, he, ho⟩, hp, hpend⟩ := hs.2.2.2.1 l hl
+          exact ⟨hb, ha, ⟨a, List.mem_cons_of_mem _ ham, he, ho⟩, hp, hpend⟩
+        · intro g hg
+          rcases List.mem_cons.mp hg with rfl | hg
+          · refine ⟨hact, ?_⟩
+            intro a ha ha_act
+            rcases List.mem_cons.mp ha with rfl | ha
+            · simp
+            · exact List.mem_cons_of_mem _
+                ((hs.2.2.2.2.2.2 f (by simp [hframes])).2 a ha ha_act)
+          · dsimp at hg
+            have hg_mem : g ∈ s.frames := by simp [hframes, hg]
+            refine ⟨(hs.2.2.2.2.2.2 g hg_mem).1, ?_⟩
+            intro a ha ha_act
+            rcases List.mem_cons.mp ha with rfl | ha
+            · simp only [List.map_cons, List.nodup_cons] at hnodup
+              exfalso
+              exact hnodup.1 (List.mem_map.mpr ⟨g, hg, ha_act.symm⟩)
+            · exact (hs.2.2.2.2.2.2 g hg_mem).2 a ha ha_act
     · contradiction
 
 /-- Helper (inversion). Structural successful-result proof used by the operation-result law. (approved: PENDING).  -/
 theorem drop_preserves_result (s t : State) (xs : List Var) (hs : WellFormed s)
     (h : drop xs s = some t) : WellFormed t := by
   unfold drop at h
-  obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
+  obtain ⟨f, hf, h⟩ := Option.bind_eq_some_iff.mp h
   dsimp at h
   split at h
   · rename_i hg
     cases h
-    refine ⟨hs.1.sublist (List.Sublist.map _ List.filter_sublist), hs.2.1, ?_, ?_, hs.2.2.2.2⟩
-    · intro a ha
-      exact hs.2.2.1 a (List.mem_filter.mp ha).1
-    · intro l hl
-      obtain ⟨hb, ha, ⟨a, ham, he, ho⟩, hp, hpend⟩ := hs.2.2.2.1 l hl
-      refine ⟨hb, ha, ⟨a, List.mem_filter.mpr ⟨ham, ?_⟩, he, ho⟩, hp, hpend⟩
-      have hc := List.all_eq_true.mp (Bool.and_eq_true_iff.mp hg).2 l hl
-      simpa [he] using hc
+    cases hframes : s.frames with
+    | nil => simp [hframes] at hf
+    | cons f₀ tail =>
+      simp only [hframes, List.head?_cons, Option.some.injEq] at hf
+      subst f₀
+      have hnodup : (s.frames.map Activation.id).Nodup := hs.2.2.2.2.2.1
+      rw [hframes] at hnodup
+      refine ⟨hs.1.sublist (List.Sublist.map _ List.filter_sublist), hs.2.1, ?_, ?_, hs.2.2.2.2.1, hnodup, ?_⟩
+      · intro a ha
+        exact hs.2.2.1 a (List.mem_filter.mp ha).1
+      · intro l hl
+        obtain ⟨hb, ha, ⟨a, ham, he, ho⟩, hp, hpend⟩ := hs.2.2.2.1 l hl
+        refine ⟨hb, ha, ⟨a, List.mem_filter.mpr ⟨ham, ?_⟩, he, ho⟩, hp, hpend⟩
+        have hc := List.all_eq_true.mp (Bool.and_eq_true_iff.mp hg).2 l hl
+        simpa [he] using hc
+      · intro g hg
+        rcases List.mem_cons.mp hg with rfl | hg
+        · have hf_mem : f ∈ s.frames := by simp [hframes]
+          refine ⟨(hs.2.2.2.2.2.2 f hf_mem).1, ?_⟩
+          intro a ha ha_act
+          obtain ⟨ha_mem, ha_not_ps⟩ := List.mem_filter.mp ha
+          simp only [decide_eq_true_eq] at ha_not_ps
+          have hplace := (hs.2.2.2.2.2.2 f hf_mem).2 a ha_mem ha_act
+          obtain ⟨e, he_mem, he_snd⟩ := List.mem_map.mp hplace
+          apply List.mem_map.mpr
+          refine ⟨e, List.mem_filter.mpr ⟨he_mem, ?_⟩, he_snd⟩
+          simp only [decide_eq_true_eq]
+          intro he_xs
+          apply ha_not_ps
+          apply List.mem_map.mpr
+          exact ⟨e, List.mem_filter.mpr ⟨he_mem, decide_eq_true he_xs⟩, he_snd⟩
+        · dsimp at hg
+          have hg_mem : g ∈ s.frames := by simp [hframes, hg]
+          refine ⟨(hs.2.2.2.2.2.2 g hg_mem).1, ?_⟩
+          intro a ha ha_act
+          exact (hs.2.2.2.2.2.2 g hg_mem).2 a (List.mem_filter.mp ha).1 ha_act
   · contradiction
 
 /-- Helper (inversion). Structural successful-result proof used by the operation-result law. (approved: PENDING).  -/
@@ -382,12 +446,26 @@ theorem enter_preserves_result (types : Var → Option Descriptor) (s t : State)
   have hw : WellFormed { s with
       nextActivation := s.nextActivation + 1
       frames := ⟨s.nextActivation, [], []⟩ :: s.frames } := by
-    refine ⟨hs.1, hs.2.1, ?_, ?_, hs.2.2.2.2⟩
+    refine ⟨hs.1, hs.2.1, ?_, ?_, hs.2.2.2.2.1, ?_, ?_⟩
     · intro a ha
       exact ⟨(hs.2.2.1 a ha).1, Nat.lt_succ_of_lt (hs.2.2.1 a ha).2⟩
     · intro l hl
       obtain ⟨hb, ha, hr, hp, hpend⟩ := hs.2.2.2.1 l hl
       exact ⟨hb, Nat.lt_succ_of_lt ha, hr, hp, hpend⟩
+    · simp only [List.map_cons, List.nodup_cons]
+      refine ⟨?_, hs.2.2.2.2.2.1⟩
+      intro hm
+      obtain ⟨g, hg, he⟩ := List.mem_map.mp hm
+      have hlt := (hs.2.2.2.2.2.2 g hg).1
+      omega
+    · intro g hg
+      rcases List.mem_cons.mp hg with rfl | hg
+      · refine ⟨Nat.lt_succ_self _, ?_⟩
+        intro a ha ha_act
+        have hlt := (hs.2.2.1 a ha).2
+        dsimp at ha_act
+        omega
+      · exact ⟨Nat.lt_succ_of_lt (hs.2.2.2.2.2.2 g hg).1, (hs.2.2.2.2.2.2 g hg).2⟩
   exact fold_preserves _ (fun s x t hs h => bind_preserves_result types s t x hs h) xs _ t hw h
 
 /-- Helper (inversion). Structural successful-result proof used by the operation-result law. (approved: PENDING).  -/
@@ -402,25 +480,30 @@ theorem leave_preserves_result (s t : State) (hs : WellFormed s)
   obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
   obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
   obtain ⟨v, hv, h⟩ := Option.bind_eq_some_iff.mp h
-  split at h
-  · contradiction
-  · rename_i guard
-    cases h
-    have hw := drop_preserves_result u v _ (endLocals_preserves_result s u f.id hs hu) hv
-    have ok : (v.slots.all (fun x => x.activation != f.id || x.desc.copy || x.status == .moved) &&
-        v.loans.all (fun l => v.slots.all (fun x => x.activation != f.id || x.place != l.root))) = true := by
-      cases hb : (v.slots.all (fun x => x.activation != f.id || x.desc.copy || x.status == .moved) &&
-        v.loans.all (fun l => v.slots.all (fun x => x.activation != f.id || x.place != l.root))) <;>
-        simp_all
-    have clear := (Bool.and_eq_true_iff.mp ok).2
-    refine ⟨hw.1.sublist (List.Sublist.map _ List.filter_sublist), hw.2.1, ?_, ?_, hw.2.2.2.2⟩
-    · intro x hx
-      exact hw.2.2.1 x (List.mem_filter.mp hx).1
-    · intro l hl
-      obtain ⟨hid, ha, ⟨x, hx, he, ho⟩, hp, hpend⟩ := hw.2.2.2.1 l hl
-      refine ⟨hid, ha, ⟨x, List.mem_filter.mpr ⟨hx, ?_⟩, he, ho⟩, hp, hpend⟩
-      have hc := List.all_eq_true.mp (List.all_eq_true.mp clear l hl) x hx
-      simpa [he] using hc
+  cases h
+  have hw := drop_preserves_result u v _ (endLocals_preserves_result s u f.id hs hu) hv
+  refine ⟨hw.1, hw.2.1, hw.2.2.1, hw.2.2.2.1, hw.2.2.2.2.1,
+    hw.2.2.2.2.2.1.sublist (List.Sublist.map _ (List.tail_sublist _)), ?_⟩
+  intro g hg
+  exact hw.2.2.2.2.2.2 g (List.mem_of_mem_tail hg)
+
+/-- Helper (congruence). Updating only the view-binding lookup table of the current frame preserves `WellFormed`. (approved: PENDING). -/
+private theorem set_views_preserves (s : State) (f : Activation) (views : AList Var LoanId)
+    (hs : WellFormed s) (hf : s.frames.head? = some f) :
+    WellFormed { s with frames := { f with views := views } :: s.frames.tail } := by
+  cases hframes : s.frames with
+  | nil => simp [hframes] at hf
+  | cons f₀ tail =>
+    simp only [hframes, List.head?_cons, Option.some.injEq] at hf
+    subst f₀
+    have hnodup : (s.frames.map Activation.id).Nodup := hs.2.2.2.2.2.1
+    rw [hframes] at hnodup
+    refine ⟨hs.1, hs.2.1, hs.2.2.1, hs.2.2.2.1, hs.2.2.2.2.1, hnodup, ?_⟩
+    intro g hg
+    rcases List.mem_cons.mp hg with rfl | hg
+    · exact hs.2.2.2.2.2.2 f (by simp [hframes])
+    · dsimp at hg
+      exact hs.2.2.2.2.2.2 g (by simp [hframes, hg])
 
 /-- Helper (inversion). Structural successful-result proof used by the operation-result law. (approved: PENDING).  -/
 theorem enterDown_preserves_result (s t : State) (args : List (Var × LoanId)) (hs : WellFormed s)
@@ -430,10 +513,18 @@ theorem enterDown_preserves_result (s t : State) (args : List (Var × LoanId)) (
   refine fold_preserves _ ?_ args u t (enter_preserves_result _ _ _ _ hs hu) hh
   intro s arg t hs hh
   obtain ⟨a, _, hh⟩ := Option.bind_eq_some_iff.mp hh
-  obtain ⟨f, _, hh⟩ := Option.bind_eq_some_iff.mp hh
+  obtain ⟨f, hf, hh⟩ := Option.bind_eq_some_iff.mp hh
   obtain ⟨v, hv, hh⟩ := Option.bind_eq_some_iff.mp hh
   cases hh
-  exact reborrowTo_preserves_result s v arg.2 [] a.mode f.id hs hv
+  have hw := reborrowTo_preserves_result s v arg.2 [] a.mode f.id hs hv
+  have hv_frames : v.frames = s.frames := by
+    unfold reborrowTo at hv
+    obtain ⟨_, _, hv⟩ := Option.bind_eq_some_iff.mp hv
+    split at hv
+    · cases hv; rfl
+    · contradiction
+  rw [← hv_frames] at hf
+  exact set_views_preserves v f ((arg.1, ⟨v.nextLoan - 1⟩) :: f.views) hw hf
 
 /-- Helper (inversion). Structural successful-result proof used by the operation-result law. (approved: PENDING).  -/
 theorem life_preserves_result (types : Var → Option Descriptor) (e : Exec.Life) (s t : State)
@@ -640,7 +731,7 @@ private theorem map_metadata_preserves (s : State) (hs : WellFormed s)
     WellFormed { s with loans := s.loans.map fun l =>
       { l with activation := act l, pendingArgument := pending l } } := by
   let change := fun l : Loan => { l with activation := act l, pendingArgument := pending l }
-  refine ⟨hs.1, ?_, hs.2.2.1, ?_, ?_⟩
+  refine ⟨hs.1, ?_, hs.2.2.1, ?_, ?_, hs.2.2.2.2.2⟩
   · simpa only [List.map_map, Function.comp_def] using hs.2.1
   · intro l hl
     obtain ⟨a, ha, rfl⟩ := List.mem_map.mp hl
@@ -656,13 +747,13 @@ private theorem map_metadata_preserves (s : State) (hs : WellFormed s)
   · intro a ha b hb
     obtain ⟨x, hx, rfl⟩ := List.mem_map.mp ha
     obtain ⟨y, hy, rfl⟩ := List.mem_map.mp hb
-    exact hs.2.2.2.2 x hx y hy
+    exact hs.2.2.2.2.1 x hx y hy
 
 /-- Helper (inversion). Structural successful-result proof used by the operation-result law. (approved: PENDING).  -/
 theorem adoptDown_preserves_result (s t : State) (args : List (Var × LoanId))
     (hs : WellFormed s) (h : adoptDown s args = some t) : WellFormed t := by
   unfold adoptDown at h
-  obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
+  obtain ⟨f, hf, h⟩ := Option.bind_eq_some_iff.mp h
   split at h
   · rename_i hg
     cases h
@@ -678,8 +769,8 @@ theorem adoptDown_preserves_result (s t : State) (args : List (Var × LoanId))
           pendingArgument := if l.id ∈ args.map Prod.snd then false else l.pendingArgument }) := by
       funext l
       split <;> rfl
-    rw [eq]
-    exact hw
+    rw [← eq] at hw
+    exact set_views_preserves _ f (args ++ f.views) hw hf
   · contradiction
 
 /-- Helper (inversion). Structural successful-result proof used by the operation-result law. (approved: PENDING).  -/
@@ -904,12 +995,10 @@ private theorem life_subset (types : Var → Option Descriptor) (e : Exec.Life) 
     obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
     obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
     obtain ⟨v, hv, h⟩ := Option.bind_eq_some_iff.mp h
-    split at h
-    · contradiction
-    · cases h
-      intro l hl
-      rw [drop_loans u v _ hv] at hl
-      exact fold_loans _ (fun s l t h => endLoan_subset s t l.id h) _ s u hu l hl
+    cases h
+    intro l hl
+    rw [drop_loans u v _ hv] at hl
+    exact fold_loans _ (fun s l t h => endLoan_subset s t l.id h) _ s u hu l hl
 
 /-- Helper (inversion). Structural successful-result proof used by the operation-result law. (approved: PENDING). Entry consumes the pending metadata exactly once; other lifecycle events require an
 empty argument buffer, so they cannot leave dangling argument identities. -/
@@ -1139,9 +1228,6 @@ theorem leave_no_local_loan_result (s t : State) (f : Activation)
   obtain ⟨u, hu, hh⟩ := Option.bind_eq_some_iff.mp h
   have hframes := fold_frames _ (fun s l t hh => endLoan_frames s t l.id hh) _ s u hu
   obtain ⟨v, hv, hh⟩ := Option.bind_eq_some_iff.mp hh
-  split at hh
-  · contradiction
-  rename_i _
   have heq := Option.some.inj hh
   have hp : entry.2 ∈ List.map Prod.snd (f.locals.filter fun e =>
       decide (e.1 ∈ List.map Prod.fst f.locals)) := by
@@ -1152,7 +1238,7 @@ theorem leave_no_local_loan_result (s t : State) (f : Activation)
   obtain ⟨x, hx, hxroot, _⟩ := loan_has_owned_root t ht l hl
   have hxv : x ∈ v.slots := by
     rw [← heq] at hx
-    exact (List.mem_filter.mp hx).1
+    exact hx
   exact habsent x hxv (hxroot.trans hroot)
 
 /-- Helper (projection). Extracts exactly the pending-argument witness checked by adoption. (approved: PENDING). -/
@@ -1166,20 +1252,37 @@ theorem adoptDown_only_arguments (s t : State) (args : List (Var × LoanId))
     exact guard.2.2.2.1 e he
   · contradiction
 
-/-- Helper (inversion). Structural result proof for the operation-result law. (approved: PENDING). -/
+/-- Helper (inversion). Structural result proof for the operation-result law, derived from `drop_absent` and the frame-local completeness clause of `WellFormed`. (approved: PENDING). -/
 theorem leave_no_activation_slot_result (s t : State) (f : Activation)
-    (hf : s.frames.head? = some f) (h : leave s = some t) :
+    (hs : WellFormed s) (hf : s.frames.head? = some f) (h : leave s = some t) :
     ∀ x ∈ t.slots, x.activation ≠ f.id := by
   unfold leave at h
   rw [hf] at h
   dsimp at h
-  obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp h
-  obtain ⟨v, _, hh⟩ := Option.bind_eq_some_iff.mp hh
-  split at hh
-  · contradiction
-  · cases hh
-    intro x hx
-    simpa using (List.mem_filter.mp hx).2
+  obtain ⟨u, hu, hh⟩ := Option.bind_eq_some_iff.mp h
+  have hu_wf := endLocals_preserves_result s u f.id hs hu
+  have hframes := fold_frames _ (fun s l t hh => endLoan_frames s t l.id hh) _ s u hu
+  obtain ⟨v, hv, hh⟩ := Option.bind_eq_some_iff.mp hh
+  cases hh
+  intro x hx hact
+  have hxu : x ∈ u.slots := by
+    unfold drop at hv
+    rw [hframes, hf] at hv
+    dsimp at hv
+    split at hv
+    · cases hv
+      exact (List.mem_filter.mp hx).1
+    · contradiction
+  have hf_mem : f ∈ u.frames := by
+    rw [hframes]
+    exact List.mem_of_head? hf
+  have hplace := (hu_wf.2.2.2.2.2.2 f hf_mem).2 x hxu hact
+  obtain ⟨entry, he_mem, he_snd⟩ := List.mem_map.mp hplace
+  have hp : x.place ∈ List.map Prod.snd (f.locals.filter fun e =>
+      decide (e.1 ∈ List.map Prod.fst f.locals)) := by
+    apply List.mem_map.mpr
+    exact ⟨entry, List.mem_filter.mpr ⟨he_mem, by simp; exact ⟨entry.2, he_mem⟩⟩, he_snd⟩
+  exact drop_absent u v _ f (hframes ▸ hf) hv x.place hp x hx rfl
 
 /-- Helper (projection). Extracts exactly the active-current-frame destination checked by reborrowing. (approved: PENDING). -/
 theorem reborrowTo_current (s t : State) (i : LoanId) (suffix : List Projection)
@@ -1342,9 +1445,8 @@ theorem leave_retains_caller_result (s t : State) (f : Activation) (l : Loan)
     exact caller (by simpa using act)
   obtain ⟨v, hv, h⟩ := Option.bind_eq_some_iff.mp h
   rw [← drop_loans u v _ hv] at retained
-  split at h
-  · contradiction
-  · cases h; exact retained
+  cases h
+  exact retained
 
 /-- Helper (inversion). Ending loans removes every scheduled identity and never adds loans. (approved: PENDING). -/
 private theorem endLoans_removed (xs : List Loan) (s t : State)
@@ -1378,13 +1480,11 @@ theorem leave_no_activation_loan_result (s t : State) (f : Activation)
   dsimp at h
   obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
   obtain ⟨v, hv, h⟩ := Option.bind_eq_some_iff.mp h
-  split at h
-  · contradiction
-  · cases h
-    intro l hl he
-    rw [drop_loans u v _ hv] at hl
-    obtain ⟨hs, removed⟩ := endLoans_removed _ s u hu l hl
-    exact removed l (List.mem_filter.mpr ⟨hs, by simpa using he⟩) rfl
+  cases h
+  intro l hl he
+  rw [drop_loans u v _ hv] at hl
+  obtain ⟨hs, removed⟩ := endLoans_removed _ s u hu l hl
+  exact removed l (List.mem_filter.mpr ⟨hs, by simpa using he⟩) rfl
 
 /-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). Registering a deferred call preserves the entire store: it neither ends existing loans
 nor evaluates late-read arguments. The ordinary call at execution time opens/adopts its loan. -/
@@ -1541,8 +1641,6 @@ theorem directOwner_roundtrip (s : State) (p : Hybrid.Place) (path : List Projec
   simp [passOwner, hf, issued, allowed, callLife, enter, adoptDown, life, leave,
     endLocals, endLoan, drop, loan, AList.lookup, mapOld, filterAct, noChildExists,
     filterId]
-  exact ⟨⟨fun a ha he _ => False.elim (oldSlots a ha he),
-    fun _ _ a ha he => False.elim (oldSlots a ha he)⟩, oldSlots⟩
 
 namespace DirectArgumentWitnesses
 open ConcreteSpec.Core.Own.Examples
@@ -1669,10 +1767,8 @@ private theorem leave_frames_proj (s t : State) (f : Activation)
   dsimp at hv
   split at hv
   · cases hv
-    split at h
-    · contradiction
-    · cases h
-      simp
+    cases h
+    simp
   · contradiction
 
 /-- Helper (inversion). Structural result proof for the operation-result law. (approved: PENDING). -/
@@ -4023,11 +4119,11 @@ theorem leave_no_local_loan (s : State) (f : Activation) (entry : Var × Hybrid.
 
 /-- Law (subject `ConcreteSpec.Core.Own.leave`). The semantic postcondition holds
 of the actual successful operation result. -/
-theorem leave_no_activation_slot (s : State) (f : Activation) (hf : s.frames.head? = some f) :
+theorem leave_no_activation_slot (s : State) (f : Activation) (hs : WellFormed s) (hf : s.frames.head? = some f) :
     ResultSatisfies (fun t : State => ∀ x ∈ t.slots, x.activation ≠ f.id) (leave s) := by
   cases h : leave s with
   | none => trivial
-  | some t => exact leave_no_activation_slot_result s t f hf h
+  | some t => exact leave_no_activation_slot_result s t f hs hf h
 
 /-- Law (subject `ConcreteSpec.Core.Own.passOwner`). The semantic postcondition holds
 of the actual successful operation result. -/
@@ -4112,10 +4208,10 @@ def leave_no_activation_slotCase := (RoundThreeWitnesses.localLoan)
 
 /-- Instance (law `ConcreteSpec.Core.Own.leave_no_activation_slot`, case `ConcreteSpec.Core.Own.LifetimeEvidence.leave_no_activation_slotCase`). -/
 example : ResultSatisfies (fun t : State => ∀ x ∈ t.slots, x.activation ≠ (⟨1, [(y, ⟨1⟩)], []⟩ : Activation).id) (leave (RoundThreeWitnesses.localLoan)) :=
-  @leave_no_activation_slot RoundThreeWitnesses.localLoan ⟨1, [(y, ⟨1⟩)], []⟩ (rfl)
+  @leave_no_activation_slot RoundThreeWitnesses.localLoan ⟨1, [(y, ⟨1⟩)], []⟩ (by decide) (rfl)
 
 /-- Planted (law `ConcreteSpec.Core.Own.leave_no_activation_slot`, case `ConcreteSpec.Core.Own.LifetimeEvidence.leave_no_activation_slotCase`, subject `ConcreteSpec.Core.Own.leave`, mutant `ConcreteSpec.Core.Own.LifetimeEvidence.leaveIdentity`). -/
-example : ((RoundThreeWitnesses.localLoan).frames.head? = some (⟨1, [(y, ⟨1⟩)], []⟩ : Activation)) ∧ ¬ ResultSatisfies (fun t : State => ∀ x ∈ t.slots, x.activation ≠ (⟨1, [(y, ⟨1⟩)], []⟩ : Activation).id) (leaveIdentity (RoundThreeWitnesses.localLoan)) := by decide
+example : (WellFormed (RoundThreeWitnesses.localLoan)) ∧ ((RoundThreeWitnesses.localLoan).frames.head? = some (⟨1, [(y, ⟨1⟩)], []⟩ : Activation)) ∧ ¬ ResultSatisfies (fun t : State => ∀ x ∈ t.slots, x.activation ≠ (⟨1, [(y, ⟨1⟩)], []⟩ : Activation).id) (leaveIdentity (RoundThreeWitnesses.localLoan)) := by decide
 
 def passOwner_freezesCase := (DirectArgumentWitnesses.caller)
 
@@ -4171,26 +4267,15 @@ example : ResultSatisfies (fun t : State => LiveDestinations t) (leave (RoundThr
 /-- Planted (law `ConcreteSpec.Core.Own.leave_live`, case `ConcreteSpec.Core.Own.LifetimeEvidence.leave_liveCase`, subject `ConcreteSpec.Core.Own.leave`, mutant `ConcreteSpec.Core.Own.LifetimeEvidence.leaveStranded`). -/
 example : (LiveDestinations (RoundThreeWitnesses.localLoan)) ∧ ((RoundThreeWitnesses.localLoan).frames.head? = some (⟨1, [(y, ⟨1⟩)], []⟩ : Activation)) ∧ ¬ ResultSatisfies (fun t : State => LiveDestinations t) (leaveStranded (RoundThreeWitnesses.localLoan)) := by decide
 
-/-- The slot inventory remains complete when the variable lookup index is empty. -/
+/-- A state whose active frame omits a slot of its activation from `f.locals` violates
+the frame-local completeness clause of `WellFormed`. -/
 def unindexedCopy : State :=
   { initial with
     slots := initial.slots.map fun x => { x with desc := { x.desc with copy := true } }
     frames := [⟨0, [], []⟩] }
 
-/-- Instance (law `ConcreteSpec.Core.Own.leave_no_activation_slot`, case `ConcreteSpec.Core.Own.LifetimeEvidence.unindexedCopy`). -/
-example : ResultSatisfies (fun t : State => ∀ x ∈ t.slots, x.activation ≠ 0) (leave unindexedCopy) :=
-  @leave_no_activation_slot unindexedCopy ⟨0, [], []⟩ rfl
-
-/-- Planted (law `ConcreteSpec.Core.Own.leave_no_activation_slot`, case `ConcreteSpec.Core.Own.LifetimeEvidence.unindexedCopy`, subject `ConcreteSpec.Core.Own.leave`, mutant `ConcreteSpec.Core.Own.LifetimeEvidence.leaveIdentity`). -/
-example : unindexedCopy.frames.head? = some (⟨0, [], []⟩ : Activation) ∧
-    ¬ ResultSatisfies (fun t : State => ∀ x ∈ t.slots, x.activation ≠ 0) (leaveIdentity unindexedCopy) := by decide
-
-/-- Accepted: cleanup removes an unindexed Copy owner using the complete slot inventory. -/
-example : (leave unindexedCopy).isSome = true ∧
-    ((leave unindexedCopy).getD initial).slots = [] := by decide
-
-/-- Refused: an unindexed live linear obligation still prevents exit. -/
-example : leave { initial with frames := [⟨0, [], []⟩] } = none := by decide
+example : ¬ WellFormed unindexedCopy := by decide
+example : ¬ WellFormed { initial with frames := [⟨0, [], []⟩] } := by decide
 
 end LifetimeEvidence
 
