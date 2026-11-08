@@ -282,30 +282,25 @@ def targetedEdges (p : Program) : List (Nat × (Nat × List Operand)) :=
     | .condbr _ t ta e ea => [(t, (k, ta)), (e, (k, ea))]
     | _ => []
 
-def incomingBound : List (Nat × (Nat × List Operand)) → Nat
-  | [] => 0
-  | e :: es => max (e.1 + 1) (incomingBound es)
+/-- Reverse buckets of prepared edge payloads; no allocation depends on a branch target. -/
+abbrev IncomingTable := Std.HashMap Nat (List (Nat × Array Operand))
 
-def addIncoming (es : List (Nat × (Nat × List Operand)))
-    (bs : Array (List (Nat × List Operand))) : Array (List (Nat × List Operand)) :=
-  match es with
-  | [] => bs
-  | e :: es =>
-    let bs := if h : e.1 < bs.size then bs.setIfInBounds e.1 (e.2 :: bs[e.1]) else bs
-    addIncoming es bs
+def incomingBucket (bs : IncomingTable) (j : Nat) : List (Nat × Array Operand) :=
+  bs[j]?.getD []
 
-def incomingBuckets (p : Program) : Array (List (Nat × List Operand)) :=
-  let es := targetedEdges p
-  addIncoming es (Array.replicate (incomingBound es) [])
+def addIncoming : List (Nat × (Nat × List Operand)) → IncomingTable → IncomingTable
+  | [], bs => bs
+  | e :: es, bs => addIncoming es (bs.insert e.1
+      ((e.2.1, e.2.2.toArray) :: incomingBucket bs e.1))
 
-def incomingBucket (bs : Array (List (Nat × List Operand))) (j : Nat) : List (Nat × List Operand) :=
-  (bs[j]?).getD []
+def incomingBuckets (p : Program) : IncomingTable :=
+  (addIncoming (targetedEdges p) ∅).map (fun _ xs => xs.reverse)
 
 structure Prepared where
   data : NumberingData
   offsets : Array (Nat × Array Nat)
   regs : Std.HashMap Reg Nat
-  incoming : Array (List (Nat × List Operand))
+  incoming : IncomingTable
   ok : Bool
 
 /-- Insert only absent keys: malformed duplicate definitions still use the first one. -/
@@ -338,7 +333,7 @@ def instFast (prep : Prepared) (n : Nat) := instWith (regIdFast prep) n
 def termFast (prep : Prepared) := termWith (regIdFast prep)
 
 def adaptPhiFast (prep : Prepared) (j k : Nat) : Except String Source.Phi := do
-  let arms ← (incomingBucket prep.incoming j).reverse.mapM fun (pred, args) => do
+  let arms ← (incomingBucket prep.incoming j).mapM fun (pred, args) => do
     let a ← match args[k]? with
       | some a => operandFast prep a
       | none => throw s!"block {pred} passes too few arguments to block {j}"
@@ -536,76 +531,26 @@ theorem instOffset_prepare {p : Program} {j i : Nat} {b : Block} {ins : Inst}
   simp [instOffset, prepare, numbering_eq, numberingSpec, List.getElem?_toArray,
     List.getElem?_map, Runtime.getElem?_indexed, hb, hi]
 
-theorem incomingBound_lt {e : Nat × (Nat × List Operand)} {es : List (Nat × (Nat × List Operand))}
-    (h : e ∈ es) : e.1 < incomingBound es := by
-  induction es with
-  | nil => simp at h
-  | cons a es ih =>
-    simp only [List.mem_cons] at h
-    rcases h with rfl | h
-    · simp only [incomingBound]; omega
-    · simp only [incomingBound]; have := ih h; omega
-
-theorem size_addIncoming : ∀ (es : List (Nat × (Nat × List Operand)))
-    (bs : Array (List (Nat × List Operand))), (addIncoming es bs).size = bs.size
-  | [], _ => rfl
-  | e :: es, bs => by
-    simp only [addIncoming]
-    rw [size_addIncoming]
-    split <;> simp
-
 theorem incomingBucket_add : ∀ (es : List (Nat × (Nat × List Operand)))
-    (bs : Array (List (Nat × List Operand))) (j : Nat), j < bs.size →
+    (bs : IncomingTable) (j : Nat),
     incomingBucket (addIncoming es bs) j =
-      ((es.filter (·.1 == j)).map Prod.snd).reverse ++ incomingBucket bs j
-  | [], bs, j, _ => by simp [addIncoming, incomingBucket]
-  | e :: es, bs, j, hj => by
-    simp only [addIncoming]
-    by_cases hlt : e.1 < bs.size
-    · simp only [hlt, ↓reduceDIte]
-      rw [incomingBucket_add es _ j (by simpa using hj)]
-      by_cases h : e.1 = j
-      · subst h
-        have hget : bs[e.1]?.getD [] = bs[e.1] := by
-          rw [Array.getElem?_eq_getElem hlt]; rfl
-        simp [incomingBucket, Array.getElem?_setIfInBounds_self_of_lt (by simpa using hlt), hget,
-          List.reverse_cons, List.append_assoc]
-      · have hne : j ≠ e.1 := Ne.symm h
-        simp [incomingBucket, h]
-    · simp only [hlt, ↓reduceDIte]
-      rw [incomingBucket_add es bs j hj]
-      have hne : e.1 ≠ j := by omega
-      simp [hne]
+      ((es.filter (·.1 == j)).map (fun e => (e.2.1, e.2.2.toArray))).reverse ++ incomingBucket bs j
+  | [], bs, j => by simp [addIncoming]
+  | e :: es, bs, j => by
+    rw [addIncoming, incomingBucket_add]
+    by_cases h : e.1 = j
+    · subst j
+      simp [incomingBucket, List.reverse_cons, List.append_assoc]
+    · simp [incomingBucket, Std.HashMap.getElem?_insert, h]
 
 theorem incomingBucket_buckets (p : Program) (j : Nat) :
-    (incomingBucket (incomingBuckets p) j).reverse =
-      ((targetedEdges p).filter (·.1 == j)).map Prod.snd := by
-  by_cases hj : j < (Array.replicate (incomingBound (targetedEdges p))
-    ([] : List (Nat × List Operand))).size
-  · have h := incomingBucket_add (targetedEdges p)
-      (Array.replicate (incomingBound (targetedEdges p)) ([] : List (Nat × List Operand))) j hj
-    have hinit : incomingBucket (Array.replicate (incomingBound (targetedEdges p))
-        ([] : List (Nat × List Operand))) j = [] := by
-      simp only [incomingBucket]
-      rw [Array.getElem?_eq_getElem hj]
-      simp
-    change (incomingBucket (addIncoming (targetedEdges p)
-      (Array.replicate (incomingBound (targetedEdges p)) [])) j).reverse = _
-    rw [h, hinit]
-    simp
-  · have hnone : (incomingBuckets p)[j]? = none := by
-      apply Array.getElem?_eq_none
-      rw [incomingBuckets, size_addIncoming]
-      simpa using hj
-    have hnoedge : (targetedEdges p).filter (·.1 == j) = [] := by
-      apply List.filter_eq_nil_iff.mpr
-      intro e he
-      have hlt := incomingBound_lt he
-      simp only [beq_iff_eq]
-      intro h
-      subst h
-      exact hj (by simpa using hlt)
-    simp [incomingBucket, hnone, hnoedge]
+    incomingBucket (incomingBuckets p) j =
+      ((targetedEdges p).filter (·.1 == j)).map (fun e => (e.2.1, e.2.2.toArray)) := by
+  have hm : incomingBucket (incomingBuckets p) j = (incomingBucket (addIncoming (targetedEdges p) ∅) j).reverse := by
+    simp only [incomingBuckets, incomingBucket, Std.HashMap.getElem?_map]
+    cases (addIncoming (targetedEdges p) ∅)[j]? <;> rfl
+  rw [hm, incomingBucket_add]
+  simp [incomingBucket]
 
 theorem targetedEdges_incoming (p : Program) (j : Nat) :
     ((targetedEdges p).filter (·.1 == j)).map Prod.snd = incoming p j := by
@@ -620,8 +565,10 @@ theorem targetedEdges_incoming (p : Program) (j : Nat) :
     cases tm <;> simp [edgesTo] <;> (try split) <;> (try split) <;> simp_all
 
 theorem prepare_incoming (p : Program) (j : Nat) :
-    (incomingBucket (prepare p).incoming j).reverse = incoming p j := by
-  rw [prepare, incomingBucket_buckets, targetedEdges_incoming]
+    incomingBucket (prepare p).incoming j =
+      (incoming p j).map (fun e => (e.1, e.2.toArray)) := by
+  simp only [prepare, incomingBucket_buckets, ← targetedEdges_incoming, List.map_map]
+  rfl
 
 /-- The marked entries of an array are exactly the previously seen natural numbers. -/
 def Marks (a : Array Bool) (seen : List Nat) : Prop :=
@@ -842,7 +789,7 @@ theorem termFast_eq (p : Program) (tm : Term) : termFast (prepare p) tm = term p
 
 theorem adaptPhiFast_eq {p : Program} {j : Nat} {b : Block} (hb : p.blocks[j]? = some b) (k : Nat) :
     adaptPhiFast (prepare p) j k = adaptPhi p j k := by
-  simp [adaptPhiFast, adaptPhi, prepare_incoming, operandFast_eq, blockOffset_prepare hb]
+  simp [adaptPhiFast, adaptPhi, prepare_incoming, operandFast_eq, blockOffset_prepare hb, List.mapM_map, Function.comp_def, List.getElem?_toArray]
 
 theorem adaptInstFast_eq {p : Program} {j i : Nat} {b : Block} {ins : Inst}
     (hb : p.blocks[j]? = some b) (hi : b.insts[i]? = some ins) :

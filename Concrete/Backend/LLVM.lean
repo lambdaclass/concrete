@@ -1,4 +1,5 @@
 import Concrete.Backend.Runtime
+import Std.Data.HashMap.Lemmas
 
 /-!
 # BIR → LLVM text (UNVERIFIED)
@@ -61,12 +62,24 @@ def edges (p : Program) : List (Nat × Nat × List Operand) :=
     | .condbr _ t ta e ea => [(t, j, ta), (e, j, ea)]
     | _ => []
 
-def phis (p : Program) (j : Nat) (b : Block) : String :=
-  let incoming := (edges p).filter (·.1 == j)
+/-- Shared phi renderer. Each edge payload is converted once by the caller. -/
+def phiText (incoming : List (Nat × Array Operand)) (b : Block) : String :=
   String.join ((indexed b.params).map fun (k, (r, pty)) =>
-    let arms := incoming.map fun (_, pred, args) =>
-      s!"[ {operand (args.getD k (.imm .u8 0))}, %b{pred} ]"
+    let arms := incoming.map fun (pred, args) =>
+      s!"[ {operand (args[k]?.getD (.imm .u8 0))}, %b{pred} ]"
     s!"  %r{r} = phi {ty pty} {", ".intercalate arms}\n")
+
+def phis (p : Program) (j : Nat) (b : Block) : String :=
+  phiText (((edges p).filter (·.1 == j)).map fun e => (e.2.1, e.2.2.toArray)) b
+
+/-- The shared renderer preserves the original list-indexing reference, including missing arms. -/
+theorem phis_eq_reference (p : Program) (j : Nat) (b : Block) :
+    phis p j b =
+      String.join ((indexed b.params).map fun (k, (r, pty)) =>
+        let arms := ((edges p).filter (·.1 == j)).map fun (_, pred, args) =>
+          s!"[ {operand (args.getD k (.imm .u8 0))}, %b{pred} ]"
+        s!"  %r{r} = phi {ty pty} {", ".intercalate arms}\n") := by
+  simp [phis, phiText, List.map_map, Function.comp_def, List.getElem?_toArray, List.getD_eq_getElem?_getD]
 
 def term (j : Nat) : Term → String
   | .ret a => s!"  %ret{j} = zext i8 {operand a} to i32\n  ret i32 %ret{j}\n"
@@ -90,104 +103,41 @@ def printSpec (p : Program) : String :=
     s!"b{j}:\n" ++ phis p j b ++ String.join (b.insts.map inst) ++ term j b.term) ++
   "}\n"
 
-/-- One more than the largest edge target, so even malformed targets have a bucket. -/
-def edgeBound : List (Nat × Nat × List Operand) → Nat
-  | [] => 0
-  | e :: es => max (e.1 + 1) (edgeBound es)
+/-- Finite predecessor maps allocate per edge, independent of target magnitude. -/
+abbrev EdgeTable := Std.HashMap Nat (List (Nat × Array Operand))
 
-/-- Add edges to reverse-order buckets. Reversing a bucket restores predecessor and conditional-arm
-order without the quadratic repeated append. -/
-def addEdges (es : List (Nat × Nat × List Operand))
-    (bs : Array (List (Nat × Nat × List Operand))) : Array (List (Nat × Nat × List Operand)) :=
-  match es with
-  | [] => bs
-  | e :: es =>
-    let bs := if h : e.1 < bs.size then bs.setIfInBounds e.1 (e :: bs[e.1]) else bs
-    addEdges es bs
+def bucket (bs : EdgeTable) (j : Nat) : List (Nat × Array Operand) := bs[j]?.getD []
 
-/-- The predecessor table, computed once per program. -/
-def edgeBuckets (p : Program) : Array (List (Nat × Nat × List Operand)) :=
-  let es := edges p
-  addEdges es (Array.replicate (edgeBound es) [])
+def addEdges : List (Nat × Nat × List Operand) → EdgeTable → EdgeTable
+  | [], bs => bs
+  | e :: es, bs => addEdges es (bs.insert e.1 ((e.2.1, e.2.2.toArray) :: bucket bs e.1))
 
-def bucket (bs : Array (List (Nat × Nat × List Operand))) (j : Nat) : List (Nat × Nat × List Operand) :=
-  (bs[j]?).getD []
-
-theorem edgeBound_lt {e : Nat × Nat × List Operand} {es : List (Nat × Nat × List Operand)}
-    (h : e ∈ es) : e.1 < edgeBound es := by
-  induction es with
-  | nil => simp at h
-  | cons a es ih =>
-    simp only [List.mem_cons] at h
-    rcases h with rfl | h
-    · simp only [edgeBound]; omega
-    · simp only [edgeBound]; have := ih h; omega
-
-theorem size_addEdges : ∀ (es : List (Nat × Nat × List Operand))
-    (bs : Array (List (Nat × Nat × List Operand))), (addEdges es bs).size = bs.size
-  | [], _ => rfl
-  | e :: es, bs => by
-    simp only [addEdges]
-    rw [size_addEdges]
-    split <;> simp
+def edgeBuckets (p : Program) : EdgeTable :=
+  (addEdges (edges p) ∅).map (fun _ xs => xs.reverse)
 
 theorem bucket_addEdges : ∀ (es : List (Nat × Nat × List Operand))
-    (bs : Array (List (Nat × Nat × List Operand))) (j : Nat), j < bs.size →
-    bucket (addEdges es bs) j = (es.filter (·.1 == j)).reverse ++ bucket bs j
-  | [], bs, j, _ => by simp [addEdges, bucket]
-  | e :: es, bs, j, hj => by
-    simp only [addEdges]
-    by_cases hlt : e.1 < bs.size
-    · simp only [hlt, ↓reduceDIte]
-      rw [bucket_addEdges es _ j (by simpa using hj)]
-      by_cases h : e.1 = j
-      · subst h
-        have hget : bs[e.1]?.getD [] = bs[e.1] := by
-          rw [Array.getElem?_eq_getElem hlt]; rfl
-        simp [bucket, Array.getElem?_setIfInBounds_self_of_lt (by simpa using hlt), hget,
-          List.reverse_cons, List.append_assoc]
-      · have hne : j ≠ e.1 := Ne.symm h
-        simp [bucket, h]
-    · simp only [hlt, ↓reduceDIte]
-      rw [bucket_addEdges es bs j hj]
-      have hne : e.1 ≠ j := by omega
-      simp [hne]
+    (bs : EdgeTable) (j : Nat),
+    bucket (addEdges es bs) j =
+      ((es.filter (·.1 == j)).map (fun e => (e.2.1, e.2.2.toArray))).reverse ++ bucket bs j
+  | [], bs, j => by simp [addEdges]
+  | e :: es, bs, j => by
+    rw [addEdges, bucket_addEdges]
+    by_cases h : e.1 = j
+    · subst j
+      simp [bucket, List.reverse_cons, List.append_assoc]
+    · simp [bucket, Std.HashMap.getElem?_insert, h]
 
 theorem bucket_edgeBuckets (p : Program) (j : Nat) :
-    (bucket (edgeBuckets p) j).reverse = (edges p).filter (·.1 == j) := by
-  by_cases hj : j < (Array.replicate (edgeBound (edges p)) ([] : List (Nat × Nat × List Operand))).size
-  · have h := bucket_addEdges (edges p)
-      (Array.replicate (edgeBound (edges p)) ([] : List (Nat × Nat × List Operand))) j hj
-    have hinit : bucket (Array.replicate (edgeBound (edges p))
-        ([] : List (Nat × Nat × List Operand))) j = [] := by
-      simp only [bucket]
-      rw [Array.getElem?_eq_getElem hj]
-      simp
-    change (bucket (addEdges (edges p)
-      (Array.replicate (edgeBound (edges p)) [])) j).reverse = _
-    rw [h, hinit]
-    simp
-  · have hnone : (edgeBuckets p)[j]? = none := by
-      apply Array.getElem?_eq_none
-      rw [edgeBuckets, size_addEdges]
-      simpa using hj
-    have hnoedge : (edges p).filter (·.1 == j) = [] := by
-      apply List.filter_eq_nil_iff.mpr
-      intro e he
-      have hlt := edgeBound_lt he
-      simp only [beq_iff_eq]
-      intro h
-      subst h
-      exact hj (by simpa using hlt)
-    simp [bucket, hnone, hnoedge]
+    bucket (edgeBuckets p) j =
+      ((edges p).filter (·.1 == j)).map (fun e => (e.2.1, e.2.2.toArray)) := by
+  have hm : bucket (edgeBuckets p) j = (bucket (addEdges (edges p) ∅) j).reverse := by
+    simp only [edgeBuckets, bucket, Std.HashMap.getElem?_map]
+    cases (addEdges (edges p) ∅)[j]? <;> rfl
+  rw [hm, bucket_addEdges]
+  simp [bucket]
 
-/-- Phi rendering from the prepared predecessor table. -/
-def phisFast (bs : Array (List (Nat × Nat × List Operand))) (j : Nat) (b : Block) : String :=
-  let incoming := (bucket bs j).reverse
-  String.join ((indexed b.params).map fun (k, (r, pty)) =>
-    let arms := incoming.map fun (_, pred, args) =>
-      s!"[ {operand (args.getD k (.imm .u8 0))}, %b{pred} ]"
-    s!"  %r{r} = phi {ty pty} {", ".intercalate arms}\n")
+/-- Phi rendering from the prepared predecessor table, sharing the reference renderer. -/
+def phisFast (bs : EdgeTable) (j : Nat) (b : Block) : String := phiText (bucket bs j) b
 
 theorem phisFast_eq (p : Program) (j : Nat) (b : Block) :
     phisFast (edgeBuckets p) j b = phis p j b := by
