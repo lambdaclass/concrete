@@ -770,4 +770,171 @@ example (L : AList Var Demo.ops.Val) (st : Demo.DState) (k : List (Frame Demo.op
   done_scope_runs_defers Demo.prog ⟨1⟩ dm L k
     (.cons (demo_bump_completes L st) (.cons (demo_log_completes L _) (.nil _))) rfl
 
+/-! ### Lifecycle evidence and planted refusal bypasses
+
+`Refusal.ops` refuses every lifecycle event. Each configuration below reaches exactly one
+lifecycle callback: operands, destination lookup, callee lookup, arity, and boolean testing all
+succeed first. `Demo.ops` is the planted replacement handler: it accepts the same callback instead
+of propagating refusal. These are executable rules, not contradictory hypotheses.
+-/
+namespace Refusal
+open Demo
+
+abbrev ops : Operands := { Demo.ops with life := fun _ _ => none }
+def fn : Fn ops := ⟨[], .unit, ⟨0⟩, .skip⟩
+def prog : Program ops := ⟨[(bumpF, fn)]⟩
+
+/-- Instance (law `ConcreteSpec.Core.Exec.bind_refused`). Only the lifecycle callback refuses. -/
+example : Blocked prog ⟨.exec (.bind x (.lit 1) s), [], .init, []⟩ :=
+  (bind_refused prog x (.lit 1) s [] .init .init 1 [] rfl).2 rfl
+
+/-- Planted (law `ConcreteSpec.Core.Exec.bind_refused`). The replacement rule ignores refusal
+by using the accepting demo handler. The same predecessor checks succeed. -/
+example : ¬ Blocked Demo.prog ⟨.exec (.bind x (.lit 1) s), [], .init, []⟩ := by
+  intro h
+  exact h .silent _ (.silent rfl)
+
+/-- Instance (law `ConcreteSpec.Core.Exec.assign_refused`). Only the lifecycle callback refuses. -/
+example : Blocked prog ⟨.exec (.assign x (.lit 1) s), [(x, 0)], .init, []⟩ :=
+  (assign_refused prog x (.lit 1) s [(x, 0)] .init .init 1 0 [] rfl rfl).2 rfl
+
+/-- Planted (law `ConcreteSpec.Core.Exec.assign_refused`). The replacement rule ignores refusal
+by using the accepting demo handler. The same predecessor checks succeed. -/
+example : ¬ Blocked Demo.prog ⟨.exec (.assign x (.lit 1) s), [(x, 0)], .init, []⟩ := by
+  intro h
+  exact h .silent _ (.silent rfl)
+
+/-- Instance (law `ConcreteSpec.Core.Exec.call_refused`). Only the lifecycle callback refuses. -/
+example : Blocked prog ⟨.exec (.call none bumpF [] s), [], .init, []⟩ :=
+  (call_refused prog none bumpF [] s [] .init .init [] fn [] rfl rfl rfl).2 rfl
+
+/-- Planted (law `ConcreteSpec.Core.Exec.call_refused`). The replacement rule ignores refusal
+by using the accepting demo handler. The same predecessor checks succeed. -/
+example : ¬ Blocked Demo.prog ⟨.exec (.call none bumpF [] s), [], .init, []⟩ := by
+  intro h
+  exact h .silent _ (.silent rfl)
+
+/-- Instance (law `ConcreteSpec.Core.Exec.scope_drop_refused`). Only the lifecycle callback refuses. -/
+example : Blocked prog ⟨.done, [(x, 1)], .init, [.scope ⟨0⟩ [] []]⟩ :=
+  (scope_drop_refused prog ⟨0⟩ [] [(x, 1)] .init []).2 rfl
+
+/-- Planted (law `ConcreteSpec.Core.Exec.scope_drop_refused`). The replacement rule ignores refusal
+by using the accepting demo handler. The same predecessor checks succeed. -/
+example : ¬ Blocked Demo.prog ⟨.done, [(x, 1)], .init, [.scope ⟨0⟩ [] []]⟩ := by
+  intro h
+  exact h .silent _ (.silent rfl)
+
+/-- Instance (law `ConcreteSpec.Core.Exec.exit_drop_refused`). Only the lifecycle callback refuses. -/
+example : Blocked prog ⟨.exiting (.ret 7), [(x, 1)], .init, [.scope ⟨0⟩ [] []]⟩ :=
+  (exit_drop_refused prog (.ret 7) ⟨0⟩ [] [(x, 1)] .init []).2 rfl
+
+/-- Planted (law `ConcreteSpec.Core.Exec.exit_drop_refused`). The replacement rule ignores refusal
+by using the accepting demo handler. The same predecessor checks succeed. -/
+example : ¬ Blocked Demo.prog ⟨.exiting (.ret 7), [(x, 1)], .init, [.scope ⟨0⟩ [] []]⟩ := by
+  intro h
+  exact h .silent _ (.silent rfl)
+
+/-- Instance (law `ConcreteSpec.Core.Exec.exit_test_drop_refused`). Only the lifecycle callback refuses. -/
+example : Blocked prog ⟨.exiting (.ret 7), [(x, 1)], .init, [.test ⟨0⟩ .skip (.lit 1) .skip s []]⟩ :=
+  (exit_test_drop_refused prog (.ret 7) [] ⟨0⟩ .skip .skip (.lit 1) s [(x, 1)] .init []).2 rfl
+
+/-- Planted (law `ConcreteSpec.Core.Exec.exit_test_drop_refused`). The replacement rule ignores refusal
+by using the accepting demo handler. The same predecessor checks succeed. -/
+example : ¬ Blocked Demo.prog ⟨.exiting (.ret 7), [(x, 1)], .init, [.test ⟨0⟩ .skip (.lit 1) .skip s []]⟩ := by
+  intro h
+  exact h .silent _ (.silent rfl)
+
+/-- Instance (law `ConcreteSpec.Core.Exec.test_drop_refused`). Only the lifecycle callback refuses. -/
+example : Blocked prog ⟨.done, [(x, 1)], .init, [.test ⟨0⟩ .skip (.lit 1) .skip s []]⟩ :=
+  (test_drop_refused prog ⟨0⟩ .skip .skip (.lit 1) s [] [(x, 1)] .init .init 1 true [] rfl rfl).2 rfl
+
+/-- Planted (law `ConcreteSpec.Core.Exec.test_drop_refused`). The replacement rule ignores refusal
+by using the accepting demo handler. The same predecessor checks succeed. -/
+example : ¬ Blocked Demo.prog ⟨.done, [(x, 1)], .init, [.test ⟨0⟩ .skip (.lit 1) .skip s []]⟩ := by
+  intro h
+  exact h .silent _ (.silent rfl)
+
+/-- Instance (law `ConcreteSpec.Core.Exec.return_refused`). Only the lifecycle callback refuses. -/
+example : Blocked prog ⟨.exiting (.ret 7), [], .init, [.ret (some x) [(y, 2)]]⟩ :=
+  (return_refused prog (some x) 7 [(y, 2)] [] .init []).1.2 rfl
+
+/-- Planted (law `ConcreteSpec.Core.Exec.return_refused`). The replacement rule ignores refusal
+by using the accepting demo handler. The same predecessor checks succeed. -/
+example : ¬ Blocked Demo.prog ⟨.exiting (.ret 7), [], .init, [.ret (some x) [(y, 2)]]⟩ := by
+  intro h
+  exact h .silent _ (.silent rfl)
+
+/-- Instance (law `ConcreteSpec.Core.Exec.return_refused`). Implicit Unit return also refuses leave. -/
+example : Blocked prog ⟨.done, [], .init, [.ret none []]⟩ :=
+  (return_refused prog none 7 [] [] .init []).2.2 rfl
+
+/-- Planted (law `ConcreteSpec.Core.Exec.return_refused`). Ignoring leave refusal permits the
+implicit return. -/
+example : ¬ Blocked Demo.prog ⟨.done, [], .init, [.ret none []]⟩ := by
+  intro h
+  exact h .silent _ (.silent rfl)
+
+/-- Instance (law `ConcreteSpec.Core.Exec.return_refused`). Leave succeeds but result binding
+alone refuses; the second lifecycle callback is independently exercised. -/
+example : let O : Operands := { Demo.ops with life := fun e st => match e with
+    | .bind _ => none
+    | _ => some (DState.life e st) }
+    Blocked (O := O) ⟨[]⟩ ⟨.exiting (.ret 7), [], .init, [.ret (some x) []]⟩ := by
+  dsimp
+  apply no_step_of_none_inv
+  rfl
+
+/-- Instance (law `ConcreteSpec.Core.Exec.prim_bind_refused`). Instance (law
+`ConcreteSpec.Core.Exec.continuation_refused`). The allowed log answer would emit `1`, but only
+its result initialization refuses. A pre-existing history must survive unchanged. -/
+example : runFrom prog Demo.env 10 [9] ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩ =
+    ⟨[9], .stuck ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩⟩ :=
+  prim_bind_refused prog Demo.env 9 [9] x .log [.lit 1] s [] .init .init [1] []
+    ⟨some 1, .ok 0, .init⟩ 0 rfl rfl (by decide) rfl rfl
+
+/-- Planted (law `ConcreteSpec.Core.Exec.prim_bind_refused`). Planted (law
+`ConcreteSpec.Core.Exec.continuation_refused`). Ignoring the refused bind accepts the event
+and finishes, so it violates the required stuck report and unchanged history. -/
+example : ¬ runFrom Demo.prog Demo.env 10 [9]
+    ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩ =
+    ⟨[9], .stuck ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩⟩ := by
+  intro h
+  have he := congrArg Report.events h
+  change [9, 1] = [9] at he
+  cases he
+
+/-- Error-capable operand contract: the environment may trap instead of producing a value. -/
+abbrev errorOps : Operands := { ops with allows := fun _ _ _ _ => true }
+
+/-- Instance (law `ConcreteSpec.Core.Exec.prim_error_bypasses_bind`). The bind callback refuses,
+but an allowed error answer still produces a real labeled trap transition. -/
+example : Step (O := errorOps) ⟨[]⟩
+    ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩ (.emit 1)
+    ⟨.trapped .abort s, [], .init, []⟩ :=
+  prim_error_bypasses_bind (O := errorOps) ⟨[]⟩ x .log [.lit 1] s [] .init .init [1] []
+    ⟨some 1, .error .abort, .init⟩ .abort rfl rfl rfl
+
+/-- Planted (law `ConcreteSpec.Core.Exec.prim_error_bypasses_bind`). A bad rule that also sends
+error answers through binding refuses this error; the required transition is absent. -/
+example : ¬ (ops.life (.bind x) DState.init).map (fun st =>
+    (⟨.trapped .abort s, [], st, []⟩ : Config errorOps)) = some
+      ⟨.trapped .abort s, [], .init, []⟩ := by
+  intro h; cases h
+
+end Refusal
+
+/-- A concrete destruction protocol, checked independently by cases on demo types and the
+function table. In particular the non-Copy obligation is satisfiable alongside the signature. -/
+def Demo.destroyProtocol : DestroyProtocol Demo.prog where
+  impl := fun T => match T with | .tok => some Demo.eatF | _ => none
+  sig := by
+    intro T f h
+    cases T with
+    | unit => cases h
+    | int => cases h
+    | tok => cases h; exact ⟨Demo.eatFn, Demo.p, rfl, rfl, rfl⟩
+  notCopy := by
+    intro T f h
+    cases T <;> simp_all
+
 end ConcreteSpec.Core.Exec
