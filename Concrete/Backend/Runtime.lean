@@ -41,21 +41,26 @@ example : trapLine ⟨.arithmeticOverflow, ⟨9⟩, ⟨40, 47⟩, ⟨"src/main.c
     "concrete: trap: overflow at src/main.con:4:12 (site 9)" := by decide +kernel
 
 /-- Pair every element with its index. -/
-def indexedFrom {α : Type} (n : Nat) : List α → List (Nat × α)
-  | [] => []
-  | a :: l => (n, a) :: indexedFrom (n + 1) l
+def indexedFrom {α : Type} (n : Nat) (l : List α) : List (Nat × α) :=
+  (l.zipIdx n).map (fun (a, i) => (i, a))
+
+@[simp] theorem indexedFrom_nil {α : Type} (n : Nat) : indexedFrom n ([] : List α) = [] := rfl
+
+@[simp] theorem indexedFrom_cons {α : Type} (n : Nat) (a : α) (l : List α) :
+    indexedFrom n (a :: l) = (n, a) :: indexedFrom (n + 1) l := by
+  simp [indexedFrom, List.zipIdx_cons]
 
 def indexed {α : Type} (l : List α) : List (Nat × α) := indexedFrom 0 l
 
 theorem getElem?_indexedFrom {α : Type} (l : List α) (n k : Nat) :
     (indexedFrom n l)[k]? = l[k]?.map (n + k, ·) := by
   induction l generalizing n k with
-  | nil => simp [indexedFrom]
+  | nil => simp
   | cons a l ih =>
     cases k with
-    | zero => simp [indexedFrom]
+    | zero => simp
     | succ k =>
-      simp only [indexedFrom, List.getElem?_cons_succ, ih]
+      simp only [indexedFrom_cons, List.getElem?_cons_succ, ih]
       congr 1; funext x; congr 1; omega
 
 theorem getElem?_indexed {α : Type} (l : List α) (k : Nat) :
@@ -68,11 +73,11 @@ theorem mem_indexedFrom {α : Type} {l : List α} {n k : Nat} {x : α} (h : l[k]
   | nil => simp at h
   | cons a l ih =>
     cases k with
-    | zero => simp at h; subst h; simp [indexedFrom]
+    | zero => simp at h; subst h; simp
     | succ k =>
       simp only [List.getElem?_cons_succ] at h
       have := ih (n := n + 1) h
-      simp only [indexedFrom, List.mem_cons]
+      simp only [indexedFrom_cons, List.mem_cons]
       exact Or.inr (by rwa [show n + (k + 1) = n + 1 + k by omega])
 
 theorem mem_indexed {α : Type} {l : List α} {k : Nat} {x : α} (h : l[k]? = some x) :
@@ -151,5 +156,30 @@ def qbe (tbl : SiteTable) : String :=
   s!"@c{tbl.length}\n    call $concrete_rt_write_all(l $bad, l {(invalidLine ++ "\n").utf8ByteSize})\n" ++
   "    call $abort()\n    ret 0\n" ++
   "}\n"
+
+/-- Closed reference for running offsets; only used in proofs. -/
+def positionsSpec {α : Type} (width : α → Nat) (base : Nat) : List α → List (Nat × α)
+  | [] => []
+  | x :: xs => (base, x) :: positionsSpec width (base + width x) xs
+
+/-- Tail-recursive offset collection, with one accumulator cell per entry. -/
+def positionsAux {α : Type} (width : α → Nat) :
+    List α → Nat → List (Nat × α) → List (Nat × α)
+  | [], _, acc => acc.reverse
+  | x :: xs, base, acc => positionsAux width xs (base + width x) ((base, x) :: acc)
+
+theorem positionsAux_eq {α : Type} (width : α → Nat) (xs : List α) (base : Nat)
+    (acc : List (Nat × α)) :
+    positionsAux width xs base acc = acc.reverse ++ positionsSpec width base xs := by
+  induction xs generalizing base acc with
+  | nil => simp [positionsAux, positionsSpec]
+  | cons x xs ih => simp [positionsAux, ih, positionsSpec, List.reverse_cons, List.append_assoc]
+
+def positions {α : Type} (width : α → Nat) (base : Nat) (xs : List α) : List (Nat × α) :=
+  positionsAux width xs base []
+
+theorem positions_eq {α : Type} (width : α → Nat) (base : Nat) (xs : List α) :
+    positions width base xs = positionsSpec width base xs := by
+  simp [positions, positionsAux_eq]
 
 end Concrete.Backend.Runtime

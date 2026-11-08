@@ -12,8 +12,10 @@
 # nonexistent program must fail opposite inventory directions (these child runs are emit-only,
 # never native). A body that never returns must
 # be observed as incomplete on both backends; a body returning a word that encodes nothing must reach
-# the runtime's refusal; and the comparison itself must reject a missing or extra newline, a wrong
-# status with the right stderr, and stray stdout. Run inside the nix devshell, from the repo root.
+# the runtime's refusal; the prepared-numbering, predecessor-grouping, reference-equality and
+# stack-depth regressions (slice0_bir.lean numbering) must pass with exact refusal diagnostics; and
+# the comparison itself must reject a missing or extra newline, a wrong status with the right stderr,
+# and stray stdout. Run inside the nix devshell, from the repo root.
 set -euo pipefail
 # shellcheck source=scripts/checks/lib/slice0_common.sh
 source scripts/checks/lib/slice0_common.sh
@@ -87,6 +89,12 @@ if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" = 1 ]; then exit 0; fi
 expected_timeout check control-loop "$work/ctl/loop" 1 1
 "${emitter[@]}" invalid "$work/ctl/invalid" "$target"
 check control-invalid-word "$work/ctl/invalid" 10 20
+if "${emitter[@]}" numbering; then
+  echo "ok   numbering regressions (sparse/duplicate/missing/phi/condbr/target/spec-eq/stack-depth)"
+else
+  echo "FAIL numbering regressions"
+  fail=1
+fi
 
 # The comparison's own negative controls: each forged observation must be rejected.
 e="$work/ctl/judge"; mkdir -p "$e"

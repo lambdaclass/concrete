@@ -20,6 +20,9 @@ word that encodes nothing, which the runtime must refuse (`Runtime.invalidLine`,
 determinism gate. Its controls append the CWD to `llvm.ll` or monotonic nanoseconds to
 `lcb_body.s`, and are accepted only after `--allow-planted-failure --plant nondeterministic` or
 `--allow-planted-failure --plant monotonic` following the expectation.
+`... numbering` runs the deterministic prepared-numbering, predecessor-grouping and
+reference-equality regressions (ISS-0030), including exact refusal-diagnostic controls and a
+non-timed stack-depth check on `sparse` and `deepBlocks`.
 -/
 
 open Concrete.BIR Concrete.Backend
@@ -174,6 +177,118 @@ def emitArgs (name dir target : String) (args : List String) (twice : Option Str
     | none => return 0
     | some second => emit name second expectation t plant
 
+private def sparse (n : Nat) (stride : Nat := 1000000000000) : Program :=
+  { blocks := [{ params := [],
+                 insts := (List.range n).map (fun i =>
+                   .bin .add .u8 (stride * (i + 1)) (.imm .u8 1) (.imm .u8 2)),
+                 term := .ret (.reg (stride * n)) }],
+    sites := [] }
+
+private def wide (n : Nat) : Program :=
+  { blocks := [
+      { params := [], insts := [.binOvf .add .u8 (n + 1) (n + 2) (.imm .u8 0) (.imm .u8 0)],
+        term := .condbr (n + 2) 1
+          ((List.range n).map fun i => .imm .u8 (Int.ofNat (i % 256))) 1
+          ((List.range n).map fun i => .imm .u8 (Int.ofNat ((i + 1) % 256))) },
+      { params := (List.range n).map (fun i => (i, .int .u8)), insts := [], term := .ret (.imm .u8 0) }],
+    sites := [] }
+
+private def deepBlocks (n : Nat) : Program :=
+  { blocks := (List.range n).map (fun _ => { params := [], insts := [], term := .ret (.imm .u8 0) }),
+    sites := [] }
+
+private def requireOk (label : String) (ok : Bool) : IO Unit :=
+  unless ok do throw (IO.userError s!"numbering: {label}")
+
+private def expectAdaptError (label expected : String) (p : Program) : IO Unit := do
+  match LCB.adapt p with
+  | .error actual =>
+    requireOk s!"{label}: wrong diagnostic: {actual} (expected {expected})" (actual == expected)
+  | .ok _ => throw (IO.userError s!"numbering: {label}: accepted planted defect")
+
+/-- Deterministic ISS-0030 regressions: sparse/large register names, first-definition-wins lookup,
+exact refusal diagnostics, conditional-arm order and multiplicity, huge branch targets,
+prepared/reference equality (`adapt = adaptSpec`, `emit = emitSpec`, `LLVM.print = LLVM.printSpec`),
+and a non-timed stack-depth check on `sparse` and `deepBlocks`. -/
+def checkNumbering : IO UInt32 := do
+  let large := sparse 1
+  requireOk "large register lookup" (LCB.regIdFast (LCB.prepare large) 1000000000000 == some 3)
+  let duplicate : Program :=
+    { blocks := [{ params := [],
+                   insts := [.bin .add .u8 1000000000000 (.imm .u8 1) (.imm .u8 2),
+                             .bin .add .u8 1000000000000 (.imm .u8 3) (.imm .u8 4)],
+                   term := .ret (.imm .u8 0) }],
+      sites := [] }
+  requireOk "duplicate first definition wins"
+    (LCB.regIdFast (LCB.prepare duplicate) 1000000000000 == some 3)
+  expectAdaptError "duplicate register"
+    "the numbering is not injective (a register defined twice?)" duplicate
+  let missing : Program :=
+    { blocks := [{ params := [], insts := [], term := .ret (.reg 1000000000000) }], sites := [] }
+  expectAdaptError "missing register" "register %r1000000000000 has no definition" missing
+  let short : Program :=
+    { blocks := [{ params := [], insts := [], term := .br 1 [] },
+                 { params := [(0, .int .u8)], insts := [], term := .ret (.reg 0) }],
+      sites := [] }
+  expectAdaptError "short phi payload" "block 0 passes too few arguments to block 1" short
+  let repeated := wide 8
+  match LCB.adapt repeated with
+  | .error e => throw (IO.userError s!"numbering: conditional arms unexpectedly refused: {e}")
+  | .ok f =>
+    let arms := ((f.blocks[1]?.map (·.phis)).getD #[])[0]?
+    let expected : Array (Nat × LeanCompilerBackend.Verified.Source.Operand) :=
+      #[(0, .literal (LCB.word 0)), (0, .literal (LCB.word 1))]
+    requireOk "conditional-arm order and multiplicity"
+      (arms.map (fun phi => reprStr phi.incoming) == some (reprStr expected))
+  let shortSecond := { repeated with blocks := match repeated.blocks with
+    | b :: rest => { b with term := .condbr 10 1 (List.replicate 8 (.imm .u8 0)) 1 [] } :: rest
+    | [] => [] }
+  expectAdaptError "short second conditional arm"
+    "block 0 passes too few arguments to block 1" shortSecond
+  let outOfProfileBin : Program :=
+    { blocks := [{ params := [], insts := [.bin .add .u32 0 (.imm .u32 1) (.imm .u32 2)],
+                   term := .ret (.imm .u8 0) }], sites := [] }
+  expectAdaptError "out-of-profile bin"
+    s!"{repr ConcreteSpec.IntTy.u32} is outside LCB's slice-0 profile" outOfProfileBin
+  let outOfProfileTrunc : Program :=
+    { blocks := [{ params := [], insts := [.trunc .u32 .u8 0 (.imm .u32 1)],
+                   term := .ret (.reg 0) }], sites := [] }
+  expectAdaptError "out-of-profile trunc"
+    s!"{repr ConcreteSpec.IntTy.u32} → {repr ConcreteSpec.IntTy.u8} is outside LCB's slice-0 profile"
+    outOfProfileTrunc
+  -- Negative controls for the diagnostic matcher itself: wrong diagnostic or unexpected .ok must fail.
+  let rejectedWrong ← try expectAdaptError "ctl-wrong" "wrong diagnostic" duplicate; pure false
+    catch _ => pure true
+  requireOk "expectAdaptError must reject a wrong diagnostic" rejectedWrong
+  let rejectedOk ← try expectAdaptError "ctl-ok" "any" large; pure false
+    catch _ => pure true
+  requireOk "expectAdaptError must reject an accepted program" rejectedOk
+  let hugeTarget : Program :=
+    { blocks := [{ params := [], insts := [], term := .br 1000000000000 [] }], sites := [] }
+  for p in [large, duplicate, missing, short, shortSecond, outOfProfileBin, outOfProfileTrunc,
+      hugeTarget, wide 8, sparse 8] ++ Examples.all.map (·.2) do
+    requireOk "prepared adapter differs from reference"
+      (reprStr (LCB.adapt p) == reprStr (LCB.adaptSpec p))
+    requireOk "prepared emit differs from reference"
+      (reprStr (LCB.emit p) == reprStr (LCB.emitSpec p))
+    requireOk "prepared LLVM differs from reference" (LLVM.print p == LLVM.printSpec p)
+  let depth := 20000
+  let deepInsts := sparse depth
+  match LCB.emit deepInsts with
+  | .error e => throw (IO.userError s!"numbering: sparse stack-depth check refused: {e}")
+  | .ok (f, _) =>
+    requireOk "sparse stack-depth shape"
+      (f.blocks.size == 1 && f.valueWidths.size == 4 * depth &&
+        (f.blocks[0]?.map (·.instructions.size)) == some (4 * depth))
+  requireOk "sparse stack-depth LLVM" ((LLVM.module deepInsts).length > 0)
+  let deepCfg := deepBlocks depth
+  match LCB.emit deepCfg with
+  | .error e => throw (IO.userError s!"numbering: deepBlocks stack-depth check refused: {e}")
+  | .ok (f, _) =>
+    requireOk "deepBlocks stack-depth shape" (f.blocks.size == depth && f.valueWidths.size == 0)
+  requireOk "deepBlocks stack-depth LLVM" ((LLVM.module deepCfg).length > 0)
+  return 0
+
 def main (args : List String) : IO UInt32 := do
   match args with
   | ["list"] => do
@@ -184,4 +299,7 @@ def main (args : List String) : IO UInt32 := do
     emitArgs name dir t expectation (some second)
   | ["loop", dir, t] => withTarget t (emitLoop dir)
   | ["invalid", dir, t] => withTarget t (emitInvalid dir)
-  | _ => IO.eprintln "usage: slice0_bir.lean list | emit[-twice] NAME DIR [DIR2] TARGET EXPECT... [--allow-planted-failure --plant nondeterministic|monotonic] | (loop | invalid) DIR TARGET"; return 2
+  | ["numbering"] => checkNumbering
+  | _ =>
+    IO.eprintln "usage: slice0_bir.lean list | numbering | emit[-twice] NAME DIR [DIR2] TARGET EXPECT... [--allow-planted-failure --plant nondeterministic|monotonic] | (loop | invalid) DIR TARGET"
+    return 2

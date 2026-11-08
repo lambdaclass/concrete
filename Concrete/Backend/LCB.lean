@@ -1,4 +1,5 @@
 import Concrete.Backend.Runtime
+import Std.Data.HashMap.Lemmas
 import Concrete.BIR.Progress
 import LeanCompilerBackend.Verified.Job
 import LeanCompilerBackend.AMD64
@@ -102,14 +103,21 @@ def numberingOk (p : Program) : Bool :=
 definitions, so this is a function of the register. -/
 def regId (p : Program) (r : Reg) : Option Nat := (ids p).lookup r
 
-def idOf (p : Program) (r : Reg) : Except String Nat :=
-  match regId p r with
+def idOfWith (lookup : Reg → Option Nat) (r : Reg) : Except String Nat :=
+  match lookup r with
   | some n => .ok n
   | none => .error s!"register %r{r} has no definition"
 
-def operand (p : Program) : Operand → Except String Source.Operand
-  | .reg r => return .local (← idOf p r)
+def idOf (p : Program) := idOfWith (regId p)
+
+def operandWith (lookup : Reg → Option Nat) : Operand → Except String Source.Operand
+  | .reg r => return .local (← idOfWith lookup r)
   | .imm _ v => return .literal (word v)
+
+def operand (p : Program) := operandWith (regId p)
+
+theorem operand_eq_with (p : Program) : operand p = operandWith (regId p) := rfl
+theorem idOf_eq_with (p : Program) : idOf p = idOfWith (regId p) := rfl
 
 def opBinary : BinOp → Source.Binary
   | .add => .add
@@ -120,19 +128,19 @@ def ins (d : Nat) (op : Source.Operation) : Source.Instruction :=
   { destination := d, width := .word, operation := op }
 
 /-- An instruction's LCB instructions, its first value numbered `n`. -/
-def inst (p : Program) (n : Nat) : Inst → Except String (List Source.Instruction)
+def instWith (lookup : Reg → Option Nat) (n : Nat) : Inst → Except String (List Source.Instruction)
   | .bin op t _ a b => do
     unless inProfile t do throw s!"{repr t} is outside LCB's slice-0 profile"
-    let a ← operand p a
-    let b ← operand p b
+    let a ← operandWith lookup a
+    let b ← operandWith lookup b
     return [ins n (.binary (opBinary op) a b),
       ins (n + 1) (.binary .sub (.local n) (.literal (word t.min))),
       ins (n + 2) (.binary .andBits (.local (n + 1)) (.literal (word (2 ^ t.bits - 1)))),
       ins (n + 3) (.binary .add (.local (n + 2)) (.literal (word t.min)))]
   | .binOvf op t _ _ a b => do
     unless inProfile t do throw s!"{repr t} is outside LCB's slice-0 profile"
-    let a ← operand p a
-    let b ← operand p b
+    let a ← operandWith lookup a
+    let b ← operandWith lookup b
     return [ins n (.binary (opBinary op) a b),
       ins (n + 1) (.binary .sub (.local n) (.literal (word t.min))),
       ins (n + 2) (.binary .andBits (.local (n + 1)) (.literal (word (2 ^ t.bits - 1)))),
@@ -141,10 +149,12 @@ def inst (p : Program) (n : Nat) : Inst → Except String (List Source.Instructi
       ins (n + 5) (.compare .eq .word (.local (n + 4)) (.literal (word 0)))]
   | .trunc fr to _ a => do
     unless inProfile fr && inProfile to do throw s!"{repr fr} → {repr to} is outside LCB's slice-0 profile"
-    let a ← operand p a
+    let a ← operandWith lookup a
     return [ins n (.binary .sub a (.literal (word to.min))),
       ins (n + 1) (.binary .andBits (.local n) (.literal (word (2 ^ to.bits - 1)))),
       ins (n + 2) (.binary .add (.local (n + 1)) (.literal (word to.min)))]
+
+def inst (p : Program) := instWith (regId p)
 
 /-- The edges into block `j` from block `k`, whose terminator is `term`: (k, arguments). -/
 def edgesTo (j k : Nat) : Term → List (Nat × List Operand)
@@ -156,34 +166,47 @@ def edgesTo (j k : Nat) : Term → List (Nat × List Operand)
 def incoming (p : Program) (j : Nat) : List (Nat × List Operand) :=
   (indexed p.blocks).flatMap fun (k, b) => edgesTo j k b.term
 
-def term (p : Program) : Term → Except String Source.Terminator
-  | .ret a => return .ret (← operand p a)
+def termWith (lookup : Reg → Option Nat) : Term → Except String Source.Terminator
+  | .ret a => return .ret (← operandWith lookup a)
   | .trap s => return .ret (.literal (word (256 + s)))
   | .br t _ => return .jump t
-  | .condbr c t _ e _ => return .branch (.local (← idOf p c)) t e
+  | .condbr c t _ e _ => return .branch (.local (← idOfWith lookup c)) t e
 
-/-- Block `j`'s phi for its parameter `k`: one arm per incoming edge, by predecessor. -/
-def adaptPhi (p : Program) (j k : Nat) : Except String Source.Phi := do
-  let arms ← (incoming p j).mapM fun (pred, args) => do
-    let a ← match args[k]? with
-      | some a => operand p a
+def term (p : Program) := termWith (regId p)
+
+/-- Shared phi lowering, parameterized by register lookup and payload access. -/
+def adaptPhiWith {α : Type} (lookup : Reg → Option Nat) (base j k : Nat)
+    (incoming : List (Nat × α)) (argAt : α → Nat → Option Operand) : Except String Source.Phi := do
+  let arms ← incoming.mapM fun (pred, args) => do
+    let a ← match argAt args k with
+      | some a => operandWith lookup a
       | none => throw s!"block {pred} passes too few arguments to block {j}"
     pure (pred, a)
-  pure { destination := blockBase p j + k, width := .word, incoming := arms.toArray }
+  pure { destination := base + k, width := .word, incoming := arms.toArray }
+
+/-- Block `j`'s reference phi for parameter `k`, in predecessor order. -/
+def adaptPhi (p : Program) (j k : Nat) : Except String Source.Phi :=
+  adaptPhiWith (regId p) (blockBase p j) j k (incoming p j) (fun args k => args[k]?)
 
 /-- Instruction `i` of block `j`, numbered from its slot. -/
 def adaptInst (p : Program) (j : Nat) (b : Block) : Nat × Inst → Except String (List Source.Instruction)
   | (i, ins) => inst p (blockBase p j + instBase b i) ins
 
-/-- Block `j`: its phis, its instructions' expansions in order, its terminator. -/
-def adaptBlock (p : Program) : Nat × Block → Except String Source.Block
+/-- Shared block assembly; only the prepared/reference queries differ. -/
+def adaptBlockWith (phiAt : Nat → Nat → Except String Source.Phi)
+    (instAt : Nat → Block → Nat × Inst → Except String (List Source.Instruction))
+    (termAt : Term → Except String Source.Terminator) : Nat × Block → Except String Source.Block
   | (j, b) => do
-    let phis ← (indexed b.params).mapM fun (k, _) => adaptPhi p j k
-    let insts ← (indexed b.insts).mapM (adaptInst p j b)
-    pure { phis := phis.toArray, instructions := insts.flatten.toArray, terminator := ← term p b.term }
+    let phis ← (indexed b.params).mapM fun (k, _) => phiAt j k
+    let insts ← (indexed b.insts).mapM (instAt j b)
+    pure { phis := phis.toArray, instructions := insts.flatten.toArray, terminator := ← termAt b.term }
+
+/-- Block `j`: its reference phis and instruction expansions, in order. -/
+def adaptBlock (p : Program) : Nat × Block → Except String Source.Block :=
+  adaptBlockWith (adaptPhi p) (adaptInst p) (term p)
 
 /-- `main`'s body as a function of LCB's verified source profile. -/
-def adapt (p : Program) : Except String Source.Function := do
+def adaptSpec (p : Program) : Except String Source.Function := do
   unless numberingOk p do throw "the numbering is not injective (a register defined twice?)"
   let blocks ← (indexed p.blocks).mapM (adaptBlock p)
   return { resultWidth := .word, parameters := #[],
@@ -191,7 +214,7 @@ def adapt (p : Program) : Except String Source.Function := do
 
 /-- The reference LCB emit, retained for the executable/reference equality. -/
 def emitSpec (p : Program) : Except String (Source.Function × SiteTable) := do
-  let f ← adapt p
+  let f ← adaptSpec p
   return (f, p.sites)
 
 /-! ## Prepared numbering and predecessors -/
@@ -231,17 +254,62 @@ def numberingFrom (base : Nat) : List Block → NumberingData
     ⟨head.ids ++ tail.ids, head.intermediates ++ tail.intermediates,
       (base, head.instOffsets) :: tail.blocks⟩
 
-def numbering (p : Program) : NumberingData := numberingFrom 0 p.blocks
+/-- Production instruction numbering uses tail-recursive running positions and flat maps. -/
+def instNumberingFast (base : Nat) (xs : List Inst) : InstNumberingData :=
+  let ps := Runtime.positions Inst.width base xs
+  ⟨ps.flatMap (fun (n, ins) => (instDefs ins).map fun (r, off) => (r, n + off)),
+    ps.flatMap (fun (n, ins) => (interOffsets ins).map (n + ·)), ps.map Prod.fst⟩
+
+def blockNumberingFast (base : Nat) (b : Block) : BlockNumberingData :=
+  let tail := instNumberingFast (base + b.params.length) b.insts
+  ⟨(indexed b.params).map (fun (k, (r, _)) => (r, base + k)) ++ tail.ids,
+    tail.intermediates, tail.offsets⟩
+
+/-- Production block numbering has bounded call-stack depth, including long single blocks. -/
+def numberingFastFrom (base : Nat) (xs : List Block) : NumberingData :=
+  let chunks := (Runtime.positions blockSize base xs).map fun (n, b) => (n, blockNumberingFast n b)
+  ⟨chunks.flatMap (·.2.ids), chunks.flatMap (·.2.intermediates),
+    chunks.map (fun (n, data) => (n, data.instOffsets))⟩
+
+theorem instNumberingFast_eq (base : Nat) (xs : List Inst) :
+    instNumberingFast base xs = instNumbering base xs := by
+  induction xs generalizing base with
+  | nil => simp [instNumberingFast, Runtime.positions_eq, Runtime.positionsSpec, instNumbering]
+  | cons ins xs ih =>
+    have h := ih (base + Inst.width ins)
+    simp only [instNumberingFast, Runtime.positions_eq, Runtime.positionsSpec,
+      List.flatMap_cons, List.map_cons] at h ⊢
+    simp only [instNumbering]
+    cases ht : instNumbering (base + Inst.width ins) xs
+    simp only [ht, InstNumberingData.mk.injEq] at h
+    rcases h with ⟨hids, hinter, hoff⟩
+    simp only [hids, hinter, hoff]
+
+theorem blockNumberingFast_eq (base : Nat) (b : Block) :
+    blockNumberingFast base b = blockNumbering base b := by
+  simp only [blockNumberingFast, instNumberingFast_eq, blockNumbering]
+
+theorem numberingFastFrom_eq (base : Nat) (xs : List Block) :
+    numberingFastFrom base xs = numberingFrom base xs := by
+  induction xs generalizing base with
+  | nil => simp [numberingFastFrom, Runtime.positions_eq, Runtime.positionsSpec, numberingFrom]
+  | cons b xs ih =>
+    have h := ih (base + blockSize b)
+    simp only [numberingFastFrom, Runtime.positions_eq, Runtime.positionsSpec,
+      List.map_cons, List.flatMap_cons, List.flatMap_map, List.map_map, Function.comp_def,
+      blockNumberingFast_eq] at h ⊢
+    simp only [numberingFrom]
+    cases ht : numberingFrom (base + blockSize b) xs
+    simp only [ht, NumberingData.mk.injEq] at h
+    rcases h with ⟨hids, hinter, hblocks⟩
+    simp only [hids, hinter, hblocks]
+
+def numbering (p : Program) : NumberingData := numberingFastFrom 0 p.blocks
 
 /-- The same prepared data, expressed by the closed reference functions. -/
 def numberingSpec (p : Program) : NumberingData :=
   ⟨ids p, intermediates p, (indexed p.blocks).map fun (j, b) =>
     (blockBase p j, (indexed b.insts).map fun (i, _) => blockBase p j + instBase b i)⟩
-
-/-- One more than the largest register, including every malformed register. -/
-def regBound : List (Reg × Nat) → Nat
-  | [] => 0
-  | (r, _) :: rest => max (r + 1) (regBound rest)
 
 /-- Mark previously unseen natural numbers, refusing a duplicate or an out-of-bounds number. -/
 def markUnique (xs : List Nat) (a : Array Bool) : Option (Array Bool) :=
@@ -252,9 +320,12 @@ def markUnique (xs : List Nat) (a : Array Bool) : Option (Array Bool) :=
       if a[x] then none else markUnique xs (a.setIfInBounds x true)
     else none
 
-def regCheck (ids : List (Reg × Nat)) : Bool :=
-  let regs := ids.map Prod.fst
-  (markUnique regs (Array.replicate (regBound ids) false)).isSome
+/-- A finite set of seen names; storage depends on definitions, never name magnitude. -/
+def uniqueRegs : List Nat → Std.HashMap Nat Unit → Bool
+  | [], _ => true
+  | r :: rs, seen => !seen.contains r && uniqueRegs rs (seen.insert r ())
+
+def regCheck (ids : List (Reg × Nat)) : Bool := uniqueRegs (ids.map Prod.fst) ∅
 
 def slotInterCheck (slots inters : List Nat) (count : Nat) : Bool :=
   match markUnique slots (Array.replicate count false) with
@@ -272,44 +343,33 @@ def targetedEdges (p : Program) : List (Nat × (Nat × List Operand)) :=
     | .condbr _ t ta e ea => [(t, (k, ta)), (e, (k, ea))]
     | _ => []
 
-def incomingBound : List (Nat × (Nat × List Operand)) → Nat
-  | [] => 0
-  | e :: es => max (e.1 + 1) (incomingBound es)
+/-- Reverse buckets of prepared edge payloads; no allocation depends on a branch target. -/
+abbrev IncomingTable := Std.HashMap Nat (List (Nat × Array Operand))
 
-def addIncoming (es : List (Nat × (Nat × List Operand)))
-    (bs : Array (List (Nat × List Operand))) : Array (List (Nat × List Operand)) :=
-  match es with
-  | [] => bs
-  | e :: es =>
-    let bs := if h : e.1 < bs.size then bs.setIfInBounds e.1 (e.2 :: bs[e.1]) else bs
-    addIncoming es bs
+def incomingBucket (bs : IncomingTable) (j : Nat) : List (Nat × Array Operand) :=
+  bs[j]?.getD []
 
-def incomingBuckets (p : Program) : Array (List (Nat × List Operand)) :=
-  let es := targetedEdges p
-  addIncoming es (Array.replicate (incomingBound es) [])
+def addIncoming : List (Nat × (Nat × List Operand)) → IncomingTable → IncomingTable
+  | [], bs => bs
+  | e :: es, bs => addIncoming es (bs.insert e.1
+      ((e.2.1, e.2.2.toArray) :: incomingBucket bs e.1))
 
-def incomingBucket (bs : Array (List (Nat × List Operand))) (j : Nat) : List (Nat × List Operand) :=
-  (bs[j]?).getD []
+def incomingBuckets (p : Program) : IncomingTable :=
+  (addIncoming (targetedEdges p) ∅).map (fun _ xs => xs.reverse)
 
 structure Prepared where
   data : NumberingData
   offsets : Array (Nat × Array Nat)
-  regs : Array (Option Nat)
-  incoming : Array (List (Nat × List Operand))
+  regs : Std.HashMap Reg Nat
+  incoming : IncomingTable
   ok : Bool
 
-/-- Insert only an absent register, so the first definition wins exactly as in `List.lookup`. -/
-def addRegIds (ids : List (Reg × Nat)) (a : Array (Option Nat)) : Array (Option Nat) :=
-  match ids with
-  | [] => a
-  | (r, n) :: ids =>
-    let a := if h : r < a.size then
-      if a[r].isSome then a else a.setIfInBounds r (some n)
-    else a
-    addRegIds ids a
+/-- Insert only absent keys: malformed duplicate definitions still use the first one. -/
+def addRegIds : List (Reg × Nat) → Std.HashMap Reg Nat → Std.HashMap Reg Nat
+  | [], a => a
+  | (r, n) :: ids, a => addRegIds ids (a.insertIfNew r n)
 
-def regTable (data : NumberingData) : Array (Option Nat) :=
-  addRegIds data.ids (Array.replicate (regBound data.ids) none)
+def regTable (data : NumberingData) : Std.HashMap Reg Nat := addRegIds data.ids ∅
 
 def blockOffset (prep : Prepared) (j : Nat) : Nat :=
   (prep.offsets[j]?.map (·.1)).getD 0
@@ -323,65 +383,25 @@ def prepare (p : Program) : Prepared :=
     regs := regTable data, incoming := incomingBuckets p,
     ok := numberingOkFastData data (valueCount p) }
 
-def regIdFast (prep : Prepared) (r : Reg) : Option Nat := (prep.regs[r]?).getD none
+def regIdFast (prep : Prepared) (r : Reg) : Option Nat := prep.regs[r]?
 
-def idOfFast (prep : Prepared) (r : Reg) : Except String Nat :=
-  match regIdFast prep r with
-  | some n => .ok n
-  | none => .error s!"register %r{r} has no definition"
+def idOfFast (prep : Prepared) := idOfWith (regIdFast prep)
 
-def operandFast (prep : Prepared) : Operand → Except String Source.Operand
-  | .reg r => return .local (← idOfFast prep r)
-  | .imm _ v => return .literal (word v)
+def operandFast (prep : Prepared) := operandWith (regIdFast prep)
 
-def instFast (prep : Prepared) (n : Nat) : Inst → Except String (List Source.Instruction)
-  | .bin op t _ a b => do
-    unless inProfile t do throw s!"{repr t} is outside LCB's slice-0 profile"
-    let a ← operandFast prep a
-    let b ← operandFast prep b
-    return [ins n (.binary (opBinary op) a b),
-      ins (n + 1) (.binary .sub (.local n) (.literal (word t.min))),
-      ins (n + 2) (.binary .andBits (.local (n + 1)) (.literal (word (2 ^ t.bits - 1)))),
-      ins (n + 3) (.binary .add (.local (n + 2)) (.literal (word t.min)))]
-  | .binOvf op t _ _ a b => do
-    unless inProfile t do throw s!"{repr t} is outside LCB's slice-0 profile"
-    let a ← operandFast prep a
-    let b ← operandFast prep b
-    return [ins n (.binary (opBinary op) a b),
-      ins (n + 1) (.binary .sub (.local n) (.literal (word t.min))),
-      ins (n + 2) (.binary .andBits (.local (n + 1)) (.literal (word (2 ^ t.bits - 1)))),
-      ins (n + 3) (.binary .add (.local (n + 2)) (.literal (word t.min))),
-      ins (n + 4) (.compare .unsignedLT .word (.local (n + 1)) (.literal (word (2 ^ t.bits)))),
-      ins (n + 5) (.compare .eq .word (.local (n + 4)) (.literal (word 0)))]
-  | .trunc fr to _ a => do
-    unless inProfile fr && inProfile to do throw s!"{repr fr} → {repr to} is outside LCB's slice-0 profile"
-    let a ← operandFast prep a
-    return [ins n (.binary .sub a (.literal (word to.min))),
-      ins (n + 1) (.binary .andBits (.local n) (.literal (word (2 ^ to.bits - 1)))),
-      ins (n + 2) (.binary .add (.local (n + 1)) (.literal (word to.min)))]
+def instFast (prep : Prepared) (n : Nat) := instWith (regIdFast prep) n
 
-def termFast (prep : Prepared) : Term → Except String Source.Terminator
-  | .ret a => return .ret (← operandFast prep a)
-  | .trap s => return .ret (.literal (word (256 + s)))
-  | .br t _ => return .jump t
-  | .condbr c t _ e _ => return .branch (.local (← idOfFast prep c)) t e
+def termFast (prep : Prepared) := termWith (regIdFast prep)
 
-def adaptPhiFast (prep : Prepared) (j k : Nat) : Except String Source.Phi := do
-  let arms ← (incomingBucket prep.incoming j).reverse.mapM fun (pred, args) => do
-    let a ← match args[k]? with
-      | some a => operandFast prep a
-      | none => throw s!"block {pred} passes too few arguments to block {j}"
-    pure (pred, a)
-  pure { destination := blockOffset prep j + k, width := .word, incoming := arms.toArray }
+def adaptPhiFast (prep : Prepared) (j k : Nat) : Except String Source.Phi :=
+  adaptPhiWith (regIdFast prep) (blockOffset prep j) j k
+    (incomingBucket prep.incoming j) (fun args k => args[k]?)
 
 def adaptInstFast (prep : Prepared) (j : Nat) : Nat × Inst → Except String (List Source.Instruction)
   | (i, ins) => instFast prep (instOffset prep j i) ins
 
-def adaptBlockFast (prep : Prepared) : Nat × Block → Except String Source.Block
-  | (j, b) => do
-    let phis ← (indexed b.params).mapM fun (k, _) => adaptPhiFast prep j k
-    let insts ← (indexed b.insts).mapM (adaptInstFast prep j)
-    pure { phis := phis.toArray, instructions := insts.flatten.toArray, terminator := ← termFast prep b.term }
+def adaptBlockFast (prep : Prepared) : Nat × Block → Except String Source.Block :=
+  adaptBlockWith (adaptPhiFast prep) (fun j _ => adaptInstFast prep j) (termFast prep)
 
 /-- The executable adapter: all tables and validation are prepared once per program. -/
 def adaptFast (p : Program) : Except String Source.Function := do
@@ -391,12 +411,14 @@ def adaptFast (p : Program) : Except String Source.Function := do
   return { resultWidth := .word, parameters := #[],
            valueWidths := Array.replicate (valueCount p) .word, blocks := blocks.toArray }
 
+def adapt (p : Program) : Except String Source.Function := adaptFast p
+
 /-- The LCB backend's emit: the adapted body paired with the program's site table (the table that
 decodes the body's result is part of the emitted artifact), or the adapter's refusal, in which case
 no artifact exists (`artifact` and the emitter build only from `.ok`). `Proof.emit_correct` and
 `Proof.artifact_correct` are the backend contract: no premise. -/
 def emit (p : Program) : Except String (Source.Function × SiteTable) := do
-  let f ← adaptFast p
+  let f ← adapt p
   return (f, p.sites)
 
 /-! ## Assembly, in process (inside `P_toolchain[lcb]`) -/
@@ -483,7 +505,7 @@ theorem instBase_succ {b : Block} {i : Nat} {ins : Inst} (hi : b.insts[i]? = som
 theorem instNumbering_from (b : Block) (base : Nat) :
     ∀ (i : Nat) (l : List Inst), b.insts.drop i = l →
       instNumbering (base + instBase b i) l = instSpecFrom b base i
-  | i, [], hd => by simp [instNumbering, instSpecFrom, hd, Runtime.indexedFrom]
+  | i, [], hd => by simp [instNumbering, instSpecFrom, hd, Runtime.indexedFrom_nil]
   | i, ins :: rest, hd => by
     have hi : b.insts[i]? = some ins := by
       have := congrArg (·[0]?) hd
@@ -493,7 +515,7 @@ theorem instNumbering_from (b : Block) (base : Nat) :
       rfl
     have ih := instNumbering_from b base (i + 1) rest hd'
     rw [instBase_succ hi] at ih
-    simp only [instNumbering, instSpecFrom, hd, Runtime.indexedFrom, List.flatMap_cons,
+    simp only [instNumbering, instSpecFrom, hd, Runtime.indexedFrom_cons, List.flatMap_cons,
       List.map_cons]
     rw [Nat.add_assoc, ih]
     simp only [instSpecFrom, hd']
@@ -510,7 +532,7 @@ theorem blockBase_succ {p : Program} {j : Nat} {b : Block} (hb : p.blocks[j]? = 
 theorem numberingFrom_correct (p : Program) :
     ∀ (j : Nat) (l : List Block), p.blocks.drop j = l →
       numberingFrom (blockBase p j) l = numberingSpecFrom p j
-  | j, [], hd => by simp [numberingFrom, numberingSpecFrom, hd, Runtime.indexedFrom]
+  | j, [], hd => by simp [numberingFrom, numberingSpecFrom, hd, Runtime.indexedFrom_nil]
   | j, b :: rest, hd => by
     have hb : p.blocks[j]? = some b := by
       have := congrArg (·[0]?) hd
@@ -520,94 +542,33 @@ theorem numberingFrom_correct (p : Program) :
       rfl
     have ih := numberingFrom_correct p (j + 1) rest hd'
     rw [blockBase_succ hb] at ih
-    simp only [numberingFrom, numberingSpecFrom, hd, Runtime.indexedFrom, blockNumbering_eq,
+    simp only [numberingFrom, numberingSpecFrom, hd, Runtime.indexedFrom_cons, blockNumbering_eq,
       List.flatMap_cons, List.map_cons]
     rw [ih]
     simp only [numberingSpecFrom, hd']
 
 theorem numbering_eq (p : Program) : numbering p = numberingSpec p := by
   have h := numberingFrom_correct p 0 p.blocks (by simp)
-  exact h
+  change numberingFrom 0 p.blocks = numberingSpec p at h
+  simpa only [numbering, numberingFastFrom_eq] using h
 
-theorem regBound_lt {ids : List (Reg × Nat)} {r n : Nat} (h : (r, n) ∈ ids) : r < regBound ids := by
-  induction ids with
-  | nil => simp at h
-  | cons a ids ih =>
-    rcases a with ⟨q, m⟩
-    simp only [List.mem_cons, Prod.mk.injEq] at h
-    rcases h with ⟨rfl, rfl⟩ | h
-    · simp only [regBound]; omega
-    · simp only [regBound]; have := ih h; omega
-
-theorem lookup_none_of_not_mem {ids : List (Reg × Nat)} {r : Reg}
-    (h : r ∉ ids.map Prod.fst) : ids.lookup r = none := by
-  induction ids with
-  | nil => rfl
-  | cons a ids ih =>
-    rcases a with ⟨q, n⟩
-    simp only [List.map_cons, List.mem_cons] at h
-    have hq : r ≠ q := fun e => h (Or.inl e)
-    have hb : (r == q) = false := by simpa using hq
-    simp [List.lookup, hb, ih (fun hm => h (Or.inr hm))]
-
-theorem size_addRegIds : ∀ (ids : List (Reg × Nat)) (a : Array (Option Nat)),
-    (addRegIds ids a).size = a.size
-  | [], _ => rfl
-  | (r, n) :: ids, a => by
-    simp only [addRegIds]
-    rw [size_addRegIds]
-    split <;> (try split) <;> first | rfl | simp
-
-theorem addRegIds_lookup : ∀ (ids : List (Reg × Nat)) (a : Array (Option Nat)) (r : Reg),
-    r < a.size → ((addRegIds ids a)[r]?).getD none = ((a[r]?).getD none).or (ids.lookup r)
-  | [], a, r, _ => by simp [addRegIds]
-  | (x, n) :: ids, a, r, hr => by
-    simp only [addRegIds]
-    by_cases hx : x < a.size
-    · simp only [hx, ↓reduceDIte]
-      cases ha : a[x] with
-      | none =>
-        simp only [Option.isSome_none, Bool.false_eq_true, ↓reduceIte]
-        rw [addRegIds_lookup ids _ r (by simpa using hr)]
-        by_cases h : r = x
-        · subst h
-          simp [List.lookup, Array.getElem?_setIfInBounds_self_of_lt hx,
-            Array.getElem?_eq_getElem hx, ha]
-        · have hne : r ≠ x := h
-          have hb : (r == x) = false := by simpa using hne
-          simp [List.lookup, hb, Array.getElem?_setIfInBounds_ne (Ne.symm hne)]
-      | some v =>
-        simp only [Option.isSome_some, ↓reduceIte]
-        rw [addRegIds_lookup ids a r hr]
-        by_cases h : r = x
-        · subst h
-          simp [List.lookup, Array.getElem?_eq_getElem hx, ha]
-        · have hne : r ≠ x := h
-          have hb : (r == x) = false := by simpa using hne
-          simp [List.lookup, hb]
-    · simp only [hx, ↓reduceDIte]
-      rw [addRegIds_lookup ids a r hr]
-      have hne : r ≠ x := fun h => hx (h ▸ hr)
-      have hb : (r == x) = false := by simpa using hne
-      simp [List.lookup, hb]
+theorem addRegIds_lookup : ∀ (ids : List (Reg × Nat)) (a : Std.HashMap Reg Nat) (r : Reg),
+    (addRegIds ids a)[r]? = a[r]?.or (ids.lookup r)
+  | [], a, r => by simp [addRegIds]
+  | (x, n) :: ids, a, r => by
+    rw [addRegIds, addRegIds_lookup, Std.HashMap.getElem?_insertIfNew]
+    by_cases h : x = r
+    · subst x
+      by_cases hm : r ∈ a
+      · have hs := Std.HashMap.isSome_getElem?_eq_contains (m := a) (a := r)
+        cases ha : a[r]? <;> simp_all [List.lookup]
+      · simp [hm, List.lookup]
+    · have hb : (r == x) = false := by simp [Ne.symm h]
+      simp [h, hb, List.lookup]
 
 theorem regTable_lookup (data : NumberingData) (r : Reg) :
-    ((regTable data)[r]?).getD none = data.ids.lookup r := by
-  by_cases hr : r < regBound data.ids
-  · rw [regTable, addRegIds_lookup _ _ r (by simpa using hr)]
-    rw [Array.getElem?_eq_getElem (show r < (Array.replicate (regBound data.ids) none).size by simpa)]
-    simp
-  · have hnone : ((regTable data)[r]?) = none := by
-      apply Array.getElem?_eq_none
-      rw [regTable, size_addRegIds]
-      simpa using hr
-    have hnot : r ∉ data.ids.map Prod.fst := by
-      intro hm
-      obtain ⟨a, ha, hra⟩ := List.mem_map.mp hm
-      change a.1 = r at hra
-      have hb : (r, a.2) ∈ data.ids := by rwa [← hra]
-      exact hr (regBound_lt hb)
-    simp [hnone, lookup_none_of_not_mem hnot]
+    (regTable data)[r]? = data.ids.lookup r := by
+  simp [regTable, addRegIds_lookup]
 
 theorem prepare_regId (p : Program) (r : Reg) : regIdFast (prepare p) r = regId p r := by
   simp only [regIdFast, prepare, regTable_lookup, regId]
@@ -625,76 +586,26 @@ theorem instOffset_prepare {p : Program} {j i : Nat} {b : Block} {ins : Inst}
   simp [instOffset, prepare, numbering_eq, numberingSpec, List.getElem?_toArray,
     List.getElem?_map, Runtime.getElem?_indexed, hb, hi]
 
-theorem incomingBound_lt {e : Nat × (Nat × List Operand)} {es : List (Nat × (Nat × List Operand))}
-    (h : e ∈ es) : e.1 < incomingBound es := by
-  induction es with
-  | nil => simp at h
-  | cons a es ih =>
-    simp only [List.mem_cons] at h
-    rcases h with rfl | h
-    · simp only [incomingBound]; omega
-    · simp only [incomingBound]; have := ih h; omega
-
-theorem size_addIncoming : ∀ (es : List (Nat × (Nat × List Operand)))
-    (bs : Array (List (Nat × List Operand))), (addIncoming es bs).size = bs.size
-  | [], _ => rfl
-  | e :: es, bs => by
-    simp only [addIncoming]
-    rw [size_addIncoming]
-    split <;> simp
-
 theorem incomingBucket_add : ∀ (es : List (Nat × (Nat × List Operand)))
-    (bs : Array (List (Nat × List Operand))) (j : Nat), j < bs.size →
+    (bs : IncomingTable) (j : Nat),
     incomingBucket (addIncoming es bs) j =
-      ((es.filter (·.1 == j)).map Prod.snd).reverse ++ incomingBucket bs j
-  | [], bs, j, _ => by simp [addIncoming, incomingBucket]
-  | e :: es, bs, j, hj => by
-    simp only [addIncoming]
-    by_cases hlt : e.1 < bs.size
-    · simp only [hlt, ↓reduceDIte]
-      rw [incomingBucket_add es _ j (by simpa using hj)]
-      by_cases h : e.1 = j
-      · subst h
-        have hget : bs[e.1]?.getD [] = bs[e.1] := by
-          rw [Array.getElem?_eq_getElem hlt]; rfl
-        simp [incomingBucket, Array.getElem?_setIfInBounds_self_of_lt (by simpa using hlt), hget,
-          List.reverse_cons, List.append_assoc]
-      · have hne : j ≠ e.1 := Ne.symm h
-        simp [incomingBucket, h]
-    · simp only [hlt, ↓reduceDIte]
-      rw [incomingBucket_add es bs j hj]
-      have hne : e.1 ≠ j := by omega
-      simp [hne]
+      ((es.filter (·.1 == j)).map (fun e => (e.2.1, e.2.2.toArray))).reverse ++ incomingBucket bs j
+  | [], bs, j => by simp [addIncoming]
+  | e :: es, bs, j => by
+    rw [addIncoming, incomingBucket_add]
+    by_cases h : e.1 = j
+    · subst j
+      simp [incomingBucket, List.reverse_cons, List.append_assoc]
+    · simp [incomingBucket, Std.HashMap.getElem?_insert, h]
 
 theorem incomingBucket_buckets (p : Program) (j : Nat) :
-    (incomingBucket (incomingBuckets p) j).reverse =
-      ((targetedEdges p).filter (·.1 == j)).map Prod.snd := by
-  by_cases hj : j < (Array.replicate (incomingBound (targetedEdges p))
-    ([] : List (Nat × List Operand))).size
-  · have h := incomingBucket_add (targetedEdges p)
-      (Array.replicate (incomingBound (targetedEdges p)) ([] : List (Nat × List Operand))) j hj
-    have hinit : incomingBucket (Array.replicate (incomingBound (targetedEdges p))
-        ([] : List (Nat × List Operand))) j = [] := by
-      simp only [incomingBucket]
-      rw [Array.getElem?_eq_getElem hj]
-      simp
-    change (incomingBucket (addIncoming (targetedEdges p)
-      (Array.replicate (incomingBound (targetedEdges p)) [])) j).reverse = _
-    rw [h, hinit]
-    simp
-  · have hnone : (incomingBuckets p)[j]? = none := by
-      apply Array.getElem?_eq_none
-      rw [incomingBuckets, size_addIncoming]
-      simpa using hj
-    have hnoedge : (targetedEdges p).filter (·.1 == j) = [] := by
-      apply List.filter_eq_nil_iff.mpr
-      intro e he
-      have hlt := incomingBound_lt he
-      simp only [beq_iff_eq]
-      intro h
-      subst h
-      exact hj (by simpa using hlt)
-    simp [incomingBucket, hnone, hnoedge]
+    incomingBucket (incomingBuckets p) j =
+      ((targetedEdges p).filter (·.1 == j)).map (fun e => (e.2.1, e.2.2.toArray)) := by
+  have hm : incomingBucket (incomingBuckets p) j = (incomingBucket (addIncoming (targetedEdges p) ∅) j).reverse := by
+    simp only [incomingBuckets, incomingBucket, Std.HashMap.getElem?_map]
+    cases (addIncoming (targetedEdges p) ∅)[j]? <;> rfl
+  rw [hm, incomingBucket_add]
+  simp [incomingBucket]
 
 theorem targetedEdges_incoming (p : Program) (j : Nat) :
     ((targetedEdges p).filter (·.1 == j)).map Prod.snd = incoming p j := by
@@ -709,8 +620,10 @@ theorem targetedEdges_incoming (p : Program) (j : Nat) :
     cases tm <;> simp [edgesTo] <;> (try split) <;> (try split) <;> simp_all
 
 theorem prepare_incoming (p : Program) (j : Nat) :
-    (incomingBucket (prepare p).incoming j).reverse = incoming p j := by
-  rw [prepare, incomingBucket_buckets, targetedEdges_incoming]
+    incomingBucket (prepare p).incoming j =
+      (incoming p j).map (fun e => (e.1, e.2.toArray)) := by
+  simp only [prepare, incomingBucket_buckets, ← targetedEdges_incoming, List.map_map]
+  rfl
 
 /-- The marked entries of an array are exactly the previously seen natural numbers. -/
 def Marks (a : Array Bool) (seen : List Nat) : Prop :=
@@ -821,19 +734,31 @@ theorem all_and {α : Type} (f g : α → Bool) (l : List α) :
     rw [ih]
     cases f x <;> cases g x <;> cases l.all f <;> cases l.all g <;> rfl
 
+theorem uniqueRegs_eq (xs : List Nat) (seen : Std.HashMap Nat Unit) :
+    uniqueRegs xs seen = decide (xs.Nodup ∧ ∀ r ∈ xs, r ∉ seen) := by
+  induction xs generalizing seen with
+  | nil => simp [uniqueRegs]
+  | cons r rs ih =>
+    apply Bool.eq_iff_iff.mpr
+    simp only [uniqueRegs, ih, Bool.and_eq_true, Bool.not_eq_true',
+      Std.HashMap.contains_eq_false_iff_not_mem, decide_eq_true_eq,
+      List.nodup_cons, List.mem_cons, Std.HashMap.mem_insert, beq_iff_eq]
+    constructor
+    · rintro ⟨hr, hn, ht⟩
+      refine ⟨⟨?_, hn⟩, ?_⟩
+      · intro hm; exact (ht r hm) (Or.inl rfl)
+      · intro x hx; rcases hx with rfl | hx
+        · exact hr
+        · intro hm; exact (ht x hx) (Or.inr hm)
+    · rintro ⟨⟨hr, hn⟩, ht⟩
+      refine ⟨ht r (Or.inl rfl), hn, ?_⟩
+      intro x hx hm
+      rcases hm with he | hm
+      · subst x; exact hr hx
+      · exact ht x (Or.inr hx) hm
+
 theorem regCheck_eq (ids : List (Reg × Nat)) : regCheck ids = decide ((ids.map Prod.fst).Nodup) := by
-  have h := markUnique_ok (ids.map Prod.fst) (Array.replicate (regBound ids) false) []
-    (marks_replicate _)
-  simp only [Array.size_replicate] at h
-  have hall : (ids.map Prod.fst).all (· < regBound ids) = true := by
-    apply List.all_eq_true.mpr
-    intro r hr
-    obtain ⟨a, ha, hra⟩ := List.mem_map.mp hr
-    change a.1 = r at hra
-    have hb : (r, a.2) ∈ ids := by rwa [← hra]
-    simpa using regBound_lt hb
-  simp only [regCheck, h, hall, List.not_mem_nil, not_false_eq_true, implies_true, decide_true,
-    Bool.and_true]
+  simp [regCheck, uniqueRegs_eq]
 
 theorem slotInterCheck_eq (slots inters : List Nat) (count : Nat) :
     slotInterCheck slots inters count =
@@ -905,21 +830,21 @@ theorem getElem_of_mem_indexed {α : Type} {l : List α} {i : Nat} {x : α}
     exact hi
 
 theorem idOfFast_eq (p : Program) (r : Reg) : idOfFast (prepare p) r = idOf p r := by
-  simp [idOfFast, idOf, prepare_regId]
+  simp only [idOfFast, idOf, idOfWith, funext (prepare_regId p)]
 
 theorem operandFast_eq (p : Program) (a : Operand) : operandFast (prepare p) a = operand p a := by
-  cases a <;> simp [operandFast, operand, idOfFast_eq]
+  simp only [operandFast, operand, operandWith, funext (prepare_regId p)]
 
 theorem instFast_eq (p : Program) (n : Nat) (ins : Inst) :
     instFast (prepare p) n ins = inst p n ins := by
-  cases ins <;> simp [instFast, inst, operandFast_eq]
+  simp only [instFast, inst, instWith, funext (prepare_regId p)]
 
 theorem termFast_eq (p : Program) (tm : Term) : termFast (prepare p) tm = term p tm := by
-  cases tm <;> simp [termFast, term, operandFast_eq, idOfFast_eq]
+  simp only [termFast, term, termWith, funext (prepare_regId p)]
 
 theorem adaptPhiFast_eq {p : Program} {j : Nat} {b : Block} (hb : p.blocks[j]? = some b) (k : Nat) :
     adaptPhiFast (prepare p) j k = adaptPhi p j k := by
-  simp [adaptPhiFast, adaptPhi, prepare_incoming, operandFast_eq, blockOffset_prepare hb]
+  simp [adaptPhiFast, adaptPhi, adaptPhiWith, prepare_incoming, funext (prepare_regId p), blockOffset_prepare hb, List.mapM_map, Function.comp_def, List.getElem?_toArray]
 
 theorem adaptInstFast_eq {p : Program} {j i : Nat} {b : Block} {ins : Inst}
     (hb : p.blocks[j]? = some b) (hi : b.insts[i]? = some ins) :
@@ -938,20 +863,22 @@ theorem adaptBlockFast_eq {p : Program} {j : Nat} {b : Block} (hb : p.blocks[j]?
     apply mapM_ext
     rintro ⟨i, ins⟩ hm
     exact adaptInstFast_eq hb (getElem_of_mem_indexed hm)
-  simp only [adaptBlockFast, adaptBlock, hp, hi, termFast_eq]
+  simp only [adaptBlockFast, adaptBlock, adaptBlockWith, hp, hi, termFast_eq]
 
-theorem adaptFast_eq (p : Program) : adaptFast p = adapt p := by
+theorem adaptFast_eq (p : Program) : adaptFast p = adaptSpec p := by
   have hblocks : (indexed p.blocks).mapM (adaptBlockFast (prepare p)) =
       (indexed p.blocks).mapM (adaptBlock p) := by
     apply mapM_ext
     rintro ⟨j, b⟩ hm
     exact adaptBlockFast_eq (getElem_of_mem_indexed hm)
-  unfold adaptFast adapt
+  unfold adaptFast adaptSpec
   simp only [prepare_ok]
   cases hn : numberingOk p <;> simp [hblocks, bind, Except.bind, pure, Except.pure]
 
+theorem adapt_eq_spec (p : Program) : adapt p = adaptSpec p := adaptFast_eq p
+
 theorem emit_eq_spec (p : Program) : emit p = emitSpec p := by
-  simp [emit, emitSpec, adaptFast_eq]
+  simp [emit, emitSpec, adapt, adaptFast_eq]
 
 /-- How a BIR value is represented in LCB: an integer as its 32-bit word, a flag as 0 or 1. -/
 def enc : Val → Source.Value
@@ -1061,15 +988,18 @@ theorem inst_length {p : Program} {n : Nat} {ins : Inst} {xs : List Source.Instr
     (h : inst p n ins = .ok xs) : xs.length = Inst.width ins := by
   cases ins with
   | bin op t d a b =>
-    unfold inst at h
+    unfold inst instWith at h
+    simp only [← operand_eq_with] at h
     cases hp : inProfile t <;> cases ha : operand p a <;> cases hb : operand p b <;>
       simp_all [Inst.width, bind, Except.bind, pure, Except.pure] <;> (subst h; rfl)
   | binOvf op t d f a b =>
-    unfold inst at h
+    unfold inst instWith at h
+    simp only [← operand_eq_with] at h
     cases hp : inProfile t <;> cases ha : operand p a <;> cases hb : operand p b <;>
       simp_all [Inst.width, bind, Except.bind, pure, Except.pure] <;> (subst h; rfl)
   | trunc fr to d a =>
-    unfold inst at h
+    unfold inst instWith at h
+    simp only [← operand_eq_with] at h
     cases hp : inProfile fr <;> cases hq : inProfile to <;> cases ha : operand p a <;>
       simp_all [Inst.width, bind, Except.bind, pure, Except.pure] <;> (subst h; rfl)
 
@@ -1150,11 +1080,11 @@ theorem read_operand {p : Program} {benv : Env} {lenv : Source.Environment}
   cases a with
   | reg r =>
     obtain ⟨n, hn, hl⟩ := hag r v hv
-    simp [operand, idOf, hn, bind, Except.bind, pure, Except.pure] at ha
+    simp [operand, operandWith, idOfWith, hn, bind, Except.bind, pure, Except.pure] at ha
     subst ha
     simp [Source.read, hl, enc_width, word_bne, bind, Except.bind, pure, Except.pure]
   | imm t x =>
-    simp only [operand, pure, Except.pure] at ha
+    simp only [operand, operandWith, pure, Except.pure] at ha
     cases ha
     simp only [evalOp] at hv
     split at hv
@@ -1224,7 +1154,8 @@ theorem inst_bin {p : Program} {n : Nat} {op : BinOp} {t : IntTy} {d : Reg} {a b
         ins (n + 1) (.binary .sub (.local n) (.literal (word t.min))),
         ins (n + 2) (.binary .andBits (.local (n + 1)) (.literal (word (2 ^ t.bits - 1)))),
         ins (n + 3) (.binary .add (.local (n + 2)) (.literal (word t.min)))] := by
-  unfold inst at h
+  unfold inst instWith at h
+  simp only [← operand_eq_with] at h
   cases hp : inProfile t <;> cases ha : operand p a <;> cases hb : operand p b <;>
     simp_all [bind, Except.bind, pure, Except.pure]
 
@@ -1238,7 +1169,8 @@ theorem inst_binOvf {p : Program} {n : Nat} {op : BinOp} {t : IntTy} {d fl : Reg
         ins (n + 3) (.binary .add (.local (n + 2)) (.literal (word t.min))),
         ins (n + 4) (.compare .unsignedLT .word (.local (n + 1)) (.literal (word (2 ^ t.bits)))),
         ins (n + 5) (.compare .eq .word (.local (n + 4)) (.literal (word 0)))] := by
-  unfold inst at h
+  unfold inst instWith at h
+  simp only [← operand_eq_with] at h
   cases hp : inProfile t <;> cases ha : operand p a <;> cases hb : operand p b <;>
     simp_all [bind, Except.bind, pure, Except.pure]
 
@@ -1249,7 +1181,8 @@ theorem inst_trunc {p : Program} {n : Nat} {fr to : IntTy} {d : Reg} {a : Operan
       xs = [ins n (.binary .sub a' (.literal (word to.min))),
         ins (n + 1) (.binary .andBits (.local n) (.literal (word (2 ^ to.bits - 1)))),
         ins (n + 2) (.binary .add (.local (n + 1)) (.literal (word to.min)))] := by
-  unfold inst at h
+  unfold inst instWith at h
+  simp only [← operand_eq_with] at h
   cases hp : inProfile fr <;> cases hq : inProfile to <;> cases ha : operand p a <;>
     simp_all [bind, Except.bind, pure, Except.pure]
 
@@ -1735,7 +1668,7 @@ theorem mapM_ok_ok {α β ε : Type} {g : α → Except ε β} {l : List α} {l'
 
 theorem length_indexedFrom {α : Type} : ∀ (n : Nat) (l : List α), (Runtime.indexedFrom n l).length = l.length
   | _, [] => rfl
-  | n, _ :: l => by simp [Runtime.indexedFrom, length_indexedFrom (n + 1) l]
+  | n, _ :: l => by simp [Runtime.indexedFrom_cons, length_indexedFrom (n + 1) l]
 
 theorem length_indexed {α : Type} (l : List α) : (indexed l).length = l.length :=
   length_indexedFrom 0 l
@@ -1745,7 +1678,8 @@ theorem adapt_ok {p : Program} {f : Source.Function} (h : adapt p = .ok f) :
     numberingOk p = true ∧ ∃ bs, (indexed p.blocks).mapM (adaptBlock p) = .ok bs ∧
       f = { resultWidth := .word, parameters := #[],
             valueWidths := Array.replicate (valueCount p) .word, blocks := bs.toArray } := by
-  unfold adapt at h
+  rw [adapt, adaptFast_eq] at h
+  unfold adaptSpec at h
   cases hn : numberingOk p <;> cases hb : (indexed p.blocks).mapM (adaptBlock p) <;>
     simp_all [bind, Except.bind, pure, Except.pure]
 
@@ -1755,7 +1689,7 @@ theorem adaptBlock_ok {p : Program} {j : Nat} {b : Block} {lb : Source.Block}
     ∃ phis xss tm, (indexed b.params).mapM (fun (k, _) => adaptPhi p j k) = .ok phis ∧
       (indexed b.insts).mapM (adaptInst p j b) = .ok xss ∧ term p b.term = .ok tm ∧
       lb = { phis := phis.toArray, instructions := xss.flatten.toArray, terminator := tm } := by
-  unfold adaptBlock at h
+  unfold adaptBlock adaptBlockWith at h
   cases hp : (indexed b.params).mapM (fun (k, _) => adaptPhi p j k) <;>
     cases hi : (indexed b.insts).mapM (adaptInst p j b) <;> cases ht : term p b.term <;>
     simp_all [bind, Except.bind, pure, Except.pure]
@@ -1902,7 +1836,7 @@ theorem ret_sim {p : Program} {f : Source.Function} (hf : adapt p = .ok f) {j : 
     Source.step f ⟨j, (b.insts.map Inst.width).sum, env⟩ = .ok (.returned (enc v)) := by
   have hterm := block_term hlb
   rw [ht] at hterm
-  simp only [term, bind, Except.bind, pure, Except.pure] at hterm
+  simp only [term, termWith, ← operand_eq_with, bind, Except.bind, pure, Except.pure] at hterm
   cases ha : operand p a with
   | error e => simp [ha] at hterm
   | ok a' =>
@@ -1918,7 +1852,7 @@ theorem trap_sim {p : Program} {f : Source.Function} (hf : adapt p = .ok f) {j :
     Source.step f ⟨j, (b.insts.map Inst.width).sum, env⟩ = .ok (.returned (word (256 + st))) := by
   have hterm := block_term hlb
   rw [ht] at hterm
-  simp only [term, pure, Except.pure] at hterm
+  simp only [term, termWith, pure, Except.pure] at hterm
   injection hterm with hterm
   exact step_ret hfb (block_size hlb).symm hterm.symm
     (by rw [adapt_result hf]; exact read_literal _ _)
@@ -2032,9 +1966,9 @@ theorem flatMap_indexedFrom_pick {α β : Type} (F : Nat → α → List β) (j 
     ∀ (n : Nat) (l : List α), (Runtime.indexedFrom n l).flatMap
       (fun (kx : Nat × α) => if kx.1 = j then F kx.1 kx.2 else []) =
       if n ≤ j then (match l[j - n]? with | some x => F j x | none => []) else []
-  | n, [] => by simp [Runtime.indexedFrom]
+  | n, [] => by simp
   | n, x :: l => by
-    simp only [Runtime.indexedFrom, List.flatMap_cons]
+    simp only [Runtime.indexedFrom_cons, List.flatMap_cons]
     rw [flatMap_indexedFrom_pick F j (n + 1) l]
     rcases Nat.lt_trichotomy n j with h | h | h
     · have h1 : j - n = (j - (n + 1)) + 1 := by omega
@@ -2103,7 +2037,8 @@ theorem adaptPhi_ok {p : Program} {t k : Nat} {phi : Source.Phi} (h : adaptPhi p
           | none => throw s!"block {pa.1} passes too few arguments to block {t}"
         pure (pa.1, a) : Except String (Nat × Source.Operand))) = .ok arms ∧
       phi = { destination := blockBase p t + k, width := .word, incoming := arms.toArray } := by
-  unfold adaptPhi at h
+  unfold adaptPhi adaptPhiWith at h
+  simp only [← operand_eq_with] at h
   cases ha : (incoming p t).mapM (fun (pa : Nat × List Operand) => (do
         let a ← match pa.2[k]? with
           | some a => operand p a
@@ -2456,13 +2391,13 @@ theorem runBlock_sim {p : Program} (hwf : WF p) (hok : numberingOk p = true) {f 
       obtain ⟨env₂, htr, hsz₂, hag₂, hr₂⟩ := edge_sim hok hf hbj hedge hen hsz₁ hag₁ hr₁
       have hterm := block_term hlb
       rw [htm] at hterm
-      simp only [term, pure, Except.pure, Except.ok.injEq] at hterm
+      simp only [term, termWith, pure, Except.pure, Except.ok.injEq] at hterm
       exact cont t benv₂ env₂ (pre (step_jump hfb (block_size hlb).symm hterm.symm htr)) hsz₂ hag₂ hr₂
     | condbr c t ta e ea =>
       have hne := condbr_ne hwf hbj htm
       have hterm := block_term hlb
       rw [htm] at hterm
-      simp only [term, bind, Except.bind] at hterm
+      simp only [term, termWith, ← idOf_eq_with, bind, Except.bind] at hterm
       cases hid : idOf p c with
       | error e => simp [hid] at hterm
       | ok nc =>
@@ -2473,7 +2408,7 @@ theorem runBlock_sim {p : Program} (hwf : WF p) (hok : numberingOk p = true) {f 
       rcases v with ⟨ty, x⟩ | bb
       · simp only [hl]
       have hread : Source.read env₁ .word (.local nc) = .ok (enc (.bool bb)) :=
-        read_operand (a := .reg c) hag₁ (by simp [operand, hid, bind, Except.bind, pure, Except.pure])
+        read_operand (a := .reg c) hag₁ (by simp [operand, operandWith, ← idOf_eq_with, hid, bind, Except.bind, pure, Except.pure])
           (by simpa [evalOp] using hl)
       cases bb with
       | true =>
@@ -2520,7 +2455,7 @@ theorem initial_ok {p : Program} (hwf : WF p) {f : Source.Function} (hf : adapt 
   obtain ⟨lb, hfb, hlb⟩ := adapt_block hf hb
   obtain ⟨phis, xss, tm, hphis, -, -, rfl⟩ := adaptBlock_ok hlb
   rw [entry_params hwf hb] at hphis
-  simp only [indexed, Runtime.indexedFrom, List.mapM_nil, pure, Except.pure, Except.ok.injEq] at hphis
+  simp only [indexed, Runtime.indexedFrom_nil, List.mapM_nil, pure, Except.pure, Except.ok.injEq] at hphis
   subst hphis
   have hf' := adapt_ok hf
   obtain ⟨-, bs, -, rfl⟩ := hf'
@@ -2709,7 +2644,6 @@ theorem adapter_correct {p : Program} (hwf : WF p) {f : Source.Function}
 theorem emit_ok {p : Program} {f : Source.Function} {tbl : SiteTable}
     (h : emit p = .ok (f, tbl)) : adapt p = .ok f ∧ tbl = p.sites := by
   unfold emit at h
-  rw [adaptFast_eq] at h
   cases ha : adapt p with
   | error e => rw [ha] at h; cases h
   | ok g =>
