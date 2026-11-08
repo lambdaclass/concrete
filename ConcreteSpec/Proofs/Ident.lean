@@ -977,10 +977,15 @@ def unknownRecord : EncodedPremise := ⟨99, stackAssumption.scope, specVersion�
 with its typed scope and writer version. -/
 example : stackRecord.encode.read specVersion = some stackRecord := by decide
 
-/-- Planted (law `ConcreteSpec.Core.EncodedPremise.read_encode`). Changing the writer version makes
-this reader reject rather than reinterpret the record. -/
-example : ({ stackRecord with spec := ⟨0, 2⟩ }.encode.read specVersion) ≠
-    some ({ stackRecord with spec := ⟨0, 2⟩ }) := by decide
+/-- Helper (projection). A faulty encoder discards the known premise category, retaining the
+writer version and typed scope. -/
+def encodeDroppingKind (record : PremiseRecord) : EncodedPremise :=
+  { record.encode with category := 0 }
+
+/-- Planted (law `ConcreteSpec.Core.EncodedPremise.read_encode`). A category-dropping encoder fails
+the round trip for a known stack premise under the current version, with no mismatched version
+premise to switch off the law. -/
+example : ¬ ((encodeDroppingKind stackRecord).read specVersion = some stackRecord) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.EncodedPremise.read_unknown`). Category 99 has no meaning in the
 closed schema and is refused. -/
