@@ -255,6 +255,7 @@ theorem runFromQ_request {fuel : Nat} {events : List O.Event} {issued : List (Qu
           | none => ⟨events, issued ++ [q], .stuck c⟩
         else ⟨events, issued ++ [q], .badAnswer c⟩ := by
   simp only [runFromQ, hf, hs]
+  rfl
 
 /-- Every instrumented run extends the query history with which it started. -/
 theorem runFromQ_queries_from : ∀ (fuel : Nat) (events : List O.Event) (issued : List (Query O))
