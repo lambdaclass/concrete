@@ -22,8 +22,10 @@ Links only; each item's text lives where it is linked.
 1. The spec read and the Core freeze, A2c ([queue](../ROADMAP.md#the-queue)).
 2. The spelling round: exact names, signatures and spellings, shown as before/after code
    ([row](#decided-2026-11-08-spelling-round)).
+3. Where a decided proposal is kept once `docs/archive/` is under `legacy/`
+   ([archive move](#decided-2026-11-08-archive-move)).
 
-A decided proposal moves to `docs/archive/<topic>-<date>/`.
+A decided proposal moves to `docs/archive/<topic>-<date>/` until the [archive move](#decided-2026-11-08-archive-move) lands; after that, waiting item 3 decides where it goes.
 
 <a id="recent-decisions"></a>
 ## Recent decisions
@@ -68,6 +70,9 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 - A std-per-slice table in the roadmap; no user-guide chapter per slice for now; the written grammar before the parser; a speed target against C at slice 16 ([row](#decided-2026-11-08-std-table)).
 - Capabilities stay as decided, `with(...)` permission sets plus grant values; confirmed, no revision ([row](#decided-2026-11-08-capabilities-kept)).
 - Language and process decisions: no method calls or receivers, no `as`, always-qualified imports, no `char`, trap names, review sign-off ([row](#decided-2026-11-08-language)).
+- Owner sign-offs of slice 0, record-language and one repository ([row](#decided-2026-11-08-signoffs)).
+- The landing protection redesign: server-side protection of `main` ([row](#decided-2026-11-08-landing-redesign)).
+- Byte-for-byte sweeps into `legacy/`, and `docs/archive/` moves there ([sweep](#decided-2026-11-08-legacy-sweep), [archive](#decided-2026-11-08-archive-move)).
 - Every branch gets an agy review too ([row](#decided-project-review)).
 - Eleven plan and process decisions: UBSan dropped, a complete adapter theorem, smaller landing scripts, Claude's quota on the critical path, the front end now, one decisions writer, risk-capped reviews, one clones folder, a later no-libc runtime, a compile-speed budget and the termination wording ([row](#decided-2026-11-08-eleven)).
 
@@ -290,7 +295,7 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 - **P2** Priority order when principles conflict — Soundness and provability > transparency (with auditability, honest trust boundaries and compiler-owned identity) > one authoritative definition (checked derived views allowed) > explicitness at the use site > brevity. The philosophy guides open choices and never silently reopens decided rules.
 - **P3** Lean is the spec: confirm the amendment — Lean is the specification: confirmed together with Q9.15 (revision below).
 - **P4** Duplicate enum variants or methods (bug 313) — Refuse duplicate variant names in one enum and duplicate method names in one impl, with a new rule and diagnostic, the same as duplicate fields.
-- **P5** legacy/ is a byte-frozen snapshot, never patched or run — legacy/ is main's tree at the move commit, byte-frozen. A root check compares its tree hash, allowing only deletions a satisfied RETENTION.tsv entry authorizes. No legacy gate ever runs. The oracle is the tag-built artifact (P13), not the legacy/ copy.
+- **P5** legacy/ is a byte-frozen snapshot, never patched or run — legacy/ is main's tree at the move commit, byte-frozen. A root check compares its tree hash, allowing only deletions a satisfied RETENTION.tsv entry authorizes. No legacy gate ever runs. The oracle is the tag-built artifact (P13), not the legacy/ copy. *Revised 2026-11-08 (owner, "ok to 1"): legacy/ also grows by byte-for-byte sweeps recorded in scripts/checks/legacy.lock; no file, once frozen or swept, is ever rewritten ([sweep row](#decided-2026-11-08-legacy-sweep)).*
 - **P6** Retention manifest gates deleting legacy/ — RETENTION.tsv at the root gives every legacy asset (corpus, regressions, examples, std, bug ledger, site, docs, research) a destination and deletion criterion. Revised 2026-11-06 ([restart row](#decided-project-restart)): nothing is deleted at B3; legacy/, the old pipeline included, is deleted way later (LD: once the new compiler implements a full real program such as RocksDB, ethrex or similar), when RETENTION.tsv has no live entry, a final ideas sweep has dispositioned every idea and the owner explicitly approves.
 - **P7** Prove the new landing path before moving — T0: land beside the old tree the new root CI, required-checks.txt (enforced by train watch and land), RETENTION.tsv, the task disposition table, ORACLE.lock with the oracle artifact, and ISSUES.tsv. T1: rehearse the move on a throwaway branch: fresh clone, build, hook, exact-SHA CI, train --dry-run land; a broken build, a failing gate and a missing required check must each be refused. T2: the move in one train.
 - **P8** Server services under scripts/ — Keep only landing services: train, review, hook, landing bot. The status page, work queue, fuzz farm, perf tracking and nightly campaign all stop and are recorded as archived in RETENTION.tsv; each returns only with a roadmap task.
@@ -307,7 +312,7 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 - **P18** Phase E: contracts and termination within OD115–OD117 — Phase E: no source old, quantifier, implication or snapshot construct (OD117); entry/exit and frame properties are Lean theorems (a source frame clause would be a new decision for you); spec functions have a body and are total (OD115); ordinary functions have no total category (OD116) and get per-function termination theorems where wanted. R-0524 becomes 'Frame and entry/exit theorems in Lean, no old'; R-0526 stays 'checked totality of spec functions'.
 - **P19** Mutation testing for the new compiler — Retire the old mutation-harness defect work (R-0518). The new compiler gets its own mutation harness under R-0498, not a port of the old one.
 - **P20** One home for binding decisions — Move the still-binding roadmap decisions (new compiler, retention contract, authority, allocation, Lean as the spec) into docs/decisions.md beside your language answers. The dated log becomes history; ROADMAP.md links to decisions.md and restates nothing.
-- **P21** Retention records outlive legacy/ — RETENTION.tsv, ISSUES.tsv, required-checks.txt, scripts/oracle/ and docs/archive/roadmap-2026-11/ (with task_disposition.tsv) are part of the day-one root, outside legacy/, so they survive deleting it. *Revised 2026-11-06 (owner, verbatim: "do the whole movement"): of docs/archive/roadmap-2026-11/, the files that are decision sources or disposition records stay at the root (task_disposition.tsv, the decision log ROADMAP_DECISIONS.md, the task register ROADMAP_TASKS.md, ROADMAP_RECONCILIATION.md, ROADMAP_RESTRUCTURE.md with its table, and the archive README); the old control plane ROADMAP.md, ROADMAP_BACKLOG.md, ROADMAP_DIRECTION.md and WORK_QUEUE.md were duplicates of their frozen legacy/ copies apart from the move's mechanical rewrites, and nothing cites them as a decision source, so their root copies were removed and links point at the legacy/ copies, which stay until the legacy deletion point. The other docs/archive/ records (the site takedown record, the old bug ledger's disposition, the landing audit and the dated decision archives) stay at the root.*
+- **P21** Retention records outlive legacy/ — RETENTION.tsv, ISSUES.tsv, required-checks.txt, scripts/oracle/ and docs/archive/roadmap-2026-11/ (with task_disposition.tsv) are part of the day-one root, outside legacy/, so they survive deleting it. *Revised 2026-11-06 (owner, verbatim: "do the whole movement"): of docs/archive/roadmap-2026-11/, the files that are decision sources or disposition records stay at the root (task_disposition.tsv, the decision log ROADMAP_DECISIONS.md, the task register ROADMAP_TASKS.md, ROADMAP_RECONCILIATION.md, ROADMAP_RESTRUCTURE.md with its table, and the archive README); the old control plane ROADMAP.md, ROADMAP_BACKLOG.md, ROADMAP_DIRECTION.md and WORK_QUEUE.md were duplicates of their frozen legacy/ copies apart from the move's mechanical rewrites, and nothing cites them as a decision source, so their root copies were removed and links point at the legacy/ copies, which stay until the legacy deletion point. The other docs/archive/ records (the site takedown record, the old bug ledger's disposition, the landing audit and the dated decision archives) stay at the root.* *Revised 2026-11-08 (owner, "ok to 2"): all of docs/archive/ moves under legacy/, these retained records included, so docs/archive/roadmap-2026-11/ is no longer part of the day-one root; docs/decisions.md stays the one home of decisions and their quotes, and git history keeps the originals ([archive move](#decided-2026-11-08-archive-move)).*
 - **P22** The work-queue dispatcher — Stop the dispatcher for the lean start. Agents are started by hand from the roadmap; bring the dispatcher back only when there is enough parallel work to need it.
 - **P23** Precedence between decisions, rows and drafts — Recorded decisions govern. An accepted row supersedes a recorded rule only through an explicitly identified, owner-approved revision (Q5.1/Q5.4 for OD45/OD87, Q6.4 for TYPE-22, Q2.8 for TRAIT-1, Q9.15/P3 for generated chapters). R4's replacements govern conflicting draft recommendations. Before your acceptance is recorded, every passage R4 F18 lists is reconciled (capability inference, generated chapters, roadmap authority, assurance wording, restart order and retention, Phase E, freeze dependencies, superseded Core recommendations), and historical conflicting text is marked superseded.
 
@@ -379,7 +384,8 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
 - <a id="decided-project-restart"></a>**The restart and the `legacy/` folder** (owner, 2026-11-04;
   details rows P5–P8, P21, P22, 2026-11-05). Everything old moves under `legacy/` on main in one
   train. `legacy/` is a byte-frozen snapshot of main's tree at the move commit, never patched and
-  never run; one root check refuses any change under it except a deletion its retention row allows,
+  never run; one root check refuses any change under it except a deletion its retention row allows
+  (revised 2026-11-08: or a recorded byte-for-byte sweep, see P5),
   and no legacy gate runs (P5). Every legacy asset has a row in the root `RETENTION.tsv` with a
   destination and deletion condition (P6). Revised 2026-11-06 by the owner ("i would delete legacy way later, we want to check it to see if
   we fogot any idea right?"): `legacy/` is kept much longer, as the reference for ideas the new
@@ -1345,6 +1351,40 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     - [Foundation question 9](#foundation-q9) (item 4): the trap names above.
     - [Review caps](#decided-2026-11-08-review-caps) (items 1, 2): the sign-off path and the cap
       for a diff that mixes classes.
+- <a id="decided-2026-11-08-signoffs"></a>**Owner sign-offs at the review cap** (owner, 2026-11-08:
+  "sign off ea5181b5, 1547734f8, a27fbb842, yes redesign"), under [process item 1](#decided-2026-11-08-process). Each sign-off approves one exact SHA
+  that Codex, Kimi and agy all reviewed. It never replaces a gate or a proof obligation.
+  - `wip/slice0` at `ea5181b535fd2983abfcafe31b3ff7bf59ec6439`: Codex ACCEPT (verification), Kimi
+    ACCEPT, agy ACCEPT after withdrawing its findings; branch CI run 42451061873, 18 of 18 jobs green.
+  - `wip/record-language` at `1547734f86e83d381f6cac2f25d2810b083bc9ed`: Codex and Kimi ACCEPT
+    (verification of the round-2 fixes), agy ACCEPT.
+  - `wip/one-repository` at `a27fbb842`: all three ACCEPT, at the scripts cap of 3 rounds.
+  None of the three has an outstanding finding.
+- <a id="decided-2026-11-08-landing-redesign"></a>**The landing protection redesign** (owner, 2026-11-08,
+  the same answer: "yes redesign"). The local remote guard ("guard A") and the acceptance shim are
+  replaced by this order:
+  1. the [landing scripts shrink](#decided-2026-11-08-landing-shrink) (R-0617: the bot, notify,
+     install-bot and the systemd units go);
+  2. then one repository, `lambdaclass/concrete` only (`wip/one-repository`), lands before the
+     foundation freeze;
+  3. then server-side protection of `main` becomes the real boundary: GitHub rulesets or branch
+     protection let only a train merge with the required checks green update `main` (R-0628);
+  4. then a much smaller local guard, as a convenience only (R-0629).
+  `wip/remote-guard` (`b60670804`) and `wip/acceptance-shim` (`eca268078`) are superseded and do not
+  land.
+- <a id="decided-2026-11-08-legacy-sweep"></a>**Byte-for-byte sweeps into `legacy/`** (owner,
+  2026-11-08: "ok to 1", answering legacy sweep question 1). `legacy_frozen.sh` may accept an addition
+  under `legacy/` only if it is byte-identical to the same root path at a named commit, and the file
+  is gone from the root. Every other addition or edit stays refused, and the rule has negative
+  controls. The sweeps are recorded in `scripts/checks/legacy.lock`. The check judges the history
+  that landed on `main`: no lock line is rewritten or removed, and no `legacy/` file changes from a
+  version it once had there. No file, once frozen or swept, is ever rewritten ([P5](#decided-project-restart)).
+- <a id="decided-2026-11-08-archive-move"></a>**All of `docs/archive/` moves under `legacy/`** (owner,
+  2026-11-08: "ok to 2", answering legacy sweep question 2). This includes the decision sources and the
+  reconciliation and restructure records that P21 kept at the root. It is done by the byte-for-byte
+  sweep above (R-0631), and P21 is revised to match. `docs/decisions.md` stays the one home of
+  decisions and their verbatim quotes. Git history keeps the originals, and the final ideas sweep
+  before LD checks them.
 - <a id="decided-project-spark-2026-11-06"></a>**What Concrete takes from SPARK** (owner, 2026-11-06: "ok do everything", after Claude, Codex, agy and Kimi chose unanimously; the
   [review](proposals/SPARK.md) items 1, 2, 3, 6, 7, 9 and 10).
   - *Function values with safety preconditions.* A function whose `#[requires]` is a safety
