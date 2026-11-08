@@ -80,7 +80,10 @@ variable off before taking the servers down.
 
 This route enforces a comparison, not a claim that it has passed: run 42495924019 at
 688e10a86 failed on linked executables (ISS-0031). The native toolchain now declares its
-Nix closure and validates link inputs and runtime paths. Passing branch CI on both
+Nix closure and executes exact flake-owned argument templates through the real linker,
+with no Nix linker wrapper between validation and execution. It validates consumed inputs
+and recursive runtime dependencies; the reproducibility gate also checks the original
+`688e10a86` helper through a digest-checked source fixture. Passing branch CI on both
 Ubuntu and concrete-ci-2 is required to establish cross-machine executable equality.
 macOS is checked within its own target; it is never compared with Linux.
 

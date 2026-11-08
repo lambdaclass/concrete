@@ -1,14 +1,16 @@
-Native slice-0 links consume one structured flake-owned compiler, environment, flag and closure
-policy (ISS-0031, R-0577). They reject unapproved caller arguments and undeclared effective
-linker searches before linking, then validate exact trace grammar and recursive runtime metadata.
-Object symlink escapes, empty ELF runtime tags and Mach-O environment injection are refused.
-Linux uses compiler-rt and static LLVM libunwind rather than exempting GCC's empty runtime tag.
-Darwin keeps the native wrapper target, fixed deployment version and pinned SDK, with a directly
-named compiler-rt ASan runtime. Unexpected wrapper output produces a bounded diagnostic.
+Native slice-0 links execute exact flake-owned real-linker templates (ISS-0031, R-0577).
+No compiler/linker wrapper can rewrite arguments or synthesize RPATH after validation.
+GNU and Darwin implicit library directories are disabled; searches, startup objects, runtimes
+and local objects are checked before linking, then traces and recursive runtime metadata are
+validated. Raw dot-component traversal, object symlinks and store objects passed as local inputs
+are refused. Every constructor creates private scratch rather than inheriting ambient TMPDIR.
 
-Working-directory, TMPDIR and ambient-flag controls now assert executable purity as well as equality;
-all four product-purity assertions and eight invocation refusal controls detect the pre-fix
-688e10a86 behavior. The dead ambient libc plant and surrogate-sysroot positive claim were removed;
-sysroot overrides are negative controls. Build identity includes policy and closure digests.
-Round-1 Linux CI manifests matched across runners, but macOS failed. ISS-0031 remains open pending
-round-2 macOS and cross-machine CI; the host OS supplies Darwin runtime ABI dependencies.
+The compiler and real-linker grammars have direct negative controls. Shared invocation and host
+alias controls run on Darwin as well as Linux; synthetic Mach-O headers exercise the production
+parser on every host. A digest-checked historical helper keeps the four product and eight
+invocation differential obligations available in shallow CI clones. Darwin metadata derivations
+no longer introduce the uncached stdenvNoCC -> locale -> bmake build dependency.
+
+Round-3 Linux reproducibility compared all 32 examples across 13 stages without normalization.
+ISS-0031 remains open pending Darwin execution and cross-machine CI; Darwin runtime ABI libraries
+remain supplied by the host OS. See Concrete/README.md for the policy and validation boundary.

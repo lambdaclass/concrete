@@ -706,34 +706,46 @@ all objects and both executables. Negative controls check that the comparator re
 byte, a missing artifact and a differing inventory. The slice-0 front end is not implemented yet, so
 this gate starts at the hand-written BIR contract.
 
-Both native gates use `scripts/checks/lib/slice0_native.sh` (a build helper, not a gate): the Nix-pinned clang 21 (`CONCRETE_SLICE0_CLANG`; the
-shell's general `clang` is unchanged), with a flake-owned compiler/linker/sysroot closure and an
-explicit wrapper environment (fixed tool PATH, Nix store and purity policy, nonexistent build root and
-caller-selected TMPDIR; no inherited flags). The flake defines the target, environment, driver,
-link and sanitizer arguments as structured data consumed by the helper. Every link, including
-control and ASan links, first checks the caller arguments and the effective `clang -###` linker
-invocation, including unused search directories. It then parses the input trace by its filename/archive
-grammar and checks loader and runtime search paths before accepting the executable. Unknown trace
-syntax is a diagnostic failure. Local objects must be regular files in the build directory without
-symlink traversal; other inputs and searches must belong lexically and after resolution to the closure.
-Build identity records the policy and sorted closure digests. Controls change cwd/TMPDIR and inject
-ambient search flags; both executable equality and actual executable purity must hold. The purity
-assertions for both control and ASan products fail on the original `688e10a86` helper under both
-layouts; equality alone passed there. Separate controls reject unused search paths, sysroot overrides,
-linker scripts, external object symlinks, host and aliased RUNPATHs, empty ELF runtime tags, and
-malformed trace text. The eight invocation refusal controls also fail against the unchanged historical
-driver constructor. Linux uses compiler-rt builtins and static LLVM libunwind for ASan, avoiding the
-pinned GCC shared unwinder's empty RUNPATH rather than exempting it from validation. Startup objects,
-libc, compiler runtime, unwinder and loader belong to the pinned Nix closure.
+Both native gates use `scripts/checks/lib/slice0_native.sh` (a build helper, not a gate).
+The flake owns the pinned clang 21 compiler, real linker, sysroot, closure, environment and
+complete argument templates. Compilation uses the native Nix clang wrapper with validated
+compiler arguments and a clean environment; each constructor creates private scratch and passes
+it as TMPDIR to compilation, LCB and the real linker. No ambient search flags are inherited.
+Linking invokes the unwrapped GNU ld or ld64 directly: no cc-wrapper or ld-wrapper can strip
+arguments, add flags or synthesize RPATH after validation. The policy supplies startup objects,
+runtime archives, explicit library directories and runtime paths. GNU `-nostdlib` and Darwin `-Z`
+disable implicit library directories. The only template substitutions are local object basenames,
+a local output basename and the declared ASan variant.
 
-Darwin uses the native Nix wrapper's default target with deployment version 15.0 and the explicit
-pinned SDK; it does not pass a different target triple or suppress the wrapper warning. This follows
-the pinned nixpkgs `pkgs/build-support/cc-wrapper/add-clang-cc-cflags-before.sh`: its normal native
-branch supplies the wrapper's target and machine/ABI flags, while a differing target warns that
-multi-target use is unsupported. `pkgs/development/compilers/llvm/common/default.nix` makes the
-wrapper's resource library a symlink to compiler-rt; the policy names that compiler-rt output directly
-for the ASan runtime and RPATH. Mach-O dependency injection through `LC_DYLD_ENVIRONMENT` is refused
-and dylib IDs are validated. Darwin execution remains unverified until branch CI. Its fixed
+`scripts/checks/lib/link_command.py` checks the real-linker arguments against a closed grammar
+and the exact policy template, records the argument vector as JSON, and executes that vector.
+The supported grammar comes from [GNU binutils 2.44 `ld/ld.texi`](https://github.com/RTEMS/sourceware-mirror-binutils-gdb/blob/binutils-2_44/ld/ld.texi)
+and [ld64-954.16 `ld-classic.1`](https://github.com/apple-oss-distributions/ld64/blob/ld64-954.16/doc/man/man1/ld-classic.1),
+including Darwin's zero-operand `-w`, three-operand `-platform_version`, `-syslibroot` and `-Z`.
+It does not attempt to accept arbitrary clang-generated commands. Every consumed-input trace
+must match the filename/archive grammar. Loader and recursive runtime dependencies are checked
+before the executable is accepted. Local objects must be plain basenames naming regular,
+non-symlink files. Other inputs and searches must belong lexically and after resolution to the
+closure, including every symlink prefix. Raw `.` and `..` components are rejected before any
+normalization; local checks never fall through to store acceptance.
+
+Build identity records policy and closure digests. The controls check executable purity and
+byte equality under changed cwd/TMPDIR and ambient flags. The gate also runs a differential
+witness: all four product-purity obligations and all eight invocation refusal obligations fail
+on the byte-preserved `688e10a86` helper (a digest-checked fixture, available in shallow CI clones).
+The invocation suite runs on both platforms. Direct parser controls bypass the shell constructor
+and test command mutations, compiler-policy searches, raw path traversal and Mach-O headers;
+the Mach-O fixtures exercise the production parser on both platforms, including environment
+injection, unexpected loaders, RPATHs, install names, missing SDK stubs and unresolved dependencies.
+Other controls reject host and aliased runtime paths and traces, malformed trace text and empty
+ELF runtime tags. Linux uses compiler-rt builtins and static LLVM libunwind for ASan; startup
+objects, libc, runtimes, unwinder and loader belong to the pinned closure.
+
+Darwin links directly with ld64, deployment version 15.0 and the pinned SDK's version, with an
+explicit compiler-rt ASan dylib and RPATH. Closure and policy metadata use only cached bash/jq,
+without introducing a stdenv build (the previous `closureInfo` introduced Darwin
+`stdenvNoCC -> locale -> bmake`, whose unavailable source blocked CI). Darwin execution remains
+unverified until branch CI. Its fixed
 `/usr/lib/dyld` ABI and SDK-backed OS dylib install names refer to macOS at runtime. This is a reduced,
 not hermetic whole build: Lake/Lean and executable execution are outside a Nix sandbox, and macOS
 runtime libraries belong to the host OS. The native policy uses fixed relative object names and link order, epoch 1, UTC/C locale, no
