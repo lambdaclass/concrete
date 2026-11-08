@@ -25,6 +25,13 @@ REMOTE="${LAND_REMOTE:-origin}"
 DRY="${LAND_NOTES_DRY:-0}"
 die() { echo "notes: $*" >&2; exit 1; }
 [ "$REMOTE" != fork ] || die "refusing the remote named 'fork'"
+# One of the project's repositories, before `fetch` or `put` touch the remote (land_remote_bad;
+# `get` and `ready` read only local notes).
+# shellcheck source=scripts/land/lib.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+case "${1:-}" in
+  fetch|put) why="$(land_remote_bad "$REMOTE")" || die "$why" ;;
+esac
 
 kind_ok() { case "$1" in review|gates) ;; *) die "kind must be review or gates, not '$1'" ;; esac; }
 

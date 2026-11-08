@@ -80,6 +80,16 @@ if [ "$PRIMARY" = "fork" ] || [ "$MIRROR" = "fork" ]; then
   echo "push-both: refusing the remote named fork (a divergent repository) as PRIMARY or MIRROR" >&2
   exit 2
 fi
+# Each remote must be one of the project's repositories, every fetch and push URL of it (lib.sh).
+# shellcheck source=scripts/land/lib.sh
+. "$ROOT_DIR/scripts/land/lib.sh"
+for r in "$PRIMARY" ${MIRROR:+"$MIRROR"}; do
+  git remote get-url "$r" >/dev/null 2>&1 || continue   # a missing remote is refused below, as before
+  if ! why="$(land_remote_bad "$r")"; then
+    echo "push-both: $why. Nothing was pushed." >&2
+    exit 1
+  fi
+done
 BRANCH="${BRANCH:-main}"
 LOCAL="$(git rev-parse HEAD)"
 CI_WAIT=0

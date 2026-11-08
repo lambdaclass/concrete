@@ -22,6 +22,10 @@ if [ "${1:-}" = --fetch ]; then FETCH=1; shift; fi
 [ $# -eq 1 ] || { echo "usage: verify.sh [--fetch] <commit>" >&2; exit 2; }
 
 if [ "$FETCH" = 1 ]; then
+  # One of the project's repositories, before the notes are fetched (land_remote_bad, lib.sh).
+  # shellcheck source=scripts/land/lib.sh
+  . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../land/lib.sh" || exit 2
+  why="$(land_remote_bad "$REMOTE")" || { echo "verify: $why" >&2; exit 2; }
   git fetch -q "$REMOTE" "+$NOTES_REF:$NOTES_REF" \
     || { echo "verify: could not fetch $NOTES_REF from $REMOTE" >&2; exit 2; }
 fi

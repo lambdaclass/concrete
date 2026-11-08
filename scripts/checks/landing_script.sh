@@ -140,6 +140,17 @@ for r in origin lambdaclass fork; do git init -q --bare "$TMP/$r.git"; done
 git init -q "$W"
 cd "$W" || exit 2
 for r in origin lambdaclass fork; do git remote add "$r" "$TMP/$r.git"; done
+# Remotes that are not one of the project's repositories (scripts/land/lib.sh, LAND_REPOSITORIES):
+# every command must refuse them before any network use.
+git remote add gh-other https://github.com/someone/else.git
+# Fetches from the local origin but would push to another repository: the guard reads push URLs.
+git remote add gh-push "$TMP/origin.git"
+git remote set-url --push gh-push https://github.com/someone/else.git
+# Fetches from one project repository and pushes to the other.
+git remote add gh-mixed https://github.com/lambdaclass/concrete.git
+git remote set-url --push gh-mixed https://github.com/unbalancedparentheses/concrete2.git
+git remote add gh-canon https://github.com/lambdaclass/concrete.git
+git remote add gh-alias git@github-old:someone/else.git
 
 # --- the toy repository: a ledger, a corpus map, a generated block, a generated file ---------------
 mkdir -p scripts/gen scripts/tests docs/project src Concrete
@@ -564,6 +575,16 @@ dec="$( cd "$RI" && export CONCRETE_TEST_OUT="$TMP" CONCRETE_TEST_LIB="$ROOT_DIR
 dec="$( cd "$RI" && source "$ROOT_DIR/scripts/checks/lib/prepush_record.sh" && ppr_remote_components "$RI" "$RIH" "$TMP/ri.changed" "$TMP/ri.plan" "$TMP/ri.comp" \
   && ppr_remote_check "$RI" "$TMP/ri.comp" && echo REUSE || echo "refused:$PPR_REASON" )"
 has "$dec" "refused:changed:env" && ok "a push in another CONCRETE_* environment than the host's run does not reuse it" || no "e2e env mismatch: $dec"
+# A git shim on the "host" logs every fetch: a gate clone at another repository must log none.
+mkdir -p "$TMP/hostgit"
+printf '#!/bin/sh\nfor a in "$@"; do case "$a" in fetch|ls-remote) echo "$*" >> "%s"; break ;; esac; done\nexec "%s" "$@"\n' "$TMP/hostgit.log" "$(command -v git)" > "$TMP/hostgit/git"
+chmod +x "$TMP/hostgit/git"; : > "$TMP/hostgit.log"
+git -C "$HH/concrete2" remote set-url origin https://github.com/someone/else.git
+PATH="$TMP/hostgit:$PATH" e2e
+git -C "$HH/concrete2" remote set-url origin "$TMP/ri-origin.git"
+[ "$rc" = 3 ] && has "$out" "INCOMPLETE" && has "$out" "the gate clone" && has "$out" "not one of the project's repositories" \
+  && ! grep -q "$HH/concrete2" "$TMP/hostgit.log" \
+  && ok "a gate clone whose origin is another repository is refused on the host before it fetches (INCOMPLETE)" || { no "foreign gate clone: exit $rc"; echo "$out" | sed 's/^/      /'; }
 touch "$HH/unreachable"; e2e; rm -f "$HH/unreachable"
 [ "$rc" = 3 ] && has "$out" "INCOMPLETE" && [ ! -f "$RIATT" ] && ok "the real transport to an unreachable host is INCOMPLETE (exit 3), attests nothing" || { no "e2e unreachable: exit $rc"; echo "$out" | sed 's/^/      /'; }
 hook="$ROOT_DIR/.githooks/pre-push"
@@ -605,6 +626,89 @@ runjson "$(git rev-parse b1)" success success
 out="$(bash "$TRAIN" land t1 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "not the train HEAD" && ok "land refuses a run at another SHA" || no "land accepted a head-SHA mismatch (exit $rc)"
 runjson "$HEAD1" success failure
+# The project's-repositories guard: refused before any push or GitHub read.
+for c in "land t1" "ci t1" "check t1" "watch t1 --interval 1" "--dry-run build tother --no-fetch b1"; do
+  out="$(LAND_REMOTE=gh-other bash "$TRAIN" $c 2>&1)"; rc=$?
+  [ "$rc" != 0 ] && has "$out" "not one of the project's repositories" && ok "train.sh ${c%% *} refuses a remote that is another GitHub repository" || no "train.sh $c accepted github.com/someone/else (exit $rc)"
+done
+[ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$BASE" ] && ok "no refused command moved origin/main" || no "a refused command moved origin/main"
+out="$(LAND_REMOTE=gh-push bash "$TRAIN" land t1 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "not one of the project's repositories" && ok "land refuses a remote whose push URL is another repository" || no "land accepted a foreign push URL (exit $rc)"
+out="$(LAND_REMOTE=gh-mixed LAND_REPO=lambdaclass/concrete bash "$TRAIN" ci t1 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "fetches or pushes both" && ok "ci refuses a remote that fetches one project repository and pushes the other" || no "ci accepted a mixed remote (exit $rc)"
+out="$(LAND_REMOTE=gh-canon bash "$TRAIN" ci t1 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "gh would read another repository" && ok "ci refuses a LAND_REPO that is not the remote's repository" || no "ci accepted LAND_REPO=test/repo on github.com/lambdaclass/concrete (exit $rc)"
+out="$(LAND_REMOTE=gh-alias bash "$TRAIN" land t1 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "not one of the project's repositories" && ok "land refuses an ssh host alias for another repository" || no "land accepted an ssh alias for another repository (exit $rc)"
+out="$(LAND_MIRROR=gh-other bash "$TRAIN" land t1 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "mirror:" && has "$out" "not one of the project's repositories" && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$BASE" ] \
+  && ok "land refuses a mirror that is another repository, before pushing anything" || no "land accepted a foreign mirror (exit $rc)"
+# The URL table, read through the same function: both project repositories pass in every network
+# form while the migration is under way, anything else fails, local paths pass and leave LAND_REPO free.
+# ssh -G is stubbed: github-lambdaclass and github_work are aliases for github.com, every other name is itself.
+mkdir -p "$TMP/sshstub"
+cat > "$TMP/sshstub/ssh" <<'SSH'
+#!/bin/sh
+[ "$1" = -G ] || { echo "ssh stub: only -G" >&2; exit 255; }
+for host; do :; done
+case "$host" in github-lambdaclass|github_work) echo "hostname github.com" ;; *) echo "hostname $host" ;; esac
+SSH
+chmod +x "$TMP/sshstub/ssh"
+url_ok=1
+while read -r want url repo; do
+  git remote add url-probe "$url"
+  ( PATH="$TMP/sshstub:$PATH"; . "$ROOT_DIR/scripts/land/lib.sh"; land_remote_bad url-probe $repo >/dev/null ); got=$?
+  git remote remove url-probe
+  [ "$got" = "$want" ] || { url_ok=0; echo "      $url (repo=$repo): exit $got, want $want"; }
+done <<'URLS'
+0 https://github.com/lambdaclass/concrete.git lambdaclass/concrete
+0 https://github.com/unbalancedparentheses/concrete2.git unbalancedparentheses/concrete2
+0 https://GitHub.com./LambdaClass/Concrete/ lambdaclass/concrete
+0 git@github.com:lambdaclass/concrete.git lambdaclass/concrete
+0 git@github-lambdaclass:lambdaclass/concrete.git lambdaclass/concrete
+0 git@github_work:lambdaclass/concrete.git lambdaclass/concrete
+0 ssh://git@github.com:22/lambdaclass/concrete.git lambdaclass/concrete
+0 https://user:token@github.com:443/lambdaclass/concrete lambdaclass/concrete
+0 git@GITHUB.COM.:unbalancedparentheses/concrete2
+0 /tmp/x.git test/repo
+0 file:///tmp/x.git test/repo
+0 repos/concrete:backup.git test/repo
+1 https://github.com/unbalancedparentheses/concrete2.git lambdaclass/concrete
+1 git@github-lambdaclass:lambdaclass/concrete.git test/repo
+1 https://github.com/someone/else.git
+1 git@github-old:lambdaclass/concrete.git
+1 https://attacker.example/lambdaclass/concrete.git
+1 git@attacker.example:lambdaclass/concrete.git
+1 foo::https://github.com/lambdaclass/concrete
+1 ftp://github.com/lambdaclass/concrete
+1 ssh://host
+URLS
+[ "$url_ok" = 1 ] && ok "the guard accepts exactly the project's repositories on github.com, in every URL form and through ssh aliases" || no "the guard misjudged a URL form"
+# A refusal never prints a URL's credentials (through the authority's last @).
+git remote add gh-secret https://x-access-token:pre@SENTINEL-SECRET@github.com/someone/else.git
+out="$(LAND_REMOTE=gh-secret bash "$TRAIN" ci t1 2>&1)"; rc=$?
+out2="$(printf 'refs/heads/x %s refs/heads/wip/dst %s\n' "$(git rev-parse main)" 0000000000000000000000000000000000000000 \
+  | bash "$ROOT_DIR/.githooks/pre-push" gh-secret https://x-access-token:pre@SENTINEL-SECRET@github.com/someone/else.git 2>&1)"; rc2=$?
+git remote remove gh-secret
+[ "$rc" != 0 ] && [ "$rc2" = 1 ] && has "$out" "https://***@github.com" && has "$out2" "https://***@github.com" && ! has "$out$out2" "SENTINEL" \
+  && [ "$(. "$ROOT_DIR/scripts/land/lib.sh"; land_url_redact 'https://u:a@b@github.com/x/y@z')" = 'https://***@github.com/x/y@z' ] \
+  && [ "$(printf '%s\n' 'https://u:a@SENTINEL@github.com/x' | sed -E "$(sed -n "s/^redact() { sed -E '\(.*\)' |.*/\1/p" "$ROOT_DIR/scripts/land/install-bot.sh")")" = 'https://***@github.com/x' ] \
+  && ok "refusals redact a URL's credentials (in lib.sh and install-bot.sh)" || no "a refusal printed credentials or did not refuse ($rc/$rc2): $out $out2"
+# Every script that fetches or pushes on its own refuses another repository before touching it: a git
+# shim logs every fetch and push, and must log none.
+REALGIT="$(command -v git)"; mkdir -p "$TMP/gitshim"
+printf '#!/bin/sh\nfor a in "$@"; do case "$a" in fetch|push|ls-remote|clone) echo "$*" >> "%s"; break ;; esac; done\nexec "%s" "$@"\n' "$TMP/gitshim.log" "$REALGIT" > "$TMP/gitshim/git"
+chmod +x "$TMP/gitshim/git"
+for ep in "LAND_REMOTE=gh-other bash $ROOT_DIR/scripts/land/notes.sh fetch" \
+          "LAND_REMOTE=gh-other bash $ROOT_DIR/scripts/land/notes.sh put review HEAD verdict=clean" \
+          "LAND_REMOTE=gh-other bash $ROOT_DIR/scripts/land/ready.sh main" \
+          "REVIEW_REMOTE=gh-other bash $ROOT_DIR/scripts/review/verify.sh --fetch HEAD" \
+          "REVIEW_REMOTE=gh-other REVIEW_CODEX_BIN=false bash $ROOT_DIR/scripts/review/review.sh --base HEAD~1"; do
+  : > "$TMP/gitshim.log"
+  out="$(PATH="$TMP/gitshim:$PATH" eval "$ep" 2>&1)"; rc=$?
+  [ "$rc" != 0 ] && has "$out" "not one of the project's repositories" && [ ! -s "$TMP/gitshim.log" ] \
+    && ok "refused before any fetch or push: ${ep%% *} ${ep##*/}" || { no "not refused cleanly (exit $rc): $ep"; echo "$out" | sed 's/^/      /'; sed 's/^/      git: /' "$TMP/gitshim.log"; }
+done
 out="$(LAND_REMOTE=fork bash "$TRAIN" land t1 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "named 'fork'" && ok "land refuses the remote named fork as primary" || no "fork accepted as primary (exit $rc)"
 out="$(LAND_MIRROR=fork bash "$TRAIN" land t1 2>&1)"; rc=$?
@@ -686,7 +790,13 @@ no_op_left && [ -z "$(git status --porcelain --untracked-files=no)" ] && ok "bis
 
 echo "=== push-both.sh: both remotes required, refusals before anything is pushed ==="
 cp "$ROOT_DIR/scripts/push-both.sh" scripts/push-both.sh
+had_land=0; [ -d scripts/land ] && had_land=1
+mkdir -p scripts/land && cp "$ROOT_DIR/scripts/land/lib.sh" scripts/land/lib.sh   # push-both sources it
 before="$(git ls-remote origin refs/heads/main | cut -f1)"
+out="$(PRIMARY=gh-other bash scripts/push-both.sh 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "not one of the project's repositories" && ok "push-both refuses a PRIMARY that is another repository" || no "push-both PRIMARY=gh-other: exit $rc"
+out="$(MIRROR=gh-push bash scripts/push-both.sh 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "not one of the project's repositories" && ok "push-both refuses a MIRROR whose push URL is another repository" || no "push-both MIRROR=gh-push: exit $rc"
 out="$(PRIMARY=fork bash scripts/push-both.sh 2>&1)"; rc=$?
 [ "$rc" = 2 ] && has "$out" "remote named fork" && ok "push-both refuses PRIMARY=fork" || no "push-both PRIMARY=fork: exit $rc"
 out="$(MIRROR=fork bash scripts/push-both.sh 2>&1)"; rc=$?
@@ -695,7 +805,7 @@ out="$(MIRROR=nosuch bash scripts/push-both.sh 2>&1)"; rc=$?
 [ "$rc" = 1 ] && has "$out" "both remotes are required" && ok "push-both refuses a missing mirror remote" || no "push-both missing mirror: exit $rc"
 [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$before" ] && [ "$(git ls-remote fork refs/heads/main | cut -f1)" = "$BASE" ] \
   && ok "no refused push-both moved origin or fork" || no "a refused push-both pushed something"
-rm -f scripts/push-both.sh
+rm -f scripts/push-both.sh scripts/land/lib.sh; [ "$had_land" = 1 ] || rmdir scripts/land 2>/dev/null || true
 
 echo "=== report ==="
 out="$(bash "$REPORT" 2>&1)"; rc=$?
@@ -1200,6 +1310,18 @@ out="$(cd "$W" && printf 'refs/heads/x %s refs/heads/wip/idn %s\n' "$(git rev-pa
   | CONCRETE_PREPUSH_IDENTIFY=1 bash "$ROOT_DIR/.githooks/pre-push" origin "$TMP/origin.git" 2>&1)"; rc=$?
 ! has "$out" "concrete-pre-push /" && has "$out" "wip/* backup push" \
   && ok "a real push never takes the identify answer (no environment switch exists)" || { no "identify leaked into a push: $out"; }
+# The hook refuses a push to any network URL that is not one of the project's repositories, before
+# any tier (CONCRETE_SKIP_GATES does not skip it); both project repositories reach their tier.
+for u in https://github.com/someone/else.git git@github-old:someone/else.git https://attacker.example/lambdaclass/concrete.git; do
+  out="$(cd "$W" && printf 'refs/heads/x %s refs/heads/wip/dst %s\n' "$(git rev-parse main)" 0000000000000000000000000000000000000000 \
+    | CONCRETE_SKIP_GATES=1 bash "$ROOT_DIR/.githooks/pre-push" origin "$u" 2>&1)"; rc=$?
+  [ "$rc" = 1 ] && has "$out" "not one of the project's repositories" && ok "the hook refuses a push to $u, even with CONCRETE_SKIP_GATES=1" || no "hook pushed to $u: exit $rc, $out"
+done
+for u in git@github-lambdaclass:lambdaclass/concrete.git https://github.com/LambdaClass/concrete https://github.com/unbalancedparentheses/concrete2.git; do
+  out="$(cd "$W" && printf 'refs/heads/x %s refs/heads/wip/dst %s\n' "$(git rev-parse main)" 0000000000000000000000000000000000000000 \
+    | PATH="$TMP/sshstub:$PATH" bash "$ROOT_DIR/.githooks/pre-push" origin "$u" 2>&1)"; rc=$?
+  [ "$rc" = 0 ] && has "$out" "wip/* backup push" && ok "the hook lets a push to $u through to its tier" || no "hook refused $u: exit $rc, $out"
+done
 standin_hook
 [ ! -e "$TMP/state/tnh" ] && ok "no refused run left train state behind" || no "a refused run left state"
 

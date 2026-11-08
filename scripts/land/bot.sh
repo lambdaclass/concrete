@@ -509,6 +509,18 @@ cmd_tick() {
   if [ "$DRY" = 0 ]; then git checkout -q --detach "$REMOTE/main"; land_assert_no_op "final checkout"; fi
 }
 
+# Every pass that fetches, rebases, pushes or reads GitHub first checks that the remote (and the
+# mirror) is one of the project's repositories and that the remote is LAND_REPO (land_remote_bad,
+# lib.sh): `rebase` pushes without going through a guarded train command.
+case "$SUB" in
+  tick|rebase|list)
+    if ! why="$(land_remote_bad "$REMOTE" "${LAND_REPO:-unbalancedparentheses/concrete2}")"; then
+      echo "bot: refusing to run: $why" >&2; exit 1
+    fi
+    if [ -n "$MIRROR" ] && git remote get-url "$MIRROR" >/dev/null 2>&1 && ! why="$(land_remote_bad "$MIRROR")"; then
+      echo "bot: refusing to run: mirror: $why" >&2; exit 1
+    fi ;;
+esac
 case "$SUB" in
   tick) cmd_tick ;;
   rebase)

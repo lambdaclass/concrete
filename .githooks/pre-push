@@ -26,6 +26,18 @@ if [ "$#" = 1 ] && [ "$1" = --concrete-identify ]; then
   echo "concrete-pre-push $(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/$(basename "${BASH_SOURCE[0]}")"
   exit 0
 fi
+# THE PROJECT'S REPOSITORIES (scripts/land/lib.sh, LAND_REPOSITORIES). git passes the hook the URL
+# it pushes to (each push URL in turn). A network URL that is not github.com/<one of them>
+# (land_url_target: another host, another repository, an ssh alias for either) is refused here, so
+# one check covers every push from this checkout: train.sh, push-both.sh, the bot, notes.sh,
+# review.sh, ready.sh and a push by hand. A local path (the test fixtures' bare repositories) passes.
+# Before the CONCRETE_SKIP_GATES exit: that skips gates, never the destination.
+# shellcheck source=scripts/land/lib.sh
+. "$(dirname "$HOOK_SELF")/../scripts/land/lib.sh" || { echo "pre-push: cannot read scripts/land/lib.sh; refusing" >&2; exit 1; }
+if dest="$(land_url_target "${2:-}")" && { [ "${dest%% *}" != github.com ] || ! land_known_repo "${dest#* }"; }; then
+  echo "pre-push: refusing to push to $(land_url_redact "${2:-}"): it is not one of the project's repositories ($LAND_REPOSITORIES on github.com)" >&2
+  exit 1
+fi
 ROOT_DIR="$(git rev-parse --show-toplevel)"
 cd "$ROOT_DIR"
 

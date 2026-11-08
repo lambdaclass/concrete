@@ -130,6 +130,15 @@ refuse_fork() {
   esac
 }
 
+# The remote is one of the project's repositories and is the one gh reads ($REPO): every fetch and
+# push URL that is a network URL names it (land_remote_bad, lib.sh). Every command that can push or
+# read GitHub (build, check, ci, watch, land) checks it before anything else; record runs inside the
+# repository's own CI, whose checkout is that repository by construction.
+require_remote_repo() {
+  local why
+  why="$(land_remote_bad "$REMOTE" "$REPO")" || die "$why"
+}
+
 valid_name() {
   case "$1" in
     ""|*[!A-Za-z0-9._-]*|.*|*..*) die "train name '$1' must be [A-Za-z0-9._-]+ and not start with '.'" ;;
@@ -283,6 +292,7 @@ cmd_build() {
     shift
   done
   valid_name "$name"
+  require_remote_repo
   [ "${#refs[@]}" -ge 1 ] || die "build: name at least one ref to merge"
   stage_start
   assert_no_op "start"
@@ -513,6 +523,7 @@ cmd_check() {
     esac; shift
   done
   valid_name "$name"
+  require_remote_repo
   require_train_checkout "$name"
   stage_start
   local base head; base="$(state_get "$name" base)"; head="$(git rev-parse HEAD)"
@@ -586,6 +597,7 @@ cmd_ci() {
     esac; shift
   done
   valid_name "$name"
+  require_remote_repo
   require_train_checkout "$name"
   refuse_fork "$REMOTE"
   stage_start
@@ -695,6 +707,7 @@ cmd_watch() {
     esac; shift
   done
   valid_name "$name"
+  require_remote_repo
   stage_start
   local id; id="$(state_get "$name" run_id)"
   [ -n "$id" ] || die "watch: no CI run recorded for $name (train.sh ci $name)"
@@ -919,6 +932,7 @@ cmd_land() {
     esac; shift
   done
   valid_name "$name"
+  require_remote_repo
   require_train_checkout "$name"
   refuse_fork "$REMOTE"
   stage_start
@@ -976,6 +990,7 @@ cmd_land() {
     refuse_fork "$MIRROR"
     git remote get-url "$MIRROR" >/dev/null 2>&1 \
       || die "land: mirror remote '$MIRROR' is not configured; both remotes are required (add it, or pass --no-mirror deliberately)"
+    local mwhy; mwhy="$(land_remote_bad "$MIRROR")" || die "land: mirror: $mwhy"
     mirror="$MIRROR"
     mmain="$(git ls-remote "$mirror" refs/heads/main | cut -f1)"
     if [ -n "$mmain" ] && ! git merge-base --is-ancestor "$mmain" "$head" 2>/dev/null; then
