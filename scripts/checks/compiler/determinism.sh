@@ -67,7 +67,18 @@ case "$(uname -s)-$(uname -m)" in
   *) echo "determinism: unsupported host $(uname -s)-$(uname -m)" >&2; exit 2 ;;
 esac
 lake_cmd=$(command -v lake)
+# Resolve Lake's executable and absolute module search path once; Lake is never in the
+# perturbed child launch path. Keep the clean environment explicit.
+lean_cmd=$(bounded 30 "$lake_cmd" env which lean)
+lean_path=$(bounded 30 "$lake_cmd" env printenv LEAN_PATH)
 driver=$root/scripts/checks/compiler/slice0_bir.lean
+printf 'def main : IO Unit := do IO.println (← IO.currentDir)\n' >"$work/cwd.lean"
+for cwd in "$root" "$root/scripts"; do
+  actual=$(cd "$cwd" && bounded 30 env -i "PATH=$PATH" "LEAN_PATH=$lean_path" "$lean_cmd" --run "$work/cwd.lean")
+  [ "$actual" = "$cwd" ] || { echo "FAIL slice0_determinism: child cwd $actual != $cwd" >&2; exit 1; }
+done
+[ "$root" != "$root/scripts" ] || exit 1
+echo "ok slice0_determinism: effective Lean child CWDs distinct: $root / $root/scripts"
 manifest=${CONCRETE_TEST_MANIFEST:-tests/manifest.tsv}
 bounded 30 python3 -I "$root/scripts/checks/lib/test_manifest.py" rows --kind bir "$manifest" >"$work/rows"
 [ -s "$work/rows" ] || { echo "determinism: no bir tests" >&2; exit 1; }
@@ -118,13 +129,13 @@ emit_one() { # emit_one SIDE CWD NAME PROGRAM EXPECT [PLANT]
   if [ "$side" = "$a" ]; then
     mask=$umask_a
     envs=("PATH=$PATH" "HOME=$side/home" "TMPDIR=$side/tmp" "LC_ALL=$locale_a" "LANG=$locale_a"
-      "TZ=$tz_a" SOURCE_DATE_EPOCH=1 ZERO_AR_DATE=1)
+      "LEAN_PATH=$lean_path" "TZ=$tz_a" SOURCE_DATE_EPOCH=1 ZERO_AR_DATE=1)
   else
     mask=$umask_b
-    envs=(ZERO_AR_DATE=1 SOURCE_DATE_EPOCH=1 "TZ=$tz_b" "LANG=$locale_b" "LC_ALL=$locale_b"
+    envs=("LEAN_PATH=$lean_path" ZERO_AR_DATE=1 SOURCE_DATE_EPOCH=1 "TZ=$tz_b" "LANG=$locale_b" "LC_ALL=$locale_b"
       "TMPDIR=$side/tmp" "HOME=$side/home" "PATH=$PATH")
   fi
-  (umask "$mask" && cd "$cwd" && bounded 120 env -i "${envs[@]}" "$lake_cmd" --dir "$root" env lean --run "$driver" emit \
+  (umask "$mask" && cd "$cwd" && bounded 120 env -i "${envs[@]}" "$lean_cmd" --run "$driver" emit \
     "${program#bir:}" "$out" "$target" "${expectation[@]}" ${plant_args[@]+"${plant_args[@]}"})
 }
 
@@ -138,7 +149,7 @@ native_one() { # native_one SIDE NAME
   if [ "$side" = "$a" ]; then
     mask=$umask_a
     envs=("PATH=$PATH" "HOME=$side/home" "TMPDIR=$side/tmp" "LC_ALL=$locale_a" "LANG=$locale_a"
-      "TZ=$tz_a" SOURCE_DATE_EPOCH=1 ZERO_AR_DATE=1 "CONCRETE_SLICE0_CLANG=$CONCRETE_SLICE0_CLANG")
+      "LEAN_PATH=$lean_path" "TZ=$tz_a" SOURCE_DATE_EPOCH=1 ZERO_AR_DATE=1 "CONCRETE_SLICE0_CLANG=$CONCRETE_SLICE0_CLANG")
   else
     mask=$umask_b
     envs=("CONCRETE_SLICE0_CLANG=$CONCRETE_SLICE0_CLANG" ZERO_AR_DATE=1 SOURCE_DATE_EPOCH=1 "TZ=$tz_b"
@@ -249,6 +260,18 @@ cp -R "$a" "$c/b"
 mkdir "$c/b/out/unexpected_prog"
 control_compare extra-program-dir \
   "^FAIL slice0_determinism: unexpected_prog: unexpected program directory in out/ \\(second side\\)$" \
+  "$c/a" "$c/b" "$required"
+
+# Early registered bytes take precedence over every later inventory defect together.
+c=$work/control-combined
+mkdir -p "$c"
+cp -R "$a" "$c/a"
+cp -R "$a" "$c/b"
+printf '\ncombined control\n' >>"$c/b/out/$first_name/bir.txt"
+mkdir "$c/b/out/$first_name/later-directory" "$c/b/out/unexpected_prog"
+touch "$c/b/out/unexpected.top"
+control_compare combined \
+  "^FAIL slice0_determinism: ${first_name}: bir\\.txt: [0-9a-f]{64} != [0-9a-f]{64}$" \
   "$c/a" "$c/b" "$required"
 
 read -r -a first_expectation <<<"$first_expect"

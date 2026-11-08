@@ -43,34 +43,38 @@ def names(value):
 
 def validate_out_root(side_root, side_name, expected_names, label):
     out_dir = side_root / 'out'
+    defects = []
     if not out_dir.is_dir():
-        sys.exit(f'FAIL {label}: output directory missing ({out_dir})')
+        return [f'FAIL {label}: output directory missing ({out_dir})']
     expected_set = set(expected_names)
     for entry in sorted(out_dir.iterdir(), key=lambda p: p.name):
         if entry.is_symlink() or not entry.is_dir():
-            sys.exit(
+            defects.append(
                 f'FAIL {label}: {entry.name}: unexpected top-level file in out/ ({side_name} side)')
         if entry.name not in expected_set:
-            sys.exit(
+            defects.append(
                 f'FAIL {label}: {entry.name}: unexpected program directory in out/ ({side_name} side)')
+
+    return defects
 
 
 def inventory(root, label, name):
+    defects = []
     if not root.is_dir():
-        sys.exit(f'FAIL {label}: {name}: output directory missing ({root})')
+        return [], [], [f'FAIL {label}: {name}: output directory missing ({root})']
     files = []
     dirs = []
     for path in root.rglob('*'):
         relative = path.relative_to(root).as_posix()
         if path.is_symlink():
-            sys.exit(f'FAIL {label}: {name}: {relative}: non-file artifact (symlink)')
+            defects.append(f'FAIL {label}: {name}: {relative}: non-file artifact (symlink)')
         elif path.is_file():
             files.append(relative)
         elif path.is_dir():
             dirs.append(relative)
         else:
-            sys.exit(f'FAIL {label}: {name}: {relative}: non-file artifact')
-    return sorted(files), sorted(dirs)
+            defects.append(f'FAIL {label}: {name}: {relative}: non-file artifact')
+    return sorted(files), sorted(dirs), defects
 
 
 def ordered_inventory_stages(required, files_a, files_b):
@@ -119,47 +123,54 @@ def main(argv):
     if (any(not n or '/' in n or n in ('.', '..') for n in example_names)
             or len(set(example_names)) != len(example_names)):
         sys.exit(f'FAIL {args.label}: invalid example inventory')
-    validate_out_root(a, 'first', example_names, args.label)
-    validate_out_root(b, 'second', example_names, args.label)
+    # Inventory defects are deferred until ALL registered stages have been compared.
+    # Ordering: pipeline stage, manifest example order, then lexical discovered files;
+    # remaining root/type/directory defects follow in side and example order.
+    defects = (validate_out_root(a, 'first', example_names, args.label) +
+               validate_out_root(b, 'second', example_names, args.label))
     lines = identity.read_text().splitlines()
     required_set = set(required)
+    records = []
     for name in example_names:
         roots = [d / 'out' / name for d in (a, b)]
         if args.inventory:
-            (files_a, dirs_a), (files_b, dirs_b) = (
-                inventory(roots[0], args.label, name),
-                inventory(roots[1], args.label, name),
-            )
-            if dirs_a != dirs_b:
-                extra_dir = sorted(set(dirs_a) ^ set(dirs_b))[0]
-                side = 'second' if extra_dir in set(dirs_b) else 'first'
-                sys.exit(
-                    f'FAIL {args.label}: {name}: {extra_dir}: '
-                    f'inventory differs (only in {side} side)')
+            files_a, dirs_a, errors_a = inventory(roots[0], args.label, name)
+            files_b, dirs_b, errors_b = inventory(roots[1], args.label, name)
+            defects.extend(errors_a + errors_b)
+            for directory in sorted(set(dirs_a) ^ set(dirs_b)):
+                side = 'second' if directory in dirs_b else 'first'
+                defects.append(f'FAIL {args.label}: {name}: {directory}: '
+                               f'inventory differs (only in {side} side)')
             selected = ordered_inventory_stages(required, files_a, files_b)
-            if not selected:
-                sys.exit(f'FAIL {args.label}: {name}: empty artifact inventory')
             present_a, present_b = set(files_a), set(files_b)
         else:
-            selected = list(stages) + [s for s in required if s not in set(stages)]
-            if not selected:
-                sys.exit(f'FAIL {args.label}: {name}: empty artifact inventory')
+            selected = list(stages) + [s for s in required if s not in stages]
             present_a = present_b = None
+        if not selected:
+            defects.append(f'FAIL {args.label}: {name}: empty artifact inventory')
+        records.append((name, roots, selected, present_a, present_b))
 
-        for stage in selected:
-            if args.inventory and stage not in required_set:
+    all_stages = ordered_inventory_stages(required, [],
+        [stage for _, _, selected, _, _ in records for stage in selected]) if args.inventory else selected
+    for stage in all_stages:
+        for name, roots, selected, present_a, present_b in records:
+            if stage not in selected:
+                continue
+            if args.inventory and stage not in required_set and stage not in PIPELINE_ORDER:
                 if (stage in present_a) != (stage in present_b):
                     side = 'second' if stage in present_b else 'first'
-                    sys.exit(
-                        f'FAIL {args.label}: {name}: {stage}: '
-                        f'inventory differs (only in {side} side)')
+                    sys.exit(f'FAIL {args.label}: {name}: {stage}: '
+                             f'inventory differs (only in {side} side)')
             try:
                 hashes = [hashlib.sha256((root / stage).read_bytes()).hexdigest() for root in roots]
-            except FileNotFoundError as error:
+            except (FileNotFoundError, IsADirectoryError, NotADirectoryError) as error:
                 sys.exit(f'FAIL {args.label}: {name}: {stage}: missing ({error.filename})')
             if hashes[0] != hashes[1]:
                 sys.exit(f'FAIL {args.label}: {name}: {stage}: {hashes[0]} != {hashes[1]}')
             lines.append(f'{hashes[0]}  {name}/{stage}')
+    if defects:
+        sys.exit(defects[0])
+    for name in example_names:
         print(f'ok {args.label}: {name}: all stages byte-identical')
     if args.manifest:
         Path(args.manifest).write_text('\n'.join(lines) + '\n')
