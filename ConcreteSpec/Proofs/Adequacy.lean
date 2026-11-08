@@ -104,6 +104,42 @@ theorem runFromQ_queryHistoryValid : ∀ (fuel : Nat) (events : List O.Event)
                 simpa [runFromQ, hf, hs, q, ha, hallow, hk] using
                   ih (events ++ a.event.toList) (issued ++ [q]) c' nextValid
 
+/-- Helper (computation). The empty query history has no entries to check (approved: PENDING). -/
+theorem QueryHistoryValid.nil : QueryHistoryValid ([] : List (Query O)) := by
+  intro i q h
+  simp at h
+
+/-- Helper (computation). Specializes the evaluator invariant to its public entry point
+(approved: PENDING). -/
+theorem runQ_queryHistoryValid (fuel : Nat) (c : Config O) :
+    QueryHistoryValid (runQ P ρ fuel c).queries :=
+  runFromQ_queryHistoryValid fuel [] [] c QueryHistoryValid.nil
+
+/-- Helper (arithmetic). The count between two prefix boundaries is the sum of the
+per-site contributions, including silent requests (approved: PENDING). -/
+theorem occurrenceAt_take_interval (qs : List (Query O)) (site : SiteId)
+    {i j : Nat} (hij : i ≤ j) :
+    occurrenceAt (qs.take j) site = occurrenceAt (qs.take i) site +
+      occurrenceAt ((qs.drop i).take (j - i)) site := by
+  have split : qs.take j = qs.take i ++ (qs.drop i).take (j - i) := by
+    rw [← List.take_add, Nat.add_sub_cancel' hij]
+  rw [split]
+  simp [occurrenceAt, List.filter_append]
+
+/-- Helper (computation). Execution occurrence accounting over an arbitrary interval; unlike
+adjacent-site peeling this relates both occurrences at the same site (approved: PENDING). -/
+theorem runFromQ_interleaved_site (fuel : Nat) (events : List O.Event)
+    (issued : List (Query O)) (c : Config O) (valid : QueryHistoryValid issued)
+    {i j : Nat} {q q' : Query O} (hij : i ≤ j)
+    (hq : (runFromQ P ρ fuel events issued c).queries[i]? = some q)
+    (hq' : (runFromQ P ρ fuel events issued c).queries[j]? = some q')
+    (site : q.site = q'.site) :
+    q'.occurrence = q.occurrence + occurrenceAt
+      (((runFromQ P ρ fuel events issued c).queries.drop i).take (j - i)) q.site := by
+  have validRun := runFromQ_queryHistoryValid (P := P) (ρ := ρ) fuel events issued c valid
+  rw [validRun j q' hq', ← site, occurrenceAt_take_interval _ _ hij,
+    ← validRun i q hq]
+
 /-- **Repeated requests at one site advance their occurrences.** These are consecutive queries in
 the actual run history; arbitrarily many silent machine transitions may separate the requests. -/
 theorem runFromQ_consecutive_same_site (fuel : Nat) (events : List O.Event)
@@ -175,23 +211,50 @@ theorem runFromQ_toReport {ρ₀ : Oracle O} :
                   hallow, hk] using
                   ih (events ++ a.event.toList) (issued ++ [Query.issue events p vs site st issued]) c'
 
-/-- **Lifting an oracle preserves an actual run's answers.** Every primitive move under the lifted
-oracle uses the ordinary oracle's answer at that execution position, with the same contract check,
-successful continuation and event contribution. -/
+/-- Helper (inversion). Exact primitive transition characterization, including the complete
+query history. This describes `Move`, not independent evaluator evidence (approved: PENDING). -/
 theorem Move.toQueryOracle_answer {ρ₀ : Oracle O} {pos pos' : Position O}
-    (move : Move P ρ₀.toQueryOracle pos pos') {p : O.Prim} {vs : List O.Val} {site : SiteId}
+    {p : O.Prim} {vs : List O.Val} {site : SiteId}
     {st : O.Store} {k : Answer O.Val O.Event O.Store → Option (Config O)}
     (request : step P pos.config = some (.request p vs site st k)) :
+    Move P ρ₀.toQueryOracle pos pos' ↔
     ∃ a, ρ₀ pos.events p vs site st = some a ∧ O.allows p vs st a = true ∧
-      k a = some pos'.config ∧ pos'.events = pos.events ++ a.event.toList := by
-  cases move with
-  | silent silentStep =>
-    rw [request] at silentStep
-    cases silentStep
-  | @prim c c' events issued p' vs' site' st' k' a primStep answer allows continued =>
-    rw [request] at primStep
-    cases primStep
-    exact ⟨a, answer, allows, continued, rfl⟩
+      k a = some pos'.config ∧ pos'.events = pos.events ++ a.event.toList ∧
+      pos'.queries = pos.queries ++ [Query.issue pos.events p vs site st pos.queries] := by
+  constructor
+  · intro move
+    cases move with
+    | silent silentStep => rw [request] at silentStep; cases silentStep
+    | prim primStep ha allows continued =>
+      rw [request] at primStep
+      cases primStep
+      exact ⟨_, ha, allows, continued, rfl, rfl⟩
+  · rintro ⟨a, ha, allows, continued, he, hq⟩
+    cases pos with
+    | mk c events issued =>
+      cases pos' with
+      | mk c' events' issued' =>
+        simp only at he hq
+        subst events'; subst issued'
+        exact .prim request ha allows continued
+
+/-- Helper (computation). Evaluator-level request/answer correspondence. Only issuance and
+nonfinality are premises: the selected answer and all four continuations are computed by the
+evaluator, including unanswered, invalid and refused answers (approved: PENDING). -/
+theorem runFromQ_request {fuel : Nat} {events : List O.Event} {issued : List (Query O)}
+    {c : Config O} {p : O.Prim} {vs : List O.Val} {site : SiteId} {st : O.Store}
+    {k : Answer O.Val O.Event O.Store → Option (Config O)}
+    (hf : c.final? = none) (hs : step P c = some (.request p vs site st k)) :
+    runFromQ P ρ (fuel + 1) events issued c =
+      let q := Query.issue events p vs site st issued
+      match answer ρ q with
+      | none => ⟨events, issued ++ [q], .noAnswer c⟩
+      | some a => if O.allows p vs st a then
+          match k a with
+          | some c' => runFromQ P ρ fuel (events ++ a.event.toList) (issued ++ [q]) c'
+          | none => ⟨events, issued ++ [q], .stuck c⟩
+        else ⟨events, issued ++ [q], .badAnswer c⟩ := by
+  simp only [runFromQ, hf, hs]
 
 /-- Every instrumented run extends the query history with which it started. -/
 theorem runFromQ_queries_from : ∀ (fuel : Nat) (events : List O.Event) (issued : List (Query O))
@@ -875,10 +938,27 @@ theorem eventually_constant_of_bounded {f : Nat → Nat} (mono : ∀ {m n}, m �
       have hne : f n ≠ bound + 1 := fun h => reached ⟨n, h⟩
       omega
 
+/-- Helper (computation). Cofinality through the actual projected histories relates arbitrary
+matching streams, including noncanonical stuttering schedules (approved: PENDING). -/
+theorem MatchesProjectedHistory.sameObservation {S : Observe.EventSignature}
+    {A : Observe.ExecAdapter O S} {X : InfiniteExecution P ρ c}
+    {xs ys : Nat → Observe.Step S}
+    (hx : MatchesProjectedHistory A X xs) (hy : MatchesProjectedHistory A X ys) :
+    Observe.SameInfiniteObservation xs ys := by
+  constructor
+  · intro n
+    obtain ⟨i, r, hi⟩ := hx.2 n
+    obtain ⟨m, t, hm⟩ := hy.1 i
+    exact ⟨m, r ++ t, by rw [hm, hi, List.append_assoc]⟩
+  · intro n
+    obtain ⟨i, r, hi⟩ := hy.2 n
+    obtain ⟨m, t, hm⟩ := hx.1 i
+    exact ⟨m, r ++ t, by rw [hm, hi, List.append_assoc]⟩
+
 /-- **Finite projected behavior agrees with C6.** A finite external history determines the
 canonical eventually silent C6 execution with exactly the same prefixes and a `finiteDivergence`
 observation. -/
-theorem finite_projected_observation {S : Observe.EventSignature} {A : Observe.ExecAdapter O S}
+theorem finite_projected_canonical {S : Observe.EventSignature} {A : Observe.ExecAdapter O S}
     {X : InfiniteExecution P ρ c} (hf : FiniteEvents A X) :
     ∃ steps events, MatchesProjectedHistory A X steps ∧
       Observe.HasFullObservation (.infinite steps) (.finiteDivergence events) := by
@@ -919,7 +999,7 @@ theorem finite_projected_observation {S : Observe.EventSignature} {A : Observe.E
 
 /-- **Infinite projected behavior agrees with C6.** An unbounded projected history determines an
 infinite C6 trace with exactly the same finite prefixes and an `infiniteDivergence` observation. -/
-theorem infinite_projected_observation {S : Observe.EventSignature} {A : Observe.ExecAdapter O S}
+theorem infinite_projected_canonical {S : Observe.EventSignature} {A : Observe.ExecAdapter O S}
     {X : InfiniteExecution P ρ c} (hi : InfiniteEvents A X) :
     ∃ steps trace, MatchesProjectedHistory A X steps ∧
       Observe.HasFullObservation (.infinite steps) (.infiniteDivergence trace) := by
@@ -967,6 +1047,30 @@ theorem infinite_projected_observation {S : Observe.EventSignature} {A : Observe
     refine ⟨first n, (A.project (X.states (first n)).events).drop n, ?_⟩
     rw [visiblePrefix_emitTrace, take_eq_range _ _ (Nat.le_of_lt (first_spec n)),
       List.take_append_drop]
+
+/-- Helper (computation). Finite projected adequacy supplies a stream and proves the
+observation for every matching stream, independent of its silent scheduling (approved: PENDING). -/
+theorem finite_projected_observation {S : Observe.EventSignature} {A : Observe.ExecAdapter O S}
+    {X : InfiniteExecution P ρ c} (hf : FiniteEvents A X) :
+    ∃ events, (∃ steps, MatchesProjectedHistory A X steps) ∧
+      ∀ steps, MatchesProjectedHistory A X steps →
+        Observe.HasFullObservation (.infinite steps) (.finiteDivergence events) := by
+  obtain ⟨canonical, events, hm, ho⟩ := finite_projected_canonical hf
+  refine ⟨events, ⟨canonical, hm⟩, ?_⟩
+  intro steps hs
+  exact Observe.SameInfiniteObservation.trans (hs.sameObservation hm) ho
+
+/-- Helper (computation). Infinite projected adequacy constrains every matching stream,
+including streams with arbitrary finite silent gaps (approved: PENDING). -/
+theorem infinite_projected_observation {S : Observe.EventSignature} {A : Observe.ExecAdapter O S}
+    {X : InfiniteExecution P ρ c} (hi : InfiniteEvents A X) :
+    ∃ trace, (∃ steps, MatchesProjectedHistory A X steps) ∧
+      ∀ steps, MatchesProjectedHistory A X steps →
+        Observe.HasFullObservation (.infinite steps) (.infiniteDivergence trace) := by
+  obtain ⟨canonical, trace, hm, ho⟩ := infinite_projected_canonical hi
+  refine ⟨trace, ⟨canonical, hm⟩, ?_⟩
+  intro steps hs
+  exact Observe.SameInfiniteObservation.trans (hs.sameObservation hm) ho
 
 /-- Every infinite execution has either finitely many or infinitely many projected events; these
 are the two external classes `SilentDivergence` and `InfiniteInteraction`. -/
@@ -1321,14 +1425,14 @@ theorem keeping_infinite_interaction : InfiniteInteraction prog keepingAdapter e
 observation even though the raw execution interacts forever. -/
 example : ∃ steps events, MatchesProjectedHistory erasingAdapter event_infinite steps ∧
     Observe.HasFullObservation (.infinite steps) (.finiteDivergence events) :=
-  finite_projected_observation (show FiniteEvents erasingAdapter event_infinite from
+  finite_projected_canonical (show FiniteEvents erasingAdapter event_infinite from
     ⟨0, fun n => by simp [erasing_project]⟩)
 
 /-- Non-vacuity for `infinite_projected_observation`: the keeping adapter has a real infinite C6
 trace. -/
 example : ∃ steps trace, MatchesProjectedHistory keepingAdapter event_infinite steps ∧
     Observe.HasFullObservation (.infinite steps) (.infiniteDivergence trace) :=
-  infinite_projected_observation (show InfiniteEvents keepingAdapter event_infinite from by
+  infinite_projected_canonical (show InfiniteEvents keepingAdapter event_infinite from by
     intro bound
     refine ⟨5 * (bound + 1), ?_⟩
     simp [event_infinite, eventPosition, eventCount, keeping_project_rawEvents])
@@ -1430,12 +1534,14 @@ theorem bumpedMove : Move prog env ⟨bumpConfig, [], []⟩ ⟨bumpContinued, []
 
 /-- Non-vacuity for `Move.toQueryOracle_answer`: the actual transition uses exactly `env`'s answer. -/
 example : ∃ a, env [] .bump [] s .init = some a ∧ ops.allows .bump [] .init a = true ∧
-    bumpK a = some bumpContinued ∧ [] = [] ++ a.event.toList := by
-  exact Move.toQueryOracle_answer (ρ₀ := env) bumpedMove (p := .bump) (vs := []) (site := s)
+    bumpK a = some bumpContinued ∧ [] = [] ++ a.event.toList ∧
+      [bumpQuery] = [] ++ [bumpQuery] := by
+  exact (Move.toQueryOracle_answer (ρ₀ := env) (pos := ⟨bumpConfig, [], []⟩)
+    (pos' := ⟨bumpContinued, [], [bumpQuery]⟩) (p := .bump) (vs := []) (site := s)
     (st := .init) (k := bumpK) (by
       simp [bumpConfig, step, evalArgs, onRes]
       funext a
-      cases hr : a.result <;> simp [bumpK, hr])
+      cases hr : a.result <;> simp [bumpK, hr])).mp bumpedMove
 
 /-- An occurrence-sensitive mutation answers only the first request at each site. -/
 def occurrenceSensitiveOracle : QueryOracle ops := fun q =>
