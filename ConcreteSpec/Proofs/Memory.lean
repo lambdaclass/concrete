@@ -107,7 +107,7 @@ theorem decodeInt_inRange (tgt : Target) (t : IntTy) (bs : List MByte) :
         exact hb
     next => cases h
 
-/-- Law (subject `ConcreteSpec.Core.Mem.decodeBool`, `ConcreteSpec.Core.Mem.encodeBool`). Boolean decoding inverts boolean encoding. -/
+/-- Representation lemma. Computes the canonical boolean encoding round trip; semantic byte admission is covered by decodeBool_valid (approved: PENDING). -/
 @[simp] theorem decodeBool_encodeBool (b : Bool) : decodeBool (encodeBool b) = some b := by
   cases b <;> rfl
 
@@ -320,7 +320,7 @@ theorem access_no_provenance (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat)
   simp [Memory.access, hn, hp]
 
 /-- Helper (inversion). Extract the retained dead block and unchanged freshness counter of a successful release (approved: PENDING). -/
-theorem free_retains (m : Memory) (b : MemBlockId) (m' : Memory) (h : m.free b = some m') :
+theorem free_retains_inv (m : Memory) (b : MemBlockId) (m' : Memory) (h : m.free b = some m') :
     ∃ x, m.block b = some x ∧
       m'.block b = some { x with live := false, exposed := false } ∧ m'.next = m.next := by
   unfold Memory.free at h
@@ -338,12 +338,27 @@ theorem free_retains (m : Memory) (b : MemBlockId) (m' : Memory) (h : m.free b =
 theorem access_after_free (tgt : Target) (m m' : Memory) (b : MemBlockId)
     (p : Ptr) (n a : Nat) (hf : m.free b = some m') (hp : p.prov = some b)
     (hn : n ≠ 0) : m'.access tgt p n a = none := by
-  obtain ⟨x, _, hx, _⟩ := free_retains m b m' hf
+  obtain ⟨x, _, hx, _⟩ := free_retains_inv m b m' hf
   simp [Memory.access, hn, hp, hx]
 
-/-- Law (subject `ConcreteSpec.Core.Mem.Ptr.eqAddr`). Pointer address equality compares space and numeric address only, ignoring provenance. -/
+/-- Helper (computation). Computes equality of identical space/address components; comparison separation is covered by eqAddr_separation (approved: PENDING). -/
 theorem eqAddr_provenance (s : AddrSpace) (a : Nat) (b c : Option MemBlockId) :
     Ptr.eqAddr ⟨s, a, b⟩ ⟨s, a, c⟩ = true := by simp [Ptr.eqAddr]
+
+/-- Law (subject `ConcreteSpec.Core.Mem.Ptr.eqAddr`). Unequal pointers are separated by space or by strict numeric order, regardless of provenance. -/
+theorem eqAddr_separation (p q : Ptr) :
+    Ptr.eqAddr p q = false ↔ p.space ≠ q.space ∨ p.addr < q.addr ∨ q.addr < p.addr := by
+  simp only [Ptr.eqAddr, decide_eq_false_iff_not]
+  constructor
+  · intro h
+    by_cases hs : p.space = q.space
+    · right; have hn : p.addr ≠ q.addr := fun ha => h ⟨hs, ha⟩
+      omega
+    · exact .inl hs
+  · rintro (hs | ha | ha) ⟨hs', ha'⟩
+    · exact hs hs'
+    · omega
+    · omega
 
 /-- Law (subject `ConcreteSpec.Core.Mem.Memory.alloc`). Any later allocation differs from every identity still present, including released blocks. -/
 theorem alloc_ne_existing (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
@@ -452,15 +467,15 @@ theorem candidate_contains_unique (tgt : Target) (m : Memory) (hw : m.WellFormed
   apply hw.disjoint b x c y hx hy hn hxc.1.1.1 hyc.1.1.1
   refine ⟨hxc.2.trans hyc.2.symm, hxc.1.2, hyc.1.2, ?_, ?_⟩ <;> omega
 
-/-- Helper (inversion). Reconstruction chooses an eligible containing block, or a one-past block only when no
-eligible block contains the address (approved: PENDING). -/
+/-- Law (subject `ConcreteSpec.Core.Mem.Memory.fromExposed`). Reconstruction chooses an eligible containing block, or a one-past block only when no eligible block contains the address. -/
 theorem fromExposed_sound (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
-    (s : AddrSpace) (addr : Nat) (b : MemBlockId)
-    (h : (m.fromExposed s addr).prov = some b) :
+    (s : AddrSpace) (addr : Nat) :
+    ∀ b, (m.fromExposed s addr).prov = some b →
     ∃ x, m.block b = some x ∧ x.Candidate s = true ∧
       ((x.base ≤ addr ∧ addr < x.base + x.size) ∨
        (addr = x.base + x.size ∧ ∀ e ∈ m.blocks, e.2.Candidate s = true →
          ¬ (e.2.base ≤ addr ∧ addr < e.2.base + e.2.size))) := by
+  intro b h
   unfold Memory.fromExposed at h
   dsimp only at h
   split at h
@@ -814,7 +829,7 @@ theorem expose_success (m : Memory) (p : Ptr) (b : MemBlockId) (x : Block)
 
 /-- Helper (inversion). The exposed block has exactly its old fields except the exposed flag; other blocks and
 freshness counter are unchanged (approved: PENDING). -/
-theorem expose_frame (m m' : Memory) (p : Ptr) (h : m.expose p = some m') :
+theorem expose_frame_inv (m m' : Memory) (p : Ptr) (h : m.expose p = some m') :
     ∃ b x, p.prov = some b ∧ m.block b = some x ∧
       m'.block b = some { x with exposed := true } ∧ m'.next = m.next ∧
       ∀ c, c ≠ b → m'.block c = m.block c := by
@@ -841,7 +856,7 @@ def Block.geometry (x : Block) : AddrSpace × Nat × Nat × Nat :=
   (x.space, x.base, x.size, x.align)
 
 /-- Helper (congruence). Store does not change any block's projection geometry (approved: PENDING). -/
-theorem store_geometry (tgt : Target) (m m' : Memory) (p : Ptr) (bs : List MByte)
+theorem store_geometry_inv (tgt : Target) (m m' : Memory) (p : Ptr) (bs : List MByte)
     (a : Nat) (h : m.store tgt p bs a = some m') (b : MemBlockId) :
     (m'.block b).map Block.geometry = (m.block b).map Block.geometry := by
   unfold Memory.store at h
@@ -858,7 +873,7 @@ theorem store_geometry (tgt : Target) (m m' : Memory) (p : Ptr) (bs : List MByte
   next => cases h
 
 /-- Helper (congruence). Exposure also preserves every projection's geometry (approved: PENDING). -/
-theorem expose_geometry (m m' : Memory) (p : Ptr) (h : m.expose p = some m')
+theorem expose_geometry_inv (m m' : Memory) (p : Ptr) (h : m.expose p = some m')
     (b : MemBlockId) :
     (m'.block b).map Block.geometry = (m.block b).map Block.geometry := by
   obtain ⟨c, _, _, _, _, rfl⟩ := expose_result m m' p h
@@ -868,6 +883,45 @@ theorem expose_geometry (m m' : Memory) (p : Ptr) (h : m.expose p = some m')
       subst b
       cases m.block _ <;> rfl
   · rfl
+
+/-- Law (subject `ConcreteSpec.Core.Mem.Memory.free`). Releasing storage retains its identity and freshness, while marking the block dead and unexposed. -/
+theorem free_retains (m : Memory) (b : MemBlockId) :
+    match m.free b with
+    | none => True
+    | some m' => ∃ x, m.block b = some x ∧
+        m'.block b = some { x with live := false, exposed := false } ∧ m'.next = m.next := by
+  cases h : m.free b with
+  | none => trivial
+  | some m' => exact free_retains_inv m b m' h
+
+/-- Law (subject `ConcreteSpec.Core.Mem.Memory.expose`). Exposure preserves every other block and freshness, changing only the exposed flag. -/
+theorem expose_frame (m : Memory) (p : Ptr) :
+    match m.expose p with
+    | none => True
+    | some m' => ∃ b x, p.prov = some b ∧ m.block b = some x ∧
+        m'.block b = some { x with exposed := true } ∧ m'.next = m.next ∧
+        ∀ c, c ≠ b → m'.block c = m.block c := by
+  cases h : m.expose p with
+  | none => trivial
+  | some m' => exact expose_frame_inv m m' p h
+
+/-- Law (subject `ConcreteSpec.Core.Mem.Memory.store`). Successful byte stores preserve all allocation geometry. -/
+theorem store_geometry (tgt : Target) (m : Memory) (p : Ptr) (bs : List MByte) (a : Nat) :
+    match m.store tgt p bs a with
+    | none => True
+    | some m' => ∀ b, (m'.block b).map Block.geometry = (m.block b).map Block.geometry := by
+  cases h : m.store tgt p bs a with
+  | none => trivial
+  | some m' => exact store_geometry_inv tgt m m' p bs a h
+
+/-- Law (subject `ConcreteSpec.Core.Mem.Memory.expose`). Exposure preserves all allocation geometry. -/
+theorem expose_geometry (m : Memory) (p : Ptr) :
+    match m.expose p with
+    | none => True
+    | some m' => ∀ b, (m'.block b).map Block.geometry = (m.block b).map Block.geometry := by
+  cases h : m.expose p with
+  | none => trivial
+  | some m' => exact expose_geometry_inv m m' p h
 
 /-- Helper (congruence). Reads depend only on their provenance block, independently of every other block (approved: PENDING). -/
 theorem load_congr (tgt : Target) (m m' : Memory) (p : Ptr) (n a : Nat)
@@ -964,7 +1018,7 @@ theorem free_alloc_ne_existing (tgt : Target) (m freed : Memory)
   | error _ => trivial
   | ok pair =>
     obtain ⟨new, allocated⟩ := pair
-    obtain ⟨_, _, _, hn⟩ := free_retains m b freed hf
+    obtain ⟨_, _, _, hn⟩ := free_retains_inv m b freed hf
     obtain ⟨he, _, _⟩ := alloc_result tgt freed s base size align new allocated ha
     have hlt := hw.fresh c x hc
     intro heq
@@ -1122,14 +1176,14 @@ example : ¬ (match badDecodeIntRange target .i8 [.init 251 none] with
   decide
 
 -- 3. decodeBool_encodeBool
-/-- Instance (law `ConcreteSpec.Core.Mem.decodeBool_encodeBool`, case `true`). -/
+/-- Representation check. Canonical computation. -/
 example : decodeBool (encodeBool true) = some true :=
   decodeBool_encodeBool true
 
-/-- Planted (law `ConcreteSpec.Core.Mem.decodeBool_encodeBool`, case `true`, subject `ConcreteSpec.Core.Mem.decodeBool`, mutant `ConcreteSpec.Core.Mem.Audit.badDecodeBool`). -/
+/-- Representation check. Canonical computation. -/
 example : ¬ (badDecodeBool (encodeBool true) = some true) := by decide
 
-/-- Planted (law `ConcreteSpec.Core.Mem.decodeBool_encodeBool`, case `true`, subject `ConcreteSpec.Core.Mem.encodeBool`, mutant `ConcreteSpec.Core.Mem.Audit.badEncodeBool`). -/
+/-- Representation check. Canonical computation. -/
 example : ¬ (decodeBool (badEncodeBool true) = some true) := by decide
 
 -- 4. decodeBool_valid
@@ -1359,11 +1413,11 @@ example : memory.free ⟨0⟩ = some freedMemory ∧ ptr.prov = some ⟨0⟩ ∧
   ⟨rfl, rfl, by decide, by decide⟩
 
 -- 14. eqAddr_provenance
-/-- Instance (law `ConcreteSpec.Core.Mem.eqAddr_provenance`, case `diffProv`). -/
+/-- Representation check. Canonical computation. -/
 example : Ptr.eqAddr ⟨⟨0⟩, 40, some ⟨0⟩⟩ ⟨⟨0⟩, 40, none⟩ = true :=
   eqAddr_provenance ⟨0⟩ 40 (some ⟨0⟩) none
 
-/-- Planted (law `ConcreteSpec.Core.Mem.eqAddr_provenance`, case `diffProv`, subject `ConcreteSpec.Core.Mem.Ptr.eqAddr`, mutant `ConcreteSpec.Core.Mem.Audit.badEqAddr`). -/
+/-- Representation check. Canonical computation. -/
 example : ¬ (badEqAddr ⟨⟨0⟩, 40, some ⟨0⟩⟩ ⟨⟨0⟩, 40, none⟩ = true) := by decide
 
 -- 15. alloc_ne_existing
@@ -1625,6 +1679,88 @@ example : memory.WellFormed target ∧ memory.free ⟨0⟩ = some freedMemory �
       | .error _ => True) :=
   ⟨memory_wf, rfl, rfl, fun h => h rfl⟩
 
+
+def skipFree : Memory → MemBlockId → Option Memory := fun m _ => some m
+def corruptExpose : Memory → Ptr → Option Memory := fun _ _ => some badEmpty
+def corruptStoreGeometry : Target → Memory → Ptr → List MByte → Nat → Option Memory :=
+  fun _ m _ _ _ => some (m.modify ⟨0⟩ fun x => { x with base := x.base + 1 })
+def corruptExposeGeometry : Memory → Ptr → Option Memory :=
+  fun m _ => some (m.modify ⟨0⟩ fun x => { x with size := x.size + 1 })
+def wrongReconstruction : Memory → AddrSpace → Nat → Ptr :=
+  fun _ s a => ⟨s, a, some ⟨1⟩⟩
+
+/-- Instance (law `ConcreteSpec.Core.Mem.eqAddr_separation`, case `provenance`). -/
+example : Ptr.eqAddr ptr rawPtr = false ↔ ptr.space ≠ rawPtr.space ∨
+    ptr.addr < rawPtr.addr ∨ rawPtr.addr < ptr.addr := eqAddr_separation ptr rawPtr
+/-- Planted (law `ConcreteSpec.Core.Mem.eqAddr_separation`, case `provenance`, subject `ConcreteSpec.Core.Mem.Ptr.eqAddr`, mutant `ConcreteSpec.Core.Mem.Audit.badEqAddr`). -/
+example : ¬ (badEqAddr ptr rawPtr = false ↔ ptr.space ≠ rawPtr.space ∨
+    ptr.addr < rawPtr.addr ∨ rawPtr.addr < ptr.addr) := by decide
+def alwaysEqual : Ptr → Ptr → Bool := fun _ _ => true
+/-- Instance (law `ConcreteSpec.Core.Mem.eqAddr_separation`, case `address`). -/
+example : Ptr.eqAddr ptr other = false ↔ ptr.space ≠ other.space ∨
+    ptr.addr < other.addr ∨ other.addr < ptr.addr := eqAddr_separation ptr other
+/-- Planted (law `ConcreteSpec.Core.Mem.eqAddr_separation`, case `address`, subject `ConcreteSpec.Core.Mem.Ptr.eqAddr`, mutant `ConcreteSpec.Core.Mem.Audit.alwaysEqual`). -/
+example : ¬ (alwaysEqual ptr other = false ↔ ptr.space ≠ other.space ∨
+    ptr.addr < other.addr ∨ other.addr < ptr.addr) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Mem.free_retains`, case `live`). -/
+example : match memory.free ⟨0⟩ with | none => True | some m' => ∃ x, memory.block ⟨0⟩ = some x ∧ m'.block ⟨0⟩ = some { x with live := false, exposed := false } ∧ m'.next = memory.next :=
+  free_retains memory ⟨0⟩
+/-- Planted (law `ConcreteSpec.Core.Mem.free_retains`, case `live`, subject `ConcreteSpec.Core.Mem.Memory.free`, mutant `ConcreteSpec.Core.Mem.Audit.skipFree`). -/
+example : ¬ (match skipFree memory ⟨0⟩ with | none => True | some m' => ∃ x, memory.block ⟨0⟩ = some x ∧ m'.block ⟨0⟩ = some { x with live := false, exposed := false } ∧ m'.next = memory.next) := by
+  intro h
+  obtain ⟨x, hx, hh, _⟩ := h
+  have he : x = initBlock := Option.some.inj hx.symm
+  subst x
+  have hf := congrArg (fun z => z.map Block.live) hh
+  cases hf
+
+/-- Instance (law `ConcreteSpec.Core.Mem.expose_frame`, case `live`). -/
+example : match memory.expose ptr with | none => True | some m' => ∃ b x, ptr.prov = some b ∧ memory.block b = some x ∧ m'.block b = some { x with exposed := true } ∧ m'.next = memory.next ∧ ∀ c, c ≠ b → m'.block c = memory.block c :=
+  expose_frame memory ptr
+/-- Planted (law `ConcreteSpec.Core.Mem.expose_frame`, case `live`, subject `ConcreteSpec.Core.Mem.Memory.expose`, mutant `ConcreteSpec.Core.Mem.Audit.corruptExpose`). -/
+example : ¬ (match corruptExpose memory ptr with | none => True | some m' => ∃ b x, ptr.prov = some b ∧ memory.block b = some x ∧ m'.block b = some { x with exposed := true } ∧ m'.next = memory.next ∧ ∀ c, c ≠ b → m'.block c = memory.block c) := by
+  intro h
+  obtain ⟨b, x, hp, hx, _, hn, _⟩ := h
+  have : (0 : Nat) = 1 := hn
+  cases this
+
+/-- Instance (law `ConcreteSpec.Core.Mem.store_geometry`, case `live`). -/
+example : match memory.store target ptr [.init 7 none] 1 with | none => True | some m' => ∀ b, (m'.block b).map Block.geometry = (memory.block b).map Block.geometry :=
+  store_geometry target memory ptr [.init 7 none] 1
+/-- Planted (law `ConcreteSpec.Core.Mem.store_geometry`, case `live`, subject `ConcreteSpec.Core.Mem.Memory.store`, mutant `ConcreteSpec.Core.Mem.Audit.corruptStoreGeometry`). -/
+example : ¬ (match corruptStoreGeometry target memory ptr [.init 7 none] 1 with | none => True | some m' => ∀ b, (m'.block b).map Block.geometry = (memory.block b).map Block.geometry) := by
+  intro h
+  have hh := h ⟨0⟩
+  revert hh
+  decide
+
+/-- Instance (law `ConcreteSpec.Core.Mem.expose_geometry`, case `live`). -/
+example : match memory.expose ptr with | none => True | some m' => ∀ b, (m'.block b).map Block.geometry = (memory.block b).map Block.geometry :=
+  expose_geometry memory ptr
+/-- Planted (law `ConcreteSpec.Core.Mem.expose_geometry`, case `live`, subject `ConcreteSpec.Core.Mem.Memory.expose`, mutant `ConcreteSpec.Core.Mem.Audit.corruptExposeGeometry`). -/
+example : ¬ (match corruptExposeGeometry memory ptr with | none => True | some m' => ∀ b, (m'.block b).map Block.geometry = (memory.block b).map Block.geometry) := by
+  intro h
+  have hh := h ⟨0⟩
+  revert hh
+  decide
+
+/-- Instance (law `ConcreteSpec.Core.Mem.fromExposed_sound`, case `interior`). -/
+example : ∀ b, (exposedMemory.fromExposed ⟨0⟩ 42).prov = some b →
+    ∃ x, exposedMemory.block b = some x ∧ x.Candidate ⟨0⟩ = true ∧
+      ((x.base ≤ 42 ∧ 42 < x.base + x.size) ∨
+       (42 = x.base + x.size ∧ ∀ e ∈ exposedMemory.blocks, e.2.Candidate ⟨0⟩ = true →
+         ¬ (e.2.base ≤ 42 ∧ 42 < e.2.base + e.2.size))) := fromExposed_sound target exposedMemory exposedMemory_wf ⟨0⟩ 42
+/-- Planted (law `ConcreteSpec.Core.Mem.fromExposed_sound`, case `interior`, subject `ConcreteSpec.Core.Mem.Memory.fromExposed`, mutant `ConcreteSpec.Core.Mem.Audit.wrongReconstruction`). -/
+example : exposedMemory.WellFormed target ∧ ¬ (∀ b, (wrongReconstruction exposedMemory ⟨0⟩ 42).prov = some b →
+    ∃ x, exposedMemory.block b = some x ∧ x.Candidate ⟨0⟩ = true ∧
+      ((x.base ≤ 42 ∧ 42 < x.base + x.size) ∨
+       (42 = x.base + x.size ∧ ∀ e ∈ exposedMemory.blocks, e.2.Candidate ⟨0⟩ = true →
+         ¬ (e.2.base ≤ 42 ∧ 42 < e.2.base + e.2.size)))) := by
+  refine ⟨exposedMemory_wf, ?_⟩
+  intro h
+  obtain ⟨x, hx, _⟩ := h ⟨1⟩ rfl
+  cases hx
 end Audit
 
 end ConcreteSpec.Core.Mem

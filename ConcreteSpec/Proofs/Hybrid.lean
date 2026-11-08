@@ -246,7 +246,7 @@ theorem write_wellFormed (tgt : Target) (st : State) (hw : st.WellFormed tgt)
             subst st'
             have hsw := store_wellFormed tgt st.memory hw.memory r.ptr (encode tgt v) r.align
             rw [hm] at hsw
-            exact memory_wellFormed tgt st m hw hsw (store_geometry tgt _ _ _ _ _ hm)
+            exact memory_wellFormed tgt st m hw hsw (store_geometry_inv tgt _ _ _ _ _ hm)
       next => simp at h
 
 /-- Law (subject `ConcreteSpec.Core.Hybrid.State.rawWrite`). Raw writes likewise preserve geometry without maintaining a second typed copy. -/
@@ -266,7 +266,7 @@ theorem rawWrite_wellFormed (tgt : Target) (st : State) (hw : st.WellFormed tgt)
       subst st'
       have hsw := store_wellFormed tgt st.memory hw.memory p bs align
       rw [hm] at hsw
-      exact memory_wellFormed tgt st m hw hsw (store_geometry tgt _ _ _ _ _ hm)
+      exact memory_wellFormed tgt st m hw hsw (store_geometry_inv tgt _ _ _ _ _ hm)
 
 /-- Helper (inversion). Successful materialization either reuses the existing cell or allocates and fills one
 fresh block. This decomposition keeps the later laws independent of monadic elaboration (approved: PENDING). -/
@@ -345,9 +345,9 @@ theorem materialize_wellFormed (tgt : Target) (st : State) (hw : st.WellFormed t
         exact alloc_projected tgt _ _ hw.memory d (hw.projected q d hd) s base _ align b ha
       have hsw := store_wellFormed tgt m ham ⟨s, base, some b⟩ (encode tgt v ++ padding) align
       rw [hm] at hsw
-      have hwritten := memory_wellFormed tgt _ m' halloc hsw (store_geometry tgt _ _ _ _ _ hm)
+      have hwritten := memory_wellFormed tgt _ m' halloc hsw (store_geometry_inv tgt _ _ _ _ _ hm)
       apply set_wellFormed tgt _ p _ hwritten
-      apply projected_transport m m' _ _ (store_geometry tgt _ _ _ _ _ hm)
+      apply projected_transport m m' _ _ (store_geometry_inv tgt _ _ _ _ _ hm)
       simp only [Cell.Projected]
       have hab := alloc_block tgt st.memory s base (encode tgt v ++ padding).length align
       rw [ha] at hab
@@ -381,7 +381,7 @@ theorem expose_wellFormed (tgt : Target) (st : State) (hw : st.WellFormed tgt)
         rw [hm] at hmid
         have hew := Mem.expose_wellFormed tgt mid.memory hmid.memory r'.ptr
         rw [he] at hew
-        exact memory_wellFormed tgt mid m hmid hew (expose_geometry _ _ _ he)
+        exact memory_wellFormed tgt mid m hmid hew (expose_geometry_inv _ _ _ he)
 
 /-- Law (subject `ConcreteSpec.Core.Hybrid.State.read`). Typed writes frame every other place with a distinct materialized allocation identity. -/
 theorem write_frame (tgt : Target) (st st' : State) (p q : Place) (v : Value)
@@ -810,12 +810,79 @@ example : structState.WellFormed linuxX8664 ∧
       | none => True) :=
   ⟨structState_wf, not_badState_wf⟩
 
+namespace Frame
+
+/-- An existing materialized boolean at address 80, independent of the place under test. -/
+def observedStart : State := ⟨[(⟨1⟩, ⟨.bool, .structured (.bool true)⟩)], Memory.empty⟩
+def observedRange : Range := ⟨⟨⟨0⟩, 80, some ⟨0⟩⟩, 1, 1⟩
+def observed : State :=
+  (observedStart.materialize linuxX8664 ⟨1⟩ ⟨0⟩ 80 1 []).getD (observedRange, observedStart) |>.2
+def structState : State := observed.set ⟨0⟩ ⟨.bool, .structured (.bool false)⟩
+def matRange : Range := ⟨⟨⟨0⟩, 40, some ⟨1⟩⟩, 1, 1⟩
+def matState : State :=
+  (structState.materialize linuxX8664 ⟨0⟩ ⟨0⟩ 40 1 []).getD (matRange, structState) |>.2
+def matExposedState : State :=
+  (structState.expose linuxX8664 ⟨0⟩ ⟨0⟩ 40 1 []).getD (matRange, structState) |>.2
+def before : State := matState
+def after : State := (before.write linuxX8664 ⟨0⟩ (.bool true)).getD before
+
+/-- Helper (congruence). Closed structured fixture has no memory projections yet (approved: PENDING). -/
+private theorem observedStart_wf : observedStart.WellFormed linuxX8664 := by
+  refine ⟨empty_wellFormed linuxX8664, ?_⟩
+  intro p c hc
+  simp only [State.places, observedStart, AList.lookup] at hc
+  split at hc
+  next => cases hc; trivial
+  next => cases hc
+/-- Helper (congruence). Derived from a successful first materialization, retaining its invariant (approved: PENDING). -/
+private theorem observed_wf : observed.WellFormed linuxX8664 :=
+  materialize_wellFormed linuxX8664 observedStart observedStart_wf ⟨1⟩ ⟨0⟩ 80 1 []
+/-- Helper (congruence). Adding a structured cell does not disturb the existing projection (approved: PENDING). -/
+private theorem structState_wf : structState.WellFormed linuxX8664 :=
+  set_wellFormed linuxX8664 observed ⟨0⟩ ⟨.bool, .structured (.bool false)⟩ observed_wf trivial
+/-- Helper (congruence). Both allocations and their materialized projections satisfy the invariant (approved: PENDING). -/
+private theorem before_wf : before.WellFormed linuxX8664 :=
+  materialize_wellFormed linuxX8664 structState structState_wf ⟨0⟩ ⟨0⟩ 40 1 []
+/-- Helper (computation). Both existing places name distinct live block identities (approved: PENDING). -/
+private theorem before_sep : before.Separated ⟨0⟩ ⟨1⟩ := by
+  intro c d r s hc hd hr hs
+  have hc' : c = ⟨.bool, .materialized matRange⟩ := Option.some.inj hc.symm
+  have hd' : d = ⟨.bool, .materialized observedRange⟩ := Option.some.inj hd.symm
+  subst c; subst d
+  cases hr; cases hs
+  decide
+/-- Helper (computation). The live intervals 40..41 and 80..81 are disjoint (approved: PENDING). -/
+private theorem before_disjoint : before.RangesDisjoint ⟨0⟩ ⟨1⟩ := by
+  intro c d r s hc hd hr hs
+  have hc' : c = ⟨.bool, .materialized matRange⟩ := Option.some.inj hc.symm
+  have hd' : d = ⟨.bool, .materialized observedRange⟩ := Option.some.inj hd.symm
+  subst c; subst d
+  cases hr; cases hs
+  exact .inr (.inr (.inr (.inl (by decide))))
+
+/-- Corrupt the actual observed value by confusing the two live projections. -/
+def badReadDiff : Target → State → Place → Option Value :=
+  fun tgt st q => if q = ⟨1⟩ then st.read tgt ⟨0⟩ else st.read tgt q
+/-- Corrupt the observed boolean when a separate place becomes materialized. -/
+def badReadEmptyDiff : Target → State → Place → Option Value :=
+  fun tgt st q => if q = ⟨1⟩ then
+    match st.places ⟨0⟩ with
+    | some ⟨_, .materialized _⟩ => some (.bool false)
+    | _ => st.read tgt q
+  else st.read tgt q
+
+/-- Accepted (rule C4). The observed place decodes successfully before and after each transition. -/
+example : before.read linuxX8664 ⟨1⟩ = some (.bool true) ∧
+    after.read linuxX8664 ⟨1⟩ = some (.bool true) ∧
+    structState.read linuxX8664 ⟨1⟩ = some (.bool true) ∧
+    matExposedState.read linuxX8664 ⟨1⟩ = some (.bool true) := by decide
+
 -- 13. write_frame
 /-- Instance (law `ConcreteSpec.Core.Hybrid.write_frame`, case `otherPlace`). -/
 example : after.read linuxX8664 ⟨1⟩ = before.read linuxX8664 ⟨1⟩ :=
   write_frame linuxX8664 before after ⟨0⟩ ⟨1⟩ (.bool true) (by decide) before_sep rfl
 
-/-- Planted (law `ConcreteSpec.Core.Hybrid.write_frame`, case `otherPlace`, subject `ConcreteSpec.Core.Hybrid.State.read`, mutant `ConcreteSpec.Core.Hybrid.Audit.badReadDiff`). -/
+/-- Planted (law `ConcreteSpec.Core.Hybrid.write_frame`, case `otherPlace`, subject `ConcreteSpec.Core.Hybrid.State.read`, mutant `ConcreteSpec.Core.Hybrid.Audit.Frame.badReadDiff`). -/
 example : (⟨1⟩ : Place) ≠ ⟨0⟩ ∧ before.Separated ⟨0⟩ ⟨1⟩ ∧
     before.write linuxX8664 ⟨0⟩ (.bool true) = some after ∧
     ¬ (badReadDiff linuxX8664 after ⟨1⟩ = badReadDiff linuxX8664 before ⟨1⟩) :=
@@ -827,7 +894,7 @@ example : after.read linuxX8664 ⟨1⟩ = before.read linuxX8664 ⟨1⟩ :=
   write_frame_disjoint linuxX8664 before after before_wf ⟨0⟩ ⟨1⟩ (.bool true)
     (by decide) before_disjoint rfl
 
-/-- Planted (law `ConcreteSpec.Core.Hybrid.write_frame_disjoint`, case `otherPlace`, subject `ConcreteSpec.Core.Hybrid.State.read`, mutant `ConcreteSpec.Core.Hybrid.Audit.badReadDiff`). -/
+/-- Planted (law `ConcreteSpec.Core.Hybrid.write_frame_disjoint`, case `otherPlace`, subject `ConcreteSpec.Core.Hybrid.State.read`, mutant `ConcreteSpec.Core.Hybrid.Audit.Frame.badReadDiff`). -/
 example : before.WellFormed linuxX8664 ∧ (⟨1⟩ : Place) ≠ ⟨0⟩ ∧
     before.RangesDisjoint ⟨0⟩ ⟨1⟩ ∧
     before.write linuxX8664 ⟨0⟩ (.bool true) = some after ∧
@@ -840,7 +907,7 @@ example : matState.read linuxX8664 ⟨1⟩ = structState.read linuxX8664 ⟨1⟩
   materialize_frame linuxX8664 structState matState structState_wf ⟨0⟩ ⟨1⟩
     (by decide) ⟨0⟩ 40 1 [] matRange rfl
 
-/-- Planted (law `ConcreteSpec.Core.Hybrid.materialize_frame`, case `otherPlace`, subject `ConcreteSpec.Core.Hybrid.State.read`, mutant `ConcreteSpec.Core.Hybrid.Audit.badReadEmptyDiff`). -/
+/-- Planted (law `ConcreteSpec.Core.Hybrid.materialize_frame`, case `otherPlace`, subject `ConcreteSpec.Core.Hybrid.State.read`, mutant `ConcreteSpec.Core.Hybrid.Audit.Frame.badReadEmptyDiff`). -/
 example : structState.WellFormed linuxX8664 ∧ (⟨1⟩ : Place) ≠ ⟨0⟩ ∧
     structState.materialize linuxX8664 ⟨0⟩ ⟨0⟩ 40 1 [] = some (matRange, matState) ∧
     ¬ (badReadEmptyDiff linuxX8664 matState ⟨1⟩ =
@@ -853,12 +920,14 @@ example : matExposedState.read linuxX8664 ⟨1⟩ = structState.read linuxX8664 
   expose_frame linuxX8664 structState matExposedState structState_wf ⟨0⟩ ⟨1⟩
     (by decide) ⟨0⟩ 40 1 [] matRange rfl
 
-/-- Planted (law `ConcreteSpec.Core.Hybrid.expose_frame`, case `otherPlace`, subject `ConcreteSpec.Core.Hybrid.State.read`, mutant `ConcreteSpec.Core.Hybrid.Audit.badReadEmptyDiff`). -/
+/-- Planted (law `ConcreteSpec.Core.Hybrid.expose_frame`, case `otherPlace`, subject `ConcreteSpec.Core.Hybrid.State.read`, mutant `ConcreteSpec.Core.Hybrid.Audit.Frame.badReadEmptyDiff`). -/
 example : structState.WellFormed linuxX8664 ∧ (⟨1⟩ : Place) ≠ ⟨0⟩ ∧
     structState.expose linuxX8664 ⟨0⟩ ⟨0⟩ 40 1 [] = some (matRange, matExposedState) ∧
     ¬ (badReadEmptyDiff linuxX8664 matExposedState ⟨1⟩ =
       badReadEmptyDiff linuxX8664 structState ⟨1⟩) :=
   ⟨structState_wf, by decide, rfl, by decide⟩
+
+end Frame
 
 -- 17. materialize_read
 /-- Instance (law `ConcreteSpec.Core.Hybrid.materialize_read`, case `firstMat`). -/
