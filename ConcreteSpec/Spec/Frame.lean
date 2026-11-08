@@ -176,6 +176,19 @@ def EffectCommand.Defined (tgt : Target) (before : State) : EffectCommand → Pr
   | .write place value => (before.write tgt place value).isSome
   | .rawWrite pointer bytes alignment => (before.rawWrite tgt pointer bytes alignment).isSome
 
+/-- Permissions are fixed by the command and pre-state, independently of the executor's
+reported effects. Allocation uses the allocator's pre-state fresh identity. -/
+def EffectCommand.permissions (tgt : Target) (before : State) : EffectCommand → Footprint
+  | .store pointer bytes alignment | .rawWrite pointer bytes alignment =>
+    accessFootprint (before.memory.access tgt pointer bytes.length alignment) bytes.length
+  | .free block => .block block
+  | .expose pointer => match pointer.prov with
+    | some block => .block block
+    | none => .empty
+  | .alloc _ _ size _ => .byte (fullBlock ⟨before.memory.next⟩ size)
+  | .set place _ => .place place
+  | .write place value => writeFootprint tgt before place value
+
 /-- Execute one C4 or Hybrid instruction and report its exact computed permission set. -/
 def runEffect (tgt : Target) (before : State) : EffectCommand → Option (State × Footprint)
   | .store pointer bytes alignment =>
@@ -205,7 +218,8 @@ state outside its computed footprint. -/
 def EffectResult (tgt : Target) (before : State) (command : EffectCommand) :
     Option (State × Footprint) → Prop
   | none => ¬ command.Defined tgt before
-  | some (after, footprint) => command.Defined tgt before ∧ footprint.Preserves before after
+  | some (after, footprint) => command.Defined tgt before ∧ footprint = command.permissions tgt before ∧
+      (command.permissions tgt before).Preserves before after
 
 /-- Operand implementation for a concrete modifying callee: evaluating its return operand
 executes one authorized C4 byte store. Lifecycle events have no memory effects. -/

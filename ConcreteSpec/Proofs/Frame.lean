@@ -578,8 +578,8 @@ theorem runEffect_frame (tgt : Target) (before : State) (command : EffectCommand
     cases hs : before.memory.store tgt pointer bytes alignment with
     | none => simp [runEffect, EffectResult, EffectCommand.Defined, hs]
     | some memory =>
-      simp only [runEffect, hs, Option.map_some, EffectResult, EffectCommand.Defined, Option.isSome]
-      exact ⟨ trivial, store_frame tgt before wellFormed memory pointer bytes alignment _ rfl hs ⟩
+      simp only [runEffect, hs, Option.map_some, EffectResult, EffectCommand.Defined, EffectCommand.permissions, Option.isSome]
+      exact ⟨ trivial, by trivial, store_frame tgt before wellFormed memory pointer bytes alignment _ rfl hs ⟩
   | free block =>
     cases hb : before.memory.block block with
     | none => simp [runEffect, Memory.free, hb, EffectResult, EffectCommand.Defined]
@@ -587,8 +587,8 @@ theorem runEffect_frame (tgt : Target) (before : State) (command : EffectCommand
       cases hs : before.memory.free block with
       | none => simp [runEffect, hs, EffectResult, EffectCommand.Defined]
       | some memory =>
-        simp only [runEffect, hs, Option.map_some, EffectResult, EffectCommand.Defined, Option.isSome]
-        exact ⟨ trivial, free_frame before block x memory hb hs ⟩
+        simp only [runEffect, hs, Option.map_some, EffectResult, EffectCommand.Defined, EffectCommand.permissions, Option.isSome]
+        exact ⟨ trivial, by trivial, free_frame before block x memory hb hs ⟩
   | expose pointer =>
     cases hp : pointer.prov with
     | none => simp [runEffect, hp, EffectResult, EffectCommand.Defined]
@@ -600,23 +600,30 @@ theorem runEffect_frame (tgt : Target) (before : State) (command : EffectCommand
         | none => simp [runEffect, hp, hs, EffectResult, EffectCommand.Defined]
         | some memory =>
           simp only [runEffect, hp, Option.bind_some, hs, Option.map_some, EffectResult,
-            EffectCommand.Defined, Option.isSome]
-          exact ⟨ trivial, expose_frame before memory pointer block x hp hb hs ⟩
+            EffectCommand.Defined, EffectCommand.permissions, Option.isSome]
+          exact ⟨ trivial, by trivial, expose_frame before memory pointer block x hp hb hs ⟩
   | alloc space base size alignment =>
     cases ha : before.memory.alloc tgt space base size alignment with
     | error _ => simp [runEffect, ha, EffectResult, EffectCommand.Defined]
     | ok output =>
       obtain ⟨block, memory⟩ := output
-      simp only [runEffect, ha, EffectResult, EffectCommand.Defined]
-      exact ⟨ trivial, alloc_frame tgt before wellFormed space base size alignment block memory ha ⟩
+      simp only [runEffect, ha, EffectResult, EffectCommand.Defined, EffectCommand.permissions]
+      have hid : block = ⟨before.memory.next⟩ := by
+        unfold Memory.alloc at ha
+        dsimp only at ha
+        split at ha
+        · cases ha; rfl
+        · cases ha
+      subst block
+      exact ⟨ trivial, by trivial, alloc_frame tgt before wellFormed space base size alignment ⟨before.memory.next⟩ memory ha ⟩
   | set place cell =>
-    exact ⟨ trivial, set_frame before place cell ⟩
+    exact ⟨ trivial, by trivial, set_frame before place cell ⟩
   | write place value =>
     cases hw : before.write tgt place value with
     | none => simp [runEffect, hw, EffectResult, EffectCommand.Defined]
     | some after =>
-      simp only [runEffect, hw, Option.map_some, EffectResult, EffectCommand.Defined, Option.isSome]
-      refine ⟨ trivial, ?_ ⟩
+      simp only [runEffect, hw, Option.map_some, EffectResult, EffectCommand.Defined, EffectCommand.permissions, Option.isSome]
+      refine ⟨ trivial, by trivial, ?_ ⟩
       have hplaces : ∃ c, before.places place = some c := by
         unfold State.write at hw
         cases hc : before.places place with
@@ -636,8 +643,8 @@ theorem runEffect_frame (tgt : Target) (before : State) (command : EffectCommand
     cases hr : before.rawWrite tgt pointer bytes alignment with
     | none => simp [runEffect, hr, EffectResult, EffectCommand.Defined]
     | some after =>
-      simp only [runEffect, hr, Option.map_some, EffectResult, EffectCommand.Defined, Option.isSome]
-      exact ⟨ trivial, rawWrite_frame tgt before after wellFormed pointer bytes alignment _ rfl hr ⟩
+      simp only [runEffect, hr, Option.map_some, EffectResult, EffectCommand.Defined, EffectCommand.permissions, Option.isSome]
+      exact ⟨ trivial, by trivial, rawWrite_frame tgt before after wellFormed pointer bytes alignment _ rfl hr ⟩
 
 /-- Instance (law `ConcreteSpec.Core.Frame.runEffect_frame`, case `byte_store`). -/
 example : EffectResult linuxX8664 metadataStoreBefore
@@ -660,10 +667,28 @@ example : metadataStoreBefore.memory.WellFormed linuxX8664 ∧
       (corruptEffect linuxX8664 metadataStoreBefore (.store metadataStorePtr [.init 7 none] 1)) := by
   refine ⟨metadataStoreWellFormed, ?_⟩
   intro h
-  have hm := h.2.2.1 ⟨0⟩ metadataStoreBlock (by decide) (by decide)
+  have hm := h.2.2.2.1 ⟨0⟩ metadataStoreBlock (by decide) (by decide)
   simp [metadataStoreBefore, metadataStoreBlock,
     metadataStorePtr, blockMetadata, Memory.modify, Memory.block,
     AList.update, AList.lookup] at hm
+
+/-- A planted executor corrupts metadata and claims additional metadata permissions. -/
+def selfAuthorizingEffect (tgt : Target) (before : State) (command : EffectCommand) :
+    Option (State × Footprint) :=
+  (corruptEffect tgt before command).map fun (after, footprint) =>
+    (after, footprint.union (.block ⟨0⟩))
+
+/-- Planted (law `ConcreteSpec.Core.Frame.runEffect_frame`, case `byte_store`,
+subject `ConcreteSpec.Core.Frame.runEffect`, mutant `ConcreteSpec.Core.Frame.selfAuthorizingEffect`). -/
+example : metadataStoreBefore.memory.WellFormed linuxX8664 ∧
+    ¬ EffectResult linuxX8664 metadataStoreBefore
+      (.store metadataStorePtr [.init 7 none] 1)
+      (selfAuthorizingEffect linuxX8664 metadataStoreBefore (.store metadataStorePtr [.init 7 none] 1)) := by
+  refine ⟨metadataStoreWellFormed, ?_⟩
+  intro h
+  have hm := h.2.2.2.1 ⟨0⟩ metadataStoreBlock (by decide) (by decide)
+  simp [metadataStoreBefore, metadataStoreBlock, metadataStorePtr, blockMetadata,
+    Memory.modify, Memory.block, AList.update, AList.lookup] at hm
 
 /-- A planted executor refuses every command, even when the underlying C4 operation is defined. -/
 def droppingEffect (_tgt : Target) (_before : State) (_command : EffectCommand) :
