@@ -38,6 +38,10 @@ archived prose specification [legacy/docs/spec](../legacy/docs/spec)).
   inventory against its golden list, the transitive ban on `sorry` and `native_decide`, a fresh
   kernel replay with `leanchecker`, and an independent re-check of the exported theorems by
   con-leche and nanoda.
+- Every rule a diagnostic can name is registered in [`Spec/Rules.lean`](Spec/Rules.lean) by its
+  Lean name and revision. The rule gate ([scripts/spec/rules.sh](../scripts/spec/rules.sh), run by
+  CI's Spec build) requires each registered rule to cite its decision row and to have an example
+  it accepts and one it refuses, and every rule citation to name a registered rule.
 - The judgments (inductive relations) are the normative form; the checker is proved to agree with
   them (`check_iff`).
 - Build: `lake build ConcreteSpec`. The external checker re-checks every theorem.
