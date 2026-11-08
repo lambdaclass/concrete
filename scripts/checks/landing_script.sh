@@ -651,6 +651,7 @@ ovr_ok=1
 recip(){ GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=url.https://attacker.example/.insteadOf GIT_CONFIG_VALUE_0=https://github.com/ \
   GIT_CONFIG_KEY_1=url.https://github.com/.insteadOf GIT_CONFIG_VALUE_1=https://attacker.example/ "$@"; }
 git init -q "$TMP/recip" && git -C "$TMP/recip" remote add origin https://github.com/lambdaclass/concrete.git
+mkdir -p "$TMP/sshfail" && printf '#!/bin/sh\nexit 255\n' > "$TMP/sshfail/ssh" && chmod +x "$TMP/sshfail/ssh"
 while read -r want how url; do
   ( . "$ROOT_DIR/scripts/land/lib.sh"; case "$how" in
       plain) land_url_bad "$url" ;;
@@ -666,6 +667,9 @@ while read -r want how url; do
       recip-resolved) recip land_url_bad "$url" ;;
       recip-remote) cd "$TMP/recip" && recip land_remote_bad origin ;;
       remote) cd "$TMP/recip" && land_remote_bad origin ;;
+      # An ssh that cannot answer -G (fails, or names no host) leaves the destination unknown: refused.
+      g-fails) PATH="$TMP/sshfail:$PATH" land_url_bad "$url" ;;
+      g-fails-cmd) PATH="$TMP/sshfail:$PATH" GIT_SSH_COMMAND='ssh -o ServerAliveInterval=20' land_url_bad "$url" ;;
       config) GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.sshCommand GIT_CONFIG_VALUE_0='ssh -o HostName=attacker.example' land_url_bad "$url" ;;
     esac ) >/dev/null; got=$?
   [ "$got" = "$want" ] || { ovr_ok=0; echo "      $how $url: exit $got, want $want"; }
@@ -682,6 +686,9 @@ done <<'OVR'
 1 recip-resolved https://attacker.example/lambdaclass/concrete.git
 1 recip-remote -
 0 remote -
+1 g-fails git@github.com:lambdaclass/concrete.git
+1 g-fails-cmd git@github.com:lambdaclass/concrete.git
+0 g-fails https://github.com/lambdaclass/concrete.git
 0 plain https://github.com/lambdaclass/concrete.git
 OVR
 [ "$ovr_ok" = 1 ] && ok "the guard resolves URLs as git does: its own ssh command (GIT_SSH_COMMAND, core.sshCommand, GIT_SSH, in that order) and url.insteadOf, applied once" || no "the guard ignored an ssh override"
@@ -843,6 +850,7 @@ out="$(PUSH_REMOTE=fork bash scripts/push-both.sh 2>&1)"; rc=$?
 [ "$rc" = 2 ] && has "$out" "remote named fork" && ok "push-both refuses the remote named fork" || no "push-both PUSH_REMOTE=fork: exit $rc"
 out="$(PUSH_REMOTE=nosuch bash scripts/push-both.sh 2>&1)"; rc=$?
 [ "$rc" = 1 ] && has "$out" "is not configured" && ok "push-both refuses a missing remote" || no "push-both missing remote: exit $rc"
+refused_offline "push-both refuses a remote that is a literal URL, not a configured remote" "is not configured" env PUSH_REMOTE=https://github.com/someone/else.git bash scripts/push-both.sh
 out="$(PUSH_REMOTE=gh-stale bash scripts/push-both.sh 2>&1)"; rc=$?
 [ "$rc" = 1 ] && has "$out" "points at another repository" && ok "push-both refuses a remote that is another GitHub repository" || no "push-both stale GitHub remote: exit $rc"
 # push-both prints its destination redacted: a canonical URL carrying credentials, with a git that
