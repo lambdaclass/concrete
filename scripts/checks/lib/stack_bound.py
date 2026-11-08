@@ -111,7 +111,8 @@ class St:
     which every return must restore) or None (unknown); `saved`, the stack slots holding a saved
     frame pointer or link register, as (lowest, highest) byte depths with a tag (("fp", value) or
     ("lr", whether it holds the function's own return address)), kept after the stack pointer
-    moves past them, since the memory keeps their contents; `lr`, whether the AArch64 link
+    moves past them and after the register is restored from them, since the memory keeps their
+    contents, until an exact overwrite (`overwrite`); `lr`, whether the AArch64 link
     register holds the function's own return address. A byte at depth n lies n bytes below the
     entry stack pointer; the function's own bytes have depth >= 1."""
 
@@ -195,8 +196,9 @@ def x86_inst(mn, ops, st):
             raise Refuse(f"push/pop of other than a 64-bit general register: {what}")
         if mn == "push":
             d = st.d + 8
-            check_bytes(st, d - 7, d, what)
-            saved = st.saved | {(d - 7, d, ("fp", st.fp))} if dst == "rbp" else st.saved
+            saved = overwrite(st, ((d - 7, d),), what)
+            if dst == "rbp":
+                saved = saved | {(d - 7, d, ("fp", st.fp))}
             return st.but(d=d, saved=saved), d
         return x86_pop(st, dst, st.d, what), None
     if mn == "leave":
@@ -215,9 +217,18 @@ def x86_inst(mn, ops, st):
     return st, deepest
 
 
+def overwrite(st, spans, what):
+    """`saved` after a write of exactly the 8-byte spans (lo, hi): a saved slot at exactly one of
+    them is overwritten (its stack address is gone); a partial overlap is refused."""
+    for lo, hi in spans:
+        check_bytes(st, lo, hi, what, allowed=tuple(x for x in st.saved if x[:2] == (lo, hi)))
+    return frozenset(x for x in st.saved if x[:2] not in spans)
+
+
 def x86_pop(st, dst, at, what):
     """Pop the 8 bytes whose deepest is at depth `at` into `dst`: a saved frame pointer only into
-    rbp, which then holds the saved value again (any other pop into rbp makes it unknown)."""
+    rbp, which then holds the saved value again (any other pop into rbp makes it unknown). The slot
+    stays saved: its memory still holds the stack address."""
     slot = slot_at(st.saved, at - 7, at)
     if slot and dst != "rbp":
         raise Refuse(f"a saved frame pointer popped into {dst}: {what}")
@@ -225,7 +236,7 @@ def x86_pop(st, dst, at, what):
     if dst != "rbp":
         return st.but(d=at - 8)
     fp = slot[2][1] if slot and slot[2][0] == "fp" else None
-    return st.but(d=at - 8, fp=fp, saved=st.saved - {slot} if slot else st.saved)
+    return st.but(d=at - 8, fp=fp)
 
 
 A64_SP = ("sp", "wsp")
@@ -289,7 +300,7 @@ def a64_inst(mn, ops, st):
             if record:
                 # x29 at the lower address (the deeper half), x30 above it.
                 if is_store:
-                    check_bytes(st, lo, top, what)
+                    saved = overwrite(st, ((lo, lo + 7), (lo + 8, lo + 15)), what)
                     saved = saved | {(lo + 8, lo + 15, ("fp", fp)), (lo, lo + 7, ("lr", lr))}
                 else:
                     fp_slot, lr_slot = slot_at(saved, lo + 8, lo + 15), slot_at(saved, lo, lo + 7)
@@ -297,8 +308,7 @@ def a64_inst(mn, ops, st):
                     check_bytes(st, lo, top, what, allowed=inside)
                     lr = bool(lr_slot and lr_slot[2] == ("lr", True))
                     fp = fp_slot[2][1] if fp_slot and fp_slot[2][0] == "fp" else None
-                    saved = frozenset(x for x in saved if x not in inside)
-                    restored = True
+                    restored = True  # the slots stay saved: memory still holds the addresses
             else:
                 check_bytes(st, lo, top, what)
             deepest = top

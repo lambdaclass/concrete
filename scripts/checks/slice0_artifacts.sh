@@ -21,7 +21,7 @@
 #     frame-pointer write, an indexed stack address, a saved frame pointer popped into another
 #     register, a stack address taken, an overwritten return address, an AArch64 frame pointer
 #     stored, a register-directed return, a return after a call without the link register
-#     restored, a freed saved slot reread, a callee that does not restore the frame pointer, a
+#     restored, a freed or restored saved slot reread, a callee that does not restore the frame pointer, a
 #     frame record away from sp, an unmodelled
 #     instruction (x86 `loop`) and frame-pointer writeback (AArch64), and give the
 #     expected bound on known functions (x86 frame, red-zone store, two AArch64 frame-record
@@ -216,6 +216,8 @@ refuse a64-link-register-lost '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014
 refuse freed-slot-reread '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tpush\trbp\n    1015:\tadd\trsp, 0x8\n    1019:\tmov\trax, qword ptr [rsp - 0x8]\n    101e:\tmov\tdword ptr [rax - 0x100], ecx\n    1024:\tpop\trbp\n    1025:\tret\n'
 refuse callee-clobbers-frame-pointer '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tcall\t0x1040 <concrete_body>\n    1019:\tmov\tdword ptr [rbp - 0x100], ecx\n    101f:\tpop\trbp\n    1020:\tret\n\n0000000000001040 <concrete_body>:\n    1040:\tsub\trsp, 0x1000\n    1047:\tmov\trbp, rsp\n    104a:\tadd\trsp, 0x1000\n    1051:\tret\n'
 refuse a64-frame-record-elsewhere '    1010:\tldp\tx29, x30, [x0]\n    1014:\tret\n' aarch64 _main
+refuse restored-slot-reread '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tpush\trbp\n    1015:\tpop\trbp\n    1016:\tmov\trax, qword ptr [rsp - 0x8]\n    101b:\tmov\tdword ptr [rax - 0x1000], ecx\n    1021:\tpop\trbp\n    1022:\tret\n'
+refuse a64-restored-record-reread '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tmov\tx29, sp\n    1018:\tstp\tx29, x30, [sp, #-0x10]!\n    101c:\tldp\tx29, x30, [sp], #0x10\n    1020:\tldr\tx0, [sp, #-0x10]\n    1024:\tstr\tx1, [x0, #-0x1000]\n    1028:\tldp\tx29, x30, [sp], #0x10\n    102c:\tret\n' aarch64 _main
 refuse a64-w29-writeback-load '    1010:\tsub\tsp, sp, #0x10\n    1014:\tmov\tx29, sp\n    1018:\tldr\tw29, [sp], #0x10\n    101c:\tstr\tx0, [x29, #-0x100]\n    1020:\tret\n' aarch64 _main
 refuse a64-frame-writeback '    1010:\tmov\tx29, sp\n    1014:\tstr\tx0, [x29], #-0x100\n    1018:\tstr\tx0, [x29]\n    101c:\tadd\tx29, x29, #0x100\n    1020:\tret\n' aarch64 _main
 # A leaf's red-zone store, below the stack pointer, is inside the bound: 8 + 0x30.
