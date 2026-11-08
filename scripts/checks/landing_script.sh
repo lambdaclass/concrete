@@ -980,17 +980,49 @@ for v in ungated always nocancel; do
 done
 
 echo "=== required-checks.txt names exactly the workflow's landing-tier jobs ==="
-out="$(python3 -I - "$ROOT_DIR/.github/workflows/lean_action_ci.yml" "$re_default" "$ROOT_DIR/required-checks.txt" <<'PY'
+# A matrix job is one job per leg, each under the name GitHub shows: its name template with that
+# leg's values (`include` rows only; any other matrix form is refused, since its legs are not listed).
+cat > "$TMP/required_names.py" <<'PY'
 import re, sys, yaml
 jobs = yaml.safe_load(open(sys.argv[1]))["jobs"]
 rx = re.compile(sys.argv[2])
-landing = {str(j.get("name", k)) for k, j in jobs.items() if not rx.search(str(j.get("name", k)))}
+def legs(k, j):
+    name = str(j.get("name", k)); m = (j.get("strategy") or {}).get("matrix")
+    if m is None:
+        return [name]
+    if set(m) != {"include"} or not isinstance(m["include"], list) or not m["include"]:
+        print(f"matrix of {k} is not a non-empty include list: its legs cannot be named"); return []
+    out = []
+    for row in m["include"]:
+        leg = re.sub(r"\$\{\{\s*matrix\.(\w+)\s*\}\}", lambda g: str(row.get(g.group(1), "\0")), name)
+        if "\0" in leg or "${{" in leg:
+            print(f"matrix leg {row} of {k} leaves its name unresolved: {name}"); continue
+        out.append(leg)
+    if len(set(out)) != len(m["include"]):
+        print(f"matrix legs of {k} do not have distinct names: {out}")
+    return out
+landing = {n for k, j in jobs.items() for n in legs(k, j) if not rx.search(n)}
 req = {l.split("#")[0].strip() for l in open(sys.argv[3])} - {""}
 for n in sorted(req - landing): print("required but not a landing-tier job: " + n)
 for n in sorted(landing - req): print("landing-tier job not required: " + n)
 PY
-)"; rc=$?
-[ "$rc" = 0 ] && [ -z "$out" ] && ok "required-checks.txt = the workflow's landing tier" || { no "required-checks.txt disagrees with the workflow (rc=$rc)"; echo "$out" | sed 's/^/      /'; }
+out="$(python3 -I "$TMP/required_names.py" "$ROOT_DIR/.github/workflows/lean_action_ci.yml" "$re_default" "$ROOT_DIR/required-checks.txt")"; rc=$?
+[ "$rc" = 0 ] && [ -z "$out" ] && ok "required-checks.txt = the workflow's landing tier, one name per matrix leg" || { no "required-checks.txt disagrees with the workflow (rc=$rc)"; echo "$out" | sed 's/^/      /'; }
+# Controls: a matrix leg missing from required-checks.txt, a leg whose name the template does not
+# resolve, and a cross-product matrix are each reported.
+python3 -I - "$ROOT_DIR/.github/workflows/lean_action_ci.yml" "$TMP/rn" <<'PY3'
+import sys, yaml, copy, os
+w = yaml.safe_load(open(sys.argv[1])); os.makedirs(sys.argv[2], exist_ok=True)
+a = copy.deepcopy(w); a["jobs"]["backends"]["strategy"]["matrix"]["include"].append({"arch": "riscv64", "runner": "ubuntu-latest"})
+b = copy.deepcopy(w); b["jobs"]["backends"]["name"] = "Slice 0 backends (${{ matrix.os }})"
+c = copy.deepcopy(w); c["jobs"]["backends"]["strategy"]["matrix"] = {"arch": ["x86-64", "aarch64-macos"]}
+for n, x in (("extraleg", a), ("unresolved", b), ("product", c)):
+    yaml.safe_dump(x, open(os.path.join(sys.argv[2], n + ".yml"), "w"))
+PY3
+for v in extraleg:"landing-tier job not required: Slice 0 backends (riscv64)" unresolved:"leaves its name unresolved" product:"is not a non-empty include list"; do
+  o="$(python3 -I "$TMP/required_names.py" "$TMP/rn/${v%%:*}.yml" "$re_default" "$ROOT_DIR/required-checks.txt")"
+  has "$o" "${v#*:}" && ok "CONTROL: the required-checks check reports the ${v%%:*} matrix" || no "CONTROL: the required-checks check missed the ${v%%:*} matrix: '$o'"
+done
 
 echo "=== the move gate: legacy/ lands only with an accepted rehearsal of that exact candidate ==="
 cd "$W" || exit 2

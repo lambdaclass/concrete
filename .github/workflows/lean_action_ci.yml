@@ -1,6 +1,6 @@
 name: CI
 
-# The root's CI after the legacy/ move. Eight jobs, all required (required-checks.txt):
+# The root's CI after the legacy/ move. Eighteen jobs, all required (required-checks.txt):
 #   Landing record  main's push run names the run that qualified its exact SHA (R-0570), kept from
 #                the base unchanged; when it finds one, the jobs below are skipped on main.
 #   Root checks  every check of scripts/checks/run.sh: legacy/ frozen, the day-one root inventory,
@@ -8,6 +8,8 @@ name: CI
 #   Spec build   lake build of the specification, warnings refused.
 #   Proof axioms, Proof trust ban (sorry, native_decide), Kernel replay (leanchecker), External
 #                re-check (con-leche, nanoda)  the proof-integrity checks of scripts/proofs.
+#   Slice 0 backends, artifacts, trusted base, reproducibility (x86-64 Linux and AArch64 macOS)
+#                the compiler's gates (scripts/checks/compiler), each in the compiler's devshell.
 #   Oracle (GitHub-hosted fetch + smoke)  the published oracle fetched, verified and run on a
 #                GitHub-hosted runner (ISS-0005, P13; R-0564), kept from the base unchanged.
 # legacy/ is never built or run here: its gates were qualified at tag legacy-compiler-final. The old
@@ -342,3 +344,159 @@ jobs:
 
       - name: "Fetch the published oracle, verify it, run smoke.con through it (exit 42)"
         run: bash scripts/oracle/ci_check.sh
+
+  # THE COMPILER'S GATES (Concrete/README.md gates 4, 6, 6a, 8, 9, 10, 11 and 12; slice 0, provisional),
+  # scripts/checks/compiler/: not root checks (run.sh runs only scripts/checks/*.sh), because they need
+  # the compiler's devshell, a native macOS runner and minutes each. Every hand-written BIR example
+  # through the LLVM path and the LCB path, each executable's observation compared with the BIR
+  # semantics; sanitizers, binary size (report-only) and the stack bound; the trusted-base golden; and
+  # every build stage reproduced in distinct directories and on distinct machines. Each runs natively
+  # on x86-64 Linux and on AArch64 macOS (LCB's first native proof profile is Apple AArch64), and every
+  # matrix leg is a required job of its own name.
+  backends:
+    name: Slice 0 backends (${{ matrix.arch }})
+    needs: landing-record
+    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
+    # The compiler's devshell (flake.nix default: Lean, clang, LLVM, gdb/lldb), entered per step;
+    # the gates shell has no Lean.
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86-64
+            runner: ubuntu-latest
+          - arch: aarch64-macos
+            runner: macos-15
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+      - name: Backend gate (LLVM and LCB, native)
+        run: nix develop --command bash scripts/checks/compiler/slice0_backends.sh
+
+  artifacts:
+    name: Slice 0 artifacts (${{ matrix.arch }})
+    needs: landing-record
+    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
+    # The compiler's devshell (flake.nix default: Lean, clang, LLVM, gdb/lldb), entered per step;
+    # the gates shell has no Lean.
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86-64
+            runner: ubuntu-latest
+          - arch: aarch64-macos
+            runner: macos-15
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+      - name: Sanitizers, binary size (report-only) and stack bound (gates 10, 11, 12)
+        run: nix develop --command timeout 3000 bash scripts/checks/compiler/slice0_artifacts.sh report
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: artifacts-${{ matrix.arch }}
+          path: report
+          if-no-files-found: error
+
+  trusted-base:
+    name: Slice 0 trusted base (gate 9, ${{ matrix.arch }})
+    needs: landing-record
+    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
+    # The compiler's devshell (flake.nix default: Lean, clang, LLVM, gdb/lldb), entered per step;
+    # the gates shell has no Lean.
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86-64
+            runner: ubuntu-latest
+          - arch: aarch64-macos
+            runner: macos-15
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+      - name: Trusted-base golden (premises, axioms, toolchain and LCB pin)
+        run: nix develop --command timeout 3000 bash scripts/checks/compiler/slice0_trusted_base.sh
+
+  reproducibility:
+    name: Reproducibility (${{ matrix.id }})
+    needs: landing-record
+    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
+    # The compiler's devshell (flake.nix default: Lean, clang, LLVM, gdb/lldb), entered per step;
+    # the gates shell has no Lean.
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: linux-first
+            runner: ubuntu-24.04
+          - id: linux-independent
+            runner: ubuntu-24.04
+          - id: macos
+            runner: macos-15
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - name: Compare every stage in distinct build directories
+        run: nix develop --command timeout 3600 bash scripts/checks/compiler/slice0_repro.sh manifest.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reproducibility-${{ matrix.id }}
+          path: manifest.txt
+          if-no-files-found: error
+
+  compare-linux:
+    name: Cross-machine reproducibility (x86-64 Linux)
+    needs: reproducibility
+    # Runs only when every reproducibility job ran (landing-record gate inherited); no Nix here.
+    defaults:
+      run:
+        shell: bash
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: reproducibility-linux-*
+          path: manifests
+      - name: Compare like targets, including compiler and toolchain identity
+        run: |
+          set -eu
+          m1=manifests/reproducibility-linux-first/manifest.txt
+          m2=manifests/reproducibility-linux-independent/manifest.txt
+          # Both manifests carry the identity and at least one artifact hash.
+          for m in "$m1" "$m2"; do grep -q '^compiler_commit=' "$m"; grep -q '/lcb.exe$' "$m"; done
+          diff -u "$m1" "$m2"
