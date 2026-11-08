@@ -431,30 +431,36 @@ def validSources : SourceTable := [("src/main.con", tabSource)]
 def validSites : SiteTable := [(⟨0⟩, tabSpan)]
 def badTabSpan : Span := { tabSpan with col := 1, col_pos := by decide }
 
-/-- Mutant `trapTerminal` that fabricates a column-1 span instead of using the validated span from
-`sites`. -/
+/-- Mutant `trapTerminal` that preserves the registered span in the terminal structure while
+rendering a fabricated column-1 line instead of the source-derived byte column. -/
 def fabricatedTrapTerminal (sites : SiteTable) (kind : TrapKind) (site : SiteId) : Option Terminal :=
   (AList.lookup sites site).map fun sp =>
     let badSpan : Span := { sp with col := 1, col_pos := by decide }
-    .trapped kind site badSpan (trapLine kind site badSpan)
+    .trapped kind site sp (trapLine kind site badSpan)
 
-/-- Independently specified source observation: parse the produced bytes, then require the decoded
-coordinates to equal byte-derived source coordinates. Non-trap terminals cannot describe a trap. -/
-def SourceTrapObservation (sources : SourceTable) (kind : TrapKind) (site : SiteId) :
-    Option Terminal → Prop
-  | none => True
+/-- Mutant `trapTerminal` that silently drops every trap observation instead of consulting `sites`. -/
+def silentTrapTerminal (_sites : SiteTable) (_kind : TrapKind) (_site : SiteId) : Option Terminal :=
+  none
+
+/-- Independently specified source observation: an unregistered site produces `none`, while a
+registered site produces a trap terminal for that exact site's span whose decoded line recovers the
+requested identity and byte-derived source coordinates. Non-trap terminals cannot describe a trap. -/
+def SourceTrapObservation (sources : SourceTable) (sites : SiteTable) (kind : TrapKind)
+    (site : SiteId) : Option Terminal → Prop
+  | none => AList.lookup sites site = none
   | some (.trapped actualKind actualSite sp line) =>
-    actualKind = kind ∧ actualSite = site ∧ sp.PathOk ∧
+    actualKind = kind ∧ actualSite = site ∧ AList.lookup sites site = some sp ∧ sp.PathOk ∧
       ∃ source, AList.lookup sources sp.path = some source ∧ sp.endOffset ≤ source.length ∧
         decodeTrapLine line = some (kind, site, sp.path,
           source.lineAt sp.startOffset, source.columnAt sp.startOffset)
   | some _ => False
 
 /-- Law (subject `ConcreteSpec.Core.Observe.trapTerminal`).
-Parsing a produced trap observation recovers the requested identity and source-derived coordinates. -/
+Parsing a produced trap observation recovers the requested identity, its registered site span, and
+its source-derived coordinates, while an unregistered site is refused (`none`). -/
 theorem trapTerminal_valid_location (sources : SourceTable) (sites : SiteTable)
     (valid : SiteTable.Valid sources sites) (kind : TrapKind) (site : SiteId) :
-    SourceTrapObservation sources kind site (trapTerminal sites kind site) := by
+    SourceTrapObservation sources sites kind site (trapTerminal sites kind site) := by
   cases found : AList.lookup sites site with
   | none => simp [trapTerminal, found, SourceTrapObservation]
   | some sp =>
@@ -462,7 +468,7 @@ theorem trapTerminal_valid_location (sources : SourceTable) (sites : SiteTable)
       trapTerminal_valid_location_inv sources sites valid kind site sp (trapLine kind site sp)
         (by simp [trapTerminal, found])
     simp only [trapTerminal, found, Option.map_some, SourceTrapObservation]
-    refine ⟨True.intro, True.intro, pathOk, source, sourceFound, bounds, ?_⟩
+    refine ⟨True.intro, True.intro, True.intro, pathOk, source, sourceFound, bounds, ?_⟩
     rw [decodeTrapLine_render, line, col]
 
 /-- Helper (computation). The concrete tab source and site table satisfy the table invariant.
@@ -477,15 +483,16 @@ theorem validSites_valid : SiteTable.Valid validSources validSites := by
   · simp [validSites, AList.lookup, h] at hlookup
 
 /-- Instance (law `ConcreteSpec.Core.Observe.trapTerminal_valid_location`, case `ConcreteSpec.Core.Observe.validSites`). -/
-example : SourceTrapObservation validSources .abort ⟨0⟩ (trapTerminal validSites .abort ⟨0⟩) :=
+example : SourceTrapObservation validSources validSites .abort ⟨0⟩
+    (trapTerminal validSites .abort ⟨0⟩) :=
   trapTerminal_valid_location validSources validSites validSites_valid .abort ⟨0⟩
 
 /-- Planted (law `ConcreteSpec.Core.Observe.trapTerminal_valid_location`, case `ConcreteSpec.Core.Observe.validSites`, subject `ConcreteSpec.Core.Observe.trapTerminal`, mutant `ConcreteSpec.Core.Observe.fabricatedTrapTerminal`). -/
 example : SiteTable.Valid validSources validSites ∧
-    ¬ SourceTrapObservation validSources .abort ⟨0⟩
+    ¬ SourceTrapObservation validSources validSites .abort ⟨0⟩
       (fabricatedTrapTerminal validSites .abort ⟨0⟩) := by
   refine ⟨validSites_valid, ?_⟩
-  rintro ⟨_, _, _, source, found, _, decoded⟩
+  rintro ⟨_, _, _, _, source, found, _, decoded⟩
   have equal : source = tabSource := by
     have hf : "src/main.con" = tabSpan.path ∧ tabSource = source := by
       simpa [validSources, fabricatedTrapTerminal, validSites, AList.lookup] using found
@@ -494,6 +501,14 @@ example : SiteTable.Valid validSources validSites ∧
   rw [decodeTrapLine_render] at decoded
   have badColumn := congrArg (fun tuple => tuple.2.2.2.2) (Option.some.inj decoded)
   revert badColumn
+  decide
+
+/-- Planted (law `ConcreteSpec.Core.Observe.trapTerminal_valid_location`, case `ConcreteSpec.Core.Observe.validSites`, subject `ConcreteSpec.Core.Observe.trapTerminal`, mutant `ConcreteSpec.Core.Observe.silentTrapTerminal`). -/
+example : SiteTable.Valid validSources validSites ∧
+    ¬ SourceTrapObservation validSources validSites .abort ⟨0⟩
+      (silentTrapTerminal validSites .abort ⟨0⟩) := by
+  refine ⟨validSites_valid, ?_⟩
+  dsimp [silentTrapTerminal, SourceTrapObservation]
   decide
 
 /-- Rendering uses the byte column supplied by elaboration, not a Unicode-scalar column. -/
