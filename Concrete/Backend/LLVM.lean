@@ -84,7 +84,7 @@ def declarations (p : Program) : String :=
     s!"declare \{{intTy t}, i1} @{intrinsic op t}({intTy t}, {intTy t})\n")
 
 /-- `main`'s body as LLVM text. -/
-def print (p : Program) : String :=
+def printSpec (p : Program) : String :=
   declarations p ++ "\ndefine i32 @concrete_body() {\n" ++
   String.join ((indexed p.blocks).map fun (j, b) =>
     s!"b{j}:\n" ++ phis p j b ++ String.join (b.insts.map inst) ++ term j b.term) ++
@@ -201,19 +201,21 @@ def printFast (p : Program) : String :=
     s!"b{j}:\n" ++ phisFast bs j b ++ String.join (b.insts.map inst) ++ term j b.term) ++
   "}\n"
 
-theorem printFast_eq (p : Program) : printFast p = print p := by
-  simp only [printFast, print]
+theorem printFast_eq (p : Program) : printFast p = printSpec p := by
+  simp only [printFast, printSpec]
   congr 2
   congr 1
   apply List.map_congr_left
   intro (j, b) hj
   rw [phisFast_eq]
 
+def print (p : Program) : String := printFast p
+
 /-- The whole LLVM module: the body and the runtime entry. -/
-def module (p : Program) : String := printFast p ++ "\n" ++ Runtime.llvm p.sites
+def module (p : Program) : String := print p ++ "\n" ++ Runtime.llvm p.sites
 
 theorem module_eq_reference (p : Program) :
-    module p = print p ++ "\n" ++ Runtime.llvm p.sites := by
-  rw [module, printFast_eq]
+    module p = printSpec p ++ "\n" ++ Runtime.llvm p.sites := by
+  rw [module, print, printFast_eq]
 
 end Concrete.Backend.LLVM

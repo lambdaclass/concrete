@@ -102,14 +102,21 @@ def numberingOk (p : Program) : Bool :=
 definitions, so this is a function of the register. -/
 def regId (p : Program) (r : Reg) : Option Nat := (ids p).lookup r
 
-def idOf (p : Program) (r : Reg) : Except String Nat :=
-  match regId p r with
+def idOfWith (lookup : Reg → Option Nat) (r : Reg) : Except String Nat :=
+  match lookup r with
   | some n => .ok n
   | none => .error s!"register %r{r} has no definition"
 
-def operand (p : Program) : Operand → Except String Source.Operand
-  | .reg r => return .local (← idOf p r)
+def idOf (p : Program) := idOfWith (regId p)
+
+def operandWith (lookup : Reg → Option Nat) : Operand → Except String Source.Operand
+  | .reg r => return .local (← idOfWith lookup r)
   | .imm _ v => return .literal (word v)
+
+def operand (p : Program) := operandWith (regId p)
+
+theorem operand_eq_with (p : Program) : operand p = operandWith (regId p) := rfl
+theorem idOf_eq_with (p : Program) : idOf p = idOfWith (regId p) := rfl
 
 def opBinary : BinOp → Source.Binary
   | .add => .add
@@ -120,19 +127,19 @@ def ins (d : Nat) (op : Source.Operation) : Source.Instruction :=
   { destination := d, width := .word, operation := op }
 
 /-- An instruction's LCB instructions, its first value numbered `n`. -/
-def inst (p : Program) (n : Nat) : Inst → Except String (List Source.Instruction)
+def instWith (lookup : Reg → Option Nat) (n : Nat) : Inst → Except String (List Source.Instruction)
   | .bin op t _ a b => do
     unless inProfile t do throw s!"{repr t} is outside LCB's slice-0 profile"
-    let a ← operand p a
-    let b ← operand p b
+    let a ← operandWith lookup a
+    let b ← operandWith lookup b
     return [ins n (.binary (opBinary op) a b),
       ins (n + 1) (.binary .sub (.local n) (.literal (word t.min))),
       ins (n + 2) (.binary .andBits (.local (n + 1)) (.literal (word (2 ^ t.bits - 1)))),
       ins (n + 3) (.binary .add (.local (n + 2)) (.literal (word t.min)))]
   | .binOvf op t _ _ a b => do
     unless inProfile t do throw s!"{repr t} is outside LCB's slice-0 profile"
-    let a ← operand p a
-    let b ← operand p b
+    let a ← operandWith lookup a
+    let b ← operandWith lookup b
     return [ins n (.binary (opBinary op) a b),
       ins (n + 1) (.binary .sub (.local n) (.literal (word t.min))),
       ins (n + 2) (.binary .andBits (.local (n + 1)) (.literal (word (2 ^ t.bits - 1)))),
@@ -141,12 +148,14 @@ def inst (p : Program) (n : Nat) : Inst → Except String (List Source.Instructi
       ins (n + 5) (.compare .eq .word (.local (n + 4)) (.literal (word 0)))]
   | .trunc fr to _ a => do
     unless inProfile fr && inProfile to do throw s!"{repr fr} → {repr to} is outside LCB's slice-0 profile"
-    let a ← operand p a
+    let a ← operandWith lookup a
     return [ins n (.binary .sub a (.literal (word to.min))),
       ins (n + 1) (.binary .andBits (.local n) (.literal (word (2 ^ to.bits - 1)))),
       ins (n + 2) (.binary .add (.local (n + 1)) (.literal (word to.min)))]
 
 /-- The edges into block `j` from block `k`, whose terminator is `term`: (k, arguments). -/
+def inst (p : Program) := instWith (regId p)
+
 def edgesTo (j k : Nat) : Term → List (Nat × List Operand)
   | .br t args => if t = j then [(k, args)] else []
   | .condbr _ t ta e ea => (if t = j then [(k, ta)] else []) ++ (if e = j then [(k, ea)] else [])
@@ -156,13 +165,15 @@ def edgesTo (j k : Nat) : Term → List (Nat × List Operand)
 def incoming (p : Program) (j : Nat) : List (Nat × List Operand) :=
   (indexed p.blocks).flatMap fun (k, b) => edgesTo j k b.term
 
-def term (p : Program) : Term → Except String Source.Terminator
-  | .ret a => return .ret (← operand p a)
+def termWith (lookup : Reg → Option Nat) : Term → Except String Source.Terminator
+  | .ret a => return .ret (← operandWith lookup a)
   | .trap s => return .ret (.literal (word (256 + s)))
   | .br t _ => return .jump t
-  | .condbr c t _ e _ => return .branch (.local (← idOf p c)) t e
+  | .condbr c t _ e _ => return .branch (.local (← idOfWith lookup c)) t e
 
 /-- Block `j`'s phi for its parameter `k`: one arm per incoming edge, by predecessor. -/
+def term (p : Program) := termWith (regId p)
+
 def adaptPhi (p : Program) (j k : Nat) : Except String Source.Phi := do
   let arms ← (incoming p j).mapM fun (pred, args) => do
     let a ← match args[k]? with
@@ -183,7 +194,7 @@ def adaptBlock (p : Program) : Nat × Block → Except String Source.Block
     pure { phis := phis.toArray, instructions := insts.flatten.toArray, terminator := ← term p b.term }
 
 /-- `main`'s body as a function of LCB's verified source profile. -/
-def adapt (p : Program) : Except String Source.Function := do
+def adaptSpec (p : Program) : Except String Source.Function := do
   unless numberingOk p do throw "the numbering is not injective (a register defined twice?)"
   let blocks ← (indexed p.blocks).mapM (adaptBlock p)
   return { resultWidth := .word, parameters := #[],
@@ -191,7 +202,7 @@ def adapt (p : Program) : Except String Source.Function := do
 
 /-- The reference LCB emit, retained for the executable/reference equality. -/
 def emitSpec (p : Program) : Except String (Source.Function × SiteTable) := do
-  let f ← adapt p
+  let f ← adaptSpec p
   return (f, p.sites)
 
 /-! ## Prepared numbering and predecessors -/
@@ -325,46 +336,13 @@ def prepare (p : Program) : Prepared :=
 
 def regIdFast (prep : Prepared) (r : Reg) : Option Nat := (prep.regs[r]?).getD none
 
-def idOfFast (prep : Prepared) (r : Reg) : Except String Nat :=
-  match regIdFast prep r with
-  | some n => .ok n
-  | none => .error s!"register %r{r} has no definition"
+def idOfFast (prep : Prepared) := idOfWith (regIdFast prep)
 
-def operandFast (prep : Prepared) : Operand → Except String Source.Operand
-  | .reg r => return .local (← idOfFast prep r)
-  | .imm _ v => return .literal (word v)
+def operandFast (prep : Prepared) := operandWith (regIdFast prep)
 
-def instFast (prep : Prepared) (n : Nat) : Inst → Except String (List Source.Instruction)
-  | .bin op t _ a b => do
-    unless inProfile t do throw s!"{repr t} is outside LCB's slice-0 profile"
-    let a ← operandFast prep a
-    let b ← operandFast prep b
-    return [ins n (.binary (opBinary op) a b),
-      ins (n + 1) (.binary .sub (.local n) (.literal (word t.min))),
-      ins (n + 2) (.binary .andBits (.local (n + 1)) (.literal (word (2 ^ t.bits - 1)))),
-      ins (n + 3) (.binary .add (.local (n + 2)) (.literal (word t.min)))]
-  | .binOvf op t _ _ a b => do
-    unless inProfile t do throw s!"{repr t} is outside LCB's slice-0 profile"
-    let a ← operandFast prep a
-    let b ← operandFast prep b
-    return [ins n (.binary (opBinary op) a b),
-      ins (n + 1) (.binary .sub (.local n) (.literal (word t.min))),
-      ins (n + 2) (.binary .andBits (.local (n + 1)) (.literal (word (2 ^ t.bits - 1)))),
-      ins (n + 3) (.binary .add (.local (n + 2)) (.literal (word t.min))),
-      ins (n + 4) (.compare .unsignedLT .word (.local (n + 1)) (.literal (word (2 ^ t.bits)))),
-      ins (n + 5) (.compare .eq .word (.local (n + 4)) (.literal (word 0)))]
-  | .trunc fr to _ a => do
-    unless inProfile fr && inProfile to do throw s!"{repr fr} → {repr to} is outside LCB's slice-0 profile"
-    let a ← operandFast prep a
-    return [ins n (.binary .sub a (.literal (word to.min))),
-      ins (n + 1) (.binary .andBits (.local n) (.literal (word (2 ^ to.bits - 1)))),
-      ins (n + 2) (.binary .add (.local (n + 1)) (.literal (word to.min)))]
+def instFast (prep : Prepared) (n : Nat) := instWith (regIdFast prep) n
 
-def termFast (prep : Prepared) : Term → Except String Source.Terminator
-  | .ret a => return .ret (← operandFast prep a)
-  | .trap s => return .ret (.literal (word (256 + s)))
-  | .br t _ => return .jump t
-  | .condbr c t _ e _ => return .branch (.local (← idOfFast prep c)) t e
+def termFast (prep : Prepared) := termWith (regIdFast prep)
 
 def adaptPhiFast (prep : Prepared) (j k : Nat) : Except String Source.Phi := do
   let arms ← (incomingBucket prep.incoming j).reverse.mapM fun (pred, args) => do
@@ -391,12 +369,14 @@ def adaptFast (p : Program) : Except String Source.Function := do
   return { resultWidth := .word, parameters := #[],
            valueWidths := Array.replicate (valueCount p) .word, blocks := blocks.toArray }
 
+def adapt (p : Program) : Except String Source.Function := adaptFast p
+
 /-- The LCB backend's emit: the adapted body paired with the program's site table (the table that
 decodes the body's result is part of the emitted artifact), or the adapter's refusal, in which case
 no artifact exists (`artifact` and the emitter build only from `.ok`). `Proof.emit_correct` and
 `Proof.artifact_correct` are the backend contract: no premise. -/
 def emit (p : Program) : Except String (Source.Function × SiteTable) := do
-  let f ← adaptFast p
+  let f ← adapt p
   return (f, p.sites)
 
 /-! ## Assembly, in process (inside `P_toolchain[lcb]`) -/
@@ -905,17 +885,17 @@ theorem getElem_of_mem_indexed {α : Type} {l : List α} {i : Nat} {x : α}
     exact hi
 
 theorem idOfFast_eq (p : Program) (r : Reg) : idOfFast (prepare p) r = idOf p r := by
-  simp [idOfFast, idOf, prepare_regId]
+  simp only [idOfFast, idOf, idOfWith, funext (prepare_regId p)]
 
 theorem operandFast_eq (p : Program) (a : Operand) : operandFast (prepare p) a = operand p a := by
-  cases a <;> simp [operandFast, operand, idOfFast_eq]
+  simp only [operandFast, operand, operandWith, funext (prepare_regId p)]
 
 theorem instFast_eq (p : Program) (n : Nat) (ins : Inst) :
     instFast (prepare p) n ins = inst p n ins := by
-  cases ins <;> simp [instFast, inst, operandFast_eq]
+  simp only [instFast, inst, instWith, funext (prepare_regId p)]
 
 theorem termFast_eq (p : Program) (tm : Term) : termFast (prepare p) tm = term p tm := by
-  cases tm <;> simp [termFast, term, operandFast_eq, idOfFast_eq]
+  simp only [termFast, term, termWith, funext (prepare_regId p)]
 
 theorem adaptPhiFast_eq {p : Program} {j : Nat} {b : Block} (hb : p.blocks[j]? = some b) (k : Nat) :
     adaptPhiFast (prepare p) j k = adaptPhi p j k := by
@@ -940,18 +920,18 @@ theorem adaptBlockFast_eq {p : Program} {j : Nat} {b : Block} (hb : p.blocks[j]?
     exact adaptInstFast_eq hb (getElem_of_mem_indexed hm)
   simp only [adaptBlockFast, adaptBlock, hp, hi, termFast_eq]
 
-theorem adaptFast_eq (p : Program) : adaptFast p = adapt p := by
+theorem adaptFast_eq (p : Program) : adaptFast p = adaptSpec p := by
   have hblocks : (indexed p.blocks).mapM (adaptBlockFast (prepare p)) =
       (indexed p.blocks).mapM (adaptBlock p) := by
     apply mapM_ext
     rintro ⟨j, b⟩ hm
     exact adaptBlockFast_eq (getElem_of_mem_indexed hm)
-  unfold adaptFast adapt
+  unfold adaptFast adaptSpec
   simp only [prepare_ok]
   cases hn : numberingOk p <;> simp [hblocks, bind, Except.bind, pure, Except.pure]
 
 theorem emit_eq_spec (p : Program) : emit p = emitSpec p := by
-  simp [emit, emitSpec, adaptFast_eq]
+  simp [emit, emitSpec, adapt, adaptFast_eq]
 
 /-- How a BIR value is represented in LCB: an integer as its 32-bit word, a flag as 0 or 1. -/
 def enc : Val → Source.Value
@@ -1061,15 +1041,18 @@ theorem inst_length {p : Program} {n : Nat} {ins : Inst} {xs : List Source.Instr
     (h : inst p n ins = .ok xs) : xs.length = Inst.width ins := by
   cases ins with
   | bin op t d a b =>
-    unfold inst at h
+    unfold inst instWith at h
+    simp only [← operand_eq_with] at h
     cases hp : inProfile t <;> cases ha : operand p a <;> cases hb : operand p b <;>
       simp_all [Inst.width, bind, Except.bind, pure, Except.pure] <;> (subst h; rfl)
   | binOvf op t d f a b =>
-    unfold inst at h
+    unfold inst instWith at h
+    simp only [← operand_eq_with] at h
     cases hp : inProfile t <;> cases ha : operand p a <;> cases hb : operand p b <;>
       simp_all [Inst.width, bind, Except.bind, pure, Except.pure] <;> (subst h; rfl)
   | trunc fr to d a =>
-    unfold inst at h
+    unfold inst instWith at h
+    simp only [← operand_eq_with] at h
     cases hp : inProfile fr <;> cases hq : inProfile to <;> cases ha : operand p a <;>
       simp_all [Inst.width, bind, Except.bind, pure, Except.pure] <;> (subst h; rfl)
 
@@ -1150,11 +1133,11 @@ theorem read_operand {p : Program} {benv : Env} {lenv : Source.Environment}
   cases a with
   | reg r =>
     obtain ⟨n, hn, hl⟩ := hag r v hv
-    simp [operand, idOf, hn, bind, Except.bind, pure, Except.pure] at ha
+    simp [operand, operandWith, idOfWith, hn, bind, Except.bind, pure, Except.pure] at ha
     subst ha
     simp [Source.read, hl, enc_width, word_bne, bind, Except.bind, pure, Except.pure]
   | imm t x =>
-    simp only [operand, pure, Except.pure] at ha
+    simp only [operand, operandWith, pure, Except.pure] at ha
     cases ha
     simp only [evalOp] at hv
     split at hv
@@ -1224,7 +1207,8 @@ theorem inst_bin {p : Program} {n : Nat} {op : BinOp} {t : IntTy} {d : Reg} {a b
         ins (n + 1) (.binary .sub (.local n) (.literal (word t.min))),
         ins (n + 2) (.binary .andBits (.local (n + 1)) (.literal (word (2 ^ t.bits - 1)))),
         ins (n + 3) (.binary .add (.local (n + 2)) (.literal (word t.min)))] := by
-  unfold inst at h
+  unfold inst instWith at h
+  simp only [← operand_eq_with] at h
   cases hp : inProfile t <;> cases ha : operand p a <;> cases hb : operand p b <;>
     simp_all [bind, Except.bind, pure, Except.pure]
 
@@ -1238,7 +1222,8 @@ theorem inst_binOvf {p : Program} {n : Nat} {op : BinOp} {t : IntTy} {d fl : Reg
         ins (n + 3) (.binary .add (.local (n + 2)) (.literal (word t.min))),
         ins (n + 4) (.compare .unsignedLT .word (.local (n + 1)) (.literal (word (2 ^ t.bits)))),
         ins (n + 5) (.compare .eq .word (.local (n + 4)) (.literal (word 0)))] := by
-  unfold inst at h
+  unfold inst instWith at h
+  simp only [← operand_eq_with] at h
   cases hp : inProfile t <;> cases ha : operand p a <;> cases hb : operand p b <;>
     simp_all [bind, Except.bind, pure, Except.pure]
 
@@ -1249,7 +1234,8 @@ theorem inst_trunc {p : Program} {n : Nat} {fr to : IntTy} {d : Reg} {a : Operan
       xs = [ins n (.binary .sub a' (.literal (word to.min))),
         ins (n + 1) (.binary .andBits (.local n) (.literal (word (2 ^ to.bits - 1)))),
         ins (n + 2) (.binary .add (.local (n + 1)) (.literal (word to.min)))] := by
-  unfold inst at h
+  unfold inst instWith at h
+  simp only [← operand_eq_with] at h
   cases hp : inProfile fr <;> cases hq : inProfile to <;> cases ha : operand p a <;>
     simp_all [bind, Except.bind, pure, Except.pure]
 
@@ -1745,7 +1731,8 @@ theorem adapt_ok {p : Program} {f : Source.Function} (h : adapt p = .ok f) :
     numberingOk p = true ∧ ∃ bs, (indexed p.blocks).mapM (adaptBlock p) = .ok bs ∧
       f = { resultWidth := .word, parameters := #[],
             valueWidths := Array.replicate (valueCount p) .word, blocks := bs.toArray } := by
-  unfold adapt at h
+  rw [adapt, adaptFast_eq] at h
+  unfold adaptSpec at h
   cases hn : numberingOk p <;> cases hb : (indexed p.blocks).mapM (adaptBlock p) <;>
     simp_all [bind, Except.bind, pure, Except.pure]
 
@@ -1902,7 +1889,7 @@ theorem ret_sim {p : Program} {f : Source.Function} (hf : adapt p = .ok f) {j : 
     Source.step f ⟨j, (b.insts.map Inst.width).sum, env⟩ = .ok (.returned (enc v)) := by
   have hterm := block_term hlb
   rw [ht] at hterm
-  simp only [term, bind, Except.bind, pure, Except.pure] at hterm
+  simp only [term, termWith, ← operand_eq_with, bind, Except.bind, pure, Except.pure] at hterm
   cases ha : operand p a with
   | error e => simp [ha] at hterm
   | ok a' =>
@@ -1918,7 +1905,7 @@ theorem trap_sim {p : Program} {f : Source.Function} (hf : adapt p = .ok f) {j :
     Source.step f ⟨j, (b.insts.map Inst.width).sum, env⟩ = .ok (.returned (word (256 + st))) := by
   have hterm := block_term hlb
   rw [ht] at hterm
-  simp only [term, pure, Except.pure] at hterm
+  simp only [term, termWith, pure, Except.pure] at hterm
   injection hterm with hterm
   exact step_ret hfb (block_size hlb).symm hterm.symm
     (by rw [adapt_result hf]; exact read_literal _ _)
@@ -2456,13 +2443,13 @@ theorem runBlock_sim {p : Program} (hwf : WF p) (hok : numberingOk p = true) {f 
       obtain ⟨env₂, htr, hsz₂, hag₂, hr₂⟩ := edge_sim hok hf hbj hedge hen hsz₁ hag₁ hr₁
       have hterm := block_term hlb
       rw [htm] at hterm
-      simp only [term, pure, Except.pure, Except.ok.injEq] at hterm
+      simp only [term, termWith, pure, Except.pure, Except.ok.injEq] at hterm
       exact cont t benv₂ env₂ (pre (step_jump hfb (block_size hlb).symm hterm.symm htr)) hsz₂ hag₂ hr₂
     | condbr c t ta e ea =>
       have hne := condbr_ne hwf hbj htm
       have hterm := block_term hlb
       rw [htm] at hterm
-      simp only [term, bind, Except.bind] at hterm
+      simp only [term, termWith, ← idOf_eq_with, bind, Except.bind] at hterm
       cases hid : idOf p c with
       | error e => simp [hid] at hterm
       | ok nc =>
@@ -2473,7 +2460,7 @@ theorem runBlock_sim {p : Program} (hwf : WF p) (hok : numberingOk p = true) {f 
       rcases v with ⟨ty, x⟩ | bb
       · simp only [hl]
       have hread : Source.read env₁ .word (.local nc) = .ok (enc (.bool bb)) :=
-        read_operand (a := .reg c) hag₁ (by simp [operand, hid, bind, Except.bind, pure, Except.pure])
+        read_operand (a := .reg c) hag₁ (by simp [operand, operandWith, ← idOf_eq_with, hid, bind, Except.bind, pure, Except.pure])
           (by simpa [evalOp] using hl)
       cases bb with
       | true =>
@@ -2709,7 +2696,6 @@ theorem adapter_correct {p : Program} (hwf : WF p) {f : Source.Function}
 theorem emit_ok {p : Program} {f : Source.Function} {tbl : SiteTable}
     (h : emit p = .ok (f, tbl)) : adapt p = .ok f ∧ tbl = p.sites := by
   unfold emit at h
-  rw [adaptFast_eq] at h
   cases ha : adapt p with
   | error e => rw [ha] at h; cases h
   | ok g =>
