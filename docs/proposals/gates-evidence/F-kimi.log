@@ -3369,4 +3369,29 @@ Hint: Omit it from the simp argument list.
 Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
 
 
-• Now remove warning.
+• Now remove warning. Also check performance definitions complexity: `numberingFrom` using `head.ids ++ tail.ids` per block cost head ids each once, yes linear. `regTable addRegIds` arrays persistent set O(1) but Lean arrays copying when shared? Functional array set O(1) if unique, fold recursive unique. Good. `slotInterCheck` linear. incoming buckets uses targeted edges once.
+  `instOffset` uses `.toArray` on list inst offsets for each instruction! This converts the whole list to an array on every lookup, which is Θ(n²) per block. Should fix: the prepared representation's block offsets should use an Array Nat in NumberingData instead of a List. The current data.blocks List(Nat×List Nat); the fast instOffset calls `.toArray` per instruction, which is bad. Should change NumberingData blocks to List(Nat×Array Nat) and the spec builds `(indexed...).map... .toArray` once during prepare. But numberingSpec then creates the arrays as reference. The `numbering_eq` proof is still okay? blockSpec instOffsets is a List; numberingSpecFrom currently pairs the list. Should have the NumberingData blocks field to be `List (Nat×Array Nat)`, with the numberingFrom head instOffsets `.toArray` conversion per block once. numberingSpecFrom maps `.toArray`. The numberingSpec top maps `.toArray`. instOffset is then direct `data.blocks.toArray[j]?.map (·.2)` getD #[] and `[i]?`. This avoids per-inst conversion. The blockOffset list-toArray per block still does `data.blocks.toArray` per block; `adaptBlockFast` calls blockOffset per phi, instOffset per inst, and `blockOffset` converts the entire blocks list every call => quadratic. Should have NumberingData blocks as an Array rather than a List. `blocks : Array (Nat×Array Nat)` computed once when numbering is constructed. The numberingFrom recursive building is currently a list; can the NumberingData structure's blocks Array be constructed as `( ... :: tail.blocks)` which is impossible? Use a List internally, then the numbering wrapper converts the entire thing once. Better to separate `NumberingListData` and a Prepared data array. Simpler to change NumberingData blocks to `Array (Nat×Array Nat)` and make numberingFrom return a List-based structure? Could have numberingFrom keep `List`, with numbering converting `.toArray`, but the recursive numberingFrom accesses tail.blocks as a List. Define a new internal `NumberingList` structure? Or change numberingFrom to return `NumberingData` where blocks is an Array and prepend using `#[head] ++ tail.blocks` — does Array append copy the tail each block, causing quadratic. Use `tail.blocks` list as needed. Could add NumberingData `blocksList : List...` plus prepared arrays separately. The Prepared structure can have `offsets : Array (Nat×Array Nat)` computed once from `data.blocks`, and fast functions use `prep.offsets`. Then blockOffset/instOffset take Prepared, not data. Currently they take data. Add `offsets` to Prepared, computed `data.blocks.map (fun(base,offsets)=>(base,offsets.toArray)) |>.toArray` once. Keep NumberingData proof unchanged. Redefine blockOffset/instOffset to take `prep : Prepared`, not data, and use prep.offsets. The fast functions already call `blockOffset prep.data`, so change to prep. The offset theorems prove prep.offsets equals the numberingSpec mapping via numbering_eq. This is best. Prepared is computed once. Add:
+  ```
+  offsets : Array (Nat×Array Nat)
+  ```
+  prepare field `offsets := data.blocks.map ... .toArray`.
+  `blockOffset (prep) j := (prep.offsets[j]?.map fst).getD0`.
+  `instOffset prep j i := ((prep.offsets[j]?.map snd).getD #[])[i]?.getD0`.
+  Adapt calls prep.
+  Proofs:
+  ```
+  simp [blockOffset,prepare,numbering_eq,numberingSpec,List.getElem?_toArray,List.getElem?_map,...]
+  ```
+  prepare offsets: the list map adds a `.toArray` inner conversion. `List.getElem?_map` nested handles it.
+  InstOffset spec: inner List toArray get rewritten.
+  This addresses linear. Should do it before measuring. Also `regIdFast` array lookups are O(1).
+  `prepare` numberingOkFast uses data ids arrays etc.
+  LLVM edgeBuckets phis uses bucket get O(1) and reverse total linear.
+  LLVM `declarations eraseDups` is quadratic in intrinsic distinct count — small bounded by 3 ops*types, so okay.
+  LCB `numbering` intermediates list map append etc is linear.
+
+  Now remove the warning and fix offsets. Read the Prepared definitions.
+
+• The full file now elaborates with one linter warning. Before measuring, I found and am removing an important asymptotic issue in my own fast path: offset lists must be converted to arrays once in `prepare`, not on each instruction/phi lookup.
+
+• One edit entire structure+offset+prepare and adapt calls not contiguous but could old string huge through adaptInst lines 294-376 ~82 lines. Instead edit structure/offset/prepare one call then read adapt calls edit one region. Do first.

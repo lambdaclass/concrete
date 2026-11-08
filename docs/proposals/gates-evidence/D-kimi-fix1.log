@@ -732,4 +732,23 @@ in the application
 Some required targets logged failures:
 - Concrete.Premises
 error: build failed
-Shadow parent name by DefinitionVal. Should rename pattern pVal and use outer parent Name. `parent.safety` to pVal. Edit after Read.
+Shadow parent name by DefinitionVal. Should rename pattern pVal and use outer parent Name. `parent.safety` to pVal. Edit after Read.Run.warning: Git tree '/home/unbalancedparen/projects/gates-trusted-base' is dirty
+✔ [40/42] Built Concrete.Premises (751ms)
+✔ [41/42] Built Concrete (535ms)
+Build completed successfully (42 jobs).
+warning: Git tree '/home/unbalancedparen/projects/gates-trusted-base' is dirty
+trusted declarations: 0
+Good. Run nonnative harness again (same mock). One run at time gate 9 actual not now; harness okay. Start background no edits while active.
+
+• The full-library audit is back to `trusted declarations: 0`. I’m rerunning the non-native harness to verify the example audit and all controls after these corrections.
+
+• Can I do no edits. Automatic soon. WaitFor warning says don't call again this turn unless explicit, user asked run, but use not necessary. I can read git diff --check while active read only but candidate validation says read-only inspection okay. Do `git diff --check` and status, no edits. M Concrete/Premises.lean
+ M Concrete/README.md
+ M scripts/checks/compiler/slice0_trusted_base.sh
+ M scripts/proofs/lean_lex.py
+ M tests/golden/slice0_trusted_base.txt
+?? changelog.d/2026-11-08-trusted-base-review-1.md
+?? scripts/checks/compiler/slice0_allowed_axioms.lean
+?? scripts/checks/compiler/slice0_concrete_modules.lean
+?? scripts/checks/lib/execve_names.py
+No notification yet perhaps use TaskOutput nonblocking snapshot allowed but prefer auto. I can inspect scripts diff read-only but no need. Should wait some time, can run no other work. WaitFor warning says do not call again unless explicitly asked wait, user asked gate run but not wait. Could just call TaskOutput once nonblocking after other work.
