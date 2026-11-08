@@ -647,12 +647,18 @@ ConcreteSpec.Core.AList.update.eq_1
 ConcreteSpec.Core.AList.update.eq_2	
 ConcreteSpec.Core.AList.update.eq_def	
 ConcreteSpec.Core.AList.update_cons	
+ConcreteSpec.Core.AddrSpace.mk.inj	
+ConcreteSpec.Core.AddrSpace.mk.injEq	propext
+ConcreteSpec.Core.AddrSpace.mk.sizeOf_spec	
 ConcreteSpec.Core.BlockId.mk.inj	
 ConcreteSpec.Core.BlockId.mk.injEq	propext
 ConcreteSpec.Core.BlockId.mk.sizeOf_spec	
 ConcreteSpec.Core.BrandId.mk.inj	
 ConcreteSpec.Core.BrandId.mk.injEq	propext
 ConcreteSpec.Core.BrandId.mk.sizeOf_spec	
+ConcreteSpec.Core.ByteOrder.big.sizeOf_spec	
+ConcreteSpec.Core.ByteOrder.little.sizeOf_spec	
+ConcreteSpec.Core.ByteOrder.ofNat_ctorIdx	
 ConcreteSpec.Core.CapVarId.mk.inj	
 ConcreteSpec.Core.CapVarId.mk.injEq	propext
 ConcreteSpec.Core.CapVarId.mk.sizeOf_spec	
@@ -706,6 +712,9 @@ ConcreteSpec.Core.Span.mk.sizeOf_spec
 ConcreteSpec.Core.SpecVersion.mk.inj	
 ConcreteSpec.Core.SpecVersion.mk.injEq	propext
 ConcreteSpec.Core.SpecVersion.mk.sizeOf_spec	
+ConcreteSpec.Core.Target.mk.inj	
+ConcreteSpec.Core.Target.mk.injEq	propext
+ConcreteSpec.Core.Target.mk.sizeOf_spec	
 ConcreteSpec.Core.TheoremId.mk.inj	
 ConcreteSpec.Core.TheoremId.mk.injEq	propext
 ConcreteSpec.Core.TheoremId.mk.sizeOf_spec	
@@ -715,10 +724,14 @@ ConcreteSpec.Core.Var.mk.sizeOf_spec
 ConcreteSpec.Core.VariantId.mk.inj	
 ConcreteSpec.Core.VariantId.mk.injEq	propext
 ConcreteSpec.Core.VariantId.mk.sizeOf_spec	
+ConcreteSpec.Core.instDecidableEqAddrSpace.decEq._proof_1	
+ConcreteSpec.Core.instDecidableEqAddrSpace.decEq._proof_2	
 ConcreteSpec.Core.instDecidableEqBlockId.decEq._proof_1	
 ConcreteSpec.Core.instDecidableEqBlockId.decEq._proof_2	
 ConcreteSpec.Core.instDecidableEqBrandId.decEq._proof_1	
 ConcreteSpec.Core.instDecidableEqBrandId.decEq._proof_2	
+ConcreteSpec.Core.instDecidableEqByteOrder._proof_1	
+ConcreteSpec.Core.instDecidableEqByteOrder._proof_2	
 ConcreteSpec.Core.instDecidableEqCapVarId.decEq._proof_1	
 ConcreteSpec.Core.instDecidableEqCapVarId.decEq._proof_2	
 ConcreteSpec.Core.instDecidableEqDeclId.decEq._proof_1	
@@ -763,6 +776,16 @@ ConcreteSpec.Core.instDecidableEqSpan.decEq._proof_5
 ConcreteSpec.Core.instDecidableEqSpecVersion.decEq._proof_1	
 ConcreteSpec.Core.instDecidableEqSpecVersion.decEq._proof_2	
 ConcreteSpec.Core.instDecidableEqSpecVersion.decEq._proof_3	
+ConcreteSpec.Core.instDecidableEqTarget.decEq._proof_1	
+ConcreteSpec.Core.instDecidableEqTarget.decEq._proof_10	
+ConcreteSpec.Core.instDecidableEqTarget.decEq._proof_2	
+ConcreteSpec.Core.instDecidableEqTarget.decEq._proof_3	
+ConcreteSpec.Core.instDecidableEqTarget.decEq._proof_4	
+ConcreteSpec.Core.instDecidableEqTarget.decEq._proof_5	
+ConcreteSpec.Core.instDecidableEqTarget.decEq._proof_6	
+ConcreteSpec.Core.instDecidableEqTarget.decEq._proof_7	
+ConcreteSpec.Core.instDecidableEqTarget.decEq._proof_8	
+ConcreteSpec.Core.instDecidableEqTarget.decEq._proof_9	
 ConcreteSpec.Core.instDecidableEqTheoremId.decEq._proof_1	
 ConcreteSpec.Core.instDecidableEqTheoremId.decEq._proof_2	
 ConcreteSpec.Core.instDecidableEqVar.decEq._proof_1	
