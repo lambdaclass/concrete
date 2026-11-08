@@ -420,6 +420,42 @@ example : byteColumn "a\té" = 5 := by decide
 
 example : Span.HasByteColumn (Span.mk "src/main.con" 1 5 (by decide) (by decide)) "a\té" := rfl
 
+/-- Refusing result binding through lifecycle instrumentation; all other demo operations are
+unchanged. -/
+abbrev refusingBindOps : Exec.Operands := { Exec.Demo.ops with
+  life := fun e st => match e with
+    | .bind y => if y = Exec.Demo.x then none else some (Exec.Demo.DState.life e st)
+    | _ => some (Exec.Demo.DState.life e st) }
+
+/-- A request whose otherwise valid response would initialize the refused local. -/
+def refusedRequest : Exec.Config refusingBindOps :=
+  ⟨.exec (.prim (some Exec.Demo.x) .log [.lit 3] Exec.Demo.s), [], .init, []⟩
+
+/-- The answer is allowed by the primitive contract, but its continuation is refused. -/
+def refusedReport : Exec.Report refusingBindOps :=
+  Exec.run ⟨[]⟩ Exec.Demo.env 1 refusedRequest
+
+/-- If the refused response had been accepted, its C1 event would project to a C6 response. -/
+def refusingAdapter : ExecAdapter refusingBindOps signature where
+  events := fun n => [response (Int.toNat n)]
+  request := fun _ _ _ _ => none
+  status := fun _ => none
+  sites := []
+
+/-- A stuck report has no `noAnswer` ending, so the blocking premise imposes nothing. -/
+theorem refusedReportPermitted :
+    ExecAdapter.BlockingPermitted ⟨[]⟩ refusingAdapter contract () refusedReport := by
+  intro c p vs site store k q ending pending typed
+  rw [show refusedReport.ending = .stuck refusedRequest from rfl] at ending
+  cases ending
+
+/-- Refused: result binding rejects the response. The run keeps the requesting configuration as
+its stuck ending, records neither the response nor any other event, and has no C6 observation. -/
+example : refusedReport.events = [] ∧
+    (match refusedReport.ending with | .stuck _ => true | _ => false) = true ∧
+    reportObservation ⟨[]⟩ refusingAdapter contract () refusedReport refusedReportPermitted = none := by
+  refine ⟨by decide, by decide, rfl⟩
+
 end Demo
 
 end ConcreteSpec.Core.Observe

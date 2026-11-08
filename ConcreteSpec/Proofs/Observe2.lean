@@ -422,7 +422,7 @@ theorem runFrom_validTrace (P : Exec.Program O) (A : ExecAdapter O S) (C : Opera
       CompleteTrace C input (A.project hist) →
       CompleteTrace C input (A.project (Exec.runFrom P ρ fuel hist c).events) ∧
       ∀ {c' : Exec.Config O} {p : O.Prim} {vs : List O.Val} {site : SiteId} {store : O.Store}
-        {k : Exec.Answer O.Val O.Event O.Store → Exec.Config O} {q : Request S},
+        {k : Exec.Answer O.Val O.Event O.Store → Option (Exec.Config O)} {q : Request S},
         (Exec.runFrom P ρ fuel hist c).ending = .noAnswer c' →
         Exec.step P c' = some (.request p vs site store k) →
         A.request p vs site store = some q →
@@ -457,20 +457,23 @@ theorem runFrom_validTrace (P : Exec.Program O) (A : ExecAdapter O S) (C : Opera
               simpa [Exec.runFrom, final, next, answer] using wellFormed.blocked answer typed
           | some a =>
             by_cases allowed : O.allows p vs store a = true
-            · have answerValid : CompleteTrace C input (A.project (hist ++ a.event.toList)) := by
-                rw [ExecAdapter.project_append]
-                cases typed : A.request p vs site store with
-                | none =>
-                  obtain ⟨outputs, projection⟩ := wellFormed.internal answer typed
-                  rw [projection]
-                  exact valid.outputs outputs
-                | some q =>
-                  obtain ⟨before, r, after, projection, beforeOutputs, afterOutputs, matching,
-                    allows⟩ := wellFormed.answered answer typed
-                  rw [projection]
-                  exact ValidTrace.answer_projection valid beforeOutputs afterOutputs matching allows
-              simpa [Exec.runFrom, final, next, answer, allowed] using
-                ih (hist ++ a.event.toList) (k a) answerValid
+            · cases continued : k a with
+              | none => simp [Exec.runFrom, final, next, answer, allowed, continued, valid]
+              | some c' =>
+                have answerValid : CompleteTrace C input (A.project (hist ++ a.event.toList)) := by
+                  rw [ExecAdapter.project_append]
+                  cases typed : A.request p vs site store with
+                  | none =>
+                    obtain ⟨outputs, projection⟩ := wellFormed.internal answer typed
+                    rw [projection]
+                    exact valid.outputs outputs
+                  | some q =>
+                    obtain ⟨before, r, after, projection, beforeOutputs, afterOutputs, matching,
+                      allows⟩ := wellFormed.answered answer typed
+                    rw [projection]
+                    exact ValidTrace.answer_projection valid beforeOutputs afterOutputs matching allows
+                simpa [Exec.runFrom, final, next, answer, allowed, continued] using
+                  ih (hist ++ a.event.toList) c' answerValid
             · simp [Exec.runFrom, final, next, answer, allowed, valid]
 
 /-- A blocked C1 observation has exactly the pending `ValidTrace` state and history that its
@@ -481,7 +484,7 @@ theorem runFrom_noAnswer_pending_valid (P : Exec.Program O) (A : ExecAdapter O S
     {fuel : Nat} {hist : List O.Event} {c c' : Exec.Config O}
     (valid : CompleteTrace C input (A.project hist))
     {p : O.Prim} {vs : List O.Val} {site : SiteId} {store : O.Store}
-    {k : Exec.Answer O.Val O.Event O.Store → Exec.Config O} {q : Request S}
+    {k : Exec.Answer O.Val O.Event O.Store → Option (Exec.Config O)} {q : Request S}
     (ending : (Exec.runFrom P ρ fuel hist c).ending = .noAnswer c')
     (pending : Exec.step P c' = some (.request p vs site store k))
     (typed : A.request p vs site store = some q) :
@@ -516,7 +519,7 @@ theorem report_noAnswer_mayBlock (P : Exec.Program O) (A : ExecAdapter O S)
     (C : OperationContract S) (input : C.Input) (events : List O.Event) (c : Exec.Config O)
     (permitted : ExecAdapter.BlockingPermitted P A C input ⟨events, .noAnswer c⟩)
     {p : O.Prim} {vs : List O.Val} {site : SiteId} {store : O.Store}
-    {k : Exec.Answer O.Val O.Event O.Store → Exec.Config O} {request : Request S}
+    {k : Exec.Answer O.Val O.Event O.Store → Option (Exec.Config O)} {request : Request S}
     (pending : Exec.step P c = some (.request p vs site store k))
     (typed : A.request p vs site store = some request) :
     C.mayBlock input (A.project events ++ [.request request]) request :=
@@ -527,7 +530,8 @@ and ends in the request itself; it is not mistaken for termination or divergence
 theorem report_noAnswer_blocked (P : Exec.Program O) (A : ExecAdapter O S)
     (C : OperationContract S) (input : C.Input)
     (events : List O.Event) (c : Exec.Config O) (p : O.Prim) (vs : List O.Val) (site : SiteId)
-    (store : O.Store) (k : Exec.Answer O.Val O.Event O.Store → Exec.Config O) (request : Request S)
+    (store : O.Store) (k : Exec.Answer O.Val O.Event O.Store → Option (Exec.Config O))
+    (request : Request S)
     (permitted : ExecAdapter.BlockingPermitted P A C input ⟨events, .noAnswer c⟩)
     (pending : Exec.step P c = some (.request p vs site store k))
     (typed : A.request p vs site store = some request) :
