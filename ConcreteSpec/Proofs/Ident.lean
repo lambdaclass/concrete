@@ -478,6 +478,41 @@ theorem KeyConstruct.pathAt_insert_differentKind (before mid after : List KeyCon
   rw [KeyConstruct.pathAt_at_length, KeyConstruct.pathAt_at_length]
   exact KeyConstruct.descendant_insert_differentKind before mid inserted target route avoids
 
+/-- Helper (computation). Splits collection at a forest boundary, carrying all preceding roots
+into the suffix scope. Used to isolate actual subtree entries in the assigned table.
+(approved: PENDING). -/
+theorem KeyConstruct.collectKeysIn_append (scope before after : List KeyConstruct) :
+    collectKeysIn scope (before ++ after) =
+      collectKeysIn scope before ++ collectKeysIn (scope ++ before) after := by
+  induction before generalizing scope with
+  | nil => simp [collectKeysIn]
+  | cons root rest ih =>
+    simp only [List.cons_append, collectKeysIn, ih]
+    simp [List.append_assoc]
+
+/-- Law (subject `ConcreteSpec.Core.KeyConstruct.assignFunctionTable`).
+Replacing the outer forest of a named construct preserves its entire ordered assigned subtree:
+root, all descendants, and multiplicities. The slice starts after the collected preceding forest
+and ends before the following forest; arbitrary lexical site offsets are erased only after the
+actual table has been assigned. No occurrence-validity or admission premise is required. -/
+theorem KeyConstruct.assignFunctionTable_named_scope (f : FnId) (start₁ start₂ : Nat)
+    (before₁ after₁ before₂ after₂ : List KeyConstruct)
+    (kind : ConstructKind) (name : String) (children : List KeyConstruct) :
+    ((List.map Prod.snd (assignFunctionTable f start₁
+      (before₁ ++ KeyConstruct.mk kind (.named name) children :: after₁))).drop
+        (collectKeys before₁).length).take
+          (collectKeys [KeyConstruct.mk kind (.named name) children]).length =
+    ((List.map Prod.snd (assignFunctionTable f start₂
+      (before₂ ++ KeyConstruct.mk kind (.named name) children :: after₂))).drop
+        (collectKeys before₂).length).take
+          (collectKeys [KeyConstruct.mk kind (.named name) children]).length := by
+  simp only [assignFunctionTable, numberFunctionKeys_snd, collectKeys,
+    collectKeysIn_append, List.map_append]
+  simp only [← List.length_map (f := fun rel : FunctionRelativeKey =>
+    (⟨.function f, rel⟩ : StableKey)), List.drop_left]
+  simp [collectKeysIn, KeyConstruct.key, KeyConstruct.segment, KeyConstruct.childScope,
+    List.map_append, List.take_succ_cons]
+
 /-- Helper (computation). Computes the scope reset of a named root for
 `KeyConstruct.pathAt_named_ancestor_resets_scope`. (approved: REVIEW7-codex). -/
 theorem KeyConstruct.descendant_named_ancestor_resets_scope
@@ -487,11 +522,9 @@ theorem KeyConstruct.descendant_named_ancestor_resets_scope
       (KeyConstruct.mk kind (.named name) children).descendantKey preceding₂ route := by
   simp [KeyConstruct.descendantKey, KeyConstruct.childScope, KeyConstruct.segment]
 
-/-- Law (subject `ConcreteSpec.Core.KeyConstruct.pathAt`, `ConcreteSpec.Core.KeyConstruct.childScope`).
-**A named construct resets the enclosing sibling scope in a forest.** Replacing the preceding
-forest prefix `before₁` with `before₂` shifts the named construct's root index from
-`before₁.length` to `before₂.length` while leaving the complete assigned path of the named
-construct and every descendant inside it unchanged. -/
+/-- Helper (computation). Transports the named-root scope equation through forest locators.
+This is not assignment soundness; `KeyConstruct.assignFunctionTable_named_scope` establishes
+preservation of the complete assigned subtree. (approved: PENDING). -/
 theorem KeyConstruct.pathAt_named_ancestor_resets_scope
     (before₁ after₁ before₂ after₂ : List KeyConstruct)
     (kind : ConstructKind) (name : String) (children : List KeyConstruct) (route : List Nat) :
@@ -1324,6 +1357,32 @@ decreasing_by
 def unresetScopeAssign (f : FnId) (startSite : Nat) (body : List KeyConstruct) : SiteKeyTable :=
   KeyConstruct.numberFunctionKeys f startSite (unresetScopeCollect [] body)
 
+/-- Instance (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_named_scope`, case `ConcreteSpec.Core.Vacuity.namedNested`). -/
+example : ((List.map Prod.snd (KeyConstruct.assignFunctionTable function 7
+      ([unnamedLoop] ++ KeyConstruct.mk .block (.named "body") nestedBody.children :: [namedCall]))).drop
+        (KeyConstruct.collectKeys [unnamedLoop]).length).take
+          (KeyConstruct.collectKeys [KeyConstruct.mk .block (.named "body") nestedBody.children]).length =
+    ((List.map Prod.snd (KeyConstruct.assignFunctionTable function 19
+      ([] ++ KeyConstruct.mk .block (.named "body") nestedBody.children :: [unnamedBinding]))).drop
+        (KeyConstruct.collectKeys []).length).take
+          (KeyConstruct.collectKeys [KeyConstruct.mk .block (.named "body") nestedBody.children]).length :=
+  KeyConstruct.assignFunctionTable_named_scope function 7 19 [unnamedLoop] [namedCall]
+    [] [unnamedBinding] .block "body" nestedBody.children
+
+/-- Planted (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_named_scope`, case `ConcreteSpec.Core.Vacuity.namedNested`, subject `ConcreteSpec.Core.KeyConstruct.assignFunctionTable`, mutant `ConcreteSpec.Core.Vacuity.unresetScopeAssign`). -/
+example : ¬ (((List.map Prod.snd (unresetScopeAssign function 7
+      ([unnamedLoop] ++ KeyConstruct.mk .block (.named "body") nestedBody.children :: [namedCall]))).drop
+        (KeyConstruct.collectKeys [unnamedLoop]).length).take
+          (KeyConstruct.collectKeys [KeyConstruct.mk .block (.named "body") nestedBody.children]).length =
+    ((List.map Prod.snd (unresetScopeAssign function 19
+      ([] ++ KeyConstruct.mk .block (.named "body") nestedBody.children :: [unnamedBinding]))).drop
+        (KeyConstruct.collectKeys []).length).take
+          (KeyConstruct.collectKeys [KeyConstruct.mk .block (.named "body") nestedBody.children]).length) := by
+  simp [unresetScopeAssign, KeyConstruct.numberFunctionKeys_snd, unresetScopeCollect,
+    KeyConstruct.collectKeys, KeyConstruct.collectKeysIn, KeyConstruct.key,
+    KeyConstruct.segment, KeyConstruct.childScope, ConstructName.isUnnamed,
+    unnamedLoop, nestedBody, namedCall, unnamedBinding]
+
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_rename_named`, case `ConcreteSpec.Core.Vacuity.namedNested`). -/
 example : (⟨.function function, renamedRootKey⟩ : StableKey) ∈
       (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7
@@ -1625,7 +1684,7 @@ def unresetScopePathAt (forest : List KeyConstruct) : List Nat → Option Functi
     | some construct =>
       unresetScopeDescendantKey (forest.take index) construct route
 
-/-- Instance (law `ConcreteSpec.Core.KeyConstruct.pathAt_named_ancestor_resets_scope`, case `ConcreteSpec.Core.Vacuity.namedNested`). -/
+/-- Regression example (not independent soundness evidence). -/
 example : KeyConstruct.pathAt
       ([unnamedLoop] ++ KeyConstruct.mk .block (.named "body") nestedBody.children :: [])
       (([unnamedLoop] : List KeyConstruct).length :: [0, 0]) =
@@ -1635,7 +1694,7 @@ example : KeyConstruct.pathAt
   KeyConstruct.pathAt_named_ancestor_resets_scope [unnamedLoop] [] [] [] .block "body"
     nestedBody.children [0, 0]
 
-/-- Planted (law `ConcreteSpec.Core.KeyConstruct.pathAt_named_ancestor_resets_scope`, case `ConcreteSpec.Core.Vacuity.namedNested`, subject `ConcreteSpec.Core.KeyConstruct.pathAt`, mutant `ConcreteSpec.Core.Vacuity.unresetScopePathAt`). -/
+/-- Regression example (not independent soundness evidence). -/
 example : ¬ (unresetScopePathAt
       ([unnamedLoop] ++ KeyConstruct.mk .block (.named "body") nestedBody.children :: [])
       (([unnamedLoop] : List KeyConstruct).length :: [0, 0]) =
