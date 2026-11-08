@@ -42,25 +42,61 @@ echo "=== structural: every repository-making script sources the sandbox helper 
 # install-bot.sh` (no sibling files to source) and makes the bot's persistent clone, and
 # worktree-new.sh makes a worktree OF the caller's repository by design.
 EXEMPT=" scripts/land/install-bot.sh scripts/worktree-new.sh "
+MAKES='git( -C [^ ]+)? (init|clone)\b|worktree add'
+# shell_scripts DIR: every shell script under DIR/scripts at ANY depth, as paths relative to DIR,
+# sorted: a `*.sh` file, or any other file whose first line is a sh/bash shebang. (Until 2026-11-08
+# the scan was `scripts/*.sh scripts/*/*.sh`, so a script two directories down was never looked at.)
+shell_scripts() {
+  (cd "$1" && find scripts -type f -print | LC_ALL=C sort | while IFS= read -r f; do
+    case "$f" in
+      *.sh) echo "$f" ;;
+      *) head -n 1 "$f" 2>/dev/null | grep -qE '^#!.*[/ ](ba)?sh([[:space:]]|$)' && echo "$f" ;;
+    esac
+  done)
+}
+# scan_makers DIR: one line per repository-making script under DIR (exemptions and this check
+# skipped): `ok<TAB>file<TAB>why` or `FAIL<TAB>file<TAB>why`. The helper must be sourced and
+# called, as statements, before the first repository is made.
+scan_makers() {
+  local dir="$1" f first_make src_line call_line
+  shell_scripts "$dir" | while IFS= read -r f; do
+    [ "$f" = scripts/checks/sandbox_isolation.sh ] && continue
+    case "$EXEMPT" in *" $f "*) continue ;; esac
+    grep -qE "$MAKES" "$dir/$f" || continue
+    first_make="$(grep -nE "$MAKES" "$dir/$f" | grep -vE '^[0-9]+:[[:space:]]*#' | head -n 1 | cut -d: -f1)"
+    src_line="$(grep -nE '^[[:space:]]*(source|\.) .*checks/lib/git_sandbox\.sh' "$dir/$f" | head -n 1 | cut -d: -f1)"
+    call_line="$(grep -nE '^[[:space:]]*git_sandbox( |$)' "$dir/$f" | head -n 1 | cut -d: -f1)"
+    if [ -n "$src_line" ] && [ -n "$call_line" ] && [ -n "$first_make" ] \
+       && [ "$src_line" -lt "$call_line" ] && [ "$call_line" -lt "$first_make" ]; then
+      printf 'ok\t%s\tsources git_sandbox.sh (line %s) and calls it (line %s) before its first repository (line %s)\n' "$f" "$src_line" "$call_line" "$first_make"
+    else
+      printf 'FAIL\t%s\tmakes a repository (line %s) without sourcing (line %s) and calling git_sandbox (line %s) before it\n' "$f" "${first_make:-?}" "${src_line:-none}" "${call_line:-none}"
+    fi
+  done
+}
 makers=0
-for f in scripts/*.sh scripts/*/*.sh; do
-  [ "$f" = scripts/checks/sandbox_isolation.sh ] && continue
-  grep -qE 'git( -C [^ ]+)? (init|clone)\b|worktree add' "$f" || continue
-  case "$EXEMPT" in *" $f "*) continue ;; esac
+while IFS=$'\t' read -r verdict f why; do
   makers=$((makers+1))
-  # The helper must be sourced and called, as statements, before the first repository is made.
-  first_make="$(grep -nE 'git( -C [^ ]+)? (init|clone)\b|worktree add' "$f" | grep -vE '^[0-9]+:[[:space:]]*#' | head -n 1 | cut -d: -f1)"
-  src_line="$(grep -nE '^[[:space:]]*(source|\.) .*checks/lib/git_sandbox\.sh' "$f" | head -n 1 | cut -d: -f1)"
-  call_line="$(grep -nE '^[[:space:]]*git_sandbox( |$)' "$f" | head -n 1 | cut -d: -f1)"
-  if [ -n "$src_line" ] && [ -n "$call_line" ] && [ -n "$first_make" ] \
-     && [ "$src_line" -lt "$call_line" ] && [ "$call_line" -lt "$first_make" ]; then
-    ok "$f sources git_sandbox.sh (line $src_line) and calls it (line $call_line) before its first repository (line $first_make)"
-  else
-    no "$f makes a repository (line ${first_make:-?}) without sourcing (line ${src_line:-none}) and calling git_sandbox (line ${call_line:-none}) before it"
-  fi
-done
+  if [ "$verdict" = ok ]; then ok "$f $why"; else no "$f $why"; fi
+done < <(scan_makers "$ROOT_DIR")
 [ "$makers" -ge 9 ] && ok "found $makers repository-making scripts (at least the 9 known)" \
   || no "found only $makers repository-making scripts; the scan is not seeing them"
+
+echo "=== control: the structural scan sees scripts at any depth and without a .sh suffix ==="
+# A planted tree: an unsandboxed maker three directories down and one with a bash shebang and no
+# suffix must both FAIL; a sandboxed one at depth must pass. The scan cannot pass by not looking.
+CTL_TREE="$(mktemp -d)" || exit 2
+mkdir -p "$CTL_TREE/scripts/a/b/c"
+printf '#!/usr/bin/env bash\ngit init -q "$1"\n' > "$CTL_TREE/scripts/a/b/c/deep.sh"
+printf '#!/bin/bash\ngit clone -q "$1" "$2"\n' > "$CTL_TREE/scripts/a/b/nosuffix"
+printf '#!/usr/bin/env bash\nsource "$(dirname "$0")/../../checks/lib/git_sandbox.sh"\ngit_sandbox "$1"\ngit init -q "$2"\n' > "$CTL_TREE/scripts/a/b/good.sh"
+ctl="$(scan_makers "$CTL_TREE")"; rm -rf "${CTL_TREE:?}"
+printf '%s\n' "$ctl" | grep -q $'^FAIL\tscripts/a/b/c/deep.sh\t' \
+  && ok "an unsandboxed maker three directories down is refused" || no "the scan missed scripts/a/b/c/deep.sh: $ctl"
+printf '%s\n' "$ctl" | grep -q $'^FAIL\tscripts/a/b/nosuffix\t' \
+  && ok "an unsandboxed maker with a bash shebang and no .sh suffix is refused" || no "the scan missed scripts/a/b/nosuffix: $ctl"
+printf '%s\n' "$ctl" | grep -q $'^ok\tscripts/a/b/good.sh\t' \
+  && ok "a sandboxed maker at depth passes" || no "the scan did not accept scripts/a/b/good.sh: $ctl"
 
 # The harness itself is a sandbox: it must not be steered by whatever environment started it.
 source "$HELPER" || exit 2
