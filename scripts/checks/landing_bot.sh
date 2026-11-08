@@ -441,11 +441,11 @@ ib(){ HOME="$IB/home" PATH="$IB/stub:$PATH" INSTALL_ORIGIN_URL="$IB/origin.git" 
 out="$(ib)"; rc=$?
 [ "$rc" = 0 ] && ok "the installer installs from a local origin" || { no "installer: exit $rc"; echo "$out" | sed 's/^/      /'; }
 BC="$IB/home/concrete-bot"
-git -C "$BC" remote set-url --push origin https://github.com/someone/else.git
+git -C "$BC" remote set-url --push origin https://x-access-token:pre@SENTINEL-SECRET@github.com/someone/else.git
 git -C "$BC" remote set-url --push lambdaclass https://github.com/someone/else.git
 out="$(ib)"; rc=$?
 [ "$rc" = 0 ] && ! git -C "$BC" config --get remote.origin.pushurl >/dev/null && ! git -C "$BC" config --get remote.lambdaclass.pushurl >/dev/null \
-  && ! has "$out" "SENTINEL" && ok "the installer drops a push URL of origin and lambdaclass" || { no "installer pushurl: exit $rc"; echo "$out" | sed 's/^/      /'; }
+  && has "$out" "https://***@github.com/someone/else.git" && ! has "$out" "SENTINEL" && ok "the installer drops a push URL of origin and lambdaclass" || { no "installer pushurl: exit $rc"; echo "$out" | sed 's/^/      /'; }
 mkdir -p "$IB/home2" "$IB/nonet"
 printf '#!/bin/sh\n[ "$1" = clone ] && { echo "git shim: no network" >&2; exit 1; }\nexec "%s" "$@"\n' "$(command -v git)" > "$IB/nonet/git"; chmod +x "$IB/nonet/git"
 for c in ssh gh systemctl; do cp "$IB/stub/$c" "$IB/nonet/$c"; done
@@ -471,7 +471,7 @@ git -C "$BC" remote set-url origin "$IB/origin.git"
 # A git shim logs every fetch: a refused launcher must log none.
 printf '#!/bin/sh\nfor a in "$@"; do case "$a" in fetch|push|ls-remote) case " $* " in *" --get-url "*) ;; *) echo "$*" >> "%s" ;; esac; break ;; esac; done\nexec "%s" "$@"\n' "$IB/git.log" "$(command -v git)" > "$IB/stub/git"
 chmod +x "$IB/stub/git"
-for bad in https://github.com/someone/else.git git@github-old:someone/else.git https://attacker.example/lambdaclass/concrete.git; do
+for bad in https://github.com/someone/else.git git@github-old:lambdaclass/concrete.git https://attacker.example/lambdaclass/concrete.git; do
   git -C "$BC" remote set-url origin "$bad"
   : > "$IB/git.log"
   out="$(bounded_run -i /dev/null 60 -- env HOME="$IB/home" PATH="$IB/stub:$PATH" "$IB/home/.local/libexec/concrete-landing-bot" status 2>&1)"; rc=$?

@@ -150,7 +150,7 @@ git remote set-url --push gh-push https://github.com/someone/else.git
 git remote add gh-mixed https://github.com/lambdaclass/concrete.git
 git remote set-url --push gh-mixed https://github.com/unbalancedparentheses/concrete2.git
 git remote add gh-canon https://github.com/lambdaclass/concrete.git
-git remote add gh-alias git@github-old:someone/else.git
+git remote add gh-alias git@github-old:lambdaclass/concrete.git   # a project path: only the host refuses it
 
 # --- the toy repository: a ledger, a corpus map, a generated block, a generated file ---------------
 mkdir -p scripts/gen scripts/tests docs/project src Concrete
@@ -654,6 +654,7 @@ recip(){ GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=url.https://attacker.example/.inste
   GIT_CONFIG_KEY_1=url.https://github.com/.insteadOf GIT_CONFIG_VALUE_1=https://attacker.example/ "$@"; }
 git init -q "$TMP/recip" && git -C "$TMP/recip" remote add origin https://github.com/lambdaclass/concrete.git
 mkdir -p "$TMP/sshfail" && printf '#!/bin/sh\nexit 255\n' > "$TMP/sshfail/ssh" && chmod +x "$TMP/sshfail/ssh"
+mkdir -p "$TMP/nossh" && for c in git sh awk tr; do ln -sf "$(command -v $c)" "$TMP/nossh/$c"; done   # a PATH without ssh
 mkdir -p "$TMP/sshlies" && printf '#!/bin/sh\necho "hostname github.com"\nexit 255\n' > "$TMP/sshlies/ssh" && chmod +x "$TMP/sshlies/ssh"
 while read -r want how url; do
   ( . "$ROOT_DIR/scripts/land/lib.sh"; case "$how" in
@@ -676,6 +677,9 @@ while read -r want how url; do
       # One that names github.com and then fails is still a failed query (callers may lack pipefail).
       g-lies) set +o pipefail; PATH="$TMP/sshlies:$PATH" land_url_bad "$url" ;;
       g-lies-prog) set +o pipefail; GIT_SSH="$TMP/sshlies/ssh" land_url_bad "$url" ;;
+      git-ssh-plain) GIT_SSH=ssh land_url_bad "$url" ;;
+      git-ssh-fails) GIT_SSH="$TMP/sshfail/ssh" land_url_bad "$url" ;;
+      no-ssh) PATH="$TMP/nossh" land_url_bad "$url" ;;
       config) GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.sshCommand GIT_CONFIG_VALUE_0='ssh -o HostName=attacker.example' land_url_bad "$url" ;;
     esac ) >/dev/null; got=$?
   [ "$got" = "$want" ] || { ovr_ok=0; echo "      $how $url: exit $got, want $want"; }
@@ -697,6 +701,9 @@ done <<'OVR'
 0 g-fails https://github.com/lambdaclass/concrete.git
 1 g-lies git@github.com:lambdaclass/concrete.git
 1 g-lies-prog git@github.com:lambdaclass/concrete.git
+0 git-ssh-plain git@github.com:lambdaclass/concrete.git
+1 git-ssh-fails git@github.com:lambdaclass/concrete.git
+1 no-ssh git@github.com:lambdaclass/concrete.git
 0 plain https://github.com/lambdaclass/concrete.git
 OVR
 [ "$ovr_ok" = 1 ] && ok "the guard resolves URLs as git does: its own ssh command (GIT_SSH_COMMAND, core.sshCommand, GIT_SSH, in that order) and url.insteadOf, applied once" || no "the guard ignored an ssh override"
@@ -728,6 +735,10 @@ done <<'URLS'
 0 https://user:token@github.com:443/lambdaclass/concrete lambdaclass/concrete
 0 https://alice%40example.com:TOKEN@github.com/lambdaclass/concrete.git lambdaclass/concrete
 1 ssh://-oProxyCommand=x@github.com/lambdaclass/concrete
+1 ssh://git:-oProxyCommand=x@github.com/lambdaclass/concrete
+1 ssh://@github.com/lambdaclass/concrete
+1 ssh://:x@github.com/lambdaclass/concrete
+0 https://GitHub.com/LambdaClass/Concrete.GIT
 0 git@GITHUB.COM.:unbalancedparentheses/concrete2
 0 /tmp/x.git test/repo
 0 file:///tmp/x.git test/repo
@@ -1372,7 +1383,7 @@ out="$(cd "$W" && printf 'refs/heads/x %s refs/heads/wip/idn %s\n' "$(git rev-pa
   && ok "a real push never takes the identify answer (no environment switch exists)" || { no "identify leaked into a push: $out"; }
 # The hook refuses a push to any network URL that is not one of the project's repositories, before
 # any tier (CONCRETE_SKIP_GATES does not skip it); both project repositories reach their tier.
-for u in https://github.com/someone/else.git git@github-old:someone/else.git https://attacker.example/lambdaclass/concrete.git; do
+for u in https://github.com/someone/else.git git@github-old:lambdaclass/concrete.git https://attacker.example/lambdaclass/concrete.git; do
   out="$(cd "$W" && printf 'refs/heads/x %s refs/heads/wip/dst %s\n' "$(git rev-parse main)" 0000000000000000000000000000000000000000 \
     | CONCRETE_SKIP_GATES=1 bash "$ROOT_DIR/.githooks/pre-push" origin "$u" 2>&1)"; rc=$?
   [ "$rc" = 1 ] && has "$out" "not one of the project's repositories" && ok "the hook refuses a push to $u, even with CONCRETE_SKIP_GATES=1" || no "hook pushed to $u: exit $rc, $out"

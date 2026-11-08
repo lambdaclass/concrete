@@ -84,7 +84,7 @@ fi
 # shellcheck source=scripts/land/lib.sh
 . "$ROOT_DIR/scripts/land/lib.sh"
 # PRIMARY must be a configured remote (a literal URL would skip the check); a missing mirror is
-# skipped, as before.
+# refused below ("both remotes are required"), a configured one is checked here.
 git remote get-url "$PRIMARY" >/dev/null 2>&1 || { echo "push-both: PRIMARY '$(land_url_redact "$PRIMARY")' is not a configured remote. Nothing was pushed." >&2; exit 1; }
 for r in "$PRIMARY" ${MIRROR:+"$MIRROR"}; do
   git remote get-url "$r" >/dev/null 2>&1 || continue
