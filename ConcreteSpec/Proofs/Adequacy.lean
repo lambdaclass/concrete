@@ -2039,8 +2039,8 @@ def terminatingDomain : CallDomain ops :=
 
 /-- This aborting function terminates with a trapped outcome; termination does not promise success. -/
 def terminatingConditional : ConditionalTermination ops prog terminatingDomain where
-  Premises := Unit
   dependencies := []
+  Premise := fun _ => Unit
   fuel := fun _ _ _ _ => 10
   terminates := by
     intro _ ρ args st h
@@ -2050,7 +2050,7 @@ def terminatingConditional : ConditionalTermination ops prog terminatingDomain w
 
 /-- An inhabited certificate for a declared function and an actual successful entry. -/
 def terminatingEvidence : TerminationEvidence ops prog terminatingDomain :=
-  ⟨terminatingConditional, (), env, [], .init, rfl, rfl, rfl⟩
+  ⟨terminatingConditional, (fun _ h => nomatch h), env, [], .init, rfl, rfl, rfl⟩
 
 /-- The empty declared domain has no usable certificate, even though its conditional coverage
 can be proved with no executions. -/
@@ -2116,6 +2116,35 @@ example : ¬ Nonempty (TerminationEvidence ops spinningProgram spinningDomain) :
   rintro ⟨E⟩
   exact E.excludes_infinite env [] .init spinningFn (start spinningFn [] .init)
     rfl ⟨rfl, rfl, rfl⟩ rfl ⟨admittedSpin⟩
+
+/-- The per-callee termination premise for `spinningDomain`: every admitted call terminates within
+its witness budget. -/
+def spinningCalleePremise : Type :=
+  PLift (∀ ρ args st, spinningDomain.calls ρ args st →
+    ∃ fn c f, AList.lookup spinningProgram.fns spinningDomain.function = some fn ∧
+      enter fn args st = some c ∧ (run spinningProgram ρ 10 c).ending = .final f)
+
+/-- A conditional theorem that lists an uncertified dependency (`mainF`) whose premise requires
+termination of `spinningDomain` cannot have its dependency-indexed `Premises` discharged. -/
+def uncertifiedDepConditional : ConditionalTermination ops prog terminatingDomain where
+  dependencies := [mainF]
+  Premise := fun _ => spinningCalleePremise
+  fuel := fun _ _ _ _ => 10
+  terminates := by
+    intro _ ρ args st h
+    obtain ⟨rfl, rfl, rfl⟩ := h
+    exact ⟨boomFn, start boomFn [] .init, .trapped .abort ⟨9⟩,
+      rfl, rfl, rfl⟩
+
+/-- Because `dependencies` indexes `Premises`, a conditional theorem depending on a diverging
+callee has an uninhabited premise family. -/
+example : ¬ Nonempty uncertifiedDepConditional.Premises := by
+  rintro ⟨premises⟩
+  obtain ⟨h⟩ := premises mainF (.head [])
+  obtain ⟨fn, c, f, hf, he, hfinal⟩ := h env [] .init ⟨rfl, rfl, rfl⟩
+  cases hf
+  cases he
+  exact not_infinite_of_final hfinal ⟨admittedSpin⟩
 
 /-! ### Closed round-four controls -/
 

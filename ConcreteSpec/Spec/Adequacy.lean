@@ -331,21 +331,31 @@ structure CallDomain (O : Operands) where
   function : FnId
   calls : Oracle O → List O.Val → O.Store → Prop
 
-/-- A conditional termination theorem covers the entire declared domain. Trusted premises may be
-uninhabited; such a theorem alone is deliberately not usable termination evidence. -/
+/-- A conditional termination theorem covers the entire declared domain. Each declared callee
+dependency in `dependencies` carries its own required premise `Premise f`; trusted premises may be
+uninhabited for an uncertified dependency, so a conditional theorem alone is deliberately not
+usable termination evidence until every dependency's premise is supplied. -/
 structure ConditionalTermination (O : Operands) (P : Program O) (domain : CallDomain O) where
-  Premises : Type
-  /-- Syntactic callee metadata; semantic assumptions belong to `Premises`. -/
+  /-- The declared callee dependencies whose termination evidence this theorem relies on. -/
   dependencies : List FnId
-  fuel : Premises → Oracle O → List O.Val → O.Store → Nat
+  /-- The evidence premise required for each declared dependency. -/
+  Premise : FnId → Type
+  fuel : (∀ f, f ∈ dependencies → Premise f) → Oracle O → List O.Val → O.Store → Nat
   terminates : ∀ premises ρ args st, domain.calls ρ args st →
     ∃ fn c f, AList.lookup P.fns domain.function = some fn ∧ enter fn args st = some c ∧
       (run P ρ (fuel premises ρ args st) c).ending = .final f
 
-/-- Usable evidence discharges the conditional theorem's trusted premises and supplies an actual
-call in its independently declared domain. There is no certificate-local admission filter: every
-declared call is covered, so neither an empty premise type nor a false filter can disable coverage.
-Lookup and entry success remain consequences, rather than restrictions on the call domain. -/
+/-- The family of premises required across all declared dependencies of a conditional termination
+theorem. -/
+abbrev ConditionalTermination.Premises {O : Operands} {P : Program O} {domain : CallDomain O}
+    (C : ConditionalTermination O P domain) : Type :=
+  ∀ f, f ∈ C.dependencies → C.Premise f
+
+/-- Usable evidence discharges the conditional theorem's dependency-indexed premises and supplies
+an actual call in its independently declared domain. There is no certificate-local admission filter:
+every declared call is covered, so neither an empty premise type nor a false filter can disable
+coverage. Lookup and entry success remain consequences, rather than restrictions on the call
+domain. -/
 structure TerminationEvidence (O : Operands) (P : Program O) (domain : CallDomain O) where
   conditional : ConditionalTermination O P domain
   premises : conditional.Premises
