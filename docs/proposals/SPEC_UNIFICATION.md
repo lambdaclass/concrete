@@ -13,7 +13,7 @@ the repository; the exact revisions below are the inputs. I checked each kept re
 - `origin/wip/spec-nht` a5e982a6c4: A2i no-hidden-traps M1 (`atomBounds`, `admitted`, `checked_no_implicit_traps`, `add100` refused, `add0` accepted).
 - `origin/main` ab537833d7 and `origin/wip/decisions-followup` 4e75883d91: `docs/decisions.md` and `ROADMAP.md`. The three decided proposals are in [`docs/archive/crucial-2026-11-06/`](../archive/crucial-2026-11-06/).
 - `origin/wip/slice0` 53f9a21798: `Concrete/README.md`, the compiler's view of the spec. It records the owner's slice order of 2026-11-06 at lines 612-622.
-- The pipeline review [`MERGED.md`](MERGED.md) (item 11).
+- The pipeline review [`MERGED.md`](../../legacy/docs/proposals/MERGED.md) (item 11).
 
 **Path conventions.** A file:line reference is to `origin/wip/spec-root` 6f80b9c9d0
 unless it is marked `nht:`. The declaration name next to each line number is the anchor: the

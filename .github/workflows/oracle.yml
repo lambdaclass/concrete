@@ -6,7 +6,7 @@
 # reproduce the oracle (a vanished download, a moved tag, a nondeterministic build), which must be
 # investigated before the next differential run relies on the published artifact. It never runs on
 # a push or in a train: the oracle is frozen, so nothing a candidate changes can affect this result.
-# Kept at the root by the legacy/ move (scripts/land/legacy_move.sh, prerequisite P2), whose check
+# Kept at the root by the legacy/ move (legacy/scripts/land/legacy_move.sh, prerequisite P2), whose check
 # reads exactly one unconditional step `bash scripts/oracle/build.sh`; keep that step's form.
 name: oracle
 
