@@ -103,32 +103,18 @@ structure Position (O : Operands) where
   events : List O.Event
   queries : List (Query O)
 
-/-- The independent oracle/contract specification of a single issued request. Successful answers
-produce an oracle-checked transition and its residual report; terminal answers preserve the old
-event history and record exactly this query. No answer or continuation is assumed by callers. -/
-inductive RequestResolution (P : Program O) (ρ : QueryOracle O) (fuel : Nat)
-    (pos : Position O) (p : O.Prim) (vs : List O.Val) (site : SiteId) (st : O.Store)
-    (k : Answer O.Val O.Event O.Store → Option (Config O)) : QueryReport O → Prop where
-  | unanswered (ha : answer ρ (Query.issue pos.events p vs site st pos.queries) = none) :
-      RequestResolution P ρ fuel pos p vs site st k
-        ⟨pos.events, pos.queries ++ [Query.issue pos.events p vs site st pos.queries],
-          .noAnswer pos.config⟩
-  | invalid {a} (ha : answer ρ (Query.issue pos.events p vs site st pos.queries) = some a)
-      (hl : O.allows p vs st a = false) :
-      RequestResolution P ρ fuel pos p vs site st k
-        ⟨pos.events, pos.queries ++ [Query.issue pos.events p vs site st pos.queries],
-          .badAnswer pos.config⟩
-  | refused {a} (ha : answer ρ (Query.issue pos.events p vs site st pos.queries) = some a)
-      (hl : O.allows p vs st a = true) (hk : k a = none) :
-      RequestResolution P ρ fuel pos p vs site st k
-        ⟨pos.events, pos.queries ++ [Query.issue pos.events p vs site st pos.queries],
-          .stuck pos.config⟩
-  | continued {a c'}
-      (ha : answer ρ (Query.issue pos.events p vs site st pos.queries) = some a)
-      (hl : O.allows p vs st a = true) (hk : k a = some c') :
-      RequestResolution P ρ fuel pos p vs site st k
-        (runFromQ P ρ fuel (pos.events ++ a.event.toList)
-          (pos.queries ++ [Query.issue pos.events p vs site st pos.queries]) c')
+/-- Whether an instrumented report ended by exhausting its step budget. -/
+def QueryReport.isOutOfFuel (r : QueryReport O) : Bool :=
+  match r.ending with
+  | .outOfFuel _ => true
+  | _ => false
+
+/-- The position reached by a report, using `fallback` when the report did not end in
+`outOfFuel`. -/
+def QueryReport.position (fallback : Config O) (r : QueryReport O) : Position O :=
+  match r.ending with
+  | .outOfFuel c => ⟨c, r.events, r.queries⟩
+  | _ => ⟨fallback, r.events, r.queries⟩
 
 /-- One transition under a fixed query-level oracle. A request records its query before the answer is
 used. -/
@@ -206,6 +192,50 @@ inductive ReportedQueries (P : Program O) (ρ : QueryOracle O) :
       (hf : c.final? = none) :
       ReportedQueries P ρ (ending := .outOfFuel c) (pos := ⟨c, events, issued⟩)
         (Conclusion.outOfFuel hf) issued
+
+/-- The independent oracle/contract specification of resolving an issued request at `pos`.
+Terminal request outcomes (`unanswered`, `invalid`, `refused`) justify the report at `pos` without
+advancing the position and append the authenticated query; a `continued` request makes one
+oracle-checked `Move` to an intermediate position `pos'` and reaches the report's endpoint `pos''`
+from `pos'` by `Moves`. -/
+inductive RequestResolution (P : Program O) (ρ : QueryOracle O)
+    (pos : Position O) (p : O.Prim) (vs : List O.Val) (site : SiteId) (st : O.Store)
+    (k : Answer O.Val O.Event O.Store → Option (Config O)) : QueryReport O → Prop where
+  | unanswered
+      (ha : answer ρ (Query.issue pos.events p vs site st pos.queries) = none)
+      (hc : Conclusion P ρ (.noAnswer pos.config) pos)
+      (hr : ReportedQueries P ρ hc
+        (pos.queries ++ [Query.issue pos.events p vs site st pos.queries])) :
+      RequestResolution P ρ pos p vs site st k
+        ⟨pos.events, pos.queries ++ [Query.issue pos.events p vs site st pos.queries],
+          .noAnswer pos.config⟩
+  | invalid {a}
+      (ha : answer ρ (Query.issue pos.events p vs site st pos.queries) = some a)
+      (hl : O.allows p vs st a = false)
+      (hc : Conclusion P ρ (.badAnswer pos.config) pos)
+      (hr : ReportedQueries P ρ hc
+        (pos.queries ++ [Query.issue pos.events p vs site st pos.queries])) :
+      RequestResolution P ρ pos p vs site st k
+        ⟨pos.events, pos.queries ++ [Query.issue pos.events p vs site st pos.queries],
+          .badAnswer pos.config⟩
+  | refused {a}
+      (ha : answer ρ (Query.issue pos.events p vs site st pos.queries) = some a)
+      (hl : O.allows p vs st a = true) (hk : k a = none)
+      (hc : Conclusion P ρ (.stuck pos.config) pos)
+      (hr : ReportedQueries P ρ hc
+        (pos.queries ++ [Query.issue pos.events p vs site st pos.queries])) :
+      RequestResolution P ρ pos p vs site st k
+        ⟨pos.events, pos.queries ++ [Query.issue pos.events p vs site st pos.queries],
+          .stuck pos.config⟩
+  | continued {a pos' n pos'' report}
+      (ha : answer ρ (Query.issue pos.events p vs site st pos.queries) = some a)
+      (hl : O.allows p vs st a = true) (hk : k a = some pos'.config)
+      (hm : Move P ρ pos pos')
+      (hpath : Moves P ρ n pos' pos'')
+      (hevents : report.events = pos''.events)
+      (hc : Conclusion P ρ report.ending pos'')
+      (hr : ReportedQueries P ρ hc report.queries) :
+      RequestResolution P ρ pos p vs site st k report
 
 /-- An infinite maximal execution under one fixed query-level oracle. Every adjacent pair is a
 successful transition, so this excludes final, stuck, blocked, and bad-answer endpoints. -/

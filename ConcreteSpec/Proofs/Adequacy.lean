@@ -322,29 +322,6 @@ theorem runFromQ_request {fuel : Nat} {events : List O.Event} {issued : List (Qu
   simp only [runFromQ, hf, hs]
   rfl
 
-/-- Law (subject `runFromQ`).
-An actually issued request is answered at its exact event and query
-history. The report obeys that answer, the contract, and the partial continuation, in every branch. -/
-theorem runFromQ_request_correspondence {fuel : Nat} {events : List O.Event}
-    {issued : List (Query O)} {c : Config O} {p : O.Prim} {vs : List O.Val} {site : SiteId}
-    {st : O.Store} {k : Answer O.Val O.Event O.Store → Option (Config O)}
-    (hf : c.final? = none) (hs : step P c = some (.request p vs site st k)) :
-    RequestResolution P ρ fuel ⟨c, events, issued⟩ p vs site st k
-      (runFromQ P ρ (fuel + 1) events issued c) := by
-  rw [runFromQ_request hf hs]
-  dsimp only
-  cases ha : answer ρ (Query.issue events p vs site st issued) with
-  | none => exact RequestResolution.unanswered (pos := ⟨c, events, issued⟩) ha
-  | some a =>
-    cases hl : O.allows p vs st a with
-    | false => simpa only [hl, Bool.false_eq_true, ↓reduceIte] using
-        (RequestResolution.invalid (pos := ⟨c, events, issued⟩) (k := k) ha hl)
-    | true =>
-      simp only [hl, ↓reduceIte]
-      cases hk : k a with
-      | none => exact RequestResolution.refused (pos := ⟨c, events, issued⟩) ha hl hk
-      | some c' => exact RequestResolution.continued (pos := ⟨c, events, issued⟩) ha hl hk
-
 /-- Helper (computation). Every instrumented run extends the query history with which it started.
 (approved: PENDING). -/
 theorem runFromQ_queries_from : ∀ (fuel : Nat) (events : List O.Event) (issued : List (Query O))
@@ -589,6 +566,44 @@ theorem runFromQ_sound : ∀ (fuel : Nat) (events : List O.Event) (issued : List
                   by simpa [runFromQ, hf, hs, q, ha, hallow, hk] using he,
                   by simpa [runFromQ, hf, hs, q, ha, hallow, hk] using hc,
                   by simpa [runFromQ, hf, hs, q, ha, hallow, hk] using hr⟩
+
+/-- Law (subject `runFromQ`).
+An actually issued request is answered at its exact event and query history. Terminal request
+outcomes stop at the requesting position with the authenticated terminal query; a continued request
+steps by `Move` to an intermediate position and from there by `Moves` to the report's justified
+endpoint. -/
+theorem runFromQ_request_correspondence {fuel : Nat} {events : List O.Event}
+    {issued : List (Query O)} {c : Config O} {p : O.Prim} {vs : List O.Val} {site : SiteId}
+    {st : O.Store} {k : Answer O.Val O.Event O.Store → Option (Config O)}
+    (hf : c.final? = none) (hs : step P c = some (.request p vs site st k)) :
+    RequestResolution P ρ ⟨c, events, issued⟩ p vs site st k
+      (runFromQ P ρ (fuel + 1) events issued c) := by
+  rw [runFromQ_request hf hs]
+  dsimp only
+  let q := Query.issue events p vs site st issued
+  cases ha : answer ρ q with
+  | none =>
+    exact RequestResolution.unanswered (pos := ⟨c, events, issued⟩) ha
+      (Conclusion.noAnswer hs ha) (ReportedQueries.noAnswer hs ha)
+  | some a =>
+    cases hl : O.allows p vs st a with
+    | false =>
+      simpa only [hl, Bool.false_eq_true, ↓reduceIte] using
+        RequestResolution.invalid (pos := ⟨c, events, issued⟩) (k := k) ha hl
+          (Conclusion.badAnswer hs ha hl) (ReportedQueries.badAnswer hs ha hl)
+    | true =>
+      simp only [hl, ↓reduceIte]
+      cases hk : k a with
+      | none =>
+        exact RequestResolution.refused (pos := ⟨c, events, issued⟩) ha hl hk
+          (Conclusion.stuckContinuation hs ha hl hk)
+          (ReportedQueries.stuckContinuation hs ha hl hk)
+      | some c' =>
+        obtain ⟨n, pos'', hpath, he, hc, hr⟩ :=
+          runFromQ_sound (P := P) (ρ := ρ) fuel (events ++ a.event.toList) (issued ++ [q]) c'
+        exact RequestResolution.continued (pos := ⟨c, events, issued⟩)
+          (pos' := ⟨c', events ++ a.event.toList, issued ++ [q]⟩)
+          ha hl hk (.prim hs ha hl hk) hpath he hc hr
 
 /-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness
 (approved: PENDING).
@@ -1945,42 +1960,102 @@ theorem terminalRequest : step prog terminalConfig = some (.request .log [1] s .
   cases hr : a.result <;> simp [terminalK, hr]
 
 /-- Instance (law `runFromQ_request_correspondence`, case `terminalConfig`). -/
-example : RequestResolution prog noAnswerOracle 0 ⟨terminalConfig, [], []⟩ .log [1] s .init terminalK
+example : RequestResolution prog noAnswerOracle ⟨terminalConfig, [], []⟩ .log [1] s .init terminalK
     (runFromQ prog noAnswerOracle 1 [] [] terminalConfig) :=
   runFromQ_request_correspondence (O := ops) (P := prog) (ρ := noAnswerOracle)
   (fuel := 0) (events := []) (issued := []) (c := terminalConfig) (p := .log) (vs := [1])
   (site := s) (st := .init) (k := terminalK) rfl terminalRequest
 
 /-- Instance (law `runFromQ_request_correspondence`, case `badAnswerOracle`). -/
-example : RequestResolution prog badAnswerOracle 0 ⟨terminalConfig, [], []⟩ .log [1] s .init terminalK
+example : RequestResolution prog badAnswerOracle ⟨terminalConfig, [], []⟩ .log [1] s .init terminalK
     (runFromQ prog badAnswerOracle 1 [] [] terminalConfig) :=
   runFromQ_request_correspondence (O := ops) (P := prog) (ρ := badAnswerOracle)
   (fuel := 0) (events := []) (issued := []) (c := terminalConfig) (p := .log) (vs := [1])
   (site := s) (st := .init) (k := terminalK) rfl terminalRequest
 
 /-- Instance (law `runFromQ_request_correspondence`, case `env`). -/
-example : RequestResolution prog env.toQueryOracle 0 ⟨terminalConfig, [], []⟩ .log [1] s .init terminalK
+example : RequestResolution prog env.toQueryOracle ⟨terminalConfig, [], []⟩ .log [1] s .init terminalK
     (runFromQ prog env.toQueryOracle 1 [] [] terminalConfig) :=
   runFromQ_request_correspondence (O := ops) (P := prog) (ρ := env.toQueryOracle)
   (fuel := 0) (events := []) (issued := []) (c := terminalConfig) (p := .log) (vs := [1])
   (site := s) (st := .init) (k := terminalK) rfl terminalRequest
 
-/-- A mutation fabricates successful termination after an unanswered request.
+/-- A mutation fabricates successful termination after an unanswered or rejected request.
 This tests report soundness separately from the wrong-history oracle mutation. -/
-def fabricatedFinalRun (O : Operands) (P : Program O) (ρ : QueryOracle O) (fuel : Nat)
+def fabricatedFinalRun {O : Operands} (P : Program O) (ρ : QueryOracle O) (fuel : Nat)
     (events : List O.Event) (issued : List (Query O)) (c : Config O) : QueryReport O :=
   { runFromQ P ρ fuel events issued c with ending := .final .normal }
+
+/-- An evaluator mutation discards all supplied answers. -/
+def droppedAnswerRun {O : Operands} (P : Program O) (_ : QueryOracle O) (fuel : Nat)
+    (events : List O.Event) (issued : List (Query O)) (c : Config O) : QueryReport O :=
+  runFromQ P (fun _ => none) fuel events issued c
 
 /-- Planted (law `runFromQ_request_correspondence`, case `terminalConfig`,
 subject `runFromQ`, mutant `fabricatedFinalRun`). The issuance premises remain true. -/
 example : terminalConfig.final? = none ∧
     step prog terminalConfig = some (.request .log [1] s .init terminalK) ∧
-    ¬ RequestResolution prog noAnswerOracle 0 ⟨terminalConfig, [], []⟩ .log [1] s .init terminalK
-      (fabricatedFinalRun ops prog noAnswerOracle 1 [] [] terminalConfig) := by
+    ¬ RequestResolution prog noAnswerOracle ⟨terminalConfig, [], []⟩ .log [1] s .init terminalK
+      (fabricatedFinalRun prog noAnswerOracle 1 [] [] terminalConfig) := by
   refine ⟨rfl, terminalRequest, ?_⟩
-  generalize he : fabricatedFinalRun ops prog noAnswerOracle 1 [] [] terminalConfig = report
+  generalize he : fabricatedFinalRun prog noAnswerOracle 1 [] [] terminalConfig = report
   intro h
   cases h <;> simp_all [answer, noAnswerOracle, fabricatedFinalRun, terminalConfig]
+
+/-- Planted (law `runFromQ_request_correspondence`, case `badAnswerOracle`,
+subject `runFromQ`, mutant `fabricatedFinalRun`). The issuance premises remain true, while the
+invalid oracle answer cannot resolve to `.final .normal`. -/
+example : terminalConfig.final? = none ∧
+    step prog terminalConfig = some (.request .log [1] s .init terminalK) ∧
+    ¬ RequestResolution prog badAnswerOracle ⟨terminalConfig, [], []⟩ .log [1] s .init terminalK
+      (fabricatedFinalRun prog badAnswerOracle 1 [] [] terminalConfig) := by
+  refine ⟨rfl, terminalRequest, ?_⟩
+  generalize he : fabricatedFinalRun prog badAnswerOracle 1 [] [] terminalConfig = report
+  intro h
+  cases h with
+  | unanswered ha _ _ =>
+    simp [answer, badAnswerOracle] at ha
+  | invalid _ _ _ _ =>
+    have hend := congrArg QueryReport.ending he
+    simp [fabricatedFinalRun] at hend
+  | refused ha hl _ _ _ =>
+    simp [answer, badAnswerOracle] at ha
+    subst ha
+    simp [ops] at hl
+  | continued ha hl _ _ _ _ _ _ =>
+    simp [answer, badAnswerOracle] at ha
+    subst ha
+    simp [ops] at hl
+
+/-- Planted (law `runFromQ_request_correspondence`, case `env`,
+subject `runFromQ`, mutant `droppedAnswerRun`). Dropping the valid oracle answer omits the
+continued transition's emitted event and reports `.noAnswer` instead. -/
+example : terminalConfig.final? = none ∧
+    step prog terminalConfig = some (.request .log [1] s .init terminalK) ∧
+    ¬ RequestResolution prog env.toQueryOracle ⟨terminalConfig, [], []⟩ .log [1] s .init terminalK
+      (droppedAnswerRun prog env.toQueryOracle 1 [] [] terminalConfig) := by
+  refine ⟨rfl, terminalRequest, ?_⟩
+  have hev : (droppedAnswerRun prog env.toQueryOracle 1 [] [] terminalConfig).events = [] := rfl
+  generalize he : droppedAnswerRun prog env.toQueryOracle 1 [] [] terminalConfig = report at hev ⊢
+  intro h
+  cases h with
+  | unanswered ha _ _ =>
+    simp [answer, Oracle.toQueryOracle, env, Query.issue] at ha
+  | invalid ha hl _ _ =>
+    simp [answer, Oracle.toQueryOracle, env, Query.issue] at ha
+    subst ha
+    simp [ops] at hl
+  | refused ha _ hk _ _ =>
+    simp [answer, Oracle.toQueryOracle, env, Query.issue] at ha
+    subst ha
+    simp [terminalK, bindLife, ops, DState.life] at hk
+  | continued _ _ _ hm hpath hevents _ _ =>
+    obtain ⟨a, ha, _, _, hpos', _⟩ := (Move.toQueryOracle_answer terminalRequest).mp hm
+    simp [env] at ha
+    subst ha
+    obtain ⟨tr, _, hpath_ev, _, _⟩ := Moves.toSteps hpath
+    rw [hev, hpath_ev, hpos'] at hevents
+    simp at hevents
 
 /-- Helper (computation). Finite projected histories of the erasing execution. (approved: PENDING). -/
 theorem erasedFinite : FiniteEvents erasingAdapter event_infinite :=
@@ -2058,12 +2133,12 @@ example : InfiniteEvents keepingAdapter event_infinite ∧
   simp at hl
 
 /-- A wrong-history evaluator resets every occurrence before querying the supplied oracle. -/
-def wrongHistoryRun (O : Operands) (P : Program O) (ρ : QueryOracle O) (fuel : Nat)
+def wrongHistoryRun {O : Operands} (P : Program O) (ρ : QueryOracle O) (fuel : Nat)
     (events : List O.Event) (issued : List (Query O)) (c : Config O) : QueryReport O :=
   runFromQ P (fun q => ρ { q with occurrence := 0 }) fuel events issued c
 
 /-- Instance (law `runFromQ_request_correspondence`, case `occurrenceSensitiveOracle`). -/
-example : RequestResolution prog occurrenceSensitiveOracle 0 ⟨terminalConfig, [], [terminalQuery]⟩
+example : RequestResolution prog occurrenceSensitiveOracle ⟨terminalConfig, [], [terminalQuery]⟩
     .log [1] s .init terminalK
     (runFromQ prog occurrenceSensitiveOracle 1 [] [terminalQuery] terminalConfig) :=
   runFromQ_request_correspondence (O := ops) (P := prog) (ρ := occurrenceSensitiveOracle)
@@ -2075,22 +2150,22 @@ subject `runFromQ`, mutant `wrongHistoryRun`). Resetting the occurrence substitu
 answer for an unanswered repeated request. Both issuance premises are unchanged. -/
 example : terminalConfig.final? = none ∧
     step prog terminalConfig = some (.request .log [1] s .init terminalK) ∧
-    ¬ RequestResolution prog occurrenceSensitiveOracle 0 ⟨terminalConfig, [], [terminalQuery]⟩
+    ¬ RequestResolution prog occurrenceSensitiveOracle ⟨terminalConfig, [], [terminalQuery]⟩
       .log [1] s .init terminalK
-      (wrongHistoryRun ops prog occurrenceSensitiveOracle 1 [] [terminalQuery] terminalConfig) := by
+      (wrongHistoryRun prog occurrenceSensitiveOracle 1 [] [terminalQuery] terminalConfig) := by
   refine ⟨rfl, terminalRequest, ?_⟩
-  have hfinal : (wrongHistoryRun ops prog occurrenceSensitiveOracle 1 [] [terminalQuery]
+  have hfinal : (wrongHistoryRun prog occurrenceSensitiveOracle 1 [] [terminalQuery]
     terminalConfig).ending = .final .normal := rfl
-  generalize he : wrongHistoryRun ops prog occurrenceSensitiveOracle 1 [] [terminalQuery]
+  generalize he : wrongHistoryRun prog occurrenceSensitiveOracle 1 [] [terminalQuery]
     terminalConfig = report at hfinal ⊢
   intro h
   cases h with
-  | unanswered _ => cases hfinal
-  | invalid ha _ => simp [answer, occurrenceSensitiveOracle, Query.issue, occurrenceAt,
+  | unanswered _ _ _ => cases hfinal
+  | invalid ha _ _ _ => simp [answer, occurrenceSensitiveOracle, Query.issue, occurrenceAt,
       terminalQuery] at ha
-  | refused ha _ _ => simp [answer, occurrenceSensitiveOracle, Query.issue, occurrenceAt,
+  | refused ha _ _ _ _ => simp [answer, occurrenceSensitiveOracle, Query.issue, occurrenceAt,
       terminalQuery] at ha
-  | continued ha _ _ => simp [answer, occurrenceSensitiveOracle, Query.issue, occurrenceAt,
+  | continued ha _ _ _ _ _ _ _ => simp [answer, occurrenceSensitiveOracle, Query.issue, occurrenceAt,
       terminalQuery] at ha
 
 /-- The actual continuation of a lifecycle-refused request. -/
@@ -2101,32 +2176,54 @@ def refusingK : Answer refusingBindOps.Val refusingBindOps.Event refusingBindOps
       ⟨.done, bindDst (some x) v [], st', []⟩
   | .error kd => some ⟨.trapped kd s, [], a.store, []⟩
 
+/-- Helper (computation). Computes the request and continuation issued by the concrete
+lifecycle-refused statement. (approved: PENDING). -/
+theorem refusingBindRequest :
+    step refusingBindProgram refusingBindConfig = some (.request .log [1] s .init refusingK) := by
+  simp [refusingBindConfig, step, evalArgs, evalE, onRes, Res.bind, Res.map]
+  funext a
+  cases hr : a.result <;> simp [refusingK, hr]
+
 /-- Instance (law `runFromQ_request_correspondence`, case `refusingBindConfig`). -/
-example : RequestResolution refusingBindProgram refusingBindOracle 0 ⟨refusingBindConfig, [], []⟩
+example : RequestResolution refusingBindProgram refusingBindOracle ⟨refusingBindConfig, [], []⟩
     .log [1] s .init refusingK
     (runFromQ refusingBindProgram refusingBindOracle 1 [] [] refusingBindConfig) :=
   runFromQ_request_correspondence (O := refusingBindOps) (P := refusingBindProgram)
     (ρ := refusingBindOracle) (fuel := 0) (events := []) (issued := []) (c := refusingBindConfig)
-    (p := .log) (vs := [1]) (site := s) (st := .init) (k := refusingK) rfl (by
-      simp [refusingBindConfig, step, evalArgs, evalE, onRes, Res.bind, Res.map]
-      funext a
-      cases hr : a.result <;> simp [refusingK, hr])
+    (p := .log) (vs := [1]) (site := s) (st := .init) (k := refusingK) rfl refusingBindRequest
+
+/-- Planted (law `runFromQ_request_correspondence`, case `refusingBindConfig`,
+subject `runFromQ`, mutant `fabricatedFinalRun`). Refusing the continuation produces `.stuck`,
+not `.final .normal`. -/
+example : refusingBindConfig.final? = none ∧
+    step refusingBindProgram refusingBindConfig = some (.request .log [1] s .init refusingK) ∧
+    ¬ RequestResolution refusingBindProgram refusingBindOracle ⟨refusingBindConfig, [], []⟩
+      .log [1] s .init refusingK
+      (fabricatedFinalRun refusingBindProgram refusingBindOracle 1 [] [] refusingBindConfig) := by
+  refine ⟨rfl, refusingBindRequest, ?_⟩
+  generalize he :
+    fabricatedFinalRun refusingBindProgram refusingBindOracle 1 [] [] refusingBindConfig = report
+  intro h
+  cases h with
+  | unanswered ha _ _ =>
+    simp [answer, refusingBindOracle] at ha
+  | invalid ha hl _ _ =>
+    simp [answer, refusingBindOracle] at ha
+    subst ha
+    simp [refusingBindOps, ops] at hl
+  | refused _ _ _ _ _ =>
+    have hend := congrArg QueryReport.ending he
+    simp [fabricatedFinalRun] at hend
+  | continued ha _ hk _ _ _ _ _ =>
+    simp [answer, refusingBindOracle] at ha
+    subst ha
+    simp [refusingK, bindLife, refusingBindOps] at hk
 
 /-- A genuine three-query execution revisits the first site after an unrelated request. -/
 def threeRequestConfig : Config ops := ⟨.exec (.seq (.prim none .bump [] s)
   (.seq (.prim none .bump [] otherSite) (.prim none .bump [] s))), [], .init, []⟩
 def thirdQuery : Query ops := Query.issue [] .bump [] s ⟨2, []⟩
   [interleavedQuery0, interleavedQuery1]
-
-/-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than
-independent execution evidence (approved: PENDING).
-Computes the interval contribution in an actual three-request run: the first and third
-requests share a site while the intervening request contributes zero to its counter. -/
-theorem interleaved_execution : thirdQuery.occurrence = interleavedQuery0.occurrence +
-    occurrenceAt (((runQ prog env 7 threeRequestConfig).queries.drop 0).take (2 - 0)) s :=
-  runFromQ_interleaved_site (O := ops) (P := prog) (ρ := env.toQueryOracle)
-    7 [] [] threeRequestConfig QueryHistoryValid.nil (i := 0) (j := 2)
-    (q := interleavedQuery0) (q' := thirdQuery) (by decide) rfl rfl rfl
 
 /-- A frozen revisited-site occurrence disagrees with the actual interval contribution. -/
 example : ¬ ({ thirdQuery with occurrence := 0 } : Query ops).occurrence =
@@ -2142,7 +2239,7 @@ example : thirdQuery.occurrence = interleavedQuery0.occurrence +
 
 /-- A mutation shares the first two sites' counters by rewriting the second site's identity.
 The two endpoint queries retain exactly the identities used by the law's instance. -/
-def sharedSiteRun (O : Operands) (P : Program O) (ρ : QueryOracle O) (fuel : Nat)
+def sharedSiteRun {O : Operands} (P : Program O) (ρ : QueryOracle O) (fuel : Nat)
     (events : List O.Event) (issued : List (Query O)) (c : Config O) : QueryReport O :=
   let report := runFromQ P ρ fuel events issued c
   { report with queries := report.queries.map fun q =>
@@ -2151,18 +2248,13 @@ def sharedSiteRun (O : Operands) (P : Program O) (ρ : QueryOracle O) (fuel : Na
 /-- Planted (law `runFromQ_interleaved_site`, case `threeRequestConfig`,
 subject `runFromQ`, mutant `sharedSiteRun`). -/
 example : QueryHistoryValid ([] : List (Query ops)) ∧ 0 ≤ 2 ∧
-    (sharedSiteRun ops prog env 7 [] [] threeRequestConfig).queries[0]? = some interleavedQuery0 ∧
-    (sharedSiteRun ops prog env 7 [] [] threeRequestConfig).queries[2]? = some thirdQuery ∧
+    (sharedSiteRun prog env 7 [] [] threeRequestConfig).queries[0]? = some interleavedQuery0 ∧
+    (sharedSiteRun prog env 7 [] [] threeRequestConfig).queries[2]? = some thirdQuery ∧
     interleavedQuery0.site = thirdQuery.site ∧
     ¬ thirdQuery.occurrence = interleavedQuery0.occurrence +
-      occurrenceAt (((sharedSiteRun ops prog env 7 [] [] threeRequestConfig).queries.drop 0).take
+      occurrenceAt (((sharedSiteRun prog env 7 [] [] threeRequestConfig).queries.drop 0).take
         (2 - 0)) interleavedQuery0.site := by
   exact ⟨QueryHistoryValid.nil, by decide, rfl, rfl, rfl, by decide⟩
-
-/-- An evaluator mutation discards all supplied answers. -/
-def droppedAnswerRun (O : Operands) (P : Program O) (_ : QueryOracle O) (fuel : Nat)
-    (events : List O.Event) (issued : List (Query O)) (c : Config O) : QueryReport O :=
-  runFromQ P (fun _ => none) fuel events issued c
 
 /-- Instance (law `runFromQ_toReport`, case `terminalConfig`). -/
 example : (runFromQ prog env.toQueryOracle 1 [] [] terminalConfig).toReport =
@@ -2171,7 +2263,7 @@ example : (runFromQ prog env.toQueryOracle 1 [] [] terminalConfig).toReport =
 
 /-- Planted (law `runFromQ_toReport`, case `terminalConfig`,
 subject `runFromQ`, mutant `droppedAnswerRun`). -/
-example : (droppedAnswerRun ops prog env.toQueryOracle 1 [] [] terminalConfig).toReport ≠
+example : (droppedAnswerRun prog env.toQueryOracle 1 [] [] terminalConfig).toReport ≠
     runFrom prog env 1 [] terminalConfig := by
   intro h
   have he := congrArg Report.events h
@@ -2198,7 +2290,7 @@ example : runFromQ prog env.toQueryOracle 1 [] [] terminalConfig =
 subject `runFromQ`, mutant `droppedAnswerRun`). -/
 example : Moves prog env 1 ⟨terminalConfig, [], []⟩ terminalFinished ∧
     terminalFinished.config.final? = some (.normal : Final Int) ∧
-    droppedAnswerRun ops prog env.toQueryOracle 1 [] [] terminalConfig ≠
+    droppedAnswerRun prog env.toQueryOracle 1 [] [] terminalConfig ≠
       ⟨terminalFinished.events, terminalFinished.queries, .final .normal⟩ := by
   exact ⟨terminalPath, rfl, by intro h; cases h⟩
 
@@ -2222,18 +2314,18 @@ theorem unanswered_no_move {pos : Position ops} :
 /-- Planted (law `runFromQ_sound`, case `terminalConfig`,
 subject `runFromQ`, mutant `fabricatedFinalRun`). -/
 example : ¬ (∃ n pos, Moves prog noAnswerOracle n ⟨terminalConfig, [], []⟩ pos ∧
-    (fabricatedFinalRun ops prog noAnswerOracle 1 [] [] terminalConfig).events = pos.events ∧
+    (fabricatedFinalRun prog noAnswerOracle 1 [] [] terminalConfig).events = pos.events ∧
     ∃ hc : Conclusion prog noAnswerOracle
-        (fabricatedFinalRun ops prog noAnswerOracle 1 [] [] terminalConfig).ending pos,
+        (fabricatedFinalRun prog noAnswerOracle 1 [] [] terminalConfig).ending pos,
       ReportedQueries prog noAnswerOracle hc
-        (fabricatedFinalRun ops prog noAnswerOracle 1 [] [] terminalConfig).queries) := by
+        (fabricatedFinalRun prog noAnswerOracle 1 [] [] terminalConfig).queries) := by
   rintro ⟨n, pos, path, _, hc, _⟩
   cases path with
   | refl => cases hc with | final hf => cases hf
   | step hm _ => exact unanswered_no_move hm
 
 /-- An infinite-prefix mutation loses accumulated histories and restarts the configuration. -/
-def forgetfulRunQ (O : Operands) (_ : Program O) (_ : QueryOracle O) (_ : Nat)
+def forgetfulRunQ {O : Operands} (_ : Program O) (_ : QueryOracle O) (_ : Nat)
     (c : Config O) : QueryReport O := ⟨[], [], .outOfFuel c⟩
 
 /-- Instance (law `InfiniteExecution.evaluator_prefix`, case `event_infinite`). -/
@@ -2245,7 +2337,7 @@ example : runQ prog env 4 eventConfig =
 
 /-- Planted (law `InfiniteExecution.evaluator_prefix`, case `event_infinite`,
 subject `runQ`, mutant `forgetfulRunQ`). -/
-example : forgetfulRunQ ops prog env 4 eventConfig ≠
+example : forgetfulRunQ prog env 4 eventConfig ≠
     ⟨(event_infinite.states 4).events, (event_infinite.states 4).queries,
       .outOfFuel (event_infinite.states 4).config⟩ := by
   intro h
@@ -2260,7 +2352,7 @@ example : QueryHistoryValid (runFromQ prog env 7 [] [] threeRequestConfig).queri
 /-- Planted (law `runFromQ_queryHistoryValid`, case `threeRequestConfig`,
 subject `runFromQ`, mutant `sharedSiteRun`). -/
 example : QueryHistoryValid ([] : List (Query ops)) ∧
-    ¬ QueryHistoryValid (sharedSiteRun ops prog env 7 [] [] threeRequestConfig).queries := by
+    ¬ QueryHistoryValid (sharedSiteRun prog env 7 [] [] threeRequestConfig).queries := by
   refine ⟨QueryHistoryValid.nil, ?_⟩
   intro h
   have wrong := h 1 { interleavedQuery1 with site := s } rfl
@@ -2269,7 +2361,7 @@ example : QueryHistoryValid ([] : List (Query ops)) ∧
 
 /-- A budget-specific evaluator defect preserves the certificate's witness budget (10), but
 incorrectly reports exhaustion at the larger budget used by the exported law (11). -/
-def earlyStopRun (O : Operands) (P : Program O) (ρ : Oracle O) (fuel : Nat)
+def earlyStopRun {O : Operands} (P : Program O) (ρ : Oracle O) (fuel : Nat)
     (c : Config O) : Report O :=
   if fuel = 11 then ⟨[], .outOfFuel c⟩ else run P ρ fuel c
 
@@ -2284,7 +2376,7 @@ subject `run`, mutant `earlyStopRun`). -/
 example : terminatingDomain.calls env [] .init ∧
     terminatingEvidence.conditional.fuel terminatingEvidence.premises env [] .init ≤ 11 ∧
     ¬ (∃ fn c f, AList.lookup prog.fns terminatingDomain.function = some fn ∧
-      enter fn [] .init = some c ∧ (earlyStopRun ops prog env 11 c).ending = .final f) := by
+      enter fn [] .init = some c ∧ (earlyStopRun prog env 11 c).ending = .final f) := by
   refine ⟨⟨rfl, rfl, rfl⟩, by decide, ?_⟩
   rintro ⟨fn, c, f, _, _, h⟩
   simp [earlyStopRun] at h
