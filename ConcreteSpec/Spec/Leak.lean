@@ -44,6 +44,21 @@ inductive Leakage (Val Address Effect : Type) where
   | publicLength (site : SiteId) (length : Nat)
   | external (effect : Effect)
 
+/-- Every leakage constructor has a nonempty representative. -/
+def leakageCatalog : List (Leakage Nat Nat Nat) :=
+  [.branch ⟨0⟩ true, .address ⟨1⟩ 4096, .allocation ⟨2⟩ ⟨3⟩ 8,
+    .loop ⟨4⟩ 3, .variableTime ⟨5⟩ [1, 2], .publicLength ⟨6⟩ 2, .external 7]
+example : leakageCatalog.length = 7 := by decide
+
+/-- Planted changed-event controls for every constructor. -/
+example : (show Leakage Nat Nat Nat from .branch ⟨0⟩ true) ≠ .branch ⟨0⟩ false := by simp
+example : (show Leakage Nat Nat Nat from .address ⟨1⟩ 4096) ≠ .address ⟨1⟩ 8192 := by simp
+example : (show Leakage Nat Nat Nat from .allocation ⟨2⟩ ⟨3⟩ 8) ≠ .allocation ⟨2⟩ ⟨3⟩ 9 := by simp
+example : (show Leakage Nat Nat Nat from .loop ⟨4⟩ 3) ≠ .loop ⟨4⟩ 4 := by simp
+example : (show Leakage Nat Nat Nat from .variableTime ⟨5⟩ [1]) ≠ .variableTime ⟨5⟩ [2] := by simp
+example : (show Leakage Nat Nat Nat from .publicLength ⟨6⟩ 2) ≠ .publicLength ⟨6⟩ 3 := by simp
+example : (show Leakage Nat Nat Nat from .external 7) ≠ .external 8 := by simp
+
 /-- A typed release site. The site identifies the operation in the facts; `ty` is the type of the
 value explicitly declared for release there. -/
 structure ReleaseSite (Ty : Type) where
@@ -89,6 +104,25 @@ example : ¬ (ReleasePolicy.mk [⟨⟨0⟩, ()⟩]).Authorized
   simp [ReleasePolicy.Authorized, ReleasePolicy.Permits]
 
 example : (ReleasePolicy.mk ([] : List (ReleaseSite Unit))).ForbidsRelease := rfl
+
+/-- Every nonempty release trace is unauthorized under the empty policy. -/
+example (r : Release Unit Nat) (rs : List (Release Unit Nat)) :
+    ¬ (ReleasePolicy.mk []).Authorized (r :: rs) := by
+  intro h
+  have hr := h r (by simp)
+  simp [ReleasePolicy.Permits] at hr
+
+/-- Typed-site, value and ordering controls for release comparison and authorization. -/
+def typedRelease (ty : String) (value : Nat) : Release String Nat :=
+  ⟨⟨⟨0⟩, ty⟩, value, "example", []⟩
+def typedReleasePolicy : ReleasePolicy String := ⟨[⟨⟨0⟩, "public"⟩]⟩
+example : typedReleasePolicy.Permits (typedRelease "public" 7) := by
+  simp [typedReleasePolicy, ReleasePolicy.Permits, typedRelease]
+example : ¬ typedReleasePolicy.Permits (typedRelease "secret" 7) := by
+  simp [typedReleasePolicy, ReleasePolicy.Permits, typedRelease]
+example : typedRelease "public" 7 ≠ typedRelease "public" 8 := by decide
+example : [typedRelease "public" 7, typedRelease "public" 8] ≠
+    [typedRelease "public" 8, typedRelease "public" 7] := by decide
 
 /-- What is public in a C1 state, parametric in a labelling. `project` exposes the public view of a
 value, or none for a secret; `lowStore` relates the public parts of shared state. -/

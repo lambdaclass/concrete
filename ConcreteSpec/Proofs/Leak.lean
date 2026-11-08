@@ -6,23 +6,35 @@ import ConcreteSpec.Proofs.Exec
 
 PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `ConcreteSpec/README.md`.
 
-The execution example is a small C1 operand language with one explicit release followed by one
-output. `secure_ni` and `secure_ct` prove delimited-release NI and constant time for the start
-configuration whose output and variable-time operands are public, for every pair of complete
-instrumented runs with matched choices. The leaky start configuration releases the same authorized
-public zero but outputs its secret: `authorized_release_not_ni` and `authorized_release_not_ct` are
-concrete counterexamples to deriving either security claim from policy authorization alone.
+The execution examples use a small C1 operand language. `secure_ni` and `secure_ct` declassify the
+secret itself, so equal release records are genuinely needed. `timing_ni` and `timing_not_ct`
+separate the claims with public output but secret-dependent variable-time work. The leaky start
+configuration releases authorized public zero but outputs its secret: `authorized_release_not_ni`
+and `authorized_release_not_ct` refute deriving either claim from authorization alone.
 
 The accounting theorems prove that every successful abstract C4 action sequence conserves requested
-and live bytes, preserves well-formedness and never lowers the historical peak. Free and reset
-conserve cumulative history and both historical and function-local peaks while removing exactly
-their stated live bytes. Zero-byte allocation is the identity on a well-formed abstract memory.
-Report soundness uses only the requests and peak since function entry.
+and live bytes, preserves well-formedness and never lowers either historical or function-local
+peaks. Reset outflow is read from actual intermediate states. Zero-byte allocation is the identity
+on a well-formed abstract memory. Report soundness connects independent limits to actual runs.
 -/
 
 namespace ConcreteSpec.Core.Leak
 open ConcreteSpec.Core
 open ConcreteSpec.Core.Exec
+
+/-- Forget only the C7 instrumentation: an instrumented execution projects to the C1 steps and their
+ordinary event trace, with every machine transition unchanged. -/
+theorem InstrumentedSteps.toSteps {O : Operands} {I : Instrumentation O} {P : Program O}
+    {c : Config O} {observations : List I.Observation}
+    {leakage : List (Leakage O.Val I.Address I.Effect)} {releases : List (Release O.Ty O.Val)}
+    {choices : List I.Choice} {c' : Config O}
+    (h : InstrumentedSteps I P c observations leakage releases choices c') :
+    ∃ events, Steps P c events c' := by
+  induction h with
+  | refl c => exact ⟨[], Steps.refl c⟩
+  | step h rest ih =>
+    obtain ⟨events, steps⟩ := ih
+    exact ⟨_, Steps.step h steps⟩
 
 namespace Demo
 
@@ -31,10 +43,11 @@ inductive Expr where
   | lit (n : Int)
   | secret
 
-/-- An explicit public release or a public output. -/
+/-- An explicit public release, a public output, or unobserved variable-time work. -/
 inductive Prim where
   | release
   | output
+  | work
 
 /-- Decidable equality for the example's primitive answers. -/
 instance answerDecidableEq : DecidableEq (Answer Int Int Int) := fun a b =>
@@ -53,6 +66,7 @@ def allowed (p : Prim) (vs : List Int) (st : Int) (a : Answer Int Int Int) : Boo
   match p, vs with
   | .release, [_] => decide (a = ⟨none, .ok 0, st⟩)
   | .output, [v] => decide (a = ⟨some v, .ok 0, st⟩)
+  | .work, [_] => decide (a = ⟨none, .ok 0, st⟩)
   | _, _ => false
 
 /-- Evaluate a public literal or read the secret shared input. -/
@@ -76,25 +90,27 @@ abbrev ops : Operands where
   test := fun v => some (v ≠ 0)
   allows := allowed
 
-/-- Release zero, then evaluate `result` as the output. -/
-def body (result : Expr) : Stmt ops :=
-  .seq (.prim none .release [.lit 0] ⟨0⟩) (.prim none .output [result] ⟨1⟩)
+/-- Release `released`, then evaluate `result` as the output. -/
+def body (released result : Expr) : Stmt ops :=
+  .seq (.prim none .release [released] ⟨0⟩) (.prim none .output [result] ⟨1⟩)
 
-/-- The shared empty function table; the secure and leaky examples differ in their initial
-configurations, not in their program. -/
+/-- The shared empty function table; the examples differ in their initial configurations. -/
 def program : Program ops := ⟨[]⟩
 
-/-- Start the secure example from secret input `secret`. Its public output and variable-time
-operands do not depend on the secret, and there are no public local inputs. -/
-def start (secret : Int) : Config ops := ⟨.exec (body (.lit 7)), [], secret, []⟩
+/-- The secure example declassifies and outputs its secret. Equal release records therefore expose
+exactly the input equality needed for equal public observations and leakage. -/
+def start (secret : Int) : Config ops := ⟨.exec (body .secret .secret), [], secret, []⟩
 
-/-- Start the leaky example from the same secret input. It releases the same public zero but outputs
-the secret. -/
-def leakyStart (secret : Int) : Config ops := ⟨.exec (body .secret), [], secret, []⟩
+/-- The leaky example releases public zero but outputs its secret. -/
+def leakyStart (secret : Int) : Config ops := ⟨.exec (body (.lit 0) .secret), [], secret, []⟩
+
+/-- Public output with secret-dependent variable-time work and no secret-dependent release. -/
+def timingBody : Stmt ops := .seq (.prim none .work [.secret] ⟨2⟩) (body (.lit 0) (.lit 7))
+def timingStart (secret : Int) : Config ops := ⟨.exec timingBody, [], secret, []⟩
 
 /-- The configuration after sequencing into the release. -/
-def afterSeq (result : Expr) (secret : Int) : Config ops :=
-  ⟨.exec (.prim none .release [.lit 0] ⟨0⟩), [], secret,
+def afterSeq (released result : Expr) (secret : Int) : Config ops :=
+  ⟨.exec (.prim none .release [released] ⟨0⟩), [], secret,
     [.seq (.prim none .output [result] ⟨1⟩)]⟩
 
 /-- The configuration after the release answer. -/
@@ -104,6 +120,14 @@ def afterRelease (result : Expr) (secret : Int) : Config ops :=
 /-- The configuration before the output answer. -/
 def beforeOutput (result : Expr) (secret : Int) : Config ops :=
   ⟨.exec (.prim none .output [result] ⟨1⟩), [], secret, []⟩
+
+/-- The two configurations specific to sequencing and answering the timing example's work. -/
+def timingAfterSeq (secret : Int) : Config ops :=
+  ⟨.exec (.prim none .work [.secret] ⟨2⟩), [], secret, [.seq (body (.lit 0) (.lit 7))]⟩
+def timingAfterWork (secret : Int) : Config ops :=
+  ⟨.done, [], secret, [.seq (body (.lit 0) (.lit 7))]⟩
+def timingBeforeBody (secret : Int) : Config ops :=
+  ⟨.exec (body (.lit 0) (.lit 7)), [], secret, []⟩
 
 /-- The common final configuration. -/
 def finished (secret : Int) : Config ops := ⟨.done, [], secret, []⟩
@@ -123,9 +147,11 @@ def request : Config ops → Option (Prim × List Int × SiteId)
       | _ => none
   | _ => none
 
-/-- The release record emitted by the example's release primitive. -/
-def releaseZero : Release Unit Int :=
-  ⟨⟨⟨0⟩, ()⟩, 0, "public zero", []⟩
+/-- A release record carries the actual evaluated operand, not a constant chosen by the observer. -/
+def releaseValue (value : Int) : Release Unit Int :=
+  ⟨⟨⟨0⟩, ()⟩, value, "released operand", []⟩
+
+def releaseZero : Release Unit Int := releaseValue 0
 
 /-- C7 instrumentation of the example. Every primitive is treated as variable-time, so its evaluated
 operands are leaked. The external choice records only that a step was taken; answers themselves are
@@ -143,17 +169,18 @@ abbrev instrumentation : Instrumentation ops where
     | some (_, vs, site) => [.variableTime site vs]
     | none => []
   releases := fun c _ _ => match request c with
-    | some (.release, [0], _) => [releaseZero]
+    | some (.release, [v], _) => [releaseValue v]
     | _ => []
   choices := fun _ _ _ => [()]
 
-/-- All values are secret in the example labelling; public shared state carries no information. -/
+/-- Negative local values are secret; nonnegative local values are public. The shared store remains
+secret, which is what lets the input configurations be low-equivalent. -/
 abbrev labelling : Labelling ops where
-  PublicValue := Unit
-  project := fun _ => none
+  PublicValue := Int
+  project := fun v => if v < 0 then none else some v
   lowStore := fun _ _ => True
 
-/-- The policy authorizes exactly the typed release site used by both start configurations. -/
+/-- The policy authorizes exactly the typed release site used by the examples. -/
 abbrev policy : ReleasePolicy Unit := ⟨[⟨⟨0⟩, ()⟩]⟩
 
 theorem allowed_unique {p : Prim} {vs : List Int} {st : Int} {a b : Answer Int Int Int}
@@ -192,12 +219,13 @@ theorem step_unique {P : Program ops} {c c₁ c₂ : Config ops} {l₁ l₂ : La
       cases hk'
       exact ⟨by rw [hab], rfl⟩
 
-/-- Every complete run of the secure four-step example has exactly the public traces below. -/
+/-- Every complete run of the secure four-step example has exactly the secret-dependent traces
+below. In particular, its release record carries the actual secret operand. -/
 theorem secure_run_unique (secret : Int)
     (r : Run instrumentation program (start secret)) :
-    r.observations = [.output 7] ∧
-      r.leakage = [.variableTime ⟨0⟩ [0], .variableTime ⟨1⟩ [7]] ∧
-      r.releases = [releaseZero] ∧ r.choices = [(), (), (), ()] ∧
+    r.observations = [.output secret] ∧
+      r.leakage = [.variableTime ⟨0⟩ [secret], .variableTime ⟨1⟩ [secret]] ∧
+      r.releases = [releaseValue secret] ∧ r.choices = [(), (), (), ()] ∧
       r.final = ⟨.done, [], secret, []⟩ := by
   obtain ⟨final, ending, hf, observations, leakage, releases, choices, hs⟩ := r
   cases hs with
@@ -205,71 +233,78 @@ theorem secure_run_unique (secret : Int)
   | step h₁ rest₁ =>
     obtain ⟨rfl, rfl⟩ := step_unique h₁ (.silent (P := program) rfl)
     cases rest₁ with
-    | refl => simp [Config.final?] at hf
+    | refl => dsimp [timingAfterSeq, timingAfterWork, timingBeforeBody, afterSeq, afterRelease, beforeOutput] at hf <;> simp [Config.final?] at hf
     | step h₂ rest₂ =>
       obtain ⟨rfl, rfl⟩ := step_unique h₂
-        (Step.prim (O := ops) (P := program) (p := .release) (vs := [0]) (st := secret)
+        (Step.prim (O := ops) (P := program) (p := .release) (vs := [secret]) (st := secret)
           (a := (⟨none, .ok 0, secret⟩ : Answer Int Int Int)) rfl (by simp [allowed]) rfl)
       cases rest₂ with
-      | refl => simp [Config.final?] at hf
+      | refl => dsimp [timingAfterSeq, timingAfterWork, timingBeforeBody, afterSeq, afterRelease, beforeOutput] at hf <;> simp [Config.final?] at hf
       | step h₃ rest₃ =>
         obtain ⟨rfl, rfl⟩ := step_unique h₃ (.silent (P := program) rfl)
         cases rest₃ with
-        | refl => simp [Config.final?] at hf
+        | refl => dsimp [timingAfterSeq, timingAfterWork, timingBeforeBody, afterSeq, afterRelease, beforeOutput] at hf <;> simp [Config.final?] at hf
         | step h₄ rest₄ =>
           obtain ⟨rfl, rfl⟩ := step_unique h₄
-            (Step.prim (O := ops) (P := program) (p := .output) (vs := [7]) (st := secret)
-              (a := (⟨some 7, .ok 0, secret⟩ : Answer Int Int Int)) rfl (by simp [allowed]) rfl)
+            (Step.prim (O := ops) (P := program) (p := .output) (vs := [secret]) (st := secret)
+              (a := (⟨some secret, .ok 0, secret⟩ : Answer Int Int Int)) rfl (by simp [allowed]) rfl)
           cases rest₄ with
           | refl => exact ⟨rfl, rfl, rfl, rfl, rfl⟩
           | step hs _ => exact (no_step_of_none (P := program)
             (c := (⟨.done, [], secret, []⟩ : Config ops)) rfl _ _ hs).elim
 
-/-- **Delimited-release NI, proved for the secure example.** Low-equivalent secret inputs, matched
-choices and equal release traces give the same output and final public observation. -/
+/-- **Delimited-release NI, proved for the secure example.** Equality of the actual release records
+is used to derive equality of the secrets, hence of their public outputs. -/
 theorem secure_ni (s₁ s₂ : Int) :
     DelimitedReleaseNI instrumentation program labelling (start s₁) (start s₂) := by
-  intro r₁ r₂ _ _ _
+  intro r₁ r₂ _ _ hreleases
   have h₁ := secure_run_unique s₁ r₁
   have h₂ := secure_run_unique s₂ r₂
+  have hs : s₁ = s₂ := by
+    rw [h₁.2.2.1, h₂.2.2.1] at hreleases
+    simpa [releaseValue] using hreleases
+  subst s₂
   simp only [Run.publicObservations, h₁.1, h₂.1, h₁.2.2.2.2, h₂.2.2.2.2]
-  rfl
 
-/-- **Constant time, proved separately for the secure example.** Under the same premises the entire
-leakage traces, including all variable-time operands, are equal. -/
+/-- **Constant time, proved separately for the secure example.** Equal release values likewise make
+the two secret-dependent variable-time traces equal. -/
 theorem secure_ct (s₁ s₂ : Int) :
     ConstantTime instrumentation program labelling (start s₁) (start s₂) := by
-  intro r₁ r₂ _ _ _
+  intro r₁ r₂ _ _ hreleases
   have h₁ := secure_run_unique s₁ r₁
   have h₂ := secure_run_unique s₂ r₂
+  have hs : s₁ = s₂ := by
+    rw [h₁.2.2.1, h₂.2.2.1] at hreleases
+    simpa [releaseValue] using hreleases
+  subst s₂
   rw [h₁.2.1, h₂.2.1]
 
-/-- One complete secure execution: release zero, output seven, and finish normally. -/
+/-- One complete secure execution: declassify the secret, output it, and finish normally. -/
 def secureRun (secret : Int) : Run instrumentation program (start secret) where
   final := finished secret
   ending := .normal
   finalEnding := rfl
-  observations := [.output 7]
-  leakage := [.variableTime ⟨0⟩ [0], .variableTime ⟨1⟩ [7]]
-  releases := [releaseZero]
+  observations := [.output secret]
+  leakage := [.variableTime ⟨0⟩ [secret], .variableTime ⟨1⟩ [secret]]
+  releases := [releaseValue secret]
   choices := [(), (), (), ()]
   steps :=
     InstrumentedSteps.step (I := instrumentation)
-      (Step.silent (P := program) (c := start secret) (c' := afterSeq (.lit 7) secret) rfl) <|
+      (Step.silent (P := program) (c := start secret) (c' := afterSeq .secret .secret secret) rfl) <|
     InstrumentedSteps.step (I := instrumentation)
-      (Step.prim (O := ops) (P := program) (c := afterSeq (.lit 7) secret)
-        (c' := afterRelease (.lit 7) secret) (p := .release) (vs := [0]) (st := secret)
+      (Step.prim (O := ops) (P := program) (c := afterSeq .secret .secret secret)
+        (c' := afterRelease .secret secret) (p := .release) (vs := [secret]) (st := secret)
         (a := (⟨none, .ok 0, secret⟩ : Answer Int Int Int)) rfl (by simp [allowed]) rfl) <|
     InstrumentedSteps.step (I := instrumentation)
-      (Step.silent (P := program) (c := afterRelease (.lit 7) secret)
-        (c' := beforeOutput (.lit 7) secret) rfl) <|
+      (Step.silent (P := program) (c := afterRelease .secret secret)
+        (c' := beforeOutput .secret secret) rfl) <|
     InstrumentedSteps.step (I := instrumentation)
-      (Step.prim (O := ops) (P := program) (c := beforeOutput (.lit 7) secret)
-        (c' := finished secret) (p := .output) (vs := [7]) (st := secret)
-        (a := (⟨some 7, .ok 0, secret⟩ : Answer Int Int Int)) rfl (by simp [allowed]) rfl) <|
+      (Step.prim (O := ops) (P := program) (c := beforeOutput .secret secret)
+        (c' := finished secret) (p := .output) (vs := [secret]) (st := secret)
+        (a := (⟨some secret, .ok 0, secret⟩ : Answer Int Int Int)) rfl (by simp [allowed]) rfl) <|
     InstrumentedSteps.refl (I := instrumentation) (P := program) (finished secret)
 
-/-- One complete leaky execution. Its release and choice traces are exactly `secureRun`'s. -/
+/-- One complete leaky execution: release public zero but output the secret. -/
 def leakyRun (secret : Int) : Run instrumentation program (leakyStart secret) where
   final := finished secret
   ending := .normal
@@ -280,9 +315,10 @@ def leakyRun (secret : Int) : Run instrumentation program (leakyStart secret) wh
   choices := [(), (), (), ()]
   steps :=
     InstrumentedSteps.step (I := instrumentation)
-      (Step.silent (P := program) (c := leakyStart secret) (c' := afterSeq .secret secret) rfl) <|
+      (Step.silent (P := program) (c := leakyStart secret)
+        (c' := afterSeq (.lit 0) .secret secret) rfl) <|
     InstrumentedSteps.step (I := instrumentation)
-      (Step.prim (O := ops) (P := program) (c := afterSeq .secret secret)
+      (Step.prim (O := ops) (P := program) (c := afterSeq (.lit 0) .secret secret)
         (c' := afterRelease .secret secret) (p := .release) (vs := [0]) (st := secret)
         (a := (⟨none, .ok 0, secret⟩ : Answer Int Int Int)) rfl (by simp [allowed]) rfl) <|
     InstrumentedSteps.step (I := instrumentation)
@@ -294,11 +330,175 @@ def leakyRun (secret : Int) : Run instrumentation program (leakyStart secret) wh
         (a := (⟨some secret, .ok 0, secret⟩ : Answer Int Int Int)) rfl (by simp [allowed]) rfl) <|
     InstrumentedSteps.refl (I := instrumentation) (P := program) (finished secret)
 
+/-- The concrete instrumented run projects to C1, not to a second semantics. -/
+example : ∃ events, Steps program (start 1) events (finished 1) :=
+  (secureRun 1).steps.toSteps
+
+/-- Every complete timing run has public output seven but leaks its secret work operand. -/
+theorem timing_run_unique (secret : Int)
+    (r : Run instrumentation program (timingStart secret)) :
+    r.observations = [.output 7] ∧
+      r.leakage = [.variableTime ⟨2⟩ [secret], .variableTime ⟨0⟩ [0], .variableTime ⟨1⟩ [7]] ∧
+      r.releases = [releaseZero] ∧ r.choices = [(), (), (), (), (), (), ()] ∧
+      r.final = ⟨.done, [], secret, []⟩ := by
+  obtain ⟨final, ending, hf, observations, leakage, releases, choices, hs⟩ := r
+  cases hs with
+  | refl => simp [timingStart, Config.final?] at hf
+  | step h₁ rest₁ =>
+    obtain ⟨rfl, rfl⟩ := step_unique h₁ (.silent (P := program) rfl)
+    cases rest₁ with
+    | refl => dsimp [timingAfterSeq, timingAfterWork, timingBeforeBody, afterSeq, afterRelease, beforeOutput] at hf <;> simp [Config.final?] at hf
+    | step h₂ rest₂ =>
+      obtain ⟨rfl, rfl⟩ := step_unique h₂
+        (Step.prim (O := ops) (P := program) (c := timingAfterSeq secret)
+          (c' := timingAfterWork secret) (p := .work) (vs := [secret]) (st := secret)
+          (a := (⟨none, .ok 0, secret⟩ : Answer Int Int Int)) rfl (by simp [allowed]) rfl)
+      cases rest₂ with
+      | refl => dsimp [timingAfterSeq, timingAfterWork, timingBeforeBody, afterSeq, afterRelease, beforeOutput] at hf <;> simp [Config.final?] at hf
+      | step h₃ rest₃ =>
+        obtain ⟨rfl, rfl⟩ := step_unique h₃ (.silent (P := program)
+          (c := timingAfterWork secret) (c' := timingBeforeBody secret) rfl)
+        cases rest₃ with
+        | refl => dsimp [timingAfterSeq, timingAfterWork, timingBeforeBody, afterSeq, afterRelease, beforeOutput] at hf <;> simp [Config.final?] at hf
+        | step h₄ rest₄ =>
+          obtain ⟨rfl, rfl⟩ := step_unique h₄ (.silent (P := program)
+            (c := timingBeforeBody secret) (c' := afterSeq (.lit 0) (.lit 7) secret) rfl)
+          cases rest₄ with
+          | refl => dsimp [timingAfterSeq, timingAfterWork, timingBeforeBody, afterSeq, afterRelease, beforeOutput] at hf <;> simp [Config.final?] at hf
+          | step h₅ rest₅ =>
+            obtain ⟨rfl, rfl⟩ := step_unique h₅
+              (Step.prim (O := ops) (P := program) (c := afterSeq (.lit 0) (.lit 7) secret)
+                (c' := afterRelease (.lit 7) secret) (p := .release) (vs := [0]) (st := secret)
+                (a := (⟨none, .ok 0, secret⟩ : Answer Int Int Int)) rfl (by simp [allowed]) rfl)
+            cases rest₅ with
+            | refl => dsimp [timingAfterSeq, timingAfterWork, timingBeforeBody, afterSeq, afterRelease, beforeOutput] at hf <;> simp [Config.final?] at hf
+            | step h₆ rest₆ =>
+              obtain ⟨rfl, rfl⟩ := step_unique h₆ (.silent (P := program)
+                (c := afterRelease (.lit 7) secret) (c' := beforeOutput (.lit 7) secret) rfl)
+              cases rest₆ with
+              | refl => dsimp [timingAfterSeq, timingAfterWork, timingBeforeBody, afterSeq, afterRelease, beforeOutput] at hf <;> simp [Config.final?] at hf
+              | step h₇ rest₇ =>
+                obtain ⟨rfl, rfl⟩ := step_unique h₇
+                  (Step.prim (O := ops) (P := program) (c := beforeOutput (.lit 7) secret)
+                    (c' := finished secret) (p := .output) (vs := [7]) (st := secret)
+                    (a := (⟨some 7, .ok 0, secret⟩ : Answer Int Int Int)) rfl
+                    (by simp [allowed]) rfl)
+                cases rest₇ with
+                | refl => exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+                | step hs _ => exact (no_step_of_none (P := program)
+                  (c := (⟨.done, [], secret, []⟩ : Config ops)) rfl _ _ hs).elim
+
+/-- One complete seven-step timing execution. -/
+def timingRun (secret : Int) : Run instrumentation program (timingStart secret) where
+  final := finished secret
+  ending := .normal
+  finalEnding := rfl
+  observations := [.output 7]
+  leakage := [.variableTime ⟨2⟩ [secret], .variableTime ⟨0⟩ [0], .variableTime ⟨1⟩ [7]]
+  releases := [releaseZero]
+  choices := [(), (), (), (), (), (), ()]
+  steps :=
+    InstrumentedSteps.step (I := instrumentation)
+      (Step.silent (P := program) (c := timingStart secret) (c' := timingAfterSeq secret) rfl) <|
+    InstrumentedSteps.step (I := instrumentation)
+      (Step.prim (O := ops) (P := program) (c := timingAfterSeq secret)
+        (c' := timingAfterWork secret) (p := .work) (vs := [secret]) (st := secret)
+        (a := (⟨none, .ok 0, secret⟩ : Answer Int Int Int)) rfl (by simp [allowed]) rfl) <|
+    InstrumentedSteps.step (I := instrumentation)
+      (Step.silent (P := program) (c := timingAfterWork secret)
+        (c' := timingBeforeBody secret) rfl) <|
+    InstrumentedSteps.step (I := instrumentation)
+      (Step.silent (P := program) (c := timingBeforeBody secret)
+        (c' := afterSeq (.lit 0) (.lit 7) secret) rfl) <|
+    InstrumentedSteps.step (I := instrumentation)
+      (Step.prim (O := ops) (P := program) (c := afterSeq (.lit 0) (.lit 7) secret)
+        (c' := afterRelease (.lit 7) secret) (p := .release) (vs := [0]) (st := secret)
+        (a := (⟨none, .ok 0, secret⟩ : Answer Int Int Int)) rfl (by simp [allowed]) rfl) <|
+    InstrumentedSteps.step (I := instrumentation)
+      (Step.silent (P := program) (c := afterRelease (.lit 7) secret)
+        (c' := beforeOutput (.lit 7) secret) rfl) <|
+    InstrumentedSteps.step (I := instrumentation)
+      (Step.prim (O := ops) (P := program) (c := beforeOutput (.lit 7) secret)
+        (c' := finished secret) (p := .output) (vs := [7]) (st := secret)
+        (a := (⟨some 7, .ok 0, secret⟩ : Answer Int Int Int)) rfl (by simp [allowed]) rfl) <|
+    InstrumentedSteps.refl (I := instrumentation) (P := program) (finished secret)
+
+/-- NI does not use the release premise here: every timing run emits the same public output. -/
+theorem timing_ni (s₁ s₂ : Int) :
+    DelimitedReleaseNI instrumentation program labelling (timingStart s₁) (timingStart s₂) := by
+  intro r₁ r₂ _ _ _
+  have h₁ := timing_run_unique s₁ r₁
+  have h₂ := timing_run_unique s₂ r₂
+  simp only [Run.publicObservations, h₁.1, h₂.1, h₁.2.2.2.2, h₂.2.2.2.2]
+  rfl
+
+/-- The same program is not CT: secret-dependent work produces different nonempty leakage traces. -/
+theorem timing_not_ct : ¬ ConstantTime instrumentation program labelling (timingStart 1) (timingStart 2) := by
+  intro h
+  have hl := h (timingRun 1) (timingRun 2)
+    (by simp [LowEquivalent, publicLocals, labelling, timingStart])
+    (by simp [timingRun]) (by simp [timingRun, releaseZero, releaseValue])
+  simp [timingRun] at hl
+
+/-- A deliberately permissive output oracle admits two distinct labels for one machine request. -/
+abbrev permissiveOps : Operands := { ops with allows := fun p vs st a =>
+  match p, vs with
+  | .output, [_] => true
+  | _, _ => allowed p vs st a }
+
+def permissiveBeforeOutput : Config permissiveOps :=
+  ⟨.exec (.prim none .output [.lit 7] ⟨1⟩), [], 0, []⟩
+def permissiveFinished : Config permissiveOps := ⟨.done, [], 0, []⟩
+
+theorem permissive_step_not_unique :
+    ∃ (l₁ l₂ : Label permissiveOps) (c₁ c₂ : Config permissiveOps),
+      Step (⟨[]⟩ : Program permissiveOps) permissiveBeforeOutput l₁ c₁ ∧
+      Step (⟨[]⟩ : Program permissiveOps) permissiveBeforeOutput l₂ c₂ ∧
+      (l₁ ≠ l₂ ∨ c₁ ≠ c₂) := by
+  refine ⟨.emit 7, .emit 8, permissiveFinished, permissiveFinished, ?_, ?_, Or.inl ?_⟩
+  · exact Step.prim (O := permissiveOps) (P := (⟨[]⟩ : Program permissiveOps))
+      (p := .output) (vs := [7]) (st := 0)
+      (a := (⟨some 7, .ok 0, 0⟩ : Answer Int Int Int)) rfl rfl rfl
+  · exact Step.prim (O := permissiveOps) (P := (⟨[]⟩ : Program permissiveOps))
+      (p := .output) (vs := [7]) (st := 0)
+      (a := (⟨some 8, .ok 0, 0⟩ : Answer Int Int Int)) rfl rfl rfl
+  · intro h
+    injection h with hv
+    exact (by decide : (7 : Int) ≠ 8) hv
+
+/-- Planted trace mutations: reversed leakage and a missing final observation are detectable. -/
+example : (secureRun 1).leakage ≠ [.variableTime ⟨1⟩ [1], .variableTime ⟨0⟩ [1]] := by
+  intro h
+  simp [secureRun] at h
+example : (secureRun 1).publicObservations ≠ [.output 1] := by decide
+
+/-- A nonfinal execution prefix is not a complete run. -/
+example : ¬ ∃ ending, (afterRelease .secret 1).final? = some ending := by
+  simp [afterRelease, Config.final?]
+
+/-- A configuration with one secret and one public local. -/
+def mixedConfig (secret publicValue : Int) : Config ops :=
+  ⟨.done, [(⟨"secret", 0⟩, secret), (⟨"public", 1⟩, publicValue)], 0, []⟩
+
+/-- Secret local changes are invisible; a planted public local change rejects low-equivalence. -/
+example : LowEquivalent labelling (mixedConfig (-1) 7) (mixedConfig (-2) 7) := by
+  simp [LowEquivalent, publicLocals, labelling, mixedConfig]
+example : ¬ LowEquivalent labelling (mixedConfig (-1) 7) (mixedConfig (-2) 8) := by
+  simp [LowEquivalent, publicLocals, labelling, mixedConfig]
+
+/-- A store-sensitive labelling supplies the corresponding public-store negative control. -/
+abbrev storeSensitiveLabelling : Labelling ops where
+  PublicValue := Int
+  project := fun _ => none
+  lowStore := fun s₁ s₂ => s₁ = s₂
+example : ¬ LowEquivalent storeSensitiveLabelling (leakyStart 1) (leakyStart 2) := by
+  simp [LowEquivalent, storeSensitiveLabelling, leakyStart]
+
 theorem leaky_low (s₁ s₂ : Int) : LowEquivalent labelling (leakyStart s₁) (leakyStart s₂) := by
   simp [LowEquivalent, publicLocals, labelling, leakyStart]
 
 theorem release_authorized (secret : Int) : policy.Authorized (leakyRun secret).releases := by
-  simp [ReleasePolicy.Authorized, ReleasePolicy.Permits, leakyRun, releaseZero]
+  simp [ReleasePolicy.Authorized, ReleasePolicy.Permits, leakyRun, releaseZero, releaseValue]
 
 /-- **Authorization does not imply NI.** These two executions have low-equivalent inputs, matched
 choices and identical authorized releases, yet output different public observations. -/
