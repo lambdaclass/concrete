@@ -163,8 +163,8 @@ The push sequence:
    so a publisher that moved main without taking the lock makes the push fail. Nothing it pushed
    is undone.
 2. Checks `origin/main` with `ls-remote` once more; the landing is complete only when it is at the
-   head. There is no mirror: since 2026-11-06 lambdaclass/concrete is the one repository
-   ([decision](decisions.md)), and `origin` is it in every clone.
+   head. There is no mirror: lambdaclass/concrete is the one repository by the owner's decision of
+   2026-11-06, pending its record in `docs/decisions.md`, and `origin` is it in every clone.
 3. Cancels nothing. The push to main starts CI on main at the landed SHA, and that run's first job,
    **Landing record**, runs `train.sh record <head> --base <before>` (R-0570). It finds the newest
    completed `workflow_dispatch` run of CI at exactly that SHA whose title says it ran at base

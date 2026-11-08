@@ -6,7 +6,8 @@
 # artifact_url is the published release asset (owner approval P13; published 2026-11-05, release tag
 # release_tag pointing at commit). fetch.sh downloads it and trusts it only through artifact_sha256.
 # Republished on lambdaclass/concrete on 2026-11-07 (the one repository since 2026-11-06), the same
-# asset (same artifact_sha256); the first publication stays on the archived concrete2.
+# asset (same artifact_sha256); the first publication stays on the old concrete2 repository, to be
+# archived after the first landing on lambdaclass/concrete.
 tag=legacy-compiler-final
 commit=066c9d9b8836a2b176aa37f6c8313195a4b4ee29
 url=https://github.com/lambdaclass/concrete.git

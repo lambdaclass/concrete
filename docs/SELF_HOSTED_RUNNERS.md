@@ -86,9 +86,10 @@ gh variable set CONCRETE_SELF_HOSTED_CAMPAIGN --body true -R lambdaclass/concret
 
 The variable is read when a run starts. Runs already queued keep the routing they started with.
 
-**One repository.** Since 2026-11-06 the runners serve lambdaclass/concrete only
-([decision](decisions.md)); concrete2, where they were registered until
-then, is archived once a full landing has run on lambdaclass/concrete. Variables and repository-level runners belong to one repository: the move
+**One repository.** Since the owner's decision of 2026-11-06, pending its record in
+`docs/decisions.md`, the runners serve lambdaclass/concrete only; concrete2, where they were
+registered until then, is archived once a full landing has run on lambdaclass/concrete. Variables
+and repository-level runners belong to one repository: the move
 re-registered each runner there (the dotfiles `servers/runners.sh`, `RUNNER_REINSTALL=1`, which
 reinstalls the runner into a fresh user), and `CONCRETE_SELF_HOSTED=true` is set on
 lambdaclass/concrete. The root has no nightly campaign yet; `CONCRETE_SELF_HOSTED_CAMPAIGN` matters
@@ -99,8 +100,8 @@ only when one returns.
 GitHub's own guidance is that self-hosted runners should not be used with public repositories,
 because a pull request can run arbitrary code on them. We use them anyway, under these rules:
 
-**Who can reach the runners at all** (owner, 2026-11-06, "A";
-[decisions](decisions.md)). On lambdaclass/concrete every org member
+**Who can reach the runners at all** (owner decision of 2026-11-06, "A", pending its record in
+`docs/decisions.md`). On lambdaclass/concrete every org member
 has push: 44 accounts. A push of any branch, or a `workflow_dispatch`, runs the workflow file of that
 branch, so any of them can put a job on these runners with no approval; the rules below do not
 change that. The owner accepted this exposure, as for stabileo's runners. On concrete2 one account

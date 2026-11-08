@@ -2,8 +2,9 @@
 
 The owner approved migrating everything to lambdaclass/concrete and archiving
 unbalancedparentheses/concrete2, and accepted that every lambdaclass org member with push (44
-accounts) reaches the self-hosted runners through branch pushes and `workflow_dispatch` ("A"; both in
-`docs/decisions.md`). The `pull_request` guard on every self-hosted job stays.
+accounts) reaches the self-hosted runners through branch pushes and `workflow_dispatch` ("A"). These
+are the owner's decisions of 2026-11-06, pending their record in `docs/decisions.md`. The
+`pull_request` guard on every self-hosted job stays.
 
 - **No mirror.** `origin` is lambdaclass/concrete in every clone. `scripts/land/train.sh` lands on
   `origin` only (`LAND_MIRROR` and `land --no-mirror` are gone), `LAND_REPO` defaults to
