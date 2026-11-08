@@ -19,18 +19,44 @@ def firstStepVisible {S : EventSignature} (steps : List (Step S)) : List (Event 
   (steps.head?.bind Step.event?).toList
 
 /-- Instance (law `ConcreteSpec.Core.Observe.silent_internal_steps`, case `leading_silence`). -/
-example : SameObservation (.finite before (.exited 0)) (.finite after (.exited 0)) :=
-  silent_internal_steps insertion (.exited 0)
+example : SameObservation (.finite before (.exited 0) 7) (.finite after (.exited 0) 7) :=
+  silent_internal_steps insertion (.exited 0) 7
 
 /-- Planted (law `ConcreteSpec.Core.Observe.silent_internal_steps`, case `leading_silence`,
 subject `ConcreteSpec.Core.Observe.visible`, mutant `ConcreteSpec.Core.Observe.Evidence.firstStepVisible`). -/
 example : SilentInsertion before after ∧
-    ¬ (firstStepVisible before = firstStepVisible after ∧ Terminal.exited 0 = .exited 0) := by
+    ¬ (firstStepVisible before = firstStepVisible after ∧ Terminal.exited 0 = .exited 0 ∧
+      (7 : Int) = 7) := by
   refine ⟨insertion, ?_⟩
   intro invalid
   have equal := invalid.1
   change [event] = [] at equal
   cases equal
+
+/-- Fault: inspects only the first step of a finite execution when projecting its observation,
+so inserting a leading silent step loses the terminal observation even though `SameObservation`
+holds. -/
+def firstStepHasFullObservation {S : EventSignature} : Execution S → FullObservation S → Prop
+  | .finite steps terminal state, .terminal observation =>
+      observation = ⟨firstStepVisible steps, terminal, state⟩
+  | execution, observation => HasFullObservation execution observation
+
+/-- Instance (law `ConcreteSpec.Core.Observe.full_observation_preservation`, case `stuttered_terminal_state`). -/
+example : HasFullObservation (.finite after (.exited 0) 7) (.terminal ⟨[event], .exited 0, 7⟩) :=
+  full_observation_preservation (x := .finite before (.exited 0) 7)
+    (y := .finite after (.exited 0) 7) (observation := .terminal ⟨[event], .exited 0, 7⟩)
+    (silent_internal_steps insertion (.exited 0) 7) rfl
+
+/-- Planted (law `ConcreteSpec.Core.Observe.full_observation_preservation`, case `stuttered_terminal_state`,
+subject `ConcreteSpec.Core.Observe.HasFullObservation`, mutant `ConcreteSpec.Core.Observe.Evidence.firstStepHasFullObservation`). -/
+example : SameObservation (.finite before (.exited 0) 7) (.finite after (.exited 0) 7) ∧
+    firstStepHasFullObservation (.finite before (.exited 0) 7) (.terminal ⟨[event], .exited 0, 7⟩) ∧
+    ¬ firstStepHasFullObservation (.finite after (.exited 0) 7) (.terminal ⟨[event], .exited 0, 7⟩) := by
+  refine ⟨silent_internal_steps insertion (.exited 0) 7, rfl, ?_⟩
+  intro invalid
+  have eventsEqual := congrArg Observation.events invalid
+  change [event] = [] at eventsEqual
+  cases eventsEqual
 
 /-- Instance (law `ConcreteSpec.Core.Observe.blocked_silent_internal_steps`, case `pending_silence`). -/
 example : SameObservation (.blocked before ⟨Demo.Op.double, 3⟩)

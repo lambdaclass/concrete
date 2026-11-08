@@ -53,10 +53,12 @@ theorem SilentInsertion.visible {before after : List (Step S)} (h : SilentInsert
   | emit event _ ih => exact congrArg (List.cons event) ih
 
 /-- Law (subject `ConcreteSpec.Core.Observe.visible`).
- Any finite number of silent steps may be inserted anywhere in a finite terminated run. -/
+ Any finite number of silent steps may be inserted anywhere in a finite terminated run,
+preserving both its event history and its externally visible final state. -/
 theorem silent_internal_steps {before after : List (Step S)} (h : SilentInsertion before after)
-    (terminal : Terminal) : SameObservation (.finite before terminal) (.finite after terminal) := by
-  exact ⟨h.visible, rfl⟩
+    (terminal : Terminal) (state : S.State) :
+    SameObservation (.finite before terminal state) (.finite after terminal state) := by
+  exact ⟨h.visible, rfl, rfl⟩
 
 /-- Law (subject `ConcreteSpec.Core.Observe.visible`).
  The same arbitrary finite stuttering preserves a blocked run and its pending request. -/
@@ -219,44 +221,47 @@ theorem infinite_stuttering {steps : Nat → Step S} {f : Nat → Nat} {stutter 
     obtain ⟨rest, extended⟩ := visiblePrefix_prefix steps oldBound
     exact ⟨m, rest, by rw [extended, pref]⟩
 
-/-- Representation lemma. Algebra of the observation representation; not independent semantic soundness evidence. (approved: PENDING)
+/-- Representation lemma. Reflexivity of full-observation equivalence across finite, blocked and infinite executions. (approved: PENDING)
  Full-observation equivalence is reflexive. -/
 theorem SameObservation.refl (execution : Execution S) : SameObservation execution execution := by
   cases execution with
-  | finite steps terminal => exact ⟨rfl, rfl⟩
+  | finite steps terminal state => exact ⟨rfl, rfl, rfl⟩
   | blocked steps request => exact ⟨rfl, rfl⟩
   | infinite steps => exact SameInfiniteObservation.refl steps
 
-/-- Representation lemma. Algebra of the observation representation; not independent semantic soundness evidence. (approved: PENDING)
+/-- Representation lemma. Symmetry of full-observation equivalence across finite, blocked and infinite executions. (approved: PENDING)
  Full-observation equivalence is symmetric. -/
 theorem SameObservation.symm {x y : Execution S} (h : SameObservation x y) : SameObservation y x := by
   cases x <;> cases y <;> simp only [SameObservation] at h ⊢
-  all_goals first | exact h.elim | exact ⟨h.1.symm, h.2.symm⟩ | exact h.symm
+  all_goals first | exact h.elim | exact ⟨h.1.symm, h.2.1.symm, h.2.2.symm⟩ |
+    exact ⟨h.1.symm, h.2.symm⟩ | exact h.symm
 
-/-- Representation lemma. Algebra of the observation representation; not independent semantic soundness evidence. (approved: PENDING)
+/-- Representation lemma. Transitivity of full-observation equivalence across finite, blocked and infinite executions. (approved: PENDING)
  Full-observation equivalence is transitive. -/
 theorem SameObservation.trans {x y z : Execution S}
     (hxy : SameObservation x y) (hyz : SameObservation y z) : SameObservation x z := by
   cases x <;> cases y <;> cases z <;> simp only [SameObservation] at hxy hyz ⊢
   all_goals first | exact hxy.elim | exact hyz.elim |
+    exact ⟨hxy.1.trans hyz.1, hxy.2.1.trans hyz.2.1, hxy.2.2.trans hyz.2.2⟩ |
     exact ⟨hxy.1.trans hyz.1, hxy.2.trans hyz.2⟩ | exact hxy.trans hyz
 
-/-- Representation lemma. Relational transport of a represented observation, not execution or final-store adequacy. (approved: PENDING)
+/-- Law (subject `ConcreteSpec.Core.Observe.HasFullObservation`).
  **Full-observation preservation.** An observation projected from `x` is also an observation of
-every `y` equivalent to `x`. Finite runs preserve their events and terminal action, blocked runs
-also preserve their pending request, and infinite runs transport both eventually silent and
-infinitely emitting histories. No infinite run is related to a finite termination. -/
+every `y` equivalent to `x`. Finite runs preserve their events, terminal action, and externally
+visible final state; blocked runs also preserve their pending request; infinite runs transport
+both eventually silent and infinitely emitting histories. No infinite run is related to a finite
+termination. -/
 theorem full_observation_preservation {x y : Execution S} {observation : FullObservation S}
     (h : SameObservation x y) (hx : HasFullObservation x observation) :
     HasFullObservation y observation := by
   cases x with
-  | finite xs terminal =>
+  | finite xs terminal state =>
     cases y with
-    | finite ys terminal' =>
+    | finite ys terminal' state' =>
       cases observation with
       | terminal observation =>
         simp only [HasFullObservation] at hx ⊢
-        exact hx.trans (by rw [h.1, h.2])
+        exact hx.trans (by rw [h.1, h.2.1, h.2.2])
       | blocked events request => exact hx.elim
       | finiteDivergence events => exact hx.elim
       | infiniteDivergence events => exact hx.elim
@@ -271,7 +276,7 @@ theorem full_observation_preservation {x y : Execution S} {observation : FullObs
       | terminal observation => exact hx.elim
       | finiteDivergence events => exact hx.elim
       | infiniteDivergence events => exact hx.elim
-    | finite ys terminal => exact h.elim
+    | finite ys terminal state => exact h.elim
     | infinite ys => exact h.elim
   | infinite xs =>
     cases y with
@@ -281,22 +286,22 @@ theorem full_observation_preservation {x y : Execution S} {observation : FullObs
       | infiniteDivergence events => exact SameInfiniteObservation.trans (SameInfiniteObservation.symm h) hx
       | terminal observation => exact hx.elim
       | blocked events request => exact hx.elim
-    | finite ys terminal => exact h.elim
+    | finite ys terminal state => exact h.elim
     | blocked ys request => exact h.elim
 
-/-- Representation lemma. Distinguishes observation constructors; it does not validate an execution transformation. (approved: PENDING)
+/-- Representation lemma. Constructor disjointness between infinite and finite `Execution` cases in `SameObservation`. (approved: PENDING)
  No infinite execution, including one that eventually becomes silent forever, is equivalent to
 any finite successful or trapped termination. -/
 theorem infinite_not_termination (steps : Nat → Step S) (finiteSteps : List (Step S))
-    (terminal : Terminal) :
-    ¬ SameObservation (.infinite steps) (.finite finiteSteps terminal) := by
+    (terminal : Terminal) (state : S.State) :
+    ¬ SameObservation (.infinite steps) (.finite finiteSteps terminal state) := by
   simp [SameObservation]
 
-/-- Representation lemma. Distinguishes observation constructors; operational transformation evidence is separate. (approved: PENDING)
+/-- Representation lemma. Specializes `infinite_not_termination` to the all-silent stream and empty finite trace. (approved: PENDING)
  In particular, an infinite silent run never acquires a terminal observation. -/
-theorem infinite_silent_not_termination (terminal : Terminal) :
-    ¬ SameObservation (.infinite (fun _ => Step.silent)) (.finite (S := S) [] terminal) :=
-  infinite_not_termination _ [] terminal
+theorem infinite_silent_not_termination (terminal : Terminal) (state : S.State) :
+    ¬ SameObservation (.infinite (fun _ => Step.silent)) (.finite (S := S) [] terminal state) :=
+  infinite_not_termination _ [] terminal state
 
 /-! ## Decoding the exact trap line -/
 
@@ -546,12 +551,14 @@ theorem runFrom_blockingPermitted (P : Exec.Program O) (A : ExecAdapter O S)
 
 /-- Helper (computation). Projection of a certified step history. This does not establish independent output correspondence for an arbitrary adapter. (approved: PENDING)
  **Output before a trap is kept.** The terminal C1 observation contains the projection of the
-whole `Steps` history, not merely a suffix or the trap itself, and contains the exact trap line. -/
+whole `Steps` history, not merely a suffix or the trap itself, and contains the exact trap line
+and final external state. -/
 theorem output_before_trap_kept (A : ExecAdapter O S) {P : Exec.Program O} {c c' : Exec.Config O}
     {events : List O.Event} (steps : Exec.Steps P c events c') {kind : TrapKind} {site : SiteId}
     {sp : Span} (final : c'.final? = some (.trapped kind site))
     (resolved : AList.lookup A.sites site = some sp) :
-    stepsObservation A steps = some ⟨A.project events, .trapped kind site sp (trapLine kind site sp)⟩ := by
+    stepsObservation A steps =
+      some ⟨A.project events, .trapped kind site sp (trapLine kind site sp), A.state c'.store⟩ := by
   simp [stepsObservation, final, ExecAdapter.terminal?, trapTerminal, resolved]
 
 /-- Helper (projection). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
@@ -607,6 +614,8 @@ abbrev signature : EventSignature where
   Request := fun _ => Int
   Response := fun _ => Int
   Output := String
+  State := Unit
+  initState := ()
 
 def query (n : Int) : Request signature := ⟨.double, n⟩
 def request (n : Int) : Event signature := .request (query n)
@@ -649,6 +658,7 @@ def adapter : ExecAdapter ops signature where
   events := fun n => [request n, response (n * 2)]
   request := fun p _ _ _ => some (query p)
   status := fun _ => none
+  state := id
   sites := []
 
 def program : Exec.Program ops := ⟨[]⟩
@@ -783,7 +793,7 @@ example : reportObservation program adapter permittingContract () blockedReport 
 /-- Distinct observation example for `report_noAnswer_blocked`: the pending request cannot instead be
 observed as successful termination. -/
 example : reportObservation program adapter permittingContract () blockedReport blockedPermitted ≠
-    some (.terminal ⟨[request 3], .exited 0⟩) := by
+    some (.terminal ⟨[request 3], .exited 0, ()⟩) := by
   rw [blockedObservation]
   intro invalid
   cases invalid

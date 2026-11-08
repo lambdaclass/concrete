@@ -87,17 +87,14 @@ Open obligations, by name:
   (`Target`), C1 (`Exec`: the machine, its step, cleanup order, traps; parametric in the operand
   language), C2 (`Scalar`, `Const`), C4 (`Memory`, `Hybrid`) and C6 (`Observe`: typed requests,
   responses and output, finite and infinite observations, environment contracts, terminal
-  observations and the C1 adapter). **C6 remains reopened, not accepted.** Its audit repair now
-  includes source-derived byte columns, independently checked response production and routing,
-  exact reachable blocked reports with prior history, physical-output correspondence and an
-  output-then-trap execution, execution-delay classification, and valid adapter trap paths.
-  Inversion, projection and representation helpers carry pending independent-review approvals;
-  they are not contract evidence. Final external-state observation is still absent: the C1 final
-  report omits the final store. R-0571 must connect observations to actual terminal stores (for
-  example through a store-retaining evaluator refinement proved to erase to C1), include the
-  complete abstract external projection in observation equivalence, and establish its relationship
-  to operation effects. An arbitrary state field supplied independently of the run would not
-  discharge that obligation. The source-to-span connection remains O1. C4 covers byte memory, scalar
+  observations with externally visible final state, and the C1 adapter). **C6 remains reopened,
+  not accepted.** Its audit repair includes externally visible final-state projection from C1
+  terminal stores across observation equivalence and stuttering, source-derived byte columns,
+  independently checked response production and routing, exact reachable blocked reports with prior
+  history, physical-output correspondence and an output-then-trap execution, execution-delay
+  classification, and valid adapter trap paths. Inversion, projection and representation helpers
+  carry pending independent-review approvals; they are not contract evidence. The source-to-span
+  connection remains O1. C4 covers byte memory, scalar
   representation and structured/materialized places, with trailing padding preserved by typed
   writes; struct field layouts, enums, pointers in structs and the C8 padding oracle remain out
   of its scalar slice. The old slice-1 `Spec/Rep.lean` still has its own `MByte` and integer

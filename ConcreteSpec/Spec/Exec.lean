@@ -574,10 +574,11 @@ its site and the current state. -/
 abbrev Oracle (O : Operands) :=
   List O.Event → O.Prim → List O.Val → SiteId → O.Store → Option (Answer O.Val O.Event O.Store)
 
-/-- How a run of `run` ended. -/
+/-- How a run of `run` ended. A finished run retains both its `Final` classification and the
+final shared store `O.Store`, so C6 can project the externally visible final state. -/
 inductive Ending (O : Operands) where
-  /-- The program finished. -/
-  | final (f : Final O.Val)
+  /-- The program finished in `store`. -/
+  | final (f : Final O.Val) (store : O.Store)
   /-- No rule applies: unsafe stuckness. -/
   | stuck (c : Config O)
   /-- The oracle gave no answer: the run waits on the environment. C8 refines this (a run that
@@ -598,7 +599,7 @@ as final whatever fuel is left, so a run that ends on its last unit of fuel is n
 def runFrom (P : Program O) (ρ : Oracle O) : Nat → List O.Event → Config O → Report O
   | fuel, hist, c =>
     match c.final?, fuel with
-    | some f, _ => ⟨hist, .final f⟩
+    | some f, _ => ⟨hist, .final f c.store⟩
     | none, 0 => ⟨hist, .outOfFuel c⟩
     | none, n + 1 =>
       match step P c with
@@ -779,13 +780,13 @@ example : (match (run (O := refusingOps) ⟨[]⟩ (fun _ _ _ _ _ => none) 10
 
 example : (match (run (O := refusingOps) ⟨[]⟩ (fun _ _ _ _ _ => none) 10
     ⟨.exec (.block ⟨0⟩ (.bind y (.lit 1) s)), [], .init, []⟩).ending with
-    | .final .normal => true
+    | .final .normal _ => true
     | _ => false) = true := by decide
 
 /-- A report's events and, if the program finished, how. -/
 def brief (r : Report ops) : List Int × Option (Final Int) :=
   (r.events, match r.ending with
-    | .final f => some f
+    | .final f _ => some f
     | _ => none)
 
 /-- The report says the run was stuck. -/

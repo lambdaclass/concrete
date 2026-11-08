@@ -35,7 +35,7 @@ theorem runFrom_report_trace {O : Exec.Operands} {S : EventSignature}
   obtain ⟨history, _⟩ := runFrom_validTrace P A C input ρ wellFormed fuel hist c valid
   generalize ending : (Exec.runFrom P ρ fuel hist c).ending = e
   cases e with
-  | final f =>
+  | final f store =>
     simp only [reportObservation, ending]
     cases A.terminal? f <;> simp_all [ReportTraceValid]
   | noAnswer pending =>

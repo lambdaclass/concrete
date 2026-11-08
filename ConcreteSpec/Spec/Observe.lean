@@ -32,12 +32,16 @@ namespace ConcreteSpec.Core.Observe
 open ConcreteSpec.Core
 
 /-- The types an external-event instance supplies. `Kind` is extensible by choosing a larger type;
-each kind keeps its own request and response types. Public output is separate from operations. -/
+each kind keeps its own request and response types. Public output is separate from operations.
+`State` is the abstract externally visible state observed at termination, with initial launch
+state `initState`. -/
 structure EventSignature where
   Kind : Type
   Request : Kind → Type
   Response : Kind → Type
   Output : Type
+  State : Type
+  initState : State
 
 variable {S : EventSignature}
 
@@ -165,10 +169,11 @@ def Terminal.trapLine? : Terminal → Option String
   | .trapped _ _ _ line => some line
   | _ => none
 
-/-- A finite event history followed by a logical terminal action. -/
+/-- A finite event history, a logical terminal action, and the externally visible final state. -/
 structure Observation (S : EventSignature) where
   events : FiniteTrace S
   terminal : Terminal
+  state : S.State
 
 /-- Every externally visible behavior: finite termination, an explicitly blocked request, silent
 or eventually silent divergence with a finite event history, or an infinite event history. In
@@ -180,9 +185,10 @@ inductive FullObservation (S : EventSignature) where
   | finiteDivergence (events : FiniteTrace S)
   | infiniteDivergence (events : InfiniteTrace S)
 
-/-- Startup is refused before any program event when a required launch grant is missing. -/
+/-- Startup is refused before any program event when a required launch grant is missing,
+leaving the initial externally visible state unchanged. -/
 def launch (configured : Bool) (run : Unit → FullObservation S) : FullObservation S :=
-  if configured then run () else .terminal ⟨[], .startupRefused⟩
+  if configured then run () else .terminal ⟨[], .startupRefused, S.initState⟩
 
 /-! ## Preservation across silent internal steps -/
 
@@ -191,18 +197,19 @@ inductive Step (S : EventSignature) where
   | silent
   | emit (event : Event S)
 
-/-- A finite terminated or blocked execution, or a step-indexed infinite execution. The infinite
-form retains silent steps, so an empty event history does not make it terminated. -/
+/-- A finite terminated or blocked execution, or a step-indexed infinite execution. The finite
+form retains its terminal action and externally visible final state; the infinite form retains
+silent steps, so an empty event history does not make it terminated. -/
 inductive Execution (S : EventSignature) where
-  | finite (steps : List (Step S)) (terminal : Terminal)
+  | finite (steps : List (Step S)) (terminal : Terminal) (state : S.State)
   | blocked (steps : List (Step S)) (request : Request S)
   | infinite (steps : Nat → Step S)
 
-/-- Insert one internal step before an execution, retaining its ending and shifting every
-infinite step by one. This is an executable transformation, independent of the observation
-relations below; it does not inspect or recheck observation equivalence. -/
+/-- Insert one internal step before an execution, retaining its ending and final state, and
+shifting every infinite step by one. This is an executable transformation, independent of the
+observation relations below; it does not inspect or recheck observation equivalence. -/
 def delayExecution : Execution S → Execution S
-  | .finite steps terminal => .finite (.silent :: steps) terminal
+  | .finite steps terminal state => .finite (.silent :: steps) terminal state
   | .blocked steps request => .blocked (.silent :: steps) request
   | .infinite steps => .infinite (fun n => match n with | 0 => .silent | n + 1 => steps n)
 
@@ -245,13 +252,13 @@ emitting and diverge silently. Each visible prefix of either must eventually occ
 def SameInfiniteObservation (steps₁ steps₂ : Nat → Step S) : Prop :=
   PrefixEventually steps₁ steps₂ ∧ PrefixEventually steps₂ steps₁
 
-/-- Full-observation equivalence for executions. Finite runs preserve every event and the exact
-terminal action; blocked runs also preserve the pending request. Infinite runs use the eventual
-prefix relation. Mixed finite/infinite cases are false, which is what prevents silent divergence
-from becoming successful termination. -/
+/-- Full-observation equivalence for executions. Finite runs preserve every event, the exact
+terminal action, and the externally visible final state; blocked runs also preserve the pending
+request. Infinite runs use the eventual prefix relation. Mixed finite/infinite cases are false,
+which is what prevents silent divergence from becoming successful termination. -/
 def SameObservation : Execution S → Execution S → Prop
-  | .finite xs terminal, .finite ys terminal' =>
-      visible xs = visible ys ∧ terminal = terminal'
+  | .finite xs terminal state, .finite ys terminal' state' =>
+      visible xs = visible ys ∧ terminal = terminal' ∧ state = state'
   | .blocked xs request, .blocked ys request' =>
       visible xs = visible ys ∧ request = request'
   | .infinite xs, .infinite ys => SameInfiniteObservation xs ys
@@ -261,13 +268,14 @@ def SameObservation : Execution S → Execution S → Prop
 def finiteDivergenceSteps (events : FiniteTrace S) (n : Nat) : Step S :=
   if h : n < events.length then .emit events[n] else .silent
 
-/-- An execution has a particular full observation. Finite and blocked runs project exactly their
-visible history and ending. An infinite run with finite divergence has the same history as the
-canonical eventually silent execution; infinite divergence retains every event of an infinite
-trace. This is a projection relation, not merely a restatement of `SameObservation`. -/
+/-- An execution has a particular full observation. Finite and blocked runs project their visible
+history, ending, and (for finite termination) externally visible final state. An infinite run with
+finite divergence has the same history as the canonical eventually silent execution; infinite
+divergence retains every event of an infinite trace. This is a projection relation, not merely a
+restatement of `SameObservation`. -/
 def HasFullObservation : Execution S → FullObservation S → Prop
-  | .finite steps terminal, .terminal observation =>
-      observation = ⟨visible steps, terminal⟩
+  | .finite steps terminal state, .terminal observation =>
+      observation = ⟨visible steps, terminal, state⟩
   | .blocked steps request, .blocked events request' =>
       visible steps ++ [.request request] = events ∧ request = request'
   | .infinite steps, .finiteDivergence events =>
@@ -280,12 +288,14 @@ def HasFullObservation : Execution S → FullObservation S → Prop
 
 /-- How a C1 operand instance appears in C6. An answer's C1 event may project to several typed C6
 events (for example, the split request and response it records). A pending C1 request must have a
-typed C6 request for blocking to be observed. Only a valid `main` result needs a status mapping;
-C1's value-less `Final.normal` is not given an invented process status. -/
+typed C6 request for blocking to be observed. `state` projects the externally visible final state
+from the C1 store. Only a valid `main` result needs a status mapping; C1's value-less
+`Final.normal` is not given an invented process status. -/
 structure ExecAdapter (O : Exec.Operands) (S : EventSignature) where
   events : O.Event → List (Event S)
   request : O.Prim → List O.Val → SiteId → O.Store → Option (Request S)
   status : O.Val → Option Nat
+  state : O.Store → S.State
   sites : SiteTable
 
 variable {O : Exec.Operands}
@@ -335,10 +345,10 @@ def ExecAdapter.terminal? (A : ExecAdapter O S) : Exec.Final O.Val → Option Te
   | .trapped kind site => trapTerminal A.sites kind site
 
 /-- The observation of a C1 finite execution. Its event projection is retained in full, including
-all output emitted before a trap. -/
+all output emitted before a trap, together with the projected externally visible final state. -/
 def stepsObservation (A : ExecAdapter O S) {P : Exec.Program O} {c c' : Exec.Config O}
     {events : List O.Event} (_steps : Exec.Steps P c events c') : Option (Observation S) :=
-  (c'.final?.bind A.terminal?).map fun terminal => ⟨A.project events, terminal⟩
+  (c'.final?.bind A.terminal?).map fun terminal => ⟨A.project events, terminal, A.state c'.store⟩
 
 /-- Every `noAnswer` projection in a report is permitted to block. The history ends in the typed
 request, exactly as required by `OperationContract.mayBlock` and `ValidTrace`. -/
@@ -350,14 +360,16 @@ def ExecAdapter.BlockingPermitted (P : Exec.Program O) (A : ExecAdapter O S)
 
 /-- The observation of a C1 evaluator report. The `BlockingPermitted` premise prevents an
 unanswered request from becoming a program observation when its operation forbids blocking.
-A blocked observation retains the earlier events and ends in its pending request. Unsafe stuckness,
-a bad answer and fuel exhaustion remain evaluator/premise reports, not external events. -/
+A terminal observation retains the projected event history, terminal action, and projected final
+external state; a blocked observation retains the earlier events and ends in its pending request.
+Unsafe stuckness, a bad answer and fuel exhaustion remain evaluator/premise reports, not external
+events. -/
 def reportObservation (P : Exec.Program O) (A : ExecAdapter O S) (C : OperationContract S)
     (input : C.Input) (r : Exec.Report O) (_permitted : ExecAdapter.BlockingPermitted P A C input r) :
     Option (FullObservation S) :=
   match r.ending with
-  | .final final => (A.terminal? final).map fun terminal =>
-      .terminal ⟨A.project r.events, terminal⟩
+  | .final final store => (A.terminal? final).map fun terminal =>
+      .terminal ⟨A.project r.events, terminal, A.state store⟩
   | .noAnswer c => match Exec.step P c with
     | some (.request p vs site store _) => (A.request p vs site store).map fun request =>
         .blocked (A.project r.events ++ [.request request]) request
@@ -371,12 +383,15 @@ namespace Demo
 inductive Op where
   | double
 
-/-- One operation kind: a natural request, its doubled natural response, and text output. -/
+/-- One operation kind: a natural request, its doubled natural response, text output, and an
+integer external state with initial value `0`. -/
 abbrev signature : EventSignature where
   Kind := Op
   Request := fun _ => Nat
   Response := fun _ => Nat
   Output := String
+  State := Int
+  initState := 0
 
 /-- Responses double the request after any history; blocking is refused by this operation. -/
 abbrev contract : OperationContract signature where
@@ -415,9 +430,9 @@ example : Responds contract () [request 3] ⟨.double, 3⟩ (.response ⟨.doubl
 example : InfiniteTrace signature := fun _ => .output "tick"
 
 /-- Internal steps before and after an event do not change a finite observation. -/
-example : SameObservation (.finite [.silent, .emit (request 1), .silent] (.exited 0))
-    (.finite [.emit (request 1)] (.exited 0)) := by
-  exact ⟨rfl, rfl⟩
+example : SameObservation (.finite [.silent, .emit (request 1), .silent] (.exited 0) 0)
+    (.finite [.emit (request 1)] (.exited 0) 0) := by
+  exact ⟨rfl, rfl, rfl⟩
 
 /-- Accepted: an existing silent step is retained while another is inserted. -/
 example : SilentInsertion (S := signature) [.silent, .emit (request 1)]
@@ -426,7 +441,7 @@ example : SilentInsertion (S := signature) [.silent, .emit (request 1)]
 
 /-- An infinite silent execution is not a successful empty termination. -/
 example : ¬ SameObservation (S := signature) (.infinite (fun _ => Step.silent))
-    (.finite [] (.exited 0)) := by
+    (.finite [] (.exited 0) 0) := by
   simp [SameObservation]
 
 def site : SiteId := ⟨7⟩
@@ -439,7 +454,7 @@ example : trapLine .overflow site sp =
 
 example : (trapTerminal sites .overflow site).map Terminal.status = some 134 := by decide
 example : (launch (S := signature) false (fun _ => .finiteDivergence [])) =
-    .terminal ⟨[], .startupRefused⟩ := rfl
+    .terminal ⟨[], .startupRefused, 0⟩ := rfl
 example : (Terminal.exited 134).status = 134 ∧ Terminal.exited 134 ≠
     (trapTerminal sites .overflow site).get (by decide) := by
   constructor
@@ -473,6 +488,7 @@ def refusingAdapter : ExecAdapter refusingBindOps signature where
   events := fun n => [response (Int.toNat n)]
   request := fun _ _ _ _ => none
   status := fun _ => none
+  state := fun st => st.counter
   sites := []
 
 /-- Helper (computation). Bookkeeping for a stuck report: its `noAnswer` antecedent is

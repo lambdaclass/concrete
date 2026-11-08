@@ -57,6 +57,8 @@ abbrev signature : EventSignature where
   Request := fun _ => Nat
   Response := fun _ => Nat
   Output := String
+  State := Unit
+  initState := ()
 
 /-- Separate operation policy: response routing and multiplication determine correctness. -/
 def contract : OperationContract signature where
