@@ -32,7 +32,9 @@
 #     beyond the reach premise, an absolute address (memory only through sp/fp, PC-relative or fs/gs), a callee that does not restore the frame pointer, a frame record away from sp, an unmodelled
 #     instruction (x86 `loop`) and frame- or link-register writeback (AArch64), and give the
 #     expected bound on known functions (x86 frame, red-zone store, two AArch64 frame-record
-#     shapes, a read of bytes written on both paths, an adrp-based load); the comparison must reject a
+#     shapes, a read of bytes written on both paths, an adrp-based load, LCB's single link-register
+#     save with a Mach-O stub call in a loop); also refuse the link register loaded from another
+#     slot and a stub call with no indirect-symbol entry; the comparison must reject a
 #     measurement above the bound.
 #
 # usage: slice0_artifacts.sh [REPORT_DIR]. Run inside the nix devshell, from the repository root.
@@ -45,6 +47,7 @@ SLICE0_GATE_MEM_GB=0
 source scripts/checks/lib/slice0_common.sh
 : "${CONCRETE_SLICE0_LLVM:?run inside nix develop}"
 objdump=(bounded 60 "$CONCRETE_SLICE0_LLVM/llvm-objdump" -d --no-show-raw-insn)
+indirect=(bounded 60 "$CONCRETE_SLICE0_LLVM/llvm-objdump" --macho --indirect-symbols)
 case "$target" in
   x86_64-linux) arch=x86_64; objdump+=(--x86-asm-syntax=intel) ;;
   aarch64-*) arch=aarch64 ;;
@@ -108,6 +111,15 @@ stack_check() {
   local name=$1 backend=$2 exe=$3 dis="$3.dis" out bound ext m measured=not-run
   if ! "${objdump[@]}" "$exe" >"$dis" 2>"$dis.err"; then
     echo "FAIL $name [$backend] stack: disassembly failed: $(head -c 300 "$dis.err")"; fail=1; return
+  fi
+  # Mach-O names only the whole __stubs section; each stub entry's imported symbol comes from the
+  # indirect symbol table, appended as `stub ADDR SYMBOL` lines (lib/stack_bound.py).
+  if [ "$target" = aarch64-macos ]; then
+    if ! "${indirect[@]}" "$exe" 2>"$dis.err" | awk '
+         /^Indirect symbols for / {s = ($0 ~ /\(__TEXT,__stubs\)/); next}
+         s && $1 ~ /^0x[0-9a-f]+$/ && NF == 3 {print "stub", $1, $3}' >>"$dis"; then
+      echo "FAIL $name [$backend] stack: indirect symbols failed: $(head -c 300 "$dis.err")"; fail=1; return
+    fi
   fi
   # The disassembly the bound is derived from is kept in the report (audit evidence).
   mkdir -p "$report/disassembly"
@@ -268,6 +280,9 @@ refuse a64-pc-relative-after-call '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    
 refuse a64-pc-relative-walk '    1010:\tadr\tx8, 0x1010 <_main>\n    1014:\tsub\tx2, x1, #0xfff\n    1018:\tadd\tx8, x8, #0x8\n    101c:\tcmp\tx8, x2\n    1020:\tb.lo\t0x1018 <_main+0x8>\n    1024:\tstrb\twzr, [x8]\n    1028:\tret\n' aarch64 _main
 refuse a64-pc-relative-far '    1010:\tadrp\tx8, 0x7fff0000\n    1014:\tstrb\twzr, [x8]\n    1018:\tret\n' aarch64 _main
 refuse absolute-address '    1010:\tmov\tbyte ptr [0x7fffffd0], 0x0\n    1018:\tret\n'
+# The link register loaded from a slot that does not hold it, and a stub call with no stub entry.
+refuse a64-lr-from-other-slot '    1010:\tsub\tsp, sp, #0x20\n    1014:\tstr\tx30, [sp, #0x10]\n    1018:\tstr\tx0, [sp, #0x8]\n    101c:\tldr\tx30, [sp, #0x8]\n    1020:\tadd\tsp, sp, #0x20\n    1024:\tret\n' aarch64 _main
+refuse a64-unmapped-stub '    1010:\tstr\tx30, [sp, #-0x10]!\n    1014:\tbl\t0x1040 <_write+0x1040>\n    1018:\tldr\tx30, [sp], #0x10\n    101c:\tret\n' aarch64 _main
 refuse a64-callee-residual-reread '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tmov\tx29, sp\n    1018:\tbl\t0x1040 <_concrete_body>\n    101c:\tldr\tx0, [sp, #-0x10]\n    1020:\tstr\tx1, [x0, #-0x100]\n    1024:\tldp\tx29, x30, [sp], #0x10\n    1028:\tret\n\n0000000000001040 <_concrete_body>:\n    1040:\tstp\tx29, x30, [sp, #-0x10]!\n    1044:\tldp\tx29, x30, [sp], #0x10\n    1048:\tret\n' aarch64 _main
 # A read of a byte written on only one path into it.
 refuse one-path-write '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tje\t0x101e <main+0xe>\n    1016:\tmov\tqword ptr [rbp - 0x8], rax\n    101e:\tmov\trax, qword ptr [rbp - 0x8]\n    1022:\tpop\trbp\n    1023:\tret\n'
@@ -303,6 +318,9 @@ bound_is a64-framed-main-and-leaf aarch64 'bound 32' '0000000000001000 <_main>:\
 bound_is a64-offset-frame-record aarch64 'bound 32' '0000000000001000 <_main>:\n    1000:\tsub\tsp, sp, #0x20\n    1004:\tstp\tx29, x30, [sp, #0x10]\n    1008:\tadd\tx29, sp, #0x10\n    100c:\tstur\twzr, [x29, #-0x4]\n    1010:\tldp\tx29, x30, [sp, #0x10]\n    1014:\tadd\tsp, sp, #0x20\n    1018:\tret\n'
 # A load PC-relative through adrp + add is not a stack access.
 bound_is a64-pc-relative-load aarch64 'bound 0' '0000000000001000 <_main>:\n    1000:\tadrp\tx8, 0x2000 <_main+0x1000>\n    1004:\tadd\tx8, x8, #0x10\n    1008:\tldr\tw0, [x8, #0x4]\n    100c:\tret\n'
+# LCB's frame: the link register saved and restored by a single str/ldr; a Mach-O stub entry named
+# by the indirect symbol table (a `stub` line); a call made in a loop (the link register meets).
+bound_is a64-single-lr-save-and-stub aarch64 'bound 48' '0000000000001000 <_main>:\n    1000:\tsub\tsp, sp, #0x30\n    1004:\tstr\tx30, [sp, #0x20]\n    1008:\tmov\tw0, #0x2\n    100c:\tbl\t0x1040 <_write+0x1040>\n    1010:\tcbnz\tw0, 0x1008 <_main+0x8>\n    1014:\tldr\tx30, [sp, #0x20]\n    1018:\tadd\tsp, sp, #0x30\n    101c:\tret\n\nDisassembly of section __TEXT,__stubs:\n\n0000000000001040 <__stubs>:\n    1040:\tadrp\tx16, 0x2000\n    1044:\tldr\tx16, [x16]\n    1048:\tbr\tx16\nstub 0x0000000000001040 _write\n'
 # A read of bytes the function wrote on both paths into it is accepted.
 bound_is both-path-write x86_64 'bound 16' '0000000000001010 <main>:\n    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tje\t0x101c <main+0xc>\n    1016:\tmov\tqword ptr [rbp - 0x8], rax\n    101a:\tjmp\t0x1020 <main+0x10>\n    101c:\tmov\tqword ptr [rbp - 0x8], rcx\n    1020:\tmov\trax, qword ptr [rbp - 0x8]\n    1024:\tpop\trbp\n    1025:\tret\n'
 if [ -n "$measuring" ]; then

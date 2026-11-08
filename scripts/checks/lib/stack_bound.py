@@ -63,21 +63,33 @@ def owned_name(sym):
 
 
 def parse(path):
-    """Functions: name -> list of (addr, mnemonic, operands). Also the set of stub symbols."""
-    funcs, cur, stubs, section = {}, None, set(), ""
+    """Functions: name -> list of (addr, mnemonic, operands). Also the stubs: ELF PLT symbol names
+    (`write@plt`), and Mach-O stub entries, address -> imported symbol, from `stub ADDR SYMBOL`
+    lines the gate appends (from `llvm-objdump --macho --indirect-symbols`, since the Mach-O
+    disassembly names only the whole `__stubs` section)."""
+    funcs, cur, stubs, section = {}, None, {"names": set(), "addrs": {}}, ""
     head = re.compile(r"^([0-9a-f]+) <([^>]+)>:$")
     inst = re.compile(r"^\s*([0-9a-f]+):\s*(\S+)\s*(.*)$")
+    stub = re.compile(r"^stub 0x([0-9a-f]+) (\S+)$")
     for line in open(path, encoding="utf-8", errors="replace"):
         line = line.rstrip("\n")
+        m = stub.match(line)
+        if m:
+            addr = int(m.group(1), 16)
+            if addr in stubs["addrs"]:
+                raise Refuse(f"two stub entries at {addr:#x}")
+            stubs["addrs"][addr] = m.group(2)
+            cur = None
+            continue
         if line.startswith("Disassembly of section"):
-            section = line.split()[-1].rstrip(":")
+            section = line.split()[-1].rstrip(":").split(",")[-1]
             cur = None
             continue
         m = head.match(line)
         if m:
             name = m.group(2)
             if section in (".plt", ".plt.sec", ".plt.got", "__stubs") or name.endswith("@plt"):
-                stubs.add(name)
+                stubs["names"].add(name)
                 cur = None
             else:
                 cur = name
@@ -109,7 +121,8 @@ class St:
     frame pointer or link register, (lowest, highest, tag) in byte depths, tag ("fp", value) or
     ("lr", whether it is this function's return address); kept after the stack pointer moves past
     them and after a restore (memory keeps them) until an exact overwrite. `lr`: whether the
-    AArch64 link register holds this function's return address. `w`: the stack bytes this
+    AArch64 link register holds this function's return address on every path (not part of the
+    key; joins take the conjunction). `w`: the stack bytes this
     function has written since its last call, on every path (not part of the equality key). `g`
     (AArch64): the registers holding a PC-relative address (adrp/adr, plus an immediate), on every
     path since the last call (not part of the key): the only registers memory may be addressed
@@ -121,7 +134,7 @@ class St:
         self.d, self.fp, self.saved, self.lr, self.w, self.g = d, fp, saved, lr, w, g
 
     def key(self):
-        return (self.d, self.fp, self.saved, self.lr)
+        return (self.d, self.fp, self.saved)
 
     def but(self, **kw):
         s = St(self.d, self.fp, self.saved, self.lr, self.w, self.g)
@@ -337,7 +350,7 @@ def a64_core(mn, ops, st):
     data = args[:first_mem]
     is_load, is_store = mn.startswith("ld"), mn.startswith("st")
     deepest = None
-    record = restored = False
+    record = restored = single = False
     if first_mem < len(args):
         mem = args[first_mem]
         post = args[first_mem + 1] if first_mem + 1 < len(args) else None
@@ -386,6 +399,26 @@ def a64_core(mn, ops, st):
                 lr = bool(lr_slot and lr_slot[2] == ("lr", True))
                 fp = fp_slot[2][1] if fp_slot and fp_slot[2][0] == "fp" else None
                 restored = True
+            elif data in (["x30"], ["x29"]) and top - lo == 7:
+                # A single 8-byte save or restore of the link register or frame pointer (LCB's
+                # `str x30, [sp, #k]`): a saved slot, as in the frame record.
+                tag = "lr" if data == ["x30"] else "fp"
+                if is_store:
+                    w = touch(st, lo, top, "w", what)
+                    saved = cleared(saved, lo, top) | {(lo, top, (tag, lr if tag == "lr" else fp))}
+                    single = True
+                elif is_load:
+                    slot = slot_at(saved, lo, top)
+                    w = touch(st, lo, top, "r", what, restore=(slot,) if slot else ())
+                    if not slot or slot[2][0] != tag:
+                        raise Refuse(f"{data[0]} loaded from other than its saved slot: {what}")
+                    if tag == "lr":
+                        lr = slot[2][1]
+                    else:
+                        fp = slot[2][1]
+                    restored = True
+                else:
+                    raise Refuse(f"unmodelled stack memory instruction: {what}")
             elif is_load or is_store:
                 w = touch(st, lo, top, "r" if is_load else "w", what)
                 if is_store:
@@ -397,13 +430,13 @@ def a64_core(mn, ops, st):
         elif base in A64_SP + A64_FP:
             raise Refuse(f"unmodelled stack address: {what}")
     if is_store:
-        if not record and any(a in A64_SP + A64_FP for a in data):
+        if not (record or single) and any(a in A64_SP + A64_FP for a in data):
             raise Refuse(f"stack or frame pointer stored as a value: {what}")
         return st, deepest
     if is_load:
         if any(a in A64_SP for a in data):
             raise Refuse(f"stack pointer loaded: {what}")
-        if any(a in A64_LR for a in data) and not record:
+        if any(a in A64_LR for a in data) and not (record or restored):
             raise Refuse(f"link register overwritten: {what}")
         if any(a in A64_FP for a in data) and not restored:
             st = st.but(fp=None)
@@ -523,8 +556,8 @@ def analyse(funcs, stubs):
             old = states[j]
             if old.key() != st.key():
                 raise Refuse(f"{key}+{addr:#x}: states {old.key()} and {st.key()} meet")
-            if not (old.w <= st.w and old.g <= st.g):
-                states[j] = old.but(w=old.w & st.w, g=old.g & st.g)
+            if not (old.w <= st.w and old.g <= st.g and (st.lr or not old.lr)):
+                states[j] = old.but(w=old.w & st.w, g=old.g & st.g, lr=old.lr and st.lr)
                 work.append(j)
 
         while work:
@@ -562,13 +595,21 @@ def analyse(funcs, stubs):
             if kind == "call":
                 base = sym.split("+")[0]
                 callee, d = owned_name(base), st.d
-                if callee and "+" not in sym:
+                if tgt in stubs["addrs"]:
+                    # A Mach-O stub entry: the imported symbol carries one leading underscore.
+                    imported = stubs["addrs"][tgt]
+                    name = imported[1:] if imported.startswith("_") else imported
+                    add_ext(ext, {name: 0}, d + ret_push)
+                    deepest = max(deepest, d + ret_push)
+                    if name in NORETURN:
+                        continue
+                elif callee and "+" not in sym:
                     sub_deep, sub_ext = fn_bound(callee)
                     deepest = max(deepest, d + ret_push + sub_deep)
                     add_ext(ext, sub_ext, d + ret_push)
-                elif base in stubs or base.endswith("@plt"):
-                    # ELF `write@plt`; Mach-O stubs carry one extra leading underscore.
-                    name = base.removesuffix("@plt") if base.endswith("@plt") else base[1:]
+                elif base in stubs["names"] and base.endswith("@plt"):
+                    # An ELF PLT entry, `write@plt`.
+                    name = base.removesuffix("@plt")
                     add_ext(ext, {name: 0}, d + ret_push)
                     deepest = max(deepest, d + ret_push)
                     if name in NORETURN:
