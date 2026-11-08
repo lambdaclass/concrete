@@ -338,6 +338,39 @@ theorem instrument_erasure {σ α : Type} (transition : State → Option State)
   cases hh
   exact hr
 
+/-- Every successful finite allocator run erases to the same ordered results and concrete
+state. This is one-way: instrumentation refusal does not imply concrete refusal. -/
+theorem run_erasure {σ α : Type} (cs : List (Command σ α)) (s : σ × State)
+    (results : List α) (t : σ × State) (h : run cs s = some (results, t)) :
+    runErased cs s.1 = some (results, t.1) := by
+  induction cs generalizing s results with
+  | nil => cases h; rfl
+  | cons c cs ih =>
+    simp only [run] at h
+    obtain ⟨⟨a, u⟩, hu, h⟩ := Option.bind_eq_some_iff.mp h
+    obtain ⟨⟨as, v⟩, hv, h⟩ := Option.bind_eq_some_iff.mp h
+    cases h
+    have hc := instrument_erasure c.transition c.operation s a u.1 u.2 hu
+    have ht := ih u as hv
+    simp [runErased, hc, ht]
+
+namespace RunWitnesses
+open ConcreteSpec.Core.Generative.Examples
+
+def resetCommand (i : BrandId) : Command Nat Nat :=
+  ⟨fun s => reset s i, fun n => some (n, n + 1)⟩
+def commands : List (Command Nat Nat) := [resetCommand ⟨0⟩, resetCommand ⟨1⟩]
+def finalState : State := ((reset initial ⟨0⟩).bind fun s => reset s ⟨1⟩).getD {}
+/-- Positive: two generative resets preserve both concrete results, their order and state. -/
+example : run commands (7, initial) = some ([7, 8], (9, finalState)) ∧
+    runErased commands 7 = some ([7, 8], 9) := by decide
+/-- Planted erasure mutation drops the first instruction, losing its effect and result. -/
+example : ¬ runErased commands.tail 7 = some ([7, 8], 9) := by decide
+/-- A refused brand operation is not a refused concrete allocator operation. -/
+example : run [resetCommand ⟨0⟩] (7, PreservationWitnesses.dependent) = none ∧
+    runErased [resetCommand ⟨0⟩] 7 = some ([7], 8) := by decide
+end RunWitnesses
+
 end ConcreteSpec.Core.Generative
 
 namespace ConcreteSpec.Core.Grants

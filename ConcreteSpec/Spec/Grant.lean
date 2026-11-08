@@ -109,6 +109,28 @@ def instrument {σ α : Type} (transition : State → Option State)
   let (result, concrete) ← operation s.1
   pure (result, (concrete, ghost))
 
+/-- One allocator instruction couples its concrete effect with its brand transition.
+A run carries the same concrete operations in the same order after erasure. -/
+structure Command (σ α : Type) where
+  transition : State → Option State
+  operation : σ → Option (α × σ)
+
+/-- Execute a finite allocator command stream, retaining all results in order. -/
+def run {σ α : Type} : List (Command σ α) → σ × State → Option (List α × (σ × State))
+  | [], s => some ([], s)
+  | c :: cs, s => do
+    let (a, t) ← instrument c.transition c.operation s
+    let (as, u) ← run cs t
+    pure (a :: as, u)
+
+/-- The uninstrumented allocator stream forgets brand transitions only. -/
+def runErased {σ α : Type} : List (Command σ α) → σ → Option (List α × σ)
+  | [], s => some ([], s)
+  | c :: cs, s => do
+    let (a, t) ← c.operation s
+    let (as, u) ← runErased cs t
+    pure (a :: as, u)
+
 namespace Examples
 
 def initial : State := (fresh {} ⟨0⟩).getD {}
