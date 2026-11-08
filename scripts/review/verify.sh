@@ -1,19 +1,27 @@
 #!/usr/bin/env bash
 # R-0544 — does a commit carry a clean review verdict? See docs/REVIEW.md.
 #
-#   scripts/review/verify.sh [--fetch] [--required-base BASE] <commit>
+#   scripts/review/verify.sh [--fetch] [--required-base BASE] [--fields]
+#                            [--brief-file FILE] [--output-file FILE] [--evidence-dir DIR] <commit>
 #
 # Reads the git note that scripts/review/review.sh wrote on <commit> under
 # refs/notes/concrete-review. The verdict counts only for that exact commit: a
 # clean note on an ancestor says nothing about the commits after it.
 #
-#   --fetch           first fetch refs/notes/concrete-review from $REVIEW_REMOTE
+#   --fetch           first fetch refs/notes/concrete-review (and concrete-writer) from $REVIEW_REMOTE
 #                     (default origin), replacing the local copy (a reader, not a writer).
 #   --required-base   accept a clean note only when its base is an ancestor of BASE,
 #                     or BASE itself, so its reviewed range covers BASE..commit.
+#   --fields          validate the note's schema and print its structured fields (`key: value` lines)
+#                     independent of clean-provenance eligibility (exits 0 on any well-formed note,
+#                     including findings, blocked, legacy clean and provenance-invalid clean notes;
+#                     exits 2 when no note exists or the note is malformed).
+#   --brief-file      optional brief file (or <commit>=<path>) to re-check against backfill brief-sha256.
+#   --output-file     optional output file (or <commit>=<path>) to re-check against backfill output-sha256.
+#   --evidence-dir    optional directory of <commit>.brief and <commit>.output files for backfill checks.
 #
-# Exit codes: 0 clean provenance; 1 reviewed but not clean provenance (findings,
-#             blocked, a legacy or self-reviewed clean note, or insufficient base
+# Exit codes: 0 clean provenance (or well-formed note under --fields); 1 reviewed but not clean
+#             provenance (findings, blocked, a legacy or self-reviewed clean note, or insufficient base
 #             coverage); 2 no note, a malformed note, or a usage error.
 
 set -euo pipefail
@@ -24,19 +32,29 @@ WRITER_NOTES_REF="${REVIEW_WRITER_NOTES_REF:-refs/notes/concrete-writer}"
 export REVIEW_WRITER_NOTES_REF="$WRITER_NOTES_REF"
 REMOTE="${REVIEW_REMOTE:-origin}"
 FETCH=0
+FIELDS=0
 REQUIRED_BASE=""
+PROV_ARGS=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --fetch) FETCH=1; shift ;;
+    --fields) FIELDS=1; shift ;;
     --required-base)
       [ $# -ge 2 ] && [ -n "$2" ] || { echo "verify: --required-base needs a commit" >&2; exit 2; }
       REQUIRED_BASE="$2"; shift 2 ;;
+    --brief-file|--output-file|--evidence-dir|--allowed-signers)
+      [ $# -ge 2 ] && [ -n "$2" ] || { echo "verify: $1 needs a value" >&2; exit 2; }
+      PROV_ARGS+=("$1" "$2"); shift 2 ;;
     --) shift; break ;;
     -*) echo "verify: unknown option: $1" >&2; exit 2 ;;
     *) break ;;
   esac
 done
-[ $# -eq 1 ] || { echo "usage: verify.sh [--fetch] [--required-base BASE] <commit>" >&2; exit 2; }
+[ $# -eq 1 ] || { echo "usage: verify.sh [--fetch] [--required-base BASE] [--fields] <commit>" >&2; exit 2; }
+if [ "$FIELDS" = 1 ] && [ -n "$REQUIRED_BASE" ]; then
+  echo "verify: --fields cannot be combined with --required-base" >&2
+  exit 2
+fi
 if [ -n "$REQUIRED_BASE" ]; then
   REQUIRED_BASE="$(git rev-parse -q --verify "$REQUIRED_BASE^{commit}")" \
     || { echo "verify: required base is not a commit: $REQUIRED_BASE" >&2; exit 2; }
@@ -108,6 +126,14 @@ field() { local n="F_${1//-/_}"; printf '%s' "${!n:-}"; }
 VERDICT="$(field verdict)"
 WRITER="$(field writer)"
 REVIEWER="$(field reviewer)"
+
+if [ "$FIELDS" = 1 ]; then
+  printf 'commit: %s\nverdict: %s\nrounds: %s\nreviewer: %s\nwriter: %s\nutc: %s\nbase: %s\npieces: %s\nrepository: %s\n' \
+    "$SHA" "$VERDICT" "$(field rounds)" "$REVIEWER" "$WRITER" \
+    "$(field utc)" "$(field base)" "$(field pieces)" "$(field repository)"
+  exit 0
+fi
+
 PROV_SUMMARY=""
 if [ "$VERDICT" = clean ]; then
   if [ "$(field repository)" != readable ]; then
@@ -131,7 +157,7 @@ if [ "$VERDICT" = clean ]; then
     echo "$SHA clean review note is not clean provenance: base $(field base) is not an ancestor-or-equal of required base $REQUIRED_BASE"
     exit 1
   fi
-  if ! prov_out="$(python3 -I "$SCRIPT_DIR/writer_provenance.py" verify --base "$(field base)" --head "$SHA" --claimed-writer "$WRITER" --reviewer "$REVIEWER" 2>&1)"; then
+  if ! prov_out="$(python3 -I "$SCRIPT_DIR/writer_provenance.py" verify --base "$(field base)" --head "$SHA" --claimed-writer "$WRITER" --reviewer "$REVIEWER" "${PROV_ARGS[@]}" 2>&1)"; then
     echo "$SHA clean review note is not clean provenance: ${prov_out//$'\n'/ }"
     exit 1
   fi

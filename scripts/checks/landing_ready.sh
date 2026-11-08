@@ -35,7 +35,12 @@ cat > "$GIT_CONFIG_GLOBAL" <<EOF
 [core]
 	hooksPath = $TMP/nohooks
 EOF
-mkdir -p "$TMP/nohooks" "$TMP/gh"
+mkdir -p "$TMP/nohooks" "$TMP/gh" "$TMP/keys"
+ssh-keygen -q -t ed25519 -N "" -C "orchestrator@concrete" -f "$TMP/keys/id_ed25519"
+printf 'orchestrator@concrete namespaces="git" %s\n' "$(cat "$TMP/keys/id_ed25519.pub")" > "$TMP/keys/allowed_signers"
+export REVIEW_WRITER_SIGNING_KEY="$TMP/keys/id_ed25519"
+export REVIEW_WRITER_SIGNER="orchestrator@concrete"
+export REVIEW_WRITER_ALLOWED_SIGNERS="$TMP/keys/allowed_signers"
 # train.sh runs only with the repository's pre-push hook enabled (ISS-0015): it asks the hook git
 # would run who it is (its single argument --concrete-identify). The sandbox's global hooksPath holds this
 # stand-in, which runs no gate and answers as the repository's .githooks/pre-push would: a test

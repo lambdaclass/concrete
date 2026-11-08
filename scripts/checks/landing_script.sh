@@ -84,7 +84,14 @@ standin_hook
 export LAND_NO_NIX=1 LAND_STATE_DIR="$TMP/state" LAND_GH="$TMP/fake-gh" LAND_REPO=test/repo
 export LAND_PUSH_RETRY_SLEEP=0
 unset LAND_GATES_HOST LAND_GATES_TRANSPORT CONCRETE_PREPUSH_NO_REUSE
-export FAKE_GH_DIR="$TMP/gh"; mkdir -p "$FAKE_GH_DIR"
+export FAKE_GH_DIR="$TMP/gh"; mkdir -p "$FAKE_GH_DIR" "$TMP/keys" "$TMP/ev"
+ssh-keygen -q -t ed25519 -N "" -C "orchestrator@concrete" -f "$TMP/keys/id_ed25519"
+printf 'orchestrator@concrete namespaces="git" %s\n' "$(cat "$TMP/keys/id_ed25519.pub")" > "$TMP/keys/allowed_signers"
+export REVIEW_WRITER_SIGNING_KEY="$TMP/keys/id_ed25519"
+export REVIEW_WRITER_SIGNER="orchestrator@concrete"
+export REVIEW_WRITER_ALLOWED_SIGNERS="$TMP/keys/allowed_signers"
+printf 'landing_script test brief\n' > "$TMP/ev/brief.txt"
+printf 'landing_script test output\n' > "$TMP/ev/output.txt"
 
 cat > "$TMP/fake-gh" <<'GH'
 #!/usr/bin/env bash
@@ -104,18 +111,29 @@ GH
 chmod +x "$TMP/fake-gh"
 
 # A current review note as scripts/review/review.sh writes it (seven common keys, plus repository on
-# clean), published to origin. put-review <sha> <clean|findings|blocked|malformed|none>[@rounds]
+# clean), published to origin. put-review <sha> <clean|findings|blocked|legacyclean|selfclean|malformed|none>[@rounds]
 # [review-base]; the base defaults to origin/main, and none removes the note.
-printf '#!/usr/bin/env bash\nWRITER_PROV=%q\n' "$ROOT_DIR/scripts/review/writer_provenance.py" > "$TMP/put-review"
+printf '#!/usr/bin/env bash\nWRITER_PROV=%q\nEV_DIR=%q\n' "$ROOT_DIR/scripts/review/writer_provenance.py" "$TMP/ev" > "$TMP/put-review"
 cat >> "$TMP/put-review" <<'EOF'
 set -e
 sha="$(git rev-parse "$1")"; R=refs/notes/concrete-review; W=refs/notes/concrete-writer
 base="${3:-$(git rev-parse origin/main)}"
 git fetch -q origin "+$R:$R" 2>/dev/null || true
 git fetch -q origin "+$W:$W" 2>/dev/null || true
-case "$2" in
+kind="${2%@*}"
+rounds="$(case "$2" in *@*) echo "${2#*@}" ;; *) echo 1 ;; esac)"
+case "$kind" in
   none) git notes --ref=$R remove --ignore-missing "$sha" 2>/dev/null ;;
   malformed) git notes --ref=$R add -f -m "verdict: clean" "$sha" ;;
+  legacyclean)
+    note="verdict: clean
+rounds: $rounds
+reviewer: codex
+utc: 2026-11-06T00:00:00Z
+base: $base
+pieces: 1"
+    git notes --ref=$R add -f -m "$note" "$sha"
+    ;;
   *)
     for c in $(git rev-list --reverse "$(git rev-parse origin/main)..$sha"); do
       p=($(git rev-list --parents -n 1 "$c"))
@@ -125,19 +143,25 @@ case "$2" in
       fi
       git notes --ref=$W show "$c" >/dev/null 2>&1 || python3 -I "$WRITER_PROV" backfill --repo "$PWD" \
         --commit "$c" --model claude --round 1 --branch test \
-        --brief-sha256 3333333333333333333333333333333333333333333333333333333333333333 \
-        --output-sha256 4444444444444444444444444444444444444444444444444444444444444444 \
+        --brief-file "$EV_DIR/brief.txt" \
+        --output-file "$EV_DIR/output.txt" \
         --start-sha "${p[1]}" --end-sha "$c" --evidence "landing_script test fixture" >/dev/null
     done
     ! git show-ref -q --verify $W || CONCRETE_SKIP_GATES=1 git push -q origin $W
-    note="verdict: ${2%@*}
-rounds: $(case "$2" in *@*) echo "${2#*@}" ;; *) echo 1 ;; esac)
+    verdict="$kind"
+    writer="claude"
+    if [ "$kind" = selfclean ]; then
+      verdict="clean"
+      writer="codex"
+    fi
+    note="verdict: $verdict
+rounds: $rounds
 reviewer: codex
-writer: claude
+writer: $writer
 utc: 2026-11-06T00:00:00Z
 base: $base
 pieces: 1"
-    [ "${2%@*}" != clean ] || note="$note
+    [ "$verdict" != clean ] || note="$note
 repository: readable"
     git notes --ref=$R add -f -m "$note" "$sha"
     ;;
@@ -1204,7 +1228,7 @@ git update-ref -d "$R/$sha" 2>/dev/null || true
 CONCRETE_SKIP_GATES=1 git push -q origin ":$R/$sha" 2>/dev/null || true
 [ "$mode" = none ] && exit 0
 # The member's own review.sh note: the rounds it used (any verdict), which the cap is judged against.
-bash "$(dirname "$0")/put-review" "$sha" "findings@$rounds"
+bash "$(dirname "$0")/put-review" "$sha" "${SO_REVIEW_MODE:-findings@$rounds}"
 d="$(mktemp -d)"
 first_path="$(git ls-tree -r --name-only "$sha" | head -1)"
 for r in codex kimi agy; do
@@ -1445,6 +1469,21 @@ git notes --ref=refs/notes/concrete-review add -f -m "rounds: 5" "$R2"
 o="$(bash "$ROOT_DIR/scripts/land/signoff.sh" verify "$R2" --base "$MR" 2>&1)"; r=$?
 [ "$r" = 1 ] && has "$o" "rounds-at ${R2:0:10} carries no well-formed review.sh note" \
   && ok "verify refuses cap evidence that is not a well-formed review.sh note" || { no "malformed cap note (exit $r)"; echo "$o" | sed 's/^/      /'; }
+# Cap counting uses verify.sh --fields (structured note fields independent of clean-provenance eligibility):
+# a legacy 6-key clean note (no writer, no repository: readable) or a provenance-invalid 8-key clean note
+# (self-reviewed reviewer == writer) at the round cap is valid cap evidence for signoff.sh record and verify,
+# while one below the cap is still refused for not reaching the cap.
+git checkout -q train/trv
+for cap_kind in "legacyclean legacy-6-key-clean" "selfclean provenance-invalid-clean"; do
+  read -r kmode klabel <<< "$cap_kind"
+  o="$(SO_REVIEW_MODE="${kmode}@2" bash "$TMP/put-signoff" "$R2" valid 2>&1)"; r=$?
+  [ "$r" != 0 ] && has "$o" "the review cap was not reached: a compiler change has cap 5, and ${R2:0:10} records 2 round(s)" \
+    && ok "signoff.sh record reads rounds from a $klabel note via verify.sh --fields and refuses 2 < 5" || { no "signoff record with $klabel@2 (exit $r)"; echo "$o" | sed 's/^/      /'; }
+  o="$(SO_REVIEW_MODE="${kmode}@5" bash "$TMP/put-signoff" "$R2" valid 2>&1 && bash "$ROOT_DIR/scripts/land/signoff.sh" verify "$R2" --base "$MR" 2>&1)"; r=$?
+  [ "$r" = 0 ] && has "$o" "compiler change, cap 5 reached at ${R2:0:10} with 5 round(s)" \
+    && ok "signoff.sh record and verify accept a $klabel note at the round cap (5 rounds)" || { no "signoff record/verify with $klabel@5 (exit $r)"; echo "$o" | sed 's/^/      /'; }
+  prov_leg "a member signed off at the cap with a $klabel note on rounds-at" none clean "${kmode}@5" pass "owner sign-off (1) at its exact SHA, and the head is their clean merge"
+done
 bash "$TMP/put-review" "$R2" none; bash "$TMP/put-signoff" "$R2" none
 bash "$TMP/put-signoff" "$SD" none
 git checkout -q train/trv

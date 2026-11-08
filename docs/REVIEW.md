@@ -27,7 +27,7 @@ it the same way every time, and its note is the record the landing train checks.
 
 ```sh
 scripts/review/review.sh [--writer codex|kimi|agy|claude[,...]] [--reviewer codex|kimi|agy] [--base <ref>] [--head <ref>] [--max-rounds 5] [--pieces auto|N] [--prompt-extra "..."]
-scripts/review/verify.sh [--fetch] [--required-base <ref>] <commit>
+scripts/review/verify.sh [--fetch] [--required-base <ref>] [--fields] [--brief-file <file>] [--output-file <file>] [--evidence-dir <dir>] <commit>
 ```
 
 One invocation runs **one round** on `HEAD`. Commit fixes between rounds; the
@@ -149,15 +149,62 @@ real review that discusses content filters still parses.
 
 Writer identity comes from the writer harness or an explicit audited backfill in
 `refs/notes/concrete-writer`, never from a caller flag, a commit trailer alone,
-or a default attribution on unstamped commits:
+a self-declared claim, or a default attribution on unstamped commits:
 
+- **SSH-signed entries and [allowed_writer_log_signers](../scripts/review/allowed_writer_log_signers).**
+  Every writer-log stanza (`source: harness` and `source: backfill`, including
+  corrections) carries `entry-id: <64-hex>` (the sha256 of the canonical
+  unsigned key-value lines), `signer: <principal>`, and a detached SSH signature
+  block (`-----BEGIN SSH SIGNATURE----- ... -----END SSH SIGNATURE-----`
+  produced by `ssh-keygen -Y sign -n git`), verified at read time by
+  `ssh-keygen -Y find-principals` and `ssh-keygen -Y verify -n git` against
+  [allowed_writer_log_signers](../scripts/review/allowed_writer_log_signers).
+  `scripts/review/allowed_writer_log_signers` ships tracked in the repository
+  with no key configured (comment lines only). Until the owner approves adding
+  the orchestrator's public key, every entry is unverified and provenance over
+  any range that requires a writer-log entry fails closed with a clear
+  diagnostic.
+  - *Operator steps to add the orchestrator's public key after owner approval:*
+    1. Generate a dedicated Ed25519 signing key on the orchestrator host (outside
+       any agent worktree):
+       ```sh
+       ssh-keygen -t ed25519 -N "" -C "orchestrator@concrete" -f ~/.ssh/concrete_writer_log_ed25519
+       ```
+    2. Append the authorized principal and public key to
+       `scripts/review/allowed_writer_log_signers`:
+       ```sh
+       printf 'orchestrator@concrete namespaces="git" %s\n' \
+         "$(cat ~/.ssh/concrete_writer_log_ed25519.pub)" \
+         >> scripts/review/allowed_writer_log_signers
+       ```
+    3. Configure the orchestrator environment (or git config in the orchestrator
+       clone) to sign writer-log entries with that key:
+       ```sh
+       export REVIEW_WRITER_SIGNING_KEY="$HOME/.ssh/concrete_writer_log_ed25519"
+       export REVIEW_WRITER_SIGNER="orchestrator@concrete"
+       ```
+    4. Commit `scripts/review/allowed_writer_log_signers` on a dedicated branch,
+       get independent review, and land it through `scripts/land/train.sh`.
+- **Append-only log and signed corrections.** The writer log is append-only: an
+  existing entry is never replaced or removed. `backfill` refuses to overwrite
+  an existing entry; a correction is a new signed stanza appended to the commit's
+  note via `backfill --supersedes <entry-id> --reason "<why>"` naming the latest
+  `entry-id` on that commit and stating why. The reader verifies every stanza in
+  the chain, reports the full history (`history: <sha>:<old>@r<N>[<id>]->...`),
+  and uses the latest valid entry for `writers:`. Any model attested as writer
+  in an earlier superseded signed entry remains disqualified from reviewing that
+  commit (so relabelling an unstamped Kimi commit can never make Kimi eligible
+  to review it). `.githooks/pre-push` (`validate-notes`) checks against the
+  previous ref state that existing stanzas on every commit remain an unmodified
+  prefix of the new stanzas, refusing any update that rewrites or drops an
+  existing entry.
 - **Harness-stamped commits (`source: harness`).** Each harness-written commit
   (`scripts/review/writer_provenance.py stamp-commit`) is stamped with author
   `<Model> (writer) <model@writers.concrete>` (while the committer remains the
   project owner's identity), a `Writer: <model>` trailer, and for `agy` an
   `Agy-Diff-SHA256: <64-hex>` trailer recording the sha256 of the diff
-  transported from its throwaway archive copy, plus a matching writer-log entry
-  under `refs/notes/concrete-writer`:
+  transported from its throwaway archive copy, plus a matching SSH-signed
+  writer-log entry under `refs/notes/concrete-writer`:
   ```
   model: codex|kimi|agy|claude
   round: <positive integer>
@@ -168,13 +215,21 @@ or a default attribution on unstamped commits:
   commit: <40-hex>
   source: harness
   agy-diff-sha256: <64-hex>        # present iff model == agy
+  entry-id: <64-hex>
+  signer: <principal>
+  -----BEGIN SSH SIGNATURE-----
+  ...
+  -----END SSH SIGNATURE-----
   ```
 - **Unstamped commits and `backfill` (`source: backfill`).** An unstamped
   commit has an **unknown** writer and is never attributed to `claude` by
   default; review provenance over a range containing one is refused unless
-  `refs/notes/concrete-writer` holds an explicit backfilled entry for that
-  commit (`scripts/review/writer_provenance.py backfill`). `claude` is a writer
-  only when explicitly logged. A backfilled entry records:
+  `refs/notes/concrete-writer` holds an explicit signed backfilled entry for
+  that commit (`scripts/review/writer_provenance.py backfill`). `claude` is a
+  writer only when explicitly logged. `backfill` requires `--brief-file <path>`
+  and `--output-file <path>`, computing `brief-sha256` and `output-sha256` from
+  those files (and verifying `--brief-sha256` / `--output-sha256` if also
+  passed). A backfilled entry records:
   ```
   model: codex|kimi|agy|claude
   round: <positive integer>
@@ -184,11 +239,25 @@ or a default attribution on unstamped commits:
   start-sha: <40-hex>
   end-sha: <40-hex>
   commit: <40-hex>
+  agy-diff-sha256: <64-hex>        # optional when model == agy
   source: backfill
   evidence: <non-empty single-line provenance description>
-  agy-diff-sha256: <64-hex>        # optional when model == agy
+  supersedes: <64-hex>             # present iff appending a correction
+  reason: <non-empty single-line>  # present iff appending a correction
+  entry-id: <64-hex>
+  signer: <principal>
+  -----BEGIN SSH SIGNATURE-----
+  ...
+  -----END SSH SIGNATURE-----
   ```
-  `backfill` refuses any commit that already carries a harness stamp.
+  `backfill` refuses any commit that already carries a harness stamp, and can
+  never attribute a commit to a model that is also the `reviewer` on that
+  commit's (or `end-sha`'s) review note unless an earlier signed entry already
+  did so. At verification time, when the operator supplies `--brief-file`,
+  `--output-file`, or `--evidence-dir`, the reader checks the files' sha256
+  digests against `brief-sha256` and `output-sha256` (reporting
+  `backfill-evidence: verified` when all backfilled commits' files are checked,
+  and `backfill-evidence: evidence not re-checked` otherwise).
 - **Merge commits.** A merge commit's resolution is authored work when its tree
   differs from git's conflict-free automatic merge of its two parents
   (`git merge-tree --write-tree`); a merge with no resolution adds no writer.
@@ -197,35 +266,39 @@ or a default attribution on unstamped commits:
   unstamped merge commit whose tree differs from git's automatic merge has an
   unknown writer and is refused.
 - **Reader and reporting.** `scripts/review/writer_provenance.py` (`derive`,
-  `report`, `verify`, `export-log`) derives and cross-checks the ordered unique
-  writer set of `base..HEAD`, distinguishes harness entries from backfilled ones,
-  and reports both (`writers: <list>; harness (N): <sha>:<model>@r<round>,...; backfill (M): ...`).
-  Any commit carrying a partial or mismatched stamp (such as a `Writer:` trailer
-  with no matching writer-log entry, a writer author without trailer/log, or a
+  `report`, `verify`, `export-log`) verifies every entry's `entry-id` and SSH
+  signature against `scripts/review/allowed_writer_log_signers`, derives and
+  cross-checks the ordered unique writer set of `base..HEAD`, distinguishes
+  harness entries from backfilled ones, reports superseded correction chains,
+  and reports whether backfill evidence files were re-checked. Any commit
+  carrying a partial or mismatched stamp (such as a `Writer:` trailer with no
+  matching writer-log entry, a writer author without trailer/log, or a
   mismatched `agy-diff-sha256`) is refused. A branch written by multiple models
   across rounds records all of them in order (for example `writer: kimi,agy` or
-  `writer: codex,agy`); the reviewer must be none of them.
+  `writer: codex,agy`); the reviewer must be none of them (including any model
+  attested in an earlier superseded entry).
 - **Trust boundary of `refs/notes/concrete-writer`.**
-  - *Who may write entries:* Only (1) the automated writer harness via
-    `writer_provenance.py stamp-commit` when creating a writer commit or
-    resolved merge (`source: harness`), and (2) the project owner or
-    orchestrator via `writer_provenance.py backfill` when recording audited
-    provenance for an unstamped pre-harness or human commit from the session's
-    brief and raw writer output log (`source: backfill`). No agent or reviewer
-    hand-edits `refs/notes/concrete-writer`.
-  - *What entries attest:* Each stanza attests that `commit` (in round range
-    `start-sha..end-sha` on `branch`, round `round`) was authored by `model`
-    under the brief with digest `brief-sha256`. A `source: harness` stanza
-    attests that the commit was created by the harness with matching writer
-    author, `Writer: <model>` trailer, owner committer, and (for `agy`)
+  - *Who may write entries:* Only an authorized signer whose public key is in
+    `scripts/review/allowed_writer_log_signers` — specifically (1) the automated
+    writer harness via `writer_provenance.py stamp-commit` when creating a
+    writer commit or resolved merge (`source: harness`), and (2) the project
+    owner or orchestrator via `writer_provenance.py backfill` when recording
+    audited provenance or an append-only correction from the session's brief and
+    raw writer output log (`source: backfill`). No agent or reviewer holds the
+    signing key or hand-edits `refs/notes/concrete-writer`.
+  - *What entries attest:* Each signed stanza attests that `commit` (in round
+    range `start-sha..end-sha` on `branch`, round `round`) was authored by
+    `model` under the brief with digest `brief-sha256`. A `source: harness`
+    stanza attests that the commit was created by the harness with matching
+    writer author, `Writer: <model>` trailer, owner committer, and (for `agy`)
     `Agy-Diff-SHA256`. A `source: backfill` stanza attests that the unstamped
-    commit's writer was verified against the writer's raw output log with digest
-    `output-sha256` and the cited `evidence`.
-  - *Hook enforcement:* `.githooks/pre-push` semantically validates every push
-    to `refs/notes/concrete-writer` through
-    `scripts/review/writer_provenance.py validate-notes` (the same reader used
-    by `review.sh` and `verify.sh`) before the review-notes tier accepts it, and
-    refuses deleting the ref or removing any existing commit's writer-log entry.
+    commit's writer was verified against the brief file (`brief-sha256`), the
+    writer's raw output log (`output-sha256`), and the cited `evidence`.
+  - *Hook enforcement:* `.githooks/pre-push` semantically and cryptographically
+    validates every push to `refs/notes/concrete-writer` through
+    `scripts/review/writer_provenance.py validate-notes` before the review-notes
+    tier accepts it, and refuses deleting the ref or rewriting/dropping any
+    existing writer-log entry.
 
 ## Permanent owner rule
 
@@ -371,12 +444,24 @@ commit's review provenance ([LANDING.md](LANDING.md)); it approves no other comm
 scripts/review/verify.sh <commit>                              # 0 clean provenance; 1 not clean; 2 none/malformed
 scripts/review/verify.sh --fetch <commit>                     # fetch the notes ref from origin first
 scripts/review/verify.sh --required-base <base> <commit>      # also require review coverage from base
+scripts/review/verify.sh --fields <commit>                    # 0 well-formed note fields; 2 none/malformed
+scripts/review/verify.sh --evidence-dir <dir> <commit>        # re-check backfill brief/output files
 ```
 
 It judges the exact commit. A clean note on an ancestor says nothing about the
 commits after it, so a branch that gains a commit after its clean round needs
 another round. A legacy clean note without `repository: readable` or `writer`,
 and a clean note whose reviewer equals its writer, exits 1.
+
+With `--fields`, `verify.sh` validates the note's schema and prints its
+structured `key: value` fields (`commit`, `verdict`, `rounds`, `reviewer`,
+`writer`, `utc`, `base`, `pieces`, `repository`) with exit 0 on any well-formed
+note, independent of clean-provenance eligibility (including `findings`,
+`blocked`, legacy 6-key `clean` notes, and provenance-invalid `clean` notes),
+exiting 2 only when no note exists or the note is malformed. `signoff.sh` and
+`review.sh` read note fields through `verify.sh --fields` rather than scraping
+`verify.sh`'s human summary, so valid cap evidence on a legacy or
+provenance-invalid clean note is preserved.
 
 With `--required-base BASE`, a clean note qualifies only when its `base` is an
 ancestor of `BASE`, or `BASE` itself. Thus the note's reviewed range covers
@@ -392,8 +477,12 @@ repositories, with a bare repository as `origin` and fake Codex, Kimi and agy
 binaries. It needs no API key or network. It covers delta selection, splitting,
 the refusal retry, the cap, note writing and pushing (including the
 non-fast-forward merge), verdict parsing, archived-tree access for every
-reviewer, independent reviewer/writer provenance and its refusal cases, both
-prompts' permanent owner rule, prompt persistence and hashes, blocked
-repository-access failures, legacy clean-note refusal, and required-base
-coverage. `scripts/checks/landing_script.sh` repeats the A→B→C reproducer
-through the landing train for both head and member notes.
+reviewer, independent reviewer/writer provenance and its refusal cases, SSH
+signature verification against `allowed_writer_log_signers` (including
+fail-closed behaviour when no key is configured), append-only writer-log
+corrections and relabelling defence, backfill evidence verification,
+`verify.sh --fields`, both prompts' permanent owner rule, prompt persistence
+and hashes, blocked repository-access failures, legacy clean-note refusal, and
+required-base coverage. `scripts/checks/landing_script.sh` repeats the A→B→C
+reproducer through the landing train for both head and member notes and tests
+`signoff.sh` cap counting on legacy and provenance-invalid clean notes.

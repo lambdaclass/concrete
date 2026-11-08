@@ -209,7 +209,7 @@ else
     || die "--base $BASE ($BASE_SHA) is not an ancestor of HEAD ($HEAD_SHA)"
 fi
 
-if ! WRITER="$(python3 -I "$SCRIPT_DIR/writer_provenance.py" derive --repo "$ROOT" --base "$BASE_SHA" --head "$HEAD_SHA" ${ASSERT_WRITER:+--assert-writer "$ASSERT_WRITER"} 2>"$WORK/prov.err")"; then
+if ! WRITER="$(python3 -I "$SCRIPT_DIR/writer_provenance.py" derive --repo "$ROOT" --base "$BASE_SHA" --head "$HEAD_SHA" --reviewer "$REVIEWER" ${ASSERT_WRITER:+--assert-writer "$ASSERT_WRITER"} 2>"$WORK/prov.err")"; then
   die "$(cat "$WORK/prov.err")"
 fi
 case ",$WRITER," in
@@ -228,17 +228,16 @@ fi
 PREV_SHA="" PREV_ROUNDS=0 PREV_VERDICT="" REVIEWED_SHA="" REVIEWED_ROUNDS=0 REVIEWED_VERDICT=""
 while read -r c; do
   [ -n "$c" ] || continue
-  n="$(git notes --ref="$NOTES_REF" show "$c" 2>/dev/null)" || continue
-  vrc=0
-  bash "$SCRIPT_DIR/verify.sh" --required-base "$BASE_SHA" "$c" >/dev/null 2>&1 || vrc=$?
-  [ "$vrc" -ne 2 ] || continue
-  v="$(note_field "$n" verdict)"
-  r="$(note_field "$n" rounds)"
-  nb="$(note_field "$n" base)"
-  nr="$(note_field "$n" reviewer)"
-  nw="$(note_field "$n" writer)"
-  if [ "$v" = clean ] && [ "$vrc" -ne 0 ]; then
-    v=legacy-clean
+  fields_out="$(bash "$SCRIPT_DIR/verify.sh" --fields "$c" 2>/dev/null)" || continue
+  v="$(note_field "$fields_out" verdict)"
+  r="$(note_field "$fields_out" rounds)"
+  nb="$(note_field "$fields_out" base)"
+  nr="$(note_field "$fields_out" reviewer)"
+  nw="$(note_field "$fields_out" writer)"
+  if [ "$v" = clean ]; then
+    if ! bash "$SCRIPT_DIR/verify.sh" --required-base "$BASE_SHA" "$c" >/dev/null 2>&1; then
+      v=legacy-clean
+    fi
   elif [ "$v" = findings ]; then
     if [ -z "$nw" ] \
       || ! git merge-base --is-ancestor "$nb" "$BASE_SHA" 2>/dev/null \

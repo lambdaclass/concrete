@@ -1,0 +1,29 @@
+# Concrete authorized writer-log signers (OpenSSH allowed_signers format).
+#
+# Every writer-log stanza in refs/notes/concrete-writer (both `source: harness`
+# and `source: backfill`, including append-only correction entries) must carry
+# an OpenSSH signature (`ssh-keygen -Y sign -n git`) verified against this file
+# (`ssh-keygen -Y verify -n git`).
+#
+# Status: NO KEY CONFIGURED YET (fail-closed until owner approval).
+# While this file holds no key lines, scripts/review/writer_provenance.py
+# treats every writer-log entry as unverified and refuses provenance over any
+# range that needs one.
+#
+# Operator steps to authorize the orchestrator's signing key after owner approval:
+#   1. Generate a dedicated Ed25519 signing key on the orchestrator host (outside
+#      any agent worktree):
+#        ssh-keygen -t ed25519 -N "" -C "orchestrator@concrete" \
+#          -f ~/.ssh/concrete_writer_log_ed25519
+#   2. Configure the orchestrator's git environment (or pass --signing-key /
+#      REVIEW_WRITER_SIGNING_KEY):
+#        git config --global gpg.format ssh
+#        git config --global user.signingkey ~/.ssh/concrete_writer_log_ed25519
+#   3. After explicit owner approval, append one line to this file on a branch,
+#      review, and land it on main:
+#        printf 'orchestrator@concrete namespaces="git" %s\n' \
+#          "$(cat ~/.ssh/concrete_writer_log_ed25519.pub)" \
+#          >> scripts/review/allowed_writer_log_signers
+#   4. Stamp or backfill the branch's writer-log entries so each stanza is
+#      signed by that key, and verify with:
+#        python3 -I scripts/review/writer_provenance.py report --base <base> --head <head>

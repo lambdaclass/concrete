@@ -7,20 +7,33 @@
   immutability after each piece, treats `bounded_run` double-timeouts as `blocked` without halving
   retry, and writes `repository: readable` to clean notes. `scripts/land/signoff.sh` validates each
   sign-off reviewer output through the same contract reader.
-- Writer provenance is derived and cross-checked from the branch commits and the git-object writer
-  log (`scripts/review/writer_provenance.py`, `refs/notes/concrete-writer`): harness-written commits
+- Writer provenance is derived and cross-checked from the branch commits and the SSH-signed,
+  append-only git-object writer log (`scripts/review/writer_provenance.py`,
+  `refs/notes/concrete-writer`): every writer-log stanza (`source: harness` and `source: backfill`,
+  including corrections) carries `entry-id`, `signer`, and a detached SSH signature verified against
+  `scripts/review/allowed_writer_log_signers` (shipped with no key configured so provenance fails
+  closed until the orchestrator's public key is added after owner approval); harness-written commits
   carry author `<Model> (writer) <model@writers.concrete>` (committer remains the owner), a
   `Writer: <model>` trailer (plus `Agy-Diff-SHA256:` for `agy`), and a matching `source: harness`
   writer-log entry per commit; a `Writer:` trailer alone is refused; unstamped non-merge commits and
   unstamped merge commits whose tree differs from git's conflict-free automatic merge have an
   unknown writer and are refused unless backfilled via `writer_provenance.py backfill` (`source:
-  backfill`, `output-sha256`, and `evidence`); `claude` is a writer only when explicitly logged;
-  clean automatic merges add no writer; the reader distinguishes and reports both harness and
-  backfilled entries; and multi-writer branches record all writers in order and refuse any of them
-  as reviewer. `--writer` on `review.sh` and `LAND_REVIEW_WRITER` are optional assertions, `.githooks/pre-push`
-  semantically validates `refs/notes/concrete-writer` via `writer_provenance.py validate-notes`, and
-  `train.sh`, `review.sh`, and `verify.sh` fail closed when fetching `refs/notes/concrete-writer`
-  fails while clearing any stale local ref when the remote has no such ref.
+  backfill`, `--brief-file`, `--output-file`, `output-sha256`, and `evidence`); `claude` is a writer
+  only when explicitly logged; clean automatic merges add no writer; the writer log is append-only
+  (corrections append a signed entry with `supersedes` and `reason`, full history is reported, any
+  model attested in an earlier superseded entry remains disqualified from reviewing that commit,
+  `backfill` refuses attributing a commit to its review note's reviewer unless an earlier signed
+  entry already did so, and `.githooks/pre-push` `validate-notes` refuses any update that rewrites or
+  drops an existing entry); readers re-check brief and output files when provided (reporting
+  `"evidence not re-checked"` otherwise); and multi-writer branches record all writers in order and
+  refuse any of them as reviewer. `--writer` on `review.sh` and `LAND_REVIEW_WRITER` are optional
+  assertions, and `train.sh`, `review.sh`, and `verify.sh` fail closed when fetching
+  `refs/notes/concrete-writer` fails while clearing any stale local ref when the remote has no such
+  ref.
+- `scripts/review/verify.sh --fields` exposes validated note fields (`commit`, `verdict`, `rounds`,
+  `reviewer`, `writer`, `utc`, `base`, `pieces`, `repository`) independent of clean-provenance
+  eligibility, and `scripts/land/signoff.sh` (and `review.sh`) reads note fields through it so
+  legacy and provenance-invalid clean notes at the round cap remain valid cap evidence.
 - Every review prompt, including its supplied diff piece, is saved byte for byte under `.review/`
   and its sha256 is recorded in the round's raw output (ISS-0022).
 - Review provenance and delta selection enforce base coverage (ISS-0019). `verify.sh` requires
