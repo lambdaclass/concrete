@@ -363,6 +363,10 @@ abbrev contract : OperationContract signature where
   allows := fun _ _ q r => q.2 * 2 = r.2
   mayBlock := fun _ _ _ => False
 
+/-- An executable environment producer, independent of response admission. It implements
+doubling by addition; its result is not guarded by either the operation contract or `Responds`. -/
+def doublingReply (q : Request signature) : Response signature := ⟨q.1, q.2 + q.2⟩
+
 def request (n : Nat) : Event signature := .request ⟨.double, n⟩
 def response (n : Nat) : Event signature := .response ⟨.double, n⟩
 

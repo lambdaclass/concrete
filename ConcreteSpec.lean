@@ -16,3 +16,4 @@ import ConcreteSpec.Proofs.Hybrid
 
 import ConcreteSpec.Proofs.ObserveSource
 import ConcreteSpec.Proofs.ObserveReport
+import ConcreteSpec.Proofs.ObserveEnvironment
