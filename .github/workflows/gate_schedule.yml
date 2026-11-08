@@ -1,0 +1,107 @@
+name: Scheduled gate tiers
+on:
+  schedule:
+    - cron: '17 2 * * *'
+    - cron: '43 3 * * 0'
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Full main-history SHA to replay (required for dispatch)'
+        type: string
+        required: true
+      tier:
+        description: 'Tier to replay'
+        type: choice
+        options: [daily, weekly]
+        required: true
+permissions:
+  contents: read
+jobs:
+  select:
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      sha: ${{ steps.select.outputs.sha }}
+      tier: ${{ steps.select.outputs.tier }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - id: select
+        env:
+          REQUESTED_SHA: ${{ inputs.sha }}
+          REQUESTED_TIER: ${{ inputs.tier }}
+          EVENT: ${{ github.event_name }}
+          CRON: ${{ github.event.schedule }}
+        run: |
+          set -euo pipefail
+          source scripts/checks/lib/bounded.sh
+          main_sha=$(bounded_run 30 -- git rev-parse refs/remotes/origin/main)
+          sha="$main_sha"
+          tier=daily
+          if [ "$CRON" = '43 3 * * 0' ]; then tier=weekly; fi
+          if [ "$EVENT" = workflow_dispatch ]; then
+            sha="$REQUESTED_SHA"
+            tier="$REQUESTED_TIER"
+            [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo 'invalid full SHA'; exit 1; }
+            bounded_run 30 -- git merge-base --is-ancestor "$sha" "$main_sha"
+          fi
+          [[ "$tier" = daily || "$tier" = weekly ]]
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "tier=$tier" >> "$GITHUB_OUTPUT"
+  campaign:
+    needs: select
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: [self-hosted, linux, x64, concrete, concrete-ci-2]
+    timeout-minutes: 1440
+    permissions:
+      contents: write
+    concurrency:
+      group: scheduled-note-${{ needs.select.outputs.tier }}
+      cancel-in-progress: false
+    steps:
+      - name: Refuse substitute runner
+        if: runner.environment != 'self-hosted'
+        run: |
+          echo 'forged runner: not inventoried concrete-ci-2'
+          exit 1
+      # Controller is trusted main; old replay SHAs do not supply the controller.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Run exact-SHA tier
+        env:
+          SELECTED_SHA: ${{ needs.select.outputs.sha }}
+          SELECTED_TIER: ${{ needs.select.outputs.tier }}
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          OCCURRENCE: ${{ github.event.schedule || format('replay/{0}', github.run_id) }}
+        run: |
+          set -euo pipefail
+          source scripts/checks/lib/bounded.sh
+          state=$(mktemp -d)
+          trap 'rm -rf "$state"' EXIT
+          python3 scripts/checks/lib/bounded_exec.py --timeout 80000 --kill-after 10 --status "$state/outcome" -- nix develop --command python3 scripts/checks/scheduled/run.py "$SELECTED_SHA" "$SELECTED_TIER" result-index
+          outcome=$(cat "$state/outcome")
+          [ "$outcome" = 'exit 0' ]
+      - id: result
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scheduled-${{ needs.select.outputs.tier }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: result-index/
+          if-no-files-found: error
+          retention-days: 90
+      - name: Append durable exact-SHA note
+        if: always()
+        env:
+          RESULT_ARTIFACT_URL: ${{ steps.result.outputs.artifact-url }}
+        run: |
+          set -euo pipefail
+          source scripts/checks/lib/bounded.sh
+          bounded_run 20 -- git config user.name concrete-scheduled
+          bounded_run 20 -- git config user.email concrete-scheduled@users.noreply.github.com
+          bounded_run 300 -- python3 scripts/checks/scheduled/publish.py result-index/index.json

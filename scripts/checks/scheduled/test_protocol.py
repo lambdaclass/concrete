@@ -62,6 +62,18 @@ class Controls(unittest.TestCase):
         r = record(); r["artifact"] = ""
         self.rejected("missing result-index artifact", lambda: observe([r], SHA, "daily", NOW, RUNNERS))
 
+    def test_failed_and_incomplete(self):
+        for status, conclusion in (("FAIL", "failure"), ("INCOMPLETE", "incomplete")):
+            r = record(); r.update(status=status, conclusion=conclusion)
+            self.rejected(status + " daily " + SHA + ": recorded attempt",
+                          lambda: observe([r], SHA, "daily", NOW, RUNNERS))
+
+    def test_missing_conclusions(self):
+        for conclusion in ("skipped", "queued-too-long", "absent"):
+            r = record(); r.update(status="MISSING", conclusion=conclusion)
+            self.rejected("MISSING daily " + SHA + ": recorded attempt",
+                          lambda: observe([r], SHA, "daily", NOW, RUNNERS))
+
     def test_disagreement(self):
         r = record(); r.update(attempt="1/2", status="FAIL", conclusion="failure")
         history = append([r], record(), SHA, "daily", RUNNERS)

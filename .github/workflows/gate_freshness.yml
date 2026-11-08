@@ -1,0 +1,28 @@
+name: Scheduled gate freshness
+on:
+  schedule:
+    - cron: '11 */4 * * *'
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  freshness:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Observe latest main independently
+        run: |
+          set -euo pipefail
+          source scripts/checks/lib/bounded.sh
+          for tier in daily weekly; do
+            ref="refs/notes/concrete-gates-$tier"
+            exists=$(bounded_run 30 -- git ls-remote origin "$ref")
+            if [ -n "$exists" ]; then bounded_run 30 -- git fetch origin "$ref:$ref"; fi
+          done
+          bounded_run 30 -- python3 scripts/checks/scheduled/observe.py
