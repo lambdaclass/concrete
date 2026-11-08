@@ -10,10 +10,17 @@
 - Writer provenance is derived and cross-checked from the branch commits and the git-object writer
   log (`scripts/review/writer_provenance.py`, `refs/notes/concrete-writer`): harness-written commits
   carry author `<Model> (writer) <model@writers.concrete>` (committer remains the owner), a
-  `Writer: <model>` trailer (plus `Agy-Diff-SHA256:` for `agy`), and a matching writer-log entry per
-  commit; a `Writer:` trailer alone is refused; unstamped human/pre-harness commits are explicitly
-  attributed to `claude`; multi-writer branches record all writers in order and refuse any of them
-  as reviewer. `--writer` on `review.sh` and `LAND_REVIEW_WRITER` are now optional assertions.
+  `Writer: <model>` trailer (plus `Agy-Diff-SHA256:` for `agy`), and a matching `source: harness`
+  writer-log entry per commit; a `Writer:` trailer alone is refused; unstamped non-merge commits and
+  unstamped merge commits whose tree differs from git's conflict-free automatic merge have an
+  unknown writer and are refused unless backfilled via `writer_provenance.py backfill` (`source:
+  backfill`, `output-sha256`, and `evidence`); `claude` is a writer only when explicitly logged;
+  clean automatic merges add no writer; the reader distinguishes and reports both harness and
+  backfilled entries; and multi-writer branches record all writers in order and refuse any of them
+  as reviewer. `--writer` on `review.sh` and `LAND_REVIEW_WRITER` are optional assertions, `.githooks/pre-push`
+  semantically validates `refs/notes/concrete-writer` via `writer_provenance.py validate-notes`, and
+  `train.sh`, `review.sh`, and `verify.sh` fail closed when fetching `refs/notes/concrete-writer`
+  fails while clearing any stale local ref when the remote has no such ref.
 - Every review prompt, including its supplied diff piece, is saved byte for byte under `.review/`
   and its sha256 is recorded in the round's raw output (ISS-0022).
 - Review provenance and delta selection enforce base coverage (ISS-0019). `verify.sh` requires

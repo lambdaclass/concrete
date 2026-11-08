@@ -103,9 +103,11 @@ BASE="$(git rev-parse HEAD)"
 git clone -q "$TMP/origin.git" "$W"
 ( cd "$W" && git remote add lambdaclass "$TMP/lambdaclass.git" && git remote add fork "$TMP/fork.git" )
 
-# mk <branch> <commit-message> <file> <content> [from]: one commit on <from> (default main), pushed.
+# mk <branch> <commit-message> <file> <content> [from]: one commit on <from> (default main), stamped as claude and pushed.
 mk(){ ( cd "$A" && git fetch -q origin && git checkout -q -B "$1" "${5:-origin/main}" && mkdir -p "$(dirname "$3")" \
-        && printf '%s\n' "$4" > "$3" && git add -A && git commit -qm "$2" && git push -q -f origin "HEAD:refs/heads/$1" ); }
+        && printf '%s\n' "$4" > "$3" && git add -A && git commit -qm "$2" \
+        && python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" stamp-commit --repo "$A" --model claude --round 1 --branch "$1" --brief-sha256 2222222222222222222222222222222222222222222222222222222222222222 >/dev/null \
+        && git push -q -f origin "HEAD:refs/heads/$1" refs/notes/concrete-writer ); }
 sha_of(){ git --git-dir="$TMP/origin.git" rev-parse "refs/heads/$1"; }
 mark(){ # branch [review-verdict] [gates] [extra review key=value]
   local s base repo=(); s="$(sha_of "$1")"; base="$(git --git-dir="$TMP/origin.git" rev-parse refs/heads/main)"
@@ -184,7 +186,9 @@ EOF
 chmod +x "$TMP/fake-codex"
 ( cd "$A" && git checkout -q -B wip/rv-default origin/main \
   && mkdir -p scripts/checks && cp -R "$ROOT_DIR/scripts/review" scripts/review && cp -R "$ROOT_DIR/scripts/checks/lib" scripts/checks/lib \
-  && git add -A && git commit -qm rv-default && git push -q -f origin HEAD:refs/heads/wip/rv-default )
+  && git add -A && git commit -qm rv-default \
+  && python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" stamp-commit --repo "$A" --model claude --round 1 --branch wip/rv-default --brief-sha256 2222222222222222222222222222222222222222222222222222222222222222 >/dev/null \
+  && git push -q -f origin HEAD:refs/heads/wip/rv-default refs/notes/concrete-writer )
 out="$(cd "$A" && unset LAND_REVIEW_CMD LAND_REVIEW_WRITER && REVIEW_CODEX_BIN="$TMP/fake-codex" bash "$ROOT_DIR/scripts/land/ready.sh" wip/rv-default 2>&1)"; rc=$?
 [ "$rc" = 0 ] && has "$out" "gates=pass review=clean" \
   && ok "ready.sh default review command succeeds with LAND_REVIEW_WRITER unset" || { no "ready.sh default review command: exit $rc"; echo "$out" | sed 's/^/      /'; }

@@ -1,43 +1,69 @@
 #!/usr/bin/env python3
 """Writer-provenance reader and writer-log git-object manager (scripts/review/writer_provenance.py).
 
-Writer identity comes from the writer harness, never from a caller flag or a
-commit trailer alone.
+Writer identity comes from the writer harness or an explicit audited backfill in
+the writer log, never from a caller flag, a commit trailer alone, or a default
+attribution of unstamped commits.
 
-1. Harness stamp on each writer commit:
+1. Harness stamp on each harness-written commit (non-merge commits and resolved
+   merge commits):
    - Author: `<Model> (writer) <model@writers.concrete>`
      where `<model>` is one of `codex`, `kimi`, `agy`, `claude` and `<Model>`
      is `Codex`, `Kimi`, `agy` (or `Agy`), `Claude`.
    - Committer: the project owner's / repository committer's identity (never
-     `*@writers.concrete`).
+     `*@writers.concrete` or `*(writer)*`).
    - Commit trailer: `Writer: <model>`
    - Additional commit trailer when `<model> == agy`:
      `Agy-Diff-SHA256: <64-hex>` (the sha256 of the diff transported from agy's
-     throwaway archive copy).
+     throwaway archive copy; the harness stamps resolved merges the same way).
 
 2. Writer-log entry (stored per commit under `refs/notes/concrete-writer` and
    exportable as a self-contained multi-stanza git blob for review-evidence
    records):
-     model: <codex|kimi|agy|claude>
-     round: <positive integer>
-     branch: <branch-name>
-     brief-sha256: <64-hex>
-     start-sha: <40-hex>
-     end-sha: <40-hex>
-     commit: <40-hex>
-     agy-diff-sha256: <64-hex>    # present iff model == agy
+   - Harness entry (written by `stamp-commit` at the end of a writer round):
+       model: <codex|kimi|agy|claude>
+       round: <positive integer>
+       branch: <branch-name>
+       brief-sha256: <64-hex>
+       start-sha: <40-hex>
+       end-sha: <40-hex>
+       commit: <40-hex>
+       agy-diff-sha256: <64-hex>    # present iff model == agy
+   - Backfilled entry (written by `backfill` for a historical unstamped commit):
+       model: <codex|kimi|agy|claude>
+       round: <positive integer>
+       branch: <branch-name>
+       brief-sha256: <64-hex>
+       output-sha256: <64-hex>
+       start-sha: <40-hex>
+       end-sha: <40-hex>
+       commit: <40-hex>
+       agy-diff-sha256: <64-hex>    # optional when model == agy
+       source: backfill
+       evidence: <non-empty single-line free text>
 
 3. Provenance derivation & cross-check over `base..head`:
-   - Any commit carrying ANY writer indicator (a `(writer)` / `@writers.concrete`
-     author, a `Writer:` or `Agy-Diff-SHA256:` trailer, or a writer-log entry)
-     must carry ALL required parts and they must agree; any partial or mismatched
-     stamp is refused (a `Writer:` trailer alone is never enough).
-   - Unstamped commits (human or pre-harness commits with no writer author,
-     no writer trailer, and no writer-log entry) have an explicit, documented
-     treatment: every unstamped non-merge commit (or `head` when `base..head`
-     has no non-merge commits) is attributed to `claude` (the interactive /
-     pre-harness writer identity) — never silently treated as written by nobody.
-   - A branch may have several writers across rounds (e.g. `codex,agy` or
+   - Any commit carrying ANY harness commit stamp (a `(writer)` /
+     `@writers.concrete` author, or a `Writer:` or `Agy-Diff-SHA256:` trailer)
+     must carry ALL required harness stamp parts plus a matching harness
+     writer-log entry (`source` != `backfill`), and they must agree; any partial
+     or mismatched stamp is refused (a `Writer:` trailer alone is never enough).
+   - An unstamped commit (no writer author tag and no writer trailer) has an
+     UNKNOWN writer unless the writer log holds a valid `source: backfill` entry
+     for that commit. Review provenance over a range containing an unstamped
+     authored commit without a backfilled entry is refused. `claude` is a writer
+     only when explicitly logged (via a harness stamp + log entry or a
+     backfilled log entry).
+   - Merge commits: a merge commit's resolution is authored work when its tree
+     differs from git's conflict-free automatic merge (`git merge-tree
+     --write-tree` of its two parents). A merge with no resolution (whose tree
+     equals git's conflict-free automatic merge) adds no writer. A merge with a
+     resolution is authored work and must carry a valid harness stamp + log
+     entry (such as `Writer: agy` and `Agy-Diff-SHA256: <64-hex>`) or a
+     backfilled writer-log entry.
+   - The reader distinguishes harness entries from backfilled entries and
+     reports both.
+   - A branch may have several writers across rounds (e.g. `kimi,agy` or
      `claude,codex`). The reviewer must be none of them.
 """
 
@@ -59,6 +85,7 @@ HEX40_RE = re.compile(r"^[0-9a-f]{40}$")
 HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
 POS_INT_RE = re.compile(r"^[1-9][0-9]*$")
 BRANCH_RE = re.compile(r"^[^\s~^:?*\[\]\\]+$")
+ZERO40 = "0" * 40
 
 
 class ProvenanceError(Exception):
@@ -85,9 +112,28 @@ def resolve_commit(repo: str, rev: str, label: str = "commit") -> str:
     return proc.stdout.strip()
 
 
+def commit_exists(repo: str, sha: str) -> bool:
+    proc = git_run(repo, ["cat-file", "-e", f"{sha}^{{commit}}"], check=False)
+    return proc.returncode == 0
+
+
 def is_ancestor(repo: str, anc: str, desc: str) -> bool:
     proc = git_run(repo, ["merge-base", "--is-ancestor", anc, desc], check=False)
     return proc.returncode == 0
+
+
+def is_clean_auto_merge(repo: str, sha: str, parents: list[str]) -> bool:
+    """Return True iff `sha` is a two-parent merge whose tree equals git's conflict-free automatic merge."""
+    if len(parents) != 2:
+        return False
+    proc = git_run(repo, ["merge-tree", "--write-tree", parents[0], parents[1]], check=False)
+    if proc.returncode != 0:
+        return False
+    first_line = proc.stdout.strip().splitlines()[0] if proc.stdout.strip() else ""
+    if not HEX40_RE.match(first_line):
+        return False
+    commit_tree = git_run(repo, ["rev-parse", f"{sha}^{{tree}}"], check=True).stdout.strip()
+    return first_line == commit_tree
 
 
 def parse_writer_csv(csv_val: str, label: str = "writer") -> list[str]:
@@ -115,6 +161,8 @@ def parse_log_stanza(stanza: str, source_desc: str = "writer-log") -> dict[str, 
         if not m:
             raise ProvenanceError(f"{source_desc}: malformed line '{line}'")
         k, v = m.group(1), m.group(2)
+        if k in ("log-sha256", "raw-output-sha256"):
+            k = "output-sha256"
         if k in entry:
             raise ProvenanceError(f"{source_desc}: duplicate key '{k}'")
         entry[k] = v
@@ -124,14 +172,47 @@ def parse_log_stanza(stanza: str, source_desc: str = "writer-log") -> dict[str, 
     if model not in VALID_MODELS:
         raise ProvenanceError(f"{source_desc}: invalid model '{model}'")
 
-    expected_keys = ["model", "round", "branch", "brief-sha256", "start-sha", "end-sha", "commit"]
-    if model == "agy":
-        expected_keys.append("agy-diff-sha256")
+    source = entry.get("source", "harness")
+    if source not in ("harness", "backfill"):
+        raise ProvenanceError(f"{source_desc}: invalid source '{source}' (expected harness or backfill)")
 
-    if keys_in_order != expected_keys:
-        raise ProvenanceError(
-            f"{source_desc}: keys {keys_in_order} do not match expected {expected_keys}"
-        )
+    if source == "harness":
+        expected_keys = ["model", "round", "branch", "brief-sha256", "start-sha", "end-sha", "commit"]
+        if model == "agy":
+            expected_keys.append("agy-diff-sha256")
+        if "source" in entry:
+            expected_keys.append("source")
+        if keys_in_order != expected_keys:
+            raise ProvenanceError(
+                f"{source_desc}: keys {keys_in_order} do not match expected {expected_keys}"
+            )
+    else:
+        required_keys = {
+            "model",
+            "round",
+            "branch",
+            "brief-sha256",
+            "output-sha256",
+            "start-sha",
+            "end-sha",
+            "commit",
+            "source",
+            "evidence",
+        }
+        allowed_keys = set(required_keys)
+        if model == "agy":
+            allowed_keys.add("agy-diff-sha256")
+        present_keys = set(keys_in_order)
+        missing = sorted(required_keys - present_keys)
+        extra = sorted(present_keys - allowed_keys)
+        if missing:
+            raise ProvenanceError(f"{source_desc}: backfill entry missing required key(s): {', '.join(missing)}")
+        if extra:
+            raise ProvenanceError(f"{source_desc}: backfill entry has unknown key(s): {', '.join(extra)}")
+        if not HEX64_RE.match(entry["output-sha256"]):
+            raise ProvenanceError(f"{source_desc}: invalid output-sha256 '{entry['output-sha256']}'")
+        if not entry["evidence"].strip() or "\n" in entry["evidence"] or "\r" in entry["evidence"]:
+            raise ProvenanceError(f"{source_desc}: backfill entry requires non-empty single-line evidence")
 
     if not POS_INT_RE.match(entry["round"]):
         raise ProvenanceError(f"{source_desc}: invalid round '{entry['round']}'")
@@ -145,16 +226,36 @@ def parse_log_stanza(stanza: str, source_desc: str = "writer-log") -> dict[str, 
         raise ProvenanceError(f"{source_desc}: invalid end-sha '{entry['end-sha']}'")
     if not HEX40_RE.match(entry["commit"]):
         raise ProvenanceError(f"{source_desc}: invalid commit '{entry['commit']}'")
-    if model == "agy" and not HEX64_RE.match(entry["agy-diff-sha256"]):
-        raise ProvenanceError(f"{source_desc}: invalid agy-diff-sha256 '{entry['agy-diff-sha256']}'")
+    if "agy-diff-sha256" in entry:
+        if model != "agy":
+            raise ProvenanceError(f"{source_desc}: {model} entry must not have agy-diff-sha256")
+        if not HEX64_RE.match(entry["agy-diff-sha256"]):
+            raise ProvenanceError(f"{source_desc}: invalid agy-diff-sha256 '{entry['agy-diff-sha256']}'")
 
+    entry["source"] = source
     return entry
 
 
 def format_log_stanza(entry: dict[str, str]) -> str:
-    keys = ["model", "round", "branch", "brief-sha256", "start-sha", "end-sha", "commit"]
-    if entry.get("model") == "agy":
-        keys.append("agy-diff-sha256")
+    source = entry.get("source", "harness")
+    if source == "backfill":
+        keys = [
+            "model",
+            "round",
+            "branch",
+            "brief-sha256",
+            "output-sha256",
+            "start-sha",
+            "end-sha",
+            "commit",
+        ]
+        if entry.get("model") == "agy" and "agy-diff-sha256" in entry:
+            keys.append("agy-diff-sha256")
+        keys.extend(["source", "evidence"])
+    else:
+        keys = ["model", "round", "branch", "brief-sha256", "start-sha", "end-sha", "commit"]
+        if entry.get("model") == "agy":
+            keys.append("agy-diff-sha256")
     return "\n".join(f"{k}: {entry[k]}" for k in keys)
 
 
@@ -204,13 +305,14 @@ def inspect_commit(
     sha: str,
     head_sha: str,
     external_log: dict[str, dict[str, str]] | None,
-) -> tuple[str | None, dict[str, str] | None, bool]:
+) -> tuple[str | None, dict[str, str] | None, bool, bool]:
     """Inspect a single commit's writer provenance.
 
-    Returns `(writer_model, log_entry, is_merge)`.
-    For a stamped commit, `writer_model` is the validated model and `log_entry` is its dict.
-    For an unstamped commit, `writer_model` is None and `log_entry` is None.
-    Raises `ProvenanceError` on any partial, malformed, or mismatched stamp.
+    Returns `(writer_model, log_entry, is_merge, merge_has_resolution)`.
+    - For a harness-stamped or backfilled commit, `writer_model` is the validated
+      model and `log_entry` is its dict (with `entry["source"]` in `("harness", "backfill")`).
+    - For an unstamped commit with no writer-log entry, `writer_model` is None and `log_entry` is None.
+    Raises `ProvenanceError` on any partial, malformed, or mismatched stamp or log entry.
     """
     proc = git_run(
         repo,
@@ -220,6 +322,7 @@ def inspect_commit(
     lines = proc.stdout.splitlines()
     parents = lines[0].split() if lines else []
     is_merge = len(parents) > 1
+    merge_has_resolution = is_merge and not is_clean_auto_merge(repo, sha, parents)
     an = lines[1] if len(lines) > 1 else ""
     ae = lines[2] if len(lines) > 2 else ""
     cn = lines[3] if len(lines) > 3 else ""
@@ -238,82 +341,92 @@ def inspect_commit(
         if ma:
             agy_trailers.append(ma.group(1).strip())
 
+    has_commit_stamp = author_has_writer_tag or bool(writer_trailers) or bool(agy_trailers)
+
     if external_log is not None:
         log_entry = external_log.get(sha)
     else:
         log_entry = get_commit_note_entry(repo, sha)
 
-    has_any_stamp = (
-        author_has_writer_tag
-        or bool(writer_trailers)
-        or bool(agy_trailers)
-        or (log_entry is not None)
-    )
-
-    if not has_any_stamp:
-        return None, None, is_merge
-
-    # Every stamped commit must have all required components and they must match.
-    if len(writer_trailers) == 0:
-        raise ProvenanceError(
-            f"commit {sha[:10]} has writer author or log entry but no 'Writer: <model>' trailer"
-        )
-    if len(writer_trailers) > 1:
-        raise ProvenanceError(f"commit {sha[:10]} has multiple 'Writer:' trailers")
-
-    model = writer_trailers[0]
-    if model not in VALID_MODELS:
-        raise ProvenanceError(
-            f"commit {sha[:10]} has invalid 'Writer: {model}' trailer (expected codex, kimi, agy or claude)"
-        )
-
-    expected_ae = f"{model}@writers.concrete"
-    expected_an_choices = {f"{MODEL_DISPLAY[model]} (writer)", f"{model.capitalize()} (writer)", f"{model} (writer)"}
-    if ae != expected_ae or an not in expected_an_choices:
-        raise ProvenanceError(
-            f"commit {sha[:10]} trailer 'Writer: {model}' does not match author '{an} <{ae}>' "
-            f"(expected '{MODEL_DISPLAY[model]} (writer) <{expected_ae}>')"
-        )
+    if not has_commit_stamp and log_entry is None:
+        return None, None, is_merge, merge_has_resolution
 
     if not cn or not ce or ce.lower().endswith("@writers.concrete") or "(writer)" in cn.lower():
         raise ProvenanceError(
             f"commit {sha[:10]} committer '{cn} <{ce}>' must be the owner's identity, not a writer identity"
         )
 
-    if model == "agy":
-        if len(agy_trailers) != 1:
+    if log_entry is not None and log_entry.get("source") == "backfill":
+        if has_commit_stamp:
             raise ProvenanceError(
-                f"commit {sha[:10]} written by agy must have exactly one 'Agy-Diff-SHA256: <64-hex>' trailer"
+                f"commit {sha[:10]} carries a harness commit stamp and cannot use a backfilled writer-log entry"
             )
-        if not HEX64_RE.match(agy_trailers[0]):
+        if log_entry["commit"] != sha:
             raise ProvenanceError(
-                f"commit {sha[:10]} has malformed 'Agy-Diff-SHA256: {agy_trailers[0]}' trailer"
+                f"commit {sha[:10]} writer-log entry is for commit {log_entry['commit']}, not {sha}"
             )
+        model = log_entry["model"]
     else:
-        if agy_trailers:
+        # Harness-stamped commit: must have all required commit-stamp parts and a harness writer-log entry.
+        if len(writer_trailers) == 0:
             raise ProvenanceError(
-                f"commit {sha[:10]} written by {model} must not have an 'Agy-Diff-SHA256:' trailer"
+                f"commit {sha[:10]} has writer author or harness log entry but no 'Writer: <model>' trailer"
+            )
+        if len(writer_trailers) > 1:
+            raise ProvenanceError(f"commit {sha[:10]} has multiple 'Writer:' trailers")
+
+        model = writer_trailers[0]
+        if model not in VALID_MODELS:
+            raise ProvenanceError(
+                f"commit {sha[:10]} has invalid 'Writer: {model}' trailer (expected codex, kimi, agy or claude)"
             )
 
-    if log_entry is None:
-        raise ProvenanceError(
-            f"commit {sha[:10]} has 'Writer: {model}' stamp but no matching writer-log entry "
-            f"(a Writer: trailer alone is never enough)"
-        )
+        expected_ae = f"{model}@writers.concrete"
+        expected_an_choices = {
+            f"{MODEL_DISPLAY[model]} (writer)",
+            f"{model.capitalize()} (writer)",
+            f"{model} (writer)",
+        }
+        if ae != expected_ae or an not in expected_an_choices:
+            raise ProvenanceError(
+                f"commit {sha[:10]} trailer 'Writer: {model}' does not match author '{an} <{ae}>' "
+                f"(expected '{MODEL_DISPLAY[model]} (writer) <{expected_ae}>')"
+            )
 
-    if log_entry["commit"] != sha:
-        raise ProvenanceError(
-            f"commit {sha[:10]} writer-log entry is for commit {log_entry['commit']}, not {sha}"
-        )
-    if log_entry["model"] != model:
-        raise ProvenanceError(
-            f"commit {sha[:10]} writer-log model '{log_entry['model']}' does not match commit stamp '{model}'"
-        )
-    if model == "agy" and log_entry.get("agy-diff-sha256") != agy_trailers[0]:
-        raise ProvenanceError(
-            f"commit {sha[:10]} writer-log agy-diff-sha256 '{log_entry.get('agy-diff-sha256')}' "
-            f"does not match commit trailer '{agy_trailers[0]}'"
-        )
+        if model == "agy":
+            if len(agy_trailers) != 1:
+                raise ProvenanceError(
+                    f"commit {sha[:10]} written by agy must have exactly one 'Agy-Diff-SHA256: <64-hex>' trailer"
+                )
+            if not HEX64_RE.match(agy_trailers[0]):
+                raise ProvenanceError(
+                    f"commit {sha[:10]} has malformed 'Agy-Diff-SHA256: {agy_trailers[0]}' trailer"
+                )
+        else:
+            if agy_trailers:
+                raise ProvenanceError(
+                    f"commit {sha[:10]} written by {model} must not have an 'Agy-Diff-SHA256:' trailer"
+                )
+
+        if log_entry is None:
+            raise ProvenanceError(
+                f"commit {sha[:10]} has 'Writer: {model}' stamp but no matching writer-log entry "
+                f"(a Writer: trailer alone is never enough)"
+            )
+
+        if log_entry["commit"] != sha:
+            raise ProvenanceError(
+                f"commit {sha[:10]} writer-log entry is for commit {log_entry['commit']}, not {sha}"
+            )
+        if log_entry["model"] != model:
+            raise ProvenanceError(
+                f"commit {sha[:10]} writer-log model '{log_entry['model']}' does not match commit stamp '{model}'"
+            )
+        if model == "agy" and log_entry.get("agy-diff-sha256") != agy_trailers[0]:
+            raise ProvenanceError(
+                f"commit {sha[:10]} writer-log agy-diff-sha256 '{log_entry.get('agy-diff-sha256')}' "
+                f"does not match commit trailer '{agy_trailers[0]}'"
+            )
 
     start_sha = resolve_commit(repo, log_entry["start-sha"], f"commit {sha[:10]} writer-log start-sha")
     end_sha = resolve_commit(repo, log_entry["end-sha"], f"commit {sha[:10]} writer-log end-sha")
@@ -330,7 +443,7 @@ def inspect_commit(
             f"commit {sha[:10]} writer-log end-sha {end_sha[:10]} is not an ancestor-or-equal of head {head_sha[:10]}"
         )
 
-    return model, log_entry, is_merge
+    return model, log_entry, is_merge, merge_has_resolution
 
 
 def derive_range_provenance(
@@ -341,10 +454,13 @@ def derive_range_provenance(
 ) -> tuple[list[str], list[dict[str, str]]]:
     """Derive the ordered unique writer list and log entries for `base..head`.
 
-    Unstamped non-merge commits (human or pre-harness commits) are explicitly
-    attributed to `claude`. If `base == head` or `base..head` contains only
-    unstamped merge commits, `head` is attributed to `claude` so no range is
-    ever treated as written by nobody.
+    - Every non-merge commit and every merge commit with a resolution (whose tree
+      differs from git's conflict-free automatic merge) is authored work and must
+      carry either a valid harness stamp + writer-log entry or an explicit
+      `source: backfill` writer-log entry. Unstamped authored commits have an
+      unknown writer and are refused.
+    - A merge commit with no resolution (whose tree equals git's conflict-free
+      automatic merge of its two parents) adds no writer.
     """
     base_sha = resolve_commit(repo, base_rev, "base")
     head_sha = resolve_commit(repo, head_rev, "head")
@@ -370,7 +486,6 @@ def derive_range_provenance(
 
     writers: list[str] = []
     log_entries: list[dict[str, str]] = []
-    unstamped_non_merge = False
 
     def add_writer(w: str) -> None:
         if w not in writers:
@@ -378,19 +493,28 @@ def derive_range_provenance(
 
     for c in commits:
         eff_log = external_log if external_log is not None else (head_multi_log if c in head_multi_log else None)
-        model, entry, is_merge = inspect_commit(repo, c, head_sha, eff_log)
+        model, entry, is_merge, merge_has_resolution = inspect_commit(repo, c, head_sha, eff_log)
+        if is_merge and not merge_has_resolution:
+            # Merge with no resolution (matches git's conflict-free automatic merge): adds no writer.
+            continue
         if model is not None and entry is not None:
             add_writer(model)
             log_entries.append(entry)
-        elif not is_merge:
-            # Explicit treatment for human / pre-harness unstamped commits:
-            # attributed to `claude`, never silently ignored.
-            unstamped_non_merge = True
-            add_writer("claude")
+        elif is_merge:
+            raise ProvenanceError(
+                f"merge commit {c[:10]} has a merge resolution (differs from git's automatic merge) "
+                f"but has an unknown writer (no harness stamp or backfilled writer-log entry)"
+            )
+        else:
+            raise ProvenanceError(
+                f"commit {c[:10]} is unstamped and has no backfilled writer-log entry "
+                f"(unknown writer; unstamped commits are never attributed to claude by default)"
+            )
 
     if not writers:
-        # All commits in base..head were unstamped merge commits (or base == head was a merge).
-        add_writer("claude")
+        raise ProvenanceError(
+            f"no writer provenance recorded in {base_sha[:10]}..{head_sha[:10]}"
+        )
 
     if external_log is not None:
         log_commits = set(external_log.keys())
@@ -399,16 +523,28 @@ def derive_range_provenance(
         if extra:
             extra_str = ", ".join(sorted(c[:10] for c in extra))
             raise ProvenanceError(
-                f"writer-log contains entries for commits not stamped in {base_sha[:10]}..{head_sha[:10]}: {extra_str}"
+                f"writer-log contains entries for commits not in {base_sha[:10]}..{head_sha[:10]}: {extra_str}"
             )
 
     return writers, log_entries
 
 
+def format_provenance_summary(writers: list[str], entries: list[dict[str, str]]) -> str:
+    harness = [e for e in entries if e.get("source", "harness") == "harness"]
+    backfill = [e for e in entries if e.get("source") == "backfill"]
+    h_items = ",".join(f"{e['commit'][:10]}:{e['model']}@r{e['round']}" for e in harness) or "none"
+    b_items = ",".join(f"{e['commit'][:10]}:{e['model']}@r{e['round']}" for e in backfill) or "none"
+    return (
+        f"writers: {','.join(writers)}; "
+        f"harness ({len(harness)}): {h_items}; "
+        f"backfill ({len(backfill)}): {b_items}"
+    )
+
+
 def cmd_derive(args: argparse.Namespace) -> int:
     try:
         ext_log = load_log_object(args.repo, args.log_object) if args.log_object else None
-        writers, _ = derive_range_provenance(args.repo, args.base, args.head, ext_log)
+        writers, entries = derive_range_provenance(args.repo, args.base, args.head, ext_log)
         if args.assert_writer:
             claimed = parse_writer_csv(args.assert_writer, "--writer")
             if set(claimed) != set(writers):
@@ -416,7 +552,21 @@ def cmd_derive(args: argparse.Namespace) -> int:
                     f"--writer '{args.assert_writer}' does not match derived writer provenance "
                     f"'{','.join(writers)}' for {args.base[:10]}..{args.head[:10]}"
                 )
-        print(",".join(writers))
+        if getattr(args, "report", False):
+            print(format_provenance_summary(writers, entries))
+        else:
+            print(",".join(writers))
+        return 0
+    except ProvenanceError as exc:
+        print(f"writer-provenance: {exc}", file=sys.stderr)
+        return 2
+
+
+def cmd_report(args: argparse.Namespace) -> int:
+    try:
+        ext_log = load_log_object(args.repo, args.log_object) if args.log_object else None
+        writers, entries = derive_range_provenance(args.repo, args.base, args.head, ext_log)
+        print(format_provenance_summary(writers, entries))
         return 0
     except ProvenanceError as exc:
         print(f"writer-provenance: {exc}", file=sys.stderr)
@@ -433,7 +583,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
                 f"reviewer {args.reviewer} reviewed its own work (writer {args.claimed_writer})"
             )
         ext_log = load_log_object(args.repo, args.log_object) if args.log_object else None
-        writers, _ = derive_range_provenance(args.repo, args.base, args.head, ext_log)
+        writers, entries = derive_range_provenance(args.repo, args.base, args.head, ext_log)
         if args.reviewer in writers:
             raise ProvenanceError(
                 f"reviewer {args.reviewer} reviewed its own work (derived writer {','.join(writers)})"
@@ -443,6 +593,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
                 f"note writer '{args.claimed_writer}' does not match derived writer provenance "
                 f"'{','.join(writers)}' for {args.base[:10]}..{args.head[:10]}"
             )
+        print(format_provenance_summary(writers, entries))
         return 0
     except ProvenanceError as exc:
         print(f"{exc}")
@@ -522,6 +673,12 @@ def cmd_stamp_commit(args: argparse.Namespace) -> int:
             raise ProvenanceError(f"git commit --amend failed: {amend_proc.stderr.strip()}")
 
         new_sha = resolve_commit(args.repo, "HEAD", "HEAD")
+        if new_sha != head_sha:
+            git_run(
+                args.repo,
+                ["notes", f"--ref={WRITER_NOTES_REF}", "remove", "--ignore-missing", head_sha],
+                check=False,
+            )
         end_sha = (
             resolve_commit(args.repo, args.end_sha, "end-sha")
             if args.end_sha
@@ -535,6 +692,7 @@ def cmd_stamp_commit(args: argparse.Namespace) -> int:
             "start-sha": start_sha,
             "end-sha": end_sha,
             "commit": new_sha,
+            "source": "harness",
         }
         if args.model == "agy":
             entry["agy-diff-sha256"] = args.agy_diff_sha256
@@ -550,6 +708,160 @@ def cmd_stamp_commit(args: argparse.Namespace) -> int:
         return 2
 
 
+def cmd_backfill(args: argparse.Namespace) -> int:
+    """Record an explicit backfilled writer-log entry for an unstamped commit."""
+    try:
+        target_rev = args.commit or args.commit_pos
+        if not target_rev:
+            raise ProvenanceError("backfill requires --commit <commit> (or positional <commit>)")
+        if args.commit and args.commit_pos and args.commit != args.commit_pos:
+            raise ProvenanceError(f"conflicting commit arguments '{args.commit}' and '{args.commit_pos}'")
+
+        if args.model not in VALID_MODELS:
+            raise ProvenanceError(f"invalid model '{args.model}' (expected codex, kimi, agy or claude)")
+        if not POS_INT_RE.match(str(args.round)):
+            raise ProvenanceError(f"invalid round '{args.round}'")
+        if not args.branch or not BRANCH_RE.match(args.branch) or ".." in args.branch:
+            raise ProvenanceError(f"invalid branch '{args.branch}'")
+        if not HEX64_RE.match(args.brief_sha256):
+            raise ProvenanceError(f"invalid brief-sha256 '{args.brief_sha256}'")
+        if not args.output_sha256 or not HEX64_RE.match(args.output_sha256):
+            raise ProvenanceError(f"invalid output-sha256 '{args.output_sha256}'")
+        if not args.evidence or not args.evidence.strip() or "\n" in args.evidence or "\r" in args.evidence:
+            raise ProvenanceError("backfill requires a non-empty single-line --evidence description")
+        if args.agy_diff_sha256:
+            if args.model != "agy":
+                raise ProvenanceError(f"{args.model} backfill must not set --agy-diff-sha256")
+            if not HEX64_RE.match(args.agy_diff_sha256):
+                raise ProvenanceError(f"invalid agy-diff-sha256 '{args.agy_diff_sha256}'")
+
+        commit_sha = resolve_commit(args.repo, target_rev, "commit")
+        start_sha = resolve_commit(args.repo, args.start_sha, "start-sha")
+        end_sha = resolve_commit(args.repo, args.end_sha, "end-sha")
+
+        entry = {
+            "model": args.model,
+            "round": str(args.round),
+            "branch": args.branch,
+            "brief-sha256": args.brief_sha256,
+            "output-sha256": args.output_sha256,
+            "start-sha": start_sha,
+            "end-sha": end_sha,
+            "commit": commit_sha,
+            "source": "backfill",
+            "evidence": args.evidence.strip(),
+        }
+        if args.agy_diff_sha256:
+            entry["agy-diff-sha256"] = args.agy_diff_sha256
+
+        stanza = format_log_stanza(entry)
+        parsed = parse_log_stanza(stanza, f"backfill on {commit_sha[:10]}")
+        inspect_commit(args.repo, commit_sha, end_sha, {commit_sha: parsed})
+
+        git_run(
+            args.repo,
+            ["notes", f"--ref={WRITER_NOTES_REF}", "add", "-f", "-m", stanza, commit_sha],
+        )
+        print(commit_sha)
+        return 0
+    except ProvenanceError as exc:
+        print(f"writer-provenance: {exc}", file=sys.stderr)
+        return 2
+
+
+def list_notes_tree(repo: str, notes_rev: str) -> dict[str, str]:
+    """Return `{annotated_commit_sha: note_blob_sha}` for a git notes commit, validating tree layout."""
+    notes_sha = resolve_commit(repo, notes_rev, "notes-rev")
+    proc = git_run(
+        repo,
+        ["ls-tree", "-r", "--format=%(objectmode) %(objecttype) %(objectname) %(path)", notes_sha],
+    )
+    entries: dict[str, str] = {}
+    for line in proc.stdout.splitlines():
+        if not line.strip():
+            continue
+        parts = line.split(" ", 3)
+        if len(parts) != 4:
+            raise ProvenanceError(f"writer-notes {notes_sha[:10]}: malformed ls-tree line '{line}'")
+        mode, objtype, blob_sha, path = parts
+        if mode != "100644" or objtype != "blob":
+            raise ProvenanceError(
+                f"writer-notes {notes_sha[:10]}: entry '{path}' has mode/type {mode} {objtype}, expected 100644 blob"
+            )
+        annotated_sha = path.replace("/", "")
+        if not HEX40_RE.match(annotated_sha):
+            raise ProvenanceError(
+                f"writer-notes {notes_sha[:10]}: path '{path}' is not a 40-hex commit note"
+            )
+        if annotated_sha in entries:
+            raise ProvenanceError(
+                f"writer-notes {notes_sha[:10]}: duplicate note path for {annotated_sha}"
+            )
+        entries[annotated_sha] = blob_sha
+    if not entries:
+        raise ProvenanceError(f"writer-notes {notes_sha[:10]} has an empty notes tree")
+    return entries
+
+
+def validate_notes_ref(repo: str, notes_rev: str, old_notes_rev: str | None = None) -> int:
+    """Semantically validate every writer-log note in `notes_rev`."""
+    new_entries = list_notes_tree(repo, notes_rev)
+    old_entries: dict[str, str] = {}
+    if old_notes_rev and old_notes_rev != ZERO40 and commit_exists(repo, old_notes_rev):
+        old_entries = list_notes_tree(repo, old_notes_rev)
+        removed = sorted(set(old_entries.keys()) - set(new_entries.keys()))
+        if removed:
+            rem_str = ", ".join(c[:10] for c in removed)
+            raise ProvenanceError(
+                f"writer-notes push deletes existing writer-log entry for commit(s): {rem_str}"
+            )
+
+    validated = 0
+    for annotated_sha, blob_sha in sorted(new_entries.items()):
+        is_changed = old_entries.get(annotated_sha) != blob_sha
+        proc = git_run(repo, ["cat-file", "blob", blob_sha], check=True)
+        stanzas = parse_multi_stanza_log(
+            proc.stdout, f"{WRITER_NOTES_REF} on {annotated_sha[:10]}"
+        )
+        if not stanzas:
+            raise ProvenanceError(f"{WRITER_NOTES_REF} on {annotated_sha[:10]} is empty")
+        if annotated_sha not in stanzas:
+            if len(stanzas) == 1:
+                only = next(iter(stanzas.values()))
+                raise ProvenanceError(
+                    f"{WRITER_NOTES_REF} on {annotated_sha[:10]} records commit {only['commit']}, not {annotated_sha}"
+                )
+            raise ProvenanceError(
+                f"{WRITER_NOTES_REF} on {annotated_sha[:10]} has no entry for {annotated_sha}"
+            )
+
+        has_target = commit_exists(repo, annotated_sha)
+        if is_changed and not has_target:
+            raise ProvenanceError(
+                f"{WRITER_NOTES_REF} on {annotated_sha[:10]} annotates a commit not present in this repository"
+            )
+        if has_target:
+            for c_sha, entry in stanzas.items():
+                if not commit_exists(repo, c_sha):
+                    raise ProvenanceError(
+                        f"{WRITER_NOTES_REF} on {annotated_sha[:10]} references missing commit {c_sha[:10]}"
+                    )
+                head_for_check = annotated_sha if len(stanzas) > 1 else entry["end-sha"]
+                inspect_commit(repo, c_sha, head_for_check, stanzas)
+        validated += 1
+    return validated
+
+
+def cmd_validate_notes(args: argparse.Namespace) -> int:
+    try:
+        n = validate_notes_ref(args.repo, args.notes_rev, args.old_notes_rev)
+        print(f"validated {n} writer-log note(s)")
+        return 0
+    except ProvenanceError as exc:
+        print(f"writer-provenance: {exc}", file=sys.stderr)
+        return 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Concrete writer-provenance reader and log manager.")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -560,6 +872,13 @@ def main() -> int:
     p_derive.add_argument("--head", required=True, help="Head commit")
     p_derive.add_argument("--assert-writer", help="Optional caller-supplied writer assertion to cross-check")
     p_derive.add_argument("--log-object", help="Optional multi-stanza writer-log blob or file")
+    p_derive.add_argument("--report", action="store_true", help="Report both harness and backfilled entries")
+
+    p_report = sub.add_parser("report", help="Report derived writers, harness entries, and backfilled entries")
+    p_report.add_argument("--repo", default=".", help="Git repository path")
+    p_report.add_argument("--base", required=True, help="Base commit")
+    p_report.add_argument("--head", required=True, help="Head commit")
+    p_report.add_argument("--log-object", help="Optional multi-stanza writer-log blob or file")
 
     p_verify = sub.add_parser("verify", help="Verify note writer and reviewer independence against base..head")
     p_verify.add_argument("--repo", default=".", help="Git repository path")
@@ -586,15 +905,47 @@ def main() -> int:
     p_stamp.add_argument("--end-sha", help="End SHA of the writer round (default: amended HEAD)")
     p_stamp.add_argument("--agy-diff-sha256", help="SHA-256 of the transported diff (required when model=agy)")
 
+    p_backfill = sub.add_parser("backfill", help="Record an explicit backfilled writer-log entry for an unstamped commit")
+    p_backfill.add_argument("commit_pos", nargs="?", help="Unstamped commit to backfill")
+    p_backfill.add_argument("--repo", default=".", help="Git repository path")
+    p_backfill.add_argument("--commit", help="Unstamped commit to backfill")
+    p_backfill.add_argument("--model", required=True, help="Writer model (codex|kimi|agy|claude)")
+    p_backfill.add_argument("--round", required=True, help="Writer round number")
+    p_backfill.add_argument("--branch", required=True, help="Branch name")
+    p_backfill.add_argument("--brief-sha256", required=True, help="SHA-256 of the writer brief")
+    p_backfill.add_argument(
+        "--output-sha256",
+        "--log-sha256",
+        "--raw-output-sha256",
+        dest="output_sha256",
+        required=True,
+        help="SHA-256 of the writer's raw output log",
+    )
+    p_backfill.add_argument("--start-sha", required=True, help="Start SHA of the writer round")
+    p_backfill.add_argument("--end-sha", required=True, help="End SHA of the writer round")
+    p_backfill.add_argument("--evidence", required=True, help="Free-text audit evidence for this backfill")
+    p_backfill.add_argument("--agy-diff-sha256", help="Optional SHA-256 of transported agy diff")
+
+    p_valnotes = sub.add_parser("validate-notes", help="Semantically validate a refs/notes/concrete-writer commit")
+    p_valnotes.add_argument("--repo", default=".", help="Git repository path")
+    p_valnotes.add_argument("--notes-rev", required=True, help="Notes commit SHA/ref to validate")
+    p_valnotes.add_argument("--old-notes-rev", help="Previous remote notes commit SHA (to detect deletions/changes)")
+
     args = parser.parse_args()
     if args.cmd == "derive":
         return cmd_derive(args)
+    if args.cmd == "report":
+        return cmd_report(args)
     if args.cmd == "verify":
         return cmd_verify(args)
     if args.cmd == "export-log":
         return cmd_export_log(args)
     if args.cmd == "stamp-commit":
         return cmd_stamp_commit(args)
+    if args.cmd == "backfill":
+        return cmd_backfill(args)
+    if args.cmd == "validate-notes":
+        return cmd_validate_notes(args)
     return 2
 
 

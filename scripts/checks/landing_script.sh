@@ -106,16 +106,30 @@ chmod +x "$TMP/fake-gh"
 # A current review note as scripts/review/review.sh writes it (seven common keys, plus repository on
 # clean), published to origin. put-review <sha> <clean|findings|blocked|malformed|none>[@rounds]
 # [review-base]; the base defaults to origin/main, and none removes the note.
-cat > "$TMP/put-review" <<'EOF'
-#!/usr/bin/env bash
+printf '#!/usr/bin/env bash\nWRITER_PROV=%q\n' "$ROOT_DIR/scripts/review/writer_provenance.py" > "$TMP/put-review"
+cat >> "$TMP/put-review" <<'EOF'
 set -e
-sha="$(git rev-parse "$1")"; R=refs/notes/concrete-review
+sha="$(git rev-parse "$1")"; R=refs/notes/concrete-review; W=refs/notes/concrete-writer
 base="${3:-$(git rev-parse origin/main)}"
 git fetch -q origin "+$R:$R" 2>/dev/null || true
+git fetch -q origin "+$W:$W" 2>/dev/null || true
 case "$2" in
   none) git notes --ref=$R remove --ignore-missing "$sha" 2>/dev/null ;;
   malformed) git notes --ref=$R add -f -m "verdict: clean" "$sha" ;;
   *)
+    for c in $(git rev-list --reverse "$(git rev-parse origin/main)..$sha"); do
+      p=($(git rev-list --parents -n 1 "$c"))
+      if [ "${#p[@]}" -gt 2 ]; then
+        mt="$(git merge-tree --write-tree "${p[1]}" "${p[2]}" 2>/dev/null || true)"
+        [ "$mt" != "$(git rev-parse "$c^{tree}")" ] || continue
+      fi
+      git notes --ref=$W show "$c" >/dev/null 2>&1 || python3 -I "$WRITER_PROV" backfill --repo "$PWD" \
+        --commit "$c" --model claude --round 1 --branch test \
+        --brief-sha256 3333333333333333333333333333333333333333333333333333333333333333 \
+        --output-sha256 4444444444444444444444444444444444444444444444444444444444444444 \
+        --start-sha "${p[1]}" --end-sha "$c" --evidence "landing_script test fixture" >/dev/null
+    done
+    ! git show-ref -q --verify $W || CONCRETE_SKIP_GATES=1 git push -q origin $W
     note="verdict: ${2%@*}
 rounds: $(case "$2" in *@*) echo "${2#*@}" ;; *) echo 1 ;; esac)
 reviewer: codex
@@ -1315,6 +1329,35 @@ bash "$TMP/put-review" "$HR" none; bash "$TMP/put-review" "$R1" clean; bash "$TM
 out="$(bash "$TRAIN" check trv --no-remote 2>&1)"; rc=$?
 [ "$rc" = 0 ] && [ ! -s "$FAKE_GH_DIR/review.log" ] \
   && ok "check over members reviewed clean passes the review leg without running the reviewer" || { no "check over reviewed members: exit $rc, reviewer calls '$(cat "$FAKE_GH_DIR/review.log")'"; echo "$out" | sed 's/^/      /'; }
+# train.sh fetching refs/notes/concrete-writer: distinguish "the remote has no such ref" from
+# "the fetch failed" and fail closed on the latter.
+saved_wnotes="$(git rev-parse refs/notes/concrete-writer)"
+git -C "$TMP/origin.git" update-ref -d refs/notes/concrete-writer
+out="$(bash "$TRAIN" --dry-run land trv 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "has no review provenance" && has "$out" "unknown writer" && ! git show-ref -q --verify refs/notes/concrete-writer \
+  && ok "when origin has no refs/notes/concrete-writer ref, train.sh clears any stale local ref and refuses unstamped commits as unknown writer" || { no "missing remote writer-notes ref: exit $rc"; echo "$out" | sed 's/^/      /'; }
+git update-ref refs/notes/concrete-writer "$saved_wnotes"
+CONCRETE_SKIP_GATES=1 git push -q origin refs/notes/concrete-writer
+mkdir -p "$TMP/bad-wfetch"
+cat > "$TMP/bad-wfetch/git" <<EOF
+#!/usr/bin/env bash
+for a in "\$@"; do
+  case "\$a" in
+    *refs/notes/concrete-writer*)
+      echo "fatal: transport error fetching refs/notes/concrete-writer" >&2
+      exit 128 ;;
+  esac
+done
+exec "$(command -v git)" "\$@"
+EOF
+chmod +x "$TMP/bad-wfetch/git"
+out="$(PATH="$TMP/bad-wfetch:$PATH" bash "$TRAIN" --dry-run land trv 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "could not fetch refs/notes/concrete-writer from origin: fatal: transport error fetching refs/notes/concrete-writer" \
+  && ok "land fails closed when fetching refs/notes/concrete-writer fails (never hides the fetch error behind || true)" || { no "land writer-notes fetch error: exit $rc"; echo "$out" | sed 's/^/      /'; }
+: > "$FAKE_GH_DIR/review.log"
+out="$(PATH="$TMP/bad-wfetch:$PATH" bash "$TRAIN" check trv --no-remote 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "could not fetch refs/notes/concrete-writer from origin: fatal: transport error fetching refs/notes/concrete-writer" && [ ! -s "$FAKE_GH_DIR/review.log" ] \
+  && ok "check fails closed when fetching refs/notes/concrete-writer fails and does not turn the fetch error into a reviewer run" || { no "check writer-notes fetch error: exit $rc"; echo "$out" | sed 's/^/      /'; }
 
 echo "=== review: notes cover the train base (ISS-0019, A -> B -> C) ==="
 git checkout -q -b brvcov "$MR"

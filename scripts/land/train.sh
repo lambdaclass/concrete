@@ -514,7 +514,13 @@ review_provenance() { # name head
   [ -f "$VERIFY" ] || { echo "no review verifier ($VERIFY is missing)"; return 1; }
   git fetch -q "$REMOTE" "+refs/notes/concrete-review:refs/notes/concrete-review" 2>/dev/null \
     || { echo "could not fetch refs/notes/concrete-review from $REMOTE"; return 1; }
-  git fetch -q "$REMOTE" "+refs/notes/concrete-writer:refs/notes/concrete-writer" 2>/dev/null || true
+  local werr=""
+  if ! werr="$(git fetch -q "$REMOTE" "+refs/notes/concrete-writer:refs/notes/concrete-writer" 2>&1)"; then
+    case "$werr" in
+      *"couldn't find remote ref"*) git update-ref -d refs/notes/concrete-writer 2>/dev/null || true ;;
+      *) echo "could not fetch refs/notes/concrete-writer from $REMOTE: ${werr//$'\n'/ }"; return 2 ;;
+    esac
+  fi
   if out="$(bash "$VERIFY" --required-base "$base" "$head" 2>&1)"; then echo "the head ${head:0:10} carries a clean review note covering ${base:0:10}"; return 0; fi
   if git notes --ref=refs/notes/concrete-review show "$head" >/dev/null 2>&1; then
     echo "the head's review note does not qualify: ${out//$'\n'/ }"; return 1
@@ -543,8 +549,9 @@ review_provenance() { # name head
 # provenance. Otherwise it runs the review command; a non-zero exit fails, and so does a zero exit
 # that leaves no provenance (no note, or a malformed, blocked, findings or non-covering note).
 review_leg() { # name base head
-  local why
-  if why="$(review_provenance "$1" "$3")"; then echo "review: $why; not reviewed again"; return 0; fi
+  local why rc=0
+  if why="$(review_provenance "$1" "$3")"; then echo "review: $why; not reviewed again"; return 0; else rc=$?; fi
+  [ "$rc" -ne 2 ] || { echo "review: $why"; return 1; }
   echo "review: $why; running the reviewer"
   bash -c "$(review_cmd) --base $2 --head $3" || return $?
   why="$(review_provenance "$1" "$3")" || { echo "review: the reviewer exited 0, but $why"; return 1; }

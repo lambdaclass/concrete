@@ -216,24 +216,40 @@ git init -q --bare "$T/origin.git"
 git clone -q "$T/origin.git" "$T/w" 2>/dev/null
 W="$T/w"
 g() { git -C "$W" "$@"; }
-commit_file() { # commit_file <path> <content> <message>
+commit_unstamped() { # commit_unstamped <path> <content> <message>
   mkdir -p "$(dirname "$W/$1")"
   printf '%s\n' "$2" >"$W/$1"
   g add -A && g commit -qm "$3"
 }
-commit_file README.md "base" "base"
-printf '.review/\n' >"$W/.gitignore"
-g add .gitignore && g commit -qm "ignore .review"
-g push -q origin main
-review() { (cd "$W" && bash "$REVIEW" ${REVIEW_TEST_WRITER:+--writer "$REVIEW_TEST_WRITER"} "$@"); }
 stamp_writer() { # stamp_writer <model> [round] [branch]
-  local m="$1" r="${2:-1}" b="${3:-feature}" extra=()
+  local m="$1" r="${2:-1}" b="${3:-$(g rev-parse --abbrev-ref HEAD)}" extra=()
   [ "$m" = agy ] && extra=(--agy-diff-sha256 "1111111111111111111111111111111111111111111111111111111111111111")
   python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" stamp-commit --repo "$W" \
     --model "$m" --round "$r" --branch "$b" \
     --brief-sha256 "2222222222222222222222222222222222222222222222222222222222222222" \
     "${extra[@]}" >/dev/null
 }
+backfill_writer() { # backfill_writer <commit> <model> <round> <branch> [start-sha] [end-sha] [evidence]
+  local c; c="$(g rev-parse "$1")"
+  local m="$2" r="$3" b="$4"
+  local s="${5:-$(g rev-parse "$c~1")}"
+  local e="${6:-$c}"
+  local ev="${7:-audited session transcript for $b round $r ($m)}"
+  python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" backfill --repo "$W" \
+    --commit "$c" --model "$m" --round "$r" --branch "$b" \
+    --brief-sha256 "3333333333333333333333333333333333333333333333333333333333333333" \
+    --output-sha256 "4444444444444444444444444444444444444444444444444444444444444444" \
+    --start-sha "$s" --end-sha "$e" --evidence "$ev" >/dev/null
+}
+commit_file() { # commit_file <path> <content> <message> — stamps as claude explicitly
+  commit_unstamped "$1" "$2" "$3"
+  stamp_writer claude 1 "$(g rev-parse --abbrev-ref HEAD)"
+}
+commit_unstamped README.md "base" "base"
+printf '.review/\n' >"$W/.gitignore"
+g add .gitignore && g commit -qm "ignore .review"
+g push -q origin main
+review() { (cd "$W" && bash "$REVIEW" ${REVIEW_TEST_WRITER:+--writer "$REVIEW_TEST_WRITER"} "$@"); }
 note() { g notes --ref=refs/notes/concrete-review show "${1:-HEAD}" 2>/dev/null; }
 field() { note "${2:-HEAD}" | sed -n "s/^$1: //p"; }
 sha256_file() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
@@ -495,34 +511,166 @@ check "verify.sh accepts clean note on multi-writer branch (exit 0, got $rc)" te
 LOG_BLOB="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" export-log --repo "$W" --base "$(g merge-base HEAD main)" --head HEAD --write-blob)"
 check "export-log --write-blob writes a git blob that verifies multi-writer provenance" \
   python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" verify --repo "$W" --base "$(g merge-base HEAD main)" --head HEAD --claimed-writer "codex,agy" --reviewer kimi --log-object "$LOG_BLOB"
-# Unstamped human/pre-harness commit + stamped codex commit -> derived writer is claude,codex
-# (unstamped commits are explicitly attributed to claude, never silently treated as written by nobody).
+# Unstamped commits are NEVER attributed to claude by default: an unstamped commit has an UNKNOWN
+# writer and is refused unless the writer log holds an explicit backfilled entry for it.
+reset_fake
+g checkout -q main && g checkout -qb unstamped-refused
+commit_unstamped unstamped.txt "unstamped commit" "unstamped commit"
+UNSTAMPED_SHA="$(g rev-parse HEAD)"
+UNSTAMPED_BASE="$(g merge-base HEAD main)"
+python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" derive --repo "$W" --base "$UNSTAMPED_BASE" --head "$UNSTAMPED_SHA" >"$T/unstamped-derive" 2>&1; rc=$?
+check "unstamped non-merge commit is refused by writer_provenance.py derive (exit 2, got $rc)" test "$rc" -eq 2
+check "unstamped commit error says unknown writer, never attributed to claude by default" \
+  grep -q "unknown writer; unstamped commits are never attributed to claude by default" "$T/unstamped-derive"
+before="$(calls)"
+review --reviewer codex >"$T/unstamped-review" 2>&1; rc=$?
+check "review.sh refuses a branch with an unstamped commit (exit 2, got $rc) and calls no reviewer" \
+  test "$rc" -eq 2 -a "$(calls)" = "$before"
+g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 1\nreviewer: codex\nwriter: claude\nutc: 2026-11-08T00:00:00Z\nbase: %s\npieces: 1\nrepository: readable' "$UNSTAMPED_BASE")" "$UNSTAMPED_SHA"
+out="$(cd "$W" && bash "$VERIFY" "$UNSTAMPED_SHA" 2>&1)"; rc=$?
+check "verify.sh refuses a clean note claiming writer: claude on an unstamped commit (exit 1, got $rc)" test "$rc" -eq 1
+check "verify.sh unstamped refusal names the unknown writer" grep -q "unknown writer" <<<"$out"
+g notes --ref=refs/notes/concrete-review remove "$UNSTAMPED_SHA" 2>/dev/null
+
+# Backfill subcommand and wip/review-access scenario: rounds 1 & 2 unstamped by kimi, rounds 3 & 4
+# harness-stamped by agy. Before backfilling, provenance is refused; after backfilling rounds 1 & 2
+# as kimi, kimi is refused as reviewer of its own work, agy is refused, codex is accepted, and the
+# reader distinguishes and reports both harness and backfilled entries.
+reset_fake
+g checkout -q main && g checkout -qb backfill-kimi-agy
+commit_unstamped r1.txt "round 1 by kimi (unstamped)" "r1 kimi"
+BF_R1="$(g rev-parse HEAD)"
+commit_unstamped r2.txt "round 2 by kimi (unstamped)" "r2 kimi"
+BF_R2="$(g rev-parse HEAD)"
+commit_file r3.txt "round 3 by agy (stamped)" "r3 agy"
+stamp_writer agy 3 backfill-kimi-agy
+BF_R3="$(g rev-parse HEAD)"
+commit_file r4.txt "round 4 by agy (stamped)" "r4 agy"
+stamp_writer agy 4 backfill-kimi-agy
+BF_R4="$(g rev-parse HEAD)"
+BF_BASE="$(g merge-base HEAD main)"
+review --reviewer kimi >"$T/bf-before" 2>&1; rc=$?
+check "before backfilling rounds 1 & 2, review.sh refuses the branch (exit 2, got $rc)" test "$rc" -eq 2
+# Backfill validation controls: cannot backfill a harness-stamped commit, or omit evidence / output-sha256.
+python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" backfill --repo "$W" \
+  --commit "$BF_R3" --model agy --round 3 --branch backfill-kimi-agy \
+  --brief-sha256 "3333333333333333333333333333333333333333333333333333333333333333" \
+  --output-sha256 "4444444444444444444444444444444444444444444444444444444444444444" \
+  --start-sha "$BF_R2" --end-sha "$BF_R3" --evidence "should fail" >"$T/bf-stamped-err" 2>&1; rc=$?
+check "backfill refuses a commit that already carries a harness stamp (exit 2, got $rc)" test "$rc" -eq 2
+python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" backfill --repo "$W" \
+  --commit "$BF_R1" --model kimi --round 1 --branch backfill-kimi-agy \
+  --brief-sha256 "3333333333333333333333333333333333333333333333333333333333333333" \
+  --output-sha256 "4444444444444444444444444444444444444444444444444444444444444444" \
+  --start-sha "$BF_BASE" --end-sha "$BF_R1" --evidence "   " >"$T/bf-empty-ev" 2>&1; rc=$?
+check "backfill refuses whitespace-only evidence (exit 2, got $rc)" test "$rc" -eq 2
+backfill_writer "$BF_R1" kimi 1 backfill-kimi-agy "$BF_BASE" "$BF_R1" "kimi session log for round 1"
+backfill_writer "$BF_R2" kimi 2 backfill-kimi-agy "$BF_R1" "$BF_R2" "kimi session log for round 2"
+bf_note_r1="$(g notes --ref=refs/notes/concrete-writer show "$BF_R1")"
+check "backfill writes source: backfill, output-sha256 and evidence to refs/notes/concrete-writer" \
+  bash -c 'grep -qE "^source: backfill$" <<<"$1" && grep -qE "^output-sha256: [0-9a-f]{64}$" <<<"$1" && grep -qE "^evidence: kimi session log for round 1$" <<<"$1"' _ "$bf_note_r1"
+review --reviewer kimi >"$T/bf-kimi-self" 2>&1; rc=$?
+check "after backfilling rounds 1 & 2 as kimi, kimi is refused as reviewer of its own work (exit 2, got $rc)" test "$rc" -eq 2
+check "kimi self-review refusal names derived writer kimi,agy" grep -q "reviewer kimi cannot review its own work (writer kimi,agy)" "$T/bf-kimi-self"
+review --reviewer agy >"$T/bf-agy-self" 2>&1; rc=$?
+check "agy is also refused as reviewer on the kimi,agy branch (exit 2, got $rc)" test "$rc" -eq 2
+review --reviewer codex >"$T/bf-codex-ok" 2>&1; rc=$?
+check "codex is accepted as independent reviewer on the kimi,agy branch (exit 0, got $rc)" test "$rc" -eq 0
+check "review note records writer: kimi,agy" test "$(field writer)" = "kimi,agy"
+rep_out="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" report --repo "$W" --base "$BF_BASE" --head "$BF_R4")"
+check "writer_provenance.py report distinguishes and reports both harness (2) and backfill (2) entries" \
+  bash -c "grep -q 'writers: kimi,agy; harness (2): ${BF_R3:0:10}:agy@r3,${BF_R4:0:10}:agy@r4; backfill (2): ${BF_R1:0:10}:kimi@r1,${BF_R2:0:10}:kimi@r2' <<<'$rep_out'"
+v_out="$(cd "$W" && bash "$VERIFY" "$BF_R4" 2>&1)"; rc=$?
+check "verify.sh accepts clean note and reports both harness and backfilled provenance (exit 0, got $rc)" \
+  bash -c "[ $rc -eq 0 ] && grep -q 'harness (2): ${BF_R3:0:10}:agy@r3,${BF_R4:0:10}:agy@r4; backfill (2): ${BF_R1:0:10}:kimi@r1,${BF_R2:0:10}:kimi@r2' <<<'$v_out'"
+BF_BLOB="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" export-log --repo "$W" --base "$BF_BASE" --head "$BF_R4" --write-blob)"
+check "export-log --write-blob preserves both backfilled and harness stanzas and verifies" \
+  python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" verify --repo "$W" --base "$BF_BASE" --head "$BF_R4" --claimed-writer "kimi,agy" --reviewer codex --log-object "$BF_BLOB"
+
+# Explicit claude backfill + harness-stamped codex commit -> derived writer is claude,codex
 reset_fake
 g checkout -q main && g checkout -qb human-plus-codex
-commit_file human.txt "unstamped human commit" "human commit"
+commit_unstamped human.txt "unstamped human commit" "human commit"
+backfill_writer HEAD claude 1 human-plus-codex "$(g rev-parse HEAD~1)" "$(g rev-parse HEAD)" "interactive claude commit"
 commit_file bot.txt "stamped codex commit" "bot commit"
-stamp_writer codex 1 human-plus-codex
+stamp_writer codex 2 human-plus-codex
 review --reviewer codex >"$T/hc-codex" 2>&1; rc=$?
-check "unstamped+codex branch derives claude,codex and refuses codex reviewer (exit 2, got $rc)" test "$rc" -eq 2
+check "backfilled-claude+codex branch derives claude,codex and refuses codex reviewer (exit 2, got $rc)" test "$rc" -eq 2
 review --reviewer kimi >"$T/hc-kimi" 2>&1; rc=$?
-check "unstamped+codex branch reviewed clean by kimi records writer: claude,codex (exit $rc)" \
+check "backfilled-claude+codex branch reviewed clean by kimi records writer: claude,codex (exit $rc)" \
   test "$rc" -eq 0 -a "$(field writer)" = "claude,codex"
+
+# Merge commit provenance:
+# 1. A merge with NO resolution (tree == conflict-free git merge-tree --write-tree) adds no writer.
+reset_fake
+g checkout -q main && g checkout -qb merge-side-clean
+commit_file side_clean.txt "side clean content" "side clean"
+stamp_writer codex 1 merge-side-clean
+g checkout -q main && g checkout -qb merge-main-clean
+commit_file main_clean.txt "main clean content" "main clean"
+stamp_writer codex 1 merge-main-clean
+g merge -q --no-ff merge-side-clean -m "clean merge with no conflict resolution"
+CLEAN_MERGE_BASE="$(g rev-parse main)"
+CLEAN_MERGE_HEAD="$(g rev-parse HEAD)"
+drv_clean="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" derive --repo "$W" --base "$CLEAN_MERGE_BASE" --head "$CLEAN_MERGE_HEAD" 2>&1)"; rc=$?
+check "an unstamped clean merge commit (no resolution) adds no writer and derives codex (exit 0, got $rc: $drv_clean)" \
+  test "$rc" -eq 0 -a "$drv_clean" = "codex"
+stamp_writer agy 2 merge-main-clean
+drv_clean_stamped="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" derive --repo "$W" --base "$CLEAN_MERGE_BASE" --head HEAD 2>&1)"; rc=$?
+check "a clean merge commit (no resolution) adds no writer even if stamped (exit 0, got $rc: $drv_clean_stamped)" \
+  test "$rc" -eq 0 -a "$drv_clean_stamped" = "codex"
+# 2. A merge WITH a conflict resolution (differs from git's automatic merge) is authored work:
+#    refused when unstamped, accepted and attributed when harness-stamped with Writer: agy + Agy-Diff-SHA256.
+g checkout -q main && g checkout -qb merge-side-conflict
+commit_file conflict.txt "side version of conflict.txt" "side conflict"
+stamp_writer codex 1 merge-side-conflict
+g checkout -q main && g checkout -qb merge-main-conflict
+commit_file conflict.txt "main version of conflict.txt" "main conflict"
+stamp_writer codex 1 merge-main-conflict
+g merge -q --no-commit merge-side-conflict >/dev/null 2>&1 || true
+printf 'resolved version of conflict.txt by agy\n' >"$W/conflict.txt"
+g add conflict.txt && g commit -qm "resolved merge conflict"
+UNSTAMPED_MERGE_HEAD="$(g rev-parse HEAD)"
+python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" derive --repo "$W" --base "$CLEAN_MERGE_BASE" --head "$UNSTAMPED_MERGE_HEAD" >"$T/merge-unstamped" 2>&1; rc=$?
+check "an unstamped merge commit with a conflict resolution is refused as unknown writer (exit 2, got $rc)" test "$rc" -eq 2
+check "unstamped resolved-merge error names the merge resolution rule" \
+  grep -q "has a merge resolution (differs from git's automatic merge) but has an unknown writer" "$T/merge-unstamped"
+stamp_writer agy 2 merge-main-conflict
+STAMPED_MERGE_HEAD="$(g rev-parse HEAD)"
+drv_resolved="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" derive --repo "$W" --base "$CLEAN_MERGE_BASE" --head "$STAMPED_MERGE_HEAD" 2>&1)"; rc=$?
+check "a resolved merge stamped with Writer: agy and Agy-Diff-SHA256 derives codex,agy (exit 0, got $rc: $drv_resolved)" \
+  test "$rc" -eq 0 -a "$drv_resolved" = "codex,agy"
+review --reviewer agy >"$T/merge-agy-refused" 2>&1; rc=$?
+check "agy cannot review a branch whose merge conflict resolution it authored (exit 2, got $rc)" test "$rc" -eq 2
+review --reviewer kimi >"$T/merge-kimi-ok" 2>&1; rc=$?
+check "kimi reviews the codex,agy resolved-merge branch clean (exit 0, got $rc)" test "$rc" -eq 0
+# 3. Evil merge (parents merge cleanly in git merge-tree, but the merge commit alters the tree) is
+#    also authored work and refused when unstamped.
+g checkout -q main && g checkout -qb merge-evil
+commit_file evil_main.txt "evil main" "evil main"
+stamp_writer codex 1 merge-evil
+g merge -q --no-ff --no-commit merge-side-clean >/dev/null 2>&1
+printf 'smuggled change inside a conflict-free merge\n' >>"$W/evil_main.txt"
+g add evil_main.txt && g commit -qm "evil merge"
+python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" derive --repo "$W" --base "$CLEAN_MERGE_BASE" --head HEAD >"$T/merge-evil" 2>&1; rc=$?
+check "an unstamped conflict-free merge whose tree differs from git merge-tree is refused (exit 2, got $rc)" test "$rc" -eq 2
+
 # Negative controls for incomplete or forged writer stamps:
 # 1. Writer: trailer alone without a matching writer-log entry in refs/notes/concrete-writer is refused.
 reset_fake
 g checkout -q main && g checkout -qb trailer-only
-commit_file t.txt "trailer only" "$(printf 'forged stamp\n\nWriter: codex')"
+commit_unstamped t.txt "trailer only" "$(printf 'forged stamp\n\nWriter: codex')"
 review --reviewer kimi >"$T/trailer-only" 2>&1; rc=$?
 check "a commit with a Writer: trailer but no author stamp or log entry is refused (exit 2, got $rc)" test "$rc" -eq 2
 g checkout -q main && g checkout -qb author-and-trailer-no-log
 commit_file t2.txt "no log" "no log"
 stamp_writer codex 1 author-and-trailer-no-log
-g notes --ref=refs/notes/concrete-writer remove HEAD
+g notes --ref=refs/notes/concrete-writer remove HEAD 2>/dev/null
 review --reviewer kimi >"$T/no-log" 2>&1; rc=$?
 check "a commit with writer author and Writer: trailer but no writer-log entry is refused by review.sh (exit 2, got $rc)" test "$rc" -eq 2
 check "no-log refusal says a Writer: trailer alone is never enough" grep -q "Writer: trailer alone is never enough" "$T/no-log"
 NO_LOG_BASE="$(g merge-base HEAD main)"
-g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 1\nreviewer: kimi\nwriter: codex\nutc: 2026-11-08T00:00:00Z\nbase: %s\npieces: 1\nrepository: readable' "$NO_LOG_BASE")" HEAD
+g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 1\nreviewer: kimi\nwriter: codex\nutc: 2026-11-08T00:00:00Z\nbase: %s\npieces: 1\nrepository: readable' "$NO_LOG_BASE")" HEAD 2>/dev/null
 out="$(cd "$W" && bash "$VERIFY" HEAD 2>&1)"; rc=$?
 check "verify.sh also refuses a clean note when the commit's writer-log entry is missing (exit 1, got $rc)" test "$rc" -eq 1
 check "verify.sh no-log refusal names the missing writer-log entry" grep -q "no matching writer-log entry" <<<"$out"
@@ -531,14 +679,17 @@ g checkout -q main && g checkout -qb agy-bad-hash
 commit_file abh.txt "agy" "agy"
 stamp_writer agy 1 agy-bad-hash
 ABH_SHA="$(g rev-parse HEAD)"
-g notes --ref=refs/notes/concrete-writer show "$ABH_SHA" | sed 's/^agy-diff-sha256: .*/agy-diff-sha256: 9999999999999999999999999999999999999999999999999999999999999999/' >"$T/bad-agy-log"
-g notes --ref=refs/notes/concrete-writer add -f -F "$T/bad-agy-log" "$ABH_SHA"
+g notes --ref=refs/notes/concrete-writer show "$ABH_SHA" >"$T/good-agy-log"
+sed 's/^agy-diff-sha256: .*/agy-diff-sha256: 9999999999999999999999999999999999999999999999999999999999999999/' "$T/good-agy-log" >"$T/bad-agy-log"
+g notes --ref=refs/notes/concrete-writer add -f -F "$T/bad-agy-log" "$ABH_SHA" 2>/dev/null
+BAD_WRITER_NOTES_SHA="$(g rev-parse refs/notes/concrete-writer)"
 review --reviewer kimi >"$T/agy-bad-out" 2>&1; rc=$?
 check "agy commit whose writer-log agy-diff-sha256 mismatches its trailer is refused (exit 2, got $rc)" test "$rc" -eq 2
+g notes --ref=refs/notes/concrete-writer add -f -F "$T/good-agy-log" "$ABH_SHA" 2>/dev/null
 # 3. Clean note whose writer: claims claude on a codex-stamped branch is refused by verify.sh.
 g checkout -q reviewer-kimi
 SELF_BASE="$(g merge-base HEAD main)"
-g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 1\nreviewer: agy\nwriter: claude\nutc: 2026-11-08T00:00:00Z\nbase: %s\npieces: 1\nrepository: readable' "$SELF_BASE")" HEAD
+g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 1\nreviewer: agy\nwriter: claude\nutc: 2026-11-08T00:00:00Z\nbase: %s\npieces: 1\nrepository: readable' "$SELF_BASE")" HEAD 2>/dev/null
 out="$(cd "$W" && bash "$VERIFY" HEAD 2>&1)"; rc=$?
 check "verify.sh refuses a clean note whose writer field disagrees with commit provenance (exit 1, got $rc)" test "$rc" -eq 1
 check "provenance-mismatch refusal names both claimed and derived writers" grep -q "note writer 'claude' does not match derived writer provenance 'codex'" <<<"$out"
@@ -651,15 +802,55 @@ review >/dev/null 2>&1
 check "after two blocked rounds in a row the finding still reaches the prompt" \
   grep -q "counter is never reset" "$FAKE_LOG/prompt.1"
 
-echo "=== pre-push hook: a review-notes push runs no gates ==="
+echo "=== pre-push hook: a review-notes push runs no gates and semantically validates refs/notes/concrete-writer ==="
 HOOK="$ROOT_DIR/.githooks/pre-push"
 Z=0000000000000000000000000000000000000000
 NOTES_SHA="$(g rev-parse refs/notes/concrete-review)"
 WRITER_NOTES_SHA="$(g rev-parse refs/notes/concrete-writer)"
 hook_out="$(cd "$W" && printf 'refs/notes/concrete-review %s refs/notes/concrete-review %s\nrefs/notes/concrete-review-findings %s refs/notes/concrete-review-findings %s\nrefs/notes/concrete-writer %s refs/notes/concrete-writer %s\n' \
   "$NOTES_SHA" "$Z" "$(g rev-parse refs/notes/concrete-review-findings)" "$Z" "$WRITER_NOTES_SHA" "$Z" | bash "$HOOK" 2>&1)"; rc=$?
-check "notes-only push (review, findings, writer): hook exits 0 (got $rc)" test "$rc" -eq 0
+check "notes-only push (review, findings, semantically valid writer notes): hook exits 0 (got $rc)" test "$rc" -eq 0
 check "notes-only push: hook takes the review-notes tier" grep -q "review-notes push" <<<"$hook_out"
+# Negative controls for pre-push hook semantic validation of refs/notes/concrete-writer:
+wnote_hook() { (cd "$W" && printf 'refs/notes/concrete-writer %s refs/notes/concrete-writer %s\n' "$1" "${2:-$Z}" | bash "$HOOK" 2>&1); }
+hook_out="$(wnote_hook "$BAD_WRITER_NOTES_SHA" "$Z")"; rc=$?
+check "hook refuses refs/notes/concrete-writer with mismatched agy-diff-sha256 (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "invalid refs/notes/concrete-writer" <<<"$2"' _ "$rc" "$hook_out"
+g update-ref -d refs/notes/concrete-writer-bad 2>/dev/null || true
+g notes --ref=refs/notes/concrete-writer-bad add -f -m "not a valid stanza" "$ABH_SHA" 2>/dev/null
+hook_out="$(wnote_hook "$(g rev-parse refs/notes/concrete-writer-bad)" "$Z")"; rc=$?
+check "hook refuses malformed stanza in refs/notes/concrete-writer (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "malformed line" <<<"$2"' _ "$rc" "$hook_out"
+g update-ref -d refs/notes/concrete-writer-bad 2>/dev/null || true
+g notes --ref=refs/notes/concrete-writer-bad add -f -F "$T/good-agy-log" "$UNSTAMPED_SHA" 2>/dev/null
+hook_out="$(wnote_hook "$(g rev-parse refs/notes/concrete-writer-bad)" "$Z")"; rc=$?
+check "hook refuses a writer-log note whose commit field does not match the annotated commit (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "records commit $3, not $4" <<<"$2"' _ "$rc" "$hook_out" "$ABH_SHA" "$UNSTAMPED_SHA"
+sed "s/^commit: .*/commit: $UNSTAMPED_SHA/;s/^model: .*/model: codex/;/^agy-diff-sha256:/d" "$T/good-agy-log" >"$T/forged-harness-on-unstamped"
+g update-ref -d refs/notes/concrete-writer-bad 2>/dev/null || true
+g notes --ref=refs/notes/concrete-writer-bad add -f -F "$T/forged-harness-on-unstamped" "$UNSTAMPED_SHA" 2>/dev/null
+hook_out="$(wnote_hook "$(g rev-parse refs/notes/concrete-writer-bad)" "$Z")"; rc=$?
+check "hook refuses a harness writer-log note attached to an unstamped commit (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "no '\''Writer: <model>'\'' trailer" <<<"$2"' _ "$rc" "$hook_out"
+g notes --ref=refs/notes/concrete-writer show "$BF_R1" | sed "s/^commit: .*/commit: $ABH_SHA/;s|^start-sha: .*|start-sha: $(g rev-parse "$ABH_SHA~1")|;s/^end-sha: .*/end-sha: $ABH_SHA/" >"$T/backfill-on-stamped"
+g update-ref -d refs/notes/concrete-writer-bad 2>/dev/null || true
+g notes --ref=refs/notes/concrete-writer-bad add -f -F "$T/backfill-on-stamped" "$ABH_SHA" 2>/dev/null
+hook_out="$(wnote_hook "$(g rev-parse refs/notes/concrete-writer-bad)" "$Z")"; rc=$?
+check "hook refuses a backfill writer-log note attached to a harness-stamped commit (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "carries a harness commit stamp and cannot use a backfilled writer-log entry" <<<"$2"' _ "$rc" "$hook_out"
+g update-ref refs/notes/concrete-writer-del "$WRITER_NOTES_SHA"
+g notes --ref=refs/notes/concrete-writer-del remove "$ABH_SHA" 2>/dev/null
+hook_out="$(wnote_hook "$(g rev-parse refs/notes/concrete-writer-del)" "$WRITER_NOTES_SHA")"; rc=$?
+check "hook refuses a refs/notes/concrete-writer update that deletes an existing writer-log entry (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "deletes existing writer-log entry" <<<"$2"' _ "$rc" "$hook_out"
+hook_out="$(wnote_hook "$ABH_SHA" "$Z")"; rc=$?
+check "hook refuses a source commit pushed to refs/notes/concrete-writer (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "invalid refs/notes/concrete-writer" <<<"$2"' _ "$rc" "$hook_out"
+hook_out="$(wnote_hook "$Z" "$WRITER_NOTES_SHA")"; rc=$?
+check "hook refuses deleting refs/notes/concrete-writer (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "refusing to delete refs/notes/concrete-writer" <<<"$2"' _ "$rc" "$hook_out"
+g update-ref -d refs/notes/concrete-writer-bad 2>/dev/null || true
+g update-ref -d refs/notes/concrete-writer-del 2>/dev/null || true
 # Owner sign-off refs: only a record (parentless, its subject's 40-hex name, exactly the seven files)
 # takes the notes tier. Anything else takes the full tier, which a linked worktree refuses before it
 # runs anything: that refusal is how these legs see the tier without running the gates.
@@ -703,6 +894,7 @@ printf 'doc\n' >"$W/docs/d.md"
 printf 'echo hi\n' >"$W/scripts/s.sh"
 seq 1 400 | sed 's/^/big line /' >"$W/Concrete/Big.lean"
 g add -A && g commit -qm "spread change"
+stamp_writer claude 1 split
 REVIEW_PIECE_BYTES=2000 review >"$T/out5" 2>&1; rc=$?
 check "split review is clean (exit $rc)" test "$rc" -eq 0
 K="$(field pieces)"

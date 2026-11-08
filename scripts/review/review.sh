@@ -6,7 +6,8 @@
 #                            [--pieces auto|N] [--prompt-extra "..."]
 #
 # Writer provenance is derived from the commits in base..HEAD (via scripts/review/writer_provenance.py
-# and refs/notes/concrete-writer; unstamped human/pre-harness commits are attributed to claude).
+# and refs/notes/concrete-writer; unstamped commits have an unknown writer and are refused unless
+# backfilled in refs/notes/concrete-writer).
 # --writer is optional: when supplied, it is checked as an assertion against the derived writer set.
 # --reviewer defaults to codex and must not be any writer of base..HEAD: nobody reviews their own work.
 #
@@ -133,10 +134,10 @@ sha256_file() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | c
 # for the same commit the local note wins (`-s ours`): it is the newer result.
 sync_notes() {
   [ "$PUSH" = 1 ] || return 0
-  local ref tmp
+  local ref tmp ferr
   for ref in "$NOTES_REF" "$FINDINGS_REF" "$WRITER_NOTES_REF"; do
     tmp="refs/notes/review-sync-${ref##*/}"
-    if git fetch -q "$REMOTE" "+$ref:$tmp" 2>/dev/null; then
+    if ferr="$(git fetch -q "$REMOTE" "+$ref:$tmp" 2>&1)"; then
       if git show-ref -q --verify "$ref"; then
         git notes --ref="$ref" merge -q -s ours "$tmp" >/dev/null 2>&1 \
           || { echo "review: could not merge remote $ref" >&2; git update-ref -d "$tmp"; return 1; }
@@ -144,6 +145,11 @@ sync_notes() {
         git update-ref "$ref" "$tmp"
       fi
       git update-ref -d "$tmp"
+    else
+      case "$ferr" in
+        *"couldn't find remote ref"*) ;;
+        *) echo "review: could not fetch $ref from $REMOTE: ${ferr//$'\n'/ }" >&2; return 1 ;;
+      esac
     fi
   done
 }

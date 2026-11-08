@@ -154,8 +154,11 @@ is published or brought to the owner; a reviewer's absence is recorded, never as
 ([decision](docs/decisions.md#decided-project-review)). When Codex wrote the branch, Kimi or agy
 reviews it, never Codex. Run `scripts/review/review.sh [--writer <who-wrote-it>] --reviewer
 <codex|kimi|agy>` (`--reviewer` defaults to Codex; writer provenance is derived from the commits and
-`refs/notes/concrete-writer` via `scripts/review/writer_provenance.py`, and `--writer` is an optional
-assertion); reviewer equal to any writer of the branch is refused. Reviewers run
+`refs/notes/concrete-writer` via `scripts/review/writer_provenance.py`, where unstamped non-merge or
+resolved-merge commits have an unknown writer and are refused unless backfilled via
+`writer_provenance.py backfill`, `claude` is a writer only when explicitly logged, a merge with no
+resolution adds no writer, and `--writer` is an optional assertion); reviewer equal to any writer of
+the branch is refused. Reviewers run
 with full read access only in the script's read-only disposable archive, agy's permission bypass included,
 with stdin closed and the diff in the prompt. Every slice gets that independent review before it
 lands: at most 2 rounds for docs and the roadmap, 3 for scripts and 5 for the compiler and the spec
@@ -369,7 +372,11 @@ itself via the bracket, but a ref check is still the better answer.
 
 Every agent reviews the same way: `scripts/review/review.sh [--writer <model>] [--reviewer <model>]`,
 one round per invocation, with the verdict recorded as a git note on the reviewed commit. Writer
-provenance is derived from `base..HEAD` (`scripts/review/writer_provenance.py`, `refs/notes/concrete-writer`),
+provenance is derived from `base..HEAD` (`scripts/review/writer_provenance.py`, `refs/notes/concrete-writer`;
+unstamped non-merge and resolved-merge commits are refused as unknown writer unless backfilled with
+`writer_provenance.py backfill`, `claude` is a writer only when explicitly logged, clean merges add no
+writer, and `.githooks/pre-push` semantically validates `refs/notes/concrete-writer` through
+`writer_provenance.py validate-notes`),
 and the reviewer must not be any writer of the branch. The note is shared through `origin`, so rounds run in another
 worktree or by another agent count toward the same cap, and the next round reviews only the delta when the prior note's base covers the branch base.
 Codex, Kimi and agy run with full access only in a read-only temporary `git archive` of the reviewed commit,

@@ -91,7 +91,11 @@ verdict; any failing leg fails the check (see [Pipelining](#pipelining)).
   every member at its exact recorded SHA. Each note's `base` must be an ancestor-or-equal of the
   train's recorded base, so its reviewed range covers the entire train diff; a note based at an
   unreviewed intermediate commit is refused. `scripts/review/verify.sh --required-base <train-base>`
-  judges origin's notes. Absent, malformed, blocked, findings, legacy and self-reviewed clean notes
+  judges origin's notes (`refs/notes/concrete-review` and `refs/notes/concrete-writer`; when origin
+  has no `refs/notes/concrete-writer` ref, any stale local ref is removed, and any other fetch
+  failure on `refs/notes/concrete-writer` fails closed at once in both `check` and `land`). Absent,
+  malformed, blocked, findings, legacy and self-reviewed clean notes, or notes over unstamped
+  commits without a backfilled writer-log entry,
   qualify nothing, and a non-clean head note is not overridden by the members. A member
   without a clean note qualifies instead by an **owner sign-off** at its exact SHA (R-0618: a branch
   at the review-round cap of its diff's class, approved by the owner after Codex, Kimi and agy all
@@ -328,7 +332,7 @@ A branch is **ready** when all of the following hold:
 | notes ref | lines | writer |
 |---|---|---|
 | `refs/notes/concrete-review` | `verdict: clean\|findings\|blocked`, `rounds: N`, `reviewer: codex\|kimi\|agy`, `writer: codex\|kimi\|agy\|claude[,...]`, `utc: ...`, `base: <sha>`, `pieces: N`, plus `repository: readable` on clean | `scripts/review/review.sh` (`scripts/review/verify.sh` validates it) |
-| `refs/notes/concrete-writer` | per-commit writer-log entry (`model`, `round`, `branch`, `brief-sha256`, `start-sha`, `end-sha`, `commit`, plus `agy-diff-sha256` for `agy`) | writer harness / `scripts/review/writer_provenance.py` |
+| `refs/notes/concrete-writer` | per-commit writer-log entry (`model`, `round`, `branch`, `brief-sha256`, `start-sha`, `end-sha`, `commit`, `source: harness\|backfill`, plus `agy-diff-sha256` for `agy` and `output-sha256`, `evidence` for `backfill`) | writer harness (`stamp-commit`) or owner/orchestrator (`backfill`) via `scripts/review/writer_provenance.py` (`validate-notes` in `.githooks/pre-push` validates it) |
 | `refs/notes/concrete-gates` | `gates: pass\|fail`, `selected: N`, `utc: ...` | `scripts/land/ready.sh` |
 
 One `key: value` per line; `notes.sh get` takes the last when a key repeats, while `verify.sh`

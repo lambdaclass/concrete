@@ -34,8 +34,9 @@ One invocation runs **one round** on `HEAD`. Commit fixes between rounds; the
 uncommitted tree is never reviewed, and the script warns when it is dirty.
 Writer provenance is derived from the commits in `base..HEAD` by
 `scripts/review/writer_provenance.py` (`refs/notes/concrete-writer` plus commit
-stamps; unstamped human or pre-harness commits are explicitly attributed to
-`claude`). `--writer` is optional and, when passed, checked as an assertion that
+stamps; unstamped authored commits have an unknown writer and are refused unless
+backfilled in `refs/notes/concrete-writer`, and `claude` is a writer only when
+explicitly logged). `--writer` is optional and, when passed, checked as an assertion that
 must match the derived writer set. `--reviewer` defaults to Codex. The writer
 never reviews their own work: reviewer equal to any writer of `base..HEAD` is a
 usage error (exit 2). In particular, a branch with any Codex-written commit must
@@ -146,18 +147,17 @@ real review that discusses content filters still parses.
 
 ## Writer provenance and the writer log (`scripts/review/writer_provenance.py`)
 
-Writer identity comes from the writer harness, not from a caller flag or a
-commit trailer alone:
+Writer identity comes from the writer harness or an explicit audited backfill in
+`refs/notes/concrete-writer`, never from a caller flag, a commit trailer alone,
+or a default attribution on unstamped commits:
 
-- Each harness-written commit is stamped with author
+- **Harness-stamped commits (`source: harness`).** Each harness-written commit
+  (`scripts/review/writer_provenance.py stamp-commit`) is stamped with author
   `<Model> (writer) <model@writers.concrete>` (while the committer remains the
   project owner's identity), a `Writer: <model>` trailer, and for `agy` an
   `Agy-Diff-SHA256: <64-hex>` trailer recording the sha256 of the diff
-  transported from its throwaway archive copy.
-- Each stamped commit carries a matching writer-log entry under
-  `refs/notes/concrete-writer` (and exportable as a self-contained multi-stanza
-  git blob via `writer_provenance.py export-log --write-blob` so review-evidence
-  records can embed it unchanged):
+  transported from its throwaway archive copy, plus a matching writer-log entry
+  under `refs/notes/concrete-writer`:
   ```
   model: codex|kimi|agy|claude
   round: <positive integer>
@@ -166,19 +166,66 @@ commit trailer alone:
   start-sha: <40-hex>
   end-sha: <40-hex>
   commit: <40-hex>
+  source: harness
   agy-diff-sha256: <64-hex>        # present iff model == agy
   ```
-- `scripts/review/writer_provenance.py` derives and cross-checks the ordered
-  unique writer set of `base..HEAD`. Any commit carrying a partial or mismatched
-  stamp (such as a `Writer:` trailer with no matching writer-log entry, a writer
-  author without trailer/log, or a mismatched `agy-diff-sha256`) is refused.
-- Unstamped non-merge commits (human or pre-harness commits with no writer
-  author, no writer trailer, and no writer-log entry) have an explicit,
-  documented treatment: they are attributed to `claude` and never silently
-  treated as written by nobody.
-- A branch written by multiple models across rounds records all of them in order
-  (for example `writer: codex,agy` or `writer: claude,codex`); the reviewer must
-  be none of them.
+- **Unstamped commits and `backfill` (`source: backfill`).** An unstamped
+  commit has an **unknown** writer and is never attributed to `claude` by
+  default; review provenance over a range containing one is refused unless
+  `refs/notes/concrete-writer` holds an explicit backfilled entry for that
+  commit (`scripts/review/writer_provenance.py backfill`). `claude` is a writer
+  only when explicitly logged. A backfilled entry records:
+  ```
+  model: codex|kimi|agy|claude
+  round: <positive integer>
+  branch: <branch-name>
+  brief-sha256: <64-hex>
+  output-sha256: <64-hex>
+  start-sha: <40-hex>
+  end-sha: <40-hex>
+  commit: <40-hex>
+  source: backfill
+  evidence: <non-empty single-line provenance description>
+  agy-diff-sha256: <64-hex>        # optional when model == agy
+  ```
+  `backfill` refuses any commit that already carries a harness stamp.
+- **Merge commits.** A merge commit's resolution is authored work when its tree
+  differs from git's conflict-free automatic merge of its two parents
+  (`git merge-tree --write-tree`); a merge with no resolution adds no writer.
+  The harness stamps resolved merges with `Writer: agy` and
+  `Agy-Diff-SHA256: <64-hex>` (or a resolved merge may be backfilled); an
+  unstamped merge commit whose tree differs from git's automatic merge has an
+  unknown writer and is refused.
+- **Reader and reporting.** `scripts/review/writer_provenance.py` (`derive`,
+  `report`, `verify`, `export-log`) derives and cross-checks the ordered unique
+  writer set of `base..HEAD`, distinguishes harness entries from backfilled ones,
+  and reports both (`writers: <list>; harness (N): <sha>:<model>@r<round>,...; backfill (M): ...`).
+  Any commit carrying a partial or mismatched stamp (such as a `Writer:` trailer
+  with no matching writer-log entry, a writer author without trailer/log, or a
+  mismatched `agy-diff-sha256`) is refused. A branch written by multiple models
+  across rounds records all of them in order (for example `writer: kimi,agy` or
+  `writer: codex,agy`); the reviewer must be none of them.
+- **Trust boundary of `refs/notes/concrete-writer`.**
+  - *Who may write entries:* Only (1) the automated writer harness via
+    `writer_provenance.py stamp-commit` when creating a writer commit or
+    resolved merge (`source: harness`), and (2) the project owner or
+    orchestrator via `writer_provenance.py backfill` when recording audited
+    provenance for an unstamped pre-harness or human commit from the session's
+    brief and raw writer output log (`source: backfill`). No agent or reviewer
+    hand-edits `refs/notes/concrete-writer`.
+  - *What entries attest:* Each stanza attests that `commit` (in round range
+    `start-sha..end-sha` on `branch`, round `round`) was authored by `model`
+    under the brief with digest `brief-sha256`. A `source: harness` stanza
+    attests that the commit was created by the harness with matching writer
+    author, `Writer: <model>` trailer, owner committer, and (for `agy`)
+    `Agy-Diff-SHA256`. A `source: backfill` stanza attests that the unstamped
+    commit's writer was verified against the writer's raw output log with digest
+    `output-sha256` and the cited `evidence`.
+  - *Hook enforcement:* `.githooks/pre-push` semantically validates every push
+    to `refs/notes/concrete-writer` through
+    `scripts/review/writer_provenance.py validate-notes` (the same reader used
+    by `review.sh` and `verify.sh`) before the review-notes tier accepts it, and
+    refuses deleting the ref or removing any existing commit's writer-log entry.
 
 ## Permanent owner rule
 
@@ -285,8 +332,11 @@ were run elsewhere.
 The pre-push hook (`.githooks/pre-push`) runs no gates for a push that updates
 only the review and writer notes refs (`refs/notes/concrete-review`,
 `refs/notes/concrete-review-findings`, `refs/notes/concrete-writer`): a notes
-commit holds one blob per annotated commit and no source tree. A push that also
-carries a branch takes that branch's tier.
+commit holds one blob per annotated commit and no source tree, and any push to
+`refs/notes/concrete-writer` is semantically validated in the hook by
+`scripts/review/writer_provenance.py validate-notes` ( deletions of the ref or of
+existing entries are refused). A push that also carries a branch takes that
+branch's tier.
 Until this hook reaches `main`, a hook installed from an older `main` still runs
 the gates on a note push, and the push fails outside `nix develop`.
 

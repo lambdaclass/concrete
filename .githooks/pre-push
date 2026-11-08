@@ -10,9 +10,11 @@
 #   - only refs/heads/wip/* updates or deletions: a backup of unfinished work, which can never become
 #     main. Conflict markers are refused; nothing else runs.
 #   - only the review-note refs (refs/notes/concrete-review, refs/notes/concrete-review-findings,
-#     refs/notes/concrete-writer, written by scripts/review/review.sh and the writer harness) and owner
-#     sign-off records (refs/owner-signoff/<sha>, written by scripts/land/signoff.sh): no source tree,
-#     nothing to check.
+#     refs/notes/concrete-writer, written by scripts/review/review.sh, the writer harness and
+#     scripts/review/writer_provenance.py backfill) and owner sign-off records
+#     (refs/owner-signoff/<sha>, written by scripts/land/signoff.sh): no source tree, no gates;
+#     refs/notes/concrete-writer is semantically validated by scripts/review/writer_provenance.py
+#     validate-notes before the notes tier accepts it.
 #   - anything else, including a by-hand run with no stdin: the full root set, and only from a full
 #     clone (a linked worktree is refused; ISS-0015).
 #
@@ -60,7 +62,21 @@ while read -r _localref localsha remoteref _remotesha; do
         other_refs=$((other_refs+1))
         case "$localsha" in *[!0]*) full_shas="$full_shas $localsha" ;; esac
       fi ;;
-    refs/notes/concrete-review|refs/notes/concrete-review-findings|refs/notes/concrete-writer)
+    refs/notes/concrete-writer)
+      case "$localsha" in
+        *[!0]*)
+          writer_prov_py="$ROOT_DIR/scripts/review/writer_provenance.py"
+          [ -f "$writer_prov_py" ] || writer_prov_py="$(cd "$(dirname "$HOOK_SELF")/.." && pwd)/scripts/review/writer_provenance.py"
+          if ! wnote_err="$(python3 -I "$writer_prov_py" validate-notes --repo "$ROOT_DIR" --notes-rev "$localsha" --old-notes-rev "${_remotesha:-}" 2>&1)"; then
+            echo "pre-push (review-notes tier): invalid $remoteref ($localsha): ${wnote_err//$'\n'/ } — refusing" >&2
+            exit 1
+          fi
+          note_refs=$((note_refs+1)) ;;
+        *)
+          echo "pre-push (review-notes tier): refusing to delete $remoteref" >&2
+          exit 1 ;;
+      esac ;;
+    refs/notes/concrete-review|refs/notes/concrete-review-findings)
       case "$localsha" in
         *[!0]*) note_refs=$((note_refs+1)) ;;
         *) other_refs=$((other_refs+1)) ;;   # deleting a review note takes the full tier

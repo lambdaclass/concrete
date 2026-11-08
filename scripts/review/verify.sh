@@ -45,7 +45,13 @@ fi
 if [ "$FETCH" = 1 ]; then
   git fetch -q "$REMOTE" "+$NOTES_REF:$NOTES_REF" \
     || { echo "verify: could not fetch $NOTES_REF from $REMOTE" >&2; exit 2; }
-  git fetch -q "$REMOTE" "+$WRITER_NOTES_REF:$WRITER_NOTES_REF" 2>/dev/null || true
+  werr=""
+  if ! werr="$(git fetch -q "$REMOTE" "+$WRITER_NOTES_REF:$WRITER_NOTES_REF" 2>&1)"; then
+    case "$werr" in
+      *"couldn't find remote ref"*) git update-ref -d "$WRITER_NOTES_REF" 2>/dev/null || true ;;
+      *) echo "verify: could not fetch $WRITER_NOTES_REF from $REMOTE: ${werr//$'\n'/ }" >&2; exit 2 ;;
+    esac
+  fi
 fi
 
 SHA="$(git rev-parse -q --verify "$1^{commit}")" || { echo "verify: not a commit: $1" >&2; exit 2; }
@@ -102,6 +108,7 @@ field() { local n="F_${1//-/_}"; printf '%s' "${!n:-}"; }
 VERDICT="$(field verdict)"
 WRITER="$(field writer)"
 REVIEWER="$(field reviewer)"
+PROV_SUMMARY=""
 if [ "$VERDICT" = clean ]; then
   if [ "$(field repository)" != readable ]; then
     echo "$SHA clean review note is not clean provenance: missing repository: readable"
@@ -128,7 +135,8 @@ if [ "$VERDICT" = clean ]; then
     echo "$SHA clean review note is not clean provenance: ${prov_out//$'\n'/ }"
     exit 1
   fi
+  PROV_SUMMARY="${prov_out//$'\n'/ }"
 fi
-echo "$SHA $VERDICT (round $(field rounds), reviewer $(field reviewer), writer ${WRITER:-legacy}, $(field utc), base $(field base), $(field pieces) piece(s))"
+echo "$SHA $VERDICT (round $(field rounds), reviewer $(field reviewer), writer ${WRITER:-legacy}, $(field utc), base $(field base), $(field pieces) piece(s)${PROV_SUMMARY:+; $PROV_SUMMARY})"
 [ "$VERDICT" = clean ] && exit 0
 exit 1
