@@ -9,7 +9,8 @@
 #   1. makes a DEDICATED clone (default ~/concrete-bot): the bot checks out trains there, so no human
 #      or agent may work in it. Remote: origin = lambdaclass/concrete (the one repository since
 #      2026-11-06; an existing clone is repointed); core.hooksPath=.githooks.
-#   2. writes ~/.local/libexec/concrete-landing-bot, which fetches, extracts scripts/land from
+#   2. writes ~/.local/libexec/concrete-landing-bot, which fetches, extracts $SNAPSHOT (scripts/land and
+#      the files it reads outside it) from
 #      <source-ref> into an immutable snapshot (keyed by commit) and runs the bot from there, so a
 #      train checkout never rewrites the running script. Full gates run locally through
 #      scripts/land/run-at-ref.sh, fetching the train SHA from the bot's clone.
@@ -39,6 +40,12 @@ done
 say() { echo "install-bot: $*"; }
 # URLs on one line, each with a scheme URL's userinfo replaced by *** (land_url_redact, lib.sh).
 redact() { local u; while IFS= read -r u; do printf '%s ' "$(land_url_redact "$u")"; done; }
+# The snapshot: every path the landing scripts read outside scripts/land (each path above SELF_DIR in
+# scripts/land/*.sh, and what those files source), so a snapshot is the scripts' whole closure.
+# scripts/checks/landing_bot.sh fails when a landing script reads a path this list does not cover.
+# (Until 2026-11-08 it held only scripts/land and git_sandbox.sh: train.sh's review_provenance found
+# no scripts/review/verify.sh and refused every train run from a snapshot.)
+SNAPSHOT="scripts/land scripts/review/verify.sh scripts/checks/lib/git_sandbox.sh scripts/checks/lib/prepush_record.sh scripts/checks/lib/treestate.sh"
 [ "$(id -un)" = dev ] || say "WARNING: running as $(id -un), not dev"
 ORIGIN_URL="${INSTALL_ORIGIN_URL:-git@github.com:lambdaclass/concrete.git}"
 
@@ -90,9 +97,11 @@ git fetch -q origin
 sha="\$(git rev-parse --verify "\${BOT_SOURCE_REF:-$REF}^{commit}")"
 snaps="\$HOME/.local/state/concrete-landing-bot/snap"
 snap="\$snaps/\$sha"
-if [ ! -f "\$snap/scripts/land/bot.sh" ]; then
-  rm -rf "\$snap.tmp"; mkdir -p "\$snap.tmp"
-  git archive "\$sha" scripts/land scripts/checks/lib/git_sandbox.sh | tar -x -C "\$snap.tmp"
+complete=1
+for p in $SNAPSHOT; do [ -e "\$snap/\$p" ] || complete=0; done
+if [ "\$complete" = 0 ]; then
+  rm -rf "\${snap:?}" "\$snap.tmp"; mkdir -p "\$snap.tmp"
+  git archive "\$sha" $SNAPSHOT | tar -x -C "\$snap.tmp"
   mv "\$snap.tmp" "\$snap"
   ls -1t "\$snaps" | tail -n +6 | while read -r old; do rm -rf "\${snaps:?}/\$old"; done
 fi
