@@ -653,6 +653,7 @@ ovr_ok=1
 recip(){ GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=url.https://attacker.example/.insteadOf GIT_CONFIG_VALUE_0=https://github.com/ \
   GIT_CONFIG_KEY_1=url.https://github.com/.insteadOf GIT_CONFIG_VALUE_1=https://attacker.example/ "$@"; }
 git init -q "$TMP/recip" && git -C "$TMP/recip" remote add origin https://github.com/lambdaclass/concrete.git
+mkdir -p "$TMP/sshfail" && printf '#!/bin/sh\nexit 255\n' > "$TMP/sshfail/ssh" && chmod +x "$TMP/sshfail/ssh"
 while read -r want how url; do
   ( . "$ROOT_DIR/scripts/land/lib.sh"; case "$how" in
       plain) land_url_bad "$url" ;;
@@ -668,6 +669,9 @@ while read -r want how url; do
       recip-resolved) recip land_url_bad "$url" ;;
       recip-remote) cd "$TMP/recip" && recip land_remote_bad origin ;;
       remote) cd "$TMP/recip" && land_remote_bad origin ;;
+      # An ssh that cannot answer -G (fails, or names no host) leaves the destination unknown: refused.
+      g-fails) PATH="$TMP/sshfail:$PATH" land_url_bad "$url" ;;
+      g-fails-cmd) PATH="$TMP/sshfail:$PATH" GIT_SSH_COMMAND='ssh -o ServerAliveInterval=20' land_url_bad "$url" ;;
       config) GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.sshCommand GIT_CONFIG_VALUE_0='ssh -o HostName=attacker.example' land_url_bad "$url" ;;
     esac ) >/dev/null; got=$?
   [ "$got" = "$want" ] || { ovr_ok=0; echo "      $how $url: exit $got, want $want"; }
@@ -684,6 +688,9 @@ done <<'OVR'
 1 recip-resolved https://attacker.example/lambdaclass/concrete.git
 1 recip-remote -
 0 remote -
+1 g-fails git@github.com:lambdaclass/concrete.git
+1 g-fails-cmd git@github.com:lambdaclass/concrete.git
+0 g-fails https://github.com/lambdaclass/concrete.git
 0 plain https://github.com/lambdaclass/concrete.git
 OVR
 [ "$ovr_ok" = 1 ] && ok "the guard resolves URLs as git does: its own ssh command (GIT_SSH_COMMAND, core.sshCommand, GIT_SSH, in that order) and url.insteadOf, applied once" || no "the guard ignored an ssh override"
@@ -840,6 +847,7 @@ mkdir -p scripts/land && cp "$ROOT_DIR/scripts/land/lib.sh" scripts/land/lib.sh 
 before="$(git ls-remote origin refs/heads/main | cut -f1)"
 out="$(PRIMARY=gh-other bash scripts/push-both.sh 2>&1)"; rc=$?
 [ "$rc" = 1 ] && has "$out" "not one of the project's repositories" && ok "push-both refuses a PRIMARY that is another repository" || no "push-both PRIMARY=gh-other: exit $rc"
+refused_offline "push-both refuses a PRIMARY that is a literal URL, not a configured remote" "is not a configured remote" env PRIMARY=https://github.com/someone/else.git bash scripts/push-both.sh
 out="$(MIRROR=gh-push bash scripts/push-both.sh 2>&1)"; rc=$?
 [ "$rc" = 1 ] && has "$out" "not one of the project's repositories" && ok "push-both refuses a MIRROR whose push URL is another repository" || no "push-both MIRROR=gh-push: exit $rc"
 out="$(PRIMARY=fork bash scripts/push-both.sh 2>&1)"; rc=$?

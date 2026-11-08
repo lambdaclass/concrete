@@ -432,6 +432,9 @@ echo "=== the installer drops push URLs, logs URLs redacted, and its launcher ch
 BOUNDED_PARENT="$TMP"; source "$ROOT_DIR/scripts/checks/lib/bounded.sh" || exit 2
 IB="$TMP/ib"; mkdir -p "$IB/home/.config" "$IB/stub" "$IB/src/scripts/checks/lib"
 for c in ssh gh systemctl; do printf '#!/bin/sh\nexit 1\n' > "$IB/stub/$c"; chmod +x "$IB/stub/$c"; done
+# ssh -G connects nowhere and only reports the configuration: the stub answers it as an ssh with no
+# configuration would (every host is itself), and refuses everything else.
+printf '#!/bin/sh\n[ "$1" = -G ] || exit 1\nfor h; do :; done\necho "hostname $h"\n' > "$IB/stub/ssh"
 cp -r "$ROOT_DIR/scripts/land" "$IB/src/scripts/"; cp "$ROOT_DIR/scripts/checks/lib/git_sandbox.sh" "$IB/src/scripts/checks/lib/"
 ( cd "$IB/src" && git init -q && git add -A && git commit -qm src ) && git clone -q --bare "$IB/src" "$IB/origin.git"
 ib(){ HOME="$IB/home" PATH="$IB/stub:$PATH" INSTALL_ORIGIN_URL="$IB/origin.git" INSTALL_MIRROR_URL="$IB/origin.git" bash "$ROOT_DIR/scripts/land/install-bot.sh" 2>&1; }

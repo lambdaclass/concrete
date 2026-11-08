@@ -83,8 +83,11 @@ fi
 # Each remote must be one of the project's repositories, every fetch and push URL of it (lib.sh).
 # shellcheck source=scripts/land/lib.sh
 . "$ROOT_DIR/scripts/land/lib.sh"
+# PRIMARY must be a configured remote (a literal URL would skip the check); a missing mirror is
+# skipped, as before.
+git remote get-url "$PRIMARY" >/dev/null 2>&1 || { echo "push-both: PRIMARY '$PRIMARY' is not a configured remote. Nothing was pushed." >&2; exit 1; }
 for r in "$PRIMARY" ${MIRROR:+"$MIRROR"}; do
-  git remote get-url "$r" >/dev/null 2>&1 || continue   # a missing remote is refused below, as before
+  git remote get-url "$r" >/dev/null 2>&1 || continue
   if ! why="$(land_remote_bad "$r")"; then
     echo "push-both: $why. Nothing was pushed." >&2
     exit 1
