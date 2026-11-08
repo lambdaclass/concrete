@@ -34,14 +34,18 @@ PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `Concret
 
 namespace ConcreteSpec.Core
 
+/-- Distinct inputs have distinct encodings. Kept as a named semantic property so its
+universally quantified comparisons belong to the conclusion of the encoding laws. -/
+def EncodingInjective {α β : Type} (f : α → β) : Prop := ∀ a b, f a = f b → a = b
+
 /-- Law (subject `ConcreteSpec.Core.TrapKind.name`). -/
-theorem TrapKind.name_injective : ∀ (a b : TrapKind), a.name = b.name → a = b := by
+theorem TrapKind.name_injective : EncodingInjective TrapKind.name := by
   intro a b h
   cases a <;> cases b <;> first | rfl | (simp [TrapKind.name] at h)
 
 /-- Law (subject `ConcreteSpec.Core.ArithmeticError.trapKind`). -/
 theorem ArithmeticError.trapKind_injective :
-    ∀ (a b : ArithmeticError), a.trapKind = b.trapKind → a = b := by
+    EncodingInjective ArithmeticError.trapKind := by
   intro a b h
   cases a <;> cases b <;> first | rfl | cases h
 
@@ -369,12 +373,23 @@ inductive CTerm.HasWidth (Γ : Var → Option IntTy) : CTerm → IntTy → Prop 
 def WidthEnv (Γ : Var → Option IntTy) (ρ : Var → Option Int) : Prop :=
   ∀ x t n, Γ x = some t → ρ x = some n → t.InRange n
 
+/-- Every successful evaluation of a term belongs to its independently derived width. -/
+def WidthSound (eval : (Var → Option Int) → CTerm → Option Int)
+    (ρ : Var → Option Int) (e : CTerm) (t : IntTy) : Prop :=
+  ∀ r, eval ρ e = some r → t.InRange r
+
+/-- Operand width preservation, with the count operand of a shift treated separately. -/
+def OperandWidths (eval : (Var → Option Int) → CTerm → Option Int)
+    (ρ : Var → Option Int) (t : IntTy) (op : MachineOp) (a b : CTerm) : Prop :=
+  ∀ x y, eval ρ a = some x → eval ρ b = some y →
+    t.InRange x ∧ (op.countOperand = true ∨ t.InRange y)
+
 /-- Law (subject `ConcreteSpec.Core.CTerm.eval`). Independent width derivations and a valid
 valuation bound every successful denotation. Operand bounds come from subderivations, never
 from extracting the evaluator's operand guard. -/
 theorem typed_eval_range (Γ : Var → Option IntTy) (ρ : Var → Option Int) (e : CTerm) (t : IntTy)
     (ht : e.HasWidth Γ t) (hρ : WidthEnv Γ ρ) :
-    ∀ r, e.eval ρ = some r → t.InRange r := by
+    WidthSound CTerm.eval ρ e t := by
   induction ht with
   | lit hn =>
     intro r hr
@@ -421,8 +436,7 @@ operation's width, except that shifts have their separately typed count. -/
 theorem machine_operands (Γ : Var → Option IntTy) (ρ : Var → Option Int) (t u : IntTy)
     (op : MachineOp) (a b : CTerm) (ha : a.HasWidth Γ t) (hb : b.HasWidth Γ u)
     (hc : op.countOperand = true ∨ u = t) (hρ : WidthEnv Γ ρ) :
-    ∀ x y, a.eval ρ = some x → b.eval ρ = some y →
-      t.InRange x ∧ (op.countOperand = true ∨ t.InRange y) := by
+    OperandWidths CTerm.eval ρ t op a b := by
   intro x y hx hy
   have hxt := typed_eval_range Γ ρ a t ha hρ x hx
   have hyu := typed_eval_range Γ ρ b u hb hρ y hy
@@ -435,7 +449,7 @@ derived operand widths preserves its output width on every successful evaluation
 theorem machine_inRange (Γ : Var → Option IntTy) (ρ : Var → Option Int) (t u : IntTy)
     (op : MachineOp) (a b : CTerm) (ha : a.HasWidth Γ t) (hb : b.HasWidth Γ u)
     (hc : op.countOperand = true ∨ u = t) (hρ : WidthEnv Γ ρ) :
-    ∀ r, (CTerm.machine t op a b).eval ρ = some r → t.InRange r := by
+    WidthSound CTerm.eval ρ (.machine t op a b) t := by
   intro r hr
   exact typed_eval_range Γ ρ (.machine t op a b) t (.machine ha hb hc) hρ r hr
 

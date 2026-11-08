@@ -31,10 +31,11 @@ What these prove, for every operand language:
   and has no later step or event (`steps_from_trapped`); `abort()` runs no cleanup (`abort_runs_no_cleanup`),
   and so neither does a cleanup call that traps.
 - **Evaluation order and determinism**: the first argument that traps decides the trap (`evalArgs_first_trap`);
-  silent machine steps are unique (`step_silent_deterministic`), and any two relational steps from the
-  same configuration either coincide or arise from the same primitive request (`step_deterministic`).
-- **Destruction** (Q2.3): `validDestroyFn` and `checkedDestroyCall` enforce non-`Copy` types and the
-  single-parameter `Unit`-returning signature (`destroy_not_copy`, `destroyCall_sig`); a sequence's
+  internal steps are unique (`step_silent_deterministic`), and fixing an external answer fixes
+  both label and next configuration (`step_deterministic`).
+- **Destruction** (Q2.3): an independently admitted destructor enters the ordinary consuming
+  call semantics (`destroyCall_enters`). Validator characterizations `destroy_not_copy` and
+  `destroyCall_sig` are representation lemmas. A sequence's
   element `i` is visited `i`-th and the backing last (`seqDestroyOrder_elem`, `seqDestroyOrder_storage`);
   a map's `i`-th entry has its key at `2i` and its value at `2i+1`, and the nodes come last
   (`mapDestroyOrder_entry`, `mapDestroyOrder_storage`).
@@ -396,7 +397,7 @@ inductive RunsEach (P : Program O) : List (CleanAct O) → O.Store → List O.Ev
       RunsEach P rest stDrop tr st' →
       RunsEach P (.drop dm L (restrict dm L) :: rest) st tr st'
 
-/-- Helper (inversion). Composes a `RunsAll` call sequence with a `RunsEach` suffix
+/-- Helper (inversion). Composes a `RunsAll` call certificate sequence with a `RunsEach` suffix
 (approved: PENDING). -/
 theorem RunsAll.each {P : Program O} {L : AList Var O.Val} {ds : List (Deferred O)}
     {st st₁ st₂ : O.Store} {tr₁ tr₂ : List O.Event} {rest : List (CleanAct O)}
@@ -589,7 +590,7 @@ private theorem stepExit_no_request_inv (L : AList Var O.Val) (st : O.Store) (e 
         | some stLeave =>
           cases hb : bindLife O dst stLeave <;> simp [stepExit, hl, hb]
 
-/-- Helper (inversion). Every actual exit transition is a machine step (approved: PENDING). -/
+/-- Helper (inversion). Converts the transition representation using the separately proved exit-silence restriction (approved: PENDING). -/
 private theorem exit_step_next_inv {P : Program O} {e : Exit O.Val} {L : AList Var O.Val}
     {st : O.Store} {frames : List (Frame O)} {label : Label O} {c : Config O}
     (h : Step P ⟨.exiting e, L, st, frames⟩ label c) :
@@ -915,35 +916,49 @@ theorem steps_from_trapped (P : Program O) (kd : TrapKind) (site : SiteId) (L : 
 def Protected (L : AList Var O.Val) (q : List (Frame O)) (c : Config O) : Prop :=
   ∃ pre, c.frames = pre ++ .ret none L :: q
 
+/-- Registration preserves a saved caller boundary for every successful result. -/
+def RegistrationPreservesCaller (reg : Deferred O → List (Frame O) → Option (List (Frame O)))
+    (d : Deferred O) (caller : AList Var O.Val) (q : List (Frame O)) : Prop :=
+  ∀ pre k', reg d (pre ++ .ret none caller :: q) = some k' →
+    ∃ pre', k' = pre' ++ .ret none caller :: q
+
+/-- A transition either preserves the saved boundary or restores it with the caller locals. -/
+def PreservesCaller (R : Config O → Label O → Config O → Prop)
+    (caller : AList Var O.Val) (q : List (Frame O)) (c : Config O) : Prop :=
+  ∀ label c', R c label c' →
+    Protected caller q c' ∨ (c'.ctrl = .done ∧ c'.locals = caller ∧ c'.frames = q)
+
 /-- Law (subject `ConcreteSpec.Core.Exec.register`). Defer registration preserves the saved caller boundary. -/
 theorem register_protected (d : Deferred O) (caller : AList Var O.Val)
-    (q : List (Frame O)) : ∀ (pre : List (Frame O)) (k' : List (Frame O)),
+    (q : List (Frame O)) : RegistrationPreservesCaller register d caller q := by
+  let rec go : ∀ (pre : List (Frame O)) (k' : List (Frame O)),
     register d (pre ++ .ret none caller :: q) = some k' →
     ∃ pre', k' = pre' ++ .ret none caller :: q
-  | [], _, h => by simp [register] at h
-  | f :: pre, k', h => by
-    cases f with
-    | seq t =>
-      simp only [List.cons_append, register] at h
-      cases hr : register d (pre ++ .ret none caller :: q) with
-      | none => simp [hr] at h
-      | some rest =>
-        simp only [hr, Option.map_some, Option.some.injEq] at h
-        obtain ⟨pre', rfl⟩ := register_protected d caller q pre rest hr
-        exact ⟨.seq t :: pre', h.symm⟩
-    | scope b dm ds =>
-      simp only [List.cons_append, register, Option.some.injEq] at h
-      exact ⟨.scope b dm (d :: ds) :: pre, h.symm⟩
-    | test l cr t body site dm => simp [register] at h
-    | body l cr t body site => simp [register] at h
-    | resume p => simp [register] at h
-    | ret dst L => simp [register] at h
+    | [], _, h => by simp [register] at h
+    | f :: pre, k', h => by
+      cases f with
+      | seq t =>
+        simp only [List.cons_append, register] at h
+        cases hr : register d (pre ++ .ret none caller :: q) with
+        | none => simp [hr] at h
+        | some rest =>
+          simp only [hr, Option.map_some, Option.some.injEq] at h
+          obtain ⟨pre', rfl⟩ := go pre rest hr
+          exact ⟨.seq t :: pre', h.symm⟩
+      | scope b dm ds =>
+        simp only [List.cons_append, register, Option.some.injEq] at h
+        exact ⟨.scope b dm (d :: ds) :: pre, h.symm⟩
+      | test l cr t body site dm => simp [register] at h
+      | body l cr t body site => simp [register] at h
+      | resume p => simp [register] at h
+      | ret dst L => simp [register] at h
+  
+  exact go
 
 /-- Law (subject `ConcreteSpec.Core.Exec.Step`). Each transition preserves the saved caller boundary or returns to it with caller locals restored. -/
 theorem protected_step {P : Program O} {caller : AList Var O.Val}
     {q : List (Frame O)} {c : Config O} (hp : Protected caller q c) :
-    ∀ label c', Step P c label c' →
-      Protected caller q c' ∨ (c'.ctrl = .done ∧ c'.locals = caller ∧ c'.frames = q) := by
+    PreservesCaller (Step P) caller q c := by
   intro label c' h
   cases c with | mk ctrl locals st frames =>
     obtain ⟨pre, rfl⟩ := hp
@@ -1067,7 +1082,7 @@ inductive FirstStepsN (R : Config O → Label O → Config O → Prop) (stop : C
   | step {c l c' tr c'' n} : ¬ stop c → R c l c' → FirstStepsN R stop c' tr c'' n →
       FirstStepsN R stop c (l.events ++ tr) c'' (n + 1)
 
-/-- Helper (inversion). Decomposes a raw execution using the machine stack rules (approved: PENDING). -/
+/-- Helper (inversion). Adds an induction index to the first-arrival certificate without changing its execution (approved: PENDING). -/
 private theorem FirstSteps.sized_inv {P : Program O} {stop : Config O → Prop}
     {c c' : Config O} {tr : List O.Event} (h : FirstSteps (Step P) stop c tr c') :
     ∃ n, FirstStepsN (Step P) stop c tr c' n := by
@@ -1075,7 +1090,7 @@ private theorem FirstSteps.sized_inv {P : Program O} {stop : Config O → Prop}
   | stop hs => exact ⟨0, .stop hs⟩
   | step hn hs _ ih => obtain ⟨n, ih⟩ := ih; exact ⟨n + 1, .step hn hs ih⟩
 
-/-- Helper (inversion). Decomposes a raw execution using the machine stack rules (approved: PENDING). -/
+/-- Helper (inversion). Erases only the induction index of a first-arrival certificate (approved: PENDING). -/
 private theorem FirstStepsN.unsized_inv {P : Program O} {stop : Config O → Prop}
     {c c' : Config O} {tr : List O.Event} {n : Nat} (h : FirstStepsN (Step P) stop c tr c' n) :
     FirstSteps (Step P) stop c tr c' := by
@@ -1083,14 +1098,14 @@ private theorem FirstStepsN.unsized_inv {P : Program O} {stop : Config O → Pro
   | stop hs => exact .stop hs
   | step hn hs _ ih => exact .step hn hs ih
 
-/-- Helper (inversion). Decomposes a raw execution using the machine stack rules (approved: PENDING). -/
+/-- Helper (inversion). List-length consequence of the saved-boundary predicate used in return segmentation (approved: PENDING). -/
 private theorem protected_height_inv {caller : AList Var O.Val} {q : List (Frame O)}
     {c : Config O} (h : Protected caller q c) : q.length < c.frames.length := by
   obtain ⟨pre, he⟩ := h
   simp only [he, List.length_append, List.length_cons]
   omega
 
-/-- Helper (inversion). Decomposes a raw execution using the machine stack rules (approved: PENDING). -/
+/-- Helper (inversion). Length contradiction excluding an already returned configuration while its saved frame remains (approved: PENDING). -/
 private theorem protected_not_return_inv {caller : AList Var O.Val} {q : List (Frame O)}
     {c : Config O} (h : Protected caller q c) : ¬ (c.ctrl = .done ∧ c.frames = q) := by
   intro hr
@@ -1127,11 +1142,16 @@ theorem FirstStepsN.split_return {P : Program O} {bound : Nat}
           (FirstStepsN.stop (R := Step P) (stop := fun c : Config O => c.ctrl = .done ∧ c.frames = q) ⟨rfl, rfl⟩))
       exact ⟨1, n, l.events, c'.store, tr, by omega, rfl, hseg, ht⟩
 
+/-- A call traps on its existing continuation or protects the caller boundary. -/
+def SavesCaller (R : Config O → Label O → Config O → Prop) (L : AList Var O.Val)
+    (st : O.Store) (q : List (Frame O)) (d : Deferred O) : Prop :=
+  ∀ label c', R ⟨.exec d.stmt, L, st, q⟩ label c' →
+    (∃ kd site, c'.ctrl = .trapped kd site ∧ c'.frames = q) ∨ Protected L q c'
+
 /-- Law (subject `ConcreteSpec.Core.Exec.Step`). A call either traps without changing its continuation, or saves the caller boundary. -/
 theorem call_protects {P : Program O} {L : AList Var O.Val} {st : O.Store}
     {q : List (Frame O)} {d : Deferred O} :
-    ∀ label c', Step P ⟨.exec d.stmt, L, st, q⟩ label c' →
-      (∃ kd site, c'.ctrl = .trapped kd site ∧ c'.frames = q) ∨ Protected L q c' := by
+    SavesCaller (Step P) L st q d := by
   intro label c' h
   cases h with
   | silent h =>
@@ -1147,14 +1167,14 @@ theorem call_protects {P : Program O} {L : AList Var O.Val} {st : O.Store}
     simp only [step, Deferred.stmt, onRes, Option.bind, Option.map] at h
     repeat' first | simp_all | split at h
 
-/-- Helper (inversion). Decomposes a raw execution using the machine stack rules (approved: PENDING). -/
+/-- Helper (inversion). Extracts the endpoint predicate from the first-arrival certificate (approved: PENDING). -/
 private theorem FirstStepsN.end_stop_inv {P : Program O} {stop : Config O → Prop}
     {c c' : Config O} {tr : List O.Event} {n : Nat} (h : FirstStepsN (Step P) stop c tr c' n) : stop c' := by
   induction h with
   | stop hs => exact hs
   | step _ _ _ ih => exact ih
 
-/-- Helper (inversion). Decomposes a raw execution using the machine stack rules (approved: PENDING). -/
+/-- Helper (inversion). Combines the retained trapped-run law with the endpoint bound; no additional trap semantics (approved: PENDING). -/
 private theorem FirstStepsN.trap_impossible_inv {P : Program O} {bound : Nat}
     {kd : TrapKind} {site : SiteId} {L : AList Var O.Val} {st : O.Store}
     {q : List (Frame O)} {tr : List O.Event} {endC : Config O} {n : Nat}
@@ -1189,16 +1209,21 @@ theorem FirstStepsN.call_return {P : Program O} {bound : Nat}
       exact ⟨n₁ + 1, n₂, l.events ++ tr₁, st₁, tr₂, by omega,
         by simp [he, List.append_assoc], .step (by intro h; cases h.1) hs ha, hb⟩
 
+/-- An exit dispatcher itself contributes no event. -/
+def ExitSilent (R : Config O → Label O → Config O → Prop) (e : Exit O.Val)
+    (L : AList Var O.Val) (st : O.Store) (frames : List (Frame O)) : Prop :=
+  ∀ label c, R ⟨.exiting e, L, st, frames⟩ label c → label = .silent
+
 /-- Law (subject `ConcreteSpec.Core.Exec.Step`). Unwinding itself emits no event; effects belong to dispatched calls. -/
 theorem exit_label {P : Program O} {e : Exit O.Val} {L : AList Var O.Val}
     {st : O.Store} {frames : List (Frame O)} :
-    ∀ label c, Step P ⟨.exiting e, L, st, frames⟩ label c → label = .silent := by
+    ExitSilent (Step P) e L st frames := by
   intro label c h
   cases h with
   | silent _ => rfl
   | prim h _ _ => exact False.elim (stepExit_no_request_inv L st e frames _ _ _ _ _ h)
 
-/-- Helper (inversion). Decomposes a raw execution using the machine stack rules (approved: PENDING). -/
+/-- Helper (computation). Computes the resume dispatcher result to convert its representation inside raw-run completeness (approved: PENDING). -/
 private theorem resume_step_inv {P : Program O} {e : Exit O.Val} {L : AList Var O.Val}
     {st : O.Store} {frames : List (Frame O)} {label : Label O} {c : Config O}
     (h : Step P ⟨.done, L, st, .resume (.exit e) :: frames⟩ label c) :
@@ -1456,11 +1481,19 @@ theorem AnswerStep.step_inv {P : Program O} {c c' : Config O}
   | silent h => exact .silent h
   | prim h ha hk => exact .prim h ha hk
 
+/-- Uniqueness of the observation and destination for a fixed machine input. The alternate
+transition is quantified inside this property, so it remains part of the conclusion, not an
+assumption selecting the expected answer or result. -/
+def InputDeterministic
+    (R : Program O → Config O → Option (Answer O.Val O.Event O.Store) → Label O → Config O → Prop)
+    (P : Program O) (c c₁ : Config O) (a : Option (Answer O.Val O.Event O.Store)) (l₁ : Label O) : Prop :=
+  ∀ l₂ c₂, R P c a l₂ c₂ → l₁ = l₂ ∧ c₁ = c₂
+
 /-- Law (subject `ConcreteSpec.Core.Exec.AnswerStep`). Internal transitions have a unique
 label and destination. No function-result premise supplies the destination in advance. -/
 theorem step_silent_deterministic (P : Program O) (c c₁ : Config O) (l₁ : Label O)
     (h₁ : AnswerStep P c none l₁ c₁) :
-    ∀ l₂ c₂, AnswerStep P c none l₂ c₂ → l₁ = l₂ ∧ c₁ = c₂ := by
+    InputDeterministic AnswerStep P c c₁ none l₁ := by
   intro l₂ c₂ h₂
   cases h₁ with
   | silent h₁ =>
@@ -1473,7 +1506,7 @@ answers, including answers whose label is silent. -/
 theorem step_deterministic (P : Program O) (c c₁ : Config O)
     (a : Option (Answer O.Val O.Event O.Store)) (l₁ : Label O)
     (h₁ : AnswerStep P c a l₁ c₁) :
-    ∀ l₂ c₂, AnswerStep P c a l₂ c₂ → l₁ = l₂ ∧ c₁ = c₂ := by
+    InputDeterministic AnswerStep P c c₁ a l₁ := by
   intro l₂ c₂ h₂
   cases h₁ with
   | silent h₁ =>
@@ -2407,7 +2440,7 @@ example : 0 < returnQ.length ∧
   rintro ⟨_, _, _, _, _, _, _, first, _⟩
   exact skip_no_done first (by intro h; cases h) rfl
 
-/-- Mutant raw execution can idle, then escape through `.done` instead of dispatching. -/
+/-- Mutant raw execution escapes through `.done` instead of dispatching. -/
 inductive PaddedEscape (P : Program O) : Config O → Label O → Config O → Prop where
   | skip {e L st frames k} : PaddedEscape P
       ⟨.exiting e, L, st, frames⟩ .silent ⟨.done, L, st, .resume (.exit e) :: k⟩
