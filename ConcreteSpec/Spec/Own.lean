@@ -112,14 +112,14 @@ instance (s : State) : Decidable (WellFormed s) := by
 /-- The reference transition checker: accept the candidate unchanged, or refuse it. -/
 def validate (s : State) : Option State := if WellFormed s then some s else none
 
-/-- Owner accesses cannot bypass whole-root loans. Reads may coexist with shared loans. -/
+/-- Owner accesses cannot bypass whole-root loans. Reads may coexist with shared loans (Q3.4, OD15). -/
 def ownerAccess (s : State) (p : Hybrid.Place) (m : Mode) : Bool :=
   (slot s p).any fun x => x.status == .owned &&
     (m == .shared || x.desc.mutable) && s.loans.all (fun l =>
       l.root != p || (m == .shared && l.mode == .shared))
 
 /-- Access through a loan ignores its suspended ancestors. A conflicting child suspends access
-through the parent until it ends; unrelated accesses still obey whole-root exclusion. -/
+through the parent until it ends; unrelated accesses still obey whole-root exclusion (Q3.2, Q3.4). -/
 def loanAccess (s : State) (i : LoanId) (m : Mode) : Bool :=
   (loan s i).any fun a => (m == .shared || a.mode == .mutable) &&
     s.loans.all (fun b => b.id == i || decide (b.id ∈ a.ancestors) || b.root != a.root ||
@@ -169,7 +169,7 @@ def reborrow (s : State) (i : LoanId) (suffix : List Projection) (m : Mode) :
   let f ← s.frames.head?
   reborrowAt s i suffix m f.id
 
-/-- Children must end before parents; ending a loan neither destroys nor moves its owner. -/
+/-- Children must end before parents (Q3.2); ending a loan neither destroys nor moves its owner. -/
 def endLoan (s : State) (i : LoanId) : Option State := do
   let _ ← loan s i
   if s.loans.any (·.parent == some i) then none else
@@ -267,4 +267,149 @@ def lifeStore {σ : Type} (types : Var → Option Descriptor) (e : Exec.Life)
     (s : Store σ) : Option (Store σ) :=
   (life types e s.own).map fun own => ⟨s.concrete, own⟩
 
+/-- Typed C4 reads and writes use exactly the original Hybrid operations after permission. -/
+def readOwner (tgt : Target) (p : Hybrid.Place) (s : Store Hybrid.State) :
+    Option (Hybrid.Value × Store Hybrid.State) :=
+  instrument (fun own => accessOwner own p .shared)
+    (fun st => (st.read tgt p).map fun v => (v, st)) s
+
+def writeOwner (tgt : Target) (p : Hybrid.Place) (v : Hybrid.Value)
+    (s : Store Hybrid.State) : Option (Unit × Store Hybrid.State) :=
+  instrument (fun own => accessOwner own p .mutable)
+    (fun st => (st.write tgt p v).map fun st => ((), st)) s
+
+namespace Examples
+
+def x : Var := ⟨"x", 0⟩
+def y : Var := ⟨"y", 1⟩
+def types (_ : Var) : Option Descriptor := some ⟨.int .i32, false, true⟩
+def initial : State :=
+  { slots := [⟨⟨0⟩, 0, ⟨.int .i32, false, true⟩, .owned⟩]
+    frames := [⟨0, [(x, ⟨0⟩)], []⟩]
+    nextPlace := 1
+    nextActivation := 1 }
+
+def shared : State := (borrow initial ⟨0⟩ [.index 0] .shared).getD initial
+def exclusive : State := (borrow initial ⟨0⟩ [.index 0] .mutable).getD initial
+def child : State := (reborrow exclusive ⟨0⟩ [.index 1] .mutable).getD initial
+
+/-- Accepted (rule `ConcreteSpec.Core.Own.ownerAccess`): shared loans allow owner reads. -/
+example : ownerAccess shared ⟨0⟩ .shared = true := by decide
+/-- Refused (rule `ConcreteSpec.Core.Own.ownerAccess`): shared loans freeze owner writes. -/
+example : ownerAccess shared ⟨0⟩ .mutable = false := by decide
+/-- Refused: shared loans also prevent moving the owner. -/
+example : move shared ⟨0⟩ = none := by decide
+/-- Accepted: shared loans of disjoint or overlapping projections coexist. -/
+example : (borrow shared ⟨0⟩ [.index 1] .shared).isSome = true := by decide
+/-- Refused: disjoint indices do not bypass mutable whole-root conflicts. -/
+example : borrow exclusive ⟨0⟩ [.index 999] .shared = none := by decide
+/-- Refused: an exclusive loan blocks even owner reads. -/
+example : ownerAccess exclusive ⟨0⟩ .shared = false := by decide
+/-- Accepted (rule `ConcreteSpec.Core.Own.loanAccess`): the mutable child accesses its root. -/
+example : loanAccess child ⟨1⟩ .mutable = true := by decide
+/-- Refused (rule `ConcreteSpec.Core.Own.loanAccess`): a mutable child suspends its parent. -/
+example : loanAccess child ⟨0⟩ .shared = false := by decide
+/-- Refused: shared lending cannot upgrade to mutable access. -/
+example : reborrow shared ⟨0⟩ [] .mutable = none := by decide
+/-- Refused: a shared child freezes writes through its mutable parent, but permits reads. -/
+example : (do
+    let s ← reborrow exclusive ⟨0⟩ [] .shared
+    pure (loanAccess s ⟨0⟩ .shared, loanAccess s ⟨0⟩ .mutable)) = some (true, false) := by decide
+/-- Accepted (rule `ConcreteSpec.Core.Own.endLoan`): end the child, then use the parent. -/
+example : ((endLoan child ⟨1⟩).map fun s => loanAccess s ⟨0⟩ .mutable) = some true := by decide
+/-- Refused (rule `ConcreteSpec.Core.Own.endLoan`): parents cannot end before their children. -/
+example : endLoan child ⟨0⟩ = none := by decide
+/-- Refused: moving twice or reading a moved slot; reinitializing makes it usable again. -/
+example : (do
+    let s ← move initial ⟨0⟩
+    pure ((move s ⟨0⟩).isNone, ownerAccess s ⟨0⟩ .shared,
+      (reinitialize s ⟨0⟩).isSome)) = some (true, false, true) := by decide
+/-- Refused: leaving a live linear owner would silently discard its obligation. -/
+example : leave initial = none := by decide
+/-- Accepted: downward lending preserves the root; leaving restores the caller's parent access. -/
+example : (do
+    let s ← enterDown exclusive [(y, ⟨0⟩)]
+    let frozen := loanAccess s ⟨0⟩ .shared
+    let s ← leave s
+    pure (frozen, loanAccess s ⟨0⟩ .mutable, s.nextLoan)) = some (false, true, 2) := by decide
+/-- Refused: a root with a loan cannot leave scope. -/
+example : drop [x] { shared with slots := shared.slots.map fun x =>
+    { x with desc := { x.desc with copy := true } } } = none := by decide
+/-- Accepted: identities are not reused even after the prior loan ends. -/
+example : (do
+    let s ← endLoan shared ⟨0⟩
+    let s ← borrow s ⟨0⟩ [] .shared
+    pure (s.loans.map Loan.id)) = some [⟨1⟩] := by decide
+
+/-- A small operand instance: all loan commands modify instrumentation only. There are no
+reference-valued fields, returns or aggregate operands. -/
+inductive E where
+  | lit (n : Int)
+  | move (x : Var)
+  | read (x : Var)
+  | lend (root : Hybrid.Place) (mode : Mode)
+  | reborrow (parent : LoanId)
+  | endLoan (id : LoanId)
+  | use (id : LoanId)
+
+def eval (locals : AList Var Int) (s : State) : E → Res (Int × State)
+  | .lit n => .ok (n, s)
+  | .move x => match s.frames.head?.bind (fun f => AList.lookup f.locals x),
+      AList.lookup locals x with
+    | some p, some n => match Own.move s p with
+      | some s => .ok (n, s)
+      | none => .stuck
+    | _, _ => .stuck
+  | .read x => match s.frames.head?.bind (fun f => AList.lookup f.locals x),
+      AList.lookup locals x with
+    | some p, some n => if ownerAccess s p .shared then .ok (n, s) else .stuck
+    | _, _ => .stuck
+  | .lend p m => match borrow s p [] m with
+    | some s => .ok (0, s)
+    | none => .stuck
+  | .reborrow i => match Own.reborrow s i [] .mutable with
+    | some s => .ok (0, s)
+    | none => .stuck
+  | .endLoan i => match Own.endLoan s i with
+    | some s => .ok (0, s)
+    | none => .stuck
+  | .use i => if loanAccess s i .mutable then .ok (0, s) else .stuck
+
+abbrev ops : Exec.Operands where
+  Val := Int
+  Expr := E
+  Ty := Unit
+  Store := State
+  Prim := Empty
+  Event := Empty
+  unitVal := 0
+  unitTy := ()
+  isCopy := fun _ => false
+  eval := eval
+  life := Own.life types
+  test := fun n => some (n != 0)
+  allows := fun p => nomatch p
+
+def runBody (body : Exec.Stmt ops) : Exec.Report ops :=
+  Exec.run ⟨[]⟩ (fun _ p => nomatch p) 100 ⟨.exec body, [(x, 7)], initial, []⟩
+
+def stuck (r : Exec.Report ops) : Bool := match r.ending with
+  | .stuck _ => true
+  | _ => false
+
+/-- Refused: an actual C1 run gets stuck when its next operand reads a moved owner. -/
+example : stuck (runBody (.seq (.bind y (.move x) ⟨0⟩) (.ret (.read x) ⟨1⟩))) = true := by decide
+
+/-- Accepted: a C1 run lends, reborrows, ends the child, then uses its parent and ends it.
+Conditions evaluate these instrumentation-only operands without creating ordinary bindings. -/
+example : (match (runBody
+    (.cond (.lend ⟨0⟩ .mutable) .skip
+      (.cond (.reborrow ⟨0⟩) .skip
+        (.cond (.endLoan ⟨1⟩) .skip
+          (.cond (.use ⟨0⟩) .skip
+            (.cond (.endLoan ⟨0⟩) .skip .skip ⟨0⟩) ⟨0⟩) ⟨0⟩) ⟨0⟩) ⟨0⟩)).ending with
+    | .final .normal => true
+    | _ => false) = true := by decide
+
+end Examples
 end ConcreteSpec.Core.Own
