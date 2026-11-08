@@ -1576,6 +1576,73 @@ example : ¬ (∀ acts tr L st, BoundaryRun prog MissingDrop (.ret 7) [] [.scope
     have hm := congrArg DState.moved he
     cases hm
 
+/-- Representation lemma. Extend a raw run with a concrete deferred log's complete execution.
+The outer boundary remains untouched throughout the call; only the supplied tail reaches it. -/
+private theorem logContinue_inv (n : Int) (e : Exit Int) (L : AList Var Int)
+    (rest : List (Frame ops)) {tr : List Int} {endC : Config ops}
+    (tail : FirstSteps (Step prog) (fun c => c.frames.length ≤ 0)
+      ⟨.done, L, .init, .resume (.exit e) :: rest⟩ tr endC) :
+    FirstSteps (Step prog) (fun c => c.frames.length ≤ 0)
+      ⟨.exec (.call none logF [.lit n] s), L, .init, .resume (.exit e) :: rest⟩ (n :: tr) endC := by
+  let q : List (Frame ops) := .resume (.exit e) :: rest
+  let entered : DState := DState.life (.enter [x]) .init
+  refine FirstSteps.step (R := Step prog) (c' := ⟨.exec logFn.body, [(x, n)], entered,
+      .scope logFn.block [x] [] :: .ret none L :: q⟩)
+    (by simp) (.silent rfl) ?_
+  refine FirstSteps.step (R := Step prog) (c' := ⟨.done, [(x, n)], entered,
+      .scope logFn.block [x] [] :: .ret none L :: q⟩)
+    (by simp [q])
+    (Step.prim (P := prog) (p := .log) (vs := [n]) (site := s) (st := entered)
+      (a := ⟨some n, .ok 0, entered⟩) rfl (by simp [ops]) rfl) ?_
+  refine FirstSteps.step (R := Step prog) (c' := ⟨.done, [(x, n)], entered, .ret none L :: q⟩)
+    (by simp [q]) (.silent rfl) ?_
+  simpa [Label.events] using FirstSteps.step (R := Step prog) (by simp [q])
+    (Step.silent (P := prog) (c' := ⟨.done, L, .init, q⟩) rfl) tail
+
+/-- Instance (law `ConcreteSpec.Core.Exec.raw_cleanup_runs_plan`). The premise is a raw
+first-arrival execution, with no action list or call segmentation supplied: a registered `log(1)`
+runs and its scope drops before the exit first reaches the empty boundary. -/
+example : ∃ acts, BoundaryRun prog (Step prog) (.ret 7) [] [inner] [] .init acts [1] [] .init ∧
+    acts = planWith [inner] [] ∧ Performed prog acts .init [1] .init := by
+  have h : FirstSteps (Step prog) (fun c => c.frames.length ≤ 0)
+      ⟨.exiting (.ret 7), [], .init, [inner]⟩ [1] ⟨.exiting (.ret 7), [], .init, []⟩ := by
+    refine FirstSteps.step (R := Step prog)
+      (c' := ⟨.exec (d 1).stmt, [], .init, [.resume (.exit (.ret 7)), .scope ⟨1⟩ [] []]⟩)
+      (by simp [inner]) (.silent rfl) ?_
+    apply logContinue_inv 1 (.ret 7) [] [.scope ⟨1⟩ [] []]
+    refine FirstSteps.step (R := Step prog)
+      (c' := ⟨.exiting (.ret 7), [], .init, [.scope ⟨1⟩ [] []]⟩) (by simp) (.silent rfl) ?_
+    refine FirstSteps.step (R := Step prog)
+      (c' := ⟨.exiting (.ret 7), [], .init, []⟩) (by simp) (.silent rfl) ?_
+    exact .stop (by simp)
+  exact raw_cleanup_runs_plan h (by intro f hf; cases hf with | head => trivial | tail _ hf => cases hf)
+
+/-- A different missing-call mutation: it jumps through a normal resume instead of dispatching
+a call. This path has the same boundary as a real unwind, but an unexpected intermediate control. -/
+private inductive Escape : Config ops → Label ops → Config ops → Prop where
+  | skip : Escape ⟨.exiting (.ret 7), [], .init, [inner]⟩ .silent
+      ⟨.done, [], .init, [.resume (.exit (.ret 7))]⟩
+  | resume : Escape ⟨.done, [], .init, [.resume (.exit (.ret 7))]⟩ .silent
+      ⟨.exiting (.ret 7), [], .init, []⟩
+
+/-- Planted (law `ConcreteSpec.Core.Exec.raw_cleanup_runs_plan`). A raw first-boundary path
+which skips the call via `.done`/`.resume` cannot escape the contract: it falsifies the extraction
+obligation itself, even though the earlier observer-only law would have excluded this path. -/
+example : ¬ (∀ tr L st, FirstSteps Escape (fun c => c.frames.length ≤ 0)
+    ⟨.exiting (.ret 7), [], .init, [inner]⟩ tr ⟨.exiting (.ret 7), L, st, []⟩ →
+      ∃ acts, BoundaryRun prog Escape (.ret 7) [] [inner] [] .init acts tr L st ∧
+        acts = planWith [inner] [] ∧ Performed prog acts .init tr st) := by
+  intro h
+  have raw : FirstSteps Escape (fun c => c.frames.length ≤ 0)
+      ⟨.exiting (.ret 7), [], .init, [inner]⟩ [] ⟨.exiting (.ret 7), [], .init, []⟩ :=
+    FirstSteps.step (by simp [inner]) Escape.skip
+      (FirstSteps.step (by simp) Escape.resume (.stop (by simp)))
+  obtain ⟨_, observed, _⟩ := h [] [] .init raw
+  generalize htr : ([] : List Int) = trace at observed
+  cases observed with
+  | pass _ hs _ => cases hs
+  | call _ hs _ _ _ => cases hs
+
 end CleanupEvidence
 
 /-! ### Lifecycle evidence and planted refusal bypasses
