@@ -770,7 +770,8 @@ capability contract (X3):
 - When `avail = true`, `compiler` must succeed on every supported accepted candidate
   (`compiled = supportedAccepted = accepted`). Partial lowering is a fatal failure. -/
 def genSpecWith (avail : Bool) (compiler : ConcreteSpec.Program → Except String Program)
-    (seed : String) (n : Nat) (dir : System.FilePath) (target : LCB.Target) : IO UInt32 := do
+    (seed : String) (n : Nat) (dir : System.FilePath) (target : LCB.Target)
+    (generate : String → Nat → SpecGen.Generated := SpecGen.generate) : IO UInt32 := do
   IO.FS.createDirAll dir
   let mut programs := ""
   let mut rejects := ""
@@ -783,7 +784,7 @@ def genSpecWith (avail : Bool) (compiler : ConcreteSpec.Program → Except Strin
   let mut exits := 0
   let mut traps := 0
   for index in List.range n do
-    let g := SpecGen.generate seed index
+    let g := generate seed index
     let core := ConcreteSpec.Slice0.toCore g.program
     if !ConcreteSpec.check core then
       rejected := rejected + 1
@@ -827,6 +828,7 @@ def genSpecWith (avail : Bool) (compiler : ConcreteSpec.Program → Except Strin
           IO.FS.writeFile (child / "native-ready") ""
           compiled := compiled + 1
           didCompile := true
+          IO.println s!"spec compiled candidate: index {index}, compiled {compiled}"
         programs := programs ++
           s!"program\t{index}\texit\t{if didCompile then "true" else "false"}\n"
       | .trap _ =>
@@ -863,15 +865,19 @@ def genSpecWith (avail : Bool) (compiler : ConcreteSpec.Program → Except Strin
 def genSpec (seed : String) (n : Nat) (dir : System.FilePath) (target : LCB.Target) : IO UInt32 :=
   genSpecWith loweringAvailable compileCore seed n dir target
 
-/-- Planted partial-compilation control (X3): simulates a partially wired `compileCore` that
-lowers empty-body programs (`return <lit>`) to `Examples.answer` and refuses multi-statement
-slice-0 programs with `unwiredMessage`. With `avail = true`, `genSpecWith` must reject the partial
-lowering as soon as a supported accepted candidate is refused. -/
-def controlPartialLowering (seed : String) (n : Nat) (dir : System.FilePath) (target : LCB.Target) :
+/-- Fixed X3 corpus: two supported literal returns compile before a supported binding
+program is refused. This exercises the production generation/capability path independently of seed. -/
+def controlPartialLowering (seed : String) (_n : Nat) (dir : System.FilePath) (target : LCB.Target) :
     IO UInt32 := do
+  let corpus : String → Nat → SpecGen.Generated := fun _ index =>
+    if index < 2 then
+      ⟨{ body := [], ret := .lit 42 }, ["return_literal"], none⟩
+    else
+      ⟨ConcreteSpec.Slice0.answer, ["let_literal", "return_variable"], none⟩
   let partialCompiler : ConcreteSpec.Program → Except String Program := fun core =>
-    if core.body.isEmpty then .ok Concrete.BIR.Examples.answer else .error unwiredMessage
-  genSpecWith true partialCompiler seed n dir target
+    if core.body.isEmpty then .ok Concrete.BIR.Examples.answer
+    else .error "planted partial-lowering capability refusal"
+  genSpecWith true partialCompiler seed 3 dir target corpus
 
 /-- Replay exactly one accepted spec candidate through compileCore. While the hook is unwired this
 writes the generated oracle inputs and refuses to claim a native comparison. -/

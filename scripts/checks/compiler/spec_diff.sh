@@ -549,9 +549,12 @@ control_partial_lowering() {
     echo "INCOMPLETE: control-partial-lowering deadline" >&2
     return 3
   fi
-  if [ "$rc" -eq 0 ] ||
-     ! grep -qF "FAIL spec leg capability contract: loweringAvailable = true but compileCore refused supported accepted candidate" "$drv_log"; then
-    echo "control setup: driver did not reject partial lowering (rc=$rc)" >&2
+  if [ "$rc" -ne 1 ] ||
+     ! grep -qxF 'spec compiled candidate: index 0, compiled 1' "$drv_log" ||
+     ! grep -qxF 'spec compiled candidate: index 1, compiled 2' "$drv_log" ||
+     ! grep -qxF "FAIL spec leg capability contract: loweringAvailable = true but compileCore refused supported accepted candidate (seed $seed index 2): planted partial-lowering capability refusal" "$drv_log" ||
+     [ ! -f "$d/p0/native-ready" ] || [ ! -f "$d/p1/native-ready" ]; then
+    echo "control setup: driver did not compile twice before the planted capability refusal (rc=$rc)" >&2
     cat "$drv_log" >&2
     return 1
   fi
