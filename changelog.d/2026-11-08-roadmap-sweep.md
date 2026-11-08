@@ -29,3 +29,5 @@ The lexer inventory and its six spelling blockers join R-0620 and R-0625. R-0600
 rows while its slice is an owner question. Slice 26 leaves NaN semantics open. A new open
 owner-question register points to the foundation, std, slice-1, lexer, R0600 and NaN sources;
 recommendations remain labelled as recommendations.
+
+Review fixes on 2026-11-08 align the conversion/output revisions, writer and push rules, landing services, roadmap owners and revision notes, and record ISS-0020 as filed and fixed on `wip/signoff-reject`.

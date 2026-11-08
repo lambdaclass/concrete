@@ -303,14 +303,18 @@ and per-function termination theorems for ordinary functions.
 
 **Implicit conversions and inference**
 
-- **Implicit numeric conversions.** Permanent. They hide data loss. `as` converts only when no
-  value can be lost ([OD11](decisions.md#od11)); every other conversion is a named function
-  ([OD99](decisions.md#od99)), and a checked one reports failure as a `Result`
-  ([OD106](decisions.md#od106)).
+- **Implicit numeric conversions.** Permanent. They hide data loss. Lossless conversion is a
+  canonical named function, used only when no value can be lost; [OD11](decisions.md#od11)'s
+  value-domain and provenance restrictions stay, and its spelling comes in R-0625 (revised
+  2026-11-08, [language decision item 11](decisions.md#decided-2026-11-08-language)). Every other
+  conversion is a named function ([OD99](decisions.md#od99)), and a checked one reports failure as
+  a `Result` ([OD106](decisions.md#od106)).
 - **Truthiness.** Permanent. A condition is a `bool`; no other value stands in for one.
 - **Implicit string conversion** (`Display`/`ToString`-style hooks). Permanent. It hides
-  allocation and dispatch. The reserved output and append forms ([OD133](decisions.md#od133))
-  accept a closed list of types, expand to typed calls and keep their authority visible.
+  allocation and dispatch. Output and append are ordinary typed calls with their authority visible:
+  output needs `Console` and its grant and keeps linear errors, and append needs `with(Alloc)`;
+  their exact names and signatures come in R-0625 (revised 2026-11-08,
+  [language decision item 17](decisions.md#decided-2026-11-08-language)).
 - **Global (Hindley–Milner) inference and inference from the expected result type.** Permanent.
   Signatures are written in full. A generic call's type arguments are inferred only from the checked
   types of its arguments ([OD46](decisions.md#od46), [OD129](decisions.md#od129));
@@ -375,8 +379,8 @@ and per-function termination theorems for ordinary functions.
 **Calls and declarations**
 
 - **User-defined and C-style variadic functions.** Permanent. They are unchecked or complicate
-  every signature. The reserved output and append forms are the only multi-argument forms, and they
-  are not a function type and cannot be passed as values.
+  every signature. Output and append are ordinary calls, with no special variadic status (revised
+  2026-11-08, [language decision item 17](decisions.md#decided-2026-11-08-language)).
 - **Default arguments.** Permanent (owner, 2026-11-05, row P17a,
   [record](decisions.md#decided-project-refusals)), reopened only by a new owner decision. A
   call shows every argument it passes; defaults conflict with visible arguments and with one form per
