@@ -30,7 +30,10 @@ inductive Projection where
   | index (n : Nat)
   deriving DecidableEq, Repr
 
-/-- The checked binding descriptor supplied by the operand instance, not guessed from a value. -/
+/-- The checked binding descriptor supplied by the operand instance, not guessed from a value.
+`ty` describes its C4 scalar payload representation: a linear token may have an integer or
+zero-byte payload, without becoming Copy. Semantic Copy/mutability evidence and the richer
+nominal type identity are the operand instance/C9 admission obligation. -/
 structure Descriptor where
   ty : CTy
   copy : Bool
