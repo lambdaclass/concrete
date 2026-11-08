@@ -244,6 +244,13 @@ structure InfiniteExecution (P : Program O) (ρ : QueryOracle O) (c : Config O) 
   initial : states 0 = ⟨c, [], []⟩
   step : ∀ n, Move P ρ (states n) (states (n + 1))
 
+/-- Semantic uniqueness for an execution relation: it cannot admit two infinite paths from the
+same initial position with different state sequences. This predicate does not inspect any getter
+or require that candidate paths already carry proofs for a different relation. -/
+def ExecutionUnique (R : Position O → Position O → Prop) (initial : Position O) : Prop :=
+  ¬ ∃ xs ys : Nat → Position O, xs 0 = initial ∧ ys 0 = initial ∧
+    (∀ n, R (xs n) (xs (n + 1))) ∧ (∀ n, R (ys n) (ys (n + 1))) ∧ xs ≠ ys
+
 /-- A compatible limit of fuel-indexed prefixes. The `n`-step run is exactly the `n`-th position;
 these are not independently chosen finite witnesses. -/
 structure FuelLimit (P : Program O) (ρ : QueryOracle O) (c : Config O) where
@@ -298,27 +305,45 @@ def MatchesProjectedHistory {S : Observe.EventSignature} {P : Program O} {ρ : Q
   (∀ n, ∃ m rest, Observe.visiblePrefix steps m = A.project (X.states n).events ++ rest) ∧
     (∀ m, ∃ n rest, A.project (X.states n).events = Observe.visiblePrefix steps m ++ rest)
 
-/-- The number of projected C6 events emitted by the first `n` steps of an infinite execution's
-induced C6 step stream. Each step emits at most one projected event from the history reached after
-that machine transition, and stutters with `.silent` when no unemitted projected event is
-available. -/
-def InfiniteExecution.emittedCount {S : Observe.EventSignature} {P : Program O}
+/-- The observations contributed by exactly one machine transition. -/
+def InfiniteExecution.transitionEvents {S : Observe.EventSignature} {P : Program O}
     {ρ : QueryOracle O} {c : Config O} (A : Observe.ExecAdapter O S)
-    (X : InfiniteExecution P ρ c) : Nat → Nat
-  | 0 => 0
-  | n + 1 =>
-    let k := X.emittedCount A n
-    if k < (A.project (X.states (n + 1)).events).length then k + 1 else k
+    (X : InfiniteExecution P ρ c) (n : Nat) : List (Observe.Event S) :=
+  (A.project (X.states (n + 1)).events).drop (A.project (X.states n).events).length
 
-/-- The C6 step stream induced by an infinite execution under an execution adapter. Silent machine
-transitions and transitions whose raw events are erased by `A` become `Observe.Step.silent`;
-emitted visible events become `Observe.Step.emit`. -/
+/-- Each transition occupies a nonempty finite block. An erased or silent transition occupies
+one silent step; a visible transition emits its entire projected event list in its own block. -/
+def InfiniteExecution.observeBlock {S : Observe.EventSignature} {P : Program O}
+    {ρ : QueryOracle O} {c : Config O} (A : Observe.ExecAdapter O S)
+    (X : InfiniteExecution P ρ c) (n : Nat) : List (Observe.Step S) :=
+  match X.transitionEvents A n with
+  | [] => [.silent]
+  | e :: es => (e :: es).map Observe.Step.emit
+
+/-- Concatenate a finite number of blocks, retaining their transition boundaries. -/
+def blockPrefix {S : Observe.EventSignature} (blocks : Nat → List (Observe.Step S)) :
+    Nat → List (Observe.Step S)
+  | 0 => []
+  | n + 1 => blockPrefix blocks n ++ blocks n
+
+/-- The explicit embedding of machine positions into C6 step indices. -/
+def InfiniteExecution.observeBoundary {S : Observe.EventSignature} {P : Program O}
+    {ρ : QueryOracle O} {c : Config O} (A : Observe.ExecAdapter O S)
+    (X : InfiniteExecution P ρ c) (n : Nat) : Nat :=
+  (blockPrefix (X.observeBlock A) n).length
+
+/-- Flatten nonempty finite blocks. The first `i+1` blocks suffice to supply step `i`;
+no event can migrate across the boundaries of those blocks. -/
 def InfiniteExecution.toObserveSteps {S : Observe.EventSignature} {P : Program O}
     {ρ : QueryOracle O} {c : Config O} (A : Observe.ExecAdapter O S)
-    (X : InfiniteExecution P ρ c) (n : Nat) : Observe.Step S :=
-  let k := X.emittedCount A n
-  let projected := A.project (X.states (n + 1)).events
-  if h : k < projected.length then .emit projected[k] else .silent
+    (X : InfiniteExecution P ρ c) (i : Nat) : Observe.Step S :=
+  (blockPrefix (X.observeBlock A) (i + 1))[i]?.getD .silent
+
+/-- The execution-to-trace projection at a machine position, independent of fuel evaluation. -/
+def InfiniteExecution.projectedTrace {S : Observe.EventSignature} {P : Program O}
+    {ρ : QueryOracle O} {c : Config O} (A : Observe.ExecAdapter O S)
+    (X : InfiniteExecution P ρ c) (n : Nat) : List (Observe.Event S) :=
+  A.project (X.states n).events
 
 /-- Once `fuel` reaches a blocked request, every larger budget retains C1's `noAnswer` ending.
 This is C8's blocking classification over C1; it is not divergence and has no infinite `Move`. -/
