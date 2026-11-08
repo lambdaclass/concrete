@@ -50,25 +50,28 @@ def WellFormed (s : State) : Prop :=
     (∀ i ∈ d.allocations, i ∈ d.brands ∧ ∃ b ∈ s.binders, b.brand = i ∧ b.allocatorLive = true))
 instance (s : State) : Decidable (WellFormed s) := by unfold WellFormed; infer_instance
 
-def validate (s : State) : Option State := if WellFormed s then some s else none
 
 /-- A generative binder allocates a new nominal identity, even at the same lexical loop site
 (Q1.1, Q1.2). The allocator starts a new lineage. -/
 def fresh (s : State) (scope : BlockId) : Option State :=
-  validate { s with
+  some { s with
     binders := ⟨⟨s.nextBrand⟩, ⟨s.nextLineage⟩, scope, true⟩ :: s.binders
     nextBrand := s.nextBrand + 1
     nextLineage := s.nextLineage + 1 }
 
 /-- Dependency registration is explicit and refuses missing brand/lifetime witnesses. -/
 def depend (s : State) (d : Dependency) : Option State :=
-  if s.dependencies.any (·.place == d.place) then none else
-    validate { s with dependencies := d :: s.dependencies }
+  if s.dependencies.all (·.place != d.place) ∧
+      (∀ i ∈ d.brands, ∃ b ∈ s.binders, b.brand = i) ∧
+      (∀ i ∈ d.allocations, i ∈ d.brands ∧
+        ∃ b ∈ s.binders, b.brand = i ∧ b.allocatorLive = true) then
+    some { s with dependencies := d :: s.dependencies }
+  else none
 
 /-- Discharge the dependent resource obligation, without implicitly cleaning up its allocator. -/
 def consume (s : State) (p : Hybrid.Place) : Option State :=
   if s.dependencies.any (·.place == p) then
-    validate { s with dependencies := s.dependencies.filter (·.place != p) }
+    some { s with dependencies := s.dependencies.filter (·.place != p) }
   else none
 
 /-- Release/reset cannot invalidate a live allocation dependency. Lexical phantom occurrences
@@ -76,7 +79,7 @@ remain valid until their brand binder ends (Q1.3, Q1.5). -/
 def release (s : State) (i : BrandId) : Option State :=
   if s.binders.any (fun b => b.brand == i && b.allocatorLive) &&
       s.dependencies.all (fun d => decide (i ∉ d.allocations)) then
-    validate { s with binders := s.binders.map fun b =>
+    some { s with binders := s.binders.map fun b =>
       if b.brand = i then { b with allocatorLive := false } else b }
   else none
 
@@ -85,7 +88,7 @@ The old brand stays nominally scoped, but its allocator is consumed. -/
 def reset (s : State) (i : BrandId) : Option State := do
   let b ← s.binders.find? (·.brand == i)
   let t ← release s i
-  validate { t with
+  some { t with
     binders := ⟨⟨s.nextBrand⟩, b.lineage, b.scope, true⟩ :: t.binders
     nextBrand := s.nextBrand + 1 }
 
@@ -95,7 +98,7 @@ def endScope (s : State) (scope : BlockId) : Option State :=
   if s.binders.all (fun b => b.scope != scope || !b.allocatorLive) &&
       s.dependencies.all (fun d => s.binders.all (fun b =>
         b.scope != scope || decide (b.brand ∉ d.brands))) then
-    validate { s with binders := s.binders.filter (·.scope != scope) }
+    some { s with binders := s.binders.filter (·.scope != scope) }
   else none
 
 /-- Couple a brand transition to its concrete allocator operation. Brand witnesses and

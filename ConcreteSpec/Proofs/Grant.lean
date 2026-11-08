@@ -4,55 +4,282 @@ import ConcreteSpec.Proofs.Basics
 /-! # C5 brand lifetime and grant attenuation laws -/
 namespace ConcreteSpec.Core.Generative
 
-theorem validate_iff (s t : State) : validate s = some t ↔ s = t ∧ WellFormed t := by
-  unfold validate
-  split
-  · rename_i hs
+private theorem fresh_wf (s : State) (scope : BlockId) (hs : WellFormed s) :
+    WellFormed { s with
+      binders := ⟨⟨s.nextBrand⟩, ⟨s.nextLineage⟩, scope, true⟩ :: s.binders
+      nextBrand := s.nextBrand + 1
+      nextLineage := s.nextLineage + 1 } := by
+  rcases hs with ⟨⟨hn, hd⟩, hb, hdep⟩
+  refine ⟨⟨?_, hd⟩, ?_, ?_⟩
+  · simp only [List.map_cons, List.nodup_cons]
+    refine ⟨?_, hn⟩
+    intro hi
+    obtain ⟨b, hm, he⟩ := List.mem_map.mp hi
+    have hlt := (hb b hm).1
+    rw [he] at hlt
+    exact Nat.lt_irrefl _ hlt
+  · intro b hm
+    rcases List.mem_cons.mp hm with rfl | hm
+    · exact ⟨Nat.lt_succ_self _, Nat.lt_succ_self _⟩
+    · exact ⟨Nat.lt_succ_of_lt (hb b hm).1, Nat.lt_succ_of_lt (hb b hm).2⟩
+  · intro d hm
+    obtain ⟨hbr, hal⟩ := hdep d hm
     constructor
-    · intro h; cases h; exact ⟨rfl, hs⟩
-    · rintro ⟨rfl, _⟩; rfl
-  · rename_i hs
-    constructor
-    · intro h; cases h
-    · rintro ⟨rfl, ht⟩; exact False.elim (hs ht)
+    · intro i hi
+      obtain ⟨b, hb, he⟩ := hbr i hi
+      exact ⟨b, List.mem_cons_of_mem _ hb, he⟩
+    · intro i hi
+      obtain ⟨hbr, b, hb, he⟩ := hal i hi
+      exact ⟨hbr, b, List.mem_cons_of_mem _ hb, he⟩
 
-theorem fresh_preserves (s t : State) (scope : BlockId) (h : fresh s scope = some t) :
-    WellFormed t := (validate_iff _ _).mp h |>.2
+theorem fresh_preserves (s t : State) (scope : BlockId) (hs : WellFormed s)
+    (h : fresh s scope = some t) : WellFormed t := by
+  cases h
+  exact fresh_wf s scope hs
 
-theorem depend_preserves (s t : State) (d : Dependency) (h : depend s d = some t) :
-    WellFormed t := by
+theorem fresh_progress (s : State) (scope : BlockId) :
+    ∃ t, fresh s scope = some t := ⟨_, rfl⟩
+
+theorem depend_preserves (s t : State) (d : Dependency) (hs : WellFormed s)
+    (h : depend s d = some t) : WellFormed t := by
   unfold depend at h
   split at h
+  · rename_i hg
+    cases h
+    rcases hs with ⟨⟨hb, hd⟩, hbound, hdep⟩
+    refine ⟨⟨hb, ?_⟩, hbound, ?_⟩
+    · simp only [List.map_cons, List.nodup_cons]
+      refine ⟨?_, hd⟩
+      intro hm
+      obtain ⟨a, ha, he⟩ := List.mem_map.mp hm
+      have hn := List.all_eq_true.mp hg.1 a ha
+      simp [he] at hn
+    · intro a ha
+      rcases List.mem_cons.mp ha with rfl | ha
+      · exact hg.2
+      · exact hdep a ha
   · contradiction
-  · exact (validate_iff _ _).mp h |>.2
 
-theorem consume_preserves (s t : State) (p : Hybrid.Place) (h : consume s p = some t) :
-    WellFormed t := by
+theorem consume_preserves (s t : State) (p : Hybrid.Place) (hs : WellFormed s)
+    (h : consume s p = some t) : WellFormed t := by
   unfold consume at h
   split at h
-  · exact (validate_iff _ _).mp h |>.2
+  · cases h
+    refine ⟨⟨hs.1.1, ?_⟩, hs.2.1, ?_⟩
+    · exact hs.1.2.sublist (List.Sublist.map _ (List.filter_sublist))
+    · intro d hd
+      exact hs.2.2 d (List.mem_filter.mp hd).1
   · contradiction
 
-theorem release_preserves (s t : State) (i : BrandId) (h : release s i = some t) :
-    WellFormed t := by
+theorem release_preserves (s t : State) (i : BrandId) (hs : WellFormed s)
+    (h : release s i = some t) : WellFormed t := by
   unfold release at h
   split at h
-  · exact (validate_iff _ _).mp h |>.2
+  · rename_i hg
+    cases h
+    let change := fun b : Binder => if b.brand = i then { b with allocatorLive := false } else b
+    have brand (b : Binder) : (change b).brand = b.brand := by simp [change]; split <;> rfl
+    have lineage (b : Binder) : (change b).lineage = b.lineage := by simp [change]; split <;> rfl
+    refine ⟨⟨?_, hs.1.2⟩, ?_, ?_⟩
+    · change (s.binders.map change |>.map Binder.brand).Nodup
+      simpa only [List.map_map, Function.comp_def, brand] using hs.1.1
+    · intro b hb
+      obtain ⟨a, ha, rfl⟩ := List.mem_map.mp hb
+      change (change a).brand.id < s.nextBrand ∧ (change a).lineage.id < s.nextLineage
+      simpa only [brand, lineage] using hs.2.1 a ha
+    · intro d hd
+      obtain ⟨hbr, hal⟩ := hs.2.2 d hd
+      constructor
+      · intro j hj
+        obtain ⟨b, hb, he⟩ := hbr j hj
+        exact ⟨change b, List.mem_map.mpr ⟨b, hb, rfl⟩, (brand b).trans he⟩
+      · intro j hj
+        obtain ⟨hbr, b, hb, he, hl⟩ := hal j hj
+        have hni : j ≠ i := by
+          intro heq
+          have := List.all_eq_true.mp (Bool.and_eq_true_iff.mp hg).2 d hd
+          exact (of_decide_eq_true this) (heq ▸ hj)
+        refine ⟨hbr, change b, List.mem_map.mpr ⟨b, hb, rfl⟩, (brand b).trans he, ?_⟩
+        have hbi : b.brand ≠ i := fun h => hni (he.symm.trans h)
+        simpa [change, hbi] using hl
   · contradiction
 
-theorem reset_preserves (s t : State) (i : BrandId) (h : reset s i = some t) :
-    WellFormed t := by
+theorem reset_preserves (s t : State) (i : BrandId) (hs : WellFormed s)
+    (h : reset s i = some t) : WellFormed t := by
   unfold reset at h
-  obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp h
-  obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp hh
-  exact (validate_iff _ _).mp hh |>.2
+  obtain ⟨b, hb, hh⟩ := Option.bind_eq_some_iff.mp h
+  obtain ⟨u, hu, hh⟩ := Option.bind_eq_some_iff.mp hh
+  cases hh
+  have hw := release_preserves s u i hs hu
+  have hmem : b ∈ s.binders := List.mem_of_find?_eq_some hb
+  have hlin := (hs.2.1 b hmem).2
+  have counters : u.nextBrand = s.nextBrand ∧ u.nextLineage = s.nextLineage := by
+    unfold release at hu
+    split at hu
+    · cases hu; exact ⟨rfl, rfl⟩
+    · contradiction
+  rcases hw with ⟨⟨hn, hd⟩, hbound, hdep⟩
+  refine ⟨⟨?_, hd⟩, ?_, ?_⟩
+  · simp only [List.map_cons, List.nodup_cons]
+    refine ⟨?_, hn⟩
+    intro hm
+    obtain ⟨a, ha, he⟩ := List.mem_map.mp hm
+    have hlt := (hbound a ha).1
+    rw [he, counters.1] at hlt
+    exact Nat.lt_irrefl _ hlt
+  · intro a ha
+    rcases List.mem_cons.mp ha with rfl | ha
+    · exact ⟨Nat.lt_succ_self _, by simpa only [counters.2] using hlin⟩
+    · exact ⟨Nat.lt_succ_of_lt (by simpa only [counters.1] using (hbound a ha).1), (hbound a ha).2⟩
+  · intro d hd
+    obtain ⟨hbr, hal⟩ := hdep d hd
+    constructor
+    · intro j hj
+      obtain ⟨a, ha, he⟩ := hbr j hj
+      exact ⟨a, List.mem_cons_of_mem _ ha, he⟩
+    · intro j hj
+      obtain ⟨hbr, a, ha, he⟩ := hal j hj
+      exact ⟨hbr, a, List.mem_cons_of_mem _ ha, he⟩
 
-theorem endScope_preserves (s t : State) (scope : BlockId) (h : endScope s scope = some t) :
-    WellFormed t := by
+theorem endScope_preserves (s t : State) (scope : BlockId) (hs : WellFormed s)
+    (h : endScope s scope = some t) : WellFormed t := by
   unfold endScope at h
   split at h
-  · exact (validate_iff _ _).mp h |>.2
+  · rename_i hg
+    cases h
+    refine ⟨⟨hs.1.1.sublist (List.Sublist.map _ (List.filter_sublist)), hs.1.2⟩, ?_, ?_⟩
+    · intro b hb
+      exact hs.2.1 b (List.mem_filter.mp hb).1
+    · intro d hd
+      obtain ⟨hbr, hal⟩ := hs.2.2 d hd
+      have remains (j : BrandId) (hj : j ∈ d.brands) (b : Binder) (hb : b ∈ s.binders)
+          (he : b.brand = j) : (b.scope != scope) = true := by
+        have hg' := List.all_eq_true.mp (Bool.and_eq_true_iff.mp hg).2 d hd
+        have hb' := List.all_eq_true.mp hg' b hb
+        by_cases hscope : b.scope = scope
+        · simp [hscope, he, hj] at hb'
+        · simp [hscope]
+      constructor
+      · intro j hj
+        obtain ⟨b, hb, he⟩ := hbr j hj
+        exact ⟨b, List.mem_filter.mpr ⟨hb, remains j hj b hb he⟩, he⟩
+      · intro j hj
+        obtain ⟨hj', b, hb, he, hl⟩ := hal j hj
+        exact ⟨hj', b, List.mem_filter.mpr ⟨hb, remains j hj' b hb he⟩, he, hl⟩
   · contradiction
+
+/-- All guards concern the dependency being registered, not the rest of the invariant. -/
+theorem depend_progress (s : State) (d : Dependency)
+    (unique : ∀ a ∈ s.dependencies, a.place ≠ d.place)
+    (brands : ∀ i ∈ d.brands, ∃ b ∈ s.binders, b.brand = i)
+    (allocations : ∀ i ∈ d.allocations, i ∈ d.brands ∧
+      ∃ b ∈ s.binders, b.brand = i ∧ b.allocatorLive = true) :
+    ∃ t, depend s d = some t := by
+  unfold depend
+  have hu : (s.dependencies.all (·.place != d.place)) = true := by
+    apply List.all_eq_true.mpr
+    intro a ha
+    simpa using unique a ha
+  rw [ite_eq_left ⟨hu, brands, allocations⟩]
+  exact ⟨_, rfl⟩
+
+theorem consume_progress (s : State) (p : Hybrid.Place)
+    (present : ∃ d ∈ s.dependencies, d.place = p) : ∃ t, consume s p = some t := by
+  obtain ⟨d, hd, hp⟩ := present
+  have hg : (s.dependencies.any (·.place == p)) = true :=
+    List.any_eq_true.mpr ⟨d, hd, by simp [hp]⟩
+  simp [consume, hg]
+
+theorem release_progress (s : State) (i : BrandId)
+    (present : ∃ b ∈ s.binders, b.brand = i ∧ b.allocatorLive = true)
+    (clear : ∀ d ∈ s.dependencies, i ∉ d.allocations) :
+    ∃ t, release s i = some t := by
+  obtain ⟨b, hb, hi, hl⟩ := present
+  have hp : (s.binders.any (fun b => b.brand == i && b.allocatorLive)) = true :=
+    List.any_eq_true.mpr ⟨b, hb, by simp [hi, hl]⟩
+  have hc : (s.dependencies.all (fun d => decide (i ∉ d.allocations))) = true := by
+    apply List.all_eq_true.mpr
+    intro d hd
+    simp [clear d hd]
+  unfold release
+  rw [ite_eq_left (by rw [hp, hc]; rfl)]
+  exact ⟨_, rfl⟩
+
+theorem reset_progress (s : State) (i : BrandId) (b : Binder)
+    (found : s.binders.find? (·.brand == i) = some b)
+    (live : b.allocatorLive = true)
+    (clear : ∀ d ∈ s.dependencies, i ∉ d.allocations) :
+    ∃ t, reset s i = some t := by
+  have hb : b ∈ s.binders := List.mem_of_find?_eq_some found
+  have hi : b.brand = i := by
+    have := List.find?_some found
+    simpa using this
+  obtain ⟨u, hu⟩ := release_progress s i ⟨b, hb, hi, live⟩ clear
+  simp [reset, found, hu]
+
+theorem endScope_progress (s : State) (scope : BlockId)
+    (released : ∀ b ∈ s.binders, b.scope = scope → b.allocatorLive = false)
+    (clear : ∀ d ∈ s.dependencies, ∀ b ∈ s.binders, b.scope = scope → b.brand ∉ d.brands) :
+    ∃ t, endScope s scope = some t := by
+  have hr : (s.binders.all (fun b => b.scope != scope || !b.allocatorLive)) = true := by
+    apply List.all_eq_true.mpr
+    intro b hb
+    by_cases he : b.scope = scope
+    · simp [he, released b hb he]
+    · simp [he]
+  have hc : (s.dependencies.all (fun d => s.binders.all (fun b =>
+      b.scope != scope || decide (b.brand ∉ d.brands)))) = true := by
+    apply List.all_eq_true.mpr
+    intro d hd
+    apply List.all_eq_true.mpr
+    intro b hb
+    by_cases he : b.scope = scope
+    · simp [he, clear d hd b hb he]
+    · simp [he]
+  unfold endScope
+  rw [ite_eq_left (by rw [hr, hc]; rfl)]
+  exact ⟨_, rfl⟩
+
+namespace PreservationWitnesses
+open ConcreteSpec.Core.Generative.Examples
+
+def dependent : State := { initial with dependencies := [heap, phantom] }
+def released : State := (release initial ⟨0⟩).getD {}
+def resetOnce : State := (reset initial ⟨0⟩).getD {}
+
+/-- Positive instances of all six structural preservation laws. -/
+example : WellFormed initial ∧ fresh {} ⟨0⟩ = some initial := by decide
+example : WellFormed dependent ∧ depend { initial with dependencies := [phantom] } heap =
+    some dependent := by decide
+example : WellFormed dependent ∧
+    (consume dependent ⟨0⟩).isSome = true := by decide
+example : WellFormed initial ∧ release initial ⟨0⟩ = some released ∧
+    WellFormed released := by decide
+example : WellFormed initial ∧ reset initial ⟨0⟩ = some resetOnce ∧
+    WellFormed resetOnce := by decide
+example : WellFormed released ∧ (endScope released ⟨0⟩).isSome = true := by decide
+
+/-- Planted fresh/reset mutations fail supply freshness. -/
+example : ¬ WellFormed { initial with nextBrand := 0 } := by decide
+example : ¬ WellFormed { resetOnce with nextBrand := 1 } := by decide
+/-- Planted depend mutation duplicates a resource place. -/
+example : ¬ WellFormed { dependent with dependencies := heap :: dependent.dependencies } := by decide
+/-- Planted consume mutation removes the binder instead of the dependent. -/
+example : ¬ WellFormed { dependent with binders := [] } := by decide
+/-- Planted release mutation ignores the live-allocation guard. -/
+example : ¬ WellFormed { released with dependencies := [heap] } := by decide
+/-- Planted scope-exit mutation ignores phantom dependencies. -/
+example : ¬ WellFormed { dependent with binders := [] , dependencies := [phantom] } := by decide
+
+/-- Positive progress instances and negated success for violated operational guards. -/
+example : (fresh initial ⟨1⟩).isSome = true := by decide
+example : (depend initial heap).isSome = true ∧ depend dependent heap = none := by decide
+example : (consume dependent ⟨0⟩).isSome = true ∧ consume initial ⟨0⟩ = none := by decide
+example : (release initial ⟨0⟩).isSome = true ∧ release dependent ⟨0⟩ = none := by decide
+example : (endScope released ⟨0⟩).isSome = true ∧ endScope initial ⟨0⟩ = none := by decide
+/-- A mutated fresh rule that reuses the counter does not provide fresh generation. -/
+example : ¬ (initial.nextBrand = ({} : State).nextBrand) := by decide
+end PreservationWitnesses
 
 /-- A new/reset generation is unequal to every previously scoped brand, independently of
 representation or lexical site. Supplies are never decremented when a scope ends. -/
@@ -65,8 +292,7 @@ theorem nextBrand_fresh (s : State) (hs : WellFormed s) (b : Binder) (hb : b ∈
 
 theorem fresh_generation (s t : State) (scope : BlockId) (h : fresh s scope = some t) :
     t.nextBrand = s.nextBrand + 1 ∧ ∃ b ∈ t.binders, b.brand = ⟨s.nextBrand⟩ := by
-  obtain ⟨he, _⟩ := (validate_iff _ _).mp h
-  subst t
+  cases h
   exact ⟨rfl, _, List.mem_cons_self, rfl⟩
 
 theorem reset_generation (s t : State) (i : BrandId) (h : reset s i = some t) :
@@ -74,8 +300,7 @@ theorem reset_generation (s t : State) (i : BrandId) (h : reset s i = some t) :
   unfold reset at h
   obtain ⟨b, _, hh⟩ := Option.bind_eq_some_iff.mp h
   obtain ⟨u, _, hh⟩ := Option.bind_eq_some_iff.mp hh
-  obtain ⟨he, _⟩ := (validate_iff _ _).mp hh
-  subst t
+  cases hh
   exact ⟨rfl, _, List.mem_cons_self, rfl⟩
 
 /-- Successful lexical exit leaves no dependent value mentioning any brand bound in that
@@ -87,8 +312,7 @@ theorem endScope_non_escape (s t : State) (scope : BlockId)
   unfold endScope at h
   split at h
   · rename_i guard
-    obtain ⟨he, _⟩ := (validate_iff _ _).mp h
-    subst t
+    cases h
     have hg := Bool.and_eq_true_iff.mp guard |>.2
     have hdg := List.all_eq_true.mp hg d hd
     have hbg := List.all_eq_true.mp hdg b hb
