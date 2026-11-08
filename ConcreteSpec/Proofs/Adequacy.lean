@@ -6,9 +6,10 @@ import ConcreteSpec.Proofs.Exec
 
 - Query instrumentation is observationally inert (`runFromQ_toReport`), occurrences are numbered per
   site, and adding fuel only appends queries (`runFromQ_queries_prefix_le`).
-- Reports have matching finite executions (`runFrom_sound`), final finite executions are obtained
-  with enough fuel (`runFrom_complete`), completed reports are fuel-monotone (`runFrom_mono`), and
-  event traces are prefix-monotone (`runFrom_trace_prefix_le`).
+- Reports have matching finite executions with exactly their issued queries (`runFromQ_sound`),
+  final finite executions are obtained with every sufficient fuel budget (`runFrom_complete_le`),
+  completed reports are fuel-monotone (`runFrom_mono`), and event traces are prefix-monotone
+  (`runFrom_trace_prefix_le`).
 - Infinite maximal executions and compatible fuel limits are interconvertible
   (`infinite_iff_fuelLimit`). Silent divergence and infinite interaction are distinct event
   classifications; `Demo.spin_infinite` witnesses the former. A blocked request keeps its `noAnswer`
@@ -20,7 +21,7 @@ import ConcreteSpec.Proofs.Exec
 namespace ConcreteSpec.Core.Exec
 open ConcreteSpec.Core
 
-variable {O : Operands} {P : Program O} {ρ : Oracle O} {c : Config O}
+variable {O : Operands} {P : Program O} {ρ : QueryOracle O} {c : Config O}
 
 /-- A query's occurrence is exactly the number of earlier requests at its site. -/
 theorem issue_occurrence (events : List O.Event) (p : O.Prim) (args : List O.Val) (site : SiteId)
@@ -35,14 +36,19 @@ theorem issue_next_occurrence (issued : List (Query O)) (site : SiteId) (q : Que
   simp [occurrenceAt, List.filter_append]
   split <;> simp_all
 
-/-- A fixed oracle is a function of the query alone. -/
-theorem answer_deterministic (ρ : Oracle O) {q₁ q₂ : Query O} (h : q₁ = q₂) :
+/-- A fixed query-level oracle is a function of the complete query alone. -/
+theorem answer_deterministic (ρ : QueryOracle O) {q₁ q₂ : Query O} (h : q₁ = q₂) :
     answer ρ q₁ = answer ρ q₂ := congrArg (answer ρ) h
 
-/-- Erasing query instrumentation gives C1's original driver, with the same events and ending. -/
-theorem runFromQ_toReport : ∀ (fuel : Nat) (events : List O.Event) (issued : List (Query O))
-    (c : Config O),
-    (runFromQ P ρ fuel events issued c).toReport = runFrom P ρ fuel events c := by
+/-- C1's oracle answers exactly the corresponding query-level oracle that ignores `occurrence`. -/
+theorem answer_toQueryOracle (ρ₀ : Oracle O) (q : Query O) :
+    answer ρ₀.toQueryOracle q = ρ₀ q.events q.prim q.args q.site q.store := rfl
+
+/-- Erasing query instrumentation gives C1's original driver when the query-level oracle is C1's
+oracle lifted to ignore occurrence numbers. -/
+theorem runFromQ_toReport {ρ₀ : Oracle O} :
+    ∀ (fuel : Nat) (events : List O.Event) (issued : List (Query O)) (c : Config O),
+    (runFromQ P ρ₀.toQueryOracle fuel events issued c).toReport = runFrom P ρ₀ fuel events c := by
   intro fuel
   induction fuel with
   | zero =>
@@ -59,21 +65,23 @@ theorem runFromQ_toReport : ∀ (fuel : Nat) (events : List O.Event) (issued : L
         cases out with
         | next c' => simpa [runFromQ, runFrom, hf, hs] using ih events issued c'
         | request p vs site st k =>
-          cases ha : answer ρ (Query.issue events p vs site st issued) with
+          cases ha : answer ρ₀.toQueryOracle (Query.issue events p vs site st issued) with
           | none =>
-            simp [answer, Query.issue] at ha
-            simp [runFromQ, runFrom, hf, hs, answer, Query.issue, ha, QueryReport.toReport]
+            simp [answer, Oracle.toQueryOracle, Query.issue] at ha
+            simp [runFromQ, runFrom, hf, hs, answer, Oracle.toQueryOracle, Query.issue, ha,
+              QueryReport.toReport]
           | some a =>
-            simp [answer, Query.issue] at ha
+            simp [answer, Oracle.toQueryOracle, Query.issue] at ha
             cases hallow : O.allows p vs st a with
-            | false => simp [runFromQ, runFrom, hf, hs, answer, Query.issue, ha, hallow,
-                QueryReport.toReport]
+            | false => simp [runFromQ, runFrom, hf, hs, answer, Oracle.toQueryOracle, Query.issue,
+                ha, hallow, QueryReport.toReport]
             | true =>
               cases hk : k a with
-              | none => simp [runFromQ, runFrom, hf, hs, answer, Query.issue, ha, hallow, hk,
-                  QueryReport.toReport]
+              | none => simp [runFromQ, runFrom, hf, hs, answer, Oracle.toQueryOracle, Query.issue,
+                  ha, hallow, hk, QueryReport.toReport]
               | some c' =>
-                simpa [runFromQ, runFrom, hf, hs, answer, Query.issue, ha, hallow, hk] using
+                simpa [runFromQ, runFrom, hf, hs, answer, Oracle.toQueryOracle, Query.issue, ha,
+                  hallow, hk] using
                   ih (events ++ a.event.toList) (issued ++ [Query.issue events p vs site st issued]) c'
 
 /-- Every instrumented run extends the query history with which it started. -/
@@ -227,90 +235,103 @@ theorem final?_none_of_step {c : Config O} {out : Out O} (h : step P c = some ou
     | trapped kd site => simp [step] at h
 
 /-- **Soundness.** Every instrumented report has a finite oracle-checked path to a position that
-justifies its ending. In particular, `final`, `stuck`, `noAnswer`, and `badAnswer` are witnessed by
-exactly the steps and oracle answers that produced the report. -/
+justifies its ending. `ReportedQueries` identifies the reported history exactly: it is the final
+position's history, plus the terminal query for a request-stopping ending. -/
 theorem runFromQ_sound : ∀ (fuel : Nat) (events : List O.Event) (issued : List (Query O))
     (c : Config O), ∃ n pos, Moves P ρ n ⟨c, events, issued⟩ pos ∧
       (runFromQ P ρ fuel events issued c).events = pos.events ∧
-      (∃ later, (runFromQ P ρ fuel events issued c).queries = pos.queries ++ later) ∧
-      Conclusion P ρ (runFromQ P ρ fuel events issued c).ending pos := by
+      Conclusion P ρ (runFromQ P ρ fuel events issued c).ending pos ∧
+      ReportedQueries (runFromQ P ρ fuel events issued c).ending pos
+        (runFromQ P ρ fuel events issued c).queries := by
   intro fuel
   induction fuel with
   | zero =>
     intro events issued c
     cases hf : c.final? with
     | some f => exact ⟨0, ⟨c, events, issued⟩, .refl _, by simp [runFromQ, hf],
-        ⟨[], by simp [runFromQ, hf]⟩,
-        by simpa [runFromQ, hf] using (Conclusion.final (P := P) (ρ := ρ) hf)⟩
+        by simpa [runFromQ, hf] using (Conclusion.final (P := P) (ρ := ρ) hf),
+        by simpa [runFromQ, hf] using
+          (ReportedQueries.final (f := f) (pos := (⟨c, events, issued⟩ : Position O)))⟩
     | none => exact ⟨0, ⟨c, events, issued⟩, .refl _, by simp [runFromQ, hf],
-        ⟨[], by simp [runFromQ, hf]⟩,
-        by simpa [runFromQ, hf] using (Conclusion.outOfFuel (P := P) (ρ := ρ) hf)⟩
+        by simpa [runFromQ, hf] using (Conclusion.outOfFuel (P := P) (ρ := ρ) hf),
+        by simpa [runFromQ, hf] using
+          (ReportedQueries.outOfFuel (c := c) (events := events) (issued := issued))⟩
   | succ n ih =>
     intro events issued c
     cases hf : c.final? with
     | some f => exact ⟨0, ⟨c, events, issued⟩, .refl _, by simp [runFromQ, hf],
-        ⟨[], by simp [runFromQ, hf]⟩,
-        by simpa [runFromQ, hf] using (Conclusion.final (P := P) (ρ := ρ) hf)⟩
+        by simpa [runFromQ, hf] using (Conclusion.final (P := P) (ρ := ρ) hf),
+        by simpa [runFromQ, hf] using
+          (ReportedQueries.final (f := f) (pos := (⟨c, events, issued⟩ : Position O)))⟩
     | none =>
       cases hs : step P c with
       | none => exact ⟨0, ⟨c, events, issued⟩, .refl _, by simp [runFromQ, hf, hs],
-          ⟨[], by simp [runFromQ, hf, hs]⟩,
-          by simpa [runFromQ, hf, hs] using (Conclusion.stuck (P := P) (ρ := ρ) hs)⟩
+          by simpa [runFromQ, hf, hs] using (Conclusion.stuck (P := P) (ρ := ρ) hs),
+          by simpa [runFromQ, hf, hs] using
+            (ReportedQueries.stuck (c := c) (events := events) (issued := issued))⟩
       | some out =>
         cases out with
         | next c' =>
-          obtain ⟨m, pos, hpath, he, hq, hc⟩ := ih events issued c'
+          obtain ⟨m, pos, hpath, he, hc, hr⟩ := ih events issued c'
           exact ⟨m + 1, pos, .step (.silent hs) hpath, by simpa [runFromQ, hf, hs] using he,
-            by simpa [runFromQ, hf, hs] using hq, by simpa [runFromQ, hf, hs] using hc⟩
+            by simpa [runFromQ, hf, hs] using hc, by simpa [runFromQ, hf, hs] using hr⟩
         | request p vs site st k =>
           let q := Query.issue events p vs site st issued
           cases ha : answer ρ q with
           | none => exact ⟨0, ⟨c, events, issued⟩, .refl _, by simp [runFromQ, hf, hs, q, ha],
-              ⟨[q], by simp [runFromQ, hf, hs, q, ha]⟩,
               by simpa [runFromQ, hf, hs, q, ha] using
-                (Conclusion.noAnswer (P := P) (ρ := ρ) hs ha)⟩
+                (Conclusion.noAnswer (P := P) (ρ := ρ) hs ha),
+              by simpa [runFromQ, hf, hs, q, ha] using
+                (ReportedQueries.noAnswer (c := c) (events := events) (issued := issued) (q := q))⟩
           | some a =>
             cases hallow : O.allows p vs st a with
             | false => exact ⟨0, ⟨c, events, issued⟩, .refl _,
                 by simp [runFromQ, hf, hs, q, ha, hallow],
-                ⟨[q], by simp [runFromQ, hf, hs, q, ha, hallow]⟩,
                 by simpa [runFromQ, hf, hs, q, ha, hallow] using
-                  (Conclusion.badAnswer (P := P) (ρ := ρ) hs ha hallow)⟩
+                  (Conclusion.badAnswer (P := P) (ρ := ρ) hs ha hallow),
+                by simpa [runFromQ, hf, hs, q, ha, hallow] using
+                  (ReportedQueries.badAnswer (c := c) (events := events) (issued := issued)
+                    (q := q))⟩
             | true =>
               cases hk : k a with
               | none => exact ⟨0, ⟨c, events, issued⟩, .refl _,
                   by simp [runFromQ, hf, hs, q, ha, hallow, hk],
-                  ⟨[q], by simp [runFromQ, hf, hs, q, ha, hallow, hk]⟩,
                   by simpa [runFromQ, hf, hs, q, ha, hallow, hk] using
-                    (Conclusion.stuckContinuation (P := P) (ρ := ρ) hs ha hallow hk)⟩
+                    (Conclusion.stuckContinuation (P := P) (ρ := ρ) hs ha hallow hk),
+                  by simpa [runFromQ, hf, hs, q, ha, hallow, hk] using
+                    (ReportedQueries.stuckContinuation (c := c) (events := events)
+                      (issued := issued) (q := q))⟩
               | some c' =>
-                obtain ⟨m, pos, hpath, he, hq, hc⟩ :=
+                obtain ⟨m, pos, hpath, he, hc, hr⟩ :=
                   ih (events ++ a.event.toList) (issued ++ [q]) c'
                 exact ⟨m + 1, pos, .step (.prim hs ha hallow hk) hpath,
                   by simpa [runFromQ, hf, hs, q, ha, hallow, hk] using he,
-                  by simpa [runFromQ, hf, hs, q, ha, hallow, hk] using hq,
-                  by simpa [runFromQ, hf, hs, q, ha, hallow, hk] using hc⟩
+                  by simpa [runFromQ, hf, hs, q, ha, hallow, hk] using hc,
+                  by simpa [runFromQ, hf, hs, q, ha, hallow, hk] using hr⟩
 
 /-- **Soundness for C1's `runFrom`.** Query erasure preserves the finite execution and its ending
 justification. `Moves.toSteps` turns the same witness into the ordinary `Steps` relation. -/
-theorem runFrom_sound (fuel : Nat) (events : List O.Event) (c : Config O) :
-    ∃ n pos, Moves P ρ n ⟨c, events, []⟩ pos ∧
-      (runFrom P ρ fuel events c).events = pos.events ∧
-      Conclusion P ρ (runFrom P ρ fuel events c).ending pos := by
-  obtain ⟨n, pos, hpath, he, hq, hc⟩ := runFromQ_sound (P := P) (ρ := ρ) fuel events [] c
-  have hreport := runFromQ_toReport (P := P) (ρ := ρ) fuel events [] c
-  have he' : (runFrom P ρ fuel events c).events = (runFromQ P ρ fuel events [] c).events := by
+theorem runFrom_sound {ρ₀ : Oracle O} (fuel : Nat) (events : List O.Event) (c : Config O) :
+    ∃ n pos, Moves P ρ₀.toQueryOracle n ⟨c, events, []⟩ pos ∧
+      (runFrom P ρ₀ fuel events c).events = pos.events ∧
+      Conclusion P ρ₀.toQueryOracle (runFrom P ρ₀ fuel events c).ending pos := by
+  obtain ⟨n, pos, hpath, he, hc, hr⟩ :=
+    runFromQ_sound (P := P) (ρ := ρ₀.toQueryOracle) fuel events [] c
+  have hreport := runFromQ_toReport (P := P) (ρ₀ := ρ₀) fuel events [] c
+  have he' : (runFrom P ρ₀ fuel events c).events =
+      (runFromQ P ρ₀.toQueryOracle fuel events [] c).events := by
     simpa [QueryReport.toReport] using congrArg Report.events hreport.symm
-  have hend : (runFrom P ρ fuel events c).ending = (runFromQ P ρ fuel events [] c).ending := by
+  have hend : (runFrom P ρ₀ fuel events c).ending =
+      (runFromQ P ρ₀.toQueryOracle fuel events [] c).ending := by
     simpa [QueryReport.toReport] using congrArg Report.ending hreport.symm
   refine ⟨n, pos, hpath, he'.trans he, ?_⟩
   rw [hend]
   exact hc
 
 /-- Every report extends the event history supplied to `runFrom`. -/
-theorem runFrom_events_from (fuel : Nat) (events : List O.Event) (c : Config O) :
-    ∃ tr, (runFrom P ρ fuel events c).events = events ++ tr := by
-  obtain ⟨n, pos, hpath, he, hc⟩ := runFrom_sound (P := P) (ρ := ρ) fuel events c
+theorem runFrom_events_from {ρ₀ : Oracle O} (fuel : Nat) (events : List O.Event) (c : Config O) :
+    ∃ tr, (runFrom P ρ₀ fuel events c).events = events ++ tr := by
+  obtain ⟨n, pos, hpath, he, hc⟩ := runFrom_sound (P := P) (ρ₀ := ρ₀) fuel events c
   obtain ⟨tr, later, hepos, hq, hsteps⟩ := Moves.toSteps hpath
   refine ⟨tr, ?_⟩
   rw [he, hepos]
@@ -332,20 +353,22 @@ theorem runFromQ_complete {n : Nat} {pos pos' : Position O} (h : Moves P ρ n po
       have hn := final?_none_of_step hs
       simpa [runFromQ, hn, hs, ha, hallow, hk] using ih hf
 
-/-- **Completeness for C1's `runFrom`.** Every finite execution to a final configuration is reported
-with enough fuel, using the same oracle answers as that execution. -/
-theorem runFrom_complete {n : Nat} {pos pos' : Position O} (h : Moves P ρ n pos pos')
+/-- **Completeness for C1's `runFrom`.** Every finite execution from an empty query history to a
+final configuration is reported with exactly its number of steps as fuel. -/
+theorem runFrom_complete {ρ₀ : Oracle O} {n : Nat} {events : List O.Event} {c : Config O}
+    {pos' : Position O} (h : Moves P ρ₀.toQueryOracle n ⟨c, events, []⟩ pos')
     {f : Final O.Val} (hf : pos'.config.final? = some f) :
-    runFrom P ρ n pos.events pos.config = ⟨pos'.events, .final f⟩ := by
-  have hq := runFromQ_complete (P := P) (ρ := ρ) h hf
-  have hr := runFromQ_toReport (P := P) (ρ := ρ) n pos.events pos.queries pos.config
+    runFrom P ρ₀ n events c = ⟨pos'.events, .final f⟩ := by
+  have hq := runFromQ_complete (P := P) (ρ := ρ₀.toQueryOracle) h hf
+  have hr := runFromQ_toReport (P := P) (ρ₀ := ρ₀) n events [] c
   rw [hq] at hr
   simpa [QueryReport.toReport] using hr.symm
 
 /-- **Monotonicity.** Extra fuel preserves every report other than `outOfFuel`. -/
-theorem runFrom_mono : ∀ (n m : Nat), n ≤ m → ∀ (events : List O.Event) (c : Config O),
-    (∀ c', (runFrom P ρ n events c).ending ≠ .outOfFuel c') →
-    runFrom P ρ m events c = runFrom P ρ n events c := by
+theorem runFrom_mono {ρ₀ : Oracle O} : ∀ (n m : Nat), n ≤ m →
+    ∀ (events : List O.Event) (c : Config O),
+    (∀ c', (runFrom P ρ₀ n events c).ending ≠ .outOfFuel c') →
+    runFrom P ρ₀ m events c = runFrom P ρ₀ n events c := by
   intro n
   induction n with
   | zero =>
@@ -367,11 +390,11 @@ theorem runFrom_mono : ∀ (n m : Nat), n ≤ m → ∀ (events : List O.Event) 
         | some out =>
           cases out with
           | next c' =>
-            have hnot' : ∀ c₀, (runFrom P ρ n events c').ending ≠ .outOfFuel c₀ := by
+            have hnot' : ∀ c₀, (runFrom P ρ₀ n events c').ending ≠ .outOfFuel c₀ := by
               simpa [runFrom, hf, hs] using hnot
             simpa [runFrom, hf, hs] using ih m hle' events c' hnot'
           | request p vs site st k =>
-            cases ha : ρ events p vs site st with
+            cases ha : ρ₀ events p vs site st with
             | none => simp [runFrom, hf, hs, ha]
             | some a =>
               cases hallow : O.allows p vs st a with
@@ -381,22 +404,37 @@ theorem runFrom_mono : ∀ (n m : Nat), n ≤ m → ∀ (events : List O.Event) 
                 | none => simp [runFrom, hf, hs, ha, hallow, hk]
                 | some c' =>
                   have hnot' : ∀ c₀,
-                      (runFrom P ρ n (events ++ a.event.toList) c').ending ≠ .outOfFuel c₀ := by
+                      (runFrom P ρ₀ n (events ++ a.event.toList) c').ending ≠ .outOfFuel c₀ := by
                     simpa [runFrom, hf, hs, ha, hallow, hk] using hnot
                   simpa [runFrom, hf, hs, ha, hallow, hk] using
                     ih m hle' (events ++ a.event.toList) c' hnot'
 
+/-- **Completeness with enough fuel.** Every budget at least the finite path length reports that
+path's final outcome and events. -/
+theorem runFrom_complete_le {ρ₀ : Oracle O} {n m : Nat} (hle : n ≤ m)
+    {events : List O.Event} {c : Config O} {pos' : Position O}
+    (h : Moves P ρ₀.toQueryOracle n ⟨c, events, []⟩ pos')
+    {f : Final O.Val} (hf : pos'.config.final? = some f) :
+    runFrom P ρ₀ m events c = ⟨pos'.events, .final f⟩ := by
+  have hexact := runFrom_complete (P := P) (ρ₀ := ρ₀) h hf
+  have hnot : ∀ c', (runFrom P ρ₀ n events c).ending ≠ .outOfFuel c' := by
+    rw [hexact]
+    simp
+  rw [runFrom_mono (P := P) (ρ₀ := ρ₀) n m hle events c hnot]
+  exact hexact
+
 /-- **Trace-prefix consistency.** Increasing fuel never retracts or changes an event already
 reported. -/
-theorem runFrom_trace_prefix_le : ∀ (n m : Nat), n ≤ m → ∀ (events : List O.Event) (c : Config O),
-    (runFrom P ρ n events c).events <+: (runFrom P ρ m events c).events := by
+theorem runFrom_trace_prefix_le {ρ₀ : Oracle O} : ∀ (n m : Nat), n ≤ m →
+    ∀ (events : List O.Event) (c : Config O),
+    (runFrom P ρ₀ n events c).events <+: (runFrom P ρ₀ m events c).events := by
   intro n
   induction n with
   | zero =>
     intro m hle events c
-    obtain ⟨tr, h⟩ := runFrom_events_from (P := P) (ρ := ρ) m events c
+    obtain ⟨tr, h⟩ := runFrom_events_from (P := P) (ρ₀ := ρ₀) m events c
     refine ⟨tr, ?_⟩
-    have h0 : (runFrom P ρ 0 events c).events = events := by
+    have h0 : (runFrom P ρ₀ 0 events c).events = events := by
       cases hf : c.final? <;> simp [runFrom, hf]
     rw [h0]
     exact h.symm
@@ -415,7 +453,7 @@ theorem runFrom_trace_prefix_le : ∀ (n m : Nat), n ≤ m → ∀ (events : Lis
           cases out with
           | next c' => simpa [runFrom, hf, hs] using ih m hle' events c'
           | request p vs site st k =>
-            cases ha : ρ events p vs site st with
+            cases ha : ρ₀ events p vs site st with
             | none => simp [runFrom, hf, hs, ha]
             | some a =>
               cases hallow : O.allows p vs st a with
@@ -427,17 +465,17 @@ theorem runFrom_trace_prefix_le : ∀ (n m : Nat), n ≤ m → ∀ (events : Lis
                   (ih m hle' (events ++ a.event.toList) c')
 
 /-- The events of fuel `n` are a prefix of those of fuel `n + 1`. -/
-theorem runFrom_trace_prefix (n : Nat) (events : List O.Event) (c : Config O) :
-    (runFrom P ρ n events c).events <+: (runFrom P ρ (n + 1) events c).events :=
+theorem runFrom_trace_prefix {ρ₀ : Oracle O} (n : Nat) (events : List O.Event) (c : Config O) :
+    (runFrom P ρ₀ n events c).events <+: (runFrom P ρ₀ (n + 1) events c).events :=
   runFrom_trace_prefix_le n (n + 1) (Nat.le_add_right n 1) events c
 
 /-- A final report has an ordinary finite `Steps` witness ending in exactly that final
 configuration, with the reported events. -/
-theorem runFrom_final_sound {fuel : Nat} {events : List O.Event} {c : Config O} {f : Final O.Val}
-    (h : (runFrom P ρ fuel events c).ending = .final f) :
+theorem runFrom_final_sound {ρ₀ : Oracle O} {fuel : Nat} {events : List O.Event} {c : Config O}
+    {f : Final O.Val} (h : (runFrom P ρ₀ fuel events c).ending = .final f) :
     ∃ tr c', Steps P c tr c' ∧ c'.final? = some f ∧
-      (runFrom P ρ fuel events c).events = events ++ tr := by
-  obtain ⟨n, pos, hpath, he, hc⟩ := runFrom_sound (P := P) (ρ := ρ) fuel events c
+      (runFrom P ρ₀ fuel events c).events = events ++ tr := by
+  obtain ⟨n, pos, hpath, he, hc⟩ := runFrom_sound (P := P) (ρ₀ := ρ₀) fuel events c
   rw [h] at hc
   cases hc with
   | final hf =>
@@ -617,24 +655,25 @@ theorem finite_not_infinite_events {X : InfiniteExecution P ρ c}
   exact Nat.not_lt_of_ge (hb n) hn
 
 /-- A final report excludes an infinite execution from the same initial configuration. -/
-theorem not_infinite_of_final {fuel : Nat} {c : Config O} {f : Final O.Val}
-    (h : (run P ρ fuel c).ending = .final f) (X : InfiniteExecution P ρ c) : False := by
+theorem not_infinite_of_final {ρ₀ : Oracle O} {fuel : Nat} {c : Config O} {f : Final O.Val}
+    (h : (run P ρ₀ fuel c).ending = .final f)
+    (X : InfiniteExecution P ρ₀.toQueryOracle c) : False := by
   have hp := X.toFuelLimit.prefixes fuel
-  change runFromQ P ρ fuel [] [] c = _ at hp
-  have hr := runFromQ_toReport (P := P) (ρ := ρ) fuel [] [] c
+  change runFromQ P ρ₀.toQueryOracle fuel [] [] c = _ at hp
+  have hr := runFromQ_toReport (P := P) (ρ₀ := ρ₀) fuel [] [] c
   rw [hp] at hr
-  change (runFrom P ρ fuel [] c).ending = .final f at h
+  change (runFrom P ρ₀ fuel [] c).ending = .final f at h
   simp [QueryReport.toReport] at hr
   rw [← hr] at h
   cases h
 
 /-- A blocked request remains blocked at every larger budget; it never turns into divergence or a
 program outcome merely because more fuel is supplied. -/
-theorem endlesslyBlocked_of_noAnswer {fuel : Nat} {c blocked : Config O}
-    (h : (run P ρ fuel c).ending = .noAnswer blocked) : EndlesslyBlocked P ρ fuel c blocked := by
-  change (runFrom P ρ fuel [] c).ending = .noAnswer blocked at h
+theorem endlesslyBlocked_of_noAnswer {ρ₀ : Oracle O} {fuel : Nat} {c blocked : Config O}
+    (h : (run P ρ₀ fuel c).ending = .noAnswer blocked) : EndlesslyBlocked P ρ₀ fuel c blocked := by
+  change (runFrom P ρ₀ fuel [] c).ending = .noAnswer blocked at h
   intro n hle
-  have hm : run P ρ n c = run P ρ fuel c := by
+  have hm : run P ρ₀ n c = run P ρ₀ fuel c := by
     apply runFrom_mono fuel n hle [] c
     intro c'
     rw [h]
