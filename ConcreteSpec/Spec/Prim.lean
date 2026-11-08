@@ -276,7 +276,14 @@ def SafetyEvidence.Usable (e : SafetyEvidence) (current : EvidenceContext) : Pro
   e.context = current
 
 /-- The authoritative obligations available to evidence consumption, by typed obligation identity. -/
-abbrev ObligationTable := AList ObligationId SafetyObligation
+abbrev ObligationTable := List SafetyObligation
+
+/-- Retrieve an authoritative obligation by its own identity. There is no independently supplied
+map key that could disagree with the identity of the returned obligation. -/
+def ObligationTable.lookup : ObligationTable → ObligationId → Option SafetyObligation
+  | [], _ => none
+  | obligation :: rest, requested =>
+    if obligation.id = requested then some obligation else ObligationTable.lookup rest requested
 
 /-- A successfully discharged authoritative obligation and a proof of its actual proposition. -/
 structure DischargedFact where
@@ -292,7 +299,7 @@ noncomputable def SafetyEvidence.discharge (e : SafetyEvidence) (obligations : O
   exact
     if context : e.context = current then
       if identity : current.obligation = requested then
-        match AList.lookup obligations requested with
+        match ObligationTable.lookup obligations requested with
         | none => none
         | some obligation =>
           if fact : e.fact = obligation.fact then

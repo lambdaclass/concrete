@@ -120,6 +120,19 @@ theorem eval_operands_rehint (h : Var → String) (L : AList Var Int) (st : Unit
 
 end Prim
 
+/-- Helper (projection). Lookup returns an obligation with the requested intrinsic identity. -/
+theorem ObligationTable.lookup_id (obligations : ObligationTable) (requested : ObligationId)
+    (found : SafetyObligation) (success : ObligationTable.lookup obligations requested = some found) :
+    found.id = requested := by
+  induction obligations with
+  | nil => simp [ObligationTable.lookup] at success
+  | cons obligation rest ih =>
+    by_cases same : obligation.id = requested
+    · simp [ObligationTable.lookup, same] at success
+      cases success
+      exact same
+    · exact ih (by simpa [ObligationTable.lookup, same] using success)
+
 /-- **Evidence consumption is sound.** Success consumes the evidence's exact context, discharges
 the obligation identity it names, and retrieves that obligation from the authoritative table. The
 returned dependent record contains a proof of the retrieved proposition. -/
@@ -127,16 +140,17 @@ theorem SafetyEvidence.discharge_sound (e : SafetyEvidence) (obligations : Oblig
     (current : EvidenceContext) (requested : ObligationId) (discharged : DischargedFact)
     (success : e.discharge obligations current requested = some discharged) :
     e.context = current ∧ current.obligation = requested ∧
-      AList.lookup obligations requested = some discharged.obligation := by
+      ObligationTable.lookup obligations requested = some discharged.obligation ∧
+      discharged.obligation.id = requested := by
   by_cases context : e.context = current
   · by_cases identity : current.obligation = requested
-    · cases lookup : AList.lookup obligations requested with
+    · cases lookup : ObligationTable.lookup obligations requested with
       | none => simp [SafetyEvidence.discharge, context, identity, lookup] at success
       | some obligation =>
         by_cases fact : e.fact = obligation.fact
         · simp [SafetyEvidence.discharge, context, identity, lookup, fact] at success
           cases success
-          exact ⟨context, identity, by simp⟩
+          exact ⟨context, identity, rfl, ObligationTable.lookup_id obligations requested obligation lookup⟩
         · simp [SafetyEvidence.discharge, context, identity, lookup, fact] at success
     · simp [SafetyEvidence.discharge, context, identity] at success
   · simp [SafetyEvidence.discharge, context] at success
@@ -158,7 +172,7 @@ theorem SafetyEvidence.discharge_obligation_mismatch (e : SafetyEvidence)
 /-- A proof of a different proposition cannot discharge the retrieved obligation. -/
 theorem SafetyEvidence.discharge_proposition_mismatch (e : SafetyEvidence)
     (obligations : ObligationTable) (current : EvidenceContext) (requested : ObligationId)
-    (obligation : SafetyObligation) (lookup : AList.lookup obligations requested = some obligation)
+    (obligation : SafetyObligation) (lookup : ObligationTable.lookup obligations requested = some obligation)
     (mismatch : e.fact ≠ obligation.fact) : e.discharge obligations current requested = none := by
   by_cases context : e.context = current
   · by_cases identity : current.obligation = requested
@@ -472,23 +486,24 @@ def evidence : SafetyEvidence := ⟨1 + 1 = 2, EvidenceDemo.current, by decide�
 
 /-- Helper (projection). The arithmetic obligation named by the evidence context. -/
 def obligation : SafetyObligation := ⟨EvidenceDemo.current.obligation, 1 + 1 = 2⟩
-def obligations : ObligationTable := [(obligation.id, obligation)]
+def obligations : ObligationTable := [obligation]
 def discharged : DischargedFact := ⟨obligation, by simp [obligation]⟩
 
 /-- Instance (law `ConcreteSpec.Core.SafetyEvidence.discharge_sound`). Real consumption returns the
 authoritative arithmetic obligation under the exact context and identity. -/
 example : evidence.discharge obligations EvidenceDemo.current obligation.id = some discharged ∧
-    AList.lookup obligations obligation.id = some discharged.obligation := by
-  simp [SafetyEvidence.discharge, obligations, discharged, obligation, evidence, AList.lookup]
+    ObligationTable.lookup obligations obligation.id = some discharged.obligation := by
+  simp [SafetyEvidence.discharge, obligations, discharged, obligation, evidence, ObligationTable.lookup]
 
 /-- Planted (law `ConcreteSpec.Core.SafetyEvidence.discharge_sound`). A fabricated result for an
 obligation absent from the table is not a successful consumption. -/
-example : evidence.discharge [] EvidenceDemo.current obligation.id = none := rfl
+example : ¬ (evidence.discharge [] EvidenceDemo.current obligation.id = some discharged) := by
+  simp [SafetyEvidence.discharge, ObligationTable.lookup]
 
 /-- Helper (projection). The same proposition under a different typed obligation identity. -/
 def mismatchedObligation : SafetyObligation :=
   { obligation with id := ⟨⟨0⟩, .safety, 1⟩ }
-def mismatchedObligations : ObligationTable := [(mismatchedObligation.id, mismatchedObligation)]
+def mismatchedObligations : ObligationTable := [mismatchedObligation]
 
 /-- Instance (law `ConcreteSpec.Core.SafetyEvidence.discharge_obligation_mismatch`). Even though the
 proposition and the rest of the context match, the differently identified request is refused. -/
@@ -503,7 +518,7 @@ noncomputable def dischargeIgnoringObligation (e : SafetyEvidence) (obligations 
   classical
   exact
     if e.context = current then
-      match AList.lookup obligations requested with
+      match ObligationTable.lookup obligations requested with
       | some found => if e.fact = found.fact then some found else none
       | none => none
     else none
@@ -513,7 +528,7 @@ example : evidence.context.obligation ≠ mismatchedObligation.id ∧
       mismatchedObligation.id = some mismatchedObligation := by
   refine ⟨by decide, ?_⟩
   simp [dischargeIgnoringObligation, evidence, mismatchedObligations, mismatchedObligation,
-    obligation, AList.lookup]
+    obligation, ObligationTable.lookup]
 
 /-- Helper (projection). Only the contract revision changes in this stale context. -/
 def contractChanged : EvidenceContext := { EvidenceDemo.current with contract := ⟨⟨0⟩, 2⟩ }
@@ -530,18 +545,18 @@ noncomputable def dischargeIgnoringContext (e : SafetyEvidence) (obligations : O
     (requested : ObligationId) : Option SafetyObligation := by
   classical
   exact
-    match AList.lookup obligations requested with
+    match ObligationTable.lookup obligations requested with
     | some found => if e.context.obligation = requested ∧ e.fact = found.fact then some found else none
     | none => none
 
 example : evidence.context ≠ contractChanged ∧
     dischargeIgnoringContext evidence obligations obligation.id = some obligation := by
   refine ⟨by decide, ?_⟩
-  simp [dischargeIgnoringContext, evidence, obligations, obligation, AList.lookup]
+  simp [dischargeIgnoringContext, evidence, obligations, obligation, ObligationTable.lookup]
 
 /-- Helper (projection). A different proposition under the evidence's obligation identity. -/
 def differentObligation : SafetyObligation := ⟨obligation.id, 1 + 1 = 3⟩
-def differentObligations : ObligationTable := [(obligation.id, differentObligation)]
+def differentObligations : ObligationTable := [differentObligation]
 
 /-- Instance (law `ConcreteSpec.Core.SafetyEvidence.discharge_proposition_mismatch`). Context and
 identity match, but the arithmetic proof is for a different proposition and cannot be consumed. -/
@@ -557,7 +572,7 @@ example : evidence.discharge differentObligations EvidenceDemo.current obligatio
 /-- Planted (law `ConcreteSpec.Core.SafetyEvidence.discharge_proposition_mismatch`). Looking up the
 obligation while ignoring the evidence proposition returns the mismatched obligation successfully. -/
 def lookupIgnoringEvidence (obligations : ObligationTable) (requested : ObligationId) :
-    Option SafetyObligation := AList.lookup obligations requested
+    Option SafetyObligation := ObligationTable.lookup obligations requested
 
 example : evidence.fact ≠ differentObligation.fact ∧
     lookupIgnoringEvidence differentObligations obligation.id = some differentObligation := by
