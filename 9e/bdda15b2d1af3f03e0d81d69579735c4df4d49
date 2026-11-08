@@ -1,0 +1,7 @@
+[piece 12 of 43: scripts]
+- scripts/checks/lib/stack_measure.py:68: The measurement tracks only `sp`, although the static bound includes memory accessed below it. For example, `mov qword ptr [rsp - 128], 0; ret` produces a measured depth of zero despite touching 128 bytes below entry. This cannot validate the claimed stack usage for red-zone code; the LLDB implementation has the same omission.
+- scripts/checks/sandbox_isolation.sh:47: The structural scan covers only `scripts/*.sh` and `scripts/*/*.sh`. Repository-making scripts in deeper directories bypass the check entirely, so it does not enforce its stated guarantee that every script under `scripts/` isolates Git before creating a repository.
+[piece 13 of 43: scripts]
+- scripts/checks/slice0_trusted_base.sh:93: The `0,/pattern/` address range is a GNU sed extension; macOS BSD sed rejects it. With `set -e`, this aborts the trusted-base gate on the supported aarch64-macos target before the remaining controls run. Use a portable first-match replacement.
+[piece 14 of 43: scripts]
+- scripts/land/install-bot.sh:66: The installed snapshot includes `train.sh` but omits `scripts/review/verify.sh`, which the new `review_provenance` requires relative to `train.sh`. Trains run from this snapshot therefore always fail provenance verification with “no review verifier,” blocking the installed bot from landing even correctly reviewed candidates.
