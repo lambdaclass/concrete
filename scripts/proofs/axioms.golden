@@ -1350,9 +1350,11 @@ ConcreteSpec.Core.Frame.accessFootprint.eq_1	propext
 ConcreteSpec.Core.Frame.accessFootprint.eq_2	propext
 ConcreteSpec.Core.Frame.alloc_frame	Quot.sound propext
 ConcreteSpec.Core.Frame.alloc_fresh_disjoint	Quot.sound propext
+ConcreteSpec.Core.Frame.blockMetadata.eq_1	
 ConcreteSpec.Core.Frame.blockOutside_block	propext
 ConcreteSpec.Core.Frame.blockOutside_union	propext
-ConcreteSpec.Core.Frame.byteOutside_of_blockOutside	
+ConcreteSpec.Core.Frame.blockOutside_union._simp_1_1	propext
+ConcreteSpec.Core.Frame.blockOutside_union._simp_1_2	propext
 ConcreteSpec.Core.Frame.byteOutside_union	propext
 ConcreteSpec.Core.Frame.c1Call_restores_caller	propext
 ConcreteSpec.Core.Frame.c1_call_frame	propext
@@ -1365,6 +1367,7 @@ ConcreteSpec.Core.Frame.instDecidableEqByteRange.decEq._proof_4
 ConcreteSpec.Core.Frame.instDecidableEqFootprint.decEq._proof_1	
 ConcreteSpec.Core.Frame.instDecidableEqFootprint.decEq._proof_2	
 ConcreteSpec.Core.Frame.instDecidableEqFootprint.decEq._proof_3	
+ConcreteSpec.Core.Frame.instDecidableEqFootprint.decEq._proof_4	
 ConcreteSpec.Core.Frame.placeOutside_union	propext
 ConcreteSpec.Core.Frame.placeOutside_union._simp_1_1	propext
 ConcreteSpec.Core.Frame.placeOutside_union._simp_1_2	propext
@@ -2850,6 +2853,8 @@ _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Res.bind.match_1.eq_2
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Res.bind.match_1.eq_3	
 _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.accessFootprint.match_1.eq_1	propext
 _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.accessFootprint.match_1.eq_2	propext
+_private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.metadataStoreAfter._proof_1	propext
+_private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.metadataStoreWellFormed	Quot.sound propext
 _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Hybrid.instReprStorage.repr.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Hybrid.instReprStorage.repr.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.State.materialize.match_3.eq_1	
