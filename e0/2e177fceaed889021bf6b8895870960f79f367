@@ -1,0 +1,2 @@
+[piece 1 of 1: scripts]
+- ConcreteSpec/Spec/Leak.lean:286: `LineageReport.Sound` checks a function’s requested-byte bound against `exit.requested`, which includes allocations before function entry. For example, a function allocating nothing after an entry account with 100 requested bytes cannot establish a zero-byte bound. Compare against `exit.requested - entry.requested` to measure the function’s requests.
