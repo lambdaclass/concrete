@@ -65,6 +65,7 @@ for st, raw in zip(f[0::2], f[1::2]):
 ' "$ret" | while IFS= read -r line; do
     case "$line" in ADD$'\t'*) ;; *) printf '%s\n' "$line"; continue ;; esac
     local path="${line#ADD$'\t'}" want s found=""
+    local -x GIT_LITERAL_PATHSPECS=1 # a path is a path: ":(literal)p/x" must not resolve to p/x
     want="$(git ls-tree "$cur" -- "$path" | cut -f1)"
     [ -n "$want" ] || { echo "A legacy/$path: cannot resolve the added path; refused"; continue; }
     if [ -n "$(git ls-tree "$root" -- "$path")" ]; then
@@ -167,6 +168,10 @@ printf 'sweep %s %s\nsweep %s %s\n' "$S" "$SW1" "$S2" "$SW2" > "$TMP/l_two"
 [ -n "$(chain "$TMP/l_two" "$F" "$SW2" "$TMP/r_ok.tsv" "$H2")" ] && ok "control: a later sweep cannot rewrite a file an earlier sweep moved" || no "control: second sweep rewrote a swept file"
 T="$(tree_with 'mkdir -p p; printf m > "p/odd\\name"')"
 [ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$R0" "$S")" ] && ok "control: an added path git would C-quote is refused when it has no original" || no "control: C-quoted path accepted"
+# A legitimate sweep of p/moved plus a file at ":(literal)p/moved": read as pathspec magic, that path
+# would resolve to p/moved, match the sweep commit and pass.
+T="$(tree_with 'mkdir -p p ":(literal)p"; echo m > p/moved; echo m > ":(literal)p/moved"')"
+[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$R0" "$S")" ] && ok "control: an added path spelled as pathspec magic is refused" || no "control: pathspec-magic path accepted"
 cd "$ROOT_DIR"
 
 echo "=== legacy/ against $LOCK ==="
