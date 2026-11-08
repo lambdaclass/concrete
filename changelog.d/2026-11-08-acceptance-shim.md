@@ -1,4 +1,4 @@
-### Acceptance lets the root checks push to their own fixtures (ISS-0017) (2026-11-08)
+### Acceptance lets the root checks push to their own fixtures (ISS-0033) (2026-11-08)
 
 `scripts/land/acceptance.sh` failed every move candidate at its check leg. Its git shim refused any
 push that named main, wherever it went, and since ISS-0015 the train's impact leg runs the

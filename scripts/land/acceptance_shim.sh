@@ -12,7 +12,7 @@
 #
 # The root checks the train's impact leg runs (landing_bot.sh, landing_script.sh, review_tool.sh)
 # push main to throwaway local fixture repositories; refusing those made every acceptance run fail
-# (ISS-0017). A destination is therefore unprotected only when every URL it resolves to is an
+# (ISS-0033). A destination is therefore unprotected only when every URL it resolves to is an
 # absolute local path (or file:// URL) naming an existing repository whose identity is none of the
 # protected ones. Everything else counts as protected and fails closed: no repository argument (the
 # default remote), a URL that is relative, remote (https, ssh) or names no repository, a protected

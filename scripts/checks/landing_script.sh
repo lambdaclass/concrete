@@ -1044,7 +1044,7 @@ MB="$HM"
 ) > "$TMP/dl.out" 2>&1
 [ "$(tr '\n' ' ' < "$TMP/dl.out")" = "pass1 pass2 pass3 pass4 pass5 pass6 " ] \
   && ok "acceptance's dry-run leg: exit 5 + whole marker line passes; no marker, another exit, a prefixed or altered marker fail" || { no "dryland classifier: $(cat "$TMP/dl.out")"; }
-# acceptance's git shim (ISS-0017) refuses a push that could move main on a protected repository,
+# acceptance's git shim (ISS-0033) refuses a push that could move main on a protected repository,
 # however it is spelled (remote name, URL, file://, a relative protected URL by its absolute path, a
 # non-bare repository's .git, a symlink, a second push URL, an alias from config, -c or the
 # environment, a shell alias), and lets a push to a throwaway local fixture through: the root checks
