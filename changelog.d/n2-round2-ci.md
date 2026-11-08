@@ -1,0 +1,1 @@
+N2 (R-0219): use one normal landing-gated Proof vacuity CI job with exact controls; migrated structural scopes accumulate in that job at promotion. Distinguish rules fixture checks from the specification audit and restore executable rule-checker modes.

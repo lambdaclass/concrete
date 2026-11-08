@@ -203,6 +203,42 @@ jobs:
       - name: Proof axioms (scripts/proofs/axioms.sh)
         run: bash scripts/proofs/axioms.sh
 
+  proof-vacuity:
+    name: Proof vacuity
+    needs: landing-record
+    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Install Lean and build the specification (via lean-action)
+        id: lean_install
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean and build the specification (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Proof vacuity (scripts/proofs/axioms.sh)
+        run: bash scripts/proofs/axioms.sh
+
   proof-trust-ban:
     name: Proof trust ban (sorry, native_decide)
     needs: landing-record

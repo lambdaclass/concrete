@@ -7,8 +7,8 @@
 old_job	replacements	reason
 # N2 / R-0219 migration requirement (not a retirement/replacement row):
 # Main 9cddd5891: NOT MIGRATED; whole-spec Proof vacuity is not claimed or required yet.
-# Promote C10 with required PR/landing job "Proof vacuity (ConcreteSpec.Proofs.Frame)" running
-# scripts/proofs/vacuity.sh --scope ConcreteSpec.Proofs.Frame plus --controls.
+# Promote C10 with required PR/landing job "Proof vacuity" running
+# scripts/proofs/vacuity.sh --scope ConcreteSpec.Spec.Frame --scope ConcreteSpec.Proofs.Frame plus --controls.
 # Add that job to required-checks.txt in the C10 promotion, never mark unmigrated code PASS.
 # Extend required scopes cumulatively: C10; C1/C8; C4; C2/C3; C6; older proofs.
 # Final promotion requires the unscoped audit. Missing migrated modules must fail.

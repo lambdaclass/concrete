@@ -8,7 +8,7 @@ Run under `nix develop`:
 
 ```
 bash scripts/proofs/vacuity.sh --controls
-bash scripts/proofs/vacuity.sh --scope ConcreteSpec.Proofs.Frame
+bash scripts/proofs/vacuity.sh --scope ConcreteSpec.Spec.Frame --scope ConcreteSpec.Proofs.Frame
 bash scripts/proofs/vacuity.sh
 ```
 
@@ -65,11 +65,11 @@ specification. `required-checks-transition.tsv` records this staged requirement.
 The PR tier must run the real structural audit for each migrated scope and its
 controls. The promotion commit for each contract must add its scope to the required
 CI command, with that exact job in `required-checks.txt`; a missing source must fail.
-The first promotion must call the reusable N2 workflow.
+The first promotion must extend the normal `proof-vacuity` job in `lean_action_ci.yml` with the cumulative structural scope.
 Do not add a globally required whole-spec N2 success claim before migration.
 
 The agreed order is C10; C1/C8 together; C4; C2/C3; C6; older slice/vertical/Examples
-proofs. C10 promotion starts with `--scope ConcreteSpec.Proofs.Frame`. Its tagged
+proofs. C10 promotion starts with `--scope ConcreteSpec.Spec.Frame --scope ConcreteSpec.Proofs.Frame`. Its tagged
 candidate is checked read-only; unresolved approvals or semantic findings go back
 to the spec writer. Subsequent promotions retain every previously required scope.
 The final promotion replaces the explicit module scopes with the unscoped audit.
@@ -81,16 +81,18 @@ Main at the base commit had no rule checker yet. This branch carries C10’s unc
 `rules.py` and its shell controls, routing the registry read through
 `PROOF_MODE=rules` in the shared `theorems.lean` driver. The default rule checker
 still audits the registry and the source Accepted/Refused convention; these verdicts
-never count as N2 law evidence. `rules.sh --controls-only` runs its existing focused
-controls without a spec build. Pre-registry main is not claimed to pass the rule
+never count as N2 law evidence. `rules.sh --controls-only` reports `SPEC-RULES-CONTROLS`, explicitly covering only
+fixtures without a spec build. Pre-registry main is not claimed to pass the rule
 audit. The original registry JSONL and axiom outputs are compared byte-for-byte
 on focused source fixtures, including generated and private theorem declarations.
 
-The reusable `.github/workflows/proof_vacuity.yml` runs both exact controls and the
-full structural checker at PR tier, taking a mandatory migrated module scope.
-The promotion commit calls it from the main CI and adds the emitted job name to
-`required-checks.txt`. Until that promotion it is dispatchable, with no required
-whole-spec coverage claim. Missing scopes fail rather than turning into a skip.
+The normal `Proof vacuity` job follows the axiom/trust jobs' landing-record,
+runner, Nix and lean-action setup. It currently requires the exact controls and
+explicitly reports NOT MIGRATED for structural coverage. C10 promotion must add
+`vacuity.sh --scope ConcreteSpec.Spec.Frame --scope ConcreteSpec.Proofs.Frame`
+to this same job. Later promotions extend that one invocation; dependencies are
+compiled once over the union. The separate dispatch workflow is for manual
+scope audits only and is never a reusable required-check identity.
 
 On the shared build host, run source elaboration under the coordinator-provided
 `lean-build.sh` build-slot wrapper. Only focused controls run locally; complete

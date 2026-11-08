@@ -35,6 +35,9 @@ run_bounded() {
 # check BUDGET RULES-JSONL SRC-DIR ROWS... → the checker
 check() { local b="$1"; shift; run_bounded "$b" python3 -I scripts/spec/rules.py "$@"; }
 
+if [ "${1:-}" = --controls-only ]; then
+  CHECK_NAME=SPEC-RULES-CONTROLS
+fi
 if [ "${1:-}" != --controls-only ]; then
 command -v lake >/dev/null || { echo "error: $CHECK_NAME needs Lean's lake on PATH (elan)" >&2; exit 2; }
 bounded_run -i /dev/null -r 3600 3600 -- lake build ConcreteSpec > "$TMP/build.log" 2>&1 \
