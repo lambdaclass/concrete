@@ -435,7 +435,10 @@ for c in ssh gh systemctl; do printf '#!/bin/sh\nexit 1\n' > "$IB/stub/$c"; chmo
 # ssh -G connects nowhere and only reports the configuration: the stub answers it as an ssh with no
 # configuration would (every host is itself), and refuses everything else.
 printf '#!/bin/sh\n[ "$1" = -G ] || exit 1\nfor h; do :; done\necho "hostname $h"\n' > "$IB/stub/ssh"
-cp -r "$ROOT_DIR/scripts/land" "$IB/src/scripts/"; cp "$ROOT_DIR/scripts/checks/lib/git_sandbox.sh" "$IB/src/scripts/checks/lib/"
+# The origin holds the launcher's whole snapshot (install-bot.sh's SNAPSHOT list).
+for f in $(sed -n 's/^SNAPSHOT="\(.*\)"$/\1/p' "$ROOT_DIR/scripts/land/install-bot.sh"); do
+  mkdir -p "$IB/src/$(dirname "$f")"; cp -r "$ROOT_DIR/$f" "$IB/src/$(dirname "$f")/"
+done
 ( cd "$IB/src" && git init -q && git add -A && git commit -qm src ) && git clone -q --bare "$IB/src" "$IB/origin.git"
 ib(){ HOME="$IB/home" PATH="$IB/stub:$PATH" INSTALL_ORIGIN_URL="$IB/origin.git" INSTALL_MIRROR_URL="$IB/origin.git" bash "$ROOT_DIR/scripts/land/install-bot.sh" 2>&1; }
 out="$(ib)"; rc=$?
@@ -487,6 +490,60 @@ out="$(bounded_run -i /dev/null 60 -- env HOME="$IB/home" PATH="$IB/stub:$PATH" 
 echo "=== main is never force-pushed ==="
 bad="$(grep -nE 'git push[^#]*(--force|[[:space:]]-f[[:space:]])[^#]*refs/heads/main' "$ROOT_DIR"/scripts/land/*.sh || true)"
 [ -z "$bad" ] && ok "no forced push of refs/heads/main in scripts/land" || { no "forced push of main:"; echo "$bad" | sed 's/^/      /'; }
+
+echo "=== the bot's snapshot holds every path the landing scripts read ==="
+# install-bot.sh's SNAPSHOT is what the launcher extracts; train.sh, bot.sh and their helpers run
+# from that copy. Every `$SELF_DIR/../X` a landing script reads, and every sibling a snapshot library
+# sources, must be in it (2026-11-08: verify.sh was not, and review_provenance refused every train).
+# legacy_move.sh is excluded: its `$SELF_DIR/..` text is data it rewrites, not a path it reads.
+snapshot_misses() { # snapshot_misses "<paths>": prints each path the snapshot at HEAD lacks
+  local list="$1" d f ref
+  d="$(mktemp -d "$TMP/snap.XXXXXX")"
+  # The working tree, not HEAD: the gate judges the candidate being validated, uncommitted edits
+  # (and a mutation probe's) included. The launcher's git archive of the same list at a commit holds
+  # the same files.
+  for f in $list; do
+    [ -e "$ROOT_DIR/$f" ] || { echo "$f (in SNAPSHOT, but not in the tree)"; continue; }
+    mkdir -p "$d/$(dirname "$f")" && cp -R "$ROOT_DIR/$f" "$d/$(dirname "$f")/" || { echo "(copying $f failed)"; return; }
+  done
+  # Every landing script itself is in the snapshot (a list without scripts/land must not pass by
+  # leaving nothing to scan).
+  for f in "$ROOT_DIR"/scripts/land/*.sh; do
+    [ -f "$d/scripts/land/$(basename "$f")" ] || echo "scripts/land/$(basename "$f") (a landing script)"
+  done
+  for f in "$d"/scripts/land/*.sh; do
+    [ -f "$f" ] || continue
+    [ "$(basename "$f")" = legacy_move.sh ] && continue
+    grep -oE '\$SELF_DIR/\.\./[A-Za-z0-9_./-]+' "$f" | sed 's|^\$SELF_DIR/\.\./|scripts/|' | while read -r ref; do
+      [ -e "$d/$ref" ] || echo "$ref (read by scripts/land/$(basename "$f"))"
+    done
+  done
+  for f in "$d"/scripts/checks/lib/*.sh; do
+    [ -f "$f" ] || continue
+    grep -oE '^[[:space:]]*(source|\.) "\$[_A-Za-z]*dir/[A-Za-z0-9_.-]+"' "$f" | sed -E 's|.*dir/([^"]+)"$|\1|' | while read -r ref; do
+      [ -e "$d/scripts/checks/lib/$ref" ] || echo "scripts/checks/lib/$ref (sourced by scripts/checks/lib/$(basename "$f"))"
+    done
+  done
+  rm -rf "${d:?}"
+}
+SNAP_LIST="$(sed -n 's/^SNAPSHOT="\(.*\)"$/\1/p' "$ROOT_DIR/scripts/land/install-bot.sh")"
+if [ -z "$SNAP_LIST" ]; then no "install-bot.sh has no SNAPSHOT=\"...\" line"
+else
+  miss="$(snapshot_misses "$SNAP_LIST")"
+  [ -z "$miss" ] && ok "the snapshot ($SNAP_LIST) covers every path the landing scripts read" \
+    || { no "the bot's snapshot lacks paths its scripts read:"; echo "$miss" | sed 's/^/      /'; }
+  miss="$(snapshot_misses "scripts/review/verify.sh scripts/checks/lib")"
+  has "$miss" "scripts/land/train.sh (a landing script)" \
+    && ok "control: a snapshot without scripts/land is reported" \
+    || { no "control: a snapshot without scripts/land passed"; echo "$miss" | sed 's/^/      /'; }
+  # Control: the snapshot as it was before 2026-11-08 must be reported short of verify.sh.
+  miss="$(snapshot_misses "scripts/land scripts/checks/lib/git_sandbox.sh")"
+  has "$miss" "scripts/review/verify.sh (read by scripts/land/train.sh)" \
+    && ok "control: a snapshot without scripts/review/verify.sh is reported" \
+    || { no "control: the old snapshot was not reported short of verify.sh"; echo "$miss" | sed 's/^/      /'; }
+  grep -q 'git archive "\\$sha" \$SNAPSHOT' "$ROOT_DIR/scripts/land/install-bot.sh" \
+    && ok "the launcher extracts exactly \$SNAPSHOT" || no "the launcher does not extract \$SNAPSHOT"
+fi
 
 echo
 echo "check_landing_bot: PASS=$PASS FAIL=$FAIL"
