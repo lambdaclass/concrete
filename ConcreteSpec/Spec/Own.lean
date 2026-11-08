@@ -353,6 +353,7 @@ def callLifeStore {σ : Type} (types : Var → Option Descriptor) (e : Exec.Life
 structure Store (σ : Type) where
   concrete : σ
   own : State
+  deriving DecidableEq, Repr
 
 def erase {σ : Type} (s : Store σ) : σ := s.concrete
 
@@ -367,6 +368,271 @@ def instrument {σ α : Type} (permit : State → Option State)
 def lifeStore {σ : Type} (types : Var → Option Descriptor) (e : Exec.Life)
     (s : Store σ) : Option (Store σ) :=
   (life types e s.own).map fun own => ⟨s.concrete, own⟩
+
+/-- Evaluate an operand under ownership instrumentation (Q9.10, owner decision 2026-11-08 Q3):
+the permission transition must succeed on the ownership state, and the concrete operand
+evaluation then runs on the concrete store. Refused permissions yield unsafe stuckness;
+concrete traps and results pass through unchanged. -/
+def instrumentEval (O : Exec.Operands)
+    (permit : AList Var O.Val → O.Expr → State → Option State)
+    (locals : AList Var O.Val) (s : Store O.Store) (e : O.Expr) :
+    Res (O.Val × Store O.Store) :=
+  match permit locals e s.own with
+  | none => .stuck
+  | some own => (O.eval locals s.concrete e).map fun (v, concrete) => (v, ⟨concrete, own⟩)
+
+/-- Apply a C1 lifecycle event to both the ownership state and the concrete store. -/
+def instrumentLife (O : Exec.Operands) (types : Var → Option Descriptor)
+    (e : Exec.Life) (s : Store O.Store) : Option (Store O.Store) := do
+  let own ← life types e s.own
+  let concrete ← O.life e s.concrete
+  some ⟨concrete, own⟩
+
+/-- Forget the ownership state carried by a primitive operation's answer. -/
+def eraseAnswer {Val Event σ : Type} (a : Exec.Answer Val Event (Store σ)) :
+    Exec.Answer Val Event σ :=
+  ⟨a.event, a.result, erase a.store⟩
+
+/-- Lift a concrete primitive answer into an instrumented store by keeping the current
+ownership state; result binding updates ownership separately through `bindLife`. -/
+def liftAnswer {Val Event σ : Type} (own : State) (a : Exec.Answer Val Event σ) :
+    Exec.Answer Val Event (Store σ) :=
+  ⟨a.event, a.result, ⟨a.store, own⟩⟩
+
+/-- A primitive answer is allowed on the instrumented store when its erased answer
+satisfies the concrete contract and the primitive does not fabricate ownership state. -/
+def instrumentAllows (O : Exec.Operands) (p : O.Prim) (vs : List O.Val)
+    (s : Store O.Store) (a : Exec.Answer O.Val O.Event (Store O.Store)) : Bool :=
+  O.allows p vs (erase s) (eraseAnswer a) && decide (a.store.own = s.own)
+
+/-- Equip a concrete C1 operand instance `O` with C5 ownership and loan instrumentation
+(Q9.10, owner decision 2026-11-08 Q3). Values, expressions, types, primitives, events
+and branch tests are shared with the erased concrete instance `O`. -/
+abbrev instrumentOperands (O : Exec.Operands) (types : Var → Option Descriptor)
+    (permit : AList Var O.Val → O.Expr → State → Option State) : Exec.Operands where
+  Val := O.Val
+  Expr := O.Expr
+  Ty := O.Ty
+  Store := Store O.Store
+  Prim := O.Prim
+  Event := O.Event
+  unitVal := O.unitVal
+  unitTy := O.unitTy
+  isCopy := O.isCopy
+  eval := instrumentEval O permit
+  life := instrumentLife O types
+  test := O.test
+  allows := instrumentAllows O
+
+section
+variable {O : Exec.Operands} {types : Var → Option Descriptor}
+  {permit : AList Var O.Val → O.Expr → State → Option State}
+
+/-- Erase statement typing from the instrumented operand instance to `O`. -/
+def eraseStmt : Exec.Stmt (instrumentOperands O types permit) → Exec.Stmt O
+  | .skip => .skip
+  | .bind x (e : O.Expr) site => .bind x e site
+  | .assign x (e : O.Expr) site => .assign x e site
+  | .seq s t => .seq (eraseStmt s) (eraseStmt t)
+  | .block b s => .block b (eraseStmt s)
+  | .defer f (args : List O.Expr) site => .defer f args site
+  | .cond (c : O.Expr) s t site => .cond c (eraseStmt s) (eraseStmt t) site
+  | .loop l c (t : O.Expr) b site => .loop l (eraseStmt c) t (eraseStmt b) site
+  | .brk l => .brk l
+  | .cont l => .cont l
+  | .ret (e : O.Expr) site => .ret e site
+  | .call dst f (args : List O.Expr) site => .call dst f args site
+  | .prim dst (p : O.Prim) (args : List O.Expr) site => .prim dst p args site
+  | .abort site => .abort site
+
+/-- Erase a deferred cleanup call to `O`. -/
+def eraseDeferred (d : Exec.Deferred (instrumentOperands O types permit)) : Exec.Deferred O :=
+  ⟨d.f, (d.args : List O.Expr), d.site⟩
+
+/-- Erase a continuation frame to `O`. -/
+def eraseFrame : Exec.Frame (instrumentOperands O types permit) → Exec.Frame O
+  | .seq t => .seq (eraseStmt t)
+  | .scope b dom defers => .scope b dom (defers.map eraseDeferred)
+  | .test l c t body site dom => .test l (eraseStmt c) t (eraseStmt body) site dom
+  | .body l c t body site => .body l (eraseStmt c) t (eraseStmt body) site
+  | .resume p => .resume p
+  | .ret dst caller => .ret dst caller
+
+/-- Erase machine control to `O`. -/
+def eraseCtrl : Exec.Ctrl (instrumentOperands O types permit) → Exec.Ctrl O
+  | .exec s => .exec (eraseStmt s)
+  | .done => .done
+  | .exiting e => .exiting e
+  | .trapped k site => .trapped k site
+
+/-- Erase an instrumented C1 configuration by projecting its store to `erase c.store`. -/
+def eraseConfig (c : Exec.Config (instrumentOperands O types permit)) : Exec.Config O :=
+  ⟨eraseCtrl c.ctrl, (c.locals : AList Var O.Val), erase c.store, c.frames.map eraseFrame⟩
+
+/-- Erase an instrumented function declaration to `O`. -/
+def eraseFn (fn : Exec.Fn (instrumentOperands O types permit)) : Exec.Fn O :=
+  ⟨(fn.params : List (Var × O.Ty)), (fn.result : O.Ty), fn.block, eraseStmt fn.body⟩
+
+/-- Erase an instrumented program to `O`. -/
+def eraseProgram (P : Exec.Program (instrumentOperands O types permit)) : Exec.Program O :=
+  ⟨List.map (fun e => (e.1, eraseFn e.2)) P.fns⟩
+
+/-- Erase a step label to `O`, preserving its emitted event. -/
+def eraseLabel : Exec.Label (instrumentOperands O types permit) → Exec.Label O
+  | .silent => .silent
+  | .emit ev => .emit ev
+
+/-- Erase a run ending to `O`. -/
+def eraseEnding : Exec.Ending (instrumentOperands O types permit) → Exec.Ending O
+  | .final f => .final f
+  | .stuck c => .stuck (eraseConfig c)
+  | .noAnswer c => .noAnswer (eraseConfig c)
+  | .badAnswer c => .badAnswer (eraseConfig c)
+  | .outOfFuel c => .outOfFuel (eraseConfig c)
+
+/-- Erase an evaluator report to `O`, preserving its ordered events and erased ending. -/
+def eraseReport (r : Exec.Report (instrumentOperands O types permit)) : Exec.Report O :=
+  ⟨r.events, eraseEnding r.ending⟩
+
+end
+
+/-- Lift a concrete C1 oracle to the instrumented machine by querying the concrete store
+and preserving the current ownership state across the environment's answer. -/
+def liftOracle (O : Exec.Operands) (types : Var → Option Descriptor)
+    (permit : AList Var O.Val → O.Expr → State → Option State)
+    (ρ : Exec.Oracle O) : Exec.Oracle (instrumentOperands O types permit) :=
+  fun hist p vs site s => (ρ hist p vs site (erase s)).map (liftAnswer s.own)
+
+/-- Whether a C1 run ending is `stuck`. -/
+def Ending.IsStuck {O : Exec.Operands} : Exec.Ending O → Bool
+  | .stuck _ => true
+  | _ => false
+
+/-- A C1 run ending that is not `stuck` (`final`, `noAnswer`, `badAnswer` or `outOfFuel`). -/
+def Ending.NotStuck {O : Exec.Operands} (e : Exec.Ending O) : Prop :=
+  Ending.IsStuck e = false
+
+/-- Local operand permission: when the concrete operand evaluation is not stuck,
+the ownership transition does not refuse. -/
+def EvalPermitted (O : Exec.Operands)
+    (permit : AList Var O.Val → O.Expr → State → Option State)
+    (L : AList Var O.Val) (s : Store O.Store) (e : O.Expr) : Prop :=
+  O.eval L s.concrete e ≠ .stuck → (permit L e s.own).isSome = true
+
+/-- Left-to-right argument permission: each argument whose concrete evaluation is not
+stuck is permitted in the state left by the preceding arguments. -/
+def ArgsPermitted (O : Exec.Operands) (types : Var → Option Descriptor)
+    (permit : AList Var O.Val → O.Expr → State → Option State)
+    (L : AList Var O.Val) : Store O.Store → List O.Expr → Prop
+  | _, [] => True
+  | s, e :: es =>
+    EvalPermitted O permit L s e ∧
+      ∀ v s₁, (instrumentOperands O types permit).eval L s e = .ok (v, s₁) →
+        ArgsPermitted O types permit L s₁ es
+
+/-- Local lifecycle permission: when the concrete lifecycle transition succeeds,
+the ownership lifecycle transition also succeeds. -/
+def LifePermitted (O : Exec.Operands) (types : Var → Option Descriptor)
+    (ev : Exec.Life) (s : Store O.Store) : Prop :=
+  (O.life ev s.concrete).isSome = true → (life types ev s.own).isSome = true
+
+/-- Result-binding permission for a call or primitive destination. -/
+def BindDstPermitted (O : Exec.Operands) (types : Var → Option Descriptor)
+    (dst : Option Var) (s : Store O.Store) : Prop :=
+  match dst with
+  | none => True
+  | some x => LifePermitted O types (.bind x) s
+
+/-- Call-return lifecycle permission: leaving the activation and binding the destination. -/
+def ReturnPermitted (O : Exec.Operands) (types : Var → Option Descriptor)
+    (permit : AList Var O.Val → O.Expr → State → Option State)
+    (dst : Option Var) (s : Store O.Store) : Prop :=
+  LifePermitted O types .leave s ∧
+    ∀ s', (instrumentOperands O types permit).life .leave s = some s' →
+      BindDstPermitted O types dst s'
+
+/-- Statement-level non-refusal at the active control point. -/
+def StmtPermitted (O : Exec.Operands) (types : Var → Option Descriptor)
+    (permit : AList Var O.Val → O.Expr → State → Option State)
+    (P : Exec.Program (instrumentOperands O types permit))
+    (L : AList Var O.Val) (s : Store O.Store) :
+    Exec.Stmt (instrumentOperands O types permit) → Prop
+  | .bind x e _ =>
+    EvalPermitted O permit L s e ∧
+      ∀ v s', (instrumentOperands O types permit).eval L s e = .ok (v, s') →
+        LifePermitted O types (.bind x) s'
+  | .assign x e _ =>
+    EvalPermitted O permit L s e ∧
+      ∀ v s', (instrumentOperands O types permit).eval L s e = .ok (v, s') →
+        (AList.lookup L x).isSome = true →
+          LifePermitted O types (.bind x) s'
+  | .cond e _ _ _ => EvalPermitted O permit L s e
+  | .ret e _ => EvalPermitted O permit L s e
+  | .call _ f args _ =>
+    ArgsPermitted O types permit L s args ∧
+      ∀ vs s' fn, Exec.evalArgs (instrumentOperands O types permit) L s args = .ok (vs, s') →
+        AList.lookup P.fns f = some fn → fn.params.length = vs.length →
+          LifePermitted O types (.enter (fn.params.map Prod.fst)) s'
+  | .prim x p args _ =>
+    ArgsPermitted O types permit L s args ∧
+      ∀ vs s' a, Exec.evalArgs (instrumentOperands O types permit) L s args = .ok (vs, s') →
+        (instrumentOperands O types permit).allows p vs s' a = true →
+          a.result.isOk = true →
+            BindDstPermitted O types x a.store
+  | _ => True
+
+/-- Frame-level non-refusal when the current statement has completed normally. -/
+def DoneFramePermitted (O : Exec.Operands) (types : Var → Option Descriptor)
+    (permit : AList Var O.Val → O.Expr → State → Option State)
+    (L : AList Var O.Val) (s : Store O.Store) :
+    Exec.Frame (instrumentOperands O types permit) → Prop
+  | .scope _ dm [] => LifePermitted O types (.drop (Exec.dead dm L)) s
+  | .test _ _ t _ _ dm =>
+    EvalPermitted O permit L s t ∧
+      ∀ v s', (instrumentOperands O types permit).eval L s t = .ok (v, s') →
+        (O.test v).isSome = true →
+          LifePermitted O types (.drop (Exec.dead dm L)) s'
+  | .ret dst _ => ReturnPermitted O types permit dst s
+  | _ => True
+
+/-- Frame-level non-refusal when a structured exit is unwinding. -/
+def ExitFramePermitted (O : Exec.Operands) (types : Var → Option Descriptor)
+    (permit : AList Var O.Val → O.Expr → State → Option State)
+    (L : AList Var O.Val) (s : Store O.Store) (e : Exec.Exit O.Val) :
+    Exec.Frame (instrumentOperands O types permit) → Prop
+  | .scope _ dm [] => LifePermitted O types (.drop (Exec.dead dm L)) s
+  | .test _ _ _ _ _ dm => LifePermitted O types (.drop (Exec.dead dm L)) s
+  | .ret dst _ => match e with
+    | .ret _ => ReturnPermitted O types permit dst s
+    | _ => True
+  | _ => True
+
+/-- Single-step non-refusal at a configuration: the ownership and lifecycle guards of
+the active control point do not refuse when the concrete operation is defined. -/
+def StepPermitted (O : Exec.Operands) (types : Var → Option Descriptor)
+    (permit : AList Var O.Val → O.Expr → State → Option State)
+    (P : Exec.Program (instrumentOperands O types permit))
+    (c : Exec.Config (instrumentOperands O types permit)) : Prop :=
+  match c.ctrl with
+  | .exec s => StmtPermitted O types permit P c.locals c.store s
+  | .done => match c.frames with
+    | f :: _ => DoneFramePermitted O types permit c.locals c.store f
+    | [] => True
+  | .exiting e => match c.frames with
+    | f :: _ => ExitFramePermitted O types permit c.locals c.store e f
+    | [] => True
+  | .trapped .. => True
+
+/-- Obligation (discharged by the ownership checker, slice 1, R-0571).
+A program and initial configuration accepted by the C5/C9 ownership and borrow checker
+maintain a well-formed ownership state and never fail an ownership or lifecycle guard at
+any reachable configuration where the concrete operation is defined (owner decision
+2026-11-08 Q3). -/
+def CheckerAccepted (O : Exec.Operands) (types : Var → Option Descriptor)
+    (permit : AList Var O.Val → O.Expr → State → Option State)
+    (P : Exec.Program (instrumentOperands O types permit))
+    (c₀ : Exec.Config (instrumentOperands O types permit)) : Prop :=
+  ∀ tr c, Exec.Steps P c₀ tr c → WellFormed c.store.own ∧ StepPermitted O types permit P c
 
 /-- Typed C4 reads and writes use exactly the original Hybrid operations after permission. -/
 def readOwner (tgt : Target) (p : Hybrid.Place) (s : Store Hybrid.State) :
@@ -473,6 +739,7 @@ example : (do
 reference-valued fields, returns or aggregate operands. -/
 inductive E where
   | lit (n : Int)
+  | fail (k : TrapKind)
   | move (x : Var)
   | read (x : Var)
   | lend (root : Hybrid.Place) (mode : Mode)
@@ -482,6 +749,7 @@ inductive E where
 
 def eval (locals : AList Var Int) (s : State) : E → Res (Int × State)
   | .lit n => .ok (n, s)
+  | .fail k => .trap k
   | .move x => match s.frames.head?.bind (fun f => AList.lookup f.locals x),
       AList.lookup locals x with
     | some p, some n => match Own.move s p with
@@ -528,38 +796,80 @@ def stuck (r : Exec.Report ops) : Bool := match r.ending with
 /-- Refused: an actual C1 run gets stuck when its next operand reads a moved owner. -/
 example : stuck (runBody (.seq (.bind y (.move x) ⟨0⟩) (.ret (.read x) ⟨1⟩))) = true := by decide
 
-/-- The concrete operand instance for this example erases all permission bookkeeping.
-Reads/moves still fetch their concrete value from the same locals. -/
-def erasedEval (locals : AList Var Int) (_ : Unit) : E → Res (Int × Unit)
-  | .lit n => .ok (n, ())
+/-- Ownership permission transition for `E`, coupled to `erasedOps` through
+`instrumentOperands`. -/
+def permitE (_ : AList Var Int) : E → State → Option State
+  | .lit _, s | .fail _, s => some s
+  | .move x, s => (s.frames.head?.bind fun f => AList.lookup f.locals x).bind (Own.move s)
+  | .read x, s => (s.frames.head?.bind fun f => AList.lookup f.locals x).bind fun p =>
+      accessOwner s p .shared
+  | .lend p m, s => borrow s p [] m
+  | .reborrow i, s => Own.reborrow s i [] .mutable
+  | .endLoan i, s => Own.endLoan s i
+  | .use i, s => accessLoan s i .mutable
+
+/-- The concrete operand instance erases all permission bookkeeping: reads and moves fetch
+their concrete value from `locals`, and the primitive emits its argument as an event while
+adding it to the concrete `Int` store. -/
+def erasedEval (locals : AList Var Int) (st : Int) : E → Res (Int × Int)
+  | .lit n => .ok (n, st)
+  | .fail k => .trap k
   | .read x | .move x => match AList.lookup locals x with
-    | some n => .ok (n, ())
+    | some n => .ok (n, st)
     | none => .stuck
-  | _ => .ok (0, ())
+  | _ => .ok (0, st)
 
 abbrev erasedOps : Exec.Operands where
   Val := Int
   Expr := E
   Ty := Unit
-  Store := Unit
-  Prim := Empty
-  Event := Empty
+  Store := Int
+  Prim := Unit
+  Event := Int
   unitVal := 0
   unitTy := ()
   isCopy := fun _ => false
   eval := erasedEval
   life := fun _ s => some s
   test := fun n => some (n != 0)
-  allows := fun p => nomatch p
+  allows := fun _ vs st a => match vs, a.event, a.result with
+    | [v], some ev, .ok r => decide (ev = v) && decide (r = st + v) && decide (a.store = st + v)
+    | _, _, _ => false
+
+abbrev instrumentedOps : Exec.Operands :=
+  instrumentOperands erasedOps types permitE
+
+def erasedOracle : Exec.Oracle erasedOps := fun _ _ vs _ st => match vs with
+  | [v] => some ⟨some v, .ok (st + v), st + v⟩
+  | _ => none
+
+def moveConfig : Exec.Config instrumentedOps :=
+  ⟨.exec (.seq (.bind y (.move x) ⟨0⟩) (.ret (.read x) ⟨1⟩)), [(x, 7)], ⟨0, initial⟩, []⟩
+
+def acceptedMoveConfig : Exec.Config instrumentedOps :=
+  ⟨.exec (.seq (.bind y (.move x) ⟨0⟩) (.ret (.read y) ⟨1⟩)), [(x, 7)], ⟨0, initial⟩, []⟩
+
+def acceptedStuckConfig : Exec.Config instrumentedOps :=
+  ⟨.exec (.assign y (.lit 1) ⟨0⟩), [(x, 7)], ⟨0, initial⟩, []⟩
+
+def primTraceConfig : Exec.Config instrumentedOps :=
+  ⟨.exec (.seq (.prim (some y) () [.read x] ⟨0⟩)
+    (.seq (.prim none () [.lit 3] ⟨1⟩) (.ret (.read y) ⟨2⟩))), [(x, 7)], ⟨0, initial⟩, []⟩
+
+def badOracle : Exec.Oracle erasedOps := fun _ _ _ _ st =>
+  some ⟨some 99, .ok st, st⟩
+
+def instrumentedMoveRun : Exec.Report instrumentedOps :=
+  Exec.run ⟨[]⟩ (liftOracle erasedOps types permitE erasedOracle) 100 moveConfig
 
 def erasedMoveRun : Exec.Report erasedOps :=
-  Exec.run ⟨[]⟩ (fun _ p => nomatch p) 100
-    ⟨.exec (.seq (.bind y (.move x) ⟨0⟩) (.ret (.read x) ⟨1⟩)), [(x, 7)], (), []⟩
+  Exec.run ⟨[]⟩ erasedOracle 100 (eraseConfig moveConfig)
 
 /-- A planted unsafe execution refutes unconditional equality of final classifications:
 the instrumented run is stuck, but the erased concrete run returns 7. A checker-safety
 premise or a one-way successful-execution theorem is necessary for C1 erasure. -/
 example : stuck (runBody (.seq (.bind y (.move x) ⟨0⟩) (.ret (.read x) ⟨1⟩))) = true ∧
+    Ending.IsStuck instrumentedMoveRun.ending = true ∧
     (match erasedMoveRun.ending with
       | .final (.returned n) => n == 7
       | _ => false) = true := by decide
