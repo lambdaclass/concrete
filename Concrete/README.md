@@ -152,6 +152,23 @@ its families to add for the scheduled tier on `concrete-ci-2` are `wide_phi` (tw
 passing $n$ arguments to $n$ parameters), `sparse_registers` (register names at stride $10^{12}$),
 `dense_registers` (register names at stride $1$), `many_blocks` ($n$ blocks), and the
 `100000`-entry instruction and block depth probes (`deep_instructions`, `deep_blocks`).
+The owning roadmap row is [R-0550](../ROADMAP.md) (compiler speed, scaling and binary-size
+tracking). This branch must land together with Gate C, through Gate C's merge of this branch;
+it must never land alone. Gate C must retain meaningful cheap PR coverage and full scheduled
+scaling assertions and depth probes on `concrete-ci-2`. ISS-0030 remains open until those families
+pass on `concrete-ci-2` for the integrated candidate's exact SHA.
+
+Interim qualification on `concrete-ci-2` (coordinator records in `gates-briefs/RESULTS.md`):
+`ee2d82528fe84b2da2d69eec9756e168e29a1ecd` and
+`ef3fed56ab78f1adb04778d099091c6c57c8d2fe` passed build, trusted base, backends, artifacts,
+repro and root checks. Their throwaway integrations with Gate C `1f5457c9` measured backend
+exponents at most 1.08, but failed the timing-resolution floor; these are interim scaling
+evidence, not passing integrated scaling gates. At `ef3fed56ab78f1adb04778d099091c6c57c8d2fe`,
+`lcb_numbering.sh --full` passed, including wide phis and 100000-entry depth probes.
+At `cea8af594b287a6b8442005db122cd08d0669755`, a fresh server clone passed build, trusted base,
+backends (including the moved numbering regressions), artifacts, repro and root checks (11/11).
+The coordinator must qualify Gate C's merged candidate and record its exact SHA and family
+results before closure; earlier runs do not qualify that future candidate.
 
 
 LCB's own lowering, assembler and linker are LCB's named trust boundaries, carried as `P_toolchain[lcb]` until LCB's preservation theorem covers the slice-0 domain.
