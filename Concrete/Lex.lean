@@ -3,8 +3,9 @@ import ConcreteSpec.Spec.Surface0
 /-!
 # Settled lexer components
 
-Total byte-list UTF-8 decoding and source checking, ASCII identifier tests and line comments.
-No tokens, literal rules, whitespace rules, shebang handling or block comments are introduced.
+Total byte-list UTF-8 decoding and source checking, ASCII identifier tests, the four settled
+whitespace scalars, line comments and maximal trivia scanning. No tokens, literal rules, shebang
+handling or block comments are introduced; no other Unicode whitespace is included.
 Error constructors are internal data, not diagnostic wording. Offsets are zero-based byte offsets;
 truncation points at EOF. TODO: prove the first non-extendible-prefix property of error offsets.
 The success correspondence theorems below do not claim error-position correctness.
@@ -344,6 +345,13 @@ theorem identStart?_iff (c : Nat) : identStart? c = true ↔ IdentStart c := by
 theorem identContinue?_iff (c : Nat) : identContinue? c = true ↔ IdentContinue c := by
   simp [identContinue?]
 
+/-- Test exactly the four settled whitespace scalars. -/
+def whitespace? (c : Nat) : Bool := decide (Whitespace c)
+
+/-- The whitespace test agrees with the declarative predicate. -/
+theorem whitespace?_iff (c : Nat) : whitespace? c = true ↔ Whitespace c := by
+  simp [whitespace?]
+
 /-- Scan a comment body, retaining its first LF or CR in the remainder. -/
 def scanLine : List Nat → List Nat × List Nat
   | [] => ([], [])
@@ -395,6 +403,149 @@ theorem lineComment_complete {cs : List Nat} {out : List Nat × List Nat}
   cases h with
   | intro hb => simp [lineComment, scanLine_complete hb]
 
+/-- A comment body's remainder is no longer than its input. -/
+theorem commentBody_rest_length_le {input body rest : List Nat}
+    (h : CommentBody input body rest) : rest.length ≤ input.length := by
+  induction h with
+  | eof => simp
+  | lf rest => simp
+  | cr rest => simp
+  | cons _ _ _ ih => simp only [List.length_cons]; omega
+
+/-- Scanning a line comment consumes at least its two slashes. -/
+theorem lineComment_rest_length_lt {input comment rest : List Nat}
+    (h : LineComment input (comment, rest)) : rest.length < input.length := by
+  cases h with
+  | intro hb =>
+    have hle := commentBody_rest_length_le hb
+    simp only [List.length_cons]
+    omega
+
+/-- Structural scanner used with fuel at least the input length. -/
+def skipTriviaAux : Nat → List Nat → List Nat × List Nat
+  | _, [] => ([], [])
+  | 0, cs => ([], cs)
+  | fuel + 1, c :: input =>
+    if _h : Whitespace c then
+      let out := skipTriviaAux fuel input
+      (c :: out.1, out.2)
+    else
+      match _hline : lineComment (c :: input) with
+      | some (comment, rest) =>
+        let out := skipTriviaAux fuel rest
+        (comment ++ out.1, out.2)
+      | none => ([], c :: input)
+
+/-- Skip a maximal run of whitespace scalars and line comments. -/
+def skipTrivia (cs : List Nat) : List Nat × List Nat := skipTriviaAux cs.length cs
+
+/-- With enough fuel, the structural scanner satisfies the maximal-trivia judgment. -/
+theorem skipTriviaAux_sound (cs : List Nat) (fuel : Nat) (hfuel : cs.length ≤ fuel) :
+    Trivia cs (skipTriviaAux fuel cs) := by
+  induction fuel generalizing cs with
+  | zero =>
+    cases cs with
+    | nil =>
+      rw [skipTriviaAux.eq_def]
+      exact .stop [] (by intro c cs h; cases h) (by intro cs h; cases h)
+    | cons c input => simp at hfuel
+  | succ fuel ih =>
+    cases cs with
+    | nil =>
+      rw [skipTriviaAux.eq_def]
+      exact .stop [] (by intro c cs h; cases h) (by intro cs h; cases h)
+    | cons c input =>
+      by_cases hw : Whitespace c
+      · rw [skipTriviaAux.eq_def]
+        simp only [hw]
+        apply Trivia.whitespace hw
+        apply ih
+        simp only [List.length_cons] at hfuel
+        omega
+      · cases hline : lineComment (c :: input) with
+        | none =>
+          rw [skipTriviaAux.eq_def]
+          simp only [hw]
+          rw [hline]
+          apply Trivia.stop
+          · intro d ds heq
+            cases heq
+            exact hw
+          · intro tail heq
+            cases heq
+            simp [lineComment] at hline
+        | some out =>
+          cases out with
+          | mk comment rest =>
+            rw [skipTriviaAux.eq_def]
+            simp only [hw]
+            rw [hline]
+            apply Trivia.comment (lineComment_sound hline)
+            apply ih
+            have hlt := lineComment_rest_length_lt (lineComment_sound hline)
+            simp only [List.length_cons] at hfuel hlt
+            omega
+
+/-- With enough fuel, every declarative decomposition is the structural scanner's result. -/
+theorem skipTriviaAux_complete {cs : List Nat} {out : List Nat × List Nat}
+    (h : Trivia cs out) (fuel : Nat) (hfuel : cs.length ≤ fuel) :
+    skipTriviaAux fuel cs = out := by
+  induction h generalizing fuel with
+  | stop rest hw hc =>
+    cases rest with
+    | nil => cases fuel <;> rfl
+    | cons c input =>
+      have hline : lineComment (c :: input) = none := by
+        unfold lineComment
+        split
+        · rename_i tail heq
+          exact (hc tail heq).elim
+        · rfl
+      cases fuel with
+      | zero => simp at hfuel
+      | succ fuel =>
+        rw [skipTriviaAux.eq_def]
+        simp only [hw c input rfl]
+        rw [hline]
+        simp
+  | whitespace hw _ ih =>
+    cases fuel with
+    | zero => simp at hfuel
+    | succ fuel =>
+      rw [skipTriviaAux.eq_def]
+      simp only [hw]
+      simp
+      have hrec := ih fuel (by simp only [List.length_cons] at hfuel; omega)
+      exact ⟨congrArg Prod.fst hrec, congrArg Prod.snd hrec⟩
+  | comment hl _ ih =>
+    cases hl with
+    | intro hb =>
+      cases fuel with
+      | zero => simp at hfuel
+      | succ fuel =>
+        have hline := lineComment_complete (LineComment.intro hb)
+        rw [skipTriviaAux.eq_def]
+        simp only [show ¬ Whitespace 47 from by decide]
+        rw [hline]
+        simp
+        have hlt := lineComment_rest_length_lt (LineComment.intro hb)
+        have hrec := ih fuel (by simp only [List.length_cons] at hfuel hlt; omega)
+        exact ⟨congrArg Prod.fst hrec, congrArg Prod.snd hrec⟩
+
+/-- The scanner's result satisfies the independent maximal-trivia judgment. -/
+theorem skipTrivia_sound (cs : List Nat) : Trivia cs (skipTrivia cs) :=
+  skipTriviaAux_sound cs cs.length (Nat.le_refl _)
+
+/-- Every declarative maximal-trivia decomposition is the scanner's result. -/
+theorem skipTrivia_complete {cs : List Nat} {out : List Nat × List Nat}
+    (h : Trivia cs out) : skipTrivia cs = out :=
+  skipTriviaAux_complete h cs.length (Nat.le_refl _)
+
+/-- Maximal-trivia decompositions are unique. -/
+theorem trivia_unique {cs : List Nat} {out₁ out₂ : List Nat × List Nat}
+    (h₁ : Trivia cs out₁) (h₂ : Trivia cs out₂) : out₁ = out₂ := by
+  rw [← skipTrivia_complete h₁, ← skipTrivia_complete h₂]
+
 /-! ## Kernel-checked conformance cases -/
 
 section Conformance
@@ -435,6 +586,24 @@ example : lineComment [47,47,32,120,10,114,101,115,116] =
 example : lineComment [47,47,32,120,13] = some ([47,47,32,120], [13]) := by decide
 example : lineComment [47,47,32,120] = some ([47,47,32,120], []) := by decide
 example : lineComment [47,42,32,120,32,42,47] = none := by decide
+
+example : skipTrivia [32,65] = ([32], [65]) := by decide
+example : skipTrivia [9,65] = ([9], [65]) := by decide
+example : skipTrivia [10,65] = ([10], [65]) := by decide
+example : skipTrivia [13,65] = ([13], [65]) := by decide
+example : skipTrivia [13,10,65] = ([13,10], [65]) := by decide
+example : skipTrivia [47,47,120,10,65] = ([47,47,120,10], [65]) := by decide
+example : skipTrivia [47,47,120,13,65] = ([47,47,120,13], [65]) := by decide
+example : skipTrivia [47,47,120] = ([47,47,120], []) := by decide
+example : skipTrivia [9,32,47,47,120,13,10,65] =
+    ([9,32,47,47,120,13,10], [65]) := by decide
+
+example : skipTrivia [47,42,32,42,47] = ([], [47,42,32,42,47]) := by decide
+example : skipTrivia [35,33,65] = ([], [35,33,65]) := by decide
+example : skipTrivia [0xA0,32] = ([], [0xA0,32]) := by decide
+example : skipTrivia [0xFEFF,32] = ([], [0xFEFF,32]) := by decide
+example : skipTrivia [47] = ([], [47]) := by decide
+example : skipTrivia [65,32] = ([], [65,32]) := by decide
 
 end Conformance
 

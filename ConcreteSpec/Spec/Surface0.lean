@@ -1,9 +1,10 @@
 /-!
 # Settled pieces of the slice-0 surface
 
-Only UTF-8 source validity, NUL/BOM refusal, ASCII identifier characters and line comments
-are specified here. Tokens, keywords, punctuation, literals, other whitespace, grammar,
-diagnostics and CLI spellings are not defined. There is no shebang or block-comment rule.
+UTF-8 source validity, NUL/BOM refusal, ASCII identifier characters, the four settled
+whitespace scalars, line comments and maximal trivia runs are specified here. Tokens, keywords,
+punctuation, literals, grammar, diagnostics and CLI spellings are not defined. There is no
+shebang or block-comment rule; no other Unicode whitespace is included.
 -/
 
 namespace ConcreteSpec.Surface0
@@ -57,6 +58,9 @@ end Utf8
 def SourceOk (bs : List UInt8) : Prop :=
   ∃ cs, Utf8.Decodes bs cs ∧ ∀ c ∈ cs, c ≠ 0 ∧ c ≠ 0xFEFF
 
+/-- Exactly space, tab, LF and CR are whitespace. -/
+def Whitespace (c : Nat) : Prop := c = 32 ∨ c = 9 ∨ c = 10 ∨ c = 13
+
 /-- ASCII letters and underscore start identifiers. -/
 def IdentStart (c : Nat) : Prop :=
   (65 ≤ c ∧ c ≤ 90) ∨ (97 ≤ c ∧ c ≤ 122) ∨ c = 95
@@ -79,8 +83,24 @@ inductive LineComment : List Nat → (List Nat × List Nat) → Prop
   | intro {input body rest : List Nat} : CommentBody input body rest →
       LineComment (47 :: 47 :: input) (47 :: 47 :: body, rest)
 
+/-- A maximal run of whitespace scalars and line comments. The result is the consumed trivia
+and the unconsumed remainder; the remainder starts with neither whitespace nor two slashes. -/
+inductive Trivia : List Nat → (List Nat × List Nat) → Prop
+  | stop (rest : List Nat) :
+      (∀ c cs, rest = c :: cs → ¬ Whitespace c) →
+      (∀ cs, rest ≠ 47 :: 47 :: cs) →
+      Trivia rest ([], rest)
+  | whitespace {c : Nat} {input trivia rest : List Nat} :
+      Whitespace c → Trivia input (trivia, rest) →
+      Trivia (c :: input) (c :: trivia, rest)
+  | comment {input comment rest trivia final : List Nat} :
+      LineComment input (comment, rest) → Trivia rest (trivia, final) →
+      Trivia input (comment ++ trivia, final)
+
 /-- Scalar membership is decidable by its interval bounds. -/
 instance (c : Nat) : Decidable (Utf8.Scalar c) := inferInstanceAs (Decidable (_ ∧ _))
+/-- Whitespace membership is decidable by the four scalar equalities. -/
+instance (c : Nat) : Decidable (Whitespace c) := inferInstanceAs (Decidable (_ ∨ _))
 /-- Identifier-start membership is decidable by ASCII bounds. -/
 instance (c : Nat) : Decidable (IdentStart c) := inferInstanceAs (Decidable (_ ∨ _))
 /-- Identifier-continuation membership is decidable by ASCII bounds. -/
