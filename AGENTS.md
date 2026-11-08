@@ -76,8 +76,10 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
   [ROADMAP's defect disposition and frozen-compiler rule](ROADMAP.md#defect-disposition-rule).
 
 **Who works on what** (owner, 2026-11-08, [decision](docs/decisions.md#decided-2026-11-08-eleven)).
-- Claude's quota goes to the critical path: the spec, slice 0 and the front end. Mechanical work
-  goes to Codex and Kimi as writers.
+- Claude's quota goes to the critical path: the spec, slice 0 and the front end. Codex, Kimi and agy
+  write in their own fresh full clones on their own `wip/` branches. Claude briefs, reviews, runs the
+  gates and lands. The other two models cross-review each diff; a writer never reviews its own work
+  ([decision](docs/decisions.md#decided-2026-11-08-writers)).
 - One writer edits `docs/decisions.md` and `ROADMAP.md` at a time; other workers send that writer
   their records instead of editing those files.
 
