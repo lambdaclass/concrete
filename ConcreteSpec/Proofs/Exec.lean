@@ -746,7 +746,6 @@ private theorem register_protected_inv (d : Deferred O) (caller : AList Var O.Va
     | resume p => simp [register] at h
     | ret dst L => simp [register] at h
 
-set_option maxHeartbeats 2000000 in
 /-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
 private theorem protected_step_inv {P : Program O} {caller : AList Var O.Val}
     {q : List (Frame O)} {c c' : Config O} {label : Label O}
