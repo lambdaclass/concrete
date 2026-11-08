@@ -393,7 +393,10 @@ def Machine.RegisterFrame {Reg Word : Type} (before after : Machine Reg Word)
     (clobbers : List Reg) : Prop :=
   ∀ r, r ∉ clobbers → after.regs r = before.regs r
 
-/-- A signature's structural laws: positive power-of-two alignment, frame size rounded to it, the
+/-- Obligation (discharged at slice 0, R-0580).
+Obligation on the code generator: establish these properties for its actual target frame layout,
+including spills and cleanup. The abstract toy layout is not evidence for a native layout.
+A signature's structural laws: positive power-of-two alignment, frame size rounded to it, the
 frame included in the callee stack bound, and callee-saved registers disjoint from clobbers. -/
 def Signature.WellFormed {Ty Val Reg Word : Type} (sig : Signature Ty Val Reg Word) : Prop :=
   IsPow2 sig.frameAlign ∧ sig.frameSize % sig.frameAlign = 0 ∧
@@ -413,7 +416,11 @@ structure Signature.Call {Ty Val Reg Word : Type} (sig : Signature Ty Val Reg Wo
 abbrev CallTransition (_Ty Val Reg Word : Type) :=
   Machine Reg Word → Machine Reg Word → List Val → Val → Prop
 
-/-- Conformance is a specification to prove about a transition, never execution evidence. -/
+/-- Obligation (discharged at slice 0, R-0580).
+Obligation on the code generator: prove conformance of its actual target call transition.
+This binds typed input/output locations and protected machine state to native execution;
+the toy transition below discharges only its own instance.
+Conformance is a specification to prove about a transition, never execution evidence. -/
 def TransitionConforms {Ty Val Reg Word : Type} (sig : Signature Ty Val Reg Word)
     (transition : CallTransition Ty Val Reg Word) : Prop :=
   ∀ before after args result, transition before after args result → sig.Call before after args result
@@ -507,6 +514,14 @@ def computedStackBound : StackCode → Nat
 /-- The stack-bound specification quantifies over all operational samples and initial depths. -/
 def StackSafe (code : StackCode) : Prop :=
   ∀ base sample, sample ∈ stackSamples code base → sample ≤ base + computedStackBound code
+
+/-- Obligation (discharged at slice 0, R-0575).
+Obligation on the code generator: bind the final artifact's stack report to its actual stack-use
+samples, including spills, nested calls, cleanup, and launcher/runtime frames. The operational
+samples must come from artifact execution, not from an admission test against the reported bound.
+The nested toy stack language proves only its own computed bound. -/
+def ArtifactStackConforms (reportedBound : Nat) (samples : Nat → List Nat) : Prop :=
+  ∀ base sample, sample ∈ samples base → sample ≤ base + reportedBound
 
 /-! ### Foreign validity and retention (Q3.12) -/
 
@@ -647,6 +662,14 @@ def TransferCorrect {F H : Type} (pair : KeptPair F H) (before : RetentionState 
   | none => True
   | some (event, after) => KeptStep pair before event after
 
+/-- Obligation (discharged at slice 25, R-0580).
+Obligation on the code generator: relate actual foreign-boundary ownership transfers to the
+checked paired protocol. Foreign code respecting the declared access/retention restriction
+remains the named Q3.12 trusted premise; this obligation does not prove foreign code correct. -/
+def RetentionConforms {F H : Type} (pair : KeptPair F H)
+    (transition : RetentionState H → ForeignEvent F H → RetentionState H → Prop) : Prop :=
+  ∀ before event after, transition before event after → KeptStep pair before event after
+
 /-- Correctness of the protocol extracted by declaration checking. Rejection makes no validity
 claim; a returned protocol must implement the original four descriptors. -/
 def CheckedPairCorrect {F H : Type} (sp : ExternParam H) (sr cp cr : ExternType H) :
@@ -683,6 +706,17 @@ structure Launcher.Run {Artifact Input Result Observation : Type}
   entry : l.entry artifact input
   exit : l.exit artifact result observation
   adequateStack : l.stackBound artifact ≤ reserved
+
+/-- Obligation (discharged at slice 0, R-0505).
+Obligation on the native launcher integration: relate independently executed startup and exit to
+the retained artifact closure, entry inputs, observations and reservation. Slice 0's unverified
+native path carries the explicit premise (R-0503); final-image validation discharges it at
+R-0505, with the direct-syscall launcher supplied by R-0584. Toy launches do not discharge it. -/
+def LauncherConforms {Artifact Input Result Observation : Type}
+    (launcher : Launcher Artifact Input Result Observation)
+    (execution : Artifact → Nat → Input → Result → Observation → Prop) : Prop :=
+  ∀ artifact reserved input result observation, execution artifact reserved input result observation →
+    launcher.Run artifact reserved input result observation
 
 /-- An executable closure loader for a toy chain of dependencies: module `n+1` needs module `n`.
 The implementation traverses the graph, whereas the closure specification quantifies over reachability. -/
