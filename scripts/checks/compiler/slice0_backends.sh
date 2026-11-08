@@ -8,7 +8,9 @@
 # the BIR semantics gives (the emitter writes the expected status and stderr bytes).
 #
 # Controls: a body that never returns must be observed as incomplete on both backends; a body
-# returning a word that encodes nothing must reach the runtime's refusal; and the comparison
+# returning a word that encodes nothing must reach the runtime's refusal; the prepared-numbering,
+# predecessor-grouping, reference-equality and stack-depth regressions (slice0_bir.lean numbering)
+# must pass with exact refusal diagnostics; and the comparison
 # itself must reject a missing or extra newline, a wrong status with the right stderr, and stray
 # stdout. Run inside the nix devshell, from the repository root.
 set -euo pipefail
@@ -47,6 +49,12 @@ done
 expected_timeout check control-loop "$work/ctl/loop" 1 1
 "${emitter[@]}" invalid "$work/ctl/invalid" "$target"
 check control-invalid-word "$work/ctl/invalid" 10 20
+if "${emitter[@]}" numbering; then
+  echo "ok   numbering regressions (sparse/duplicate/missing/phi/condbr/target/spec-eq/stack-depth)"
+else
+  echo "FAIL numbering regressions"
+  fail=1
+fi
 
 # The comparison's own negative controls: each forged observation must be rejected.
 e="$work/ctl/judge"; mkdir -p "$e"

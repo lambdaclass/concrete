@@ -124,28 +124,34 @@ The adapter's output is handed to LCB **in process**, as the value: on `aarch64-
 
 Two refactors make layers 2–4 tractable, and both are done: `runBlock` names blocks by index (as LCB's state does), and the numbering is a closed function of position (`blockBase`, `instBase`, `regId`), which LCB's canonical-form check accepts for every example.
 
-The closed numbering is the specification, not an executable query plan. `LCB.adapt` and
-`LLVM.print` are the production entry points; `adapt_eq_spec` and `print_eq_spec` connect them to
-`adaptSpec` and `printSpec`. The production adapter collects running offsets with tail-recursive
-accumulators and checks register uniqueness with a finite map. Register and predecessor maps use
-storage proportional to entries, independently of numeric register names and branch targets, and
-register lookup preserves the first definition even on malformed programs. Each incoming argument
-list becomes an array once; bucket finalization restores predecessor and conditional-arm order
-once. Wide phis then cost linear time in their incoming payload and generated arms. Instruction,
-terminator, operand, phi and block lowering share implementations parameterized by their queries, so a
-new instruction extends one lowering and its simulation proof. The headline theorems continue to
-state correctness of the production entry points.
+The closed numbering is the specification, not an executable query plan. `LCB.adapt`, `LCB.emit`
+and `LLVM.print` are the production entry points; `adapt_eq_spec`, `emit_eq_spec` and
+`print_eq_spec` connect them to `adaptSpec`, `emitSpec` and `printSpec`. The production adapter
+collects running offsets with tail-recursive accumulators and checks register uniqueness with a
+finite map. Register and predecessor maps use storage proportional to entries, independently of
+numeric register names and branch targets, and register lookup preserves the first definition even
+on malformed programs. Each incoming argument list becomes an array once; bucket finalization
+restores predecessor and conditional-arm order once. Wide phis then cost linear time in their
+incoming payload and generated arms. Instruction, terminator, operand, phi and block lowering share
+implementations parameterized by their queries, so a new instruction extends one lowering and its
+simulation proof. The headline theorems continue to state correctness of the production entry
+points.
 
-ISS-0030's focused regression and measurement driver is
-`scripts/checks/compiler/lcb_numbering_cases.lean`. Its cheap PR tier checks exact refusal
-diagnostics, first-definition lookup, malformed large targets, reference equality, wide phis,
-sparse and dense names, and many blocks. The weekly `Backend scaling` workflow runs `--full`:
-100→1000→10000 scaling with an exponent bound of 1.2 for each backend/family, plus 100000-entry
-instruction and block stack-depth probes. It records the exact SHA, times and structural digests.
-Timing includes a linear output digest and uses the minimum per-operation average of three
-sampling windows (at least 10 ms in PRs, 50 ms in the weekly tier); tiny PR samples report
-measurements without claiming a reliable exponent. ISS-0030 remains open until the coordinator's
-server qualification passes; this local evidence is not that qualification.
+ISS-0030's deterministic functional regressions run in the required backend gate
+([`scripts/checks/compiler/slice0_bir.lean`](../scripts/checks/compiler/slice0_bir.lean) `numbering`,
+invoked by [`scripts/checks/compiler/slice0_backends.sh`](../scripts/checks/compiler/slice0_backends.sh)
+in [`.github/workflows/lean_action_ci.yml`](../.github/workflows/lean_action_ci.yml) under
+[`required-checks.txt`](../required-checks.txt)): large/sparse register names, first-definition-wins
+lookup and the exact duplicate-register refusal diagnostic, the undefined-register, short
+phi-payload (including a short second conditional arm) and out-of-profile refusal diagnostics,
+conditional-arm order and multiplicity, malformed huge branch targets, `adapt = adaptSpec` /
+`emit = emitSpec` / `LLVM.print = LLVM.printSpec` reference equality, and a non-timed stack-depth
+check over deep single-block instruction lists (`sparse`) and many blocks (`deepBlocks`). Backend
+scaling is owned by Gate C (`wip/gate-scaling-determinism`, `scripts/checks/compiler/scaling.lean`);
+its families to add for the scheduled tier on `concrete-ci-2` are `wide_phi` (two conditional edges
+passing $n$ arguments to $n$ parameters), `sparse_registers` (register names at stride $10^{12}$),
+`dense_registers` (register names at stride $1$), `many_blocks` ($n$ blocks), and the
+`100000`-entry instruction and block depth probes (`deep_instructions`, `deep_blocks`).
 
 
 LCB's own lowering, assembler and linker are LCB's named trust boundaries, carried as `P_toolchain[lcb]` until LCB's preservation theorem covers the slice-0 domain.
