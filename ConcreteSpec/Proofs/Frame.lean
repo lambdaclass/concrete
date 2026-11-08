@@ -360,9 +360,59 @@ theorem c1Call_restores_caller {O : Exec.Operands} {f : FnId} {P : Exec.Program 
     {entry exit : Exec.Config O} (h : C1Call O f P entry exit) :
     ∃ (dst : Option Var) (result : O.Val) (caller : AList Var O.Val) (k : List (Exec.Frame O)),
       exit.locals = Exec.bindDst dst result caller ∧ exit.frames = k := by
-  obtain ⟨fn, dst, caller, k, args, site, vs, st, stArgs, stEnter, tr, result,
-    hf, he, hv, hlen, hl, hxc, hxl, hxf, hs⟩ := h
+  obtain ⟨fn, dst, caller, k, args, site, vs, st, stArgs, stEnter, stReturn, callee, tr, result,
+    hf, he, hv, hlen, hl, hxc, hxl, hxf, hs, hr⟩ := h
   exact ⟨dst, result, caller, k, hxl, hxf⟩
+
+private def c1Operands : Exec.Operands where
+  Val := Nat
+  Expr := Nat
+  Ty := Unit
+  Store := Unit
+  Prim := Unit
+  Event := Unit
+  unitVal := 0
+  unitTy := ()
+  isCopy := fun _ => true
+  eval := fun _ _ n => .ok (n, ())
+  life := fun _ st => some st
+  test := fun n => some (n != 0)
+  allows := fun _ _ _ _ => false
+
+private def c1FnId : FnId := ⟨⟨[]⟩, "seven"⟩
+
+private def c1Fn : Exec.Fn c1Operands := ⟨[], (), ⟨0⟩, .ret (7 : Nat) ⟨0⟩⟩
+
+private def c1Program : Exec.Program c1Operands := ⟨[(c1FnId, c1Fn)]⟩
+
+private def c1Entry : Exec.Config c1Operands :=
+  ⟨.exec (.call none c1FnId [] ⟨0⟩), [], (), []⟩
+
+private def c1Boundary : Exec.Config c1Operands :=
+  ⟨.exiting (.ret (7 : Nat)), [], (), [.ret none []]⟩
+
+private def c1Exit : Exec.Config c1Operands := ⟨.done, [], (), []⟩
+
+/-- Accepted: a real call reaches its own `.ret` frame after evaluating and cleaning up the callee,
+then takes the final return step. -/
+example : C1Call c1Operands c1FnId c1Program c1Entry c1Exit := by
+  have hs : Exec.Steps c1Program c1Entry [] c1Boundary := by
+    apply Exec.steps_next rfl
+    apply Exec.steps_next rfl
+    apply Exec.steps_next rfl
+    exact Exec.Steps.refl _
+  exact ⟨c1Fn, none, [], [], [], ⟨0⟩, [], (), (), (), (), [], [], (7 : Nat),
+    rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, hs, rfl⟩
+
+/-- Refused: a configuration that still contains the call's return frame is not a completed call. -/
+example : ¬ C1Call c1Operands c1FnId c1Program c1Entry
+    ⟨.done, [], (), [.ret none []]⟩ := by
+  intro h
+  obtain ⟨fn, dst, caller, k, args, site, vs, st, stArgs, stEnter, stReturn, callee, tr, result,
+    hf, he, hv, hlen, hl, hxc, hxl, hxf, hs, hr⟩ := h
+  have hk : k = [] := (congrArg Exec.Config.frames he).symm
+  rw [hk] at hxf
+  simp at hxf
 
 /-- A complete C1 call has exactly the frame law supplied by its callee contract. -/
 theorem c1_call_frame {O : Exec.Operands} {f : FnId} {P : Exec.Program O}

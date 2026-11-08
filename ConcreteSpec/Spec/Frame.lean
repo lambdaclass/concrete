@@ -120,21 +120,26 @@ def accessFootprint : Option (Option (MemBlockId × Nat)) → Nat → Footprint
   | some (some (b, off)), n => .byte ⟨b, off, n⟩
   | _, _ => .empty
 
-/-- A complete C1 call of `f`, from its `.call` statement to the caller continuation. Argument
-evaluation, `.enter`, the callee body and cleanup, `.leave`, and result binding are all inside the
-`Steps` premise. The result is bound into the restored caller locals at the saved continuation. -/
+/-- A complete C1 call of `f`, from its `.call` statement to the caller continuation. The `Steps`
+premise reaches the explicit return boundary on this call's own `.ret` frame; the final silent step
+performs `.leave`, result binding and restoration. A matching intermediate configuration therefore
+cannot stand in for the outer return. -/
 def C1Call (O : Exec.Operands) (f : FnId) (P : Exec.Program O)
     (entry exit : Exec.Config O) : Prop :=
   ∃ (fn : Exec.Fn O) (dst : Option Var) (caller : AList Var O.Val)
     (k : List (Exec.Frame O)) (args : List O.Expr) (site : SiteId) (vs : List O.Val)
-    (st stArgs stEnter : O.Store) (tr : List O.Event) (result : O.Val),
+    (st stArgs stEnter stReturn : O.Store) (callee : AList Var O.Val)
+    (tr : List O.Event) (result : O.Val),
     AList.lookup P.fns f = some fn ∧
     entry = ⟨.exec (.call dst f args site), caller, st, k⟩ ∧
     Exec.evalArgs O caller st args = .ok (vs, stArgs) ∧
     fn.params.length = vs.length ∧
     O.life (.enter (fn.params.map Prod.fst)) stArgs = some stEnter ∧
     exit.ctrl = .done ∧ exit.locals = Exec.bindDst dst result caller ∧ exit.frames = k ∧
-    Exec.Steps P entry tr exit
+    Exec.Steps P entry tr
+      ⟨.exiting (.ret result), callee, stReturn, .ret dst caller :: k⟩ ∧
+    Exec.step P ⟨.exiting (.ret result), callee, stReturn, .ret dst caller :: k⟩ =
+      some (.next exit)
 
 /-- The footprint contract of one C1 callee. `project` exposes the hybrid part of the operand
 instance's shared state; ownership instrumentation need not have a footprint. Every complete call of
