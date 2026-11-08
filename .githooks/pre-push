@@ -35,12 +35,18 @@ if [ "${CONCRETE_SKIP_GATES:-0}" = "1" ]; then
   exit 0
 fi
 
+reservation_refs=0
 wip_refs=0; wip_dels=0; note_refs=0; other_refs=0; wip_shas=""; full_shas=""
 # Kept whole so the hook can hand the same lines to itself when it re-enters the gate shell (below).
 HOOK_STDIN="$(cat)"
 while read -r _localref localsha remoteref _remotesha; do
   [ -z "${localsha:-}" ] && continue
   case "${remoteref:-}" in
+    refs/reserved/iss/*|refs/bug-reservations/*)
+      if ! python3 -I scripts/ids/allocate.py verify-ref "$remoteref" "$localsha" "$_remotesha"; then
+        echo "pre-push: invalid reservation update — refusing" >&2; exit 1
+      fi
+      reservation_refs=$((reservation_refs+1)) ;;
     refs/heads/wip/*)
       case "$localsha" in
         *[!0]*) wip_refs=$((wip_refs+1)); wip_shas="$wip_shas $localsha" ;;
@@ -83,8 +89,8 @@ if [ "$other_refs" -eq 0 ] && [ $((wip_refs + wip_dels)) -gt 0 ]; then
   echo "pre-push: wip/* backup push ($wip_refs update(s), $wip_dels deletion(s)) — conflict-marker check only; the full set runs on ci/* and main"
   exit 0
 fi
-if [ "$other_refs" -eq 0 ] && [ "$note_refs" -gt 0 ]; then
-  echo "pre-push: review-notes push (review notes, owner sign-offs) — no source tree, no gates"
+if [ "$other_refs" -eq 0 ] && [ $((note_refs + reservation_refs)) -gt 0 ]; then
+  echo "pre-push: metadata push (review notes, owner sign-offs, ID reservations) — no source tree, no gates"
   exit 0
 fi
 

@@ -71,3 +71,4 @@ docs/spec	prose spec	archived	legacy/docs/spec (non-normative once the Lean rule
 docs	docs	archived	legacy/docs; a page returns when a task needs it (more specific rows above govern their paths)	R-0558	never deleted with the pipeline	open
 editor	tooling	archived	legacy/editor	R-0558	never deleted automatically; returns with an editor task (phase G)	open
 research paper bench tasks logo.png	research	archived	legacy/	R-0558	never deleted with the pipeline	open
+scripts/ids docs/ISSUE_IDS.md	issue identity	retained	root allocator and reservation protocol	R-0542	root: never; legacy/ copy: at LD (R-0590)	open

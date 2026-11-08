@@ -53,11 +53,19 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
   is not picking a side; what the review checks then is in
   [REVIEW.md](docs/REVIEW.md#owner-decisions-choosing-versus-recording).
 
+**Issue and bug numbers (ISS-0034).** Before writing any new issue or bug record, reserve its
+identity with `python3 -I scripts/ids/allocate.py reserve iss|bug "Short immutable title"`.
+Use the returned ID and exact title; never infer a number from local files. Origin must be
+reachable. The [reservation protocol and operator backfill](docs/ISSUE_IDS.md) define failure
+recovery, branch inheritance and legacy imports. `scripts/checks/id_reservations.sh` refuses
+unreserved identities and collisions across origin main and every wip branch. The old filing
+instructions below describe frozen legacy tooling; no new filing runs the legacy allocator.
+
 **Bugs.**
 - Every bug gets a structural cause and a structural owner: the design fact that let it exist, and
   the roadmap task or pipeline stage that removes the whole class
   ([STRUCTURAL_CLASSES.md](legacy/docs/bugs/STRUCTURAL_CLASSES.md)). A patch without them is not a fix.
-- To file a bug, run `scripts/gen/new_bug.sh`, which writes its record and runs the ledger
+- Historically, to file a legacy bug, `scripts/gen/new_bug.sh` was run; it wrote its record and ran the ledger
   generator. To log a change, add a `changelog.d/` fragment
   ([changelog.d/README.md](legacy/changelog.d/README.md)). Never hand-edit a generated view (the bug
   lists, the class table's bugs column, the generated bug dashboard, `CHANGELOG.md`,

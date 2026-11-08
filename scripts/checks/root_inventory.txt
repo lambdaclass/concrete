@@ -47,3 +47,5 @@ scripts/push-both.sh
 scripts/review
 scripts/spec
 scripts/worktree-new.sh
+scripts/ids
+docs/ISSUE_IDS.md
