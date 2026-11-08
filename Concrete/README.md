@@ -132,7 +132,7 @@ storage proportional to entries, independently of numeric register names and bra
 register lookup preserves the first definition even on malformed programs. Each incoming argument
 list becomes an array once; bucket finalization restores predecessor and conditional-arm order
 once. Wide phis then cost linear time in their incoming payload and generated arms. Instruction,
-terminator and operand lowering share one implementation parameterized by register lookup, so a
+terminator, operand, phi and block lowering share implementations parameterized by their queries, so a
 new instruction extends one lowering and its simulation proof. The headline theorems continue to
 state correctness of the production entry points.
 

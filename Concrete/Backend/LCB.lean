@@ -154,9 +154,9 @@ def instWith (lookup : Reg → Option Nat) (n : Nat) : Inst → Except String (L
       ins (n + 1) (.binary .andBits (.local n) (.literal (word (2 ^ to.bits - 1)))),
       ins (n + 2) (.binary .add (.local (n + 1)) (.literal (word to.min)))]
 
-/-- The edges into block `j` from block `k`, whose terminator is `term`: (k, arguments). -/
 def inst (p : Program) := instWith (regId p)
 
+/-- The edges into block `j` from block `k`, whose terminator is `term`: (k, arguments). -/
 def edgesTo (j k : Nat) : Term → List (Nat × List Operand)
   | .br t args => if t = j then [(k, args)] else []
   | .condbr _ t ta e ea => (if t = j then [(k, ta)] else []) ++ (if e = j then [(k, ea)] else [])
@@ -172,27 +172,38 @@ def termWith (lookup : Reg → Option Nat) : Term → Except String Source.Termi
   | .br t _ => return .jump t
   | .condbr c t _ e _ => return .branch (.local (← idOfWith lookup c)) t e
 
-/-- Block `j`'s phi for its parameter `k`: one arm per incoming edge, by predecessor. -/
 def term (p : Program) := termWith (regId p)
 
-def adaptPhi (p : Program) (j k : Nat) : Except String Source.Phi := do
-  let arms ← (incoming p j).mapM fun (pred, args) => do
-    let a ← match args[k]? with
-      | some a => operand p a
+/-- Shared phi lowering, parameterized by register lookup and payload access. -/
+def adaptPhiWith {α : Type} (lookup : Reg → Option Nat) (base j k : Nat)
+    (incoming : List (Nat × α)) (argAt : α → Nat → Option Operand) : Except String Source.Phi := do
+  let arms ← incoming.mapM fun (pred, args) => do
+    let a ← match argAt args k with
+      | some a => operandWith lookup a
       | none => throw s!"block {pred} passes too few arguments to block {j}"
     pure (pred, a)
-  pure { destination := blockBase p j + k, width := .word, incoming := arms.toArray }
+  pure { destination := base + k, width := .word, incoming := arms.toArray }
+
+/-- Block `j`'s reference phi for parameter `k`, in predecessor order. -/
+def adaptPhi (p : Program) (j k : Nat) : Except String Source.Phi :=
+  adaptPhiWith (regId p) (blockBase p j) j k (incoming p j) (fun args k => args[k]?)
 
 /-- Instruction `i` of block `j`, numbered from its slot. -/
 def adaptInst (p : Program) (j : Nat) (b : Block) : Nat × Inst → Except String (List Source.Instruction)
   | (i, ins) => inst p (blockBase p j + instBase b i) ins
 
-/-- Block `j`: its phis, its instructions' expansions in order, its terminator. -/
-def adaptBlock (p : Program) : Nat × Block → Except String Source.Block
+/-- Shared block assembly; only the prepared/reference queries differ. -/
+def adaptBlockWith (phiAt : Nat → Nat → Except String Source.Phi)
+    (instAt : Nat → Block → Nat × Inst → Except String (List Source.Instruction))
+    (termAt : Term → Except String Source.Terminator) : Nat × Block → Except String Source.Block
   | (j, b) => do
-    let phis ← (indexed b.params).mapM fun (k, _) => adaptPhi p j k
-    let insts ← (indexed b.insts).mapM (adaptInst p j b)
-    pure { phis := phis.toArray, instructions := insts.flatten.toArray, terminator := ← term p b.term }
+    let phis ← (indexed b.params).mapM fun (k, _) => phiAt j k
+    let insts ← (indexed b.insts).mapM (instAt j b)
+    pure { phis := phis.toArray, instructions := insts.flatten.toArray, terminator := ← termAt b.term }
+
+/-- Block `j`: its reference phis and instruction expansions, in order. -/
+def adaptBlock (p : Program) : Nat × Block → Except String Source.Block :=
+  adaptBlockWith (adaptPhi p) (adaptInst p) (term p)
 
 /-- `main`'s body as a function of LCB's verified source profile. -/
 def adaptSpec (p : Program) : Except String Source.Function := do
@@ -256,10 +267,9 @@ def blockNumberingFast (base : Nat) (b : Block) : BlockNumberingData :=
 
 /-- Production block numbering has bounded call-stack depth, including long single blocks. -/
 def numberingFastFrom (base : Nat) (xs : List Block) : NumberingData :=
-  let ps := Runtime.positions blockSize base xs
-  ⟨ps.flatMap (fun (n, b) => (blockNumberingFast n b).ids),
-    ps.flatMap (fun (n, b) => (blockNumberingFast n b).intermediates),
-    ps.map (fun (n, b) => (n, (blockNumberingFast n b).instOffsets))⟩
+  let chunks := (Runtime.positions blockSize base xs).map fun (n, b) => (n, blockNumberingFast n b)
+  ⟨chunks.flatMap (·.2.ids), chunks.flatMap (·.2.intermediates),
+    chunks.map (fun (n, data) => (n, data.instOffsets))⟩
 
 theorem instNumberingFast_eq (base : Nat) (xs : List Inst) :
     instNumberingFast base xs = instNumbering base xs := by
@@ -286,7 +296,8 @@ theorem numberingFastFrom_eq (base : Nat) (xs : List Block) :
   | cons b xs ih =>
     have h := ih (base + blockSize b)
     simp only [numberingFastFrom, Runtime.positions_eq, Runtime.positionsSpec,
-      List.flatMap_cons, List.map_cons, blockNumberingFast_eq] at h ⊢
+      List.map_cons, List.flatMap_cons, List.flatMap_map, List.map_map, Function.comp_def,
+      blockNumberingFast_eq] at h ⊢
     simp only [numberingFrom]
     cases ht : numberingFrom (base + blockSize b) xs
     simp only [ht, NumberingData.mk.injEq] at h
@@ -382,22 +393,15 @@ def instFast (prep : Prepared) (n : Nat) := instWith (regIdFast prep) n
 
 def termFast (prep : Prepared) := termWith (regIdFast prep)
 
-def adaptPhiFast (prep : Prepared) (j k : Nat) : Except String Source.Phi := do
-  let arms ← (incomingBucket prep.incoming j).mapM fun (pred, args) => do
-    let a ← match args[k]? with
-      | some a => operandFast prep a
-      | none => throw s!"block {pred} passes too few arguments to block {j}"
-    pure (pred, a)
-  pure { destination := blockOffset prep j + k, width := .word, incoming := arms.toArray }
+def adaptPhiFast (prep : Prepared) (j k : Nat) : Except String Source.Phi :=
+  adaptPhiWith (regIdFast prep) (blockOffset prep j) j k
+    (incomingBucket prep.incoming j) (fun args k => args[k]?)
 
 def adaptInstFast (prep : Prepared) (j : Nat) : Nat × Inst → Except String (List Source.Instruction)
   | (i, ins) => instFast prep (instOffset prep j i) ins
 
-def adaptBlockFast (prep : Prepared) : Nat × Block → Except String Source.Block
-  | (j, b) => do
-    let phis ← (indexed b.params).mapM fun (k, _) => adaptPhiFast prep j k
-    let insts ← (indexed b.insts).mapM (adaptInstFast prep j)
-    pure { phis := phis.toArray, instructions := insts.flatten.toArray, terminator := ← termFast prep b.term }
+def adaptBlockFast (prep : Prepared) : Nat × Block → Except String Source.Block :=
+  adaptBlockWith (adaptPhiFast prep) (fun j _ => adaptInstFast prep j) (termFast prep)
 
 /-- The executable adapter: all tables and validation are prepared once per program. -/
 def adaptFast (p : Program) : Except String Source.Function := do
@@ -840,7 +844,7 @@ theorem termFast_eq (p : Program) (tm : Term) : termFast (prepare p) tm = term p
 
 theorem adaptPhiFast_eq {p : Program} {j : Nat} {b : Block} (hb : p.blocks[j]? = some b) (k : Nat) :
     adaptPhiFast (prepare p) j k = adaptPhi p j k := by
-  simp [adaptPhiFast, adaptPhi, prepare_incoming, operandFast_eq, blockOffset_prepare hb, List.mapM_map, Function.comp_def, List.getElem?_toArray]
+  simp [adaptPhiFast, adaptPhi, adaptPhiWith, prepare_incoming, funext (prepare_regId p), blockOffset_prepare hb, List.mapM_map, Function.comp_def, List.getElem?_toArray]
 
 theorem adaptInstFast_eq {p : Program} {j i : Nat} {b : Block} {ins : Inst}
     (hb : p.blocks[j]? = some b) (hi : b.insts[i]? = some ins) :
@@ -859,7 +863,7 @@ theorem adaptBlockFast_eq {p : Program} {j : Nat} {b : Block} (hb : p.blocks[j]?
     apply mapM_ext
     rintro ⟨i, ins⟩ hm
     exact adaptInstFast_eq hb (getElem_of_mem_indexed hm)
-  simp only [adaptBlockFast, adaptBlock, hp, hi, termFast_eq]
+  simp only [adaptBlockFast, adaptBlock, adaptBlockWith, hp, hi, termFast_eq]
 
 theorem adaptFast_eq (p : Program) : adaptFast p = adaptSpec p := by
   have hblocks : (indexed p.blocks).mapM (adaptBlockFast (prepare p)) =
@@ -1685,7 +1689,7 @@ theorem adaptBlock_ok {p : Program} {j : Nat} {b : Block} {lb : Source.Block}
     ∃ phis xss tm, (indexed b.params).mapM (fun (k, _) => adaptPhi p j k) = .ok phis ∧
       (indexed b.insts).mapM (adaptInst p j b) = .ok xss ∧ term p b.term = .ok tm ∧
       lb = { phis := phis.toArray, instructions := xss.flatten.toArray, terminator := tm } := by
-  unfold adaptBlock at h
+  unfold adaptBlock adaptBlockWith at h
   cases hp : (indexed b.params).mapM (fun (k, _) => adaptPhi p j k) <;>
     cases hi : (indexed b.insts).mapM (adaptInst p j b) <;> cases ht : term p b.term <;>
     simp_all [bind, Except.bind, pure, Except.pure]
@@ -2033,7 +2037,8 @@ theorem adaptPhi_ok {p : Program} {t k : Nat} {phi : Source.Phi} (h : adaptPhi p
           | none => throw s!"block {pa.1} passes too few arguments to block {t}"
         pure (pa.1, a) : Except String (Nat × Source.Operand))) = .ok arms ∧
       phi = { destination := blockBase p t + k, width := .word, incoming := arms.toArray } := by
-  unfold adaptPhi at h
+  unfold adaptPhi adaptPhiWith at h
+  simp only [← operand_eq_with] at h
   cases ha : (incoming p t).mapM (fun (pa : Nat × List Operand) => (do
         let a ← match pa.2[k]? with
           | some a => operand p a
