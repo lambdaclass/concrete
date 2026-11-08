@@ -893,8 +893,6 @@ ConcreteSpec.Core.Exec.Demo.admittedSpin._proof_13	Quot.sound propext
 ConcreteSpec.Core.Exec.Demo.admittedSpin._proof_14	Quot.sound propext
 ConcreteSpec.Core.Exec.Demo.admittedSpin._proof_2	Quot.sound propext
 ConcreteSpec.Core.Exec.Demo.admittedSpin._proof_3	Quot.sound propext
-ConcreteSpec.Core.Exec.Demo.alwaysEmit_not_finite	Quot.sound propext
-ConcreteSpec.Core.Exec.Demo.alwaysEmit_not_finite._proof_1_1	Quot.sound propext
 ConcreteSpec.Core.Exec.Demo.bumpedMove	propext
 ConcreteSpec.Core.Exec.Demo.erasedFinite	Quot.sound propext
 ConcreteSpec.Core.Exec.Demo.erasingAdapter.eq_1	propext
@@ -942,17 +940,27 @@ ConcreteSpec.Core.Exec.Demo.instDecidableEqDState.decEq._proof_2
 ConcreteSpec.Core.Exec.Demo.instDecidableEqDState.decEq._proof_3	
 ConcreteSpec.Core.Exec.Demo.instDecidableEqT._proof_1	
 ConcreteSpec.Core.Exec.Demo.instDecidableEqT._proof_2	
-ConcreteSpec.Core.Exec.Demo.interleaved_execution	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Exec.Demo.keepingAdapter.eq_1	propext
+ConcreteSpec.Core.Exec.Demo.keepingWellFormed	Quot.sound propext
 ConcreteSpec.Core.Exec.Demo.keeping_infinite_interaction	Quot.sound propext
 ConcreteSpec.Core.Exec.Demo.keeping_project_rawEvents	Quot.sound propext
 ConcreteSpec.Core.Exec.Demo.keptInfinite	Quot.sound propext
 ConcreteSpec.Core.Exec.Demo.logFn.eq_1	propext
+ConcreteSpec.Core.Exec.Demo.logThenSpinFinite	Quot.sound propext
+ConcreteSpec.Core.Exec.Demo.logThenSpinPosition.eq_1	propext
+ConcreteSpec.Core.Exec.Demo.logThenSpinPosition.eq_2	propext
+ConcreteSpec.Core.Exec.Demo.logThenSpinPosition.eq_3	propext
+ConcreteSpec.Core.Exec.Demo.logThenSpin_infinite._proof_1	propext
+ConcreteSpec.Core.Exec.Demo.logThenSpin_move	Quot.sound propext
 ConcreteSpec.Core.Exec.Demo.noAnswerOracle.eq_1	propext
 ConcreteSpec.Core.Exec.Demo.ops._sparseCasesOn_1.else_eq	propext
 ConcreteSpec.Core.Exec.Demo.ops._sparseCasesOn_2.else_eq	propext
 ConcreteSpec.Core.Exec.Demo.ops._sparseCasesOn_3.else_eq	propext
 ConcreteSpec.Core.Exec.Demo.rawEvents.eq_1	
+ConcreteSpec.Core.Exec.Demo.refusingBindConfig.eq_1	propext
+ConcreteSpec.Core.Exec.Demo.refusingBindRequest	Quot.sound propext
+ConcreteSpec.Core.Exec.Demo.refusingK.eq_1	propext
+ConcreteSpec.Core.Exec.Demo.silentObserveSteps.eq_1	propext
 ConcreteSpec.Core.Exec.Demo.spinConfigAt.eq_1	propext
 ConcreteSpec.Core.Exec.Demo.spinConfigAt.eq_2	propext
 ConcreteSpec.Core.Exec.Demo.spinConfigAt.eq_3	propext
@@ -982,6 +990,8 @@ ConcreteSpec.Core.Exec.Demo.terminalRequest	Quot.sound propext
 ConcreteSpec.Core.Exec.Demo.terminatingConditional._proof_1	propext
 ConcreteSpec.Core.Exec.Demo.terminatingEvidence._proof_1	propext
 ConcreteSpec.Core.Exec.Demo.unanswered_no_move	Quot.sound propext
+ConcreteSpec.Core.Exec.Demo.uncertifiedDepConditional._proof_1	propext
+ConcreteSpec.Core.Exec.Demo.visiblePrefix_silentObserveSteps	Quot.sound propext
 ConcreteSpec.Core.Exec.DestroyProtocol.mk.inj	
 ConcreteSpec.Core.Exec.DestroyProtocol.mk.injEq	propext
 ConcreteSpec.Core.Exec.DestroyProtocol.mk.sizeOf_spec	
@@ -1051,6 +1061,20 @@ ConcreteSpec.Core.Exec.FuelLimit.toInfiniteExecution._proof_1	propext
 ConcreteSpec.Core.Exec.FuelLimit.toInfiniteExecution._proof_2	propext
 ConcreteSpec.Core.Exec.FuelLimit.toInfiniteExecution_toFuelLimit	propext
 ConcreteSpec.Core.Exec.FuelLimit.unique	Quot.sound propext
+ConcreteSpec.Core.Exec.InfiniteExecution.emittedCount.eq_1	propext
+ConcreteSpec.Core.Exec.InfiniteExecution.emittedCount.eq_2	propext
+ConcreteSpec.Core.Exec.InfiniteExecution.emittedCount.eq_def	propext
+ConcreteSpec.Core.Exec.InfiniteExecution.emittedCount_le	Quot.sound propext
+ConcreteSpec.Core.Exec.InfiniteExecution.emittedCount_le._proof_1_1	Quot.sound propext
+ConcreteSpec.Core.Exec.InfiniteExecution.emittedCount_le._proof_1_5	Quot.sound propext
+ConcreteSpec.Core.Exec.InfiniteExecution.emittedCount_le._proof_1_6	Quot.sound propext
+ConcreteSpec.Core.Exec.InfiniteExecution.emittedCount_reach	Quot.sound propext
+ConcreteSpec.Core.Exec.InfiniteExecution.emittedCount_reach._proof_1_1	Quot.sound propext
+ConcreteSpec.Core.Exec.InfiniteExecution.emittedCount_reach._proof_1_2	Quot.sound propext
+ConcreteSpec.Core.Exec.InfiniteExecution.emittedCount_reach._proof_1_3	Quot.sound propext
+ConcreteSpec.Core.Exec.InfiniteExecution.emittedCount_reach._proof_1_4	Quot.sound propext
+ConcreteSpec.Core.Exec.InfiniteExecution.emittedCount_reach._proof_1_8	Quot.sound propext
+ConcreteSpec.Core.Exec.InfiniteExecution.emittedCount_reach._proof_1_9	Quot.sound propext
 ConcreteSpec.Core.Exec.InfiniteExecution.evaluator_prefix	propext
 ConcreteSpec.Core.Exec.InfiniteExecution.events_prefix	Quot.sound propext
 ConcreteSpec.Core.Exec.InfiniteExecution.events_prefix._proof_1_1	Quot.sound propext
@@ -1060,10 +1084,13 @@ ConcreteSpec.Core.Exec.InfiniteExecution.mk.inj	propext
 ConcreteSpec.Core.Exec.InfiniteExecution.mk.injEq	propext
 ConcreteSpec.Core.Exec.InfiniteExecution.mk.sizeOf_spec	propext
 ConcreteSpec.Core.Exec.InfiniteExecution.not_final	propext
+ConcreteSpec.Core.Exec.InfiniteExecution.projected_completeTrace	Quot.sound propext
 ConcreteSpec.Core.Exec.InfiniteExecution.projected_prefix	Quot.sound propext
 ConcreteSpec.Core.Exec.InfiniteExecution.step	propext
 ConcreteSpec.Core.Exec.InfiniteExecution.toFuelLimit_toInfiniteExecution	propext
+ConcreteSpec.Core.Exec.InfiniteExecution.toObserveSteps_matches	Quot.sound propext
 ConcreteSpec.Core.Exec.InfiniteExecution.unique	Quot.sound propext
+ConcreteSpec.Core.Exec.InfiniteExecution.visiblePrefix_toObserveSteps	Quot.sound propext
 ConcreteSpec.Core.Exec.Label.emit.inj	
 ConcreteSpec.Core.Exec.Label.emit.injEq	propext
 ConcreteSpec.Core.Exec.Label.emit.sizeOf_spec	
@@ -1127,9 +1154,12 @@ ConcreteSpec.Core.Exec.Query.mk.sizeOf_spec
 ConcreteSpec.Core.Exec.QueryHistoryValid.append	Quot.sound propext
 ConcreteSpec.Core.Exec.QueryHistoryValid.append._proof_1_1	Quot.sound propext
 ConcreteSpec.Core.Exec.QueryHistoryValid.nil	propext
+ConcreteSpec.Core.Exec.QueryReport.isOutOfFuel._sparseCasesOn_1.else_eq	propext
+ConcreteSpec.Core.Exec.QueryReport.isOutOfFuel.eq_1	propext
 ConcreteSpec.Core.Exec.QueryReport.mk.inj	
 ConcreteSpec.Core.Exec.QueryReport.mk.injEq	propext
 ConcreteSpec.Core.Exec.QueryReport.mk.sizeOf_spec	
+ConcreteSpec.Core.Exec.QueryReport.position.eq_1	propext
 ConcreteSpec.Core.Exec.QueryReport.toReport.eq_1	
 ConcreteSpec.Core.Exec.Report.mk.inj	
 ConcreteSpec.Core.Exec.Report.mk.injEq	propext
@@ -1225,17 +1255,15 @@ ConcreteSpec.Core.Exec.exit_scope_runs_defers	propext
 ConcreteSpec.Core.Exec.final?_none_of_step	propext
 ConcreteSpec.Core.Exec.finite_not_infinite_events	propext
 ConcreteSpec.Core.Exec.finite_or_infinite_events	Classical.choice Quot.sound propext
-ConcreteSpec.Core.Exec.finite_projected_canonical	Classical.choice Quot.sound propext
-ConcreteSpec.Core.Exec.finite_projected_canonical._proof_1_1	Quot.sound propext
 ConcreteSpec.Core.Exec.finite_projected_observation	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Exec.finite_projected_observation._proof_1_1	Quot.sound propext
 ConcreteSpec.Core.Exec.fuelLimit_states_unique	Quot.sound propext
 ConcreteSpec.Core.Exec.getElem?_eq_of_prefix	propext
 ConcreteSpec.Core.Exec.infinite_iff_fuelLimit	propext
-ConcreteSpec.Core.Exec.infinite_projected_canonical	Classical.choice Quot.sound propext
-ConcreteSpec.Core.Exec.infinite_projected_canonical._proof_1_1	Quot.sound propext
-ConcreteSpec.Core.Exec.infinite_projected_canonical._proof_1_2	Quot.sound propext
-ConcreteSpec.Core.Exec.infinite_projected_canonical._proof_1_3	Quot.sound propext
 ConcreteSpec.Core.Exec.infinite_projected_observation	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Exec.infinite_projected_observation._proof_1_1	Quot.sound propext
+ConcreteSpec.Core.Exec.infinite_projected_observation._proof_1_2	Quot.sound propext
+ConcreteSpec.Core.Exec.infinite_projected_observation._proof_1_3	Quot.sound propext
 ConcreteSpec.Core.Exec.instDecidableEqExit.decEq._proof_1	
 ConcreteSpec.Core.Exec.instDecidableEqExit.decEq._proof_10	
 ConcreteSpec.Core.Exec.instDecidableEqExit.decEq._proof_11	
@@ -1335,6 +1363,7 @@ ConcreteSpec.Core.Exec.restrict.eq_1	propext
 ConcreteSpec.Core.Exec.restrict_dom_drops	propext
 ConcreteSpec.Core.Exec.return_reaches_caller	propext
 ConcreteSpec.Core.Exec.return_refused	propext
+ConcreteSpec.Core.Exec.run.eq_1	propext
 ConcreteSpec.Core.Exec.runFrom.eq_1	propext
 ConcreteSpec.Core.Exec.runFrom.eq_2	propext
 ConcreteSpec.Core.Exec.runFrom.eq_3	propext
@@ -2827,12 +2856,19 @@ _private.ConcreteSpec.Proofs.Adequacy.0.ConcreteSpec.Core.Exec.Demo.evalE.match_
 _private.ConcreteSpec.Proofs.Adequacy.0.ConcreteSpec.Core.Exec.Demo.evalE.match_5.eq_4	
 _private.ConcreteSpec.Proofs.Adequacy.0.ConcreteSpec.Core.Exec.Demo.evalE.match_5.eq_5	
 _private.ConcreteSpec.Proofs.Adequacy.0.ConcreteSpec.Core.Exec.Demo.evalE.match_5.eq_6	
+_private.ConcreteSpec.Proofs.Adequacy.0.ConcreteSpec.Core.Exec.Demo.logThenSpinPosition.match_1.eq_1	
+_private.ConcreteSpec.Proofs.Adequacy.0.ConcreteSpec.Core.Exec.Demo.logThenSpinPosition.match_1.eq_2	
+_private.ConcreteSpec.Proofs.Adequacy.0.ConcreteSpec.Core.Exec.Demo.logThenSpinPosition.match_1.eq_3	
 _private.ConcreteSpec.Proofs.Adequacy.0.ConcreteSpec.Core.Exec.Demo.spinConfigAt.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Adequacy.0.ConcreteSpec.Core.Exec.Demo.spinConfigAt.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Adequacy.0.ConcreteSpec.Core.Exec.Demo.spinConfigAt.match_1.eq_3	
 _private.ConcreteSpec.Proofs.Adequacy.0.ConcreteSpec.Core.Exec.Demo.spinConfigAt.match_1.eq_4	
 _private.ConcreteSpec.Proofs.Adequacy.0.ConcreteSpec.Core.Exec.Demo.spinConfigAt.match_1.eq_5	
 _private.ConcreteSpec.Proofs.Adequacy.0.ConcreteSpec.Core.Exec.Demo.spinConfigAt.match_1.eq_6	
+_private.ConcreteSpec.Proofs.Adequacy.0.ConcreteSpec.Core.Exec.InfiniteExecution.emittedCount.match_1.eq_1	
+_private.ConcreteSpec.Proofs.Adequacy.0.ConcreteSpec.Core.Exec.InfiniteExecution.emittedCount.match_1.eq_2	
+_private.ConcreteSpec.Proofs.Adequacy.0.ConcreteSpec.Core.Exec.QueryReport.isOutOfFuel.match_1.eq_1	propext
+_private.ConcreteSpec.Proofs.Adequacy.0.ConcreteSpec.Core.Exec.QueryReport.isOutOfFuel.match_1.eq_2	propext
 _private.ConcreteSpec.Proofs.Adequacy.0.ConcreteSpec.Core.Exec.runFromQ.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Adequacy.0.ConcreteSpec.Core.Exec.runFromQ.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Adequacy.0.ConcreteSpec.Core.Exec.runFromQ.match_3.eq_1	
