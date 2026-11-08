@@ -11,6 +11,14 @@ structure Tagged where
   doc : String
   deriving Inhabited
 
+/-- Evidence references are resolved once. Pairing compares declaration identities, not the
+    spelling of a qualified, relative or quoted reference in a doc comment. -/
+structure Evidence extends Tagged where
+  law : Name
+  key : String
+  subject : Option Name := none
+  mutant : Option Name := none
+
 structure Finding where
   status : String
   code : String
@@ -281,17 +289,29 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
         let some row := between doc ", R-" ")" | fail "obligation-roadmap" n; continue
         unless (roadmap.splitOn ("| R-" ++ row ++ " |")).length > 1 do fail "obligation-roadmap" n ("R-" ++ row)
     unless hasAuthored do fail "empty-authored-scope" .anonymous scope
-    let mut evidence : Array Tagged := #[]
+    let mut evidence : Array Evidence := #[]
     for t in tags do
       for tag in ["Instance (", "Planted ("] do
         for part in (t.doc.splitOn tag).drop 1 do
           let doc := tag ++ (part.splitOn ").").head! ++ ")."
-          evidence := evidence.push { t with doc := doc }
+          let some lt := field doc "law" | fail "evidence-tag" t.name; continue
+          let some law ← resolve all t.name lt | continue
+          let some key := field doc "case" | fail "evidence-tag" t.name; continue
+          let mut subject := none
+          let mut mutant := none
+          if tag == "Planted (" then
+            let some st := field doc "subject" | fail "planted-tag" t.name; continue
+            let some sn ← resolve all t.name st | continue
+            let some mt := field doc "mutant" | fail "planted-tag" t.name; continue
+            let some mn ← resolve all t.name mt | continue
+            subject := some sn
+            mutant := some mn
+          evidence := evidence.push { toTagged := { t with doc := doc }, law, key, subject, mutant }
     for t in evidence do
       unless ((toString t.name).splitOn "⟪example⟫").length > 1 do
         fail "evidence-not-example" t.name
-      let some lt := field t.doc "law" | fail "evidence-tag" t.name; continue
-      let some target ← resolve all t.name lt | continue
+      let target := t.law
+      let lt := toString target
       let candidate := tags.find? (·.name == target)
       match candidate with
       | some l =>
@@ -301,15 +321,17 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
       if (t.doc.splitOn "Planted (").length > 1 then
         let subjects := tags.filter fun l => l.name == target && (l.doc.splitOn "Law (subject ").length > 1
         if subjects.isEmpty then continue
-        let some st := field t.doc "subject" | fail "planted-tag" t.name; continue
-        unless subjects.any (fun l => (quoted ((between l.doc "Law (subject " ").").getD "")).contains st) do
-          fail "planted-subject" t.name st
+        let mut declared : Array Name := #[]
+        for l in subjects do
+          for st in quoted ((between l.doc "Law (subject " ").").getD "") do
+            if let some subject ← resolve all l.name st then declared := declared.push subject
+        unless t.subject.any declared.contains do
+          fail "planted-subject" t.name ((field t.doc "subject").getD "")
     let mut instances : Array InstanceCase := #[]
     for t in evidence do
       if !(t.doc.splitOn "Instance (").length > 1 then continue
-      let some lawText := field t.doc "law" | fail "instance-tag" t.name; continue
-      let some law ← resolve all t.name lawText | continue
-      let some key := field t.doc "case" | fail "instance-tag" t.name; continue
+      let law := t.law
+      let key := t.key
       let some value := t.info.value? | fail "instance-application" t.name; continue
       let value := value.consumeMData
       let .const head levels := value.getAppFn | fail "instance-application" t.name; continue
@@ -333,7 +355,7 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
       instances := instances.push ⟨t.name, law, key, args, levels⟩
     for p in evidence do
       if (p.doc.splitOn "Planted (").length > 1 then
-        unless instances.any (fun i => field p.doc "law" == some (toString i.law) && field p.doc "case" == some i.key) do
+        unless instances.any (fun i => p.law == i.law && p.key == i.key) do
           fail "unpaired-planted" p.name
     for law in tags do
       unless (law.doc.splitOn "Law (subject ").length > 1 do continue
@@ -350,13 +372,12 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
         let (occurs, _) ← (mentions law.info.type subject).run (20000, {})
         unless occurs do fail "subject-absent" law.name st
         for ic in cases do
-          let planted := evidence.filter fun t => field t.doc "law" == some (toString law.name) &&
-            field t.doc "case" == some ic.key && field t.doc "subject" == some st &&
+          let planted := evidence.filter fun t => t.law == law.name &&
+            t.key == ic.key && t.subject == some subject &&
             (t.doc.splitOn "Planted (").length > 1
           if planted.isEmpty then fail "missing-planted" law.name (ic.key ++ "/" ++ st)
           for p in planted do
-            let some mt := field p.doc "mutant" | fail "planted-tag" p.name; continue
-            let some mutant ← resolve all p.name mt | continue
+            let some mutant := p.mutant | fail "planted-tag" p.name; continue
             let mi := (env.find? mutant).get!
             unless mutant != subject && (mi matches .defnInfo _) &&
               mi.levelParams.length == ((env.find? subject).get!).levelParams.length do

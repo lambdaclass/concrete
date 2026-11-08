@@ -90,6 +90,10 @@ def controls(run, source):
         {("FAIL", "obligation-kind", "ConcreteSpecControl.proofDef")})
     add("law-definition", extra("/-- Law (subject `ConcreteSpecControl.S`). -/", "def falseLaw : 1 = 1 := rfl"),
         {("FAIL", "law-kind", "ConcreteSpecControl.falseLaw")})
+    relative = BASE.replace("Law (subject `ConcreteSpecControl.S`)", "Law (subject `ConcreteSpecControl.«S»`)").replace("Instance (law `ConcreteSpecControl.growth`", "Instance (law `growth`").replace("Planted (law `ConcreteSpecControl.growth`", "Planted (law `ConcreteSpecControl.«growth»`").replace("subject `ConcreteSpecControl.S`, mutant `ConcreteSpecControl.mutant`", "subject `S`, mutant `mutant`")
+    add("resolved-name-identity", relative, set(), status=0)
+    shared = BASE.replace("end ConcreteSpecControl", "/-- Law (subject `ConcreteSpecControl.S`). -/\ntheorem growth2 (n : Nat) (_h : n = 2) : n < S n := Nat.lt_succ_self n\n/-- Instance (law `ConcreteSpecControl.growth2`, case `two`). -/\nexample : 2 < S 2 := growth2 2 rfl\nend ConcreteSpecControl").replace("mutant `ConcreteSpecControl.mutant`). -/", "mutant `ConcreteSpecControl.mutant`).\nPlanted (law `ConcreteSpecControl.growth2`, case `two`, subject `ConcreteSpecControl.S`, mutant `ConcreteSpecControl.mutant`). -/")
+    add("shared-planted-example", shared, set(), status=0)
     failed = 0
     for label, fixture, budget, expected, status in cases:
         code, output = run(source, "", fixture, budget)
