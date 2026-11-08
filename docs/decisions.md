@@ -38,7 +38,7 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 - The 29 final picks on process, lexer, slice 1, floats, CLI, foundation, std, sign-offs and planning ([row](#decided-2026-11-08-twenty-nine)).
 - Best long-term writer and reviewer design ([row](#decided-2026-11-08-long-term-reviews)).
 - C5 Q1–Q3, architecture items K1–K13 and the dedicated `concrete-ci-2` runner label ([row](#decided-2026-11-08-yes-to-everything)).
-- Approved gate additions and three tiers; assignments remain open ([row](#decided-2026-11-08-gate-tiers)).
+- Approved gate additions and coordinator-approved tier assignments (revised 2026-11-08) ([row](#decided-2026-11-08-gate-tiers)).
 - The core statement ([row](#decided-project-core-statement)).
 - Proof infrastructure from the first commit ([row](#decided-project-proof-infrastructure)).
 - No hidden traps, and termination evidence or a report of the permitted unresolved obligations ([row](#decided-project-no-hidden-traps)).
@@ -198,7 +198,7 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 <a id="decided-2026-11-05-revisions"></a>**Owner-approved revisions of recorded rules** (each also noted at the rule it revises):
 
 - **OD45 and OD87** (rows Q5.1, Q5.4): capability arguments are written explicitly at every polymorphic call and checked against the callee; there is no capability inference and no inference solver. OD46 (type arguments from checked argument types) is unchanged.
-- **TYPE-22@1's examples** (row Q6.4): a constant whose initializer provably fails is refused at compile time whether or not it is used (OD118); both examples, `unused-constant-never-runs` and `constant-traps-at-use`, become reject examples. When a constant is evaluated (at each use, never at start) is unchanged. *Revised 2026-11-08 by the [29 decisions](#decided-2026-11-08-twenty-nine).* Every initializer is evaluated at compile time; fallible primitives are allowed in the closed no-call, no-loop, no-effect grammar. Kernel-checked success is required; failure or fuel exhaustion refuses it.
+- **TYPE-22@1's examples** (row Q6.4): a constant whose initializer provably fails is refused at compile time whether or not it is used (OD118); both examples, `unused-constant-never-runs` and `constant-traps-at-use`, become reject examples. The earlier clause “at each use, never at start” is superseded by the following compile-time evaluation revision (2026-11-08). *Revised 2026-11-08 by the [29 decisions](#decided-2026-11-08-twenty-nine).* Every initializer is evaluated at compile time; fallible primitives are allowed in the closed no-call, no-loop, no-effect grammar. Kernel-checked success is required; failure or fuel exhaustion refuses it.
 - **TRAIT-1@1** (row Q2.8): two impls with equal heads may coexist only when Copy/Destroy disjointness (OD28) makes their domains disjoint, as in `impl<T: Copy> Destroy for Vec<T, A>` beside `impl<T: Destroy> Destroy for Vec<T, A>`. No other coherence or orphan rule changes, and no disjunctive bound syntax is added.
 - **The generated-chapter requirement** (rows Q9.15, P3): Lean is the specification, in one main normative file with doc comments and examples; no prose is generated from it. This confirms the [2026-11-04 decision](#decided-project-lean-is-the-spec). The "one main normative file" wording is revised 2026-11-06 by the [long-term changes](#decided-project-long-term-2026-11-06): one authoritative specification library in cohesive modules, with `ConcreteSpec/Spec.lean` as its public import.
 - **Authority rules 13, 5 and 7** (row Q7.11): `Console` joins the reserved capability set, for operations on the `StdIn`, `StdOut` and `StdErr` grants; rule 5's operational list and rule 7's primitive table include it. `Device` stays for device grants.
@@ -259,7 +259,7 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 - **Q6.3** Are violations rechecked after generic substitution? — Parametric checking plus substitution-time rechecking.
 - **Q6.4** Does unreachable code receive static refusal checks? — Check all written code, including generic bodies. *Revises or adds: REVISES TYPE-22@1 examples.* *Revised 2026-11-08 by the [29 decisions](#decided-2026-11-08-twenty-nine).* Every initializer is evaluated at compile time; fallible primitives are allowed in the closed no-call, no-loop, no-effect grammar. Kernel-checked success is required; failure or fuel exhaustion refuses it.
 - **Q6.5** How do short-circuit operators interact with refusal? — Check both short-circuit operands; execute conditionally.
-- **Q6.6** What happens when constant evaluation fails? — Separate invalid and unknown; no evaluator-resource failure.
+- **Q6.6** What happens when constant evaluation fails? — Separate invalid and unknown; no evaluator-resource failure. *Revised 2026-11-08 by [item 26 of the language decisions](#decided-2026-11-08-language) and [item 18 of the 29 decisions](#decided-2026-11-08-twenty-nine): the earlier no-evaluator-resource-failure clause is superseded for constants; every initializer must succeed at compile time with kernel-checked evidence, and failure or fuel exhaustion refuses it.*
 - **Q6.7** What distinguishes traps, unsafe stuckness and exhaustion? — Separate traps, unsafe stuckness, OOM and fuel exhaustion.
 - **Q7.1** How are target grant schemas and multiplicities specified? — One target, linux-x86_64-hosted (Linux ≥ 5.6), with a fixed grant table; main asks for grants as parameters. *Revised 2026-11-08 by the [foundation decision](#foundation-q16): the grant table is a lawful extensible registry rather than a permanently closed one.*
 - **Q7.2** How do narrowing, acquisition and splitting relate? — Narrowing consumes and intersects rights; children are acquired from a grant that stays.
@@ -273,7 +273,7 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 - **Q7.10** Do you approve the linux-x86_64-hosted grant table? — Approve R4 F6's complete grant table below as part of this row: every launch configuration, operation signature, permission, narrowing rule and ending contract. Standard-stream operations require Console (Q7.11), not Device; where the R4 F6 table says with(Device) for StdIn/StdOut/StdErr, read with(Console). A missing configured grant refuses startup with exit 125; a trap exits 134. *Revises or adds: New target contract: owner decision.* *Extended 2026-11-06 by [no hidden traps](#decided-project-no-hidden-traps): the stack target contract (adequate stack excludes exhaustion, launch refusal 125 when the reservation is smaller than the bound; then a defined outcome for inadequate stack) is a future target-contract obligation, not a current guarantee.* *Revised 2026-11-08 by the [foundation decision](#foundation-q16): the grant table is a lawful extensible registry; the existing grant contracts are preserved, an unknown operation is refused, and the Entropy grant's shape waits for slice 6 ([question 14](#foundation-q14)).*
 - **Q7.11** Which permission do the standard streams use? — Add a Console capability for StdIn/StdOut/StdErr operations; keep Device for device grants. *Revises or adds: Authority rule 13 (adds Console); rules 5 and 7 lists include it.*
 - **Q8.1** What is the first proof endpoint? — Proved source→BIR; qualified native; conditional image claim.
-- **Q8.2** What exact source subset is admitted? — A1 minimal `u8`/linear-struct component subset. <a id="q8-2-revision"></a>Confirmed 2026-11-06 by [vertical slices](#decided-project-vertical-slices-2026-11-06): this is slice 1; its defined trap is an explicit `abort()`, with the refused `200 + 56` as its known-violation control; integers are complete at slice 2.
+- **Q8.2** What exact source subset is admitted? — A1 minimal `u8`/linear-struct component subset. <a id="q8-2-revision"></a>Confirmed 2026-11-06 by [vertical slices](#decided-project-vertical-slices-2026-11-06): this is slice 1; its defined trap is an explicit `abort()`, with the refused `200 + 56` as its known-violation control; integers are complete at slice 2. *Revised 2026-11-08 by [items 6–8](#decided-2026-11-08-twenty-nine): the earlier subset description is refined to a stated subset of the uncut spec with preservation proof, `move t`, and `return abort();` running no cleanup.*
 - **Q8.3** What establishes frontend correspondence? — Independent byte-to-Core correspondence judgments.
 - **Q8.4** Does the first artifact qualify as a complete executable? — Component plus bound launcher first.
 - **Q8.5** What launcher ABI and observations are fixed? — Pinned launcher ABI, inputs, startup and trap mapping. *Extended 2026-11-06 by [no hidden traps](#decided-project-no-hidden-traps): the stack target contract (adequate stack excludes exhaustion, launch refusal 125 when the reservation is smaller than the bound; then a defined outcome for inadequate stack) is a future target-contract obligation, not a current guarantee.*
@@ -689,7 +689,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     admission needs closed evidence), CON-6 and [OD80](#od80) (`assume` cannot admit an operation in
     safe code), [OD120](#od120) (a vacuous precondition used for safety is refused), [OD82](#od82)
     (extended to functions), Q7.10 and Q8.5 (extended by the stack target-contract obligations of Q14, which are future target work, not current guarantees). Unchanged: STMT-1, STMT-2, OD101 (general trap semantics), Q6.3–Q6.6
-    (with the interactions stated in the proposal), CON-1 and P18.
+    (with the interactions stated in the proposal; revised 2026-11-08: the unchanged designation for Q6.4 and Q6.6 is superseded by their compile-time constant-evaluation revisions above), CON-1 and P18.
   - *Spellings* (owner, 2026-11-06: "ok agreed with the 3 decisions"; checked by Codex, agy and Kimi,
     whose shared refinements are recorded here under the owner's rule that what Claude and Codex agree
     on is recorded).
@@ -830,6 +830,8 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     as an assumption diff that fails CI until it is recorded with the change (R-0589).
   - *Tables* (owner, 2026-11-06: "ok do everything", after Claude, Codex, agy and Kimi chose unanimously). The sections are the typed, versioned `[policy]` and `[assumptions]` tables;
     an unknown key or version is refused. Slices 7 and 19 extend them.
+  Revised 2026-11-08: The earlier general table-versioning clause is refined by [items 9 and 17](#decided-2026-11-08-twenty-nine): per-table versions, named `profile = "predictable"`, an explicit trusted-assumptions setting and fixed version-1 meanings; `[policy]` sets minimum proof strength and rejects vacuous proofs.
+
 - <a id="decided-project-os-sandboxing"></a>**OS-level sandboxing is outside the compiler's scope**
   (owner, 2026-11-06: "shouldn't be even part of a compiler, that's something the user can decide"). OS-level sandboxing
   (seccomp/landlock, Capsicum, pledge/unveil) is outside the compiler's scope; users may apply it
@@ -847,6 +849,8 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   `--format=human|json`. The checker result type is fixed in A2i, before the freeze (R-0592); the
   record, its JSON schema, goldens and the parser's diagnostics land in B0 (R-0593). It refines
   R-0479.
+  Revised 2026-11-08: The earlier error-selection and output contract is refined by [item 12](#decided-2026-11-08-twenty-nine): each file is checked separately, stopping at its first error. [K12/K13](#decided-2026-11-08-yes-to-everything) extend the versioned output schema and require Elm-quality structured diagnostics and their quality gate; a new CLI surface still waits for the owner.
+
 - <a id="decided-project-memory-2026-11-06"></a>**Heap facts and memory policies** (owner,
   2026-11-06: "a", option (a) on every question of the [proposal](archive/crucial-2026-11-06/MEMORY.md), reviewed by Codex,
   agy and Kimi). Each function reports, per allocator lineage, requested bytes, net change and peak
@@ -916,6 +920,8 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   confused. An integer literal with a leading zero (such as `007`) is refused, so no literal reads as
   octal. The trap site an executable reports is a named premise of the theorem until it is proved
   (spec obligation O4).
+  Revised 2026-11-08: The earlier two-command inventory is superseded by [items 12–14 and 16](#decided-2026-11-08-twenty-nine): the first-error rule, `emit`, `trace`, `interp`, `help`, `concrete schema`, `concrete capabilities`, uniform exits 0–4 and `concrete facts` as check mode apply as specified there; no `run` command.
+
 - <a id="decided-project-vertical-slices-2026-11-06"></a>**Thin vertical slices**
   (owner, 2026-11-06, relayed by the orchestrator from the owner session: "and let's have vertical slices where everything is proven and work
   first with integers right?", then "reorder based on what you believe is more important" and "have
@@ -975,6 +981,8 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   then as you said right", approving the recorded recommendation). This answers when the tools
   arrive: the test runner lands at slice 8 with `#[test]`, extends to modules at slice 17, and the
   formatter lands at slice 17. The LSP comes later.
+  Revised 2026-11-08: The earlier formatter description is extended by [item 15](#decided-2026-11-08-twenty-nine): `--check`, `--write` and `--stdin` are mutually exclusive modes.
+
 - <a id="decided-2026-11-07-performance"></a>**Speed tracking** (owner, 2026-11-07: "ok go ahead all
   yes then as you said right", approving the recorded recommendation). This answers when performance
   is measured and how it is reported. Flagship runtime is tracked from slice 2. Compiler wall time,
@@ -1152,6 +1160,8 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
      Codex and Kimi" split. Codex, Kimi and agy implement across the codebase, not only mechanical
      work; Claude briefs, reviews, runs the gates and lands, with its quota focused on the critical
      path.*
+     Revised 2026-11-08: The earlier allocation of writing work to Claude is superseded by [Claude reviews only](#decided-2026-11-08-claude-reviews-only): Claude writes no file content; its critical-path quota is for briefing, review, gates and git transport.
+
   5. <a id="decided-2026-11-08-front-end"></a>*The front end starts now.* The lexer and the LL(1)
      parser are written now, in parallel with the foundation (R-0620); since the later answer "ok do
      the written grammar", the parser waits for the owner-approved written grammar and its Lean
@@ -1174,7 +1184,8 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
       d-site permission establishes, in the [no-hidden-traps row](#decided-project-no-hidden-traps),
       README.md, PHILOSOPHY.md and the pending no-hidden-traps changelog fragment.
 - <a id="decided-2026-11-08-std-table"></a>**A std-per-slice table, no user-guide chapters for now, the written grammar and the speed target**
-  (owner, 2026-11-08: "ok let's do 2, for now let's not do 3"). Item 2 is approved: `ROADMAP.md`
+  (owner, 2026-11-08: "ok let's do 2, for now let's not do 3"). Item 2 is approved.
+  The related owner request was "ok launch codex kimi and agyh review the stdlib deisng and where to do what and when". `ROADMAP.md`
   gets a table of which standard-library module arrives in which slice, with its spec contract, its
   std source, its proof status and the showcases that need it
   ([table](../ROADMAP.md#std-per-slice)). Item 3, a user-guide chapter per slice, is not done for
@@ -1189,6 +1200,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   owner decision (R-0623).
 - <a id="decided-2026-11-08-capabilities-kept"></a>**Capabilities stay as decided: `with(...)` permission
   sets plus grant values** (owner, 2026-11-08: "i don't see an isue with noisier if it's clearer").
+  The owner requested the comparison with "i want a comparison of capabilitiy yes".
   This confirms the existing design with no revision: the [authority rules](#decided-2026-11-02-authority)
   and the Q5 and Q7 rows stand as written, and foundation contract C5 is written to them. The
   answer closes a comparison with a capabilities-as-values-only (object-capability) model, in
@@ -1272,7 +1284,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
         obligation.
     25. *Function values* keep the decided design: a function pointer plus explicit context, with
         contracts.
-    26. *Constants are computed at compile time*, and a constant's value must be `Copy`. Before
+    26. *Constants are computed at compile time*, and a constant's value must be `Copy`.
         Initializers use a closed grammar with fallible primitive operations, no calls, loops or effects. Every initializer is evaluated at compile time and kernel-checked for success; failure or fuel exhaustion refuses it. One operation set is shared with runtime code. *Revised 2026-11-08 by the [29 decisions](#decided-2026-11-08-twenty-nine).*
     27. *Kept explicitly:* value-producing `if` and `match`, both proof scopes, and existential
         brands.
@@ -1387,7 +1399,8 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   - `wip/record-language` at `1547734f86e83d381f6cac2f25d2810b083bc9ed`: Codex and Kimi ACCEPT
     (verification of the round-2 fixes), agy ACCEPT.
   - `wip/one-repository` at `a27fbb842`: all three ACCEPT, at the scripts cap of 3 rounds. Revised 2026-11-08: this approves only that exact SHA; a rebased one-repository candidate needs a new sign-off ([sign-offs](#decided-2026-11-08-signoffs)).
-  None of the three has an outstanding finding.
+  None of those three has an outstanding finding.
+  - Revised 2026-11-08: owner answer "sign off fb097fa4" approves only `fb097fa4c3a44abdb23e394db418193d6ac838fc` on `wip/owner-signoff`, at scripts cap 3. Codex review.sh clean; agy ACCEPT; Kimi REJECT with two real findings: the transcript could bind through any SHA mention, and the verdict could be read from the whole transcript including the request. Follow-up `b7f30d36` on `wip/owner-signoff-split` closes both findings (R-0643); Codex review.sh round 1 clean, agy ACCEPT; Kimi wrote that follow-up and did not review it. The sign-off does not waive those repairs or any gate.
 - <a id="decided-2026-11-08-landing-redesign"></a>**The landing protection redesign** (owner, 2026-11-08,
   the same answer: "yes redesign"). The local remote guard ("guard A") and the acceptance shim are
   replaced by this order:
@@ -1462,7 +1475,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
 
   Every slice extends the generator and the manifest and states its trusted-base additions; scaling
   and determinism stay green. This answer covered items 2–5. Showcase sketches were later approved by [item 29](#decided-2026-11-08-twenty-nine) (revised 2026-11-08).
-- <a id="decided-2026-11-08-gate-tiers"></a>**All gate additions and three tiers are decided** (owner, 2026-11-08): "ok add all the gates but we should run some of them in every pr and others every day and others every week?" and "ok let's add the tiers when you get back". All C1–C6, D1–D3, A1–A5, T1, G1–G3 and new gates 1–12 below are added. The tiers are PR, daily and weekly. Which gate runs in which tier stays **OPEN**: assign each gate to the PR, daily or weekly tier (R-0649), owned by the gates worker's three-model round. The proposal's assignments are proposals only.
+- <a id="decided-2026-11-08-gate-tiers"></a>**All gate additions and three tiers are decided** (owner, 2026-11-08): "ok add all the gates but we should run some of them in every pr and others every day and others every week?" and "ok let's add the tiers when you get back". All C1–C6, D1–D3, A1–A5, T1, G1–G3 and new gates 1–12 below are added. The tiers are PR, daily and weekly. Revised 2026-11-08: the earlier **OPEN / PROPOSAL** assignment clause is superseded. The tier assignment and execution contract below are approved by the coordinator 2026-11-08, under the owner's approval of all gates with per-PR, daily and weekly tiers (the first quote above), and of test types, "ok let's add all this". No approval times are known. R-0649 owns enforcement; this is a decision record, not a claim that the gates are implemented.
 
   **C/D: scaling and determinism**
 
@@ -1509,15 +1522,29 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   11. Import layering: compiler code must not import test or spec-diff code.
   12. Gate coverage: every pipeline stage is covered by at least one gate.
 
-  **Operating rules**
+  **Tier and scheduled-run rules — approved by the coordinator 2026-11-08**
 
-  - Every gate declares its tier, and the meta-gate enforces this along with the PR-tier budget.
-  - A daily or weekly failure is a stop-the-line bug against main, at the exact SHA, with a reproducer. It never blocks an unrelated landing, and it is never ignored.
-  - Every bug a scheduled run finds adds a regression fixture to the PR tier.
-  - A skipped or cancelled scheduled run counts as missing, never as passed.
+  Every gate declares its tier (PR, daily or weekly) in the gate manifest. The meta-gate (G1) fails on a missing tier, or on a PR gate over its budget (measured by G3). A daily or weekly failure is a stop-the-line defect pinned to the exact SHA. It is triaged immediately and blocks work that depends on the broken property; it does not put a failing check on unrelated candidates. Each such defect adds a PR regression in the right fixture domain: compiler program, proof mutation, gate record, binary artifact, or scheduler control. A skipped, cancelled, queued-too-long or absent scheduled run is MISSING, never passed. Results are PASS, FAIL, INCOMPLETE or MISSING, and a replay records a new attempt without overwriting the earlier one.
 
+  A schedule workflow runs on self-hosted concrete-ci-2, under a host-specific runner label, with workflow_dispatch for replays. main is resolved once to its full SHA; each run uses a private checkout under nix develop and the bounded runner, within the two-heavy-runs-per-host limit. Results are recorded per exact SHA as git notes under refs/notes/concrete-gates-{daily,weekly}, plus a result-index artifact holding the logs, seeds, tool identities, controls and reproducers. An independent observer on a GitHub-hosted runner checks freshness, and normal CI checks it too. ISSUES.tsv gets a row for each confirmed defect, not one per run. Where the reviewers disagreed, the long-term option was taken. The 10-minute PR budget is a target to be measured: a gate's full leg moves to daily rather than being weakened, and a real cheap PR leg stays.
 
-  **Test types T-a to T-j are decided** (owner, 2026-11-08, 15:13:46 UTC): "ok let's add all this". R-0652 adds all ten. Their tier assignment is the same open R-0649 item.
+  **Decided tier table (coordinator approval, 2026-11-08; no times known)**
+
+  | Tier | Assigned work |
+  |---|---|
+  | PR | Tests: manifest on both backends (B/N5). Gate infrastructure: N11 import layering; G1, G2, G3. Scaling: C6 automatic controls, X1 stage inventory, and deterministic work counters at small sizes (C1/C3); until the counters exist, wall-clock scaling runs on ci-2 through the trusted exact-SHA path. Determinism: D1 two runs varying path, HOME, TMPDIR, env order, locale, TZ and umask; D2 full artifact inventory with the earliest differing stage named; D3 GitHub vs ci-2, required. Spec differential: A fixtures plus a short fixed-seed generated run, the X3 lowering contract, A2 and A5. Trust and artifacts: T1, X2 and N8 consumed-identity checks; N2 on spec branches; N3, N6, N7, N9, N10 caps, N12. Test types: T-c validators on every manifest output, T-g statement pins, T-j regression links (with exact-parent replay on ci-2), T-b boundary matrix, T-d ASan plus a valgrind control per backend, T-h curated limits. T-f, T-i, A3, N1 and N4 get PR legs as their slices land. |
+  | Daily (ci-2) | Scaling: large sizes and RSS, plus C5 history and budgets. The full D1 perturbation matrix; a one-hour A1 campaign with shrinking. Test types: T-b exhaustive on the evaluator, T-d memcheck on every binary on both backends, T-h full stress, T-a rewrite chains, T-c on generated outputs. One-hour N4 fuzz, N8 clean project rebuild, N10 proof history, T-j historical replay, and the trusted-base fresh-build trace audit. |
+  | Weekly | Mutation: A4 compiler mutation, G1 gate-bypass mutation. T-b exhaustive native u8/i8 on both backends; N8 full toolchain and supply-chain rebuild; overnight fuzz and differential runs. T-e full ABI matrix, T-d cross-host run, and the C5/N10/G3 trend reviews. |
+
+  X1 is sample/stage inventory completeness; X2 binds consumed executable identities rather than tool basenames; X3 requires every supported accepted candidate to compile and compare when lowering lands. Future capabilities are reported as unavailable, never as passed. The table above governs tier placement where the input review proposed a different tier (notably exhaustive native arithmetic). The input's cost ranges are unmeasured planning estimates excluding setup/builds; they do not establish a ten-minute CI duration.
+
+  **Design and build order.** Follow `prop-codex2.md`'s dependency order, one numbered entry per branch, with automatic controls included: N11 → B/N5 → G1 → G2 → G3 → scheduled execution → independent freshness → N12 → C sample completeness → C6 → C1 → C2 independent families → C3 → C4 output growth → C4 isolated RSS → C5 → D2 → D1 → D3 → T1 declarations → T1 executable identities → N7 → N6 → T-g → N2 → N3 → N9 → T-j → T-c → T-b → T-d → A1 replay/shrinking → T-a → A4 → G1 mutation → N8 identities → N8 daily rebuild → N8 weekly rebuild → N10 → A5. C2 uses one family per branch, D1 separate perturbation branches, N7 separate target-format branches, T-c one implemented pass boundary per branch and T-a one justified transformation per branch. Each has its intended failing plant, not merely declared controls.
+
+  Dependent work then follows capabilities: N4 lexer corpus against landed lexical rules; N4 parser after R-0622's approved grammar and R-0620; T-f after R-0593/R-0603; N1 after rule IDs; A2 witnesses per supported rule family (backend work can start earlier); full Core→native A after slice-1 lowering; A3 after diagnostics/checker interfaces; T-h per supported input class (BIR earlier); T-i as functions/loops/recursion and facts arrive; T-e with approved extern/layout support. Staged large work retains the complete design, dependencies and closure control in its roadmap row. `wip/gates-roadmap-rows` owns the new detailed rows; this branch only links the existing gate rows.
+
+  The design uses actual compiler-work counters, independent input families, at least four distinct growth samples and the declared model (including n log n); finite fits are evidence, not asymptotic proofs. RSS is measured in isolated processes, distinct from report-only final binary size. D3 preserves independent builds and uses trusted exact-SHA dispatch rather than arbitrary PR execution on self-hosted runners. N2 tests explicit non-vacuity obligations (inhabited hypotheses, feasible contexts, boundary witnesses and claim strength); unconditional laws need no invented counterexample. N1 requires refusal witnesses only for refusal-producing rules. T-i tests the decided termination/permission policy, including permitted unresolved cases; evaluator fuel exhaustion is not proof of divergence. These refine the earlier blanket counterexample/refusal descriptions rather than weaken their actual obligations. A5 keeps executable differentials for residual trusted boundaries. No existing required proof check moves to a schedule to claim the cost target.
+
+  **Test types T-a to T-j are decided** (owner, 2026-11-08; no time known): "ok let's add all this". R-0652 adds all ten. Revised 2026-11-08: their earlier open assignment is superseded by the coordinator-approved tier table above (R-0649).
 
   - T-a metamorphic: rename, reorder, dead code, reformat.
   - T-b exhaustive arithmetic over 8-bit operands, with boundary values at wider widths.
@@ -1529,6 +1556,17 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   - T-h limit tests.
   - T-i termination and bounded-execution refusals.
   - T-j a regression fixture for every bug.
+
+  **ci-2 evidence (2026-11-08).** The following is RESULTS.md wording, with short commit identifiers expanded using SHAS.txt. The throwaway merge has no supplied full SHA and is not an exact-SHA qualification result. No FAIL below is promoted by passing controls or root checks.
+
+  - A 83fb12da3155c03d70cb1a1d7fc1a6371e283b00 (2026-11-08T15:35Z): spec_diff FAIL (fresh clone: ConcreteSpec/Spec/Slice0.olean not built by the gate; see A2-ci2-findings.md); root checks 12/12 PASS.
+  - C 1f5457c975829e21e403a217ffa2f90d63cb0abf (2026-11-08T15:35-15:42Z): determinism PASS (32 tests, all controls refused for planted reason); slice0_repro PASS; scaling FAIL as expected for ISS-0030 (lcb_emit 2.883, llvm_module 1.505, in_process_total 2.815, total 1.961; lcb_assemble 1.083, native flat); automatic controls linear PASS, quadratic refused (1.988); root checks 12/12 PASS.
+  - D 217d122a99c1c8294ef68b13e97c43d2709e5a4e (15:40-15:44Z): trusted_base FAIL (unlisted mktemp/realpath/rm in native helper; comm unsorted input); declaration/axiom/registry controls all refused for planted reason; tests PASS; root 12/12 PASS.
+  - lcb-numbering ee2d82528fe84b2da2d69eec9756e168e29a1ecd (15:4x-15:48Z): lake build Concrete PASS; slice0_trusted_base PASS; slice0_backends PASS; slice0_artifacts PASS; slice0_repro PASS; root PASS. Throwaway merge with C 1f5457c975829e21e403a217ffa2f90d63cb0abf: scaling exponents 10x->100x lcb_emit 0.971, llvm_module 0.980, lcb_assemble 1.075, in_process_total 1.063 (was 2.883/1.505); gate FAILs only on resolution floor (lcb_emit 3.7 ms, llvm_module 4.2 ms < 10 ms at 100x, k0=1) -> C must raise k0.
+
+  A2 structural finding: the gate must build its complete import closure in a fresh checkout, through a test-generator target/library depending on ConcreteSpec and Concrete, rather than rely on another job’s build. D2 structural findings: either list the helper’s coreutils as trusted pipeline components with why/how removable, or stop invoking them; never use an ad-hoc allow-list. Fail-closed set comparison must sort under LC_ALL=C or avoid comm. D2 tests.sh rc=0 covered 32 examples and 68 backend runs.
+
+  Evidence integrity: SHA256SUMS verified for `prop-codex2.md`, `RESULTS.md`, `A2-ci2-findings.md` and `D2-ci2-findings.md`. Their SHA-256 identities, respectively: `6d4fb86cd147cd99a99fdbbf4d0d588255cae32d2cadfdaacf837bdff1aa909c`, `e6f35c485537df7f2b82bb65835692ecd120c4feb2d96778cf75a27c3ce33226`, `514faf7841f445059d0004c0bcbd5ed1fd7cdb7278f6c032e819dd16b648ffe1`, `cffa345ffe3c4468096877ec47d1a15a5befdcf51dbd42b0f5549f918d213254`. These are source records, not new runs on this branch.
 
 - <a id="decided-2026-11-08-six"></a>**Six spec and process improvements** (owner, 2026-11-08,
   about 14:00 UTC: "yes to 6 things"):
@@ -1650,10 +1688,11 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   29. The showcase programs are sketched before the C1-C10 freeze, to test the design.
 
   Operating rule from ISS-0021: every reviewer, agy included, runs where it can read the repository and names the files it read. On record-foundation, Codex wrote the round-2 fixes and the Codex leg ran; that writer/reviewer overlap is recorded. R-0650 fixes the tooling. The owner sign-offs of legacy sweep `35b489e4` and B `e997548d` are recorded once that work lands; the former is the legacy sweep, not the roadmap sweep.
-  Item 30 was answered separately at 15:11:33 UTC: "sign off e997548d i amn gonna grab a coffee, gonna come back in an hour". This approves only `e997548d93482f37181dc0a523a2a06bca40a77c` on `wip/one-repository-2`: Codex ACCEPT (fix check, full access), agy ACCEPT; Kimi wrote it and did not review. The three C5 questions and the gate-tier assignment remain open.
+  Item 30 was answered separately at 15:11:33 UTC: "sign off e997548d i amn gonna grab a coffee, gonna come back in an hour". This approves only `e997548d93482f37181dc0a523a2a06bca40a77c` on `wip/one-repository-2`: Codex ACCEPT (fix check, full access), agy ACCEPT; Kimi wrote it and did not review. Revised 2026-11-08: the earlier open status is superseded for C5 by the [C5 answer](#decided-2026-11-08-yes-to-everything), and for tier assignment by the coordinator-approved [tier decision](#decided-2026-11-08-gate-tiers).
+- <a id="decided-2026-11-08-codex-unsandboxed"></a>**Codex execution in an isolated review copy** (owner, 2026-11-08): "you can use codex without sandbox it's okay". The operating restriction is danger-full-access only inside a git-archive copy of the exact head, as specified in AGENTS.md; this grants no language decision authority.
 - <a id="decided-2026-11-08-long-term-reviews"></a>**Best long-term design** (owner, 2026-11-08): "ALWAYS tell the reviewrs to do the best long term thing rather than cuitting corners". Every writer and reviewer prompt to Codex, Kimi or agy explicitly says to judge and fix by the best long-term design, never cutting corners for speed, a smaller diff or fewer rounds. Reviewers report shortcuts as real findings and name the long-term fix. Writers implement the structural fix. If staging is unavoidable, they record the long-term design and its roadmap row.
 
-- <a id="decided-2026-11-08-yes-to-everything"></a>**C5, architecture items K1–K13 and the runner label** (owner, 2026-11-08, 15:21:26 UTC): "yes to everythiong". The owner confirmed at 15:21:44 UTC: "yes to adding all the 12" / "add all 12" / "the three things are all good". The three pending asks are decided as follows. This supersedes the earlier note in the 29-decisions row that the C5 questions remained open; the gate-tier assignment remains open.
+- <a id="decided-2026-11-08-yes-to-everything"></a>**C5, architecture items K1–K13 and the runner label** (owner, 2026-11-08, 15:21:26 UTC): "yes to everythiong". The owner confirmed at 15:21:44 UTC: "yes to adding all the 12" / "add all 12" / "the three things are all good". The three pending asks are decided as follows. This supersedes the earlier note in the 29-decisions row that the C5 questions remained open; revised 2026-11-08: the earlier open gate-tier status is superseded by the coordinator-approved [tier assignment](#decided-2026-11-08-gate-tiers).
   1. **C5 Q1–Q3, all as recommended** (R-0611):
      - Q1: loans target only the current activation or the entered callee; upward loans are refused.
      - Q2: an owner passed directly as an argument gets a call-duration root loan. A deferred call holds the loan until it runs; there is no implicit ending of an existing loan.
@@ -1662,7 +1701,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   3. **Architecture items K1–K12 are added on the plan below** (R-0653–R-0665). The survey agent's three-model round settles how each is built and its final placement. Every placement below is a proposal, not a final scheduling decision. K5's optimization architecture choice stays an **OPEN owner question**, after the three-model round and before slice 1 sets passes.
      - **K1. Source provenance through every IR** (R-0653). Every node in HIR, Core, MIR, CFG, SSA and BIR carries its origin span and a stable ID. Diagnostics, trap-site accounting, debug info and facts depend on this. Proposed placement: identity work (C9 U1-U13 / B0).
      - **K2. A textual printer and parser for every IR** (R-0654), with a round-trip law, so each pass can be tested in isolation. Proposed placement: with the B0 printers (U5/U11).
-     - **K3. A compiler with no panics** (R-0655). No panic!, unreachable!, partial def or sorry in compiler code, except entries on an allow-list enforced by a gate. Proposed placement: a PR-tier gate.
+     - **K3. A compiler with no panics** (R-0655). No panic!, unreachable!, partial def or sorry in compiler code, except entries on an allow-list enforced by a gate. Proposed placement: a PR-tier gate. **OPEN owner question (recorded 2026-11-08):** the approved K3 allow-list wording includes `sorry` and `partial def`, while R-0630 bans them throughout `Concrete/`. These obligations conflict; their reconciliation waits for the owner. Neither side is selected here.
      - **K4. Generated-code quality benchmarks** (R-0656). Runtime and code size of the showcases compared with C at -O2, on both the LCB and LLVM paths, with history on concrete-ci-2. Proposed placement: daily tier, once the showcases run.
      - **K5. An optimization architecture, decided early** (R-0657). The options are verified BIR passes, translation validation, or LLVM on the printer path only. Also decided here: what the LCB path promises about performance. Proposed placement: before slice 1; the choice itself remains an open owner question.
      - **K6. Translation validation or a differential check for the unproven LLVM printer path** (R-0658), until it is replaced or proven. Proposed placement: alongside the backend-agreement gate.

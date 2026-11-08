@@ -6,8 +6,7 @@
   spec-vs-compiler comparison, one test manifest and runner, scaling and determinism, and the
   maintained trusted-base list. The back-end-first comparison and its fixed full-path hook were
   approved with "ok wuith this but we have to add it to the roadmap or a slice" and "ok let's make
-  sure the roadmap has all this and the slices" (R-0632–R-0635). Showcase sketches before the
-  freeze were not included in that approval.
+  sure the roadmap has all this and the slices" (R-0632–R-0635). Showcase sketches were outside that initial approval; item 29 of the later 29-decisions answer approves them before the freeze (R-0651).
 - **Six spec and process improvements** ("yes to 6 things"): law-vacuity controls, a
   property-checked axioms list, continuous foundation integration, frozen process tooling and
   independent landings, bounded watchers for background jobs, and a Codex+Kimi+agy round before
@@ -23,11 +22,6 @@ spec-vs-native comparison.
 
 The foundation state for C1 (including its lifecycle change), C2, C4 and C6 is: reviewed;
 reopened by the 2026-11-08 vacuity audit, one fix round each (C1, C6, C2, C4) on the integrated
-spec-core. C7 was accepted before the vacuity rule and is audited next. The C1 lifecycle change's
-owner-confirmation question stays open, and the A2c freeze gate is unchanged.
-The lexer inventory and its six spelling blockers join R-0620 and R-0625. R-0600 stays in both
-rows while its slice is an owner question. Slice 26 leaves NaN semantics open. A new open
-owner-question register points to the foundation, std, slice-1, lexer, R0600 and NaN sources;
-recommendations remain labelled as recommendations.
+spec-core. C7 was accepted before the vacuity rule and is audited next. The owner confirmed the C1 lifecycle change in item 21; the vacuity-audit reopening and A2c freeze gate remain. The lexer spellings are decided, with the remaining keyword/builtin tables and other grammar spellings still in R-0625. R-0600 is due at slice 5 under item 10, and the canonical NaN rule is decided under item 11. The remaining foundation, std, slice-1 and spelling questions stay explicit; recommendations remain labelled as recommendations.
 
 Review fixes on 2026-11-08 align the conversion/output revisions, writer and push rules, landing services, roadmap owners and revision notes, and record ISS-0020 as filed and fixed on `wip/signoff-reject`.

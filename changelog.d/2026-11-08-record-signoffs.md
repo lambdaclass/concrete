@@ -19,7 +19,7 @@
   if it is byte-identical to the same root path at a named commit and is gone from the root. P5 and
   the restart row are revised.
 - **All of `docs/archive/` moves under `legacy/`** ("ok to 2"), by that sweep (R-0631). P21 is
-  revised. Where a decided proposal goes after the move waits for the owner.
+  revised. The archive-move answer settles the destination of docs/archive/; it does not decide a separate relocation policy for docs/proposals/. No such relocation is recorded here.
 
 ROADMAP adds R-0630: gate 2 for `Concrete/`, the axioms, trust, totality and replay checks over the
 compiler, which are not built yet. ISSUES.tsv files ISS-0018, review.sh reviewing changes outside a
