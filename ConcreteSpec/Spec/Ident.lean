@@ -335,9 +335,12 @@ inductive ConstructName where
   | unnamed (label : Option String)
   deriving DecidableEq, Repr
 
-/-- A labelled segment is keyed by its label; an unlabelled unnamed segment by its per-kind ordinal. -/
+/-- A named segment is keyed by its source item name; an unnamed segment with a user label by its
+pinned label; an unlabelled unnamed segment by its per-kind ordinal within the enclosing named
+scope. -/
 inductive SegmentName where
-  | label (name : String)
+  | named (name : String)
+  | pinned (label : String)
   | ordinal (n : Nat)
   deriving DecidableEq, Repr
 
@@ -378,45 +381,133 @@ def ConstructName.isUnnamed : ConstructName → Bool
   | .named _ => false
   | .unnamed _ => true
 
-/-- Rename without changing named/unnamed status, so siblings' ordinals cannot change. -/
+/-- Rename a named construct without changing named/unnamed status. Unnamed constructs have no item
+name to rename; pinning or unpinning an unnamed construct's user label is `ConstructName.pin`. -/
 def ConstructName.rename : ConstructName → String → ConstructName
   | .named _, name => .named name
-  | .unnamed _, name => .unnamed (some name)
+  | .unnamed label, _ => .unnamed label
 
-/-- Rename one construct root, retaining its kind and complete subtree. -/
+/-- Pin or unpin an unnamed construct's user label without changing its unnamed status, so
+siblings' ordinals cannot change. Named constructs are unchanged. -/
+def ConstructName.pin : ConstructName → Option String → ConstructName
+  | .named name, _ => .named name
+  | .unnamed _, label => .unnamed label
+
+/-- Rename one named construct root, retaining its kind and complete subtree. -/
 def KeyConstruct.rename (construct : KeyConstruct) (name : String) : KeyConstruct :=
   { construct with name := construct.name.rename name }
 
-/-- The persistent segment assigned among these preceding siblings. Named siblings do not consume
-unnamed ordinals; ordinals are per construct kind, and labels replace ordinals. -/
+/-- Pin or unpin one unnamed construct root's label, retaining its kind and complete subtree. -/
+def KeyConstruct.pin (construct : KeyConstruct) (label : Option String) : KeyConstruct :=
+  { construct with name := construct.name.pin label }
+
+/-- The persistent segment assigned among these preceding constructs in the enclosing named scope.
+Named constructs do not consume unnamed ordinals; ordinals are per construct kind, and pinned labels
+replace ordinals in the emitted segment while still participating in the unnamed ordinal sequence. -/
 def KeyConstruct.segment (preceding : List KeyConstruct) (construct : KeyConstruct) : KeySegment :=
   let ordinal := (preceding.filter fun sibling =>
     sibling.kind == construct.kind && sibling.name.isUnnamed).length
   ⟨construct.kind, match construct.name with
-    | .named name => .label name
-    | .unnamed (some label) => .label label
+    | .named name => .named name
+    | .unnamed (some label) => .pinned label
     | .unnamed none => .ordinal ordinal⟩
 
-/-- The key of a construct root under its preceding siblings. -/
+/-- The key of a construct root under its preceding constructs in the enclosing named scope. -/
 def KeyConstruct.key (preceding : List KeyConstruct) (construct : KeyConstruct) : FunctionRelativeKey :=
   ⟨[construct.segment preceding]⟩
 
-/-- Assign the complete persistent path to an occurrence in a construct forest. The numeric
-route is only a locator in this particular syntax tree; no child index enters the assigned key.
-Every level uses the construct's kind and name or same-kind unnamed ordinal. -/
-def KeyConstruct.pathAt (forest : List KeyConstruct) : List Nat → Option FunctionRelativeKey
+/-- The enclosing named scope passed to a construct's children: a `.named` construct establishes a
+fresh named scope (`[]`), whereas an `.unnamed` construct retains the enclosing named scope's
+preceding constructs (`localPreceding`) (Owner Decision 8). -/
+def KeyConstruct.childScope (localPreceding : List KeyConstruct) (construct : KeyConstruct) :
+    List KeyConstruct :=
+  match construct.name with
+  | .named _ => []
+  | .unnamed _ => localPreceding
+
+/-- Assign the complete persistent path to an occurrence in a construct forest within an inherited
+unnamed-ancestor scope `scope`. The numeric route is only a locator in this particular syntax tree;
+no child index enters the assigned key. Every level counts its per-kind unnamed ordinal against
+`scope ++ forest.take index` and resets the child scope to `[]` only when entering a `.named`
+construct. -/
+def KeyConstruct.pathAtIn (scope : List KeyConstruct) (forest : List KeyConstruct) :
+    List Nat → Option FunctionRelativeKey
   | [] => some ⟨[]⟩
   | index :: route => do
     let construct ← forest[index]?
-    let descendant ← KeyConstruct.pathAt construct.children route
-    pure ⟨construct.segment (forest.take index) :: descendant.path⟩
+    let localPreceding := scope ++ forest.take index
+    let descendant ← KeyConstruct.pathAtIn (construct.childScope localPreceding) construct.children route
+    pure ⟨construct.segment localPreceding :: descendant.path⟩
 
-/-- Assign a descendant path beneath a located root. This is also the compositional interface
-used when elaboration already knows the root and its preceding siblings. -/
+/-- Assign the complete persistent path to an occurrence from the root of an enclosing item's
+construct forest. -/
+def KeyConstruct.pathAt (forest : List KeyConstruct) (route : List Nat) :
+    Option FunctionRelativeKey :=
+  KeyConstruct.pathAtIn [] forest route
+
+/-- Assign a descendant path beneath a located root with preceding constructs `preceding` in the
+enclosing named scope. -/
 def KeyConstruct.descendantKey (preceding : List KeyConstruct) (construct : KeyConstruct)
     (route : List Nat) : Option FunctionRelativeKey :=
-  (KeyConstruct.pathAt construct.children route).map fun descendant =>
-    ⟨construct.segment preceding :: descendant.path⟩
+  (KeyConstruct.pathAtIn (construct.childScope preceding) construct.children route).map
+    fun descendant => ⟨construct.segment preceding :: descendant.path⟩
+
+/-- Check that every construct encountered along `route` in `forest` within the current enclosing
+named scope has kind different from `k`. Entering a `.named` construct starts a new named scope and
+needs no further check on `k`. -/
+def KeyConstruct.routeAvoidsKind (k : ConstructKind) : List KeyConstruct → List Nat → Bool
+  | _, [] => true
+  | forest, index :: route =>
+    match forest[index]? with
+    | none => true
+    | some construct =>
+      (k != construct.kind) &&
+        match construct.name with
+        | .named _ => true
+        | .unnamed _ => KeyConstruct.routeAvoidsKind k construct.children route
+
+/-- Every construct encountered along `route` in `forest` within the current enclosing named scope
+has kind different from `k`. -/
+def KeyConstruct.RouteAvoidsKind (k : ConstructKind) (forest : List KeyConstruct)
+    (route : List Nat) : Prop :=
+  KeyConstruct.routeAvoidsKind k forest route = true
+
+instance (k : ConstructKind) (forest : List KeyConstruct) (route : List Nat) :
+    Decidable (KeyConstruct.RouteAvoidsKind k forest route) := by
+  unfold KeyConstruct.RouteAvoidsKind
+  infer_instance
+
+/-- Check that every construct encountered from `target` along `route` within `target`'s enclosing
+named scope has kind different from `k`. -/
+def KeyConstruct.subtreeAvoidsKind (k : ConstructKind) (target : KeyConstruct)
+    (route : List Nat) : Bool :=
+  (k != target.kind) &&
+    match target.name with
+    | .named _ => true
+    | .unnamed _ => KeyConstruct.routeAvoidsKind k target.children route
+
+/-- Every construct encountered from `target` along `route` within `target`'s enclosing named scope
+has kind different from `k`. -/
+def KeyConstruct.SubtreeAvoidsKind (k : ConstructKind) (target : KeyConstruct)
+    (route : List Nat) : Prop :=
+  KeyConstruct.subtreeAvoidsKind k target route = true
+
+instance (k : ConstructKind) (target : KeyConstruct) (route : List Nat) :
+    Decidable (KeyConstruct.SubtreeAvoidsKind k target route) := by
+  unfold KeyConstruct.SubtreeAvoidsKind
+  infer_instance
+
+/-- Collect the persistent function-relative keys of a construct forest in order within the
+inherited unnamed-ancestor scope `scope`. -/
+def KeyConstruct.collectKeysIn (scope : List KeyConstruct) :
+    List KeyConstruct → List FunctionRelativeKey
+  | [] => []
+  | construct :: rest =>
+    construct.key scope :: KeyConstruct.collectKeysIn (scope ++ [construct]) rest
+
+/-- Collect the persistent function-relative keys of a function body's construct forest in order. -/
+def KeyConstruct.collectKeys (body : List KeyConstruct) : List FunctionRelativeKey :=
+  KeyConstruct.collectKeysIn [] body
 
 /-- The premise and declared-assumption kinds named by decided rows. This is a closed schema
 enumeration: a constructor is added only when a decided row names that category. -/
@@ -482,6 +573,27 @@ structure StableSiteKey where
 /-- A finite site-to-key table. -/
 abbrev SiteKeyTable := AList SiteId StableKey
 
+/-- Pair a sequence of function-relative keys with sequential lexical `SiteId`s starting at
+`startSite` under owner `StableOwner.function f`. -/
+def KeyConstruct.numberFunctionKeys (f : FnId) :
+    Nat → List FunctionRelativeKey → SiteKeyTable
+  | _, [] => []
+  | nextSite, rel :: rest =>
+    (⟨nextSite⟩, ⟨.function f, rel⟩) :: KeyConstruct.numberFunctionKeys f (nextSite + 1) rest
+
+/-- Assign a function's `SiteKeyTable` from its `FnId`, its starting lexical site number, and its
+construct forest. -/
+def KeyConstruct.assignFunctionTable (f : FnId) (startSite : Nat)
+    (body : List KeyConstruct) : SiteKeyTable :=
+  KeyConstruct.numberFunctionKeys f startSite (KeyConstruct.collectKeys body)
+
+/-- Assign `SiteKeyTable`s to every function in a program from a function-body map and a per-function
+starting lexical site offset. Editing one function can shift the starting lexical site offsets of
+other functions without changing their construct bodies or persistent keys. -/
+def KeyConstruct.assignProgramTables (bodies : FnId → List KeyConstruct)
+    (startSite : FnId → Nat) (f : FnId) : SiteKeyTable :=
+  KeyConstruct.assignFunctionTable f (startSite f) (bodies f)
+
 /-- The persistent key associated with one lexical trait instance. -/
 structure StableInstanceKey where
   instanceId : InstanceId
@@ -513,11 +625,11 @@ instance (table : SiteKeyTable) : Decidable table.NoDupSites := by
   unfold SiteKeyTable.NoDupSites
   infer_instance
 
-/-- Obligation (discharged by elaboration, slice R-0492). Editing outside `edited` leaves the
+/-- Obligation (discharged at slice 1, R-0492). Editing outside `edited` leaves the
 complete sequence of persistent keys of every other function unchanged. Lexical sites may be
 renumbered independently; persistent keys may not be rewritten by the edit. -/
-structure OutsideFunctionEdit (before after : FnId → SiteKeyTable) (edited : FnId) : Prop where
-  keysUnchanged : ∀ f, f ≠ edited → List.map Prod.snd (after f) = List.map Prod.snd (before f)
+def OutsideFunctionEdit (before after : FnId → SiteKeyTable) (edited : FnId) : Prop :=
+  ∀ f, f ≠ edited → List.map Prod.snd (after f) = List.map Prod.snd (before f)
 
 /-- A loop label (Q9.3): `break L` and `continue L` name the loop they leave. -/
 structure LoopId where
