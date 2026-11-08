@@ -221,11 +221,81 @@ theorem adoptDown_preserves (s t : State) (args : List (Var × LoanId))
 theorem passDown_preserves (s t : CallState) (i : LoanId) (parameter : Var)
     (h : passDown s i parameter = some t) : WellFormed t.own := by
   unfold passDown at h
-  obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp h
-  obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp hh
-  obtain ⟨own, ho, hh⟩ := Option.bind_eq_some_iff.mp hh
-  cases hh
-  exact validate_wf ho
+  split at h
+  · contradiction
+  · next =>
+    obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp h
+    obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp hh
+    obtain ⟨own, ho, hh⟩ := Option.bind_eq_some_iff.mp hh
+    cases hh
+    exact validate_wf ho
+
+
+/-- Pending metadata stays synchronized when argument evaluation adds a fresh child. -/
+theorem passDown_call_preserves (s t : CallState) (i : LoanId) (parameter : Var)
+    (hs : CallState.WellFormed s) (h : passDown s i parameter = some t) :
+    CallState.WellFormed t := by
+  have hw := passDown_preserves s t i parameter h
+  unfold passDown at h
+  split at h
+  · contradiction
+  · rename_i unique
+    obtain ⟨a, ha, hh⟩ := Option.bind_eq_some_iff.mp h
+    obtain ⟨u, hu, hh⟩ := Option.bind_eq_some_iff.mp hh
+    obtain ⟨v, hv, hh⟩ := Option.bind_eq_some_iff.mp hh
+    cases hh
+    obtain ⟨hv, _⟩ := (validate_iff _ _).mp hv
+    subst v
+    unfold reborrow at hu
+    obtain ⟨f, hf, hu⟩ := Option.bind_eq_some_iff.mp hu
+    unfold reborrowAt at hu
+    rw [ha] at hu
+    dsimp at hu
+    split at hu
+    · obtain ⟨hu, _⟩ := (validate_iff _ _).mp hu
+      subst u
+      have fresh : ∀ l ∈ s.own.loans, l.id.id ≠ s.own.nextLoan := by
+        intro l hl he
+        have := (hs.1.2.2.2.1 l hl).1
+        omega
+      have pendingFresh : LoanId.mk s.own.nextLoan ∉ s.pending.map Prod.snd := by
+        intro hm
+        obtain ⟨e, he, hid⟩ := List.mem_map.mp hm
+        obtain ⟨l, hl, hh⟩ := hs.2.2.2.1 e he
+        exact fresh l hl (congrArg LoanId.id (hh.trans hid))
+      refine ⟨hw, ?_, ?_, ?_, ?_⟩
+      · simp only [List.map_append, List.map_cons, List.map_nil, List.nodup_append]
+        refine ⟨hs.2.1, by simp, ?_⟩
+        intro a ha b hb
+        simp only [List.mem_singleton] at hb
+        subst b
+        intro he
+        exact unique (he ▸ ha)
+      · simp only [List.map_append, List.map_cons, List.map_nil, List.nodup_append]
+        refine ⟨hs.2.2.1, by simp, ?_⟩
+        intro a ha b hb
+        simp only [List.mem_singleton] at hb
+        subst b
+        intro he
+        exact pendingFresh (he ▸ ha)
+      · intro e he
+        rcases List.mem_append.mp he with he | he
+        · obtain ⟨l, hl, hid⟩ := hs.2.2.2.1 e he
+          refine ⟨l, ?_, hid⟩
+          apply List.mem_map.mpr
+          exact ⟨l, List.mem_cons_of_mem _ hl, by simp [fresh l hl]⟩
+        · simp only [List.mem_singleton] at he
+          subst e
+          refine ⟨_, List.mem_map.mpr ⟨_, List.mem_cons_self, rfl⟩, ?_⟩
+          simp
+      · intro l hl
+        obtain ⟨b, hb, rfl⟩ := List.mem_map.mp hl
+        rcases List.mem_cons.mp hb with rfl | hb
+        · simp
+        · simpa [fresh b hb, List.map_append, pendingFresh,
+            (show b.id ≠ LoanId.mk s.own.nextLoan from fun he => fresh b hb (congrArg LoanId.id he))]
+            using hs.2.2.2.2 b hb
+    · contradiction
 
 /-- C1's actual call/lifecycle callback preserves ownership, for both owner and view parameters. -/
 theorem callLife_preserves (types : Var → Option Descriptor) (e : Exec.Life)
@@ -241,19 +311,177 @@ theorem callLife_preserves (types : Var → Option Descriptor) (e : Exec.Life)
     · contradiction
   | bind x =>
     simp only [callLife] at h
-    obtain ⟨own, ho, hh⟩ := Option.map_eq_some_iff.mp h
-    subst t
-    exact life_preserves types (.bind x) s.own own ho
+    split at h
+    · obtain ⟨own, ho, hh⟩ := Option.map_eq_some_iff.mp h
+      subst t
+      exact life_preserves types (.bind x) s.own own ho
+    · contradiction
   | leave =>
     simp only [callLife] at h
-    obtain ⟨own, ho, hh⟩ := Option.map_eq_some_iff.mp h
-    subst t
-    exact life_preserves types .leave s.own own ho
+    split at h
+    · obtain ⟨own, ho, hh⟩ := Option.map_eq_some_iff.mp h
+      subst t
+      exact life_preserves types .leave s.own own ho
+    · contradiction
   | drop xs =>
     simp only [callLife] at h
-    obtain ⟨own, ho, hh⟩ := Option.map_eq_some_iff.mp h
-    subst t
-    exact life_preserves types (.drop xs) s.own own ho
+    split at h
+    · obtain ⟨own, ho, hh⟩ := Option.map_eq_some_iff.mp h
+      subst t
+      exact life_preserves types (.drop xs) s.own own ho
+    · contradiction
+
+private theorem reinitialize_loans (s t : State) (p : Hybrid.Place)
+    (h : reinitialize s p = some t) : t.loans = s.loans := by
+  unfold reinitialize at h
+  obtain ⟨x, _, h⟩ := Option.bind_eq_some_iff.mp h
+  split at h
+  · obtain ⟨h, _⟩ := (validate_iff _ _).mp h
+    cases h; rfl
+  · contradiction
+
+private theorem bind_loans (types : Var → Option Descriptor) (s t : State) (x : Var)
+    (h : bind types x s = some t) : t.loans = s.loans := by
+  unfold bind at h
+  obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
+  split at h
+  · exact reinitialize_loans _ _ _ h
+  · obtain ⟨d, _, h⟩ := Option.bind_eq_some_iff.mp h
+    obtain ⟨h, _⟩ := (validate_iff _ _).mp h
+    cases h; rfl
+
+private theorem fold_loans {α : Type} (f : State → α → Option State)
+    (hf : ∀ s a t, f s a = some t → ∀ l ∈ t.loans, l ∈ s.loans)
+    (xs : List α) (s t : State) (h : xs.foldlM f s = some t) :
+    ∀ l ∈ t.loans, l ∈ s.loans := by
+  induction xs generalizing s with
+  | nil => simp at h; subst t; exact fun _ h => h
+  | cons a xs ih =>
+    simp only [List.foldlM_cons] at h
+    obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
+    exact fun l hl => hf s a u hu l (ih u h l hl)
+
+private theorem enter_loans (types : Var → Option Descriptor) (s t : State) (xs : List Var)
+    (h : enter types xs s = some t) : t.loans = s.loans := by
+  unfold enter at h
+  obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
+  obtain ⟨hu, _⟩ := (validate_iff _ _).mp hu
+  subst u
+  suffices ∀ (xs : List Var) (u v : State),
+      xs.foldlM (fun s x => bind types x s) u = some v → v.loans = u.loans by
+    exact this xs { s with
+      nextActivation := s.nextActivation + 1
+      frames := ⟨s.nextActivation, [], []⟩ :: s.frames } t h
+  intro xs
+  induction xs with
+  | nil => intro u v h; simp at h; subst v; rfl
+  | cons x xs ih =>
+    intro u v h
+    simp only [List.foldlM_cons] at h
+    obtain ⟨w, hw, h⟩ := Option.bind_eq_some_iff.mp h
+    exact (ih w v h).trans (bind_loans types u w x hw)
+
+private theorem drop_loans (s t : State) (xs : List Var) (h : drop xs s = some t) :
+    t.loans = s.loans := by
+  unfold drop at h
+  obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
+  dsimp at h
+  split at h
+  · obtain ⟨h, _⟩ := (validate_iff _ _).mp h
+    cases h; rfl
+  · contradiction
+
+private theorem endLoan_subset (s t : State) (i : LoanId) (h : endLoan s i = some t) :
+    ∀ l ∈ t.loans, l ∈ s.loans := by
+  unfold endLoan at h
+  obtain ⟨a, _, h⟩ := Option.bind_eq_some_iff.mp h
+  split at h
+  · contradiction
+  · obtain ⟨h, _⟩ := (validate_iff _ _).mp h
+    cases h
+    exact fun _ hl => (List.mem_filter.mp hl).1
+
+private theorem life_subset (types : Var → Option Descriptor) (e : Exec.Life) (s t : State)
+    (h : life types e s = some t) : ∀ l ∈ t.loans, l ∈ s.loans := by
+  cases e with
+  | bind x => rw [bind_loans types s t x h]; exact fun _ h => h
+  | enter xs => rw [enter_loans types s t xs h]; exact fun _ h => h
+  | drop xs => rw [drop_loans s t xs h]; exact fun _ h => h
+  | leave =>
+    unfold life leave at h
+    obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
+    obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
+    obtain ⟨v, hv, h⟩ := Option.bind_eq_some_iff.mp h
+    split at h
+    · contradiction
+    · obtain ⟨h, _⟩ := (validate_iff _ _).mp h
+      cases h
+      intro l hl
+      rw [drop_loans u v _ hv] at hl
+      exact fold_loans _ (fun s l t h => endLoan_subset s t l.id h) _ s u hu l hl
+
+/-- Entry consumes the pending metadata exactly once; other lifecycle events require an
+empty argument buffer, so they cannot leave dangling argument identities. -/
+theorem callLife_call_preserves (types : Var → Option Descriptor) (e : Exec.Life)
+    (s t : CallState) (hs : CallState.WellFormed s) (h : callLife types e s = some t) :
+    CallState.WellFormed t := by
+  have hw := callLife_preserves types e s t h
+  cases e with
+  | enter params =>
+    simp only [callLife] at h
+    split at h
+    · obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
+      obtain ⟨v, hv, h⟩ := Option.bind_eq_some_iff.mp h
+      cases h
+      have he := enter_loans types s.own u _ hu
+      unfold adoptDown at hv
+      obtain ⟨f, _, hv⟩ := Option.bind_eq_some_iff.mp hv
+      split at hv
+      · obtain ⟨hv, _⟩ := (validate_iff _ _).mp hv
+        subst v
+        refine ⟨hw, by simp, by simp, by simp, ?_⟩
+        intro l hl
+        obtain ⟨b, hb, rfl⟩ := List.mem_map.mp hl
+        rw [he] at hb
+        have flag := hs.2.2.2.2 b hb
+        by_cases hm : b.id ∈ s.pending.map Prod.snd
+        · simp [hm]
+        · have hf : b.pendingArgument ≠ true := fun h => hm (flag.mp h)
+          simp [hm, hf]
+      · contradiction
+    · contradiction
+  | bind x | leave | drop x =>
+    all_goals
+      simp only [callLife] at h
+      split at h
+      · rename_i hempty
+        obtain ⟨own, ho, hh⟩ := Option.map_eq_some_iff.mp h
+        subst t
+        refine ⟨hw, ?_, ?_, ?_, ?_⟩
+        · simp [hempty]
+        · simp [hempty]
+        · simp [hempty]
+        · intro l hl
+          have hmem := life_subset types _ s.own own ho l hl
+          have hf := hs.2.2.2.2 l hmem
+          simpa [hempty] using hf
+      · contradiction
+
+namespace CallWitnesses
+open ConcreteSpec.Core.Own.Examples
+
+def waiting : CallState := (passDown ⟨exclusive, []⟩ ⟨0⟩ y).getD ⟨initial, []⟩
+example : CallState.WellFormed ⟨exclusive, []⟩ ∧ CallState.WellFormed waiting := by decide
+example : (passDown waiting ⟨0⟩ y) = none := by decide
+example : callLife types .leave waiting = none := by decide
+example : (callLife types (.enter [y]) waiting).isSome = true := by decide
+example : CallState.WellFormed ((callLife types (.enter [y]) waiting).getD waiting) := by decide
+/-- Planted bookkeeping mutations: duplicate parameters and a dangling identity. -/
+example : ¬ CallState.WellFormed { waiting with pending := waiting.pending ++ waiting.pending } := by decide
+example : ¬ CallState.WellFormed { waiting with own := exclusive } := by decide
+/-- Planted leave mutation: discard loans but retain the pending buffer. -/
+example : ¬ CallState.WellFormed { waiting with own := initial } := by decide
+end CallWitnesses
 
 /-- Passing loans changes only instrumentation, including at mixed-parameter call entry. -/
 theorem callLife_erasure {σ : Type} (types : Var → Option Descriptor) (e : Exec.Life)

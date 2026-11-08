@@ -157,7 +157,10 @@ def borrow (s : State) (p : Hybrid.Place) (path : List Projection) (m : Mode) :
   else none
 
 /-- Reborrow appends a projection, never changes the original root and never upgrades shared.
-The explicit activation is the destination activation for a downward call. -/
+The explicit activation is the destination activation for a downward call.
+PENDING (round-two boundary): arbitrary destinations are still admitted here. Q3.2 rules
+out upward parameter passing, but does not specify which activation identities this standalone
+helper may target. Do not treat this helper as an enforced downward-only interface. -/
 def reborrowAt (s : State) (i : LoanId) (suffix : List Projection) (m : Mode)
     (activation : Nat) : Option State := do
   let a ← loan s i
@@ -275,16 +278,35 @@ structure CallState where
   pending : List (Var × LoanId) := []
   deriving DecidableEq, Repr
 
+/-- Call argument bookkeeping: names/identities are unique, every pending identity exists,
+and precisely the listed loans carry the pending flag. This is instrumentation metadata,
+not reference-valued Concrete storage (Q3.1–Q3.3, OD23). -/
+def CallState.WellFormed (s : CallState) : Prop :=
+  Own.WellFormed s.own ∧
+  (s.pending.map Prod.fst).Nodup ∧ (s.pending.map Prod.snd).Nodup ∧
+  (∀ e ∈ s.pending, ∃ l ∈ s.own.loans, l.id = e.2) ∧
+  (∀ l ∈ s.own.loans, l.pendingArgument = true ↔ l.id ∈ s.pending.map Prod.snd)
+instance (s : CallState) : Decidable (CallState.WellFormed s) := by
+  unfold CallState.WellFormed
+  infer_instance
+
 /-- Evaluate a downward view argument now, before the next argument. Target binder identities
 come from the checked call signature. Shared views may be passed repeatedly, each with a fresh
-loan; a mutable view's first lending freezes it immediately. -/
+loan; a mutable view's first lending freezes it immediately. A signature parameter cannot
+be supplied twice; unfinished argument evaluation cannot cross another lifecycle event
+(Q3.2 downward parameters, OD23 left-to-right argument freezes). -/
 def passDown (s : CallState) (source : LoanId) (parameter : Var) : Option CallState := do
+  if parameter ∈ s.pending.map Prod.fst then none else do
   let l ← loan s.own source
   let own ← reborrow s.own source [] l.mode
   let own ← validate { own with loans := own.loans.map fun l =>
     if l.id.id = s.own.nextLoan then { l with pendingArgument := true } else l }
   pure ⟨own, s.pending ++ [(parameter, ⟨s.own.nextLoan⟩)]⟩
 
+/- PENDING (round-two boundary, Q3.2, OD15, OD23): direct owner-to-callee lending
+is not provided. Borrowing then passing a child retains the caller loan after return.
+Whether to introduce a call-duration root loan or require an explicit caller borrow scope
+needs the owner's answer; no implicit end of the caller loan is added here. -/
 /-- A C1 lifecycle adapter for mixed owning/view parameters. Owning parameters use descriptors;
 view parameters adopt the loans opened during left-to-right argument evaluation. There is no
 loan-valued result-binding case. Every other lifecycle event uses the same ownership rules. -/
@@ -295,7 +317,9 @@ def callLife (types : Var → Option Descriptor) : Exec.Life → CallState → O
       let own ← adoptDown own s.pending
       pure ⟨own, []⟩
     else none
-  | e, s => (life types e s.own).map fun own => { s with own := own }
+  | e, s => if s.pending = [] then
+      (life types e s.own).map fun own => { s with own := own }
+    else none
 
 /-- The call adapter also carries an arbitrary concrete memory/resource store unchanged. -/
 def callLifeStore {σ : Type} (types : Var → Option Descriptor) (e : Exec.Life)
