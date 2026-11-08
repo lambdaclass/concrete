@@ -52,6 +52,10 @@ def inPopulation (env : Environment) (n : Name) : Bool :=
   | some i => (env.header.moduleNames[i.toNat]?.map (·.getRoot)) == some `ConcreteSpec
   | none => (`ConcreteSpecControl).isPrefixOf (privateToUserName n)
 
+/-- The single environment population shared by all proof audits. -/
+def populationConstants (env : Environment) : List (Name × ConstantInfo) :=
+  (env.constants.map₁.toList ++ env.constants.map₂.toList).filter fun (n, _) => inPopulation env n
+
 def nm : Name → String
   | .anonymous => ""
   | .str p s => if p.isAnonymous then s else nm p ++ "." ++ s
@@ -174,8 +178,9 @@ def rowSafe : Name → Bool
 #eval show CoreM Unit from do
   let env ← getEnv
   let mode := (← IO.getEnv "PROOF_MODE").getD "theorems"
-  unless ["theorems", "encoded", "constants", "modules", "imported", "decls", "heads", "examples"].contains mode do
+  unless ["theorems", "encoded", "constants", "modules", "imported", "decls", "heads", "examples", "vacuity"].contains mode do
     throwError s!"unknown PROOF_MODE '{mode}'"
+  if mode == "vacuity" then return -- the injected N2 consumer uses populationConstants below
   -- Fail closed, once, before any mode writes a row: every constant and module name of the
   -- environment (the population, the axioms its constants depend on, the inductive heads of
   -- `heads`, the modules) must be writable. One check covers every mode.
@@ -218,9 +223,7 @@ def rowSafe : Name → Bool
     for m in env.header.moduleNames do
       if m.getRoot == `ConcreteSpec then rows := rows.push (nm m)
   else
-    let consts := env.constants.map₁.toList ++ env.constants.map₂.toList
-    for (n, ci) in consts do
-      if !inPopulation env n then continue
+    for (n, ci) in populationConstants env do
       let axs := fun () => do
         return " ".intercalate (((← collectAxioms n).map toString).qsort (· < ·)).toList
       if mode == "constants" then
