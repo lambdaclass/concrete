@@ -1,0 +1,46 @@
+[piece 1 of 18: scripts]
+- scripts/land/lib.sh:99: `land_ssh_host` runs `ssh -G` without the URL’s SSH user. SSH configurations using `Match user git` can therefore resolve differently during this check and the actual Git operation. This can reject a valid GitHub alias or accept a destination that Git resolves to another host. Pass the URL’s user and port when resolving the effective hostname.
+[piece 3 of 18: docs]
+- scripts/checks/landing_bot.sh:443: The previously reported GNU `timeout` portability issue remains unresolved in the supplied diff: these launcher tests fail on macOS instead of exercising the launcher. Use `bounded_run`.
+
+Repository reads failed because the sandbox could not start. The finding’s current repository status and owner-decision compliance could not be independently verified.
+[piece 4 of 18: docs]
+- scripts/checks/landing_bot.sh:443: The previously reported GNU `timeout` usage remains unaddressed by this delta. It is unavailable on macOS, so the launcher tests fail without checking the intended behavior. Use `bounded_run`.
+
+Repository reads failed because the sandbox could not start. Review was limited to the supplied diff; owner-decision compliance could not be fully verified.
+[piece 7 of 18: docs]
+- scripts/checks/landing_bot.sh:443: The previous finding remains open in the supplied delta: launcher tests use GNU `timeout`, unavailable on macOS, so they fail before exercising the launcher. Use `bounded_run`.
+
+Repository reads failed because the sandbox could not start. Review was limited to the supplied diff; owner-decision compliance could not be fully verified.
+[piece 8 of 18: docs]
+- scripts/checks/landing_bot.sh:443: The previously reported GNU `timeout` dependency remains unaddressed in the supplied diff, so the launcher tests still fail on macOS unless corrected elsewhere.
+
+Repository reads failed because the sandbox could not start. Archive relocation and owner-decision compliance could not be verified.
+[piece 9 of 18: docs]
+- scripts/checks/landing_bot.sh:443: The previous finding remains unresolved in the supplied delta: launcher tests use GNU `timeout`, unavailable on macOS, causing the gate to fail without exercising the launcher. Use `bounded_run`.
+
+Repository reads failed because the sandbox could not start; deletion context and owner-decision compliance could not be verified.
+[piece 10 of 18: docs]
+- scripts/checks/landing_bot.sh:443: The previously reported GNU `timeout` usage remains unaddressed in the supplied delta. It is unavailable on macOS, so the launcher tests fail without exercising the launcher. Use `bounded_run`.
+
+Repository reads failed because the sandbox could not start. Review was limited to the supplied diff; the earlier fix and owner-decision compliance could not be independently verified.
+[piece 12 of 18: docs]
+Repository reads failed because the sandbox could not start. Owner-decision compliance could not be fully verified.
+
+- scripts/checks/landing_bot.sh:443: The earlier finding remains unaddressed by the supplied diff: launcher tests use GNU `timeout`, unavailable on macOS, causing the gate to fail without exercising the launcher. Use the repository’s `bounded_run` helper.
+[piece 14 of 18: docs]
+Repository reads failed because the sandbox could not start. This diff does not resolve the previous finding; archive relocation and owner-decision compliance could not be verified.
+
+- scripts/checks/landing_bot.sh:443: The previously reported GNU `timeout` calls remain unresolved in the supplied diff. GNU `timeout` is unavailable on macOS, so these tests fail without exercising the launcher. Use the repository’s `bounded_run` helper.
+[piece 15 of 18: docs]
+- scripts/checks/landing_bot.sh:443: The previously reported GNU `timeout` dependency remains unresolved in the supplied diff. It fails on macOS before exercising the launcher; use `bounded_run`.
+
+Repository reads failed because the sandbox could not start. Review was limited to the supplied diff; the earlier fix and owner-decision compliance could not be verified.
+[piece 16 of 18: docs]
+Repository reads failed because the sandbox could not start. The supplied diff does not resolve the previous finding; owner-decision compliance could not be fully verified.
+
+- scripts/checks/landing_bot.sh:443: The previously reported GNU `timeout` calls remain unresolved in this diff. GNU `timeout` is unavailable on macOS, so the launcher tests fail without exercising the intended cases. Use the repository’s `bounded_run` helper.
+[piece 18 of 18: docs]
+- scripts/checks/landing_bot.sh:443: The previous GNU `timeout` portability finding remains unresolved in the supplied diff: these launcher tests fail on macOS without exercising the launcher. Use `bounded_run`.
+
+Repository reads failed because the sandbox could not start. Review was limited to the supplied diff; the current launcher code and owner-decision provenance could not be verified.
