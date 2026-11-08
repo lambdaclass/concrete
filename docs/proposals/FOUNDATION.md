@@ -1,6 +1,6 @@
 # Concrete Lean foundation proposal — draft 3
 
-Status: approved by the owner 2026-11-08; the plan for PLAN steps 3+; the Lean spec stays the only home of rules.
+Status: the owner answered "ok all recommended" on 2026-11-08 to the proposal's sixteen questions ([record](../decisions.md#decided-2026-11-08-foundation)), after choosing foundation-first on 2026-11-07 with "ok to option b then for freeze the foundation>?" ([record](../decisions.md#decided-2026-11-07-foundation-first)). The plan for PLAN steps 3+; the Lean spec stays the only home of rules.
 
 The [A2i decision](../decisions.md#decided-project-long-term-2026-11-06) freezes integrated scopes, "not an untested whole-language architecture". Here the frozen foundation means interfaces and laws implemented, proved and tested together, with representative interactions. It does not mean designing every future slice before slice 1. Later slices supply lawful instances; changes to decided rules return to the owner.
 

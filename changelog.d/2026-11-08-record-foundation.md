@@ -24,7 +24,8 @@
 - "ok go ahead with all the decisions": UBSan leaves the slice-0 gates (it checks nothing on LLVM IR
   input; ASan stays); the BIR → LCB-IR adapter theorem is complete (an error produces no artifact,
   success implies correctness); the landing scripts shrink (R-0617); Claude's quota goes to the
-  critical path; the lexer and LL(1) parser start now (R-0620; the parser waits for the approved written grammar, R-0622); one writer for `docs/decisions.md`
+  critical path; the lexer starts now against the spec's Lexical rules (R-0620); only its LL(1)
+  parser waits for the approved written grammar (R-0622); one writer for `docs/decisions.md`
   and `ROADMAP.md`; review rounds are capped by risk, 2, 3 and 5 (R-0618); one clones folder
   (R-0619); a no-libc runtime around slices 24–25 (R-0621); a report-only compile-speed budget
   (R-0550); and the ISS-0014 F7 termination wording, applied in `docs/decisions.md`, `README.md`,
@@ -39,7 +40,8 @@
   need a module before it arrives flagged for the owner); a user-guide chapter per slice is not done
   for now.
 - "ok do the written grammar": the full surface grammar is written down for the owner's review
-  before the parser, then encoded in Lean as the grammar judgment (R-0622; R-0620 waits for it).
+  before the parser, then encoded in Lean as the grammar judgment (R-0622); only R-0620's parser
+  waits for it. The lexer starts now against the spec's Lexical rules.
 - "and yes speed target is fine": speed and size stay report-only until grep at slice 16, when the
   owner sets a target against C from measured data (R-0623).
 - Recorded the owner's confirmation that capabilities stay as decided, `with(...)` permission sets
