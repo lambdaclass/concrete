@@ -90,10 +90,14 @@ Open obligations, by name:
   encoding over the old type universe. The slice-1-to-Core integration slice must port that
   layer to `Mem.MByte`/`Mem.encodeInt` and retire the old encoders while preserving its proofs;
   C4 has not completed that port. Core constants and Hybrid share `CTy`/`CVal` from `Scalar`.
-  C5–C10 remain. C1 leaves to later slices the source-level
-  evaluation orders (elaboration, O1), counted loops (slice 4), and ownership of moved values
-  (C5), the split of a request from its response (C6) and the oracle's query record (C8); its
-  storage can use C4's hybrid state; C5 must still supply ownership instrumentation. Lifecycle
+  C5 (`Own`, `Grant`) now supplies ownership/loan transitions, finite preservation checks,
+  C1 lifecycle and downward-call adapters, scalar C4 access erasure, generative brand lifetimes,
+  and grant attenuation/consumption laws. Nonempty projection resolution, semantic type/Copy
+  admission, existential package elaboration and concrete grant instances remain integration
+  duties; these modules do not claim their checker correspondence. C6–C10 remain.
+  C1 leaves to later slices the source-level evaluation orders (elaboration, O1), counted loops
+  (slice 4), the split of a request from its response (C6) and the oracle's query record (C8).
+  Its storage can use C4's hybrid state and C5's ownership adapters. Lifecycle
   instrumentation may refuse an event (`Option.none`), making execution stuck, including initial
   activation and primitive result binding; cleanup laws require successful lifecycle events. C2
   leaves floats (slice 26), and two owner questions: whether a failing operation may appear in a constant

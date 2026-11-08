@@ -433,4 +433,34 @@ theorem leave_no_local_loan (s t : State) (f : Activation)
   have hxv : x ∈ v.slots := by rw [← heq] at hx; exact hx
   exact habsent x hxv (hxroot.trans hroot)
 
+/-- Adoption cannot transfer ordinary caller loans: every adopted identity must have been
+marked as a pending argument by the argument-opening transition. -/
+theorem adoptDown_only_arguments (s t : State) (args : List (Var × LoanId))
+    (h : adoptDown s args = some t) (e : Var × LoanId) (he : e ∈ args) :
+    ∃ l ∈ s.loans, l.id = e.2 ∧ l.pendingArgument = true := by
+  unfold adoptDown at h
+  obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp h
+  split at hh
+  · rename_i guard
+    exact guard.2.2.1 e he
+  · contradiction
+
+/-- Exit accounts for every slot of the departing activation, independently of whether its
+locals table named the slot. A successful exit leaves none behind. -/
+theorem leave_no_activation_slot (s t : State) (f : Activation)
+    (hf : s.frames.head? = some f) (h : leave s = some t) :
+    ∀ x ∈ t.slots, x.activation ≠ f.id := by
+  unfold leave at h
+  rw [hf] at h
+  dsimp at h
+  obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp h
+  obtain ⟨v, _, hh⟩ := Option.bind_eq_some_iff.mp hh
+  split at hh
+  · contradiction
+  · rename_i guard
+    obtain ⟨heq, _⟩ := (validate_iff _ _).mp hh
+    subst t
+    intro x hx he
+    exact guard (List.any_eq_true.mpr ⟨x, hx, by simp [he]⟩)
+
 end ConcreteSpec.Core.Own
