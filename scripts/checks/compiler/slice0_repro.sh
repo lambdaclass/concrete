@@ -42,6 +42,7 @@ bounded() {
   return "$rc"
 }
 bounded 120 bash scripts/checks/lib/link_controls.sh
+bounded 300 bash scripts/checks/lib/link_regression_controls.sh
 manifest=${1:-}
 [ -z "$manifest" ] || manifest=$(realpath -m "$manifest")
 compare=(python3 "$root/scripts/checks/lib/repro_compare.py")

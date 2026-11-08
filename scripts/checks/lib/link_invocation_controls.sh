@@ -20,11 +20,14 @@ if [ "$#" = 1 ]; then
   python3 - "$1" <<'PY' >historical.sh
 import pathlib, sys
 s = pathlib.Path(sys.argv[1]).read_text()
-print(s[s.index('clean=('):s.index('if [ "${3:-}" = sanitize ]; then')])
+start = s.index('clean=(')
+end = s.index('if [ "${3:-}" = sanitize ]; then', start)
+assert s.count('clean=(') == 1 and s.count('if [ "${3:-}" = sanitize ]; then') == 1
+print(s[start:end])
 PY
   target=$(bash "$root/scripts/checks/lib/slice0_native.sh" target)
   source historical.sh
-  link=(-Wl,--build-id=none)
+  if [ "$target" = aarch64-macos ]; then link=(-Wl,-no_uuid); else link=(-Wl,--build-id=none); fi
   link_native() { local output=$1; shift; "${cc[@]}" "${link[@]}" "$@" -o "$output"; }
 fi
 failures=0
@@ -50,4 +53,5 @@ refuse linker-script link_native out.exe "-Wl,-T,$work/host/layout.ld" control.o
 refuse symlinked-object link_native out.exe external.o
 cc+=(--sysroot="$work/host")
 refuse driver-sysroot-override link_native out.exe control.o
+echo "invocation controls: total=8 failed=$failures"
 [ "$failures" = 0 ]

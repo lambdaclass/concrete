@@ -49,19 +49,6 @@ if [ "$(uname -s)" = Linux ]; then
   libc="$(cat "${CONCRETE_SLICE0_CLANG%/bin/clang}/nix-support/orig-libc")/lib/libc.so"
   ln -s "$libc" "$work/host/lib/libc.so"
 fi
-# An overridden sysroot is forbidden even when no host library is consumed.
-if [ "$(uname -s)" = Linux ]; then
-  (
-    cd "$work/a"
-    policy_root="$root/scripts/checks/lib"
-    source "$policy_root/native_toolchain.sh"
-    cc+=(--sysroot="$work/host")
-    if link_native probe.exe control.o >refusal 2>&1; then
-      echo 'FAIL link controls: surrogate sysroot accepted' >&2; exit 1
-    fi
-    grep -F "link command: driver differs from flake policy" refusal
-  )
-fi
 for exe in control.exe llvm.san.exe; do
   cmp "$work/a/$exe" "$work/different/b/$exe"
   echo "ok link controls: $exe unchanged by host layout, cwd and TMPDIR"
@@ -99,25 +86,6 @@ if CONCRETE_SLICE0_SYSROOT="$work/host" python3 "$root/scripts/checks/lib/link_p
   echo 'FAIL link controls: effective policy mismatch accepted' >&2; exit 1
 fi
 grep -F 'link policy: effective setting differs: CONCRETE_SLICE0_SYSROOT' refusal
-# Policy mutation controls: reject unused searches too, before the wrapper can
-# silently discard them. Test caller args AND driver overrides separately.
-(
-  policy_root="$root/scripts/checks/lib"
-  source "$policy_root/native_toolchain.sh"
-  for option in "-L$work/host/lib" "-F$work/host/lib" "-B$work/host/lib" \
-      "--sysroot=$work/host" "-Wl,-rpath,$work/host/lib" "-Wl,-T,$work/host/script"; do
-    if link_native rejected.exe "$option" control.o >refusal 2>&1; then
-      echo "FAIL link controls: accepted $option" >&2; exit 1
-    fi
-    grep -F 'link command: unapproved caller argument:' refusal
-  done
-  cp control.o "$work/host/outside.o"
-  ln -s "$work/host/outside.o" outside.o
-  if link_native rejected.exe outside.o >refusal 2>&1; then
-    echo 'FAIL link controls: symlinked object accepted' >&2; exit 1
-  fi
-  grep -F 'link purity: undeclared path:' refusal
-)
 # Unknown trace text (including the macOS warning from CI) must fail diagnostically,
 # with no filesystem probe or traceback, even for an overlong line.
 python3 - <<'WARN' >warning.trace
@@ -135,7 +103,7 @@ if [ "$(uname -s)" = Linux ]; then
     policy_root="$root/scripts/checks/lib"
     source "$policy_root/native_toolchain.sh"
     for mode in --enable-new-dtags --disable-new-dtags; do
-      "${cc[@]}" "${link[@]}" -Wl,-t "-Wl,$mode" control.o -o empty.exe >empty.trace 2>&1
+      "${cc[@]}" -Wl,-t "-Wl,$mode" control.o -o empty.exe >empty.trace 2>&1
       # The Nix wrapper appends its own nonempty RPATH. Empty the actual
       # dynamic string after linking to test both tag kinds independently.
       python3 - "$CONCRETE_SLICE0_LINKER_BIN/readelf" empty.exe <<'EMPTY'
@@ -156,7 +124,6 @@ EMPTY
     done
   )
 fi
-if [ "$(uname -s)" = Linux ]; then
-  bash "$root/scripts/checks/lib/link_invocation_controls.sh"
-fi
+bash "$root/scripts/checks/lib/link_invocation_controls.sh"
+python3 "$root/scripts/checks/lib/link_parser_controls.py"
 echo 'PASS native link controls'
