@@ -1,0 +1,2 @@
+[piece 1 of 2: scripts]
+- scripts/land/acceptance_shim.sh:54: The `*://*` case misclassifies absolute local paths containing `://`, such as `/tmp/store://protected.git`, as remote URLs. Git treats that absolute path as local, but the shim records no protected repository identity. A push to the same repository through a differently named symlink can therefore pass the local-fixture exception and move its `main`.
