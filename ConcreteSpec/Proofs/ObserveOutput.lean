@@ -220,8 +220,7 @@ def initial (values : List Int) : Exec.Config Exec.Demo.ops :=
   ⟨.exec (writeThenTrap values), [], .init, []⟩
 
 /-- Helper (computation). Induction over executed logging operations establishes their actual
-C1 events before the final trap, including a nonempty incoming history; feeds `permitted` and
-`trap_ending` for the closed `output_before_trap_kept` instances. (approved: PENDING) -/
+C1 events before the final trap, including a nonempty incoming history; feeds the permission witness and trap-ending premises for the closed `output_before_trap_kept` instances. (approved: PENDING) -/
 theorem run_writes (values : List Int) (history : List Int) :
     Exec.runFrom program Exec.Demo.env (3 * values.length + 1) history (initial values) =
       ⟨history ++ values, .final (.trapped .abort Exec.Demo.s) .init⟩ := by
@@ -318,6 +317,8 @@ example : reportObservation program adapter Demo.contract ()
 subject `ConcreteSpec.Core.Observe.reportObservation`, mutant `ConcreteSpec.Core.Observe.dropTrapHistoryReport`). -/
 example : ExecAdapter.OutputCorrespondence adapter effects.past ∧
     effects.OracleFaithful Exec.Demo.env ∧
+    ExecAdapter.BlockingPermitted program adapter Demo.contract ()
+      (Exec.runFrom program Exec.Demo.env 7 [-2, 11] (initial [3, 4])) ∧
     (Exec.runFrom program Exec.Demo.env 7 [-2, 11] (initial [3, 4])).ending =
       .final (.trapped .abort Exec.Demo.s) .init ∧
     AList.lookup adapter.sites Exec.Demo.s = some trapSpan ∧ trapSpan.PathOk ∧
@@ -328,7 +329,8 @@ example : ExecAdapter.OutputCorrespondence adapter effects.past ∧
       ∃ outputs finalConfig, effects.Execution program Exec.Demo.env [-2, 11] (initial [3, 4])
       outputs (Exec.runFrom program Exec.Demo.env 7 [-2, 11] (initial [3, 4])).events finalConfig ∧
     publicOutputs (adapter.project (Exec.runFrom program Exec.Demo.env 7 [-2, 11] (initial [3, 4])).events) = [-2, 11].flatMap effects.past ++ outputs) := by
-  refine ⟨adapter_correspondence, oracle_faithful, rfl, rfl, by decide, ?_⟩
+  refine ⟨adapter_correspondence, oracle_faithful, permitted [3, 4] [-2, 11],
+    rfl, rfl, by decide, ?_⟩
   intro invalid
   have equal := congrArg (fun r : Option (FullObservation Demo.signature) =>
     match r with | some (.terminal obs) => obs.events.length | _ => 0) invalid.1
@@ -351,6 +353,8 @@ example : reportObservation program adapter Demo.contract ()
 subject `ConcreteSpec.Core.Observe.ExecAdapter.project`, mutant `ConcreteSpec.Core.Observe.eraseProjection`). -/
 example : ExecAdapter.OutputCorrespondence adapter effects.past ∧
     effects.OracleFaithful Exec.Demo.env ∧
+    ExecAdapter.BlockingPermitted program adapter Demo.contract ()
+      (Exec.runFrom program Exec.Demo.env 7 [-2, 11] (initial [3, 4])) ∧
     (Exec.runFrom program Exec.Demo.env 7 [-2, 11] (initial [3, 4])).ending =
       .final (.trapped .abort Exec.Demo.s) .init ∧
     AList.lookup adapter.sites Exec.Demo.s = some trapSpan ∧ trapSpan.PathOk ∧
@@ -361,7 +365,8 @@ example : ExecAdapter.OutputCorrespondence adapter effects.past ∧
       ∃ outputs finalConfig, effects.Execution program Exec.Demo.env [-2, 11] (initial [3, 4])
       outputs (Exec.runFrom program Exec.Demo.env 7 [-2, 11] (initial [3, 4])).events finalConfig ∧
     publicOutputs (eraseProjection adapter (Exec.runFrom program Exec.Demo.env 7 [-2, 11] (initial [3, 4])).events) = [-2, 11].flatMap effects.past ++ outputs) := by
-  refine ⟨adapter_correspondence, oracle_faithful, rfl, rfl, by decide, ?_⟩
+  refine ⟨adapter_correspondence, oracle_faithful, permitted [3, 4] [-2, 11],
+    rfl, rfl, by decide, ?_⟩
   intro invalid
   obtain ⟨outputs, finalConfig, execution, erased⟩ := invalid.2
   exact cannot_erase execution erased

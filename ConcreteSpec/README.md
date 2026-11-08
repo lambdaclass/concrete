@@ -90,11 +90,11 @@ Open obligations, by name:
   observations with externally visible final state, and the C1 adapter). **C6 remains reopened,
   not accepted.** Its audit repair includes externally visible final-state projection from C1
   terminal stores across observation equivalence and stuttering, source-derived byte columns,
-  independently checked response production and routing, exact reachable blocked reports with prior
-  history, physical-output correspondence and an output-then-trap execution, execution-delay
-  classification, and valid adapter trap paths. Inversion, projection and representation helpers
-  carry pending independent-review approvals; they are not contract evidence. The source-to-span
-  connection remains O1. C4 covers byte memory, scalar
+  typed handler-to-C1 oracle construction with response, history and store correspondence, exact
+  reachable blocked reports tied to unanswered evaluator requests, primitive physical-effect
+  execution relations and output-before-trap preservation, execution-delay classification, and
+  source-produced trap sites preserving file identity and valid project paths. Inversion, projection and representation helpers
+  carry pending independent-review approvals; they are not contract evidence. Integration of the source-to-span pipeline with the elaborator remains O1. C4 covers byte memory, scalar
   representation and structured/materialized places, with trailing padding preserved by typed
   writes; struct field layouts, enums, pointers in structs and the C8 padding oracle remain out
   of its scalar slice. The old slice-1 `Spec/Rep.lean` still has its own `MByte` and integer

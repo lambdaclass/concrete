@@ -3,9 +3,9 @@ import ConcreteSpec.Proofs.Observe2
 /-! # Independent environment production and trace stepping
 
 `Responds` specifies relational environment admission, while `Environment` specifies executable
-environment dispatch by operation kind. The general laws here prove that any valid `Environment`
-handler produces answers satisfying `Responds`, preserves `RequestResponse` routing by construction,
-and advances `CompleteTrace` histories to valid completed or pending traces; `Demo` and
+environment dispatch by operation kind. The admission bridge is a helper. The operational laws execute typed handlers through C1,
+preserving computed replies and ordered histories, and advance completed traces to valid
+completed or pending traces; `Demo` and
 `RoutingDemo` supply the closed `Instance` and `Planted` witnesses.
 -/
 
@@ -102,6 +102,11 @@ theorem environment_run_reply {S : EventSignature} (C : OperationContract S)
 def noReplyOracle {S : EventSignature} {Input : Type}
     (_E : Environment S Input) (_input : Input) : Exec.Oracle (Environment.operands S) :=
   fun _ _ _ _ _ => none
+
+/-- Fault: invokes the right handler with an empty preceding C1 history. -/
+def forgetHistoryOracle {S : EventSignature} {Input : Type}
+    (E : Environment S Input) (input : Input) : Exec.Oracle (Environment.operands S) :=
+  fun _ q vs site store => E.oracle input [] q vs site store
 
 /-- Fault: environment dispatch always reports `.blocked` instead of delivering the handler's
 computed response. -/
@@ -260,6 +265,68 @@ example : Environment.Valid Demo.contract Demo.envHandler ∧
   have hlen := congrArg (fun p : List (Event Demo.signature) × Option (Request Demo.signature) =>
     p.1.length) hstep
   contradiction
+
+namespace HistoryDemo
+
+/-- A history-sensitive fixture: the current request is part of the handler's input history. -/
+def contract : OperationContract Demo.signature where
+  Input := Unit
+  allows := fun _ history q r => q.2 * 2 + history.length = r.2
+  mayBlock := fun _ _ _ => False
+
+def handler : Environment Demo.signature Unit where
+  reply := fun _ history _ n => some (n + n + history.length)
+
+/-- Helper (arithmetic). Proves the independent history-sensitive operation policy for its
+addition-based handler; no admission or response guard is executed. (approved: PENDING) -/
+theorem handler_valid : Environment.Valid contract handler := by
+  constructor
+  · intro input history k req resp answer
+    cases k
+    simp only [handler, Option.some.injEq] at answer
+    subst resp
+    exact congrArg (fun n : Nat =>
+      n + (history ++ [Event.request (S := Demo.signature) ⟨.double, req⟩]).length)
+      (Nat.mul_two req)
+  · intro input history k req answer
+    simp [handler] at answer
+
+def prior : List (Request Demo.signature × Response Demo.signature) :=
+  [(⟨.double, 1⟩, ⟨.double, 3⟩)]
+
+/-- Helper (computation). The first exchange satisfies the policy at its own request history.
+It is used as a closed premise of the actual second C1 call. (approved: PENDING) -/
+theorem prior_valid : CompleteTrace contract () (Environment.history prior) :=
+  .response (.request .idle) (RequestResponse.matched _ _ _) rfl
+
+/-- Instance (law `ConcreteSpec.Core.Observe.environment_run_reply`, case `history_sensitive_c1_call`). -/
+example : Exec.runFrom ⟨[]⟩ (handler.oracle ()) 1 prior
+      (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩) =
+      ⟨prior ++ [(⟨.double, 3⟩, ⟨.double, 9⟩)], .final .normal ()⟩ ∧
+    CompleteTrace contract () ((Environment.adapter Demo.signature).project
+      (Exec.runFrom ⟨[]⟩ (handler.oracle ()) 1 prior
+        (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩)).events) :=
+  environment_run_reply contract handler handler_valid () prior ⟨.double, 3⟩ ⟨7⟩ 9 prior_valid rfl
+
+/-- Planted (law `ConcreteSpec.Core.Observe.environment_run_reply`, case `history_sensitive_c1_call`,
+subject `ConcreteSpec.Core.Observe.Environment.oracle`, mutant `ConcreteSpec.Core.Observe.forgetHistoryOracle`). -/
+example : Environment.Valid contract handler ∧
+    CompleteTrace contract () (Environment.history prior) ∧
+    handler.reply () (Environment.history prior ++ [.request ⟨.double, 3⟩]) .double 3 = some 9 ∧
+    ¬ (Exec.runFrom ⟨[]⟩ (forgetHistoryOracle handler ()) 1 prior
+        (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩) =
+        ⟨prior ++ [(⟨.double, 3⟩, ⟨.double, 9⟩)], .final .normal ()⟩ ∧
+      CompleteTrace contract () ((Environment.adapter Demo.signature).project
+        (Exec.runFrom ⟨[]⟩ (forgetHistoryOracle handler ()) 1 prior
+          (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩)).events)) := by
+  refine ⟨handler_valid, prior_valid, rfl, ?_⟩
+  intro invalid
+  have responses := congrArg (fun r : Exec.Report (Environment.operands Demo.signature) =>
+    r.events.map fun pair => pair.2.2) invalid.1
+  change [3, 7] = [3, 9] at responses
+  exact (by decide : ([3, 7] : List Nat) ≠ [3, 9]) responses
+
+end HistoryDemo
 
 namespace RoutingDemo
 
