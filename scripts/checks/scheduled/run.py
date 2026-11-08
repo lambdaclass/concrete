@@ -84,9 +84,18 @@ def run(sha, tier, output):
                     # The shared helper owns acquisition/release; gate commands inherit the held slot.
                     command = ["nix", "develop", "--command", "bash", str(ROOT / "scripts/checks/scheduled/with_slot.sh"),
                                str(row["budget_seconds"]), *row["command"]]
+                    gate_env = clean_env()
+                    gate_env.update(
+                        SELECTED_SHA=sha,
+                        SELECTED_TIER=tier,
+                        CONCRETE_SCALING_EXPECTED_SHA=sha,
+                        CONCRETE_SCALING_GITHUB_REPOSITORY=os.environ.get("GITHUB_REPOSITORY", ""),
+                        CONCRETE_SCALING_RUNNER_ENVIRONMENT=os.environ.get("RUNNER_ENVIRONMENT", "self-hosted"),
+                        CONCRETE_SCALING_RUNNER_NAME=os.environ.get("RUNNER_NAME", ""),
+                    )
                     with log.open("w") as stream:
                         outcome = call(command, cwd=checkout, stdout=stream, stderr=subprocess.STDOUT,
-                                       timeout=row["budget_seconds"] * 3 + 180)
+                                       timeout=row["budget_seconds"] * 3 + 180, env=gate_env)
                     gate["resources"] = {"wall_seconds": time.monotonic() - began, "exit_code": outcome.returncode}
                     gate["status"] = "PASS" if outcome.returncode == 0 else "INCOMPLETE" if outcome.returncode == 125 else "FAIL"
                     for control in row["controls"]:

@@ -35,15 +35,17 @@ non-timed stack-depth check on `sparse` and `deepBlocks`) run in
 (`scripts/checks/compiler/scaling.sh`, `scripts/checks/compiler/scaling.lean`, and
 `scripts/checks/lib/scaling_report.py`).
 
-Landing dependency: the ISS-0030 branch (`wip/lcb-numbering`) and Gate C
-(`gate-scaling-determinism` / `wip/gate-scaling-determinism`) are merged here and land **together**,
+Landing dependency: the ISS-0030 branch (`wip/lcb-numbering`), Gate C
+(`gate-scaling-determinism` / `wip/gate-scaling-determinism`), and the scheduled-tier runner
+(`wip/gate-schedule`, [R-0676](ROADMAP.md)) are merged here (`c-wiring`) and land **together**,
 never alone. [R-0550](ROADMAP.md) owns backend scaling (with scheduled-tier infrastructure under
-`R-0563`). Gate C provides meaningful cheap PR coverage (`SCALING_TIER=pr`, `check-small` across all
-five families at `1, 10, 100` plus `1,000`-entry depth probes) plus full scheduled scaling
-assertions (`SCALING_TIER=daily`, `--mode backend` at `100, 1000, 10000`) and `100,000`-entry
-instruction and block depth probes (`check-depth`, with `wide_phi_depth` at `10,000`) on
-`concrete-ci-2`, as recorded in `Concrete/README.md`. ISS-0030 remains open until Gate C's families
-pass on `concrete-ci-2` against the integrated candidate's exact SHA.
+`R-0676` / `R-0690` / `R-0563`). Gate C provides meaningful cheap PR coverage (`SCALING_TIER=pr`,
+`check-small` across all five families at `1, 10, 100` plus `1,000`-entry depth probes) plus full
+scheduled scaling assertions (`SCALING_TIER=daily`, declared in `scripts/checks/lib/gate_manifest.py`
+and invoked by `scripts/checks/scheduled/run.py --tier daily` on `concrete-ci-2`, running
+`--mode backend` at `100, 1000, 10000` and `100,000`-entry instruction/block depth probes with
+`wide_phi_depth` at `10,000`), as recorded in `Concrete/README.md`. ISS-0030 remains open until Gate
+C's families pass on `concrete-ci-2` against the integrated candidate's exact SHA.
 
 Local stress-family measurements below are from commit
 `1103b54c4f9e5e60605ce96c0d1e7576b82e5657`, on the Linux shared development host

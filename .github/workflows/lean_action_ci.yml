@@ -428,6 +428,9 @@ jobs:
           echo "::error::Scaling (x86-64) requires self-hosted concrete-ci-2; heavy qualification cannot use a hosted substitute"
           exit 1
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name != 'pull_request' && github.sha || '' }}
+          persist-credentials: false
       - name: Install Nix (GitHub-hosted only)
         if: runner.environment != 'self-hosted'
         uses: cachix/install-nix-action@v31
@@ -437,10 +440,13 @@ jobs:
       - name: Interleaved 1x, 10x and 100x backend scaling
         if: github.event_name != 'pull_request'
         env:
+          CONCRETE_SCALING_EXPECTED_SHA: ${{ github.sha }}
+          CONCRETE_SCALING_EVENT_NAME: ${{ github.event_name }}
+          CONCRETE_SCALING_REF: ${{ github.ref }}
           CONCRETE_SCALING_GITHUB_REPOSITORY: ${{ github.repository }}
           CONCRETE_SCALING_RUNNER_ENVIRONMENT: ${{ runner.environment }}
           CONCRETE_SCALING_RUNNER_NAME: ${{ runner.name }}
-        run: nix develop --command bash scripts/checks/lib/bounded.sh 600 bash scripts/checks/compiler/scaling.sh scaling-report
+        run: nix develop --command bash scripts/checks/lib/bounded.sh 600 env SCALING_TIER=qualification bash scripts/checks/compiler/scaling.sh scaling-report
       - uses: actions/upload-artifact@v4
         if: always() && runner.environment == 'self-hosted'
         with:

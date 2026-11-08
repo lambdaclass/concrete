@@ -3,7 +3,10 @@
 # watch and land: replacements must each be in required-checks.txt (so they run and are checked at
 # the exact SHA), and `-` retires the job with a reason; a retired job is reported NOT RUN, never passed.
 # "Root checks" keeps its name and is required on both sides, so it has no row. Delete a row once main
-# no longer requires its job (required_checks.py reports it stale).
+# no longer requires its job (required_checks.py reports it stale). Newly added jobs in
+# required-checks.txt (Determinism (x86-64), Determinism (aarch64-macos), Scaling (x86-64)) do not
+# replace a removed base job and therefore have no transition row here; Scaling (x86-64)'s staged X4
+# pre-landing dispatcher and landing-acceptance note verification belong to ISS-0029 and R-0690.
 old_job	replacements	reason
 Slice 0 backends (x86-64)	Tests (x86-64)	The manifest-driven runner replaces the slice-0 backend gate.
 Slice 0 backends (aarch64-macos)	Tests (aarch64-macos)	The manifest-driven runner replaces the slice-0 backend gate.

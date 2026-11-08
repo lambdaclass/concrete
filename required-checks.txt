@@ -1,8 +1,12 @@
 # Required CI jobs: a train lands only when every job named here ran at the candidate's exact SHA and
 # succeeded (scripts/land/train.sh watch and land). One exact job name per line, as GitHub shows it.
 # GitHub branch protection is not configured for main, so this file is the record. Every job of
-# .github/workflows/lean_action_ci.yml is listed, each matrix leg under the name GitHub shows for it:
-# the root has no campaign tier.
+# .github/workflows/lean_action_ci.yml is listed, each matrix leg under the name GitHub shows for it.
+# Scheduled daily/weekly campaign tiers (.github/workflows/gate_schedule.yml, gate_publish.yml,
+# gate_freshness.yml) run on main and are intentionally absent from this list so scheduled freshness
+# cannot block unrelated landings. For Scaling (x86-64), pre-landing trusted candidate dispatch and
+# landing-train acceptance of collected concrete-ci-2 qualification notes remain staged on ISS-0029
+# (wip/repro-ci2) and R-0690 (see Concrete/README.md, gate 13).
 Root checks
 Spec build
 Oracle (GitHub-hosted fetch + smoke)

@@ -127,5 +127,17 @@ class Controls(unittest.TestCase):
         self.rejected("FAIL daily " + SHA + ": recorded attempt",
                       lambda: observe([r, fresh], SHA, "daily", later, RUNNERS))
 
+    def test_shared_ci2_inventory_binding(self):
+        import tempfile
+        from pathlib import Path
+        from protocol import inventory
+        real = inventory()
+        self.assertIn("unbalancedparentheses/concrete2", real)
+        self.assertIn("concrete-ci-2-gha1", real["unbalancedparentheses/concrete2"])
+        self.assertNotIn("concrete-ci-2-gha7", real["unbalancedparentheses/concrete2"])
+        with tempfile.TemporaryDirectory() as empty:
+            self.rejected("INCOMPLETE dependency: ISS-0029 runner binding unavailable",
+                          lambda: inventory(Path(empty)))
+
 if __name__ == "__main__":
     unittest.main()

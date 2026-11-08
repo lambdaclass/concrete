@@ -72,8 +72,63 @@ case "$in_process_only" in 0|1) ;; *) echo "scaling: SCALING_IN_PROCESS_ONLY mus
 tier=${SCALING_TIER:-qualification}
 case "$tier" in pr|qualification|daily) ;; *) echo "scaling: invalid SCALING_TIER" >&2; exit 2 ;; esac
 [ "$tier" != pr ] || in_process_only=1
+head_sha=$(git rev-parse HEAD)
+expected_sha=${CONCRETE_SCALING_EXPECTED_SHA:-${SELECTED_SHA:-}}
 mkdir -p "$report"
-printf 'sha=%s\ntier=%s\n' "$(git rev-parse HEAD)" "$tier" >"$report/identity.txt"
+printf 'sha=%s\ntier=%s\n' "$head_sha" "$tier" >"$report/identity.txt"
+
+check_exact_sha() { # check_exact_sha ACTUAL_HEAD EXPECTED_SHA [EVENT_NAME] [REF_NAME] [RUNNER_ENV]
+  local actual_head=$1 expected=$2 event=${3:-} ref=${4:-} runner_env=${5:-}
+  if [ "$runner_env" = "self-hosted" ] && [ "$event" = "pull_request" ]; then
+    echo "FAIL scaling: unauthorized event pull_request for self-hosted qualification" >&2
+    return 1
+  fi
+  if [ -n "$ref" ]; then
+    case "$ref" in
+      refs/heads/main|refs/heads/ci/*|refs/heads/wip/*) ;;
+      *)
+        echo "FAIL scaling: unauthorized ref $ref for self-hosted qualification" >&2
+        return 1
+        ;;
+    esac
+  fi
+  if ! [[ "$expected" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "FAIL scaling: unauthorized or invalid expected SHA: ${expected:-<empty>}" >&2
+    return 1
+  fi
+  if [ "$actual_head" != "$expected" ]; then
+    echo "FAIL scaling: checked-out HEAD does not match authorized expected SHA $expected" >&2
+    return 1
+  fi
+}
+
+verify_report_sha() { # verify_report_sha FILE EXPECTED_SHA EXPECTED_TIER
+  python3 -I - "$1" "$2" "$3" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+path, expected_sha, expected_tier = sys.argv[1:]
+if not re.fullmatch(r"[0-9a-f]{40}", expected_sha):
+    sys.exit(f"FAIL scaling: unauthorized or invalid expected SHA: {expected_sha}")
+try:
+    text = Path(path).read_text(encoding="utf-8")
+except OSError as error:
+    sys.exit(f"FAIL scaling: cannot read report {path} ({error})")
+sha_match = re.search(r"(?:^|[;\s])sha=([0-9a-fA-F]+)(?:$|[;\s])", text, re.MULTILINE)
+tier_match = re.search(r"(?:^|[;\s])tier=([a-z_]+)(?:$|[;\s])", text, re.MULTILINE)
+if not sha_match:
+    sys.exit(f"FAIL scaling: report {path} is missing sha= binding")
+got_sha = sha_match.group(1)
+if got_sha != expected_sha:
+    sys.exit(f"FAIL scaling: report SHA {got_sha} in {path} does not match authorized expected SHA {expected_sha}")
+if not tier_match:
+    sys.exit(f"FAIL scaling: report {path} is missing tier= binding")
+got_tier = tier_match.group(1)
+if got_tier != expected_tier:
+    sys.exit(f"FAIL scaling: report tier {got_tier} in {path} does not match expected tier {expected_tier}")
+PY
+}
 
 check_ci2_runner() { # check_ci2_runner REPOSITORY ENVIRONMENT RUNNER_NAME INVENTORY_PATH
   python3 -I - "$1" "$2" "$3" "$4" <<'PY'
@@ -122,6 +177,17 @@ if [ -n "${CONCRETE_SCALING_GITHUB_REPOSITORY:-}${CONCRETE_SCALING_RUNNER_ENVIRO
     "${CONCRETE_SCALING_RUNNER_NAME:-}" \
     "$root/scripts/checks/lib/ci2_runners.txt"
 fi
+if [ -n "${CONCRETE_SCALING_EXPECTED_SHA:-}${SELECTED_SHA:-}${CONCRETE_SCALING_EVENT_NAME:-}${CONCRETE_SCALING_REF:-}" ]; then
+  check_exact_sha \
+    "$head_sha" \
+    "$expected_sha" \
+    "${CONCRETE_SCALING_EVENT_NAME:-}" \
+    "${CONCRETE_SCALING_REF:-}" \
+    "${CONCRETE_SCALING_RUNNER_ENVIRONMENT:-}"
+else
+  expected_sha=$head_sha
+fi
+verify_report_sha "$report/identity.txt" "$expected_sha" "$tier"
 driver=(lake env lean --run "$root/scripts/checks/compiler/scaling.lean")
 if [ "$in_process_only" = 1 ]; then
   bounded 1800 lake build Concrete >"$work/lake-build.log" 2>&1 ||
@@ -142,12 +208,14 @@ run_lean() { # run_lean PLANT OUTPUT
 analyze() { # analyze SAMPLES REPORT MODE
   bounded 60 python3 -I "$root/scripts/checks/lib/scaling_report.py" "$1" "$2" \
     --k0 "$k0" --repetitions "$repetitions" --max-exponent "$max_exponent" \
-    --min-stage-ns "$min_stage_ns" --min-native-ns "$min_native_ns" --mode "$3"
+    --min-stage-ns "$min_stage_ns" --min-native-ns "$min_native_ns" --mode "$3" \
+    --sha "$head_sha" --tier "$tier"
 }
 
 if [ -n "$plant" ]; then
   run_lean "$plant" "$work/plant.tsv"
   analyze "$work/plant.tsv" "$report/scaling.tsv" "$plant"
+  verify_report_sha "$report/scaling.tsv" "$expected_sha" "$tier"
   exit
 fi
 
@@ -260,13 +328,46 @@ control_ci2_provenance() {
   echo 'ok scaling control ci2-provenance: eligible runners accepted and substitutes refused'
 }
 
+control_exact_sha() {
+  local log=$work/control-sha.log bad_report=$work/control-bad-report.tsv rc=0
+  if ! check_exact_sha "$head_sha" "$head_sha" "workflow_dispatch" "refs/heads/main" "self-hosted" >"$log" 2>&1 ||
+      ! verify_report_sha "$report/identity.txt" "$head_sha" "$tier" >"$log" 2>&1; then
+    control_setup exact-sha "authorized exact SHA was rejected" "$log"
+    return 1
+  fi
+  for case_spec in \
+      "unauthorized-event|$head_sha|pull_request|refs/heads/main|self-hosted|FAIL scaling: unauthorized event pull_request for self-hosted qualification" \
+      "unauthorized-ref|$head_sha|workflow_dispatch|refs/pull/1/merge|self-hosted|FAIL scaling: unauthorized ref refs/pull/1/merge for self-hosted qualification" \
+      "invalid-sha|not-a-sha|workflow_dispatch|refs/heads/main|self-hosted|FAIL scaling: unauthorized or invalid expected SHA: not-a-sha" \
+      "mismatched-sha|0000000000000000000000000000000000000000|workflow_dispatch|refs/heads/main|self-hosted|FAIL scaling: checked-out HEAD does not match authorized expected SHA 0000000000000000000000000000000000000000"; do
+    IFS='|' read -r label exp_sha ev ref renv expected <<<"$case_spec"
+    rc=0
+    check_exact_sha "$head_sha" "$exp_sha" "$ev" "$ref" "$renv" >"$log" 2>&1 || rc=$?
+    if [ "$rc" = 0 ] || ! grep -qF "$expected" "$log"; then
+      control_setup "exact-sha-$label" "did not refuse with '$expected' (status $rc)" "$log"
+      return 1
+    fi
+  done
+  printf '# sha=1111111111111111111111111111111111111111; tier=%s\n' "$tier" >"$bad_report"
+  rc=0
+  verify_report_sha "$bad_report" "$head_sha" "$tier" >"$log" 2>&1 || rc=$?
+  if [ "$rc" = 0 ] || ! grep -qF "FAIL scaling: report SHA 1111111111111111111111111111111111111111 in $bad_report does not match authorized expected SHA $head_sha" "$log"; then
+    control_setup exact-sha-report-mismatch "did not refuse mismatched report SHA (status $rc)" "$log"
+    return 1
+  fi
+  echo 'ok scaling control exact-sha: authorized exact SHA accepted and unauthorized/mismatched SHAs refused'
+}
+
 if [ "$tier" = pr ]; then
-  bounded 300 "${driver[@]}" check-small >"$report/pr-coverage.txt"
+  printf '# sha=%s; tier=%s\n' "$head_sha" "$tier" >"$report/pr-coverage.txt"
+  bounded 300 "${driver[@]}" check-small >>"$report/pr-coverage.txt"
+  verify_report_sha "$report/pr-coverage.txt" "$expected_sha" "$tier"
   cat "$report/pr-coverage.txt"
   controls_rc=0
   control_noise_envelope || controls_rc=1
   control_refusal || controls_rc=1
   control_ci2_provenance || controls_rc=1
+  control_exact_sha || controls_rc=1
   if [ "$controls_rc" != 0 ]; then
     echo 'FAIL scaling: automatic planted controls failed' >&2
     exit 1
@@ -311,6 +412,9 @@ fi
 if [ "$clean_rc" = 0 ]; then
   cp "$work/clean.tsv" "$report/samples.tsv"
   analyze "$work/clean.tsv" "$report/scaling.tsv" "$mode" || clean_rc=$?
+  if [ "$clean_rc" = 0 ]; then
+    verify_report_sha "$report/scaling.tsv" "$expected_sha" "$tier" || clean_rc=$?
+  fi
 else
   echo "FAIL scaling: clean measurement failed with status $clean_rc; running controls" >&2
 fi
@@ -327,11 +431,19 @@ if [ "$tier" = daily ]; then
       bounded 60 python3 -I "$root/scripts/checks/lib/scaling_report.py" \
         "$report/$family.samples.tsv" "$report/$family.tsv" --k0 "$family_k0" \
         --repetitions "$repetitions" --max-exponent "$max_exponent" \
-        --min-stage-ns "$min_stage_ns" --min-native-ns "$min_native_ns" --mode backend || rc=$?
+        --min-stage-ns "$min_stage_ns" --min-native-ns "$min_native_ns" --mode backend \
+        --sha "$head_sha" --tier "$tier" || rc=$?
+    fi
+    if [ "$rc" = 0 ]; then
+      verify_report_sha "$report/$family.tsv" "$expected_sha" "$tier" || rc=$?
     fi
     [ "$rc" = 0 ] || clean_rc=$rc
   done
-  bounded 600 "${driver[@]}" check-depth >"$report/depth.txt" || clean_rc=$?
+  printf '# sha=%s; tier=%s\n' "$head_sha" "$tier" >"$report/depth.txt"
+  bounded 600 "${driver[@]}" check-depth >>"$report/depth.txt" || clean_rc=$?
+  if [ "$clean_rc" = 0 ]; then
+    verify_report_sha "$report/depth.txt" "$expected_sha" "$tier" || clean_rc=$?
+  fi
 fi
 
 controls_rc=0
@@ -340,6 +452,7 @@ control_quadratic || controls_rc=1
 control_noise_envelope || controls_rc=1
 control_refusal || controls_rc=1
 control_ci2_provenance || controls_rc=1
+control_exact_sha || controls_rc=1
 if [ "$controls_rc" != 0 ]; then
   echo 'FAIL scaling: automatic planted controls failed' >&2
   [ "$clean_rc" != 0 ] || clean_rc=1

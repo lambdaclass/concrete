@@ -32,16 +32,44 @@ def timestamp(value):
     except (ValueError, AttributeError):
         raise EvidenceError("invalid UTC timestamp")
 
-def inventory():
-    # ISS-0029 owns both parsing and the sole runner binding. No copied inventory.
-    path = Path(__file__).resolve().parents[1] / "lib/repro_manifest_compare.py"
-    require(path.is_file(), "INCOMPLETE dependency: ISS-0029 runner binding unavailable")
-    spec = importlib.util.spec_from_file_location("ci2_binding", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+def read_ci2_inventory(inv_path):
+    lines = Path(inv_path).read_text(encoding="utf-8").splitlines()
+    runners = {}
+    pairs = set()
+    for number, raw in enumerate(lines, 1):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        fields = line.split()
+        if len(fields) != 2:
+            raise ValueError(f"{inv_path}:{number}: expected repository and one runner name")
+        repo, name = fields
+        if (repo, name) in pairs:
+            raise ValueError(f"{inv_path}:{number}: duplicate {repo} {name}")
+        pairs.add((repo, name))
+        runners.setdefault(repo, set()).add(name)
+    if not runners:
+        raise ValueError(f"{inv_path}: empty runner inventory")
+    return runners
+
+def inventory(root=None):
+    # ISS-0029 owns both parsing and the sole runner binding when merged; until
+    # repro_manifest_compare.py lands, read the shared ci2_runners.txt inventory.
+    base = Path(root) if root is not None else Path(__file__).resolve().parents[1] / "lib"
+    path = base / "repro_manifest_compare.py"
+    ci2 = base / "ci2_runners.txt"
+    if path.is_file():
+        spec = importlib.util.spec_from_file_location("ci2_binding", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        try:
+            return module.read_inventory()
+        except (SystemExit, OSError, ValueError) as error:
+            raise EvidenceError(f"INCOMPLETE runner inventory: {error}") from error
+    require(ci2.is_file(), "INCOMPLETE dependency: ISS-0029 runner binding unavailable")
     try:
-        return module.read_inventory()
-    except (SystemExit, OSError, ValueError) as error:
+        return read_ci2_inventory(ci2)
+    except (OSError, ValueError) as error:
         raise EvidenceError(f"INCOMPLETE runner inventory: {error}") from error
 
 def validate(record, sha, tier, runners, repository=None):

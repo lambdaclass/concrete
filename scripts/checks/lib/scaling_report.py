@@ -3,6 +3,7 @@
 
 import argparse
 import math
+import re
 import sys
 from collections import defaultdict
 
@@ -27,10 +28,14 @@ def main():
     parser.add_argument("--min-native-ns", type=int, required=True)
     parser.add_argument("--mode", choices=["normal", "in-process", "backend", "linear", "quadratic"],
                         default="normal")
+    parser.add_argument("--sha", default=None)
+    parser.add_argument("--tier", choices=["pr", "qualification", "daily"], default=None)
     args = parser.parse_args()
     if (args.k0 <= 0 or args.repetitions <= 0 or args.max_exponent <= 0
             or args.min_stage_ns <= 0 or args.min_native_ns <= 0):
         parser.error("k0/repetitions/exponent and both resolution floors must be positive")
+    if args.sha is not None and re.fullmatch(r"[0-9a-f]{40}", args.sha) is None:
+        sys.exit(f"FAIL scaling: unauthorized or invalid expected SHA: {args.sha}")
 
     samples = defaultdict(dict)
     with open(args.samples, encoding="utf-8") as stream:
@@ -87,8 +92,11 @@ def main():
         unexpected = sorted(set(samples) - expected_inventory)
         failures.append(f"FAIL scaling: stage inventory differs (missing {missing}, unexpected {unexpected})")
 
+    identity_prefix = ""
+    if args.sha is not None and args.tier is not None:
+        identity_prefix = f"sha={args.sha}; tier={args.tier}; "
     lines = [
-        f"# mode={args.mode}; k0={args.k0}; sizes={sizes[0]},{sizes[1]},{sizes[2]}; repetitions={args.repetitions}",
+        f"# {identity_prefix}mode={args.mode}; k0={args.k0}; sizes={sizes[0]},{sizes[1]},{sizes[2]}; repetitions={args.repetitions}",
         f"# minimum per size; max_exponent={args.max_exponent:.3f}; "
         f"min_100x_stage_ns={args.min_stage_ns}; min_100x_native_ns={args.min_native_ns}",
         "stage\t1x_ms\t10x_ms\t100x_ms\texponent_1x_10x\texponent_10x_100x\tupper_low_quantile_exponent",

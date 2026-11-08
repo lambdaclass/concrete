@@ -9,23 +9,24 @@ No language or spec decision is made here.
 
 ## Explicit integration dependencies — do not enable as qualified yet
 
-This branch supplies the execution/record/observation protocol, not the campaigns.
+This branch supplies the execution/record/observation protocol and wires Gate C's
+`SCALING_TIER=daily` campaign through `scripts/checks/lib/gate_manifest.py`.
 It depends on ISS-0029 (`origin/wip/repro-ci2`, 688e10a86421feb48ab4f26f2b4dd2955a18aff4)
-for `scripts/checks/lib/repro_manifest_compare.py:read_inventory` and that module's
-single `ci2_runners.txt` binding. It imports the parser rather than copying its
-inventory or using a runner-name pattern. Repository/runner registration remains
-the trust boundary described in that branch's `docs/SELF_HOSTED_RUNNERS.md`.
-The referenced tip has no reusable exact-SHA dispatch helper: selection is a
-main-only schedule-specific entry point; it does not replace the repro CI leg.
-The coordinator must reconcile X4's shared dispatch interface with ISS-0029 before
-qualification; a second independent trusted-runner implementation is forbidden.
+for `scripts/checks/lib/repro_manifest_compare.py:read_inventory` once merged; until that
+module lands, `protocol.py:inventory` reads the shared `scripts/checks/lib/ci2_runners.txt`
+binding directly rather than using a runner-name pattern. Repository/runner registration remains
+the trust boundary described in `docs/SELF_HOSTED_RUNNERS.md`.
+The referenced tip has no reusable pre-landing exact-SHA dispatch helper: selection in
+`gate_schedule.yml` is a main-only schedule/replay entry point; it does not replace pre-landing
+candidate dispatch in `lean_action_ci.yml` or the repro CI leg.
+The coordinator must reconcile X4's shared pre-landing dispatch interface and landing-acceptance
+note checks with ISS-0029 and R-0690 before qualification; a second independent trusted-runner
+implementation is forbidden.
 
 B/N5 (`origin/wip/gates-manifest`, c2245c99ab7e9255e6a25898386804d6621f2bb8)
-provides `tests/manifest.tsv`, a **fixture** inventory. It does not declare gate
-tiers, commands or windows. No fixture list is copied here and no campaign list
-is invented. The single source of gate selection must be G1 (R-0674), with G2/G3
-(R-0675) evidence/cost contracts. Until that producer lands, the executor records
-INCOMPLETE, and the observer cannot report PASS. The proposed adapter boundary is:
+provides `tests/manifest.tsv`, a **fixture** inventory. Gate tier declarations live in
+`scripts/checks/lib/gate_manifest.py` (to be expanded by G1/R-0674, with G2/G3
+R-0675 evidence/cost contracts):
 
 ```
 python3 scripts/checks/lib/gate_manifest.py scheduled --tier daily|weekly
@@ -35,9 +36,12 @@ It emits one JSON array of rows with `id`, `tier`, `command` (argv),
 `budget_seconds`, `tools` (consumed identities), `seed`, and `controls`.
 Each control has `id`, `command` (argv), `exit_code` (nonzero) and `diagnostic`
 (the complete, exact combined stdout/stderr after stripping surrounding whitespace).
-G1 must validate completeness, capability availability and tier placement before
-export; the scheduler refuses empty tiers and absent controls. This is an adapter
-contract awaiting agreement with G1, **not a claim that its exporter exists**.
+On this branch `gate_manifest.py` declares Gate C's `scaling` tiers (`pr`, `qualification`,
+`daily`) once and exports `SCALING_TIER=daily` for `--tier daily` along with its five
+exact-diagnostic controls; `--tier weekly` remains empty (`[]`, reported as INCOMPLETE by
+`run.py`) until G1/R-0674 registers weekly campaigns.
+`gate_manifest.py` and `workflow_yaml.sh` validate tier placement and controls and refuse
+removal, tier misrouting or a wrong `SCALING_TIER`.
 The registry must also own freshness windows; the protocol's current 36-hour daily
 and eight-day weekly recovery windows are initial operational defaults requiring
 integration into that registry before qualification. Prior failed attempts remain
