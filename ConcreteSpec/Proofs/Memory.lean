@@ -377,6 +377,82 @@ theorem fromExposed_sound (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
         simpa using hh
     next => cases h
 
+/-- An eligible containing or one-past candidate suffices to recover some provenance. -/
+theorem fromExposed_exists (m : Memory) (s : AddrSpace) (addr : Nat)
+    (e : MemBlockId × Block) (he : e ∈ m.blocks) (hc : e.2.Candidate s = true)
+    (ha : (e.2.base ≤ addr ∧ addr < e.2.base + e.2.size) ∨
+      addr = e.2.base + e.2.size) :
+    ∃ b, (m.fromExposed s addr).prov = some b := by
+  have hm : e ∈ m.blocks.filter (fun e => e.2.Candidate s) := List.mem_filter.mpr ⟨he, hc⟩
+  unfold Memory.fromExposed
+  dsimp only
+  split
+  next e' _ => exact ⟨e'.1, rfl⟩
+  next hn =>
+    split
+    next e' _ => exact ⟨e'.1, rfl⟩
+    next hp =>
+      rcases ha with ha | ha
+      · have hh := List.find?_eq_none.mp hn e hm
+        simp [ha] at hh
+      · have hh := List.find?_eq_none.mp hp e hm
+        simp [ha] at hh
+
+/-- Completeness at the containing-block priority; no list-order tie-break enters the result. -/
+theorem fromExposed_contains (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
+    (s : AddrSpace) (addr : Nat) (b : MemBlockId) (x : Block)
+    (hx : m.block b = some x) (hc : x.Candidate s = true)
+    (hi : x.base ≤ addr ∧ addr < x.base + x.size) :
+    (m.fromExposed s addr).prov = some b := by
+  obtain ⟨c, hp⟩ := fromExposed_exists m s addr (b, x) (AList.lookup_mem hx) hc (.inl hi)
+  obtain ⟨y, hy, hcy, hiy⟩ := fromExposed_sound tgt m hw s addr c hp
+  rcases hiy with hiy | ⟨_, hn⟩
+  · have := candidate_contains_unique tgt m hw s addr b c x y hx hy hc hcy hi hiy
+    simpa only [← this] using hp
+  · exact False.elim (hn (b, x) (AList.lookup_mem hx) hc hi)
+
+/-- Nonempty disjoint blocks in one space cannot share their one-past endpoint either. -/
+theorem candidate_onePast_unique (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
+    (s : AddrSpace) (addr : Nat) (b c : MemBlockId) (x y : Block)
+    (hx : m.block b = some x) (hy : m.block c = some y)
+    (hxc : x.Candidate s = true) (hyc : y.Candidate s = true)
+    (hxi : addr = x.base + x.size) (hyi : addr = y.base + y.size) : b = c := by
+  by_cases hn : b = c
+  · exact hn
+  apply False.elim
+  simp only [Block.Candidate, Bool.and_eq_true, decide_eq_true_eq] at hxc hyc
+  apply hw.disjoint b x c y hx hy hn hxc.1.1.1 hyc.1.1.1
+  refine ⟨hxc.2.trans hyc.2.symm, hxc.1.2, hyc.1.2, ?_, ?_⟩ <;> omega
+
+/-- In the absence of any containing candidate, a one-past candidate is recovered exactly. -/
+theorem fromExposed_onePast (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
+    (s : AddrSpace) (addr : Nat) (b : MemBlockId) (x : Block)
+    (hx : m.block b = some x) (hc : x.Candidate s = true) (hi : addr = x.base + x.size)
+    (hn : ∀ e ∈ m.blocks, e.2.Candidate s = true →
+      ¬ (e.2.base ≤ addr ∧ addr < e.2.base + e.2.size)) :
+    (m.fromExposed s addr).prov = some b := by
+  obtain ⟨c, hp⟩ := fromExposed_exists m s addr (b, x) (AList.lookup_mem hx) hc (.inr hi)
+  obtain ⟨y, hy, hcy, hiy⟩ := fromExposed_sound tgt m hw s addr c hp
+  rcases hiy with hiy | ⟨hiy, _⟩
+  · exact False.elim (hn (c, y) (AList.lookup_mem hy) hcy hiy)
+  · have := candidate_onePast_unique tgt m hw s addr b c x y hx hy hc hcy hi hiy
+    simpa only [← this] using hp
+
+/-- If neither priority has a candidate, reconstruction supplies no provenance. -/
+theorem fromExposed_none (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
+    (s : AddrSpace) (addr : Nat)
+    (hn : ∀ e ∈ m.blocks, e.2.Candidate s = true →
+      ¬ (e.2.base ≤ addr ∧ addr < e.2.base + e.2.size) ∧ addr ≠ e.2.base + e.2.size) :
+    (m.fromExposed s addr).prov = none := by
+  cases hp : (m.fromExposed s addr).prov with
+  | none => rfl
+  | some b =>
+    obtain ⟨x, hx, hc, hi⟩ := fromExposed_sound tgt m hw s addr b hp
+    have hh := hn (b, x) (AList.lookup_mem hx) hc
+    rcases hi with hi | ⟨hi, _⟩
+    · exact False.elim (hh.1 hi)
+    · exact False.elim (hh.2 hi)
+
 /-- A valid nonempty access identifies a live block and an in-bounds offset. -/
 theorem access_some (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat) (b : MemBlockId)
     (off : Nat) (h : m.access tgt p n a = some (some (b, off))) :
@@ -541,6 +617,21 @@ theorem expose_result (m m' : Memory) (p : Ptr) (h : m.expose p = some m') :
       next hl => cases h; exact ⟨b, x, hp, hx, hl, rfl⟩
       next => cases h
     next => cases h
+
+/-- Conversely every live provenance block can be exposed, preserving all other fields. -/
+theorem expose_success (m : Memory) (p : Ptr) (b : MemBlockId) (x : Block)
+    (hp : p.prov = some b) (hx : m.block b = some x) (hl : x.live = true) :
+    m.expose p = some (m.modify b (fun y => { y with exposed := true })) := by
+  simp [Memory.expose, hp, hx, hl]
+
+/-- The exposed block has exactly its old fields except the exposed flag; other blocks and
+freshness counter are unchanged. -/
+theorem expose_frame (m m' : Memory) (p : Ptr) (h : m.expose p = some m') :
+    ∃ b x, p.prov = some b ∧ m.block b = some x ∧
+      m'.block b = some { x with exposed := true } ∧ m'.next = m.next ∧
+      ∀ c, c ≠ b → m'.block c = m.block c := by
+  obtain ⟨b, x, hp, hx, _, rfl⟩ := expose_result m m' p h
+  exact ⟨b, x, hp, hx, by simp [hx], rfl, by intro c hc; simp [hc]⟩
 
 /-- Marking a block exposed preserves well-formedness. -/
 theorem expose_wellFormed (tgt : Target) (m m' : Memory) (hw : m.WellFormed tgt)
