@@ -1,0 +1,2 @@
+[piece 1 of 2: scripts]
+- scripts/land/lib.sh:122: The username validation also applies to HTTPS URLs, rejecting valid percent-encoded userinfo such as `https://alice%40example.com:TOKEN@github.com/lambdaclass/concrete.git`. This blocks pushes and landing commands for a legitimate project remote. Apply SSH username restrictions only to SSH transports.
