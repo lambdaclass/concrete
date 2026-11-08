@@ -10,7 +10,7 @@
 # brings it up to date with its origin (so base, which is on main, is there) and runs run-at-ref.sh with
 # RUN_AT_REF_SOURCE=<the bundle>, <ref> and <command>. The ref and command are quoted for bash HERE,
 # into that file, so the host's login shell only ever sees `bash land-remote-<id>/run.sh`, whatever
-# the command contains. Output is run-at-ref.sh's. The host needs its gate clone (RUN_AT_REF_REPO,
+# the command contains. Output is run-at-ref.sh's. The login must not be root. The host needs its gate clone (RUN_AT_REF_REPO,
 # default ~/concrete2) and nix; it needs no GitHub credentials and no copy of the landing scripts.
 #
 # Env: LAND_GATES_SSH (default `ssh -o BatchMode=yes -o ServerAliveInterval=20 -o ServerAliveCountMax=120`),
@@ -37,6 +37,13 @@ cp "$bundle" "$tmp/$id/c.bundle" && cp "$SELF_DIR/run-at-ref.sh" "$tmp/$id/scrip
   # fetches: a gate clone at another repository is a transport failure (INCOMPLETE).
   echo '. "$dir/scripts/land/lib.sh" || { echo "transport: cannot read lib.sh" >&2; exit 255; }'
   echo 'gc="${RUN_AT_REF_REPO:-$HOME/concrete2}"'
+  # Who the ssh destination logged in as, checked ON THE HOST: gates never run as root, and a login
+  # without its gate clone names the account and path. (2026-11-08: a train run from an account
+  # whose `concrete-ci-2` alias is the root admin login looked for /root/concrete2 and reported only
+  # "fetch in the gate clone failed".) Both are transport failures: INCOMPLETE, never a pass.
+  echo 'who="$(id -un)@$(hostname)"'
+  echo '[ "$(id -u)" != 0 ] || { echo "transport: the gate host login is $who (root); gates run as the gate user (dev on the CI hosts), never root: check the ssh destination User" >&2; exit 255; }'
+  echo '[ -d "$gc/.git" ] || { echo "transport: no gate clone at $gc for $who (RUN_AT_REF_REPO); is the ssh destination the gate user?" >&2; exit 255; }'
   echo 'why="$(cd "$gc" && land_remote_bad origin)" || { echo "transport: the gate clone $gc: $why" >&2; exit 255; }'
   echo 'git -C "$gc" fetch -q origin || { echo "transport: fetch in the gate clone failed" >&2; exit 255; }'
   printf 'RUN_AT_REF_SOURCE="$dir/c.bundle" bash "$dir/scripts/land/run-at-ref.sh" %q %q\n' "$ref" "$cmd"

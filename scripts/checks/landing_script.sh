@@ -585,6 +585,19 @@ git -C "$HH/concrete2" remote set-url origin "$TMP/ri-origin.git"
 [ "$rc" = 3 ] && has "$out" "INCOMPLETE" && has "$out" "the gate clone" && has "$out" "not one of the project's repositories" \
   && ! grep -q "$HH/concrete2" "$TMP/hostgit.log" \
   && ok "a gate clone whose origin is another repository is refused on the host before it fetches (INCOMPLETE)" || { no "foreign gate clone: exit $rc"; echo "$out" | sed 's/^/      /'; }
+# The login is checked on the host: a root login, or one without its gate clone, is INCOMPLETE and
+# named, and nothing is fetched (2026-11-08: the root admin alias looked for /root/concrete2).
+mkdir -p "$TMP/hostroot"
+printf '#!/bin/sh\ncase "$1" in -u) echo 0 ;; -un) echo root ;; *) exec /usr/bin/env -i id "$@" ;; esac\n' > "$TMP/hostroot/id"
+chmod +x "$TMP/hostroot/id"; : > "$TMP/hostgit.log"
+PATH="$TMP/hostroot:$TMP/hostgit:$PATH" e2e
+[ "$rc" = 3 ] && has "$out" "INCOMPLETE" && has "$out" "gate host login is root@" && [ ! -s "$TMP/hostgit.log" ] \
+  && ok "a root login on the gate host is refused before it fetches (INCOMPLETE)" || { no "root gate login: exit $rc"; echo "$out" | sed 's/^/      /'; }
+mv "$HH/concrete2" "$HH/concrete2.away"; : > "$TMP/hostgit.log"
+PATH="$TMP/hostgit:$PATH" e2e
+mv "$HH/concrete2.away" "$HH/concrete2"
+[ "$rc" = 3 ] && has "$out" "INCOMPLETE" && has "$out" "no gate clone at $HH/concrete2 for " && [ ! -s "$TMP/hostgit.log" ] \
+  && ok "a gate login without its gate clone is INCOMPLETE and names the account and path" || { no "missing gate clone: exit $rc"; echo "$out" | sed 's/^/      /'; }
 touch "$HH/unreachable"; e2e; rm -f "$HH/unreachable"
 [ "$rc" = 3 ] && has "$out" "INCOMPLETE" && [ ! -f "$RIATT" ] && ok "the real transport to an unreachable host is INCOMPLETE (exit 3), attests nothing" || { no "e2e unreachable: exit $rc"; echo "$out" | sed 's/^/      /'; }
 hook="$ROOT_DIR/.githooks/pre-push"
