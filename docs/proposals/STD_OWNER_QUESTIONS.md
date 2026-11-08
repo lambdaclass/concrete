@@ -1,0 +1,374 @@
+# Owner questions O1–O12 of the std placement round: recommendations (PROPOSED, 2026-11-08)
+
+**PROPOSED, not decided.** Nothing here is a decision; the owner decides, and a decision is recorded only in
+[decisions.md](../decisions.md). This proposal was reviewed by Codex, Kimi and agy (one round, a fix round and two verification passes). It depends on records not yet on main: the 2026-11-08 language, foundation and
+std-table rows, `docs/proposals/FOUNDATION.md` and the std-per-slice table of `ROADMAP.md`, all on
+branch `wip/record-language` (reviewed at `e4737efa`); row names below refer to that branch until it lands.
+
+Status: proposal. It decides nothing. For each question of section 6 of [STD_PLACEMENT.md](STD_PLACEMENT.md) it says
+whether a recorded row already answers it (cited), or what remains open, and gives a recommendation
+and a runner-up reasoned from [PHILOSOPHY.md](../PHILOSOPHY.md) and the decided rows, with a short program
+sketch. **Every spelling in the sketches is illustrative**; exact spellings belong to the spelling
+round (`docs/decisions.md`, 2026-11-08 language row, items 55 and 59). Sketches before slice 17 use
+bare same-file or builtin names (no modules yet); sketches from 17 use qualified names (item 11(b)).
+Draft 2 applies the review of Codex, Kimi and agy (section "Review").
+
+Status labels: **decided** (a recorded row answers it; only spelling or signatures remain),
+**partly decided** (a row fixes the direction; a named substantive part is open), **deferred by
+decision** (a row says when it is decided), **open**.
+
+## O1. The view type used as a parameter
+
+**Status: decided (signatures in the spelling round).** Item 38 ("views and constant-time APIs
+(OPEN-21) are ordinary calls") accepted the grammar review's OPEN-21 direction: `View<T>` /
+`ViewMut<T>` as recognized second-class parameter type constructors (alternative `&[T]` /
+`&mut [T]`, which needs an unsized type form). Core Q3.1–Q3.5 fix the semantics (second-class
+shared/mutable views, downward passing, original root plus projection, `u64` lengths). Item 59
+leaves the exhaustive view API signatures to the spelling round.
+
+**Recommendation:** `View<T>` / `ViewMut<T>`, lent alike by arrays (15), `HeapArray` (21) and `Vec`
+(22): named type constructors, no new type form, second-class like `&T` (rule 10).
+**Runner-up:** `&[T]` / `&mut [T]`: familiar, but an unsized type form is one more kind of type for
+the checker and the proofs (rule 15).
+
+```
+// illustrative, slice 16 (console needed for the output grant)
+fn count_newlines(v: View<u8>) -> u64 {
+    let mut n: u64 = 0;
+    for i from 0 until view_len(v) {            // the loop bound is the index evidence
+        if v[i] == 10 { n = n + 1; }            // n ≤ i < view_len(v), so no overflow
+    }
+    return n;
+}
+fn main(out: StdOut) with(Console) -> u8 {
+    let buf: [u8; 4] = [104, 10, 105, 10];
+    borrow v = buf from 0 until 4 {
+        let n: u64 = count_newlines(v);
+        match give_up(out) { Result::Ok { value: u } => { discard(u); }, Result::Err { error: e } => { discard(e); return 1; }, }
+        if n == 2 { return 0; }
+        return 1;
+    }
+}
+```
+
+## O2. Views of grant-owned storage (arguments, variables)
+
+**Status: partly decided.** The hosted grant table (Q7.10, R4 F6) fixes the contract: "args and
+allowlisted vars, read with `with(Env)`; scoped views, no allocation"; Q7.5 a scoped immutable
+launch snapshot. A borrow source is a place rooted in a binding (Q4.7 as revised by item 11(c); the
+2026-11-02 audit: bind call results before projecting); `else` exists only on the range form (item
+37, OPEN-19); no function returns a reference (rule 10). Open: how the snapshot becomes a borrowable
+place.
+
+**Recommendation:** use only the decided forms plus one rule. The `Environment` grant exposes its
+launch snapshot as read-only borrowable places, `env.arg_bytes` and `env.var_bytes` (the one new
+rule: a grant-owned snapshot may be a borrow root). Primitives return `Copy` coordinates:
+`env_arg_range(e: &Environment, i: u64) with(Env) -> Result<ByteRange, NoSuchArg>` and
+`env_var_range(e: &Environment, name: View<u8>) with(Env) -> Result<ByteRange, NoSuchVar>` (an
+allowlisted variable is found by name). The caller opens the bytes with the decided range form,
+whose `else` covers the range. Nothing is copied, nothing is returned by reference, and failure is a
+typed `Result` (rules 3, 10, 18; P4's coordinates).
+**Runner-up:** a copy primitive `env_arg_into(e: &Environment, i: u64, out: ViewMut<u8>) with(Env)
+-> Result<u64, ArgError>` (and the same for variables): no new place rule and zero heap, but it
+copies, imposes a maximum length, and departs from Q7.10's "scoped views", so that row would need
+a recorded revision.
+
+```
+// illustrative, slice 18
+fn run(env: &Environment, dir: &Directory) with(Env, Fs) -> u8 {
+    match env_arg_range(env, 1) {
+        Result::Err { error: e } => { discard(e); return 2; },
+        Result::Ok { value: r } => {
+            borrow all = env.arg_bytes {
+                borrow pattern = all from r.start until r.end { ... search ... }
+                else { return 2; }
+            }
+            return 0;
+        },
+    }
+}
+fn main(env: Environment, dir: Directory) with(Env, Fs) -> u8 {
+    let code: u8 = run(&env, &dir);
+    close_dir(dir);
+    give_up(env);
+    return code;
+}
+```
+
+## O3. `Vec`'s representation
+
+**Status: partly decided.** Q2.2 names `Vec`'s two `Destroy` impls among the closed sixteen (beside
+`Heap` and `HeapArray`), Q2.3 fixes its destruction order, Q2.4/Q3.6 its draining and in-place
+replacement; Q9.6 makes irreducible operations primitives; item 19 denies compiler privilege only
+to map names. Open: whether spare capacity is a language container case or a new primitive buffer
+under std code.
+
+**Recommendation:** `Vec<T, A>` is a language container like `HeapArray`, its spare capacity being
+C4's per-slot initialization state. Growth is irreducible in safe Concrete before slice 24 (Q9.6),
+so some primitive is needed either way; making the container the primitive adds one container, not
+a general uninitialized-memory capability in the safe language (rules 3, 15).
+**Runner-up:** std code over one new primitive, a capacity buffer with explicit per-slot state: more
+logic in proven Concrete, but uninitialized storage becomes a safe source concept.
+
+```
+// illustrative, slice 22
+fn push_line<brand A>(lines: &mut vec::Vec<u64, A>, a: &mut Allocator<A>, off: u64) with(Alloc) -> Result<Unit, AllocFailure<u64>> {
+    return vec::push(lines, a, off);   // on failure the vector is unchanged and `off` comes back
+}
+```
+
+## O4. Reading container elements without returned references
+
+**Status: partly decided.** No function returns a reference and no value stores one (rule 10, REF-1,
+REF-3); opening a heap array yields views and never element references (Q3.1); consuming traversal
+is `drain` / `map_into` and in-place replacement `swap_at(v, i, x) -> T` (Q2.4, Q3.6). `Copy`
+elements are read by index through a view. Open: how a non-`Copy` element is inspected in place; no
+decided accessor does it, for sequences or maps.
+
+**Recommendation:** one downward callback form for both, from slice 20 (function pointer plus
+explicit context, item 25, the same shape as Q2.4's `drain` callback): `vec::with_elem(v, i, ctx, f)`
+and `ordered_map::with_value(m, k, ctx, f)`, where `f` receives the element by shared reference,
+can only pass it further down, and returns a `Result` the accessor hands back. One form for every
+container, and the reference only ever goes down.
+**Runner-up:** a scoped element-borrow language form, `borrow x = v[i] { ... } else { ... }`. It needs
+no function value, but it revises Q3.1 ("no element references") and item 37 (`else` only on the
+range form).
+
+```
+// illustrative, slice 23
+fn add_len<brand A>(total: &mut u64, s: &string::String<A>) -> Result<Unit, ArithmeticError> {
+    match checked_add(*total, string::len(s)) {
+        Result::Ok { value: t } => { *total = t; return Result::Ok { value: Unit }; },
+        Result::Err { error: e } => { return Result::Err { error: e }; },
+    }
+}
+fn total_len<brand A>(m: &ordered_map::OrderedMap<u64, string::String<A>, A>, key: u64) -> Result<u64, LookupError> {
+    let mut total: u64 = 0;
+    match ordered_map::with_value(m, key, &mut total, add_len) {   // Err covers a missing key or f's error
+        Result::Ok { value: u } => { discard(u); return Result::Ok { value: total }; },
+        Result::Err { error: e } => { return Result::Err { error: e }; },
+    }
+}
+```
+
+## O5. Wide arithmetic
+
+**Status: decided for now.** The approved foundation contract C2 (foundation question 1; its freeze
+comes only after implementation, proofs and the owner's acceptance) keeps the integer widths
+`i8`…`i64` and `u8`…`u64`; adding `u128` revises that recorded contract. A widening multiply is
+reducible with half products, so Q9.6 ("irreducible primitives") excludes it as a primitive. The
+workload rule (rule 17) admits a change only on measured need.
+
+**Recommendation:** limb code in std on 64-bit integers (32-bit half products), no new type.
+**Runner-up:** a `u128` type (a revision of C2) or a widening-multiply primitive (a revision of
+Q9.6 plus a C9 registration), considered only when measurements show the limb code is too slow.
+
+```
+// illustrative, slice 15 (same-file names before 17)
+struct Copy U256 { l0: u64, l1: u64, l2: u64, l3: u64 }
+fn u256_add(a: U256, b: U256) -> U256 { ... wrapping_add per limb, carries computed and proved in range ... }
+```
+
+## O6. Primitive or std, and where primitives are named
+
+**Status: partly decided.** `ct_eq` on arrays and views is an entry of the closed per-target
+constant-time table the owner approved (information-flow row, option (a) on every question of
+INFOFLOW.md), so it is a primitive. Item 32 decides one closed builtin-name table with no aliases;
+the 2026-11-02 audit, that only the compiler introduces intrinsics; Q9.6, that only irreducible
+operations are primitives; item 11(b), that builtin types stay bare; item 37 and Q4.7, that borrow
+sources are places and `else` belongs to the range form. Open: whether UTF-8 validation is a
+primitive, how dynamic bytes become usable as text, and whether primitive functions stay bare
+after 17.
+
+**Recommendation:** (a) `ct_eq` as decided; (b) UTF-8 validation is ordinary std code, being
+reducible (Q9.6) and provable as a program theorem; (c) no new borrow behaviour: the validator's
+postcondition is the evidence. `utf8_validate(v: View<u8>) -> Result<Unit, Utf8Error>` ensures
+`utf8_valid(v)` on `Ok`, and text operations on bytes require `utf8_valid(v)`. The slice-16 text
+views are formed by the decided borrow form only from values already valid (`StaticStr`, later
+`String`); (d) primitives are bare names from the closed builtin table at every slice, so nothing
+migrates at 17 and each primitive has one name (rules 2, 5).
+**Runner-up:** (c') a validating borrow source, `borrow t = utf8(v) { ... } else { ... }`, which reads
+well but makes validation a language primitive and revises item 37 and Q4.7; (d') primitives
+declared at std module paths and used qualified from 17, a second naming scheme beside the builtin
+table.
+
+```
+// illustrative, slice 16
+fn first_code_point(v: View<u8>) -> Result<u32, Utf8Error> {
+    match utf8_validate(v) {
+        Result::Err { error: e } => { return Result::Err { error: e }; },
+        Result::Ok { value: u } => {
+            discard(u);
+            if view_len(v) == 0 { return Result::Err { error: Utf8Error::Empty }; }
+            return utf8_decode_at(v, 0);        // requires utf8_valid(v) and 0 < view_len(v): both established above
+        },
+    }
+}
+```
+
+## O7. Constant-time table contents
+
+**Status: decided.** The information-flow row (owner option (a) on every question of INFOFLOW.md)
+fixes a closed per-target table of trap-free constant-time primitives: `wrapping_add`,
+`wrapping_sub`, `wrapping_mul`; `^ & | !`; shifts and rotations by public counts; comparisons giving
+`Secret<bool>`; `ct_select`; `ct_eq` on arrays and views. Variable-time multiplication on a target is
+that target's table entry and a named backend premise (C7).
+
+**Recommendation:** use the table as decided: Poly1305 and X25519 use `wrapping_mul`, ChaCha20
+rotations by public constants.
+**Runner-up:** none; any change is a revision.
+
+```
+// illustrative, slice 7
+fn chacha_step(a: Secret<u32>, b: Secret<u32>, d: Secret<u32>) -> Secret<u32> {
+    return rotate_left(wrapping_add(a, b) ^ d, 16);   // public rotation count
+}
+```
+
+## O8. Constant arrays
+
+**Status: partly decided.** Item 26: constants are computed at compile time and a constant's value
+must be `Copy`. `OWN-D1@3` (`legacy/docs/spec/ownership.md`, the recorded rule until its Lean
+definition lands): "an array of a Copy type" is `Copy`. Open: only whether array literals (and
+repetitions, OD149) are in the closed total initializer subset item 26 defines before Q6.4/TYPE-22
+are revised.
+
+**Recommendation:** array literals of literal elements are in the initializer subset; computed tables
+wait for the subset's definition.
+**Runner-up:** literal arrays only, never computed, each with a Lean theorem that the literal equals
+its generating definition (for CRC32, the reflected polynomial).
+
+```
+// illustrative, slice 17
+const KECCAK_RC: [u64; 24] = [0x0000000000000001, 0x0000000000008082, ...];
+```
+
+## O9. One implementation for public and secret data
+
+**Status: open, with no current consumer.** Q6.3 (parametric checking plus substitution-time
+rechecking) would make a generic function instantiated at `Secret<T>` sound to check; OD148 refuses
+type parameters on traits; no arithmetic trait or operator overloading is decided. No adopted stage
+needs one function on both (Keccak is public; the ciphers are secret).
+
+**Recommendation:** two plain implementations, each over its own element type, and a shared generic
+version only when a consumer needs both (rule 17).
+**Runner-up:** a `Word` trait with impls for `u64` and `Secret<u64>` exposing only table
+operations, so one generic body serves both after Mono; it needs trait methods over secrets designed
+first.
+
+```
+// illustrative, slice 21
+fn keccak_f1600(state: ViewMut<u64>) -> Unit { ... }          // public lanes
+fn chacha_block(state: ViewMut<Secret<u32>>) -> Unit { ... }  // secret words
+```
+
+## O10. Several results from one function
+
+**Status: open as a row, settled in practice.** No recorded row adds tuples; the slice table schedules
+none; the grammar review states that no tuples are inferred; OD54 removed the `.0` projection.
+Before references (13), a named struct (9) is the only way to return several values; from 13,
+`&mut` output parameters also exist.
+
+**Recommendation:** a named struct is the one form for several results, declared `Copy` when every
+result is `Copy` (rules 2, 3: the names say what each result is); the slice-7 crypto stage is the
+single-word ARX steps.
+**Runner-up:** results written through `&mut` parameters (from 13): available, but outputs hide
+among inputs, and it is a second form for the same job.
+
+```
+// illustrative, slice 9
+struct Copy Quarter { a: Secret<u32>, b: Secret<u32>, c: Secret<u32>, d: Secret<u32> }
+fn quarter_round(q: Quarter) -> Quarter { ... }
+```
+
+## O11. Trait laws
+
+**Status: open.** The SPARK row (R-0601) designs function-type contracts, trait methods included, for
+safety preconditions only, and "never broadened to non-safety contracts"; `Ord`'s total-order laws
+are functional, not safety. `#[proof(path)]` (slice 8) attaches Lean theorems to functions.
+
+**Recommendation:** no trait-law language feature. Std's functional theorems about `OrderedMap` are
+Lean theorems with the premise that the key type's `cmp` is a total order; each instance discharges
+it in Lean. A non-lawful `cmp` can make lookups wrong but never unsafe, because ownership and memory
+safety do not depend on it, and the premise is named rather than trusted (rule 12).
+**Runner-up:** a trait-level law declaration checked at every impl (a new attribute in the closed set,
+item 36): the obligation is visible in source, but it adds a construct.
+
+```
+// illustrative, slice 23
+impl Ord for Id { fn cmp(a: &Id, b: &Id) -> Ordering { return u64_cmp(a.n, b.n); } }
+// Lean: theorem Id.cmp_total : TotalOrder Id.cmp   -- premise of ordered_map's lookup theorem
+```
+
+## O12. The entropy draw at slice 7
+
+**Status: deferred by decision.** Item 56 and foundation question 14 decide the entropy grant shape
+at slice 6. The randomness row (2026-11-07) and the slice table put entropy output as `Secret<T>` at
+7 (slice-7 row: "entropy output as `Secret<T>`, with its source named as a trusted premise in
+facts") and fill-bytes at 15; references arrive at 13 and structs at 9. Authority rule 12 says
+"`main` receives the target's grants and consumes them". The hosted grant table (Q7.10) has no
+entropy row, so no ending contract is decided for it. No adopted stage needs a draw before 15: the
+crypto 7 stage is the single-word ARX steps (O10), whose inputs come from the decided `classify` of a
+value passed in.
+
+Three options, with the decided rows each one revises:
+
+| option | what a slice-7 program writes | revises | cost |
+|---|---|---|---|
+| A. `Copy` entropy grant | `entropy_u64(g)`, `g` not consumed | authority rule 12 (an entropy-specific exception: one grant that is not linear and has no ending) | two grant rules instead of one |
+| B. linear grant, draw at 13 | nothing drawn at 7; from 13, `entropy_u64(&mut g) -> Secret<u64>`, ordinary mutable lending of a linear grant; the grant ends with a consuming `give_up(g) with(Entropy) -> Unit`, proposed as entropy's ending contract at slice 6 (not yet decided) | one scheduling change (the draw moves from 7 to 13), recorded in every place that states it: the randomness row (2026-11-07), the information-flow row's 2026-11-07 revision, the vertical-slices row, and in ROADMAP the slice-7 row, the stack/randomness paragraph, the entropy row of the std table and R-0596's acceptance; slice 6 keeps the grant, slice 15 fill-bytes | the draw arrives six slices later; no stage needs it earlier |
+| C. linear grant, draw at 9 | `entropy_draw(g: EntropyGrant) -> Drawn { grant: EntropyGrant, value: Secret<u64> }` (a builtin non-generic struct), threading the grant through by value | the same scheduling change to 9, in the same records, plus a builtin result type | if a lending draw is also added at 13, two entropy APIs (rule 2); if not, entropy alone keeps a grant-threading idiom that no other grant uses |
+
+**Recommendation (for the slice-6 decision): B.** Every grant stays linear under one rule (authority
+rule 12; rules 2 and 9), the draw uses the existing ownership and reference rules (ordinary
+mutable lending, then explicit consumption), and no stage
+loses anything, because the first stage that needs randomness is crypto 15 (keys and nonces), after
+13. The only revision is one scheduling change, propagated to every record listed in the table; no semantic rule changes.
+**Runner-up: A**, which keeps the decided slice-7 placement and adds no form, at the price of the
+only exception to the linear-grant rule. C is not recommended: it adds a builtin type and a grant
+idiom that `&mut` makes redundant at 13.
+
+```
+// illustrative, slice 13 (recommendation B)
+fn fresh_key_word(g: &mut EntropyGrant) with(Entropy) -> Secret<u64> { return entropy_u64(g); }
+fn main(g: EntropyGrant) with(Entropy) -> u8 {
+    let mut g2: EntropyGrant = g;               // illustrative: a mutable binding to lend from
+    let k: Secret<u64> = fresh_key_word(&mut g2);
+    discard(k);                                 // Secret<u64> is Copy (scalar)
+    give_up(g2);                                // the proposed slice-6 ending contract; rule 12 satisfied
+    return 0;
+}
+```
+
+## Review
+
+Round 1 (Codex, Kimi and agy all REJECT) found, and draft 2 fixes: O1's status label against its
+own definition, a module path before 17 and an unconsumed grant (Codex, Kimi, agy); O2's `else` on
+a non-range borrow (item 37), missing variables, the runner-up's missing `with(Env)` and leaked
+grants (all three), now a range-form coordinate design; O3's and O4's unbound brands (Kimi, agy);
+O4's false claim that view plus index reads non-`Copy` elements, its unchecked addition and unused
+binding (all three), now one callback form with a scoped element borrow as the honest runner-up;
+O5's "frozen" wording and the Q9.6 conflict of the widening-multiply runner-up (Codex, Kimi); O6's
+contradiction between std validation and a validating borrow, which revised item 37, and its
+unhandled `Result`s (all three), now contract evidence with the validating borrow as runner-up; O8's
+missed `OWN-D1@3` (Codex, Kimi); O10's "only form" overstatement (Kimi); O12's runner-up using a
+slice-12 construct at slice 7 (all three) and agy's objection that the recommendation revised two
+decided rows: the recommendation now keeps the decided slice-7 placement, and the revision is the
+runner-up.
+
+Fix round (agy ACCEPT; Codex and Kimi ACCEPT-WITH-CHANGES), applied afterwards and not re-reviewed:
+O1's sketch no longer has a dead store to a `mut` local (item 29) (Codex); O12's recommendation now
+states that a `Copy` entropy grant revises authority rule 12, so both options revise a decided rule
+(Codex); the grant type is `EntropyGrant`, distinct from the `Entropy` capability (authority rule 13)
+(Kimi).
+
+
+Second verification request (coordinator): O12 now compares three options (A `Copy` grant, B linear
+with the draw at 13, C linear with a grant-returning draw at 9) with the revisions each needs, and
+recommends B with A as runner-up; this replaces the earlier recommendation of A.
+
+That pass (agy VERIFIED; Codex and Kimi VERIFIED-WITH-CHANGES; all three preferred B) asked for, and
+this final text applies without further review: the complete list of records the B and C
+scheduling change touches (Codex, Kimi); "ordinary mutable lending" instead of "same shape as every
+other grant operation" (Codex); `give_up(EntropyGrant)` marked as a proposed slice-6 ending contract
+(Codex); C's duplication stated conditionally (Codex).
