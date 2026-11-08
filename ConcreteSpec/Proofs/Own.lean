@@ -3596,6 +3596,44 @@ example : Exec.Steps emptyProg primOneConfig [7] primitiveSuccessor ∧
   have he := traceEmpty hs
   cases he
 
+/-- Endpoint of the complete two-primitive execution, including both concrete store updates. -/
+def traceSuccessor : Exec.Config instrumentedOps :=
+  ⟨.exiting (.ret 7), [(y, 7), (x, 7)], ⟨10, (bind types y initial).getD initial⟩, []⟩
+
+/-- Helper (computation). The seven-step execution emits both primitive events in order.
+(approved: PENDING). -/
+private theorem traceSteps : Exec.Steps emptyProg primTraceConfig [7, 3] traceSuccessor := by
+  have hsteps : Exec.Steps emptyProg primTraceConfig _ _ :=
+    .step (.silent rfl)
+      (.step (.prim (a := liftAnswer initial ⟨some 7, .ok 7, 7⟩) rfl rfl rfl)
+        (.step (.silent rfl)
+          (.step (.silent rfl)
+            (.step (.prim (a := liftAnswer ((bind types y initial).getD initial)
+                  ⟨some 3, .ok 10, 10⟩) rfl rfl rfl)
+              (.step (.silent rfl)
+                (.step (.silent rfl) (.refl _)))))))
+  exact hsteps
+
+/-- Instance (law `ConcreteSpec.Core.Own.Steps_erasure`, case `ConcreteSpec.Core.Own.Examples.primTraceConfig`). -/
+example : Exec.Steps (eraseProgram emptyProg) (eraseConfig primTraceConfig) [7, 3]
+    (eraseConfig traceSuccessor) :=
+  @Steps_erasure erasedOps types permitE emptyProg primTraceConfig traceSuccessor [7, 3] traceSteps
+
+/-- Planted (law `ConcreteSpec.Core.Own.Steps_erasure`, case `ConcreteSpec.Core.Own.Examples.primTraceConfig`, subject `ConcreteSpec.Core.Own.eraseConfig`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.eraseConfigDone`). -/
+example : Exec.Steps emptyProg primTraceConfig [7, 3] traceSuccessor ∧
+    ¬ Exec.Steps (eraseProgram emptyProg) (eraseConfigDone primTraceConfig) [7, 3]
+      (eraseConfigDone traceSuccessor) := by
+  refine ⟨traceSteps, ?_⟩
+  intro hs
+  have traceEmpty : ∀ {tr c'},
+      Exec.Steps (eraseProgram emptyProg) (eraseConfigDone primTraceConfig) tr c' → tr = [] := by
+    intro tr c' h
+    cases h with
+    | refl => rfl
+    | step first _ => exact False.elim (step_det_none_inv rfl first)
+  have he := traceEmpty hs
+  cases he
+
 end ExecErasureWitnesses
 
 /-- Preservation is a property of the actual result, so an operation mutant can falsify
