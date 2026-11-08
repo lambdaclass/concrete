@@ -29,26 +29,18 @@ for side in a different/b; do
   bash "$root/scripts/checks/lib/slice0_native.sh" control "$work/$side"
   bash "$root/scripts/checks/lib/slice0_native.sh" "$work/$side" - sanitize
 done
-# Reproduce the original mechanism exactly, without modifying host /usr/lib:
-# a surrogate host sysroot changes from empty to containing libc.so. Use the SAME
-# driver/environment constructor as production, then override only the sysroot
-# for this diagnostic. Wrapper-pinned startup/libc inputs remain in the closure.
+# An overridden sysroot is forbidden even when no host library is consumed.
 if [ "$(uname -s)" = Linux ]; then
-  rm "$work/host/lib/libc.so"
   (
     cd "$work/a"
-    target=$(bash "$root/scripts/checks/lib/slice0_native.sh" target)
-    link=(-Wl,--build-id=none)
     policy_root="$root/scripts/checks/lib"
     source "$policy_root/native_toolchain.sh"
     cc+=(--sysroot="$work/host")
-    link_native probe.exe control.o
-    cp probe.exe absent.exe
-    ln -s "$libc" "$work/host/lib/libc.so"
-    link_native probe.exe control.o
-    cmp absent.exe probe.exe
+    if link_native probe.exe control.o >refusal 2>&1; then
+      echo 'FAIL link controls: surrogate sysroot accepted' >&2; exit 1
+    fi
+    grep -F "link command: driver differs from flake policy" refusal
   )
-  echo 'ok link controls: surrogate sysroot libc.so perturbation unchanged'
 fi
 for exe in control.exe llvm.san.exe; do
   cmp "$work/a/$exe" "$work/different/b/$exe"

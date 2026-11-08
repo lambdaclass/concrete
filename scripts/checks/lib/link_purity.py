@@ -14,23 +14,10 @@ from link_policy import verify_policy
 
 verify_policy()
 exe, trace, *args = sys.argv[1:]
-closure = set(Path(os.environ['CONCRETE_SLICE0_LINK_CLOSURE']).read_text().splitlines())
+from link_paths import allowed
 objects = {os.path.abspath(a): str(Path(a).resolve()) for a in args if a.endswith('.o')}
-
-
-def allowed(path, local=False):
-    lexical = os.path.abspath(path)
-    resolved = str(Path(path).resolve())
-    if local and lexical in objects and resolved == objects[lexical]:
-        return
-    if not path.startswith('/') or os.path.normpath(path) != path:
-        sys.exit('link purity: noncanonical path: ' + path)
-    def member(p):
-        return any(p == root or p.startswith(root + '/') for root in closure)
-    if member(path) and member(resolved):
-        return
-    sys.exit('link purity: undeclared path: ' + path)
-
+for obj in objects:
+    allowed(obj, local=True)
 
 lines = Path(trace).read_text().splitlines()
 seen = set()
@@ -38,14 +25,19 @@ for line in lines:
     line = line.strip()
     if not line:
         continue
-    # GNU ld traces archives as /path/archive.a(member.o).
-    path = line.split('(', 1)[0]
-    if Path(path).exists():
+    # GNU ld -t: a filename, or an archive filename followed by (member).
+    # Darwin ld -t: a filename. Never probe arbitrary diagnostic text as a path.
+    match = re.fullmatch(r'((?:/|[A-Za-z0-9_.-])[^\n()]*\.(?:o|a|so(?:\.[0-9]+)*|dylib|tbd))(?:\([^()/]+\))?', line)
+    if not match or len(match[1].encode()) > 4096:
+        sys.exit('link purity: unrecognized linker trace: ' + line[:500])
+    path = match[1]
+    try:
         allowed(path, local=True)
+        if not Path(path).is_file():
+            sys.exit('link purity: missing traced input: ' + path)
         seen.add(str(Path(path).resolve()))
-    else:
-        # Unknown trace syntax is not evidence of purity.
-        sys.exit('link purity: unrecognized linker trace: ' + line)
+    except (OSError, ValueError) as error:
+        sys.exit('link purity: invalid traced input: ' + str(error)[:500])
 if not set(objects.values()).issubset(seen):
     sys.exit('link purity: trace omitted an explicit object')
 if sys.platform == 'darwin':
@@ -66,6 +58,8 @@ if sys.platform == 'darwin':
             path_commands = {'LC_RPATH', 'LC_LOAD_DYLINKER', 'LC_ID_DYLIB',
                              'LC_LOAD_DYLIB', 'LC_LOAD_WEAK_DYLIB', 'LC_REEXPORT_DYLIB',
                              'LC_LOAD_UPWARD_DYLIB', 'LC_LAZY_LOAD_DYLIB', 'LC_PREBOUND_DYLIB'}
+            if command and command[1] == 'LC_DYLD_ENVIRONMENT':
+                sys.exit('link purity: unsupported LC_DYLD_ENVIRONMENT')
             if command and command[1] in path_commands:
                 if not entry:
                     sys.exit('link purity: unparsed Mach-O path command: ' + command[1])
@@ -87,7 +81,7 @@ if sys.platform == 'darwin':
             if command == 'LC_LOAD_DYLINKER':
                 if path != '/usr/lib/dyld':
                     sys.exit('link purity: unexpected Darwin loader: ' + path)
-            if command not in ('LC_LOAD_DYLIB', 'LC_LOAD_WEAK_DYLIB', 'LC_REEXPORT_DYLIB', 'LC_LOAD_UPWARD_DYLIB', 'LC_LAZY_LOAD_DYLIB', 'LC_PREBOUND_DYLIB'):
+            if command not in ('LC_ID_DYLIB', 'LC_LOAD_DYLIB', 'LC_LOAD_WEAK_DYLIB', 'LC_REEXPORT_DYLIB', 'LC_LOAD_UPWARD_DYLIB', 'LC_LAZY_LOAD_DYLIB', 'LC_PREBOUND_DYLIB'):
                 continue
             if os.path.normpath(path) != path:
                 sys.exit('link purity: noncanonical install name: ' + path)
@@ -132,10 +126,6 @@ else:
         if re.search(r'\((?:FILTER|AUXILIARY|AUDIT|DEPAUDIT)\)', headers):
             sys.exit('link purity: unsupported ELF dependency injection tag')
         for paths in re.findall(r'\((?:RUNPATH|RPATH)\).*?\[([^\]]*)\]', headers):
-            # glibc disables an entirely empty tag; an empty component of a
-            # nonempty colon list instead searches cwd and is rejected below.
-            if not paths:
-                continue
             for path in paths.split(':'):
                 elf_path(path, image)
         for path in re.findall(r'\(NEEDED\).*?\[([^\]]*)\]', headers):

@@ -7,9 +7,9 @@ policy_root=$(cd "$(dirname "$0")" && pwd)
 : "${CONCRETE_SLICE0_LINK_POLICY:?run inside nix develop}"
 python3 "$policy_root/link_policy.py"
 case "$(uname -s)-$(uname -m)" in
-  Linux-x86_64) target=x86_64-linux; link=(-Wl,--build-id=none) ;;
-  Linux-aarch64) target=aarch64-linux; link=(-Wl,--build-id=none) ;;
-  Darwin-arm64) target=aarch64-macos; link=(-Wl,-no_uuid) ;;
+  Linux-x86_64) target=x86_64-linux ;;
+  Linux-aarch64) target=aarch64-linux ;;
+  Darwin-arm64) target=aarch64-macos ;;
   *) echo 'slice0_native: unsupported target' >&2; exit 2 ;;
 esac
 if [ "${1:-}" = target ]; then echo "$target"; exit; fi
@@ -30,16 +30,7 @@ if [ "${3:-}" = sanitize ]; then
   sed -E 's/^(define .*\)) \{$/\1 sanitize_address {/' llvm.ll >llvm.san.ll
   [ "$(grep -c '^define ' llvm.san.ll)" = "$(grep -c '^define .* sanitize_address {$' llvm.san.ll)" ] ||
     { echo 'slice0_native: a definition lacks sanitize_address' >&2; exit 1; }
-  san=(-fsanitize=address -fno-sanitize-recover=all)
   "${cc[@]}" "${san[@]}" -c llvm.san.ll -o llvm.san.o
-  sanlink=("${san[@]}")
-  if [ "$target" = aarch64-macos ]; then
-    # Clang's implicit ASan link adds @executable_path, an undeclared runtime
-    # search directory. Name the pinned runtime and its search path explicitly.
-    runtime="${CONCRETE_SLICE0_CLANG%/bin/clang}/resource-root/lib/darwin"
-    sanlink+=(-fno-sanitize-link-runtime "$runtime/libclang_rt.asan_osx_dynamic.dylib"
-      "-Wl,-rpath,$runtime")
-  fi
   link_native llvm.san.exe "${sanlink[@]}" llvm.san.o
   exit
 fi

@@ -109,9 +109,10 @@
           nativeSysroot = if pkgs.stdenv.isDarwin then pkgs.apple-sdk
             else pkgs.lib.getDev nativeCC.libc;
           nativeClosure = pkgs.closureInfo {
-            rootPaths = [ nativeCC nativeLD nativeSysroot pkgs.llvmPackages_21.llvm pkgs.llvmPackages_21.compiler-rt ];
+            rootPaths = [ nativeCC nativeLD nativeSysroot pkgs.llvmPackages_21.llvm pkgs.llvmPackages_21.compiler-rt pkgs.llvmPackages_21.libunwind ];
           };
           nativeSettings = {
+            CONCRETE_SLICE0_COMPILER_RT = "${pkgs.llvmPackages_21.compiler-rt}";
             CONCRETE_SLICE0_CLANG = "${nativeCC}/bin/clang";
             CONCRETE_SLICE0_LINK_CLOSURE = "${nativeClosure}/store-paths";
             CONCRETE_SLICE0_LINKER_BIN = "${nativeLD}/bin";
@@ -128,9 +129,27 @@
             # pinned wrapper, enumerated transitively by closureInfo.
             libc = "${nativeCC.libc}";
             compilerRuntime = "${pkgs.llvmPackages_21.compiler-rt}";
-            environment = "empty; fixed PATH, NIX_STORE, NIX_ENFORCE_PURITY, NIX_BUILD_TOP; no ambient flags";
+            environment = {
+              PATH = nativeSettings.CONCRETE_SLICE0_TOOL_PATH;
+              NIX_STORE = "/nix/store"; NIX_ENFORCE_PURITY = "1";
+              NIX_BUILD_TOP = "/nonexistent"; TMPDIR = "@TMPDIR@";
+              LC_ALL = "C"; TZ = "UTC"; SOURCE_DATE_EPOCH = "1"; ZERO_AR_DATE = "1";
+            };
+            compile = [ nativeSettings.CONCRETE_SLICE0_CLANG "--no-default-config"
+              "-B${nativeLD}/bin" "--sysroot=${nativeSettings.CONCRETE_SLICE0_SYSROOT}"
+              "-O0" "-g0" "-w" "-ffile-prefix-map=@CWD@=." "-fdebug-prefix-map=@CWD@=."
+              "-fdebug-compilation-dir=." ]
+              ++ (if pkgs.stdenv.isDarwin then [ "-mmacosx-version-min=15.0" ]
+                  else [ "-rtlib=compiler-rt" "-unwindlib=none" ]);
+            link = if pkgs.stdenv.isDarwin then [ "-Wl,-no_uuid" ] else [ "-Wl,--build-id=none" ];
+            sanitize = [ "-fsanitize=address" "-fno-sanitize-recover=all" ];
+            sanitizeLink = [ "-fsanitize=address" "-fno-sanitize-recover=all" ]
+              ++ pkgs.lib.optionals pkgs.stdenv.isLinux [ "${pkgs.lib.getLib pkgs.llvmPackages_21.libunwind}/lib/libunwind.a" ]
+              ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [ "-fno-sanitize-link-runtime"
+                "${pkgs.llvmPackages_21.compiler-rt}/lib/darwin/libclang_rt.asan_osx_dynamic.dylib"
+                "-Wl,-rpath,${pkgs.llvmPackages_21.compiler-rt}/lib/darwin" ];
             validation = "lexical and resolved closure containment; trace and recursive loader dependency resolution without host cache";
-            darwin = "arm64-apple-macosx15.0; SDK-backed OS dylibs and /usr/lib/dyld ABI; explicit ASan runtime without executable-relative RPATH";
+            darwin = "native wrapper default target (no multi-target override), deployment 15.0; SDK-backed OS dylibs and /usr/lib/dyld ABI; explicit ASan runtime without executable-relative RPATH";
           });
           nativeEnv = nativeSettings // { CONCRETE_SLICE0_LINK_POLICY = nativePolicy; };
 
