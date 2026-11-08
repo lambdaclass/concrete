@@ -107,6 +107,48 @@ inductive ValidTrace (C : OperationContract S) (input : C.Input) :
 def CompleteTrace (C : OperationContract S) (input : C.Input) (events : List (Event S)) : Prop :=
   ValidTrace C input none events
 
+/-- An executable C6 environment handler: given the static launch input, the prior C6 event
+history, and the typed request `(k, req)`, `reply` dispatches on the operation kind `k` to compute
+either a typed payload `S.Response k` for that same operation kind or `none` when the environment
+leaves the request unanswered (blocked). Because `reply` returns `Option (S.Response q.1)`,
+`Environment.respond` guarantees operation-kind routing (`RequestResponse q r`) by construction
+whenever a response is produced. -/
+structure Environment (S : EventSignature) (Input : Type) where
+  reply : Input → List (Event S) → (k : S.Kind) → S.Request k → Option (S.Response k)
+
+/-- Execute an environment handler on a dependent request `q : Request S` after `history`,
+packaging a produced payload with `q.1` into `.response ⟨q.1, resp⟩` and mapping `none` to
+`.blocked`. -/
+def Environment.respond {S : EventSignature} {Input : Type}
+    (E : Environment S Input) (input : Input) (history : List (Event S))
+    (q : Request S) : Answer S :=
+  match E.reply input history q.1 q.2 with
+  | some resp => .response ⟨q.1, resp⟩
+  | none => .blocked
+
+/-- An executable environment handler `E` is valid for operation contract `C` when every produced
+payload satisfies `C.allows` at the history ending in `.request q`, and every `none` result is
+permitted to block by `C.mayBlock` at that history. -/
+structure Environment.Valid {S : EventSignature} (C : OperationContract S)
+    (E : Environment S C.Input) : Prop where
+  allows {input history k req resp} :
+    E.reply input (history ++ [.request ⟨k, req⟩]) k req = some resp →
+    C.allows input (history ++ [.request ⟨k, req⟩]) ⟨k, req⟩ ⟨k, resp⟩
+  mayBlock {input history k req} :
+    E.reply input (history ++ [.request ⟨k, req⟩]) k req = none →
+    C.mayBlock input (history ++ [.request ⟨k, req⟩]) ⟨k, req⟩
+
+/-- Extend a completed C6 event history by issuing request `q` and immediately recording
+`E.respond`'s answer: if `E.respond` returns `.response r`, both `.request q` and `.response r`
+are appended (`CompleteTrace`, pending `none`); if `E.respond` returns `.blocked`, `.request q`
+remains pending (`some q`). -/
+def Environment.stepHistory {S : EventSignature} {Input : Type}
+    (E : Environment S Input) (input : Input) (history : List (Event S))
+    (q : Request S) : List (Event S) × Option (Request S) :=
+  match E.respond input (history ++ [.request q]) q with
+  | .response r => (history ++ [.request q, .response r], none)
+  | .blocked => (history ++ [.request q], some q)
+
 /-- A finite externally visible history, oldest event first. -/
 abbrev FiniteTrace (S : EventSignature) := List (Event S)
 
