@@ -62,6 +62,7 @@ structure Component where
   slice : String
   removal : String
   premises : List String
+  declarations : List String := []
   «matches» : List String
 
 /-- The open premises for slice 0, in the README's order. -/
@@ -174,10 +175,10 @@ def components : List Component := [
     why := "the development and CI environment determines the programs used by the pipeline"
     removal := "not planned; another reproducibly pinned environment would replace this entry" },
   { id := "native-shell-utilities", kind := .pipelineTool, slice := "slice0", premises := []
-    «matches» := ["bash", "env", "uname"]
-    what := "the shell and small utilities used by the native build helper"
-    why := "they select targets, construct the reduced environment and invoke the native tools"
-    removal := "replace the shell helper with a pinned, attested build driver" },
+    «matches» := ["bash", "env", "uname", "mktemp", "realpath", "rm"]
+    what := "the shell and coreutils used by the native build helper and Nix compiler/linker wrappers"
+    why := "they select targets, construct the reduced environment, manage scratch files and resolve wrapper paths"
+    removal := "replace the shell helper and Nix shell wrappers with a pinned, attested driver using direct filesystem APIs" },
   { id := "gate-analysis-tools", kind := .gateTool, slice := "slice0", premises := []
     «matches» := ["gdb", "lldb", "llvm-objdump", "llvm-size", "python3", "strace"]
     what := "gdb, lldb, llvm-objdump, llvm-size, python3 and strace used only by gates"
@@ -214,12 +215,12 @@ def Premise.line (p : Premise) : String :=
 
 def Component.tableRow (c : Component) : String :=
   let premises := if c.premises.isEmpty then "—" else ", ".intercalate c.premises
-  let toolNames := if c.«matches».isEmpty then "—" else ", ".intercalate c.«matches»
+  let toolNames := if (c.«matches» ++ c.declarations).isEmpty then "—" else ", ".intercalate (c.«matches» ++ c.declarations)
   s!"| {c.id} | {c.kind.name} | {c.slice} | {premises} | {c.what} | {c.why} | {c.removal} | {toolNames} |"
 
 def Component.line (c : Component) : String :=
   let premises := if c.premises.isEmpty then "-" else ", ".intercalate c.premises
-  let toolNames := if c.«matches».isEmpty then "-" else ", ".intercalate c.«matches»
+  let toolNames := if (c.«matches» ++ c.declarations).isEmpty then "-" else ", ".intercalate (c.«matches» ++ c.declarations)
   s!"component {c.id} [{c.kind.name}] slice: {c.slice} premises: {premises} matches: {toolNames} :: {c.what} :: why: {c.why} :: removal: {c.removal}"
 
 /-- Names executable by the compilation pipeline; gate-only tools are deliberately excluded. -/
@@ -266,29 +267,27 @@ def axiomErrors (env : Environment) (localPrefix : Option Name := none)
       unless allowed.contains ax do errors := errors ++ [s!"unlisted axiom {ax} in {n}"]
   return errors
 
+/-- A total recursive parent's compiler-recorded recursion tag licenses its generated
+runtime twin. A suffix or declaration shape alone is never evidence of generation. -/
 def isGeneratedPartialTwin (env : Environment) (n : Name) : Bool :=
-  match n with
-  | .str parent "_unsafe_rec" =>
-      match env.find? n, env.find? parent with
-      | some (.defnInfo d), some (.opaqueInfo _) => d.safety == .partial
-      | some (.defnInfo d), some (.defnInfo parentVal) =>
-          d.safety == .partial && parentVal.safety == .safe && env.contains (.str parent "_f")
-      | _, _ => false
-  | _ => false
+  match Compiler.isUnsafeRecName? n with
+  | some parent => Meta.recExt.isTagged env parent &&
+      (env.find? n).any (·.isPartial)
+  | none => false
 
 def trustedDeclarationKinds (env : Environment) (n : Name) (ci : ConstantInfo) : List String := Id.run do
   let mut kinds := []
   if isExtern env n then kinds := kinds ++ ["extern"]
   if (Compiler.implementedByAttr.getParam? env n).isSome then kinds := kinds ++ ["implemented_by"]
+  if Compiler.hasCSimpAttribute env n then kinds := kinds ++ ["csimp"]
   unless isGeneratedPartialTwin env n do
-    match ci with
-    | .opaqueInfo o =>
-        kinds := kinds ++ [if isGeneratedPartialTwin env (.str n "_unsafe_rec") then "partial" else "opaque"]
-        if o.isUnsafe && !kinds.contains "unsafe" then kinds := kinds ++ ["unsafe"]
-    | .defnInfo d =>
-        if d.safety == .unsafe then kinds := kinds ++ ["unsafe"]
-        else if d.safety == .partial then kinds := kinds ++ ["partial"]
-    | _ => pure ()
+    if ci.isUnsafe then kinds := kinds ++ ["unsafe"]
+    if ci.isPartial then kinds := kinds ++ ["partial"]
+    if ci matches .opaqueInfo _ then
+      kinds := kinds ++ [if (env.find? (Compiler.mkUnsafeRecName n)).any (·.isPartial)
+        then "partial" else "opaque"]
+  if ci.value?.any (fun v => (v.find? (·.isConstOf ``Lean.Loop.forIn)).isSome) then
+    kinds := kinds ++ ["partial-loop"]
   return kinds
 
 def trustedDeclarations (env : Environment) (localPrefix : Option Name := none) :
@@ -301,7 +300,7 @@ def trustedDeclarations (env : Environment) (localPrefix : Option Name := none) 
 
 def declarationOwners (n : Name) (cs : List Component) : List Component :=
   let user := (privateToUserName? n).getD n
-  cs.filter fun c => c.«matches».contains n.toString || c.«matches».contains user.toString
+  cs.filter fun c => c.declarations.contains n.toString || c.declarations.contains user.toString
 
 /-- Every compiled escape hatch must have exactly one owner, and not a non-trusted component. -/
 def trustedDeclarationErrors (env : Environment) (localPrefix : Option Name := none)
@@ -311,10 +310,15 @@ def trustedDeclarationErrors (env : Environment) (localPrefix : Option Name := n
     match declarationOwners n cs with
     | [] => errors := errors ++ [s!"unlisted trusted declaration {n} [{", ".intercalate kinds}]"]
     | [owner] =>
-        if owner.kind == .notTrusted then
-          errors := errors ++ [s!"trusted declaration {n} belongs to non-trusted component {owner.id}"]
+        if !(#[ComponentKind.implementation, .backend, .runtime].contains owner.kind) then
+          errors := errors ++ [s!"trusted declaration {n} belongs to non-code component {owner.id}"]
     | owners =>
         errors := errors ++ [s!"trusted declaration {n} is owned by {owners.length} components, expected exactly one"]
+  for c in cs do
+    for m in c.declarations do
+      unless (trustedDeclarations env localPrefix).any (fun (n, _) =>
+          n.toString == m || ((privateToUserName? n).getD n).toString == m) do
+        errors := errors ++ [s!"stale trusted declaration {m} in component {c.id}"]
   return errors
 
 /-- The trusted-base report: components, premises, each theorem's sorted axioms, then each axiom
