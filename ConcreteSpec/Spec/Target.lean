@@ -68,7 +68,9 @@ structure Target where
 /-- What every profile must satisfy.
 
 - An address has at least one bit, and a stored pointer has room for all of them.
-- A stored pointer's alignment is a power of two.
+- A stored pointer's alignment is a power of two, and its size is a multiple of it (the layout law
+  that a size is a multiple of its alignment, FOUNDATION C3).
+- A stored pointer fits in one object.
 - A stored length has between 1 and 64 bits, since its meaning is a `u64` (Q3.5).
 - The data space is one of the target's spaces.
 - The null address is an address.
@@ -76,7 +78,8 @@ structure Target where
   `2 ^ addrBits`, the analogue of row Q3.10's one-past bound `base + size ≤ 2^64 − 1` that every
   profile needs (question 3). -/
 def Target.WellFormed (t : Target) : Prop :=
-  0 < t.addrBits ∧ t.addrBits ≤ 8 * t.ptrSize ∧ IsPow2 t.ptrAlign ∧
+  0 < t.addrBits ∧ t.addrBits ≤ 8 * t.ptrSize ∧ IsPow2 t.ptrAlign ∧ t.ptrSize % t.ptrAlign = 0 ∧
+  t.ptrSize ≤ t.maxObject ∧
   0 < t.lenBits ∧ t.lenBits ≤ 64 ∧ t.dataSpace ∈ t.spaces ∧
   t.null < 2 ^ t.addrBits ∧ t.maxObject < 2 ^ t.addrBits
 
@@ -111,6 +114,12 @@ example : ¬ ({ linuxX8664 with
 
 /-- Nor is one whose pointer alignment is not a power of two. -/
 example : ¬ ({ linuxX8664 with ptrAlign := 6 } : Target).WellFormed := by decide
+
+/-- Nor one whose pointer size is not a multiple of its alignment. -/
+example : ¬ ({ linuxX8664 with ptrAlign := 16 } : Target).WellFormed := by decide
+
+/-- Nor one whose objects are too small to hold a pointer. -/
+example : ¬ ({ linuxX8664 with maxObject := 4 } : Target).WellFormed := by decide
 
 /-- Nor one whose objects can reach the end of the address range, so that one past the end would
 not be an address. -/

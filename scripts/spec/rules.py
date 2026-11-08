@@ -25,7 +25,7 @@ CITE = re.compile(r"\(rule `([^`\n]+)`\)")
 VERDICT = re.compile(r"\b(Accepted|Refused) \(rule `([^`\n]+)`\)")
 # What may stand between a doc comment and the `example` it documents: attributes and modifiers.
 EXAMPLE_AFTER = re.compile(
-    r"\s*(?:@\[[^\]]*\]\s*)*(?:(?:noncomputable|private|protected|unsafe|partial)\s+)*"
+    r"\s*(?:@\[(?:[^\[\]]|\[[^\[\]]*\])*\]\s*)*(?:(?:noncomputable|private|protected|unsafe|partial)\s+)*"
     r"example(?![\w'!?])")
 
 
@@ -84,6 +84,11 @@ def main(rules_path, src_dir, row_paths):
                 if m.group(1) not in seen:
                     line = src.count("\n", 0, m.start()) + 1
                     fails.append(f"{path}:{line}: cites unregistered rule {m.group(1)}")
+            # a verdict anywhere outside a doc comment (code, a string literal) is stray too
+            for m in VERDICT.finditer(src):
+                if not any(a <= m.start() < b and src.startswith("/--", a) for a, b in spans):
+                    line = src.count("\n", 0, m.start()) + 1
+                    fails.append(f"{path}:{line}: a verdict citation outside an example's doc comment")
             for a, b in spans:
                 text, line = src[a:b], src.count("\n", 0, a) + 1
                 verdicts = VERDICT.findall(text)

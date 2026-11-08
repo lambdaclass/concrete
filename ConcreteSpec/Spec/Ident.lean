@@ -142,7 +142,9 @@ structure Span where
   deriving DecidableEq, Repr
 
 /-- A span's path is relative to the project root and uses forward slashes: it is not empty,
-does not start with `/`, and holds no `\`. -/
+does not start with `/`, and holds no `\`. This is the minimal syntactic check; that the path is
+the one normalized path of its file (no `.` or `..` segment, no empty segment) is part of
+elaboration's site-table obligation (README obligation O1). -/
 def Span.PathOk (sp : Span) : Prop :=
   sp.path.toList ≠ [] ∧ sp.path.toList.head? ≠ some '/' ∧ '\\' ∉ sp.path.toList
 

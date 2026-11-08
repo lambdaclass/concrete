@@ -136,6 +136,18 @@ noncomputable example : True := trivial'
 fixture unlexable "$GOOD
 $END" '/-- Accepted (rule `R.ok`). unterminated'
 [ "$RC" = 3 ] && ok "control: an unlexable source is an error" || no "control: unlexable source gave rc=$RC: $OUT"
+fixture literal "$GOOD
+$END" "$EXA
+def s : String := \"Accepted (rule \`R.ok\`)\""
+[ "$RC" = 1 ] && [[ "$OUT" == *"outside an example's doc comment"* ]] && ok "control: a verdict in a string literal fails" \
+  || no "control: string-literal verdict not reported: $OUT"
+fixture nestedattr "$GOOD
+$END" '/-- Accepted (rule `R.ok`). -/
+@[simp, scoped [foo] bar] example : True := trivial
+
+/-- Refused (rule `R.ok`). -/
+example : True := trivial'
+[ "$RC" = 0 ] && ok "control: an attribute with brackets inside counts" || no "control: bracketed attribute refused: $OUT"
 OUT=$(check 60 "$TMP/good.jsonl" "$TMP/no-such-dir" "$TMP/rows.md"); RC=$?
 [ "$RC" = 3 ] && ok "control: a missing source directory is an error" || no "control: missing source dir gave rc=$RC: $OUT"
 mkdir -p "$TMP/empty"

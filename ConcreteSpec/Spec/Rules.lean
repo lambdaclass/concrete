@@ -17,7 +17,9 @@ by CI) requires of each registered rule:
 
 Every citation of that form (`(rule`, a backticked name, `)`) written anywhere in the
 specification must name a registered rule. A rule's entry is written with a double-backtick name,
-so Lean refuses an entry for a name that does not exist. The registry is empty until the first
+so Lean refuses an entry for a name that does not exist; the gate also checks that each registered
+name is a declaration of the built environment, which catches an entry written with a single
+backtick. The registry is empty until the first
 rules are ported (phase A, step 3 onward); each step registers the rules it adds.
 -/
 
