@@ -21,7 +21,8 @@ What these prove, for every operand language:
   `done_scope_runs_defers`); an exit through several frames runs the calls of `plan`, innermost
   scope first, and arrives unchanged (`unwind_runs_plan`); the cleanup runs exactly the calls of
   `plan`, in order. Actual first-boundary executions dispatch exactly `planWith` and perform its
-  state updates (`cleanup_runs_exact_plan`); `cleans_iff_runs_plan_inv` only relates abstract
+  state updates (`raw_cleanup_runs_plan`, `cleanup_runs_exact_plan`); the former derives
+  segmentation from arbitrary raw first-arrival executions. `cleans_iff_runs_plan_inv` only relates abstract
   certificates. A `return` then reaches its caller with
   the value bound (`return_reaches_caller`), and a `break` or `continue` its loop
   (`break_reaches_loop`, `continue_reaches_loop`).
