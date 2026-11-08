@@ -975,6 +975,13 @@ theorem empty_function_report_sound :
   · simp [Bound.Sound, Memory.set, Account.enter]
   · simp [Bound.SoundOptional]
 
+/-- Planted empty-report mutation: established footprint evidence is impossible with no footprint. -/
+example : ¬ LineageReport.Sound (Account.enter ⟨100, 0, 100, 0⟩)
+    (Account.enter ⟨100, 0, 100, 0⟩) none
+    ⟨⟨0⟩, ⟨0, .boundEstablished⟩, ⟨0, .boundEstablished⟩,
+      ⟨0, .boundEstablished⟩, ⟨0, .boundEstablished⟩⟩ := by
+  simp [LineageReport.Sound, Bound.SoundOptional]
+
 /-- Planted underbounds: each established field independently rejects an understated limit. -/
 example : ¬ LineageReport.Sound reportEntry reportExit (some 10)
     (establishedReportWith 7 5 10 12) := by
