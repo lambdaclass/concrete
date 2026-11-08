@@ -18,8 +18,8 @@ import ConcreteSpec.Proofs.Observe2
   that raw interaction can erase to silent divergence. A blocked request keeps its `noAnswer`
   classification and excludes infinite execution
   (`endlesslyBlocked_of_noAnswer`, `not_infinite_of_noAnswer`).
-- Per-function termination evidence quantifies over every entry run admitted by its named premises
-  and excludes infinite execution (`TerminationEvidence.excludes_infinite`).
+- Usable termination evidence discharges its trusted premises, covers its independently declared
+  inhabited call domain, and excludes infinite execution (`TerminationEvidence.excludes_infinite`).
 -/
 
 namespace ConcreteSpec.Core.Exec
@@ -27,14 +27,16 @@ open ConcreteSpec.Core
 
 variable {O : Operands} {P : Program O} {ρ : QueryOracle O} {c : Config O}
 
-/-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness (approved: PENDING).
+/-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness
+(approved: PENDING).
 Helper for constructing a query; this definitional equality is not execution-level contract
 evidence. -/
 theorem issue_occurrence (events : List O.Event) (p : O.Prim) (args : List O.Val) (site : SiteId)
     (st : O.Store) (issued : List (Query O)) :
     (Query.issue events p args site st issued).occurrence = occurrenceAt issued site := rfl
 
-/-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than independent execution evidence (approved: PENDING).
+/-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than
+independent execution evidence (approved: PENDING).
 Helper for reasoning about a history append; this is not execution-level contract evidence. -/
 theorem issue_next_occurrence (issued : List (Query O)) (site : SiteId) (q : Query O) :
     occurrenceAt (issued ++ [q]) site =
@@ -48,13 +50,15 @@ execution-level contract evidence. -/
 theorem answer_deterministic (ρ : QueryOracle O) {q₁ q₂ : Query O} (h : q₁ = q₂) :
     answer ρ q₁ = answer ρ q₂ := congrArg (answer ρ) h
 
-/-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness (approved: PENDING).
+/-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness
+(approved: PENDING).
 Helper for unfolding the adapter; this definitional equality is not execution-level contract
 evidence. -/
 theorem answer_toQueryOracle (ρ₀ : Oracle O) (q : Query O) :
     answer ρ₀.toQueryOracle q = ρ₀ q.events q.prim q.args q.site q.store := rfl
 
-/-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than independent execution evidence (approved: PENDING).
+/-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than
+independent execution evidence (approved: PENDING).
 Appending the authenticated next query preserves the per-site occurrence invariant. -/
 theorem QueryHistoryValid.append {issued : List (Query O)} {q : Query O}
     (valid : QueryHistoryValid issued) (occurrence : q.occurrence = occurrenceAt issued q.site) :
@@ -110,20 +114,20 @@ theorem runFromQ_queryHistoryValid : ∀ (fuel : Nat) (events : List O.Event)
                 simpa [runFromQ, hf, hs, q, ha, hallow, hk] using
                   ih (events ++ a.event.toList) (issued ++ [q]) c' nextValid
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
- -/
+/-- Helper (computation). The empty history has no entries to check (approved: PENDING). -/
 theorem QueryHistoryValid.nil : QueryHistoryValid ([] : List (Query O)) := by
   intro i q h
   simp at h
 
-/-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness (approved: PENDING).
- -/
+/-- Helper (projection). Specializes the general evaluator invariant to empty histories (approved:
+PENDING). -/
 theorem runQ_queryHistoryValid (fuel : Nat) (c : Config O) :
     QueryHistoryValid (runQ P ρ fuel c).queries :=
   runFromQ_queryHistoryValid fuel [] [] c QueryHistoryValid.nil
 
-/-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than independent execution evidence (approved: PENDING).
- -/
+/-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than
+independent execution evidence (approved: PENDING).
+Splits a per-site prefix count into its old prefix and the queries in the interval. -/
 theorem occurrenceAt_take_interval (qs : List (Query O)) (site : SiteId)
     {i j : Nat} (hij : i ≤ j) :
     occurrenceAt (qs.take j) site = occurrenceAt (qs.take i) site +
@@ -134,7 +138,8 @@ theorem occurrenceAt_take_interval (qs : List (Query O)) (site : SiteId)
   simp [occurrenceAt, List.filter_append]
 
 /-- Law (subject `runFromQ`).
- -/
+Between two issued queries at the same site, the occurrence increases by exactly the number
+of requests at that site in the intervening half-open interval; other sites contribute zero. -/
 theorem runFromQ_interleaved_site (fuel : Nat) (events : List O.Event)
     (issued : List (Query O)) (c : Config O) (valid : QueryHistoryValid issued)
     {i j : Nat} {q q' : Query O} (hij : i ≤ j)
@@ -191,7 +196,8 @@ theorem runFromQ_interleaved_other_sites (fuel : Nat) (events : List O.Event)
   rw [history j q' hq', ← site, occurrenceAt_take_no_other _ hq separate j hij (Nat.le_refl j),
     ← history i q hq]
 
-/-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than independent execution evidence (approved: PENDING).
+/-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than
+independent execution evidence (approved: PENDING).
 **Repeated requests at one site advance their occurrences.** These are consecutive queries in
 the actual run history; arbitrarily many silent machine transitions may separate the requests. -/
 theorem runFromQ_consecutive_same_site (fuel : Nat) (events : List O.Event)
@@ -208,7 +214,8 @@ theorem runFromQ_consecutive_same_site (fuel : Nat) (events : List O.Event)
   rw [issue_next_occurrence, before, site]
   simp
 
-/-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than independent execution evidence (approved: PENDING).
+/-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than
+independent execution evidence (approved: PENDING).
 **Interleaved sites keep separate counters.** A query at another site does not advance the
 current query's occurrence count, even when the requests are consecutive in an actual run. -/
 theorem runFromQ_consecutive_other_site (fuel : Nat) (events : List O.Event)
@@ -265,8 +272,11 @@ theorem runFromQ_toReport {ρ₀ : Oracle O} :
                   hallow, hk] using
                   ih (events ++ a.event.toList) (issued ++ [Query.issue events p vs site st issued]) c'
 
-/-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness (approved: PENDING).
- -/
+/-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness
+(approved: PENDING).
+Exact primitive-move characterization under a lifted ordinary oracle, in both directions,
+including the successor configuration, events, and queries. This is constructor inversion,
+not the independent evaluator request/answer law. -/
 theorem Move.toQueryOracle_answer {ρ₀ : Oracle O} {pos pos' : Position O}
     {p : O.Prim} {vs : List O.Val} {site : SiteId}
     {st : O.Store} {k : Answer O.Val O.Event O.Store → Option (Config O)}
@@ -292,8 +302,10 @@ theorem Move.toQueryOracle_answer {ρ₀ : Oracle O} {pos pos' : Position O}
         subst events'; subst issued'
         exact .prim request ha allows continued
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
- -/
+/-- Helper (computation). Unfolds one issued request into the four evaluator branches. This
+computation helper
+is used to prove the independent oracle/contract relation in the request correspondence law.
+(approved: PENDING). -/
 theorem runFromQ_request {fuel : Nat} {events : List O.Event} {issued : List (Query O)}
     {c : Config O} {p : O.Prim} {vs : List O.Val} {site : SiteId} {st : O.Store}
     {k : Answer O.Val O.Event O.Store → Option (Config O)}
@@ -333,8 +345,8 @@ theorem runFromQ_request_correspondence {fuel : Nat} {events : List O.Event}
       | none => exact RequestResolution.refused (pos := ⟨c, events, issued⟩) ha hl hk
       | some c' => exact RequestResolution.continued (pos := ⟨c, events, issued⟩) ha hl hk
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-Every instrumented run extends the query history with which it started. -/
+/-- Helper (computation). Every instrumented run extends the query history with which it started.
+(approved: PENDING). -/
 theorem runFromQ_queries_from : ∀ (fuel : Nat) (events : List O.Event) (issued : List (Query O))
     (c : Config O), ∃ later, (runFromQ P ρ fuel events issued c).queries = issued ++ later := by
   intro fuel
@@ -367,8 +379,8 @@ theorem runFromQ_queries_from : ∀ (fuel : Nat) (events : List O.Event) (issued
                 exact ⟨q :: later, by simp [runFromQ, hf, hs, q, ha, hallow, hk, h,
                   List.append_assoc]⟩
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-One more unit of fuel preserves every query already issued. -/
+/-- Helper (computation). One more unit of fuel preserves every query already issued. (approved:
+PENDING). -/
 theorem runFromQ_queries_prefix : ∀ (fuel : Nat) (events : List O.Event) (issued : List (Query O))
     (c : Config O),
     (runFromQ P ρ fuel events issued c).queries <+:
@@ -407,8 +419,8 @@ theorem runFromQ_queries_prefix : ∀ (fuel : Nat) (events : List O.Event) (issu
                 simpa [runFromQ, hf, hs, q, ha, hallow, hk, Nat.succ_eq_add_one] using
                   ih (events ++ a.event.toList) (issued ++ [q]) c'
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-Query histories are prefix-monotone for every increase in fuel. -/
+/-- Helper (computation). Query histories are prefix-monotone for every increase in fuel. (approved:
+PENDING). -/
 theorem runFromQ_queries_prefix_le {n m : Nat} (hle : n ≤ m) (events : List O.Event)
     (issued : List (Query O)) (c : Config O) :
     (runFromQ P ρ n events issued c).queries <+: (runFromQ P ρ m events issued c).queries := by
@@ -423,9 +435,9 @@ theorem runFromQ_queries_prefix_le {n m : Nat} (hle : n ≤ m) (events : List O.
     rw [← List.append_assoc, h₁]
     exact h₂
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-The first queries of a run are independent of its fuel: if two budgets both issue query `i`,
-they issue the same query there. -/
+/-- Helper (computation). The first queries of a run are independent of its fuel: if two budgets both
+issue query `i`,
+they issue the same query there. (approved: PENDING). -/
 theorem runFromQ_query_fuel_independent {n m : Nat} {events : List O.Event}
     {issued : List (Query O)} {c : Config O} {i : Nat} {qn qm : Query O}
     (hn : (runFromQ P ρ n events issued c).queries[i]? = some qn)
@@ -443,7 +455,8 @@ theorem runFromQ_query_fuel_independent {n m : Nat} {events : List O.Event}
 
 /-! ### Finite executions and evaluator adequacy -/
 
-/-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness (approved: PENDING).
+/-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness
+(approved: PENDING).
 One oracle-checked move is one ordinary labeled step, with the same event contribution. -/
 theorem Move.toStep {pos pos' : Position O} (h : Move P ρ pos pos') :
     ∃ l, Step P pos.config l pos'.config ∧ pos'.events = pos.events ++ l.events ∧
@@ -454,7 +467,8 @@ theorem Move.toStep {pos pos' : Position O} (h : Move P ρ pos pos') :
     refine ⟨a.label, .prim hs hallow hk, ?_, [Query.issue events p vs site st issued], rfl⟩
     cases he : a.event <;> simp [Answer.label, Label.events, he]
 
-/-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness (approved: PENDING).
+/-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness
+(approved: PENDING).
 An oracle-checked finite path erases to `Steps`; its final histories extend its initial ones. -/
 theorem Moves.toSteps {n : Nat} {pos pos' : Position O} (h : Moves P ρ n pos pos') :
     ∃ tr later, pos'.events = pos.events ++ tr ∧ pos'.queries = pos.queries ++ later ∧
@@ -468,8 +482,8 @@ theorem Moves.toSteps {n : Nat} {pos pos' : Position O} (h : Moves P ρ n pos po
     · rw [he', he, List.append_assoc]
     · rw [hq', hq, List.append_assoc]
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-A configuration with an available machine transition is not final. -/
+/-- Helper (computation). A configuration with an available machine transition is not final.
+(approved: PENDING). -/
 theorem final?_none_of_step {c : Config O} {out : Out O} (h : step P c = some out) :
     c.final? = none := by
   cases c with
@@ -576,7 +590,8 @@ theorem runFromQ_sound : ∀ (fuel : Nat) (events : List O.Event) (issued : List
                   by simpa [runFromQ, hf, hs, q, ha, hallow, hk] using hc,
                   by simpa [runFromQ, hf, hs, q, ha, hallow, hk] using hr⟩
 
-/-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness (approved: PENDING).
+/-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness
+(approved: PENDING).
 **Soundness for C1's `runFrom`.** Query erasure preserves the finite execution and its ending
 justification. `Moves.toSteps` turns the same witness into the ordinary `Steps` relation. -/
 theorem runFrom_sound {ρ₀ : Oracle O} (fuel : Nat) (events : List O.Event) (c : Config O) :
@@ -596,8 +611,8 @@ theorem runFrom_sound {ρ₀ : Oracle O} (fuel : Nat) (events : List O.Event) (c
   rw [hend]
   exact hc
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-Every report extends the event history supplied to `runFrom`. -/
+/-- Helper (computation). Every report extends the event history supplied to `runFrom`. (approved:
+PENDING). -/
 theorem runFrom_events_from {ρ₀ : Oracle O} (fuel : Nat) (events : List O.Event) (c : Config O) :
     ∃ tr, (runFrom P ρ₀ fuel events c).events = events ++ tr := by
   obtain ⟨n, pos, hpath, he, hc⟩ := runFrom_sound (P := P) (ρ₀ := ρ₀) fuel events c
@@ -623,7 +638,8 @@ theorem runFromQ_complete {n : Nat} {pos pos' : Position O} (h : Moves P ρ n po
       have hn := final?_none_of_step hs
       simpa [runFromQ, hn, hs, ha, hallow, hk] using ih hf
 
-/-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness (approved: PENDING).
+/-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness
+(approved: PENDING).
 **Completeness for C1's `runFrom`.** Every finite execution from an empty query history to a
 final configuration is reported with exactly its number of steps as fuel. -/
 theorem runFrom_complete {ρ₀ : Oracle O} {n : Nat} {events : List O.Event} {c : Config O}
@@ -635,8 +651,8 @@ theorem runFrom_complete {ρ₀ : Oracle O} {n : Nat} {events : List O.Event} {c
   rw [hq] at hr
   simpa [QueryReport.toReport] using hr.symm
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-**Monotonicity.** Extra fuel preserves every report other than `outOfFuel`. -/
+/-- Helper (computation). **Monotonicity.** Extra fuel preserves every report other than `outOfFuel`.
+(approved: PENDING). -/
 theorem runFrom_mono {ρ₀ : Oracle O} : ∀ (n m : Nat), n ≤ m →
     ∀ (events : List O.Event) (c : Config O),
     (∀ c', (runFrom P ρ₀ n events c).ending ≠ .outOfFuel c') →
@@ -681,9 +697,9 @@ theorem runFrom_mono {ρ₀ : Oracle O} : ∀ (n m : Nat), n ≤ m →
                   simpa [runFrom, hf, hs, ha, hallow, hk] using
                     ih m hle' (events ++ a.event.toList) c' hnot'
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-**Completeness with enough fuel.** Every budget at least the finite path length reports that
-path's final outcome and events. -/
+/-- Helper (computation). **Completeness with enough fuel.** Every budget at least the finite path
+length reports that
+path's final outcome and events. (approved: PENDING). -/
 theorem runFrom_complete_le {ρ₀ : Oracle O} {n m : Nat} (hle : n ≤ m)
     {events : List O.Event} {c : Config O} {pos' : Position O}
     (h : Moves P ρ₀.toQueryOracle n ⟨c, events, []⟩ pos')
@@ -696,9 +712,9 @@ theorem runFrom_complete_le {ρ₀ : Oracle O} {n m : Nat} (hle : n ≤ m)
   rw [runFrom_mono (P := P) (ρ₀ := ρ₀) n m hle events c hnot]
   exact hexact
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-**Trace-prefix consistency.** Increasing fuel never retracts or changes an event already
-reported. -/
+/-- Helper (computation). **Trace-prefix consistency.** Increasing fuel never retracts or changes an
+event already
+reported. (approved: PENDING). -/
 theorem runFrom_trace_prefix_le {ρ₀ : Oracle O} : ∀ (n m : Nat), n ≤ m →
     ∀ (events : List O.Event) (c : Config O),
     (runFrom P ρ₀ n events c).events <+: (runFrom P ρ₀ m events c).events := by
@@ -738,15 +754,15 @@ theorem runFrom_trace_prefix_le {ρ₀ : Oracle O} : ∀ (n m : Nat), n ≤ m �
                 | some c' => simpa [runFrom, hf, hs, ha, hallow, hk] using
                   (ih m hle' (events ++ a.event.toList) c')
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-The events of fuel `n` are a prefix of those of fuel `n + 1`. -/
+/-- Helper (computation). The events of fuel `n` are a prefix of those of fuel `n + 1`. (approved:
+PENDING). -/
 theorem runFrom_trace_prefix {ρ₀ : Oracle O} (n : Nat) (events : List O.Event) (c : Config O) :
     (runFrom P ρ₀ n events c).events <+: (runFrom P ρ₀ (n + 1) events c).events :=
   runFrom_trace_prefix_le n (n + 1) (Nat.le_add_right n 1) events c
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-A final report has an ordinary finite `Steps` witness ending in exactly that final
-configuration, with the reported events. -/
+/-- Helper (computation). A final report has an ordinary finite `Steps` witness ending in exactly that
+final
+configuration, with the reported events. (approved: PENDING). -/
 theorem runFrom_final_sound {ρ₀ : Oracle O} {fuel : Nat} {events : List O.Event} {c : Config O}
     {f : Final O.Val} (h : (runFrom P ρ₀ fuel events c).ending = .final f) :
     ∃ tr c', Steps P c tr c' ∧ c'.final? = some f ∧
@@ -761,9 +777,9 @@ theorem runFrom_final_sound {ρ₀ : Oracle O} {fuel : Nat} {events : List O.Eve
 
 /-! ### Infinite executions are compatible fuel limits -/
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-If `n` steps exhaust the budget at `pos`, then `n + m` steps are exactly `m` steps from `pos`.
-This is the compatibility operation used by the infinite-limit theorem. -/
+/-- Helper (computation). If `n` steps exhaust the budget at `pos`, then `n + m` steps are exactly `m`
+steps from `pos`.
+This is the compatibility operation used by the infinite-limit theorem. (approved: PENDING). -/
 theorem runFromQ_add_of_outOfFuel {n : Nat} {events : List O.Event} {issued : List (Query O)}
     {c : Config O} {pos : Position O}
     (h : runFromQ P ρ n events issued c =
@@ -810,8 +826,8 @@ theorem runFromQ_add_of_outOfFuel {n : Nat} {events : List O.Event} {issued : Li
                   simpa [runFromQ, hf, hs, ha, hallow, hk] using h
                 simpa [runFromQ, hf, hs, ha, hallow, hk, Nat.succ_add] using ih h' m
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-A zero-step `outOfFuel` report identifies its position exactly. -/
+/-- Helper (computation). A zero-step `outOfFuel` report identifies its position exactly. (approved:
+PENDING). -/
 theorem eq_of_runFromQ_zero_out {events : List O.Event} {issued : List (Query O)} {c : Config O}
     {pos : Position O}
     (h : runFromQ P ρ 0 events issued c = ⟨pos.events, pos.queries, .outOfFuel pos.config⟩) :
@@ -825,8 +841,8 @@ theorem eq_of_runFromQ_zero_out {events : List O.Event} {issued : List (Query O)
       obtain ⟨rfl, rfl, rfl⟩ := h
       rfl
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-A move between two nonfinal positions determines the one-unit report from its source. -/
+/-- Helper (computation). A move between two nonfinal positions determines the one-unit report from
+its source. (approved: PENDING). -/
 theorem Move.runFromQ_one {pos pos' : Position O} (hm : Move P ρ pos pos')
     (hf : pos.config.final? = none) (hf' : pos'.config.final? = none) :
     runFromQ P ρ 1 pos.events pos.queries pos.config =
@@ -835,16 +851,15 @@ theorem Move.runFromQ_one {pos pos' : Position O} (hm : Move P ρ pos pos')
   | silent hs => simp [runFromQ, hf, hs, hf']
   | prim hs ha hallow hk => simp [runFromQ, hf, hs, ha, hallow, hk, hf']
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-A move's source is not final. -/
+/-- Helper (computation). A move's source is not final. (approved: PENDING). -/
 theorem Move.not_final {pos pos' : Position O} (hm : Move P ρ pos pos') :
     pos.config.final? = none := by
   cases hm with
   | silent hs => exact final?_none_of_step hs
   | prim hs _ _ _ => exact final?_none_of_step hs
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-Two consecutive fuel-prefix reports determine exactly one transition between their positions. -/
+/-- Helper (computation). Two consecutive fuel-prefix reports determine exactly one transition between
+their positions. (approved: PENDING). -/
 theorem move_of_fuel_succ {n : Nat} {events : List O.Event} {issued : List (Query O)}
     {c : Config O} {pos pos' : Position O}
     (h0 : runFromQ P ρ n events issued c = ⟨pos.events, pos.queries, .outOfFuel pos.config⟩)
@@ -882,13 +897,15 @@ theorem move_of_fuel_succ {n : Nat} {events : List O.Event} {issued : List (Quer
                 subst pos'
                 exact .prim hs ha hallow hk
 
-/-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness (approved: PENDING).
+/-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness
+(approved: PENDING).
 No position of an infinite execution is final. -/
 theorem InfiniteExecution.not_final (X : InfiniteExecution P ρ c) (n : Nat) :
     (X.states n).config.final? = none :=
   (X.step n).not_final
 
-/-- Law (subject `runQ`). Every position of a genuine infinite execution is exactly the
+/-- Law (subject `runQ`).
+Every position of a genuine infinite execution is exactly the
 corresponding evaluator prefix, including its events, queries, and residual configuration. -/
 theorem InfiniteExecution.evaluator_prefix (X : InfiniteExecution P ρ c) (n : Nat) :
     runQ P ρ n c =
@@ -917,23 +934,26 @@ def FuelLimit.toInfiniteExecution (L : FuelLimit P ρ c) : InfiniteExecution P �
   · intro n
     exact move_of_fuel_succ (L.prefixes n) (L.prefixes (n + 1))
 
-/-- Representation lemma. This repackages the same states and proof fields; it supplies no independent behavioral evidence (approved: PENDING).
+/-- Representation lemma. This repackages the same states and proof fields; it supplies no independent
+behavioral evidence (approved: PENDING).
 Infinite executions and compatible fuel limits are two presentations of the same behavior. -/
 theorem infinite_iff_fuelLimit : Nonempty (InfiniteExecution P ρ c) ↔ Nonempty (FuelLimit P ρ c) :=
   ⟨fun ⟨X⟩ => ⟨X.toFuelLimit⟩, fun ⟨L⟩ => ⟨L.toInfiniteExecution⟩⟩
 
-/-- Representation lemma. This repackages the same states and proof fields; it supplies no independent behavioral evidence (approved: PENDING).
+/-- Representation lemma. This repackages the same states and proof fields; it supplies no independent
+behavioral evidence (approved: PENDING).
 Truncating an infinite execution and reconstructing it returns the original execution. -/
 theorem InfiniteExecution.toFuelLimit_toInfiniteExecution (X : InfiniteExecution P ρ c) :
     X.toFuelLimit.toInfiniteExecution = X := rfl
 
-/-- Representation lemma. This repackages the same states and proof fields; it supplies no independent behavioral evidence (approved: PENDING).
+/-- Representation lemma. This repackages the same states and proof fields; it supplies no independent
+behavioral evidence (approved: PENDING).
 Reconstructing a fuel limit and truncating it returns the original limit. -/
 theorem FuelLimit.toInfiniteExecution_toFuelLimit (L : FuelLimit P ρ c) :
     L.toInfiniteExecution.toFuelLimit = L := rfl
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-Compatible fuel limits from one initial configuration have the same positions. -/
+/-- Helper (computation). Compatible fuel limits from one initial configuration have the same
+positions. (approved: PENDING). -/
 theorem fuelLimit_states_unique (L K : FuelLimit P ρ c) : L.states = K.states := by
   funext n
   have h := (L.prefixes n).symm.trans (K.prefixes n)
@@ -952,9 +972,9 @@ theorem fuelLimit_states_unique (L K : FuelLimit P ρ c) : L.states = K.states :
       cases hq
       rfl
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-There is at most one compatible fuel limit for a fixed query-level oracle and initial
-configuration. -/
+/-- Helper (computation). There is at most one compatible fuel limit for a fixed query-level oracle
+and initial
+configuration. (approved: PENDING). -/
 theorem FuelLimit.unique (L K : FuelLimit P ρ c) : L = K := by
   cases L with
   | mk ls lp =>
@@ -964,8 +984,8 @@ theorem FuelLimit.unique (L K : FuelLimit P ρ c) : L = K := by
       cases hs
       rfl
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-A fixed query-level oracle and initial configuration determine a unique infinite execution. -/
+/-- Helper (computation). A fixed query-level oracle and initial configuration determine a unique
+infinite execution. (approved: PENDING). -/
 theorem InfiniteExecution.unique (X Y : InfiniteExecution P ρ c) : X = Y := by
   have h : X.toFuelLimit = Y.toFuelLimit := FuelLimit.unique _ _
   calc
@@ -974,7 +994,8 @@ theorem InfiniteExecution.unique (X Y : InfiniteExecution P ρ c) : X = Y := by
       congrArg (fun L : FuelLimit P ρ c => L.toInfiniteExecution) h
     _ = Y := toFuelLimit_toInfiniteExecution Y
 
-/-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness (approved: PENDING).
+/-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness
+(approved: PENDING).
 One transition extends, and never changes, the raw event history. -/
 theorem Move.events_prefix {pos pos' : Position O} (h : Move P ρ pos pos') :
     pos.events <+: pos'.events := by
@@ -982,7 +1003,8 @@ theorem Move.events_prefix {pos pos' : Position O} (h : Move P ρ pos pos') :
   | silent => exact ⟨[], by simp⟩
   | prim => exact ⟨_, rfl⟩
 
-/-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than independent execution evidence (approved: PENDING).
+/-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than
+independent execution evidence (approved: PENDING).
 Every later position of an infinite execution extends every earlier raw history. -/
 theorem InfiniteExecution.events_prefix (X : InfiniteExecution P ρ c) {m n : Nat} (h : m ≤ n) :
     (X.states m).events <+: (X.states n).events := by
@@ -995,7 +1017,8 @@ theorem InfiniteExecution.events_prefix (X : InfiniteExecution P ρ c) {m n : Na
     refine ⟨rest ++ next, ?_⟩
     rw [← List.append_assoc, hrest, show m + (d + 1) = m + d + 1 by omega, hnext]
 
-/-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than independent execution evidence (approved: PENDING).
+/-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than
+independent execution evidence (approved: PENDING).
 Adapter projection preserves the execution's history-prefix order. -/
 theorem InfiniteExecution.projected_prefix {S : Observe.EventSignature}
     (A : Observe.ExecAdapter O S) (X : InfiniteExecution P ρ c) {m n : Nat} (h : m ≤ n) :
@@ -1003,16 +1026,17 @@ theorem InfiniteExecution.projected_prefix {S : Observe.EventSignature}
   obtain ⟨rest, hrest⟩ := X.events_prefix h
   exact ⟨A.project rest, by rw [← Observe.ExecAdapter.project_append, hrest]⟩
 
-/-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than independent execution evidence (approved: PENDING).
+/-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than
+independent execution evidence (approved: PENDING).
 A prefix determines every list entry that lies in the shorter list. -/
 theorem getElem?_eq_of_prefix {α : Type} {xs ys : List α} (h : xs <+: ys) {i : Nat}
     (hi : i < xs.length) : ys[i]? = xs[i]? := by
   obtain ⟨rest, rfl⟩ := h
   exact List.getElem?_append_left hi
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-The canonical eventually silent C6 execution has exactly `events.take n` events after `n`
-steps. -/
+/-- Helper (computation). The canonical eventually silent C6 execution has exactly `events.take n`
+events after `n`
+steps. (approved: PENDING). -/
 theorem visiblePrefix_finiteDivergenceSteps {S : Observe.EventSignature}
     (events : List (Observe.Event S)) (n : Nat) :
     Observe.visiblePrefix (Observe.finiteDivergenceSteps events) n = events.take n := by
@@ -1024,8 +1048,8 @@ theorem visiblePrefix_finiteDivergenceSteps {S : Observe.EventSignature}
     · simp [Observe.finiteDivergenceSteps, Observe.Step.event?, h]
     · simp [Observe.finiteDivergenceSteps, Observe.Step.event?, h]
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-An emitting C6 execution has exactly the first `n` trace events after `n` steps. -/
+/-- Helper (computation). An emitting C6 execution has exactly the first `n` trace events after `n`
+steps. (approved: PENDING). -/
 theorem visiblePrefix_emitTrace {S : Observe.EventSignature} (trace : Observe.InfiniteTrace S)
     (n : Nat) : Observe.visiblePrefix (fun i => Observe.Step.emit (trace i)) n =
       (List.range n).map trace := by
@@ -1033,7 +1057,8 @@ theorem visiblePrefix_emitTrace {S : Observe.EventSignature} (trace : Observe.In
   | zero => rfl
   | succ n ih => simp [Observe.visiblePrefix_succ, ih, Observe.Step.event?, List.range_succ]
 
-/-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than independent execution evidence (approved: PENDING).
+/-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than
+independent execution evidence (approved: PENDING).
 A bounded monotone sequence of natural numbers is eventually constant. -/
 theorem eventually_constant_of_bounded {f : Nat → Nat} (mono : ∀ {m n}, m ≤ n → f m ≤ f n) :
     ∀ bound, (∀ n, f n ≤ bound) → ∃ start, ∀ n, start ≤ n → f n = f start := by
@@ -1057,8 +1082,10 @@ theorem eventually_constant_of_bounded {f : Nat → Nat} (mono : ∀ {m n}, m �
       have hne : f n ≠ bound + 1 := fun h => reached ⟨n, h⟩
       omega
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
- -/
+/-- Helper (computation). Cofinality through the actual projected histories relates any two matching
+streams,
+even with different silent-step schedules. This is a relational composition helper. (approved:
+PENDING). -/
 theorem MatchesProjectedHistory.sameObservation {S : Observe.EventSignature}
     {A : Observe.ExecAdapter O S} {X : InfiniteExecution P ρ c}
     {xs ys : Nat → Observe.Step S}
@@ -1074,10 +1101,10 @@ theorem MatchesProjectedHistory.sameObservation {S : Observe.EventSignature}
     obtain ⟨m, t, hm⟩ := hx.1 i
     exact ⟨m, r ++ t, by rw [hm, hi, List.append_assoc]⟩
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-**Finite projected behavior agrees with C6.** A finite external history determines the
+/-- Helper (computation). **Finite projected behavior agrees with C6.** A finite external history
+determines the
 canonical eventually silent C6 execution with exactly the same prefixes and a `finiteDivergence`
-observation. -/
+observation. (approved: PENDING). -/
 theorem finite_projected_canonical {S : Observe.EventSignature} {A : Observe.ExecAdapter O S}
     {X : InfiniteExecution P ρ c} (hf : FiniteEvents A X) :
     ∃ steps events, MatchesProjectedHistory A X steps ∧
@@ -1117,9 +1144,10 @@ theorem finite_projected_canonical {S : Observe.EventSignature} {A : Observe.Exe
     refine ⟨start, events.drop n, ?_⟩
     rw [visiblePrefix_finiteDivergenceSteps, List.take_append_drop]
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-**Infinite projected behavior agrees with C6.** An unbounded projected history determines an
-infinite C6 trace with exactly the same finite prefixes and an `infiniteDivergence` observation. -/
+/-- Helper (computation). **Infinite projected behavior agrees with C6.** An unbounded projected
+history determines an
+infinite C6 trace with exactly the same finite prefixes and an `infiniteDivergence` observation.
+(approved: PENDING). -/
 theorem infinite_projected_canonical {S : Observe.EventSignature} {A : Observe.ExecAdapter O S}
     {X : InfiniteExecution P ρ c} (hi : InfiniteEvents A X) :
     ∃ steps trace, MatchesProjectedHistory A X steps ∧
@@ -1170,7 +1198,8 @@ theorem infinite_projected_canonical {S : Observe.EventSignature} {A : Observe.E
       List.take_append_drop]
 
 /-- Law (subject `MatchesProjectedHistory`).
- -/
+A finite projected history has a matching C6 stream, and every matching stream has the
+same finite-divergence observation. Soundness does not depend on choosing the canonical stream. -/
 theorem finite_projected_observation {S : Observe.EventSignature} {A : Observe.ExecAdapter O S}
     {X : InfiniteExecution P ρ c} (hf : FiniteEvents A X) :
     ∃ events, (∃ steps, MatchesProjectedHistory A X steps) ∧
@@ -1182,7 +1211,8 @@ theorem finite_projected_observation {S : Observe.EventSignature} {A : Observe.E
   exact Observe.SameInfiniteObservation.trans (hs.sameObservation hm) ho
 
 /-- Law (subject `MatchesProjectedHistory`).
- -/
+An unbounded projected history has a matching C6 stream, and every matching stream has
+the same infinite trace. Soundness preserves the trace under arbitrary silent-step scheduling. -/
 theorem infinite_projected_observation {S : Observe.EventSignature} {A : Observe.ExecAdapter O S}
     {X : InfiniteExecution P ρ c} (hi : InfiniteEvents A X) :
     ∃ trace, (∃ steps, MatchesProjectedHistory A X steps) ∧
@@ -1193,7 +1223,8 @@ theorem infinite_projected_observation {S : Observe.EventSignature} {A : Observe
   intro steps hs
   exact Observe.SameInfiniteObservation.trans (hs.sameObservation hm) ho
 
-/-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than independent execution evidence (approved: PENDING).
+/-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than
+independent execution evidence (approved: PENDING).
 Every infinite execution has either finitely many or infinitely many projected events; these
 are the two external classes `SilentDivergence` and `InfiniteInteraction`. -/
 theorem finite_or_infinite_events {S : Observe.EventSignature} (A : Observe.ExecAdapter O S)
@@ -1208,7 +1239,8 @@ theorem finite_or_infinite_events {S : Observe.EventSignature} (A : Observe.Exec
     refine ⟨bound, fun n => ?_⟩
     exact Nat.le_of_not_gt (fun hlt => hn ⟨n, hlt⟩)
 
-/-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than independent execution evidence (approved: PENDING).
+/-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than
+independent execution evidence (approved: PENDING).
 One infinite execution cannot have both finitely many and infinitely many projected events. -/
 theorem finite_not_infinite_events {S : Observe.EventSignature} {A : Observe.ExecAdapter O S}
     {X : InfiniteExecution P ρ c} (hf : FiniteEvents A X) (hi : InfiniteEvents A X) : False := by
@@ -1216,7 +1248,8 @@ theorem finite_not_infinite_events {S : Observe.EventSignature} {A : Observe.Exe
   obtain ⟨n, hn⟩ := hi bound
   exact Nat.not_lt_of_ge (hb n) hn
 
-/-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than independent execution evidence (approved: PENDING).
+/-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than
+independent execution evidence (approved: PENDING).
 External silent divergence and infinite interaction are mutually exclusive on the same run. -/
 theorem silentDivergence_not_infiniteInteraction {S : Observe.EventSignature}
     (A : Observe.ExecAdapter O S) :
@@ -1226,7 +1259,8 @@ theorem silentDivergence_not_infiniteInteraction {S : Observe.EventSignature}
   subst Y
   exact finite_not_infinite_events hf hi
 
-/-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than independent execution evidence (approved: PENDING).
+/-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than
+independent execution evidence (approved: PENDING).
 The raw classification has the same finite/infinite dichotomy, explicitly internally. -/
 theorem internal_finite_or_infinite_events (X : InfiniteExecution P ρ c) :
     InternalFiniteEvents X ∨ InternalInfiniteEvents X := by
@@ -1239,8 +1273,8 @@ theorem internal_finite_or_infinite_events (X : InfiniteExecution P ρ c) :
     apply h
     exact ⟨bound, fun n => Nat.le_of_not_gt (fun hlt => hn ⟨n, hlt⟩)⟩
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-A final report excludes an infinite execution from the same initial configuration. -/
+/-- Helper (computation). A final report excludes an infinite execution from the same initial
+configuration. (approved: PENDING). -/
 theorem not_infinite_of_final {ρ₀ : Oracle O} {fuel : Nat} {c : Config O} {f : Final O.Val}
     (h : (run P ρ₀ fuel c).ending = .final f)
     (X : InfiniteExecution P ρ₀.toQueryOracle c) : False := by
@@ -1253,9 +1287,9 @@ theorem not_infinite_of_final {ρ₀ : Oracle O} {fuel : Nat} {c : Config O} {f 
   rw [← hr] at h
   cases h
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-An endlessly blocked `noAnswer` report excludes an infinite execution from the same initial
-configuration. -/
+/-- Helper (computation). An endlessly blocked `noAnswer` report excludes an infinite execution from
+the same initial
+configuration. (approved: PENDING). -/
 theorem not_infinite_of_noAnswer {ρ₀ : Oracle O} {fuel : Nat} {c blocked : Config O}
     (h : (run P ρ₀ fuel c).ending = .noAnswer blocked)
     (X : InfiniteExecution P ρ₀.toQueryOracle c) : False := by
@@ -1268,9 +1302,9 @@ theorem not_infinite_of_noAnswer {ρ₀ : Oracle O} {fuel : Nat} {c blocked : Co
   rw [← hr] at h
   cases h
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-A blocked request remains blocked at every larger budget; it never turns into divergence or a
-program outcome merely because more fuel is supplied. -/
+/-- Helper (computation). A blocked request remains blocked at every larger budget; it never turns
+into divergence or a
+program outcome merely because more fuel is supplied. (approved: PENDING). -/
 theorem endlesslyBlocked_of_noAnswer {ρ₀ : Oracle O} {fuel : Nat} {c blocked : Config O}
     (h : (run P ρ₀ fuel c).ending = .noAnswer blocked) : EndlesslyBlocked P ρ₀ fuel c blocked := by
   change (runFrom P ρ₀ fuel [] c).ending = .noAnswer blocked at h
@@ -1299,7 +1333,8 @@ theorem TerminationEvidence.all_allowed_runs {domain : CallDomain O} (E : Termin
     apply runFrom_mono (P := P) (ρ₀ := ρ) (E.conditional.fuel E.premises ρ args st) m hm [] c hnot
   exact (congrArg Report.ending hmono).trans hfinal
 
-/-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness (approved: PENDING).
+/-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness
+(approved: PENDING).
 Per-function termination evidence excludes divergence from every successful admitted entry
 configuration. -/
 theorem TerminationEvidence.excludes_infinite {domain : CallDomain O} (E : TerminationEvidence O P domain)
@@ -1369,24 +1404,19 @@ def spinConfigAt : Nat → Config ops
 /-- No events or queries occur in the periodic execution. -/
 def spinPosition (n : Nat) : Position ops := ⟨spinConfigAt (n % 5), [], []⟩
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-Concrete computation for `spin_move_01`. -/
+/-- Helper (computation). Concrete computation for `spin_move_01`. (approved: PENDING). -/
 theorem spin_move_01 : Move prog env ⟨spinConfig, [], []⟩ ⟨spinConfig1, [], []⟩ := .silent rfl
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-Concrete computation for `spin_move_12`. -/
+/-- Helper (computation). Concrete computation for `spin_move_12`. (approved: PENDING). -/
 theorem spin_move_12 : Move prog env ⟨spinConfig1, [], []⟩ ⟨spinConfig2, [], []⟩ := .silent rfl
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-Concrete computation for `spin_move_23`. -/
+/-- Helper (computation). Concrete computation for `spin_move_23`. (approved: PENDING). -/
 theorem spin_move_23 : Move prog env ⟨spinConfig2, [], []⟩ ⟨spinConfig3, [], []⟩ := .silent rfl
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-Concrete computation for `spin_move_34`. -/
+/-- Helper (computation). Concrete computation for `spin_move_34`. (approved: PENDING). -/
 theorem spin_move_34 : Move prog env ⟨spinConfig3, [], []⟩ ⟨spinConfig4, [], []⟩ := .silent rfl
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-Concrete computation for `spin_move_40`. -/
+/-- Helper (computation). Concrete computation for `spin_move_40`. (approved: PENDING). -/
 theorem spin_move_40 : Move prog env ⟨spinConfig4, [], []⟩ ⟨spinConfig, [], []⟩ := .silent rfl
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-Every adjacent pair of periodic positions is one machine transition. -/
+/-- Helper (computation). Every adjacent pair of periodic positions is one machine transition.
+(approved: PENDING). -/
 theorem spin_move (n : Nat) : Move prog env (spinPosition n) (spinPosition (n + 1)) := by
   have hlt : n % 5 < 5 := Nat.mod_lt _ (by decide)
   have hc : n % 5 = 0 ∨ n % 5 = 1 ∨ n % 5 = 2 ∨ n % 5 = 3 ∨ n % 5 = 4 := by omega
@@ -1408,8 +1438,8 @@ def spin_infinite : InfiniteExecution prog env spinConfig where
   initial := rfl
   step := spin_move
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-In particular it is internal silent divergence: infinitely many steps and no raw events. -/
+/-- Helper (computation). In particular it is internal silent divergence: infinitely many steps and no
+raw events. (approved: PENDING). -/
 theorem spin_internal_silent_divergence : InternalSilentDivergence prog env spinConfig :=
   ⟨spin_infinite, ⟨0, fun n => by simp [spin_infinite, spinPosition]⟩⟩
 
@@ -1448,29 +1478,25 @@ def eventPosition (n : Nat) : Position ops :=
   ⟨eventConfigAt (n % 5), rawEvents (eventCount n),
     (List.range (eventCount n)).map eventQuery⟩
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-Concrete computation for `event_move_01`. -/
+/-- Helper (computation). Concrete computation for `event_move_01`. (approved: PENDING). -/
 theorem event_move_01 (n : Nat) : Move prog env
     ⟨eventConfig, rawEvents n, (List.range n).map eventQuery⟩
     ⟨eventConfig1, rawEvents n, (List.range n).map eventQuery⟩ := .silent rfl
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-Concrete computation for `event_move_12`. -/
+/-- Helper (computation). Concrete computation for `event_move_12`. (approved: PENDING). -/
 theorem event_move_12 (n : Nat) : Move prog env
     ⟨eventConfig1, rawEvents n, (List.range n).map eventQuery⟩
     ⟨eventConfig2, rawEvents n, (List.range n).map eventQuery⟩ := .silent rfl
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-Concrete computation for `event_move_23`. -/
+/-- Helper (computation). Concrete computation for `event_move_23`. (approved: PENDING). -/
 theorem event_move_23 (n : Nat) : Move prog env
     ⟨eventConfig2, rawEvents n, (List.range n).map eventQuery⟩
     ⟨eventConfig3, rawEvents n, (List.range n).map eventQuery⟩ := .silent rfl
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-Concrete computation for `event_move_40`. -/
+/-- Helper (computation). Concrete computation for `event_move_40`. (approved: PENDING). -/
 theorem event_move_40 (n : Nat) : Move prog env
     ⟨eventConfig4, rawEvents n, (List.range n).map eventQuery⟩
     ⟨eventConfig, rawEvents n, (List.range n).map eventQuery⟩ := .silent rfl
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-The logging transition appends exactly its raw event and its next per-site query. -/
+/-- Helper (computation). The logging transition appends exactly its raw event and its next per-site
+query. (approved: PENDING). -/
 theorem event_move_34 (n : Nat) : Move prog env
     ⟨eventConfig3, rawEvents n, (List.range n).map eventQuery⟩
     ⟨eventConfig4, rawEvents (n + 1), (List.range (n + 1)).map eventQuery⟩ := by
@@ -1493,8 +1519,8 @@ theorem event_move_34 (n : Nat) : Move prog env
       (site := s) (st := spinStore) (a := ⟨some 1, .ok 0, spinStore⟩) rfl rfl rfl rfl
   simpa [rawEvents, List.range_succ] using hm
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-Every adjacent pair of positions in the logging loop is one real machine transition. -/
+/-- Helper (computation). Every adjacent pair of positions in the logging loop is one real machine
+transition. (approved: PENDING). -/
 theorem event_move (n : Nat) : Move prog env (eventPosition n) (eventPosition (n + 1)) := by
   have hlt : n % 5 < 5 := Nat.mod_lt _ (by decide)
   have hc : n % 5 = 0 ∨ n % 5 = 1 ∨ n % 5 = 2 ∨ n % 5 = 3 ∨ n % 5 = 4 := by omega
@@ -1535,15 +1561,13 @@ def keepingAdapter : Observe.ExecAdapter ops Observe.Demo.signature where
   status := fun _ => none
   sites := []
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-Concrete computation for `erasing_project`. -/
+/-- Helper (computation). Concrete computation for `erasing_project`. (approved: PENDING). -/
 theorem erasing_project (events : List Int) : erasingAdapter.project events = [] := by
   induction events with
   | nil => rfl
   | cons event events ih => simp [Observe.ExecAdapter.project, erasingAdapter]
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-Concrete computation for `keeping_project_rawEvents`. -/
+/-- Helper (computation). Concrete computation for `keeping_project_rawEvents`. (approved: PENDING). -/
 theorem keeping_project_rawEvents (n : Nat) : keepingAdapter.project (rawEvents n) =
     (List.range n).map fun _ => Observe.Event.output "1" := by
   induction n with
@@ -1553,8 +1577,8 @@ theorem keeping_project_rawEvents (n : Nat) : keepingAdapter.project (rawEvents 
       Observe.ExecAdapter.project_append, ih]
     simp [Observe.ExecAdapter.project, keepingAdapter, List.range_succ] <;> decide
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-Empty output satisfies C6's internal-answer rule even though C1 emits a raw event. -/
+/-- Helper (computation). Empty output satisfies C6's internal-answer rule even though C1 emits a raw
+event. (approved: PENDING). -/
 theorem erasingWellFormed : Observe.ExecAdapter.WellFormed erasingAdapter Observe.Demo.contract () env := by
   constructor
   · intro hist p vs site store a answer typed
@@ -1564,19 +1588,18 @@ theorem erasingWellFormed : Observe.ExecAdapter.WellFormed erasingAdapter Observ
   · intro hist p vs site store q answer typed
     simp [erasingAdapter] at typed
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-Externally the erasing run is silent divergence. -/
+/-- Helper (computation). Externally the erasing run is silent divergence. (approved: PENDING). -/
 theorem erasing_silent_divergence : SilentDivergence prog erasingAdapter env eventConfig :=
   ⟨event_infinite, ⟨0, fun n => by simp [event_infinite, eventPosition, erasing_project]⟩⟩
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-Internally that same run has infinitely many raw events. -/
+/-- Helper (computation). Internally that same run has infinitely many raw events. (approved:
+PENDING). -/
 theorem erasing_internal_infinite : InternalInfiniteInteraction prog env eventConfig := by
   refine ⟨event_infinite, fun bound => ⟨5 * (bound + 1), ?_⟩⟩
   simp [event_infinite, eventPosition, eventCount, rawEvents]
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-Retaining the raw events turns the same execution into external infinite interaction. -/
+/-- Helper (computation). Retaining the raw events turns the same execution into external infinite
+interaction. (approved: PENDING). -/
 theorem keeping_infinite_interaction : InfiniteInteraction prog keepingAdapter env eventConfig := by
   refine ⟨event_infinite, fun bound => ⟨5 * (bound + 1), ?_⟩⟩
   simp [event_infinite, eventPosition, eventCount, keeping_project_rawEvents]
@@ -1686,8 +1709,8 @@ def bumpK : Answer ops.Val ops.Event ops.Store → Option (Config ops) := fun a 
   | .ok v => (bindLife ops none a.store).map fun st' => ⟨.done, bindDst none v [], st', []⟩
   | .error kd => some ⟨.trapped kd s, [], a.store, []⟩
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-A real transition under the lifted ordinary demo oracle. -/
+/-- Helper (computation). A real transition under the lifted ordinary demo oracle. (approved:
+PENDING). -/
 theorem bumpedMove : Move prog env ⟨bumpConfig, [], []⟩ ⟨bumpContinued, [], [bumpQuery]⟩ :=
   Move.prim (P := prog) (ρ := env) (c := bumpConfig) (c' := bumpContinued) (events := [])
     (issued := []) (p := .bump) (vs := []) (site := s) (st := .init)
@@ -1914,8 +1937,8 @@ def terminalK : Answer ops.Val ops.Event ops.Store → Option (Config ops) := fu
   | .ok v => (bindLife ops none a.store).map fun st' => ⟨.done, bindDst none v [], st', []⟩
   | .error kd => some ⟨.trapped kd s, [], a.store, []⟩
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
- -/
+/-- Helper (computation). Computes the request and continuation issued by the concrete logging
+statement. (approved: PENDING). -/
 theorem terminalRequest : step prog terminalConfig = some (.request .log [1] s .init terminalK) := by
   simp [terminalConfig, step, evalArgs, evalE, onRes, Res.bind, Res.map]
   funext a
@@ -1959,12 +1982,10 @@ example : terminalConfig.final? = none ∧
   intro h
   cases h <;> simp_all [answer, noAnswerOracle, fabricatedFinalRun, terminalConfig]
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-Finite projected histories of the erasing execution. -/
+/-- Helper (computation). Finite projected histories of the erasing execution. (approved: PENDING). -/
 theorem erasedFinite : FiniteEvents erasingAdapter event_infinite :=
   ⟨0, fun _ => by simp [erasing_project]⟩
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
-Unbounded projected histories of the keeping execution. -/
+/-- Helper (computation). Unbounded projected histories of the keeping execution. (approved: PENDING). -/
 theorem keptInfinite : InfiniteEvents keepingAdapter event_infinite := by
   intro bound
   refine ⟨5 * (bound + 1), ?_⟩
@@ -1991,8 +2012,9 @@ def uncheckedHistory {O : Operands} {S : Observe.EventSignature} {P : Program O}
     {ρ : QueryOracle O} {c : Config O} (_ : Observe.ExecAdapter O S)
     (_ : InfiniteExecution P ρ c) (_ : Nat → Observe.Step S) : Prop := True
 
-/-- Helper (computation). Auxiliary evaluator calculation or concrete execution witness; independent contract evidence is provided by the request, soundness, completeness and observation laws (approved: PENDING).
- -/
+/-- Helper (computation). A constantly emitting stream exceeds every finite observed history; the
+prefix lengths
+contradict any proposed finite observation. (approved: PENDING). -/
 theorem alwaysEmit_not_finite (events : List (Observe.Event Observe.Demo.signature)) :
     ¬ Observe.HasFullObservation
       (.infinite (fun _ => .emit (.output "invented"))) (.finiteDivergence events) := by
@@ -2096,8 +2118,10 @@ def threeRequestConfig : Config ops := ⟨.exec (.seq (.prim none .bump [] s)
 def thirdQuery : Query ops := Query.issue [] .bump [] s ⟨2, []⟩
   [interleavedQuery0, interleavedQuery1]
 
-/-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than independent execution evidence (approved: PENDING).
- -/
+/-- Helper (arithmetic). Derived list-prefix and per-site counting calculation, rather than
+independent execution evidence (approved: PENDING).
+Computes the interval contribution in an actual three-request run: the first and third
+requests share a site while the intervening request contributes zero to its counter. -/
 theorem interleaved_execution : thirdQuery.occurrence = interleavedQuery0.occurrence +
     occurrenceAt (((runQ prog env 7 threeRequestConfig).queries.drop 0).take (2 - 0)) s :=
   runFromQ_interleaved_site (O := ops) (P := prog) (ρ := env.toQueryOracle)
@@ -2157,7 +2181,8 @@ example : (droppedAnswerRun ops prog env.toQueryOracle 1 [] [] terminalConfig).t
 def terminalFinished : Position ops := ⟨⟨.done, [], .init, []⟩, [1], [terminalQuery]⟩
 
 /-- Helper (computation). A real path includes the oracle's event and its recorded query
-(approved: PENDING). -/
+(approved: PENDING).
+Constructs a concrete one-step oracle-checked path, including its event and query. -/
 theorem terminalPath : Moves prog env 1 ⟨terminalConfig, [], []⟩ terminalFinished :=
   .step (.prim (k := terminalK) (a := ⟨some 1, .ok 0, .init⟩)
     terminalRequest rfl rfl rfl) (.refl _)
@@ -2184,7 +2209,9 @@ example : ∃ n pos, Moves prog noAnswerOracle n ⟨terminalConfig, [], []⟩ po
       ReportedQueries prog noAnswerOracle hc (runFromQ prog noAnswerOracle 1 [] [] terminalConfig).queries :=
   runFromQ_sound (O := ops) (P := prog) (ρ := noAnswerOracle) 1 [] [] terminalConfig
 
-/-- Helper (inversion). No successful move answers this unanswered request (approved: PENDING). -/
+/-- Helper (inversion). No successful move answers this unanswered request (approved: PENDING).
+Inverts a purported move at the concrete unanswered request; neither a silent step
+nor an answered primitive transition is possible. -/
 theorem unanswered_no_move {pos : Position ops} :
     ¬ Move prog noAnswerOracle ⟨terminalConfig, [], []⟩ pos := by
   intro h
