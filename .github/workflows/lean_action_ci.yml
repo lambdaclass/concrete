@@ -418,7 +418,7 @@ jobs:
     # never on GitHub-hosted VMs or macOS shared VMs, and never executes pull_request code on
     # concrete-ci-2. Pull requests run deterministic family coverage on a hosted runner.
     runs-on: ${{ github.event_name != 'pull_request' && fromJSON('["self-hosted","linux","x64","concrete","concrete-ci-2"]') || 'ubuntu-24.04' }}
-    timeout-minutes: 15
+    timeout-minutes: 60
     permissions:
       contents: read
     steps:
@@ -433,7 +433,7 @@ jobs:
         uses: cachix/install-nix-action@v31
       - name: Small deterministic family coverage (PR; no timing qualification)
         if: github.event_name == 'pull_request'
-        run: nix develop --command bash scripts/checks/lib/bounded.sh 120 lake env lean --run scripts/checks/compiler/scaling.lean check-small
+        run: nix develop --command bash scripts/checks/lib/bounded.sh 2400 env SCALING_TIER=pr bash scripts/checks/compiler/scaling.sh scaling-report
       - name: Interleaved 1x, 10x and 100x backend scaling
         if: github.event_name != 'pull_request'
         env:

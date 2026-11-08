@@ -5,20 +5,23 @@
 # conservative low-quantile noise envelope must both satisfy the unchanged exponent bound. The 10x->100x exponent must be
 # at most SCALING_MAX_EXPONENT (default 1.35); 100x in-process stages must be at least
 # SCALING_MIN_STAGE_NS (default 10 ms), and native at least SCALING_MIN_NATIVE_NS (default 100 ms).
-# After ISS-0030 made LCB.emit and LLVM.module linear, concrete-ci-2 measured lcb_emit = 3.7 ms and
-# llvm_module = 4.2 ms at 100x with k0=1 (below the 10 ms floor). Requiring at least 2x the 10 ms
-# floor (>= 20 ms) for the fastest stage gives k0 = ceil(20 ms / 3.7 ms) = 6 (1201 blocks and about
-# 350 KiB of LLVM text at 100x, k=600), clearing the floor with margin. scaling.tsv records every
-# minimum and both exponents.
+# After ISS-0030 made LCB.emit and LLVM.module linear, the k0=1 sizing run (C 1f5457c9 + backend
+# ee2d8252 on concrete-ci-2) measured lcb_emit = 3.7 ms and llvm_module = 4.2 ms at 100x (below the
+# 10 ms floor). Requiring at least 2x the 10 ms floor (>= 20 ms) for the fastest stage gives
+# k0 = ceil(20 ms / 3.7 ms) = 6 (1201 blocks and about 350 KiB of LLVM text at 100x, k=600),
+# clearing the floor with margin. scaling.tsv records every minimum, both exponents and the upper
+# low-quantile noise envelope.
 # Hosted macOS runners are shared VMs; exponents there are not comparable, so x86-64-only is a decision.
 # lean --run measures the interpreted compiler, the only compiler available until concrete exists.
 #
 # usage: scaling.sh [REPORT_DIR] [--allow-planted-failure --plant linear|quadratic]
-# SCALING_IN_PROCESS_ONLY=1 omits native timing for local smoke runs. Every normal run automatically
-# checks linear PASS, quadratic FAIL and plant-without-authorization refusal controls without
-# rebuilding; they measure/analyze only their planted stage, so independent pipeline scaling defects
-# cannot mask them. A control's validation, timeout, resolution, inventory or unexpected verdict is
-# a "control setup" failure.
+# SCALING_TIER=pr builds Concrete and runs deterministic family/depth coverage plus fast
+# analyzer/refusal/provenance controls (no wall-clock qualification). SCALING_IN_PROCESS_ONLY=1 omits
+# native timing for local smoke runs. Every normal qualification/daily run automatically checks
+# linear PASS, quadratic FAIL, noise-envelope FAIL, plant-without-authorization refusal and
+# ci2-provenance controls without rebuilding; they measure/analyze only their planted stage, so
+# independent pipeline scaling defects cannot mask them. A control's validation, timeout, resolution,
+# inventory or unexpected verdict is a "control setup" failure.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/../../.." && pwd)
 cd "$root"
@@ -67,7 +70,8 @@ case "$(uname -s)-$(uname -m)" in
 esac
 case "$in_process_only" in 0|1) ;; *) echo "scaling: SCALING_IN_PROCESS_ONLY must be 0 or 1" >&2; exit 2 ;; esac
 tier=${SCALING_TIER:-qualification}
-case "$tier" in qualification|daily) ;; *) echo "scaling: invalid SCALING_TIER" >&2; exit 2 ;; esac
+case "$tier" in pr|qualification|daily) ;; *) echo "scaling: invalid SCALING_TIER" >&2; exit 2 ;; esac
+[ "$tier" != pr ] || in_process_only=1
 mkdir -p "$report"
 printf 'sha=%s\ntier=%s\n' "$(git rev-parse HEAD)" "$tier" >"$report/identity.txt"
 
@@ -147,47 +151,6 @@ if [ -n "$plant" ]; then
   exit
 fi
 
-mode=normal
-[ "$in_process_only" = 0 ] || mode=in-process
-clean_rc=0
-run_lean "" "$work/clean.tsv" || clean_rc=$?
-
-if [ "$clean_rc" = 0 ] && [ "$in_process_only" = 0 ]; then
-  lcb=$root/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb
-  for k in "$k0" "$((10 * k0))" "$((100 * k0))"; do
-    bounded 600 "${driver[@]}" emit "$k" "$work/native-inputs/$k" "$target" || clean_rc=$?
-  done
-  now_ns() { python3 -I -c 'import time; print(time.monotonic_ns())'; }
-  if [ "$clean_rc" = 0 ]; then
-    for ((rep = 0; rep < repetitions; rep++)); do
-      sizes=("$k0" "$((10 * k0))" "$((100 * k0))")
-      if ((rep % 2)); then sizes=("$((100 * k0))" "$((10 * k0))" "$k0"); fi
-      for k in "${sizes[@]}"; do
-        run=$work/native-runs/$rep/$k
-        mkdir -p "$(dirname "$run")"
-        cp -R "$work/native-inputs/$k" "$run"
-        log=$work/native-$k-$rep.log
-        start=$(now_ns)
-        if bounded 300 bash "$root/scripts/checks/lib/slice0_native.sh" "$run" "$lcb" >"$log" 2>&1; then
-          stop=$(now_ns)
-          printf 'sample\t%s\t%s\tnative\t%s\t0\n' "$rep" "$k" "$((stop - start))" >>"$work/clean.tsv"
-        else
-          cat "$log" >&2
-          echo "FAIL scaling: native build failed at size $k repetition $rep" >&2
-          clean_rc=1
-          break 2
-        fi
-      done
-    done
-  fi
-fi
-if [ "$clean_rc" = 0 ]; then
-  cp "$work/clean.tsv" "$report/samples.tsv"
-  analyze "$work/clean.tsv" "$report/scaling.tsv" "$mode" || clean_rc=$?
-else
-  echo "FAIL scaling: clean measurement failed with status $clean_rc; running controls" >&2
-fi
-
 control_setup() { # control_setup PLANT REASON LOG
   echo "FAIL scaling control $1: control setup: $2" >&2
   [ ! -f "$3" ] || cat "$3" >&2
@@ -236,6 +199,28 @@ control_quadratic() {
   echo "ok scaling control quadratic: refused for planted reason (exponent $value)"
 }
 
+control_noise_envelope() {
+  local samples=$work/control-envelope.tsv log=$work/control-envelope.log rc=0 rep large_ns
+  : >"$samples"
+  for ((rep = 0; rep < 9; rep++)); do
+    large_ns=300000000
+    [ "$rep" != 0 ] || large_ns=100000000
+    printf 'sample\t%s\t6\tplant_linear\t1000000\t1\n' "$rep" >>"$samples"
+    printf 'sample\t%s\t60\tplant_linear\t10000000\t1\n' "$rep" >>"$samples"
+    printf 'sample\t%s\t600\tplant_linear\t%s\t1\n' "$rep" "$large_ns" >>"$samples"
+  done
+  bounded 60 python3 -I "$root/scripts/checks/lib/scaling_report.py" "$samples" "$work/control-envelope-report.tsv" \
+    --k0 6 --repetitions 9 --max-exponent 1.35 --min-stage-ns 10000000 --min-native-ns 100000000 \
+    --mode linear >"$log" 2>&1 || rc=$?
+  if [ "$rc" != 1 ] || [ "$(grep -c '^FAIL scaling:' "$log")" != 1 ] || ! grep -Eq \
+      '^FAIL scaling: stage plant_linear noise envelope exponent = 1\.477 exceeds 1\.350; measurement is not noise-robust$' "$log"; then
+    control_setup noise-envelope "did not reject noisy 100x distribution with exact envelope diagnostic (status $rc)" "$log"
+    return 1
+  fi
+  cat "$log"
+  echo 'ok scaling control noise-envelope: refused for planted reason (envelope 1.477 > 1.350)'
+}
+
 control_refusal() {
   local log=$work/control-refusal.log rc=0
   bounded 60 "${driver[@]}" measure "$k0" "$repetitions" "$target" --plant quadratic >"$log" 2>&1 || rc=$?
@@ -275,6 +260,61 @@ control_ci2_provenance() {
   echo 'ok scaling control ci2-provenance: eligible runners accepted and substitutes refused'
 }
 
+if [ "$tier" = pr ]; then
+  bounded 300 "${driver[@]}" check-small >"$report/pr-coverage.txt"
+  cat "$report/pr-coverage.txt"
+  controls_rc=0
+  control_noise_envelope || controls_rc=1
+  control_refusal || controls_rc=1
+  control_ci2_provenance || controls_rc=1
+  if [ "$controls_rc" != 0 ]; then
+    echo 'FAIL scaling: automatic planted controls failed' >&2
+    exit 1
+  fi
+  exit 0
+fi
+
+mode=normal
+[ "$in_process_only" = 0 ] || mode=in-process
+clean_rc=0
+run_lean "" "$work/clean.tsv" || clean_rc=$?
+
+if [ "$clean_rc" = 0 ] && [ "$in_process_only" = 0 ]; then
+  lcb=$root/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb
+  for k in "$k0" "$((10 * k0))" "$((100 * k0))"; do
+    bounded 600 "${driver[@]}" emit "$k" "$work/native-inputs/$k" "$target" || clean_rc=$?
+  done
+  now_ns() { python3 -I -c 'import time; print(time.monotonic_ns())'; }
+  if [ "$clean_rc" = 0 ]; then
+    for ((rep = 0; rep < repetitions; rep++)); do
+      sizes=("$k0" "$((10 * k0))" "$((100 * k0))")
+      if ((rep % 2)); then sizes=("$((100 * k0))" "$((10 * k0))" "$k0"); fi
+      for k in "${sizes[@]}"; do
+        run=$work/native-runs/$rep/$k
+        mkdir -p "$(dirname "$run")"
+        cp -R "$work/native-inputs/$k" "$run"
+        log=$work/native-$k-$rep.log
+        start=$(now_ns)
+        if bounded 300 bash "$root/scripts/checks/lib/slice0_native.sh" "$run" "$lcb" >"$log" 2>&1; then
+          stop=$(now_ns)
+          printf 'sample\t%s\t%s\tnative\t%s\t0\n' "$rep" "$k" "$((stop - start))" >>"$work/clean.tsv"
+        else
+          cat "$log" >&2
+          echo "FAIL scaling: native build failed at size $k repetition $rep" >&2
+          clean_rc=1
+          break 2
+        fi
+      done
+    done
+  fi
+fi
+if [ "$clean_rc" = 0 ]; then
+  cp "$work/clean.tsv" "$report/samples.tsv"
+  analyze "$work/clean.tsv" "$report/scaling.tsv" "$mode" || clean_rc=$?
+else
+  echo "FAIL scaling: clean measurement failed with status $clean_rc; running controls" >&2
+fi
+
 # One policy/analyzer for all backend families. Large families and depth probes
 # belong to the scheduled tier; no second backend-specific scaling workflow.
 if [ "$tier" = daily ]; then
@@ -287,7 +327,7 @@ if [ "$tier" = daily ]; then
       bounded 60 python3 -I "$root/scripts/checks/lib/scaling_report.py" \
         "$report/$family.samples.tsv" "$report/$family.tsv" --k0 "$family_k0" \
         --repetitions "$repetitions" --max-exponent "$max_exponent" \
-        --min-stage-ns "$min_stage_ns" --min-native-ns "$min_native_ns" --mode in-process || rc=$?
+        --min-stage-ns "$min_stage_ns" --min-native-ns "$min_native_ns" --mode backend || rc=$?
     fi
     [ "$rc" = 0 ] || clean_rc=$rc
   done
@@ -297,6 +337,7 @@ fi
 controls_rc=0
 control_linear || controls_rc=1
 control_quadratic || controls_rc=1
+control_noise_envelope || controls_rc=1
 control_refusal || controls_rc=1
 control_ci2_provenance || controls_rc=1
 if [ "$controls_rc" != 0 ]; then

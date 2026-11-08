@@ -48,28 +48,50 @@ def scaled (k rep : Nat) : Program :=
       [{ params := [(6 * k, .int .u8)], insts := [], term := .ret (.reg (6 * k)) }]
     sites := (List.range k).map (site rep) }
 
-/-- Register magnitude varies independently of program size. -/
+/-- Register magnitude varies independently of program size; instructions are chained through
+registers so every instruction is live and performs a register lookup (`regIdFast`). -/
 private def registers (n rep stride : Nat) : Program :=
-  { blocks := [{ params := [], insts := (List.range n).map (fun i => .bin .add .u8 (stride * (i + 1)) (.imm .u8 (Int.ofNat (rep % 128))) (.imm .u8 1)), term := .ret (.reg (stride * n)) }], sites := [] }
+  let salt : Int := Int.ofNat (rep % 128)
+  { blocks := [{ params := []
+                 insts := (List.range n).map (fun i =>
+                   let prev : Operand := if i == 0 then .imm .u8 salt else .reg (stride * i)
+                   let rhs : Operand := .imm .u8 (if i == 0 then 1 else 0)
+                   .bin .add .u8 (stride * (i + 1)) prev rhs)
+                 term := .ret (.reg (stride * n)) }]
+    sites := [] }
 
 private def widePhi (n rep : Nat) : Program :=
+  let salt : Int := Int.ofNat (rep % 128)
   { blocks := [
     { params := [], insts := [.binOvf .add .u8 (n + 1) (n + 2) (.imm .u8 0) (.imm .u8 0)],
       term := .condbr (n + 2) 1 [] 2 [] },
     { params := [], insts := [], term := .br 3
         ((List.range n).map fun i => .imm .u8 (Int.ofNat ((i + rep) % 256))) },
     { params := [], insts := [], term := .br 3
-        ((List.range n).map fun i => .imm .u8 (Int.ofNat ((i + rep + 1) % 256))) },
+        ((List.range n).map fun i =>
+          if i + 1 == n then .imm .u8 (salt + 1)
+          else .imm .u8 (Int.ofNat ((i + rep + 1) % 256))) },
     { params := (List.range n).map (fun i => (i, .int .u8)), insts := [],
-      term := .ret (.imm .u8 0) }], sites := [] }
+      term := .ret (if n == 0 then .imm .u8 1 else .reg (n - 1)) }], sites := [] }
 
+/-- A well-formed chain of `n` blocks connected by branches with block parameters and instructions,
+exercising `blockOffset`, `instOffset`, `incomingBuckets`, and `LLVM.edgeBuckets`. -/
 private def manyBlocks (n rep : Nat) : Program :=
-  { blocks := (List.range n).map (fun _ =>
-      { params := [], insts := [], term := .ret (.imm .u8 (Int.ofNat (rep % 256))) }), sites := [] }
+  let salt : Int := Int.ofNat (rep % 128)
+  { blocks := (List.range n).map (fun j =>
+      let prev : Operand := if j == 0 then .imm .u8 salt else .reg (2 * j)
+      let rhs : Operand := .imm .u8 (if j == 0 then 1 else 0)
+      { params := if j == 0 then [] else [(2 * j, .int .u8)]
+        insts := [.bin .add .u8 (2 * j + 1) prev rhs]
+        term := if j + 1 < n then .br (j + 1) [.reg (2 * j + 1)] else .ret (.reg (2 * j + 1)) })
+    sites := [] }
 
 private def backendFamilies : List (String × (Nat → Nat → Program)) :=
   [("wide_phi", widePhi), ("sparse_registers", fun n rep => registers n rep 1000000000000),
    ("dense_registers", fun n rep => registers n rep 1), ("many_blocks", manyBlocks)]
+
+private def allFamilies : List (String × (Nat → Nat → Program)) :=
+  ("scaled", scaled) :: backendFamilies
 
 private def instructions (p : Program) : List Inst := p.blocks.flatMap (·.insts)
 
@@ -92,17 +114,16 @@ private def terminatorDigest : LeanCompilerBackend.Verified.Source.Terminator �
   | .branch _ yes no => yes.toUInt64 + no.toUInt64 + 3
 
 private def blockDigest (b : LeanCompilerBackend.Verified.Source.Block) : UInt64 :=
-  b.instructions.size.toUInt64 +
-    b.phis.foldl (fun n phi => n + phi.incoming.size.toUInt64) 0 +
-    terminatorDigest b.terminator
+  let h := mix64 b.instructions.size.toUInt64 (terminatorDigest b.terminator)
+  b.phis.foldl (fun acc phi => mix64 acc (phi.incoming.size.toUInt64 + phi.destination.toUInt64)) h
 
 /-- Linear structural forcing: every block, phi arm, instruction count and terminator is visited
 using fixed-width 64-bit wrapping arithmetic (`UInt64`), with no `repr`, no string construction and
 no unbounded `Nat` growth. -/
 private def forceEmit : Except String (LeanCompilerBackend.Verified.Source.Function × SiteTable) → UInt64
   | .ok (f, sites) =>
-    f.blocks.foldl (fun n b => mix64 n (blockDigest b))
-      (f.valueWidths.size.toUInt64 + sites.length.toUInt64)
+    let init := mix64 14695981039346656037 (f.valueWidths.size.toUInt64 + sites.length.toUInt64)
+    f.blocks.foldl (fun n b => mix64 n (blockDigest b)) init
   | .error msg => msg.utf8ByteSize.toUInt64
 
 private def forceString (s : String) : UInt64 :=
@@ -158,6 +179,15 @@ private def measureOne (rep k : Nat) (t : LCB.Target) (p : Program) (plant : Opt
       | .error msg => IO.eprintln s!"scaled {k}: LCB assemble: {msg}"; return false
       | .ok _ => return true
 
+private def measureBackendOne (rep k : Nat) (p : Program) : IO Bool := do
+  let llvm ← timedPure (fun _ => LLVM.module (opaqueIdentity p)) forceString
+  sample rep k "llvm_module" llvm
+  let emitted ← timedPure (fun _ => LCB.emit (opaqueIdentity p)) forceEmit
+  sample rep k "lcb_emit" emitted
+  match emitted.1 with
+  | .error msg => IO.eprintln s!"backend family {k}: LCB emit: {msg}"; return false
+  | .ok _ => return true
+
 private def validate (k : Nat) (p : Program) : IO Bool := do
   unless wf p do IO.eprintln s!"scaled {k}: not well formed"; return false
   unless run p (k + 2) == .exited 1 do
@@ -179,37 +209,49 @@ private def runMeasurement (k0 repetitions : Nat) (targetName : String) (plant :
   return 0
 
 /-- PR coverage is deterministic correctness/shape coverage, not a timing qualification or a
-claim about algorithmic work. The production stages execute twice and must agree exactly. -/
+claim about algorithmic work. Every family is checked for BIR well-formedness, evaluator outcome,
+LCB body evaluation, repeated emission and LLVM rendering determinism, sparse/dense canonical
+numbering equivalence, and in-process assembly at sizes 1, 10 and 100, followed by deep
+instruction, block and wide-phi probes. -/
 private def checkFamilies (depth : Nat) : IO UInt32 := do
   let some target := LCB.Target.ofName "x86_64-linux" | return 2
-  for k in [1, 10, 100] do
-    unless ← validate k (scaled k 0) do return 1
-  for (family, make) in backendFamilies do
+  for (family, make) in allFamilies do
     for n in [1, 10, 100] do
       let p := make n 0
+      unless wf p do
+        IO.eprintln s!"FAIL scaling PR: {family} {n}: not well formed"; return 1
+      unless run p (2 * n + 4) == .exited 1 do
+        IO.eprintln s!"FAIL scaling PR: {family} {n}: wrong evaluator result {repr (run p (2 * n + 4))}"; return 1
       let first := LCB.emit p
       match first with
       | .error msg => IO.eprintln s!"FAIL scaling PR: {family} {n}: {msg}"; return 1
       | .ok (f, _) =>
-        let expected := if family == "sparse_registers" || family == "dense_registers" then 1 else 0
-        unless run p (n + 2) == .exited expected do
-          IO.eprintln s!"FAIL scaling PR: {family}: wrong evaluator result"; return 1
         unless f.blocks.size == p.blocks.length do
-          IO.eprintln s!"FAIL scaling PR: {family}: block count"; return 1
+          IO.eprintln s!"FAIL scaling PR: {family} {n}: block count"; return 1
+        unless LCB.evalBody f (20 * n + 100) == encode (.exited 1) do
+          IO.eprintln s!"FAIL scaling PR: {family} {n}: LCB evaluator mismatch"; return 1
         unless reprStr first == reprStr (LCB.emit (opaqueIdentity p)) &&
             LLVM.module p == LLVM.module (opaqueIdentity p) do
-          IO.eprintln s!"FAIL scaling PR: {family}: repeated output differs"; return 1
+          IO.eprintln s!"FAIL scaling PR: {family} {n}: repeated output differs"; return 1
         match LCB.assemble target f with
-        | .error msg => IO.eprintln s!"FAIL scaling PR: {family}: assembly: {msg}"; return 1
+        | .error msg => IO.eprintln s!"FAIL scaling PR: {family} {n}: assembly: {msg}"; return 1
         | .ok asm =>
-          unless !asm.isEmpty do IO.eprintln s!"FAIL scaling PR: {family}: empty assembly"; return 1
+          unless !asm.isEmpty do IO.eprintln s!"FAIL scaling PR: {family} {n}: empty assembly"; return 1
         IO.println s!"coverage\t{family}\t{n}\tblocks={f.blocks.size}\tdigest={forceEmit first}"
-  for (family, p) in [("deep_instructions", registers depth 0 1000000000000),
-                      ("deep_blocks", manyBlocks depth 0)] do
+  for n in [1, 10, 100, 1000] do
+    unless reprStr (LCB.emit (registers n 0 1000000000000)) == reprStr (LCB.emit (registers n 0 1)) do
+      IO.eprintln s!"FAIL scaling PR: sparse/dense register canonical numbering differs at {n}"; return 1
+  let phiDepth := if depth ≥ 10000 then 10000 else 1000
+  for (family, probeDepth, p) in [("wide_phi_depth", phiDepth, widePhi phiDepth 0),
+                                  ("deep_instructions", depth, registers depth 0 1000000000000),
+                                  ("deep_dense_registers", depth, registers depth 0 1),
+                                  ("deep_blocks", depth, manyBlocks depth 0)] do
     match LCB.emit p with
     | .error msg => IO.eprintln s!"FAIL scaling depth: {family}: {msg}"; return 1
     | .ok result =>
-      IO.println s!"depth\t{family}\t{depth}\tdigest={forceEmit (.ok result)}\tllvm={forceString (LLVM.module p)}"
+      let llvmLen := forceString (LLVM.module p)
+      unless llvmLen > 0 do IO.eprintln s!"FAIL scaling depth: {family}: empty LLVM module"; return 1
+      IO.println s!"depth\t{family}\t{probeDepth}\tdigest={forceEmit (.ok result)}\tllvm={llvmLen}"
   IO.println "PASS scaling deterministic family coverage (no wall-clock qualification)"
   return 0
 
@@ -219,11 +261,19 @@ private def measureFamily (family : String) (k0 repetitions : Nat) (targetName :
   let some target := LCB.Target.ofName targetName
     | IO.eprintln s!"unknown target {targetName}"; return 2
   if k0 == 0 || repetitions == 0 then return 2
+  let base := make k0 0
+  unless wf base && run base (2 * k0 + 4) == .exited 1 do
+    IO.eprintln s!"{family} {k0}: not well formed or unexpected BIR run outcome"; return 1
+  match LCB.emit base with
+  | .error msg => IO.eprintln s!"{family} {k0}: LCB emit: {msg}"; return 1
+  | .ok (f, _) =>
+    if let .error msg := LCB.assemble target f then
+      IO.eprintln s!"{family} {k0}: LCB assemble: {msg}"; return 1
   for rep in List.range repetitions do
     -- Rotate and reverse the size order to avoid a fixed correlation with warmup/drift.
     let sizes := if rep % 2 == 0 then [k0, 10*k0, 100*k0] else [100*k0, 10*k0, k0]
     for k in sizes do
-      unless ← measureOne rep k target (make k rep) none do return 1
+      unless ← measureBackendOne rep k (make k rep) do return 1
   return 0
 
 private def emitInputs (k : Nat) (dir : System.FilePath) (targetName : String) : IO UInt32 := do
@@ -267,5 +317,5 @@ def main (args : List String) : IO UInt32 := do
       IO.eprintln "plants require --allow-planted-failure --plant linear|quadratic"; return 2
     | _, _, _ => IO.eprintln "measure: K0 and REPETITIONS must be naturals"; return 2
   | _ =>
-    IO.eprintln "usage: scaling.lean emit K DIR TARGET | measure K0 REPETITIONS TARGET [--allow-planted-failure --plant linear|quadratic]"
+    IO.eprintln "usage: scaling.lean check-small | check-depth | measure-family FAMILY K0 REPETITIONS TARGET | emit K DIR TARGET | measure K0 REPETITIONS TARGET [--allow-planted-failure --plant linear|quadratic]"
     return 2

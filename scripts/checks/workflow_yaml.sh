@@ -126,6 +126,8 @@ def check(workflow_path):
     scaling = jobs["scaling"]
     require(scaling.get("runs-on") == EXPECTED_RUNS_ON,
             f"scaling does not route only to concrete-ci-2 outside pull_request: {scaling.get('runs-on')}")
+    require(scaling.get("timeout-minutes") == 60,
+            f"scaling timeout-minutes={scaling.get('timeout-minutes')}, expected 60 for cold hosted PR builds")
     steps = scaling["steps"]
     guards = [step for step in steps if step.get("name") == GUARD_NAME]
     require(len(guards) == 1, f"scaling must contain exactly one {GUARD_NAME!r} step")
@@ -149,15 +151,20 @@ def check(workflow_path):
                     f"{label}: refusal does not explain concrete-ci-2/self-hosted/qualification")
     require(not evaluate_condition(condition, {"runner": {"environment": "github-hosted"},
                 "github": {"event_name": "pull_request"}}), "PR coverage is intentionally refused")
-    pr = [st for st in steps if "check-small" in st.get("run", "")]
-    require(len(pr) == 1 and pr[0].get("if") == "github.event_name == 'pull_request'",
-            "missing deterministic PR family coverage")
+    pr = [st for st in steps if st.get("if") == "github.event_name == 'pull_request'"]
+    require(len(pr) == 1, "missing deterministic PR family coverage")
+    pr_run = pr[0].get("run", "")
+    require("scripts/checks/lib/bounded.sh" in pr_run and "SCALING_TIER=pr" in pr_run
+            and "scripts/checks/compiler/scaling.sh" in pr_run and "lean --run" not in pr_run,
+            "PR scaling step must invoke scripts/checks/compiler/scaling.sh with SCALING_TIER=pr (so Concrete is built before lean --run)")
     nix = [step for step in steps if step.get("uses") == "cachix/install-nix-action@v31"]
     require(len(nix) == 1 and nix[0].get("if") == "runner.environment != 'self-hosted'",
             "scaling Nix installation is not GitHub-hosted-only")
-    run_step = next(step for step in steps if "scaling.sh" in step.get("run", ""))
-    require(run_step.get("if") == "github.event_name != 'pull_request'",
+    heavy = [step for step in steps if "scripts/checks/compiler/scaling.sh" in step.get("run", "")
+             and step.get("if") != "github.event_name == 'pull_request'"]
+    require(len(heavy) == 1 and heavy[0].get("if") == "github.event_name != 'pull_request'",
             "heavy scaling executes pull_request code")
+    run_step = heavy[0]
     env = run_step.get("env") or {}
     require(env.get("CONCRETE_SCALING_GITHUB_REPOSITORY") == "${{ github.repository }}",
             "scaling does not record github.repository")
@@ -171,6 +178,8 @@ def check(workflow_path):
             cmd = st.get("run", "")
             require("command timeout " not in cmd,
                     f"{job_name} uses GNU timeout instead of scripts/checks/lib/bounded.sh: {cmd}")
+            require("lean --run" not in cmd,
+                    f"{job_name} invokes lean --run directly in workflow YAML without building Concrete first: {cmd}")
         require(any("scripts/checks/lib/bounded.sh" in st.get("run", "") for st in job_steps),
                 f"{job_name} does not invoke scripts/checks/lib/bounded.sh")
 
@@ -208,6 +217,10 @@ elif kind == "moved":
     wf["jobs"]["scaling"]["steps"] = [steps[1], steps[0], *steps[2:]]
 elif kind == "gnu-timeout":
     wf["jobs"]["determinism"]["steps"][-1]["run"] = "nix develop --command timeout 3000 bash scripts/checks/compiler/determinism.sh"
+elif kind == "pr-unbuilt-lean":
+    for st in steps:
+        if st.get("if") == "github.event_name == 'pull_request'":
+            st["run"] = "nix develop --command bash scripts/checks/lib/bounded.sh 120 lake env lean --run scripts/checks/compiler/scaling.lean check-small"
 Path(dst).write_text(yaml.safe_dump(wf, sort_keys=False), encoding="utf-8")
 PY
   python3 -I "$GATE_TMP/check_scaling_ci.py" "$mutated" >"$out" 2>&1 || rc=$?
@@ -224,6 +237,7 @@ mutation_control condition-inverted inverted "guard enabled="
 mutation_control guard-removed removed "exactly one"
 mutation_control guard-after-checkout moved "before checkout"
 mutation_control gnu-timeout gnu-timeout "uses GNU timeout"
+mutation_control pr-unbuilt-lean pr-unbuilt-lean "PR scaling step must invoke scripts/checks/compiler/scaling.sh with SCALING_TIER=pr"
 
 echo ""
 echo "WORKFLOW-YAML: PASS=$PASS  FAIL=$FAIL"

@@ -7,6 +7,7 @@ import sys
 from collections import defaultdict
 
 CORE = ("llvm_module", "lcb_emit", "lcb_assemble")
+BACKEND = ("llvm_module", "lcb_emit")
 
 
 def exponent(small, large):
@@ -24,7 +25,7 @@ def main():
     parser.add_argument("--max-exponent", type=float, required=True)
     parser.add_argument("--min-stage-ns", type=int, required=True)
     parser.add_argument("--min-native-ns", type=int, required=True)
-    parser.add_argument("--mode", choices=["normal", "in-process", "linear", "quadratic"],
+    parser.add_argument("--mode", choices=["normal", "in-process", "backend", "linear", "quadratic"],
                         default="normal")
     args = parser.parse_args()
     if (args.k0 <= 0 or args.repetitions <= 0 or args.max_exponent <= 0
@@ -55,7 +56,8 @@ def main():
     if args.mode in ("linear", "quadratic"):
         expected_inventory = {"plant_" + args.mode}
     else:
-        raw_expected = set(CORE)
+        stage_group = BACKEND if args.mode == "backend" else CORE
+        raw_expected = set(stage_group)
         if args.mode == "normal":
             raw_expected.add("native")
         if set(samples) != raw_expected:
@@ -66,10 +68,10 @@ def main():
         for stage, values in samples.items():
             for key, nanos in values.items():
                 per_rep[key][stage] = nanos
-        if args.mode in ("normal", "in-process"):
+        if args.mode in ("normal", "in-process", "backend"):
             samples["in_process_total"] = {
-                key: sum(stages[stage] for stage in CORE)
-                for key, stages in per_rep.items() if all(stage in stages for stage in CORE)
+                key: sum(stages[stage] for stage in stage_group)
+                for key, stages in per_rep.items() if all(stage in stages for stage in stage_group)
             }
         if args.mode == "normal":
             samples["total"] = {
@@ -77,7 +79,7 @@ def main():
                 for key, stages in per_rep.items()
                 if "native" in stages and key in samples["in_process_total"]
             }
-        expected_inventory = set(CORE) | {"in_process_total"}
+        expected_inventory = set(stage_group) | {"in_process_total"}
         if args.mode == "normal":
             expected_inventory.update(("native", "total"))
     if set(samples) != expected_inventory:
@@ -116,7 +118,7 @@ def main():
         upper = exponent(minima[1], large_low)
         lines.append("{}\t{:.3f}\t{:.3f}\t{:.3f}\t{:.3f}\t{:.3f}\t{:.3f}".format(
             stage, *(nanos / 1_000_000 for nanos in minima), *exponents, upper))
-        if args.mode in ("normal", "in-process") and upper > args.max_exponent and exponents[1] <= args.max_exponent:
+        if args.mode in ("normal", "in-process", "backend", "linear") and upper > args.max_exponent and exponents[1] <= args.max_exponent:
             failures.append(f"FAIL scaling: stage {stage} noise envelope exponent = {upper:.3f} "
                             f"exceeds {args.max_exponent:.3f}; measurement is not noise-robust")
         floor = args.min_native_ns if stage == "native" else args.min_stage_ns
