@@ -161,13 +161,21 @@ land_url_redact() {
   esac
   printf '%s\n' "$1"
 }
-# land_url_bad url: print why <url> is not a URL of one of the project's repositories and return 1;
-# 0 for such a URL and for a local one. The URL is first expanded as git would (url.*.insteadOf,
-# through `git ls-remote --get-url`, which connects nowhere), as `git remote get-url` does for a remote.
-land_url_bad() {
-  local target u
+# land_url_expand url: <url> as git will use it, url.*.insteadOf applied once (`git ls-remote
+# --get-url`, which connects nowhere), for a URL taken as typed or as stored in remote.<r>.url.
+# Git applies the rewrite exactly once, so a URL git already resolved (`git remote get-url`, the
+# pre-push hook's $2) must not pass through here again: reciprocal rewrites would turn it back.
+land_url_expand() {
+  local u
   u="$(git ls-remote --get-url "$1" 2>/dev/null)" && [ -n "$u" ] || u="$1"
-  target="$(land_url_target "$u")" || return 0
+  printf '%s\n' "$u"
+}
+# land_url_bad url: print why <url> is not a URL of one of the project's repositories and return 1;
+# 0 for such a URL and for a local one. <url> is the URL git connects to, already rewritten (the
+# hook's $2; land_url_expand for a raw one); it is not expanded again.
+land_url_bad() {
+  local target
+  target="$(land_url_target "$1")" || return 0
   if [ "${target%% *}" != github.com ] || ! land_known_repo "${target#* }"; then
     echo "$(land_url_redact "$1") is not one of the project's repositories ($LAND_REPOSITORIES on github.com): it points at another repository"
     return 1

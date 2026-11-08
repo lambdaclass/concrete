@@ -452,7 +452,9 @@ out="$(HOME="$IB/home2" PATH="$IB/nonet:$PATH" INSTALL_ORIGIN_URL='https://x-acc
 # The installer checks every URL before it clones or fetches: a foreign origin or mirror URL, and an
 # existing clone whose remote is another repository, are refused with no clone and no fetch.
 printf '#!/bin/sh\nfor a in "$@"; do case "$a" in fetch|push|ls-remote|clone) case " $* " in *" --get-url "*) ;; *) echo "$*" >> "%s" ;; esac; break ;; esac; done\nexec "%s" "$@"\n' "$IB/inst.log" "$(command -v git)" > "$IB/nonet/git"; chmod +x "$IB/nonet/git"
-for env in "INSTALL_ORIGIN_URL=https://github.com/someone/else.git" "INSTALL_ORIGIN_URL=$IB/origin.git INSTALL_MIRROR_URL=https://attacker.example/lambdaclass/concrete.git"; do
+# The third: a raw URL that url.*.insteadOf rewrites (as git clone would) to another repository.
+for env in "INSTALL_ORIGIN_URL=https://github.com/someone/else.git" "INSTALL_ORIGIN_URL=$IB/origin.git INSTALL_MIRROR_URL=https://attacker.example/lambdaclass/concrete.git" \
+           "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=url.https://github.com/someone/else.git.insteadOf GIT_CONFIG_VALUE_0=https://github.com/lambdaclass/concrete.git INSTALL_ORIGIN_URL=https://github.com/lambdaclass/concrete.git INSTALL_MIRROR_URL=$IB/origin.git"; do
   rm -rf "$IB/home3"; mkdir -p "$IB/home3"; : > "$IB/inst.log"
   out="$(env HOME="$IB/home3" PATH="$IB/nonet:$PATH" $env bash "$ROOT_DIR/scripts/land/install-bot.sh" 2>&1)"; rc=$?
   [ "$rc" != 0 ] && has "$out" "refusing" && has "$out" "not one of the project's repositories" && [ ! -s "$IB/inst.log" ] && [ ! -e "$IB/home3/concrete-bot" ] \

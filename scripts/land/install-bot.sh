@@ -39,13 +39,14 @@ say() { echo "install-bot: $*"; }
 # URLs on one line, each with a scheme URL's userinfo replaced by *** (land_url_redact, lib.sh).
 redact() { local u; while IFS= read -r u; do printf '%s ' "$(land_url_redact "$u")"; done; }
 [ "$(id -un)" = dev ] || say "WARNING: running as $(id -un), not dev"
-ORIGIN_URL="${INSTALL_ORIGIN_URL:-$(git -C "$HOME/concrete2" remote get-url origin 2>/dev/null || echo git@github.com:unbalancedparentheses/concrete2.git)}"
+# Raw URLs (config --get, not get-url): git clone and git remote apply url.*.insteadOf to them once.
+ORIGIN_URL="${INSTALL_ORIGIN_URL:-$(git -C "$HOME/concrete2" config --get remote.origin.url 2>/dev/null || echo git@github.com:unbalancedparentheses/concrete2.git)}"
 MIRROR_URL="${INSTALL_MIRROR_URL:-git@github.com:lambdaclass/concrete.git}"
 
-# 1. the dedicated clone. Every URL is one of the project's repositories (lib.sh) before anything is
-# cloned or fetched.
+# 1. the dedicated clone. Every URL, rewritten as git clone will rewrite it, is one of the project's
+# repositories (lib.sh) before anything is cloned or fetched.
 for u in "$ORIGIN_URL" "$MIRROR_URL"; do
-  why="$(land_url_bad "$u")" || { say "refusing: $why"; exit 1; }
+  why="$(land_url_bad "$(land_url_expand "$u")")" || { say "refusing: $why"; exit 1; }
 done
 if [ ! -d "$CLONE/.git" ]; then
   say "cloning $(echo "$ORIGIN_URL" | redact)into $CLONE"

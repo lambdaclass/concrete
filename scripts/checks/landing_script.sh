@@ -650,6 +650,9 @@ refused_offline "land refuses a mirror that is another repository, before pushin
 # git's own ssh command decides where an ssh URL goes: the guard asks it. An override that changes the
 # host is refused; one that only adds options passes; one that is not ssh cannot be asked and is refused.
 ovr_ok=1
+recip(){ GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=url.https://attacker.example/.insteadOf GIT_CONFIG_VALUE_0=https://github.com/ \
+  GIT_CONFIG_KEY_1=url.https://github.com/.insteadOf GIT_CONFIG_VALUE_1=https://attacker.example/ "$@"; }
+git init -q "$TMP/recip" && git -C "$TMP/recip" remote add origin https://github.com/lambdaclass/concrete.git
 while read -r want how url; do
   ( . "$ROOT_DIR/scripts/land/lib.sh"; case "$how" in
       plain) land_url_bad "$url" ;;
@@ -658,7 +661,13 @@ while read -r want how url; do
       cmd-other) GIT_SSH_COMMAND='plink -batch' land_url_bad "$url" ;;
       prog) GIT_SSH=/usr/local/bin/ssh-wrapper land_url_bad "$url" ;;
       config-over-prog) GIT_SSH=ssh GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.sshCommand GIT_CONFIG_VALUE_0='ssh -o HostName=attacker.example' land_url_bad "$url" ;;
-      insteadof) GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=url.https://github.com/someone/else.git.insteadOf GIT_CONFIG_VALUE_0=https://github.com/lambdaclass/concrete.git land_url_bad "$url" ;;
+      insteadof) export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=url.https://github.com/someone/else.git.insteadOf GIT_CONFIG_VALUE_0=https://github.com/lambdaclass/concrete.git
+                 land_url_bad "$(land_url_expand "$url")" ;;
+      # Reciprocal rewrites: git resolves the GitHub URL to attacker.example once; checking the
+      # resolved URL must not rewrite it back (land_url_bad never expands; get-url already did).
+      recip-resolved) recip land_url_bad "$url" ;;
+      recip-remote) cd "$TMP/recip" && recip land_remote_bad origin ;;
+      remote) cd "$TMP/recip" && land_remote_bad origin ;;
       config) GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.sshCommand GIT_CONFIG_VALUE_0='ssh -o HostName=attacker.example' land_url_bad "$url" ;;
     esac ) >/dev/null; got=$?
   [ "$got" = "$want" ] || { ovr_ok=0; echo "      $how $url: exit $got, want $want"; }
@@ -672,8 +681,12 @@ done <<'OVR'
 0 cmd-host https://github.com/lambdaclass/concrete.git
 1 config-over-prog git@github.com:lambdaclass/concrete.git
 1 insteadof https://github.com/lambdaclass/concrete.git
+1 recip-resolved https://attacker.example/lambdaclass/concrete.git
+1 recip-remote -
+0 remote -
+0 plain https://github.com/lambdaclass/concrete.git
 OVR
-[ "$ovr_ok" = 1 ] && ok "the guard resolves URLs as git does: its own ssh command (GIT_SSH_COMMAND, core.sshCommand, GIT_SSH, in that order) and url.insteadOf" || no "the guard ignored an ssh override"
+[ "$ovr_ok" = 1 ] && ok "the guard resolves URLs as git does: its own ssh command (GIT_SSH_COMMAND, core.sshCommand, GIT_SSH, in that order) and url.insteadOf, applied once" || no "the guard ignored an ssh override"
 # The URL table, read through the same function: both project repositories pass in every network
 # form while the migration is under way, anything else fails, local paths pass and leave LAND_REPO free.
 # ssh -G is stubbed: github-lambdaclass and github_work are aliases for github.com, every other name is itself.
