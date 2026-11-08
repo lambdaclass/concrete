@@ -18,6 +18,7 @@
 #   cap_out: copy stdin to stdout, failing above 1 MiB: every command output a gate captures
 #     into a variable goes through it, so no producer can grow the gate's shell (which may run
 #     with no address-space cap, see SLICE0_GATE_MEM_GB) without bound.
+export LC_ALL=C
 root=$(pwd)
 work=$(mktemp -d)
 # On every exit, the bounded-run summary (recovered and INCOMPLETE runs, whatever a caller did

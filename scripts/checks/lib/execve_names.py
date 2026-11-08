@@ -2,52 +2,61 @@
 """Print basenames of successful execve calls in a strace -f execve log."""
 
 import os
+import json
 import re
 import sys
 
-SUCCESS = re.compile(r'execve\("((?:[^"\\]|\\.)*)".*\)\s+=\s+0\s*$')
-UNFINISHED = re.compile(r'execve\("((?:[^"\\]|\\.)*)".*\)\s+<unfinished \.\.\.>\s*$')
-RESUMED = re.compile(r'<\.\.\. execve resumed>.*=\s+(-?[0-9]+)\s*$')
-PID = re.compile(r'^\s*([0-9]+)\s+')
+CALL = re.compile(r'execve(at)?\((?:[^," ]+,\s*)?"((?:[^"\\]|\\.)*)"')
+RESULT = re.compile(r'\)\s*=\s*(-?[0-9]+)(?:\s|$)')
+RESUMED = re.compile(r'<\.\.\. execve(at)? resumed>')
+PID = re.compile(r'^\s*(?:\[pid\s+)?([0-9]+)\]?\s+')
 
 
-def parse(lines):
-    names = set()
-    pending = {}
+def parse(lines, paths=False):
+    """Keep syscall state per trace; admit only completed successful executions.
+
+    Relative execveat targets cannot be resolved without fd/cwd tracking. Reject
+    them explicitly rather than guessing an identity. Absolute execveat is supported.
+    """
+    found, pending = set(), {}
     for line_number, line in enumerate(lines, 1):
-        line = line.rstrip("\n")
         pid_match = PID.match(line)
-        pid = pid_match.group(1) if pid_match else None
-        match = SUCCESS.search(line)
-        if match:
-            names.add(os.path.basename(match.group(1)))
+        pid = pid_match.group(1) if pid_match else "main"
+        call, resumed = CALL.search(line), RESUMED.search(line)
+        if call:
+            if pid in pending:
+                raise ValueError(f"line {line_number}: overlapping exec calls")
+            path = json.loads('"' + call.group(2) + '"')
+            if "<unfinished ...>" in line:
+                pending[pid] = path
+                continue
+        elif resumed:
+            if pid not in pending:
+                raise ValueError(f"line {line_number}: resumed exec has no unfinished call")
+            path = pending.pop(pid)
+        else:
+            if "execve" in line:
+                raise ValueError(f"line {line_number}: unrecognised exec syscall")
             continue
-        match = UNFINISHED.search(line)
-        if match:
-            if pid is None or pid in pending:
-                raise ValueError(f"line {line_number}: ambiguous unfinished execve")
-            pending[pid] = match.group(1)
-            continue
-        match = RESUMED.search(line)
-        if match:
-            if pid is None or pid not in pending:
-                raise ValueError(f"line {line_number}: resumed execve has no unfinished call")
-            if int(match.group(1)) == 0:
-                names.add(os.path.basename(pending[pid]))
-            del pending[pid]
-            continue
-        if "execve" in line and re.search(r"=\s+0\s*$", line):
-            raise ValueError(f"line {line_number}: unrecognised successful execve")
+        result = RESULT.search(line)
+        if not result:
+            raise ValueError(f"line {line_number}: missing exec result")
+        if int(result.group(1)) == 0:
+            if not os.path.isabs(path):
+                raise ValueError(f"line {line_number}: unresolved relative executable {path!r}")
+            found.add(path if paths else os.path.basename(path))
     if pending:
-        raise ValueError(f"unfinished execve calls have no result: {', '.join(sorted(pending))}")
-    return sorted(names)
+        raise ValueError(f"unfinished exec calls have no result: {', '.join(sorted(pending))}")
+    return sorted(found)
 
 
 def main():
+    paths = "--paths" in sys.argv
+    if paths: sys.argv.remove("--paths")
     if len(sys.argv) != 2:
         raise ValueError("usage: execve_names.py LOG")
     with open(sys.argv[1], encoding="utf-8", errors="replace") as log:
-        for name in parse(log):
+        for name in parse(log, paths=paths):
             print(name)
 
 

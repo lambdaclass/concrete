@@ -16,6 +16,7 @@
 # usage: slice0_trusted_base.sh [update]. Run inside the nix devshell, from the repository root;
 # `update` rewrites the golden (review the diff before committing it).
 set -euo pipefail
+export LC_ALL=C
 # shellcheck source=scripts/checks/lib/slice0_common.sh
 source scripts/checks/lib/slice0_common.sh
 golden=tests/golden/slice0_trusted_base.txt
@@ -81,12 +82,12 @@ trace_emit() { # trace_emit NAME DIR EXPECT...
   local name=$1 d=$2
   shift 2
   mkdir -p "$d"
-  bounded "$emit_secs" strace -f -qq -s 4096 -e trace=execve -o "$d/emit.execve" \
+  bounded "$emit_secs" strace -f -qq -s 4096 -e trace=execve,execveat -o "$d/emit.execve" \
     lake env lean --run scripts/checks/compiler/slice0_bir.lean emit "$name" "$d" "$target" "$@"
 }
 
 trace_native() { # trace_native DIR HELPER
-  bounded "$native_secs" strace -f -qq -s 4096 -e trace=execve -o "$1/native.execve" \
+  bounded "$native_secs" strace -f -qq -s 4096 -e trace=execve,execveat -o "$1/native.execve" \
     bash "$2" "$1" "$lcb"
 }
 
@@ -107,7 +108,7 @@ trace_all() {
 }
 
 trace_build() {
-  bounded 1800 strace -f -qq -s 4096 -e trace=execve -o "$work/build.execve" \
+  bounded 1800 strace -f -qq -s 4096 -e trace=execve,execveat -o "$work/build.execve" \
     lake build Concrete lean-compiler-backend/lcb
 }
 
@@ -454,9 +455,10 @@ if [ "$(uname -s)" = Linux ]; then
   else
     cat >"$work/ctl/split-execve.log" <<'EOF'
 100 execve("/nix/store/lean/bin/lean", ["lean"], 0x0) = 0
-101 execve("/usr/bin/objcopy", ["objcopy"], 0x0) <unfinished ...>
+101 execve("/usr/bin/objcopy", ["objcopy"], 0x0 <unfinished ...>
 101 <... execve resumed>) = 0
-102 execve("/missing/objcopy", ["objcopy"], 0x0) = -1 ENOENT (No such file or directory)
+102 execve("/missing/objcopy", ["objcopy"], 0x0 <unfinished ...>
+102 <... execve resumed>) = -1 ENOENT (No such file or directory)
 EOF
     if check_tools "$work/ctl/split-execve.log" "$work/pipeline-tools" >"$work/ctl/split-execve.out" 2>&1; then
       echo "FAIL control: the parser accepts a split successful execve of objcopy"; fail=1
