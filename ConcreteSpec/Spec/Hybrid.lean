@@ -76,10 +76,11 @@ structure Range where
   align : Nat
   deriving Repr
 
-/-- Occupied byte intervals are disjoint when they are in different spaces or one interval
+/-- Occupied byte intervals are disjoint when either is empty, they are in different spaces,
+or one interval
 ends before the other starts. Endpoints are excluded, so adjacent ranges are disjoint. -/
 def Range.Disjoint (r s : Range) : Prop :=
-  r.ptr.space ≠ s.ptr.space ∨ r.ptr.addr + r.extent ≤ s.ptr.addr ∨
+  r.extent = 0 ∨ s.extent = 0 ∨ r.ptr.space ≠ s.ptr.space ∨ r.ptr.addr + r.extent ≤ s.ptr.addr ∨
     s.ptr.addr + s.extent ≤ r.ptr.addr
 
 /-- A single authoritative storage form. -/

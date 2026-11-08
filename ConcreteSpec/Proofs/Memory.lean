@@ -101,19 +101,19 @@ theorem decodeBool_valid (bs : List MByte) (b : Bool) (h : decodeBool bs = some 
   | [] | .uninit :: _ | .init _ _ :: _ :: _ => cases h
 
 theorem decodePtr_encodePtr (tgt : Target) (ht : tgt.WellFormed) (p : Ptr) (hpv : p.Valid tgt) :
-    decodePtr tgt (encodePtr tgt p) = some p := by
+    decodePtr tgt (encodePtr tgt p hpv) = some p := by
   have hp : 0 < tgt.ptrSize := by have := ht.1; have := ht.2.1; omega
   have hl : (ordered tgt.byteOrder (leBytes tgt.ptrSize p.addr)).length > 0 := by simpa using hp
   cases hs : ordered tgt.byteOrder (leBytes tgt.ptrSize p.addr) with
   | nil => simp [hs] at hl
   | cons v vs =>
-    have he : encodePtr tgt p = .init v (some (p, 0)) ::
+    have he : encodePtr tgt p hpv = .init v (some (p, 0)) ::
         (vs.zipIdx 1).map (fun (v, i) => .init v (some (p, i))) := by
-      simp [encodePtr, hpv, hs, List.zipIdx_cons]
+      simp [encodePtr, hs, List.zipIdx_cons]
     rw [he]
     simp only [decodePtr]
     rw [← he]
-    simp
+    simp [hpv]
 
 @[simp] theorem block_modify (m : Memory) (b c : MemBlockId) (f : Block → Block) :
     (m.modify b f).block c = if c = b then (m.block b).map f else m.block c := by
@@ -497,9 +497,20 @@ theorem access_valid (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat)
         next hv => exact hv.2.2.2.2.2
         next => cases h
 
-/-- An invalid pointer has no byte encoding. -/
-theorem encodePtr_invalid (tgt : Target) (p : Ptr) (h : ¬ p.Valid tgt) :
-    encodePtr tgt p = [] := by simp [encodePtr, h]
+/-- Every decoded whole stored pointer is target-valid. Other fragment patterns remain
+without pointer meaning in this draft. -/
+theorem decodePtr_valid (tgt : Target) (bs : List MByte) (p : Ptr)
+    (h : decodePtr tgt bs = some p) : p.Valid tgt := by
+  match bs with
+  | .init _ (some (q, 0)) :: _ =>
+    simp only [decodePtr] at h
+    split at h
+    next hp =>
+      split at h
+      next => cases h; exact hp
+      next => cases h
+    next => cases h
+  | [] | .uninit :: _ | .init _ none :: _ | .init _ (some (_, Nat.succ _)) :: _ => cases h
 
 /-- Replacing a range reads back exactly that range. -/
 theorem splice_read (xs bs : List MByte) (off : Nat) (h : off ≤ xs.length) :

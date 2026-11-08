@@ -372,7 +372,9 @@ theorem rangesDisjoint_separated (tgt : Target) (st : State) (hw : st.WellFormed
     | int t => cases t <;> decide
     | bool => decide
     | unit => exact False.elim (hct hc')
-  rcases hd c d r s hc hq hcr hds with hspace | hbefore | hafter
+  rcases hd c d r s hc hq hcr hds with hempty | hempty | hspace | hbefore | hafter
+  · omega
+  · omega
   · exact hspace (hrspace.trans hsspace.symm)
   · omega
   · omega

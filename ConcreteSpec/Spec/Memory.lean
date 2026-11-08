@@ -284,17 +284,16 @@ def decodeBool : List MByte → Option Bool
   | _ => none
 
 /-- The bytes of a stored pointer: its address in the profile's order and pointer width, each byte
-a fragment of the pointer. An address or space outside the target has no encoding. -/
-def encodePtr (tgt : Target) (p : Ptr) : List MByte :=
-  if p.Valid tgt then
-    ((ordered tgt.byteOrder (leBytes tgt.ptrSize p.addr)).zipIdx).map fun (v, i) => .init v (some (p, i))
-  else []
+a fragment of the pointer. A proof of target-relative validity is required to encode it. -/
+def encodePtr (tgt : Target) (p : Ptr) (_valid : p.Valid tgt) : List MByte :=
+  ((ordered tgt.byteOrder (leBytes tgt.ptrSize p.addr)).zipIdx).map fun (v, i) => .init v (some (p, i))
 
 /-- The pointer the bytes hold, when they are exactly one stored pointer's fragments, in order. Any
 other contents have no pointer meaning in this draft (see the module header). -/
 def decodePtr (tgt : Target) (bs : List MByte) : Option Ptr :=
   match bs with
-  | .init _ (some (p, 0)) :: _ => if bs = encodePtr tgt p then some p else none
+  | .init _ (some (p, 0)) :: _ =>
+    if hp : p.Valid tgt then if bs = encodePtr tgt p hp then some p else none else none
   | _ => none
 
 /-! ### Examples -/
@@ -302,10 +301,17 @@ def decodePtr (tgt : Target) (bs : List MByte) : Option Ptr :=
 /-- The target of the examples. -/
 abbrev tgt : Target := linuxX8664
 
+/-- A well-formed small profile used to check the address boundary. -/
+private def tinyTarget : Target :=
+  { tgt with addrBits := 8, ptrSize := 1, ptrAlign := 1, maxObject := 255 }
+
+example : tinyTarget.WellFormed := by decide
+
 /-- Refused: even a zero-byte access requires an address and space of the target. -/
-example : Memory.empty.access { tgt with addrBits := 8 } ⟨⟨0⟩, 256, none⟩ 0 1 = none ∧
+example : Memory.empty.access tinyTarget ⟨⟨0⟩, 256, none⟩ 0 1 = none ∧
     Memory.empty.access tgt ⟨⟨99⟩, 8, none⟩ 0 1 = none ∧
-    encodePtr { tgt with addrBits := 8 } ⟨⟨0⟩, 256, none⟩ = [] ∧
+    decodePtr tinyTarget
+      [.init 0 (some (⟨⟨0⟩, 256, none⟩, 0))] = none ∧
     (Memory.empty.alloc tgt ⟨99⟩ 4096 1 1).toOption = none := by decide
 
 /-- A `u16` `0x1234` is stored little-endian on the x86-64 profile, and reads back. -/
@@ -365,7 +371,9 @@ address, with no provenance. -/
 example : (do
     let (b, m) ← (Memory.empty.alloc tgt ⟨0⟩ 4096 16 8).toOption
     let p : Ptr := ⟨⟨0⟩, 4100, some b⟩
-    let m ← m.store tgt ⟨⟨0⟩, 4104, some b⟩ (encodePtr tgt p) 8
+    let m ← m.store tgt ⟨⟨0⟩, 4104, some b⟩ (encodePtr tgt p (by
+      change 4100 < 2 ^ 64 ∧ (⟨0⟩ : AddrSpace) ∈ [⟨0⟩]
+      decide)) 8
     let bs ← m.load tgt ⟨⟨0⟩, 4104, some b⟩ 8 8
     pure (decodePtr tgt bs == some p, decodeInt tgt .u64 bs)) = some (true, some 4100) := by
   decide
