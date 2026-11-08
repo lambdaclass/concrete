@@ -465,6 +465,30 @@ example : refusedReport.events = [] ∧
     reportObservation ⟨[]⟩ refusingAdapter contract () refusedReport refusedReportPermitted = none := by
   refine ⟨by decide, by decide, rfl⟩
 
+/-- Refused: the primitive request and its allowed answer are both present. Only the result
+binding fails. The exact requesting configuration is retained and a nonempty prior history is
+unchanged; failure cannot be explained by a missing oracle answer or a disallowed response. -/
+example : ∃ k : Exec.Answer Int Int Exec.Demo.DState → Option (Exec.Config refusingBindOps),
+    Exec.step (O := refusingBindOps) ⟨[]⟩ refusedRequest =
+      some (.request .log [3] Exec.Demo.s .init k) ∧
+    Exec.Demo.env [11] .log [3] Exec.Demo.s .init =
+      some ⟨some 3, .ok 0, .init⟩ ∧
+    refusingBindOps.allows .log [3] .init ⟨some 3, .ok 0, .init⟩ = true ∧
+    k ⟨some 3, .ok 0, .init⟩ = none ∧
+    Exec.runFrom (O := refusingBindOps) ⟨[]⟩ Exec.Demo.env 1 [11] refusedRequest = ⟨[11], .stuck refusedRequest⟩ := by
+  exact ⟨_, rfl, rfl, by decide, by decide, rfl⟩
+
+/-- Accepted: changing only the destination to the permitted local makes the continuation
+succeed. The same allowed answer is recorded after the same nonempty prior history. -/
+example : ∃ k : Exec.Answer Int Int Exec.Demo.DState → Option (Exec.Config refusingBindOps),
+    ∃ next : Exec.Config refusingBindOps,
+    Exec.step (O := refusingBindOps) ⟨[]⟩ ⟨.exec (.prim (some Exec.Demo.y) .log [.lit 3] Exec.Demo.s), [], .init, []⟩ =
+      some (.request .log [3] Exec.Demo.s .init k) ∧
+    k ⟨some 3, .ok 0, .init⟩ = some next ∧
+    (Exec.runFrom (O := refusingBindOps) ⟨[]⟩ Exec.Demo.env 1 [11]
+      ⟨.exec (.prim (some Exec.Demo.y) .log [.lit 3] Exec.Demo.s), [], .init, []⟩).events = [11, 3] := by
+  exact ⟨_, _, rfl, rfl, by decide⟩
+
 end Demo
 
 end ConcreteSpec.Core.Observe
