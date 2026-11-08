@@ -1,4 +1,5 @@
 import Concrete.Backend.Runtime
+import Std.Data.HashMap.Lemmas
 import Concrete.BIR.Progress
 import LeanCompilerBackend.Verified.Job
 import LeanCompilerBackend.AMD64
@@ -249,11 +250,6 @@ def numberingSpec (p : Program) : NumberingData :=
   ⟨ids p, intermediates p, (indexed p.blocks).map fun (j, b) =>
     (blockBase p j, (indexed b.insts).map fun (i, _) => blockBase p j + instBase b i)⟩
 
-/-- One more than the largest register, including every malformed register. -/
-def regBound : List (Reg × Nat) → Nat
-  | [] => 0
-  | (r, _) :: rest => max (r + 1) (regBound rest)
-
 /-- Mark previously unseen natural numbers, refusing a duplicate or an out-of-bounds number. -/
 def markUnique (xs : List Nat) (a : Array Bool) : Option (Array Bool) :=
   match xs with
@@ -263,9 +259,12 @@ def markUnique (xs : List Nat) (a : Array Bool) : Option (Array Bool) :=
       if a[x] then none else markUnique xs (a.setIfInBounds x true)
     else none
 
-def regCheck (ids : List (Reg × Nat)) : Bool :=
-  let regs := ids.map Prod.fst
-  (markUnique regs (Array.replicate (regBound ids) false)).isSome
+/-- A finite set of seen names; storage depends on definitions, never name magnitude. -/
+def uniqueRegs : List Nat → Std.HashMap Nat Unit → Bool
+  | [], _ => true
+  | r :: rs, seen => !seen.contains r && uniqueRegs rs (seen.insert r ())
+
+def regCheck (ids : List (Reg × Nat)) : Bool := uniqueRegs (ids.map Prod.fst) ∅
 
 def slotInterCheck (slots inters : List Nat) (count : Nat) : Bool :=
   match markUnique slots (Array.replicate count false) with
@@ -305,22 +304,16 @@ def incomingBucket (bs : Array (List (Nat × List Operand))) (j : Nat) : List (N
 structure Prepared where
   data : NumberingData
   offsets : Array (Nat × Array Nat)
-  regs : Array (Option Nat)
+  regs : Std.HashMap Reg Nat
   incoming : Array (List (Nat × List Operand))
   ok : Bool
 
-/-- Insert only an absent register, so the first definition wins exactly as in `List.lookup`. -/
-def addRegIds (ids : List (Reg × Nat)) (a : Array (Option Nat)) : Array (Option Nat) :=
-  match ids with
-  | [] => a
-  | (r, n) :: ids =>
-    let a := if h : r < a.size then
-      if a[r].isSome then a else a.setIfInBounds r (some n)
-    else a
-    addRegIds ids a
+/-- Insert only absent keys: malformed duplicate definitions still use the first one. -/
+def addRegIds : List (Reg × Nat) → Std.HashMap Reg Nat → Std.HashMap Reg Nat
+  | [], a => a
+  | (r, n) :: ids, a => addRegIds ids (a.insertIfNew r n)
 
-def regTable (data : NumberingData) : Array (Option Nat) :=
-  addRegIds data.ids (Array.replicate (regBound data.ids) none)
+def regTable (data : NumberingData) : Std.HashMap Reg Nat := addRegIds data.ids ∅
 
 def blockOffset (prep : Prepared) (j : Nat) : Nat :=
   (prep.offsets[j]?.map (·.1)).getD 0
@@ -334,7 +327,7 @@ def prepare (p : Program) : Prepared :=
     regs := regTable data, incoming := incomingBuckets p,
     ok := numberingOkFastData data (valueCount p) }
 
-def regIdFast (prep : Prepared) (r : Reg) : Option Nat := (prep.regs[r]?).getD none
+def regIdFast (prep : Prepared) (r : Reg) : Option Nat := prep.regs[r]?
 
 def idOfFast (prep : Prepared) := idOfWith (regIdFast prep)
 
@@ -509,85 +502,23 @@ theorem numbering_eq (p : Program) : numbering p = numberingSpec p := by
   have h := numberingFrom_correct p 0 p.blocks (by simp)
   exact h
 
-theorem regBound_lt {ids : List (Reg × Nat)} {r n : Nat} (h : (r, n) ∈ ids) : r < regBound ids := by
-  induction ids with
-  | nil => simp at h
-  | cons a ids ih =>
-    rcases a with ⟨q, m⟩
-    simp only [List.mem_cons, Prod.mk.injEq] at h
-    rcases h with ⟨rfl, rfl⟩ | h
-    · simp only [regBound]; omega
-    · simp only [regBound]; have := ih h; omega
-
-theorem lookup_none_of_not_mem {ids : List (Reg × Nat)} {r : Reg}
-    (h : r ∉ ids.map Prod.fst) : ids.lookup r = none := by
-  induction ids with
-  | nil => rfl
-  | cons a ids ih =>
-    rcases a with ⟨q, n⟩
-    simp only [List.map_cons, List.mem_cons] at h
-    have hq : r ≠ q := fun e => h (Or.inl e)
-    have hb : (r == q) = false := by simpa using hq
-    simp [List.lookup, hb, ih (fun hm => h (Or.inr hm))]
-
-theorem size_addRegIds : ∀ (ids : List (Reg × Nat)) (a : Array (Option Nat)),
-    (addRegIds ids a).size = a.size
-  | [], _ => rfl
-  | (r, n) :: ids, a => by
-    simp only [addRegIds]
-    rw [size_addRegIds]
-    split <;> (try split) <;> first | rfl | simp
-
-theorem addRegIds_lookup : ∀ (ids : List (Reg × Nat)) (a : Array (Option Nat)) (r : Reg),
-    r < a.size → ((addRegIds ids a)[r]?).getD none = ((a[r]?).getD none).or (ids.lookup r)
-  | [], a, r, _ => by simp [addRegIds]
-  | (x, n) :: ids, a, r, hr => by
-    simp only [addRegIds]
-    by_cases hx : x < a.size
-    · simp only [hx, ↓reduceDIte]
-      cases ha : a[x] with
-      | none =>
-        simp only [Option.isSome_none, Bool.false_eq_true, ↓reduceIte]
-        rw [addRegIds_lookup ids _ r (by simpa using hr)]
-        by_cases h : r = x
-        · subst h
-          simp [List.lookup, Array.getElem?_setIfInBounds_self_of_lt hx,
-            Array.getElem?_eq_getElem hx, ha]
-        · have hne : r ≠ x := h
-          have hb : (r == x) = false := by simpa using hne
-          simp [List.lookup, hb, Array.getElem?_setIfInBounds_ne (Ne.symm hne)]
-      | some v =>
-        simp only [Option.isSome_some, ↓reduceIte]
-        rw [addRegIds_lookup ids a r hr]
-        by_cases h : r = x
-        · subst h
-          simp [List.lookup, Array.getElem?_eq_getElem hx, ha]
-        · have hne : r ≠ x := h
-          have hb : (r == x) = false := by simpa using hne
-          simp [List.lookup, hb]
-    · simp only [hx, ↓reduceDIte]
-      rw [addRegIds_lookup ids a r hr]
-      have hne : r ≠ x := fun h => hx (h ▸ hr)
-      have hb : (r == x) = false := by simpa using hne
-      simp [List.lookup, hb]
+theorem addRegIds_lookup : ∀ (ids : List (Reg × Nat)) (a : Std.HashMap Reg Nat) (r : Reg),
+    (addRegIds ids a)[r]? = a[r]?.or (ids.lookup r)
+  | [], a, r => by simp [addRegIds]
+  | (x, n) :: ids, a, r => by
+    rw [addRegIds, addRegIds_lookup, Std.HashMap.getElem?_insertIfNew]
+    by_cases h : x = r
+    · subst x
+      by_cases hm : r ∈ a
+      · have hs := Std.HashMap.isSome_getElem?_eq_contains (m := a) (a := r)
+        cases ha : a[r]? <;> simp_all [List.lookup]
+      · simp [hm, List.lookup]
+    · have hb : (r == x) = false := by simp [Ne.symm h]
+      simp [h, hb, List.lookup]
 
 theorem regTable_lookup (data : NumberingData) (r : Reg) :
-    ((regTable data)[r]?).getD none = data.ids.lookup r := by
-  by_cases hr : r < regBound data.ids
-  · rw [regTable, addRegIds_lookup _ _ r (by simpa using hr)]
-    rw [Array.getElem?_eq_getElem (show r < (Array.replicate (regBound data.ids) none).size by simpa)]
-    simp
-  · have hnone : ((regTable data)[r]?) = none := by
-      apply Array.getElem?_eq_none
-      rw [regTable, size_addRegIds]
-      simpa using hr
-    have hnot : r ∉ data.ids.map Prod.fst := by
-      intro hm
-      obtain ⟨a, ha, hra⟩ := List.mem_map.mp hm
-      change a.1 = r at hra
-      have hb : (r, a.2) ∈ data.ids := by rwa [← hra]
-      exact hr (regBound_lt hb)
-    simp [hnone, lookup_none_of_not_mem hnot]
+    (regTable data)[r]? = data.ids.lookup r := by
+  simp [regTable, addRegIds_lookup]
 
 theorem prepare_regId (p : Program) (r : Reg) : regIdFast (prepare p) r = regId p r := by
   simp only [regIdFast, prepare, regTable_lookup, regId]
@@ -801,19 +732,31 @@ theorem all_and {α : Type} (f g : α → Bool) (l : List α) :
     rw [ih]
     cases f x <;> cases g x <;> cases l.all f <;> cases l.all g <;> rfl
 
+theorem uniqueRegs_eq (xs : List Nat) (seen : Std.HashMap Nat Unit) :
+    uniqueRegs xs seen = decide (xs.Nodup ∧ ∀ r ∈ xs, r ∉ seen) := by
+  induction xs generalizing seen with
+  | nil => simp [uniqueRegs]
+  | cons r rs ih =>
+    apply Bool.eq_iff_iff.mpr
+    simp only [uniqueRegs, ih, Bool.and_eq_true, Bool.not_eq_true',
+      Std.HashMap.contains_eq_false_iff_not_mem, decide_eq_true_eq,
+      List.nodup_cons, List.mem_cons, Std.HashMap.mem_insert, beq_iff_eq]
+    constructor
+    · rintro ⟨hr, hn, ht⟩
+      refine ⟨⟨?_, hn⟩, ?_⟩
+      · intro hm; exact (ht r hm) (Or.inl rfl)
+      · intro x hx; rcases hx with rfl | hx
+        · exact hr
+        · intro hm; exact (ht x hx) (Or.inr hm)
+    · rintro ⟨⟨hr, hn⟩, ht⟩
+      refine ⟨ht r (Or.inl rfl), hn, ?_⟩
+      intro x hx hm
+      rcases hm with he | hm
+      · subst x; exact hr hx
+      · exact ht x (Or.inr hx) hm
+
 theorem regCheck_eq (ids : List (Reg × Nat)) : regCheck ids = decide ((ids.map Prod.fst).Nodup) := by
-  have h := markUnique_ok (ids.map Prod.fst) (Array.replicate (regBound ids) false) []
-    (marks_replicate _)
-  simp only [Array.size_replicate] at h
-  have hall : (ids.map Prod.fst).all (· < regBound ids) = true := by
-    apply List.all_eq_true.mpr
-    intro r hr
-    obtain ⟨a, ha, hra⟩ := List.mem_map.mp hr
-    change a.1 = r at hra
-    have hb : (r, a.2) ∈ ids := by rwa [← hra]
-    simpa using regBound_lt hb
-  simp only [regCheck, h, hall, List.not_mem_nil, not_false_eq_true, implies_true, decide_true,
-    Bool.and_true]
+  simp [regCheck, uniqueRegs_eq]
 
 theorem slotInterCheck_eq (slots inters : List Nat) (count : Nat) :
     slotInterCheck slots inters count =
