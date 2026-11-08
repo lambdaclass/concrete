@@ -7,6 +7,7 @@ an arbitrary checker/elaborator enforces these transitions; that is C9's corresp
 -/
 namespace ConcreteSpec.Core.Own
 
+/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
 private theorem fold_preserves {α : Type} (f : State → α → Option State)
     (hf : ∀ s a t, WellFormed s → f s a = some t → WellFormed t) (xs : List α)
     (s t : State) (hs : WellFormed s) (h : xs.foldlM f s = some t) : WellFormed t := by
@@ -18,7 +19,7 @@ private theorem fold_preserves {α : Type} (f : State → α → Option State)
     | none => simp [he] at h
     | some u => simp only [he] at h <;> dsimp at h; exact ih u (hf s a u hs he) h
 
-/-- Move changes only the selected slot's status, after excluding every loan of its root. -/
+/-- Law (subject `ConcreteSpec.Core.Own.move`). Move changes only the selected slot's status, after excluding every loan of its root. -/
 theorem move_preserves (s t : State) (p : Hybrid.Place) (hs : WellFormed s)
     (h : move s p = some t) : WellFormed t := by
   unfold move at h
@@ -48,6 +49,7 @@ theorem move_preserves (s t : State) (p : Hybrid.Place) (hs : WellFormed s)
       have hn : a.place ≠ p := fun h => clear l hl (he.symm.trans h)
       simpa [change, hn] using ho
 
+/-- Law (subject `ConcreteSpec.Core.Own.reinitialize`). -/
 theorem reinitialize_preserves (s t : State) (p : Hybrid.Place) (hs : WellFormed s)
     (h : reinitialize s p = some t) : WellFormed t := by
   unfold reinitialize at h
@@ -73,6 +75,7 @@ theorem reinitialize_preserves (s t : State) (p : Hybrid.Place) (hs : WellFormed
       · exact ho
   · contradiction
 
+/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
 private theorem compatible_symm (a b : Loan) (h : Compatible a b) : Compatible b a := by
   unfold Compatible at *
   rcases h with h | h | h | h | h
@@ -82,6 +85,7 @@ private theorem compatible_symm (a b : Loan) (h : Compatible a b) : Compatible b
   · exact Or.inr (Or.inr (Or.inl h))
   · exact Or.inr (Or.inr (Or.inr (Or.inr h.symm)))
 
+/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
 private theorem insert_loan (s : State) (a : Loan) (hs : WellFormed s)
     (hid : a.id = ⟨s.nextLoan⟩) (hact : a.activation < s.nextActivation)
     (hroot : ∃ x ∈ s.slots, x.place = a.root ∧ x.status = .owned)
@@ -124,6 +128,7 @@ private theorem insert_loan (s : State) (a : Loan) (hs : WellFormed s)
       · subst c; exact compatible_symm a b (hcompat b hb)
       · exact hs.2.2.2.2 b hb c hc
 
+/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
 private theorem owner_guard (s : State) (p : Hybrid.Place) (m : Mode)
     (h : ownerAccess s p m = true) :
     (∃ x ∈ s.slots, x.place = p ∧ x.status = .owned) ∧
@@ -141,6 +146,7 @@ private theorem owner_guard (s : State) (p : Hybrid.Place) (m : Mode)
     have := List.all_eq_true.mp h.2 l hl
     simpa only [Bool.or_eq_true, bne_iff_ne, Bool.and_eq_true, beq_iff_eq] using this
 
+/-- Law (subject `ConcreteSpec.Core.Own.borrow`). -/
 theorem borrow_preserves (s t : State) (p : Hybrid.Place) (path : List Projection)
     (m : Mode) (hs : WellFormed s) (h : borrow s p path m = some t) : WellFormed t := by
   unfold borrow at h
@@ -158,6 +164,7 @@ theorem borrow_preserves (s t : State) (p : Hybrid.Place) (path : List Projectio
     · exact Or.inr (Or.inr (Or.inr (Or.inr hm)))
   · contradiction
 
+/-- Law (subject `ConcreteSpec.Core.Own.reborrowTo`). -/
 theorem reborrowTo_preserves (s t : State) (i : LoanId) (path : List Projection)
     (m : Mode) (activation : Nat) (hs : WellFormed s)
     (h : reborrowTo s i path m activation = some t) : WellFormed t := by
@@ -196,12 +203,14 @@ theorem reborrowTo_preserves (s t : State) (i : LoanId) (path : List Projection)
       · exact Or.inr (Or.inr (Or.inr (Or.inr he)))
   · contradiction
 
+/-- Law (subject `ConcreteSpec.Core.Own.reborrow`). -/
 theorem reborrow_preserves (s t : State) (i : LoanId) (path : List Projection)
     (m : Mode) (hs : WellFormed s) (h : reborrow s i path m = some t) : WellFormed t := by
   unfold reborrow at h
   obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
   exact reborrowTo_preserves s t i path m f.id hs h
 
+/-- Law (subject `ConcreteSpec.Core.Own.endLoan`). -/
 theorem endLoan_preserves (s t : State) (i : LoanId) (hs : WellFormed s)
     (h : endLoan s i = some t) : WellFormed t := by
   unfold endLoan at h
@@ -230,6 +239,7 @@ theorem endLoan_preserves (s t : State) (i : LoanId) (hs : WellFormed s)
     · intro b hb c hc
       exact hs.2.2.2.2 b (List.mem_filter.mp hb).1 c (List.mem_filter.mp hc).1
 
+/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). -/
 theorem accessOwner_preserves (s t : State) (p : Hybrid.Place) (m : Mode)
     (hs : WellFormed s) (h : accessOwner s p m = some t) : WellFormed t := by
   unfold accessOwner at h
@@ -237,6 +247,7 @@ theorem accessOwner_preserves (s t : State) (p : Hybrid.Place) (m : Mode)
   · cases h; exact hs
   · contradiction
 
+/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). -/
 theorem accessLoan_preserves (s t : State) (i : LoanId) (m : Mode)
     (hs : WellFormed s) (h : accessLoan s i m = some t) : WellFormed t := by
   unfold accessLoan at h
@@ -244,7 +255,7 @@ theorem accessLoan_preserves (s t : State) (i : LoanId) (m : Mode)
   · cases h; exact hs
   · contradiction
 
-/-- A movable non-Copy slot with no outstanding loan always moves; unrelated invariant
+/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). A movable non-Copy slot with no outstanding loan always moves; unrelated invariant
 checks cannot make this transition stuck. -/
 theorem move_progress (s : State) (p : Hybrid.Place) (x : Slot)
     (found : slot s p = some x) (linear : x.desc.copy = false)
@@ -257,12 +268,14 @@ theorem move_progress (s : State) (p : Hybrid.Place) (x : Slot)
     exact clear l hl (by simpa using he)
   simp [move, found, linear, owned, hc]
 
+/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). -/
 theorem borrow_progress (s : State) (p : Hybrid.Place) (path : List Projection) (m : Mode)
     (f : Activation) (frame : s.frames.head? = some f)
     (issued : f.id < s.nextActivation) (allowed : ownerAccess s p m = true) :
     ∃ t, borrow s p path m = some t := by
   simp [borrow, frame, issued, allowed]
 
+/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). -/
 theorem reborrowTo_progress (s : State) (i : LoanId) (path : List Projection) (m : Mode)
     (activation : Nat) (a : Loan) (found : loan s i = some a)
     (issued : activation < s.nextActivation)
@@ -271,6 +284,7 @@ theorem reborrowTo_progress (s : State) (i : LoanId) (path : List Projection) (m
     ∃ t, reborrowTo s i path m activation = some t := by
   simp [reborrowTo, found, issued, current, allowed]
 
+/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). -/
 theorem reborrow_progress (s : State) (i : LoanId) (path : List Projection) (m : Mode)
     (f : Activation) (frame : s.frames.head? = some f) (issued : f.id < s.nextActivation)
     (a : Loan) (found : loan s i = some a) (allowed : loanAccess s i m = true) :
@@ -278,10 +292,12 @@ theorem reborrow_progress (s : State) (i : LoanId) (path : List Projection) (m :
   simpa [reborrow, frame] using
     reborrowTo_progress s i path m f.id a found issued (by simp [frame]) allowed
 
+/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). -/
 theorem accessOwner_progress (s : State) (p : Hybrid.Place) (m : Mode)
     (allowed : ownerAccess s p m = true) : accessOwner s p m = some s := by
   simp [accessOwner, allowed]
 
+/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). -/
 theorem accessLoan_progress (s : State) (i : LoanId) (m : Mode)
     (allowed : loanAccess s i m = true) : accessLoan s i m = some s := by
   simp [accessLoan, allowed]
@@ -313,6 +329,7 @@ example : ¬ (accessOwner shared ⟨0⟩ .mutable).isSome = true := by decide
 example : ¬ (accessLoan child ⟨0⟩ .mutable).isSome = true := by decide
 end PrimitiveWitnesses
 
+/-- Law (subject `ConcreteSpec.Core.Own.bind`). -/
 theorem bind_preserves (types : Var → Option Descriptor) (s t : State) (x : Var)
     (hs : WellFormed s) (h : bind types x s = some t) : WellFormed t := by
   unfold bind at h
@@ -340,6 +357,7 @@ theorem bind_preserves (types : Var → Option Descriptor) (s t : State) (x : Va
         exact ⟨hb, ha, ⟨a, List.mem_cons_of_mem _ ham, he, ho⟩, hp, hpend⟩
     · contradiction
 
+/-- Law (subject `ConcreteSpec.Core.Own.drop`). -/
 theorem drop_preserves (s t : State) (xs : List Var) (hs : WellFormed s)
     (h : drop xs s = some t) : WellFormed t := by
   unfold drop at h
@@ -358,6 +376,7 @@ theorem drop_preserves (s t : State) (xs : List Var) (hs : WellFormed s)
       simpa [he] using hc
   · contradiction
 
+/-- Law (subject `ConcreteSpec.Core.Own.enter`). -/
 theorem enter_preserves (types : Var → Option Descriptor) (s t : State) (xs : List Var)
     (hs : WellFormed s) (h : enter types xs s = some t) : WellFormed t := by
   have hw : WellFormed { s with
@@ -371,10 +390,12 @@ theorem enter_preserves (types : Var → Option Descriptor) (s t : State) (xs : 
       exact ⟨hb, Nat.lt_succ_of_lt ha, hr, hp, hpend⟩
   exact fold_preserves _ (fun s x t hs h => bind_preserves types s t x hs h) xs _ t hw h
 
+/-- Law (subject `ConcreteSpec.Core.Own.endLocals`). -/
 theorem endLocals_preserves (s t : State) (a : Nat) (hs : WellFormed s)
     (h : endLocals a s = some t) : WellFormed t :=
   fold_preserves _ (fun s l t hs h => endLoan_preserves s t l.id hs h) _ _ _ hs h
 
+/-- Law (subject `ConcreteSpec.Core.Own.leave`). -/
 theorem leave_preserves (s t : State) (hs : WellFormed s)
     (h : leave s = some t) : WellFormed t := by
   unfold leave at h
@@ -383,9 +404,25 @@ theorem leave_preserves (s t : State) (hs : WellFormed s)
   obtain ⟨v, hv, h⟩ := Option.bind_eq_some_iff.mp h
   split at h
   · contradiction
-  · cases h
-    exact drop_preserves u v _ (endLocals_preserves s u f.id hs hu) hv
+  · rename_i guard
+    cases h
+    have hw := drop_preserves u v _ (endLocals_preserves s u f.id hs hu) hv
+    have ok : (v.slots.all (fun x => x.activation != f.id || x.desc.copy || x.status == .moved) &&
+        v.loans.all (fun l => v.slots.all (fun x => x.activation != f.id || x.place != l.root))) = true := by
+      cases hb : (v.slots.all (fun x => x.activation != f.id || x.desc.copy || x.status == .moved) &&
+        v.loans.all (fun l => v.slots.all (fun x => x.activation != f.id || x.place != l.root))) <;>
+        simp_all
+    have clear := (Bool.and_eq_true_iff.mp ok).2
+    refine ⟨hw.1.sublist (List.Sublist.map _ List.filter_sublist), hw.2.1, ?_, ?_, hw.2.2.2.2⟩
+    · intro x hx
+      exact hw.2.2.1 x (List.mem_filter.mp hx).1
+    · intro l hl
+      obtain ⟨hid, ha, ⟨x, hx, he, ho⟩, hp, hpend⟩ := hw.2.2.2.1 l hl
+      refine ⟨hid, ha, ⟨x, List.mem_filter.mpr ⟨hx, ?_⟩, he, ho⟩, hp, hpend⟩
+      have hc := List.all_eq_true.mp (List.all_eq_true.mp clear l hl) x hx
+      simpa [he] using hc
 
+/-- Law (subject `ConcreteSpec.Core.Own.enterDown`). -/
 theorem enterDown_preserves (s t : State) (args : List (Var × LoanId)) (hs : WellFormed s)
     (h : enterDown s args = some t) : WellFormed t := by
   unfold enterDown at h
@@ -398,6 +435,7 @@ theorem enterDown_preserves (s t : State) (args : List (Var × LoanId)) (hs : We
   cases hh
   exact reborrowTo_preserves s v arg.2 [] a.mode f.id hs hv
 
+/-- Law (subject `ConcreteSpec.Core.Own.life`). -/
 theorem life_preserves (types : Var → Option Descriptor) (e : Exec.Life) (s t : State)
     (hs : WellFormed s) (h : life types e s = some t) : WellFormed t := by
   cases e with
@@ -406,6 +444,7 @@ theorem life_preserves (types : Var → Option Descriptor) (e : Exec.Life) (s t 
   | leave => exact leave_preserves s t hs h
   | drop xs => exact drop_preserves s t xs hs h
 
+/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). -/
 theorem reinitialize_progress (s : State) (p : Hybrid.Place) (x : Slot)
     (found : slot s p = some x)
     (available : x.status = .moved ∨ (x.desc.copy = true ∧ x.desc.mutable = true))
@@ -422,6 +461,7 @@ theorem reinitialize_progress (s : State) (p : Hybrid.Place) (x : Slot)
   rw [ha, hc]
   exact ⟨_, rfl⟩
 
+/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). -/
 theorem endLoan_progress (s : State) (i : LoanId) (a : Loan)
     (found : loan s i = some a) (children : ∀ b ∈ s.loans, b.parent ≠ some i) :
     ∃ t, endLoan s i = some t := by
@@ -432,12 +472,14 @@ theorem endLoan_progress (s : State) (i : LoanId) (a : Loan)
     exact children b hb (by simpa using he)
   simp [endLoan, found, hc]
 
+/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). -/
 theorem bind_fresh_progress (types : Var → Option Descriptor) (s : State) (x : Var)
     (f : Activation) (d : Descriptor) (frame : s.frames.head? = some f)
     (issued : f.id < s.nextActivation) (fresh : AList.lookup f.locals x = none)
     (descriptor : types x = some d) : ∃ t, bind types x s = some t := by
   simp [bind, frame, issued, fresh, descriptor]
 
+/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
 private theorem bind_params_progress (types : Var → Option Descriptor) (xs : List Var)
     (s : State) (f : Activation) (frame : s.frames.head? = some f)
     (issued : f.id < s.nextActivation) (unique : xs.Nodup)
@@ -463,7 +505,7 @@ private theorem bind_params_progress (types : Var → Option Descriptor) (xs : L
       (fun y hy => typed y (List.mem_cons_of_mem _ hy))
     exact ⟨t, by simp [List.foldlM_cons, hb, ht]⟩
 
-/-- Fresh, distinct, typed parameters always enter: no global invariant scan can refuse them. -/
+/-- Law (subject `ConcreteSpec.Core.Own.enter`). Fresh, distinct, typed parameters always enter: no global invariant scan can refuse them. -/
 theorem enter_progress (types : Var → Option Descriptor) (s : State) (params : List Var)
     (unique : params.Nodup) (typed : ∀ x ∈ params, ∃ d, types x = some d) :
     ∃ t, enter types params s = some t :=
@@ -473,6 +515,7 @@ theorem enter_progress (types : Var → Option Descriptor) (s : State) (params :
     ⟨s.nextActivation, [], []⟩ rfl (Nat.lt_succ_self _) unique
     (fun _ _ => rfl) typed
 
+/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). -/
 theorem drop_progress (s : State) (xs : List Var) (f : Activation)
     (frame : s.frames.head? = some f)
     (discharged : ∀ a ∈ s.slots,
@@ -537,10 +580,11 @@ example : ¬ (bind (fun _ => none) y shared).isSome = true := by decide
 example : ¬ (drop [x] initial).isSome = true := by decide
 end LifecycleWitnesses
 
-/-- No active loan can outlive its original owned root, including across calls. -/
+/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). No active loan can outlive its original owned root, including across calls. -/
 theorem loan_has_owned_root (s : State) (hs : WellFormed s) (l : Loan) (hl : l ∈ s.loans) :
     ∃ x ∈ s.slots, x.place = l.root ∧ x.status = .owned := (hs.2.2.2.1 l hl).2.2.1
 
+/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
 private theorem slot_unique (xs : List Slot) (hn : (xs.map Slot.place).Nodup)
     (x y : Slot) (hx : x ∈ xs) (hy : y ∈ xs) (he : x.place = y.place) : x = y := by
   induction xs with
@@ -556,7 +600,7 @@ private theorem slot_unique (xs : List Slot) (hn : (xs.map Slot.place).Nodup)
       · exact False.elim (hn.1 (List.mem_map.mpr ⟨x, hx, he⟩))
       · exact ih hn.2 hx hy
 
-/-- A moved slot cannot have an active loan, since place identities are unique. -/
+/-- Law (subject `ConcreteSpec.Core.Own.move`). A moved slot cannot have an active loan, since place identities are unique. -/
 theorem moved_no_loan (s : State) (hs : WellFormed s) (x : Slot) (hx : x ∈ s.slots)
     (hm : x.status = .moved) (l : Loan) (hl : l ∈ s.loans) : x.place ≠ l.root := by
   intro he
@@ -566,7 +610,7 @@ theorem moved_no_loan (s : State) (hs : WellFormed s) (x : Slot) (hx : x ∈ s.s
   rw [hm] at ho
   cases ho
 
-/-- Success projects to precisely the uninstrumented result and concrete store. This covers
+/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). Success projects to precisely the uninstrumented result and concrete store. This covers
 moves, permissions, lifecycle and concrete reads/writes by choosing their permission transition. -/
 theorem instrument_erasure {σ α : Type} (permit : State → Option State)
     (operation : σ → Option (α × σ)) (s : Store σ) (a : α) (t : Store σ)
@@ -580,6 +624,7 @@ theorem instrument_erasure {σ α : Type} (permit : State → Option State)
     | some r => cases r; simp [hc] at h
                 rcases h with ⟨rfl, rfl⟩; exact hc
 
+/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). -/
 theorem life_erasure {σ : Type} (types : Var → Option Descriptor) (e : Exec.Life)
     (s t : Store σ) (h : lifeStore types e s = some t) : erase t = erase s := by
   unfold lifeStore at h
@@ -587,6 +632,7 @@ theorem life_erasure {σ : Type} (types : Var → Option Descriptor) (e : Exec.L
   subst t
   rfl
 
+/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
 private theorem map_metadata_preserves (s : State) (hs : WellFormed s)
     (act : Loan → Nat) (pending : Loan → Bool)
     (issued : ∀ l ∈ s.loans, act l < s.nextActivation)
@@ -612,6 +658,7 @@ private theorem map_metadata_preserves (s : State) (hs : WellFormed s)
     obtain ⟨y, hy, rfl⟩ := List.mem_map.mp hb
     exact hs.2.2.2.2 x hx y hy
 
+/-- Law (subject `ConcreteSpec.Core.Own.adoptDown`). -/
 theorem adoptDown_preserves (s t : State) (args : List (Var × LoanId))
     (hs : WellFormed s) (h : adoptDown s args = some t) : WellFormed t := by
   unfold adoptDown at h
@@ -635,6 +682,7 @@ theorem adoptDown_preserves (s t : State) (args : List (Var × LoanId))
     exact hw
   · contradiction
 
+/-- Law (subject `ConcreteSpec.Core.Own.passDown`). -/
 theorem passDown_preserves (s t : CallState) (i : LoanId) (parameter : Var)
     (hs : WellFormed s.own) (h : passDown s i parameter = some t) : WellFormed t.own := by
   unfold passDown at h
@@ -675,7 +723,7 @@ theorem passDown_preserves (s t : CallState) (i : LoanId) (parameter : Var)
       exact hh
     · contradiction
 
-/-- Pending metadata stays synchronized when argument evaluation adds a fresh child. -/
+/-- Law (subject `ConcreteSpec.Core.Own.passDown`). Pending metadata stays synchronized when argument evaluation adds a fresh child. -/
 theorem passDown_call_preserves (s t : CallState) (i : LoanId) (parameter : Var)
     (hs : CallState.WellFormed s) (h : passDown s i parameter = some t) :
     CallState.WellFormed t := by
@@ -737,7 +785,7 @@ theorem passDown_call_preserves (s t : CallState) (i : LoanId) (parameter : Var)
             using hs.2.2.2.2 b hb
     · contradiction
 
-/-- C1's actual call/lifecycle callback preserves ownership, for both owner and view parameters. -/
+/-- Law (subject `ConcreteSpec.Core.Own.callLife`). C1's actual call/lifecycle callback preserves ownership, for both owner and view parameters. -/
 theorem callLife_preserves (types : Var → Option Descriptor) (e : Exec.Life)
     (s t : CallState) (hs : WellFormed s.own)
     (h : callLife types e s = some t) : WellFormed t.own := by
@@ -772,6 +820,7 @@ theorem callLife_preserves (types : Var → Option Descriptor) (e : Exec.Life)
       exact life_preserves types (.drop xs) s.own own hs ho
     · contradiction
 
+/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
 private theorem reinitialize_loans (s t : State) (p : Hybrid.Place)
     (h : reinitialize s p = some t) : t.loans = s.loans := by
   unfold reinitialize at h
@@ -780,6 +829,7 @@ private theorem reinitialize_loans (s t : State) (p : Hybrid.Place)
   · cases h; rfl
   · contradiction
 
+/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
 private theorem bind_loans (types : Var → Option Descriptor) (s t : State) (x : Var)
     (h : bind types x s = some t) : t.loans = s.loans := by
   unfold bind at h
@@ -791,6 +841,7 @@ private theorem bind_loans (types : Var → Option Descriptor) (s t : State) (x 
     · cases h; rfl
     · contradiction
 
+/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
 private theorem fold_loans {α : Type} (f : State → α → Option State)
     (hf : ∀ s a t, f s a = some t → ∀ l ∈ t.loans, l ∈ s.loans)
     (xs : List α) (s t : State) (h : xs.foldlM f s = some t) :
@@ -802,6 +853,7 @@ private theorem fold_loans {α : Type} (f : State → α → Option State)
     obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
     exact fun l hl => hf s a u hu l (ih u h l hl)
 
+/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
 private theorem enter_loans (types : Var → Option Descriptor) (s t : State) (xs : List Var)
     (h : enter types xs s = some t) : t.loans = s.loans := by
   unfold enter at h
@@ -820,6 +872,7 @@ private theorem enter_loans (types : Var → Option Descriptor) (s t : State) (x
     obtain ⟨w, hw, h⟩ := Option.bind_eq_some_iff.mp h
     exact (ih w v h).trans (bind_loans types u w x hw)
 
+/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
 private theorem drop_loans (s t : State) (xs : List Var) (h : drop xs s = some t) :
     t.loans = s.loans := by
   unfold drop at h
@@ -829,6 +882,7 @@ private theorem drop_loans (s t : State) (xs : List Var) (h : drop xs s = some t
   · cases h; rfl
   · contradiction
 
+/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
 private theorem endLoan_subset (s t : State) (i : LoanId) (h : endLoan s i = some t) :
     ∀ l ∈ t.loans, l ∈ s.loans := by
   unfold endLoan at h
@@ -838,6 +892,7 @@ private theorem endLoan_subset (s t : State) (i : LoanId) (h : endLoan s i = som
   · cases h
     exact fun _ hl => (List.mem_filter.mp hl).1
 
+/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
 private theorem life_subset (types : Var → Option Descriptor) (e : Exec.Life) (s t : State)
     (h : life types e s = some t) : ∀ l ∈ t.loans, l ∈ s.loans := by
   cases e with
@@ -856,7 +911,7 @@ private theorem life_subset (types : Var → Option Descriptor) (e : Exec.Life) 
       rw [drop_loans u v _ hv] at hl
       exact fold_loans _ (fun s l t h => endLoan_subset s t l.id h) _ s u hu l hl
 
-/-- Entry consumes the pending metadata exactly once; other lifecycle events require an
+/-- Law (subject `ConcreteSpec.Core.Own.callLife`). Entry consumes the pending metadata exactly once; other lifecycle events require an
 empty argument buffer, so they cannot leave dangling argument identities. -/
 theorem callLife_call_preserves (types : Var → Option Descriptor) (e : Exec.Life)
     (s t : CallState) (hs : CallState.WellFormed s) (h : callLife types e s = some t) :
@@ -918,7 +973,7 @@ example : ¬ CallState.WellFormed { waiting with own := exclusive } := by decide
 example : ¬ CallState.WellFormed { waiting with own := initial } := by decide
 end CallWitnesses
 
-/-- Passing loans changes only instrumentation, including at mixed-parameter call entry. -/
+/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). Passing loans changes only instrumentation, including at mixed-parameter call entry. -/
 theorem callLife_erasure {σ : Type} (types : Var → Option Descriptor) (e : Exec.Life)
     (s t : σ × CallState) (h : callLifeStore types e s = some t) : t.1 = s.1 := by
   unfold callLifeStore at h
@@ -926,7 +981,7 @@ theorem callLife_erasure {σ : Type} (types : Var → Option Descriptor) (e : Ex
   subst t
   rfl
 
-/-- Any successful instrumented operation preserves the invariant when its permission
+/-- Helper (congruence). Derived invariant or supplied-preservation fact; not independent soundness evidence. (approved: PENDING). Any successful instrumented operation preserves the invariant when its permission
 transition does. Concrete values and concrete branch choices are irrelevant to this proof. -/
 theorem instrument_preserves {σ α : Type} (permit : State → Option State)
     (hp : ∀ s t, permit s = some t → WellFormed t) (operation : σ → Option (α × σ))
@@ -939,6 +994,7 @@ theorem instrument_preserves {σ α : Type} (permit : State → Option State)
   cases hh
   exact hp _ _ ho
 
+/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). -/
 theorem readOwner_erasure (tgt : Target) (p : Hybrid.Place) (s t : Store Hybrid.State)
     (v : Hybrid.Value) (h : readOwner tgt p s = some (v, t)) :
     s.concrete.read tgt p = some v ∧ t.concrete = s.concrete := by
@@ -948,6 +1004,7 @@ theorem readOwner_erasure (tgt : Target) (p : Hybrid.Place) (s t : Store Hybrid.
   | none => simp [hc] at he
   | some w => simp [hc] at he; rcases he with ⟨rfl, hstore⟩; exact ⟨rfl, hstore.symm⟩
 
+/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). -/
 theorem writeOwner_erasure (tgt : Target) (p : Hybrid.Place) (s t : Store Hybrid.State)
     (v : Hybrid.Value) (h : writeOwner tgt p v s = some ((), t)) :
     s.concrete.write tgt p v = some t.concrete := by
@@ -957,6 +1014,7 @@ theorem writeOwner_erasure (tgt : Target) (p : Hybrid.Place) (s t : Store Hybrid
   | none => simp [hc] at he
   | some st => simp [hc] at he; rw [← he]
 
+/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). -/
 theorem readLoan_erasure (tgt : Target) (i : LoanId) (s t : Store Hybrid.State)
     (v : Hybrid.Value) (h : readLoan tgt i s = some (v, t)) :
     ∃ l, loan s.own i = some l ∧ l.path = [] ∧
@@ -973,6 +1031,7 @@ theorem readLoan_erasure (tgt : Target) (i : LoanId) (s t : Store Hybrid.State)
                 exact ⟨l, hl, hpath, hc, hstore.symm⟩
   · contradiction
 
+/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). -/
 theorem writeLoan_erasure (tgt : Target) (i : LoanId) (s t : Store Hybrid.State)
     (v : Hybrid.Value) (h : writeLoan tgt i v s = some ((), t)) :
     ∃ l, loan s.own i = some l ∧ l.path = [] ∧
@@ -988,7 +1047,7 @@ theorem writeLoan_erasure (tgt : Target) (i : LoanId) (s t : Store Hybrid.State)
     | some st => simp [hc] at he; exact ⟨l, hl, hpath, he ▸ hc⟩
   · contradiction
 
-/-- The next identity has never belonged to any currently active loan. Combined with the
+/-- Helper (arithmetic). Derived invariant or supplied-preservation fact; not independent soundness evidence. (approved: PENDING). The next identity has never belonged to any currently active loan. Combined with the
 unchanged/incremented supply laws, ending a loan cannot make its identity fresh again. -/
 theorem nextLoan_fresh (s : State) (hs : WellFormed s) (l : Loan) (hl : l ∈ s.loans) :
     l.id ≠ LoanId.mk s.nextLoan := by
@@ -997,7 +1056,7 @@ theorem nextLoan_fresh (s : State) (hs : WellFormed s) (l : Loan) (hl : l ∈ s.
   rw [he] at hb
   exact Nat.lt_irrefl _ hb
 
-/-- A successful borrow issues the old supply and advances it exactly once. -/
+/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). A successful borrow issues the old supply and advances it exactly once. -/
 theorem borrow_birth (s t : State) (p : Hybrid.Place) (path : List Projection)
     (m : Mode) (h : borrow s p path m = some t) :
     t.nextLoan = s.nextLoan + 1 ∧
@@ -1009,7 +1068,7 @@ theorem borrow_birth (s t : State) (p : Hybrid.Place) (path : List Projection)
     exact ⟨rfl, _, List.mem_cons_self, rfl, rfl, rfl⟩
   · contradiction
 
-/-- A reborrow keeps the original root and extends the parent's projection. -/
+/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). A reborrow keeps the original root and extends the parent's projection. -/
 theorem reborrow_birth (s t : State) (i : LoanId) (suffix : List Projection)
     (m : Mode) (activation : Nat) (h : reborrowTo s i suffix m activation = some t) :
     t.nextLoan = s.nextLoan + 1 ∧ ∃ a l, loan s i = some a ∧ l ∈ t.loans ∧
@@ -1022,6 +1081,7 @@ theorem reborrow_birth (s t : State) (i : LoanId) (suffix : List Projection)
       List.mem_cons_of_mem _ (List.mem_of_find?_eq_some ha)⟩
   · contradiction
 
+/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
 private theorem endLoan_frames (s t : State) (i : LoanId) (h : endLoan s i = some t) :
     t.frames = s.frames := by
   unfold endLoan at h
@@ -1031,7 +1091,7 @@ private theorem endLoan_frames (s t : State) (i : LoanId) (h : endLoan s i = som
   · cases hh
     rfl
 
-/-- Ending any loan leaves the freshness supply unchanged; an ended identity is not recycled. -/
+/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). Ending any loan leaves the freshness supply unchanged; an ended identity is not recycled. -/
 theorem endLoan_supply (s t : State) (i : LoanId) (h : endLoan s i = some t) :
     t.nextLoan = s.nextLoan := by
   unfold endLoan at h
@@ -1041,6 +1101,7 @@ theorem endLoan_supply (s t : State) (i : LoanId) (h : endLoan s i = some t) :
   · cases hh
     rfl
 
+/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
 private theorem fold_frames {α : Type} (f : State → α → Option State)
     (hf : ∀ s a t, f s a = some t → t.frames = s.frames) (xs : List α)
     (s t : State) (h : xs.foldlM f s = some t) : t.frames = s.frames := by
@@ -1051,6 +1112,7 @@ private theorem fold_frames {α : Type} (f : State → α → Option State)
     obtain ⟨u, hu, hh⟩ := Option.bind_eq_some_iff.mp h
     exact (ih u hh).trans (hf s a u hu)
 
+/-- Helper (inversion). Internal structural proof used by the public results. (approved: PENDING). -/
 private theorem drop_absent (s t : State) (xs : List Var) (f : Activation)
     (hf : s.frames.head? = some f) (h : drop xs s = some t)
     (p : Hybrid.Place) (hp : p ∈ List.map Prod.snd (f.locals.filter fun e => decide (e.1 ∈ xs))) :
@@ -1065,7 +1127,7 @@ private theorem drop_absent (s t : State) (xs : List Var) (f : Activation)
     exact hx.2 (he ▸ hp)
   · contradiction
 
-/-- On leaving a call, no active loan remains rooted at any of that callee's locals.
+/-- Law (subject `ConcreteSpec.Core.Own.leave`). On leaving a call, no active loan remains rooted at any of that callee's locals.
 Outer owners passed downward are not locals; their parent loans remain usable after return. -/
 theorem leave_no_local_loan (s t : State) (f : Activation)
     (hf : s.frames.head? = some f) (hs : WellFormed s) (h : leave s = some t)
@@ -1089,10 +1151,12 @@ theorem leave_no_local_loan (s t : State) (f : Activation)
   have habsent := drop_absent u v _ f (hframes ▸ hf) hv entry.2 hp
   intro hroot
   obtain ⟨x, hx, hxroot, _⟩ := loan_has_owned_root t ht l hl
-  have hxv : x ∈ v.slots := by rw [← heq] at hx; exact hx
+  have hxv : x ∈ v.slots := by
+    rw [← heq] at hx
+    exact (List.mem_filter.mp hx).1
   exact habsent x hxv (hxroot.trans hroot)
 
-/-- Adoption cannot transfer ordinary caller loans: every adopted identity must have been
+/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). Adoption cannot transfer ordinary caller loans: every adopted identity must have been
 marked as a pending argument by the argument-opening transition. -/
 theorem adoptDown_only_arguments (s t : State) (args : List (Var × LoanId))
     (h : adoptDown s args = some t) (e : Var × LoanId) (he : e ∈ args) :
@@ -1104,8 +1168,9 @@ theorem adoptDown_only_arguments (s t : State) (args : List (Var × LoanId))
     exact guard.2.2.2.1 e he
   · contradiction
 
-/-- Exit accounts for every slot of the departing activation, independently of whether its
-locals table named the slot. A successful exit leaves none behind. -/
+/-- Law (subject `ConcreteSpec.Core.Own.leave`). Cleanup removes every slot owned by
+ the departing activation from the authoritative slot inventory, even when a variable lookup
+ index is incomplete. This follows from the removal operation, not a final invariant scan. -/
 theorem leave_no_activation_slot (s t : State) (f : Activation)
     (hf : s.frames.head? = some f) (h : leave s = some t) :
     ∀ x ∈ t.slots, x.activation ≠ f.id := by
@@ -1116,12 +1181,11 @@ theorem leave_no_activation_slot (s t : State) (f : Activation)
   obtain ⟨v, _, hh⟩ := Option.bind_eq_some_iff.mp hh
   split at hh
   · contradiction
-  · rename_i guard
-    cases hh
-    intro x hx he
-    exact guard (List.any_eq_true.mpr ⟨x, hx, by simp [he]⟩)
+  · cases hh
+    intro x hx
+    simpa using (List.mem_filter.mp hx).2
 
-/-- Successful lending targets a real active frame, specifically the current frame.
+/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). Successful lending targets a real active frame, specifically the current frame.
 This includes a callee only after entry has made it current (owner Q1, 2026-11-08). -/
 theorem reborrowTo_current (s t : State) (i : LoanId) (suffix : List Projection)
     (m : Mode) (activation : Nat) (h : reborrowTo s i suffix m activation = some t) :
@@ -1135,7 +1199,7 @@ theorem reborrowTo_current (s t : State) (i : LoanId) (suffix : List Projection)
     exact ⟨f, List.mem_of_head? hf, he, hf⟩
   · contradiction
 
-/-- A direct call argument adds a parentless pending root loan and preserves ownership. -/
+/-- Law (subject `ConcreteSpec.Core.Own.passOwner`). A direct call argument adds a parentless pending root loan and preserves ownership. -/
 theorem passOwner_preserves (s t : CallState) (p : Hybrid.Place) (path : List Projection)
     (m : Mode) (x : Var) (hs : WellFormed s.own)
     (h : passOwner s p path m x = some t) : WellFormed t.own := by
@@ -1155,7 +1219,7 @@ theorem passOwner_preserves (s t : CallState) (p : Hybrid.Place) (path : List Pr
       · exact Or.inr (Or.inr (Or.inr (Or.inr hm)))
     · contradiction
 
-/-- Direct owner argument evaluation preserves synchronized call metadata as well as ownership. -/
+/-- Law (subject `ConcreteSpec.Core.Own.passOwner`). Direct owner argument evaluation preserves synchronized call metadata as well as ownership. -/
 theorem passOwner_call_preserves (s t : CallState) (p : Hybrid.Place)
     (path : List Projection) (m : Mode) (x : Var) (hs : CallState.WellFormed s)
     (h : passOwner s p path m x = some t) : CallState.WellFormed t := by
@@ -1205,7 +1269,7 @@ theorem passOwner_call_preserves (s t : CallState) (p : Hybrid.Place)
         · simpa [List.map_append, fresh l hl] using hs.2.2.2.2 l hl
     · contradiction
 
-/-- Direct owner arguments freeze writes, and mutable arguments also freeze reads,
+/-- Law (subject `ConcreteSpec.Core.Own.passOwner`). Direct owner arguments freeze writes, and mutable arguments also freeze reads,
 from their left-to-right evaluation until their call-duration loan ends. -/
 theorem passOwner_freezes (s t : CallState) (p : Hybrid.Place) (path : List Projection)
     (m : Mode) (x : Var) (h : passOwner s p path m x = some t) :
@@ -1220,7 +1284,7 @@ theorem passOwner_freezes (s t : CallState) (p : Hybrid.Place) (path : List Proj
       cases m <;> simp [ownerAccess, show (Mode.mutable == Mode.shared) = false from rfl]
     · contradiction
 
-/-- Direct argument loans have no caller parent; the caller loan table is retained as a tail. -/
+/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). Direct argument loans have no caller parent; the caller loan table is retained as a tail. -/
 theorem passOwner_birth (s t : CallState) (p : Hybrid.Place) (path : List Projection)
     (m : Mode) (x : Var) (h : passOwner s p path m x = some t) :
     ∃ l, t.own.loans = l :: s.own.loans ∧ l.id = LoanId.mk s.own.nextLoan ∧
@@ -1234,7 +1298,7 @@ theorem passOwner_birth (s t : CallState) (p : Hybrid.Place) (path : List Projec
     · cases h; exact ⟨_, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
     · contradiction
 
-/-- Helper (inversion). Unique loan identities identify the full loan record. -/
+/-- Helper (inversion). Unique loan identities identify the full loan record. (approved: PENDING). -/
 private theorem loan_unique (xs : List Loan) (hn : (xs.map Loan.id).Nodup)
     (x y : Loan) (hx : x ∈ xs) (hy : y ∈ xs) (he : x.id = y.id) : x = y := by
   induction xs with
@@ -1250,7 +1314,7 @@ private theorem loan_unique (xs : List Loan) (hn : (xs.map Loan.id).Nodup)
       · exact False.elim (hn.1 (List.mem_map.mpr ⟨x, hx, he⟩))
       · exact ih hn.2 hx hy
 
-/-- Helper (inversion). Ending a list of other identities retains the entire loan record. -/
+/-- Helper (inversion). Ending a list of other identities retains the entire loan record. (approved: PENDING). -/
 private theorem endLoans_retains (xs : List Loan) (l : Loan)
     (different : ∀ a ∈ xs, l.id ≠ a.id) (s t : State) (hl : l ∈ s.loans)
     (h : xs.foldlM (fun s a => endLoan s a.id) s = some t) : l ∈ t.loans := by
@@ -1267,7 +1331,7 @@ private theorem endLoans_retains (xs : List Loan) (l : Loan)
     · cases hu
       exact List.mem_filter.mpr ⟨hl, by simpa using different a List.mem_cons_self⟩
 
-/-- Returning from a call leaves every loan of another activation unchanged, including
+/-- Law (subject `ConcreteSpec.Core.Own.leave`). Returning from a call leaves every loan of another activation unchanged, including
 pre-existing caller loans. It ends only loans assigned to the departing activation. -/
 theorem leave_retains_caller (s t : State) (f : Activation) (l : Loan)
     (hs : WellFormed s) (hf : s.frames.head? = some f) (hl : l ∈ s.loans)
@@ -1289,7 +1353,7 @@ theorem leave_retains_caller (s t : State) (f : Activation) (l : Loan)
   · contradiction
   · cases h; exact retained
 
-/-- Helper (inversion). Ending loans removes every scheduled identity and never adds loans. -/
+/-- Helper (inversion). Ending loans removes every scheduled identity and never adds loans. (approved: PENDING). -/
 private theorem endLoans_removed (xs : List Loan) (s t : State)
     (h : xs.foldlM (fun s a => endLoan s a.id) s = some t) :
     ∀ l ∈ t.loans, l ∈ s.loans ∧ ∀ a ∈ xs, l.id ≠ a.id := by
@@ -1312,7 +1376,7 @@ private theorem endLoans_removed (xs : List Loan) (s t : State)
       · simpa using hn
       · exact rest b hb
 
-/-- Every call-duration loan ends on successful return, including direct owner arguments.
+/-- Law (subject `ConcreteSpec.Core.Own.leave`). Every call-duration loan ends on successful return, including direct owner arguments.
 There is no lingering caller parent for such arguments (owner Q2, 2026-11-08). -/
 theorem leave_no_activation_loan (s t : State) (f : Activation)
     (hf : s.frames.head? = some f) (h : leave s = some t) :
@@ -1330,7 +1394,7 @@ theorem leave_no_activation_loan (s t : State) (f : Activation)
     obtain ⟨hs, removed⟩ := endLoans_removed _ s u hu l hl
     exact removed l (List.mem_filter.mpr ⟨hs, by simpa using he⟩) rfl
 
-/-- Registering a deferred call preserves the entire store: it neither ends existing loans
+/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). Registering a deferred call preserves the entire store: it neither ends existing loans
 nor evaluates late-read arguments. The ordinary call at execution time opens/adopts its loan. -/
 theorem defer_keeps_store (O : Exec.Operands) (P : Exec.Program O)
     (f : FnId) (args : List O.Expr) (site : SiteId) (L : AList Var O.Val)
@@ -1344,29 +1408,29 @@ theorem defer_keeps_store (O : Exec.Operands) (P : Exec.Program O)
 
 namespace RoundThreeWitnesses
 open ConcreteSpec.Core.Own.Examples
-/-- Instance (law `ConcreteSpec.Core.Own.borrow_birth`). A projected owner loan issues identity zero. -/
+/-- Observation. A projected owner loan issues identity zero. -/
 example : borrow initial ⟨0⟩ [.index 0] .shared = some shared ∧
     shared.nextLoan = initial.nextLoan + 1 ∧ ∃ l ∈ shared.loans,
       l.id = LoanId.mk initial.nextLoan ∧ l.root = ⟨0⟩ ∧ l.path = [.index 0] := by decide
-/-- Planted (law `ConcreteSpec.Core.Own.borrow_birth`). Wrong projection falsifies the existential birth conclusion. -/
+/-- Rejection observation. Wrong projection falsifies the existential birth conclusion. -/
 example : ¬ (∃ l ∈ shared.loans, l.id = LoanId.mk initial.nextLoan ∧
     l.root = ⟨0⟩ ∧ l.path = [.index 99]) := by decide
-/-- Instance (law `ConcreteSpec.Core.Own.reborrow_birth`). The child retains its parent's root, extended path and parent identity. -/
+/-- Observation. The child retains its parent's root, extended path and parent identity. -/
 example : reborrowTo exclusive ⟨0⟩ [.index 1] .mutable 0 = some child ∧
     child.nextLoan = exclusive.nextLoan + 1 ∧ ∃ a l, loan exclusive ⟨0⟩ = some a ∧
       l ∈ child.loans ∧ l.id = LoanId.mk exclusive.nextLoan ∧ l.root = a.root ∧
       l.path = a.path ++ [.index 1] ∧ l.parent = some ⟨0⟩ := by
   simp [Examples.exclusive, Examples.child, Examples.initial, reborrow, reborrowTo, borrow,
     ownerAccess, loanAccess, slot, loan]
-/-- Planted (law `ConcreteSpec.Core.Own.reborrow_birth`). Removing the child's parent field falsifies the birth conclusion itself. -/
+/-- Rejection observation. Removing the child's parent field falsifies the birth conclusion itself. -/
 example : ¬ (∃ a l, loan exclusive ⟨0⟩ = some a ∧
     l ∈ (child.loans.map fun l => { l with parent := none }) ∧
     l.id = LoanId.mk exclusive.nextLoan ∧ l.root = a.root ∧
     l.path = a.path ++ [.index 1] ∧ l.parent = some ⟨0⟩) := by
   simp [Examples.exclusive, Examples.initial, borrow, ownerAccess, slot, loan]
-/-- Instance (law `ConcreteSpec.Core.Own.endLoan_supply`). Ending a child preserves the nonzero supply. -/
+/-- Observation. Ending a child preserves the nonzero supply. -/
 example : ∃ t, endLoan child ⟨1⟩ = some t ∧ t.nextLoan = child.nextLoan := by decide
-/-- Planted (law `ConcreteSpec.Core.Own.endLoan_supply`). A mutated end decrements the supply. -/
+/-- Rejection observation. A mutated end decrements the supply. -/
 example : ¬ (({ child with nextLoan := child.nextLoan - 1 } : State).nextLoan =
     child.nextLoan) := by decide
 
@@ -1374,54 +1438,54 @@ example : ¬ (({ child with nextLoan := child.nextLoan - 1 } : State).nextLoan =
 def localFrame : State := (enter (fun _ => some ⟨.int .i32, true, true⟩) [y] shared).getD initial
 def localLoan : State := (borrow localFrame ⟨1⟩ [] .shared).getD initial
 def exited : State := (leave localLoan).getD initial
-/-- Instance (law `ConcreteSpec.Core.Own.leave_no_local_loan`, law `ConcreteSpec.Core.Own.leave_no_activation_slot`). The departing local had a live loan; the caller's loan survives. -/
+/-- Observation. The departing local had a live loan; the caller's loan survives. -/
 example : WellFormed localLoan ∧ leave localLoan = some exited ∧
     (y, Hybrid.Place.mk 1) ∈ (localLoan.frames.headD ⟨99, [], []⟩).locals ∧
     (∃ l ∈ localLoan.loans, l.root = ⟨1⟩) ∧
     (∃ l ∈ exited.loans, l.root = ⟨0⟩) ∧
     (∀ l ∈ exited.loans, l.root ≠ Hybrid.Place.mk 1) ∧
     (∀ x ∈ exited.slots, x.activation ≠ 1) := by decide
-/-- Planted (law `ConcreteSpec.Core.Own.leave_no_local_loan`). Exit retaining the local's loan fails the root exclusion conclusion. -/
+/-- Rejection observation. Exit retaining the local's loan fails the root exclusion conclusion. -/
 example : ¬ (∀ l ∈ localLoan.loans, l.root ≠ Hybrid.Place.mk 1) := by decide
-/-- Planted (law `ConcreteSpec.Core.Own.leave_no_activation_slot`). Exit retaining a departing slot fails activation exclusion. -/
+/-- Rejection observation. Exit retaining a departing slot fails activation exclusion. -/
 example : ¬ (∀ x ∈ localLoan.slots, x.activation ≠ 1) := by decide
-/-- Instance (law `ConcreteSpec.Core.Own.adoptDown_only_arguments`). A child marked during argument evaluation can be adopted. -/
+/-- Observation. A child marked during argument evaluation can be adopted. -/
 example : (callLife types (.enter [y]) CallWitnesses.waiting).isSome = true ∧
     ∃ l ∈ CallWitnesses.waiting.own.loans, l.id = LoanId.mk 1 ∧
       l.pendingArgument = true := by decide
-/-- Planted (law `ConcreteSpec.Core.Own.adoptDown_only_arguments`). Adopting a normal caller loan lacks the required pending witness. -/
+/-- Rejection observation. Adopting a normal caller loan lacks the required pending witness. -/
 example : ¬ (∃ l ∈ exclusive.loans, l.id = LoanId.mk 0 ∧
     l.pendingArgument = true) := by decide
-/-- Planted (law `ConcreteSpec.Core.Own.enter_progress`). An untyped parameter refuses entry. -/
+/-- Rejection observation. An untyped parameter refuses entry. -/
 example : ¬ (enter (fun _ => none) [y] shared).isSome = true := by decide
-/-- Instance (law `ConcreteSpec.Core.Own.enter_progress`). A typed fresh parameter enters over a borrowed caller. -/
+/-- Observation. A typed fresh parameter enters over a borrowed caller. -/
 example : (enter types [y] shared).isSome = true := by decide
-/-- Instance (law `ConcreteSpec.Core.Own.reborrowTo_current`). Lending downward after entry targets the newly active callee. -/
+/-- Observation. Lending downward after entry targets the newly active callee. -/
 example : (reborrowTo LifecycleWitnesses.called ⟨1⟩ [] .shared 1).isSome = true ∧
     ∃ f ∈ LifecycleWitnesses.called.frames, f.id = 1 ∧
       LifecycleWitnesses.called.frames.head? = some f := by decide
 /-- Refused: activation 1 cannot lend upward into its caller, activation 0. -/
 example : reborrowTo LifecycleWitnesses.called ⟨1⟩ [] .shared 0 = none := by decide
-/-- Planted (law `ConcreteSpec.Core.Own.reborrowTo_current`). The former arbitrary-destination rule admits upward lending, whose destination is not current. -/
+/-- Rejection observation. The former arbitrary-destination rule admits upward lending, whose destination is not current. -/
 example : ¬ (∃ f ∈ LifecycleWitnesses.called.frames, f.id = 0 ∧
     LifecycleWitnesses.called.frames.head? = some f) := by decide
-/-- Planted (law `ConcreteSpec.Core.Own.borrow_birth`). A rule that issues the wrong birth counter fails the supply conclusion. -/
+/-- Rejection observation. A rule that issues the wrong birth counter fails the supply conclusion. -/
 example : ¬ (({ shared with nextLoan := 7 } : State).nextLoan = initial.nextLoan + 1) := by decide
-/-- Planted (law `ConcreteSpec.Core.Own.reborrow_birth`). Failing to append the requested suffix falsifies the path conclusion. -/
+/-- Rejection observation. Failing to append the requested suffix falsifies the path conclusion. -/
 example : ¬ (∃ l ∈ child.loans, l.id = LoanId.mk exclusive.nextLoan ∧
     l.path = [.index 0, .index 99]) := by decide
-/-- Instance (law `ConcreteSpec.Core.Own.reborrow_birth`). Reborrowing retains the original parent record. -/
+/-- Observation. Reborrowing retains the original parent record. -/
 example : ∃ a, loan exclusive ⟨0⟩ = some a ∧ a ∈ child.loans := by
   simp [Examples.exclusive, Examples.child, Examples.initial, reborrow, reborrowTo,
     borrow, ownerAccess, loanAccess, slot, loan]
-/-- Planted (law `ConcreteSpec.Core.Own.reborrow_birth`). Removing the parent now falsifies the strengthened retention conclusion. -/
+/-- Rejection observation. Removing the parent now falsifies the strengthened retention conclusion. -/
 example : ¬ (∃ a, loan exclusive ⟨0⟩ = some a ∧
     a ∈ child.loans.filter (·.id != LoanId.mk 0)) := by
   simp [Examples.exclusive, Examples.child, Examples.initial, reborrow, reborrowTo,
     borrow, ownerAccess, loanAccess, slot, loan]
 end RoundThreeWitnesses
 
-/-- A direct owner call with no intervening operation restores the caller's complete slot
+/-- Law (subject `ConcreteSpec.Core.Own.passOwner`). A direct owner call with no intervening operation restores the caller's complete slot
 and loan tables. Only the fresh identity supplies advance. Thus every owner permission and
 every pre-existing caller loan is exactly as before the call. -/
 theorem directOwner_roundtrip (s : State) (p : Hybrid.Place) (path : List Projection)
@@ -1482,12 +1546,11 @@ theorem directOwner_roundtrip (s : State) (p : Hybrid.Place) (path : List Projec
   have noChildExists : ¬ ∃ l ∈ s.loans, l.parent = some (LoanId.mk s.nextLoan) := by
     rintro ⟨l, hl, he⟩
     exact noChild l hl he
-  have noSlotExists : ¬ ∃ a ∈ s.slots, a.activation = s.nextActivation := by
-    rintro ⟨a, ha, he⟩
-    exact oldSlots a ha he
   simp [passOwner, hf, issued, allowed, callLife, enter, adoptDown, life, leave,
     endLocals, endLoan, drop, loan, AList.lookup, mapOld, filterAct, noChildExists,
-    filterId, noSlotExists]
+    filterId]
+  exact ⟨⟨fun a ha he _ => False.elim (oldSlots a ha he),
+    fun _ _ a ha he => False.elim (oldSlots a ha he)⟩, oldSlots⟩
 
 namespace DirectArgumentWitnesses
 open ConcreteSpec.Core.Own.Examples
@@ -1501,43 +1564,43 @@ def waiting : CallState := (passOwner caller ⟨1⟩ [.index 3] .mutable z).getD
 def called : CallState := (callLife types (.enter [z]) waiting).getD caller
 def returned : CallState := (callLife types .leave called).getD caller
 
-/-- Instance (law `ConcreteSpec.Core.Own.passOwner_preserves`, law `ConcreteSpec.Core.Own.passOwner_call_preserves`). A direct mutable argument coexists with an unrelated caller loan. -/
+/-- Observation. A direct mutable argument coexists with an unrelated caller loan. -/
 example : CallState.WellFormed caller ∧ passOwner caller ⟨1⟩ [.index 3] .mutable z = some waiting ∧
     CallState.WellFormed waiting := by decide
-/-- Planted (law `ConcreteSpec.Core.Own.passOwner_preserves`, law `ConcreteSpec.Core.Own.passOwner_call_preserves`). A mutated direct loan reuses the birth supply. -/
+/-- Rejection observation. A mutated direct loan reuses the birth supply. -/
 example : ¬ WellFormed { waiting.own with nextLoan := 1 } := by decide
-/-- Instance (law `ConcreteSpec.Core.Own.passOwner_birth`). Direct lending has no caller-side parent. -/
+/-- Observation. Direct lending has no caller-side parent. -/
 example : ∃ l, waiting.own.loans = l :: caller.own.loans ∧ l.id = LoanId.mk caller.own.nextLoan ∧
     l.root = Hybrid.Place.mk 1 ∧ l.path = [.index 3] ∧ l.mode = .mutable ∧
     l.parent = none ∧ l.pendingArgument = true ∧ l.callRoot = true := by
   exact passOwner_birth caller waiting ⟨1⟩ [.index 3] .mutable z (by decide)
-/-- Planted (law `ConcreteSpec.Core.Own.passOwner_birth`). A child of the caller loan cannot be the required parentless root. -/
+/-- Rejection observation. A child of the caller loan cannot be the required parentless root. -/
 example : ¬ (∃ l ∈ child.loans, l.id = LoanId.mk 1 ∧ l.parent = none) := by decide
-/-- Instance (law `ConcreteSpec.Core.Own.passOwner_freezes`). Argument evaluation freezes both reads and writes before entry. -/
+/-- Observation. Argument evaluation freezes both reads and writes before entry. -/
 example : ownerAccess waiting.own ⟨1⟩ .mutable = false ∧
     ownerAccess waiting.own ⟨1⟩ .shared = false := by decide
-/-- Planted (law `ConcreteSpec.Core.Own.passOwner_freezes`). Removing the loan prematurely fails the freeze conclusion. -/
+/-- Rejection observation. Removing the loan prematurely fails the freeze conclusion. -/
 example : ¬ (ownerAccess { waiting.own with loans := caller.own.loans } ⟨1⟩ .mutable = false) := by decide
-/-- Instance (law `ConcreteSpec.Core.Own.leave_no_activation_loan`). Entry adopts the direct root and return ends it; its owner is immediately writable. -/
+/-- Observation. Entry adopts the direct root and return ends it; its owner is immediately writable. -/
 example : callLife types (.enter [z]) waiting = some called ∧
     callLife types .leave called = some returned ∧
     (∃ l ∈ called.own.loans, l.callRoot = true ∧ l.activation = 1) ∧
     (∀ l ∈ returned.own.loans, l.activation ≠ 1) ∧
     ownerAccess returned.own ⟨1⟩ .mutable = true := by decide
-/-- Planted (law `ConcreteSpec.Core.Own.leave_no_activation_loan`). A return that never ends its direct argument retains a callee loan and freezes the owner. -/
+/-- Rejection observation. A return that never ends its direct argument retains a callee loan and freezes the owner. -/
 example : ¬ (∀ l ∈ called.own.loans, l.activation ≠ 1) := by decide
-/-- Instance (law `ConcreteSpec.Core.Own.leave_retains_caller`). The original caller loan is unchanged after return. -/
+/-- Observation. The original caller loan is unchanged after return. -/
 example : WellFormed called.own ∧
     (∀ l ∈ caller.own.loans, l ∈ called.own.loans ∧ l ∈ returned.own.loans) := by decide
-/-- Planted (law `ConcreteSpec.Core.Own.leave_retains_caller`). Ending every loan would destroy the pre-existing caller loan. -/
+/-- Rejection observation. Ending every loan would destroy the pre-existing caller loan. -/
 example : ¬ (∀ l ∈ caller.own.loans, l ∈ ([] : List Loan)) := by decide
 
-/-- Instance (law `ConcreteSpec.Core.Own.defer_keeps_store`). Registering a deferred call keeps a live direct root loan unchanged. -/
+/-- Observation. Registering a deferred call keeps a live direct root loan unchanged. -/
 example : ∃ c : Exec.Config callOps,
     Exec.step callProgram ⟨.exec (.defer callee [.ownerArgument ⟨1⟩ .mutable z] ⟨0⟩),
       [], waiting, [.scope ⟨0⟩ [] []]⟩ = some (.next c) ∧ c.store = waiting := by
   exact ⟨_, rfl, rfl⟩
-/-- Planted (law `ConcreteSpec.Core.Own.defer_keeps_store`). Ending the call loan at registration changes the store and unfreezes the owner prematurely. -/
+/-- Rejection observation. Ending the call loan at registration changes the store and unfreezes the owner prematurely. -/
 example : ¬ ({ waiting with own := { waiting.own with loans := caller.own.loans } } = waiting) := by decide
 
 /-- Accepted: a real C1 direct owner call returns, and the next operand reads the owner. -/
@@ -1553,17 +1616,17 @@ example : (match (Exec.run callProgram (fun _ p => nomatch p) 100
       (.cond (.value (.read x)) .skip .skip ⟨0⟩)), [(x, 7)], ⟨initial, []⟩, []⟩).ending with
     | .final .normal => true
     | _ => false) = true := by decide
-/-- Instance (law `ConcreteSpec.Core.Own.directOwner_roundtrip`). A call restores two caller owners and a pre-existing caller loan. -/
+/-- Observation. A call restores two caller owners and a pre-existing caller loan. -/
 example : (do
     let waiting ← passOwner caller ⟨1⟩ [.index 3] .mutable z
     let called ← callLife types (.enter [z]) waiting
     callLife types .leave called) = some returned ∧
     returned = ⟨{ caller.own with nextLoan := caller.own.nextLoan + 1, nextActivation := caller.own.nextActivation + 1 }, []⟩ := by decide
-/-- Planted (law `ConcreteSpec.Core.Own.directOwner_roundtrip`). Keeping the call loan forever fails exact restoration of the caller tables. -/
+/-- Rejection observation. Keeping the call loan forever fails exact restoration of the caller tables. -/
 example : ¬ (called.own.loans = caller.own.loans) := by decide
 end DirectArgumentWitnesses
 
-/-- Reborrowing preserves actual active destinations, rather than just the supply bound. -/
+/-- Law (subject `ConcreteSpec.Core.Own.reborrowTo`). Reborrowing preserves actual active destinations, rather than just the supply bound. -/
 theorem reborrowTo_live (s t : State) (i : LoanId) (path : List Projection)
     (m : Mode) (activation : Nat) (hs : LiveDestinations s)
     (h : reborrowTo s i path m activation = some t) : LiveDestinations t := by
@@ -1580,7 +1643,7 @@ theorem reborrowTo_live (s t : State) (i : LoanId) (path : List Projection)
     · exact hs l hl
   · contradiction
 
-/-- Adopting pending arguments preserves active destinations: adopted loans target the
+/-- Law (subject `ConcreteSpec.Core.Own.adoptDown`). Adopting pending arguments preserves active destinations: adopted loans target the
 current callee, and other loans retain their active caller destinations. -/
 theorem adoptDown_live (s t : State) (args : List (Var × LoanId))
     (hs : LiveDestinations s) (h : adoptDown s args = some t) : LiveDestinations t := by
@@ -1600,7 +1663,7 @@ theorem adoptDown_live (s t : State) (args : List (Var × LoanId))
       · simpa [hframes] using hs a ha
     · contradiction
 
-/-- Helper (projection). Successful return pops exactly the current activation frame. -/
+/-- Helper (projection). Successful return pops exactly the current activation frame. (approved: PENDING). -/
 private theorem leave_frames_proj (s t : State) (f : Activation)
     (hf : s.frames.head? = some f) (h : leave s = some t) :
     t.frames = s.frames.tail := by
@@ -1621,7 +1684,7 @@ private theorem leave_frames_proj (s t : State) (f : Activation)
       simp
   · contradiction
 
-/-- Successful return cannot strand a loan targeting the departed frame. Together with
+/-- Law (subject `ConcreteSpec.Core.Own.leave`). Successful return cannot strand a loan targeting the departed frame. Together with
 active destinations on entry, this preserves the lifetime invariant across the pop. -/
 theorem leave_live (s t : State) (f : Activation) (hs : LiveDestinations s)
     (hf : s.frames.head? = some f) (h : leave s = some t) : LiveDestinations t := by
@@ -1639,23 +1702,23 @@ theorem leave_live (s t : State) (f : Activation) (hs : LiveDestinations s)
 
 namespace LiveDestinationWitnesses
 open ConcreteSpec.Core.Own.Examples
-/-- Instance (law `ConcreteSpec.Core.Own.reborrowTo_live`). A mutable loan and child target their active caller frame. -/
+/-- Observation. A mutable loan and child target their active caller frame. -/
 example : LiveDestinations exclusive ∧ LiveDestinations child ∧
     reborrowTo exclusive ⟨0⟩ [.index 1] .mutable 0 = some child := by decide
-/-- Planted (law `ConcreteSpec.Core.Own.reborrowTo_live`). Targeting an inactive but previously issued activation breaks actual liveness. -/
+/-- Rejection observation. Targeting an inactive but previously issued activation breaks actual liveness. -/
 example : ¬ LiveDestinations { child with
     nextActivation := 3
     loans := child.loans.map fun l => { l with activation := 2 } } := by decide
-/-- Instance (law `ConcreteSpec.Core.Own.adoptDown_live`). A pending direct root becomes a loan of the active callee. -/
+/-- Observation. A pending direct root becomes a loan of the active callee. -/
 example : LiveDestinations DirectArgumentWitnesses.waiting.own ∧
     LiveDestinations DirectArgumentWitnesses.called.own := by decide
-/-- Planted (law `ConcreteSpec.Core.Own.adoptDown_live`). Adoption into an inactive destination violates the conclusion. -/
+/-- Rejection observation. Adoption into an inactive destination violates the conclusion. -/
 example : ¬ LiveDestinations { DirectArgumentWitnesses.called.own with
     loans := DirectArgumentWitnesses.called.own.loans.map fun l => { l with activation := 7 } } := by decide
-/-- Instance (law `ConcreteSpec.Core.Own.leave_live`). Return retains the caller loan and its live destination. -/
+/-- Observation. Return retains the caller loan and its live destination. -/
 example : LiveDestinations DirectArgumentWitnesses.called.own ∧
     LiveDestinations DirectArgumentWitnesses.returned.own := by decide
-/-- Planted (law `ConcreteSpec.Core.Own.leave_live`). Popping the callee without ending its root loan strands that loan. -/
+/-- Rejection observation. Popping the callee without ending its root loan strands that loan. -/
 example : ¬ LiveDestinations { DirectArgumentWitnesses.called.own with
     frames := DirectArgumentWitnesses.called.own.frames.tail } := by decide
 end LiveDestinationWitnesses
@@ -1664,7 +1727,7 @@ section ExecErasure
 variable {O : Exec.Operands} {types : Var → Option Descriptor}
   {permit : AList Var O.Val → O.Expr → State → Option State}
 
-/-- Operand evaluation forward simulation (Q9.10, owner decision 2026-11-08 Q3): a
+/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). Operand evaluation forward simulation (Q9.10, owner decision 2026-11-08 Q3): a
 successful instrumented operand evaluation evaluates to the same value and concrete store
 in the erased operand instance. -/
 theorem eval_ok_erasure (L : AList Var O.Val) (s t : Store O.Store) (e : O.Expr) (v : O.Val)
@@ -1684,7 +1747,7 @@ theorem eval_ok_erasure (L : AList Var O.Val) (s t : Store O.Store) (e : O.Expr)
     | trap _ => rw [he] at h; cases h
     | stuck => rw [he] at h; cases h
 
-/-- Operand trap forward simulation (Q9.10, owner decision 2026-11-08 Q3): an instrumented
+/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). Operand trap forward simulation (Q9.10, owner decision 2026-11-08 Q3): an instrumented
 operand evaluation that traps traps with the same kind in the erased operand instance. -/
 theorem eval_trap_erasure (L : AList Var O.Val) (s : Store O.Store) (e : O.Expr) (kd : TrapKind)
     (h : (instrumentOperands O types permit).eval L s e = .trap kd) :
@@ -1699,7 +1762,7 @@ theorem eval_trap_erasure (L : AList Var O.Val) (s : Store O.Store) (e : O.Expr)
     | trap _ => rw [he] at h; cases h; exact he
     | stuck => rw [he] at h; cases h
 
-/-- Left-to-right argument evaluation forward simulation: a successful instrumented
+/-- Law (subject `ConcreteSpec.Core.Own.instrumentEval`). Left-to-right argument evaluation forward simulation: a successful instrumented
 argument list evaluates to the same values and concrete store in the erased instance. -/
 theorem evalArgs_ok_erasure (L : AList Var O.Val) :
     ∀ (args : List O.Expr) (s t : Store O.Store) (vs : List O.Val),
@@ -1734,7 +1797,7 @@ theorem evalArgs_ok_erasure (L : AList Var O.Val) :
     | trap _ => rw [he] at h; cases h
     | stuck => rw [he] at h; cases h
 
-/-- Argument trap forward simulation: an instrumented argument list that traps traps
+/-- Law (subject `ConcreteSpec.Core.Own.instrumentEval`). Argument trap forward simulation: an instrumented argument list that traps traps
 with the same kind in the erased instance. -/
 theorem evalArgs_trap_erasure (L : AList Var O.Val) :
     ∀ (args : List O.Expr) (s : Store O.Store) (kd : TrapKind),
@@ -1771,11 +1834,11 @@ theorem evalArgs_trap_erasure (L : AList Var O.Val) :
       rfl
     | stuck => rw [he] at h; cases h
 
-/-- Condition tests are identical in the instrumented and erased operand instances. -/
+/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). Condition tests are identical in the instrumented and erased operand instances. -/
 theorem test_erasure (v : O.Val) :
     (instrumentOperands O types permit).test v = O.test v := rfl
 
-/-- Lifecycle forward simulation: a successful instrumented lifecycle event performs
+/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). Lifecycle forward simulation: a successful instrumented lifecycle event performs
 the matching concrete lifecycle transition on the erased store. -/
 theorem instrumentLife_erasure (ev : Exec.Life) (s t : Store O.Store)
     (h : (instrumentOperands O types permit).life ev s = some t) :
@@ -1792,7 +1855,7 @@ theorem instrumentLife_erasure (ev : Exec.Life) (s t : Store O.Store)
       cases h
       exact hc
 
-/-- Primitive-contract forward simulation: an allowed instrumented answer satisfies the
+/-- Helper (computation). Computes the transition or extracts its checked guard; not independent soundness evidence. (approved: PENDING). Primitive-contract forward simulation: an allowed instrumented answer satisfies the
 erased primitive contract and preserves the ownership state across the request. -/
 theorem allows_erasure (p : O.Prim) (vs : List O.Val) (s : Store O.Store)
     (a : Exec.Answer O.Val O.Event (Store O.Store))
@@ -1802,7 +1865,7 @@ theorem allows_erasure (p : O.Prim) (vs : List O.Val) (s : Store O.Store)
   obtain ⟨ha, hown⟩ := Bool.and_eq_true_iff.mp h
   exact ⟨ha, of_decide_eq_true hown⟩
 
-/-- Helper (projection). Result-binding lifecycle erases to the concrete `bindLife`. -/
+/-- Helper (projection). Result-binding lifecycle erases to the concrete `bindLife`. (approved: PENDING). -/
 private theorem bindLife_erasure_proj (dst : Option Var) (s t : Store O.Store)
     (h : Exec.bindLife (instrumentOperands O types permit) dst s = some t) :
     Exec.bindLife O dst (erase s) = some (erase t) := by
@@ -1810,13 +1873,13 @@ private theorem bindLife_erasure_proj (dst : Option Var) (s t : Store O.Store)
   | none => cases h; rfl
   | some x => exact instrumentLife_erasure (.bind x) s t h
 
-/-- Helper (projection). Scope-exit drop erases to the concrete `dropOut`. -/
+/-- Helper (projection). Scope-exit drop erases to the concrete `dropOut`. (approved: PENDING). -/
 private theorem dropOut_erasure_proj (dm : List Var) (L : AList Var O.Val) (s t : Store O.Store)
     (h : Exec.dropOut (instrumentOperands O types permit) dm L s = some t) :
     Exec.dropOut O dm L (erase s) = some (erase t) :=
   instrumentLife_erasure (.drop (Exec.dead dm L)) s t h
 
-/-- Helper (projection). Deferred cleanup registration commutes with frame erasure. -/
+/-- Helper (projection). Deferred cleanup registration commutes with frame erasure. (approved: PENDING). -/
 private theorem register_erasure_proj (d : Exec.Deferred (instrumentOperands O types permit)) :
     ∀ (k k' : List (Exec.Frame (instrumentOperands O types permit))),
       Exec.register d k = some k' →
@@ -1834,7 +1897,7 @@ private theorem register_erasure_proj (d : Exec.Deferred (instrumentOperands O t
   | .resume _ :: _, _, h => by cases h
   | .ret .. :: _, _, h => by cases h
 
-/-- Helper (projection). Function lookup in an erased program erases the looked-up function. -/
+/-- Helper (projection). Function lookup in an erased program erases the looked-up function. (approved: PENDING). -/
 private theorem lookup_eraseProgram_proj :
     ∀ (fns : AList FnId (Exec.Fn (instrumentOperands O types permit))) (f : FnId),
       AList.lookup (List.map (fun e => (e.1, eraseFn e.2)) fns) f =
@@ -1846,7 +1909,7 @@ private theorem lookup_eraseProgram_proj :
     · simp [h]
     · simp [h, lookup_eraseProgram_proj fns f]
 
-/-- Helper (projection). Structured exit unwinding commutes with configuration erasure. -/
+/-- Helper (projection). Structured exit unwinding commutes with configuration erasure. (approved: PENDING). -/
 private theorem stepExit_erasure_proj (L : AList Var O.Val) (s : Store O.Store)
     (e : Exec.Exit O.Val) (k : List (Exec.Frame (instrumentOperands O types permit)))
     (out : Exec.Out (instrumentOperands O types permit))
@@ -1911,7 +1974,7 @@ private theorem stepExit_erasure_proj (L : AList Var O.Val) (s : Store O.Store)
         rw [bindLife_erasure_proj (O := O) (permit := permit) dst st' st'' hst'']
         rfl
 
-/-- Silent machine-step forward simulation (owner decision 2026-11-08 Q3): whenever `step`
+/-- Law (subject `ConcreteSpec.Core.Own.eraseConfig`). Silent machine-step forward simulation (owner decision 2026-11-08 Q3): whenever `step`
 on the instrumented C1 machine produces a next configuration, `step` on the erased machine
 produces the erased configuration. -/
 theorem step_next_erasure (P : Exec.Program (instrumentOperands O types permit))
@@ -2122,7 +2185,7 @@ theorem step_next_erasure (P : Exec.Program (instrumentOperands O types permit))
     exact hstep
   | trapped _ _ => cases h
 
-/-- Primitive-request forward simulation (owner decision 2026-11-08 Q3): whenever `step`
+/-- Law (subject `ConcreteSpec.Core.Own.eraseConfig`). Primitive-request forward simulation (owner decision 2026-11-08 Q3): whenever `step`
 on the instrumented C1 machine issues a primitive request, `step` on the erased machine
 issues the matching request with the erased store and agreeing continuation. -/
 theorem step_request_erasure (P : Exec.Program (instrumentOperands O types permit))
@@ -2263,18 +2326,18 @@ theorem step_request_erasure (P : Exec.Program (instrumentOperands O types permi
     cases hc
   | trapped _ _ => cases h
 
-/-- Helper (projection). Erasing a step label preserves its emitted event list. -/
+/-- Helper (projection). Erasing a step label preserves its emitted event list. (approved: PENDING). -/
 private theorem eraseLabel_events_proj (l : Exec.Label (instrumentOperands O types permit)) :
     (eraseLabel l).events = l.events := by
   cases l <;> rfl
 
-/-- Helper (projection). Erasing an answer's step label equals the erased answer's label. -/
+/-- Helper (projection). Erasing an answer's step label equals the erased answer's label. (approved: PENDING). -/
 private theorem eraseLabel_answer_proj (a : Exec.Answer O.Val O.Event (Store O.Store)) :
     eraseLabel (O := O) (types := types) (permit := permit) a.label = (eraseAnswer a).label := by
   rcases a with ⟨ev, _, _⟩
   cases ev <;> rfl
 
-/-- Single-step forward simulation (owner decision 2026-11-08 Q3): every labeled step of
+/-- Law (subject `ConcreteSpec.Core.Own.eraseConfig`). Single-step forward simulation (owner decision 2026-11-08 Q3): every labeled step of
 the instrumented C1 machine is matched by a step of the erased machine with the same
 event label and concrete store. -/
 theorem Step_erasure (P : Exec.Program (instrumentOperands O types permit))
@@ -2290,7 +2353,7 @@ theorem Step_erasure (P : Exec.Program (instrumentOperands O types permit))
     rw [eraseLabel_answer_proj]
     exact .prim hs_erased hallows_erased (hk_erased _ _ hk)
 
-/-- Multi-step forward simulation (owner decision 2026-11-08 Q3): every multi-step run
+/-- Law (subject `ConcreteSpec.Core.Own.eraseConfig`). Multi-step forward simulation (owner decision 2026-11-08 Q3): every multi-step run
 of the instrumented C1 machine is matched by a multi-step run of the erased machine
 emitting the exact same events in the same order and reaching the erased configuration. -/
 theorem Steps_erasure (P : Exec.Program (instrumentOperands O types permit))
@@ -2304,7 +2367,7 @@ theorem Steps_erasure (P : Exec.Program (instrumentOperands O types permit))
     have hs' := Step_erasure P c c₁ l hs
     simpa [eraseLabel_events_proj] using Exec.Steps.step hs' ih
 
-/-- Helper (projection). Configuration finality is invariant under erasure. -/
+/-- Helper (projection). Configuration finality is invariant under erasure. (approved: PENDING). -/
 private theorem final?_eraseConfig_proj (c : Exec.Config (instrumentOperands O types permit)) :
     (eraseConfig c).final? = c.final? := by
   rcases c with ⟨ctrl, L, st, frames⟩
@@ -2318,14 +2381,14 @@ private theorem final?_eraseConfig_proj (c : Exec.Config (instrumentOperands O t
     | ret _ => cases frames <;> rfl
   | trapped _ _ => rfl
 
-/-- Helper (projection). Lifting a concrete answer preserves the primitive contract check. -/
+/-- Helper (projection). Lifting a concrete answer preserves the primitive contract check. (approved: PENDING). -/
 private theorem allows_liftAnswer_proj (p : O.Prim) (vs : List O.Val) (s : Store O.Store)
     (a : Exec.Answer O.Val O.Event O.Store) :
     (instrumentOperands O types permit).allows p vs s (liftAnswer s.own a) =
       O.allows p vs (erase s) a := by
   simp [instrumentOperands, instrumentAllows, eraseAnswer, liftAnswer, erase]
 
-/-- Fuel-indexed evaluator forward simulation (owner decision 2026-11-08 Q3): whenever
+/-- Law (subject `ConcreteSpec.Core.Own.eraseConfig`). Fuel-indexed evaluator forward simulation (owner decision 2026-11-08 Q3): whenever
 the instrumented run reaches a non-`stuck` outcome (`final`—normal, returned or trapped—
 `noAnswer`, `badAnswer` or `outOfFuel`), the erased run reaches the matching outcome with
 the same events in order and the same concrete store. -/
@@ -2392,7 +2455,7 @@ theorem runFrom_erasure (P : Exec.Program (instrumentOperands O types permit))
               simp only [ha', ha] at hns ⊢
               rfl
 
-/-- Whole-run forward simulation from an empty event history (owner decision 2026-11-08 Q3). -/
+/-- Law (subject `ConcreteSpec.Core.Own.eraseConfig`). Whole-run forward simulation from an empty event history (owner decision 2026-11-08 Q3). -/
 theorem run_erasure (P : Exec.Program (instrumentOperands O types permit))
     (ρ : Exec.Oracle O) (fuel : Nat)
     (c : Exec.Config (instrumentOperands O types permit))
@@ -2402,7 +2465,7 @@ theorem run_erasure (P : Exec.Program (instrumentOperands O types permit))
   runFrom_erasure P ρ fuel [] c h
 
 /-- Helper (inversion). Under `EvalPermitted`, an instrumented operand evaluation that is
-stuck is also stuck in the erased operand instance. -/
+stuck is also stuck in the erased operand instance. (approved: PENDING). -/
 private theorem eval_stuck_of_permitted_inv (L : AList Var O.Val) (s : Store O.Store)
     (e : O.Expr) (hp : EvalPermitted O permit L s e)
     (hs : (instrumentOperands O types permit).eval L s e = .stuck) :
@@ -2423,7 +2486,7 @@ private theorem eval_stuck_of_permitted_inv (L : AList Var O.Val) (s : Store O.S
   | stuck => exact hc
 
 /-- Helper (inversion). Under `ArgsPermitted`, an instrumented argument list that is
-stuck is also stuck in the erased operand instance. -/
+stuck is also stuck in the erased operand instance. (approved: PENDING). -/
 private theorem evalArgs_stuck_of_permitted_inv (L : AList Var O.Val) :
     ∀ (args : List O.Expr) (s : Store O.Store),
       ArgsPermitted O types permit L s args →
@@ -2458,7 +2521,7 @@ private theorem evalArgs_stuck_of_permitted_inv (L : AList Var O.Val) :
       rfl
 
 /-- Helper (inversion). Under `LifePermitted`, an instrumented lifecycle transition that
-returns `none` also returns `none` on the erased store. -/
+returns `none` also returns `none` on the erased store. (approved: PENDING). -/
 private theorem life_none_of_permitted_inv (ev : Exec.Life) (s : Store O.Store)
     (hp : LifePermitted O types ev s)
     (hs : (instrumentOperands O types permit).life ev s = none) :
@@ -2473,7 +2536,7 @@ private theorem life_none_of_permitted_inv (ev : Exec.Life) (s : Store O.Store)
     cases hs
 
 /-- Helper (inversion). Under `BindDstPermitted`, an instrumented destination-binding
-lifecycle that returns `none` also returns `none` on the erased store. -/
+lifecycle that returns `none` also returns `none` on the erased store. (approved: PENDING). -/
 private theorem bindLife_none_of_permitted_inv (dst : Option Var) (s : Store O.Store)
     (hp : BindDstPermitted O types dst s)
     (hs : Exec.bindLife (instrumentOperands O types permit) dst s = none) :
@@ -2483,14 +2546,14 @@ private theorem bindLife_none_of_permitted_inv (dst : Option Var) (s : Store O.S
   | some x => exact life_none_of_permitted_inv (O := O) (permit := permit) (.bind x) s hp hs
 
 /-- Helper (inversion). Under `LifePermitted`, an instrumented scope-exit drop that
-returns `none` also returns `none` on the erased store. -/
+returns `none` also returns `none` on the erased store. (approved: PENDING). -/
 private theorem dropOut_none_of_permitted_inv (dm : List Var) (L : AList Var O.Val)
     (s : Store O.Store) (hp : LifePermitted O types (.drop (Exec.dead dm L)) s)
     (hs : Exec.dropOut (instrumentOperands O types permit) dm L s = none) :
     Exec.dropOut O dm L (erase s) = none :=
   life_none_of_permitted_inv (O := O) (permit := permit) (.drop (Exec.dead dm L)) s hp hs
 
-/-- Helper (projection). Deferred registration failure is invariant under frame erasure. -/
+/-- Helper (projection). Deferred registration failure is invariant under frame erasure. (approved: PENDING). -/
 private theorem register_none_proj (d : Exec.Deferred (instrumentOperands O types permit)) :
     ∀ (k : List (Exec.Frame (instrumentOperands O types permit))),
       Exec.register d k = none →
@@ -2506,7 +2569,7 @@ private theorem register_none_proj (d : Exec.Deferred (instrumentOperands O type
   | .ret .. :: _, _ => rfl
 
 /-- Helper (inversion). Under `ExitFramePermitted`, structured exit unwinding that returns
-`none` on the instrumented machine also returns `none` on the erased machine. -/
+`none` on the instrumented machine also returns `none` on the erased machine. (approved: PENDING). -/
 private theorem stepExit_none_of_permitted_inv (L : AList Var O.Val) (s : Store O.Store)
     (e : Exec.Exit O.Val) (k : List (Exec.Frame (instrumentOperands O types permit)))
     (hp : match k with
@@ -2562,7 +2625,7 @@ private theorem stepExit_none_of_permitted_inv (L : AList Var O.Val) (s : Store 
           rfl
 
 /-- Helper (inversion). Under `StepPermitted`, if `step` on the instrumented C1 machine
-returns `none`, then `step` on the erased machine also returns `none`. -/
+returns `none`, then `step` on the erased machine also returns `none`. (approved: PENDING). -/
 private theorem step_none_of_permitted_inv
     (P : Exec.Program (instrumentOperands O types permit))
     (c : Exec.Config (instrumentOperands O types permit))
@@ -2738,7 +2801,7 @@ private theorem step_none_of_permitted_inv
   | trapped _ _ => rfl
 
 /-- Helper (inversion). Under `StepPermitted`, if a primitive request continuation returns
-`none` on an allowed answer, the erased continuation also returns `none`. -/
+`none` on an allowed answer, the erased continuation also returns `none`. (approved: PENDING). -/
 private theorem request_none_of_permitted_inv
     (P : Exec.Program (instrumentOperands O types permit))
     (c : Exec.Config (instrumentOperands O types permit))
@@ -2876,7 +2939,7 @@ private theorem request_none_of_permitted_inv
     cases hc
   | trapped _ _ => cases hs
 
-/-- Helper (inversion). `CheckerAccepted` is preserved across any single machine step. -/
+/-- Helper (inversion). `CheckerAccepted` is preserved across any single machine step. (approved: PENDING). -/
 private theorem checkerAccepted_step_inv
     (P : Exec.Program (instrumentOperands O types permit))
     (c c' : Exec.Config (instrumentOperands O types permit))
@@ -2886,7 +2949,7 @@ private theorem checkerAccepted_step_inv
     CheckerAccepted O types permit P c' :=
   fun tr c'' hsteps => hacc (l.events ++ tr) c'' (.step hs hsteps)
 
-/-- Single-step stuck equivalence for checker-accepted programs (owner decision 2026-11-08 Q3):
+/-- Law (subject `ConcreteSpec.Core.Own.eraseConfig`). Single-step stuck equivalence for checker-accepted programs (owner decision 2026-11-08 Q3):
 at any configuration accepted by the ownership checker, the instrumented C1 machine has no
 step iff the erased machine has no step. -/
 theorem step_stuck_iff_of_accepted
@@ -2910,7 +2973,7 @@ theorem step_stuck_iff_of_accepted
         rw [herased] at h'
         cases h'
 
-/-- Exact fuel-indexed simulation for checker-accepted programs (owner decision 2026-11-08 Q3):
+/-- Law (subject `ConcreteSpec.Core.Own.eraseConfig`). Exact fuel-indexed simulation for checker-accepted programs (owner decision 2026-11-08 Q3):
 when `(P, c)` satisfies `CheckerAccepted`, the erased run equals the erased report of the
 instrumented run for every outcome, including `stuck`. -/
 theorem runFrom_erasure_of_accepted
@@ -2988,12 +3051,12 @@ theorem runFrom_erasure_of_accepted
               simp only [ha_inst, ha]
               rfl
 
-/-- Helper (projection). `Ending.IsStuck` is invariant under `eraseEnding`. -/
+/-- Helper (projection). `Ending.IsStuck` is invariant under `eraseEnding`. (approved: PENDING). -/
 private theorem isStuck_eraseEnding_proj (e : Exec.Ending (instrumentOperands O types permit)) :
     Ending.IsStuck (eraseEnding e) = Ending.IsStuck e := by
   cases e <;> rfl
 
-/-- Converse stuck equivalence for checker-accepted programs (owner decision 2026-11-08 Q3):
+/-- Law (subject `ConcreteSpec.Core.Own.eraseConfig`). Converse stuck equivalence for checker-accepted programs (owner decision 2026-11-08 Q3):
 for a program and initial configuration accepted by the ownership checker, the instrumented
 C1 machine is stuck iff the erased machine is stuck. -/
 theorem run_stuck_iff_of_accepted
@@ -3021,7 +3084,7 @@ private def primOneConfig : Exec.Config instrumentedOps :=
   ⟨.exec (.prim (some y) () [.read x] ⟨0⟩), [(x, 7)], ⟨0, initial⟩, []⟩
 
 /-- Helper (inversion). A step from a configuration whose `step` is `some (.next c₁)` must
-land in `c₁`. -/
+land in `c₁`. (approved: PENDING). -/
 private theorem step_det_next_inv {O : Exec.Operands} {P : Exec.Program O}
     {c c₁ c' : Exec.Config O} {l : Exec.Label O}
     (hs : Exec.step P c = some (.next c₁)) (hstep : Exec.Step P c l c') :
@@ -3036,7 +3099,7 @@ private theorem step_det_next_inv {O : Exec.Operands} {P : Exec.Program O}
     rw [hs] at h
     cases h
 
-/-- Helper (inversion). A configuration whose `step` is `none` cannot take a `Step`. -/
+/-- Helper (inversion). A configuration whose `step` is `none` cannot take a `Step`. (approved: PENDING). -/
 private theorem step_det_none_inv {O : Exec.Operands} {P : Exec.Program O}
     {c c' : Exec.Config O} {l : Exec.Label O}
     (hs : Exec.step P c = none) (hstep : Exec.Step P c l c') : False := by
@@ -3046,7 +3109,7 @@ private theorem step_det_none_inv {O : Exec.Operands} {P : Exec.Program O}
 
 /-- Helper (inversion). The moved-owner program `moveConfig` is rejected by `CheckerAccepted`
 because after moving `x` to `y` it reaches `.ret (.read x)` where concrete evaluation succeeds
-while `permitE` refuses. -/
+while `permitE` refuses. (approved: PENDING). -/
 private theorem move_not_checkerAccepted_inv :
     ¬ CheckerAccepted erasedOps types permitE emptyProg moveConfig := by
   intro hacc
@@ -3058,7 +3121,7 @@ private theorem move_not_checkerAccepted_inv :
   cases hsome
 
 /-- Helper (inversion). The valid move-and-return program `acceptedMoveConfig`
-(`seq (bind y (move x)) (ret (read y))`) satisfies `CheckerAccepted`. -/
+(`seq (bind y (move x)) (ret (read y))`) satisfies `CheckerAccepted`. (approved: PENDING). -/
 private theorem acceptedMove_checkerAccepted_inv :
     CheckerAccepted erasedOps types permitE emptyProg acceptedMoveConfig := by
   intro tr c hsteps
@@ -3089,7 +3152,7 @@ private theorem acceptedMove_checkerAccepted_inv :
           | step hs₅ _ => exact False.elim (step_det_none_inv rfl hs₅)
 
 /-- Helper (inversion). The unbound-assignment configuration `acceptedStuckConfig`
-satisfies `CheckerAccepted` and gets stuck in both the instrumented and erased machines. -/
+satisfies `CheckerAccepted` and gets stuck in both the instrumented and erased machines. (approved: PENDING). -/
 private theorem acceptedStuck_checkerAccepted_inv :
     CheckerAccepted erasedOps types permitE emptyProg acceptedStuckConfig := by
   intro tr c hsteps
@@ -3098,7 +3161,7 @@ private theorem acceptedStuck_checkerAccepted_inv :
     exact ⟨by decide, ⟨fun _ => by decide, fun _ _ _ hlook => by cases hlook⟩⟩
   | step hs _ => exact False.elim (step_det_none_inv rfl hs)
 
-/-- Instance (law `ConcreteSpec.Core.Own.eval_ok_erasure`). Moving an initialized owner in the instrumented operand instance erases to the concrete value and store. -/
+/-- Observation. Moving an initialized owner in the instrumented operand instance erases to the concrete value and store. -/
 example : ∃ s' : Store Int,
     instrumentedOps.eval [(x, 7)] ⟨0, initial⟩ (.move x) = .ok (7, s') ∧
     erasedOps.eval [(x, 7)] (erase (⟨0, initial⟩ : Store Int)) (.move x) = .ok (7, erase s') := by
@@ -3106,21 +3169,21 @@ example : ∃ s' : Store Int,
   exact eval_ok_erasure (O := erasedOps) (types := types) (permit := permitE)
     [(x, 7)] ⟨0, initial⟩ _ (.move x) 7 (by decide)
 
-/-- Planted (law `ConcreteSpec.Core.Own.eval_ok_erasure`). A corrupted concrete value disagrees with the erased evaluation of `.move x`. -/
+/-- Rejection observation. A corrupted concrete value disagrees with the erased evaluation of `.move x`. -/
 example : ¬ (erasedOps.eval [(x, 7)] (erase (⟨0, initial⟩ : Store Int)) (.move x) = .ok (8, 0)) := by
   decide
 
-/-- Instance (law `ConcreteSpec.Core.Own.eval_trap_erasure`). A trapping operand in the instrumented instance traps with the same kind in the erased instance. -/
+/-- Observation. A trapping operand in the instrumented instance traps with the same kind in the erased instance. -/
 example : instrumentedOps.eval [(x, 7)] ⟨0, initial⟩ (.fail .abort) = .trap .abort ∧
     erasedOps.eval [(x, 7)] (erase (⟨0, initial⟩ : Store Int)) (.fail .abort) = .trap .abort :=
   ⟨by decide, eval_trap_erasure (O := erasedOps) (types := types) (permit := permitE)
     [(x, 7)] ⟨0, initial⟩ (.fail .abort) .abort (by decide)⟩
 
-/-- Planted (law `ConcreteSpec.Core.Own.eval_trap_erasure`). A trapping operand does not erase to a normal value. -/
+/-- Rejection observation. A trapping operand does not erase to a normal value. -/
 example : ¬ (erasedOps.eval [(x, 7)] (erase (⟨0, initial⟩ : Store Int)) (.fail .abort) = .ok (0, 0)) := by
   decide
 
-/-- Instance (law `ConcreteSpec.Core.Own.evalArgs_ok_erasure`). Left-to-right instrumented argument evaluation erases to the concrete argument values and store. -/
+/-- Observation. Left-to-right instrumented argument evaluation erases to the concrete argument values and store. -/
 example : ∃ s' : Store Int,
     Exec.evalArgs instrumentedOps [(x, 7)] ⟨0, initial⟩ [.read x, .move x] = .ok ([7, 7], s') ∧
     Exec.evalArgs erasedOps [(x, 7)] (erase (⟨0, initial⟩ : Store Int)) [.read x, .move x] =
@@ -3129,24 +3192,24 @@ example : ∃ s' : Store Int,
   exact evalArgs_ok_erasure (O := erasedOps) (types := types) (permit := permitE)
     [(x, 7)] [.read x, .move x] ⟨0, initial⟩ _ [7, 7] (by decide)
 
-/-- Planted (law `ConcreteSpec.Core.Own.evalArgs_ok_erasure`). Reversing or corrupting the argument list violates erased argument evaluation. -/
+/-- Rejection observation. Reversing or corrupting the argument list violates erased argument evaluation. -/
 example : ¬ (Exec.evalArgs erasedOps [(x, 7)] (erase (⟨0, initial⟩ : Store Int)) [.read x, .move x] =
     .ok ([7, 0], 0)) := by
   decide
 
-/-- Instance (law `ConcreteSpec.Core.Own.evalArgs_trap_erasure`). An argument list that traps after a move traps with the same kind in the erased instance. -/
+/-- Observation. An argument list that traps after a move traps with the same kind in the erased instance. -/
 example : Exec.evalArgs instrumentedOps [(x, 7)] ⟨0, initial⟩ [.move x, .fail .overflow] = .trap .overflow ∧
     Exec.evalArgs erasedOps [(x, 7)] (erase (⟨0, initial⟩ : Store Int)) [.move x, .fail .overflow] =
       .trap .overflow :=
   ⟨by decide, evalArgs_trap_erasure (O := erasedOps) (types := types) (permit := permitE)
     [(x, 7)] [.move x, .fail .overflow] ⟨0, initial⟩ .overflow (by decide)⟩
 
-/-- Planted (law `ConcreteSpec.Core.Own.evalArgs_trap_erasure`). A trapping argument list cannot erase to a different trap kind. -/
+/-- Rejection observation. A trapping argument list cannot erase to a different trap kind. -/
 example : ¬ (Exec.evalArgs erasedOps [(x, 7)] (erase (⟨0, initial⟩ : Store Int)) [.move x, .fail .overflow] =
     .trap .abort) := by
   decide
 
-/-- Instance (law `ConcreteSpec.Core.Own.test_erasure`). Condition testing agrees between the instrumented and erased instances on both truth values. -/
+/-- Observation. Condition testing agrees between the instrumented and erased instances on both truth values. -/
 example : instrumentedOps.test 7 = erasedOps.test 7 ∧
     instrumentedOps.test 0 = erasedOps.test 0 ∧
     erasedOps.test 7 = some true ∧ erasedOps.test 0 = some false :=
@@ -3154,10 +3217,10 @@ example : instrumentedOps.test 7 = erasedOps.test 7 ∧
    test_erasure (O := erasedOps) (types := types) (permit := permitE) 0,
    by decide, by decide⟩
 
-/-- Planted (law `ConcreteSpec.Core.Own.test_erasure`). A nonzero condition value does not test as `false`. -/
+/-- Rejection observation. A nonzero condition value does not test as `false`. -/
 example : ¬ (erasedOps.test 7 = some false) := by decide
 
-/-- Instance (law `ConcreteSpec.Core.Own.instrumentLife_erasure`). Binding a fresh variable updates the ownership frame and erases to the concrete lifecycle step. -/
+/-- Observation. Binding a fresh variable updates the ownership frame and erases to the concrete lifecycle step. -/
 example : ∃ s' : Store Int,
     instrumentedOps.life (.bind y) ⟨7, initial⟩ = some s' ∧
     erasedOps.life (.bind y) (erase (⟨7, initial⟩ : Store Int)) = some (erase s') := by
@@ -3165,11 +3228,11 @@ example : ∃ s' : Store Int,
   exact instrumentLife_erasure (O := erasedOps) (types := types) (permit := permitE)
     (.bind y) ⟨7, initial⟩ _ (by decide)
 
-/-- Planted (law `ConcreteSpec.Core.Own.instrumentLife_erasure`). A concrete lifecycle step cannot alter the concrete store to a different integer. -/
+/-- Rejection observation. A concrete lifecycle step cannot alter the concrete store to a different integer. -/
 example : ¬ (erasedOps.life (.bind y) (erase (⟨7, initial⟩ : Store Int)) = some 99) := by
   decide
 
-/-- Instance (law `ConcreteSpec.Core.Own.allows_erasure`). An allowed primitive answer satisfies the erased primitive contract and preserves the ownership state. -/
+/-- Observation. An allowed primitive answer satisfies the erased primitive contract and preserves the ownership state. -/
 example : let a : Exec.Answer Int Int (Store Int) := ⟨some 7, .ok 7, ⟨7, initial⟩⟩
     instrumentedOps.allows () [7] ⟨0, initial⟩ a = true ∧
     erasedOps.allows () [7] (erase (⟨0, initial⟩ : Store Int)) (eraseAnswer a) = true ∧
@@ -3178,12 +3241,12 @@ example : let a : Exec.Answer Int Int (Store Int) := ⟨some 7, .ok 7, ⟨7, ini
   exact ⟨by decide, allows_erasure (O := erasedOps) (types := types) (permit := permitE)
     () [7] ⟨0, initial⟩ ⟨some 7, .ok 7, ⟨7, initial⟩⟩ (by decide)⟩
 
-/-- Planted (law `ConcreteSpec.Core.Own.allows_erasure`). A primitive answer that mutates the ownership state or emits the wrong event is rejected by `instrumentAllows`. -/
+/-- Rejection observation. A primitive answer that mutates the ownership state or emits the wrong event is rejected by `instrumentAllows`. -/
 example : ¬ (instrumentedOps.allows () [7] ⟨0, initial⟩
     ⟨some 7, .ok 7, ⟨7, (move initial ⟨0⟩).getD initial⟩⟩ = true) := by
   decide
 
-/-- Instance (law `ConcreteSpec.Core.Own.step_next_erasure`). A silent `.bind` step on the instrumented machine erases to the matching `.bind` step on the erased machine. -/
+/-- Observation. A silent `.bind` step on the instrumented machine erases to the matching `.bind` step on the erased machine. -/
 example : ∃ c' : Exec.Config instrumentedOps,
     Exec.step emptyProg bindMoveConfig = some (.next c') ∧
     Exec.step (eraseProgram emptyProg) (eraseConfig bindMoveConfig) =
@@ -3191,13 +3254,13 @@ example : ∃ c' : Exec.Config instrumentedOps,
   refine ⟨_, rfl, ?_⟩
   exact step_next_erasure emptyProg bindMoveConfig _ rfl
 
-/-- Planted (law `ConcreteSpec.Core.Own.step_next_erasure`). A silent step cannot land in a configuration with a different local binding value. -/
+/-- Rejection observation. A silent step cannot land in a configuration with a different local binding value. -/
 example : ¬ (Exec.step (eraseProgram emptyProg) (eraseConfig bindMoveConfig) =
     some (.next ⟨.done, [(y, 99), (x, 7)], 0, []⟩)) := by
   intro h
   cases h
 
-/-- Instance (law `ConcreteSpec.Core.Own.step_request_erasure`). A primitive request step erases to the concrete request and its continuation commutes with `eraseConfig`. -/
+/-- Observation. A primitive request step erases to the concrete request and its continuation commutes with `eraseConfig`. -/
 example : ∃ p vs site st k,
     Exec.step emptyProg primOneConfig = some (.request p vs site st k) ∧
     ∃ k_erased,
@@ -3207,12 +3270,12 @@ example : ∃ p vs site st k,
   refine ⟨(), [7], ⟨0⟩, ⟨0, initial⟩, _, rfl, ?_⟩
   exact step_request_erasure emptyProg primOneConfig () [7] ⟨0⟩ ⟨0, initial⟩ _ rfl
 
-/-- Planted (law `ConcreteSpec.Core.Own.step_request_erasure`). A primitive request step never erases to `none`. -/
+/-- Rejection observation. A primitive request step never erases to `none`. -/
 example : ¬ (Exec.step (eraseProgram emptyProg) (eraseConfig primOneConfig) = none) := by
   intro h
   cases h
 
-/-- Instance (law `ConcreteSpec.Core.Own.Step_erasure`). Both silent and primitive-event single steps of the instrumented machine erase to matching steps of the erased machine. -/
+/-- Observation. Both silent and primitive-event single steps of the instrumented machine erase to matching steps of the erased machine. -/
 example : ∃ c' : Exec.Config instrumentedOps,
     Exec.Step emptyProg primOneConfig
       (liftAnswer initial ⟨some 7, .ok 7, 7⟩).label c' ∧
@@ -3225,12 +3288,12 @@ example : ∃ c' : Exec.Config instrumentedOps,
     .prim rfl (by decide) rfl
   exact ⟨_, hs, Step_erasure emptyProg primOneConfig _ _ hs⟩
 
-/-- Planted (law `ConcreteSpec.Core.Own.Step_erasure`). Erasing an event label never drops or alters its emitted event. -/
+/-- Rejection observation. Erasing an event label never drops or alters its emitted event. -/
 example : ¬ ((eraseLabel (O := erasedOps) (types := types) (permit := permitE)
     (liftAnswer initial ⟨some 7, .ok 7, 7⟩).label).events = [8]) := by
   decide
 
-/-- Instance (law `ConcreteSpec.Core.Own.Steps_erasure`). A multi-step instrumented run emitting two primitive events `[7, 3]` in order erases to a multi-step erased run with the exact same event trace `[7, 3]` and concrete store `10`. -/
+/-- Observation. A multi-step instrumented run emitting two primitive events `[7, 3]` in order erases to a multi-step erased run with the exact same event trace `[7, 3]` and concrete store `10`. -/
 example : ∃ c' : Exec.Config instrumentedOps,
     Exec.Steps emptyProg primTraceConfig [7, 3] c' ∧
     Exec.Steps (eraseProgram emptyProg) (eraseConfig primTraceConfig) [7, 3] (eraseConfig c') ∧
@@ -3246,11 +3309,11 @@ example : ∃ c' : Exec.Config instrumentedOps,
                 (.step (.silent rfl) (.refl _)))))))
   exact ⟨_, hsteps, Steps_erasure emptyProg primTraceConfig _ [7, 3] hsteps, rfl, rfl⟩
 
-/-- Planted (law `ConcreteSpec.Core.Own.Steps_erasure`). Reversing the event order `[3, 7]` or corrupting the final store falsifies the erased trace report. -/
+/-- Rejection observation. Reversing the event order `[3, 7]` or corrupting the final store falsifies the erased trace report. -/
 example : ¬ ((Exec.run (eraseProgram emptyProg) erasedOracle 100 (eraseConfig primTraceConfig)).events = [3, 7]) := by
   decide
 
-/-- Instance (law `ConcreteSpec.Core.Own.runFrom_erasure`). Non-`stuck` fuel-indexed runs (`returned`, `normal`, `trapped`, `noAnswer`, `badAnswer` and `outOfFuel`) erase with identical events and concrete stores. -/
+/-- Observation. Non-`stuck` fuel-indexed runs (`returned`, `normal`, `trapped`, `noAnswer`, `badAnswer` and `outOfFuel`) erase with identical events and concrete stores. -/
 example :
     let ρI := liftOracle erasedOps types permitE erasedOracle
     let cTrap : Exec.Config instrumentedOps :=
@@ -3273,7 +3336,7 @@ example :
    runFrom_erasure emptyProg badOracle 100 [] primTraceConfig rfl,
    runFrom_erasure emptyProg erasedOracle 2 [] primTraceConfig rfl⟩
 
-/-- Planted (law `ConcreteSpec.Core.Own.runFrom_erasure`). Dropping the `NotStuck` premise fails on the moved-owner counterexample: the instrumented run is `stuck` while the erased run returns `7`. -/
+/-- Rejection observation. Dropping the `NotStuck` premise fails on the moved-owner counterexample: the instrumented run is `stuck` while the erased run returns `7`. -/
 example : ¬ (Exec.runFrom (eraseProgram emptyProg)
       erasedOracle 100 [] (eraseConfig moveConfig) =
     eraseReport (Exec.runFrom emptyProg (liftOracle erasedOps types permitE erasedOracle) 100 [] moveConfig)) := by
@@ -3282,7 +3345,7 @@ example : ¬ (Exec.runFrom (eraseProgram emptyProg)
   revert h1
   decide
 
-/-- Instance (law `ConcreteSpec.Core.Own.run_erasure`). A full instrumented run with primitive events `[7, 3]`, store updates `0 → 7 → 10`, and return value `7` erases to the identical concrete run. -/
+/-- Observation. A full instrumented run with primitive events `[7, 3]`, store updates `0 → 7 → 10`, and return value `7` erases to the identical concrete run. -/
 example :
     Exec.run (eraseProgram emptyProg)
       erasedOracle 100 (eraseConfig primTraceConfig) =
@@ -3292,14 +3355,14 @@ example :
       .final (.returned 7) :=
   ⟨run_erasure emptyProg erasedOracle 100 primTraceConfig rfl, rfl, rfl⟩
 
-/-- Planted (law `ConcreteSpec.Core.Own.run_erasure`). The moved-owner counterexample refutes unconditional converse erasure on `Exec.run`: instrumented is `stuck`, erased returns `7`. -/
+/-- Rejection observation. The moved-owner counterexample refutes unconditional converse erasure on `Exec.run`: instrumented is `stuck`, erased returns `7`. -/
 example : ¬ (erasedMoveRun = eraseReport instrumentedMoveRun) := by
   intro h
   have h1 := congrArg (fun r => Ending.IsStuck r.ending) h
   revert h1
   decide
 
-/-- Instance (law `ConcreteSpec.Core.Own.step_stuck_iff_of_accepted`). On checker-accepted configurations (`acceptedMoveConfig` and `acceptedStuckConfig`), the instrumented step is `none` iff the erased step is `none`, while `CheckerAccepted` rejects `moveConfig`. -/
+/-- Observation. On checker-accepted configurations (`acceptedMoveConfig` and `acceptedStuckConfig`), the instrumented step is `none` iff the erased step is `none`, while `CheckerAccepted` rejects `moveConfig`. -/
 example :
     CheckerAccepted erasedOps types permitE emptyProg acceptedMoveConfig ∧
     CheckerAccepted erasedOps types permitE emptyProg acceptedStuckConfig ∧
@@ -3314,7 +3377,7 @@ example :
    step_stuck_iff_of_accepted emptyProg acceptedMoveConfig acceptedMove_checkerAccepted_inv,
    step_stuck_iff_of_accepted emptyProg acceptedStuckConfig acceptedStuck_checkerAccepted_inv⟩
 
-/-- Planted (law `ConcreteSpec.Core.Own.step_stuck_iff_of_accepted`). At the unaccepted moved-read step `.ret (.read x)`, the instrumented step is `none` while the erased step succeeds. -/
+/-- Rejection observation. At the unaccepted moved-read step `.ret (.read x)`, the instrumented step is `none` while the erased step succeeds. -/
 example :
     let cMovedRead : Exec.Config instrumentedOps :=
       ⟨.exec (.ret (.read x) ⟨1⟩), [(y, 7), (x, 7)], ⟨7, (move initial ⟨0⟩).getD initial⟩, []⟩
@@ -3327,7 +3390,7 @@ example :
   have h2 := h.mp h1
   cases h2
 
-/-- Instance (law `ConcreteSpec.Core.Own.runFrom_erasure_of_accepted`). For both non-stuck (`acceptedMoveConfig`) and stuck (`acceptedStuckConfig`) checker-accepted programs, `runFrom` on the erased machine equals `eraseReport` of the instrumented `runFrom`. -/
+/-- Observation. For both non-stuck (`acceptedMoveConfig`) and stuck (`acceptedStuckConfig`) checker-accepted programs, `runFrom` on the erased machine equals `eraseReport` of the instrumented `runFrom`. -/
 example :
     let ρI := liftOracle erasedOps types permitE erasedOracle
     Exec.runFrom (eraseProgram emptyProg) erasedOracle 100 [] (eraseConfig acceptedMoveConfig) =
@@ -3339,7 +3402,7 @@ example :
    runFrom_erasure_of_accepted emptyProg erasedOracle 100 [] acceptedStuckConfig
       acceptedStuck_checkerAccepted_inv⟩
 
-/-- Planted (law `ConcreteSpec.Core.Own.runFrom_erasure_of_accepted`). Without `CheckerAccepted`, `moveConfig` violates `runFrom` erasure because instrumentation refuses `.read x` after `.move x`. -/
+/-- Rejection observation. Without `CheckerAccepted`, `moveConfig` violates `runFrom` erasure because instrumentation refuses `.read x` after `.move x`. -/
 example : ¬ (Exec.runFrom (eraseProgram emptyProg)
       erasedOracle 100 [] (eraseConfig moveConfig) =
     eraseReport (Exec.runFrom emptyProg (liftOracle erasedOps types permitE erasedOracle) 100 [] moveConfig)) := by
@@ -3348,7 +3411,7 @@ example : ¬ (Exec.runFrom (eraseProgram emptyProg)
   revert h1
   decide
 
-/-- Instance (law `ConcreteSpec.Core.Own.run_stuck_iff_of_accepted`). For checker-accepted programs, the instrumented run is `stuck` iff the erased run is `stuck` (`false` on `acceptedMoveConfig`, `true` on `acceptedStuckConfig`). -/
+/-- Observation. For checker-accepted programs, the instrumented run is `stuck` iff the erased run is `stuck` (`false` on `acceptedMoveConfig`, `true` on `acceptedStuckConfig`). -/
 example :
     let ρI := liftOracle erasedOps types permitE erasedOracle
     Ending.IsStuck (Exec.run emptyProg ρI 100 acceptedMoveConfig).ending =
@@ -3362,7 +3425,7 @@ example :
    run_stuck_iff_of_accepted emptyProg erasedOracle 100 acceptedStuckConfig acceptedStuck_checkerAccepted_inv,
    by decide⟩
 
-/-- Planted (law `ConcreteSpec.Core.Own.run_stuck_iff_of_accepted`). Without `CheckerAccepted`, `moveConfig` is stuck in the instrumented run (`true`) and not stuck in the erased run (`false`). -/
+/-- Rejection observation. Without `CheckerAccepted`, `moveConfig` is stuck in the instrumented run (`true`) and not stuck in the erased run (`false`). -/
 example : ¬ (Ending.IsStuck instrumentedMoveRun.ending = Ending.IsStuck erasedMoveRun.ending) := by
   decide
 

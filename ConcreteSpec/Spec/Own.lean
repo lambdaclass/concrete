@@ -114,7 +114,7 @@ instance (s : State) : Decidable (WellFormed s) := by
   unfold WellFormed
   infer_instance
 
-/-- Representation lemma. Loan destinations refer to frames still active in the call stack.
+/-- Loan destinations refer to frames still active in the call stack.
 This lifetime invariant is independent of the monotonically increasing activation supply. -/
 def LiveDestinations (s : State) : Prop :=
   ∀ l ∈ s.loans, l.activation ∈ s.frames.map Activation.id
@@ -239,14 +239,19 @@ def endLocals (activation : Nat) (s : State) : Option State :=
   (s.loans.filter (·.activation == activation)).foldlM (fun s l => endLoan s l.id) s
 
 /-- Leave consumes no resource implicitly: all remaining local owners must be Copy or moved.
-Local loans end before local roots are removed. Every slot of the departing activation must
-be gone, including any slot an incomplete locals table failed to name. -/
+Local loans end before local roots are removed. `Slot.activation` is the authoritative,
+complete inventory of activation ownership; `Activation.locals` is only the variable lookup
+index. After named locals are dropped, cleanup checks the linear discharge and loan guards
+for any remaining activation slots, then removes them by filtering that inventory. It never
+checks its own postcondition at run time. -/
 def leave (s : State) : Option State := do
   let f ← s.frames.head?
   let s ← endLocals f.id s
   let s ← drop (List.map Prod.fst f.locals) s
-  if s.slots.any (·.activation == f.id) then none else
-    some { s with frames := s.frames.tail }
+  if !(s.slots.all (fun x => x.activation != f.id || x.desc.copy || x.status == .moved) &&
+      s.loans.all (fun l => s.slots.all (fun x => x.activation != f.id || x.place != l.root)))
+    then none else
+    some { s with slots := s.slots.filter (·.activation != f.id), frames := s.frames.tail }
 
 /-- Downward-only lending: each parameter gets a new child loan. Views never become owner slots,
 so cannot be returned/stored/moved by the owner operations. This standalone call-boundary transition supports the preservation laws. C1 uses `callLife`
