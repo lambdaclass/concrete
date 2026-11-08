@@ -594,7 +594,7 @@ theorem admitted_copy_proj (U : ConstTypes) (fuel : Nat) (ds : List (ConstDecl U
 
 /-- Representation lemma. The concrete scalar embedding classifies each scalar as Copy without
 assuming a universal Copy field in `ConstTypes`. (approved: PENDING) -/
-theorem ofC_copy (v : CVal) : ConstDemo.U.isCopy (ConstDemo.U.ofC v.ty) = true := by
+theorem ofC_copy_proj (v : CVal) : ConstDemo.U.isCopy (ConstDemo.U.ofC v.ty) = true := by
   cases v <;> rfl
 
 /-- Helper (projection). Admission is the conjunction of two separately named checks, rather than
