@@ -6,8 +6,10 @@ import ConcreteSpec.Proofs.Exec
 # Laws of logical footprints and frames (foundation C10)
 
 Byte-range disjointness, preservation under sequential composition, and the frame laws of C4 byte
-store, release, exposure and fresh allocation. The allocation theorem also shows that the fresh block
-is disjoint from every range in an old block.
+store, release, exposure and fresh allocation; fresh-block disjointness and C1 callee-contract
+framing. Call entry and return restore caller locals and continuations, including after cleanup.
+The ABI laws cover typed locations, callee-saved and non-clobbered registers, stack restoration and
+accounting, paired `kept` retention, and launcher admission and entry/exit relations.
 -/
 namespace ConcreteSpec.Core.Frame
 open ConcreteSpec.Core.Mem

@@ -90,7 +90,10 @@ Open obligations, by name:
   encoding over the old type universe. The slice-1-to-Core integration slice must port that
   layer to `Mem.MByte`/`Mem.encodeInt` and retire the old encoders while preserving its proofs;
   C4 has not completed that port. Core constants and Hybrid share `CTy`/`CVal` from `Scalar`.
-  C5–C10 remain. C1 leaves to later slices the source-level
+  C10 (`Frame`) now covers logical footprints, C1 caller restoration, target-independent ABI and
+  `kept` retention interfaces, and launcher entry/exit relations; concrete ABI implementations,
+  extern syntax, packed access and source frame/snapshot constructs remain out. C5–C9 remain.
+  C1 leaves to later slices the source-level
   evaluation orders (elaboration, O1), counted loops (slice 4), and ownership of moved values
   (C5), the split of a request from its response (C6) and the oracle's query record (C8); its
   storage can use C4's hybrid state; C5 must still supply ownership instrumentation. Lifecycle
