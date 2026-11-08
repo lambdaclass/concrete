@@ -226,9 +226,33 @@ def close {H : Type} (s : State H) (i : GrantId) (outcome : CloseResult) :
 /-- A launch budget bounds every resource's rights, including consumed history. -/
 def Bounded {H : Type} (budget : List Nat) (s : State H) : Prop :=
   ∀ e ∈ s.resources, ∀ right ∈ e.2.rights, right ∈ budget
+instance {H : Type} (budget : List Nat) (s : State H) : Decidable (Bounded budget s) := by
+  unfold Bounded; infer_instance
 
 /-- Historical identities remain below the monotonically increasing supply. -/
 def Fresh {H : Type} (s : State H) : Prop := ∀ e ∈ s.resources, e.1.id < s.next
+instance {H : Type} (s : State H) : Decidable (Fresh s) := by
+  unfold Fresh; infer_instance
+
+/-- One permitted grant operation (narrowing, child acquisition, or close). -/
+inductive Op (H : Type) where
+  | narrow (i : GrantId) (requested : List Nat)
+  | acquire (i : GrantId) (requested selected : List Nat) (permissions : List Cap)
+      (allowed : Bool) (handle : H)
+  | close (i : GrantId) (outcome : CloseResult)
+  deriving DecidableEq, Repr
+
+/-- Execute one grant operation. -/
+def stepOp {H : Type} (s : State H) : Op H → Option (State H)
+  | .narrow i requested => narrow s i requested
+  | .acquire i requested selected permissions allowed handle =>
+    acquire s i requested selected permissions allowed handle
+  | .close i outcome => (close s i outcome).map Prod.snd
+
+/-- Execute a finite sequence of permitted grant operations, without a minting operation. -/
+def runOps {H : Type} : State H → List (Op H) → Option (State H)
+  | s, [] => some s
+  | s, op :: ops => (stepOp s op).bind fun t => runOps t ops
 
 /-- Any finite sequence of the permitted grant transitions, without a minting operation. -/
 inductive Steps {H : Type} : State H → State H → Prop where
