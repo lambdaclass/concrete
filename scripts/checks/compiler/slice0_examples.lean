@@ -7,21 +7,39 @@ import Concrete.Premises
    No source lexer or textual import insertion participates in the trust check. -/
 open Lean Elab Frontend Command
 
-def makeExampleDef (exStx : Syntax) (file : String) (map : FileMap) :
+def sortAdded (xs : Array (Name × ConstantInfo)) : Array (Name × ConstantInfo) :=
+  xs.qsort fun a b =>
+    let ea := a.1.eraseMacroScopes.toString
+    let eb := b.1.eraseMacroScopes.toString
+    ea < eb || (ea == eb && a.1.toString < b.1.toString)
+
+def freshExampleName (base : String) : Command.CommandElabM Name := do
+  let env ← getEnv
+  let ns ← getCurrNamespace
+  let checkFree (c : Name) : Bool :=
+    let full := ns ++ c
+    !env.contains full && !env.contains (mkPrivateName env full)
+  let candidate := Name.mkSimple base
+  if checkFree candidate then return candidate
+  let u ← liftCoreM mkFreshId
+  return Name.mkSimple s!"{base}:{u}"
+
+def makeExampleDef (stx : Syntax) (file : String) (map : FileMap) :
     Command.CommandElabM (Syntax × Name) := do
-  let pos := map.toPosition (exStx.getPos?.getD 0)
-  let n ← liftCoreM <| mkFreshUserName (Name.mkSimple s!"⟪example⟫{file}:{pos.line}:{pos.column}")
+  let exStx := stx[1]
+  let pos := map.toPosition (exStx.getPos?.getD (stx.getPos?.getD 0))
+  let n ← freshExampleName s!"⟪example⟫{file}:{pos.line}:{pos.column}"
   let sig : TSyntax ``Parser.Command.optDeclSig := ⟨exStx[1]⟩
   let val : TSyntax ``Parser.Command.declVal := ⟨exStx[2]⟩
   let id := mkIdent n
-  let replacement ← `(command| noncomputable def $id:ident $sig:optDeclSig $val:declVal)
-  return (replacement.raw, n)
+  let replacement ← `(command| def $id:ident $sig:optDeclSig $val:declVal)
+  return (stx.setArg 1 replacement.raw[1], (← getCurrNamespace) ++ n)
 
 -- This elaborator participates in recursive command elaboration, including commands
 -- produced by imported macros. Quoted command syntax is never elaborated here.
 def retainExample : CommandElab := fun stx => do
   unless stx[1].getKind == ``Parser.Command.example do throwUnsupportedSyntax
-  let (replacement, _) ← makeExampleDef stx[1] (← getFileName) (← getFileMap)
+  let (replacement, _) ← makeExampleDef stx (← getFileName) (← getFileMap)
   elabCommand replacement
 
 partial def hasPartialModifier (stx : Syntax) : Bool :=
@@ -70,8 +88,12 @@ partial def commands (file : String) (csList : List Concrete.Premises.Component)
   runCommandElabM do
     let env ← getEnv
     let allowed := Concrete.Premises.allowedAxioms csList
+    let mut added : Array (Name × ConstantInfo) := #[]
     for (n, ci) in env.constants.toList do
       unless cs.env.contains n || n.isAnonymous do
+        added := added.push (n, ci)
+    for (n, ci) in sortAdded added do
+      do
         let kinds ← liftCoreM <| Concrete.Premises.trustedDeclarationKinds env n ci
         do
           let axs ← liftCoreM (collectAxioms n)
@@ -82,7 +104,7 @@ partial def commands (file : String) (csList : List Concrete.Premises.Component)
               IO.println s!"FAIL unlisted example axiom {ax} in {file}:{(input.fileMap.toPosition (cmd.getPos?.getD 0)).line}"
               throwError "example axiom audit failed"
         let owners := effectiveOwners env n csList
-        if hasPartialModifier cmd && !n.isInternalDetail && (Compiler.isUnsafeRecName? n).isNone then
+        if hasPartialModifier cmd && !n.isInternalDetail && (n.toString.splitOn "⟪example⟫").length == 1 && (Compiler.isUnsafeRecName? n).isNone then
           unless (← checkOwnerKind n owners) do
             IO.println s!"FAIL unlisted partial declaration {n} in {file}"
             throwError "partial modifier audit failed"

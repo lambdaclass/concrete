@@ -8,10 +8,13 @@ cat >"$work/Seed.lean" <<'EOF'
 import Lean
 axiom planted : False
 macro "sprout" : command => `(example : False := planted)
+macro "sproutUnsafe" : command => `(unsafe example : Nat := 0)
+macro "sproutPartial" : command => `(partial example : Nat := let rec loop (n : Nat) : Nat := loop n; loop 0)
+macro "sproutExtern" : command => `(@[extern "c_sprout"] example : Nat := 0)
 macro "bloom" : command => `(unsafe def $(Lean.mkIdent `hiddenEscape) : Nat := 0)
 EOF
 bounded_run 60 -- lake env lean --root="$work" -o "$work/Seed.olean" "$work/Seed.lean"
-for invocation in sprout bloom; do
+for invocation in sprout sproutUnsafe sproutPartial sproutExtern bloom; do
   printf 'import Seed\n%s\n' "$invocation" >"$work/Invoke.lean"
   printf 'import Lean\n' >"$work/Other.lean"
   # Neither importing nor invoking file contains any former candidate token.
@@ -23,11 +26,17 @@ for invocation in sprout bloom; do
     scripts/checks/compiler/slice0_examples.lean "$work/Other.lean" "$work/Invoke.lean" >"$work/out" 2>&1 || rc=$?
   if bounded_is_incomplete "$rc"; then cat "$work/out"; exit 1; fi
   if [ "$rc" -eq 0 ]; then cat "$work/out"; echo "FAIL control: accepted $invocation"; exit 1; fi
-  if [ "$invocation" = sprout ]; then
-    expected="FAIL unlisted example axiom planted in $work/Invoke.lean:2"
-  else
-    expected='FAIL unlisted example trusted declaration hiddenEscape [unsafe]'
-  fi
-  grep -qxF "$expected" "$work/out" || { cat "$work/out"; exit 1; }
+  case "$invocation" in
+    sprout)
+      grep -qxF "FAIL unlisted example axiom planted in $work/Invoke.lean:2" "$work/out" || { cat "$work/out"; exit 1; } ;;
+    sproutUnsafe)
+      grep -Eq "^FAIL unlisted example trusted declaration «?⟪example⟫.*Invoke\.lean:2:0»? \[unsafe\]$" "$work/out" || { cat "$work/out"; exit 1; } ;;
+    sproutPartial)
+      grep -Eq "^FAIL unlisted example trusted declaration «?⟪example⟫.*Invoke\.lean:2:0»? \[partial\]$" "$work/out" || { cat "$work/out"; exit 1; } ;;
+    sproutExtern)
+      grep -Eq "^FAIL unlisted example trusted declaration «?⟪example⟫.*Invoke\.lean:2:0»? \[extern\]$" "$work/out" || { cat "$work/out"; exit 1; } ;;
+    bloom)
+      grep -qxF 'FAIL unlisted example trusted declaration hiddenEscape [unsafe]' "$work/out" || { cat "$work/out"; exit 1; } ;;
+  esac
   echo "ok imported $invocation rejected for exact planted reason"
 done

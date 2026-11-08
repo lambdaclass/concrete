@@ -36,6 +36,27 @@ with tempfile.TemporaryDirectory() as d:
     assert re.search(r'^FAIL unlisted example axiom .*\._native\.decide\.ax_1(?:\._@\.[^ ]+)? in ' + re.escape(str(p)) + r':4$', r.stdout, re.M), r.stdout
     p.write_text('import Lean\nexample : IO Unit := do while true do pure ()\n')
     require(lean(p, True), False, 'FAIL unlisted example trusted declaration ')
+    for ex_src, extra, kind_tag in [
+        ('import Lean\nunsafe example : Nat := 0\n', None, 'unsafe'),
+        ('import Lean\nunsafe def unsafeHelper : Nat := 0\nunsafe example : Nat := unsafeHelper\n',
+         {"CONCRETE_TRUSTED_DECLARATIONS": "lexer:unsafeHelper"}, 'unsafe'),
+        ('import Lean\npartial example : Nat :=\n  let rec loop (n : Nat) : Nat := loop n\n  loop 0\n',
+         None, 'partial'),
+        ('import Lean\n@[extern "c_example"] example : Nat := 0\n', None, 'extern'),
+        ('import Lean\ndef implTarget : Nat := 0\n@[implemented_by implTarget] example : Nat := 1\n',
+         None, 'implemented_by'),
+        ('import Lean\ndef csimpOrig (n : Nat) := n + 0\ndef csimpRepl (n : Nat) := n\n'
+         '@[csimp] example : csimpOrig = csimpRepl := by funext n; simp [csimpOrig, csimpRepl]\n',
+         None, 'csimp'),
+    ]:
+        p.write_text(ex_src)
+        r_ex = lean(p, True, extra)
+        require(r_ex, False, f'FAIL unlisted example trusted declaration ')
+        assert re.search(
+            r'^FAIL unlisted example trusted declaration «?⟪example⟫'
+            + re.escape(str(p)) + r':\d+:\d+»? \[' + re.escape(kind_tag) + r'\]$',
+            r_ex.stdout, re.M
+        ), r_ex.stdout
     no_kw = d / "loop_no_kw.lean"
     benign = d / "benign.lean"
     benign.write_text('import Lean\ndef benignVal : Nat := 1\n')
