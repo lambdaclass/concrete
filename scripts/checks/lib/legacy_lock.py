@@ -79,6 +79,8 @@ def parse(data, name):
             problems.append(f"{where}: repeats line {seen[line]}: a row is recorded once"); continue
         seen[line] = n
         rows.append(line)
+    if len(lines) < 2:
+        problems.append(f"{name}:2: missing: line 2 must be 'tree <tree>'")
     if problems:
         raise LockError(problems)
     return rows
@@ -108,7 +110,10 @@ def history(lock, lpath, trusted):
     for c in out.decode().split():
         rc, blob = git("cat-file", "blob", f"{c}:{lpath}")
         if rc != 0:
-            continue  # that commit deleted the lock; the lock it had is in an older version
+            rc, entries = git("ls-tree", c, "--", lpath)
+            if rc != 0 or entries:
+                refusals.append(f"lock: cannot read trusted version {c[:10]}:{lpath}")
+            continue  # an absent path is a deletion; older versions are still checked
         try:
             rows = parse(blob, f"{c[:10]}:{lpath}")
         except LockError as e:

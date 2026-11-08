@@ -44,6 +44,18 @@ PASS=0; FAIL=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
+# checked STEP COMMAND...: preserve semantic diagnostics; execution failures always print a refusal.
+# Helpers use stdout as the refusal channel, including when the failed command printed nothing.
+checked() {
+  local label="$1" output rc; shift
+  output="$("$@")"; rc=$?
+  [ -z "$output" ] || printf '%s\n' "$output"
+  if [ "$rc" -ne 0 ] && { [ "$rc" -ne 1 ] || [ -z "$output" ]; }; then
+    printf 'refused: %s failed (exit %s)\n' "$label" "$rc"
+  fi
+  return "$rc"
+}
+
 # judge FROZEN_TREE CURRENT_TREE RETENTION_FILE (in the current repository): prints one problem per line.
 judge() { # FROZEN CUR RETENTION ROOT-TREE [SWEEP-COMMIT...]
   local frozen="$1" cur="$2" ret="$3" root="$4"; shift 4
@@ -80,24 +92,26 @@ for st, raw in zip(f[0::2], f[1::2]):
         print(f"D legacy/{path}: no resolved RETENTION.tsv row allows this deletion")
 ' "$ret" | while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in ADD$'\t'*) ;; *) printf '%s\n' "$line"; continue ;; esac
-    local path="${line#ADD$'\t'}" want s found=""
+    local path="${line#ADD$'\t'}" want s entry found=""
     local -x GIT_LITERAL_PATHSPECS=1 # a path is a path: ":(literal)p/x" must not resolve to p/x
-    want="$(git ls-tree "$cur" -- "$path" | cut -f1)"
+    want="$(git ls-tree "$cur" -- "$path" | cut -f1)" || { echo "refused: judge added-path lookup failed"; continue; }
     [ -n "$want" ] || { echo "A legacy/$path: cannot resolve the added path; refused"; continue; }
-    if [ -n "$(git ls-tree "$root" -- "$path")" ]; then
+    entry="$(git ls-tree "$root" -- "$path")" || { echo "refused: judge root lookup failed"; continue; }
+    if [ -n "$entry" ]; then
       echo "A legacy/$path: a swept file must no longer exist at the root, and $path does"; continue
     fi
     for s in "$@"; do
-      [ "$(git ls-tree "$s" -- "$path" | cut -f1)" = "$want" ] && { found=1; break; }
+      entry="$(git ls-tree "$s" -- "$path" | cut -f1)" || { echo "refused: judge sweep lookup failed"; continue; }
+      [ "$entry" = "$want" ] && { found=1; break; }
     done
     [ -n "$found" ] || echo "A legacy/$path: no sweep commit in the lock has $path with this content; legacy/ admits only byte-for-byte moves"
-  done
+  done || echo "refused: judge diff/retention pipeline failed"
 }
 
 chain() { # LOCK FROZEN CUR RETENTION HEAD-COMMIT: judges frozen -> each sweep tree -> CUR; prints refusals
   local lock="$1" prev="$2" cur="$3" ret="$4" head="$5" root rows kind sw st n=0 step
   rows="$(lock_rows "$lock")" || { printf '%s\n' "$rows"; return 0; }
-  root="$(git rev-parse "$head^{tree}")"
+  root="$(git rev-parse "$head^{tree}")" || { echo "refused: chain HEAD tree lookup failed"; return; }
   while read -r kind sw st || [ -n "$kind" ]; do # rows are the parser's, one per line
     [ "$kind" = sweep ] || continue
     n=$((n+1))
@@ -115,36 +129,36 @@ chain() { # LOCK FROZEN CUR RETENTION HEAD-COMMIT: judges frozen -> each sweep t
 
 # trusted_base HEAD-COMMIT: the newest commit whose history is trusted (see 5 above).
 trusted_base() {
-  local ref="${LEGACY_TRUSTED_REF:-origin/main}" mb
-  if git rev-parse -q --verify "$ref^{commit}" >/dev/null && mb="$(git merge-base "$1" "$ref" 2>/dev/null)"; then
-    echo "$mb"
+  local ref="${LEGACY_TRUSTED_REF:-origin/main}" rc
+  git rev-parse -q --verify "$ref^{commit}" >/dev/null; rc=$?
+  if [ "$rc" = 0 ]; then
+    git merge-base "$1" "$ref" || echo "refused: trusted_base merge-base failed"
+  elif [ "$rc" = 1 ]; then
+    git rev-parse -q --verify "$1^{commit}" || echo "refused: trusted_base HEAD lookup failed"
   else
-    git rev-parse "$1^{commit}"
+    echo "refused: trusted_base ref lookup failed"
   fi
 }
 
 # lock_rows LOCK-FILE: the lock's rows, from its one parser (lib/legacy_lock.py); exit 1 with one
 # diagnostic per problem. No code here reads the lock's bytes itself.
-lock_rows() { python3 -I "$LOCKPY" rows "$1"; }
+lock_rows() { checked lock_rows python3 -I "$LOCKPY" rows "$1"; }
 # lock_history LOCK-FILE LOCK-PATH TRUSTED: every row of every version of LOCK-PATH in TRUSTED's
 # first-parent history is still a row of LOCK-FILE; a malformed trusted version is refused. Prints
 # one refusal per problem, naming the newest trusted commit that has a missing row.
-lock_history() { python3 -I "$LOCKPY" history "$1" "$2" "$3"; }
+lock_history() { checked lock_history python3 -I "$LOCKPY" history "$1" "$2" "$3"; }
 
 # history_identity PREFIX HEAD-COMMIT TRUSTED: every version PREFIX/<path> had in TRUSTED's history is
 # the version it has at HEAD-COMMIT, for each path HEAD-COMMIT still has. Prints one refusal per path.
 history_identity() {
   local prefix="$1" head="$2" trusted="$3"
-  python3 -I - "$prefix" \
-    3< <(git log --first-parent --diff-merges=first-parent -z --raw --no-renames --no-abbrev --format= "$trusted" -- "$prefix/") \
-    4< <(git ls-tree -r -z --full-tree "$head" -- "$prefix/") <<'PY'
-import os, sys
+  checked history_identity python3 -I - "$prefix" "$head" "$trusted" <<'PY'
+import subprocess, sys
 prefix = sys.argv[1] + "/"
-def tokens(fd):
-    with os.fdopen(fd, "rb") as f:
-        return [t for t in f.read().split(b"\0")]
+def tokens(args):
+    return subprocess.check_output(["git", *args]).split(b"\0")
 seen = {}
-t = tokens(3); i = 0
+t = tokens(["log", "--first-parent", "--diff-merges=first-parent", "-z", "--raw", "--no-renames", "--no-abbrev", "--format=", sys.argv[3], "--", prefix]); i = 0
 while i < len(t):
     tok = t[i].lstrip(b"\n")
     if tok.startswith(b":") and i + 1 < len(t):
@@ -155,7 +169,7 @@ while i < len(t):
         i += 2
     else:
         i += 1
-for ent in tokens(4):
+for ent in tokens(["ls-tree", "-r", "-z", "--full-tree", sys.argv[2], "--", prefix]):
     if not ent:
         continue
     meta, path = ent.split(b"\t", 1)
@@ -165,6 +179,26 @@ for ent in tokens(4):
     if other:
         print(f"{path}: was {other[0][1][:10]} (mode {other[0][0]}) in trusted history and is {sha[:10]} (mode {mode}) now: a frozen or swept file is never rewritten, by an edit or by deletion and re-addition")
 PY
+}
+
+read_loop_scan() {
+  printf '%s\n' "$1" | grep -vF '|| [ -n "$' | grep -vF 'grep -nE'
+  local statuses=("${PIPESTATUS[@]}") rc
+  for rc in "${statuses[@]}"; do [ "$rc" -le 1 ] || { echo "refused: read-loop scan failed"; break; }; done
+}
+named_readers() {
+  git ls-files -z -- scripts .githooks .github | xargs -0 -r grep -nIE 'legacy[.]lock' -- 2>/dev/null \
+  | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' | grep -vE '^scripts/checks/lib/legacy_lock[.]py:' \
+  | grep -vE '^scripts/checks/legacy_frozen[.]sh:[0-9]+:LOCK=scripts/checks/legacy[.]lock$'
+  local statuses=("${PIPESTATUS[@]}") rc
+  [ "${statuses[0]}" = 0 ] || echo "refused: reader file listing failed"
+  for rc in "${statuses[@]:1}"; do [ "$rc" -le 1 ] || { echo "refused: reader scan failed"; break; }; done
+}
+lock_uses() {
+  grep -nE '"\$(LOCK|lock)"' "$SELF" | grep -vE '^[0-9]+:[[:space:]]*#' \
+  | grep -vE '(lock_rows|lock_history|chain) "\$(LOCK|lock)"|\[ -f "\$LOCK" \]|echo "=== |no "\$LOCK |local lock="\$1"'
+  local statuses=("${PIPESTATUS[@]}") rc
+  for rc in "${statuses[@]}"; do [ "$rc" -le 1 ] || { echo "refused: lock-use scan failed"; break; }; done
 }
 
 echo "=== negative controls ==="
@@ -259,7 +293,7 @@ refused_lock "a sweep row with a third field" '%s\nsweep %s %s %s\n' "$TMP/a swe
 refused_lock "a blank line" '%s\n\nsweep %s %s\n' "$TMP/a blank line:3: $ROW" "$HDR" "$S" "$SW1"
 refused_lock "a repeated sweep row" '%s\nsweep %s %s\nsweep %s %s\n' "$TMP/a repeated sweep row:4: repeats line 3: a row is recorded once" "$HDR" "$S" "$SW1" "$S" "$SW1"
 refused_lock "a last row without its newline" '%s\nsweep %s %s' "$TMP/a last row without its newline:3: has no newline: every line, the last too, ends with one" "$HDR" "$S" "$SW1"
-refused_lock "a lock without its base row" 'tree %s\n' "$TMP/a lock without its base row:1: is not a lock row: line 1 must be 'base <commit>', one space between fields, each oid 40 or 64 lowercase hex digits" "$F"
+refused_lock "a lock without its base row" 'tree %s\ntree %s\n' "$TMP/a lock without its base row:1: is not a lock row: line 1 must be 'base <commit>', one space between fields, each oid 40 or 64 lowercase hex digits" "$F" "$F"
 refused_lock "a preview lock" '%s\npreview missing: P2\n' "$TMP/a preview lock:3: the move is a --preview build (preview missing: P2); a lock may only record a move generated with its landing prerequisites met (the generator is legacy/scripts/land/legacy_move.sh since the 2026-11-08 sweep)" "$HDR"
 S2="$(git commit-tree "$(tree_with 'mkdir -p p; echo m2 > p/moved')" -p "$S" -m sweep-2)"
 H2="$(git commit-tree "$R0" -p "$S2" -m head2)"
@@ -340,20 +374,73 @@ MM="$(git commit-tree "$(git rev-parse "$B2^{tree}")" -p "$M2" -p "$B2" -m lande
 # trusted_base: the merge base with the trusted ref; HEAD itself when the ref is absent.
 [ "$(LEGACY_TRUSTED_REF="$M2" trusted_base "$C1")" = "$M2" ] && [ "$(LEGACY_TRUSTED_REF=refs/heads/no-such trusted_base "$C1")" = "$C1" ] \
   && ok "control: the trusted base is the merge base with the trusted ref, else HEAD (everything trusted)" || no "control: trusted_base"
+# Exact failure controls: command stubs affect only the subshell invoking the helper.
+expect_refusal() {
+  local name="$1" want="$2" got; shift 2
+  got="$("$@" 2>/dev/null)"
+  [ "$got" = "$want" ] && ok "control: $name" || no "control: $name: '$got' (wanted '$want')"
+}
+env_chain_stub() { local LOCKPY="$1"; chain "$TMP/l_ok" "$F" "$F" "$TMP/r_ok.tsv" "$H"; }
+env_history_stub() { local LOCKPY="$1"; lock_history "$TMP/lock_dropped" L "$M1"; }
+printf 'base %s\n' "$S" > "$TMP/base_only"
+expect_refusal "base-only chain" "$TMP/base_only:2: missing: line 2 must be 'tree <tree>'" chain "$TMP/base_only" "$F" "$F" "$TMP/r_ok.tsv" "$H"
+MB0="$(commit_of "" "$F" r "base $S")"
+expect_refusal "base-only trusted lock" "lock: a trusted version is malformed: ${MB0:0:10}:L:2: missing: line 2 must be 'tree <tree>'" lock_history "$TMP/lock_dropped" L "$MB0"
+for rc in 1 2; do
+  printf 'import sys\nprint("stub error", file=sys.stderr)\nsys.exit(%s)\n' "$rc" > "$TMP/parser_stub.py"
+  expect_refusal "silent parser exit $rc chain" "refused: lock_rows failed (exit $rc)" env_chain_stub "$TMP/parser_stub.py"
+  expect_refusal "silent parser exit $rc history" "refused: lock_history failed (exit $rc)" env_history_stub "$TMP/parser_stub.py"
+done
+expect_refusal "chain HEAD lookup failure" "refused: chain HEAD tree lookup failed" chain "$TMP/l_ok" "$F" "$F" "$TMP/r_ok.tsv" no-such-head
+expect_refusal "judge diff failure" "refused: judge diff/retention pipeline failed" judge no-such-tree "$F" "$TMP/r_ok.tsv" "$F"
+expect_refusal "judge retention failure" "refused: judge diff/retention pipeline failed" judge "$SW1" "$F" "$TMP/no-retention" "$F"
+expect_refusal "judge root lookup failure" "refused: judge root lookup failed" judge "$F" "$SW1" "$TMP/r_ok.tsv" no-such-tree "$S"
+expect_refusal "judge sweep lookup failure" "refused: judge sweep lookup failed"$'\n'"A legacy/p/moved: no sweep commit in the lock has p/moved with this content; legacy/ admits only byte-for-byte moves" judge "$F" "$SW1" "$TMP/r_ok.tsv" "$R0" no-such-commit
+expect_refusal "identity log failure" "refused: history_identity failed (exit 1)" history_identity legacy "$M1" no-such-commit
+expect_refusal "identity tree failure" "refused: history_identity failed (exit 1)" history_identity legacy no-such-commit "$M1"
+expect_refusal "trusted merge-base failure" "refused: trusted_base merge-base failed" env LEGACY_TRUSTED_REF="$M1" bash -c "$(declare -f trusted_base); trusted_base no-such-head"
+expect_refusal "trusted HEAD failure" "refused: trusted_base HEAD lookup failed" env LEGACY_TRUSTED_REF=refs/heads/no-such bash -c "$(declare -f trusted_base); trusted_base no-such-head"
+# Selectively fail one command while letting all other Git/Python calls run normally.
+fail_command() (
+  local target="$1"; shift
+  git() { if [ "$1" = "$target" ]; then return 2; else command git "$@"; fi; }
+  grep() { if [ "$target" = grep ]; then return 2; else command grep "$@"; fi; }
+  python3() { if [ "$target" = python3 ]; then return 2; else command python3 "$@"; fi; }
+  "$@"
+)
+expect_refusal "judge Python failure" "refused: judge diff/retention pipeline failed" fail_command python3 judge "$SW1" "$F" "$TMP/r_ok.tsv" "$F"
+expect_refusal "judge added-path lookup failure" "refused: judge added-path lookup failed" fail_command ls-tree judge "$F" "$SW1" "$TMP/r_ok.tsv" "$R0" "$S"
+expect_refusal "identity Python failure" "refused: history_identity failed (exit 2)" fail_command python3 history_identity legacy "$M1" "$M1"
+expect_refusal "trusted ref lookup failure" "refused: trusted_base ref lookup failed" fail_command rev-parse trusted_base "$M1"
+expect_refusal "reader listing failure" "refused: reader file listing failed" fail_command ls-files named_readers
+expect_refusal "reader scan failure" "refused: reader scan failed" fail_command grep named_readers
+expect_refusal "lock-use scan failure" "refused: lock-use scan failed" fail_command grep lock_uses
+expect_refusal "read-loop scan failure" "refused: read-loop scan failed" fail_command grep read_loop_scan 'while read x || [ -n "$x" ]'
+# Subprocess Git failures must not be mistaken for absent history or a deleted lock.
+mkdir "$TMP/bin"
+REAL_GIT="$(command -v git)"
+cat > "$TMP/bin/git" <<'STUB'
+#!/usr/bin/env bash
+if [ "$1" = "$FAIL_GIT_COMMAND" ] || { [ "$FAIL_GIT_COMMAND" = blob-and-tree ] && { [ "$1" = cat-file ] || [ "$1" = ls-tree ]; }; }; then exit 2; fi
+exec "$REAL_GIT" "$@"
+STUB
+chmod +x "$TMP/bin/git"
+export REAL_GIT
+path_failure() { local PATH="$TMP/bin:$PATH"; export FAIL_GIT_COMMAND="$1"; shift; "$@"; }
+expect_refusal "lock history log failure" "lock: cannot list the trusted history of L through ${M1:0:10}" path_failure log lock_history "$TMP/lock_dropped" L "$M1"
+expect_refusal "lock history blob failure" "lock: cannot read trusted version ${M1:0:10}:L" path_failure cat-file lock_history "$TMP/lock_dropped" L "$M1"
+expect_refusal "lock history tree failure" "lock: cannot read trusted version ${M1:0:10}:L" path_failure blob-and-tree lock_history "$TMP/lock_dropped" L "$M1"
 # Every shell read loop here reads a last line that has no newline: `read` fails on it, so a bare
 # `while read` silently drops it. (The loops' behaviour is checked above; this keeps a new one honest.)
 loops="$(grep -nE '^[^#]*while[^#]*[[:space:]]read[[:space:]]' "$SELF")" || { echo "FATAL: cannot read $SELF"; exit 2; }
-bad="$(printf '%s\n' "$loops" | grep -vF '|| [ -n "$' | grep -vF 'grep -nE')"
+bad="$(read_loop_scan "$loops")"
 [ "$(printf '%s\n' "$loops" | grep -cF '|| [ -n "$')" -ge 3 ] && [ -z "$bad" ] && ok "control: every read loop in this check reads a last line without a newline" || no "control: a read loop drops an unterminated last line: $bad"
 cd "$ROOT_DIR"
 # The parser is the lock's one reader. Outside legacy/ (frozen, never run) and comments, the lock's
 # path is named only by the parser and by this check's LOCK=, and every use of LOCK here hands it to
 # the parser (lock_rows, lock_history) or only tests or names it.
-named="$(git ls-files -z -- scripts .githooks .github | xargs -0 grep -nIE 'legacy[.]lock' -- 2>/dev/null \
-  | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' | grep -vE '^scripts/checks/lib/legacy_lock[.]py:' \
-  | grep -vE '^scripts/checks/legacy_frozen[.]sh:[0-9]+:LOCK=scripts/checks/legacy[.]lock$')"
-uses="$(grep -nE '"\$(LOCK|lock)"' "$SELF" | grep -vE '^[0-9]+:[[:space:]]*#' \
-  | grep -vE '(lock_rows|lock_history|chain) "\$(LOCK|lock)"|\[ -f "\$LOCK" \]|echo "=== |no "\$LOCK |local lock="\$1"')"
+named="$(named_readers)"
+uses="$(lock_uses)"
 [ -z "$named" ] && [ -z "$uses" ] && [ "$(grep -c '' "$SELF")" -gt 0 ] \
   && ok "control: lib/legacy_lock.py is the lock's one reader: no other code names or reads the lock" \
   || no "control: another reader of the lock: ${named}${uses:+ / in this check: $uses}"
@@ -376,9 +463,9 @@ else
     no "HEAD has no legacy/ directory"
   else
     [ -f RETENTION.tsv ] || { no "RETENTION.tsv is missing"; }
-    out="$(chain "$LOCK" "$frozen" "$cur" "${RETENTION:-RETENTION.tsv}" HEAD)"
-    tb="$(trusted_base HEAD)"
-    hist="$(lock_history "$LOCK" "$LOCK" "$tb"; history_identity legacy HEAD "$tb")"
+    out="$(checked chain chain "$LOCK" "$frozen" "$cur" "${RETENTION:-RETENTION.tsv}" HEAD)"
+    tb="$(checked trusted_base trusted_base HEAD)"
+    hist="$(checked lock_history lock_history "$LOCK" "$LOCK" "$tb"; checked history_identity history_identity legacy HEAD "$tb")"
     [ -z "$hist" ] && ok "trusted history (through ${tb:0:10}): every lock line kept, no legacy/ file rewritten" \
       || { no "legacy/ or its lock rewrote trusted history (through ${tb:0:10}):"; echo "$hist" | sed 's/^/      /'; }
     [ "$nsw" = 0 ] || [ -n "$out" ] || ok "the lock's $nsw sweep line(s) name commits of HEAD's history and chain to HEAD:legacy"
