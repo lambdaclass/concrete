@@ -11,6 +11,8 @@
 AGENTS.md
 CHANGELOG.md
 CLAUDE.md
+Concrete
+Concrete.lean
 ConcreteSpec
 ConcreteSpec.lean
 ISSUES.tsv
@@ -29,6 +31,7 @@ legacy
 required-checks-transition.tsv
 required-checks.txt
 scripts
+tests
 docs/LANDING.md
 docs/PHILOSOPHY.md
 docs/REVIEW.md
