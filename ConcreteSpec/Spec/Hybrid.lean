@@ -138,12 +138,15 @@ def State.RangesDisjoint (st : State) (p q : Place) : Prop :=
 def State.set (st : State) (p : Place) (c : Cell) : State :=
   { st with cells := (p, c) :: st.cells }
 
+/-- Helper (computation). Place lookup after State.set reduces to association-list cons (approved: PENDING). -/
 @[simp] theorem State.places_set (st : State) (p q : Place) (c : Cell) :
     (st.set p c).places q = if p = q then some c else st.places q := rfl
 
+/-- Helper (computation). Updating the byte-memory field preserves place lookup (approved: PENDING). -/
 @[simp] theorem State.places_memory (st : State) (m : Memory) (p : Place) :
     ({ st with memory := m } : State).places p = st.places p := rfl
 
+/-- Helper (computation). Updating a logical place preserves the byte-memory field (approved: PENDING). -/
 @[simp] theorem State.memory_set (st : State) (p : Place) (c : Cell) :
     (st.set p c).memory = st.memory := rfl
 

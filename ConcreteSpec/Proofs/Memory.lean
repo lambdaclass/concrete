@@ -16,23 +16,28 @@ target and a target-valid pointer.
 namespace ConcreteSpec.Core.Mem
 open ConcreteSpec
 
+/-- Representation lemma. Applying the byte-order permutation twice is the identity (approved: PENDING). -/
 @[simp] theorem ordered_ordered (o : ByteOrder) (bs : List (Fin 256)) :
     ordered o (ordered o bs) = bs := by cases o <;> simp [ordered]
 
+/-- Representation lemma. Fixed-width little-endian encoding produces the requested octet count (approved: PENDING). -/
 @[simp] theorem leBytes_length (k n : Nat) : (leBytes k n).length = k := by
   induction k generalizing n with
   | zero => rfl
   | succ k ih => simp [leBytes, ih]
 
+/-- Representation lemma. Byte-order permutation preserves octet count (approved: PENDING). -/
 @[simp] theorem ordered_length (o : ByteOrder) (bs : List (Fin 256)) :
     (ordered o bs).length = bs.length := by cases o <;> simp [ordered]
 
+/-- Representation lemma. Plain initialized bytes extract to their underlying octets (approved: PENDING). -/
 @[simp] theorem octets_init (bs : List (Fin 256)) :
     octets (bs.map (.init · none)) = some bs := by
   induction bs with
   | nil => rfl
   | cons b bs ih => simp [octets, ih]
 
+/-- Representation lemma. Little-endian decoding inverts fixed-width little-endian encoding below the width bound (approved: PENDING). -/
 theorem leValue_leBytes (k n : Nat) (h : n < 256 ^ k) : leValue (leBytes k n) = n := by
   induction k generalizing n with
   | zero => simp at h; subst n; rfl
@@ -43,6 +48,7 @@ theorem leValue_leBytes (k n : Nat) (h : n < 256 ^ k) : leValue (leBytes k n) = 
     simp only [leBytes, leValue, ih _ hd]
     omega
 
+/-- Representation lemma. Little-endian value is bounded by 256 to the octet length (approved: PENDING). -/
 theorem leValue_lt (bs : List (Fin 256)) : leValue bs < 256 ^ bs.length := by
   induction bs with
   | nil => simp [leValue]
@@ -51,11 +57,14 @@ theorem leValue_lt (bs : List (Fin 256)) : leValue bs < 256 ^ bs.length := by
     have := b.isLt
     omega
 
+/-- Representation lemma. Byte width of an integer type matches its bit-width power (approved: PENDING). -/
 theorem intByte_power (t : IntTy) : 256 ^ intBytes t = 2 ^ t.bits := by cases t <;> decide
 
+/-- Representation lemma. Integer encoding produces intBytes octets (approved: PENDING). -/
 @[simp] theorem encodeInt_length (tgt : Target) (t : IntTy) (n : Int) :
     (encodeInt tgt t n).length = intBytes t := by simp [encodeInt]
 
+/-- Law (subject `ConcreteSpec.Core.Mem.decodeInt`, `ConcreteSpec.Core.Mem.encodeInt`). Integer decoding inverts integer encoding for every in-range value. -/
 theorem decodeInt_encodeInt (tgt : Target) (t : IntTy) (n : Int) (h : t.InRange n) :
     decodeInt tgt t (encodeInt tgt t n) = some n := by
   unfold decodeInt
@@ -63,6 +72,7 @@ theorem decodeInt_encodeInt (tgt : Target) (t : IntTy) (n : Int) (h : t.InRange 
   simp only [encodeInt, octets_init, Option.map_some, ordered_ordered]
   rw [leValue_leBytes _ _ (by rw [intByte_power]; exact toBits_lt t n), ofBits_toBits t n h]
 
+/-- Representation lemma. Extracted octets preserve the byte-list length (approved: PENDING). -/
 theorem octets_length {bs : List MByte} {os : List (Fin 256)}
     (h : octets bs = some os) : os.length = bs.length := by
   induction bs generalizing os with
@@ -75,39 +85,51 @@ theorem octets_length {bs : List MByte} {os : List (Fin 256)}
       | none => simp [octets, ho] at h
       | some xs => simp [octets, ho] at h; subst os; simp [ih ho]
 
-theorem decodeInt_inRange (tgt : Target) (t : IntTy) (bs : List MByte) (n : Int)
-    (h : decodeInt tgt t bs = some n) : t.InRange n := by
-  unfold decodeInt at h
-  split at h
-  next hl =>
-    cases ho : octets bs with
-    | none => simp [ho] at h
-    | some os =>
-      simp [ho] at h
-      subst n
-      apply ofBits_inRange
-      have hb := leValue_lt (ordered tgt.byteOrder os)
-      rw [ordered_length, octets_length ho, hl, intByte_power] at hb
-      exact hb
-  next => cases h
+/-- Law (subject `ConcreteSpec.Core.Mem.decodeInt`). Every decoded integer lies within its declared type's range. -/
+theorem decodeInt_inRange (tgt : Target) (t : IntTy) (bs : List MByte) :
+    match decodeInt tgt t bs with
+    | some n => t.InRange n
+    | none => True := by
+  cases h : decodeInt tgt t bs with
+  | none => trivial
+  | some n =>
+    unfold decodeInt at h
+    split at h
+    next hl =>
+      cases ho : octets bs with
+      | none => simp [ho] at h
+      | some os =>
+        simp [ho] at h
+        subst n
+        apply ofBits_inRange
+        have hb := leValue_lt (ordered tgt.byteOrder os)
+        rw [ordered_length, octets_length ho, hl, intByte_power] at hb
+        exact hb
+    next => cases h
 
+/-- Law (subject `ConcreteSpec.Core.Mem.decodeBool`, `ConcreteSpec.Core.Mem.encodeBool`). Boolean decoding inverts boolean encoding. -/
 @[simp] theorem decodeBool_encodeBool (b : Bool) : decodeBool (encodeBool b) = some b := by
   cases b <;> rfl
 
-theorem decodeBool_valid (bs : List MByte) (b : Bool) (h : decodeBool bs = some b) :
-    ∃ v f, bs = [.init v f] ∧ v.val = boolToBits b := by
-  match bs with
-  | [.init v f] => exact ⟨v, f, rfl, (boolOfBits_some_iff _ _).1 h⟩
-  | [] | .uninit :: _ | .init _ _ :: _ :: _ => cases h
+/-- Law (subject `ConcreteSpec.Core.Mem.decodeBool`). A byte list decodes to a boolean if and only if it is one initialized 0 or 1 byte. -/
+theorem decodeBool_valid (bs : List MByte) (b : Bool) :
+    decodeBool bs = some b ↔ ∃ v f, bs = [.init v f] ∧ v.val = boolToBits b := by
+  constructor
+  · intro h
+    match bs with
+    | [.init v f] => exact ⟨v, f, rfl, (boolOfBits_some_iff _ _).1 h⟩
+    | [] | .uninit :: _ | .init _ _ :: _ :: _ => cases h
+  · rintro ⟨v, f, rfl, hv⟩
+    exact (boolOfBits_some_iff v.val b).2 hv
 
-/-- Representation lemma. Fragment annotations do not alter the numeric octets. -/
+/-- Representation lemma. Fragment annotations do not alter the numeric octets (approved: PENDING). -/
 private theorem octets_fragments (os : List (Fin 256)) (p : Ptr) (start : Nat) :
     octets ((os.zipIdx start).map (fun (v, i) => MByte.init v (some (p, i)))) = some os := by
   induction os generalizing start with
   | nil => rfl
   | cons v vs ih => simp [List.zipIdx_cons, octets, ih]
 
-/-- Representation lemma. Reading a fixed-width octet sequence and writing it back is exact. -/
+/-- Representation lemma. Reading a fixed-width octet sequence and writing it back is exact (approved: PENDING). -/
 private theorem leBytes_leValue (os : List (Fin 256)) : leBytes os.length (leValue os) = os := by
   induction os with
   | nil => rfl
@@ -115,7 +137,7 @@ private theorem leBytes_leValue (os : List (Fin 256)) : leBytes os.length (leVal
     simp [leBytes, leValue, Nat.add_mod, Nat.add_div, Nat.mod_eq_of_lt v.isLt,
       Nat.div_eq_of_lt v.isLt, Nat.not_le_of_gt v.isLt, ih]
 
-/-- A valid pointer round-trips by numeric octet decoding, independently of fragment validation. -/
+/-- Law (subject `ConcreteSpec.Core.Mem.decodePtr`, `ConcreteSpec.Core.Mem.encodePtr`). A valid pointer round-trips by numeric octet decoding, independently of fragment validation. -/
 theorem decodePtr_encodePtr (tgt : Target) (ht : tgt.WellFormed) (p : Ptr) (hpv : p.Valid tgt) :
     decodePtr tgt (encodePtr tgt p) = some p := by
   have hp : 0 < tgt.ptrSize := by have := ht.1; have := ht.2.1; omega
@@ -140,14 +162,16 @@ theorem decodePtr_encodePtr (tgt : Target) (ht : tgt.WellFormed) (p : Ptr) (hpv 
     simp only [hlen, ↓reduceIte, ho]
     simp [encodePtr, ordered_ordered, leValue_leBytes _ _ hb, hpv]
 
+/-- Helper (computation). Block lookup after modify reduces to association-list update (approved: PENDING). -/
 @[simp] theorem block_modify (m : Memory) (b c : MemBlockId) (f : Block → Block) :
     (m.modify b f).block c = if c = b then (m.block b).map f else m.block c := by
   exact AList.lookup_update b f m.blocks c
 
-/-- Empty memory satisfies every target's memory invariant. -/
+/-- Law (subject `ConcreteSpec.Core.Mem.Memory.empty`). Empty memory satisfies every target's memory invariant. -/
 theorem empty_wellFormed (tgt : Target) : Memory.empty.WellFormed tgt := by
   constructor <;> simp [Memory.empty, Memory.block, AList.lookup]
 
+/-- Helper (congruence). Updating an association-list entry preserves the key list (approved: PENDING). -/
 private theorem keys_update (xs : AList MemBlockId Block) (b : MemBlockId) (f : Block → Block) :
     List.map Prod.fst (AList.update xs b f) = List.map Prod.fst xs := by
   induction xs with
@@ -156,6 +180,7 @@ private theorem keys_update (xs : AList MemBlockId Block) (b : MemBlockId) (f : 
     simp only [AList.update]
     split <;> simp_all
 
+/-- Helper (inversion). Nodup keys ensure every stored entry is returned by lookup (approved: PENDING). -/
 private theorem canonical_of_unique (xs : AList MemBlockId Block)
     (hu : (List.map Prod.fst xs).Nodup) :
     ∀ e ∈ xs, AList.lookup xs e.1 = some e.2 := by
@@ -171,8 +196,8 @@ private theorem canonical_of_unique (xs : AList MemBlockId Block)
         exact hu.1 (hh ▸ List.mem_map.mpr ⟨e, he, rfl⟩)
       simp [AList.lookup, hn, ih hu.2 e he]
 
-/-- A block update preserving geometry and byte count, and never reviving a dead block,
-preserves the whole memory invariant. Exposure and byte contents are otherwise unrestricted. -/
+/-- Helper (congruence). A block update preserving geometry and byte count, and never reviving a dead block,
+preserves the whole memory invariant (approved: PENDING). -/
 theorem modify_wellFormed (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
     (b : MemBlockId) (f : Block → Block)
     (hg : ∀ x, (f x).space = x.space ∧ (f x).base = x.base ∧
@@ -223,6 +248,7 @@ theorem modify_wellFormed (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
     simpa only [Block.Overlaps, hspace, hbase, hsize, hspace', hbase', hsize'] using
       hw.disjoint c x d w hx hw' hne (hlive hyl) (hlive' hzl)
 
+/-- Helper (inversion). Unpack the block identity, updated memory and fit condition of a successful allocation (approved: PENDING). -/
 theorem alloc_result (tgt : Target) (m : Memory) (s : AddrSpace) (base size align : Nat)
     (b : MemBlockId) (m' : Memory) (h : m.alloc tgt s base size align = .ok (b, m')) :
     b = ⟨m.next⟩ ∧ m' = ⟨(b, candidate s base size align) :: m.blocks, m.next + 1⟩ ∧
@@ -232,36 +258,54 @@ theorem alloc_result (tgt : Target) (m : Memory) (s : AddrSpace) (base size alig
   next hf => cases h; exact ⟨rfl, rfl, hf⟩
   next => cases h
 
+/-- Law (subject `ConcreteSpec.Core.Mem.Memory.alloc`). Successful allocation assigns the next fresh identity, absent from prior blocks. -/
 theorem alloc_fresh (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
-    (s : AddrSpace) (base size align : Nat) (b : MemBlockId) (m' : Memory)
-    (h : m.alloc tgt s base size align = .ok (b, m')) : b.id = m.next ∧ m.block b = none := by
-  obtain ⟨rfl, _, _⟩ := alloc_result tgt m s base size align b m' h
-  refine ⟨rfl, ?_⟩
-  cases hb : m.block ⟨m.next⟩ with
-  | none => rfl
-  | some x => have := hw.fresh _ _ hb; simp at this
+    (s : AddrSpace) (base size align : Nat) :
+    match m.alloc tgt s base size align with
+    | .ok (b, _) => b.id = m.next ∧ m.block b = none
+    | .error _ => True := by
+  cases h : m.alloc tgt s base size align with
+  | error _ => trivial
+  | ok pair =>
+    obtain ⟨b, m'⟩ := pair
+    obtain ⟨rfl, _, _⟩ := alloc_result tgt m s base size align b m' h
+    refine ⟨rfl, ?_⟩
+    cases hb : m.block ⟨m.next⟩ with
+    | none => rfl
+    | some x => have := hw.fresh _ _ hb; simp at this
 
-theorem alloc_block (tgt : Target) (m : Memory) (s : AddrSpace) (base size align : Nat)
-    (b : MemBlockId) (m' : Memory) (h : m.alloc tgt s base size align = .ok (b, m')) :
-    m'.block b = some (candidate s base size align) := by
-  obtain ⟨_, rfl, _⟩ := alloc_result tgt m s base size align b m' h
-  simp [Memory.block, AList.lookup]
+/-- Law (subject `ConcreteSpec.Core.Mem.Memory.alloc`). Successful allocation installs the candidate block at the returned identity. -/
+theorem alloc_block (tgt : Target) (m : Memory) (s : AddrSpace) (base size align : Nat) :
+    match m.alloc tgt s base size align with
+    | .ok (b, m') => m'.block b = some (candidate s base size align)
+    | .error _ => True := by
+  cases h : m.alloc tgt s base size align with
+  | error _ => trivial
+  | ok pair =>
+    obtain ⟨b, m'⟩ := pair
+    obtain ⟨_, rfl, _⟩ := alloc_result tgt m s base size align b m' h
+    simp [Memory.block, AList.lookup]
 
-/-- Allocation rejects misalignment, a one-past address beyond the boundary, or overlap
-with an existing live block. These are geometric failure laws, independent of Fits. -/
+/-- Law (subject `ConcreteSpec.Core.Mem.Memory.alloc`). Allocation rejects non-power-of-two alignment, base misalignment, a one-past address beyond the boundary, a size exceeding maxObject, a nonempty null base, overlap with an existing live block, or an unknown address space. -/
 theorem alloc_failure (tgt : Target) (m : Memory) (s : AddrSpace) (base size align : Nat)
-    (h : base % align ≠ 0 ∨ 2 ^ tgt.addrBits - 1 < base + size ∨
-      ∃ e ∈ m.blocks, e.2.live = true ∧ e.2.Overlaps (candidate s base size align)) :
+    (h : ¬ IsPow2 align ∨ base % align ≠ 0 ∨ 2 ^ tgt.addrBits - 1 < base + size ∨
+      tgt.maxObject < size ∨ (0 < size ∧ base = tgt.null) ∨
+      (∃ e ∈ m.blocks, e.2.live = true ∧ e.2.Overlaps (candidate s base size align)) ∨
+      s ∉ tgt.spaces) :
     m.alloc tgt s base size align = .error .unavailable := by
   have hf : ¬ m.Fits tgt (candidate s base size align) := by
     intro hf
-    rcases h with ha | hb | ⟨e, he, hl, ho⟩
+    rcases h with hp | ha | hb | hm | ⟨hpos, hnull⟩ | ⟨e, he, hl, ho⟩ | hs
+    · exact hp hf.1
     · exact ha hf.2.1
     · exact Nat.not_lt_of_ge hf.2.2.1 hb
+    · exact Nat.not_lt_of_ge hf.2.2.2.1 hm
+    · exact hf.2.2.2.2.1 hpos hnull
     · exact hf.2.2.2.2.2.1 e he hl ho
+    · exact hs hf.2.2.2.2.2.2
   simp [Memory.alloc, hf]
 
-/-- Zero-byte loads and stores succeed exactly at aligned, non-null, target-valid addresses;
+/-- Law (subject `ConcreteSpec.Core.Mem.Memory.load`, `ConcreteSpec.Core.Mem.Memory.store`). Zero-byte loads and stores succeed exactly at aligned, non-null, target-valid addresses;
 no allocation or provenance is needed and an empty store preserves the whole memory. -/
 theorem access_zero (tgt : Target) (m : Memory) (p : Ptr) (a : Nat) :
     (m.load tgt p 0 a = some [] ∧ m.store tgt p [] a = some m) ↔
@@ -270,10 +314,12 @@ theorem access_zero (tgt : Target) (m : Memory) (p : Ptr) (a : Nat) :
   · simp [Memory.load, Memory.store, Memory.access, h]
   · simp [Memory.load, Memory.store, Memory.access, h]
 
+/-- Law (subject `ConcreteSpec.Core.Mem.Memory.access`). A nonzero access through a pointer without provenance fails. -/
 theorem access_no_provenance (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat)
     (hn : n ≠ 0) (hp : p.prov = none) : m.access tgt p n a = none := by
   simp [Memory.access, hn, hp]
 
+/-- Helper (inversion). Extract the retained dead block and unchanged freshness counter of a successful release (approved: PENDING). -/
 theorem free_retains (m : Memory) (b : MemBlockId) (m' : Memory) (h : m.free b = some m') :
     ∃ x, m.block b = some x ∧
       m'.block b = some { x with live := false, exposed := false } ∧ m'.next = m.next := by
@@ -288,93 +334,111 @@ theorem free_retains (m : Memory) (b : MemBlockId) (m' : Memory) (h : m.free b =
       exact ⟨x, rfl, by simp [hb], rfl⟩
     · simp [hl] at h
 
+/-- Law (subject `ConcreteSpec.Core.Mem.Memory.access`). Any nonzero access through a pointer to a released block fails. -/
 theorem access_after_free (tgt : Target) (m m' : Memory) (b : MemBlockId)
     (p : Ptr) (n a : Nat) (hf : m.free b = some m') (hp : p.prov = some b)
     (hn : n ≠ 0) : m'.access tgt p n a = none := by
   obtain ⟨x, _, hx, _⟩ := free_retains m b m' hf
   simp [Memory.access, hn, hp, hx]
 
+/-- Law (subject `ConcreteSpec.Core.Mem.Ptr.eqAddr`). Pointer address equality compares space and numeric address only, ignoring provenance. -/
 theorem eqAddr_provenance (s : AddrSpace) (a : Nat) (b c : Option MemBlockId) :
     Ptr.eqAddr ⟨s, a, b⟩ ⟨s, a, c⟩ = true := by simp [Ptr.eqAddr]
 
-/-- Any later allocation differs from every identity still present, including released blocks. -/
+/-- Law (subject `ConcreteSpec.Core.Mem.Memory.alloc`). Any later allocation differs from every identity still present, including released blocks. -/
 theorem alloc_ne_existing (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
-    (s : AddrSpace) (base size align : Nat) (b c : MemBlockId) (m' : Memory) (x : Block)
-    (h : m.alloc tgt s base size align = .ok (b, m')) (hc : m.block c = some x) : b ≠ c := by
-  obtain ⟨hb, _⟩ := alloc_fresh tgt m hw s base size align b m' h
-  have := hw.fresh c x hc
-  intro he; subst c; omega
+    (s : AddrSpace) (base size align : Nat) (c : MemBlockId) (x : Block)
+    (hc : m.block c = some x) :
+    match m.alloc tgt s base size align with
+    | .ok (b, _) => b ≠ c
+    | .error _ => True := by
+  have hf := alloc_fresh tgt m hw s base size align
+  cases h : m.alloc tgt s base size align with
+  | error _ => trivial
+  | ok pair =>
+    obtain ⟨b, m'⟩ := pair
+    rw [h] at hf
+    have := hw.fresh c x hc
+    intro he; subst c; omega
 
+/-- Helper (projection). Block overlap is symmetric (approved: PENDING). -/
 private theorem overlaps_symm (x y : Block) (h : x.Overlaps y) : y.Overlaps x :=
   ⟨h.1.symm, h.2.2.1, h.2.1, h.2.2.2.2, h.2.2.2.1⟩
 
+/-- Law (subject `ConcreteSpec.Core.Mem.Memory.alloc`). Successful allocation preserves memory well-formedness. -/
 theorem alloc_wellFormed (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
-    (s : AddrSpace) (base size align : Nat) (b : MemBlockId) (m' : Memory)
-    (h : m.alloc tgt s base size align = .ok (b, m')) : m'.WellFormed tgt := by
-  obtain ⟨rfl, rfl, hf⟩ := alloc_result tgt m s base size align b m' h
-  let z : MemBlockId := ⟨m.next⟩
-  let x := candidate s base size align
-  have lookup (c : MemBlockId) :
-      (Memory.mk ((z, x) :: m.blocks) (m.next + 1)).block c =
-        if z = c then some x else m.block c := rfl
-  constructor
-  · intro e he
-    cases he with
-    | head => simp [Memory.block, AList.lookup]
-    | tail _ he =>
-      rw [lookup]
-      have hh := hw.canonical e he
-      have hfresh := hw.fresh e.1 e.2 hh
-      have hn : z ≠ e.1 := by intro hz; rw [← hz] at hfresh; simp [z] at hfresh
-      simp [hn, hh]
-  · simp only [List.map_cons, List.nodup_cons]
-    refine ⟨?_, hw.unique⟩
-    intro hm
-    obtain ⟨e, he, hz⟩ := List.mem_map.mp hm
-    have hh := hw.fresh e.1 e.2 (hw.canonical e he)
-    rw [hz] at hh
-    exact Nat.lt_irrefl _ hh
-  · intro c y hy
-    rw [lookup] at hy
-    split at hy
-    next he => subst c; simp [z]
-    next => have hh := hw.fresh c y hy; exact Nat.lt_trans hh (Nat.lt_succ_self _)
-  · intro c y hy
-    rw [lookup] at hy
-    split at hy
-    next => cases hy; simp [x, candidate]
-    next => exact hw.sized c y hy
-  · intro c y hy
-    rw [lookup] at hy
-    split at hy
-    next => cases hy; exact hf.2.2.1
-    next => exact hw.fits c y hy
-  · intro c y hy
-    rw [lookup] at hy
-    split at hy
-    next => cases hy; exact hf.2.2.2.2.2.2
-    next => exact hw.spaces c y hy
-  · intro c y hy
-    rw [lookup] at hy
-    split at hy
-    next => cases hy; exact ⟨hf.1, hf.2.1⟩
-    next => exact hw.aligned c y hy
-  · intro c y d w hy hw' hne hyl hwl
-    rw [lookup] at hy hw'
-    split at hy
-    next hc =>
-      cases hy
-      split at hw'
-      next hd => exact False.elim (hne (hc.symm.trans hd))
+    (s : AddrSpace) (base size align : Nat) :
+    match m.alloc tgt s base size align with
+    | .ok (_, m') => m'.WellFormed tgt
+    | .error _ => True := by
+  cases h : m.alloc tgt s base size align with
+  | error _ => trivial
+  | ok pair =>
+    obtain ⟨b, m'⟩ := pair
+    obtain ⟨rfl, rfl, hf⟩ := alloc_result tgt m s base size align b m' h
+    let z : MemBlockId := ⟨m.next⟩
+    let x := candidate s base size align
+    have lookup (c : MemBlockId) :
+        (Memory.mk ((z, x) :: m.blocks) (m.next + 1)).block c =
+          if z = c then some x else m.block c := rfl
+    constructor
+    · intro e he
+      cases he with
+      | head => simp [Memory.block, AList.lookup]
+      | tail _ he =>
+        rw [lookup]
+        have hh := hw.canonical e he
+        have hfresh := hw.fresh e.1 e.2 hh
+        have hn : z ≠ e.1 := by intro hz; rw [← hz] at hfresh; simp [z] at hfresh
+        simp [hn, hh]
+    · simp only [List.map_cons, List.nodup_cons]
+      refine ⟨?_, hw.unique⟩
+      intro hm
+      obtain ⟨e, he, hz⟩ := List.mem_map.mp hm
+      have hh := hw.fresh e.1 e.2 (hw.canonical e he)
+      rw [hz] at hh
+      exact Nat.lt_irrefl _ hh
+    · intro c y hy
+      rw [lookup] at hy
+      split at hy
+      next he => subst c; simp [z]
+      next => have hh := hw.fresh c y hy; exact Nat.lt_trans hh (Nat.lt_succ_self _)
+    · intro c y hy
+      rw [lookup] at hy
+      split at hy
+      next => cases hy; simp [x, candidate]
+      next => exact hw.sized c y hy
+    · intro c y hy
+      rw [lookup] at hy
+      split at hy
+      next => cases hy; exact hf.2.2.1
+      next => exact hw.fits c y hy
+    · intro c y hy
+      rw [lookup] at hy
+      split at hy
+      next => cases hy; exact hf.2.2.2.2.2.2
+      next => exact hw.spaces c y hy
+    · intro c y hy
+      rw [lookup] at hy
+      split at hy
+      next => cases hy; exact ⟨hf.1, hf.2.1⟩
+      next => exact hw.aligned c y hy
+    · intro c y d w hy hw' hne hyl hwl
+      rw [lookup] at hy hw'
+      split at hy
+      next hc =>
+        cases hy
+        split at hw'
+        next hd => exact False.elim (hne (hc.symm.trans hd))
+        next =>
+          intro hov
+          exact hf.2.2.2.2.2.1 _ (AList.lookup_mem hw') hwl (overlaps_symm _ _ hov)
       next =>
-        intro hov
-        exact hf.2.2.2.2.2.1 _ (AList.lookup_mem hw') hwl (overlaps_symm _ _ hov)
-    next =>
-      split at hw'
-      next => cases hw'; exact hf.2.2.2.2.2.1 _ (AList.lookup_mem hy) hyl
-      next => exact hw.disjoint c y d w hy hw' hne hyl hwl
+        split at hw'
+        next => cases hw'; exact hf.2.2.2.2.2.1 _ (AList.lookup_mem hy) hyl
+        next => exact hw.disjoint c y d w hy hw' hne hyl hwl
 
-/-- Non-overlap makes the in-bounds provenance unique; no order on identities is used. -/
+/-- Helper (inversion). Non-overlap makes the in-bounds provenance unique; no order on identities is used (approved: PENDING). -/
 theorem candidate_contains_unique (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
     (s : AddrSpace) (addr : Nat) (b c : MemBlockId) (x y : Block)
     (hx : m.block b = some x) (hy : m.block c = some y)
@@ -388,8 +452,8 @@ theorem candidate_contains_unique (tgt : Target) (m : Memory) (hw : m.WellFormed
   apply hw.disjoint b x c y hx hy hn hxc.1.1.1 hyc.1.1.1
   refine ⟨hxc.2.trans hyc.2.symm, hxc.1.2, hyc.1.2, ?_, ?_⟩ <;> omega
 
-/-- Reconstruction chooses an eligible containing block, or a one-past block only when no
-eligible block contains the address. -/
+/-- Helper (inversion). Reconstruction chooses an eligible containing block, or a one-past block only when no
+eligible block contains the address (approved: PENDING). -/
 theorem fromExposed_sound (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
     (s : AddrSpace) (addr : Nat) (b : MemBlockId)
     (h : (m.fromExposed s addr).prov = some b) :
@@ -419,7 +483,7 @@ theorem fromExposed_sound (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
         simpa using hh
     next => cases h
 
-/-- An eligible containing or one-past candidate suffices to recover some provenance. -/
+/-- Helper (inversion). An eligible containing or one-past candidate suffices to recover some provenance (approved: PENDING). -/
 theorem fromExposed_exists (m : Memory) (s : AddrSpace) (addr : Nat)
     (e : MemBlockId × Block) (he : e ∈ m.blocks) (hc : e.2.Candidate s = true)
     (ha : (e.2.base ≤ addr ∧ addr < e.2.base + e.2.size) ∨
@@ -440,7 +504,7 @@ theorem fromExposed_exists (m : Memory) (s : AddrSpace) (addr : Nat)
       · have hh := List.find?_eq_none.mp hp e hm
         simp [ha] at hh
 
-/-- Completeness at the containing-block priority; no list-order tie-break enters the result. -/
+/-- Law (subject `ConcreteSpec.Core.Mem.Memory.fromExposed`). Completeness at the containing-block priority; no list-order tie-break enters the result. -/
 theorem fromExposed_contains (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
     (s : AddrSpace) (addr : Nat) (b : MemBlockId) (x : Block)
     (hx : m.block b = some x) (hc : x.Candidate s = true)
@@ -453,7 +517,7 @@ theorem fromExposed_contains (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
     simpa only [← this] using hp
   · exact False.elim (hn (b, x) (AList.lookup_mem hx) hc hi)
 
-/-- Nonempty disjoint blocks in one space cannot share their one-past endpoint either. -/
+/-- Helper (inversion). Nonempty disjoint blocks in one space cannot share their one-past endpoint either (approved: PENDING). -/
 theorem candidate_onePast_unique (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
     (s : AddrSpace) (addr : Nat) (b c : MemBlockId) (x y : Block)
     (hx : m.block b = some x) (hy : m.block c = some y)
@@ -466,7 +530,7 @@ theorem candidate_onePast_unique (tgt : Target) (m : Memory) (hw : m.WellFormed 
   apply hw.disjoint b x c y hx hy hn hxc.1.1.1 hyc.1.1.1
   refine ⟨hxc.2.trans hyc.2.symm, hxc.1.2, hyc.1.2, ?_, ?_⟩ <;> omega
 
-/-- In the absence of any containing candidate, a one-past candidate is recovered exactly. -/
+/-- Law (subject `ConcreteSpec.Core.Mem.Memory.fromExposed`). In the absence of any containing candidate, a one-past candidate is recovered exactly. -/
 theorem fromExposed_onePast (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
     (s : AddrSpace) (addr : Nat) (b : MemBlockId) (x : Block)
     (hx : m.block b = some x) (hc : x.Candidate s = true) (hi : addr = x.base + x.size)
@@ -480,7 +544,7 @@ theorem fromExposed_onePast (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
   · have := candidate_onePast_unique tgt m hw s addr b c x y hx hy hc hcy hi hiy
     simpa only [← this] using hp
 
-/-- If neither priority has a candidate, reconstruction supplies no provenance. -/
+/-- Law (subject `ConcreteSpec.Core.Mem.Memory.fromExposed`). If neither priority has a candidate, reconstruction supplies no provenance. -/
 theorem fromExposed_none (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
     (s : AddrSpace) (addr : Nat)
     (hn : ∀ e ∈ m.blocks, e.2.Candidate s = true →
@@ -495,7 +559,7 @@ theorem fromExposed_none (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
     · exact False.elim (hh.1 hi)
     · exact False.elim (hh.2 hi)
 
-/-- Helper (inversion). Extract the block and bounds of a successful nonempty access. -/
+/-- Helper (inversion). Extract the block and bounds of a successful nonempty access (approved: PENDING). -/
 theorem access_some_inv (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat) (b : MemBlockId)
     (off : Nat) (h : m.access tgt p n a = some (some (b, off))) :
     ∃ x, p.prov = some b ∧ m.block b = some x ∧ n ≠ 0 ∧ x.live = true ∧
@@ -518,26 +582,31 @@ theorem access_some_inv (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat) (b : M
           hv.2.2.2.1, hv.2.2.2.2, rfl⟩
         next => cases h
 
-/-- Nonempty access validity follows from the stored block geometry, rather than a runtime check. -/
+/-- Law (subject `ConcreteSpec.Core.Mem.Memory.access`). Nonempty access validity follows from the stored block geometry, rather than a runtime check. -/
 theorem access_valid (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
-    (p : Ptr) (n a : Nat) (r : Option (MemBlockId × Nat))
-    (h : m.access tgt p n a = some r) : p.Valid tgt := by
-  cases r with
-  | none =>
-    unfold Memory.access at h
-    split at h
-    · split at h
-      next hv => exact hv.2.2
-      next => cases h
-    · split at h <;> (try split at h) <;> (try split at h) <;> cases h
-  | some pair =>
-    obtain ⟨b, off⟩ := pair
-    obtain ⟨x, _, hx, hn, _, hs, hlo, hhi, _, _⟩ := access_some_inv tgt m p n a b off h
-    have hf := hw.fits b x hx
-    have hpos : 0 < 2 ^ tgt.addrBits := Nat.two_pow_pos tgt.addrBits
-    exact ⟨by omega, hs ▸ hw.spaces b x hx⟩
+    (p : Ptr) (n a : Nat) :
+    match m.access tgt p n a with
+    | some _ => p.Valid tgt
+    | none => True := by
+  cases h : m.access tgt p n a with
+  | none => trivial
+  | some r =>
+    cases r with
+    | none =>
+      unfold Memory.access at h
+      split at h
+      · split at h
+        next hv => exact hv.2.2
+        next => cases h
+      · split at h <;> (try split at h) <;> (try split at h) <;> cases h
+    | some pair =>
+      obtain ⟨b, off⟩ := pair
+      obtain ⟨x, _, hx, hn, _, hs, hlo, hhi, _, _⟩ := access_some_inv tgt m p n a b off h
+      have hf := hw.fits b x hx
+      have hpos : 0 < 2 ^ tgt.addrBits := Nat.two_pow_pos tgt.addrBits
+      exact ⟨by omega, hs ▸ hw.spaces b x hx⟩
 
-/-- Helper (inversion). Extract the independent width, fragment, numeric and validity checks. -/
+/-- Helper (inversion). Extract the independent width, fragment, numeric and validity checks (approved: PENDING). -/
 private theorem decodePtr_checks_inv (tgt : Target) (bs : List MByte) (p : Ptr)
     (h : decodePtr tgt bs = some p) :
     ∃ os, octets bs = some os ∧ bs.length = tgt.ptrSize ∧
@@ -557,25 +626,23 @@ private theorem decodePtr_checks_inv (tgt : Target) (bs : List MByte) (p : Ptr)
     next => cases h
   | [] | .uninit :: _ | .init _ none :: _ | .init _ (some (_, Nat.succ _)) :: _ => cases h
 
-/-- Helper (projection). Defensive target validity, covered by decodePtr_some. -/
-theorem decodePtr_valid_inv (tgt : Target) (bs : List MByte) (p : Ptr)
-    (h : decodePtr tgt bs = some p) : p.Valid tgt := by
-  obtain ⟨_, _, _, _, _, hv⟩ := decodePtr_checks_inv tgt bs p h
-  exact hv
-
-/-- Successful pointer decoding recovers exactly a whole stored representation and a valid
+/-- Law (subject `ConcreteSpec.Core.Mem.decodePtr`, `ConcreteSpec.Core.Mem.encodePtr`). Successful pointer decoding recovers exactly a whole stored representation and a valid
 pointer. The representation follows from numeric byte reconstruction, not encoder comparison. -/
-theorem decodePtr_some (tgt : Target) (bs : List MByte) (p : Ptr)
-    (h : decodePtr tgt bs = some p) : bs = encodePtr tgt p ∧ p.Valid tgt := by
-  obtain ⟨os, ho, hlen, hf, hn, hv⟩ := decodePtr_checks_inv tgt bs p h
-  have hos : os = ordered tgt.byteOrder (leBytes tgt.ptrSize p.addr) := by
-    have hr := leBytes_leValue (ordered tgt.byteOrder os)
-    rw [ordered_length, octets_length ho, hlen, hn] at hr
-    have hh := congrArg (ordered tgt.byteOrder) hr
-    simpa using hh.symm
-  exact ⟨by rw [hf, hos]; rfl, hv⟩
+theorem decodePtr_some (tgt : Target) (ht : tgt.WellFormed) (bs : List MByte) (p : Ptr) :
+    decodePtr tgt bs = some p ↔ bs = encodePtr tgt p ∧ p.Valid tgt := by
+  constructor
+  · intro h
+    obtain ⟨os, ho, hlen, hf, hn, hv⟩ := decodePtr_checks_inv tgt bs p h
+    have hos : os = ordered tgt.byteOrder (leBytes tgt.ptrSize p.addr) := by
+      have hr := leBytes_leValue (ordered tgt.byteOrder os)
+      rw [ordered_length, octets_length ho, hlen, hn] at hr
+      have hh := congrArg (ordered tgt.byteOrder) hr
+      simpa using hh.symm
+    exact ⟨by rw [hf, hos]; rfl, hv⟩
+  · rintro ⟨rfl, hv⟩
+    exact decodePtr_encodePtr tgt ht p hv
 
-/-- Nonempty access succeeds on the independent liveness, provenance and geometry obligations.
+/-- Law (subject `ConcreteSpec.Core.Mem.Memory.access`). Nonempty access succeeds on the independent liveness, provenance and geometry obligations.
 Together with access_valid this proves deleting the redundant target-validity guard preserves
 success on well-formed memory. -/
 theorem access_success (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat)
@@ -586,13 +653,13 @@ theorem access_success (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat)
     m.access tgt p n a = some (some (b, p.addr - x.base)) := by
   simp [Memory.access, hn, hp, hx, hl, hs, hlo, hhi, ha]
 
-/-- Replacing a range reads back exactly that range. -/
+/-- Representation lemma. Replacing a range reads back exactly that range (approved: PENDING). -/
 theorem splice_read (xs bs : List MByte) (off : Nat) (h : off ≤ xs.length) :
     ((xs.take off ++ bs ++ xs.drop (off + bs.length)).drop off).take bs.length = bs := by
   rw [List.append_assoc, List.drop_append_of_le_length (by simp [List.length_take, Nat.min_eq_left h])]
   simp
 
-/-- The bytes before and after a splice are unchanged, including uninitialized bytes and fragments. -/
+/-- Representation lemma. The bytes before and after a splice are unchanged, including uninitialized bytes and fragments (approved: PENDING). -/
 theorem splice_frame (xs bs : List MByte) (off i : Nat)
     (hb : off + bs.length ≤ xs.length) (hi : i < off ∨ off + bs.length ≤ i) :
     (xs.take off ++ bs ++ xs.drop (off + bs.length))[i]? = xs[i]? := by
@@ -607,6 +674,7 @@ theorem splice_frame (xs bs : List MByte) (off i : Nat)
     congr 1
     omega
 
+/-- Law (subject `ConcreteSpec.Core.Mem.Memory.load`). Reading back a stored byte slice at the same pointer and alignment recovers the stored bytes. -/
 theorem store_load (tgt : Target) (m m' : Memory) (hw : m.WellFormed tgt)
     (p : Ptr) (bs : List MByte) (a : Nat) (h : m.store tgt p bs a = some m') :
     m'.load tgt p bs.length a = some bs := by
@@ -638,25 +706,21 @@ theorem store_load (tgt : Target) (m m' : Memory) (hw : m.WellFormed tgt)
       congr 1
       exact splice_read _ _ _ (by omega)
 
-/-- A store frames every block except its access block. -/
-theorem store_other_block (tgt : Target) (m m' : Memory) (p : Ptr) (bs : List MByte)
+/-- Law (subject `ConcreteSpec.Core.Mem.Memory.store`). A store frames every block except its access block. -/
+theorem store_other_block (tgt : Target) (m : Memory) (p : Ptr) (bs : List MByte)
     (a : Nat) (b : MemBlockId) (off : Nat) (c : MemBlockId)
-    (ha : m.access tgt p bs.length a = some (some (b, off)))
-    (h : m.store tgt p bs a = some m') (hc : c ≠ b) : m'.block c = m.block c := by
-  simp only [Memory.store, ha, Option.some.injEq] at h
-  subst m'
-  simp [hc]
+    (ha : m.access tgt p bs.length a = some (some (b, off))) (hc : c ≠ b) :
+    (m.store tgt p bs a).bind (fun m' => m'.block c) = m.block c := by
+  simp [Memory.store, ha, hc]
 
-/-- A store also frames each byte outside its range in the accessed block. -/
-theorem store_same_block_frame (tgt : Target) (m m' : Memory) (hw : m.WellFormed tgt)
+/-- Law (subject `ConcreteSpec.Core.Mem.Memory.store`). A store also frames each byte outside its range in the accessed block. -/
+theorem store_same_block_frame (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
     (p : Ptr) (bs : List MByte) (a : Nat) (b : MemBlockId) (off i : Nat) (x : Block)
     (ha : m.access tgt p bs.length a = some (some (b, off)))
-    (hx : m.block b = some x) (h : m.store tgt p bs a = some m')
-    (hi : i < off ∨ off + bs.length ≤ i) :
-    (m'.block b).map (fun y => y.bytes[i]?) = some (x.bytes[i]?) := by
-  simp only [Memory.store, ha, Option.some.injEq] at h
-  subst m'
-  simp only [block_modify, ↓reduceIte, hx, Option.map_some]
+    (hx : m.block b = some x) (hi : i < off ∨ off + bs.length ≤ i) :
+    ((m.store tgt p bs a).bind fun m' => m'.block b).map (fun y => y.bytes[i]?) =
+      some (x.bytes[i]?) := by
+  simp only [Memory.store, ha, Option.bind_some, block_modify, ↓reduceIte, hx, Option.map_some]
   congr 1
   obtain ⟨y, _, hy, _, _, _, hlo, hhi, _, hoff⟩ := access_some_inv tgt m p bs.length a b off ha
   rw [hx] at hy
@@ -665,55 +729,73 @@ theorem store_same_block_frame (tgt : Target) (m m' : Memory) (hw : m.WellFormed
   have := hw.sized b x hx
   omega
 
-/-- The allocated block is live and unexposed and every byte is uninitialized. -/
-theorem alloc_initialized (tgt : Target) (m : Memory) (s : AddrSpace) (base size align : Nat)
-    (b : MemBlockId) (m' : Memory) (h : m.alloc tgt s base size align = .ok (b, m')) :
-    ∃ x, m'.block b = some x ∧ x.live = true ∧ x.exposed = false ∧
-      x.bytes = List.replicate size .uninit :=
-  ⟨candidate s base size align, alloc_block tgt m s base size align b m' h, rfl, rfl, rfl⟩
+/-- Law (subject `ConcreteSpec.Core.Mem.Memory.alloc`). The allocated block is live and unexposed and every byte is uninitialized. -/
+theorem alloc_initialized (tgt : Target) (m : Memory) (s : AddrSpace) (base size align : Nat) :
+    match m.alloc tgt s base size align with
+    | .ok (b, m') => ∃ x, m'.block b = some x ∧ x.live = true ∧ x.exposed = false ∧
+        x.bytes = List.replicate size .uninit
+    | .error _ => True := by
+  have hb := alloc_block tgt m s base size align
+  cases h : m.alloc tgt s base size align with
+  | error _ => trivial
+  | ok pair =>
+    obtain ⟨b, m'⟩ := pair
+    rw [h] at hb
+    exact ⟨candidate s base size align, hb, rfl, rfl, rfl⟩
 
-/-- Successful byte stores preserve block geometry, liveness and well-formedness. -/
-theorem store_wellFormed (tgt : Target) (m m' : Memory) (hw : m.WellFormed tgt)
-    (p : Ptr) (bs : List MByte) (a : Nat) (h : m.store tgt p bs a = some m') :
-    m'.WellFormed tgt := by
-  unfold Memory.store at h
-  cases ha : m.access tgt p bs.length a with
-  | none => simp [ha] at h
-  | some v =>
-    rw [ha] at h
-    cases v with
-    | none => cases h; exact hw
-    | some pair =>
-      obtain ⟨b, off⟩ := pair
-      cases h
-      obtain ⟨x, _, hx, _, _, _, hlo, hhi, _, hoff⟩ :=
-        access_some_inv tgt m p bs.length a b off ha
-      apply modify_wellFormed tgt m hw b
-      · intro y; exact ⟨rfl, rfl, rfl, rfl⟩
-      · intro y hy
-        rw [hx] at hy; cases hy
-        have := hw.sized b x hx
-        simp only [List.length_append, List.length_take, List.length_drop]
-        omega
-      · intro y hy; exact hy
+/-- Law (subject `ConcreteSpec.Core.Mem.Memory.store`). Successful byte stores preserve block geometry, liveness and well-formedness. -/
+theorem store_wellFormed (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
+    (p : Ptr) (bs : List MByte) (a : Nat) :
+    match m.store tgt p bs a with
+    | some m' => m'.WellFormed tgt
+    | none => True := by
+  cases h : m.store tgt p bs a with
+  | none => trivial
+  | some m' =>
+    unfold Memory.store at h
+    cases ha : m.access tgt p bs.length a with
+    | none => simp [ha] at h
+    | some v =>
+      rw [ha] at h
+      cases v with
+      | none => cases h; exact hw
+      | some pair =>
+        obtain ⟨b, off⟩ := pair
+        cases h
+        obtain ⟨x, _, hx, _, _, _, hlo, hhi, _, hoff⟩ :=
+          access_some_inv tgt m p bs.length a b off ha
+        apply modify_wellFormed tgt m hw b
+        · intro y; exact ⟨rfl, rfl, rfl, rfl⟩
+        · intro y hy
+          rw [hx] at hy; cases hy
+          have := hw.sized b x hx
+          simp only [List.length_append, List.length_take, List.length_drop]
+          omega
+        · intro y hy; exact hy
 
-/-- Successful release preserves the invariant without deleting the identity. -/
-theorem free_wellFormed (tgt : Target) (m m' : Memory) (hw : m.WellFormed tgt)
-    (b : MemBlockId) (h : m.free b = some m') : m'.WellFormed tgt := by
-  unfold Memory.free at h
-  split at h
-  next x hx =>
+/-- Law (subject `ConcreteSpec.Core.Mem.Memory.free`). Successful release preserves the invariant without deleting the identity. -/
+theorem free_wellFormed (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
+    (b : MemBlockId) :
+    match m.free b with
+    | some m' => m'.WellFormed tgt
+    | none => True := by
+  cases h : m.free b with
+  | none => trivial
+  | some m' =>
+    unfold Memory.free at h
     split at h
-    next =>
-      cases h
-      apply modify_wellFormed tgt m hw b
-      · intro y; exact ⟨rfl, rfl, rfl, rfl⟩
-      · intro y hy; exact hw.sized b y hy
-      · intro y hy; cases hy
+    next x hx =>
+      split at h
+      next =>
+        cases h
+        apply modify_wellFormed tgt m hw b
+        · intro y; exact ⟨rfl, rfl, rfl, rfl⟩
+        · intro y hy; exact hw.sized b y hy
+        · intro y hy; cases hy
+      next => cases h
     next => cases h
-  next => cases h
 
-/-- Exposure changes exactly the exposed flag of a live provenance block. -/
+/-- Helper (inversion). Exposure changes exactly the exposed flag of a live provenance block (approved: PENDING). -/
 theorem expose_result (m m' : Memory) (p : Ptr) (h : m.expose p = some m') :
     ∃ b x, p.prov = some b ∧ m.block b = some x ∧ x.live = true ∧
       m' = m.modify b (fun y => { y with exposed := true }) := by
@@ -728,14 +810,14 @@ theorem expose_result (m m' : Memory) (p : Ptr) (h : m.expose p = some m') :
       next => cases h
     next => cases h
 
-/-- Conversely every live provenance block can be exposed, preserving all other fields. -/
+/-- Law (subject `ConcreteSpec.Core.Mem.Memory.expose`). Conversely every live provenance block can be exposed, preserving all other fields. -/
 theorem expose_success (m : Memory) (p : Ptr) (b : MemBlockId) (x : Block)
     (hp : p.prov = some b) (hx : m.block b = some x) (hl : x.live = true) :
     m.expose p = some (m.modify b (fun y => { y with exposed := true })) := by
   simp [Memory.expose, hp, hx, hl]
 
-/-- The exposed block has exactly its old fields except the exposed flag; other blocks and
-freshness counter are unchanged. -/
+/-- Helper (inversion). The exposed block has exactly its old fields except the exposed flag; other blocks and
+freshness counter are unchanged (approved: PENDING). -/
 theorem expose_frame (m m' : Memory) (p : Ptr) (h : m.expose p = some m') :
     ∃ b x, p.prov = some b ∧ m.block b = some x ∧
       m'.block b = some { x with exposed := true } ∧ m'.next = m.next ∧
@@ -743,20 +825,26 @@ theorem expose_frame (m m' : Memory) (p : Ptr) (h : m.expose p = some m') :
   obtain ⟨b, x, hp, hx, _, rfl⟩ := expose_result m m' p h
   exact ⟨b, x, hp, hx, by simp [hx], rfl, by intro c hc; simp [hc]⟩
 
-/-- Marking a block exposed preserves well-formedness. -/
-theorem expose_wellFormed (tgt : Target) (m m' : Memory) (hw : m.WellFormed tgt)
-    (p : Ptr) (h : m.expose p = some m') : m'.WellFormed tgt := by
-  obtain ⟨b, _, _, _, _, rfl⟩ := expose_result m m' p h
-  apply modify_wellFormed tgt m hw b
-  · intro y; exact ⟨rfl, rfl, rfl, rfl⟩
-  · intro y hy; exact hw.sized b y hy
-  · intro y hy; exact hy
+/-- Law (subject `ConcreteSpec.Core.Mem.Memory.expose`). Marking a block exposed preserves well-formedness. -/
+theorem expose_wellFormed (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
+    (p : Ptr) :
+    match m.expose p with
+    | some m' => m'.WellFormed tgt
+    | none => True := by
+  cases h : m.expose p with
+  | none => trivial
+  | some m' =>
+    obtain ⟨b, _, _, _, _, rfl⟩ := expose_result m m' p h
+    apply modify_wellFormed tgt m hw b
+    · intro y; exact ⟨rfl, rfl, rfl, rfl⟩
+    · intro y hy; exact hw.sized b y hy
+    · intro y hy; exact hy
 
 /-- Geometry relevant to hybrid projections; neither byte contents nor exposure is cached. -/
 def Block.geometry (x : Block) : AddrSpace × Nat × Nat × Nat :=
   (x.space, x.base, x.size, x.align)
 
-/-- Store does not change any block's projection geometry. -/
+/-- Helper (congruence). Store does not change any block's projection geometry (approved: PENDING). -/
 theorem store_geometry (tgt : Target) (m m' : Memory) (p : Ptr) (bs : List MByte)
     (a : Nat) (h : m.store tgt p bs a = some m') (b : MemBlockId) :
     (m'.block b).map Block.geometry = (m.block b).map Block.geometry := by
@@ -773,7 +861,7 @@ theorem store_geometry (tgt : Target) (m m' : Memory) (p : Ptr) (bs : List MByte
     · rfl
   next => cases h
 
-/-- Exposure also preserves every projection's geometry. -/
+/-- Helper (congruence). Exposure also preserves every projection's geometry (approved: PENDING). -/
 theorem expose_geometry (m m' : Memory) (p : Ptr) (h : m.expose p = some m')
     (b : MemBlockId) :
     (m'.block b).map Block.geometry = (m.block b).map Block.geometry := by
@@ -785,7 +873,7 @@ theorem expose_geometry (m m' : Memory) (p : Ptr) (h : m.expose p = some m')
       cases m.block _ <;> rfl
   · rfl
 
-/-- Reads depend only on their provenance block, independently of every other block. -/
+/-- Helper (congruence). Reads depend only on their provenance block, independently of every other block (approved: PENDING). -/
 theorem load_congr (tgt : Target) (m m' : Memory) (p : Ptr) (n a : Nat)
     (h : ∀ b, p.prov = some b → m'.block b = m.block b) :
     m'.load tgt p n a = m.load tgt p n a := by
@@ -801,7 +889,7 @@ theorem load_congr (tgt : Target) (m m' : Memory) (p : Ptr) (n a : Nat)
         simp only [Memory.load, Memory.access, hz, ↓reduceIte, hp, h b hp, hx]
         split <;> simp_all
 
-/-- A store frames reads using a different allocation identity. -/
+/-- Law (subject `ConcreteSpec.Core.Mem.Memory.load`). A store frames reads using a different allocation identity. -/
 theorem store_load_other (tgt : Target) (m m' : Memory) (p q : Ptr) (bs : List MByte)
     (a n align : Nat) (h : m.store tgt p bs a = some m') (hn : q.prov ≠ p.prov) :
     m'.load tgt q n align = m.load tgt q n align := by
@@ -821,7 +909,7 @@ theorem store_load_other (tgt : Target) (m m' : Memory) (p q : Ptr) (bs : List M
       have hcb : c ≠ b := by intro he; subst c; exact hn (hc.trans hp.symm)
       simp [hcb]
 
-/-- Exposure affects provenance reconstruction, but no byte read or access check. -/
+/-- Law (subject `ConcreteSpec.Core.Mem.Memory.load`). Exposure affects provenance reconstruction, but no byte read or access check. -/
 theorem expose_load (tgt : Target) (m m' : Memory) (p q : Ptr) (n a : Nat)
     (h : m.expose p = some m') : m'.load tgt q n a = m.load tgt q n a := by
   obtain ⟨b, _, _, _, _, rfl⟩ := expose_result m m' p h
@@ -845,7 +933,7 @@ theorem expose_load (tgt : Target) (m m' : Memory) (p q : Ptr) (n a : Nat)
         subst d
         simp [hc]
 
-/-- A successful nonempty read can be shortened to any nonempty prefix. -/
+/-- Law (subject `ConcreteSpec.Core.Mem.Memory.load`). A successful nonempty read can be shortened to any nonempty prefix. -/
 theorem load_prefix (tgt : Target) (m : Memory) (p : Ptr) (n k a : Nat) (bs : List MByte)
     (hn : n ≠ 0) (hk : k ≠ 0) (hkn : k ≤ n) (h : m.load tgt p n a = some bs) :
     m.load tgt p k a = some (bs.take k) := by
@@ -867,52 +955,235 @@ theorem load_prefix (tgt : Target) (m : Memory) (p : Ptr) (n k a : Nat) (bs : Li
       simp [Memory.load, Memory.access, hk, hp, hx, hl, hs, hlo, hb, hal, hoff,
         List.take_take, Nat.min_eq_left hkn]
 
-/-- Releasing a block cannot permit any existing identity to be reused by the next allocation,
+/-- Law (subject `ConcreteSpec.Core.Mem.Memory.alloc`). Releasing a block cannot permit any existing identity to be reused by the next allocation,
 even when the allocator reuses the released address. -/
-theorem free_alloc_ne_existing (tgt : Target) (m freed allocated : Memory)
-    (hw : m.WellFormed tgt) (b c new : MemBlockId) (x : Block)
+theorem free_alloc_ne_existing (tgt : Target) (m freed : Memory)
+    (hw : m.WellFormed tgt) (b c : MemBlockId) (x : Block)
     (hf : m.free b = some freed) (hc : m.block c = some x)
-    (s : AddrSpace) (base size align : Nat)
-    (ha : freed.alloc tgt s base size align = .ok (new, allocated)) : new ≠ c := by
-  obtain ⟨_, _, _, hn⟩ := free_retains m b freed hf
-  obtain ⟨he, _, _⟩ := alloc_result tgt freed s base size align new allocated ha
-  have hlt := hw.fresh c x hc
-  intro heq
-  rw [heq] at he
-  have hid := congrArg MemBlockId.id he
-  dsimp at hid
-  omega
+    (s : AddrSpace) (base size align : Nat) :
+    match freed.alloc tgt s base size align with
+    | .ok (new, _) => new ≠ c
+    | .error _ => True := by
+  cases ha : freed.alloc tgt s base size align with
+  | error _ => trivial
+  | ok pair =>
+    obtain ⟨new, allocated⟩ := pair
+    obtain ⟨_, _, _, hn⟩ := free_retains m b freed hf
+    obtain ⟨he, _, _⟩ := alloc_result tgt freed s base size align new allocated ha
+    have hlt := hw.fresh c x hc
+    intro heq
+    rw [heq] at he
+    have hid := congrArg MemBlockId.id he
+    dsimp at hid
+    omega
 
 
 namespace Audit
-private def target : Target :=
-  { linuxX8664 with addrBits := 8, ptrSize := 2, ptrAlign := 1, maxObject := 255 }
-private def ptr : Ptr := ⟨⟨0⟩, 40, some ⟨0⟩⟩
-private def other : Ptr := ⟨⟨0⟩, 41, some ⟨1⟩⟩
-private def bytes : List MByte := [.init 40 (some (ptr, 0)), .init 0 (some (ptr, 1))]
 
-/-- Instance (law `ConcreteSpec.Core.Mem.decodePtr_encodePtr`). Accepted: a valid whole pointer. -/
-example : target.WellFormed ∧ ptr.Valid target ∧
-    decodePtr target (encodePtr target ptr) = some ptr := by decide
+def target : Target :=
+  { linuxX8664 with addrBits := 8, ptrSize := 2, ptrAlign := 1, maxObject := 250 }
+def ptr : Ptr := ⟨⟨0⟩, 40, some ⟨0⟩⟩
+def other : Ptr := ⟨⟨0⟩, 41, some ⟨1⟩⟩
+def badPtr : Ptr := ⟨⟨0⟩, 256, some ⟨0⟩⟩
+def nullPtr : Ptr := ⟨⟨0⟩, 0, none⟩
+def rawPtr : Ptr := ⟨⟨0⟩, 40, none⟩
+def bytes : List MByte := [.init 40 (some (ptr, 0)), .init 0 (some (ptr, 1))]
+def initBlock : Block := candidate ⟨0⟩ 40 8 1
+def memory : Memory := ⟨[(⟨0⟩, initBlock)], 1⟩
+def freedBlock : Block := { initBlock with live := false, exposed := false }
+def freedMemory : Memory := ⟨[(⟨0⟩, freedBlock)], 1⟩
+def exposedBlock : Block := { initBlock with exposed := true }
+def exposedMemory : Memory := ⟨[(⟨0⟩, exposedBlock)], 1⟩
+def storedBlock : Block :=
+  { initBlock with bytes := .init 7 none :: List.replicate 7 .uninit }
+def storedMemory : Memory := ⟨[(⟨0⟩, storedBlock)], 1⟩
 
-/-- Instance (law `ConcreteSpec.Core.Mem.decodePtr_some`). Accepted: successful decoding
-has exactly the stored encoding, including provenance. -/
-example : decodePtr target bytes = some ptr ∧ bytes = encodePtr target ptr ∧ ptr.Valid target := by decide
+def badDecodeInt : Target → IntTy → List MByte → Option Int := fun _ _ _ => none
+def badDecodeIntRange : Target → IntTy → List MByte → Option Int := fun _ _ _ => some 200
+def badEncodeInt : Target → IntTy → Int → List MByte := fun _ _ _ => []
+def badDecodeBool : List MByte → Option Bool := fun _ => none
+def badEncodeBool : Bool → List MByte := fun _ => []
+def badDecodePtr (tgt : Target) (bs : List MByte) : Option Ptr :=
+  decodePtr { tgt with byteOrder := .big } bs
+def badEncodePtr : Target → Ptr → List MByte := fun _ _ => []
+def firstFragment : Target → List MByte → Option Ptr
+  | _, .init _ (some (p, _)) :: _ => some p
+  | _, _ => none
 
-/-- Planted (law `ConcreteSpec.Core.Mem.decodePtr_encodePtr`). A decoder mutated to reverse violates the round trip at this valid pointer. -/
-example : ¬ (decodePtr { target with byteOrder := .big } (encodePtr target ptr) = some ptr) := by decide
+def badEmpty : Memory := ⟨[(⟨1⟩, initBlock)], 0⟩
 
-private def firstFragment : List MByte → Option Ptr
-  | .init _ (some (p, _)) :: _ => some p
-  | _ => none
+def badAllocId : Target → Memory → AddrSpace → Nat → Nat → Nat →
+    Except AllocError (MemBlockId × Memory) :=
+  fun _ m s base size align =>
+    .ok (⟨m.next + 1⟩, ⟨(⟨m.next + 1⟩, candidate s base size align) :: m.blocks, m.next + 1⟩)
 
-/-- Planted (law `ConcreteSpec.Core.Mem.decodePtr_some`). The actual first-fragment-only
-mutant violates the converse on a partial pointer. -/
-example : ¬ (∀ bs p, firstFragment bs = some p → bs = encodePtr target p ∧ p.Valid target) := by
+def badAllocEmpty : Target → Memory → AddrSpace → Nat → Nat → Nat →
+    Except AllocError (MemBlockId × Memory) :=
+  fun _ m _ _ _ _ => .ok (⟨m.next⟩, m)
+
+def badAllocReuseZero : Target → Memory → AddrSpace → Nat → Nat → Nat →
+    Except AllocError (MemBlockId × Memory) :=
+  fun _ m _ _ _ _ => .ok (⟨0⟩, m)
+
+/-- Deliberately wrong allocator for planted checks: skip exactly one geometry obligation.
+0 skips power-of-two alignment, 1 skips base alignment, 2 skips the address boundary,
+3 skips maxObject, 4 skips the non-null base check, 5 skips live overlap,
+6 skips address-space membership. -/
+def mutatedAlloc (skip : Nat) (tgt : Target) (m : Memory) (s : AddrSpace)
+    (base size align : Nat) : Except AllocError (MemBlockId × Memory) :=
+  let x := candidate s base size align
+  if (skip = 0 ∨ IsPow2 align) ∧ (skip = 1 ∨ base % align = 0) ∧
+      (skip = 2 ∨ base + size ≤ 2 ^ tgt.addrBits - 1) ∧
+      (skip = 3 ∨ size ≤ tgt.maxObject) ∧
+      (skip = 4 ∨ (0 < size → base ≠ tgt.null)) ∧
+      (skip = 5 ∨ ∀ e ∈ m.blocks, e.2.live = true → ¬ e.2.Overlaps x) ∧
+      (skip = 6 ∨ x.space ∈ tgt.spaces)
+  then .ok (⟨m.next⟩, ⟨(⟨m.next⟩, x) :: m.blocks, m.next + 1⟩)
+  else .error .unavailable
+
+def mutatedAllocPow2 : Target → Memory → AddrSpace → Nat → Nat → Nat →
+    Except AllocError (MemBlockId × Memory) := mutatedAlloc 0
+def mutatedAllocAlign : Target → Memory → AddrSpace → Nat → Nat → Nat →
+    Except AllocError (MemBlockId × Memory) := mutatedAlloc 1
+def mutatedAllocBound : Target → Memory → AddrSpace → Nat → Nat → Nat →
+    Except AllocError (MemBlockId × Memory) := mutatedAlloc 2
+def mutatedAllocMaxObj : Target → Memory → AddrSpace → Nat → Nat → Nat →
+    Except AllocError (MemBlockId × Memory) := mutatedAlloc 3
+def mutatedAllocNull : Target → Memory → AddrSpace → Nat → Nat → Nat →
+    Except AllocError (MemBlockId × Memory) := mutatedAlloc 4
+def mutatedAllocOverlap : Target → Memory → AddrSpace → Nat → Nat → Nat →
+    Except AllocError (MemBlockId × Memory) := mutatedAlloc 5
+def mutatedAllocSpace : Target → Memory → AddrSpace → Nat → Nat → Nat →
+    Except AllocError (MemBlockId × Memory) := mutatedAlloc 6
+
+def badLoadNone : Target → Memory → Ptr → Nat → Nat → Option (List MByte) :=
+  fun _ _ _ _ _ => none
+def badLoadDiff : Target → Memory → Ptr → Nat → Nat → Option (List MByte) :=
+  fun _ m _ _ _ =>
+    match m.block ⟨0⟩ with
+    | some x => if x.bytes == initBlock.bytes && !x.exposed then none else some []
+    | none => none
+def badLoadPrefix : Target → Memory → Ptr → Nat → Nat → Option (List MByte) :=
+  fun tgt m p sz a => if sz == 2 then m.load tgt p sz a else none
+def badStoreNone : Target → Memory → Ptr → List MByte → Nat → Option Memory :=
+  fun _ _ _ _ _ => none
+def badStoreDup : Target → Memory → Ptr → List MByte → Nat → Option Memory :=
+  fun _ m _ _ _ => some ⟨(⟨1⟩, candidate ⟨0⟩ 80 8 1) :: m.blocks, m.next + 1⟩
+def badStoreWf : Target → Memory → Ptr → List MByte → Nat → Option Memory :=
+  fun _ _ _ _ _ => some badEmpty
+def badAccessSome : Target → Memory → Ptr → Nat → Nat → Option (Option (MemBlockId × Nat)) :=
+  fun _ _ _ _ _ => some none
+def badAccessNone : Target → Memory → Ptr → Nat → Nat → Option (Option (MemBlockId × Nat)) :=
+  fun _ _ _ _ _ => none
+def badEqAddr : Ptr → Ptr → Bool := fun p q => p == q
+def badFromExposedNone : Memory → AddrSpace → Nat → Ptr := fun _ s addr => ⟨s, addr, none⟩
+def badFromExposedSome : Memory → AddrSpace → Nat → Ptr := fun _ s addr => ⟨s, addr, some ⟨0⟩⟩
+def badFreeWf : Memory → MemBlockId → Option Memory := fun _ _ => some badEmpty
+def badExposeNone : Memory → Ptr → Option Memory := fun _ _ => none
+def badExposeWf : Memory → Ptr → Option Memory := fun _ _ => some badEmpty
+
+/-- Helper (inversion). The out-of-range block identity in badEmpty violates the freshness invariant (approved: PENDING). -/
+private theorem not_badEmpty_wf : ¬ badEmpty.WellFormed target := by
+  intro hw
+  have h := hw.fresh ⟨1⟩ initBlock rfl
+  cases h
+
+/-- Helper (congruence). The audit fixture memory satisfies the target memory invariant (approved: PENDING). -/
+private theorem memory_wf : memory.WellFormed target :=
+  alloc_wellFormed target Memory.empty (empty_wellFormed target) ⟨0⟩ 40 8 1
+
+/-- Helper (congruence). The exposed audit fixture memory satisfies the target memory invariant (approved: PENDING). -/
+private theorem exposedMemory_wf : exposedMemory.WellFormed target :=
+  expose_wellFormed target memory memory_wf ptr
+
+-- 1. decodeInt_encodeInt
+/-- Instance (law `ConcreteSpec.Core.Mem.decodeInt_encodeInt`, case `i8`). -/
+example : decodeInt target .i8 (encodeInt target .i8 (-5)) = some (-5) :=
+  decodeInt_encodeInt target .i8 (-5) (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Mem.decodeInt_encodeInt`, case `i8`, subject `ConcreteSpec.Core.Mem.decodeInt`, mutant `ConcreteSpec.Core.Mem.Audit.badDecodeInt`). -/
+example : IntTy.i8.InRange (-5) ∧
+    ¬ (badDecodeInt target .i8 (encodeInt target .i8 (-5)) = some (-5)) := by decide
+
+/-- Planted (law `ConcreteSpec.Core.Mem.decodeInt_encodeInt`, case `i8`, subject `ConcreteSpec.Core.Mem.encodeInt`, mutant `ConcreteSpec.Core.Mem.Audit.badEncodeInt`). -/
+example : IntTy.i8.InRange (-5) ∧
+    ¬ (decodeInt target .i8 (badEncodeInt target .i8 (-5)) = some (-5)) := by decide
+
+-- 2. decodeInt_inRange
+/-- Instance (law `ConcreteSpec.Core.Mem.decodeInt_inRange`, case `i8`). -/
+example : match decodeInt target .i8 [.init 251 none] with
+    | some n => IntTy.i8.InRange n
+    | none => True :=
+  decodeInt_inRange target .i8 [.init 251 none]
+
+/-- Planted (law `ConcreteSpec.Core.Mem.decodeInt_inRange`, case `i8`, subject `ConcreteSpec.Core.Mem.decodeInt`, mutant `ConcreteSpec.Core.Mem.Audit.badDecodeIntRange`). -/
+example : ¬ (match badDecodeIntRange target .i8 [.init 251 none] with
+    | some n => IntTy.i8.InRange n
+    | none => True) := by
+  dsimp [badDecodeIntRange]
+  decide
+
+-- 3. decodeBool_encodeBool
+/-- Instance (law `ConcreteSpec.Core.Mem.decodeBool_encodeBool`, case `true`). -/
+example : decodeBool (encodeBool true) = some true :=
+  decodeBool_encodeBool true
+
+/-- Planted (law `ConcreteSpec.Core.Mem.decodeBool_encodeBool`, case `true`, subject `ConcreteSpec.Core.Mem.decodeBool`, mutant `ConcreteSpec.Core.Mem.Audit.badDecodeBool`). -/
+example : ¬ (badDecodeBool (encodeBool true) = some true) := by decide
+
+/-- Planted (law `ConcreteSpec.Core.Mem.decodeBool_encodeBool`, case `true`, subject `ConcreteSpec.Core.Mem.encodeBool`, mutant `ConcreteSpec.Core.Mem.Audit.badEncodeBool`). -/
+example : ¬ (decodeBool (badEncodeBool true) = some true) := by decide
+
+-- 4. decodeBool_valid
+/-- Instance (law `ConcreteSpec.Core.Mem.decodeBool_valid`, case `true`). -/
+example : decodeBool (encodeBool true) = some true ↔
+    ∃ v f, encodeBool true = [.init v f] ∧ v.val = boolToBits true :=
+  decodeBool_valid (encodeBool true) true
+
+/-- Planted (law `ConcreteSpec.Core.Mem.decodeBool_valid`, case `true`, subject `ConcreteSpec.Core.Mem.decodeBool`, mutant `ConcreteSpec.Core.Mem.Audit.badDecodeBool`). -/
+example : ¬ (badDecodeBool (encodeBool true) = some true ↔
+    ∃ v f, encodeBool true = [.init v f] ∧ v.val = boolToBits true) := by
   intro h
-  have hh := (h [.init 40 (some (ptr, 0))] ptr rfl).1
-  have hn : [MByte.init 40 (some (ptr, 0))] ≠ encodePtr target ptr := by decide
-  exact hn hh
+  have hh := h.mpr ⟨⟨1, by decide⟩, none, rfl, rfl⟩
+  cases hh
+
+-- 5. decodePtr_encodePtr
+/-- Instance (law `ConcreteSpec.Core.Mem.decodePtr_encodePtr`, case `valid`). Accepted: a valid whole pointer. -/
+example : decodePtr target (encodePtr target ptr) = some ptr :=
+  decodePtr_encodePtr target (by decide) ptr (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Mem.decodePtr_encodePtr`, case `valid`, subject `ConcreteSpec.Core.Mem.decodePtr`, mutant `ConcreteSpec.Core.Mem.Audit.badDecodePtr`). A decoder mutated to reverse violates the round trip at this valid pointer. -/
+example : target.WellFormed ∧ ptr.Valid target ∧
+    ¬ (badDecodePtr target (encodePtr target ptr) = some ptr) := by decide
+
+/-- Planted (law `ConcreteSpec.Core.Mem.decodePtr_encodePtr`, case `valid`, subject `ConcreteSpec.Core.Mem.encodePtr`, mutant `ConcreteSpec.Core.Mem.Audit.badEncodePtr`). -/
+example : target.WellFormed ∧ ptr.Valid target ∧
+    ¬ (decodePtr target (badEncodePtr target ptr) = some ptr) := by decide
+
+-- 6. decodePtr_some
+/-- Instance (law `ConcreteSpec.Core.Mem.decodePtr_some`, case `valid`). Accepted: successful decoding has exactly the stored encoding, including provenance. -/
+example : decodePtr target bytes = some ptr ↔ bytes = encodePtr target ptr ∧ ptr.Valid target :=
+  decodePtr_some target (by decide) bytes ptr
+
+/-- Planted (law `ConcreteSpec.Core.Mem.decodePtr_some`, case `valid`, subject `ConcreteSpec.Core.Mem.decodePtr`, mutant `ConcreteSpec.Core.Mem.Audit.badDecodePtr`). -/
+example : target.WellFormed ∧
+    ¬ (badDecodePtr target bytes = some ptr ↔ bytes = encodePtr target ptr ∧ ptr.Valid target) := by
+  decide
+
+/-- Planted (law `ConcreteSpec.Core.Mem.decodePtr_some`, case `valid`, subject `ConcreteSpec.Core.Mem.encodePtr`, mutant `ConcreteSpec.Core.Mem.Audit.badEncodePtr`). -/
+example : target.WellFormed ∧
+    ¬ (decodePtr target bytes = some ptr ↔ bytes = badEncodePtr target ptr ∧ ptr.Valid target) := by
+  decide
+
+/-- Instance (law `ConcreteSpec.Core.Mem.decodePtr_some`, case `partial`). Refused: partial pointer, with the second fragment missing. -/
+example : decodePtr target [.init 40 (some (ptr, 0))] = some ptr ↔
+    [.init 40 (some (ptr, 0))] = encodePtr target ptr ∧ ptr.Valid target :=
+  decodePtr_some target (by decide) [.init 40 (some (ptr, 0))] ptr
+
+/-- Planted (law `ConcreteSpec.Core.Mem.decodePtr_some`, case `partial`, subject `ConcreteSpec.Core.Mem.decodePtr`, mutant `ConcreteSpec.Core.Mem.Audit.firstFragment`). The first-fragment-only mutant violates the converse on a partial pointer. -/
+example : target.WellFormed ∧
+    ¬ (firstFragment target [.init 40 (some (ptr, 0))] = some ptr ↔
+      [.init 40 (some (ptr, 0))] = encodePtr target ptr ∧ ptr.Valid target) := by decide
 
 /-- Refused: partial pointer, with the second fragment missing. -/
 example : decodePtr target [.init 40 (some (ptr, 0))] = none := by decide
@@ -927,89 +1198,432 @@ example : decodePtr target [.init 40 none, .init 0 none] = none := by decide
 /-- Refused: uninitialized bytes cannot supply a pointer. -/
 example : decodePtr target [.uninit, .uninit] = none := by decide
 
-private def memory : Memory := ⟨[(⟨0⟩, candidate ⟨0⟩ 40 8 1)], 1⟩
-/-- Instance (law `ConcreteSpec.Core.Mem.access_valid`). Construct the nonempty memory invariant. -/
-private theorem memory_wf : memory.WellFormed target :=
-  alloc_wellFormed target Memory.empty (empty_wellFormed target) ⟨0⟩ 40 8 1 ⟨0⟩ memory (by rfl)
+-- 7. empty_wellFormed
+/-- Instance (law `ConcreteSpec.Core.Mem.empty_wellFormed`, case `default`). -/
+example : Memory.empty.WellFormed target :=
+  empty_wellFormed target
 
-/-- Instance (law `ConcreteSpec.Core.Mem.access_valid`). An allocated, well-formed block
-supplies the bounds from which target validity follows. -/
-example : memory.WellFormed target ∧ memory.access target ptr 2 1 = some (some (⟨0⟩, 0)) ∧
-    ptr.Valid target := ⟨memory_wf, by decide, by decide⟩
+/-- Planted (law `ConcreteSpec.Core.Mem.empty_wellFormed`, case `default`, subject `ConcreteSpec.Core.Mem.Memory.empty`, mutant `ConcreteSpec.Core.Mem.Audit.badEmpty`). -/
+example : ¬ badEmpty.WellFormed target := not_badEmpty_wf
 
-/-- Planted (law `ConcreteSpec.Core.Mem.access_valid`). A bad state with an out-of-target
-block admits access but violates validity; WellFormed excludes exactly this defect. -/
-example : let bad : Memory := ⟨[(⟨0⟩, candidate ⟨0⟩ 256 8 1)], 1⟩
-    let p : Ptr := ⟨⟨0⟩, 256, some ⟨0⟩⟩
-    bad.access target p 1 1 = some (some (⟨0⟩, 0)) ∧ ¬ p.Valid target := by decide
+-- 8. alloc_fresh
+/-- Instance (law `ConcreteSpec.Core.Mem.alloc_fresh`, case `first`). -/
+example : match Memory.empty.alloc target ⟨0⟩ 40 8 1 with
+    | .ok (b, _) => b.id = Memory.empty.next ∧ Memory.empty.block b = none
+    | .error _ => True :=
+  alloc_fresh target Memory.empty (empty_wellFormed target) ⟨0⟩ 40 8 1
 
-/-- Instance (law `ConcreteSpec.Core.Mem.access_success`). Independent provenance, liveness,
-alignment and bounds obligations hold for an interior two-byte access. -/
-example : ptr.prov = some ⟨0⟩ ∧ memory.block ⟨0⟩ = some (candidate ⟨0⟩ 40 8 1) ∧
-    (candidate ⟨0⟩ 40 8 1).live = true ∧ (candidate ⟨0⟩ 40 8 1).space = ptr.space ∧
-    40 ≤ ptr.addr ∧ ptr.addr + 2 ≤ 40 + 8 ∧ ptr.addr % 1 = 0 ∧
-    memory.access target ptr 2 1 = some (some (⟨0⟩, 0)) := by decide
+/-- Planted (law `ConcreteSpec.Core.Mem.alloc_fresh`, case `first`, subject `ConcreteSpec.Core.Mem.Memory.alloc`, mutant `ConcreteSpec.Core.Mem.Audit.badAllocId`). -/
+example : Memory.empty.WellFormed target ∧
+    ¬ (match badAllocId target Memory.empty ⟨0⟩ 40 8 1 with
+      | .ok (b, _) => b.id = Memory.empty.next ∧ Memory.empty.block b = none
+      | .error _ => True) :=
+  ⟨empty_wellFormed target, by rintro ⟨h, _⟩; cases h⟩
 
-/-- Planted (law `ConcreteSpec.Core.Mem.access_success`). A mutation requiring one extra
-byte refuses an access ending exactly at the block boundary, despite all success obligations. -/
-example : 40 + 8 ≤ 40 + 8 ∧
-    ¬ (memory.access target ptr (8 + 1) 1 = some (some (⟨0⟩, 0))) := by decide
+-- 9. alloc_block
+/-- Instance (law `ConcreteSpec.Core.Mem.alloc_block`, case `first`). -/
+example : match Memory.empty.alloc target ⟨0⟩ 40 8 1 with
+    | .ok (b, m') => m'.block b = some (candidate ⟨0⟩ 40 8 1)
+    | .error _ => True :=
+  alloc_block target Memory.empty ⟨0⟩ 40 8 1
 
-/-- Instance (law `ConcreteSpec.Core.Mem.alloc_failure`). Refused: misalignment, boundary
-crossing, and live overlap are each isolated from the other two failure reasons. -/
-example : (41 % 2 ≠ 0 ∧ Memory.empty.alloc target ⟨0⟩ 41 2 2 = .error .unavailable) ∧
-    (255 < 254 + 2 ∧ Memory.empty.alloc target ⟨0⟩ 254 2 1 = .error .unavailable) ∧
-    ((candidate ⟨0⟩ 40 8 1).Overlaps (candidate ⟨0⟩ 44 2 1) ∧
-      memory.alloc target ⟨0⟩ 44 2 1 = .error .unavailable) := by
-  exact ⟨⟨by decide, rfl⟩, ⟨by decide, rfl⟩, ⟨by decide, rfl⟩⟩
+/-- Planted (law `ConcreteSpec.Core.Mem.alloc_block`, case `first`, subject `ConcreteSpec.Core.Mem.Memory.alloc`, mutant `ConcreteSpec.Core.Mem.Audit.badAllocEmpty`). -/
+example : ¬ (match badAllocEmpty target Memory.empty ⟨0⟩ 40 8 1 with
+    | .ok (b, m') => m'.block b = some (candidate ⟨0⟩ 40 8 1)
+    | .error _ => True) := by
+  intro h; cases h
 
-/-- Deliberately wrong allocator for planted checks: skip exactly one geometry obligation.
-0 skips base alignment, 1 skips the address boundary, 2 skips overlap. -/
-private def mutatedAlloc (skip : Nat) (m : Memory) (base size align : Nat) :
-    Except AllocError (MemBlockId × Memory) :=
-  let x := candidate ⟨0⟩ base size align
-  if IsPow2 align ∧ (skip = 0 ∨ base % align = 0) ∧
-      (skip = 1 ∨ base + size ≤ 2 ^ target.addrBits - 1) ∧ size ≤ target.maxObject ∧
-      (0 < size → base ≠ target.null) ∧
-      (skip = 2 ∨ ∀ e ∈ m.blocks, e.2.live = true → ¬ e.2.Overlaps x) ∧
-      x.space ∈ target.spaces
-  then .ok (⟨m.next⟩, ⟨(⟨m.next⟩, x) :: m.blocks, m.next + 1⟩)
-  else .error .unavailable
+-- 10. alloc_failure (all 7 failure branches)
+/-- Instance (law `ConcreteSpec.Core.Mem.alloc_failure`, case `pow2`). -/
+example : Memory.empty.alloc target ⟨0⟩ 42 2 3 = .error .unavailable :=
+  alloc_failure target Memory.empty ⟨0⟩ 42 2 3 (.inl (by decide))
 
-/-- Planted (law `ConcreteSpec.Core.Mem.alloc_failure`). Removing only the base-alignment
-check accepts this otherwise admissible misaligned request. -/
-example : ¬ (mutatedAlloc 0 Memory.empty 41 2 2 = .error .unavailable) := by intro h; cases h
-/-- Planted (law `ConcreteSpec.Core.Mem.alloc_failure`). Removing only the address-boundary
-check accepts this otherwise admissible request crossing the boundary. -/
-example : ¬ (mutatedAlloc 1 Memory.empty 254 2 1 = .error .unavailable) := by intro h; cases h
-/-- Planted (law `ConcreteSpec.Core.Mem.alloc_failure`). Removing only the overlap check
-accepts this otherwise admissible request overlapping live storage. -/
-example : ¬ (mutatedAlloc 2 memory 44 2 1 = .error .unavailable) := by intro h; cases h
+/-- Planted (law `ConcreteSpec.Core.Mem.alloc_failure`, case `pow2`, subject `ConcreteSpec.Core.Mem.Memory.alloc`, mutant `ConcreteSpec.Core.Mem.Audit.mutatedAllocPow2`). -/
+example : (¬ IsPow2 3 ∨ 42 % 3 ≠ 0 ∨ 2 ^ target.addrBits - 1 < 42 + 2 ∨
+      target.maxObject < 2 ∨ (0 < 2 ∧ 42 = target.null) ∨
+      (∃ e ∈ Memory.empty.blocks, e.2.live = true ∧ e.2.Overlaps (candidate ⟨0⟩ 42 2 3)) ∨
+      (⟨0⟩ : AddrSpace) ∉ target.spaces) ∧
+    ¬ (mutatedAllocPow2 target Memory.empty ⟨0⟩ 42 2 3 = .error .unavailable) :=
+  ⟨.inl (by decide), by intro h; cases h⟩
 
-/-- Instance (law `ConcreteSpec.Core.Mem.access_zero`). Accepted: zero-size load/store need
-no provenance, and the empty store preserves the complete memory. -/
-example : let p : Ptr := ⟨⟨0⟩, 40, none⟩
-    p.addr % 2 = 0 ∧ p.addr ≠ target.null ∧ p.Valid target ∧
-    Memory.empty.load target p 0 2 = some [] ∧
-    Memory.empty.store target p [] 2 = some Memory.empty := by
-  exact ⟨by decide, by decide, by decide, rfl, rfl⟩
+/-- Instance (law `ConcreteSpec.Core.Mem.alloc_failure`, case `align`). -/
+example : Memory.empty.alloc target ⟨0⟩ 41 2 2 = .error .unavailable :=
+  alloc_failure target Memory.empty ⟨0⟩ 41 2 2 (.inr (.inl (by decide)))
 
-/-- Planted (law `ConcreteSpec.Core.Mem.access_zero`). Refused: a null address is aligned
-and target-valid; a mutant accepting it violates the zero-access equivalence. -/
-example : let p : Ptr := ⟨⟨0⟩, 0, none⟩
-    p.addr % 1 = 0 ∧ p.Valid target ∧ ¬ (p.addr ≠ target.null) ∧
-    Memory.empty.load target p 0 1 = none := by decide
+/-- Planted (law `ConcreteSpec.Core.Mem.alloc_failure`, case `align`, subject `ConcreteSpec.Core.Mem.Memory.alloc`, mutant `ConcreteSpec.Core.Mem.Audit.mutatedAllocAlign`). -/
+example : (¬ IsPow2 2 ∨ 41 % 2 ≠ 0 ∨ 2 ^ target.addrBits - 1 < 41 + 2 ∨
+      target.maxObject < 2 ∨ (0 < 2 ∧ 41 = target.null) ∨
+      (∃ e ∈ Memory.empty.blocks, e.2.live = true ∧ e.2.Overlaps (candidate ⟨0⟩ 41 2 2)) ∨
+      (⟨0⟩ : AddrSpace) ∉ target.spaces) ∧
+    ¬ (mutatedAllocAlign target Memory.empty ⟨0⟩ 41 2 2 = .error .unavailable) :=
+  ⟨.inr (.inl (by decide)), by intro h; cases h⟩
 
-/-- Planted (law `ConcreteSpec.Core.Mem.decodePtr_some`). Skipping target validity would
-accept this exact pointer encoding, but it fails the converse's validity conclusion. -/
-example : let p : Ptr := ⟨⟨0⟩, 256, none⟩
-    ¬ (encodePtr target p = encodePtr target p ∧ p.Valid target) := by decide
+/-- Instance (law `ConcreteSpec.Core.Mem.alloc_failure`, case `bound`). -/
+example : Memory.empty.alloc target ⟨0⟩ 254 2 1 = .error .unavailable :=
+  alloc_failure target Memory.empty ⟨0⟩ 254 2 1 (.inr (.inr (.inl (by decide))))
 
-/-- Planted (law `ConcreteSpec.Core.Mem.access_zero`). A load mutated to omit the null
-check violates the law's equivalence at an aligned target-valid null address. -/
-example : let p : Ptr := ⟨⟨0⟩, 0, none⟩
-    let mutant := if p.addr % 1 = 0 ∧ p.Valid target then some ([] : List MByte) else none
-    ¬ (mutant = some [] ↔ p.addr % 1 = 0 ∧ p.addr ≠ target.null ∧ p.Valid target) := by decide
+/-- Planted (law `ConcreteSpec.Core.Mem.alloc_failure`, case `bound`, subject `ConcreteSpec.Core.Mem.Memory.alloc`, mutant `ConcreteSpec.Core.Mem.Audit.mutatedAllocBound`). -/
+example : (¬ IsPow2 1 ∨ 254 % 1 ≠ 0 ∨ 2 ^ target.addrBits - 1 < 254 + 2 ∨
+      target.maxObject < 2 ∨ (0 < 2 ∧ 254 = target.null) ∨
+      (∃ e ∈ Memory.empty.blocks, e.2.live = true ∧ e.2.Overlaps (candidate ⟨0⟩ 254 2 1)) ∨
+      (⟨0⟩ : AddrSpace) ∉ target.spaces) ∧
+    ¬ (mutatedAllocBound target Memory.empty ⟨0⟩ 254 2 1 = .error .unavailable) :=
+  ⟨.inr (.inr (.inl (by decide))), by intro h; cases h⟩
+
+/-- Instance (law `ConcreteSpec.Core.Mem.alloc_failure`, case `maxObject`). -/
+example : Memory.empty.alloc target ⟨0⟩ 1 251 1 = .error .unavailable :=
+  alloc_failure target Memory.empty ⟨0⟩ 1 251 1 (.inr (.inr (.inr (.inl (by decide)))))
+
+/-- Planted (law `ConcreteSpec.Core.Mem.alloc_failure`, case `maxObject`, subject `ConcreteSpec.Core.Mem.Memory.alloc`, mutant `ConcreteSpec.Core.Mem.Audit.mutatedAllocMaxObj`). -/
+example : (¬ IsPow2 1 ∨ 1 % 1 ≠ 0 ∨ 2 ^ target.addrBits - 1 < 1 + 251 ∨
+      target.maxObject < 251 ∨ (0 < 251 ∧ 1 = target.null) ∨
+      (∃ e ∈ Memory.empty.blocks, e.2.live = true ∧ e.2.Overlaps (candidate ⟨0⟩ 1 251 1)) ∨
+      (⟨0⟩ : AddrSpace) ∉ target.spaces) ∧
+    ¬ (mutatedAllocMaxObj target Memory.empty ⟨0⟩ 1 251 1 = .error .unavailable) :=
+  ⟨.inr (.inr (.inr (.inl (by decide)))), by intro h; cases h⟩
+
+/-- Instance (law `ConcreteSpec.Core.Mem.alloc_failure`, case `null`). -/
+example : Memory.empty.alloc target ⟨0⟩ 0 2 1 = .error .unavailable :=
+  alloc_failure target Memory.empty ⟨0⟩ 0 2 1 (.inr (.inr (.inr (.inr (.inl (by decide))))))
+
+/-- Planted (law `ConcreteSpec.Core.Mem.alloc_failure`, case `null`, subject `ConcreteSpec.Core.Mem.Memory.alloc`, mutant `ConcreteSpec.Core.Mem.Audit.mutatedAllocNull`). -/
+example : (¬ IsPow2 1 ∨ 0 % 1 ≠ 0 ∨ 2 ^ target.addrBits - 1 < 0 + 2 ∨
+      target.maxObject < 2 ∨ (0 < 2 ∧ 0 = target.null) ∨
+      (∃ e ∈ Memory.empty.blocks, e.2.live = true ∧ e.2.Overlaps (candidate ⟨0⟩ 0 2 1)) ∨
+      (⟨0⟩ : AddrSpace) ∉ target.spaces) ∧
+    ¬ (mutatedAllocNull target Memory.empty ⟨0⟩ 0 2 1 = .error .unavailable) :=
+  ⟨.inr (.inr (.inr (.inr (.inl (by decide))))), by intro h; cases h⟩
+
+/-- Instance (law `ConcreteSpec.Core.Mem.alloc_failure`, case `overlap`). -/
+example : memory.alloc target ⟨0⟩ 44 2 1 = .error .unavailable :=
+  alloc_failure target memory ⟨0⟩ 44 2 1 (.inr (.inr (.inr (.inr (.inr (.inl (by decide)))))))
+
+/-- Planted (law `ConcreteSpec.Core.Mem.alloc_failure`, case `overlap`, subject `ConcreteSpec.Core.Mem.Memory.alloc`, mutant `ConcreteSpec.Core.Mem.Audit.mutatedAllocOverlap`). -/
+example : (¬ IsPow2 1 ∨ 44 % 1 ≠ 0 ∨ 2 ^ target.addrBits - 1 < 44 + 2 ∨
+      target.maxObject < 2 ∨ (0 < 2 ∧ 44 = target.null) ∨
+      (∃ e ∈ memory.blocks, e.2.live = true ∧ e.2.Overlaps (candidate ⟨0⟩ 44 2 1)) ∨
+      (⟨0⟩ : AddrSpace) ∉ target.spaces) ∧
+    ¬ (mutatedAllocOverlap target memory ⟨0⟩ 44 2 1 = .error .unavailable) :=
+  ⟨.inr (.inr (.inr (.inr (.inr (.inl (by decide)))))), by intro h; cases h⟩
+
+/-- Instance (law `ConcreteSpec.Core.Mem.alloc_failure`, case `space`). -/
+example : Memory.empty.alloc target ⟨1⟩ 40 2 1 = .error .unavailable :=
+  alloc_failure target Memory.empty ⟨1⟩ 40 2 1 (.inr (.inr (.inr (.inr (.inr (.inr (by decide)))))))
+
+/-- Planted (law `ConcreteSpec.Core.Mem.alloc_failure`, case `space`, subject `ConcreteSpec.Core.Mem.Memory.alloc`, mutant `ConcreteSpec.Core.Mem.Audit.mutatedAllocSpace`). -/
+example : (¬ IsPow2 1 ∨ 40 % 1 ≠ 0 ∨ 2 ^ target.addrBits - 1 < 40 + 2 ∨
+      target.maxObject < 2 ∨ (0 < 2 ∧ 40 = target.null) ∨
+      (∃ e ∈ Memory.empty.blocks, e.2.live = true ∧ e.2.Overlaps (candidate ⟨1⟩ 40 2 1)) ∨
+      (⟨1⟩ : AddrSpace) ∉ target.spaces) ∧
+    ¬ (mutatedAllocSpace target Memory.empty ⟨1⟩ 40 2 1 = .error .unavailable) :=
+  ⟨.inr (.inr (.inr (.inr (.inr (.inr (by decide)))))), by intro h; cases h⟩
+
+-- 11. access_zero
+/-- Instance (law `ConcreteSpec.Core.Mem.access_zero`, case `alignedNonNull`). Accepted: zero-size load/store need no provenance, and the empty store preserves the complete memory. -/
+example : (Memory.empty.load target rawPtr 0 2 = some [] ∧
+      Memory.empty.store target rawPtr [] 2 = some Memory.empty) ↔
+    rawPtr.addr % 2 = 0 ∧ rawPtr.addr ≠ target.null ∧ rawPtr.Valid target :=
+  access_zero target Memory.empty rawPtr 2
+
+/-- Planted (law `ConcreteSpec.Core.Mem.access_zero`, case `alignedNonNull`, subject `ConcreteSpec.Core.Mem.Memory.load`, mutant `ConcreteSpec.Core.Mem.Audit.badLoadNone`). -/
+example : ¬ ((badLoadNone target Memory.empty rawPtr 0 2 = some [] ∧
+      Memory.empty.store target rawPtr [] 2 = some Memory.empty) ↔
+    rawPtr.addr % 2 = 0 ∧ rawPtr.addr ≠ target.null ∧ rawPtr.Valid target) := by
+  intro h
+  have hh := (h.mpr (by decide)).1
+  cases hh
+
+/-- Planted (law `ConcreteSpec.Core.Mem.access_zero`, case `alignedNonNull`, subject `ConcreteSpec.Core.Mem.Memory.store`, mutant `ConcreteSpec.Core.Mem.Audit.badStoreNone`). -/
+example : ¬ ((Memory.empty.load target rawPtr 0 2 = some [] ∧
+      badStoreNone target Memory.empty rawPtr [] 2 = some Memory.empty) ↔
+    rawPtr.addr % 2 = 0 ∧ rawPtr.addr ≠ target.null ∧ rawPtr.Valid target) := by
+  intro h
+  have hh := (h.mpr (by decide)).2
+  cases hh
+
+-- 12. access_no_provenance
+/-- Instance (law `ConcreteSpec.Core.Mem.access_no_provenance`, case `nonzero`). -/
+example : memory.access target rawPtr 1 1 = none :=
+  access_no_provenance target memory rawPtr 1 1 (by decide) rfl
+
+/-- Planted (law `ConcreteSpec.Core.Mem.access_no_provenance`, case `nonzero`, subject `ConcreteSpec.Core.Mem.Memory.access`, mutant `ConcreteSpec.Core.Mem.Audit.badAccessSome`). -/
+example : (1 : Nat) ≠ 0 ∧ rawPtr.prov = none ∧
+    ¬ (badAccessSome target memory rawPtr 1 1 = none) := by decide
+
+-- 13. access_after_free
+/-- Instance (law `ConcreteSpec.Core.Mem.access_after_free`, case `freed`). -/
+example : freedMemory.access target ptr 1 1 = none :=
+  access_after_free target memory freedMemory ⟨0⟩ ptr 1 1 rfl rfl (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Mem.access_after_free`, case `freed`, subject `ConcreteSpec.Core.Mem.Memory.access`, mutant `ConcreteSpec.Core.Mem.Audit.badAccessSome`). -/
+example : memory.free ⟨0⟩ = some freedMemory ∧ ptr.prov = some ⟨0⟩ ∧ (1 : Nat) ≠ 0 ∧
+    ¬ (badAccessSome target freedMemory ptr 1 1 = none) :=
+  ⟨rfl, rfl, by decide, by decide⟩
+
+-- 14. eqAddr_provenance
+/-- Instance (law `ConcreteSpec.Core.Mem.eqAddr_provenance`, case `diffProv`). -/
+example : Ptr.eqAddr ⟨⟨0⟩, 40, some ⟨0⟩⟩ ⟨⟨0⟩, 40, none⟩ = true :=
+  eqAddr_provenance ⟨0⟩ 40 (some ⟨0⟩) none
+
+/-- Planted (law `ConcreteSpec.Core.Mem.eqAddr_provenance`, case `diffProv`, subject `ConcreteSpec.Core.Mem.Ptr.eqAddr`, mutant `ConcreteSpec.Core.Mem.Audit.badEqAddr`). -/
+example : ¬ (badEqAddr ⟨⟨0⟩, 40, some ⟨0⟩⟩ ⟨⟨0⟩, 40, none⟩ = true) := by decide
+
+-- 15. alloc_ne_existing
+/-- Instance (law `ConcreteSpec.Core.Mem.alloc_ne_existing`, case `second`). -/
+example : match memory.alloc target ⟨0⟩ 60 8 1 with
+    | .ok (b, _) => b ≠ ⟨0⟩
+    | .error _ => True :=
+  alloc_ne_existing target memory memory_wf ⟨0⟩ 60 8 1 ⟨0⟩ initBlock rfl
+
+/-- Planted (law `ConcreteSpec.Core.Mem.alloc_ne_existing`, case `second`, subject `ConcreteSpec.Core.Mem.Memory.alloc`, mutant `ConcreteSpec.Core.Mem.Audit.badAllocReuseZero`). -/
+example : memory.WellFormed target ∧ memory.block ⟨0⟩ = some initBlock ∧
+    ¬ (match badAllocReuseZero target memory ⟨0⟩ 60 8 1 with
+      | .ok (b, _) => b ≠ ⟨0⟩
+      | .error _ => True) :=
+  ⟨memory_wf, rfl, fun h => h rfl⟩
+
+-- 16. alloc_wellFormed
+/-- Instance (law `ConcreteSpec.Core.Mem.alloc_wellFormed`, case `first`). -/
+example : match Memory.empty.alloc target ⟨0⟩ 40 8 1 with
+    | .ok (_, m') => m'.WellFormed target
+    | .error _ => True :=
+  alloc_wellFormed target Memory.empty (empty_wellFormed target) ⟨0⟩ 40 8 1
+
+/-- Planted (law `ConcreteSpec.Core.Mem.alloc_wellFormed`, case `first`, subject `ConcreteSpec.Core.Mem.Memory.alloc`, mutant `ConcreteSpec.Core.Mem.Audit.badAllocId`). -/
+example : Memory.empty.WellFormed target ∧
+    ¬ (match badAllocId target Memory.empty ⟨0⟩ 40 8 1 with
+      | .ok (_, m') => m'.WellFormed target
+      | .error _ => True) := by
+  refine ⟨empty_wellFormed target, ?_⟩
+  intro hw
+  have h : (1 : Nat) < 1 := hw.fresh ⟨1⟩ initBlock rfl
+  exact (by decide : ¬ ((1 : Nat) < 1)) h
+
+-- 17. fromExposed_contains
+/-- Instance (law `ConcreteSpec.Core.Mem.fromExposed_contains`, case `interior`). -/
+example : (exposedMemory.fromExposed ⟨0⟩ 42).prov = some ⟨0⟩ :=
+  fromExposed_contains target exposedMemory exposedMemory_wf ⟨0⟩ 42 ⟨0⟩ exposedBlock
+    rfl rfl (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Mem.fromExposed_contains`, case `interior`, subject `ConcreteSpec.Core.Mem.Memory.fromExposed`, mutant `ConcreteSpec.Core.Mem.Audit.badFromExposedNone`). -/
+example : exposedMemory.WellFormed target ∧ exposedMemory.block ⟨0⟩ = some exposedBlock ∧
+    exposedBlock.Candidate ⟨0⟩ = true ∧
+    (exposedBlock.base ≤ 42 ∧ 42 < exposedBlock.base + exposedBlock.size) ∧
+    ¬ ((badFromExposedNone exposedMemory ⟨0⟩ 42).prov = some ⟨0⟩) :=
+  ⟨exposedMemory_wf, rfl, rfl, by decide, by decide⟩
+
+-- 18. fromExposed_onePast
+/-- Instance (law `ConcreteSpec.Core.Mem.fromExposed_onePast`, case `boundary`). -/
+example : (exposedMemory.fromExposed ⟨0⟩ 48).prov = some ⟨0⟩ :=
+  fromExposed_onePast target exposedMemory exposedMemory_wf ⟨0⟩ 48 ⟨0⟩ exposedBlock
+    rfl rfl rfl (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Mem.fromExposed_onePast`, case `boundary`, subject `ConcreteSpec.Core.Mem.Memory.fromExposed`, mutant `ConcreteSpec.Core.Mem.Audit.badFromExposedNone`). -/
+example : exposedMemory.WellFormed target ∧ exposedMemory.block ⟨0⟩ = some exposedBlock ∧
+    exposedBlock.Candidate ⟨0⟩ = true ∧ 48 = exposedBlock.base + exposedBlock.size ∧
+    (∀ e ∈ exposedMemory.blocks, e.2.Candidate ⟨0⟩ = true →
+      ¬ (e.2.base ≤ 48 ∧ 48 < e.2.base + e.2.size)) ∧
+    ¬ ((badFromExposedNone exposedMemory ⟨0⟩ 48).prov = some ⟨0⟩) :=
+  ⟨exposedMemory_wf, rfl, rfl, rfl, by decide, by decide⟩
+
+-- 19. fromExposed_none
+/-- Instance (law `ConcreteSpec.Core.Mem.fromExposed_none`, case `outside`). -/
+example : (exposedMemory.fromExposed ⟨0⟩ 100).prov = none :=
+  fromExposed_none target exposedMemory exposedMemory_wf ⟨0⟩ 100 (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Mem.fromExposed_none`, case `outside`, subject `ConcreteSpec.Core.Mem.Memory.fromExposed`, mutant `ConcreteSpec.Core.Mem.Audit.badFromExposedSome`). -/
+example : exposedMemory.WellFormed target ∧
+    (∀ e ∈ exposedMemory.blocks, e.2.Candidate ⟨0⟩ = true →
+      ¬ (e.2.base ≤ 100 ∧ 100 < e.2.base + e.2.size) ∧
+        100 ≠ e.2.base + e.2.size) ∧
+    ¬ ((badFromExposedSome exposedMemory ⟨0⟩ 100).prov = none) :=
+  ⟨exposedMemory_wf, by decide, by decide⟩
+
+-- 20. access_valid
+/-- Instance (law `ConcreteSpec.Core.Mem.access_valid`, case `outOfTarget`). -/
+example : match memory.access target badPtr 1 1 with
+    | some _ => badPtr.Valid target
+    | none => True :=
+  access_valid target memory memory_wf badPtr 1 1
+
+/-- Planted (law `ConcreteSpec.Core.Mem.access_valid`, case `outOfTarget`, subject `ConcreteSpec.Core.Mem.Memory.access`, mutant `ConcreteSpec.Core.Mem.Audit.badAccessSome`). -/
+example : memory.WellFormed target ∧
+    ¬ (match badAccessSome target memory badPtr 1 1 with
+      | some _ => badPtr.Valid target
+      | none => True) :=
+  ⟨memory_wf, by dsimp [badAccessSome]; decide⟩
+
+-- 21. access_success
+/-- Instance (law `ConcreteSpec.Core.Mem.access_success`, case `interior`). Independent provenance, liveness, alignment and bounds obligations hold for an interior two-byte access. -/
+example : memory.access target ptr 2 1 = some (some (⟨0⟩, ptr.addr - initBlock.base)) :=
+  access_success target memory ptr 2 1 ⟨0⟩ initBlock (by decide) rfl rfl rfl rfl
+    (by decide) (by decide) (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Mem.access_success`, case `interior`, subject `ConcreteSpec.Core.Mem.Memory.access`, mutant `ConcreteSpec.Core.Mem.Audit.badAccessNone`). -/
+example : (2 : Nat) ≠ 0 ∧ ptr.prov = some ⟨0⟩ ∧ memory.block ⟨0⟩ = some initBlock ∧
+    initBlock.live = true ∧ initBlock.space = ptr.space ∧ initBlock.base ≤ ptr.addr ∧
+    ptr.addr + 2 ≤ initBlock.base + initBlock.size ∧ ptr.addr % 1 = 0 ∧
+    ¬ (badAccessNone target memory ptr 2 1 = some (some (⟨0⟩, ptr.addr - initBlock.base))) := by
+  decide
+
+-- 22. store_load
+/-- Instance (law `ConcreteSpec.Core.Mem.store_load`, case `oneByte`). -/
+example : storedMemory.load target ptr ([MByte.init 7 none]).length 1 =
+    some [MByte.init 7 none] :=
+  store_load target memory storedMemory memory_wf ptr [.init 7 none] 1 rfl
+
+/-- Planted (law `ConcreteSpec.Core.Mem.store_load`, case `oneByte`, subject `ConcreteSpec.Core.Mem.Memory.load`, mutant `ConcreteSpec.Core.Mem.Audit.badLoadNone`). -/
+example : memory.WellFormed target ∧
+    memory.store target ptr [.init 7 none] 1 = some storedMemory ∧
+    ¬ (badLoadNone target storedMemory ptr ([MByte.init 7 none]).length 1 =
+      some [MByte.init 7 none]) :=
+  ⟨memory_wf, rfl, by decide⟩
+
+-- 23. store_other_block
+/-- Instance (law `ConcreteSpec.Core.Mem.store_other_block`, case `otherBlock`). -/
+example : (memory.store target ptr [.init 7 none] 1).bind (fun m' => m'.block ⟨1⟩) =
+    memory.block ⟨1⟩ :=
+  store_other_block target memory ptr [.init 7 none] 1 ⟨0⟩ 0 ⟨1⟩ rfl (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Mem.store_other_block`, case `otherBlock`, subject `ConcreteSpec.Core.Mem.Memory.store`, mutant `ConcreteSpec.Core.Mem.Audit.badStoreDup`). -/
+example : memory.access target ptr ([MByte.init 7 none]).length 1 = some (some (⟨0⟩, 0)) ∧
+    (⟨1⟩ : MemBlockId) ≠ ⟨0⟩ ∧
+    ¬ ((badStoreDup target memory ptr [.init 7 none] 1).bind (fun m' => m'.block ⟨1⟩) =
+      memory.block ⟨1⟩) :=
+  ⟨rfl, by decide, by intro h; cases h⟩
+
+-- 24. store_same_block_frame
+/-- Instance (law `ConcreteSpec.Core.Mem.store_same_block_frame`, case `afterSlice`). -/
+example : ((memory.store target ptr [.init 7 none] 1).bind fun m' => m'.block ⟨0⟩).map
+      (fun y => y.bytes[2]?) = some (initBlock.bytes[2]?) :=
+  store_same_block_frame target memory memory_wf ptr [.init 7 none] 1 ⟨0⟩ 0 2 initBlock
+    rfl rfl (.inr (by decide))
+
+/-- Planted (law `ConcreteSpec.Core.Mem.store_same_block_frame`, case `afterSlice`, subject `ConcreteSpec.Core.Mem.Memory.store`, mutant `ConcreteSpec.Core.Mem.Audit.badStoreNone`). -/
+example : memory.WellFormed target ∧
+    memory.access target ptr ([MByte.init 7 none]).length 1 = some (some (⟨0⟩, 0)) ∧
+    memory.block ⟨0⟩ = some initBlock ∧ (2 < 0 ∨ 0 + ([MByte.init 7 none]).length ≤ 2) ∧
+    ¬ (((badStoreNone target memory ptr [.init 7 none] 1).bind fun m' => m'.block ⟨0⟩).map
+      (fun y => y.bytes[2]?) = some (initBlock.bytes[2]?)) :=
+  ⟨memory_wf, rfl, rfl, .inr (by decide), by decide⟩
+
+-- 25. alloc_initialized
+/-- Instance (law `ConcreteSpec.Core.Mem.alloc_initialized`, case `first`). -/
+example : match Memory.empty.alloc target ⟨0⟩ 40 8 1 with
+    | .ok (b, m') => ∃ x, m'.block b = some x ∧ x.live = true ∧ x.exposed = false ∧
+        x.bytes = List.replicate 8 .uninit
+    | .error _ => True :=
+  alloc_initialized target Memory.empty ⟨0⟩ 40 8 1
+
+/-- Planted (law `ConcreteSpec.Core.Mem.alloc_initialized`, case `first`, subject `ConcreteSpec.Core.Mem.Memory.alloc`, mutant `ConcreteSpec.Core.Mem.Audit.badAllocEmpty`). -/
+example : ¬ (match badAllocEmpty target Memory.empty ⟨0⟩ 40 8 1 with
+    | .ok (b, m') => ∃ x, m'.block b = some x ∧ x.live = true ∧ x.exposed = false ∧
+        x.bytes = List.replicate 8 .uninit
+    | .error _ => True) := by
+  rintro ⟨x, hx, _⟩
+  cases hx
+
+-- 26. store_wellFormed
+/-- Instance (law `ConcreteSpec.Core.Mem.store_wellFormed`, case `oneByte`). -/
+example : match memory.store target ptr [.init 7 none] 1 with
+    | some m' => m'.WellFormed target
+    | none => True :=
+  store_wellFormed target memory memory_wf ptr [.init 7 none] 1
+
+/-- Planted (law `ConcreteSpec.Core.Mem.store_wellFormed`, case `oneByte`, subject `ConcreteSpec.Core.Mem.Memory.store`, mutant `ConcreteSpec.Core.Mem.Audit.badStoreWf`). -/
+example : memory.WellFormed target ∧
+    ¬ (match badStoreWf target memory ptr [.init 7 none] 1 with
+      | some m' => m'.WellFormed target
+      | none => True) :=
+  ⟨memory_wf, not_badEmpty_wf⟩
+
+-- 27. free_wellFormed
+/-- Instance (law `ConcreteSpec.Core.Mem.free_wellFormed`, case `live`). -/
+example : match memory.free ⟨0⟩ with
+    | some m' => m'.WellFormed target
+    | none => True :=
+  free_wellFormed target memory memory_wf ⟨0⟩
+
+/-- Planted (law `ConcreteSpec.Core.Mem.free_wellFormed`, case `live`, subject `ConcreteSpec.Core.Mem.Memory.free`, mutant `ConcreteSpec.Core.Mem.Audit.badFreeWf`). -/
+example : memory.WellFormed target ∧
+    ¬ (match badFreeWf memory ⟨0⟩ with
+      | some m' => m'.WellFormed target
+      | none => True) :=
+  ⟨memory_wf, not_badEmpty_wf⟩
+
+-- 28. expose_success
+/-- Instance (law `ConcreteSpec.Core.Mem.expose_success`, case `live`). -/
+example : memory.expose ptr = some (memory.modify ⟨0⟩ (fun y => { y with exposed := true })) :=
+  expose_success memory ptr ⟨0⟩ initBlock rfl rfl rfl
+
+/-- Planted (law `ConcreteSpec.Core.Mem.expose_success`, case `live`, subject `ConcreteSpec.Core.Mem.Memory.expose`, mutant `ConcreteSpec.Core.Mem.Audit.badExposeNone`). -/
+example : ptr.prov = some ⟨0⟩ ∧ memory.block ⟨0⟩ = some initBlock ∧ initBlock.live = true ∧
+    ¬ (badExposeNone memory ptr =
+      some (memory.modify ⟨0⟩ (fun y => { y with exposed := true }))) :=
+  ⟨rfl, rfl, rfl, by intro h; cases h⟩
+
+-- 29. expose_wellFormed
+/-- Instance (law `ConcreteSpec.Core.Mem.expose_wellFormed`, case `live`). -/
+example : match memory.expose ptr with
+    | some m' => m'.WellFormed target
+    | none => True :=
+  expose_wellFormed target memory memory_wf ptr
+
+/-- Planted (law `ConcreteSpec.Core.Mem.expose_wellFormed`, case `live`, subject `ConcreteSpec.Core.Mem.Memory.expose`, mutant `ConcreteSpec.Core.Mem.Audit.badExposeWf`). -/
+example : memory.WellFormed target ∧
+    ¬ (match badExposeWf memory ptr with
+      | some m' => m'.WellFormed target
+      | none => True) :=
+  ⟨memory_wf, not_badEmpty_wf⟩
+
+-- 30. store_load_other
+/-- Instance (law `ConcreteSpec.Core.Mem.store_load_other`, case `disjointProv`). -/
+example : storedMemory.load target other 1 1 = memory.load target other 1 1 :=
+  store_load_other target memory storedMemory ptr other [.init 7 none] 1 1 1 rfl (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Mem.store_load_other`, case `disjointProv`, subject `ConcreteSpec.Core.Mem.Memory.load`, mutant `ConcreteSpec.Core.Mem.Audit.badLoadDiff`). -/
+example : memory.store target ptr [.init 7 none] 1 = some storedMemory ∧
+    other.prov ≠ ptr.prov ∧
+    ¬ (badLoadDiff target storedMemory other 1 1 = badLoadDiff target memory other 1 1) :=
+  ⟨rfl, by decide, by decide⟩
+
+-- 31. expose_load
+/-- Instance (law `ConcreteSpec.Core.Mem.expose_load`, case `samePtr`). -/
+example : exposedMemory.load target ptr 1 1 = memory.load target ptr 1 1 :=
+  expose_load target memory exposedMemory ptr ptr 1 1 rfl
+
+/-- Planted (law `ConcreteSpec.Core.Mem.expose_load`, case `samePtr`, subject `ConcreteSpec.Core.Mem.Memory.load`, mutant `ConcreteSpec.Core.Mem.Audit.badLoadDiff`). -/
+example : memory.expose ptr = some exposedMemory ∧
+    ¬ (badLoadDiff target exposedMemory ptr 1 1 = badLoadDiff target memory ptr 1 1) :=
+  ⟨rfl, by decide⟩
+
+-- 32. load_prefix
+/-- Instance (law `ConcreteSpec.Core.Mem.load_prefix`, case `twoToOne`). -/
+example : memory.load target ptr 1 1 = some ([MByte.uninit, MByte.uninit].take 1) :=
+  load_prefix target memory ptr 2 1 1 [.uninit, .uninit]
+    (by decide) (by decide) (by decide) rfl
+
+/-- Planted (law `ConcreteSpec.Core.Mem.load_prefix`, case `twoToOne`, subject `ConcreteSpec.Core.Mem.Memory.load`, mutant `ConcreteSpec.Core.Mem.Audit.badLoadPrefix`). -/
+example : (2 : Nat) ≠ 0 ∧ (1 : Nat) ≠ 0 ∧ 1 ≤ 2 ∧
+    badLoadPrefix target memory ptr 2 1 = some [.uninit, .uninit] ∧
+    ¬ (badLoadPrefix target memory ptr 1 1 = some ([MByte.uninit, MByte.uninit].take 1)) := by
+  decide
+
+-- 33. free_alloc_ne_existing
+/-- Instance (law `ConcreteSpec.Core.Mem.free_alloc_ne_existing`, case `reuseAddr`). -/
+example : match freedMemory.alloc target ⟨0⟩ 40 8 1 with
+    | .ok (new, _) => new ≠ ⟨0⟩
+    | .error _ => True :=
+  free_alloc_ne_existing target memory freedMemory memory_wf ⟨0⟩ ⟨0⟩ initBlock rfl rfl
+    ⟨0⟩ 40 8 1
+
+/-- Planted (law `ConcreteSpec.Core.Mem.free_alloc_ne_existing`, case `reuseAddr`, subject `ConcreteSpec.Core.Mem.Memory.alloc`, mutant `ConcreteSpec.Core.Mem.Audit.badAllocReuseZero`). -/
+example : memory.WellFormed target ∧ memory.free ⟨0⟩ = some freedMemory ∧
+    memory.block ⟨0⟩ = some initBlock ∧
+    ¬ (match badAllocReuseZero target freedMemory ⟨0⟩ 40 8 1 with
+      | .ok (new, _) => new ≠ ⟨0⟩
+      | .error _ => True) :=
+  ⟨memory_wf, rfl, rfl, fun h => h rfl⟩
 
 end Audit
 
