@@ -31,15 +31,15 @@ compares addresses only and grants nothing (Q3.10).
 
 **Access validity** (Q3.7). A nonzero access needs provenance, a live block, bounds, alignment;
 a read also needs initialized bytes (checked when the bytes are decoded), and a write needs write
-permission, which is authority (C5) and is a premise here, not a check. A zero-byte access needs
-only alignment and a non-null address. A violated premise is a failed proof obligation of the
+permission, which is authority (C5) and is a premise here, not a check. All accesses require a
+target-valid pointer. A zero-byte access additionally needs only alignment and a non-null address. A violated premise is a failed proof obligation of the
 `Unsafe` code that made the access: here, the operation has no result (unsafe stuckness), never a
 fabricated value.
 
 **Allocation** (Q1.8–Q1.11, Q3.10). `alloc` takes the address the allocator chose (an environment
 choice, C8) and either creates a fresh block there, uninitialized, or fails with an ordinary
 failure that leaves memory unchanged; an address that would overlap a live block, misalign, or not
-fit is a failure, not a trap. The allocator's own availability laws are its contract (slices
+fit in a target space is a failure, not a trap. The allocator's own availability laws are its contract (slices
 19–23), not this module's.
 
 **Scalar representation** (OD126, TYPE-19). An integer of type `t` occupies `bits / 8` bytes in the
@@ -65,6 +65,14 @@ structure Ptr where
   addr : Nat
   prov : Option MemBlockId
   deriving DecidableEq, Repr
+
+/-- A pointer's numeric address and space belong to this target. Provenance is checked
+separately by nonempty accesses. -/
+def Ptr.Valid (tgt : Target) (p : Ptr) : Prop :=
+  p.addr < 2 ^ tgt.addrBits ∧ p.space ∈ tgt.spaces
+
+instance (tgt : Target) (p : Ptr) : Decidable (p.Valid tgt) := by
+  unfold Ptr.Valid; infer_instance
 
 /-- A byte of memory. An initialized byte is an octet, and may also be byte `index` of a stored
 pointer `ptr`. -/
@@ -107,12 +115,18 @@ def Block.Overlaps (x y : Block) : Prop :=
 instance (x y : Block) : Decidable (x.Overlaps y) := by unfold Block.Overlaps; infer_instance
 
 /-- What every memory satisfies: identities below `next` (so `next` is fresh), each block's
-bytes as many as its size, its one-past address an address of the target, its base aligned, and no
+bytes as many as its size, its space among the target spaces, its one-past address an address
+of the target, its base aligned, and no
 two live blocks overlapping. -/
 structure Memory.WellFormed (tgt : Target) (m : Memory) : Prop where
+  /-- Every stored entry agrees with lookup; shadowed contradictory blocks are forbidden. -/
+  canonical : ∀ e ∈ m.blocks, m.block e.1 = some e.2
+  /-- A block identity has exactly one entry, so first-entry updates preserve canonicality. -/
+  unique : (List.map Prod.fst m.blocks).Nodup
   fresh : ∀ b x, m.block b = some x → b.id < m.next
   sized : ∀ b x, m.block b = some x → x.bytes.length = x.size
   fits : ∀ b x, m.block b = some x → x.base + x.size ≤ 2 ^ tgt.addrBits - 1
+  spaces : ∀ b x, m.block b = some x → x.space ∈ tgt.spaces
   aligned : ∀ b x, m.block b = some x → IsPow2 x.align ∧ x.base % x.align = 0
   disjoint : ∀ b x c y, m.block b = some x → m.block c = some y → b ≠ c → x.live = true →
     y.live = true → ¬ x.Overlaps y
@@ -136,7 +150,7 @@ when nonempty, and overlapping no live block. -/
 def Memory.Fits (tgt : Target) (m : Memory) (x : Block) : Prop :=
   IsPow2 x.align ∧ x.base % x.align = 0 ∧ x.base + x.size ≤ 2 ^ tgt.addrBits - 1 ∧
     x.size ≤ tgt.maxObject ∧ (0 < x.size → x.base ≠ tgt.null) ∧
-    ∀ e ∈ m.blocks, e.2.live = true → ¬ e.2.Overlaps x
+    (∀ e ∈ m.blocks, e.2.live = true → ¬ e.2.Overlaps x) ∧ x.space ∈ tgt.spaces
 
 instance (tgt : Target) (m : Memory) (x : Block) : Decidable (m.Fits tgt x) := by
   unfold Memory.Fits; infer_instance
@@ -159,12 +173,12 @@ def Memory.free (m : Memory) (b : MemBlockId) : Option Memory :=
 
 /-! ## Access validity, reads and writes -/
 
-/-- A pointer `p` may access `n` bytes aligned to `a`: for `n = 0`, an aligned non-null address
+/-- A target-valid pointer `p` may access `n` bytes aligned to `a`: for `n = 0`, an aligned non-null address
 (Q3.7's exception); otherwise a live block of `p`'s provenance, in `p`'s space, holding all `n`
 bytes, with `p` aligned. The block and the offset of the first byte, or `none`. -/
 def Memory.access (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat) : Option (Option (MemBlockId × Nat)) :=
   if n = 0 then
-    if p.addr % a = 0 ∧ p.addr ≠ tgt.null then some none else none
+    if p.addr % a = 0 ∧ p.addr ≠ tgt.null ∧ p.Valid tgt then some none else none
   else
     match p.prov with
     | none => none
@@ -172,7 +186,7 @@ def Memory.access (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat) : Option (Op
       | none => none
       | some x =>
         if x.live = true ∧ x.space = p.space ∧ x.base ≤ p.addr ∧ p.addr + n ≤ x.base + x.size ∧
-            p.addr % a = 0
+            p.addr % a = 0 ∧ p.Valid tgt
         then some (some (b, p.addr - x.base)) else none
 
 /-- Read `n` bytes through `p` (aligned to `a`): the bytes, which may be uninitialized (decoding
@@ -270,21 +284,35 @@ def decodeBool : List MByte → Option Bool
   | _ => none
 
 /-- The bytes of a stored pointer: its address in the profile's order and pointer width, each byte
-a fragment of the pointer. -/
-def encodePtr (tgt : Target) (p : Ptr) : List MByte :=
+a fragment of the pointer. A proof of target-relative validity is required to encode it. -/
+def encodePtr (tgt : Target) (p : Ptr) (_valid : p.Valid tgt) : List MByte :=
   ((ordered tgt.byteOrder (leBytes tgt.ptrSize p.addr)).zipIdx).map fun (v, i) => .init v (some (p, i))
 
 /-- The pointer the bytes hold, when they are exactly one stored pointer's fragments, in order. Any
 other contents have no pointer meaning in this draft (see the module header). -/
 def decodePtr (tgt : Target) (bs : List MByte) : Option Ptr :=
   match bs with
-  | .init _ (some (p, 0)) :: _ => if bs = encodePtr tgt p then some p else none
+  | .init _ (some (p, 0)) :: _ =>
+    if hp : p.Valid tgt then if bs = encodePtr tgt p hp then some p else none else none
   | _ => none
 
 /-! ### Examples -/
 
 /-- The target of the examples. -/
 abbrev tgt : Target := linuxX8664
+
+/-- A well-formed small profile used to check the address boundary. -/
+private def tinyTarget : Target :=
+  { tgt with addrBits := 8, ptrSize := 1, ptrAlign := 1, maxObject := 255 }
+
+example : tinyTarget.WellFormed := by decide
+
+/-- Refused: even a zero-byte access requires an address and space of the target. -/
+example : Memory.empty.access tinyTarget ⟨⟨0⟩, 256, none⟩ 0 1 = none ∧
+    Memory.empty.access tgt ⟨⟨99⟩, 8, none⟩ 0 1 = none ∧
+    decodePtr tinyTarget
+      [.init 0 (some (⟨⟨0⟩, 256, none⟩, 0))] = none ∧
+    (Memory.empty.alloc tgt ⟨99⟩ 4096 1 1).toOption = none := by decide
 
 /-- A `u16` `0x1234` is stored little-endian on the x86-64 profile, and reads back. -/
 example : encodeInt tgt .u16 0x1234 = [.init 0x34 none, .init 0x12 none] := by decide
@@ -316,7 +344,7 @@ example : (do
       m.load tgt ⟨⟨0⟩, 4096, none⟩ 4 4)) = some (some 7, none, none) := by decide
 
 /-- After release, the old pointer reaches nothing, and the next block has a new identity even at
-the same address. A zero-byte access needs only an aligned non-null address. -/
+the same address. A zero-byte access needs a target-valid, aligned non-null address. -/
 example : (do
     let (b, m) ← (Memory.empty.alloc tgt ⟨0⟩ 4096 4 4).toOption
     let m ← m.free b
@@ -343,7 +371,9 @@ address, with no provenance. -/
 example : (do
     let (b, m) ← (Memory.empty.alloc tgt ⟨0⟩ 4096 16 8).toOption
     let p : Ptr := ⟨⟨0⟩, 4100, some b⟩
-    let m ← m.store tgt ⟨⟨0⟩, 4104, some b⟩ (encodePtr tgt p) 8
+    let m ← m.store tgt ⟨⟨0⟩, 4104, some b⟩ (encodePtr tgt p (by
+      change 4100 < 2 ^ 64 ∧ (⟨0⟩ : AddrSpace) ∈ [⟨0⟩]
+      decide)) 8
     let bs ← m.load tgt ⟨⟨0⟩, 4104, some b⟩ 8 8
     pure (decodePtr tgt bs == some p, decodeInt tgt .u64 bs)) = some (true, some 4100) := by
   decide
