@@ -102,14 +102,15 @@ Open obligations, by name:
   C1 characterizes lifecycle blockage over actual transitions (`Step`) and top-level/driver entry
   (`runFn`, `runFrom`) after successful predecessor checks, with relational primitive-bind refusal
   (`prim_bind_step`) alongside the driver laws (`continuation_refused`, `prim_bind_refused`).
-  First-boundary cleanup executions are equivalent to executing `planWith`, restoring locals to
+  Raw first-boundary cleanup executions yield the segmented execution of `planWith`, restoring locals to
   `unwindLocals`, and performing every planned call and drop in order (`raw_cleanup_runs_plan`,
   `cleanup_runs_exact_plan`), with planted mutants for extra/missing calls, unexpected resume
   paths, skipped `dropOut`, and skipped local `restrict`. Raw-path coverage is proved from the
   machine stack rules; callers do not supply cleanup segmentation.
-  Relational step determinism (`step_silent_deterministic`, `step_deterministic`) and executable
-  destruction-protocol validation (`validDestroyFn` / `destroy_not_copy`,
-  `checkedDestroyCall` / `destroyCall_sig`) are proved as bidirectional contract laws alongside
-  positive and negative planted-mutant witnesses. C2
+  Answer-indexed relational determinism (`step_silent_deterministic`, `step_deterministic`)
+  covers internal steps and uniqueness for a fixed primitive answer. Independently admitted
+  destructors enter through the consuming call semantics (`destroyCall_enters`); executable
+  validator characterizations (`destroy_not_copy`, `destroyCall_sig`) are representation lemmas.
+  Each law has closed positive and premise-preserving planted-mutant witnesses. C2
   leaves floats (slice 26), and two owner questions: whether a failing operation may appear in a constant
   initializer, and whether the source may name a constant written later in the file.

@@ -301,7 +301,8 @@ def register (d : Deferred O) : List (Frame O) → Option (List (Frame O))
   | _ => none
 
 /-- Request continuations are partial: `none` refuses result binding through lifecycle
-instrumentation. This is unsafe stuckness, not a different primitive answer or a trap;
+instrumentation (owner decision 2026-11-08, 15:08 UTC, item 21: a cleanup step may
+be refused, and refusal ends stuck). This is unsafe stuckness, not a different primitive answer or a trap;
 `Step.prim` requires success, and `runFrom` reports the requesting configuration as stuck
 without accepting the response event when continuation fails.
 

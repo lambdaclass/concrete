@@ -1697,7 +1697,8 @@ theorem prim_error_bypasses_bind (P : Program O) (x : Var) (p : O.Prim) (args : 
 private theorem destroy_not_copy_proj {P : Program O} (D : DestroyProtocol P) (T : O.Ty) (f : FnId)
     (h : D.impl T = some f) : O.isCopy T = false := D.notCopy T f h
 
-/-- Law (subject `ConcreteSpec.Core.Exec.validDestroyFn`). The executable destroy-function
+/-- Representation lemma. Characterizes the validator checks, not admission soundness
+(approved: PENDING). The executable destroy-function
 validator accepts `(T, f)` if and only if `T` is non-Copy (`O.isCopy T = false`) and `f` is in the
 program table taking a single parameter of type `T` and returning `O.unitTy`. -/
 theorem destroy_not_copy [DecidableEq O.Ty] (P : Program O) (T : O.Ty) (f : FnId) :
@@ -1727,7 +1728,8 @@ theorem destroy_not_copy [DecidableEq O.Ty] (P : Program O) (T : O.Ty) (f : FnId
   · rintro ⟨hc, fn, x, hl, hp, hr⟩
     simp [validDestroyFn, hc, hl, hp, hr]
 
-/-- Law (subject `ConcreteSpec.Core.Exec.checkedDestroyCall`). The executable checked destroy-call
+/-- Representation lemma. Characterizes the checked builder, not admission soundness
+(approved: PENDING). The executable checked destroy-call
 builder produces `some d` if and only if `impl T = some d.f`, `d.args = [arg]`, `d.site = site`,
 `T` is non-Copy, and `d.f` has signature `(x : T) -> Unit` in `P.fns`. -/
 theorem destroyCall_sig [DecidableEq O.Ty] (P : Program O) (impl : O.Ty → Option FnId) (T : O.Ty)
@@ -1757,6 +1759,28 @@ theorem destroyCall_sig [DecidableEq O.Ty] (P : Program O) (impl : O.Ty → Opti
     simp only at hi hargs hsite hv
     subst hargs; subst hsite
     simp [checkedDestroyCall, hi, hv]
+
+/-- Law (subject `ConcreteSpec.Core.Exec.Step`, `ConcreteSpec.Core.Exec.DestroyProtocol.destroyCall`).
+An independently admitted consuming destructor enters its ordinary singleton-parameter body
+through the actual call semantics. Argument evaluation may move the value; its resulting store
+is threaded through activation entry. Admission, rather than the executable validator, supplies
+the non-Copy and Unit-result facts. A refused activation is covered separately by `call_refused`. -/
+theorem destroyCall_enters (P : Program O) (D : DestroyProtocol P) (T : O.Ty)
+    (f : FnId) (fn : Fn O) (x : Var) (arg : O.Expr) (site : SiteId)
+    (L : AList Var O.Val) (st st' st'' : O.Store) (v : O.Val) (k : List (Frame O))
+    (hi : D.impl T = some f) (hf : AList.lookup P.fns f = some fn)
+    (hp : fn.params = [(x, T)]) (he : O.eval L st arg = .ok (v, st'))
+    (hl : O.life (.enter [x]) st' = some st'') :
+    ∃ d, D.destroyCall T arg site = some d ∧ fn.result = O.unitTy ∧ O.isCopy T = false ∧
+      Step P ⟨.exec d.stmt, L, st, k⟩ .silent
+        ⟨.exec fn.body, [(x, v)], st'', .scope fn.block [x] [] :: .ret none L :: k⟩ := by
+  obtain ⟨admitted, _, hfn, _, hr⟩ := D.sig T f hi
+  rw [hf] at hfn
+  cases hfn
+  refine ⟨⟨f, [arg], site⟩, ?_, hr, D.notCopy T f hi, ?_⟩
+  · simp [DestroyProtocol.destroyCall, hi]
+  · apply Step.silent
+    simp [Deferred.stmt, step, evalArgs, he, Res.bind, Res.map, onRes, hf, hp, hl]
 
 /-- Law (subject `ConcreteSpec.Core.Exec.seqDestroyOrder`). A sequence's element `i` is visited at
 position `i`: in increasing index order. -/
@@ -3305,6 +3329,32 @@ example : competingAnswerStep prog ⟨.exec (.prim none .log [.lit 1] s), [], .i
   have hh := (h .silent ⟨.done, [], .init, []⟩ True.intro).1
   cases hh
 
+/-- Instance (law `ConcreteSpec.Core.Exec.destroyCall_enters`, case `consume_tok`). Moving `p`
+marks it moved in the caller before the destructor's activation is entered. -/
+example : ∃ d, Demo.destroyProtocol.destroyCall .tok (.move p) s = some d ∧
+    eatFn.result = ops.unitTy ∧ ops.isCopy .tok = false ∧
+    Step prog ⟨.exec d.stmt, [(p, 7)], ⟨0, [[]]⟩, []⟩ .silent
+      ⟨.exec eatFn.body, [(p, 7)], ⟨0, [[], [p]]⟩,
+        [.scope eatFn.block [p] [], .ret none [(p, 7)]]⟩ :=
+  destroyCall_enters prog Demo.destroyProtocol .tok eatF eatFn p (.move p) s [(p, 7)]
+    ⟨0, [[]]⟩ ⟨0, [[p]]⟩ ⟨0, [[], [p]]⟩ 7 [] rfl rfl rfl rfl rfl
+
+/-- Planted (law `ConcreteSpec.Core.Exec.destroyCall_enters`, case `consume_tok`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.Refusal.StuckStep`).
+Admission, lookup, singleton parameters, move evaluation and activation all succeed, but
+removing the actual call step prevents consuming entry. -/
+example : Demo.destroyProtocol.impl .tok = some eatF ∧
+    AList.lookup prog.fns eatF = some eatFn ∧ eatFn.params = [(p, T.tok)] ∧
+    ops.eval [(p, 7)] ⟨0, [[]]⟩ (.move p) = .ok (7, ⟨0, [[p]]⟩) ∧
+    ops.life (.enter [p]) ⟨0, [[p]]⟩ = some ⟨0, [[], [p]]⟩ ∧
+    ¬ (∃ d, Demo.destroyProtocol.destroyCall .tok (.move p) s = some d ∧
+      eatFn.result = ops.unitTy ∧ ops.isCopy .tok = false ∧
+      Refusal.StuckStep prog ⟨.exec d.stmt, [(p, 7)], ⟨0, [[]]⟩, []⟩ .silent
+        ⟨.exec eatFn.body, [(p, 7)], ⟨0, [[], [p]]⟩,
+          [.scope eatFn.block [p] [], .ret none [(p, 7)]]⟩) := by
+  refine ⟨rfl, rfl, rfl, rfl, rfl, ?_⟩
+  rintro ⟨_, _, _, _, hs⟩
+  cases hs
+
 def copyEatFn : Fn ops := ⟨[(p, .int)], .unit, ⟨1⟩, .skip⟩
 def copyProg : Program ops := ⟨[(eatF, copyEatFn)]⟩
 def tokImpl : T → Option FnId := fun | .tok => some eatF | _ => none
@@ -3312,14 +3362,14 @@ def badImpl : T → Option FnId := fun | .tok => some bumpF | _ => none
 def eatCall : Deferred ops := ⟨eatF, [.var p], s⟩
 def bumpCall : Deferred ops := ⟨bumpF, [.var p], s⟩
 
-/-- Instance (law `ConcreteSpec.Core.Exec.destroy_not_copy`, case `linear_tok`). `eatF` is a valid
+/-- Regression for validator representation. `eatF` is a valid
 destroy function for the non-Copy type `.tok`. -/
 example : validDestroyFn prog .tok eatF = true ↔
     ops.isCopy .tok = false ∧ ∃ fn x, AList.lookup prog.fns eatF = some fn ∧
       fn.params = [(x, .tok)] ∧ fn.result = ops.unitTy :=
   destroy_not_copy prog .tok eatF
 
-/-- Planted (law `ConcreteSpec.Core.Exec.destroy_not_copy`, case `linear_tok`, subject `ConcreteSpec.Core.Exec.validDestroyFn`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.rejectAllDestroyFn`).
+/-- Regression for validator representation.
 `rejectAllDestroyFn` rejects the valid linear destroy function `eatF` on `.tok`. -/
 example : ¬ (rejectAllDestroyFn prog .tok eatF = true ↔
     ops.isCopy .tok = false ∧ ∃ fn x, AList.lookup prog.fns eatF = some fn ∧
@@ -3328,14 +3378,14 @@ example : ¬ (rejectAllDestroyFn prog .tok eatF = true ↔
   have hv := h.mpr ⟨rfl, eatFn, p, rfl, rfl, rfl⟩
   cases hv
 
-/-- Instance (law `ConcreteSpec.Core.Exec.destroy_not_copy`, case `copy_int_rejected`). Even when
+/-- Regression for validator representation. Even when
 `eatF` has signature `(p : .int) -> .unit`, `validDestroyFn` rejects it because `.int` is `Copy`. -/
 example : validDestroyFn copyProg .int eatF = true ↔
     ops.isCopy .int = false ∧ ∃ fn x, AList.lookup copyProg.fns eatF = some fn ∧
       fn.params = [(x, .int)] ∧ fn.result = ops.unitTy :=
   destroy_not_copy copyProg .int eatF
 
-/-- Planted (law `ConcreteSpec.Core.Exec.destroy_not_copy`, case `copy_int_rejected`, subject `ConcreteSpec.Core.Exec.validDestroyFn`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.allowCopyDestroyFn`).
+/-- Regression for validator representation.
 `allowCopyDestroyFn` forgets `!ops.isCopy T` and accepts a destroy function on the `Copy` type `.int`. -/
 example : ¬ (allowCopyDestroyFn copyProg .int eatF = true ↔
     ops.isCopy .int = false ∧ ∃ fn x, AList.lookup copyProg.fns eatF = some fn ∧
@@ -3344,7 +3394,7 @@ example : ¬ (allowCopyDestroyFn copyProg .int eatF = true ↔
   have hc := (h.mp rfl).1
   cases hc
 
-/-- Instance (law `ConcreteSpec.Core.Exec.destroyCall_sig`, case `valid_tok`). Building a checked
+/-- Regression for validator representation. Building a checked
 destroy call for `.tok` produces `eatCall` with single argument `.var p` and verified signature. -/
 example : checkedDestroyCall prog tokImpl .tok (.var p) s = some eatCall ↔
     tokImpl .tok = some eatCall.f ∧ eatCall.args = [.var p] ∧ eatCall.site = s ∧
@@ -3352,7 +3402,7 @@ example : checkedDestroyCall prog tokImpl .tok (.var p) s = some eatCall ↔
       fn.params = [(x, .tok)] ∧ fn.result = ops.unitTy :=
   destroyCall_sig prog tokImpl .tok (.var p) s eatCall
 
-/-- Planted (law `ConcreteSpec.Core.Exec.destroyCall_sig`, case `valid_tok`, subject `ConcreteSpec.Core.Exec.checkedDestroyCall`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.dropArgDestroyCall`).
+/-- Regression for validator representation.
 `dropArgDestroyCall` drops the target argument `.var p` and fails to produce `eatCall`. -/
 example : ¬ (dropArgDestroyCall prog tokImpl .tok (.var p) s = some eatCall ↔
     tokImpl .tok = some eatCall.f ∧ eatCall.args = [.var p] ∧ eatCall.site = s ∧
@@ -3362,7 +3412,7 @@ example : ¬ (dropArgDestroyCall prog tokImpl .tok (.var p) s = some eatCall ↔
   have hc := h.mpr ⟨rfl, rfl, rfl, rfl, eatFn, p, rfl, rfl, rfl⟩
   cases hc
 
-/-- Instance (law `ConcreteSpec.Core.Exec.destroyCall_sig`, case `bad_sig_rejected`). When `badImpl`
+/-- Regression for validator representation. When `badImpl`
 maps `.tok` to `bumpF` (whose parameter list is `[]`), `checkedDestroyCall` rejects it. -/
 example : checkedDestroyCall prog badImpl .tok (.var p) s = some bumpCall ↔
     badImpl .tok = some bumpCall.f ∧ bumpCall.args = [.var p] ∧ bumpCall.site = s ∧
@@ -3370,7 +3420,7 @@ example : checkedDestroyCall prog badImpl .tok (.var p) s = some bumpCall ↔
       fn.params = [(x, .tok)] ∧ fn.result = ops.unitTy :=
   destroyCall_sig prog badImpl .tok (.var p) s bumpCall
 
-/-- Planted (law `ConcreteSpec.Core.Exec.destroyCall_sig`, case `bad_sig_rejected`, subject `ConcreteSpec.Core.Exec.checkedDestroyCall`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.uncheckedDestroyCall`).
+/-- Regression for validator representation.
 `uncheckedDestroyCall` skips `validDestroyFn` and returns `some bumpCall` despite `bumpF` taking no
 parameters. -/
 example : ¬ (uncheckedDestroyCall prog badImpl .tok (.var p) s = some bumpCall ↔
