@@ -564,6 +564,25 @@ dec="$( cd "$RI" && export CONCRETE_TEST_OUT="$TMP" CONCRETE_TEST_LIB="$ROOT_DIR
 dec="$( cd "$RI" && source "$ROOT_DIR/scripts/checks/lib/prepush_record.sh" && ppr_remote_components "$RI" "$RIH" "$TMP/ri.changed" "$TMP/ri.plan" "$TMP/ri.comp" \
   && ppr_remote_check "$RI" "$TMP/ri.comp" && echo REUSE || echo "refused:$PPR_REASON" )"
 has "$dec" "refused:changed:env" && ok "a push in another CONCRETE_* environment than the host's run does not reuse it" || no "e2e env mismatch: $dec"
+# The login is checked on the host before anything is fetched: a root login, an unreadable one, or
+# one without its gate clone is INCOMPLETE and named (2026-11-08: the root admin alias looked for
+# /root/concrete2). A git shim on the "host" logs every fetch; each case must log none.
+mkdir -p "$TMP/hostgit" "$TMP/hostroot" "$TMP/hostnoid"
+printf '#!/bin/sh\nfor a in "$@"; do case "$a" in fetch) echo "$*" >> "%s"; break ;; esac; done\nexec "%s" "$@"\n' "$TMP/hostgit.log" "$(command -v git)" > "$TMP/hostgit/git"
+printf '#!/bin/sh\ncase "$1" in -u) echo 0 ;; -un) echo root ;; *) exit 1 ;; esac\n' > "$TMP/hostroot/id"
+printf '#!/bin/sh\nexit 1\n' > "$TMP/hostnoid/id"
+chmod +x "$TMP/hostgit/git" "$TMP/hostroot/id" "$TMP/hostnoid/id"
+: > "$TMP/hostgit.log"; PATH="$TMP/hostroot:$TMP/hostgit:$PATH" e2e
+[ "$rc" = 3 ] && has "$out" "INCOMPLETE" && has "$out" "gate host login is root@" && [ ! -s "$TMP/hostgit.log" ] && [ ! -f "$RIATT" ] \
+  && ok "a root login on the gate host is refused before it fetches (INCOMPLETE)" || { no "root gate login: exit $rc"; echo "$out" | sed 's/^/      /'; }
+: > "$TMP/hostgit.log"; PATH="$TMP/hostnoid:$TMP/hostgit:$PATH" e2e
+[ "$rc" = 3 ] && has "$out" "INCOMPLETE" && has "$out" "cannot read the gate host login" && [ ! -s "$TMP/hostgit.log" ] && [ ! -f "$RIATT" ] \
+  && ok "a gate host login that id cannot read is refused, not taken as non-root (INCOMPLETE)" || { no "unreadable gate login: exit $rc"; echo "$out" | sed 's/^/      /'; }
+mv "$HH/concrete2" "$HH/concrete2.away"; : > "$TMP/hostgit.log"
+PATH="$TMP/hostgit:$PATH" e2e
+mv "$HH/concrete2.away" "$HH/concrete2"
+[ "$rc" = 3 ] && has "$out" "INCOMPLETE" && has "$out" "no gate clone at $HH/concrete2 for " && [ ! -s "$TMP/hostgit.log" ] && [ ! -f "$RIATT" ] \
+  && ok "a gate login without its gate clone is INCOMPLETE and names the account and path" || { no "missing gate clone: exit $rc"; echo "$out" | sed 's/^/      /'; }
 touch "$HH/unreachable"; e2e; rm -f "$HH/unreachable"
 [ "$rc" = 3 ] && has "$out" "INCOMPLETE" && [ ! -f "$RIATT" ] && ok "the real transport to an unreachable host is INCOMPLETE (exit 3), attests nothing" || { no "e2e unreachable: exit $rc"; echo "$out" | sed 's/^/      /'; }
 hook="$ROOT_DIR/.githooks/pre-push"
