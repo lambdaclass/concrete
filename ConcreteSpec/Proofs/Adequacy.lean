@@ -1895,6 +1895,80 @@ example : InfiniteEvents keepingAdapter event_infinite ∧
   rw [visiblePrefix_emitTrace, silent] at hl
   simp at hl
 
+/-- A wrong-history evaluator resets every occurrence before querying the supplied oracle. -/
+def wrongHistoryRun (O : Operands) (P : Program O) (ρ : QueryOracle O) (fuel : Nat)
+    (events : List O.Event) (issued : List (Query O)) (c : Config O) : QueryReport O :=
+  runFromQ P (fun q => ρ { q with occurrence := 0 }) fuel events issued c
+
+/-- Instance (law `runFromQ_request_correspondence`, case `occurrenceSensitiveOracle`). -/
+example : RequestResolution prog occurrenceSensitiveOracle 0 ⟨terminalConfig, [], [terminalQuery]⟩
+    .log [1] s .init terminalK
+    (runFromQ prog occurrenceSensitiveOracle 1 [] [terminalQuery] terminalConfig) :=
+  runFromQ_request_correspondence (O := ops) (P := prog) (ρ := occurrenceSensitiveOracle)
+    (fuel := 0) (events := []) (issued := [terminalQuery]) (c := terminalConfig) (p := .log)
+    (vs := [1]) (site := s) (st := .init) (k := terminalK) rfl terminalRequest
+
+/-- Planted (law `runFromQ_request_correspondence`, case `occurrenceSensitiveOracle`,
+subject `runFromQ`, mutant `wrongHistoryRun`). Resetting the occurrence substitutes the first
+answer for an unanswered repeated request. Both issuance premises are unchanged. -/
+example : terminalConfig.final? = none ∧
+    step prog terminalConfig = some (.request .log [1] s .init terminalK) ∧
+    ¬ RequestResolution prog occurrenceSensitiveOracle 0 ⟨terminalConfig, [], [terminalQuery]⟩
+      .log [1] s .init terminalK
+      (wrongHistoryRun ops prog occurrenceSensitiveOracle 1 [] [terminalQuery] terminalConfig) := by
+  refine ⟨rfl, terminalRequest, ?_⟩
+  have hfinal : (wrongHistoryRun ops prog occurrenceSensitiveOracle 1 [] [terminalQuery]
+    terminalConfig).ending = .final .normal := rfl
+  generalize he : wrongHistoryRun ops prog occurrenceSensitiveOracle 1 [] [terminalQuery]
+    terminalConfig = report at hfinal ⊢
+  intro h
+  cases h with
+  | unanswered _ => cases hfinal
+  | invalid ha _ => simp [answer, occurrenceSensitiveOracle, Query.issue, occurrenceAt,
+      terminalQuery] at ha
+  | refused ha _ _ => simp [answer, occurrenceSensitiveOracle, Query.issue, occurrenceAt,
+      terminalQuery] at ha
+  | continued ha _ _ => simp [answer, occurrenceSensitiveOracle, Query.issue, occurrenceAt,
+      terminalQuery] at ha
+
+/-- The actual continuation of a lifecycle-refused request. -/
+def refusingK : Answer refusingBindOps.Val refusingBindOps.Event refusingBindOps.Store →
+    Option (Config refusingBindOps) := fun a =>
+  match a.result with
+  | .ok v => (bindLife refusingBindOps (some x) a.store).map fun st' =>
+      ⟨.done, bindDst (some x) v [], st', []⟩
+  | .error kd => some ⟨.trapped kd s, [], a.store, []⟩
+
+/-- Instance (law `runFromQ_request_correspondence`, case `refusingBindConfig`). -/
+example : RequestResolution refusingBindProgram refusingBindOracle 0 ⟨refusingBindConfig, [], []⟩
+    .log [1] s .init refusingK
+    (runFromQ refusingBindProgram refusingBindOracle 1 [] [] refusingBindConfig) :=
+  runFromQ_request_correspondence (O := refusingBindOps) (P := refusingBindProgram)
+    (ρ := refusingBindOracle) (fuel := 0) (events := []) (issued := []) (c := refusingBindConfig)
+    (p := .log) (vs := [1]) (site := s) (st := .init) (k := refusingK) rfl (by
+      simp [refusingBindConfig, step, evalArgs, evalE, onRes, Res.bind, Res.map]
+      funext a
+      cases hr : a.result <;> simp [refusingK, hr])
+
+/-- A genuine three-query execution revisits the first site after an unrelated request. -/
+def threeRequestConfig : Config ops := ⟨.exec (.seq (.prim none .bump [] s)
+  (.seq (.prim none .bump [] otherSite) (.prim none .bump [] s))), [], .init, []⟩
+def thirdQuery : Query ops := Query.issue [] .bump [] s ⟨2, []⟩
+  [interleavedQuery0, interleavedQuery1]
+
+/-- Helper (computation). The interval contains the first site's earlier query exactly once;
+the intervening other-site query contributes zero (approved: PENDING). -/
+theorem interleaved_execution : thirdQuery.occurrence = interleavedQuery0.occurrence +
+    occurrenceAt (((runQ prog env 7 threeRequestConfig).queries.drop 0).take (2 - 0)) s :=
+  runFromQ_interleaved_site (O := ops) (P := prog) (ρ := env.toQueryOracle)
+    7 [] [] threeRequestConfig QueryHistoryValid.nil (i := 0) (j := 2)
+    (q := interleavedQuery0) (q' := thirdQuery) (by decide) rfl rfl rfl
+
+/-- A frozen revisited-site occurrence disagrees with the actual interval contribution. -/
+example : ¬ ({ thirdQuery with occurrence := 0 } : Query ops).occurrence =
+    interleavedQuery0.occurrence + occurrenceAt
+      (((runQ prog env 7 threeRequestConfig).queries.drop 0).take (2 - 0)) s := by decide
+
 end Demo
 
 end ConcreteSpec.Core.Exec
