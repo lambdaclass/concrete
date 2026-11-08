@@ -1,0 +1,21 @@
+Concrete is a systems language being rebuilt as a fully proven compiler in Lean. You are one of three independent reviewers (Codex, Kimi, agy). The owner will decide; you advise. DO NOT MODIFY ANY FILE.
+
+Context in this directory: AGENTS.md and docs/project/AGENTS.md if present; docs/decisions.md (recorded decisions; rows such as Q6.4, Q6.6, P17b, OD8, OD118, OD137, TYPE-22, the slice-0 surface row); docs/PHILOSOPHY.md; ROADMAP.md; _review/LANGUAGE_DECISIONS_2026-11-08.md (owner decisions of 2026-11-08, items 1-59, decided though not yet in decisions.md; item 16 removes char, item 33 escape lists); _review/PENDING_RECORDS.md (section "MORNING QUEUE additions (spec worker, ~06:30)": foundation Q1, fallible operations in constant initializers); docs/proposals/OWNER_QUESTIONS_REVIEW.md and docs/proposals/owner-questions-review/ (the earlier review round, question L2); docs/proposals/CLI_OWNER_QUESTIONS.md and docs/proposals/CLI_QUESTION_AUDIT.md (question Q3: trace, emit, run, interp, help).
+
+You reviewed earlier versions of these questions. Claude has now made three revised recommendations. Review each one.
+
+R3 (was L2): `'a'` is an ASCII byte literal (typed u8), with its own small escape list (\n \t \r \0 \\ \'); non-ASCII is refused; a label `'name` is told apart because a literal has a closing quote. Rationale: the owner optimizes for reading and auditing (LLMs write the code, humans audit); parsers compare bytes constantly, and `b == 'a'` is auditable where `b == 97u8` hides intent; it is not a second form any more than hex vs decimal. Earlier, Codex picked: no single-quote literal, one escape list.
+
+R14 (was CLI Q3): `help` now; `emit`, `trace` and `interp` each when its data exists; NO `run` command, because "build, then execute the binary" is already the one way and the owner's rule is no duplication. `interp` is different: it runs the spec's evaluator.
+
+R18 (was foundation Q1, fallible operations in constant initializers): admit the ordinary operations, including ones that can fail; the compile-time evaluation, checked by the kernel, is the evidence, and a failing evaluation refuses the constant. One operation set, the same as runtime code, with no separate "always-succeeds" subset; it matches overflow obligations elsewhere. Earlier picks: Codex and Kimi wanted the strict closed subset; agy wanted what R18 now says; all three proposed "admit with closed evidence of success".
+
+For EACH of R3, R14 and R18 give:
+- AGREE or DISAGREE, with a concrete reason of at most 60 words;
+- the rows cited from docs/decisions.md and docs/PHILOSOPHY.md (and 2026-11-08 items) that bear on it;
+- whether the recommendation breaks a decided row (name it, or say none);
+- any better option.
+For R18 also say whether "the kernel-checked evaluation is the evidence" is sound given Q6.4 / TYPE-22 (a constant whose initializer provably fails is refused whether or not used), Q6.6 (invalid vs unknown, no evaluator-resource failure) and P17b (compile-time evaluation stays closed unless reopened by a new decision).
+
+End with exactly one line:
+ANSWER: R3=<agree|disagree>; R14=<agree|disagree>; R18=<agree|disagree>

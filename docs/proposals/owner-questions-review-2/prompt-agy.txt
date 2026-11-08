@@ -1,0 +1,1237 @@
+Answer directly from the context below. Do NOT read files or use tools. Do not modify anything.
+
+Concrete is a systems language being rebuilt as a fully proven compiler in Lean. You are one of three independent reviewers (Codex, Kimi, agy). The owner will decide; you advise. DO NOT MODIFY ANY FILE.
+
+Context: inlined below (excerpts of docs/decisions.md, docs/PHILOSOPHY.md in full, the 2026-11-08 owner decisions, the foundation Q1 queue entry, the earlier L2 review, and the CLI question Q3).
+
+You reviewed earlier versions of these questions. Claude has now made three revised recommendations. Review each one.
+
+R3 (was L2): `'a'` is an ASCII byte literal (typed u8), with its own small escape list (\n \t \r \0 \\ \'); non-ASCII is refused; a label `'name` is told apart because a literal has a closing quote. Rationale: the owner optimizes for reading and auditing (LLMs write the code, humans audit); parsers compare bytes constantly, and `b == 'a'` is auditable where `b == 97u8` hides intent; it is not a second form any more than hex vs decimal. Earlier, Codex picked: no single-quote literal, one escape list.
+
+R14 (was CLI Q3): `help` now; `emit`, `trace` and `interp` each when its data exists; NO `run` command, because "build, then execute the binary" is already the one way and the owner's rule is no duplication. `interp` is different: it runs the spec's evaluator.
+
+R18 (was foundation Q1, fallible operations in constant initializers): admit the ordinary operations, including ones that can fail; the compile-time evaluation, checked by the kernel, is the evidence, and a failing evaluation refuses the constant. One operation set, the same as runtime code, with no separate "always-succeeds" subset; it matches overflow obligations elsewhere. Earlier picks: Codex and Kimi wanted the strict closed subset; agy wanted what R18 now says; all three proposed "admit with closed evidence of success".
+
+For EACH of R3, R14 and R18 give:
+- AGREE or DISAGREE, with a concrete reason of at most 60 words;
+- the rows cited from docs/decisions.md and docs/PHILOSOPHY.md (and 2026-11-08 items) that bear on it;
+- whether the recommendation breaks a decided row (name it, or say none);
+- any better option.
+For R18 also say whether "the kernel-checked evaluation is the evidence" is sound given Q6.4 / TYPE-22 (a constant whose initializer provably fails is refused whether or not used), Q6.6 (invalid vs unknown, no evaluator-resource failure) and P17b (compile-time evaluation stays closed unless reopened by a new decision).
+
+End with exactly one line:
+ANSWER: R3=<agree|disagree>; R14=<agree|disagree>; R18=<agree|disagree>
+
+=================== CONTEXT ===================
+
+### docs/PHILOSOPHY.md (full)
+# Concrete Philosophy
+
+Status: standing policy, the one home of the project's design rules. Every other document links
+here instead of restating them. The language rules themselves are the
+[specification](../legacy/docs/spec/README.md) and the owner's [decision record](decisions.md); where this
+document cites one, those are authoritative, and nothing here overrides a decided entry.
+
+It absorbs, as of 2026-11-04, the principles and design policy of [PROJECT.md](../legacy/docs/project/PROJECT.md), the
+refusal list of `ANTI_FEATURES.md` and the "no" and "not yet" entries of PROJECT.md's language
+decisions. The per-language comparisons that used to sit beside each refusal are in
+[INFLUENCES.md](../legacy/docs/project/INFLUENCES.md#how-other-languages-answer-concretes-refusals).
+
+Contents:
+
+1. [What Concrete is for](#what-concrete-is-for)
+2. [The rules](#the-rules)
+3. [When rules conflict](#when-rules-conflict)
+4. [Admission test](#admission-test)
+5. [What Concrete refuses](#what-concrete-refuses)
+6. [Where the earlier rules went](#where-the-earlier-rules-went)
+
+## What Concrete is for
+
+**Concrete is a fully proven systems programming language with no garbage collector, where you can
+know everything a program does: what it does, what it may touch, whether it can fail or stop, and
+what is proved about it.** "Fully proven" means compiler correctness proved end to end, with every
+unproven step named as an explicit assumption and never silently trusted, and a program's own
+correctness proved by Lean theorems about it. This states the project's goal: each guarantee holds
+only as its evidence lands, and native claims remain conditional on their named assumptions
+([decision](decisions.md#decided-project-core-statement)).
+
+Concrete is a small systems language for code that must be reviewed, audited, bounded and proved:
+no garbage collector and no hidden runtime, linear ownership, second-class references, and
+authority that is visible in every signature. Its aim is that a reader can answer "what does this
+code do, what may it touch, and what is actually proved about it" from the source, the compiler's
+reports and the Lean theorems, without trusting anything that is not named. Lean 4 is the language
+the semantics and proofs are written in and the language the compiler is built in; Concrete itself
+stays a systems language, not a proof assistant.
+
+Most Concrete code is expected to be written by language models, not typed by hand. What matters
+is that everything is checkable and easy to understand: the cost that counts is the cost for a
+reviewer, an auditor or a checker to understand what code does and what it may touch. Rule 4
+draws the consequence for verbosity.
+
+## The rules
+
+Each rule states what holds and why. Its history is in the changelog and the decision record.
+
+1. **Pick the best long-term structural solution.** A design question is answered by the structure
+   that removes the whole class of problem, not by the smallest local patch, and once that answer is
+   known it is chosen rather than offered as one option among several. *Why:* a patch fixes one
+   instance and leaves the class to recur; the language is still small enough to change shape.
+
+2. **One form per situation.** There are never two ways to write one thing. A second spelling, an
+   alias or a convenience form beside an existing one is removed, not added. *Why:* every extra form
+   is one more thing a reader, a checker and a proof must cover, and two forms drift apart. The
+   decided removals are listed in [OD61](decisions.md#od61) and the entries it names.
+
+3. **The most transparent long-term option wins.** Between two designs, prefer the one that leaves
+   nothing for the reader to reconstruct: no hidden control flow, data flow, allocation, dispatch,
+   authority or cleanup. *Why:* Concrete's value is that behaviour can be read off the source.
+
+4. **Verbosity never argues against a clearer or safer design.** Writing more is acceptable when it
+   makes behaviour, authority or failure visible. "It is longer" is not a reason to reject a
+   design; "it hides something" is. *Why:* most code is now written by tools, where writing explicit
+   forms is cheap and reviewing them is the expensive part.
+
+5. **Every fact once.** Every fact that affects behavior or authority has exactly one authoritative
+   definition, at a place the reader can find from the use site. Views checked against that
+   definition (a signature, a compiler report, a derived table or registry) and explanatory
+   examples are not second definitions. A restated fact that nothing checks (a size copied into a
+   constant, a rule copied into a second document, a capability implied rather than declared) is a
+   defect waiting to drift. This document is itself an instance: other documents link here.
+
+6. **Lean is the specification.** The language's syntax, typing, ownership, effects and semantics
+   are defined in Lean. Each rule is a readable definition with a plain-words doc comment and its
+   conformance examples, and the reference interpreter is built from those definitions. No prose is
+   generated from them. Machine views (the rule registry, rule IDs, manifests) are derived from them
+   and checked for staleness. A guide may teach and link the rules but states none of its own. Until
+   a rule lands in Lean, its prose chapter states the decided rule, and the chapter retires once its
+   rules are covered
+   ([Lean-source decision](archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-11-01--lean-as-the-only-source),
+   [revised 2026-11-04](archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-11-04--lean-is-the-specification)). *Why:* one
+   definition that machines check cannot silently disagree with itself, and a second prose
+   rendering would be a second text to keep in step.
+
+7. **Systems first, not theorem-prover first.** Source code reads as systems programming. Proofs
+   attach to real Concrete functions through the semantics, not to a parallel reimplementation.
+   *Why:* the point is evidence about the code that runs.
+
+8. **No hidden runtime.** No garbage collector, no hidden reference counting, no hidden scheduler or
+   executor, no life before `main`. What the target does at startup, at shutdown and on a trap is a
+   named entry in the target's table. *Why:* memory, time and authority behaviour must be auditable
+   and boundable.
+
+9. **Ownership is linear, not affine.** A non-Copy value is used exactly once; it is never dropped
+   silently at the end of a scope. Copy means "may be duplicated", nothing more. `_` names an unused
+   binding and never discards a linear value, a `Result` or an `Option`
+   ([OD62](decisions.md#od62), [OWN-5](../legacy/docs/spec/ownership.md#OWN-5)). Cleanup is an explicit
+   consuming operation. *Why:* every resource has one visible owner and one visible end.
+
+10. **References are second-class.** A reference may be passed down into a call or held inside a
+    borrow block; no function, trusted or not, returns one and no value stores one
+    ([REF-1](../legacy/docs/spec/references.md#REF-1), [REF-3](../legacy/docs/spec/references.md#REF-3)). Raw pointers, used
+    in `trusted` code or under `with(Unsafe)`, are the only escape, and every use carries stated
+    validity premises; the full raw-memory taxonomy is still
+    [undecided](decisions.md#core-unsafe-premises). *Why:* scoped access
+    needs no lifetime language, and the checker and the proofs stay local.
+
+11. **Authority and trust are visible.** A function's permissions are declared in `with(...)`; a
+    resource is a value it holds; an operation on a resource needs both. Nothing discharges or hides
+    an operational capability, `trusted` and `with(Unsafe)` included, and there are no umbrella
+    capabilities ([authority rules](decisions.md#decided-2026-11-02-authority)). *Why:* a
+    reviewer reads what a function may do from its signature alone.
+
+12. **Trust boundaries are honest.** Every claim says which of these it is: enforced by the compiler,
+    reported by analysis, proved in Lean, or assumed at a named source, backend, toolchain or target
+    boundary. Being listed in the trusted base proves nothing; an unknown is never reported as a
+    reassuring default ([ABSENCE_IS_NOT_A_FACT.md](../legacy/docs/project/ABSENCE_IS_NOT_A_FACT.md)). New kinds of fact
+    (frames, dependencies, ghost state, resource bounds) are reported through the one obligation and
+    evidence ledger, never a parallel system. *Why:* evidence that overstates itself is worse than
+    none.
+
+13. **The compiler owns semantic identity.** A name, a link symbol or a restated constant is a
+    representation of an entity, never the entity. Every pass preserves an entity's identity or
+    creates a checked derivation from it, and identity claims are tested structurally, not by
+    observed values. *Why:* using a representation as identity, and re-interpreting it in a later
+    pass, is the single largest class of past compiler defects. (Older documents and comments
+    call this "principle 12".)
+
+14. **Artifact-first auditability.** The compiler emits facts, evidence and replay commands that
+    people, CI and tools consume directly. Auditing never means reading the compiler's source.
+    *Why:* an audit that depends on the auditor's reading of the implementation is not repeatable.
+
+15. **A small analyzable core over feature growth.** A smaller language with strong boundaries
+    beats a larger one with weaker analysis. Removing a feature is an improvement when what remains
+    is more coherent; each refusal makes the rest easier to check, teach and prove. *Why:* every
+    feature is paid for in grammar, checker, semantics, proofs and review.
+
+16. **Predictable execution and a separable core.** Recursion, loop bounds, allocation, blocking and
+    foreign calls stay visible, so a bounded, analyzable core can be told apart from an effectful
+    shell, and writing code that way is natural. Before a program runs, every function has
+    termination evidence with its premises, or a report naming the explicitly permitted unresolved
+    obligations: every loop, recursive cycle, indirect call and blocking or foreign boundary either has termination
+    evidence or carries a written permission at that source, which every report traces to its
+    callers. Recursion depth, stack use, allocation, blocking, foreign calls and possible aborts are
+    reported per function with their evidence, and a module or project policy may require them;
+    these are reported facts, not function categories
+    ([decision](decisions.md#decided-project-no-hidden-traps), 2026-11-06). *Why:* resource bounds
+    and proofs need a core they can reach, and an unexplained infinite loop is a hidden behaviour.
+
+17. **Real programs test the shape.** A design is validated by serious workloads, not by thought
+    experiments alone, and a refused or deferred feature reopens only on such evidence. *Why:*
+    hypothetical convenience is not a cost; measured pain is.
+
+18. **No hidden traps.** Accepted safe code has no reachable implicit language trap: every operation
+    that could fail at run time carries checked evidence that it cannot, or its failure is handled by
+    a branch written in the source. An explicit `abort()` remains terminal behaviour and is reported
+    transitively; resource exhaustion and foreign behaviour are named target and trust premises.
+    Evidence comes from a small decidable checker proved correct in Lean, contracts whose evidence is
+    closed, and Lean theorems, never from an unpredictable solver
+    ([decision](decisions.md#decided-project-no-hidden-traps), 2026-11-06). *Why:* an inserted trap
+    is an exit the reader of the operation cannot see, which rule 3 refuses for the same reason
+    exceptions are refused.
+
+## When rules conflict
+
+**Decided by the owner on 2026-11-05** (row P2, [record](decisions.md#decided-project-priority)). When two rules pull in different directions, the earlier
+item in this order wins:
+
+1. soundness and provability, which includes honest trust boundaries (rule 12) and compiler-owned
+   semantic identity (rule 13): a claim that overstates its evidence, or an entity known only by
+   its spelling, is unsound;
+2. transparency: nothing hidden, and every claim backed by an artifact a reader can inspect and
+   replay (rules 3, 8, 11, 14);
+3. a single source of truth: one authoritative definition per fact (rule 5);
+4. explicitness at the use site;
+5. brevity.
+
+The third item is read with rule 5's definition: every fact that affects behavior or authority has
+one authoritative definition, at a place the reader can find from the use site. So "write it once"
+and "show it at the use site" agree whenever the use site can reach that definition, directly or
+through a checked view such as a signature or a report; a fact that can be found only by searching
+the whole program fails both.
+
+**This order guides choices that are still open. It never reopens a decided rule.** The owner's
+answers in [decisions.md](decisions.md) stand as recorded, whatever this order would
+suggest; changing one is a new owner decision. When the order argues for changing a decided rule,
+the change goes to the owner as a proposed revision and the decided rule stands meanwhile. For
+example, type arguments are inferred from the checked argument types
+([OD46](decisions.md#od46)), and that stands. Capability arguments were inferred the same
+way ([OD45](decisions.md#od45), [OD87](decisions.md#od87)) until the owner
+approved, on 2026-11-05, the revision that writes them on every capability-polymorphic call,
+checked against the callee, because a call's authority should be read rather than solved for
+([revision](decisions.md#decided-2026-11-05-revisions)).
+
+## Admission test
+
+A proposed language feature, compiler feature or borrowed idea is admitted only if every question
+below has a good answer. Each question is a rule above applied to the proposal; failing one is
+grounds for rejection.
+
+1. **One form?** Does it add a second way to do something already expressible? (rule 2)
+2. **Visible?** Does it expose ownership, effects, dispatch, layout, allocation or control flow, or
+   hide work behind familiar syntax? (rules 3, 8)
+3. **One fact, one place?** Is every fact it introduces written once and findable from the use site?
+   (rule 5)
+4. **A simple invariant?** Can it be stated as one Lean judgment without "except when" clauses, and
+   does it elaborate into simpler Core forms? (rules 6, 15)
+5. **Declaration-level and phase-separated?** Does it keep cross-module dependence on declarations
+   and summaries, never on another module's bodies, and early phases independent of later semantic
+   information? (rule 15)
+6. **Static or explicitly indirect dispatch?** Is every call target known at compile time or visibly
+   indirect at the call site? (rule 3)
+7. **Predictable code?** Can a reader form a rough model of the generated work from the source?
+   (rule 16)
+8. **One owner?** Does exactly one pass or judgment own it, with one diagnostic when it fails? (rules
+   5, 13)
+9. **Authority intact?** Does every effect still appear in `with(...)` and every resource as a
+   value, with no way to hide either? (rule 11)
+10. **Through the contract boundary?** Do its safety, behaviour, effects, failure modes and resource
+    consequences appear in summaries and obligations, rather than disappear at a function boundary?
+    (rules 12, 14)
+11. **Fails visibly?** Does an unsupported use produce a precise diagnostic or a named hole, never
+    silence? (rule 12)
+12. **Identity kept?** Does every entity, claim and piece of evidence it introduces have a typed
+    identity of its own (subject, claim, dependencies, artifacts, checker rule, freshness), never a
+    string, a display name, a first-match lookup or one status standing for several independently
+    degradable claims? Does it keep apart identities that change independently (implementation,
+    model, exported contract, proposition, policy, claim scope) and say which one moves under each
+    change? An exact digest prevents substitution but says nothing about whether a model is
+    faithful; an identity key holds the subject of a fact, never alternative answers, so
+    contradictory rows (trusted and proved, refinement and equivalence) cannot coexist under
+    different keys. (rule 13)
+13. **Honest under hostile input?** For an evidence or tooling feature: does it treat proof
+    modules, generated artifacts, receipts and checker output as adversarial, define limits,
+    malformed, duplicate and surplus input behaviour, negative controls and mutation tests, and say
+    how a revoked checker or assumption degrades only the claims that depend on it? Silence creates
+    a missing obligation, never an assumption. (rule 12)
+14. **A real benefit for audited code?** Is the gain more than writing speed? Convenience alone is
+    not enough, and brevity alone never outweighs a visibility loss. (rules 4, 17)
+
+**In one line.** A feature is promising when it makes the language and the compiler easier to
+explain at the same time: explicit, local, phase-separated, summary-friendly and easy to lower
+away, never implicit, global, inference-heavy, body-dependent or hard to model formally.
+
+**Ordering.** Architecture before ornament; visibility in tooling before convenience syntax;
+layout and ABI credibility before feature expansion; proof-friendly boundaries before richer
+abstractions; replayable evidence alongside each new contract family. The roadmap applies this
+order; it does not restate it.
+
+**Borrowed ideas.** Copy constraints before copying features: Zig, Austral, SPARK and Odin are
+most useful where they say no. [INFLUENCES.md](../legacy/docs/project/INFLUENCES.md) records what is copied, adapted and
+rejected.
+
+**Recording a refusal.** A rejected feature with its reason is worth more than a feature added
+without one. A new refusal gets an entry in the next section, with its research note when there is
+one. A refusal that is a language rule is an owner decision first ([decisions.md](decisions.md)).
+
+## What Concrete refuses
+
+Each refusal is either **Permanent**, with the reason, or **Reopens when** a named condition holds.
+"Under the pull rules" means that a real workload, bug report, pilot or user need runs into the
+refusal and measures its cost; a hypothetical convenience never counts (rule 17). Reopening a
+refusal that is a decided language rule is an owner decision, recorded in
+[decisions.md](decisions.md).
+
+Some former "not yet" entries are planned work, not refusals, and live in the roadmap: freestanding
+targets (the [allocation decision](decisions.md#decided-2026-11-02-allocation) already
+covers their allocators; [R-0323](../legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0323) and
+[R-0324](../legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0324) split std and its capabilities), package management
+(decided 2026-10-17, in the [task register](archive/roadmap-2026-11/ROADMAP_TASKS.md)), and the richer contract layer
+(dependency-flow contracts, mature loop invariant and variant authoring, the specification
+library, and package and release evidence summaries, phase E of the
+[roadmap](../ROADMAP.md#phases)). That layer's syntax is frozen only after a flagship or external
+workload needs its facts, and its facts are reported through the one evidence ledger (rule 12).
+Within that layer the decided rules hold: no `old`, quantifier or implication in contracts
+([OD117](decisions.md#od117)), specification functions with a required, total body
+([OD115](decisions.md#od115)) and no total-function category
+([OD116](decisions.md#od116)). How frames, entry-state facts and termination are stated
+inside those rules was decided on 2026-11-05 (row P18, [record](decisions.md#decided-project-contracts)): no snapshot construct, frame
+and entry/exit properties as Lean theorems (a source frame clause would be a new owner decision),
+and per-function termination theorems for ordinary functions.
+
+**Hidden runtime and hidden work**
+
+- **Garbage collection and hidden reference counting.** Permanent. They hide when memory is
+  reclaimed and whether a call allocates; linear ownership and explicit cleanup replace them.
+- **A hidden async runtime, executor or scheduler, and function colouring.** Permanent. They hide
+  concurrency and scheduling behind calls that look ordinary.
+- **Explicit structured concurrency.** Reopens when [R-0399](../legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0399)'s pull
+  trigger holds: a workload needs concurrency after the new compiler's v1 surface is frozen. Any
+  design keeps authority in `with(...)` and handles as linear values; single-threaded execution
+  until then.
+- **Exceptions and unwinding.** Permanent. They turn every call into a hidden exit. Recoverable
+  failure is a `Result` handled by an exhaustive `match`, running out of memory included
+  ([allocation decision](decisions.md#decided-2026-11-02-allocation)); an abort is terminal
+  and runs no deferred call ([OD10](decisions.md#od10)).
+- **Postfix `?` and any implicit error propagation or conversion.** Permanent. It hides a function
+  exit, a cleanup boundary and a conversion behind one character; the error arm is written.
+- **Mutable global state of any kind.** Permanent ([OD8](decisions.md#od8)). Constants are
+  truly immutable; resources reach code only as values handed to it.
+
+**Implicit conversions and inference**
+
+- **Implicit numeric conversions.** Permanent. They hide data loss. `as` converts only when no
+  value can be lost ([OD11](decisions.md#od11)); every other conversion is a named function
+  ([OD99](decisions.md#od99)), and a checked one reports failure as a `Result`
+  ([OD106](decisions.md#od106)).
+- **Truthiness.** Permanent. A condition is a `bool`; no other value stands in for one.
+- **Implicit string conversion** (`Display`/`ToString`-style hooks). Permanent. It hides
+  allocation and dispatch. The reserved output and append forms ([OD133](decisions.md#od133))
+  accept a closed list of types, expand to typed calls and keep their authority visible.
+- **Global (Hindley–Milner) inference and inference from the expected result type.** Permanent.
+  Signatures are written in full. A generic call's type arguments are inferred only from the checked
+  types of its arguments ([OD46](decisions.md#od46), [OD129](decisions.md#od129));
+  what no argument determines is written explicitly. Capability arguments are not inferred at all: they
+  are written on every capability-polymorphic call and checked (owner revision of
+  [OD45](decisions.md#od45) and [OD87](decisions.md#od87), 2026-11-05,
+  [record](decisions.md#decided-2026-11-05-revisions)).
+
+**Dispatch and abstraction**
+
+- **Closures and anonymous functions with capture.** Permanent. Captured data and control flow are
+  invisible at the call site. Named functions, capture-free function values, monomorphized generics
+  and an explicit context parameter replace them ([detail](../legacy/research/language/no-closures.md)).
+- **Trait objects and hidden dynamic dispatch.** Permanent. An opaque vtable hides the call target
+  from the reader, the analyses and the prover. Enums, monomorphized generics and explicit function
+  values replace them ([detail](../legacy/research/language/no-trait-objects.md)).
+- **Implicit trait resolution beyond monomorphization.** Permanent. Traits are coherent, an
+  ambiguous call is qualified, and resolution is by typed identity ([OD6](decisions.md#od6)),
+  so adding an impl elsewhere cannot change what a call means.
+- **Class inheritance.** Permanent. It makes the call target depend on a hierarchy instead of the
+  source; structs, enums, traits and composition replace it.
+- **User-defined operator overloading.** Permanent. An operator would hide allocation or effects
+  behind arithmetic syntax; operators take primitive operands only
+  ([OD26](decisions.md#od26), [OD42](decisions.md#od42)), and user types use named
+  functions.
+- **Hiding an operational capability**, for example a trusted wrapper that uses `Fs` or `Alloc`
+  without declaring it. Permanent ([authority rule 5](decisions.md#decided-2026-11-02-authority)).
+  A caller must see what authority a call uses. A `trusted fn` absorbs `Unsafe` only, which is a
+  caller safety obligation, not authority ([TRUST-5](../legacy/docs/spec/trusted.md#TRUST-5)).
+- **Umbrella capabilities and capability aliases** (`Std`, user `cap X = ...`). Permanent
+  ([authority rule 6](decisions.md#decided-2026-11-02-authority),
+  [audit decisions](decisions.md#decided-2026-11-02-audit)). A signature lists its real
+  capabilities.
+- **An effect system beyond `with(...)`** (algebraic effects and handlers). Permanent. Permissions
+  are compile-time sets over a fixed, reserved list of capabilities and resources are linear values;
+  that needs no runtime support and keeps signatures readable.
+- **Foreign function values.** Refused ([OD4](decisions.md#od4)). Reopens when the owner
+  admits typed `extern "C" fn` types, which OD4 leaves for later, with the permissions of foreign
+  callbacks decided at that point ([authority rule 4](decisions.md#decided-2026-11-02-authority));
+  [R-0283](../legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0283) reviews the C interop requirements when phase C becomes
+  active or next.
+
+**Generation and metaprogramming**
+
+- **Source-generating macros, derive helpers and in-language source generation.** Permanent. They
+  break file-local parsing and phase separation and make audit output describe code nobody wrote.
+  Generics, ordinary functions and external generators whose output is reviewed as ordinary source
+  replace them; attributes classify, never generate.
+- **Derived structural equality.** Permanent as language machinery, for the same reason; equality
+  is written or generated as reviewable source.
+- **General compile-time evaluation** (`comptime`, `constexpr`-style). Reopens when a workload under
+  the pull rules needs compile-time values beyond constant declarations; any design stays
+  constants-only and states its interaction with the semantics.
+- **Broad in-source conditional compilation** (`#[cfg]` throughout files). It hides control flow,
+  authority and target assumptions behind build configuration. Target-specific code is selected by
+  module and file per target profile in `Concrete.toml`, and audit output names what was selected
+  and excluded. Reopens when, with the project model, target profiles and the hosted/freestanding
+  std split ([R-0323](../legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0323)) in place, a workload under the pull rules
+  shows that module and file selection is not enough; any form is narrow and appears in audit
+  output.
+
+**Calls and declarations**
+
+- **User-defined and C-style variadic functions.** Permanent. They are unchecked or complicate
+  every signature. The reserved output and append forms are the only multi-argument forms, and they
+  are not a function type and cannot be passed as values.
+- **Default arguments.** Permanent (owner, 2026-11-05, row P17a,
+  [record](decisions.md#decided-project-refusals)), reopened only by a new owner decision. A
+  call shows every argument it passes; defaults conflict with visible arguments and with one form per
+  situation. General compile-time evaluation and broad conditional compilation (above) keep their
+  evidence-based reopening (row P17b).
+- **Lexical shadowing of a visible local, parameter or top-level name.** Permanent
+  ([SCOPE-1](../legacy/docs/spec/scope.md#SCOPE-1), [OD67](decisions.md#od67)). One name, one binding
+  in a scope; the compiler still never recovers identity from spellings (rule 13).
+
+**Contracts and ghost code**
+
+- **Decorative contracts.** Permanent. A contract is a claim that lowers to an obligation and is
+  reported with its evidence; contracts never change what a program does at run time
+  ([OD125](decisions.md#od125)), and a vacuous one is reported as such
+  ([OD120](decisions.md#od120)).
+- **`old`, quantifiers and implication in contracts.** Permanent ([OD117](decisions.md#od117)).
+  Such properties are stated as Lean theorems, keeping the contract language small.
+- **Ghost code that affects execution.** Permanent. Ghost code itself is admitted as decided:
+  `ghost let` with `ghost` reserved ([OD81](decisions.md#od81)) and specification
+  functions whose body is required and total ([OD115](decisions.md#od115)). How ghost state
+  is represented in Core and erased was approved provisionally by the owner on 2026-11-05 (row
+  Q9.10, [decided rows](decisions.md#decided-2026-11-05-core)): ghost ownership
+  instrumentation with proved erasure; Core freezes at stage A2c
+  ([roadmap](../ROADMAP.md#questions-for-the-core-session)).
+
+## Where the earlier rules went
+
+Nothing from the documents this one absorbed was dropped silently. The former principles of
+PROJECT.md (numbered as they were) and its fifteen admission criteria map as follows; "AT" is the
+[admission test](#admission-test).
+
+| former rule | here |
+|---|---|
+| principle 1, systems first | rule 7 |
+| principle 2, no hidden runtime | rule 8 |
+| principle 3, linearity and ownership | rule 9 |
+| principle 4, second-class references | rule 10 |
+| principle 5, visible capabilities and trust | rule 11 |
+| principle 6, predictable execution | rule 16 |
+| principle 7, core/shell separation | rule 16 |
+| principle 8, artifact-first auditability | rule 14; conflict order item 2 |
+| principle 9, proofs attach to real code | rule 7 |
+| principle 10, small analyzable core | rule 15 |
+| principle 11, honest trust boundaries | rule 12; conflict order item 1 |
+| principle 12, compiler-owned identity | rule 13; conflict order item 1 |
+| criterion 1, a simple invariant | AT 4 |
+| criterion 2, more visible | AT 2 |
+| criterion 3, less phase coupling | AT 5 |
+| criterion 4, declaration-level dependencies | AT 5 |
+| criterion 5, static or explicit dispatch | AT 6 |
+| criterion 6, predictable code generation | AT 7 |
+| criterion 7, clear diagnostics | AT 8 |
+| criterion 8, one owning pass | AT 8 |
+| criterion 9, the proof story | AT 4 |
+| criterion 10, real benefit for audited code | AT 14 |
+| criterion 11, crosses a contract boundary | AT 10 |
+| criterion 12, fails visibly | AT 11 |
+| criterion 13, evidence as precise as its claim | AT 12 |
+| criterion 14, honest under hostile input | AT 13 |
+| criterion 15, independent semantic identities | AT 12 |
+| admission principle, quick decision rule, one-line test | AT, "In one line" |
+| main rule for borrowed ideas | AT, "Borrowed ideas" |
+| ordering principle | AT, "Ordering" |
+| shape principles (features earn admission, removals improve, constraints compound, real programs test shape, record refusals) | rules 15, 17; AT, "Recording a refusal" |
+| high-leverage priorities | not a design rule: the [roadmap](../ROADMAP.md) owns priority |
+| ANTI_FEATURES.md entries and PROJECT.md's "no" and "not yet" decisions | [What Concrete refuses](#what-concrete-refuses); comparisons in [INFLUENCES.md](../legacy/docs/project/INFLUENCES.md#how-other-languages-answer-concretes-refusals) |
+
+### _review/LANGUAGE_DECISIONS_2026-11-08.md (full)
+# Language and process decisions, 2026-11-08
+
+Owner, verbatim: "record, yes to all recommended" (2026-11-08), and "i prefer fully gone, self and as are irrelevant from what i see".
+Reviewed by Codex, Kimi and agy in six rounds (scratchpad verdict1..verdict6); unanimous on every item below; 11(b) decided by the owner as option 3 (round 6: Codex 3, Kimi 3, agy 1).
+Items marked * were revised after reviewer objections. Each change to a decided row must be recorded as an explicit owner revision naming that row (e.g. OD6/OD32/OD60 dot calls and receivers, OD130 patterns, OD11/OD91 casts, OD59 heap move-out, TYPE-20/OD137 char, Q9.8 defer kept, OD77/OD39 bodyless, OD111/OD147 packed, OD80 assume, Q6.4/TYPE-22 constants, OD62 dead stores, Q4.7/Q9.5 borrow, MOD-2/MOD-3 imports, OD90 self).
+
+A. Process
+1. Review-round cap reached: the owner may approve one exact SHA after Codex, Kimi and agy all reviewed it; the approval and every outstanding finding/verdict are recorded; it never replaces gates or proof obligations. Yes.
+2. A branch mixing classes gets the highest cap (docs 2 / scripts 3 / compiler-spec 5), classified by the actual diff. Yes.
+3. One review round on where each std item lives. Yes.
+4. Trap names: overflow, division_by_zero, invalid_shift, out_of_bounds, invalid_range, abort (diagnostic categories, distinct from checked-operation error types). Yes.
+5. Land slice 0 at 0e2950e7 (3 reviewers ACCEPT, CI 9/9 green). Yes.
+
+B. Language simplifications
+6. Remove dot method calls; Type::f(x) or Trait::f(x). Yes.
+7.* Replace self/&self/&mut self receiver forms with an ordinary typed first parameter, preserving one consuming Destroy protocol. Yes.
+8. Constructors always field: value. Yes.
+9. Patterns always field: binder (revises OD130; ignored-field rules and linear consumption preserved). Yes.
+10. Contracts mark exact mathematical arithmetic explicitly (spelling/scope later; OD12, OD145 preserved). Yes.
+11. Remove `as` from the language entirely (owner 2026-11-08: fully gone, not reserved). (a) expression casts replaced by one canonical named lossless conversion (OD11 value-domain rule and provenance restrictions preserved); (b) import renaming removed; imported items are ALWAYS used qualified by their module's last segment (owner 2026-11-08: "i like 3"): `import std::json::{parse};` then `json::parse(...)`, `vec::Vec<u8>`, never bare; same-module items and builtin types stay bare; two same-named items from different modules may both be imported (revises MOD-3); two imported modules with the same last segment are refused; a local named like an imported segment is refused (no shadowing); MOD-2 manifest and OD139 kept; (c) borrow revises Core Q4.7/Q9.5: `borrow [mut] view = source [from a until b] { ... } [else { ... }]`; (d) unpack: `unpack <brand A> x = p { ... }`. Spellings illustrative; exact ones in the spelling round.
+12. Replace consuming *h on heap boxes with one named move-out (allocator identity, conservation, distinct from destruction). Yes.
+13. assert(e); always parenthesized (optional `by` suffix). Yes.
+14. #[link_name("sym")] / #[export_name("sym")]. Yes.
+15. Imports use ::. Yes.
+16. Remove char; u8 plus explicit UTF-8 operations; quoted ASCII literals, patterns, comparisons migrate explicitly. Yes.
+17.* Remove print/println/append builtins. Output: ordinary calls needing Console and its grant, linear errors kept. String append: ordinary allocating operation under with(Alloc), not Console. Yes.
+18. Every local has a written type and every function a result arrow incl. -> Unit; argument-based generic inference kept; destructuring/ghost-binding typing rules defined later (item 55). Yes.
+
+C. Removals and keeps
+19. OrderedMap only now; HashMap when the KV store (slice 23) measures need; no compiler privilege for map names. Yes.
+20.* Process: audit every foreign declaration first; remove only if none needs it. Yes.
+21. defer keeps late reads (Q9.8), with reserved by-value arguments, held loans and cleanup order preserved. Keep.
+22.* Refuse handwritten ordinary bodyless functions; compiler-generated interfaces (OD9/OD39) keep bodyless declarations, as do trait signatures and extern. Yes.
+23. Remove general packed structs until a real packed foreign ABI needs them (revises OD111/OD147; a demonstrated ABI reopens). Yes.
+24.* Local assume: remove only after a replacement (named trusted contracts with evidence identity) is shown on real examples, including point-local conditional facts; until then it stays explicit, tracked and never admits a safety obligation. Yes.
+25. Function values: keep decided fn pointer + explicit context with contracts. Keep.
+26.* Constants: direction = computed at compile time; constant values must be Copy; the closed total initializer subset is defined, and the decided comptime reopening conditions checked, before revising Q6.4/TYPE-22. Yes.
+27.* Explicitly keep value-producing if/match, both proof scopes, existential brands. Keep.
+28.* SPARK 4(b): optional #[depends(result <- a, b)], checked against the derived fact, never trusted. Yes.
+29.* SPARK 4(c): refuse a dead store to a mut local (extends OD62). Yes.
+
+D. Grammar items all agreed (OPEN numbers in parentheses)
+30. (OPEN-1) UTF-8 source; space/tab/LF/CR whitespace; // comments ending at LF, CR or EOF; no block comments/BOM/shebang/NUL.
+31. (OPEN-2) ASCII case-sensitive identifiers.
+32. (OPEN-4) one closed builtin-name table, no aliases.
+33. (OPEN-6) exactly two escape lists; no raw line breaks in quotes.
+34. (OPEN-7) longest-match tokens; >> split only in generic closers.
+35. (OPEN-10) type N = T; and const N: T = e;
+36. (OPEN-15) closed attribute set.
+37. (OPEN-19) borrow/defer restrictions as proposed.
+38. (OPEN-21) views and constant-time APIs as ordinary calls.
+39. (OPEN-24) no concurrency syntax until the model is reviewed.
+
+E. Grammar choices
+40. (OPEN-3) Reserve spec, by, kept, Self, while, Entropy. `self` and `as` are NOT reserved: ordinary identifiers (owner: "i prefer fully gone, self and as are irrelevant from what i see"). Drop obsolete reservations (in/newtype/union/total) unless a decided row still needs them.
+41. (OPEN-5) keep typed number suffixes like 200u8; exact suffix grammar later. Yes.
+42. (OPEN-8) keep the legacy precedence table (chained comparisons parse); agy preferred refusing chains. Yes.
+43. (OPEN-9) attributes, pub, item; mandatory commas, optional trailing comma. Yes.
+44. (OPEN-11) import a::b::{x, y}; nonempty item list only; no renaming; no module imports (rejected by all three reviewers: second form, MOD-2 manifest). Uses always qualified: see 11(b).
+45. (OPEN-13) spec fn f(...) -> T = e; assert(e) by path(args); pure spec subset; ghost let name-restriction fixed. Yes.
+46. (OPEN-14) type params before cap params, cap C, + unions, {} empty; cap names never ordinary types. Yes.
+47. (OPEN-16) keep decided statement/value block behaviour; common-prefix LL(1) grammar proved. Yes.
+48. (OPEN-17) qualified enum patterns; every arm ends with a comma. Yes.
+49. (OPEN-18) labels on both loop forms: 'label: while and 'label: for; break 'label;, continue 'label;; no empty statements.
+50. (OPEN-20) no empty array literals; empty structs kept. Yes.
+51. (OPEN-22) explicit exists/pack/unpack brand surface and named binder contracts on fn types. Yes.
+52. (OPEN-23) kept buf: H, paired Kept<H> completion, no borrow-derived kept arguments (full Q3.12); only pointer qualification left. Yes.
+53. (OPEN-25) ratify refusal of value while...else and postfix member ->. Yes.
+
+F. Later, no decision now
+54. Core freeze A2c after spec-core proofs and A2i integration.
+55. Exact names/signatures: lossless conversion, move-out, math boundary, output/append, typed destructuring/ghost rules, and all spellings from B, C, E, shown to the owner as before/after code.
+56. Entropy grant shape at slice 6.
+57. Concurrency model at slice 28.
+58. Niches / smaller enum tags only if a workload needs them.
+59. The remaining OPEN sub-rules come back to the owner in the spelling round with item 55, as before/after code: numeric token policy (OPEN-5), attribute duplication/ordering/attachment/scope incl. struct-invariant scope (OPEN-15), zero-count array repetition (OPEN-20), closed builtin inventory and exhaustive view/constant-time/text/container/branded API signatures (OPEN-4/21), trait/inherent impl shells (OPEN-12), brand binder scope/escape/loop-carried existential rules (OPEN-22).
+
+### docs/decisions.md excerpts: lines 100-320 (prose fixes, 2026-11-05 rows Q*, P*)
+| PAT-1/6, SYN-4, scope introduction | `if let` and `while let` are supported forms with specified semantics. | OD52 | Fixed in prose 2026-11-03. |
+| PAT-5/10/11, OWN-5/15 | Refutable destructuring uses `let … else`; rules explain its fallback and mutability. | OD52/85 | Fixed in prose 2026-11-03. |
+| PAT-2/3/4/7/9, TYPE-5, OWN-15 | Guards affect matching, coverage, commitment, and moves. | OD55 | Fixed in prose 2026-11-03. |
+| PAT-3/7, OWN-15, REF-9 rationale | Range patterns match integer intervals. | OD56/41 | Fixed in prose 2026-11-03. |
+| TYPE-7/11, STMT-4/5, OWN-15;  | Struct update `..base` supplies fields, has evaluation order, and copies fields. | OD53 | Fixed in prose 2026-11-03. |
+| TYPE-11/21/24, OWN-D1/15, REF-3/5, MOD-9;  | Newtypes exist, have representation rules, constructors, `.0`, casts, and imports. | OD54/123/155 | Fixed in prose 2026-11-03. |
+| REF-D3, SCOPE-D1;  | Borrow blocks bind a region via `in R`. | OD57 | Fixed in prose 2026-11-03. |
+| OWN-8 rationale; REF-5/12 rationale | Auto-borrowed receivers are ordinary supported places; elaboration builds implicit receiver borrows. | OD32 | Fixed in prose 2026-11-03. |
+| MEM-4 accepted example; OWN-15 heap-field row | `h.f` works directly through `&Heap<S>`/`&mut Heap<S>`. | OD30/36 | Fixed in prose 2026-11-03. Exact heap-array view remains [undecided: see the target Core proposal](#core-heap-array-view). |
+| TRUST-13, TRUST-4 exception; accepted example  | Reference-to-pointer conversion is safe and needs neither trust nor `Unsafe`. | OD98 | Fixed in prose 2026-11-03. |
+| MEM-9, ARITH-13 | Proven runtime violations are refused only outside trusted/`Unsafe` functions. | OD118 | Fixed in prose 2026-11-03. |
+| CON-3 | Contracts read parameters and `result`. | OD143 | Fixed in prose 2026-11-03. |
+| STMT-11 and execution prose; OWN-13 rationale | Remaining locals “are destroyed”; storage teardown versus `Destroy` remains open. | OD69 | Fixed in prose 2026-11-03. |
+| OWN-17 | Deferred Copy results are implicitly dropped. | OD140; authority rule 9 | Fixed in prose 2026-11-03. |
+| OWN-5; catalog | `discard` accepts any Copy value. | OD62 | Fixed in prose 2026-11-03. |
+| REF-10 | An exclusive-reference binding may go unused. | OD62 | Fixed in prose 2026-11-03. |
+| SYN-1 and introduction | The external EBNF governs acceptance exactly. | OD150/77 | Fixed in prose 2026-11-03. |
+| SYN-6 | A char literal is any one character; non-ASCII behavior is left open. | OD137 | Fixed in prose 2026-11-03. |
+| TYPE-6 | Comparisons take numbers only; bool/char support is unresolved. | OD42 | Fixed in prose 2026-11-03. |
+| TRAIT-6 and introduction; rationale  | Ambiguous bound-method calls are refused and qualification does not exist. | OD6, completed 2026-11-02 by the qualified call `Trait::method(&x, ...)` | Fixed in prose 2026-11-03. |
+| PAT-8 and accepted examples; PASS-6; CON-4 | Rules/examples still accept or regulate C-style `for` headers. | OD47/61 | Fixed in prose 2026-11-03. |
+| Conformance examples across all 15 rule chapters; e.g. | Unqualified accepted fixtures use removed aliases/forms, wrong `main` results, or unused named bindings. | Alias/main decisions; OD33/52–57/62 and others above | Fixed in prose 2026-11-03. |
+| README and overview authority description | Markdown sentences are normative except where semantics later lands; the written directory is the language source. | the Lean-only source decision (ROADMAP) | Fixed in prose 2026-11-03. |
+
+
+<a id="target-core-proposal"></a>
+## Target Core proposal: dependencies (provisionally decided 2026-11-05)
+
+These items were undesigned when the chapters were cleaned up on 2026-11-03. **The owner approved their design provisionally on 2026-11-05** ([the decided rows](#decided-2026-11-05-core): allocator identities Q1, allocation contracts Q1–Q2, the heap-array view Q3, static text Q4, capability inference Q5, unsafe contracts Q3.7–Q3.12, static refusal Q6, grants Q7, semantic objects Q8–Q9). Where a chapter still says **undecided: see the target Core proposal**, read the decided row; the rule is rewritten in Lean at stage A2b and frozen at A2c. The proposal is owned by
+[ROADMAP: Questions for the Core session](../ROADMAP.md#questions-for-the-core-session).
+
+- <a id="core-allocator-identities"></a>[Core-session question 1](../ROADMAP.md#questions-for-the-core-session). **Allocator identities and dependencies:** introduction, kind,
+  scope, equality, packaging and repeated reset, dependency tracking across calls, containers and
+  callbacks, and lifetime-safe release metadata; the allocation decision's conservation and no-live-
+  allocation requirements stand, but the discipline expressing them, undecided on 2026-11-03, is provisionally decided by rows Q1.1–Q1.13 ([rows](#decided-2026-11-05-core)).
+- <a id="core-allocation-contracts"></a>[Core-session question 1–2](../ROADMAP.md#questions-for-the-core-session). **Allocation contracts:** failure payload shapes and complete
+  growth, reserve and multi-allocation transition contracts; applicability of container `Destroy`
+  when payload cleanup needs effects beyond `Alloc`, undecided on 2026-11-03, are provisionally decided by rows Q1.8–Q1.12 and Q2.1–Q2.8 ([rows](#decided-2026-11-05-core)).
+- <a id="core-heap-array-view"></a>[Core-session question 3](../ROADMAP.md#questions-for-the-core-session). **Heap-array view:** exact bounded view type, operations, lifetime,
+  mutability and permitted positions, undecided on 2026-11-03, are provisionally decided by rows Q3.1–Q3.6 and Q4.7 ([rows](#decided-2026-11-05-core)); opening never yields an element reference.
+- <a id="core-static-text"></a>[Core-session question 4](../ROADMAP.md#questions-for-the-core-session). **Static text:** literal type, ownership and conversion into
+  allocator-branded strings, undecided on 2026-11-03, are provisionally decided by rows Q4.1–Q4.6 ([rows](#decided-2026-11-05-core)); static text requires no allocation.
+- <a id="core-grants"></a>[Core-session question 7](../ROADMAP.md#questions-for-the-core-session). **Target grants:** exhaustive schemas, multiplicity, lifecycle and narrowing
+  APIs, including the resource backing process services, undecided on 2026-11-03, are provisionally decided by rows Q7.1–Q7.11 ([rows](#decided-2026-11-05-core); process spawning is deferred).
+- <a id="core-capability-inference"></a>[Core-session question 5](../ROADMAP.md#questions-for-the-core-session). **Capability inference:** decided 2026-11-05 (row Q5.1/Q5.4): there is
+  none; capability arguments are written explicitly at every polymorphic call and checked, so no choice among
+  solutions arises. Exact sets and refusal of inconsistent bindings stand.
+- <a id="core-unsafe-premises"></a>[Core-session question 3, 9](../ROADMAP.md#questions-for-the-core-session). **Unsafe contracts:** the complete validity, provenance, aliasing
+  and foreign-mutation taxonomy and call-only annotation syntax, undecided on 2026-11-03, are provisionally decided by rows Q3.7–Q3.12 and Q9.7 ([rows](#decided-2026-11-05-core)); OD64's confinement
+  requirement stands.
+- <a id="core-static-refusal"></a>[Core-session question 6](../ROADMAP.md#questions-for-the-core-session). **Static refusal:** the mandatory proof criterion and its relation
+  to Core acceptance, undecided on 2026-11-03, are provisionally decided by rows Q6.1–Q6.7 ([rows](#decided-2026-11-05-core)); recorded proven-violation refusals apply in trusted code too.
+- <a id="core-semantic-contract"></a>[Core-session question 8–9](../ROADMAP.md#questions-for-the-core-session). **Semantic objects:** exact events, admissible allocation oracles,
+  observations, resource relations and theorem endpoint, undecided on 2026-11-03, are provisionally decided by rows Q8.1–Q8.7 and Q9.1–Q9.19 ([rows](#decided-2026-11-05-core)); technical adequacy and
+  refinement obligations remain binding.
+
+
+### Rules awaiting Lean formalization (listed 2026-11-03)
+
+These rules depended on a design that was undecided on 2026-11-03. Their designs were provisionally
+decided on 2026-11-05 ([decided rows](#decided-2026-11-05-core)); formalizing them in Lean remains
+pending through A2b, and freezing them through A2c. This does not reopen the decisions already
+recorded in their sentences.
+
+| rules | reason |
+|---|---|
+| SYN-5, TYPE-3, OWN-15, REF-5 | [Static-text typing, ownership and borrowing](#core-static-text) |
+| TYPE-D1, TYPE-17 | [Ambiguous set-variable inference](#core-capability-inference) |
+| TYPE-10, OWN-13 | [Complete conserving failure contracts and container Destroy applicability](#core-allocation-contracts) |
+| MEM-5, MEM-7 | [Allocator identity introduction, dependency discipline and release metadata](#core-allocator-identities); MEM-5 also needs [failure payload contracts](#core-allocation-contracts) |
+| REF-D3, MEM-4 | [Exact bounded heap-array view](#core-heap-array-view) |
+| STMT-7, TRUST-D1, TRUST-9, TRUST-10 | [Target grant schemas, lifecycle and future foreign callback permissions](#core-grants) |
+| ARITH-13, MEM-9 | [Mandatory static-proof refusal criterion](#core-static-refusal) |
+| TRUST-13, FFI-12 | [Complete unsafe primitive contracts and call-only annotation syntax](#core-unsafe-premises) |
+
+
+<a id="decided-2026-11-05"></a>
+## Owner decisions 2026-11-05: Core design (A2a provisional approval) and project rows
+
+The owner answered every row of the 2026-11-05 decision page, in the terminal. The rows that revise a recorded rule were answered one by one: Q5.1/Q5.4, Q6.4, Q2.8, Q9.15 with P3, Q7.11 and Q4.7. Q3.12, Q9.19, Q7.10, Q1.6, P2, P4, P9, P13, P16 and P17a/b were also answered directly. The remaining Core rows were accepted as recommended, and the remaining project rows were approved on the owner's condition that Claude and Codex agree and that each is the best long-term design (both confirmed; every row carries Codex agreement). The full rows (question, options, reason, recommendation, agreement, revision and notes) are in [core_rows.json](archive/decisions-2026-11-05/core_rows.json) and [other_rows.json](archive/decisions-2026-11-05/other_rows.json); the concrete rules behind them are in [R4_RATIONALE.md](archive/decisions-2026-11-05/R4_RATIONALE.md), and where R4 and a row differ, the row governs.
+
+**The Core rows are a provisional approval (stage A2a).** They bind the design without freezing it. Stage A2b formalizes them in a proposed `ConcreteSpec/Spec.lean` and proves the four design theorems; any row the formalization changes returns to the owner; stage A2i integrates the parts (2026-11-06); the owner freezes Core at A2c (row Q9.19 as revised). Until a rule is written in Lean, the answer below governs over any chapter text that differs.
+
+<a id="decided-2026-11-05-revisions"></a>**Owner-approved revisions of recorded rules** (each also noted at the rule it revises):
+
+- **OD45 and OD87** (rows Q5.1, Q5.4): capability arguments are written explicitly at every polymorphic call and checked against the callee; there is no capability inference and no inference solver. OD46 (type arguments from checked argument types) is unchanged.
+- **TYPE-22@1's examples** (row Q6.4): a constant whose initializer provably fails is refused at compile time whether or not it is used (OD118); both examples, `unused-constant-never-runs` and `constant-traps-at-use`, become reject examples. When a constant is evaluated (at each use, never at start) is unchanged.
+- **TRAIT-1@1** (row Q2.8): two impls with equal heads may coexist only when Copy/Destroy disjointness (OD28) makes their domains disjoint, as in `impl<T: Copy> Destroy for Vec<T, A>` beside `impl<T: Destroy> Destroy for Vec<T, A>`. No other coherence or orphan rule changes, and no disjunctive bound syntax is added.
+- **The generated-chapter requirement** (rows Q9.15, P3): Lean is the specification, in one main normative file with doc comments and examples; no prose is generated from it. This confirms the [2026-11-04 decision](#decided-project-lean-is-the-spec). The "one main normative file" wording is revised 2026-11-06 by the [long-term changes](#decided-project-long-term-2026-11-06): one authoritative specification library in cohesive modules, with `ConcreteSpec/Spec.lean` as its public import.
+- **Authority rules 13, 5 and 7** (row Q7.11): `Console` joins the reserved capability set, for operations on the `StdIn`, `StdOut` and `StdErr` grants; rule 5's operational list and rule 7's primitive table include it. `Device` stays for device grants.
+- **The text-only slice of R4 F4.3** (row Q4.7) is replaced before it was recorded: one scoped form opens every view, `borrow [mut] source [from a until b] as view { … } [else { … }]`. Without `else` an invalid range traps, like indexing; with `else` it is handled; a proven invalid range without `else` is refused (OD118). Arrays need `a ≤ b ≤ len`; text also needs UTF-8 scalar boundaries at both byte offsets.
+- <a id="decided-2026-11-05-q6-2-fields"></a>**Q6.2 and R4 F12, known values through structs** (owner-approved revision, 2026-11-05, made during A2b): known values propagate field by field through immutable struct construction and destructuring. The checker tracks an abstract value for each binding: unknown, a known scalar, or a constructor whose fields carry their own abstract values. Constructing a struct records each field's fact independently; an immutable binding keeps the fact; destructuring hands each field's fact, recursively, to the corresponding immutable binder; an unknown component stays unknown without discarding its known siblings; an ownership transfer keeps the facts for the receiving binding without permitting reuse of the consumed one. Q6.2's exclusions stay (mutable state, branches and paths, user-function calls, calls outside the table, elaborator temporaries). So `let S { a } = S { a: 200u8 }; a + 100` is refused, in trusted and unreachable code too (OD118 as revised by Q6.4). Before this revision a field bound by destructuring was not known and that program was accepted and trapped.
+- <a id="decided-2026-11-05-q9-1-reads"></a>**Q9.1, read forms** (owner-confirmed, 2026-11-05): `copy x` is allowed only when `x` has a Copy type and `move x` only when it has a non-Copy (linear) type. Each read has one form; `move` of a Copy value and `copy` of a linear value are both refused.
+
+<a id="decided-2026-11-05-new-rules"></a>**New rules** (P4): duplicate variant names in one enum and duplicate method names in one impl are refused, like duplicate fields (bug 313); the rule gets its ID and diagnostic when it is written in Lean.
+
+<a id="decided-2026-11-05-core"></a>**Core rows** (the answer is the row's recommendation):
+
+- **Q1.1** What is an allocator brand? — Separate erased `Brand` kind.
+- **Q1.2** How are fresh brands introduced, including loop resets? — Generative binders; existential loop state.
+- **Q1.3** How are packages formed and opened? — Explicit pack; lexical unpack; repackage escapes.
+- **Q1.4** How are brands compared and supplied? — Nominal brand equality; explicit brand arguments.
+- **Q1.5** How are allocator dependencies tracked across calls? — Structural dependencies; checked interface summaries.
+- **Q1.6** Who owns a child allocator’s backing? — Child owns backing; parent brand exposed in type. *Revises or adds: Clarify/extend allocator interface.*
+- **Q1.7** Where does release information live? — Stable release state and raw context; no safe references. *Revised 2026-11-08 by the [foundation decision](#foundation-q6): release-context erasure is allowed only with a proof (release statically known, no per-instance information), including owning Text where applicable; no unconditional one-pointer claim.*
+- **Q1.8** What if creating allocator state fails? — Fallible allocator construction conserving surviving inputs.
+- **Q1.9** What do allocation failures contain? — `AllocFailure<T>` returns rejected `T`; operation-specific recovery.
+- **Q1.10** Are capacity and addresses observable? — Observable capacity; explicit raw-address exposure.
+- **Q1.11** What does “unchanged” require of allocator state? — Availability predicate plus four laws: progress, unchanged state on failure, release never reduces availability, a concrete success witness.
+- **Q1.12** What rolls back around callbacks? — No rollback of callback effects; every element accounted for in a typed result.
+- **Q1.13** Can resetting the system allocator return `Allocator<Sys>` again? — Fresh brand after any supported system reset.
+- **Q2.1** Are storage release, destruction and resource cleanup separate? — Separate storage release, destruction and resource cleanup.
+- **Q2.2** Which containers implement `Destroy`? — Exactly sixteen named Destroy impls: Array (T: Destroy); Heap, HeapArray and Vec (two each: T: Copy; T: Destroy); String (unconditional); Option (T: Destroy); Result (three: T: Destroy/E: Copy, T: Destroy/E: Destroy, T: Copy/E: Destroy); OrderedMap (four: each of K and V Copy or Destroy). HashMap excluded. <a id="q2-2-revision"></a>Revised 2026-11-06 by [information flow](#decided-project-infoflow-2026-11-06): `Secret<T>` is `Copy` only for scalar `T`; secret arrays and heap secrets are linear and their destruction wipes them.
+- **Q2.3** In what order are contents destroyed? — Index order 0..len−1, then the backing; OrderedMap in ascending key order, key then value, then the nodes.
+- **Q2.4** How does a container of non-`Destroy` resources release its storage? — `drain(v, ctx, f)` with `f: fn(&mut C, T) with(K) -> Step<T, E>`; the only way to empty a container of non-Destroy elements.
+- **Q2.5** What happens when drain processing fails? — On Stop, `Drained { at, survivor, rest, err }`; `map_into` returns `Stopped { done, survivor, rest, err }`.
+- **Q2.6** Must `destroy` terminate and avoid traps? — Ordinary partial correctness; prove stronger guarantees separately.
+- **Q2.7** Does user destruction have special execution semantics? — Ordinary consuming checked `destroy`; at most `Alloc`.
+- **Q2.8** How is 'Copy or Destroy' written for container impls? — (a) separate impls for every admitted combination of Copy/Destroy payload bounds, no disjunctive-bound syntax: two each for Heap, HeapArray and Vec, three for Result, four for OrderedMap; coherence may use Copy/Destroy disjointness. *Revises or adds: TRAIT-1@1 (under OD6): equal generic impl heads allowed only when Copy/Destroy disjointness makes their domains disjoint; all other coherence and orphan rules unchanged. Option (b) would also add new bound syntax.*
+- **Q3.1** What does opening a heap array produce? — Second-class shared/mutable array views; no element references.
+- **Q3.2** How are views passed and lent? — Downward parameters; mutable lending freezes origin.
+- **Q3.3** What is a view’s root identity? — Original owner identity plus projection path.
+- **Q3.4** Which view accesses conflict? — Existing whole-root conflict rules.
+- **Q3.5** What is the index type? — `u64` lengths/indices across profiles; checked target limits.
+- **Q3.6** How are nested linear elements traversed without substitutes? — `drain` / `map_into` for consuming traversal; `swap_at(v, i, x) -> T` for in-place replacement.
+- **Q3.7** What is the raw-memory model and validity taxonomy? — Blocks with provenance; pointer = (prov: Option<BlockId>, addr: u64); integers carry no provenance; every access needs explicit validity premises. *Generalized 2026-11-08 by the [foundation decision](#foundation-q3): the address is read from a read-only target profile; the existing 64-bit little-endian profile is unchanged, and the provenance rules and the zero-byte exception are preserved.*
+- **Q3.8** How do zero-sized elements behave? — Zero-sized slots own their obligations; they occupy no bytes and may share addresses.
+- **Q3.9** What do pointer equality and integer round trips mean? — `expose` records the block; `from_exposed` picks in-bounds, then one-past, else no provenance. *Generalized 2026-11-08 by the [foundation decision](#foundation-q3): over the target profile's address spaces; the reconstruction policy is unchanged.*
+- **Q3.10** What happens when address space runs out? — A collision means overlapping occupied bytes; address exhaustion is part of Avail. *Generalized 2026-11-08 by the [foundation decision](#foundation-q3): the existing profile keeps the `base + size ≤ 2^64−1` one-past bound; any generalized profile needs an analogous checked bound.*
+- **Q3.11** How are typed values related to raw bytes? — Structured values and raw store joined by `Rep`.
+- **Q3.12** How are extern pointer parameters marked, and how does C keep memory past the call? — (a) `kept` parameter marker; `Kept<H>` receipt ended only by the paired extern. *Revises or adds: New design + spelling: owner decision.*
+- **Q4.1** What is a literal’s type? — Copy `StaticStr`; explicit fallible dynamic conversion.
+- **Q4.2** Which encoding and NUL policy apply? — UTF-8 including embedded NUL.
+- **Q4.3** What do length and comparison mean? — Byte length; content equality; lexicographic byte order.
+- **Q4.4** Are literal addresses observable and literals mergeable? — Content semantics; pooling allowed; no safe address identity.
+- **Q4.5** What is the FFI representation? — Explicit pointer/byte-length FFI adapter.
+- **Q4.6** What are dynamic string views? — Byte offsets; `byte_at` traps out of range; subviews only through the scoped borrow form of Q4.7 (`borrow t from a until b as s { … } [else { … }]`). *Revised 2026-11-06 by [no hidden traps](#decided-project-no-hidden-traps): byte_at needs evidence of an in-range offset.*
+- **Q4.7** How are scoped views and range subviews introduced? — (a) borrow [mut] source [from a until b] as view { … } [else { … }]; no else = trap (like indexing); proven invalid range without else refused (OD118). *Revises or adds: Replaces R4 F4.3 text-only mandatory-else form; extends Q3.1/Q3.2 with subview formation; preserves OD36/OD118.* *Revised 2026-11-06 by [no hidden traps](#decided-project-no-hidden-traps): the form without `else` needs evidence of a valid range; a provably out-of-range view index is covered by the same rule.*
+- **Q5.1** Should capability arguments ever be inferred? — Explicit capability arguments on every polymorphic call. *Revises or adds: OD45, OD87.*
+- **Q5.2** May explicit arguments contain the caller’s capability variables? — Explicit symbolic capability expressions and union.
+- **Q5.3** What is capability-set equality and normal form? — Canonical semantic equality; refuse repeated names.
+- **Q5.4** Is a capability inference solver still normative? — Explicit substitution checking; no inference solver. *Revises or adds: OD45, OD87.*
+- **Q6.1** What determines mandatory static refusal? — Fixed Lean-defined local refusal rules. *Revised 2026-11-06 by [no hidden traps](#decided-project-no-hidden-traps): static refusal widens from proven violations to unproven safety.*
+- **Q6.2** Is local constant propagation mandatory? — Fixed table of statically known values: literals, immutable lets, module constants, checked ops, six named wrapping/saturating ops, lossless `as`. *Revised 2026-11-05: facts propagate field by field through immutable struct construction and destructuring ([revision](#decided-2026-11-05-q6-2-fields)).* *Revised 2026-11-06 by [no hidden traps](#decided-project-no-hidden-traps): known values remain facts; refusal widens to unproven safety.*
+- **Q6.3** Are violations rechecked after generic substitution? — Parametric checking plus substitution-time rechecking.
+- **Q6.4** Does unreachable code receive static refusal checks? — Check all written code, including generic bodies. *Revises or adds: REVISES TYPE-22@1 examples.*
+- **Q6.5** How do short-circuit operators interact with refusal? — Check both short-circuit operands; execute conditionally.
+- **Q6.6** What happens when constant evaluation fails? — Separate invalid and unknown; no evaluator-resource failure.
+- **Q6.7** What distinguishes traps, unsafe stuckness and exhaustion? — Separate traps, unsafe stuckness, OOM and fuel exhaustion.
+- **Q7.1** How are target grant schemas and multiplicities specified? — One target, linux-x86_64-hosted (Linux ≥ 5.6), with a fixed grant table; main asks for grants as parameters. *Revised 2026-11-08 by the [foundation decision](#foundation-q16): the grant table is a lawful extensible registry rather than a permanently closed one.*
+- **Q7.2** How do narrowing, acquisition and splitting relate? — Narrowing consumes and intersects rights; children are acquired from a grant that stays.
+- **Q7.3** What are close and close-error contracts? — close always consumes; failure is a Copy error holding no handle; listen failure returns its grant.
+- **Q7.4** How does process inheritance work? — Deferred: this target offers no process spawning.
+- **Q7.5** Which environment does a program observe? — Scoped immutable launch environment snapshot.
+- **Q7.6** What does a clock grant specify? — Explicit clock identity, kind, resolution and guarantees.
+- **Q7.7** What are network scopes? — Connect and listen grants with numeric scopes; a separate Resolver grant with explicit server, transport, suffixes and record types.
+- **Q7.8** Is grant policy enforced statically or dynamically? — Static authority checks plus atomic dynamic scope checks.
+- **Q7.9** How are blocking, terminal actions and delivery observed? — Split request/response events; logical terminal observations.
+- **Q7.10** Do you approve the linux-x86_64-hosted grant table? — Approve R4 F6's complete grant table below as part of this row: every launch configuration, operation signature, permission, narrowing rule and ending contract. Standard-stream operations require Console (Q7.11), not Device; where the R4 F6 table says with(Device) for StdIn/StdOut/StdErr, read with(Console). A missing configured grant refuses startup with exit 125; a trap exits 134. *Revises or adds: New target contract: owner decision.* *Extended 2026-11-06 by [no hidden traps](#decided-project-no-hidden-traps): the stack target contract (adequate stack excludes exhaustion, launch refusal 125 when the reservation is smaller than the bound; then a defined outcome for inadequate stack) is a future target-contract obligation, not a current guarantee.* *Revised 2026-11-08 by the [foundation decision](#foundation-q16): the grant table is a lawful extensible registry; the existing grant contracts are preserved, an unknown operation is refused, and the Entropy grant's shape waits for slice 6 ([question 14](#foundation-q14)).*
+- **Q7.11** Which permission do the standard streams use? — Add a Console capability for StdIn/StdOut/StdErr operations; keep Device for device grants. *Revises or adds: Authority rule 13 (adds Console); rules 5 and 7 lists include it.*
+- **Q8.1** What is the first proof endpoint? — Proved source→BIR; qualified native; conditional image claim.
+- **Q8.2** What exact source subset is admitted? — A1 minimal `u8`/linear-struct component subset. <a id="q8-2-revision"></a>Confirmed 2026-11-06 by [vertical slices](#decided-project-vertical-slices-2026-11-06): this is slice 1; its defined trap is an explicit `abort()`, with the refused `200 + 56` as its known-violation control; integers are complete at slice 2.
+- **Q8.3** What establishes frontend correspondence? — Independent byte-to-Core correspondence judgments.
+- **Q8.4** Does the first artifact qualify as a complete executable? — Component plus bound launcher first.
+- **Q8.5** What launcher ABI and observations are fixed? — Pinned launcher ABI, inputs, startup and trap mapping. *Extended 2026-11-06 by [no hidden traps](#decided-project-no-hidden-traps): the stack target contract (adequate stack excludes exhaustion, launch refusal 125 when the reservation is smaller than the bound; then a defined outcome for inadequate stack) is a future target-contract obligation, not a current guarantee.*
+- **Q8.6** What artifacts does the claim bind? — Bind complete retained dependency and image closure.
+- **Q8.7** What prevents vacuous correctness? — Coverage, realizable witnesses and rejection controls; a spec where every allocation fails fails qualification.
+- **Q9.1** What is Core’s expression and binding form? — ANF; fresh identities; explicit moves/copies; separate places. *Confirmed 2026-11-05: `copy` only for Copy types, `move` only for non-Copy types ([read forms](#decided-2026-11-05-q9-1-reads)).*
+- **Q9.2** What types and declaration identities must Core represent? — Kinded nominal inventory; ordinary owning container definitions.
+- **Q9.3** What is the single loop form? — Core `while L { C } do { B }`: C is a condition region re-run every iteration; the counted loop advances its counter before the body.
+- **Q9.4** How are data, matching and exits represented? — Flat data/matches; structured exits; checked stores.
+- **Q9.5** Are heap opening and borrowing separate user mechanisms? — One surface borrow; distinct typed Core cases.
+- **Q9.6** Which operations are primitives rather than ordinary definitions? — Irreducible primitives; checked destructor bodies.
+- **Q9.7** How are primitive calls specified? — One exhaustive typed primitive-contract inventory. *Revised 2026-11-08 by the [foundation decision](#foundation-q16): lawful registry instances rather than a permanently closed inventory; exhaustive coverage of the selected registry; an unknown operation is refused.*
+- **Q9.8** Does `defer` survive in Core? — Nested deferred scopes; late reads; reverse cleanup.
+- **Q9.9** What is evaluator state and execution style? — Total clock-indexed evaluator; explicit instrumented state.
+- **Q9.10** How are ownership instrumentation and erasure organized? — Ghost ownership instrumentation with proved erasure.
+- **Q9.11** What do contracts mean and when are they checked? — Erased logical contracts; ensures sees result and surviving parameters after cleanup; no snapshot construct. *Revised 2026-11-06 by [no hidden traps](#decided-project-no-hidden-traps): a claim used for safety admission needs closed evidence.*
+- **Q9.12** What evidence crosses declaration/module interfaces? — Checked semantic interfaces with reviewable declarations.
+- **Q9.13** Are judgments independent of the checker and elaborator? — Independent judgments; checker/elaborator correspondence.
+- **Q9.14** What must pass before Core freezes? — Provisional approval, then four kernel-checked theorems against a proposed Spec.lean, then freeze. Revised 2026-11-06 by the [long-term changes](#decided-project-long-term-2026-11-06): the integration stage A2i (interaction proofs, semantic contract, modular layout, owner view, outside-reader pass) also passes before the freeze.
+- **Q9.15** Where do normative definitions and documentation live? — One main normative Lean file with doc comments. *Revises or adds: Generated-chapter requirement (philosophy rule 6 / earlier roadmap commitment): replaced by one normative Lean file with doc comments and examples, a browsable rendering of that Lean, and coverage-gated retirement of prose chapters; your decision of 2026-11-04.*
+- **Q9.16** What Lean dependencies may the specification use? — Core Lean; supporting Batteries; owner exceptions for Mathlib.
+- **Q9.17** May spec proofs use `native_decide`? — Kernel-only authoritative spec/A2 proofs.
+- **Q9.18** How is the old compiler retained? — Frozen isolated `legacy/`; no normative fallback.
+- **Q9.19** How do approval, formalization and Core freeze relate? — A2a → A2b → A2c; Spec.lean headed PROPOSED until freeze; R-0560 depends on the freeze. *Revises or adds: Process: owner decision.* Revised 2026-11-06 by the [long-term changes](#decided-project-long-term-2026-11-06): integration (A2i) comes between A2b and the A2c freeze, and the modular layout (R-0560) precedes the freeze.
+
+<a id="decided-2026-11-05-project"></a>**Project rows:**
+
+- **P1** Where agent discretion ends — Claude and Codex reason every question from the philosophy and recommend; they never pick a language answer through code, fixtures, diagnostics or docs. 'Important' = anything that revises a decided rule, changes observable language meaning you have not ruled on, or that you reserved. Every important decision comes to you.
+- **P2** Priority order when principles conflict — Soundness and provability > transparency (with auditability, honest trust boundaries and compiler-owned identity) > one authoritative definition (checked derived views allowed) > explicitness at the use site > brevity. The philosophy guides open choices and never silently reopens decided rules.
+- **P3** Lean is the spec: confirm the amendment — Lean is the specification: confirmed together with Q9.15 (revision below).
+- **P4** Duplicate enum variants or methods (bug 313) — Refuse duplicate variant names in one enum and duplicate method names in one impl, with a new rule and diagnostic, the same as duplicate fields.
+- **P5** legacy/ is a byte-frozen snapshot, never patched or run — legacy/ is main's tree at the move commit, byte-frozen. A root check compares its tree hash, allowing only deletions a satisfied RETENTION.tsv entry authorizes. No legacy gate ever runs. The oracle is the tag-built artifact (P13), not the legacy/ copy.
+- **P6** Retention manifest gates deleting legacy/ — RETENTION.tsv at the root gives every legacy asset (corpus, regressions, examples, std, bug ledger, site, docs, research) a destination and deletion criterion. Revised 2026-11-06 ([restart row](#decided-project-restart)): nothing is deleted at B3; legacy/, the old pipeline included, is deleted way later (LD: once the new compiler implements a full real program such as RocksDB, ethrex or similar), when RETENTION.tsv has no live entry, a final ideas sweep has dispositioned every idea and the owner explicitly approves.
+- **P7** Prove the new landing path before moving — T0: land beside the old tree the new root CI, required-checks.txt (enforced by train watch and land), RETENTION.tsv, the task disposition table, ORACLE.lock with the oracle artifact, and ISSUES.tsv. T1: rehearse the move on a throwaway branch: fresh clone, build, hook, exact-SHA CI, train --dry-run land; a broken build, a failing gate and a missing required check must each be refused. T2: the move in one train.
+- **P8** Server services under scripts/ — Keep only landing services: train, review, hook, landing bot. The status page, work queue, fuzz farm, perf tracking and nightly campaign all stop and are recorded as archived in RETENTION.tsv; each returns only with a roadmap task.
+- **P9** Website during the transition — The website goes down at the move and is redone from scratch with the new compiler; no frozen playground is served. Unpublishing the live site is an outward action whose moment the owner confirms.
+- **P10** What 'closed' means for old-compiler bugs — Old-compiler defects become 'retired with the old implementation', never 'fixed'. Each keeps its reproducer, ruling and structural class; 106 reproducers feed the oracle comparisons. Bugs the frozen browser compiler still shows stay visible while the site serves it.
+- **P11** Std bugs and rulings are carried — Add a 'std' class: 12 std bugs move with std as contracts plus regressions. The 112 language rulings (26 still open) keep their ruling and become conformance examples.
+- **P12** Issue record from day one — From day one, ISSUES.tsv at the root: id, date, area (spec|proof|compiler|launcher|ci|migration), evidence, owner, severity, closure condition, status, with a small root check. Spec, proof, launcher, CI and migration defects go there. The full bug ledger and tool return with slice 1.
+- **P13** concrete-ci-2 as the only CI host — CI runs on concrete-ci-2 (self-hosted) and on GitHub-hosted runners as a regular second pool, not only a fallback. Jobs that need ci-2 caches run there; the oracle is fetched as a release asset verified by digest; a check neither pool can run is incomplete and blocks landing. Self-hosted runners never run pull_request jobs.
+- **P14** ci-3 handover: an exception to the archive requirement — Done by the owner on 2026-11-04: concrete-ci-3 was handed to stabileo; its fuzz corpus, perf history and leanprof data were not copied (an exception to the archive requirement).
+- **P15** New roadmap: retiring obligations — Accept the new single-file ROADMAP.md (wip/new-roadmap, reconciled: prepare → rehearse → move, assurance wording per Q8.1, Phase E per P18, decides nothing itself): 79 tasks kept as rows, 345 folded into area tasks with their obligations, 109 deferred with triggers, 7 retired, 15 done.
+- **P16** Status changes in the refusal list — Accept the new statuses in PHILOSOPHY.md. Now Permanent: operator overloading (OD26), capability hiding (authority rule 5), derived equality, mutable global state (OD8), umbrella capabilities and aliases, old/quantifiers in contracts (OD117), lexical shadowing (OD67), and ghost code that affects execution. Ghost code itself is admitted as decided (OD81). Foreign function values reopen when typed extern fn types are admitted (OD4); concurrency reopens on R-0399's trigger.
+- **P17a** Default arguments — Default arguments: a Permanent refusal, reopened only by a new decision from you. They conflict with visible arguments.
+- **P17b** Compile-time evaluation and broad #[cfg] — comptime and broad #[cfg]: keep evidence-based reopening, only with a workload, a proof story, phase separation and an audit report, and only by a new decision from you.
+- **P18** Phase E: contracts and termination within OD115–OD117 — Phase E: no source old, quantifier, implication or snapshot construct (OD117); entry/exit and frame properties are Lean theorems (a source frame clause would be a new decision for you); spec functions have a body and are total (OD115); ordinary functions have no total category (OD116) and get per-function termination theorems where wanted. R-0524 becomes 'Frame and entry/exit theorems in Lean, no old'; R-0526 stays 'checked totality of spec functions'.
+- **P19** Mutation testing for the new compiler — Retire the old mutation-harness defect work (R-0518). The new compiler gets its own mutation harness under R-0498, not a port of the old one.
+- **P20** One home for binding decisions — Move the still-binding roadmap decisions (new compiler, retention contract, authority, allocation, Lean as the spec) into docs/decisions.md beside your language answers. The dated log becomes history; ROADMAP.md links to decisions.md and restates nothing.
+- **P21** Retention records outlive legacy/ — RETENTION.tsv, ISSUES.tsv, required-checks.txt, scripts/oracle/ and docs/archive/roadmap-2026-11/ (with task_disposition.tsv) are part of the day-one root, outside legacy/, so they survive deleting it. *Revised 2026-11-06 (owner, verbatim: "do the whole movement"): of docs/archive/roadmap-2026-11/, the files that are decision sources or disposition records stay at the root (task_disposition.tsv, the decision log ROADMAP_DECISIONS.md, the task register ROADMAP_TASKS.md, ROADMAP_RECONCILIATION.md, ROADMAP_RESTRUCTURE.md with its table, and the archive README); the old control plane ROADMAP.md, ROADMAP_BACKLOG.md, ROADMAP_DIRECTION.md and WORK_QUEUE.md were duplicates of their frozen legacy/ copies apart from the move's mechanical rewrites, and nothing cites them as a decision source, so their root copies were removed and links point at the legacy/ copies, which stay until the legacy deletion point. The other docs/archive/ records (the site takedown record, the old bug ledger's disposition, the landing audit and the dated decision archives) stay at the root.*
+- **P22** The work-queue dispatcher — Stop the dispatcher for the lean start. Agents are started by hand from the roadmap; bring the dispatcher back only when there is enough parallel work to need it.
+- **P23** Precedence between decisions, rows and drafts — Recorded decisions govern. An accepted row supersedes a recorded rule only through an explicitly identified, owner-approved revision (Q5.1/Q5.4 for OD45/OD87, Q6.4 for TYPE-22, Q2.8 for TRAIT-1, Q9.15/P3 for generated chapters). R4's replacements govern conflicting draft recommendations. Before your acceptance is recorded, every passage R4 F18 lists is reconciled (capability inference, generated chapters, roadmap authority, assurance wording, restart order and retention, Phase E, freeze dependencies, superseded Core recommendations), and historical conflicting text is marked superseded.
+
+<a id="decided-project"></a>
+## Project and architecture decisions
+
+These are the binding project and architecture decisions, moved here from the archived roadmap
+decision log (decision row P20, 2026-11-05) so that language and project decisions have one home.
+Each entry summarizes the decision and links its verbatim record in the
+[2026-11 archive](archive/roadmap-2026-11/ROADMAP_DECISIONS.md), which stays as history; where an
+
+### docs/decisions.md: slice-0 surface row
+- <a id="decided-slice0-surface-2026-11-06"></a>**The slice-0 surface** (owner, 2026-11-06, relayed by the orchestrator from the owner session:
+  presented as four questions with option (a) recommended, the owner answered "for the decisions a
+  is okay").
+  The commands are `concrete build` and `concrete facts` (the [facts query](#decided-project-facts-report)).
+  A form the language decides but the current slice does not yet support gets its own refusal,
+  "not supported in this slice", distinct from a refusal of an invalid program, so the two are never
+  confused. An integer literal with a leading zero (such as `007`) is refused, so no literal reads as
+  octal. The trap site an executable reports is a named premise of the theorem until it is proved
+  (spec obligation O4).
+- <a id="decided-project-vertical-slices-2026-11-06"></a>**Thin vertical slices**
+  (owner, 2026-11-06, relayed by the orchestrator from the owner session: "and let's have vertical slices where everything is proven and work
+  first with integers right?", then "reorder based on what you believe is more important" and "have
+  the full slices thought and ranked in order by you, codex, kimi and agy, they should decide it
+
+### docs/decisions.md: refusal list (P16/P17a/P17b)
+  spec functions have a body and are total (OD115); an ordinary function can get its own termination
+  proof, with no total-function category (OD116).
+- <a id="decided-project-refusals"></a>**The refusal list** (rows P16, P17a, P17b, 2026-11-05). The
+  statuses in `PHILOSOPHY.md` stand; default arguments are a permanent refusal; compile-time
+  evaluation and broad `#[cfg]` reopen only with a workload, a proof story, phase separation, an audit
+  report and a new owner decision.
+- <a id="decided-project-review"></a>**Review** (owner, 2026-10-18, reaffirmed 2026-11-04: "always codex
+  should check everything"). Codex reviews every change, plan, specification, decision row and piece
+  of infrastructure before it is published or brought to the owner. A second, independent reviewer
+  (Kimi, Grok or agy/Gemini) reviews as well when one is available, as the owner required for cleanup
+  branches on 2026-10-28; when none is (quota, credit or sign-in), its absence is recorded with the
+  review and never assumed. A review never replaces the gates. Extended 2026-11-08 (owner: "also
+  remember we have agy not only codex kimi and claude"; also on 2026-11-08: "ok but review the
+  foundation with all the models right? agy, kimi and codex apart from claude that is us"; "use agy laso";
+  "have everything reviewed by the other llms"): every branch gets an agy review beside the
+  Codex and Kimi reviews. agy cannot read files, so its prompt carries the diff and the context it
+  needs and ends with a required verdict line. (The coordinator's relay added that agy can also act
+  as a writer.)
+- <a id="decided-project-throughput"></a>**Development throughput** (2026-10-22). The development
+  feedback loop (landing, review, CI) is a priority track beside the main sequence
+
+### docs/decisions.md: no-duplication passages
+  with changes"; its rules confirmed and completed on 2026-11-02, see
+  [the authority rules](#decided-2026-11-02-authority)). `with(...)` is the only permission
+  mechanism; it is compile-time information, not a resource. Linear values are the only resource
+  mechanism: `File`, `Socket`, `Heap<T, A>`, and the grants the target hands to `main`. The concept
+  "token" is dropped. An operation needs both the resource value (which thing) and the permission
+  (what is allowed); in the owner's words, "one is the parameter to modify, the other the permission",
+  and this is not duplication. `Std` is removed as a capability: every signature, `main` included,
+  lists its real capabilities; std, examples and tests are to migrate under exit 2q, with the compiler
+  suggesting the exact set needed. It supersedes OD38's and OD156's readings through a `Root` value
+  and OD83's allocator token. OD8 stands except where this supersedes it: its root value and
+  its split (item 2) give way to the grants the target hands to `main`, and its "every effect shows as a
+- <a id="OPEN-131"></a>**OPEN-131** (OD131, `union` declarations): See [OD131](#od131).
+- <a id="OPEN-136"></a>**OPEN-136** (OD136, std's `process_exit`): See [OD136](#od136).
+- <a id="OPEN-137"></a>**OPEN-137** (OD137, Character literals outside ASCII): See [OD137](#od137).
+- <a id="OPEN-139"></a>**OPEN-139** (OD139, A qualified call to a function that is not imported): See [OD139](#od139).
+- <a id="OPEN-148"></a>**OPEN-148** (OD148, Type parameters on a trait): See [OD148](#od148).
+
+**Decided 2026-11-01 by the owner** (the final set, reviewed by Claude, Codex and Grok, checked
+against Austral and the no-duplication rule):
+
+- <a id="OPEN-34"></a>**OPEN-34** (OD34, A struct literal inside brackets in a condition head): See [OD34](#od34).
+- <a id="OPEN-35"></a>**OPEN-35** (OD35, How an array satisfies a `Destroy` bound): See [OD35](#od35).
+- <a id="OPEN-36"></a>**OPEN-36** (OD36, The explicit place form that opens a heap cell): See [OD36](#od36).
+- <a id="OPEN-37"></a>**OPEN-37** (OD37, The names of the pointer difference and ordering functions): See [OD37](#od37).
+- <a id="OPEN-38"></a>**OPEN-38** (OD38, The root resource API): See [OD38](#od38).
+- <a id="OPEN-39"></a>**OPEN-39** (OD39, The interface artifact format): See [OD39](#od39).
+- <a id="OPEN-40"></a>**OPEN-40** (OD40, PAT-9 and the fallback arm of a desugared form): See [OD40](#od40).
+
+### docs/decisions.md: OD rows
+| OD8 | <a id="od8"></a>Global state: immutable globals everywhere; mutable state only as declared cells in unsafe-marked modules, reached through capabilities; no `static mut` | D8; pending (TRUST-6, R-0509) | R-0509, R-0496; V6 | decided 2026-10-29 by the owner: Austral's capability model, extended. (1) Constants only: no mutable global state of any kind (no `static mut`, no cells); a constant is truly immutable, has no interior mutability and never contains a capability, token or handle. (2) Global resources are linear tokens minted at startup: `main` receives a root resource value (in the spirit of Austral's `RootCapability`) and splits it; hardware and runtime singletons (allocator arena, UART and MMIO, panic buffer, errno, C libraries with internal state) are produced or taken only by `trusted fn` wrappers returning or taking linear tokens, and a gate lists those wrappers. (3) Tokens are ordinary values: every effect shows as a token parameter, under the existing loan and exclusivity rules (OD1, OD2, OD15), with no separate effect system. (4) Interrupt handlers, FFI callbacks and future threads get only the tokens explicitly given to them, by installation, transfer or a lock granting a borrow. (5) No life before `main`, no cleanup protocol for global state, and abort runs nothing (OD10). (6) An implicit-context mechanism, if ergonomics later demands one, is a new owner decision, never a hidden global. The cell variant was rejected after the Codex and Grok reviews (interrupts, FFI re-entrancy, linear cell contents, effect polymorphism, concurrency). Now TRUST-8 to TRUST-10 (pending, R-0557) Revised 2026-11-01 – 11-02: items 2 and 3 are superseded by the authority decision (grants handed to `main`; `with(...)` plus resource values); item 5 stands ([decisions](decisions.md#decided-2026-11-02-authority)) |
+| OD42 | <a id="od42"></a>Comparisons on `bool` and `char` under OD26 (added 2026-10-29, while recording OD26, whose answer says "arithmetic, shifts and comparisons take numbers only"). Two readings: numbers only, so `b == true` and `c < 'z'` are refused (a `bool` is tested directly, a `char` converted by a named function); or "numbers" excludes pointers only, and `bool` and `char` keep equality (and `char` ordering). Recommendation: keep `==` and `!=` on `bool` and `char` and ordering on `char`, and refuse only pointers, which is what OD26's alignment with TRUST-1 is about Reviewed pick (2026-10-30, a recommendation that supersedes the recommendation above where they differ): keep `==` and `!=` on `bool` and `char` and ordering on `char`, refuse ordering on `bool`; amend TYPE-6 and OD26 explicitly | the current compiler compares `bool` and `char` | bug 322's repair (TYPE-6) | decided 2026-11-01 by the owner (final set): Keep `==`/`!=` on bool/char and `<` on char; refuse ordering on bool |
+| OD116 | <a id="od116"></a>A checked total function category (added 2026-10-30, raised while absorbing the verification documents). Question: Whether the language has a `total fn` category, a runtime function checked to terminate without trapping that contracts may then call. Bears on CON-1, CON-3, CON-5. The current compiler: there is no such category (`total fn f(..)` is a parse error, E0001); a contract clause may still call a capability-free runtime function until CON-3's judgment lands. [CONTRACTS_AND_VCS.md](../legacy/docs/verification/CONTRACTS_AND_VCS.md) (Design Principles) distinguishes `spec fn`, a checked `total fn`, ordinary and trusted functions, and admits a `total fn` into contracts once its obligations close. Options: (a) add the category; (b) no category: contracts call only `spec fn` (CON-3's full judgment). Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30). | see OPEN-116 | see OPEN-116 | decided 2026-11-01 by the owner (final set): No category |
+| OD118 | <a id="od118"></a>A proven run-time violation in trusted code (added 2026-10-30, raised while absorbing the verification documents). Question: Whether an index the compiler proves out of bounds, or a division it proves to be by zero, is refused in `trusted` and `with(Unsafe)` code as in safe code. Bears on MEM-6, ARITH-3, TRUST-5, TRUST-12. The current compiler: `a[5]` on a `[Int; 3]`, or `x / 0`, is refused in safe code (E0900, `error[runtime-safety]`) and compiles in a `trusted fn` (the index also in a function declaring `Unsafe`), where it aborts at run time on both consumers. MEM-6 states the refusal with no exemption; [KNOWN_HOLES.md](../legacy/docs/verification/KNOWN_HOLES.md) C7 records the exemption as intended. Options: (a) refuse everywhere, as MEM-6 reads; (b) keep the exemption and state it in MEM-6. Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30). | see OPEN-118 | see OPEN-118 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Refuse everywhere **Subsumed 2026-11-06 by [no hidden traps](#decided-project-no-hidden-traps): refusal of proven violations becomes refusal of unproven safety, everywhere.** |
+| OD137 | <a id="od137"></a>Character literals outside ASCII (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: Which byte a char literal denotes when its character is not ASCII. Bears on SYN-6, TYPE-20 and SYN-5. The current compiler: the literal silently takes the low byte of the character's code point: `'é'` (U+00E9) is 233, `'ā'` (U+0101) is 1 and `'€'` (U+20AC) is 172 as `u8`, on both consumers, and SYN-6 says only that a char literal is a token. Options: (a) refuse a char literal whose character is not ASCII, so every accepted literal is the one byte of its ASCII character; (b) accept U+0000 to U+00FF as that byte (Latin-1) and refuse anything above; (c) make `char` a Unicode scalar value, which changes TYPE-20's one-byte `char`. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-137 | see OPEN-137 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Refuse non-ASCII |
+| OD99 | <a id="od99"></a>The names of the named conversions (added 2026-10-30, raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL). Question: The spellings of the named conversions of ARITH-5, ARITH-10 and ARITH-11 (`try_convert`, `truncate`, `reinterpret`, the integer-to-float and `f64`-to-`f32` conversions, and the float roundings `trunc`, `round`, `floor`, `ceil`). Bears on ARITH-5, ARITH-10, ARITH-11. The current compiler: none of them exists (E0101). ARITH-5's sentence names `truncate` and `reinterpret`, while the archived [ARITHMETIC_POLICY.md](../legacy/docs/archive/design-records/ARITHMETIC_POLICY.md) §8.2 calls its spellings indicative, to be fixed by the API's owner; it names the integer-to-float and `f64`-to-`f32` conversions by their rounding only. Options: (a) the spellings above, as builtins; (b) other names, or std functions rather than builtins. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md (2026-10-30). | see OPEN-99 | see OPEN-99 | decided 2026-11-01 by the owner (final set): These spellings, as builtins |
+
+### _review/PENDING_RECORDS.md: foundation Q1 entry
+## MORNING QUEUE additions (spec worker, ~06:30)
+- Foundation Q1 (fallible op in const init): Codex+Kimi = refuse (closed always-succeeds subset); agy = admit arithmetic, refuse failing evaluation. All three add: admit only with closed evidence of success. Note: strict subset excludes even 1 + 2 today.
+- Q2 (forward const refs): all three = order-independent, cycles refused (report dependency path).
+
+### docs/proposals/OWNER_QUESTIONS_REVIEW.md (earlier round; L2 is relevant)
+# Owner questions: three-model review (2026-11-08)
+
+One independent, read-only round by Codex, Kimi and agy (Gemini) on ten open owner questions.
+This page decides nothing. It gives the owner each question, its options, the reviewers'
+recommendation and their verdicts.
+
+- Context: origin/main at b6a647bea; `docs/proposals/SLICE1_BRIEF.md` from origin/wip/slice1-brief
+  (28b42ade9); `docs/proposals/STD_COVERAGE.md` from origin/wip/std-placement (abc648e4d); the
+  grammar sheet v2 (`GRAMMAR_REVIEW.md`); the owner record `LANGUAGE_DECISIONS_2026-11-08.md`
+  (items 1-59).
+- Codex and Kimi read the files in a git-archive copy. agy answered from the same question text with
+  the context inlined in its prompt (the 2026-11-08 record, grammar section 2 and OPEN-5/6/7, the
+  slice-1 brief, ROADMAP rows B1/slice 0-1/R-0589/R-0600/R-0576, `docs/decisions.md` excerpts and
+  the full `PHILOSOPHY.md`). No reviewer modified a file (the three copies were compared afterwards
+  and are identical).
+- The prompt and raw outputs are in `owner-questions-review/` (`prompt.txt`, `codex.out`,
+  `kimi.out`, `agy.out`). Kimi's output includes its reasoning trace before the answer; Codex's
+  includes its tool trace, with the answer at the end.
+- F-NaN option (d) was added at the coordinator's request before launch; the owner leans toward
+  (c) or (d).
+
+## Table
+
+| Question | Codex | Kimi | agy | Agreement |
+|---|---|---|---|---|
+| L1 item 34 and the token set | a | a | a | unanimous (a) |
+| L2 second escape list after char | b | a | a | 2-1 (a) |
+| L3 raw controls in strings | a | a | a | unanimous (a) |
+| L4 suffixes and base prefixes | a | a | a | unanimous (a) |
+| S1-scope | a | a | a | unanimous (a) |
+| S1-move | a | a | a | unanimous (a) |
+| S1-abort | a | a | a | unanimous (a) |
+| S1-toml | b | b | a | 2-1 (b) |
+| R0600 | c | b | b | 2-1 (b) |
+| F-NaN | e (scoped d) | d (scoped, "d'") | c | no letter majority; Codex and Kimi same substance |
+| Float `==` | IEEE | IEEE + named bit_eq | reflexive (no NaN by invariant) + named bits_eq | 2-1 IEEE |
+
+## Per question
+
+### L1. Did item 34 approve the section 2 token set?
+Options: (a) yes, the set is closed; (b) only the rule, the inventory goes to the spelling round;
+(c) approved except tokens touched by items 6/11/15/49.
+- Codex: (a), runner-up (c). OPEN-7's recommendation was "exactly section 2's token set"; removing
+  method calls or casts changes productions, not punctuation.
+- Kimi: (a), runner-up (c). Items 55/59 do not reopen OPEN-7; no later item removes a listed token.
+- agy: (a), runner-up (c). Same reading; item 59 omits OPEN-7.
+- Agreement: unanimous (a). Missing option: none. Codex adds that any later token change must be an
+  explicit revision.
+
+### L2. Which literal owns a second escape list now?
+Options: (a) single-quoted ASCII `u8` literal keeps `\n \t \r \0 \\ \'`, closing-quote priority
+over `'label`; (b) no single-quoted literal, one escape list, `'` only starts a label; (c) a
+byte-string literal with `\xHH`.
+- Codex: (b), runner-up (a). Item 16 does not expressly introduce a `u8` quote literal; bytes are
+  integers, text is strings, apostrophes are labels. Revise item 33 to one list explicitly.
+- Kimi: (a), runner-up (b). Item 33 still requires two lists; (a) keeps the second list unchanged and
+  implements item 16's "quoted ASCII literals ... migrate explicitly"; malformed extra quotes refused.
+- agy: (a), runner-up (b). Same; disambiguation by closing-quote lookahead.
+- Agreement: 2-1 for (a); Codex dissents. Missing options: Codex, labels are `'` plus identifier with
+  no closing quote, and `'a'` and a lone `'` are refused; agy, one shared seven-escape list for both
+  literals (revising item 33 while keeping `'a'`).
+
+### L3. Raw control characters other than LF/CR in strings?
+Options: (a) all refused, escapes only; (b) raw tab allowed; (c) all allowed.
+- Codex: (a), runner-up (b). OPEN-6 recommended refusing raw controls, not only line breaks.
+- Kimi: (a), runner-up (b). Invisible bytes hurt audit.
+- agy: (a), runner-up (b).
+- Agreement: unanimous (a). Missing options: with the current list, controls without an escape (for
+  example 0x01) become unrepresentable in literals; Kimi offers (a') add `\xHH` if they must be
+  representable (an explicit owner addition). Codex: the rule concerns decoded characters, not UTF-8
+  continuation bytes.
+
+### L4. Integer suffixes and base prefixes
+Options: (a) eight type-name suffixes directly after digits, lowercase `0x/0b/0o`, suffix after any
+base, no `_`, no float suffix; (b) as (a) without octal; (c) suffix on decimal only; (d) no prefixes.
+- Codex: (a), runner-up (b). One suffix rule across bases; keep octal absent evidence for removing it.
+- Kimi: (a), runner-up (b). `0o` avoids leading-zero octal ambiguity; floats keep OD63 expected typing.
+- agy: (a), runner-up (b).
+- Agreement: unanimous (a). Missing option (Codex): fix malformed-token boundaries, refusing `123u9`,
+  `0b102` and `200u8foo` as malformed numerals rather than splitting them into tokens.
+
+### S1-scope
+Options: (a) the compiler admits a subset of the slice-1 spec, given by a predicate in the spec, with
+preservation proofs; (b) narrow the spec to the slice.
+- Codex: (a), runner-up (b). Avoids deleting formalized rules; across IRs use corresponding subset
+  predicates or indexed invariants, not one source predicate.
+- Kimi: (a), runner-up (b). Narrowing deletes rules needed at slices 2, 3 and 9 and re-adds them later.
+- agy: (a), runner-up (b). Matches slice 0's pattern; one authoritative spec.
+- Agreement: unanimous (a). Missing option: none.
+
+### S1-move
+Options: (a) source writes `move t`; (b) plain `t`, elaborated to Core `move t`.
+- Codex: (a), runner-up (b). Losing access to a resource is behaviour worth showing at the use.
+  Copy reads stay plain names; no optional `move`, no source `copy`. Apply the same rule at arguments,
+  returns, constructors and destructuring inputs.
+- Kimi: (a), runner-up (b). Q9.1 settles Core only, but its distinction argues for visible consumption.
+  `move`'s reserved or contextual status needs the spelling round (it is not in item 40's list).
+- agy: (a), runner-up (b). Transparency and explicitness beat brevity.
+- Agreement: unanimous (a). Note: grammar sheet v2 proposed moves by ordinary reads (b), so (a) also
+  changes the sheet and adds a reserved or contextual word.
+
+### S1-abort
+Options: (a) only `return abort();`, abort() bottom-typed; (b) let initializer or return value;
+(c) bring `abort();` statements forward; (d) other.
+- Codex: (a), runner-up (b). Divergence typing, not a fabricated Unit; abort runs no cleanup, and
+  ownership soundness must cover that outcome. Missing option: a primitive divergence judgment
+  without a source-spellable `never` type in slice 1.
+- Kimi: (a), runner-up (b). Smallest sufficient form; does not pull OD29's Unit statements forward.
+- agy: (a), runner-up (b). Avoids dead `let x: u8 = abort();` bindings.
+- Agreement: unanimous (a).
+
+### S1-toml
+Options: (a) top-level `version = 1`, `[policy] predictable = true`, `[assumptions]` keyed by the
+five decided kinds; (b) per-table versions and `[policy] profile = "predictable"`; (c) other.
+- Codex: (b), runner-up (a). Version the policy and assumption schemas independently; a named bundle
+  matches the decided "named, versioned bundle". Missing: separate schema version from bundle
+  identity; version 1 pins the exact predictable bundle (termination, stack, trusted-assumption
+  treatment), so a later compiler cannot silently change it.
+- Kimi: (b), runner-up (a). Keep (a)'s five closed assumption kinds and unknown-key refusal. Missing:
+  an explicit `trusted_assumptions` setting with its default, which Q13 requires and neither option
+  states.
+- agy: (a), runner-up (b). One top-level version avoids skew; booleans compose as modules tighten.
+  Missing: top-level version plus a structured `[policy.predictable]` table with `enabled = true` and
+  `allow_trusted_assumptions = false`.
+- Agreement: 2-1 for (b). All three independently ask for an explicit trusted-assumptions setting.
+
+### R0600
+Options: (a) slice 1; (b) slice 5, remove from B1; (c) trivial `main` fact at 1, derived call-pruning
+fact at 5.
+- Codex: (c), runner-up (b). Slice 1 can report that `main` always aborts; propagation and pruning at
+  5. Keep "always aborts", "may abort" and "never returns normally" distinct.
+- Kimi: (b), runner-up (c). R-0600's own row is about abort wrappers and pruning after calls; direct
+  aborts at slice 1 are already reported through R-0575; a slice-1 duplicate has no consumer.
+- agy: (b), runner-up (c). Same reasoning.
+- Agreement: 2-1 for (b); each side's runner-up is the other's pick.
+
+### F-NaN
+Options: (a) canonical NaN; (b) hardware/IEEE payload propagation; (c) no NaN-producing operation
+without a proof or a checked form; (d) (c) as the surface rule plus (a) for NaN that still enters.
+- Codex: missing option (e), a scoped (d); runner-up (d). NaN-creating operations need evidence or a
+  checked form; NaN results of numerical operations are one canonical quiet NaN per width; bits are
+  preserved through reinterpretation, copies and memory; sign operations are exact; foreign and guest
+  boundaries carry explicit representation contracts. Literal (d) overreaches: canonicalizing every
+  operation on NaN conflicts with reinterpretation and sign operations, whose exact bits Wasm exposes.
+- Kimi: (d) scoped the same way (its "d'"), runner-up (c). (c) alone leaves NaN that enters by bits,
+  foreign code or Wasm without deterministic semantics. Canonicalize arithmetic results only; keep
+  reinterpretation, memory, `abs`, `neg` and `copysign` bit-exact. A checked-float error type needs
+  its own approval, not a silent reuse of `OutOfRange`.
+- agy: (c), runner-up (d). f32/f64 are NaN-free and finite by invariant: overflow to infinity is
+  treated like integer overflow (evidence or checked/saturating forms); bit casts, FFI and Wasm enter
+  through checked conversions (`from_bits -> Result`), so no backend canonicalization is needed.
+  Missing: separate raw IEEE types (`RawFloat32/64`) for Wasm and FFI payloads.
+- Proof cost of finiteness (all three agree): proving "not NaN" is not enough, since `inf - inf` and
+  `0 * inf` produce NaN and finite operands can overflow to infinity and feed a later invalid
+  operation. The proofs are the same under (c) and (d); canonicalization adds a backend obligation but
+  removes no proof. Codex and Kimi: a separate finite-float type is not required (finite floats are
+  not closed under arithmetic); start with predicates and checked forms. agy: no separate type either,
+  because f32/f64 themselves become finite, which moves overflow to infinity under the no-hidden-traps
+  evidence rule.
+- Agreement: none on a letter. Codex and Kimi converge on the same scoped (d): proved or checked NaN
+  creation, canonical NaN for arithmetic results only, bit-exact representation and sign operations.
+  agy picks (c) with a stronger finite-by-invariant reading.
+
+### Float `==`
+- Codex: keep IEEE `==` (NaN unequal to itself, signed zeros equal), which legacy ARITH-6@1 already
+  states; proofs distinguish it from Lean equality and need non-NaN evidence for reflexivity; a
+  separately named bit equality for representation.
+- Kimi: same; source `==` stays IEEE; proofs use Lean's total value equality; a named total `bit_eq`.
+- agy: with NaN excluded by invariant, IEEE `==` is reflexive; a named `bits_eq` for bits; if NaN can
+  be held, refuse `==` on floats not proved non-NaN.
+- Agreement: all three keep a separately named bit-equality operation, and none redefines `==` as
+  bitwise. ARITH-6@1 (`legacy/docs/spec/arithmetic.md`) does say "`x == x` is false for a NaN";
+  agy's answer is compatible with it only because its invariant removes NaN.
+
+## Missing options worth the owner's attention
+1. F-NaN: scoped (d) (Codex (e), Kimi (d')): canonicalize arithmetic NaN results, keep representation
+   and sign operations bit-exact. Literal (d) as written would conflict with Wasm.
+2. F-NaN: agy's finite-by-invariant floats with raw IEEE boundary types.
+3. S1-toml: an explicit trusted-assumptions setting (all three) and a pinned bundle identity per
+   version (Codex).
+4. L2: Codex's one-escape-list reading (refuse `'a'`) against agy's one shared seven-escape list.
+5. L3: `\xHH`, if controls without an escape must be representable (Kimi).
+6. L4: malformed numerals (`123u9`, `0b102`, `200u8foo`) refused as one malformed token (Codex).
+7. S1-move: `move` must be reserved or contextual (spelling round), and the rule applies at every
+   consuming position (Kimi, Codex).
+
+### docs/proposals/CLI_OWNER_QUESTIONS.md (Q3 is relevant)
+# CLI owner questions from the CLI question audit
+
+PROPOSAL, 2026-11-08, for the owner. It decides nothing. These are the six owner questions in
+[CLI_QUESTION_AUDIT.md](CLI_QUESTION_AUDIT.md#gaps-and-proposed-slices). Each one has options and
+Claude's recommendation. Codex, Kimi and agy each reviewed them once, independently; their picks are
+at the end, and their raw answers are in `cli-question-audit/` ([prompt](cli-question-audit/owner-prompt.md)).
+
+**Rows every question rests on.**
+- The slice-0 surface (decisions.md, `decided-slice0-surface-2026-11-06`) names two commands,
+  `concrete build` and `concrete facts`.
+- Diagnostics (`decided-project-diagnostics-2026-11-06`) are one typed record, rendered as human
+  text or JSON lines (`--format=human|json`). There are no warnings. A fix is applied automatically
+  only when a lemma proves it preserves meaning.
+- R-0479: refusals are never turned into facts, they survive through results, text, JSON and exit
+  codes, and diagnostics name the valid next action.
+- The facts design (`decided-project-facts-report`): every fact has a closed status, an unknown fact
+  never satisfies a policy, and a policy's result is satisfied, violated or incomplete, where only
+  satisfied passes.
+- The tools row (`decided-2026-11-07-tools`): the test runner comes at slice 8, the formatter at 17
+  and the LSP later.
+- Philosophy: one form per situation, the most transparent long-term option, and verbosity is fine
+  when it is clearer. Most code is written by LLMs, so the CLI must be easy for an agent to drive
+  and to check.
+- The program's own exit statuses are decided and are separate from the compiler's: the program
+  exits 0–255, 125 on a startup refusal and 134 on a trap (Q7.10, the trap line).
+
+## Q1. Does the front end keep reporting after its first failure? (audit U6)
+
+**Legacy.** `--diagnostics-json` ran an error-tolerant front end (Phase 4 #12a). A pass that failed
+did not hide the diagnostics of passes that could still run, and the result carried a `partial`
+flag. **New.** The checker returns `refused (rs : List Refusal)`, every refusal it finds, in a
+deterministic order (SPEC_UNIFICATION, the checker result). For the lexer, parser and elaborator,
+nothing is decided.
+
+- **(a)** Stop at the first lexer, parser or elaboration refusal. The checker still reports all of
+  its own refusals.
+- **(b)** Recover in a defined way inside each stage: the lexer skips to the next token, the parser
+  resynchronizes at a statement or item boundary, and elaboration continues over the items that
+  resolved. Every refusal is reported, and the result is marked incomplete when a later stage could
+  not run. Recovery is part of each stage's specification, so it is proved like the rest of the
+  stage.
+- **(c)** Like (a), but run every independent unit (file, later module) separately, so one broken
+  file does not hide another's refusals. There is no recovery inside a unit.
+- **(d)** Recover only in an unverified diagnostics-only path, as legacy did, with the proved path
+  stopping at the first refusal.
+
+**Recommendation: (c) now, and (b) for the parser when a workload shows that one refusal per file
+is too slow to fix.** (c) gives agents and people every independent refusal without making
+recovery part of the proved front end. (d) is a second front end, which the one-form rule refuses.
+(b) adds proof work to the LL(1) parser now for a convenience.
+
+## Q2. An exit-code scheme for `build`, `facts` and `diff`, and a check-only mode
+
+**Legacy.** One taxonomy (`legacy/Main.lean` 7–29): 0 success, 1 usage, 2 obligations missing,
+3 stale evidence, 4 proof-check failure, 5 solver failure, 6 internal error. It was not applied
+everywhere: `concrete check` exited 1 on any issue, and `diff` exited 1 on a weakened fact and 2 on
+incomparable snapshots. **New.** R-0479 and the policy results above; no numbers are decided.
+
+- **(a)** One small taxonomy for every command, from the typed result: 0 accepted or satisfied,
+  1 refused (a program refusal, a violated policy, a weakened fact in `diff`), 2 incomplete (an
+  unknown fact, an analysis limit, an incomparable snapshot or schema version), 3 usage, 4 internal
+  or toolchain failure. The JSON record gives the detail. It is generated from one Lean definition,
+  as legacy's help block was.
+- **(b)** A finer taxonomy like legacy's, one code per cause (refused, policy violated, proof
+  missing, proof rejected, incomplete, usage, internal, toolchain).
+- **(c)** 0 or 1 only; the JSON record gives every reason.
+- **Check-only mode.** (i) `concrete facts` gets the taxonomy and is the check, with no separate
+  command; (ii) `concrete check` runs admission, the facts and the policies without code
+  generation; (iii) `concrete build --no-emit`.
+
+**Recommendation: (a) with (i).** (a) keeps the decided three-valued policy result (satisfied,
+violated, incomplete) visible to CI without parsing, and keeps internal failures apart from
+refusals. (b) duplicates in numbers what the record already says. (c) loses "incomplete", which the
+facts design says must never read as a pass. For the check, (i) avoids a second command that does
+what `facts` already does. Artifact facts such as the stack bound need a build, so `facts` reports
+them "not established" when no artifact exists.
+
+## Q3. The `trace`, `emit`, `run`, `interp` and `help` commands
+
+**Legacy.** `--trace-pipeline` named the first failing stage; `--emit-core`, `--emit-ssa` and
+`--emit-llvm` printed an IR; `run [-- args]` built and ran; `--interp [-- args]` ran the reference
+interpreter; `--help`, `help` and `-h` printed grouped help. **New.** Slice 0's `Output` keeps every
+intermediate, the Lean evaluator is the reference interpreter (R-0496, the I/O driver R-0586), and
+none of these commands is named.
+
+- **(a)** All five as subcommands: `concrete trace`, `concrete emit --stage <core|mir|mem|bir|llvm|lcb>`,
+  `concrete run`, `concrete interp`, `concrete help`.
+- **(b)** Fold the inspection into the two commands that exist: `concrete build --emit <stage>` and
+  `concrete facts --trace`; add `concrete run` and `concrete help`. The evaluator runs only in CI's
+  differential.
+- **(c)** Add `help` now and nothing else until a slice needs it; `trace` and `emit` stay developer
+  scripts.
+- **(d)** Like (a), but `interp` is `concrete run --evaluator`, one command with two engines.
+- **(e)** (a) without `run`: `trace`, `emit`, `interp` and `help`, each scheduled with its data
+  (`help` first, `emit` with the IR printers, `interp` with the evaluator's I/O driver), and `run`
+  decided at slice 1, when the launcher exists.
+
+Every option except (c) extends the decided two-command slice-0 surface, so each is an owner
+decision.
+
+**Recommendation: (e).** Each answers one question and maps to one data source
+(the stage registry, one IR, the evaluator, the command table), which is the most transparent.
+(d) merges two different meanings (the native build and the Lean semantics) under one name. (b)
+hides a question behind a flag on a command that answers another. `run` adds nothing that
+`build` plus executing the file does not do.
+
+## Q4. The formatter's `--check`, `--write` and `--stdin` modes (slice 17)
+
+**Legacy.** `concrete fmt FILE` printed to stdout, `--check` exited nonzero when the file was not
+formatted, `--write` rewrote the file, and `--stdin` formatted standard input. A file is formatted
+when formatting its parse gives the same bytes back.
+
+- **(a)** All three, with legacy's meaning and the Q2 exit codes.
+- **(b)** `--check` and `--write` only; editors pipe a temporary file.
+- **(c)** `--check` only, as a CI gate; the formatter otherwise prints to stdout.
+- **(d)** A canonical form that is part of admission: an unformatted file is refused.
+
+**Recommendation: (a).** `--check` is the CI gate, `--write` is the daily use and `--stdin` is what
+editors and agents need without touching files. (d) makes layout a language rule, which no decided
+row asks for and which would refuse correct programs for whitespace.
+
+## Q5. Agent feature discovery
+
+**Legacy.** `concrete prove --capabilities` printed a JSON object of supported features, obligation
+kinds, evidence classes and the schema version; `--schema` printed the JSON schema; `--help=agent`
+printed a workflow guide. **New.** The JSON schema is generated from the Lean types (R-0593); every
+output carries `spec_version`; nothing lists features.
+
+- **(a)** `concrete schema` prints the generated JSON schema of diagnostics and facts, and
+  `concrete capabilities` prints the supported slice, the commands, the fact kinds, the rule IDs and
+  the versions, all generated from the Lean registries.
+- **(b)** Only `concrete schema`; feature support is read from the schema and the slice number.
+- **(c)** Nothing on the CLI; the schema and the rule registry are published files.
+- **(d)** (a) plus a workflow guide for agents, like `--help=agent`.
+
+**Recommendation: (a).** An agent should learn what this exact compiler supports from the compiler,
+generated from the same registries, so the answer cannot drift. (d)'s guide is prose that goes
+stale; the next actions in each diagnostic (R-0479) already say what to do.
+
+## Q6. A proof-floor policy for user contracts (from slice 8)
+
+**Legacy.** Policy `require-proofs` refused a project with any eligible function whose proof was
+missing, stale or blocked. **New.** Safety obligations cannot be left open: admission refuses them
+(no hidden traps). A user's own contract (an `#[ensures]` or a stated property) may be "not
+established" and is then reported as a fact; no policy key requires it.
+
+- **(a)** A policy key in `Concrete.toml` `[policy]`, for example `require-contract-proofs`, scoped
+  like the predictable policy (project or module, tighten only, transitive to dependencies): every
+  stated contract in scope must be established; conditional on named premises passes only if the
+  policy lists them.
+- **(b)** No key: an unproved `#[ensures]` is refused at admission, as safety obligations are.
+- **(c)** No key: the facts report the gap and CI checks the JSON itself.
+- **(d)** (a), plus a strength floor: a point-instance proof does not satisfy it (R-0585 strength
+  labels).
+
+**Recommendation: (d).** It is a policy over existing facts, as the facts and Concrete.toml rows
+require, and it uses the strength labels so that a single-input proof cannot pass a floor meant for
+a contract. (b) changes what a contract means, and an unproved contract is legitimate during
+development. (c) makes every project re-implement the same check outside the compiler.
+
+## Reviewer picks
+
+One independent round, 2026-11-08 (Codex in a git-archive copy of origin/main, Kimi read-only,
+agy with the context inlined). Raw answers: [Codex](cli-question-audit/owner-codex.md),
+[Kimi](cli-question-audit/owner-kimi.md), [agy](cli-question-audit/owner-agy.md).
+
+| Question | Claude | Codex | Kimi | agy |
+|---|---|---|---|---|
+| Q1 front-end recovery | c (b later) | c, runner-up b | c, runner-up b | c, runner-up b |
+| Q2 exit codes and check mode | a+i | a+i, runner-up a+iii | a+i, runner-up a+iii | a+i, runner-up a+ii |
+| Q3 trace, emit, run, interp, help | e | a, runner-up d | e, runner-up c | c, runner-up b |
+| Q4 formatter modes | a | a, runner-up c | a, runner-up b | a, runner-up b |
+| Q5 agent discovery | a | a, runner-up d | a, runner-up d | a, runner-up b |
+| Q6 proof floor | d | d, runner-up a | d, runner-up a | d, runner-up a |
+
+Q1, Q2, Q4, Q5 and Q6 are unanimous. Q3 splits: Codex wants all five commands, Kimi agrees with the
+recommendation, and agy wants only `help` until a slice needs more, because the slice-0 surface
+names two commands. (e) was missing from the reviewed draft's options; Kimi, Codex and agy each
+pointed that out, and it is added above.
+
+**Points the reviewers raised, for the owner's answer:**
+- Q1 (Kimi, Codex): `CheckResult` cannot carry refusals and "incomplete" together, so (b) or (c)
+  needs a coverage mark for skipped stages and dependent units, as legacy's `partial` flag did.
+- Q2 (Codex, Kimi, agy): an unknown fact makes a command incomplete only when a policy requires it;
+  the precedence of mixed outcomes needs a rule; and `facts` on a tree with no built artifact makes
+  artifact facts, such as the stack bound, incomplete. Artifact reuse needs a rule.
+- Q4 (Codex, Kimi): combined modes (`--check --write`, `--stdin --check`) should be refused as
+  usage; legacy silently chose one.
+- Q5 (Codex, Kimi): a capability listing must distinguish recognized rules from implemented
+  features and supported targets. A workflow guide is allowed if it only teaches and links, or is
+  generated from the command and next-action registries.
+- Q6 (Codex): the floor must require evidence for the exact contract, state its scope and refuse a
+  vacuous discharge (R-0585), not only check a strength label.
+- agy's claim that `spec_version` was replaced by per-rule revisions is not right: the runtime row
+  keeps one `spec_version` header in every output (decisions.md, `decided-project-runtime-2026-11-06`);
+  the revision replaced only the version inside each rule ID.
