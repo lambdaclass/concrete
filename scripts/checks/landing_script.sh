@@ -1367,7 +1367,10 @@ so_leg "F1b: a request without a reviewed first line" noreviewed refuse "the kim
 so_leg "F2: ACCEPT in agy's request but no verdict in its output" requestverdict refuse "the agy output has no verdict"
 so_leg "a request body that names no commit" unnamedbody refuse "the kimi request body does not name ${R2:0:10}"
 so_leg "a sign-off without agy's verdict" noagy refuse "the record has no agy verdict"
-so_leg "a sign-off whose agy output ends in REJECT" reject refuse "the agy output's last verdict is 'VERDICT:REJECT'"
+so_leg "a sign-off whose agy output ends in REJECT" reject pass "owner sign-off (1) at its exact SHA, and the head is their clean merge"
+o="$(bash "$ROOT_DIR/scripts/land/signoff.sh" verify "$R2" --base "$MR" 2>&1)"; r=$?
+[ "$r" = 0 ] && has "$o" "verdicts: codex ACCEPT, kimi ACCEPT, agy REJECT" \
+  && ok "verify accepts agy's REJECT at the cap and reports every verdict" || { no "verify with agy's REJECT (exit $r)"; echo "$o" | sed 's/^/      /'; }
 so_leg "a sign-off whose agy output has no READ: <path> line" noread refuse "the agy output fails the reviewer-output contract: reviewer output has no 'READ: <path>' line"
 so_leg "a sign-off whose agy output names a nonexistent READ: path" badread refuse "the agy output fails the reviewer-output contract: READ: path 'does-not-exist-in-commit.txt' does not exist"
 so_leg "a sign-off whose agy output omits REPOSITORY: readable" norepo refuse "the agy output fails the reviewer-output contract: penultimate non-empty line is"

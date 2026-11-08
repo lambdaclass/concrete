@@ -308,8 +308,10 @@ recorded, from the owner's own words only, with `scripts/land/signoff.sh record 
 verbatim request as `r-request.txt` after prepending `reviewed: <sha>`, and the output separately as
 `r.txt`. The request body must name that commit by an unambiguous prefix, and the output must pass
 `scripts/review/output_contract.py` (at least one valid `READ: <path>` from `<sha>`'s tree,
-`REPOSITORY: readable` as the penultimate non-empty line, and `VERDICT: ACCEPT` as the last
-non-empty line). Recording refuses a record that does not qualify.
+`REPOSITORY: readable` as the penultimate non-empty line, and `VERDICT: ACCEPT` or `VERDICT: REJECT`
+as the last non-empty line). A completed REJECT is recorded and reported, not a refusal of the
+owner's sign-off; an output with no verdict line or failing the output contract does not qualify.
+Recording refuses a record that does not qualify.
 Push the resulting `refs/owner-signoff/<sha>` to both remotes. The landing train accepts it as that
 commit's review provenance ([LANDING.md](LANDING.md)); it approves no other commit.
 
