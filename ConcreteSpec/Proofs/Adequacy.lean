@@ -2,18 +2,25 @@ import ConcreteSpec.Spec.Adequacy
 import ConcreteSpec.Proofs.Exec
 
 /-!
-# Oracle discipline for the reference evaluator
+# Evaluator adequacy and termination (`Spec/Adequacy.lean`, foundation contract C8)
 
-The query instrumentation is observationally inert (`runFromQ_toReport`). Occurrences are numbered
-per site (`issue_occurrence`, `issue_next_occurrence`), answers are deterministic for a fixed oracle,
-and adding one unit of fuel can only append queries (`runFromQ_queries_prefix`). Thus a query that a
-run issues does not depend on the remaining fuel.
+- Query instrumentation is observationally inert (`runFromQ_toReport`), occurrences are numbered per
+  site, and adding fuel only appends queries (`runFromQ_queries_prefix_le`).
+- Reports have matching finite executions (`runFrom_sound`), final finite executions are obtained
+  with enough fuel (`runFrom_complete`), completed reports are fuel-monotone (`runFrom_mono`), and
+  event traces are prefix-monotone (`runFrom_trace_prefix_le`).
+- Infinite maximal executions and compatible fuel limits are interconvertible
+  (`infinite_iff_fuelLimit`). Silent divergence and infinite interaction are distinct event
+  classifications; `Demo.spin_infinite` witnesses the former. A blocked request keeps its `noAnswer`
+  classification (`endlesslyBlocked_of_noAnswer`).
+- Per-function termination evidence quantifies over every entry run admitted by its named premises
+  and excludes infinite execution (`TerminationEvidence.excludes_infinite`).
 -/
 
 namespace ConcreteSpec.Core.Exec
 open ConcreteSpec.Core
 
-variable {O : Operands} {P : Program O} {ρ : Oracle O}
+variable {O : Operands} {P : Program O} {ρ : Oracle O} {c : Config O}
 
 /-- A query's occurrence is exactly the number of earlier requests at its site. -/
 theorem issue_occurrence (events : List O.Event) (p : O.Prim) (args : List O.Val) (site : SiteId)
@@ -438,6 +445,220 @@ theorem runFrom_final_sound {fuel : Nat} {events : List O.Event} {c : Config O} 
     refine ⟨tr, pos.config, hsteps, hf, ?_⟩
     rw [he, hepos]
 
+/-! ### Infinite executions are compatible fuel limits -/
+
+/-- If `n` steps exhaust the budget at `pos`, then `n + m` steps are exactly `m` steps from `pos`.
+This is the compatibility operation used by the infinite-limit theorem. -/
+theorem runFromQ_add_of_outOfFuel {n : Nat} {events : List O.Event} {issued : List (Query O)}
+    {c : Config O} {pos : Position O}
+    (h : runFromQ P ρ n events issued c =
+      ⟨pos.events, pos.queries, .outOfFuel pos.config⟩) : ∀ m,
+    runFromQ P ρ (n + m) events issued c = runFromQ P ρ m pos.events pos.queries pos.config := by
+  induction n generalizing events issued c pos with
+  | zero =>
+    intro m
+    cases hf : c.final? with
+    | some f => simp [runFromQ, hf] at h
+    | none =>
+      cases pos with
+      | mk pc pe pq =>
+        simp [runFromQ, hf] at h
+        obtain ⟨rfl, rfl, rfl⟩ := h
+        simp only [Nat.zero_add]
+  | succ n ih =>
+    intro m
+    cases hf : c.final? with
+    | some f => simp [runFromQ, hf] at h
+    | none =>
+      cases hs : step P c with
+      | none => simp [runFromQ, hf, hs] at h
+      | some out =>
+        cases out with
+        | next c' =>
+          have h' : runFromQ P ρ n events issued c' =
+              ⟨pos.events, pos.queries, .outOfFuel pos.config⟩ := by
+            simpa [runFromQ, hf, hs] using h
+          simpa [runFromQ, hf, hs, Nat.succ_add] using ih h' m
+        | request p vs site st k =>
+          cases ha : answer ρ (Query.issue events p vs site st issued) with
+          | none => simp [runFromQ, hf, hs, ha] at h
+          | some a =>
+            cases hallow : O.allows p vs st a with
+            | false => simp [runFromQ, hf, hs, ha, hallow] at h
+            | true =>
+              cases hk : k a with
+              | none => simp [runFromQ, hf, hs, ha, hallow, hk] at h
+              | some c' =>
+                have h' : runFromQ P ρ n (events ++ a.event.toList)
+                    (issued ++ [Query.issue events p vs site st issued]) c' =
+                    ⟨pos.events, pos.queries, .outOfFuel pos.config⟩ := by
+                  simpa [runFromQ, hf, hs, ha, hallow, hk] using h
+                simpa [runFromQ, hf, hs, ha, hallow, hk, Nat.succ_add] using ih h' m
+
+/-- A zero-step `outOfFuel` report identifies its position exactly. -/
+theorem eq_of_runFromQ_zero_out {events : List O.Event} {issued : List (Query O)} {c : Config O}
+    {pos : Position O}
+    (h : runFromQ P ρ 0 events issued c = ⟨pos.events, pos.queries, .outOfFuel pos.config⟩) :
+    pos = ⟨c, events, issued⟩ := by
+  cases pos with
+  | mk pc pe pq =>
+    cases hf : c.final? with
+    | some f => simp [runFromQ, hf] at h
+    | none =>
+      simp [runFromQ, hf] at h
+      obtain ⟨rfl, rfl, rfl⟩ := h
+      rfl
+
+/-- A move between two nonfinal positions determines the one-unit report from its source. -/
+theorem Move.runFromQ_one {pos pos' : Position O} (hm : Move P ρ pos pos')
+    (hf : pos.config.final? = none) (hf' : pos'.config.final? = none) :
+    runFromQ P ρ 1 pos.events pos.queries pos.config =
+      ⟨pos'.events, pos'.queries, .outOfFuel pos'.config⟩ := by
+  cases hm with
+  | silent hs => simp [runFromQ, hf, hs, hf']
+  | prim hs ha hallow hk => simp [runFromQ, hf, hs, ha, hallow, hk, hf']
+
+/-- A move's source is not final. -/
+theorem Move.not_final {pos pos' : Position O} (hm : Move P ρ pos pos') :
+    pos.config.final? = none := by
+  cases hm with
+  | silent hs => exact final?_none_of_step hs
+  | prim hs _ _ _ => exact final?_none_of_step hs
+
+/-- Two consecutive fuel-prefix reports determine exactly one transition between their positions. -/
+theorem move_of_fuel_succ {n : Nat} {events : List O.Event} {issued : List (Query O)}
+    {c : Config O} {pos pos' : Position O}
+    (h0 : runFromQ P ρ n events issued c = ⟨pos.events, pos.queries, .outOfFuel pos.config⟩)
+    (h1 : runFromQ P ρ (n + 1) events issued c =
+      ⟨pos'.events, pos'.queries, .outOfFuel pos'.config⟩) : Move P ρ pos pos' := by
+  have hadd := runFromQ_add_of_outOfFuel (P := P) (ρ := ρ) h0 1
+  have h : runFromQ P ρ 1 pos.events pos.queries pos.config =
+      ⟨pos'.events, pos'.queries, .outOfFuel pos'.config⟩ := hadd.symm.trans h1
+  cases pos with
+  | mk c events issued =>
+    cases hf : c.final? with
+    | some f => simp [runFromQ, hf] at h
+    | none =>
+      cases hs : step P c with
+      | none => simp [runFromQ, hf, hs] at h
+      | some out =>
+        cases out with
+        | next c' =>
+          simp only [runFromQ, hf, hs] at h
+          have hp := eq_of_runFromQ_zero_out (P := P) (ρ := ρ) h
+          subst pos'
+          exact .silent hs
+        | request p vs site st k =>
+          cases ha : answer ρ (Query.issue events p vs site st issued) with
+          | none => simp [runFromQ, hf, hs, ha] at h
+          | some a =>
+            cases hallow : O.allows p vs st a with
+            | false => simp [runFromQ, hf, hs, ha, hallow] at h
+            | true =>
+              cases hk : k a with
+              | none => simp [runFromQ, hf, hs, ha, hallow, hk] at h
+              | some c' =>
+                simp only [runFromQ, hf, hs, ha, hallow, hk] at h
+                have hp := eq_of_runFromQ_zero_out (P := P) (ρ := ρ) h
+                subst pos'
+                exact .prim hs ha hallow hk
+
+/-- No position of an infinite execution is final. -/
+theorem InfiniteExecution.not_final (X : InfiniteExecution P ρ c) (n : Nat) :
+    (X.states n).config.final? = none :=
+  (X.step n).not_final
+
+/-- Every infinite execution has exactly the fuel-indexed prefixes obtained by truncating it. -/
+def InfiniteExecution.toFuelLimit (X : InfiniteExecution P ρ c) : FuelLimit P ρ c := by
+  refine ⟨X.states, ?_⟩
+  intro n
+  induction n with
+  | zero =>
+    have hn := X.not_final 0
+    rw [X.initial] at hn
+    simp [runQ, runFromQ, X.initial, hn]
+  | succ n ih =>
+    have hadd := runFromQ_add_of_outOfFuel (P := P) (ρ := ρ) ih 1
+    change runFromQ P ρ (n + 1) [] [] c = _
+    rw [hadd]
+    exact (X.step n).runFromQ_one (X.not_final n) (X.not_final (n + 1))
+
+/-- Compatible fuel prefixes correspond to an infinite maximal execution. -/
+def FuelLimit.toInfiniteExecution (L : FuelLimit P ρ c) : InfiniteExecution P ρ c := by
+  refine ⟨L.states, ?_, ?_⟩
+  · apply eq_of_runFromQ_zero_out (P := P) (ρ := ρ)
+    simpa [runQ] using L.prefixes 0
+  · intro n
+    exact move_of_fuel_succ (L.prefixes n) (L.prefixes (n + 1))
+
+/-- Infinite executions and compatible fuel limits are two presentations of the same behavior. -/
+theorem infinite_iff_fuelLimit : Nonempty (InfiniteExecution P ρ c) ↔ Nonempty (FuelLimit P ρ c) :=
+  ⟨fun ⟨X⟩ => ⟨X.toFuelLimit⟩, fun ⟨L⟩ => ⟨L.toInfiniteExecution⟩⟩
+
+/-- Every infinite execution has either finitely many events or infinitely many; these are the two
+distinct classes `SilentDivergence` and `InfiniteInteraction`. -/
+theorem finite_or_infinite_events (X : InfiniteExecution P ρ c) :
+    FiniteEvents X ∨ InfiniteEvents X := by
+  classical
+  by_cases h : ∃ bound, ∀ n, (X.states n).events.length ≤ bound
+  · exact .inl h
+  · refine .inr (fun bound => ?_)
+    apply Classical.byContradiction
+    intro hn
+    apply h
+    refine ⟨bound, fun n => ?_⟩
+    exact Nat.le_of_not_gt (fun hlt => hn ⟨n, hlt⟩)
+
+/-- Silent divergence cannot also be infinite interaction. -/
+theorem finite_not_infinite_events {X : InfiniteExecution P ρ c}
+    (hf : FiniteEvents X) (hi : InfiniteEvents X) : False := by
+  obtain ⟨bound, hb⟩ := hf
+  obtain ⟨n, hn⟩ := hi bound
+  exact Nat.not_lt_of_ge (hb n) hn
+
+/-- A final report excludes an infinite execution from the same initial configuration. -/
+theorem not_infinite_of_final {fuel : Nat} {c : Config O} {f : Final O.Val}
+    (h : (run P ρ fuel c).ending = .final f) (X : InfiniteExecution P ρ c) : False := by
+  have hp := X.toFuelLimit.prefixes fuel
+  change runFromQ P ρ fuel [] [] c = _ at hp
+  have hr := runFromQ_toReport (P := P) (ρ := ρ) fuel [] [] c
+  rw [hp] at hr
+  change (runFrom P ρ fuel [] c).ending = .final f at h
+  simp [QueryReport.toReport] at hr
+  rw [← hr] at h
+  cases h
+
+/-- A blocked request remains blocked at every larger budget; it never turns into divergence or a
+program outcome merely because more fuel is supplied. -/
+theorem endlesslyBlocked_of_noAnswer {fuel : Nat} {c blocked : Config O}
+    (h : (run P ρ fuel c).ending = .noAnswer blocked) : EndlesslyBlocked P ρ fuel c blocked := by
+  change (runFrom P ρ fuel [] c).ending = .noAnswer blocked at h
+  intro n hle
+  have hm : run P ρ n c = run P ρ fuel c := by
+    apply runFrom_mono fuel n hle [] c
+    intro c'
+    rw [h]
+    simp
+  exact (congrArg Report.ending hm).trans h
+
+/-- The evidence field applies to every oracle, argument list, store, and entry configuration that
+satisfies the named premises. -/
+theorem TerminationEvidence.all_allowed_runs (E : TerminationEvidence O P)
+    (premises : E.Premises) (ρ : Oracle O) (args : List O.Val) (st : O.Store)
+    (fn : Fn O) (c : Config O) (hf : AList.lookup P.fns E.function = some fn)
+    (ha : E.admits premises ρ args st) (he : enter fn args st = some c) :
+    ∃ f, (run P ρ (E.fuel premises ρ args st) c).ending = .final f :=
+  E.terminates premises ρ args st fn c hf ha he
+
+/-- Per-function termination evidence excludes divergence from every allowed entry run. -/
+theorem TerminationEvidence.excludes_infinite (E : TerminationEvidence O P)
+    (premises : E.Premises) (ρ : Oracle O) (args : List O.Val) (st : O.Store)
+    (fn : Fn O) (c : Config O) (hf : AList.lookup P.fns E.function = some fn)
+    (ha : E.admits premises ρ args st) (he : enter fn args st = some c)
+    (X : InfiniteExecution P ρ c) : False := by
+  obtain ⟨f, hfinal⟩ := E.all_allowed_runs premises ρ args st fn c hf ha he
+  exact not_infinite_of_final hfinal X
+
 /-! ### Fuel exhaustion is only a budget report -/
 
 namespace Demo
@@ -457,6 +678,66 @@ example :
 /-- `outOfFuel` is not a program failure either: the silent loop exhausts its simulation budget
 without trapping or becoming stuck. The infinite-execution witness is `spin_infinite` below. -/
 example : isOutOfFuel (run prog env 50 spinConfig) = true := by decide
+
+/-- The store after entering the demo's parameterless main function. -/
+def spinStore : DState := DState.life (.enter []) .init
+
+/-- The main function's scope frame. -/
+def spinScope : Frame ops := .scope ⟨0⟩ [] []
+
+/-- The loop's condition-test and body continuation frames. -/
+def spinTest : Frame ops := .test ⟨0⟩ .skip (.lit 1) .skip s []
+def spinBody : Frame ops := .body ⟨0⟩ .skip (.lit 1) .skip s
+
+/-- The four successors of `spinConfig` in one five-step silent loop iteration. -/
+def spinConfig1 : Config ops := ⟨.exec .skip, [], spinStore, [spinTest, spinScope]⟩
+def spinConfig2 : Config ops := ⟨.done, [], spinStore, [spinTest, spinScope]⟩
+def spinConfig3 : Config ops := ⟨.exec .skip, [], spinStore, [spinBody, spinScope]⟩
+def spinConfig4 : Config ops := ⟨.done, [], spinStore, [spinBody, spinScope]⟩
+
+/-- The configuration at a phase of the periodic silent execution. -/
+def spinConfigAt : Nat → Config ops
+  | 0 => spinConfig
+  | 1 => spinConfig1
+  | 2 => spinConfig2
+  | 3 => spinConfig3
+  | 4 => spinConfig4
+  | _ => spinConfig
+
+/-- No events or queries occur in the periodic execution. -/
+def spinPosition (n : Nat) : Position ops := ⟨spinConfigAt (n % 5), [], []⟩
+
+theorem spin_move_01 : Move prog env ⟨spinConfig, [], []⟩ ⟨spinConfig1, [], []⟩ := .silent rfl
+theorem spin_move_12 : Move prog env ⟨spinConfig1, [], []⟩ ⟨spinConfig2, [], []⟩ := .silent rfl
+theorem spin_move_23 : Move prog env ⟨spinConfig2, [], []⟩ ⟨spinConfig3, [], []⟩ := .silent rfl
+theorem spin_move_34 : Move prog env ⟨spinConfig3, [], []⟩ ⟨spinConfig4, [], []⟩ := .silent rfl
+theorem spin_move_40 : Move prog env ⟨spinConfig4, [], []⟩ ⟨spinConfig, [], []⟩ := .silent rfl
+
+/-- Every adjacent pair of periodic positions is one machine transition. -/
+theorem spin_move (n : Nat) : Move prog env (spinPosition n) (spinPosition (n + 1)) := by
+  have hlt : n % 5 < 5 := Nat.mod_lt _ (by decide)
+  have hc : n % 5 = 0 ∨ n % 5 = 1 ∨ n % 5 = 2 ∨ n % 5 = 3 ∨ n % 5 = 4 := by omega
+  rcases hc with h | h | h | h | h
+  · have hn : (n + 1) % 5 = 1 := by omega
+    simpa [spinPosition, spinConfigAt, h, hn] using spin_move_01
+  · have hn : (n + 1) % 5 = 2 := by omega
+    simpa [spinPosition, spinConfigAt, h, hn] using spin_move_12
+  · have hn : (n + 1) % 5 = 3 := by omega
+    simpa [spinPosition, spinConfigAt, h, hn] using spin_move_23
+  · have hn : (n + 1) % 5 = 4 := by omega
+    simpa [spinPosition, spinConfigAt, h, hn] using spin_move_34
+  · have hn : (n + 1) % 5 = 0 := by omega
+    simpa [spinPosition, spinConfigAt, h, hn] using spin_move_40
+
+/-- The demo loop is an infinite maximal execution under its fixed environment. -/
+def spin_infinite : InfiniteExecution prog env spinConfig where
+  states := spinPosition
+  initial := rfl
+  step := spin_move
+
+/-- In particular it is silent divergence: infinitely many steps and no events at all. -/
+theorem spin_silent_divergence : SilentDivergence prog env spinConfig :=
+  ⟨spin_infinite, ⟨0, fun n => by simp [spin_infinite, spinPosition]⟩⟩
 
 end Demo
 
