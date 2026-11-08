@@ -1033,25 +1033,47 @@ example :
 namespace ABI
 
 /-- Law (subject `ConcreteSpec.Core.Frame.ABI.layoutBytes`).
-Executing a layout plan produces a size aligned to its declared positive alignment. -/
-theorem layout_aligned (plan : LayoutPlan) (_positive : 0 < plan.alignment) :
-    layoutBytes plan % plan.alignment = 0 := by
-  exact Nat.mul_mod_left _ _
+Rounding up raw slot bytes to a positive alignment never shrinks the frame and produces a multiple
+of the alignment. -/
+theorem layout_aligned (plan : LayoutPlan) (positive : 0 < plan.alignment) :
+    rawSlotBytes plan ≤ layoutBytes plan ∧ layoutBytes plan % plan.alignment = 0 := by
+  refine ⟨?_, Nat.mul_mod_left _ _⟩
+  dsimp [layoutBytes]
+  have hdiv := Nat.div_add_mod (rawSlotBytes plan + plan.alignment - 1) plan.alignment
+  have hmod := Nat.mod_lt (rawSlotBytes plan + plan.alignment - 1) positive
+  rw [Nat.mul_comm]
+  omega
 
 /-- Instance (law `ConcreteSpec.Core.Frame.ABI.layout_aligned`, case `two_slots`). -/
-example : layoutBytes ⟨8, [1, 2]⟩ % 8 = 0 :=
-  layout_aligned ⟨8, [1, 2]⟩ (by decide)
+example : rawSlotBytes ⟨8, [3, 6]⟩ ≤ layoutBytes ⟨8, [3, 6]⟩ ∧
+    layoutBytes ⟨8, [3, 6]⟩ % 8 = 0 :=
+  layout_aligned ⟨8, [3, 6]⟩ (by decide)
 
-/-- A planted layout forgets to include its final byte in alignment rounding. -/
-def wrongLayoutBytes (plan : LayoutPlan) : Nat := layoutBytes plan + 1
+/-- A planted layout skips alignment rounding and returns the unrounded byte sum. -/
+def wrongLayoutBytes (plan : LayoutPlan) : Nat := rawSlotBytes plan
 
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.layout_aligned`, case `two_slots`,
 subject `ConcreteSpec.Core.Frame.ABI.layoutBytes`, mutant `ConcreteSpec.Core.Frame.ABI.wrongLayoutBytes`). -/
-example : 0 < (8 : Nat) ∧ ¬ wrongLayoutBytes ⟨8, [1, 2]⟩ % 8 = 0 := by decide
+example : 0 < (8 : Nat) ∧
+    ¬ (rawSlotBytes ⟨8, [3, 6]⟩ ≤ wrongLayoutBytes ⟨8, [3, 6]⟩ ∧
+      wrongLayoutBytes ⟨8, [3, 6]⟩ % 8 = 0) := by
+  decide
 
-/-- Law (subject `ConcreteSpec.Core.Frame.ABI.stackSamples`).
-The static bound covers every sample of an independently described nested stack execution. -/
-theorem stackSamples_bounded (code : StackCode) : StackSafe code := by
+/-- A planted layout rounds down instead of up, shrinking the frame below its raw slot bytes. -/
+def truncatingLayoutBytes (plan : LayoutPlan) : Nat :=
+  (rawSlotBytes plan / plan.alignment) * plan.alignment
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.layout_aligned`, case `two_slots`,
+subject `ConcreteSpec.Core.Frame.ABI.layoutBytes`,
+mutant `ConcreteSpec.Core.Frame.ABI.truncatingLayoutBytes`). -/
+example : 0 < (8 : Nat) ∧
+    ¬ (rawSlotBytes ⟨8, [3, 6]⟩ ≤ truncatingLayoutBytes ⟨8, [3, 6]⟩ ∧
+      truncatingLayoutBytes ⟨8, [3, 6]⟩ % 8 = 0) := by
+  decide
+
+/-- Helper (computation). Structural induction showing operational stack samples conform to the
+static stack bound (`ArtifactStackConforms`). (approved: PENDING) -/
+theorem stackCode_conforms (code : StackCode) : StackSafe code := by
   induction code with
   | done =>
     intro base sample hs
@@ -1079,68 +1101,94 @@ theorem stackSamples_bounded (code : StackCode) : StackSafe code := by
       simpa [computedStackBound, Nat.add_assoc] using h
     · simp [computedStackBound]
 
-/-- Instance (law `ConcreteSpec.Core.Frame.ABI.stackSamples_bounded`, case `nested_call`). -/
-example : StackSafe (.frame 16 (.seq (.frame 32 .done) (.frame 8 .done))) :=
-  stackSamples_bounded (.frame 16 (.seq (.frame 32 .done) (.frame 8 .done)))
+/-- Law (subject `ConcreteSpec.Core.Frame.ABI.computedStackBound`).
+The static bound covers every sample of an independently described nested stack execution. -/
+theorem stackSamples_bounded (code : StackCode) (base sample : Nat)
+    (inSamples : sample ∈ stackSamples code base) :
+    sample ≤ base + computedStackBound code :=
+  stackCode_conforms code base sample inSamples
 
-/-- A planted runtime consumes an extra byte at every stack sample. -/
-def overBudgetSamples (code : StackCode) (base : Nat) : List Nat :=
-  (stackSamples code base).map (· + 1)
+/-- Instance (law `ConcreteSpec.Core.Frame.ABI.stackSamples_bounded`, case `nested_call`). -/
+example : 48 ≤ 0 + computedStackBound (.frame 16 (.seq (.frame 32 .done) (.frame 8 .done))) :=
+  stackSamples_bounded (.frame 16 (.seq (.frame 32 .done) (.frame 8 .done))) 0 48 (by decide)
+
+/-- A planted stack-bound calculator counts only the outer frame and ignores nested calls. -/
+def unnestedStackBound : StackCode → Nat
+  | .frame bytes _ => bytes
+  | _ => 0
 
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.stackSamples_bounded`, case `nested_call`,
-subject `ConcreteSpec.Core.Frame.ABI.stackSamples`, mutant `ConcreteSpec.Core.Frame.ABI.overBudgetSamples`). -/
-example : ¬ (∀ base sample,
-    sample ∈ overBudgetSamples (.frame 16 (.seq (.frame 32 .done) (.frame 8 .done))) base →
-    sample ≤ base + computedStackBound (.frame 16 (.seq (.frame 32 .done) (.frame 8 .done)))) := by
-  intro h
-  have bad := h 0 49 (by decide)
-  contradiction
+subject `ConcreteSpec.Core.Frame.ABI.computedStackBound`,
+mutant `ConcreteSpec.Core.Frame.ABI.unnestedStackBound`). -/
+example :
+    48 ∈ stackSamples (.frame 16 (.seq (.frame 32 .done) (.frame 8 .done))) 0 ∧
+    ¬ (48 ≤ 0 + unnestedStackBound (.frame 16 (.seq (.frame 32 .done) (.frame 8 .done)))) := by
+  decide
 
+/-- Helper (computation). Establishes that the toy ABI signature satisfies alignment, frame-bound,
+and register-disjointness invariants. (approved: PENDING) -/
+theorem toySignature_wellFormed : toySignature.WellFormed := by
+  refine ⟨⟨by decide, by decide⟩, by decide, by decide, ?_⟩
+  intro r hr
+  simp only [toySignature, List.mem_cons, List.not_mem_nil, or_false] at hr ⊢
+  omega
 
-/-- Helper (inversion). Establish the relation form of toy-call conformance from its
-independent execution witnesses. (approved: PENDING)
-The independently executed toy call satisfies the complete typed ABI contract for every base
-machine, argument and return value, including its private spill and balanced stack operations. -/
+/-- Helper (computation). Running `toyBodyAt` preserves callee-saved register 0, caller stack slots,
+and the stack pointer while modifying at most `resultReg`. (approved: PENDING) -/
+theorem toyBodyAt_preserved (before : Machine Nat Nat) (resultReg result : Nat)
+    (_hnc : 0 ≠ resultReg) :
+    Machine.Preserved before (runToy (toyBodyAt resultReg result) before) [0] ∧
+      Machine.RegisterFrame before (runToy (toyBodyAt resultReg result) before) [resultReg] := by
+  refine ⟨⟨?_, ?_, ?_⟩, ?_⟩
+  · intro r hr
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hr
+    subst r
+    simp [toyBodyAt, runToy]
+  · intro slot hs
+    have hn1 : slot ≠ before.stackPointer := by omega
+    have hn2 : slot ≠ before.stackPointer + 1 := by omega
+    simp [toyBodyAt, runToy, hn1, hn2]
+  · simp [toyBodyAt, runToy]
+  · intro r hr
+    have hnr : r ≠ resultReg := by
+      simpa only [List.mem_cons, List.not_mem_nil, or_false] using hr
+    by_cases hr0 : r = 0
+    · subst r
+      simp [toyBodyAt, runToy]
+    · simp [toyBodyAt, runToy, hr0, hnr]
+
+/-- Helper (inversion). Establishes the relation form of toy-call conformance from its
+independent execution witnesses. (approved: PENDING) -/
 theorem toyTransition_conforms : TransitionConforms toySignature toyTransition := by
   intro before after args result h
   obtain ⟨base, arg, rfl, rfl, rfl⟩ := h
-  refine ⟨?_, ?_, ?_, ?_⟩
+  have hp := toyBodyAt_preserved (toyInput base arg) 1 result (by decide)
+  refine ⟨?_, ?_, hp.1, hp.2⟩
   · simp [toySignature, ArgumentsHold, Binding.Holds, Location.read, toyInput, runToy]
-  · simp [toySignature, Binding.Holds, Location.read, toyBody, toyInput, runToy]
-  · refine ⟨?_, ?_, ?_⟩
-    · intro r hr
-      simp only [toySignature, List.mem_cons, List.not_mem_nil, or_false] at hr
-      subst r
-      simp [toyInput, toyBody, runToy]
-    · intro slot hs
-      have hn : slot ≠ base.stackPointer + 8 := by
-        change slot < base.stackPointer at hs
-        omega
-      simp [toyInput, toyBody, runToy, hn]
-    · simp [toyInput, toyBody, runToy]
-  · intro r hr
-    have hn : r ≠ 1 := by simpa [toySignature] using hr
-    simp [toyInput, toyBody, runToy, hn]
+  · simp [toySignature, Binding.Holds, Location.read, toyBody, toyBodyAt, toyInput, runToy]
 
 /-- A populated base machine, including a caller-owned stack slot. -/
 def toyBase : Machine Nat Nat := ⟨fun r => 10 + r, fun slot => 20 + slot, 1⟩
 
 /-- Law (subject `ConcreteSpec.Core.Frame.ABI.toyCall`).
-Executing input packing and the independent toy body establishes the complete ABI contract. -/
+Executing input packing and the independent toy body establishes a well-formed signature and the
+complete ABI contract, including in-frame spilling and restoration of callee-saved register 0. -/
 theorem toyCall_conforms (base : Machine Nat Nat) (arg result : Nat) :
-    toySignature.Call (toyInput base arg) (toyCall base arg result) [arg] result :=
-  toyTransition_conforms _ _ _ _ ⟨base, arg, rfl, rfl, rfl⟩
+    toySignature.WellFormed ∧
+      toySignature.Call (toyInput base arg) (toyCall base arg result) [arg] result :=
+  ⟨toySignature_wellFormed, toyTransition_conforms _ _ _ _ ⟨base, arg, rfl, rfl, rfl⟩⟩
 
 /-- Instance (law `ConcreteSpec.Core.Frame.ABI.toyCall_conforms`, case `spill`). -/
-example : toySignature.Call (toyInput toyBase 11) (toyCall toyBase 11 7) [11] 7 :=
+example : toySignature.WellFormed ∧
+    toySignature.Call (toyInput toyBase 11) (toyCall toyBase 11 7) [11] 7 :=
   toyCall_conforms toyBase 11 7
 
-/-- A planted call clobbers a callee-saved register. -/
+/-- A planted call clobbers a callee-saved register without restoring it. -/
 def wrongToySaved (base : Machine Nat Nat) (arg result : Nat) : Machine Nat Nat :=
   runToy [.register 0 99] (toyCall base arg result)
-/-- A planted call overwrites a caller-owned stack slot. -/
+/-- A planted call overwrites a caller-owned stack slot below `base.stackPointer`. -/
 def wrongToySlot (base : Machine Nat Nat) (arg result : Nat) : Machine Nat Nat :=
-  runToy [.release 1, .slot 0 99, .reserve 1] (toyCall base arg result)
+  runToy [.slot 1 99] (toyCall base arg result)
 /-- A planted call leaks its frame. -/
 def wrongToyPointer (base : Machine Nat Nat) (arg result : Nat) : Machine Nat Nat :=
   runToy [.reserve 8] (toyCall base arg result)
@@ -1150,32 +1198,36 @@ def wrongToyResult (base : Machine Nat Nat) (arg result : Nat) : Machine Nat Nat
 
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyCall_conforms`, case `spill`,
 subject `ConcreteSpec.Core.Frame.ABI.toyCall`, mutant `ConcreteSpec.Core.Frame.ABI.wrongToySaved`). -/
-example : ¬ toySignature.Call (toyInput toyBase 11) (wrongToySaved toyBase 11 7) [11] 7 := by
-  intro h
+example : ¬ (toySignature.WellFormed ∧
+    toySignature.Call (toyInput toyBase 11) (wrongToySaved toyBase 11 7) [11] 7) := by
+  intro ⟨_, h⟩
   have bad := h.preserved.1 0 (by simp [toySignature])
-  simp [wrongToySaved, toyCall, toyInput, toyBody, toyBase, runToy] at bad
+  simp [wrongToySaved, toyCall, toyInput, toyBody, toyBodyAt, toyBase, runToy] at bad
 
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyCall_conforms`, case `spill`,
 subject `ConcreteSpec.Core.Frame.ABI.toyCall`, mutant `ConcreteSpec.Core.Frame.ABI.wrongToySlot`). -/
-example : ¬ toySignature.Call (toyInput toyBase 11) (wrongToySlot toyBase 11 7) [11] 7 := by
-  intro h
+example : ¬ (toySignature.WellFormed ∧
+    toySignature.Call (toyInput toyBase 11) (wrongToySlot toyBase 11 7) [11] 7) := by
+  intro ⟨_, h⟩
   have bad := h.preserved.2.1 0 (by decide)
-  simp [wrongToySlot, toyCall, toyInput, toyBody, toyBase, runToy] at bad
+  simp [wrongToySlot, toyCall, toyInput, toyBody, toyBodyAt, toyBase, runToy] at bad
 
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyCall_conforms`, case `spill`,
 subject `ConcreteSpec.Core.Frame.ABI.toyCall`, mutant `ConcreteSpec.Core.Frame.ABI.wrongToyPointer`). -/
-example : ¬ toySignature.Call (toyInput toyBase 11) (wrongToyPointer toyBase 11 7) [11] 7 := by
-  intro h
+example : ¬ (toySignature.WellFormed ∧
+    toySignature.Call (toyInput toyBase 11) (wrongToyPointer toyBase 11 7) [11] 7) := by
+  intro ⟨_, h⟩
   have bad := h.preserved.2.2
-  simp [wrongToyPointer, toyCall, toyInput, toyBody, toyBase, runToy] at bad
+  simp [wrongToyPointer, toyCall, toyInput, toyBody, toyBodyAt, toyBase, runToy] at bad
 
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyCall_conforms`, case `spill`,
 subject `ConcreteSpec.Core.Frame.ABI.toyCall`, mutant `ConcreteSpec.Core.Frame.ABI.wrongToyResult`). -/
-example : ¬ toySignature.Call (toyInput toyBase 11) (wrongToyResult toyBase 11 7) [11] 7 := by
-  intro h
+example : ¬ (toySignature.WellFormed ∧
+    toySignature.Call (toyInput toyBase 11) (wrongToyResult toyBase 11 7) [11] 7) := by
+  intro ⟨_, h⟩
   have bad := h.result
   simp [toySignature, Binding.Holds, Location.read, wrongToyResult, toyCall,
-    toyInput, toyBody, toyBase, runToy] at bad
+    toyInput, toyBody, toyBodyAt, toyBase, runToy] at bad
 
 /-- Helper (congruence). Transitivity of protected machine observations across calls. (approved: PENDING)
  Preserved machine state composes across sequential calls with the same saved-register set. -/
@@ -1201,88 +1253,47 @@ theorem machine_registerFrame_union {Reg Word : Type} {before middle after : Mac
     simpa only [List.mem_append, not_or] using hr
   exact (h₂ r hr'.2).trans (h₁ r hr'.1)
 
-/-- Helper (projection). Extracts an ABI contract obligation; implementation evidence is
-`ConcreteSpec.Core.Frame.ABI.toyCall_conforms`. (approved: PENDING)
- A well-formed returning ABI call restores every callee-saved register exactly: well-formedness
-puts those registers outside the clobber set, and the call's register frame preserves that set. -/
-theorem callee_saved_registers_equal {Ty Val Reg Word : Type} {sig : Signature Ty Val Reg Word}
-    {before after : Machine Reg Word} {args : List Val} {result : Val}
-    (hw : sig.WellFormed) (h : sig.Call before after args result) :
-    ∀ r ∈ sig.calleeSaved, after.regs r = before.regs r :=
-  fun r hr => h.clobbers r (hw.2.2.2 r hr)
+/-- Law (subject `ConcreteSpec.Core.Frame.ABI.toyCallSeq`).
+Two sequential toy calls preserve the caller's saved register, stack slots, and stack pointer
+across both calls while confining register modifications to the union of their clobber sets. -/
+theorem toyCallSeq_conforms (base : Machine Nat Nat) (arg result₁ result₂ : Nat) :
+    Machine.Preserved (toyInput base arg) (toyCallSeq base arg result₁ result₂) [0] ∧
+      Machine.RegisterFrame (toyInput base arg) (toyCallSeq base arg result₁ result₂) ([1] ++ [2]) := by
+  have h₁ := (toyCall_conforms base arg result₁).2
+  have h₂ := toyBodyAt_preserved (toyCall base arg result₁) 2 result₂ (by decide)
+  exact ⟨machine_preserved_trans h₁.preserved h₂.1, machine_registerFrame_union h₁.clobbers h₂.2⟩
 
-/-- Helper (projection). Extracts an ABI contract obligation; implementation evidence is
-`ConcreteSpec.Core.Frame.ABI.toyCall_conforms`. (approved: PENDING)
- Registers outside the clobber set are unchanged; equivalently, clobbers are the only registers
-permitted to differ after return. -/
-theorem clobbers_only_changed_registers {Ty Val Reg Word : Type} {sig : Signature Ty Val Reg Word}
-    {before after : Machine Reg Word} {args : List Val} {result : Val}
-    (h : sig.Call before after args result) :
-    ∀ r, r ∉ sig.clobbers → after.regs r = before.regs r :=
-  h.clobbers
+/-- Instance (law `ConcreteSpec.Core.Frame.ABI.toyCallSeq_conforms`, case `two_calls`). -/
+example :
+    Machine.Preserved (toyInput toyBase 11) (toyCallSeq toyBase 11 7 9) [0] ∧
+      Machine.RegisterFrame (toyInput toyBase 11) (toyCallSeq toyBase 11 7 9) ([1] ++ [2]) :=
+  toyCallSeq_conforms toyBase 11 7 9
 
-/-- Helper (projection). Extracts an ABI contract obligation; implementation evidence is
-`ConcreteSpec.Core.Frame.ABI.toyCall_conforms`. (approved: PENDING)
- The caller's stack slots below its stack pointer are restored exactly. -/
-theorem caller_stack_slots_equal {Ty Val Reg Word : Type} {sig : Signature Ty Val Reg Word}
-    {before after : Machine Reg Word} {args : List Val} {result : Val}
-    (h : sig.Call before after args result) :
-    ∀ slot, slot < before.stackPointer → after.slots slot = before.slots slot :=
-  h.preserved.2.1
+/-- A planted sequential call fails to restore callee-saved register 0 on the second call. -/
+def clobberingSavedToyCallSeq (base : Machine Nat Nat) (arg result₁ result₂ : Nat) : Machine Nat Nat :=
+  runToy [.register 0 88] (toyCallSeq base arg result₁ result₂)
 
-/-- Helper (projection). Extracts an ABI contract obligation; implementation evidence is
-`ConcreteSpec.Core.Frame.ABI.toyCall_conforms`. (approved: PENDING)
- Returning restores the caller's stack pointer exactly. -/
-theorem stack_pointer_restored {Ty Val Reg Word : Type} {sig : Signature Ty Val Reg Word}
-    {before after : Machine Reg Word} {args : List Val} {result : Val}
-    (h : sig.Call before after args result) : after.stackPointer = before.stackPointer :=
-  h.preserved.2.2
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyCallSeq_conforms`, case `two_calls`,
+subject `ConcreteSpec.Core.Frame.ABI.toyCallSeq`,
+mutant `ConcreteSpec.Core.Frame.ABI.clobberingSavedToyCallSeq`). -/
+example : ¬ (Machine.Preserved (toyInput toyBase 11) (clobberingSavedToyCallSeq toyBase 11 7 9) [0] ∧
+    Machine.RegisterFrame (toyInput toyBase 11) (clobberingSavedToyCallSeq toyBase 11 7 9) ([1] ++ [2])) := by
+  intro ⟨hp, _⟩
+  have bad := hp.1 0 (by decide)
+  simp [clobberingSavedToyCallSeq, toyCallSeq, toyCall, toyInput, toyBody, toyBodyAt, toyBase, runToy] at bad
 
-/-- Helper (projection). Extracts an ABI contract obligation; implementation evidence is
-`ConcreteSpec.Core.Frame.ABI.toyCall_conforms`. (approved: PENDING)
- Typed arguments occupy their signature locations at entry. -/
-theorem typed_arguments_at_entry {Ty Val Reg Word : Type} {sig : Signature Ty Val Reg Word}
-    {before after : Machine Reg Word} {args : List Val} {result : Val}
-    (h : sig.Call before after args result) : ArgumentsHold sig.encode sig.arguments args before :=
-  h.arguments
+/-- A planted sequential call clobbers register 3 outside the combined clobber set `[1] ++ [2]`. -/
+def undeclaredClobberToyCallSeq (base : Machine Nat Nat) (arg result₁ result₂ : Nat) : Machine Nat Nat :=
+  runToy [.register 3 77] (toyCallSeq base arg result₁ result₂)
 
-/-- Helper (projection). Extracts an ABI contract obligation; implementation evidence is
-`ConcreteSpec.Core.Frame.ABI.toyCall_conforms`. (approved: PENDING)
- The typed result occupies its return-convention locations after return. -/
-theorem typed_result_at_return {Ty Val Reg Word : Type} {sig : Signature Ty Val Reg Word}
-    {before after : Machine Reg Word} {args : List Val} {result : Val}
-    (h : sig.Call before after args result) : sig.result.Holds sig.encode result after :=
-  h.result
-
-/-- Helper (projection). Describes the contract or its arithmetic; independent execution
-evidence must be supplied separately. (approved: PENDING)
- A well-formed signature's frame size is a multiple of its positive power-of-two alignment. -/
-theorem frame_size_aligned {Ty Val Reg Word : Type} {sig : Signature Ty Val Reg Word}
-    (h : sig.WellFormed) : IsPow2 sig.frameAlign ∧ sig.frameSize % sig.frameAlign = 0 :=
-  ⟨h.1, h.2.1⟩
-
-/-- Helper (projection). Describes the contract or its arithmetic; independent execution
-evidence must be supplied separately. (approved: PENDING)
- The callee's own frame is included in its final-artifact stack bound. -/
-theorem frame_within_stack_bound {Ty Val Reg Word : Type} {sig : Signature Ty Val Reg Word}
-    (h : sig.WellFormed) : sig.frameSize ≤ sig.stackBound :=
-  h.2.2.1
-
-/-- Helper (projection). Describes the contract or its arithmetic; independent execution
-evidence must be supplied separately. (approved: PENDING)
- Stack accounting of a call is exactly caller frame plus callee bound. -/
-theorem call_stack_account {Ty Val Reg Word : Type} (callerFrame : Nat)
-    (sig : Signature Ty Val Reg Word) : callStack callerFrame sig = callerFrame + sig.stackBound :=
-  rfl
-
-/-- Helper (projection). Describes the contract or its arithmetic; independent execution
-evidence must be supplied separately. (approved: PENDING)
- Whole-artifact accounting adds launcher/runtime bytes to that same handoff. -/
-theorem artifact_stack_account {Ty Val Reg Word : Type} (launcherRuntime callerFrame : Nat)
-    (sig : Signature Ty Val Reg Word) :
-    artifactStack launcherRuntime callerFrame sig =
-      launcherRuntime + callerFrame + sig.stackBound := by
-  simp [artifactStack, callStack, Nat.add_assoc]
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyCallSeq_conforms`, case `two_calls`,
+subject `ConcreteSpec.Core.Frame.ABI.toyCallSeq`,
+mutant `ConcreteSpec.Core.Frame.ABI.undeclaredClobberToyCallSeq`). -/
+example : ¬ (Machine.Preserved (toyInput toyBase 11) (undeclaredClobberToyCallSeq toyBase 11 7 9) [0] ∧
+    Machine.RegisterFrame (toyInput toyBase 11) (undeclaredClobberToyCallSeq toyBase 11 7 9) ([1] ++ [2])) := by
+  intro ⟨_, hf⟩
+  have bad := hf 3 (by decide)
+  simp [undeclaredClobberToyCallSeq, toyCallSeq, toyCall, toyInput, toyBody, toyBodyAt, toyBase, runToy] at bad
 
 /-- Helper (computation). Characterizes the retention specification; execution evidence is
 `ConcreteSpec.Core.Frame.ABI.transferKept_sound`. (approved: PENDING)

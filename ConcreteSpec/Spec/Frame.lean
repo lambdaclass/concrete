@@ -443,19 +443,26 @@ def TransitionConforms {Ty Val Reg Word : Type} (sig : Signature Ty Val Reg Word
 exit are explicit operations; writes carry their destinations rather than frame-law proofs. -/
 inductive ToyInstruction where
   | register (r word : Nat)
-  | slot (offset word : Nat)
+  | save (r backOffset : Nat)
+  | restore (r backOffset : Nat)
+  | slot (backOffset word : Nat)
   | reserve (bytes : Nat)
   | release (bytes : Nat)
 
 /-- Execute instructions without checking any ABI contract. Stack writes address the current
-stack pointer plus their offset, so a write after reservation targets the callee's frame. -/
+stack pointer minus their back-offset, so after reserving `bytes`, offsets `1 .. bytes` address
+slots inside `[base.stackPointer, base.stackPointer + bytes)`. -/
 def runToy : List ToyInstruction → Machine Nat Nat → Machine Nat Nat
   | [], st => st
   | instruction :: rest, st =>
     let next := match instruction with
       | .register r word => { st with regs := fun q => if q = r then word else st.regs q }
-      | .slot offset word =>
-        { st with slots := fun q => if q = st.stackPointer + offset then word else st.slots q }
+      | .save r backOffset =>
+        { st with slots := fun q => if q = st.stackPointer - backOffset then st.regs r else st.slots q }
+      | .restore r backOffset =>
+        { st with regs := fun q => if q = r then st.slots (st.stackPointer - backOffset) else st.regs q }
+      | .slot backOffset word =>
+        { st with slots := fun q => if q = st.stackPointer - backOffset then word else st.slots q }
       | .reserve bytes => { st with stackPointer := st.stackPointer + bytes }
       | .release bytes => { st with stackPointer := st.stackPointer - bytes }
     runToy rest next
@@ -470,14 +477,24 @@ def toySignature : Signature Unit Nat Nat Nat :=
 def toyInput (base : Machine Nat Nat) (arg : Nat) : Machine Nat Nat :=
   runToy [.register 0 arg] base
 
-/-- A real toy callee reserves a frame, writes its return value and a private spill, then
-releases the frame. No instruction tests restoration or result validity. -/
+/-- A real toy callee reserves an 8-slot frame, spills and clobbers callee-saved register 0 inside
+that frame, writes a private spill slot inside the frame and its return register, then restores
+register 0 and releases the frame. -/
+def toyBodyAt (resultReg result : Nat) : List ToyInstruction :=
+  [.reserve 8, .save 0 8, .register 0 55, .slot 7 99, .register resultReg result, .restore 0 8, .release 8]
+
+/-- Standard single-call body returning in register 1. -/
 def toyBody (result : Nat) : List ToyInstruction :=
-  [.reserve 8, .register 1 result, .slot 0 99, .release 8]
+  toyBodyAt 1 result
 
 /-- Execute a full toy call, including input packing. -/
 def toyCall (base : Machine Nat Nat) (arg result : Nat) : Machine Nat Nat :=
   runToy (toyBody result) (toyInput base arg)
+
+/-- Execute two sequential toy calls writing their results to registers 1 and 2 while both save,
+clobber, and restore callee-saved register 0 in their private stack frames. -/
+def toyCallSeq (base : Machine Nat Nat) (arg result₁ result₂ : Nat) : Machine Nat Nat :=
+  runToy (toyBodyAt 2 result₂) (toyCall base arg result₁)
 
 /-- Independent execution relation for the toy convention. The witnesses describe input
 packing and actual instructions; they contain none of the ABI equalities being proved. -/
@@ -495,15 +512,19 @@ def artifactStack {Ty Val Reg Word : Type} (launcherRuntime callerFrame : Nat)
     (sig : Signature Ty Val Reg Word) : Nat :=
   launcherRuntime + callStack callerFrame sig
 
-/-- A layout plan counts alignment-sized units for each slot. It is input data, not evidence
-that a supplied frame size is aligned. -/
+/-- A layout plan gives the raw byte size of each slot together with the required frame alignment. -/
 structure LayoutPlan where
   alignment : Nat
-  slotUnits : List Nat
+  slotBytes : List Nat
 
-/-- Lay out slots by accumulating their unit counts, then converting units to bytes. -/
+/-- Total unrounded byte count required by the slots in a layout plan. -/
+def rawSlotBytes (plan : LayoutPlan) : Nat :=
+  plan.slotBytes.foldl (· + ·) 0
+
+/-- Lay out slots by accumulating their byte sizes and rounding up to the next multiple of the
+required alignment. -/
 def layoutBytes (plan : LayoutPlan) : Nat :=
-  plan.slotUnits.foldl (· + ·) 0 * plan.alignment
+  ((rawSlotBytes plan + plan.alignment - 1) / plan.alignment) * plan.alignment
 
 /-- Structured stack instructions. A frame allocates before running its body and releases on
 return; sequencing reuses the released stack. -/
@@ -525,10 +546,6 @@ def computedStackBound : StackCode → Nat
   | .seq first second => max (computedStackBound first) (computedStackBound second)
   | .frame bytes body => bytes + computedStackBound body
 
-/-- The stack-bound specification quantifies over all operational samples and initial depths. -/
-def StackSafe (code : StackCode) : Prop :=
-  ∀ base sample, sample ∈ stackSamples code base → sample ≤ base + computedStackBound code
-
 /-- Obligation (discharged at slice 0, R-0575).
 Obligation on the code generator: bind the final artifact's stack report to its actual stack-use
 samples, including spills, nested calls, cleanup, and launcher/runtime frames. The operational
@@ -536,6 +553,10 @@ samples must come from artifact execution, not from an admission test against th
 The nested toy stack language proves only its own computed bound. -/
 def ArtifactStackConforms (reportedBound : Nat) (samples : Nat → List Nat) : Prop :=
   ∀ base sample, sample ∈ samples base → sample ≤ base + reportedBound
+
+/-- The stack-bound specification for `StackCode` is an instance of `ArtifactStackConforms`. -/
+def StackSafe (code : StackCode) : Prop :=
+  ArtifactStackConforms (computedStackBound code) (stackSamples code)
 
 /-! ### Foreign validity and retention (Q3.12) -/
 
