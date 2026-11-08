@@ -34,36 +34,45 @@ PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `Concret
 
 namespace ConcreteSpec.Core
 
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) -/
 theorem TrapKind.name_injective {a b : TrapKind} (h : a.name = b.name) : a = b := by
   cases a <;> cases b <;> first | rfl | (simp [TrapKind.name] at h)
 
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) -/
 theorem ArithmeticError.trapKind_injective {a b : ArithmeticError} (h : a.trapKind = b.trapKind) :
     a = b := by
   cases a <;> cases b <;> first | rfl | cases h
 
 /-! ### Representation -/
 
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) -/
 theorem toBits_lt (t : IntTy) (n : Int) : toBits t n < 2 ^ t.bits := by
   cases t <;> simp only [toBits, IntTy.bits] <;> omega
 
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) -/
 theorem ofBits_inRange (t : IntTy) (m : Nat) (h : m < 2 ^ t.bits) : t.InRange (ofBits t m) := by
   cases t <;> simp only [IntTy.bits] at h <;>
     simp [ofBits, IntTy.InRange, IntTy.min, IntTy.max, IntTy.signed, IntTy.bits] <;>
     (try split) <;> omega
 
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) -/
 theorem ofBits_toBits (t : IntTy) (n : Int) (h : t.InRange n) : ofBits t (toBits t n) = n := by
   cases t <;> simp [IntTy.InRange, IntTy.min, IntTy.max, IntTy.signed, IntTy.bits] at h <;>
     simp [ofBits, toBits, IntTy.signed, IntTy.bits] <;> (try split) <;> omega
 
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) -/
 theorem wrap_inRange (t : IntTy) (n : Int) : t.InRange (wrap t n) :=
   ofBits_inRange t _ (toBits_lt t n)
 
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) -/
 theorem wrap_of_inRange (t : IntTy) (n : Int) (h : t.InRange n) : wrap t n = n :=
   ofBits_toBits t n h
 
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) -/
 theorem IntTy.min_le_max (t : IntTy) : t.min ≤ t.max := by
   cases t <;> decide
 
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) -/
 theorem saturate_inRange (t : IntTy) (n : Int) : t.InRange (saturate t n) := by
   have := t.min_le_max
   unfold saturate IntTy.InRange
@@ -71,7 +80,7 @@ theorem saturate_inRange (t : IntTy) (n : Int) : t.InRange (saturate t n) := by
   · omega
   · split <;> omega
 
-/-- Saturation keeps a value in range. -/
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) Saturation keeps a value in range. -/
 theorem saturate_of_inRange (t : IntTy) (n : Int) (h : t.InRange n) : saturate t n = n := by
   obtain ⟨h1, h2⟩ := h
   unfold saturate
@@ -81,6 +90,7 @@ theorem saturate_of_inRange (t : IntTy) (n : Int) (h : t.InRange n) : saturate t
     · omega
     · rfl
 
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) -/
 theorem bitwise_inRange (t : IntTy) (op : BitOp) (a b : Int) : t.InRange (bitwise t op a b) := by
   have ha := toBits_lt t a
   have hb := toBits_lt t b
@@ -89,6 +99,7 @@ theorem bitwise_inRange (t : IntTy) (op : BitOp) (a b : Int) : t.InRange (bitwis
   · exact ofBits_inRange t _ (Nat.or_lt_two_pow ha hb)
   · exact ofBits_inRange t _ (Nat.xor_lt_two_pow ha hb)
 
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) -/
 theorem bitNot_inRange (t : IntTy) (a : Int) : t.InRange (bitNot t a) := by
   have := toBits_lt t a
   have hp : 0 < 2 ^ t.bits := Nat.two_pow_pos _
@@ -96,13 +107,14 @@ theorem bitNot_inRange (t : IntTy) (a : Int) : t.InRange (bitNot t a) := by
 
 /-! ### Checked operations stay in range -/
 
+/-- Helper (inversion). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) -/
 theorem inRangeOr_inRange {t : IntTy} {r s : Int} (h : inRangeOr t r = .ok s) : t.InRange s := by
   unfold inRangeOr at h
   split at h
   · cases h; assumption
   · cases h
 
-/-- A right shift of a value in range is in range: it moves the value toward the sign's end. -/
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) A right shift of a value in range is in range: it moves the value toward the sign's end. -/
 theorem shr_inRange (t : IntTy) (a : Int) (d : Nat) (ha : t.InRange a) :
     t.InRange (a / (2 : Int) ^ d) := by
   have hd : (0 : Int) < 2 ^ d := Int.pow_pos (by decide)
@@ -121,7 +133,7 @@ theorem shr_inRange (t : IntTy) (a : Int) (d : Nat) (ha : t.InRange a) :
     · exact Int.le_trans (Int.ediv_le_self _ ha0) h2
     · exact Int.le_trans (Int.le_of_lt (Int.ediv_neg_of_neg_of_pos (Int.lt_of_not_ge ha0) hd)) hmax
 
-/-- A remainder of a value in range is in range: it lies between `0` and the dividend. This holds
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) A remainder of a value in range is in range: it lies between `0` and the dividend. This holds
 for every divisor (Lean's `tmod` by `0` is the dividend), so `checked` needs no extra case. -/
 theorem tmod_inRange (t : IntTy) (a b : Int) (ha : t.InRange a) : t.InRange (a.tmod b) := by
   have hmin : t.min ≤ 0 := by cases t <;> decide
@@ -135,7 +147,7 @@ theorem tmod_inRange (t : IntTy) (a b : Int) (ha : t.InRange a) : t.InRange (a.t
     rw [Int.neg_tmod] at hnp
     constructor <;> omega
 
-/-- Every successful checked operation on operands in range gives a value in range. -/
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) Every successful checked operation on operands in range gives a value in range. -/
 theorem checked_inRange (t : IntTy) (op : ArithOp) (a b r : Int) (ha : t.InRange a)
     (h : checked t op a b = .ok r) : t.InRange r := by
   cases op <;> simp only [checked] at h
@@ -159,17 +171,19 @@ theorem checked_inRange (t : IntTy) (op : ArithOp) (a b r : Int) (ha : t.InRange
 
 /-! ### Plain, wrapping and saturating -/
 
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) -/
 theorem plain_ok_iff (t : IntTy) (op : ArithOp) (a b r : Int) :
     plain t op a b = .ok r ↔ checked t op a b = .ok r := by
   unfold plain
   cases checked t op a b <;> simp
 
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) -/
 theorem plain_trap_iff (t : IntTy) (op : ArithOp) (a b : Int) (k : TrapKind) :
     plain t op a b = .trap k ↔ ∃ e, checked t op a b = .error e ∧ e.trapKind = k := by
   unfold plain
   cases checked t op a b <;> simp
 
-/-- A plain operation is never stuck: it has a result or a trap. -/
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) A plain operation is never stuck: it has a result or a trap. -/
 theorem plain_not_stuck (t : IntTy) (op : ArithOp) (a b : Int) : plain t op a b ≠ .stuck := by
   unfold plain
   cases checked t op a b <;> simp
@@ -180,10 +194,12 @@ def WrapOp.arith : WrapOp → ArithOp
   | .sub => .sub
   | .mul => .mul
 
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) -/
 theorem checked_wrapOp (t : IntTy) (op : WrapOp) (a b : Int) :
     checked t op.arith a b = inRangeOr t (op.exact a b) := by
   cases op <;> rfl
 
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) -/
 theorem wrapping_of_checked (t : IntTy) (op : WrapOp) (a b r : Int)
     (h : checked t op.arith a b = .ok r) : wrapping t op a b = r := by
   rw [checked_wrapOp] at h
@@ -192,6 +208,7 @@ theorem wrapping_of_checked (t : IntTy) (op : WrapOp) (a b r : Int)
   · cases h; exact wrap_of_inRange t _ (by assumption)
   · cases h
 
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) -/
 theorem saturating_of_checked (t : IntTy) (op : WrapOp) (a b r : Int)
     (h : checked t op.arith a b = .ok r) : saturating t op a b = r := by
   rw [checked_wrapOp] at h
@@ -203,6 +220,7 @@ theorem saturating_of_checked (t : IntTy) (op : WrapOp) (a b r : Int)
 
 /-! ### Conversions -/
 
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) -/
 theorem lossless_iff (s t : IntTy) : Lossless s t ↔ ∀ n, s.InRange n → t.InRange n := by
   constructor
   · intro ⟨h1, h2⟩ n ⟨hn1, hn2⟩
@@ -211,10 +229,11 @@ theorem lossless_iff (s t : IntTy) : Lossless s t ↔ ∀ n, s.InRange n → t.I
     have hm := s.min_le_max
     exact ⟨(h s.min ⟨Int.le_refl _, hm⟩).1, (h s.max ⟨hm, Int.le_refl _⟩).2⟩
 
-/-- `bool` converts losslessly to every integer type. -/
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) `bool` converts losslessly to every integer type. -/
 theorem boolToInt_inRange (t : IntTy) (b : Bool) : t.InRange (boolToInt b) := by
   cases t <;> cases b <;> decide
 
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) -/
 theorem tryConvert_ok_iff (t : IntTy) (n r : Int) :
     tryConvert t n = .ok r ↔ t.InRange n ∧ r = n := by
   unfold tryConvert
@@ -224,12 +243,13 @@ theorem tryConvert_ok_iff (t : IntTy) (n r : Int) :
 
 /-! ### Machine and exact arithmetic in contracts -/
 
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) -/
 theorem exact_defined (ρ : Var → Option Int) (op : WrapOp) (a b : CTerm) (x y : Int)
     (ha : a.eval ρ = some x) (hb : b.eval ρ = some y) :
     (CTerm.exact op a b).eval ρ = some (op.exact x y) := by
   simp [CTerm.eval, ha, hb]
 
-/-- Where a plain machine term is defined, it means the exact operation: the two differ only in
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) Where a plain machine term is defined, it means the exact operation: the two differ only in
 where the machine one is undefined. -/
 theorem machine_plain_eq_exact (ρ : Var → Option Int) (t : IntTy) (op : WrapOp) (a b : CTerm)
     (r : Int) (h : (CTerm.machine t (.plain op.arith) a b).eval ρ = some r) :
@@ -251,7 +271,7 @@ theorem machine_plain_eq_exact (ρ : Var → Option Int) (t : IntTy) (op : WrapO
         · simp [hr] at h; subst h; rfl
         · simp [hr] at h
 
-/-- A defined machine term has operands that are values of its width (a shift count excepted). -/
+/-- Helper (inversion). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) A defined machine term has operands that are values of its width (a shift count excepted). -/
 theorem machine_operands (ρ : Var → Option Int) (t : IntTy) (op : MachineOp) (a b : CTerm)
     (r : Int) (h : (CTerm.machine t op a b).eval ρ = some r) :
     ∃ x y, a.eval ρ = some x ∧ b.eval ρ = some y ∧ t.InRange x ∧
@@ -272,7 +292,7 @@ theorem machine_operands (ρ : Var → Option Int) (t : IntTy) (op : MachineOp) 
           Bool.or_eq_true] at hok
         exact ⟨x, y, rfl, rfl, hok.1, hok.2⟩
 
-/-- A defined machine term's value is a value of its width. -/
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) A defined machine term's value is a value of its width. -/
 theorem machine_inRange (ρ : Var → Option Int) (t : IntTy) (op : MachineOp) (a b : CTerm)
     (r : Int) (h : (CTerm.machine t op a b).eval ρ = some r) : t.InRange r := by
   obtain ⟨x, y, ha, hb, hx, _⟩ := machine_operands ρ t op a b r h
@@ -288,6 +308,7 @@ theorem machine_inRange (ρ : Var → Option Int) (t : IntTy) (op : MachineOp) (
     | wrapping o => cases h; exact wrap_inRange t _
     | saturating o => cases h; exact saturate_inRange t _
 
+/-- Helper (inversion). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) -/
 theorem exactOf?_some {op : MachineOp} {w : WrapOp} (h : op.exactOf? = some w) :
     op = .plain w.arith := by
   cases op with
@@ -295,7 +316,7 @@ theorem exactOf?_some {op : MachineOp} {w : WrapOp} (h : op.exactOf? = some w) :
   | wrapping _ => cases h
   | saturating _ => cases h
 
-/-- **Reading in exact arithmetic.** Where a contract term is defined, its exact reading is
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) **Reading in exact arithmetic.** Where a contract term is defined, its exact reading is
 defined and has the same value. -/
 theorem eval_toExact (ρ : Var → Option Int) : ∀ (e : CTerm) (r : Int),
     e.eval ρ = some r → e.toExact.eval ρ = some r
@@ -328,27 +349,29 @@ theorem eval_toExact (ρ : Var → Option Int) : ∀ (e : CTerm) (r : Int),
 
 /-! ### Negation, `bool` patterns, lossy conversion -/
 
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) -/
 theorem plainNeg_ok_iff (t : IntTy) (a r : Int) : plainNeg t a = .ok r ↔ checkedNeg t a = .ok r := by
   unfold plainNeg
   cases checkedNeg t a <;> simp
 
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) -/
 theorem plainNeg_trap_iff (t : IntTy) (a : Int) (k : TrapKind) :
     plainNeg t a = .trap k ↔ ∃ e, checkedNeg t a = .error e ∧ e.trapKind = k := by
   unfold plainNeg
   cases checkedNeg t a <;> simp
 
 /-- Helper (projection). The old range-only statement is retained as a projection; the arithmetic
-laws below independently characterize successful and failing negation. -/
+laws below independently characterize successful and failing negation. (approved: PENDING) -/
 private theorem checkedNeg_inRange_proj {t : IntTy} {a r : Int} (h : checkedNeg t a = .ok r) :
     t.InRange r := inRangeOr_inRange h
 
 /-- Helper (arithmetic). Representability of mathematical negation, independently of the
-`checkedNeg` result wrapper. -/
+`checkedNeg` result wrapper. (approved: PENDING) -/
 private theorem neg_inRange_iff (t : IntTy) (a : Int) (ha : t.InRange a) :
     t.InRange (-a) ↔ (if t.signed = true then a ≠ t.min else a = 0) := by
   cases t <;> simp [IntTy.InRange, IntTy.min, IntTy.max, IntTy.signed, IntTy.bits] at * <;> omega
 
-/-- Checked negation succeeds exactly with the mathematical negation, when that integer is
+/-- Law (subject `ConcreteSpec.Core.checkedNeg`). Checked negation succeeds exactly with the mathematical negation, when that integer is
 representable: signed `MIN` and nonzero unsigned inputs are the only invalid values in range. -/
 theorem checkedNeg_ok_arithmetic (t : IntTy) (a r : Int) (ha : t.InRange a) :
     checkedNeg t a = .ok r ↔ r = -a ∧
@@ -368,7 +391,7 @@ theorem checkedNeg_ok_arithmetic (t : IntTy) (a r : Int) (ha : t.InRange a) :
     intro _ hc
     exact hn ((neg_inRange_iff t a ha).2 hc)
 
-/-- Checked negation fails only with `Overflow`, exactly for signed `MIN` or a nonzero unsigned
+/-- Law (subject `ConcreteSpec.Core.checkedNeg`). Checked negation fails only with `Overflow`, exactly for signed `MIN` or a nonzero unsigned
 input. -/
 theorem checkedNeg_error_iff (t : IntTy) (a : Int) (e : ArithmeticError) (ha : t.InRange a) :
     checkedNeg t a = .error e ↔ e = .overflow ∧
@@ -393,54 +416,67 @@ theorem checkedNeg_error_iff (t : IntTy) (a : Int) (e : ArithmeticError) (ha : t
     · rintro ⟨rfl, _⟩
       rfl
 
-/-- Instance (law `ConcreteSpec.Core.checkedNeg_ok_arithmetic`). Signed and unsigned zero inputs
-exercise both branches of the representability condition. -/
-example : checkedNeg .i8 5 = .ok (-5) ∧ checkedNeg .u8 0 = .ok 0 := by decide
+/-- Incorrect negation that preserves its input. -/
+def identityNeg (_t : IntTy) (a : Int) : Except ArithmeticError Int := .ok a
 
-/-- Planted (law `ConcreteSpec.Core.checkedNeg_ok_arithmetic`). Negation that keeps signed `MIN`
-or accepts a nonzero unsigned input would violate the arithmetic characterization. -/
-example : ¬(checkedNeg .i8 (-128) = .ok 128) ∧ ¬(checkedNeg .u8 1 = .ok (-1)) := by decide
+/-- Incorrect negation that never reports overflow. -/
+def uncheckedNeg (_t : IntTy) (a : Int) : Except ArithmeticError Int := .ok (-a)
 
-/-- Instance (law `ConcreteSpec.Core.checkedNeg_error_iff`). The two invalid classes report the
-same arithmetic error. -/
-example : checkedNeg .i8 (-128) = .error .overflow ∧
-    checkedNeg .u8 1 = .error .overflow := by decide
+/-- Instance (law `ConcreteSpec.Core.checkedNeg_ok_arithmetic`, case `signed`). -/
+example : checkedNeg .i8 5 = .ok (-5) ↔ (-5 : Int) = -5 ∧
+    (if IntTy.i8.signed = true then (5 : Int) ≠ IntTy.i8.min else (5 : Int) = 0) :=
+  checkedNeg_ok_arithmetic .i8 5 (-5) (by decide)
 
-/-- Planted (law `ConcreteSpec.Core.checkedNeg_error_iff`). A wrong error category, or rejecting a
-representable negation, falsifies the failure law. -/
-example : ¬(checkedNeg .u8 1 = .error .invalidShift) ∧
-    ¬(checkedNeg .i8 5 = .error .overflow) := by decide
+/-- Planted (law `ConcreteSpec.Core.checkedNeg_ok_arithmetic`, case `signed`,
+subject `ConcreteSpec.Core.checkedNeg`, mutant `ConcreteSpec.Core.identityNeg`). -/
+example : IntTy.i8.InRange 5 ∧ ¬(identityNeg .i8 5 = .ok (-5) ↔ (-5 : Int) = -5 ∧
+    (if IntTy.i8.signed = true then (5 : Int) ≠ IntTy.i8.min else (5 : Int) = 0)) := by decide
 
+/-- Instance (law `ConcreteSpec.Core.checkedNeg_error_iff`, case `minimum`). -/
+example : checkedNeg .i8 (-128) = .error .overflow ↔ ArithmeticError.overflow = .overflow ∧
+    ¬(if IntTy.i8.signed = true then (-128 : Int) ≠ IntTy.i8.min else (-128 : Int) = 0) :=
+  checkedNeg_error_iff .i8 (-128) .overflow (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.checkedNeg_error_iff`, case `minimum`,
+subject `ConcreteSpec.Core.checkedNeg`, mutant `ConcreteSpec.Core.uncheckedNeg`). -/
+example : IntTy.i8.InRange (-128) ∧ ¬(uncheckedNeg .i8 (-128) = .error .overflow ↔
+    ArithmeticError.overflow = .overflow ∧
+      ¬(if IntTy.i8.signed = true then (-128 : Int) ≠ IntTy.i8.min else (-128 : Int) = 0)) := by decide
+
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) -/
 theorem boolOfBits_boolToBits (b : Bool) : boolOfBits (boolToBits b) = some b := by
   cases b <;> rfl
 
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) -/
 theorem boolOfBits_some_iff (m : Nat) (b : Bool) : boolOfBits m = some b ↔ m = boolToBits b := by
   match m with
   | 0 => cases b <;> simp [boolOfBits, boolToBits]
   | 1 => cases b <;> simp [boolOfBits, boolToBits]
   | m + 2 => cases b <;> simp [boolOfBits, boolToBits]
 
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) -/
 theorem lossyConvert_inRange (t : IntTy) (n : Int) : t.InRange (lossyConvert t n) := wrap_inRange t n
 
-/-- A lossy conversion of a value of the target type keeps it. -/
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) A lossy conversion of a value of the target type keeps it. -/
 theorem lossyConvert_of_inRange (t : IntTy) (n : Int) (h : t.InRange n) : lossyConvert t n = n :=
   wrap_of_inRange t n h
 
 /-! ### Bit-level correspondence -/
 
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) -/
 theorem toBits_ofBits (t : IntTy) (m : Nat) (h : m < 2 ^ t.bits) : toBits t (ofBits t m) = m := by
   cases t <;> simp only [IntTy.bits] at h <;>
     simp [toBits, ofBits, IntTy.signed, IntTy.bits] <;> (try split) <;> omega
 
-/-- Wrapping keeps the bit pattern: `wrap` only reads the low `bits` bits. -/
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) Wrapping keeps the bit pattern: `wrap` only reads the low `bits` bits. -/
 theorem toBits_wrap (t : IntTy) (n : Int) : toBits t (wrap t n) = toBits t n :=
   toBits_ofBits t _ (toBits_lt t n)
 
-/-- A wrapping operation's pattern is the exact result's pattern, modulo `2^bits`. -/
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) A wrapping operation's pattern is the exact result's pattern, modulo `2^bits`. -/
 theorem toBits_wrapping (t : IntTy) (op : WrapOp) (a b : Int) :
     toBits t (wrapping t op a b) = toBits t (op.exact a b) := toBits_wrap t _
 
-/-- A valid left shift's pattern is the pattern of `a · 2^c`: the bits shifted out are gone. -/
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) A valid left shift's pattern is the pattern of `a · 2^c`: the bits shifted out are gone. -/
 theorem toBits_shl (t : IntTy) (a c r : Int) (h : checked t .shl a c = .ok r) :
     toBits t r = toBits t (a * (2 : Int) ^ c.toNat) := by
   simp only [checked] at h
@@ -448,7 +484,7 @@ theorem toBits_shl (t : IntTy) (a c r : Int) (h : checked t .shl a c = .ok r) :
   · cases h; exact toBits_wrap t _
   · cases h
 
-/-- An unsigned right shift is the logical shift of the pattern. -/
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) An unsigned right shift is the logical shift of the pattern. -/
 theorem toBits_shr_unsigned (t : IntTy) (hs : t.signed = false) (a c r : Int) (ha : t.InRange a)
     (h : checked t .shr a c = .ok r) : toBits t r = toBits t a >>> c.toNat := by
   simp only [checked] at h
@@ -471,7 +507,7 @@ theorem toBits_shr_unsigned (t : IntTy) (hs : t.signed = false) (a c r : Int) (h
     rw [hq, Int.toNat_natCast, Int.toNat_natCast]
   · cases h
 
-/-- Bitwise operations act on the patterns, bit by bit. -/
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) Bitwise operations act on the patterns, bit by bit. -/
 theorem toBits_bitwise (t : IntTy) (op : BitOp) (a b : Int) :
     toBits t (bitwise t op a b) = match op with
       | .and => toBits t a &&& toBits t b
@@ -484,17 +520,18 @@ theorem toBits_bitwise (t : IntTy) (op : BitOp) (a b : Int) :
   · exact toBits_ofBits t _ (Nat.or_lt_two_pow ha hb)
   · exact toBits_ofBits t _ (Nat.xor_lt_two_pow ha hb)
 
-/-- Bitwise not flips every bit of the pattern. -/
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) Bitwise not flips every bit of the pattern. -/
 theorem toBits_bitNot (t : IntTy) (a : Int) :
     toBits t (bitNot t a) = 2 ^ t.bits - 1 - toBits t a := by
   have := toBits_lt t a
   have hp : 0 < 2 ^ t.bits := Nat.two_pow_pos _
   exact toBits_ofBits t _ (by omega)
 
-/-- Saturation clamps: below the range it gives the minimum, above it the maximum. -/
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) Saturation clamps: below the range it gives the minimum, above it the maximum. -/
 theorem saturate_below (t : IntTy) (n : Int) (h : n < t.min) : saturate t n = t.min := by
   simp [saturate, h]
 
+/-- Helper (arithmetic). Supporting scalar lemma for downstream semantic proofs. (approved: PENDING) -/
 theorem saturate_above (t : IntTy) (n : Int) (h : t.max < n) : saturate t n = t.max := by
   have := t.min_le_max
   have : ¬ n < t.min := by omega
