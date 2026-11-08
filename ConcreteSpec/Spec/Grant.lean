@@ -9,6 +9,9 @@ scopes use `BlockId`, and resource obligations use existing typed place/grant id
 Dependencies distinguish lexical brand occurrence (including phantom tags) from live allocator
 use (Q1.3, Q1.5). A reset changes generation, never lineage. This is the generative binder
 transition; existential package syntax and structural dependency extraction remain C9 duties.
+The C9 ownership/brand integration slice must tie `Dependency.place` registration and
+consumption to the Own slot lifecycle (`move`, `drop`, `leave`); this standalone state
+does not establish that correspondence.
 
 Grant rights below are abstract policy atoms, not a replacement target/network grant table.
 Concrete resource identity/state is an opaque parameter and is retained, never erased as a
@@ -40,7 +43,7 @@ structure State where
 /-- Brand witnesses are nominal identities. Allocations require a still-live allocator;
 phantom occurrences only require the binder to remain scoped (Q1.1–Q1.5). -/
 def WellFormed (s : State) : Prop :=
-  (s.binders.map Binder.brand).Nodup ∧
+  ((s.binders.map Binder.brand).Nodup ∧ (s.dependencies.map Dependency.place).Nodup) ∧
   (∀ b ∈ s.binders, b.brand.id < s.nextBrand ∧ b.lineage.id < s.nextLineage) ∧
   (∀ d ∈ s.dependencies,
     (∀ i ∈ d.brands, ∃ b ∈ s.binders, b.brand = i) ∧
@@ -109,6 +112,10 @@ def initial : State := (fresh {} ⟨0⟩).getD {}
 def heap : Dependency := ⟨⟨0⟩, [⟨0⟩], [⟨0⟩]⟩
 def phantom : Dependency := ⟨⟨1⟩, [⟨0⟩], []⟩
 
+/-- Nonempty well-formed dependency table; duplicating its place is a planted bad state. -/
+example : WellFormed { initial with dependencies := [heap, phantom] } := by decide
+example : ¬ WellFormed { initial with dependencies := [heap, heap] } := by decide
+
 /-- Accepted (rule `ConcreteSpec.Core.Generative.reset`): repeated resets at the same site produce distinct nominal generations. -/
 example : (do
     let s ← reset initial ⟨0⟩
@@ -147,8 +154,9 @@ structure Resource (Handle : Type) where
   deriving DecidableEq, Repr
 
 structure State (Handle : Type) where
-  resources : AList GrantId (Resource Handle)
-  next : Nat
+  resources : AList GrantId (Resource Handle) := []
+  next : Nat := 0
+  deriving DecidableEq, Repr
 
 /-- A successful lookup also checks linear availability. A consumed identity is never usable. -/
 def usable {H : Type} (s : State H) (i : GrantId) : Option (Resource H) := do

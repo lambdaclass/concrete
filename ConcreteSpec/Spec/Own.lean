@@ -414,9 +414,9 @@ example : (do
     let s ← borrow s ⟨0⟩ [] .shared
     pure (s.loans.map Loan.id)) = some [⟨1⟩] := by decide
 
-/-- Refused: a zero-byte representation still has a linear ownership obligation (Q3.8). -/
-example : Hybrid.sizeof .unit = 0 ∧
-    drop [x] { initial with slots := [⟨⟨0⟩, 0, ⟨.unit, false, true⟩, .owned⟩] } = none := by decide
+/-- Refused: a logical token has a linear obligation independently of representation
+(Q3.8). No C4 representation-size sentinel is used as evidence. -/
+example : drop [x] { initial with slots := [⟨⟨0⟩, 0, ⟨.unit, false, true⟩, .owned⟩] } = none := by decide
 /-- Accepted: explicitly consuming the zero-byte obligation permits its slot to end. -/
 example : (do
     let s ← move { initial with slots := [⟨⟨0⟩, 0, ⟨.unit, false, true⟩, .owned⟩] } ⟨0⟩
