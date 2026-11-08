@@ -370,6 +370,12 @@ else
   echo "FAIL control: the population check did not name the unimported module: '$missing'"; fail=1
 fi
 
+if bounded_run 240 -- bash scripts/checks/tests/trusted_frontend_controls.sh; then
+  echo "ok   imported command macro frontend controls"
+else
+  echo "FAIL imported command macro frontend controls"; fail=1
+fi
+
 mkdir -p "$work/ctl/native-example/Concrete"
 cp Concrete/BIR.lean "$work/ctl/native-example/Concrete/BIR.lean"
 python3 -I -c 'import sys

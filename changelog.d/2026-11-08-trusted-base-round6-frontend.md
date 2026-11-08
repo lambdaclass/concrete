@@ -1,0 +1,1 @@
+Audit every source through Lean’s frontend without token filtering. Retain anonymous examples at declaration elaboration after imported command macro expansion, and audit every new constant’s axioms and trusted kinds. Multi-file controls require the exact planted diagnostics for token-free invocations introducing an example or unsafe declaration.

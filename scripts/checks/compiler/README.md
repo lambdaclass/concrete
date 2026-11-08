@@ -132,17 +132,16 @@ unsafe/partial/extern/implemented_by/csimp/opaque status and `Lean.Loop`
 licenses total recursive runtime twins; partial runtime twins inherit their
 parent declaration's owner when registered.
 
-`slice0_examples.lean` retains `example` AST commands as named declarations with
-`line:column` identities, checks every newly elaborated declaration in the module
-against both `hasPartialModifier` and `trustedDeclarationKinds` via
-`effectiveOwners` (so registered `partial def`s owned by a code component pass
-while unlisted or non-code-owned declarations, including non-`partial` `def`s
-using `while`/`repeat` in files without `example` or `partial`, print `FAIL ...`
-to stdout and fail), selects multi-file candidates across all trusted/loop/example
-identifier tokens (`example`, `partial`, `while`, `repeat`, `Loop`, `unsafe`,
-`extern`, `implemented_by`, `csimp`, `opaque`, while always elaborating
-single-file invocations), and `example_rows.py` fails closed if zero
-`example-json` rows are observed.
+`slice0_examples.lean` elaborates every source file through Lean's frontend,
+without source-token filtering. Its declaration elaborator retains anonymous
+examples after command macro expansion, including imported macros, as named
+noncomputable declarations with fresh `line:column` identities. Every newly
+elaborated constant has its axiom closure audited and its trusted declaration
+kinds checked through `effectiveOwners`. Quoted command templates remain data
+until invoked. `example_rows.py` fails closed if zero `example-json` rows are
+observed. The multi-file imported-macro controls in
+`scripts/checks/tests/trusted_frontend_controls.sh` require exact diagnostics for both an
+unlisted example axiom and a generated unsafe declaration.
 
 Focused controls live in `scripts/checks/tests/test_execve_names.py`,
 `scripts/checks/tests/trusted_base_controls.py` and
