@@ -16,6 +16,7 @@ import ConcreteSpec.Spec.Observation
 import ConcreteSpec.Spec.Target
 import ConcreteSpec.Spec.Outcome
 import ConcreteSpec.Spec.Exec
+import ConcreteSpec.Spec.Observe
 import ConcreteSpec.Spec.Scalar
 import ConcreteSpec.Spec.Const
 import ConcreteSpec.Spec.Memory
@@ -55,9 +56,10 @@ The foundation (owner decision 2026-11-08, "ok all recommended": the shared inte
 laws, written, proved and tested before the freeze) is in the namespace `ConcreteSpec.Core`, from
 `Target` on: `Target` (C3, target profiles), `Outcome` (trap kinds and the ways a run stops),
 `Exec` (C1, execution, calls and cleanup), `Scalar` (C2, scalars and arithmetic), `Const` (C2,
-the constant initializer subset), `Memory` (C4, byte memory and scalar representation), and
-`Hybrid` (C4, structured places and stable materialized ranges). Each module's header says which contract it states and what it
-leaves to a later slice.
+the constant initializer subset), `Memory` (C4, byte memory and scalar representation),
+`Hybrid` (C4, structured places and stable materialized ranges) and `Observe` (C6, observations
+and the environment). Each module's header says which contract it states and what it leaves to a
+later slice.
 
 Only Lean core is imported (Q9.16). No proof uses `native_decide` or `sorry` (Q9.17).
 

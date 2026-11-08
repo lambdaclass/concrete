@@ -137,8 +137,8 @@ structure SiteId where
 /-- A position in source text (the trap-line decision, R-0496): the file's path relative to the
 project root, with forward slashes, and a line and a column, both counted from 1. The type keeps
 line and column positive; that the path is relative with forward slashes is `Span.PathOk`, which
-the program's site table must satisfy (elaboration, README obligation O1). The unit a column
-counts (bytes, Unicode scalar values) is not yet decided; it is an owner question. -/
+the program's site table must satisfy (elaboration, README obligation O1). A column counts UTF-8
+bytes, with a tab counting one byte (foundation question 10, 2026-11-08). -/
 structure Span where
   path : String
   line : Nat
