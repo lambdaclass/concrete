@@ -735,6 +735,28 @@ theorem expose_load (tgt : Target) (m m' : Memory) (p q : Ptr) (n a : Nat)
         subst d
         simp [hc]
 
+/-- A successful nonempty read can be shortened to any nonempty prefix. -/
+theorem load_prefix (tgt : Target) (m : Memory) (p : Ptr) (n k a : Nat) (bs : List MByte)
+    (hn : n ≠ 0) (hk : k ≠ 0) (hkn : k ≤ n) (h : m.load tgt p n a = some bs) :
+    m.load tgt p k a = some (bs.take k) := by
+  unfold Memory.load at h
+  cases ha : m.access tgt p n a with
+  | none => simp [ha] at h
+  | some v =>
+    rw [ha] at h
+    cases v with
+    | none => simp [Memory.access, hn] at ha; split at ha <;> (try split at ha) <;>
+        (try split at ha) <;> cases ha
+    | some pair =>
+      obtain ⟨b, off⟩ := pair
+      obtain ⟨x, hp, hx, _, hl, hs, hlo, hhi, hal, hoff, hpv⟩ :=
+        access_some tgt m p n a b off ha
+      simp only [hx, Option.map_some, Option.some.injEq] at h
+      subst bs
+      have hb : p.addr + k ≤ x.base + x.size := by omega
+      simp [Memory.load, Memory.access, hk, hp, hx, hl, hs, hlo, hb, hal, hpv, hoff,
+        List.take_take, Nat.min_eq_left hkn]
+
 /-- Releasing a block cannot permit any existing identity to be reused by the next allocation,
 even when the allocator reuses the released address. -/
 theorem free_alloc_ne_existing (tgt : Target) (m freed allocated : Memory)

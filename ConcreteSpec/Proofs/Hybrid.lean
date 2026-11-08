@@ -310,4 +310,123 @@ theorem expose_wellFormed (tgt : Target) (st st' : State) (hw : st.WellFormed tg
       exact memory_wellFormed tgt mid m hmid
         (Mem.expose_wellFormed tgt _ _ hmid.memory _ he) (expose_geometry _ _ _ he)
 
+/-- Typed writes frame every other place with a distinct materialized allocation identity. -/
+theorem write_frame (tgt : Target) (st st' : State) (p q : Place) (v : Value)
+    (hne : q ≠ p) (hsep : st.Separated p q) (h : st.write tgt p v = some st') :
+    st'.read tgt q = st.read tgt q := by
+  unfold State.write at h
+  cases hc : st.places p with
+  | none => simp [hc] at h
+  | some c =>
+    simp only [hc] at h
+    dsimp at h
+    split at h
+    next =>
+      cases hs : c.storage with
+      | structured old =>
+        simp only [hs, Option.some.injEq] at h
+        subst st'
+        simp [State.read, Ne.symm hne]
+      | materialized r =>
+        simp only [hs] at h
+        cases hm : st.memory.store tgt r.ptr (encode tgt v) r.align with
+        | none => simp [hm] at h
+        | some m =>
+          simp [hm] at h
+          subst st'
+          cases hq : st.places q with
+          | none => simp [State.read, hq]
+          | some d =>
+            cases hd : d.storage with
+            | structured w => simp [State.read, hq, hd]
+            | materialized s =>
+              have hh := store_load_other tgt st.memory m r.ptr s.ptr (encode tgt v)
+                r.align (sizeof d.ty) s.align hm (Ne.symm (hsep c d r s hc hq hs hd))
+              simp [State.read, hq, hd, hh]
+    next => simp at h
+
+/-- First materialization frames all other places; freshness supplies block separation, so no
+additional separation premise is necessary. -/
+theorem materialize_frame (tgt : Target) (st st' : State) (hw : st.WellFormed tgt)
+    (p q : Place) (hne : q ≠ p) (space : AddrSpace) (base align : Nat)
+    (padding : List MByte) (r : Range)
+    (h : st.materialize tgt p space base align padding = some (r, st')) :
+    st'.read tgt q = st.read tgt q := by
+  rcases materialize_cases tgt st st' p space base align padding r h with reused | fresh
+  · obtain ⟨_, _, _, rfl⟩ := reused; rfl
+  · obtain ⟨c, v, b, m, m', _, _, _, _, ha, hm, rfl, rfl⟩ := fresh
+    cases hq : st.places q with
+    | none => simp [State.read, Ne.symm hne, hq]
+    | some d =>
+      cases hd : d.storage with
+      | structured w => simp [State.read, Ne.symm hne, hq, hd]
+      | materialized s =>
+        have hproj := hw.projected q d hq
+        simp only [Cell.Projected, hd] at hproj
+        obtain ⟨old, x, hp, hx, _⟩ := hproj
+        have hbo := alloc_ne_existing tgt _ hw.memory space base _ align b old m x ha hx
+        have hload : m.load tgt s.ptr (sizeof d.ty) s.align =
+            st.memory.load tgt s.ptr (sizeof d.ty) s.align := by
+          apply load_congr
+          intro old' hp'
+          have he : old' = old := by rw [hp] at hp'; exact (Option.some.inj hp').symm
+          subst old'
+          obtain ⟨_, rfl, _⟩ := alloc_result tgt _ space base _ align b m ha
+          simp [Memory.block, AList.lookup, hbo]
+        have hstore := store_load_other tgt m m' ⟨space, base, some b⟩ s.ptr
+          (encode tgt v ++ padding) align (sizeof d.ty) s.align hm
+          (by simpa only [hp, ne_eq, Option.some.injEq] using Ne.symm hbo)
+        simp [State.read, Ne.symm hne, hq, hd, hstore, hload]
+
+/-- Exposure frames other places, including all byte decodes; it changes only reconstruction. -/
+theorem expose_frame (tgt : Target) (st st' : State) (hw : st.WellFormed tgt)
+    (p q : Place) (hne : q ≠ p) (space : AddrSpace) (base align : Nat)
+    (padding : List MByte) (r : Range)
+    (h : st.expose tgt p space base align padding = some (r, st')) :
+    st'.read tgt q = st.read tgt q := by
+  unfold State.expose at h
+  cases hm : st.materialize tgt p space base align padding with
+  | none => simp [hm] at h
+  | some pair =>
+    obtain ⟨r', mid⟩ := pair
+    simp only [hm] at h
+    dsimp at h
+    cases he : mid.memory.expose r'.ptr with
+    | none => simp [he] at h
+    | some m =>
+      simp [he] at h
+      obtain ⟨rfl, rfl⟩ := h
+      rw [← materialize_frame tgt st mid hw p q hne space base align padding r' hm]
+      cases hq : mid.places q with
+      | none => simp [State.read, hq]
+      | some d =>
+        cases hd : d.storage with
+        | structured v => simp [State.read, hq, hd]
+        | materialized s =>
+          simp [State.read, hq, hd, expose_load tgt _ _ r'.ptr s.ptr (sizeof d.ty) s.align he]
+
+/-- Materialization preserves the value read from a place, including its first allocation. -/
+theorem materialize_read (tgt : Target) (st st' : State) (hw : st.memory.WellFormed tgt)
+    (p : Place) (v : Value) (space : AddrSpace) (base align : Nat)
+    (padding : List MByte) (r : Range) (hr : st.read tgt p = some v)
+    (h : st.materialize tgt p space base align padding = some (r, st')) :
+    st'.read tgt p = some v := by
+  rcases materialize_cases tgt st st' p space base align padding r h with reused | fresh
+  · obtain ⟨_, _, _, rfl⟩ := reused; exact hr
+  · obtain ⟨c, w, b, m, m', hc, hs, ht, hv, ha, hm, rfl, rfl⟩ := fresh
+    have hvw : w = v := by
+      simpa [State.read, hc, hs, ht, hv] using hr
+    subst w
+    have ham := alloc_wellFormed tgt _ hw space base _ align b m ha
+    have hl := store_load tgt m m' ham ⟨space, base, some b⟩ (encode tgt v ++ padding) align hm
+    have hpos : 0 < sizeof v.ty := by cases v <;> simp [Value.ty, sizeof, intBytes] <;>
+      (try cases ‹IntTy› <;> decide)
+    have hshort := load_prefix tgt m' ⟨space, base, some b⟩
+      (encode tgt v ++ padding).length (sizeof v.ty) align (encode tgt v ++ padding)
+      (by simp [encode_length]; omega) (by omega) (by simp) hl
+    have htake : (encode tgt v ++ padding).take (sizeof v.ty) = encode tgt v := by
+      rw [← encode_length tgt v]; simp
+    rw [htake] at hshort
+    simpa [State.read, hshort, ← ht, Rep] using (rep_roundtrip tgt v hv)
+
 end ConcreteSpec.Core.Hybrid

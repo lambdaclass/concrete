@@ -137,6 +137,9 @@ def State.set (st : State) (p : Place) (c : Cell) : State :=
 @[simp] theorem State.places_memory (st : State) (m : Memory) (p : Place) :
     ({ st with memory := m } : State).places p = st.places p := rfl
 
+@[simp] theorem State.memory_set (st : State) (p : Place) (c : Cell) :
+    (st.set p c).memory = st.memory := rfl
+
 /-- Safe typed read. Materialized storage is decoded on every read. -/
 def State.read (tgt : Target) (st : State) (p : Place) : Option Value := do
   let c ← st.places p
@@ -191,6 +194,13 @@ def State.rawWrite (tgt : Target) (st : State) (p : Ptr) (bs : List MByte) (alig
 /-- Accepted: a structured bool is read without allocating byte storage. -/
 example : (State.mk [(⟨0⟩, ⟨.bool, .structured (.bool true)⟩)] Memory.empty).read
     linuxX8664 ⟨0⟩ = some (.bool true) := by decide
+
+/-- Accepted: first materialization preserves an integer's value, including its byte order. -/
+example : (do
+    let st : State := ⟨[(⟨0⟩, ⟨.int .i16, .structured (.int .i16 (-37))⟩)], Memory.empty⟩
+    let (_, st) ← st.materialize { linuxX8664 with byteOrder := .big } ⟨0⟩ ⟨0⟩ 4096 2 [.uninit]
+    pure (st.read { linuxX8664 with byteOrder := .big } ⟨0⟩)) =
+      some (some (.int .i16 (-37))) := by decide
 
 /-- Refused: invalid bytes at a materialized bool do not fall back to a structured value. -/
 example : decode linuxX8664 .bool [.init 2 none] = none := by decide
