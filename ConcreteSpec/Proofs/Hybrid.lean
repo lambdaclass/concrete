@@ -503,6 +503,7 @@ private def after : State :=
   { before with memory := memory.modify ⟨0⟩ fun x =>
       { x with bytes := [.init 1 none, .uninit, .uninit] } }
 
+/-- Instance (law `ConcreteSpec.Core.Hybrid.typed_store_frame`). Construct its hybrid invariant. -/
 private theorem before_wf : before.WellFormed linuxX8664 := by
   refine ⟨alloc_wellFormed linuxX8664 Memory.empty (empty_wellFormed linuxX8664)
     ⟨0⟩ 40 3 1 ⟨0⟩ memory rfl, ?_⟩

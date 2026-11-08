@@ -899,13 +899,20 @@ example : target.WellFormed ∧ ptr.Valid target ∧
 has exactly the stored encoding, including provenance. -/
 example : decodePtr target bytes = some ptr ∧ bytes = encodePtr target ptr ∧ ptr.Valid target := by decide
 
-/-- Planted (law `ConcreteSpec.Core.Mem.decodePtr_encodePtr`). A decoder mutated to refuse
-whole pointers violates the round trip at this valid pointer. -/
-example : ¬ ((none : Option Ptr) = some ptr) := by decide
+/-- Planted (law `ConcreteSpec.Core.Mem.decodePtr_encodePtr`). A decoder mutated to reverse violates the round trip at this valid pointer. -/
+example : ¬ (decodePtr { target with byteOrder := .big } (encodePtr target ptr) = some ptr) := by decide
 
-/-- Planted (law `ConcreteSpec.Core.Mem.decodePtr_some`). A first-fragment-only decoder
-would return ptr here, although this is not its stored representation. -/
-example : ¬ ([MByte.init 40 (some (ptr, 0))] = encodePtr target ptr) := by decide
+private def firstFragment : List MByte → Option Ptr
+  | .init _ (some (p, _)) :: _ => some p
+  | _ => none
+
+/-- Planted (law `ConcreteSpec.Core.Mem.decodePtr_some`). The actual first-fragment-only
+mutant violates the converse on a partial pointer. -/
+example : ¬ (∀ bs p, firstFragment bs = some p → bs = encodePtr target p ∧ p.Valid target) := by
+  intro h
+  have hh := (h [.init 40 (some (ptr, 0))] ptr rfl).1
+  have hn : [MByte.init 40 (some (ptr, 0))] ≠ encodePtr target ptr := by decide
+  exact hn hh
 
 /-- Refused: partial pointer, with the second fragment missing. -/
 example : decodePtr target [.init 40 (some (ptr, 0))] = none := by decide
@@ -921,6 +928,7 @@ example : decodePtr target [.init 40 none, .init 0 none] = none := by decide
 example : decodePtr target [.uninit, .uninit] = none := by decide
 
 private def memory : Memory := ⟨[(⟨0⟩, candidate ⟨0⟩ 40 8 1)], 1⟩
+/-- Instance (law `ConcreteSpec.Core.Mem.access_valid`). Construct the nonempty memory invariant. -/
 private theorem memory_wf : memory.WellFormed target :=
   alloc_wellFormed target Memory.empty (empty_wellFormed target) ⟨0⟩ 40 8 1 ⟨0⟩ memory (by rfl)
 
@@ -942,9 +950,10 @@ example : ptr.prov = some ⟨0⟩ ∧ memory.block ⟨0⟩ = some (candidate ⟨
     40 ≤ ptr.addr ∧ ptr.addr + 2 ≤ 40 + 8 ∧ ptr.addr % 1 = 0 ∧
     memory.access target ptr 2 1 = some (some (⟨0⟩, 0)) := by decide
 
-/-- Planted (law `ConcreteSpec.Core.Mem.access_success`). A decoder mutated to refuse
-in-bounds nonempty access violates success on the preceding obligations. -/
-example : ¬ ((none : Option (Option (MemBlockId × Nat))) = some (some (⟨0⟩, 0))) := by decide
+/-- Planted (law `ConcreteSpec.Core.Mem.access_success`). A mutation requiring one extra
+byte refuses an access ending exactly at the block boundary, despite all success obligations. -/
+example : 40 + 8 ≤ 40 + 8 ∧
+    ¬ (memory.access target ptr (8 + 1) 1 = some (some (⟨0⟩, 0))) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.Mem.alloc_failure`). Refused: misalignment, boundary
 crossing, and live overlap are each isolated from the other two failure reasons. -/
@@ -954,23 +963,53 @@ example : (41 % 2 ≠ 0 ∧ Memory.empty.alloc target ⟨0⟩ 41 2 2 = .error .u
       memory.alloc target ⟨0⟩ 44 2 1 = .error .unavailable) := by
   exact ⟨⟨by decide, rfl⟩, ⟨by decide, rfl⟩, ⟨by decide, rfl⟩⟩
 
-/-- Planted (law `ConcreteSpec.Core.Mem.alloc_failure`). An allocator mutated to accept
-these misaligned, boundary-crossing and overlapping requests violates all three failure legs. -/
-example : ¬ ((Except.ok (⟨1⟩, memory) : Except AllocError (MemBlockId × Memory)) = .error .unavailable) := by
-  intro h; cases h
+/-- Deliberately wrong allocator for planted checks: skip exactly one geometry obligation.
+0 skips base alignment, 1 skips the address boundary, 2 skips overlap. -/
+private def mutatedAlloc (skip : Nat) (m : Memory) (base size align : Nat) :
+    Except AllocError (MemBlockId × Memory) :=
+  let x := candidate ⟨0⟩ base size align
+  if IsPow2 align ∧ (skip = 0 ∨ base % align = 0) ∧
+      (skip = 1 ∨ base + size ≤ 2 ^ target.addrBits - 1) ∧ size ≤ target.maxObject ∧
+      (0 < size → base ≠ target.null) ∧
+      (skip = 2 ∨ ∀ e ∈ m.blocks, e.2.live = true → ¬ e.2.Overlaps x) ∧
+      x.space ∈ target.spaces
+  then .ok (⟨m.next⟩, ⟨(⟨m.next⟩, x) :: m.blocks, m.next + 1⟩)
+  else .error .unavailable
+
+/-- Planted (law `ConcreteSpec.Core.Mem.alloc_failure`). Removing only the base-alignment
+check accepts this otherwise admissible misaligned request. -/
+example : ¬ (mutatedAlloc 0 Memory.empty 41 2 2 = .error .unavailable) := by intro h; cases h
+/-- Planted (law `ConcreteSpec.Core.Mem.alloc_failure`). Removing only the address-boundary
+check accepts this otherwise admissible request crossing the boundary. -/
+example : ¬ (mutatedAlloc 1 Memory.empty 254 2 1 = .error .unavailable) := by intro h; cases h
+/-- Planted (law `ConcreteSpec.Core.Mem.alloc_failure`). Removing only the overlap check
+accepts this otherwise admissible request overlapping live storage. -/
+example : ¬ (mutatedAlloc 2 memory 44 2 1 = .error .unavailable) := by intro h; cases h
 
 /-- Instance (law `ConcreteSpec.Core.Mem.access_zero`). Accepted: zero-size load/store need
 no provenance, and the empty store preserves the complete memory. -/
 example : let p : Ptr := ⟨⟨0⟩, 40, none⟩
     p.addr % 2 = 0 ∧ p.addr ≠ target.null ∧ p.Valid target ∧
     Memory.empty.load target p 0 2 = some [] ∧
-    (Memory.empty.store target p [] 2).map Memory.next = some 0 := by decide
+    Memory.empty.store target p [] 2 = some Memory.empty := by
+  exact ⟨by decide, by decide, by decide, rfl, rfl⟩
 
 /-- Planted (law `ConcreteSpec.Core.Mem.access_zero`). Refused: a null address is aligned
 and target-valid; a mutant accepting it violates the zero-access equivalence. -/
 example : let p : Ptr := ⟨⟨0⟩, 0, none⟩
     p.addr % 1 = 0 ∧ p.Valid target ∧ ¬ (p.addr ≠ target.null) ∧
     Memory.empty.load target p 0 1 = none := by decide
+
+/-- Planted (law `ConcreteSpec.Core.Mem.decodePtr_some`). Skipping target validity would
+accept this exact pointer encoding, but it fails the converse's validity conclusion. -/
+example : let p : Ptr := ⟨⟨0⟩, 256, none⟩
+    ¬ (encodePtr target p = encodePtr target p ∧ p.Valid target) := by decide
+
+/-- Planted (law `ConcreteSpec.Core.Mem.access_zero`). A load mutated to omit the null
+check violates the law's equivalence at an aligned target-valid null address. -/
+example : let p : Ptr := ⟨⟨0⟩, 0, none⟩
+    let mutant := if p.addr % 1 = 0 ∧ p.Valid target then some ([] : List MByte) else none
+    ¬ (mutant = some [] ↔ p.addr % 1 = 0 ∧ p.addr ≠ target.null ∧ p.Valid target) := by decide
 
 end Audit
 
