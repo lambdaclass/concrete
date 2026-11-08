@@ -11,6 +11,10 @@ cd "$(dirname "$0")/../../.."
 : "${CONCRETE_SLICE0_CLANG:?run inside nix develop}"
 # shellcheck source=scripts/checks/lib/slice0_sources.sh
 source scripts/checks/lib/slice0_sources.sh
+printf 'link_policy_sha256=%s\n' "$(sha256sum "$CONCRETE_SLICE0_LINK_POLICY" | cut -d' ' -f1)"
+printf 'link_closure_sha256=%s\n' "$(LC_ALL=C sort "$CONCRETE_SLICE0_LINK_CLOSURE" | sha256sum | cut -d' ' -f1)"
+cat "$CONCRETE_SLICE0_LINK_POLICY"
+printf '\n'
 printf 'compiler_commit=%s\n' "$(git rev-parse HEAD)"
 if [ -z "$(git status --porcelain --untracked-files=no -- "${slice0_sources[@]}")" ]; then
   echo 'source_tree=clean'

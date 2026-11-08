@@ -103,6 +103,34 @@
             util-linux         # flock, hexdump, column, script
           ];
 
+          # One owner for native link search policy and its complete pinned closure.
+          nativeCC = pkgs.llvmPackages_21.clang;
+          nativeLD = nativeCC.bintools;
+          nativeSysroot = if pkgs.stdenv.isDarwin then pkgs.apple-sdk
+            else pkgs.lib.getDev nativeCC.libc;
+          nativeClosure = pkgs.closureInfo {
+            rootPaths = [ nativeCC nativeLD nativeSysroot pkgs.llvmPackages_21.llvm ];
+          };
+          nativePolicy = pkgs.writeText "slice0-link-policy-v1" (builtins.toJSON {
+            version = 1;
+            compiler = "${nativeCC}/bin/clang";
+            linker = "${nativeLD}/bin/ld";
+            sysroot = "${nativeSysroot}";
+            closure = "${nativeClosure}/store-paths";
+            environment = "empty; fixed PATH, NIX_STORE, NIX_ENFORCE_PURITY; no ambient flags";
+            validation = "link trace and executable loader/search paths must belong to closure";
+          });
+          nativeEnv = {
+            CONCRETE_SLICE0_CLANG = "${nativeCC}/bin/clang";
+            CONCRETE_SLICE0_LINK_POLICY = nativePolicy;
+            CONCRETE_SLICE0_LINK_CLOSURE = "${nativeClosure}/store-paths";
+            CONCRETE_SLICE0_LINKER_BIN = "${nativeLD}/bin";
+            CONCRETE_SLICE0_SYSROOT = if pkgs.stdenv.isDarwin
+              then "${nativeSysroot}/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk"
+              else "${nativeSysroot}";
+            CONCRETE_SLICE0_TOOL_PATH = pkgs.lib.makeBinPath [ nativeLD pkgs.coreutils pkgs.gnugrep pkgs.gnused ];
+          };
+
           # Every gate refuses to run without this (scripts/tests/lib/gate_env.sh). Each shell
           # below that is a superset of the gate userland sets it too.
           gatesMarker = { CONCRETE_GATES_SHELL = "1"; };
@@ -124,7 +152,7 @@
             packages = base;
             # Slice-0 native builds name their compiler explicitly (scripts/checks/lib/slice0_native.sh),
             # pinned here so the shell's general clang can move without changing their identity.
-            CONCRETE_SLICE0_CLANG = "${pkgs.llvmPackages_21.clang}/bin/clang";
+            # Compiler and link policy are supplied together by nativeEnv.
             # The artifact gates (scripts/checks/compiler/slice0_artifacts.sh) read the linked executables
             # with the same LLVM release's llvm-objdump and llvm-size, and measure a run under gdb
             # (Linux, pinned) or LLDB (macOS: Apple's /usr/bin/lldb, whose signed debugserver is
@@ -134,7 +162,7 @@
             CONCRETE_SLICE0_GDB = "${pkgs.gdb}/bin/gdb";
           } // pkgs.lib.optionalAttrs pkgs.stdenv.isDarwin {
             CONCRETE_SLICE0_LLDB = "/usr/bin/lldb";
-          } // gatesMarker);
+          } // nativeEnv // gatesMarker);
 
           # `nix develop .#gates` — what CI runs every gate step in: the gate userland, the marker,
           # and no compiler toolchain (mkShellNoCC, so not even stdenv's cc). Lean and the C
