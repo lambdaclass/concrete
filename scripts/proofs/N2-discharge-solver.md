@@ -755,3 +755,147 @@ PHASE B EXIT CRITERION (fixed by the coordinator 2026-11-09 before phase B start
 The exact historical C9-new and C6-current controls (whole replay scopes, not selected roots) must COMPLETE under the unchanged budgets: 2,000,000 heartbeats, projection 4,096, discharge work 20,000, with the measured cost reported for each (exact source/checker SHA, heartbeats, discharge work units, worklist/SCC/query counts, projection visits) and with their historical diagnostics unchanged. If either control does not complete, phase B STOPS: report the measured cut-short point and return the design for revision. Never raise a budget, never add a staged exception, never record a partial completion as a pass. All negative controls keep failing with their exact diagnostics and the F3b repro passes; otherwise phase B also stops.
 Condition for starting phase B: a valid ACCEPT (VERDICT: CLEAN under checker-60934a193, output unmodified) from agy's N6a review of the note at 25907fb41.
 ```
+
+
+## A3 amendment: per-analysis accounting and the round-5 regression
+
+Design only; no checker implementation is authorized by this amendment. R-0219
+owns the structural repair in phase B / slice 2a; the coordinator records any
+additional roadmap scheduling row. Independent reviewers must **do the best
+long-term thing rather than cut corners**. See the
+[bounded diagnosis](N2-A3-budget-diagnosis.md) for historical source locations,
+measurements and the distinction between individual cost and cumulative timeout.
+
+### Isolation unit and deterministic bounds
+
+Proposed accounting unit: a named analysis identified by environment/source
+identity, retained declaration, stage, law, case and (where applicable) subject,
+mutant and Instance. Enumerate these identities in a stable order. Each analysis
+gets a fresh heartbeat baseline and exactly 2,000,000 user heartbeats, 20,000
+charged discharge-work units and 4,096 projection visits. A caller's existing
+explicit projection control limit remains effective. These limits are unchanged.
+Every argument, helper, template, substitution, certificate dependency, invariant,
+SCC iteration and retry belonging to that analysis uses its one budget object.
+No helper or internal phase renews it. In particular, do not reset the work state
+for each hypothesis argument as the historical Instance loop did.
+
+At entry set the Core context's initial heartbeat count to the current counter,
+retain the configured maximum, and restore the scheduler context at exit. Use the
+runtime-exception catch, not ordinary `try`. Save/restore Meta state on failure;
+preserve earlier findings. Record a result before scheduling the next identity.
+The scheduler must not do uncharged reduction, certificate search or solver work.
+Enumeration/bookkeeping needs its own bounded, reported allowance; failure there
+is a named scheduler INCOMPLETE, never silent truncation. A process crash or wall
+watchdog is infrastructure INCOMPLETE, never a completed per-analysis result.
+
+Flatten the current nested `isolated` scopes into scheduler jobs. A projection or
+planted job is separately named; its enclosing law job only schedules it and
+consumes its explicit result. Never renew a child deadline inside a still-running
+parent solver. Dependent jobs with unavailable prerequisite results report
+`reason=dependency-incomplete`; independent jobs still run. No cache entry from an
+unfinished analysis certifies safety. Share immutable templates only with their
+construction charged and dependencies validated; cache hits must not make budget
+outcomes depend on incidental scheduler history. Use deterministic per-analysis
+logical work charges and deterministic cache policy (or private query caches).
+
+For N scheduled analysis identities the analysis allowance is at most
+N × 2,000,000 user heartbeats, N × 20,000 discharge-work units and
+N × 4,096 projection visits, plus the separately declared bounded scheduler
+allowance. Report N, attempted/completed/incomplete counts, per-analysis usage,
+and these aggregate bounds and actual totals. No dynamic retry creates another
+identity. Bound the driver's wall watchdog for this schedule explicitly: its
+current fixed 120-second audit subprocess is not evidence that N jobs completed.
+Report wall time separately from deterministic heartbeat/work limits.
+
+This **replaces round 6's “without renewing” rule** and supersedes A2 and the
+Costs section wherever “original deadline” meant the entire audit command.
+Renewal happens once for each finite, named analysis, not on recursion or failure;
+therefore it remains bounded by N times the unchanged allowance and deterministic
+for the same inputs/toolchain. Exhaustion of one analysis cannot spend another's
+allowance or suppress its result. Preserve FAIL findings even when INCOMPLETE
+controls the overall exit status.
+
+Planned exact diagnostic grammar (one line, stable field order):
+
+```text
+INCOMPLETE analysis-budget-or-error <retained-name> stage=<stage> law=<law-or-none> case=<case-or-none> reason=<reason> heartbeats=<used>/2000000 work=<used>/20000 projection=<used>/4096
+```
+
+Budget reasons are exactly `heartbeats`, `false-discharge-budget`, or
+`projection-budget`; other reasons are `dependency-incomplete`,
+`unsupported-obligation`, or `analysis-error`. Preserve the underlying exception
+as a separate detail record. A2 dependency stages keep their names and the same
+originating retained Instance. Heartbeat sampling can cross the threshold inside
+a Meta primitive; report actual usage, not a fabricated capped value. Exhaustion
+must identify the current analysis even if it happens before its first solver
+step. A scheduler failure uses stage `scheduler` and its own reported allowance.
+
+Required control: schedule a planted heavy Instance named
+`BudgetControls.heavy` (law `BudgetControls.heavyLaw`, case `heavy`) that creates
+more than 20,000 distinct charged obligations while staying below the heartbeat
+limit, then the ordinary malformed Instance `BudgetControls.nextBad`.
+Assert the heavy result has the exact diagnostic grammar above, with
+`stage=instance law=BudgetControls.heavyLaw case=heavy
+reason=false-discharge-budget`, work `20000/20000`, and independently checked
+numeric usage fields. Assert the next result is exactly
+`FAIL instance-application BudgetControls.nextBad law=BudgetControls.nextLaw case=next`.
+Assert both results are present in order, no heartbeat-at-entry diagnostic occurs
+for `nextBad`, and the aggregate verdict is INCOMPLETE with the FAIL retained.
+Repeat with the heavy job alone and the failing job alone, and reverse order:
+individual diagnostics and logical costs must agree. Add a separate heartbeat
+control that exhausts inside a Meta operation, with exact `reason=heartbeats`,
+followed by that same exact FAIL. Never accept merely a nonzero exit or any error.
+These are proposed controls, not claims of implemented/observed behavior.
+
+### Remove expansion cost without restoring the round-5 soundness hole
+
+This is part of the phase-B solver in slice 2a, not a separate exemption or a
+budget increase. Round 5 correctly requires actual supplied contradictions to
+remain supplied, even in open helper calls, while allowing independently
+validated impossible *hypothetical* contexts. Keep both requirements and A2's
+non-circular certificate admission. Do not restore `openBodies : HashSet Name`,
+replace actual proof arguments with new hypothetical binders, or treat a pending
+summary lookup as clean.
+
+Implement the template/guarded-transfer DAG and application-sensitive provenance
+substitution described above. Construct each declaration template once per
+universe/environment/mode; represent beta/let and actual arguments as shared typed
+substitutions rather than materializing and normalizing recursive applied proof
+bodies. Summarize recursive calls through explicit SCC obligations and validated
+invariants. Normalize only the demanded guard/type/head slice, under the same
+charged worklist and heartbeat budget; a single `whnf` must not expand an entire
+specialized recursive proof before the worklist regains control. Unsupported or
+unfinished transfers remain named INCOMPLETE.
+
+Use alpha-stable binder origins and the full relevant typed guard/provenance
+context, with structural equality after hashing. Raw fresh FVarId arrays prevent
+reuse across equivalent openings; dropping context entirely would be unsound.
+Context refutations should be dependency-validated, memoized obligations at the
+appropriate instantiated graph entry, not repeated unrestricted `simpAll` calls
+at each expression visit. Preserve all supplied/global dependencies and live
+branch-controlling data. A safe first application never certifies a differently
+supplied second application.
+
+The accounting scheduler and solver are complementary: isolation prevents one
+unfinished query hiding other findings; summaries remove repeated specialization
+without erasing supplied evidence. Neither alone establishes the phase-B exit
+criterion. Replay both measured roots and the entire historical C9-new/C6-current
+scopes, with the existing exact controls for joint supplied contradictions,
+hypothetical contexts, branch reachability and certificate laundering. Report
+worklist/query/SCC counts as well as completed costs. If completion does not fit,
+revise this structural design; do not raise budgets or weaken gate coverage.
+
+### Owner interpretation question: phase-B exit criterion
+
+The quoted phase-B criterion above requires the *whole replay scopes* to COMPLETE
+under “2,000,000 heartbeats.” Does that number mean:
+
+1. **Per named analysis:** each analysis has the unchanged limit, and the whole
+   scope must finish every analysis with no INCOMPLETE; report the N-times total.
+2. **Per whole replay scope:** the entire C9-new or C6-current scope must complete
+   within 2,000,000 total, in addition to any per-analysis isolation caps.
+
+No option is chosen here. The per-analysis scheduler is the proposed accounting
+design, not an interpretation that silently changes the exit criterion. Until the
+owner answers, do not claim phase-B acceptance from per-analysis completion alone;
+retain and report whole-scope totals as well. No language/spec OD is decided.
