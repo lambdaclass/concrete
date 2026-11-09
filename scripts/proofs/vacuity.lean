@@ -1082,7 +1082,8 @@ def isolated (deadline : Core.Context) (job : AnalysisJob) : Audit Bool := do
   tryCatchRuntimeEx
     (withTheReader Core.Context (fun _ => { deadline with initHeartbeats := start }) do
       Core.checkMaxHeartbeats "vacuity-analysis"
-      job.action)
+      job.action
+      Core.checkMaxHeartbeats "vacuity-analysis")
     (fun ex => do
       let message ← ex.toMessageData.toString
       liftM (saved.restore : MetaM Unit)
@@ -1116,7 +1117,9 @@ def schedulerPart (deadline : Core.Context) (ticks heartbeats : IO.Ref Nat)
     (do
       let result ← withTheReader Core.Context (fun _ => { deadline with initHeartbeats := start - spent }) do
         Core.checkMaxHeartbeats "vacuity-scheduler"
-        action
+        let value ← action
+        Core.checkMaxHeartbeats "vacuity-scheduler"
+        pure value
       heartbeats.set (spent + (← IO.getNumHeartbeats) - start)
       return result)
     (fun ex => do
@@ -1251,21 +1254,22 @@ def checkInstance (env : Environment) (all : List (Name × ConstantInfo))
   return instances
 
 def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := do
-  let env ← getEnv
-  let all := env.constants.map₁.toList ++ env.constants.map₂.toList
-  let scope := (← IO.getEnv "VACUITY_SCOPE").getD ""
-  let scopes := scope.splitOn ","
-  let budget := min 4096 (((← IO.getEnv "VACUITY_BUDGET").getD "4096").toNat?.getD 4096)
-  let roadmap ← IO.FS.readFile "ROADMAP.md"
   let deadline ← readThe Core.Context
   let run : Audit Unit := do
     let schedulerStart ← IO.getNumHeartbeats
     let schedulerWork ← IO.mkRef (0 : Nat)
     let step : Audit Unit := do
+      Core.checkMaxHeartbeats "vacuity-scheduler"
       let used ← schedulerWork.get
       if used >= 20000 then throwError "scheduler-work-budget"
       schedulerWork.set (used + 1)
     let build : Audit (Array AnalysisJob) := do
+      let env ← getEnv
+      let all := env.constants.map₁.toList ++ env.constants.map₂.toList
+      let scope := (← IO.getEnv "VACUITY_SCOPE").getD ""
+      let scopes := scope.splitOn ","
+      let budget := min 4096 (((← IO.getEnv "VACUITY_BUDGET").getD "4096").toNat?.getD 4096)
+      let roadmap ← IO.FS.readFile "ROADMAP.md"
       let mut jobs : Array AnalysisJob := #[]
       let provenance ← IO.mkRef (false, ({} : Std.HashSet String))
       let validInstances ← IO.mkRef (#[] : Array InstanceCase)
@@ -1527,7 +1531,9 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
     let saved ← liftM (Meta.saveState : MetaM Meta.SavedState)
     let planned ← tryCatchRuntimeEx
       (withTheReader Core.Context (fun ctx => { ctx with initHeartbeats := schedulerStart, maxHeartbeats := deadline.maxHeartbeats }) do
-        return some (← build))
+        let jobs ← build
+        Core.checkMaxHeartbeats "vacuity-scheduler"
+        return some jobs)
       (fun ex => do
         liftM (saved.restore : MetaM Unit)
         let message ← ex.toMessageData.toString

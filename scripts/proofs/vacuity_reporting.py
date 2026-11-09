@@ -49,6 +49,21 @@ end ConcreteSpecControl''')
         if code != 2 or normalized != expected or detail not in report.splitlines() or not report.endswith('N2 INCOMPLETE\n'):
             raise AssertionError(f'{label}: exit={code}\n{report}\nexpected={expected}')
         print(f'PASS reporting {label}: exact named INCOMPLETE and unrelated FAIL retained')
+    # Enumeration failures, including setup before job construction, belong to
+    # the scheduler and cannot masquerade as an empty successful population.
+    anchor = '    let build : Audit (Array AnalysisJob) := do\n'
+    assert consumer.count(anchor) == 1
+    with compiled_consumer(consumer_text=consumer.replace(anchor, anchor +
+            '      throwError "planted-scheduler-enumeration"\n')) as meta:
+        code, report = run(ROOT, '', source, 64, meta_path=meta)
+    diagnostics = [re.sub(r'heartbeats=\d+/', 'heartbeats=MEASURED/', row)
+                   for row in report.splitlines() if row.startswith(('FAIL ', 'INCOMPLETE '))]
+    assert code == 2 and report.endswith('N2 INCOMPLETE\n') and diagnostics == [
+        'INCOMPLETE analysis-budget-or-error [anonymous] stage=scheduler law=none case=none reason=analysis-error heartbeats=MEASURED/2000000 work=0/20000 projection=0/4096',
+    ], report
+    assert 'DETAIL analysis-error [anonymous] planted-scheduler-enumeration' in report.splitlines(), report
+    assert not any(row.startswith(('NOTE analysis-population ', 'NOTE analysis-result ')) for row in report.splitlines()), report
+    print('PASS reporting scheduler-error: exact named scheduler INCOMPLETE and no partial population')
     # A failed Planted analysis belongs to the Planted declaration and its
     # paired Instance, rather than merely to the enclosing law.
     fixture = BASE.replace('end ConcreteSpecControl',
