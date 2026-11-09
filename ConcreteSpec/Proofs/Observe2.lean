@@ -283,7 +283,8 @@ theorem LoadedProject.load_refuses (input : ProjectSources)
 
 /-- Law (subject `ConcreteSpec.Core.Observe.LoadedProject.load`). Every raw-path parser refusal
 at any position forces whole-project refusal with a diagnostic naming original input. This covers
-empty, dot, traversal, absolute, drive, empty-component and preserved backslash refusals. -/
+empty, dot, traversal, absolute, drive, empty-component, preserved backslash and control-character
+refusals. -/
 theorem LoadedProject.load_refuses_malformed (input : ProjectSources) (file : String × SourceText)
     (diagnostic : SourcePath.Refusal) (member : file ∈ input.files)
     (malformed : SourcePath.parse file.1 = .error diagnostic) :
@@ -718,8 +719,16 @@ example : ¬ (match loseSites good with
   obtain ⟨sp, _, impossible, _⟩ := resolves [⟨0⟩] rfl ⟨0⟩ (by decide)
   cases impossible
 
+-- The loader's Refused examples are intentionally unregistered, pending the owner's decision
+-- on registering ConcreteSpec.Core.Observe.LoadedProject.load as a rule.
+-- If yes: add ⟨``ConcreteSpec.Core.Observe.LoadedProject.load, 1⟩ to
+-- ConcreteSpec.Core.registeredRules in ConcreteSpec/Spec/Rules.lean, with the required import
+-- of ConcreteSpec.Spec.Observe. Change each loader Refused: tag to the registered form:
+-- Refused followed by a parenthesized rule citation of `ConcreteSpec.Core.Observe.LoadedProject.load`
+-- and then the colon (preserving its class wording).
+
 /-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.duplicate`).
-Refused (rule `ConcreteSpec.Core.Observe.LoadedProject.load`): duplicate site identity. -/
+Refused: duplicate site identity. -/
 example : ∃ issue, LoadedProject.load duplicate = .refused issue :=
   LoadedProject.load_refuses duplicate duplicate_invalid
 
@@ -746,7 +755,7 @@ example : ¬ (match fabricatedRefusal duplicate with
   decide
 
 /-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.duplicateFiles`).
-Refused (rule `ConcreteSpec.Core.Observe.LoadedProject.load`): duplicate file identity. -/
+Refused: duplicate file identity. -/
 example : ∃ issue, LoadedProject.load duplicateFiles = .refused issue :=
   LoadedProject.load_refuses duplicateFiles duplicateFiles_invalid
 
@@ -773,7 +782,7 @@ example : ¬ (match fabricatedRefusal duplicateFiles with
   decide
 
 /-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.missing`).
-Refused (rule `ConcreteSpec.Core.Observe.LoadedProject.load`): site without a loaded file. -/
+Refused: site without a loaded file. -/
 example : ∃ issue, LoadedProject.load missing = .refused issue :=
   LoadedProject.load_refuses missing missing_invalid
 
@@ -799,7 +808,8 @@ example : ¬ (match fabricatedRefusal missing with
   change ¬ (SiteId.mk 99 ∈ List.map Prod.fst missing.sites)
   decide
 
-/-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.badLocation`). -/
+/-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.badLocation`).
+Refused: invalid location. -/
 example : ∃ issue, LoadedProject.load badLocation = .refused issue :=
   LoadedProject.load_refuses badLocation badLocation_invalid
 
@@ -839,7 +849,7 @@ def emptyInput : ProjectSources := malformedInput ""
 def emptyDiagnostic : SourcePath.Refusal := ⟨"", "".toList, .empty⟩
 
 /-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.emptyInput`).
-Refused (rule `ConcreteSpec.Core.Observe.LoadedProject.load`): malformed empty path. -/
+Refused: malformed empty path. -/
 example : ∃ issue, LoadedProject.load emptyInput = .refused issue ∧ issue.Names emptyInput :=
   LoadedProject.load_refuses_malformed emptyInput ("", tabSource) emptyDiagnostic
     (by decide) (by rfl)
@@ -858,7 +868,8 @@ example : (("", tabSource) ∈ emptyInput.files ∧
 def dotInput : ProjectSources := malformedInput "."
 def dotDiagnostic : SourcePath.Refusal := ⟨".", ".".toList, .dot⟩
 
-/-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.dotInput`). -/
+/-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.dotInput`).
+Refused: malformed dot path. -/
 example : ∃ issue, LoadedProject.load dotInput = .refused issue ∧ issue.Names dotInput :=
   LoadedProject.load_refuses_malformed dotInput (".", tabSource) dotDiagnostic
     (by decide) (by rfl)
@@ -878,7 +889,7 @@ def parentInput : ProjectSources := malformedInput ".."
 def parentDiagnostic : SourcePath.Refusal := ⟨"..", "..".toList, .outOfProject⟩
 
 /-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.parentInput`).
-Refused (rule `ConcreteSpec.Core.Observe.LoadedProject.load`): out-of-project path. -/
+Refused: out-of-project path. -/
 example : ∃ issue, LoadedProject.load parentInput = .refused issue ∧ issue.Names parentInput :=
   LoadedProject.load_refuses_malformed parentInput ("..", tabSource) parentDiagnostic
     (by decide) (by rfl)
@@ -897,7 +908,8 @@ example : (("..", tabSource) ∈ parentInput.files ∧
 def absoluteInput : ProjectSources := malformedInput "/src"
 def absoluteDiagnostic : SourcePath.Refusal := ⟨"/src", "".toList, .absolute⟩
 
-/-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.absoluteInput`). -/
+/-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.absoluteInput`).
+Refused: malformed absolute path. -/
 example : ∃ issue, LoadedProject.load absoluteInput = .refused issue ∧ issue.Names absoluteInput :=
   LoadedProject.load_refuses_malformed absoluteInput ("/src", tabSource) absoluteDiagnostic
     (by decide) (by rfl)
@@ -916,7 +928,8 @@ example : (("/src", tabSource) ∈ absoluteInput.files ∧
 def driveInput : ProjectSources := malformedInput "C:main"
 def driveDiagnostic : SourcePath.Refusal := ⟨"C:main", "C:main".toList, .drivePrefixed⟩
 
-/-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.driveInput`). -/
+/-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.driveInput`).
+Refused: malformed drive-prefixed path. -/
 example : ∃ issue, LoadedProject.load driveInput = .refused issue ∧ issue.Names driveInput :=
   LoadedProject.load_refuses_malformed driveInput ("C:main", tabSource) driveDiagnostic
     (by decide) (by rfl)
@@ -935,7 +948,8 @@ example : (("C:main", tabSource) ∈ driveInput.files ∧
 def emptyComponentInput : ProjectSources := malformedInput "src//main"
 def emptyComponentDiagnostic : SourcePath.Refusal := ⟨"src//main", "".toList, .emptyComponent⟩
 
-/-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.emptyComponentInput`). -/
+/-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.emptyComponentInput`).
+Refused: malformed empty path component. -/
 example : ∃ issue, LoadedProject.load emptyComponentInput = .refused issue ∧ issue.Names emptyComponentInput :=
   LoadedProject.load_refuses_malformed emptyComponentInput ("src//main", tabSource) emptyComponentDiagnostic
     (by decide) (by rfl)
@@ -955,7 +969,7 @@ def backslashInput : ProjectSources := malformedInput "src\\main"
 def backslashDiagnostic : SourcePath.Refusal := ⟨"src\\main", "src\\main".toList, .backslash⟩
 
 /-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.backslashInput`).
-Refused (rule `ConcreteSpec.Core.Observe.LoadedProject.load`): backslash in a path (AY-2, assumed-yes pending owner confirmation). -/
+Refused: backslash in a path (AY-2, assumed-yes pending owner confirmation). -/
 example : ∃ issue, LoadedProject.load backslashInput = .refused issue ∧ issue.Names backslashInput :=
   LoadedProject.load_refuses_malformed backslashInput ("src\\main", tabSource) backslashDiagnostic
     (by decide) (by rfl)
@@ -976,9 +990,7 @@ def controlInput : ProjectSources := malformedInput "src/ma\tin.con"
 def controlDiagnostic : SourcePath.Refusal :=
   ⟨"src/ma\tin.con", "ma\tin.con".toList, .controlCharacter⟩
 
-/-- Helper (computation). The exact loader diagnostic retains the offending raw file,
-component and typed control-character reason. (approved: PENDING).
-Refused (rule `ConcreteSpec.Core.Observe.LoadedProject.load`): control character in a file path
+/-- Refused: control character in a file path
 (AY-3, assumed-yes pending owner confirmation). -/
 example : LoadedProject.load controlInput =
     .refused (.malformed ("src/ma\tin.con", tabSource) controlDiagnostic) := by rfl
@@ -1002,7 +1014,8 @@ example : (("src/ma\tin.con", tabSource) ∈ controlInput.files ∧
 def innerDotInput : ProjectSources := malformedInput "a/./b"
 def innerDotDiagnostic : SourcePath.Refusal := ⟨"a/./b", ".".toList, .dot⟩
 
-/-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.innerDotInput`). -/
+/-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.innerDotInput`).
+Refused: malformed inner dot component. -/
 example : ∃ issue, LoadedProject.load innerDotInput = .refused issue ∧ issue.Names innerDotInput :=
   LoadedProject.load_refuses_malformed innerDotInput ("a/./b", tabSource) innerDotDiagnostic
     (by decide) (by rfl)
@@ -1021,7 +1034,8 @@ example : (("a/./b", tabSource) ∈ innerDotInput.files ∧
 def innerParentInput : ProjectSources := malformedInput "a/../b"
 def innerParentDiagnostic : SourcePath.Refusal := ⟨"a/../b", "..".toList, .outOfProject⟩
 
-/-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.innerParentInput`). -/
+/-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.innerParentInput`).
+Refused: out-of-project inner parent component. -/
 example : ∃ issue, LoadedProject.load innerParentInput = .refused issue ∧ issue.Names innerParentInput :=
   LoadedProject.load_refuses_malformed innerParentInput ("a/../b", tabSource) innerParentDiagnostic
     (by decide) (by rfl)
@@ -1040,7 +1054,8 @@ example : (("a/../b", tabSource) ∈ innerParentInput.files ∧
 def trailingSlashInput : ProjectSources := malformedInput "a/"
 def trailingSlashDiagnostic : SourcePath.Refusal := ⟨"a/", "".toList, .emptyComponent⟩
 
-/-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.trailingSlashInput`). -/
+/-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.trailingSlashInput`).
+Refused: malformed trailing empty component. -/
 example : ∃ issue, LoadedProject.load trailingSlashInput = .refused issue ∧ issue.Names trailingSlashInput :=
   LoadedProject.load_refuses_malformed trailingSlashInput ("a/", tabSource) trailingSlashDiagnostic
     (by decide) (by rfl)
