@@ -30,6 +30,7 @@ CLI output (stdout, two lines):
 """
 
 import argparse
+import fnmatch
 import posixpath
 import re
 import subprocess
@@ -100,6 +101,18 @@ IDENTIFIER = r"[A-Za-z_][\w]*[!?']?(?:\.[A-Za-z_][\w]*[!?']?)*"
 LOCATION = re.compile(r"(?P<path>(?:file://)?[A-Za-z0-9_./-]+\.[A-Za-z0-9]+)(?::(?P<lines>[0-9]+(?:[-–][0-9]+)?(?:,[0-9]+(?:[-–][0-9]+)?)*)|#L(?P<anchor>[0-9]+(?:-L[0-9]+)?))")
 
 
+# Evidence about the validator must not bootstrap identifier authority. Keep this
+# declared scope beside the contract; explicit locations may still cite these files.
+IDENTIFIER_EXCLUSIONS = (
+    "legacy/*", "ISSUES.tsv", "scripts/review/fixtures/*",
+    "scripts/review/test_*.py", "scripts/review/external-names.tsv",
+)
+
+
+def identifier_source(path):
+    return not any(fnmatch.fnmatchcase(path, pattern) for pattern in IDENTIFIER_EXCLUSIONS)
+
+
 def citation_error(text, repo, commit, paths, positive, base=None):
     errors = []
     cache = {}
@@ -164,13 +177,10 @@ def citation_error(text, repo, commit, paths, positive, base=None):
         if selected:
             valid += 1
     # Resolve identifiers against actual blobs, never prompt text or the allowlist itself.
-    proc = subprocess.run(["git", "-C", repo, "grep", "-I", "-h", "-e", ".", commit, "--", ".", ":(exclude)scripts/review/external-names.tsv"], capture_output=True, check=False)
-    if proc.returncode not in (0, 1):
-        raise ValueError("citation: cannot read reviewed tree identifiers")
-    content = proc.stdout.decode("utf-8", errors="replace")
+    content = "\n".join(blob(path) for path in sorted(paths) if identifier_source(path))
     removed = ""
     if base:
-        proc = subprocess.run(["git", "-C", repo, "diff", "--no-ext-diff", "--unified=0", base, commit, "--"], capture_output=True, text=True, check=True)
+        proc = subprocess.run(["git", "-C", repo, "diff", "--no-ext-diff", "--unified=0", base, commit, "--", ".", *[":(exclude)" + p for p in IDENTIFIER_EXCLUSIONS]], capture_output=True, text=True, check=True)
         removed = "\n".join(l[1:] for l in proc.stdout.splitlines() if l.startswith("-") and not l.startswith("---"))
     absent = set(re.findall(r"^ABSENT: (" + IDENTIFIER + r")$", text, re.M))
     external = set()

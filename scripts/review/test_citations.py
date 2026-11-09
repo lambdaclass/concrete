@@ -28,6 +28,9 @@ with tempfile.TemporaryDirectory() as directory:
     target = root / "scripts/review"
     target.mkdir(parents=True)
     (target / "external-names.tsv").write_bytes(Path(__file__).with_name("external-names.tsv").read_bytes())
+    (target / "test_contamination.py").write_text("inventedLaw mutantFake caseFake\n")
+    (target / "fixtures").mkdir(exist_ok=True)
+    (target / "fixtures/fake.txt").write_text("inventedLaw mutantFake caseFake\n")
     git("add", ".")
     git("-c", "user.name=Control", "-c", "user.email=control@example.invalid", "commit", "-qm", "fixture")
     sha = git("rev-parse", "HEAD")
@@ -77,3 +80,8 @@ with tempfile.TemporaryDirectory() as directory:
     result = contract.evaluate_output("source.lean:1 `otherAnchor`\nREAD: source.lean\nREPOSITORY: readable\nVERDICT: clean", "", sha, directory, ["clean"], base=base)
     assert result[0] == "clean", result
 print("citation controls: PASS")
+
+# The actual branch tree must never gain authority from its fabricated evidence.
+repo = str(Path(__file__).resolve().parents[2])
+result = contract.citation_error("README.md:1 `alwaysEmitSteps` `invalidTwo` `mutateStoreGhostStep`", repo, "HEAD", contract.commit_blob_paths(repo, "HEAD"), True)
+assert result == "citation: identifier 'alwaysEmitSteps' unresolved; citation: identifier 'invalidTwo' unresolved; citation: identifier 'mutateStoreGhostStep' unresolved", result
