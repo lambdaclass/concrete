@@ -440,7 +440,19 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install Nix
         uses: cachix/install-nix-action@v31
+      - name: Cheap trusted memory control (kernel limits)
+        if: matrix.arch == 'x86-64'
+        run: |
+          nix develop --command bash -euo pipefail -c '
+            source scripts/checks/lib/slice0_environment.sh
+            hosted_memory_control() {
+              source scripts/checks/lib/bounded.sh
+              bounded_run 90 -- python3 -I scripts/checks/tests/trusted_memory_bound_controls.py
+            }
+            slice0_gate_environment hosted_memory_control
+          '
       - name: Trusted-base golden (premises, axioms, toolchain and LCB pin)
+        if: ${{ !cancelled() }}
         run: nix develop --command timeout 3000 bash scripts/checks/compiler/slice0_trusted_base.sh
 
   reproducibility:

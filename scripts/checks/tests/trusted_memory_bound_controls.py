@@ -20,6 +20,7 @@ path=next(line[3:] for line in Path('/proc/self/cgroup').read_text().splitlines(
 cgroup=Path('/sys/fs/cgroup') / path.lstrip('/')
 assert int((cgroup/'memory.max').read_text()) == {bound.LIMIT}
 assert int((cgroup/'memory.swap.max').read_text()) == 0
+print(f'kernel memory.max={{(cgroup/"memory.max").read_text().strip()}} memory.swap.max={{(cgroup/"memory.swap.max").read_text().strip()}} RLIMIT_AS.hard={{hard}}', flush=True)
 x=bytearray(1024*1024)
 """
     assert bound.run([sys.executable, "-I", "-c", positive], seconds=15) == 0
