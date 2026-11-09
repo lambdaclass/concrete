@@ -117,9 +117,20 @@ validate_reviewer_output() {
   if bounded_is_incomplete "$rc"; then
     incomplete_flag=(--incomplete)
   fi
-  python3 -I "$COLLECT_OUTPUT_DIR/output_contract.py" \
+  local parsed status
+  parsed="$(python3 -I "$COLLECT_OUTPUT_DIR/output_contract.py" \
     --repo "$repo" --commit "$commit" "${base_flag[@]}" --verdicts "$verdicts" \
-    --rc "$rc" "${incomplete_flag[@]}" --log "$log_file" "$out_file"
+    --rc "$rc" "${incomplete_flag[@]}" --log "$log_file" "$out_file")" || return 2
+  status="$(printf '%s\n' "$parsed" | sed -n 's/^status: //p')"
+  case "$status" in
+    invalid) printf '%s\n' "$parsed" ;; # Evidence failure, never a verdict.
+    blocked|refused|noverdict|error) printf '%s\n' "$parsed" ;;
+    *)
+      case ",$verdicts," in
+        *",$status,"*) printf '%s\n' "$parsed" ;;
+        *) printf 'status: error\nreason: unknown reviewer-output status: %s\n' "$status" ;;
+      esac ;;
+  esac
 }
 
 collect_reviewer_output() {

@@ -108,7 +108,9 @@ while IFS= read -r line; do
   SEEN="$SEEN$k "
   printf -v "F_${k//-/_}" '%s' "$v"
   case "$k" in
-    verdict)      [[ "$v" =~ ^(clean|findings|blocked)$ ]] ;;
+    verdict)
+      [ "$v" != invalid ] || malformed "invalid reviewer evidence is not a verdict"
+      [[ "$v" =~ ^(clean|findings|blocked)$ ]] ;;
     rounds)       [[ "$v" =~ ^[1-9][0-9]*$ ]] ;;
     reviewer)     [[ "$v" =~ ^(codex|kimi|agy)$ ]] ;;
     writer)       valid_writer_field "$v" ;;

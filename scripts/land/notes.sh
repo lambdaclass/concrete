@@ -107,6 +107,7 @@ case "$sub" in
     elif git rev-parse -q --verify "$REMOTE/main^{commit}" >/dev/null 2>&1; then
       req_base="$(git merge-base "$REMOTE/main" "$s" 2>/dev/null || true)"
     fi
+    # verify.sh explicitly rejects invalid evidence and unknown verdicts.
     REVIEW_NOTES_REF="refs/notes/remote/concrete-review" \
     REVIEW_WRITER_NOTES_REF="refs/notes/remote/concrete-writer" \
       bash "$VERIFY" ${req_base:+--required-base "$req_base"} "$s" >/dev/null 2>&1 \

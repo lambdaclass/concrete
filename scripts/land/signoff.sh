@@ -209,7 +209,7 @@ check() {
     got="$(git cat-file blob "$obj:$file" | sha256)"
     [ "$got" = "$hash" ] || bad "the sha256 of $file is $got, not the recorded $hash"
     local c_out c_status c_reason
-    c_out="$(git cat-file blob "$obj:$file" | python3 -I "$OUTPUT_CONTRACT" --commit "$sha" --verdicts ACCEPT,REJECT)" \
+    c_out="$(git cat-file blob "$obj:$file" | python3 -I "$OUTPUT_CONTRACT" --commit "$sha" --base "$(git merge-base "$base" "$sha")" --verdicts ACCEPT,REJECT)" \
       || bad "the $r output could not be parsed by output_contract.py"
     c_status="$(printf '%s\n' "$c_out" | sed -n 's/^status: //p' | head -1)"
     c_reason="$(printf '%s\n' "$c_out" | sed -n 's/^reason: //p' | head -1)"
@@ -238,11 +238,12 @@ cmd_verify() {
 
 cmd_collect() {
   [ $# -ge 1 ] || die "collect: name the commit"
-  local sha reviewer="" req="" out="" log="" timeout="${REVIEW_TIMEOUT:-1500}"
+  local sha reviewer="" req="" out="" log="" base="${LAND_REMOTE:-origin}/main" timeout="${REVIEW_TIMEOUT:-1500}"
   sha="$(git rev-parse -q --verify "$1^{commit}")" || die "collect: not a commit: $1"; shift
   while [ $# -gt 0 ]; do
     [ $# -ge 2 ] || die "collect: $1 needs a value"
     case "$1" in
+      --base) base="$2" ;;
       --reviewer) reviewer="$2" ;;
       --request) req="$2" ;;
       --out) out="$2" ;;
@@ -258,6 +259,7 @@ cmd_collect() {
   names "$sha" < "$req" || die "collect: request body does not name ${sha:0:10} (an unambiguous prefix of at least 7 hex digits)"
   local work tree manifest repo_root rc=0 c_out c_status c_reason
   repo_root="$(git rev-parse --show-toplevel)"
+  base="$(git merge-base "$base" "$sha")" || die "collect: cannot resolve reviewed diff base"
   work="$(mktemp -d "${TMPDIR:-/tmp}/concrete-signoff-collect.XXXXXX")"
   # shellcheck disable=SC2064
   trap "chmod -R u+w '$work' 2>/dev/null || true; rm -rf '$work'" RETURN
@@ -268,9 +270,13 @@ cmd_collect() {
   prepare_review_archive "$repo_root" "$sha" "$tree" "$manifest"
   printf '\n%s\n' 'Citation contract: use repository-relative path:N[-M][,N[-M]...] or path#LN-LM, optionally as Markdown links. En-dash ranges are accepted. Absolute file:// links are normalized to an exact repository path. Basename labels require a unique file or an immediately following full link to the same starting line. A [`name`](path#LA-LB) link asserts that name occurs inside those lines. Every citation must resolve; invented citations make the output invalid. Backticked dotted, underscore or camelCase identifiers must resolve component by component in the reviewed tree, removed side of the reviewed diff, or the pinned external-name list. Report a missing identifier with a standalone ABSENT: name line. For proposed fixes in FINDINGS/REJECT use `proposed:newName`. Plain words and hash ranges are not identifiers. Positive CLEAN/clean/ACCEPT requires READ: paths actually read and at least one resolving file:line citation supporting the conclusion. ALWAYS do the best long term thing rather than cutting corners.' >>"$work/request.txt"
   collect_reviewer_output "$reviewer" "$tree" "$work/request.txt" "$out" "$log" "$timeout" || rc=$?
-  c_out="$(validate_reviewer_output "$repo_root" "$sha" "$tree" "$manifest" "$out" "$log" "ACCEPT,REJECT" "$rc")" || die "collect: validate_reviewer_output failed"
+  c_out="$(validate_reviewer_output "$repo_root" "$sha" "$tree" "$manifest" "$out" "$log" "ACCEPT,REJECT" "$rc" "$base")" || die "collect: validate_reviewer_output failed"
   c_status="$(printf '%s\n' "$c_out" | sed -n 's/^status: //p' | head -1)"
   c_reason="$(printf '%s\n' "$c_out" | sed -n 's/^reason: //p' | head -1)"
+  if [ "$c_status" = invalid ]; then
+    echo "signoff: collect invalid reviewer evidence ($c_reason)" >&2
+    return 1
+  fi
   if [ "$rc" -ne 0 ] || { [ "$c_status" != ACCEPT ] && [ "$c_status" != REJECT ]; }; then
     rm -f "$out"
     echo "signoff: collect ($reviewer on ${sha:0:10}) failed: status=$c_status ($c_reason, exit $rc)" >&2

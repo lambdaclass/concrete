@@ -45,10 +45,13 @@ assert run('rev-c2a4', 'rev-c2a4/codex.final', positive=False, removed=True) is 
 # The later positive-evidence requirement deliberately rejects this uncited positive output.
 assert run('rev-c2a4', 'rev-c2a4/codex.final', removed=True) == 'citation: positive verdict requires at least one resolvable file:line citation'
 assert run('scheduled', 'S3-agy.log') is None
-for name, needle in [('rev-c9r8-invalid', "identifier '"), ('rev-c4a3', "identifier '"), ('rev-c7r6', "identifier 'vacuousForbidsRelease' unresolved"), ('rev-intg6', "identifier '")]:
+for name, needle in [('rev-c9r8-invalid', "identifier 'stepChecked' unresolved"), ('rev-c4a3', "identifier 'invalidTwo' unresolved"), ('rev-c7r6', "identifier 'vacuousForbidsRelease' unresolved"), ('rev-intg6', "identifier 'alwaysEmitSteps' unresolved")]:
     result = run(name, name + '/agy.out')
     assert result and needle in result, (name, result)
 result = run('anchors', 'AKa-agy.log')
 assert "anchor 'finish_diff' absent from 'file:///home/unbalancedparen/projects/gates-briefs/ro-AKa/scripts/checks/compiler/spec_diff.sh#L2020-L2034'" in result, result
 assert run('anchors', 'AKc-codex.md') == 'citation: positive verdict requires at least one resolvable file:line citation'
+# Raw AKc has no framing directives either: the uncited positive is still invalid.
+status, reason = c.evaluate_output((FIX / 'AKc-codex.md').read_text(), '', 'HEAD', str(HERE.parents[1]), ['clean', 'findings'])
+assert (status, reason) == ('invalid', 'citation: positive verdict requires at least one resolvable file:line citation'), (status, reason)
 print('original citation evidence: PASS (hashes, honest reviews, fabricated reviews, fake anchors, uncited CLEAN)')

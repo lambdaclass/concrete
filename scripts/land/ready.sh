@@ -99,7 +99,9 @@ if bash "$SELF_DIR/notes.sh" ready --base "$base" "$head"; then
   echo "ready: ${head:0:10} gates=$gates review=clean"
   exit 0
 fi
-if [ "$verdict" = clean ] && [ "$gates" = pass ]; then
+if [ "$verdict" = invalid ]; then
+  echo "ready: ${head:0:10} gates=$gates review=invalid (not a verdict)"
+elif [ "$verdict" = clean ] && [ "$gates" = pass ]; then
   echo "ready: ${head:0:10} gates=$gates review=invalid-clean (rejected by verify.sh)"
 else
   echo "ready: ${head:0:10} gates=$gates review=${verdict:-none}"

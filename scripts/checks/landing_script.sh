@@ -1224,7 +1224,7 @@ d="$(mktemp -d)"
 first_path="$(git ls-tree -r --name-only "$sha" | head -1)"
 for r in codex kimi agy; do
   printf 'review of %s by %s\n' "$sha" "$r" > "$d/$r-request"
-  printf 'READ: %s\nREPOSITORY: readable\n  VERDICT: ACCEPT\n' "$first_path" > "$d/$r"
+  printf '%s:1\nREAD: %s\nREPOSITORY: readable\n  VERDICT: ACCEPT\n' "$first_path" "$first_path" > "$d/$r"
 done
 bash "$SIGNOFF" record "$sha" --base "$base" --rounds-at "$sha" --date 2026-11-08 --quote "sign off ${sha:0:8}, yes" \
   --codex-request "$d/codex-request" --codex "$d/codex" \
@@ -1274,13 +1274,13 @@ case "$mode" in
   reject) printf 'READ: %s\nREPOSITORY: readable\nVERDICT: REJECT\n' "$first_path" > "$d/agy-r"
     variant "s/^verdict-agy: .*/verdict-agy: agy.txt $(sha256sum < "$d/agy-r" | cut -d' ' -f1)/" \
       "set:agy.txt:$(git hash-object -w "$d/agy-r")" ;;
-  noread) printf 'REPOSITORY: readable\nVERDICT: ACCEPT\n' > "$d/agy-r"
+  noread) printf '%s:1\nREPOSITORY: readable\nVERDICT: ACCEPT\n' "$first_path" > "$d/agy-r"
     variant "s/^verdict-agy: .*/verdict-agy: agy.txt $(sha256sum < "$d/agy-r" | cut -d' ' -f1)/" \
       "set:agy.txt:$(git hash-object -w "$d/agy-r")" ;;
-  badread) printf 'READ: does-not-exist-in-commit.txt\nREPOSITORY: readable\nVERDICT: ACCEPT\n' > "$d/agy-r"
+  badread) printf '%s:1\nREAD: does-not-exist-in-commit.txt\nREPOSITORY: readable\nVERDICT: ACCEPT\n' "$first_path" > "$d/agy-r"
     variant "s/^verdict-agy: .*/verdict-agy: agy.txt $(sha256sum < "$d/agy-r" | cut -d' ' -f1)/" \
       "set:agy.txt:$(git hash-object -w "$d/agy-r")" ;;
-  norepo) printf 'READ: %s\nVERDICT: ACCEPT\n' "$first_path" > "$d/agy-r"
+  norepo) printf '%s:1\nREAD: %s\nVERDICT: ACCEPT\n' "$first_path" "$first_path" > "$d/agy-r"
     variant "s/^verdict-agy: .*/verdict-agy: agy.txt $(sha256sum < "$d/agy-r" | cut -d' ' -f1)/" \
       "set:agy.txt:$(git hash-object -w "$d/agy-r")" ;;
   unreadable) printf 'READ: %s\nREPOSITORY: unreadable\nVERDICT: ACCEPT\n' "$first_path" > "$d/agy-r"
@@ -1506,8 +1506,8 @@ out=""
 while [ $# -gt 0 ]; do
   case "$1" in -o) out="$2"; shift 2 ;; *) shift ;; esac
 done
-printf 'READ: rv2.txt\nREPOSITORY: readable\nVERDICT: ACCEPT\n' > "$out"
-printf 'READ: rv2.txt\nREPOSITORY: readable\nVERDICT: ACCEPT\ntokens used\n1,234\n'
+printf 'rv2.txt:1\nREAD: rv2.txt\nREPOSITORY: readable\nVERDICT: ACCEPT\n' > "$out"
+printf 'rv2.txt:1\nREAD: rv2.txt\nREPOSITORY: readable\nVERDICT: ACCEPT\ntokens used\n1,234\n'
 EOF
 chmod +x "$TMP/fake-codex-so"
 printf 'Review commit %s\n' "$R2" > "$TMP/so-collect-req.txt"
@@ -1535,7 +1535,7 @@ out=""
 while [ $# -gt 0 ]; do
   case "$1" in -o) out="$2"; shift 2 ;; *) shift ;; esac
 done
-printf 'READ: rv2.txt\nREPOSITORY: readable\nVERDICT: ACCEPT\n' > "$out"
+printf 'rv2.txt:1\nREAD: rv2.txt\nREPOSITORY: readable\nVERDICT: ACCEPT\n' > "$out"
 echo "sandbox could not start" >&2
 EOF
 chmod +x "$TMP/fake-codex-so-stderr-fail"
@@ -1551,7 +1551,7 @@ while [ $# -gt 0 ]; do
   case "$1" in -o) out="$2"; shift 2 ;; -C) cd_dir="$2"; shift 2 ;; *) shift ;; esac
 done
 chmod u+w "$cd_dir/rv2.txt" 2>/dev/null && printf 'mutated by reviewer\n' > "$cd_dir/rv2.txt"
-printf 'READ: rv2.txt\nREPOSITORY: readable\nVERDICT: ACCEPT\n' > "$out"
+printf 'rv2.txt:1\nREAD: rv2.txt\nREPOSITORY: readable\nVERDICT: ACCEPT\n' > "$out"
 EOF
 chmod +x "$TMP/fake-codex-so-mutate"
 o="$(REVIEW_CODEX_BIN="$TMP/fake-codex-so-mutate" bash "$ROOT_DIR/scripts/land/signoff.sh" collect "$R2" --reviewer codex --request "$TMP/so-collect-req.txt" --out "$TMP/so-collect-mutate-out.txt" --log "$TMP/so-collect-mutate-log.txt" 2>&1)"; r=$?

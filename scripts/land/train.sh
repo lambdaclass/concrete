@@ -521,6 +521,7 @@ review_provenance() { # name head
       *) echo "could not fetch refs/notes/concrete-writer from $REMOTE: ${werr//$'\n'/ }"; return 2 ;;
     esac
   fi
+  # invalid evidence and unknown verdicts are rejected by the shared verifier.
   if out="$(bash "$VERIFY" --required-base "$base" "$head" 2>&1)"; then echo "the head ${head:0:10} carries a clean review note covering ${base:0:10}"; return 0; fi
   if git notes --ref=refs/notes/concrete-review show "$head" >/dev/null 2>&1; then
     echo "the head's review note does not qualify: ${out//$'\n'/ }"; return 1

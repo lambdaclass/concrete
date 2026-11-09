@@ -24,6 +24,8 @@ SPLIT="$ROOT_DIR/scripts/review/split_diff.py"
 
 python3 -I "$ROOT_DIR/scripts/review/test_citations.py" || exit 1
 python3 -I "$ROOT_DIR/scripts/review/test_citation_evidence.py" || exit 1
+python3 -I "$ROOT_DIR/scripts/review/test_citation_callers.py" || exit 1
+if [ "${1:-}" = --citations-only ]; then exit 0; fi
 
 PASS=0
 FAIL=0
@@ -93,7 +95,7 @@ has() { grep -q "$1" <<<"$added"; }
 # Real `codex exec` writes a session transcript ending with a "tokens used" trailer to stdout, while
 # writing the agent's final message only to `-o $out`. Emulate that in fake codex so any collector
 # that reads stdout instead of `-o` fails the strict output contract.
-reply() { printf '%s\n' "$1" >"$out"; printf '%s\ntokens used\n1,234\n' "$1"; }
+reply() { printf 'README.md:1\n%s\n' "$1" >"$out"; printf 'README.md:1\n%s\ntokens used\n1,234\n' "$1"; }
 if has MARK_REFUSE_ALWAYS || { has MARK_REFUSE_STANDARD && [ "$kind" = standard ]; }; then
   reply "I'm sorry, but I can't help with that request because it was flagged by our cybersecurity policy."
 elif has MARK_DOUBLE_TIMEOUT; then
@@ -194,6 +196,7 @@ archive=no
 [ ! -e .git ] && [ "$(cat README.md 2>/dev/null)" = base ] && [ ! -w README.md ] && [ ! -w . ] && archive=yes
 echo "$n $reviewer archive=$archive stdin_bytes=$(wc -c <"$FAKE_LOG/actual-stdin.$n" | tr -d ' ')" >>"$FAKE_LOG/calls"
 echo "$n optional_locks=${GIT_OPTIONAL_LOCKS:-unset}" >>"$FAKE_LOG/locks"
+printf 'README.md:1\n'
 case "$prompt" in
   *MARK_REFUSE_ALWAYS*) printf "I'm sorry, but I can't help with that request because it was flagged by our cybersecurity policy.\n" ;;
   *MARK_DOUBLE_TIMEOUT*) sleep 1; exit 0 ;;

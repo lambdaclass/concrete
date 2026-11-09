@@ -113,8 +113,14 @@ def citation_error(text, repo, commit, paths, positive, base=None):
     def resolve(path):
         if path.startswith("file://"):
             parts = path[7:].split("/")
-            candidates = ["/".join(parts[i:]) for i in range(len(parts)) if "/".join(parts[i:]) in paths]
-            return candidates[0] if candidates else None
+            roots = {p.split("/", 1)[0] for p in paths if "/" in p}
+            for i, part in enumerate(parts):
+                if part in roots:
+                    candidate = "/".join(parts[i:])
+                    return candidate if candidate in paths else None
+            # Root-level files have no directory component to recognize.
+            candidate = parts[-1]
+            return candidate if candidate in paths else None
         if path in paths and is_clean_relative_path(path):
             return path
         if "/" not in path:
@@ -227,8 +233,7 @@ def evaluate_output(
     matched_verdict = None
     if verdict_match:
         candidate = verdict_match.group(1).strip()
-        if candidate in verdicts:
-            matched_verdict = candidate
+        matched_verdict = next((v for v in verdicts if v.casefold() == candidate.casefold()), None)
 
     if matched_verdict is None:
         if REFUSAL_RE.search(combined):
@@ -237,6 +242,15 @@ def evaluate_output(
             "noverdict",
             f"last non-empty line is not a valid VERDICT ({'|'.join(verdicts)}) line",
         )
+
+    try:
+        valid_blobs = commit_blob_paths(repo, commit)
+        problem = citation_error(strip_directives(text), repo, commit, valid_blobs,
+                                 matched_verdict.lower() in ("clean", "accept"), base)
+    except (ValueError, OSError, subprocess.SubprocessError) as exc:
+        return "blocked", f"citation lookup failed: {exc}"
+    if problem:
+        return "invalid", problem
 
     if len(norm_nonempty) < 2:
         return "blocked", "missing REPOSITORY: readable penultimate line and READ: <path> lines"
@@ -262,11 +276,6 @@ def evaluate_output(
     if not read_paths:
         return "blocked", "reviewer output has no 'READ: <path>' line"
 
-    try:
-        valid_blobs = commit_blob_paths(repo, commit)
-    except ValueError as exc:
-        return "blocked", str(exc)
-
     for rp in read_paths:
         if not is_clean_relative_path(rp):
             return "blocked", f"READ: path '{rp}' is not a clean relative path"
@@ -275,11 +284,6 @@ def evaluate_output(
                 "blocked",
                 f"READ: path '{rp}' does not exist as a file in commit {commit}",
             )
-
-    problem = citation_error(strip_directives(text), repo, commit, valid_blobs,
-                             matched_verdict.lower() in ("clean", "accept"), base)
-    if problem:
-        return "invalid", problem
 
     return matched_verdict, f"verified {len(read_paths)} READ path(s), REPOSITORY: readable, VERDICT: {matched_verdict}"
 
