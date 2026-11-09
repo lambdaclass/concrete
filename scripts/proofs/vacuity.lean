@@ -1619,7 +1619,7 @@ def counterexample (law : ConstantInfo) (ic : InstanceCase) (s m : Name) (subjec
     Only computational fields become arbitrary functions of the full telescope.
     Unsupported dependencies fail the subsequent kernel-style Meta.check; they
     never fall back to comparison of the concrete result. -/
-def withProtectedSubject (term : Expr) (budget : WorkBudget) (carrierTag : Name)
+def withProtectedSubject (term : Expr) (budget : WorkBudget) (carrierSeal : Expr)
     (next : Expr → MetaM Bool) : MetaM Bool := do
   let type ← inferType term
   forallTelescopeReducing type fun xs result => do
@@ -1638,8 +1638,8 @@ def withProtectedSubject (term : Expr) (budget : WorkBudget) (carrierTag : Name)
           chargeWork budget
           match left with
           | 0 =>
-            let replacement ← mkLambdaFVars xs
-              (.mdata (({} : MData).setName `vacuity.subjectCarrier carrierTag) built)
+            let pair ← instantiateMVars (← mkAppM ``PProd.mk #[carrierSeal, built])
+            let replacement ← mkLambdaFVars xs (.proj ``PProd 1 pair)
             Lean.Meta.check replacement
             unless ← isDefEq (← inferType replacement) type do
               throwError "protected-subject-type"
@@ -1680,28 +1680,31 @@ structure ComputationCandidate where
 
 abbrev ComputationCache := Std.HashMap (Expr × Array Expr) (Expr × Bool × Bool)
 
-/-- Only reconstructions created in this protection call, and their raw field
-    projections, are subject carriers. Result types (including structures) do
-    not classify carriers. The fresh tag cannot be supplied by source syntax. -/
-partial def subjectCarrier (budget : WorkBudget) (tag : Name) (e : Expr) : MetaM Bool := do
+/-- The carrier seal is a fresh local expression variable, not a metadata
+    name. A well-typed source declaration cannot reference that future local.
+    Only the actual typed seal wrapper and its raw field projections count;
+    metadata itself conveys no authority. -/
+partial def subjectCarrier (budget : WorkBudget) (sealValue : Expr) (e : Expr) : MetaM Bool := do
   chargeWork budget
   let e := e.headBeta
   match e with
-  | .mdata md body =>
-    if md.getName `vacuity.subjectCarrier == tag then return true
-    subjectCarrier budget tag body
-  | .proj _ _ body => subjectCarrier budget tag body
+  | .mdata _ body => subjectCarrier budget sealValue body
+  | .proj name i body =>
+    if name == ``PProd && i == 1 && body.getAppFn'.isConstOf ``PProd.mk then
+      let args := body.getAppArgs
+      if args.size == 4 && args[2]! == sealValue then return true
+    subjectCarrier budget sealValue body
   | _ =>
     if let .const head _ := e.getAppFn' then
       if let some projection ← getProjectionFnInfo? head then
         let args := e.getAppArgs
         if args.size == projection.numParams + 1 then
-          return ← subjectCarrier budget tag args[projection.numParams]!
+          return ← subjectCarrier budget sealValue args[projection.numParams]!
     return false
 
 mutual
 partial def computationVisit (budget : WorkBudget) (depends : Expr → MetaM Bool)
-    (carrierTag : Name)
+    (carrierSeal : Expr)
     (candidates : IO.Ref (Array ComputationCandidate)) (cache : IO.Ref ComputationCache)
     (e : Expr) (xs : Array Expr) : MetaM (Expr × Bool × Bool) := do
   chargeWork budget
@@ -1709,23 +1712,23 @@ partial def computationVisit (budget : WorkBudget) (depends : Expr → MetaM Boo
   let e := e.headBeta
   let key := (e, xs)
   if let some result := (← cache.get)[key]? then return result
-  let result ← computationVisitStep budget depends carrierTag candidates cache e xs
+  let result ← computationVisitStep budget depends carrierSeal candidates cache e xs
   cache.modify (·.insert key result)
   return result
 
 partial def computationVisitStep (budget : WorkBudget) (depends : Expr → MetaM Bool)
-    (carrierTag : Name)
+    (carrierSeal : Expr)
     (candidates : IO.Ref (Array ComputationCandidate)) (cache : IO.Ref ComputationCache)
     (e : Expr) (xs : Array Expr) : MetaM (Expr × Bool × Bool) := do
   if !(← depends e) then return (e, false, false)
   let type ← whnfD (← inferType e)
-  if ← subjectCarrier budget carrierTag e then
+  if ← subjectCarrier budget carrierSeal e then
     -- Representation fields remain fixed. Their syntactic receiver contains
     -- semantic fields, but that does not make a type argument computational.
     return (e, false, !(← representationField type))
   -- Traverse types as well as terms; the result guard below prevents a type
   -- expression from becoming an arbitrary computation result.
-  let visit := computationVisit budget depends carrierTag candidates cache
+  let visit := computationVisit budget depends carrierSeal candidates cache
   let (rebuilt, childResult, actual) ← match e with
     | .app f a => do
       let (f', fc, fa) ← visit f xs
@@ -1778,7 +1781,7 @@ end
     when the concrete computation would immediately select one constructor.
     Matcher definitions are compared by ordinary checked conversion, never by
     generated names or a branch-shape whitelist. -/
-def withComputationResults (a b : Expr) (semantic : Array FVarId) (budget : WorkBudget) (carrierTag : Name)
+def withComputationResults (a b : Expr) (semantic : Array FVarId) (budget : WorkBudget) (carrierSeal : Expr)
     (check : Expr → Expr → MetaM Bool) : MetaM Bool := do
   let dependencies ← IO.mkRef ({} : Std.HashMap Expr Bool)
   let rec depends (e : Expr) : MetaM Bool := do
@@ -1798,7 +1801,7 @@ def withComputationResults (a b : Expr) (semantic : Array FVarId) (budget : Work
     return found
   let candidates ← IO.mkRef (#[] : Array ComputationCandidate)
   let cache ← IO.mkRef ({} : ComputationCache)
-  let visit := computationVisit budget depends carrierTag candidates cache
+  let visit := computationVisit budget depends carrierSeal candidates cache
   -- A single transformation gives domains and bodies exactly the same typed
   -- placeholders. Collection and replacement cannot open different telescopes.
   let (a', _, _) ← visit a #[]
@@ -1848,7 +1851,6 @@ def withProtected (a b : Expr) (subjects : Array Name) (check : Expr → Expr �
     | .mdata _ b | .proj _ _ b => collect b terms
     | _ => return terms
   let protectedTerms ← collect b (← collect a #[])
-  let carrierTag ← mkFreshId
   let replacements ← IO.mkRef ({} : Std.HashMap (Expr × Expr × Expr) Expr)
   let rec replace (e term value : Expr) : MetaM Expr := do
     chargeWork budget
@@ -1865,18 +1867,18 @@ def withProtected (a b : Expr) (subjects : Array Name) (check : Expr → Expr �
       | _ => return e)
     replacements.modify (·.insert (e, term, value) result)
     return result
-  let rec compare (i : Nat) (a b : Expr) (semantic : Array FVarId) : MetaM Bool := do
+  let rec compare (carrierSeal : Expr) (i : Nat) (a b : Expr) (semantic : Array FVarId) : MetaM Bool := do
     chargeWork budget
     if i >= protectedTerms.size then
       -- Conversion on an ill-typed protection is never evidence.
       Lean.Meta.check a
       Lean.Meta.check b
-      return ← withComputationResults a b semantic budget carrierTag check
+      return ← withComputationResults a b semantic budget carrierSeal check
     let term := protectedTerms[i]!
-    withProtectedSubject term budget carrierTag fun replacement => do
+    withProtectedSubject term budget carrierSeal fun replacement => do
       let vars := (collectFVars {} replacement).fvarIds
-      compare (i + 1) (← replace a term replacement) (← replace b term replacement) (semantic ++ vars)
-  compare 0 a b #[]
+      compare carrierSeal (i + 1) (← replace a term replacement) (← replace b term replacement) (semantic ++ vars)
+  withLocalDeclD `subjectSeal (mkConst ``Unit) fun sealValue => compare sealValue 0 a b #[]
 
 
 def protectedEq (a b : Expr) (subjects : Array Name) (budget : Option WorkBudget := none) : MetaM Bool :=

@@ -87,3 +87,24 @@ checks all proof-bearing fields and function outputs. Paired independent-base
 and two-IH controls ensure that recursion is not rejected merely because it
 uses an IH. Failed or unfinished checks cannot certify a negative answer, and
 all validation consumes the same original budget.
+
+## Metadata and fieldless-subject audit confirmations
+
+At `8a789aa12` (consumer `4a4697bdc63dc1def7a13977e479079f0686fdcc`),
+a bounded low-level computation-protection probe reported:
+
+```
+METADATA forged=false equal=false
+METADATA forged=true equal=true
+EMPTY carrier equal=true
+```
+
+The forged probe used the same known metadata name as the carrier recognizer
+around an ordinary constant-returning subject-consuming operation. A plain
+name is not an unforgeable carrier identity. The empty-record probe used
+`protectedEq` and admitted a concrete-result counterfeit because reconstruction
+created no semantic fields. Both are fixed by a typed projection wrapper with
+a fresh local expression seal; no metadata name or flag grants authority. The
+seal also supplies the missing fieldless-subject dependence. Permanent controls
+require both metadata forgeries to compare false and the genuine/counterfeit
+fieldless contracts to compare true/false respectively.

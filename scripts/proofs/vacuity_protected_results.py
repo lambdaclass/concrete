@@ -27,6 +27,13 @@ def packaged : Prop := (∃ v : Nat × Nat, v = pair subject 0) ↔
 def dependent (n : Nat) : Prop := ∃ x : {v : Nat // v ≤ subject.step n}, x.1 < subject.step x.1
 def sigmaDependent (n : Nat) : Prop :=
   ∃ x : Sigma (fun _v : Nat => Fin (subject.step n)), x.2.val < subject.step x.1
+structure EmptyOps where
+def emptySubject : EmptyOps := {}
+def fromEmpty (_o : EmptyOps) : Nat := 0
+def emptyOriginal : Prop := fromEmpty emptySubject = fromEmpty emptySubject
+def emptyRestated : Prop := let v := fromEmpty emptySubject; v = v
+def emptyCounterfeit : Prop := fromEmpty emptySubject = 0
+def ignoreScalar (_f : Nat → Nat) : Nat := 0
 set_option maxRecDepth 4096 in
 set_option maxHeartbeats 2000000 in
 #eval show MetaM Unit from do
@@ -35,25 +42,51 @@ set_option maxHeartbeats 2000000 in
       ("structure-counterfeit", mkConst ``original, mkConst ``counterfeit, false),
       ("nested-counterfeit", mkConst ``nestedOriginal, mkConst ``nestedCounterfeit, false),
       ("iff-exists-packaging", mkConst ``packaged, mkConst ``packaged, true),
+      ("empty-carrier-positive", mkConst ``emptyOriginal, mkConst ``emptyRestated, true),
+      ("empty-carrier-counterfeit", mkConst ``emptyOriginal, mkConst ``emptyCounterfeit, false),
       ("dependent-domain", mkApp (mkConst ``dependent) (mkNatLit 2), mkApp (mkConst ``dependent) (mkNatLit 2), true),
       ("sigma-dependent-domain", mkApp (mkConst ``sigmaDependent) (mkNatLit 2), mkApp (mkConst ``sigmaDependent) (mkNatLit 2), true)] do
     if structuresOnly && (label == "dependent-domain" || label == "sigma-dependent-domain") then continue
     let job : AnalysisJob := {
       name := Name.str `ProtectedResults label, stage := "instance"
       action := do
-        let equal ← protectedEq a b #[``subject] (← get).budget
+        let equal ← protectedEq a b #[``subject, ``emptySubject] (← get).budget
         IO.println s!"PROTECTED {label} equal={equal} expected={expected}"
         unless equal == expected do throwError "protected-result-verdict {label}"
         -- Ordinary metadata and a let alias must not change protection.
         let tagged := Expr.mdata (({} : MData).setString `control "ordinary") a
         let alias := Expr.letE `contract (mkSort .zero) tagged (.bvar 0) false
-        unless (← protectedEq alias b #[``subject] (← get).budget) == expected do
+        unless (← protectedEq alias b #[``subject, ``emptySubject] (← get).budget) == expected do
           throwError "protected-metadata-let-verdict {label}"
     }
     let (_, state) ← (isolated (← readThe Core.Context) job).run {}
     for finding in state.findings do
       IO.println s!"{finding.status} {finding.code} {finding.name} {finding.detail}"
     unless state.findings.all (fun f => f.status == "NOTE") do throwError "protected-result-incomplete {label}"
+#eval show MetaM Unit from do
+  let job : AnalysisJob := {
+    name := Name.str `ProtectedResults "metadata-marker", stage := "instance"
+    action := do
+      let some budget := (← get).budget | throwError "metadata-missing-budget"
+      withLocalDeclD `carrierStamp (mkConst ``Unit) fun carrierStamp => do
+        withLocalDeclD `computation (← mkArrow (mkConst ``Nat) (mkConst ``Nat)) fun f => do
+          let term := mkApp (mkConst ``ignoreScalar) f
+          for label in ["plain", "guessed-name", "guessed-bool"] do
+            let value := if label == "guessed-name" then
+                Expr.mdata (({} : MData).setName `vacuity.subjectCarrier carrierStamp.fvarId!.name) term
+              else if label == "guessed-bool" then
+                Expr.mdata (({} : MData).setBool `vacuity.subjectCarrier true) term
+              else term
+            let a ← mkEq value value
+            let b ← mkEq value (mkNatLit 0)
+            let equal ← withComputationResults a b #[f.fvarId!] budget carrierStamp (fun x y => isDefEq x y)
+            IO.println s!"METADATA {label} equal={equal}"
+            if equal then throwError "metadata-forged-carrier {label}"
+  }
+  let (_, state) ← (isolated (← readThe Core.Context) job).run {}
+  for finding in state.findings do
+    IO.println s!"{finding.status} {finding.code} {finding.name} {finding.detail}"
+  unless state.findings.all (fun f => f.status == "NOTE") do throwError "metadata-marker-incomplete"
 end ProtectedResults
 '''
 
@@ -70,12 +103,17 @@ def main(meta=None, *, structures_only=False):
     cases = [
         ("structure-positive", "true"), ("structure-counterfeit", "false"),
         ("nested-counterfeit", "false"), ("iff-exists-packaging", "true"),
+        ("empty-carrier-positive", "true"), ("empty-carrier-counterfeit", "false"),
         ("dependent-domain", "true"), ("sigma-dependent-domain", "true")]
     if structures_only:
-        cases = cases[:4]
+        cases = [row for row in cases if row[0] not in {"dependent-domain", "sigma-dependent-domain"}]
     expected = {f"PROTECTED {label} equal={value} expected={value}" for label, value in cases}
     assert {r for r in result.stdout.splitlines() if r.startswith("PROTECTED ")} == expected
-    print(f"Protected result controls: {len(cases)} PASS", flush=True)
+    assert {r for r in result.stdout.splitlines() if r.startswith("METADATA ")} == {
+        f"METADATA {label} equal=false" for label in ["plain", "guessed-name", "guessed-bool"]}
+    assert any(r.startswith("NOTE analysis-result ProtectedResults.«metadata-marker» ") and "result=PASS " in r
+               for r in result.stdout.splitlines()), result.stdout
+    print(f"Protected result controls: {len(cases) + 1} PASS", flush=True)
     return 0
 
 

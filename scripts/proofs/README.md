@@ -771,8 +771,10 @@ projection memoization keys. The structural cause was treating unsupported
 multi-minor and data-major elimination as completed negative evidence; R-0219
 owns the generalized traversal. Unsupported carriers/eliminators are INCOMPLETE.
 
-Round-5 typed protection explicitly marks each reconstructed subject with a
-fresh per-call carrier identity, propagated through its raw field projections.
+Round-5 typed protection wraps each reconstructed subject in a typed carrier
+seal containing a fresh local expression variable, propagated through raw field
+projections. A closed input declaration cannot reference that future local;
+source metadata has no authority to mark a carrier.
 Carrier fields never become minimal computation candidates. Subject-consuming
 computations are abstracted regardless of input values or result sort (inductive
 or structure). The structural cause was inferring subject identity from result
@@ -874,3 +876,12 @@ source traversal and caches share the existing allowance without a fresh
 budget. Cache identity includes this analysis strength and the source maps.
 The paired recursive-transfer, independent-base, two-IH and cast controls are
 permanent, with exact outcomes. R-0219 owns this structural implementation.
+
+The typed seal also records subject dependence for structures with no
+computational fields. It is part of the protected subject value but is never a
+computation result: the carrier recognizer stops at the exact sealed projection.
+Consequently an outer subject-consuming operation is still abstracted for a
+fieldless or representation-only record. The metadata controls supply both a
+guessed name and a guessed flag and require `equal=false`; the paired fieldless
+subject controls require a genuine match and a rejected counterfeit. Ordinary
+metadata and let wrappers remain transparent. R-0219 owns this carrier protocol.
