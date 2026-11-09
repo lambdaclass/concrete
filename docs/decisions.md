@@ -24,7 +24,530 @@ Links only; each item's text lives where it is linked.
    4(c) ([SPARK review](proposals/SPARK.md)). Quantitative step and time bounds were decided on
    2026-11-07 ([row](#decided-2026-11-07-step-bounds)); the reviews' remaining disposition is unchanged.
 
+3. The [33 revised proposals under review](#proposals-under-review-2026-11-09), all awaiting the owner.
+
 A decided proposal moves to `docs/archive/<topic>-<date>/`.
+
+<a id="proposals-under-review-2026-11-09"></a>
+## Proposals under review (2026-11-09)
+
+All 33 items below are **proposals, not decided**. They revise the coordinator’s unapproved
+recommendations using both independent per-item reviews. Existing decisions govern until the
+owner explicitly answers; review acceptance is not owner approval. Delivery slices are proposed
+obligations, not changes to ROADMAP. Every proposed syntax, API, manifest field and CLI form has
+**spelling pending owner**; existing names identify current concepts, not approval of new forms.
+Costs include implementation and proof work. The two split verdicts remain unresolved.
+
+<a id="pending-r1"></a>
+### R1. Hosted launch and final image
+
+*Status*: proposal, not decided. **revises a decided row: needs the owner** — Q7.10/Q8.5 in [Core rows](#decided-2026-11-05-core) and the [stack contract](#decided-2026-11-07-stack-randomness).
+
+*Proposal*: Define separate executable-launch and foreign-library-entry contracts. For executables, each platform states the signal baseline (including ignoring SIGPIPE), descriptor grants and restrictive creation permissions with a zero process creation mask. Refuse ungranted descriptors numbered 3 or higher with exit 125; do not silently close them. Require static linking or no loader for the proof profile. For dynamic profiles, expose loader-environment cleanliness and integrity of the complete loaded dependency closure as premises in receipts; startup code cannot undo earlier loader activity. Inspect final ELF/Mach-O permissions from slice 0 for a non-executable stack, no writable/executable segment and loader-path injection. Either include dynamic mappings in that claim or explicitly limit it to the image. Separate stack reservation, commitment, guard-page/frame checks and OS exhaustion assumptions: a stack limit or touched pages alone is insufficient. Refuse inadequate reservation under the target contract. Stage launcher work at 6, stream/file/socket work at 16/18/27, loader work at 25 and floating-point control state at 26. Keep conditions visible in receipts and stay within the existing [OS-sandbox boundary](#decided-project-os-sandboxing).
+
+*Alternatives*: Keep the current narrower startup contract and expose remaining premises (small initial work, weaker claims); use a separate platform launcher with attested checks (medium integration cost, another component to qualify).
+
+*Cost*: Large — platform launchers, loader closure, final-image checks and environmental proofs must agree.
+
+*Review*: Codex: ACCEPT WITH CHANGES; agy: ACCEPT WITH CHANGES
+
+*Changes taken*: Codex: separate entry contracts, full dependency closure, honest stack/mapping scope, restrictive modes and receipts. agy: refusal rather than closing descriptors, exact signal/mask baseline, static proof profile, dynamic-loader premises and final-image/guard checks.
+
+*Conflict*: Original close-or-refuse wording is narrowed to agy’s refusal; Codex’s stronger stack/loader qualification prevents treating agy’s limit checks as an availability proof.
+
+<a id="pending-r2"></a>
+### R2. Aggregate and enum constants
+
+*Status*: proposal, not decided. **revises a decided row: needs the owner** — TYPE-22/Q6.4 in the [2026-11-05 revisions](#decided-2026-11-05-revisions), [foundation C2 contract](#decided-2026-11-08-foundation), and [slice placement](#decided-project-vertical-slices-2026-11-06).
+
+*Proposal*: Propose immutable static places for aggregates and payload-carrying enums, with one read-only storage instance per declaration across modules; distinct declarations have no address-equality guarantee. Scalar and fieldless enum uses keep their current value meaning. Require recursively Copy, brand-free types with no cleanup, runtime ownership, authority or interior-mutation obligations. Open storage through existing explicit shared scoped borrowing or shared argument borrowing; allow Copy scalar projections and explicit aggregate copies, never mutable access or implicit whole-aggregate materialization. Specify zero-sized storage, representation and address exposure. Charge static bytes, loads and actual copies; waive only materialization that does not occur. Before bringing single-file constants to slice 15 (module export/import stays at 17), satisfy the five reopening safeguards requested by the reviews, against the decided [foundation contracts](#decided-2026-11-08-foundation): closed successful evaluation, typed storage representation, ownership/view laws, honest per-use accounting and lowering preservation. No general compile-time execution.
+
+*Alternatives*: Retain scalar-only constants (small implementation/proof cost, tables remain awkward); explicit per-use aggregate values (medium proofs, visible copying and stack costs).
+
+*Cost*: Large — storage identity, linking, borrowing and cost preservation need new correspondence proofs.
+
+*Review*: Codex: ACCEPT WITH CHANGES; agy: ACCEPT WITH CHANGES
+
+*Changes taken*: Codex: explicit storage/borrowing, ownership-free types, identity/zero-size/address rules, actual costs and proof-before-scheduling. agy: recursive Copy/brand restriction, scalar distinction, explicit access/copy cases, pooling boundary and all five proposed reopening gates. The inputs’ delegated-C2 anchor does not exist on this base; the verified foundation row governs, and these five safeguards are proposed conditions, not a claimed existing decision.
+
+<a id="pending-r3"></a>
+### R3. Bit and wide arithmetic
+
+*Status*: proposal, not decided.
+
+*Proposal*: At slice 2, propose scalar-result rotations, leading/trailing zero counts, population count, byte swap, high-word multiplication and separate wrapped-result/carry-or-borrow projections with carry-in. Define all inputs, including zero, rotation normalization, signedness and carry-in domains, using one mathematical carry/borrow relation. Keep this single primitive interface as structs arrive; slice-15 standard-library helpers may return structs built on it. Charge both scalar computations unless a proved deterministic lowering combines them. Justify each primitive and limb-based 128/256-bit library against EVM, X25519 or Poly1305 workloads, with separate representation and constant-time proofs. Secret use is refused unless the target table certifies the operation or a proved constant-time sequence; this includes zero counts, population counts and high multiplication. Exact primitive names require the owner before slice 2.
+
+*Alternatives*: Implement bit operations as proved library sequences (medium proof cost, potentially slower); delay wide arithmetic until later aggregate support (small early cost, delays the named workloads).
+
+*Cost*: Medium — total bitvector semantics and limb proofs are bounded, but target leakage/lowering evidence adds work.
+
+*Review*: Codex: ACCEPT WITH CHANGES; agy: ACCEPT WITH CHANGES
+
+*Changes taken*: Codex: total inputs, one carry relation, real projection costs, workload justification and separate leakage proofs. agy: permanent scalar primitive interface, later library helpers and target-certified secret operations.
+
+<a id="pending-r4"></a>
+### R4. Split and bulk view operations
+
+*Status*: proposal, not decided. **revises a decided row: needs the owner** — Q3.2–Q3.4 in [Core rows](#decided-2026-11-05-core), Q4.7 in [revisions](#decided-2026-11-05-revisions), and [OD15](#od15).
+
+*Proposal*: Extend the existing scoped borrow binder to introduce two disjoint child loans under one frozen root, without returning or storing views. Require checked ranges, no escape, frozen ancestors, and laws for nested splits, empty ranges, reborrowing and reunification. Without a failure branch, splitting requires static range evidence; otherwise take an explicit checked failure path. At slice 15, propose distinct-view equal-length copy, overlap-correct within-view copy and fill for Copy elements only; extend to heap arrays at 21. Length and bounds need static evidence or explicit checked failure, never hidden traps. Linear replacements need separately specified consuming operations. Give library operations normative range-update laws and validate memory-move/fill intrinsic lowering where useful.
+
+*Alternatives*: Keep whole-root conflicts and element loops (small new proof cost, restricts simultaneous disjoint access); add split loans first and defer bulk lowering (medium staged cost, slower early operations).
+
+*Cost*: Large — composing child loans, ownership soundness and byte-level range lowering need proofs.
+
+*Review*: Codex: ACCEPT WITH CHANGES; agy: ACCEPT WITH CHANGES
+
+*Changes taken*: Codex: complete loan composition, Copy restriction, explicit linear replacement and library laws without mandatory new primitives. agy: one scoped binder, second-class identities and static-or-explicit failure evidence.
+
+*Conflict*: agy’s primitive framing is narrowed to its scoped binder plus Codex’s library laws and validated lowering; no second view-opening API is assumed.
+
+<a id="pending-r5"></a>
+### R5. Secret wiping scope
+
+*Status*: proposal, not decided. **revises a decided row: needs the owner** — [information-flow scope](#decided-project-infoflow-2026-11-06).
+
+*Proposal*: Define erasure over tracked secret-bearing storage and information dependencies, not coincidentally equal bytes. Separate source inaccessibility, architectural overwrite and physical persistence. Any function touching scalar Copy secrets or linear secrets must scrub covered frames and scratch registers on return, preserving live returned secrets. Cover spills, padding that received secrets, move temporaries, outgoing call areas, foreign boundaries and abandoned-frame exclusions. A moved-from linear-secret slot must be wiped on move or remain in a region whose inaccessibility and eventual scrub are proved; do not imply immediate architectural erasure from logical movement alone. Moving resize wipes old backing before release; arena reset retains prior secret cleanup and no-live-allocation conditions. Require backend evidence for every claimed location, with LLVM gaps named as premises. Disable core dumps before receiving secrets on supported launch profiles, refusing launch with 125 if this fails. Keep swap, debugging/process-memory access, hibernation, abort, forced termination and foreign code explicit premises or exclusions. Retain scalar Copy status and the existing speculative-leakage exclusion. Refine obligations at slices 7, 15 and 19.
+
+*Alternatives*: Keep the current narrower source/wipe claim with explicit residual premises (small extra cost, less erasure coverage); isolate secret computation in a separately qualified process (large integration cost, still needs OS premises).
+
+*Cost*: Large — information dependencies and erasure preservation span source storage and machine locations.
+
+*Review*: Codex: ACCEPT WITH CHANGES; agy: ACCEPT WITH CHANGES
+
+*Changes taken*: Codex: information-based scope, complete location coverage, returned secrets and three erasure levels. agy: scrub scalar-secret functions too, cover moved slots and fail on dump-disable failure while retaining OS exclusions.
+
+*Conflict*: agy permits epilogue-only moved-slot scrubbing; Codex’s stronger scope requires proving inaccessibility until then and advertising no immediate physical-erasure guarantee.
+
+<a id="pending-r6"></a>
+### R6. Earlier generated functional models
+
+*Status*: proposal, not decided. **revises a decided row: needs the owner** — item 4 of [compiler proof order](#decided-project-proof-order).
+
+*Proposal*: Present the functional-model design to the owner before building it. Generate from admitted Core with kernel-checked correspondence to the exact checked implementation; preserve partiality, environmental choice and observable failures, using relations or traces where a pure total function is unsuitable. Keep implementation, model, proposition and exported-contract identities distinct. Pull the relevant R-0482 and R-0353 obligations forward: pure models including loop/recursion combinators at 8; mutable updates at 13, cleanup at 14 and array views at 15; effects at 18 and fallible allocation at 19. Each increment needs its integration proof and stage modularity; unsupported constructs retain direct Core proofs rather than trusted translations or handwritten duplicate implementations. The inherited model schedule must not block a slice whose constructs lack a proved generator increment.
+
+*Alternatives*: Keep phase-E generation and prove early programs over Core (small scheduling change, more early proof effort); generate only supported pure fragments initially (medium cost, explicit coverage limits).
+
+*Cost*: Large — early refinement must account for loops, mutation, cleanup, effects and allocation failures.
+
+*Review*: Codex: ACCEPT WITH CHANGES; agy: ACCEPT WITH CHANGES
+
+*Changes taken*: Codex: admitted-Core generation, partiality/traces, four identities and proved increments with direct-Core baseline. agy: loops at 8, cleanup/views at 14/15, stage modularity and exact checked-subject fallback.
+
+<a id="pending-r7"></a>
+### R7. Unused imports and private reachability
+
+*Status*: proposal, not decided. **split: waiting for the owner**.
+
+*Proposal*: Present both positions; split: waiting for the owner. Codex rejects unconditional refusal: emit typed unused-import/private-reachability facts and let explicit project policy refuse them, following the [diagnostic policy](#decided-project-diagnostics-2026-11-06). agy proposes mandatory refusal at slice 17, arguing for a smaller reviewed surface. Both analyze the active module graph using resolved identities. Distinguish runtime, proof, test and exported-interface roots: entry point, public declarations of reachable modules, tests and reachable contract/proof references. Edges include indirect calls, generic instantiations, applicable implementations, field types, invariants and constant initializers. Selected files define the analyzed universe, never roots for every declaration. Import use means a referenced imported binding in that file. Check all written code under Q6.4 even when unreachable. In agy’s position duplicate/unused imports receive a meaning-preserving fix hint only with checked preservation evidence.
+
+*Alternatives*: Codex’s facts plus policy: medium analysis/policy implementation and proof cost, project-dependent strictness. agy’s mandatory refusal: medium graph/fix-evidence cost and stricter source maintenance, uniform smaller surface. Keep current admission meanwhile: small immediate cost, no new coverage.
+
+*Cost*: Medium — either position needs precise dependency roots/edges; refusal adds compatibility cost.
+
+*Review*: Codex: REJECT; agy: ACCEPT WITH CHANGES
+
+*Changes taken*: Codex: typed facts/policies, distinct roots, indirect/generic edges and checking all code. agy: mandatory refusal position, resolved graph/import rules, implementation/invariant edges and proved fix hints. Neither admission policy is selected.
+
+*Conflict*: Codex rejects mandatory refusal while agy recommends it; the owner must choose. Mandatory refusal would revise the [diagnostic policy](#decided-project-diagnostics-2026-11-06): revises a decided row: needs the owner.
+
+<a id="pending-r8"></a>
+### R8. Package spec version
+
+*Status*: proposal, not decided.
+
+*Proposal*: Have each package declare its targeted specification version in the manifest and refuse versions the compiler does not implement. Implement one version, with no edition modes. Bind the declaration into facts and receipts before product 1.0; extend the existing [output version and normative-bump rule](#decided-project-runtime-2026-11-06), without repeating or replacing it. [L8](#pending-l8) owns compatibility and evidence survival.
+
+*Alternatives*: Use the compiler-selected version only (small cost, less explicit package intent); support parallel editions (large semantic/proof and maintenance cost).
+
+*Cost*: Small — manifest validation can reuse output identity and evidence binding.
+
+*Review*: Codex: ACCEPT; agy: ACCEPT
+
+*Changes taken*: Neither reviewer requested substantive changes; retain both reviewers’ single-version identity boundary and mark the field spelling pending owner.
+
+<a id="pending-r9"></a>
+### R9. Incoming C boundary
+
+*Status*: proposal, not decided.
+
+*Proposal*: At slice 25, restrict exported parameters/results to FFI-safe types and declare permissions on exports. Specify how calls receive, borrow and return authority. Grants still originate in the target runtime. Treat native C as trusted under explicit validity, ownership, lifetime, aliasing, reentrancy and threading premises; validate safely checkable inputs before constructing typed values. Opaque handles need liveness, generation/reuse and uniqueness checks at entry or explicit foreign-caller assumptions in facts and the manifest. Never claim static unforgeability against arbitrary same-process memory access. Hostile callers require external isolation. Traps follow the existing terminal contract without unwinding into C.
+
+*Alternatives*: Allow only trusted native callers with fully disclosed premises (medium adapter/proof cost, larger assumed boundary); registry-validated handles (large state/proof cost, still no protection from arbitrary C memory writes); external process boundary (large transport cost, stronger isolation).
+
+*Cost*: Large — ABI adapters, authority transfer and residual foreign behavior need precise contracts.
+
+*Review*: Codex: ACCEPT WITH CHANGES; agy: ACCEPT WITH CHANGES
+
+*Changes taken*: Codex: broad entry premises, safe validation, isolation boundary and authority flow. agy: explicit handle-reentry alternatives, FFI-safe export permissions and terminal trap behavior.
+
+<a id="pending-r10"></a>
+### R10. Checked layout values
+
+*Status*: proposal, not decided. **revises a decided row: needs the owner** — Q6.2 in [Core rows](#decided-2026-11-05-core) and its [field propagation revision](#decided-2026-11-05-q6-2-fields).
+
+*Proposal*: Extend the known-value table with size, alignment and typed-field offset queries from the authoritative layout computation: size at slice 9, layout/FFI queries at 24–25. Bind answers to concrete type, target profile and layout revision. Offsets require addressable fields with defined representation; precisely refuse unsupported payload or bit-level cases and unrepresentable numeric results. Use the same computation in semantics, known-value analysis and lowering. An offset establishes neither pointer validity nor access permission; retain the existing default-layout versus C-ABI distinction.
+
+*Alternatives*: Keep layout values outside known-value analysis (small initial cost, repeated proof obligations); require explicit layout constants supplied with correspondence proofs (medium burden on each interface).
+
+*Cost*: Medium — target-dependent evaluation and lowering correspondence must agree.
+
+*Review*: Codex: ACCEPT WITH CHANGES; agy: ACCEPT
+
+*Changes taken*: Codex: target/revision binding, addressability, representability, pointer limits and one computation. agy: confirms the closed-table extension only as an owner question, with query spelling pending owner.
+
+<a id="pending-k5"></a>
+### K5. Optimization architecture
+
+*Status*: proposal, not decided. **revises a decided row: needs the owner** — [pipeline optimization scope](#decided-project-pipeline-2026-11-06) and [foundation contracts](#decided-2026-11-08-foundation).
+
+*Proposal*: Extend the [shared pipeline](#decided-project-pipeline-2026-11-06): optimize shared SSA/BIR before the backend split, with target inputs explicit; machine passes remain in LCB. A pass is off until a direct proof or proved validator is kernel-checked for behavior, leakage, erasure, provenance and resource accounting. Allow proved non-increase or checked recomputation rather than equal step costs. Recheck final-artifact stack claims after machine passes. Preserve the OD15(b) prohibition on exploiting mutable-borrow non-alias metadata until its ownership proof is complete. LLVM wipes and constant-time operations need contractual barriers plus unoptimized and enabled optimized-profile differential and binary leakage tests. Record the exact LLVM transformation pipeline as separate named premises; testing agreement proves no translation theorem. The LLVM path and LCB performance claim only what their evidence supports.
+
+*Alternatives*: Optimize only in LCB (medium duplication/opportunity cost, fewer shared proofs); use unverified LLVM optimization with explicit premises (smaller proof effort, larger trust boundary); postpone optimization (small immediate cost, weaker workload performance).
+
+*Cost*: Large — separate preservation claims and final-artifact accounting require multi-stage proofs.
+
+*Review*: Codex: ACCEPT WITH CHANGES; agy: ACCEPT WITH CHANGES
+
+*Changes taken*: Codex: separate claim obligations, non-increase/recomputed costs, final stack validation, explicit target inputs and testing limits. agy: proof-gated passes, existing non-alias restriction, wipe/leakage barriers and both LLVM test profiles.
+
+*Conflict*: agy’s preservation wording is interpreted using Codex’s proved non-increase or recomputation, so legitimate cost improvements remain possible.
+
+<a id="pending-l1"></a>
+### L1. Legacy corpus as slice targets
+
+*Status*: proposal, not decided.
+
+*Proposal*: Inventory every historical reproducer, including 024–079, and the legacy workloads. Classify each against current semantics as accepted behavior, required refusal, superseded rule or implementation-specific regression. Preserve originals and provenance; map adaptations to current rules, with a slice and executable expectation for applicable cases and justified exclusions for the rest. This expands corpus coverage under the existing [bug policy](#decided-project-bugs) and [restart boundary](#decided-project-restart). Never run or edit the frozen compiler, nor treat it as language authority.
+
+*Alternatives*: Port only selected representative cases (medium cost, known coverage gaps); port the entire corpus mechanically (medium initial work, risks obsolete expectations and misleading coverage).
+
+*Cost*: Large — historical classification and faithful adaptations require sustained semantic checking.
+
+*Review*: Codex: ACCEPT WITH CHANGES; agy: ACCEPT
+
+*Changes taken*: Codex: explicit dispositions, provenance, justified exclusions and current-rule authority. agy: no changes; retain comprehensive historical/workload coverage and slice tagging.
+
+<a id="pending-l2"></a>
+### L2. LLM writability benchmark
+
+*Status*: proposal, not decided.
+
+*Proposal*: Run report-only scheduled or milestone campaigns once proof/test support at slice 8 or the slice-18 subset is available. Pin model, prompts/digests, tools, compiler commit, sampling settings/seeds, budgets and task sets; repeat trials and retain full artifacts. Track compile/proof success, diagnostic repair rounds, functional correctness, independent proof checking, assumptions and human review effort. Unauthorized nontermination, assumptions, declassification, trust or capability widening count as task failure; inspect facts and policy evidence. Use held-out realistic tasks and diagnostic ablations. Study variance and contamination, honor the existing [checking/reading priority](#decided-project-priority), and do not tune the language for one model or make this a flaky presubmit gate.
+
+*Alternatives*: Run a small manually audited usability pilot (small infrastructure cost, weaker reproducibility); build a fully automated blocking benchmark (large oracle/stability cost, unjustified before variance is understood).
+
+*Cost*: Medium — reproducible tasks, correctness oracles and retained evaluation artifacts need maintenance.
+
+*Review*: Codex: ACCEPT WITH CHANGES; agy: ACCEPT WITH CHANGES
+
+*Changes taken*: Codex: controlled repeated trials, held-out tasks, correctness/trust/review measures and report-only use. agy: explicit unauthorized-fact failures, exact compiler/sampling records and slice-based campaign start.
+
+<a id="pending-l3"></a>
+### L3. Failed-obligation counterexamples beyond R-0599
+
+*Status*: proposal, not decided.
+
+*Proposal*: Extend R-0599’s existing deterministic bounded search and Lean evaluator replay to overflow, bounds and contracts, rather than creating another diagnostic system. Keep the finder untrusted and the kernel the judge. Separate a falsified analysis condition from a refuted program property; the latter requires a reachable replay satisfying entry conditions and environment assumptions. Bind witnesses to exact subject, obligation, semantics and dependencies. Bound search/replay resources and reject malformed or stale witnesses. No witness found is neither proof nor refutation.
+
+*Alternatives*: Keep the current obligation-family scope (small cost, weaker diagnostics); use a richer untrusted solver as witness finder with the same replay checks (medium integration cost, no extra proof authority).
+
+*Cost*: Medium — each obligation family needs a faithful witness interpretation and replay bridge.
+
+*Review*: Codex: ACCEPT WITH CHANGES; agy: ACCEPT
+
+*Changes taken*: Codex: distinguish analysis failure from reachable refutation, bind identities and limit/reject stale replay. agy: no changes; retain the existing search/replay home and zero solver trust.
+
+<a id="pending-l4"></a>
+### L4. Independent kernel replay
+
+*Status*: proposal, not decided.
+
+*Proposal*: Integrate independent replay into the existing proof-infrastructure gate, not a parallel assurance system. Qualify and pin the second checker’s source/binary in [flake.lock](../flake.lock) against the pinned Lean calculus and features. Replay the complete admitted declaration closure, comparing exported names, exact statement digests, the existing three-axiom ceiling and declared-premise closure against the shipped artifacts and implementation. Use corrupt-proof/hostile-input controls, including extra axioms, native-decision admission and mutated statements, with resource limits. Unsupported export formats produce INCOMPLETE and block, never skip. Disclose shared exporters, parsers, specifications and toolchains as residual trust. Agreement does not establish that the intended proposition was stated.
+
+*Alternatives*: Retain primary-kernel checking with current closure audits (small added cost, one implementation boundary); replay only a documented supported subset (medium cost, must expose incomplete coverage).
+
+*Cost*: Large — checker qualification, artifact transport and format compatibility need continuing proofs and maintenance.
+
+*Review*: Codex: ACCEPT WITH CHANGES; agy: ACCEPT WITH CHANGES
+
+*Changes taken*: Codex: qualify independence/features, complete closure/artifact binding, hostile controls and residual trust. agy: pinned checker, statement/axiom/premise comparison, specific negative controls and fail-closed format upgrades.
+
+<a id="pending-l5"></a>
+### L5. No execution of untrusted build code
+
+*Status*: proposal, not decided.
+
+*Proposal*: Extend the existing [macro/compile-time restrictions](#decided-project-refusals) with an enforced package execution boundary: no package hooks, plugins, executable macros or package-selected tools. Keep initializer evaluation in its closed grammar. Enumerate the trusted compiler/toolchain executables. Treat proof inputs as adversarial: ingest kernel-checkable artifacts as data, or make executable elaboration a separately authorized trusted step. External generators run before compilation in an explicit user workflow with reviewed outputs; compilation never invokes them implicitly.
+
+*Alternatives*: Accept prechecked proof artifacts only (medium transport cost, narrower execution surface); permit explicitly authorized isolated elaboration (large isolation/qualification cost, additional trusted step).
+
+*Cost*: Large — loading, proof ingestion and tool invocation all need enforced execution boundaries.
+
+*Review*: Codex: ACCEPT WITH CHANGES; agy: ACCEPT
+
+*Changes taken*: Codex: qualify the universal promise with proof-elaboration/toolchain boundaries and explicit external generation. agy: no changes; retain the no-hooks/no-general-compile-time-execution goal.
+
+<a id="pending-l6"></a>
+### L6. Parser-driven migration
+
+*Status*: proposal, not decided. **split: waiting for the owner**.
+
+*Proposal*: Present both positions; split: waiting for the owner. Codex recommends structured migration with parsing plus resolution/typing where needed, old grammar confined to the migration tool, source/destination versioned reviewable patches and automatic application only after checked preservation conditions. Unsupported semantic changes produce precise manual obligations, not a promise of a complete codemod per revision. agy rejects a standing pre-1.0 requirement: retain [up-front grammar freezing](#decided-2026-11-08-written-grammar), existing [proved diagnostic fixes](#decided-project-diagnostics-2026-11-06), the [slice-17 formatter](#decided-2026-11-07-tools), and R-0392’s later migration work after compatibility policy and external-user demand. Neither a new command nor an earlier delivery requirement is selected.
+
+*Alternatives*: Codex’s versioned semantic migration tool: large historical-parser, typing and preservation-proof cost, lower repeated user migration effort. agy’s grammar-first/later-tooling position: small immediate cost, manual guidance plus checked diagnostic fixes until demonstrated demand; later migrations still cost work.
+
+*Cost*: Large if early structured migration is chosen; small immediate cost if existing staging remains — the owner must choose the obligation.
+
+*Review*: Codex: ACCEPT WITH CHANGES; agy: REJECT
+
+*Changes taken*: Codex: semantic checks, tool-only historical grammar, versioned patches and precise manual obligations. agy: grammar-first refusal of a standing early requirement, formatter/diagnostic reuse and later migration placement. Neither is selected.
+
+*Conflict*: Codex accepts a qualified tool requirement; agy rejects its early standing cost. Timing and obligation remain with the owner.
+
+<a id="pending-l7"></a>
+### L7. Targets as data
+
+*Status*: proposal, not decided.
+
+*Proposal*: Extend existing [read-only target profiles](#foundation-q3) inside representation, ABI and backend work, without a second abstraction. Use a typed identity covering architecture, ABI variant, platform, CPU features, object format, runtime and toolchain constraints. Separate declarative layout/calling-convention data from backend algorithms with proved interfaces. Validate profiles and refuse unsupported combinations. New instruction sets still need algorithms and proofs; WebAssembly needs explicit memory/execution contracts. Reuse proofs only after establishing their parameterized hypotheses.
+
+*Alternatives*: Keep one qualified profile until a second target is pulled (small immediate cost, later generalization work); centralize target-specific algorithms behind interfaces without full parameterization (medium duplication cost, simpler first proofs).
+
+*Cost*: Large — parameterized layout/ABI evidence and additional backend implementations remain necessary.
+
+*Review*: Codex: ACCEPT WITH CHANGES; agy: ACCEPT
+
+*Changes taken*: Codex: complete typed target identity, algorithm/data separation, validation and honest proof reuse. agy: keep this within existing target/representation/backend work rather than inventing a parallel system.
+
+<a id="pending-l8"></a>
+### L8. Language and evidence versioning
+
+*Status*: proposal, not decided.
+
+*Proposal*: Before external users, extend the [existing version/bump rule](#decided-project-runtime-2026-11-06) and [semantic-interface evidence contract](#decided-2026-11-05-core) with separate compatibility classes for language/standard-library API, ABI and proof/fact schemas. Define invalidation, migration and revalidation for each. Proofs survive only unchanged semantic subjects/dependencies or checked transport proving correspondence. [R8](#pending-r8) owns package targeting and the one-implemented-version rule; product version alone establishes no proof freshness.
+
+*Alternatives*: Require complete revalidation on every revision (small policy cost, large recurring user proof/build work); introduce parallel editions (large semantic and proof-maintenance cost).
+
+*Cost*: Medium — compatibility classification, semantic dependency tracking and release tooling must stay consistent.
+
+*Review*: Codex: ACCEPT; agy: ACCEPT
+
+*Changes taken*: Neither reviewer requested substantive changes; preserve their agreement on independent identities, one version and justified evidence survival.
+
+<a id="pending-a2"></a>
+### A2. Allocator interface and instances
+
+*Status*: proposal, not decided. **revises a decided row: needs the owner** — Q1.6/Q1.10/Q1.13 in [Core rows](#decided-2026-11-05-core) and universal reset wording in the [allocation audit](#decided-2026-11-02-audit).
+
+*Proposal*: Keep one semantic allocation contract with statically selected implementations, distinct allocator brands and implementation kinds, and no hidden vtable. The exact type/release-metadata encoding remains for owner review. Prove arena/child implementations against backing and parent-dependency contracts; system correctness remains conditional on named OS/foreign premises. Keep logical availability universal. Runtime remaining-capacity/reset operations belong only to arena or bounded implementations that establish their laws; hosted system allocation has no runtime reset. Preserve fresh brands and no live allocations/loans at reset. Leave the separate [capability/destruction question](#decided-2026-11-08-capabilities-kept) open.
+
+*Alternatives*: Separate concrete allocator APIs sharing only semantic laws (medium duplication/proof cost); one statically parameterized implementation interface (large composition proofs, greater reuse). Neither requires dynamic dispatch.
+
+*Cost*: Large — backing, release contexts and cross-function brand dependencies must compose.
+
+*Review*: Codex: ACCEPT WITH CHANGES; agy: ACCEPT WITH CHANGES
+
+*Changes taken*: Codex: static shared semantics, conditional system proofs and lawful specialized operations. agy: universal logical availability, explicit absence of system reset, encoding alternatives and preservation of the separate destruction-permission question.
+
+<a id="pending-a3"></a>
+### A3. Resize and peak accounting
+
+*Status*: proposal, not decided.
+
+*Proposal*: Expose container resize contracts before a raw resize API. Distinguish in-place from moving resize, specifying addresses, brands and release contexts; an in-place request never silently moves. Any resize not statically proved in-place charges old plus new bytes to the static peak bound. Report logical storage, allocator footprint and actual temporaries separately, including copy/move work. Specify linear-element shrink cleanup and conserve surviving inputs on failure. Moving secrets require an observable wipe of old backing after transfer and before release, under [R5](#pending-r5).
+
+*Alternatives*: Allocate/move/release explicitly (small new API cost, repeated client proofs); allow only in-place resize (medium proof cost, more failures and reduced growth flexibility).
+
+*Cost*: Large — failure atomicity, linear shrink behavior and peak accounting require container proofs.
+
+*Review*: Codex: ACCEPT WITH CHANGES; agy: ACCEPT WITH CHANGES
+
+*Changes taken*: Codex: address/brand/release behavior, no silent move, shrink/failure conservation and separate footprint/work measures. agy: conservative static old-plus-new unless proved in-place, and mandatory old-secret wipe.
+
+<a id="pending-a4"></a>
+### A4. Valid-zero allocation
+
+*Status*: proposal, not decided.
+
+*Proposal*: Allow typed zeroed allocation only with a target-specific compiler-checked structural proof that zero bytes construct a canonical Copy, brand/resource/authority-free value. Integers, false booleans, positive-zero floats and arrays qualify only with representation proofs; structs need qualifying fields and any invariant proved at zero. Refuse linear values, references, handles, grants, allocator brands and heap owners; enum eligibility needs an explicit zero discriminant on a fieldless variant and its representation proof. Include padding and zero-sized cases. Preserve explicit allocator/permission inputs and fallible results, exposing typed storage only after completed initialization and conserving inputs on failure. Other types may receive raw zeroed storage only through qualified raw memory followed by explicit initialization.
+
+*Alternatives*: Keep explicit typed initialization (small new implementation cost, potentially higher initialization/stack work); raw zeroed bytes plus manual qualification (medium client proof burden, delayed to raw-memory support).
+
+*Cost*: Medium — canonical construction, structural eligibility and initialization/failure lemmas are needed.
+
+*Review*: Codex: ACCEPT WITH CHANGES; agy: ACCEPT WITH CHANGES
+
+*Changes taken*: Codex: ownership-valid canonical construction, target/padding/zero-size cases and failure-safe raw fallback. agy: Copy-only structural eligibility, invariant/enum restrictions and explicit fallible allocation authority.
+
+<a id="pending-a5"></a>
+### A5. Allocator rollout
+
+*Status*: proposal, not decided.
+
+*Proposal*: At slice 19, propose system allocation, buffer arenas, explicit child arenas and limit/failure test wrappers, each with brand, backing and release proofs. Keep user-defined implementations behind raw-memory qualification at 24. Limit wrappers use a narrower lawful availability predicate; deterministic failure injection uses an explicit schedule or separately modeled test-environment transition, never a hidden allocator counter that changes on a supposedly unchanged failure. Keep system guarantees conditional on external premises and preserve Q1.11 success witnesses and failure-state laws.
+
+*Alternatives*: System allocator first, then lawful test wrappers (medium staged cost, initially weaker failure coverage); all instances together (large early integration/proof cost, stronger hostile tests).
+
+*Cost*: Large — multiple instances and failure tests must satisfy the same strict state/availability laws.
+
+*Review*: Codex: ACCEPT WITH CHANGES; agy: ACCEPT
+
+*Changes taken*: Codex: proof-gated rollout, lawful limit predicates and explicit failure schedules/environment state. agy: no changes; retain the proposed slice-19 instances and slice-24 qualification.
+
+<a id="pending-a6"></a>
+### A6. Initialized HeapArray and Vec capacity
+
+*Status*: proposal, not decided.
+
+*Proposal*: Keep public heap arrays fully initialized at slice 21. Provide Copy-filled, valid-zero and function/mapping construction as applicable, with explicit partial-progress survivor returns on initializer or allocation failure under Q1.12/Q2.5. At slice 22 keep one prefix-initialized capacity representation internal to vectors and strings, not a second public safe container. Separate initialized elements from raw spare capacity, including zero-sized types; spare bytes never expose a typed value. Prove push, pop, drain, failed growth, partial construction and representation lowering preserve the partition. Every linear element needs destruction, transfer or explicit resource handling; do not assume it implements destruction. Where vector destruction is admitted, visit initialized indices in order and release the capacity-sized block.
+
+*Alternatives*: Build heap arrays through explicit temporary initialized prefixes (medium construction proofs, more visible client progress); keep vectors unavailable until raw-memory qualification (small early implementation cost, delays safe growable workloads).
+
+*Cost*: Large — partial initialization and all linear survivor paths interact across container operations.
+
+*Review*: Codex: ACCEPT WITH CHANGES; agy: ACCEPT WITH CHANGES
+
+*Changes taken*: Codex: full partition/operation proofs, zero-sized types and non-destructible resource accounting. agy: constructor cases and partial failure, internal vector/string buffer and index-ordered destruction/capacity release.
+
+<a id="pending-a7"></a>
+### A7. HashMap consumption order
+
+*Status*: proposal, not decided.
+
+*Proposal*: Extend the existing [Q2.4/Q2.5 drain and survivor laws](#decided-2026-11-05-core) with an explicit deterministic traversal contract at slice 23; do not treat drain itself as a new permission. Keep Q2.2’s exclusion of map destruction. Compare canonical bucket order (scans capacity, depends on specified representation/hash history), stable insertion order (extra ordering metadata/update proofs), and caller-directed consumption (explicit sequencing, more client work). Specify hashing, resizing, leakage and interrupted-drain costs. Prefer explicit drain initially; the exact deterministic order still needs owner selection. If the owner instead wants map destruction, require an explicit Q2.2 revision with insertion-ordered drain/destruction, dense entries plus index table and the four Copy/destructible key/value combinations; no such revision is assumed.
+
+*Alternatives*: Canonical bucket traversal: medium proof/work cost and capacity scans; insertion order: large metadata/update/leakage cost but stable construction-order cleanup; caller-directed extraction: medium client proof burden and explicit per-entry sequencing.
+
+*Cost*: Medium for specified drain; large if stable order maintenance and automatic destruction are selected.
+
+*Review*: Codex: ACCEPT WITH CHANGES; agy: ACCEPT WITH CHANGES
+
+*Changes taken*: Codex: retain exclusion, compare real order/cost choices and prefer explicit drain with survivor accounting. agy: require deterministic order, retain current exclusion or explicitly request insertion-ordered destruction and its implementation cases.
+
+*Conflict*: No conflict on keeping Q2.2 now; agy’s optional automatic-destruction route would revise Q2.2 in [Core rows](#decided-2026-11-05-core): revises a decided row: needs the owner.
+
+<a id="pending-a8"></a>
+### A8. Collections over storage
+
+*Status*: proposal, not decided.
+
+*Proposal*: Before slice 21 compare fixed-capacity and heap workloads. Share non-resizing byte, codec, text and collection algorithms through the existing second-class array/text views across fixed arrays at 15, heap arrays at 21 and vectors at 22. Do not add public storage parameters to allocator-branded collections. For resizing internals, establish only workload-justified laws for capacity, initialization, growth failure, movement and release, retaining distinct public authority/failure contracts. Do not assume every algorithm can share all proofs. Defer an inline growable container until arrays plus cursors/views demonstrably fail a measured workload need.
+
+*Alternatives*: Keep separate small implementations until comparison shows duplication costs (small initial cost, later duplicated proofs); introduce an internal storage abstraction only after evidence (medium proof cost, avoids public generic/type-system commitments).
+
+*Cost*: Medium — view reuse is modest, but workload comparisons and reusable growth invariants require proofs.
+
+*Review*: Codex: ACCEPT WITH CHANGES; agy: ACCEPT WITH CHANGES
+
+*Changes taken*: Codex: comparative workloads, minimal internal laws and distinct authority/failure contracts. agy: existing-view sharing, no public storage parameter and measured pull for inline growth.
+
+*Conflict*: The original public storage-generalization preference is narrowed to agy’s view-first approach, retaining Codex’s internal-law comparison. A public replacement would revise the [allocator-branded types](#decided-2026-11-02-allocation), Q2.2 in [Core rows](#decided-2026-11-05-core) and [OD148](#od148): revises a decided row: needs the owner.
+
+<a id="pending-a10"></a>
+### A10. Child arenas before rewind
+
+*Status*: proposal, not decided.
+
+*Proposal*: Prefer explicit child arenas at slice 19, using the existing [Q1.6 backing ownership](#decided-2026-11-05-core) and [fresh-brand/reset conditions](#decided-2026-11-02-audit), rather than adding rewind-to-mark. A child has a fresh identity and exposed parent-backing dependency; it must be consumed/reset lawfully before the parent can be reused. This proposal adds the no-rewind disposition, not duplicate ownership rules.
+
+*Alternatives*: Use distinct short-lived arenas (medium backing/release cost); add branded marks with a proof that no later allocations survive rewind (large new invalidation machinery and proof cost).
+
+*Cost*: Medium — child ownership/release still needs proofs even without arbitrary rewind.
+
+*Review*: Codex: ACCEPT; agy: ACCEPT
+
+*Changes taken*: Neither reviewer requested changes; retain their shared structural-lifetime rationale and link the existing decided ownership rules.
+
+<a id="pending-d2"></a>
+### D2. Error-only deferred cleanup
+
+*Status*: proposal, not decided.
+
+*Proposal*: Propose refusing a second error-only deferred-cleanup form. Keep explicit error branches and the one existing deferred-call mechanism under the [cleanup audit](#decided-2026-11-02-audit); do not restate its reservation/loan rules or alter the [abort contract](#od10). This specific refusal remains a proposal.
+
+*Alternatives*: Introduce conditional error cleanup with explicit outcome classification (medium implementation/linearity proof cost, shorter repeated cleanup); use small explicit cleanup helpers (small library cost, still visible control flow).
+
+*Cost*: Small — document the specific refusal and retain cleanup conformance; no new lowering proof.
+
+*Review*: Codex: ACCEPT; agy: ACCEPT
+
+*Changes taken*: Neither reviewer requested changes; retain one cleanup form and explicit written error paths.
+
+<a id="pending-d4"></a>
+### D4. Implicit context and using
+
+*Status*: proposal, not decided.
+
+*Proposal*: Propose refusing implicit context mechanisms that supply resources, allocators or permissions without written call arguments. Retain the existing [authority rules](#decided-2026-11-02-authority) and [explicit-capability direction](#decided-2026-11-08-capabilities-kept); this adds a specific disposition where [OD8](#od8) reserves a new owner decision.
+
+*Alternatives*: Explicit context records passed as ordinary arguments (small library cost, visible grouping); statically resolved implicit contexts (large resolution/authority proof cost and surrounding-scope review burden).
+
+*Cost*: Small — precise refusal and diagnostic coverage reuse existing parameter/authority machinery.
+
+*Review*: Codex: ACCEPT; agy: ACCEPT
+
+*Changes taken*: Neither reviewer requested changes; retain visible authority and arguments rather than duplicate existing capability decisions.
+
+<a id="pending-d6"></a>
+### D6. Dynamic borrow checking
+
+*Status*: proposal, not decided.
+
+*Proposal*: Separate two boundaries: [OD112](#od112) already refuses mutation through shared references; additionally propose refusing implicit runtime loan acquisition and borrow-failure behavior. A shared-mutation cell need not itself perform runtime loan checks. Do not classify every checked handle as dynamic borrowing: R-0412’s explicit generational-validity research retains its workload pressure test, evidence classification and requirement for a new decision.
+
+*Alternatives*: Explicit indexed/checked handles (medium validity proofs, visible runtime failure); runtime loan-state objects (large state/aliasing proof cost and new failure paths).
+
+*Cost*: Small — precise boundary documentation and negative cases; handle research is separate work.
+
+*Review*: Codex: ACCEPT WITH CHANGES; agy: ACCEPT
+
+*Changes taken*: Codex: distinguish interior mutation, runtime loans and lawful explicit handles. agy: no changes; retain static second-class borrowing while preserving the separately pull-gated research.
+
+<a id="pending-d8"></a>
+### D8. Arbitrary-width integers and bitfields
+
+*Status*: proposal, not decided.
+
+*Proposal*: Defer arbitrary-width scalar types and packed fields separately, preserving R-0303’s pull-gated research. Use masks, shifts, byte encoders and [R3](#pending-r3)’s proposed limb libraries meanwhile. Reopen widths on measured arithmetic/representation costs; reopen packed layout on measured protocol, hardware or ABI costs, which limb arithmetic alone cannot solve. Admission requires defined alignment, overflow, access and representation proofs; do not call these features inherently opaque or permanently impossible.
+
+*Alternatives*: Library encoders/limbs (medium proof cost, explicit conversions); qualified packed-layout support only (large representation/access/ABI proofs, solves fixed external layouts without arbitrary-width arithmetic).
+
+*Cost*: Small for deferral; medium for the substitute encoders and limb proofs.
+
+*Review*: Codex: ACCEPT WITH CHANGES; agy: ACCEPT
+
+*Changes taken*: Codex: separate deferrals/triggers and honest packed-ABI limitation. agy: no changes; retain a small current integer core and pull-gated research rather than turn deferral into a permanent ban.
+
+<a id="pending-d12"></a>
+### D12. Embedded-file compiler forms
+
+*Status*: proposal, not decided.
+
+*Proposal*: Propose refusing new file-embedding language forms for now. Inert byte input is not executable metaprogramming. Use explicitly run external generators under the existing [generator boundary](#decided-project-refusals), with explicit paths, content digests, limits, deterministic outputs and dependency receipts. Compilation never runs them implicitly. Count source/output size and review cost; large binary assets need reproducible verification rather than nominal inspection of bytes. Generated aggregate constants depend on [R2](#pending-r2)’s still-pending storage semantics.
+
+*Alternatives*: Keep assets external and read them at runtime (medium authority/I/O cost, smaller source artifacts); add a declared inert-asset build input facility (large dependency/storage proof cost, avoids giant generated source but needs an owner decision).
+
+*Cost*: Medium — reproducible asset provenance and verification require tooling, even without language syntax.
+
+*Review*: Codex: ACCEPT WITH CHANGES; agy: ACCEPT
+
+*Changes taken*: Codex: distinguish data from execution, require generator provenance/limits/receipts and honest large-asset verification. agy: no changes; retain ordinary generated source and no new embedding syntax.
+
+<a id="pending-d13"></a>
+### D13. Fixed point and units
+
+*Status*: proposal, not decided.
+
+*Proposal*: Defer built-in fixed point and units as separate features. For units use distinct wrapper types and named conversions, not names alone; for fixed point specify scale, rounding, overflow and conversion contracts. Keep the deferred units design and report-only workload probe in [legacy types](../legacy/docs/spec/types.md), without running the frozen compiler. Reopen each feature on measured correctness, proof or representation costs; future language-level units need explicit erasure and conversion evidence. Library wrappers may use the existing [private-field rules](#od54) and proved invariants.
+
+*Alternatives*: Proved library wrappers (medium arithmetic/conversion proof cost, explicit operations); language-level units or fixed-point support (large elaboration/representation proofs, potentially less repetitive client work after evidence).
+
+*Cost*: Medium — useful library contracts and workload probes need proofs while language machinery remains deferred.
+
+*Review*: Codex: ACCEPT WITH CHANGES; agy: ACCEPT
+
+*Changes taken*: Codex: separate tracking, typed unit conversions, fixed-point arithmetic contracts and evidence triggers. agy: no changes; retain workload-based deferral and explicit library wrappers.
 
 <a id="recent-decisions"></a>
 ## Recent decisions
