@@ -391,7 +391,7 @@ partial def directStep (n : Name) (e : Expr) : StateRefT ProjectionState Audit B
         if let some receiver := e.getAppArgs[projection.numParams]? then
           return ← direct n receiver
         return false
-      if [``Eq.refl, ``rfl, ``HEq.refl, ``Iff.refl].contains h then return true
+      if [``Eq.refl, ``rfl, ``HEq.refl, ``Iff.refl, ``True.intro].contains h then return true
       if let some (.recInfo r) := (← getEnv).find? h then
         if r.numMinors == 1 then
           let args := e.getAppArgs
@@ -1170,6 +1170,182 @@ def counterexample (law : ConstantInfo) (ic : InstanceCase) (s m : Name) (subjec
   for h in hyps.reverse do result ← mkAppM ``And #[h, result]
   return result
 
+/-- Type-valued representation fields must remain definitionally fixed. -/
+def representationField (type : Expr) : MetaM Bool :=
+  forallTelescopeReducing type fun _ result => return (← whnfD result).isSort
+
+/-- Rebuild a structure-valued subject with its original representation fields.
+    Only computational fields become arbitrary functions of the full telescope.
+    Unsupported dependencies fail the subsequent kernel-style Meta.check; they
+    never fall back to comparison of the concrete result. -/
+def withProtectedSubject (term : Expr) (budget : WorkBudget)
+    (next : Expr → MetaM Bool) : MetaM Bool := do
+  let type ← inferType term
+  forallTelescopeReducing type fun xs result => do
+    chargeWork budget
+    let result ← whnfD result
+    if result.isSort then throwError "protected-type-valued-subject"
+    let env ← getEnv
+    if let .const name levels := result.getAppFn then
+      if let some structInfo := getStructureInfo? env name then
+        let ctor := getStructureCtor env name
+        let params := result.getAppArgs
+        unless params.size == ctor.numParams do throwError "protected-indexed-structure"
+        let value := mkAppN term xs
+        let start := mkAppN (mkConst ctor.name levels) params
+        let rec fields (left i : Nat) (built : Expr) : MetaM Bool := do
+          chargeWork budget
+          match left with
+          | 0 =>
+            let replacement ← mkLambdaFVars xs built
+            Lean.Meta.check replacement
+            unless ← isDefEq (← inferType replacement) type do
+              throwError "protected-subject-type"
+            return ← next replacement
+          | left + 1 =>
+           let .forallE _ domain _ _ ← whnfD (← inferType built)
+             | throwError "protected-constructor-telescope"
+           if ← representationField domain then
+             let fixed := Expr.proj name i value
+             Lean.Meta.check fixed
+             return ← fields left (i + 1) (mkApp built fixed)
+           let fieldType ← mkForallFVars xs domain
+           Lean.Meta.check fieldType
+           withLocalDeclD `computation fieldType fun computation =>
+             fields left (i + 1) (mkApp built (mkAppN computation xs))
+        return ← fields structInfo.fieldNames.size 0 start
+    -- Scalar/function subjects have no representation fields to retain.
+    -- Their complete typed function remains arbitrary, as in the original
+    -- contract; no concrete operation is evaluated to justify equivalence.
+    withLocalDeclD `computation type next
+
+
+/-- Close only actually used binders, including dependencies of their types.
+    Unused generated matcher parameters cannot create distinct result variables. -/
+def computationBinders (e : Expr) (xs : Array Expr) : MetaM (Array Expr) := do
+  let mut needed := collectFVars (collectFVars {} e) (← inferType e)
+  let mut result := #[]
+  for x in xs.reverse do
+    if needed.fvarSet.contains x.fvarId! then
+      result := #[x] ++ result
+      needed := collectFVars needed (← inferType x)
+  return result
+
+abbrev ComputationCache := Std.HashMap (Expr × Array Expr × Bool) (Expr × Bool × Bool)
+
+mutual
+partial def computationVisit (budget : WorkBudget) (depends : Expr → MetaM Bool)
+    (candidates : IO.Ref (Array Expr)) (cache : IO.Ref ComputationCache)
+    (e : Expr) (xs : Array Expr) (replacements : Option (Array Expr)) : MetaM (Expr × Bool × Bool) := do
+  chargeWork budget
+  -- Beta specializes generated matcher parameters, not semantic results.
+  let e := e.headBeta
+  let key := (e, xs, replacements.isSome)
+  if let some result := (← cache.get)[key]? then return result
+  let result ← computationVisitStep budget depends candidates cache e xs replacements
+  cache.modify (·.insert key result)
+  return result
+
+partial def computationVisitStep (budget : WorkBudget) (depends : Expr → MetaM Bool)
+    (candidates : IO.Ref (Array Expr)) (cache : IO.Ref ComputationCache)
+    (e : Expr) (xs : Array Expr) (replacements : Option (Array Expr)) : MetaM (Expr × Bool × Bool) := do
+  if !(← depends e) then return (e, false, false)
+  let type ← whnfD (← inferType e)
+  -- Never abstract representation types/records or function prefixes. In
+  -- particular a partial matcher retains its complete motive and alternatives.
+  if let .sort level := type then
+    if level != .zero then return (e, false, false)
+  let visit := computationVisit budget depends candidates cache
+  let (rebuilt, childResult, actual) ← match e with
+    | .app f a => do
+      let (f', fc, fa) ← visit f xs replacements
+      let (a', ac, aa) ← visit a xs replacements
+      pure (mkApp f' a', fc || ac, fa || aa)
+    | .lam n t body bi | .forallE n t body bi => do
+      let (t', tc, ta) ← visit t xs replacements
+      withLocalDecl n bi t' fun x => do
+        let (body', bc, ba) ← visit (body.instantiate1 x) (xs.push x) replacements
+        let rebuilt ← if e.isLambda then mkLambdaFVars #[x] body' else mkForallFVars #[x] body'
+        pure (rebuilt, tc || bc, ta || ba)
+    | .letE _ _ v body _ => do
+      Lean.Meta.check e
+      visit (body.instantiate1 v) xs replacements
+    | .proj n i body => do
+      let (body', bc, ba) ← visit body xs replacements
+      pure (.proj n i body', bc, ba)
+    | .mdata md body => do
+      let (body', bc, ba) ← visit body xs replacements
+      pure (.mdata md body', bc, ba)
+    | .fvar _ => pure (e, false, true)
+    | _ => pure (e, false, false)
+  -- Abstract minimal computations. Derived values (e.g. result.ctorIdx) must
+  -- be rebuilt from the SAME arbitrary result, never abstracted independently.
+  if childResult then return (rebuilt, true, actual)
+  if !actual then return (rebuilt, false, false)
+  if let .const name _ := type.getAppFn then
+    if isStructure (← getEnv) name then return (rebuilt, false, actual)
+  if !(e.isApp || e.isProj) || type.isForall || type.isSort then return (rebuilt, false, actual)
+  if ← isProp type then return (rebuilt, false, actual)
+  let binders ← computationBinders e xs
+  let closure ← mkLambdaFVars binders e
+  Lean.Meta.check closure
+  let mut index := none
+  let entries ← candidates.get
+  for i in [:entries.size] do
+    chargeWork budget
+    if ← withNewMCtxDepth (isDefEq entries[i]! closure) then index := some i; break
+  match replacements, index with
+  | none, none => candidates.modify (·.push closure); return (rebuilt, true, true)
+  | none, some _ => return (rebuilt, true, true)
+  | some values, some i => return (mkAppN values[i]! binders, true, true)
+  | some _, none => throwError "protected-computation-not-collected"
+end
+
+
+/-- Abstract complete subject-dependent computations at a shared arbitrary typed
+    result, including under binders. Closing over the full binder telescope
+    preserves correlations. This keeps every match branch/motive visible even
+    when the concrete computation would immediately select one constructor.
+    Matcher definitions are compared by ordinary checked conversion, never by
+    generated names or a branch-shape whitelist. -/
+def withComputationResults (a b : Expr) (semantic : Array FVarId) (budget : WorkBudget)
+    (check : Expr → Expr → MetaM Bool) : MetaM Bool := do
+  let dependencies ← IO.mkRef ({} : Std.HashMap Expr Bool)
+  let rec depends (e : Expr) : MetaM Bool := do
+    chargeWork budget
+    -- Semantic computations are free variables. Closed representation syntax
+    -- cannot contain them; avoid walking its potentially enormous telescope.
+    if !e.hasFVar then return false
+    if let some found := (← dependencies.get)[e]? then return found
+    let found ← match e with
+      | .fvar id => pure (semantic.contains id)
+      | .app f a => pure ((← depends f) || (← depends a))
+      | .lam _ t b _ | .forallE _ t b _ => pure ((← depends t) || (← depends b))
+      | .letE _ t v b _ => pure ((← depends t) || (← depends v) || (← depends b))
+      | .proj _ _ b | .mdata _ b => depends b
+      | _ => pure false
+    dependencies.modify (·.insert e found)
+    return found
+  let candidates ← IO.mkRef (#[] : Array Expr)
+  let cache ← IO.mkRef ({} : ComputationCache)
+  let visit := computationVisit budget depends candidates cache
+  discard <| visit a #[] none
+  discard <| visit b #[] none
+  let terms ← candidates.get
+  let rec compare (left : List Expr) (values : Array Expr) : MetaM Bool := do
+    chargeWork budget
+    match left with
+    | [] =>
+      let (a', _, _) ← visit a #[] (some values)
+      let (b', _, _) ← visit b #[] (some values)
+      Lean.Meta.check a'
+      Lean.Meta.check b'
+      check a' b'
+    | term :: rest =>
+      withLocalDeclD `result (← inferType term) fun value => compare rest (values.push value)
+  compare terms.toList #[]
+
+
 /-- Expand only dependencies of protectedNames subjects, then abstract the subjects.
     Definitional comparison may reduce contracts, but cannot erase semantic arguments. -/
 def withProtected (a b : Expr) (subjects : Array Name) (check : Expr → Expr → MetaM Bool)
@@ -1211,13 +1387,18 @@ def withProtected (a b : Expr) (subjects : Array Name) (check : Expr → Expr �
       | _ => return e)
     replacements.modify (·.insert (e, term, value) result)
     return result
-  let rec compare (i : Nat) (a b : Expr) : MetaM Bool := do
+  let rec compare (i : Nat) (a b : Expr) (semantic : Array FVarId) : MetaM Bool := do
     chargeWork budget
-    if i >= protectedTerms.size then return ← check a b
+    if i >= protectedTerms.size then
+      -- Conversion on an ill-typed protection is never evidence.
+      Lean.Meta.check a
+      Lean.Meta.check b
+      return ← withComputationResults a b semantic budget check
     let term := protectedTerms[i]!
-    withLocalDeclD `subject (← inferType term) fun subjectVar => do
-      compare (i + 1) (← replace a term subjectVar) (← replace b term subjectVar)
-  compare 0 a b
+    withProtectedSubject term budget fun replacement => do
+      let vars := (collectFVars {} replacement).fvarIds
+      compare (i + 1) (← replace a term replacement) (← replace b term replacement) (semantic ++ vars)
+  compare 0 a b #[]
 
 
 def protectedEq (a b : Expr) (subjects : Array Name) (budget : Option WorkBudget := none) : MetaM Bool :=

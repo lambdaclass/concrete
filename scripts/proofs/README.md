@@ -650,3 +650,37 @@ roadmap row in the sweep; this writer allocates no R/ISS IDs. R-0219 owns the
 existing N2 audit machinery. The per-analysis interpretation and wall policy
 also remain pending owner. Reviewers must do the best long-term thing rather
 than cut corners.
+
+
+#### Typed contract protection (round 4, B)
+
+`withProtectedSubject` reconstructs structure-valued subjects with the original
+representation/type fields and arbitrary computational fields over their complete
+telescope. It never substitutes arbitrary representation types. Both protected
+contracts are independently `Meta.check`ed before any comparison. Type-valued
+subjects, indexed/unsupported reconstructions and ill-typed transformations are
+INCOMPLETE, never a successful or negative comparison.
+
+`withComputationResults` then compares subject-dependent computation results at
+shared arbitrary typed values. The traversal retains representation syntax,
+function prefixes, complete motives and all alternatives; it beta-specializes
+syntactic lambda applications before closing computations over precisely their
+used binders (including binder-type dependencies). Minimal computation boundaries
+are shared; derived values such as `result.ctorIdx` are reconstructed from the
+same arbitrary result. Computational-field dependence excludes occurrences only
+inside fixed type arguments. Every final transformed contract is typechecked.
+Ordinary definitional conversion unfolds the actual matcher definitions; no name
+or shape identification, concrete-result fallback, or dropped branch is used.
+Universes, binder domains, motives and constructor branches all participate in
+that typed conversion. Exact law head/telescope/closed arguments, evidence kind
+and contradiction-discharge checks stay in `checkInstance`.
+
+`vacuity_typed_contracts.py` retains the confirmed inferred/restated Ok/Trap
+contracts and `Confirm.changedStoreOk`, plus a trap-only execution whose
+unselected success branch is changed. The five genuine contracts PASS; both
+counterfeits require exactly `FAIL instance-application` naming their original
+law. `vacuity_body_access.py` audits the remaining accessor boundaries. All share
+the existing work, projection, heartbeat and watchdog bounds. Syntax dependency
+and transformed-term traversals publish compound DAG entries after completing
+nodes; neither early return may bypass cache publication. This is the long-term
+comparison design, not a budget exemption or a matcher-name accommodation.

@@ -1,0 +1,52 @@
+warning: Git tree '/home/unbalancedparen/projects/gates-vacuity' is dirty
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=2.295
+/tmp/nix-shell.JgrJ8r/vacuity-uv8ot7jl/audit.lean:13:0: warning: Definition `inferredOk` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.JgrJ8r/vacuity-uv8ot7jl/audit.lean:15:0: warning: Definition `inferredTrap` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.JgrJ8r/vacuity-uv8ot7jl/audit.lean:18:0: warning: Definition `restatedOk` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.JgrJ8r/vacuity-uv8ot7jl/audit.lean:26:15: warning: Variable name `t` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _t
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+/tmp/nix-shell.JgrJ8r/vacuity-uv8ot7jl/audit.lean:25:0: warning: Definition `changedStoreOk` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.JgrJ8r/vacuity-uv8ot7jl/audit.lean:31:0: warning: Definition `restatedTrap` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.JgrJ8r/vacuity-uv8ot7jl/audit.lean:38:0: warning: Definition `unselectedRestatedOk` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.JgrJ8r/vacuity-uv8ot7jl/audit.lean:46:15: warning: Variable name `t` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _t
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+/tmp/nix-shell.JgrJ8r/vacuity-uv8ot7jl/audit.lean:45:0: warning: Definition `unselectedChangedStoreOk` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+TYPED Confirm.inferredOk elapsed-ms=225
+NOTE analysis-result Confirm.inferredOk stage=instance law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed result=PASS heartbeats=4301/2000000 work=5584/20000 projection=0/4096
+TYPED Confirm.restatedOk elapsed-ms=222
+NOTE analysis-result Confirm.restatedOk stage=instance law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed result=PASS heartbeats=4367/2000000 work=6577/20000 projection=0/4096
+TYPED Confirm.inferredTrap elapsed-ms=224
+NOTE analysis-result Confirm.inferredTrap stage=instance law=ConcreteSpec.Core.Own.evalArgs_trap_erasure case=typed result=PASS heartbeats=4260/2000000 work=5102/20000 projection=0/4096
+TYPED Confirm.restatedTrap elapsed-ms=222
+NOTE analysis-result Confirm.restatedTrap stage=instance law=ConcreteSpec.Core.Own.evalArgs_trap_erasure case=typed result=PASS heartbeats=4316/2000000 work=5837/20000 projection=0/4096
+TYPED Confirm.changedStoreOk elapsed-ms=228
+FAIL instance-application Confirm.changedStoreOk law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed
+NOTE analysis-result Confirm.changedStoreOk stage=instance law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed result=FAIL heartbeats=4371/2000000 work=6585/20000 projection=0/4096
+TYPED Confirm.unselectedRestatedOk elapsed-ms=229
+NOTE analysis-result Confirm.unselectedRestatedOk stage=instance law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed result=PASS heartbeats=4362/2000000 work=6529/20000 projection=0/4096
+TYPED Confirm.unselectedChangedStoreOk elapsed-ms=226
+FAIL instance-application Confirm.unselectedChangedStoreOk law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed
+NOTE analysis-result Confirm.unselectedChangedStoreOk stage=instance law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed result=FAIL heartbeats=4366/2000000 work=6537/20000 projection=0/4096
+Typed contract controls: 7 PASS, 0 FAIL

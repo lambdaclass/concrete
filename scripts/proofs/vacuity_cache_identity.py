@@ -10,6 +10,7 @@ class Box : Type where val : Nat
 axiom boxOp : Box → Box
 axiom boxA : Box
 axiom boxB : Box
+def cacheSubject : Nat := 0
 axiom suppliedFalse : False
 def H1 : Prop := (heq : boxOp boxA = boxB) → (f : (x : Box) → Nat → Prop) → (h1 : f (boxOp boxA) 1) → (h2 : ¬ f boxB 1) → True
 def H2 : Prop := (heq : boxOp boxA = boxB) → (f : [Box] → Nat → Prop) → (h1 : @f (boxOp boxA) 1) → (h2 : ¬ @f boxB 1) → True
@@ -69,7 +70,17 @@ def witnessReverse : True := reverse b2 b1
     let (a, _) ← (mutate base `absent `alsoAbsent #[] (some budget)).run 0
     let (b, _) ← (mutate variant `absent `alsoAbsent #[] (some budget)).run 0
     unless Expr.equal a base && Expr.equal b variant do throwError "mutation-collapsed-syntax"
-    let separated ← withProtected base variant #[``Nat] (fun a b => pure (!Expr.equal a b)) (some budget)
+    -- Protect a computational value in WELL-TYPED contracts. Nat itself is a
+    -- representation type and must no longer be replaced by an arbitrary type.
+    let subjectEq ← mkEq (mkConst ``cacheSubject) (mkConst ``cacheSubject)
+    let left ← mkAppM ``And #[← mkEq base base, subjectEq]
+    let right ← mkAppM ``And #[← mkEq variant variant, subjectEq]
+    let separated ← withProtected left right #[``cacheSubject] (fun a b => do
+      Lean.Meta.check a
+      Lean.Meta.check b
+      if a.getUsedConstants.contains ``cacheSubject || b.getUsedConstants.contains ``cacheSubject then
+        throwError "replacement-did-not-abstract-subject"
+      pure (!Expr.equal a b)) (some budget)
     unless separated do throwError "replacement-collapsed-syntax"
     let ((_, projection), _) ← ((do
       discard <| direct `absent base

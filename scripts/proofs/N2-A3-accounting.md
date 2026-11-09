@@ -693,3 +693,44 @@ transfers would be INCOMPLETE. This sketch is not implemented. The coordinator
 assigns the owning roadmap row in the sweep; R-0219 owns the current N2 audit.
 Per-analysis interpretation and whole-scope wall policy remain pending owner.
 Coordinator reviewers must do the best long-term thing rather than cut corners.
+
+
+### Fix round 4: typed protection and complete comparison (B)
+
+The structural fix rebuilds subject structures with their original representation
+fields, abstracting only computational fields, and typechecks protected terms.
+A second typed DAG traversal shares minimal subject-dependent computations at
+arbitrary typed results, preserving every motive, binder domain, universe and
+constructor alternative. Derived values (including sparse-matcher constructor
+masks) use that same result. Type-only occurrences are not computations. Beta
+specialization removes phantom matcher parameters; used-binder closure preserves
+real parameter dependencies. Matcher definitions are compared by actual ordinary
+conversion, with no name/shape exemptions. Every transformed term is checked;
+unsupported or ill-typed protection is INCOMPLETE. Existing instance head,
+telescope, closed argument, evidence-kind and false-discharge checks remain.
+
+Focused typed control receipts are in
+[audits/N2-A3-round4-typed-contracts.txt](audits/N2-A3-round4-typed-contracts.txt).
+Five positive contracts PASS: inferred/restated Ok and Trap, and restated Ok
+on a concrete trap execution. `Confirm.changedStoreOk` and
+`Confirm.unselectedChangedStoreOk` both FAIL with exactly
+`instance-application`, the expected law, and case `typed`. Thus even an
+unselected success branch is checked. No invalid-projection exception is used
+as the counterfeit's rejection evidence.
+
+| Contract | Result | Work / 20,000 | HB / 2,000,000 | Analysis ms |
+|---|---|---:|---:|---:|
+| inferredOk | PASS | 5584 | 4301 | 225 |
+| restatedOk | PASS | 6577 | 4367 | 222 |
+| inferredTrap | PASS | 5102 | 4260 | 224 |
+| restatedTrap | PASS | 5837 | 4316 | 222 |
+| changedStoreOk | FAIL instance-application | 6585 | 4371 | 228 |
+| unselectedRestatedOk | PASS | 6529 | 4362 | 229 |
+| unselectedChangedStoreOk | FAIL instance-application | 6537 | 4366 | 226 |
+
+These are uninstrumented isolated production analyses on the final consumer
+bytes of this fix; source is pinned to `6efdce6136752d51fc74265d61278d90937f24cd`.
+They are single-contract measurements, not a scope census. The original B
+reproducer's inferred/restated true/false split and independent ill-typed-term
+checks are recorded in the confirmation brief. No budget was changed to obtain
+these results. `certificateDependency` through `end Discharge` remains untouched.
