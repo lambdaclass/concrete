@@ -16,7 +16,7 @@
 # Every candidate failure (lowering, emission, assembly, native_compilation, native_setup,
 # observation, mismatch) writes one durable failure record into the candidate directory and
 # persists a regression bundle under SPEC_DIFF_REGRESSIONS (default
-# .lake/concrete/spec_diff/regressions/<leg>/<safe_seed>-<index>/) before scratch cleanup,
+# .lake/concrete/spec_diff/regressions/<leg>/<safe_seed>-<index>/executions/<id>/latest) before scratch cleanup,
 # preserving the seed/index, leg, generated terms (plus .con source for spec-leg failures),
 # every artifact available at that point, failure-kinds.txt, failure-record.tsv, diagnostics.txt,
 # the exact manifest row and Examples entry, and the candidate's shell-quoted replay command.
@@ -392,7 +392,7 @@ check_judged() { # check_judged LEG COUNT MIN EXPECTED_TOTAL OUTCOME-GUARD REQUI
   [ "$missing" -eq 0 ] || coverage_fail=1
 }
 
-candidate_bundle_path() { # LEG DIR: plant scenarios are separate regression identities.
+candidate_identity_path() { # LEG DIR: plant scenarios are separate regression identities.
   local leg=$1 d=$2 scenario=""
   if [ -f "$d/control-replay" ]; then
     scenario=$(cat "$d/control-replay")
@@ -400,6 +400,14 @@ candidate_bundle_path() { # LEG DIR: plant scenarios are separate regression ide
     printf '%s/controls/%s/%s/%s-%s\n' "$regressions" "$scenario" "$leg" "$(cat "$d/safe-seed.txt")" "$(cat "$d/index")"
   else
     printf '%s/%s/%s-%s\n' "$regressions" "$leg" "$(cat "$d/safe-seed.txt")" "$(cat "$d/index")"
+  fi
+}
+
+candidate_bundle_path() { # Latest immutable snapshot of this execution.
+  if [ -f "$2/bundle-path" ]; then
+    cat "$2/bundle-path"
+  else
+    candidate_identity_path "$1" "$2"
   fi
 }
 
@@ -417,18 +425,13 @@ persist_candidate_bundle() { # persist_candidate_bundle LEG CAND_SEED INDEX DIR
     replay_text=$(printf 'SPEC_DIFF_REPLAY=%q SPEC_DIFF_REPLAY_CONTROL=%q bash scripts/checks/compiler/spec_diff.sh' \
       "$leg:$cand_seed:$index" "$(cat "$d/control-replay")")
   fi
+  replay_text=${replay_text% bash scripts/checks/compiler/spec_diff.sh}
+  replay_text+=$(printf ' SPEC_DIFF_REGRESSIONS=%q bash scripts/checks/compiler/spec_diff.sh' "$regressions")
   printf '%s\n' "$replay_text" >"$d/replay.sh"
-  bundle=$(candidate_bundle_path "$leg" "$d") || { fail=1; return 1; }
-  mkdir -p "${bundle%/*}"
-  if ! mkdir "$bundle" 2>/dev/null; then
-    if ! cmp -s "$d/bundle-owner" "$bundle/bundle-owner"; then
-      echo "FAIL regression bundle collision: $bundle" >&2
-      fail=1
-      return 1
-    fi
-  fi
-  # Only the registration that claimed this destination may update its snapshot.
-  cp "$d/bundle-owner" "$bundle/bundle-owner"
+  local candidate execution
+  candidate=$(candidate_identity_path "$leg" "$d") || { fail=1; return 1; }
+  bundle=$(python3 -I scripts/checks/compiler/spec_diff_identity.py allocate "$candidate" "$d") || { fail=1; return 1; }
+  execution=${bundle%/snapshots/*}
   cp -R "$d/." "$bundle/"
   printf '%s\n' "$cand_seed" >"$bundle/seed"
   printf '%s\n' "$cand_safe_seed" >"$bundle/safe-seed"
@@ -486,6 +489,12 @@ persist_candidate_bundle() { # persist_candidate_bundle LEG CAND_SEED INDEX DIR
       } >"$bundle/examples.lean"
     fi
   fi
+  # Snapshot contents never change after publication. Only this execution's latest
+  # pointer advances; a replay has a new execution and cannot touch these snapshots.
+  ln -s "${bundle#"$execution/"}" "$execution/.latest-$(cat "$d/execution-id")"
+  python3 -I -c 'import os, sys; os.replace(sys.argv[1], sys.argv[2])' \
+    "$execution/.latest-$(cat "$d/execution-id")" "$execution/latest"
+  printf '%s/latest\n' "$execution" >"$d/bundle-path"
 }
 
 record_candidate_failure() { # record_candidate_failure LEG CAND_SEED INDEX DIR KIND SUBJECT DIAGNOSTIC [EXTRA_LOG]
@@ -711,7 +720,6 @@ collect_available() {
         replay_text=$(cat "$bundle/replay.sh")
         if [ ! -f "$d/bundle-reported" ]; then
           : >"$d/bundle-reported"
-          cp "$d/bundle-reported" "$bundle/bundle-reported"
           [ ! -f "$d/diagnostics.txt" ] || cat "$d/diagnostics.txt" >&2
           echo "  regression bundle: $bundle" >&2
           if [ -f "$d/manifest-row.txt" ]; then
@@ -879,8 +887,7 @@ control_worker_journal() {
           worker_exit_command "$mode" "$scenario" "$leg" journal-control 0 "$work/replay"
         ) >"$d.log" 2>&1 || rc=$?
         diag="FAIL $leg seed journal-control index 0 [$stage]: unexpected worker exit (rc 7)"
-        saved=$(find "$d/saved" -name failure-record.tsv -print | head -1)
-        saved=${saved%/failure-record.tsv}
+        saved=$(find "$d/saved" -type l -name latest -print | head -1)
         [ "$rc" -eq 1 ] && [ ! -e "$d/work" ] &&
           grep -qxF "$diag" "$d.log" && grep -qxF "$diag" "$saved/diagnostics.txt" &&
           grep -qxF "$stage" "$saved/failure-kinds.txt" &&
@@ -911,8 +918,8 @@ control_worker_journal() {
   ) >"$d.log" 2>&1 || rc=$?
   [ "$rc" -eq 1 ] && [ ! -e "$d/work" ] || return 1
   local count=0 saved_seed
+  find "$d/saved" -type l -name latest -print >"$d/original-executions"
   while IFS= read -r saved; do
-    saved=${saved%/failure-record.tsv}
     saved_seed=$(cat "$saved/seed")
     case "$saved_seed" in 'Early:A'|'Early?A') ;; *) return 1 ;; esac
     diag="FAIL bir seed $saved_seed index 0 [generation]: unexpected worker exit (rc 7)"
@@ -921,7 +928,7 @@ control_worker_journal() {
     verify_saved_replay "$saved" "$d/reproduced-$count" "$d/replayed-$count.log" || return $?
     grep -qxF "$diag" "$d/replayed-$count.log" || return 1
     count=$((count + 1))
-  done < <(find "$d/saved" -name failure-record.tsv -print)
+  done <"$d/original-executions"
   [ "$count" -eq 2 ] || { echo 'control setup: early seed collision lost a bundle' >&2; return 1; }
   echo 'FAIL worker-journal: every unmarked stage exit persisted and replayed, including later timeout'
   return "$PLANTED_FAIL_RC"
@@ -980,14 +987,30 @@ run_replay() {
   exit "$rc"
 }
 
-# Replay verification has exactly one launch path. Only the destination for newly
-# produced bundles is supplied externally; all failure state comes from replay.sh.
-verify_saved_replay() { # BUNDLE OUTPUT_ROOT LOG
+# Replay verification executes exactly the saved command, into its populated root.
+verify_saved_replay() { # BUNDLE REPRODUCED_PATH_FILE LOG
   local saved=$1 out=$2 log=$3 rc=0 reproduced kind subject diagnostic scenario
-  bounded_remaining env -u BASH_ENV -u ENV SPEC_DIFF_REGRESSIONS="$out" \
+  local execution candidate before original fingerprint
+  execution=${saved%/latest}
+  candidate=${execution%/executions/*}
+  before=$(find "$candidate/executions" -mindepth 1 -maxdepth 1 -type d -print | LC_ALL=C sort)
+  original=$(readlink "$saved")
+  fingerprint=$(python3 -I scripts/checks/compiler/spec_diff_identity.py digest "$saved")
+  bounded_remaining env -u BASH_ENV -u ENV \
     bash --noprofile --norc "$saved/replay.sh" >"$log" 2>&1 || rc=$?
   [ "$rc" -ne 3 ] || { cat "$log" >&2; return 3; }
-  reproduced=$(regressions=$out candidate_bundle_path "$(cat "$saved/leg")" "$saved")
+  reproduced=""
+  while IFS= read -r execution; do
+    if ! grep -qxF "$execution" <<<"$before"; then
+      [ -z "$reproduced" ] || { echo 'control setup: replay allocated multiple executions' >&2; return 1; }
+      reproduced="$execution/latest"
+    fi
+  done < <(find "$candidate/executions" -mindepth 1 -maxdepth 1 -type d -print)
+  [ "$(readlink "$saved")" = "$original" ] && [ -d "$saved" ] || return 1
+  [ "$(python3 -I scripts/checks/compiler/spec_diff_identity.py digest "$saved")" = "$fingerprint" ] || {
+    echo 'control setup: replay modified original execution evidence' >&2; return 1;
+  }
+  printf '%s\n' "$reproduced" >"$out"
   if [ "$rc" -ne 1 ] || [ ! -d "$reproduced" ]; then
     echo "control setup: standalone replay did not fail and persist $reproduced (rc=$rc)" >&2
     cat "$log" >&2
@@ -1051,15 +1074,14 @@ verify_failure_bundle_and_replay() {
     cat "$log_1" >&2
     return 1
   fi
-  bundle_1=$(find "$regressions_1" -type f -name failure-kinds.txt -print | sed -n '1p')
-  bundle_1=${bundle_1%/failure-kinds.txt}
+  bundle_1=$(find "$regressions_1" -type l -name latest -print | sed -n '1p')
   if [ ! -d "$bundle_1" ] || [ ! -f "$bundle_1/safe-seed" ]; then
     echo "control setup: $label did not persist a regression bundle under $regressions_1/$leg" >&2
     cat "$log_1" >&2
     return 1
   fi
   safe_seed=$(cat "$bundle_1/safe-seed")
-  [ "${bundle_1##*/}" = "${safe_seed}-$index" ] &&
+  [[ "$bundle_1" = */"${safe_seed}-$index"/executions/*/latest ]] &&
     [ "$(cat "$bundle_1/leg")" = "$leg" ] &&
     [ "$(cat "$bundle_1/seed")" = "$cand_seed" ] &&
     [ "$(cat "$bundle_1/index")" = "$index" ] &&
@@ -1096,10 +1118,9 @@ verify_failure_bundle_and_replay() {
     }
   done
   rc=0
-  # A new shell executes only the saved command; no functions, driver arguments,
-  # plants or observations are supplied by the verifier. Output routing is not a plant.
+  # A new shell executes the unchanged saved command, including its destination.
   verify_saved_replay "$bundle_1" "$regressions_2" "$log_2" || return $?
-  bundle_2="$regressions_2/${bundle_1#"$regressions_1/"}"
+  bundle_2=$(cat "$regressions_2")
   if ! grep -qxF "$expected_diag" "$log_2" || [ ! -d "$bundle_2" ]; then
     echo "control setup: $label replay did not reproduce failure '$expected_diag' and persist $bundle_2 (rc=$rc)" >&2
     cat "$log_2" >&2

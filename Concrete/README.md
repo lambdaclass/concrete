@@ -598,12 +598,23 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
    with leg and index in the regression name and control scenario in the bundle path.
    Lean consumes the registered identity, including for manifests and Examples entries;
    standalone driver invocations use the same registrar before their first stage.
-   Each registration also owns its bundle with a unique token. Persistence refuses an existing
-   destination owned by another registration with `FAIL regression bundle collision: <path>`;
-   it never deletes that destination. Repeated persistence by the same registration retains
-   accumulated artifacts and failure records. Controls kill generation for both `Early:A` and
-   `Early?A` before metadata emission, require two surviving bundles in one regression root,
-   and replay each to its own exact generation failure.
+   Candidate identity and execution identity are separate. The candidate directory is
+   `<leg>/<SHA-256-seed>-<index>` (under `controls/<scenario>` for plants). A locked
+   `candidate.json` claim checks leg, original seed, index, scenario and hashes of generated
+   `.lean.txt`/`.con` content as it becomes available. Different candidates at that path fail
+   with exactly `FAIL regression candidate identity collision: <path>`; early failures may
+   add missing source claims later, but cannot change a recorded claim. Observations are
+   execution evidence, not candidate identity. Each registration, including a copied baseline
+   or plant, allocates its own `executions/<id>` directory. Persistence appends immutable
+   snapshots there and atomically advances only that execution's `latest` symlink after all
+   artifacts are written. Prior snapshots and other executions are never overwritten.
+   Saved commands record the original regression root; replaying one into that populated root
+   adds an execution. The round-trip verifier runs the saved command unchanged, requires its
+   exact original diagnostic, and checks that both executions survive. Controls kill generation
+   for both `Early:A` and `Early?A` before metadata emission, require distinct candidates in one
+   root, and replay each to its own exact generation failure. Cheap orchestration controls
+   also force a candidate/content identity collision and require the exact collision diagnostic
+   while checking that the original evidence is unchanged.
 
 6a. **AArch64:** a GitHub-hosted AArch64 macOS job (`macos-15`) builds the LCB output for `aarch64-macos`, runs gates 4 and 6 there natively, and compares against Lean. LLVM-native also runs there, as a third cross-check. Gates 4 and 6 for x86-64 run on concrete-ci-2.
 7. **Certificates:** the kernel checks every acceptance and refusal certificate, with measured budgets.

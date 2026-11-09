@@ -22,7 +22,7 @@ class Orchestration(unittest.TestCase):
             regressions = pathlib.Path(tmp) / 'regressions'
             work.mkdir()
             functions = '\n'.join(function(n) for n in (
-                'parse_replay', 'replay_command', 'register_candidate', 'register_generation', 'candidate_bundle_path', 'persist_candidate_bundle',
+                'parse_replay', 'replay_command', 'register_candidate', 'register_generation', 'candidate_identity_path', 'candidate_bundle_path', 'persist_candidate_bundle',
                 'record_candidate_failure', 'report_mismatch', 'judge_evaluator',
                 'judge_available', 'reset_observations', 'control_candidate', 'native_one', 'absorb_native_result', 'collect_available',
                 'reconcile_worker_exit', 'finish_diff', 'run_control', 'run_replay', 'first_outcome_index',
@@ -53,7 +53,8 @@ record_judged() {{ :; }}
                 check_fn(work, regressions)
 
     def assert_bundle(self, regressions, leg, seed, index, kind, diag_lines, artifacts=()):
-        matches = [p for p in regressions.rglob(f'{safe(seed)}-{index}') if p.parent.name == leg]
+        matches = [e / 'latest' for p in regressions.rglob(f'{safe(seed)}-{index}')
+                   if p.parent.name == leg for e in (p / 'executions').iterdir()]
         self.assertEqual(len(matches), 1, matches)
         bundle = matches[0]
         self.assertTrue(bundle.is_dir(), f'missing bundle {bundle}')
@@ -204,7 +205,7 @@ exit 3
                 def check(work, regressions):
                     self.assertFalse(work.exists())
                     self.assert_bundle(regressions, 'bir', 'test', 0, kind, (diag,))
-                    self.assertTrue((regressions / f'bir/{safe("test")}-0/control-owner').is_file())
+                    self.assertTrue((next(regressions.glob(f'bir/{safe("test")}-0/executions/*/latest/control-owner'))).is_file())
                 plant = (f'''echo emission >"$d/failure-kinds.txt"
 printf 'emission\\tsubject\\t{diag}\\n' >"$d/failure-record.tsv"
 echo '{diag}' >"$d/diagnostics.txt"
@@ -305,7 +306,7 @@ exit "$fail"
         def check(work, regressions):
             self.assertFalse(work.exists())
             self.assert_bundle(regressions, 'bir', 'test', 0, 'native_setup', (diag,))
-            bundle = regressions / f'bir/{safe("test")}-0'
+            bundle = next(regressions.glob(f'bir/{safe("test")}-0/executions/*/latest'))
             self.assertNotIn('mismatch', (bundle / 'failure-kinds.txt').read_text().splitlines())
         self.run_shell('''
 trap 'finish_diff $?' EXIT
@@ -327,7 +328,7 @@ exit 1
         def check(work, regressions):
             self.assertFalse(work.exists())
             for scenario in ('emission', 'assembly'):
-                bundle = regressions / f'controls/{scenario}/bir/{safe("test")}-0'
+                bundle = next(regressions.glob(f'controls/{scenario}/bir/{safe("test")}-0/executions/*/latest'))
                 self.assertTrue(bundle.is_dir())
                 self.assertEqual((bundle / 'failure-kinds.txt').read_text().strip(), scenario)
                 self.assertIn(f'SPEC_DIFF_REPLAY_CONTROL={scenario}',
@@ -345,19 +346,103 @@ exit 1
     def test_bundle_collision_refused_without_touching_original(self):
         self.run_shell('''
 register_candidate bir test 0 "$work/first"
+echo original >"$work/first/program.lean.txt"
 record_candidate_failure bir test 0 "$work/first" generation worker_exit 'FAIL first generation'
 bundle=$(candidate_bundle_path bir "$work/first")
-cp -R "$bundle" "$work/snapshot"
+candidate=$(candidate_identity_path bir "$work/first")
+cp -RL "$bundle" "$work/snapshot"
 register_candidate bir test 0 "$work/second"
+echo different >"$work/second/program.lean.txt"
 rc=0
 record_candidate_failure bir test 0 "$work/second" generation worker_exit 'FAIL second generation' 2>"$work/collision.log" || rc=$?
 [ "$rc" -eq 1 ] && [ "$fail" -eq 1 ] || exit 9
-grep -qxF "FAIL regression bundle collision: $bundle" "$work/collision.log" || exit 9
+grep -qxF "FAIL regression candidate identity collision: $candidate" "$work/collision.log" || exit 9
 diff -r "$work/snapshot" "$bundle" || exit 9
 echo 'ok collision preserved original bundle'
 ''', 0, ('FAIL first generation',
                 'ok collision preserved original bundle'),
             lambda work, regressions: None)
+
+    def test_same_candidate_reexecution_and_append_only_snapshots(self):
+        self.run_shell('''
+register_candidate bir test 0 "$work/first"
+echo term >"$work/first/program.lean.txt"
+record_candidate_failure bir test 0 "$work/first" emission stage 'FAIL planted emission'
+first=$(candidate_bundle_path bir "$work/first")
+original=$(readlink -f "$first")
+fingerprint=$(python3 -I scripts/checks/compiler/spec_diff_identity.py digest "$original")
+record_candidate_failure bir test 0 "$work/first" assembly stage 'FAIL planted assembly'
+[ "$(readlink -f "$first")" != "$original" ] || exit 9
+[ "$(python3 -I scripts/checks/compiler/spec_diff_identity.py digest "$original")" = "$fingerprint" ] || exit 9
+cp -R "$work/first" "$work/copied"
+register_candidate bir test 0 "$work/copied"
+[ "$(cat "$work/first/execution-id")" != "$(cat "$work/copied/execution-id")" ] || exit 9
+record_candidate_failure bir test 0 "$work/copied" emission stage 'FAIL planted emission'
+register_candidate bir test 0 "$work/second"
+echo term >"$work/second/program.lean.txt"
+record_candidate_failure bir test 0 "$work/second" emission stage 'FAIL planted emission'
+second=$(candidate_bundle_path bir "$work/second")
+[ "$first" != "$second" ] && [ -f "$first/failure-record.tsv" ] && [ -f "$second/failure-record.tsv" ] || exit 9
+[ "$(find "$regressions" -type l -name latest | wc -l)" -eq 3 ] || exit 9
+echo 'ok independent executions and immutable snapshots'
+''', 0, ('FAIL planted emission', 'FAIL planted assembly',
+                'ok independent executions and immutable snapshots'))
+
+    def test_distinct_seeds_at_forced_candidate_path_collide(self):
+        self.run_shell('''
+candidate_identity_path() { echo "$regressions/forced"; }
+register_candidate bir first 0 "$work/first"
+record_candidate_failure bir first 0 "$work/first" generation stage 'FAIL first generation'
+bundle=$(candidate_bundle_path bir "$work/first")
+fingerprint=$(python3 -I scripts/checks/compiler/spec_diff_identity.py digest "$bundle")
+register_candidate bir second 0 "$work/second"
+rc=0
+record_candidate_failure bir second 0 "$work/second" generation stage 'FAIL second generation' 2>"$work/collision.log" || rc=$?
+[ "$rc" -eq 1 ] || exit 9
+grep -qxF "FAIL regression candidate identity collision: $regressions/forced" "$work/collision.log" || exit 9
+[ "$(python3 -I scripts/checks/compiler/spec_diff_identity.py digest "$bundle")" = "$fingerprint" ] || exit 9
+echo 'ok exact candidate collision preserved evidence'
+''', 0, ('FAIL first generation', 'ok exact candidate collision preserved evidence'))
+
+    def test_populated_legacy_root_preserves_claim_and_evidence(self):
+        self.run_shell('''
+register_candidate bir test 0 "$work/first"
+echo term >"$work/first/program.lean.txt"
+candidate=$(candidate_identity_path bir "$work/first")
+mkdir -p "$candidate"
+cp -R "$work/first/." "$candidate/"
+echo 'FAIL legacy emission' >"$candidate/diagnostics.txt"
+record_candidate_failure bir test 0 "$work/first" emission stage 'FAIL planted emission'
+grep -qxF 'FAIL legacy emission' "$candidate/diagnostics.txt" || exit 9
+register_candidate bir test 0 "$work/different"
+echo other >"$work/different/program.lean.txt"
+rc=0
+record_candidate_failure bir test 0 "$work/different" emission stage 'FAIL different emission' 2>"$work/error" || rc=$?
+[ "$rc" -eq 1 ] || exit 9
+grep -qxF "FAIL regression candidate identity collision: $candidate" "$work/error" || exit 9
+echo 'ok legacy root evidence preserved and collision checked'
+''', 0, ('FAIL planted emission', 'ok legacy root evidence preserved and collision checked'))
+
+    def test_missing_content_claim_can_be_learned_but_cannot_change(self):
+        self.run_shell('''
+register_candidate bir test 0 "$work/first"
+record_candidate_failure bir test 0 "$work/first" generation stage 'FAIL generation'
+echo term >"$work/first/program.lean.txt"
+record_candidate_failure bir test 0 "$work/first" emission stage 'FAIL emission'
+first=$(candidate_bundle_path bir "$work/first")
+echo assembly >"$work/first/control-replay"
+record_candidate_failure bir test 0 "$work/first" assembly stage 'FAIL assembly'
+second=$(candidate_bundle_path bir "$work/first")
+[ "$first" != "$second" ] && [ -f "$first/diagnostics.txt" ] || exit 9
+echo changed >"$work/first/program.lean.txt"
+candidate=$(candidate_identity_path bir "$work/first")
+rc=0
+record_candidate_failure bir test 0 "$work/first" assembly stage 'FAIL changed assembly' 2>"$work/error" || rc=$?
+[ "$rc" -eq 1 ] || exit 9
+grep -qxF "FAIL regression candidate identity collision: $candidate" "$work/error" || exit 9
+echo 'ok monotone content claims and separate compound plant execution'
+''', 0, ('FAIL generation', 'FAIL emission', 'FAIL assembly',
+                'ok monotone content claims and separate compound plant execution'))
 
     def test_control_identity_is_not_sanitized(self):
         self.run_shell('''
@@ -380,12 +465,12 @@ for item in A B; do
  d="$work/$item"
  s='Early:A'; [ "$item" = A ] || s='Early?A'
  register_candidate bir "$s" 0 "$d"
- [ -s "$d/safe-seed.txt" ] && [ -s "$d/regression-name.txt" ] && [ -s "$d/bundle-owner" ] || exit 9
+ [ -s "$d/safe-seed.txt" ] && [ -s "$d/regression-name.txt" ] && [ -s "$d/execution-id" ] || exit 9
  printf 'generation\\tstarted\\t123\\n' >"$d/stage-journal.tsv"
  echo 7 >"$d/worker-result"
 done
 reconcile_worker_exit 7
-[ "$(find "$regressions" -name failure-record.tsv | wc -l)" -eq 2 ] || exit 9
+[ "$(find "$regressions" -type l -name latest | wc -l)" -eq 2 ] || exit 9
 ''', 0, diags, check)
 
     def test_failure_log_cannot_claim_timeout(self):
