@@ -1055,7 +1055,7 @@ theorem Responds.matches {C : OperationContract S} {input : C.Input} {hist : Lis
   cases h with
   | response matching _ => exact matching
 
-/-- Helper (computation). Induction on `SilentInsertion` showing that inserting or keeping `.silent`
+/-- Helper (computation). Induction on `SilentInsertion` showing that inserting or keeping `ConcreteSpec.Core.Observe.Step.silent`
 steps preserves `visible`; feeds `silent_internal_steps` and `blocked_silent_internal_steps`.
 (approved: APPR-C6-agy-6477c65a7)
  Inserting silent steps leaves exactly the same visible events, in the same order. -/
@@ -1083,14 +1083,14 @@ theorem blocked_silent_internal_steps {before after : List (Step S)}
   exact ⟨h.visible, rfl⟩
 
 /-- Representation lemma. Reflexivity of eventual prefix containment `PrefixEventually` with empty
-suffix `rest = []`; feeds `SameInfiniteObservation.refl`. (approved: APPR-C6-agy-6477c65a7)
+suffix rest = []; feeds `SameInfiniteObservation.refl`. (approved: APPR-C6-agy-6477c65a7)
  Any finite visible prefix is immediately a prefix of the same execution's prefix. -/
 theorem PrefixEventually.refl (steps : Nat → Step S) : PrefixEventually steps steps := by
   intro n
   exact ⟨n, [], by simp⟩
 
 /-- Representation lemma. Transitivity of eventual prefix containment `PrefixEventually` by
-concatenating suffixes `rest₁ ++ rest₂`; feeds `SameInfiniteObservation.trans`. (approved: APPR-C6-agy-6477c65a7)
+concatenating suffixes rest₁ ++ rest₂; feeds `SameInfiniteObservation.trans`. (approved: APPR-C6-agy-6477c65a7)
  Eventual prefix containment composes; the second execution may need more internal steps. -/
 theorem PrefixEventually.trans {xs ys zs : Nat → Step S}
     (hxy : PrefixEventually xs ys) (hyz : PrefixEventually ys zs) : PrefixEventually xs zs := by
@@ -1100,7 +1100,7 @@ theorem PrefixEventually.trans {xs ys zs : Nat → Step S}
   exact ⟨p, rest₁ ++ rest₂, by rw [h₂, h₁, List.append_assoc]⟩
 
 /-- Representation lemma. Reflexivity of `SameInfiniteObservation` from `PrefixEventually.refl`;
-feeds `SameObservation.refl` in the `.infinite` branch. (approved: APPR-C6-agy-6477c65a7) -/
+feeds `SameObservation.refl` in the `ConcreteSpec.Core.Observe.Execution.infinite` branch. (approved: APPR-C6-agy-6477c65a7) -/
 theorem SameInfiniteObservation.refl (steps : Nat → Step S) : SameInfiniteObservation steps steps :=
   ⟨PrefixEventually.refl steps, PrefixEventually.refl steps⟩
 
@@ -1116,8 +1116,8 @@ theorem SameInfiniteObservation.trans {xs ys zs : Nat → Step S}
     (hxy : SameInfiniteObservation xs ys) (hyz : SameInfiniteObservation ys zs) :
     SameInfiniteObservation xs zs := ⟨hxy.1.trans hyz.1, hyz.2.trans hxy.2⟩
 
-/-- Helper (computation). Unfolds `visiblePrefix` on `List.range (n + 1)` to append
-`(steps n).event?.toList`; feeds `visiblePrefix_prefix` and `InfiniteStuttering.prefix_indices`.
+/-- Helper (computation). Unfolds `visiblePrefix` on List.range (n + 1) to append
+(steps n).event?.toList; feeds `visiblePrefix_prefix` and `InfiniteStuttering.prefix_indices`.
 (approved: APPR-C6-agy-6477c65a7)
  One more step adds exactly its optional event to the visible prefix. -/
 theorem visiblePrefix_succ (steps : Nat → Step S) (n : Nat) :
@@ -1125,8 +1125,8 @@ theorem visiblePrefix_succ (steps : Nat → Step S) (n : Nat) :
   cases step : steps n <;>
     simp [visiblePrefix, List.range_succ, visible, List.filterMap_append, Step.event?, step]
 
-/-- Helper (computation). Induction on `n - m` showing `visiblePrefix steps m` is a prefix of
-`visiblePrefix steps n` for `m ≤ n`; feeds the reverse direction of `infinite_stuttering`.
+/-- Helper (computation). Induction on n - m showing visiblePrefix steps m is a prefix of
+visiblePrefix steps n for m ≤ n; feeds the reverse direction of `infinite_stuttering`.
 (approved: APPR-C6-agy-6477c65a7)
  A shorter step prefix's events are a prefix of a longer step prefix's events. -/
 theorem visiblePrefix_prefix (steps : Nat → Step S) {m n : Nat} (h : m ≤ n) :
@@ -1139,8 +1139,8 @@ theorem visiblePrefix_prefix (steps : Nat → Step S) {m n : Nat} (h : m ≤ n) 
     refine ⟨rest ++ (steps (m + d)).event?.toList, ?_⟩
     rw [show m + (d + 1) = m + d + 1 by omega, visiblePrefix_succ, pref, List.append_assoc]
 
-/-- Helper (arithmetic). Induction on `n` lifting one-step `StepIndexIncreasing` (`f n < f (n + 1)`)
-to pairwise monotonicity `m ≤ n → f m ≤ f n`; feeds `StepIndexIncreasing.strict`.
+/-- Helper (arithmetic). Induction on n lifting one-step `StepIndexIncreasing` (f n < f (n + 1))
+to pairwise monotonicity m ≤ n → f m ≤ f n; feeds `StepIndexIncreasing.strict`.
 (approved: APPR-C6-agy-6477c65a7)
  A strictly increasing step-index map is monotone on every pair of indices. -/
 theorem StepIndexIncreasing.monotone {f : Nat → Nat} (increasing : StepIndexIncreasing f)
@@ -1152,8 +1152,8 @@ theorem StepIndexIncreasing.monotone {f : Nat → Nat} (increasing : StepIndexIn
     · subst m; exact Nat.le_refl _
     · exact Nat.le_trans (ih (by omega)) (Nat.le_of_lt (increasing n))
 
-/-- Helper (arithmetic). Combines `increasing m` with `StepIndexIncreasing.monotone` on `m + 1 ≤ n`
-to obtain strict monotonicity `m < n → f m < f n`; feeds `InfiniteStuttering.prefix_indices` and
+/-- Helper (arithmetic). Combines increasing m with `StepIndexIncreasing.monotone` on m + 1 ≤ n
+to obtain strict monotonicity m < n → f m < f n; feeds `InfiniteStuttering.prefix_indices` and
 `InfiniteStuttering.visiblePrefix_at`. (approved: APPR-C6-agy-6477c65a7)
  A strictly increasing step-index map strictly increases on every ordered pair. -/
 theorem StepIndexIncreasing.strict {f : Nat → Nat} (increasing : StepIndexIncreasing f)
@@ -1162,8 +1162,8 @@ theorem StepIndexIncreasing.strict {f : Nat → Nat} (increasing : StepIndexIncr
   have rest := increasing.monotone (show m + 1 ≤ n by omega)
   omega
 
-/-- Helper (arithmetic). Induction on `n` proving the lower bound `n ≤ f n` for any strictly
-increasing index map `f : Nat → Nat`. (approved: APPR-C6-agy-6477c65a7)
+/-- Helper (arithmetic). Induction on n proving the lower bound n ≤ f n for any strictly
+increasing index map f : Nat → Nat. (approved: APPR-C6-agy-6477c65a7)
  A strictly increasing map on natural step indices is unbounded. -/
 theorem StepIndexIncreasing.apply_le {f : Nat → Nat} (increasing : StepIndexIncreasing f) (n : Nat) :
     n ≤ f n := by
@@ -1171,11 +1171,11 @@ theorem StepIndexIncreasing.apply_le {f : Nat → Nat} (increasing : StepIndexIn
   | zero => exact Nat.zero_le _
   | succ n ih => have next := increasing n; omega
 
-/-- Helper (computation). Induction on stuttered index `m` finding the corresponding unstuttered
-prefix length `n` with `visiblePrefix stutter m = visiblePrefix steps n`; feeds
+/-- Helper (computation). Induction on stuttered index m finding the corresponding unstuttered
+prefix length n with visiblePrefix stutter m = visiblePrefix steps n; feeds
 `InfiniteStuttering.visiblePrefix_at` and `infinite_stuttering`. (approved: APPR-C6-agy-6477c65a7)
- At every stuttered index `m`, some old prefix `n` has exactly the same events: all retained
-indices below `m` are below `n`, and `f n` is the next retained index at or after `m`. -/
+ At every stuttered index m, some old prefix n has exactly the same events: all retained
+indices below m are below n, and f n is the next retained index at or after m. -/
 theorem InfiniteStuttering.prefix_indices {steps : Nat → Step S} {f : Nat → Nat}
     {stutter : Nat → Step S} (h : InfiniteStuttering steps f stutter) (m : Nat) :
     ∃ n, n ≤ m ∧ m ≤ f n ∧ visiblePrefix stutter m = visiblePrefix steps n ∧
@@ -1215,11 +1215,11 @@ theorem InfiniteStuttering.prefix_indices {steps : Nat → Step S} {f : Nat → 
         have index := before i hi
         omega
 
-/-- Helper (computation). Specializes `InfiniteStuttering.prefix_indices` at `m = f n` and uses
-`StepIndexIncreasing.strict` to force `k = n`; feeds the forward direction of
+/-- Helper (computation). Specializes `InfiniteStuttering.prefix_indices` at m = f n and uses
+`StepIndexIncreasing.strict` to force k = n; feeds the forward direction of
 `infinite_stuttering`. (approved: APPR-C6-agy-6477c65a7)
- The stuttered prefix through the position just before `f n` is exactly the old prefix before
-`n`; leading and intermediate silent steps contribute nothing. -/
+ The stuttered prefix through the position just before f n is exactly the old prefix before
+n; leading and intermediate silent steps contribute nothing. -/
 theorem InfiniteStuttering.visiblePrefix_at {steps : Nat → Step S} {f : Nat → Nat}
     {stutter : Nat → Step S} (h : InfiniteStuttering steps f stutter) (n : Nat) :
     visiblePrefix stutter (f n) = visiblePrefix steps n := by
@@ -1240,7 +1240,7 @@ theorem InfiniteStuttering.visiblePrefix_at {steps : Nat → Step S} {f : Nat �
   exact pref
 
 /-- Law (subject `ConcreteSpec.Core.Observe.visiblePrefix`).
- **Infinite stuttering.** Retaining step `n` at `f n` for a strictly increasing `f`, with every
+ **Infinite stuttering.** Retaining step n at f n for a strictly increasing f, with every
 other step silent, preserves the complete observation in both eventual-prefix directions. This
 also covers runs that emit only finitely often and then remain silent forever. -/
 theorem infinite_stuttering {steps : Nat → Step S} {f : Nat → Nat} {stutter : Nat → Step S}
@@ -1280,8 +1280,8 @@ theorem SameObservation.trans {x y z : Execution S}
     exact ⟨hxy.1.trans hyz.1, hxy.2.trans hyz.2⟩ | exact hxy.trans hyz
 
 /-- Law (subject `ConcreteSpec.Core.Observe.HasFullObservation`).
- **Full-observation preservation.** An observation projected from `x` is also an observation of
-every `y` equivalent to `x`. Finite runs preserve their events, terminal action, and externally
+ **Full-observation preservation.** An observation projected from x is also an observation of
+every y equivalent to x. Finite runs preserve their events, terminal action, and externally
 visible final state; blocked runs also preserve their pending request; infinite runs transport
 both eventually silent and infinitely emitting histories. No infinite run is related to a finite
 termination. -/
@@ -1344,7 +1344,7 @@ private def stripPrefix : List Char → List Char → Option (List Char)
   | _ :: _, [] => none
   | c :: cs, d :: ds => if c = d then stripPrefix cs ds else none
 
-/-- Helper (computation). Induction on `pre` showing `stripPrefix pre (pre ++ rest) = some rest`;
+/-- Helper (computation). Induction on pre showing stripPrefix pre (pre ++ rest) = some rest;
 feeds `decodeWithKind_render` for `trapLine_injective`. (approved: APPR-C6-agy-6477c65a7) -/
 private theorem stripPrefix_append (pre rest : List Char) :
     stripPrefix pre (pre ++ rest) = some rest := by
@@ -1358,8 +1358,8 @@ private def parseRevNat (cs : List Char) : Option (Nat × List Char) :=
   if digits.isEmpty then none
   else some (Nat.ofDigitChars 10 digits.reverse 0, cs.dropWhile Char.isDigit)
 
-/-- Helper (computation). Uses `Nat.isDigit_of_mem_toDigits` and `hc : c.isDigit = false` to invert
-reversed decimal rendering before a non-digit delimiter `c`; feeds `decodeWithKind_render`.
+/-- Helper (computation). Uses `Nat.isDigit_of_mem_toDigits` and hc : c.isDigit = false to invert
+reversed decimal rendering before a non-digit delimiter c; feeds `decodeWithKind_render`.
 (approved: APPR-C6-agy-6477c65a7) -/
 private theorem parseRevNat_digits (n : Nat) (c : Char) (rest : List Char)
     (hc : c.isDigit = false) :
@@ -1381,7 +1381,7 @@ private def decodeKinds : List TrapKind → List Char → Option TrapKind
 private def decodeKind (cs : List Char) : Option TrapKind := decodeKinds TrapKind.all cs
 
 /-- Helper (computation). Case analysis on `TrapKind` showing `decodeKind` recovers `kind` from
-`trapLineChars kind site sp`; feeds `decodeTrapLine_render`. (approved: PENDING) -/
+trapLineChars kind site sp; feeds `decodeTrapLine_render`. (approved: PENDING) -/
 private theorem decodeKind_render (kind : TrapKind) (site : SiteId) (sp : Span) :
     decodeKind (trapLineChars kind site sp) = some kind := by
   cases kind <;>
@@ -1574,7 +1574,7 @@ theorem byteColumn_tab (before : String) : byteColumn (before ++ "\t") = byteCol
 
 variable {O : Exec.Operands}
 
-/-- Helper (computation). Induction on `outputs` iterating `ValidTrace.output` when no request is
+/-- Helper (computation). Induction on outputs iterating `ValidTrace.output` when no request is
 outstanding (`none`); feeds `ValidTrace.answer_projection` and the internal-answer branch of
 `runFrom_validTrace`. (approved: APPR-C6-agy-6477c65a7)
  Output-only extensions preserve a complete valid trace. -/
@@ -1605,8 +1605,8 @@ theorem ValidTrace.answer_projection {C : OperationContract S} {input : C.Input}
   simpa [CompleteTrace, List.append_assoc] using answered.outputs afterOutputs
 
 /-- Helper (computation). Distributes `ExecAdapter.project` (`List.flatMap`) over list append
-`xs ++ ys`; feeds the recursive step of `runFrom_validTrace`. (approved: APPR-C6-agy-6477c65a7)
- Projection distributes over the C1 event-history append performed by `runFrom`. -/
+xs ++ ys; feeds the recursive step of `runFrom_validTrace`. (approved: APPR-C6-agy-6477c65a7)
+ Projection distributes over the C1 event-history append performed by `ConcreteSpec.Core.Exec.runFrom`. -/
 theorem ExecAdapter.project_append (A : ExecAdapter O S) (xs ys : List O.Event) :
     A.project (xs ++ ys) = A.project xs ++ A.project ys := by
   simp [ExecAdapter.project, List.flatMap_append]
@@ -1676,7 +1676,7 @@ theorem runFrom_validTrace (P : Exec.Program O) (A : ExecAdapter O S) (C : Opera
             · simp [Exec.runFrom, final, next, answer, allowed, valid]
 
 /-- Helper (projection). Combines `runFrom_validTrace` with `ValidTrace.request` to package the
-pending-trace and `mayBlock` obligations for `runFrom_blocked_report` and `runFrom_report_trace`.
+pending-trace and `ConcreteSpec.Core.Observe.OperationContract.mayBlock` obligations for `runFrom_blocked_report` and `runFrom_report_trace`.
 (approved: APPR-C6-agy-6477c65a7)
  A blocked C1 observation has the pending `ValidTrace` state and history that its operation
 contract uses. -/
@@ -1701,7 +1701,7 @@ theorem runFrom_noAnswer_pending_valid (P : Exec.Program O) (A : ExecAdapter O S
   cases typed'
   exact ⟨ValidTrace.request laws.1, mayBlock'⟩
 
-/-- Helper (projection). Supplies the `BlockingPermitted` proof argument of `reportObservation`
+/-- Helper (projection). Supplies the `ConcreteSpec.Core.Observe.ExecAdapter.BlockingPermitted` proof argument of `reportObservation`
 from `runFrom_validTrace`. (approved: APPR-C6-agy-6477c65a7)
  A well-formed C1 run supplies the blocking premise required by `reportObservation`. -/
 theorem runFrom_blockingPermitted (P : Exec.Program O) (A : ExecAdapter O S)
@@ -1714,9 +1714,9 @@ theorem runFrom_blockingPermitted (P : Exec.Program O) (A : ExecAdapter O S)
   exact (runFrom_noAnswer_pending_valid P A C input ρ wellFormed valid ending pending typed).2
 
 /-- Helper (computation). Projects a certified `Exec.Steps` history to its terminal `Observation`;
-feeds the `Steps`-level bridge while `output_before_trap_kept` in `ObserveOutput.lean` proves the
-operational `runFrom`/`reportObservation` law. (approved: PENDING)
- The terminal `Steps` observation contains the projection of the whole `Steps` history, the exact
+feeds the `ConcreteSpec.Core.Exec.Steps`-level bridge while `output_before_trap_kept` in ObserveOutput.lean proves the
+operational `ConcreteSpec.Core.Exec.runFrom`/`reportObservation` law. (approved: PENDING)
+ The terminal `ConcreteSpec.Core.Exec.Steps` observation contains the projection of the whole `ConcreteSpec.Core.Exec.Steps` history, the exact
 trap line, and the final external state. -/
 theorem steps_trap_observation (A : ExecAdapter O S) {P : Exec.Program O} {c c' : Exec.Config O}
     {events : List O.Event} (steps : Exec.Steps P c events c') {kind : TrapKind} {site : SiteId}
@@ -1805,8 +1805,8 @@ def requesting (n : Int) : Exec.Config ops := ⟨.exec (.prim none n [] ⟨0⟩)
 def answeredReport : Exec.Report ops := Exec.run program answeringOracle 1 (requesting 3)
 def blockedReport : Exec.Report ops := Exec.run program blockingOracle 1 (requesting 3)
 
-/-- Helper (computation). Well-formedness witness for `answeringOracle` in `AdapterDemo`,
-feeding the closed instances in `ObserveReport.lean`. (approved: PENDING)
+/-- Helper (computation). Well-formedness witness for `answeringOracle` in AdapterDemo,
+feeding the closed instances in ObserveReport.lean. (approved: PENDING)
  The answering oracle satisfies the adapter contract for either blocking policy. -/
 theorem answeringWellFormed (blocking : Unit → List (Event signature) → Request signature → Prop) :
     ExecAdapter.WellFormed adapter (makeContract blocking) () answeringOracle := by
@@ -1821,8 +1821,8 @@ theorem answeringWellFormed (blocking : Unit → List (Event signature) → Requ
   · intro hist p vs site store answer
     simp [answeringOracle] at answer
 
-/-- Helper (computation). Well-formedness witness for `blockingOracle` in `AdapterDemo`,
-feeding the closed instances in `ObserveReport.lean`. (approved: PENDING)
+/-- Helper (computation). Well-formedness witness for `blockingOracle` in AdapterDemo,
+feeding the closed instances in ObserveReport.lean. (approved: PENDING)
  The blocking oracle is well formed because this contract permits blocking. -/
 theorem blockingWellFormed : ExecAdapter.WellFormed adapter permittingContract () blockingOracle := by
   constructor
@@ -1880,7 +1880,7 @@ example : ¬ (ValidTrace forbiddingContract () (some (query 3)) [request 3] ∧
   intro invalid
   exact invalid.2
 
-/-- Helper (projection). Closed `BlockingPermitted` witness for `blockedReport` in `AdapterDemo`. (approved: APPR-C6-agy-6477c65a7) -/
+/-- Helper (projection). Closed `ConcreteSpec.Core.Observe.ExecAdapter.BlockingPermitted` witness for `blockedReport` in AdapterDemo. (approved: APPR-C6-agy-6477c65a7) -/
 theorem blockedPermitted : ExecAdapter.BlockingPermitted program adapter permittingContract ()
     blockedReport :=
   runFrom_blockingPermitted program adapter permittingContract () blockingOracle

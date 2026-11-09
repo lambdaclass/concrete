@@ -13,8 +13,8 @@ specified primitive effects.
 namespace ConcreteSpec.Core.Observe
 open ConcreteSpec.Core
 
-/-- Helper (computation). By induction on an event list `history`, `publicOutputs (A.project history)`
-equals `history.flatMap F.past` whenever `A` satisfies `ExecAdapter.OutputCorrespondence A`;
+/-- Helper (computation). By induction on an event list history, publicOutputs (A.project history)
+equals history.flatMap F.past whenever A satisfies `ConcreteSpec.Core.Observe.ExecAdapter.OutputCorrespondence`;
 feeds the operational laws `project_physical_outputs` and `output_before_trap_kept`.
 (approved: APPR-C6-agy-6477c65a7) -/
 theorem project_physical_outputs_list {O : Exec.Operands} {S : EventSignature}
@@ -32,7 +32,7 @@ theorem project_physical_outputs_list {O : Exec.Operands} {S : EventSignature}
     rw [append, corresponds event, ih]
 
 /-- Helper (computation). Every fuel-driver report has a physical execution reaching its exact
-`Exec.Ending O` through guarded terminal/stopped constructors. This is an evaluator-to-relation
+`ConcreteSpec.Core.Exec.Ending` through guarded terminal/stopped constructors. This is an evaluator-to-relation
 proof, not a second implementation of the evaluator. (approved: APPR-C6-agy-6477c65a7) -/
 theorem physical_run_execution {O : Exec.Operands} (Output : Type) [F : PhysicalEffects O Output]
     (P : Exec.Program O) (ρ : Exec.Oracle O)
@@ -96,7 +96,7 @@ theorem physical_execution_outputs {O : Exec.Operands} (Output : Type) [F : Phys
       List.append_assoc]
 
 /-- Helper (computation). Whenever an event history has a nonempty physical output interpretation
-under the fixed `[PhysicalEffects O S.Output]` instance, an output-erasing adapter cannot satisfy
+under the fixed `ConcreteSpec.Core.Observe.PhysicalEffects` instance, an output-erasing adapter cannot satisfy
 `ExecAdapter.OutputCorrespondence`. (approved: APPR-C6-agy-6477c65a7) -/
 theorem no_erasing_correspondence {O : Exec.Operands} {S : EventSignature}
     [F : PhysicalEffects O S.Output] (A : ExecAdapter O S)
@@ -116,7 +116,7 @@ theorem no_erasing_correspondence {O : Exec.Operands} {S : EventSignature}
 
 /-- Law (subject `ConcreteSpec.Core.Observe.ExecAdapter.project`).
 An actual evaluator run admits an independently specified physical execution reaching its exact
-`Exec.Ending O`, its public outputs are the incoming effects followed by that execution's primitive
+`ConcreteSpec.Core.Exec.Ending`, its public outputs are the incoming effects followed by that execution's primitive
 effects, and any nonempty emitted output refutes an output-erasing adapter against the operand
 language's authoritative physical operand bundle. -/
 theorem project_physical_outputs {S : EventSignature}
@@ -154,7 +154,7 @@ def reverseProjection {S : EventSignature} {O : Exec.Operands}
 /-- Law (subject `ConcreteSpec.Core.Observe.reportObservation`, `ConcreteSpec.Core.Observe.ExecAdapter.project`).
 An actual trapped run reports its full history, diagnostic and final external state. That
 history retains precisely the independently specified physical execution's ordered outputs up to
-the trapped `.final` ending, and any nonempty emitted output refutes an output-erasing adapter. -/
+the trapped `ConcreteSpec.Core.Exec.Ending.final` ending, and any nonempty emitted output refutes an output-erasing adapter. -/
 theorem output_before_trap_kept {S : EventSignature}
     (M : PhysicalOperands S.Output)
     (P : Exec.Program M.operands) (A : ExecAdapter M.operands S) (C : OperationContract S) (input : C.Input)
@@ -251,9 +251,9 @@ theorem oracle_faithful : PhysicalEffects.OracleFaithful (O := Exec.Demo.ops) St
 for this language must retain this bundle when choosing a different event projection. -/
 abbrev model : PhysicalOperands String := ⟨Exec.Demo.ops, effects, Exec.Demo.env, oracle_faithful⟩
 
-/-- Helper (computation). Proves `ExecAdapter.OutputCorrespondence adapter` by case-splitting
-on `n < 0` so exchange events (`[request, response]`) filter to `[]` while output events filter to
-`[toString n]`; feeds the closed `Instance` and `Planted` witnesses of `project_physical_outputs`
+/-- Helper (computation). Proves `ConcreteSpec.Core.Observe.ExecAdapter.OutputCorrespondence` by case-splitting
+on n < 0 so exchange events ([request, response]) filter to [] while output events filter to
+[toString n]; feeds the closed Instance and Planted witnesses of `project_physical_outputs`
 and `output_before_trap_kept`. (approved: APPR-C6-agy-6477c65a7) -/
 theorem adapter_correspondence : adapter.OutputCorrespondence := by
   intro n
@@ -298,7 +298,7 @@ theorem run_writes (values : List Int) (history : List Int) :
     simp [List.append_assoc]
 
 /-- Helper (computation). A completed concrete run cannot have a pending request; supplies the
-`BlockingPermitted` argument for the closed `output_before_trap_kept` instances.
+`ConcreteSpec.Core.Observe.ExecAdapter.BlockingPermitted` argument for the closed `output_before_trap_kept` instances.
 (approved: APPR-C6-agy-6477c65a7) -/
 theorem permitted (values : List Int) (history : List Int) :
     ExecAdapter.BlockingPermitted program adapter Demo.contract ()

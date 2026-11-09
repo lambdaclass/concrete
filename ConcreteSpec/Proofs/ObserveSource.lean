@@ -71,7 +71,7 @@ theorem scanSourcePrefix_no_newline (cs rest : List Char) (newlines : Nat)
 
 /-- Law (subject `ConcreteSpec.Core.Observe.sourcePrefixSpan`).
 Across a newline boundary, multi-line source prefix scanning increments the 1-based line
-number to `2`, resets the line accumulator, and computes the second line's 1-based UTF-8 byte
+number to 2, resets the line accumulator, and computes the second line's 1-based UTF-8 byte
 column from the characters after the newline. -/
 theorem sourcePrefixSpan_second_line (path : SourcePath)
     (firstLine before : String)

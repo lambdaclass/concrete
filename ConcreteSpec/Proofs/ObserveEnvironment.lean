@@ -70,13 +70,13 @@ theorem environment_oracle_wellFormed {S : EventSignature} (C : OperationContrac
     exact valid.mayBlock blocked
 
 /-- Law (subject `ConcreteSpec.Core.Observe.Environment.oracle`).
-Executing a typed handler call in C1 binds the oracle's returned value to local `⟨0⟩` and returns
-it while preserving the C1 store `store : S.State`. When `E.reply` produces `some reply`, the C1
-run ends in `.final (.returned (some ⟨q.1, reply⟩)) store`, `reportObservation` reports the
-terminal `.exited 0` observation with the extended event history and final external state `store`,
-and the projected history is a `CompleteTrace`. When `E.reply` returns `none`, the C1 run blocks
-at the primitive request, `reportObservation` reports `.blocked`, and the pending trace satisfies
-`ValidTrace` and `C.mayBlock`. -/
+Executing a typed handler call in C1 binds the oracle's returned value to local ⟨0⟩ and returns
+it while preserving the C1 store store : S.State. When `ConcreteSpec.Core.Observe.Environment.reply` produces some reply, the C1
+run ends in .final (.returned (some ⟨q.1, reply⟩)) store, `reportObservation` reports the
+terminal .exited 0 observation with the extended event history and final external state store,
+and the projected history is a `CompleteTrace`. When `ConcreteSpec.Core.Observe.Environment.reply` returns `none`, the C1 run blocks
+at the primitive request, `reportObservation` reports `ConcreteSpec.Core.Observe.FullObservation.blocked`, and the pending trace satisfies
+`ValidTrace` and `ConcreteSpec.Core.Observe.OperationContract.mayBlock`. -/
 theorem environment_run_reply {S : EventSignature} (C : OperationContract S)
     (E : Environment S C.Input) (validEnv : Environment.Valid C E) (input : C.Input)
     (hist : List (Request S × Response S)) (q : Request S) (site : SiteId) (store : S.State)
@@ -180,9 +180,9 @@ def alwaysBlockedRespond {S : EventSignature} {Input : Type}
   .blocked
 
 /-- Law (subject `ConcreteSpec.Core.Observe.Environment.stepHistory`).
-Stepping a valid completed trace `history` with a valid environment handler `E` on request `q`
-produces a `ValidTrace` whose pending state matches `E.respond`, and when `E.reply` produces
-`some resp`, `E.stepHistory` appends `[.request q, .response ⟨q.1, resp⟩]` and yields a
+Stepping a valid completed trace history with a valid environment handler E on request q
+produces a `ValidTrace` whose pending state matches `ConcreteSpec.Core.Observe.Environment.respond`, and when `ConcreteSpec.Core.Observe.Environment.reply` produces
+some resp, `ConcreteSpec.Core.Observe.Environment.stepHistory` appends [.request q, .response ⟨q.1, resp⟩] and yields a
 `CompleteTrace`. -/
 theorem environment_stepHistory_valid {S : EventSignature} (C : OperationContract S)
     (E : Environment S C.Input) (validEnv : Environment.Valid C E)
@@ -234,7 +234,7 @@ def Demo.envHandler : Environment Demo.signature Unit where
   reply := fun _ _ _ n => some (n + n)
 
 /-- Helper (computation). Proves that `Demo.envHandler` satisfies `Environment.Valid` for
-`Demo.contract` by arithmetic (`n * 2 = n + n`), feeding the closed `Instance` and `Planted`
+`Demo.contract` by arithmetic (n * 2 = n + n), feeding the closed Instance and Planted
 witnesses of `environment_run_reply` and `environment_stepHistory_valid`.
 (approved: APPR-C6-agy-6477c65a7) -/
 theorem Demo.envHandler_valid : Environment.Valid Demo.contract Demo.envHandler := by
@@ -488,7 +488,7 @@ def envHandler : Environment signature Unit where
     | .fourTimes => some ((n + n) + (n + n))
 
 /-- Helper (computation). Proves that `RoutingDemo.envHandler` satisfies `Environment.Valid` for
-both `.twice` and `.fourTimes` operation kinds, feeding the closed `Instance` and `Planted`
+both `ConcreteSpec.Core.Observe.RoutingDemo.Kind.twice` and `ConcreteSpec.Core.Observe.RoutingDemo.Kind.fourTimes` operation kinds, feeding the closed Instance and Planted
 witnesses of `environment_run_reply` and `environment_stepHistory_valid`.
 (approved: APPR-C6-agy-6477c65a7) -/
 theorem envHandler_valid : Environment.Valid contract envHandler := by

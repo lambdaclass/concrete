@@ -40,7 +40,7 @@ def ReportTraceValid {O : Exec.Operands} {S : EventSignature} (P : Exec.Program 
 /-- Law (subject `ConcreteSpec.Core.Observe.reportObservation`).
 Reporting an actual well-formed evaluator run preserves sequential trace validity, ties terminal
 and blocked observations to the report's ending and projected events, and never returns `none` on
-a well-formed `noAnswer` or mapped `final` ending. -/
+a well-formed `ConcreteSpec.Core.Exec.Ending.noAnswer` or mapped `ConcreteSpec.Core.Exec.Ending.final` ending. -/
 theorem runFrom_report_trace {O : Exec.Operands} {S : EventSignature}
     (P : Exec.Program O) (A : ExecAdapter O S) (C : OperationContract S) (input : C.Input)
     (ρ : Exec.Oracle O) (wellFormed : ExecAdapter.WellFormed A C input ρ)
@@ -122,8 +122,8 @@ def alwaysNoneReport {S : EventSignature} {O : Exec.Operands}
     Option (FullObservation S) :=
   none
 
-/-- Helper (computation). By induction on evaluator fuel, an `.outOfFuel c'` ending occurs only at a
-non-final configuration `c'.final? = none`, feeding `runFrom_outOfFuel_report_none`.
+/-- Helper (computation). By induction on evaluator fuel, an .outOfFuel c' ending occurs only at a
+non-final configuration c'.final? = none, feeding `runFrom_outOfFuel_report_none`.
 (approved: APPR-C6-agy-6477c65a7) -/
 theorem runFrom_outOfFuel_not_final {O : Exec.Operands}
     (P : Exec.Program O) (ρ : Exec.Oracle O) (fuel : Nat) (hist : List O.Event)
@@ -168,8 +168,8 @@ theorem runFrom_outOfFuel_not_final {O : Exec.Operands}
             · simp [hallows] at ending
 
 /-- Law (subject `ConcreteSpec.Core.Observe.reportObservation`).
-When an evaluator run exhausts its step budget (`.outOfFuel c'`), the configuration `c'` is not
-final (`c'.final? = none`), the events emitted before fuel ran out form a complete valid trace, and
+When an evaluator run exhausts its step budget (.outOfFuel c'), the configuration c' is not
+final (c'.final? = none), the events emitted before fuel ran out form a complete valid trace, and
 `reportObservation` returns `none` rather than fabricating divergence or termination. -/
 theorem runFrom_outOfFuel_report_none {O : Exec.Operands} {S : EventSignature}
     (P : Exec.Program O) (A : ExecAdapter O S) (C : OperationContract S) (input : C.Input)
@@ -205,10 +205,10 @@ def exitZeroOnOutOfFuelReport {S : EventSignature} {O : Exec.Operands}
   | _ => reportObservation P A C input r permitted
 
 /-- Law (subject `ConcreteSpec.Core.Observe.launchObservation`, `ConcreteSpec.Core.Observe.Terminal.status`).
-When a required capability grant `g ∈ required` is missing from the launch configuration
-(`g ∉ configured`), `launchObservation` refuses startup before running `main`: it produces
-`some (.terminal ⟨[], .startupRefused, A.state c.store⟩)`, whose exit status is `125` with no
-trap line (`trapLine? = none`). -/
+When a required capability grant g ∈ required is missing from the launch configuration
+(g ∉ configured), `launchObservation` refuses startup before running main: it produces
+some (.terminal ⟨[], .startupRefused, A.state c.store⟩), whose exit status is 125 with no
+trap line (trapLine? = none). -/
 theorem launch_missing_grant_status_125 {α : Type} [DecidableEq α]
     {O : Exec.Operands} {S : EventSignature}
     (required configured : List α) (g : α)
@@ -243,11 +243,11 @@ def wrongStartupStatus : Terminal → Nat
   | .startupRefused => 1
 
 /-- Law (subject `ConcreteSpec.Core.Observe.reportObservation`, `ConcreteSpec.Core.Observe.Terminal.status`).
-When an evaluator run ends in `.final (.trapped kind site) store` and the well-formed adapter
-resolves `site` to `sp`, `reportObservation` produces the trapped terminal observation retaining
-all prior projected events and the final external state `A.state store`, with valid relative
-path `sp.PathOk`, exit status `134`, diagnostic line `trapLine kind site sp`, and terminal
-classification distinct from normal `.exited 134`. -/
+When an evaluator run ends in .final (.trapped kind site) store and the well-formed adapter
+resolves site to sp, `reportObservation` produces the trapped terminal observation retaining
+all prior projected events and the final external state A.state store, with valid relative
+path `ConcreteSpec.Core.Span.PathOk`, exit status 134, diagnostic line trapLine kind site sp, and terminal
+classification distinct from normal .exited 134. -/
 theorem runFrom_trapped_status_134 {O : Exec.Operands} {S : EventSignature}
     (P : Exec.Program O) (A : ExecAdapter O S) (C : OperationContract S) (input : C.Input)
     (ρ : Exec.Oracle O) (wellFormed : ExecAdapter.WellFormed A C input ρ)
