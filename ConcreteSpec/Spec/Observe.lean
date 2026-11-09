@@ -158,15 +158,115 @@ abbrev InfiniteTrace (S : EventSignature) := Nat → Event S
 /-- A program's mapping from typed source sites to source spans. -/
 abbrev SiteTable := AList SiteId Span
 
-/-- A well-formed site table gives every resolved site a project-relative, forward-slash path.
-Elaboration's stronger normalized-path obligation remains O1. -/
-def SiteTable.Valid (sites : SiteTable) : Prop :=
-  ∀ site sp, AList.lookup sites site = some sp → sp.PathOk
+/-- Source files by their project-relative paths, used to validate stored diagnostic coordinates. -/
+abbrev SourceTable := AList SourcePath SourceText
+
+/-- A well-formed site table gives every resolved site a project-relative, forward-slash path and
+checks its range, line and byte column against that path's actual source bytes.
+Path syntax is carried by `SourcePath`, independently of this byte-correspondence predicate. -/
+def SiteTable.Valid (sources : SourceTable) (sites : SiteTable) : Prop :=
+  ∀ site sp, AList.lookup sites site = some sp → sp.PathOk ∧
+    ∃ source, AList.lookup sources sp.path = some source ∧ sp.LocationOk source
+
+/-- The complete source boundary input. Site spans already carry structured identities, while
+file paths are raw external spellings and must pass the strict parser. -/
+structure ProjectSources where
+  files : AList String SourceText
+  sites : SiteTable
+  deriving DecidableEq, Repr
+
+/-- Admission failures retain the offending input. A coordinate mismatch is also refused:
+accepting one would claim source correspondence without the source bytes establishing it. -/
+inductive SourceLoadRefusal where
+  | malformed (file : String × SourceText) (diagnostic : SourcePath.Refusal)
+  | duplicateFile (path : SourcePath)
+  | duplicateSite (site : SiteId)
+  | missingFile (entry : SiteId × Span)
+  | invalidLocation (entry : SiteId × Span) (bytes : SourceText)
+  deriving DecidableEq, Repr
+
+/-- The admitted tables contain data, not a stored assertion of their own correctness. The
+loader's operational laws establish completeness, uniqueness and byte correspondence. -/
+structure LoadedProject where
+  sources : SourceTable
+  sites : SiteTable
+  deriving DecidableEq, Repr
+
+/-- Whole-project admission or a named refusal. There is no partial-success constructor. -/
+inductive SourceLoadResult where
+  | admitted (project : LoadedProject)
+  | refused (diagnostic : SourceLoadRefusal)
+  deriving DecidableEq, Repr
+
+/-- Parse every file in order, stopping with a named error rather than dropping a malformed file. -/
+def LoadedProject.parseFiles : AList String SourceText → Except SourceLoadRefusal SourceTable
+  | [] => .ok []
+  | file :: rest =>
+    match SourcePath.parse file.1 with
+    | .error diagnostic => .error (.malformed file diagnostic)
+    | .ok path => match parseFiles rest with
+      | .error diagnostic => .error diagnostic
+      | .ok files => .ok ((path, file.2) :: files)
+
+/-- Locate a duplicate identity, including equal duplicate entries. The entire tail is searched,
+so keeping the first occurrence is never an admission policy. -/
+def LoadedProject.firstDuplicate {α : Type} [DecidableEq α] : List α → Option α
+  | [] => none
+  | key :: rest => if key ∈ rest then some key else firstDuplicate rest
+
+/-- Check the source binding of a supplied site. Coordinates are checked only at this admission
+boundary, never in `trapTerminal`; malformed locations have no reporting fallback. -/
+def LoadedProject.siteIssue (sources : SourceTable) (entry : SiteId × Span) :
+    Option SourceLoadRefusal :=
+  match AList.lookup sources entry.2.path with
+  | none => some (.missingFile entry)
+  | some bytes => if entry.2.LocationOk bytes then none
+      else some (.invalidLocation entry bytes)
+
+/-- Search for a source-binding error without changing the supplied site table. -/
+def LoadedProject.findSiteIssue (sources : SourceTable) : SiteTable → Option SourceLoadRefusal
+  | [] => none
+  | entry :: rest => match siteIssue sources entry with
+    | some issue => some issue
+    | none => findSiteIssue sources rest
+
+/-- Strict whole-project loader, following `LoadedModules.load`: parse the complete file input,
+refuse file and site collisions, then establish each site's byte correspondence. The returned
+site table is the input itself. Error priority is deterministic in input order; admission is
+order independent, while the first diagnostic and table enumeration need not be. -/
+def LoadedProject.load (input : ProjectSources) : SourceLoadResult :=
+  match parseFiles input.files with
+  | .error issue => .refused issue
+  | .ok sources =>
+    match firstDuplicate (List.map Prod.fst sources) with
+    | some path => .refused (.duplicateFile path)
+    | none => match firstDuplicate (List.map Prod.fst input.sites) with
+      | some site => .refused (.duplicateSite site)
+      | none => match findSiteIssue sources input.sites with
+        | some issue => .refused issue
+        | none => .admitted ⟨sources, input.sites⟩
+
+/-- Independent admission specification: exact raw spellings and bytes, unique file/site
+identities, and source-derived coordinates for every supplied span. -/
+def ProjectSources.Realizes (input : ProjectSources) (project : LoadedProject) : Prop :=
+  List.map (fun entry => (entry.1.render, entry.2)) project.sources = input.files ∧
+    (List.map Prod.fst project.sources).Nodup ∧ project.sites = input.sites ∧
+    (List.map Prod.fst input.sites).Nodup ∧
+    ∀ entry ∈ input.sites, ∃ bytes,
+      AList.lookup project.sources entry.2.path = some bytes ∧ entry.2.LocationOk bytes
+
+/-- A diagnostic names an input identity, never a fabricated file or site. Duplicate diagnostics
+name the common identity; malformed-file diagnostics additionally retain the unmodified raw file. -/
+def SourceLoadRefusal.Names (input : ProjectSources) : SourceLoadRefusal → Prop
+  | .malformed file diagnostic => file ∈ input.files ∧ diagnostic.input = file.1
+  | .duplicateFile path => path.render ∈ List.map Prod.fst input.files
+  | .duplicateSite site => site ∈ List.map Prod.fst input.sites
+  | .missingFile entry | .invalidLocation entry _ => entry ∈ input.sites
 
 /-- The character form of the decided trap line (OD101, Q7.10, runtime decision 2026-11-06).
 Keeping the append structure explicit also makes the exact delimiter bytes auditable. -/
 def trapLineChars (kind : TrapKind) (site : SiteId) (sp : Span) : List Char :=
-  "concrete: trap: ".toList ++ kind.name.toList ++ " at ".toList ++ sp.path.toList ++
+  "concrete: trap: ".toList ++ kind.name.toList ++ " at ".toList ++ sp.path.render.toList ++
     ":".toList ++ (toString sp.line).toList ++ ":".toList ++ (toString sp.col).toList ++
     " (site ".toList ++ (toString site.id).toList ++ ")".toList
 
@@ -177,21 +277,12 @@ def trapLine (kind : TrapKind) (site : SiteId) (sp : Span) : String :=
 /-- The 1-based byte column after source text `before`: its UTF-8 byte length plus one. -/
 def byteColumn (before : String) : Nat := before.utf8ByteSize + 1
 
-/-- A source path string is project-relative and uses forward slashes: nonempty, not rooted
-at `/`, and containing no `\`. -/
-def PathOk (path : String) : Prop :=
-  path.toList ≠ [] ∧ path.toList.head? ≠ some '/' ∧ '\\' ∉ path.toList
-
-instance (path : String) : Decidable (PathOk path) := by unfold PathOk; infer_instance
-
-/-- Construct an operation's source span from a validated project-relative forward-slash path,
-a positive 1-based line number, and the text preceding it on its source line.
-The caller cannot supply a column or an invalid path: `pathOk` enforces `Span.PathOk`, and UTF-8
-source bytes establish that column, with a tab contributing its single encoded byte
-(foundation Q10). Connecting the elaborator's source offsets to this constructor remains O1. -/
-def sourceSpan (path : String) (_pathOk : PathOk path) (line : Nat) (linePositive : 0 < line)
+/-- A candidate point span from a structured path and a source line prefix. The column counts
+UTF-8 bytes, including one byte for a tab. Its offset is relative to that prefix; use
+`sourcePrefixSpan` for a whole-file offset. Only the project loader admits a candidate for reporting. -/
+def sourceSpan (path : SourcePath) (line : Nat) (linePositive : 0 < line)
     (before : String) : Span :=
-  ⟨path, line, before.utf8ByteSize + 1, linePositive, Nat.zero_lt_succ _⟩
+  ⟨path, before.utf8ByteSize, before.utf8ByteSize, Nat.le_refl _, line, before.utf8ByteSize + 1, linePositive, Nat.zero_lt_succ _⟩
 
 /-- Scan the source text preceding an operation from the start of the file, returning the number
 of completed newline breaks and the characters preceding the operation on its own line. -/
@@ -205,28 +296,12 @@ def scanSourcePrefix : List Char → Nat → List Char → Nat × List Char
 multi-line source text preceding the operation from the beginning of the file. Newlines advance
 the 1-based line number and reset the current line prefix; the column on the final line is its
 1-based UTF-8 byte column (`byteColumn`), with a tab counting one byte. -/
-def sourcePrefixSpan (path : String) (pathOk : PathOk path) (prefixText : String) : Span :=
+def sourcePrefixSpan (path : SourcePath) (prefixText : String) : Span :=
   let scanned := scanSourcePrefix prefixText.toList 0 []
-  sourceSpan path pathOk (scanned.1 + 1) (Nat.zero_lt_succ _) (String.ofList scanned.2)
-
-/-- Source input for one elaborated operation: the file's raw path string and the source text
-preceding the operation from the start of the file. No precomputed span or `PathOk` proof is
-bundled in the input data; the site producer validates paths and derives positions from the
-source text. -/
-structure SourcePosition where
-  path : String
-  prefixText : String
-
-/-- Produce a diagnostic site table from source inputs, admitting only valid project-relative
-forward-slash paths (`PathOk`) and deriving 1-based line numbers and UTF-8 byte columns from the
-source prefix text while preserving typed site identities. -/
-def sourceSites : AList SiteId SourcePosition → SiteTable
-  | [] => []
-  | (site, src) :: rest =>
-    if h : PathOk src.path then
-      (site, sourcePrefixSpan src.path h src.prefixText) :: sourceSites rest
-    else
-      sourceSites rest
+  { sourceSpan path (scanned.1 + 1) (Nat.zero_lt_succ _) (String.ofList scanned.2) with
+    startOffset := prefixText.utf8ByteSize
+    endOffset := prefixText.utf8ByteSize
+    range_ok := Nat.le_refl _ }
 
 /-- A span's column is the byte column at the operation on its source line. -/
 def Span.HasByteColumn (sp : Span) (before : String) : Prop := sp.col = byteColumn before
@@ -239,14 +314,9 @@ inductive Terminal where
   | trapped (kind : TrapKind) (site : SiteId) (sp : Span) (line : String)
   deriving DecidableEq, Repr
 
-/-- The terminal observation of a trap at a site present in the table whose span satisfies
-`Span.PathOk` (nonempty, project-relative, forward slashes only). An absent site or a site with
-an invalid path is not assigned a trap observation. -/
+/-- Resolve the registered source span without rechecking admission invariants. -/
 def trapTerminal (sites : SiteTable) (kind : TrapKind) (site : SiteId) : Option Terminal :=
-  match AList.lookup sites site with
-  | some sp =>
-    if decide sp.PathOk then some (.trapped kind site sp (trapLine kind site sp)) else none
-  | none => none
+  (AList.lookup sites site).map fun sp => .trapped kind site sp (trapLine kind site sp)
 
 /-- The process status (Q7.10): startup refusal 125, a normal exit's own status, trap 134. -/
 def Terminal.status : Terminal → Nat
@@ -386,7 +456,12 @@ structure ExecAdapter (O : Exec.Operands) (S : EventSignature) where
   request : O.Prim → List O.Val → SiteId → O.Store → Option (Request S)
   status : O.Val → Option Nat
   state : O.Store → S.State
-  sites : SiteTable
+  sourceProject : LoadedProject
+  sourceInput : ProjectSources
+  loaded : LoadedProject.load sourceInput = .admitted sourceProject
+
+/-- The site table supplied by the project boundary. -/
+def ExecAdapter.sites {O : Exec.Operands} {S : EventSignature} (A : ExecAdapter O S) : SiteTable := A.sourceProject.sites
 
 variable {O : Exec.Operands}
 
@@ -512,7 +587,6 @@ structure ExecAdapter.WellFormed (A : ExecAdapter O S) (C : OperationContract S)
   blocked {hist p vs site store} : ρ hist p vs site store = none →
     ∃ q, A.request p vs site store = some q ∧
       C.mayBlock input (A.project hist ++ [.request q]) q
-  sites_valid : SiteTable.Valid A.sites
 
 /-- Turn a C1 final configuration into a logical terminal observation, if it is a valid hosted
 `main` ending with a known trap site. -/
@@ -616,7 +690,9 @@ def Environment.adapter (S : EventSignature) : ExecAdapter (Environment.operands
   request := fun q _ _ _ => some q
   status := fun v => match v with | some _ => some 0 | none => none
   state := id
-  sites := []
+  sourceProject := ⟨[], []⟩
+  sourceInput := ⟨[], []⟩
+  loaded := rfl
 
 /-- Execute a single typed call in C1 from `store`: bind the primitive's returned response value to
 local variable `⟨"reply", 0⟩` and return that bound local so the `.final (.returned v) store` ending
@@ -692,8 +768,27 @@ example : ¬ SameObservation (S := signature) (.infinite (fun _ => Step.silent))
   simp [SameObservation]
 
 def site : SiteId := ⟨7⟩
-def sp : Span := ⟨"src/main.con", 3, 9, by decide, by decide⟩
+def sp : Span := ⟨mainSourcePath, 40, 50, by decide, 3, 9, by decide, by decide⟩
 def sites : SiteTable := [(site, sp)]
+
+/-- The actual bytes behind the demo path and a span whose stored coordinates agree with them. -/
+def locationSources : SourceTable := [(sp.path, tabSource)]
+def badLocationSpan : Span := { tabSpan with col := 2, col_pos := by decide }
+
+/-- Accepted: path syntax, range bounds, line and byte column all validate against the source. -/
+example : SiteTable.Valid locationSources [(site, tabSpan)] := by
+  intro resolved span found
+  simp [AList.lookup] at found
+  rcases found with ⟨_, rfl⟩
+  exact ⟨by decide, tabSource, by decide, by decide⟩
+
+/-- Refused: a wrong stored column cannot pass site-table validation even when its path resolves. -/
+example : ¬ SiteTable.Valid locationSources [(site, badLocationSpan)] := by
+  intro valid
+  obtain ⟨_, source, resolved, location⟩ := valid site badLocationSpan (by simp [AList.lookup])
+  simp [locationSources, AList.lookup] at resolved
+  rcases resolved with ⟨_, rfl⟩
+  exact (by decide : ¬ badLocationSpan.LocationOk tabSource) location
 
 /-- The exact decided line, including the byte column and typed site identity. -/
 example : trapLine .overflow site sp =
@@ -713,7 +808,8 @@ example : (Terminal.exited 134).status = 134 ∧ Terminal.exited 134 ≠
 `a`, tab and `é`, not four after three Unicode scalar values. -/
 example : byteColumn "a\té" = 5 := by decide
 
-example : Span.HasByteColumn (Span.mk "src/main.con" 1 5 (by decide) (by decide)) "a\té" := rfl
+example : Span.HasByteColumn
+    (Span.mk mainSourcePath 4 4 (by decide) 1 5 (by decide) (by decide)) "a\té" := rfl
 
 /-- Refusing result binding through lifecycle instrumentation; all other demo operations are
 unchanged. -/
@@ -736,7 +832,9 @@ def refusingAdapter : ExecAdapter refusingBindOps signature where
   request := fun _ _ _ _ => none
   status := fun _ => none
   state := fun st => st.counter
-  sites := []
+  sourceProject := ⟨[], []⟩
+  sourceInput := ⟨[], []⟩
+  loaded := rfl
 
 /-- Helper (computation). Bookkeeping for a stuck report: its `noAnswer` antecedent is
 impossible. This is not a contract law or evidence of blocking correctness. (approved: APPR-C6-agy-6477c65a7) -/

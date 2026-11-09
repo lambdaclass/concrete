@@ -61,7 +61,8 @@ Open obligations, by name:
   `used`, `live`, `known` and `kfields` fields of `Entry`) is stated as intent, with no erasure
   definition or theorem yet. (Brand erasure, part 5, is done.)
 - **O4 Trap diagnostics** (Q7.10, OD101): C6 defines the exact trap-line bytes and their
-  injectivity. `Observe.sourceSpan` constructs byte columns from source prefixes; the operational
+  injectivity on the rendered fields (kind, site, path, line, byte column), independently of
+  unrendered byte ranges. `Observe.sourceSpan` constructs byte columns from source prefixes; the operational
   source-column law rejects scalar counting on `"a\té"`. Connecting elaborated operations to
   that constructor remains O1; the startup refusal's bytes are not yet defined.
 - **O5 Target observations** (the launcher contract): every result here is about the model's
@@ -95,9 +96,13 @@ Open obligations, by name:
   execution relations tied to authoritative operand/oracle/effect bundles and output-before-trap
   preservation, execution-delay classification, and source-produced trap sites preserving file
   identity. General ASCII and multibyte source-column laws distinguish bytes from scalar counts
-  and tab expansion. The source-path boundary remains open pending the owner’s disposition of
-  invalid paths and duplicate site keys; the current source-site filtering is not independent
-  path-production evidence. Inversion, projection and representation helpers
+  and tab expansion. Under the owner's 2026-11-09 source-path decision, C6 consumes C9's
+  structured source identities and whole-project loader: malformed paths, unresolved files,
+  invalid coordinates and duplicate sites are refused without filtering. Every adapter carries
+  successful loader admission; source trap reports derive identity, line and byte column through
+  C9's consumer theorem, with no `found` or `pathOk` premise or reporting-time validation.
+  This integration depends on C9 commit `115a73b2d` (under independent review; subsequent C9
+  fixes must be merged on top). Inversion, projection and representation helpers
   carry pending independent-review approvals; they are not contract evidence. Integration of the source-to-span pipeline with the elaborator remains O1. C4 covers byte memory, scalar
   representation and structured/materialized places, with trailing padding preserved by typed
   writes; struct field layouts, enums, pointers in structs and the C8 padding oracle remain out

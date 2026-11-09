@@ -163,7 +163,7 @@ theorem output_before_trap_kept {S : EventSignature}
     (permitted : ExecAdapter.BlockingPermitted P A C input (M.runFrom P fuel hist c))
     (kind : TrapKind) (site : SiteId) (store : M.operands.Store) (sp : Span)
     (ending : (M.runFrom P fuel hist c).ending = .final (.trapped kind site) store)
-    (resolved : AList.lookup A.sites site = some sp) (pathOk : sp.PathOk) :
+    (resolved : AList.lookup A.sites site = some sp) :
     letI := M.effects
     reportObservation P A C input (M.runFrom P fuel hist c) permitted =
       some (.terminal ⟨A.project (M.runFrom P fuel hist c).events,
@@ -178,7 +178,7 @@ theorem output_before_trap_kept {S : EventSignature}
     project_physical_outputs M P A corresponds fuel hist c
   rw [ending] at execution
   refine ⟨?_, outputs, execution, hproj, herase⟩
-  simp [reportObservation, ending, ExecAdapter.terminal?, trapTerminal, resolved, pathOk]
+  simp [reportObservation, ending, ExecAdapter.terminal?, trapTerminal, resolved]
 
 /-- Fault: drops all events emitted before a trap when reporting a trapped terminal state. -/
 def dropTrapHistoryReport {S : EventSignature} {O : Exec.Operands}
@@ -193,7 +193,7 @@ def dropTrapHistoryReport {S : EventSignature} {O : Exec.Operands}
 namespace OutputDemo
 
 /-- Span used for `Exec.Demo.s` in `OutputDemo`. -/
-def trapSpan : Span := sourceSpan "src/main.con" (by decide) 1 (by decide) "a\té"
+def trapSpan : Span := sourceSpan mainSourcePath 1 (by decide) "a\té"
 
 /-- Adapter distinguishing negative C1 events (projected to a request/response exchange with no
 public output) from non-negative C1 events (projected to public text output). -/
@@ -206,7 +206,9 @@ def adapter : ExecAdapter Exec.Demo.ops Demo.signature where
   request := fun _ _ _ _ => none
   status := fun _ => none
   state := fun st => st.counter
-  sites := [(Exec.Demo.s, trapSpan)]
+  sourceProject := ⟨[(mainSourcePath, [97, 9, 195, 169])], [(Exec.Demo.s, trapSpan)]⟩
+  sourceInput := ⟨[("src/main.con", [97, 9, 195, 169])], [(Exec.Demo.s, trapSpan)]⟩
+  loaded := by decide
 
 /-- Physical public outputs of a C1 event in `OutputDemo`: negative exchange events produce `[]`,
 while non-negative logging events produce `[toString n]`. -/
@@ -368,7 +370,7 @@ example : reportObservation program adapter Demo.contract ()
     (outputs ≠ [] → ¬ ExecAdapter.OutputCorrespondence (S := Demo.signature) { adapter with events := fun _ => [] }) :=
   output_before_trap_kept (S := Demo.signature) model program adapter Demo.contract ()
     adapter_correspondence 7 [-2, 11] (initial [3, 4])
-    (permitted [3, 4] [-2, 11]) .abort Exec.Demo.s .init trapSpan rfl rfl (by decide)
+    (permitted [3, 4] [-2, 11]) .abort Exec.Demo.s .init trapSpan rfl rfl
 
 /-- Planted (law `ConcreteSpec.Core.Observe.output_before_trap_kept`, case `two_outputs_then_trap_report`,
 subject `ConcreteSpec.Core.Observe.reportObservation`, mutant `ConcreteSpec.Core.Observe.dropTrapHistoryReport`). -/
@@ -377,7 +379,7 @@ example : adapter.OutputCorrespondence ∧
       (Exec.runFrom program Exec.Demo.env 7 [-2, 11] (initial [3, 4])) ∧
     (Exec.runFrom program Exec.Demo.env 7 [-2, 11] (initial [3, 4])).ending =
       .final (.trapped .abort Exec.Demo.s) .init ∧
-    AList.lookup adapter.sites Exec.Demo.s = some trapSpan ∧ trapSpan.PathOk ∧
+    AList.lookup adapter.sites Exec.Demo.s = some trapSpan ∧
     ¬ (dropTrapHistoryReport program adapter Demo.contract ()
       (Exec.runFrom program Exec.Demo.env 7 [-2, 11] (initial [3, 4])) (permitted [3, 4] [-2, 11]) =
       some (.terminal ⟨adapter.project (Exec.runFrom program Exec.Demo.env 7 [-2, 11] (initial [3, 4])).events,
@@ -389,7 +391,7 @@ example : adapter.OutputCorrespondence ∧
       [-2, 11].flatMap (PhysicalEffects.past (O := Exec.Demo.ops) (Output := String)) ++ outputs ∧
     (outputs ≠ [] → ¬ ExecAdapter.OutputCorrespondence (S := Demo.signature) { adapter with events := fun _ => [] })) := by
   refine ⟨adapter_correspondence, permitted [3, 4] [-2, 11],
-    rfl, rfl, by decide, ?_⟩
+    rfl, rfl, ?_⟩
   intro invalid
   have equal := congrArg (fun r : Option (FullObservation Demo.signature) =>
     match r with | some (.terminal obs) => obs.events.length | _ => 0) invalid.1
@@ -403,7 +405,7 @@ example : adapter.OutputCorrespondence ∧
       (Exec.runFrom program Exec.Demo.env 7 [-2, 11] (initial [3, 4])) ∧
     (Exec.runFrom program Exec.Demo.env 7 [-2, 11] (initial [3, 4])).ending =
       .final (.trapped .abort Exec.Demo.s) .init ∧
-    AList.lookup adapter.sites Exec.Demo.s = some trapSpan ∧ trapSpan.PathOk ∧
+    AList.lookup adapter.sites Exec.Demo.s = some trapSpan ∧
     ¬ (reportObservation program adapter Demo.contract ()
       (Exec.runFrom program Exec.Demo.env 7 [-2, 11] (initial [3, 4])) (permitted [3, 4] [-2, 11]) =
       some (.terminal ⟨eraseProjection adapter (Exec.runFrom program Exec.Demo.env 7 [-2, 11] (initial [3, 4])).events,
@@ -415,7 +417,7 @@ example : adapter.OutputCorrespondence ∧
       [-2, 11].flatMap (PhysicalEffects.past (O := Exec.Demo.ops) (Output := String)) ++ outputs ∧
     (outputs ≠ [] → ¬ ExecAdapter.OutputCorrespondence (S := Demo.signature) { adapter with events := fun _ => [] })) := by
   refine ⟨adapter_correspondence, permitted [3, 4] [-2, 11],
-    rfl, rfl, by decide, ?_⟩
+    rfl, rfl, ?_⟩
   intro invalid
   obtain ⟨outputs, execution, erased, _⟩ := invalid.2
   exact cannot_erase execution erased

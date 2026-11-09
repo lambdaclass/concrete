@@ -38,7 +38,7 @@ theorem environment_respond_valid {S : EventSignature} (C : OperationContract S)
 
 /-- Helper (computation). Establishes every C1 adapter obligation for the oracle actually built
 from typed handlers. Contract admission is inherited from the handler's independent proof;
-answer encoding, histories and stores are computed by the bridge. (approved: APPR-C6-agy-6477c65a7) -/
+answer encoding, histories and stores are computed by the bridge. (approved: PENDING) -/
 theorem environment_oracle_wellFormed {S : EventSignature} (C : OperationContract S)
     (E : Environment S C.Input) (valid : Environment.Valid C E) (input : C.Input) :
     ExecAdapter.WellFormed (Environment.adapter S) C input (E.oracle input) := by
@@ -68,8 +68,6 @@ theorem environment_oracle_wellFormed {S : EventSignature} (C : OperationContrac
       | none => rfl
       | some reply => simp [h] at answer
     exact valid.mayBlock blocked
-  · intro site sp found
-    cases found
 
 /-- Law (subject `ConcreteSpec.Core.Observe.Environment.oracle`).
 Executing a typed handler call in C1 binds the oracle's returned value to local `⟨0⟩` and returns
