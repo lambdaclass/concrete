@@ -24,6 +24,7 @@ with tempfile.TemporaryDirectory() as directory:
         return subprocess.check_output(["git", "-C", directory, *args], env=env, stderr=subprocess.PIPE).decode().strip()
     git("init", "-q")
     (root / "source.lean").write_text("def realAnchor := 1\ndef otherAnchor := 2\n")
+    (root / "source.123").write_text("numeric extension\n")
     (root / "lean-toolchain").write_text("leanprover/lean4:v4.34.1\n")
     target = root / "scripts/review"
     target.mkdir(parents=True)
@@ -53,6 +54,8 @@ with tempfile.TemporaryDirectory() as directory:
     check("source.lean:1 `inventedLaw`", ("invalid", "citation: identifier 'inventedLaw' unresolved"), "findings")
     check("source.lean:1 old mode 100644 new mode 100755", "clean")
     check("[bad](source.lean#L1-L2-L3)", ("invalid", "citation: unsupported location grammar 'source.lean#L1-L2-L3'"))
+    check("[numeric](source.123:1)", "clean")
+    check("[numeric](source.123:1junk)", ("invalid", "citation: unsupported location grammar 'source.123:1junk'"))
     # An absolute prefix cannot redirect a missing script to a root/legacy basename.
     (root / "README.md").write_text("root file\n")
     (root / "ISSUES.tsv").write_text("issue row\n")

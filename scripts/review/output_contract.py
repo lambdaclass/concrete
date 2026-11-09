@@ -143,7 +143,7 @@ def citation_error(text, repo, commit, paths, positive, base=None, review_root=N
         return bool(re.search(r"\.(lean|py|sh|md|tsv|json|yml|yaml|toml|txt|log)$", name))
     for link in re.finditer(r"\]\(([^)\s]+)\)", text):
         target = link.group(1)
-        if ("#L" in target or re.search(r"\.[A-Za-z]+:[0-9]", target)) and not LOCATION.fullmatch(target):
+        if ("#L" in target or re.search(r"\.[A-Za-z0-9]+:", target)) and not LOCATION.fullmatch(target):
             errors.append(f"citation: unsupported location grammar '{target}'")
     locations = list(LOCATION.finditer(text))
     valid = 0
@@ -183,7 +183,14 @@ def citation_error(text, repo, commit, paths, positive, base=None, review_root=N
         if selected:
             valid += 1
     # Resolve identifiers against actual blobs, never prompt text or the allowlist itself.
-    content = "\n".join(blob(path) for path in sorted(paths) if identifier_source(path))
+    sources = sorted(path for path in paths if identifier_source(path))
+    content = ""
+    if sources:
+        proc = subprocess.run(["git", "-C", repo, "grep", "-I", "-h", "-e", ".", commit, "--",
+                               *[":(literal)" + path for path in sources]], capture_output=True, check=False)
+        if proc.returncode not in (0, 1):
+            raise ValueError("citation: cannot read reviewed tree identifiers")
+        content = proc.stdout.decode("utf-8", errors="replace")
     removed = ""
     if base:
         proc = subprocess.run(["git", "-C", repo, "diff", "--no-ext-diff", "--unified=0", base, commit, "--", ".", *[":(exclude)" + p for p in IDENTIFIER_EXCLUSIONS]], capture_output=True, text=True, check=True)
