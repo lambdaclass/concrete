@@ -445,6 +445,20 @@ section
 variable {O : Exec.Operands} {types : Var → Option Descriptor}
   {permit : AList Var O.Val → O.Expr → State → Option State}
 
+/-- Finite execution of a supplied machine transition. This separates the execution subject
+from erasure: mutation of instrumentation may change transitions, never the expected concrete
+semantics. Primitive answers obey the operand contract, exactly as in C1 `Step`/`Steps`. -/
+inductive FiniteExecution {A : Exec.Operands}
+    (advance : Exec.Config A → Option (Exec.Out A)) :
+    Exec.Config A → List A.Event → Exec.Config A → Prop where
+  | refl (c : Exec.Config A) : FiniteExecution advance c [] c
+  | silent {c d e tr} : advance c = some (.next d) →
+      FiniteExecution advance d tr e → FiniteExecution advance c tr e
+  | prim {c d e tr p vs site st k a} :
+      advance c = some (.request p vs site st k) →
+      A.allows p vs st a = true → k a = some d →
+      FiniteExecution advance d tr e → FiniteExecution advance c (a.label.events ++ tr) e
+
 /-- Erase statement typing from the instrumented operand instance to `O`. -/
 def eraseStmt : Exec.Stmt (instrumentOperands O types permit) → Exec.Stmt O
   | .skip => .skip
@@ -493,6 +507,18 @@ def eraseFn (fn : Exec.Fn (instrumentOperands O types permit)) : Exec.Fn O :=
 /-- Erase an instrumented program to `O`. -/
 def eraseProgram (P : Exec.Program (instrumentOperands O types permit)) : Exec.Program O :=
   ⟨List.map (fun e => (e.1, eraseFn e.2)) P.fns⟩
+
+/-- Unconditional finite simulation from a configuration: every finite instrumented execution
+has an erased C1 execution with the same ordered events and erased endpoint. No oracle, fuel,
+checker acceptance or non-stuck premise restricts this protocol. -/
+def FiniteSimulation (O : Exec.Operands) (types : Var → Option Descriptor)
+    (permit : AList Var O.Val → O.Expr → State → Option State)
+    (advance : Exec.Config (instrumentOperands O types permit) →
+      Option (Exec.Out (instrumentOperands O types permit)))
+    (P : Exec.Program (instrumentOperands O types permit))
+    (c : Exec.Config (instrumentOperands O types permit)) : Prop :=
+  ∀ tr c', FiniteExecution advance c tr c' →
+    Exec.Steps (eraseProgram P) (eraseConfig c) tr (eraseConfig c')
 
 /-- Erase a step label to `O`, preserving its emitted event. -/
 def eraseLabel : Exec.Label (instrumentOperands O types permit) → Exec.Label O

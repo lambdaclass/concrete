@@ -2672,7 +2672,21 @@ theorem Step_erasure (P : Exec.Program (instrumentOperands O types permit))
       intro a c' hallows hk
       exact Step_erasure_result P c c' a.label (.prim hs hallows hk)
 
-/-- Helper (inversion). Multi-step forward simulation over `Exec.Steps`. (approved: PENDING). -/
+/-- Law (subject `ConcreteSpec.Core.Own.stepInstrumented`). Every finite execution of the
+instrumented machine is simulated by C1 with the instrumentation erased. This is the
+unconditional Q3 obligation, separate from oracle evaluation and its `NotStuck` premise. -/
+theorem Steps_erasure (P : Exec.Program (instrumentOperands O types permit))
+    (c : Exec.Config (instrumentOperands O types permit)) :
+    FiniteSimulation O types permit (stepInstrumented O types permit P) P c := by
+  intro tr c' h
+  induction h with
+  | refl c => exact .refl (eraseConfig c)
+  | silent hs _ ih => exact .step (Step_erasure_result P _ _ .silent (.silent hs)) ih
+  | prim hs ha hk _ ih =>
+    have hstep := Step_erasure_result P _ _ _ (.prim hs ha hk)
+    simpa [eraseLabel_events_proj] using Exec.Steps.step hstep ih
+
+/-- Helper (inversion). C1-closure specialization of the unconditional `Steps_erasure` protocol; retained for execution clients using C1 proofs directly. (approved: PENDING). -/
 theorem Steps_erasure_result (P : Exec.Program (instrumentOperands O types permit))
     (c c' : Exec.Config (instrumentOperands O types permit))
     (tr : List O.Event)
@@ -2781,23 +2795,6 @@ theorem run_erasure (P : Exec.Program (instrumentOperands O types permit))
       eraseReport (Exec.run P (liftOracle O types permit ρ) fuel c) :=
   runFrom_erasure P ρ fuel [] c h
 
-/-- Law (subject `ConcreteSpec.Core.Own.liftOracle`). Multi-step forward simulation (owner decision
-2026-11-08 Q3): every multi-step run of the instrumented C1 machine is matched by a multi-step run
-of the erased machine emitting the exact same events in the same order and reaching the erased
-configuration, and any non-`stuck` oracle run with `liftOracle` emits the same event trace as the
-erased oracle run. -/
-theorem Steps_erasure (P : Exec.Program (instrumentOperands O types permit))
-    (ρ : Exec.Oracle O) (fuel : Nat)
-    (c c' : Exec.Config (instrumentOperands O types permit))
-    (tr : List O.Event)
-    (h : Exec.Steps P c tr c')
-    (hns : Ending.NotStuck (Exec.run P (liftOracle O types permit ρ) fuel c).ending) :
-    Exec.Steps (eraseProgram P) (eraseConfig c) tr (eraseConfig c') ∧
-      (Exec.run (eraseProgram P) ρ fuel (eraseConfig c)).events =
-        (Exec.run P (liftOracle O types permit ρ) fuel c).events := by
-  refine ⟨Steps_erasure_result P c c' tr h, ?_⟩
-  have hrun := run_erasure P ρ fuel c hns
-  exact congrArg Exec.Report.events hrun
 
 /-- Helper (inversion). Under `EvalPermitted`, an instrumented operand evaluation that is
 stuck is also stuck in the erased operand instance. (approved: PENDING). -/
@@ -4044,24 +4041,31 @@ private theorem traceSteps : Exec.Steps emptyProg primTraceConfig [7, 3] traceSu
                 (.step (.silent rfl) (.refl _)))))))
   exact hsteps
 
-/-- Instance (law `ConcreteSpec.Core.Own.Steps_erasure`, case `ConcreteSpec.Core.Own.Examples.primTraceConfig`). -/
-example : Exec.Steps (eraseProgram emptyProg) (eraseConfig primTraceConfig) [7, 3]
-      (eraseConfig traceSuccessor) ∧
-    (Exec.run (eraseProgram emptyProg) erasedOracle 100 (eraseConfig primTraceConfig)).events =
-      (Exec.run emptyProg (liftOracle erasedOps types permitE erasedOracle) 100 primTraceConfig).events :=
-  @Steps_erasure erasedOps types permitE emptyProg erasedOracle 100 primTraceConfig
-    traceSuccessor [7, 3] traceSteps rfl
+/-- Instance (law `ConcreteSpec.Core.Own.Steps_erasure`, case `ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig`). -/
+example : FiniteSimulation erasedOps types permitE
+    (stepInstrumented erasedOps types permitE emptyProg) emptyProg bindMoveConfig :=
+  @Steps_erasure erasedOps types permitE emptyProg bindMoveConfig
 
-/-- Planted (law `ConcreteSpec.Core.Own.Steps_erasure`, case `ConcreteSpec.Core.Own.Examples.primTraceConfig`, subject `ConcreteSpec.Core.Own.liftOracle`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.liftOracleMutateOwn`). -/
-example : Exec.Steps emptyProg primTraceConfig [7, 3] traceSuccessor ∧
-    Ending.NotStuck (Exec.run emptyProg (liftOracleMutateOwn erasedOps types permitE erasedOracle) 100 primTraceConfig).ending ∧
-    ¬ (Exec.Steps (eraseProgram emptyProg) (eraseConfig primTraceConfig) [7, 3]
-        (eraseConfig traceSuccessor) ∧
-      (Exec.run (eraseProgram emptyProg) erasedOracle 100 (eraseConfig primTraceConfig)).events =
-        (Exec.run emptyProg (liftOracleMutateOwn erasedOps types permitE erasedOracle) 100 primTraceConfig).events) := by
-  refine ⟨traceSteps, rfl, ?_⟩
-  rintro ⟨_, hev⟩
-  cases hev
+/-- Endpoint of the mutant's one-step execution: it has corrupted both local values. -/
+def zeroSuccessor : Exec.Config instrumentedOps :=
+  ⟨.done, [(y, 0), (x, 0)], ⟨0, (bind types y ((move initial ⟨0⟩).getD initial)).getD initial⟩, []⟩
+
+/-- Planted (law `ConcreteSpec.Core.Own.Steps_erasure`, case `ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig`, subject `ConcreteSpec.Core.Own.stepInstrumented`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.stepInstrumentedZeroVal`). -/
+example : ¬ FiniteSimulation erasedOps types permitE
+    (stepInstrumentedZeroVal erasedOps types permitE emptyProg) emptyProg bindMoveConfig := by
+  intro h
+  have bad : FiniteExecution (stepInstrumentedZeroVal erasedOps types permitE emptyProg)
+      bindMoveConfig [] zeroSuccessor := .silent rfl (.refl _)
+  have impossible : ∀ tr, ¬ Exec.Steps (eraseProgram emptyProg)
+      (eraseConfig bindMoveConfig) tr (eraseConfig zeroSuccessor) := by
+    intro tr he
+    cases he with
+    | step hs rest =>
+      have hd := step_det_next_inv (O := erasedOps) (P := eraseProgram emptyProg) (c₁ := ⟨.done, [(y, 7), (x, 7)], 0, []⟩) rfl hs
+      subst hd
+      cases rest with
+      | step hs _ => exact step_det_none_inv rfl hs
+  exact impossible [] (h [] zeroSuccessor bad)
 
 /-- Instance (law `ConcreteSpec.Core.Own.runFrom_erasure`, case `ConcreteSpec.Core.Own.Examples.primTraceConfig`). -/
 example : Exec.runFrom (eraseProgram emptyProg) erasedOracle 100 [] (eraseConfig primTraceConfig) =
