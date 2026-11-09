@@ -63,7 +63,8 @@ of their distinct names. Negation and inequality conclusions are accepted.
 A wrapper matching on the opaque operation result remains a contract conclusion;
 a universal exposed independently of that result still requires closed arguments.
 
-Resolution searches ancestor namespaces in order, recovers command-level opens with
+Resolution preserves explicit root qualification, searches ancestor namespaces in
+order, and recovers command-level opens with
 Lean’s source parser (including scoped boundaries, hiding and aliases), and keeps imported private names
 outside their declaring module. Ordinary Accepted/Refused examples carry no N2
 obligation and are not scanned unless they also have an N2 annotation. Backticks

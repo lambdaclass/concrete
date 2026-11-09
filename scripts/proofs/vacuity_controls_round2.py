@@ -151,3 +151,8 @@ end ConcreteSpecControl
     add("dependent-mutant-positive", dependent, set(), status=0)
     add("dependent-mutant-fresh-argument", dependent.replace("2 = 2 ∧ ¬ 2 < mutant 2", "2 = 2 ∧ ¬ 2 < mutant 999"), bad("planted-proposition"))
     add("dependent-mutant-erased-boundary", dependent.replace("2 = 2 ∧ ¬ 2 < mutant 2", "2 = 2 ∧ ¬ 2 < S 0"), bad("planted-proposition"))
+
+    rooted = base.replace("Law (subject `ConcreteSpecControl.S`)", "Law (subject `_root_.S`)")
+    add("rooted-name-no-local-fallback", rooted, bad("unknown-name", "ConcreteSpecControl.growth") | bad("planted-subject"))
+    rooted = base.replace("Law (subject `ConcreteSpecControl.S`)", "Law (subject `_root_.ConcreteSpecControl.S`)")
+    add("rooted-name-positive", rooted, set(), status=0)

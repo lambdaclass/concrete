@@ -158,7 +158,7 @@ def resolve (all : List (Name × ConstantInfo)) (owner : Name) (s : String) : Au
     if namespacePrefix.isAnonymous then break
     namespacePrefix := namespacePrefix.getPrefix
   let (ns, opens) ← sourceOpens owner
-  let hits := (Lean.ResolveName.resolveGlobalName env (← getOptions) ns opens requested).filter fun (n, projections) =>
+  let hits := (Lean.ResolveName.resolveGlobalName env (← getOptions) ns opens stx.getId).filter fun (n, projections) =>
     projections.isEmpty && (!isPrivateName n || env.getModuleIdxFor? n == env.getModuleIdxFor? owner)
   match hits.eraseDups with
   | [(n, _)] => return some n
