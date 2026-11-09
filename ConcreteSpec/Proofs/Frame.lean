@@ -2234,7 +2234,7 @@ theorem inadmissible_no_artifact {Artifact : Type} (build : Observe.LoadedProjec
       (Observe.LoadedProject.load_admitted source project).mp loaded⟩)
 
 /-- Helper (inversion). A source-originated run carries the artifact handoff that load refusal
-excludes. (approved: PENDING) -/
+excludes. (approved: REV-C10-agy-367764f3b) -/
 theorem inadmissible_no_run {Root Artifact Input Result Observation : Type}
     (build : Observe.LoadedProject → Artifact) (source : Observe.ProjectSources)
     (invalid : ¬ ∃ project, source.Realizes project)
@@ -2247,7 +2247,7 @@ theorem inadmissible_no_run {Root Artifact Input Result Observation : Type}
   exact inadmissible_no_artifact build source invalid ⟨project, artifact, built⟩
 
 /-- Helper (inversion). Neither startup constructor, including status 125, exists for refused
-source input. (approved: PENDING) -/
+source input. (approved: REV-C10-agy-367764f3b) -/
 theorem inadmissible_no_startup {Root Artifact Input Result Observation : Type}
     (build : Observe.LoadedProject → Artifact) (source : Observe.ProjectSources)
     (invalid : ¬ ∃ project, source.Realizes project)
@@ -2266,7 +2266,7 @@ theorem inadmissible_no_startup {Root Artifact Input Result Observation : Type}
     exact inadmissible_no_artifact build source invalid ⟨project, execution.1, built⟩
 
 /-- Helper (inversion). No trap report can originate from input without a built artifact.
-(approved: PENDING) -/
+(approved: REV-C10-agy-367764f3b) -/
 theorem inadmissible_no_trap {Artifact : Type} (build : Observe.LoadedProject → Artifact)
     (source : Observe.ProjectSources) (invalid : ¬ ∃ project, source.Realizes project)
     (kind : TrapKind) (site : SiteId) (terminal : Observe.Terminal) :
@@ -2275,7 +2275,7 @@ theorem inadmissible_no_trap {Artifact : Type} (build : Observe.LoadedProject �
   exact inadmissible_no_artifact build source invalid ⟨project, artifact, built⟩
 
 /-- Helper (inversion). Extract admission of the original input from a built artifact, without
-checking paths again at launch. (approved: PENDING) -/
+checking paths again at launch. (approved: REV-C10-agy-367764f3b) -/
 theorem assembled_admitted {Artifact : Type} (build : Observe.LoadedProject → Artifact)
     (source : Observe.ProjectSources) (project : Observe.LoadedProject) (artifact : Artifact)
     (built : assembleProject build source = some (project, artifact)) : source.Realizes project := by
@@ -2288,7 +2288,7 @@ theorem assembled_admitted {Artifact : Type} (build : Observe.LoadedProject → 
     exact (Observe.LoadedProject.load_admitted source project).mp loaded
 
 /-- Helper (inversion). Status 125 is a run-time outcome of an admitted source project with an
-inadequate reservation, rather than a load diagnostic. (approved: PENDING) -/
+inadequate reservation, rather than a load diagnostic. (approved: REV-C10-agy-367764f3b) -/
 theorem startup125_admitted {Root Artifact Input Result Observation : Type}
     (build : Observe.LoadedProject → Artifact) (source : Observe.ProjectSources)
     (launcher : Launcher Root Artifact Input Result Observation)
@@ -2314,7 +2314,7 @@ def admitRefused {Artifact : Type} (build : LoadedProject → Artifact)
   some (project, build project)
 
 /-- Helper (inversion). C9's admitted/realizes equivalence transports an existing loader refusal
-to the independent admission predicate. No refusal class is defined here. (approved: PENDING) -/
+to the independent admission predicate. No refusal class is defined here. (approved: REV-C10-agy-367764f3b) -/
 theorem refused_invalid (source : ProjectSources) (issue : SourceLoadRefusal)
     (refused : LoadedProject.load source = .refused issue) : ¬ ∃ project, source.Realizes project := by
   rintro ⟨project, valid⟩
@@ -2327,17 +2327,17 @@ def controlInput : ProjectSources := ⟨[(String.ofList ['a', Char.ofNat 0], tab
 
 
 /-- Helper (computation). Reuse C9's empty-path refusal through its admission equivalence.
-(approved: PENDING) -/
+(approved: REV-C10-agy-367764f3b) -/
 theorem empty_invalid : ¬ ∃ project, emptyInput.Realizes project :=
   refused_invalid emptyInput (.malformed ("", tabSource) emptyDiagnostic) (by decide)
 
 /-- Helper (computation). Reuse C9's backslash refusal through its admission equivalence.
-(approved: PENDING) -/
+(approved: REV-C10-agy-367764f3b) -/
 theorem backslash_invalid : ¬ ∃ project, backslashInput.Realizes project :=
   refused_invalid backslashInput (.malformed ("src\\main", tabSource) backslashDiagnostic) (by decide)
 
 /-- Helper (computation). Transport C9's control-character refusal, without restating its rule.
-(approved: PENDING) -/
+(approved: REV-C10-agy-367764f3b) -/
 theorem control_invalid : ¬ ∃ project, controlInput.Realizes project :=
   refused_invalid controlInput (.malformed (String.ofList ['a', Char.ofNat 0], tabSource)
     ⟨String.ofList ['a', Char.ofNat 0], ['a', Char.ofNat 0], .controlCharacter⟩) (by decide)
