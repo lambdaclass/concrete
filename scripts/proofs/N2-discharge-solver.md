@@ -16,12 +16,28 @@ coordinator obtains a valid independent ACCEPT. R-0219 remains the sole owner.
 The owner-approved N2-FINAL-CONVENTION.md supplied with this task is normative.
 An Instance is an elaborated full application of a named Law, with every argument
 closed, including implicit arguments and hypothesis proofs. Its type must match
-the instantiated law statement by protected definitional equality. A premise
-actually discharged by absurd, False elimination or empty matching is rejected.
-The same rule applies through transparent helpers, aliases, recursors, and
-opaque suppliers of impossible inhabitants. Classification, Planted witnesses,
-subject boundaries, and the separate projection check retain their current rules.
-No exemption can waive a recognized projection or incomplete analysis.
+the instantiated law statement by well-typed protected definitional equality
+(`evalArgs`: typed abstraction preserving fixed representation fields, explicit
+transports where needed, typechecking both transformed contracts before
+comparison, and comparing full motives, universes, binder types, and branches at
+a shared arbitrary typed discriminant; unsupported abstraction = `INCOMPLETE`).
+A premise actually discharged by absurd, False elimination or empty matching is
+rejected. The same rule applies through transparent helpers, aliases, recursors,
+and opaque suppliers of impossible inhabitants. Classification, Planted
+witnesses, and subject boundaries follow the normative convention; the separate
+Law projection check does **not** retain the inherited `directStep` or
+`withProtected`/`protectedEq` shortcuts, and instead adopts the accounting
+line's (`wip/gate-vacuity`, current tip `30c57a17c`, reconciled against its
+accepted fix-round-4 tip) bounded memoized proof-dependency projection traversal
+(unfolding `theorem` and `opaque` helper bodies as well as `def` bodies with
+actual argument and universe substitution, reporting `INCOMPLETE` on unavailable
+or unsupported bodies). Certificate-body dependency validation
+(`validateCertificate`, whose scope is candidate branch-exclusion certificate
+roots) does **not** cover the separate Law projection path. Whether N2 must also
+reject contradictions hidden inside helper bodies referenced by `Law` or
+`Planted` declarations (`hidden-law-body` and `hidden-planted-body`) is an open
+owner question named in Section 5.3 and is not decided here. No exemption can
+waive a recognized projection or incomplete analysis.
 
 The discharge question is about the supplied proof, not the mere occurrence of
 an eliminator in a generic theorem body. A supplied inhabitant of a refutable
@@ -676,15 +692,18 @@ The exact historical C9-new and C6-current controls (whole replay scopes, not se
 Condition for starting phase B: a valid ACCEPT (VERDICT: CLEAN under checker-60934a193, output unmodified) from agy's N6a review of the note at 25907fb41.
 ```
 
-## Design amendment 3 (slice 2a round 4): complete dependency-obligation model, prerequisite-bearing cache protocol, terminating partial-value judgment, and explicit walk accounting
+## Design amendment 3 (slice 2a round 5): complete dependency-obligation model, prerequisite-bearing cache protocol, terminating partial-value judgment, and sub-20,000 full-walk schedule
 
 Owner: R-0219. For the coordinator's independent reviewers: **do the best
-long-term thing rather than cut corners**. This section is the Round-4 design
-note revision (`N13e-codex-findings.out` on Round-3 commit `56d9722c6`) required
+long-term thing rather than cut corners**. This section is the Round-5 design
+note revision (`N13f-codex-findings.out` on Round-4 commit `9b2730bce` /
+`34a9fcf73`, verified by the bounded Lean 4.34.1 prototype
+`scripts/proofs/audits/N2-round5-prototype.py`, SHA-256
+`b3a1adb41fabb83152459a5084ec22be4b7d3689cf011131e2c4649ca7992daa`) required
 before any further edits to `scripts/proofs/vacuity.lean` or the control suite
 on branch `n2-2a`.
 
-### Why Round 1, Round 2, and Round 3 failed
+### Why Round 1, Round 2, Round 3, and Round 4 failed
 
 1. **Round 1 (`9a315ba06`, `N13c-codex-findings.out`):** `evalCall` evaluated only
    `tmpl.root` (`ci.value?`), ignoring `tmpl.declaredType` (`ci.type`), and
@@ -725,68 +744,74 @@ on branch `n2-2a`.
      returned empty `transfers` and `structuralExclusions`.
 3. **Round 3 (`56d9722c6`, `N13e-codex-findings.out`):** Round 3 introduced
    recursive `completeValue` and separated `pending*` / `completed*` tables, but
-   left four design defects and one type-instantiation discrepancy:
+   left four design defects and one type-instantiation discrepancy (all three
+   structural resolutions—the prerequisite-DAG disjointness argument, removal of
+   the partial-call self-cycle via `completePartialCall`, and retaining trailing
+   arguments in `filterTypeArgs`—were accepted by Codex in
+   `N13f-codex-findings.out` and are preserved below):
    - **Finding 1 (HIGH — Cache identity omits observed state, prerequisite identities, and pending-before-completed lookup):**
-     (a) `Query`, `TypeQuery`, and `ValueQuery` omitted `entry.query.inputs`,
-     even though `openMinorFields` branches on `!entry.query.inputs.isEmpty`
-     when choosing between `Origin.field majorInput.origin idx` and
-     `Origin.hypothetical lvl domId` (and `ValueQuery` fixed `origin := 0`
-     even though `.ctor` completion wraps errors with `Origin.field inp.origin`).
-     (b) `CompletedEval` stored `output`, `transfers`, and
-     `structuralExclusions`, but omitted the completed node's transitive
-     prerequisite identities (`Query`, `TypeQuery`, `ValueQuery`), contrary to
-     the accepted solver spec's requirement (`N2-discharge-solver.md:191-193`)
-     that cached completions carry their prerequisite queries and re-verify
-     them upon reuse.
-     (c) The state machine checked `completed*` *before* `pending*` and never
-     checked whether a cached completion's prerequisites overlapped the new
-     validation's `pendingQueries`, so if a prior `validateCertificate` call
-     completed `A` (or `B` depending on `A`) and a subsequent
-     `validateCertificate` call in the same `SolverState` seeded `A` in
-     `pendingQueries`, looking up `A` or `B` hit `completedQueries` instead of
-     reporting `"cyclic-certificate-dependency"`.
+     `Query`, `TypeQuery`, and `ValueQuery` omitted `entry.query.inputs` (and
+     `ValueQuery` fixed `origin := 0`); `CompletedEval` omitted transitive
+     prerequisite identities; and `completed*` was checked before `pending*`.
    - **Finding 2 (HIGH — Under-applied constructor and recursor completion self-cycles):**
-     In Round 3, `completeValue` on `Value.partialCall key savedArgs savedHyp`
-     inserted `vKey` into `pendingValues` and called
-     `evalCall entry key savedArgs lHyp .body`. In `evalCall`, Row 13b
-     (under-applied `.ctorInfo`) recorded the exact same `Value.partialCall` on
-     `callInput.term` and invoked `completeValue entry callInput queryHyp` in
-     `.body` mode, which immediately hit `vKey ∈ pendingValues` and threw a
-     spurious `"cyclic-certificate-dependency"`. Meanwhile, Row 14d
-     (under-applied `.recInfo`) omitted post-check `completeValue` in `.body`
-     mode (conflicting with the universal state machine in Section 2.4) and
-     never opened supplied minor premises across their constructor-field / IH
-     binders when no major premise was supplied.
+     Recording `Value.partialCall` on `.body`-mode under-applied constructors
+     and calling `evalCall .body` from `completeValue` caused an immediate
+     `vKey ∈ pendingValues` self-cycle.
    - **Finding 3 (MEDIUM — Per-row negative coverage claimed for atomic leaves via sibling arguments):**
-     In Section 4.1, Row 4 (`Expr.sort u`) and Row 5b (`Expr.lit (.strVal s)`)
-     placed the poison in a sibling function argument (`id (α := Prop) (fun _ => impossible)`
-     and `(fun _ _ => True.intro) "hello" (fun _ => impossible)`), which rejects
-     through Row 8a / Row 11 rather than exercising the sort or string literal row.
-     In addition, Section 4.2 omitted same-state retry controls after
-     work-budget exhaustion (`false-discharge-budget`) and after runtime
-     exceptions (`Quot.lift` / `Meta` error).
-   - **Finding 4 (MEDIUM — Uncharged walks and honest budget headroom):**
-     Round 3's accounting table charged only 5 operations (`drainConstruction`,
-     `validateCertificate` entry, `evalCall` miss, `evalTypeInstantiate` node,
-     `evalNode` node) and left 5 new walks uncharged: context projection
-     (`liveBvarsFor`, `liveHypFor`, `liveHypForInputs`), `completeValue` steps
-     over `.ctor` elements and `.partialCall` arguments, cache-hit replay
-     (`replayCompleted`), prerequisite-DAG verification (`verifyDerivation`),
-     and derivation evidence collection (`collectDerivationEvidence`). Under
-     full accounting of every walk, `f3b-decide-matcher` (`18,516` base units +
-     `20,641` new walk units = `39,157` total units) and `f3b-simp-all`
-     (`19,223` base units + `18,702` new walk units = `37,925` total units)
-     exceed the unchanged `20,000` work budget, requiring an explicit open
-     budget question pending the owner.
-   - **Reviewer's Note (`filterTypeArgs` dropping vs retaining remaining arguments):**
-     Round 3's Section 2.2 table stated that `filterTypeArgs` returns `#[]` once
-     the syntactic `.forallE`/`.letE`/`.mdata` prefix of `declTyExpr` ends
-     (`| _ => #[]`), whereas `vacuity.lean:737` retains `args.extract idx args.size`
-     (`| _ => args.extract idx args.size`). When a declaration's type ends in a
-     type alias or reducible helper that unfolds to a dependent Pi telescope
-     (e.g., `abbrev HiddenDepCodomain : Prop := (n : Nat) → badDepCodomain n`),
-     dropping remaining arguments masks dependent arguments in `typeInputs` and
-     fails to pass them into the unfolded Pi telescope.
+     Row 4 and Row 5b placed poison in a sibling argument, and Section 4.2
+     omitted same-state retry controls after budget exhaustion and runtime
+     exceptions.
+   - **Finding 4 (MEDIUM — Uncharged walks):**
+     5 walks (`cProj`, `cComplete`, `cReplay`, `cVerify`, `cCollect`) were left
+     uncharged.
+   - **Reviewer's Note (`filterTypeArgs` retaining remaining arguments):**
+     `filterTypeArgs` must retain `args.extract idx args.size` once the
+     syntactic `.forallE`/`.letE`/`.mdata` prefix ends so dependent type aliases
+     receive trailing arguments in `evalTypeInstantiate`.
+4. **Round 4 (`9b2730bce` / `34a9fcf73`, `N13f-codex-findings.out`):** Codex
+   accepted Round 4's prerequisite-DAG disjointness proof, removal of the
+   partial-call self-cycle, and `filterTypeArgs` decision, and identified five
+   remaining issues resolved in this Round-5 revision:
+   - **Finding 1 (HIGH — Projection `theorem`-helper hole) & Finding 2 (HIGH — Ill-typed protected comparison `evalArgs`):**
+     Both defects are confirmed in the inherited gate (`/home/unbalancedparen/projects/gates-briefs/CF-evidence/CONFIRM-results.txt`)
+     and are being fixed on the accounting line `wip/gate-vacuity` (fix round 4,
+     `/home/unbalancedparen/projects/gates-briefs/N2-fix-a3-r4.md` items A and B;
+     current tip `30c57a17c`). Under the one-owner-per-fix rule, this note stops
+     retaining the inherited `directStep` and `withProtected`/`protectedEq`
+     behaviour in the contract and Section 6 reconciliation list, requires
+     adopting the accounting line's repaired projection traversal and well-typed
+     protected comparison (`evalArgs`), lists the paired `def`/`theorem` helper
+     controls, the inferred/restated `Ok`/`Trap` controls, and `changedStoreOk`
+     with exact diagnostics, states explicitly that `validateCertificate` covers
+     certificate roots and does not cover the separate Law projection path, and
+     names the hidden Law/Planted helper contradiction question (`hidden-law-body`,
+     `hidden-planted-body`) as an open owner question in Section 5.3.
+   - **Finding 3 (MEDIUM — Real elaborated per-row controls, Lean 4.34.1 `String` constructor, redundant minor-premise loop in Row 14d, and executed single-row mutations):**
+     In Lean 4.34.1, `String`'s single constructor is
+     `String.ofByteArray : (toByteArray : ByteArray) → toByteArray.IsValidUTF8 → String`
+     (exposed by `Expr.toCtorIfLit`), so `@String.rec` requires a 2-argument
+     minor premise `(fun (b : ByteArray) (_h : b.IsValidUTF8) => ...)`. In Row
+     14d (`completePartialCall` Case C), Step 1's `completeValue` on `savedArgs`
+     already recursively opens every binder of a supplied `.closure` in `.body`
+     mode (via Row 8b), making the second `openMinorFields` loop redundant; that
+     redundant loop is removed. Every per-row positive/negative control and
+     every single-row mutation (`mut-row1-bvar` through `mut-row16b-application`)
+     is elaborated and executed in `scripts/proofs/audits/N2-round5-prototype.py`.
+   - **Finding 4 (HIGH — Over-budget cost is a design failure, not an owner budget question) & Finding 5 (MEDIUM — Real complexity accounting for every walk):**
+     All proposals to raise the `20,000` work bound or to charge only a subset
+     of categories are removed. Every walk is charged with its real
+     complexity (`activeChildrenSet : Std.HashSet DerivationId` for $O(1)$ child
+     deduplication on replay, incremental shared evidence references `firstTransfer`
+     and `exclusions` on `CompletedNode`, per-node FVar-bitmask construction
+     charged during `compileNode`, and per-binder/per-element projection,
+     verification, and collection charges), and the schedule is redesigned
+     (term-level `NodeQuery` memoization, interned context projections,
+     telescope-level `.forallBinder` traversal `evalForallRest`, shared domain-prefix
+     `TypeQuery` caching `tDomKey`, canonical ascending `hypothetical` ordering,
+     and `fastMinor` direct non-recursive minor-premise dispatch) so that
+     `library-decide-matcher` (`9,267`), `f3b-decide-matcher` (`17,804`),
+     `f3b-simp-all` (`18,994`), and `singletonCertificate` (`8,735`) all
+     complete with honest headroom **below the unchanged `20,000` work cap**.
 
 ---
 
@@ -849,43 +874,29 @@ on branch `n2-2a`.
        canonical binders in `.body` mode without calling `evalCall`). If this
        returns `.ok bodyOut` with `bodyOut.term != callInput.term`, run
        `completeValue entry bodyOut lHyp`. Return `.ok callInput`.
-     - **Case B (`hasVal == false`, `.ctorInfo c` with `savedArgs.size < c.numParams + c.numFields`):**
-       A constructor has no body (`value? = none`) and no reduction rule. Its
-       unsupplied binders (`(c.numParams + c.numFields) - savedArgs.size`
-       remaining parameter and field binders) exist solely in its Pi telescope
-       `tmpl.declaredType`. Because `evalDeclaredType` substitutes `savedArgs`
-       into the first `savedArgs.size` binders of `tmpl.declaredType` and opens
-       every remaining unsupplied `.forallE` binder with a canonical binder via
-       `withCanonicalBinder` (Row 9b), all dependent domain and codomain
-       obligations of the unsupplied binders have already been discharged by
-       `evalDeclaredType`, and all supplied argument values have been completed
-       by Step 1. Return `.ok callInput`.
-     - **Case C (`hasVal == false`, `.recInfo r` with `savedArgs.size <= r.getMajorIdx`):**
-       In addition to `evalDeclaredType` (which opens all unsupplied motive,
-       minor-premise, major-premise, and index binders in `tmpl.declaredType`)
-       and Step 1 (which completes every supplied parameter, motive, and
-       0-argument minor premise in `savedArgs`), a recursor's minor premises are
-       branch callbacks expecting constructor-field and induction-hypothesis
-       arguments (`minorArity := ruleMinorArity r rule`). When `minorArity > 0`,
-       a supplied minor premise `minorInput := savedArgs[minorStart + idx]` is a
-       `.closure` or `.partialCall`; Step 1's `completeValue` opens only its
-       first binder unless all `minorArity` binders are opened. Therefore, for
-       every supplied minor premise index `idx ∈ [:r.numMinors]` with
-       `minorStart + idx < savedArgs.size`, `completePartialCall` computes
-       `minorArity := match r.rules[idx]? with | some rule => ruleMinorArity r rule | none => 0`
-       and runs
-       `openMinorFields entry savedArgs[minorStart + idx]! callInput #[] minorArity 0 lHyp`
-       (which opens all `minorArity` constructor-field and IH binders with
-       canonical binders and completes the resulting branch body via
-       `completeValue`). If any supplied minor premise returns `.error sup`,
-       wrap `sup` via `wrapSupplierOrigin appId (savedArgs.map (·.origin)) sup`
-       and return `.error`. Otherwise return `.ok callInput`.
+     - **Case B (`hasVal == false`, `.ctorInfo c` with `savedArgs.size < c.numParams + c.numFields` or `.recInfo r` with `savedArgs.size <= r.getMajorIdx`):**
+       A constructor or under-applied recursor has no definition body
+       (`value? = none`) and no reduction rule before `majorIdx`. Its
+       unsupplied parameter, motive, minor-premise, field, major-premise, and
+       index binders exist in its Pi telescope `tmpl.declaredType`, which is
+       validated by `evalDeclaredType` (substituting `savedArgs` into the
+       supplied prefix and opening every remaining unsupplied `.forallE` binder
+       with a canonical binder via `withCanonicalBinder`, Row 9b). Meanwhile,
+       every supplied argument `aInp ∈ savedArgs` (including any 0-argument or
+       multi-argument minor-premise `.closure` passed to an under-applied
+       recursor) is recursively completed by Step 1's `completeValue entry aInp lHyp`:
+       because `completeValue` on `Value.closure` evaluates `nodeId` in `.body`
+       mode (Row 8b), which opens the outer `.binder` and evaluates `bodyId` in
+       `.body` mode (recursively opening all nested `.binder`s and running
+       `completeValue` on the leaf `bodyOut`), Step 1 already opens every
+       binder of a supplied minor-premise closure without needing a second,
+       redundant `openMinorFields` pass. Return `.ok callInput`.
 4. **Recursive completion (`completeValue entry inp hypothetical`):**
    `completeValue` discharges all deferred obligations inside `inp` and any
    values nested inside it, returning `Solver (Except CertificateSupplier Input)`:
-   - If `isDummyInput inp` or `(← get).graph.values[inp.term]? == none`, no
-     deferred closure, partial call, or constructor container is attached to
-     `inp.term`; return `.ok inp`.
+   - If `isDummyInput inp` or `!needsValueCompletion (← get).graph inp.term`, no
+     deferred closure, partial call, or closure/partial-call-bearing constructor
+     container is attached to `inp.term`; return `.ok inp`.
    - Otherwise, let `v := (← get).graph.values[inp.term]!`. Form the canonical
      `ValueQuery` key `vKey` (Section 2.1, including `entryInputs := entry.query.inputs`,
      `guards := entry.query.guards`, and `origin := inp.origin`, charging
@@ -893,21 +904,19 @@ on branch `n2-2a`.
    - **Lookup order (`pendingValues` before `completedValues`):**
      1. If `vKey ∈ pendingValues`, throw `"cyclic-certificate-dependency"`.
      2. If `completedValues[vKey]? = some dId`, call `replayCompleted dId`
-        (which verifies `dId`'s prerequisite DAG against all `pending*` sets via
-        `verifyDerivation dId` and records `dId` as a child of the active parent
-        derivation) and return `.ok inp`.
+        (which verifies `dId`'s prerequisite DAG against `initPending` via
+        `verifyDerivation dId` and records `dId` in `s.activeChildren` /
+        `s.activeChildrenSet`) and return `.ok inp`.
    - Otherwise, charge 1 `cComplete` unit (`chargeComplete 1`), insert `vKey`
-     into `pendingValues`, and evaluate `v` under `tryCatchRuntimeEx`:
+     into `pendingValues`, and evaluate `v` under `runDerivationFrame`:
      - **Case `v = .closure nodeId savedBvars savedHyp`:**
        Under `withHypotheticalLCtx lHyp`, evaluate
        `evalNode entry nodeId lBvars #[] lHyp .body` (opening the unapplied
        `.binder` with a canonical binder `xInput` and evaluating its body in
-       `.body` mode, Row 8b). If this returns `.error sup`, wrap `sup` via
-       `wrapSupplierOrigin inp.term #[inp.origin] sup` and return `.error`. If
-       it returns `.ok bodyOut` with `bodyOut.term != inp.term`, recursively
-       call `completeValue entry bodyOut lHyp`. On success, record a
-       `CompletedNode` for `.valueQuery vKey` in `completedValues` and return
-       `.ok inp`.
+       `.body` mode, Row 8b, which also completes `bodyOut`). If this returns
+       `.error sup`, wrap `sup` via `wrapSupplierOrigin inp.term #[inp.origin] sup`
+       and return `.error`. On success, record a `CompletedNode` for
+       `.valueQuery vKey` in `completedValues` and return `.ok inp`.
      - **Case `v = .partialCall key savedArgs savedHyp`:**
        Under `withHypotheticalLCtx lHyp`, invoke
        `completePartialCall entry key savedArgs lHyp inp.term inp true`. On
@@ -915,9 +924,9 @@ on branch `n2-2a`.
        `completedValues` and return `.ok inp`.
      - **Case `v = .ctor cName numParams cArgs`:**
        For every index `idx ∈ [:cArgs.size]` (both inductive parameters
-       `idx < numParams` and constructor fields `idx >= numParams`), if
-       `!isDummyInput cArgs[idx]`, charge 1 `cComplete` unit (`chargeComplete 1`)
-       and recursively call `completeValue entry cArgs[idx] lHyp`. If any
+       `idx < numParams` and constructor fields `idx >= numParams`), charge 1
+       `cComplete` unit (`chargeComplete 1`) and, if `!isDummyInput cArgs[idx]`,
+       recursively call `completeValue entry cArgs[idx] lHyp`. If any
        element returns `.error sup`, wrap `sup` with
        `Origin.field inp.origin (idx - numParams)` (when `idx >= numParams`) and
        `Origin.substitution inp.term #[...]` and return `.error`. On success,
@@ -930,7 +939,7 @@ on branch `n2-2a`.
      `completePartialCall` Step 1, every per-element step in `completeValue` on
      `Value.ctor`, every `evalNode` step, every `evalTypeInstantiate` step, and
      every `evalCall` miss strictly decrements `s.remaining : Nat` via `charge`
-     ( throwing `"false-discharge-budget"` when `s.remaining == 0`).
+     (throwing `"false-discharge-budget"` when `s.remaining == 0`).
    - Within a single value hierarchy (even before considering the global budget),
      `completeValue` inserts `vKey` into `pendingValues` before recurring on its
      children and checks `pendingValues` *before* `completedValues`:
@@ -942,12 +951,10 @@ on branch `n2-2a`.
        `(key, savedArgs)` and never writes `Value.partialCall` to
        `callInput.term`: Step 1 recurses only on strict subterms `aInp ∈ savedArgs`
        and `tmpl.declaredType`, and Step 2 either steps directly into
-       `tmpl.root` (`.binder` body), returns immediately (`.ctorInfo`), or opens
-       strictly smaller minor-premise closures across finite `minorArity`
-       binders (`openMinorFields` strictly increases `idx` from `0` to
-       `minorArity`).
-     - Any cyclic reference to an already-active `Query`, `TypeQuery`, or
-       `ValueQuery` hits `pending*` immediately and halts with
+       `tmpl.root` (`.binder` body) or returns immediately (`.ctorInfo` /
+       `.recInfo`).
+     - Any cyclic reference to an already-active `Query`, `TypeQuery`,
+       `ValueQuery`, or `NodeQuery` hits `pending*` immediately and halts with
        `"cyclic-certificate-dependency"`.
    Therefore, `completeValue` and `completePartialCall` cannot self-cycle and
    must terminate on every input.
@@ -1004,8 +1011,8 @@ modes in `evalNode` / `evalCall` and one template-kind tag in `TemplateKey`:
 | 3 | `Expr.mvar m` | `validateCertificate` `hasMVar` check + `Transfer.unresolved id "uninstantiated-metavariable"` | Any | Must be rejected fail-closed. | Immediately in `validateCertificate` (`proof.hasMVar \|\| target.hasMVar \|\| type.hasMVar`) or on reaching `Transfer.unresolved` in `evalNode`. | Throws `"uninstantiated-certificate-metavariable"` or `"uninstantiated-metavariable"` -> `INCOMPLETE`. | Fail-closed: metavariables cannot produce `.ok` or enter any completed cache. |
 | 4 | `Expr.sort u` | `Transfer.result termId` | `.body`, `.closure` | Atomic leaf: construct `inp ← mkInput raw (origin (.substitution termId #[]))` and pass to `applyValue entry inp args hypothetical mode`. | Immediately at `evalNode`. | `Origin.substitution termId #[]`. | Atomic sort with no dependency-bearing children (verified by positive recognition control `sort-recognition-honest`, Table 4.1a). |
 | 5a | `Expr.lit (.natVal n)` | `Transfer.result termId` | `.body`, `.closure` | Atomic leaf with canonical constructor view: construct `inp ← mkInput raw (origin (.substitution termId #[]))`; record `Value.ctor ``Nat.zero 0 #[]` if `n == 0`, else `Value.ctor ``Nat.succ 0 #[predInp]` where `predInp` wraps `mkNatLit (n - 1)` in `Graph.values[inp.term]`; pass to `applyValue`. | Immediately at `evalNode`. When inspected by `.recInfo` or `completeValue`, `0` matches `Nat.zero` and `n + 1` matches `Nat.succ` with field `n`. | `Value.ctor` in `Graph.values`; `Origin.substitution termId #[]`. | Atomic literal; its constructor view enables concrete recursor/matcher rules to step on `Nat` literals (`library-decide-matcher`, `natRecSuccBasePoison`, Table 4.1a). |
-| 5b | `Expr.lit (.strVal s)` | `Transfer.result termId` | `.body`, `.closure` | Atomic leaf: construct `inp ← mkInput raw (origin (.substitution termId #[]))` and pass to `applyValue entry inp args hypothetical mode`. When eliminated by `String.rec` / `String.casesOn`, `whnfD` exposes `String.mk (List.cons ...)` for concrete rule matching in Row 14b. | Immediately at `evalNode` (and via `whnfD` when eliminated in Row 14b). | `Origin.substitution termId #[]`. | Atomic string literal with no child subterms (verified by `str-lit-honest` and `str-lit-rec-poison` / `str-lit-rec-honest`, Table 4.1a). |
-| 6 | `Expr.mdata d body` | `cleanSpine` strips outer `.mdata`; `compileNode` compiles `.mdata _ body` to `Transfer.result (← term body)`; `filterTypeArgs` strips `.mdata` | `.body`, `.closure`, `evalDeclaredType` | Delegate transparently to `body` (`evalNode entry termId bvars args hypothetical mode`). | Immediately by recursing on `body` with the same `bvars`, `args`, `hypothetical`, and `mode`. | Same as `body`. | Metadata wrappers cannot hide any subterm because both `cleanSpine` and `compileNode` strip `.mdata` and evaluate `body` directly. |
+| 5b | `Expr.lit (.strVal s)` | `Transfer.result termId` | `.body`, `.closure` | Atomic leaf: construct `inp ← mkInput raw (origin (.substitution termId #[]))` and pass to `applyValue entry inp args hypothetical mode`. When eliminated by `String.rec` / `String.casesOn`, `whnfD` followed by `Expr.toCtorIfLit` exposes Lean 4.34.1's `String.ofByteArray : (toByteArray : ByteArray) → toByteArray.IsValidUTF8 → String` for concrete rule matching in Row 14b. | Immediately at `evalNode` (and via `whnfD` + `Expr.toCtorIfLit` when eliminated in Row 14b). | `Origin.substitution termId #[]`. | Atomic string literal with no child subterms (verified by `row5b-str-lit-simple-honest`, `row5b-str-lit-rec-honest`, `row5b-str-lit-rec-poison`, `row5b-str-lit-honest`, and `row5b-str-lit-poison`, Table 4.1a). |
+| 6 | `Expr.mdata d body` | `cleanSpine` strips `.mdata` along application spines; `compileNode` compiles `.mdata _ body` to `Transfer.result (← term body)`; `evalNodeDirect` delegates `.mdata _ _` to `evalNode entry termId bvars args hypothetical mode`; `filterTypeArgs` strips `.mdata` | `.body`, `.closure`, `evalDeclaredType` | Normalize and delegate transparently to `body` (`evalNode entry termId bvars args hypothetical mode`). | Immediately by recursing on `body` with the same `bvars`, `args`, `hypothetical`, and `mode`. | Same as `body`. | Metadata wrappers cannot hide any subterm because `cleanSpine`, `compileNode`, and `evalNodeDirect` strip `.mdata` and evaluate `body` directly (verified by `row6-mdata-poison`, `row6-mdata-honest`, and `mut-row6-mdata`, Table 4.1b). |
 | 7 | `Expr.letE name type value body _` | `Transfer.letBind typeId valueId bodyId` in `evalNode` and `evalTypeInstantiate` | `.body`, `.closure`, `evalTypeInstantiate` | (1) Validate `typeId` via `evalCachedInvariantNode entry typeId bvars hypothetical`; (2) evaluate `valueId` with `args = #[]` in `.body` mode if `!bodyNode.hasLooseBVar 0` and `.closure` mode otherwise; (3) if `!bodyNode.hasLooseBVar 0`, immediately discharge `completeValue entry valInput hypothetical`; (4) evaluate `bodyId` with `bvars.push valInput` and `args`; (5) after `bodyId` returns `bodyOut`, if `valInput` is a `Value.ctor` (or in `evalTypeInstantiate`), run `completeValue entry valInput hypothetical` so any unprojected fields of a let-bound container are completed even when `bvar 0` was only partially projected in `bodyId`. | (1)–(3) before `bodyId`; (4) during `bodyId`; (5) immediately after `bodyId` before `.letBind` returns `.ok bodyOut`. | Any transfers/exclusions from `typeId`, `valueId`, `bodyId`, and `completeValue valInput`; supplier rejections wrap `bvars.map (·.origin)` via `wrapSupplierOrigin`. | If `bvar 0` is unused in `bodyId` (`let _ := box; True` in `boxedType` / `boxedBody`), step (3) calls `completeValue` on `valInput` (recursively forcing all closures, partial calls, and constructor fields). If `bvar 0` is used in `bodyId` (e.g., `let box := ((poison, ()), ()); box.2` in `nestedBoxType`), step (5) calls `completeValue` on `valInput` when it is a `.ctor` (and `.projection` also completes unselected fields). |
 | 8a | `Expr.lam name type body _` (applied: `!args.isEmpty`) | `Transfer.binder typeId bodyId` in `evalNode` | `.body`, `.closure` | (1) Validate `typeId` via `evalCachedInvariantNode entry typeId usedBvars hypothetical`; (2) pop `arg0 := args[0]!` and `rest := args.extract 1 args.size`; (3) if `!isDummyInput arg0 && !bodyNode.hasLooseBVar 0`, discharge `completeValue entry arg0 hypothetical` (forcing unused argument `arg0`); (4) evaluate `bodyId` with `usedBvars.push arg0` and `rest` in `mode`; (5) if `arg0` is a `Value.ctor`, run `completeValue entry arg0 hypothetical` after `bodyId` so unprojected fields of a constructor passed to a lambda are completed. | (1) & (3) before `bodyId`; (4) during `bodyId`; (5) immediately after `bodyId`. | Supplier rejections wrap `#[arg0.origin] ++ usedBvars.map (·.origin)` at `id`. | Unused lambda arguments (`!bodyNode.hasLooseBVar 0`) are forced immediately by `completeValue`; used lambda arguments that are constructor containers have any remaining unprojected fields completed by `completeValue` after `bodyId`. |
 | 8b | `Expr.lam name type body _` (unapplied: `args.isEmpty` in `.body` mode) | `Transfer.binder typeId bodyId` in `evalNode` | `.body` | (1) Validate `typeId` via `evalCachedInvariantNode entry typeId usedBvars hypothetical`; (2) compute `liveH := liveHypFor g id usedBvars hypothetical`; (3) open canonical binder `xInput` of domain `domInp.term` via `withCanonicalBinder domInp.term none liveH`; (4) evaluate `bodyId` with `usedBvars.push xInput`, `args = #[]`, and `pushHypothetical liveH xInput` in `.body` mode; (5) discharge `completeValue entry bodyOut (pushHypothetical liveH xInput)`. | Immediately at `evalNode` before returning `bodyOut`. | Canonical binder `Origin.hypothetical lvl domInp.term`; transfers/exclusions from `typeId`, `bodyId`, and `completeValue bodyOut`. | Unapplied lambdas in `.body` mode (`fun _ : Empty => impossible`, `fun _ => (fun _ => False.elim impossible, ())` in `closureReturningBox`) always open their binder regardless of whether the domain is empty or inhabited, and `completeValue` forces the returned `bodyOut`. |
@@ -1020,7 +1027,7 @@ modes in `evalNode` / `evalCall` and one template-kind tag in `TemplateKey`:
 | 14a | `Expr.const` / `Expr.app` — 0-constructor recursor (`.recInfo r` with `r.rules.isEmpty`, e.g. `False.rec`, `Empty.rec`, `PEmpty.rec`, with `actualArgs.size > r.getMajorIdx`) | `Transfer.branch` -> `evalCall` (`.recInfo r`, `r.rules.isEmpty`) | `.body`, `.closure` | (1) Evaluate child arguments in `.closure` mode; (2) run `evalDeclaredType` (Row 10); (3) run `completeValue entry majorInput queryHyp` on `majorInput := actualArgs[r.getMajorIdx]!` (and on all `actualArgs` if `mode == .body`); (4) if `isDirectHypotheticalOrigin g majorInput.origin`, record `majorInput` in `s.structuralExclusions`. | Immediately at `evalCall` (after validating `majorInput` and `declaredType`). | Appends `callInput` to `s.transfers`; if `majorInput` has direct hypothetical origin, appends `majorInput` to `s.structuralExclusions` (setting `rank := 1`). | If `majorInput` is derived from a supplied declaration (`False.elim impossible`), evaluating `majorInput` in step (1)/(3) rejects `impossible` before step (4). `structuralExclusions` is recorded only when `majorInput` has a direct hypothetical origin. |
 | 14b | `Expr.const` / `Expr.app` — recursor / `casesOn` / matcher on a concrete constructor (`matchedRule = some (cName, nfields, rhsId, fieldInputs)`) | `Transfer.branch` -> `evalCall` (`.recInfo r`, `matchedRule.isSome`) | `.body`, `.closure` | (1) Evaluate child arguments in `.closure` mode and run `evalDeclaredType`; (2) extract constructor fields `fieldInputs` from `Value.ctor` or `whnfD` of `majorInput` (with `Origin.field majorInput.origin idx`); (3) for any field `fieldInputs[fIdx]` not free in the stripped rule body `rhsId`, run `completeValue entry fieldInputs[fIdx] queryHyp`; (4) bind `rhsBvars := actualArgs.extract 0 (r.numParams + r.numMotives + r.numMinors) ++ fieldInputs` (retaining **all** minor premises intact, never overwriting unselected minor premises with `dummyInput`) and evaluate the stripped rule body `rhsId` with `extraArgs := actualArgs.extract (majorIdx + 1) actualArgs.size` in `mode`; (5) if `mode == .body`, run `completeValue` on the result. | Immediately at `evalCall` by evaluating `rhsId` on the real parameters, motives, minor premises, `fieldInputs`, and `extraArgs`. | Appends `callInput` to `s.transfers`; combines output origin with `actualArgs.map (·.origin)` via `Origin.substitution`. | Retaining all minor premises in `rhsBvars` while stripping the outer `.lam` prefix of `rule.rhs` ensures that (a) dead minor premises not referenced by `rhsId` are not forced on concrete matches (`branch-local-unreachable`, `match-redex-unreachable` stay admitted), while (b) base minor premises referenced by recursive calls inside `rhsId` (`natRecSuccBasePoison`) are passed intact to the recursive `.recInfo` call and validated, and (c) constructor fields ignored by the selected branch are forced by `completeValue`. |
 | 14c | `Expr.const` / `Expr.app` — recursor / `casesOn` / matcher on a symbolic / neutral major premise (`matchedRule == none`, `actualArgs.size > r.getMajorIdx`) | `Transfer.branch` -> `evalCall` (`.recInfo r`, `matchedRule.isNone`) | `.body`, `.closure` | (1) Evaluate child arguments in `.closure` mode and run `evalDeclaredType`; (2) run `completeValue entry majorInput queryHyp` on the symbolic `majorInput`; (3) for every minor premise `minorInput := actualArgs[minorStart + idx]` (`idx ∈ [:r.numMinors]`), determine `minorArity := ruleMinorArity r rule` (covering all constructor fields AND recursive induction hypotheses) and run `openMinorFields entry minorInput majorInput extraArgs minorArity 0 queryHyp`, which opens `minorArity` canonical binders in `.closure` mode and at `idx >= minorArity` applies `extraArgs` in `.body` mode and calls `completeValue` on the minor result. | Immediately at `evalCall`: `majorInput` and every minor premise (applied to canonical field/IH binders and `extraArgs`) are evaluated in `.body` mode and `completeValue`-completed. | Appends `callInput` to `s.transfers`; combines output origin with `actualArgs.map (·.origin)` via `Origin.substitution`. | Every branch of a symbolic recursor or matcher is opened across all constructor fields and induction hypotheses, applied to any trailing `extraArgs`, and completed via `completeValue` (so closures or constructors returned inside a minor premise, such as `PProd.mk` in `Nat.brecOn.go`, are recursively completed). |
-| 14d | `Expr.const` / `Expr.app` — under-applied recursor (`.recInfo r` with `actualArgs.size <= r.getMajorIdx`) | `Transfer.branch` -> `evalCall` (`.recInfo r`, `actualArgs[majorIdx]?.isNone`) | `.body`, `.closure` | (1) Evaluate child arguments in `.closure` mode; (2) run `evalDeclaredType` (Row 10, opening all unsupplied motive/minor/major/index binders in `tmpl.declaredType`); (3) if `mode == .closure`, record `Value.partialCall key actualArgs queryHyp` at `callInput.term` in `Graph.values` and return `.ok callInput`; (4) if `mode == .body`, invoke `completePartialCall entry key actualArgs queryHyp appId callInput false` (Case C: completes every supplied `a ∈ actualArgs` via `completeValue` AND opens every supplied minor premise `actualArgs[minorStart + idx]` across all `ruleMinorArity r rule` constructor-field and IH binders via `openMinorFields`, without recording `Value.partialCall`). | In `.body` mode, immediately at `evalCall` via `completePartialCall`; in `.closure` mode, either when applied to reach `majorIdx` in `applyValue` (dispatching to Row 14a/14b/14c) or when forced at a consumer boundary by `completeValue` (calling `completePartialCall ... true`). | Appends `callInput` to `s.transfers`; in `.closure` mode records `Value.partialCall` in `Graph.values`; caches `CompletedNode` in `completedQueries[q]`. | Closes Codex Round-3 Finding 2 (`underapplied-rec-poison`, `underapplied-rec-consumer-poison`, `underapplied-rec-minor-lam-poison`, `underapplied-rec-honest`, `underapplied-rec-consumer-honest`): consistent with the state machine in Section 2.4, neither `.body`-mode evaluation nor `completeValue` self-cycles, and multi-argument minor premises of under-applied recursors have all constructor-field/IH binders opened via `openMinorFields`. |
+| 14d | `Expr.const` / `Expr.app` — under-applied recursor (`.recInfo r` with `actualArgs.size <= r.getMajorIdx`) | `Transfer.branch` -> `evalCall` (`.recInfo r`, `actualArgs[majorIdx]?.isNone`) | `.body`, `.closure` | (1) Evaluate child arguments in `.closure` mode; (2) run `evalDeclaredType` (Row 10, opening all unsupplied motive/minor/major/index binders in `tmpl.declaredType`); (3) if `mode == .closure`, record `Value.partialCall key actualArgs queryHyp` at `callInput.term` in `Graph.values` and return `.ok callInput`; (4) if `mode == .body`, invoke `completePartialCall entry key actualArgs queryHyp appId callInput false` (Case B: completes every supplied `a ∈ actualArgs` via `completeValue`, which recursively evaluates any supplied multi-argument minor-premise `.closure` in `.body` mode across all of its binders via Row 8b without a redundant `openMinorFields` loop and without recording `Value.partialCall`). | In `.body` mode, immediately at `evalCall` via `completePartialCall`; in `.closure` mode, either when applied to reach `majorIdx` in `applyValue` (dispatching to Row 14a/14b/14c) or when forced at a consumer boundary by `completeValue` (calling `completePartialCall ... true`). | Appends `callInput` to `s.transfers`; in `.closure` mode records `Value.partialCall` in `Graph.values`; caches `CompletedNode` in `completedQueries[q]`. | Closes Codex Round-3 Finding 2 and Round-4 Finding 3 (`row14d-rec-underapplied-poison`, `row14d-rec-underapplied-consumer-poison`, `row14d-rec-underapplied-minor-lam-poison`, `row14d-rec-underapplied-honest`, `row14d-rec-underapplied-consumer-honest`, `mut-row14d-rec-underapplied`): neither `.body`-mode evaluation nor `completeValue` self-cycles, and Step 1's `completeValue` on `savedArgs` already recursively opens all binders of supplied minor-premise closures via Row 8b. |
 | 15 | `Expr.const` / `Expr.app` — quotient primitive (`.quotInfo qVal`: `Quot`, `Quot.mk`, `Quot.lift`, `Quot.ind`) | `Transfer.call` -> `evalCall` (`.quotInfo qVal`) | `.body`, `.closure` | (1) Evaluate child arguments in `.closure` mode and run `evalDeclaredType`; (2) run `completeValue entry a queryHyp` on every `a ∈ actualArgs`; (3) if `qVal.kind matches .type \| .ctor` (`Quot`, `Quot.mk`), return `.ok callInput`; if `qVal.kind matches .lift \| .ind` (`Quot.lift`, `Quot.ind`), throw `"unresolved-certificate-quotient {key.name}"`. | Immediately at `evalCall` in all modes (no `.invariant`-mode shortcut). | On `.type \| .ctor`, records `CompletedNode` in `completedQueries`; on `.lift \| .ind`, throws `INCOMPLETE`. | Arguments to `Quot` and `Quot.mk` (including functions/closures inside `Quot.mk`) are completed via `completeValue`; `Quot.lift` and `Quot.ind` fail closed as `INCOMPLETE` in all modes unless reduced by a sound quotient rule. |
 | 16a | `Expr.const` / `Expr.app` — inductive type constructor (`.inductInfo _`, e.g. `Eq`, `And`, `Prod`, `PProd`, `Nat`) | `Transfer.call` -> `evalCall` (`.inductInfo _`) | `.body`, `.closure` | (1) Evaluate child arguments in `.closure` mode and run `evalDeclaredType`; (2) run `completeValue entry a queryHyp` on every `a ∈ actualArgs`; (3) return `.ok callInput`. | Immediately at `evalCall`. | Records `CompletedNode` in `completedQueries`. | Every type parameter and index passed to an inductive type constructor (`Eq`, `PProd`, `Prod`, etc.) is evaluated, its `declaredType` is checked, and `completeValue` forces any closure, partial call, or constructor passed as an argument to the type constructor. |
 | 16b | `Expr.app` — non-constant application head (`fn` is `.bvar`, `.fvar`, `.lam`, `.letE`, `.proj`) | `Transfer.application fnId inputIds` in `evalNode` -> `applyValue` | `.body`, `.closure` | (1) Evaluate each `childId ∈ inputIds` in `.closure` mode to produce `evalInputs`; (2) evaluate `fnId` with `allArgs := evalInputs ++ args` in `mode`; (3) at `applyValue entry fnInput allArgs hypothetical mode`: if `fnInput` is `Value.closure`, evaluate `nodeId` with `savedBvars` and `allArgs` (Row 8a); if `fnInput` is `Value.partialCall`, evaluate `evalCall` with `savedArgs ++ allArgs` (Rows 11–16a); otherwise try `headBeta` on `mkAppN fnExpr argExprs` and if reducible evaluate `redId`, else run `completeValue` on every `a ∈ allArgs` and return neutral `mkInput appExpr o`. | Immediately during `evalNode` / `applyValue`. | Combines `fnInput.origin` and `allArgs.map (·.origin)` via `Origin.substitution`. | Higher-order applications pass actual `Input`s directly into `.closure` and `.partialCall` bodies (preserving origins across `letApp`), and if the head is neutral (cannot beta-reduce), `completeValue` forces every argument in `allArgs`. |
@@ -1084,30 +1091,36 @@ supplied dependencies validated before `validateCertificate` can return
      or nested closures are recursively completed.
    - `completeValue` on `Value.partialCall` invokes `completePartialCall` with
      `checkDeclType = true`, which validates `tmpl.declaredType` (opening all
-     unsupplied Pi binders), completes all `savedArgs` via `completeValue`, and
-     discharges unsupplied binders via Row 8b (`hasVal == true`),
-     `evalDeclaredType` (`.ctorInfo`), or `openMinorFields` across all
-     supplied minor premises (`.recInfo`).
+     unsupplied Pi binders), completes all `savedArgs` via `completeValue`
+     (recursively opening all binders of any supplied minor-premise `.closure`
+     in `.body` mode via Row 8b), and discharges unsupplied binders via Row 8b
+     (`hasVal == true`) or `evalDeclaredType` (`.ctorInfo` / `.recInfo`).
    Therefore, no `Value.closure`, `Value.partialCall`, or `Value.ctor` can
    remain unvalidated when `validateCertificate` returns `.admitted`.
 
 ---
 
-### 2. Complete cache protocol and prerequisite-bearing derivation DAG
+### 2. Complete cache protocol, prerequisite-bearing derivation DAG, and schedule redesign
 
 #### 2.1 Complete cache keys, shared derivation DAG (`CompletedNode`), and state tables
 
-To satisfy Codex Round-3 Finding 1 (`N13e-codex-findings.out`):
-1. Every cache key (`Query`, `TypeQuery`, `ValueQuery`) includes
+To satisfy Codex Round-3 Finding 1 (`N13e-codex-findings.out`) and Round-4
+Findings 4 & 5 (`N13f-codex-findings.out`):
+1. Every cache key (`Query`, `TypeQuery`, `ValueQuery`, `NodeQuery`) includes
    `entryInputs : Array Input` (`entry.query.inputs`), `guards : Array Guard`
    (`entry.query.guards`), and (for `ValueQuery`) `origin := inp.origin`.
 2. Every completed cache entry is stored as a node in a shared derivation DAG
    (`SolverState.derivationNodes : Array CompletedNode`, indexed by
    `DerivationId := Nat`) carrying its own `key : CacheKey`, `output : Input`,
-   `localTransfers : Array Input`, `localExclusions : Array Input`, and direct
-   prerequisite child indices `children : Array DerivationId`.
-3. `CertificateDerivation` carries `prerequisites : Array CacheKey` alongside
-   `rank : Nat`, `transfers : Array Input`, and `structuralExclusions : Array Input`.
+   `localTransfers : Array Input`, `localExclusions : Array Input`, direct
+   prerequisite child indices `children : Array DerivationId`, and incremental
+   shared evidence references (`firstTransfer : Option Input`,
+   `exclusions : Array Input`) so `collectDerivationEvidence` assembles the
+   root evidence in $O(1 + |\text{exclusions}|)$ without copying or
+   re-traversing the entire DAG.
+3. `CertificateDerivation` carries `rootNodes : Array DerivationId` (retaining
+   the shared prerequisite derivation DAG) alongside `rank : Nat`,
+   `transfers : Array Input`, and `structuralExclusions : Array Input`.
 
 ```lean
 structure Query where
@@ -1125,6 +1138,7 @@ structure TypeQuery where
   entryInputs : Array Input
   guards : Array Guard
   hypothetical : Array Input
+  isDomainPrefix : Bool := false
   deriving BEq, Hashable, Inhabited
 
 inductive ValueKind where
@@ -1144,10 +1158,21 @@ structure ValueQuery where
   mode : Mode
   deriving BEq, Hashable, Inhabited
 
+structure NodeQuery where
+  node : TermId
+  bvars : Array Input
+  args : Array Input
+  entryInputs : Array Input
+  guards : Array Guard
+  hypothetical : Array Input
+  mode : Mode
+  deriving BEq, Hashable, Inhabited
+
 inductive CacheKey where
   | query (q : Query)
   | typeQuery (tq : TypeQuery)
   | valueQuery (vq : ValueQuery)
+  | nodeQuery (nq : NodeQuery)
   deriving BEq, Hashable, Inhabited
 
 abbrev DerivationId := Nat
@@ -1158,13 +1183,8 @@ structure CompletedNode where
   localTransfers : Array Input
   localExclusions : Array Input
   children : Array DerivationId
-  deriving Inhabited
-
-structure CertificateDerivation where
-  rank : Nat := 0
-  transfers : Array Input := #[]
-  structuralExclusions : Array Input := #[]
-  prerequisites : Array CacheKey := #[]
+  firstTransfer : Option Input := none
+  exclusions : Array Input := #[]
   deriving Inhabited
 ```
 
@@ -1175,11 +1195,20 @@ In `SolverState`:
 - `completedTypes : Std.HashMap TypeQuery DerivationId := {}`
 - `pendingValues : Std.HashSet ValueQuery := {}`
 - `completedValues : Std.HashMap ValueQuery DerivationId := {}`
+- `pendingNodes : Std.HashSet NodeQuery := {}`
+- `completedNodes : Std.HashMap NodeQuery DerivationId := {}`
 - `derivationNodes : Array CompletedNode := #[]`
 - `verifiedDerivations : Std.HashSet DerivationId := {}` (reset to `{}` at the
   start of each `validateCertificate` call)
-- `activeChildren : Array DerivationId := #[]` (accumulates direct child
-  `DerivationId`s during an active cache-miss evaluation)
+- `runStartNodeId : Nat := 0` (set to `s.derivationNodes.size` at the start of
+  each `validateCertificate` call; any `dId >= runStartNodeId` was created and
+  verified during the current call against the fixed `initPending`)
+- `activeChildren : Array DerivationId := #[]` and
+  `activeChildrenSet : Std.HashSet DerivationId := {}` ($O(1)$ set-backed child
+  deduplication during an active cache-miss frame)
+- `activeFirstTransfer : Option Input := none` and
+  `activeExclusions : Array Input := #[]` (incremental shared evidence
+  accumulated in $O(1)$ per child during an active frame)
 
 #### 2.2 Exact key components, canonical context projection, and `filterTypeArgs` decision
 
@@ -1191,14 +1220,15 @@ table) was wrong:
   syntactic top-level `.forallE` nodes; its codomain (or entire type) may be an
   `abbrev` or reducible type helper that unfolds to a dependent `.forallE`
   telescope (for example,
-  `abbrev HiddenDepCodomain : Prop := (n : Nat) → badDepCodomain n` and
-  `theorem depAliasHelper : HiddenDepCodomain := fun _ => True.intro`, where the
-  proof body `fun _ => True.intro` is completely benign and `badDepCodomain n`
-  reduces to `impossible` only when `n = 1`).
+  `abbrev HiddenDepCodomain : Type := (n : Nat) → badDepCodomain n` and
+  `def depAliasHelper : HiddenDepCodomain := fun _ => ()`, where the body
+  `fun _ => ()` is completely benign and `badDepCodomain n` reduces to
+  `impossible` only when `n = 1`).
 - If `filterTypeArgs` returned `#[]` when the syntactic `.forallE`/`.letE`/`.mdata`
   prefix ended, `typeInputs` would drop `[1]` (`typeInputs = #[]`), colliding the
-  declared-type cache key of `depAliasHelper 1` with `depAliasHelper 0` and
-  failing to pass `1` into `HiddenDepCodomain`'s unfolded Pi telescope.
+  declared-type cache key of `depAliasHelper 1` with `depAliasHelper 0` (or
+  evaluating `HiddenDepCodomain` on a symbolic `n : Nat` and rejecting
+  `depAliasHelper 0`, verified by `mut-row9b-type-alias-drop`).
 - Therefore, `filterTypeArgs` **must retain** `args.extract idx args.size` after
   the syntactic `.forallE`/`.letE`/`.mdata` prefix ends, and `evalTypeInstantiate`
   (Row 9b) passes any remaining `typeArgs` into `.call` (for constants with a
@@ -1207,23 +1237,24 @@ table) was wrong:
 
 | Cache table | Entry point | Exact key components (every state component observed by the computation) | How live context is projected |
 | --- | --- | --- | --- |
-| `pendingQueries` / `completedQueries` (body / transfer call) | `evalCall` | `template := key` (`name`, `levels`, `mode := .transfer`), `inputs := actualArgs`, `entryInputs := entry.query.inputs`, `guards := entry.query.guards`, `hypothetical := queryHyp`, `mode := mode` (`.body` or `.closure`) | `queryHyp := liveHypForInputs g actualArgs hypothetical` collects `FVarId`s occurring in `actualArgs` in deterministic traversal order and looks up each `FVarId`'s active `Input` in `hypothetical` (charging `cProj`). |
-| `pendingQueries` / `completedQueries` (declared-type query) | `evalDeclaredType` | `template := { key with mode := .invariant }`, `inputs := typeInputs`, `entryInputs := entry.query.inputs`, `guards := entry.query.guards`, `hypothetical := typeHyp`, `mode := .invariant` | `typeInputs := filterTypeArgs declTyExpr actualArgs` retains `actualArgs[idx]` where the `idx`-th `.forallE` binder of `declTyExpr` has `body.hasLooseBVar 0`, masks non-dependent `.forallE` positions with `dummyInput`, and retains `actualArgs.extract idx actualArgs.size` once the syntactic `.forallE`/`.letE`/`.mdata` prefix ends (`\| _ => args.extract idx args.size`); `typeHyp := liveHypForInputs g typeInputs hypothetical` (charging `cProj`). |
-| `pendingTypes` / `completedTypes` | `evalCachedInvariantNode` | `node := id`, `bvars := liveBvars`, `entryInputs := entry.query.inputs`, `guards := entry.query.guards`, `hypothetical := liveHyp` | `liveBvars := liveBvarsFor g id bvars` retains `bvars[idx]` if `g.terms[id]!.hasLooseBVar (bvars.size - 1 - idx)` and masks dead indices with `dummyInput`; `liveHyp := liveHypFor g id liveBvars hypothetical` collects `FVarId`s free in `id` and `liveBvars` in deterministic order (charging `cProj`). |
-| `pendingValues` / `completedValues` | `completeValue` | `kind` (`.closure nodeId`, `.partialCall key`, or `.ctor cName numParams`), `term := inp.term`, `origin := inp.origin`, `inputs` (`lBvars` for `.closure`, `savedArgs` for `.partialCall`, `cArgs` for `.ctor`), `entryInputs := entry.query.inputs`, `guards := entry.query.guards`, `hypothetical := lHyp`, `mode := .body` | For `.closure`: `mHyp := mergeHypothetical savedHyp hypothetical`, `lBvars := liveBvarsFor g nodeId savedBvars`, `lHyp := liveHypFor g nodeId lBvars mHyp`. For `.partialCall`: `mHyp := mergeHypothetical savedHyp hypothetical`, `lHyp := liveHypForInputs g savedArgs mHyp`. For `.ctor`: `lHyp := liveHypForInputs g cArgs hypothetical` (all charging `cProj`). |
+| `pendingQueries` / `completedQueries` (body / transfer call) | `evalCall` | `template := key` (`name`, `levels`, `mode := .transfer`), `inputs := actualArgs`, `entryInputs := entry.query.inputs`, `guards := entry.query.guards`, `hypothetical := queryHyp`, `mode := mode` (`.body` or `.closure`) | `queryHyp ← liveHypForInputsM actualArgs hypothetical` unions the pre-charged FVar bitmasks (`Graph.termFVarMask`) of `actualArgs` (charging 1 `cProj` unit per input on miss, 1 on cache hit) and filters `hypothetical` by the union mask via `filterHypByMask` (charging `hypothetical.size` on miss, 1 on cache hit). |
+| `pendingQueries` / `completedQueries` (declared-type query) | `evalDeclaredType` | `template := { key with mode := .invariant }`, `inputs := typeInputs`, `entryInputs := entry.query.inputs`, `guards := entry.query.guards`, `hypothetical := typeHyp`, `mode := .invariant` | `typeInputs ← filterTypeArgsM tmpl declTyExpr actualArgs` uses precomputed `tmpl.typeKeepMask` when `!tmpl.hasLetInForall` and `actualArgs.size <= tmpl.forallArity`, masks non-dependent `.forallE` positions with `dummyInput`, and retains `actualArgs.extract idx actualArgs.size` once the syntactic `.forallE`/`.letE`/`.mdata` prefix ends; `typeHyp ← filterHypByMask typeMask hypothetical true` (charging `cProj`). |
+| `pendingTypes` / `completedTypes` | `evalCachedInvariantNode` & `evalDeclaredType` (`tDomKey`) | `node := id`, `bvars := liveBvars`, `entryInputs := entry.query.inputs`, `guards := entry.query.guards`, `hypothetical := liveHyp`, `isDomainPrefix` (`false` for full node, `true` for shared `.forallE` domain prefix in `evalDeclaredType`) | `(liveBvars, liveHyp) ← projectNodeCtxM id bvars hypothetical` projects live de Bruijn indices using `Graph.termLiveBVars[id]` (trimming leading `dummyInput`s) and filters `hypothetical` by `(bMask \|\|\| nMask)` (memoized in `projNodeCtxCache`, charging `cProj`). Also cross-hits `completedNodes[nKey]` when `id` was already evaluated in `.closure` mode with `args = #[]`. |
+| `pendingValues` / `completedValues` | `completeValue` | `kind` (`.closure nodeId`, `.partialCall key`, or `.ctor cName numParams`), `term := inp.term`, `origin := inp.origin`, `inputs` (`lBvars` for `.closure`, `savedArgs` for `.partialCall`, `cArgs` for `.ctor`), `entryInputs := entry.query.inputs`, `guards := entry.query.guards`, `hypothetical := lHyp`, `mode := .body` | For `.closure`: `mHyp := mergeHypothetical savedHyp hypothetical`, `(lBvars, lHyp) ← projectNodeCtxM nodeId savedBvars mHyp`. For `.partialCall`: `mHyp := mergeHypothetical savedHyp hypothetical`, `lHyp ← liveHypForInputsM savedArgs mHyp`. For `.ctor`: `lHyp ← liveHypForInputsM cArgs hypothetical` (all charging `cProj`). |
+| `pendingNodes` / `completedNodes` | `evalNode` (compound `Transfer` nodes) | `node := id`, `bvars := liveBvars`, `args := args`, `entryInputs := entry.query.inputs`, `guards := entry.query.guards`, `hypothetical := liveHyp`, `mode := mode` | `(liveBvars, baseHyp) ← projectNodeCtxM id bvars hypothetical` combined with `argsHyp ← liveHypForInputsM args hypothetical` via `mergeHypothetical baseHyp argsHyp` (charging `cProj`). |
 
-#### 2.3 Canonical binder discipline (`withCanonicalBinder`, `freshLevelFor`, `withHypotheticalLCtx`)
+#### 2.3 Canonical binder discipline and ascending `hypothetical` ordering (`withCanonicalBinder`, `freshLevelFor`, `pushHypothetical`)
 
 To prevent variable capture, `LocalContext` staleness when closures outlive the
-scope in which they were created, or unbounded origin-chain growth on symbolic
-recursion:
+scope in which they were created, cache misses from binder-ordering permutations,
+or unbounded origin-chain growth on symbolic recursion:
 
 1. **Disjoint canonical binder level (`freshLevelFor`):**
    When opening a binder of domain `domTermId` under live hypothetical context
-   `liveH`, `freshLevelFor liveH g domTermId` computes the free variables
-   `domFVars` of `g.terms[domTermId]!` and chooses the smallest `lvl : Nat` such
+   `liveH`, `freshLevelFor liveH g domTermId` reads the precomputed FVar bitmask
+   `domMask ← getTermFVarMask domTermId` and chooses the smallest `lvl : Nat` such
    that `fId := { name := ((`_n2_var).num lvl).num domTermId }` is neither in
-   `domFVars` nor in `liveH`. Because `liveH` is projected to the free variables
+   `domMask` nor in `liveH`. Because `liveH` is projected to the free variables
    actually occurring in the expression being opened, a closed minor premise
    (such as the step minor premise of `Nat.brecOn.go`) always selects `lvl = 0`
    regardless of ambient outer binders not free in that minor premise.
@@ -1232,27 +1263,32 @@ recursion:
    or partial call under `mHyp` / `liveH`, `withHypotheticalLCtx` ensures every
    `.fvar fId` in `liveH` is declared in `MetaM`'s `LocalContext` with its
    domain `g.terms[inp.type]!`.
-3. **Single binding per `TermId` in `hypothetical` (`pushHypothetical` / `mergeHypothetical`):**
+3. **Canonical ascending `TermId` order in `hypothetical` (`pushHypothetical` / `mergeHypothetical`):**
    `pushHypothetical xs x` replaces any prior element in `xs` with the same
-   `term` (`item.term == x.term`) and appends `x`. `mergeHypothetical xs ys`
-   folds `pushHypothetical` over `ys`.
+   `term` (`item.term == x.term`) and inserts `x` in strictly ascending order of
+   `Input.term`. Consequently, any two evaluation paths that reach the same live
+   set of hypothetical assumptions produce structurally identical `hypothetical`
+   arrays regardless of the order in which outer binders were introduced or
+   merged.
 4. **Canonical field origins in `openMinorFields` (why `entryInputs` is part of every cache key):**
-   When `openMinorFields` opens a minor premise binder for a symbolic
-   `majorInput`, it assigns `Origin.field majorInput.origin idx` if
+   When `openMinorFields` / `peelMinorClosure` opens a minor premise binder for
+   a symbolic `majorInput`, it assigns `Origin.field majorInput.origin idx` if
    `hasSuppliedOrigin g majorInput.origin || !entry.query.inputs.isEmpty`, and
    otherwise assigns the canonical binder origin `Origin.hypothetical lvl domId`
    (`orig = none`). Because `openMinorFields` observes `entry.query.inputs`,
-   including `entryInputs := entry.query.inputs` in `Query`, `TypeQuery`, and
-   `ValueQuery` guarantees that an evaluation under `entry.query.inputs = #[]`
-   is never conflated in the cache with an evaluation under non-empty
-   `entry.query.inputs`.
+   including `entryInputs := entry.query.inputs` in `Query`, `TypeQuery`,
+   `ValueQuery`, and `NodeQuery` guarantees that an evaluation under
+   `entry.query.inputs = #[]` is never conflated in the cache with an evaluation
+   under non-empty `entry.query.inputs`.
 
-#### 2.4 State-transition rules (`pending` before `completed`, `verifyDerivation`, and `CompletedNode` recording)
+#### 2.4 State-transition rules (`pending` before `completed`, `verifyDerivation`, `activeChildrenSet`, and `CompletedNode` recording)
 
 Every cached evaluator (`evalCall`, `evalDeclaredType`, `evalCachedInvariantNode`,
-`completeValue`) obeys the same seven-step state machine, checking `pending*`
-**before** `completed*` and verifying transitive prerequisites on every cache
-hit:
+`completeValue`, `evalNode`) obeys the same state machine via
+`runDerivationFrame`, checking `pending*` **before** `completed*`, deduplicating
+child derivations in $O(1)$ via `activeChildrenSet`, and verifying transitive
+prerequisites from prior certificate validations once per `validateCertificate`
+call:
 
 ```text
   [1. Check key in pending*]
@@ -1264,76 +1300,59 @@ hit:
                              |
                              +-- HIT(dId) ---> chargeReplay(1)
                              |                 verifyDerivation(dId):
-                             |                   for each node u in dId's DAG not in s.verifiedDerivations:
-                             |                     chargeVerify(1)
+                             |                   if dId < s.runStartNodeId && dId ∉ s.verifiedDerivations:
+                             |                     chargeVerify(1)  -- vertex charge
                              |                     if isKeyPending s u.key:
                              |                       throwError "cyclic-certificate-dependency"
-                             |                     if lookupKeyCompleted s u.key != some uId:
+                             |                     if lookupKeyCompleted s u.key != some dId:
                              |                       throwError "invalid-certificate-prerequisite"
-                             |                     insert uId into s.verifiedDerivations
-                             |                 append dId to s.activeChildren (if not already present)
+                             |                     chargeVerify(u.children.size)  -- outgoing edge charge
+                             |                     recursively verify each childId ∈ u.children
+                             |                     insert dId into s.verifiedDerivations
+                             |                 recordChildDerivation(dId):
+                             |                   if dId ∉ s.activeChildrenSet:
+                             |                     insert dId into s.activeChildrenSet
+                             |                     push dId onto s.activeChildren
+                             |                     propagate dNode.firstTransfer and dNode.exclusions
+                             |                       into parent frame (charging cCollect per new exclusion)
                              |                 return .ok derivationNodes[dId].output (or .ok inp)
                              |
-                             +-- MISS -------> save (prevTransfers, prevExclusions, prevChildren)
+                             +-- MISS -------> save parent frame (prevTrans, prevExcl, prevChildren,
+                                                 prevChildrenSet, prevFirst, prevActiveExcl)
                                                insert key into pending*
-                                               reset s.transfers := #[], s.structuralExclusions := #[], s.activeChildren := #[]
+                                               reset frame accumulators to empty
                                                run body + post-check completeValue under tryCatchRuntimeEx:
                                                  |
                                                  +-- THROWS ex (budget / cycle / propext / error):
                                                  |     erase key from pending*
-                                                 |     restore (s.transfers, s.structuralExclusions, s.activeChildren)
-                                                 |       := (prevTransfers, prevExclusions, prevChildren)
+                                                 |     restore parent frame accumulators
                                                  |     rethrow ex (no CompletedNode allocated; key NOT in completed*)
                                                  |
                                                  +-- RETURNS .error sup (supplied contradiction):
                                                  |     erase key from pending*
-                                                 |     restore (s.transfers, s.structuralExclusions, s.activeChildren)
-                                                 |       := (prevTransfers, prevExclusions, prevChildren)
+                                                 |     restore parent frame accumulators
                                                  |     return .error sup (no CompletedNode allocated; key NOT in completed*)
                                                  |
                                                  +-- RETURNS .ok out (after recursive completeValue succeeds):
-                                                       let (myTransfers, myExclusions, myChildren) :=
-                                                         (s.transfers, s.structuralExclusions, s.activeChildren)
                                                        erase key from pending*
-                                                       let dId ← recordCompletedNode (.query/.typeQuery/.valueQuery key)
-                                                                   out myTransfers myExclusions myChildren
+                                                       let dId ← recordCompletedNode key out myTrans myExcl
+                                                                   myChildren myFirst myActiveExcl
                                                        insert key -> dId into completed*
                                                        insert dId into s.verifiedDerivations
-                                                       restore s.transfers := prevTransfers
-                                                       restore s.structuralExclusions := prevExclusions
-                                                       restore s.activeChildren := prevChildren.push dId (deduped)
+                                                       restore parent frame accumulators
+                                                       recordChildDerivation(dId)
                                                        return .ok out
 ```
 
-At the outer `validateCertificate` boundary:
-- On entry, `pendingQueries` is seeded with `initPending` (`entry.query` and its
-  `.transfer` / `.body` / `.closure` / `.invariant` root variants across both
-  `entry.query.inputs` and `#[]`), `pendingTypes := {}`, `pendingValues := {}`,
-  `verifiedDerivations := {}`, `transfers := #[]`, `structuralExclusions := #[]`,
-  and `activeChildren := #[]`.
-- When all top-level obligations (`candidate.assumptions`, `candidate.proof`,
-  `entry.target`, `candidate.guards`) succeed, `collectDerivationEvidence`
-  traverses the DAG rooted at `s.activeChildren` (visiting each reachable
-  `DerivationId` at most once and charging 1 `cCollect` unit per visited
-  `CompletedNode`) to assemble `transfers`, `structuralExclusions`, and
-  `prerequisites : Array CacheKey`.
-- If `validateCertificate` catches any runtime exception `ex`, it restores
-  `worklist := s.worklist.extract 0 base`, clears `pendingQueries := {}`,
-  `pendingTypes := {}`, `pendingValues := {}`, `verifiedDerivations := {}`, and
-  `activeChildren := #[]`, and returns `.incomplete`. Because every inner
-  `tryCatchRuntimeEx` and `.error sup` path never allocates a `CompletedNode` or
-  inserts into `completed*`, a failed or `INCOMPLETE` validation leaves zero
-  poisoned completions in `SolverState`.
-
-#### 2.5 Soundness of cache reuse and prerequisite-DAG verification
+#### 2.5 Soundness of cache reuse and one-pass prerequisite-DAG verification
 
 **Theorem (Soundness of Prerequisite-Verified Cache Reuse).** *Let `dId` be a
-`CompletedNode` stored under `key` in `completedQueries`, `completedTypes`, or
-`completedValues`. Reusing `dId` via `replayCompleted dId` in any later context
-within `SolverState` that produces `key` and passes `pending`-before-`completed`
-lookup and `verifyDerivation dId` is sound and produces the exact same
-output, transfers, structural exclusions, and prerequisite keys as fresh
-evaluation.*
+`CompletedNode` stored under `key` in `completedQueries`, `completedTypes`,
+`completedValues`, or `completedNodes`. Reusing `dId` via `replayCompleted dId`
+in any later context within `SolverState` that produces `key` and passes
+`pending`-before-`completed` lookup and `verifyDerivation dId` is sound and
+produces the exact same output, transfers, structural exclusions, and
+prerequisite DAG as fresh evaluation.*
 
 *Proof:*
 1. **Complete observational key identity:** Every piece of state read by
@@ -1342,8 +1361,7 @@ evaluation.*
    - Closed compiled syntax (`template` or `node`),
    - Live bound variables (`bvars` / `inputs`) with full `(term, type, origin)`,
    - Value origin (`origin := inp.origin` in `ValueQuery`),
-   - Enclosing certificate entry inputs (`entryInputs := entry.query.inputs`,
-     which determines `openMinorFields` origin selection),
+   - Enclosing certificate entry inputs (`entryInputs := entry.query.inputs`),
    - Enclosing guards (`guards := entry.query.guards`),
    - Projected live hypothetical assumptions (`hypothetical`), and
    - Evaluator `mode` (`.body`, `.closure`, or `.invariant`).
@@ -1353,14 +1371,16 @@ evaluation.*
    `freshLevelFor`, or `withHypotheticalLCtx` on reachable subterms.
 3. **Complete prerequisite DAG recording:** During the cache-miss evaluation of
    `dId`, every direct child query, declared-type query, cached invariant node,
-   and completed value pushes its `childId` into `s.activeChildren`, which is
-   stored in `dNode.children`. Thus the transitive closure `prereqDAG(dId)`
-   contains the exact `CacheKey` of every cached prerequisite on which `dId`
-   depends.
+   completed value, and cached compound node records its `childId` in
+   `s.activeChildren` (deduplicated in $O(1)$ via `s.activeChildrenSet`), which
+   is stored in `dNode.children`. Thus the immutable transitive closure
+   `prereqDAG(dId)` contains the exact `CacheKey` of every cached prerequisite
+   on which `dId` depends.
 4. **Pending-before-completed lookup and `verifyDerivation` soundness
    (Monotonic Disjointness of Inner Pending Keys and Completed Prerequisite DAGs):**
    - Suppose `dId` is hit in `completed*` during a `validateCertificate` call
-     whose initial root pending set is `initPending`.
+     whose initial root pending set is `initPending` and whose initial
+     `derivationNodes.size` is `runStartNodeId`.
    - Every node `u ∈ prereqDAG(dId)` was already in `dom(completed*)` when `dId`
      completed (`prereqKeys(dId) ⊆ dom(completed*)`).
    - During the current `validateCertificate` call, any key `k` added to
@@ -1373,209 +1393,228 @@ evaluation.*
    - Consequently, the **only** keys in `pending*` that can ever intersect
      `prereqKeys(dId)` are those in `initPending` (fixed for the entire
      `validateCertificate` call).
-   - Checking `pending*` before `completed*` catches `key ∈ pending*` directly,
-     and `verifyDerivation dId` checks `!isKeyPending s u.key` and
-     `lookupKeyCompleted s u.key == some uId` for every `u ∈ prereqDAG(dId)`
-     (memoizing verified `uId`s in `s.verifiedDerivations`, which is reset to
-     `{}` at the start of each `validateCertificate` call). If `initPending`
-     contains `key` or any transitive prerequisite of `dId`, `replayCompleted`
-     immediately throws `"cyclic-certificate-dependency"`.
-5. **Exact evidence reconstruction:** `collectDerivationEvidence` walks the DAG
-   of `s.activeChildren` at certificate completion, collecting every reachable
-   node's `localTransfers`, `localExclusions`, and `key` (`prerequisites`).
+   - Any node `uId >= runStartNodeId` was created during the current
+     `validateCertificate` call and had all of its own key and prerequisite keys
+     checked against `initPending` before `uId` was allocated. Any node
+     `uId < runStartNodeId` from an earlier `validateCertificate` call in the
+     same `SolverState` is traversed by `verifyDerivation`, which checks
+     `!isKeyPending s u.key` and `lookupKeyCompleted s u.key == some uId` for
+     every `u ∈ prereqDAG(dId)` (charging 1 `cVerify` unit per visited node and
+     1 `cVerify` unit per outgoing edge in `u.children`, and memoizing verified
+     `uId`s in `s.verifiedDerivations`). If `initPending` contains `key` or any
+     transitive prerequisite of `dId`, `replayCompleted` immediately throws
+     `"cyclic-certificate-dependency"`.
+5. **Exact incremental evidence reconstruction:** Each `CompletedNode` stores
+   `firstTransfer` and `exclusions` (computed incrementally as direct children
+   complete or replay via `recordChildDerivation`, charging 1 `cCollect` unit on
+   `recordCompletedNode` and 1 `cCollect` unit per propagated exclusion), so
+   `collectDerivationEvidence` assembles the certificate's non-empty transfer
+   representative and structural exclusions in $O(1 + |\text{exclusions}|)$
+   while retaining `rootNodes := s.activeChildren`.
+
+#### 2.6 Schedule optimizations that keep all controls below 20,000 under full 10-category walk accounting
+
+To resolve Codex Round-4 Finding 4 (`N13f-codex-findings.out`: *"Over-budget
+cost is a design failure, not an owner budget question"*), the evaluator
+schedule eliminates redundant work while preserving every soundness obligation:
+
+1. **Term-evaluation configuration memoization (`NodeQuery` in `evalNode`):**
+   Compound `Transfer` nodes (`.letBind`, `.binder`, `.forallBinder`,
+   `.application`, `.projection`, `.call`, `.branch`, `.constructor`) are
+   memoized in `completedNodes : Std.HashMap NodeQuery DerivationId` keyed by
+   `(node, liveBvars, args, entryInputs, guards, liveHyp, mode)` (and cross-checked
+   by `evalCachedInvariantNode` when `args.isEmpty && mode == .closure`),
+   avoiding repeated re-evaluation of shared subterms across symbolic branches.
+2. **Telescope-level `.forallBinder` traversal (`evalForallRest`):**
+   When evaluating a nested Pi telescope `∀ (x_1 : A_1) ... (x_k : A_k), B`,
+   `evalForallRest` steps directly through consecutive `.forallBinder` nodes
+   without wrapping each intermediate codomain in a separate `TypeQuery`
+   derivation frame, projecting `liveH` only when a binder is actually
+   dependent (`bodyNode.hasLooseBVar 0`).
+3. **Shared domain-prefix `TypeQuery` caching (`tDomKey` in `evalDeclaredType`):**
+   For a template whose `declaredType` has `k := tmpl.forallArity` leading
+   `.forallE` binders (and `!tmpl.hasLetInForall`), `evalDeclaredType` projects
+   `typeInputs` to `domInputs` using the precomputed `tmpl.domainKeepMask` (the
+   arguments actually referenced inside the `k` binder domains, excluding
+   arguments that appear only in the final codomain `Eq lhs rhs`) and caches the
+   validation of all `k` binder domains under a single `TypeQuery`
+   `tDomKey` (`isDomainPrefix := true`). Thus multiple calls to an equality
+   congruence lemma (`congrArg`, `Eq.trans`, `implies_congr`) that share domain
+   types but vary proof/rhs arguments validate the binder-domain prefix once and
+   replay `tDomKey` in 1 `cReplay` unit.
+4. **Direct non-recursive minor-premise dispatch (`fastMinor` in Row 14b and `peelMinorClosure` in Row 14c):**
+   - On a concrete constructor match (Row 14b) where the stripped rule `rhsNode`
+     applies a minor-premise `.closure` that does not reference the induction
+     hypotheses (`((neededMask >>> nfields) &&& ((1 <<< numIH) - 1)) == 0`),
+     `evalCall` completes any unused `fieldInputs` and applies `mInp` directly
+     to `fieldInputs ++ Array.replicate numIH dummyInput ++ extraArgs`, avoiding
+     intermediate closure allocations for unused IH binders.
+   - On a symbolic major premise (Row 14c), when `minorInput` is a compiled
+     `.closure`, `peelMinorClosure` computes `computeMinorNeededMask` once and
+     steps directly across the `minorArity` `.binder` nodes of the closure
+     (binding `dummyInput` for binders not free in the minor body or subsequent
+     binder domains when `!needFieldOrigin`, and opening canonical binders only
+     for needed positions), avoiding `whnfD (inferType mExpr)` and intermediate
+     `Value.closure` allocations at each binder peel.
+5. **Pre-charged per-node FVar bitmasks (`Graph.termFVarMask`) and interned context projections (`projNodeCtxCache`, `projInputsHypCache`, `projMaskHypCache`, `projTypeArgsCache`):**
+   During `compileNode`, each `TermId`'s free-variable bitmask is computed bottom-up
+   from its child `TermId`s (charging 1 `cConstruct` unit per child union edge)
+   and stored in `Graph.termFVarMask`. Context projection in `projectNodeCtxM`
+   and `liveHypForInputsM` unions these bitmasks and interns the resulting
+   `(liveBvars, liveHyp)` and `liveHyp` arrays in `SolverState`, charging full
+   linear cost on every miss and $O(1)$ lookup cost on every cache hit.
 
 ---
 
-### 3. Explicit accounting for every walk under the unchanged 20,000 work allowance and open budget question
+### 3. Explicit accounting for every walk under the unchanged 20,000 work allowance
 
 The work budget (`SolverState.remaining : Nat := 20000`), heartbeat ceiling
 (`maxHeartbeats 2000000`), and projection limit (`4096`) are **unchanged** (no
-raise, no reset between steps). To resolve Codex Round-3 Finding 4
-(`N13e-codex-findings.out`), every walk in the certificate evaluator is charged
-explicitly with a stated asymptotic bound, and the resulting costs and budget
-headroom are reported honestly.
+raise, no reset between steps, and no uncharged categories). Every walk in the
+certificate evaluator is charged with its real asymptotic complexity, and every
+measured control completes well below the unchanged `20,000` work allowance.
 
-#### 3.1 Exhaustive 10-category charge table (`total = base + new`)
+#### 3.1 Exhaustive 10-category charge table (`total = con + ent + call + tyI + node + comp + rep + ver + col + proj`)
 
-We partition the charged operations into the 5 **base** categories (present in
-Round 3) and the 5 **new** categories (added in Round 4 so zero walks remain
-uncharged):
+Every operation charges `SolverState.remaining` and increments its dedicated
+counter in `SolverState`:
 
 | Category | Counter | Operation | Where `charge` is invoked | Explicit complexity bound |
 | --- | --- | --- | --- | --- |
-| Base 1 | `cConstruct` | Graph construction (`drainConstruction`) | 1 unit per `Work.term id` (`compileNode`) and 1 unit per `Work.template key` (`compileTemplate`) popped from `worklist` | Bounded by `\|Terms\| + \|Templates\|` newly compiled into `Graph`. |
-| Base 2 | `cEntry` | Certificate entry (`validateCertificate`) | 1 unit on certificate entry + 1 unit per assumption in `candidate.assumptions` | Exactly `1 + candidate.assumptions.size` units per `validateCertificate` call. |
-| Base 3 | `cCall` | Constant call query (`evalCall`) | 1 unit per cache-miss `Query` on entry to `evalCall` | At most 1 unit per distinct uncached `Query` evaluated. |
-| Base 4 | `cTypeInst` | Declared-type instantiation (`evalTypeInstantiate`) | 1 unit per `Transfer` node visited while instantiating `tmpl.declaredType` | Bounded by the depth of the `.forallBinder` / `.letBind` / unfolded alias spine of `tmpl.declaredType`. |
-| Base 5 | `cNode` | Term/type node evaluation (`evalNode`) | 1 unit per `Transfer` node visited in `evalNode` (across `.body`, `.closure`, and `evalCachedInvariantNode`) | Bounded by the number of AST transfer steps executed. |
-| New 6 | `cProj` | Context & argument projection (`liveBvarsFor`, `liveHypFor`, `liveHypForInputs`, `filterTypeArgs`) | `1 + bvars.size` in `liveBvarsFor`; `1 + liveBvars.size + hypothetical.size` in `liveHypFor`; `1 + inputs.size + hypothetical.size` in `liveHypForInputs`; `1` per binder step in `filterTypeArgs` | Linear $O(\|bvars\| + \|inputs\| + \|hypothetical\|)$ per key projection (`fvarsOfTerm` is memoized per `TermId` in `Graph.termFVars`). |
-| New 7 | `cComplete` | Recursive value & partial-call completion (`completeValue`, `completePartialCall`, argument completion loops) | 1 unit on cache-miss entry to `completeValue`; 1 unit per non-dummy element `cArgs[idx]` in `completeValue` on `Value.ctor`; 1 unit per supplied `aInp ∈ savedArgs` in `completePartialCall`; 1 unit per argument completed at `.axiomInfo`, `.quotInfo`, `.inductInfo`, neutral application, or unselected `.projection` field | Linear $O(1 + \text{arity}(v))$ per uncached `Value` or neutral/primitive spine. |
-| New 8 | `cReplay` | Completed cache-hit replay (`replayCompleted`) | 1 unit per cache hit in `completedQueries`, `completedTypes`, or `completedValues` | Exactly $O(1)$ per cache hit (attaching `dId` to `s.activeChildren`). |
-| New 9 | `cVerify` | Prerequisite-DAG verification (`verifyDerivation`) | 1 unit per reachable `CompletedNode` in `prereqDAG(dId)` not yet in `s.verifiedDerivations` | At most $O(\|\text{reachable } CompletedNode\text{s}\|)$ per `validateCertificate` call because each verified `DerivationId` is memoized in `s.verifiedDerivations`. |
-| New 10 | `cCollect` | Derivation evidence assembly (`collectDerivationEvidence`) | 1 unit per unique reachable `CompletedNode` in the root derivation DAG when assembling `transfers`, `structuralExclusions`, and `prerequisites` | At most $O(\|\text{reachable } CompletedNode\text{s}\|)$ once at the end of an admitted certificate validation. |
+| 1 | `cConstruct` | Graph construction, bottom-up FVar-bitmask union, and template domain precomputation (`drainConstruction`, `compileNode`, `compileTemplate`) | 1 unit per `Work.term id` (`compileNode`), 1 unit per child `TermId` edge when computing `termFVarMask[id]` in `compileNode` (`1 + children.size`), 1 unit per `Work.template key` (`compileTemplate`), and 1 unit per syntactic `.forallE` domain step in `compileTemplate` | Linear $O(\|Terms\| + \|Edges(Terms)\| + \|Templates\| + \|ForallBinders(Templates)\|)$; structural `TermNode` hashing in `internNode` is $O(\text{node arity}) \le 4$ over flat `TermId` indices and amortized by the per-child union charge. |
+| 2 | `cEntry` | Certificate entry (`validateCertificate`) | 1 unit on certificate entry + 1 unit per assumption in `candidate.assumptions` + 1 unit per guard in `candidate.guards` | Exactly `1 + candidate.assumptions.size + candidate.guards.size` units per `validateCertificate` call. |
+| 3 | `cCall` | Constant call query (`evalCall`) | 1 unit per cache-miss `Query` on entry to `evalCall` | At most 1 unit per distinct uncached `Query` evaluated. |
+| 4 | `cTypeInst` | Declared-type instantiation (`evalTypeInstantiate`, `evalDeclaredType`) | 1 unit per `Transfer` node visited in `evalTypeInstantiate` and 1 unit per precomputed non-dependent domain step in `tmpl.forallDomainTerms` | Linear in the depth of the instantiated `declaredType` spine. |
+| 5 | `cNode` | Term/type node evaluation (`evalNodeDirect`, `evalForallRest`, `applyClosureArgs`) | 1 unit per `Transfer` node visited in `evalNodeDirect`, 1 unit per dependent `.forallBinder` step in `evalForallRest`, and 1 unit per binder step in `applyClosureArgs` | Linear in the number of AST transfer steps executed on cache misses. |
+| 6 | `cComplete` | Recursive value & partial-call completion (`completeValue`, `completePartialCall`, argument completion loops) | 1 unit on cache-miss entry to `completeValue`; 1 unit per non-dummy element `cArgs[idx]` in `completeValue` on `Value.ctor`; 1 unit per supplied `aInp ∈ savedArgs` in `completePartialCall`; 1 unit per argument completed at `.axiomInfo`, `.quotInfo`, `.inductInfo`, neutral application, or unselected `.projection` field | Linear $O(1 + \text{arity}(v))$ per uncached `Value` or neutral/primitive spine. |
+| 7 | `cReplay` | Completed cache-hit replay (`replayCompleted`) | 1 unit per cache hit in `completedQueries`, `completedNodes`, `completedTypes`, or `completedValues` | $O(1)$ per cache hit via `s.activeChildrenSet : Std.HashSet DerivationId` membership check before pushing to `s.activeChildren`. |
+| 8 | `cVerify` | Cross-run prerequisite-DAG verification (`verifyDerivation`) | For `dId < s.runStartNodeId` not yet in `s.verifiedDerivations`: 1 unit when visiting `CompletedNode` `u` + `u.children.size` units before iterating `for childId in u.children` | Linear $O(\|V_{\text{prior}}\| + \|E_{\text{prior}}\|)$ in the reachable subgraph of prior-run `CompletedNode`s; $0$ for `dId ≥ s.runStartNodeId` created in the current `validateCertificate` invocation (whose prerequisite DAG is disjoint from the fixed initial `pending*` sets). |
+| 9 | `cCollect` | Derivation node allocation and exclusion propagation (`finishCompletedNode`, `validateCertificate`) | 1 unit when allocating a `CompletedNode` in `finishCompletedNode` + 1 unit per unique child `ExclusionEntry` merged into the parent node (`finishCompletedNode` and root assembly) | Linear $O(\|V_{\text{created}}\| + \sum_{u} \|u.\text{exclusions}\|)$; `firstTransfer` is propagated in $O(1)$ as an `Option TransferEntry`. |
+| 10 | `cProj` | Context & type-argument projection (`projectNodeCtxM` (`cProjBvars + cProjHyp`), `liveHypForInputsM` (`cProjInputsHyp`), `filterTypeArgsM` (`cProjTypeArgs`)) | On cache miss: `1 + bvars.size` (`cProjBvars`) and `1 + liveBvars.size + hypothetical.size` (`cProjHyp`) in `projectNodeCtxM`; `1 + inputs.size + hypothetical.size` (`cProjInputsHyp`) in `liveHypForInputsM`; `1 + actualArgs.size` (`cProjTypeArgs`) in `filterTypeArgsM`. On cache hit in `projNodeCtxCache`, `projMaskHypCache`, `projInputsHypCache`, or `projTypeArgsCache`: `1` unit | Full linear scan cost on every distinct projection miss; $O(1)$ hash-table lookup on repeated `(TermId, bvars, hypothetical)`, `(mask, hypothetical)`, `(inputs, hypothetical)`, or `(name, actualArgs)` keys. |
 
 When `s.remaining == 0`, `charge` throws `"false-discharge-budget"`, which
 unwinds all `pending*` sets without recording any `CompletedNode` and reports:
 `INCOMPLETE analysis-budget-or-error <instance> stage=certificate-dependencies law=<law> case=<case> false-discharge-budget`.
 
-#### 3.2 Recomputed prototype costs across all 16 existing controls, 7 N8a observations, and 9 Round-2/3 retry probes (at `source_sha = 56d9722c6`, Lean 4.34.1)
+#### 3.2 Measured 10-category cost vectors across all 16 certificate controls, 7 N8a observations, and `singletonCertificate`
 
-| Control / Observation | Verdict (under 5-cat `base` / under 10-cat `total`) | `total` (`base + new`) | `base` (`con+ent+call+tyI+node`) | `new` (`proj+comp+rep+ver+col`) | Breakdown `(con, ent, proj, call, tyI, node, comp, rep, ver, col)` | `dNodes` | Terms | Nodes | Tmpls | Queries | Heartbeats (`hb`) |
-| --- | --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `origin` | `rejected supplier=impossible` | 63 | 54 | 9 | `(22, 1, 3, 6, 9, 16, 0, 6, 0, 0)` | 15 | 18 | 16 | 6 | 12 | 14 |
-| `unapplied-empty-binder` | `rejected supplier=impossible` | 31 | 29 | 2 | `(12, 1, 0, 4, 5, 7, 0, 2, 0, 0)` | 10 | 11 | 8 | 4 | 8 | 7 |
-| `use-impossible-let` | `rejected supplier=impossible` | 166 | 117 | 49 | `(50, 2, 15, 9, 19, 37, 7, 27, 0, 0)` | 30 | 42 | 37 | 9 | 18 | 29 |
-| `let-app-supplied` | `rejected supplier=suppliedByBool` | 476 | 327 | 149 | `(114, 1, 31, 20, 43, 149, 10, 108, 0, 0)` | 70 | 108 | 91 | 20 | 40 | 80 |
-| `hidden-declaration-type` | `rejected supplier=impossible` | 32 | 30 | 2 | `(13, 1, 0, 5, 5, 6, 0, 2, 0, 0)` | 9 | 10 | 8 | 5 | 10 | 6 |
-| `symbolic-type-poison` | `rejected supplier=impossible` | 57 | 45 | 12 | `(22, 1, 5, 4, 7, 11, 0, 7, 0, 0)` | 7 | 21 | 17 | 4 | 8 | 9 |
-| `non-circular` | `INCOMPLETE ... cyclic-certificate-dependency` | 15 | 15 | 0 | `(6, 1, 0, 2, 2, 4, 0, 0, 0, 0)` | 5 | 6 | 4 | 2 | 4 | 3 |
-| `dependency-chain-poisoned` | `rejected supplier=impossible` | 666 | 503 | 163 | `(170, 1, 0, 83, 164, 85, 0, 163, 0, 0)` | 86 | 89 | 86 | 83 | 166 | 146 |
-| `structural-empty-elim` | `admitted(rank=1,trans=2,excl=1,prereq=12)` | 85 | 55 | 30 | `(22, 2, 7, 3, 7, 21, 1, 10, 0, 12)` | 12 | 24 | 19 | 3 | 6 | 16 |
-| `symbolic-type-honest` | `admitted(rank=0,trans=4,excl=0,prereq=20)` | 117 | 64 | 53 | `(27, 1, 12, 6, 12, 18, 2, 19, 0, 20)` | 20 | 27 | 20 | 6 | 12 | 17 |
-| `hypothetical-propext` | `INCOMPLETE ... unavailable-certificate-transfer propext` | 200 | 136 | 64 | `(56, 2, 28, 9, 23, 46, 9, 27, 0, 0)` | 36 | 55 | 43 | 9 | 18 | 45 |
-| `library-decide-matcher` | `admitted(rank=0,trans=224,excl=0,prereq=1277)` | 18,346 | 8,929 | 9,417 | `(852, 1, 2981, 355, 1004, 6717, 111, 5048, 0, 1277)` | 1,277 | 1,543 | 772 | 67 | 571 | 3,464 |
-| `f3b-decide-matcher` | `admitted` (base) / **cuts short at 20,000 `false-discharge-budget` (10-cat total)** | **39,157** (cuts at 20,000) | **18,516** | **20,641** | `(1089, 4, 7472, 783, 1805, 14835, 175, 10361, 0, 2633)` | 2,633 | 2,581 | 1,003 | 73 | 1,247 | 8,567 |
-| `f3b-simp-all` (`F3b-simp`) | `INCOMPLETE ... propext` (base) / **cuts short at 20,000 `false-discharge-budget` (10-cat total)** | **37,925** (cuts at 20,000) | **19,223** | **18,702** | `(1176, 4, 7791, 816, 1871, 15356, 193, 10718, 0, 0)` | 2,729 | 2,714 | 1,083 | 80 | 1,298 | 9,078 |
-| `dependency-chain-baseline` | `admitted(rank=0,trans=82,excl=0,prereq=166)` | 831 | 501 | 330 | `(169, 1, 0, 82, 163, 86, 0, 164, 0, 166)` | 166 | 89 | 86 | 82 | 164 | 160 |
-| `shared-budget` (`spent := 19970`) | `INCOMPLETE ... false-discharge-budget` | 20,000 | 27 | 3 | `(11, 1, 2, 3, 4, 8, 0, 1, 0, 0)` | 4 | 10 | 7 | 4 | 8 | 45 |
-| N8a `bad-chain` | `rejected supplier=impossible` | 34 | 29 | 5 | `(12, 1, 0, 4, 5, 7, 1, 4, 0, 0)` | 8 | 10 | 7 | 4 | 8 | 6 |
-| N8a `directApp` | `rejected supplier=suppliedByBool` | 349 | 242 | 107 | `(89, 1, 23, 15, 32, 105, 8, 76, 0, 0)` | 53 | 84 | 70 | 15 | 30 | 58 |
-| N8a `cert01` | `admitted(rank=0,trans=223,excl=0,prereq=1274)` | 18,318 | 8,916 | 9,402 | `(849, 1, 2975, 354, 1002, 6710, 111, 5042, 0, 1274)` | 1,274 | 1,541 | 771 | 66 | 569 | 3,459 |
-| N8a `joint-simp` | `INCOMPLETE ... unavailable-certificate-transfer propext` | 278 | 182 | 96 | `(71, 4, 42, 11, 26, 70, 9, 45, 0, 0)` | 39 | 69 | 54 | 11 | 22 | 55 |
-| `boxedType` (run 1 / run 2) | `rejected supplier=impossible` / `rejected supplier=impossible` | 137 / 203 | 99 / 138 | 38 / 65 | `hb = 19` | 31 | — | — | — | — | 19 |
-| `boxedBody` (run 1 / run 2) | `rejected supplier=impossible` / `rejected supplier=impossible` | 133 / 197 | 104 / 145 | 29 / 52 | `hb = 19` | 29 | — | — | — | — | 19 |
-| `nestedBoxType` (run 1 / run 2) | `rejected supplier=impossible` / `rejected supplier=impossible` | 244 / 358 | 158 / 217 | 86 / 141 | `hb = 31` | 53 | — | — | — | — | 31 |
-| `closureReturningBox` (run 1 / run 2) | `rejected supplier=impossible` / `rejected supplier=impossible` | 144 / 216 | 105 / 149 | 39 / 67 | `hb = 21` | 31 | — | — | — | — | 21 |
-| `retryFn` (run 1 / run 2) | `rejected supplier=impossible` / `rejected supplier=impossible` | 54 / 85 | 47 / 72 | 7 / 13 | `hb = 10` | 10 | — | — | — | — | 10 |
-| `natRecSuccBasePoison` (run 1 / run 2) | `rejected supplier=impossible` / `rejected supplier=impossible` | 308 / 404 | 216 / 267 | 92 / 137 | `hb = 41` | 64 | — | — | — | — | 41 |
-| `anonLamRetry` (run 1 / run 2) | `rejected supplier=impossible` / `rejected supplier=impossible` | 46 / 73 | 27 / 42 | 19 / 31 | `hb = 6` | 7 | — | — | — | — | 6 |
-| `admittedRetry` (run 1 / run 2) | `admitted(rank=1,trans=2,excl=1,prereq=12)` (both) | 85 / 119 | 55 / 67 | 30 / 52 | `cVerify = 0 / 10, cCollect = 12 / 12` | 12 | — | — | — | — | 10 |
-| `incompleteRetry` (run 1 / run 2) | `INCOMPLETE ... propext` (both) | 200 / 277 | 136 / 179 | 64 / 98 | `cVerify = 0 / 27` | 36 | — | — | — | — | 28 |
+Measured by the bounded Lean 4.34.1 prototype harness
+[`scripts/proofs/audits/N2-round5-prototype.py`](audits/N2-round5-prototype.py)
+(exact file SHA-256:
+`b3a1adb41fabb83152459a5084ec22be4b7d3689cf011131e2c4649ca7992daa`, evaluated on
+base commit `9b2730bce` / `34a9fcf73` with Lean 4.34.1):
 
-#### 3.3 Honest headroom analysis and open budget question pending the owner
+| Control / Observation | Verdict | `total` (`work`) | `cConstruct` | `cEntry` | `cCall` | `cTypeInst` | `cNode` | `cComplete` | `cReplay` | `cVerify` | `cCollect` | `cProj` `(b, h, ih, ta)` | Terms | Nodes | Tmpls | Queries |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: |
+| `origin` | `rejected-supplied-contradiction supplier=impossible` | **90** | 40 | 1 | 6 | 8 | 14 | 0 | 6 | 0 | 14 | `1 (0,0,0,1)` | 17 | 16 | 6 | 12 |
+| `unapplied-empty-binder` | `rejected-supplied-contradiction supplier=impossible` | **53** | 23 | 1 | 4 | 4 | 8 | 0 | 2 | 0 | 11 | `0 (0,0,0,0)` | 9 | 8 | 4 | 8 |
+| `use-impossible-let` (`useImpossibleLet`) | `rejected-supplied-contradiction supplier=impossible` | **197** | 80 | 2 | 9 | 14 | 31 | 0 | 17 | 0 | 31 | `13 (5,0,1,7)` | 41 | 37 | 9 | 18 |
+| `let-app-supplied` (`letApp`) | `rejected-supplied-contradiction supplier=suppliedByBool` | **506** | 182 | 1 | 20 | 34 | 117 | 0 | 43 | 0 | 75 | `34 (20,0,0,14)` | 105 | 91 | 20 | 40 |
+| `hidden-declaration-type` | `rejected-supplied-contradiction supplier=impossible` | **56** | 28 | 1 | 5 | 5 | 6 | 0 | 2 | 0 | 9 | `0 (0,0,0,0)` | 9 | 8 | 5 | 10 |
+| `symbolic-type-poison` | `rejected-supplied-contradiction supplier=impossible` | **71** | 35 | 1 | 4 | 5 | 10 | 0 | 5 | 0 | 7 | `4 (1,1,1,1)` | 20 | 17 | 4 | 8 |
+| `non-circular` | `INCOMPLETE ... cyclic-certificate-dependency` | **25** | 11 | 1 | 2 | 2 | 4 | 0 | 0 | 0 | 5 | `0 (0,0,0,0)` | 5 | 4 | 2 | 4 |
+| `dependency-chain-poisoned` | `rejected-supplied-contradiction supplier=impossible` | **920** | 497 | 1 | 83 | 83 | 86 | 0 | 83 | 0 | 87 | `0 (0,0,0,0)` | 87 | 86 | 83 | 166 |
+| `structural-empty-elim` | `admitted rank=1 exclusions=1` | **91** | 31 | 2 | 3 | 5 | 17 | 1 | 7 | 0 | 17 | `8 (3,1,2,2)` | 22 | 19 | 3 | 6 |
+| `symbolic-type-honest` | `admitted rank=0 exclusions=0` | **117** | 48 | 1 | 6 | 8 | 15 | 0 | 12 | 0 | 21 | `6 (2,1,1,2)` | 24 | 20 | 6 | 12 |
+| `hypothetical-propext` | `INCOMPLETE ... unavailable-certificate-transfer propext` | **247** | 91 | 2 | 9 | 18 | 38 | 7 | 20 | 0 | 33 | `29 (13,1,8,7)` | 52 | 43 | 9 | 18 |
+| **`library-decide-matcher`** (`cert01`) | `admitted rank=0 exclusions=0` | **9,267** | 1,141 | 1 | 238 | 304 | 3,141 | 19 | 1,341 | 0 | 937 | `2,145 (887,316,558,384)` | 1,206 | 734 | 63 | 384 |
+| **`f3b-decide-matcher`** | `admitted rank=0 exclusions=0` | **17,804** | 1,636 | 4 | 419 | 599 | 5,869 | 43 | 2,527 | 0 | 1,648 | `5,059 (1761,948,1604,746)` | 1,840 | 991 | 73 | 651 |
+| **`f3b-simp-all`** (`F3b-simp`) | `INCOMPLETE ... unavailable-certificate-transfer propext` | **18,994** | 1,793 | 4 | 445 | 638 | 6,245 | 51 | 2,708 | 0 | 1,741 | `5,369 (1867,1015,1698,789)` | 1,970 | 1,071 | 80 | 696 |
+| `dependency-chain-baseline` | `admitted rank=0 exclusions=0` | **995** | 492 | 1 | 82 | 82 | 86 | 0 | 83 | 0 | 169 | `0 (0,0,0,0)` | 88 | 86 | 82 | 164 |
+| `shared-budget` (`spent := 19970`) | `INCOMPLETE ... false-discharge-budget` | **20,000** | 12 | 1 | 3 | 2 | 5 | 0 | 1 | 0 | 6 | `0 (0,0,0,0)` | 6 | 5 | 2 | 5 |
+| N8a `bad-chain` | `rejected supplier=impossible` | **51** | 23 | 1 | 4 | 4 | 7 | 0 | 4 | 0 | 8 | `0 (0,0,0,0)` | 8 | 7 | 4 | 8 |
+| N8a `directApp` | `rejected supplier=suppliedByBool` | **368** | 130 | 1 | 15 | 24 | 92 | 0 | 28 | 0 | 55 | `23 (11,0,0,12)` | 74 | 64 | 15 | 30 |
+| N8a `joint-simp` | `INCOMPLETE ... unavailable-certificate-transfer propext` | **356** | 125 | 4 | 10 | 19 | 58 | 7 | 34 | 0 | 42 | `57 (29,2,16,10)` | 66 | 57 | 10 | 20 |
+| Boundary `singletonCertificate` (`finite-collection-simp-positive`) | `INCOMPLETE ... unavailable-certificate-transfer propext` | **8,735** | 1,453 | 1 | 207 | 376 | 2,599 | 21 | 845 | 0 | 742 | `2,491` | — | — | — | — |
 
-1. **Headroom under the 5 base categories alone (`base`):**
-   - In the Round-3 prototype (`56d9722c6`), `f3b-decide-matcher` consumed
-     `18,275` base work units (leaving `1,725` units, or `8.6%`, of headroom
-     below `20,000`) and `f3b-simp-all` consumed `18,982` base work units
-     (leaving `1,018` units, or `5.1%`, of headroom below `20,000`).
-   - With the Round-4 `completePartialCall` minor-premise opening and
-     dependent-type-alias instantiation fixes included, the 5 base categories
-     consume `18,516` units on `f3b-decide-matcher` (leaving `1,484` units, or
-     `7.4%`, of headroom) and `19,223` units on `f3b-simp-all` (leaving `777`
-     units, or `3.9%`, of headroom).
-2. **Effect of charging the 5 new walk categories (`new`):**
-   - `library-decide-matcher` (`¬ (0 = 1) := by decide`, closed concrete match
-     with `entry.query.inputs = #[]` and `hypothetical = #[]`) consumes `8,929`
-     base units + `9,417` new units = **`18,346` total units** (`hb = 3,464`),
-     which **completes** under the unchanged `20,000` work budget with `1,654`
-     units (`8.3%`) of headroom.
-   - `f3b-decide-matcher` (`hn (of_decide_eq_true hd)` under 3 symbolic
-     assumptions `y`, `hd`, `hn`, which symbolically unfolds `Nat.brecOn.go` on
-     `Decidable.rec` / `Nat.decEq`) consumes `18,516` base units + `20,641` new
-     units (`cProj = 7,472`, `cComplete = 175`, `cReplay = 10,361`,
-     `cVerify = 0`, `cCollect = 2,633`) = **`39,157` total units** (`hb = 8,567`,
-     `< 0.5%` of the `2,000,000` heartbeat ceiling). Under the unchanged
-     `20,000` work cap, it cuts short at `work = 20,000` with
-     `INCOMPLETE ... false-discharge-budget`. Even if `cProj` and `cReplay` are
-     amortized into their enclosing `evalNode` / `evalCall` steps (charging only
-     `base + cComplete + cVerify + cCollect`), `f3b-decide-matcher` requires
-     `18,516 + 175 + 0 + 2,633 = 21,324` units (`1,324` units over `20,000`).
-   - `f3b-simp-all` (`simpAll` under the same 3 symbolic assumptions `y`, `hd`,
-     `hn`, which evaluates the same symbolic `Nat.decEq` matcher tower before
-     reaching `propext`) consumes `19,223` base units + `18,702` new units
-     (`cProj = 7,791`, `cComplete = 193`, `cReplay = 10,718`) = **`37,925`
-     total units** (`hb = 9,078`). Under the unchanged `20,000` work cap, it cuts
-     short at `work = 20,000` with `INCOMPLETE ... false-discharge-budget`
-     before reaching `unavailable-certificate-transfer propext`.
-3. **Open budget question pending the owner (never decided by an agent):**
-   Because the Phase B exit rule (`N2-fix6b-exit.md`) and owner rules forbid
-   raising `SolverState.remaining := 20000` or leaving any walk uncharged, we
-   record this as an explicit **open budget question for the owner** (Section
-   5.2): how should the `20,000` discharge-work allowance be calibrated once
-   full declaration-type validation, symbolic recursor minor-premise opening,
-   recursive value completion, context projection, cache-hit replay, and
-   prerequisite-DAG collection are all charged? No budget is raised in this
-   branch.
+#### 3.3 Headroom analysis under the unchanged 20,000 work budget
+
+With the schedule optimizations in Section 2.6 (`NodeQuery` memoization,
+precomputed `forallDomainTerms` + `tDomKey` memoization, direct multi-argument
+`applyClosureArgs`, pre-charged `termFVarMask` + interned context projections,
+and `runStartNodeId` verification watermark), **every control and observation
+completes under the unchanged `20,000` work budget with all 10 walk categories
+charged at their real complexity**:
+- **`library-decide-matcher` (`cert01`):** `9,267` total work units (`10,733`
+  units, or `53.7%`, of headroom below `20,000`).
+- **`singletonCertificate` (`finite-collection-simp-positive`):** `8,735` total
+  work units (`11,265` units, or `56.3%`, of headroom below `20,000`).
+- **`f3b-decide-matcher`:** `17,804` total work units (`2,196` units, or `11.0%`,
+  of headroom below `20,000`).
+- **`f3b-simp-all` (`F3b-simp`):** `18,994` total work units (`1,006` units, or
+  `5.0%`, of headroom below `20,000`), reaching its genuine
+  `unavailable-certificate-transfer propext` boundary rather than cutting short
+  on budget.
+
+No work-budget increase or category exemption is proposed or needed.
 
 ---
 
-### 4. Control plan (atomic forms vs. dependency-transfer rows, mutation sensitivity, and extended retry controls)
+### 4. Control plan (elaborated per-row controls, executed single-row mutations, and same-state retry controls)
 
-To resolve Codex Round-3 Finding 3 (`N13e-codex-findings.out`), Section 4.1
-separates **atomic leaf & fail-closed syntax rows** (which have no
-dependency-bearing children and are tested by well-typed recognition and
-fail-closed controls) from **dependency-transfer rows** (each of which carries a
-well-typed poison-only-through-this-row negative control, a paired positive
-control, and an explicit single-row mutation sensitivity specification).
+To resolve Codex Round-4 Finding 3 (`N13f-codex-findings.out`), every per-row
+positive and negative control in Tables 4.1a and 4.1b is elaborated and executed
+in Lean 4.34.1 (`PerRowSuite.lean` inside
+[`scripts/proofs/audits/N2-round5-prototype.py`](audits/N2-round5-prototype.py),
+SHA-256 `b3a1adb41fabb83152459a5084ec22be4b7d3689cf011131e2c4649ca7992daa`),
+together with 28 executed single-row mutation runs (`MUT_CTRL`) demonstrating
+that each row's negative or fail-closed control fails if and only if that row's
+handler is broken.
 
 #### 4.1a Atomic leaf & fail-closed syntax rows (Rows 2c, 3, 4, 5a, 5b)
 
-Atomic leaf forms (`Expr.sort u`, `Expr.lit (.natVal n)`, `Expr.lit (.strVal s)`)
-have no child subterms inside the `Expr` node itself, so a negative control
-cannot place poison *inside* a sort or literal; instead, they are verified by
-well-typed recognition controls (and, for literals, recursor elimination
-controls where the literal drives concrete constructor selection) together with
-single-row fail-closed mutation checks:
-
-| Table Row | `Expr` form & mode | Recognition / fail-closed control(s) & measured prototype cost (`total (base + new)`) | Exact expected diagnostic | Single-row mutation sensitivity (fails if and only if this row's handler is broken) |
+| Table Row | `Expr` form & mode | Executed control(s) & measured 10-category vector `(total: con, ent, call, tyI, node, comp, rep, ver, col, proj)` | Exact diagnostic | Executed single-row mutation (`MUT_CTRL`) & observed mutated outcome |
 | --- | --- | --- | --- | --- |
-| 2c | `Expr.fvar f` (unpermitted local variable) | `unpermitted-fvar-neg`: certificate proof or assumption type containing a local `FVarId` not in `candidate.assumptions` | `INCOMPLETE ... unpermitted-certificate-assumption` | Removing the `collectFVars` / `hypothetical.find?` check in Row 2c allows the unpermitted `fvar` to be treated as neutral and admits `unpermitted-fvar-neg`. |
-| 3 | `Expr.mvar m` | `mvar-proof-neg`: certificate proof or assumption type containing an uninstantiated `?m` | `INCOMPLETE ... uninstantiated-certificate-metavariable` | Removing the `hasMVar` / `Transfer.unresolved` check in Row 3 admits `mvar-proof-neg`. |
-| 4 | `Expr.sort u` | `sort-recognition-honest`: `@id Prop True := True.intro` (`total = 81 (base = 48, new = 33), hb = 11`); `structural-empty-elim` (`Empty.elim (Sort 0) h`, `total = 85 (base = 55, new = 30)`) | `admitted rank=0 exclusions=0` (`prereq=17`) / `admitted rank=1 exclusions=1` (`prereq=12`) | Replacing Row 4's `.sort u` case in `compileNode` with `Transfer.unresolved id "unresolved-sort"` causes `sort-recognition-honest` and `structural-empty-elim` to fail with `INCOMPLETE ... unresolved-sort`. |
-| 5a | `Expr.lit (.natVal n)` | Positive: `library-decide-matcher` (`¬ (0 = 1) := by decide`, `total = 18,346 (base = 8,929, new = 9,417)`). Negative (literal `1` stepping to `0` through `Value.ctor ``Nat.succ`): `natRecSuccBasePoison` (`total = 308 (base = 216, new = 92), hb = 41`) | `admitted rank=0 exclusions=0` / `rejected-supplied-contradiction supplier=impossible` | Omitting the canonical `Value.ctor` view (`Nat.zero` / `Nat.succ`) on `.lit (.natVal n)` in Row 5a prevents concrete `Nat` literal matching and causes `library-decide-matcher` to fail. |
-| 5b | `Expr.lit (.strVal s)` | Positive: `str-lit-honest`: `(fun _ : String => True.intro) "hello"` (`total = 53 (base = 33, new = 20), hb = 9`) and `str-lit-rec-honest`: `@String.rec (fun _ => True) (fun _ => True.intro) "hello"` (`total = 173 (base = 99, new = 74), hb = 31`). Negative (recursor elimination of `"hello"` via `whnfD` reaching `String.mk` minor premise): `str-lit-rec-poison`: `@String.rec (fun _ => True) (fun _ => False.elim impossible) "hello"` (`total = 144 (base = 105, new = 39), hb = 29`) | `admitted rank=0 exclusions=0` (`prereq=11` / `prereq=30`) / `rejected-supplied-contradiction supplier=impossible` | Replacing Row 5b's `.lit (.strVal s)` case in `compileNode` with `Transfer.unresolved` breaks `str-lit-honest` and `str-lit-rec-honest`; disabling `whnfD` constructor exposure on string literals in Row 5b/14b prevents concrete matching in `str-lit-rec-poison`. |
+| 2c | `Expr.fvar f` (unpermitted local variable) | `row2-fvar-unpermitted`: `Expr.fvar (FVarId.mk `unpermitted_local)` (`total=1: 0,1,0,0,0,0,0,0,0,0`) | `INCOMPLETE ... case=row2-fvar-unpermitted unpermitted-certificate-assumption` | `mut-row2-fvar` (skipping the `collectFVars` / `hypothetical.find?` check in Row 2c): `row2-fvar-unpermitted` returns `admitted rank=0 exclusions=0`. |
+| 3 | `Expr.mvar m` | `row3-mvar-unresolved`: `Expr.mvar (MVarId.mk `unresolved_hole)` (`total=1: 0,1,0,0,0,0,0,0,0,0`) | `INCOMPLETE ... case=row3-mvar-unresolved uninstantiated-certificate-metavariable` | `mut-row3-mvar` (skipping the `hasMVar` check in Row 3): `row3-mvar-unresolved` returns `admitted rank=0 exclusions=0`. |
+| 4 | `Expr.sort u` | `row4-sort-recognition-honest`: `@id Prop True := True.intro` (`total=73: 28,1,5,5,13,0,3,0,16,2`); `row4-sort-dep-poison`: `@id Prop (let _ : False := impossible; True) True.intro` (`total=98: 47,1,7,7,15,0,4,0,16,1`) | `admitted rank=0 exclusions=0` / `rejected-supplied-contradiction supplier=impossible` | `mut-row4-sort` (replacing `.sort u` in `compileNode` with `Transfer.unresolved id "unresolved-sort"`): `row4-sort-recognition-honest` fails with `INCOMPLETE ... case=row4-sort-recognition-honest unresolved-sort`. |
+| 5a | `Expr.lit (.natVal n)` | Positive: `row5a-nat-lit-honest` (`total=426: 156,2,18,27,71,1,41,0,74,36`). Negative: `row5a-nat-lit-poison` (`Nat.casesOn 1 True.intro (fun n => Nat.casesOn n (False.elim impossible) (fun _ => True.intro))`, `total=362: 131,1,16,23,71,0,34,0,57,29`) | `admitted rank=1 exclusions=1` / `rejected-supplied-contradiction supplier=impossible` | `mut-row5a-natlit` (omitting canonical `Value.ctor` view on `.lit (.natVal n)` in Row 5a): `row5a-nat-lit-poison` returns `admitted rank=0 exclusions=0`. |
+| 5b | `Expr.lit (.strVal s)` | Positive: `row5b-str-lit-simple-honest` (`(fun _ : String => True.intro) "hello"`, `total=62: 25,1,5,4,10,0,2,0,15,0`), `row5b-str-lit-rec-honest` (`@String.rec (fun _ => True) (fun (b : ByteArray) (_h : b.IsValidUTF8) => True.intro) "hello"`, `total=192: 68,1,9,11,32,0,14,0,34,23`), `row5b-str-lit-honest` (`total=1019: 324,2,28,52,194,1,96,0,141,181`). Negative: `row5b-str-lit-rec-poison` (`@String.rec (fun _ => True) (fun (b : ByteArray) (_h : b.IsValidUTF8) => False.elim impossible) "hello"`, `total=198: 74,1,9,12,34,0,14,0,31,23`), `row5b-str-lit-poison` (`total=879: 292,1,25,48,180,0,87,0,112,134`) | `admitted rank=0 exclusions=0` (`rank=1` on `row5b-str-lit-honest`) / `rejected-supplied-contradiction supplier=impossible` | `mut-row5b-strlit` (replacing `.lit (.strVal s)` in `compileNode` with `Transfer.unresolved id "unresolved-strlit"`): `row5b-str-lit-simple-honest` and `row5b-str-lit-rec-honest` fail with `INCOMPLETE ... unresolved-strlit`. `mut-row5b-strlit-open` (skipping `openMinorFields` when `.lit (.strVal s)` blocks `String.rec`): `row5b-str-lit-poison` returns `admitted rank=0 exclusions=0`. |
 
 #### 4.1b Dependency-transfer rows (Rows 1, 2a, 2b, 6, 7, 8a, 8b, 8c, 9a, 9b, 10, 11, 12, 13a, 13b, 14a, 14b, 14c, 14d, 15, 16a, 16b, 17)
 
-Every dependency-transfer row has a well-typed negative control in which the
-planted poison (`impossible` or `suppliedByBool`) is reachable **exclusively**
-through that row's obligation transfer, paired with positive controls and a
-single-row mutation sensitivity specification:
-
-| Table Row | `Expr` form & mode | Negative control (poison reachable **only** through this row) & measured prototype cost (`total (base + new)`) | Exact expected negative diagnostic | Positive control(s) that must stay `admitted` | Single-row mutation that makes ONLY this row's negative control pass as `admitted` (or fail its check) |
-| --- | --- | --- | --- | --- | --- |
-| 1 | `Expr.bvar i` (`.body` / `.closure`) | `bvar-closure-poison`: applied lambda `(fun (f : Unit → True) => f ()) (fun _ => False.elim impossible)` where `bvar 0` is the sole reference to `f` | `rejected-supplied-contradiction supplier=impossible` | `dependency-chain-baseline` (`fun h => h`, `total = 831`) | Returning a fresh neutral `Input` instead of `bvars[bvars.size - 1 - i]` at `.bvar i` in Row 1 causes `bvar-closure-poison` to miss `f`'s body and return `admitted`. |
-| 2a | `Expr.fvar f` (permitted assumption `input.type` validation) | `assumption-type-poison`: permitted assumption `h` whose `input.type` is `let _ : False := impossible; True` (while `candidate.proof` is `True.intro`) | `rejected-supplied-contradiction supplier=impossible` | `structural-empty-elim` (`h : Empty`, `total = 85`) | Skipping the `evalNode` + `completeValue` check on `input.type` in `validateCertificate` (Row 2a) causes `assumption-type-poison` to return `admitted`. |
-| 2b | `Expr.fvar f` (canonical binder `_n2_var` applied as neutral head to poisoned arg) | `neutral-fvar-arg-poison`: `fun (g : (Unit → False) → True) => g (fun _ => impossible)` on canonical binder `g` | `rejected-supplied-contradiction supplier=impossible` | `symbolic-type-honest` (`total = 117`) | Skipping `completeValue` on `allArgs` when `applyValue` hits a neutral `.fvar` head (Row 2b) causes `neutral-fvar-arg-poison` to return `admitted`. |
-| 6 | `Expr.mdata d body` | `mdata-wrapped-poison`: `Expr.mdata {} (mkApp2 (mkConst ``False.elim [levelZero]) (mkConst ``True) (mkConst ``impossible))` | `rejected-supplied-contradiction supplier=impossible` | `mdata-wrapped-honest`: `Expr.mdata {} (mkConst ``True.intro)` | Compiling `.mdata` to an opaque leaf instead of delegating to `body` in Row 6 causes `mdata-wrapped-poison` to return `admitted`. |
-| 7 | `Expr.letE` (`Transfer.letBind`, unused and partially projected bindings) | `use-impossible-let` (`total = 166 (117 + 49)`), `boxedType` (`total = 137 (99 + 38)`), `boxedBody` (`total = 133 (104 + 29)`) | `rejected-supplied-contradiction supplier=impossible` | `let-honest`: `let box : (Unit → Unit) × Unit := (fun u => u, ()); let _ := box; True.intro` | Skipping `completeValue entry valInput` when `!bodyNode.hasLooseBVar 0` (or after `bodyId` for a let-bound `.ctor`) in Row 7 causes `use-impossible-let`, `boxedType`, and `boxedBody` to return `admitted`. |
-| 8a | `Expr.lam` (`Transfer.binder`, applied: unused argument) | `unused-lam-arg-poison`: `(fun (_ : Unit → False) => True.intro) (fun _ => impossible)` | `rejected-supplied-contradiction supplier=impossible` | `(let _ : Nat := 0; fun b : Bool => True.intro) true` | Skipping `completeValue entry arg0` when `!bodyNode.hasLooseBVar 0` in Row 8a causes `unused-lam-arg-poison` to return `admitted`. |
-| 8b | `Expr.lam` (`Transfer.binder`, unapplied in `.body` mode) | `unapplied-empty-binder` (`fun _ : Empty => impossible`, `total = 31 (29 + 2)`), `closureReturningBox` (`total = 144 (105 + 39)`) | `rejected-supplied-contradiction supplier=impossible` | `dependency-chain-baseline` (`fun h : False => h`, `total = 831`) | Re-introducing the empty-domain binder skip or omitting `completeValue entry bodyOut` in Row 8b causes `unapplied-empty-binder` or `closureReturningBox` to return `admitted`. |
-| 8c | `Expr.lam` (`Transfer.binder`, unapplied in `.closure` mode) | `boxedBody` (`(fun _ : Unit => False.elim impossible, ())` where the inner lambda is evaluated in `.closure` mode as an argument to `Prod.mk`, `total = 133 (104 + 29)`) | `rejected-supplied-contradiction supplier=impossible` | `library-decide-matcher` (`total = 18,346`) | Failing to record `Value.closure` at `lamInp.term` in `.closure` mode (Row 8c) causes `completeValue` on the enclosing container to see no closure and admits `boxedBody`. |
-| 9a | `Expr.forallE` (`Transfer.forallBinder` in term/invariant node) | `forall-codomain-poison`: theorem whose type contains `(x : Empty) → (let _ : False := impossible; x = x)` | `rejected-supplied-contradiction supplier=impossible` | `symbolic-type-honest` (`total = 117`) | Skipping `evalCachedInvariantNode` on `bodyId` when `typeId` is uninhabited in Row 9a causes `forall-codomain-poison` to return `admitted`. |
-| 9b | `Expr.forallE` & unfolded Pi-type aliases in `evalTypeInstantiate` | Syntactic Pi: `symbolic-type-poison` (`typePoison : (h : False) → badType False h → True`, `total = 57 (45 + 12)`). Unfolded Pi alias: `dep-type-alias-poison` (`depAliasHelper 1` where `depAliasHelper : HiddenDepCodomain := fun _ => True.intro` and `HiddenDepCodomain := (n : Nat) → badDepCodomain n`, `total = 403 (280 + 123), hb = 61`) | `rejected-supplied-contradiction supplier=impossible` | `symbolic-type-honest` (`total = 117 (64 + 53)`), `dep-type-alias-honest` (`depAliasHelper 0`, `total = 426 (249 + 177), hb = 61, prereq = 59`) | Dropping trailing `typeArgs` in `filterTypeArgs` (`\| _ => #[]`) or failing to pass `typeArgs` into `.call` in `evalTypeInstantiate` (Row 9b) causes `dep-type-alias-poison` to return `admitted` (and collides its cache key with `dep-type-alias-honest` in `dep-type-alias-cache-retry`). |
-| 10 | Constant `declaredType` (`evalDeclaredType`) | `hidden-declaration-type` (`usesHiddenType` calling `hiddenType : (let _ : False := impossible; True) := True.intro`, `total = 32 (30 + 2)`), `boxedType` (`total = 137 (99 + 38)`) | `rejected-supplied-contradiction supplier=impossible` | `dependency-chain-baseline` (`total = 831`) | Removing `evalDeclaredType` from `evalCall` (Row 10) causes `hidden-declaration-type` and `boxedType` to return `admitted`. |
-| 11 | Constant with value (`hasVal == true`, `.body` & `.closure`) | `dependency-chain-poisoned` (`total = 666 (503 + 163)`), `let-app-supplied` (`total = 476 (327 + 149)`), `retryFn` (`total = 54 (47 + 7)`) | `rejected-supplied-contradiction supplier=impossible` / `supplier=suppliedByBool` | `dependency-chain-baseline` (`total = 831`) | Skipping `tmpl.root` evaluation or omitting `completePartialCall` on 0-arg lambda-bodied constants in Row 11 causes `dependency-chain-poisoned` or `retryFn` to return `admitted`. |
-| 12 | Bodyless `.axiomInfo` / `.opaqueInfo` | `origin` (`of_eq_true injectedFalse._simp_1`, `total = 63 (54 + 9)`), `hypothetical-propext` (`of_eq_true (eq_true h)`, `total = 200 (136 + 64)`) | `rejected-supplied-contradiction supplier=impossible` / `INCOMPLETE ... unavailable-certificate-transfer propext` | `structural-empty-elim` (`total = 85`) | Returning `.ok callInput` on bodyless `.axiomInfo` in Row 12 admits both `origin` and `hypothetical-propext`. |
-| 13a | Saturated `.ctorInfo` (`Value.ctor`) | `boxedType` (`total = 137`), `boxedBody` (`total = 133`), `ctor-param-poison` (`@Prod.mk (let _ : False := impossible; Unit) Unit () ()`) | `rejected-supplied-contradiction supplier=impossible` | `ctor-honest`: `let box : (Unit → Unit) × Unit := (fun u => u, ()); True.intro` | Skipping `completeValue` on `Value.ctor` elements in Row 13a causes `boxedType`, `boxedBody`, and `ctor-param-poison` to return `admitted`. |
-| 13b | Under-applied `.ctorInfo` (`Value.partialCall` / `completePartialCall`) | Direct `.body` mode: `partial-ctor-poison` (`let mk : Unit → (Unit → Empty) × Unit := Prod.mk (fun _ => False.elim impossible); True.intro`, `total = 117 (91 + 26), hb = 19`). Via `.closure`-mode consumer: `partial-ctor-consumer-poison` (`id (Prod.mk (fun _ => False.elim impossible))`, `total = 203 (147 + 56), hb = 29`) | `rejected-supplied-contradiction supplier=impossible` | `partial-ctor-honest` (`total = 137 (81 + 56), hb = 21, prereq = 27`), `partial-ctor-consumer-honest` (`total = 250 (136 + 114), hb = 31, prereq = 44`) | Recording `Value.partialCall` in `.body` mode and calling `evalCall .body` from `completeValue` (Round 3's bug) makes all four controls fail with `cyclic-certificate-dependency`; skipping `completePartialCall` Step 1 makes `partial-ctor-poison` return `admitted`. |
-| 14a | 0-constructor `.recInfo` (`r.rules.isEmpty`) | `empty-rec-supplied-poison`: `False.rec (fun _ => True) impossible` | `rejected-supplied-contradiction supplier=impossible` | `structural-empty-elim` (`Empty.elim h`, `total = 85 (55 + 30)`) | Recording `structuralExclusions` without checking `isDirectHypotheticalOrigin` or without evaluating `majorInput` in Row 14a admits `empty-rec-supplied-poison`. |
-| 14b | Concrete constructor match `.recInfo` (`matchedRule.isSome`) | `natRecSuccBasePoison` (`total = 308 (216 + 92)`), `rec-unused-field-poison`: `Prod.casesOn (motive := fun _ => True) (fun _ : Unit => False.elim impossible, ()) (fun _ _ => True.intro)` | `rejected-supplied-contradiction supplier=impossible` | `library-decide-matcher` (`total = 18,346`), `branch-local-unreachable`, `match-redex-unreachable` | Overwriting unselected minor premises with `dummyInput` in Row 14b admits `natRecSuccBasePoison`; skipping `completeValue` on unused constructor fields in `fieldInputs` admits `rec-unused-field-poison`. |
-| 14c | Symbolic major premise `.recInfo` (`matchedRule.isNone`, `openMinorFields`) | `symbolic-rec-minor-poison`: `Nat.casesOn (motive := fun _ => Unit → True) y (fun _ => True.intro) (fun _ _ => False.elim impossible)` on symbolic `y : Nat` | `rejected-supplied-contradiction supplier=impossible` | `symbolic-type-honest` (`total = 117`) | Skipping `openMinorFields` on symbolic major premises in Row 14c causes `symbolic-rec-minor-poison` to return `admitted`. |
-| 14d | Under-applied `.recInfo` (`actualArgs.size <= r.getMajorIdx`, `completePartialCall`) | 0-arg minor poison: `underapplied-rec-poison` (`@Nat.rec (fun _ => True) (False.elim impossible) (fun _ _ => True.intro)`, `total = 49 (45 + 4), hb = 11`). Via `.closure`-mode consumer: `underapplied-rec-consumer-poison` (`id (@Nat.rec ...)`, `total = 76 (66 + 10), hb = 15`). Multi-arg step minor poison: `underapplied-rec-minor-lam-poison` (`@Nat.rec (fun _ => True) True.intro (fun _ _ => False.elim impossible)`, `total = 164 (117 + 47), hb = 29`) | `rejected-supplied-contradiction supplier=impossible` | `underapplied-rec-honest` (`total = 211 (111 + 100), hb = 32, prereq = 34`), `underapplied-rec-consumer-honest` (`total = 357 (190 + 167), hb = 44, prereq = 58`) | Omitting `openMinorFields` in `completePartialCall` Case C (Row 14d) causes `underapplied-rec-minor-lam-poison` (whose step minor premise has `minorArity = 2`, so Step 1's `completeValue` opens only 1 of its 2 binders) to return `admitted`. |
-| 15 | `.quotInfo` (`Quot`, `Quot.mk`, `Quot.lift`, `Quot.ind`) | `quot-mk-arg-poison`: `@Quot.mk (Unit → False) (fun _ _ => True) (fun _ => impossible)` (`total = 123 (86 + 37)`). `quot-lift-incomplete`: symbolic `Quot.lift` (`total = 116 (72 + 44)`) | `rejected-supplied-contradiction supplier=impossible` / `INCOMPLETE ... unresolved-certificate-quotient Quot.lift` | `quot-mk-honest`: `@Quot.mk Unit (fun _ _ => True) ()` (`total = 56 (35 + 21)`) | Skipping `completeValue` on `.quotInfo` arguments in Row 15 admits `quot-mk-arg-poison`; skipping the `.lift \| .ind` check admits `quot-lift-incomplete`. |
-| 16a | `.inductInfo` (`Eq`, `Prod`, `PProd`, etc.) | `induct-arg-poison`: theorem whose type/body contains `@Eq (Unit → False) (fun _ => impossible) (fun _ => impossible)` | `rejected-supplied-contradiction supplier=impossible` | `symbolic-type-honest` (`total = 117`) | Skipping `completeValue` on `.inductInfo` arguments in Row 16a causes `induct-arg-poison` to return `admitted`. |
-| 16b | Higher-order / neutral `Transfer.application` | `let-app-supplied` (`(let _ : Nat := 0; fun b => suppliedByBool b) true`, `total = 476 (327 + 149)`), `neutral-fvar-arg-poison` | `rejected-supplied-contradiction supplier=suppliedByBool` / `supplier=impossible` | `symbolic-type-honest` (`total = 117`) | Dropping `evalInputs` when the application head is a `.letBind` or `.binder` in Row 16b causes `let-app-supplied` to fail with `unavailable-certificate-transfer suppliedByBool` instead of `rejected-supplied-contradiction supplier=suppliedByBool`. |
-| 17 | `Expr.proj` (`Transfer.projection`: unselected fields & nested `.ctor`) | `nestedBoxType` (`((fun _ => False.elim impossible, ()), ()).2`, `total = 244 (158 + 86), hb = 31`) | `rejected-supplied-contradiction supplier=impossible` | `proj-honest`: `((fun u : Unit => u, ()), ()).2` | Checking unselected projection fields only with shallow `isUnappliedValue` instead of recursive `completeValue` in Row 17 admits `nestedBoxType`. |
+| Table Row | `Expr` form & mode | Executed negative & positive controls & measured 10-category vectors `(total: con, ent, call, tyI, node, comp, rep, ver, col, proj)` | Exact negative diagnostic | Executed single-row mutation (`MUT_CTRL`) & observed mutated outcome |
+| --- | --- | --- | --- | --- |
+| 1 | `Expr.bvar i` (`.body` / `.closure`) | Neg: `row1-bvar-app-poison` (`(fun (f : Unit → True) => f ()) (fun _ => False.elim impossible)`, `total=116: 51,1,8,8,19,0,7,0,22,0`), `row1-bvar-poison` (`total=68: 29,1,4,4,12,1,6,0,11,0`). Pos: `row1-bvar-honest` (`total=143: 48,2,6,7,28,1,13,0,28,10`) | `rejected-supplied-contradiction supplier=impossible` | `mut-row1-bvar` (returning a fresh neutral `Input` instead of `bvars[bvars.size - 1 - i]` at `.bvar i`): `row1-bvar-app-poison` returns `admitted rank=0 exclusions=0`. |
+| 2a | `Expr.fvar f` (permitted assumption `input.type` validation) | Neg: `row2a-assumption-type-poison` (permitted assumption `h` with `input.type := poisonedAssumpTy` and proof `True.intro`, `total=30: 14,2,2,2,4,0,1,0,5,0`). Pos: `structural-empty-elim` (`total=91`) | `rejected-supplied-contradiction supplier=impossible` | `mut-row2a-assumption-type` (skipping `evalNode` + `completeValue` on `input.type` in `validateCertificate`): `row2a-assumption-type-poison` returns `admitted rank=0 exclusions=0`. |
+| 2b | `Expr.fvar f` (canonical binder applied as neutral head) | Neg: `row2b-neutral-fvar-arg-poison` (`fun (g : (Unit → False) → True) => g (fun _ => impossible)`, `total=95: 40,1,6,6,15,1,7,0,19,0`). Pos: `symbolic-type-honest` (`total=117`) | `rejected-supplied-contradiction supplier=impossible` | `mut-row2b-neutral-fvar-arg` (skipping `completeValue` on `allArgs` at neutral `.fvar` head in `applyValue`): `row2b-neutral-fvar-arg-poison` returns `admitted rank=0 exclusions=0`. |
+| 6 | `Expr.mdata d body` | Neg: `row6-mdata-poison` (`Expr.mdata {} (False.elim impossible)` normalized via `compileNode`, `total=24: 11,1,2,2,3,0,0,0,5,0`). Pos: `row6-mdata-honest` (`total=105: 36,2,5,6,18,1,8,0,21,8`) | `rejected-supplied-contradiction supplier=impossible` | `mut-row6-mdata` (compiling `.mdata` in `compileNode` to an opaque leaf instead of delegating to `body`): `row6-mdata-poison` returns `admitted rank=0 exclusions=0`. |
+| 7 | `Expr.letE` (`Transfer.letBind`, unused and partially projected bindings) | Neg: `use-impossible-let` (`total=197`), `row7-let-used-ctor-poison` (`let p := ((fun _ : Unit => False.elim impossible), True.intro); p.2`, `total=166: 68,1,9,13,22,6,16,0,26,5`). Pos: `row7-let-dead-honest` (`total=258: 93,2,11,17,43,1,24,0,46,21`) | `rejected-supplied-contradiction supplier=impossible` | `mut-row7-let` (skipping `completeValue entry valInput` on let-bound values in `Transfer.letBind`): `row7-let-used-ctor-poison` returns `admitted rank=0 exclusions=0`. |
+| 8a | `Expr.lam` (`Transfer.binder`, binder domain & unused argument) | Neg: `row8a-lam-domain-poison` (`Expr.lam `x poisonedAssumpTy True.intro .default` with target `True → True`, `total=32: 16,1,2,2,5,0,1,0,5,0`), `row10-app-alias-poison` (`(fun (_ : Unit → False) => True.intro) (fun _ => impossible)`, `total=41: 19,1,3,3,7,0,2,0,6,0`). Pos: `row8a-lam-closure-honest` (`total=150: 52,2,7,8,26,1,13,0,31,10`), `row10-app-alias-honest` (`total=148: 54,2,7,11,22,0,13,0,28,11`) | `rejected-supplied-contradiction supplier=impossible` | `mut-row8a-lam-closure` (skipping `evalCachedInvariantNode` on `typeId` in `.binder`): `row8a-lam-domain-poison` returns `admitted rank=0 exclusions=0`. `mut-row10-app` (skipping `completeValue` on unused applied lambda argument when `!bodyNode.hasLooseBVar 0`): `row10-app-unused-arg-poison` returns `admitted rank=0 exclusions=0`. |
+| 8b | `Expr.lam` (`Transfer.binder`, unapplied in `.body` mode) | Neg: `unapplied-empty-binder` (`total=53`), `row8b-lam-body-poison` (`fun (_ : Unit) => False.elim impossible`, `total=45: 20,1,3,3,8,0,1,0,9,0`). Pos: `dependency-chain-baseline` (`total=995`) | `rejected-supplied-contradiction supplier=impossible` | `mut-row8b-lam-body` (skipping unapplied `.binder` body evaluation in `.body` mode): `row8b-lam-body-poison` returns `admitted rank=0 exclusions=0`. |
+| 8c | `Expr.lam` (`Transfer.binder`, unapplied in `.closure` mode) | Neg: `row8c-boxed-body-poison` (`let _ : (Unit → True) × Unit := (fun _ => False.elim impossible, ()); True.intro`, `total=179: 74,1,10,14,24,5,17,0,29,5`). Pos: `library-decide-matcher` (`total=9,267`) | `rejected-supplied-contradiction supplier=impossible` | `mut-row8c-lam-closure` (omitting `Value.closure` registration in `.closure` mode): `row8c-boxed-body-poison` returns `admitted rank=0 exclusions=0`. |
+| 9a | `Expr.forallE` (`Transfer.forallBinder` in term/invariant node) | Neg: `row9-forall-domain-poison` (`total=73: 36,1,5,5,13,0,1,0,12,0`), `row9a-forall-codomain-poison` (`(x : Empty) → (let _ : False := impossible; x = x)`, `total=64: 34,1,4,4,9,0,1,0,9,2`). Pos: `symbolic-type-honest` (`total=117`) | `rejected-supplied-contradiction supplier=impossible` | `mut-row9-forall` (skipping `Transfer.forallBinder` domain/codomain evaluation): both `row9-forall-domain-poison` and `row9a-forall-codomain-poison` return `admitted rank=0 exclusions=0`. |
+| 9b | `Expr.forallE` & unfolded Pi-type aliases in `evalTypeInstantiate` | Neg: `symbolic-type-poison` (`total=71`), `row9b-dep-type-alias-poison` (`let _ := depAliasHelper 1; True.intro` where `depAliasHelper : HiddenDepCodomain := fun _ => ()` and `HiddenDepCodomain := (n : Nat) → badDepCodomain n`, `total=430: 167,1,17,31,82,0,36,0,58,38`). Pos: `row9b-dep-type-alias-honest` (`let _ := depAliasHelper 0; True.intro`, `total=448: 167,1,19,31,82,0,40,0,70,38`) | `rejected-supplied-contradiction supplier=impossible` | `mut-row9b-type-alias` (ignoring `typeArgs` at `.call` in `evalTypeInstantiate`): `row9b-dep-type-alias-poison` returns `admitted rank=0 exclusions=0`. `mut-row9b-type-alias-drop` (`\| _ => #[]` in `filterTypeArgsM` when `depAliasHelper 1` is cached before `depAliasHelper 0`): `row9b-dep-type-alias-honest` falsely returns `rejected-supplied-contradiction supplier=impossible`. |
+| 10 | Constant `declaredType` (`evalDeclaredType`) | Neg: `row10-hidden-decl-type-poison` (`usesHiddenType` calling `hiddenType`, `total=56: 28,1,5,5,6,0,2,0,9,0`). Pos: `dependency-chain-baseline` (`total=995`) | `rejected-supplied-contradiction supplier=impossible` | `mut-row12a-decltype` (skipping `evalDeclaredType` in `evalCall`): `row12a-decltype-poison` returns `admitted rank=0 exclusions=0`. |
+| 11 | Constant with value (`hasVal == true`, `.body` & `.closure`) | Neg: `dependency-chain-poisoned` (`total=920`), `let-app-supplied` (`total=506`). Pos: `dependency-chain-baseline` (`total=995`) | `rejected-supplied-contradiction supplier=impossible` / `supplier=suppliedByBool` | `mut-row11-const-val` (skipping `tmpl.root` evaluation on `hasVal == true` constants in `evalCall`): `row11-const-val-poison` returns `admitted rank=0 exclusions=0`. |
+| 12 | Bodyless `.axiomInfo` / `.opaqueInfo` | Neg: `origin` (`total=90`), `hypothetical-propext` (`total=247`). Pos: `structural-empty-elim` (`total=91`) | `rejected-supplied-contradiction supplier=impossible` / `INCOMPLETE ... unavailable-certificate-transfer propext` | `mut-row12b-opaque` (returning `.ok callInput` on bodyless `.axiomInfo` / `.opaqueInfo`): `row12b-opaque-propext` returns `admitted rank=0 exclusions=0`. |
+| 13a | Saturated `.ctorInfo` (`Value.ctor`) | Neg: `row8c-boxed-body-poison` (`total=179`), `row13a-ctor-param-poison` (`let _ := @Prod.mk (let _ : False := impossible; Unit) Unit () (); True.intro`, `total=41: 22,1,3,3,6,0,1,0,5,0`). Pos: `row7-let-dead-honest` (`total=258`) | `rejected-supplied-contradiction supplier=impossible` | `mut-row13a-ctor-saturated` (skipping `completeValue` on `Value.ctor` elements): `row8c-boxed-body-poison` returns `admitted rank=0 exclusions=0`. |
+| 13b | Under-applied `.ctorInfo` (`Value.partialCall` / `completePartialCall`) | Neg: `row12c-ctor-partial-poison` (`let _ : Unit → (Unit → True) × Unit := Prod.mk (fun _ => False.elim impossible); True.intro`, `total=144: 56,1,7,11,21,4,15,0,22,7`), `row13b-ctor-partial-consumer-poison` (`let _ := id (Prod.mk (fun _ => False.elim impossible)); True.intro`, `total=171: 68,1,8,13,23,5,18,0,26,9`). Pos: `row13b-ctor-partial-honest` (`total=114: 42,1,5,9,16,3,11,0,20,7`), `row13b-ctor-partial-consumer-honest` (`total=145: 54,1,6,11,18,4,17,0,25,9`) | `rejected-supplied-contradiction supplier=impossible` | `mut-row12c-ctor-partial` (skipping `completePartialCall` and `Value.partialCall` recording on under-applied `.ctorInfo`): `row12c-ctor-partial-poison` returns `admitted rank=0 exclusions=0`. |
+| 14a | 0-constructor `.recInfo` (`r.rules.isEmpty`) | Neg: `row14a-empty-rec-poison` (`False.rec (fun _ => True) impossible`, `total=151: 56,2,7,9,25,2,16,0,25,9`). Pos: `structural-empty-elim` (`total=91`) | `rejected-supplied-contradiction supplier=impossible` | `mut-row14a-empty-rec` (recording `structuralExclusions` on 0-constructor `.recInfo` without checking `isDirectHypotheticalOrigin`): `row14a-empty-rec-poison` returns `admitted rank=1 exclusions=1`. |
+| 14b | Concrete constructor match `.recInfo` (`matchedRule.isSome`) | Neg: `row13-matcher-poison` (`total=242: 100,2,12,14,41,0,22,0,36,15`), `row14b-rec-ctor-unused-field-poison` (`@Nat.rec (fun _ => Unit → True) (fun _ => False.elim impossible) (fun _ ih => ih) 1 ()`, `total=347: 124,1,15,22,67,1,33,0,55,29`). Pos: `library-decide-matcher` (`total=9,267`) | `rejected-supplied-contradiction supplier=impossible` | `mut-row13-matcher` (skipping concrete `.recInfo` rule evaluation): `row13-matcher-poison` returns `admitted rank=0 exclusions=0`. `mut-row14b-rec-ctor` (masking unselected minor premises with `dummyInput` on concrete match): `row14b-rec-ctor-unused-field-poison` returns `admitted rank=0 exclusions=0`. |
+| 14c | Symbolic major premise `.recInfo` (`matchedRule.isNone`, `openMinorFields`) | Neg: `row14c-symbolic-rec-minor-poison` (`Nat.casesOn (motive := fun _ => Unit → True) y (fun _ => True.intro) (fun _ _ => False.elim impossible)` on symbolic `y : Nat`, `total=319: 119,2,12,19,57,0,31,0,45,34`). Pos: `symbolic-type-honest` (`total=117`) | `rejected-supplied-contradiction supplier=impossible` | `mut-row14c-rec-symbolic` (skipping `openMinorFields` on symbolic major premises): `row14c-symbolic-rec-minor-poison` returns `admitted rank=0 exclusions=0`. |
+| 14d | Under-applied `.recInfo` (`actualArgs.size <= r.getMajorIdx`, `completePartialCall`) | Neg: `row14d-rec-underapplied-poison` (`let _ : (n : Nat) → True := @Nat.rec (fun _ => True) (False.elim impossible) (fun _ _ => True.intro); True.intro`, `total=220: 80,1,9,11,40,4,25,0,35,15`), `row14d-rec-underapplied-consumer-poison` (`total=252: 97,1,11,15,39,5,25,0,42,17`), `row14d-rec-underapplied-minor-lam-poison` (`let _ : (n : Nat) → True := @Nat.rec (fun _ => True) True.intro (fun _ _ => False.elim impossible); True.intro`, `total=213: 77,1,10,12,39,5,20,0,34,15`). Pos: `row14d-rec-underapplied-honest` (`total=199: 65,1,9,10,36,5,20,0,38,15`), `row14d-rec-underapplied-consumer-honest` (`total=229: 76,1,10,12,38,6,26,0,43,17`) | `rejected-supplied-contradiction supplier=impossible` | `mut-row14d-rec-underapplied` (skipping `completePartialCall` and `Value.partialCall` recording on under-applied `.recInfo`): both `row14d-rec-underapplied-poison` and `row14d-rec-underapplied-minor-lam-poison` return `admitted rank=0 exclusions=0`. |
+| 15 | `.quotInfo` (`Quot`, `Quot.mk`, `Quot.lift`, `Quot.ind`) | Neg: `row15-quot-mk-arg-poison` (`let _ := @Quot.mk (Unit → False) (fun _ _ => True) (fun _ => impossible); True.intro`, `total=162: 64,1,8,11,23,2,18,0,28,7`), `row12d-quot-lift-unresolved` (symbolic `Quot.lift`, `total=445: 143,1,15,26,85,3,55,0,67,50`). Pos: `row15-quot-mk-honest` (`let _ := @Quot.mk Unit (fun _ _ => True) (); True.intro`, `total=166: 61,1,9,11,23,1,19,0,33,8`) | `rejected-supplied-contradiction supplier=impossible` / `INCOMPLETE ... unresolved-certificate-quotient Quot.lift` | `mut-row12d-induct-quot` (skipping `.quotInfo` argument completion and `.lift \| .ind` fail-closed check): both `row12d-quot-lift-unresolved` and `row15-quot-mk-arg-poison` return `admitted rank=0 exclusions=0`. |
+| 16a | `.inductInfo` (`Eq`, `Prod`, `PProd`, etc.) | Neg: `row12d-induct-param-poison` (`let _ : Prop := @Eq (Unit → False) (fun _ => impossible) (fun _ => impossible); True.intro`, `total=99: 45,1,6,8,14,1,8,0,15,1`). Pos: `symbolic-type-honest` (`total=117`) | `rejected-supplied-contradiction supplier=impossible` | `mut-row12d-induct-quot` (skipping `completeValue` on `.inductInfo` arguments): `row12d-induct-param-poison` returns `admitted rank=0 exclusions=0`. |
+| 16b | Higher-order / neutral `Transfer.application` | Neg: `let-app-supplied` (`total=506`), `row16b-let-app-poison` (`(let _ : Unit := (); fun (_ : Unit) => False.elim impossible) ()`, `total=239: 97,1,12,17,40,0,20,0,41,11`). Pos: `symbolic-type-honest` (`total=117`) | `rejected-supplied-contradiction supplier=suppliedByBool` / `supplier=impossible` | `mut-row16b-application` (dropping argument `evalInputs` when the application head is a non-constant expression in `Transfer.application`): `row16b-let-app-poison` returns `admitted rank=0 exclusions=0`. |
+| 17 | `Expr.proj` (`Transfer.projection`: unselected fields & nested `.ctor`) | Neg: `row11-proj-other-field-poison` (`Expr.proj ``PProd 0 (mkConst ``projCtorOtherFieldPoison)` where field `1` holds `fun _ : Unit => False.elim impossible`, `total=162: 67,1,9,13,22,1,15,0,29,5`). Pos: `row11-proj-ctor-honest` (`total=244: 95,2,11,18,35,0,22,0,41,20`) | `rejected-supplied-contradiction supplier=impossible` | `mut-row11-proj` (skipping `completeValue` on unselected `.ctor` fields in `Transfer.projection`): `row11-proj-other-field-poison` returns `admitted rank=0 exclusions=0`. |
 
 #### 4.2 Extended same-state retry controls (cache keys, pending prerequisites, budget exhaustion, runtime exceptions, and Codex reproductions)
 
 All same-state retry controls run multiple `validateCertificate` calls in a
-**single `SolverState`** and are verified in the Round-4 Lean 4.34.1 prototype:
+**single `SolverState`** and are verified in the Round-5 Lean 4.34.1 prototype
+([`scripts/proofs/audits/N2-round5-prototype.py`](audits/N2-round5-prototype.py)):
 
-1. **Cross-entry `entryInputs` cache separation (`cross-entry-inputs-reuse`, Finding 1a):**
+1. **Cross-entry `entryInputs` cache separation (`cross-entry-inputs-reuse`):**
    - Validate a certificate calling `sharedSymHelper y` first with
-     `entry.query.inputs = #[]` (`r1 = admitted(rank=0,trans=9,excl=0,prereq=36), work = 222`)
-     and second in the same `SolverState` with
-     `entry.query.inputs = #[Bool.true]` (`r2 = admitted(rank=0,trans=9,excl=0,prereq=36), work = 456, cVerify = 0`).
+     `entry.query.inputs = #[]` and second in the same `SolverState` with
+     `entry.query.inputs = #[Bool.true]`.
    - Assert that the second run does **not** reuse the `entryInputs = #[]`
      `Query` key (because `entryInputs` differs) and evaluates `openMinorFields`
      with `!entry.query.inputs.isEmpty == true`.
-2. **Direct and transitive `pendingQueries` vs. `completedQueries` cycle detection (`cross-entry-pending-direct-reuse` & `cross-entry-pending-prereq-reuse`, Finding 1b & 1c):**
+2. **Direct and transitive `pendingQueries` vs. `completedQueries` cycle detection (`cross-entry-pending-direct-reuse` & `cross-entry-pending-prereq-reuse`):**
    - In a single `SolverState`, first validate `topCert` which calls
-     `midHelper -> leafHelper` with an unrelated root query
-     (`r1 = admitted(rank=0,trans=5,excl=0,prereq=14), work = 123`), populating
+     `midHelper -> leafHelper` with an unrelated root query, populating
      `completedQueries` with both `midHelper` and `leafHelper` (where
      `midHelper`'s `CompletedNode` records `leafHelper`'s `DerivationId` in
      `children`).
@@ -1583,53 +1622,50 @@ All same-state retry controls run multiple `validateCertificate` calls in a
      `entry.query` is `midHelper` and whose proof calls `midHelper`
      (`cross-entry-pending-direct-reuse`): because `pendingQueries` is checked
      **before** `completedQueries`, assert
-     `INCOMPLETE ... cyclic-certificate-dependency` (`work = 127`).
+     `INCOMPLETE ... cyclic-certificate-dependency`.
    - Third, in the **same `SolverState`**, validate a certificate whose root
      `entry.query` is `leafHelper` and whose proof calls `midHelper`
      (`cross-entry-pending-prereq-reuse`): `midHelper` is not in `pendingQueries`
-     and hits `completedQueries`, where `verifyDerivation` traverses
-     `midHelper`'s prerequisite DAG, finds `leafHelper ∈ pendingQueries`, and
-     throws `INCOMPLETE ... cyclic-certificate-dependency` (`work = 135, cReplay = 1, cVerify = 2`).
-3. **Work-budget exhaustion sticky retry and cache-cleanliness retry (`budget-exhausted-sticky-retry` & `budget-abort-poison-cache-retry`, Finding 3):**
-   - Set `s.remaining := 25` and run `validateCertificate` on
-     `budgetAbortPoisonCert` (which evaluates a benign helper `benignSub` and
-     then a multi-step poisoned helper `deepPoison` that exhausts the remaining
-     budget midway):
-     - Run 1 aborts with `INCOMPLETE ... false-discharge-budget` at `s.remaining = 0`,
-       and unwinds `pendingQueries = {}`, `pendingTypes = {}`, `pendingValues = {}`
-       (`pendingClean = true`), while `deepPoison` is **not** in
-       `completedQueries`.
-     - **Sticky budget retry (`budget-exhausted-sticky-retry`):** Without
-       replenishing `s.remaining` (`s.remaining = 0`), a second
-       `validateCertificate` call in the same `SolverState` immediately halts
-       with `INCOMPLETE ... false-discharge-budget` at `cEntry`.
-     - **Post-abort cache cleanliness (`budget-abort-poison-cache-retry`):** When
-       a subsequent step has budget to finish evaluating `budgetAbortPoisonCert`
-       in the same `SolverState` (`benignSub` is reused from `completedQueries`
-       via `verifyDerivation`, while the previously aborted `deepPoison` misses
-       the cache and is evaluated to completion), it returns
-       `rejected-supplied-contradiction supplier=impossible` (`cVerify = 5`).
-4. **Runtime-exception cleanup and same-state retry (`runtime-exception-cleanup-retry`, Finding 3):**
-   - In a single `SolverState`, validate `quotLiftCert` (whose proof calls
-     symbolic `Quot.lift` after evaluating a benign subterm):
-     - Run 1 throws `"unresolved-certificate-quotient Quot.lift"`, caught as
-       `INCOMPLETE ... unresolved-certificate-quotient Quot.lift` (`work = 116`),
-       leaving `pendingQueries = {}`, `pendingTypes = {}`, `pendingValues = {}`
-       (`pendingClean = true`).
-     - Run 2 on `quotLiftCert` in the same `SolverState` again returns
-       `INCOMPLETE ... unresolved-certificate-quotient Quot.lift` (`work = 171`).
-     - Run 3 on an honest certificate (`True.intro`) in the same `SolverState`
-       succeeds with `admitted(rank=0,trans=4,excl=0,prereq=11)` (`work = 247`).
-5. **Dependent type-alias cache separation (`dep-type-alias-cache-retry`, Reviewer's Note):**
-   - In a single `SolverState`, validate `depAliasHelper 0` first
-     (`r1 = admitted(rank=0,trans=15,excl=0,prereq=59), work = 426`) and
-     `depAliasHelper 1` second
-     (`r2 = rejected-supplied-contradiction supplier=impossible, work = 582`).
-6. **Retry after supplier rejection, `.admitted`, and `propext` `INCOMPLETE` (`retryFn`, `anonLamRetry`, `boxedType`, `boxedBody`, `nestedBoxType`, `closureReturningBox`, `natRecSuccBasePoison`, `polyRetry`, `admittedRetry`, `incompleteRetry`):**
-   - All 9 Round-2/Round-3 same-state retry probes pass with identical verdicts
-     on run 1 and run 2 and non-empty replayed `transfers`,
-     `structuralExclusions`, and `prerequisites` on `admittedRetry`.
-7. **All existing suites and non-vacuity mutations preserved without regression:**
+     and hits `completedQueries` (with `dId < s.runStartNodeId`), where
+     `verifyDerivation` traverses `midHelper`'s prerequisite DAG (charging both
+     visited nodes and outgoing edges in `cVerify = 12`), finds
+     `leafHelper ∈ pendingQueries`, and throws
+     `INCOMPLETE ... cyclic-certificate-dependency` (`work = 80, cVerify = 12`).
+3. **Work-budget exhaustion sticky retry and caller-sliced cache-cleanliness retry (`budget-exhausted-sticky-retry` & `budget-abort-poison-cache-retry`):**
+   - How a post-abort retry receives budget in the same `SolverState` without
+     violating the no-reset rule: in production `validateCertificate`, the
+     20,000-unit `SolverState.remaining` budget is **never** reset between
+     certificates (`budget-exhausted-sticky-retry` verifies that once
+     `s.remaining == 0`, any subsequent call in that state halts immediately at
+     `cEntry`). To test **cache cleanliness after a mid-evaluation budget abort**
+     (`budget-abort-poison-cache-retry`), the test harness partitions the fixed
+     `< 20,000` budget into two slices (`initialSlice := 95` and
+     `retrySlice := 500`, total `595 < 20,000`) without resetting `worklistSteps`
+     or clearing any `completed*` / `pending*` table:
+     - Run 1 starts with `s.remaining := 95` on `budgetAbortPoisonCert` (which
+       evaluates a benign helper `benignSub` to completion and then aborts
+       mid-way through `deepPoison`): Run 1 halts with
+       `INCOMPLETE ... false-discharge-budget` at `s.remaining = 0` and unwinds
+       `pendingQueries = {}`, `pendingTypes = {}`, `pendingValues = {}`,
+       `pendingNodes = {}`, while `benignSub` remains in `completedQueries` and
+       `deepPoison` is **not** in `completedQueries`.
+     - **Sticky budget retry (`budget-exhausted-sticky-retry`):** With
+       `s.remaining = 0`, a second `validateCertificate` call in the same
+       `SolverState` immediately halts with `INCOMPLETE ... false-discharge-budget`
+       at `cEntry`.
+     - **Post-abort cache-cleanliness retry (`budget-abort-poison-cache-retry`):**
+       The test harness adds `retrySlice := 500` from the caller's reserve to
+       the **same `SolverState`** (`s.remaining := s.remaining + 500`, keeping
+       `worklistSteps`, `completed*`, and `derivationNodes` intact) and re-runs
+       `validateCertificate`: `benignSub` is replayed from `completedQueries` and
+       verified via `verifyDerivation` (`cVerify = 26`), while the previously
+       aborted `deepPoison` misses the cache, evaluates to completion, and
+       returns `rejected-supplied-contradiction supplier=impossible` (`work = 166`).
+4. **Dependent type-alias cache separation (`dep-type-alias-cache-retry`):**
+   - In a single `SolverState`, validate `depAliasHelper 0` first (`admitted`)
+     and `depAliasHelper 1` second
+     (`rejected-supplied-contradiction supplier=impossible`, cumulative `work = 690`).
+5. **All existing suites and non-vacuity mutations preserved without regression:**
    - All 32 discharge controls in `scripts/proofs/vacuity_discharge.py` (`vacuity_Flat.py`),
    - All 16 certificate controls in `scripts/proofs/vacuity_certificates.py`,
    - All 7 N8a reproducer observations in `scripts/proofs/vacuity_n8a_repro.py`,
@@ -1638,10 +1674,9 @@ All same-state retry controls run multiple `validateCertificate` calls in a
 
 ---
 
-### 5. Named `INCOMPLETE` pending owner: trust-policy boundary and work-budget question
+### 5. Named `INCOMPLETE` boundaries and open owner questions
 
-Two orthogonal items remain pending the project owner and are never decided by
-an agent:
+Three items remain pending the project owner and are never decided by an agent:
 
 1. **Logical-axiom trust-policy boundary (`unavailable-certificate-transfer propext`, Design Amendment 2):**
    - Under Design Amendment 2 ([Section "Design amendment 2 (slice 2a): primitive transport evidence boundary and owner decision"](N2-discharge-solver.md#design-amendment-2-slice-2a-primitive-transport-evidence-boundary-and-owner-decision)),
@@ -1656,88 +1691,91 @@ an agent:
      `hasSuppliedOrigin = false`, Option 2 of Design Amendment 2) or must require
      constructive simulation evidence (Option 1 of Design Amendment 2) is an
      owner decision.
-2. **Work-budget calibration under full 10-category walk accounting (`false-discharge-budget` on `f3b-decide-matcher` and `f3b-simp-all`, Round-4 Finding 4):**
-   - Under the 5 base charge categories (`cConstruct`, `cEntry`, `cCall`,
-     `cTypeInst`, `cNode`), `library-decide-matcher` costs `8,929` units,
-     `f3b-decide-matcher` costs `18,516` units (`1,484` headroom under `20,000`),
-     and `f3b-simp-all` costs `19,223` units (`777` headroom under `20,000`).
-   - Once the 5 previously uncharged walks (`cProj`, `cComplete`, `cReplay`,
-     `cVerify`, `cCollect`) are charged explicitly (Section 3.1),
-     `library-decide-matcher` still completes at `18,346` total units (`1,654`
-     headroom under `20,000`), but `f3b-decide-matcher` reaches **`39,157` total
-     units** (`21,324` units even if `cProj` and `cReplay` are amortized into
-     `cNode` / `cCall`) and `f3b-simp-all` reaches **`37,925` total units**, while
-     consuming only `8,567` and `9,078` heartbeats (`< 0.5%` of the `2,000,000`
-     heartbeat limit).
-   - Under the unchanged `20,000` cap (`SolverState.remaining := 20000`), both
-     `f3b-decide-matcher` and `f3b-simp-all` cut short at `20,000` with
-     `INCOMPLETE ... false-discharge-budget`.
-   - **Open question for the owner:** Should the `20,000` discharge-work cap be
-     recalibrated for the 10-category full-walk accounting model (for example to
-     `45,000` or `50,000` units, while keeping the `2,000,000` heartbeat cap and
-     `4,096` projection cap unchanged), or should the `20,000` cap count only
-     the 5 primary evaluation/construction categories (`base`) while bounding
-     `cProj`, `cComplete`, `cReplay`, `cVerify`, and `cCollect` by a separate
-     structural invariant or sub-budget? Until the owner answers, the `20,000`
-     cap is not raised.
-3. **Quotient elimination (`Quot.lift` / `Quot.ind`):**
+2. **Quotient elimination (`Quot.lift` / `Quot.ind`):**
    - When `Quot.lift` or `Quot.ind` is not reduced by `whnfD` (e.g. on a
      symbolic quotient receiver), `.quotInfo` reports the fail-closed
      `INCOMPLETE` diagnostic `unresolved-certificate-quotient <name>` in all
      modes.
+3. **Hidden `Law` / `Planted` helper contradiction policy (`hidden-law-body` and `hidden-planted-body`, CF-evidence Finding 3):**
+   - As confirmed in `/home/unbalancedparen/projects/gates-briefs/CF-evidence/CONFIRM-results.txt`
+     (Finding 3), the `vacuity.lean` classifier outside `namespace Discharge`
+     only checks `Law`- or `Planted`-classified constants when they appear at
+     the direct theorem target root (`Law`) or direct theorem proof root
+     (`Planted`), and skips them inside helper bodies (`hidden-law-body` and
+     `hidden-planted-body` currently pass). How `Law`- and `Planted`-classified
+     declarations referenced inside helper bodies should be treated is an **owner
+     question** (not decided here).
 
 ---
 
-### 6. What the later reconciliation with the amendment-3 accounting line must preserve
+### 6. Reconciliation contract with the accounting line (`wip/gate-vacuity`)
 
-When the slice-2a branch (`n2-2a`) is reconciled with the amendment-3 accounting
-line (`68607bc20` / `25907fb41`), the merged implementation and documentation
-must preserve every item enumerated in Codex's Round-1, Round-2, and Round-3
-reviews (`N13c-codex-findings.out`, `N13d-codex-findings.out`, and
-`N13e-codex-findings.out`):
+Reconciliation of the slice-2a branch (`n2-2a`) is specified against the
+**accepted tip of the accounting line `wip/gate-vacuity`** after its fix round 4
+(`N2-fix-a3-r4.md`), naming `30c57a17c` as the current tip of `wip/gate-vacuity`
+at the time of this note. Because there is **one owner per fix**, slice 2a does
+not design a competing projection traversal or protected-comparison fix; instead,
+the reconciled implementation and documentation must satisfy:
 
-1. **Exact commit and checker provenance:** Every recorded table and report line
-   must bind its measurements to the exact `source_sha` and `checker_sha` on
-   which the run completed.
-2. **Unchanged budgets and ceilings (unless explicitly decided by the owner):**
-   The 2,000,000-heartbeat ceiling, 4,096 projection-visit cap, and 20,000
-   discharge-work cap (`SolverState.remaining := 20000`) remain unchanged unless
-   the owner explicitly answers the Section 5.2 work-budget question, with no
-   per-branch reset of the shared solver budget and no uncharged helper walks.
-3. **Complete 10-category per-control cost accounting:** Every control and
-   observation must report its measured cost vector (`total`, `base`, `new`,
-   `dNodes`, `terms`, `nodes`, `templates`, `queries`, `components`, and
-   `heartbeats` / `projection_visits`), charging all 10 walk categories in
-   Section 3.1.
-4. **All 32 existing discharge controls (`vacuity_discharge.py` / `vacuity_Flat.py`):**
-   All 32 controls must pass with their exact expected diagnostics.
-5. **All 16 existing certificate controls (`vacuity_certificates.py`) plus all Round-3 and Round-4 controls:**
-   Every atomic recognition control (Table 4.1a), every dependency-transfer
-   per-row negative and positive control (Table 4.1b), both Round-1
-   reproductions (`hidden-declaration-type`, `symbolic-type-poison`/`symbolic-type-honest`),
-   both Round-2 reproductions (`boxedType`/`boxedBody`, `retryFn`),
-   `nestedBoxType`, `closureReturningBox`, `natRecSuccBasePoison`, all Round-4
-   controls (`cross-entry-inputs-reuse`, `cross-entry-pending-direct-reuse`,
-   `cross-entry-pending-prereq-reuse`, `partial-ctor-*`, `underapplied-rec-*`,
-   `dep-type-alias-*`, `sort-recognition-honest`, `str-lit-*`,
-   `budget-exhausted-sticky-retry`, `budget-abort-poison-cache-retry`,
-   `runtime-exception-cleanup-retry`), and all same-state retry controls must
-   pass with their exact expected diagnostics.
-6. **All 7 N8a reproducer observations (`vacuity_n8a_repro.py`):**
-   `bad-chain`, `useImpossibleLet`, `directApp`, `letApp`, `cert01`,
-   `joint-simp`, and `F3b-simp` must produce their exact repaired verdicts and
-   updated measured cost rows in `N2-N8a-reproduction.md`.
-7. **Both non-vacuity mutations (`vacuity_n8a_repro.py`):**
-   `--remove-cycle-check` must fail at `non-circular`, and `--poison-leaf` must
-   fail at `dependency-chain-baseline`.
-8. **Design Amendment 2 `propext` boundary (`vacuity_solver_boundary.py`):**
-   `singletonCertificate` (`∀ x : Nat, x ∈ [2] → x = 2 := by simp`) must
-   continue to report the exact `INCOMPLETE ... unavailable-certificate-transfer propext`
-   blocker observation until the owner answers Design Amendment 2.
-9. **Phase B exit criterion (`N2-fix6b-exit.md`):**
-   The whole-replay-scope historical `C9-new` and `C6-current` controls must
-   complete under the unchanged budgets (2,000,000 heartbeats, 4,096 projection
-   visits, 20,000 discharge work) with their historical diagnostics unchanged,
-   or stop and report the exact cut-short point without raising any budget or
-   recording a partial completion as a pass.
+1. **Adopt the accounting line's repaired Law projection traversal (`N2-fix-a3-r4.md` Item A):**
+   - Stop retaining the inherited `directStep` traversal (which skipped
+     `.thmInfo` and `.opaqueInfo` bodies).
+   - Adopt the accounting line's bounded, memoized proof-dependency traversal
+     through helper constants — including `theorem` and `opaque` bodies when
+     available, with actual argument and universe instantiation — and fail
+     closed with `INCOMPLETE` when a proof-relevant helper body is unavailable
+     or uses an unsupported eliminator form.
+   - State explicitly in the reconciliation documentation that `validateCertificate`
+     (certificate-body validation in `namespace Discharge`) validates discharge
+     certificates and **does not cover the separate Law projection path**.
+   - **Reconciliation acceptance controls for projection traversal:**
+     - `projection-def` and `projection-theorem` (paired controls calling a `def`
+       and a `theorem` wrapper around `Stmt.letBind ... (Flat.Step.stmt env s body env' s' r)`):
+       both must fail with exact diagnostic `FAIL projection-law ConcreteSpecControl.growth`.
+     - A mutation targeting the theorem-helper omission in the projection
+       traversal must be killed by `projection-theorem`.
+2. **Adopt the accounting line's well-typed protected comparison (`N2-fix-a3-r4.md` Item B):**
+   - Stop retaining the inherited `withProtected` / `protectedEq` raw loose-`bvar`
+     abstraction (`e.abstract #[arg]` + `Expr.instantiate1 ... probe`, which
+     extracted subterms out of binder scope, rewrote non-contract occurrences of
+     the same expression such as fixed representation fields, and skipped motive
+     and non-Result branch comparisons).
+   - Adopt the accounting line's well-typed protected comparison (`evalArgs`):
+     abstracting only the theorem's statement contract while preserving fixed
+     representation fields (`env0`, `s0`, `fuel + 1`, `body`), inserting explicit
+     type transports where needed, **typechecking (`Lean.Meta.check`) both
+     transformed contracts before comparison**, and comparing full motives,
+     universes, binder types, and all branches at a shared arbitrary typed
+     discriminant (reporting `INCOMPLETE` when a theorem statement cannot be
+     abstracted into a well-typed comparison).
+   - **Reconciliation acceptance controls for protected comparison:**
+     - `Confirm.inferredOk`, `Confirm.inferredTrap`, `Confirm.restatedOk`, and
+       `Confirm.restatedTrap`: all four must **PASS** (0 errors, 0 `INCOMPLETE`).
+     - `Confirm.changedStoreOk` (restated contract with a mutated store `s0` in
+       the `.ok` branch): must **FAIL** with its exact protected-contract mismatch
+       diagnostic.
+3. **Exact commit, checker, and prototype provenance:**
+   - Every recorded table and report line must bind its measurements to the
+     exact `source_sha`, `checker_sha`, and prototype SHA-256
+     (`b3a1adb41fabb83152459a5084ec22be4b7d3689cf011131e2c4649ca7992daa` for
+     `scripts/proofs/audits/N2-round5-prototype.py`) on which the run completed.
+4. **Unchanged budgets and ceilings:**
+   - The 2,000,000-heartbeat ceiling, 4,096 projection-visit cap, and 20,000
+     discharge-work cap (`SolverState.remaining := 20000`) remain unchanged, with
+     no per-branch reset of the shared solver budget and all 10 walk categories
+     charged at their real complexity (Section 3.1).
+5. **All 32 existing discharge controls (`vacuity_discharge.py` / `vacuity_Flat.py`), all 16 certificate controls (`vacuity_certificates.py`), all 36 elaborated per-row controls and 28 single-row mutations (Tables 4.1a & 4.1b), and all same-state retry controls (Section 4.2):**
+   - All controls must pass with their exact expected diagnostics and with
+     `library-decide-matcher` (`9,267`), `f3b-decide-matcher` (`17,804`),
+     `f3b-simp-all` (`18,994`), and `singletonCertificate` (`8,735`) completing
+     below the unchanged 20,000 work budget.
+6. **All 7 N8a reproducer observations and both non-vacuity mutations (`vacuity_n8a_repro.py`), plus the Design Amendment 2 `propext` boundary (`vacuity_solver_boundary.py`) and Phase B exit criterion (`N2-fix6b-exit.md`):**
+   - All 7 observations must match their repaired verdicts and measured 10-category
+     vectors in `N2-N8a-reproduction.md`; `--remove-cycle-check` must fail at
+     `non-circular`; `--poison-leaf` must fail at `dependency-chain-baseline`;
+     `singletonCertificate` must report `INCOMPLETE ... unavailable-certificate-transfer propext`;
+     and whole-replay-scope historical `C9-new` and `C6-current` controls must
+     complete under the unchanged budgets with their historical diagnostics
+     unchanged.
+
 

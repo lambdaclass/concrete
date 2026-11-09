@@ -74,7 +74,7 @@ accepted solver design ([N2-discharge-solver.md](N2-discharge-solver.md)).
      In Round 2 (`ccfbfb5f5`), `openMinorFields` opened `ruleMinorArity` and evaluated
      the minor body in `.body` mode; `applyValue` forced direct unapplied
      `Value.partialCall` and `Value.closure` values; and `validateCertificate`
-     checked and evaluated each assumption's `input.type`. **Correction (Round 3):**
+     checked and evaluated each assumption's `input.type`. **Correction (Round 3–5):**
      the Round-2 text here previously claimed that "unprojected `.ctor` fields" were
      validated. That claim was false: in Round 2 (`ccfbfb5f5`), `.ctorInfo` recorded
      `Value.ctor` and returned `.ok callInput` without completing the recursive
@@ -95,51 +95,58 @@ accepted solver design ([N2-discharge-solver.md](N2-discharge-solver.md)).
      concrete recursor matches (erasing base minor premises referenced by recursive
      step rules, as in `natRecSuccBasePoison`, and colliding with `TermId = 0`). The
      complete dependency-obligation model, prerequisite-bearing cache protocol,
-     terminating `completePartialCall` judgment, and 10-category walk accounting
-     that close this class are specified in
-     [N2-discharge-solver.md](N2-discharge-solver.md#design-amendment-3-slice-2a-round-4-complete-dependency-obligation-model-prerequisite-bearing-cache-protocol-terminating-partial-value-judgment-and-explicit-walk-accounting).
+     terminating `completePartialCall` judgment, schedule memoization, and 10-category
+     walk accounting that close this class below the unchanged 20,000 work budget are
+     specified in
+     [N2-discharge-solver.md](N2-discharge-solver.md#design-amendment-3-slice-2a-round-5-complete-dependency-obligation-model-prerequisite-bearing-cache-protocol-terminating-partial-value-judgment-and-explicit-walk-accounting).
 
 ## Repaired N8a observation measurements (`vacuity_n8a_repro.py`)
 
 All seven N8a reproducer observations with both their Round-2 (`ccfbfb5f5`)
-implementation measurements and the Round-4 prototype measurements (`base` 5-category
-vs. `total` 10-category full-walk accounting; see
-[N2-discharge-solver.md Section 3](N2-discharge-solver.md#3-explicit-accounting-for-every-walk-under-the-unchanged-20000-work-allowance-and-open-budget-question)):
+implementation measurements and the Round-5 10-category full-walk prototype
+measurements from
+[`scripts/proofs/audits/N2-round5-prototype.py`](audits/N2-round5-prototype.py)
+(SHA-256 `b3a1adb41fabb83152459a5084ec22be4b7d3689cf011131e2c4649ca7992daa`,
+evaluated on base commit `9b2730bce` / `34a9fcf73`, Lean 4.34.1; see
+[N2-discharge-solver.md Section 3](N2-discharge-solver.md#3-explicit-accounting-for-every-walk-under-the-unchanged-20000-work-allowance)):
 
-| Observation | Baseline (`22f300203`) | Repaired outcome | Round-2 Work (`ccfbfb5f5`) | Round-4 Work (`base` / `10-cat total`) | Terms | Nodes | Templates | Queries | Components |
-| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `bad-chain` (`bad1 → bad0`, leaf `fun _ => impossible`) | `admitted` (defect) | `rejected supplier=impossible` | 33 | 29 / 34 | 9 | 7 | 4 | 8 | 0 |
-| `useImpossibleLet` (applied to permitted hypothetical `h : Empty`) | `admitted` (defect) | `rejected supplier=impossible` | 127 | 117 / 166 | 41 | 37 | 9 | 19 | 0 |
-| `directApp` (`suppliedByBool true`) | `rejected supplier=suppliedByBool` | `rejected supplier=suppliedByBool` | 267 | 242 / 349 | 82 | 70 | 15 | 31 | 0 |
-| `letApp` (`(let _ : Nat := 0; fun b => suppliedByBool b) true`) | `unavailable-certificate-transfer suppliedByBool` (defect) | `rejected supplier=suppliedByBool` | 358 | 327 / 476 | 113 | 97 | 20 | 42 | 0 |
-| `cert01` (`¬ (0 = 1) := by decide`) | `false-discharge-budget` (20,000) | `admitted` | 9157 | 8916 / 18318 | 1538 | 776 | 63 | 595 | 0 |
-| `joint-simp` (permitted `p`, `hp : p`, `hn : ¬ p`) | `unavailable-certificate-transfer propext` | `unavailable-certificate-transfer propext` | 182 | 182 / 278 | 67 | 56 | 8 | 18 | 0 |
-| `F3b-simp` (permitted `y`, `decide (y = 0) = true`, `¬ (y = 0)`) | `false-discharge-budget` (20,000) | `unavailable-certificate-transfer propext` (base) / cuts at 20,000 `false-discharge-budget` (10-cat total; open budget question in Section 5.2) | 6441 | 19223 / 37925 | 1036 | 602 | 56 | 529 | 0 |
+| Observation | Baseline (`22f300203`) | Repaired outcome | Round-2 Work (`ccfbfb5f5`) | Round-5 10-cat `total` `(con, ent, call, tyI, node, comp, rep, ver, col, proj)` | Terms | Nodes | Templates | Queries | Components |
+| --- | --- | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: |
+| `bad-chain` (`bad1 → bad0`, leaf `fun _ => impossible`) | `admitted` (defect) | `rejected supplier=impossible` | 33 | **51** `(23, 1, 4, 4, 7, 0, 4, 0, 8, 0)` | 8 | 7 | 4 | 8 | 0 |
+| `useImpossibleLet` (applied to permitted hypothetical `h : Empty`) | `admitted` (defect) | `rejected supplier=impossible` | 127 | **197** `(80, 2, 9, 14, 31, 0, 17, 0, 31, 13)` | 41 | 37 | 9 | 18 | 0 |
+| `directApp` (`suppliedByBool true`) | `rejected supplier=suppliedByBool` | `rejected supplier=suppliedByBool` | 267 | **368** `(130, 1, 15, 24, 92, 0, 28, 0, 55, 23)` | 74 | 64 | 15 | 30 | 0 |
+| `letApp` (`(let _ : Nat := 0; fun b => suppliedByBool b) true`) | `unavailable-certificate-transfer suppliedByBool` (defect) | `rejected supplier=suppliedByBool` | 358 | **506** `(182, 1, 20, 34, 117, 0, 43, 0, 75, 34)` | 105 | 91 | 20 | 40 | 0 |
+| `cert01` (`¬ (0 = 1) := by decide`) | `false-discharge-budget` (20,000) | `admitted` | 9157 | **9,267** `(1141, 1, 238, 304, 3141, 19, 1341, 0, 937, 2145)` | 1206 | 734 | 63 | 384 | 0 |
+| `joint-simp` (permitted `p`, `hp : p`, `hn : ¬ p`) | `unavailable-certificate-transfer propext` | `unavailable-certificate-transfer propext` | 182 | **356** `(125, 4, 10, 19, 58, 7, 34, 0, 42, 57)` | 66 | 57 | 10 | 20 | 0 |
+| `F3b-simp` (permitted `y`, `decide (y = 0) = true`, `¬ (y = 0)`) | `false-discharge-budget` (20,000) | `unavailable-certificate-transfer propext` | 6441 | **18,994** `(1793, 4, 445, 638, 6245, 51, 2708, 0, 1741, 5369)` | 1970 | 1071 | 80 | 696 | 0 |
 
 ## Non-vacuous certificate controls (`vacuity_certificates.py`)
 
 All 16 certificate controls check their exact planted diagnostic and verify origin
-transfer, rank/exclusion counts, and the unchanged 20,000-work budget (with
-Round-4 `base` / `10-cat total` prototype costs shown alongside Round-2 `ccfbfb5f5`):
+transfer, rank/exclusion counts, and completion under the unchanged 20,000-work
+budget (with Round-5 10-category `total` prototype costs from
+[`scripts/proofs/audits/N2-round5-prototype.py`](audits/N2-round5-prototype.py),
+SHA-256 `b3a1adb41fabb83152459a5084ec22be4b7d3689cf011131e2c4649ca7992daa`,
+shown alongside Round-2 `ccfbfb5f5`):
 
-| Control | Expected & actual diagnostic | Round-2 Work (`ccfbfb5f5`) | Round-4 Work (`base` / `10-cat total`) | Terms | Nodes | Templates | Queries | Components |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `origin` (`of_eq_true injectedFalse._simp_1`, entry-arg transfer checked) | `rejected-supplied-contradiction supplier=impossible` | 61 | 54 / 63 | 17 | 16 | 6 | 13 | 0 |
-| `unapplied-empty-binder` (`fun _ : Empty => impossible`) | `rejected-supplied-contradiction supplier=impossible` | 33 | 29 / 31 | 10 | 8 | 4 | 8 | 0 |
-| `use-impossible-let` (`useImpossibleLet h` on `h : Empty`) | `rejected-supplied-contradiction supplier=impossible` | 127 | 117 / 166 | 41 | 37 | 9 | 19 | 0 |
-| `let-app-supplied` (`(let _ : Nat := 0; fun b => suppliedByBool b) true`) | `rejected-supplied-contradiction supplier=impossible/suppliedByBool` (`supplier=suppliedByBool`) | 358 | 327 / 476 | 113 | 97 | 20 | 42 | 0 |
-| `hidden-declaration-type` (`usesHiddenType` calling `hiddenType : (let _ : False := impossible; True)`) | `rejected-supplied-contradiction supplier=impossible` | 35 | 30 / 32 | 9 | 8 | 5 | 10 | 0 |
-| `symbolic-type-poison` (`typePoison : (h : False) → badType False h → True`) | `rejected-supplied-contradiction supplier=impossible` | 49 | 45 / 57 | 20 | 17 | 4 | 8 | 0 |
-| `non-circular` (`cyclicCaller` with pending `cyclicHelper`) | `INCOMPLETE ... case=non-circular cyclic-certificate-dependency` | 17 | 15 / 15 | 5 | 4 | 2 | 4 | 0 |
-| `dependency-chain-poisoned` (`badDependency80`, leaf `fun _ => impossible`) | `rejected-supplied-contradiction supplier=impossible` | 586 | 503 / 666 | 88 | 86 | 83 | 166 | 0 |
-| `structural-empty-elim` (`Empty.elim h` on `h : Empty`) | `admitted rank=1 exclusions=1` | 56 | 55 / 85 | 23 | 19 | 3 | 6 | 0 |
-| `symbolic-type-honest` (`typeHonest : (h : False) → goodType False h → True`) | `admitted rank=0 exclusions=0` | 70 | 64 / 117 | 26 | 20 | 6 | 12 | 0 |
-| `hypothetical-propext` (`of_eq_true (eq_true h)` on `h : False`) | `INCOMPLETE ... case=hypothetical-propext unavailable-certificate-transfer propext` | 133 | 136 / 200 | 53 | 42 | 7 | 16 | 0 |
-| `library-decide-matcher` (`¬ (0 = 1) := by decide`) | `admitted rank=0 exclusions=0` | 9157 | 8929 / 18346 | 1538 | 776 | 63 | 595 | 0 |
-| `f3b-decide-matcher` (`hn (of_decide_eq_true hd)`) | `admitted rank=0 exclusions=0` (base) / cuts at 20,000 `false-discharge-budget` (10-cat total; open budget question in Section 5.2) | 8279 | 18516 / 39157 | 1322 | 755 | 66 | 652 | 0 |
-| `f3b-simp-all` (`simpAll` on `y`, `hd : decide (y = 0) = true`, `hn : ¬ (y = 0)`) | `INCOMPLETE ... case=f3b-simp-all unavailable-certificate-transfer propext` (base) / cuts at 20,000 `false-discharge-budget` (10-cat total; open budget question in Section 5.2) | 6441 | 19223 / 37925 | 1036 | 602 | 56 | 529 | 0 |
-| `dependency-chain-baseline` (`dependency80`, leaf `fun h => h`) | `admitted rank=0 exclusions=0` | 583 | 501 / 831 | 88 | 86 | 82 | 164 | 0 |
-| `shared-budget` (`dependency80` with `spent := 19970`) | `INCOMPLETE ... case=shared-budget false-discharge-budget` | 20000 | 20000 / 20000 | 9 | 7 | 4 | 8 | 0 |
+| Control | Expected & actual diagnostic | Round-2 Work (`ccfbfb5f5`) | Round-5 10-cat `total` `(con, ent, call, tyI, node, comp, rep, ver, col, proj)` | Terms | Nodes | Templates | Queries | Components |
+| --- | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: |
+| `origin` (`of_eq_true injectedFalse._simp_1`, entry-arg transfer checked) | `rejected-supplied-contradiction supplier=impossible` | 61 | **90** `(40, 1, 6, 8, 14, 0, 6, 0, 14, 1)` | 17 | 16 | 6 | 12 | 0 |
+| `unapplied-empty-binder` (`fun _ : Empty => impossible`) | `rejected-supplied-contradiction supplier=impossible` | 33 | **53** `(23, 1, 4, 4, 8, 0, 2, 0, 11, 0)` | 9 | 8 | 4 | 8 | 0 |
+| `use-impossible-let` (`useImpossibleLet h` on `h : Empty`) | `rejected-supplied-contradiction supplier=impossible` | 127 | **197** `(80, 2, 9, 14, 31, 0, 17, 0, 31, 13)` | 41 | 37 | 9 | 18 | 0 |
+| `let-app-supplied` (`(let _ : Nat := 0; fun b => suppliedByBool b) true`) | `rejected-supplied-contradiction supplier=impossible/suppliedByBool` (`supplier=suppliedByBool`) | 358 | **506** `(182, 1, 20, 34, 117, 0, 43, 0, 75, 34)` | 105 | 91 | 20 | 40 | 0 |
+| `hidden-declaration-type` (`usesHiddenType` calling `hiddenType : (let _ : False := impossible; True)`) | `rejected-supplied-contradiction supplier=impossible` | 35 | **56** `(28, 1, 5, 5, 6, 0, 2, 0, 9, 0)` | 9 | 8 | 5 | 10 | 0 |
+| `symbolic-type-poison` (`typePoison : (h : False) → badType False h → True`) | `rejected-supplied-contradiction supplier=impossible` | 49 | **71** `(35, 1, 4, 5, 10, 0, 5, 0, 7, 4)` | 20 | 17 | 4 | 8 | 0 |
+| `non-circular` (`cyclicCaller` with pending `cyclicHelper`) | `INCOMPLETE ... case=non-circular cyclic-certificate-dependency` | 17 | **25** `(11, 1, 2, 2, 4, 0, 0, 0, 5, 0)` | 5 | 4 | 2 | 4 | 0 |
+| `dependency-chain-poisoned` (`badDependency80`, leaf `fun _ => impossible`) | `rejected-supplied-contradiction supplier=impossible` | 586 | **920** `(497, 1, 83, 83, 86, 0, 83, 0, 87, 0)` | 87 | 86 | 83 | 166 | 0 |
+| `structural-empty-elim` (`Empty.elim h` on `h : Empty`) | `admitted rank=1 exclusions=1` | 56 | **91** `(31, 2, 3, 5, 17, 1, 7, 0, 17, 8)` | 22 | 19 | 3 | 6 | 0 |
+| `symbolic-type-honest` (`typeHonest : (h : False) → goodType False h → True`) | `admitted rank=0 exclusions=0` | 70 | **117** `(48, 1, 6, 8, 15, 0, 12, 0, 21, 6)` | 24 | 20 | 6 | 12 | 0 |
+| `hypothetical-propext` (`of_eq_true (eq_true h)` on `h : False`) | `INCOMPLETE ... case=hypothetical-propext unavailable-certificate-transfer propext` | 133 | **247** `(91, 2, 9, 18, 38, 7, 20, 0, 33, 29)` | 52 | 43 | 9 | 18 | 0 |
+| `library-decide-matcher` (`¬ (0 = 1) := by decide`) | `admitted rank=0 exclusions=0` | 9157 | **9,267** `(1141, 1, 238, 304, 3141, 19, 1341, 0, 937, 2145)` | 1206 | 734 | 63 | 384 | 0 |
+| `f3b-decide-matcher` (`hn (of_decide_eq_true hd)`) | `admitted rank=0 exclusions=0` | 8279 | **17,804** `(1636, 4, 419, 599, 5869, 43, 2527, 0, 1648, 5059)` | 1840 | 991 | 73 | 651 | 0 |
+| `f3b-simp-all` (`simpAll` on `y`, `hd : decide (y = 0) = true`, `hn : ¬ (y = 0)`) | `INCOMPLETE ... case=f3b-simp-all unavailable-certificate-transfer propext` | 6441 | **18,994** `(1793, 4, 445, 638, 6245, 51, 2708, 0, 1741, 5369)` | 1970 | 1071 | 80 | 696 | 0 |
+| `dependency-chain-baseline` (`dependency80`, leaf `fun h => h`) | `admitted rank=0 exclusions=0` | 583 | **995** `(492, 1, 82, 82, 86, 0, 83, 0, 169, 0)` | 88 | 86 | 82 | 164 | 0 |
+| `shared-budget` (`dependency80` with `spent := 19970`) | `INCOMPLETE ... case=shared-budget false-discharge-budget` | 20000 | **20,000** `(12, 1, 3, 2, 5, 0, 1, 0, 6, 0)` | 6 | 5 | 2 | 5 | 0 |
 
 ### Mutation verification of control non-vacuity
 
