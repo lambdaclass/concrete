@@ -237,9 +237,17 @@ fi
 # findings note with invalid writer provenance or whose base does not cover
 # BASE_SHA (never widen base coverage across a delta).
 PREV_SHA="" PREV_ROUNDS=0 PREV_VERDICT="" REVIEWED_SHA="" REVIEWED_ROUNDS=0 REVIEWED_VERDICT=""
+REV_LIST_OUT="$(git rev-list --topo-order HEAD "^$BASE_SHA")" || die "git rev-list failed"
 while read -r c; do
   [ -n "$c" ] || continue
-  fields_out="$(bash "$SCRIPT_DIR/verify.sh" --fields "$c" 2>/dev/null)" || continue
+  fields_rc=0
+  fields_out="$(bash "$SCRIPT_DIR/verify.sh" --fields "$c" 2>&1)" || fields_rc=$?
+  if [ "$fields_rc" -ne 0 ]; then
+    case "$fields_out" in
+      *"git notes show failed"*|*"git for-each-ref failed"*) die "$fields_out" ;;
+    esac
+    continue
+  fi
   v="$(note_field "$fields_out" verdict)"
   r="$(note_field "$fields_out" rounds)"
   nb="$(note_field "$fields_out" base)"
@@ -258,7 +266,7 @@ while read -r c; do
   fi
   if [ -z "$PREV_SHA" ]; then PREV_SHA="$c" PREV_ROUNDS="$r" PREV_VERDICT="$v"; fi
   if [ "$v" = clean ] || [ "$v" = findings ]; then REVIEWED_SHA="$c" REVIEWED_ROUNDS="$r" REVIEWED_VERDICT="$v"; break; fi
-done < <(git rev-list --topo-order HEAD "^$BASE_SHA")
+done <<< "$REV_LIST_OUT"
 
 if [ "$PREV_SHA" = "$HEAD_SHA" ]; then
   case "$PREV_VERDICT" in

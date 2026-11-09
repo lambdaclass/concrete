@@ -118,7 +118,9 @@ assert_no_op() {
 }
 
 assert_clean() {
-  if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+  local st
+  st="$(git status --porcelain --untracked-files=no)" || die "git status failed"
+  if [ -n "$st" ]; then
     git status --short --untracked-files=no >&2
     die "the work tree has uncommitted changes to tracked files; commit or move them first"
   fi
@@ -157,6 +159,15 @@ state_set() { # name key value
   mv "$f.tmp" "$f"
 }
 
+state_reset() { # name — clear build/check/ci state while keeping monotone writer_notes checkpoint
+  local name="$1" prev_wnotes
+  prev_wnotes="$(state_get_soft "$name" writer_notes)"
+  rm -f "$(state_file "$name")"
+  if [ -n "$prev_wnotes" ]; then
+    state_set "$name" writer_notes "$prev_wnotes"
+  fi
+}
+
 STAGE_T0=0
 stage_start() { STAGE_T0="$(date +%s)"; }
 
@@ -190,7 +201,13 @@ run_or_print() { # cmd... — executes, or prints under --dry-run
   "$@"
 }
 
-remote_main() { git ls-remote "$REMOTE" refs/heads/main | cut -f1; }
+remote_main() {
+  local out sha
+  out="$(git ls-remote "$REMOTE" refs/heads/main)" || return 1
+  sha="${out%%$'\t'*}"
+  [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || return 1
+  echo "$sha"
+}
 
 # A push whose result is read from the remote, not from git's exit status. GitHub drops the
 # connection during a long pre-push hook: the push can fail AFTER the remote ref moved (then it is
@@ -290,12 +307,16 @@ cmd_build() {
   if [ "$fetch" = 1 ]; then git fetch -q "$REMOTE"; assert_no_op "fetch"; fi
   local base; base="$(git rev-parse --verify "$REMOTE/main^{commit}")"
 
-  local r sha members="" shas=()
+  local r sha members="" shas=() mb_rc
   for r in "${refs[@]}"; do
     sha="$(git rev-parse --verify -q "$r^{commit}")" || die "build: '$r' does not name a commit"
-    if git merge-base --is-ancestor "$sha" "$base"; then
+    mb_rc=0
+    git merge-base --is-ancestor "$sha" "$base" || mb_rc=$?
+    if [ "$mb_rc" -eq 0 ]; then
       note "skip $r (${sha:0:10}): already contained in $REMOTE/main"
       continue
+    elif [ "$mb_rc" -ne 1 ]; then
+      die "build: git merge-base --is-ancestor failed on $r (${sha:0:10})"
     fi
     shas+=("$r@$sha"); members="${members:+$members,}$r@$sha"
   done
@@ -312,9 +333,18 @@ cmd_build() {
   fi
   local prev; prev="$(git symbolic-ref -q --short HEAD || git rev-parse HEAD)"
   local prev_wnotes; prev_wnotes="$(state_get_soft "$name" writer_notes)"
+  local init_wnotes="" wrc=0 no_fetch_arg=()
+  [ "$fetch" = 1 ] || no_fetch_arg=(--no-fetch)
+  init_wnotes="$(python3 -B -I "$SELF_DIR/../review/writer_provenance.py" fetch-notes --repo "$PWD" --remote "$REMOTE" --target-ref refs/notes/concrete-writer "${no_fetch_arg[@]}" ${prev_wnotes:+--old-notes-rev "$prev_wnotes"} 2>&1)" || wrc=$?
+  if [ "$wrc" -ne 0 ]; then
+    state_reset "$name"
+    log_row "$name" build refused "writer-notes continuity or fetch failed"
+    die "build: invalid, discontinuous or unreadable refs/notes/concrete-writer: ${init_wnotes//$'\n'/ }"
+  fi
   git checkout -q -B "train/$name" "$base"
   assert_no_op "checkout"
-  rm -f "$(state_file "$name")"
+  state_reset "$name"
+  [ -z "$init_wnotes" ] || state_set "$name" writer_notes "$init_wnotes"
   state_set "$name" base "$base"
   state_set "$name" members "$members"
   state_set "$name" prev "$prev"
@@ -368,28 +398,26 @@ cmd_build() {
     log_row "$name" build refused "a generator refused"
     die "build: a generator refused (above); the train is left at its last merge and is NOT built"
   fi
-  if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
-    local changed; changed="$(git status --porcelain --untracked-files=no | cut -c4-)"
+  local regen_st
+  regen_st="$(git status --porcelain --untracked-files=no)" || die "build: git status failed after regeneration"
+  if [ -n "$regen_st" ]; then
+    local changed; changed="$(printf '%s\n' "$regen_st" | cut -c4-)"
     local left; left="$(markers_in $changed)"
     [ -z "$left" ] || die "build: conflict markers remain after regeneration in: $left"
     git add -u
     git commit -q -m "train/$name: regenerate generated views ($(printf '%s ' $changed | sed 's/ $//'))"
     assert_no_op "regeneration commit"
   fi
-  local tracked_markers
-  tracked_markers="$(git grep -lE '^(<{7}|>{7})( |$)' HEAD -- . 2>/dev/null || true)"
-  [ -z "$tracked_markers" ] || die "build: committed conflict markers in: $tracked_markers"
+  local tracked_markers="" grep_rc=0
+  tracked_markers="$(git grep -lE '^(<{7}|>{7})( |$)' HEAD -- . 2>/dev/null)" || grep_rc=$?
+  case "$grep_rc" in
+    0) die "build: committed conflict markers in: $tracked_markers" ;;
+    1) ;;
+    *) die "build: git grep failed scanning HEAD for conflict markers (exit $grep_rc)" ;;
+  esac
 
   state_set "$name" head "$(git rev-parse HEAD)"
   state_set "$name" built_utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  local init_wnotes=""
-  if [ "$fetch" = 1 ] && init_wnotes="$(python3 -B -I "$SELF_DIR/../review/writer_provenance.py" fetch-notes --repo "$PWD" --remote "$REMOTE" --target-ref refs/notes/concrete-writer ${prev_wnotes:+--old-notes-rev "$prev_wnotes"} 2>/dev/null)" && [ -n "$init_wnotes" ]; then
-    state_set "$name" writer_notes "$init_wnotes"
-  elif init_wnotes="$(git rev-parse -q --verify refs/notes/concrete-writer 2>/dev/null || true)" && [ -n "$init_wnotes" ]; then
-    state_set "$name" writer_notes "$init_wnotes"
-  elif [ -n "$prev_wnotes" ]; then
-    state_set "$name" writer_notes "$prev_wnotes"
-  fi
   log_row "$name" build passed "${#shas[@]} member(s)"
   note "train/$name built at $(git rev-parse --short=10 HEAD) on base ${base:0:10}:"
   printf '    %s\n' "${shas[@]}"
@@ -498,10 +526,13 @@ SIGNOFF="$SELF_DIR/signoff.sh"
 # pure_merge BASE HEAD SHA... → empty when HEAD is BASE plus exactly one clean merge of each SHA, in
 # order; otherwise prints why.
 pure_merge() {
-  local base="$1" head="$2" cur="$2" i p t want; shift 2
+  local base="$1" head="$2" cur="$2" i p t want rev_out; shift 2
   local shas=("$@")
   for ((i = ${#shas[@]} - 1; i >= 0; i--)); do
-    read -r -a p <<< "$(git rev-list --parents -n 1 "$cur")"
+    rev_out="$(git rev-list --parents -n 1 "$cur" 2>/dev/null)" || {
+      echo "${head:0:10} is not the clean merge of its members onto ${base:0:10}: git rev-list failed on ${cur:0:10}"; return 0
+    }
+    read -r -a p <<< "$rev_out"
     if [ "${#p[@]}" != 3 ] || [ "${p[2]}" != "${shas[i]}" ]; then
       echo "${head:0:10} is not the clean merge of its members onto ${base:0:10}: ${cur:0:10} is not the merge of ${shas[i]:0:10}"; return 0
     fi
@@ -509,8 +540,8 @@ pure_merge() {
     if ! t="$(git merge-tree --write-tree "${p[1]}" "${shas[i]}" 2>/dev/null)" || ! [[ "$t" =~ ^[0-9a-f]{40}$ ]]; then
       echo "${head:0:10} is not the clean merge of its members onto ${base:0:10}: merging ${shas[i]:0:10} conflicts"; return 0
     fi
-    want="$(git rev-parse "$cur^{tree}")"
-    if [ "$t" != "$want" ]; then
+    want="$(git rev-parse --verify "$cur^{tree}" 2>/dev/null)" || want=""
+    if ! [[ "$want" =~ ^[0-9a-f]{40}$ ]] || [ "$t" != "$want" ]; then
       echo "${head:0:10} is not the clean merge of its members onto ${base:0:10}: ${cur:0:10} differs from the clean merge of ${shas[i]:0:10}"; return 0
     fi
     cur="${p[1]}"
@@ -537,9 +568,15 @@ review_provenance() { # name head
     state_set "$name" writer_notes "$wout"
   fi
   if out="$(bash "$VERIFY" --required-base "$base" "$head" 2>&1)"; then echo "the head ${head:0:10} carries a clean review note covering ${base:0:10}"; return 0; fi
-  if git notes --ref=refs/notes/concrete-review show "$head" >/dev/null 2>&1; then
+  local hnote_out="" hnote_rc=0
+  hnote_out="$(git notes --ref=refs/notes/concrete-review show "$head" 2>&1)" || hnote_rc=$?
+  if [ "$hnote_rc" -eq 0 ]; then
     echo "the head's review note does not qualify: ${out//$'\n'/ }"; return 1
   fi
+  case "$hnote_out" in
+    *"no note found for object"*) ;;
+    *) echo "could not read review note on ${head:0:10}: ${hnote_out//$'\n'/ }"; return 2 ;;
+  esac
   local signed=0 shas=() so impure
   git fetch -q --prune "$REMOTE" "+refs/owner-signoff/*:refs/owner-signoff/*" 2>/dev/null \
     || { echo "could not fetch refs/owner-signoff/* from $REMOTE"; return 1; }
@@ -739,10 +776,13 @@ REQUIRED_FILE="${LAND_REQUIRED_CHECKS_FILE:-required-checks.txt}"
 TRANSITION_FILE="${LAND_REQUIRED_TRANSITION_FILE:-required-checks-transition.tsv}"
 # Prints required_checks.py's findings for base, head and the run's jobs.
 required_report() { # base head jobs
-  local d; d="$(mktemp -d)" || return 1
-  git show "$1:$REQUIRED_FILE" > "$d/base" 2>/dev/null || : > "$d/base"
-  git show "$2:$REQUIRED_FILE" > "$d/cand" 2>/dev/null || : > "$d/cand"
-  git show "$2:$TRANSITION_FILE" > "$d/trans" 2>/dev/null || : > "$d/trans"
+  local d lst; d="$(mktemp -d)" || return 1
+  lst="$(git ls-tree "$1" -- "$REQUIRED_FILE" 2>/dev/null)" || { rm -rf "$d"; return 1; }
+  if [ -n "$lst" ]; then git show "$1:$REQUIRED_FILE" > "$d/base" 2>/dev/null || { rm -rf "$d"; return 1; }; else : > "$d/base"; fi
+  lst="$(git ls-tree "$2" -- "$REQUIRED_FILE" 2>/dev/null)" || { rm -rf "$d"; return 1; }
+  if [ -n "$lst" ]; then git show "$2:$REQUIRED_FILE" > "$d/cand" 2>/dev/null || { rm -rf "$d"; return 1; }; else : > "$d/cand"; fi
+  lst="$(git ls-tree "$2" -- "$TRANSITION_FILE" 2>/dev/null)" || { rm -rf "$d"; return 1; }
+  if [ -n "$lst" ]; then git show "$2:$TRANSITION_FILE" > "$d/trans" 2>/dev/null || { rm -rf "$d"; return 1; }; else : > "$d/trans"; fi
   printf '%s\n' "$3" > "$d/jobs"
   python3 -I "$SELF_DIR/required_checks.py" "$d/base" "$d/cand" "$d/trans" "$d/jobs"; local rc=$?
   rm -rf "$d"; return "$rc"
@@ -940,17 +980,27 @@ REHEARSALS="$STATE_ROOT/rehearsals.tsv"
 # scripts/checks/root_inventory.sh parses it: a line starting with `#` is a comment, the rest is
 # stripped and a blank line skipped. An entry with a `/` is nested (docs/..., scripts/...).
 root_entries() { # commit
-  git show "$1:scripts/checks/root_inventory.txt" 2>/dev/null \
+  local lst raw
+  lst="$(git ls-tree "$1" -- scripts/checks/root_inventory.txt 2>/dev/null)" || return 1
+  if [ -z "$lst" ]; then return 0; fi
+  raw="$(git show "$1:scripts/checks/root_inventory.txt" 2>/dev/null)" || return 1
+  printf '%s\n' "$raw" \
     | awk '/^#/ { next } { gsub(/^[[:space:]]+|[[:space:]]+$/, "") } $0 != "" && !/\// { print }' \
     | LC_ALL=C sort -u
   return 0
 }
 is_move_candidate() { # base head
-  local t
-  t="$(git cat-file -t "$2:legacy" 2>/dev/null || true)"
-  [ -z "$t" ] || [ "$t" = tree ] || return 0
-  [ -z "$(git diff --name-only "$1" "$2" -- legacy)" ] || return 0
-  [ "$(root_entries "$1")" != "$(root_entries "$2")" ]
+  local t lst d e1 e2
+  lst="$(git ls-tree "$2" -- legacy 2>/dev/null)" || return 0
+  if [ -n "$lst" ]; then
+    t="$(git cat-file -t "$2:legacy" 2>/dev/null)" || return 0
+    [ "$t" = tree ] || return 0
+  fi
+  d="$(git diff --name-only "$1" "$2" -- legacy 2>/dev/null)" || return 0
+  [ -z "$d" ] || return 0
+  e1="$(root_entries "$1")" || return 0
+  e2="$(root_entries "$2")" || return 0
+  [ "$e1" != "$e2" ]
 }
 require_rehearsal() { # name base head
   local name="$1" base="$2" head="$3" tree why=""
@@ -1049,7 +1099,9 @@ cmd_land() {
     git remote get-url "$MIRROR" >/dev/null 2>&1 \
       || die "land: mirror remote '$MIRROR' is not configured; both remotes are required (add it, or pass --no-mirror deliberately)"
     mirror="$MIRROR"
-    mmain="$(git ls-remote "$mirror" refs/heads/main | cut -f1)"
+    local mls
+    mls="$(git ls-remote "$mirror" refs/heads/main)" || die "land: could not read $mirror/main"
+    mmain="${mls%%$'\t'*}"
     if [ -n "$mmain" ] && ! git merge-base --is-ancestor "$mmain" "$head" 2>/dev/null; then
       die "land: $mirror/main (${mmain:0:10}) is not an ancestor of the train; reconcile the mirror first (nothing pushed)"
     fi

@@ -1483,7 +1483,90 @@ out="$(bash "$TRAIN" check trv --no-remote 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "invalid or discontinuous refs/notes/concrete-writer" && has "$out" "rewrites or drops existing writer-log entry" && [ ! -s "$FAKE_GH_DIR/review.log" ] \
   && ok "delete-then-replay (train check, step 2): restoring older signed history after remote ref deletion is refused" \
   || { no "train check replay step: exit $rc"; echo "$out" | sed 's/^/      /'; }
-# Restore saved_wnotes on local, remote, and train state:
+# 5. Round 11 control (Codex Finding 1): rebuilding a train (build --force and build --force --no-fetch)
+#    must never suppress a fetch-notes rejection against the saved continuity checkpoint, fall back to
+#    an older local writer ref, or drop/downgrade writer_notes across train state reset.
+git update-ref refs/notes/concrete-writer "$saved_wnotes"
+git update-ref refs/notes/remote/concrete-writer "$saved_wnotes"
+git push -q -f --no-verify origin "$saved_wnotes:refs/notes/concrete-writer"
+sed -i '/^writer_notes=/d' "$LAND_STATE_DIR/trv/train.env" 2>/dev/null || true
+printf 'writer_notes=%s\n' "$n2_wnotes" >> "$LAND_STATE_DIR/trv/train.env"
+: > "$FAKE_GH_DIR/review.log"
+out="$(bash "$TRAIN" check trv --no-remote 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "invalid or discontinuous refs/notes/concrete-writer" && [ ! -s "$FAKE_GH_DIR/review.log" ] \
+  && ok "rebuild continuity (step 1): check fails when train state holds newer writer_notes than remote/local" \
+  || { no "rebuild continuity step 1: exit $rc"; echo "$out" | sed 's/^/      /'; }
+git update-ref refs/notes/concrete-writer "$saved_wnotes"
+git update-ref refs/notes/remote/concrete-writer "$saved_wnotes"
+out="$(bash "$TRAIN" build trv --force brv1 brv2 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "build: invalid, discontinuous or unreadable refs/notes/concrete-writer" \
+  && [ "$(sed -n 's/^writer_notes=//p' "$LAND_STATE_DIR/trv/train.env" | tail -1)" = "$n2_wnotes" ] \
+  && [ "$(git rev-parse refs/notes/concrete-writer)" = "$n2_wnotes" ] \
+  && [ "$(git rev-parse refs/notes/remote/concrete-writer)" = "$n2_wnotes" ] \
+  && ok "rebuild continuity (step 2): build --force refuses older remote/local writer notes, keeps writer_notes checkpoint in train state, and ratchets local refs" \
+  || { no "rebuild continuity step 2 (build --force): exit $rc, state='$(cat "$LAND_STATE_DIR/trv/train.env" 2>/dev/null)'"; echo "$out" | sed 's/^/      /'; }
+git update-ref refs/notes/concrete-writer "$saved_wnotes"
+git update-ref refs/notes/remote/concrete-writer "$saved_wnotes"
+out="$(bash "$TRAIN" build trv --force --no-fetch brv1 brv2 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "build: invalid, discontinuous or unreadable refs/notes/concrete-writer" \
+  && [ "$(sed -n 's/^writer_notes=//p' "$LAND_STATE_DIR/trv/train.env" | tail -1)" = "$n2_wnotes" ] \
+  && [ "$(git rev-parse refs/notes/concrete-writer)" = "$n2_wnotes" ] \
+  && [ "$(git rev-parse refs/notes/remote/concrete-writer)" = "$n2_wnotes" ] \
+  && ok "rebuild continuity (step 3): build --force --no-fetch also refuses older local writer notes and preserves the newer checkpoint" \
+  || { no "rebuild continuity step 3 (build --force --no-fetch): exit $rc"; echo "$out" | sed 's/^/      /'; }
+: > "$FAKE_GH_DIR/review.log"
+out="$(bash "$TRAIN" check trv --no-remote 2>&1)"; rc=$?
+[ "$rc" != 0 ] && [ ! -s "$FAKE_GH_DIR/review.log" ] \
+  && ok "rebuild continuity (step 4): check after refused build --force still fails closed" \
+  || { no "rebuild continuity step 4 (check after build --force): exit $rc"; echo "$out" | sed 's/^/      /'; }
+out="$(bash "$TRAIN" --dry-run land trv 2>&1)"; rc=$?
+[ "$rc" != 0 ] \
+  && ok "rebuild continuity (step 5): land after refused build --force also fails closed" \
+  || { no "rebuild continuity step 5 (land after build --force): exit $rc"; echo "$out" | sed 's/^/      /'; }
+# 6. Round 11 control (Codex Finding 2): git failure injection across validate-notes, provenance reading,
+#    train.sh, signoff.sh, and .githooks/pre-push must fail closed on every git read error.
+mkdir -p "$TMP/fail-git"
+cat > "$TMP/fail-git/git" <<EOF
+#!/usr/bin/env bash
+real_git="$(command -v git)"
+sub=""
+skip_next=0
+for a in "\$@"; do
+  if [ "\$skip_next" = 1 ]; then skip_next=0; continue; fi
+  case "\$a" in
+    -C|-c|--git-dir|--work-tree|--namespace) skip_next=1 ;;
+    -*) ;;
+    *) sub="\$a"; break ;;
+  esac
+done
+for bad in \${GIT_FAIL_SUBCMDS//,/ }; do
+  if [ "\$sub" = "\$bad" ]; then
+    echo "fatal: injected git \$sub failure" >&2
+    exit 128
+  fi
+done
+exec "\$real_git" "\$@"
+EOF
+chmod +x "$TMP/fail-git/git"
+out="$(PATH="$TMP/fail-git:$PATH" GIT_FAIL_SUBCMDS=log python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" validate-notes --repo "$PWD" --notes-rev "$n3_trv_rb" 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "git log" && ! has "$out" "validated " \
+  && ok "failure injection: validate-notes on signed rollback commit fails closed when git log fails" \
+  || { no "validate-notes rollback with failing git log: exit $rc"; echo "$out" | sed 's/^/      /'; }
+out="$(PATH="$TMP/fail-git:$PATH" GIT_FAIL_SUBCMDS=log python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" validate-notes --repo "$PWD" --notes-rev "$n3_trv_del" 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "git log" && ! has "$out" "validated " \
+  && ok "failure injection: validate-notes on signed deletion commit fails closed when git log fails" \
+  || { no "validate-notes deletion with failing git log: exit $rc"; echo "$out" | sed 's/^/      /'; }
+for subcmd in log ls-tree cat-file for-each-ref; do
+  out="$(PATH="$TMP/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" validate-notes --repo "$PWD" --notes-rev "$saved_wnotes" 2>&1)"; rc=$?
+  [ "$rc" != 0 ] && ! has "$out" "validated " \
+    && ok "failure injection: validate-notes fails closed when git $subcmd fails" \
+    || { no "validate-notes with failing git $subcmd: exit $rc"; echo "$out" | sed 's/^/      /'; }
+done
+out="$(printf 'refs/notes/concrete-writer %s refs/notes/concrete-writer %s\n' "$n3_trv_rb" "$n2_wnotes" | PATH="$TMP/fail-git:$PATH" GIT_FAIL_SUBCMDS=log bash "$ROOT_DIR/.githooks/pre-push" origin "$TMP/origin.git" 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "invalid refs/notes/concrete-writer" \
+  && ok "failure injection: pre-push hook refuses refs/notes/concrete-writer when git log fails" \
+  || { no "pre-push hook with failing git log: exit $rc"; echo "$out" | sed 's/^/      /'; }
+# Restore saved_wnotes on local, remote, and train state, and rebuild trv cleanly:
 git update-ref refs/notes/concrete-writer "$saved_wnotes"
 git update-ref refs/notes/remote/concrete-writer "$saved_wnotes"
 git push -q -f --no-verify origin "$saved_wnotes:refs/notes/concrete-writer"
@@ -1492,6 +1575,31 @@ git update-ref -d refs/notes/concrete-writer-trv-del 2>/dev/null || true
 git update-ref -d refs/notes/concrete-writer-trv-resign 2>/dev/null || true
 sed -i '/^writer_notes=/d' "$LAND_STATE_DIR/trv/train.env" 2>/dev/null || true
 printf 'writer_notes=%s\n' "$saved_wnotes" >> "$LAND_STATE_DIR/trv/train.env"
+bash "$TRAIN" build trv --force brv1 brv2 >/dev/null 2>&1 || no "rebuild trv after round 11 controls"
+git checkout -q train/trv; HR="$(git rev-parse HEAD)"
+bash "$TMP/put-review" "$HR" none; bash "$TMP/put-review" "$R1" clean; bash "$TMP/put-review" "$R2" clean
+bash "$TRAIN" check trv --no-remote --no-review >/dev/null 2>&1 || no "re-check trv after round 11 controls"
+printf '[{"databaseId": 6161, "headSha": "%s", "createdAt": "9999-01-01T00:00:00Z"}]' "$HR" > "$FAKE_GH_DIR/list.json"
+bash "$TRAIN" ci trv >/dev/null 2>&1 || no "re-ci trv after round 11 controls"
+runjson "$HR" success success
+for subcmd in log notes for-each-ref status; do
+  : > "$FAKE_GH_DIR/review.log"
+  out="$(PATH="$TMP/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" bash "$TRAIN" check trv --no-remote 2>&1)"; rc=$?
+  [ "$rc" != 0 ] && [ ! -s "$FAKE_GH_DIR/review.log" ] \
+    && ok "failure injection: train.sh check fails closed when git $subcmd fails" \
+    || { no "train.sh check with failing git $subcmd: exit $rc"; echo "$out" | sed 's/^/      /'; }
+  out="$(PATH="$TMP/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" bash "$TRAIN" --dry-run land trv 2>&1)"; rc=$?
+  [ "$rc" != 0 ] \
+    && ok "failure injection: train.sh land fails closed when git $subcmd fails" \
+    || { no "train.sh land with failing git $subcmd: exit $rc"; echo "$out" | sed 's/^/      /'; }
+done
+bash "$TMP/put-review" "$HR" findings
+out="$(PATH="$TMP/fail-git:$PATH" GIT_FAIL_SUBCMDS=notes bash "$TRAIN" --dry-run land trv 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "has no review provenance" \
+  && ok "failure injection: train.sh land fails closed when git notes fails on a head with a findings note" \
+  || { no "train.sh land head findings note with failing git notes: exit $rc"; echo "$out" | sed 's/^/      /'; }
+bash "$TMP/put-review" "$HR" none
+bash "$TRAIN" check trv --no-remote >/dev/null 2>&1 || no "restore trv checked state"
 
 echo "=== review: notes cover the train base (ISS-0019, A -> B -> C) ==="
 git checkout -q -b brvcov "$MR"
@@ -1693,6 +1801,20 @@ o="$(pm "$HX")"; has "$o" "${HX:0:10} is not the clean merge of its members onto
   && ok "pure_merge refuses a head with an extra commit ($o)" || no "pure_merge on an extra commit: '$o'"
 o="$(pm "$HY")"; has "$o" "${HY:0:10} is not the clean merge of its members onto ${BR:0:10}: ${HY:0:10} differs from the clean merge of ${R2:0:10}" \
   && ok "pure_merge refuses a merge whose tree carries an extra change ($o)" || no "pure_merge on a changed merge: '$o'"
+# Failure injection on signoff.sh verify:
+bash "$TMP/put-review" "$R2" "findings@2"
+bash "$TMP/put-signoff" "$R2" valid "$R1"
+o="$(PATH="$TMP/fail-git:$PATH" GIT_FAIL_SUBCMDS=diff bash "$ROOT_DIR/scripts/land/signoff.sh" verify "$R2" --base "$MR" 2>&1)"; r=$?
+[ "$r" != 0 ] \
+  && ok "failure injection: signoff.sh verify fails closed when git diff fails (never defaults diff_class to docs cap 2)" \
+  || { no "signoff.sh verify with failing git diff: exit $r"; echo "$o" | sed 's/^/      /'; }
+bash "$TMP/put-review" "$R2" "findings@5"
+for subcmd in ls-tree cat-file merge-base for-each-ref; do
+  o="$(PATH="$TMP/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" bash "$ROOT_DIR/scripts/land/signoff.sh" verify "$R2" --base "$MR" 2>&1)"; r=$?
+  [ "$r" != 0 ] \
+    && ok "failure injection: signoff.sh verify fails closed when git $subcmd fails" \
+    || { no "signoff.sh verify with failing git $subcmd: exit $r"; echo "$o" | sed 's/^/      /'; }
+done
 bash "$TMP/put-signoff" "$R2" none
 
 echo "=== where a train runs: a full clone with the repository hook (ISS-0015) ==="

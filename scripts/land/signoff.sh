@@ -86,13 +86,14 @@ names() {
 class_cap() { case "$1" in docs) echo 2 ;; scripts) echo 3 ;; *) echo 5 ;; esac; }
 # diff_class SHA BASE → the highest class among the paths SHA changes against its merge base with BASE
 diff_class() {
-  local mb p c best=docs
+  local mb p c best=docs diff_out
   mb="$(git merge-base "$2" "$1")" || return 1
+  diff_out="$(git diff --no-renames --name-only "$mb" "$1")" || return 1
   while IFS= read -r p; do
     [ -n "$p" ] || continue
     c="$(path_class "$p")"
     case "$c" in compiler) best=compiler ;; scripts) [ "$best" = compiler ] || best=scripts ;; esac
-  done < <(git diff --no-renames --name-only "$mb" "$1")
+  done <<< "$diff_out"
   echo "$best"
 }
 
@@ -171,7 +172,9 @@ check() {
   cap="$(class_cap "$cls")"
   at="$F_rounds_at"
   [[ "$at" =~ ^[0-9a-f]{40}$ ]] || bad "rounds-at '$at' is not a full commit SHA"
-  { git merge-base --is-ancestor "$at" "$sha" 2>/dev/null && ! git merge-base --is-ancestor "$at" "$base" 2>/dev/null; } \
+  local mb_base_rc=0
+  git merge-base --is-ancestor "$at" "$base" 2>/dev/null || mb_base_rc=$?
+  { git merge-base --is-ancestor "$at" "$sha" 2>/dev/null && [ "$mb_base_rc" -eq 1 ]; } \
     || bad "rounds-at ${at:0:10} is not one of ${sha:0:10}'s own commits (an ancestor or itself, not on ${base:0:10})"
   # verify.sh --fields validates the note schema as review.sh wrote it (0 any well-formed review.sh
   # note, including findings, blocked and provenance-invalid clean notes; 2 no note or a
@@ -231,8 +234,11 @@ cmd_verify() {
   done
   [ -n "$base" ] || die "verify: --base BASE is required (the cap is the class of the diff against it)"
   base="$(git rev-parse -q --verify "$base^{commit}")" || die "verify: --base is not a commit"
-  git rev-parse -q --verify "$PREFIX/$sha^{commit}" >/dev/null || { echo "$sha has no owner sign-off ($PREFIX/$sha)"; exit 2; }
-  check "$sha" "$(git rev-parse "$PREFIX/$sha^{commit}")" "$base"
+  local ref_sha obj
+  ref_sha="$(git for-each-ref --format='%(objectname)' -- "$PREFIX/$sha")" || die "verify: git for-each-ref failed"
+  [ -n "$ref_sha" ] || { echo "$sha has no owner sign-off ($PREFIX/$sha)"; exit 2; }
+  obj="$(git rev-parse -q --verify "$PREFIX/$sha^{commit}")" || die "verify: $PREFIX/$sha is not a commit"
+  check "$sha" "$obj" "$base"
 }
 
 cmd_collect() {

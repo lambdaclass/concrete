@@ -252,6 +252,46 @@ git -C "$A" push -q -f --no-verify origin "$rvbf_n1:refs/notes/concrete-writer"
 out="$(cd "$A" && bash "$NOTES" fetch writer 2>&1)"; rc=$?
 [ "$rc" = 1 ] && has "$out" "rewrites or drops existing writer-log entry" \
   && ok "notes.sh fetch refuses replayed older signed history after remote ref deletion" || { no "notes.sh fetch delete-then-replay: exit $rc"; echo "$out" | sed 's/^/      /'; }
+# Failure injection on notes.sh fetch writer and notes.sh ready:
+mkdir -p "$TMP/fail-git"
+cat > "$TMP/fail-git/git" <<EOF
+#!/usr/bin/env bash
+real_git="$(command -v git)"
+sub=""
+skip_next=0
+for a in "\$@"; do
+  if [ "\$skip_next" = 1 ]; then skip_next=0; continue; fi
+  case "\$a" in
+    -C|-c|--git-dir|--work-tree|--namespace) skip_next=1 ;;
+    -*) ;;
+    *) sub="\$a"; break ;;
+  esac
+done
+for bad in \${GIT_FAIL_SUBCMDS//,/ }; do
+  if [ "\$sub" = "\$bad" ]; then
+    echo "fatal: injected git \$sub failure" >&2
+    exit 128
+  fi
+done
+exec "\$real_git" "\$@"
+EOF
+chmod +x "$TMP/fail-git/git"
+git -C "$A" update-ref -d refs/notes/concrete-writer 2>/dev/null || true
+git -C "$A" update-ref -d refs/notes/remote/concrete-writer 2>/dev/null || true
+git -C "$A" push -q -f --no-verify origin "$rvbf_n3_rb:refs/notes/concrete-writer"
+out="$(cd "$A" && PATH="$TMP/fail-git:$PATH" GIT_FAIL_SUBCMDS=log bash "$NOTES" fetch writer 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "git log" \
+  && ok "failure injection: notes.sh fetch writer fails closed when git log fails on rollback commit" \
+  || { no "notes.sh fetch writer with failing git log: exit $rc"; echo "$out" | sed 's/^/      /'; }
+git -C "$A" update-ref refs/notes/concrete-writer "$rvbf_n0"
+git -C "$A" update-ref refs/notes/remote/concrete-writer "$rvbf_n0"
+git -C "$A" push -q -f --no-verify origin "$rvbf_n0:refs/notes/concrete-writer"
+for subcmd in log notes for-each-ref merge-base; do
+  ( cd "$A" && PATH="$TMP/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" bash "$NOTES" ready "$RVBF_SHA" >/dev/null 2>&1 ); rc=$?
+  [ "$rc" != 0 ] \
+    && ok "failure injection: notes.sh ready fails closed when git $subcmd fails" \
+    || no "failure injection: notes.sh ready with failing git $subcmd: exit $rc"
+done
 git -C "$A" update-ref refs/notes/concrete-writer "$rvbf_n0"
 git -C "$A" update-ref refs/notes/remote/concrete-writer "$rvbf_n0"
 git -C "$A" push -q -f --no-verify origin "$rvbf_n0:refs/notes/concrete-writer"

@@ -30,8 +30,11 @@ if [ "$#" = 1 ] && [ "$1" = --concrete-identify ]; then
   echo "concrete-pre-push $(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/$(basename "${BASH_SOURCE[0]}")"
   exit 0
 fi
-ROOT_DIR="$(git rev-parse --show-toplevel)"
-cd "$ROOT_DIR"
+ROOT_DIR="$(git rev-parse --show-toplevel 2>/dev/null)" || {
+  echo "pre-push: cannot determine repository root — refusing." >&2
+  exit 1
+}
+cd "$ROOT_DIR" || exit 1
 
 wip_refs=0; wip_dels=0; note_refs=0; other_refs=0; wip_shas=""; full_shas=""
 # Kept whole so the hook can hand the same lines to itself when it re-enters the gate shell (below).
@@ -112,7 +115,15 @@ fi
 # real clone and on GitHub (ISS-0015). Every repository-making script now clears git's variables, and
 # as a second wall a push that runs the checks must come from a full clone. The wip and notes tiers
 # above run nothing, so a worktree may still back up its branch.
-if [ "$(cd "$(git rev-parse --git-dir)" && pwd -P)" != "$(cd "$(git rev-parse --git-common-dir)" && pwd -P)" ]; then
+git_dir_raw="$(git rev-parse --git-dir 2>/dev/null)" || {
+  echo "pre-push: git rev-parse --git-dir failed — refusing." >&2
+  exit 1
+}
+git_common_raw="$(git rev-parse --git-common-dir 2>/dev/null)" || {
+  echo "pre-push: git rev-parse --git-common-dir failed — refusing." >&2
+  exit 1
+}
+if [ "$(cd "$git_dir_raw" && pwd -P)" != "$(cd "$git_common_raw" && pwd -P)" ]; then
   echo "pre-push: refusing: this push runs the root checks, and $ROOT_DIR is a linked worktree; push it from a full clone (git clone), never a worktree." >&2
   exit 1
 fi
@@ -130,13 +141,20 @@ if [ "${CONCRETE_GATES_SHELL:-}" != 1 ] || ! command -v lake >/dev/null 2>&1; th
 fi
 
 # The checks judge the work tree, so it must be the commit being pushed, unmodified.
-head="$(git rev-parse HEAD)"
+head="$(git rev-parse --verify HEAD^{commit} 2>/dev/null)" || {
+  echo "pre-push: cannot resolve HEAD — refusing." >&2
+  exit 1
+}
 for sha in $full_shas; do
   [ "$sha" = "$head" ] || {
     echo "pre-push: pushing ${sha:0:10}, but the checkout is at ${head:0:10}; the checks would judge the wrong commit — check it out and push from there." >&2
     exit 1; }
 done
-if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+status_out="$(git status --porcelain --untracked-files=no 2>&1)" || {
+  echo "pre-push: git status failed — refusing." >&2
+  exit 1
+}
+if [ -n "$status_out" ]; then
   echo "pre-push: the work tree has uncommitted changes to tracked files; the checks would not judge what is pushed — refusing." >&2
   exit 1
 fi

@@ -80,10 +80,29 @@ if [ "$FETCH" = 1 ]; then
 fi
 
 SHA="$(git rev-parse -q --verify "$1^{commit}")" || { echo "verify: not a commit: $1" >&2; exit 2; }
-NOTE="$(git notes --ref="$NOTES_REF" show "$SHA" 2>/dev/null)" || {
-  echo "$SHA unreviewed: no note under $NOTES_REF"
-  exit 2
-}
+NOTE_REF_SHA=""
+if [[ "$NOTES_REF" == refs/* ]]; then
+  NOTE_REF_SHA="$(git for-each-ref --format='%(objectname)' -- "$NOTES_REF")" || {
+    echo "verify: git for-each-ref failed on $NOTES_REF" >&2
+    exit 2
+  }
+  if [ -z "$NOTE_REF_SHA" ]; then
+    echo "$SHA unreviewed: no note under $NOTES_REF"
+    exit 2
+  fi
+fi
+NOTE_RC=0
+NOTE="$(git notes --ref="$NOTES_REF" show "$SHA" 2>&1)" || NOTE_RC=$?
+if [ "$NOTE_RC" -ne 0 ]; then
+  case "$NOTE" in
+    *"no note found for object"*)
+      echo "$SHA unreviewed: no note under $NOTES_REF"
+      exit 2 ;;
+    *)
+      echo "verify: git notes show failed on $SHA under $NOTES_REF: ${NOTE//$'\n'/ }" >&2
+      exit 2 ;;
+  esac
+fi
 
 # The note must carry each of review.sh's seven common fields (verdict, rounds, reviewer, writer,
 # utc, base, pieces) exactly once, each well formed. A clean note must also carry

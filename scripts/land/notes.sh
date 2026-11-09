@@ -57,8 +57,16 @@ fetch_kind() { # kind
 }
 
 get_note() { # kind sha [key]
-  local txt
-  txt="$(git notes --ref="refs/notes/remote/concrete-$1" show "$2" 2>/dev/null)" || return 0
+  local ref="refs/notes/remote/concrete-$1" ref_sha txt nrc=0
+  ref_sha="$(git for-each-ref --format='%(objectname)' -- "$ref")" || return 1
+  [ -n "$ref_sha" ] || return 0
+  txt="$(git notes --ref="$ref" show "$2" 2>&1)" || nrc=$?
+  if [ "$nrc" -ne 0 ]; then
+    case "$txt" in
+      *"no note found for object"*) return 0 ;;
+      *) echo "notes: git notes show failed: $txt" >&2; return 1 ;;
+    esac
+  fi
   if [ -n "${3:-}" ]; then
     printf '%s\n' "$txt" | sed -n "s/^$3:[[:space:]]*//p" | tail -n 1
   else
@@ -82,7 +90,7 @@ put_note() { # kind sha key=value...
   trap 'git update-ref -d "'"$tmp"'" 2>/dev/null || true' RETURN
   for try in 1 2 3 4 5; do
     fetch_kind "$kind"
-    tip="$(git rev-parse -q --verify "refs/notes/remote/concrete-$kind" || true)"
+    tip="$(git for-each-ref --format='%(objectname)' -- "refs/notes/remote/concrete-$kind")"
     if [ -n "$tip" ]; then git update-ref "$tmp" "$tip"
     else git update-ref -d "$tmp" 2>/dev/null || true; fi
     git notes --ref="$tmp" add -f -m "$msg" "$sha" 2>/dev/null
@@ -115,12 +123,15 @@ case "$sub" in
       esac
     done
     [ -n "${1:-}" ] || die "ready [--base <ref>] <sha>"
-    s="$(git rev-parse "$1")"
+    s="$(git rev-parse --verify "$1^{commit}")"
     req_base=""
     if [ -n "$baseref" ]; then
       req_base="$(git merge-base "$baseref" "$s")"
-    elif git rev-parse -q --verify "$REMOTE/main^{commit}" >/dev/null 2>&1; then
-      req_base="$(git merge-base "$REMOTE/main" "$s" 2>/dev/null || true)"
+    else
+      rmain_sha="$(git for-each-ref --format='%(objectname)' -- "refs/remotes/$REMOTE/main")"
+      if [ -n "$rmain_sha" ]; then
+        req_base="$(git merge-base "$rmain_sha" "$s")"
+      fi
     fi
     REVIEW_NOTES_REF="refs/notes/remote/concrete-review" \
     REVIEW_WRITER_NOTES_REF="refs/notes/remote/concrete-writer" \

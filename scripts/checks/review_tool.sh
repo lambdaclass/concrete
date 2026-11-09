@@ -1599,6 +1599,77 @@ check "bad --pieces: exit 2 (got $rc)" test "$rc" -eq 2
 review --bogus >/dev/null 2>&1; rc=$?
 check "unknown flag: exit 2 (got $rc)" test "$rc" -eq 2
 
+echo "=== git failure injection: validation, provenance reading, verify.sh and review.sh fail closed ==="
+mkdir -p "$T/fail-git"
+cat > "$T/fail-git/git" <<EOF
+#!/usr/bin/env bash
+real_git="$(command -v git)"
+sub=""
+skip_next=0
+for a in "\$@"; do
+  if [ "\$skip_next" = 1 ]; then skip_next=0; continue; fi
+  case "\$a" in
+    -C|-c|--git-dir|--work-tree|--namespace) skip_next=1 ;;
+    -*) ;;
+    *) sub="\$a"; break ;;
+  esac
+done
+for bad in \${GIT_FAIL_SUBCMDS//,/ }; do
+  if [ "\$sub" = "\$bad" ]; then
+    echo "fatal: injected git \$sub failure" >&2
+    exit 128
+  fi
+done
+exec "\$real_git" "\$@"
+EOF
+chmod +x "$T/fail-git/git"
+FI_HEAD="$(g rev-parse HEAD)"
+FI_BASE="$(g rev-parse origin/main)"
+FI_WNOTES="$(g rev-parse refs/notes/concrete-writer)"
+for subcmd in log ls-tree cat-file for-each-ref rev-parse; do
+  fi_rc=0
+  PATH="$T/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" \
+    python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" validate-notes --repo "$W" --notes-rev "$FI_WNOTES" \
+    >"$T/fi-val-$subcmd.out" 2>&1 || fi_rc=$?
+  check "failure injection: validate-notes fails closed when git $subcmd fails (got $fi_rc)" \
+    test "$fi_rc" -ne 0
+done
+for subcmd in log ls-tree cat-file rev-list merge-base show notes for-each-ref rev-parse; do
+  fi_rc=0
+  PATH="$T/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" \
+    python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" derive --repo "$W" --base "$FI_BASE" --head "$FI_HEAD" \
+    >"$T/fi-der-$subcmd.out" 2>&1 || fi_rc=$?
+  check "failure injection: writer_provenance.py derive fails closed when git $subcmd fails (got $fi_rc)" \
+    test "$fi_rc" -ne 0
+  fi_vrc=0
+  ( cd "$W" && PATH="$T/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" \
+      bash "$VERIFY" --required-base "$FI_BASE" "$FI_HEAD" >"$T/fi-ver-$subcmd.out" 2>&1 ) || fi_vrc=$?
+  check "failure injection: verify.sh fails closed when git $subcmd fails (got $fi_vrc)" \
+    test "$fi_vrc" -ne 0
+done
+# Also verify merge-tree failure injection on a merge commit:
+g checkout -q -b fi-merge-side "$FI_BASE"
+commit_file fi-side.txt "side" "fi-side"
+FI_SIDE="$(g rev-parse HEAD)"
+g checkout -q -b fi-merge-main "$FI_HEAD"
+g merge -q --no-ff -m "clean merge for failure-injection test" "$FI_SIDE"
+FI_MERGE="$(g rev-parse HEAD)"
+fi_mrc=0
+PATH="$T/fail-git:$PATH" GIT_FAIL_SUBCMDS=merge-tree \
+  python3 -B -I "$ROOT_DIR/scripts/review/writer_provenance.py" derive --repo "$W" --base "$FI_BASE" --head "$FI_MERGE" \
+  >"$T/fi-der-mergetree.out" 2>&1 || fi_mrc=$?
+check "failure injection: writer_provenance.py derive fails closed when git merge-tree fails on a merge commit (got $fi_mrc)" \
+  test "$fi_mrc" -ne 0
+# Also verify review.sh fails closed when git rev-list or git notes fails during round-history scan:
+for subcmd in rev-list notes for-each-ref; do
+  fi_rrc=0
+  ( cd "$W" && PATH="$T/fail-git:$PATH" GIT_FAIL_SUBCMDS="$subcmd" \
+      REVIEW_PUSH=0 REVIEW_CODEX_BIN="$T/bin/codex" \
+      bash "$REVIEW" --base "$FI_BASE" >"$T/fi-rev-$subcmd.out" 2>&1 ) || fi_rrc=$?
+  check "failure injection: review.sh fails closed when git $subcmd fails (got $fi_rrc)" \
+    test "$fi_rrc" -eq 2
+done
+
 echo "=== source tree hygiene (no Python bytecode written into repository) ==="
 ( unset PYTHONDONTWRITEBYTECODE; sign_raw_stanza "$T/good-agy-log" "$T/bytecode-check-stanza" )
 check "sign_raw_stanza and review_tool leave scripts/review/__pycache__ absent" test ! -e "$ROOT_DIR/scripts/review/__pycache__"
