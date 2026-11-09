@@ -271,8 +271,7 @@ environment combined with the retained command-elaboration history for both axio
 closures and `TrustedFact.all` kinds (`Concrete.Premises.trustedDeclarationKinds`
 and `Concrete.Premises.declarationOwners`, never from syntax). Multi-file runs
 cache immutable post-header environments for identical import headers and isolate
-heavy module graphs across bounded child processes (and `systemd-run --user
---scope -p MemoryMax=8G` when available in `slice0_trusted_base.sh`) so
+heavy module graphs across bounded child processes so
 unfreed `.olean` `CompactedRegion`s do not accumulate across files. Quoted
 command templates remain data until invoked. Initializer execution is enabled
 independently for each file, and header and command errors are checked before
@@ -319,3 +318,15 @@ Focused controls live in `scripts/checks/tests/test_execve_names.py`,
 `scripts/checks/tests/trusted_closure_control.sh` and
 `scripts/checks/tests/trusted_policy_controls.py`, plus the inline negative
 controls in `scripts/checks/compiler/slice0_trusted_base.sh`.
+
+The examples audit uses `slice0_common.sh`'s `bounded` launcher, which always
+runs `limited_exec.sh 65536`: on Linux, each launched process and its descendants
+inherit a hard RLIMIT_AS of at most 64 GiB (or a stricter inherited cap). This
+bounds virtual address space, not aggregate RSS. `gate_limits` also applies the
+hard gate-wide inherited cap before any build. The former optional 8 GiB
+systemd scope was unreachable inside the clean launch environment and has been
+removed; no 8 GiB aggregate memory guarantee is claimed. The per-file child
+isolation releases imported Lean regions between files without dropping or
+sampling any source. Darwin relies on the CI job's memory limit, as documented
+by the common launcher. A focused real allocation control checks the inherited
+hard limit and the exact ENOMEM result beyond it without allocating physical RAM.

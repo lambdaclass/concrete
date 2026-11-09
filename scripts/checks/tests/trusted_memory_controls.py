@@ -83,6 +83,19 @@ class MemoryTests(unittest.TestCase):
   for escaped, decoded in [(r'/tmp/\n','/tmp/\n'),(r'/tmp/\t','/tmp/\t'),(r'/tmp/\302\205','/tmp/\u0085')]:
    self.reject(lambda:m.strings.decode_fd_path(escaped), 'control character in mapping path: '+json.dumps(decoded,ensure_ascii=True))
 
+ def test_existing_examples_bound(self):
+  # Production bounded() uses this exact launcher for the complete frontend tree.
+  code = """import errno,mmap,resource
+soft,hard=resource.getrlimit(resource.RLIMIT_AS)
+assert 0 < soft <= 65536*1024*1024 and soft <= hard <= 65536*1024*1024, (soft,hard)
+try: mmap.mmap(-1,hard+4096)
+except OSError as error: assert error.errno==errno.ENOMEM, error
+else: raise AssertionError('address-space limit did not reject allocation')
+print('hard address-space limit: ENOMEM')
+"""
+  result=subprocess.run(['bash',str(LIB/'limited_exec.sh'),'65536',sys.executable,'-I','-c',code],check=True,text=True,capture_output=True,timeout=15)
+  self.assertEqual(result.stdout.strip(),'hard address-space limit: ENOMEM')
+
  def test_real_syscalls(self):
   with tempfile.TemporaryDirectory() as tmp:
    d=Path(tmp); src=d/'memory.c'; exe=d/'memory'; src.write_text(CODE)

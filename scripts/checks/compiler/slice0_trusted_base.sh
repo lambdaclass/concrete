@@ -182,7 +182,8 @@ concrete_modules() {
 }
 
 # check_examples ROOT OUT [REL...]: Lean parses/retains example commands in their own header context;
-# both their axiom closures and generated trusted declarations must be registered under bounded time and MemoryMax.
+# both their axiom closures and generated trusted declarations must be registered under
+# bounded time and the shared hard address-space cap (slice0_common.sh).
 check_examples() {
   local source_root=$1 out=$2 rel
   shift 2
@@ -193,17 +194,11 @@ check_examples() {
     while IFS= read -r rel; do sources+=("$source_root/$rel"); done < <(concrete_source_files)
   fi
   mkdir -p "$out"
-  local mem_max="${CONCRETE_EXAMPLES_MEMORY_MAX:-8G}"
-  local scope_cmd=()
-  if command -v systemd-run >/dev/null 2>&1 &&
-     systemd-run --user --scope -q -p "MemoryMax=$mem_max" true >/dev/null 2>&1; then
-    scope_cmd=(systemd-run --user --scope -q -p "MemoryMax=$mem_max")
-  fi
   local trace=()
   if [ "$(uname -s)" = Linux ]; then
     trace=(strace "${trusted_trace_flags[@]}" -o "$out/frontend.execve")
   fi
-  bounded 600 "${scope_cmd[@]}" "${trace[@]}" lake env lean --run "$root/scripts/checks/compiler/slice0_examples.lean" "${sources[@]}" |
+  bounded 600 "${trace[@]}" lake env lean --run "$root/scripts/checks/compiler/slice0_examples.lean" "${sources[@]}" |
     cap_out >"$out/examples" || { cat "$out/examples"; return 1; }
   if [ "${#trace[@]}" != 0 ]; then
     check_tools "$work/frontend-tools" lean-build "$out/frontend.execve" || return 1
