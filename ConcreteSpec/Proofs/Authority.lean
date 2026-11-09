@@ -8,7 +8,7 @@ PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `Concret
 
 namespace ConcreteSpec.Authority
 
-/-- Helper (computation). Exhaustive enumeration of the finite capability carrier. (approved: PENDING). -/
+/-- Helper (computation). Exhaustive enumeration of the finite capability carrier. (approved: REV-base1c-agy-01025713b). -/
 theorem mem_all (c : Cap) : c ∈ Cap.all := by cases c <;> decide
 
 /-- Law (subject `ConcreteSpec.Authority.CapExpr.Sub`). **The inclusion check is exactly inclusion for every value of the variables** (rule 3, Q5.3). -/
@@ -35,7 +35,7 @@ theorem sub_iff (e f : CapExpr) : e.Sub f ↔ ∀ ρ c, e.Mem ρ c → f.Mem ρ 
         · subst hwv; exact absurd hw hvf
         · simp [hwv] at hcw
 
-/-- Helper (projection). Forward elimination of the complete inclusion equivalence; semantic evidence belongs to sub_iff. (approved: PENDING) -/
+/-- Helper (projection). Forward elimination of the complete inclusion equivalence; semantic evidence belongs to sub_iff. (approved: REV-base1c-agy-01025713b) -/
 theorem sub_sound {e f : CapExpr} (h : e.Sub f) (ρ : Nat → List Cap) (c : Cap) :
     e.Mem ρ c → f.Mem ρ c := (sub_iff e f).mp h ρ c
 
@@ -54,18 +54,18 @@ theorem mem_subst {σ : List CapExpr} {ρ : Nat → List Cap} {e : CapExpr} {c :
     · exact .inl (List.mem_append_right _ (List.mem_flatMap.mpr ⟨v, hv, hc⟩))
     · exact .inr ⟨w, List.mem_flatMap.mpr ⟨v, hv, hw⟩, hcw⟩
 
-/-- Helper (inversion). A successful list search returns a member of that list. (approved: PENDING). -/
+/-- Helper (inversion). A successful list search returns a member of that list. (approved: REV-base1c-agy-01025713b). -/
 theorem find_mem {P : Prog} {h : String} {f : Fn} (hf : P.find h = some f) : f ∈ P :=
   List.mem_of_find?_eq_some hf
 
-/-- Helper (inversion). Eliminate a variable-membership alternative forbidden by zero-parameter well-formedness. (approved: PENDING). A permitted function has no capability variables outside its parameters. -/
+/-- Helper (inversion). Eliminate a variable-membership alternative forbidden by zero-parameter well-formedness. (approved: REV-base1c-agy-01025713b). A permitted function has no capability variables outside its parameters. -/
 theorem mem_of_no_vars {e : CapExpr} (he : e.WellFormed 0) {ρ : Nat → List Cap} {c : Cap}
     (h : e.Mem ρ c) : c ∈ e.caps := by
   rcases h with hc | ⟨v, hv, _⟩
   · exact hc
   · exact absurd (he.2.2 v hv) (Nat.not_lt_zero v)
 
-/-- Representation lemma. Successful positional lookup selects only input grants and commutes with mapping their types. (approved: PENDING). The grant arguments of a call that runs. -/
+/-- Representation lemma. Successful positional lookup selects only input grants and commutes with mapping their types. (approved: REV-base1c-agy-01025713b). The grant arguments of a call that runs. -/
 theorem mapM_args {env : List Nat} : ∀ {gs : List Nat} {env' : List Nat},
     gs.mapM (fun i => env[i]?) = some env' →
     (∀ x ∈ env', x ∈ env) ∧ ∀ (gty : Nat → GrantTy) (cg : List GrantTy),

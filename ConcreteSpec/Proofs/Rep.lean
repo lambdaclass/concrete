@@ -9,12 +9,12 @@ PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `Concret
 namespace ConcreteSpec.Rep
 open ConcreteSpec
 
-/-- Helper (arithmetic). Induction computes the width of the radix-256 expansion used by the representation proof. (approved: PENDING) -/
+/-- Helper (computation). Induction computes the width of the radix-256 expansion used by the representation proof. (approved: REV-base1c-agy-01025713b) -/
 theorem encodeNat_length : ∀ (w n : Nat), (encodeNat w n).length = w
   | 0, _ => rfl
   | w + 1, n => by simp [encodeNat, encodeNat_length w (n / 256)]
 
-/-- Helper (arithmetic). Radix-256 division and remainder reconstruct the residue modulo the encoding width. (approved: PENDING) -/
+/-- Law (subject `ConcreteSpec.Rep.encodeNat`, `ConcreteSpec.Rep.decodeNat`). Little-endian encoding and decoding reconstruct the residue at the specified width. -/
 theorem decodeNat_encodeNat : ∀ (w n : Nat), decodeNat (encodeNat w n) = some (n % 256 ^ w)
   | 0, n => by simp [encodeNat, decodeNat, Nat.mod_one]
   | w + 1, n => by
@@ -22,8 +22,7 @@ theorem decodeNat_encodeNat : ∀ (w n : Nat), decodeNat (encodeNat w n) = some 
       Option.some.injEq]
     rw [Nat.pow_succ, Nat.mul_comm (256 ^ w) 256, Nat.mod_mul]
 
-/-- Helper (arithmetic). The integer round trip, for every integer type: the bit pattern of an in-range value decodes
-to the value. This discharges the signed modular-arithmetic step of the value representation proof. (approved: PENDING) -/
+/-- Law (subject `ConcreteSpec.Rep.ofBits`). Decoding an in-range integer bit pattern recovers the signed or unsigned value. -/
 theorem int_roundtrip (t : IntTy) (n : Int) (h : t.inRange n = true) :
     ofBits t ((n % (2 : Int) ^ t.bits).toNat % 256 ^ (t.bits / 8)) = n := by
   have hpos : (0 : Int) < (2 : Int) ^ t.bits := by
@@ -83,28 +82,67 @@ def rejectValue : Decls → Ty → List MByte → Option Val := fun _ _ _ => non
 /-- A broken layout refuses the size of a scalar. -/
 def missingSize : Decls → Ty → Option Nat := fun _ _ => none
 
-/-- Instance (law `ConcreteSpec.Rep.rep_roundtrip`, case `ConcreteSpec.Rep.RoundtripEvidence.boolean`). -/
+/-- Instance (law `ConcreteSpec.Rep.rep_roundtrip`, case `boolean`). -/
 example : Ty.size [] (.scalar .bool) = some (encodeVal (.scalar (.bool true))).length ∧
     decodeVal [] (.scalar .bool) (encodeVal (.scalar (.bool true))) = some (.scalar (.bool true)) :=
   @rep_roundtrip [] (.scalar (.bool true)) (.scalar .bool) (.scalar .bool)
 
-/-- Planted (law `ConcreteSpec.Rep.rep_roundtrip`, case `ConcreteSpec.Rep.RoundtripEvidence.boolean`, subject `ConcreteSpec.Rep.encodeVal`, mutant `ConcreteSpec.Rep.RoundtripEvidence.dropBytes`). -/
+/-- Planted (law `ConcreteSpec.Rep.rep_roundtrip`, case `boolean`, subject `ConcreteSpec.Rep.encodeVal`, mutant `ConcreteSpec.Rep.RoundtripEvidence.dropBytes`). -/
 example : RepVal [] (.scalar (.bool true)) (.scalar .bool) ∧
     ¬ (Ty.size [] (.scalar .bool) = some (dropBytes (.scalar (.bool true))).length ∧
       decodeVal [] (.scalar .bool) (dropBytes (.scalar (.bool true))) = some (.scalar (.bool true))) :=
   ⟨.scalar .bool, by decide⟩
 
-/-- Planted (law `ConcreteSpec.Rep.rep_roundtrip`, case `ConcreteSpec.Rep.RoundtripEvidence.boolean`, subject `ConcreteSpec.Rep.decodeVal`, mutant `ConcreteSpec.Rep.RoundtripEvidence.rejectValue`). -/
+/-- Planted (law `ConcreteSpec.Rep.rep_roundtrip`, case `boolean`, subject `ConcreteSpec.Rep.decodeVal`, mutant `ConcreteSpec.Rep.RoundtripEvidence.rejectValue`). -/
 example : RepVal [] (.scalar (.bool true)) (.scalar .bool) ∧
     ¬ (Ty.size [] (.scalar .bool) = some (encodeVal (.scalar (.bool true))).length ∧
       rejectValue [] (.scalar .bool) (encodeVal (.scalar (.bool true))) = some (.scalar (.bool true))) :=
   ⟨.scalar .bool, by decide⟩
 
-/-- Planted (law `ConcreteSpec.Rep.rep_roundtrip`, case `ConcreteSpec.Rep.RoundtripEvidence.boolean`, subject `ConcreteSpec.Rep.Ty.size`, mutant `ConcreteSpec.Rep.RoundtripEvidence.missingSize`). -/
+/-- Planted (law `ConcreteSpec.Rep.rep_roundtrip`, case `boolean`, subject `ConcreteSpec.Rep.Ty.size`, mutant `ConcreteSpec.Rep.RoundtripEvidence.missingSize`). -/
 example : RepVal [] (.scalar (.bool true)) (.scalar .bool) ∧
     ¬ (missingSize [] (.scalar .bool) = some (encodeVal (.scalar (.bool true))).length ∧
       decodeVal [] (.scalar .bool) (encodeVal (.scalar (.bool true))) = some (.scalar (.bool true))) :=
   ⟨.scalar .bool, by decide⟩
+
+def zeroEncodeNat : Nat → Nat → List MByte := fun w _ => encodeNat w 0
+def noDecodeNat : List MByte → Option Nat := fun _ => none
+def unsignedOnlyOfBits : IntTy → Nat → Int := fun _ n => n
+
+/-- Instance (law `ConcreteSpec.Rep.decodeNat_encodeNat`, case `twoBytes`). -/
+example := decodeNat_encodeNat 2 65534
+
+/-- Planted (law `ConcreteSpec.Rep.decodeNat_encodeNat`, case `twoBytes`, subject `ConcreteSpec.Rep.encodeNat`, mutant `ConcreteSpec.Rep.RoundtripEvidence.zeroEncodeNat`). -/
+example : ¬ (decodeNat (zeroEncodeNat 2 65534) = some (65534 % 256 ^ 2)) := by decide
+
+/-- Planted (law `ConcreteSpec.Rep.decodeNat_encodeNat`, case `twoBytes`, subject `ConcreteSpec.Rep.decodeNat`, mutant `ConcreteSpec.Rep.RoundtripEvidence.noDecodeNat`). -/
+example : ¬ (noDecodeNat (encodeNat 2 65534) = some (65534 % 256 ^ 2)) := by decide
+
+/-- Instance (law `ConcreteSpec.Rep.int_roundtrip`, case `negativeSigned`). -/
+example := int_roundtrip .i16 (-2) (by decide)
+
+/-- Planted (law `ConcreteSpec.Rep.int_roundtrip`, case `negativeSigned`, subject `ConcreteSpec.Rep.ofBits`, mutant `ConcreteSpec.Rep.RoundtripEvidence.unsignedOnlyOfBits`). -/
+example : IntTy.inRange .i16 (-2) = true ∧
+    ¬ (unsignedOnlyOfBits .i16 (((-2 : Int) % (2 : Int) ^ IntTy.bits .i16).toNat %
+      256 ^ (IntTy.bits .i16 / 8)) = -2) := by decide
+
+/-- Instance (law `ConcreteSpec.Rep.rep_roundtrip`, case `negativeSigned`). -/
+example : Ty.size [] (.scalar (.int .i16)) = some (encodeVal (.scalar (.int .i16 (-2)))).length ∧ decodeVal [] (.scalar (.int .i16)) (encodeVal (.scalar (.int .i16 (-2)))) = some (.scalar (.int .i16 (-2))) := @rep_roundtrip [] (.scalar (.int .i16 (-2))) (.scalar (.int .i16)) (.scalar (.int (by decide)))
+
+/-- Planted (law `ConcreteSpec.Rep.rep_roundtrip`, case `negativeSigned`, subject `ConcreteSpec.Rep.decodeVal`, mutant `ConcreteSpec.Rep.RoundtripEvidence.rejectValue`). -/
+example : RepVal [] (.scalar (.int .i16 (-2))) (.scalar (.int .i16)) ∧ ¬ (Ty.size [] (.scalar (.int .i16)) = some (encodeVal (.scalar (.int .i16 (-2)))).length ∧ rejectValue [] (.scalar (.int .i16)) (encodeVal (.scalar (.int .i16 (-2)))) = some (.scalar (.int .i16 (-2)))) := ⟨(.scalar (.int (by decide))), by decide⟩
+
+/-- Planted (law `ConcreteSpec.Rep.rep_roundtrip`, case `negativeSigned`, subject `ConcreteSpec.Rep.Ty.size`, mutant `ConcreteSpec.Rep.RoundtripEvidence.missingSize`). -/
+example : RepVal [] (.scalar (.int .i16 (-2))) (.scalar (.int .i16)) ∧ ¬ (missingSize [] (.scalar (.int .i16)) = some (encodeVal (.scalar (.int .i16 (-2)))).length ∧ decodeVal [] (.scalar (.int .i16)) (encodeVal (.scalar (.int .i16 (-2)))) = some (.scalar (.int .i16 (-2)))) := ⟨(.scalar (.int (by decide))), by decide⟩
+
+/-- Instance (law `ConcreteSpec.Rep.rep_roundtrip`, case `emptyStruct`). -/
+example : Ty.size [⟨"Token", false, []⟩] (.struct "Token") = some (encodeVal (.struct "Token" [])).length ∧ decodeVal [⟨"Token", false, []⟩] (.struct "Token") (encodeVal (.struct "Token" [])) = some (.struct "Token" []) := @rep_roundtrip [⟨"Token", false, []⟩] (.struct "Token" []) (.struct "Token") (.empty rfl rfl)
+
+/-- Planted (law `ConcreteSpec.Rep.rep_roundtrip`, case `emptyStruct`, subject `ConcreteSpec.Rep.decodeVal`, mutant `ConcreteSpec.Rep.RoundtripEvidence.rejectValue`). -/
+example : RepVal [⟨"Token", false, []⟩] (.struct "Token" []) (.struct "Token") ∧ ¬ (Ty.size [⟨"Token", false, []⟩] (.struct "Token") = some (encodeVal (.struct "Token" [])).length ∧ rejectValue [⟨"Token", false, []⟩] (.struct "Token") (encodeVal (.struct "Token" [])) = some (.struct "Token" [])) := ⟨(.empty rfl rfl), by decide⟩
+
+/-- Planted (law `ConcreteSpec.Rep.rep_roundtrip`, case `emptyStruct`, subject `ConcreteSpec.Rep.Ty.size`, mutant `ConcreteSpec.Rep.RoundtripEvidence.missingSize`). -/
+example : RepVal [⟨"Token", false, []⟩] (.struct "Token" []) (.struct "Token") ∧ ¬ (missingSize [⟨"Token", false, []⟩] (.struct "Token") = some (encodeVal (.struct "Token" [])).length ∧ decodeVal [⟨"Token", false, []⟩] (.struct "Token") (encodeVal (.struct "Token" [])) = some (.struct "Token" [])) := ⟨(.empty rfl rfl), by decide⟩
 
 end RoundtripEvidence
 

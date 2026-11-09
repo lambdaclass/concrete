@@ -97,7 +97,7 @@ theorem checked_observable {p : Program} (h : Checked p) :
   · exact ⟨_, ho, hc⟩
   · exact ⟨_, ho, by simp [Observation.status]⟩
 
-/-- Representation lemma. A refused start never runs main: the observation does not depend on the run. This is the defining refusal branch of the observation map. (approved: PENDING) -/
+/-- Representation lemma. A refused start never runs main: the observation does not depend on the run. This is the defining refusal branch of the observation map. (approved: REV-base1c-agy-01025713b) -/
 theorem refused_start (o : Outcome) : observe false o = some .startupRefused := rfl
 
 namespace CheckedEvidence
