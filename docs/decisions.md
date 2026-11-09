@@ -29,6 +29,8 @@ A decided proposal moves to `docs/archive/<topic>-<date>/`.
 <a id="recent-decisions"></a>
 ## Recent decisions
 
+- Five [owner-delegated choices](#decided-2026-11-09-delegated), and the [previously approved architecture items](#decided-2026-11-08-architecture).
+
 Each row records a decision and its reason. A language rule itself is its Lean definition in
 [ConcreteSpec/](../ConcreteSpec/), which governs once it lands.
 
@@ -89,12 +91,12 @@ No new concrete syntax is decided here: spelling pending owner.
   duplicate sites, dropping nothing. This strengthens the existing project-relative trap-path
   decision with checked input structure (rules 12, 13, 14).
 - <a id="delegated-c2"></a>**C2 constants, options (a) and (i)** (owner delegation above, 2026-11-09).
-  Constants stay scalar; checked operations are excluded from initializers; remove tryConvert
-  from CExpr. The general checked conversion result of OD106 is unchanged. Option (c), the
-  [R2 aggregate/enum proposal](#pending-r2), is the single reopening path, subject to its listed
-  preconditions and owner confirmation. Every initializer is evaluated, used or not; fuel
-  exhaustion refuses, never supplies evidence of success. Do not quietly enlarge the initializer grammar
-  (rules 5, 12, 15).
+  Constants stay scalar; exclude Result-returning checked_* operations from initializers and
+  remove tryConvert from CExpr. This does not exclude Q6.2's ordinary arithmetic or change
+  OD106's runtime conversion. Option (c), R2 aggregate/enum constants, is the single reopening
+  path: closed successful evaluation, a typed value/representation and storage contract,
+  view/ownership laws, resource accounting and preservation evidence must be supplied before
+  reopening. The [R2 design](#pending-r2) remains pending; these reopening conditions do not.
 - <a id="delegated-x4"></a>**X4 trust approvals** (owner delegation above, 2026-11-09).
   Gate D trust approvals use the owner's SSH signing key, rather than an agent's key or unsigned
   assent. This chooses the approval authority, not permission to obtain or install a private key
@@ -106,6 +108,74 @@ No new concrete syntax is decided here: spelling pending owner.
   as representation lemmas; prove determinism over independently specified operational rules.
   Construction from the evaluator alone does not establish independent semantic determinism
   (rules 6, 12).
+
+<a id="decided-2026-11-08-architecture"></a>
+## Architecture approvals 2026-11-08
+
+Owner, verbatim, 2026-11-08T15:21:26Z: "yes to everythiong"; confirmed at
+15:21:44Z: "yes to adding all the 12". These approve K1–K4 and K6–K12 on the
+shown plan; K5 was explicitly reserved as its own owner question. These are decided,
+not assumptions under the November 9 delegation. New spellings remain pending owner.
+
+- <a id="decided-k1"></a>**K1. Provenance through every IR** (owner, 2026-11-08; approval quoted above).
+  Every HIR, Core, MIR, CFG, SSA and BIR node carries origin spans and stable identity for diagnostics, trap accounting, debug info and facts.
+- <a id="decided-k2"></a>**K2. Round-trippable IR text** (owner, 2026-11-08; approval quoted above).
+  Give every IR a textual printer/parser pair with a round-trip law for isolated pass testing; complement B0 printers.
+- <a id="decided-k3"></a>**K3. Compiler totality and panic policy** (owner, 2026-11-08; approval quoted above).
+  State compiler totality. Revised by the later owner answer, verbatim: "ok perfect":
+  the allow-list covers only panic!/unreachable!, each with a reason and a gate proving the
+  case impossible; sorry/partial def are never allowed in compiler code, and unproven facts
+  live only in Premises.lean as named tracked premises. This resolves K3 versus R-0630.
+- <a id="decided-k4"></a>**K4. Generated-code benchmarks** (owner, 2026-11-08; approval quoted above).
+  Track showcase runtime and code size against C at -O2 for both LCB and LLVM, with history on concrete-ci-2; use existing report-only/owner-target stages.
+- <a id="decided-k6"></a>**K6. Unproven LLVM path validation** (owner, 2026-11-08; approval quoted above).
+  Use translation validation or differential checks for the LLVM printer path until it is proved or replaced; test agreement never becomes a proof claim.
+- <a id="decided-k7"></a>**K7. Incremental and parallel compilation** (owner, 2026-11-08; approval quoted above).
+  Use per-function compilation units and content-addressed caching keyed by input hashes, including all semantic dependencies, compiler/toolchain/target identities; prepare for later LSP use without body-dependent cross-module inference.
+- <a id="decided-k8"></a>**K8. Compile-speed targets** (owner, 2026-11-08; approval quoted above).
+  Add absolute lines-per-second measurements on reference workloads beside scaling; retain report-only measurement until noise is understood and owner-set budgets apply.
+- <a id="decided-k9"></a>**K9. Proof engineering discipline** (owner, 2026-11-08; approval quoted above).
+  Adopt a gated proof style: no large decide terms, pinned simp sets, one proof module per stage and reused lemmas.
+- <a id="decided-k10"></a>**K10. Stage architecture contracts** (owner, 2026-11-08; approval quoted above).
+  Each stage has one architecture document recording input/output invariants, linking theorem and trusted pieces, checked by traceability; link normative definitions instead of restating rules.
+- <a id="decided-k11"></a>**K11. Debug info and maps** (owner, 2026-11-08; approval quoted above).
+  Plan DWARF and source maps from K1 provenance with LLVM DWARF at slice 17 (R-0587); assign other backend maps at their first supported debug increment without implying native correctness.
+- <a id="decided-k12"></a>**K12. Stable machine output** (owner, 2026-11-08; approval quoted above).
+  Use one versioned stable schema for facts, diagnostics and CLI JSON derived from canonical typed data, extending the existing early schema decision.
+- <a id="decided-k13"></a>**K13. Elm-quality diagnostics** (owner, 2026-11-08T15:20:52Z,
+  verbatim: "i want to have elm like errors for item 1 so we need to make sure they are good").
+  Diagnostic quality is a requirement of K1 provenance, extending the existing
+  [diagnostics decision](#decided-project-diagnostics-2026-11-06), not a new pending feature.
+
+<a id="decided-2026-11-08-constant-evaluation"></a>
+**Constant initializer evaluation** (owner, 2026-11-08 15:08 UTC, verbatim:
+"ok but i said already all yes based on the best long term reviews of each agent and what we said before right?",
+answering item 18). Fallible primitive operations in a closed initializer grammar, with no calls,
+loops or effects; success is kernel-checked, every initializer is evaluated, and running out of
+fuel refuses. This revises TYPE-22 and Q6.6's no-evaluator-resource-failure answer. It is separate
+from the November 9 C2 delegation; its scalar restriction still applies.
+
+### Survey items already governed by decided rows
+
+These are references to existing answers, not additional decisions or pending votes.
+P16/P17b were owner-approved on 2026-11-05; their canonical record below carries the
+approval provenance (the narrative is not a verbatim owner quote). A1 was reaffirmed by the owner on
+2026-11-08: "i don't see an isue with noisier if it's clearer". OD125 was decided on
+2026-11-01; the no-hidden-traps and information-flow decisions carry their own verbatim
+approval records below. P1 reserves language answers to the owner. Follow those canonical
+rows for the approval provenance rather than inventing a new quote for each survey label.
+
+- <a id="existing-l3"></a>**L3, existing work only**: [R-0599](../ROADMAP.md#b-cumulative-slices-up-to-lp0) already schedules bounded search and reference-evaluator replay. This is a roadmap overlap, not an owner approval: the SPARK decided row explicitly excludes internal item 5. The pending recommendation below concerns any scope beyond R-0599.
+- <a id="existing-a1"></a>**A1**: [existing decided row](#decided-2026-11-08-capabilities-kept). Authority remains unchanged; R-0624 is still the separate owner question about a replacement, not permission to drop Alloc.
+- <a id="existing-a9"></a>**A9**: [existing decided row](#decided-project-recording). P1 already reserves language spellings to the owner; R-0622 carries the work.
+- <a id="existing-d1"></a>**D1**: [existing decided row](#decided-project-refusals). P17b already fixes the reopening conditions: workload, proof story, phase separation, audit report and a new owner decision.
+- <a id="existing-d3"></a>**D3**: [existing decided row](#decided-project-refusals). P16 retains the permanent implicit-propagation refusal in the approved philosophy statuses.
+- <a id="existing-d5"></a>**D5**: [existing decided row](#decided-project-refusals). P16 retains the permanent algebraic-effects refusal in the approved philosophy statuses.
+- <a id="existing-d7"></a>**D7**: [existing decided row](#decided-project-refusals). P16 retains the second-class-reference boundary and refusal of source lifetime machinery.
+- <a id="existing-d9"></a>**D9**: [existing decided row](#od125). Run-time contract checks are already refused; safety evidence is qualified by the no-hidden-traps decision.
+- <a id="existing-d10"></a>**D10**: [existing decided row](#decided-project-no-hidden-traps). Safety admission uses kernel-checked evidence, never solver trust; certificate replay remains allowed.
+- <a id="existing-d11"></a>**D11**: [existing decided row](#decided-project-refusals). P17b already governs broad cfg. OD124 permits profiles of refusals without behavior change, so a blanket refusal of admission profiles is withdrawn, not recorded as decided.
+- <a id="existing-d14"></a>**D14**: [existing decided row](#decided-project-infoflow-2026-11-06). The existing observer excludes speculative leakage; no stronger claim is proposed.
 
 <a id="pending-owner-confirmation-2026-11-09"></a>
 ## Pending owner confirmation (assumed yes, 2026-11-09)
@@ -120,12 +190,12 @@ identify proposals, not accepted spellings. Reasons refer to [PHILOSOPHY.md](PHI
 ROADMAP holds work only and links these rows rather than defining choices again.
 
 - <a id="pending-r1"></a>**R1. Hosted launch and final image** (assumed yes; pending owner confirmation).
-  *Choice:* The target table specifies a clean initial process state: ignore SIGPIPE so writes return typed errors; reset signal dispositions and mask to a stated state; close descriptors >= 3 or refuse launch (125) unless granted; make file creation mode an explicit argument and set umask to 0. Refuse loader-environment injection and bind loaded libraries by hash, or use static linking on the proof profile. Pre-map the stack budget or probe pages, checked on the final artifact. Require a non-executable stack and no writable/executable segment from slice 0; fix FP control state at entry at slice 26.
+  *Choice:* The target table specifies a clean initial process state: ignore SIGPIPE so writes return typed errors; reset signal dispositions and mask to a stated state; close descriptors >= 3 or refuse launch (125) unless granted; make file creation mode an explicit argument and set umask to 0. Refuse loader-environment injection and bind loaded libraries by hash, or use static linking on the proof profile. Pre-map the stack budget or probe pages, checked on the final artifact. Require a non-executable stack and no writable/executable segment from slice 0; fix FP control state at entry at slice 26. Launcher obligations arrive at 6, stream/file/socket obligations at 16/18/27 and loader obligations at 25.
   *Alternatives:* Inherited host state; launcher conventions without final-image evidence.
   *Reason:* rules 3, 8, 11, 12, 14, 18: no ambient authority or hidden process inputs.
   *If no:* Keep existing target obligations; return each uncovered launch premise to the owner before claiming it.
 - <a id="pending-r2"></a>**R2. Aggregate and enum constants** (assumed yes; pending owner confirmation).
-  *Choice:* Give aggregate constants exactly one read-only storage instance and shared second-class views at uses, never mutable views or per-use copies. Scalars retain TYPE-22 at-use meaning; REF-6 remains unchanged and initializers do not borrow. Move at least single-file top-level constants to slice 15. Aggregate/enum initializers reopen C2 only with closed successful evaluation, a typed value/representation and storage contract, view/ownership laws, resource accounting and preservation evidence; no general compile-time execution.
+  *Choice:* Give aggregate constants exactly one read-only storage instance and shared second-class views at uses, never mutable views or per-use copies. Payloadless enum constants use scalar-like at-use values; payload-carrying enums use the aggregate storage/view contract. Shared-view reads incur no per-use copy in source stack or step bounds. Scalars retain TYPE-22 at-use meaning; REF-6 remains unchanged and initializers do not borrow. Move at least single-file top-level constants to slice 15. Aggregate/enum initializers must meet the [decided C2 reopening conditions](#delegated-c2); no general compile-time execution.
   *Alternatives:* Scalar-only constants indefinitely; copying aggregates at each use; optimizer-dependent static storage.
   *Reason:* rules 1, 5, 10, 12, 16: table costs and storage must have semantics independent of optimization.
   *If no:* C2 scalar restriction stays; slice-15 table workloads need another owner-approved design.
@@ -140,12 +210,12 @@ ROADMAP holds work only and links these rows rather than defining choices again.
   *Reason:* rules 3, 5, 10, 13: disjointness is checked while root identity remains intact.
   *If no:* Whole-root view conflicts remain; workloads use existing single-view operations.
 - <a id="pending-r5"></a>**R5. Secret wiping scope** (assumed yes; pending owner confirmation).
-  *Choice:* State the slice-7 claim by covered locations. After a linear secret is destroyed no reachable source location holds its bytes; moving it leaves no readable copy. Add frame/register scrubbing on return from functions holding secrets, as an LCB proof obligation and a named LLVM premise. Abort, core dumps and paging remain named premises; disable core dumps at launch when facts show secrets. Refine at slices 7, 15 and 19; do not imply Copy scalar secrets are wiped by destruction.
+  *Choice:* State the slice-7 claim by covered locations. After a linear secret is destroyed no reachable source location holds its bytes; moving it leaves no readable copy. Add frame/register scrubbing on return from functions holding secrets, as an LCB proof obligation and a named LLVM premise. Abort, core dumps and paging remain named premises; disable core dumps at launch when facts show secrets. Moving resize of linear-secret storage scrubs the old backing allocation before release; arena reset requires prior linear-secret destruction with scrubbing, retaining the no-live-allocation reset rule. Refine at slices 7, 15 and 19; do not imply Copy scalar secrets are wiped by destruction.
   *Alternatives:* Wipe only the final slot while advertising unscoped wiping; claim physical erasure from source semantics.
   *Reason:* rules 3, 8, 12, 14: separate logical erasure, backend preservation and OS premises.
   *If no:* Keep the existing narrower wipe claims and explicit residual premises.
 - <a id="pending-r6"></a>**R6. Earlier generated functional models** (assumed yes; pending owner confirmation).
-  *Choice:* Generate one model per function with proved refinement to Core, reusing R-0482 model/proposition identities and R-0454 canonical subjects. Deliver pure models at 8, mutable-parameter returned updates at 13, effect traces at 18 and allocation at 19, moving that part of proof-order item 4 from phase E to C.
+  *Choice:* Generate one model per function with proved refinement to Core, reusing the model/proposition identity obligations of R-0482 and canonical subjects transferred from R-0454 into R-0353, pulling those obligations forward rather than waiting for phase E/F completion. Deliver pure models at 8, mutable-parameter returned updates at 13, effect traces at 18 and allocation at 19, moving that part of proof-order item 4 from phase E to C.
   *Alternatives:* Wait until phase E; handwritten parallel functional implementations.
   *Reason:* rules 5, 7, 12, 13: the theorem concerns the actual function through a checked model.
   *If no:* Keep phase-E scheduling; early program theorems use Core directly.
@@ -169,66 +239,13 @@ ROADMAP holds work only and links these rows rather than defining choices again.
   *Alternatives:* Restated numeric offsets; string field lookup; optimizer-only layout knowledge.
   *Reason:* rules 5, 13: one computed layout with typed identity.
   *If no:* Keep existing layout queries and known-value exclusions; offsets remain unavailable.
-- <a id="pending-k1"></a>**K1. Provenance through every IR** (assumed yes; pending owner confirmation).
-  *Choice:* Every HIR, Core, MIR, CFG, SSA and BIR node carries origin spans and stable identity for diagnostics, trap accounting, debug info and facts.
-  *Alternatives:* Recover origins late; use names or positions as semantic identity.
-  *Reason:* rules 13, 14: provenance survives each lowering and is inspectable.
-  *If no:* Retain current provenance scope; do not claim end-to-end source mapping.
-- <a id="pending-k2"></a>**K2. Round-trippable IR text** (assumed yes; pending owner confirmation).
-  *Choice:* Give every IR a textual printer/parser pair with a round-trip law for isolated pass testing; complement B0 printers.
-  *Alternatives:* Printer-only dumps; tests requiring the entire frontend.
-  *Reason:* rules 5, 12, 14: replayable pass inputs with proved serialization meaning.
-  *If no:* Keep diagnostic printers without claiming round-trip or isolated replay.
-- <a id="pending-k3"></a>**K3. Compiler totality and panic policy** (assumed yes; pending owner confirmation).
-  *Choice:* State compiler totality. Permit only a reasoned allow-list for panic and unreachable cases, with a gate proving each case impossible; never allow sorry or partial definitions in compiler code. Unproven facts belong only in a named, tracked premises module. This uses the later K3/R-0630 answer in the source record, rather than reviving an unrestricted allow-list.
-  *Alternatives:* Unrestricted allow-list; unconditional panic ban without modeling impossible cases; untracked proof gaps.
-  *Reason:* rules 1, 12: totality and trust gaps must have precise, checked homes.
-  *If no:* Existing totality and premise rules remain; no broader escape is authorized.
-- <a id="pending-k4"></a>**K4. Generated-code benchmarks** (assumed yes; pending owner confirmation).
-  *Choice:* Track showcase runtime and code size against C at -O2 for both LCB and LLVM, with history on concrete-ci-2; use existing report-only/owner-target stages.
-  *Alternatives:* Measure only compiler speed; benchmark one backend.
-  *Reason:* rules 12, 17: measured workloads qualify performance claims.
-  *If no:* Keep existing measurements without added cross-backend C comparisons.
+
 - <a id="pending-k5"></a>**K5. Optimization architecture** (assumed yes; pending owner confirmation).
-  *Choice:* Optimizations live as verified BIR passes on the LCB path. The LLVM printer path may run LLVM optimization but remains unproven and claims none of its unproved facts, using K6 differential/translation validation until proven or replaced. LCB promises no performance beyond what its verified passes prove.
+  *Choice:* Use shared target-independent SSA/BIR optimization before the backend split, so both backends consume the same optimized BIR; target-specific machine passes live in LCB. Admit each pass by a direct preservation proof or a proved validator, consistent with the existing pipeline and foundation contracts. Preserve leakage traces, observable wipes and claimed stack/heap/step bounds; any enabled LLVM optimizer must carry corresponding named premises where proof is absent. The LLVM printer path may run LLVM optimization but remains unproven and claims none of its unproved facts, using K6 differential/translation validation until proven or replaced. LCB promises no performance beyond its evidence. This replaces the earlier recommendation of LCB-only BIR passes; it remains an owner question.
   *Alternatives:* Trust LLVM on both paths; unverified LCB optimization; defer architecture until optimization work.
   *Reason:* rules 1, 12, 13: semantic preservation and claimed performance follow evidence.
   *If no:* Keep existing pipeline and current optimization scope; return architecture to the owner before adding passes.
-- <a id="pending-k6"></a>**K6. Unproven LLVM path validation** (assumed yes; pending owner confirmation).
-  *Choice:* Use translation validation or differential checks for the LLVM printer path until it is proved or replaced; test agreement never becomes a proof claim.
-  *Alternatives:* Trust the printer implicitly; wait for proof closure without checks.
-  *Reason:* rules 12, 14: qualify the path while preserving its explicit trust boundary.
-  *If no:* Keep existing differential scope and name remaining unchecked boundaries.
-- <a id="pending-k7"></a>**K7. Incremental and parallel compilation** (assumed yes; pending owner confirmation).
-  *Choice:* Use per-function compilation units and content-addressed caching keyed by input hashes, including all semantic dependencies, compiler/toolchain/target identities; prepare for later LSP use without body-dependent cross-module inference.
-  *Alternatives:* Whole-program-only compilation; caches keyed by names or incomplete inputs.
-  *Reason:* rules 5, 13, 15: stable units and complete keys prevent stale evidence.
-  *If no:* Keep whole builds and defer caching/parallelism.
-- <a id="pending-k8"></a>**K8. Compile-speed targets** (assumed yes; pending owner confirmation).
-  *Choice:* Add absolute lines-per-second measurements on reference workloads beside scaling; retain report-only measurement until noise is understood and owner-set budgets apply.
-  *Alternatives:* Scaling alone; absolute thresholds without controlled measurements.
-  *Reason:* rules 12, 17: comparable evidence before performance promises.
-  *If no:* Existing speed/scaling tracking continues without new absolute targets.
-- <a id="pending-k9"></a>**K9. Proof engineering discipline** (assumed yes; pending owner confirmation).
-  *Choice:* Adopt a gated proof style: no large decide terms, pinned simp sets, one proof module per stage and reused lemmas.
-  *Alternatives:* Ad hoc proof terms; style prose without enforcement.
-  *Reason:* rules 1, 5, 6: scalable proofs with explicit dependencies.
-  *If no:* Keep current proof practices and totality checks.
-- <a id="pending-k10"></a>**K10. Stage architecture contracts** (assumed yes; pending owner confirmation).
-  *Choice:* Each stage has one architecture document recording input/output invariants, linking theorem and trusted pieces, checked by traceability; link normative definitions instead of restating rules.
-  *Alternatives:* One stale global diagram; undocumented stage assumptions.
-  *Reason:* rules 5, 12, 14: findable boundaries checked against implementation.
-  *If no:* Keep existing pipeline documentation and report uncovered stage contracts.
-- <a id="pending-k11"></a>**K11. Debug info and maps** (assumed yes; pending owner confirmation).
-  *Choice:* Plan DWARF and source maps from K1 provenance with LLVM DWARF at slice 17 (R-0587); assign other backend maps at their first supported debug increment without implying native correctness.
-  *Alternatives:* Retrofit debug locations after lowering; debug only one source stage.
-  *Reason:* rules 12, 14: inspect actual output with honest backend scope.
-  *If no:* Keep R-0587 only and defer wider maps.
-- <a id="pending-k12"></a>**K12. Stable machine output** (assumed yes; pending owner confirmation).
-  *Choice:* Use one versioned stable schema for facts, diagnostics and CLI JSON derived from canonical typed data, extending the existing early schema decision.
-  *Alternatives:* Independent serializers; silently changing JSON fields.
-  *Reason:* rules 5, 12, 14: machine readers consume one checked contract.
-  *If no:* Keep current facts/diagnostics schema scope; new CLI JSON remains unstabilized.
+
 - <a id="pending-l1"></a>**L1. Legacy corpus as slice targets** (assumed yes; pending owner confirmation).
   *Choice:* Port workload programs (including base64_cli, png_chunks, envcfg, wordfreq, httpget, tcpserve) and every legacy bug reproducer, including 024–079, into the new manifest with the slice at which each must pass. Port into the new root; never run or edit the frozen compiler tree.
   *Alternatives:* Only showcase happy paths; unplaced regressions.
@@ -239,11 +256,12 @@ ROADMAP holds work only and links these rows rather than defining choices again.
   *Alternatives:* Anecdotes; measuring generation speed alone.
   *Reason:* rules 4, 17: measure reviewer/checker cost on real tasks.
   *If no:* Keep existing usability pilots without model-task measurements.
-- <a id="pending-l3"></a>**L3. Failed-obligation counterexamples** (assumed yes; pending owner confirmation).
-  *Choice:* Design an untrusted counterexample finder that can show concrete failing inputs for overflow, bounds and contracts; the kernel remains the judge, and absence of a witness is no proof.
-  *Alternatives:* Trust a solver to admit programs; report opaque obligation failure only.
-  *Reason:* rules 12, 14, 18: useful diagnostics without enlarging trusted admission.
-  *If no:* Keep existing failure diagnostics; counterexamples are unavailable, never fabricated.
+
+- <a id="pending-l3"></a>**L3. Failed-obligation counterexamples beyond R-0599** (assumed yes; pending owner confirmation).
+  *Choice:* Extend the existing deterministic bounded search and Lean reference-evaluator replay in R-0599 by obligation family to overflow, bounds and contracts; keep the finder untrusted, the kernel the judge, and never treat absence of a witness as proof. Reuse its diagnostic interface rather than creating a second system.
+  *Alternatives:* R-0599's current scope only; trusting solver admission.
+  *Reason:* rules 5, 12, 14, 18: diagnostic evidence without new trust.
+  *If no:* R-0599 remains scheduled unchanged; no broader counterexample architecture is authorized.
 - <a id="pending-l4"></a>**L4. Independent kernel replay** (assumed yes; pending owner confirmation).
   *Choice:* Recheck every proof with an independent kernel as a gate in the new layout, using the legacy con-leche/nanoda experience without treating legacy gates as active.
   *Alternatives:* Trust one Lean kernel build; replay only headline theorems.
@@ -269,11 +287,7 @@ ROADMAP holds work only and links these rows rather than defining choices again.
   *Alternatives:* Parallel edition modes; assume old proofs survive every revision; one undifferentiated product version.
   *Reason:* rules 5, 12, 13: versioned identities and honest evidence freshness.
   *If no:* Keep current output spec_version/bump rule and release records; expanded compatibility policy stays open.
-- <a id="pending-a1"></a>**A1. Release authority** (assumed yes; pending owner confirmation).
-  *Choice:* Keep with(Alloc) on release unless the owner approves a precise replacement. Release metadata does not itself grant operational authority; R-0624 remains the review point.
-  *Alternatives:* Drop permission because metadata travels with values.
-  *Reason:* rules 3, 11: authority remains visible; the contrary audit rationale cited OD138 instead of the relevant rule.
-  *If no:* Existing authority rules still govern; any change needs a concrete replacement approved by the owner.
+
 - <a id="pending-a2"></a>**A2. Allocator interface and instances** (assumed yes; pending owner confirmation).
   *Choice:* Use one semantic allocator interface with proved system, arena and child instances; identity/brand is distinct from implementation kind. Expose reset/remaining only on arena types, not the universal interface.
   *Alternatives:* Separate incompatible APIs; universal reset on system allocators; conflate kind with brand.
@@ -309,74 +323,39 @@ ROADMAP holds work only and links these rows rather than defining choices again.
   *Alternatives:* Heap-only containers forever; prematurely generalize without a storage law.
   *Reason:* rules 1, 5, 16, 17: structural reuse with a concrete pull condition.
   *If no:* Keep heap-backed containers and the measured-workload reopening condition; no generic API is assumed approved.
-- <a id="pending-a9"></a>**A9. Brand surface remains an owner question** (assumed yes; pending owner confirmation).
-  *Choice:* Send generative brand binders, explicit brand parameters and existential pack/unpack spellings to the owner through R-0622. Q1.1–Q1.4 semantics stand; every spelling pending owner.
-  *Alternatives:* Invent syntax in a mechanization; hide brand introduction/inference.
-  *Reason:* rules 2, 3, 13: visible generativity with owner-approved surface.
-  *If no:* No new spellings are accepted; mechanization uses semantic identities only.
+
 - <a id="pending-a10"></a>**A10. Child arenas before rewind** (assumed yes; pending owner confirmation).
   *Choice:* Provide explicit child arenas only for now, with parent backing dependency and fresh identities; no rewind-to-mark API.
   *Alternatives:* Arbitrary marks and rewinds with potentially live later allocations.
   *Reason:* rules 3, 9, 10, 13: ownership scope and invalidation remain structural.
   *If no:* Keep existing child ownership/reset rules; any rewind design returns to the owner with a soundness argument.
 
-**Recommended rejections** (kind B, also pending confirmation; no new permanent refusal is ratified here).
+**Remaining recommended rejections** (kind B, pending confirmation; existing decisions are linked above).
 
-- <a id="pending-d1"></a>**D1. General compile-time execution** (assumed yes; pending owner confirmation).
-  *Choice:* Refuse general comptime; reopen only on a real workload with an explicit, analyzable replacement proposal.
-  *Alternatives:* Closed initializer evaluation and reviewed generators.
-  *Reason:* rules 3, 15, 17.
-  *If no:* Return the feature and its admission-test evidence to the owner; existing decided refusals still govern until explicitly revised.
 - <a id="pending-d2"></a>**D2. Error-only deferred cleanup** (assumed yes; pending owner confirmation).
   *Choice:* Refuse a second error-cleanup form beside written error arms and defer.
   *Alternatives:* Existing explicit error branches and one defer form.
   *Reason:* rule 2.
   *If no:* Return the feature and its admission-test evidence to the owner; existing decided refusals still govern until explicitly revised.
-- <a id="pending-d3"></a>**D3. Implicit error propagation** (assumed yes; pending owner confirmation).
-  *Choice:* Permanently refuse inferred error sets and implicit propagation forms such as or_return and question-mark propagation.
-  *Alternatives:* Explicit typed errors and written handling branches.
-  *Reason:* rules 3, 11.
-  *If no:* Return the feature and its admission-test evidence to the owner; existing decided refusals still govern until explicitly revised.
+
 - <a id="pending-d4"></a>**D4. Implicit context and using** (assumed yes; pending owner confirmation).
   *Choice:* Refuse implicit context/using mechanisms that hide data flow or authority.
   *Alternatives:* Explicit parameters, grants and permissions.
   *Reason:* rules 3, 11.
   *If no:* Return the feature and its admission-test evidence to the owner; existing decided refusals still govern until explicitly revised.
-- <a id="pending-d5"></a>**D5. Algebraic effects** (assumed yes; pending owner confirmation).
-  *Choice:* Permanently refuse algebraic effects as implicit control/handler machinery.
-  *Alternatives:* Explicit calls, results and capabilities.
-  *Reason:* rules 3, 8, 15.
-  *If no:* Return the feature and its admission-test evidence to the owner; existing decided refusals still govern until explicitly revised.
+
 - <a id="pending-d6"></a>**D6. Dynamic borrow checking** (assumed yes; pending owner confirmation).
   *Choice:* Refuse Cell/RefCell-style run-time borrow checks; R-0412 generational references remain pull-gated separately.
   *Alternatives:* Static second-class borrowing.
   *Reason:* rules 10, 18.
   *If no:* Return the feature and its admission-test evidence to the owner; existing decided refusals still govern until explicitly revised.
-- <a id="pending-d7"></a>**D7. Lifetime and region types** (assumed yes; pending owner confirmation).
-  *Choice:* Refuse lifetimes/regions as source types.
-  *Alternatives:* Downward second-class references and explicit raw-memory premises.
-  *Reason:* rule 10.
-  *If no:* Return the feature and its admission-test evidence to the owner; existing decided refusals still govern until explicitly revised.
+
 - <a id="pending-d8"></a>**D8. Arbitrary-width integers and bitfields** (assumed yes; pending owner confirmation).
   *Choice:* Refuse arbitrary-width integer types and struct bitfields for now; preserve pull-gated layout research R-0303 and use R3 arithmetic for the current need.
   *Alternatives:* Fixed-width scalar operations and proved limb libraries.
   *Reason:* rules 15, 17.
   *If no:* Return the feature and its admission-test evidence to the owner; existing decided refusals still govern until explicitly revised.
-- <a id="pending-d9"></a>**D9. Run-time contracts** (assumed yes; pending owner confirmation).
-  *Choice:* Refuse run-time contract checking under OD125.
-  *Alternatives:* Closed safety evidence and Lean theorems.
-  *Reason:* rules 12, 18; OD125.
-  *If no:* Return the feature and its admission-test evidence to the owner; existing decided refusals still govern until explicitly revised.
-- <a id="pending-d10"></a>**D10. Solver-trusted admission** (assumed yes; pending owner confirmation).
-  *Choice:* Refuse solver-trusted safety admission; kernel-checked proofs and certificate replay inside Lean theorems remain allowed.
-  *Alternatives:* A small proved checker and kernel-checked evidence.
-  *Reason:* rules 6, 12, 18.
-  *If no:* Return the feature and its admission-test evidence to the owner; existing decided refusals still govern until explicitly revised.
-- <a id="pending-d11"></a>**D11. Configuration and admission profiles** (assumed yes; pending owner confirmation).
-  *Choice:* Refuse broad cfg/cargo-style features under P17b and MISRA-style admission profiles under OD124.
-  *Alternatives:* The existing narrow target selection and policy/fact system.
-  *Reason:* rules 2, 5, 15; P17b, OD124.
-  *If no:* Return the feature and its admission-test evidence to the owner; existing decided refusals still govern until explicitly revised.
+
 - <a id="pending-d12"></a>**D12. Embedded-file compiler forms** (assumed yes; pending owner confirmation).
   *Choice:* Refuse include-bytes/embed-file compiler forms.
   *Alternatives:* Reviewed external generators with explicit inputs and artifacts.
@@ -387,11 +366,24 @@ ROADMAP holds work only and links these rows rather than defining choices again.
   *Alternatives:* Explicit library representations with stated contracts.
   *Reason:* rule 17.
   *If no:* Return the feature and its admission-test evidence to the owner; existing decided refusals still govern until explicitly revised.
-- <a id="pending-d14"></a>**D14. Speculative leakage scope** (assumed yes; pending owner confirmation).
-  *Choice:* Keep Spectre-class leakage outside the decided observer model; do not claim its absence.
-  *Alternatives:* The existing baseline constant-time observer, with limitations named.
-  *Reason:* rule 12; decided information-flow observer.
-  *If no:* Return the feature and its admission-test evidence to the owner; existing decided refusals still govern until explicitly revised.
+
+**Audit of the remaining survey and allocator recommendations.** Checked against the owner
+records through November 9 and the existing rows below; no blanket November 8 approval of the
+R, L or A lists was found. R1–R10 remain pending for their added scope (R1 startup extensions;
+R2 storage/placement; R3 primitive set; R4 split views; R5 scrub scope; R6 earlier models;
+R7 reachability refusal; R8 package targeting; R9 incoming authority; R10 known layout values).
+L1/L2/L4/L6/L8 remain pending for corpus breadth, model benchmarks, independent replay of every
+proof, migration CLI and compatibility policy respectively. L3's extension is distinguished from
+R-0599 above. L5's universal no-build-code guarantee extends existing macro/comptime refusals;
+L7's target-triple data/ABI design extends approved read-only profiles (foundation question 3).
+A2–A8/A10 remain pending for their operational additions: interface kinds, resize, valid-zero,
+rollout, initialized capacity storage, HashMap consumption, store-generic collections and the
+exclusion of rewind. Existing Q1.1–Q1.13 brand, backing, failure, freshness and reset laws remain
+decided, not re-opened by those entries. A1/A9 are existing-rule references above.
+D2/D4/D6/D8/D12/D13 remain pending for the specific error-cleanup, implicit-context, dynamic-borrow, bitfield,
+embedded-file and fixed-point/units dispositions; the existing one-form, no-interior-mutation,
+small-core, macro and workload rules constrain them but are not new approvals of this list.
+The other D items reference existing decisions above; D11's overbroad profiles refusal is withdrawn.
 
 **Conflicts and scope boundaries requiring owner review.** These name both the proposed and
 existing rows; none silently replaces an earlier decision.
@@ -412,8 +404,8 @@ existing rows; none silently replaces an earlier decision.
   HashMap Destroy remains excluded until a stated-order contract is explicitly approved; drain
   alone does not resolve the order question.
 - **K3 source reconciliation:** KLIST's possible generic allow-list is narrowed by the later
-  K3/R-0630 answer in PENDING_RECORDS (owner: "ok perfect"): only impossible panic/unreachable
-  cases, never sorry/partial definitions. The pending row does not reopen that answer or the
+  K3/R-0630 owner answer quoted above (owner: "ok perfect"): only impossible panic/unreachable
+  cases, never sorry/partial definitions. The decided row does not reopen that answer or the
   existing totality work (ROADMAP R-0553).
 - **R8/L8 versus existing spec-version row** ([runtime decision](#decided-project-runtime-2026-11-06)):
   package targeting and compatibility add obligations; they do not replace the current output
@@ -421,7 +413,22 @@ existing rows; none silently replaces an earlier decision.
   compatibility and evidence survival. No parallel edition mode is proposed.
 - **R5 versus existing secret scope** ([information-flow row](#decided-project-infoflow-2026-11-06)):
   broader location/scrubbing obligations need confirmation; scalar secrets stay Copy and speculative
-  leakage stays outside the observer. D14 records that boundary rather than extending the claim.
+  leakage stays outside the observer. The existing D14 reference records that boundary rather than extending the claim.
+
+- **R1 versus Q7.10/Q8.5:** the proposed signal, descriptor, umask, loader, stack-page
+  and image obligations extend the decided grant/startup table and launcher ABI; they need owner confirmation.
+- **R10 versus Q6.2:** layout queries enlarge the closed known-value table; current exclusions govern until approval.
+- **K5 versus the [pipeline](#decided-project-pipeline-2026-11-06) and
+  [foundation](#decided-2026-11-08-foundation), R-0581/R-0583:** the former LCB-only/direct-proof
+  proposal conflicted with shared BIR and proved validators. The revised pending recommendation
+  preserves both; optimization placement and extra preservation scope still go to the owner.
+- **L3/R-0599:** duplicate scope removed; the existing B1 search/replay task remains the home, and only extensions beyond it are pending.
+- **K6/R-0299:** early differential checking extends R-0578; later translation validation remains
+  R-0299, not a prerequisite for early tests.
+- **K7/R-0149/R-0546:** readiness is approved; full incremental product acceptance and profiled
+  build caches retain their later tasks. Early keys do not depend on completing phases F/G.
+- **R-0595:** its slice-19 Vec example conflicts with Vec at 22. Use a counted allocation loop
+  at 19; retain Vec growth acceptance at 22. This corrects an example, not the decided heap laws.
 
 <a id="rules-a-decision-changed"></a>
 ## Rules a decision has changed
@@ -473,7 +480,6 @@ undecided dependency remains explicitly linked to the target Core proposal rathe
 | Conformance examples across all 15 rule chapters; e.g. | Unqualified accepted fixtures use removed aliases/forms, wrong `main` results, or unused named bindings. | Alias/main decisions; OD33/52–57/62 and others above | Fixed in prose 2026-11-03. |
 | README and overview authority description | Markdown sentences are normative except where semantics later lands; the written directory is the language source. | the Lean-only source decision (ROADMAP) | Fixed in prose 2026-11-03. |
 
-
 <a id="target-core-proposal"></a>
 ## Target Core proposal: dependencies (provisionally decided 2026-11-05)
 
@@ -505,7 +511,6 @@ These items were undesigned when the chapters were cleaned up on 2026-11-03. **T
   observations, resource relations and theorem endpoint, undecided on 2026-11-03, are provisionally decided by rows Q8.1–Q8.7 and Q9.1–Q9.19 ([rows](#decided-2026-11-05-core)); technical adequacy and
   refinement obligations remain binding.
 
-
 ### Rules awaiting Lean formalization (listed 2026-11-03)
 
 These rules depended on a design that was undecided on 2026-11-03. Their designs were provisionally
@@ -523,7 +528,6 @@ recorded in their sentences.
 | STMT-7, TRUST-D1, TRUST-9, TRUST-10 | [Target grant schemas, lifecycle and future foreign callback permissions](#core-grants) |
 | ARITH-13, MEM-9 | [Mandatory static-proof refusal criterion](#core-static-refusal) |
 | TRUST-13, FFI-12 | [Complete unsafe primitive contracts and call-only annotation syntax](#core-unsafe-premises) |
-
 
 <a id="decided-2026-11-05"></a>
 ## Owner decisions 2026-11-05: Core design (A2a provisional approval) and project rows
@@ -596,7 +600,7 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 - **Q6.3** Are violations rechecked after generic substitution? — Parametric checking plus substitution-time rechecking.
 - **Q6.4** Does unreachable code receive static refusal checks? — Check all written code, including generic bodies. *Revises or adds: REVISES TYPE-22@1 examples.*
 - **Q6.5** How do short-circuit operators interact with refusal? — Check both short-circuit operands; execute conditionally.
-- **Q6.6** What happens when constant evaluation fails? — Separate invalid and unknown; no evaluator-resource failure.
+- **Q6.6** What happens when constant evaluation fails? — Separate invalid and unknown; no evaluator-resource failure. *Revised 2026-11-08 by the [initializer answer](#decided-2026-11-08-constant-evaluation): fuel exhaustion refuses.*
 - **Q6.7** What distinguishes traps, unsafe stuckness and exhaustion? — Separate traps, unsafe stuckness, OOM and fuel exhaustion.
 - **Q7.1** How are target grant schemas and multiplicities specified? — One target, linux-x86_64-hosted (Linux ≥ 5.6), with a fixed grant table; main asks for grants as parameters. *Revised 2026-11-08 by the [foundation decision](#foundation-q16): the grant table is a lawful extensible registry rather than a permanently closed one.*
 - **Q7.2** How do narrowing, acquisition and splitting relate? — Narrowing consumes and intersects rights; children are acquired from a grant that stays.
@@ -1637,7 +1641,6 @@ diagnostics, and keeps the bugs the rule repaired repaired.
 those of the [prerequisites table](../legacy/docs/archive/ROADMAP_LEGACY_PLAN.md#feature-prerequisites); "every deliverable" means RocksDB slice 1,
 V1a, V1b and V1c.
 
-
 | decision | proposal | record today | gates | owner's answer |
 |---|---|---|---|---|
 | OD1 | <a id="od1"></a>References: the Austral model. A reference is formed by borrowing a variable or projecting through a reference; `&s.f` is sugar; a temporary is never a root; loans are keyed by the root variable; a raw-pointer dereference needs a trusted validity premise | D2 and §4.5; implemented in landing train 6 (REF-5, REF-11) | exit 2i (G12), so every deliverable; bug 182's repair (exit 0b); V2 (row 6) | decided 2026-10-29 by the owner: the Austral model: a reference is formed by borrowing a variable or projecting through a reference; `&s.f` is sugar; a temporary is never a root; references are second-class, never stored or returned; a raw-pointer dereference needs a trusted validity premise; loans are keyed by the root variable (confirmed by OD15 (a), decided 2026-10-29) |
@@ -1797,7 +1800,6 @@ V1a, V1b and V1c.
 | OD155 | <a id="od155"></a>`unwrap` beside TYPE-24's conversions (added 2026-10-31, raised while reviewing the builtins catalog of spec readability 2). Question: Whether `unwrap` stays an intrinsic beside the conversions TYPE-24 lists (`n.0` and `n as T`), becomes one of those conversions, or is removed. Bears on TYPE-24, TYPE-11, TYPE-10 and OPEN-54. The current compiler: Check gives `unwrap(m)` the newtype's inner type (E0270 when the argument is not a newtype); `return unwrap(m);` exits 42 on both consumers, and `let x: Int = unwrap(m);` followed by `if x == 42` fails the native build at SSA verification (E0715, bug 345). TYPE-24 lists `n.0` and `n as T` and does not list `unwrap`. OPEN-54 decides this only if its answer removes newtypes; while newtypes stay, this question stays. Options: (a) keep `unwrap` as an intrinsic and leave it off TYPE-24's list, as the current compiler and TYPE-24 do; (b) `unwrap(n)` is a conversion, TYPE-24 lists it, and TYPE-11 restricts it as it restricts `n.0`; (c) remove `unwrap`, leaving `n.0` and `n as T`. Austral: not checked. Pick: none given (raised while reviewing the builtins catalog of spec readability 2, 2026-10-31). | see OPEN-155 | see OPEN-155 | decided 2026-11-01 by the owner (final set): No builtin `unwrap`; use `match` |
 | OD156 | <a id="od156"></a>The capability of `get_args` (added 2026-10-31, raised while reviewing the builtins catalog of spec readability 2). Question: Which capability the builtin `get_args` requires, or whether the builtin is removed. Bears on TRUST-4, STMT-7, TRUST-9 and OPEN-136. The current compiler: Check gives `get_args()` the result `HeapArray<String>` and requires `Process` (E0520 with `Env` only); the builtin has no implementation on either consumer (bug 347). STMT-7's rationale says command-line arguments come from `std.args` with `Env`, and OD8 gives `main` the root resource value (TRUST-9). Options: (a) `Env`, as `std.args` requires; (b) `Process`, as the current compiler's signature says; (c) another capability, or none; (d) remove the builtin, and command-line arguments come from `std.args`. Austral: not checked. Pick: none given (raised while reviewing the builtins catalog of spec readability 2, 2026-10-31). | see OPEN-156 | see OPEN-156 | decided 2026-11-01 by the owner (final set): Superseded by the authority decision of 2026-11-01: `get_args` requires `with(Env)`, and `with(Alloc)` when it allocates. Revised 2026-11-02 by the owner's rule: it also takes the `Environment` grant, and an allocator when it allocates ([decisions](decisions.md#decided-2026-11-02-filesystem)) |
 | OD157 | <a id="od157"></a>How the type `Unit` is written (added 2026-10-31, raised while reviewing the builtins catalog of spec readability 2). Question: Whether the type `Unit`, which STMT-7 names as a result type of `main` and which other rules and the builtins catalog also name, has a spelling in type positions, and which spelling. Bears on STMT-7, TYPE-4, SYN-1 and OPEN-66. The current compiler: a function with no result type returns no value, and `fn main() { return; }` exits 0; `fn main() -> Unit` and `let x: Unit = f();` are refused at resolve (E0108, unknown type 'Unit'); `fn main() -> ()` is a parse error (E0001, `expected type`). STMT-7@3 says `main`'s result type is `u8` or `Unit`. OPEN-66 concerns the unit value's literal; this entry concerns the type in type positions, and the two cross-reference each other. Options: (a) no spelling: the type is written only by omitting the result type, and STMT-7 says so; (b) `Unit` is a builtin type name, accepted wherever a type is; (c) `()` is the type's spelling; (d) both `Unit` and `()` are accepted. Austral: not checked. Pick: none given (raised while reviewing the builtins catalog of spec readability 2, 2026-10-31). | see OPEN-157 | see OPEN-157 | decided 2026-11-01 by the owner (final set): The type is written `Unit`, its value `()` |
-
 
 ## Decided
 
