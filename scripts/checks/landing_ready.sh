@@ -182,22 +182,38 @@ out="$(cd "$A" && LAND_REVIEW_CMD=true bash "$ROOT_DIR/scripts/land/ready.sh" wi
 # Default review command in ready.sh succeeds when LAND_REVIEW_CMD and LAND_REVIEW_WRITER are unset.
 cat > "$TMP/fake-codex" <<'EOF'
 #!/usr/bin/env bash
+prompt="${!#}"
 out=""
 while [ $# -gt 0 ]; do
   case "$1" in -o) out="$2"; shift 2 ;; *) shift ;; esac
 done
-printf 'READ: required-checks.txt\nREPOSITORY: readable\nVERDICT: clean\n' > "$out"
+path="$(printf '%s\n' "$prompt" | sed -n 's/^diff --git a\/.* b\///p' | head -n 1)"
+[ -n "$path" ] && [ -s "$path" ] || exit 9
+head -n 1 "$path" >/dev/null || exit 9
+case "$prompt" in *'b/scripts/review/__pycache__/planted.pyc'*|*'b/scripts/review/untracked-control.txt'*) echo 'untracked artifact entered review piece' >&2; exit 10 ;; esac
+if [ "${PLANT_UNCITED:-0}" = 1 ]; then
+  printf 'READ: %s\nREPOSITORY: readable\nVERDICT: clean\n' "$path" > "$out"
+else
+  printf '%s:1 Checked the supplied change.\nREAD: %s\nREPOSITORY: readable\nVERDICT: clean\n' "$path" "$path" > "$out"
+fi
 printf 'READ: required-checks.txt\nREPOSITORY: readable\nVERDICT: clean\ntokens used\n1,234\n'
 EOF
 chmod +x "$TMP/fake-codex"
 ( cd "$A" && git checkout -q -B wip/rv-default origin/main \
-  && mkdir -p scripts/checks && cp -R "$ROOT_DIR/scripts/review" scripts/review && cp -R "$ROOT_DIR/scripts/checks/lib" scripts/checks/lib \
+  && mkdir -p scripts/checks && ( ( cd "$ROOT_DIR" && git ls-files -z scripts/review scripts/checks/lib | tar --null -T - -cf - ) | tar -xf - ) \
   && git add -A && git commit -qm rv-default \
   && python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" stamp-commit --repo "$A" --model claude --round 1 --branch wip/rv-default --brief-sha256 2222222222222222222222222222222222222222222222222222222222222222 >/dev/null \
   && git push -q -f origin HEAD:refs/heads/wip/rv-default refs/notes/concrete-writer )
+( cd "$A" && mkdir -p scripts/review/__pycache__ && printf artifact > scripts/review/__pycache__/planted.pyc && printf artifact > scripts/review/untracked-control.txt )
+if git -C "$A" diff --name-only "$BASE" HEAD | grep -F '__pycache__/' >/dev/null; then no "fixture committed Python build artifacts"; else ok "fixture diff excludes working-tree Python artifacts"; fi
+out="$(cd "$A" && unset LAND_REVIEW_CMD LAND_REVIEW_WRITER && PLANT_UNCITED=1 REVIEW_CODEX_BIN="$TMP/fake-codex" bash "$ROOT_DIR/scripts/land/ready.sh" wip/rv-default 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "invalid reviewer evidence: citation: positive verdict requires at least one resolvable file:line citation" && has "$out" "gates=fail review=blocked" \
+  && ok "uncited positive verdict blocks readiness with the citation diagnostic" || { no "uncited positive readiness: exit $rc"; echo "$out"; }
+# Remove only the fixture's blocked note so the honest control starts at round one.
+( cd "$A" && git notes --ref=refs/notes/concrete-review remove HEAD >/dev/null 2>&1 )
 out="$(cd "$A" && unset LAND_REVIEW_CMD LAND_REVIEW_WRITER && REVIEW_CODEX_BIN="$TMP/fake-codex" bash "$ROOT_DIR/scripts/land/ready.sh" wip/rv-default 2>&1)"; rc=$?
 [ "$rc" = 0 ] && has "$out" "gates=pass review=clean" \
-  && ok "ready.sh default review command succeeds with LAND_REVIEW_WRITER unset" || { no "ready.sh default review command: exit $rc"; echo "$out" | sed 's/^/      /'; }
+  && ok "ready.sh default review command succeeds with LAND_REVIEW_WRITER unset and excludes untracked artifacts from pieces" || { no "ready.sh default review command: exit $rc"; echo "$out" | sed 's/^/      /'; }
 for b in wip/rvcov-b wip/rvcov-c wip/rv-default; do git --git-dir="$TMP/origin.git" update-ref -d "refs/heads/$b" 2>/dev/null || true; done
 
 echo "=== bisect --ci: a red CI run names the culprit, each probe its own run ==="
