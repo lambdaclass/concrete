@@ -1,0 +1,37 @@
+# One row per test: id, program, expected outcome, owning slice (tab-separated).
+# id: [a-z0-9_]+. program: bir:NAME (Concrete.BIR.Examples) or con:tests/PATH.con.
+# expect: exit N (0..255), trap KIND site N, or refuse RULE-ID. No other outcome forms.
+# slice: [a-z0-9_]+. A con: path is relative to the repository root and must exist.
+id	program	expect	slice
+answer	bir:answer	exit 42	slice0
+boundary	bir:boundary	exit 255	slice0
+overflow	bir:overflow	trap arithmeticOverflow site 0	slice0
+answer_discharged	bir:answer_discharged	exit 42	slice0
+return134	bir:return134	exit 134	slice0
+i8_add_ok	bir:i8_add_ok	exit 0	slice0
+i8_add_ovf	bir:i8_add_ovf	trap arithmeticOverflow site 0	slice0
+u16_mul_ok	bir:u16_mul_ok	exit 0	slice0
+u16_mul_ovf	bir:u16_mul_ovf	trap arithmeticOverflow site 0	slice0
+i16_sub_ovf	bir:i16_sub_ovf	trap arithmeticOverflow site 0	slice0
+u8_sub_ovf	bir:u8_sub_ovf	trap arithmeticOverflow site 0	slice0
+i8_mul_ok	bir:i8_mul_ok	exit 0	slice0
+i8_mul_ovf	bir:i8_mul_ovf	trap arithmeticOverflow site 0	slice0
+w_i8_add	bir:w_i8_add	exit 72	slice0
+w_i8_add_ok	bir:w_i8_add_ok	exit 206	slice0
+w_i8_sub	bir:w_i8_sub	exit 184	slice0
+w_i8_mul	bir:w_i8_mul	exit 240	slice0
+w_u8_add	bir:w_u8_add	exit 172	slice0
+w_u8_sub	bir:w_u8_sub	exit 126	slice0
+w_u8_mul	bir:w_u8_mul	exit 16	slice0
+w_i16_add	bir:w_i16_add	exit 128	slice0
+w_i16_sub	bir:w_i16_sub	exit 127	slice0
+w_i16_sub_ok	bir:w_i16_sub_ok	exit 88	slice0
+w_i16_mul	bir:w_i16_mul	exit 60	slice0
+w_u16_sub	bir:w_u16_sub	exit 126	slice0
+w_u16_mul	bir:w_u16_mul	exit 129	slice0
+w_u16_mul_ok	bir:w_u16_mul_ok	exit 255	slice0
+widen_u	bir:widen_u	exit 160	slice0
+widen_s	bir:widen_s	exit 90	slice0
+site1	bir:site1	trap arithmeticOverflow site 1	slice0
+site0	bir:site0	trap arithmeticOverflow site 0	slice0
+two_sites_ok	bir:two_sites_ok	exit 42	slice0

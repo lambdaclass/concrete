@@ -1,6 +1,6 @@
 # The Concrete compiler: slice 0 design (provisional)
 
-PROVISIONAL. This is a design sketch, revision 8, written after eight Codex and agy review rounds. It folds in the Codex/agy/Kimi pipeline review and the owner's answers (2026-11-06). Build step 1 (BIR as the shared backend contract) is implemented: `Concrete/BIR.lean` and `Concrete/Backend/`, gate `scripts/checks/compiler/slice0_backends.sh`. Slice 0 is the first compiler slice. It is built before the owner freezes Core (A2c) and makes no normative claim before that freeze ([decision](../docs/decisions.md#decided-project-proof-infrastructure)). Branch `wip/slice0` depends on `wip/spec-root`, which puts `ConcreteSpec` on the new root, and is rebased onto main (under a new branch name) once that lands.
+PROVISIONAL. This is a design sketch, revision 8, written after eight Codex and agy review rounds. It folds in the Codex/agy/Kimi pipeline review and the owner's answers (2026-11-06). Build step 1 (BIR as the shared backend contract) is implemented: `Concrete/BIR.lean` and `Concrete/Backend/`, gate `scripts/checks/compiler/tests.sh`. Slice 0 is the first compiler slice. It is built before the owner freezes Core (A2c) and makes no normative claim before that freeze ([decision](../docs/decisions.md#decided-project-proof-infrastructure)). Branch `wip/slice0` depends on `wip/spec-root`, which puts `ConcreteSpec` on the new root, and is rebased onto main (under a new branch name) once that lands.
 
 ## Scope
 
@@ -10,7 +10,7 @@ This document describes **the compiler**: its stages, IRs, proof strategy, premi
 - what the parent process observes, including the trap status and the trap line: [`ConcreteSpec/Spec/Observation.lean`](../ConcreteSpec/Spec/Observation.lean);
 - the slice-0 surface (token rules, grammar, elaboration): the new `ConcreteSpec/Spec/Surface0.lean` described below.
 
-The conformance corpus (`tests/slice0/`) instantiates those spec examples as source files.
+The test corpus is `tests/manifest.tsv`. Today's rows name hand-written BIR programs. Future `con:` rows name source files under `tests/`.
 
 ## The pipeline
 
@@ -154,7 +154,7 @@ Each IR has a total, fuel-indexed evaluator returning the spec's `Outcome` and a
 |---|---|
 | `Concrete.lean` | The library root that lake requires; it imports every stage. It is the same pattern as `ConcreteSpec.lean`. |
 | `Concrete/` | The compiler: one flat folder, one file per pipeline stage or concern. |
-| `tests/` | The executable test corpus. Each slice gets one subfolder, which holds `.con` sources and their `.expect` outcomes. |
+| `tests/` | The test corpus. `manifest.tsv` declares each program, its expected outcome and its owning slice. Source programs live under `tests/`. |
 
 **Changes to existing entries.** No new entry is created for any of these:
 - `lakefile.toml` gains the `Concrete` lib, the `concrete` exe, and a pinned `require` of `lean-compiler-backend`; `lake-manifest.json` records it.
@@ -191,7 +191,9 @@ Concrete/
   Cert.lean            per-compilation certificate emitter
   Main.lean            CLI driver (IO, toolchain invocation); placeholder spellings
 tests/
-  slice0/              *.con sources and *.expect outcomes (exit status, or refusal + rule)
+  manifest.tsv         one row per test: program, expected outcome and owning slice
+  slice0/              future *.con sources; their outcomes stay in manifest.tsv
+  golden/              golden outputs, not test programs
 ```
 
 **Rules:**
@@ -556,12 +558,12 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
 
    Not yet a job. Until it is, the trusted-base golden (gate 9) fixes each headline theorem's axioms (a `sorryAx` among them fails it), and the trust ban of `scripts/proofs/trust_ban.sh` covers the specification only: it reads the compiler's library entry and its pinned dependency in `lakefile.toml`, not its sources or constants.
 3. **Premise registry and stage coverage:** the checks described in the stage registry section above.
-4. **Conformance, both backends:** each `tests/slice0/*.con` example runs through:
+4. **Conformance, both backends:** each `bir:` row in `tests/manifest.tsv` runs through:
    - the Lean `run`;
    - the LLVM-native executable;
    - the LCB-native executable.
 
-   All three must give the same observation, and each must match the `.expect`.
+   All three must give the same observation, and each must match the row's `expect`. Future `con:` rows use the same manifest and runner.
 
    **Classification uses the status and the runtime evidence, never the status alone.** `Observation.status` is many-to-one.
    - Status 134 **with** the runtime's trap line on fd 2 is `trapped k`.
@@ -571,7 +573,7 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
 
    Accepted examples `return 125;` and `return 134;` are in the corpus and must classify as exits. Slice 0 can't produce a real startup refusal, because it has no grants. The refusal and trap classifications are also exercised by comparator self-tests: stub images, and the trap via gate 6.
 
-   **Refused examples have their own leg.** The Lean `check` result, the compiler's refusal (with its rule) and the refusal certificate must agree with `.expect`. No executable exists for a refused example. A separate supported-subset coverage report lists every grammar production and Core form that the corpus exercises. A reject-all compiler fails, because every accepted example must exit with its status.
+   **Refused examples have their own leg.** The Lean `check` result, the compiler's refusal (with its rule) and the refusal certificate must agree with the row's `refuse RULE-ID` expectation. No executable exists for a refused example. A separate supported-subset coverage report lists every grammar production and Core form that the corpus exercises. A reject-all compiler fails, because every accepted example must exit with its status.
 5. **Differential at the source:** generated accepted programs, with replayable seeds; native exit = Lean `run`.
 6. **Differential through the token-free lowering, both backends.** This covers overflow. Generated **well-scoped, unchecked** slice-0 programs over **arbitrary** `u8` operands, including `200 + 56`, take `lower q ∅ → memory → ssa`, so they have no tokens and no checker. Their Core `run` is compared with the LLVM path and the LCB path. Overflow must give exit 134 and the right site's trap line on fd 2, for both backends. This exercises token-aware lowering, Memory CFG and SSA, not only the backends.
    A second leg compares generated BIR directly with both backends, to cover BIR shapes that lowering does not produce.
@@ -700,11 +702,11 @@ planned `concrete facts` command will print this identity.
 different paths with different TMPDIRs, each compiling the compiler, its dependencies and the `lcb`
 executable itself, with no Lake artifact cache. They share only the pinned Lean toolchain and the
 dependency sources (tracked files only). Each side
-emits every hand-written BIR example and builds it natively, and every stage is compared without
-normalization: the BIR and adapted LCB value dumps, both text formats, both LCB assembly outputs,
-all objects and both executables. Negative controls check that the comparator refuses a flipped
-byte, a missing artifact and a differing inventory. The slice-0 front end is not implemented yet, so
-this gate starts at the hand-written BIR contract.
+emits every `bir:` row in `tests/manifest.tsv` and builds it natively, and every stage is compared
+without normalization: the BIR and adapted LCB value dumps, both text formats, both LCB assembly
+outputs, all objects and both executables. Negative controls check that the comparator refuses a
+flipped byte, a missing artifact and a differing inventory. The slice-0 front end is not implemented
+yet, so this gate starts at the hand-written BIR contract.
 
 Both native gates use `scripts/checks/lib/slice0_native.sh` (a build helper, not a gate): the Nix-pinned clang 21 (`CONCRETE_SLICE0_CLANG`; the
 shell's general `clang` is unchanged), an environment reduced to `PATH`, `HOME` and `TMPDIR`

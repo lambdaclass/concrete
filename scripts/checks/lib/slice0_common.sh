@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# Shared machinery of the slice-0 example gates (PROVISIONAL): slice0_backends.sh (gates 4, 6, 6a)
+# Shared machinery of the slice-0 example gates (PROVISIONAL): tests.sh (gates 4, 6, 6a)
 # and slice0_artifacts.sh (gates 10, 11, 12). Source it from the repository root, inside the nix
 # devshell, with `set -euo pipefail`. It builds the compiler and LCB's command line under the
 # gate's limits (lib/limits.sh: an address-space cap of SLICE0_GATE_MEM_GB GiB, default 64; 0 for
@@ -14,7 +14,7 @@
 #     OUT.stdout, OUT.stderr;
 #   judge EXPECTED_DIR OBS: the observation OBS.* equals the expectation, byte for byte;
 #   build NAME LOG CMD...: run CMD, or print LOG and fail the gate;
-#   emit_examples: the example names, one per line, failing if there are none;
+#   manifest_rows: validated rows, with the bir: inventory checked against the emitter;
 #   cap_out: copy stdin to stdout, failing above 1 MiB: every command output a gate captures
 #     into a variable goes through it, so no producer can grow the gate's shell (which may run
 #     with no address-space cap, see SLICE0_GATE_MEM_GB) without bound.
@@ -97,9 +97,27 @@ cap_out() {
   printf '%s' "$out"
 }
 
-emit_examples() {
-  local names
-  names=$("${emitter[@]}" list | cap_out) || { echo "slice0: listing the examples failed" >&2; exit 1; }
-  [ -n "$names" ] || { echo "slice0: no examples listed" >&2; exit 1; }
-  printf '%s\n' "$names"
+test_manifest=${CONCRETE_TEST_MANIFEST:-tests/manifest.tsv}
+manifest_rows() {
+  local rows emitter_names name
+  rows=$(bounded 30 python3 -I "$root/scripts/checks/lib/test_manifest.py" rows "$test_manifest" | cap_out) ||
+    { echo "slice0: reading $test_manifest failed" >&2; exit 1; }
+  [ -n "$rows" ] || { echo "slice0: no tests listed in $test_manifest" >&2; exit 1; }
+  printf '%s\n' "$rows" | awk -F '\t' '$2 ~ /^bir:/ {sub(/^bir:/, "", $2); print $2}' |
+    LC_ALL=C sort >"$work/manifest-programs"
+  emitter_names=$("${emitter[@]}" list | cap_out) ||
+    { echo "slice0: listing emitter programs failed" >&2; exit 1; }
+  printf '%s\n' "$emitter_names" | LC_ALL=C sort >"$work/emitter-programs"
+  comm -13 "$work/manifest-programs" "$work/emitter-programs" >"$work/programs-without-rows"
+  comm -23 "$work/manifest-programs" "$work/emitter-programs" >"$work/rows-without-programs"
+  if [ -s "$work/programs-without-rows" ] || [ -s "$work/rows-without-programs" ]; then
+    while IFS= read -r name; do
+      echo "slice0: program without a manifest row: $name" >&2
+    done <"$work/programs-without-rows"
+    while IFS= read -r name; do
+      echo "slice0: manifest row names no program: $name" >&2
+    done <"$work/rows-without-programs"
+    exit 1
+  fi
+  printf '%s\n' "$rows"
 }
