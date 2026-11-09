@@ -98,9 +98,23 @@ obtains the public key/fingerprint from the owner and inserts the entry:
 `concrete-owner <key-type> <public-key-base64>`. No CI or writer key is authorized.
 Until the key arrives, a consistent candidate fails with exactly
 `FAIL approval: awaiting owner key`. Gate checks and golden updates remain
-blocked. Round 14 refreshes only unsigned candidate JSON from the registry
-renderer and consumed input hashes; the trusted-base golden remains unchanged
-until owner authorization permits the gated update. Historical citations and regenerated JSON authenticate nothing.
+blocked in the current implementation. Its unsigned JSON refresh left the text
+golden stale and the update path waits for aggregate approval success; this is
+an unresolved consistency defect, not the intended trust-growth protocol.
+Historical citations and regenerated JSON authenticate nothing.
+
+The long-term structural design is recorded in
+[Gate D's threat model](TRUSTED_BASE_THREAT_MODEL.md#structural-launch-boundary-and-host-feasibility)
+and its [candidate lifecycle](TRUSTED_BASE_THREAT_MODEL.md#candidate-consistency-and-legitimate-trust-growth).
+R-0509 owns the protected launch/collection boundary and one consistent candidate
+generation across registry, text golden, README and approval JSON. Candidate
+preparation validates every non-signature obligation and updates the projections
+together; check mode still requires the owner's signature and every leg. R-0676
+owns equivalent measured host conformance and daily/weekly full evidence, with
+real cheap PR controls retained. This is staged design, not implemented behavior.
+Implementation stops for owner approval of the protected trust root and the
+manager/provisioning chain; this proposal does not add sudo or D-Bus to the
+trusted base. The coordinator files any additional roadmap rows.
 
 `trusted_approval.py` first checks candidate consistency, then verifies an SSH
 signature using `ssh-keygen -Y verify`, allowed principal **concrete-owner** and
