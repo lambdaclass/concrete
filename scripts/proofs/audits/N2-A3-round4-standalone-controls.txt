@@ -1,0 +1,166 @@
+Consumer code e479e550dbcd88871bd56f30a731882213b8044e
+Blob 912abf404b52ae8080bcb058c24bdc0d0248a1d9
+Final-byte standalone focused checks; no census.
+
+=== budget (nix develop, timeout 300, exit 0) ===
+PASS DAG memoized: DAG depth=10 work=41 cached=22 root=true
+DAG depth=15 work=61 cached=32 root=true
+PASS DAG early-exit: DAG depth=10 work=4093 cached=2 root=false
+CONTROL dag-root-not-cached
+CONTROL work-budget
+PASS dependency memoized: /tmp/nix-shell.u4TaYM/n2-dependencies-i00qa57k/Dependencies.lean:111:0: warning: Definition `witness` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.u4TaYM/n2-dependencies-i00qa57k/Dependencies.lean:114:0: warning: Definition `changed` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+DEPENDENCIES complete work=2330
+NOTE analysis-result DependencyControls.witness stage=instance law=DependencyControls.law case=inline result=PASS heartbeats=816/2000000 work=1220/20000 projection=0/4096
+FAIL instance-application DependencyControls.changed law=DependencyControls.law case=inline
+NOTE analysis-result DependencyControls.changed stage=instance law=DependencyControls.law case=inline result=FAIL heartbeats=817/2000000 work=1246/20000 projection=0/4096
+PASS dependency uncached: /tmp/nix-shell.u4TaYM/n2-dependencies-b923gv2t/Dependencies.lean:111:0: warning: Definition `witness` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.u4TaYM/n2-dependencies-b923gv2t/Dependencies.lean:114:0: warning: Definition `changed` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+CONTROL work-budget work=20000
+NOTE analysis-result DependencyControls.witness stage=instance law=DependencyControls.law case=inline result=PASS heartbeats=803/2000000 work=1112/20000 projection=0/4096
+FAIL instance-application DependencyControls.changed law=DependencyControls.law case=inline
+NOTE analysis-result DependencyControls.changed stage=instance law=DependencyControls.law case=inline result=FAIL heartbeats=804/2000000 work=1138/20000 projection=0/4096
+PASS refutation memoized: CONTEXT SEARCH
+CONTEXT SEARCH
+CONTEXT SEARCH
+CONTEXT SEARCH
+CONTEXT CACHE complete shared=1 distinct=2 mutable=uncached
+PASS refutation context-erased: CONTEXT SEARCH
+CONTROL context-cache-crossed-context
+PASS refutation raw-type-erased: CONTEXT SEARCH
+CONTEXT SEARCH
+CONTEXT SEARCH
+CONTROL raw-context-cache-crossed-type
+PASS identity PIPE FAIL instance-false-discharge witnessForward
+PASS identity PIPE FAIL instance-false-discharge witnessReverse
+PASS identity ORDER [b1, b2] b1 bad=false
+PASS identity ORDER [b1, b2] b2 bad=true
+PASS identity ORDER [b2, b1] b2 bad=true
+PASS identity ORDER [b2, b1] b1 bad=false
+PASS identity ROOT [b3, b2] b3 bad=false
+PASS identity ROOT [b3, b2] b2 bad=true
+PASS identity ROOT [b2, b3] b2 bad=true
+PASS identity ROOT [b2, b3] b3 bad=false
+PASS identity SETTYPE before=true after=false fresh=false
+PASS identity VISITED setType before=false after=true
+PASS identity KEYS interning mutation replacement projection binder-info binder-name universe distinct
+PASS identity KEYS options mode distinct
+PASS identity MODULES import-order checked forward=false backward=true self=true
+PASS identity DEMAND harmless-body context-searches=0
+PASS identity KEYS declaration-name binder-info kind distinct
+PASS identity KEYS projection same-FVarId context distinct
+PASS identity KEYS raw-refuted-types closed-refuted-types binder-info distinct
+PASS identity TRANSPORT bad=true exact=FAIL-instance-false-discharge
+PASS budget heavy-alone
+PASS budget bad-alone
+PASS budget repeated-instance-finding
+PASS budget starvation
+PASS budget reverse
+PASS budget heartbeat-starvation
+PASS budget cap-baseline
+PASS budget cap-population
+PASS budget cap-zero
+PASS budget empty
+PASS budget nested-reset-mentions
+PASS budget nested-reset-mutate
+PASS budget nested-reset-withProtected
+Budget controls: 13 PASS, 0 FAIL
+
+=== reporting (nix develop, timeout 300, exit 0) ===
+PASS reporting retry-journal: earlier completed FAIL survives less-progress retry and torn record
+PASS reporting wall-watchdog: earlier exact FAIL, named interrupted/unrun analyses, population equations
+PASS reporting work-budget: exact named INCOMPLETE and unrelated FAIL retained
+PASS reporting analysis-error: exact named INCOMPLETE and unrelated FAIL retained
+PASS reporting heartbeat: exact named INCOMPLETE and unrelated FAIL retained
+PASS reporting scheduler-error: exact named scheduler INCOMPLETE and no partial population
+PASS reporting planted-error: exact Planted and paired Instance named; unrelated FAIL retained
+PASS reporting classification-unknown cap=None
+PASS reporting classification-unknown cap=100000
+PASS reporting repeated-job-findings
+PASS budget heavy-alone
+PASS budget bad-alone
+PASS budget repeated-instance-finding
+PASS budget starvation
+PASS budget reverse
+PASS budget heartbeat-starvation
+PASS budget cap-baseline
+PASS budget cap-population
+PASS budget cap-zero
+PASS budget empty
+PASS budget nested-reset-mentions
+PASS budget nested-reset-mutate
+PASS budget nested-reset-withProtected
+Budget controls: 13 PASS, 0 FAIL
+PASS control positive
+PASS control false-discharge
+PASS control positive-budget-chain
+N2 selected controls: 3 PASS, 0 FAIL
+PASS reporting replay-validator: exactly FAIL report-incomplete c9-new
+
+=== round5 (nix develop, timeout 300, exit 0) ===
+PASS control joint-branch-decide-repro
+PASS control false-discharge
+PASS control absurd-discharge
+PASS control nomatch-discharge
+PASS control helper-false
+PASS control false-cases
+PASS control empty-elimination
+PASS control pempty-elimination
+PASS control helper-nomatch
+PASS control decide-hypothesis-positive
+PASS control nested-decide-discharge-1
+PASS control nested-decide-discharge-4
+PASS control nested-decide-discharge-12
+PASS control hypothetical-false-positive
+PASS control hypothetical-empty-positive
+PASS control hypothetical-pempty-positive
+PASS control open-helper-false
+PASS control open-helper-empty
+PASS control open-helper-pempty
+PASS control data-subtype-discharge
+PASS control data-psigma-discharge
+PASS control data-pprod-discharge
+PASS control finite-collection-decide-positive
+PASS control finite-collection-simp-positive
+PASS control finite-collection-cases-positive
+PASS control joint-hypothetical-positive
+PASS control joint-supplied-negative
+PASS control joint-open-supplied-negative
+PASS control reachable-open-impossible-negative
+PASS control reachable-joint-helper-negative
+PASS control unreachable-closed-supplier-positive
+PASS control context-cache-supplied-negative
+N2 selected controls: 32 PASS, 0 FAIL
+REPRO baseline: no context refutation
+REPRO kernel-checked certificate: of_eq_true injectedFalse._simp_1
+REPRO certificate type: False; local assumptions: 0
+REPRO supplied dependency: injectedFalse := impossible
+CERTIFICATE origin: rejected-supplied-contradiction supplier=impossible
+CERTIFICATE non-circular: rejected-supplied-contradiction supplier=impossible
+CERTIFICATE library-decide-matcher: admitted
+CERTIFICATE dependency-chain-baseline: admitted
+CERTIFICATE shared-budget: INCOMPLETE analysis-budget-or-error CertificateControl.instance stage=certificate-dependencies law=CertificateControl.law case=shared-budget false-discharge-budget
+Certificate controls: 5 PASS, 0 FAIL
+
+=== certificates (nix develop, timeout 180, exit 0) ===
+REPRO baseline: no context refutation
+REPRO kernel-checked certificate: of_eq_true injectedFalse._simp_1
+REPRO certificate type: False; local assumptions: 0
+REPRO supplied dependency: injectedFalse := impossible
+CERTIFICATE origin: rejected-supplied-contradiction supplier=impossible
+CERTIFICATE non-circular: rejected-supplied-contradiction supplier=impossible
+CERTIFICATE library-decide-matcher: admitted
+CERTIFICATE dependency-chain-baseline: admitted
+CERTIFICATE shared-budget: INCOMPLETE analysis-budget-or-error CertificateControl.instance stage=certificate-dependencies law=CertificateControl.law case=shared-budget false-discharge-budget
+Certificate controls: 5 PASS, 0 FAIL
+
+=== fixtures (nix develop, timeout 30, exit 0) ===
+PASS real fixture provenance: 10 byte-for-byte excerpts

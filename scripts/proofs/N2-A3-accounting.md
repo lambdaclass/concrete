@@ -839,3 +839,27 @@ hidden-theorem certificate rejection. Each negative checks its exact diagnostic,
 not an arbitrary failure. The hidden Law/Planted controls both still give N2 PASS.
 No all-proof contradiction rule was implemented. R-0219 remains the machinery
 owner; the coordinator assigns a new contract row only after an owner answer.
+
+
+### Final standalone check receipts
+
+All requested standalone commands complete successfully on consumer `e479e550d`:
+
+| Check | Result |
+|---|---|
+| reporting | all exact fault/watchdog/replay controls PASS |
+| budget | all DAG, dependency, refutation and identity controls PASS; 13 scheduler/budget cases PASS |
+| round-5 controls | 32 PASS / 0 FAIL, plus 5 certificate controls PASS |
+| standalone certificates | 5 PASS / 0 FAIL |
+| inline-match | 2 PASS / 0 FAIL, plus 7 typed contract controls PASS |
+| fixture provenance | 10 byte-exact excerpts PASS |
+| body-access inventory | 12 selected gate controls plus all accessor/kind/typing/certificate probes PASS |
+
+The complete driver on the final bytes is still running at this receipt; it is
+not counted as passed yet. Standalone receipts:
+[audits/N2-A3-round4-standalone-controls.txt](audits/N2-A3-round4-standalone-controls.txt).
+The complete earlier checkpoint ended at 128 PASS / 5 FAIL, all the same propext
+unsupported-transfer cause (two basic positives, negation partial-application,
+negation alias and universal alias). Its explicit failing receipt is preserved in
+[audits/N2-A3-round4-checkpoint-driver.txt](audits/N2-A3-round4-checkpoint-driver.txt).
+No timeout, partial run or INCOMPLETE analysis is reported as a passing audit.
