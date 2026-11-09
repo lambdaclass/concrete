@@ -99,13 +99,56 @@ set_option maxHeartbeats 2000000 in
     return 0
 
 
+def focused_c2():
+    """Audit only the historical C2 projection proof, at two declared bounds."""
+    from vacuity_driver import compiled_consumer, run
+    archive = subprocess.run(
+        ['bash', str(ROOT / 'scripts/checks/lib/bounded.sh'), '30', 'git',
+         'archive', '9cb0ef7fe4f23ac13745717e2e4854410cbf36d1',
+         'ConcreteSpec', 'ConcreteSpec.lean', 'ROADMAP.md'],
+        cwd=ROOT, stdout=subprocess.PIPE, check=True)
+    driver = r'''import ConcreteSpec
+import N2Meta
+open Lean Meta
+set_option maxHeartbeats 2000000 in
+#eval show MetaM Unit from do
+  let name := `ConcreteSpec.Core.ConstOrderIndependent
+  let ci ← getConstInfo name
+  let some proof := ci.value? (allowOpaque := true) | throwError "missing-c2-proof"
+  for budget in [64, 4096] do
+    let ((projection, cost), audit) ← ((Vacuity.direct name proof).run { remaining := budget }).run {}
+    unless !projection && audit.findings.isEmpty && cost.remaining > 0 do
+      for f in audit.findings do IO.println s!"{f.status} {f.code} {f.name} {f.detail}"
+      throwError "c2-projection-incomplete-or-rejected"
+    IO.println s!"C2 COMPLETE limit={budget} visited={budget - cost.remaining}"
+'''
+    with tempfile.TemporaryDirectory(prefix='n2-c2-control-') as temp:
+        with tarfile.open(fileobj=io.BytesIO(archive.stdout)) as tree:
+            tree.extractall(temp, filter='data')
+        with compiled_consumer() as meta:
+            code, output = run(Path(temp), 'ConcreteSpec.Proofs.Const', inventory=True,
+                               driver_text=driver, meta_path=meta)
+    lines = output.splitlines()
+    if (code != 0 or len(lines) != 2 or
+            not lines[0].startswith('C2 COMPLETE limit=64 visited=') or
+            not lines[1].startswith('C2 COMPLETE limit=4096 visited=')):
+        print('FAIL exact-c2-projection-control\n' + output)
+        return 1
+    print(output, end='')
+    print('PASS exact-c2-projection-control (isolated proof, no head PASS claim)')
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--reports', type=Path)
     parser.add_argument('--replay', type=Path, help='server: re-elaborate all exact historical controls into this report directory')
     parser.add_argument('--focused-c9', action='store_true', help='light isolated exact C9 law and two evidence checks')
+    parser.add_argument('--focused-c2', action='store_true', help='light isolated historical C2 projection check')
     args = parser.parse_args()
     records = json.loads((HERE / 'fixtures/provenance.json').read_text())
+    if args.focused_c2:
+        return focused_c2()
     if args.focused_c9:
         return focused_c9(records)
     if args.replay:

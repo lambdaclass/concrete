@@ -104,9 +104,11 @@ the actual visits and limit. Explicit low-budget controls still run at 3 and 64;
 exhaustion is INCOMPLETE and cannot become PASS through the cache. Process and
 heartbeat bounds also remain enforced. The C2 historical law combines typing,
 evaluation, admission and lookup proofs, sharing the first two proofs in admission;
-the former 64-visit tree walk charged repeated expanded subproofs again. Server
-replay must confirm its measured DAG cost and completion at the declared bound;
-local synthetic controls alone do not certify historical-head completion.
+the former 64-visit tree walk charged repeated expanded subproofs again. The exact isolated C2 proof (`vacuity_fixtures.py --focused-c2`) took 81 visits
+with the former tree walk and 49 with the DAG cache; thus memoization alone removes
+its 64-visit exhaustion. That control requires complete nonprojection results at
+both 64 and 4,096, without hardcoding a visit count. Server replay must still
+confirm whole-module completion; isolated proof controls do not certify a head.
 Hypothesis discharge scanning follows proof helpers transitively with a visited
 set and a shared traversal budget; data/typeclass arguments are excluded.
 Closed helper bodies are applied to the actual supplied arguments before reduction.
