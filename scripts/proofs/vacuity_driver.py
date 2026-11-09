@@ -28,7 +28,7 @@ def command(args, cwd, env, seconds=120):
 
 
 @contextlib.contextmanager
-def compiled_consumer():
+def compiled_consumer(*, consumer_text=None):
     """Compile the generic consumer once in a fresh private control-run directory.
 
     There is no persistent cache and no specification import: each fixture still
@@ -37,7 +37,7 @@ def compiled_consumer():
     with tempfile.TemporaryDirectory(prefix="vacuity-meta-") as temp:
         work = Path(temp)
         population = (HERE / "theorems.lean").read_text().replace("import ConcreteSpec\n", "", 1)
-        consumer = (HERE / "vacuity.lean").read_text().replace("import Lean\n", "", 1)
+        consumer = (consumer_text if consumer_text is not None else (HERE / "vacuity.lean").read_text()).replace("import Lean\n", "", 1)
         path = work / "N2Meta.lean"
         path.write_text(population + "\n" + consumer)
         env = dict(os.environ, LEAN_PATH=str(work), PROOF_MODE="vacuity")
@@ -174,7 +174,11 @@ def main():
     if args.controls:
         from vacuity_controls import controls
         with compiled_consumer() as meta_path:
-            return controls(functools.partial(run, meta_path=meta_path), args.source)
+            result = controls(functools.partial(run, meta_path=meta_path), args.source)
+        if result:
+            return result
+        from vacuity_reporting import main as reporting_controls
+        return reporting_controls()
     print("N2 SCOPE " + (args.scope or "ALL ConcreteSpec authored theorems"))
     print("N2 CHECKER " + hashlib.sha256((HERE / "vacuity.lean").read_bytes()).hexdigest())
     paths = ([args.source / (module.replace(".", "/") + ".lean")

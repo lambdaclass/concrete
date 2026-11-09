@@ -1,0 +1,8 @@
+PASS reporting work-budget: exact named INCOMPLETE and unrelated FAIL retained
+PASS reporting analysis-error: exact named INCOMPLETE and unrelated FAIL retained
+PASS reporting heartbeat: exact named INCOMPLETE and unrelated FAIL retained
+PASS control positive
+PASS control false-discharge
+PASS control positive-budget-chain
+N2 selected controls: 3 PASS, 0 FAIL
+PASS reporting replay-validator: exactly FAIL report-incomplete c9-new

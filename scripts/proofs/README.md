@@ -139,6 +139,25 @@ in freshly archived real sources (baseline 550fab85e or current checker); it doe
 not claim whole-module completion. R-0219 owns this semantic repair. Server replay
 and the complete 17-scope c1/c2 audits remain required before promotion.
 
+**Round 6 design-first boundary (R-0219):** the proposed discharge solver is
+specified in [N2-discharge-solver.md](N2-discharge-solver.md). Phase A changes
+reporting only; summary solving requires the coordinator's valid independent
+ACCEPT and separate phase-B brief. Both C9-new and C6-current remain completion
+blockers. No measured completion bound for an unimplemented solver is claimed.
+
+Analysis failures are isolated by declaration and evidence case. Each reports
+`INCOMPLETE analysis-budget-or-error <fully-qualified-name> stage=... law=... case=...`
+(for evidence); existing findings survive and later analysis units continue.
+Runtime heartbeat exceptions are explicitly caught. Every unit retains the same
+original command heartbeat deadline; after it expires, remaining units are named
+INCOMPLETE rather than retried with a larger budget. Only scheduler/report
+bookkeeping runs outside that deadline, still under the process wall bound.
+`scripts/proofs/vacuity_reporting.py` exercises exact work-budget, runtime-heartbeat,
+and ordinary-error diagnostics alongside an unrelated later law failure, and
+checks the same complete-report validator used by `--replay`. The standard
+`--controls` entry point includes these controls. A partial report is never clean
+historical evidence, regardless of which FAIL lines it contains.
+
 **Round 5 staging blocker (R-0219):** actual-argument traversal repairs the reported
 false positives and preserves the exact discharge negatives, but the isolated
 historical C9 control currently exhausts the unchanged 2,000,000-heartbeat bound.

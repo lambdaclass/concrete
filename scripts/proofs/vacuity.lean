@@ -524,6 +524,25 @@ def progress (stage : String) (name : Name) : MetaM Unit := do
       handle.putStrLn s!"{← IO.monoMsNow}\t{stage}\t{name}"
 
 
+/-- Isolate one named analysis without renewing its heartbeat allowance. The
+    enclosing scheduler disables heartbeat checks only for bookkeeping; every
+    analysis receives the original command deadline. Runtime exceptions need an
+    explicit catch (ordinary Lean `try` deliberately rethrows them). -/
+def isolated (deadline : Core.Context) (name : Name) (detail : String)
+    (fallback : α) (action : Audit α) : Audit α := do
+  let saved ← liftM (Meta.saveState : MetaM Meta.SavedState)
+  tryCatchRuntimeEx
+    (withTheReader Core.Context (fun _ => deadline) do
+      Core.checkMaxHeartbeats "vacuity-analysis"
+      action)
+    (fun e => do
+      let message ← addMessageContext e.toMessageData
+      liftM (saved.restore : MetaM Unit)
+      emit "INCOMPLETE" "analysis-budget-or-error" name
+        (detail ++ " " ++ (← message.toString))
+      return fallback)
+
+
 def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := do
   let env ← getEnv
   let all := env.constants.map₁.toList ++ env.constants.map₂.toList
@@ -531,6 +550,7 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
   let scopes := scope.splitOn ","
   let budget := ((← IO.getEnv "VACUITY_BUDGET").getD "4096").toNat?.getD 4096
   let roadmap ← IO.FS.readFile "ROADMAP.md"
+  let deadline ← readThe Core.Context
   let run : Audit Unit := do
     let mut tags : Array Tagged := #[]
     let mut hasAuthored := false
@@ -538,213 +558,240 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
     for (n, ci) in population do
       let module := (env.getModuleIdxFor? n).map fun i => toString env.header.moduleNames[i.toNat]!
       if scope != "" && !module.any scopes.contains && !(toString n).startsWith "ConcreteSpecControl." then continue
-      progress "classification" n
-      let doc := (← findDocString? env n).getD ""
-      let isExample := ((toString n).splitOn "⟪example⟫").length > 1
-      if ci.isTheorem || (!isExample && (ci.value? (allowOpaque := true)).isSome && (← isProof (mkConst n (ci.levelParams.map Level.param)))) then
-        match ← authored n with
-        | none => emit "INCOMPLETE" "missing-provenance" n
-        | some false =>
-          unless (doc.splitOn "Obligation (").length > 1 do continue
-        | some true =>
-          hasAuthored := true
-          if let some m := module then authoredModules := authoredModules.insert m
-          let classes := ["Law (subject ", "Helper (", "Representation lemma.", "Obligation ("]
-          let count := classes.foldl (fun k c => k + (doc.splitOn c).length - 1) 0
-          if count != 1 then fail "classification-count" n (toString count)
-      let annotated := ["Law (subject ", "Helper (", "Representation lemma.", "Obligation (",
-        "Instance (", "Planted (", "Exemption", "Exempt:", "Manual-audit", "Manual audit", "manual-audit"].any
-        fun tag => (doc.splitOn tag).length > 1
-      if !ci.isTheorem && !annotated then continue
-      if annotated then
-        hasAuthored := true
-        if let some m := module then authoredModules := authoredModules.insert m
-      if !ci.isTheorem && !(← isProof (mkConst n (ci.levelParams.map Level.param))) && ((doc.splitOn "Helper (").length > 1 || (doc.splitOn "Representation lemma.").length > 1) then
-        fail "classification-kind" n
-      tags := tags.push ⟨n, ci, doc⟩
-      if (docNames doc).2 then fail "malformed-backticks" n
-      -- Cases are labels, not declarations. Every other backtick resolves, including prose.
-      for q in quoted doc do
-        if (fields doc "case").contains q then continue
-        discard <| resolve all n q
-      if (doc.splitOn "Helper (").length > 1 then
-        let category := (between doc "Helper (" ")").getD ""
-        unless ["inversion", "projection", "congruence", "arithmetic", "computation"].contains category do
-          fail "helper-kind" n category
-        let reason := ((between doc ("Helper (" ++ category ++ ").") "(approved:").getD "").trimAscii.toString
-        if reason == "" then fail "classification-reason" n
-      if (doc.splitOn "Representation lemma.").length > 1 then
-        let reason := ((between doc "Representation lemma." "(approved:").getD "").trimAscii.toString
-        if reason == "" then fail "classification-reason" n
-      for label in ["Helper (", "Representation lemma.", "Exemption", "Exempt:", "Manual-audit", "Manual audit", "manual-audit"] do
-        if (doc.splitOn label).length > 1 then
-          emit "REPORT" label n doc
-          approval ⟨n, ci, doc⟩
-      if (doc.splitOn "Obligation (").length > 1 then
-        emit "REPORT" "Obligation" n doc
-        let propDef ← match ci with
-          | .defnInfo _ => forallTelescopeReducing ci.type fun _ t => isDefEq t (mkSort .zero)
-          | _ => pure false
-        let projection := (← getProjectionFnInfo? n).isSome
-        unless propDef || (projection && (← forallTelescopeReducing ci.type fun _ t => do
-          return (← isProp t) || (← isDefEq t (mkSort .zero)))) do
-          fail "obligation-kind" n
-        let some header := between doc "Obligation (discharged at slice " ")." | fail "obligation-format" n; continue
-        let parts := header.splitOn ", R-"
-        unless parts.length == 2 && parts[0]!.toNat?.isSome && parts[1]!.length == 4 && parts[1]!.toNat?.isSome do
-          fail "obligation-format" n; continue
-        let row := parts[1]!
-        unless (roadmap.splitOn ("| R-" ++ row ++ " |")).length > 1 do fail "obligation-roadmap" n ("R-" ++ row)
+      let result ← isolated deadline n "stage=classification" (tags, hasAuthored, authoredModules) do
+        let mut tags := tags
+        let mut hasAuthored := hasAuthored
+        let mut authoredModules := authoredModules
+        for _ in [()] do
+          progress "classification" n
+          let doc := (← findDocString? env n).getD ""
+          let isExample := ((toString n).splitOn "⟪example⟫").length > 1
+          if ci.isTheorem || (!isExample && (ci.value? (allowOpaque := true)).isSome && (← isProof (mkConst n (ci.levelParams.map Level.param)))) then
+            match ← authored n with
+            | none => emit "INCOMPLETE" "missing-provenance" n
+            | some false =>
+              unless (doc.splitOn "Obligation (").length > 1 do continue
+            | some true =>
+              hasAuthored := true
+              if let some m := module then authoredModules := authoredModules.insert m
+              let classes := ["Law (subject ", "Helper (", "Representation lemma.", "Obligation ("]
+              let count := classes.foldl (fun k c => k + (doc.splitOn c).length - 1) 0
+              if count != 1 then fail "classification-count" n (toString count)
+          let annotated := ["Law (subject ", "Helper (", "Representation lemma.", "Obligation (",
+            "Instance (", "Planted (", "Exemption", "Exempt:", "Manual-audit", "Manual audit", "manual-audit"].any
+            fun tag => (doc.splitOn tag).length > 1
+          if !ci.isTheorem && !annotated then continue
+          if annotated then
+            hasAuthored := true
+            if let some m := module then authoredModules := authoredModules.insert m
+          if !ci.isTheorem && !(← isProof (mkConst n (ci.levelParams.map Level.param))) && ((doc.splitOn "Helper (").length > 1 || (doc.splitOn "Representation lemma.").length > 1) then
+            fail "classification-kind" n
+          tags := tags.push ⟨n, ci, doc⟩
+          if (docNames doc).2 then fail "malformed-backticks" n
+          -- Cases are labels, not declarations. Every other backtick resolves, including prose.
+          for q in quoted doc do
+            if (fields doc "case").contains q then continue
+            discard <| resolve all n q
+          if (doc.splitOn "Helper (").length > 1 then
+            let category := (between doc "Helper (" ")").getD ""
+            unless ["inversion", "projection", "congruence", "arithmetic", "computation"].contains category do
+              fail "helper-kind" n category
+            let reason := ((between doc ("Helper (" ++ category ++ ").") "(approved:").getD "").trimAscii.toString
+            if reason == "" then fail "classification-reason" n
+          if (doc.splitOn "Representation lemma.").length > 1 then
+            let reason := ((between doc "Representation lemma." "(approved:").getD "").trimAscii.toString
+            if reason == "" then fail "classification-reason" n
+          for label in ["Helper (", "Representation lemma.", "Exemption", "Exempt:", "Manual-audit", "Manual audit", "manual-audit"] do
+            if (doc.splitOn label).length > 1 then
+              emit "REPORT" label n doc
+              approval ⟨n, ci, doc⟩
+          if (doc.splitOn "Obligation (").length > 1 then
+            emit "REPORT" "Obligation" n doc
+            let propDef ← match ci with
+              | .defnInfo _ => forallTelescopeReducing ci.type fun _ t => isDefEq t (mkSort .zero)
+              | _ => pure false
+            let projection := (← getProjectionFnInfo? n).isSome
+            unless propDef || (projection && (← forallTelescopeReducing ci.type fun _ t => do
+              return (← isProp t) || (← isDefEq t (mkSort .zero)))) do
+              fail "obligation-kind" n
+            let some header := between doc "Obligation (discharged at slice " ")." | fail "obligation-format" n; continue
+            let parts := header.splitOn ", R-"
+            unless parts.length == 2 && parts[0]!.toNat?.isSome && parts[1]!.length == 4 && parts[1]!.toNat?.isSome do
+              fail "obligation-format" n; continue
+            let row := parts[1]!
+            unless (roadmap.splitOn ("| R-" ++ row ++ " |")).length > 1 do fail "obligation-roadmap" n ("R-" ++ row)
+        return (tags, hasAuthored, authoredModules)
+      tags := result.1
+      hasAuthored := result.2.1
+      authoredModules := result.2.2
     unless hasAuthored do fail "empty-authored-scope" .anonymous scope
     if scope != "" then
       for m in scopes do
         unless authoredModules.contains m do fail "empty-authored-scope" .anonymous m
     let mut evidence : Array Evidence := #[]
     for t in tags do
-      for tag in ["Instance (", "Planted ("] do
-        for part in (t.doc.splitOn tag).drop 1 do
-          let errorCode := if tag == "Planted (" then "planted-tag" else "evidence-tag"
-          let some payload := between (tag ++ part) tag ")." | fail errorCode t.name; continue
-          let doc := tag ++ payload ++ ")."
-          let keys := if tag == "Planted (" then ["law", "case", "subject", "mutant"] else ["law", "case"]
-          unless keys.all (fun key => (fields doc key).size == 1) do
-            fail errorCode t.name; continue
-          let mut residue := payload
-          for key in keys do
-            residue := residue.replace (key ++ " `" ++ (field doc key).getD "" ++ "`") ""
-          unless residue.toList.all (fun c => c.isWhitespace || c == ',') &&
-            (residue.splitOn ",").length == keys.length do
-            fail errorCode t.name; continue
-          let some lt := field doc "law" | fail "evidence-tag" t.name; continue
-          let some law ← resolve all t.name lt | continue
-          let some key := field doc "case" | fail "evidence-tag" t.name; continue
-          let mut subject := none
-          let mut mutant := none
-          if tag == "Planted (" then
-            let some st := field doc "subject" | fail "planted-tag" t.name; continue
-            let some sn ← resolve all t.name st | continue
-            let some mt := field doc "mutant" | fail "planted-tag" t.name; continue
-            let some mn ← resolve all t.name mt | continue
-            subject := some sn
-            mutant := some mn
-          evidence := evidence.push { toTagged := { t with doc := doc }, law, key, subject, mutant }
+      let result ← isolated deadline t.name "stage=evidence-tags" evidence do
+        let mut evidence := evidence
+        for _ in [()] do
+          for tag in ["Instance (", "Planted ("] do
+            for part in (t.doc.splitOn tag).drop 1 do
+              let errorCode := if tag == "Planted (" then "planted-tag" else "evidence-tag"
+              let some payload := between (tag ++ part) tag ")." | fail errorCode t.name; continue
+              let doc := tag ++ payload ++ ")."
+              let keys := if tag == "Planted (" then ["law", "case", "subject", "mutant"] else ["law", "case"]
+              unless keys.all (fun key => (fields doc key).size == 1) do
+                fail errorCode t.name; continue
+              let mut residue := payload
+              for key in keys do
+                residue := residue.replace (key ++ " `" ++ (field doc key).getD "" ++ "`") ""
+              unless residue.toList.all (fun c => c.isWhitespace || c == ',') &&
+                (residue.splitOn ",").length == keys.length do
+                fail errorCode t.name; continue
+              let some lt := field doc "law" | fail "evidence-tag" t.name; continue
+              let some law ← resolve all t.name lt | continue
+              let some key := field doc "case" | fail "evidence-tag" t.name; continue
+              let mut subject := none
+              let mut mutant := none
+              if tag == "Planted (" then
+                let some st := field doc "subject" | fail "planted-tag" t.name; continue
+                let some sn ← resolve all t.name st | continue
+                let some mt := field doc "mutant" | fail "planted-tag" t.name; continue
+                let some mn ← resolve all t.name mt | continue
+                subject := some sn
+                mutant := some mn
+              evidence := evidence.push { toTagged := { t with doc := doc }, law, key, subject, mutant }
+        return evidence
+      evidence := result
     for t in evidence do
-      unless ((toString t.name).splitOn "⟪example⟫").length > 1 do
-        fail "evidence-not-example" t.name
-      let target := t.law
-      let lt := toString target
-      let candidate := tags.find? (·.name == target)
-      match candidate with
-      | some l =>
-        unless l.info.isTheorem && ((l.doc.splitOn "Law (subject ").length > 1 ) do
-          fail "evidence-law-kind" t.name lt
-      | none => fail "evidence-law-kind" t.name lt
-      if (t.doc.splitOn "Planted (").length > 1 then
-        let subjects := tags.filter fun l => l.name == target && (l.doc.splitOn "Law (subject ").length > 1
-        if subjects.isEmpty then continue
-        let mut declared : Array Name := #[]
-        for l in subjects do
-          for st in quoted ((between l.doc "Law (subject " ").").getD "") do
-            if let some subject ← resolve all l.name st then declared := declared.push subject
-        unless t.subject.any declared.contains do
-          fail "planted-subject" t.name ((field t.doc "subject").getD "")
+      isolated deadline t.name s!"stage=evidence-kind law={t.law} case={t.key}" () do
+        for _ in [()] do
+          unless ((toString t.name).splitOn "⟪example⟫").length > 1 do
+            fail "evidence-not-example" t.name
+          let target := t.law
+          let lt := toString target
+          let candidate := tags.find? (·.name == target)
+          match candidate with
+          | some l =>
+            unless l.info.isTheorem && ((l.doc.splitOn "Law (subject ").length > 1 ) do
+              fail "evidence-law-kind" t.name lt
+          | none => fail "evidence-law-kind" t.name lt
+          if (t.doc.splitOn "Planted (").length > 1 then
+            let subjects := tags.filter fun l => l.name == target && (l.doc.splitOn "Law (subject ").length > 1
+            if subjects.isEmpty then continue
+            let mut declared : Array Name := #[]
+            for l in subjects do
+              for st in quoted ((between l.doc "Law (subject " ").").getD "") do
+                if let some subject ← resolve all l.name st then declared := declared.push subject
+            unless t.subject.any declared.contains do
+              fail "planted-subject" t.name ((field t.doc "subject").getD "")
     let mut instances : Array InstanceCase := #[]
     for t in evidence do
       if !(t.doc.splitOn "Instance (").length > 1 then continue
-      progress "instance" t.name
-      let law := t.law
-      let key := t.key
-      let some value := t.info.value? | fail "instance-application" t.name s!"law={law} case={key}"; continue
-      let value := cleanSpine value
-      let .const head levels := value.getAppFn' | fail "instance-application" t.name s!"law={law} case={key}"; continue
-      unless head == law && closed value && closed t.info.type && t.info.levelParams.isEmpty do
-        fail "instance-application" t.name s!"law={law} case={key}"; continue
-      let args := value.getAppArgs
-      let lawInfo := (env.find? law).get!
-      let mut ty := lawInfo.type.instantiateLevelParams lawInfo.levelParams levels
-      let mut valid := true
-      let mut falseHyp := false
-      for arg in args do
-        ty := ty.consumeMData
-        if let .forallE _ domain body _ := ty then
-          if ← isProp domain then
-            let (bad, _) ← (falseDischarge arg).run {}
-            falseHyp := falseHyp || bad
-          ty := body.instantiate1 arg
-        else valid := false
-      let mut protectedNames := #[]
-      if let some l := tags.find? (·.name == law) then
-        for st in quoted ((between l.doc "Law (subject " ").").getD "") do
-          if let some n ← resolve all l.name st then protectedNames := protectedNames.push n
-      unless valid && (← closedTail ty protectedNames) && (← protectedEq ty t.info.type protectedNames) do fail "instance-application" t.name s!"law={law} case={key}"; continue
-      if falseHyp then
-        fail "instance-false-discharge" t.name
-        continue
-      if instances.any (fun i => i.law == law && i.key == key) then fail "duplicate-instance" t.name
-      instances := instances.push ⟨t.name, law, key, args, levels⟩
+      let result ← isolated deadline t.name s!"stage=instance law={t.law} case={t.key}" instances do
+        let mut instances := instances
+        for _ in [()] do
+          progress "instance" t.name
+          let law := t.law
+          let key := t.key
+          let some value := t.info.value? | fail "instance-application" t.name s!"law={law} case={key}"; continue
+          let value := cleanSpine value
+          let .const head levels := value.getAppFn' | fail "instance-application" t.name s!"law={law} case={key}"; continue
+          unless head == law && closed value && closed t.info.type && t.info.levelParams.isEmpty do
+            fail "instance-application" t.name s!"law={law} case={key}"; continue
+          let args := value.getAppArgs
+          let lawInfo := (env.find? law).get!
+          let mut ty := lawInfo.type.instantiateLevelParams lawInfo.levelParams levels
+          let mut valid := true
+          let mut falseHyp := false
+          for arg in args do
+            ty := ty.consumeMData
+            if let .forallE _ domain body _ := ty then
+              if ← isProp domain then
+                let (bad, _) ← (falseDischarge arg).run {}
+                falseHyp := falseHyp || bad
+              ty := body.instantiate1 arg
+            else valid := false
+          let mut protectedNames := #[]
+          if let some l := tags.find? (·.name == law) then
+            for st in quoted ((between l.doc "Law (subject " ").").getD "") do
+              if let some n ← resolve all l.name st then protectedNames := protectedNames.push n
+          unless valid && (← closedTail ty protectedNames) && (← protectedEq ty t.info.type protectedNames) do fail "instance-application" t.name s!"law={law} case={key}"; continue
+          if falseHyp then
+            fail "instance-false-discharge" t.name
+            continue
+          if instances.any (fun i => i.law == law && i.key == key) then fail "duplicate-instance" t.name
+          instances := instances.push ⟨t.name, law, key, args, levels⟩
+        return instances
+      instances := result
     for p in evidence do
-      if (p.doc.splitOn "Planted (").length > 1 then
-        unless instances.any (fun i => p.law == i.law && p.key == i.key) do
-          fail "unpaired-planted" p.name
-          if evidence.any (fun i => i.law == p.law && i.key == p.key &&
-              (i.doc.splitOn "Instance (").length > 1) then
-            fail "planted-proposition" p.name s!"law={p.law} case={p.key} no-valid-closed-instance"
+      if !(p.doc.splitOn "Planted (").length > 1 then continue
+      isolated deadline p.name s!"stage=pairing law={p.law} case={p.key}" () do
+        for _ in [()] do
+          if (p.doc.splitOn "Planted (").length > 1 then
+            unless instances.any (fun i => p.law == i.law && p.key == i.key) do
+              fail "unpaired-planted" p.name
+              if evidence.any (fun i => i.law == p.law && i.key == p.key &&
+                  (i.doc.splitOn "Instance (").length > 1) then
+                fail "planted-proposition" p.name s!"law={p.law} case={p.key} no-valid-closed-instance"
     for law in tags do
       unless (law.doc.splitOn "Law (subject ").length > 1 do continue
-      progress "law" law.name
-      unless law.info.isTheorem do fail "law-kind" law.name; continue
-      let trivialStatement ← forallTelescopeReducing law.info.type fun xs conclusion => do
-        for x in xs do
-          if ← isProof x then
-            if ← isDefEq (← inferType x) conclusion then return true
-        let args := conclusion.getAppArgs
-        if conclusion.isAppOf ``Eq && args.size == 3 then
-          return ← isDefEq args[1]! args[2]!
-        if conclusion.isAppOf ``Iff && args.size == 2 then
-          return ← isDefEq args[0]! args[1]!
-        return false
-      if trivialStatement then fail "projection-law" law.name
-      if let some proof := law.info.value? (allowOpaque := true) then
-        let (projection, cost) ← (direct law.name proof).run { remaining := budget }
-        emit "NOTE" "projection-cost" law.name s!"visited={budget - cost.remaining} limit={budget} cached={cost.answers.size}"
-        if projection then fail "projection-law" law.name
-      let subjects := quoted ((between law.doc "Law (subject " ").").getD "")
-      if subjects.isEmpty then fail "law-subject" law.name
-      let cases := instances.filter (·.law == law.name)
-      if cases.isEmpty then fail "missing-instance" law.name
-      for st in subjects do
-        let some subject ← resolve all law.name st | continue
-        unless ((env.find? subject).get! matches .defnInfo _) do fail "subject-kind" law.name st; continue
-        let (occurs, _) ← (mentions law.info.type subject).run (20000, {})
-        unless occurs do fail "subject-absent" law.name st
-        for ic in cases do
-          let planted := evidence.filter fun t => t.law == law.name &&
-            t.key == ic.key && t.subject == some subject &&
-            (t.doc.splitOn "Planted (").length > 1
-          if planted.isEmpty then fail "missing-planted" law.name (ic.key ++ "/" ++ st)
-          for p in planted do
-            let some mutant := p.mutant | fail "planted-tag" p.name; continue
-            let mi := (env.find? mutant).get!
-            unless mutant != subject && (mi matches .defnInfo _) &&
-              mi.levelParams.length == ((env.find? subject).get!).levelParams.length do
-              fail "mutant-kind" p.name; continue
-            let si := (env.find? subject).get!
-            if ← isDefEq (mkConst subject (si.levelParams.map Level.param))
-              (mkConst mutant (si.levelParams.map Level.param)) then
-              fail "mutant-defeq" p.name; continue
-            let mt := mi.type.instantiateLevelParams mi.levelParams (si.levelParams.map Level.param)
-            unless ← isDefEq si.type mt do fail "mutant-type" p.name; continue
-            let mut boundaries := #[]
-            for name in subjects do
-              if let some resolved ← resolve all law.name name then boundaries := boundaries.push resolved
-            let expected ← counterexample law.info ic subject mutant boundaries
-            Lean.Meta.check expected
-            unless closed p.info.type && (← protectedEq p.info.type expected (boundaries.push mutant)) do
-              fail "planted-proposition" p.name s!"law={law.name} case={ic.key}"
-  let safe : Audit Unit := do
-    try run
-    catch e => emit "INCOMPLETE" "analysis-budget-or-error" .anonymous (← e.toMessageData.toString)
-  let (_, state) ← safe.run {}
+      isolated deadline law.name "stage=law" () do
+        for _ in [()] do
+          progress "law" law.name
+          unless law.info.isTheorem do fail "law-kind" law.name; continue
+          isolated deadline law.name "stage=projection" () do
+            let trivialStatement ← forallTelescopeReducing law.info.type fun xs conclusion => do
+              for x in xs do
+                if ← isProof x then
+                  if ← isDefEq (← inferType x) conclusion then return true
+              let args := conclusion.getAppArgs
+              if conclusion.isAppOf ``Eq && args.size == 3 then
+                return ← isDefEq args[1]! args[2]!
+              if conclusion.isAppOf ``Iff && args.size == 2 then
+                return ← isDefEq args[0]! args[1]!
+              return false
+            if trivialStatement then fail "projection-law" law.name
+            if let some proof := law.info.value? (allowOpaque := true) then
+              let (projection, cost) ← (direct law.name proof).run { remaining := budget }
+              emit "NOTE" "projection-cost" law.name s!"visited={budget - cost.remaining} limit={budget} cached={cost.answers.size}"
+              if projection then fail "projection-law" law.name
+          let subjects := quoted ((between law.doc "Law (subject " ").").getD "")
+          if subjects.isEmpty then fail "law-subject" law.name
+          let cases := instances.filter (·.law == law.name)
+          if cases.isEmpty then fail "missing-instance" law.name
+          for st in subjects do
+            let some subject ← resolve all law.name st | continue
+            unless ((env.find? subject).get! matches .defnInfo _) do fail "subject-kind" law.name st; continue
+            let (occurs, _) ← (mentions law.info.type subject).run (20000, {})
+            unless occurs do fail "subject-absent" law.name st
+            for ic in cases do
+              let planted := evidence.filter fun t => t.law == law.name &&
+                t.key == ic.key && t.subject == some subject &&
+                (t.doc.splitOn "Planted (").length > 1
+              if planted.isEmpty then fail "missing-planted" law.name (ic.key ++ "/" ++ st)
+              for p in planted do
+                let some mutant := p.mutant | fail "planted-tag" p.name; continue
+                let mi := (env.find? mutant).get!
+                unless mutant != subject && (mi matches .defnInfo _) &&
+                  mi.levelParams.length == ((env.find? subject).get!).levelParams.length do
+                  fail "mutant-kind" p.name; continue
+                let si := (env.find? subject).get!
+                if ← isDefEq (mkConst subject (si.levelParams.map Level.param))
+                  (mkConst mutant (si.levelParams.map Level.param)) then
+                  fail "mutant-defeq" p.name; continue
+                let mt := mi.type.instantiateLevelParams mi.levelParams (si.levelParams.map Level.param)
+                unless ← isDefEq si.type mt do fail "mutant-type" p.name; continue
+                let mut boundaries := #[]
+                for name in subjects do
+                  if let some resolved ← resolve all law.name name then boundaries := boundaries.push resolved
+                let expected ← counterexample law.info ic subject mutant boundaries
+                Lean.Meta.check expected
+                unless closed p.info.type && (← protectedEq p.info.type expected (boundaries.push mutant)) do
+                  fail "planted-proposition" p.name s!"law={law.name} case={ic.key}"
+  -- Bookkeeping must survive the exhausted deadline so each subsequent
+  -- skipped analysis still gets its own named INCOMPLETE. No analysis is given
+  -- fresh heartbeats: `isolated` restores the original deadline on every call.
+  let (_, state) ← withTheReader Core.Context (fun ctx => { ctx with maxHeartbeats := 0 }) (run.run {})
   return state.findings
 
 end Vacuity

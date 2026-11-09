@@ -1,0 +1,1 @@
+N2 (R-0219): isolate audit failures by declaration and evidence case, retain other findings, and report runtime exhaustion as named INCOMPLETE without renewing the analysis deadline. Add exact reporting and replay-rejection controls.
