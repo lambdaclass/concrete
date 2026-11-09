@@ -1732,7 +1732,7 @@ theorem extern_result_rejects_unrelated_retention {F H : Type} (pair : KeptPair 
 
 /-- Helper (computation). Characterizes the retention specification; execution evidence is
 `ConcreteSpec.Core.Frame.ABI.transferKept_sound`.
-(approved: _review/REVIEW6-codex.md, _review/REVIEW7-agy.md)
+(approved: _review/REVIEW6-codex.md)
 A well-formed kept pair validly returns its submission receipt and completion-owned handle.
 The exact result constraints already imply both `ExternResult.Valid` facts. -/
 theorem keptPair_results_valid {F H : Type} (pair : KeptPair F H)
@@ -1753,7 +1753,7 @@ example : ExternResult.Valid (⟨0, 1, 7⟩ : KeptPair Nat Nat) 0 (.receipt 7) �
 
 /-- Helper (computation). Characterizes the retention specification; execution evidence is
 `ConcreteSpec.Core.Frame.ABI.transferKept_sound`.
-(approved: _review/REVIEW6-codex.md, _review/REVIEW7-agy.md)
+(approved: _review/REVIEW6-codex.md)
 A kept receipt has exactly one retention transition: the paired completion returns the same
 handle to Concrete ownership. -/
 theorem kept_only_paired_completion {F H : Type} (pair : KeptPair F H) (h : H)
@@ -1774,7 +1774,7 @@ theorem kept_only_paired_completion {F H : Type} (pair : KeptPair F H) (h : H)
 
 /-- Helper (computation). Characterizes the retention specification; execution evidence is
 `ConcreteSpec.Core.Frame.ABI.transferKept_sound`.
-(approved: _review/REVIEW6-codex.md, _review/REVIEW7-agy.md)
+(approved: _review/REVIEW6-codex.md)
 Submission of an owned handle calls the paired submitting extern and produces a receipt for the
 same handle. -/
 theorem submit_produces_paired_receipt {F H : Type} (pair : KeptPair F H) (h : H)
@@ -1795,7 +1795,7 @@ theorem submit_produces_paired_receipt {F H : Type} (pair : KeptPair F H) (h : H
 
 /-- Helper (computation). Characterizes the retention specification; execution evidence is
 `ConcreteSpec.Core.Frame.ABI.transferKept_sound`.
-(approved: _review/REVIEW6-codex.md, _review/REVIEW7-agy.md)
+(approved: _review/REVIEW6-codex.md)
 The submitting extern cannot consume its own receipt, even though it is the other member of the
 pair: completion requires a distinct extern identity. -/
 theorem kept_receipt_rejects_submission {F H : Type} (pair : KeptPair F H) (h h' : H)
@@ -1807,7 +1807,7 @@ theorem kept_receipt_rejects_submission {F H : Type} (pair : KeptPair F H) (h h'
 
 /-- Helper (computation). Characterizes the retention specification; execution evidence is
 `ConcreteSpec.Core.Frame.ABI.transferKept_sound`.
-(approved: _review/REVIEW6-codex.md, _review/REVIEW7-agy.md)
+(approved: _review/REVIEW6-codex.md)
 No other extern can consume a kept receipt. -/
 theorem kept_receipt_rejects_other_extern {F H : Type} (pair : KeptPair F H) (h h' : H)
     (f : F) (after : RetentionState H) (hf : f ≠ pair.complete) :
