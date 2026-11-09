@@ -37,7 +37,8 @@ def fail (code : String) (n : Name) (detail : String := "") : Audit Unit := emit
 
 def between (s left right : String) : Option String := do
   let tail ← (s.splitOn left)[1]?
-  return (tail.splitOn right).head!
+  let parts := tail.splitOn right
+  if parts.length < 2 then none else some parts.head!
 
 /-- Backticks inside Lean's quoted identifiers are name characters, not doc delimiters. -/
 def docNames (s : String) : Array String × Bool := Id.run do
@@ -68,17 +69,102 @@ def closed (e : Expr) : Bool :=
   !e.hasFVar && !e.hasMVar && !e.hasLooseBVars &&
     !e.hasLevelParam && !e.hasLevelMVar
 
+/-- Recover command-level namespace/open context with Lean's parser, not a prose scan.
+    Tags still come exclusively from the shared environment population. -/
+def sourceOpens (owner : Name) : MetaM (Name × List OpenDecl) := do
+  let env ← getEnv
+  let some ranges ← findDeclarationRanges? owner | throwError "resolution-provenance"
+  let path := match env.getModuleIdxFor? owner with
+    | some i => (toString env.header.moduleNames[i.toNat]!).replace "." "/" ++ ".lean"
+    | none => "ConcreteSpec.lean"
+  let input := Parser.mkInputContext (← IO.FS.readFile path) path.toString
+  let (_, initial, initialMessages) ← Parser.parseHeader input
+  let target := input.fileMap.ofPosition ranges.selectionRange.pos
+  let mut state := initial
+  let mut messages := initialMessages
+  let mut current := Name.anonymous
+  let mut opens : List OpenDecl := []
+  let mut stack : Array (Name × List OpenDecl) := #[]
+  let openNames := fun (ns : Name) (opened : List OpenDecl) (id : Name) =>
+    Lean.ResolveName.resolveNamespace env ns opened id
+  let addOpens := fun (ns : Name) (opened : List OpenDecl) (parsed : Syntax) => do
+    let mut result := opened
+    match (⟨parsed⟩ : TSyntax ``Parser.Command.openDecl) with
+    | `(Parser.Command.openDecl| $nss*) =>
+      for id in nss do
+        for resolved in openNames ns result id.getId do
+          result := .simple resolved [] :: result
+    | `(Parser.Command.openDecl| scoped $nss*) => discard <| pure nss
+    | `(Parser.Command.openDecl| $id hiding $ids*) =>
+      for resolved in openNames ns result id.getId do
+        result := .simple resolved (ids.toList.map (·.getId)) :: result
+    | `(Parser.Command.openDecl| $id ($ids*)) =>
+      for resolved in openNames ns result id.getId do
+        for name in ids do result := .explicit name.getId (resolved ++ name.getId) :: result
+    | `(Parser.Command.openDecl| $id renaming $[$froms -> $tos],*) =>
+      for resolved in openNames ns result id.getId do
+        for (original, alias) in froms.zip tos do
+          result := .explicit alias.getId (resolved ++ original.getId) :: result
+    | _ => throwError "unsupported-open-context"
+    return result
+  repeat
+    let context : Parser.ParserModuleContext := { env, options := (← getOptions), currNamespace := current, openDecls := opens }
+    let (parsed, next, log) := Parser.parseCommand input context state messages
+    if log.hasErrors then throwError "resolution-source-parser"
+    let ending := parsed.getTailPos?.getD next.pos
+    if parsed.isOfKind ``Parser.Command.«in» then
+      if ending >= target then
+        let mut nested := parsed
+        while nested.isOfKind ``Parser.Command.«in» do
+          let leading := nested[0]
+          if leading.isOfKind ``Parser.Command.«open» then
+            opens ← addOpens current opens leading[1]
+          nested := nested[2]
+        break
+    else if parsed.isOfKind ``Parser.Command.«namespace» then
+      stack := stack.push (current, opens)
+      let id := parsed[1].getId
+      current := if rootNamespace.isPrefixOf id then removeRoot id else current ++ id
+    else if parsed.isOfKind ``Parser.Command.«section» then
+      stack := stack.push (current, opens)
+    else if parsed.isOfKind ``Parser.Command.«end» then
+      if let some previous := stack.back? then
+        (current, opens) := previous
+        stack := stack.pop
+    else if parsed.isOfKind ``Parser.Command.«open» then
+      opens ← addOpens current opens parsed[1]
+    if ending >= target || Parser.isTerminalCommand parsed then break
+    if next.pos <= state.pos then throwError "resolution-source-progress"
+    state := next
+    messages := log
+  return (current, opens)
+
 def resolve (all : List (Name × ConstantInfo)) (owner : Name) (s : String) : Audit (Option Name) := do
   let .ok stx := Parser.runParserCategory (← getEnv) `term s
     | fail "unknown-name" owner s; return none
   unless stx.isIdent do fail "unknown-name" owner s; return none
   let requested := stx.getId.replacePrefix (Name.mkSimple "_root_") .anonymous
-  let hits := all.filter fun (n, _) => n == requested || privateToUserName n == requested ||
-    privateToUserName n == (privateToUserName owner).getPrefix ++ requested
-  match hits with
+  let env ← getEnv
+  let mut namespacePrefix := if (Name.mkSimple "_root_").isPrefixOf stx.getId then .anonymous else (privateToUserName owner).getPrefix
+  repeat
+    let candidate := namespacePrefix ++ requested
+    let hits := all.filter fun (n, _) =>
+      privateToUserName n == candidate &&
+      (!isPrivateName n || env.getModuleIdxFor? n == env.getModuleIdxFor? owner)
+    match hits with
+    | [(n, _)] => return some n
+    | [] => pure ()
+    | _ => fail "ambiguous-name" owner s; return none
+    if namespacePrefix.isAnonymous then break
+    namespacePrefix := namespacePrefix.getPrefix
+  let (ns, opens) ← sourceOpens owner
+  let hits := (Lean.ResolveName.resolveGlobalName env (← getOptions) ns opens requested).filter fun (n, projections) =>
+    projections.isEmpty && (!isPrivateName n || env.getModuleIdxFor? n == env.getModuleIdxFor? owner)
+  match hits.eraseDups with
   | [(n, _)] => return some n
-  | [] => fail "unknown-name" owner s; return none
-  | _ => fail "ambiguous-name" owner s; return none
+  | [] => fail "unknown-name" owner s
+  | _ => fail "ambiguous-name" owner s
+  return none
 
 /-- Provenance: the selection range must spell this declaration, not its generated parent.
     Fresh source compilation emits selection ranges for authored declarations. Generated
@@ -87,17 +173,26 @@ def resolve (all : List (Name × ConstantInfo)) (owner : Name) (s : String) : Au
     no pre-existing (possibly stripped) environment is accepted. -/
 def authored (n : Name) : MetaM (Option Bool) := do
   if (← getProjectionFnInfo? n).isSome then return some false
-  let some r ← findDeclarationRanges? n | return some false
+  if (← getMatcherInfo? n).isSome || (← isEqnThm n) then return some false
+  let some r ← findDeclarationRanges? n | do
+    -- A generated child inherits ownership from its source-declared parent.
+    let mut parent := n.getPrefix
+    while !parent.isAnonymous do
+      if (← getMatcherInfo? parent).isSome || (← getMatcherInfo? (privateToUserName parent)).isSome then return some false
+      if (← findDeclarationRangesCore? parent).isSome then return some false
+      parent := parent.getPrefix
+    return none
   let env ← getEnv
   let path ← match env.getModuleIdxFor? n with
     | some i => pure ((toString env.header.moduleNames[i.toNat]!).replace "." "/" ++ ".lean")
     | none => pure (← getFileName)
-  let src ← IO.FS.readFile path
+  let src ← try IO.FS.readFile path catch _ => return none
   let lines := src.splitOn "\n"
   let a := r.selectionRange.pos
   let b := r.selectionRange.endPos
-  if a.line != b.line then return some false
-  let line := (lines[a.line - 1]!).toList
+  if a.line != b.line then return none
+  let some sourceLine := lines[a.line - 1]? | return none
+  let line := sourceLine.toList
   let token := String.ofList ((line.drop a.column).take (b.column - a.column))
   let .ok stx := Parser.runParserCategory env `term token | return some false
   unless stx.isIdent do return some false
@@ -107,49 +202,84 @@ def authored (n : Name) : MetaM (Option Bool) := do
   return some (if root.isPrefixOf selected then user == selected.replacePrefix root .anonymous
     else selected.isSuffixOf user)
 
+/-- Strip metadata throughout an application spine, preserving all arguments. -/
+def cleanSpine : Expr → Expr
+  | .mdata _ e => cleanSpine e
+  | .app f a => mkApp (cleanSpine f) a
+  | e => e
+
 /-- Only the proof head and constructor fields are inspected. Each normalization spends a
     separate explicit unit; the Meta heartbeat additionally bounds whnfR itself. -/
-partial def direct (n : Name) (e : Expr) (fuel : Nat) : Audit Bool := do
+partial def direct (n : Name) (e : Expr) : StateRefT Nat Audit Bool := do
+  let fuel ← get
   if fuel == 0 then emit "INCOMPLETE" "projection-budget" n; return false
-  let e := e.consumeMData
-  if e.getAppFn.isFVar then return true
-  if e.getAppFn matches .proj .. then return true
+  set (fuel - 1)
+  let e := cleanSpine e
+  if e.getAppFn'.isFVar then return true
+  if e.getAppFn' matches .proj .. then return true
   match e with
-  | .lam _ _ _ _ => lambdaTelescope e fun _ body => direct n body (fuel - 1)
-  | .letE _ _ v b _ => direct n (b.instantiate1 v) (fuel - 1)
+  | .lam _ _ _ _ => lambdaTelescope e fun _ body => direct n body
+  | .letE _ _ v b _ => direct n (b.instantiate1 v)
   | .fvar _ => return true
   | .proj .. => return true
   | _ =>
-    if let .const h _ := e.getAppFn then
+    if let .const h _ := e.getAppFn' then
       if (← getProjectionFnInfo? h).isSome then return true
       if [``Eq.refl, ``rfl, ``HEq.refl, ``Iff.refl].contains h then return true
+      if let some (.recInfo r) := (← getEnv).find? h then
+        if r.numMinors == 1 then
+          let args := e.getAppArgs
+          let majorIndex := r.numParams + r.numMotives + r.numMinors + r.numIndices
+          if let some major := args[majorIndex]? then
+            if ← direct n major then
+              if let some minor := args[r.numParams + r.numMotives]? then
+                if ← direct n minor then return true
       if let some (.ctorInfo c) := (← getEnv).find? h then
         let mut all := true
-        let mut hasProof := false
         for arg in e.getAppArgs[c.numParams:] do
           if ← isProof arg then
-            hasProof := true
-            if !(← direct n arg (fuel - 1)) then all := false
-        return hasProof && all
-    let reduced ← withTransparency .reducible (whnfR e)
-    if reduced != e then direct n reduced (fuel - 1) else return false
+            if !(← direct n arg) then all := false
+        return all
+    -- Raw delta, not whnfR/smart unfolding: exactly one definition per fuel unit.
+    if let .const h levels := e.getAppFn' then
+      if let some (.defnInfo d) := (← getEnv).find? h then
+        let body := d.value.instantiateLevelParams d.levelParams levels
+        return ← direct n (mkAppN body e.getAppArgs).headBeta
+    let reduced := e.headBeta
+    if reduced != e then direct n reduced else return false
 
-partial def falseDischarge (e : Expr) : MetaM Bool := do
-  if let .const n _ := e.getAppFn then
-    if [``False.elim, ``absurd].contains n then return true
+/-- Follow only the supplied hypothesis proof, including opaque proof helpers.
+    The visited set and shared budget bound the entire dependency traversal. -/
+partial def falseDischarge (e : Expr) : StateRefT (Nat × Std.HashSet Name) MetaM Bool := do
+  let e := cleanSpine e
+  let (fuel, visited) ← get
+  if fuel == 0 then throwError "false-discharge-budget"
+  set (fuel - 1, visited)
+  if let .const n _ := e.getAppFn' then
+    if [``False.elim, ``False.casesOn, ``absurd, ``Empty.elim, ``Empty.casesOn,
+        ``PEmpty.elim, ``PEmpty.casesOn].contains n then return true
     if let some matcher ← getMatcherInfo? n then
       if matcher.numAlts == 0 then return true
     if let some (.recInfo r) := (← getEnv).find? n then
       if r.rules.isEmpty then return true
+    unless (← get).2.contains n do
+      modify fun (left, seen) => (left, seen.insert n)
+      if let some ci := (← getEnv).find? n then
+        if let some value := ci.value? (allowOpaque := true) then
+          if ← falseDischarge value then return true
   match e with
-  | .app f a => return (← falseDischarge f) || (← falseDischarge a)
-  | .lam _ t b _ | .forallE _ t b _ => return (← falseDischarge t) || (← falseDischarge b)
-  | .letE _ t v b _ => return (← falseDischarge t) || (← falseDischarge v) || (← falseDischarge b)
+  | .app .. =>
+    for arg in e.getAppArgs do
+      if ← isProof arg then
+        if ← falseDischarge arg then return true
+    return false
+  | .lam .. => lambdaTelescope e fun _ body => falseDischarge body
+  | .letE _ _ v b _ => falseDischarge (b.instantiate1 v)
   | .mdata _ e | .proj _ _ e => falseDischarge e
   | _ => return false
 
 /-- Traverse definitions only along dependencies of the semantic subject. Definitions unrelated
-    to S keep their original syntax. A shared fuel bounds the entire dependency search. -/
+    to S keep their original parsed. A shared fuel bounds the entire dependency search. -/
 partial def mentions (e : Expr) (subject : Name) : StateRefT (Nat × Std.HashSet Name) MetaM Bool := do
   let (fuel, _) ← get
   if fuel == 0 then throwError "subject-budget"
@@ -210,6 +340,48 @@ def counterexample (law : ConstantInfo) (ic : InstanceCase) (s m : Name) : MetaM
   for h in hyps.reverse do result ← mkAppM ``And #[h, result]
   return result
 
+/-- Expand only dependencies of protectedNames subjects, then abstract the subjects.
+    Definitional comparison may reduce contracts, but cannot erase semantic arguments. -/
+def withProtected (a b : Expr) (subjects : Array Name) (check : Expr → Expr → MetaM Bool) : MetaM Bool := do
+  let mut a := a
+  let mut b := b
+  for subject in subjects do
+    a := (← (mutate a subject subject).run 20000).1
+    b := (← (mutate b subject subject).run 20000).1
+  let rec collect (e : Expr) (terms : Array Expr) : Array Expr :=
+    match e with
+    | .const n _ => if subjects.contains n && !terms.contains e then terms.push e else terms
+    | .app f a => collect a (collect f terms)
+    | .lam _ t b _ | .forallE _ t b _ => collect b (collect t terms)
+    | .letE _ t v b _ => collect b (collect v (collect t terms))
+    | .mdata _ b | .proj _ _ b => collect b terms
+    | _ => terms
+  let protectedTerms := collect b (collect a #[])
+  let rec compare (i : Nat) (a b : Expr) : MetaM Bool := do
+    if i >= protectedTerms.size then return ← check a b
+    let term := protectedTerms[i]!
+    withLocalDeclD `subject (← inferType term) fun subjectVar => do
+      let replace := fun e => e.replace fun node =>
+        if node == term then some subjectVar else none
+      compare (i + 1) (replace a) (replace b)
+  compare 0 a b
+
+
+def protectedEq (a b : Expr) (subjects : Array Name) : MetaM Bool :=
+  withProtected a b subjects isDefEq
+
+/-- A contract matching on an opaque operation is a conclusion, not an open case.
+    Universals exposed independently of that operation still need closed arguments. -/
+def closedTail (ty : Expr) (subjects : Array Name) : MetaM Bool := do
+  -- A literal remaining binder belongs to the law telescope, even when its
+  -- function type happens to be definitionally equal to a negation.
+  if ty.consumeMData matches .forallE .. then return false
+  withProtected ty ty subjects fun visible _ => do
+    let reduced ← whnfD visible
+    if let .forallE _ domain body _ := reduced then
+      return body.isConstOf ``False && (← isProp domain)
+    return true
+
 def approval (t : Tagged) : Audit Unit := do
   let some ref := between t.doc "(approved: " ")" | fail "missing-approval" t.name; return
   let reference := ref.trimAscii.toString.toLower
@@ -232,31 +404,37 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
   let env ← getEnv
   let all := env.constants.map₁.toList ++ env.constants.map₂.toList
   let scope := (← IO.getEnv "VACUITY_SCOPE").getD ""
+  let scopes := scope.splitOn ","
   let budget := ((← IO.getEnv "VACUITY_BUDGET").getD "64").toNat?.getD 64
   let roadmap ← IO.FS.readFile "ROADMAP.md"
   let run : Audit Unit := do
     let mut tags : Array Tagged := #[]
     let mut hasAuthored := false
+    let mut authoredModules : Std.HashSet String := {}
     for (n, ci) in population do
       let module := (env.getModuleIdxFor? n).map fun i => toString env.header.moduleNames[i.toNat]!
-      if scope != "" && module != some scope && !(toString n).startsWith "ConcreteSpecControl." then continue
+      if scope != "" && !module.any scopes.contains && !(toString n).startsWith "ConcreteSpecControl." then continue
       let doc := (← findDocString? env n).getD ""
       let isExample := ((toString n).splitOn "⟪example⟫").length > 1
-      if ci.isTheorem then
+      if ci.isTheorem || (!isExample && (ci matches .defnInfo _) && (← isProof (mkConst n (ci.levelParams.map Level.param)))) then
         match ← authored n with
         | none => emit "INCOMPLETE" "missing-provenance" n
         | some false =>
           unless (doc.splitOn "Obligation (").length > 1 do continue
         | some true =>
           hasAuthored := true
+          if let some m := module then authoredModules := authoredModules.insert m
           let classes := ["Law (subject ", "Helper (", "Representation lemma.", "Obligation ("]
           let count := classes.foldl (fun k c => k + (doc.splitOn c).length - 1) 0
           if count != 1 then fail "classification-count" n (toString count)
       let annotated := ["Law (subject ", "Helper (", "Representation lemma.", "Obligation (",
         "Instance (", "Planted (", "Exemption", "Exempt:", "Manual-audit", "Manual audit", "manual-audit"].any
         fun tag => (doc.splitOn tag).length > 1
-      if !ci.isTheorem && !isExample && !annotated then continue
-      if !ci.isTheorem && ((doc.splitOn "Helper (").length > 1 || (doc.splitOn "Representation lemma.").length > 1) then
+      if !ci.isTheorem && !annotated then continue
+      if annotated then
+        hasAuthored := true
+        if let some m := module then authoredModules := authoredModules.insert m
+      if !ci.isTheorem && !(← isProof (mkConst n (ci.levelParams.map Level.param))) && ((doc.splitOn "Helper (").length > 1 || (doc.splitOn "Representation lemma.").length > 1) then
         fail "classification-kind" n
       tags := tags.push ⟨n, ci, doc⟩
       if (docNames doc).2 then fail "malformed-backticks" n
@@ -268,7 +446,7 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
         let category := (between doc "Helper (" ")").getD ""
         unless ["inversion", "projection", "congruence", "arithmetic", "computation"].contains category do
           fail "helper-kind" n category
-        let reason := ((between doc ")." "(approved:").getD "").trimAscii.toString
+        let reason := ((between doc ("Helper (" ++ category ++ ").") "(approved:").getD "").trimAscii.toString
         if reason == "" then fail "classification-reason" n
       if (doc.splitOn "Representation lemma.").length > 1 then
         let reason := ((between doc "Representation lemma." "(approved:").getD "").trimAscii.toString
@@ -286,14 +464,32 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
         unless propDef || (projection && (← forallTelescopeReducing ci.type fun _ t => do
           return (← isProp t) || (← isDefEq t (mkSort .zero)))) do
           fail "obligation-kind" n
-        let some row := between doc ", R-" ")" | fail "obligation-roadmap" n; continue
+        let some header := between doc "Obligation (discharged at slice " ")." | fail "obligation-format" n; continue
+        let parts := header.splitOn ", R-"
+        unless parts.length == 2 && parts[0]!.toNat?.isSome && parts[1]!.length == 4 && parts[1]!.toNat?.isSome do
+          fail "obligation-format" n; continue
+        let row := parts[1]!
         unless (roadmap.splitOn ("| R-" ++ row ++ " |")).length > 1 do fail "obligation-roadmap" n ("R-" ++ row)
     unless hasAuthored do fail "empty-authored-scope" .anonymous scope
+    if scope != "" then
+      for m in scopes do
+        unless authoredModules.contains m do fail "empty-authored-scope" .anonymous m
     let mut evidence : Array Evidence := #[]
     for t in tags do
       for tag in ["Instance (", "Planted ("] do
         for part in (t.doc.splitOn tag).drop 1 do
-          let doc := tag ++ (part.splitOn ").").head! ++ ")."
+          let errorCode := if tag == "Planted (" then "planted-tag" else "evidence-tag"
+          let some payload := between (tag ++ part) tag ")." | fail errorCode t.name; continue
+          let doc := tag ++ payload ++ ")."
+          let keys := if tag == "Planted (" then ["law", "case", "subject", "mutant"] else ["law", "case"]
+          unless keys.all (fun key => (fields doc key).size == 1) do
+            fail errorCode t.name; continue
+          let mut residue := payload
+          for key in keys do
+            residue := residue.replace (key ++ " `" ++ (field doc key).getD "" ++ "`") ""
+          unless residue.toList.all (fun c => c.isWhitespace || c == ',') &&
+            (residue.splitOn ",").length == keys.length do
+            fail errorCode t.name; continue
           let some lt := field doc "law" | fail "evidence-tag" t.name; continue
           let some law ← resolve all t.name lt | continue
           let some key := field doc "case" | fail "evidence-tag" t.name; continue
@@ -315,7 +511,7 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
       let candidate := tags.find? (·.name == target)
       match candidate with
       | some l =>
-        unless l.info.isTheorem && ((l.doc.splitOn "Law (subject ").length > 1 || l.doc == "") do
+        unless l.info.isTheorem && ((l.doc.splitOn "Law (subject ").length > 1 ) do
           fail "evidence-law-kind" t.name lt
       | none => fail "evidence-law-kind" t.name lt
       if (t.doc.splitOn "Planted (").length > 1 then
@@ -333,22 +529,29 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
       let law := t.law
       let key := t.key
       let some value := t.info.value? | fail "instance-application" t.name; continue
-      let value := value.consumeMData
-      let .const head levels := value.getAppFn | fail "instance-application" t.name; continue
+      let value := cleanSpine value
+      let .const head levels := value.getAppFn' | fail "instance-application" t.name; continue
       unless head == law && closed value && closed t.info.type && t.info.levelParams.isEmpty do
         fail "instance-application" t.name; continue
       let args := value.getAppArgs
       let lawInfo := (env.find? law).get!
       let mut ty := lawInfo.type.instantiateLevelParams lawInfo.levelParams levels
       let mut valid := true
+      let mut falseHyp := false
       for arg in args do
         ty ← whnfD ty
-        if let .forallE _ _ body _ := ty then ty := body.instantiate1 arg
+        if let .forallE _ domain body _ := ty then
+          if ← isProp domain then
+            let (bad, _) ← (falseDischarge arg).run (20000, {})
+            falseHyp := falseHyp || bad
+          ty := body.instantiate1 arg
         else valid := false
-      let finalType ← whnfD ty
-      if finalType matches .forallE .. then valid := false
-      unless valid && (← isDefEq ty t.info.type) do fail "instance-application" t.name; continue
-      if ← falseDischarge value then
+      let mut protectedNames := #[]
+      if let some l := tags.find? (·.name == law) then
+        for st in quoted ((between l.doc "Law (subject " ").").getD "") do
+          if let some n ← resolve all l.name st then protectedNames := protectedNames.push n
+      unless valid && (← closedTail ty protectedNames) && (← protectedEq ty t.info.type protectedNames) do fail "instance-application" t.name; continue
+      if falseHyp then
         fail "instance-false-discharge" t.name
         continue
       if instances.any (fun i => i.law == law && i.key == key) then fail "duplicate-instance" t.name
@@ -360,8 +563,20 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
     for law in tags do
       unless (law.doc.splitOn "Law (subject ").length > 1 do continue
       unless law.info.isTheorem do fail "law-kind" law.name; continue
+      let trivialStatement ← forallTelescopeReducing law.info.type fun xs conclusion => do
+        for x in xs do
+          if ← isProof x then
+            if ← isDefEq (← inferType x) conclusion then return true
+        let args := conclusion.getAppArgs
+        if conclusion.isAppOf ``Eq && args.size == 3 then
+          return ← isDefEq args[1]! args[2]!
+        if conclusion.isAppOf ``Iff && args.size == 2 then
+          return ← isDefEq args[0]! args[1]!
+        return false
+      if trivialStatement then fail "projection-law" law.name
       if let some proof := law.info.value? (allowOpaque := true) then
-        if ← direct law.name proof budget then fail "projection-law" law.name
+        let (projection, _) ← (direct law.name proof).run budget
+        if projection then fail "projection-law" law.name
       let subjects := quoted ((between law.doc "Law (subject " ").").getD "")
       if subjects.isEmpty then fail "law-subject" law.name
       let cases := instances.filter (·.law == law.name)
@@ -383,11 +598,14 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
               mi.levelParams.length == ((env.find? subject).get!).levelParams.length do
               fail "mutant-kind" p.name; continue
             let si := (env.find? subject).get!
+            if ← isDefEq (mkConst subject (si.levelParams.map Level.param))
+              (mkConst mutant (si.levelParams.map Level.param)) then
+              fail "mutant-defeq" p.name; continue
             let mt := mi.type.instantiateLevelParams mi.levelParams (si.levelParams.map Level.param)
             unless ← isDefEq si.type mt do fail "mutant-type" p.name; continue
             let expected ← counterexample law.info ic subject mutant
             Lean.Meta.check expected
-            unless closed p.info.type && (← isDefEq p.info.type expected) do
+            unless closed p.info.type && (← protectedEq p.info.type expected #[subject, mutant]) do
               fail "planted-proposition" p.name s!"law={law.name} case={ic.key}"
   let safe : Audit Unit := do
     try run

@@ -13,14 +13,14 @@ end ConcreteSpecControl
 """
 
 
-def controls(run, source):
+def controls(run, source, labels=None):
     cases = [("positive", BASE, 64, set(), 0)]
 
     def add(label, text, expected, budget=64, status=1):
         cases.append((label, text, budget, set(expected), status))
 
     add("unclassified", BASE.replace("/-- Law (subject `ConcreteSpecControl.S`). -/", ""),
-        {("FAIL", "classification-count", "ConcreteSpecControl.growth")})
+        {("FAIL", "classification-count", "ConcreteSpecControl.growth"), ("FAIL", "evidence-law-kind", "EXAMPLE")})
     add("double", BASE.replace("Law (subject", "Helper (computation). reason (approved: independent:r1) (writer: writer) (reviewer: reviewer). Law (subject"),
         {("FAIL", "classification-count", "ConcreteSpecControl.growth")})
     add("unknown", BASE.replace("ConcreteSpecControl.S`", "ConcreteSpecControl.missing`", 1),
@@ -58,10 +58,9 @@ def controls(run, source):
              ("FAIL", "subject-absent", "ConcreteSpecControl.projection")} if label != "rfl" else
             {("FAIL", "projection-law", "ConcreteSpecControl.projection"),
              ("FAIL", "missing-instance", "ConcreteSpecControl.projection")}, status=1)
-    add("budget", BASE, {("INCOMPLETE", "projection-budget", "ConcreteSpecControl.growth")}, budget=0, status=2)
     add("obligation-theorem", extra("/-- Obligation (discharged at slice 9, R-0219). -/", "theorem owed : True := trivial"),
         {("FAIL", "obligation-kind", "ConcreteSpecControl.owed")})
-    add("obligation-row", extra("/-- Obligation (discharged at slice 9, R-999999). -/", "def owed : Prop := True"),
+    add("obligation-row", extra("/-- Obligation (discharged at slice 9, R-9999). -/", "def owed : Prop := True"),
         {("FAIL", "obligation-roadmap", "ConcreteSpecControl.owed")})
     add("self-approved", extra("/-- Helper (computation). reason (approved: r1) (writer: alice) (reviewer: alice). -/", "theorem helper : True := trivial"),
         {("FAIL", "self-approved", "ConcreteSpecControl.helper")})
@@ -94,15 +93,50 @@ def controls(run, source):
     add("resolved-name-identity", relative, set(), status=0)
     shared = BASE.replace("end ConcreteSpecControl", "/-- Law (subject `ConcreteSpecControl.S`). -/\ntheorem growth2 (n : Nat) (_h : n = 2) : n < S n := Nat.lt_succ_self n\n/-- Instance (law `ConcreteSpecControl.growth2`, case `two`). -/\nexample : 2 < S 2 := growth2 2 rfl\nend ConcreteSpecControl").replace("mutant `ConcreteSpecControl.mutant`). -/", "mutant `ConcreteSpecControl.mutant`).\nPlanted (law `ConcreteSpecControl.growth2`, case `two`, subject `ConcreteSpecControl.S`, mutant `ConcreteSpecControl.mutant`). -/")
     add("shared-planted-example", shared, set(), status=0)
+    from vacuity_controls_round2 import extend
+    extend(add, BASE, extra)
+    for index, (label, fixture, budget, expected, status) in enumerate(cases):
+        if label == "unclassified":
+            expected.discard(("FAIL", "evidence-law-kind", "EXAMPLE"))
+            lines = fixture.splitlines()
+            for line, text in enumerate(lines, 1):
+                if text.startswith("example :"):
+                    expected.add(("FAIL", "evidence-law-kind", f"ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:{line}»"))
+    if labels is not None:
+        cases = [case for case in cases if case[0] in labels]
     failed = 0
     for label, fixture, budget, expected, status in cases:
-        code, output = run(source, "", fixture, budget)
+        options = {}
+        if label == "missing-provenance":
+            from pathlib import Path
+            driver = Path(__file__).with_name("theorems.lean").read_text()
+            driver += """
+#eval show MetaM Unit from do
+  addDecl <| .thmDecl {
+    name := `ConcreteSpecControl.missingMetadata
+    levelParams := []
+    type := mkConst ``True
+    value := mkConst ``True.intro
+  }
+"""
+            options["driver_text"] = driver
+        scope = "ConcreteSpec.Owed" if label == "scoped-obligation-only" else ""
+        try:
+            code, output = run(source, scope, fixture, budget, **options)
+        except RuntimeError as error:
+            code, output = 2, "INCOMPLETE fixture-elaboration [anonymous] " + str(error)
+
         found = set()
+        identities = {}
         for line in output.splitlines():
             words = line.split()
             if len(words) >= 3 and words[0] in {"FAIL", "INCOMPLETE"}:
                 name = "EXAMPLE" if "⟪example⟫" in words[2] else words[2]
-                found.add((words[0], words[1], name))
+                if label == "unclassified" and name == "EXAMPLE":
+                    name = words[2]
+                key = (words[0], words[1], name)
+                identities.setdefault(key, set()).add(words[2])
+                found.add(key)
         report_ok = True
         if label == "non-law-positive":
             report_ok = all(row in output for row in [
@@ -111,10 +145,11 @@ def controls(run, source):
                 "REPORT Obligation ConcreteSpecControl.owed ",
                 "REPORT Obligation ConcreteSpecControl.OwedFields.checked ",
             ])
-        if code == status and found == expected and report_ok:
+        if code == status and found == expected and report_ok and all(len(v) == 1 for k, v in identities.items() if k[2] == "EXAMPLE"):
             print("PASS control " + label)
         else:
             failed += 1
             print(f"FAIL control {label}: exit={code}, expected={status}; findings={found}, expected={expected}\n{output}")
-    print(f"N2 controls: {len(cases) - failed} PASS, {failed} FAIL")
+    selection = " selected" if labels is not None else ""
+    print(f"N2{selection} controls: {len(cases) - failed} PASS, {failed} FAIL")
     return bool(failed)

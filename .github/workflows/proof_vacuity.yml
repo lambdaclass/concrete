@@ -1,12 +1,13 @@
 name: Proof vacuity (N2 scoped audit)
 
-# Called by the PR/landing CI as each contract migrates. There is no empty scope:
+# Manual audit of explicit migrated scopes. Required CI uses the normal main-workflow job.
+# There is no empty scope:
 # an unmigrated whole spec cannot accidentally acquire a green N2 coverage job.
 on:
   workflow_dispatch:
     inputs:
       scope:
-        description: Fully qualified migrated ConcreteSpec module
+        description: Comma-separated fully qualified migrated ConcreteSpec modules
         type: string
         required: true
 

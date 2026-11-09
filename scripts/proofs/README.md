@@ -17,8 +17,15 @@ No existing build products are trusted. Every anonymous example is retained by
 `lean_lex.py examples`, the same rewrite as the trust gate. The consumer is appended
 to **theorems.lean**, whose `populationConstants` defines the single population for
 N2 and the existing axiom inventory. Generated declarations are excluded from N2
-by their declaration selection range and Lean projection provenance, never by
+by declaration selection ranges and Lean projection/matcher/equation provenance, never by
 suffix. The axiom inventory still includes generated declarations.
+
+Controls compile the generic checker and shared population functions once in a
+fresh private directory, without importing any specification. Each fixture still
+elaborates its own private source and audits its own imported population, and runs
+the shared row-safety preflight. There is no persistent cache or reused source verdict.
+This keeps the complete exact-diagnostic controls in the PR job without reducing
+coverage or moving required checks out of the PR tier.
 
 The gate returns 0 for PASS, 1 for FAIL, and 2 for INCOMPLETE. Source elaboration,
 unreadable source provenance, analysis exceptions, exhausted unfolding/heartbeat budgets,
@@ -39,6 +46,28 @@ types with the negated conclusion. This preserves the exact arguments even if
 an argument itself mentions a subject. Subject dependencies hidden behind defined
 contract aliases are traversed with a bounded dependency search.
 
+Instance and Planted comparisons expand only definitions depending on protected
+subjects, then replace each subject/mutant constant at its actual universe levels
+with a fresh local variable. Definitional equality can normalize surrounding
+contracts but cannot erase operation arguments or replace a mutant by its result.
+Mutants must also be definitionally different from their subjects, independently
+of their distinct names. Negation and inequality conclusions are accepted.
+A wrapper matching on the opaque operation result remains a contract conclusion;
+a universal exposed independently of that result still requires closed arguments.
+
+Resolution searches ancestor namespaces in order, recovers command-level opens with
+Lean’s source parser (including scoped boundaries, hiding and aliases), and keeps imported private names
+outside their declaring module. Ordinary Accepted/Refused examples carry no N2
+obligation and are not scanned unless they also have an N2 annotation. Backticks
+in annotated declaration prose still name declarations, so locals and expressions
+fail. Evidence headers reject duplicate, unparsed and unterminated fields;
+Obligation headers validate slice and roadmap-row syntax. Every selected module
+must contribute authored classified content, including Obligation-only modules.
+Unscoped audits reject source modules outside the import closure. Missing source
+provenance is INCOMPLETE; matcher/equation metadata and source-parent ranges identify
+generated children without suffix exclusions. Authored proof-valued definitions
+must be classified as well as theorems.
+
 Approval references must be nonempty and resolved (`PENDING` fails). The final
 carrier is `(approved: review reference)`; it does not require extra identity tags.
 A literal self-approval fails. If source additionally records `(writer: identity)`
@@ -50,8 +79,14 @@ corners. No exemption may suppress a recognized projection, an Instance check or
 a Planted check.
 
 The v1 recognizer checks returned hypotheses, Expr.proj, registered projection
-functions (including And.left/right), constructor repackaging and reflexivity at
-the proof head after bounded reduction. Unrecognized proof terms still need
+functions (including And.left/right), single-constructor recursor projections,
+constructor repackaging (including empty proof constructors), and reflexivity.
+It also compares the conclusion semantically against hypotheses and the two sides
+of equality/iff conclusions, catching unfolded-premise and wrapped-rfl identities.
+Raw delta reduction spends a shared proof-traversal counter for each definition unfolded; it does not ask
+whnfR to unfold an arbitrary definition chain in one step. Exhaustion is INCOMPLETE.
+Hypothesis discharge scanning follows proof helpers transitively with a visited
+set and a shared traversal budget; data/typeclass arguments are excluded. Unrecognized proof terms still need
 Instance and Planted evidence. Semantic adequacy, representativeness, completeness
 of subjects and runtime rechecking remain independent review questions.
 
@@ -59,7 +94,7 @@ of subjects and runtime rechecking remain independent review questions.
 
 Main at 9cddd5891 is **NOT MIGRATED**, not passing N2. An unscoped invocation audits
 all authored theorems and fails on missing classifications; there is no grandfather
-list. Scoped success covers only the explicitly printed module, never the whole
+list. Scoped success covers only the explicitly printed modules, never the whole
 specification. `required-checks-transition.tsv` records this staged requirement.
 
 The PR tier must run the real structural audit for each migrated scope and its

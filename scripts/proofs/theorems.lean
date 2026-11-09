@@ -196,13 +196,8 @@ unsafe def registryRows : Lean.Meta.MetaM Unit := do
       ("exists", toJson (env.contains name)), ("doc", toJson doc)]))
   IO.println (Json.compress (Json.mkObj [("end", toJson true)]))
 
--- CONTROL DECLARATIONS (negative controls are inserted here, in a temporary copy only)
-
-#eval show CoreM Unit from do
-  let env ← getEnv
-  let mode := (← IO.getEnv "PROOF_MODE").getD "theorems"
-  unless ["theorems", "encoded", "constants", "modules", "imported", "decls", "heads", "examples", "vacuity", "rules"].contains mode do
-    throwError s!"unknown PROOF_MODE '{mode}'"
+/-- Shared output preflight, also run when the N2 consumer is imported precompiled. -/
+def checkRowSafety (env : Environment) : CoreM Unit := do
   -- Fail closed, once, before any mode writes a row: every constant and module name of the
   -- environment (the population, the axioms its constants depend on, the inductive heads of
   -- `heads`, the modules) must be writable. One check covers every mode.
@@ -212,6 +207,15 @@ unsafe def registryRows : Lean.Meta.MetaM Unit := do
   for m in env.header.moduleNames do
     unless rowSafe m do
       throwError s!"theorems.lean: a module name holds a control character: {repr (toString m)}"
+
+-- CONTROL DECLARATIONS (negative controls are inserted here, in a temporary copy only)
+
+#eval show CoreM Unit from do
+  let env ← getEnv
+  let mode := (← IO.getEnv "PROOF_MODE").getD "theorems"
+  unless ["theorems", "encoded", "constants", "modules", "imported", "decls", "heads", "examples", "vacuity", "rules"].contains mode do
+    throwError s!"unknown PROOF_MODE '{mode}'"
+  checkRowSafety env
   if mode == "vacuity" then return -- the injected N2 consumer uses populationConstants below
   if mode == "decls" then
     let some path ← IO.getEnv "PROOF_NAMES" | throwError "PROOF_MODE=decls needs PROOF_NAMES"
