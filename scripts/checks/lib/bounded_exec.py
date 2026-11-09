@@ -62,7 +62,7 @@ def usage(msg):
     return 2
 
 
-def supervise(cmd, budget, kill_after, *, on_started=None, **process_options):
+def supervise(cmd, budget, kill_after, *, on_started=None, deadline=None, **process_options):
     """Single process-tree supervisor, shared by generic and scheduled callers."""
     def cancel(sig, _frame):
         raise Cancelled(sig)
@@ -99,12 +99,16 @@ def supervise(cmd, budget, kill_after, *, on_started=None, **process_options):
             if on_started is not None:
                 on_started(proc.pid)
             try:
-                rc = proc.wait(timeout=budget)
+                # Scheduled callers declare an absolute monotonic deadline. Child
+                # startup and on_started work consume it too; generic callers keep
+                # their existing relative-budget contract.
+                remaining = budget if deadline is None else min(budget, max(0, deadline - time.monotonic()))
+                rc = proc.wait(timeout=remaining)
                 outcome = f"exit {rc if rc >= 0 else 128 - rc}"
             except subprocess.TimeoutExpired:
                 killpg(pgid, signal.SIGTERM)
-                deadline = time.monotonic() + kill_after
-                while time.monotonic() < deadline:
+                grace_deadline = time.monotonic() + kill_after
+                while time.monotonic() < grace_deadline:
                     if proc.poll() is not None and not group_alive(pgid):
                         break
                     time.sleep(0.05)

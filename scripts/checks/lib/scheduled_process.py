@@ -179,7 +179,7 @@ def execute(spec):
         if remaining <= 0:
             raise subprocess.TimeoutExpired(spec['argv'], spec['timeout'])
         outcome = supervise(argv, remaining, spec.get('grace', 10),
-                            cwd=spec['cwd'], env=environment, stdin=source,
+                            deadline=spec['deadline'], cwd=spec['cwd'], env=environment, stdin=source,
                             pass_fds=slot_descriptors(environment), umask=0o077,
                             stdout=out if stdout == subprocess.PIPE else stdout,
                             stderr=err if stderr == subprocess.PIPE else stderr)

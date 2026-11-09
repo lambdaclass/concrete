@@ -554,7 +554,7 @@ bytes for note writes. The import-time Git environment snapshot is gone.
 | Isolated helper stdin-inheritance plant | IMPLEMENTED | `ProcessStdin.test_production_and_planted_inheritance`: production exit 0 with empty streams; plant exit 1, stderr exactly `FAIL scheduled process stdin: inherited open pipe\n`, empty stdout. Independent short supervisor identifies the exact pipe inode and blocked-read kernel wait channel before cancelling/reaping the group; writer closes only afterward. |
 | Unrelated timeout | IMPLEMENTED | `ProcessStdin.test_unrelated_timeout_is_incomplete`: exit 124, stderr exactly `INCOMPLETE scheduled process stdin: unproven timeout\n`, empty stdout. Missing Linux `/proc` proof is likewise INCOMPLETE, never a planted-control pass. |
 | Context fields/credential isolation (step 3) | IMPLEMENTED | `ProcessContext`: common child probe through Python, CLI, shell, slot and registry; isolated helper plants each exit 1 with empty stdout and exactly `FAIL scheduled process context: FIELD\n` for `env.SCHEDULER_FOREIGN`, `cwd`, `HOME`, `umask`, `locale`, `timezone`, `temp`, `fd.9`, `credential scope`. Existing `Slot` positive/forged descriptor controls remain. |
-| Private Git config and publisher transport (step 3) | IMPLEMENTED | `ProcessContext.test_private_git_config_hooks_and_publisher_transport`: hostile global config ignored, local hooks cannot run, declared checkout-local remote and HTTP extraheader retained. Explicit publisher role alone carries GH_TOKEN; gate selection removes tokens. |
+| Private Git config and publisher transport (step 3) | IMPLEMENTED | `ProcessContext.test_private_git_config_hooks_and_publisher_transport`: hostile global config ignored, local hooks cannot run, declared checkout-local remote and HTTP extraheader retained; real `ls-remote` uses the declared local fixture transport despite a hostile global URL rewrite. Explicit publisher role alone carries GH_TOKEN; gate selection removes tokens. |
 | Single observation and absolute deadline (step 3) | IMPLEMENTED | `ProcessClock.test_single_observation_and_second_read_plant`: production exit 0, empty streams; isolated second-read plant exit 1, empty stdout, stderr exactly `FAIL scheduled clock: undeclared read\n`. `test_no_unmediated_wall_clock_reads` rejects raw wall reads outside the owner with that same diagnostic. `test_deadline_does_not_restart_at_execution` proves only remaining monotonic budget is used and expired work never launches. `Collector.test_sweep_injects_one_observation_into_every_record` proves sweep propagation without recapture. |
 | Direct/discovery inventory parity (step 4) | MISSING | Premature main dispatch remains for its owning slice. |
 | Shared derived policy values (step 5) | MISSING | Accepted ownership controls remain required. |
@@ -588,7 +588,9 @@ captures one UTC observation and passes the clock to its consumers. Runner
 completion advances that observation by monotonic elapsed time; collector age,
 cutoff and overdue records and all observer tiers use the same observation.
 Process specifications carry an absolute monotonic deadline; execution consumes
-only its remaining budget and cannot restart it after setup. The wall source
+only its remaining budget and cannot restart it after setup or child creation.
+`ProcessClock.test_supervisor_charges_startup_to_declared_deadline` proves that
+startup consumes the same declared deadline in the existing lifecycle supervisor. The wall source
 refuses a second read, and source coverage rejects undeclared raw wall reads in
 production scheduler modules. This mediates controller dependencies; it is not a
 kernel clock/network sandbox for arbitrary gate programs.

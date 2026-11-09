@@ -250,6 +250,15 @@ class ProcessContext(unittest.TestCase):
                                  env=env, role='publisher', capture_output=True, text=True, timeout=3)
             self.assertEqual((result.returncode, result.stdout, result.stderr), (0, '', ''))
             self.assertFalse(marker.exists())
+            remote = root / 'declared-transport.git'
+            remote.mkdir()
+            git('-C', str(remote), 'init', '--bare', '-q')
+            git('-C', str(repo), 'config', 'remote.origin.url', remote.as_uri())
+            with config.open('a') as stream:
+                stream.write('[url "file:///nonexistent/hostile-transport/"]\n insteadOf = file://\n')
+            result = process_run(['git', '-C', str(repo), 'ls-remote', 'origin'],
+                                 env=env, role='publisher', capture_output=True, text=True, timeout=3)
+            self.assertEqual((result.returncode, result.stdout, result.stderr), (0, '', ''))
 
     def test_publisher_credentials_require_explicit_role(self):
         import os
@@ -331,3 +340,18 @@ class ProcessClock(unittest.TestCase):
             with self.assertRaises(subprocess.TimeoutExpired):
                 owner.execute(spec)
             supervise.assert_not_called()
+
+
+    def test_supervisor_charges_startup_to_declared_deadline(self):
+        import bounded_exec
+        from unittest.mock import Mock, patch
+        ticks = [100]
+        child = Mock(pid=12345)
+        child.wait.return_value = 0
+        def started(pid):
+            self.assertEqual(pid, 12345)
+            ticks[0] = 111
+        with patch.object(bounded_exec.subprocess, 'Popen', return_value=child), \
+             patch.object(bounded_exec.time, 'monotonic', side_effect=lambda: ticks[0]):
+            self.assertEqual(bounded_exec.supervise(['true'], 10, 0, deadline=110, on_started=started), 'exit 0')
+        child.wait.assert_called_once_with(timeout=0)
