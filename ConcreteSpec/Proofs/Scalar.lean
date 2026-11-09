@@ -121,8 +121,8 @@ theorem shr_inRange (t : IntTy) (a : Int) (d : Nat) (ha : t.InRange a) :
     · exact Int.le_trans (Int.ediv_le_self _ ha0) h2
     · exact Int.le_trans (Int.le_of_lt (Int.ediv_neg_of_neg_of_pos (Int.lt_of_not_ge ha0) hd)) hmax
 
-/-- A remainder of a value in range is in range: it lies between `0` and the dividend. This holds
-for every divisor (Lean's `tmod` by `0` is the dividend), so `checked` needs no extra case. -/
+/-- A remainder of a value in range is in range: it lies between 0 and the dividend. This holds
+for every divisor (Lean's tmod by 0 is the dividend), so `checked` needs no extra case. -/
 theorem tmod_inRange (t : IntTy) (a b : Int) (ha : t.InRange a) : t.InRange (a.tmod b) := by
   have hmin : t.min ≤ 0 := by cases t <;> decide
   have hmax : 0 ≤ t.max := by cases t <;> decide
@@ -350,7 +350,7 @@ private theorem neg_inRange_iff (t : IntTy) (a : Int) (ha : t.InRange a) :
   cases t <;> simp [IntTy.InRange, IntTy.min, IntTy.max, IntTy.signed, IntTy.bits] at * <;> omega
 
 /-- Law (subject `ConcreteSpec.Core.checkedNeg`). Checked negation succeeds exactly with the mathematical negation, when that integer is
-representable: signed `MIN` and nonzero unsigned inputs are the only invalid values in range. -/
+representable: signed MIN and nonzero unsigned inputs are the only invalid values in range. -/
 theorem checkedNeg_ok_arithmetic (t : IntTy) (a r : Int) (ha : t.InRange a) :
     checkedNeg t a = .ok r ↔ r = -a ∧
       (if t.signed = true then a ≠ t.min else a = 0) := by
@@ -369,7 +369,7 @@ theorem checkedNeg_ok_arithmetic (t : IntTy) (a r : Int) (ha : t.InRange a) :
     intro _ hc
     exact hn ((neg_inRange_iff t a ha).2 hc)
 
-/-- Law (subject `ConcreteSpec.Core.checkedNeg`). Checked negation fails only with `Overflow`, exactly for signed `MIN` or a nonzero unsigned
+/-- Law (subject `ConcreteSpec.Core.checkedNeg`). Checked negation fails only with Overflow, exactly for signed MIN or a nonzero unsigned
 input. -/
 theorem checkedNeg_error_iff (t : IntTy) (a : Int) (e : ArithmeticError) (ha : t.InRange a) :
     checkedNeg t a = .error e ↔ e = .overflow ∧
@@ -442,15 +442,15 @@ theorem toBits_ofBits (t : IntTy) (m : Nat) (h : m < 2 ^ t.bits) : toBits t (ofB
   cases t <;> simp only [IntTy.bits] at h <;>
     simp [toBits, ofBits, IntTy.signed, IntTy.bits] <;> (try split) <;> omega
 
-/-- Wrapping keeps the bit pattern: `wrap` only reads the low `bits` bits. -/
+/-- Wrapping keeps the bit pattern: `wrap` only reads the low number of bits specified by the integer type. -/
 theorem toBits_wrap (t : IntTy) (n : Int) : toBits t (wrap t n) = toBits t n :=
   toBits_ofBits t _ (toBits_lt t n)
 
-/-- A wrapping operation's pattern is the exact result's pattern, modulo `2^bits`. -/
+/-- A wrapping operation's pattern is the exact result's pattern, modulo 2^bits. -/
 theorem toBits_wrapping (t : IntTy) (op : WrapOp) (a b : Int) :
     toBits t (wrapping t op a b) = toBits t (op.exact a b) := toBits_wrap t _
 
-/-- A valid left shift's pattern is the pattern of `a · 2^c`: the bits shifted out are gone. -/
+/-- A valid left shift's pattern is the pattern of a · 2^c: the bits shifted out are gone. -/
 theorem toBits_shl (t : IntTy) (a c r : Int) (h : checked t .shl a c = .ok r) :
     toBits t r = toBits t (a * (2 : Int) ^ c.toNat) := by
   simp only [checked] at h

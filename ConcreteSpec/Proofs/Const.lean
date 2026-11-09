@@ -713,7 +713,7 @@ private theorem not_inExpr_of_fallibleFree (f : ConstFailure) :
 
 /-- Law (subject `ConcreteSpec.Core.CExpr.eval`). With sufficient fuel, a well-typed initializer in
 the full closed grammar (including fallible operations) never runs out of fuel and never fails
-static validation (`.invalid`): it either produces a valid value of its static type or reports a
+static validation (.invalid): it either produces a valid value of its static type or reports a
 located failure of a fallible sub-expression. -/
 theorem eval_wellTyped_progress (env : AList ConstId CVal) (Γ : AList ConstId CTy)
     (hag : Agree env Γ) :
@@ -1120,7 +1120,7 @@ private theorem evalConsts_sound_inv (U : ConstTypes) (fuel : Nat) (ds : List (C
     exact ⟨v, rfl, hv ▸ hty, (hm d.id).2 v hc⟩
 
 /-- Law (subject `ConcreteSpec.Core.evalConsts`). When a declaration list is statically typed and
-evaluates within `fuel`, `evalConsts` produces a value environment `env` in which every declared
+evaluates within fuel, `evalConsts` produces a value environment env in which every declared
 constant has a valid value of its declared type. -/
 theorem evalConsts_sound (U : ConstTypes) (fuel : Nat) (ds : List (ConstDecl U))
     (ht : ConstsTyped U ds) (he : ConstsEvaluate U fuel ds) :
@@ -1153,7 +1153,7 @@ example : ∃ env, evalConsts ConstDemo.U 3 divisionDecls [] = .ok env ∧
 /-- Planted (law `ConcreteSpec.Core.evalConsts_sound`, case `division`,
 subject `ConcreteSpec.Core.evalConsts`, mutant `ConcreteSpec.Core.boolConstValues`). -/
 example : ConstsTyped ConstDemo.U divisionDecls ∧
-    ConstsEvaluate ConstDemo.U 3 divisionDecls ∧
+    (boolConstValues ConstDemo.U 3 divisionDecls []).isOk = true ∧
     ¬ (∃ env, boolConstValues ConstDemo.U 3 divisionDecls [] = .ok env ∧
       ∀ d ∈ divisionDecls, ∃ v, AList.lookup env d.id = some v ∧
         ConstDemo.U.ofC v.ty = d.ty ∧ v.Valid) := by
@@ -1169,7 +1169,7 @@ example : ConstsTyped ConstDemo.U divisionDecls ∧
   cases hty
 
 /-- Helper (computation). Structural induction for declaration evaluation under sufficient fuel:
-every well-typed list either evaluates to `.ok env'` or stops at a declared constant with a located
+every well-typed list either evaluates to .ok env' or stops at a declared constant with a located
 operation failure. (approved: PENDING) -/
 private theorem typed_evalConsts_refusal_inv (U : ConstTypes) (fuel : Nat) :
     ∀ (ds : List (ConstDecl U)) (env : AList ConstId CVal) (Γ Γ' : AList ConstId CTy),
@@ -1206,9 +1206,9 @@ private theorem typed_evalConsts_refusal_inv (U : ConstTypes) (fuel : Nat) :
     · cases ht
 
 /-- Law (subject `ConcreteSpec.Core.evalConsts`). With sufficient fuel for every initializer (used
-or unused), declaration evaluation on a statically typed list never fails with `.invalid` or
-`.outOfFuel`: it either produces `.ok env` or refuses with `.error (.operation d.id f)` for a
-declared constant `d ∈ ds` and a located failure `f.InExpr d.init`. -/
+or unused), declaration evaluation on a statically typed list never fails with .invalid or
+.outOfFuel: it either produces .ok env or refuses with .error (.operation d.id f) for a
+declared constant d ∈ ds and a located failure f.InExpr d.init. -/
 theorem typed_evalConsts_refusal (U : ConstTypes) (fuel : Nat) (ds : List (ConstDecl U))
     (ht : ConstsTyped U ds) (hfuel : ∀ d ∈ ds, d.init.height ≤ fuel) :
     (∃ env, evalConsts U fuel ds [] = .ok env) ∨
@@ -1219,7 +1219,7 @@ theorem typed_evalConsts_refusal (U : ConstTypes) (fuel : Nat) (ds : List (Const
   | some Γ =>
     exact typed_evalConsts_refusal_inv U fuel ds [] [] Γ (by intro c T h; cases h) ht' hfuel
 
-/-- A broken declaration evaluator that misclassifies an arithmetic failure as `.invalid`. -/
+/-- A broken declaration evaluator that misclassifies an arithmetic failure as .invalid. -/
 def invalidRefusalEvalConsts (U : ConstTypes) (_fuel : Nat) (ds : List (ConstDecl U))
     (env : AList ConstId CVal) : Except ConstEvalRefusal (AList ConstId CVal) :=
   match ds with
@@ -1264,7 +1264,7 @@ example : ConstsTyped ConstDemo.U
   rintro (⟨env, h⟩ | ⟨d, _, f, h, _⟩) <;> cases h
 
 /-- A broken declaration typechecker that binds every declaration to `CTy.unit` without checking
-declared-type agreement `U.ofC T = d.ty`. -/
+declared-type agreement U.ofC T = d.ty. -/
 def unitTypeConsts (U : ConstTypes) : List (ConstDecl U) → AList ConstId CTy →
     Option (AList ConstId CTy)
   | [], Γ => some Γ
@@ -1273,7 +1273,7 @@ def unitTypeConsts (U : ConstTypes) : List (ConstDecl U) → AList ConstId CTy �
       unitTypeConsts U ds ((d.id, .unit) :: Γ)
     else none
 
-/-- A broken declaration typechecker that omits the `U.ofC T = d.ty` check. -/
+/-- A broken declaration typechecker that omits the U.ofC T = d.ty check. -/
 def uncheckedTypeConsts (U : ConstTypes) : List (ConstDecl U) → AList ConstId CTy →
     Option (AList ConstId CTy)
   | [], Γ => some Γ
@@ -1285,9 +1285,9 @@ def uncheckedTypeConsts (U : ConstTypes) : List (ConstDecl U) → AList ConstId 
     | none => none
 
 /-- Law (subject `ConcreteSpec.Core.typeConsts`, `ConcreteSpec.Core.evalConsts`). Every admitted
-declaration list produces a static type environment `Γ` and value environment `env` in which every
-declaration's declared type, static scalar type, and evaluated value type are `Copy` in `U`,
-derived structurally from `U.ofC T = d.ty` and `U.ofC_copy` without a runtime `isCopy` check. -/
+declaration list produces a static type environment Γ and value environment env in which every
+declaration's declared type, static scalar type, and evaluated value type are Copy in U,
+derived structurally from U.ofC T = d.ty and U.ofC_copy without a runtime isCopy check. -/
 theorem admitted_copy (U : ConstTypes) (fuel : Nat) (ds : List (ConstDecl U))
     (ht : ConstsTyped U ds) (he : ConstsEvaluate U fuel ds) :
     ∃ Γ env, typeConsts U ds [] = some Γ ∧ evalConsts U fuel ds [] = .ok env ∧
@@ -1321,7 +1321,28 @@ example : ∃ Γ env, typeConsts ConstDemo.U divisionDecls [] = some Γ ∧
 
 /-- Planted (law `ConcreteSpec.Core.admitted_copy`, case `division_type`,
 subject `ConcreteSpec.Core.typeConsts`, mutant `ConcreteSpec.Core.unitTypeConsts`). -/
-example : ConstsTyped ConstDemo.U divisionDecls ∧
+example : (unitTypeConsts ConstDemo.U divisionDecls []).isSome = true ∧
+    ConstsEvaluate ConstDemo.U 3 divisionDecls ∧
+    ¬ (∃ Γ env, unitTypeConsts ConstDemo.U divisionDecls [] = some Γ ∧
+      evalConsts ConstDemo.U 3 divisionDecls [] = .ok env ∧
+      (∀ d ∈ divisionDecls, ∃ T, AList.lookup Γ d.id = some T ∧
+        ConstDemo.U.ofC T = d.ty ∧ ConstDemo.U.isCopy d.ty = true) ∧
+      (∀ d ∈ divisionDecls, ∃ v, AList.lookup env d.id = some v ∧
+        ConstDemo.U.ofC v.ty = d.ty ∧ ConstDemo.U.isCopy (ConstDemo.U.ofC v.ty) = true)) := by
+  refine ⟨by decide, by decide, ?_⟩
+  rintro ⟨Γ, _, ht, _, hdecl, _⟩
+  cases ht
+  obtain ⟨T, hT, hty, _⟩ := hdecl
+    ⟨ConstDemo.cid "Q", .c (.int .i8), .plain .div (.int .i8 100) (.int .i8 7)⟩
+    (by simp [divisionDecls])
+  simp only [AList.lookup, ↓reduceIte, Option.some.injEq] at hT
+  change ConstDemo.U.ofC T = .c (.int .i8) at hty
+  subst T
+  cases hty
+
+/-- Planted (law `ConcreteSpec.Core.admitted_copy`, case `division_value`,
+subject `ConcreteSpec.Core.typeConsts`, mutant `ConcreteSpec.Core.unitTypeConsts`). -/
+example : (unitTypeConsts ConstDemo.U divisionDecls []).isSome = true ∧
     ConstsEvaluate ConstDemo.U 3 divisionDecls ∧
     ¬ (∃ Γ env, unitTypeConsts ConstDemo.U divisionDecls [] = some Γ ∧
       evalConsts ConstDemo.U 3 divisionDecls [] = .ok env ∧
@@ -1352,7 +1373,7 @@ example : ∃ Γ env, typeConsts ConstDemo.U divisionDecls [] = some Γ ∧
 /-- Planted (law `ConcreteSpec.Core.admitted_copy`, case `division_value`,
 subject `ConcreteSpec.Core.evalConsts`, mutant `ConcreteSpec.Core.boolConstValues`). -/
 example : ConstsTyped ConstDemo.U divisionDecls ∧
-    ConstsEvaluate ConstDemo.U 3 divisionDecls ∧
+    (boolConstValues ConstDemo.U 3 divisionDecls []).isOk = true ∧
     ¬ (∃ Γ env, typeConsts ConstDemo.U divisionDecls [] = some Γ ∧
       boolConstValues ConstDemo.U 3 divisionDecls [] = .ok env ∧
       (∀ d ∈ divisionDecls, ∃ T, AList.lookup Γ d.id = some T ∧
@@ -1371,9 +1392,31 @@ example : ConstsTyped ConstDemo.U divisionDecls ∧
   subst v
   cases hty
 
-/-- Law (subject `ConcreteSpec.Core.typeConsts`). Any declaration list containing a non-`Copy`
-declared type is statically refused by `typeConsts`, derived from `U.ofC T = d.ty` and `U.ofC_copy`
-without a runtime `isCopy` check. -/
+/-- Planted (law `ConcreteSpec.Core.admitted_copy`, case `division_type`,
+subject `ConcreteSpec.Core.evalConsts`, mutant `ConcreteSpec.Core.boolConstValues`). -/
+example : ConstsTyped ConstDemo.U divisionDecls ∧
+    (boolConstValues ConstDemo.U 3 divisionDecls []).isOk = true ∧
+    ¬ (∃ Γ env, typeConsts ConstDemo.U divisionDecls [] = some Γ ∧
+      boolConstValues ConstDemo.U 3 divisionDecls [] = .ok env ∧
+      (∀ d ∈ divisionDecls, ∃ T, AList.lookup Γ d.id = some T ∧
+        ConstDemo.U.ofC T = d.ty ∧ ConstDemo.U.isCopy d.ty = true) ∧
+      (∀ d ∈ divisionDecls, ∃ v, AList.lookup env d.id = some v ∧
+        ConstDemo.U.ofC v.ty = d.ty ∧ ConstDemo.U.isCopy (ConstDemo.U.ofC v.ty) = true)) := by
+  refine ⟨by decide, by decide, ?_⟩
+  rintro ⟨_, env, _, he, _, hval⟩
+  cases he
+  obtain ⟨v, hv, hty, _⟩ := hval
+    ⟨ConstDemo.cid "Q", .c (.int .i8), .plain .div (.int .i8 100) (.int .i8 7)⟩
+    (by simp [divisionDecls])
+  simp only [divisionDecls, List.map, List.append_nil, AList.lookup,
+    ↓reduceIte, Option.some.injEq] at hv
+  change ConstDemo.U.ofC v.ty = .c (.int .i8) at hty
+  subst v
+  cases hty
+
+/-- Law (subject `ConcreteSpec.Core.typeConsts`). Any declaration list containing a non-Copy
+declared type is statically refused by `typeConsts`, derived from U.ofC T = d.ty and U.ofC_copy
+without a runtime isCopy check. -/
 theorem typeConsts_refuses_nonCopy (U : ConstTypes) (ds : List (ConstDecl U))
     (d : ConstDecl U) (hd : d ∈ ds) (hnc : U.isCopy d.ty = false) :
     typeConsts U ds [] = none := by
@@ -1558,6 +1601,20 @@ example : ConstsRun ConstDemo.U 3 failurePrefix [] (.ok [(ConstDemo.cid "P", .un
   revert h1
   decide
 
+/-- Planted (law `ConcreteSpec.Core.semantic_failure_refuses`, case `unused_after_prefix_admitted`,
+subject `ConcreteSpec.Core.evalConsts`, mutant `ConcreteSpec.Core.skipUnusedEvalConsts`). -/
+example : ConstsRun ConstDemo.U 3 failurePrefix [] (.ok [(ConstDemo.cid "P", .unit)]) ∧
+    ConstEval [(ConstDemo.cid "P", .unit)] 3 unusedFailureDecl.init (.failure zeroFailure) ∧
+    ¬ (skipUnusedEvalConsts ConstDemo.U 3 (failurePrefix ++ unusedFailureDecl :: divisionDecls) [] =
+      .error (.operation unusedFailureDecl.id zeroFailure) ∧
+      ¬ ConstsAdmitted ConstDemo.U 3 (failurePrefix ++ unusedFailureDecl :: divisionDecls)) := by
+  refine ⟨.value _ [] [] .unit _ (.unit 2) (.nil _),
+    .plain_failure (.int_ok (by decide)) (.int_ok (by decide)) rfl, ?_⟩
+  intro h
+  have h1 := h.1
+  revert h1
+  decide
+
 /-- Instance (law `ConcreteSpec.Core.semantic_failure_refuses`, case `unused_after_prefix_admitted`). -/
 example : evalConsts ConstDemo.U 3 (failurePrefix ++ unusedFailureDecl :: divisionDecls) [] =
       .error (.operation unusedFailureDecl.id zeroFailure) ∧
@@ -1568,6 +1625,18 @@ example : evalConsts ConstDemo.U 3 (failurePrefix ++ unusedFailureDecl :: divisi
     (.plain_failure (.int_ok (by decide)) (.int_ok (by decide)) rfl)
 
 /-- Planted (law `ConcreteSpec.Core.semantic_failure_refuses`, case `unused_after_prefix_admitted`,
+subject `ConcreteSpec.Core.ConstsAdmitted`, mutant `ConcreteSpec.Core.skipUnusedConstsAdmitted`). -/
+example : ConstsRun ConstDemo.U 3 failurePrefix [] (.ok [(ConstDemo.cid "P", .unit)]) ∧
+    ConstEval [(ConstDemo.cid "P", .unit)] 3 unusedFailureDecl.init (.failure zeroFailure) ∧
+    ¬ (evalConsts ConstDemo.U 3 (failurePrefix ++ unusedFailureDecl :: divisionDecls) [] =
+      .error (.operation unusedFailureDecl.id zeroFailure) ∧
+      ¬ skipUnusedConstsAdmitted ConstDemo.U 3 (failurePrefix ++ unusedFailureDecl :: divisionDecls)) := by
+  refine ⟨.value _ [] [] .unit _ (.unit 2) (.nil _),
+    .plain_failure (.int_ok (by decide)) (.int_ok (by decide)) rfl, ?_⟩
+  intro h
+  exact h.2 ⟨by decide, by decide⟩
+
+/-- Planted (law `ConcreteSpec.Core.semantic_failure_refuses`, case `unused_after_prefix`,
 subject `ConcreteSpec.Core.ConstsAdmitted`, mutant `ConcreteSpec.Core.skipUnusedConstsAdmitted`). -/
 example : ConstsRun ConstDemo.U 3 failurePrefix [] (.ok [(ConstDemo.cid "P", .unit)]) ∧
     ConstEval [(ConstDemo.cid "P", .unit)] 3 unusedFailureDecl.init (.failure zeroFailure) ∧
@@ -1603,7 +1672,7 @@ private def idPos : List ConstId → ConstId → Nat
   | x :: xs, c => if x = c then 0 else idPos xs c + 1
 
 /-- Helper (computation). Every reference in a list satisfying `ReferencesEarlier` either lies in
-`earlier` or precedes the referencing declaration in `ds`. (approved: PENDING) -/
+earlier or precedes the referencing declaration in ds. (approved: PENDING) -/
 private theorem referencesEarlier_idPos_inv (U : ConstTypes) :
     ∀ (ds : List (ConstDecl U)) (earlier : List ConstId),
       ReferencesEarlier U ds earlier →
@@ -1643,7 +1712,7 @@ private theorem referencesEarlier_idPos_inv (U : ConstTypes) :
           omega
 
 /-- Helper (computation). Under a `DependencyOrder`, every `SourceReference` strictly decreases
-position in `order`. (approved: PENDING) -/
+position in order. (approved: PENDING) -/
 private theorem sourceReference_idPos_lt (U : ConstTypes) (source order : List (ConstDecl U))
     (hord : DependencyOrder U source order) {a b : ConstId}
     (href : SourceReference U source a b) :
@@ -1658,8 +1727,8 @@ private theorem sourceReference_idPos_lt (U : ConstTypes) (source order : List (
   · nomatch hfalse
   · exact hlt
 
-/-- Helper (computation). Any `ActualRefChain` from `a` to `b` strictly decreases position in
-`order`. (approved: PENDING) -/
+/-- Helper (computation). Any `ActualRefChain` from a to b strictly decreases position in
+order. (approved: PENDING) -/
 private theorem actualRefChain_idPos_lt (U : ConstTypes) (source order : List (ConstDecl U))
     (hord : DependencyOrder U source order) :
     ∀ (rest : List ConstId) (a b : ConstId),
@@ -1670,8 +1739,8 @@ private theorem actualRefChain_idPos_lt (U : ConstTypes) (source order : List (C
     Nat.lt_trans (actualRefChain_idPos_lt U source order hord rest mid b hrest)
       (sourceReference_idPos_lt U source order hord ham)
 
-/-- Law (subject `ConcreteSpec.Core.DependencyOrder`). A real reference cycle in `source` precludes
-every `DependencyOrder` of `source`: the ordered and cycle constructors of `ElaboratedConsts` are
+/-- Law (subject `ConcreteSpec.Core.DependencyOrder`). A real reference cycle in source precludes
+every `DependencyOrder` of source: the ordered and cycle constructors of `ElaboratedConsts` are
 mutually exclusive. -/
 theorem cycle_excludes_dependencyOrder (U : ConstTypes) (source : List (ConstDecl U))
     (chain : List ConstId) (order : List (ConstDecl U))
@@ -1724,14 +1793,14 @@ example : CycleChain ConstDemo.U
 
 /-! ### Constructive completeness of dependency sorting (`DependencySortingComplete`) -/
 
-/-- Helper (inversion). `readyDecl` reflects membership of every reference in `earlier`.
+/-- Helper (inversion). `readyDecl` reflects membership of every reference in earlier.
 (approved: PENDING) -/
 private theorem readyDecl_iff (U : ConstTypes) (earlier : List ConstId) (d : ConstDecl U) :
     readyDecl U earlier d = true ↔ ∀ c ∈ d.init.refs, c ∈ earlier := by
   simp [readyDecl, List.all_eq_true]
 
-/-- Helper (inversion). When `takeReady` succeeds, the picked declaration is ready and `d :: rest`
-is a permutation of `remaining`. (approved: PENDING) -/
+/-- Helper (inversion). When `takeReady` succeeds, the picked declaration is ready and d :: rest
+is a permutation of remaining. (approved: PENDING) -/
 private theorem takeReady_some_inv (U : ConstTypes) (earlier : List ConstId) :
     ∀ (remaining : List (ConstDecl U)) (d : ConstDecl U) (rest : List (ConstDecl U)),
       takeReady U earlier remaining = some (d, rest) →
@@ -1749,7 +1818,7 @@ private theorem takeReady_some_inv (U : ConstTypes) (earlier : List ConstId) :
       obtain ⟨hready, hperm⟩ := takeReady_some_inv U earlier ds picked tail htake
       exact ⟨hready, (List.Perm.swap d₀ picked tail).trans (hperm.cons d₀)⟩
 
-/-- Helper (inversion). When `takeReady` returns `none`, no declaration in `remaining` is ready.
+/-- Helper (inversion). When `takeReady` returns `none`, no declaration in remaining is ready.
 (approved: PENDING) -/
 private theorem takeReady_none_inv (U : ConstTypes) (earlier : List ConstId) :
     ∀ (remaining : List (ConstDecl U)),
@@ -1870,8 +1939,8 @@ private theorem walk_finds_cycle (U : ConstTypes) (source : List (ConstDecl U))
             · right
               exact List.mem_filter.mpr ⟨hx_unseen, bne_iff_ne.mpr hxv⟩
 
-/-- Helper (inversion). A finite list that does not lie entirely in `earlier` has a member outside
-`earlier`. (approved: PENDING) -/
+/-- Helper (inversion). A finite list that does not lie entirely in earlier has a member outside
+earlier. (approved: PENDING) -/
 private theorem exists_not_mem_of_not_all (earlier : List ConstId) :
     ∀ (xs : List ConstId), ¬ (∀ c ∈ xs, c ∈ earlier) → ∃ c ∈ xs, c ∉ earlier
   | [], h => (h (fun _ hc => nomatch hc)).elim
@@ -1960,8 +2029,8 @@ private theorem sortConstsAux_spec (U : ConstTypes) (source : List (ConstDecl U)
           [] d₀.id (Nat.le_refl _) (List.Mem.head _) hchain₀ (fun x hx => Or.inr hx)
         exact (hacyc chain hcycle).elim
 
-/-- Helper (computation). `sortConsts U source` produces a valid `DependencyOrder` whenever
-`source` is name-resolved and acyclic. (approved: PENDING) -/
+/-- Helper (computation). sortConsts U source produces a valid `DependencyOrder` whenever
+source is name-resolved and acyclic. (approved: PENDING) -/
 private theorem sortConsts_dependencyOrder (U : ConstTypes) (source : List (ConstDecl U))
     (hres : SourceNamesResolved U source) (hacyc : Acyclic U source) :
     DependencyOrder U source (sortConsts U source) := by
@@ -2020,7 +2089,7 @@ example : SourceNamesResolved ConstDemo.U
 
 /-! ### Order independence (`ConstOrderIndependent`) -/
 
-/-- Helper (congruence). Static expression typing depends only on the bindings of `e.refs`.
+/-- Helper (congruence). Static expression typing depends only on the bindings of e.refs.
 (approved: PENDING) -/
 private theorem ty?_congr_refs (Γ₁ Γ₂ : AList ConstId CTy) :
     ∀ (e : CExpr), (∀ c ∈ e.refs, AList.lookup Γ₁ c = AList.lookup Γ₂ c) →
@@ -2040,7 +2109,7 @@ private theorem ty?_congr_refs (Γ₁ Γ₂ : AList ConstId CTy) :
     have ha := iha h
     simp [CExpr.ty?, ha]
 
-/-- Helper (congruence). Initializer evaluation depends only on the bindings of `e.refs`.
+/-- Helper (congruence). Initializer evaluation depends only on the bindings of e.refs.
 (approved: PENDING) -/
 private theorem eval_congr_refs (env₁ env₂ : AList ConstId CVal) :
     ∀ (e : CExpr) (fuel : Nat), (∀ c ∈ e.refs, AList.lookup env₁ c = AList.lookup env₂ c) →
@@ -2072,7 +2141,7 @@ private theorem eval_congr_refs (env₁ env₂ : AList ConstId CVal) :
       have ha := iha fuel h
       simp [CExpr.eval, ha]
 
-/-- Helper (computation). `typeConsts` preserves bindings of identities absent from `ds`.
+/-- Helper (computation). `typeConsts` preserves bindings of identities absent from ds.
 (approved: PENDING) -/
 private theorem typeConsts_lookup_not_mem (U : ConstTypes) :
     ∀ (ds : List (ConstDecl U)) (Γ Γ' : AList ConstId CTy) (c : ConstId),
@@ -2091,7 +2160,7 @@ private theorem typeConsts_lookup_not_mem (U : ConstTypes) :
       · cases h
     · cases h
 
-/-- Helper (computation). `evalConsts` preserves bindings of identities absent from `ds`.
+/-- Helper (computation). `evalConsts` preserves bindings of identities absent from ds.
 (approved: PENDING) -/
 private theorem evalConsts_lookup_not_mem (U : ConstTypes) (fuel : Nat) :
     ∀ (ds : List (ConstDecl U)) (env env' : AList ConstId CVal) (c : ConstId),
@@ -2111,8 +2180,8 @@ private theorem evalConsts_lookup_not_mem (U : ConstTypes) (fuel : Nat) :
     · cases h
 
 /-- Helper (computation). Along a `ReferencesEarlier` suffix with duplicate-free names disjoint
-from `earlier`, a successful `typeConsts` produces a global fixed point for all declarations in
-`ds`. (approved: PENDING) -/
+from earlier, a successful `typeConsts` produces a global fixed point for all declarations in
+ds. (approved: PENDING) -/
 private theorem typeConsts_fixedPoint_inv (U : ConstTypes) :
     ∀ (ds : List (ConstDecl U)) (earlier : List ConstId) (Γ Γ' : AList ConstId CTy),
       ReferencesEarlier U ds earlier →
@@ -2155,8 +2224,8 @@ private theorem typeConsts_fixedPoint_inv (U : ConstTypes) :
       · cases ht
     · cases ht
 
-/-- Helper (computation). Conversely, any global typing fixed point `Γ₁` drives `typeConsts` to
-succeed along any `ReferencesEarlier` order `ds` with identical bindings. (approved: PENDING) -/
+/-- Helper (computation). Conversely, any global typing fixed point Γ₁ drives `typeConsts` to
+succeed along any `ReferencesEarlier` order ds with identical bindings. (approved: PENDING) -/
 private theorem typeConsts_from_fixedPoint_inv (U : ConstTypes) (Γ₁ : AList ConstId CTy) :
     ∀ (ds : List (ConstDecl U)) (earlier : List ConstId) (Γ : AList ConstId CTy),
       ReferencesEarlier U ds earlier →
@@ -2216,8 +2285,8 @@ private theorem typeConsts_from_fixedPoint_inv (U : ConstTypes) (Γ₁ : AList C
         | inr h => exact Or.inr h
 
 /-- Helper (computation). Along a `ReferencesEarlier` suffix with duplicate-free names disjoint
-from `earlier`, a successful `evalConsts` produces a global fixed point for all declarations in
-`ds`. (approved: PENDING) -/
+from earlier, a successful `evalConsts` produces a global fixed point for all declarations in
+ds. (approved: PENDING) -/
 private theorem evalConsts_fixedPoint_inv (U : ConstTypes) (fuel : Nat) :
     ∀ (ds : List (ConstDecl U)) (earlier : List ConstId) (env env' : AList ConstId CVal),
       ReferencesEarlier U ds earlier →
@@ -2259,8 +2328,8 @@ private theorem evalConsts_fixedPoint_inv (U : ConstTypes) (fuel : Nat) :
     · cases he
     · cases he
 
-/-- Helper (computation). Conversely, any global evaluation fixed point `env₁` drives `evalConsts`
-to succeed along any `ReferencesEarlier` order `ds` with identical bindings. (approved: PENDING) -/
+/-- Helper (computation). Conversely, any global evaluation fixed point env₁ drives `evalConsts`
+to succeed along any `ReferencesEarlier` order ds with identical bindings. (approved: PENDING) -/
 private theorem evalConsts_from_fixedPoint_inv (U : ConstTypes) (fuel : Nat)
     (env₁ : AList ConstId CVal) :
     ∀ (ds : List (ConstDecl U)) (earlier : List ConstId) (env : AList ConstId CVal),
@@ -2384,7 +2453,7 @@ private theorem evalConsts_order_transfer (U : ConstTypes) (fuel : Nat)
     rfl
 
 /-- Law (subject `ConcreteSpec.Core.ConstsAdmitted`, `ConcreteSpec.Core.evalConsts`). Any two
-dependency orders of `source` agree on static typing, evaluation success, admission, and the
+dependency orders of source agree on static typing, evaluation success, admission, and the
 computed value of every constant identity. -/
 theorem ConstOrderIndependent (U : ConstTypes) (fuel : Nat)
     (source first second : List (ConstDecl U))
