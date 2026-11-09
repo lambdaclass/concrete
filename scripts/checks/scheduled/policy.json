@@ -31,5 +31,9 @@
     "job_reserve_minutes": 10,
     "suite_seconds": 180,
     "suite_reserve": 0.1
-  }
+  },
+  "candidate_tiers": [
+    "pr",
+    "qualification"
+  ]
 }

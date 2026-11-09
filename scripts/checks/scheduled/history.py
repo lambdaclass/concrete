@@ -15,7 +15,8 @@ class MainHistory:
 
     @property
     def presentation(self):
-        return list(self.first_parent) + [sha for sha in self.eligible if sha not in set(self.first_parent)]
+        first = set(self.first_parent)
+        return list(self.first_parent) + [sha for sha in self.eligible if sha not in first]
 
     def __iter__(self):
         # Compatibility for callers explicitly requesting both order roles.

@@ -5,6 +5,7 @@ workflow projections are consumers. Numeric checks target policy-sized values an
 literal timeout arguments, avoiding unrelated counters and byte-size bounds.
 """
 import ast
+import re
 from pathlib import Path
 import sys
 import process_adapter
@@ -29,10 +30,18 @@ def check_python(path):
         if isinstance(node, (ast.Assign, ast.AnnAssign)):
             targets = node.targets if isinstance(node, ast.Assign) else [node.target]
             for target in targets:
-                if isinstance(target, ast.Name) and target.id in names:
+                if isinstance(target, ast.Name) and target.id.lower() in names:
                     if (isinstance(node.value, (ast.Constant, ast.List, ast.Tuple, ast.Set, ast.Dict, ast.BinOp))
                             and not (target.id == "budget" and isinstance(node.value, ast.Constant) and node.value.value == 0)):
-                        fail(names[target.id])
+                        fail(names[target.id.lower()])
+        if isinstance(node, ast.Dict) and any(isinstance(v, ast.Constant) and isinstance(v.value, str) and re.fullmatch(r'[0-9*/,-]+(?: [0-9*/,-]+){4}', v.value) for v in node.values):
+            fail('schedule')
+        if isinstance(node, ast.Compare):
+            if isinstance(node.left, ast.Name) and node.left.id == 'tier' and any(isinstance(v, (ast.Tuple, ast.Set, ast.List)) for v in node.comparators):
+                fail('tier')
+            if (isinstance(node.left, ast.Subscript) and isinstance(node.left.slice, ast.Constant)
+                    and node.left.slice.value == 'head_branch' and any(isinstance(v, ast.Constant) for v in node.comparators)):
+                fail('identity')
         if isinstance(node, ast.Constant):
             value = node.value
             if isinstance(value, str):

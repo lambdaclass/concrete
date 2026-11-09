@@ -13,8 +13,8 @@ POLICY = json.loads((ROOT / 'scripts/checks/scheduled/policy.json').read_text())
 from gate_manifest import read_document
 REGISTRY = read_document()
 WINDOWS = REGISTRY['windows']
-TIERS = tuple(WINDOWS)
-ALL_TIERS = frozenset(TIERS) | frozenset(t for row in REGISTRY['gates'] for t in row['tiers'])
+TIERS = tuple(POLICY['cadence'])
+ALL_TIERS = frozenset(TIERS) | frozenset(POLICY['candidate_tiers'])
 MAIN_BRANCH = POLICY['main_branch']
 REMOTE = POLICY['remote']
 MAIN_REF = 'refs/heads/' + MAIN_BRANCH
@@ -73,3 +73,9 @@ def allocate_deadline(end, count=1, *, monotonic, reserve=None):
     if end <= now:
         raise ValueError('INCOMPLETE scheduled suite: deadline exhausted')
     return now + (end - now) * (1 - (BUDGET['suite_reserve'] if reserve is None else reserve)) / count
+
+
+# Bootstrap resolves names only. Validate the complete current registry before
+# exposing any policy value to an adapter; selected revisions are validated anew.
+from gate_manifest import validate_manifest
+validate_manifest(REGISTRY)

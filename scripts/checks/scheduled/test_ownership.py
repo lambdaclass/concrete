@@ -48,6 +48,31 @@ class Ownership(unittest.TestCase):
             target.unlink()
             self.invoke(root)
 
+    def test_divergence_in_production_adapters(self):
+        plants = (
+            ('history', 'observe.py', 'main_history(environment, command=git)',
+             "__import__('history').MainHistory(tuple(git('rev-list', '--first-parent', 'HEAD', environment=environment).splitlines()), tuple(git('rev-list', 'HEAD', environment=environment).splitlines()))"),
+            ('identity', 'collect.py', 'run["head_branch"] == MAIN_BRANCH', 'run["head_branch"] == "foreign"'),
+            ('note-ref', 'observe.py', 'note_ref(tier)', '"refs/notes/foreign-" + tier'),
+            ('occurrence', 'collect.py', 'identity = dict(**Identity.actions', 'identity = dict(occurrence="foreign", **Identity.actions'),
+            ('schedule', 'selection.py', "POLICY['cadence'].items()", "{'monthly': '0 0 * * *'}.items()"),
+            ('tier', 'collect.py', 'tier in TIERS', 'tier in ("monthly",)'),
+            ('window', 'protocol.py', 'REGISTRY_ROOT =', 'WINDOWS = {"monthly": 999}\nREGISTRY_ROOT ='),
+            ('budget', 'run.py', 'timeout=gate_seconds(row["budget_seconds"])', 'timeout=999'),
+        )
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch); self.copy(root)
+            for fact, name, before, after in plants:
+                with self.subTest(fact=fact):
+                    path = root / 'scripts/checks/scheduled' / name
+                    original = path.read_text(); self.assertIn(before, original)
+                    path.write_text(original.replace(before, after))
+                    self.invoke(root, fact)
+                    path.write_text(original)
+            path = root / '.github/workflows/gate_schedule.yml'
+            path.write_text(path.read_text().replace('retention-days: 90', 'retention-days: 91'))
+            self.invoke(root, 'retention')
+
     def test_workflow_projection_drift_is_exact(self):
         with tempfile.TemporaryDirectory() as scratch:
             root = Path(scratch); self.copy(root)
