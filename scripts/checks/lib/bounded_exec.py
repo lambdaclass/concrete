@@ -108,10 +108,11 @@ class _Tree:
     def __init__(self, directory):
         from multiprocessing.connection import Listener
         import threading
+        import socket
+        self.wake_reader, self.wake_writer = socket.socketpair()
         self.address = directory + '/owner'
         self.key = os.urandom(32)
         self.listener = Listener(self.address, family='AF_UNIX', authkey=self.key)
-        self.listener._listener._socket.settimeout(.1)
         self.lock = threading.RLock()
         self.requests = {}
         self.groups = set()
@@ -122,7 +123,10 @@ class _Tree:
 
     def accept(self):
         import threading
+        import select
         while not self.stopping:
+            ready, _, _ = select.select([self.listener._listener._socket, self.wake_reader], [], [])
+            if self.wake_reader in ready: return
             try: connection = self.listener.accept()
             except TimeoutError: continue
             except (OSError, EOFError): return
@@ -260,8 +264,11 @@ class _Tree:
         with self.lock:
             roots = [key for key, entry in self.requests.items() if entry[0] is None]
         for request in roots: self.terminate(request, grace)
-        self.listener.close()
+        self.wake_writer.send(b"stop")
         self.acceptor.join(timeout=.2)
+        self.listener.close()
+        self.wake_reader.close()
+        self.wake_writer.close()
         with self.lock: threads = list(self.threads)
         for thread in threads: thread.join(timeout=grace + 1)
         # Linux subreaper adoption lets the owner reap orphaned grandchildren,

@@ -670,3 +670,22 @@ a missing executable left no outcome or log through the scheduled retry adapter
 R-0676 owns these repairs. R-0690 still owns CI2 qualification with real Nix
 campaigns, cancellation and partial artifacts at the final commit SHA. No gate
 budget/tier was reduced and no step 4 work is included.
+
+
+### Round 17 latency measurement: supervisor shutdown
+
+The accepted slice-2 root path waited for the broker listener's 100 ms accept
+poll on every completed invocation. `authorize` performs three Git calls, adding
+about 300 ms independently of Git work; this explains the reported ~51 to ~354 ms
+regression on concrete-ci-2. A five-call local cProfile probe attributed 0.501 s
+of 0.517 s to listener shutdown across five root `git --version` calls. Nested
+clients did not incur that root-only wait. The supervisor now uses a private
+socketpair to wake its accept loop on shutdown, retaining the same authenticated
+broker, deadlines, descriptor transfer, cancellation and group reaping.
+
+Light Nix probes after the repair measured 6.13 ms/root Git call and
+6.98 ms/nested Git call (ten calls each); five fixture authorizations averaged
+18.89 ms/root and 18.18 ms/nested. These are local observations, not CI2
+qualification or portable timing assertions. The coordinator must repeat the
+original authorization workload on concrete-ci-2 against the final SHA. No
+budget, timeout, isolation or check was relaxed.
