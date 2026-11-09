@@ -238,6 +238,7 @@ unsafe def auditMain (csList : List Concrete.Premises.Component) (files : List S
     | _ => (false, files.length <= 2, files)
   if perFile then
     for file in files do
+      let started ← IO.monoMsNow
       let rc ← try
         auditSingleFile retained auditRef envCache csList file
       catch e =>
@@ -245,6 +246,7 @@ unsafe def auditMain (csList : List Concrete.Premises.Component) (files : List S
         pure 1
       (← IO.getStdout).flush
       (← IO.getStderr).flush
+      IO.println s!"__FILE_MILLISECONDS__ {file} {(← IO.monoMsNow) - started}"
       IO.println s!"__FILE_RC__ {file} {rc}"
       (← IO.getStdout).flush
     return 0

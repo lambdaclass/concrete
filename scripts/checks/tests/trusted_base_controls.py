@@ -43,15 +43,22 @@ def lean_batch(paths):
         env=dict(BASE_ENV), text=True, stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT, timeout=360)
     assert r.returncode == 0, r.stdout
-    out, cur = {}, []
+    out, cur, measured = {}, [], set()
     for line in r.stdout.splitlines(keepends=True):
-        if line.startswith("__FILE_RC__ "):
+        if line.startswith("__FILE_MILLISECONDS__ "):
+            path_s, ms = line[len("__FILE_MILLISECONDS__ "):].strip().rsplit(" ", 1)
+            assert path_s not in measured, path_s
+            measured.add(path_s)
+            print("control-timing " + json.dumps({"control": "batch-file " + Path(path_s).name,
+                "seconds": int(ms) / 1000, "bound_seconds": 360}), file=sys.stderr)
+        elif line.startswith("__FILE_RC__ "):
             _, path_s, rc_s = line.strip().split(" ", 2)
             out[path_s] = subprocess.CompletedProcess(
                 args=[path_s], returncode=int(rc_s), stdout="".join(cur))
             cur = []
         else:
             cur.append(line)
+    assert set(out) == measured == {str(p) for p in paths}, (out.keys(), measured)
     return out
 
 def require(result, ok, diagnostic):
