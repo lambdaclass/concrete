@@ -123,7 +123,7 @@ def transport(root):
 def scanner(root):
     script = (SOURCE / 'scripts/checks/sandbox_isolation.sh').read_text()
     code = script.split("<<'PYSCAN'\n", 1)[1].split('\nPYSCAN', 1)[0]
-    for text in ["import subprocess\nsubprocess.run(['git', 'init'])\nsandbox_environment()\n", "import subprocess\ndef main():\n subprocess.Popen(['git', 'init'])\n sandbox_environment()\n"]:
+    for text in ["import subprocess\nsubprocess.run(['git', 'init'])\nsandbox_environment()\n", "import subprocess\ndef main():\n subprocess.Popen(['git', 'init'])\n sandbox_environment()\n", "import subprocess\ndef main():\n subprocess.run(['git', 'init'])\nmain()\nsandbox_environment()\n"]:
         path = root.parent / 'maker.py'
         path.write_text(text)
         p = subprocess.run(['python3', '-B', '-', str(path)], input=code, capture_output=True, text=True)

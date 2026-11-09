@@ -84,15 +84,18 @@ def repository_use(statement):
     return any(isinstance(n, ast.Call) and name(n) in
                ('git', 'Snapshot', 'run', 'Popen', 'call', 'check_call', 'check_output')
                for n in ast.walk(statement))
-def isolated_prefix(statements):
+def isolated_prefix(statements, main_safe=False):
     for statement in statements:
         if sandbox(statement):
             return True
         if repository_use(statement):
             return False
+        if not isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if any(isinstance(n, ast.Call) and name(n) == 'main' for n in ast.walk(statement)) and not main_safe:
+                return False
     return None
-module_prefix = isolated_prefix(module.body)
 entry_prefix = isolated_prefix(entry.body) if entry else None
+module_prefix = isolated_prefix(module.body, main_safe=entry_prefix is True)
 # A late module call cannot repair an earlier operation, even if main is safe.
 isolated = module_prefix is True or (module_prefix is None and entry_prefix is True)
 sys.exit(3 if isolated else 1)
