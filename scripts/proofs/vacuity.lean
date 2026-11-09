@@ -1308,13 +1308,19 @@ def computationBinders (e : Expr) (xs : Array Expr) : MetaM (Array Expr) := do
       needed := collectFVars needed (← inferType x)
   return result
 
-abbrev ComputationCache := Std.HashMap (Expr × Array Expr × Bool) (Expr × Bool × Bool)
+structure ComputationCandidate where
+  closure : Expr
+  placeholder : Expr
+  deriving Inhabited
+
+abbrev ComputationCache := Std.HashMap (Expr × Array Expr) (Expr × Bool × Bool)
 
 /-- Only reconstructions created in this protection call, and their raw field
     projections, are subject carriers. Result types (including structures) do
     not classify carriers. The fresh tag cannot be supplied by source syntax. -/
 partial def subjectCarrier (budget : WorkBudget) (tag : Name) (e : Expr) : MetaM Bool := do
   chargeWork budget
+  let e := e.headBeta
   match e with
   | .mdata md body =>
     if md.getName `vacuity.subjectCarrier == tag then return true
@@ -1331,48 +1337,49 @@ partial def subjectCarrier (budget : WorkBudget) (tag : Name) (e : Expr) : MetaM
 mutual
 partial def computationVisit (budget : WorkBudget) (depends : Expr → MetaM Bool)
     (carrierTag : Name)
-    (candidates : IO.Ref (Array Expr)) (cache : IO.Ref ComputationCache)
-    (e : Expr) (xs : Array Expr) (replacements : Option (Array Expr)) : MetaM (Expr × Bool × Bool) := do
+    (candidates : IO.Ref (Array ComputationCandidate)) (cache : IO.Ref ComputationCache)
+    (e : Expr) (xs : Array Expr) : MetaM (Expr × Bool × Bool) := do
   chargeWork budget
   -- Beta specializes generated matcher parameters, not semantic results.
   let e := e.headBeta
-  let key := (e, xs, replacements.isSome)
+  let key := (e, xs)
   if let some result := (← cache.get)[key]? then return result
-  let result ← computationVisitStep budget depends carrierTag candidates cache e xs replacements
+  let result ← computationVisitStep budget depends carrierTag candidates cache e xs
   cache.modify (·.insert key result)
   return result
 
 partial def computationVisitStep (budget : WorkBudget) (depends : Expr → MetaM Bool)
     (carrierTag : Name)
-    (candidates : IO.Ref (Array Expr)) (cache : IO.Ref ComputationCache)
-    (e : Expr) (xs : Array Expr) (replacements : Option (Array Expr)) : MetaM (Expr × Bool × Bool) := do
+    (candidates : IO.Ref (Array ComputationCandidate)) (cache : IO.Ref ComputationCache)
+    (e : Expr) (xs : Array Expr) : MetaM (Expr × Bool × Bool) := do
   if !(← depends e) then return (e, false, false)
-  if ← subjectCarrier budget carrierTag e then return (e, false, true)
   let type ← whnfD (← inferType e)
-  -- Never abstract representation types/records or function prefixes. In
-  -- particular a partial matcher retains its complete motive and alternatives.
-  if let .sort level := type then
-    if level != .zero then return (e, false, false)
+  if ← subjectCarrier budget carrierTag e then
+    -- Representation fields remain fixed. Their syntactic receiver contains
+    -- semantic fields, but that does not make a type argument computational.
+    return (e, false, !(← representationField type))
+  -- Traverse types as well as terms; the result guard below prevents a type
+  -- expression from becoming an arbitrary computation result.
   let visit := computationVisit budget depends carrierTag candidates cache
   let (rebuilt, childResult, actual) ← match e with
     | .app f a => do
-      let (f', fc, fa) ← visit f xs replacements
-      let (a', ac, aa) ← visit a xs replacements
+      let (f', fc, fa) ← visit f xs
+      let (a', ac, aa) ← visit a xs
       pure (mkApp f' a', fc || ac, fa || aa)
     | .lam n t body bi | .forallE n t body bi => do
-      let (t', tc, ta) ← visit t xs replacements
+      let (t', tc, ta) ← visit t xs
       withLocalDecl n bi t' fun x => do
-        let (body', bc, ba) ← visit (body.instantiate1 x) (xs.push x) replacements
+        let (body', bc, ba) ← visit (body.instantiate1 x) (xs.push x)
         let rebuilt ← if e.isLambda then mkLambdaFVars #[x] body' else mkForallFVars #[x] body'
         pure (rebuilt, tc || bc, ta || ba)
     | .letE _ _ v body _ => do
       Lean.Meta.check e
-      visit (body.instantiate1 v) xs replacements
+      visit (body.instantiate1 v) xs
     | .proj n i body => do
-      let (body', bc, ba) ← visit body xs replacements
+      let (body', bc, ba) ← visit body xs
       pure (.proj n i body', bc, ba)
     | .mdata md body => do
-      let (body', bc, ba) ← visit body xs replacements
+      let (body', bc, ba) ← visit body xs
       pure (.mdata md body', bc, ba)
     | .fvar _ => pure (e, false, true)
     | _ => pure (e, false, false)
@@ -1382,19 +1389,21 @@ partial def computationVisitStep (budget : WorkBudget) (depends : Expr → MetaM
   if !actual then return (rebuilt, false, false)
   if !(e.isApp || e.isProj) || type.isForall || type.isSort then return (rebuilt, false, actual)
   if ← isProp type then return (rebuilt, false, actual)
-  let binders ← computationBinders e xs
-  let closure ← mkLambdaFVars binders e
+  let binders ← computationBinders rebuilt xs
+  let closure ← mkLambdaFVars binders rebuilt
   Lean.Meta.check closure
   let mut index := none
   let entries ← candidates.get
   for i in [:entries.size] do
     chargeWork budget
-    if ← withNewMCtxDepth (isDefEq entries[i]! closure) then index := some i; break
-  match replacements, index with
-  | none, none => candidates.modify (·.push closure); return (rebuilt, true, true)
-  | none, some _ => return (rebuilt, true, true)
-  | some values, some i => return (mkAppN values[i]! binders, true, true)
-  | some _, none => throwError "protected-computation-not-collected"
+    if ← withNewMCtxDepth (isDefEq entries[i]!.closure closure) then index := some i; break
+  if let some i := index then
+    return (mkAppN entries[i]!.placeholder binders, true, true)
+  -- One typed placeholder is used immediately everywhere, including domains.
+  -- It is never solved by conversion and is eliminated before comparison.
+  let placeholder ← mkFreshExprMVar (some (← inferType closure)) (kind := .syntheticOpaque)
+  candidates.modify (·.push ⟨closure, placeholder⟩)
+  return (mkAppN placeholder binders, true, true)
 end
 
 
@@ -1422,24 +1431,31 @@ def withComputationResults (a b : Expr) (semantic : Array FVarId) (budget : Work
       | _ => pure false
     dependencies.modify (·.insert e found)
     return found
-  let candidates ← IO.mkRef (#[] : Array Expr)
+  let candidates ← IO.mkRef (#[] : Array ComputationCandidate)
   let cache ← IO.mkRef ({} : ComputationCache)
   let visit := computationVisit budget depends carrierTag candidates cache
-  discard <| visit a #[] none
-  discard <| visit b #[] none
+  -- A single transformation gives domains and bodies exactly the same typed
+  -- placeholders. Collection and replacement cannot open different telescopes.
+  let (a', _, _) ← visit a #[]
+  let (b', _, _) ← visit b #[]
   let terms ← candidates.get
-  let rec compare (left : List Expr) (values : Array Expr) : MetaM Bool := do
+  let rec compare (left : List ComputationCandidate) : MetaM Bool := do
     chargeWork budget
     match left with
     | [] =>
-      let (a', _, _) ← visit a #[] (some values)
-      let (b', _, _) ← visit b #[] (some values)
+      let a' ← instantiateMVars a'
+      let b' ← instantiateMVars b'
+      if a'.hasMVar || b'.hasMVar then throwError "protected-unresolved-result"
       Lean.Meta.check a'
       Lean.Meta.check b'
       check a' b'
     | term :: rest =>
-      withLocalDeclD `result (← inferType term) fun value => compare rest (values.push value)
-  compare terms.toList #[]
+      let type ← instantiateMVars (← inferType term.placeholder)
+      if type.hasMVar then throwError "protected-result-dependency-order"
+      withLocalDeclD `result type fun value => do
+        term.placeholder.mvarId!.assign value
+        compare rest
+  compare terms.toList
 
 
 /-- Expand only dependencies of protectedNames subjects, then abstract the subjects.

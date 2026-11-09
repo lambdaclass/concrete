@@ -782,3 +782,15 @@ contracts are checked independently; the empty-list Ok store/wildcard and Trap
 counterfeits require exact `FAIL instance-application` diagnostics. Structure
 results, nested matchers, metadata, let aliases and Iff/Exists packaging have
 additional focused controls in `vacuity_protected_results.py`.
+
+Round-5 dependent protection performs one transformation, traversing binder
+domains and bodies alike. Each minimal computation gets one typed, unsolved
+synthetic placeholder shared immediately by every occurrence, including Type
+expressions. In dependency order, placeholders are replaced with arbitrary
+local results; all must disappear, and both complete transformed propositions
+must pass `Lean.Meta.check` before conversion. Type expressions are traversed
+but never themselves abstracted as result values. This removes the structural
+cause of the two-pass mismatch (different binder types during collection and
+replacement); R-0219 owns the typed transformation. The genuine dependent
+Subtype contract now passes, as do dependent Sigma/Fin domains. There is no
+fallback to concrete computation and no change to any budget or owner policy.
