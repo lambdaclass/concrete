@@ -817,3 +817,25 @@ results are recorded below when complete. The first checkpoint is not claimed
 as a passing full run. Slice-2a reconciliation must retain this primitive transfer
 alongside A/B. Consumer instance/planted algorithms and their measured work did
 not change in this projection-only follow-up.
+
+
+Final consumer code is `e479e550d`, blob
+`912abf404b52ae8080bcb058c24bdc0d0248a1d9`, SHA256
+`76986f8609887277c0b0ffad57f98bd3733369534bd47bfe64d05aae507b2aca`.
+The round-4 ci-2 script pins this blob. The preceding eight instance/planted
+samples are honestly attached to `dc61c7cd3`; only projection changes after them.
+The integrated inline-match command passed its two original controls and all
+seven typed contracts on these final bytes. Final-byte budget checks also pass
+all DAG/dependency/refutation/identity probes and the 13 scheduler/budget cases.
+
+The complete final accessor suite exits 0; its transcript is
+[audits/N2-A3-round4-body-access.txt](audits/N2-A3-round4-body-access.txt).
+It includes all 12 selected classification/projection/open-C controls, five
+explicit gate fixtures (theorem Instance, hidden theorem false discharge,
+theorem subject, proof-only subject, theorem mutant), computational
+mentions/cache and ill-typed mutation probes, exact theorem template-body
+identity, ill-typed and unsupported-type protection probes, and the independent
+hidden-theorem certificate rejection. Each negative checks its exact diagnostic,
+not an arbitrary failure. The hidden Law/Planted controls both still give N2 PASS.
+No all-proof contradiction rule was implemented. R-0219 remains the machinery
+owner; the coordinator assigns a new contract row only after an owner answer.
