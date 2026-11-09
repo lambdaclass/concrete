@@ -2223,18 +2223,13 @@ theorem eval_trap_erasure (L : AList Var O.Val) (s : Store O.Store) (e : O.Expr)
   | trap kd => exact eval_trap_erasure_result L s e kd h
   | stuck => trivial
 
-@[reducible] def EvalArgsOkErasure (O : Exec.Operands) (L : AList Var O.Val) (args : List O.Expr)
-    (s : Store O.Store) (r : Res (List O.Val × Store O.Store)) : Prop :=
-  match r with
-  | .ok (vs, t) => Exec.evalArgs O L (erase s) args = .ok (vs, erase t)
-  | _ => True
-
 /-- Law (subject `ConcreteSpec.Core.Own.instrumentOperands`). Successful argument evaluation
 preserves values and concrete storage. The result remains inside the conclusion so a mutant
 cannot hide a wrong value behind an output fixed as a theorem argument. -/
 theorem evalArgs_ok_erasure (L : AList Var O.Val) (args : List O.Expr) (s : Store O.Store) :
-    EvalArgsOkErasure O L args s (Exec.evalArgs (instrumentOperands O types permit) L s args) := by
-  unfold EvalArgsOkErasure
+    match Exec.evalArgs (instrumentOperands O types permit) L s args with
+    | .ok (vs, t) => Exec.evalArgs O L (erase s) args = .ok (vs, erase t)
+    | _ => True := by
   induction args generalizing s with
   | nil => rfl
   | cons e es ih =>
@@ -2269,17 +2264,12 @@ theorem evalArgs_ok_erasure (L : AList Var O.Val) (args : List O.Expr) (s : Stor
       | trap _ => rw [he] at h; cases h
       | stuck => rw [he] at h; cases h
 
-@[reducible] def EvalArgsTrapErasure (O : Exec.Operands) (L : AList Var O.Val) (args : List O.Expr)
-    (s : Store O.Store) (r : Res (List O.Val × Store O.Store)) : Prop :=
-  match r with
-  | .trap kd => Exec.evalArgs O L (erase s) args = .trap kd
-  | _ => True
-
 /-- Law (subject `ConcreteSpec.Core.Own.instrumentOperands`). A trapping argument evaluation
 preserves the actual trap kind, without fixing that kind in a success premise. -/
 theorem evalArgs_trap_erasure (L : AList Var O.Val) (args : List O.Expr) (s : Store O.Store) :
-    EvalArgsTrapErasure O L args s (Exec.evalArgs (instrumentOperands O types permit) L s args) := by
-  unfold EvalArgsTrapErasure
+    match Exec.evalArgs (instrumentOperands O types permit) L s args with
+    | .trap kd => Exec.evalArgs O L (erase s) args = .trap kd
+    | _ => True := by
   induction args generalizing s with
   | nil => trivial
   | cons e es ih =>
@@ -2424,23 +2414,14 @@ private theorem lookup_eraseProgram_proj :
     · simp [h]
     · simp [h, lookup_eraseProgram_proj fns f]
 
-@[reducible] def StepNextErasure (O : Exec.Operands) (types : Var → Option Descriptor)
-    (permit : AList Var O.Val → O.Expr → State → Option State)
-    (advance : Exec.Config (instrumentOperands O types permit) →
-      Option (Exec.Out (instrumentOperands O types permit)))
-    (P : Exec.Program (instrumentOperands O types permit))
-    (c : Exec.Config (instrumentOperands O types permit)) : Prop :=
-  match advance c with
-  | some (.next c') => Exec.step (eraseProgram P) (eraseConfig c) = some (.next (eraseConfig c'))
-  | _ => True
-
 /-- Law (subject `ConcreteSpec.Core.Own.stepInstrumented`). Silent machine-step forward simulation
 (owner decision 2026-11-08 Q3): whenever `stepInstrumented` on the instrumented C1 machine produces a next
 configuration, `Exec.step` on the erased machine produces the erased configuration. -/
 theorem step_next_erasure (P : Exec.Program (instrumentOperands O types permit))
     (c : Exec.Config (instrumentOperands O types permit)) :
-    StepNextErasure O types permit (stepInstrumented O types permit P) P c := by
-  unfold StepNextErasure
+    match stepInstrumented O types permit P c with
+    | some (.next c') => Exec.step (eraseProgram P) (eraseConfig c) = some (.next (eraseConfig c'))
+    | _ => True := by
   cases h : stepInstrumented O types permit P c with
   | none => trivial
   | some out =>
@@ -2718,28 +2699,19 @@ theorem step_next_erasure (P : Exec.Program (instrumentOperands O types permit))
               rfl
       | trapped _ _ => cases h
 
-@[reducible] def StepRequestErasure (O : Exec.Operands) (types : Var → Option Descriptor)
-    (permit : AList Var O.Val → O.Expr → State → Option State)
-    (advance : Exec.Config (instrumentOperands O types permit) →
-      Option (Exec.Out (instrumentOperands O types permit)))
-    (P : Exec.Program (instrumentOperands O types permit))
-    (c : Exec.Config (instrumentOperands O types permit)) : Prop :=
-  match advance c with
-  | some (.request p vs site st k) =>
-    ∃ k_erased,
-      Exec.step (eraseProgram P) (eraseConfig c) =
-        some (.request p vs site (erase st) k_erased) ∧
-      ∀ a c', k a = some c' → k_erased (eraseAnswer a) = some (eraseConfig c')
-  | _ => True
-
 /-- Law (subject `ConcreteSpec.Core.Own.stepInstrumented`). Primitive-request forward simulation
 (owner decision 2026-11-08 Q3): whenever `stepInstrumented` on the instrumented C1 machine issues a primitive
 request, `Exec.step` on the erased machine issues the matching request with the erased store and agreeing
 continuation. -/
 theorem step_request_erasure (P : Exec.Program (instrumentOperands O types permit))
     (c : Exec.Config (instrumentOperands O types permit)) :
-    StepRequestErasure O types permit (stepInstrumented O types permit P) P c := by
-  unfold StepRequestErasure
+    match stepInstrumented O types permit P c with
+    | some (.request p vs site st k) =>
+      ∃ k_erased,
+        Exec.step (eraseProgram P) (eraseConfig c) =
+          some (.request p vs site (erase st) k_erased) ∧
+        ∀ a c', k a = some c' → k_erased (eraseAnswer a) = some (eraseConfig c')
+    | _ => True := by
   cases h : stepInstrumented O types permit P c with
   | none => trivial
   | some out =>
@@ -2915,41 +2887,30 @@ private theorem eraseLabel_answer_proj (a : Exec.Answer O.Val O.Event (Store O.S
   rcases a with ⟨ev, _, _⟩
   cases ev <;> rfl
 
-@[reducible] def StepErasure (O : Exec.Operands) (types : Var → Option Descriptor)
-    (permit : AList Var O.Val → O.Expr → State → Option State)
-    (advance : Exec.Config (instrumentOperands O types permit) →
-      Option (Exec.Out (instrumentOperands O types permit)))
-    (P : Exec.Program (instrumentOperands O types permit))
-    (c : Exec.Config (instrumentOperands O types permit)) : Prop :=
-  match advance c with
-  | some (.next c') =>
-    Exec.Step (eraseProgram P) (eraseConfig c) .silent (eraseConfig c')
-  | some (.request p vs _site st k) =>
-    ∀ a c', (instrumentOperands O types permit).allows p vs st a = true →
-      k a = some c' →
-      Exec.Step (eraseProgram P) (eraseConfig c) (eraseLabel a.label) (eraseConfig c')
-  | none => True
-
 /-- Law (subject `ConcreteSpec.Core.Own.stepInstrumented`). Single-step forward simulation
 (owner decision 2026-11-08 Q3): every labeled step produced by `stepInstrumented` on the instrumented C1 machine is
 matched by a step of the erased machine with the same event label and concrete store. -/
 theorem Step_erasure (P : Exec.Program (instrumentOperands O types permit))
     (c : Exec.Config (instrumentOperands O types permit)) :
-    StepErasure O types permit (stepInstrumented O types permit P) P c := by
-  unfold StepErasure
+    match stepInstrumented O types permit P c with
+    | some (.next c') =>
+      Exec.Step (eraseProgram P) (eraseConfig c) .silent (eraseConfig c')
+    | some (.request p vs _site st k) =>
+      ∀ a c', (instrumentOperands O types permit).allows p vs st a = true →
+        k a = some c' →
+        Exec.Step (eraseProgram P) (eraseConfig c) (eraseLabel a.label) (eraseConfig c')
+    | none => True := by
   cases hs : stepInstrumented O types permit P c with
   | none => trivial
   | some out =>
     cases out with
     | next c' =>
       have hnext := step_next_erasure P c
-      unfold StepNextErasure at hnext
       rw [hs] at hnext
       exact .silent hnext
     | request p vs site st k =>
       intro a c' hallows hk
       have hreq := step_request_erasure P c
-      unfold StepRequestErasure at hreq
       rw [hs] at hreq
       obtain ⟨k_erased, hs_erased, hk_erased⟩ := hreq
       obtain ⟨hallows_erased, _⟩ := allows_erasure_result _ _ _ _ hallows
@@ -2967,12 +2928,10 @@ theorem Steps_erasure (P : Exec.Program (instrumentOperands O types permit))
   | refl c => exact .refl (eraseConfig c)
   | @silent c₁ c₂ _ _ hs _ ih =>
     have hstep := Step_erasure P c₁
-    unfold StepErasure at hstep
     rw [hs] at hstep
     exact .step hstep ih
   | @prim c₁ c₂ _ _ p vs site st k a hs ha hk _ ih =>
     have hstep := Step_erasure P c₁
-    unfold StepErasure at hstep
     rw [hs] at hstep
     have hstep' := hstep a c₂ ha hk
     simpa [eraseLabel_events_proj] using Exec.Steps.step hstep' ih
@@ -3030,13 +2989,11 @@ theorem runFrom_erasure (P : Exec.Program (instrumentOperands O types permit))
         cases out with
         | next c' =>
           have hnext := step_next_erasure P c
-          unfold StepNextErasure at hnext
           rw [show stepInstrumented O types permit P c = some (.next c') from hs] at hnext
           rw [hnext]
           exact runFrom_erasure P ρ n hist c' hns
         | request p vs site st k =>
           have hreq := step_request_erasure P c
-          unfold StepRequestErasure at hreq
           rw [show stepInstrumented O types permit P c = some (.request p vs site st k) from hs] at hreq
           obtain ⟨k_erased, hs_erased, hk_erased⟩ := hreq
           rw [hs_erased]
@@ -3429,12 +3386,10 @@ theorem step_stuck_iff_of_accepted
       cases out with
       | next c' =>
         have h' := step_next_erasure P c
-        unfold StepNextErasure at h'
         rw [hs, herased] at h'
         cases h'
       | request p vs site st k =>
         have h' := step_request_erasure P c
-        unfold StepRequestErasure at h'
         rw [hs] at h'
         obtain ⟨_, h', _⟩ := h'
         rw [herased] at h'
@@ -3473,14 +3428,12 @@ theorem runFrom_erasure_of_accepted
         cases out with
         | next c' =>
           have hnext := step_next_erasure P c
-          unfold StepNextErasure at hnext
           rw [show stepInstrumented O types permit P c = some (.next c') from hs] at hnext
           rw [hnext]
           exact runFrom_erasure_of_accepted P ρ n hist c'
             (checkerAccepted_step_inv P c c' .silent hacc (.silent hs))
         | request p vs site st k =>
           have hreq := step_request_erasure P c
-          unfold StepRequestErasure at hreq
           rw [show stepInstrumented O types permit P c = some (.request p vs site st k) from hs] at hreq
           obtain ⟨k_erased, hs_erased, hk_erased⟩ := hreq
           rw [hs_erased]
@@ -3701,134 +3654,6 @@ theorem run_stuck_iff_of_accepted
 
 end ExecErasure
 
-instance (priority := 10000) decidableBAllSafe {α : Type} (P : α → Prop) [∀ a, Decidable (P a)] :
-    (l : List α) → Decidable (∀ x ∈ l, P x)
-  | [] => isTrue (fun x h =>
-      @List.Mem.rec α x
-        (fun l _ => match l with | [] => P x | _ :: _ => True)
-        (fun _ => trivial)
-        (fun _ _ _ _ => trivial)
-        [] h)
-  | a :: as =>
-    match inferInstanceAs (Decidable (P a)), decidableBAllSafe P as with
-    | isTrue ha, isTrue has => isTrue (fun x h =>
-        (@List.Mem.rec α x
-          (fun l _ =>
-            match l with
-            | [] => True
-            | head :: tail => (head = x → P x) → (∀ y ∈ tail, P y) → P x)
-          (fun _ hhead _ => hhead rfl)
-          (fun _ _ hmem _ _ htail => htail x hmem)
-          (a :: as) h)
-          (fun heq => heq ▸ ha)
-          has)
-    | isFalse hna, _ => isFalse (fun h => hna (h a (.head as)))
-    | _, isFalse hnas => isFalse (fun h => hnas (fun x hx => h x (.tail a hx)))
-
-instance (priority := 10000) decidableBExSafe {α : Type} (P : α → Prop) [∀ a, Decidable (P a)] :
-    (l : List α) → Decidable (∃ x, x ∈ l ∧ P x)
-  | [] => isFalse (fun ⟨x, hx, _⟩ =>
-      @List.Mem.rec α x
-        (fun l _ => match l with | [] => False | _ :: _ => True)
-        (fun _ => trivial)
-        (fun _ _ _ _ => trivial)
-        [] hx)
-  | a :: as =>
-    match inferInstanceAs (Decidable (P a)) with
-    | isTrue ha => isTrue ⟨a, .head as, ha⟩
-    | isFalse hna =>
-      match decidableBExSafe P as with
-      | isTrue has => isTrue (match has with | ⟨x, hx, hpx⟩ => ⟨x, .tail a hx, hpx⟩)
-      | isFalse hnas => isFalse (fun ⟨x, hx, hpx⟩ =>
-          (@List.Mem.rec α x
-            (fun l _ =>
-              match l with
-              | [] => True
-              | head :: tail => (head = x → P x → False) → ((∃ y, y ∈ tail ∧ P y) → False) → False)
-            (fun _ hhead _ => hhead rfl hpx)
-            (fun _ _ hmem _ _ htail => htail ⟨x, hmem, hpx⟩)
-            (a :: as) hx)
-            (fun heq hp => hna (heq.symm ▸ hp))
-            hnas)
-
-def decidableMemSafe {α : Type} [DecidableEq α] (x : α) :
-    (l : List α) → Decidable (x ∈ l)
-  | [] => isFalse (fun h =>
-      @List.Mem.rec α x
-        (fun l _ => match l with | [] => False | _ :: _ => True)
-        (fun _ => trivial)
-        (fun _ _ _ _ => trivial)
-        [] h)
-  | a :: as =>
-    if h : x = a then
-      isTrue (h ▸ .head as)
-    else
-      match decidableMemSafe x as with
-      | isTrue hmem => isTrue (.tail a hmem)
-      | isFalse hnmem => isFalse (fun hm =>
-          (@List.Mem.rec α x
-            (fun l _ =>
-              match l with
-              | [] => True
-              | head :: tail => (x = head → False) → (x ∈ tail → False) → False)
-            (fun _ hhead _ => hhead rfl)
-            (fun _ _ htail _ _ hntail => hntail htail)
-            (a :: as) hm)
-            h hnmem)
-
-def decidableIsPrefixSafe {α : Type} [DecidableEq α] :
-    (l₁ l₂ : List α) → Decidable (l₁ <+: l₂)
-  | [], l₂ => isTrue ⟨l₂, rfl⟩
-  | a :: as, [] => isFalse (fun ⟨t, h⟩ =>
-      @Eq.rec (List α) ((a :: as) ++ t)
-        (fun l _ => match l with | [] => False | _ :: _ => True)
-        trivial [] h)
-  | a :: as, b :: bs =>
-    if h : a = b then
-      match decidableIsPrefixSafe as bs with
-      | isTrue hp => isTrue (match hp with | ⟨t, ht⟩ => ⟨t, by rw [List.cons_append, h, ht]⟩)
-      | isFalse hnp => isFalse (fun ⟨t, ht⟩ =>
-          hnp ⟨t, @Eq.rec (List α) ((a :: as) ++ t)
-            (fun l _ => match l with | [] => True | _ :: tail => as ++ t = tail)
-            rfl (b :: bs) ht⟩)
-    else
-      isFalse (fun ⟨t, ht⟩ =>
-        h (@Eq.rec (List α) ((a :: as) ++ t)
-          (fun l _ => match l with | [] => True | head :: _ => a = head)
-          rfl (b :: bs) ht))
-
-instance (priority := 10000) decidablePairwiseSafe {α : Type} (R : α → α → Prop)
-    [∀ a b, Decidable (R a b)] : (l : List α) → Decidable (List.Pairwise R l)
-  | [] => isTrue .nil
-  | a :: as =>
-    match decidableBAllSafe (R a) as, decidablePairwiseSafe R as with
-    | isTrue ha, isTrue has => isTrue (.cons ha has)
-    | isFalse hna, _ => isFalse (fun h => by cases h with | cons ha _ => exact hna ha)
-    | _, isFalse hnas => isFalse (fun h => by cases h with | cons _ has => exact hnas has)
-
-instance (priority := 10000) decidableNodupSafe {α : Type} [DecidableEq α] (l : List α) :
-    Decidable (List.Nodup l) :=
-  decidablePairwiseSafe (· ≠ ·) l
-
-section SafeDecidable
-local instance (priority := 10000) {α : Type} [DecidableEq α] (x : α) (l : List α) :
-    Decidable (x ∈ l) := decidableMemSafe x l
-local instance (priority := 10000) {α : Type} [DecidableEq α] (l₁ l₂ : List α) :
-    Decidable (l₁ <+: l₂) := decidableIsPrefixSafe l₁ l₂
-instance (priority := 10000) (a b : Loan) : Decidable (Compatible a b) := by
-  unfold Compatible; infer_instance
-instance (priority := 10000) (s : State) (l : Loan) : Decidable (ParentValid s l) := by
-  unfold ParentValid; cases l.parent <;> infer_instance
-instance (priority := 10000) (s : State) : Decidable (WellFormed s) := by
-  unfold WellFormed; infer_instance
-instance (priority := 10000) (s : State) : Decidable (LiveDestinations s) := by
-  unfold LiveDestinations; infer_instance
-instance (priority := 10000) (s : State) (i : LoanId) : Decidable (RetiredLoan s i) := by
-  unfold RetiredLoan; infer_instance
-instance (priority := 10000) (s : CallState) : Decidable (CallState.WellFormed s) := by
-  unfold CallState.WellFormed; infer_instance
-end SafeDecidable
-
 namespace ExecErasureWitnesses
 open ConcreteSpec.Core.Own.Examples
 
@@ -3840,29 +3665,6 @@ def bindMoveConfig : Exec.Config instrumentedOps :=
 def primOneConfig : Exec.Config instrumentedOps :=
   ⟨.exec (.prim (some y) () [.read x] ⟨0⟩), [(x, 7)], ⟨0, initial⟩, []⟩
 
-private def optionNoneMotive {α : Type} (Q : Prop) : Option α → Prop
-  | none => Q
-  | some _ => True
-
-private def optionSomeMotive {α : Type} (P : α → Prop) : Option α → Prop
-  | some y => P y
-  | none => True
-
-private def optionNextMotive {O : Exec.Operands} (P : Exec.Config O → Prop) : Option (Exec.Out O) → Prop
-  | some (.next d) => P d
-  | _ => True
-
-private def optionRequestMotive {O : Exec.Operands}
-    (P : O.Prim → List O.Val → SiteId → O.Store →
-      (Exec.Answer O.Val O.Event O.Store → Option (Exec.Config O)) → Prop) :
-    Option (Exec.Out O) → Prop
-  | some (.request p vs site st k) => P p vs site st k
-  | _ => True
-
-private def boolTrueMotive (Q : Prop) : Bool → Prop
-  | true => Q
-  | false => True
-
 /-- Helper (inversion). A step from a configuration whose `Exec.step` returns a next configuration must
 land in that target configuration. (approved: APPR-C5-codex-902ce88a). -/
 private theorem step_det_next_inv {O : Exec.Operands} {P : Exec.Program O}
@@ -3871,39 +3673,21 @@ private theorem step_det_next_inv {O : Exec.Operands} {P : Exec.Program O}
     c' = c₁ := by
   cases hstep with
   | silent h =>
-    exact @Eq.rec (Option (Exec.Out O)) (Exec.step P c)
-      (fun o _ => optionNextMotive (fun d' => c' = d') o)
-      (@Eq.rec (Option (Exec.Out O)) (some (.next c'))
-        (fun o _ => optionNextMotive (fun d' => c' = d') o)
-        rfl (Exec.step P c) h.symm)
-      (some (.next c₁)) hs
-  | @prim _ p vs site st k _ h _ _ =>
-    exact @Eq.rec (Option (Exec.Out O)) (Exec.step P c)
-      (fun o _ => optionNextMotive (fun _ => c' = c₁) o)
-      (@Eq.rec (Option (Exec.Out O)) (some (.request p vs site st k))
-        (fun o _ => optionNextMotive (fun _ => c' = c₁) o)
-        trivial (Exec.step P c) h.symm)
-      (some (.next c₁)) hs
+    rw [hs] at h
+    injection h with h
+    injection h with h
+    exact h.symm
+  | prim h _ _ =>
+    rw [hs] at h
+    cases h
 
 /-- Helper (inversion). A configuration whose `Exec.step` is `none` cannot take an `Exec.Step`. (approved: APPR-C5-codex-902ce88a). -/
 private theorem step_det_none_inv {O : Exec.Operands} {P : Exec.Program O}
-    {c c' : Exec.Config O} {l : Exec.Label O} {Q : Prop}
-    (hs : Exec.step P c = none) (hstep : Exec.Step P c l c') : Q := by
+    {c c' : Exec.Config O} {l : Exec.Label O}
+    (hs : Exec.step P c = none) (hstep : Exec.Step P c l c') : False := by
   cases hstep with
-  | silent h =>
-    exact @Eq.rec (Option (Exec.Out O)) (Exec.step P c)
-      (fun o _ => optionNoneMotive Q o)
-      (@Eq.rec (Option (Exec.Out O)) (some (.next c'))
-        (fun o _ => optionNoneMotive Q o)
-        trivial (Exec.step P c) h.symm)
-      none hs
-  | @prim _ p vs site st k _ h _ _ =>
-    exact @Eq.rec (Option (Exec.Out O)) (Exec.step P c)
-      (fun o _ => optionNoneMotive Q o)
-      (@Eq.rec (Option (Exec.Out O)) (some (.request p vs site st k))
-        (fun o _ => optionNoneMotive Q o)
-        trivial (Exec.step P c) h.symm)
-      none hs
+  | silent h => rw [hs] at h; cases h
+  | prim h _ _ => rw [hs] at h; cases h
 
 /-- Helper (inversion). The moved-owner program `moveConfig` is rejected by `CheckerAccepted`
 because after moving `x` to `y` it reaches a read of `x` where concrete evaluation succeeds
@@ -3930,11 +3714,10 @@ private theorem acceptedMove_checkerAccepted_inv :
     cases hsteps with
     | refl =>
       refine ⟨by decide, ⟨fun _ => by decide, fun v s' he => ?_⟩⟩
-      have hs' : ⟨0, (move initial ⟨0⟩).getD initial⟩ = s' :=
-        congrArg (fun (r : Res (Int × Store Int)) =>
-          match r with | .ok (_, s) => s | _ => ⟨0, initial⟩) he
-      rw [← hs']
       intro _
+      have he' : instrumentEval erasedOps permitE [(x, 7)] ⟨0, initial⟩ (.move x) = .ok (v, s') := he
+      injection he' with hpair
+      rcases Prod.mk.inj hpair with ⟨_, rfl⟩
       decide
     | step hs₂ hsteps =>
       obtain rfl := step_det_next_inv rfl hs₂
@@ -3948,7 +3731,7 @@ private theorem acceptedMove_checkerAccepted_inv :
           obtain rfl := step_det_next_inv rfl hs₄
           cases hsteps with
           | refl => exact ⟨by decide, trivial⟩
-          | step hs₅ _ => exact step_det_none_inv rfl hs₅
+          | step hs₅ _ => exact False.elim (step_det_none_inv rfl hs₅)
 
 /-- Helper (inversion). The unbound-assignment configuration `acceptedStuckConfig`
 satisfies `CheckerAccepted` and gets stuck in both the instrumented and erased machines. (approved: APPR-C5-codex-902ce88a). -/
@@ -3958,7 +3741,7 @@ private theorem acceptedStuck_checkerAccepted_inv :
   cases hsteps with
   | refl =>
     exact ⟨by decide, ⟨fun _ => by decide, fun _ _ _ hlook => by cases hlook⟩⟩
-  | step hs _ => exact step_det_none_inv rfl hs
+  | step hs _ => exact False.elim (step_det_none_inv rfl hs)
 
 /-- Observation. Moving an initialized owner in the instrumented operand instance erases to the concrete value and store. -/
 example : ∃ s' : Store Int,
@@ -4320,89 +4103,40 @@ def primFrameStuckConfig : Exec.Config instrumentedOps :=
 /-- Helper (inversion). `primFrameStuckConfig` satisfies `CheckerAccepted`. (approved: APPR-C5-codex-902ce88a). -/
 private theorem primFrameStuck_checkerAccepted_inv :
     CheckerAccepted erasedOps types permitE emptyProg primFrameStuckConfig := by
-  have optionSomeInj : ∀ {α : Type} {x : Option α} {a b : α},
-      x = some a → x = some b → a = b :=
-    fun {α} {x} {a} {b} ha hb =>
-      @Eq.rec (Option α) x
-        (fun o _ => optionSomeMotive (fun b' => a = b') o)
-        (@Eq.rec (Option α) (some a)
-          (fun o _ => optionSomeMotive (fun b' => a = b') o)
-          rfl x ha.symm)
-        (some b) hb
-  have optionNextRequestElim : ∀ {O : Exec.Operands} {Q : Prop}
-      {x : Option (Exec.Out O)} {d : Exec.Config O} {p : O.Prim} {vs : List O.Val}
-      {site : SiteId} {st : O.Store}
-      {k : Exec.Answer O.Val O.Event O.Store → Option (Exec.Config O)},
-      x = some (.next d) → x = some (.request p vs site st k) → Q :=
-    fun {O} {Q} {x} {d} {p} {vs} {site} {st} {k} hnext hreq =>
-      @Eq.rec (Option (Exec.Out O)) x
-        (fun o _ => optionNextMotive (fun _ => Q) o)
-        (@Eq.rec (Option (Exec.Out O)) (some (.request p vs site st k))
-          (fun o _ => optionNextMotive (fun _ => Q) o)
-          trivial x hreq.symm)
-        (some (.next d)) hnext
-  have optionRequestElim : ∀ {O : Exec.Operands} {Q : Prop}
-      {x : Option (Exec.Out O)}
-      {p₀ p : O.Prim} {vs₀ vs : List O.Val} {site₀ site : SiteId} {st₀ st : O.Store}
-      {k₀ k : Exec.Answer O.Val O.Event O.Store → Option (Exec.Config O)},
-      x = some (.request p₀ vs₀ site₀ st₀ k₀) →
-      x = some (.request p vs site st k) →
-      (p = p₀ → vs = vs₀ → site = site₀ → st = st₀ → k = k₀ → Q) → Q :=
-    fun {O} {Q} {x} {p₀} {p} {vs₀} {vs} {site₀} {site} {st₀} {st} {k₀} {k} h₀ h hq =>
-      (@Eq.rec (Option (Exec.Out O)) x
-        (fun o _ => optionRequestMotive (fun p' vs' site' st' k' =>
-          (p' = p₀ → vs' = vs₀ → site' = site₀ → st' = st₀ → k' = k₀ → Q) → Q) o)
-        (@Eq.rec (Option (Exec.Out O)) (some (.request p₀ vs₀ site₀ st₀ k₀))
-          (fun o _ => optionRequestMotive (fun p' vs' site' st' k' =>
-            (p' = p₀ → vs' = vs₀ → site' = site₀ → st' = st₀ → k' = k₀ → Q) → Q) o)
-          (fun hq' => hq' rfl rfl rfl rfl rfl) x h₀.symm)
-        (some (.request p vs site st k)) h) hq
-  have bool_and_right : ∀ {b1 b2 : Bool}, (b1 && b2) = true → b2 = true :=
-    fun {b1} {b2} h =>
-      match b1, h with
-      | true, h => h
-      | false, h =>
-        @Eq.rec Bool (false && b2)
-          (fun b _ => boolTrueMotive (b2 = true) b)
-          trivial true h
-  have of_decide_eq_true_safe : ∀ {P : Prop} [d : Decidable P], @decide P d = true → P :=
-    fun {P} [d : Decidable P] h =>
-      @Decidable.rec P
-        (fun d' => @decide P d' = true → P)
-        (fun _ (h' : false = true) =>
-          @Eq.rec Bool false
-            (fun b _ => boolTrueMotive P b)
-            trivial true h')
-        (fun hp _ => hp)
-        d h
   intro tr c hsteps
   cases hsteps with
   | refl =>
     exact ⟨by decide, ⟨⟨fun _ => rfl, fun _ _ _ => trivial⟩, fun _ _ _ _ _ _ => trivial⟩⟩
   | step hs₁ hsteps =>
     cases hs₁ with
-    | silent h => exact optionNextRequestElim h rfl
+    | silent h => cases h
     | @prim c₁ p vs site st k a hreq hallows hk =>
-      refine optionRequestElim rfl hreq ?_
-      rintro rfl rfl rfl rfl rfl
+      have hreq' : Exec.step emptyProg primFrameStuckConfig =
+          some (.request p vs site st k) := hreq
+      dsimp [primFrameStuckConfig, Exec.step, Exec.evalArgs, instrumentOperands,
+        instrumentEval, permitE, erasedEval, Res.bind, Exec.onRes] at hreq'
+      injection hreq' with hreq'
+      injection hreq' with hp hvs hsite hst hk_eq
+      subst hp; subst hvs; subst hsite; subst hst; subst hk_eq
       have hown : a.store.own = initial :=
-        of_decide_eq_true_safe (bool_and_right hallows)
+        (allows_erasure_result (O := erasedOps) (types := types) (permit := permitE)
+          () [0] ⟨0, initial⟩ a hallows).2
       dsimp at hk
       cases ha : a.result with
       | error kd =>
         rw [ha] at hk
-        have hc₁ := optionSomeInj rfl hk
+        injection hk with hc₁
         subst hc₁
         cases hsteps with
         | refl =>
           dsimp [StepPermitted]
           rw [hown]
           exact ⟨by decide, trivial⟩
-        | step hs₂ _ => exact step_det_none_inv rfl hs₂
+        | step hs₂ _ => exact False.elim (step_det_none_inv rfl hs₂)
       | ok v =>
         rw [ha] at hk
         dsimp [Exec.bindLife] at hk
-        have hc₁ := optionSomeInj rfl hk
+        injection hk with hc₁
         subst hc₁
         cases hsteps with
         | refl =>
@@ -4416,7 +4150,7 @@ private theorem primFrameStuck_checkerAccepted_inv :
             dsimp [StepPermitted, StmtPermitted]
             rw [hown]
             exact ⟨by decide, ⟨fun _ => rfl, fun _ _ _ hlook => by cases hlook⟩⟩
-          | step hs₃ _ => exact step_det_none_inv rfl hs₃
+          | step hs₃ _ => exact False.elim (step_det_none_inv rfl hs₃)
 
 /-- Computation observation. -/
 example : (match (instrumentOperands erasedOps types permitE).eval [(x, 7)] ⟨0, initial⟩ (.move x) with
@@ -4487,35 +4221,59 @@ example : ¬ ((refuseAllowsOperands erasedOps types permitE).allows () [7] ⟨0,
   decide
 
 /-- Instance (law `ConcreteSpec.Core.Own.step_next_erasure`, case `ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig`). -/
-example : StepNextErasure erasedOps types permitE
-    (stepInstrumented erasedOps types permitE emptyProg) emptyProg bindMoveConfig :=
+example : (match stepInstrumented erasedOps types permitE emptyProg bindMoveConfig with
+    | some (.next c') => Exec.step (eraseProgram emptyProg) (eraseConfig bindMoveConfig) = some (.next (eraseConfig c'))
+    | _ => True) :=
   @step_next_erasure erasedOps types permitE emptyProg bindMoveConfig
 
 /-- Planted (law `ConcreteSpec.Core.Own.step_next_erasure`, case `ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig`, subject `ConcreteSpec.Core.Own.stepInstrumented`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.stepInstrumentedZeroVal`). -/
-example : ¬ StepNextErasure erasedOps types permitE
-    (stepInstrumentedZeroVal erasedOps types permitE emptyProg) emptyProg bindMoveConfig := by
+example : ¬ (match stepInstrumentedZeroVal erasedOps types permitE emptyProg bindMoveConfig with
+    | some (.next c') => Exec.step (eraseProgram emptyProg) (eraseConfig bindMoveConfig) = some (.next (eraseConfig c'))
+    | _ => True) := by
   intro h
   cases h
 
 /-- Instance (law `ConcreteSpec.Core.Own.step_request_erasure`, case `ConcreteSpec.Core.Own.ExecErasureWitnesses.primOneConfig`). -/
-example : StepRequestErasure erasedOps types permitE
-    (stepInstrumented erasedOps types permitE emptyProg) emptyProg primOneConfig :=
+example : (match stepInstrumented erasedOps types permitE emptyProg primOneConfig with
+    | some (.request p vs site st k) =>
+      ∃ k_erased,
+        Exec.step (eraseProgram emptyProg) (eraseConfig primOneConfig) =
+          some (.request p vs site (erase st) k_erased) ∧
+        ∀ a c', k a = some c' → k_erased (eraseAnswer a) = some (eraseConfig c')
+    | _ => True) :=
   @step_request_erasure erasedOps types permitE emptyProg primOneConfig
 
 /-- Planted (law `ConcreteSpec.Core.Own.step_request_erasure`, case `ConcreteSpec.Core.Own.ExecErasureWitnesses.primOneConfig`, subject `ConcreteSpec.Core.Own.stepInstrumented`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.stepInstrumentedZeroVal`). -/
-example : ¬ StepRequestErasure erasedOps types permitE
-    (stepInstrumentedZeroVal erasedOps types permitE emptyProg) emptyProg primOneConfig := by
+example : ¬ (match stepInstrumentedZeroVal erasedOps types permitE emptyProg primOneConfig with
+    | some (.request p vs site st k) =>
+      ∃ k_erased,
+        Exec.step (eraseProgram emptyProg) (eraseConfig primOneConfig) =
+          some (.request p vs site (erase st) k_erased) ∧
+        ∀ a c', k a = some c' → k_erased (eraseAnswer a) = some (eraseConfig c')
+    | _ => True) := by
   rintro ⟨_, h, _⟩
   cases h
 
 /-- Instance (law `ConcreteSpec.Core.Own.Step_erasure`, case `ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig`). -/
-example : StepErasure erasedOps types permitE
-    (stepInstrumented erasedOps types permitE emptyProg) emptyProg bindMoveConfig :=
+example : (match stepInstrumented erasedOps types permitE emptyProg bindMoveConfig with
+    | some (.next c') =>
+      Exec.Step (eraseProgram emptyProg) (eraseConfig bindMoveConfig) .silent (eraseConfig c')
+    | some (.request p vs _site st k) =>
+      ∀ a c', (instrumentOperands erasedOps types permitE).allows p vs st a = true →
+        k a = some c' →
+        Exec.Step (eraseProgram emptyProg) (eraseConfig bindMoveConfig) (eraseLabel a.label) (eraseConfig c')
+    | none => True) :=
   @Step_erasure erasedOps types permitE emptyProg bindMoveConfig
 
 /-- Planted (law `ConcreteSpec.Core.Own.Step_erasure`, case `ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig`, subject `ConcreteSpec.Core.Own.stepInstrumented`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.stepInstrumentedZeroVal`). -/
-example : ¬ StepErasure erasedOps types permitE
-    (stepInstrumentedZeroVal erasedOps types permitE emptyProg) emptyProg bindMoveConfig := by
+example : ¬ (match stepInstrumentedZeroVal erasedOps types permitE emptyProg bindMoveConfig with
+    | some (.next c') =>
+      Exec.Step (eraseProgram emptyProg) (eraseConfig bindMoveConfig) .silent (eraseConfig c')
+    | some (.request p vs _site st k) =>
+      ∀ a c', (instrumentOperands erasedOps types permitE).allows p vs st a = true →
+        k a = some c' →
+        Exec.Step (eraseProgram emptyProg) (eraseConfig bindMoveConfig) (eraseLabel a.label) (eraseConfig c')
+    | none => True) := by
   intro h
   have heq := step_det_next_inv rfl h
   cases heq
@@ -4596,17 +4354,16 @@ private theorem bindMove_checkerAccepted_inv :
   cases hsteps with
   | refl =>
     refine ⟨by decide, ⟨fun _ => by decide, fun v s' he => ?_⟩⟩
-    have hs' : ⟨0, (move initial ⟨0⟩).getD initial⟩ = s' :=
-      congrArg (fun (r : Res (Int × Store Int)) =>
-        match r with | .ok (_, s) => s | _ => ⟨0, initial⟩) he
-    rw [← hs']
     intro _
+    have he' : instrumentEval erasedOps permitE [(x, 7)] ⟨0, initial⟩ (.move x) = .ok (v, s') := he
+    injection he' with hpair
+    rcases Prod.mk.inj hpair with ⟨_, rfl⟩
     decide
   | step hs₁ hsteps =>
     obtain rfl := step_det_next_inv rfl hs₁
     cases hsteps with
     | refl => exact ⟨by decide, trivial⟩
-    | step hs₂ _ => exact step_det_none_inv rfl hs₂
+    | step hs₂ _ => exact False.elim (step_det_none_inv rfl hs₂)
 
 /-- Instance (law `ConcreteSpec.Core.Own.step_stuck_iff_of_accepted`, case `ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig`). -/
 example : stepInstrumented erasedOps types permitE emptyProg bindMoveConfig = none ↔
@@ -5157,30 +4914,29 @@ abbrev abortOperands (O : Exec.Operands) (types : Var → Option Descriptor)
     (permit : AList Var O.Val → O.Expr → State → Option State) : Exec.Operands :=
   { instrumentOperands O types permit with eval := fun _ _ _ => .trap .abort }
 
-def okLocals : AList Var erasedOps.Val := [(x, 7)]
-def okArgs : List erasedOps.Expr := [.read x, .move x]
-def trapArgs : List erasedOps.Expr := [.move x, .fail .overflow]
-def initStore : Store erasedOps.Store := ⟨0, initial⟩
-
 /-- Instance (law `ConcreteSpec.Core.Own.evalArgs_ok_erasure`, case `ConcreteSpec.Core.Own.Examples.initial`). -/
-example : EvalArgsOkErasure erasedOps okLocals okArgs initStore
-    (Exec.evalArgs (instrumentOperands erasedOps types permitE) okLocals initStore okArgs) :=
-  @evalArgs_ok_erasure erasedOps types permitE okLocals okArgs initStore
+example : (match Exec.evalArgs (instrumentOperands erasedOps types permitE) [(x, 7)] ⟨0, initial⟩ [.read x, .move x] with
+    | .ok (vs, t) => Exec.evalArgs erasedOps [(x, 7)] (erase (⟨0, initial⟩ : Store Int)) [.read x, .move x] = .ok (vs, erase t)
+    | _ => True) :=
+  @evalArgs_ok_erasure erasedOps types permitE [(x, 7)] [.read x, .move x] ⟨0, initial⟩
 
 /-- Planted (law `ConcreteSpec.Core.Own.evalArgs_ok_erasure`, case `ConcreteSpec.Core.Own.Examples.initial`, subject `ConcreteSpec.Core.Own.instrumentOperands`, mutant `ConcreteSpec.Core.Own.ArgumentEvidence.zeroOperands`). -/
-example : ¬ EvalArgsOkErasure erasedOps okLocals okArgs initStore
-    (Exec.evalArgs (zeroOperands erasedOps types permitE) okLocals initStore okArgs) := by
+example : ¬ (match Exec.evalArgs (zeroOperands erasedOps types permitE) [(x, 7)] ⟨0, initial⟩ [.read x, .move x] with
+    | .ok (vs, t) => Exec.evalArgs erasedOps [(x, 7)] (erase (⟨0, initial⟩ : Store Int)) [.read x, .move x] = .ok (vs, erase t)
+    | _ => True) := by
   change ¬ ((Res.ok ([7, 7], 0) : Res (List Int × Int)) = .ok ([0, 0], 0))
   decide
 
 /-- Instance (law `ConcreteSpec.Core.Own.evalArgs_trap_erasure`, case `ConcreteSpec.Core.Own.Examples.initial`). -/
-example : EvalArgsTrapErasure erasedOps okLocals trapArgs initStore
-    (Exec.evalArgs (instrumentOperands erasedOps types permitE) okLocals initStore trapArgs) :=
-  @evalArgs_trap_erasure erasedOps types permitE okLocals trapArgs initStore
+example : (match Exec.evalArgs (instrumentOperands erasedOps types permitE) [(x, 7)] ⟨0, initial⟩ [.move x, .fail .overflow] with
+    | .trap kd => Exec.evalArgs erasedOps [(x, 7)] (erase (⟨0, initial⟩ : Store Int)) [.move x, .fail .overflow] = .trap kd
+    | _ => True) :=
+  @evalArgs_trap_erasure erasedOps types permitE [(x, 7)] [.move x, .fail .overflow] ⟨0, initial⟩
 
 /-- Planted (law `ConcreteSpec.Core.Own.evalArgs_trap_erasure`, case `ConcreteSpec.Core.Own.Examples.initial`, subject `ConcreteSpec.Core.Own.instrumentOperands`, mutant `ConcreteSpec.Core.Own.ArgumentEvidence.abortOperands`). -/
-example : ¬ EvalArgsTrapErasure erasedOps okLocals trapArgs initStore
-    (Exec.evalArgs (abortOperands erasedOps types permitE) okLocals initStore trapArgs) := by
+example : ¬ (match Exec.evalArgs (abortOperands erasedOps types permitE) [(x, 7)] ⟨0, initial⟩ [.move x, .fail .overflow] with
+    | .trap kd => Exec.evalArgs erasedOps [(x, 7)] (erase (⟨0, initial⟩ : Store Int)) [.move x, .fail .overflow] = .trap kd
+    | _ => True) := by
   change ¬ ((Res.trap .overflow : Res (List Int × Int)) = .trap .abort)
   decide
 
