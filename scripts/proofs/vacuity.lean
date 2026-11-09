@@ -26,8 +26,30 @@ structure Finding where
   detail : String
   deriving BEq
 
+/-- Mutable accounting survives Meta rollback, but belongs to exactly one analysis. -/
+structure AnalysisUsage where
+  work : Nat := 0
+  projection : Nat := 0
+  modules : Std.HashMap (Name × Name) Bool := {}
+  constants : Std.HashMap Expr (Array Name) := {}
+  mentions : Std.HashMap (Expr × Name) Bool := {}
+  mutations : Std.HashMap (Expr × Name × Name × Array Name) Expr := {}
+  deriving Inhabited
+
+abbrev WorkBudget := IO.Ref AnalysisUsage
+
+def chargeWork (budget : WorkBudget) (reason : String := "work-budget") : MetaM Unit := do
+  let usage ← budget.get
+  if usage.work >= 20000 then throwError reason
+  budget.set { usage with work := usage.work + 1 }
+
+/-- Optional only for standalone helper probes; production always supplies its job budget. -/
+def useWork (budget : Option WorkBudget) (reason : String := "work-budget") : MetaM Unit := do
+  if let some budget := budget then chargeWork budget reason
+
 structure AuditState where
   findings : Array Finding := #[]
+  budget : Option WorkBudget := none
   sources : Std.HashMap String String := {}
   contexts : Std.HashMap Name (Name × List OpenDecl) := {}
   resolutions : Std.HashMap (Name × String) (Option Name) := {}
@@ -766,6 +788,7 @@ def validateCertificate (entry : CertificateEntry) (candidate : Certificate) :
 end Discharge
 
 structure DischargeState where
+  budget : Option WorkBudget := none
   remaining : Nat := 20000
   visited : Std.HashSet (Expr × Array FVarId) := {}
 
@@ -781,7 +804,8 @@ partial def falseDischarge (e : Expr) : StateRefT DischargeState MetaM Bool := d
   let key := (e, (← getLCtx).getFVarIds)
   if (← get).visited.contains key then return false
   let fuel := (← get).remaining
-  if fuel == 0 then throwError "false-discharge-budget"
+  if let some budget := (← get).budget then chargeWork budget "false-discharge-budget"
+  else if fuel == 0 then throwError "false-discharge-budget"
   modify fun state => { state with remaining := fuel - 1, visited := state.visited.insert key }
   let refuted ← refutableType (← inferType e)
   if refuted && !e.hasFVar then return !(← refutableContext true)
@@ -819,41 +843,99 @@ partial def falseDischarge (e : Expr) : StateRefT DischargeState MetaM Bool := d
   | .mdata _ e | .proj _ _ e => falseDischarge e
   | _ => return false
 
-/-- Traverse definitions only along dependencies of the semantic subject. Definitions unrelated
-    to S keep their original parsed. A shared fuel bounds the entire dependency search. -/
-partial def mentions (e : Expr) (subject : Name) : StateRefT (Nat × Std.HashSet Name) MetaM Bool := do
+/-- Enumerating constants is itself a traversal, charged before each node. -/
+partial def workConstants (e : Expr) (budget : Option WorkBudget) : MetaM (Array Name) := do
+  useWork budget
+  if let some b := budget then
+    if let some cached := (← b.get).constants[e]? then return cached
+  let result ← match e with
+    | .const n _ => pure #[n]
+    | .app f a => return ((← workConstants f budget) ++ (← workConstants a budget)).toList.eraseDups.toArray
+    | .lam _ t b _ | .forallE _ t b _ => return ((← workConstants t budget) ++ (← workConstants b budget)).toList.eraseDups.toArray
+    | .letE _ t v b _ => return ((← workConstants t budget) ++ (← workConstants v budget) ++ (← workConstants b budget)).toList.eraseDups.toArray
+    | .mdata _ b | .proj _ _ b => workConstants b budget
+    | _ => pure #[]
+  if let some b := budget then b.modify fun s => { s with constants := s.constants.insert e result }
+  return result
+
+/-- An imported module cannot refer forward to a subject outside its import DAG.
+    This prunes unrelated library bodies using provenance, not a syntactic guess.
+    Every inspected module/edge is charged; the cache is private to the analysis. -/
+partial def moduleDepends (module target : Name) (budget : Option WorkBudget) : MetaM Bool := do
+  useWork budget
+  if module == target then return true
+  if let some b := budget then
+    if let some answer := (← b.get).modules[(module, target)]? then return answer
+  let env ← getEnv
+  let some idx := env.getModuleIdx? module | return true
+  let mut answer := false
+  for imported in env.header.moduleData[idx.toNat]!.imports do
+    useWork budget
+    if ← moduleDepends imported.module target budget then answer := true; break
+  if let some b := budget then b.modify fun s => { s with modules := s.modules.insert (module, target) answer }
+  return answer
+
+def mayMention (n subject : Name) (budget : Option WorkBudget) : MetaM Bool := do
+  useWork budget
+  let env ← getEnv
+  let some source := env.getModuleIdxFor? n | return true
+  let some target := env.getModuleIdxFor? subject | return false
+  moduleDepends env.header.moduleNames[source.toNat]! env.header.moduleNames[target.toNat]! budget
+
+partial def mentionsVisit (e : Expr) (subject : Name) (budget : Option WorkBudget := none) : StateRefT (Nat × Std.HashSet Name) MetaM Bool := do
   let (fuel, _) ← get
-  if fuel == 0 then throwError "subject-budget"
+  if budget.isSome then useWork budget
+  else if fuel == 0 then throwError "work-budget"
   modify fun (_, visited) => (fuel - 1, visited)
-  if e.getUsedConstants.contains subject then return true
-  for n in e.getUsedConstants do
+  let constants ← workConstants e budget
+  if constants.contains subject then return true
+  for n in constants do
     if (← get).2.contains n then continue
     modify fun (left, visited) => (left, visited.insert n)
+    unless ← mayMention n subject budget do continue
     if let some (.defnInfo d) := (← getEnv).find? n then
-      if ← mentions d.value subject then return true
+      if ← mentionsVisit d.value subject budget then return true
   return false
 
-partial def mutate (e : Expr) (subject mutant : Name) (boundaries : Array Name := #[]) : StateRefT Nat MetaM Expr := do
-  let fuel ← get
-  if fuel == 0 then throwError "subject-budget"
-  modify (· - 1)
-  match e with
-  | .const n us =>
-    if n == subject then return .const mutant us
-    if boundaries.contains n then return e
-    if let some (.defnInfo d) := (← getEnv).find? n then
-      let (occurs, _) ← (mentions d.value subject).run (20000, {})
-      if occurs then
-        return ← mutate (d.value.instantiateLevelParams d.levelParams us) subject mutant boundaries
-    return e
-  | .app f a => return mkApp (← mutate f subject mutant boundaries) (← mutate a subject mutant boundaries)
-  | .lam n t b bi => return .lam n (← mutate t subject mutant boundaries) (← mutate b subject mutant boundaries) bi
-  | .forallE n t b bi => return .forallE n (← mutate t subject mutant boundaries) (← mutate b subject mutant boundaries) bi
-  | .letE n t v b nd => return .letE n (← mutate t subject mutant boundaries) (← mutate v subject mutant boundaries) (← mutate b subject mutant boundaries) nd
-  | .mdata md b => return .mdata md (← mutate b subject mutant boundaries)
-  | .proj n i b => return .proj n i (← mutate b subject mutant boundaries)
-  | _ => return e
+def mentions (e : Expr) (subject : Name) (budget : Option WorkBudget := none) : StateRefT (Nat × Std.HashSet Name) MetaM Bool := do
+  useWork budget
+  if let some b := budget then
+    if let some cached := (← b.get).mentions[(e, subject)]? then return cached
+  let result ← mentionsVisit e subject budget
+  if let some b := budget then b.modify fun s => { s with mentions := s.mentions.insert (e, subject) result }
+  return result
 
+partial def mutate (e : Expr) (subject mutant : Name) (boundaries : Array Name := #[])
+    (budget : Option WorkBudget := none) : StateRefT Nat MetaM Expr := do
+  let fuel ← get
+  if budget.isSome then useWork budget
+  else if fuel == 0 then throwError "work-budget"
+  modify (· - 1)
+  if let some b := budget then
+    if let some cached := (← b.get).mutations[(e, subject, mutant, boundaries)]? then return cached
+  let result ← go e
+  if let some b := budget then b.modify fun s => { s with mutations := s.mutations.insert (e, subject, mutant, boundaries) result }
+  return result
+where
+  go (e : Expr) : StateRefT Nat MetaM Expr := do
+   match e with
+   | .const n us =>
+     if n == subject then return .const mutant us
+     if boundaries.contains n then return e
+     if let some (.defnInfo d) := (← getEnv).find? n then
+       -- Query-local visited set; nested helpers never receive another allowance.
+       let (occurs, state) ← (mentions d.value subject budget).run (← get, {})
+       set state.1
+       if occurs then
+         return ← mutate (d.value.instantiateLevelParams d.levelParams us) subject mutant boundaries budget
+     return e
+   | .app f a => return mkApp (← mutate f subject mutant boundaries budget) (← mutate a subject mutant boundaries budget)
+   | .lam n t b bi => return .lam n (← mutate t subject mutant boundaries budget) (← mutate b subject mutant boundaries budget) bi
+   | .forallE n t b bi => return .forallE n (← mutate t subject mutant boundaries budget) (← mutate b subject mutant boundaries budget) bi
+   | .letE n t v b nd => return .letE n (← mutate t subject mutant boundaries budget) (← mutate v subject mutant boundaries budget) (← mutate b subject mutant boundaries budget) nd
+   | .mdata md b => return .mdata md (← mutate b subject mutant boundaries budget)
+   | .proj n i b => return .proj n i (← mutate b subject mutant boundaries budget)
+   | _ => return e
 
 structure InstanceCase where
   decl : Name
@@ -865,9 +947,12 @@ structure InstanceCase where
 /-- Consume the complete telescope, exposing definition aliases as necessary. Proof arguments
     are hypotheses; other arguments are parameters. Mutate the statement before substituting
     the closed Instance arguments, preserving their exact values. -/
-def counterexample (law : ConstantInfo) (ic : InstanceCase) (s m : Name) (subjects : Array Name) : MetaM Expr := do
+def counterexample (law : ConstantInfo) (ic : InstanceCase) (s m : Name) (subjects : Array Name) (budget : Option WorkBudget := none) : MetaM Expr := do
+  let budget ← match budget with
+    | some b => pure b
+    | none => IO.mkRef {}
   let mut original := law.type.instantiateLevelParams law.levelParams ic.levels
-  let (changed, _) ← (mutate original s m subjects).run 20000
+  let (changed, _) ← (mutate original s m subjects (some budget)).run 0
   let mut mutated := changed
   let mut hyps : Array Expr := #[]
   for arg in ic.args do
@@ -884,37 +969,52 @@ def counterexample (law : ConstantInfo) (ic : InstanceCase) (s m : Name) (subjec
 
 /-- Expand only dependencies of protectedNames subjects, then abstract the subjects.
     Definitional comparison may reduce contracts, but cannot erase semantic arguments. -/
-def withProtected (a b : Expr) (subjects : Array Name) (check : Expr → Expr → MetaM Bool) : MetaM Bool := do
+def withProtected (a b : Expr) (subjects : Array Name) (check : Expr → Expr → MetaM Bool)
+    (budget : Option WorkBudget := none) : MetaM Bool := do
+  let budget ← match budget with
+    | some b => pure b
+    | none => IO.mkRef {}
   let mut a := a
   let mut b := b
   for subject in subjects do
-    a := (← (mutate a subject subject subjects).run 20000).1
-    b := (← (mutate b subject subject subjects).run 20000).1
-  let rec collect (e : Expr) (terms : Array Expr) : Array Expr :=
+    a := (← (mutate a subject subject subjects (some budget)).run 0).1
+    b := (← (mutate b subject subject subjects (some budget)).run 0).1
+  let rec collect (e : Expr) (terms : Array Expr) : MetaM (Array Expr) := do
+    chargeWork budget
     match e with
-    | .const n _ => if subjects.contains n && !terms.contains e then terms.push e else terms
-    | .app f a => collect a (collect f terms)
-    | .lam _ t b _ | .forallE _ t b _ => collect b (collect t terms)
-    | .letE _ t v b _ => collect b (collect v (collect t terms))
+    | .const n _ => return if subjects.contains n && !terms.contains e then terms.push e else terms
+    | .app f a => collect a (← collect f terms)
+    | .lam _ t b _ | .forallE _ t b _ => collect b (← collect t terms)
+    | .letE _ t v b _ => collect b (← collect v (← collect t terms))
     | .mdata _ b | .proj _ _ b => collect b terms
-    | _ => terms
-  let protectedTerms := collect b (collect a #[])
+    | _ => return terms
+  let protectedTerms ← collect b (← collect a #[])
+  let rec replace (e term value : Expr) : MetaM Expr := do
+    chargeWork budget
+    if e == term then return value
+    match e with
+    | .app f a => return mkApp (← replace f term value) (← replace a term value)
+    | .lam n t b bi => return .lam n (← replace t term value) (← replace b term value) bi
+    | .forallE n t b bi => return .forallE n (← replace t term value) (← replace b term value) bi
+    | .letE n t v b nd => return .letE n (← replace t term value) (← replace v term value) (← replace b term value) nd
+    | .mdata md b => return .mdata md (← replace b term value)
+    | .proj n i b => return .proj n i (← replace b term value)
+    | _ => return e
   let rec compare (i : Nat) (a b : Expr) : MetaM Bool := do
+    chargeWork budget
     if i >= protectedTerms.size then return ← check a b
     let term := protectedTerms[i]!
     withLocalDeclD `subject (← inferType term) fun subjectVar => do
-      let replace := fun e => e.replace fun node =>
-        if node == term then some subjectVar else none
-      compare (i + 1) (replace a) (replace b)
+      compare (i + 1) (← replace a term subjectVar) (← replace b term subjectVar)
   compare 0 a b
 
 
-def protectedEq (a b : Expr) (subjects : Array Name) : MetaM Bool :=
+def protectedEq (a b : Expr) (subjects : Array Name) (budget : Option WorkBudget := none) : MetaM Bool :=
   -- Smart unfolding intentionally leaves compiled matchers stuck on abstract
   -- discriminants. Protection makes subject applications abstract, so compare
   -- contracts using ordinary definitional unfolding after protection instead.
-  withProtected a b subjects fun x y =>
-    withOptions (fun opts => opts.setBool `smartUnfolding false) (isDefEq x y)
+  withProtected a b subjects (fun x y =>
+    withOptions (fun opts => opts.setBool `smartUnfolding false) (isDefEq x y)) budget
 
 /-- Only syntactic binders belong to the declaration telescope. Unfolding a
     closed conclusion may expose quantifiers belonging to its predicate. -/
@@ -953,8 +1053,11 @@ def progress (stage : String) (name : Name) : MetaM Unit := do
     explicit catch (ordinary Lean `try` deliberately rethrows them). -/
 def isolated (deadline : Core.Context) (name : Name) (detail : String)
     (fallback : α) (action : Audit α) : Audit α := do
+  let previous := (← get).budget
+  let work ← IO.mkRef {}
+  modify fun s => { s with budget := some work }
   let saved ← liftM (Meta.saveState : MetaM Meta.SavedState)
-  tryCatchRuntimeEx
+  let result ← tryCatchRuntimeEx
     (withTheReader Core.Context (fun _ => deadline) do
       Core.checkMaxHeartbeats "vacuity-analysis"
       action)
@@ -964,6 +1067,8 @@ def isolated (deadline : Core.Context) (name : Name) (detail : String)
       emit "INCOMPLETE" "analysis-budget-or-error" name
         (detail ++ " " ++ (← message.toString))
       return fallback)
+  modify fun s => { s with budget := previous }
+  return result
 
 
 def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := do
@@ -1126,11 +1231,14 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
           let mut ty := lawInfo.type.instantiateLevelParams lawInfo.levelParams levels
           let mut valid := true
           let mut falseHyp := false
+          let work := (← get).budget
+          let mut discharge : DischargeState := { budget := work }
           for arg in args do
             ty := ty.consumeMData
             if let .forallE _ domain body _ := ty then
               if ← isProp domain then
-                let (bad, _) ← (falseDischarge arg).run {}
+                let (bad, next) ← (falseDischarge arg).run discharge
+                discharge := next
                 falseHyp := falseHyp || bad
               ty := body.instantiate1 arg
             else valid := false
@@ -1138,7 +1246,7 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
           if let some l := tags.find? (·.name == law) then
             for st in quoted ((between l.doc "Law (subject " ").").getD "") do
               if let some n ← resolve all l.name st then protectedNames := protectedNames.push n
-          unless valid && (← closedTail ty protectedNames) && (← protectedEq ty t.info.type protectedNames) do fail "instance-application" t.name s!"law={law} case={key}"; continue
+          unless valid && (← closedTail ty protectedNames) && (← protectedEq ty t.info.type protectedNames (← get).budget) do fail "instance-application" t.name s!"law={law} case={key}"; continue
           if falseHyp then
             fail "instance-false-discharge" t.name
             continue
@@ -1185,7 +1293,7 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
           for st in subjects do
             let some subject ← resolve all law.name st | continue
             unless ((env.find? subject).get! matches .defnInfo _) do fail "subject-kind" law.name st; continue
-            let (occurs, _) ← (mentions law.info.type subject).run (20000, {})
+            let (occurs, _) ← (mentions law.info.type subject (← get).budget).run (0, {})
             unless occurs do fail "subject-absent" law.name st
             for ic in cases do
               let planted := evidence.filter fun t => t.law == law.name &&
@@ -1209,9 +1317,9 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
                     let mut boundaries := #[]
                     for name in subjects do
                       if let some resolved ← resolve all law.name name then boundaries := boundaries.push resolved
-                    let expected ← counterexample law.info ic subject mutant boundaries
+                    let expected ← counterexample law.info ic subject mutant boundaries (← get).budget
                     Lean.Meta.check expected
-                    unless closed p.info.type && (← protectedEq p.info.type expected (boundaries.push mutant)) do
+                    unless closed p.info.type && (← protectedEq p.info.type expected (boundaries.push mutant) (← get).budget) do
                       fail "planted-proposition" p.name s!"law={law.name} case={ic.key}"
   -- Bookkeeping must survive the exhausted deadline so each subsequent
   -- skipped analysis still gets its own named INCOMPLETE. No analysis is given
