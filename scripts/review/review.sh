@@ -317,7 +317,7 @@ fi
 # ---------------------------------------------------------------- prompts
 SCOPE_ROUND1="The patch below is the complete change of a branch against its base commit $BASE_SHA."
 SCOPE_DELTA="The patch below is only the change since commit $FROM, which was reviewed in round $REVIEWED_ROUNDS. Earlier rounds covered the rest of the branch."
-VERDICT_RULE='For each finding write one bullet: `- path:line: what is wrong and why`.
+VERDICT_RULE='For each finding write one bullet explaining what is wrong and why. Cite source only as [`identifier`](relative/path#Lstart-Lend), with the exact identifier inside that range. Bare path:line citations are blocked. In clean/ACCEPT reviews every single-backticked identifier must exist in the reviewed tree or its toolchain-pinned external-name list. In findings, mark proposed names as `proposed:newName`; proposed names are not evidence. Do not format ordinary prose as identifiers.
 For every repository file you opened for context, write a line `READ: <path>` (using its path relative to the repository root; at least one such line is required) before the final two lines.
 Your penultimate non-empty line must be exactly `REPOSITORY: readable` or `REPOSITORY: unreadable`. Use readable only after you have successfully opened repository files for context; if the sandbox or any repository read failed, use unreadable.
 The last non-empty line of your reply must be exactly one of these two lines, with nothing after it:

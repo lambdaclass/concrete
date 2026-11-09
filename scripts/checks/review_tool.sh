@@ -22,6 +22,8 @@ REVIEW="$ROOT_DIR/scripts/review/review.sh"
 VERIFY="$ROOT_DIR/scripts/review/verify.sh"
 SPLIT="$ROOT_DIR/scripts/review/split_diff.py"
 
+python3 -I "$ROOT_DIR/scripts/review/test_citations.py" || exit 1
+
 PASS=0
 FAIL=0
 ok() { echo "  ok   $1"; PASS=$((PASS+1)); }
@@ -137,7 +139,7 @@ elif has MARK_READ_ABS; then
 REPOSITORY: readable
 VERDICT: clean"
 elif has MARK_FINDING; then
-  reply "- a.txt:1: the counter is never reset
+  reply "- [\`base\`](README.md#L1): the counter is never reset
 READ: README.md
 REPOSITORY: readable
 VERDICT: findings"
@@ -201,7 +203,7 @@ case "$prompt" in
   *MARK_REPO_WRONG_POS*) printf 'READ: README.md\nREPOSITORY: readable\nRemark after REPOSITORY.\nVERDICT: clean\n' ;;
   *MARK_NO_READ*) printf 'Nothing to report.\nREPOSITORY: readable\nVERDICT: clean\n' ;;
   *MARK_BAD_READ*) printf 'READ: missing-file.txt\nREPOSITORY: readable\nVERDICT: clean\n' ;;
-  *MARK_FINDING*) printf -- '- a.txt:1: the counter is never reset\nREAD: README.md\nREPOSITORY: readable\nVERDICT: findings\n' ;;
+  *MARK_FINDING*) printf -- '- [`base`](README.md#L1): the counter is never reset\nREAD: README.md\nREPOSITORY: readable\nVERDICT: findings\n' ;;
   *MARK_NOVERDICT*) printf 'READ: README.md\nREPOSITORY: readable\nI looked at it and it seems fine.\n' ;;
   *MARK_TRAILING*) printf 'READ: README.md\nREPOSITORY: readable\nVERDICT: clean\nTrailing line.\n' ;;
   *) printf 'Nothing to report.\nREAD: README.md\nREPOSITORY: readable\nVERDICT: clean\n' ;;

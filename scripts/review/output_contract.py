@@ -19,6 +19,9 @@ Contract for a reviewer's raw output:
   5. At least one `READ: <path>` line must appear before the penultimate line, and
      every `READ: <path>` line must name a clean relative path that exists as a file
      (blob or symlink blob) in `--commit`'s git tree. Otherwise `blocked`.
+  6. Source links must name an identifier present within their exact line range;
+     positive verdicts also require standalone backticked identifiers to resolve
+     in the reviewed tree or its pinned external-name list. Otherwise `blocked`.
 
 CLI output (stdout, two lines):
   status: <verdict|blocked|refused|noverdict|error>
@@ -88,6 +91,73 @@ def is_clean_relative_path(path: str) -> bool:
     if any(seg in ("", ".", "..") for seg in segments):
         return False
     return posixpath.normpath(path) == path
+
+
+
+# Citation syntax is deliberately closed: named relative Markdown source links,
+# and single-backtick identifiers. See README.md beside this reader.
+IDENTIFIER = r"[A-Za-z_][\w]*[!?']?(?:\.[A-Za-z_][\w]*[!?']?)*"
+LINK = re.compile(r"\[`([^`\n]+)`\]\(([^)\s]+)#L(\d+)(?:-L(\d+))?\)")
+
+
+def citation_error(text: str, repo: str, commit: str, paths: set[str], positive: bool) -> str | None:
+    def blob(path: str) -> str:
+        proc = subprocess.run(["git", "-C", repo, "show", f"{commit}:{path}"],
+                              capture_output=True, check=False)
+        if proc.returncode:
+            raise ValueError(f"citation: cannot read '{path}'")
+        return proc.stdout.decode("utf-8", errors="replace")
+
+    def contains(name: str, content: str) -> bool:
+        return re.search(r"(?<![\w.])" + re.escape(name) + r"(?![\w.])", content) is not None
+
+    try:
+        remainder = text
+        for match in LINK.finditer(text):
+            name, path, start, end = match.groups()
+            label = match.group(0)
+            if not is_clean_relative_path(path) or path not in paths:
+                return f"citation: file '{path}' does not exist"
+            lines = blob(path).splitlines()
+            a, b = int(start), int(end or start)
+            if not 1 <= a <= b <= len(lines):
+                return f"citation: range '{path}#L{a}-L{b}' outside 1..{len(lines)}"
+            if not re.fullmatch(IDENTIFIER, name) or not contains(name, "\n".join(lines[a-1:b])):
+                return f"citation: anchor '{name}' absent from '{path}#L{a}-L{b}'"
+            remainder = remainder.replace(label, " " * len(label), 1)
+        # Bare locations have no checkable anchor and must be rewritten as named links.
+        location = re.search(r"[\w./-]+\.[A-Za-z]+(?::\d+|#L\d+)", remainder)
+        if location:
+            return f"citation: unnamed location '{location.group()}' requires a named source link"
+        if re.search(r"\]\([^)]*#L", remainder):
+            return "citation: malformed source link requires [`identifier`](relative/path#Lstart-Lend)"
+        if positive:
+            if re.search(r"`proposed:[^`]+`", remainder):
+                return "citation: proposed names require a FINDINGS/REJECT verdict"
+            external = {}
+            allow = "scripts/review/external-names.tsv"
+            if allow in paths and "lean-toolchain" in paths:
+                pin = blob("lean-toolchain").strip()
+                for row in blob(allow).splitlines():
+                    if row and not row.startswith("#"):
+                        toolchain, name, source = row.split("\t")
+                        if toolchain == pin and source:
+                            external[name] = source
+            for match in re.finditer(r"`([^`\n]+)`", remainder):
+                name = match.group(1)
+                if not re.fullmatch(IDENTIFIER, name):
+                    continue
+                if name in external:
+                    continue
+                proc = subprocess.run(["git", "-C", repo, "grep", "-I", "-w", "-F", "-q",
+                                       "-e", name, commit, "--", ".", ":(exclude)scripts/review/external-names.tsv"], capture_output=True, check=False)
+                if proc.returncode == 1:
+                    return f"citation: identifier '{name}' absent from reviewed tree and pinned external names"
+                if proc.returncode != 0:
+                    return f"citation: identifier lookup failed for '{name}'"
+    except (ValueError, OSError) as exc:
+        return str(exc)
+    return None
 
 
 def evaluate_output(
@@ -174,6 +244,11 @@ def evaluate_output(
                 "blocked",
                 f"READ: path '{rp}' does not exist as a file in commit {commit}",
             )
+
+    problem = citation_error(strip_directives(text), repo, commit, valid_blobs,
+                             matched_verdict.lower() in ("clean", "accept"))
+    if problem:
+        return "blocked", problem
 
     return matched_verdict, f"verified {len(read_paths)} READ path(s), REPOSITORY: readable, VERDICT: {matched_verdict}"
 

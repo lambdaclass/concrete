@@ -1,0 +1,2 @@
+# toolchain<TAB>identifier<TAB>upstream declaration (reviewed allowlist, exact pin)
+leanprover/lean4:v4.34.1	declModifiers	Lean/Parser/Command.lean:114 (def declModifiers)
