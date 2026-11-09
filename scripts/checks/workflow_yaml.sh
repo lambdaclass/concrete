@@ -45,7 +45,7 @@ for f in "$WF_DIR"/*.yml "$WF_DIR"/*.yaml; do
   fi
 done
 
-if python3 -I scripts/checks/compiler/campaign_wiring.py && python3 -I scripts/checks/compiler/campaign_controls.py; then
+if python3 -I scripts/checks/compiler/hermetic_controls.py; then
   echo "  ok   C registry, workflow safety and exact-diagnostic mutation controls"; PASS=$((PASS+1))
 else
   echo "  FAIL C registry, workflow safety and mutation controls"; FAIL=$((FAIL+1))

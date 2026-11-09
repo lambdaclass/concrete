@@ -17,12 +17,12 @@ def run(argv, env):
                           capture_output=True, text=True, timeout=30)
 
 
-def main():
-    env = dict(os.environ)
+def main(environment):
+    env = {k: v for k, v in environment.items() if not k.startswith(('GITHUB_', 'SELECTED_', 'SCHEDULED_', 'RUNNER_'))}
     env.pop('SCHEDULED_OUTCOME_FILE', None)
     env.pop('SCHEDULED_OUTCOME_HELPER', None)
     sha = subprocess.check_output(['git','rev-parse','HEAD'], cwd=ROOT, text=True, timeout=10).strip()
-    env.update(SELECTED_SHA=sha, SELECTED_TIER='daily')
+    env.update(SELECTED_SHA=sha, SELECTED_TIER='daily', GITHUB_EVENT_NAME='schedule', GITHUB_REF='refs/heads/main', RUNNER_ENVIRONMENT='self-hosted')
     rows = {r['id']: r for r in gate_manifest.load()['gates']}
     for gid in ('scaling-daily','determinism'):
         for control in rows[gid]['controls']:
@@ -41,7 +41,7 @@ def main():
             events = Path(scratch)/label
             events.touch()
             selected = dict(env, SCHEDULED_OUTCOME_FILE=str(events), SCHEDULED_OUTCOME_HELPER=str(ROOT/'scripts/checks/lib/gate_outcome.py'))
-            result = run(['bash','-euc','root=$1; source "$root/scripts/checks/compiler/campaign.sh"; '+body,'control',str(ROOT)],selected)
+            result = run(['bash','-euc','campaign_outcome_helper=$SCHEDULED_OUTCOME_HELPER; root=$1; source "$root/scripts/checks/compiler/campaign.sh"; '+body,'control',str(ROOT)],selected)
             status = gate_outcome.result(events,result.returncode,sha)
             assert status == code, (label,result.returncode,status,result.stdout,result.stderr)
             statuses = {e['status'] for e in map(json.loads,events.read_text().splitlines())}
@@ -50,4 +50,4 @@ def main():
     return 0
 
 if __name__ == '__main__':
-    sys.exit(main())
+    sys.exit(main(dict(os.environ)))

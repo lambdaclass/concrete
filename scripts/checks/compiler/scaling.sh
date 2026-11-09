@@ -29,10 +29,19 @@ cd "$root"
 source scripts/checks/lib/limits.sh
 gate_limits 64 40000
 # Shared C lifecycle; the scheduler owns orchestration and outcome interpretation.
+# Snapshot external identity only at this entry point; campaign.sh receives explicit inputs.
+campaign_outcome_helper=${SCHEDULED_OUTCOME_HELPER:-}
+campaign_tier=${SELECTED_TIER:-qualification}
+campaign_attempt=${SCHEDULED_ATTEMPT_ID:-local}
+campaign_repository=${GITHUB_REPOSITORY:-local}
+campaign_runner_environment=${RUNNER_ENVIRONMENT:-local}
+campaign_runner_name=${RUNNER_NAME:-local}
 source scripts/checks/compiler/campaign.sh
 
 report=$work/report
 if [ "$#" -gt 0 ] && [ "${1#-}" = "$1" ]; then report=$1; shift; fi
+policy_only=0
+if [ "${1:-}" = --check-execution-policy ]; then policy_only=1; shift; fi
 plant=
 if [ "$#" -gt 0 ]; then
   [ "$#" = 3 ] && [ "$1" = --allow-planted-failure ] && [ "$2" = --plant ] &&
@@ -57,24 +66,9 @@ case "$tier" in pr|qualification|daily) ;; *) echo "scaling: invalid SELECTED_TI
 [ "$tier" != pr ] || in_process_only=1
 head_sha=$(git rev-parse HEAD)
 expected_sha=${SELECTED_SHA:-$head_sha}
-mkdir -p "$report"
-printf 'sha=%s\ntier=%s\n' "$head_sha" "$tier" >"$report/identity.txt"
 
-check_exact_sha() { # check_exact_sha ACTUAL_HEAD EXPECTED_SHA [EVENT_NAME] [REF_NAME] [RUNNER_ENV]
-  local actual_head=$1 expected=$2 event=${3:-} ref=${4:-} runner_env=${5:-}
-  if [ "$runner_env" = "self-hosted" ] && [ "$event" = "pull_request" ]; then
-    echo "FAIL scaling: unauthorized event pull_request for self-hosted qualification" >&2
-    return 1
-  fi
-  if [ -n "$ref" ]; then
-    case "$ref" in
-      refs/heads/main|refs/heads/ci/*|refs/heads/wip/*) ;;
-      *)
-        echo "FAIL scaling: unauthorized ref $ref for self-hosted qualification" >&2
-        return 1
-        ;;
-    esac
-  fi
+check_exact_sha() { # check_exact_sha ACTUAL_HEAD EXPECTED_SHA
+  local actual_head=$1 expected=$2
   if ! [[ "$expected" =~ ^[0-9a-f]{40}$ ]]; then
     echo "FAIL scaling: unauthorized or invalid expected SHA: ${expected:-<empty>}" >&2
     return 1
@@ -121,11 +115,17 @@ PY
 check_ci2_runner() {
   python3 -I "$root/scripts/checks/lib/ci2_binding.py"
 }
-check_exact_sha "$head_sha" "$expected_sha" "${GITHUB_EVENT_NAME:-}" "${GITHUB_REF:-}" "${RUNNER_ENVIRONMENT:-}"
+check_exact_sha "$head_sha" "$expected_sha"
+python3 -I "$root/scripts/checks/compiler/execution_policy.py" "$tier" \
+  "${GITHUB_EVENT_NAME:-}" "${GITHUB_REF:-}" "$campaign_runner_environment"
+# Policy probes never build, measure, or emit qualifying evidence.
+if [ "$policy_only" = 1 ]; then echo "PASS scaling execution policy: $tier"; exit 0; fi
+mkdir -p "$report"
+printf 'sha=%s\ntier=%s\n' "$head_sha" "$tier" >"$report/identity.txt"
 campaign_identity "$report" "$expected_sha"
 # Heavy CI and scheduled campaigns require authoritative runner verification. Local
 # focused smoke modes remain explicit and cannot qualify wall-clock measurements.
-if [ "$tier" != pr ] && [ "$in_process_only" = 0 ]; then
+if [ "$tier" != pr ]; then
   binding_rc=0
   check_ci2_runner >"$work/binding.log" 2>&1 || binding_rc=$?
   if [ "$binding_rc" != 0 ]; then
@@ -269,20 +269,18 @@ control_ci2_provenance() {
 
 control_exact_sha() {
   local log=$work/control-sha.log bad_report=$work/control-bad-report.tsv rc=0
-  if ! check_exact_sha "$head_sha" "$head_sha" "workflow_dispatch" "refs/heads/main" "self-hosted" >"$log" 2>&1 ||
+  if ! check_exact_sha "$head_sha" "$head_sha" >"$log" 2>&1 ||
       ! verify_report_sha "$report/identity.txt" "$head_sha" "$tier" >"$log" 2>&1; then
     control_setup exact-sha "authorized exact SHA was rejected" "$log"
     return 1
   fi
   for case_spec in \
-      "unauthorized-event|$head_sha|pull_request|refs/heads/main|self-hosted|FAIL scaling: unauthorized event pull_request for self-hosted qualification" \
-      "unauthorized-ref|$head_sha|workflow_dispatch|refs/pull/1/merge|self-hosted|FAIL scaling: unauthorized ref refs/pull/1/merge for self-hosted qualification" \
       "invalid-sha|not-a-sha|workflow_dispatch|refs/heads/main|self-hosted|FAIL scaling: unauthorized or invalid expected SHA: not-a-sha" \
       "mismatched-sha|0000000000000000000000000000000000000000|workflow_dispatch|refs/heads/main|self-hosted|FAIL scaling: checked-out HEAD does not match authorized expected SHA 0000000000000000000000000000000000000000"; do
     IFS='|' read -r label exp_sha ev ref renv expected <<<"$case_spec"
     rc=0
-    check_exact_sha "$head_sha" "$exp_sha" "$ev" "$ref" "$renv" >"$log" 2>&1 || rc=$?
-    if [ "$rc" = 0 ] || ! grep -qF "$expected" "$log"; then
+    check_exact_sha "$head_sha" "$exp_sha" >"$log" 2>&1 || rc=$?
+    if [ "$rc" != 1 ] || ! grep -qxF "$expected" "$log"; then
       control_setup "exact-sha-$label" "did not refuse with '$expected' (status $rc)" "$log"
       return 1
     fi
@@ -290,7 +288,7 @@ control_exact_sha() {
   printf '# sha=1111111111111111111111111111111111111111; tier=%s\n' "$tier" >"$bad_report"
   rc=0
   CAMPAIGN_EXPECT_FAILURE=1 verify_report_sha "$bad_report" "$head_sha" "$tier" >"$log" 2>&1 || rc=$?
-  if [ "$rc" = 0 ] || ! grep -qF "FAIL scaling: report SHA 1111111111111111111111111111111111111111 in $bad_report does not match authorized expected SHA $head_sha" "$log"; then
+  if [ "$rc" != 1 ] || ! grep -qxF "FAIL scaling: report SHA 1111111111111111111111111111111111111111 in $bad_report does not match authorized expected SHA $head_sha" "$log"; then
     control_setup exact-sha-report-mismatch "did not refuse mismatched report SHA (status $rc)" "$log"
     return 1
   fi

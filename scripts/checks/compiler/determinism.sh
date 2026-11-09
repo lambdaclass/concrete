@@ -32,6 +32,13 @@ cd "$root"
 source scripts/checks/lib/limits.sh
 gate_limits 64 40000
 # Shared C lifecycle; the scheduler owns orchestration and outcome interpretation.
+# Snapshot external identity only at this entry point; campaign.sh receives explicit inputs.
+campaign_outcome_helper=${SCHEDULED_OUTCOME_HELPER:-}
+campaign_tier=${SELECTED_TIER:-qualification}
+campaign_attempt=${SCHEDULED_ATTEMPT_ID:-local}
+campaign_repository=${GITHUB_REPOSITORY:-local}
+campaign_runner_environment=${RUNNER_ENVIRONMENT:-local}
+campaign_runner_name=${RUNNER_NAME:-local}
 source scripts/checks/compiler/campaign.sh
 
 report=${1:-$work/report}

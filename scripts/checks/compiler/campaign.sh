@@ -5,8 +5,8 @@ source "$root/scripts/checks/lib/bounded.sh"
 CAMPAIGN_INCOMPLETE=0
 campaign_outcome() {
   [ "$1" != INCOMPLETE ] || CAMPAIGN_INCOMPLETE=1
-  if [ -n "${SCHEDULED_OUTCOME_HELPER:-}" ]; then
-    python3 -I "$SCHEDULED_OUTCOME_HELPER" "$1" "$2"
+  if [ -n "${campaign_outcome_helper:-}" ]; then
+    python3 -I "$campaign_outcome_helper" "$1" "$2"
   fi
 }
 campaign_finish() {
@@ -49,6 +49,6 @@ campaign_identity() {
   mkdir -p "$1"
   printf '%s\n' "$2" >"$1/sha.txt"
   printf 'sha=%s\ntier=%s\nattempt=%s\nrepository=%s\nrunner_environment=%s\nrunner_name=%s\n' \
-    "$2" "${SELECTED_TIER:-qualification}" "${SCHEDULED_ATTEMPT_ID:-local}" \
-    "${GITHUB_REPOSITORY:-local}" "${RUNNER_ENVIRONMENT:-local}" "${RUNNER_NAME:-local}" >"$1/provenance.txt"
+    "$2" "${campaign_tier}" "${campaign_attempt}" \
+    "${campaign_repository}" "${campaign_runner_environment}" "${campaign_runner_name}" >"$1/provenance.txt"
 }
