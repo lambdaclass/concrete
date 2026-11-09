@@ -1511,24 +1511,27 @@ example : exposedMemory.WellFormed target ∧
   ⟨exposedMemory_wf, by decide, by decide⟩
 
 -- 20. access_valid
-/-- Instance (law `ConcreteSpec.Core.Mem.access_valid`, case `nonempty`). The domain contains the successful two-byte access through ptr. -/
-example : ∀ p, match memory.access target p 2 1 with
-    | some _ => p.Valid target
+/-- Instance (law `ConcreteSpec.Core.Mem.access_valid`, case `nonempty`). An out-of-range closed pointer cannot yield a successful nonempty access. -/
+example : match memory.access target badPtr 2 1 with
+    | some _ => badPtr.Valid target
     | none => True :=
-  access_valid target memory memory_wf 2 1 (by decide)
+  access_valid target memory memory_wf 2 1 (by decide) badPtr
 
-/-- Accepted (rule C4). The nonempty validity instance includes an actual successful access. -/
-example : memory.access target ptr 2 1 = some (some (⟨0⟩, 0)) := rfl
+/-- Accepted (rule C4). Successful nonempty access remains covered at a valid closed pointer. -/
+example : (memory.access target ptr 2 1 = some (some (⟨0⟩, 0))) ∧
+    (match memory.access target ptr 2 1 with
+    | some _ => ptr.Valid target
+    | none => True) :=
+  ⟨rfl, access_valid target memory memory_wf 2 1 (by decide) ptr⟩
 
 /-- Planted (law `ConcreteSpec.Core.Mem.access_valid`, case `nonempty`, subject `ConcreteSpec.Core.Mem.Memory.access`, mutant `ConcreteSpec.Core.Mem.Audit.badAccessPair`). -/
 example : memory.WellFormed target ∧ (2 : Nat) ≠ 0 ∧
-    ¬ (∀ p, match badAccessPair target memory p 2 1 with
-      | some _ => p.Valid target
-      | none => True) := by
-  refine ⟨memory_wf, by decide, ?_⟩
-  intro h
-  have hv := h badPtr
-  exact (by decide : ¬ badPtr.Valid target) hv
+    ¬ (match badAccessPair target memory badPtr 2 1 with
+      | some _ => badPtr.Valid target
+      | none => True) :=
+  ⟨memory_wf, by decide, by
+    change ¬ badPtr.Valid target
+    decide⟩
 
 -- 21. access_success
 /-- Instance (law `ConcreteSpec.Core.Mem.access_success`, case `interior`). Independent provenance, liveness, alignment and bounds obligations hold for an interior two-byte access. -/
