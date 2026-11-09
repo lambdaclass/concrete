@@ -102,3 +102,56 @@ requirement merely because partial diagnostics exist.
 No push, review tooling or landing was performed by this writer. Reviews of
 record and any scheduling rows are the coordinator's responsibility. Reviewers
 must do the best long-term thing rather than cut corners.
+
+## Amendment 3 implementation fix round 1 (2026-11-09)
+
+The ci-2 N12r census at `a55d5880975f` is **INCOMPLETE**, not a successful
+population result: the 120/240s watchdog discarded the audit after 389 seconds
+and hid all five historical instance-application FAILs. No full-scope census is
+run by this writer. The coordinator's wide-watchdog measurement is diagnostic
+only and has not yet been supplied here.
+
+F1: planning and parsing have private states; each analysis owns its resolutions
+and findings, and terminal verdicts precede global deduplication. Unknown Instance
+law controls require the exact `FAIL unknown-name` on classification both without
+a cap and with `C=100000`, which stops before evidence-tags. Repeated failing
+Planted jobs require FAIL terminals even with identical emitted diagnostics;
+repeated Instance job controls require two FAIL terminals and one global finding.
+
+F2: the shared DAG control measures depth 10 at **4093 -> 41** work units,
+`cached=2 root=false -> cached=22 root=true`; depth 15 changes from exact
+`work-budget` exhaustion to **61** work units, `cached=32 root=true` (bound 63).
+This measures a small local synthetic scope, not the cause or wall-time recovery
+of Grant/Own. Restoring the early-exit bug must produce exact
+`dag-root-not-cached` and `work-budget` diagnostics. Other traversal ownership
+and memoization were audited as documented in README.
+
+W: a READY/START/F/END journal makes results recoverable after process watchdog
+expiry. The control plants a 15s sleep at evidence-tags and uses 4/8s watchdogs;
+it requires the earlier exact unknown-name FAIL, named interrupted/unrun
+INCOMPLETEs, and all three population equations. Production watchdogs and work
+allowances are unchanged. Per-analysis interpretation stays **assumed, pending
+owner**, with shared-budget option B still open. README records wall-policy
+options and the coordinator-owned future worker design without allocating IDs.
+
+Coordinator ci-2 command, in this clone's exact final implementation commit
+(substitute the reported implementation SHA for IMPLEMENTATION_SHA):
+
+```bash
+nix develop --command bash scripts/checks/lib/bounded.sh 900 bash -c '
+  set -euo pipefail
+  test "$(git rev-parse HEAD)" = IMPLEMENTATION_SHA
+  scratch=$(mktemp -d)
+  trap '\''rm -rf "$scratch"'\'' EXIT
+  git archive --format=tar 6efdce6136752d51fc74265d61278d90937f24cd > "$scratch/source.tar"
+  mkdir "$scratch/source"
+  tar -xf "$scratch/source.tar" -C "$scratch/source"
+  python3 scripts/proofs/vacuity_driver.py --source "$scratch/source" --scope ConcreteSpec.Proofs.Grant,ConcreteSpec.Proofs.Own
+'
+```
+
+Record stdout, rc, elapsed time, the three equations, class/reason counts, and
+whether each of the five instance-application names appears. Recovery accounting
+is not evidence that every independent analysis completed. Reviews of record
+must do the best long-term thing rather than cut corners. No push, review tool,
+OD decision, certificate/solver rewrite, or ROADMAP edit is authorized here.

@@ -6,6 +6,7 @@ The lexical rewrite only retains anonymous examples, exactly as for the trust ga
 import argparse
 import contextlib
 import io
+import json
 import functools
 import hashlib
 import os
@@ -22,8 +23,21 @@ ROOT = HERE.parent.parent
 BOUND = ROOT / "scripts/checks/lib/bounded.sh"
 
 
-def command(args, cwd, env, seconds=120):
-    return subprocess.run(["bash", str(BOUND), str(seconds), *map(str, args)],
+def command(args, cwd, env, seconds=120, *, outcome=None):
+    argv = ["bash", str(BOUND), str(seconds), *map(str, args)]
+    if outcome is not None:
+        # Read the watchdog's private outcome, never infer timeout from exit 124.
+        script = """
+source "$1"; shift
+trap 'rm -rf "$BOUNDED_DIR"' EXIT
+result_path="$1"; shift
+bounded_run "$@"
+rc=$?
+if bounded_is_incomplete "$rc"; then printf incomplete > "$result_path"; else printf completed > "$result_path"; fi
+exit "$rc"
+"""
+        argv = ["bash", "-c", script, "n2-audit", str(BOUND), str(outcome), str(seconds), "--", *map(str, args)]
+    return subprocess.run(argv,
                           cwd=cwd, env=env, text=True, stdout=subprocess.PIPE,
                           stderr=subprocess.STDOUT)
 
@@ -48,6 +62,56 @@ def compiled_consumer(*, consumer_text=None):
         yield work
 
 
+def recover_watchdog(path):
+    """Recover only closed records from the last attempt's frozen population.
+
+    READY commits the manifest; END commits an analysis' terminal result. Earlier
+    findings are durable independently, including FAILs from an interrupted job.
+    """
+    if not path.exists():
+        return None
+    plans, ended, started, findings = {}, {}, set(), []
+    cap = None
+    for line in path.read_text().split("\n")[:-1]:
+        parts = json.loads(line).split('\t')
+        if parts[0] == 'P' and len(parts) == 5:
+            plans[int(parts[1])] = parts[2:]
+        elif parts[0] == 'READY' and len(parts) == 2:
+            cap = int(parts[1])
+        elif parts[0] == 'START' and len(parts) == 2:
+            started.add(int(parts[1]))
+        elif parts[0] == 'END' and len(parts) == 4:
+            ended[int(parts[1])] = (int(parts[2]), parts[3] == 'true')
+        elif parts[0] == 'F' and len(parts) >= 2:
+            findings.append('\t'.join(parts[1:]))
+    if cap is None or set(plans) != set(range(len(plans))):
+        return None
+    # A result printed before END was not committed; regenerate it as INCOMPLETE.
+    terminals = [f for f in findings if f.startswith('NOTE analysis-result ')]
+    committed_terminals = terminals[:len(ended)]
+    rows = list(dict.fromkeys(f for f in findings if not f.startswith(
+        ('NOTE analysis-result ', 'NOTE analysis-summary ', 'NOTE analysis-population '))))
+    rows.insert(0, f'NOTE analysis-population [anonymous] N={len(plans)} C={cap} K={cap // 20000}')
+    rows.extend(committed_terminals)
+    for i, (name, fields, extra) in plans.items():
+        if i in ended:
+            continue
+        reason = 'wall-watchdog' if i in started else 'wall-watchdog-unrun'
+        amount = 'unavailable' if i in started else '0'
+        usage = f'heartbeats={amount}/2000000 work={amount}/20000 projection={amount}/4096' + (' ' + extra if extra else '')
+        rows.append(f'INCOMPLETE analysis-budget-or-error {name} {fields} reason={reason} {usage}')
+        rows.append(f'NOTE analysis-result {name} {fields} result=INCOMPLETE {usage}')
+    attempted = len(started | {i for i, (decision, _) in ended.items() if decision != 0})
+    completed = sum(complete for _, complete in ended.values())
+    n = len(plans)
+    rows.append(f'NOTE analysis-summary [anonymous] N={n} C={cap} K={cap // 20000} '
+                f'attempted={attempted} unrun={n - attempted} completed={completed} '
+                f'incomplete={n - completed} reported={n} reason=wall-watchdog usage=unavailable')
+    rows.append('N2 INCOMPLETE')
+    return '\n'.join(rows) + '\n'
+
+
+
 def _run(source, scope, fixture=None, budget=4096, inventory=False, *, driver_text=None, proof_mode=None, meta_path=None, audit_seconds=120, whole_run_cap=None):
     with tempfile.TemporaryDirectory(prefix="vacuity-") as temp:
         work = Path(temp)
@@ -69,7 +133,7 @@ def _run(source, scope, fixture=None, budget=4096, inventory=False, *, driver_te
                 examples(work, work, ["ConcreteSpec.lean"])
         (work / "ROADMAP.md").write_text((source / "ROADMAP.md").read_text())
         env = dict(os.environ, LEAN_PATH=os.pathsep.join(map(str, [work, meta_path] if meta_path else [work])), VACUITY_SCOPE=scope,
-                   VACUITY_TRACE=str(work / "audit-trace.tsv"),
+                   VACUITY_TRACE=str(work / "audit-trace.tsv"), VACUITY_JOURNAL=str(work / "audit-journal.tsv"),
                    VACUITY_BUDGET=str(budget), PROOF_MODE=proof_mode or ("theorems" if inventory else "vacuity"))
         if whole_run_cap is not None:
             env["VACUITY_WHOLE_RUN_CAP"] = str(whole_run_cap)
@@ -124,6 +188,7 @@ def _run(source, scope, fixture=None, budget=4096, inventory=False, *, driver_te
 set_option maxHeartbeats 2000000 in
 #eval show MetaM Unit from do
   try
+    if let some path ← IO.getEnv "VACUITY_JOURNAL" then IO.FS.writeFile path ""
     checkRowSafety (← getEnv)
     let findings ← Vacuity.check (populationConstants (← getEnv))
     for f in findings do
@@ -138,10 +203,13 @@ set_option maxHeartbeats 2000000 in
         path = work / "audit.lean"
         path.write_text(driver)
         started = time.monotonic()
-        result = command(["lean", path], work, env, seconds=audit_seconds)
+        result = command(["lean", path], work, env, seconds=audit_seconds, outcome=work / "audit-outcome")
         wall = f"N2 WALL audit-seconds={audit_seconds} retry-seconds={audit_seconds * 2} elapsed-seconds={time.monotonic() - started:.3f}\n"
         result.stdout = wall + result.stdout
         if result.returncode:
+            recovered = recover_watchdog(work / "audit-journal.tsv") if (work / "audit-outcome").read_text() == "incomplete" else None
+            if recovered is not None:
+                return 2, wall + recovered
             trace = work / "audit-trace.tsv"
             tail = "\n".join(trace.read_text().splitlines()[-20:]) if trace.exists() else "no audit progress"
             return 2, "INCOMPLETE enumerator\n" + result.stdout + "\nN2 LAST PROGRESS\n" + tail + "\n"

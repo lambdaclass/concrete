@@ -44,7 +44,32 @@ def ownership_controls(meta):
     print('PASS reporting repeated-job-findings', flush=True)
 
 
+def watchdog_controls():
+    consumer = (HERE / 'vacuity.lean').read_text()
+    anchor = '        journal s!"START\\t{i}"\n        let complete ← isolated deadline job'
+    assert consumer.count(anchor) == 1
+    injection = anchor.replace('        let complete',
+        '        if job.stage == "evidence-tags" then liftM (IO.sleep 15000 : IO Unit)\n        let complete')
+    fixture = BASE.replace('Instance (law `ConcreteSpecControl.growth`',
+                           'Instance (law `ConcreteSpecControl.missingLaw`')
+    with compiled_consumer(consumer_text=consumer.replace(anchor, injection)) as meta:
+        code, report = run(ROOT, '', fixture, 64, meta_path=meta, audit_seconds=4)
+    rows = report.splitlines()
+    assert code == 2 and 'FAIL unknown-name ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:8» ConcreteSpecControl.missingLaw' in rows, report
+    assert any('stage=evidence-tags ' in r and 'reason=wall-watchdog ' in r for r in rows), report
+    assert any('stage=projection ' in r and 'reason=wall-watchdog-unrun ' in r for r in rows), report
+    terminals = [r for r in rows if r.startswith('NOTE analysis-result ')]
+    stats = dict(re.findall(r'(\w[\w-]*)=([^ ]+)', next(r for r in rows if r.startswith('NOTE analysis-summary '))))
+    n = int(stats['N'])
+    assert len(terminals) == int(stats['reported']) == n, report
+    assert int(stats['attempted']) + int(stats['unrun']) == n, report
+    assert int(stats['completed']) + int(stats['incomplete']) == n, report
+    assert report.endswith('N2 INCOMPLETE\n') and 'INCOMPLETE enumerator' not in report, report
+    print('PASS reporting wall-watchdog: earlier exact FAIL, named interrupted/unrun analyses, population equations', flush=True)
+
+
 def main():
+    watchdog_controls()
     source = BASE.replace('end ConcreteSpecControl', '''axiom budgetSupplier : 2 = 2
 /-- Instance (law `ConcreteSpecControl.growth`, case `budget`). -/
 example : 2 < S 2 := growth 2 budgetSupplier

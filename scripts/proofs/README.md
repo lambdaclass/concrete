@@ -411,3 +411,51 @@ budget failures, and vacuous historical controls. The required long-term repair
 is one Graph/Work evaluator over closed templates with typed actual-origin
 substitution; delete the parallel certificate walker. No replacement evaluator,
 primitive trust rule or phase-B completion is claimed by the reproduction.
+
+### N2 A3 fix round 1: state ownership and wall recovery
+
+Planning runs in a private `AuditState`, with journaling disabled. Evidence
+parsers also have private findings and resolution caches. Each admitted analysis
+owns fresh findings and resolutions, computes its terminal verdict locally, then
+merges diagnostics into the global deduplicated report. Terminal analysis records
+are never deduplicated: identical findings and identities still represent distinct
+jobs. Mutable cross-job evidence/provenance references are scheduler-owned data;
+resolution caches and emitted findings are not shared across analyses.
+
+`workConstants` memoizes every expression constructor after evaluating its
+children. `mentionsVisit` uses a query-local visited declaration set and delegates
+expression traversal to that cache; `mentions` and `mutate` insert their results
+outside their early-return helpers. `moduleDepends` caches completed module walks;
+its equality/missing-module exits are constant-time leaves, not recursive walks.
+`withProtected` now visits each shared expression once while collecting terms and
+memoizes replacement by expression, protected term, and replacement value.
+The depth-15 shared application DAG control has a bound of 63 work units and
+requires the root cache entry. The early-exit mutation must report exactly
+`dag-root-not-cached` at depth 10 and `work-budget` at depth 15.
+
+The audit writes a private append-only JSON-string journal. A READY record commits
+the complete ordered population before admission. Findings are flushed when
+emitted; END commits each terminal result. Planning and global report merging do
+not journal findings a second time. The bounded runner's private outcome file,
+not exit status or printed text, identifies watchdog expiry. After both attempts
+expire, the driver recovers the last attempt's complete journal records. It keeps
+completed results and FAILs already emitted by an interrupted analysis, then emits
+one named terminal INCOMPLETE for every unfinished job: `reason=wall-watchdog`
+for a started job, `reason=wall-watchdog-unrun` for the remainder. Interrupted
+usage is `unavailable`, never claimed as zero. Unrun usage is zero. The recovery
+summary preserves `reported=N`, `attempted+unrun=N`, and
+`completed+incomplete=N`. It explicitly marks aggregate usage unavailable. A
+watchdog before READY remains an enumerator INCOMPLETE because no complete
+population has yet been established; it cannot claim population accounting.
+
+Budget interpretation remains **assumed, pending owner**: per-analysis budgets
+are independent; option B (one shared budget) remains the alternative. Wall-time
+policy is also pending owner: retain the existing process watchdog and account
+for its unfinished population (implemented), or introduce an independently timed
+worker per analysis so a slow job cannot prevent later independent jobs from
+being attempted. The latter would require an owner-approved wall allowance and
+worker/environment protocol. It is not a reason to raise the existing 120/240s
+watchdog, 2,000,000 heartbeats, or 20,000 work units. The coordinator owns any
+roadmap row for that worker design; this writer allocates no IDs.
+
+Reviews of record must do the best long-term thing rather than cut corners.

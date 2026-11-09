@@ -48,6 +48,7 @@ def useWork (budget : Option WorkBudget) (reason : String := "work-budget") : Me
   if let some budget := budget then chargeWork budget reason
 
 structure AuditState where
+  journalEnabled : Bool := true
   findings : Array Finding := #[]
   budget : Option WorkBudget := none
   lastUsage : AnalysisUsage := {}
@@ -58,7 +59,15 @@ structure AuditState where
 
 abbrev Audit := StateRefT AuditState MetaM
 
-def emit (status code : String) (n : Name) (detail : String := "") : Audit Unit :=
+/-- Append-only private recovery journal: each write is closed before work resumes. -/
+def journal (line : String) : MetaM Unit := do
+  if let some path ← IO.getEnv "VACUITY_JOURNAL" then
+    let handle ← IO.FS.Handle.mk path .append
+    handle.putStrLn (Json.compress (toJson line))
+    handle.flush
+
+def emit (status code : String) (n : Name) (detail : String := "") : Audit Unit := do
+  if (← get).journalEnabled then journal s!"F\t{status} {code} {n} {detail}"
   modify fun state =>
     let f := { status, code, name := n, detail : Finding }
     if code != "analysis-result" && state.findings.contains f then state
@@ -1112,7 +1121,10 @@ def isolated (deadline : Core.Context) (job : AnalysisJob) : Audit Bool := do
   emit "NOTE" "analysis-result" job.name s!"{job.fields} result={result} {job.usage heartbeats (← work.get)}"
   let localFindings := (← get).findings
   modify fun s => { s with findings := global }
-  for f in localFindings do emit f.status f.code f.name f.detail
+  for f in localFindings do
+    modify fun s =>
+      if f.code != "analysis-result" && s.findings.contains f then s
+      else { s with findings := s.findings.push f }
   let usage ← work.get
   modify fun s => { s with budget := none, lastUsage := usage, lastHeartbeats := heartbeats }
   return !incomplete
@@ -1143,6 +1155,11 @@ def schedulerPart (deadline : Core.Context) (ticks heartbeats : IO.Ref Nat)
 def runJobs (deadline : Core.Context) (jobs : Array AnalysisJob) (cap : Nat)
     (schedulerTicks schedulerHeartbeats : IO.Ref Nat) : Audit Unit := do
   if cap > jobs.size * 20000 then throwError "invalid-whole-run-cap"
+  if let some path ← IO.getEnv "VACUITY_JOURNAL" then IO.FS.writeFile path ""
+  for i in [:jobs.size] do
+    let job := jobs[i]!
+    journal s!"P\t{i}\t{job.name}\t{job.fields}\t{job.extra}"
+  journal s!"READY\t{cap}"
   schedulerPart deadline schedulerTicks schedulerHeartbeats do
     emit "NOTE" "analysis-population" .anonymous s!"N={jobs.size} C={cap} K={cap / 20000}"
   let mut outcomes : Array Bool := #[]
@@ -1175,12 +1192,14 @@ def runJobs (deadline : Core.Context) (jobs : Array AnalysisJob) (cap : Nat)
       attempted := attempted + 1
       if decision == 1 then outcomes := outcomes.push false
       else
+        journal s!"START\t{i}"
         let complete ← isolated deadline job
         outcomes := outcomes.push complete
         if complete then completed := completed + 1
         actualHeartbeats := actualHeartbeats + (← get).lastHeartbeats
         actualWork := actualWork + (← get).lastUsage.work
         actualProjection := actualProjection + (← get).lastUsage.projection
+    journal s!"END\t{i}\t{decision}\t{outcomes[i]!}"
   let unrun := jobs.size - attempted
   let hit := match capHit with
     | none => "none"
@@ -1541,7 +1560,7 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
     let saved ← liftM (Meta.saveState : MetaM Meta.SavedState)
     let planned ← tryCatchRuntimeEx
       (withTheReader Core.Context (fun ctx => { ctx with initHeartbeats := schedulerStart, maxHeartbeats := deadline.maxHeartbeats }) do
-        let (jobs, _) ← build.run { (← get) with findings := #[], resolutions := {} }
+        let (jobs, _) ← build.run { (← get) with findings := #[], resolutions := {}, journalEnabled := false }
         Core.checkMaxHeartbeats "vacuity-scheduler"
         return some jobs)
       (fun ex => do
