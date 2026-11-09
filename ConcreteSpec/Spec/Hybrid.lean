@@ -15,8 +15,8 @@ Typed writes touch only the active scalar prefix, preserving padding, initializa
 fragments outside it. Struct field layout, enums, pointers in structs and the C8 padding oracle
 are left out. Pointer decoding stays exactly as in Memory; no new pointer meaning is chosen.
 
-Pointer-typed places await the whole-pointer decoding owner decision; their sizeof will take
-the target.
+Pointer-typed places remain outside this scalar slice; their sizeof will take the target.
+Raw pointer decoding follows owner decision 2026-11-08, item 20 in Memory.
 
 `State` is an `Exec.Operands.Store` shape: instantiate `Store := State`, use `read`/`write` in
 operand evaluation and `rawWrite` for authorized primitive writes; turn `none` into `Res.stuck`.
@@ -138,12 +138,15 @@ def State.RangesDisjoint (st : State) (p q : Place) : Prop :=
 def State.set (st : State) (p : Place) (c : Cell) : State :=
   { st with cells := (p, c) :: st.cells }
 
+/-- Helper (computation). Place lookup after State.set reduces to association-list cons (approved: APPR-C4-agy-78ee5a2db). -/
 @[simp] theorem State.places_set (st : State) (p q : Place) (c : Cell) :
     (st.set p c).places q = if p = q then some c else st.places q := rfl
 
+/-- Helper (computation). Updating the byte-memory field preserves place lookup (approved: APPR-C4-agy-78ee5a2db). -/
 @[simp] theorem State.places_memory (st : State) (m : Memory) (p : Place) :
     ({ st with memory := m } : State).places p = st.places p := rfl
 
+/-- Helper (computation). Updating a logical place preserves the byte-memory field (approved: APPR-C4-agy-78ee5a2db). -/
 @[simp] theorem State.memory_set (st : State) (p : Place) (c : Cell) :
     (st.set p c).memory = st.memory := rfl
 
