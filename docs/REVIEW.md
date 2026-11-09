@@ -173,6 +173,22 @@ records — is validated by `scripts/review/output_contract.py`:
    `signoff.sh`), with nothing after it. Markdown emphasis around directive
    lines is tolerated; trailing text after the verdict is not.
 
+4. Every source location and identifier must satisfy the
+   [citation contract](../scripts/review/README.md). Tracked paths (including
+   extensionless files and dotfiles) define filenames. Exact paths take precedence;
+   basename lookup excludes frozen legacy copies. Absolute file URLs must remain
+   beneath the verified archive root. Named anchors check the declaration inside
+   the cited range and namespace components in that file. Identifiers resolve only
+   from the reviewed tree, the removed diff side, an explicit ABSENT report or a
+   pinned external name; export helper files cannot authorize them. Positive
+   verdicts require at least one resolving location. All citation failures are
+   collected with status `invalid`, before final-message framing checks.
+
+`invalid` describes unusable reviewer evidence, not a verdict. It cannot authorize
+landing or advance the next delta base. Consumers fail closed, and rejected
+sign-off output is removed. Repository failures, process errors and timeouts
+retain their precedence over citation validation.
+
 **Refusals.** A piece that comes back refused, with no verdict line, or with a
 non-timeout reviewer error is retried **once**: the piece is halved and each
 half is sent with a more neutral prompt that leaves out the project framing. If
