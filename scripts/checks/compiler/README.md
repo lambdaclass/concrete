@@ -111,7 +111,15 @@ generation across registry, text golden, README and approval JSON. Candidate
 preparation validates every non-signature obligation and updates the projections
 together; check mode still requires the owner's signature and every leg. R-0676
 owns equivalent measured host conformance and daily/weekly full evidence, with
-real cheap PR controls retained. This is staged design, not implemented behavior.
+real cheap PR controls retained. The
+[hosted preparation and platform contracts](TRUSTED_BASE_THREAT_MODEL.md#hosted-evidence-and-required-preparationplatform-contracts)
+require sealed pinned-package materialization before isolation, a pinned linker
+for newly linked Lake executables, capability-aware INCOMPLETE results, preserved
+pipeline statuses and one diagnostic owner per mechanism under R-0509. R-0676
+owns capable-host live campaigns and platform budgets. Darwin Linux-only legs
+remain INCOMPLETE until an equivalent backend; required macOS CI scope is an
+owner question alongside the existing trust-policy stops. This is staged design,
+not implemented behavior.
 Implementation stops for owner approval of the protected trust root and the
 manager/provisioning chain; this proposal does not add sudo or D-Bus to the
 trusted base. The coordinator files any additional roadmap rows.
