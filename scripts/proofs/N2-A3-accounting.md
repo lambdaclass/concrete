@@ -863,3 +863,45 @@ unsupported-transfer cause (two basic positives, negation partial-application,
 negation alias and universal alias). Its explicit failing receipt is preserved in
 [audits/N2-A3-round4-checkpoint-driver.txt](audits/N2-A3-round4-checkpoint-driver.txt).
 No timeout, partial run or INCOMPLETE analysis is reported as a passing audit.
+
+
+Additional final-byte projection measurements cover all five propext-affected
+checkpoint cases and the new negative transfer control:
+
+| Control | Projection result | Nodes / cache entries | HB | General work |
+|---|---|---:|---:|---:|
+| propext-hypothesis | FAIL projection-law | 3 / 3 | 5 | 0 |
+| inequality-positive | PASS | 19 / 19 | 33 | 0 |
+| negation-positive | PASS | 19 / 19 | 33 | 0 |
+| partial-negation | PASS (projection only; Instance correctly FAILs application) | 19 / 19 | 34 | 0 |
+| negation-alias-positive | PASS | 19 / 19 | 33 | 0 |
+| forall-alias-full-application | PASS | 19 / 19 | 36 | 0 |
+
+The controls retain their original 64-node fixture allowance under the unchanged
+4,096-node production ceiling. The unsupported checkpoint stopped at 11 nodes
+on propext; the final traversal follows its supplied Iff evidence instead. All six
+control assertions PASS, with exact intended negative diagnostics. Full counters:
+[audits/N2-A3-round4-primitive-measurements.txt](audits/N2-A3-round4-primitive-measurements.txt).
+
+
+### Authoritative round-4 terminal receipt
+
+The final-byte complete command
+
+```bash
+timeout 1500 nix develop -c python3 -u scripts/proofs/vacuity_driver.py --controls
+```
+
+exited **0**: **134 core controls PASS, 0 FAIL**, followed by all reporting
+controls PASS, including its 13 budget cases, three selected consumer controls,
+and exact replay rejection. This supersedes the earlier explicit pending-driver
+notes, not their historical checkpoint results. The full terminal transcript is
+[audits/N2-A3-round4-final-controls.txt](audits/N2-A3-round4-final-controls.txt).
+Every requested focused check has now completed on final consumer blob
+`912abf404b52ae8080bcb058c24bdc0d0248a1d9` (code commit `e479e550d`);
+subsequent commits are records only. The final protected-region comparison
+against `30c57a17c` is byte-identical, with the SHA256 recorded above. Both C
+controls and both budget/wall contract interpretations remain pending owner.
+There was no push, review invocation, local whole-scope census, full suite,
+ROADMAP/ISS allocation, ConcreteSpec edit, or OD decision. The coordinator owns
+publication, independent reviews and the pinned concrete-ci-2 census command.

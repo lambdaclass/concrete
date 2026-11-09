@@ -1,0 +1,170 @@
+Final consumer e479e550d blob 912abf404b52ae8080bcb058c24bdc0d0248a1d9
+Command: timeout 180 nix develop -c python3 -u .round4/primitive-measure.py
+Six isolated exact-diagnostic controls, no scope census.
+
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=5.351
+NOTE scheduler-usage [anonymous] heartbeats=2349/2000000 work=17/20000
+NOTE analysis-population [anonymous] N=20 C=400000 K=20
+NOTE analysis-result ConcreteSpecControl.S stage=classification law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.growth stage=classification law=none case=none result=PASS heartbeats=641/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.mutant stage=classification law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.projection stage=classification law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:10» stage=classification law=none case=none result=PASS heartbeats=1/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:8» stage=classification law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result [anonymous] stage=scope law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.growth stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.projection stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:10» stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:8» stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:10» stage=evidence-kind law=ConcreteSpecControl.growth case=two result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096 subject=ConcreteSpecControl.S mutant=ConcreteSpecControl.mutant
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:8» stage=evidence-kind law=ConcreteSpecControl.growth case=two result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:8» stage=instance law=ConcreteSpecControl.growth case=two result=PASS heartbeats=23/2000000 work=101/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:10» stage=pairing law=ConcreteSpecControl.growth case=two result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096 subject=ConcreteSpecControl.S mutant=ConcreteSpecControl.mutant
+NOTE analysis-result ConcreteSpecControl.growth stage=law law=ConcreteSpecControl.growth case=none result=PASS heartbeats=2/2000000 work=31/20000 projection=0/4096
+NOTE projection-cost ConcreteSpecControl.growth visited=5 limit=64 cached=5
+NOTE analysis-result ConcreteSpecControl.growth stage=projection law=ConcreteSpecControl.growth case=none result=PASS heartbeats=9/2000000 work=0/20000 projection=5/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:10» stage=planted law=ConcreteSpecControl.growth case=two result=PASS heartbeats=24/2000000 work=233/20000 projection=0/4096 instance=ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:8» subject=ConcreteSpecControl.S mutant=ConcreteSpecControl.mutant
+FAIL missing-instance ConcreteSpecControl.projection 
+FAIL subject-absent ConcreteSpecControl.projection ConcreteSpecControl.S
+NOTE analysis-result ConcreteSpecControl.projection stage=law law=ConcreteSpecControl.projection case=none result=FAIL heartbeats=1/2000000 work=19/20000 projection=0/4096
+NOTE projection-cost ConcreteSpecControl.projection visited=3 limit=64 cached=3
+FAIL projection-law ConcreteSpecControl.projection 
+NOTE analysis-result ConcreteSpecControl.projection stage=projection law=ConcreteSpecControl.projection case=none result=FAIL heartbeats=5/2000000 work=0/20000 projection=3/4096
+NOTE analysis-summary [anonymous] N=20 C=400000 K=20 reserved=400000 cap-hit=none attempted=20 unrun=0 completed=20 incomplete=0 reported=20 work=384 projection=8 heartbeats=706 heartbeat-bound=40000000 work-bound=400000 projection-bound=81920
+NOTE scheduler-total [anonymous] heartbeats=2350/2000000 work=39/20000
+N2 FAIL
+PASS control propext-hypothesis
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=5.299
+NOTE scheduler-usage [anonymous] heartbeats=2340/2000000 work=14/20000
+NOTE analysis-population [anonymous] N=16 C=320000 K=16
+NOTE analysis-result ConcreteSpecControl.S stage=classification law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.mutant stage=classification law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.nonzero stage=classification law=none case=none result=PASS heartbeats=638/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:10» stage=classification law=none case=none result=PASS heartbeats=1/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:8» stage=classification law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result [anonymous] stage=scope law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.nonzero stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:10» stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:8» stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:10» stage=evidence-kind law=ConcreteSpecControl.nonzero case=zero result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096 subject=ConcreteSpecControl.S mutant=ConcreteSpecControl.mutant
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:8» stage=evidence-kind law=ConcreteSpecControl.nonzero case=zero result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:8» stage=instance law=ConcreteSpecControl.nonzero case=zero result=PASS heartbeats=10/2000000 work=100/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:10» stage=pairing law=ConcreteSpecControl.nonzero case=zero result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096 subject=ConcreteSpecControl.S mutant=ConcreteSpecControl.mutant
+NOTE analysis-result ConcreteSpecControl.nonzero stage=law law=ConcreteSpecControl.nonzero case=none result=PASS heartbeats=1/2000000 work=21/20000 projection=0/4096
+NOTE projection-cost ConcreteSpecControl.nonzero visited=19 limit=64 cached=19
+NOTE analysis-result ConcreteSpecControl.nonzero stage=projection law=ConcreteSpecControl.nonzero case=none result=PASS heartbeats=33/2000000 work=0/20000 projection=19/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:10» stage=planted law=ConcreteSpecControl.nonzero case=zero result=PASS heartbeats=16/2000000 work=168/20000 projection=0/4096 instance=ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:8» subject=ConcreteSpecControl.S mutant=ConcreteSpecControl.mutant
+NOTE analysis-summary [anonymous] N=16 C=320000 K=16 reserved=320000 cap-hit=none attempted=16 unrun=0 completed=16 incomplete=0 reported=16 work=289 projection=19 heartbeats=699 heartbeat-bound=32000000 work-bound=320000 projection-bound=65536
+NOTE scheduler-total [anonymous] heartbeats=2341/2000000 work=32/20000
+N2 PASS
+PASS control inequality-positive
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=5.399
+NOTE scheduler-usage [anonymous] heartbeats=2341/2000000 work=14/20000
+NOTE analysis-population [anonymous] N=16 C=320000 K=16
+NOTE analysis-result ConcreteSpecControl.S stage=classification law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.mutant stage=classification law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.nonzero stage=classification law=none case=none result=PASS heartbeats=639/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:10» stage=classification law=none case=none result=PASS heartbeats=1/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:8» stage=classification law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result [anonymous] stage=scope law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.nonzero stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:10» stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:8» stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:10» stage=evidence-kind law=ConcreteSpecControl.nonzero case=zero result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096 subject=ConcreteSpecControl.S mutant=ConcreteSpecControl.mutant
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:8» stage=evidence-kind law=ConcreteSpecControl.nonzero case=zero result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:8» stage=instance law=ConcreteSpecControl.nonzero case=zero result=PASS heartbeats=11/2000000 work=116/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:10» stage=pairing law=ConcreteSpecControl.nonzero case=zero result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096 subject=ConcreteSpecControl.S mutant=ConcreteSpecControl.mutant
+NOTE analysis-result ConcreteSpecControl.nonzero stage=law law=ConcreteSpecControl.nonzero case=none result=PASS heartbeats=1/2000000 work=23/20000 projection=0/4096
+NOTE projection-cost ConcreteSpecControl.nonzero visited=19 limit=64 cached=19
+NOTE analysis-result ConcreteSpecControl.nonzero stage=projection law=ConcreteSpecControl.nonzero case=none result=PASS heartbeats=33/2000000 work=0/20000 projection=19/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:10» stage=planted law=ConcreteSpecControl.nonzero case=zero result=PASS heartbeats=19/2000000 work=182/20000 projection=0/4096 instance=ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:8» subject=ConcreteSpecControl.S mutant=ConcreteSpecControl.mutant
+NOTE analysis-summary [anonymous] N=16 C=320000 K=16 reserved=320000 cap-hit=none attempted=16 unrun=0 completed=16 incomplete=0 reported=16 work=321 projection=19 heartbeats=704 heartbeat-bound=32000000 work-bound=320000 projection-bound=65536
+NOTE scheduler-total [anonymous] heartbeats=2341/2000000 work=32/20000
+N2 PASS
+PASS control negation-positive
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=5.448
+NOTE scheduler-usage [anonymous] heartbeats=2998/2000000 work=21/20000
+NOTE analysis-population [anonymous] N=24 C=480000 K=24
+NOTE analysis-result ConcreteSpecControl.S stage=classification law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.growth stage=classification law=none case=none result=PASS heartbeats=643/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.mutant stage=classification law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.negationPartial stage=classification law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:10» stage=classification law=none case=none result=PASS heartbeats=1/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:14» stage=classification law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:8» stage=classification law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result [anonymous] stage=scope law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.growth stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.negationPartial stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:10» stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:14» stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:8» stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:10» stage=evidence-kind law=ConcreteSpecControl.growth case=two result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096 subject=ConcreteSpecControl.S mutant=ConcreteSpecControl.mutant
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:14» stage=evidence-kind law=ConcreteSpecControl.negationPartial case=bad result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:8» stage=evidence-kind law=ConcreteSpecControl.growth case=two result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+FAIL instance-application ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:14» law=ConcreteSpecControl.negationPartial case=bad
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:14» stage=instance law=ConcreteSpecControl.negationPartial case=bad result=FAIL heartbeats=13/2000000 work=152/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:8» stage=instance law=ConcreteSpecControl.growth case=two result=PASS heartbeats=21/2000000 work=101/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:10» stage=pairing law=ConcreteSpecControl.growth case=two result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096 subject=ConcreteSpecControl.S mutant=ConcreteSpecControl.mutant
+NOTE analysis-result ConcreteSpecControl.growth stage=law law=ConcreteSpecControl.growth case=none result=PASS heartbeats=2/2000000 work=31/20000 projection=0/4096
+NOTE projection-cost ConcreteSpecControl.growth visited=5 limit=64 cached=5
+NOTE analysis-result ConcreteSpecControl.growth stage=projection law=ConcreteSpecControl.growth case=none result=PASS heartbeats=9/2000000 work=0/20000 projection=5/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:10» stage=planted law=ConcreteSpecControl.growth case=two result=PASS heartbeats=24/2000000 work=233/20000 projection=0/4096 instance=ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:8» subject=ConcreteSpecControl.S mutant=ConcreteSpecControl.mutant
+FAIL missing-instance ConcreteSpecControl.negationPartial 
+NOTE analysis-result ConcreteSpecControl.negationPartial stage=law law=ConcreteSpecControl.negationPartial case=none result=FAIL heartbeats=1/2000000 work=23/20000 projection=0/4096
+NOTE projection-cost ConcreteSpecControl.negationPartial visited=19 limit=64 cached=19
+NOTE analysis-result ConcreteSpecControl.negationPartial stage=projection law=ConcreteSpecControl.negationPartial case=none result=PASS heartbeats=34/2000000 work=0/20000 projection=19/4096
+NOTE analysis-summary [anonymous] N=24 C=480000 K=24 reserved=480000 cap-hit=none attempted=24 unrun=0 completed=24 incomplete=0 reported=24 work=540 projection=24 heartbeats=748 heartbeat-bound=48000000 work-bound=480000 projection-bound=98304
+NOTE scheduler-total [anonymous] heartbeats=2999/2000000 work=47/20000
+N2 FAIL
+PASS control partial-negation
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=5.449
+NOTE scheduler-usage [anonymous] heartbeats=2342/2000000 work=15/20000
+NOTE analysis-population [anonymous] N=17 C=340000 K=17
+NOTE analysis-result ConcreteSpecControl.Nonzero stage=classification law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.S stage=classification law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.mutant stage=classification law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.nonzero stage=classification law=none case=none result=PASS heartbeats=639/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:11» stage=classification law=none case=none result=PASS heartbeats=1/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:9» stage=classification law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result [anonymous] stage=scope law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.nonzero stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:11» stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:9» stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:11» stage=evidence-kind law=ConcreteSpecControl.nonzero case=zero result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096 subject=ConcreteSpecControl.S mutant=ConcreteSpecControl.mutant
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:9» stage=evidence-kind law=ConcreteSpecControl.nonzero case=zero result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:9» stage=instance law=ConcreteSpecControl.nonzero case=zero result=PASS heartbeats=12/2000000 work=136/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:11» stage=pairing law=ConcreteSpecControl.nonzero case=zero result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096 subject=ConcreteSpecControl.S mutant=ConcreteSpecControl.mutant
+NOTE analysis-result ConcreteSpecControl.nonzero stage=law law=ConcreteSpecControl.nonzero case=none result=PASS heartbeats=1/2000000 work=29/20000 projection=0/4096
+NOTE projection-cost ConcreteSpecControl.nonzero visited=19 limit=64 cached=19
+NOTE analysis-result ConcreteSpecControl.nonzero stage=projection law=ConcreteSpecControl.nonzero case=none result=PASS heartbeats=33/2000000 work=0/20000 projection=19/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:11» stage=planted law=ConcreteSpecControl.nonzero case=zero result=PASS heartbeats=23/2000000 work=262/20000 projection=0/4096 instance=ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:9» subject=ConcreteSpecControl.S mutant=ConcreteSpecControl.mutant
+NOTE analysis-summary [anonymous] N=17 C=340000 K=17 reserved=340000 cap-hit=none attempted=17 unrun=0 completed=17 incomplete=0 reported=17 work=427 projection=19 heartbeats=709 heartbeat-bound=34000000 work-bound=340000 projection-bound=69632
+NOTE scheduler-total [anonymous] heartbeats=2343/2000000 work=34/20000
+N2 PASS
+PASS control negation-alias-positive
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=5.349
+NOTE scheduler-usage [anonymous] heartbeats=2345/2000000 work=15/20000
+NOTE analysis-population [anonymous] N=17 C=340000 K=17
+NOTE analysis-result ConcreteSpecControl.Nonzero stage=classification law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.S stage=classification law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.mutant stage=classification law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.nonzero stage=classification law=none case=none result=PASS heartbeats=640/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:11» stage=classification law=none case=none result=PASS heartbeats=1/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:9» stage=classification law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result [anonymous] stage=scope law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.nonzero stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:11» stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:9» stage=evidence-tags law=none case=none result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:11» stage=evidence-kind law=ConcreteSpecControl.nonzero case=zero result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096 subject=ConcreteSpecControl.S mutant=ConcreteSpecControl.mutant
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:9» stage=evidence-kind law=ConcreteSpecControl.nonzero case=zero result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:9» stage=instance law=ConcreteSpecControl.nonzero case=zero result=PASS heartbeats=14/2000000 work=154/20000 projection=0/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:11» stage=pairing law=ConcreteSpecControl.nonzero case=zero result=PASS heartbeats=0/2000000 work=0/20000 projection=0/4096 subject=ConcreteSpecControl.S mutant=ConcreteSpecControl.mutant
+NOTE analysis-result ConcreteSpecControl.nonzero stage=law law=ConcreteSpecControl.nonzero case=none result=PASS heartbeats=1/2000000 work=31/20000 projection=0/4096
+NOTE projection-cost ConcreteSpecControl.nonzero visited=19 limit=64 cached=19
+NOTE analysis-result ConcreteSpecControl.nonzero stage=projection law=ConcreteSpecControl.nonzero case=none result=PASS heartbeats=36/2000000 work=0/20000 projection=19/4096
+NOTE analysis-result ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:11» stage=planted law=ConcreteSpecControl.nonzero case=zero result=PASS heartbeats=26/2000000 work=294/20000 projection=0/4096 instance=ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:9» subject=ConcreteSpecControl.S mutant=ConcreteSpecControl.mutant
+NOTE analysis-summary [anonymous] N=17 C=340000 K=17 reserved=340000 cap-hit=none attempted=17 unrun=0 completed=17 incomplete=0 reported=17 work=479 projection=19 heartbeats=718 heartbeat-bound=34000000 work-bound=340000 projection-bound=69632
+NOTE scheduler-total [anonymous] heartbeats=2345/2000000 work=34/20000
+N2 PASS
+PASS control forall-alias-full-application
+N2 selected controls: 6 PASS, 0 FAIL

@@ -694,3 +694,15 @@ typechecked and its exact three-argument telescope is required. The permanent
 laws must PASS. Other unavailable bodies remain INCOMPLETE. The inline-match
 focused command also runs all seven typed contract controls using its compiled
 consumer, so the confirmed B regression is part of the ordinary focused set.
+
+
+Round-4 final validation: 134 driver controls and its reporting checks PASS;
+all requested standalone focused checks PASS. Exact accessor outcomes, isolated
+measurements and pending-owner questions are in
+[N2-A3-accounting.md](N2-A3-accounting.md); per-control terminal results are in
+[audits/N2-A3-round4-final-controls.txt](audits/N2-A3-round4-final-controls.txt).
+The coordinator's exact concrete-ci-2 command is
+`bash scripts/proofs/audits/N2-A3-round4-ci2.sh`; it pins the final consumer blob
+and preserves the original source/watchdog bounds. No whole-scope result is
+claimed by these focused checks. Reviews of record remain with the coordinator;
+reviewers must do the best long-term thing rather than cut corners.
