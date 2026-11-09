@@ -24,12 +24,14 @@ instance {α : Type} (P : α → Prop) (x : Option α) [∀ a, Decidable (P a)] 
   | none => isTrue trivial
   | some a => inferInstanceAs (Decidable (P a))
 
-/-- Helper (congruence). Allocating a fresh nominal binder preserves `WellFormed`. (approved: REVIEW7-agy). -/
-private theorem fresh_wf (s : State) (scope : BlockId) (hs : WellFormed s) :
-    WellFormed { s with
-      binders := ⟨⟨s.nextBrand⟩, ⟨s.nextLineage⟩, scope, true⟩ :: s.binders
-      nextBrand := s.nextBrand + 1
-      nextLineage := s.nextLineage + 1 } := by
+/-- Law (subject `ConcreteSpec.Core.Generative.fresh`). Allocating a fresh generative binder
+preserves `WellFormed`. -/
+theorem fresh_preserves (s : State) (scope : BlockId) (hs : WellFormed s) :
+    ResultSatisfies WellFormed (fresh s scope) := by
+  change WellFormed { s with
+    binders := ⟨⟨s.nextBrand⟩, ⟨s.nextLineage⟩, scope, true⟩ :: s.binders
+    nextBrand := s.nextBrand + 1
+    nextLineage := s.nextLineage + 1 }
   rcases hs with ⟨⟨hn, hd⟩, hb, hdep⟩
   refine ⟨⟨?_, hd⟩, ?_, ?_⟩
   · simp only [List.map_cons, List.nodup_cons]
@@ -53,149 +55,85 @@ private theorem fresh_wf (s : State) (scope : BlockId) (hs : WellFormed s) :
       obtain ⟨hbr, b, hb, he⟩ := hal i hi
       exact ⟨hbr, b, List.mem_cons_of_mem _ hb, he⟩
 
-/-- Helper (inversion). Structural preservation for `fresh` on a given output state. (approved: REVIEW7-agy). -/
-theorem fresh_preserves_result (s t : State) (scope : BlockId) (hs : WellFormed s)
-    (h : fresh s scope = some t) : WellFormed t := by
-  cases h
-  exact fresh_wf s scope hs
-
-/-- Law (subject `ConcreteSpec.Core.Generative.fresh`). Allocating a fresh generative binder
-preserves `WellFormed`. -/
-theorem fresh_preserves (s : State) (scope : BlockId) (hs : WellFormed s) :
-    ResultSatisfies WellFormed (fresh s scope) := by
-  cases h : fresh s scope with
-  | none => trivial
-  | some t => exact fresh_preserves_result s t scope hs h
-
-/-- Helper (computation). Computes the total constructor; fresh_nominal establishes that the new identity differs from every old scoped identity. (approved: REVIEW7-agy). -/
+/-- Helper (computation). Computes the total constructor; fresh_nominal establishes that the new identity differs from every old scoped identity. (approved: APPR-C5-codex-902ce88a). -/
 theorem fresh_progress (s : State) (scope : BlockId) :
     ∃ t, fresh s scope = some t := ⟨_, rfl⟩
-
-/-- Helper (inversion). Structural preservation for `depend` on a given output state. (approved: REVIEW7-agy). -/
-theorem depend_preserves_result (s t : State) (d : Dependency) (hs : WellFormed s)
-    (h : depend s d = some t) : WellFormed t := by
-  unfold depend at h
-  split at h
-  · rename_i hg
-    cases h
-    rcases hs with ⟨⟨hb, hd⟩, hbound, hdep⟩
-    refine ⟨⟨hb, ?_⟩, hbound, ?_⟩
-    · simp only [List.map_cons, List.nodup_cons]
-      refine ⟨?_, hd⟩
-      intro hm
-      obtain ⟨a, ha, he⟩ := List.mem_map.mp hm
-      have hn := List.all_eq_true.mp hg.1 a ha
-      simp [he] at hn
-    · intro a ha
-      rcases List.mem_cons.mp ha with rfl | ha
-      · exact hg.2
-      · exact hdep a ha
-  · contradiction
 
 /-- Law (subject `ConcreteSpec.Core.Generative.depend`). Registering a dependency preserves `WellFormed`. -/
 theorem depend_preserves (s : State) (d : Dependency) (hs : WellFormed s) :
     ResultSatisfies WellFormed (depend s d) := by
   cases h : depend s d with
   | none => trivial
-  | some t => exact depend_preserves_result s t d hs h
-
-/-- Helper (inversion). Structural preservation for `consume` on a given output state. (approved: REVIEW7-agy). -/
-theorem consume_preserves_result (s t : State) (p : Hybrid.Place) (hs : WellFormed s)
-    (h : consume s p = some t) : WellFormed t := by
-  unfold consume at h
-  split at h
-  · cases h
-    refine ⟨⟨hs.1.1, ?_⟩, hs.2.1, ?_⟩
-    · exact hs.1.2.sublist (List.Sublist.map _ (List.filter_sublist))
-    · intro d hd
-      exact hs.2.2 d (List.mem_filter.mp hd).1
-  · contradiction
+  | some t =>
+    unfold depend at h
+    split at h
+    · rename_i hg
+      cases h
+      rcases hs with ⟨⟨hb, hd⟩, hbound, hdep⟩
+      refine ⟨⟨hb, ?_⟩, hbound, ?_⟩
+      · simp only [List.map_cons, List.nodup_cons]
+        refine ⟨?_, hd⟩
+        intro hm
+        obtain ⟨a, ha, he⟩ := List.mem_map.mp hm
+        have hn := List.all_eq_true.mp hg.1 a ha
+        simp [he] at hn
+      · intro a ha
+        rcases List.mem_cons.mp ha with rfl | ha
+        · exact hg.2
+        · exact hdep a ha
+    · contradiction
 
 /-- Law (subject `ConcreteSpec.Core.Generative.consume`). Consuming a dependent place preserves `WellFormed`. -/
 theorem consume_preserves (s : State) (p : Hybrid.Place) (hs : WellFormed s) :
     ResultSatisfies WellFormed (consume s p) := by
   cases h : consume s p with
   | none => trivial
-  | some t => exact consume_preserves_result s t p hs h
-
-/-- Helper (inversion). Structural preservation for `release` on a given output state. (approved: REVIEW7-agy). -/
-theorem release_preserves_result (s t : State) (i : BrandId) (hs : WellFormed s)
-    (h : release s i = some t) : WellFormed t := by
-  unfold release at h
-  split at h
-  · rename_i hg
-    cases h
-    let change := fun b : Binder => if b.brand = i then { b with allocatorLive := false } else b
-    have brand (b : Binder) : (change b).brand = b.brand := by simp [change]; split <;> rfl
-    have lineage (b : Binder) : (change b).lineage = b.lineage := by simp [change]; split <;> rfl
-    refine ⟨⟨?_, hs.1.2⟩, ?_, ?_⟩
-    · change (s.binders.map change |>.map Binder.brand).Nodup
-      simpa only [List.map_map, Function.comp_def, brand] using hs.1.1
-    · intro b hb
-      obtain ⟨a, ha, rfl⟩ := List.mem_map.mp hb
-      change (change a).brand.id < s.nextBrand ∧ (change a).lineage.id < s.nextLineage
-      simpa only [brand, lineage] using hs.2.1 a ha
-    · intro d hd
-      obtain ⟨hbr, hal⟩ := hs.2.2 d hd
-      constructor
-      · intro j hj
-        obtain ⟨b, hb, he⟩ := hbr j hj
-        exact ⟨change b, List.mem_map.mpr ⟨b, hb, rfl⟩, (brand b).trans he⟩
-      · intro j hj
-        obtain ⟨hbr, b, hb, he, hl⟩ := hal j hj
-        have hni : j ≠ i := by
-          intro heq
-          have := List.all_eq_true.mp (Bool.and_eq_true_iff.mp hg).2 d hd
-          exact (of_decide_eq_true this) (heq ▸ hj)
-        refine ⟨hbr, change b, List.mem_map.mpr ⟨b, hb, rfl⟩, (brand b).trans he, ?_⟩
-        have hbi : b.brand ≠ i := fun h => hni (he.symm.trans h)
-        simpa [change, hbi] using hl
-  · contradiction
+  | some t =>
+    unfold consume at h
+    split at h
+    · cases h
+      refine ⟨⟨hs.1.1, ?_⟩, hs.2.1, ?_⟩
+      · exact hs.1.2.sublist (List.Sublist.map _ (List.filter_sublist))
+      · intro d hd
+        exact hs.2.2 d (List.mem_filter.mp hd).1
+    · contradiction
 
 /-- Law (subject `ConcreteSpec.Core.Generative.release`). Releasing an allocator preserves `WellFormed`. -/
 theorem release_preserves (s : State) (i : BrandId) (hs : WellFormed s) :
     ResultSatisfies WellFormed (release s i) := by
   cases h : release s i with
   | none => trivial
-  | some t => exact release_preserves_result s t i hs h
-
-/-- Helper (inversion). Structural preservation for `reset` on a given output state. (approved: REVIEW7-agy). -/
-theorem reset_preserves_result (s t : State) (i : BrandId) (hs : WellFormed s)
-    (h : reset s i = some t) : WellFormed t := by
-  unfold reset at h
-  obtain ⟨b, hb, hh⟩ := Option.bind_eq_some_iff.mp h
-  obtain ⟨u, hu, hh⟩ := Option.bind_eq_some_iff.mp hh
-  cases hh
-  have hw := release_preserves_result s u i hs hu
-  have hmem : b ∈ s.binders := List.mem_of_find?_eq_some hb
-  have hlin := (hs.2.1 b hmem).2
-  have counters : u.nextBrand = s.nextBrand ∧ u.nextLineage = s.nextLineage := by
-    unfold release at hu
-    split at hu
-    · cases hu; exact ⟨rfl, rfl⟩
+  | some t =>
+    unfold release at h
+    split at h
+    · rename_i hg
+      cases h
+      let change := fun b : Binder => if b.brand = i then { b with allocatorLive := false } else b
+      have brand (b : Binder) : (change b).brand = b.brand := by simp [change]; split <;> rfl
+      have lineage (b : Binder) : (change b).lineage = b.lineage := by simp [change]; split <;> rfl
+      refine ⟨⟨?_, hs.1.2⟩, ?_, ?_⟩
+      · change (s.binders.map change |>.map Binder.brand).Nodup
+        simpa only [List.map_map, Function.comp_def, brand] using hs.1.1
+      · intro b hb
+        obtain ⟨a, ha, rfl⟩ := List.mem_map.mp hb
+        change (change a).brand.id < s.nextBrand ∧ (change a).lineage.id < s.nextLineage
+        simpa only [brand, lineage] using hs.2.1 a ha
+      · intro d hd
+        obtain ⟨hbr, hal⟩ := hs.2.2 d hd
+        constructor
+        · intro j hj
+          obtain ⟨b, hb, he⟩ := hbr j hj
+          exact ⟨change b, List.mem_map.mpr ⟨b, hb, rfl⟩, (brand b).trans he⟩
+        · intro j hj
+          obtain ⟨hbr, b, hb, he, hl⟩ := hal j hj
+          have hni : j ≠ i := by
+            intro heq
+            have := List.all_eq_true.mp (Bool.and_eq_true_iff.mp hg).2 d hd
+            exact (of_decide_eq_true this) (heq ▸ hj)
+          refine ⟨hbr, change b, List.mem_map.mpr ⟨b, hb, rfl⟩, (brand b).trans he, ?_⟩
+          have hbi : b.brand ≠ i := fun h => hni (he.symm.trans h)
+          simpa [change, hbi] using hl
     · contradiction
-  rcases hw with ⟨⟨hn, hd⟩, hbound, hdep⟩
-  refine ⟨⟨?_, hd⟩, ?_, ?_⟩
-  · simp only [List.map_cons, List.nodup_cons]
-    refine ⟨?_, hn⟩
-    intro hm
-    obtain ⟨a, ha, he⟩ := List.mem_map.mp hm
-    have hlt := (hbound a ha).1
-    rw [he, counters.1] at hlt
-    exact Nat.lt_irrefl _ hlt
-  · intro a ha
-    rcases List.mem_cons.mp ha with rfl | ha
-    · exact ⟨Nat.lt_succ_self _, by simpa only [counters.2] using hlin⟩
-    · exact ⟨Nat.lt_succ_of_lt (by simpa only [counters.1] using (hbound a ha).1), (hbound a ha).2⟩
-  · intro d hd
-    obtain ⟨hbr, hal⟩ := hdep d hd
-    constructor
-    · intro j hj
-      obtain ⟨a, ha, he⟩ := hbr j hj
-      exact ⟨a, List.mem_cons_of_mem _ ha, he⟩
-    · intro j hj
-      obtain ⟨hbr, a, ha, he⟩ := hal j hj
-      exact ⟨hbr, a, List.mem_cons_of_mem _ ha, he⟩
 
 /-- Law (subject `ConcreteSpec.Core.Generative.reset`). Resetting an allocator to a fresh nominal
 generation preserves `WellFormed`. -/
@@ -203,35 +141,43 @@ theorem reset_preserves (s : State) (i : BrandId) (hs : WellFormed s) :
     ResultSatisfies WellFormed (reset s i) := by
   cases h : reset s i with
   | none => trivial
-  | some t => exact reset_preserves_result s t i hs h
-
-/-- Helper (inversion). Structural preservation for `endScope` on a given output state. (approved: REVIEW7-agy). -/
-theorem endScope_preserves_result (s t : State) (scope : BlockId) (hs : WellFormed s)
-    (h : endScope s scope = some t) : WellFormed t := by
-  unfold endScope at h
-  split at h
-  · rename_i hg
-    cases h
-    refine ⟨⟨hs.1.1.sublist (List.Sublist.map _ (List.filter_sublist)), hs.1.2⟩, ?_, ?_⟩
-    · intro b hb
-      exact hs.2.1 b (List.mem_filter.mp hb).1
+  | some t =>
+    unfold reset at h
+    obtain ⟨b, hb, hh⟩ := Option.bind_eq_some_iff.mp h
+    obtain ⟨u, hu, hh⟩ := Option.bind_eq_some_iff.mp hh
+    cases hh
+    have hw : WellFormed u := by
+      have hr := release_preserves s i hs
+      rwa [hu] at hr
+    have hmem : b ∈ s.binders := List.mem_of_find?_eq_some hb
+    have hlin := (hs.2.1 b hmem).2
+    have counters : u.nextBrand = s.nextBrand ∧ u.nextLineage = s.nextLineage := by
+      unfold release at hu
+      split at hu
+      · cases hu; exact ⟨rfl, rfl⟩
+      · contradiction
+    rcases hw with ⟨⟨hn, hd⟩, hbound, hdep⟩
+    refine ⟨⟨?_, hd⟩, ?_, ?_⟩
+    · simp only [List.map_cons, List.nodup_cons]
+      refine ⟨?_, hn⟩
+      intro hm
+      obtain ⟨a, ha, he⟩ := List.mem_map.mp hm
+      have hlt := (hbound a ha).1
+      rw [he, counters.1] at hlt
+      exact Nat.lt_irrefl _ hlt
+    · intro a ha
+      rcases List.mem_cons.mp ha with rfl | ha
+      · exact ⟨Nat.lt_succ_self _, by simpa only [counters.2] using hlin⟩
+      · exact ⟨Nat.lt_succ_of_lt (by simpa only [counters.1] using (hbound a ha).1), (hbound a ha).2⟩
     · intro d hd
-      obtain ⟨hbr, hal⟩ := hs.2.2 d hd
-      have remains (j : BrandId) (hj : j ∈ d.brands) (b : Binder) (hb : b ∈ s.binders)
-          (he : b.brand = j) : (b.scope != scope) = true := by
-        have hg' := List.all_eq_true.mp (Bool.and_eq_true_iff.mp hg).2 d hd
-        have hb' := List.all_eq_true.mp hg' b hb
-        by_cases hscope : b.scope = scope
-        · simp [hscope, he, hj] at hb'
-        · simp [hscope]
+      obtain ⟨hbr, hal⟩ := hdep d hd
       constructor
       · intro j hj
-        obtain ⟨b, hb, he⟩ := hbr j hj
-        exact ⟨b, List.mem_filter.mpr ⟨hb, remains j hj b hb he⟩, he⟩
+        obtain ⟨a, ha, he⟩ := hbr j hj
+        exact ⟨a, List.mem_cons_of_mem _ ha, he⟩
       · intro j hj
-        obtain ⟨hj', b, hb, he, hl⟩ := hal j hj
-        exact ⟨hj', b, List.mem_filter.mpr ⟨hb, remains j hj' b hb he⟩, he, hl⟩
-  · contradiction
+        obtain ⟨hbr, a, ha, he⟩ := hal j hj
+        exact ⟨hbr, a, List.mem_cons_of_mem _ ha, he⟩
 
 /-- Law (subject `ConcreteSpec.Core.Generative.endScope`). Ending a lexical brand scope preserves
 `WellFormed`. -/
@@ -239,9 +185,33 @@ theorem endScope_preserves (s : State) (scope : BlockId) (hs : WellFormed s) :
     ResultSatisfies WellFormed (endScope s scope) := by
   cases h : endScope s scope with
   | none => trivial
-  | some t => exact endScope_preserves_result s t scope hs h
+  | some t =>
+    unfold endScope at h
+    split at h
+    · rename_i hg
+      cases h
+      refine ⟨⟨hs.1.1.sublist (List.Sublist.map _ (List.filter_sublist)), hs.1.2⟩, ?_, ?_⟩
+      · intro b hb
+        exact hs.2.1 b (List.mem_filter.mp hb).1
+      · intro d hd
+        obtain ⟨hbr, hal⟩ := hs.2.2 d hd
+        have remains (j : BrandId) (hj : j ∈ d.brands) (b : Binder) (hb : b ∈ s.binders)
+            (he : b.brand = j) : (b.scope != scope) = true := by
+          have hg' := List.all_eq_true.mp (Bool.and_eq_true_iff.mp hg).2 d hd
+          have hb' := List.all_eq_true.mp hg' b hb
+          by_cases hscope : b.scope = scope
+          · simp [hscope, he, hj] at hb'
+          · simp [hscope]
+        constructor
+        · intro j hj
+          obtain ⟨b, hb, he⟩ := hbr j hj
+          exact ⟨b, List.mem_filter.mpr ⟨hb, remains j hj b hb he⟩, he⟩
+        · intro j hj
+          obtain ⟨hj', b, hb, he, hl⟩ := hal j hj
+          exact ⟨hj', b, List.mem_filter.mpr ⟨hb, remains j hj' b hb he⟩, he, hl⟩
+    · contradiction
 
-/-- Helper (computation). Normalizes dependency admission; depend_preserves establishes lexical and allocation lifetime safety. (approved: REVIEW7-agy). -/
+/-- Helper (computation). Normalizes dependency admission; depend_preserves establishes lexical and allocation lifetime safety. (approved: APPR-C5-codex-902ce88a). -/
 theorem depend_progress (s : State) (d : Dependency)
     (unique : ∀ a ∈ s.dependencies, a.place ≠ d.place)
     (brands : ∀ i ∈ d.brands, ∃ b ∈ s.binders, b.brand = i)
@@ -256,7 +226,7 @@ theorem depend_progress (s : State) (d : Dependency)
   rw [ite_eq_left ⟨hu, brands, allocations⟩]
   exact ⟨_, rfl⟩
 
-/-- Helper (computation). Normalizes the dependency lookup guard; retired_never_revives establishes that consumption cannot revive ended identities. (approved: REVIEW7-agy). -/
+/-- Helper (computation). Normalizes the dependency lookup guard; retired_never_revives establishes that consumption cannot revive ended identities. (approved: APPR-C5-codex-902ce88a). -/
 theorem consume_progress (s : State) (p : Hybrid.Place)
     (present : ∃ d ∈ s.dependencies, d.place = p) : ∃ t, consume s p = some t := by
   obtain ⟨d, hd, hp⟩ := present
@@ -264,7 +234,7 @@ theorem consume_progress (s : State) (p : Hybrid.Place)
     List.any_eq_true.mpr ⟨d, hd, by simp [hp]⟩
   simp [consume, hg]
 
-/-- Helper (computation). Normalizes the live-allocation exclusion guard; release_preserves and allocations_have_live_allocator establish allocator safety. (approved: REVIEW7-agy). -/
+/-- Helper (computation). Normalizes the live-allocation exclusion guard; release_preserves and allocations_have_live_allocator establish allocator safety. (approved: APPR-C5-codex-902ce88a). -/
 theorem release_progress (s : State) (i : BrandId)
     (present : ∃ b ∈ s.binders, b.brand = i ∧ b.allocatorLive = true)
     (clear : ∀ d ∈ s.dependencies, i ∉ d.allocations) :
@@ -280,7 +250,7 @@ theorem release_progress (s : State) (i : BrandId)
   rw [ite_eq_left (by rw [hp, hc]; rfl)]
   exact ⟨_, rfl⟩
 
-/-- Helper (computation). Composes lookup and release computations; reset_preserves and retired_never_revives establish generativity and lifetime safety. (approved: REVIEW7-agy). -/
+/-- Helper (computation). Composes lookup and release computations; reset_preserves and retired_never_revives establish generativity and lifetime safety. (approved: APPR-C5-codex-902ce88a). -/
 theorem reset_progress (s : State) (i : BrandId) (b : Binder)
     (found : s.binders.find? (·.brand == i) = some b)
     (live : b.allocatorLive = true)
@@ -293,7 +263,7 @@ theorem reset_progress (s : State) (i : BrandId) (b : Binder)
   obtain ⟨u, hu⟩ := release_progress s i ⟨b, hb, hi, live⟩ clear
   simp [reset, found, hu]
 
-/-- Helper (computation). Normalizes lexical exit guards; scope_exit_lifetime establishes non-escape and non-revival across later executions. (approved: REVIEW7-agy). -/
+/-- Helper (computation). Normalizes lexical exit guards; scope_exit_lifetime establishes non-escape and non-revival across later executions. (approved: APPR-C5-codex-902ce88a). -/
 theorem endScope_progress (s : State) (scope : BlockId)
     (released : ∀ b ∈ s.binders, b.scope = scope → b.allocatorLive = false)
     (clear : ∀ d ∈ s.dependencies, ∀ b ∈ s.binders, b.scope = scope → b.brand ∉ d.brands) :
@@ -318,7 +288,7 @@ theorem endScope_progress (s : State) (scope : BlockId)
   exact ⟨_, rfl⟩
 
 /-- Helper (arithmetic). A new or reset generation is unequal to every previously scoped brand,
-because every active binder's brand ID is strictly below `s.nextBrand`. (approved: REVIEW7-agy). -/
+because every active binder's brand ID is strictly below `s.nextBrand`. (approved: APPR-C5-codex-902ce88a). -/
 theorem nextBrand_fresh (s : State) (hs : WellFormed s) (b : Binder) (hb : b ∈ s.binders) :
     b.brand ≠ BrandId.mk s.nextBrand := by
   intro he
@@ -326,13 +296,13 @@ theorem nextBrand_fresh (s : State) (hs : WellFormed s) (b : Binder) (hb : b ∈
   rw [he] at hn
   exact Nat.lt_irrefl _ hn
 
-/-- Helper (inversion). Generation birth for `fresh` on a given output state. (approved: REVIEW7-agy). -/
+/-- Helper (inversion). Generation birth for `fresh` on a given output state. (approved: APPR-C5-codex-902ce88a). -/
 theorem fresh_generation_result (s t : State) (scope : BlockId) (h : fresh s scope = some t) :
     t.nextBrand = s.nextBrand + 1 ∧ ∃ b ∈ t.binders, b.brand = ⟨s.nextBrand⟩ := by
   cases h
   exact ⟨rfl, _, List.mem_cons_self, rfl⟩
 
-/-- Helper (computation). Calculates constructor fields; fresh_nominal supplies independent nominal freshness evidence. (approved: REVIEW7-agy). -/
+/-- Helper (computation). Calculates constructor fields; fresh_nominal supplies independent nominal freshness evidence. (approved: APPR-C5-codex-902ce88a). -/
 theorem fresh_generation (s : State) (scope : BlockId) :
     ResultSatisfies (fun t : State =>
       t.nextBrand = s.nextBrand + 1 ∧ ∃ b ∈ t.binders, b.brand = ⟨s.nextBrand⟩)
@@ -341,7 +311,7 @@ theorem fresh_generation (s : State) (scope : BlockId) :
   | none => trivial
   | some t => exact fresh_generation_result s t scope h
 
-/-- Helper (inversion). Generation birth for `reset` on a given output state. (approved: REVIEW7-agy). -/
+/-- Helper (inversion). Generation birth for `reset` on a given output state. (approved: APPR-C5-codex-902ce88a). -/
 theorem reset_generation_result (s t : State) (i : BrandId) (h : reset s i = some t) :
     t.nextBrand = s.nextBrand + 1 ∧ ∃ b ∈ t.binders, b.brand = ⟨s.nextBrand⟩ := by
   unfold reset at h
@@ -350,7 +320,7 @@ theorem reset_generation_result (s t : State) (i : BrandId) (h : reset s i = som
   cases hh
   exact ⟨rfl, _, List.mem_cons_self, rfl⟩
 
-/-- Helper (computation). Calculates the reset birth counter; reset_preserves and retired_never_revives establish generation separation over executions. (approved: REVIEW7-agy). -/
+/-- Helper (computation). Calculates the reset birth counter; reset_preserves and retired_never_revives establish generation separation over executions. (approved: APPR-C5-codex-902ce88a). -/
 theorem reset_generation (s : State) (i : BrandId) :
     ResultSatisfies (fun t : State =>
       t.nextBrand = s.nextBrand + 1 ∧ ∃ b ∈ t.binders, b.brand = ⟨s.nextBrand⟩)
@@ -359,7 +329,7 @@ theorem reset_generation (s : State) (i : BrandId) :
   | none => trivial
   | some t => exact reset_generation_result s t i h
 
-/-- Helper (inversion). Scope-exit non-escape on a given output state. (approved: REVIEW7-agy). -/
+/-- Helper (inversion). Scope-exit non-escape on a given output state. (approved: APPR-C5-codex-902ce88a). -/
 theorem endScope_non_escape_result (s t : State) (scope : BlockId)
     (h : endScope s scope = some t) (b : Binder) (hb : b ∈ s.binders)
     (hscope : b.scope = scope) (d : Dependency) (hd : d ∈ t.dependencies) :
@@ -374,7 +344,7 @@ theorem endScope_non_escape_result (s t : State) (scope : BlockId)
     simpa [hscope] using hbg
   · contradiction
 
-/-- Helper (computation). Extracts the lexical admission check; scope_exit_lifetime establishes scoped dependencies and prevents later resurrection. (approved: REVIEW7-agy). -/
+/-- Helper (computation). Extracts the lexical admission check; scope_exit_lifetime establishes scoped dependencies and prevents later resurrection. (approved: APPR-C5-codex-902ce88a). -/
 theorem endScope_non_escape (s : State) (scope : BlockId) :
     ResultSatisfies (fun t : State =>
       ∀ b ∈ s.binders, b.scope = scope → ∀ d ∈ t.dependencies, b.brand ∉ d.brands)
@@ -386,7 +356,7 @@ theorem endScope_non_escape (s : State) (scope : BlockId) :
     exact endScope_non_escape_result s t scope h b hb hscope d hd
 
 /-- Helper (projection). Extracts the live-allocator witness for an allocation dependency from
-`WellFormed`. (approved: REVIEW7-agy). -/
+`WellFormed`. (approved: APPR-C5-codex-902ce88a). -/
 theorem allocations_have_live_allocator_of_wf (s : State) (hs : WellFormed s) (d : Dependency)
     (hd : d ∈ s.dependencies) (i : BrandId) (hi : i ∈ d.allocations) :
     ∃ b ∈ s.binders, b.brand = i ∧ b.allocatorLive = true :=
@@ -403,9 +373,12 @@ theorem allocations_have_live_allocator (s : State) (i : BrandId) (hs : WellForm
   | none => trivial
   | some t =>
     intro d hd j hj
-    exact allocations_have_live_allocator_of_wf t (release_preserves_result s t i hs h) d hd j hj
+    have hw : WellFormed t := by
+      have hr := release_preserves s i hs
+      rwa [h] at hr
+    exact allocations_have_live_allocator_of_wf t hw d hd j hj
 
-/-- Helper (inversion). Single-command brand erasure on a given output pair. (approved: REVIEW7-agy). -/
+/-- Helper (inversion). Single-command brand erasure on a given output pair. (approved: APPR-C5-codex-902ce88a). -/
 theorem instrument_erasure_result {σ α : Type} (transition : State → Option State)
     (operation : σ → Option (α × σ)) (s : σ × State) (a : α) (concrete : σ) (ghost : State)
     (h : instrument transition operation s = some (a, (concrete, ghost))) :
@@ -417,7 +390,7 @@ theorem instrument_erasure_result {σ α : Type} (transition : State → Option 
   cases hh
   exact hr
 
-/-- Helper (computation). Calculates one allocator wrapper; run_erasure establishes the independent finite execution contract. (approved: REVIEW7-agy). -/
+/-- Helper (computation). Calculates one allocator wrapper; run_erasure establishes the independent finite execution contract. (approved: APPR-C5-codex-902ce88a). -/
 theorem instrument_erasure {σ α : Type} (transition : State → Option State)
     (operation : σ → Option (α × σ)) (s : σ × State) :
     ResultSatisfies (fun r : α × (σ × State) => operation s.1 = some (r.1, r.2.1))
@@ -426,29 +399,27 @@ theorem instrument_erasure {σ α : Type} (transition : State → Option State)
   | none => trivial
   | some r => exact instrument_erasure_result transition operation s r.1 r.2.1 r.2.2 h
 
-/-- Helper (inversion). Finite allocator stream erasure on a given output pair. (approved: REVIEW7-agy). -/
-theorem run_erasure_result {σ α : Type} (cs : List (Command σ α)) (s : σ × State)
-    (results : List α) (t : σ × State) (h : run cs s = some (results, t)) :
-    runErased cs s.1 = some (results, t.1) := by
-  induction cs generalizing s results with
-  | nil => cases h; rfl
-  | cons c cs ih =>
-    simp only [run] at h
-    obtain ⟨⟨a, u⟩, hu, h⟩ := Option.bind_eq_some_iff.mp h
-    obtain ⟨⟨as, v⟩, hv, h⟩ := Option.bind_eq_some_iff.mp h
-    cases h
-    have hc := instrument_erasure_result c.transition c.operation s a u.1 u.2 hu
-    have ht := ih u as hv
-    simp [runErased, hc, ht]
-
 /-- Law (subject `ConcreteSpec.Core.Generative.run`). Every successful finite allocator run
 erases to the same ordered results and concrete state in `runErased`. -/
 theorem run_erasure {σ α : Type} (cs : List (Command σ α)) (s : σ × State) :
     ResultSatisfies (fun r : List α × (σ × State) => runErased cs s.1 = some (r.1, r.2.1))
       (run cs s) := by
-  cases h : run cs s with
-  | none => trivial
-  | some r => exact run_erasure_result cs s r.1 r.2 h
+  induction cs generalizing s with
+  | nil => rfl
+  | cons c cs ih =>
+    cases h : run (c :: cs) s with
+    | none => trivial
+    | some r =>
+      rcases r with ⟨results, t⟩
+      simp only [run] at h
+      obtain ⟨⟨a, u⟩, hu, h⟩ := Option.bind_eq_some_iff.mp h
+      obtain ⟨⟨as, v⟩, hv, h⟩ := Option.bind_eq_some_iff.mp h
+      cases h
+      have hc := instrument_erasure_result c.transition c.operation s a u.1 u.2 hu
+      have ht : runErased cs u.1 = some (as, v.1) := by
+        have ihu := ih u
+        rwa [hv] at ihu
+      simp [ResultSatisfies, runErased, hc, ht]
 
 namespace PreservationWitnesses
 open ConcreteSpec.Core.Generative.Examples
@@ -734,7 +705,7 @@ example : run [resetCommand ⟨0⟩] (7, PreservationWitnesses.dependent) = none
 end RunWitnesses
 
 /-- Helper (inversion). Release preserves all nominal binder identities and the generation
-supply, even when it consumes the corresponding allocator. (approved: REVIEW7-agy). -/
+supply, even when it consumes the corresponding allocator. (approved: APPR-C5-codex-902ce88a). -/
 private theorem release_retired (s t : State) (i j : BrandId) (hr : Retired s j)
     (h : release s i = some t) : Retired t j := by
   unfold release at h
@@ -746,63 +717,66 @@ private theorem release_retired (s t : State) (i j : BrandId) (hr : Retired s j)
     split <;> exact hr.2 a ha
   · contradiction
 
-/-- Helper (inversion). Each lifetime operation keeps ended nominal identities unavailable;
-new generations lie strictly above every retired identity. (approved: REVIEW7-agy). -/
-private theorem lifetime_retired_step (s t : State) (op : LifetimeOp) (i : BrandId)
-    (hr : Retired s i) (h : lifetimeStep s op = some t) : Retired t i := by
-  have bound := hr.1
-  cases op with
-  | fresh scope =>
-    cases h
-    refine ⟨Nat.lt_succ_of_lt hr.1, ?_⟩
-    intro b hb
-    rcases List.mem_cons.mp hb with rfl | hb
-    · intro he
-      have hid := congrArg BrandId.id he
-      dsimp at hid
-      omega
-    · exact hr.2 b hb
-  | depend d =>
-    change depend s d = some t at h
-    unfold depend at h
-    split at h
-    · cases h; exact hr
-    · contradiction
-  | consume p =>
-    change consume s p = some t at h
-    unfold consume at h
-    split at h
-    · cases h; exact hr
-    · contradiction
-  | release j => exact release_retired s t j i hr h
-  | reset j =>
-    change reset s j = some t at h
-    unfold reset at h
-    obtain ⟨b, _, h⟩ := Option.bind_eq_some_iff.mp h
-    obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
-    have hur := release_retired s u j i hr hu
-    have supply : u.nextBrand = s.nextBrand := by
-      unfold release at hu
-      split at hu
-      · cases hu; rfl
+/-- Law (subject `ConcreteSpec.Core.Generative.lifetimeStep`). Each lifetime operation keeps ended
+nominal identities unavailable; new generations lie strictly above every retired identity. -/
+theorem lifetime_retired_step (s : State) (op : LifetimeOp) (i : BrandId)
+    (hr : Retired s i) : ResultSatisfies (fun t => Retired t i) (lifetimeStep s op) := by
+  cases h : lifetimeStep s op with
+  | none => trivial
+  | some t =>
+    have bound := hr.1
+    cases op with
+    | fresh scope =>
+      cases h
+      refine ⟨Nat.lt_succ_of_lt hr.1, ?_⟩
+      intro b hb
+      rcases List.mem_cons.mp hb with rfl | hb
+      · intro he
+        have hid := congrArg BrandId.id he
+        dsimp at hid
+        omega
+      · exact hr.2 b hb
+    | depend d =>
+      change depend s d = some t at h
+      unfold depend at h
+      split at h
+      · cases h; exact hr
       · contradiction
-    cases h
-    refine ⟨by dsimp; omega, ?_⟩
-    intro a ha
-    rcases List.mem_cons.mp ha with rfl | ha
-    · intro he
-      have hid := congrArg BrandId.id he
-      dsimp at hid
-      have := hr.1
-      omega
-    · exact hur.2 a ha
-  | endScope scope =>
-    change endScope s scope = some t at h
-    unfold endScope at h
-    split at h
-    · cases h
-      exact ⟨hr.1, fun b hb => hr.2 b (List.mem_filter.mp hb).1⟩
-    · contradiction
+    | consume p =>
+      change consume s p = some t at h
+      unfold consume at h
+      split at h
+      · cases h; exact hr
+      · contradiction
+    | release j => exact release_retired s t j i hr h
+    | reset j =>
+      change reset s j = some t at h
+      unfold reset at h
+      obtain ⟨b, _, h⟩ := Option.bind_eq_some_iff.mp h
+      obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
+      have hur := release_retired s u j i hr hu
+      have supply : u.nextBrand = s.nextBrand := by
+        unfold release at hu
+        split at hu
+        · cases hu; rfl
+        · contradiction
+      cases h
+      refine ⟨by dsimp; omega, ?_⟩
+      intro a ha
+      rcases List.mem_cons.mp ha with rfl | ha
+      · intro he
+        have hid := congrArg BrandId.id he
+        dsimp at hid
+        have := hr.1
+        omega
+      · exact hur.2 a ha
+    | endScope scope =>
+      change endScope s scope = some t at h
+      unfold endScope at h
+      split at h
+      · cases h
+        exact ⟨hr.1, fun b hb => hr.2 b (List.mem_filter.mp hb).1⟩
+      · contradiction
 
 /-- Law (subject `ConcreteSpec.Core.Generative.runLifetime`). Once a lexical brand has ended,
 no finite sequence of allocation, reset, release, dependency registration/consumption or scope
@@ -818,7 +792,10 @@ theorem retired_never_revives (s : State) (i : BrandId) (ops : List LifetimeOp)
     | cons op ops ih =>
       simp only [List.foldlM_cons] at h
       obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
-      exact ih u (lifetime_retired_step s u op i hr hu) h
+      have hur : Retired u i := by
+        have hs := lifetime_retired_step s op i hr
+        rwa [hu] at hs
+      exact ih u hur h
 
 /-- Law (subject `ConcreteSpec.Core.Generative.fresh`). Generativity is nominal: allocation
 succeeds and supplies a live binder whose brand differs from every previously scoped brand,
@@ -839,6 +816,10 @@ open ConcreteSpec.Core.Generative.Examples PreservationWitnesses
 
 def operations : List LifetimeOp := [.fresh ⟨0⟩, .reset ⟨1⟩]
 
+/-- Mutant: a single lifetime step resurrects a previously ended lexical brand. -/
+def lifetimeStepRevive (s : State) (op : LifetimeOp) : Option State :=
+  (lifetimeStep s op).map fun t => { t with binders := ⟨⟨0⟩, ⟨0⟩, ⟨0⟩, true⟩ :: t.binders }
+
 /-- Mutant: executing a lifetime sequence resurrects a previously ended lexical brand. -/
 def revive (s : State) (ops : List LifetimeOp) : Option State :=
   (runLifetime s ops).map fun t => { t with binders := ⟨⟨0⟩, ⟨0⟩, ⟨0⟩, true⟩ :: t.binders }
@@ -852,6 +833,14 @@ def freshReuse (s : State) (scope : BlockId) : Option State :=
 
 /-- Successful scope exit retains the outside dependency; reentry and reset both run. -/
 example : (runLifetime departed operations).isSome = true ∧ departed.dependencies = [outside] := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Generative.lifetime_retired_step`, case `ConcreteSpec.Core.Generative.PreservationWitnesses.departed`). -/
+example : ResultSatisfies (fun t => Retired t ⟨0⟩) (lifetimeStep departed (.fresh ⟨0⟩)) :=
+  @lifetime_retired_step departed (.fresh ⟨0⟩) ⟨0⟩ (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Generative.lifetime_retired_step`, case `ConcreteSpec.Core.Generative.PreservationWitnesses.departed`, subject `ConcreteSpec.Core.Generative.lifetimeStep`, mutant `ConcreteSpec.Core.Generative.LifetimeEvidence.lifetimeStepRevive`). -/
+example : Retired departed ⟨0⟩ ∧ ¬ ResultSatisfies (fun t => Retired t ⟨0⟩)
+    (lifetimeStepRevive departed (.fresh ⟨0⟩)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.Generative.retired_never_revives`, case `ConcreteSpec.Core.Generative.PreservationWitnesses.departed`). -/
 example : ResultSatisfies (fun t => Retired t ⟨0⟩) (runLifetime departed operations) :=
@@ -886,7 +875,7 @@ example : WellFormed releasedWithPhantom ∧
 end LifetimeEvidence
 
 /-- Helper (inversion). The unique nominal binder table identifies two records with the same
-brand; lexical exit cannot confuse an outside binder with an exiting one. (approved: REVIEW7-agy). -/
+brand; lexical exit cannot confuse an outside binder with an exiting one. (approved: APPR-C5-codex-902ce88a). -/
 private theorem binder_unique (xs : List Binder) (hn : (xs.map Binder.brand).Nodup)
     (a b : Binder) (ha : a ∈ xs) (hb : b ∈ xs) (he : a.brand = b.brand) : a = b := by
   induction xs with
@@ -902,24 +891,39 @@ private theorem binder_unique (xs : List Binder) (hn : (xs.map Binder.brand).Nod
       · exact False.elim (hn.1 (List.mem_map.mpr ⟨a, ha, he⟩))
       · exact ih hn.2 ha hb
 
-/-- Helper (inversion). Composes the structural preservation proof of each public lifetime
-operation through the finite lifetime interpreter. (approved: REVIEW7-agy). -/
-private theorem lifetime_wf (s t : State) (ops : List LifetimeOp) (hs : WellFormed s)
-    (h : runLifetime s ops = some t) : WellFormed t := by
-  unfold runLifetime at h
-  induction ops generalizing s with
-  | nil => simp at h; subst t; exact hs
-  | cons op ops ih =>
-    simp only [List.foldlM_cons] at h
-    obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
-    apply ih u ?_ h
-    cases op with
-    | fresh b => exact fresh_preserves_result s u b hs hu
-    | depend d => exact depend_preserves_result s u d hs hu
-    | consume p => exact consume_preserves_result s u p hs hu
-    | release i => exact release_preserves_result s u i hs hu
-    | reset i => exact reset_preserves_result s u i hs hu
-    | endScope b => exact endScope_preserves_result s u b hs hu
+/-- Law (subject `ConcreteSpec.Core.Generative.runLifetime`). Every finite lifetime execution
+preserves `WellFormed`. -/
+theorem lifetime_wf (s : State) (ops : List LifetimeOp) (hs : WellFormed s) :
+    ResultSatisfies WellFormed (runLifetime s ops) := by
+  cases h : runLifetime s ops with
+  | none => trivial
+  | some t =>
+    unfold runLifetime at h
+    induction ops generalizing s with
+    | nil => simp at h; subst t; exact hs
+    | cons op ops ih =>
+      simp only [List.foldlM_cons] at h
+      obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
+      apply ih u ?_ h
+      cases op with
+      | fresh b =>
+        have hw := fresh_preserves s b hs
+        rwa [show fresh s b = some u from hu] at hw
+      | depend d =>
+        have hw := depend_preserves s d hs
+        rwa [show depend s d = some u from hu] at hw
+      | consume p =>
+        have hw := consume_preserves s p hs
+        rwa [show consume s p = some u from hu] at hw
+      | release i =>
+        have hw := release_preserves s i hs
+        rwa [show release s i = some u from hu] at hw
+      | reset i =>
+        have hw := reset_preserves s i hs
+        rwa [show reset s i = some u from hu] at hw
+      | endScope b =>
+        have hw := endScope_preserves s b hs
+        rwa [show endScope s b = some u from hu] at hw
 
 /-- Law (subject `ConcreteSpec.Core.Generative.runLifetime`). Scope exit permanently retires
 its nominal brands. Every subsequent finite lifetime execution, including reentry and resets,
@@ -936,8 +940,12 @@ theorem scope_exit_lifetime (s : State) (scope : BlockId) (ops : List LifetimeOp
     | none => simp only [Option.bind_some, hx, ResultSatisfies]
     | some t =>
       simp only [Option.bind_some, hx, ResultSatisfies]
-      have huw := endScope_preserves_result s u scope hs he
-      have htw := lifetime_wf u t ops huw hx
+      have huw : WellFormed u := by
+        have hw := endScope_preserves s scope hs
+        rwa [he] at hw
+      have htw : WellFormed t := by
+        have hw := lifetime_wf u ops huw
+        rwa [hx] at hw
       intro b hb hscope
       have hur : Retired u b.brand := by
         unfold endScope at he
@@ -961,6 +969,19 @@ theorem scope_exit_lifetime (s : State) (scope : BlockId) (ops : List LifetimeOp
 
 namespace ScopeLifetimeEvidence
 open ConcreteSpec.Core.Generative.Examples PreservationWitnesses LifetimeEvidence
+
+/-- Mutant: executing a lifetime sequence duplicates a binder brand, breaking `WellFormed`. -/
+def runLifetimeDuplicateBrand (s : State) (ops : List LifetimeOp) : Option State :=
+  (runLifetime s ops).map fun t =>
+    { t with binders := ⟨⟨0⟩, ⟨0⟩, ⟨0⟩, true⟩ :: ⟨⟨0⟩, ⟨0⟩, ⟨0⟩, true⟩ :: t.binders }
+
+/-- Instance (law `ConcreteSpec.Core.Generative.lifetime_wf`, case `ConcreteSpec.Core.Generative.PreservationWitnesses.departed`). -/
+example : ResultSatisfies WellFormed (runLifetime departed operations) :=
+  @lifetime_wf departed operations (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Generative.lifetime_wf`, case `ConcreteSpec.Core.Generative.PreservationWitnesses.departed`, subject `ConcreteSpec.Core.Generative.runLifetime`, mutant `ConcreteSpec.Core.Generative.ScopeLifetimeEvidence.runLifetimeDuplicateBrand`). -/
+example : WellFormed departed ∧
+    ¬ ResultSatisfies WellFormed (runLifetimeDuplicateBrand departed operations) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.Generative.scope_exit_lifetime`, case `ConcreteSpec.Core.Generative.PreservationWitnesses.departing`). -/
 example : ResultSatisfies (fun t => ∀ b ∈ departing.binders, b.scope = ⟨0⟩ →
@@ -996,7 +1017,7 @@ instance {α : Type} (P : α → Prop) (x : Option α) [∀ a, Decidable (P a)] 
   | some a => inferInstanceAs (Decidable (P a))
 
 /-- Helper (congruence). Updating a single entry in an association list preserves a pointwise
-property whenever the update function preserves it at the target key. (approved: REVIEW7-agy). -/
+property whenever the update function preserves it at the target key. (approved: APPR-C5-codex-902ce88a). -/
 private theorem update_all {α : Type} (P : GrantId × α → Prop) (i : GrantId) (f : α → α)
     (hf : ∀ a, P (i, a) → P (i, f a)) (xs : AList GrantId α)
     (hxs : ∀ e ∈ xs, P e) : ∀ e ∈ AList.update xs i f, P e := by
@@ -1017,7 +1038,7 @@ private theorem update_all {α : Type} (P : GrantId × α → Prop) (i : GrantId
       · exact hxs e List.mem_cons_self
       · exact ih (fun q hq => hxs q (List.mem_cons_of_mem _ hq)) q hq
 
-/-- Helper (inversion). Successful usability exposes both the original resource and its live flag. (approved: REVIEW7-agy). -/
+/-- Helper (inversion). Successful usability exposes both the original resource and its live flag. (approved: APPR-C5-codex-902ce88a). -/
 theorem usable_some (s : State H) (i : GrantId) (r : Resource H) (h : usable s i = some r) :
     AList.lookup s.resources i = some r ∧ r.live = true := by
   unfold usable at h
@@ -1026,18 +1047,18 @@ theorem usable_some (s : State H) (i : GrantId) (r : Resource H) (h : usable s i
   · cases hh; exact ⟨ha, by assumption⟩
   · contradiction
 
-/-- Helper (congruence). Marking a grant consumed preserves `Bounded`. (approved: REVIEW7-agy). -/
+/-- Helper (congruence). Marking a grant consumed preserves `Bounded`. (approved: APPR-C5-codex-902ce88a). -/
 theorem consumed_bounded (budget : List Nat) (s : State H) (i : GrantId)
     (hs : Bounded budget s) : Bounded budget (consumed s i) :=
   update_all (fun (e : GrantId × Resource H) => ∀ right ∈ e.2.rights, right ∈ budget)
     i (fun r => { r with live := false }) (fun _ h => h) s.resources hs
 
-/-- Helper (congruence). Marking a grant consumed preserves `Fresh`. (approved: REVIEW7-agy). -/
+/-- Helper (congruence). Marking a grant consumed preserves `Fresh`. (approved: APPR-C5-codex-902ce88a). -/
 theorem consumed_fresh (s : State H) (i : GrantId) (hs : Fresh s) : Fresh (consumed s i) :=
   update_all (fun (e : GrantId × Resource H) => e.1.id < s.next)
     i (fun r => { r with live := false }) (fun _ h => h) s.resources hs
 
-/-- Helper (congruence). Issuing a resource whose rights are within `budget` preserves `Bounded`. (approved: REVIEW7-agy). -/
+/-- Helper (congruence). Issuing a resource whose rights are within `budget` preserves `Bounded`. (approved: APPR-C5-codex-902ce88a). -/
 theorem issue_bounded (budget : List Nat) (s : State H) (r : Resource H)
     (hs : Bounded budget s) (hr : ∀ x ∈ r.rights, x ∈ budget) : Bounded budget (issue s r) := by
   intro e he
@@ -1046,7 +1067,7 @@ theorem issue_bounded (budget : List Nat) (s : State H) (r : Resource H)
   · exact hr
   · exact hs e he
 
-/-- Helper (congruence). Issuing a resource at `⟨s.next⟩` and advancing `next` preserves `Fresh`. (approved: REVIEW7-agy). -/
+/-- Helper (congruence). Issuing a resource at `⟨s.next⟩` and advancing `next` preserves `Fresh`. (approved: APPR-C5-codex-902ce88a). -/
 theorem issue_fresh (s : State H) (r : Resource H) (hs : Fresh s) : Fresh (issue s r) := by
   intro e he
   change e ∈ (⟨s.next⟩, r) :: s.resources at he
@@ -1054,38 +1075,19 @@ theorem issue_fresh (s : State H) (r : Resource H) (hs : Fresh s) : Fresh (issue
   · exact Nat.lt_succ_self _
   · exact Nat.lt_succ_of_lt (hs e he)
 
-/-- Helper (inversion). `Bounded` preservation for `narrow` on a given output state. (approved: REVIEW7-agy). -/
-theorem narrow_bounded_result (budget : List Nat) (s t : State H) (i : GrantId) (requested : List Nat)
-    (hs : Bounded budget s) (h : narrow s i requested = some t) : Bounded budget t := by
-  unfold narrow at h
-  obtain ⟨r, hr, hh⟩ := Option.bind_eq_some_iff.mp h
-  cases hh
-  apply issue_bounded _ _ _ (consumed_bounded budget s i hs)
-  intro x hx
-  exact hs _ (AList.lookup_mem (usable_some s i r hr).1) x (List.mem_filter.mp hx).1
-
 /-- Law (subject `ConcreteSpec.Core.Grants.narrow`). Narrowing a grant preserves `Bounded` (Q7.2). -/
 theorem narrow_bounded (budget : List Nat) (s : State H) (i : GrantId) (requested : List Nat)
     (hs : Bounded budget s) :
     ResultSatisfies (Bounded budget) (narrow s i requested) := by
   cases h : narrow s i requested with
   | none => trivial
-  | some t => exact narrow_bounded_result budget s t i requested hs h
-
-/-- Helper (inversion). `Bounded` preservation for `acquire` on a given output state. (approved: REVIEW7-agy). -/
-theorem acquire_bounded_result (budget : List Nat) (s t : State H) (i : GrantId)
-    (requested selected : List Nat) (permissions : List Cap) (allowed : Bool) (handle : H)
-    (hs : Bounded budget s) (h : acquire s i requested selected permissions allowed handle = some t) :
-    Bounded budget t := by
-  unfold acquire at h
-  obtain ⟨r, hr, hh⟩ := Option.bind_eq_some_iff.mp h
-  split at hh
-  · rename_i guard
+  | some t =>
+    unfold narrow at h
+    obtain ⟨r, hr, hh⟩ := Option.bind_eq_some_iff.mp h
     cases hh
-    apply issue_bounded _ _ _ hs
+    apply issue_bounded _ _ _ (consumed_bounded budget s i hs)
     intro x hx
-    exact hs _ (AList.lookup_mem (usable_some s i r hr).1) x (guard.2.2 x hx).1
-  · contradiction
+    exact hs _ (AList.lookup_mem (usable_some s i r hr).1) x (List.mem_filter.mp hx).1
 
 /-- Law (subject `ConcreteSpec.Core.Grants.acquire`). Acquiring a child grant preserves `Bounded`
 (Q7.2, Q7.8). -/
@@ -1095,15 +1097,16 @@ theorem acquire_bounded (budget : List Nat) (s : State H) (i : GrantId)
     ResultSatisfies (Bounded budget) (acquire s i requested selected permissions allowed handle) := by
   cases h : acquire s i requested selected permissions allowed handle with
   | none => trivial
-  | some t => exact acquire_bounded_result budget s t i requested selected permissions allowed handle hs h
-
-/-- Helper (inversion). `Bounded` preservation for `close` on a given output state. (approved: REVIEW7-agy). -/
-theorem close_bounded_result (budget : List Nat) (s t : State H) (i : GrantId) (result : CloseResult)
-    (hs : Bounded budget s) (h : close s i result = some (result, t)) : Bounded budget t := by
-  unfold close at h
-  obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp h
-  cases hh
-  exact consumed_bounded budget s i hs
+  | some t =>
+    unfold acquire at h
+    obtain ⟨r, hr, hh⟩ := Option.bind_eq_some_iff.mp h
+    split at hh
+    · rename_i guard
+      cases hh
+      apply issue_bounded _ _ _ hs
+      intro x hx
+      exact hs _ (AList.lookup_mem (usable_some s i r hr).1) x (guard.2.2 x hx).1
+    · contradiction
 
 /-- Law (subject `ConcreteSpec.Core.Grants.close`). Closing a grant preserves `Bounded` (Q7.3). -/
 theorem close_bounded (budget : List Nat) (s : State H) (i : GrantId) (result : CloseResult)
@@ -1118,17 +1121,8 @@ theorem close_bounded (budget : List Nat) (s : State H) (i : GrantId) (result : 
     cases hh
     exact consumed_bounded budget s i hs
 
-/-- Helper (inversion). Inductive `Steps` preserves `Bounded`. (approved: REVIEW7-agy). -/
-theorem rights_never_grow_steps (budget : List Nat) (s t : State H) (hs : Bounded budget s)
-    (h : Steps s t) : Bounded budget t := by
-  induction h with
-  | refl => exact hs
-  | narrow _ hn ih => exact narrow_bounded_result _ _ _ _ _ ih hn
-  | acquire _ ha ih => exact acquire_bounded_result _ _ _ _ _ _ _ _ _ ih ha
-  | close _ hc ih => exact close_bounded_result _ _ _ _ _ ih hc
-
 /-- Helper (inversion). Executing `runOps` from a state `s` with `Steps s₀ s` produces a state `t`
-with `Steps s₀ t`. (approved: REVIEW7-agy). -/
+with `Steps s₀ t`. (approved: APPR-C5-codex-902ce88a). -/
 private theorem steps_of_runOps (s₀ : State H) :
     ∀ (ops : List (Op H)) (s t : State H),
       Steps s₀ s → runOps s ops = some t → Steps s₀ t
@@ -1163,32 +1157,31 @@ theorem rights_never_grow (budget : List Nat) (s : State H) (ops : List (Op H))
   cases h : runOps s ops with
   | none => trivial
   | some t =>
-    exact rights_never_grow_steps budget s t hs (steps_of_runOps s ops s t (.refl s) h)
-
-/-- Helper (inversion). `Fresh` preservation for `narrow` on a given output state. (approved: REVIEW7-agy). -/
-theorem narrow_fresh_result (s t : State H) (i : GrantId) (requested : List Nat)
-    (hs : Fresh s) (h : narrow s i requested = some t) : Fresh t := by
-  unfold narrow at h
-  obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp h
-  cases hh
-  exact issue_fresh _ _ (consumed_fresh s i hs)
+    suffices ∀ u, Steps s u → Bounded budget u from
+      this t (steps_of_runOps s ops s t (.refl s) h)
+    intro u hsteps
+    induction hsteps with
+    | refl => exact hs
+    | @narrow t' u' i req _ hn ih =>
+      have hw := narrow_bounded budget t' i req ih
+      rwa [hn] at hw
+    | @acquire t' u' i req sel perms allowed hdl _ ha ih =>
+      have hw := acquire_bounded budget t' i req sel perms allowed hdl ih
+      rwa [ha] at hw
+    | @close t' u' i res _ hc ih =>
+      have hw := close_bounded budget t' i res ih
+      rwa [hc] at hw
 
 /-- Law (subject `ConcreteSpec.Core.Grants.narrow`). Narrowing preserves supply freshness `Fresh`. -/
 theorem narrow_fresh (s : State H) (i : GrantId) (requested : List Nat) (hs : Fresh s) :
     ResultSatisfies Fresh (narrow s i requested) := by
   cases h : narrow s i requested with
   | none => trivial
-  | some t => exact narrow_fresh_result s t i requested hs h
-
-/-- Helper (inversion). `Fresh` preservation for `acquire` on a given output state. (approved: REVIEW7-agy). -/
-theorem acquire_fresh_result (s t : State H) (i : GrantId) (requested selected : List Nat)
-    (permissions : List Cap) (allowed : Bool) (handle : H)
-    (hs : Fresh s) (h : acquire s i requested selected permissions allowed handle = some t) : Fresh t := by
-  unfold acquire at h
-  obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp h
-  split at hh
-  · cases hh; exact issue_fresh _ _ hs
-  · contradiction
+  | some t =>
+    unfold narrow at h
+    obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp h
+    cases hh
+    exact issue_fresh _ _ (consumed_fresh s i hs)
 
 /-- Law (subject `ConcreteSpec.Core.Grants.acquire`). Acquisition preserves supply freshness `Fresh`. -/
 theorem acquire_fresh (s : State H) (i : GrantId) (requested selected : List Nat)
@@ -1196,15 +1189,12 @@ theorem acquire_fresh (s : State H) (i : GrantId) (requested selected : List Nat
     ResultSatisfies Fresh (acquire s i requested selected permissions allowed handle) := by
   cases h : acquire s i requested selected permissions allowed handle with
   | none => trivial
-  | some t => exact acquire_fresh_result s t i requested selected permissions allowed handle hs h
-
-/-- Helper (inversion). `Fresh` preservation for `close` on a given output state. (approved: REVIEW7-agy). -/
-theorem close_fresh_result (s t : State H) (i : GrantId) (result : CloseResult)
-    (hs : Fresh s) (h : close s i result = some (result, t)) : Fresh t := by
-  unfold close at h
-  obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp h
-  cases hh
-  exact consumed_fresh s i hs
+  | some t =>
+    unfold acquire at h
+    obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp h
+    split at hh
+    · cases hh; exact issue_fresh _ _ hs
+    · contradiction
 
 /-- Law (subject `ConcreteSpec.Core.Grants.close`). Closing a grant preserves supply freshness `Fresh`. -/
 theorem close_fresh (s : State H) (i : GrantId) (result : CloseResult) (hs : Fresh s) :
@@ -1230,18 +1220,18 @@ instance [DecidableEq H] (s : State H) (i : GrantId) : Decidable (Dead s i) :=
     else
       isFalse (by rintro ⟨r', hr', hl'⟩; rw [h] at hr'; injection hr' with hr'; subst hr'; exact hl hl')
 
-/-- Helper (computation). Unpacks the usability guard; consumed_never_revives establishes unavailability after every subsequent grant operation. (approved: REVIEW7-agy). -/
+/-- Helper (computation). Unpacks the usability guard; consumed_never_revives establishes unavailability after every subsequent grant operation. (approved: APPR-C5-codex-902ce88a). -/
 theorem dead_unusable (s : State H) (i : GrantId) (h : Dead s i) : usable s i = none := by
   obtain ⟨r, hr, hd⟩ := h
   simp [usable, hr, hd]
 
-/-- Helper (congruence). Marking an existing grant consumed makes it `Dead`. (approved: REVIEW7-agy). -/
+/-- Helper (congruence). Marking an existing grant consumed makes it `Dead`. (approved: APPR-C5-codex-902ce88a). -/
 theorem consumed_dead (s : State H) (i : GrantId) (r : Resource H)
     (hr : AList.lookup s.resources i = some r) : Dead (consumed s i) i := by
   refine ⟨{ r with live := false }, ?_, rfl⟩
   simp [consumed, AList.lookup_update, hr]
 
-/-- Helper (congruence). Consuming any grant preserves `Dead` on already-consumed grants. (approved: REVIEW7-agy). -/
+/-- Helper (congruence). Consuming any grant preserves `Dead` on already-consumed grants. (approved: APPR-C5-codex-902ce88a). -/
 theorem consumed_keeps_dead (s : State H) (i j : GrantId) (h : Dead s i) :
     Dead (consumed s j) i := by
   obtain ⟨r, hr, hd⟩ := h
@@ -1249,7 +1239,8 @@ theorem consumed_keeps_dead (s : State H) (i j : GrantId) (h : Dead s i) :
   · subst j; exact consumed_dead s i r hr
   · exact ⟨r, by simp [consumed, AList.lookup_update, he, hr], hd⟩
 
-/-- Helper (congruence). Issuing a fresh grant preserves `Dead` on already-consumed grants. (approved: REVIEW7-agy). -/
+/-- Law (subject `ConcreteSpec.Core.Grants.issue`). Issuing a fresh grant preserves `Dead` on
+already-consumed grants. -/
 theorem issue_keeps_dead (s : State H) (r : Resource H) (i : GrantId)
     (hs : Fresh s) (h : Dead s i) : Dead (issue s r) i := by
   obtain ⟨a, ha, hd⟩ := h
@@ -1257,14 +1248,6 @@ theorem issue_keeps_dead (s : State H) (r : Resource H) (i : GrantId)
   have hi : GrantId.mk s.next ≠ i := by
     intro he; rw [← he] at hb; exact Nat.lt_irrefl _ hb
   exact ⟨a, by simp [issue, AList.lookup, hi, ha], hd⟩
-
-/-- Helper (inversion). `close` consumes on a given output state. (approved: REVIEW7-agy). -/
-theorem close_consumes_result (s t : State H) (i : GrantId) (result : CloseResult)
-    (h : close s i result = some (result, t)) : Dead t i := by
-  unfold close at h
-  obtain ⟨r, hr, hh⟩ := Option.bind_eq_some_iff.mp h
-  cases hh
-  exact consumed_dead s i r (usable_some s i r hr).1
 
 /-- Law (subject `ConcreteSpec.Core.Grants.close`). Every close outcome consumes the grant,
 including when close returns an error code; the result never contains a handle (Q7.3). -/
@@ -1274,24 +1257,10 @@ theorem close_consumes (s : State H) (i : GrantId) (result : CloseResult) :
   cases h : close s i result with
   | none => trivial
   | some r =>
-    have hres : r.1 = result := by
-      unfold close at h
-      obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp h
-      cases hh
-      rfl
-    rcases r with ⟨res, t⟩
-    dsimp at hres
-    subst hres
-    exact ⟨rfl, close_consumes_result s t i res h⟩
-
-/-- Helper (inversion). `narrow` consumes the parent on a given output state. (approved: REVIEW7-agy). -/
-theorem narrow_consumes_result (s t : State H) (i : GrantId) (requested : List Nat)
-    (hs : Fresh s) (h : narrow s i requested = some t) : Dead t i := by
-  unfold narrow at h
-  obtain ⟨r, hr, hh⟩ := Option.bind_eq_some_iff.mp h
-  cases hh
-  exact issue_keeps_dead _ _ i (consumed_fresh s i hs)
-    (consumed_dead s i r (usable_some s i r hr).1)
+    unfold close at h
+    obtain ⟨res, hr, hh⟩ := Option.bind_eq_some_iff.mp h
+    cases hh
+    exact ⟨rfl, consumed_dead s i res (usable_some s i res hr).1⟩
 
 /-- Law (subject `ConcreteSpec.Core.Grants.narrow`). Narrowing consumes the parent grant identity
 (Q7.2). -/
@@ -1299,35 +1268,12 @@ theorem narrow_consumes (s : State H) (i : GrantId) (requested : List Nat) (hs :
     ResultSatisfies (fun t : State H => Dead t i) (narrow s i requested) := by
   cases h : narrow s i requested with
   | none => trivial
-  | some t => exact narrow_consumes_result s t i requested hs h
-
-/-- Helper (inversion). Inductive `Steps` never revives a `Dead` grant. (approved: REVIEW7-agy). -/
-theorem consumed_never_revives_steps (s t : State H) (i : GrantId) (hs : Fresh s) (hd : Dead s i)
-    (h : Steps s t) : Dead t i ∧ Fresh t := by
-  induction h with
-  | refl => exact ⟨hd, hs⟩
-  | narrow _ hn ih =>
-    obtain ⟨hd, hf⟩ := ih
-    refine ⟨?_, narrow_fresh_result _ _ _ _ hf hn⟩
-    unfold narrow at hn
-    obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp hn
+  | some t =>
+    unfold narrow at h
+    obtain ⟨r, hr, hh⟩ := Option.bind_eq_some_iff.mp h
     cases hh
-    exact issue_keeps_dead _ _ i (consumed_fresh _ _ hf) (consumed_keeps_dead _ _ _ hd)
-  | acquire _ ha ih =>
-    obtain ⟨hd, hf⟩ := ih
-    refine ⟨?_, acquire_fresh_result _ _ _ _ _ _ _ _ hf ha⟩
-    unfold acquire at ha
-    obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp ha
-    split at hh
-    · cases hh; exact issue_keeps_dead _ _ i hf hd
-    · contradiction
-  | close _ hc ih =>
-    obtain ⟨hd, hf⟩ := ih
-    refine ⟨?_, close_fresh_result _ _ _ _ hf hc⟩
-    unfold close at hc
-    obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp hc
-    cases hh
-    exact consumed_keeps_dead _ _ _ hd
+    exact issue_keeps_dead _ _ i (consumed_fresh s i hs)
+      (consumed_dead s i r (usable_some s i r hr).1)
 
 /-- Law (subject `ConcreteSpec.Core.Grants.runOps`). Once consumed, no sequence of permitted grant
 operations can revive a resource identity (Q7.2, Q7.3). -/
@@ -1337,9 +1283,44 @@ theorem consumed_never_revives (s : State H) (i : GrantId) (ops : List (Op H))
   cases h : runOps s ops with
   | none => trivial
   | some t =>
-    exact consumed_never_revives_steps s t i hs hd (steps_of_runOps s ops s t (.refl s) h)
+    suffices ∀ u, Steps s u → Dead u i ∧ Fresh u from
+      this t (steps_of_runOps s ops s t (.refl s) h)
+    intro u hsteps
+    induction hsteps with
+    | refl => exact ⟨hd, hs⟩
+    | @narrow t' u' j req _ hn ih =>
+      obtain ⟨hd, hf⟩ := ih
+      have hfr : Fresh u' := by
+        have hw := narrow_fresh t' j req hf
+        rwa [hn] at hw
+      refine ⟨?_, hfr⟩
+      unfold narrow at hn
+      obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp hn
+      cases hh
+      exact issue_keeps_dead _ _ i (consumed_fresh _ _ hf) (consumed_keeps_dead _ _ _ hd)
+    | @acquire t' u' j req sel perms allowed hdl _ ha ih =>
+      obtain ⟨hd, hf⟩ := ih
+      have hfr : Fresh u' := by
+        have hw := acquire_fresh t' j req sel perms allowed hdl hf
+        rwa [ha] at hw
+      refine ⟨?_, hfr⟩
+      unfold acquire at ha
+      obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp ha
+      split at hh
+      · cases hh; exact issue_keeps_dead _ _ i hf hd
+      · contradiction
+    | @close t' u' j res _ hc ih =>
+      obtain ⟨hd, hf⟩ := ih
+      have hfr : Fresh u' := by
+        have hw := close_fresh t' j res hf
+        rwa [hc] at hw
+      refine ⟨?_, hfr⟩
+      unfold close at hc
+      obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp hc
+      cases hh
+      exact consumed_keeps_dead _ _ _ hd
 
-/-- Helper (inversion). `narrow` intersection characterization on a given output state. (approved: REVIEW7-agy). -/
+/-- Helper (inversion). `narrow` intersection characterization on a given output state. (approved: APPR-C5-codex-902ce88a). -/
 theorem narrow_intersection_result (s t : State H) (i : GrantId) (requested : List Nat)
     (h : narrow s i requested = some t) : ∃ r,
       usable s i = some r ∧ AList.lookup t.resources ⟨s.next⟩ =
@@ -1349,7 +1330,7 @@ theorem narrow_intersection_result (s t : State H) (i : GrantId) (requested : Li
   cases hh
   exact ⟨r, hr, by simp [issue, consumed, AList.lookup]⟩
 
-/-- Helper (computation). Calculates the issued child record; narrow_permissions establishes the extensional permission contract independently of list representation. (approved: REVIEW7-agy). -/
+/-- Helper (computation). Calculates the issued child record; narrow_permissions establishes the extensional permission contract independently of list representation. (approved: APPR-C5-codex-902ce88a). -/
 theorem narrow_intersection (s : State H) (i : GrantId) (requested : List Nat) :
     ResultSatisfies (fun t : State H =>
       ∃ r, usable s i = some r ∧ AList.lookup t.resources ⟨s.next⟩ =
@@ -1359,21 +1340,6 @@ theorem narrow_intersection (s : State H) (i : GrantId) (requested : List Nat) :
   | none => trivial
   | some t => exact narrow_intersection_result s t i requested h
 
-/-- Helper (inversion). `acquire` parent-preservation on a given output state. (approved: REVIEW7-agy). -/
-theorem acquire_keeps_parent_result (s t : State H) (i : GrantId) (requested selected : List Nat)
-    (permissions : List Cap) (allowed : Bool) (handle : H) (hs : Fresh s)
-    (h : acquire s i requested selected permissions allowed handle = some t) :
-    usable t i = usable s i := by
-  unfold acquire at h
-  obtain ⟨r, hr, hh⟩ := Option.bind_eq_some_iff.mp h
-  have hb := hs _ (AList.lookup_mem (usable_some s i r hr).1)
-  have hi : GrantId.mk s.next ≠ i := by
-    intro he; rw [← he] at hb; exact Nat.lt_irrefl _ hb
-  split at hh
-  · cases hh
-    simp [usable, issue, AList.lookup, hi]
-  · contradiction
-
 /-- Law (subject `ConcreteSpec.Core.Grants.acquire`). Acquisition leaves its parent's resource,
 rights and availability unchanged (Q7.2). -/
 theorem acquire_keeps_parent (s : State H) (i : GrantId) (requested selected : List Nat)
@@ -1382,7 +1348,16 @@ theorem acquire_keeps_parent (s : State H) (i : GrantId) (requested selected : L
       (acquire s i requested selected permissions allowed handle) := by
   cases h : acquire s i requested selected permissions allowed handle with
   | none => trivial
-  | some t => exact acquire_keeps_parent_result s t i requested selected permissions allowed handle hs h
+  | some t =>
+    unfold acquire at h
+    obtain ⟨r, hr, hh⟩ := Option.bind_eq_some_iff.mp h
+    have hb := hs _ (AList.lookup_mem (usable_some s i r hr).1)
+    have hi : GrantId.mk s.next ≠ i := by
+      intro he; rw [← he] at hb; exact Nat.lt_irrefl _ hb
+    split at hh
+    · cases hh
+      simp [ResultSatisfies, usable, issue, AList.lookup, hi]
+    · contradiction
 
 namespace GrantWitnesses
 open ConcreteSpec.Core.Grants.Examples
@@ -1390,9 +1365,14 @@ open ConcreteSpec.Core.Grants.Examples
 def launchBudget : List Nat := [0, 1]
 def afterAcquire : State Nat := (acquire initial ⟨0⟩ [0, 1] [1] [.fs] true 99).getD initial
 def afterClose0 : State Nat := ((close afterAcquire ⟨0⟩ (.error 5)).map Prod.snd).getD afterAcquire
+def sampleResource : Resource Nat := ⟨77, [1], .fs, true⟩
 def validOps : List (Op Nat) :=
   [.acquire ⟨0⟩ [0, 1] [1] [.fs] true 99, .narrow ⟨1⟩ [1], .close ⟨2⟩ (.ok ())]
 def postCloseOps : List (Op Nat) := [.narrow ⟨1⟩ [1]]
+
+/-- Mutant: issuing a resource overwrites grant `0` instead of allocating at `s.next`. -/
+def issueOverwriteZero {H : Type} (s : State H) (r : Resource H) : State H :=
+  ⟨(⟨0⟩, r) :: s.resources, s.next + 1⟩
 
 /-- Mutant: narrowing replaces rights with `requested` instead of intersecting with parent rights. -/
 def narrowTakeRequested {H : Type} (s : State H) (i : GrantId) (requested : List Nat) :
@@ -1476,7 +1456,15 @@ def acquireEscalate {H : Type} (s : State H) (i : GrantId) (requested selected :
     { t with resources := (AList.update t.resources ⟨s.next⟩
       (fun r => { r with rights := 99 :: r.rights })) }
 
--- Grant laws (13)
+-- Grant laws (14)
+
+/-- Instance (law `ConcreteSpec.Core.Grants.issue_keeps_dead`, case `ConcreteSpec.Core.Grants.GrantWitnesses.afterClose0`). -/
+example : Dead (issue afterClose0 sampleResource) ⟨0⟩ :=
+  @issue_keeps_dead Nat afterClose0 sampleResource ⟨0⟩ (by decide) (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Grants.issue_keeps_dead`, case `ConcreteSpec.Core.Grants.GrantWitnesses.afterClose0`, subject `ConcreteSpec.Core.Grants.issue`, mutant `ConcreteSpec.Core.Grants.GrantWitnesses.issueOverwriteZero`). -/
+example : Fresh afterClose0 ∧ Dead afterClose0 ⟨0⟩ ∧
+    ¬ Dead (issueOverwriteZero afterClose0 sampleResource) ⟨0⟩ := by decide
 
 /-- Instance (law `ConcreteSpec.Core.Grants.narrow_bounded`, case `ConcreteSpec.Core.Grants.Examples.initial`). -/
 example : ResultSatisfies (Bounded launchBudget) (narrow initial ⟨0⟩ [1, 2]) :=
