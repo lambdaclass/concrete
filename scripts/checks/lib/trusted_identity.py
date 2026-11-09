@@ -14,6 +14,9 @@ parser = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(parser)
 parse = parser.parse
 parse_many = parser.parse_many
+map_spec = importlib.util.spec_from_file_location("trusted_mappings", Path(__file__).with_name("trusted_mappings.py"))
+mappings = importlib.util.module_from_spec(map_spec)
+map_spec.loader.exec_module(mappings)
 
 def realpath(path):
     parser.checked_path(str(path))
@@ -190,7 +193,10 @@ def check(logs, allowed, evidence, lcb, role):
             info = evidence["closure"].get(root, {})
             print("tool-identity " + json.dumps({"executed": path, "resolved": real,
                   "narHash": info.get("narHash"), "local": local, "role": role}, sort_keys=True))
-    return 1 if failed else 0
+    if failed:
+        return 1
+    mappings.check(logs, evidence)
+    return 0
 
 
 if __name__ == "__main__":

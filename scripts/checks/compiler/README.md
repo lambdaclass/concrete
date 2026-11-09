@@ -24,10 +24,52 @@ module into private temporary storage before running that test entry. An inherit
 `CONCRETE_TRUSTED_DECLARATIONS` must still produce exactly
 `FAIL unlisted example trusted declaration ambientAuthority [unsafe]` in production.
 
-The other ambient inputs are observations, not authority: PATH-resolved tools and
-`CONCRETE_SLICE0_CLANG` must match lock-derived identities; cwd is fixed to the production entry point's checkout before any helper is sourced; resource bounds cannot add trust. `CONCRETE_TRUSTED_BASE_WITHOUT` only removes
-registry components for the missing-entry control and cannot add matches. The
-approval input remains fail-closed under T1. No external declaration list is read.
+Gate D's shell, Nix evaluator, and the host kernel/tracer form the bootstrap boundary.
+Before any audited build or frontend process, `slice0_gate_environment` runs the
+entry function in a fresh shell through the single `slice0_clean_environment`
+allowlist in `lib/slice0_environment.sh`. `slice0_native.sh` uses that same helper;
+there is no independent native environment list. The PR, daily fresh-build and
+weekly store-verification entries all use this launch boundary.
+
+The worker receives a PATH evaluated offline from the checked-in flake/lock,
+private HOME/TMPDIR/Lake cache roots, fixed locale/time/reproducibility values,
+two Lean threads, disabled Lake artifact downloads, and the lock-derived native
+compiler path. Loader variables (`LD_PRELOAD`, `LD_LIBRARY_PATH`, `LD_AUDIT`,
+`GCONV_PATH`, Darwin `DYLD_*`), Lean search/compiler variables, shell startup
+hooks, compiler wrapper flags, Git/Nix/Python configuration, and gate-specific
+manifest/registry/resource overrides are absent. Lake supplies its own search
+paths from the local pinned project. Dependency revisions and cleanliness are
+checked before the initial Lake invocation so missing pins cannot trigger a fetch.
+The parent shell and the initial offline Nix evaluation must themselves be
+trusted; a hostile shell or Nix installation is outside this audit's authority.
+
+Sanitation is supplemented by Linux `strace -yy` executable mapping evidence for
+builds, emissions, native compiles/links, registry printers and example frontends.
+`trusted_mappings.py` reconstructs split `mmap`/`mprotect` calls per process and
+per session. Successful executable mappings require resolved backing files whose
+invoked and real paths both belong to the lock-derived pipeline closure. This
+checks actual loaded code regardless of filename suffix, including dynamic
+loader injections and explicit `dlopen`. Anonymous executable mappings and
+executable `mprotect` transitions have no registered file identity and fail closed.
+Other platforms continue to report the Linux-only tool audit as unchecked.
+The registry-renderer launch is first checked against narrowly fixed bootstrap
+names and lock-derived identities, then checked again against the registry it
+rendered; subsequent frontend launches use the rendered registry.
+
+`trusted_loader_controls.py` builds a real constructor library with a non-`.so`
+filename. Uncontrolled pinned Lean runs the constructor while the executable
+inventory still contains only Lean; the mapping check must reject exactly
+`unregistered executable mapping: "<planted path>"`. The shared clean launch
+must prevent the constructor and pass the mapping check. Separate controls poison
+PATH and ambient configuration, and assert exact diagnostics for split, malformed,
+anonymous and protection-changing mapping events. The structural cause was
+counting successful executable launches as the entire native-code population;
+Gate D owns the controlled-launch and mapped-code evidence for that population
+under the existing **R-0509** validation work. No language decision is taken.
+
+`CONCRETE_TRUSTED_BASE_WITHOUT` remains an internally planted missing-entry
+control, never inherited authority. Owner approval remains fail-closed under T1.
+No external declaration list is read.
 
 ## Approval authority (T1)
 

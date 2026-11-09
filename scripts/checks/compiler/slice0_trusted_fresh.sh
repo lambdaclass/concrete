@@ -7,6 +7,9 @@ set -euo pipefail
 export LC_ALL=C LAKE_ARTIFACT_CACHE=false
 root=$(cd "$(dirname "$0")/../../.." && pwd)
 cd "$root"
+source scripts/checks/lib/slice0_environment.sh
+slice0_trusted_fresh_main() {
+root=$PWD
 # shellcheck source=scripts/checks/lib/limits.sh
 source scripts/checks/lib/limits.sh
 # shellcheck source=scripts/checks/lib/slice0_sources.sh
@@ -35,8 +38,8 @@ bounded() {
 # shellcheck source=scripts/checks/lib/git_sandbox.sh
 source scripts/checks/lib/git_sandbox.sh
 git_sandbox "$work/gitconfig"
-# Materialize the pinned dependency checkouts locally (no build) and verify their
-# clean manifest revisions before creating the unbuilt source checkout.
+# Require existing clean pins before Lake can load the project; never fetch dependencies.
+bounded 30 python3 -I -c 'import runpy; runpy.run_path("scripts/checks/lib/trusted_identity.py")["verify_packages"]()'
 bounded 600 lake env true
 bash scripts/checks/compiler/build_identity.sh >/dev/null
 bounded 120 git clone --shared --no-hardlinks "$root" "$work/source"
@@ -56,3 +59,6 @@ cd "$work/source"
 export LAKE_ARTIFACT_CACHE=false LAKE_CACHE_DIR="$work/cache"
 bounded 7200 bash scripts/checks/compiler/slice0_trusted_base.sh
 echo "PASS slice0_trusted_fresh"
+
+}
+slice0_gate_environment slice0_trusted_fresh_main "$@"

@@ -183,6 +183,9 @@ def parse(lines, paths=False):
             continue
         if SIGNAL_LINE.match(body) and "execve" not in body:
             continue
+        # Mapping records are independently parsed fail-closed by trusted_mappings.py.
+        if re.match(r"^(?:mmap\(|mprotect\(|<\.\.\. (?:mmap|mprotect) resumed>)", body):
+            continue
         if body.startswith(("execve(", "execveat(")):
             if pid in pending:
                 raise ValueError(f"line {line_number}: overlapping exec calls")

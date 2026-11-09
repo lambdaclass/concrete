@@ -113,6 +113,7 @@
             # every C link step that uses PATH's clang (run_tests phase3_abi_interop, regress_103)
             # failed in this shell while passing on CI, whose elan puts no clang on PATH.
             clang
+            nix.nix-cli         # gate 9 evaluates lock-derived launch and identity policy
             leanRelease
           ] ++ gatesUserland ++ lib.optionals stdenv.isLinux [
             strace               # gate 9 inventories exec'd compilation-pipeline tools
@@ -134,6 +135,7 @@
             packages = base;
             # Gate 9 evaluates this from the checked-in flake/lock, rather than trusting PATH
             # or caller-supplied store roots. Descendant wrappers live in these closures.
+            passthru.trustedLaunchPath = pkgs.lib.makeBinPath (base ++ [ pkgs.git ]);
             passthru.trustedPipelineRoots = map builtins.toString pipelinePackages;
             passthru.trustedIdentity = {
               roots = map builtins.toString pipelinePackages;

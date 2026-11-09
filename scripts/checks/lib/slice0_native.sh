@@ -2,6 +2,7 @@
 # Shared native build policy. Input/output names and link order are fixed, relative to cwd.
 # Use the pinned Nix compiler; discard ambient compiler/linker flags and wrapper injections.
 set -euo pipefail
+source "${BASH_SOURCE[0]%/*}/slice0_environment.sh"
 : "${CONCRETE_SLICE0_CLANG:?run inside nix develop}"
 case "$(uname -s)-$(uname -m)" in
   Linux-x86_64) target=x86_64-linux; link=(-Wl,--build-id=none) ;;
@@ -21,8 +22,7 @@ lcb=$2
 cd "$1"
 # Fixed epoch rather than wall clock or caller environment. No debug data is requested, and
 # prefix maps also cover future debug additions. Separate objects avoid random linker temp names.
-clean=(env -i "PATH=$PATH" "HOME=$HOME" "TMPDIR=${TMPDIR:-/tmp}"
-  LC_ALL=C TZ=UTC SOURCE_DATE_EPOCH=1 ZERO_AR_DATE=1)
+slice0_clean_environment "$PATH" "$HOME" "${TMPDIR:-/tmp}"
 cc=("${clean[@]}" "$CONCRETE_SLICE0_CLANG" --no-default-config
   -O0 -g0 -w "-ffile-prefix-map=$PWD=." "-fdebug-prefix-map=$PWD=."
   -fdebug-compilation-dir=.)

@@ -6,6 +6,9 @@ set -euo pipefail
 export LC_ALL=C
 root=$(cd "$(dirname "$0")/../../.." && pwd)
 cd "$root"
+source scripts/checks/lib/slice0_environment.sh
+slice0_trusted_store_main() {
+root=$PWD
 work=$(mktemp -d)
 trap 'rc=$?; bounded_summary || true
   if [ "$rc" = 0 ] && grep -Eqs "^(incomplete|runner-failed)" "${BOUNDED_LOG:-/nonexistent}"; then
@@ -50,3 +53,6 @@ while IFS=$'\t' read -r out_path drv_path; do
   bounded 14400 nix build --rebuild --no-link "$drv_path^*"
 done <"$work/roots.tsv"
 echo "PASS slice0_trusted_store"
+
+}
+slice0_gate_environment slice0_trusted_store_main "$@"

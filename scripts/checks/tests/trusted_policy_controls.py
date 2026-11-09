@@ -240,7 +240,9 @@ with tempfile.TemporaryDirectory() as tmp:
         evidence.write_text(json.dumps(data))
 
         def check_trace(path, role, resolved=None):
-            log.write_text(f'1 execve("{path}", ["tool"], 0x0) = 0\n')
+            mapping_root = next(iter(json.loads(evidence.read_text())["closure"]))
+            log.write_text(f'1 execve("{path}", ["tool"], 0x0) = 0\n'
+                           f'1 mmap(NULL, 4096, PROT_READ|PROT_EXEC, MAP_PRIVATE, 3<{mapping_root}/lib/libfixture.so>, 0) = 0x1000\n')
             out = io.StringIO()
             original = os.path.realpath
             with patch.object(identity.os.path, "realpath",
