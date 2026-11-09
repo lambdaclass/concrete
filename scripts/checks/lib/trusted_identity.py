@@ -195,7 +195,7 @@ def check(logs, allowed, evidence, lcb, role):
                   "narHash": info.get("narHash"), "local": local, "role": role}, sort_keys=True))
     if failed:
         return 1
-    mappings.check(logs, evidence)
+    mappings.check(logs, evidence, role)
     return 0
 
 

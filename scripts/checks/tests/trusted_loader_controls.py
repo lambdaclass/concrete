@@ -45,7 +45,7 @@ for lines, expected in [
      'executable mprotect has no pinned file identity'),
     (['1 <... mmap resumed>) = 0x1000\n'], 'resumed mapping has no unfinished call'),
     (['1 mmap(NULL, 4096, PROT_READ <unfinished ...>\n'], 'unfinished mapping calls have no result'),
-    (['1 mmap(NULL, 4096, PROT_EXEC, MAP_PRIVATE, 3</tmp/x>, 0) = ?\n'], 'missing mapping result'),
+    (['1 mmap(NULL, 4096, PROT_EXEC, MAP_PRIVATE, 3</tmp/x>, 0) = ?\n'], 'unfinished mapping calls have no result'),
 ]:
     rejects(lambda: mappings.executable_mappings(lines), expected)
 
@@ -59,7 +59,7 @@ with tempfile.TemporaryDirectory() as tmp:
     assert str(lean).startswith('/nix/store/'), lean
     root = '/'.join(str(lean).split('/')[:4])
     closure = run(['nix', 'path-info', '--offline', '--recursive', root]).stdout.splitlines()
-    evidence = {'closure': dict.fromkeys(closure)}
+    evidence = {'closure': dict.fromkeys(closure), 'role_closures': {'test': {'lean': closure}}}
     marker = d / 'constructor-ran'
     source = d / 'inject.c'
     source.write_text('''#include <unistd.h>
@@ -81,15 +81,14 @@ __attribute__((constructor)) static void injected(void) {
          '"${clean[@]}" "$2" --no-default-config -shared -fPIC "$3" -o "$4"',
          'bash', helper, os.environ['CONCRETE_SLICE0_CLANG'], str(source), str(library)])
     trace = d / 'injected.trace'
-    command = ['strace', '-f', '-qq', '-s', '4096', '-yy', '-e',
-               'trace=execve,execveat,mmap,mprotect', '-o', str(trace), str(lean), '--version']
+    command = ['strace', *mappings.strings.TRACE_FLAGS, '-o', str(trace), str(lean), '--version']
     run(command, env={**os.environ, 'LD_PRELOAD': str(library)})
     assert marker.exists(), 'injection did not run its constructor in Lean'
     names_spec = importlib.util.spec_from_file_location('execve_names', ROOT / 'scripts/checks/lib/execve_names.py')
     names = importlib.util.module_from_spec(names_spec)
     names_spec.loader.exec_module(names)
     assert names.parse_many([trace]) == ['lean'], 'injection changed the executable inventory'
-    rejects(lambda: mappings.check([trace], evidence),
+    rejects(lambda: mappings.check([trace], evidence, 'test'),
             'unregistered executable mapping: ' + json.dumps(str(library)))
     marker.unlink()
     # Exercise the real production boundary as well as its underlying allowlist.
@@ -129,7 +128,7 @@ __attribute__((constructor)) static void injected(void) {
          'slice0_clean_environment "$PATH" "$HOME" "${TMPDIR:-/tmp}"; "${clean[@]}" "$@"',
          'bash', helper, str(library), *command])
     assert not marker.exists(), 'clean launch still loaded the planted library into Lean'
-    mappings.check([clean_trace], evidence)
+    mappings.check([clean_trace], evidence, 'test')
     print('ok   control: real injected library rejected with exact mapping diagnostic')
     print('ok   control: shared clean environment prevents injected constructor and passes mapping audit')
 print('PASS focused loader and executable-mapping controls')

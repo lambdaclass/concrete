@@ -20,6 +20,7 @@ set -euo pipefail
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.."
 source scripts/checks/lib/slice0_environment.sh
 slice0_trusted_base_main() {
+source scripts/checks/lib/trusted_trace.sh
 export LC_ALL=C
 # This callback runs INSIDE common initialization, before any Lake build.
 slice0_audit_initial_build() {
@@ -27,7 +28,7 @@ slice0_audit_initial_build() {
   bounded 30 python3 -I -c 'import runpy; runpy.run_path("scripts/checks/lib/trusted_identity.py")["verify_packages"]()'
   if [ "$(uname -s)" = Linux ]; then
     LAKE_ARTIFACT_CACHE=false LAKE_CACHE_DIR="$work/lake-cache" \
-      bounded 1800 strace -f -qq -s 4096 -yy -e trace=execve,execveat,mmap,mprotect -o "$work/build.execve" \
+      bounded 1800 strace "${trusted_trace_flags[@]}" -o "$work/build.execve" \
       lake --no-cache build Concrete lean-compiler-backend/lcb
   else
     LAKE_ARTIFACT_CACHE=false LAKE_CACHE_DIR="$work/lake-cache" \
@@ -45,7 +46,7 @@ print_lean() {
   : >"$2"
   local trace=()
   if [ "$(uname -s)" = Linux ]; then
-    trace=(strace -f -qq -s 4096 -yy -e trace=execve,execveat,mmap,mprotect -o "$2.execve")
+    trace=(strace "${trusted_trace_flags[@]}" -o "$2.execve")
   fi
   bounded_run -i /dev/null 600 -- "${capped[@]}" "${trace[@]}" lake env lean "$1" >"$2.raw" 2>"$2.err" || rc=$?
   if [ "${#trace[@]}" != 0 ]; then
@@ -112,12 +113,12 @@ trace_emit() { # trace_emit NAME DIR EXPECT...
   local name=$1 d=$2
   shift 2
   mkdir -p "$d"
-  bounded "$emit_secs" lake env strace -f -qq -s 4096 -yy -e trace=execve,execveat,mmap,mprotect -o "$d/emit.execve" \
+  bounded "$emit_secs" lake env strace "${trusted_trace_flags[@]}" -o "$d/emit.execve" \
     lean --run scripts/checks/compiler/slice0_bir.lean emit "$name" "$d" "$target" "$@"
 }
 
 trace_native() { # trace_native DIR HELPER
-  bounded "$native_secs" strace -f -qq -s 4096 -yy -e trace=execve,execveat,mmap,mprotect -o "$1/native.execve" \
+  bounded "$native_secs" strace "${trusted_trace_flags[@]}" -o "$1/native.execve" \
     bash "$2" "$1" "$lcb"
 }
 
@@ -157,11 +158,11 @@ EOF
   unless result.exitCode == 0 do throw <| IO.userError "planted build tool failed"
 EOF
   (cd "$d"; LAKE_ARTIFACT_CACHE=false LAKE_CACHE_DIR="$d/.cache" \
-    bounded 180 strace -f -qq -s 4096 -yy -e trace=execve,execveat,mmap,mprotect \
+    bounded 180 strace "${trusted_trace_flags[@]}" \
     -o "$work/fresh-pr.execve" lake --no-cache build) || return 1
   check_tools "$work/pipeline-tools" lean-build "$work/fresh-pr.execve" || return 1
   (cd "$control"; LAKE_ARTIFACT_CACHE=false LAKE_CACHE_DIR="$control/.cache" \
-    bounded 180 strace -f -qq -s 4096 -yy -e trace=execve,execveat,mmap,mprotect \
+    bounded 180 strace "${trusted_trace_flags[@]}" \
     -o "$work/build-control.execve" lake --no-cache build) || return 1
   if check_tools "$work/pipeline-tools" lean-build "$work/build-control.execve" >"$work/build-control.out" 2>&1; then
     echo "FAIL control: fresh Lake build accepts objcopy"; return 1
@@ -200,7 +201,7 @@ check_examples() {
   fi
   local trace=()
   if [ "$(uname -s)" = Linux ]; then
-    trace=(strace -f -qq -s 4096 -yy -e trace=execve,execveat,mmap,mprotect -o "$out/frontend.execve")
+    trace=(strace "${trusted_trace_flags[@]}" -o "$out/frontend.execve")
   fi
   bounded 600 "${scope_cmd[@]}" "${trace[@]}" lake env lean --run "$root/scripts/checks/compiler/slice0_examples.lean" "${sources[@]}" |
     cap_out >"$out/examples" || { cat "$out/examples"; return 1; }
@@ -211,6 +212,7 @@ check_examples() {
 }
 
 bounded 30 python3 -I "$root/scripts/checks/tests/test_execve_names.py"
+bounded 60 python3 -I "$root/scripts/checks/tests/trusted_memory_controls.py"
 bounded 90 python3 -I "$root/scripts/checks/tests/trusted_policy_controls.py"
 bounded 180 python3 -I "$root/scripts/checks/tests/trusted_base_controls.py"
 bounded 180 python3 -I "$root/scripts/checks/lib/trusted_identity.py" prepare "$work/identity.json"
@@ -597,7 +599,7 @@ EOF
     fi
 
     long_arg=$(python3 -I -c 'print(") = -1 <unfinished ...> <... execve resumed>) = -1 " + "A" * 5000)')
-    bounded 30 strace -f -qq -s 4096 -yy -e trace=execve,execveat,mmap,mprotect \
+    bounded 30 strace "${trusted_trace_flags[@]}" \
       -o "$work/ctl/quoted-args.execve" bash -c '
         "$1" ") = 0" "<unfinished ...>" "<... execve resumed>) = 0" 2>/dev/null || true
         exec "$2" --version ") = -1 " "<unfinished ...>" "<... execve resumed>) = -1 " "a\"b\\\"c\\\\\") = -1 " "$3" >/dev/null
@@ -615,7 +617,7 @@ EOF
 
     mkdir -p "$work/ctl/wrong-path"
     cp "$(command -v bash)" "$work/ctl/wrong-path/clang"
-    bounded 30 strace -f -qq -s 4096 -yy -e trace=execve,execveat,mmap,mprotect \
+    bounded 30 strace "${trusted_trace_flags[@]}" \
       -o "$work/ctl/wrong-path.execve" "$work/ctl/wrong-path/clang" --version \
       ") = -1 " "<unfinished ...>" "<... execve resumed>) = -1 " 'a"b\"c\\") = -1 ' "$long_arg" >/dev/null
     if check_tools "$work/pipeline-tools" native "$work/ctl/wrong-path.execve" >"$work/ctl/wrong-path.out" 2>&1; then
@@ -628,7 +630,7 @@ EOF
 
     mkdir -p "$work/ctl/symlink-path"
     ln -s "$(command -v bash)" "$work/ctl/symlink-path/clang"
-    bounded 30 strace -f -qq -s 4096 -yy -e trace=execve,execveat,mmap,mprotect \
+    bounded 30 strace "${trusted_trace_flags[@]}" \
       -o "$work/ctl/symlink-path.execve" "$work/ctl/symlink-path/clang" --version >/dev/null
     if check_tools "$work/pipeline-tools" native "$work/ctl/symlink-path.execve" >"$work/ctl/symlink-path.out" 2>&1; then
       echo "FAIL control: identity audit accepts a symlink named clang to a store binary"; fail=1
@@ -641,7 +643,7 @@ EOF
     fi
 
     lean_root=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["lean"])' "$work/identity.json")
-    bounded 30 strace -f -qq -s 4096 -yy -e trace=execve,execveat,mmap,mprotect \
+    bounded 30 strace "${trusted_trace_flags[@]}" \
       -o "$work/ctl/lean-clang.execve" "$lean_root/bin/clang" --version >/dev/null
     if check_tools "$work/pipeline-tools" native "$work/ctl/lean-clang.execve" >"$work/ctl/lean-clang.out" 2>&1; then
       echo "FAIL control: native role accepts leanRelease/bin/clang"; fail=1
@@ -653,7 +655,7 @@ EOF
       fail=1
     fi
 
-    bounded 30 strace -f -qq -s 4096 -yy -e trace=execve,execveat,mmap,mprotect \
+    bounded 30 strace "${trusted_trace_flags[@]}" \
       -o "$work/ctl/lean-lld.execve" "$lean_root/bin/ld.lld" --version >/dev/null
     if check_tools "$work/pipeline-tools" native "$work/ctl/lean-lld.execve" >"$work/ctl/lean-lld.out" 2>&1; then
       echo "FAIL control: native role accepts leanRelease/bin/ld.lld"; fail=1
@@ -665,7 +667,7 @@ EOF
       fail=1
     fi
 
-    bounded 30 strace -f -qq -s 4096 -yy -e trace=execve,execveat,mmap,mprotect \
+    bounded 30 strace "${trusted_trace_flags[@]}" \
       -o "$work/ctl/lean-leanc.execve" "$lean_root/bin/leanc" --print-cflags >/dev/null
     if check_tools "$work/pipeline-tools" lean-emit "$work/ctl/lean-leanc.execve" >"$work/ctl/lean-leanc.out" 2>&1; then
       echo "FAIL control: lean-emit role accepts leanRelease/bin/leanc"; fail=1

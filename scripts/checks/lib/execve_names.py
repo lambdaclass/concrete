@@ -7,8 +7,14 @@ import os
 import re
 import sys
 
+# %memory selects all memory-management calls known to the installed strace,
+# including architecture-specific mmap2 and ipc decoding. Unknown calls fail closed.
+MEMORY_CALLS = frozenset("mmap mmap2 old_mmap mprotect pkey_mprotect shmat shmdt remap_file_pages mremap munmap brk msync madvise process_madvise mlock mlock2 munlock mlockall munlockall mincore membarrier mbind get_mempolicy set_mempolicy migrate_pages move_pages pkey_alloc pkey_free personality ptrace process_vm_writev userfaultfd open openat openat2".split())
+TRACE_FLAGS = ['-f', '-qq', '-s', '4096', '-yy', '-e',
+    'trace=%memory,execve,execveat,personality,ptrace,process_vm_writev,userfaultfd,open,openat,openat2']
+
 PID_PREFIX = re.compile(r'^\s*(?:(?:\[pid\s+([0-9]+)\]|([0-9]+))\s+)?(.*)$')
-DIRFD_PREFIX = re.compile(r'^(AT_FDCWD|-?[0-9]+)\s*,\s*')
+DIRFD_PREFIX = re.compile(r'^(AT_FDCWD|-?[0-9]+)(?:<[^<>]*>)?\s*,\s*')
 RESUMED_PREFIX = re.compile(r'^<\.\.\.\s+(execve(?:at)?)\s+resumed>')
 UNFINISHED_TAIL = re.compile(r'^<unfinished \.\.\.>\s*$')
 RESULT_TAIL = re.compile(
@@ -46,15 +52,15 @@ def _skip_ws(text, idx):
     return idx
 
 
-def _scan_quoted_string(text, idx, line_number):
+def _scan_quoted_string(text, idx, line_number, delimiter='"'):
     """Scan a C/strace double-quoted string literal starting at text[idx] == '"'."""
-    if idx >= len(text) or text[idx] != '"':
+    if idx >= len(text) or text[idx] != ('<' if delimiter == '>' else '"'):
         raise ValueError(f"line {line_number}: expected quoted string literal")
     idx += 1
     raw = bytearray()
     while idx < len(text):
         ch = text[idx]
-        if ch == '"':
+        if ch == delimiter:
             idx += 1
             truncated = text.startswith("...", idx)
             if truncated:
@@ -98,9 +104,17 @@ def _scan_quoted_string(text, idx, line_number):
             else:
                 raise ValueError(f"line {line_number}: unknown escape \\{esc} in string literal")
         else:
-            raw.extend(ch.encode("utf-8"))
+            raw.extend(os.fsencode(ch))
             idx += 1
     raise ValueError(f"line {line_number}: unterminated string literal")
+
+
+def decode_fd_path(text):
+    # strace uses the same C byte escapes in fd annotations and quoted strings.
+    path, end, truncated = _scan_quoted_string('<' + text + '>', 0, 0, delimiter='>')
+    if truncated or end != len(text) + 2:
+        raise ValueError('truncated fd annotation')
+    return checked_path(path, "mapping path")
 
 
 def _scan_args_to_end(text, idx, line_number, allow_unfinished, require_arg=False):
@@ -184,7 +198,7 @@ def parse(lines, paths=False):
         if SIGNAL_LINE.match(body) and "execve" not in body:
             continue
         # Mapping records are independently parsed fail-closed by trusted_mappings.py.
-        if re.match(r"^(?:mmap\(|mprotect\(|<\.\.\. (?:mmap|mprotect) resumed>)", body):
+        if re.match(r"^(?:" + "|".join(MEMORY_CALLS) + r")\(|^<\.\.\. (?:" + "|".join(MEMORY_CALLS) + r") resumed>", body):
             continue
         if body.startswith(("execve(", "execveat(")):
             if pid in pending:
@@ -243,6 +257,8 @@ def parse(lines, paths=False):
         if not result:
             raise ValueError(f"line {line_number}: missing exec result")
         if result.group(1) == "0":
+            if kind == "execveat" and not path:
+                raise ValueError("execveat AT_EMPTY_PATH has no audited file identity")
             if not os.path.isabs(path):
                 raise ValueError(f"line {line_number}: unresolved relative executable {path!r}")
             norm_path = os.path.normpath(path)
@@ -276,6 +292,9 @@ def main():
             print(f"FAIL tools: unlisted program '{checked_path(name)}'")
         if unlisted:
             sys.exit(1)
+        return
+    if sys.argv[1:] == ["--trace-flags"]:
+        sys.stdout.buffer.write(b"\0".join(os.fsencode(x) for x in TRACE_FLAGS) + b"\0")
         return
     paths = "--paths" in sys.argv
     if paths: sys.argv.remove("--paths")

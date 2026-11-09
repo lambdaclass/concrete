@@ -35,7 +35,7 @@ class TraceTests(unittest.TestCase):
             m.parse(['1 execve("/bin/unresolved", [], 0x0) = ?'])
         with tempfile.TemporaryDirectory() as directory:
             log = Path(directory) / "kill.trace"
-            result = subprocess.run(["strace", "-f", "-qq", "-e", "trace=execve,execveat",
+            result = subprocess.run(["strace", *m.TRACE_FLAGS,
                 "-o", str(log), shutil.which("bash"), "-c", "kill -13 $$"], timeout=15)
             self.assertEqual(result.returncode, -13)
             self.assertRegex(log.read_text(), r'\+\+\+ killed by SIGPIPE \+\+\+')
@@ -45,7 +45,7 @@ class TraceTests(unittest.TestCase):
             import time
             import signal
             pidfile = Path(directory) / "pid"
-            process = subprocess.Popen(["strace", "-f", "-qq", "-e", "trace=execve,execveat",
+            process = subprocess.Popen(["strace", *m.TRACE_FLAGS,
                 "-e", "inject=execve:delay_enter=2s:when=1", "-o", str(log),
                 shutil.which("bash"), "-c", 'echo $$ > "$1"; exec "$2"',
                 "_", str(pidfile), shutil.which("true")], stderr=subprocess.PIPE)
@@ -79,7 +79,7 @@ class TraceTests(unittest.TestCase):
             shutil.copyfile(shutil.which("bash"), target)
             target.chmod(0o755)
             log = root / "trace"
-            subprocess.run(["strace", "-f", "-qq", "-s", "4096", "-e", "trace=execve,execveat",
+            subprocess.run(["strace", *m.TRACE_FLAGS,
                             "-o", str(log), str(target), "-c", "exit 0"], check=True, timeout=15)
             import json
             expected = "line 1: control character in executable path: " + json.dumps(str(target))
@@ -102,7 +102,7 @@ class TraceTests(unittest.TestCase):
             # A clean executed path can resolve through a symlink to a hostile target.
             link = root / "clang"
             link.symlink_to(target)
-            subprocess.run(["strace", "-f", "-qq", "-e", "trace=execve,execveat",
+            subprocess.run(["strace", *m.TRACE_FLAGS,
                             "-o", str(log), str(link), "-c", "exit 0"], check=True, timeout=15)
             self.assertEqual(m.parse_many([log]), ["clang"])
             evidence.write_text(json.dumps({"inputs": {}, "role_closures": {"native": {}}}))
@@ -181,12 +181,8 @@ class TraceTests(unittest.TestCase):
                 proc = subprocess.run(
                     [
                         "strace",
-                        "-f",
-                        "-qq",
-                        "-s",
-                        str(strsize),
-                        "-e",
-                        "trace=execve,execveat",
+                        *m.TRACE_FLAGS,
+                        "-s", str(strsize),
                         "-o",
                         str(trace_path),
                         *cmd,

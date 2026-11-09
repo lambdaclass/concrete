@@ -186,7 +186,7 @@ with tempfile.TemporaryDirectory() as tmp:
             real_trace = tmp / "real-fake-clang.execve"
             long_arg = ") = -1 <unfinished ...> <... execve resumed>) = -1 " + ("A" * 5000)
             subprocess.run([
-                "strace", "-f", "-qq", "-s", "4096", "-e", "trace=execve,execveat",
+                "strace", *identity.parser.TRACE_FLAGS,
                 "-o", str(real_trace), str(fake), "--version",
                 ") = -1 ", "<unfinished ...>", "<... execve resumed>) = -1 ", 'a"b\\"c\\\\") = -1 ', long_arg,
             ], check=True, capture_output=True, text=True, timeout=30)
@@ -240,12 +240,15 @@ with tempfile.TemporaryDirectory() as tmp:
         evidence.write_text(json.dumps(data))
 
         def check_trace(path, role, resolved=None):
-            mapping_root = next(iter(json.loads(evidence.read_text())["closure"]))
+            trace_evidence = json.loads(evidence.read_text())
+            mapping_root = next((root for roots in trace_evidence["role_closures"][role].values() for root in roots), next(iter(trace_evidence["closure"])))
             log.write_text(f'1 execve("{path}", ["tool"], 0x0) = 0\n'
                            f'1 mmap(NULL, 4096, PROT_READ|PROT_EXEC, MAP_PRIVATE, 3<{mapping_root}/lib/libfixture.so>, 0) = 0x1000\n')
             out = io.StringIO()
             original = os.path.realpath
-            with patch.object(identity.os.path, "realpath",
+            original_exists = os.path.exists
+            fixture = mapping_root + "/lib/libfixture.so"
+            with patch.object(identity.os.path, "exists", side_effect=lambda p: str(p) == fixture or original_exists(p)), patch.object(identity.os.path, "realpath",
                               side_effect=lambda p: resolved if str(p) == path and resolved else original(p)):
                 with contextlib.redirect_stdout(out):
                     rc = identity.check(log, allowed, evidence, lcb_bin, role)

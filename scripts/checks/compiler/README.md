@@ -45,12 +45,29 @@ trusted; a hostile shell or Nix installation is outside this audit's authority.
 
 Sanitation is supplemented by Linux `strace -yy` executable mapping evidence for
 builds, emissions, native compiles/links, registry printers and example frontends.
-`trusted_mappings.py` reconstructs split `mmap`/`mprotect` calls per process and
-per session. Successful executable mappings require resolved backing files whose
-invoked and real paths both belong to the lock-derived pipeline closure. This
+`execve_names.py` owns the production/test strace flags; `trusted_trace.sh`
+loads that policy for every shell call site. `%memory` includes the installed
+strace's architecture-specific memory syscall set, including `mmap2`; unknown
+records fail closed. `trusted_mappings.py` reconstructs split calls per process
+and per session. Protection and mapping flags are parsed as argument fields,
+never searched for in paths or other arguments. The shared strace string decoder
+collects bytes before filesystem decoding and rejects Unicode control characters.
+Annotated execveat dirfds are supported for absolute targets; AT_EMPTY_PATH is
+refused because the executed fd has no audited identity. Successful executable mappings require resolved backing files whose
+invoked and real paths both belong to the lock-derived closure for that pipeline role. This
 checks actual loaded code regardless of filename suffix, including dynamic
 loader injections and explicit `dlopen`. Anonymous executable mappings and
-executable `mprotect` transitions have no registered file identity and fail closed.
+executable `mprotect`/`pkey_mprotect` transitions and `shmat(SHM_EXEC)` have no
+registered file identity and fail closed. Executable file mappings must be
+read-only, private and non-anonymous, with known protection/flag bits: a writable
+private page ceases to identify the store bytes, and shared backing is mutable.
+Memory identity mutations (`remap_file_pages`, personality changes, ptrace,
+process_vm_writev, userfaultfd) and process-memory file access are refused.
+Ordinary mremap only moves/aliases already checked mappings; it cannot add execute
+permission or replace their bytes. Killed no-return records require exact death
+records, just as the exec parser does. Both invoked and resolved paths must exist
+and belong to the role closure. This is a role-level union, matching the declared
+pipeline trust boundary; it is deliberately not the union of all pipeline roles.
 Other platforms continue to report the Linux-only tool audit as unchecked.
 The registry-renderer launch is first checked against narrowly fixed bootstrap
 names and lock-derived identities, then checked again against the registry it
