@@ -554,15 +554,15 @@ theorem toBits_ofBits (t : IntTy) (m : Nat) (h : m < 2 ^ t.bits) : toBits t (ofB
   cases t <;> simp only [IntTy.bits] at h <;>
     simp [toBits, ofBits, IntTy.signed, IntTy.bits] <;> (try split) <;> omega
 
-/-- Law (subject `ConcreteSpec.Core.wrap`). Wrapping keeps the bit pattern: `wrap` only reads the low `bits` bits. -/
+/-- Law (subject `ConcreteSpec.Core.wrap`). Wrapping keeps the bit pattern: `wrap` only reads the low `IntTy.bits` bits. -/
 theorem toBits_wrap (t : IntTy) (n : Int) : toBits t (wrap t n) = toBits t n :=
   toBits_ofBits t _ (toBits_lt t n)
 
-/-- Law (subject `ConcreteSpec.Core.wrapping`). A wrapping operation's pattern is the exact result's pattern, modulo `2^bits`. -/
+/-- Law (subject `ConcreteSpec.Core.wrapping`). A wrapping operation's pattern is the exact result's pattern, modulo 2^bits. -/
 theorem toBits_wrapping (t : IntTy) (op : WrapOp) (a b : Int) :
     toBits t (wrapping t op a b) = toBits t (op.exact a b) := toBits_wrap t _
 
-/-- Law (subject `ConcreteSpec.Core.toBits`). A valid left shift's pattern is the pattern of `a · 2^c`: the bits shifted out are gone. -/
+/-- Law (subject `ConcreteSpec.Core.toBits`). A valid left shift's pattern is the pattern of a · 2^c: the bits shifted out are gone. -/
 theorem toBits_shl (t : IntTy) (a c r : Int) (h : checked t .shl a c = .ok r) :
     toBits t r = toBits t (a * (2 : Int) ^ c.toNat) := by
   simp only [checked] at h
@@ -794,7 +794,9 @@ example : toBits .i8 (-56) = toBits .i8 (100 * (2 : Int) ^ (1 : Int).toNat) :=
   toBits_shl .i8 100 1 (-56) rfl
 
 /-- Planted (law `ConcreteSpec.Core.toBits_shl`, case `concrete`, subject `ConcreteSpec.Core.toBits`, mutant `ConcreteSpec.Core.ScalarLawEvidence.unboundedBits`). -/
-example : checked .i8 .shl 100 1 = .ok (-56) ∧
+example :
+    (if validShift .i8 1 then .ok (ofBits .i8 (unboundedBits .i8 (100 * (2 : Int) ^ (1 : Int).toNat)))
+      else (.error .invalidShift : Except ArithmeticError Int)) = .ok (-56) ∧
     ¬ (unboundedBits .i8 (-56) = unboundedBits .i8 (100 * (2 : Int) ^ (1 : Int).toNat)) := by decide
 
 /-- Instance (law `ConcreteSpec.Core.toBits_shr_unsigned`, case `concrete`). -/
