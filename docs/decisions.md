@@ -71,6 +71,358 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 - Every branch gets an agy review too ([row](#decided-project-review)).
 - Eleven plan and process decisions: UBSan dropped, a complete adapter theorem, smaller landing scripts, Claude's quota on the critical path, the front end now, one decisions writer, risk-capped reviews, one clones folder, a later no-libc runtime, a compile-speed budget and the termination wording ([row](#decided-2026-11-08-eleven)).
 
+<a id="decided-2026-11-09-delegated"></a>
+## Owner-delegated decisions 2026-11-09
+
+The owner said, verbatim: "ok tell me again the options choose the best long term options for everything".
+These five choices were made under that delegation (kind A); they are distinct from the
+assumptions below. This records the choices, not completed implementation or a merge approval.
+No new concrete syntax is decided here: spelling pending owner.
+
+- <a id="delegated-id-reservations"></a>**ID reservations** (owner delegation above, 2026-11-09).
+  Publish the authoritative reservation plan: 488 reservations, zero conflicts in the coordinator's
+  allocation record at d390e5a35. This is provenance of that allocation result, not a fresh check
+  performed by this branch; publication work remains. One allocator owns real IDs (rules 5, 13).
+  The R-XXXX rows below await that allocator and reserve no numeric ID.
+- <a id="delegated-c6"></a>**C6 source paths, option (a)** (owner delegation above, 2026-11-09).
+  Use structured project-relative paths. The loader refuses malformed or out-of-project paths and
+  duplicate sites, dropping nothing. This strengthens the existing project-relative trap-path
+  decision with checked input structure (rules 12, 13, 14).
+- <a id="delegated-c2"></a>**C2 constants, options (a) and (i)** (owner delegation above, 2026-11-09).
+  Constants stay scalar; checked operations are excluded from initializers; remove tryConvert
+  from CExpr. The general checked conversion result of OD106 is unchanged. Option (c), the
+  [R2 aggregate/enum proposal](#pending-r2), is the single reopening path, subject to its listed
+  preconditions and owner confirmation. Every initializer is evaluated, used or not; fuel
+  exhaustion refuses, never supplies evidence of success. Do not quietly enlarge the initializer grammar
+  (rules 5, 12, 15).
+- <a id="delegated-x4"></a>**X4 trust approvals** (owner delegation above, 2026-11-09).
+  Gate D trust approvals use the owner's SSH signing key, rather than an agent's key or unsigned
+  assent. This chooses the approval authority, not permission to obtain or install a private key
+  (rules 11, 12, 14).
+- <a id="delegated-q-subj"></a>**Q-SUBJ option (a), with C1 determinism reclassification**
+  (owner delegation above, 2026-11-09). N2 accepts inductive-relation subjects with same-signature
+  inductive mutants, rather than changing Step/Steps/AnswerStep to definitions or restating all
+  36 laws over the step function. Reclassify step_deterministic and step_silent_deterministic
+  as representation lemmas; prove determinism over independently specified operational rules.
+  Construction from the evaluator alone does not establish independent semantic determinism
+  (rules 6, 12).
+
+<a id="pending-owner-confirmation-2026-11-09"></a>
+## Pending owner confirmation (assumed yes, 2026-11-09)
+
+The owner said, verbatim: "i am going to sleep, work on a new worktree supposing that i would say yes to the things you think are best but don't mere".
+These kind-B recommendations are recorded for review on waking, not as ratified rules. Existing
+decided rows continue to govern wherever there is a conflict. Nothing on this branch is merged
+without the owner. The recommendations follow the owner's 2026-11-08 direction, verbatim:
+"ALWAYS tell the reviewrs to do the best long term thing rather than cuitting corners".
+Every new syntax/API/CLI form below has **spelling pending owner**; conceptual operation names
+identify proposals, not accepted spellings. Reasons refer to [PHILOSOPHY.md](PHILOSOPHY.md#the-rules).
+ROADMAP holds work only and links these rows rather than defining choices again.
+
+- <a id="pending-r1"></a>**R1. Hosted launch and final image** (assumed yes; pending owner confirmation).
+  *Choice:* The target table specifies a clean initial process state: ignore SIGPIPE so writes return typed errors; reset signal dispositions and mask to a stated state; close descriptors >= 3 or refuse launch (125) unless granted; make file creation mode an explicit argument and set umask to 0. Refuse loader-environment injection and bind loaded libraries by hash, or use static linking on the proof profile. Pre-map the stack budget or probe pages, checked on the final artifact. Require a non-executable stack and no writable/executable segment from slice 0; fix FP control state at entry at slice 26.
+  *Alternatives:* Inherited host state; launcher conventions without final-image evidence.
+  *Reason:* rules 3, 8, 11, 12, 14, 18: no ambient authority or hidden process inputs.
+  *If no:* Keep existing target obligations; return each uncovered launch premise to the owner before claiming it.
+- <a id="pending-r2"></a>**R2. Aggregate and enum constants** (assumed yes; pending owner confirmation).
+  *Choice:* Give aggregate constants exactly one read-only storage instance and shared second-class views at uses, never mutable views or per-use copies. Scalars retain TYPE-22 at-use meaning; REF-6 remains unchanged and initializers do not borrow. Move at least single-file top-level constants to slice 15. Aggregate/enum initializers reopen C2 only with closed successful evaluation, a typed value/representation and storage contract, view/ownership laws, resource accounting and preservation evidence; no general compile-time execution.
+  *Alternatives:* Scalar-only constants indefinitely; copying aggregates at each use; optimizer-dependent static storage.
+  *Reason:* rules 1, 5, 10, 12, 16: table costs and storage must have semantics independent of optimization.
+  *If no:* C2 scalar restriction stays; slice-15 table workloads need another owner-approved design.
+- <a id="pending-r3"></a>**R3. Bit and wide arithmetic** (assumed yes; pending owner confirmation).
+  *Choice:* Complete the slice-2 scalar-result primitive set: rotations, leading/trailing zero counts, population count, byte swap, high-word multiplication, and separate total scalar carry/borrow operations (wrapped result and a carry-out predicate with carry-in). Include operations in the constant-time table only where the target supports that claim. Add proved limb-based u128/u256 std modules at 15; no arbitrary-width integer types. All primitive spellings are pending owner.
+  *Alternatives:* Delay multi-result operations until structs; arbitrary-width builtin types; ad hoc crypto helpers.
+  *Reason:* rules 2, 5, 12, 15: one scalar operation contract and an honest target cost boundary.
+  *If no:* Retain the existing slice-2 set and replan crypto arithmetic before slice 15.
+- <a id="pending-r4"></a>**R4. Split and bulk view operations** (assumed yes; pending owner confirmation).
+  *Choice:* Add language primitives that split one checked view into two disjoint second-class views under its single existing root loan; the root stays frozen under OD15. Add equal-length distinct-view copy, overlap-correct within-view copy, and fill, each with one Lean range-update law and memmove/memset lowering. Introduce at 15 and extend to HeapArray at 21; spelling pending owner.
+  *Alternatives:* Element loops only; weakening root freezing; std helpers without primitive range laws.
+  *Reason:* rules 3, 5, 10, 13: disjointness is checked while root identity remains intact.
+  *If no:* Whole-root view conflicts remain; workloads use existing single-view operations.
+- <a id="pending-r5"></a>**R5. Secret wiping scope** (assumed yes; pending owner confirmation).
+  *Choice:* State the slice-7 claim by covered locations. After a linear secret is destroyed no reachable source location holds its bytes; moving it leaves no readable copy. Add frame/register scrubbing on return from functions holding secrets, as an LCB proof obligation and a named LLVM premise. Abort, core dumps and paging remain named premises; disable core dumps at launch when facts show secrets. Refine at slices 7, 15 and 19; do not imply Copy scalar secrets are wiped by destruction.
+  *Alternatives:* Wipe only the final slot while advertising unscoped wiping; claim physical erasure from source semantics.
+  *Reason:* rules 3, 8, 12, 14: separate logical erasure, backend preservation and OS premises.
+  *If no:* Keep the existing narrower wipe claims and explicit residual premises.
+- <a id="pending-r6"></a>**R6. Earlier generated functional models** (assumed yes; pending owner confirmation).
+  *Choice:* Generate one model per function with proved refinement to Core, reusing R-0482 model/proposition identities and R-0454 canonical subjects. Deliver pure models at 8, mutable-parameter returned updates at 13, effect traces at 18 and allocation at 19, moving that part of proof-order item 4 from phase E to C.
+  *Alternatives:* Wait until phase E; handwritten parallel functional implementations.
+  *Reason:* rules 5, 7, 12, 13: the theorem concerns the actual function through a checked model.
+  *If no:* Keep phase-E scheduling; early program theorems use Core directly.
+- <a id="pending-r7"></a>**R7. Unused imports and private reachability** (assumed yes; pending owner confirmation).
+  *Choice:* Refuse unused imports and unreachable private items at slice 17. Define reachability roots in the spec: exports, main, tests, theorem/spec dependencies and target-selected files.
+  *Alternatives:* Facts plus optional policy first; silently retaining unused surface.
+  *Reason:* rules 5, 12, 15: dependencies and reviewed surface must be real, with no warning tier.
+  *If no:* Use existing admission rules; reconsider fact-plus-policy reporting before imposing refusal.
+- <a id="pending-r8"></a>**R8. Package spec version** (assumed yes; pending owner confirmation).
+  *Choice:* Declare the targeted spec version in Concrete.toml; refuse a version the compiler does not implement, with no edition modes. Record it in facts and receipts before product 1.0. Compatibility and evidence survival policy lives in L8. Field spelling pending owner.
+  *Alternatives:* Implicit compiler-selected version; multiple edition modes.
+  *Reason:* rules 5, 12, 14: one declared language identity bound to evidence.
+  *If no:* Outputs retain their existing spec_version; package declaration and refusal stay unimplemented.
+- <a id="pending-r9"></a>**R9. Incoming C boundary** (assumed yes; pending owner confirmation).
+  *Choice:* Exported functions accept only FFI-safe types. Operational authority is carried only through grant handles created by Concrete and passed out, never forged by C. Foreign-caller entry premises are declared assumptions in facts at slice 25.
+  *Alternatives:* Treat C as able to mint capabilities; silently trust every caller.
+  *Reason:* rules 11, 12, 14: exported entry preserves authority and exposes assumptions.
+  *If no:* Keep the existing export surface and explicitly unresolved incoming-authority boundary.
+- <a id="pending-r10"></a>**R10. Checked layout values** (assumed yes; pending owner confirmation).
+  *Choice:* Provide a field-offset query over typed field identity, never strings, for representation-fixed types. Add concrete-type size/alignment/offset queries to the known-value table: size at 9 and layout/FFI queries at 24–25. New query spelling pending owner.
+  *Alternatives:* Restated numeric offsets; string field lookup; optimizer-only layout knowledge.
+  *Reason:* rules 5, 13: one computed layout with typed identity.
+  *If no:* Keep existing layout queries and known-value exclusions; offsets remain unavailable.
+- <a id="pending-k1"></a>**K1. Provenance through every IR** (assumed yes; pending owner confirmation).
+  *Choice:* Every HIR, Core, MIR, CFG, SSA and BIR node carries origin spans and stable identity for diagnostics, trap accounting, debug info and facts.
+  *Alternatives:* Recover origins late; use names or positions as semantic identity.
+  *Reason:* rules 13, 14: provenance survives each lowering and is inspectable.
+  *If no:* Retain current provenance scope; do not claim end-to-end source mapping.
+- <a id="pending-k2"></a>**K2. Round-trippable IR text** (assumed yes; pending owner confirmation).
+  *Choice:* Give every IR a textual printer/parser pair with a round-trip law for isolated pass testing; complement B0 printers.
+  *Alternatives:* Printer-only dumps; tests requiring the entire frontend.
+  *Reason:* rules 5, 12, 14: replayable pass inputs with proved serialization meaning.
+  *If no:* Keep diagnostic printers without claiming round-trip or isolated replay.
+- <a id="pending-k3"></a>**K3. Compiler totality and panic policy** (assumed yes; pending owner confirmation).
+  *Choice:* State compiler totality. Permit only a reasoned allow-list for panic and unreachable cases, with a gate proving each case impossible; never allow sorry or partial definitions in compiler code. Unproven facts belong only in a named, tracked premises module. This uses the later K3/R-0630 answer in the source record, rather than reviving an unrestricted allow-list.
+  *Alternatives:* Unrestricted allow-list; unconditional panic ban without modeling impossible cases; untracked proof gaps.
+  *Reason:* rules 1, 12: totality and trust gaps must have precise, checked homes.
+  *If no:* Existing totality and premise rules remain; no broader escape is authorized.
+- <a id="pending-k4"></a>**K4. Generated-code benchmarks** (assumed yes; pending owner confirmation).
+  *Choice:* Track showcase runtime and code size against C at -O2 for both LCB and LLVM, with history on concrete-ci-2; use existing report-only/owner-target stages.
+  *Alternatives:* Measure only compiler speed; benchmark one backend.
+  *Reason:* rules 12, 17: measured workloads qualify performance claims.
+  *If no:* Keep existing measurements without added cross-backend C comparisons.
+- <a id="pending-k5"></a>**K5. Optimization architecture** (assumed yes; pending owner confirmation).
+  *Choice:* Optimizations live as verified BIR passes on the LCB path. The LLVM printer path may run LLVM optimization but remains unproven and claims none of its unproved facts, using K6 differential/translation validation until proven or replaced. LCB promises no performance beyond what its verified passes prove.
+  *Alternatives:* Trust LLVM on both paths; unverified LCB optimization; defer architecture until optimization work.
+  *Reason:* rules 1, 12, 13: semantic preservation and claimed performance follow evidence.
+  *If no:* Keep existing pipeline and current optimization scope; return architecture to the owner before adding passes.
+- <a id="pending-k6"></a>**K6. Unproven LLVM path validation** (assumed yes; pending owner confirmation).
+  *Choice:* Use translation validation or differential checks for the LLVM printer path until it is proved or replaced; test agreement never becomes a proof claim.
+  *Alternatives:* Trust the printer implicitly; wait for proof closure without checks.
+  *Reason:* rules 12, 14: qualify the path while preserving its explicit trust boundary.
+  *If no:* Keep existing differential scope and name remaining unchecked boundaries.
+- <a id="pending-k7"></a>**K7. Incremental and parallel compilation** (assumed yes; pending owner confirmation).
+  *Choice:* Use per-function compilation units and content-addressed caching keyed by input hashes, including all semantic dependencies, compiler/toolchain/target identities; prepare for later LSP use without body-dependent cross-module inference.
+  *Alternatives:* Whole-program-only compilation; caches keyed by names or incomplete inputs.
+  *Reason:* rules 5, 13, 15: stable units and complete keys prevent stale evidence.
+  *If no:* Keep whole builds and defer caching/parallelism.
+- <a id="pending-k8"></a>**K8. Compile-speed targets** (assumed yes; pending owner confirmation).
+  *Choice:* Add absolute lines-per-second measurements on reference workloads beside scaling; retain report-only measurement until noise is understood and owner-set budgets apply.
+  *Alternatives:* Scaling alone; absolute thresholds without controlled measurements.
+  *Reason:* rules 12, 17: comparable evidence before performance promises.
+  *If no:* Existing speed/scaling tracking continues without new absolute targets.
+- <a id="pending-k9"></a>**K9. Proof engineering discipline** (assumed yes; pending owner confirmation).
+  *Choice:* Adopt a gated proof style: no large decide terms, pinned simp sets, one proof module per stage and reused lemmas.
+  *Alternatives:* Ad hoc proof terms; style prose without enforcement.
+  *Reason:* rules 1, 5, 6: scalable proofs with explicit dependencies.
+  *If no:* Keep current proof practices and totality checks.
+- <a id="pending-k10"></a>**K10. Stage architecture contracts** (assumed yes; pending owner confirmation).
+  *Choice:* Each stage has one architecture document recording input/output invariants, linking theorem and trusted pieces, checked by traceability; link normative definitions instead of restating rules.
+  *Alternatives:* One stale global diagram; undocumented stage assumptions.
+  *Reason:* rules 5, 12, 14: findable boundaries checked against implementation.
+  *If no:* Keep existing pipeline documentation and report uncovered stage contracts.
+- <a id="pending-k11"></a>**K11. Debug info and maps** (assumed yes; pending owner confirmation).
+  *Choice:* Plan DWARF and source maps from K1 provenance with LLVM DWARF at slice 17 (R-0587); assign other backend maps at their first supported debug increment without implying native correctness.
+  *Alternatives:* Retrofit debug locations after lowering; debug only one source stage.
+  *Reason:* rules 12, 14: inspect actual output with honest backend scope.
+  *If no:* Keep R-0587 only and defer wider maps.
+- <a id="pending-k12"></a>**K12. Stable machine output** (assumed yes; pending owner confirmation).
+  *Choice:* Use one versioned stable schema for facts, diagnostics and CLI JSON derived from canonical typed data, extending the existing early schema decision.
+  *Alternatives:* Independent serializers; silently changing JSON fields.
+  *Reason:* rules 5, 12, 14: machine readers consume one checked contract.
+  *If no:* Keep current facts/diagnostics schema scope; new CLI JSON remains unstabilized.
+- <a id="pending-l1"></a>**L1. Legacy corpus as slice targets** (assumed yes; pending owner confirmation).
+  *Choice:* Port workload programs (including base64_cli, png_chunks, envcfg, wordfreq, httpget, tcpserve) and every legacy bug reproducer, including 024–079, into the new manifest with the slice at which each must pass. Port into the new root; never run or edit the frozen compiler tree.
+  *Alternatives:* Only showcase happy paths; unplaced regressions.
+  *Reason:* rules 12, 17: real programs and historical failures expose missing coverage.
+  *If no:* Keep existing corpus migration scope and explicit uncovered regressions.
+- <a id="pending-l2"></a>**L2. LLM writability benchmark** (assumed yes; pending owner confirmation).
+  *Choice:* Give models task specifications and track compile/proof success and diagnostic repair rounds with history, assessing language design and Elm-quality errors together.
+  *Alternatives:* Anecdotes; measuring generation speed alone.
+  *Reason:* rules 4, 17: measure reviewer/checker cost on real tasks.
+  *If no:* Keep existing usability pilots without model-task measurements.
+- <a id="pending-l3"></a>**L3. Failed-obligation counterexamples** (assumed yes; pending owner confirmation).
+  *Choice:* Design an untrusted counterexample finder that can show concrete failing inputs for overflow, bounds and contracts; the kernel remains the judge, and absence of a witness is no proof.
+  *Alternatives:* Trust a solver to admit programs; report opaque obligation failure only.
+  *Reason:* rules 12, 14, 18: useful diagnostics without enlarging trusted admission.
+  *If no:* Keep existing failure diagnostics; counterexamples are unavailable, never fabricated.
+- <a id="pending-l4"></a>**L4. Independent kernel replay** (assumed yes; pending owner confirmation).
+  *Choice:* Recheck every proof with an independent kernel as a gate in the new layout, using the legacy con-leche/nanoda experience without treating legacy gates as active.
+  *Alternatives:* Trust one Lean kernel build; replay only headline theorems.
+  *Reason:* rules 6, 12: independent checking narrows shared trust.
+  *If no:* Keep current Lean checking and explicitly name its kernel boundary.
+- <a id="pending-l5"></a>**L5. No execution of untrusted build code** (assumed yes; pending owner confirmation).
+  *Choice:* State and enforce that compilation never executes untrusted code: no build scripts, IO macros or package hooks; compile-time evaluation stays in its closed initializer grammar.
+  *Alternatives:* Arbitrary package hooks; general compile-time IO.
+  *Reason:* rules 3, 8, 12, 15: compilation has a bounded, auditable supply-chain boundary.
+  *If no:* Current refusals remain; no new execution surface is authorized.
+- <a id="pending-l6"></a>**L6. Parser-driven migration** (assumed yes; pending owner confirmation).
+  *Choice:* Ship a parser-driven codemod for each syntax revision. The command name `concrete migrate` is a placeholder only: spelling pending owner; this does not approve CLI surface.
+  *Alternatives:* Manual migration instructions; text replacement without parsing.
+  *Reason:* rules 2, 5, 14: one syntax with checked, reviewable transitions.
+  *If no:* Existing syntax changes need explicit manual migration; no new command is added.
+- <a id="pending-l7"></a>**L7. Targets as data** (assumed yes; pending owner confirmation).
+  *Choice:* Declare layout, ABI and calling conventions per target triple as data with proofs, extending read-only profiles so future aarch64/wasm support does not require scattered pass changes.
+  *Alternatives:* Hardcoded target conditionals across passes; adding targets without proofs.
+  *Reason:* rules 5, 12, 13: one target identity and checked representation contract.
+  *If no:* Existing target profile remains, with no new portability claim.
+- <a id="pending-l8"></a>**L8. Language and evidence versioning** (assumed yes; pending owner confirmation).
+  *Choice:* Before users exist, define compatibility and spec revision policy with one implemented version, not edition modes (R8); separately classify language/std API, ABI, proof/fact schema changes and the invalidation, migration and revalidation each requires. Proofs survive only when their subjects/dependencies remain valid or checked transport establishes correspondence.
+  *Alternatives:* Parallel edition modes; assume old proofs survive every revision; one undifferentiated product version.
+  *Reason:* rules 5, 12, 13: versioned identities and honest evidence freshness.
+  *If no:* Keep current output spec_version/bump rule and release records; expanded compatibility policy stays open.
+- <a id="pending-a1"></a>**A1. Release authority** (assumed yes; pending owner confirmation).
+  *Choice:* Keep with(Alloc) on release unless the owner approves a precise replacement. Release metadata does not itself grant operational authority; R-0624 remains the review point.
+  *Alternatives:* Drop permission because metadata travels with values.
+  *Reason:* rules 3, 11: authority remains visible; the contrary audit rationale cited OD138 instead of the relevant rule.
+  *If no:* Existing authority rules still govern; any change needs a concrete replacement approved by the owner.
+- <a id="pending-a2"></a>**A2. Allocator interface and instances** (assumed yes; pending owner confirmation).
+  *Choice:* Use one semantic allocator interface with proved system, arena and child instances; identity/brand is distinct from implementation kind. Expose reset/remaining only on arena types, not the universal interface.
+  *Alternatives:* Separate incompatible APIs; universal reset on system allocators; conflate kind with brand.
+  *Reason:* rules 1, 5, 11, 13: one contract with lawful, statically delimited operations.
+  *If no:* Keep the existing abstract Allocator contract; operational instance surface stays open.
+- <a id="pending-a3"></a>**A3. Resize and peak accounting** (assumed yes; pending owner confirmation).
+  *Choice:* Separate in-place and moving resize contracts, exposed through containers first. Moving resize counts old plus new allocation toward transient peak; failure preserves storage/contents and all surviving ownership.
+  *Alternatives:* One ambiguous realloc contract; count only final capacity; raw resize API first.
+  *Reason:* rules 3, 9, 12, 16: movement, failure and resource peaks stay visible.
+  *If no:* No resize surface is added; existing allocate/move/release operations retain their costs.
+- <a id="pending-a4"></a>**A4. Valid-zero allocation** (assumed yes; pending owner confirmation).
+  *Choice:* Provide zeroed allocation only for types with a proof that the all-zero representation is valid. The property name is a placeholder, spelling pending owner.
+  *Alternatives:* Treat zero bytes as an arbitrary valid T; omit zeroed allocation.
+  *Reason:* rules 6, 12, 18: initialization must establish typed validity.
+  *If no:* Keep explicit typed initialization; no zero-validity assumption is introduced.
+- <a id="pending-a5"></a>**A5. Allocator rollout** (assumed yes; pending owner confirmation).
+  *Choice:* Slice 19 supplies system allocation, arena over a buffer, explicit child arena, and limit/failing test wrappers; user-defined allocators come at 24. Wrappers obey Q1.11 availability laws and cannot fabricate success/failure outside their lawful wrapper contract.
+  *Alternatives:* Only a system allocator; postpone failure injection; user-defined implementations before raw-memory qualification.
+  *Reason:* rules 11, 12, 17: useful instances and lawful hostile tests accompany allocation.
+  *If no:* Keep existing allocator placement and return instance coverage to the owner before 19.
+- <a id="pending-a6"></a>**A6. Initialized HeapArray and Vec capacity** (assumed yes; pending owner confirmation).
+  *Choice:* HeapArray is always fully initialized. A separate capacity buffer supports Vec spare capacity with initialized-prefix ownership and exactly-once destruction, without exposing uninitialized T before raw pointers at 24.
+  *Alternatives:* Partially initialized safe HeapArray; require raw pointer APIs for Vec.
+  *Reason:* rules 9, 12, 18: typed values never stand for uninitialized storage.
+  *If no:* Keep HeapArray initialization surface open and block safe spare-capacity claims.
+- <a id="pending-a7"></a>**A7. HashMap consumption order** (assumed yes; pending owner confirmation).
+  *Choice:* Provide drain; admit Destroy only with a stated destruction order. Do not infer an order from a particular hash-table representation.
+  *Alternatives:* Unordered implicit destruction; no consuming API.
+  *Reason:* rules 3, 9, 12: consumption and observable order have a contract.
+  *If no:* Keep Q2.2 exclusion of HashMap Destroy; consumption needs existing explicit operations.
+- <a id="pending-a8"></a>**A8. Collections over storage** (assumed yes; pending owner confirmation).
+  *Choice:* Review and decide collections-over-storage before slice 21: prefer separating collection algorithms from storage so inline/fixed-capacity and allocated stores share proved algorithms. If the decision is deferred, reopen when a real workload needs fixed-capacity or alternate storage and measures the cost; do not freeze a heap-only abstraction across that need.
+  *Alternatives:* Heap-only containers forever; prematurely generalize without a storage law.
+  *Reason:* rules 1, 5, 16, 17: structural reuse with a concrete pull condition.
+  *If no:* Keep heap-backed containers and the measured-workload reopening condition; no generic API is assumed approved.
+- <a id="pending-a9"></a>**A9. Brand surface remains an owner question** (assumed yes; pending owner confirmation).
+  *Choice:* Send generative brand binders, explicit brand parameters and existential pack/unpack spellings to the owner through R-0622. Q1.1–Q1.4 semantics stand; every spelling pending owner.
+  *Alternatives:* Invent syntax in a mechanization; hide brand introduction/inference.
+  *Reason:* rules 2, 3, 13: visible generativity with owner-approved surface.
+  *If no:* No new spellings are accepted; mechanization uses semantic identities only.
+- <a id="pending-a10"></a>**A10. Child arenas before rewind** (assumed yes; pending owner confirmation).
+  *Choice:* Provide explicit child arenas only for now, with parent backing dependency and fresh identities; no rewind-to-mark API.
+  *Alternatives:* Arbitrary marks and rewinds with potentially live later allocations.
+  *Reason:* rules 3, 9, 10, 13: ownership scope and invalidation remain structural.
+  *If no:* Keep existing child ownership/reset rules; any rewind design returns to the owner with a soundness argument.
+
+**Recommended rejections** (kind B, also pending confirmation; no new permanent refusal is ratified here).
+
+- <a id="pending-d1"></a>**D1. General compile-time execution** (assumed yes; pending owner confirmation).
+  *Choice:* Refuse general comptime; reopen only on a real workload with an explicit, analyzable replacement proposal.
+  *Alternatives:* Closed initializer evaluation and reviewed generators.
+  *Reason:* rules 3, 15, 17.
+  *If no:* Return the feature and its admission-test evidence to the owner; existing decided refusals still govern until explicitly revised.
+- <a id="pending-d2"></a>**D2. Error-only deferred cleanup** (assumed yes; pending owner confirmation).
+  *Choice:* Refuse a second error-cleanup form beside written error arms and defer.
+  *Alternatives:* Existing explicit error branches and one defer form.
+  *Reason:* rule 2.
+  *If no:* Return the feature and its admission-test evidence to the owner; existing decided refusals still govern until explicitly revised.
+- <a id="pending-d3"></a>**D3. Implicit error propagation** (assumed yes; pending owner confirmation).
+  *Choice:* Permanently refuse inferred error sets and implicit propagation forms such as or_return and question-mark propagation.
+  *Alternatives:* Explicit typed errors and written handling branches.
+  *Reason:* rules 3, 11.
+  *If no:* Return the feature and its admission-test evidence to the owner; existing decided refusals still govern until explicitly revised.
+- <a id="pending-d4"></a>**D4. Implicit context and using** (assumed yes; pending owner confirmation).
+  *Choice:* Refuse implicit context/using mechanisms that hide data flow or authority.
+  *Alternatives:* Explicit parameters, grants and permissions.
+  *Reason:* rules 3, 11.
+  *If no:* Return the feature and its admission-test evidence to the owner; existing decided refusals still govern until explicitly revised.
+- <a id="pending-d5"></a>**D5. Algebraic effects** (assumed yes; pending owner confirmation).
+  *Choice:* Permanently refuse algebraic effects as implicit control/handler machinery.
+  *Alternatives:* Explicit calls, results and capabilities.
+  *Reason:* rules 3, 8, 15.
+  *If no:* Return the feature and its admission-test evidence to the owner; existing decided refusals still govern until explicitly revised.
+- <a id="pending-d6"></a>**D6. Dynamic borrow checking** (assumed yes; pending owner confirmation).
+  *Choice:* Refuse Cell/RefCell-style run-time borrow checks; R-0412 generational references remain pull-gated separately.
+  *Alternatives:* Static second-class borrowing.
+  *Reason:* rules 10, 18.
+  *If no:* Return the feature and its admission-test evidence to the owner; existing decided refusals still govern until explicitly revised.
+- <a id="pending-d7"></a>**D7. Lifetime and region types** (assumed yes; pending owner confirmation).
+  *Choice:* Refuse lifetimes/regions as source types.
+  *Alternatives:* Downward second-class references and explicit raw-memory premises.
+  *Reason:* rule 10.
+  *If no:* Return the feature and its admission-test evidence to the owner; existing decided refusals still govern until explicitly revised.
+- <a id="pending-d8"></a>**D8. Arbitrary-width integers and bitfields** (assumed yes; pending owner confirmation).
+  *Choice:* Refuse arbitrary-width integer types and struct bitfields for now; preserve pull-gated layout research R-0303 and use R3 arithmetic for the current need.
+  *Alternatives:* Fixed-width scalar operations and proved limb libraries.
+  *Reason:* rules 15, 17.
+  *If no:* Return the feature and its admission-test evidence to the owner; existing decided refusals still govern until explicitly revised.
+- <a id="pending-d9"></a>**D9. Run-time contracts** (assumed yes; pending owner confirmation).
+  *Choice:* Refuse run-time contract checking under OD125.
+  *Alternatives:* Closed safety evidence and Lean theorems.
+  *Reason:* rules 12, 18; OD125.
+  *If no:* Return the feature and its admission-test evidence to the owner; existing decided refusals still govern until explicitly revised.
+- <a id="pending-d10"></a>**D10. Solver-trusted admission** (assumed yes; pending owner confirmation).
+  *Choice:* Refuse solver-trusted safety admission; kernel-checked proofs and certificate replay inside Lean theorems remain allowed.
+  *Alternatives:* A small proved checker and kernel-checked evidence.
+  *Reason:* rules 6, 12, 18.
+  *If no:* Return the feature and its admission-test evidence to the owner; existing decided refusals still govern until explicitly revised.
+- <a id="pending-d11"></a>**D11. Configuration and admission profiles** (assumed yes; pending owner confirmation).
+  *Choice:* Refuse broad cfg/cargo-style features under P17b and MISRA-style admission profiles under OD124.
+  *Alternatives:* The existing narrow target selection and policy/fact system.
+  *Reason:* rules 2, 5, 15; P17b, OD124.
+  *If no:* Return the feature and its admission-test evidence to the owner; existing decided refusals still govern until explicitly revised.
+- <a id="pending-d12"></a>**D12. Embedded-file compiler forms** (assumed yes; pending owner confirmation).
+  *Choice:* Refuse include-bytes/embed-file compiler forms.
+  *Alternatives:* Reviewed external generators with explicit inputs and artifacts.
+  *Reason:* rules 3, 5.
+  *If no:* Return the feature and its admission-test evidence to the owner; existing decided refusals still govern until explicitly revised.
+- <a id="pending-d13"></a>**D13. Fixed point and units** (assumed yes; pending owner confirmation).
+  *Choice:* Defer Ada-style fixed point and units of measure for lack of a workload; reopen on measured need, preserving the deferred units design.
+  *Alternatives:* Explicit library representations with stated contracts.
+  *Reason:* rule 17.
+  *If no:* Return the feature and its admission-test evidence to the owner; existing decided refusals still govern until explicitly revised.
+- <a id="pending-d14"></a>**D14. Speculative leakage scope** (assumed yes; pending owner confirmation).
+  *Choice:* Keep Spectre-class leakage outside the decided observer model; do not claim its absence.
+  *Alternatives:* The existing baseline constant-time observer, with limitations named.
+  *Reason:* rule 12; decided information-flow observer.
+  *If no:* Return the feature and its admission-test evidence to the owner; existing decided refusals still govern until explicitly revised.
+
+**Conflicts and scope boundaries requiring owner review.** These name both the proposed and
+existing rows; none silently replaces an earlier decision.
+
+- **R2 versus TYPE-22/Q6.4** ([2026-11-05 revision](#decided-2026-11-05-revisions)):
+  one aggregate storage instance/shared views would revise at-use constant semantics and the
+  slice-17 placement. C2's scalar restriction is decided above; R2 is only its proposed reopening.
+- **R4 versus Q3.2–Q3.4** ([Core rows](#decided-2026-11-05-core)):
+  simultaneous disjoint mutable views require an explicit extension to current whole-root
+  conflicts. OD15 root freezing is retained; an implementation must not pretend current rules
+  already admit the split views.
+- **R6 versus compiler proof-order item 4** ([row](#decided-project-proof-order)):
+  advancing models to slices 8/13/18/19 revises phase-E placement and requires confirmation.
+- **A2 versus universal allocator reset wording** ([2026-11-02 audit](#decided-2026-11-02-audit)):
+  arena-only reset/remaining narrows the surface of the common Allocator contract; retain the
+  already-decided no-live-allocation and fresh-brand conditions in any instance design.
+- **A7 versus Q2.2** ([Core rows](#decided-2026-11-05-core)):
+  HashMap Destroy remains excluded until a stated-order contract is explicitly approved; drain
+  alone does not resolve the order question.
+- **K3 source reconciliation:** KLIST's possible generic allow-list is narrowed by the later
+  K3/R-0630 answer in PENDING_RECORDS (owner: "ok perfect"): only impossible panic/unreachable
+  cases, never sorry/partial definitions. The pending row does not reopen that answer or the
+  existing totality work (ROADMAP R-0553).
+- **R8/L8 versus existing spec-version row** ([runtime decision](#decided-project-runtime-2026-11-06)):
+  package targeting and compatibility add obligations; they do not replace the current output
+  spec_version, normative-change bump or A2c version rule. R8 owns package declaration; L8 owns
+  compatibility and evidence survival. No parallel edition mode is proposed.
+- **R5 versus existing secret scope** ([information-flow row](#decided-project-infoflow-2026-11-06)):
+  broader location/scrubbing obligations need confirmation; scalar secrets stay Copy and speculative
+  leakage stays outside the observer. D14 records that boundary rather than extending the claim.
+
 <a id="rules-a-decision-changed"></a>
 ## Rules a decision has changed
 
