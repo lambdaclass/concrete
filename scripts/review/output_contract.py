@@ -18,10 +18,13 @@ Contract for a reviewer's raw output:
   4. The penultimate non-empty line must be `REPOSITORY: readable`. Otherwise `blocked`.
   5. At least one `READ: <path>` line must appear before the penultimate line, and
      every `READ: <path>` line must name a clean relative path that exists as a file
-     (blob or symlink blob) in `--commit`'s git tree. Otherwise `blocked`.
+     (blob or symlink blob) in `--commit`'s git tree, or be explicitly declared
+     by the harness as a supplied review-root file. Otherwise `blocked`.
   6. Every source location and identifier citation resolves against the reviewed tree,
      removed side of --base..--commit, an ABSENT report or pinned external name.
-     Named anchors occur within the cited range. Positive verdicts require a location.
+     Named anchors occur within the cited range. Explicit text:name links check text
+     occurrence only and cannot support a positive verdict. Harness files never count
+     as evidence. Positive verdicts require a supporting location.
      All failures are collected in the distinct `invalid` status (not a verdict).
 
 CLI output (stdout, two lines):
