@@ -6,7 +6,7 @@ from protocol import EvidenceError, append, clean_env, git, inventory, read_note
 
 def publish(record, runners, repository, environment):
     sha, tier = record["sha"], record["tier"]
-    validate(record, sha, tier, runners, repository, record["attempt"])
+    record = validate(record, sha, tier, runners, repository, record["attempt"])
     ref = "refs/notes/concrete-gates-" + tier
     for retry in range(4):
         remote = git("ls-remote", "origin", ref, environment=environment)
@@ -19,7 +19,7 @@ def publish(record, runners, repository, environment):
             git("update-ref", "-d", ref, environment=environment)
         history = read_note(sha, tier, environment=environment) if expected else []
         for old in history:
-            validate(old, sha, tier, runners, repository, None)
+            old = validate(old, sha, tier, runners, repository, None)
             if old["attempt"] == record["attempt"]:
                 if old["status"] == "MISSING" and old["conclusion"] == "queued-too-long":
                     return  # The first overdue observation permanently closes this attempt.

@@ -80,8 +80,7 @@ def record_for(run, job, selection, payload, artifact, repository, runners):
     else:
         if payload is None:
             payload = dict(identity, gate_revision=None, status="INCOMPLETE", conclusion="incomplete",
-                           gates=[dict(id="execution-index", status="INCOMPLETE", command=[], tools={}, seed=None,
-                                       resources={}, controls=[], log="Actions execution completed without index.json")])
+                           gates=[], execution_error="Actions execution completed without index.json")
             artifact = artifact or f'https://github.com/{repository}/actions/runs/{run["id"]}'
         require(isinstance(payload, dict), "invalid worker index shape")
         require(payload.get("sha") == sha and payload.get("tier") == tier, "wrong worker selection")
@@ -91,11 +90,9 @@ def record_for(run, job, selection, payload, artifact, repository, runners):
         record.update(identity, artifact=artifact, started=job["started_at"], completed=job["completed_at"])
         # A worker cannot claim success if Actions did not observe successful execution.
         if job["conclusion"] != "success" and record["status"] == "PASS":
-            record["gates"].append(dict(id="actions-job", status="INCOMPLETE", command=[], tools={},
-                                        seed=None, resources={}, controls=[], log="Actions job metadata"))
+            record["execution_error"] = "Actions job metadata"
             record.update(status="INCOMPLETE", conclusion="incomplete")
-    validate(record, sha, tier, runners, repository, attempt=identity["attempt"])
-    return record
+    return validate(record, sha, tier, runners, repository, attempt=identity["attempt"])
 
 def read_index(archive):
     with archive.open("index.json") as stream:
@@ -134,8 +131,7 @@ def collect(run, repository, runners, environment):
             logs = [a for a in artifacts if a["name"] == name.replace("scheduled-index-", "scheduled-", 1) and not a["expired"]]
             require(len(logs) <= 1, "ambiguous logs artifact")
             if not logs and payload is not None:
-                payload["gates"].append(dict(id="artifact-upload", status="INCOMPLETE", command=[], tools={},
-                                            seed=None, resources={}, controls=[], log="Actions upload metadata"))
+                payload["execution_error"] = "Actions upload metadata"
                 if payload["status"] != "FAIL":
                     payload.update(status="INCOMPLETE", conclusion="incomplete")
             artifact = logs[0] if logs else found[0]

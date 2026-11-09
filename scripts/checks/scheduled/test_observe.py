@@ -1,3 +1,4 @@
+from test_protocol import RegistryFixture
 """History controls: main advancing cannot hide defects or manufacture absence."""
 import unittest
 import os
@@ -8,8 +9,9 @@ from test_protocol import SHA, NOW, RUNNERS, record
 
 TIP = "b" * 40
 
-class History(unittest.TestCase):
+class History(RegistryFixture, unittest.TestCase):
     def setUp(self):
+        super().setUp()
         env = patch.dict(os.environ, {"GITHUB_REPOSITORY": "example/repo"}, clear=True)
         env.start(); self.addCleanup(env.stop)
 

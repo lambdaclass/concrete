@@ -1,7 +1,9 @@
 """Exact-SHA append-only scheduled evidence. No gate list lives here."""
+import copy
 import datetime as dt
 import importlib.util
 import json
+import hashlib
 import re
 import subprocess
 from pathlib import Path
@@ -11,6 +13,7 @@ _registry_spec = importlib.util.spec_from_file_location("gate_manifest", Path(__
 _registry = importlib.util.module_from_spec(_registry_spec)
 _registry_spec.loader.exec_module(_registry)
 WINDOWS = _registry.load()["windows"]
+REGISTRY_ROOT = Path(__file__).resolve().parents[3]
 
 class EvidenceError(ValueError):
     pass
@@ -44,6 +47,103 @@ def inventory():
     except _binding.BindingError as error:
         raise EvidenceError(str(error)) from error
 
+def registry_at(sha):
+    """Read data at the evidence revision with the trusted manifest reader."""
+    try:
+        body = git("-C", str(REGISTRY_ROOT), "show",
+                   sha + ":scripts/checks/gates.json")
+        return _registry.validate_manifest(json.loads(body))
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        raise EvidenceError("INCOMPLETE registry: unavailable at " + sha) from error
+
+
+def qualification(record, sha, tier):
+    """A separate, recomputed verdict preserves partial and forged worker data."""
+    if record["status"] == "MISSING":
+        return []
+    try:
+        rows = _registry.scheduled_rows(tier, registry_at(sha))
+    except (EvidenceError, _registry.GateManifestError) as error:
+        return [str(error)]
+    issues = []
+    def issue(status, message):
+        issues.append(status + " registry: " + message)
+    expected = {row["id"]: row for row in rows}
+    actual = {gate["id"]: gate for gate in record["gates"]}
+    if not expected:
+        issue("INCOMPLETE", "no registered gates for " + tier)
+    for gid in sorted(actual.keys() - expected.keys()):
+        issue("FAIL", "unregistered gate " + gid)
+    for gid in sorted(expected.keys() - actual.keys()):
+        issue("INCOMPLETE", "missing gate " + gid)
+    for number, row in enumerate(rows):
+        gid = row["id"]
+        if gid not in actual:
+            continue
+        gate = actual[gid]
+        if gate["command"] != row["command"]:
+            issue("FAIL", "wrong command " + gid)
+        controls = gate["controls"]
+        ids = [c.get("id") for c in controls]
+        if any(not isinstance(cid, str) for cid in ids) or len(set(ids)) != len(ids):
+            issue("FAIL", "invalid control inventory " + gid)
+            continue
+        registered = {c["id"]: c for c in row["controls"]}
+        observed = {c["id"]: c for c in controls}
+        for cid in sorted(observed.keys() - registered.keys()):
+            issue("FAIL", "unregistered control " + gid + "/" + cid)
+        for cid in sorted(registered.keys() - observed.keys()):
+            issue("INCOMPLETE", "missing control " + gid + "/" + cid)
+        for cid in sorted(registered.keys() & observed.keys()):
+            # Failed or interrupted controls retain their actual diagnostic. They
+            # cannot qualify; only a claimed PASS attests the registered refusal.
+            if observed[cid]["status"] == "PASS" and observed[cid].get("diagnostic") != registered[cid]["diagnostic"]:
+                issue("FAIL", "wrong diagnostic " + gid + "/" + cid)
+        artifacts = gate.get("artifacts", [])
+        if not isinstance(artifacts, list) or any(not isinstance(a, dict) or not isinstance(a.get("path"), str) for a in artifacts):
+            issue("FAIL", "invalid artifact inventory " + gid)
+            continue
+        paths = [a["path"] for a in artifacts]
+        if len(set(paths)) != len(paths):
+            issue("FAIL", "duplicate artifact " + gid)
+        declarations = {f"gate-{number}-artifacts/" + a["path"]: a for a in row["artifacts"]}
+        saved = {a["path"]: a for a in artifacts}
+        for path in sorted(saved.keys() - declarations.keys()):
+            issue("FAIL", "unregistered artifact " + gid + "/" + path)
+        for path, declared in declarations.items():
+            label = gid + "/" + declared["path"]
+            if path not in saved:
+                issue("INCOMPLETE", "missing artifact " + label)
+                continue
+            artifact = saved[path]
+            if artifact.get("sha") is None:
+                issue("INCOMPLETE", "missing SHA binding " + label)
+            elif artifact["sha"] != sha:
+                issue("FAIL", "wrong SHA binding " + label)
+            elif artifact.get("binding_status") != "PASS":
+                issue("INCOMPLETE", "missing SHA binding " + label)
+            binding_path = f"gate-{number}-artifacts/" + declared["sha_file"]
+            files = artifact.get("files", [])
+            if not isinstance(files, list) or any(
+                    not isinstance(f, dict) or not isinstance(f.get("path"), str) or
+                    (f["path"] != path and not f["path"].startswith(path + "/")) or ".." in Path(f["path"]).parts or
+                    type(f.get("bytes")) is not int or f["bytes"] < 0 or
+                    not isinstance(f.get("sha256"), str) or re.fullmatch(r"[0-9a-f]{64}", f["sha256"]) is None
+                    for f in files):
+                issue("FAIL", "invalid artifact files " + label)
+                continue
+            if len({f["path"] for f in files}) != len(files):
+                issue("FAIL", "duplicate artifact file " + label)
+            if not any(isinstance(f, dict) and f.get("path") == binding_path for f in files):
+                issue("INCOMPLETE", "missing binding artifact " + gid + "/" + declared["sha_file"])
+            else:
+                binding = next(f for f in files if isinstance(f, dict) and f.get("path") == binding_path)
+                bindings = {(len(value), hashlib.sha256(value).hexdigest()) for value in
+                            (sha.encode(), (sha + "\n").encode())}
+                if artifact.get("sha") == sha and (binding.get("bytes"), binding.get("sha256")) not in bindings:
+                    issue("FAIL", "wrong binding artifact " + gid + "/" + declared["sha_file"])
+    return sorted(issues, key=lambda message: not message.startswith("FAIL "))
+
 def validate(record, sha, tier, runners, repository, attempt):
     """Validate explicit target identity; attempt=None validates a multi-attempt history."""
     require(isinstance(record, dict), "invalid record shape")
@@ -71,7 +171,7 @@ def validate(record, sha, tier, runners, repository, attempt):
     require(missing or record.get("gate_revision") == sha or
             (record.get("status") == "INCOMPLETE" and record.get("gate_revision") is None), "wrong gate revision")
     gates = record.get("gates")
-    require(isinstance(gates, list) and (missing or gates), "missing gate evidence")
+    require(isinstance(gates, list), "missing gate evidence")
     require(not missing or gates == [], "MISSING must have empty gates")
     require(not missing or record.get("runner_name") is None or
             record.get("runner_name") in runners.get(repo, set()), "MISSING has uninventoried runner")
@@ -89,18 +189,23 @@ def validate(record, sha, tier, runners, repository, attempt):
         require(gate.get("status") in STATUSES, "invalid gate status")
         require(all(k in gate for k in ("command", "tools", "seed", "resources", "controls", "log")), "missing gate metadata")
         if gate["status"] == "PASS":
-            require(gate["controls"] and all(c.get("status") == "PASS" for c in gate["controls"]), "missing/pending control evidence")
+            require(all(c.get("status") == "PASS" for c in gate["controls"]), "missing/pending control evidence")
     statuses = {g["status"] for g in gates}
     expected = ("MISSING" if record["conclusion"] in {"cancelled", "skipped", "queued-too-long", "absent"}
                 else "FAIL" if "FAIL" in statuses else "INCOMPLETE" if "INCOMPLETE" in statuses
-                else "PASS" if gates and statuses == {"PASS"} else None)
+                else "INCOMPLETE" if record.get("execution_error") or dependency else "PASS" if statuses <= {"PASS"} else None)
     conclusions = {"PASS": "success", "FAIL": "failure", "INCOMPLETE": "incomplete"}
     require(record["status"] == expected and
             (missing or record["conclusion"] == conclusions.get(expected)), "status/conclusion contradicts evidence")
+    record = copy.deepcopy(record)
+    record["qualification"] = qualification(record, sha, tier)
+    record["qualification_status"] = (
+        "FAIL" if record["status"] == "FAIL" or any(message.startswith("FAIL ") for message in record["qualification"])
+        else "INCOMPLETE" if record["qualification"] else record["status"])
     return record
 
 def append(history, record, sha, tier, runners, repository):
-    validate(record, sha, tier, runners, repository, None)
+    record = validate(record, sha, tier, runners, repository, None)
     for old in history:
         validate(old, sha, tier, runners, repository, None)
         require(old["attempt"] != record["attempt"], "replay would overwrite attempt")
@@ -109,14 +214,18 @@ def append(history, record, sha, tier, runners, repository):
 def observe(history, sha, tier, now, runners, repository):
     if not history:
         raise EvidenceError(f"MISSING {tier} {sha}: absent run")
+    history = [validate(record, sha, tier, runners, repository, None) for record in history]
     for record in history:
-        validate(record, sha, tier, runners, repository, None)
         require(timestamp(record["completed"]) <= now, "future completion")
     require(len({r["attempt"] for r in history}) == len(history), "replay would overwrite attempt")
     require(not any(r["status"] == "FAIL" for r in history), f"FAIL {tier} {sha}: recorded attempt")
+    for record in history:
+        failures = [message for message in record["qualification"] if message.startswith("FAIL ")]
+        require(not failures, failures[0] if failures else "")
     recent = [r for r in history if now - timestamp(r["completed"]) <= WINDOWS[tier]]
     require(recent, f"STALE {tier} {sha}: no fresh PASS")
     latest = max(recent, key=lambda r: (timestamp(r["completed"]), timestamp(r["started"]), tuple(map(int, r["attempt"].split("/")))))
+    require(not latest["qualification"], latest["qualification"][0] if latest["qualification"] else "")
     require(latest["status"] == "PASS", f"{latest['status']} {tier} {sha}: recorded attempt")
     return f"PASS {tier} {sha}"
 
