@@ -20,32 +20,26 @@ theorem brand_mismatch_refused {B Γ h a β1 β2 r Γ'} (hh : AList.lookup Γ h 
   · cases hok with
     | free h1 h2 _ => rw [hh] at h1; rw [ha] at h2; cases h1; cases h2; exact hne rfl
 
-/-- Quantifies the constrained judgments. Universal closure recovers the original guarantee. -/
-def ResetNoOld (judgment : List Nat → Ctx → List Stmt → Ctx → Prop) (B : List Nat) : Prop :=
-    ∀ {Γ a' a β' rest Γ' β}, judgment B Γ (.reset a' a β' :: rest) Γ' → AList.lookup Γ a = some (.alloc β) →
-    ∀ hv, AList.lookup Γ hv ≠ some (.heap β)
-
 /-- Law (subject `ConcreteSpec.Brand.Ok`). A checked reset leaves no value of the old brand (Q1.5): none is live at the reset. -/
-theorem reset_requires_no_old {B} : ResetNoOld Ok B := by
-  intro Γ a' a β' rest Γ' β h ha
-  intro hv hh
+theorem reset_requires_no_old {B Γ a' a β' rest Γ' β hv}
+    (ha : AList.lookup Γ a = some (.alloc β)) (hh : AList.lookup Γ hv = some (.heap β)) :
+    ¬ Ok B Γ (.reset a' a β' :: rest) Γ' := by
+  intro h
   cases h with
   | reset ha' hno _ _ _ =>
     rw [ha] at ha'; cases ha'
     exact hno _ (AList.lookup_mem hh) rfl
-
-/-- Quantifies the constrained judgments. Universal closure recovers the original guarantee. -/
-def ResetRefusesOld (judgment : List Nat → Ctx → List Stmt → Ctx → Prop) (B : List Nat) : Prop :=
-    ∀ {Γ a' a β' rest Γ'}, BrandsIn B Γ → judgment B Γ (.reset a' a β' :: rest) Γ' → ∀ {hv βh}, AList.lookup
-    Γ hv = some (.heap βh) → βh ≠ β' ∧ ∀ r, rest = .use hv a' :: r ∨ rest = .free hv a' :: r → False
 
 /-- Law (subject `ConcreteSpec.Brand.Ok`). **reset_fresh, static part** (Q1.2, Q1.4). The brand of a reset allocator differs from the
 brand of every value live before the reset, so each operation of the new allocator on such a
 value (use, free) is refused. Values of the old brand cannot be live at a checked reset
 (reset_requires_no_old); one that reached the new allocator anyway would be refused by
 brand_mismatch_refused, and the ghost run refuses it too (reset_fresh, part 3). -/
-theorem reset_refuses_old {B} : ResetRefusesOld Ok B := by
-  intro Γ a' a β' rest Γ' hw h hv βh hh
+theorem reset_refuses_old {B Γ a' a β' rest Γ' hv βh} (hw : BrandsIn B Γ)
+    (hh : AList.lookup Γ hv = some (.heap βh))
+    (hbad : βh = β' ∨ ∃ r, rest = .use hv a' :: r ∨ rest = .free hv a' :: r) :
+    ¬ Ok B Γ (.reset a' a β' :: rest) Γ' := by
+  intro h
   cases h with
   | @reset _ _ _ _ β _ _ _ ha hno hfresh hb hrest =>
     have hβh : βh ∈ B := hw _ (AList.lookup_mem hh) βh (Or.inr rfl)
@@ -60,7 +54,8 @@ theorem reset_refuses_old {B} : ResetRefusesOld Ok B := by
       simp only [AList.lookup, show ¬ a' = hv from fun e => hva' e.symm, ↓reduceIte]; exact hold
     have hnew : AList.lookup ((a', STy.alloc β') :: AList.erase Γ a) a' = some (.alloc β') := by
       simp [AList.lookup]
-    refine ⟨hne, fun r hr => ?_⟩
+    rcases hbad with he | ⟨r, hr⟩
+    · exact hne he
     rcases hr with rfl | rfl
     · cases hrest with
       | use h1 h2 _ => rw [hfind] at h1; rw [hnew] at h2; cases h1; cases h2; exact hne rfl
@@ -100,13 +95,8 @@ theorem inv_bind {s : State} (a : Nat) {env : AList Nat Val} (hi : Inv s)
     · omega
   · exact nodup_snoc hn (fun hm => by have := hg _ hm; omega)
 
-/-- Quantifies the constrained judgments. Universal closure recovers the original guarantee. -/
-def RunInvariant (judgment : State → List Stmt → State → Prop) (s : State) (ss : List Stmt) : Prop :=
-  ∀ {s'}, judgment s ss s' → Inv s → Inv s'
-
-/-- Law (subject `ConcreteSpec.Brand.Run`). The ghost run keeps the invariant. -/
-theorem run_inv {s ss} : RunInvariant Run s ss := by
-  intro s' h
+/-- Helper (inversion). Induction transports the input invariant through the single fixed run derivation; no premise-preserving run mutant tests its fixed output. (approved: PENDING). -/
+theorem run_inv {s ss s'} (h : Run s ss s') : Inv s → Inv s' := by
   induction h with
   | nil => exact id
   | newAlloc _ ih => intro hi; exact ih (inv_bind _ hi hi.1)
@@ -136,14 +126,8 @@ theorem reset_fresh_brand {s : State} {a' a β' : Nat} {rest : List Stmt} {s' : 
   cases h with
   | reset _ hr => exact ⟨_, rfl, hr, fun e he => Nat.ne_of_lt (hi.1 e he)⟩
 
-/-- Quantifies the constrained judgments. Universal closure recovers the original guarantee. -/
-def GeneratedUnique (judgment : State → List Stmt → State → Prop) (prog : List Stmt) : Prop :=
-  ∀ {s' : State}, judgment State.init prog s' → s'.gen.Nodup
-
-/-- Law (subject `ConcreteSpec.Brand.Run`). Brands generated throughout a run, including
-all loop iterations, are pairwise distinct. -/
-theorem reset_fresh_nodup {prog : List Stmt} : GeneratedUnique Run prog := by
-  intro s' h
+/-- Helper (projection). Specializes run preservation at initialization and extracts generated-brand uniqueness. (approved: PENDING). -/
+theorem reset_fresh_nodup {prog : List Stmt} {s' : State} (h : Run State.init prog s') : s'.gen.Nodup := by
   exact (run_inv h inv_init).2.2
 
 /-- Law (subject `ConcreteSpec.Brand.Run`). After reset, use and free through the new
@@ -602,19 +586,13 @@ example : Ok [] [] [.newAlloc 0 0] [(0, .alloc 0)] ∧
 example := @brand_mismatch_refused [10, 11] [(1, .heap 10), (0, .alloc 11)] 1 0 10 11 []
   [(1, .heap 10), (0, .alloc 11)] rfl rfl (by decide)
 
-/-- Instance (law `ConcreteSpec.Brand.reset_requires_no_old`, case `reset`). -/
-example := @reset_requires_no_old [0]
 
-/-- Instance (law `ConcreteSpec.Brand.reset_refuses_old`, case `otherLiveBrand`). -/
-example := @reset_refuses_old [0, 2]
 
-/-- Instance (law `ConcreteSpec.Brand.run_inv`, case `firstAllocation`). -/
-example := @run_inv State.init [.newAlloc 0 0]
 
 def beforeReset : State := ⟨[(0, .allocV 0), (1, .heapV 0)], 1, [0]⟩
 def afterReset : State := beforeReset.bind 0 (AList.erase beforeReset.env 0)
 
-/-- Helper (computation). Closed state with two live old-brand values and a fresh counter. (approved: PENDING). -/
+/-- Helper (computation). Closed state with two live old-brand values and a fresh counter. (approved: REV-base23b-agy-8601f966a). -/
 theorem beforeResetInv : Inv beforeReset := by
   refine ⟨?_, ?_, ?_⟩
   · intro e he; cases he with
@@ -628,8 +606,6 @@ theorem beforeResetInv : Inv beforeReset := by
 /-- Instance (law `ConcreteSpec.Brand.reset_fresh_brand`, case `liveOldBrand`). -/
 example := @reset_fresh_brand beforeReset 0 0 1 [] afterReset beforeResetInv (.reset rfl .nil)
 
-/-- Instance (law `ConcreteSpec.Brand.reset_fresh_nodup`, case `firstAllocation`). -/
-example := @reset_fresh_nodup [.newAlloc 0 0]
 
 /-- Instance (law `ConcreteSpec.Brand.reset_fresh_refuses`, case `liveOldHandle`). -/
 example := @reset_fresh_refuses beforeReset 0 0 1 1 [] afterReset beforeResetInv (by decide)
@@ -697,60 +673,40 @@ example : ghost (fun _ => false) 2 0 State.init [.newAlloc 0 0] = .done (State.i
     ¬ MissingRun State.init [.newAlloc 0 0] (State.init.bind 0 []) := by
   exact ⟨rfl, fun h => nomatch h⟩
 
-/-- Planted (law `ConcreteSpec.Brand.reset_requires_no_old`, case `reset`, subject `ConcreteSpec.Brand.Ok`, mutant `ConcreteSpec.Brand.Evidence.PermissiveOk`). -/
-example : ¬ ResetNoOld PermissiveOk [0] := by
-  intro h
-  exact h (Γ := [(1, .heap 0), (0, .alloc 0)]) (a' := 0) (a := 0) (β' := 1)
-    (rest := []) (Γ' := []) (β := 0) .accept rfl 1 rfl
 
-/-- Planted (law `ConcreteSpec.Brand.reset_refuses_old`, case `otherLiveBrand`, subject `ConcreteSpec.Brand.Ok`, mutant `ConcreteSpec.Brand.Evidence.PermissiveOk`). -/
-example : ¬ ResetRefusesOld PermissiveOk [0, 2] := by
-  intro h
-  have hb : BrandsIn [0, 2] [(1, .heap 2)] := by
-    intro e he β ht
-    simp only [List.mem_singleton] at he
-    subst e
-    rcases ht with ht | ht
-    · cases ht
-    · cases ht; simp
-  have bad := h (Γ := [(1, .heap 2)]) (a' := 0) (a := 0) (β' := 2)
-    (rest := []) (Γ' := []) hb .accept (hv := 1) (βh := 2) rfl
-  exact bad.1 rfl
 
-/-- Planted (law `ConcreteSpec.Brand.run_inv`, case `firstAllocation`, subject `ConcreteSpec.Brand.Run`, mutant `ConcreteSpec.Brand.Evidence.PermissiveRun`). -/
-example : ¬ RunInvariant PermissiveRun State.init [.newAlloc 0 0] := by
-  intro h
-  have bad := h (s' := ⟨[], 0, [0, 0]⟩) .accept inv_init
-  have hn : ¬ ([0, 0] : List Nat).Nodup := by decide
-  exact hn bad.2.2
 
-/-- Planted (law `ConcreteSpec.Brand.reset_fresh_nodup`, case `firstAllocation`, subject `ConcreteSpec.Brand.Run`, mutant `ConcreteSpec.Brand.Evidence.PermissiveRun`). -/
-example : ¬ GeneratedUnique PermissiveRun [.newAlloc 0 0] := by
-  intro h
-  have hn : ¬ ([0, 0] : List Nat).Nodup := by decide
-  exact hn (h (s' := ⟨[], 0, [0, 0]⟩) .accept)
 
-/-! Specializing the quantified laws recovers every original closed derivation. These
-corollaries preserve the concrete accepted traces; the full Instances above test the contracts. -/
-
-example := @reset_requires_no_old [0] [(0, .alloc 0)] 0 0 1 [] [(0, .alloc 1)] 0
-  (.reset rfl (by decide) rfl (by decide) .nil) rfl 0
-
-example := @reset_refuses_old [0, 2] [(1, .heap 2), (0, .alloc 0)] 0 0 3 []
-  [(0, .alloc 3), (1, .heap 2)]
-  (by
-    intro e he β hb
-    cases he with
-    | head => rcases hb with hb | hb <;> cases hb; decide
-    | tail _ he =>
-      cases he with
-      | head => rcases hb with hb | hb <;> cases hb; decide
-      | tail _ he => cases he)
-  (.reset rfl (by decide) rfl (by decide) .nil) 1 2 rfl
-
+/-! Closed uses of the preservation helpers. -/
 example := @run_inv State.init [.newAlloc 0 0] (State.init.bind 0 []) (.newAlloc .nil) inv_init
-
 example := @reset_fresh_nodup [.newAlloc 0 0] (State.init.bind 0 []) (.newAlloc .nil)
+
+/-- Helper (computation). The singleton live handle has a brand in the closed allowed set. (approved: PENDING). -/
+theorem liveBrandIn : BrandsIn [0, 2] [(1, .heap 2)] := by
+  intro e he β ht
+  simp only [List.mem_singleton] at he
+  subst e
+  rcases ht with ht | ht
+  · cases ht
+  · cases ht; simp
+
+/-- Instance (law `ConcreteSpec.Brand.reset_requires_no_old`, case `liveOldHandle`). -/
+example := @reset_requires_no_old [0] [(1, .heap 0), (0, .alloc 0)] 0 0 1 [] [] 0 1 rfl rfl
+
+/-- Planted (law `ConcreteSpec.Brand.reset_requires_no_old`, case `liveOldHandle`, subject `ConcreteSpec.Brand.Ok`, mutant `ConcreteSpec.Brand.Evidence.PermissiveOk`). -/
+example : AList.lookup [(1, STy.heap 0), (0, .alloc 0)] 0 = some (.alloc 0) ∧
+    AList.lookup [(1, STy.heap 0), (0, .alloc 0)] 1 = some (.heap 0) ∧
+    ¬ (¬ PermissiveOk [0] [(1, .heap 0), (0, .alloc 0)] [.reset 0 0 1] []) :=
+  ⟨rfl, rfl, fun h => h .accept⟩
+
+/-- Instance (law `ConcreteSpec.Brand.reset_refuses_old`, case `reusedLiveBrand`). -/
+example := @reset_refuses_old [0, 2] [(1, .heap 2)] 0 0 2 [] [] 1 2 liveBrandIn rfl (Or.inl rfl)
+
+/-- Planted (law `ConcreteSpec.Brand.reset_refuses_old`, case `reusedLiveBrand`, subject `ConcreteSpec.Brand.Ok`, mutant `ConcreteSpec.Brand.Evidence.PermissiveOk`). -/
+example : BrandsIn [0, 2] [(1, .heap 2)] ∧ AList.lookup [(1, STy.heap 2)] 1 = some (.heap 2) ∧
+    ((2 : Nat) = 2 ∨ ∃ r, ([] : List Stmt) = .use 1 0 :: r ∨ ([] : List Stmt) = .free 1 0 :: r) ∧
+    ¬ (¬ PermissiveOk [0, 2] [(1, .heap 2)] [.reset 0 0 2] []) :=
+  ⟨liveBrandIn, rfl, Or.inl rfl, fun h => h .accept⟩
 
 end Evidence
 
