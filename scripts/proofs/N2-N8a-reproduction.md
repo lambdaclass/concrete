@@ -70,13 +70,32 @@ accepted solver design ([N2-discharge-solver.md](N2-discharge-solver.md)).
      `.invariant`-mode non-proof shortcut is removed from `.quotInfo`. Symbolic type
      and helper calls in binder domains/codomains are evaluated through the same
      application-sensitive transfer and recursor evaluator.
-   - **Same-class dependency paths closed:** `openMinorFields` opens the full minor
-     arity (`ruleMinorArity`, covering constructor fields and induction hypotheses)
-     and evaluates the minor body in `.body` mode; `applyValue` forces unapplied
-     `Value.partialCall` as well as `Value.closure`; unused `.letBind` and `.binder`
-     bindings, unprojected `.ctor` fields, and unapplied arguments to `.axiomInfo`,
-     `.quotInfo`, `.inductInfo`, and neutral applications are validated; and
-     `validateCertificate` checks and evaluates each assumption's `input.type`.
+   - **Same-class dependency paths attempted in Round 2 and correction of the Round-2 constructor/cache claim:**
+     In Round 2 (`ccfbfb5f5`), `openMinorFields` opened `ruleMinorArity` and evaluated
+     the minor body in `.body` mode; `applyValue` forced direct unapplied
+     `Value.partialCall` and `Value.closure` values; and `validateCertificate`
+     checked and evaluated each assumption's `input.type`. **Correction (Round 3):**
+     the Round-2 text here previously claimed that "unprojected `.ctor` fields" were
+     validated. That claim was false: in Round 2 (`ccfbfb5f5`), `.ctorInfo` recorded
+     `Value.ctor` and returned `.ok callInput` without completing the recursive
+     dependencies of its arguments, and `isUnappliedValue` returned `true` only for
+     direct `.closure` and `.partialCall` values (`false` for `.ctor`). Unselected
+     constructor fields were checked only when an outer `Expr.proj` directly visited
+     that `.ctor` and only when the unselected field was itself a direct `.closure`
+     or `.partialCall`. As Codex Round 2 demonstrated, any constructor container that
+     was never projected (`boxedType`, `boxedBody`), any nested constructor container
+     (`nestedBoxType`), and any closure returning a constructor container
+     (`closureReturningBox`) hid unvalidated function bodies and was unsoundly
+     admitted. In addition, Round 2 inserted `cKey` into `validatedClosures` *before*
+     evaluating the closure or partial call (so a rejected or `INCOMPLETE` validation
+     remained cached as completed and was unsoundly admitted on a same-state retry,
+     as in `retryFn`), cached only `Input` in `completedQueries` / `validatedTypes`
+     without replaying `transfers` and `structuralExclusions`, and overwrote
+     unselected minor premises with `{ term := 0, type := 0, origin := 0 }` on
+     concrete recursor matches (erasing base minor premises referenced by recursive
+     step rules, as in `natRecSuccBasePoison`, and colliding with `TermId = 0`). The
+     complete dependency-obligation model and cache protocol that close this class are
+     specified in [N2-discharge-solver.md](N2-discharge-solver.md#design-amendment-3-slice-2a-round-3-complete-dependency-obligation-model-and-cache-protocol-of-the-certificate-evaluator).
 
 ## Repaired N8a observation measurements (`vacuity_n8a_repro.py`)
 
