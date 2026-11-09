@@ -34,6 +34,7 @@ with tempfile.TemporaryDirectory() as directory:
     check("source.lean:1 `c2245c99..21ad148b` `plainword`", "clean")
     check("source.lean:1 `missingName`\nABSENT: missingName", "clean")
     check("source.lean:1 Introduce `proposed:newLaw`", "findings", "findings")
+    check("source.lean:1 `proposed:newLaw`", ("invalid", "citation: proposed name 'proposed:newLaw' requires a FINDINGS/REJECT verdict"))
     check("No citations", ("invalid", "citation: positive verdict requires at least one resolvable file:line citation"))
     check("source.lean:1 `fictionalPart.realAnchor`", ("invalid", "citation: identifier 'fictionalPart.realAnchor' unresolved"))
     check("source.lean:1 `inventedLaw`", ("invalid", "citation: identifier 'inventedLaw' unresolved"), "findings")

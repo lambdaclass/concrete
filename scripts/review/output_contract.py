@@ -183,7 +183,9 @@ def citation_error(text, repo, commit, paths, positive, base=None):
         name = m.group(1)
         if filename(name):
             continue
-        if name.startswith("proposed:") and not positive:
+        if name.startswith("proposed:"):
+            if positive:
+                errors.append(f"citation: proposed name '{name}' requires a FINDINGS/REJECT verdict")
             continue
         if not re.fullmatch(IDENTIFIER, name) or not ("." in name or "_" in name or re.search(r"[a-z][A-Z]", name)):
             continue
