@@ -126,6 +126,16 @@ def witnessReverse : True := reverse b2 b1
       ((direct `absent x).run before).run {}
     unless after.answers.size == 2 do throwError "projection-context-collapsed"
   IO.println "KEYS projection same-FVarId context distinct"
+
+#eval show MetaM Unit from do
+  let tail ← mkArrow (mkConst ``Nat) (mkSort .zero)
+  let explicit := mkForall `x .default (mkConst `Box) tail
+  let implicit := mkForall `x .instImplicit (mkConst `Box) tail
+  let (_, state) ← (dischargeRefutableType explicit).run {}
+  let (_, state) ← (dischargeRefutableType implicit).run state
+  unless state.rawRefutedTypes.size == 2 && state.refutedTypes.size == 2 do
+    throwError "refuted-type-binder-info-collapsed"
+  IO.println "KEYS raw-refuted-types closed-refuted-types binder-info distinct"
 '''
 def controls(meta):
     with tempfile.TemporaryDirectory(prefix='n2-cache-identity-') as temp:
@@ -148,6 +158,7 @@ def controls(meta):
         'DEMAND harmless-body searches=0',
         'KEYS declaration-name binder-info kind distinct',
         'KEYS projection same-FVarId context distinct',
+        'KEYS raw-refuted-types closed-refuted-types binder-info distinct',
     ]
     assert [r.rstrip() for r in result.stdout.splitlines()] == expected, result.stdout
     for line in expected: print('PASS identity ' + line, flush=True)
