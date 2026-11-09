@@ -105,7 +105,7 @@ theorem bitwise_inRange (t : IntTy) (op : BitOp) (a b : Int) : t.InRange (bitwis
   · exact ofBits_inRange t _ (Nat.or_lt_two_pow ha hb)
   · exact ofBits_inRange t _ (Nat.xor_lt_two_pow ha hb)
 
-/-- Law (subject `ConcreteSpec.Core.bitNot`). Extracts the explicit range validator result (approved: PENDING). -/
+/-- Law (subject `ConcreteSpec.Core.bitNot`). Bitwise complement produces a value in the integer type's range. -/
 theorem bitNot_inRange (t : IntTy) (a : Int) : t.InRange (bitNot t a) := by
   have := toBits_lt t a
   have hp : 0 < 2 ^ t.bits := Nat.two_pow_pos _
@@ -213,7 +213,7 @@ theorem wrapping_of_checked (t : IntTy) (op : WrapOp) (a b r : Int)
   · cases h; exact wrap_of_inRange t _ (by assumption)
   · cases h
 
-/-- Law (subject `ConcreteSpec.Core.saturating`). Interval representation of the lossless relation (approved: PENDING). -/
+/-- Law (subject `ConcreteSpec.Core.saturating`). Saturating arithmetic agrees with a successful checked result. -/
 theorem saturating_of_checked (t : IntTy) (op : WrapOp) (a b r : Int)
     (h : checked t op.arith a b = .ok r) : saturating t op a b = r := by
   rw [checked_wrapOp] at h
