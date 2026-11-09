@@ -31,6 +31,11 @@ def compare(clean, hostile):
         raise ValueError('FAIL scheduled hermeticity: clean and hostile test results differ')
 
 
+def compare_canary(before, after):
+    if before != after:
+        raise ValueError('FAIL scheduled hermeticity: canary repository changed')
+
+
 class Results(unittest.TextTestResult):
     def __init__(self, *args):
         super().__init__(*args)
@@ -57,6 +62,8 @@ def main(environment):
         canary = Path(scratch) / 'canary'
         canary.mkdir()
         git('-C', str(canary), 'init', '-q')
+        (canary / 'staged.txt').write_text('canary index contents\n')
+        git('-C', str(canary), 'add', 'staged.txt')
         git('-C', str(canary), '-c', 'user.name=Canary', '-c', 'user.email=canary@example.invalid',
             '-c', 'core.hooksPath=/dev/null', 'commit', '--allow-empty', '-qm', 'canary')
         def snapshot():
@@ -74,8 +81,7 @@ def main(environment):
             if result.returncode:
                 print(result.stdout, end=''); print(result.stderr, end='', file=sys.stderr)
                 raise ValueError(f'FAIL scheduled hermeticity: {name} suite failed')
-            if snapshot() != before:
-                raise ValueError('FAIL scheduled hermeticity: canary repository changed')
+            compare_canary(before, snapshot())
             reports.append(json.loads(Path(destination).read_text()))
         compare(*reports)
         print(f'PASS scheduled hermeticity: {len(reports[0])} identical clean/hostile results')

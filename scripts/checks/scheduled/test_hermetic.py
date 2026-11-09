@@ -1,6 +1,6 @@
 """The environment control must detect changed outcomes, not merely two exits."""
 import unittest
-from hermetic_suite import compare, environments, PREFIXES
+from hermetic_suite import compare, compare_canary, environments, PREFIXES
 
 
 class Hermeticity(unittest.TestCase):
@@ -38,3 +38,7 @@ class Hermeticity(unittest.TestCase):
             result = subprocess.run([sys.executable, '-I', '-c', program, str(Path(__file__).resolve().parent)],
                                     env=environment, text=True, capture_output=True, timeout=10, check=True)
             self.assertEqual(result.stdout, 'selected gate git\n')
+
+    def test_planted_canary_index_corruption(self):
+        with self.assertRaisesRegex(ValueError, '^FAIL scheduled hermeticity: canary repository changed$'):
+            compare_canary({'.git/index': b'original'}, {'.git/index': b'corrupted'})
