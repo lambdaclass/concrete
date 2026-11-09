@@ -11,7 +11,7 @@ open Core (AList)
 
 /-! ### Properties of the semantics -/
 
-/-- Fuel monotonicity: a run that finishes with some fuel finishes the same way with more. -/
+/-- Law (subject `ConcreteSpec.runBody`). Fuel monotonicity: a run that finishes with some fuel finishes the same way with more. -/
 theorem runBody_mono {Δ : Decls} {r : Atom} :
     ∀ {n : Nat} {env : Env} {ss : List Stmt} {o : Outcome}, runBody Δ n env ss r = o →
       o ≠ .outOfFuel → ∀ m, n ≤ m → runBody Δ m env ss r = o := by
@@ -30,12 +30,12 @@ theorem runBody_mono {Δ : Decls} {r : Atom} :
       · exact h
       · exact h
 
-/-- The `return` step never runs out of fuel. -/
+/-- Helper (computation). The defining branch equations and structural traversal contain no constructor for this result; used inside the semantic safety proofs. (approved: REV-base1a-agy-01025713b). The return step never runs out of fuel. -/
 theorem retOutcome_ne_outOfFuel (Δ : Decls) (env : Env) (r : Atom) :
     retOutcome Δ env r ≠ .outOfFuel := by
   unfold retOutcome; split <;> simp
 
-/-- A body of `k` statements finishes with `k + 1` units of fuel. -/
+/-- Law (subject `ConcreteSpec.runBody`). A body of k statements finishes with k + 1 units of fuel. -/
 theorem runBody_enough {Δ : Decls} {r : Atom} :
     ∀ (ss : List Stmt) (env : Env), runBody Δ (ss.length + 1) env ss r ≠ .outOfFuel
   | [], env => by simpa [runBody] using retOutcome_ne_outOfFuel Δ env r
@@ -46,7 +46,7 @@ theorem runBody_enough {Δ : Decls} {r : Atom} :
     · simp
     · simp
 
-/-- The evaluator is sound for `Exec`: an outcome reached with some fuel is an `Exec` outcome. -/
+/-- Law (subject `ConcreteSpec.Exec`). The evaluator is sound for Exec: an outcome reached with some fuel is an Exec outcome. -/
 theorem runBody_sound {Δ : Decls} {r : Atom} :
     ∀ {n : Nat} {env : Env} {ss : List Stmt} {o : Outcome}, runBody Δ n env ss r = o →
       o ≠ .outOfFuel → Exec Δ env ss r o := by
@@ -64,7 +64,7 @@ theorem runBody_sound {Δ : Decls} {r : Atom} :
       · rename_i k he; subst h; exact .trap he
       · rename_i w he; subst h; exact .stuck he
 
-/-- The evaluator is complete for `Exec`: every `Exec` outcome is reached with enough fuel. -/
+/-- Law (subject `ConcreteSpec.runBody`). The evaluator is complete for Exec: every Exec outcome is reached with enough fuel. -/
 theorem exec_complete {Δ : Decls} {r : Atom} {env : Env} {ss : List Stmt} {o : Outcome}
     (h : Exec Δ env ss r o) : runBody Δ (ss.length + 1) env ss r = o := by
   induction h with
@@ -73,21 +73,32 @@ theorem exec_complete {Δ : Decls} {r : Atom} {env : Env} {ss : List Stmt} {o : 
   | trap he => simp [runBody, he]
   | stuck he => simp [runBody, he]
 
-/-- `Exec` never ends in `outOfFuel`. -/
-theorem exec_ne_outOfFuel {Δ : Decls} {r : Atom} {env : Env} {ss : List Stmt} {o : Outcome}
-    (h : Exec Δ env ss r o) : o ≠ .outOfFuel := by
+/-- Quantifies the constrained judgments. Universal closure recovers the original guarantee. -/
+def ExecFinite (judgment : Decls → Env → List Stmt → Atom → Outcome → Prop) (Δ : Decls) (r : Atom) (env :
+    Env) (ss : List Stmt) : Prop :=
+  ∀ {o : Outcome}, judgment Δ env ss r o → o ≠ .outOfFuel
+
+/-- Law (subject `ConcreteSpec.Exec`). Exec never ends in outOfFuel. -/
+theorem exec_ne_outOfFuel {Δ : Decls} {r : Atom} {env : Env} {ss : List Stmt} : ExecFinite Exec Δ r env ss := by
+  intro o h
   induction h with
   | ret => exact retOutcome_ne_outOfFuel _ _ _
   | step _ _ ih => exact ih
   | trap => simp
   | stuck => simp
 
-/-- Determinism: a body has at most one outcome. -/
-theorem exec_deterministic {Δ : Decls} {r : Atom} {env : Env} {ss : List Stmt} {o₁ o₂ : Outcome}
-    (h₁ : Exec Δ env ss r o₁) (h₂ : Exec Δ env ss r o₂) : o₁ = o₂ := by
+/-- Quantifies the constrained judgments. Universal closure recovers the original guarantee. -/
+def ExecUnique (judgment : Decls → Env → List Stmt → Atom → Outcome → Prop) (Δ : Decls) (r : Atom) (env :
+    Env) (ss : List Stmt) (o₁ : Outcome) : Prop :=
+  ∀ {o₂ : Outcome}, judgment Δ env ss r o₂ → o₁ = o₂
+
+/-- Law (subject `ConcreteSpec.Exec`). Determinism: a body has at most one outcome. -/
+theorem exec_deterministic {Δ : Decls} {r : Atom} {env : Env} {ss : List Stmt} {o₁ : Outcome}
+    (h₁ : Exec Δ env ss r o₁) : ExecUnique Exec Δ r env ss o₁ := by
+  intro o₂ h₂
   rw [← exec_complete h₁, ← exec_complete h₂]
 
-/-- Totality: every body has exactly one outcome (slice 1 has no loops or calls). -/
+/-- Law (subject `ConcreteSpec.Exec`). Totality: every body has exactly one outcome (slice 1 has no loops or calls). -/
 theorem exec_total (Δ : Decls) (env : Env) (ss : List Stmt) (r : Atom) :
     ∃ o, Exec Δ env ss r o :=
   ⟨_, runBody_sound rfl (runBody_enough ss env)⟩
@@ -96,7 +107,7 @@ theorem exec_total (Δ : Decls) (env : Env) (ss : List Stmt) (r : Atom) :
 binding holds a value of its type, a binding with a known value holds exactly that scalar and has
 a Copy type, and a slot holding a struct value agrees with the binding's known field values. A
 binding the context records as moved is otherwise unconstrained here; the evaluator marks such a
-slot `moved` when it moves the value out. -/
+slot moved when it moves the value out. -/
 inductive Corr (Δ : Decls) : Ctx → Env → Prop where
   | nil : Corr Δ [] []
   | cons {x e sl Γ env} : (e.live = true → ∃ v, sl = .val v ∧ VTy Δ v e.ty) →
@@ -104,12 +115,15 @@ inductive Corr (Δ : Decls) : Ctx → Env → Prop where
       (∀ sn vs, sl = .val (.struct sn vs) → FieldsHold e.kfields vs) →
       Corr Δ Γ env → Corr Δ ((x, e) :: Γ) ((x, sl) :: env)
 
+/-- Representation lemma. Type, Copy and known-value projections commute with usage bookkeeping; this is an equality of representations, not execution safety. (approved: REV-base1a-agy-01025713b). -/
 theorem tys_lookup (x : Var) (Γ : Ctx) : AList.lookup Γ.tys x = (AList.lookup Γ x).map Entry.ty :=
   AList.lookup_map Entry.ty Γ x
 
+/-- Representation lemma. Type, Copy and known-value projections commute with usage bookkeeping; this is an equality of representations, not execution safety. (approved: REV-base1a-agy-01025713b). -/
 theorem ctxMark_tys (x : Var) (mv : Bool) (Γ : Ctx) : (ctxMark Γ x mv).tys = Γ.tys :=
   AList.map_update Entry.ty (Entry.read mv) (fun _ => rfl) Γ x
 
+/-- Representation lemma. Type, Copy and known-value projections commute with usage bookkeeping; this is an equality of representations, not execution safety. (approved: REV-base1a-agy-01025713b). -/
 theorem useAtom_tys {Δ : Decls} {Γ Γ' : Ctx} {a : Atom} (h : UseAtom Δ Γ a Γ') : Γ'.tys = Γ.tys := by
   cases h with
   | int => rfl
@@ -117,21 +131,25 @@ theorem useAtom_tys {Δ : Decls} {Γ Γ' : Ctx} {a : Atom} (h : UseAtom Δ Γ a 
   | copy => exact ctxMark_tys _ _ _
   | move => exact ctxMark_tys _ _ _
 
+/-- Representation lemma. Type, Copy and known-value projections commute with usage bookkeeping; this is an equality of representations, not execution safety. (approved: REV-base1a-agy-01025713b). -/
 theorem useAtoms_tys {Δ : Decls} {Γ Γ' : Ctx} {as : List Atom} (h : UseAtoms Δ Γ as Γ') :
     Γ'.tys = Γ.tys := by
   induction h with
   | nil => rfl
   | cons h₁ _ ih => rw [ih, useAtom_tys h₁]
 
+/-- Representation lemma. Type, Copy and known-value projections commute with usage bookkeeping; this is an equality of representations, not execution safety. (approved: REV-base1a-agy-01025713b). -/
 theorem uses_tys {Δ : Decls} {Γ Γ' : Ctx} {e : Expr} (h : Uses Δ Γ e Γ') : Γ'.tys = Γ.tys := by
   cases h with
   | atom h => exact useAtom_tys h
   | add h₁ h₂ => rw [useAtom_tys h₂, useAtom_tys h₁]
   | mk h => exact useAtoms_tys h
 
+/-- Representation lemma. Type, Copy and known-value projections commute with usage bookkeeping; this is an equality of representations, not execution safety. (approved: REV-base1a-agy-01025713b). -/
 theorem vty_isCopy {Δ : Decls} {v : Val} {t : Ty} (h : VTy Δ v t) : v.isCopy Δ = t.isCopy Δ := by
   cases h <;> rfl
 
+/-- Helper (inversion). Extract a constituent fact from the context correspondence or typing derivation. (approved: REV-base1a-agy-01025713b). -/
 theorem corr_find {Δ : Decls} {x : Var} {Γ : Ctx} {env : Env} (hc : Corr Δ Γ env) :
     ∀ {e : Entry}, AList.lookup Γ x = some e →
       (e.live = true → ∃ v, AList.lookup env x = some (.val v) ∧ VTy Δ v e.ty) ∧
@@ -157,6 +175,7 @@ theorem corr_find {Δ : Decls} {x : Var} {Γ : Ctx} {env : Env} (hc : Corr Δ Γ
       simp only [hne, ↓reduceIte]
       exact ih h
 
+/-- Representation lemma. Transport the context/environment correspondence across read bookkeeping on its two representations. (approved: REV-base1a-agy-01025713b). -/
 theorem corr_mark_copy {Δ : Decls} {x : Var} {Γ : Ctx} {env : Env} (hc : Corr Δ Γ env) :
     Corr Δ (ctxMark Γ x false) env := by
   induction hc with
@@ -169,7 +188,7 @@ theorem corr_mark_copy {Δ : Decls} {x : Var} {Γ : Ctx} {env : Env} (hc : Corr 
       exact .cons (fun hl => hsl (by rw [← hl]; exact (Bool.and_true e.live).symm)) hk hkf hc
     · rw [ite_eq_right h]; exact .cons hsl hk hkf ih
 
-/-- Moving `x` out keeps the description, provided `x`'s binding has no known value (a known
+/-- Law (subject `ConcreteSpec.ctxMark`). Moving x out keeps the description, provided x's binding has no known value (a known
 value is a Copy scalar, which is never moved). -/
 theorem corr_mark_move {Δ : Decls} {x : Var} {Γ : Ctx} {env : Env} (hc : Corr Δ Γ env) :
     (∀ e, AList.lookup Γ x = some e → e.known = none) →
@@ -188,7 +207,7 @@ theorem corr_mark_move {Δ : Decls} {x : Var} {Γ : Ctx} {env : Env} (hc : Corr 
     · rename_i hne
       exact .cons hsl hk hkf (ih (fun e' h => hn e' (by simp [AList.lookup, hne, h])))
 
-/-- Reading a live local in the mode its type requires succeeds with a value of its type, and the
+/-- Law (subject `ConcreteSpec.readVar`). Reading a live local in the mode its type requires succeeds with a value of its type, and the
 context's record of the read matches what the evaluator did. -/
 theorem readVar_safe {Δ : Decls} {Γ : Ctx} {env : Env} {x : Var} {e : Entry} {mv : Bool}
     (hc : Corr Δ Γ env) (hf : AList.lookup Γ x = some e) (hl : e.live = true)
@@ -212,7 +231,7 @@ theorem readVar_safe {Δ : Decls} {Γ : Ctx} {env : Env} {x : Var} {e : Entry} {
     | none => rfl
     | some s => have := (hknown s hk).2; rw [hm] at this; cases this
 
-/-- A known atom evaluates to its known value without changing the environment (Q6.2). -/
+/-- Law (subject `ConcreteSpec.evalAtom`). A known atom evaluates to its known value without changing the environment (Q6.2). -/
 theorem knownAtom_sound {Δ : Decls} {Γ : Ctx} {env : Env} {a : Atom} {s : Scalar}
     (hc : Corr Δ Γ env) (hk : knownAtom Γ a = some s) : evalAtom Δ env a = .ok (s, env) := by
   cases a with
@@ -225,7 +244,7 @@ theorem knownAtom_sound {Δ : Decls} {Γ : Ctx} {env : Env} {a : Atom} {s : Scal
     obtain ⟨hv, _⟩ := (corr_find hc hf).2.1 s hke
     simp [evalAtom, readVar, hv, Val.isCopy]
 
-/-- Recording a read changes no binding's known value or field facts. -/
+/-- Representation lemma. Type, Copy and known-value projections commute with usage bookkeeping; this is an equality of representations, not execution safety. (approved: REV-base1a-agy-01025713b). Recording a read changes no binding's known value or field facts. -/
 theorem knownAtom_mark (y : Var) (mv : Bool) (a : Atom) (Γ : Ctx) :
     knownAtom (ctxMark Γ y mv) a = knownAtom Γ a := by
   cases a with
@@ -237,6 +256,7 @@ theorem knownAtom_mark (y : Var) (mv : Bool) (a : Atom) (Γ : Ctx) :
     · rw [ite_eq_right h]
   | _ => rfl
 
+/-- Representation lemma. Type, Copy and known-value projections commute with usage bookkeeping; this is an equality of representations, not execution safety. (approved: REV-base1a-agy-01025713b). -/
 theorem useAtom_knownAtom {Δ : Decls} {Γ Γ' : Ctx} {a : Atom} (h : UseAtom Δ Γ a Γ') (b : Atom) :
     knownAtom Γ' b = knownAtom Γ b := by
   cases h with
@@ -245,6 +265,7 @@ theorem useAtom_knownAtom {Δ : Decls} {Γ Γ' : Ctx} {a : Atom} (h : UseAtom Δ
   | copy => exact knownAtom_mark _ _ _ _
   | move => exact knownAtom_mark _ _ _ _
 
+/-- Law (subject `ConcreteSpec.evalAtom`). -/
 theorem evalAtom_safe {Δ : Decls} {Γ Γ' : Ctx} {env : Env} {a : Atom} {st : STy}
     (hc : Corr Δ Γ env) (ht : AtomTy Γ.tys a st) (hu : UseAtom Δ Γ a Γ') :
     ∃ v env', evalAtom Δ env a = .ok (v, env') ∧ SVTy v st ∧ Corr Δ Γ' env' := by
@@ -270,6 +291,7 @@ theorem evalAtom_safe {Δ : Decls} {Γ Γ' : Ctx} {env : Env} {a : Atom} {st : S
       cases hv with
       | scalar hs => exact ⟨_, env', by simp [evalAtom, hr], hs, hc'⟩
 
+/-- Law (subject `ConcreteSpec.evalFields`). -/
 theorem evalFields_safe {Δ : Decls} :
     ∀ {fs : List (Name × Atom)} {Γ Γ' : Ctx} {env : Env}, Corr Δ Γ env →
       (∀ p ∈ fs, ∃ st, AtomTy Γ.tys p.2 st) → UseAtoms Δ Γ (fs.map Prod.snd) Γ' →
@@ -317,7 +339,7 @@ theorem evalFields_safe {Δ : Decls} :
           simp only [hne, ↓reduceIte]
           exact hk f a' hf s (by rw [useAtom_knownAtom hu₁]; exact hks)
 
-/-- Expression safety: a well-typed expression whose reads are allowed evaluates to a value of its
+/-- Law (subject `ConcreteSpec.evalExpr`). Expression safety: a well-typed expression whose reads are allowed evaluates to a value of its
 type, or traps. It never gets stuck, and in particular never reads a moved variable. A struct
 value it produces agrees with the expression's known field values (Q6.2). -/
 theorem evalExpr_safe {Δ : Decls} {e : Expr} {Γ Γ' : Ctx} {env : Env} {t : Ty}
@@ -397,7 +419,7 @@ theorem evalExpr_safe {Δ : Decls} {e : Expr} {Γ Γ' : Ctx} {env : Env} {t : Ty
           simp only [hla, Option.map_some, Option.bind_some, id] at hff
           exact hk f a hla sv hff
 
-/-- A known expression evaluates to its known value (Q6.2): the static table agrees with the
+/-- Law (subject `ConcreteSpec.evalExpr`). A known expression evaluates to its known value (Q6.2): the static table agrees with the
 evaluator. -/
 theorem knownExpr_sound {Δ : Decls} {Γ : Ctx} {env : Env} {e : Expr} {s : Scalar}
     (hc : Corr Δ Γ env) (hk : knownExpr Γ e = some s) : evalExpr Δ env e = .ok (.scalar s, env) := by
@@ -428,12 +450,12 @@ theorem knownExpr_sound {Δ : Decls} {Γ : Ctx} {env : Env} {e : Expr} {s : Scal
 
 /-! ### No hidden traps -/
 
-/-- Reading a local never traps. -/
+/-- Helper (computation). The defining branch equations and structural traversal contain no constructor for this result; used inside the semantic safety proofs. (approved: REV-base1a-agy-01025713b). Reading a local never traps. -/
 theorem readVar_ne_trap (Δ : Decls) (env : Env) (x : Var) (mv : Bool) (k : Trap) :
     readVar Δ env x mv ≠ .trap k := by
   unfold readVar; split <;> (try split) <;> simp
 
-/-- Reading an atom never traps. -/
+/-- Helper (computation). The defining branch equations and structural traversal contain no constructor for this result; used inside the semantic safety proofs. (approved: REV-base1a-agy-01025713b). Reading an atom never traps. -/
 theorem evalAtom_ne_trap (Δ : Decls) (env : Env) (a : Atom) (k : Trap) : evalAtom Δ env a ≠ .trap k := by
   cases a with
   | int => simp [evalAtom]
@@ -447,7 +469,7 @@ theorem evalAtom_ne_trap (Δ : Decls) (env : Env) (a : Atom) (k : Trap) : evalAt
     have := readVar_ne_trap Δ env x true k
     split <;> simp_all
 
-/-- Struct-literal fields never trap: they are atoms. -/
+/-- Helper (computation). The defining branch equations and structural traversal contain no constructor for this result; used inside the semantic safety proofs. (approved: REV-base1a-agy-01025713b). Struct-literal fields never trap: they are atoms. -/
 theorem evalFields_ne_trap (Δ : Decls) (k : Trap) :
     ∀ (env : Env) (fs : List (Name × Atom)), evalFields Δ env fs ≠ .trap k
   | env, [] => by simp [evalFields]
@@ -461,7 +483,7 @@ theorem evalFields_ne_trap (Δ : Decls) (k : Trap) :
     · simp_all
     · simp
 
-/-- Recording a read changes no binding's bounds. -/
+/-- Representation lemma. Type, Copy and known-value projections commute with usage bookkeeping; this is an equality of representations, not execution safety. (approved: REV-base1a-agy-01025713b). Recording a read changes no binding's bounds. -/
 theorem atomBounds_mark (y : Var) (mv : Bool) (a : Atom) (Γ : Ctx) :
     atomBounds (ctxMark Γ y mv) a = atomBounds Γ a := by
   cases a with
@@ -473,6 +495,7 @@ theorem atomBounds_mark (y : Var) (mv : Bool) (a : Atom) (Γ : Ctx) :
     · rw [ite_eq_right h]
   | _ => rfl
 
+/-- Representation lemma. Type, Copy and known-value projections commute with usage bookkeeping; this is an equality of representations, not execution safety. (approved: REV-base1a-agy-01025713b). -/
 theorem useAtom_atomBounds {Δ : Decls} {Γ Γ' : Ctx} {a : Atom} (h : UseAtom Δ Γ a Γ') (b : Atom) :
     atomBounds Γ' b = atomBounds Γ b := by
   cases h with
@@ -481,9 +504,9 @@ theorem useAtom_atomBounds {Δ : Decls} {Γ Γ' : Ctx} {a : Atom} (h : UseAtom �
   | copy => exact atomBounds_mark _ _ _ _
   | move => exact atomBounds_mark _ _ _ _
 
-/-- **The bounds are sound.** An atom the checker bounds evaluates to an integer of the bounded
+/-- Law (subject `ConcreteSpec.evalAtom`). **The bounds are sound.** An atom the checker bounds evaluates to an integer of the bounded
 type within the bounds: a known value exactly, any other local within its type (it holds a value of
-its type, `Corr`). -/
+its type, Corr). -/
 theorem atomBounds_sound {Δ : Decls} {Γ Γ' : Ctx} {env : Env} {a : Atom} {t : IntTy} {lo hi : Int}
     (hc : Corr Δ Γ env) (hu : UseAtom Δ Γ a Γ') (hb : atomBounds Γ a = some (t, lo, hi)) :
     ∃ n env', evalAtom Δ env a = .ok (.int t n, env') ∧ lo ≤ n ∧ n ≤ hi ∧ Corr Δ Γ' env' := by
@@ -523,7 +546,7 @@ theorem atomBounds_sound {Δ : Decls} {Γ Γ' : Ctx} {env : Env} {a : Atom} {t :
           exact ⟨n, env', by simp [evalAtom, hr], hin.1, hin.2, hc'⟩
     · simp at hb
 
-/-- **Admitted operations do not trap.** In any environment the checker's context describes, an
+/-- Law (subject `ConcreteSpec.evalExpr`). **Admitted operations do not trap.** In any environment the checker's context describes, an
 expression whose operation is admitted evaluates without a trap: its evidence holds. -/
 theorem evalExpr_ne_trap {Δ : Decls} {e : Expr} {Γ Γ' : Ctx} {env : Env}
     (hc : Corr Δ Γ env) (hu : Uses Δ Γ e Γ') (ha : admitted Γ e = true) (k : Trap) :
@@ -555,7 +578,7 @@ theorem evalExpr_ne_trap {Δ : Decls} {e : Expr} {Γ Γ' : Ctx} {env : Env}
         simp [evalExpr, he₁, he₂, checkedAdd, hin]
       · cases ha
 
-/-- Binding the fields of a struct never traps. -/
+/-- Helper (computation). The defining branch equations and structural traversal contain no constructor for this result; used inside the semantic safety proofs. (approved: REV-base1a-agy-01025713b). Binding the fields of a struct never traps. -/
 theorem destructure_ne_trap (k : Trap) :
     ∀ (pat : List (Name × Binder)) (vs : List (Name × Scalar)) (env : Env), destructure pat vs env ≠ .trap k
   | [], _, _ => by simp [destructure]
@@ -566,7 +589,7 @@ theorem destructure_ne_trap (k : Trap) :
     · exact destructure_ne_trap k rest vs _
     · simp
 
-/-- A statement whose operation is admitted executes without a trap. -/
+/-- Law (subject `ConcreteSpec.execStmt`). A statement whose operation is admitted executes without a trap. -/
 theorem execStmt_ne_trap {Δ : Decls} {Γ Γ' : Ctx} {env : Env} {s : Stmt}
     (hc : Corr Δ Γ env) (hs : StmtOk Δ Γ s Γ') (k : Trap) : execStmt Δ env s ≠ .trap k := by
   cases hs with
@@ -580,6 +603,7 @@ theorem execStmt_ne_trap {Δ : Decls} {Γ Γ' : Ctx} {env : Env} {s : Stmt}
     have := evalExpr_ne_trap hc hu ha k
     simp only [execStmt]; split <;> (try split) <;> simp_all [destructure_ne_trap]
 
+/-- Law (subject `ConcreteSpec.destructure`). -/
 theorem destructure_safe {Δ : Decls} {d : StructDecl} {vs : List (Name × Scalar)}
     {K : List (Name × Option Scalar)}
     (hvs : ∀ f st, AList.lookup d.fields f = some st → ∃ v, AList.lookup vs f = some v ∧ SVTy v st)
@@ -608,7 +632,7 @@ theorem destructure_safe {Δ : Decls} {d : StructDecl} {vs : List (Name × Scala
         (by intro sn vs' h; cases h) hc)
       (fun p h => hp p (List.Mem.tail _ h))
 
-/-- Statement safety: a checked statement executes or traps; it never gets stuck. -/
+/-- Law (subject `ConcreteSpec.execStmt`). Statement safety: a checked statement executes or traps; it never gets stuck. -/
 theorem execStmt_safe {Δ : Decls} {Γ Γ' : Ctx} {env : Env} {s : Stmt}
     (hc : Corr Δ Γ env) (hs : StmtOk Δ Γ s Γ') :
     (∃ k, execStmt Δ env s = .trap k) ∨ ∃ env', execStmt Δ env s = .ok env' ∧ Corr Δ Γ' env' := by
@@ -640,7 +664,7 @@ theorem execStmt_safe {Δ : Decls} {Γ Γ' : Ctx} {env : Env} {s : Stmt}
         obtain ⟨env', hde, hc'⟩ := destructure_safe hvs (hkf _ _ rfl) hc₁ hp.declared
         exact .inr ⟨env', by simp [execStmt, he, hde], hc'⟩
 
-/-- An atom with a scalar type in `HasType` has that type in `AtomTy`. -/
+/-- Helper (inversion). Extract a constituent fact from the context correspondence or typing derivation. (approved: REV-base1a-agy-01025713b). An atom with a scalar type in HasType has that type in AtomTy. -/
 theorem hasType_atom_scalar {Δ : Decls} {Γ : TyCtx} {a : Atom} {st : STy}
     (h : HasType Δ Γ (.atom a) (.scalar st)) : AtomTy Γ a st := by
   cases h with
@@ -649,7 +673,7 @@ theorem hasType_atom_scalar {Δ : Decls} {Γ : TyCtx} {a : Atom} {st : STy}
   | copy h => exact .copy h
   | move h => exact .move h
 
-/-- Body safety: from a described environment, a checked body never gets stuck, for any fuel. -/
+/-- Law (subject `ConcreteSpec.runBody`). Body safety: from a described environment, a checked body never gets stuck, for any fuel. -/
 theorem runBody_safe {Δ : Decls} {Γ : Ctx} {ss : List Stmt} {r : Atom} (hb : BodyOk Δ Γ ss r) :
     ∀ {env : Env}, Corr Δ Γ env → ∀ n w, runBody Δ n env ss r ≠ .stuck w := by
   induction hb with
@@ -673,18 +697,18 @@ theorem runBody_safe {Δ : Decls} {Γ : Ctx} {ss : List Stmt} {r : Atom} (hb : B
       · simp [hk]
       · simp only [he]; exact ih hc' n w
 
-/-- **Slice-1 safety.** An accepted program never gets stuck, with any amount of fuel: it never
+/-- Law (subject `ConcreteSpec.run`). **Slice-1 safety.** An accepted program never gets stuck, with any amount of fuel: it never
 reads a moved variable, never reads an unbound one, never reads in the wrong mode and never meets
 a value of the wrong type (STMT-1: safe code never reaches a stuck state; OWN-1). -/
 theorem checked_never_stuck {p : Program} (h : Checked p) : ∀ n w, run p n ≠ .stuck w :=
   runBody_safe h.2 .nil
 
-/-- In particular an accepted program never reads a moved variable (OWN-1). -/
+/-- Law (subject `ConcreteSpec.run`). In particular an accepted program never reads a moved variable (OWN-1). -/
 theorem checked_no_use_after_move {p : Program} (h : Checked p) (n : Nat) :
     run p n ≠ .stuck .movedRead :=
   checked_never_stuck h n _
 
-/-- Body trap-freedom: from a described environment, a checked body never ends in a trap, for any
+/-- Law (subject `ConcreteSpec.runBody`). Body trap-freedom: from a described environment, a checked body never ends in a trap, for any
 fuel. -/
 theorem runBody_ne_trap {Δ : Decls} {Γ : Ctx} {ss : List Stmt} {r : Atom} (hb : BodyOk Δ Γ ss r) :
     ∀ {env : Env}, Corr Δ Γ env → ∀ n k, runBody Δ n env ss r ≠ .trap k := by
@@ -709,17 +733,17 @@ theorem runBody_ne_trap {Δ : Decls} {Γ : Ctx} {ss : List Stmt} {r : Atom} (hb 
       · exact absurd hk' (execStmt_ne_trap hc hs k')
       · simp only [he]; exact ih hc' n k
 
-/-- **No hidden traps** (decision of 2026-11-06, Q1). An accepted program's run never ends in an
+/-- Law (subject `ConcreteSpec.run`). **No hidden traps** (decision of 2026-11-06, Q1). An accepted program's run never ends in an
 implicit trap, with any amount of fuel. Every trap of slice 1 is implicit: the only one is the
-overflow of checked `+` (ARITH-3), and slice 1 has no explicit `abort()`. The Core semantics keeps
-the trap outcome (`runBody` of an unchecked body can trap, `Examples.add100`); admission rules it
+overflow of checked + (ARITH-3), and slice 1 has no explicit abort(). The Core semantics keeps
+the trap outcome (runBody of an unchecked body can trap, Examples.add100); admission rules it
 out. -/
 theorem checked_no_implicit_traps {p : Program} (h : Checked p) : ∀ n k, run p n ≠ .trap k :=
   runBody_ne_trap h.2 .nil
 
-/-- **Slice-1 behaviour.** An accepted program has exactly one outcome, and it is an exit
-(STMT-1): it never gets stuck (`checked_never_stuck`) and never traps
-(`checked_no_implicit_traps`). -/
+/-- Law (subject `ConcreteSpec.Exec`). **Slice-1 behaviour.** An accepted program has exactly one outcome, and it is an exit
+(STMT-1): it never gets stuck (checked_never_stuck) and never traps
+(checked_no_implicit_traps). -/
 theorem checked_exits {p : Program} (h : Checked p) :
     ∃ o, Exec p.decls [] p.body p.ret o ∧ ∃ c, o = .exit c := by
   obtain ⟨o, ho⟩ := exec_total p.decls [] p.body p.ret
@@ -735,5 +759,330 @@ theorem checked_exits {p : Program} (h : Checked p) :
   | trap k => exact absurd rfl (hnt k)
   | stuck w => exact absurd rfl (hns w)
   | outOfFuel => exact absurd rfl hnf
+
+namespace Evidence
+
+def slotVar : Var := ⟨"x", 0⟩
+def entry : Entry := ⟨.scalar (.int .u8), true, false, none, []⟩
+def context : Ctx := [(slotVar, entry)]
+def environment : Env := [(slotVar, .val (.scalar (.int .u8 42)))]
+
+
+def literal : Program := ⟨[], [], .int .u8 42⟩
+def sum : Expr := .add (.int .u8 20) (.int .u8 22)
+def discard : Stmt := .let_ .wild (.scalar (.int .u8)) (.atom (.int .u8 42))
+
+/-- Helper (computation). The closed local holds a live in-range unsigned-byte value, establishing the read instance's correspondence premise. (approved: REV-base1a-agy-01025713b) -/
+theorem contextCorr : Corr [] context environment :=
+  .cons (fun _ => ⟨_, rfl, .scalar (.int (by decide))⟩)
+    (fun _ h => by cases h) (fun _ _ h => by cases h) .nil
+
+/-- A broken move marker that leaves the static binding live. -/
+def keepLiveMark (Γ : Ctx) (_ : Var) (_ : Bool) : Ctx := Γ
+
+/-- Instance (law `ConcreteSpec.corr_mark_move`, case `liveSlot`). -/
+example := @corr_mark_move [] slotVar context environment contextCorr
+  (by intro e h; simpa [entry] using congrArg Entry.known (Option.some.inj h).symm)
+
+/-- Planted (law `ConcreteSpec.corr_mark_move`, case `liveSlot`, subject `ConcreteSpec.ctxMark`, mutant `ConcreteSpec.Evidence.keepLiveMark`). -/
+example : Corr [] context environment ∧
+    (∀ e, AList.lookup context slotVar = some e → e.known = none) ∧
+    ¬ Corr [] (keepLiveMark context slotVar true)
+      (AList.update environment slotVar (fun _ => .moved)) := by
+  refine ⟨contextCorr, ?_, ?_⟩
+  · intro e h
+    have : entry = e := Option.some.inj h
+    subst e; rfl
+  · intro h
+    obtain ⟨v, hv, _⟩ := (corr_find h (x := slotVar) (e := entry) rfl).1 rfl
+    cases hv
+
+/-- Helper (computation). Closed typing and ownership derivation for dropping a Copy scalar. (approved: REV-base1a-agy-01025713b) -/
+theorem discardOk : StmtOk [] [] discard [] :=
+  .letWild (.int (by decide)) rfl rfl (.atom .int)
+
+def fuelSwitch (_ : Decls) (n : Nat) (_ : Env) (_ : List Stmt) (_ : Atom) : Outcome :=
+  if n = 1 then .exit 42 else .exit 43
+
+def noFuel : Decls → Nat → Env → List Stmt → Atom → Outcome := fun _ _ _ _ _ => .outOfFuel
+
+def stuckRead : Decls → Env → Var → Bool → R (Val × Env) := fun _ _ _ _ => .stuck .unbound
+
+def stuckAtom : Decls → Env → Atom → R (Scalar × Env) := fun _ _ _ => .stuck .unbound
+
+def stuckFields : Decls → Env → List (Name × Atom) → R (List (Name × Scalar) × Env) :=
+  fun _ _ _ => .stuck .unbound
+
+def stuckExpr : Decls → Env → Expr → R (Val × Env) := fun _ _ _ => .stuck .unbound
+
+def trapExpr : Decls → Env → Expr → R (Val × Env) := fun _ _ _ => .trap .arithmeticOverflow
+
+def stuckDestructure : List (Name × Binder) → List (Name × Scalar) → Env → R Env :=
+  fun _ _ _ => .stuck .unbound
+
+def stuckStmt : Decls → Env → Stmt → R Env := fun _ _ _ => .stuck .unbound
+
+def trapStmt : Decls → Env → Stmt → R Env := fun _ _ _ => .trap .arithmeticOverflow
+
+def stuckBody : Decls → Nat → Env → List Stmt → Atom → Outcome := fun _ _ _ _ _ => .stuck .movedRead
+
+def trapBody : Decls → Nat → Env → List Stmt → Atom → Outcome := fun _ _ _ _ _ => .trap .arithmeticOverflow
+
+def stuckRun : Program → Nat → Outcome := fun _ _ => .stuck .movedRead
+
+def trapRun : Program → Nat → Outcome := fun _ _ => .trap .arithmeticOverflow
+
+/-- Instance (law `ConcreteSpec.runBody_mono`, case `return`). -/
+example := @runBody_mono [] (.int .u8 42) 1 [] [] (.exit 42) rfl (by decide) 2 (by decide)
+
+/-- Planted (law `ConcreteSpec.runBody_mono`, case `return`, subject `ConcreteSpec.runBody`, mutant `ConcreteSpec.Evidence.fuelSwitch`). -/
+example : fuelSwitch [] 1 [] [] (.int .u8 42) = .exit 42 ∧ Outcome.exit 42 ≠ .outOfFuel ∧ 1 ≤ 2 ∧
+    ¬ (fuelSwitch [] 2 [] [] (.int .u8 42) = .exit 42) := by decide
+
+/-- Instance (law `ConcreteSpec.runBody_enough`, case `discard`). -/
+example := @runBody_enough [] (.int .u8 42) [discard] []
+
+/-- Planted (law `ConcreteSpec.runBody_enough`, case `discard`, subject `ConcreteSpec.runBody`, mutant `ConcreteSpec.Evidence.noFuel`). -/
+example : ¬ (noFuel [] ([discard].length + 1) [] [discard] (.int .u8 42) ≠ .outOfFuel) := by decide
+
+/-- Instance (law `ConcreteSpec.exec_complete`, case `return`). -/
+example := @exec_complete [] (.int .u8 42) [] [] (.exit 42) .ret
+
+/-- Planted (law `ConcreteSpec.exec_complete`, case `return`, subject `ConcreteSpec.runBody`, mutant `ConcreteSpec.Evidence.noFuel`). -/
+example : Exec [] [] [] (.int .u8 42) (.exit 42) ∧
+    ¬ (noFuel [] (([] : List Stmt).length + 1) [] [] (.int .u8 42) = .exit 42) := ⟨.ret, by decide⟩
+
+/-- Instance (law `ConcreteSpec.readVar_safe`, case `copy`). -/
+example := @readVar_safe [] context environment slotVar entry false contextCorr rfl rfl rfl
+
+/-- Planted (law `ConcreteSpec.readVar_safe`, case `copy`, subject `ConcreteSpec.readVar`, mutant `ConcreteSpec.Evidence.stuckRead`). -/
+example : Corr [] context environment ∧ Core.AList.lookup context slotVar = some entry ∧
+    entry.live = true ∧ entry.ty.isCopy [] = !false ∧
+    ¬ (∃ v env', stuckRead [] environment slotVar false = .ok (v, env') ∧ VTy [] v entry.ty ∧
+      (∀ sn vs, v = .struct sn vs → FieldsHold entry.kfields vs) ∧ Corr [] (ctxMark context slotVar false) env') :=
+  ⟨contextCorr, rfl, rfl, rfl, by simp [stuckRead]⟩
+
+/-- Instance (law `ConcreteSpec.knownAtom_sound`, case `literal`). -/
+example := @knownAtom_sound [] [] [] (.int .u8 42) (.int .u8 42) .nil rfl
+
+/-- Planted (law `ConcreteSpec.knownAtom_sound`, case `literal`, subject `ConcreteSpec.evalAtom`, mutant `ConcreteSpec.Evidence.stuckAtom`). -/
+example : Corr [] [] [] ∧ knownAtom [] (.int .u8 42) = some (.int .u8 42) ∧
+    ¬ (stuckAtom [] [] (.int .u8 42) = .ok (.int .u8 42, [])) := ⟨.nil, rfl, by simp [stuckAtom]⟩
+
+/-- Instance (law `ConcreteSpec.evalAtom_safe`, case `literal`). -/
+example := @evalAtom_safe [] [] [] [] (.int .u8 42) (.int .u8) .nil (.int (by decide)) .int
+
+/-- Planted (law `ConcreteSpec.evalAtom_safe`, case `literal`, subject `ConcreteSpec.evalAtom`, mutant `ConcreteSpec.Evidence.stuckAtom`). -/
+example : Corr [] [] [] ∧ AtomTy (Ctx.tys []) (.int .u8 42) (.int .u8) ∧
+    UseAtom [] [] (.int .u8 42) [] ∧
+    ¬ (∃ v env', stuckAtom [] [] (.int .u8 42) = .ok (v, env') ∧ SVTy v (.int .u8) ∧ Corr [] [] env') :=
+  ⟨.nil, .int (by decide), .int, by simp [stuckAtom]⟩
+
+/-- Instance (law `ConcreteSpec.evalFields_safe`, case `field`). -/
+example := @evalFields_safe [] [("a", .int .u8 42)] [] [] [] .nil
+  (by intro p hp; cases hp with
+      | head => exact ⟨_, .int (by decide)⟩
+      | tail _ h => cases h) (.cons .int .nil)
+
+/-- Planted (law `ConcreteSpec.evalFields_safe`, case `field`, subject `ConcreteSpec.evalFields`, mutant `ConcreteSpec.Evidence.stuckFields`). -/
+example : Corr [] [] [] ∧
+    (∀ p ∈ ([("a", .int .u8 42)] : List (Name × Atom)), ∃ st, AtomTy (Ctx.tys []) p.2 st) ∧
+    UseAtoms [] [] (([("a", .int .u8 42)] : List (Name × Atom)).map Prod.snd) [] ∧
+    ¬ (∃ vs env', stuckFields [] [] [("a", .int .u8 42)] = .ok (vs, env') ∧ Corr [] [] env' ∧
+      (∀ f a, Core.AList.lookup [("a", .int .u8 42)] f = some a → ∀ st, AtomTy (Ctx.tys []) a st →
+        ∃ v, Core.AList.lookup vs f = some v ∧ SVTy v st) ∧
+      (∀ f a, Core.AList.lookup [("a", .int .u8 42)] f = some a → ∀ s,
+        knownAtom [] a = some s → Core.AList.lookup vs f = some s)) := by
+  refine ⟨.nil, ?_, .cons .int .nil, ?_⟩
+  · intro p hp
+    cases hp with
+    | head => exact ⟨_, .int (by decide)⟩
+    | tail _ h => cases h
+  · simp [stuckFields]
+
+/-- Instance (law `ConcreteSpec.evalExpr_safe`, case `sum`). -/
+example := @evalExpr_safe [] sum [] [] [] (.scalar (.int .u8)) .nil
+  (.add (.int (by decide)) (.int (by decide))) (.add .int .int)
+
+/-- Planted (law `ConcreteSpec.evalExpr_safe`, case `sum`, subject `ConcreteSpec.evalExpr`, mutant `ConcreteSpec.Evidence.stuckExpr`). -/
+example : Corr [] [] [] ∧ HasType [] (Ctx.tys []) sum (.scalar (.int .u8)) ∧ Uses [] [] sum [] ∧
+    ¬ ((∃ k, stuckExpr [] [] sum = .trap k) ∨
+      ∃ v env', stuckExpr [] [] sum = .ok (v, env') ∧ VTy [] v (.scalar (.int .u8)) ∧
+        (∀ sn vs, v = .struct sn vs → FieldsHold (knownFields [] sum) vs) ∧ Corr [] [] env') :=
+  ⟨.nil, .add (.int (by decide)) (.int (by decide)), .add .int .int, by simp [stuckExpr]⟩
+
+/-- Instance (law `ConcreteSpec.knownExpr_sound`, case `sum`). -/
+example := @knownExpr_sound [] [] [] sum (.int .u8 42) .nil rfl
+
+/-- Planted (law `ConcreteSpec.knownExpr_sound`, case `sum`, subject `ConcreteSpec.evalExpr`, mutant `ConcreteSpec.Evidence.stuckExpr`). -/
+example : Corr [] [] [] ∧ knownExpr [] sum = some (.int .u8 42) ∧
+    ¬ (stuckExpr [] [] sum = .ok (.scalar (.int .u8 42), [])) := ⟨.nil, rfl, by simp [stuckExpr]⟩
+
+/-- Instance (law `ConcreteSpec.atomBounds_sound`, case `literal`). -/
+example := @atomBounds_sound [] [] [] [] (.int .u8 42) .u8 42 42 .nil .int rfl
+
+/-- Planted (law `ConcreteSpec.atomBounds_sound`, case `literal`, subject `ConcreteSpec.evalAtom`, mutant `ConcreteSpec.Evidence.stuckAtom`). -/
+example : Corr [] [] [] ∧ UseAtom [] [] (.int .u8 42) [] ∧
+    atomBounds [] (.int .u8 42) = some (.u8, 42, 42) ∧
+    ¬ (∃ n env', stuckAtom [] [] (.int .u8 42) = .ok (.int .u8 n, env') ∧
+      42 ≤ n ∧ n ≤ 42 ∧ Corr [] [] env') := ⟨.nil, .int, rfl, by simp [stuckAtom]⟩
+
+/-- Instance (law `ConcreteSpec.evalExpr_ne_trap`, case `sum`). -/
+example := @evalExpr_ne_trap [] sum [] [] [] .nil (.add .int .int) rfl .arithmeticOverflow
+
+/-- Planted (law `ConcreteSpec.evalExpr_ne_trap`, case `sum`, subject `ConcreteSpec.evalExpr`, mutant `ConcreteSpec.Evidence.trapExpr`). -/
+example : Corr [] [] [] ∧ Uses [] [] sum [] ∧ admitted [] sum = true ∧
+    ¬ (trapExpr [] [] sum ≠ .trap .arithmeticOverflow) := ⟨.nil, .add .int .int, rfl, by simp [trapExpr]⟩
+
+/-- Instance (law `ConcreteSpec.execStmt_ne_trap`, case `discard`). -/
+example := @execStmt_ne_trap [] [] [] [] discard .nil discardOk .arithmeticOverflow
+
+/-- Planted (law `ConcreteSpec.execStmt_ne_trap`, case `discard`, subject `ConcreteSpec.execStmt`, mutant `ConcreteSpec.Evidence.trapStmt`). -/
+example : Corr [] [] [] ∧ StmtOk [] [] discard [] ∧
+    ¬ (trapStmt [] [] discard ≠ .trap .arithmeticOverflow) := ⟨.nil, discardOk, by simp [trapStmt]⟩
+
+def oneField : StructDecl := ⟨"Field", false, [("a", .int .u8)]⟩
+def fieldValues : List (Name × Scalar) := [("a", .int .u8 42)]
+def fieldPattern : List (Name × Binder) := [("a", .name slotVar)]
+
+/-- Helper (computation). The concrete field value meets its declaration's scalar type. (approved: REV-base1a-agy-01025713b) -/
+theorem fieldTyped : ∀ f st, Core.AList.lookup oneField.fields f = some st →
+    ∃ v, Core.AList.lookup fieldValues f = some v ∧ SVTy v st := by
+  intro f st hf
+  simp only [oneField, Core.AList.lookup] at hf
+  split at hf
+  · rename_i he
+    cases hf
+    exact ⟨.int .u8 42, by simp [fieldValues, Core.AList.lookup, he], .int (by decide)⟩
+  · cases hf
+
+/-- Helper (computation). The concrete named-field pattern names a declared field. (approved: REV-base1a-agy-01025713b) -/
+theorem fieldDeclared : ∀ p ∈ fieldPattern, ∃ st, Core.AList.lookup oneField.fields p.1 = some st := by
+  intro p hp
+  cases hp with
+  | head => exact ⟨_, rfl⟩
+  | tail _ h => cases h
+
+/-- Instance (law `ConcreteSpec.destructure_safe`, case `namedField`). -/
+example := @destructure_safe [] oneField fieldValues [] fieldTyped (by intro f s h; cases h)
+  fieldPattern [] [] .nil fieldDeclared
+
+/-- Planted (law `ConcreteSpec.destructure_safe`, case `namedField`, subject `ConcreteSpec.destructure`, mutant `ConcreteSpec.Evidence.stuckDestructure`). -/
+example : (∀ f st, Core.AList.lookup oneField.fields f = some st →
+      ∃ v, Core.AList.lookup fieldValues f = some v ∧ SVTy v st) ∧
+    FieldsHold [] fieldValues ∧ Corr [] [] [] ∧
+    (∀ p ∈ fieldPattern, ∃ st, Core.AList.lookup oneField.fields p.1 = some st) ∧
+    ¬ (∃ env', stuckDestructure fieldPattern fieldValues [] = .ok env' ∧
+      Corr [] (bindPat oneField [] fieldPattern []) env') :=
+  ⟨fieldTyped, (by intro f s h; cases h), .nil, fieldDeclared, by simp [stuckDestructure]⟩
+
+/-- Instance (law `ConcreteSpec.execStmt_safe`, case `discard`). -/
+example := @execStmt_safe [] [] [] [] discard .nil discardOk
+
+/-- Planted (law `ConcreteSpec.execStmt_safe`, case `discard`, subject `ConcreteSpec.execStmt`, mutant `ConcreteSpec.Evidence.stuckStmt`). -/
+example : Corr [] [] [] ∧ StmtOk [] [] discard [] ∧
+    ¬ ((∃ k, stuckStmt [] [] discard = .trap k) ∨
+      ∃ env', stuckStmt [] [] discard = .ok env' ∧ Corr [] [] env') := ⟨.nil, discardOk, by simp [stuckStmt]⟩
+
+/-- Instance (law `ConcreteSpec.runBody_safe`, case `return`). -/
+example := @runBody_safe [] [] [] (.int .u8 42)
+  (.ret (.int (by decide)) (.atom .int) (by decide)) [] .nil 1 .movedRead
+
+/-- Planted (law `ConcreteSpec.runBody_safe`, case `return`, subject `ConcreteSpec.runBody`, mutant `ConcreteSpec.Evidence.stuckBody`). -/
+example : BodyOk [] [] [] (.int .u8 42) ∧ Corr [] [] [] ∧
+    ¬ (stuckBody [] 1 [] [] (.int .u8 42) ≠ .stuck .movedRead) :=
+  ⟨.ret (.int (by decide)) (.atom .int) (by decide), .nil, by simp [stuckBody]⟩
+
+/-- Instance (law `ConcreteSpec.runBody_ne_trap`, case `return`). -/
+example := @runBody_ne_trap [] [] [] (.int .u8 42)
+  (.ret (.int (by decide)) (.atom .int) (by decide)) [] .nil 1 .arithmeticOverflow
+
+/-- Planted (law `ConcreteSpec.runBody_ne_trap`, case `return`, subject `ConcreteSpec.runBody`, mutant `ConcreteSpec.Evidence.trapBody`). -/
+example : BodyOk [] [] [] (.int .u8 42) ∧ Corr [] [] [] ∧
+    ¬ (trapBody [] 1 [] [] (.int .u8 42) ≠ .trap .arithmeticOverflow) :=
+  ⟨.ret (.int (by decide)) (.atom .int) (by decide), .nil, by simp [trapBody]⟩
+
+/-- Instance (law `ConcreteSpec.checked_never_stuck`, case `return`). -/
+example := @checked_never_stuck literal
+  ⟨by decide, .ret (.int (by decide)) (.atom .int) (by decide)⟩ 1 .movedRead
+
+/-- Planted (law `ConcreteSpec.checked_never_stuck`, case `return`, subject `ConcreteSpec.run`, mutant `ConcreteSpec.Evidence.stuckRun`). -/
+example : Checked literal ∧ ¬ (stuckRun literal 1 ≠ .stuck .movedRead) :=
+  ⟨⟨by decide, .ret (.int (by decide)) (.atom .int) (by decide)⟩, by simp [stuckRun]⟩
+
+/-- Instance (law `ConcreteSpec.checked_no_use_after_move`, case `return`). -/
+example := @checked_no_use_after_move literal
+  ⟨by decide, .ret (.int (by decide)) (.atom .int) (by decide)⟩ 1
+
+/-- Planted (law `ConcreteSpec.checked_no_use_after_move`, case `return`, subject `ConcreteSpec.run`, mutant `ConcreteSpec.Evidence.stuckRun`). -/
+example : Checked literal ∧ ¬ (stuckRun literal 1 ≠ .stuck .movedRead) :=
+  ⟨⟨by decide, .ret (.int (by decide)) (.atom .int) (by decide)⟩, by simp [stuckRun]⟩
+
+/-- Instance (law `ConcreteSpec.checked_no_implicit_traps`, case `return`). -/
+example := @checked_no_implicit_traps literal
+  ⟨by decide, .ret (.int (by decide)) (.atom .int) (by decide)⟩ 1 .arithmeticOverflow
+
+/-- Planted (law `ConcreteSpec.checked_no_implicit_traps`, case `return`, subject `ConcreteSpec.run`, mutant `ConcreteSpec.Evidence.trapRun`). -/
+example : Checked literal ∧ ¬ (trapRun literal 1 ≠ .trap .arithmeticOverflow) :=
+  ⟨⟨by decide, .ret (.int (by decide)) (.atom .int) (by decide)⟩, by simp [trapRun]⟩
+
+/-- Instance (law `ConcreteSpec.runBody_sound`, case `return`). -/
+example := @runBody_sound [] (.int .u8 42) 1 [] [] (.exit 42) rfl (by decide)
+
+/-- Instance (law `ConcreteSpec.exec_ne_outOfFuel`, case `return`). -/
+example := @exec_ne_outOfFuel [] (.int .u8 42) [] []
+
+/-- Instance (law `ConcreteSpec.exec_deterministic`, case `return`). -/
+example := @exec_deterministic [] (.int .u8 42) [] [] (.exit 42) .ret
+
+/-- Instance (law `ConcreteSpec.exec_total`, case `return`). -/
+example := exec_total [] [] [] (.int .u8 42)
+
+/-- Instance (law `ConcreteSpec.checked_exits`, case `return`). -/
+example := @checked_exits literal ⟨by decide, .ret (.int (by decide)) (.atom .int) (by decide)⟩
+
+/-- A broken operational relation with no execution rules. -/
+inductive MissingExec : Decls → Env → List Stmt → Atom → Outcome → Prop where
+
+/-- Planted (law `ConcreteSpec.runBody_sound`, case `return`, subject `ConcreteSpec.Exec`, mutant `ConcreteSpec.Evidence.MissingExec`). -/
+example : runBody [] 1 [] [] (.int .u8 42) = .exit 42 ∧
+    (.exit 42 : Outcome) ≠ .outOfFuel ∧ ¬ MissingExec [] [] [] (.int .u8 42) (.exit 42) := by
+  exact ⟨rfl, by decide, fun h => nomatch h⟩
+
+/-- Planted (law `ConcreteSpec.exec_total`, case `return`, subject `ConcreteSpec.Exec`, mutant `ConcreteSpec.Evidence.MissingExec`). -/
+example : ¬ ∃ o, MissingExec [] [] [] (.int .u8 42) o := by
+  rintro ⟨_, h⟩; cases h
+
+/-- Planted (law `ConcreteSpec.checked_exits`, case `return`, subject `ConcreteSpec.Exec`, mutant `ConcreteSpec.Evidence.MissingExec`). -/
+example : Checked literal ∧
+    ¬ (∃ o, MissingExec literal.decls [] literal.body literal.ret o ∧ ∃ c, o = .exit c) := by
+  refine ⟨⟨by decide, .ret (.int (by decide)) (.atom .int) (by decide)⟩, ?_⟩
+  rintro ⟨_, h, _⟩; cases h
+
+/-- A broken execution relation admits every result, including fuel exhaustion. -/
+inductive AnyExec : Decls → Env → List Stmt → Atom → Outcome → Prop where
+  | accept {Δ env ss r o} : AnyExec Δ env ss r o
+
+/-- Planted (law `ConcreteSpec.exec_ne_outOfFuel`, case `return`, subject `ConcreteSpec.Exec`, mutant `ConcreteSpec.Evidence.AnyExec`). -/
+example : ¬ ExecFinite AnyExec [] (.int .u8 42) [] [] := by
+  intro h
+  exact h .accept rfl
+
+/-- Planted (law `ConcreteSpec.exec_deterministic`, case `return`, subject `ConcreteSpec.Exec`, mutant `ConcreteSpec.Evidence.AnyExec`). -/
+example : AnyExec [] [] [] (.int .u8 42) (.exit 42) ∧
+    ¬ ExecUnique AnyExec [] (.int .u8 42) [] [] (.exit 42) := by
+  refine ⟨.accept, ?_⟩
+  intro h
+  have bad := h (o₂ := .outOfFuel) .accept
+  cases bad
+
+/-! Specializing the quantified laws recovers every original closed derivation. These
+corollaries preserve the concrete accepted traces; the full Instances above test the contracts. -/
+
+example := @exec_ne_outOfFuel [] (.int .u8 42) [] [] (.exit 42) .ret
+
+example := @exec_deterministic [] (.int .u8 42) [] [] (.exit 42) .ret (.exit 42) .ret
+
+end Evidence
 
 end ConcreteSpec
