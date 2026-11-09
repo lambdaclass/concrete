@@ -399,6 +399,8 @@ inductive Transfer where
   | constructor (name : Name) (inputs : Array TermId)
   | projection (name : Name) (field : Nat) (receiver : TermId)
   | binder (type body : TermId)
+  | forallBinder (type body : TermId)
+  | letBind (type value body : TermId)
   | branch (recursor : TemplateKey) (inputs : Array TermId)
   | call (callee : TemplateKey) (inputs : Array TermId)
   | demand (inhabitant : TermId)
@@ -408,6 +410,8 @@ inductive Transfer where
 structure Template where
   key : TemplateKey
   root : TermId
+  declaredType : TermId := 0
+  rules : Array (Name × Nat × TermId) := #[]
   transfers : Array Transfer := #[]
   dependencies : Array TemplateKey := #[]
   deriving Inhabited
@@ -422,6 +426,12 @@ structure Query where
   mode : Mode
   deriving BEq, Hashable, Inhabited
 
+inductive Value where
+  | closure (node : TermId) (bvars : Array Input) (hypothetical : Array Input)
+  | partialCall (key : TemplateKey) (args : Array Input) (hypothetical : Array Input)
+  | ctor (name : Name) (numParams : Nat) (args : Array Input)
+  deriving Inhabited
+
 structure Graph where
   terms : Array Expr := #[]
   termIds : Std.HashMap Expr TermId := {}
@@ -429,6 +439,7 @@ structure Graph where
   originIds : Std.HashMap Origin OriginId := {}
   templates : Std.HashMap TemplateKey Template := {}
   nodes : Std.HashMap TermId Transfer := {}
+  values : Std.HashMap TermId Value := {}
   deriving Inhabited
 
 /-- Interning does not beta-expand or open binders. Expression equality includes
@@ -455,86 +466,6 @@ inductive Work where
   | certificate (query : Query) (certificate : Certificate)
   | invariant (component : Array TemplateKey)
   deriving Inhabited
-
-structure SolverState where
-  graph : Graph := {}
-  remaining : Nat := 20000
-  worklist : Array Work := #[]
-  worklistSteps : Nat := 0
-  queryCount : Nat := 0
-  componentCount : Nat := 0
-  certificates : Nat := 0
-  deriving Inhabited
-
-abbrev Solver := StateRefT SolverState MetaM
-
-def charge : Solver Unit := do
-  let s ← get
-  if s.remaining == 0 then throwError "false-discharge-budget"
-  set { s with remaining := s.remaining - 1, worklistSteps := s.worklistSteps + 1 }
-
-def term (e : Expr) : Solver TermId := do
-  let (id, graph) := internTerm e |>.run (← get).graph
-  modify fun s => { s with graph }
-  return id
-
-def enqueue (work : Work) : Solver Unit :=
-  modify fun s => { s with worklist := s.worklist.push work }
-
-/-- Edges retain formal expressions. Constructing a callee does not instantiate
-    its body at this call and cannot recursively grow an expression context. -/
-def compileNode (id : TermId) : Solver Unit := do
-  if (← get).graph.nodes.contains id then return
-  let e := (← get).graph.terms[id]!
-  let mut children : Array Expr := #[]
-  let transfer ← match e with
-    | .app .. => do
-      let fn := e.getAppFn'
-      let args := e.getAppArgs
-      let inputs ← args.mapM term
-      children := args
-      match fn with
-      | .const name levels =>
-        let key := { name, levels, mode := .transfer : TemplateKey }
-        if (← getMatcherInfo? name).isSome then
-          pure (.branch key inputs)
-        else
-          match (← getEnv).find? name with
-          | some (.ctorInfo _) => pure (.constructor name inputs)
-          | some (.recInfo _) => pure (.branch key inputs)
-          | _ => pure (.call key inputs)
-      | _ =>
-        children := children.push fn
-        pure (.application (← term fn) inputs)
-    | .lam _ type body _ | .forallE _ type body _ => do
-      children := #[type, body]
-      pure (.binder (← term type) (← term body))
-    | .letE _ type value body _ => do
-      children := #[type, value, body]
-      pure (.application (← term (.lam `_ type body .default)) #[← term value])
-    | .proj name field receiver => do
-      children := #[receiver]
-      pure (.projection name field (← term receiver))
-    | .mdata _ body => do
-      children := #[body]
-      pure (.result (← term body))
-    | .mvar _ => pure (.unresolved id "uninstantiated-metavariable")
-    | _ => pure (.result id)
-  modify fun s => { s with graph.nodes := s.graph.nodes.insert id transfer }
-  for child in children do
-    let childId ← term child
-    unless (← get).graph.nodes.contains childId do enqueue (.term childId)
-
-/-- Templates are raw closed declaration bodies at their actual universes.
-    Dependencies come from term structure, with no pretty-name or library filter. -/
-def compileTemplate (key : TemplateKey) : Solver Unit := do
-  if (← get).graph.templates.contains key then return
-  let ci ← getConstInfo key.name
-  let body := (ci.value? (allowOpaque := true)).getD (mkConst key.name key.levels)
-  let root ← term (body.instantiateLevelParams ci.levelParams key.levels)
-  let template : Template := { key, root }
-  modify fun s => { s with graph.templates := s.graph.templates.insert key template }
-  enqueue (.term root)
 
 /-- Identity of the retained consumer, even when dependency nodes are shared. -/
 structure CertificateEntry where
@@ -566,18 +497,123 @@ inductive CertificateResult where
   | rejectedSuppliedContradiction (supplier : CertificateSupplier)
   | incomplete (finding : Finding)
 
-structure DependencyState where
-  pending : Std.HashSet (Expr × Array FVarId) := {}
-  completed : Std.HashSet (Expr × Array FVarId) := {}
+structure SolverState where
+  graph : Graph := {}
+  remaining : Nat := 20000
+  worklist : Array Work := #[]
+  worklistSteps : Nat := 0
+  queryCount : Nat := 0
+  componentCount : Nat := 0
+  certificates : Nat := 0
+  pendingQueries : Std.HashSet Query := {}
+  completedQueries : Std.HashMap Query Input := {}
+  validatedTypes : Std.HashSet TemplateKey := {}
+  validatedClosures : Std.HashSet (TermId × Array OriginId) := {}
   transfers : Array Input := #[]
-  hypothetical : Array Input := #[]
   structuralExclusions : Array Input := #[]
+  deriving Inhabited
 
-abbrev Dependencies := ReaderT CertificateEntry (StateRefT DependencyState Solver)
+abbrev Solver := StateRefT SolverState MetaM
+
+def charge : Solver Unit := do
+  let s ← get
+  if s.remaining == 0 then throwError "false-discharge-budget"
+  set { s with remaining := s.remaining - 1, worklistSteps := s.worklistSteps + 1 }
+
+def term (e : Expr) : Solver TermId := do
+  let (id, graph) := internTerm e |>.run (← get).graph
+  modify fun s => { s with graph }
+  return id
+
+def origin (o : Origin) : Solver OriginId := do
+  let (id, graph) := internOrigin o |>.run (← get).graph
+  modify fun s => { s with graph }
+  return id
+
+def enqueue (work : Work) : Solver Unit :=
+  modify fun s => { s with worklist := s.worklist.push work }
+
+def withCanonicalBinder (scopeId : TermId) (domTermId : TermId) (orig : OriginId)
+    (k : Input → Solver α) : Solver α := do
+  let fId : FVarId := { name := ((`_n2_var).num scopeId).num domTermId }
+  let xExpr := Expr.fvar fId
+  let xTermId ← term xExpr
+  let xInput : Input := { term := xTermId, type := domTermId, origin := orig }
+  let domExpr := (← get).graph.terms[domTermId]!
+  let lctx ← getLCtx
+  let lctx' := if lctx.contains fId then lctx else lctx.mkLocalDecl fId (`x) domExpr .default
+  let insts ← getLocalInstances
+  withLCtx lctx' insts (k xInput)
+
+/-- Edges retain formal expressions. Constructing a callee does not instantiate
+    its body at this call and cannot recursively grow an expression context. -/
+def compileNode (id : TermId) : Solver Unit := do
+  if (← get).graph.nodes.contains id then return
+  let e := cleanSpine (← get).graph.terms[id]!
+  let mut children : Array Expr := #[]
+  let transfer ← match e with
+    | .app .. | .const .. => do
+      let fn := e.getAppFn'
+      let args := e.getAppArgs
+      let inputs ← args.mapM term
+      children := args
+      match fn with
+      | .const name levels =>
+        let key := { name, levels, mode := .transfer : TemplateKey }
+        if (← getMatcherInfo? name).isSome then
+          pure (.branch key inputs)
+        else
+          match (← getEnv).find? name with
+          | some (.ctorInfo _) => pure (.constructor name inputs)
+          | some (.recInfo _) => pure (.branch key inputs)
+          | _ => pure (.call key inputs)
+      | _ =>
+        children := children.push fn
+        pure (.application (← term fn) inputs)
+    | .lam _ type body _ => do
+      children := #[type, body]
+      pure (.binder (← term type) (← term body))
+    | .forallE _ type body _ => do
+      children := #[type, body]
+      pure (.forallBinder (← term type) (← term body))
+    | .letE _ type value body _ => do
+      children := #[type, value, body]
+      pure (.letBind (← term type) (← term value) (← term body))
+    | .proj name field receiver => do
+      children := #[receiver]
+      pure (.projection name field (← term receiver))
+    | .mdata _ body => do
+      children := #[body]
+      pure (.result (← term body))
+    | .mvar _ => pure (.unresolved id "uninstantiated-metavariable")
+    | _ => pure (.result id)
+  modify fun s => { s with graph.nodes := s.graph.nodes.insert id transfer }
+  for child in children do
+    let childId ← term child
+    unless (← get).graph.nodes.contains childId do enqueue (.term childId)
+
+/-- Templates are raw closed declaration bodies at their actual universes.
+    Dependencies come from term structure, with no pretty-name or library filter. -/
+def compileTemplate (key : TemplateKey) : Solver Unit := do
+  if (← get).graph.templates.contains key then return
+  let ci ← getConstInfo key.name
+  let declaredType ← term (ci.type.instantiateLevelParams ci.levelParams key.levels)
+  let body := (ci.value? (allowOpaque := true)).getD (mkConst key.name key.levels)
+  let root ← term (body.instantiateLevelParams ci.levelParams key.levels)
+  let mut rules : Array (Name × Nat × TermId) := #[]
+  if let .recInfo r := ci then
+    for rule in r.rules do
+      let rhsId ← term (rule.rhs.instantiateLevelParams ci.levelParams key.levels)
+      rules := rules.push (rule.ctor, rule.nfields, rhsId)
+      unless (← get).graph.nodes.contains rhsId do enqueue (.term rhsId)
+  let template : Template := { key, root, declaredType, rules }
+  modify fun s => { s with graph.templates := s.graph.templates.insert key template }
+  unless (← get).graph.nodes.contains declaredType do enqueue (.term declaredType)
+  unless (← get).graph.nodes.contains root do enqueue (.term root)
 
 /-- Drain only construction work appended by this validation; the enclosing
     solver's earlier obligations remain queued. Construction shares charge. -/
-def certificateConstruction (base : Nat) : Solver Unit := do
+def drainConstruction (base : Nat) : Solver Unit := do
   while (← get).worklist.size > base do
     let work := (← get).worklist.back!
     modify fun s => { s with worklist := s.worklist.pop }
@@ -587,127 +623,467 @@ def certificateConstruction (base : Nat) : Solver Unit := do
     | .template key => compileTemplate key
     | _ => throwError "unexpected-certificate-construction-work"
 
-/-- Trace the actual application, not an opened declaration with fresh proof
-    parameters. This phase never calls refutableContext/simp or consumes a pending
-    exclusion, so an impossible producer cannot erase its own prerequisite.
-    Types are expressions too, and are checked through this same traversal. -/
-partial def certificateDependency (e : Expr) : Dependencies (Option CertificateSupplier) := do
+def ensureNode (id : TermId) : Solver Transfer := do
+  if let some tr := (← get).graph.nodes[id]? then return tr
+  let base := (← get).worklist.size
+  enqueue (.term id)
+  drainConstruction base
+  return (← get).graph.nodes[id]!
+
+def ensureTemplate (key : TemplateKey) : Solver Template := do
+  if let some tmpl := (← get).graph.templates[key]? then return tmpl
+  let base := (← get).worklist.size
+  enqueue (.template key)
+  drainConstruction base
+  return (← get).graph.templates[key]!
+
+def instantiateExpr (id : TermId) (bvars : Array Input) : Solver Expr := do
+  let g := (← get).graph
+  let raw := g.terms[id]!
+  if !raw.hasLooseBVars || bvars.isEmpty then return raw
+  let substExprs := bvars.map (fun inp => g.terms[inp.term]!)
+  return raw.instantiateRev substExprs
+
+def mkInput (e : Expr) (orig : OriginId) : Solver Input := do
   let e := cleanSpine e
-  let key := (e, (collectFVars {} e).fvarIds)
-  if (← get).completed.contains key then return none
-  if (← get).pending.contains key then throwError "cyclic-certificate-dependency"
-  modify fun s => { s with pending := s.pending.insert key }
-  liftM (m := Solver) charge
-  let id ← liftM (m := Solver) (term e)
-  -- Use the slice-1 node identities and construction, charged to the same state.
-  let base := (← liftM (m := Solver) get).worklist.size
-  liftM (m := Solver) (enqueue (.term id))
-  liftM (m := Solver) (certificateConstruction base)
-  let finish : Dependencies (Option CertificateSupplier) := do
-    modify fun s => { s with pending := s.pending.erase key, completed := s.completed.insert key }
-    return none
-  if e.hasMVar then throwError "uninstantiated-certificate-metavariable"
-  if e.hasLooseBVars then throwError "unbound-certificate-variable"
-  -- inferType does not unfold or replace the producing expression.
-  unless e.isSort do
-    if let some bad ← certificateDependency (← inferType e) then return some bad
-  match e with
-  | .app .. | .const .. =>
-    let fn := e.getAppFn'
-    let args := e.getAppArgs
-    -- Arguments retain their actual origins, including proof and data arguments.
-    for arg in args do
-      if let some bad ← certificateDependency arg then return some bad
-    if let .const name levels := fn then
-      let ci ← getConstInfo name
-      -- Preserve domains erased from the application's result type. Earlier
-      -- parameters are substituted with actual arguments before later domains
-      -- are inspected; supplied proofs never become hypothetical binders.
-      let mut declared := ci.type.instantiateLevelParams ci.levelParams levels
-      for arg in args do
-        unless declared.isForall do
-          if let some bad ← certificateDependency declared then return some bad
-          declared ← whnfD declared
-        let .forallE _ domain body _ := declared
-          | throwError "unsupported-certificate-function-type {name}"
-        if let some bad ← certificateDependency domain then return some bad
-        declared := body.instantiate1 arg
-      if let some bad ← certificateDependency declared then return some bad
-      let type ← liftM (m := Solver) (term (← inferType e))
-      let (origin, graph) := internOrigin (.supplied (← readThe CertificateEntry).instanceName 0 id)
-        |>.run (← liftM (m := Solver) get).graph
-      liftM (m := Solver) (modify fun s => { s with graph })
-      let input : Input := { term := id, type, origin }
-      modify fun s => { s with transfers := s.transfers.push input }
-      let template : TemplateKey := { name, levels, mode := .transfer }
-      let base := (← liftM (m := Solver) get).worklist.size
-      liftM (m := Solver) (enqueue (.template template))
-      liftM (m := Solver) (certificateConstruction base)
-      if let some value := ci.value? (allowOpaque := true) then
-        let applied := (mkAppN (value.instantiateLevelParams ci.levelParams levels) args).headBeta
-        if let some bad ← certificateDependency applied then return some bad
-      else
-        match ci with
-        | .axiomInfo _ | .opaqueInfo _ =>
-          if ← refutableType (← inferType e) then
-            return some { declaration := name, input }
-          throwError "unavailable-certificate-transfer {name}"
-        | .recInfo _ =>
-          -- All motives, minors and actual inputs were validated above. The
-          -- kernel recursor metadata supplies its structural transfer rule;
-          -- reduction may additionally expose an instantiated transfer.
-          let reduced ← whnfD e
-          if reduced != e then
-            if let some bad ← certificateDependency reduced then return some bad
-        | .quotInfo _ => throwError "unresolved-certificate-quotient {name}"
-        | _ => pure () -- inductive and constructor metadata are structural rules
+  let id ← term e
+  let ty ← if e.hasLooseBVars then pure (mkSort .zero) else inferType e
+  let tyId ← term (cleanSpine ty)
+  return { term := id, type := tyId, origin := orig }
+
+def recordValue (id : TermId) (v : Value) : Solver Unit :=
+  modify fun s => { s with graph.values := s.graph.values.insert id v }
+
+def mergeHypothetical (xs ys : Array Input) : Array Input := Id.run do
+  let mut out := xs
+  for y in ys do
+    unless out.contains y do
+      out := out.push y
+  return out
+
+partial def hasSuppliedOrigin (g : Graph) (oid : OriginId) (seen : Std.HashSet OriginId := {}) : Bool :=
+  if seen.contains oid then false
+  else
+    let seen := seen.insert oid
+    match g.origins[oid]? with
+    | some (.supplied ..) => true
+    | some (.field p _) => hasSuppliedOrigin g p seen
+    | some (.substitution _ ins) => ins.any (fun i => hasSuppliedOrigin g i seen)
+    | _ => false
+
+partial def hasHypotheticalOrigin (g : Graph) (oid : OriginId) (seen : Std.HashSet OriginId := {}) : Bool :=
+  if seen.contains oid then false
+  else
+    let seen := seen.insert oid
+    match g.origins[oid]? with
+    | some (.hypothetical ..) => true
+    | some (.field p _) => hasHypotheticalOrigin g p seen
+    | some (.substitution _ ins) => ins.any (fun i => hasHypotheticalOrigin g i seen)
+    | _ => false
+
+partial def isDirectHypotheticalOrigin (g : Graph) (oid : OriginId) : Bool :=
+  match g.origins[oid]? with
+  | some (.hypothetical ..) => true
+  | some (.field p _) => isDirectHypotheticalOrigin g p
+  | _ => false
+
+mutual
+partial def applyValue (entry : CertificateEntry) (fnInput : Input) (args : Array Input)
+    (hypothetical : Array Input) (mode : Mode) : Solver (Except CertificateSupplier Input) := do
+  if args.isEmpty then
+    if mode == .body then
+      if let some (.closure nodeId savedBvars savedHyp) := (← get).graph.values[fnInput.term]? then
+        let cKey := (fnInput.term, savedBvars.map (·.origin))
+        if (← get).validatedClosures.contains cKey then
+          return .ok fnInput
+        modify fun s => { s with validatedClosures := s.validatedClosures.insert cKey }
+        return ← evalNode entry nodeId savedBvars #[] (mergeHypothetical savedHyp hypothetical) .body
+    return .ok fnInput
+  match (← get).graph.values[fnInput.term]? with
+  | some (.closure nodeId savedBvars savedHyp) =>
+    evalNode entry nodeId savedBvars args (mergeHypothetical savedHyp hypothetical) mode
+  | some (.partialCall key savedArgs savedHyp) =>
+    evalCall entry key (savedArgs ++ args) (mergeHypothetical savedHyp hypothetical) mode
+  | _ =>
+    let g := (← get).graph
+    let fnExpr := g.terms[fnInput.term]!
+    let argExprs := args.map (fun a => g.terms[a.term]!)
+    let appExpr := mkAppN fnExpr argExprs
+    let reduced := appExpr.headBeta
+    if reduced != appExpr then
+      let redId ← term reduced
+      evalNode entry redId #[] #[] hypothetical mode
     else
-      let reduced := e.headBeta
-      if reduced != e then
-        if let some bad ← certificateDependency reduced then return some bad
+      if mode != .invariant then
+        for a in args do
+          if (← get).graph.values[a.term]? matches some (.closure ..) then
+            if let .error sup ← applyValue entry a #[] hypothetical .body then
+              return .error sup
+      let appId ← term appExpr
+      let o ← origin (.substitution appId (#[fnInput.origin] ++ args.map (·.origin)))
+      let inp ← mkInput appExpr o
+      return .ok inp
+
+partial def openMinorFields (entry : CertificateEntry) (minorInput : Input) (majorInput : Input)
+    (extraArgs : Array Input) (nfields : Nat) (idx : Nat) (hypothetical : Array Input)
+    (mode : Mode) : Solver (Except CertificateSupplier Input) := do
+  if idx >= nfields then
+    applyValue entry minorInput extraArgs hypothetical (if mode == .invariant then .invariant else .body)
+  else
+    let mExpr := (← get).graph.terms[minorInput.term]!
+    let mTy ← whnfD (← inferType mExpr)
+    if let .forallE _ dom _ _ := mTy then
+      let domId ← term (cleanSpine dom)
+      let fOrig ← origin (.field majorInput.origin idx)
+      let scopeId := (minorInput.term + 1) * 4096 + idx + 1
+      withCanonicalBinder scopeId domId fOrig fun xInput => do
+        match ← applyValue entry minorInput #[xInput] (hypothetical.push xInput) .closure with
+        | .error sup => return .error sup
+        | .ok nextMinor =>
+          openMinorFields entry nextMinor majorInput extraArgs nfields (idx + 1) (hypothetical.push xInput) mode
+    else
+      applyValue entry minorInput extraArgs hypothetical (if mode == .invariant then .invariant else .body)
+
+partial def evalCall (entry : CertificateEntry) (key : TemplateKey) (actualArgs : Array Input)
+    (hypothetical : Array Input) (mode : Mode) : Solver (Except CertificateSupplier Input) := do
+  let gInit := (← get).graph
+  let mut argFVars : FVarIdSet := {}
+  for a in actualArgs do
+    let e := gInit.terms[a.term]!
+    if e.hasFVar then
+      argFVars := (collectFVars {} e).fvarIds.foldl (fun s f => s.insert f) argFVars
+  let queryHyp := hypothetical.filter fun inp =>
+    match gInit.terms[inp.term]! with
+    | .fvar f => argFVars.contains f
+    | _ => false
+  let q : Query := { template := key, inputs := actualArgs, guards := entry.query.guards, hypothetical := queryHyp, mode }
+  if let some cached := (← get).completedQueries[q]? then
+    return .ok cached
+  if (← get).pendingQueries.contains q then
+    throwError "cyclic-certificate-dependency"
+  enqueue (.query q)
+  modify fun s => {
+    s with
+      worklist := s.worklist.pop,
+      queryCount := s.queryCount + 1,
+      pendingQueries := s.pendingQueries.insert q
+  }
+  charge
+  let tmpl ← ensureTemplate key
+  let ci ← getConstInfo key.name
+  let g := (← get).graph
+  let argExprs := actualArgs.map (fun a => g.terms[a.term]!)
+  let appExpr := mkAppN (mkConst key.name key.levels) argExprs
+  let appId ← term appExpr
+  let callOrigin ← origin (.substitution appId (actualArgs.map (·.origin)))
+  let callInput ← mkInput appExpr callOrigin
+  let hasVal := (ci.value? (allowOpaque := true)).isSome
+  let skipSymbolicNonProof ← if mode == .invariant && !queryHyp.isEmpty then
+      pure (!(← Meta.isProof appExpr))
+    else
+      pure false
+  let res : Except CertificateSupplier Input ← match hasVal with
+    | true => do
+      let rootTransfer ← ensureNode tmpl.root
+      let isLam := match rootTransfer with | .binder .. => true | _ => false
+      if skipSymbolicNonProof then
+        modify fun s => { s with transfers := s.transfers.push callInput }
+        pure (.ok callInput)
+      else if actualArgs.isEmpty && mode == .closure && isLam then
+        modify fun s => { s with transfers := s.transfers.push callInput }
+        recordValue callInput.term (.partialCall key #[] hypothetical)
+        pure (.ok callInput)
       else
-        if let some bad ← certificateDependency fn then return some bad
-  | .lam name type body bi | .forallE name type body bi =>
-    if let some bad ← certificateDependency type then return some bad
-    let bad ← withLocalDecl name bi type fun x => do
-      let id ← liftM (m := Solver) (term x)
-      let typeId ← liftM (m := Solver) (term type)
-      let (origin, graph) := internOrigin (.hypothetical id id)
-        |>.run (← liftM (m := Solver) get).graph
-      liftM (m := Solver) (modify fun s => { s with graph })
-      let input : Input := { term := id, type := typeId, origin }
-      let previous := (← get).hypothetical
-      modify fun s => { s with hypothetical := previous.push input }
-      -- A direct empty-inductive assumption is a finite structural refutation,
-      -- independent of this candidate and of every global proof producer.
-      -- No simp/decide-generated exclusion is assumed here.
-      let empty ← match type.getAppFn' with
-        | .const n _ => pure <| match (← getEnv).find? n with
-          | some (.inductInfo info) => info.ctors.isEmpty
-          | _ => false
-        | _ => pure false
-      let bad ← if empty then do
-          modify fun s => { s with structuralExclusions := s.structuralExclusions.push input }
-          pure none
-        else certificateDependency (body.instantiate1 x)
-      modify fun s => { s with hypothetical := previous }
-      return bad
-    if bad.isSome then return bad
-  | .letE _ type value body _ =>
-    if let some bad ← certificateDependency type then return some bad
-    if let some bad ← certificateDependency value then return some bad
-    if let some bad ← certificateDependency (body.instantiate1 value) then return some bad
-  | .proj _ _ receiver =>
-    if let some bad ← certificateDependency receiver then return some bad
-  | .mdata _ body =>
-    if let some bad ← certificateDependency body then return some bad
-  | .fvar _ =>
-    let graph := (← liftM (m := Solver) get).graph
-    unless (← get).hypothetical.any (fun input => graph.terms[input.term]? == some e) do
-      throwError "unpermitted-certificate-assumption"
-  | .sort _ | .lit _ => pure ()
-  | _ => throwError "unsupported-certificate-expression"
-  finish
+        match ← evalNode entry tmpl.root #[] actualArgs hypothetical mode with
+        | .ok bodyOut =>
+          let mut combOrigins := #[bodyOut.origin]
+          for a in actualArgs do
+            unless combOrigins.contains a.origin do
+              combOrigins := combOrigins.push a.origin
+          let outOrigin ← origin (.substitution appId combOrigins)
+          let outInput : Input := { bodyOut with origin := outOrigin }
+          modify fun s => { s with transfers := s.transfers.push outInput }
+          pure (.ok outInput)
+        | .error sup =>
+          let mut combOrigins := #[sup.input.origin]
+          for a in actualArgs do
+            unless combOrigins.contains a.origin do
+              combOrigins := combOrigins.push a.origin
+          let errOrigin ← origin (.substitution appId combOrigins)
+          pure (.error { sup with input := { sup.input with origin := errOrigin } })
+    | false => do
+      match ci with
+      | .axiomInfo _ | .opaqueInfo _ =>
+        if mode != .invariant then
+          for a in actualArgs do
+            if (← get).graph.values[a.term]? matches some (.closure ..) then
+              if let .error sup ← applyValue entry a #[] hypothetical .body then
+                return .error sup
+        let gNow := (← get).graph
+        let mut hasProofHyp := false
+        let mut allProofsHyp := true
+        let mut anySupplied := false
+        for a in actualArgs do
+          if hasSuppliedOrigin gNow a.origin then
+            anySupplied := true
+          if ← Meta.isProof gNow.terms[a.term]! then
+            if hasHypotheticalOrigin gNow a.origin && !hasSuppliedOrigin gNow a.origin then
+              hasProofHyp := true
+            else
+              allProofsHyp := false
+        let purelyHypothetical := hasProofHyp && allProofsHyp && !anySupplied
+        let isRefutable ← refutableType (← inferType appExpr)
+        if isRefutable && !purelyHypothetical then
+          let baseSup ← origin (.supplied entry.instanceName 0 appId)
+          let supOrigin ← if actualArgs.isEmpty then
+              pure baseSup
+            else
+              origin (.substitution appId (#[baseSup] ++ actualArgs.map (·.origin)))
+          let supInput : Input := { callInput with origin := supOrigin }
+          modify fun s => { s with transfers := s.transfers.push supInput }
+          pure (.error { declaration := key.name, input := supInput })
+        else
+          modify fun s => { s with transfers := s.transfers.push callInput }
+          throwError "unavailable-certificate-transfer {key.name}"
+      | .ctorInfo c =>
+        modify fun s => { s with transfers := s.transfers.push callInput }
+        recordValue callInput.term (.ctor key.name c.numParams actualArgs)
+        pure (.ok callInput)
+      | .recInfo r =>
+        modify fun s => { s with transfers := s.transfers.push callInput }
+        let majorIdx := r.getMajorIdx
+        if skipSymbolicNonProof then
+          pure (.ok callInput)
+        else if let some majorInput := actualArgs[majorIdx]? then
+          if r.rules.isEmpty then
+            let gNow := (← get).graph
+            if isDirectHypotheticalOrigin gNow majorInput.origin then
+              modify fun s => {
+                s with structuralExclusions :=
+                  if s.structuralExclusions.contains majorInput then s.structuralExclusions
+                  else s.structuralExclusions.push majorInput
+              }
+            pure (.ok callInput)
+          else
+            let mut matchedRule : Option (Name × Nat × TermId × Array Input) := none
+            if let some (.ctor cName numParams cArgs) := (← get).graph.values[majorInput.term]? then
+              if let some (_, nfields, rhsId) := tmpl.rules.find? (fun (cn, _, _) => cn == cName) then
+                if cArgs.size >= numParams + nfields then
+                  matchedRule := some (cName, nfields, rhsId, cArgs.extract numParams (numParams + nfields))
+            if matchedRule.isNone then
+              let majorExpr := (← get).graph.terms[majorInput.term]!
+              let mut redMajor ← whnfD majorExpr
+              if let .lit (.natVal n) := redMajor then
+                redMajor := if n == 0 then mkConst ``Nat.zero else mkApp (mkConst ``Nat.succ) (mkNatLit (n - 1))
+              if let .const cName _ := redMajor.getAppFn' then
+                if let some (.ctorInfo cInfo) := (← getEnv).find? cName then
+                  if let some (_, nfields, rhsId) := tmpl.rules.find? (fun (cn, _, _) => cn == cName) then
+                    let rawArgs := redMajor.getAppArgs
+                    if rawArgs.size >= cInfo.numParams + nfields then
+                      let mut fInputs : Array Input := #[]
+                      for idx in [:nfields] do
+                        let fExpr := rawArgs[cInfo.numParams + idx]!
+                        let fO ← origin (.field majorInput.origin idx)
+                        fInputs := fInputs.push (← mkInput fExpr fO)
+                      matchedRule := some (cName, nfields, rhsId, fInputs)
+            if let some (_, _, rhsId, fieldInputs) := matchedRule then
+              let paramsAndMinors := actualArgs.extract 0 (r.numParams + r.numMotives + r.numMinors)
+              let extraArgs := if actualArgs.size > majorIdx + 1 then actualArgs.extract (majorIdx + 1) actualArgs.size else #[]
+              let rhsArgs := paramsAndMinors ++ fieldInputs ++ extraArgs
+              evalNode entry rhsId #[] rhsArgs hypothetical mode
+            else
+              let minorStart := r.numParams + r.numMotives
+              let extraArgs := if actualArgs.size > majorIdx + 1 then actualArgs.extract (majorIdx + 1) actualArgs.size else #[]
+              let mut minorErr : Option CertificateSupplier := none
+              for (_, nfields, _) in tmpl.rules, idx in [:r.numMinors] do
+                if minorErr.isNone then
+                  if let some minorInput := actualArgs[minorStart + idx]? then
+                    match ← openMinorFields entry minorInput majorInput extraArgs nfields 0 hypothetical mode with
+                    | .error sup => minorErr := some sup
+                    | .ok _ => pure ()
+              if let some sup := minorErr then pure (.error sup) else pure (.ok callInput)
+        else
+          recordValue callInput.term (.partialCall key actualArgs hypothetical)
+          pure (.ok callInput)
+      | .quotInfo qVal =>
+        if (qVal.kind matches .type | .ctor) || (mode == .invariant && !(← Meta.isProof appExpr)) then
+          pure (.ok callInput)
+        else
+          for a in actualArgs do
+            if (← get).graph.values[a.term]? matches some (.closure ..) then
+              if let .error sup ← applyValue entry a #[] hypothetical .body then
+                return .error sup
+          throwError "unresolved-certificate-quotient {key.name}"
+      | _ => pure (.ok callInput)
+  modify fun s => { s with pendingQueries := s.pendingQueries.erase q }
+  match res with
+  | .ok out =>
+    modify fun s => { s with completedQueries := s.completedQueries.insert q out }
+    return .ok out
+  | .error sup => return .error sup
+
+partial def evalNode (entry : CertificateEntry) (id : TermId) (bvars : Array Input)
+    (args : Array Input) (hypothetical : Array Input) (mode : Mode) :
+    Solver (Except CertificateSupplier Input) := do
+  charge
+  let transfer ← ensureNode id
+  match transfer with
+  | .unresolved _ reason => throwError reason
+  | .demand inh => evalNode entry inh bvars args hypothetical mode
+  | .result termId =>
+    let raw := (← get).graph.terms[termId]!
+    match raw with
+    | .bvar i =>
+      let some bound := bvars[bvars.size - 1 - i]? | throwError "unbound-certificate-variable"
+      applyValue entry bound args hypothetical mode
+    | .fvar _ =>
+      let g := (← get).graph
+      let some found := hypothetical.find? (fun inp => g.terms[inp.term]? == some raw)
+        | throwError "unpermitted-certificate-assumption"
+      applyValue entry found args hypothetical mode
+    | .lit (.natVal n) =>
+      let o ← origin (.substitution termId #[])
+      let inp ← mkInput raw o
+      if n == 0 then
+        recordValue inp.term (.ctor ``Nat.zero 0 #[])
+      else
+        let predExpr := mkNatLit (n - 1)
+        let predInp ← mkInput predExpr o
+        recordValue inp.term (.ctor ``Nat.succ 0 #[predInp])
+      applyValue entry inp args hypothetical mode
+    | .sort _ | .lit _ =>
+      let o ← origin (.substitution termId #[])
+      let inp ← mkInput raw o
+      applyValue entry inp args hypothetical mode
+    | _ =>
+      if raw == (← get).graph.terms[id]! then
+        throwError "unsupported-certificate-expression"
+      else
+        evalNode entry termId bvars args hypothetical mode
+  | .letBind typeId valueId bodyId =>
+    match ← evalNode entry typeId bvars #[] hypothetical .invariant with
+    | .error sup => return .error sup
+    | .ok _ =>
+      match ← evalNode entry valueId bvars #[] hypothetical .closure with
+      | .error sup => return .error sup
+      | .ok valInput =>
+        evalNode entry bodyId (bvars.push valInput) args hypothetical mode
+  | .forallBinder typeId bodyId =>
+    let usedBvars := if (← get).graph.terms[id]!.hasLooseBVars then bvars else #[]
+    match ← evalNode entry typeId usedBvars #[] hypothetical .invariant with
+    | .error sup => return .error sup
+    | .ok domInp =>
+      let rawPi ← instantiateExpr id usedBvars
+      let o ← origin (.hypothetical id id)
+      withCanonicalBinder id domInp.term o fun xInput => do
+        match ← evalNode entry bodyId (usedBvars.push xInput) #[] (hypothetical.push xInput) .invariant with
+        | .error sup => return .error sup
+        | .ok _ =>
+          let piO ← origin (.substitution id (usedBvars.map (·.origin)))
+          let piInp ← mkInput rawPi piO
+          return .ok piInp
+  | .binder typeId bodyId =>
+    let usedBvars := if (← get).graph.terms[id]!.hasLooseBVars then bvars else #[]
+    match ← evalNode entry typeId usedBvars #[] hypothetical .invariant with
+    | .error sup => return .error sup
+    | .ok domInp =>
+      if !args.isEmpty then
+        let arg0 := args[0]!
+        let rest := args.extract 1 args.size
+        evalNode entry bodyId (usedBvars.push arg0) rest hypothetical mode
+      else if mode == .body then
+        let o ← origin (.hypothetical id id)
+        withCanonicalBinder id domInp.term o fun xInput => do
+          evalNode entry bodyId (usedBvars.push xInput) #[] (hypothetical.push xInput) .body
+      else
+        let rawLam ← instantiateExpr id usedBvars
+        let gNow := (← get).graph
+        let rawNode := gNow.terms[id]!
+        let lamFVars := (collectFVars {} rawLam).fvarSet
+        let mut capOrigins : Array OriginId := #[]
+        for h : idx in [:usedBvars.size] do
+          if rawNode.hasLooseBVar (usedBvars.size - 1 - idx) then
+            let o := usedBvars[idx].origin
+            unless capOrigins.contains o do
+              capOrigins := capOrigins.push o
+        for inp in hypothetical do
+          if let .fvar f := gNow.terms[inp.term]! then
+            if lamFVars.contains f && !capOrigins.contains inp.origin then
+              capOrigins := capOrigins.push inp.origin
+        let lamO ← origin (.substitution id capOrigins)
+        let lamInp ← mkInput rawLam lamO
+        recordValue lamInp.term (.closure id usedBvars hypothetical)
+        return .ok lamInp
+  | .application fnId inputIds =>
+    let argMode := if mode == .invariant then .invariant else .closure
+    let mut evalInputs : Array Input := #[]
+    for childId in inputIds do
+      match ← evalNode entry childId bvars #[] hypothetical argMode with
+      | .error sup =>
+        let errO ← origin (.substitution id (#[sup.input.origin] ++ evalInputs.map (·.origin)))
+        return .error { sup with input := { sup.input with origin := errO } }
+      | .ok inp => evalInputs := evalInputs.push inp
+    let allArgs := evalInputs ++ args
+    evalNode entry fnId bvars allArgs hypothetical mode
+  | .constructor name inputIds =>
+    let argMode := if mode == .invariant then .invariant else .closure
+    let mut evalInputs : Array Input := #[]
+    for childId in inputIds do
+      match ← evalNode entry childId bvars #[] hypothetical argMode with
+      | .error sup =>
+        let errO ← origin (.substitution id (#[sup.input.origin] ++ evalInputs.map (·.origin)))
+        return .error { sup with input := { sup.input with origin := errO } }
+      | .ok inp => evalInputs := evalInputs.push inp
+    let allArgs := evalInputs ++ args
+    let key : TemplateKey := { name, levels := ((← get).graph.terms[id]!).getAppFn'.constLevels!, mode := .transfer }
+    evalCall entry key allArgs hypothetical mode
+  | .branch key inputIds =>
+    let argMode := if mode == .invariant then .invariant else .closure
+    let mut evalInputs : Array Input := #[]
+    for childId in inputIds do
+      match ← evalNode entry childId bvars #[] hypothetical argMode with
+      | .error sup =>
+        let errO ← origin (.substitution id (#[sup.input.origin] ++ evalInputs.map (·.origin)))
+        return .error { sup with input := { sup.input with origin := errO } }
+      | .ok inp => evalInputs := evalInputs.push inp
+    let allArgs := evalInputs ++ args
+    evalCall entry key allArgs hypothetical mode
+  | .call key inputIds =>
+    let argMode := if mode == .invariant then .invariant else .closure
+    let mut evalInputs : Array Input := #[]
+    for childId in inputIds do
+      match ← evalNode entry childId bvars #[] hypothetical argMode with
+      | .error sup =>
+        let errO ← origin (.substitution id (#[sup.input.origin] ++ evalInputs.map (·.origin)))
+        return .error { sup with input := { sup.input with origin := errO } }
+      | .ok inp => evalInputs := evalInputs.push inp
+    let allArgs := evalInputs ++ args
+    evalCall entry key allArgs hypothetical mode
+  | .projection typeName idx receiverId =>
+    let argMode := if mode == .invariant then .invariant else .closure
+    match ← evalNode entry receiverId bvars #[] hypothetical argMode with
+    | .error sup => return .error sup
+    | .ok recvInput =>
+      let mut fieldInput : Option Input := none
+      if let some (.ctor cName numParams cArgs) := (← get).graph.values[recvInput.term]? then
+        let _ := cName
+        if let some fInp := cArgs[numParams + idx]? then
+          let fO ← origin (.field recvInput.origin idx)
+          fieldInput := some { fInp with origin := fO }
+      if fieldInput.isNone then
+        let recvExpr := (← get).graph.terms[recvInput.term]!
+        let projExpr := Expr.proj typeName idx recvExpr
+        let redProj ← whnfD projExpr
+        let fO ← origin (.field recvInput.origin idx)
+        if redProj != projExpr then
+          let redId ← term redProj
+          match ← evalNode entry redId #[] #[] hypothetical argMode with
+          | .error sup => return .error sup
+          | .ok inp => fieldInput := some { inp with origin := fO }
+        else
+          fieldInput := some (← mkInput projExpr fO)
+      applyValue entry fieldInput.get! args hypothetical mode
+end
 
 /-- Validate a candidate without changing any consumer or admitting it into a
     cache. The caller's SolverState supplies the existing 20,000-work allowance;
@@ -717,8 +1093,10 @@ def validateCertificate (entry : CertificateEntry) (candidate : Certificate) :
   let base := (← get).worklist.size
   enqueue (.certificate entry.query candidate)
   tryCatchRuntimeEx (do
-    -- Take this root from the shared worklist without consuming older work.
-    modify fun s => { s with worklist := s.worklist.pop }
+    let qTransferBody : Query := { entry.query with template := { entry.query.template with mode := .transfer }, hypothetical := #[], mode := .body }
+    let qTransferClosure : Query := { entry.query with template := { entry.query.template with mode := .transfer }, hypothetical := #[], mode := .closure }
+    let initPending : Std.HashSet Query := ({} : Std.HashSet Query).insert entry.query |>.insert qTransferBody |>.insert qTransferClosure
+    modify fun s => { s with worklist := s.worklist.pop, pendingQueries := initPending, transfers := #[], structuralExclusions := #[] }
     charge
     let graph := (← get).graph
     let some proof := graph.terms[candidate.proof]? | throwError "missing-certificate-proof"
@@ -742,23 +1120,35 @@ def validateCertificate (entry : CertificateEntry) (candidate : Certificate) :
     Lean.Meta.check proof
     Lean.Meta.check target
     unless ← isDefEq (← inferType proof) target do throwError "certificate-type-mismatch"
-    let action : Dependencies (Option CertificateSupplier) := do
-      if let some bad ← certificateDependency proof then return some bad
-      if let some bad ← certificateDependency target then return some bad
-      for guard in candidate.guards do
-        for id in [guard.type, guard.lhs, guard.rhs] do
-          let some e := (← liftM (m := Solver) get).graph.terms[id]?
-            | throwError "missing-certificate-guard-term"
-          if let some bad ← certificateDependency e then return some bad
-        let graph := (← liftM (m := Solver) get).graph
-        for id in [guard.lhs, guard.rhs] do
-          unless ← isDefEq (← inferType graph.terms[id]!) graph.terms[guard.type]! do
-            throwError "certificate-guard-type"
-      return none
-    let (bad, dependencies) ← (action.run entry).run { hypothetical := candidate.assumptions }
-    if let some supplier := bad then return .rejectedSuppliedContradiction supplier
-    modify fun s => { s with certificates := s.certificates + 1 }
-    return .admitted { entry, candidate, environment := (← getEnv), transfers := dependencies.transfers, structuralExclusions := dependencies.structuralExclusions, rank := if dependencies.structuralExclusions.isEmpty then 0 else 1 }
+    match ← evalNode entry candidate.proof #[] #[] candidate.assumptions .body with
+    | .error sup => return .rejectedSuppliedContradiction sup
+    | .ok proofOut =>
+      if (← get).graph.values[proofOut.term]? matches some (.closure ..) then
+        if let .error sup ← applyValue entry proofOut #[] candidate.assumptions .body then
+          return .rejectedSuppliedContradiction sup
+      match ← evalNode entry entry.target #[] #[] candidate.assumptions .body with
+      | .error sup => return .rejectedSuppliedContradiction sup
+      | .ok _ =>
+        for guard in candidate.guards do
+          for id in [guard.type, guard.lhs, guard.rhs] do
+            if (← get).graph.terms[id]?.isNone then throwError "missing-certificate-guard-term"
+            match ← evalNode entry id #[] #[] candidate.assumptions .body with
+            | .error sup => return .rejectedSuppliedContradiction sup
+            | .ok _ => pure ()
+          let g := (← get).graph
+          for id in [guard.lhs, guard.rhs] do
+            unless ← isDefEq (← inferType g.terms[id]!) g.terms[guard.type]! do
+              throwError "certificate-guard-type"
+        let s ← get
+        set { s with certificates := s.certificates + 1 }
+        return .admitted {
+          entry,
+          candidate,
+          environment := (← getEnv),
+          transfers := s.transfers,
+          structuralExclusions := s.structuralExclusions,
+          rank := if s.structuralExclusions.isEmpty then 0 else 1
+        }
   ) (fun ex => do
     modify fun s => { s with worklist := s.worklist.extract 0 base }
     return .incomplete { status := "INCOMPLETE", code := "analysis-budget-or-error", name := entry.instanceName, detail := s!"stage=certificate-dependencies law={entry.law} case={entry.caseName} {← ex.toMessageData.toString}" })
