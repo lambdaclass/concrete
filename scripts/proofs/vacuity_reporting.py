@@ -3,6 +3,7 @@
 Faults are injected into a private compiled consumer, never the production checker.
 """
 import functools
+import re
 import tempfile
 from pathlib import Path
 
@@ -35,16 +36,17 @@ end ConcreteSpecControl''')
         with compiled_consumer(consumer_text=consumer.replace(anchor, anchor + injection)) as meta:
             code, report = run(ROOT, '', source, 64, meta_path=meta)
         diagnostics = [row for row in report.splitlines() if row.startswith(('FAIL ', 'INCOMPLETE '))]
+        normalized = {re.sub(r'heartbeats=\d+/', 'heartbeats=MEASURED/', row) for row in diagnostics}
+        expected_reason = {'work-budget': 'false-discharge-budget', 'analysis-error': 'analysis-error', 'heartbeat': 'heartbeats'}[label]
         expected = {
-            f'FAIL missing-instance ConcreteSpecControl.unrelated ',
-            f'INCOMPLETE analysis-budget-or-error {name} stage=instance law=ConcreteSpecControl.growth case=budget {reason}',
+            'FAIL missing-instance ConcreteSpecControl.unrelated ',
+            f'INCOMPLETE analysis-budget-or-error {name} stage=instance law=ConcreteSpecControl.growth case=budget reason={expected_reason} heartbeats=MEASURED/2000000 work=0/20000 projection=0/4096',
+            'INCOMPLETE analysis-budget-or-error ConcreteSpecControl.growth stage=law law=ConcreteSpecControl.growth case=none reason=dependency-incomplete heartbeats=MEASURED/2000000 work=0/20000 projection=0/4096',
         }
-        # Runtime errors contain multiline Lean hints; compare the exact diagnostic
-        # line and exact declaration/case, and forbid any other finding.
+        detail = f'DETAIL analysis-error {name} stage=instance law=ConcreteSpecControl.growth case=budget {reason}'
         if label == 'heartbeat':
-            expected = {row + ', maximum number of heartbeats (0) has been reached' if row.endswith(reason) else row
-                        for row in expected}
-        if code != 2 or set(diagnostics) != expected or not report.endswith('N2 INCOMPLETE\n'):
+            detail += ', maximum number of heartbeats (0) has been reached'
+        if code != 2 or normalized != expected or detail not in report.splitlines() or not report.endswith('N2 INCOMPLETE\n'):
             raise AssertionError(f'{label}: exit={code}\n{report}\nexpected={expected}')
         print(f'PASS reporting {label}: exact named INCOMPLETE and unrelated FAIL retained')
     # A failed Planted analysis belongs to the Planted declaration and its
@@ -57,18 +59,23 @@ end ConcreteSpecControl''')
     instance_line = next(i for i, text in enumerate(fixture.splitlines(), 1) if 'example : 2 < S 2' in text)
     planted_name = f'ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:{planted_line}»'
     instance_name = f'ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:{instance_line}»'
-    anchor = 'def counterexample (law : ConstantInfo) (ic : InstanceCase) (s m : Name) (subjects : Array Name) : MetaM Expr := do\n'
+    anchor = 'def counterexample (law : ConstantInfo) (ic : InstanceCase) (s m : Name) (subjects : Array Name) (budget : Option WorkBudget := none) : MetaM Expr := do\n'
     assert consumer.count(anchor) == 1
     with compiled_consumer(consumer_text=consumer.replace(anchor, anchor +
             '  if ic.key == "two" then throwError "planted-counterexample-error"\n')) as meta:
         code, report = run(ROOT, '', fixture, 64, meta_path=meta)
-    diagnostics = {row for row in report.splitlines() if row.startswith(('FAIL ', 'INCOMPLETE '))}
+    diagnostics = {re.sub(r'heartbeats=\d+/', 'heartbeats=MEASURED/', row)
+                   for row in report.splitlines() if row.startswith(('FAIL ', 'INCOMPLETE '))}
     assert code == 2 and report.endswith('N2 INCOMPLETE\n') and diagnostics == {
         'FAIL missing-instance ConcreteSpecControl.unrelated ',
-        f'INCOMPLETE analysis-budget-or-error {planted_name} stage=planted law=ConcreteSpecControl.growth case=two instance={instance_name} subject=ConcreteSpecControl.S planted-counterexample-error',
+        f'INCOMPLETE analysis-budget-or-error {planted_name} stage=planted law=ConcreteSpecControl.growth case=two reason=analysis-error heartbeats=MEASURED/2000000 work=0/20000 projection=0/4096 instance={instance_name} subject=ConcreteSpecControl.S mutant=ConcreteSpecControl.mutant',
     }, report
+    assert f'DETAIL analysis-error {planted_name} stage=planted law=ConcreteSpecControl.growth case=two planted-counterexample-error' in report.splitlines(), report
     print('PASS reporting planted-error: exact Planted and paired Instance named; unrelated FAIL retained')
+    from vacuity_budget import controls as budget_controls
     with compiled_consumer() as meta:
+        if budget_controls(meta):
+            return 1
         if controls(functools.partial(run, meta_path=meta), ROOT,
                     labels={'positive', 'false-discharge', 'positive-budget-chain'}):
             return 1

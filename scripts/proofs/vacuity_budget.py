@@ -1,0 +1,157 @@
+"""A3 exact-diagnostic controls for the production job scheduler and fuel helpers."""
+import os
+import re
+import tempfile
+from pathlib import Path
+
+from vacuity_driver import command, compiled_consumer
+
+DRIVER = r'''
+import N2Meta
+open Lean Meta Vacuity
+namespace BudgetControls
+def subject : Nat := 1
+def mutant : Nat := 2
+def wrapper : Nat := subject + 1
+theorem nextLaw (n : Nat) : n = n := rfl
+theorem nextBad : True := True.intro
+
+def bad : AnalysisJob := {
+  name := `BudgetControls.nextBad, stage := "instance", law := some `BudgetControls.nextLaw, caseName := "next"
+  action := do
+    IO.println "BODY bad"
+    let env ← getEnv
+    let ci ← getConstInfo `BudgetControls.nextBad
+    discard <| checkInstance env [] #[]
+      { name := `BudgetControls.nextBad, info := ci, doc := "", law := `BudgetControls.nextLaw, key := "next" } #[]
+}
+
+def heavy : AnalysisJob := {
+  name := `BudgetControls.heavy, stage := "instance", law := some `BudgetControls.heavyLaw, caseName := "heavy"
+  action := do
+    let mut state : DischargeState := { budget := (← get).budget }
+    for n in [:20001] do
+      let (_, next) ← (falseDischarge (mkNatLit n)).run state
+      state := next
+}
+
+def heartbeat : AnalysisJob := {
+  name := `BudgetControls.heartbeat, stage := "instance", law := some `BudgetControls.heavyLaw, caseName := "heartbeat"
+  action := do
+    -- Plant a runtime exception inside a Meta primitive; the production job's
+    -- context is still 2,000,000 and must be restored for the following job.
+    withTheReader Core.Context (fun ctx => { ctx with initHeartbeats := 0, maxHeartbeats := 1 }) do
+      discard <| isDefEq (mkConst ``True) (mkConst ``False)
+      Core.checkMaxHeartbeats "planted-meta-heartbeat"
+}
+
+def passJob : AnalysisJob := { name := `BudgetControls.ok, stage := "instance", action := IO.println "BODY ok" }
+def unrun (key : String) : AnalysisJob := {
+  name := Name.str `BudgetControls key, stage := "instance", law := some `BudgetControls.capLaw, caseName := key
+  action := do
+    IO.println s!"BODY-RAN {key}"
+    fail "unexpected-body" (Name.str `BudgetControls key)
+}
+
+def nested (label : String) : AnalysisJob := {
+  name := Name.str `BudgetControls label, stage := label
+  action := do
+    let budget := (← get).budget
+    for _ in [:20001] do
+      match label with
+      | "mentions" => discard <| (mentions (mkConst `BudgetControls.wrapper) `BudgetControls.subject budget).run (0, {})
+      | "mutate" => discard <| (mutate (mkConst `BudgetControls.wrapper) `BudgetControls.subject `BudgetControls.mutant #[] budget).run 0
+      | _ => discard <| withProtected (mkConst `BudgetControls.wrapper) (mkConst `BudgetControls.wrapper) #[`BudgetControls.subject] (fun _ _ => pure true) budget
+}
+
+set_option maxHeartbeats 2000000 in
+#eval show MetaM Unit from do
+  let deadline ← readThe Core.Context
+  let ticks ← IO.mkRef (0 : Nat)
+  let hb ← IO.mkRef (0 : Nat)
+  let jobs : Array AnalysisJob := JOBS
+  let (_, state) ← withTheReader Core.Context (fun ctx => { ctx with maxHeartbeats := 0 }) do
+    (runJobs deadline jobs CAP ticks hb).run {}
+  for f in state.findings do IO.println s!"{f.status} {f.code} {f.name} {f.detail}"
+  if state.findings.any (·.status == "INCOMPLETE") then IO.println "N2 INCOMPLETE"
+  else if state.findings.any (·.status == "FAIL") then IO.println "N2 FAIL"
+  else IO.println "N2 PASS"
+end BudgetControls
+'''
+
+BAD = 'FAIL instance-application BudgetControls.nextBad law=BudgetControls.nextLaw case=next'
+GRAMMAR = re.compile(r'INCOMPLETE analysis-budget-or-error BudgetControls\.(\w+) stage=(\w+) law=([\w.]+) case=(\w+) reason=([\w-]+) heartbeats=(\d+)/2000000 work=(\d+)/20000 projection=(\d+)/4096$')
+
+
+def controls(meta):
+    with tempfile.TemporaryDirectory(prefix='n2-budget-') as temp:
+        work = Path(temp)
+
+        def probe(label, jobs, cap):
+            path = work / 'Budget.lean'
+            path.write_text(DRIVER.replace('JOBS', jobs).replace('CAP', str(cap)))
+            result = command(['lean', path], work, dict(os.environ, LEAN_PATH=str(meta)), seconds=60)
+            if result.returncode:
+                raise AssertionError(f'{label}: infrastructure failure\n{result.stdout}')
+            rows = result.stdout.splitlines()
+            assert not any('BODY-RAN' in r for r in rows), result.stdout
+            incomplete = [r for r in rows if r.startswith('INCOMPLETE ')]
+            for row in incomplete:
+                match = GRAMMAR.fullmatch(row)
+                assert match, row
+                assert 0 <= int(match[6]) and 0 <= int(match[7]) <= 20000 and 0 <= int(match[8]) <= 4096, row
+            terminals = [r for r in rows if r.startswith('NOTE analysis-result ')]
+            summary = next(r for r in rows if r.startswith('NOTE analysis-summary '))
+            stats = dict(re.findall(r'(\w[\w-]*)=([^ ]+)', summary))
+            assert len(terminals) == int(stats['N']) == int(stats['reported']), result.stdout
+            assert int(stats['attempted']) + int(stats['unrun']) == int(stats['N']), result.stdout
+            assert int(stats['completed']) + int(stats['incomplete']) == int(stats['N']), result.stdout
+            print(f'PASS budget {label}', flush=True)
+            return rows, incomplete, terminals, stats
+
+        single, heavy, _, _ = probe('heavy-alone', '#[heavy]', 20000)
+        assert len(heavy) == 1 and int(GRAMMAR.fullmatch(heavy[0])[6]) < 2000000 and 'stage=instance law=BudgetControls.heavyLaw case=heavy reason=false-discharge-budget' in heavy[0] and 'work=20000/20000' in heavy[0], single
+        alone, incomplete, _, _ = probe('bad-alone', '#[bad]', 20000)
+        assert incomplete == [] and BAD in alone and alone[-1] == 'N2 FAIL', alone
+        for label, jobs in [('starvation', '#[heavy, bad]'), ('reverse', '#[bad, heavy]')]:
+            rows, inc, terminals, stats = probe(label, jobs, 40000)
+            assert BAD in rows and len(inc) == 1 and rows[-1] == 'N2 INCOMPLETE', rows
+            assert GRAMMAR.fullmatch(inc[0]).groups()[:5] == GRAMMAR.fullmatch(heavy[0]).groups()[:5], rows
+            assert GRAMMAR.fullmatch(inc[0]).groups()[6:] == GRAMMAR.fullmatch(heavy[0]).groups()[6:], rows
+            if label == 'starvation': assert rows.index(inc[0]) < rows.index(BAD), rows
+            else: assert rows.index(BAD) < rows.index(inc[0]), rows
+            assert not any('reason=heartbeats' in r and 'nextBad' in r for r in rows), rows
+        rows, inc, _, _ = probe('heartbeat-starvation', '#[heartbeat, bad]', 40000)
+        assert len(inc) == 1 and 'reason=heartbeats' in inc[0] and BAD in rows and rows.index(inc[0]) < rows.index(BAD) and rows[-1] == 'N2 INCOMPLETE', rows
+        uncapped, _, original, _ = probe('cap-baseline', '#[passJob, bad]', 40000)
+        rows, inc, terminals, stats = probe('cap-population', '#[passJob, bad, unrun "unrunA", unrun "unrunB"]', 40000)
+        assert BAD in rows and rows[-1] == 'N2 INCOMPLETE', rows
+        assert terminals[:2] == original, rows
+        expected = [f'INCOMPLETE analysis-budget-or-error BudgetControls.{n} stage=instance law=BudgetControls.capLaw case={n} reason=whole-run-cap heartbeats=0/2000000 work=0/20000 projection=0/4096' for n in ['unrunA', 'unrunB']]
+        assert inc == expected, rows
+        for k, v in {'N': '4', 'attempted': '2', 'unrun': '2', 'completed': '2', 'incomplete': '2', 'reserved': '40000', 'C': '40000'}.items(): assert stats[k] == v, rows
+        rows, inc, _, stats = probe('cap-zero', '#[passJob, bad, unrun "unrunA", unrun "unrunB"]', 0)
+        zero_expected = [
+            'INCOMPLETE analysis-budget-or-error BudgetControls.ok stage=instance law=none case=none reason=whole-run-cap heartbeats=0/2000000 work=0/20000 projection=0/4096',
+            'INCOMPLETE analysis-budget-or-error BudgetControls.nextBad stage=instance law=BudgetControls.nextLaw case=next reason=whole-run-cap heartbeats=0/2000000 work=0/20000 projection=0/4096',
+            *expected,
+        ]
+        assert inc == zero_expected, rows
+        assert not any(r.startswith(('FAIL ', 'BODY ')) for r in rows) and stats['attempted'] == '0' and stats['reserved'] == '0', rows
+        rows, inc, _, stats = probe('empty', '#[]', 0)
+        assert inc == [] and stats['N'] == '0' and stats['cap-hit'] == 'none' and rows[-1] == 'N2 PASS', rows
+        for label in ['mentions', 'mutate', 'withProtected']:
+            rows, inc, _, _ = probe('nested-reset-' + label, f'#[nested "{label}", bad]', 40000)
+            assert len(inc) == 1 and inc[0] == f'INCOMPLETE analysis-budget-or-error BudgetControls.{label} stage={label} law=none case=none reason=work-budget heartbeats={GRAMMAR.fullmatch(inc[0])[6]}/2000000 work=20000/20000 projection=0/4096', rows
+            assert BAD in rows and rows[-1] == 'N2 INCOMPLETE', rows
+    print('Budget controls: 12 PASS, 0 FAIL', flush=True)
+    return 0
+
+
+def main():
+    with compiled_consumer() as meta:
+        return controls(meta)
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

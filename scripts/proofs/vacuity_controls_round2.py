@@ -56,7 +56,7 @@ end ConcreteSpecControl
     chain_fixture = base.replace("/-- Law", chain + "/-- Law", 1).replace(":= Nat.lt_succ_self n", ":= d5 n")
     # Restore d1 after replacing the law's proof.
     chain_fixture = chain_fixture.replace("def d1 (n : Nat) : n < n + 1 := d5 n", "def d1 (n : Nat) : n < n + 1 := Nat.lt_succ_self n")
-    add("positive-budget-chain", chain_fixture, {("INCOMPLETE", "projection-budget", "ConcreteSpecControl.growth")}, budget=3, status=2)
+    add("positive-budget-chain", chain_fixture, {("INCOMPLETE", "analysis-budget-or-error", "ConcreteSpecControl.growth")}, budget=3, status=2)
     long_chain = ""
     for i in range(1, 97):
         body = "Nat.lt_succ_self n" if i == 1 else f"long{i-1} n"
@@ -68,7 +68,7 @@ end ConcreteSpecControl
                                         "theorem growth (n : Nat) (_h : n = 2) : n < S n := long96 n")
     add("projection-long-complete", long_fixture, set(), budget=4096, status=0)
     add("projection-long-incomplete", long_fixture,
-        {("INCOMPLETE", "projection-budget", "ConcreteSpecControl.growth")}, budget=64, status=2)
+        {("INCOMPLETE", "analysis-budget-or-error", "ConcreteSpecControl.growth")}, budget=64, status=2)
 
 
     add("missing-close", base.replace("case `two`).", "case `two`.", 1), bad("evidence-tag") | bad("unpaired-planted") | bad("missing-instance", "ConcreteSpecControl.growth"))

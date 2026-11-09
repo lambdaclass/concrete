@@ -121,6 +121,12 @@ end ConcreteSpec.Repro""")
             for line, text in enumerate(lines, 1):
                 if text.startswith("example :"):
                     expected.add(("FAIL", "evidence-law-kind", f"ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:{line}»"))
+    for label, _, _, expected, _ in cases:
+        if label == "missing-provenance":
+            expected.update({
+                ("INCOMPLETE", "analysis-budget-or-error", "[anonymous]"),
+                ("INCOMPLETE", "analysis-budget-or-error", "ConcreteSpecControl.missingMetadata"),
+            })
     for _, _, _, expected, _ in cases:
         if ("FAIL", "unpaired-planted", "EXAMPLE") in expected and any(
             code in {"instance-application", "instance-false-discharge"}
@@ -165,6 +171,18 @@ end ConcreteSpec.Repro""")
                 identities.setdefault(key, set()).add(words[2])
                 found.add(key)
         report_ok = True
+        if label == "missing-provenance":
+            report_ok = {row for row in output.splitlines() if row.startswith(("FAIL ", "INCOMPLETE "))} == {
+                'INCOMPLETE missing-provenance ConcreteSpecControl.missingMetadata ',
+                'INCOMPLETE analysis-budget-or-error [anonymous] stage=scope law=none case=none reason=dependency-incomplete heartbeats=0/2000000 work=0/20000 projection=0/4096',
+                'INCOMPLETE analysis-budget-or-error ConcreteSpecControl.missingMetadata stage=evidence-tags law=none case=none reason=dependency-incomplete heartbeats=0/2000000 work=0/20000 projection=0/4096',
+            }
+        if label in {"positive-budget-chain", "projection-long-incomplete"}:
+            import re
+            records = [row for row in output.splitlines() if row.startswith(("FAIL ", "INCOMPLETE "))]
+            report_ok = len(records) == 1 and re.fullmatch(
+                rf"INCOMPLETE analysis-budget-or-error ConcreteSpecControl.growth stage=projection law=ConcreteSpecControl.growth case=none reason=projection-budget heartbeats=\d+/2000000 work=0/20000 projection={budget}/4096",
+                records[0]) is not None
         if label == "inline-match-changed-branch":
             line = next(i for i, text in enumerate(fixture.splitlines(), 1)
                         if text.startswith("example :")

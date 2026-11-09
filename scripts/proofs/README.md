@@ -193,19 +193,59 @@ these controls after its unchanged 32 discharge controls:
 nix develop -c bash scripts/checks/lib/bounded.sh 140 python3 -u scripts/proofs/vacuity_round5.py controls
 ```
 
-Analysis failures are isolated by declaration and evidence case. Each reports
-`INCOMPLETE analysis-budget-or-error <fully-qualified-name> stage=... law=... case=...`
-(for evidence); existing findings survive and later analysis units continue.
-Runtime heartbeat exceptions are explicitly caught. Every unit retains the same
-original command heartbeat deadline; after it expires, remaining units are named
-INCOMPLETE rather than retried with a larger budget. Only scheduler/report
-bookkeeping runs outside that deadline, still under the process wall bound.
-`scripts/proofs/vacuity_reporting.py` exercises exact work-budget, runtime-heartbeat,
-and ordinary-error diagnostics alongside an unrelated later law failure, names
-a failed Planted analysis together with its paired Instance, and
-checks the same complete-report validator used by `--replay`. The standard
-`--controls` entry point includes these controls. A partial report is never clean
-historical evidence, regardless of which FAIL lines it contains.
+**A3 budget accounting (R-0219, per-analysis interpretation assumed, pending
+owner):** the coordinator authorized implementation of amendment 3's option C;
+this records no owner answer and authorizes no landing. The owning design is
+[A3 in N2-discharge-solver.md](N2-discharge-solver.md#a3-amendment-per-analysis-accounting-and-the-round-5-regression).
+The round-5 solver repair remains a separate slice 2a responsibility. Budget
+accounting does not implement that repair or claim historical completion.
+
+The scheduler first freezes a stable population of named jobs, including separate
+law, projection and Planted jobs. Source/provenance/name parsing is bookkeeping;
+it does no reduction or solver search. Enumeration and dispatch share a separately
+reported 20,000-step / 2,000,000-heartbeat scheduler allowance. Each admitted
+analysis starts its own unchanged 2,000,000-heartbeat deadline and one mutable
+20,000-work counter. All Instance hypothesis arguments share that counter and
+visited state. Discharge, mentions, mutation and every protected collection,
+replacement and comparison-preparation step use it; nested helpers cannot renew
+fuel. Projection retains its separate 4,096-visit bound (or a caller's smaller
+explicit control limit). Meta state is restored after each job, including on
+success, and all expression/dependency caches are private to its work object.
+Imported module dependency metadata prunes bodies that cannot reach the subject;
+module/edge visits and cache lookups are charged, without assuming module index
+ordering or changing proof semantics.
+
+For N frozen analyses, the default reservation cap is C=N*20,000. The explicit
+`--whole-run-cap C` option may lower it, including to zero, but never raise it.
+Every attempt reserves 20,000 units without a refund; once the next reservation
+would exceed C, every remaining identity receives its own exact
+`reason=whole-run-cap` INCOMPLETE with zero usage. Earlier findings and terminal
+records survive. Unavailable prerequisites produce `reason=dependency-incomplete`
+before a cap hit; after a cap hit all unrun jobs report the cap reason. Population,
+reservation, attempted/unrun/completed/incomplete counts, logical usage totals and
+aggregate bounds are reported. Runtime exceptions are caught explicitly and name
+the current analysis, with a normalized reason and separate underlying detail.
+A work exhaustion in discharge reports `false-discharge-budget`; mentions,
+mutation and protection exhaust with `work-budget`. An exhausted job cannot
+spend any later independent job's allowance.
+
+The driver's wall watchdog is separate: `--audit-seconds` defaults to the existing
+120 seconds, with the bounded runner's retry at twice that value. It reports both
+wall bounds and observed elapsed time. An expired watchdog is infrastructure
+INCOMPLETE, never evidence of a completed population. A larger wall allowance on
+a dedicated server does not enlarge any deterministic analysis or scheduler limit.
+
+`vacuity_budget.py` checks the production scheduler with 12 exact-diagnostic
+controls: a real 20,001-obligation discharge workload followed by a malformed
+Instance, each alone and in reverse order; an in-Meta heartbeat exception followed
+by that same FAIL; four-identity cap population and zero-cap controls; empty
+population; and shared-counter exhaustion through mentions, mutate and protection.
+The cap controls assert unchanged earlier terminal records byte for byte and
+that no capped body executes. `vacuity_reporting.py` includes these controls,
+checks normalized exceptions and prerequisite failures in the full consumer,
+and exercises the complete-report validator used by replay. The standard
+`--controls` entry point includes reporting controls. A partial report is never
+clean historical evidence, regardless of retained FAIL lines.
 
 **Round 5 staging blocker (R-0219):** actual-argument traversal repairs the reported
 false positives and preserves the exact discharge negatives, but the isolated

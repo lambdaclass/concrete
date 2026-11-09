@@ -13,6 +13,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 
 from lean_lex import examples, lex, LexError, ExampleProvenanceError
 
@@ -47,7 +48,7 @@ def compiled_consumer(*, consumer_text=None):
         yield work
 
 
-def _run(source, scope, fixture=None, budget=4096, inventory=False, *, driver_text=None, proof_mode=None, meta_path=None):
+def _run(source, scope, fixture=None, budget=4096, inventory=False, *, driver_text=None, proof_mode=None, meta_path=None, audit_seconds=120, whole_run_cap=None):
     with tempfile.TemporaryDirectory(prefix="vacuity-") as temp:
         work = Path(temp)
         if fixture is None:
@@ -70,6 +71,8 @@ def _run(source, scope, fixture=None, budget=4096, inventory=False, *, driver_te
         env = dict(os.environ, LEAN_PATH=os.pathsep.join(map(str, [work, meta_path] if meta_path else [work])), VACUITY_SCOPE=scope,
                    VACUITY_TRACE=str(work / "audit-trace.tsv"),
                    VACUITY_BUDGET=str(budget), PROOF_MODE=proof_mode or ("theorems" if inventory else "vacuity"))
+        if whole_run_cap is not None:
+            env["VACUITY_WHOLE_RUN_CAP"] = str(whole_run_cap)
         visited = set()
 
         def build(module):
@@ -134,7 +137,10 @@ set_option maxHeartbeats 2000000 in
 """
         path = work / "audit.lean"
         path.write_text(driver)
-        result = command(["lean", path], work, env)
+        started = time.monotonic()
+        result = command(["lean", path], work, env, seconds=audit_seconds)
+        wall = f"N2 WALL audit-seconds={audit_seconds} retry-seconds={audit_seconds * 2} elapsed-seconds={time.monotonic() - started:.3f}\n"
+        result.stdout = wall + result.stdout
         if result.returncode:
             trace = work / "audit-trace.tsv"
             tail = "\n".join(trace.read_text().splitlines()[-20:]) if trace.exists() else "no audit progress"
@@ -165,7 +171,11 @@ def main():
     parser.add_argument("--source", type=Path, default=ROOT)
     parser.add_argument("--scope", action="append", default=[])
     parser.add_argument("--controls", action="store_true")
+    parser.add_argument("--audit-seconds", type=int, default=120, help="wall watchdog per audit attempt; retry uses twice this bound")
+    parser.add_argument("--whole-run-cap", type=int, help="lower the frozen population reservation cap (work units)")
     args = parser.parse_args()
+    if args.audit_seconds <= 0 or (args.whole_run_cap is not None and args.whole_run_cap < 0):
+        parser.error("audit seconds must be positive and the reservation cap nonnegative")
     args.scope = ",".join(args.scope)
     for module in filter(None, args.scope.split(",")):
         if not (args.source / (module.replace(".", "/") + ".lean")).is_file():
@@ -187,7 +197,7 @@ def main():
     for path in paths:
         print(f"N2 SOURCE-FILE {path.relative_to(args.source)} {hashlib.sha256(path.read_bytes()).hexdigest()}")
     with compiled_consumer() as meta_path:
-        code, output = run(args.source, args.scope, meta_path=meta_path)
+        code, output = run(args.source, args.scope, meta_path=meta_path, audit_seconds=args.audit_seconds, whole_run_cap=args.whole_run_cap)
     print(output, end="")
     return code
 
