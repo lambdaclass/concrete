@@ -1057,6 +1057,30 @@ example : Checked literal ∧
   refine ⟨⟨by decide, .ret (.int (by decide)) (.atom .int) (by decide)⟩, ?_⟩
   rintro ⟨_, h, _⟩; cases h
 
+/-- A broken execution relation admits every result, including fuel exhaustion. -/
+inductive AnyExec : Decls → Env → List Stmt → Atom → Outcome → Prop where
+  | accept {Δ env ss r o} : AnyExec Δ env ss r o
+
+/-- Planted (law `ConcreteSpec.exec_ne_outOfFuel`, case `return`, subject `ConcreteSpec.Exec`, mutant `ConcreteSpec.Evidence.AnyExec`). -/
+example : ¬ ExecFinite AnyExec [] (.int .u8 42) [] [] := by
+  intro h
+  exact h .accept rfl
+
+/-- Planted (law `ConcreteSpec.exec_deterministic`, case `return`, subject `ConcreteSpec.Exec`, mutant `ConcreteSpec.Evidence.AnyExec`). -/
+example : AnyExec [] [] [] (.int .u8 42) (.exit 42) ∧
+    ¬ ExecUnique AnyExec [] (.int .u8 42) [] [] (.exit 42) := by
+  refine ⟨.accept, ?_⟩
+  intro h
+  have bad := h (o₂ := .outOfFuel) .accept
+  cases bad
+
+/-! Specializing the quantified laws recovers every original closed derivation. These
+corollaries preserve the concrete accepted traces; the full Instances above test the contracts. -/
+
+example := @exec_ne_outOfFuel [] (.int .u8 42) [] [] (.exit 42) .ret
+
+example := @exec_deterministic [] (.int .u8 42) [] [] (.exit 42) .ret (.exit 42) .ret
+
 end Evidence
 
 end ConcreteSpec

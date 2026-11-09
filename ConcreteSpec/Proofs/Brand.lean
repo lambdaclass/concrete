@@ -695,6 +695,61 @@ example : ghost (fun _ => false) 2 0 State.init [.newAlloc 0 0] = .done (State.i
     ¬ MissingRun State.init [.newAlloc 0 0] (State.init.bind 0 []) := by
   exact ⟨rfl, fun h => nomatch h⟩
 
+/-- Planted (law `ConcreteSpec.Brand.reset_requires_no_old`, case `reset`, subject `ConcreteSpec.Brand.Ok`, mutant `ConcreteSpec.Brand.Evidence.PermissiveOk`). -/
+example : ¬ ResetNoOld PermissiveOk [0] := by
+  intro h
+  exact h (Γ := [(1, .heap 0), (0, .alloc 0)]) (a' := 0) (a := 0) (β' := 1)
+    (rest := []) (Γ' := []) (β := 0) .accept rfl 1 rfl
+
+/-- Planted (law `ConcreteSpec.Brand.reset_refuses_old`, case `otherLiveBrand`, subject `ConcreteSpec.Brand.Ok`, mutant `ConcreteSpec.Brand.Evidence.PermissiveOk`). -/
+example : ¬ ResetRefusesOld PermissiveOk [0, 2] := by
+  intro h
+  have hb : BrandsIn [0, 2] [(1, .heap 2)] := by
+    intro e he β ht
+    simp only [List.mem_singleton] at he
+    subst e
+    rcases ht with ht | ht
+    · cases ht
+    · cases ht; simp
+  have bad := h (Γ := [(1, .heap 2)]) (a' := 0) (a := 0) (β' := 2)
+    (rest := []) (Γ' := []) hb .accept (hv := 1) (βh := 2) rfl
+  exact bad.1 rfl
+
+/-- Planted (law `ConcreteSpec.Brand.run_inv`, case `firstAllocation`, subject `ConcreteSpec.Brand.Run`, mutant `ConcreteSpec.Brand.Evidence.PermissiveRun`). -/
+example : ¬ RunInvariant PermissiveRun State.init [.newAlloc 0 0] := by
+  intro h
+  have bad := h (s' := ⟨[], 0, [0, 0]⟩) .accept inv_init
+  have hn : ¬ ([0, 0] : List Nat).Nodup := by decide
+  exact hn bad.2.2
+
+/-- Planted (law `ConcreteSpec.Brand.reset_fresh_nodup`, case `firstAllocation`, subject `ConcreteSpec.Brand.Run`, mutant `ConcreteSpec.Brand.Evidence.PermissiveRun`). -/
+example : ¬ GeneratedUnique PermissiveRun [.newAlloc 0 0] := by
+  intro h
+  have hn : ¬ ([0, 0] : List Nat).Nodup := by decide
+  exact hn (h (s' := ⟨[], 0, [0, 0]⟩) .accept)
+
+/-! Specializing the quantified laws recovers every original closed derivation. These
+corollaries preserve the concrete accepted traces; the full Instances above test the contracts. -/
+
+example := @reset_requires_no_old [0] [(0, .alloc 0)] 0 0 1 [] [(0, .alloc 1)] 0
+  (.reset rfl (by decide) rfl (by decide) .nil) rfl 0
+
+example := @reset_refuses_old [0, 2] [(1, .heap 2), (0, .alloc 0)] 0 0 3 []
+  [(0, .alloc 3), (1, .heap 2)]
+  (by
+    intro e he β hb
+    cases he with
+    | head => rcases hb with hb | hb <;> cases hb; decide
+    | tail _ he =>
+      cases he with
+      | head => rcases hb with hb | hb <;> cases hb; decide
+      | tail _ he => cases he)
+  (.reset rfl (by decide) rfl (by decide) .nil) 1 2 rfl
+
+example := @run_inv State.init [.newAlloc 0 0] (State.init.bind 0 []) (.newAlloc .nil) inv_init
+
+example := @reset_fresh_nodup [.newAlloc 0 0] (State.init.bind 0 []) (.newAlloc .nil)
+
 end Evidence
 
 end ConcreteSpec.Brand

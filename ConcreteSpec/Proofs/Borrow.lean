@@ -907,6 +907,93 @@ inductive PermissiveBorrow : Ctx → List Stmt → Ctx → Prop where
 example : ¬ (¬ PermissiveBorrow (bodyCtx true 1 rootPlace x0) [.move 1] x0) := by
   intro h; exact h .accept
 
+/-- Planted (law `ConcreteSpec.Borrow.ok_det`, case `read`, subject `ConcreteSpec.Borrow.Ok`, mutant `ConcreteSpec.Borrow.Evidence.PermissiveBorrow`). -/
+example : PermissiveBorrow x0 [.read 0] x0 ∧ ¬ UniqueContext PermissiveBorrow x0 [.read 0] x0 := by
+  refine ⟨.accept, ?_⟩
+  intro h
+  have bad := h (Γ₂ := []) .accept
+  cases bad
+
+/-- Planted (law `ConcreteSpec.Borrow.ok_keeps_locked`, case `otherRootRead`, subject `ConcreteSpec.Borrow.Ok`, mutant `ConcreteSpec.Borrow.Evidence.PermissiveBorrow`). -/
+example : ¬ KeepsLocked PermissiveBorrow lockedContext [.read 1] := by
+  intro h
+  have bad := h (Γ' := []) .accept (p := 0) (q := frozen) rfl (by decide)
+  cases bad
+
+/-- Planted (law `ConcreteSpec.Borrow.excl_untouched`, case `otherRootRead`, subject `ConcreteSpec.Borrow.Ok`, mutant `ConcreteSpec.Borrow.Evidence.PermissiveBorrow`). -/
+example : ¬ ExclusiveUntouched PermissiveBorrow lockedContext := by
+  intro h
+  exact h (ss := [.read 0]) (Γ' := lockedContext) .accept (p := 0) (q := frozen) rfl rfl .read
+
+/-- Planted (law `ConcreteSpec.Borrow.open_mut_freezes_root`, case `writeThroughView`, subject `ConcreteSpec.Borrow.Ok`, mutant `ConcreteSpec.Borrow.Evidence.PermissiveBorrow`). -/
+example : ¬ MutableFreezes PermissiveBorrow x0 0 1 := by
+  intro h
+  exact h (body := [.read 0]) (rest := []) (q := rootPlace) (Γ' := x0) .accept rfl
+    0 rootPlace rfl rfl .read
+
+/-- Planted (law `ConcreteSpec.Borrow.noWrite_sound`, case `readOnly`, subject `ConcreteSpec.Borrow.Ok`, mutant `ConcreteSpec.Borrow.Evidence.PermissiveBorrow`). -/
+example : ¬ NoWriteSound PermissiveBorrow readOnly := by
+  intro h
+  have hn : NoWrite 0 readOnly := by
+    intro p q hp _ _
+    simp only [readOnly, AList.lookup] at hp
+    split at hp
+    · cases hp; exact ⟨rfl, rfl⟩
+    · cases hp
+  exact h (ss := [.write 0]) (Γ' := readOnly) .accept hn (.write rfl rfl)
+
+/-- Planted (law `ConcreteSpec.Borrow.shared_open_grants_no_write`, case `readThroughView`, subject `ConcreteSpec.Borrow.Ok`, mutant `ConcreteSpec.Borrow.Evidence.PermissiveBorrow`). -/
+example : ¬ SharedNoWrite PermissiveBorrow x0 0 1 := by
+  intro h
+  exact h (body := [.write 1]) (rest := []) (q := rootPlace) (Γ' := x0) .accept rfl
+    (.write rfl rfl)
+
+/-- Planted (law `ConcreteSpec.Borrow.range_open_mut_freezes_root`, case `writeThroughView`, subject `ConcreteSpec.Borrow.Ok`, mutant `ConcreteSpec.Borrow.Evidence.PermissiveBorrow`). -/
+example : ¬ RangeMutableFreezes PermissiveBorrow x0 0 1 ⟨some (.array 2), some 0, some 1⟩ := by
+  intro h
+  exact h (body := [.read 0]) (els := none) (rest := []) (Γ' := x0) (q := rootPlace)
+    ⟨.accept, rfl⟩ rfl 0 rootPlace rfl rfl .read
+
+/-- Planted (law `ConcreteSpec.Borrow.fresh_not_used`, case `readOtherName`, subject `ConcreteSpec.Borrow.Ok`, mutant `ConcreteSpec.Borrow.Evidence.PermissiveBorrow`). -/
+example : ¬ FreshUnused PermissiveBorrow x0 := by
+  intro h
+  exact h (ss := [.read 1]) (Γ' := x0) .accept (p := 1) rfl .read
+
+/-- Planted (law `ConcreteSpec.Borrow.view_not_used_after`, case `writeThroughView`, subject `ConcreteSpec.Borrow.Ok`, mutant `ConcreteSpec.Borrow.Evidence.PermissiveBorrow`). -/
+example : ¬ ViewScoped PermissiveBorrow x0 true 0 1 := by
+  intro h
+  exact h (body := []) (rest := [.read 1]) (Γ' := x0) .accept .read
+
+/-! Specializing the quantified laws recovers every original closed derivation. These
+corollaries preserve the concrete accepted traces; the full Instances above test the contracts. -/
+
+example := @ok_det x0 [.read 0] x0 (.read rfl (by decide) .nil) x0 (.read rfl (by decide) .nil)
+
+example := @ok_keeps_locked lockedContext [.read 1] lockedContext (.read rfl (by decide) .nil)
+  0 frozen rfl (by decide)
+
+example := @excl_untouched lockedContext [.read 1] lockedContext (.read rfl (by decide) .nil)
+  0 frozen rfl rfl
+
+example := @open_mut_freezes_root x0 0 1 [.write 1] [] rootPlace x0 mutableBlock rfl 0 rootPlace rfl rfl
+
+example := @noWrite_sound readOnly [.read 0] readOnly (.read rfl (by decide) .nil) 0
+  (by
+    intro p q hp hr hl
+    simp only [readOnly, AList.lookup] at hp
+    split at hp
+    · cases hp; exact ⟨rfl, rfl⟩
+    · cases hp)
+
+example := @shared_open_grants_no_write x0 0 1 [.read 1] [] rootPlace x0 sharedBlock rfl
+
+example := @range_open_mut_freezes_root x0 0 1 ⟨some (.array 2), some 0, some 1⟩
+  [.write 1] none [] x0 rootPlace ⟨mutableBlock, rfl⟩ rfl 0 rootPlace rfl rfl
+
+example := @fresh_not_used x0 [.read 0] x0 (.read rfl (by decide) .nil) 1 rfl
+
+example := @view_not_used_after x0 true 0 1 [.write 1] [] x0 mutableBlock
+
 end Evidence
 
 end ConcreteSpec.Borrow

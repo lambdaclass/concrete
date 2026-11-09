@@ -328,6 +328,58 @@ example : (∀ x ∈ [desV], (fun d => d != desB) x = true) ∧
   intro h
   cases h.mpr ⟨rfl, rfl⟩
 
+/-- A broken registration relation admits stacks without ownership or ordering checks. -/
+inductive AnyRegistration : (Res → Bool) → Stack → Prop where
+  | accept {live st} : AnyRegistration live st
+
+/-- Planted (law `ConcreteSpec.Cleanup.reg_inv`, case `registeredStack`, subject `ConcreteSpec.Cleanup.Reg`, mutant `ConcreteSpec.Cleanup.Evidence.AnyRegistration`). -/
+example : ¬ RegistrationInvariant AnyRegistration ownedAfter := by
+  intro h
+  have bad := h (st := [⟨.fnBody, [relA, relA]⟩]) .accept
+  have hn : ¬ (targets (pending [⟨.fnBody, [relA, relA]⟩])).Nodup := by decide
+  exact hn bad.2.1
+
+/-- Planted (law `ConcreteSpec.Cleanup.defer_cleanup_releases_before`, case `allocatorDependency`, subject `ConcreteSpec.Cleanup.Reg`, mutant `ConcreteSpec.Cleanup.Evidence.AnyRegistration`). -/
+example : ¬ CleanupBefore AnyRegistration ownedAfter := by
+  intro h
+  obtain ⟨t₁, t₂, t₃, he⟩ := h (st := [⟨.fnBody, [relA, desV]⟩]) .accept (e := .ret)
+    (fs := [⟨.fnBody, [relA, desV]⟩]) rfl (d := desV) (da := relA)
+    (by decide) (by decide) (by decide)
+  have hp : (expected (pending [⟨.fnBody, [relA, desV]⟩])).Pairwise
+      (fun x y => ¬ (x = .call desV ∧ y = .call relA)) := by decide
+  rw [he] at hp
+  have cross := (List.pairwise_append.mp hp).2.2
+  exact cross (.call desV) (by simp) (.call relA) (by simp) ⟨rfl, rfl⟩
+
+/-- Planted (law `ConcreteSpec.Cleanup.defer_cleanup_releases_nodup`, case `returnStack`, subject `ConcreteSpec.Cleanup.Reg`, mutant `ConcreteSpec.Cleanup.Evidence.AnyRegistration`). -/
+example : ¬ CleanupUnique AnyRegistration ownedAfter := by
+  intro h
+  have bad := h (st := [⟨.fnBody, [relA, relA]⟩]) .accept (e := .ret)
+    (fs := [⟨.fnBody, [relA, relA]⟩]) rfl
+  have hn : ¬ (targets (pending [⟨.fnBody, [relA, relA]⟩])).Nodup := by decide
+  exact hn bad
+
+/-- Planted (law `ConcreteSpec.Cleanup.defer_cleanup_releases_needs`, case `loanSource`, subject `ConcreteSpec.Cleanup.Reg`, mutant `ConcreteSpec.Cleanup.Evidence.AnyRegistration`). -/
+example : ¬ CleanupNeeds AnyRegistration ownedAfter := by
+  intro h
+  have bad := h (st := [⟨.fnBody, [desV]⟩]) .accept (e := .ret)
+    (fs := [⟨.fnBody, [desV]⟩]) rfl (pre := []) (post := []) (d := desV) rfl (r := 0) (by decide)
+  have hn : ¬ (ownedAfter 0 = true ∨ 0 ∈ targets (pending [⟨.fnBody, [desV]⟩])) := by decide
+  exact hn bad.2
+
+/-! Specializing the quantified laws recovers every original closed derivation. These
+corollaries preserve the concrete accepted traces; the full Instances above test the contracts. -/
+
+example := reg_inv stack_reg
+
+example := @defer_cleanup_releases_before ownedAfter stack stack_reg .ret stack rfl
+  desV relA (by decide) (by decide) (by decide)
+
+example := @defer_cleanup_releases_nodup ownedAfter stack stack_reg .ret stack rfl
+
+example := @defer_cleanup_releases_needs ownedAfter stack stack_reg .ret stack rfl
+  [] [desB, relA] desV rfl 2 (by decide)
+
 end Evidence
 
 end ConcreteSpec.Cleanup
