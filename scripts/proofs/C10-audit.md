@@ -115,3 +115,13 @@ open-case and planted-proposition findings belong to the spec writer. Neither
 ConcreteSpec nor the C10 worktree was edited; no gate condition was weakened to
 make either candidate pass. Migration remains owned by R-0219 in
 [README.md](README.md), with one cumulative required CI job at promotion.
+
+## Round 3 historical C9 follow-up
+
+The [round 3 handoff](N2-round3.md) records the independently reproduced gate
+false positives and the C6 revision correction. The complete [C9-new baseline
+diagnostic audit](audits/C9-3e22e6417-round3.tsv) records all 131 supplied findings
+with source locations at 3e22e6417. Source-worker items are the declaration-name
+carrier violations, the inductive subject kind, and the missing law/case/subject
+planted pairs. Revised historical server audits remain pending; baseline counts
+are not evidence of a post-fix PASS or of cost certification.

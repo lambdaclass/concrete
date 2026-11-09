@@ -187,3 +187,24 @@ never constitute source coverage.
 invocation, including a planted substitution with `axioms.sh`. The control requires
 exactly `FAIL registry-required-invocation proof-vacuity`. An unrelated successful
 gate cannot satisfy this registry entry.
+
+### Full-head cost obligation and R-0691
+
+Round 3 caches source text, parsed namespace contexts and resolved references, and
+compiles the consumer once per invocation. A timed-out private audit reports its
+last stage/declaration boundaries. These changes do not certify full-head cost:
+the coordinator must measure the complete candidate on concrete-ci-2 under the
+existing bound before promotion. A timeout remains INCOMPLETE.
+
+If this is insufficient, **R-0691 (law-to-witness schema)** needs this implementation
+scope: build one canonical index from the shared elaborated population containing
+each law's identity, universe arguments, literal binder telescope, closed argument
+vector, hypothesis/conclusion boundary, all declared subject identities, instance
+case keys, and paired mutants. Resolve evidence once across the whole requested
+scope. Partition every authored declaration and law check into deterministic
+bounded shards using that shared index; cross-module witnesses must retain exactly
+the same meaning as the unpartitioned audit. Aggregate only when every required
+shard has completed, with all FAIL and INCOMPLETE findings retained. Never sample,
+omit an obligation, or weaken the PR checker to fit a budget. Keep the complete
+structural sweep in the scheduled tier. R-0219 remains the gate owner; the
+coordinator records the R-0691 roadmap text, rather than writers editing ROADMAP.
