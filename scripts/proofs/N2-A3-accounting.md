@@ -306,3 +306,10 @@ hit the old front entry. Exact planted reasons are
 `CONTROL raw-context-cache-crossed-type` (raw-type erasure); the normal four-search
 control passes, including metavariable exclusion. This is an audit-cache repair,
 not a spec/OD decision or a solver rewrite.
+
+The complete raw snapshot is captured once per production proof node and refreshed
+inside each newly opened lambda telescope. Related queries reuse that immutable
+snapshot; standalone helper probes capture the current context themselves. The
+same-ID mutation controls and all scheduler/budget controls still pass. This
+removes repeated key construction while preserving complete keys and the existing
+proof-state work charges.

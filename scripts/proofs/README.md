@@ -561,3 +561,10 @@ types must fail with exactly `CONTROL raw-context-cache-crossed-type`. Together
 with the alpha-renaming/distinct-context controls this performs four real
 refutation searches. Both the front and canonical keys now preserve the full
 context, rather than relying on a caller never updating it.
+
+Production captures that immutable raw snapshot once per visited proof node and
+again after opening a lambda telescope, then supplies it to that node's related
+refutation queries. Standalone probes capture their own current snapshot. This
+shares key construction without omitting metadata or reusing a snapshot across
+a binder-context change. All original proof-state visits and analysis budgets
+remain unchanged.

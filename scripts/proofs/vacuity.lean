@@ -859,8 +859,8 @@ def dischargeClosure (e : Expr) : MetaM (Option DischargeKey) := do
   let closure ← mkLambdaFVars xs e (usedLetOnly := false) (generalizeNondepLet := false)
   return some ⟨closure, instances, declarations⟩
 
-def dischargeRefutableType (domain : Expr) : StateRefT DischargeState MetaM Bool := do
-  let raw := (domain, ← dischargeRawContext)
+def dischargeRefutableTypeAt (context : DischargeRawContext) (domain : Expr) : StateRefT DischargeState MetaM Bool := do
+  let raw := (domain, context)
   if let some cached := (← get).rawRefutedTypes[raw]? then return cached
   let some key ← dischargeClosure domain | return ← refutableType domain
   let result ← match (← get).refutedTypes[key]? with
@@ -872,8 +872,8 @@ def dischargeRefutableType (domain : Expr) : StateRefT DischargeState MetaM Bool
   modify fun s => { s with rawRefutedTypes := s.rawRefutedTypes.insert raw result }
   return result
 
-def dischargeRefutableContext (simplify : Bool := false) : StateRefT DischargeState MetaM Bool := do
-  let raw := (← dischargeRawContext, simplify)
+def dischargeRefutableContextAt (context : DischargeRawContext) (simplify : Bool := false) : StateRefT DischargeState MetaM Bool := do
+  let raw := (context, simplify)
   if let some cached := (← get).rawRefutedContexts[raw]? then return cached
   let some closure ← dischargeClosure (mkConst ``False) | return ← refutableContext simplify
   let key := (closure, simplify)
@@ -885,6 +885,14 @@ def dischargeRefutableContext (simplify : Bool := false) : StateRefT DischargeSt
       pure result
   modify fun s => { s with rawRefutedContexts := s.rawRefutedContexts.insert raw result }
   return result
+
+/-- Standalone probes capture the current context. Production captures it once
+    per proof node and once again after opening a lambda telescope. -/
+def dischargeRefutableType (domain : Expr) : StateRefT DischargeState MetaM Bool := do
+  dischargeRefutableTypeAt (← dischargeRawContext) domain
+
+def dischargeRefutableContext (simplify : Bool := false) : StateRefT DischargeState MetaM Bool := do
+  dischargeRefutableContextAt (← dischargeRawContext) simplify
 
 /-- Inspect helpers at their actual arguments, including open applications. Only
     a checked refutation of the hypothetical local context can exempt an impossible
@@ -901,16 +909,17 @@ partial def falseDischarge (e : Expr) : StateRefT DischargeState MetaM Bool := d
   if let some budget := (← get).budget then chargeWork budget "false-discharge-budget"
   else if fuel == 0 then throwError "false-discharge-budget"
   modify fun state => { state with remaining := fuel - 1, visited := state.visited.insert key }
-  let refuted ← dischargeRefutableType (← inferType e)
-  if refuted && !e.hasFVar then return !(← dischargeRefutableContext true)
+  let context ← dischargeRawContext
+  let refuted ← dischargeRefutableTypeAt context (← inferType e)
+  if refuted && !e.hasFVar then return !(← dischargeRefutableContextAt context true)
   let e ← whnfD e
   if let .const n levels := e.getAppFn' then
     if [``False.elim, ``False.casesOn, ``absurd, ``Empty.elim, ``Empty.casesOn,
-        ``PEmpty.elim, ``PEmpty.casesOn].contains n && !e.hasFVar then return !(← dischargeRefutableContext true)
+        ``PEmpty.elim, ``PEmpty.casesOn].contains n && !e.hasFVar then return !(← dischargeRefutableContextAt context true)
     if let some matcher ← getMatcherInfo? n then
-      if matcher.numAlts == 0 && !e.hasFVar then return !(← dischargeRefutableContext true)
+      if matcher.numAlts == 0 && !e.hasFVar then return !(← dischargeRefutableContextAt context true)
     if let some (.recInfo r) := (← getEnv).find? n then
-      if r.rules.isEmpty && !e.hasFVar then return !(← dischargeRefutableContext true)
+      if r.rules.isEmpty && !e.hasFVar then return !(← dischargeRefutableContextAt context true)
     if let some ci := (← getEnv).find? n then
       if let some value := ci.value? (allowOpaque := true) then
         let body := value.instantiateLevelParams ci.levelParams levels
@@ -921,17 +930,18 @@ partial def falseDischarge (e : Expr) : StateRefT DischargeState MetaM Bool := d
         -- An opaque supplied producer of an impossible inhabitant is real
         -- evidence. Transparent derivations are followed to their suppliers;
         -- hypothetical local contradictions are not mistaken for suppliers.
-        if let .axiomInfo .. := ci then return !(← dischargeRefutableContext true)
+        if let .axiomInfo .. := ci then return !(← dischargeRefutableContextAt context true)
   match e with
   | .app .. =>
     for arg in e.getAppArgs do
-      if (← isProof arg) || (← dischargeRefutableType (← inferType arg)) then
+      if (← isProof arg) || (← dischargeRefutableTypeAt context (← inferType arg)) then
         if ← falseDischarge arg then return true
     return false
   | .lam .. => lambdaTelescope e fun xs body => do
+    let context ← dischargeRawContext
     for x in xs do
-      if ← dischargeRefutableType (← inferType x) then return false
-    if ← dischargeRefutableContext then return false
+      if ← dischargeRefutableTypeAt context (← inferType x) then return false
+    if ← dischargeRefutableContextAt context then return false
     falseDischarge body
   | .letE _ _ v b _ => falseDischarge (b.instantiate1 v)
   | .mdata _ e | .proj _ _ e => falseDischarge e
