@@ -585,6 +585,40 @@ example : Ok [] [] [.newAlloc 0 0] [(0, .alloc 0)] ∧
       (ghost (fun _ => false) 2 0 State.init [.newAlloc 0 0]).erase) :=
   ⟨.newAlloc rfl (by simp) .nil, by decide⟩
 
+/-- Instance (law `ConcreteSpec.Brand.brand_mismatch_refused`, case `distinctBrands`). -/
+example := @brand_mismatch_refused [10, 11] [(1, .heap 10), (0, .alloc 11)] 1 0 10 11 []
+  [(1, .heap 10), (0, .alloc 11)] rfl rfl (by decide)
+
+/-- Instance (law `ConcreteSpec.Brand.reset_requires_no_old`, case `reset`). -/
+example := @reset_requires_no_old [0] [(0, .alloc 0)] 0 0 1 [] [(0, .alloc 1)] 0
+  (.reset rfl (by decide) rfl (by decide) .nil) rfl 0
+
+/-- Instance (law `ConcreteSpec.Brand.reset_refuses_old`, case `otherLiveBrand`). -/
+example := @reset_refuses_old [0, 2] [(1, .heap 2), (0, .alloc 0)] 0 0 3 []
+  [(0, .alloc 3), (1, .heap 2)]
+  (by
+    intro e he β hb
+    cases he with
+    | head => rcases hb with hb | hb <;> cases hb; decide
+    | tail _ he =>
+      cases he with
+      | head => rcases hb with hb | hb <;> cases hb; decide
+      | tail _ he => cases he)
+  (.reset rfl (by decide) rfl (by decide) .nil) 1 2 rfl
+
+/-- Instance (law `ConcreteSpec.Brand.run_inv`, case `firstAllocation`). -/
+example := @run_inv State.init [.newAlloc 0 0] (State.init.bind 0 []) (.newAlloc .nil) inv_init
+
+/-- Instance (law `ConcreteSpec.Brand.reset_fresh`, case `generativity`). -/
+example := reset_fresh
+
+/-- Instance (law `ConcreteSpec.Brand.run_append`, case `twoAllocations`). -/
+example := @run_append State.init [.newAlloc 0 0] (State.init.bind 0 []) (.newAlloc .nil)
+  [.newAlloc 1 1] ((State.init.bind 0 []).bind 1 (State.init.bind 0 []).env) (.newAlloc .nil)
+
+/-- Instance (law `ConcreteSpec.Brand.ghost_run`, case `firstAllocation`). -/
+example := @ghost_run (fun _ => false) 2 0 State.init [.newAlloc 0 0] (State.init.bind 0 []) 0 rfl
+
 end Evidence
 
 end ConcreteSpec.Brand
