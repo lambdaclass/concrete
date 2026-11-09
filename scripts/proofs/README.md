@@ -364,3 +364,10 @@ long-term R-0219 resolution proposed in the record is an explicit generic typed
 axiom-origin/transport relation with checked evidence, rather than an axiom trust
 list or a non-refutable-result exemption. It requires design acceptance before
 implementation. No new solver entry or consumer switch is included in this record.
+
+**N8a slice-2a reproduction (R-0219):** [measured baseline findings](N2-N8a-reproduction.md)
+confirm the binder/application/origin defects, basic-decide and F3b certificate
+budget failures, and vacuous historical controls. The required long-term repair
+is one Graph/Work evaluator over closed templates with typed actual-origin
+substitution; delete the parallel certificate walker. No replacement evaluator,
+primitive trust rule or phase-B completion is claimed by the reproduction.
