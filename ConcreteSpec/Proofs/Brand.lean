@@ -113,53 +113,48 @@ theorem run_inv {s ss s'} (h : Run s ss s') : Inv s → Inv s' := by
 /-- Representation lemma. The empty initialization fields reduce the bookkeeping invariant to empty-list identities. (approved: REV-base1b-agy-01025713b). -/
 theorem inv_init : Inv State.init := ⟨by simp [State.init], by simp [State.init], by simp [State.init]⟩
 
-/-- Law (subject `ConcreteSpec.Brand.Run`). **reset_fresh** (Q9.14, Q1.2, Q1.4, Q1.5).
+/-- Law (subject `ConcreteSpec.Brand.Run`). Reset creates a brand different from every
+live value's brand and continues with the freshly bound allocator. -/
+theorem reset_fresh_brand {s : State} {a' a β' : Nat} {rest : List Stmt} {s' : State}
+    (hi : Inv s) (h : Run s (.reset a' a β' :: rest) s') :
+    ∃ mid, mid.env = (a', .allocV s.next) :: AList.erase s.env a ∧ Run mid rest s' ∧
+      ∀ e ∈ s.env, brandOf e.2 ≠ s.next := by
+  cases h with
+  | reset _ hr => exact ⟨_, rfl, hr, fun e he => Nat.ne_of_lt (hi.1 e he)⟩
 
-1. The brand a reset gives the new allocator differs from the brand of every value live at the
-   reset, in any reachable ghost state.
-2. Every brand a run generates (each new and each reset, in every iteration of every loop,
-   for every outcome of the loop conditions) differs from every other: the generated brands are
-   pairwise distinct.
-3. The new allocator's operations refuse the old brand: statically (reset_refuses_old,
-   brand_mismatch_refused), and in the ghost run, where use or free through the new
-   allocator of any value live before the reset, of the old brand or any other, is stuck. -/
-theorem reset_fresh :
-    (∀ {s a' a β' rest s'}, Inv s → Run s (.reset a' a β' :: rest) s' →
-      ∃ mid, mid.env = (a', .allocV s.next) :: AList.erase s.env a ∧ Run mid rest s' ∧
-        ∀ e ∈ s.env, brandOf e.2 ≠ s.next) ∧
-    (∀ {prog s'}, Run State.init prog s' → s'.gen.Nodup) ∧
-    (∀ {s a' a β' h r s'}, Inv s → (∃ v, AList.lookup s.env h = some v) → h ≠ a' →
-      ¬ Run s (.reset a' a β' :: .use h a' :: r) s' ∧
-      ¬ Run s (.reset a' a β' :: .free h a' :: r) s') := by
-  refine ⟨?_, ?_, ?_⟩
-  · intro s a' a β' rest s' hi h
-    cases h with
+/-- Law (subject `ConcreteSpec.Brand.Run`). Brands generated throughout a run, including
+all loop iterations, are pairwise distinct. -/
+theorem reset_fresh_nodup {prog : List Stmt} {s' : State}
+    (h : Run State.init prog s') : s'.gen.Nodup := by
+  exact (run_inv h inv_init).2.2
+
+/-- Law (subject `ConcreteSpec.Brand.Run`). After reset, use and free through the new
+allocator refuse every other handle. A pre-reset lookup premise is unnecessary: the use/free
+rules themselves require the handle to exist, and the state invariant bounds its old brand. -/
+theorem reset_fresh_refuses {s : State} {a' a β' h : Nat} {r : List Stmt} {s' : State}
+    (hi : Inv s) (hne : h ≠ a') :
+    ¬ Run s (.reset a' a β' :: .use h a' :: r) s' ∧
+    ¬ Run s (.reset a' a β' :: .free h a' :: r) s' := by
+  have key : ∀ b, AList.lookup ((a', Val.allocV s.next) :: AList.erase s.env a) h = some (.heapV b) →
+      b ≠ s.next := by
+    intro b hb
+    simp only [AList.lookup, show ¬ a' = h from fun e => hne e.symm, ↓reduceIte] at hb
+    exact Nat.ne_of_lt (hi.1 _ (AList.lookup_mem (α := Val) (l := AList.erase s.env a) hb |> AList.mem_of_mem_erase a))
+  have hnew : AList.lookup ((a', Val.allocV s.next) :: AList.erase s.env a) a' = some (.allocV s.next) := by
+    simp [AList.lookup]
+  refine ⟨fun hrun => ?_, fun hrun => ?_⟩
+  · cases hrun with
     | reset _ hr =>
-      exact ⟨_, rfl, hr, fun e he => Nat.ne_of_lt (hi.1 e he)⟩
-  · intro prog s' h
-    exact (run_inv h inv_init).2.2
-  · intro s a' a β' h r s' hi ⟨v, hv⟩ hne
-    have key : ∀ b, AList.lookup ((a', Val.allocV s.next) :: AList.erase s.env a) h = some (.heapV b) →
-        b ≠ s.next := by
-      intro b hb
-      simp only [AList.lookup, show ¬ a' = h from fun e => hne e.symm, ↓reduceIte] at hb
-      exact Nat.ne_of_lt (hi.1 _ (AList.lookup_mem (α := Val) (l := AList.erase s.env a) hb |> AList.mem_of_mem_erase a))
-    have hnew : AList.lookup ((a', Val.allocV s.next) :: AList.erase s.env a) a' = some (.allocV s.next) := by
-      simp [AList.lookup]
-    have _ := hv
-    refine ⟨fun hrun => ?_, fun hrun => ?_⟩
-    · cases hrun with
-      | reset _ hr =>
-        cases hr with
-        | use h1 h2 _ =>
-          simp only [State.bind] at h1 h2
-          rw [hnew] at h2; cases h2; exact key _ h1 rfl
-    · cases hrun with
-      | reset _ hr =>
-        cases hr with
-        | free h1 h2 _ =>
-          simp only [State.bind] at h1 h2
-          rw [hnew] at h2; cases h2; exact key _ h1 rfl
+      cases hr with
+      | use h1 h2 _ =>
+        simp only [State.bind] at h1 h2
+        rw [hnew] at h2; cases h2; exact key _ h1 rfl
+  · cases hrun with
+    | reset _ hr =>
+      cases hr with
+      | free h1 h2 _ =>
+        simp only [State.bind] at h1 h2
+        rw [hnew] at h2; cases h2; exact key _ h1 rfl
 
 
 /-! ### Erasure (Q1.1): a checked program passes every ghost brand check -/
@@ -609,8 +604,28 @@ example := @reset_refuses_old [0, 2] [(1, .heap 2), (0, .alloc 0)] 0 0 3 []
 /-- Instance (law `ConcreteSpec.Brand.run_inv`, case `firstAllocation`). -/
 example := @run_inv State.init [.newAlloc 0 0] (State.init.bind 0 []) (.newAlloc .nil) inv_init
 
-/-- Instance (law `ConcreteSpec.Brand.reset_fresh`, case `generativity`). -/
-example := reset_fresh
+def beforeReset : State := ⟨[(0, .allocV 0), (1, .heapV 0)], 1, [0]⟩
+def afterReset : State := beforeReset.bind 0 (AList.erase beforeReset.env 0)
+
+/-- Helper (computation). Closed state with two live old-brand values and a fresh counter. (approved: PENDING). -/
+theorem beforeResetInv : Inv beforeReset := by
+  refine ⟨?_, ?_, ?_⟩
+  · intro e he; cases he with
+    | head => decide
+    | tail _ he => cases he with
+      | head => decide
+      | tail _ he => cases he
+  · decide
+  · decide
+
+/-- Instance (law `ConcreteSpec.Brand.reset_fresh_brand`, case `liveOldBrand`). -/
+example := @reset_fresh_brand beforeReset 0 0 1 [] afterReset beforeResetInv (.reset rfl .nil)
+
+/-- Instance (law `ConcreteSpec.Brand.reset_fresh_nodup`, case `firstAllocation`). -/
+example := @reset_fresh_nodup [.newAlloc 0 0] (State.init.bind 0 []) (.newAlloc .nil)
+
+/-- Instance (law `ConcreteSpec.Brand.reset_fresh_refuses`, case `liveOldHandle`). -/
+example := @reset_fresh_refuses beforeReset 0 0 1 1 [] afterReset beforeResetInv (by decide)
 
 /-- Instance (law `ConcreteSpec.Brand.run_append`, case `twoAllocations`). -/
 example := @run_append State.init [.newAlloc 0 0] (State.init.bind 0 []) (.newAlloc .nil)

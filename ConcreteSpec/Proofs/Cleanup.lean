@@ -220,56 +220,55 @@ theorem depOrder_needs_unconsumed {pre post : List Deferred} {d : Deferred}
   subst he
   exact depOrder_cross h x hx d (List.mem_cons_self ..) hr
 
-/-- Law (subject `ConcreteSpec.Cleanup.Reg`, `ConcreteSpec.Cleanup.RunCleanup`). **defer_cleanup_releases** (Q9.14, Q9.8, Q1.5). For every cleanup stack a block can build
-from the resources it owns, and every structured exit (falling through, break L, continue L,
-return), the calls of the scopes the exit leaves:
-
-1. when every call returns, run exactly in reverse registration order, innermost scope first,
-   each call immediately followed by the release of each loan it held (expected);
-2. keep the allocator-dependency check: a call runs before the call that consumes anything it
-   needs (an allocator it depends on, or a loan's source);
-3. when a call traps, stop there: the earlier calls ran with their loan releases, the trapping
-   call is the last event, and no later cleanup runs;
-4. consume each resource at most once;
-5. find everything a call needs unconsumed when the call and its loan releases run: no earlier
-   call consumed it, and it was owned or is consumed by a later-running call. -/
-theorem defer_cleanup_releases {ok : Deferred → Bool} {live : Res → Bool} {st : Stack}
-    (hreg : Reg live st) {e : Exit} (he : e ≠ .abort) {fs : List Frame}
-    (hu : unwound e st = some fs) :
-    ((∀ d ∈ pending fs, ok d = true) →
-      ∀ tr r, RunCleanup ok (pending fs) tr r ↔ tr = expected (pending fs) ∧ r = .done) ∧
-    (∀ d da, d ∈ pending fs → da ∈ pending fs → da.target ∈ d.needs →
-      ∃ t₁ t₂ t₃, expected (pending fs) = t₁ ++ .call d :: t₂ ++ .call da :: t₃) ∧
-    (∀ pre d post, pending fs = pre ++ d :: post → (∀ x ∈ pre, ok x = true) → ok d = false →
-      ∀ tr r, RunCleanup ok (pending fs) tr r ↔ tr = expected pre ++ [.call d] ∧ r = .trapped) ∧
-    (targets (pending fs)).Nodup ∧
-    (∀ pre d post, pending fs = pre ++ d :: post → ∀ r ∈ d.needs,
-      (∀ x ∈ pre, x.target ≠ r) ∧ (live r = true ∨ r ∈ targets (pending st))) := by
-  have _ := he
+/-- Law (subject `ConcreteSpec.Cleanup.Reg`). Cleanup of exited scopes calls each dependent
+before the allocator or loan source it needs. This applies also to abort's empty prefix. -/
+theorem defer_cleanup_releases_before {live : Res → Bool} {st : Stack}
+    (hreg : Reg live st) {e : Exit} {fs : List Frame}
+    (hu : unwound e st = some fs) {d da : Deferred}
+    (hd : d ∈ pending fs) (hda : da ∈ pending fs) (hdep : da.target ∈ d.needs) :
+    ∃ t₁ t₂ t₃, expected (pending fs) = t₁ ++ .call d :: t₂ ++ .call da :: t₃ := by
   obtain ⟨rest, hst⟩ := unwound_prefix hu
-  obtain ⟨hdo0, hnd0, _, hav⟩ := reg_inv hreg
+  obtain ⟨hdo0, _, _, _⟩ := reg_inv hreg
+  rw [hst, pending_append] at hdo0
+  have hdo := depOrder_append_left hdo0
+  obtain ⟨pre, mid, post, hsplit⟩ := depOrder_before hdo hd hda hdep
+  refine ⟨expected pre, d.loans.map .release ++ expected mid,
+    da.loans.map .release ++ expected post, ?_⟩
+  rw [hsplit]
+  simp [expected, List.flatMap_append]
+
+/-- Law (subject `ConcreteSpec.Cleanup.Reg`). Exiting scopes never consumes a resource twice.
+Abort unwinds no frames, so it consumes none. -/
+theorem defer_cleanup_releases_nodup {live : Res → Bool} {st : Stack}
+    (hreg : Reg live st) {e : Exit} {fs : List Frame}
+    (hu : unwound e st = some fs) : (targets (pending fs)).Nodup := by
+  obtain ⟨rest, hst⟩ := unwound_prefix hu
+  obtain ⟨_, hnd, _, _⟩ := reg_inv hreg
+  rw [hst, pending_append] at hnd
+  simp only [targets, List.map_append] at hnd ⊢
+  exact hnd.sublist (List.sublist_append_left _ _)
+
+/-- Law (subject `ConcreteSpec.Cleanup.Reg`). A call's dependencies remain unconsumed by
+all preceding calls and are either owned or scheduled for cleanup. -/
+theorem defer_cleanup_releases_needs {live : Res → Bool} {st : Stack}
+    (hreg : Reg live st) {e : Exit} {fs : List Frame}
+    (hu : unwound e st = some fs) {pre post : List Deferred} {d : Deferred}
+    (hsplit : pending fs = pre ++ d :: post) {r : Res} (hr : r ∈ d.needs) :
+    (∀ x ∈ pre, x.target ≠ r) ∧ (live r = true ∨ r ∈ targets (pending st)) := by
+  obtain ⟨rest, hst⟩ := unwound_prefix hu
+  obtain ⟨hdo0, _, _, hav⟩ := reg_inv hreg
   have hdo : DepOrder (pending fs) := by
-    have := hdo0
-    rw [hst, pending_append] at this
-    exact depOrder_append_left this
-  refine ⟨fun hok => runCleanup_all_ok hok, ?_, ?_, ?_, ?_⟩
-  · intro d da hd hda hdep
-    obtain ⟨pre, mid, post, hsplit⟩ := depOrder_before hdo hd hda hdep
-    refine ⟨expected pre, d.loans.map .release ++ expected mid,
-      da.loans.map .release ++ expected post, ?_⟩
-    rw [hsplit]
-    simp [expected, List.flatMap_append]
-  · intro pre d post hsplit hok hd tr r
-    rw [hsplit]
-    exact runCleanup_trap hok hd tr r
-  · have := hnd0
-    rw [hst, pending_append] at this
-    simp only [targets, List.map_append] at this ⊢
-    exact this.sublist (List.sublist_append_left _ _)
-  · intro pre d post hsplit r hr
-    refine ⟨depOrder_needs_unconsumed (hsplit ▸ hdo) r hr, hav d ?_ r hr⟩
-    rw [hst, pending_append, hsplit]
-    exact List.mem_append_left _ (List.mem_append_right _ (List.mem_cons_self ..))
+    rw [hst, pending_append] at hdo0
+    exact depOrder_append_left hdo0
+  refine ⟨depOrder_needs_unconsumed (hsplit ▸ hdo) r hr, hav d ?_ r hr⟩
+  rw [hst, pending_append, hsplit]
+  exact List.mem_append_left _ (List.mem_append_right _ (List.mem_cons_self ..))
+
+/-! The five cleanup obligations have independent theorem parameters: runCleanup_all_ok and
+runCleanup_trap specify returning and trapping execution; the three laws above specify
+registration order, unique consumption, and dependency availability. No shared choice of ok
+can hide the trapping obligation behind the returning case. The spec's abort branch selects
+an empty frame prefix, so these prefix properties require no structured-exit restriction. -/
 
 /-- Representation lemma. The defining abort branch unwinds no scopes, whose flattened pending list is empty. (approved: REV-base1b-agy-01025713b). An abort runs no cleanup (Q9.8). -/
 theorem abort_no_cleanup (st : Stack) : unwound .abort st = some [] ∧ pending [] = [] := ⟨rfl, rfl⟩
@@ -289,9 +288,16 @@ example := @runCleanup_trap (fun d => d != desB) desB [relA] [desV]
       | head => decide
       | tail _ h => cases h) (by decide) (expected [desV] ++ [.call desB]) .trapped
 
-/-- Instance (law `ConcreteSpec.Cleanup.defer_cleanup_releases`, case `returnStack`). -/
-example := defer_cleanup_releases (ok := fun _ => true) stack_reg (e := .ret) (by decide)
-  (fs := stack) rfl
+/-- Instance (law `ConcreteSpec.Cleanup.defer_cleanup_releases_before`, case `allocatorDependency`). -/
+example := @defer_cleanup_releases_before ownedAfter stack stack_reg .ret stack rfl
+  desV relA (by decide) (by decide) (by decide)
+
+/-- Instance (law `ConcreteSpec.Cleanup.defer_cleanup_releases_nodup`, case `returnStack`). -/
+example := @defer_cleanup_releases_nodup ownedAfter stack stack_reg .ret stack rfl
+
+/-- Instance (law `ConcreteSpec.Cleanup.defer_cleanup_releases_needs`, case `loanSource`). -/
+example := @defer_cleanup_releases_needs ownedAfter stack stack_reg .ret stack rfl
+  [] [desB, relA] desV rfl 2 (by decide)
 
 end Evidence
 

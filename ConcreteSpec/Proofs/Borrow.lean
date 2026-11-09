@@ -151,9 +151,8 @@ theorem noWrite_erase {r Γ p'} (h : NoWrite r Γ) : NoWrite r (AList.erase Γ p
   · cases hp
   · exact h p q hp
 
-/-- Helper (congruence). Transport the context predicate across restriction or a locked context extension; used by the separate access-soundness law. (approved: REV-base1b-agy-01025713b). -/
+/-- Helper (congruence). Transport the context predicate across restriction or a locked context extension; used by the separate access-soundness law. (approved: PENDING). -/
 theorem noWrite_bodyCtx {r Γ m v q0} (h : NoWrite r Γ)
-    (hm : m = true → q0.lock = .free ∧ q0.mutable = true)
     (hsrc : q0.root = r → m = true → False) : NoWrite r (bodyCtx m v q0 Γ) := by
   intro p q hp hr hl
   by_cases hpv : p = v
@@ -169,7 +168,6 @@ theorem noWrite_bodyCtx {r Γ m v q0} (h : NoWrite r Γ)
     | none => rw [hq] at hp; cases hp
     | some q1 =>
       rw [hq] at hp; cases hp
-      have _ := hm
       by_cases h1 : q1.root = q0.root
       · by_cases h2 : q1.lock = .free <;> cases m <;> simp [lockFor, h1, h2] at hl
       · simp only [lockFor, h1, ↓reduceIte] at hr hl ⊢
@@ -200,7 +198,7 @@ theorem noWrite_sound {Γ ss Γ'} (h : Ok Γ ss Γ') : ∀ {r}, NoWrite r Γ →
       rw [(hn _ _ hs hr hl).1] at hmut; cases hmut
     cases hw with
     | mutOpen hs' hr => rw [hs] at hs'; cases hs'; exact hbad hr rfl
-    | body hs' hw => rw [hs] at hs'; cases hs'; exact ihb (noWrite_bodyCtx hn hm hbad) hw
+    | body hs' hw => rw [hs] at hs'; cases hs'; exact ihb (noWrite_bodyCtx hn hbad) hw
     | tail hs1 hw =>
       cases hs1 with
       | borrow hs2 _ _ _ hb2 h0 =>
