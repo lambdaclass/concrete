@@ -1,0 +1,53 @@
+{
+  "worktree": {
+    "checker_sha": "16fb6551f4dfc9f922c0fdcc3a4862722688af10",
+    "exit": 1,
+    "counts": {
+      "unresolved-approval": 54,
+      "unknown-name": 3,
+      "instance-false-discharge": 5,
+      "instance-application": 4,
+      "unpaired-planted": 12,
+      "missing-instance": 9
+    },
+    "incomplete": [],
+    "obligations": [
+      "ConcreteSpec.Core.Frame.ABI.Signature.WellFormed",
+      "ConcreteSpec.Core.Frame.ABI.RetentionConforms",
+      "ConcreteSpec.Core.Frame.ABI.LauncherConforms",
+      "ConcreteSpec.Core.Frame.ABI.ArtifactStackConforms",
+      "ConcreteSpec.Core.Frame.ABI.TransitionConforms"
+    ],
+    "source_sha": "487085db1fcdf85a20c6310314170bfbcb44dc8f",
+    "scopes": [
+      "ConcreteSpec.Spec.Frame",
+      "ConcreteSpec.Proofs.Frame"
+    ]
+  },
+  "adc": {
+    "checker_sha": "16fb6551f4dfc9f922c0fdcc3a4862722688af10",
+    "exit": 1,
+    "counts": {
+      "unresolved-approval": 53,
+      "unknown-name": 9,
+      "instance-false-discharge": 9,
+      "instance-application": 1,
+      "unpaired-planted": 16,
+      "missing-instance": 9,
+      "planted-proposition": 1
+    },
+    "incomplete": [],
+    "obligations": [
+      "ConcreteSpec.Core.Frame.ABI.Signature.WellFormed",
+      "ConcreteSpec.Core.Frame.ABI.RetentionConforms",
+      "ConcreteSpec.Core.Frame.ABI.LauncherConforms",
+      "ConcreteSpec.Core.Frame.ABI.ArtifactStackConforms",
+      "ConcreteSpec.Core.Frame.ABI.TransitionConforms"
+    ],
+    "source_sha": "adc0656fc22c0cea0d74406778c59b9d1ff85c30",
+    "scopes": [
+      "ConcreteSpec.Spec.Frame",
+      "ConcreteSpec.Proofs.Frame"
+    ]
+  }
+}

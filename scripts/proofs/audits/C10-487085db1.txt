@@ -1,0 +1,265 @@
+Checker: 16fb6551f4dfc9f922c0fdcc3a4862722688af10
+Source: 487085db1fcdf85a20c6310314170bfbcb44dc8f
+Scopes: ConcreteSpec.Spec.Frame,ConcreteSpec.Proofs.Frame
+
+REPORT Helper ( ConcreteSpec.Core.Frame.ABI.call_stack_account Helper (projection). Describes the contract or its arithmetic; independent execution
+evidence must be supplied separately. (approved: PENDING)
+ Stack accounting of a call is exactly caller frame plus callee bound.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.ABI.call_stack_account PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.ABI.encodeToyExit_correct Helper (computation). Repeated successor implements the exit contract's arithmetic encoding.
+(approved: PENDING)
+FAIL unresolved-approval ConcreteSpec.Core.Frame.ABI.encodeToyExit_correct PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.free_frame Helper (inversion). Decomposes successful C4 release for the instruction and execution soundness laws. (approved: PENDING)
+ Releasing a block may change its lifecycle metadata, but frames all bytes and all metadata of
+other blocks and every structured place.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.free_frame PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.ABI.retainChain_length Helper (computation). The loader's module count agrees with the independent entry contract.
+(approved: PENDING)
+FAIL unresolved-approval ConcreteSpec.Core.Frame.ABI.retainChain_length PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.ABI.machine_registerFrame_union Helper (congruence). Transitivity of register observations outside combined clobber sets. (approved: PENDING)
+Sequential calls preserve every register outside the union of their clobber sets.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.ABI.machine_registerFrame_union PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.ABI.launcher_run_admitted Helper (projection). Describes the contract or its arithmetic; independent execution
+evidence must be supplied separately. (approved: PENDING)
+ Every launched run passes stack admission with its recorded reservation.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.ABI.launcher_run_admitted PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.preserves_trans Helper (congruence). Compose two executions with the same advertised permission set.
+(approved: PENDING)
+FAIL unresolved-approval ConcreteSpec.Core.Frame.preserves_trans PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.ABI.typed_result_at_return Helper (projection). Extracts an ABI contract obligation; implementation evidence is
+`ConcreteSpec.Core.Frame.ABI.toyCall_conforms`. (approved: PENDING)
+ The typed result occupies its return-convention locations after return.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.ABI.typed_result_at_return PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.rawWrite_frame Helper (inversion). Reduces a successful Hybrid raw write to its C4 store. (approved: PENDING)
+A raw Hybrid write has the byte footprint of its underlying memory store and touches no place.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.rawWrite_frame PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.c1_call_frame_of_implementation Helper (inversion). Lifts step soundness through the complete-call derivation.
+(approved: PENDING)
+Complete-call framing follows from the callee's actual steps and their C4 decompositions,
+including its final return/pop. The call contract is the conclusion, never a premise.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.c1_call_frame_of_implementation PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.ABI.frame_within_stack_bound Helper (projection). Describes the contract or its arithmetic; independent execution
+evidence must be supplied separately. (approved: PENDING)
+ The callee's own frame is included in its final-artifact stack bound.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.ABI.frame_within_stack_bound PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.expose_frame Helper (inversion). Decomposes successful C4 exposure for the instruction and execution soundness laws. (approved: PENDING)
+ Exposure may change only the exposed flag of the provenance block; every byte and all metadata
+of other blocks and every place are preserved.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.expose_frame PENDING
+FAIL unknown-name ConcreteSpec.Core.Frame.runStoringCall_result .done
+REPORT Helper ( ConcreteSpec.Core.Frame.runStoringCall_result Helper (computation). The actual four C1 steps implement the successful C4 store, ending
+with `.done` and an empty caller continuation. (approved: PENDING)
+FAIL unresolved-approval ConcreteSpec.Core.Frame.runStoringCall_result PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.ABI.kept_receipt_rejects_other_extern Helper (computation). Characterizes the retention specification; execution evidence is
+`ConcreteSpec.Core.Frame.ABI.transferKept_sound`. (approved: PENDING)
+ No other extern can consume a kept receipt.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.ABI.kept_receipt_rejects_other_extern PENDING
+REPORT Obligation ConcreteSpec.Core.Frame.ABI.Signature.WellFormed Obligation (discharged at slice 0, R-0580).
+Obligation on the code generator: establish these properties for its actual target frame layout,
+including spills and cleanup. The abstract toy layout is not evidence for a native layout.
+A signature's structural laws: positive power-of-two alignment, frame size rounded to it, the
+frame included in the callee stack bound, and callee-saved registers disjoint from clobbers.
+REPORT Helper ( ConcreteSpec.Core.Frame.alloc_frame Helper (inversion). Decomposes successful C4 allocation for the instruction and execution soundness laws. (approved: PENDING)
+ Fresh allocation preserves every old byte, every old block's metadata and every place. The
+footprint is the complete new block; old bytes are necessarily outside it because their allocation
+identities differ.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.alloc_frame PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.alloc_fresh_disjoint Helper (inversion). Extracts allocation-identity freshness from successful C4 allocation. (approved: PENDING)
+The allocated identity is disjoint from every range whose block existed before allocation.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.alloc_fresh_disjoint PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.ABI.machine_preserved_trans Helper (congruence). Transitivity of protected machine observations across calls. (approved: PENDING)
+Preserved machine state composes across sequential calls with the same saved-register set.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.ABI.machine_preserved_trans PENDING
+FAIL unknown-name ConcreteSpec.Core.Frame.step_call_saves_caller .ret
+REPORT Helper ( ConcreteSpec.Core.Frame.step_call_saves_caller Helper (computation). Computes the C1 call-entry step used by caller restoration. (approved: PENDING)
+ Entering a C1 call saves the caller's locals in a `.ret` frame, binds the evaluated arguments to
+callee parameters, and preserves the caller's continuation below that frame.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.step_call_saves_caller PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.ABI.stack_pointer_restored Helper (projection). Extracts an ABI contract obligation; implementation evidence is
+`ConcreteSpec.Core.Frame.ABI.toyCall_conforms`. (approved: PENDING)
+ Returning restores the caller's stack pointer exactly.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.ABI.stack_pointer_restored PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.ABI.submit_produces_paired_receipt Helper (computation). Characterizes the retention specification; execution evidence is
+`ConcreteSpec.Core.Frame.ABI.transferKept_sound`. (approved: PENDING)
+ Submission of an owned handle calls the paired submitting extern and produces a receipt for the
+same handle.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.ABI.submit_produces_paired_receipt PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.ABI.caller_stack_slots_equal Helper (projection). Extracts an ABI contract obligation; implementation evidence is
+`ConcreteSpec.Core.Frame.ABI.toyCall_conforms`. (approved: PENDING)
+ The caller's stack slots below its stack pointer are restored exactly.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.ABI.caller_stack_slots_equal PENDING
+REPORT Helper ( _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.metadataStoreWellFormed Helper (computation). Constructs the closed memory fixture used by the execution witnesses. (approved: PENDING)
+FAIL unresolved-approval _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.metadataStoreWellFormed PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.preserves_seq Helper (congruence). Transitivity under footprint union, used by execution induction. (approved: PENDING)
+Sequential composition frames the union of the two operations' footprints.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.preserves_seq PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.preserves_covers Helper (congruence). Widen static permissions without changing an execution.
+(approved: PENDING)
+FAIL unresolved-approval ConcreteSpec.Core.Frame.preserves_covers PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.write_structured_frame Helper (inversion). Reduces a successful Hybrid structured write to the place-update case. (approved: PENDING)
+A successful typed write to structured storage has exactly the written place's footprint.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.write_structured_frame PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.ABI.typed_arguments_at_entry Helper (projection). Extracts an ABI contract obligation; implementation evidence is
+`ConcreteSpec.Core.Frame.ABI.toyCall_conforms`. (approved: PENDING)
+ Typed arguments occupy their signature locations at entry.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.ABI.typed_arguments_at_entry PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.ABI.stack_under_reservation Helper (computation). Computes the refusal branch of the launcher admission specification. (approved: PENDING)
+A reservation below the final artifact bound refuses startup with status 125.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.ABI.stack_under_reservation PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.write_materialized_frame Helper (inversion). Reduces a successful Hybrid materialized write to its C4 store. (approved: PENDING)
+A successful typed write to materialized storage has the byte footprint of its actual store.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.write_materialized_frame PENDING
+FAIL unknown-name ConcreteSpec.Core.Frame.step_return_restores_caller .ret
+REPORT Helper ( ConcreteSpec.Core.Frame.step_return_restores_caller Helper (computation). Computes the C1 final return step used by caller restoration. (approved: PENDING)
+ A returned value reaching a `.ret` frame restores the caller's locals and continuation, binding
+the result at any requested destination. Leave and destination-bind instrumentation thread the shared
+state through the same step.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.step_return_restores_caller PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.ABI.kept_receipt_rejects_submission Helper (computation). Characterizes the retention specification; execution evidence is
+`ConcreteSpec.Core.Frame.ABI.transferKept_sound`. (approved: PENDING)
+ The submitting extern cannot consume its own receipt, even though it is the other member of the
+pair: completion requires a distinct extern identity.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.ABI.kept_receipt_rejects_submission PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.ABI.keptPair_results_valid Helper (computation). Characterizes the retention specification; execution evidence is
+`ConcreteSpec.Core.Frame.ABI.transferKept_sound`. (approved: PENDING)
+ A well-formed kept pair validly returns its submission receipt and completion-owned handle.
+The exact result constraints already imply both `ExternResult.Valid` facts.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.ABI.keptPair_results_valid PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.ABI.frame_size_aligned Helper (projection). Describes the contract or its arithmetic; independent execution
+evidence must be supplied separately. (approved: PENDING)
+ A well-formed signature's frame size is a multiple of its positive power-of-two alignment.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.ABI.frame_size_aligned PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.blockOutside_union Helper (inversion). Decomposes metadata nonmembership in a footprint union. (approved: PENDING)
+Block metadata outside a union is outside both components.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.blockOutside_union PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.return_cleanup_restores_caller Helper (inversion). Reduces completed scope cleanup to the C1 return step. (approved: PENDING)
+ Successful cleanup does not disturb call-frame ownership: after every exited scope has run its
+deferred calls, return restores the caller and binds its result at any requested destination.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.return_cleanup_restores_caller PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.ABI.retainChain_complete Helper (computation). The dependency-chain traversal visits every reachable module.
+(approved: PENDING)
+FAIL unresolved-approval ConcreteSpec.Core.Frame.ABI.retainChain_complete PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.ABI.launcher_entry_exit Helper (projection). Describes the contract or its arithmetic; independent execution
+evidence must be supplied separately. (approved: PENDING)
+ A launcher run relates its exact retained closure to the stated entry and exit observations.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.ABI.launcher_entry_exit PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.ABI.extern_result_rejects_unrelated_retention Helper (computation). Characterizes the retention specification; execution evidence is
+`ConcreteSpec.Core.Frame.ABI.transferKept_sound`. (approved: PENDING)
+ An extern unrelated to both sides of a pair cannot validly return either retention value.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.ABI.extern_result_rejects_unrelated_retention PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.ABI.callee_saved_registers_equal Helper (projection). Extracts an ABI contract obligation; implementation evidence is
+`ConcreteSpec.Core.Frame.ABI.toyCall_conforms`. (approved: PENDING)
+ A well-formed returning ABI call restores every callee-saved register exactly: well-formedness
+puts those registers outside the clobber set, and the call's register frame preserves that set.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.ABI.callee_saved_registers_equal PENDING
+REPORT Obligation ConcreteSpec.Core.Frame.ABI.RetentionConforms Obligation (discharged at slice 25, R-0580).
+Obligation on the code generator: relate actual foreign-boundary ownership transfers to the
+checked paired protocol. Foreign code respecting the declared access/retention restriction
+remains the named Q3.12 trusted premise; this obligation does not prove foreign code correct.
+REPORT Helper ( ConcreteSpec.Core.Frame.placeOutside_union Helper (inversion). Decomposes place nonmembership in a footprint union. (approved: PENDING)
+Place membership outside a union is membership outside both components.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.placeOutside_union PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.ABI.kept_only_paired_completion Helper (computation). Characterizes the retention specification; execution evidence is
+`ConcreteSpec.Core.Frame.ABI.transferKept_sound`. (approved: PENDING)
+ A kept receipt has exactly one retention transition: the paired completion returns the same
+handle to Concrete ownership.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.ABI.kept_only_paired_completion PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.c1Call_restores_caller Helper (inversion). Inverts the complete-call derivation for the caller-restoration law. (approved: PENDING)
+ Every complete `C1Call` ends with its result bound into the caller locals and at the caller
+continuation saved by its entry statement. The conclusion follows from the actual final return or
+Unit fall-through step, including successful leave and destination-bind instrumentation.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.c1Call_restores_caller PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.c1_steps_frame Helper (inversion). Induction over actual C1 steps composes their independently justified
+C4 effects, including request/answer transitions. (approved: PENDING)
+FAIL unresolved-approval ConcreteSpec.Core.Frame.c1_steps_frame PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.ABI.toyTransition_conforms Helper (inversion). Establish the relation form of toy-call conformance from its
+independent execution witnesses. (approved: PENDING)
+The independently executed toy call satisfies the complete typed ABI contract for every base
+machine, argument and return value, including its private spill and balanced stack operations.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.ABI.toyTransition_conforms PENDING
+REPORT Obligation ConcreteSpec.Core.Frame.ABI.LauncherConforms Obligation (discharged at slice 0, R-0505).
+Obligation on the native launcher integration: relate independently executed startup and exit to
+the retained artifact closure, entry inputs, observations and reservation. Slice 0's unverified
+native path carries the explicit premise (R-0503); final-image validation discharges it at
+R-0505, with the direct-syscall launcher supplied by R-0584. Toy launches do not discharge it.
+REPORT Obligation ConcreteSpec.Core.Frame.ABI.ArtifactStackConforms Obligation (discharged at slice 0, R-0575).
+Obligation on the code generator: bind the final artifact's stack report to its actual stack-use
+samples, including spills, nested calls, cleanup, and launcher/runtime frames. The operational
+samples must come from artifact execution, not from an admission test against the reported bound.
+The nested toy stack language proves only its own computed bound.
+REPORT Helper ( ConcreteSpec.Core.Frame.ABI.artifact_stack_account Helper (projection). Describes the contract or its arithmetic; independent execution
+evidence must be supplied separately. (approved: PENDING)
+ Whole-artifact accounting adds launcher/runtime bytes to that same handoff.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.ABI.artifact_stack_account PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.set_frame Helper (computation). Computes the protected observations of a single structured-place update. (approved: PENDING)
+ Replacing one structured place has exactly that place's footprint; bytes and block metadata are
+untouched.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.set_frame PENDING
+REPORT Obligation ConcreteSpec.Core.Frame.ABI.TransitionConforms Obligation (discharged at slice 0, R-0580).
+Obligation on the code generator: prove conformance of its actual target call transition.
+This binds typed input/output locations and protected machine state to native execution;
+the toy transition below discharges only its own instance.
+Conformance is a specification to prove about a transition, never execution evidence.
+REPORT Helper ( ConcreteSpec.Core.Frame.byteOutside_union Helper (inversion). Decomposes byte nonmembership in a footprint union. (approved: PENDING)
+Membership outside a union is membership outside both components.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.byteOutside_union PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.ABI.clobbers_only_changed_registers Helper (projection). Extracts an ABI contract obligation; implementation evidence is
+`ConcreteSpec.Core.Frame.ABI.toyCall_conforms`. (approved: PENDING)
+ Registers outside the clobber set are unchanged; equivalently, clobbers are the only registers
+permitted to differ after return.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.ABI.clobbers_only_changed_registers PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.ABI.stack_adequate Helper (computation). Computes the entry branch of the launcher admission specification. (approved: PENDING)
+A reservation at least the bound admits the same launcher input.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.ABI.stack_adequate PENDING
+REPORT Helper ( _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.c1ExplicitCall Helper (computation). Constructs the closed explicit-return execution witness. (approved: PENDING)
+FAIL unresolved-approval _private.ConcreteSpec.Proofs.Frame.0.ConcreteSpec.Core.Frame.c1ExplicitCall PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.ABI.checkKeptPair_result Helper (inversion). An accepted declaration-check result meets the descriptor contract.
+(approved: PENDING)
+Declaration checking extracts a protocol whose four descriptors satisfy the specification.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.ABI.checkKeptPair_result PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.blockOutside_block Helper (inversion). Extracts identity inequality from singleton nonmembership. (approved: PENDING)
+ A lifecycle footprint excludes metadata framing for its own block, even when that block is
+zero-sized.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.blockOutside_block PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.store_frame Helper (inversion). Decomposes successful C4 stores for the instruction and execution soundness laws. (approved: PENDING)
+ A successful byte store preserves every old byte outside the exact access range, every block's
+metadata (including the written block's), and every structured place. A zero-byte store has the
+empty footprint.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.store_frame PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.ABI.retainChain_membership Helper (computation). The loader retains all and only reachable modules, so
+extra retained modules cannot satisfy the exact closure contract. (approved: PENDING)
+FAIL unresolved-approval ConcreteSpec.Core.Frame.ABI.retainChain_membership PENDING
+REPORT Helper ( ConcreteSpec.Core.Frame.preserves_refl Helper (congruence). Reflexivity of the preservation relation; used for idle execution. (approved: PENDING)
+The empty footprint frames every operation.
+FAIL unresolved-approval ConcreteSpec.Core.Frame.preserves_refl PENDING
+FAIL instance-false-discharge ConcreteSpec.Core.Frame.ABI.«⟪example⟫ConcreteSpec/Proofs/Frame.lean:1329»
+FAIL instance-false-discharge ConcreteSpec.Core.Frame.ABI.«⟪example⟫ConcreteSpec/Proofs/Frame.lean:1239»
+FAIL instance-false-discharge ConcreteSpec.Core.Frame.«⟪example⟫ConcreteSpec/Proofs/Frame.lean:565»
+FAIL instance-application ConcreteSpec.Core.Frame.«⟪example⟫ConcreteSpec/Proofs/Frame.lean:681»
+FAIL instance-application ConcreteSpec.Core.Frame.ABI.«⟪example⟫ConcreteSpec/Proofs/Frame.lean:845»
+FAIL instance-application ConcreteSpec.Core.Frame.«⟪example⟫ConcreteSpec/Proofs/Frame.lean:754»
+FAIL instance-false-discharge ConcreteSpec.Core.Frame.«⟪example⟫ConcreteSpec/Proofs/Frame.lean:614»
+FAIL instance-application ConcreteSpec.Core.Frame.«⟪example⟫ConcreteSpec/Proofs/Frame.lean:502»
+FAIL instance-false-discharge ConcreteSpec.Core.Frame.ABI.«⟪example⟫ConcreteSpec/Proofs/Frame.lean:804»
+FAIL unpaired-planted ConcreteSpec.Core.Frame.«⟪example⟫ConcreteSpec/Proofs/Frame.lean:760»
+FAIL unpaired-planted ConcreteSpec.Core.Frame.ABI.«⟪example⟫ConcreteSpec/Proofs/Frame.lean:854»
+FAIL unpaired-planted ConcreteSpec.Core.Frame.ABI.«⟪example⟫ConcreteSpec/Proofs/Frame.lean:1269»
+FAIL unpaired-planted ConcreteSpec.Core.Frame.«⟪example⟫ConcreteSpec/Proofs/Frame.lean:626»
+FAIL unpaired-planted ConcreteSpec.Core.Frame.ABI.«⟪example⟫ConcreteSpec/Proofs/Frame.lean:1359»
+FAIL unpaired-planted ConcreteSpec.Core.Frame.ABI.«⟪example⟫ConcreteSpec/Proofs/Frame.lean:812»
+FAIL unpaired-planted ConcreteSpec.Core.Frame.ABI.«⟪example⟫ConcreteSpec/Proofs/Frame.lean:1252»
+FAIL unpaired-planted ConcreteSpec.Core.Frame.ABI.«⟪example⟫ConcreteSpec/Proofs/Frame.lean:1376»
+FAIL unpaired-planted ConcreteSpec.Core.Frame.«⟪example⟫ConcreteSpec/Proofs/Frame.lean:511»
+FAIL unpaired-planted ConcreteSpec.Core.Frame.«⟪example⟫ConcreteSpec/Proofs/Frame.lean:578»
+FAIL unpaired-planted ConcreteSpec.Core.Frame.«⟪example⟫ConcreteSpec/Proofs/Frame.lean:696»
+FAIL unpaired-planted ConcreteSpec.Core.Frame.ABI.«⟪example⟫ConcreteSpec/Proofs/Frame.lean:1340»
+FAIL missing-instance ConcreteSpec.Core.Frame.ABI.stackSamples_bounded
+FAIL missing-instance ConcreteSpec.Core.Frame.runEffect_frame
+FAIL missing-instance ConcreteSpec.Core.Frame.c1_call_frame
+FAIL missing-instance ConcreteSpec.Core.Frame.caller_restoration
+FAIL missing-instance ConcreteSpec.Core.Frame.storingCall_frame
+FAIL missing-instance ConcreteSpec.Core.Frame.ABI.toyLaunch_conforms
+FAIL missing-instance ConcreteSpec.Core.Frame.c4_effects_frame
+FAIL missing-instance ConcreteSpec.Core.Frame.ABI.transferKept_sound
+FAIL missing-instance ConcreteSpec.Core.Frame.ABI.layout_aligned
+N2 FAIL

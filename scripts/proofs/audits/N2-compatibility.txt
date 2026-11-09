@@ -1,0 +1,12 @@
+Checker: 16fb6551f4dfc9f922c0fdcc3a4862722688af10
+
+PASS shared population compatibility theorems
+PASS shared population compatibility constants
+PASS shared population compatibility examples
+PASS shared population compatibility heads
+PASS shared population compatibility modules
+PASS shared population compatibility imported
+PASS unchanged rule consumer scripts/spec/rules.py
+PASS unchanged audit scripts/proofs/axioms.sh
+PASS unchanged audit scripts/proofs/trust_ban.sh
+PASS registered-rule JSONL compatibility
