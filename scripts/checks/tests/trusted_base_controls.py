@@ -5,11 +5,23 @@ import os
 import re
 import subprocess
 import tempfile
+import sys
+import time
+import signal
+
+import importlib.util
+_spec = importlib.util.spec_from_file_location("trusted_control_run", Path(__file__).resolve().parents[1] / "lib/trusted_control_run.py")
+_runner = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_runner)
+control_run = _runner.control_run
 
 DRIVER = "scripts/checks/compiler/slice0_examples.lean"
-BASE_ENV = json.loads(subprocess.check_output(
-    ["lake", "env", "python3", "-I", "-c", "import json, os; print(json.dumps(dict(os.environ)))"],
-    text=True, timeout=30))
+# Lake must never fetch while running controls. Only consume existing local artifacts.
+BASE_ENV = dict(os.environ)
+paths = [Path(".lake/build/lib/lean"), Path(".lake/packages/lean-compiler-backend/.lake/build/lib/lean")]
+if not (paths[0] / "Concrete/Premises.olean").is_file():
+    sys.exit("INCOMPLETE trusted-base control: missing prebuilt Concrete.Premises")
+BASE_ENV["LEAN_PATH"] = os.pathsep.join(str(p.resolve()) for p in paths)
 BASE_ENV["LEAN_NUM_THREADS"] = "2"
 
 TEST_DRIVER = "scripts/checks/tests/trusted_examples_entry.lean"
@@ -22,14 +34,14 @@ def lean(path, driver=False, extra_env=None, production=False):
         args = ["lean", TEST_DRIVER]
     else:
         args = ["lean", *(["--run", DRIVER] if driver else []), str(path)]
-    return subprocess.run(args,
+    return control_run(args,
         env=env, text=True, stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT, timeout=60)
+        stderr=subprocess.STDOUT, timeout=180)
 
 def lean_batch(paths):
-    r = subprocess.run(["lean", "--run", DRIVER, "--per-file", *[str(p) for p in paths]],
+    r = control_run(["lean", "--run", DRIVER, "--per-file", *[str(p) for p in paths]],
         env=dict(BASE_ENV), text=True, stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT, timeout=120)
+        stderr=subprocess.STDOUT, timeout=360)
     assert r.returncode == 0, r.stdout
     out, cur = {}, []
     for line in r.stdout.splitlines(keepends=True):
@@ -49,7 +61,7 @@ with tempfile.TemporaryDirectory() as d:
     d = Path(d)
     module = d / "scripts/checks/compiler/slice0_examples.olean"
     module.parent.mkdir(parents=True)
-    subprocess.run(["lean", "-o", str(module), DRIVER], env=BASE_ENV, check=True, timeout=60)
+    control_run(["lean", "-o", str(module), DRIVER], env=BASE_ENV, check=True, timeout=180)
     BASE_ENV["LEAN_PATH"] = str(d) + os.pathsep + BASE_ENV.get("LEAN_PATH", "")
     ambient = d / "ambient.lean"
     ambient.write_text("import Lean\nunsafe def ambientAuthority : Nat := 0\n")
@@ -62,7 +74,7 @@ with tempfile.TemporaryDirectory() as d:
     assert ambient_diagnostic in ambient_result.stdout.splitlines(), ambient_result.stdout
     empty = d / "empty.rows"
     empty.write_text("no json rows\n")
-    r_empty = subprocess.run(["python3", "-I", "scripts/checks/lib/example_rows.py", str(empty)],
+    r_empty = control_run(["python3", "-I", "scripts/checks/lib/example_rows.py", str(empty)],
         text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=15)
     require(r_empty, False, "FAIL examples: no example-json rows observed")
     p = d / "examples.lean"
@@ -115,7 +127,7 @@ with tempfile.TemporaryDirectory() as d:
     assert r_benign.returncode == 0 and "example-json" not in r_benign.stdout, (r_benign.returncode, r_benign.stdout)
     benign_rows = d / "benign.rows"
     benign_rows.write_text(r_benign.stdout)
-    r_benign_rows = subprocess.run(["python3", "-I", "scripts/checks/lib/example_rows.py", str(benign_rows)],
+    r_benign_rows = control_run(["python3", "-I", "scripts/checks/lib/example_rows.py", str(benign_rows)],
         text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=15)
     require(r_benign_rows, False, "FAIL examples: no example-json rows observed")
     valid_rows = d / "valid_example.rows"
@@ -123,7 +135,7 @@ with tempfile.TemporaryDirectory() as d:
         'example-json {"name":"⟪example⟫f.lean:1:0","axioms":[]}\n'
         'example-json {"name":"Concrete.BIR.Examples.«⟪example⟫Concrete/BIR.lean:542:0»","axioms":["propext"]}\n'
     )
-    r_valid_rows = subprocess.run(["python3", "-I", "scripts/checks/lib/example_rows.py", str(valid_rows)],
+    r_valid_rows = control_run(["python3", "-I", "scripts/checks/lib/example_rows.py", str(valid_rows)],
         text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=15)
     assert r_valid_rows.returncode == 0, (r_valid_rows.returncode, r_valid_rows.stdout)
     non_ex_rows = d / "non_example.rows"
@@ -134,17 +146,17 @@ with tempfile.TemporaryDirectory() as d:
         'unparsed line\nexample-json {"name":"⟪example⟫f.lean:1:0","axioms":[]}\n',
     ]:
         non_ex_rows.write_text(bad_rows_text)
-        r_non_ex = subprocess.run(["python3", "-I", "scripts/checks/lib/example_rows.py", str(non_ex_rows)],
+        r_non_ex = control_run(["python3", "-I", "scripts/checks/lib/example_rows.py", str(non_ex_rows)],
             text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=15)
         require(r_non_ex, False, "FAIL examples: invalid observation schema")
     spoof = d / "spoof_example_json.lean"
     spoof.write_text('import Lean\n#eval IO.println "example-json {\\"name\\":\\"⟪example⟫spoof.lean:1:0\\",\\"axioms\\":[]}"\n')
-    r_spoof = subprocess.run(["lean", "--run", DRIVER, str(spoof)],
-        env=dict(BASE_ENV), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+    r_spoof = control_run(["lean", "--run", DRIVER, str(spoof)],
+        env=dict(BASE_ENV), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=180)
     assert r_spoof.returncode == 0 and r_spoof.stdout == "", (r_spoof.returncode, r_spoof.stdout, r_spoof.stderr)
     spoof_rows = d / "spoof.rows"
     spoof_rows.write_text(r_spoof.stdout)
-    r_spoof_rows = subprocess.run(["python3", "-I", "scripts/checks/lib/example_rows.py", str(spoof_rows)],
+    r_spoof_rows = control_run(["python3", "-I", "scripts/checks/lib/example_rows.py", str(spoof_rows)],
         text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=15)
     require(r_spoof_rows, False, "FAIL examples: no example-json rows observed")
     for loop_src, expected_decl in [
@@ -156,10 +168,10 @@ with tempfile.TemporaryDirectory() as d:
         assert "example" not in loop_src and "partial" not in loop_src
         no_kw.write_text(loop_src)
         require(lean(no_kw, True), False, expected_decl)
-        r_multi = subprocess.run(
-            ["lake", "env", "lean", "--run", DRIVER, str(benign), str(no_kw)],
-            env={**os.environ, "LEAN_NUM_THREADS": "2"},
-            text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=60,
+        r_multi = control_run(
+            ["lean", "--run", DRIVER, str(benign), str(no_kw)],
+            env=dict(BASE_ENV),
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=180,
         )
         require(r_multi, False, expected_decl)
     p.write_text(

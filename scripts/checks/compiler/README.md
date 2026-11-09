@@ -354,3 +354,20 @@ require decoded, known flags and refuse CLONE_UNTRACED, which otherwise prevents
 strace -f from observing a child's executable memory and exec events. A real
 clone control creates executable anonymous memory in that hidden child; the gate
 must reject the parent clone with `untraced clone child has no audited identity`.
+
+## Control timeouts (round 14, item 8)
+
+Every semantic control subprocess emits `control-timing` JSON with its command,
+elapsed seconds and bound. A timeout kills and reaps its process group and exits
+2 with `INCOMPLETE trusted-base control: NAME (timeout Ns)`, never a traceback or
+PASS. Controls consume existing local artifacts without invoking Lake; missing
+artifacts are INCOMPLETE. No controls are sampled or dropped.
+
+On this shared development host the round-14 focused run passed; ownership.lean
+cost 42.529 s, declarations.lean 8.882 s, and individual frontend cases about
+2–3 s. These are **not ci-2 measurements**. The 180 s individual / 360 s batched /
+900 s enclosing bounds are provisional (the individual bound is three times the
+old 60 s limit exceeded on ci-2 D14). The coordinator must collect every timing
+on ci-2, repeat under shared load, and record the measured maximum plus margin
+before accepting item 8. This remaining calibration belongs to R-0678 / R-0509;
+no new roadmap ID is allocated by this writer.
