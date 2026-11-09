@@ -5,9 +5,9 @@
 The frozen legacy allocator is not a filing entry point.
 
 ```sh
-python3 -I scripts/ids/allocate.py reserve iss 'Short immutable title'
-python3 -I scripts/ids/allocate.py reserve bug 'Short immutable title'
-python3 -I scripts/ids/allocate.py reserve roadmap 'Short immutable subject'
+python3 -I scripts/ids/allocate.py reserve iss 'Short initial title'
+python3 -I scripts/ids/allocate.py reserve bug 'Short initial title'
+python3 -I scripts/ids/allocate.py reserve roadmap 'Short initial subject'
 ```
 
 Run from the writer's local worktree branch (`NAME` or `wip/NAME`). The shared
@@ -15,14 +15,13 @@ Run from the writer's local worktree branch (`NAME` or `wip/NAME`). The shared
 `ISSUES.tsv` title column, `# Bug NNN: Title` heading, or the second (subject) cell of a
 `| R-NNNN | Subject | ... |` row in `ROADMAP.md`. Writers never pick IDs. If a coordinator must
 allocate for a writer, leave an uncommitted `ISS-XXXX` or `R-XXXX` placeholder and report it;
-a placeholder is never a valid record or a passing gate state. The reservation binds ID, title and
-reserving branch. The branch is immutable provenance, not an ancestry requirement: derived,
-stacked, rebased, cherry-picked and detached train checkouts all carry the same identity. Status,
-evidence, acceptance obligations and closure fields may evolve. Roadmap subjects are immutable
-identity metadata, including Markdown spelling. The shared `scripts/ids/roadmap.py` parser owns
-all reads of task rows for allocation, snapshots, working trees, backfill and audit: the first
-cell declares the ID, the second declares its subject, and prose/dependency references do not
-declare identities. Duplicate IDs, malformed numeric IDs and empty subjects are refused. A different title for the same ID is a collision; a
+a placeholder is never a valid record or a passing gate state. The reservation records the ID,
+initial title and reserving branch as immutable provenance. The current title, subject, status,
+evidence, acceptance obligations and closure fields may evolve. All three record kinds use
+introduction provenance rather than wording to distinguish edits from new items.
+The shared `scripts/ids/roadmap.py` parser owns all reads of task rows: the first cell declares
+the ID, the second its current subject; prose/dependency references do not declare identities.
+Duplicate IDs, malformed numeric IDs and empty subjects are refused. A
 separate issue needs a new reservation. `--number N` permits a coordinator-assigned unused number
 through the same atomic protocol, without overwriting anything.
 
@@ -60,7 +59,7 @@ signing and inherit transport/authentication settings from the caller, including
 
 `allocate.py check` validates every reservation ref as schema-1, every record on fresh
 origin/main (including the frozen bug ledger), every record committed in HEAD, and every record
-in the working tree independently, for all three kinds. All must have reservations with exact titles/subjects. Collision diagnostics name the exact
+in the working tree independently, for all three kinds. All must have schema-1 reservations and consistent introduction provenance. Collision diagnostics name the exact
 reservation ref or origin/main file and row ID. An unreadable origin/main or reservation object
 is INCOMPLETE (exit 2), never PASS; a proven identity violation is refused (exit 1). Local main
 cannot replace the origin/main snapshot, and unstaged edits cannot mask committed records.
@@ -84,9 +83,9 @@ and the current worktree, the same records the activation gate requires. This is
 path: stale unrelated drafts need not migrate on the same day. It never exempts any main, HEAD
 or worktree record from the live gate. The default whole-inventory plan and `audit-wip` expose
 draft conflicts separately; each writer reconciles its draft before passing its own gate. Local
-main cannot replace origin/main in either plan scope. Explicit titles define identity. For pre-title
-rows, backfill recovers first-introduction titles from history. Distinct remaining titles require
-operator reconciliation; date/area signatures and majority votes never establish identity.
+main cannot replace origin/main in either plan scope. Initial titles are preserved in reservation
+metadata and never constrain later wording. First-introduction commits establish record identity;
+date/area signatures and majority votes do not.
 The local branch replaces its remote inventory entry rather than being counted twice.
 Detached allocation or backfill requires `id.branch` or exactly one matching advertised wip HEAD;
 an unattributable or ambiguous HEAD is refused, never silently omitted.
@@ -98,8 +97,7 @@ changes. The five ISS-0018 copies represent one evolving issue, not five introdu
 1. Have writers stop hand allocation. Use the updated tools and hook from this branch in a full
    clone **before enabling enforcement on main**. Planning and audit are read-only. Coordinate the
    known renumberings: acceptance-shim ISS-0017 becomes ISS-0033, spec-* retains ISS-0017, lexer
-   becomes ISS-0032. Reconcile differing explicit titles; do not retire a rebased head merely for
-   lacking shared introduction ancestry.
+   becomes ISS-0032. Reconcile independent introductions; rewording an inherited row needs no reconciliation.
 2. Produce the authoritative backfill plan with the commands below. Inspect every conflict, title, provenance,
    old OID and legacy import. Resolve conflicts with the owning writers, then regenerate until
    backfill exits 0. Inspect that every ISS, BUG and R record on origin/main and this branch is represented by a
@@ -142,6 +140,36 @@ Round-5 read-only inventory on 2026-11-09 at origin/main
 323 bug records. The authoritative plan exited 0: 488 planned reservations, zero conflicts,
 including all 146 main R rows. The whole-inventory plan exited 1: 495 planned reservations
 and 82 conflicts (81 differing R subjects on historical drafts and one malformed draft issue
-ledger). These are evidence for coordinator reconciliation, never automatic renumberings or
-title substitutions. Plans are read-only and must be regenerated against current advertised
+ledger). Round 6 supersedes those title-based conflicts with introduction-provenance checks. Plans are read-only and must be regenerated against current advertised
 heads before publication. No round-5 backfill was published.
+
+## Edits and independent additions
+
+An introduction is a commit containing an ID when none of its parents contains that ID.
+The allocator reads ledger patches and checks candidate parents for presence. It inspects all
+merge parents and all reachable introductions, so resolving a merge to one row cannot erase
+an independent addition in its history. Historical presence uses a tolerant reader: old schema
+versions and historically repaired duplicates do not have to satisfy today's record validator.
+Current main, HEAD and working tree still undergo full current-schema validation.
+
+For a number with introductions on origin/main, a branch must inherit at least one of those
+introductions and carry no independent introduction. Changing the subject or moving the row to
+a different line keeps the identity. A branch based before main introduced ISS-0020 that adds
+its own ISS-0020 has a different introduction and fails, even with identical wording. A merged
+candidate carrying both introductions fails too. These rules apply equally to ISS, BUG and R.
+Main's existing introduction history is the baseline; this migration does not retrospectively
+split historical main records.
+
+For a reserved number absent from main's introduction history, a new addition belongs to the
+reserving branch. Other branches may inherit an introduction already present on that owner's
+advertised head. A detached candidate can inherit this provenance but cannot claim a new
+addition merely by changing its text. Without a reservation, a backfill plan refuses multiple
+independent introductions across branches, even if their titles match. A reservation's title
+remains the original metadata; it is never rewritten to match the current row.
+
+No extra row-position rule is needed: each kind has its own number namespace, and each current
+ledger refuses duplicate IDs. Physical line numbers, sorting and legitimate bug-file moves do
+not change identity. A delete followed by a later re-add is a new introduction and is checked
+as such. Independent rebases or squash copies that lose introduction ancestry must retain the
+reservation owner's branch attribution (before main owns the number), or reconcile with main's
+introduction history; matching text alone cannot establish identity.
