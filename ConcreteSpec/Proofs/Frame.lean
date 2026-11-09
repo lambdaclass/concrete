@@ -1,6 +1,7 @@
 import ConcreteSpec.Spec.Frame
 import ConcreteSpec.Proofs.Memory
 import ConcreteSpec.Proofs.Exec
+import ConcreteSpec.Proofs.Observe2
 
 /-!
 # Laws of logical footprints and frames (foundation C10)
@@ -2219,6 +2220,256 @@ example : ¬ ToyLaunchCorrect 2 4 7 (unboundedToyLaunch 2 4 7) := by
   have bad : 8 ≤ 4 := h.adequateStack
   omega
 
+
+/-- Law (subject `ConcreteSpec.Core.Frame.ABI.assembleProject`).
+One law parameterized by C9's admission predicate covers every refusal class, including future
+classes, without restating any parser or loader rule: inadmissible input yields no artifact. -/
+theorem inadmissible_no_artifact {Artifact : Type} (build : Observe.LoadedProject → Artifact)
+    (source : Observe.ProjectSources) (invalid : ¬ ∃ project, source.Realizes project) :
+    ¬ ∃ project artifact, assembleProject build source = some (project, artifact) := by
+  cases loaded : Observe.LoadedProject.load source with
+  | refused issue => simp [assembleProject, loaded]
+  | admitted project =>
+    exact False.elim (invalid ⟨project,
+      (Observe.LoadedProject.load_admitted source project).mp loaded⟩)
+
+/-- Helper (inversion). A source-originated run carries the artifact handoff that load refusal
+excludes. (approved: PENDING) -/
+theorem inadmissible_no_run {Root Artifact Input Result Observation : Type}
+    (build : Observe.LoadedProject → Artifact) (source : Observe.ProjectSources)
+    (invalid : ¬ ∃ project, source.Realizes project)
+    (launcher : Launcher Root Artifact Input Result Observation)
+    (root : Root) (artifact : Artifact) (reserved : Nat) (input : Input) (requested result : Result)
+    (observation : Observation) :
+    ¬ ProjectRun build source launcher root artifact reserved input requested result observation := by
+  intro run
+  obtain ⟨project, built⟩ := run.closure.2
+  exact inadmissible_no_artifact build source invalid ⟨project, artifact, built⟩
+
+/-- Helper (inversion). Neither startup constructor, including status 125, exists for refused
+source input. (approved: PENDING) -/
+theorem inadmissible_no_startup {Root Artifact Input Result Observation : Type}
+    (build : Observe.LoadedProject → Artifact) (source : Observe.ProjectSources)
+    (invalid : ¬ ∃ project, source.Realizes project)
+    (launcher : Launcher Root Artifact Input Result Observation)
+    (root : Root) (reserved : Nat) (requested : Result)
+    (outcome : Startup (Artifact × Input × Result × Observation)) :
+    ¬ ProjectStartup build source launcher root reserved requested outcome := by
+  cases outcome with
+  | refused125 =>
+    rintro ⟨artifact, _, closure, _⟩
+    obtain ⟨project, built⟩ := closure.2
+    exact inadmissible_no_artifact build source invalid ⟨project, artifact, built⟩
+  | entered execution =>
+    intro run
+    obtain ⟨project, built⟩ := run.closure.2
+    exact inadmissible_no_artifact build source invalid ⟨project, execution.1, built⟩
+
+/-- Helper (inversion). No trap report can originate from input without a built artifact.
+(approved: PENDING) -/
+theorem inadmissible_no_trap {Artifact : Type} (build : Observe.LoadedProject → Artifact)
+    (source : Observe.ProjectSources) (invalid : ¬ ∃ project, source.Realizes project)
+    (kind : TrapKind) (site : SiteId) (terminal : Observe.Terminal) :
+    ¬ ProjectTrap build source kind site terminal := by
+  rintro ⟨project, artifact, built, _⟩
+  exact inadmissible_no_artifact build source invalid ⟨project, artifact, built⟩
+
+/-- Helper (inversion). Extract admission of the original input from a built artifact, without
+checking paths again at launch. (approved: PENDING) -/
+theorem assembled_admitted {Artifact : Type} (build : Observe.LoadedProject → Artifact)
+    (source : Observe.ProjectSources) (project : Observe.LoadedProject) (artifact : Artifact)
+    (built : assembleProject build source = some (project, artifact)) : source.Realizes project := by
+  cases loaded : Observe.LoadedProject.load source with
+  | refused issue => simp [assembleProject, loaded] at built
+  | admitted admitted =>
+    have equal : admitted = project := by
+      simpa [assembleProject, loaded] using congrArg (Option.map (fun pair => pair.1)) built
+    subst admitted
+    exact (Observe.LoadedProject.load_admitted source project).mp loaded
+
+/-- Helper (inversion). Status 125 is a run-time outcome of an admitted source project with an
+inadequate reservation, rather than a load diagnostic. (approved: PENDING) -/
+theorem startup125_admitted {Root Artifact Input Result Observation : Type}
+    (build : Observe.LoadedProject → Artifact) (source : Observe.ProjectSources)
+    (launcher : Launcher Root Artifact Input Result Observation)
+    (root : Root) (reserved : Nat) (requested : Result)
+    (startup : ProjectStartup build source launcher root reserved requested .refused125) :
+    ∃ project artifact, source.Realizes project ∧ launcher.rootOf artifact = root ∧
+      launcher.retainedClosure artifact ∧ reserved < launcher.stackBound artifact := by
+  obtain ⟨artifact, rootMatches, closure, bound⟩ := startup
+  obtain ⟨project, built⟩ := closure.2
+  exact ⟨project, artifact, assembled_admitted build source project artifact built,
+    rootMatches, closure.1, bound⟩
+
+namespace LoadBoundaryDemo
+open ConcreteSpec.Core.Observe ConcreteSpec.Core.Observe.SourceLoadDemo
+
+/-- A loader mutant admitting every refused input with fabricated empty tables. It keeps the
+same artifact builder and changes only the loader's refusal arm. -/
+def admitRefused {Artifact : Type} (build : LoadedProject → Artifact)
+    (source : ProjectSources) : Option (LoadedProject × Artifact) :=
+  let project := match LoadedProject.load source with
+    | .admitted project => project
+    | .refused _ => ⟨[], []⟩
+  some (project, build project)
+
+/-- Helper (inversion). C9's admitted/realizes equivalence transports an existing loader refusal
+to the independent admission predicate. No refusal class is defined here. (approved: PENDING) -/
+theorem refused_invalid (source : ProjectSources) (issue : SourceLoadRefusal)
+    (refused : LoadedProject.load source = .refused issue) : ¬ ∃ project, source.Realizes project := by
+  rintro ⟨project, valid⟩
+  have accepted := (LoadedProject.load_admitted source project).mpr valid
+  rw [refused] at accepted
+  cases accepted
+
+/-- A control-bearing file input exercises AY-3 at the end-to-end boundary. -/
+def controlInput : ProjectSources := ⟨[(String.ofList ['a', Char.ofNat 0], tabSource)], []⟩
+
+
+/-- Helper (computation). Reuse C9's empty-path refusal through its admission equivalence.
+(approved: PENDING) -/
+theorem empty_invalid : ¬ ∃ project, emptyInput.Realizes project :=
+  refused_invalid emptyInput (.malformed ("", tabSource) emptyDiagnostic) (by decide)
+
+/-- Helper (computation). Reuse C9's backslash refusal through its admission equivalence.
+(approved: PENDING) -/
+theorem backslash_invalid : ¬ ∃ project, backslashInput.Realizes project :=
+  refused_invalid backslashInput (.malformed ("src\\main", tabSource) backslashDiagnostic) (by decide)
+
+/-- Helper (computation). Transport C9's control-character refusal, without restating its rule.
+(approved: PENDING) -/
+theorem control_invalid : ¬ ∃ project, controlInput.Realizes project :=
+  refused_invalid controlInput (.malformed (String.ofList ['a', Char.ofNat 0], tabSource)
+    ⟨String.ofList ['a', Char.ofNat 0], ['a', Char.ofNat 0], .controlCharacter⟩) (by decide)
+
+/-- Instance (law `ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact`, case `malformed`). -/
+example : ¬ ∃ project artifact, assembleProject (fun _ => (7 : Nat)) emptyInput =
+    some (project, artifact) :=
+  @inadmissible_no_artifact Nat (fun _ => 7) emptyInput empty_invalid
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact`, case `malformed`,
+subject `ConcreteSpec.Core.Frame.ABI.assembleProject`,
+mutant `ConcreteSpec.Core.Frame.ABI.LoadBoundaryDemo.admitRefused`). -/
+example : (¬ ∃ project, emptyInput.Realizes project) ∧
+    ¬ (¬ ∃ project artifact, admitRefused (fun _ => (7 : Nat)) emptyInput =
+      some (project, artifact)) := by
+  refine ⟨empty_invalid, ?_⟩
+  intro absent
+  exact absent ⟨⟨[], []⟩, 7, by decide⟩
+
+/-- Instance (law `ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact`, case `out_of_project`). -/
+example : ¬ ∃ project artifact, assembleProject (fun _ => (7 : Nat)) parentPath =
+    some (project, artifact) :=
+  @inadmissible_no_artifact Nat (fun _ => 7) parentPath parent_invalid
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact`, case `out_of_project`,
+subject `ConcreteSpec.Core.Frame.ABI.assembleProject`,
+mutant `ConcreteSpec.Core.Frame.ABI.LoadBoundaryDemo.admitRefused`). -/
+example : (¬ ∃ project, parentPath.Realizes project) ∧
+    ¬ (¬ ∃ project artifact, admitRefused (fun _ => (7 : Nat)) parentPath =
+      some (project, artifact)) := by
+  refine ⟨parent_invalid, ?_⟩
+  intro absent
+  exact absent ⟨⟨[], []⟩, 7, by decide⟩
+
+/-- Instance (law `ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact`, case `duplicate_file`). -/
+example : ¬ ∃ project artifact, assembleProject (fun _ => (7 : Nat)) duplicateFiles =
+    some (project, artifact) :=
+  @inadmissible_no_artifact Nat (fun _ => 7) duplicateFiles duplicateFiles_invalid
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact`, case `duplicate_file`,
+subject `ConcreteSpec.Core.Frame.ABI.assembleProject`,
+mutant `ConcreteSpec.Core.Frame.ABI.LoadBoundaryDemo.admitRefused`). -/
+example : (¬ ∃ project, duplicateFiles.Realizes project) ∧
+    ¬ (¬ ∃ project artifact, admitRefused (fun _ => (7 : Nat)) duplicateFiles =
+      some (project, artifact)) := by
+  refine ⟨duplicateFiles_invalid, ?_⟩
+  intro absent
+  exact absent ⟨⟨[], []⟩, 7, by decide⟩
+
+/-- Instance (law `ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact`, case `duplicate_site`). -/
+example : ¬ ∃ project artifact, assembleProject (fun _ => (7 : Nat)) duplicate =
+    some (project, artifact) :=
+  @inadmissible_no_artifact Nat (fun _ => 7) duplicate duplicate_invalid
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact`, case `duplicate_site`,
+subject `ConcreteSpec.Core.Frame.ABI.assembleProject`,
+mutant `ConcreteSpec.Core.Frame.ABI.LoadBoundaryDemo.admitRefused`). -/
+example : (¬ ∃ project, duplicate.Realizes project) ∧
+    ¬ (¬ ∃ project artifact, admitRefused (fun _ => (7 : Nat)) duplicate =
+      some (project, artifact)) := by
+  refine ⟨duplicate_invalid, ?_⟩
+  intro absent
+  exact absent ⟨⟨[], []⟩, 7, by decide⟩
+
+/-- Instance (law `ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact`, case `missing_file`). -/
+example : ¬ ∃ project artifact, assembleProject (fun _ => (7 : Nat)) missing =
+    some (project, artifact) :=
+  @inadmissible_no_artifact Nat (fun _ => 7) missing missing_invalid
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact`, case `missing_file`,
+subject `ConcreteSpec.Core.Frame.ABI.assembleProject`,
+mutant `ConcreteSpec.Core.Frame.ABI.LoadBoundaryDemo.admitRefused`). -/
+example : (¬ ∃ project, missing.Realizes project) ∧
+    ¬ (¬ ∃ project artifact, admitRefused (fun _ => (7 : Nat)) missing =
+      some (project, artifact)) := by
+  refine ⟨missing_invalid, ?_⟩
+  intro absent
+  exact absent ⟨⟨[], []⟩, 7, by decide⟩
+
+/-- Instance (law `ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact`, case `control_character`). -/
+example : ¬ ∃ project artifact, assembleProject (fun _ => (7 : Nat)) controlInput =
+    some (project, artifact) :=
+  @inadmissible_no_artifact Nat (fun _ => 7) controlInput control_invalid
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact`, case `control_character`,
+subject `ConcreteSpec.Core.Frame.ABI.assembleProject`,
+mutant `ConcreteSpec.Core.Frame.ABI.LoadBoundaryDemo.admitRefused`). -/
+example : (¬ ∃ project, controlInput.Realizes project) ∧
+    ¬ (¬ ∃ project artifact, admitRefused (fun _ => (7 : Nat)) controlInput =
+      some (project, artifact)) := by
+  refine ⟨control_invalid, ?_⟩
+  intro absent
+  exact absent ⟨⟨[], []⟩, 7, by decide⟩
+
+/-- Instance (law `ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact`, case `backslash`). -/
+example : ¬ ∃ project artifact, assembleProject (fun _ => (7 : Nat)) backslashInput =
+    some (project, artifact) :=
+  @inadmissible_no_artifact Nat (fun _ => 7) backslashInput backslash_invalid
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact`, case `backslash`,
+subject `ConcreteSpec.Core.Frame.ABI.assembleProject`,
+mutant `ConcreteSpec.Core.Frame.ABI.LoadBoundaryDemo.admitRefused`). -/
+example : (¬ ∃ project, backslashInput.Realizes project) ∧
+    ¬ (¬ ∃ project artifact, admitRefused (fun _ => (7 : Nat)) backslashInput =
+      some (project, artifact)) := by
+  refine ⟨backslash_invalid, ?_⟩
+  intro absent
+  exact absent ⟨⟨[], []⟩, 7, by decide⟩
+
+/-- Instance (law `ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact`, case `invalid_location`). -/
+example : ¬ ∃ project artifact, assembleProject (fun _ => (7 : Nat)) badLocation =
+    some (project, artifact) :=
+  @inadmissible_no_artifact Nat (fun _ => 7) badLocation badLocation_invalid
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.inadmissible_no_artifact`, case `invalid_location`,
+subject `ConcreteSpec.Core.Frame.ABI.assembleProject`,
+mutant `ConcreteSpec.Core.Frame.ABI.LoadBoundaryDemo.admitRefused`). -/
+example : (¬ ∃ project, badLocation.Realizes project) ∧
+    ¬ (¬ ∃ project artifact, admitRefused (fun _ => (7 : Nat)) badLocation =
+      some (project, artifact)) := by
+  refine ⟨badLocation_invalid, ?_⟩
+  intro absent
+  exact absent ⟨⟨[], []⟩, 7, by decide⟩
+
+/-- Accepted: the same admitted project can reach run-time status 125. This witnesses that
+startup refusal is inhabited independently of load refusal. -/
+example : ProjectStartup (fun _ => (2, retainChain 2)) good toyLauncher 2 4 7 .refused125 := by
+  refine ⟨(2, retainChain 2), rfl, ⟨retainChain_membership 2, ?_⟩, by decide⟩
+  exact ⟨ConcreteSpec.Core.Observe.SourceLoadDemo.admitted, by decide⟩
+
+
+end LoadBoundaryDemo
 
 end ABI
 
