@@ -203,7 +203,15 @@ def execute(spec):
                             pass_fds=slot_descriptors(environment), umask=0o077,
                             stdout=out if stdout == subprocess.PIPE else stdout,
                             stderr=err if stderr == subprocess.PIPE else stderr)
-        if outcome == 'timeout':
+        # Read the attempt's evidence before its private context is destroyed.
+        # FAIL is final; an INCOMPLETE-only timed-out attempt remains retryable.
+        attempt_rc = 0 if outcome == 'timeout' else int(outcome.split()[1])
+        gate_rc = None
+        if spec.get('gate_outcome'):
+            from gate_outcome import result as gate_result
+            gate_rc = gate_result(environment['SCHEDULED_OUTCOME_FILE'], attempt_rc, environment.get('SELECTED_SHA'),
+                                  failure_only=outcome == 'timeout')
+        if outcome == 'timeout' and gate_rc != 1:
             raise subprocess.TimeoutExpired(spec['argv'], spec['timeout'])
         out.seek(0); err.seek(0)
         output = out.read() if stdout == subprocess.PIPE else None
@@ -211,10 +219,7 @@ def execute(spec):
         if text:
             output = output.decode() if output is not None else None
             errors = errors.decode() if errors is not None else None
-        rc = int(outcome.split()[1])
-        if spec.get('gate_outcome'):
-            from gate_outcome import result as gate_result
-            rc = gate_result(environment['SCHEDULED_OUTCOME_FILE'], rc, environment.get('SELECTED_SHA'))
+        rc = gate_rc if gate_rc is not None else attempt_rc
         result = subprocess.CompletedProcess(spec['argv'], rc, output, errors)
         if spec.get('check', False):
             result.check_returncode()

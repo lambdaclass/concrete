@@ -10,7 +10,7 @@ import subprocess
 import sys
 import tempfile
 from protocol import EvidenceError, git, inventory, require, clean_env, _registry, _binding
-from scheduled_outcome import reduce_outcomes, execution_status
+from scheduled_outcome import reduce_outcomes, execution_record
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -145,8 +145,7 @@ def run(sha, tier, output, environment, *, clock=None):
             print(error, file=sys.stderr)
             # A dependency failure is evidence about availability, never a dummy passed gate.
             record["execution_error"] = str(error)
-    record["status"] = execution_status(record["gates"], unavailable=bool(record.get("execution_error")))
-    record["conclusion"] = {"PASS": "success", "FAIL": "failure", "INCOMPLETE": "incomplete"}[record["status"]]
+    record = execution_record(record)
     record["completed"] = clock.instant().isoformat()
     (output / "index.json").write_text(json.dumps(record, sort_keys=True) + "\n")
     return 0 if record["status"] == "PASS" else 1

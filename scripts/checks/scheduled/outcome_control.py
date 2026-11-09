@@ -13,7 +13,8 @@ def load(path):
     return module
 
 
-def precedence(reducer):
+def precedence(owner):
+    reducer = owner.reduce_outcomes
     # Independent oracle: presence, never ordering or the production reducer.
     for size in range(1, 5):
         for values in itertools.product(('PASS', 'FAIL', 'INCOMPLETE', 'MISSING'), repeat=size):
@@ -21,6 +22,20 @@ def precedence(reducer):
             expected = next(status for status in ('FAIL', 'INCOMPLETE', 'MISSING', 'PASS') if status in values)
             if actual != expected:
                 raise ValueError('FAIL scheduled outcome precedence: FAIL masked')
+
+    diagnostic = 'FAIL scheduled outcome precedence: FAIL masked'
+    if owner.execution_status([]) != 'INCOMPLETE':
+        raise ValueError(diagnostic)
+    for missing, unavailable, nested in itertools.product((False, True), repeat=3):
+        gates = [dict(status='PASS' if nested else 'FAIL',
+                      controls=[dict(status='FAIL')] if nested else [])]
+        if owner.execution_status(gates, missing=missing, unavailable=unavailable) != 'FAIL':
+            raise ValueError(diagnostic)
+
+
+def preserves_failure(status, boundary):
+    if status != 'FAIL':
+        raise ValueError('FAIL scheduled monotonicity: ' + boundary + ' masked FAIL')
 
 
 def transport(handler):
@@ -34,7 +49,7 @@ def transport(handler):
 def main(argv):
     try:
         if argv[0] == 'precedence':
-            precedence(load(argv[1]).reduce_outcomes)
+            precedence(load(argv[1]))
         elif argv[0] == 'transport':
             transport(load(argv[1]).SafeRedirect)
         else:

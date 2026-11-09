@@ -25,4 +25,15 @@ def execution_status(gates, *, unavailable=False, missing=False) -> Status:
     return reduce_outcomes([*(gate['status'] for gate in gates),
                             *(control['status'] for gate in gates for control in gate.get('controls', [])),
                             *([Status.MISSING] if missing else []),
-                            *([Status.INCOMPLETE] if unavailable else [])])
+                            *([Status.INCOMPLETE] if unavailable else [])], empty=Status.INCOMPLETE)
+
+
+def execution_record(record, *, error=None):
+    """Recompute from evidence, retaining the first specific execution error."""
+    result = dict(record)
+    if error:
+        result.setdefault('execution_error', error)
+    status = execution_status(result['gates'], unavailable=bool(result.get('execution_error')))
+    result.update(status=status, conclusion={Status.PASS: 'success', Status.FAIL: 'failure',
+                                            Status.INCOMPLETE: 'incomplete', Status.MISSING: 'absent'}[status])
+    return result

@@ -17,13 +17,15 @@ from protocol import clean_env, git
 ROOT = Path(__file__).resolve().parents[3]
 
 class Slot(unittest.TestCase):
-    def invoke(self, command, acquire=None, budget="1"):
+    def invoke(self, command, acquire=None, budget="1", process_source=None):
         with tempfile.TemporaryDirectory() as work:
             root = Path(work) / "controller"
             lib = root / "scripts/checks/lib"; lib.mkdir(parents=True)
             scheduled = root / "scripts/checks/scheduled"; scheduled.mkdir()
             for name in ("bounded.sh", "bounded_exec.py", "scheduled_process.py", "scheduled_process.sh", "heavy_slots.sh", "gate_outcome.py", "scheduled_outcome.py"):
                 shutil.copy(ROOT / "scripts/checks/lib" / name, lib / name)
+            if process_source is not None:
+                (lib / "scheduled_process.py").write_text(process_source)
             (lib / "gate_env.sh").write_text(":\n")
             if acquire is not None:
                 (lib / "heavy_slots.sh").write_text(f"heavy_slot_acquire() {{ {acquire}; }}\nheavy_slot_release() {{ :; }}\n")
@@ -88,6 +90,11 @@ class Slot(unittest.TestCase):
         self.assertEqual((result.returncode,result.stdout,result.stderr),
                          (1,'','FAIL scheduled outcome: invalid event stream\n'))
 
+    def test_command_fail_is_not_masked_by_nested_incomplete(self):
+        result = self.invoke(['bash', '-c',
+            'python3 "$SCHEDULED_OUTCOME_HELPER" INCOMPLETE "nested timeout"; echo command-failed; exit 7'])
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (7, 'command-failed\n', ''))
+
     def test_expected_inner_timeout_is_not_gate_outcome(self):
         command = ['bash', '-c', 'source "$1"; bounded_run 0.02 -- sleep 1; rc=$?; bounded_is_incomplete "$rc" || exit 7; echo expected-timeout', 'bash', str(ROOT / 'scripts/checks/lib/bounded.sh')]
         result = self.invoke(command)
@@ -101,6 +108,29 @@ class Slot(unittest.TestCase):
                 'if [ ! -e "$1" ]; then touch "$1"; python3 "$SCHEDULED_OUTCOME_HELPER" INCOMPLETE "abandoned attempt"; exec sleep 2; fi; echo recovered',
                 'bash', marker], budget='0.1')
         self.assertEqual((result.returncode, result.stdout, result.stderr), (0, 'recovered\n', ''))
+
+    def test_explicit_fail_survives_outer_timeout_and_retry(self):
+        from outcome_control import preserves_failure
+        production = (ROOT / 'scripts/checks/lib/scheduled_process.py').read_text()
+        planted = production.replace("if outcome == 'timeout' and gate_rc != 1:",
+                                     "if outcome == 'timeout':")
+        for source in (None, planted):
+            for mode in ('retry', 'double'):
+                with tempfile.TemporaryDirectory() as work:
+                    marker = str(Path(work) / 'attempted')
+                    result = self.invoke(['bash', '-c',
+                        'if [ ! -e "$1" ] || [ "$2" = double ]; then touch "$1"; python3 "$SCHEDULED_OUTCOME_HELPER" FAIL "real failure"; exec sleep 2; fi; echo recovered',
+                        'bash', marker, mode], budget='0.15', process_source=source)
+                boundary = 'outer timeout ' + mode
+                if source is None:
+                    self.assertEqual((result.returncode, result.stdout, result.stderr),
+                                     (1, '', 'FAIL scheduled gate: explicit failure outcome\n'))
+                    preserves_failure('FAIL', boundary)
+                else:
+                    with self.assertRaises(ValueError) as caught:
+                        preserves_failure('PASS' if result.returncode == 0 else 'INCOMPLETE', boundary)
+                    self.assertEqual(str(caught.exception),
+                                     'FAIL scheduled monotonicity: ' + boundary + ' masked FAIL')
 
     def test_child_reuses_parent_slot(self):
         script = r'''source "$1"

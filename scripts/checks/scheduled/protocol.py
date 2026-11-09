@@ -152,7 +152,7 @@ def qualification(record, sha, tier):
                 binding = next(f for f in files if isinstance(f, dict) and f.get("path") == binding_path)
                 bindings = {(len(value), hashlib.sha256(value).hexdigest()) for value in
                             (sha.encode(), (sha + "\n").encode())}
-                if artifact.get("sha") == sha and (binding.get("bytes"), binding.get("sha256")) not in bindings:
+                if (binding.get("bytes"), binding.get("sha256")) not in bindings:
                     issue("FAIL", "wrong binding artifact " + gid + "/" + declared["sha_file"])
     return sorted(issues, key=lambda outcome: outcome["status"] != "FAIL")
 
@@ -216,22 +216,36 @@ def append(history, record, sha, tier, runners, repository):
     record = validate(record, sha, tier, runners, repository, None)
     for old in history:
         validate(old, sha, tier, runners, repository, None)
-        require(old["attempt"] != record["attempt"], "replay would overwrite attempt")
+        require(old["attempt"] != record["attempt"] or
+                (old["status"] == "MISSING" and old["conclusion"] == "queued-too-long"
+                 and record["qualification_status"] == "FAIL"), "replay would overwrite attempt")
     return [*history, record]
 
 def observe(history, sha, tier, now, runners, repository):
     if not history:
         raise observation_error("MISSING", tier, sha, "absent run", operational=True)
-    history = [validate(record, sha, tier, runners, repository, None) for record in history]
+    valid, errors = [], []
     for record in history:
-        require(timestamp(record["completed"]) <= now, "future completion")
-    require(len({r["attempt"] for r in history}) == len(history), "replay would overwrite attempt")
+        try:
+            qualified = validate(record, sha, tier, runners, repository, None)
+            valid.append(qualified)
+            require(timestamp(qualified["completed"]) <= now, "future completion")
+        except EvidenceError as error:
+            errors.append(error)
+    history = valid
+    if len({r["attempt"] for r in history}) != len(history):
+        errors.append(EvidenceError("replay would overwrite attempt"))
     if reduce_outcomes(r["status"] for r in history) == "FAIL":
         raise observation_error("FAIL", tier, sha, "recorded attempt")
     for record in history:
         for outcome in record["qualification_outcomes"]:
             if outcome["status"] == "FAIL":
                 raise observation_error("FAIL", tier, sha, outcome["diagnostic"])
+    if errors:
+        raise errors[0]
+    # Non-operational defects anywhere in this SHA's history cannot be recovered
+    # by a newer SHA's PASS. A valid later attempt on this SHA can repair absence.
+    operational = all(o["operational"] for r in history for o in r["qualification_outcomes"])
     recent = [r for r in history if now - timestamp(r["completed"]) <= WINDOWS[tier]]
     if not recent:
         raise observation_error("STALE", tier, sha, "no fresh PASS")
@@ -239,9 +253,9 @@ def observe(history, sha, tier, now, runners, repository):
     if latest["qualification_outcomes"]:
         outcome = latest["qualification_outcomes"][0]
         raise observation_error(outcome["status"], tier, sha, outcome["diagnostic"],
-                                operational=all(o["operational"] for o in latest["qualification_outcomes"]))
+                                operational=operational)
     if latest["status"] != "PASS":
-        raise observation_error(latest["status"], tier, sha, "recorded attempt", operational=True)
+        raise observation_error(latest["status"], tier, sha, "recorded attempt", operational=operational)
     return f"PASS {tier} {sha}"
 
 def read_note(sha, tier, listed=False, *, environment=None):
@@ -252,4 +266,12 @@ def read_note(sha, tier, listed=False, *, environment=None):
             return []
     lines = git("notes", "--ref=" + ref, "show", sha, environment=environment).splitlines()
     require(lines, "empty annotated note")
-    return [json.loads(line) for line in lines]
+    records = []
+    for line in lines:
+        try:
+            records.append(json.loads(line))
+        except ValueError:
+            # Keep the invalid sibling for validation without dropping parseable
+            # FAIL evidence. Publication still refuses to append to corruption.
+            records.append(None)
+    return records

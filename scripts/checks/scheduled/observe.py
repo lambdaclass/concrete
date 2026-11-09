@@ -76,6 +76,10 @@ def main(*, clock=None):
                 print(f"INCOMPLETE {tier}: {error}"); failed = True
     except ERRORS as error:
         print(f"INCOMPLETE observer: {error}"); failed = True
+    # Completion is execution health, independent of the producer verdict.
+    if environment.get("GITHUB_OUTPUT"):
+        with open(environment["GITHUB_OUTPUT"], "a") as output:
+            output.write("completed=true\n")
     return int(failed)
 
 if __name__ == "__main__":

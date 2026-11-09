@@ -20,7 +20,7 @@ def emit(status, diagnostic, path, sha):
         finally:
             os.close(fd)
 
-def result(path, rc, sha):
+def result(path, rc, sha, *, failure_only=False):
     try:
         events = [json.loads(line) for line in Path(path).read_text().splitlines()]
         for event in events:
@@ -32,11 +32,13 @@ def result(path, rc, sha):
     except (OSError, ValueError, TypeError):
         print('FAIL scheduled outcome: invalid event stream', file=sys.stderr)
         return 1
-    status = reduce_outcomes(e['status'] for e in events)
+    status = reduce_outcomes([*(e['status'] for e in events), *(['FAIL'] if rc not in (0, 125) else [])])
     if status == 'FAIL':
+        if not any(e['status'] == 'FAIL' for e in events):
+            return rc
         print('FAIL scheduled gate: explicit failure outcome', file=sys.stderr)
         return 1
-    if status == 'INCOMPLETE':
+    if status == 'INCOMPLETE' and not failure_only:
         print('INCOMPLETE scheduled gate: nested watchdog or gate incomplete', file=sys.stderr)
         return 125
     return 1 if rc == 125 else rc

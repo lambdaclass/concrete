@@ -894,9 +894,13 @@ Live consumed-tool provenance remains part of R-0690 campaign qualification.
 
 The publisher's scheduled sweep now checks observer coverage separately from the
 observer workflow. `observer_watch.py` derives due four-hour occurrences from the
-policy cadence and reads successful scheduled observer runs from Actions, not an
-observer-written heartbeat or producer claim. Manual runs and unsuccessful runs
-cannot fill an occurrence. It allows one cadence period for completion and checks
+policy cadence and reads scheduled observer runs and their attempt-specific job
+steps from Actions. The named `Observer execution completed` step must complete
+successfully; workflow conclusion is a separate producer verdict. The observer
+sets its completion output after reporting all observed states, including FAIL,
+and a following always-eligible step records that execution completed. Fetch
+failures, watchdog expiry and crashes cannot produce that record. Manual runs
+and runs without the completion step cannot fill an occurrence. It allows one cadence period for completion and checks
 the existing two-queue-age collection horizon. Missing coverage exits nonzero even
 when there are no campaign records to collect. Completion-triggered publication
 continues independently; the hourly sweep owns this additional check.
@@ -929,3 +933,78 @@ history and archive-corruption refusal (`FAIL scheduled archive: digest mismatch
 exit 1). Full campaigns retain their daily/weekly tiers. No reviews, pushes,
 roadmap edits, ID allocation, language decisions or heavy local suites were run
 by this implementation slice.
+
+
+### Round 21: irreversible evidence at adapter boundaries
+
+The shared reduction owns empty execution (INCOMPLETE), nested controls, and
+Actions availability. `execution_record` recomputes summaries from gates and
+controls and preserves the first execution error. Cancellation/skipping discards
+no uploaded index: gate and registry qualification failures remain observable.
+The executor reads its private structured stream before timeout cleanup; FAIL or
+invalid evidence ends the attempt with failure rather than entering the retry.
+An INCOMPLETE-only abandoned attempt is still discarded and may recover.
+
+History validation accumulates sibling defects before reducing valid evidence.
+A validated FAIL outranks future timestamps, duplicate identities and malformed
+siblings, including malformed JSON lines. Non-operational qualification defects
+in any attempt prevent recovery by a newer SHA's PASS. Same-SHA later complete
+attempts can still repair missing evidence. Present binding digests are checked
+even when the artifact's SHA field is absent. A completed command failure also
+outranks a nested INCOMPLETE event.
+
+Publication preserves an overdue observation permanently, but never uses it to
+discard subsequent FAIL evidence. A late failing observation for that same
+attempt is appended alongside the overdue record (never overwritten); duplicate
+identity remains a defect, which cannot outrank the recorded FAIL. Identical
+late-failure publication retries are idempotent. Other attempt collisions still
+refuse with `replay would overwrite attempt`.
+
+Every Actions query, including pagination, uses `observer_watch.query` and its
+URL encoder. Observer occurrence health uses the attempt-specific completion step
+described above, independently of the producer state that made observation exit 1.
+
+Bounded reproductions at `7de83e5dcbc71853b7d453ebf42716e01b554d99`:
+
+| Finding | Observed before repair |
+|---|---|
+| 1: cancelled uploaded FAIL | `MISSING []` |
+| 1: missing logs overwrites specific worker error | `Actions upload metadata` |
+| 2: explicit FAIL, timeout, passing retry | exit 0, stdout `recovered\n`, empty stderr |
+| 2: explicit FAIL, two timeouts | exit 125, stderr `INCOMPLETE scheduled gate: nested watchdog or gate incomplete\n` |
+| 3: FAIL with future / duplicate / invalid sibling | `future completion` / `replay would overwrite attempt` / `invalid record shape` |
+| 3: prior non-operational defect, later MISSING | `MISSING daily <sha>: recorded attempt`, operational=True |
+| 3: wrong present binding with absent artifact SHA | `INCOMPLETE registry: missing SHA binding scaling-daily/report` |
+| 3: empty execution | `PASS` |
+| 4: completed observer reporting producer FAIL | `FAIL scheduled observer: missed occurrence` |
+| 4: query | literal `created=>=2027-01-13T08:29:00Z` |
+| Additional: malformed JSON sibling | JSONDecodeError before FAIL observation |
+| Additional: command exit 1 with nested INCOMPLETE | exit 125 |
+| Additional: overdue attempt followed by FAIL | publisher returns without writing failure |
+
+All claimed masking scenarios were confirmed. The controls now exercise the
+production adapters and isolated regressions with exact diagnostics:
+
+| Control | Exact refusal / production output |
+|---|---|
+| Empty, nested-control and missing-marker reducer plants | stderr `FAIL scheduled outcome precedence: FAIL masked\n`, exit 1 |
+| Cancellation / skipping plants | `FAIL scheduled monotonicity: cancelled masked FAIL` / `FAIL scheduled monotonicity: skipped masked FAIL` |
+| Outer timeout retry / double-timeout plants | `FAIL scheduled monotonicity: outer timeout retry masked FAIL` / `FAIL scheduled monotonicity: outer timeout double masked FAIL` |
+| Outer timeout production, both scenarios | exit 1, empty stdout, stderr `FAIL scheduled gate: explicit failure outcome\n` |
+| Future / duplicate / invalid sibling plants | `FAIL scheduled monotonicity: future masked FAIL` / `FAIL scheduled monotonicity: duplicate masked FAIL` / `FAIL scheduled monotonicity: invalid sibling masked FAIL` |
+| Partial binding plant | `FAIL scheduled monotonicity: partial binding masked FAIL` |
+| Partial binding production | `FAIL registry: wrong binding artifact scaling-daily/report/selected-sha.txt` |
+| Overdue publication plant | `FAIL scheduled monotonicity: overdue publication masked FAIL` |
+| Producer-coupled observer plant / missing completion step | `FAIL scheduled observer: missed occurrence` |
+| Producer FAIL with completed observation | observation exits 1, output record `completed=true\n`; census passes |
+| Completed command failure plus nested INCOMPLETE | exit 7, stdout `command-failed\n`, empty stderr |
+
+The cancellation controls cover both gate FAIL and recomputed qualification FAIL;
+the upload control includes a nested failed control with a stale cached summary
+and asserts preservation of `specific worker failure`. JSON sibling and late
+overdue publication controls assert `FAIL daily <sha>: recorded attempt`.
+The existing `test_outer_retry_discards_abandoned_outcome` remains required.
+
+Step 7 and R-0690's deployment baseline, durable archive, independent watchdog and
+real GitHub/concrete-ci-2 qualification remain outstanding as described above.
+No local fixture or completion-step marker discharges those live obligations.

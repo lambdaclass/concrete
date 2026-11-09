@@ -15,7 +15,8 @@ import urllib.parse
 import zipfile
 from protocol import EvidenceError, inventory, require, validate
 from publish import publish
-from scheduled_outcome import reduce_outcomes
+from observer_watch import query
+from scheduled_outcome import execution_record
 from process_adapter import operation_clock
 from scheduler_policy import Identity, POLICY, TIERS, MAIN_BRANCH, BUDGET
 
@@ -42,7 +43,7 @@ def request(path, binary=False, *, token):
 def pages(path, key, *, token):
     result = []
     for page in range(1, 1001):
-        data = request(path + ("&" if "?" in path else "?") + f"per_page=100&page={page}", token=token)[key]
+        data = request(query(path, per_page=100, page=page), token=token)[key]
         result.extend(data)
         if len(data) < 100:
             return result
@@ -73,7 +74,7 @@ def record_for(run, job, selection, payload, artifact, repository, runners, *, c
     identity = dict(**Identity.actions(repository, sha, tier, run["id"], run["run_attempt"], run["event"]).fields(),
                     runner_name=job.get("runner_name") if job else None,
                     runner_environment="self-hosted" if job and job.get("runner_name") else None)
-    if missing:
+    if missing and payload is None:
         identity.update(runner_name=None, runner_environment=None)
         record = dict(identity, status="MISSING", conclusion=missing, gates=[], artifact=None,
                       gate_revision=None, started=run["created_at"], completed=(job.get("completed_at") if job else None) or (clock.observation.isoformat() if missing == "queued-too-long" else run.get("updated_at", clock.observation.isoformat())))
@@ -89,10 +90,7 @@ def record_for(run, job, selection, payload, artifact, repository, runners, *, c
         record = dict(payload)
         record.update(identity, artifact=artifact, started=job["started_at"], completed=job["completed_at"])
         # A worker cannot claim success if Actions did not observe successful execution.
-        if job["conclusion"] != "success":
-            record.setdefault("execution_error", "Actions job metadata")
-            status = reduce_outcomes([record["status"], "INCOMPLETE"])
-            record.update(status=status, conclusion="failure" if status == "FAIL" else "incomplete")
+        record = execution_record(record, error="Actions job metadata" if job["conclusion"] != "success" else None)
     return validate(record, sha, tier, runners, repository, attempt=identity["attempt"])
 
 def read_index(archive):
@@ -133,9 +131,7 @@ def collect(run, repository, runners, environment, *, clock=None):
             logs = [a for a in artifacts if a["name"] == name.replace("scheduled-index-", "scheduled-", 1) and not a["expired"]]
             require(len(logs) <= 1, "ambiguous logs artifact")
             if not logs and payload is not None:
-                payload["execution_error"] = "Actions upload metadata"
-                status = reduce_outcomes([payload["status"], "INCOMPLETE"])
-                payload.update(status=status, conclusion="failure" if status == "FAIL" else "incomplete")
+                payload = execution_record(payload, error="Actions upload metadata")
             artifact = logs[0] if logs else found[0]
             url = f'https://github.com/{repository}/actions/runs/{run["id"]}/artifacts/{artifact["id"]}'
         publish(record_for(run, job, selection, payload, url, repository, runners, clock=clock), runners, repository, environment)
@@ -149,12 +145,12 @@ def collect_event(environment, *, clock=None):
     if "workflow_run" in event:
         runs = [event["workflow_run"]]
     else:
-        path = f"/repos/{repository}/actions/workflows/gate_schedule.yml/runs?branch={MAIN_BRANCH}"
+        path = query(f"/repos/{repository}/actions/workflows/gate_schedule.yml/runs", branch=MAIN_BRANCH)
         cutoff = (clock.observation - dt.timedelta(seconds=2 * MAX_AGE)).strftime("%Y-%m-%dT%H:%M:%SZ")
-        candidates = pages(path + "&created=" + urllib.parse.quote(">=" + cutoff), "workflow_runs", token=token)
+        candidates = pages(query(path, created=">=" + cutoff), "workflow_runs", token=token)
         # Old live runs must remain observable even when the hosted sweep was absent.
         for status in ("queued", "in_progress", "waiting", "pending", "requested"):
-            candidates.extend(pages(path + "&status=" + status, "workflow_runs", token=token))
+            candidates.extend(pages(query(path, status=status), "workflow_runs", token=token))
         runs = list({run["id"]: run for run in candidates}.values())
     failed = False
     if "workflow_run" not in event:

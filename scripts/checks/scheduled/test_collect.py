@@ -57,6 +57,35 @@ class Collector(RegistryFixture, unittest.TestCase):
         self.assertEqual((r["status"], r["conclusion"]), ("INCOMPLETE", "incomplete"))
         self.assertEqual(r["execution_error"], "Actions job metadata")
 
+    def test_upload_and_job_metadata_recompute_and_preserve_specific_error(self):
+        import io
+        import json
+        import zipfile
+        for nested in (False, True):
+            payload = copy.deepcopy(self.payload)
+            payload.update(status='PASS', execution_error='specific worker failure')
+            if nested:
+                payload['gates'][0]['status'] = 'INCOMPLETE'
+                payload['gates'][0]['controls'][0]['status'] = 'FAIL'
+            else:
+                payload['gates'][0]['status'] = 'FAIL'
+            # Deliberately stale summary: collector must use the evidence.
+            archive = io.BytesIO()
+            with zipfile.ZipFile(archive, 'w') as saved:
+                saved.writestr('index.json', json.dumps(payload))
+            job = dict(self.job, conclusion='cancelled')
+            artifacts = [dict(id=2, name='scheduled-index-daily-1-1', expired=False)]
+            def pages(path, key, **kwargs):
+                return [job] if key == 'jobs' else artifacts
+            with patch.object(collect, 'pages', side_effect=pages), \
+                 patch.object(collect, 'request', return_value=archive.getvalue()), \
+                 patch.object(collect, 'publish') as published:
+                collect.collect(self.run, 'example/repo', RUNNERS, {'GH_TOKEN':'fixture'})
+            result = published.call_args.args[0]
+            self.assertEqual((result['status'], result['qualification_status'], result['execution_error']),
+                             ('FAIL', 'FAIL', 'specific worker failure'))
+            self.assertEqual(result['gates'], payload['gates'])
+
     def test_unstarted_workflow_publishes_real_missing_notes(self):
         with patch.object(collect, "pages", return_value=[]), patch.object(collect, "publish") as publish:
             collect.collect(self.run, "example/repo", RUNNERS, {"GH_TOKEN": "test-token"})
@@ -139,11 +168,11 @@ class Collector(RegistryFixture, unittest.TestCase):
         job = dict(self.job, status='queued', completed_at=None, created_at=runs[0]['created_at'])
         def pages(path, key, **kwargs):
             if 'gate_freshness.yml' in path:
-                return [dict(id=n, event='schedule', status='completed', conclusion='success',
-                             created_at=(observation.replace(hour=0, minute=11, second=0, microsecond=0) - dt.timedelta(hours=4*n)).isoformat())
+                return [dict(id=100+n, event='schedule', status='completed', conclusion='success',
+                             observation_complete=True, created_at=(observation.replace(hour=0, minute=11, second=0, microsecond=0) - dt.timedelta(hours=4*n)).isoformat())
                         for n in range(-6, 14)]
             if key == 'jobs':
-                return [job]
+                return [dict(steps=[dict(name='Observer execution completed', status='completed', conclusion='success')])] if '/attempts/' in path and '/runs/1/' not in path and '/runs/2/' not in path else [job]
             return runs if '&created=' in path else []
         with tempfile.NamedTemporaryFile(mode='w') as event:
             json.dump({}, event); event.flush()
