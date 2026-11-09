@@ -26,7 +26,8 @@ class Orchestration(unittest.TestCase):
                 'record_candidate_failure', 'report_mismatch', 'judge_evaluator',
                 'judge_available', 'reset_observations', 'control_candidate', 'native_one', 'absorb_native_result', 'collect_available',
                 'reconcile_worker_exit', 'finish_diff', 'run_control', 'run_replay', 'first_outcome_index',
-                'control_drop_overflow', 'control_lcb_off_by_one', 'control_spec_oracle'))
+                'control_drop_overflow', 'control_lcb_off_by_one', 'control_spec_oracle',
+                'verify_failure_bundle_and_replay', 'collect_control_failures', 'control_expected_record'))
             setup = f'''set -euo pipefail
 work={work}
 seed=test
@@ -71,6 +72,80 @@ record_judged() {{ :; }}
         self.assertTrue(replay_sh.startswith('SPEC_DIFF_REPLAY='), replay_sh)
         for art in artifacts:
             self.assertTrue((bundle / art).exists(), f'missing {art} in {bundle}')
+
+    def test_nested_verifier_extra_mismatch_then_replay_timeout(self):
+        emission = 'FAIL BIR emission: seed test index 0: planted selective emission refusal'
+        mismatch = 'FAIL bir seed test index 0 [lcb_eval]: observation mismatch'
+        def check(work, regressions):
+            self.assertFalse(work.exists())
+            bundles = list(regressions.rglob('latest'))
+            self.assertTrue(bundles, 'nested evidence deleted by outer cleanup')
+            self.assertTrue(any(mismatch in (b / 'diagnostics.txt').read_text()
+                                for b in bundles))
+        self.run_shell('''
+trap 'finish_diff $?' EXIT
+verify_saved_replay() { echo 'INCOMPLETE: planted replay timeout' >&2; return 3; }
+first_nested() {
+ d="$work/bir/p0"
+ register_candidate bir test 0 "$d" emission
+ echo term >"$d/program.lean.txt"; echo construct >"$d/constructs.txt"
+ echo manifest >"$d/manifest-row.txt"
+ echo 0 >"$d/status"; : >"$d/stderr"; echo 9 >"$d/lcb_eval.status"
+ record_candidate_failure bir test 0 "$d" emission emission \
+   'FAIL BIR emission: seed test index 0: planted selective emission refusal'
+ exit 1
+}
+control_nested() {
+ verify_failure_bundle_and_replay nested bir test 0 emission \
+   'FAIL BIR emission: seed test index 0: planted selective emission refusal' '' '' '' first_nested || return $?
+ return 99
+}
+run_control nested '^unused$' control_nested
+''', 1, (emission, mismatch, 'INCOMPLETE: planted replay timeout'), check)
+
+    def test_verified_nested_control_acknowledges_only_exact_plant(self):
+        for extra in (False, True):
+            with self.subTest(extra=extra):
+                self.run_shell('''
+trap 'finish_diff $?' EXIT
+control_nested() {
+ (
+  work="$work/inner"; mkdir -p "$work"
+  regressions="$control_evidence/saved"
+  trap 'finish_diff $?' EXIT
+  d="$work/bir/p0"
+  register_candidate bir test 0 "$d" emission
+  echo term >"$d/program.lean.txt"
+  record_candidate_failure bir test 0 "$d" emission lcb_emit \
+    'FAIL BIR emission: seed test index 0: planted selective emission refusal'
+''' + ('''
+  echo 0 >"$d/status"; : >"$d/stderr"; echo 9 >"$d/lcb_eval.status"
+''' if extra else '') + '''
+  exit 1
+ ) || :
+ echo 'FAIL planted: exact emission verified'
+ return 99
+}
+run_control selective-refusal '^FAIL planted: exact emission verified$' control_nested
+exit "$fail"
+''', int(extra),
+                    'FAIL bir seed test index 0 [lcb_eval]: observation mismatch' if extra else
+                    'ok   control selective-refusal: failed for the planted reason',
+                    lambda work, regressions: self.assertTrue(list(regressions.rglob('latest'))))
+
+    def test_observer_plant_contract_checks_each_exact_backend(self):
+        self.run_shell('''
+b="$work/bundle"; mkdir -p "$b"
+echo observation >"$b/control-replay"
+echo bir >"$b/leg"; echo test >"$b/seed"; echo 0 >"$b/index"
+for backend in llvm lcb; do
+ control_expected_record observation-failure "$b" observation "$backend" \
+   "FAIL bir seed test index 0 [$backend]: observation failed" || exit 9
+done
+if control_expected_record observation-failure "$b" observation lcb_eval \
+ 'FAIL bir seed test index 0 [lcb_eval]: observation failed'; then exit 9; fi
+echo 'ok observer plant requires exact backend diagnostic'
+''', 0, 'ok observer plant requires exact backend diagnostic')
 
     def test_unrelated_exit_cannot_reclassify_timed_out_candidate(self):
         self.run_shell('''

@@ -495,6 +495,10 @@ persist_candidate_bundle() { # persist_candidate_bundle LEG CAND_SEED INDEX DIR
   python3 -I -c 'import os, sys; os.replace(sys.argv[1], sys.argv[2])' \
     "$execution/.latest-$(cat "$d/execution-id")" "$execution/latest"
   printf '%s/latest\n' "$execution" >"$d/bundle-path"
+  # Immutable snapshot references carry structured failures out of nested shells.
+  if [ -n "${control_failures:-}" ]; then
+    printf '%s\n' "$bundle" >>"$control_failures"
+  fi
 }
 
 record_candidate_failure() { # record_candidate_failure LEG CAND_SEED INDEX DIR KIND SUBJECT DIAGNOSTIC [EXTRA_LOG]
@@ -745,6 +749,7 @@ finish_diff() {
   set +e
   reconcile_worker_exit "$rc"
   collect_available
+  if [ -n "${control_failures:-}" ]; then collect_control_failures "${label:-interrupted}" 0; fi
   bounded_summary
   if [ "$fail" -ne 0 ] || { [ "$rc" -ne 0 ] && [ "$rc" -ne 3 ]; }; then
     rc=1
@@ -756,14 +761,77 @@ finish_diff() {
 }
 trap 'finish_diff $?' EXIT
 
+# Exact record contracts, independent of the control's summary prose. A successful
+# control can acknowledge only its declared scenario, kind, subject and diagnostic.
+control_expected_record() { # LABEL BUNDLE KIND SUBJECT DIAGNOSTIC
+  local label=$1 b=$2 kind=$3 subject=$4 diagnostic=$5 scenario leg cand_seed index expected=""
+  scenario=$(cat "$b/control-replay" 2>/dev/null) || return 1
+  leg=$(cat "$b/leg"); cand_seed=$(cat "$b/seed"); index=$(cat "$b/index")
+  case "$label:$scenario:$kind:$subject" in
+    selective-refusal:emission:emission:lcb_emit)
+      expected="FAIL BIR emission: seed $cand_seed index $index: planted selective emission refusal" ;;
+    assembly-failure:assembly:assembly:aarch64-macos)
+      expected="FAIL bir assembly: seed $cand_seed index $index [aarch64-macos]: planted LCB assembly refusal" ;;
+    partial-lowering:lowering:lowering:compileCore)
+      expected="FAIL spec leg capability contract: loweringAvailable = true but compileCore refused supported accepted candidate (seed $cand_seed index $index): planted partial-lowering capability refusal" ;;
+    native-compilation-failure:native-compilation:native_compilation:native_build)
+      expected="FAIL $leg-$index: native build/setup failed" ;;
+    native-setup-failure:native-setup:native_setup:lcb_eval)
+      expected="FAIL $leg-$index [lcb_eval]: missing evaluator observation" ;;
+    observation-failure:observation:observation:llvm|observation-failure:observation:observation:lcb)
+      expected="FAIL $leg seed $cand_seed index $index [$subject]: observation failed" ;;
+    drop-overflow-llvm:drop-overflow-llvm:mismatch:llvm|\
+    drop-overflow-llvm:drop-overflow-llvm+lcb-timeout:mismatch:llvm|\
+    lcb-off-by-one:lcb-off-by-one:mismatch:lcb_eval|\
+    lcb-off-by-one:lcb-off-by-one+llvm-timeout:mismatch:lcb_eval|\
+    lcb-off-by-one:lcb-off-by-one+lcb-timeout:mismatch:lcb_eval|\
+    lcb-off-by-one:lcb-off-by-one:mismatch:lcb|\
+    lcb-off-by-one:lcb-off-by-one+llvm-timeout:mismatch:lcb|\
+    spec-oracle:spec-oracle:mismatch:lcb_eval|\
+    spec-oracle:spec-oracle:mismatch:llvm|spec-oracle:spec-oracle:mismatch:lcb|\
+    report-mismatch:report-mismatch:mismatch:llvm|report-mismatch:report-mismatch:mismatch:lcb)
+      expected="FAIL $leg seed $cand_seed index $index [$subject]: observation mismatch" ;;
+    worker-journal:worker-exit-*:generation:worker_exit|\
+    worker-journal:worker-exit-*:lowering:worker_exit|\
+    worker-journal:worker-exit-*:emission:worker_exit|\
+    worker-journal:worker-exit-*:assembly:worker_exit)
+      [ "${scenario#worker-exit-}" = "$kind" ] ||
+        [ "${scenario#worker-exit-}" = "$kind+timeout" ] || return 1
+      expected="FAIL $leg seed $cand_seed index $index [$kind]: unexpected worker exit (rc 7)" ;;
+    *) return 1 ;;
+  esac
+  [ "$diagnostic" = "$expected" ]
+}
+
+collect_control_failures() { # LABEL VERIFIED: unverified plants remain failures too.
+  local label=$1 verified=$2 b kind subject diagnostic
+  while IFS= read -r b; do
+    while IFS=$'\t' read -r kind subject diagnostic; do
+      if [ "$verified" != 1 ] || ! control_expected_record "$label" "$b" "$kind" "$subject" "$diagnostic"; then
+        fail=1
+        echo "$diagnostic" >&2
+        echo "  regression bundle: $b" >&2
+      fi
+    done <"$b/failure-record.tsv"
+    [ -s "$b/failure-record.tsv" ] || {
+      echo "FAIL control $label: missing structured failure evidence: $b" >&2
+      fail=1
+    }
+  done < <(LC_ALL=C sort -u "$control_failures")
+}
+
 run_control() { # fn runs under set -euo pipefail and must return PLANTED_FAIL_RC (99) + match expected regex
-  local label expected_regex fn log rc d control_registry
+  local label expected_regex fn log rc d control_registry control_failures control_evidence verified=0
   label=$1
   expected_regex=$2
   fn=$3
   log="$work/ctl-$label.log"
   control_registry="$log.dirs"
   : >"$control_registry"
+  control_failures="$log.failures"
+  : >"$control_failures"
+  mkdir -p "$regressions/control-runs"
+  control_evidence=$(mktemp -d "$regressions/control-runs/$label.XXXXXX")
   rc=0
   set +e
   ( set -euo pipefail; "$fn" ) >"$log" 2>&1
@@ -773,6 +841,10 @@ run_control() { # fn runs under set -euo pipefail and must return PLANTED_FAIL_R
      ! grep -q '^control setup:' "$log" &&
      ! grep -q 'INCOMPLETE:' "$log" &&
      grep -qE -- "$expected_regex" "$log"; then
+    verified=1
+  fi
+  collect_control_failures "$label" "$verified"
+  if [ "$verified" -eq 1 ]; then
     # Only a fully verified planted effect is exempt from the outer failure verdict.
     while IFS= read -r d; do
       [ -d "$d" ] || continue
@@ -881,13 +953,13 @@ control_worker_journal() {
         rc=0
         (
           work="$d/work"; mkdir -p "$work"
-          regressions="$d/saved"; fail=0; deadline_stopped=0
+          regressions="$control_evidence/${d##*/}/saved"; fail=0; deadline_stopped=0
           trap 'finish_diff $?' EXIT
           register_candidate "$leg" journal-control 0 "$work/replay" "worker-exit-$scenario"
           worker_exit_command "$mode" "$scenario" "$leg" journal-control 0 "$work/replay"
         ) >"$d.log" 2>&1 || rc=$?
         diag="FAIL $leg seed journal-control index 0 [$stage]: unexpected worker exit (rc 7)"
-        saved=$(find "$d/saved" -type l -name latest -print | head -1)
+        saved=$(find "$control_evidence/${d##*/}/saved" -type l -name latest -print | head -1)
         [ "$rc" -eq 1 ] && [ ! -e "$d/work" ] &&
           grep -qxF "$diag" "$d.log" && grep -qxF "$diag" "$saved/diagnostics.txt" &&
           grep -qxF "$stage" "$saved/failure-kinds.txt" &&
@@ -907,7 +979,7 @@ control_worker_journal() {
   rc=0
   (
     work="$d/work"; mkdir -p "$work"
-    regressions="$d/saved"; fail=0; deadline_stopped=0
+    regressions="$control_evidence/${d##*/}/saved"; fail=0; deadline_stopped=0
     trap 'finish_diff $?' EXIT
     for cand_seed in 'Early:A' 'Early?A'; do
       local candidate_dir="$work/early-$cand_seed"
@@ -918,7 +990,7 @@ control_worker_journal() {
   ) >"$d.log" 2>&1 || rc=$?
   [ "$rc" -eq 1 ] && [ ! -e "$d/work" ] || return 1
   local count=0 saved_seed
-  find "$d/saved" -type l -name latest -print >"$d/original-executions"
+  find "$control_evidence/${d##*/}/saved" -type l -name latest -print >"$d/original-executions"
   while IFS= read -r saved; do
     saved_seed=$(cat "$saved/seed")
     case "$saved_seed" in 'Early:A'|'Early?A') ;; *) return 1 ;; esac
@@ -998,7 +1070,6 @@ verify_saved_replay() { # BUNDLE REPRODUCED_PATH_FILE LOG
   fingerprint=$(python3 -I scripts/checks/compiler/spec_diff_identity.py digest "$saved")
   bounded_remaining env -u BASH_ENV -u ENV \
     bash --noprofile --norc "$saved/replay.sh" >"$log" 2>&1 || rc=$?
-  [ "$rc" -ne 3 ] || { cat "$log" >&2; return 3; }
   reproduced=""
   while IFS= read -r execution; do
     if ! grep -qxF "$execution" <<<"$before"; then
@@ -1006,6 +1077,10 @@ verify_saved_replay() { # BUNDLE REPRODUCED_PATH_FILE LOG
       reproduced="$execution/latest"
     fi
   done < <(find "$candidate/executions" -mindepth 1 -maxdepth 1 -type d -print)
+  if [ -n "$reproduced" ] && [ -n "${control_failures:-}" ]; then
+    printf '%s\n' "$(readlink -f "$reproduced")" >>"$control_failures"
+  fi
+  [ "$rc" -ne 3 ] || { cat "$log" >&2; return 3; }
   [ "$(readlink "$saved")" = "$original" ] && [ -d "$saved" ] || return 1
   [ "$(python3 -I scripts/checks/compiler/spec_diff_identity.py digest "$saved")" = "$fingerprint" ] || {
     echo 'control setup: replay modified original execution evidence' >&2; return 1;
@@ -1045,7 +1120,7 @@ verify_failure_bundle_and_replay() {
   local label=$1 leg=$2 cand_seed=$3 index=$4 kind=$5 expected_diag=$6 extra_diag=$7
   local required_csv=$8 forbidden_csv=$9 first_fn=${10}
   local ctl_dir="$work/ctl-bundle-$label" sub_work="$work/ctl-bundle-$label/work-1"
-  local regressions_1="$work/ctl-bundle-$label/reg-1" regressions_2="$work/ctl-bundle-$label/reg-2"
+  local regressions_1="${control_evidence:-$regressions}/$label-reg-1" regressions_2="$work/ctl-bundle-$label/reg-2"
   local log_1="$work/ctl-bundle-$label/run-1.log" log_2="$work/ctl-bundle-$label/run-2.log"
   local rc=0 safe_seed bundle_1="" bundle_2 art
   local -a req_arts=() forb_arts=()
@@ -1213,7 +1288,7 @@ control_drop_overflow() {
   (
     local rc=0 obs_first_cap=1 obs_retry_cap=1 safe_seed bundle sub="$work/control-drop-timeout"
     local BOUNDED_KILL_AFTER=0 BOUNDED_LOG="$work/expected-timeouts.log"
-    local regressions="$work/mismatch-timeout-regressions"
+    local regressions="${control_evidence:-$regressions}/mismatch-timeout-regressions"
     rm -rf "$sub" "$regressions"
     cp -R "$mutated" "$sub"
     reset_observations "$sub"
@@ -1273,7 +1348,7 @@ control_lcb_off_by_one() {
   (
     local rc=0 obs_first_cap=1 obs_retry_cap=1 safe_seed bundle log
     local BOUNDED_KILL_AFTER=0 BOUNDED_LOG="$work/expected-timeouts.log"
-    local regressions="$work/eval-llvm-timeout-regressions"
+    local regressions="${control_evidence:-$regressions}/eval-llvm-timeout-regressions"
     local sub="$work/control-lcb-llvm-timeout"
     rm -rf "$sub" "$regressions"
     cp -R "$mutated" "$sub"
@@ -1305,7 +1380,7 @@ control_lcb_off_by_one() {
   (
     local rc=0 obs_first_cap=1 obs_retry_cap=1 safe_seed bundle log
     local BOUNDED_KILL_AFTER=0 BOUNDED_LOG="$work/expected-timeouts.log"
-    local regressions="$work/eval-lcb-timeout-regressions"
+    local regressions="${control_evidence:-$regressions}/eval-lcb-timeout-regressions"
     local sub="$work/control-lcb-lcb-timeout"
     rm -rf "$sub" "$regressions"
     cp -R "$mutated" "$sub"
@@ -1403,7 +1478,7 @@ EOF
 }
 
 control_report_mismatch() {
-  local regressions="$work/control-regressions"
+  local regressions="${control_evidence:-$regressions}/control-regressions"
   local bir_dir_a="$work/control-mm-bir-a" bir_dir_b="$work/control-mm-bir-b" spec_dir="$work/control-mm-spec"
   local seed_a="Replay-Seed:A's" seed_b="Replay_Seed_A_s"
   local safe_a safe_b bir_bundle_a bir_bundle_b spec_bundle spec_name mdir rc=0
@@ -1670,6 +1745,12 @@ run_control partial-lowering \
 run_control report-mismatch \
   "^FAIL report-mismatch: persisted distinct bir and spec bundles for Replay-Seed:A's index 0 and validated manifest rows$" \
   control_report_mismatch
+
+# A focused control run does not claim the native corpus comparison passed.
+if [ "${SPEC_DIFF_CONTROLS_ONLY:-0}" = 1 ]; then
+  echo "spec_diff: controls only (native corpus not run)"
+  exit "$fail"
+fi
 
 bir_accepted=$(summary_value "$work/bir/summary.tsv" accepted)
 while IFS=$'\t' read -r tag index outcome production; do
