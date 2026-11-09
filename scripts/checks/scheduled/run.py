@@ -82,8 +82,8 @@ def run(sha, tier, output, environment, *, clock=None):
             runners = inventory()
             _binding.verify(environment.get("GITHUB_REPOSITORY"), environment.get("RUNNER_ENVIRONMENT"),
                             environment.get("RUNNER_NAME"), runners)
-            call(["git", "clone", "--shared", "--no-checkout", str(ROOT), str(checkout)], check=True, env=clean_env(environment))
-            call(["git", "-C", str(checkout), "checkout", "--detach", sha], check=True, env=clean_env(environment))
+            call(["git", "clone", "--shared", "--no-checkout", str(ROOT), str(checkout)], check=True, env=clean_env(environment), cwd=Path(__file__).resolve().parents[3], timeout=120)
+            call(["git", "-C", str(checkout), "checkout", "--detach", sha], check=True, env=clean_env(environment), cwd=Path(__file__).resolve().parents[3], timeout=120)
             record["checkout_revision"] = git("-C", str(checkout), "rev-parse", "HEAD", environment=environment)
             require(record["checkout_revision"] == sha, "wrong checked-out revision")
             record["gate_revision"] = record["checkout_revision"]

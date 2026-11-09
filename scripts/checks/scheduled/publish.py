@@ -1,6 +1,7 @@
 """Trusted publisher: immutable attempts, idempotent retry, leased notes updates."""
 from process_adapter import process_run
 import json
+from pathlib import Path
 import subprocess
 import sys
 from protocol import EvidenceError, append, clean_env, git, inventory, read_note, require, validate
@@ -29,11 +30,11 @@ def publish(record, runners, repository, environment):
         history = append(history, record, sha, tier, runners, repository)
         body = "\n".join(json.dumps(item, sort_keys=True) for item in history) + "\n"
         process_run(["git", "notes", "--ref=" + ref, "add", "-f", "-F", "-", sha],
-                       input=body, text=True, check=True, timeout=60, env=clean_env(environment))
+                       input=body, text=True, check=True, timeout=60, env=clean_env(environment), cwd=Path(__file__).resolve().parents[3])
         local = git("rev-parse", ref, environment=environment)
         try:
             process_run(["git", "push", "--force-with-lease=" + ref + ":" + expected,
-                        "origin", ref + ":" + ref], timeout=120, env=clean_env(environment))
+                        "origin", ref + ":" + ref], timeout=120, env=clean_env(environment), cwd=Path(__file__).resolve().parents[3])
         except subprocess.TimeoutExpired:
             pass  # Remote readback, then identical-attempt recovery on the next iteration.
         if git("ls-remote", "origin", ref, environment=environment).split()[0:1] == [local]:

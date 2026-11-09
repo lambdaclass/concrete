@@ -7,13 +7,16 @@ import sys
 from process_adapter import process_run
 
 PROBE = r"""
-import json, os, stat, tempfile
+import json, os, stat, tempfile, sys
 from pathlib import Path
 mask = os.umask(0o077); os.umask(mask)
-try:
-    os.fstat(9); fd9 = True
-except OSError:
-    fd9 = False
+fd9 = False
+for entry in Path('/proc/self/fd').iterdir():
+    fd = int(entry.name)
+    if fd in (0, 1, 2, sys.stdout.fileno(), sys.stderr.fileno(), sys.stdin.fileno()) or str(fd) == os.environ.get('CONCRETE_HEAVY_SLOT_FD'): continue
+    try:
+        os.fstat(fd); fd9 = True
+    except OSError: pass
 slot = os.environ.get('CONCRETE_HEAVY_SLOT_FD')
 slot_valid = None
 if slot is not None:
@@ -63,7 +66,7 @@ def detect(observed, cwd):
 def main(helper, cwd):
     result = process_run([sys.executable, '-I', helper, '--cwd', cwd, '--timeout', '3',
                           '--', sys.executable, '-I', '-c', PROBE],
-                         cwd=cwd, capture_output=True, text=True, timeout=4)
+                         cwd=cwd, capture_output=True, text=True, timeout=4, env=dict(os.environ))
     if result.returncode or result.stderr:
         raise ValueError('INCOMPLETE scheduled process context: probe did not complete')
     detect(json.loads(result.stdout), cwd)

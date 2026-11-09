@@ -8,6 +8,7 @@ import unittest
 from process_adapter import process_run
 from process_coverage import check, ROOT
 from test_support import runtime_environment
+from protocol import clean_env
 
 
 class ProcessCoverage(unittest.TestCase):
@@ -22,10 +23,11 @@ class ProcessCoverage(unittest.TestCase):
             (root / 'scripts/checks/lib').mkdir()
             shutil.copy(ROOT / 'scripts/checks/lib/scheduled_process.py', root / 'scripts/checks/lib')
             shutil.copy(ROOT / 'scripts/checks/lib/gate_manifest.py', root / 'scripts/checks/lib')
+            shutil.copy(ROOT / 'scripts/checks/scheduled_gates.sh', root / 'scripts/checks/scheduled_gates.sh')
             with (root / 'scripts/checks/scheduled/planted.py').open('w') as stream:
                 stream.write('from subprocess import run as launch\nlaunch(["true"])\n')
             result = process_run([sys.executable, str(ROOT / 'scripts/checks/scheduled/process_coverage.py'), str(root)],
-                                 env=runtime_environment(), capture_output=True, text=True, timeout=5)
+                                 env=runtime_environment(), capture_output=True, text=True, timeout=5, cwd=Path(__file__).resolve().parents[3])
             self.assertEqual((result.returncode, result.stdout, result.stderr),
                              (1, '', 'FAIL scheduled process boundary: unmanaged launch\n'))
 
@@ -41,18 +43,130 @@ class ProcessCoverage(unittest.TestCase):
             with (root / 'scripts/checks/scheduled/with_slot.sh').open('a') as stream:
                 stream.write('python3 -c "pass"\n')
             result = process_run([sys.executable, str(ROOT / 'scripts/checks/scheduled/process_coverage.py'), str(root)],
-                                 env=runtime_environment(), capture_output=True, text=True, timeout=5)
+                                 env=runtime_environment(), capture_output=True, text=True, timeout=5, cwd=Path(__file__).resolve().parents[3])
             self.assertEqual((result.returncode, result.stdout, result.stderr),
                              (1, '', 'FAIL scheduled process boundary: unmanaged launch\n'))
 
+    def test_sandbox_projection_covers_workflows_and_variable_argv(self):
+        from python_git_sandbox import scan
+        for plant in ('workflow', 'variable argv'):
+            with self.subTest(plant=plant), tempfile.TemporaryDirectory() as scratch:
+                root = Path(scratch)
+                shutil.copytree(ROOT / 'scripts/checks/scheduled', root / 'scripts/checks/scheduled')
+                shutil.copytree(ROOT / '.github/workflows', root / '.github/workflows')
+                (root / 'scripts/checks/lib').mkdir()
+                for relative in ('scripts/checks/lib/scheduled_process.py',
+                                 'scripts/checks/lib/gate_manifest.py',
+                                 'scripts/checks/scheduled_gates.sh'):
+                    shutil.copy(ROOT / relative, root / relative)
+                self.assertFalse([row for row in scan(root) if row.startswith('FAIL\t')])
+                if plant == 'workflow':
+                    path = root / '.github/workflows/gate_freshness.yml'
+                    source = path.read_text()
+                    before = 'source scripts/checks/lib/scheduled_process.sh'
+                    self.assertIn(before, source)
+                    path.write_text(source.replace(before, before + '\n          if true; then git status; fi'))
+                else:
+                    (root / 'scripts/checks/scheduled/planted.py').write_text(
+                        'import subprocess\ncommand = ["git", "status"]\nsubprocess.run(command)\n')
+                self.assertEqual([row for row in scan(root) if row.startswith('FAIL\t')],
+                                 ['FAIL\tscripts/checks/scheduled\tFAIL scheduled process boundary: unmanaged launch'])
+
     def test_missing_cwd(self):
+        result = process_run([sys.executable, str(ROOT / 'scripts/checks/lib/scheduled_process.py'),
+                              '--timeout', '1', '--', 'true'], cwd=ROOT,
+                             env=runtime_environment(), capture_output=True, text=True, timeout=5)
+        self.assertEqual((result.returncode, result.stdout, result.stderr),
+                         (1, '', 'FAIL scheduled process specification: missing cwd\n'))
+
+    def test_required_raw_fields_at_production_boundaries(self):
+        from scheduled_process import Invocation, run as launch
+        valid = dict(cwd=ROOT, env=runtime_environment(), timeout=1)
+        for field in ('cwd', 'env', 'timeout'):
+            for value in ('omit', None):
+                options = dict(valid)
+                if value == 'omit': options.pop(field)
+                else: options[field] = value
+                for adapter in (process_run, launch):
+                    with self.subTest(field=field, value=value, adapter=adapter):
+                        with self.assertRaisesRegex(ValueError, '^FAIL scheduled process specification: missing ' + field + '$'):
+                            adapter(['true'], **options)
+        with self.assertRaisesRegex(ValueError, '^FAIL scheduled process specification: missing cwd$'):
+            Invocation.capture({})
+        for cwd in ('relative', 7):
+            with self.assertRaisesRegex(ValueError, '^FAIL scheduled process specification: invalid cwd$'):
+                Invocation.capture({}, cwd)
+
+    def test_tool_resolution_uses_declared_cwd(self):
         with tempfile.TemporaryDirectory() as scratch:
-            spec = Path(scratch) / 'spec.json'
-            spec.write_text(json.dumps(dict(argv=['true'], env={}, timeout=1)))
-            result = process_run([sys.executable, str(ROOT / 'scripts/checks/scheduled/process_coverage.py'), '--spec', str(spec)],
-                                 env=runtime_environment(), capture_output=True, text=True, timeout=5)
+            root = Path(scratch)
+            (root / 'bin').mkdir()
+            tool = root / 'bin/selected'
+            tool.write_text('#!/bin/sh\nprintf "declared tool\\n"\n')
+            tool.chmod(0o755)
+            for command in (['selected'], ['bin/selected']):
+                result = process_run(command, cwd=root, env={'PATH': 'bin'}, timeout=2,
+                                     capture_output=True, text=True)
+                self.assertEqual((result.returncode, result.stdout, result.stderr), (0, 'declared tool\n', ''))
+
+    def test_shell_positions_and_supervisor_bypass(self):
+        from process_coverage import check_shell_launches, DIAGNOSTIC
+        positions = ['x=$(git status)', 'if true; then git status; fi',
+                     'if false; then :; else python3 x; fi',
+                     'while true; do sh x; done', 'true && env git status',
+                     'false || bash x', 'echo x | nix x', '{ git status; }',
+                     'if true; then "$@"; fi', 'exec "$@"', '( "$@" )',
+                     'if "$@"; then :; fi', 'git', '"/usr/bin/git" status',
+                     'if "$tool"; then :; fi', '[[ "$(git status)" = yes ]]']
+        for script in positions:
+            with self.subTest(script=script):
+                with self.assertRaisesRegex(ValueError, '^' + DIAGNOSTIC + '$'):
+                    check_shell_launches(script)
+        with tempfile.TemporaryDirectory() as scratch:
+            path = Path(scratch) / 'planted.py'
+            path.write_text('from bounded_exec import supervise as launch\nlaunch(["git"], 1, 0)\n')
+            from process_coverage import check_python_launches
+            with self.assertRaisesRegex(ValueError, '^' + DIAGNOSTIC + '$'):
+                check_python_launches(path)
+
+    def test_scheduled_retry_status_has_one_owner(self):
+        cases = [
+            ('bounded_run 0.03 -- python3 -c "import time; time.sleep(2)"',
+             '124 incomplete incomplete'),
+            ('bounded_run 1 -- /nonexistent/scheduled-process-control',
+             '124 incomplete runner-failed'),
+            ("bounded_run 0.1 -- bash -c 'if [ ! -e \"$1/attempt\" ]; then touch \"$1/attempt\"; sleep 2; fi' bash \"$2\"",
+             '0 done recovered'),
+        ]
+        for command, expected in cases:
+            with self.subTest(expected=expected), tempfile.TemporaryDirectory() as scratch:
+                script = ('source "$1"; ' + command + '; rc=$?; '
+                          'printf "%s %s %s\\n" "$rc" "$(cat "$BOUNDED_OUTCOME_FILE")" "$(cut -d " " -f1 "$BOUNDED_LOG")"; '
+                          'rm -rf "$BOUNDED_DIR"')
+                result = process_run(['bash', '-c', script, 'bash',
+                                      str(ROOT / 'scripts/checks/lib/scheduled_process.sh'), scratch],
+                                     cwd=ROOT, env=runtime_environment(), timeout=5,
+                                     capture_output=True, text=True)
+                self.assertEqual((result.returncode, result.stdout.strip()), (0, expected))
+                diagnostic = ('bounded_run: the runner reported no outcome for: /nonexistent/scheduled-process-control\n'
+                              if expected.endswith('runner-failed') else '')
+                self.assertEqual(result.stderr, diagnostic)
+
+    def test_explicit_input_replays_through_scheduled_retry(self):
+        script = r'''source "$1"
+printf 'declared payload' > "$2/payload"
+bounded_run -i "$2/payload" 0.05 -- bash -c 'cat > "$1/observed"; if [ ! -e "$1/attempt" ]; then touch "$1/attempt"; sleep 2; fi; cat "$1/observed"' bash "$2"
+rc=$?
+printf '\n%s %s %s\n' "$rc" "$(cat "$BOUNDED_OUTCOME_FILE")" "$(cut -d ' ' -f1 "$BOUNDED_LOG")"
+rm -rf "$BOUNDED_DIR"
+'''
+        with tempfile.TemporaryDirectory() as scratch:
+            result = process_run(['bash', '-c', script, 'bash',
+                                  str(ROOT / 'scripts/checks/lib/scheduled_process.sh'), scratch],
+                                 cwd=ROOT, env=runtime_environment(), timeout=5,
+                                 capture_output=True, text=True)
             self.assertEqual((result.returncode, result.stdout, result.stderr),
-                             (1, '', 'FAIL scheduled process specification: missing cwd\n'))
+                             (0, 'declared payload\n0 done recovered\n', ''))
 
 
 class ProcessStdin(unittest.TestCase):
@@ -63,7 +177,7 @@ class ProcessStdin(unittest.TestCase):
             command = [sys.executable, str(ROOT / 'scripts/checks/scheduled/stdin_control.py')]
             good = root / 'good'; good.mkdir()
             result = process_run([*command, str(helper), str(good)], env=runtime_environment(),
-                                 capture_output=True, text=True, timeout=5)
+                                 capture_output=True, text=True, timeout=5, cwd=Path(__file__).resolve().parents[3])
             self.assertEqual((result.returncode, result.stdout, result.stderr), (0, '', ''))
             planted = root / 'scheduled_process.py'
             source = helper.read_text()
@@ -72,7 +186,7 @@ class ProcessStdin(unittest.TestCase):
             shutil.copy(ROOT / 'scripts/checks/lib/bounded_exec.py', root)
             bad = root / 'bad'; bad.mkdir()
             result = process_run([*command, str(planted), str(bad)], env=runtime_environment(),
-                                 capture_output=True, text=True, timeout=5)
+                                 capture_output=True, text=True, timeout=5, cwd=Path(__file__).resolve().parents[3])
             self.assertEqual((result.returncode, result.stdout, result.stderr),
                              (1, '', 'FAIL scheduled process stdin: inherited open pipe\n'))
 
@@ -85,7 +199,7 @@ class ProcessStdin(unittest.TestCase):
             shutil.copy(ROOT / 'scripts/checks/lib/bounded_exec.py', root)
             result = process_run([sys.executable, str(ROOT / 'scripts/checks/scheduled/stdin_control.py'),
                                   str(planted), str(root)], env=runtime_environment(),
-                                 capture_output=True, text=True, timeout=5)
+                                 capture_output=True, text=True, timeout=5, cwd=Path(__file__).resolve().parents[3])
             self.assertEqual((result.returncode, result.stdout, result.stderr),
                              (124, '', 'INCOMPLETE scheduled process stdin: unproven timeout\n'))
 
@@ -101,20 +215,28 @@ class ProcessStdin(unittest.TestCase):
             os.dup2(reader, 0)
             command = [sys.executable, '-c', 'import sys; assert sys.stdin.buffer.read() == b""; print("EOF")']
             for adapter in (process_run, run.call):
-                result = adapter(command, env=runtime_environment(), capture_output=True, text=True, timeout=5)
+                result = adapter(command, env=runtime_environment(), capture_output=True, text=True, timeout=5, cwd=Path(__file__).resolve().parents[3])
                 self.assertEqual((result.returncode, result.stdout, result.stderr), (0, 'EOF\n', ''))
             # Keep the real stdin-sensitive Git operation; write-tree would hide the defect.
             with tempfile.TemporaryDirectory() as scratch:
                 git('-C', scratch, 'init', '-q')
                 self.assertEqual(git('-C', scratch, 'mktree'), '4b825dc642cb6eb9a060e54bf8d69288fbee4904')
-            for argv in (
-                [sys.executable, '-I', str(ROOT / 'scripts/checks/lib/scheduled_process.py'), '--cwd', str(ROOT), '--timeout', '3', '--', *command],
-                ['bash', '-c', 'source "$1"; bounded_run 3 -- "${@:2}"', 'bash', str(ROOT / 'scripts/checks/lib/scheduled_process.sh'), *command],
-            ):
-                result = process_run(argv, env=runtime_environment(), capture_output=True, text=True, timeout=5)
-                self.assertEqual((result.returncode, result.stdout, result.stderr), (0, 'EOF\n', ''))
-            result = Slot().invoke(command)
-            self.assertEqual((result.returncode, result.stdout, result.stderr), (0, 'EOF\n', ''))
+            adapters = [
+                [sys.executable, '-I', str(ROOT / 'scripts/checks/lib/scheduled_process.py'), '--cwd', str(ROOT), '--timeout', '3', '--'],
+                ['bash', '-c', 'source "$1"; bounded_run 3 -- "${@:2}"', 'bash', str(ROOT / 'scripts/checks/lib/scheduled_process.sh')],
+                ['bash', str(ROOT / 'scripts/checks/scheduled/with_slot.sh'), '3'],
+                ['bash', str(ROOT / 'scripts/checks/lib/bounded.sh'), '3'],
+            ]
+            for index, argv in enumerate(adapters):
+                with tempfile.TemporaryDirectory() as scratch:
+                    pool = Path(scratch) / 'pool'; pool.mkdir()
+                    for n in (1, 2): (pool / f'slot-{n}').touch()
+                    result = process_run([sys.executable, str(ROOT / 'scripts/checks/scheduled/stdin_control.py'),
+                                          'unused', scratch, *argv], cwd=ROOT,
+                                         env=dict(runtime_environment(), CONCRETE_HEAVY_SLOT_DIR=str(pool)),
+                                         capture_output=True, text=True, timeout=5)
+                    expected = (1, '', 'FAIL scheduled process stdin: inherited open pipe\n') if index == 3 else (0, '', '')
+                    self.assertEqual((result.returncode, result.stdout, result.stderr), expected)
             row = dict(id='stdin-probe', command=command, budget_seconds=3, artifacts=[])
             with patch.object(_registry, 'tier_rows', return_value=[row]):
                 self.assertEqual(_registry.execute('stdin-probe', 'daily', runtime_environment()), 0)
@@ -156,7 +278,7 @@ class ProcessContext(unittest.TestCase):
                             "os.dup2(source.fileno(), 9)\n        outcome = supervise(argv,")
                     planted.write_text(text)
                     result = process_run([sys.executable, str(ROOT / 'scripts/checks/scheduled/context_control.py'),
-                                          str(planted), scratch], capture_output=True, text=True, timeout=5)
+                                          str(planted), scratch], capture_output=True, text=True, timeout=5, cwd=Path(__file__).resolve().parents[3], env=runtime_environment())
                     expected = (1, '', 'FAIL scheduled process context: ' + field + '\n') if field else (0, '', '')
                     self.assertEqual((result.returncode, result.stdout, result.stderr), expected)
 
@@ -236,18 +358,18 @@ class ProcessContext(unittest.TestCase):
             git('-C', str(repo), 'config', 'http.https://github.com/.extraheader', 'AUTHORIZATION: control-transport')
             for role in ('gate', 'publisher'):
                 result = process_run(['git', '-C', str(repo), 'config', '--get', 'scheduled.foreign'],
-                                     env=env, role=role, capture_output=True, text=True, timeout=3)
+                                     env=clean_env(env), role=role, capture_output=True, text=True, timeout=3, cwd=Path(__file__).resolve().parents[3])
                 self.assertEqual((result.returncode, result.stdout, result.stderr), (1, '', ''))
             # The trusted publisher declares its checkout transport locally (as
             # actions/checkout does). Private global config must not erase it.
             for key, expected in (('remote.origin.url', 'https://github.com/example/repo'),
                                   ('http.https://github.com/.extraheader', 'AUTHORIZATION: control-transport')):
                 result = process_run(['git', '-C', str(repo), 'config', '--get', key], role='publisher',
-                                     env=env, capture_output=True, text=True, timeout=3)
+                                     env=clean_env(env), capture_output=True, text=True, timeout=3, cwd=Path(__file__).resolve().parents[3])
                 self.assertEqual((result.returncode, result.stdout, result.stderr), (0, expected + '\n', ''))
             result = process_run(['git', '-C', str(repo), '-c', 'user.name=Control', '-c',
                                   'user.email=control@example.invalid', 'commit', '--allow-empty', '-qm', 'control'],
-                                 env=env, role='publisher', capture_output=True, text=True, timeout=3)
+                                 env=clean_env(env), role='publisher', capture_output=True, text=True, timeout=3, cwd=Path(__file__).resolve().parents[3])
             self.assertEqual((result.returncode, result.stdout, result.stderr), (0, '', ''))
             self.assertFalse(marker.exists())
             remote = root / 'declared-transport.git'
@@ -257,7 +379,7 @@ class ProcessContext(unittest.TestCase):
             with config.open('a') as stream:
                 stream.write('[url "file:///nonexistent/hostile-transport/"]\n insteadOf = file://\n')
             result = process_run(['git', '-C', str(repo), 'ls-remote', 'origin'],
-                                 env=env, role='publisher', capture_output=True, text=True, timeout=3)
+                                 env=clean_env(env), role='publisher', capture_output=True, text=True, timeout=3, cwd=Path(__file__).resolve().parents[3])
             self.assertEqual((result.returncode, result.stdout, result.stderr), (0, '', ''))
 
     def test_publisher_credentials_require_explicit_role(self):
@@ -271,7 +393,7 @@ class ProcessContext(unittest.TestCase):
                 ['bash', '-c', 'source "$1"; bounded_run 3 --role "$2" -- "${@:3}"',
                  'bash', str(ROOT / 'scripts/checks/lib/scheduled_process.sh'), role, *command]]
             for argv in adapters:
-                result = process_run(argv, role=role, env=env, capture_output=True, text=True, timeout=5)
+                result = process_run(argv, role=role, env=clean_env(env), capture_output=True, text=True, timeout=5, cwd=Path(__file__).resolve().parents[3])
                 self.assertEqual((result.returncode, result.stdout, result.stderr), (0, expected + '\n', ''))
 
 
@@ -286,7 +408,7 @@ class ProcessContext(unittest.TestCase):
                       'CONCRETE_HEAVY_SLOT_FD=9; exec "$2" -I "$3" --cwd "$1" '
                       '--timeout 2 -- true')
             result = process_run(['bash', '-c', script, 'bash', scratch, sys.executable, str(helper)],
-                                 capture_output=True, text=True, timeout=3)
+                                 capture_output=True, text=True, timeout=3, cwd=Path(__file__).resolve().parents[3], env=runtime_environment())
             self.assertEqual((result.returncode, result.stdout, result.stderr),
                              (1, '', 'INCOMPLETE heavy slots: invalid inherited slot descriptor\n'))
 
@@ -306,7 +428,7 @@ class ProcessClock(unittest.TestCase):
                     text = text.replace('observed = source.read()', 'observed = source.read(); source.read()')
                 planted.write_text(text)
                 result = process_run([sys.executable, str(ROOT / 'scripts/checks/scheduled/clock_control.py'),
-                                      str(planted)], capture_output=True, text=True, timeout=3)
+                                      str(planted)], capture_output=True, text=True, timeout=3, cwd=Path(__file__).resolve().parents[3], env=runtime_environment())
                 expected = (1, '', 'FAIL scheduled clock: undeclared read\n') if plant else (0, '', '')
                 self.assertEqual((result.returncode, result.stdout, result.stderr), expected)
 
@@ -344,14 +466,16 @@ class ProcessClock(unittest.TestCase):
 
     def test_supervisor_charges_startup_to_declared_deadline(self):
         import bounded_exec
-        from unittest.mock import Mock, patch
-        ticks = [100]
-        child = Mock(pid=12345)
-        child.wait.return_value = 0
-        def started(pid):
-            self.assertEqual(pid, 12345)
-            ticks[0] = 111
-        with patch.object(bounded_exec.subprocess, 'Popen', return_value=child), \
-             patch.object(bounded_exec.time, 'monotonic', side_effect=lambda: ticks[0]):
-            self.assertEqual(bounded_exec.supervise(['true'], 10, 0, deadline=110, on_started=started), 'exit 0')
-        child.wait.assert_called_once_with(timeout=0)
+        import os
+        import subprocess
+        import time
+        with tempfile.TemporaryDirectory() as scratch:
+            marker = Path(scratch) / 'started'
+            began = time.monotonic()
+            outcome = bounded_exec.supervise(
+                [sys.executable, '-c', 'import time; time.sleep(5)'], 10, .05,
+                deadline=began + .1, on_started=lambda pid: marker.touch(),
+                env=runtime_environment())
+            self.assertEqual(outcome, 'timeout')
+            self.assertTrue(marker.exists())
+            self.assertLess(time.monotonic() - began, 1)

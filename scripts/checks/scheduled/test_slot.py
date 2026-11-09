@@ -54,7 +54,7 @@ class Slot(unittest.TestCase):
         result = process_run(["bash", "-c", 'source "$1"; heavy_slot_acquire', "bash",
                                  str(ROOT / "scripts/checks/lib/heavy_slots.sh")],
                                 env={**runtime_environment(), "CONCRETE_HEAVY_SLOT_DIR": "/nonexistent/concrete-slot-control"},
-                                capture_output=True, text=True, timeout=5)
+                                capture_output=True, text=True, timeout=5, cwd=Path(__file__).resolve().parents[3])
         self.assertEqual((result.returncode, result.stderr),
                          (1, "INCOMPLETE heavy slots: host pool is not provisioned\n"))
 
@@ -68,12 +68,12 @@ class Slot(unittest.TestCase):
             argv = ["bash", "-c", 'source "$1"; heavy_slot_acquire || exit 125; heavy_slot_release',
                     "bash", str(ROOT / "scripts/checks/lib/heavy_slots.sh")]
             env = {**runtime_environment(), "CONCRETE_HEAVY_SLOT_DIR": work}
-            result = process_run(argv, env=env, capture_output=True, text=True, timeout=5)
+            result = process_run(argv, env=env, capture_output=True, text=True, timeout=5, cwd=Path(__file__).resolve().parents[3])
             self.assertEqual((result.returncode, result.stderr),
                              (125, "INCOMPLETE heavy slots: both host slots occupied\n"))
             handles[0].close()
             for _ in range(2):
-                result = process_run(argv, env=env, capture_output=True, text=True, timeout=5)
+                result = process_run(argv, env=env, capture_output=True, text=True, timeout=5, cwd=Path(__file__).resolve().parents[3])
                 self.assertEqual((result.returncode, result.stderr), (0, ""))
             handles[1].close()
 
@@ -109,7 +109,7 @@ echo inherited-slot
         with tempfile.TemporaryDirectory() as work:
             for n in (1, 2): (Path(work) / f'slot-{n}').touch()
             result = process_run(['bash', '-c', script, 'bash', str(ROOT / 'scripts/checks/lib/heavy_slots.sh')],
-                env={**runtime_environment(), 'CONCRETE_HEAVY_SLOT_DIR': work}, capture_output=True, text=True, timeout=5)
+                env={**runtime_environment(), 'CONCRETE_HEAVY_SLOT_DIR': work}, capture_output=True, text=True, timeout=5, cwd=Path(__file__).resolve().parents[3])
         self.assertEqual((result.returncode, result.stdout, result.stderr), (0, 'inherited-slot\n', ''))
 
     def test_watchdog_child_reuses_slot(self):
@@ -123,12 +123,69 @@ echo inherited-slot
         self.assertEqual((result.returncode, result.stdout, result.stderr),
             (1, '', 'INCOMPLETE heavy slots: invalid inherited slot descriptor\n'))
 
+    def test_outer_timeout_and_cancel_reap_gate_and_release_slot(self):
+        import fcntl
+        import signal
+        from bounded_exec import supervise
+        for cancel in (False, True):
+            with self.subTest(cancel=cancel), tempfile.TemporaryDirectory() as work:
+                pool = Path(work) / 'pool'; pool.mkdir()
+                for n in (1, 2): (pool / f'slot-{n}').touch()
+                marker = Path(work) / 'members.json'
+                program = ('import json,os,sys,time; child=os.fork(); '
+                           'open(sys.argv[1],"w").write(json.dumps([os.getpid(),child])) if child else None; '
+                           'time.sleep(20)')
+                command = ['bash', str(ROOT / 'scripts/checks/scheduled/with_slot.sh'), '10',
+                           os.sys.executable, '-c', program, str(marker)]
+                environment = dict(runtime_environment(), CONCRETE_HEAVY_SLOT_DIR=str(pool))
+                if cancel:
+                    # The adapter receives cancellation itself, from a separate
+                    # bounded test driver, rather than from an expired gate budget.
+                    driver = r"""
+import os, signal, sys, threading, time
+sys.path.insert(0, sys.argv[1])
+from process_adapter import process_run
+from bounded_exec import Cancelled
+from pathlib import Path
+def cancel():
+    end = time.monotonic() + 2
+    while time.monotonic() < end:
+        try:
+            import json
+            if len(json.loads(Path(sys.argv[2]).read_text())) == 2: break
+        except (OSError, ValueError): pass
+        time.sleep(.005)
+    os.kill(os.getpid(), signal.SIGTERM)
+threading.Thread(target=cancel).start()
+try:
+    process_run(sys.argv[3:], cwd=sys.argv[4], env={k:v for k,v in os.environ.items() if not k.startswith('BOUNDED_TREE_')}, timeout=5, grace=.2)
+except Cancelled:
+    print('cancelled and reaped')
+"""
+                    # cwd is an explicit argument independent of the command argv.
+                    driver = driver.replace('cwd=sys.argv[4]', 'cwd=os.getcwd()')
+                    result = process_run([os.sys.executable, '-c', driver,
+                                          str(ROOT / 'scripts/checks/scheduled'), str(marker), *command],
+                                         cwd=ROOT, env=environment, capture_output=True, text=True, timeout=5)
+                    self.assertEqual((result.returncode, result.stdout, result.stderr), (0, 'cancelled and reaped\n', ''))
+                else:
+                    with self.assertRaises(subprocess.TimeoutExpired):
+                        process_run(command, cwd=ROOT, env=environment, timeout=.4, grace=.2,
+                                    capture_output=True, text=True)
+                import json
+                members = json.loads(marker.read_text())
+                self.assertTrue(all(pid > 0 for pid in members))
+                self.assertTrue(all(not Path(f'/proc/{pid}').exists() for pid in members), members)
+                for n in (1, 2):
+                    with (pool / f'slot-{n}').open() as handle:
+                        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
     def test_git_environment_sanitized(self):
         from unittest.mock import patch
         with patch.dict(os.environ, {"GIT_DIR": "/nonexistent/planted-git-dir", "GIT_WORK_TREE": "/nonexistent/planted-work-tree"}):
             self.assertNotIn("GIT_DIR", clean_env(dict(os.environ)))
             self.assertRegex(git("-C", str(ROOT), "rev-parse", "HEAD", environment=dict(os.environ)), r"^[0-9a-f]{40}$")
-            result = run.call(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True, check=True, env=clean_env(dict(os.environ)))
+            result = run.call(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True, check=True, env=clean_env(dict(os.environ)), cwd=Path(__file__).resolve().parents[3], timeout=120)
             self.assertRegex(result.stdout.strip(), r"^[0-9a-f]{40}$")
 
 if __name__ == "__main__":

@@ -67,6 +67,7 @@ def operation_clock(*, observation=None, wall=None, monotonic=None):
 # Runtime tool identity is an explicit stage input (including Nix's resolved PATH).
 # No wildcard namespaces: adding a controller input requires declaring its name.
 ENVIRONMENT_KEYS = frozenset({
+    'BOUNDED_TREE_SOCKET', 'BOUNDED_TREE_KEY', 'BOUNDED_TREE_REQUEST',
     'PATH', 'NIX_PATH', 'NIX_PROFILES', 'NIX_SSL_CERT_FILE', 'SSL_CERT_FILE',
     'CONCRETE_GATES_SHELL', 'CONCRETE_HEAVY_SLOT_DIR', 'CONCRETE_HEAVY_SLOT_FD',
     'GITHUB_REPOSITORY', 'GITHUB_SERVER_URL', 'GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT',
@@ -77,6 +78,11 @@ ENVIRONMENT_KEYS = frozenset({
 })
 CREDENTIAL_KEYS = frozenset({'GH_TOKEN', 'GITHUB_TOKEN'})
 INVALID_SLOT = 'INCOMPLETE heavy slots: invalid inherited slot descriptor'
+
+
+def clean_env(environment):
+    """Shared Git input sanitizer; protocol.clean_env re-exports this owner."""
+    return {k: v for k, v in environment.items() if not k.startswith('GIT_')}
 
 
 def role_environment(environment, role):
@@ -116,10 +122,12 @@ class Invocation:
     role: str = 'gate'
 
     @classmethod
-    def capture(cls, environment, cwd, role='gate'):
-        return cls(Path(cwd).resolve(), role_environment(environment, role), role)
+    def capture(cls, environment=None, cwd=None, role='gate'):
+        validate(dict(cwd=cwd, env=environment, argv=['capture'], timeout=1, deadline=1))
+        return cls(Path(cwd), role_environment(environment, role), role)
 
-    def specification(self, argv, *, timeout=120, deadline=None, **streams):
+    def specification(self, argv, *, timeout=None, deadline=None, **streams):
+        validate(dict(argv=argv, cwd=self.cwd, env=self.environment, timeout=timeout, deadline=deadline if deadline is not None else 1))
         return dict(argv=list(argv), cwd=str(self.cwd), env=dict(self.environment),
                     role=self.role, timeout=timeout,
                     deadline=time.monotonic() + timeout if deadline is None else deadline, **streams)
@@ -131,13 +139,17 @@ def private_context(spec):
     with tempfile.TemporaryDirectory(prefix='scheduled-process-', dir='/tmp') as root:
         home = Path(root) / 'home'; home.mkdir(mode=0o700)
         temporary = Path(root) / 'tmp'; temporary.mkdir(mode=0o700)
-        environment = role_environment(spec['env'], spec.get('role', 'gate'))
+        environment = role_environment(clean_env(spec['env']), spec.get('role', 'gate'))
         environment.update(HOME=str(home), XDG_CONFIG_HOME=str(home / '.config'),
                            TMPDIR=str(temporary), TMP=str(temporary), TEMP=str(temporary),
                            LC_ALL='C', LANG='C', TZ='UTC',
                            GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL=os.devnull,
                            GIT_CONFIG_COUNT='1', GIT_CONFIG_KEY_0='core.hooksPath',
                            GIT_CONFIG_VALUE_0=os.devnull)
+        if spec.get('gate_outcome'):
+            outcome_file = Path(root) / 'outcome.jsonl'; outcome_file.touch()
+            environment.update(SCHEDULED_OUTCOME_FILE=str(outcome_file),
+                               SCHEDULED_OUTCOME_HELPER=str(Path(__file__).with_name('gate_outcome.py')))
         # Repository-local transport (checkout's scoped extraheader/remote URL) is
         # retained; global/system config and local hooks cannot influence execution.
         yield environment
@@ -147,7 +159,7 @@ def validate(spec):
     for field in ('cwd', 'argv', 'env', 'timeout', 'deadline'):
         if field not in spec or spec[field] is None:
             raise ValueError('FAIL scheduled process specification: missing ' + field)
-    if not Path(spec['cwd']).is_absolute() or not Path(spec['cwd']).is_dir():
+    if not isinstance(spec['cwd'], (str, Path)) or not Path(spec['cwd']).is_absolute() or not Path(spec['cwd']).is_dir():
         raise ValueError('FAIL scheduled process specification: invalid cwd')
     if not isinstance(spec['env'], dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in spec['env'].items()):
         raise ValueError('FAIL scheduled process specification: invalid env')
@@ -155,17 +167,25 @@ def validate(spec):
         raise ValueError('FAIL scheduled process specification: invalid timeout')
     if not isinstance(spec['deadline'], (int, float)) or not math.isfinite(spec['deadline']):
         raise ValueError('FAIL scheduled process specification: invalid deadline')
-    if not spec['argv'] or not all(isinstance(x, str) for x in spec['argv']):
+    if not isinstance(spec['argv'], (list, tuple)) or not spec['argv'] or not all(isinstance(x, str) for x in spec['argv']):
         raise ValueError('FAIL scheduled process specification: invalid argv')
 
 
 def execute(spec):
     validate(spec)
     argv = list(spec['argv'])
-    tool = shutil.which(argv[0], path=spec['env'].get('PATH', os.defpath))
+    # Resolve relative executable/PATH entries against the declared cwd, never
+    # against the controller's ambient working directory. Preserve symlink names.
+    cwd = Path(spec['cwd'])
+    search = os.pathsep.join(str(cwd / entry) if not Path(entry).is_absolute() else entry
+                             for entry in spec['env'].get('PATH', os.defpath).split(os.pathsep))
+    requested = argv[0]
+    if os.path.dirname(requested) and not Path(requested).is_absolute():
+        requested = str(cwd / requested)
+    tool = shutil.which(requested, path=search)
     if tool is None:
         raise FileNotFoundError(argv[0])
-    argv[0] = str(Path(tool).resolve())
+    argv[0] = os.path.abspath(tool)
     text = spec.get('text', False)
     with private_context(spec) as environment, tempfile.TemporaryFile() as source, tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
         payload = spec.get('input')
@@ -191,37 +211,44 @@ def execute(spec):
         if text:
             output = output.decode() if output is not None else None
             errors = errors.decode() if errors is not None else None
-        result = subprocess.CompletedProcess(spec['argv'], int(outcome.split()[1]), output, errors)
+        rc = int(outcome.split()[1])
+        if spec.get('gate_outcome'):
+            from gate_outcome import result as gate_result
+            rc = gate_result(environment['SCHEDULED_OUTCOME_FILE'], rc, environment.get('SELECTED_SHA'))
+        result = subprocess.CompletedProcess(spec['argv'], rc, output, errors)
         if spec.get('check', False):
             result.check_returncode()
         return result
 
 
-def run(argv, *, cwd, env, timeout=120, role='gate', **options):
+def run(argv, *, cwd=None, env=None, timeout=None, role='gate', **options):
     return execute(Invocation.capture(env, cwd, role).specification(argv, timeout=timeout, **options))
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--cwd', required=True)
-    parser.add_argument('--timeout', type=float, required=True)
-    parser.add_argument('--retry', type=float)
+    parser.add_argument('--cwd')
+    parser.add_argument('--timeout', type=float)
+    parser.add_argument('--kill-after', type=float, default=10)
     parser.add_argument('--role', choices=('gate', 'publisher'), default='gate')
     parser.add_argument('--status')
+    parser.add_argument('--input-file')
+    parser.add_argument('--gate-outcome', action='store_true')
     parser.add_argument('argv', nargs=argparse.REMAINDER)
     args = parser.parse_args()
     command = args.argv[1:] if args.argv[:1] == ['--'] else args.argv
-    for budget in ([args.timeout, args.retry] if args.retry is not None else [args.timeout]):
-        try:
-            result = run(command, cwd=args.cwd, env=dict(os.environ), role=args.role, timeout=budget, capture_output=args.retry is not None)
-        except subprocess.TimeoutExpired:
-            continue
-        if args.status: Path(args.status).write_text('done\n')
-        if result.stdout is not None: sys.stdout.buffer.write(result.stdout)
-        if result.stderr is not None: sys.stderr.buffer.write(result.stderr)
-        return result.returncode
-    if args.status: Path(args.status).write_text('incomplete\n')
-    return 124
+    try:
+        result = run(command, cwd=args.cwd, env=dict(os.environ), role=args.role,
+                     timeout=args.timeout, grace=args.kill_after, gate_outcome=args.gate_outcome,
+                     input=Path(args.input_file).read_bytes() if args.input_file else None)
+        outcome = 'exit ' + str(result.returncode)
+    except subprocess.TimeoutExpired:
+        outcome = 'timeout'
+    if args.status:
+        Path(args.status).write_text(outcome + '\n')
+        return 0
+    return 124 if outcome == 'timeout' else result.returncode
+
 
 
 if __name__ == '__main__':

@@ -1,5 +1,6 @@
 """Exact-SHA append-only scheduled evidence. No gate list lives here."""
 from process_adapter import process_run
+from scheduled_process import clean_env
 import os
 import copy
 import datetime as dt
@@ -32,12 +33,9 @@ def require(ok, message):
     if not ok:
         raise EvidenceError(message)
 
-def clean_env(environment):
-    return {k: v for k, v in environment.items() if not k.startswith("GIT_")}
-
 def git(*args, environment=None):
     return process_run(["git", *args], check=True, capture_output=True,
-                          text=True, timeout=60, env=clean_env(dict(os.environ) if environment is None else environment)).stdout.strip()
+                          text=True, timeout=60, env=clean_env(dict(os.environ) if environment is None else environment), cwd=REGISTRY_ROOT).stdout.strip()
 
 def timestamp(value):
     try:

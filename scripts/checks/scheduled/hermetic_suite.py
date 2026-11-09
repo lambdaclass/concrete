@@ -80,7 +80,7 @@ def main(environment):
                            GIT_OBJECT_DIRECTORY=str(canary / '.git/objects'))
             destination = str(Path(scratch) / (name + '.json'))
             result = process_run([sys.executable, '-I', str(Path(__file__).resolve()), '--child', destination],
-                                    env=env, capture_output=True, text=True, timeout=45)
+                                    env=env, capture_output=True, text=True, timeout=45, cwd=Path(__file__).resolve().parents[3])
             if result.returncode:
                 print(result.stdout, end=''); print(result.stderr, end='', file=sys.stderr)
                 raise ValueError(f'FAIL scheduled hermeticity: {name} suite failed')

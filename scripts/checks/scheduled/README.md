@@ -600,3 +600,73 @@ validated slot transfer, cancellation/reaping and partial-artifact retention, pl
 trusted publisher transport and the scheduled tier campaigns. Run those against
 the exact final slice SHA; the focused PR probes do not replace full daily/weekly
 campaigns. No gate budget or tier has been reduced.
+
+
+### Round 16: structural repair of slices 1–2 (R-0676)
+
+The S14 failure and S13a findings are confirmed. The structural cause of
+ISS-0043 was duplicated enforcement: a caller could supply a locally named
+"clean" dictionary while bypassing the shared process specification. The process
+owner now applies the one sanitizer unconditionally. `protocol.clean_env` is a
+re-export of that same function. `process_coverage.check_python_launches` forbids
+raw Python launches (including variable argv and aliases) throughout the scheduled
+package, tests included. The Python leg of `sandbox_isolation.sh` projects that
+complete Python/shell/workflow census, including **every** scheduled module;
+it does not maintain a second scheduled
+Git policy. Its existing non-scheduled repository-maker audit remains in place.
+The shell/workflow control checks substitutions, conditionals, loops, braces,
+pipelines, conjunctions and disjunctions. Planted launches fail with exactly
+`FAIL scheduled process boundary: unmanaged launch`. Direct supervisor access is
+limited to the independent stdin control and the named lifecycle regression test.
+
+`Invocation.capture`, the Python adapter and the real CLI validate raw required
+fields before conversion. There is no ambient cwd/environment fallback in the
+scheduled specification. Operation call sites declare their repository, stage
+environment and budget. The history fixture injects a repository dependency rather
+than changing the test process's cwd. Resolved tool paths preserve executable
+basenames, which matters for multicall binaries in the Nix userland.
+
+`bounded_exec` owns one authenticated Unix-socket supervisor per invocation tree.
+Nested runners are clients; only the owner launches process groups. Requests carry
+parent identity, deadlines, environment and transferred stream/slot descriptors.
+The owner registers the request before a descendant can launch, rejects children
+of cancelled requests, terminates every registered descendant group with TERM
+then bounded KILL, waits for leaders, and on Linux adopts/reaps orphaned group
+members. Cancellation cannot kill an inner supervisor before it propagates: there
+is no inner supervisor. The private `BOUNDED_TREE_*` capability is explicitly
+carried through the process specification; it is not a gate configuration input.
+Slot descriptor numbers are remapped after transfer while retaining their open
+file descriptions. Tests cancel and time out the real slot adapter, verify both
+gate PIDs disappear, and acquire both pool locks afterward. The independent stdin
+control deliberately establishes its own short supervision boundary.
+
+`bounded.sh` alone owns retries, outcome reset, incomplete/runner-failed status
+and recovered/incomplete logs. `scheduled_process.sh` selects the single-attempt
+runner, whose status protocol is `exit N` / `timeout`; it contains no retry loop.
+Per-attempt structured outcome files live in the process owner's private context,
+so the slot adapter no longer wraps a gate in redundant watchdogs. Focused tests
+exercise recovered retries (including replay of an explicitly declared stdin file),
+double timeouts and runner failure with exact status,
+log and diagnostic assertions.
+
+The open pipe is attached directly to each CLI/shell/slot adapter under test.
+The proof program forks a same-group member; cleanup checks both members, not just
+the leader. A generic stdin-inheriting adapter must fail with exactly
+`FAIL scheduled process stdin: inherited open pipe`, while unrelated timeouts
+remain exactly `INCOMPLETE scheduled process stdin: unproven timeout`.
+The writer stays open until cleanup completes. The sandbox live probe counts
+Linux tasks (threads) for RLIMIT_NPROC, retaining the same 512 additional-task
+allowance on shared hosts.
+
+Reproduction evidence against the rejected baseline: an outer 0.5-second timeout left the recorded
+gate PID alive and slot-1 locked (F1); the generic stdin-inheriting bounded adapter
+returned `0, EOF` through the old EOF probe (F2); omitted cwd/env reached execution
+without a specification error (F3); removing the managed wrappers from workflow
+substitutions/conditionals and planting `then "$@"` still passed the census (F4);
+the old stdin control returned its exact planted-failure diagnostic while a same-group fork remained an unreaped zombie, verified under a separate subreaper that cleaned it up (F5);
+a missing executable left no outcome or log through the scheduled retry adapter
+(F6). All six findings are accepted; none is dismissed as a budget problem.
+
+R-0676 owns these repairs. R-0690 still owns CI2 qualification with real Nix
+campaigns, cancellation and partial artifacts at the final commit SHA. No gate
+budget/tier was reduced and no step 4 work is included.

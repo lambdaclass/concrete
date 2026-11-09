@@ -21,7 +21,7 @@
 # Every run is bounded in time (120 s per attempt, bounded_run) and in aggregate: a systemd user
 # scope with TasksMax=512 and MemoryMax=8G (fede-256gb, concrete-ci-2 logins), or, where there is
 # none (a CI runner service), the cgroup the check already runs in when it has a finite memory.max
-# (concrete-ci-2's runners: 28G per runner) plus `ulimit -u` of 512 more processes. With neither, the
+# (concrete-ci-2's runners: 28G per runner) plus `ulimit -u` of 512 more tasks. With neither, the
 # live probes do not run and the check fails as INCOMPLETE: never an unbounded run. macOS has
 # neither (no unprivileged aggregate memory limit), so there the root checks are INCOMPLETE by design
 # and a gated push from a macOS clone is refused: gated pushes (trains) are made from a Linux clone
@@ -132,14 +132,15 @@ if command -v systemd-run >/dev/null 2>&1 \
 elif CGMEM="$(cgroup_memory_max)"; then BOUND=cgroup; fi
 case "$BOUND" in
   scope)  echo "bound: a systemd user scope, TasksMax=512, MemoryMax=8G" ;;
-  cgroup) echo "bound: this cgroup's memory.max ($CGMEM bytes, aggregate) and ulimit -u (512 more processes)" ;;
+  cgroup) echo "bound: this cgroup's memory.max ($CGMEM bytes, aggregate) and ulimit -u (512 more tasks)" ;;
   none)   echo "bound: none available (no systemd user scope, no finite cgroup memory.max; macOS has neither): the live probes will not run; run the root checks and gated pushes from a bounded Linux host (fede-256gb, concrete-ci-2) or in CI" ;;
 esac
 bounded() {
   case "$BOUND" in
     scope) bounded_run -i /dev/null -r 120 120 -- systemd-run --user --scope -q -p TasksMax=512 -p MemoryMax=8G "$@" ;;
     cgroup)
-      local n; n="$(ps -o pid= -U "$(id -u)" 2>/dev/null | wc -l | tr -d ' ')"
+      # Linux RLIMIT_NPROC counts threads, including other shared-host jobs.
+      local n; n="$(ps -L -o lwp= -U "$(id -u)" 2>/dev/null | wc -l | tr -d ' ')"
       ( ulimit -u $(( ${n:-0} + 512 )) 2>/dev/null || { echo "sandbox_isolation: ulimit -u refused; not running $*"; exit 125; }
         bounded_run -i /dev/null -r 120 120 -- "$@" ) ;;
     *) echo "sandbox_isolation: no aggregate task and memory bound here; not running $*"; return 125 ;;

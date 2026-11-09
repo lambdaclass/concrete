@@ -143,10 +143,12 @@ class MergeHistory(RegistryFixture, unittest.TestCase):
                     r['gates'][0]['status'] = status
                     g('notes', '--ref=refs/notes/concrete-gates-' + tier,
                       'add', '-m', json.dumps(r), sha)
+            import protocol
+            from pathlib import Path
             output = io.StringIO()
             with patch.dict(os.environ, {'GITHUB_REPOSITORY': 'example/repo'}), \
                  patch.object(observe, 'inventory', return_value=RUNNERS), \
-                 contextlib.chdir(scratch), contextlib.redirect_stdout(output):
+                 patch.object(protocol, 'REGISTRY_ROOT', Path(scratch)), contextlib.redirect_stdout(output):
                 from history import authorize
                 self.assertEqual(authorize(replay, dict(os.environ)), replay)
                 from protocol import EvidenceError

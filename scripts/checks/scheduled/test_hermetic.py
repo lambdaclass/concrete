@@ -1,3 +1,4 @@
+from test_support import runtime_environment
 """The environment control must detect changed outcomes, not merely two exits."""
 from process_adapter import process_run
 import unittest
@@ -37,7 +38,7 @@ class Hermeticity(unittest.TestCase):
                        "assert sys.stdin.buffer.read() == b''; "
                        "print(protocol.git('--version'))")
             result = process_run([sys.executable, '-I', '-c', program, str(Path(__file__).resolve().parent)],
-                                    env=environment, text=True, capture_output=True, timeout=10, check=True)
+                                    env=environment, text=True, capture_output=True, timeout=10, check=True, cwd=Path(__file__).resolve().parents[3])
             self.assertEqual(result.stdout, 'selected gate git\n')
 
     def test_planted_canary_index_corruption(self):

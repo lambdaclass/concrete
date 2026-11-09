@@ -9,25 +9,38 @@ ROOT = Path(__file__).resolve().parents[3]
 DIAGNOSTIC = 'FAIL scheduled process boundary: unmanaged launch'
 
 
+def check_python_launches(path):
+    tree = ast.parse(path.read_text())
+    aliases = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            aliases.update((x.asname or x.name, x.name) for x in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            aliases.update((x.asname or x.name, (node.module or '') + '.' + x.name) for x in node.names)
+    allowed = set()
+    exceptions = {'stdin_control.py': 'main',
+                  'test_process.py': 'test_supervisor_charges_startup_to_declared_deadline'}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == exceptions.get(path.name):
+            allowed.update(id(n) for n in ast.walk(node) if isinstance(n, ast.Call))
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call): continue
+        name = ast.unparse(node.func).split('.')
+        full = '.'.join([aliases.get(name[0], name[0]), *name[1:]])
+        if full == 'bounded_exec.supervise' and id(node) not in allowed:
+            raise ValueError(DIAGNOSTIC)
+        if full in {'subprocess.run', 'subprocess.Popen', 'subprocess.call',
+                    'subprocess.check_call', 'subprocess.check_output',
+                    'subprocess.getoutput', 'subprocess.getstatusoutput',
+                    'asyncio.create_subprocess_exec', 'asyncio.create_subprocess_shell',
+                    'os.system', 'os.popen', 'os.posix_spawn', 'os.posix_spawnp'} or full.startswith(('os.exec', 'os.spawn')):
+            raise ValueError(DIAGNOSTIC)
+
 def check(root):
     paths = [*(root / 'scripts/checks/scheduled').glob('*.py'),
              root / 'scripts/checks/lib/gate_manifest.py']
     for path in paths:
-        tree = ast.parse(path.read_text())
-        aliases = {}
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                aliases.update((x.asname or x.name, x.name) for x in node.names)
-            elif isinstance(node, ast.ImportFrom):
-                aliases.update((x.asname or x.name, (node.module or '') + '.' + x.name) for x in node.names)
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call): continue
-            name = ast.unparse(node.func).split('.')
-            full = '.'.join([aliases.get(name[0], name[0]), *name[1:]])
-            if full in {'subprocess.run', 'subprocess.Popen', 'subprocess.call',
-                        'subprocess.check_call', 'subprocess.check_output',
-                        'os.system', 'os.popen', 'os.posix_spawn', 'os.posix_spawnp'} or full.startswith(('os.exec', 'os.spawn')):
-                raise ValueError(DIAGNOSTIC)
+        check_python_launches(path)
     check_clock_reads(root)
     # Shell adapters must enter the owner before utility children; workflow
     # controllers explicitly select the scheduler dispatcher, never generic policy.
@@ -37,9 +50,7 @@ def check(root):
             raise ValueError(DIAGNOSTIC)
         if 'source "$ROOT/scripts/checks/lib/scheduled_process.sh"' not in text:
             raise ValueError(DIAGNOSTIC)
-        for line in text.splitlines():
-            if re.search(r'(?:^|[;$(])\s*(?:python3|git|nix|bash) ', line):
-                raise ValueError(DIAGNOSTIC)
+        check_shell_launches(text, bootstrap=True)
     for path in (root / '.github/workflows').glob('gate_*.yml'):
         import yaml
         document = yaml.safe_load(path.read_text())
@@ -51,11 +62,28 @@ def check(root):
                            'python3 scripts/checks/lib/scheduled_process.py --cwd "$PWD" --timeout ' in script)
                 if not managed or 'lib/bounded_exec.py' in script or 'lib/bounded.sh' in script:
                     raise ValueError(DIAGNOSTIC)
-                # Execution commands are bounded; shell builtins/utilities inherit
-                # the adapter context. Reject raw controller/tool launches.
-                for line in script.splitlines():
-                    if re.match(r'\s*(?:python3|git|nix|bash) ', line) and 'lib/scheduled_process.py --cwd' not in line:
-                        raise ValueError(DIAGNOSTIC)
+                check_shell_launches(script)
+
+
+def check_shell_launches(script, *, bootstrap=False):
+    # Scan command segments, including substitutions and every shell separator.
+    # Erase the explicitly managed argv tail, not an entire line containing it:
+    # a second command after `then`, &&, || or | must still be checked.
+    for line in script.splitlines():
+        if line.lstrip().startswith('#'): continue
+        # A complete [[ expression ]] has no executable positions except its
+        # substitutions. Do not misclassify variables after its logical ||/&&.
+        if (re.fullmatch(r'\s*\[\[(?:(?!\]\]).)*\]\]\s*', line) and
+                '$(' not in line and '`' not in line): continue
+        segments = re.split(r';|&&|\|\||\|(?!=)|\$\(|[(){}]', line)
+        for segment in segments:
+            segment = re.sub(r'\bbounded_run\s+[^;]*?--(?:role\s+\S+\s+--)?\s+.*$', '', segment)
+            # The sole bootstrap is the explicit process owner itself.
+            segment = re.sub(r'(?:exec\s+)?python3\s+(?:-I\s+)?["\S]*scripts/checks/lib/scheduled_process\.py["\S]*\s+--cwd\s+.*$', '', segment)
+            tool = r"(?<![\w/.-])[\"']?(?:[^\s\"'(){};|&]*/)?(?:python3|git|nix|bash|sh|env)[\"']?(?:\s|$)"
+            dynamic = r"(?:^|\bthen\s+|\belse\s+|\bdo\s+)\s*(?:(?:if|elif|while|until|exec|command|!)\s+)*[\"']?\$(?:@|[A-Za-z_0-9]|\{)"
+            if re.search(tool, segment) or re.search(dynamic, segment):
+                raise ValueError(DIAGNOSTIC)
 
 
 def check_clock_reads(root):
@@ -91,12 +119,7 @@ def check_clock_reads(root):
 
 
 def main():
-    if len(sys.argv) == 3 and sys.argv[1] == '--spec':
-        sys.path.insert(0, str(ROOT / 'scripts/checks/lib'))
-        from scheduled_process import validate
-        validate(json.loads(Path(sys.argv[2]).read_text()))
-    else:
-        check(Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT)
+    check(Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT)
     return 0
 
 

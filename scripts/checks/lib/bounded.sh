@@ -80,11 +80,13 @@ bounded_is_incomplete() {
 }
 
 bounded_run() {
-  local stdin_file="" retry="" secs="" rc tries=0 budget tmp outcome
+  local stdin_file="" retry="" secs="" rc tries=0 budget tmp outcome role=gate
+  local -a policy=()
   while [ $# -gt 0 ]; do
     case "$1" in
       -i) stdin_file="$2"; shift 2 ;;
       -r) retry="$2"; shift 2 ;;
+      --role) role="$2"; shift 2 ;;
       --) shift; break ;;
       *) if [ -z "$secs" ]; then secs="$1"; shift; else break; fi ;;
     esac
@@ -99,15 +101,20 @@ bounded_run() {
     if [ -n "$stdin_file" ]; then "$@" < "$stdin_file"; else "$@"; fi
     return $?
   fi
+  if [ "${BOUNDED_SCHEDULED:-0}" = 1 ]; then
+    policy=(--cwd "$PWD" --role "$role")
+    [ -z "$stdin_file" ] || policy+=(--input-file "$stdin_file")
+  fi
+  if [ "${BOUNDED_GATE_OUTCOME:-0}" = 1 ]; then policy+=(--gate-outcome); fi
   tmp="$(mktemp -d "$BOUNDED_DIR/run.XXXXXX")"
   budget="$secs"
   while :; do
     tries=$((tries + 1))
     rm -f "$tmp/status"
     if [ -n "$stdin_file" ]; then
-      python3 -I "$BOUNDED_EXEC" --timeout "$budget" --kill-after "${BOUNDED_KILL_AFTER:-10}" --status "$tmp/status" -- "$@" < "$stdin_file" > "$tmp/out" 2> "$tmp/err"
+      python3 -I "$BOUNDED_EXEC" "${policy[@]}" --timeout "$budget" --kill-after "${BOUNDED_KILL_AFTER:-10}" --status "$tmp/status" -- "$@" < "$stdin_file" > "$tmp/out" 2> "$tmp/err"
     else
-      python3 -I "$BOUNDED_EXEC" --timeout "$budget" --kill-after "${BOUNDED_KILL_AFTER:-10}" --status "$tmp/status" -- "$@" > "$tmp/out" 2> "$tmp/err"
+      python3 -I "$BOUNDED_EXEC" "${policy[@]}" --timeout "$budget" --kill-after "${BOUNDED_KILL_AFTER:-10}" --status "$tmp/status" -- "$@" > "$tmp/out" 2> "$tmp/err"
     fi
     outcome="$(cat "$tmp/status" 2>/dev/null)"
     case "$outcome" in
