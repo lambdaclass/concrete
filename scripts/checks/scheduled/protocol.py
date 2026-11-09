@@ -8,7 +8,10 @@ import subprocess
 from pathlib import Path
 
 STATUSES = {"PASS", "FAIL", "INCOMPLETE", "MISSING"}
-WINDOWS = {"daily": 36 * 3600, "weekly": 8 * 86400}
+_registry_spec = importlib.util.spec_from_file_location("gate_manifest", Path(__file__).resolve().parents[1] / "lib/gate_manifest.py")
+_registry = importlib.util.module_from_spec(_registry_spec)
+_registry_spec.loader.exec_module(_registry)
+WINDOWS = _registry.load()["windows"]
 
 class EvidenceError(ValueError):
     pass
@@ -32,45 +35,15 @@ def timestamp(value):
     except (ValueError, AttributeError):
         raise EvidenceError("invalid UTC timestamp")
 
-def read_ci2_inventory(inv_path):
-    lines = Path(inv_path).read_text(encoding="utf-8").splitlines()
-    runners = {}
-    pairs = set()
-    for number, raw in enumerate(lines, 1):
-        line = raw.strip()
-        if not line or line.startswith("#"):
-            continue
-        fields = line.split()
-        if len(fields) != 2:
-            raise ValueError(f"{inv_path}:{number}: expected repository and one runner name")
-        repo, name = fields
-        if (repo, name) in pairs:
-            raise ValueError(f"{inv_path}:{number}: duplicate {repo} {name}")
-        pairs.add((repo, name))
-        runners.setdefault(repo, set()).add(name)
-    if not runners:
-        raise ValueError(f"{inv_path}: empty runner inventory")
-    return runners
+_binding_spec = importlib.util.spec_from_file_location("ci2_binding", Path(__file__).resolve().parents[1] / "lib/ci2_binding.py")
+_binding = importlib.util.module_from_spec(_binding_spec)
+_binding_spec.loader.exec_module(_binding)
 
-def inventory(root=None):
-    # ISS-0029 owns both parsing and the sole runner binding when merged; until
-    # repro_manifest_compare.py lands, read the shared ci2_runners.txt inventory.
-    base = Path(root) if root is not None else Path(__file__).resolve().parents[1] / "lib"
-    path = base / "repro_manifest_compare.py"
-    ci2 = base / "ci2_runners.txt"
-    if path.is_file():
-        spec = importlib.util.spec_from_file_location("ci2_binding", path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        try:
-            return module.read_inventory()
-        except (SystemExit, OSError, ValueError) as error:
-            raise EvidenceError(f"INCOMPLETE runner inventory: {error}") from error
-    require(ci2.is_file(), "INCOMPLETE dependency: ISS-0029 runner binding unavailable")
+def inventory():
     try:
-        return read_ci2_inventory(ci2)
-    except (OSError, ValueError) as error:
-        raise EvidenceError(f"INCOMPLETE runner inventory: {error}") from error
+        return _binding.read_inventory()
+    except _binding.BindingError as error:
+        raise EvidenceError(str(error)) from error
 
 def validate(record, sha, tier, runners, repository=None):
     require(isinstance(record, dict), "invalid record shape")

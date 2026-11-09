@@ -1,0 +1,1 @@
+Own gate tiers, commands, budgets, runner classes, outputs and freshness windows in one JSON registry. CI executes registered IDs; a required root check rejects registry/workflow drift and missing root gates.

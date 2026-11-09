@@ -86,7 +86,17 @@ def main(argv):
         # child starting and its group being recorded; the child itself starts with them unblocked.
         signal.pthread_sigmask(signal.SIG_BLOCK, cancel_sigs)
         try:
-            proc = subprocess.Popen(cmd, start_new_session=True,
+            # Preserve the host slot's open description across the watchdog's
+            # process boundary. All unrelated descriptors remain closed.
+            slot_fd = os.environ.get("CONCRETE_HEAVY_SLOT_FD", "")
+            inherited = ()
+            if slot_fd.isdecimal() and int(slot_fd) >= 3:
+                try:
+                    os.fstat(int(slot_fd))
+                    inherited = (int(slot_fd),)
+                except OSError:
+                    pass  # the child's acquisition reports the invalid inheritance
+            proc = subprocess.Popen(cmd, start_new_session=True, pass_fds=inherited,
                                     preexec_fn=lambda: signal.pthread_sigmask(signal.SIG_UNBLOCK, cancel_sigs))
         except OSError as e:
             proc = None

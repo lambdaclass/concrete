@@ -9,53 +9,80 @@ No language or spec decision is made here.
 
 ## Explicit integration dependencies — do not enable as qualified yet
 
-This branch supplies the execution/record/observation protocol and wires Gate C's
-`SCALING_TIER=daily` campaign through `scripts/checks/lib/gate_manifest.py`.
+This branch supplies the execution/record/observation protocol, not the campaigns.
 It depends on ISS-0029 (`origin/wip/repro-ci2`, 688e10a86421feb48ab4f26f2b4dd2955a18aff4)
-for `scripts/checks/lib/repro_manifest_compare.py:read_inventory` once merged; until that
-module lands, `protocol.py:inventory` reads the shared `scripts/checks/lib/ci2_runners.txt`
-binding directly rather than using a runner-name pattern. Repository/runner registration remains
-the trust boundary described in `docs/SELF_HOSTED_RUNNERS.md`.
-The referenced tip has no reusable pre-landing exact-SHA dispatch helper: selection in
-`gate_schedule.yml` is a main-only schedule/replay entry point; it does not replace pre-landing
-candidate dispatch in `lean_action_ci.yml` or the repro CI leg.
-The coordinator must reconcile X4's shared pre-landing dispatch interface and landing-acceptance
-note checks with ISS-0029 and R-0690 before qualification; a second independent trusted-runner
-implementation is forbidden.
+for `scripts/checks/lib/repro_manifest_compare.py:read_inventory` and that module's
+single `ci2_runners.txt` binding. `scripts/checks/lib/ci2_binding.py` is the sole
+adapter: `read_inventory(lib=None)` imports that authoritative parser, and
+`verify(repository, environment, name, runners=None)` checks exact membership.
+`protocol.py` delegates to it; Gate C must use this same helper (its CLI verifies
+standard `GITHUB_REPOSITORY`, `RUNNER_ENVIRONMENT`, `RUNNER_NAME`). Neither the
+ISS-0029 parser nor its authoritative inventory exists on this base. The exact
+absence diagnostic is `INCOMPLETE dependency: ISS-0029 runner binding unavailable`,
+even if an isolated `ci2_runners.txt` appears. This is a deliberate dependency,
+not a second parser or a fallback that weakens provenance. Repository/runner registration remains
+the trust boundary described in that branch's `docs/SELF_HOSTED_RUNNERS.md`.
+The referenced tip has no reusable exact-SHA dispatch helper: selection is a
+main-only schedule-specific entry point; it does not replace the repro CI leg.
+The coordinator must reconcile X4's shared dispatch interface with ISS-0029 before
+qualification; a second independent trusted-runner implementation is forbidden.
 
-B/N5 (`origin/wip/gates-manifest`, c2245c99ab7e9255e6a25898386804d6621f2bb8)
-provides `tests/manifest.tsv`, a **fixture** inventory. Gate tier declarations live in
-`scripts/checks/lib/gate_manifest.py` (to be expanded by G1/R-0674, with G2/G3
-R-0675 evidence/cost contracts):
+## Gate registry (G1)
 
-```
-python3 scripts/checks/lib/gate_manifest.py scheduled --tier daily|weekly
-```
+`scripts/checks/gates.json` is the sole declarative owner of gate IDs, tiers,
+argv commands, budgets in seconds, runner classes, output artifacts, tools, seeds,
+controls, workflow bindings and daily/weekly freshness windows. JSON schema version
+1 has `schema`, `windows` and `gates`. `tests/manifest.tsv` on B/N5 is a separate
+program/expected-outcome inventory; it owns no gate tiers.
 
-It emits one JSON array of rows with `id`, `tier`, `command` (argv),
-`budget_seconds`, `tools` (consumed identities), `seed`, and `controls`.
-Each control has `id`, `command` (argv), `exit_code` (nonzero) and `diagnostic`
-(the complete, exact combined stdout/stderr after stripping surrounding whitespace).
-On this branch `gate_manifest.py` declares Gate C's `scaling` tiers (`pr`, `qualification`,
-`daily`) once and exports `SCALING_TIER=daily` for `--tier daily` along with its five
-exact-diagnostic controls; `--tier weekly` remains empty (`[]`, reported as INCOMPLETE by
-`run.py`) until G1/R-0674 registers weekly campaigns.
-`gate_manifest.py` and `workflow_yaml.sh` validate tier placement and controls and refuse
-removal, tier misrouting or a wrong `SCALING_TIER`.
-The registry must also own freshness windows; the protocol's current 36-hour daily
-and eight-day weekly recovery windows are initial operational defaults requiring
-integration into that registry before qualification. Prior failed attempts remain
-visible; recovery never rewrites their occurrence. The latest fresh attempt recovers
-operational MISSING/INCOMPLETE on its SHA; FAIL remains permanent. Newer main
-coverage recovers older operational gaps, while malformed evidence always surfaces.
+The single reader/validator is `scripts/checks/lib/gate_manifest.py`:
+`load(path=REGISTRY)` returns a validated document; `tier_rows(tier, data=None)` and
+`scheduled_rows(tier, data=None)` return matching rows with a selected `tier`;
+`check_workflow(data=None, root=ROOT, workflow=None)` checks CI and root inventory
+coverage. CLI: `validate`, `check-workflow`, `tier --tier T`,
+`scheduled --tier daily|weekly`, `execute --id ID --tier T`.
+Unknown fields, duplicate IDs/bindings, unsafe artifact paths, invalid budgets,
+scheduled runner mismatches and missing scheduled controls are rejected generically.
+No campaign count or specific gate belongs in the validator.
 
-The executor also requires the root `scripts/checks/lib/heavy_slots.sh` interface
-`heavy_slot_acquire` / `heavy_slot_release`. The frozen legacy helper is not run.
-The root helper must coordinate two slots **across runner Unix users and with
-landing/repro/manual work**, not merely within a checkout or user home. Its shared
-directory and permissions must be provisioned by the coordinator if absent; this
-branch changes no host settings. Until available, execution is INCOMPLETE. R-0676
-owns this integration; do not substitute a private scheduler semaphore.
+Every existing CI command and root check is registered. CI calls `execute` by ID;
+commands and budgets do not appear a second time in YAML. Job timeouts are generated
+as `ceil(sum(registered step budgets) * 3 / 60) + 10` minutes (two bounded attempts
+plus setup/cleanup reserve), and checked for exact drift. When adding rows, update
+those generated job timeout values. `gates_registry.sh`, required by `run.sh`,
+checks workflow invocation, tier, budget, runner and root inventory completeness.
+Controls for row removal, literal/duplicate YAML commands, misrouted tiers, unknown
+fields, budgets and runner drift run through `scheduled_gates.sh`.
+
+Rows contain `id`, `tiers`, `command` (argv), `budget_seconds`, `runner_class`
+(`ci`, `github-hosted`, `native-matrix`, `concrete-ci-2`), `artifacts`, `tools`,
+`seed`, `controls`, and `workflow` (`null` or `job`/`step` binding). Each control
+has `id`, `command`, `exit_code` (nonzero, excluding reserved 125), and `diagnostic`
+(the complete exact combined output after stripping surrounding whitespace).
+Each artifact declares `path` and `sha_file`; scheduled outputs require a SHA file.
+No daily/weekly campaigns exist on this base: those tiers remain INCOMPLETE with
+`INCOMPLETE dependency: tier has no registered gates` until campaign owners add rows.
+Gate C must add its own PR/qualification/daily declarations here and CI bindings;
+it must not introduce a separate registry or add tiers to the fixture inventory.
+
+The executor uses `scripts/checks/lib/heavy_slots.sh`, the shared Linux host-wide
+`heavy_slot_acquire` / `heavy_slot_release` API. Landing, reproducibility and manual
+heavy work must source this same helper; no private pools are permitted. Acquisition
+is nonblocking: two occupied slots report INCOMPLETE, leaving the coordinator to
+queue a new attempt. Nested acquisition is refused. File descriptors hold locks for
+the process lifetime, so cancellation releases them without deleting lock files.
+
+The coordinator provisions `/var/lib/concrete/heavy-slots` once: a root-owned,
+non-writable directory containing exactly the persistent regular files `slot-1` and
+`slot-2`, owned by root and group-writable by the shared runner group (mode 0660).
+Every runner Unix user and manual heavy-work user must belong to that group. Never
+unlink/replace these files while workers run. `CONCRETE_HEAVY_SLOT_DIR` is a host
+configuration override, shared by **all** heavy-work entry points on that host,
+not a per-checkout escape hatch. Missing provisioning, inaccessible files, or an
+occupied pool produces an exact INCOMPLETE diagnostic; the helper creates nothing.
+This branch makes no host settings changes. R-0676 owns adopting this helper in
+ISS-0029 and the landing host entry points; the coordinator must verify that
+integration and provision the pool before live scheduled qualification.
 
 ## Execution and evidence
 
@@ -66,8 +93,16 @@ Trusted main supplies the controller; the selected revision runs in a fresh
 `mktemp` private clone under Nix, the shared heavy slot and `bounded_run`.
 The controller revision is recorded separately from the selected gate revision.
 Commands, controls, consumed tool identities, seeds, wall duration, exit status and
-logs are indexed per attempt. Future raw samples and minimized reproducers belong
-in the result-index directory alongside logs and must be registered by G1's schema.
+logs are indexed per attempt. Registered raw report trees are copied under
+`gate-N-artifacts/` in the result index before the private checkout is removed,
+including partial outputs from incomplete runs. Each regular file is indexed with
+its relative path, byte count and SHA-256. Symlinks and special files are refused.
+The artifact's `sha_file` names a file inside the declared artifact containing only
+the selected full SHA (with an optional final newline). Missing required reports
+fail with `FAIL scheduled artifact: missing PATH`; a mismatched binding fails with
+`FAIL scheduled artifact: selected SHA mismatch PATH`. Partial reports remain in
+the upload on failure. CI upload steps obtain artifact paths from the registry
+executor's `artifact_paths` step output; literal YAML paths are drift too.
 
 The note refs are `refs/notes/concrete-gates-daily` and
 `refs/notes/concrete-gates-weekly`. Each exact-SHA note is JSON Lines with immutable
@@ -126,17 +161,61 @@ visibility without adding a required candidate check. A scheduled failure requir
 immediate triage and a structural repair/regression pinned to its exact SHA; dependent
 work stops. It never becomes a blanket failed check on unrelated landings.
 
+## Scheduled-gate environment and outcome contract
+
+Both gate commands and control commands receive the same generic environment:
+`SELECTED_SHA` (selected full 40-digit commit), `SELECTED_TIER` (`daily` or `weekly`),
+`SCHEDULED_ATTEMPT_ID` (`GITHUB_RUN_ID/GITHUB_RUN_ATTEMPT`), `GITHUB_REPOSITORY`,
+`RUNNER_NAME`, and `RUNNER_ENVIRONMENT`. Runner identity uses the real Actions
+values; no missing value is fabricated. Before executing any code, the controller
+requires `RUNNER_ENVIRONMENT=self-hosted` and exact inventory membership.
+No gate-specific environment variables are supplied by the scheduler.
+
+The trusted wrapper additionally supplies `SCHEDULED_OUTCOME_FILE` (a private JSONL
+append stream for that invocation) and `SCHEDULED_OUTCOME_HELPER` (the trusted
+`gate_outcome.py`). Emit a semantic failure with
+`python3 "$SCHEDULED_OUTCOME_HELPER" FAIL "DIAGNOSTIC"`; emit gate-level availability
+loss with `INCOMPLETE` instead. Events contain `status`, `diagnostic`, and `sha`.
+Only the gate's top-level code emits a gate outcome. `bounded.sh` records local
+watchdog state only: check `bounded_is_incomplete "$rc"` and explicitly emit
+INCOMPLETE when an unrecovered timeout prevents the gate's observation. Expected
+timeout controls and recovered inner retries must not emit gate outcomes.
+Each outer watchdog attempt has a private outcome stream, discarded on timeout.
+Non-timeout failures must emit FAIL before continuing after an error; otherwise a
+bare nonzero exit is FAIL when no INCOMPLETE event exists.
+Explicit FAIL takes precedence over every INCOMPLETE event. A mismatched event SHA
+is FAIL with `FAIL scheduled outcome: selected SHA mismatch`. The wrapper transports
+INCOMPLETE as reserved exit 125; an unmarked gate exit 124 or 125 remains FAIL.
+Malformed streams fail with `FAIL scheduled outcome: invalid event stream`.
+The stream is separate from stdout/stderr: log text cannot impersonate an outcome.
+
 All git subprocesses discard inherited `GIT_*` variables. The executor reads the
 checked-out HEAD back and records it separately from the trusted controller revision.
-Slot and bounded libraries come from the trusted controller ROOT. Exit 125 is reserved
-for controller incompleteness (slot acquisition or bounded double timeout); a gate
-that completes with exit 124 remains a failure. Per-gate exceptions preserve FAIL and
-allow later gates to execute. Inventory/setup errors write indexed INCOMPLETE evidence.
+The selected registry is data parsed by the trusted reader; no historical exporter
+is executed. Slot, bounded and outcome libraries come from trusted ROOT. Per-gate
+exceptions preserve FAIL and allow later gates to execute. Inventory/setup errors
+write indexed INCOMPLETE evidence.
+
+### Gate C integration instructions (verbatim handoff)
+
+Add scaling PR, qualification and daily rows and determinism rows to
+`scripts/checks/gates.json`; give different commands/budgets distinct IDs, bind CI
+rows by workflow job/step, and declare report directories with a `sha_file` inside
+each report. Use `SELECTED_TIER` and `SELECTED_SHA`, `SCHEDULED_ATTEMPT_ID`, and the
+standard `GITHUB_REPOSITORY`, `RUNNER_ENVIRONMENT`, `RUNNER_NAME`; remove scheduler
+coupling to `CONCRETE_SCALING_*`. Use `ci2_binding.py` for runner verification.
+Write the selected full SHA into each declared `sha_file`. Use the shared
+`bounded.sh` and emit structured FAIL for genuine failures through
+`SCHEDULED_OUTCOME_HELPER`; propagate INCOMPLETE for build, measurement and planted
+control timeouts. Keep exact-diagnostic controls in the registry. Route CI commands
+through `gate_manifest.py execute` and upload its `artifact_paths` output; update
+the derived job timeouts and run `gates_registry.sh`. Do not add a second manifest,
+runner parser, semaphore or gate-specific assertion to the generic validator.
 
 Remaining qualification work belongs to **R-0676**, coordinated with R-0674/R-0675:
 shared X4 dispatch agreement with ISS-0029 (whose referenced branch supplies no
-reusable dispatcher), manifest-owned freshness windows and agreed exporter schema,
-shared cross-user host slots, durable logs/samples, and observer-occurrence history
+reusable dispatcher), live adoption/provisioning of the shared cross-user host
+slots, durable logs/samples, and observer-occurrence history
 with missed-observer controls. No substitute gate list, private semaphore or hosting
 setting is introduced. The allocated **R-0690 — Scheduled evidence integration
 and watchdog qualification** owns live qualification of the watchdog on the real schedule: land these producer interfaces, validate real cancellation,
@@ -166,3 +245,15 @@ collector, publication and history-observer controls through the bounded runner.
 These are controller controls, not evidence that actual campaign/collector integration
 has run. Qualification requires coordinator CI2 checks after the dependencies above
 land; do not run heavy campaigns locally or weaken campaigns to make them cheap.
+
+Partial report trees are preserved even before their SHA binding is written. Their
+artifact entry has `binding_status=INCOMPLETE`, `sha=null`, and an exact missing
+binding diagnostic; only verified bindings carry `sha`. Missing bindings cannot
+upgrade an INCOMPLETE gate to FAIL. Present mismatched bindings and unsafe paths
+remain FAIL. A successful command with an unfinished binding is INCOMPLETE.
+
+A child of a heavy-slot holder reuses its exported `CONCRETE_HEAVY_SLOT_FD`,
+validated against the provisioned pool's inodes. The watchdog explicitly preserves
+that descriptor across its subprocess boundary. Release closes only the caller's
+copy, so a child cannot release its parent's lock. Invalid inheritance fails
+closed rather than consuming another host slot.

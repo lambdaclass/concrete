@@ -1,0 +1,1 @@
+Define generic selected-SHA/tier/attempt/runner and structured outcome contracts for scheduled gates. Preserve nested watchdog INCOMPLETE with explicit FAIL precedence; retain declared multi-file reports with SHA binding and file hashes before checkout cleanup. Keep ISS-0029 inventory an explicit dependency through one shared adapter, without a fallback parser.

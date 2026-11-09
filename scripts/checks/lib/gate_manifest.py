@@ -1,321 +1,177 @@
 #!/usr/bin/env python3
-"""Single source of truth for Gate C tier declarations and scheduled-tier export.
-
-Usage:
-  python3 scripts/checks/lib/gate_manifest.py scheduled --tier daily|weekly
-  python3 scripts/checks/lib/gate_manifest.py tier --tier pr|qualification|daily|weekly
-  python3 scripts/checks/lib/gate_manifest.py validate
-  python3 scripts/checks/lib/gate_manifest.py self-test
-"""
-
+"""The sole gate-registry reader/validator and CI command executor."""
+import argparse
 import copy
 import json
+import math
+import os
+import uuid
+from pathlib import Path
+import re
+import subprocess
 import sys
 
-VALID_TIERS = ("pr", "qualification", "daily", "weekly")
-SCHEDULED_TIERS = ("daily", "weekly")
-
-GATES = [
-    {
-        "id": "scaling",
-        "tier": "pr",
-        "command": [
-            "env",
-            "SCALING_TIER=pr",
-            "bash",
-            "scripts/checks/compiler/scaling.sh",
-            "scaling-report",
-        ],
-        "budget_seconds": 2400,
-        "tools": {
-            "lean": "lean-toolchain",
-            "lcb": "lake-manifest.json",
-            "nix": "flake.lock",
-        },
-        "seed": 0,
-        "controls": [],
-    },
-    {
-        "id": "scaling",
-        "tier": "qualification",
-        "command": [
-            "env",
-            "SCALING_TIER=qualification",
-            "bash",
-            "scripts/checks/compiler/scaling.sh",
-            "scaling-report",
-        ],
-        "budget_seconds": 600,
-        "tools": {
-            "lean": "lean-toolchain",
-            "lcb": "lake-manifest.json",
-            "nix": "flake.lock",
-        },
-        "seed": 0,
-        "controls": [],
-    },
-    {
-        "id": "scaling",
-        "tier": "daily",
-        "command": [
-            "env",
-            "SCALING_TIER=daily",
-            "bash",
-            "scripts/checks/compiler/scaling.sh",
-            "scaling-report",
-        ],
-        "budget_seconds": 3600,
-        "tools": {
-            "lean": "lean-toolchain",
-            "lcb": "lake-manifest.json",
-            "nix": "flake.lock",
-        },
-        "seed": 0,
-        "controls": [
-            {
-                "id": "refusal-unauthorised-plant",
-                "command": [
-                    "bash",
-                    "scripts/checks/compiler/scaling.sh",
-                    "--plant",
-                    "quadratic",
-                ],
-                "exit_code": 2,
-                "diagnostic": "scaling: plants require --allow-planted-failure --plant linear|quadratic",
-            },
-            {
-                "id": "refusal-invalid-tier",
-                "command": [
-                    "env",
-                    "SCALING_TIER=invalid",
-                    "bash",
-                    "scripts/checks/compiler/scaling.sh",
-                ],
-                "exit_code": 2,
-                "diagnostic": "scaling: invalid SCALING_TIER",
-            },
-            {
-                "id": "refusal-forged-runner",
-                "command": [
-                    "env",
-                    "CONCRETE_SCALING_GITHUB_REPOSITORY=unbalancedparentheses/concrete2",
-                    "CONCRETE_SCALING_RUNNER_ENVIRONMENT=github-hosted",
-                    "CONCRETE_SCALING_RUNNER_NAME=ubuntu-latest",
-                    "bash",
-                    "scripts/checks/compiler/scaling.sh",
-                ],
-                "exit_code": 1,
-                "diagnostic": "FAIL scaling: expected runner_environment=self-hosted, got github-hosted",
-            },
-            {
-                "id": "refusal-unauthorized-sha",
-                "command": [
-                    "env",
-                    "CONCRETE_SCALING_EXPECTED_SHA=not-a-sha",
-                    "bash",
-                    "scripts/checks/compiler/scaling.sh",
-                ],
-                "exit_code": 1,
-                "diagnostic": "FAIL scaling: unauthorized or invalid expected SHA: not-a-sha",
-            },
-            {
-                "id": "refusal-mismatched-sha",
-                "command": [
-                    "env",
-                    "CONCRETE_SCALING_EXPECTED_SHA=0000000000000000000000000000000000000000",
-                    "bash",
-                    "scripts/checks/compiler/scaling.sh",
-                ],
-                "exit_code": 1,
-                "diagnostic": "FAIL scaling: checked-out HEAD does not match authorized expected SHA 0000000000000000000000000000000000000000",
-            },
-        ],
-    },
-]
-
-REQUIRED_DAILY_SCALING_CONTROLS = (
-    "refusal-unauthorised-plant",
-    "refusal-invalid-tier",
-    "refusal-forged-runner",
-    "refusal-unauthorized-sha",
-    "refusal-mismatched-sha",
-)
-
+ROOT = Path(__file__).resolve().parents[3]
+REGISTRY = ROOT / 'scripts/checks/gates.json'
+TIERS = {'pr', 'qualification', 'daily', 'weekly'}
+RUNNERS = {'ci', 'github-hosted', 'native-matrix', 'concrete-ci-2'}
+FIELDS = {'id', 'tiers', 'command', 'budget_seconds', 'runner_class', 'artifacts', 'tools', 'seed', 'controls', 'workflow'}
 
 class GateManifestError(ValueError):
     pass
 
-
-def require(condition, message):
-    if not condition:
+def require(ok, message):
+    if not ok:
         raise GateManifestError(message)
 
+def exact_fields(value, fields, where):
+    require(isinstance(value, dict), f'registry: invalid {where} shape')
+    unknown = sorted(set(value) - fields)
+    require(not unknown, f'registry: unknown {where} field: {unknown[0] if unknown else ""}')
+    require(set(value) == fields, f'registry: missing {where} fields')
 
-def validate_manifest(gates=None):
-    rows = GATES if gates is None else gates
-    require(isinstance(rows, list) and bool(rows), "gate manifest is empty")
-    seen_tier_ids = set()
-    for row in rows:
-        require(isinstance(row, dict), "invalid gate manifest row shape")
-        gate_id = row.get("id")
-        tier = row.get("tier")
-        command = row.get("command")
-        budget = row.get("budget_seconds")
-        tools = row.get("tools")
-        controls = row.get("controls")
-        require(isinstance(gate_id, str) and bool(gate_id), "invalid gate id")
-        require(isinstance(tier, str) and tier in VALID_TIERS, f"invalid gate tier {tier!r}")
-        if gate_id == "scaling" and tier not in ("pr", "qualification", "daily"):
-            raise GateManifestError(f"scaling daily gate misrouted to tier {tier!r}")
-        require((tier, gate_id) not in seen_tier_ids, f"duplicate gate {gate_id!r} in tier {tier!r}")
-        seen_tier_ids.add((tier, gate_id))
-        require(
-            isinstance(command, list) and bool(command) and all(isinstance(arg, str) and bool(arg) for arg in command),
-            f"invalid command for gate {gate_id!r} in tier {tier!r}",
-        )
-        require(isinstance(budget, int) and budget > 0, f"invalid budget_seconds for gate {gate_id!r}")
-        require(
-            isinstance(tools, dict) and all(isinstance(k, str) and isinstance(v, str) for k, v in tools.items()),
-            f"invalid tools map for gate {gate_id!r}",
-        )
-        require("seed" in row, f"missing seed for gate {gate_id!r}")
-        require(isinstance(controls, list), f"invalid controls list for gate {gate_id!r}")
-        if tier in SCHEDULED_TIERS:
-            require(bool(controls), f"scheduled gate {gate_id!r} in tier {tier!r} has no controls")
-        seen_controls = set()
-        for ctl in controls:
-            require(isinstance(ctl, dict), f"invalid control shape in gate {gate_id!r}")
-            cid = ctl.get("id")
-            ccmd = ctl.get("command")
-            code = ctl.get("exit_code")
-            diag = ctl.get("diagnostic")
-            require(isinstance(cid, str) and bool(cid), f"invalid control id in gate {gate_id!r}")
-            require(cid not in seen_controls, f"duplicate control {cid!r} in gate {gate_id!r}")
-            seen_controls.add(cid)
-            require(
-                isinstance(ccmd, list) and bool(ccmd) and all(isinstance(a, str) and bool(a) for a in ccmd),
-                f"invalid control command for {cid!r}",
-            )
-            require(isinstance(code, int) and code not in (0, 125), f"invalid control exit_code for {cid!r}")
-            require(isinstance(diag, str) and bool(diag.strip()), f"missing exact control diagnostic for {cid!r}")
+def argv(value):
+    return isinstance(value, list) and bool(value) and all(isinstance(x, str) and x for x in value)
 
-    daily_scaling = [r for r in rows if r.get("id") == "scaling" and r.get("tier") == "daily"]
-    require(len(daily_scaling) == 1, "daily tier manifest missing scaling gate")
-    daily_cmd = daily_scaling[0]["command"]
-    scaling_tier_args = [arg for arg in daily_cmd if arg.startswith("SCALING_TIER=")]
-    require(
-        scaling_tier_args == ["SCALING_TIER=daily"]
-        and daily_cmd == [
-            "env",
-            "SCALING_TIER=daily",
-            "bash",
-            "scripts/checks/compiler/scaling.sh",
-            "scaling-report",
-        ],
-        "daily scaling gate must run with SCALING_TIER=daily",
-    )
-    control_ids = tuple(c["id"] for c in daily_scaling[0]["controls"])
-    require(
-        all(req in control_ids for req in REQUIRED_DAILY_SCALING_CONTROLS),
-        "daily scaling gate is missing required exact-diagnostic controls",
-    )
+def relative(value):
+    return isinstance(value, str) and bool(value) and not Path(value).is_absolute() and '..' not in Path(value).parts and value != '.' and '\n' not in value and '\r' not in value
 
-    for expected_tier in ("pr", "qualification"):
-        matching = [r for r in rows if r.get("id") == "scaling" and r.get("tier") == expected_tier]
-        require(len(matching) == 1, f"{expected_tier} tier manifest missing scaling gate")
-        expected_cmd = [
-            "env",
-            f"SCALING_TIER={expected_tier}",
-            "bash",
-            "scripts/checks/compiler/scaling.sh",
-            "scaling-report",
-        ]
-        require(
-            matching[0]["command"] == expected_cmd,
-            f"{expected_tier} scaling gate must run with SCALING_TIER={expected_tier}",
-        )
-    return rows
+def validate_manifest(data):
+    exact_fields(data, {'schema', 'windows', 'gates'}, 'document')
+    require(type(data['schema']) is int and data['schema'] == 1, 'registry: unsupported schema')
+    require(isinstance(data['windows'], dict) and set(data['windows']) == {'daily','weekly'} and
+            all(type(v) is int and v > 0 for v in data['windows'].values()), 'registry: invalid freshness windows')
+    require(isinstance(data['gates'], list) and data['gates'], 'registry: empty gates')
+    seen = set(); bindings = set()
+    for row in data['gates']:
+        exact_fields(row, FIELDS, 'gate')
+        gid = row['id']
+        require(isinstance(gid, str) and re.fullmatch(r'[a-z0-9][a-z0-9_-]*', gid), 'registry: invalid gate id')
+        require(gid not in seen, f'registry: duplicate gate id: {gid}'); seen.add(gid)
+        tiers = row['tiers']
+        require(isinstance(tiers, list) and tiers and all(isinstance(t, str) and t in TIERS for t in tiers) and
+                len(set(tiers)) == len(tiers), f'registry: invalid tiers: {gid}')
+        require(argv(row['command']), f'registry: invalid command: {gid}')
+        require(type(row['budget_seconds']) is int and row['budget_seconds'] > 0, f'registry: invalid budget: {gid}')
+        require(isinstance(row['runner_class'],str) and row['runner_class'] in RUNNERS, f'registry: invalid runner class: {gid}')
+        scheduled = bool(set(tiers) & {'daily','weekly'})
+        require(not scheduled or row['runner_class'] == 'concrete-ci-2', f'registry: scheduled runner class mismatch: {gid}')
+        require(isinstance(row['tools'], dict) and all(isinstance(k,str) and isinstance(v,str) for k,v in row['tools'].items()), f'registry: invalid tools: {gid}')
+        require(row['seed'] is None or type(row['seed']) is int, f'registry: invalid seed: {gid}')
+        require(isinstance(row['artifacts'], list), f'registry: invalid artifacts: {gid}')
+        paths = set()
+        for artifact in row['artifacts']:
+            exact_fields(artifact, {'path','sha_file'}, 'artifact')
+            require(relative(artifact['path']) and artifact['path'] not in paths, f'registry: invalid artifact path: {gid}')
+            paths.add(artifact['path'])
+            require((artifact['sha_file'] is None and not scheduled) or relative(artifact['sha_file']), f'registry: missing artifact SHA binding: {gid}')
+            require(artifact['sha_file'] is None or Path(artifact['sha_file']).is_relative_to(artifact['path']), f'registry: artifact SHA binding outside artifact: {gid}')
+        require(isinstance(row['controls'], list) and (row['controls'] or not scheduled), f'registry: missing scheduled controls: {gid}')
+        controls = set()
+        for control in row['controls']:
+            exact_fields(control, {'id','command','exit_code','diagnostic'}, 'control')
+            require(isinstance(control['id'],str) and control['id'] and control['id'] not in controls, f'registry: invalid control id: {gid}')
+            controls.add(control['id'])
+            require(argv(control['command']) and type(control['exit_code']) is int and control['exit_code'] not in (0,125) and
+                    isinstance(control['diagnostic'],str) and control['diagnostic'].strip(), f'registry: invalid control: {gid}')
+        binding = row['workflow']
+        if binding is not None:
+            exact_fields(binding, {'job','step'}, 'workflow binding')
+            require(all(isinstance(v,str) and v for v in binding.values()), f'registry: invalid workflow binding: {gid}')
+            pair=(binding['job'],binding['step'])
+            require(pair not in bindings, f'registry: duplicate workflow binding: {gid}'); bindings.add(pair)
+    return data
 
-
-def scheduled_rows(tier, gates=None):
-    require(tier in SCHEDULED_TIERS, f"invalid scheduled tier {tier!r}")
-    rows = validate_manifest(gates)
-    return [copy.deepcopy(row) for row in rows if row["tier"] == tier]
-
-
-def tier_rows(tier, gates=None):
-    require(tier in VALID_TIERS, f"invalid gate tier {tier!r}")
-    rows = validate_manifest(gates)
-    return [copy.deepcopy(row) for row in rows if row["tier"] == tier]
-
-
-def self_test():
-    validate_manifest()
-    assert len(scheduled_rows("daily")) == 1
-    assert scheduled_rows("weekly") == []
-
-    # Control 1: daily scaling invocation removed
-    removed = [copy.deepcopy(r) for r in GATES if not (r["id"] == "scaling" and r["tier"] == "daily")]
+def load(path=REGISTRY):
     try:
-        validate_manifest(removed)
-    except GateManifestError as exc:
-        assert str(exc) == "daily tier manifest missing scaling gate", str(exc)
-    else:
-        raise AssertionError("removed daily scaling gate was not refused")
+        return validate_manifest(json.loads(Path(path).read_text()))
+    except (OSError, json.JSONDecodeError) as error:
+        raise GateManifestError(f'registry: cannot read registry: {error}') from error
 
-    # Control 2: daily scaling invocation misrouted to weekly tier
-    misrouted = copy.deepcopy(GATES)
-    for row in misrouted:
-        if row["id"] == "scaling" and row["tier"] == "daily":
-            row["tier"] = "weekly"
-    try:
-        validate_manifest(misrouted)
-    except GateManifestError as exc:
-        assert str(exc) == "scaling daily gate misrouted to tier 'weekly'", str(exc)
-    else:
-        raise AssertionError("misrouted daily scaling gate was not refused")
+def tier_rows(tier, data=None):
+    require(tier in TIERS, f'registry: invalid tier: {tier}')
+    return [dict(copy.deepcopy(row), tier=tier) for row in (load() if data is None else validate_manifest(data))['gates'] if tier in row['tiers']]
 
-    # Control 3: daily scaling invocation run with wrong SCALING_TIER
-    wrong_tier = copy.deepcopy(GATES)
-    for row in wrong_tier:
-        if row["id"] == "scaling" and row["tier"] == "daily":
-            row["command"] = [
-                "env",
-                "SCALING_TIER=qualification",
-                "bash",
-                "scripts/checks/compiler/scaling.sh",
-                "scaling-report",
-            ]
-    try:
-        validate_manifest(wrong_tier)
-    except GateManifestError as exc:
-        assert str(exc) == "daily scaling gate must run with SCALING_TIER=daily", str(exc)
-    else:
-        raise AssertionError("wrong SCALING_TIER in daily scaling gate was not refused")
+def scheduled_rows(tier, data=None):
+    require(tier in {'daily','weekly'}, f'registry: invalid scheduled tier: {tier}')
+    return tier_rows(tier, data)
 
-    print("gate_manifest self-test: ok")
+TIER_EXPRESSION = "${{ github.event_name == 'pull_request' && 'pr' || 'qualification' }}"
 
+def invocation(gid):
+    return f'python3 scripts/checks/lib/gate_manifest.py execute --id {gid} --tier {TIER_EXPRESSION}'
 
-def main(argv):
-    if len(argv) == 2 and argv[1] == "validate":
-        validate_manifest()
-        print("gate_manifest: valid")
-        return 0
-    if len(argv) == 2 and argv[1] == "self-test":
-        self_test()
-        return 0
-    if len(argv) == 4 and argv[1] in ("scheduled", "tier") and argv[2] == "--tier":
-        rows = scheduled_rows(argv[3]) if argv[1] == "scheduled" else tier_rows(argv[3])
-        print(json.dumps(rows, sort_keys=True))
-        return 0
-    raise GateManifestError(
-        "usage: gate_manifest.py (scheduled --tier daily|weekly | tier --tier pr|qualification|daily|weekly | validate | self-test)"
-    )
+def check_workflow(data=None, root=ROOT, workflow=None):
+    # YAML is read only here; all registry parsing goes through load/validate_manifest.
+    import yaml
+    data = load() if data is None else validate_manifest(data)
+    document = yaml.safe_load((root / '.github/workflows/lean_action_ci.yml').read_text()) if workflow is None else workflow
+    jobs = document['jobs']; expected = {}
+    for row in data['gates']:
+        binding = row['workflow']
+        if binding:
+            require({'pr','qualification'} <= set(row['tiers']), f'registry: workflow tier mismatch: {row["id"]}')
+            expected[(binding['job'],binding['step'])] = row
+    found=set()
+    for jobid,job in jobs.items():
+        budget=0
+        artifact_outputs=set()
+        for step in job['steps']:
+            if 'run' not in step: continue
+            command=step['run']
+            if re.fullmatch(r'sleep [0-9]+',command): continue  # install retry, not a gate
+            pair=(jobid,step.get('name'))
+            require(pair in expected, f'registry: unregistered workflow command: {jobid}/{step.get("name")}')
+            row=expected[pair]
+            require(command == invocation(row['id']), f'registry: workflow command drift: {row["id"]}')
+            require(pair not in found, f'registry: duplicate workflow invocation: {row["id"]}')
+            found.add(pair); budget += row['budget_seconds']
+            if row['artifacts']:
+                stepid='gate-'+row['id']
+                require(step.get('id')==stepid, f'registry: workflow artifact producer drift: {row["id"]}')
+                artifact_outputs.add('${{ steps.'+stepid+'.outputs.artifact_paths }}')
+            host=job['runs-on']; kind=row['runner_class']
+            require((kind=='native-matrix' and host=='${{ matrix.runner }}') or
+                    (kind=='github-hosted' and isinstance(host,str) and host.startswith(('ubuntu-','macos-'))) or
+                    (kind=='ci' and isinstance(host,str) and "github.event_name != 'pull_request'" in host),
+                    f'registry: workflow runner class drift: {row["id"]}')
+        uploads=[s.get('with',{}).get('path') for s in job['steps'] if s.get('uses','').startswith('actions/upload-artifact@')]
+        require(set(uploads)==artifact_outputs and len(uploads)==len(artifact_outputs), f'registry: workflow artifact path drift: {jobid}')
+        require(job.get('timeout-minutes') == math.ceil(budget*3/60)+10, f'registry: workflow budget drift: {jobid}')
+    for pair,row in expected.items():
+        require(pair in found, f'registry: missing workflow invocation: {row["id"]}')
+    # Root checks discover files dynamically; inventory completeness prevents row deletion.
+    for path in sorted((root / 'scripts/checks').glob('*.sh')):
+        if path.name == 'run.sh':continue
+        matched=[r for r in data['gates'] if r['command'] == ['bash',str(path.relative_to(root))]]
+        require(len(matched)==1, f'registry: missing root gate row: {path.stem}')
+    return data
 
+def execute(gid,tier):
+    matches=[r for r in tier_rows(tier) if r['id']==gid]
+    require(len(matches)==1, f'registry: gate not registered in tier: {gid}/{tier}')
+    row=matches[0]
+    if os.environ.get('GITHUB_OUTPUT'):
+        delimiter='gate-artifacts-'+uuid.uuid4().hex
+        with open(os.environ['GITHUB_OUTPUT'],'a') as stream:
+            stream.write('artifact_paths<<'+delimiter+'\n'+'\n'.join(a['path'] for a in row['artifacts'])+'\n'+delimiter+'\n')
+    # The same bounded runner owns CI and scheduled budgets; no command in YAML.
+    return subprocess.run(['bash',str(ROOT/'scripts/checks/lib/bounded.sh'),str(row['budget_seconds']),*row['command']],
+                          timeout=row['budget_seconds']*3+60).returncode
 
-if __name__ == "__main__":
-    try:
-        sys.exit(main(sys.argv))
-    except GateManifestError as error:
-        print(f"gate_manifest: {error}", file=sys.stderr)
-        sys.exit(1)
+def main():
+    parser=argparse.ArgumentParser(); parser.add_argument('operation',choices=['validate','check-workflow','tier','scheduled','execute','execute-root'])
+    parser.add_argument('--tier'); parser.add_argument('--id'); parser.add_argument('--path');args=parser.parse_args()
+    if args.operation=='validate':load()
+    elif args.operation=='check-workflow':check_workflow()
+    elif args.operation=='execute':return execute(args.id,args.tier)
+    elif args.operation=='execute-root':
+        rows=[r for r in load()['gates'] if r['command']==['bash',args.path]]
+        require(len(rows)==1, f'registry: missing root gate row: {Path(args.path).stem}')
+        return execute(rows[0]['id'], args.tier or 'qualification')
+    else:print(json.dumps((scheduled_rows if args.operation=='scheduled' else tier_rows)(args.tier)))
+    return 0
+
+if __name__=='__main__':
+    try:sys.exit(main())
+    except GateManifestError as error:sys.exit(str(error))

@@ -53,7 +53,7 @@ jobs:
   landing-record:
     name: Landing record
     runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
-    timeout-minutes: 15
+    timeout-minutes: 16
     permissions:
       actions: read
       contents: read
@@ -79,24 +79,7 @@ jobs:
           HEAD_SHA: ${{ github.sha }}
           LAND_REPO: unbalancedparentheses/concrete2
           LAND_NO_NIX: "1"
-        run: |
-          recorded=false run=""
-          if out="$(git fetch -q --depth=1 origin "$BEFORE" 2>&1 \
-                    && bash scripts/land/train.sh record "$HEAD_SHA" --base "$BEFORE" --exclude-run "$GITHUB_RUN_ID" 2>&1)"; then
-            run="$(printf '%s\n' "$out" | sed -n 's/^qualifying_run=\([0-9][0-9]*\)$/\1/p' | tail -1)"
-          fi
-          printf '%s\n' "$out"
-          if [ -n "$run" ]; then
-            recorded=true
-            { echo "### Landing record"
-              echo "Run [$run](https://github.com/$LAND_REPO/actions/runs/$run) passed every landing-tier and required job at exactly \`$HEAD_SHA\`."
-              echo "This run skips those jobs: that run is the result for this SHA."; } >> "$GITHUB_STEP_SUMMARY"
-          else
-            { echo "### No landing record"
-              echo "No run qualifies \`$HEAD_SHA\`, so every job runs here:"
-              printf '\n```\n%s\n```\n' "$out"; } >> "$GITHUB_STEP_SUMMARY"
-          fi
-          echo "recorded=$recorded" >> "$GITHUB_OUTPUT"
+        run: python3 scripts/checks/lib/gate_manifest.py execute --id landing-record --tier ${{ github.event_name == 'pull_request' && 'pr' || 'qualification' }}
 
   root-checks:
     name: Root checks
@@ -104,6 +87,7 @@ jobs:
     if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
     # Self-hosted runners never take pull_request events (forks could run code on them).
     runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    timeout-minutes: 55
     steps:
       # Full history: legacy_frozen.sh reads the move commit named in scripts/checks/legacy.lock.
       - uses: actions/checkout@v4
@@ -118,13 +102,14 @@ jobs:
             experimental-features = nix-command flakes
 
       - name: Root checks (scripts/checks/run.sh)
-        run: bash scripts/checks/run.sh
+        run: python3 scripts/checks/lib/gate_manifest.py execute --id root-checks --tier ${{ github.event_name == 'pull_request' && 'pr' || 'qualification' }}
 
   spec:
     name: Spec build
     needs: landing-record
     if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
     runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@v4
 
@@ -155,13 +140,7 @@ jobs:
           build-args: "--log-level=warning"
 
       - name: Build the specification, warnings refused
-        run: |
-          OUTPUT=$(lake build 2>&1) || { echo "$OUTPUT"; exit 1; }
-          if printf '%s\n' "$OUTPUT" | grep -i "warning"; then
-            echo "::error::Build produced warnings"
-            printf '%s\n' "$OUTPUT"
-            exit 1
-          fi
+        run: python3 scripts/checks/lib/gate_manifest.py execute --id spec --tier ${{ github.event_name == 'pull_request' && 'pr' || 'qualification' }}
 
   # PROOF INTEGRITY (scripts/proofs). Four jobs, each required, each with its own negative controls:
   # the per-theorem axiom inventory against its golden list, the transitive sorry/native_decide ban,
@@ -172,7 +151,7 @@ jobs:
     needs: landing-record
     if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
     runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
-    timeout-minutes: 30
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@v4
 
@@ -201,14 +180,14 @@ jobs:
           build-args: "--log-level=warning"
 
       - name: Proof axioms (scripts/proofs/axioms.sh)
-        run: bash scripts/proofs/axioms.sh
+        run: python3 scripts/checks/lib/gate_manifest.py execute --id proof-axioms --tier ${{ github.event_name == 'pull_request' && 'pr' || 'qualification' }}
 
   proof-trust-ban:
     name: Proof trust ban (sorry, native_decide)
     needs: landing-record
     if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
     runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
-    timeout-minutes: 30
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@v4
 
@@ -237,14 +216,14 @@ jobs:
           build-args: "--log-level=warning"
 
       - name: Proof trust ban (sorry, native_decide) (scripts/proofs/trust_ban.sh)
-        run: bash scripts/proofs/trust_ban.sh
+        run: python3 scripts/checks/lib/gate_manifest.py execute --id proof-trust-ban --tier ${{ github.event_name == 'pull_request' && 'pr' || 'qualification' }}
 
   kernel-replay:
     name: Kernel replay (leanchecker)
     needs: landing-record
     if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
     runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
-    timeout-minutes: 30
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@v4
 
@@ -273,7 +252,7 @@ jobs:
           build-args: "--log-level=warning"
 
       - name: Kernel replay (leanchecker) (scripts/proofs/kernel_replay.sh)
-        run: bash scripts/proofs/kernel_replay.sh
+        run: python3 scripts/checks/lib/gate_manifest.py execute --id kernel-replay --tier ${{ github.event_name == 'pull_request' && 'pr' || 'qualification' }}
 
   # lean4export, con-leche and nanoda are built once per pinned revision (scripts/proofs/external.pins)
   # into ~/.cache/concrete-ext; nanoda needs cargo, so the check runs in the extcheck shell.
@@ -282,7 +261,7 @@ jobs:
     needs: landing-record
     if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
     runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
-    timeout-minutes: 90
+    timeout-minutes: 100
     steps:
       - uses: actions/checkout@v4
 
@@ -318,7 +297,7 @@ jobs:
 
       - name: External re-check (con-leche, nanoda) (scripts/proofs/external.sh)
         shell: "nix develop .#extcheck --command bash --noprofile --norc -eo pipefail {0}"
-        run: bash scripts/proofs/external.sh
+        run: python3 scripts/checks/lib/gate_manifest.py execute --id external-recheck --tier ${{ github.event_name == 'pull_request' && 'pr' || 'qualification' }}
 
   # The oracle check on a GitHub-hosted runner (ISS-0005, P13; R-0564): proves that a runner other than
   # concrete-ci-2 gets a verified oracle from the release alone. A missing, corrupt or unverifiable
@@ -329,7 +308,7 @@ jobs:
     needs: landing-record
     if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@v4
 
@@ -340,10 +319,10 @@ jobs:
             experimental-features = nix-command flakes
 
       - name: "Oracle fetch (missing, corrupt or unverifiable artifact is INCOMPLETE; negative controls)"
-        run: bash scripts/checks/oracle_fetch.sh
+        run: python3 scripts/checks/lib/gate_manifest.py execute --id oracle-hosted-1 --tier ${{ github.event_name == 'pull_request' && 'pr' || 'qualification' }}
 
       - name: "Fetch the published oracle, verify it, run smoke.con through it (exit 42)"
-        run: bash scripts/oracle/ci_check.sh
+        run: python3 scripts/checks/lib/gate_manifest.py execute --id oracle-hosted-2 --tier ${{ github.event_name == 'pull_request' && 'pr' || 'qualification' }}
 
   # THE COMPILER'S GATES (Concrete/README.md gates 4, 6, 6a, 8–14; slice 0, provisional),
   # scripts/checks/compiler/: not root checks (run.sh runs only scripts/checks/*.sh), because they need
@@ -371,7 +350,7 @@ jobs:
           - arch: aarch64-macos
             runner: macos-15
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
+    timeout-minutes: 70
     permissions:
       contents: read
     steps:
@@ -472,7 +451,7 @@ jobs:
           - arch: aarch64-macos
             runner: macos-15
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
+    timeout-minutes: 160
     permissions:
       contents: read
     steps:
@@ -480,12 +459,13 @@ jobs:
       - name: Install Nix
         uses: cachix/install-nix-action@v31
       - name: Sanitizers, binary size (report-only) and stack bound (gates 10, 11, 12)
-        run: nix develop --command bash scripts/checks/lib/bounded.sh 3000 bash scripts/checks/compiler/slice0_artifacts.sh report
+        id: gate-artifacts
+        run: python3 scripts/checks/lib/gate_manifest.py execute --id artifacts --tier ${{ github.event_name == 'pull_request' && 'pr' || 'qualification' }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: artifacts-${{ matrix.arch }}
-          path: report
+          path: ${{ steps.gate-artifacts.outputs.artifact_paths }}
           if-no-files-found: error
 
   trusted-base:
@@ -506,7 +486,7 @@ jobs:
           - arch: aarch64-macos
             runner: macos-15
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
+    timeout-minutes: 160
     permissions:
       contents: read
     steps:
@@ -514,7 +494,7 @@ jobs:
       - name: Install Nix
         uses: cachix/install-nix-action@v31
       - name: Trusted-base golden (premises, axioms, toolchain and LCB pin)
-        run: nix develop --command bash scripts/checks/lib/bounded.sh 3000 bash scripts/checks/compiler/slice0_trusted_base.sh
+        run: python3 scripts/checks/lib/gate_manifest.py execute --id trusted-base --tier ${{ github.event_name == 'pull_request' && 'pr' || 'qualification' }}
 
   reproducibility:
     name: Reproducibility (${{ matrix.id }})
@@ -536,18 +516,19 @@ jobs:
           - id: macos
             runner: macos-15
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
+    timeout-minutes: 190
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
       - name: Compare every stage in distinct build directories
-        run: nix develop --command bash scripts/checks/lib/bounded.sh 3600 bash scripts/checks/compiler/slice0_repro.sh manifest.txt
+        id: gate-reproducibility
+        run: python3 scripts/checks/lib/gate_manifest.py execute --id reproducibility --tier ${{ github.event_name == 'pull_request' && 'pr' || 'qualification' }}
       - uses: actions/upload-artifact@v4
         with:
           name: reproducibility-${{ matrix.id }}
-          path: manifest.txt
+          path: ${{ steps.gate-reproducibility.outputs.artifact_paths }}
           if-no-files-found: error
 
   compare-linux:
@@ -560,17 +541,13 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
+    timeout-minutes: 13
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           pattern: reproducibility-linux-*
           path: manifests
       - name: Compare like targets, including compiler and toolchain identity
-        run: |
-          set -eu
-          m1=manifests/reproducibility-linux-first/manifest.txt
-          m2=manifests/reproducibility-linux-independent/manifest.txt
-          # Both manifests carry the identity and at least one artifact hash.
-          for m in "$m1" "$m2"; do grep -q '^compiler_commit=' "$m"; grep -q '/lcb.exe$' "$m"; done
-          diff -u "$m1" "$m2"
+        run: python3 scripts/checks/lib/gate_manifest.py execute --id compare-linux --tier ${{ github.event_name == 'pull_request' && 'pr' || 'qualification' }}
 
