@@ -36,6 +36,26 @@ class Outcome(RegistryFixture, unittest.TestCase):
                 self.assertEqual((bad.returncode, bad.stdout, bad.stderr),
                                  (1, '', 'FAIL scheduled outcome precedence: FAIL masked\n'))
 
+    def test_fail_absorbs_missing_and_actions_availability(self):
+        from scheduled_outcome import execution_status
+        self.assertEqual(execution_status([{'status': 'FAIL'}], missing=True, unavailable=True), 'FAIL')
+        forged = record()
+        forged.update(status='INCOMPLETE', conclusion='incomplete')
+        forged['gates'][0]['status'] = 'INCOMPLETE'
+        forged['gates'][0]['controls'][0]['status'] = 'FAIL'
+        with self.assertRaisesRegex(protocol.EvidenceError, '^status/conclusion contradicts evidence$'):
+            protocol.validate(forged, SHA, 'daily', {'example/repo': {'ci2-heavy'}}, 'example/repo', None)
+        import collect
+        payload = record()
+        payload.update(status='FAIL', conclusion='failure')
+        payload['gates'][0]['status'] = 'FAIL'
+        run = dict(id=1, run_attempt=1, event='schedule')
+        job = dict(conclusion='failure', runner_name='ci2-heavy', status='completed',
+                   started_at=payload['started'], completed_at=payload['completed'])
+        result = collect.record_for(run, job, (SHA, 'daily'), payload, payload['artifact'],
+                                    'example/repo', {'example/repo': {'ci2-heavy'}})
+        self.assertEqual((result['status'], result['qualification_status']), ('FAIL', 'FAIL'))
+
     def test_redirect_production_and_credential_plant(self):
         good = self.command('transport', ROOT / 'collect.py')
         self.assertEqual((good.returncode, good.stdout, good.stderr), (0, '', ''))

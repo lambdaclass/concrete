@@ -15,6 +15,7 @@ import urllib.parse
 import zipfile
 from protocol import EvidenceError, inventory, require, validate
 from publish import publish
+from scheduled_outcome import reduce_outcomes
 from process_adapter import operation_clock
 from scheduler_policy import Identity, POLICY, TIERS, MAIN_BRANCH, BUDGET
 
@@ -88,9 +89,10 @@ def record_for(run, job, selection, payload, artifact, repository, runners, *, c
         record = dict(payload)
         record.update(identity, artifact=artifact, started=job["started_at"], completed=job["completed_at"])
         # A worker cannot claim success if Actions did not observe successful execution.
-        if job["conclusion"] != "success" and record["status"] == "PASS":
+        if job["conclusion"] != "success":
             record["execution_error"] = "Actions job metadata"
-            record.update(status="INCOMPLETE", conclusion="incomplete")
+            status = reduce_outcomes([record["status"], "INCOMPLETE"])
+            record.update(status=status, conclusion="failure" if status == "FAIL" else "incomplete")
     return validate(record, sha, tier, runners, repository, attempt=identity["attempt"])
 
 def read_index(archive):
@@ -132,8 +134,8 @@ def collect(run, repository, runners, environment, *, clock=None):
             require(len(logs) <= 1, "ambiguous logs artifact")
             if not logs and payload is not None:
                 payload["execution_error"] = "Actions upload metadata"
-                if payload["status"] != "FAIL":
-                    payload.update(status="INCOMPLETE", conclusion="incomplete")
+                status = reduce_outcomes([payload["status"], "INCOMPLETE"])
+                payload.update(status=status, conclusion="failure" if status == "FAIL" else "incomplete")
             artifact = logs[0] if logs else found[0]
             url = f'https://github.com/{repository}/actions/runs/{run["id"]}/artifacts/{artifact["id"]}'
         publish(record_for(run, job, selection, payload, url, repository, runners, clock=clock), runners, repository, environment)

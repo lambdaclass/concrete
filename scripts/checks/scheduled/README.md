@@ -881,9 +881,11 @@ qualification on concrete-ci-2; fixture controls do not discharge that obligatio
 ### Round 20, implementation slice 5: step 6
 
 R-0676 owns the shared typed outcome reduction in `lib/scheduled_outcome.py`.
-Execution, structured nested events and qualification use this owner; adapters
+Execution, Actions availability updates, structured nested events and qualification use this owner; adapters
 only translate their evidence into statuses. `FAIL` is absorbing across gate/control
-updates, exceptions, qualification and attempt history. Qualification is always
+updates, exceptions, Actions availability loss, qualification and attempt history.
+Authoritative gate reduction includes nested control outcomes, so an INCOMPLETE
+gate cannot hide a failed control. Missing/availability markers cannot mask FAIL. Qualification is always
 recomputed from the selected commit's registry, replacing cached verdict fields.
 Tool identities and seed attestations must equal that registry, including seed
 type; substitution cannot qualify through collection, serialization or observation.

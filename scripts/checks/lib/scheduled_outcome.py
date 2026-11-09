@@ -22,7 +22,7 @@ def reduce_outcomes(outcomes: Iterable[Status | str], *, empty: Status = Status.
 
 
 def execution_status(gates, *, unavailable=False, missing=False) -> Status:
-    if missing:
-        return Status.MISSING
     return reduce_outcomes([*(gate['status'] for gate in gates),
+                            *(control['status'] for gate in gates for control in gate.get('controls', [])),
+                            *([Status.MISSING] if missing else []),
                             *([Status.INCOMPLETE] if unavailable else [])])
