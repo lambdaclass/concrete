@@ -374,3 +374,157 @@ found no other independently defined ancestry set: execution uses the accepted
 exact SHA, collection transports trusted selection (or the scheduled main head),
 and publication stores exact-SHA notes without applying another history filter.
 R-0690 retains the live CI2 replay/collection/publication qualification obligation.
+
+
+## One owner per scheduler fact
+
+Design audit of d6254f31967d (round 12). This is an implementation contract,
+not a claim that the residuals below are fixed. Prefer the best long-term design;
+never trade structural ownership for speed, a smaller diff, or fewer review rounds.
+The structural cause is that callers still assemble parts of execution context and
+some derived facts independently. R-0676 owns the controller repair; R-0690 owns
+live qualification and operational dependencies. If a separate tracking row is
+needed, send ISS-XXXX and its closure condition to the coordinator for allocation;
+writers do not allocate IDs or edit ROADMAP.md. No OD is selected.
+
+Citation convention: bare Python/shell filenames below are relative to
+`scripts/checks/scheduled/`; `lib/` means `scripts/checks/lib/`; `checks/` means
+`scripts/checks/`; `workflows/` means `.github/workflows/`. Each citation names an
+existing line inspected in this tree. Proposed helpers and controls have no line
+citation because they do not exist. “MISSING” means no control proves the entire
+single-owner property; narrower controls are identified separately. Consumers in
+this audit include production adapters, workflow boundaries and test runners;
+tests using fixture data are controls, not alternate production authorities.
+
+### Ownership and residual ledger
+
+| Fact | Single owner (current or required) | Consumers today | Duplicate or ambient read today | Control and residual |
+|---|---|---|---|---|
+| Eligible main set, resolved tip, topological and first-parent orders | `history.py:10` (`MAIN` at `history.py:7`) | `history.py:19`, `observe.py:51`, replay adapter `workflows/gate_schedule.yml:51` | No second ancestry predicate; `observe.py:53` separately assembles presentation order. Scheduled selection uses event SHA at `workflows/gate_schedule.yml:46`, deliberately distinct from replay's current-main tip. | `test_observe.py:109` checks real merge authorization and exact FAIL output; `test_observe.py:162` checks freshness scope. Residual: S11a P1 blocks this control with open stdin, and P2 skips it on direct execution. Return a named history value with explicit ordering roles. |
+| Repository, main ref, selected SHA/tier, controller and checkout identity | Trusted selection adapter `workflows/gate_schedule.yml:34`; history authority above; verification `run.py:102` | `run.py:88`, `collect.py:51`, `collect.py:67`, `protocol.py:160`, `publish.py:7`, `observe.py:50` | CLI snapshots at `run.py:180`, `collect.py:177`, `publish.py:45`, `observe.py:47`, `history.py:29`; git's fallback import snapshot at `protocol.py:37` is a separate context. Main literals at `collect.py:108`, `collect.py:149` and workflow checkout/ref guards are independently maintained. | `test_execution.py:45`, `test_collect.py:120`, `test_protocol.py:159`; MISSING shared identity/context ownership control. Residual: construct explicit trusted invocation identity once, retain event SHA versus history tip distinction. |
+| Attempt/occurrence identity, immutable closure, event/job state | Authoritative Actions reconstruction `collect.py:67`; append invariant `protocol.py:221` | `run.py:91`, `collect.py:106`, `publish.py:23`, `protocol.py:174`, `protocol.py:244` | Occurrence is cron/replay plus run ID at `run.py:94`, event plus run ID at `collect.py:73`; collector overrides worker identity intentionally but the occurrence meanings differ. | `test_collect.py:79`, `test_publish.py:17`, `test_protocol.py:166`; MISSING occurrence parity control. Residual: name execution identity versus schedule occurrence and use one encoding for each. |
+| Child environment, tool resolution, credentials and host configuration | Required process-context owner: proposed `lib/scheduled_process.py`; current filter `protocol.py:34` is insufficient | `protocol.py:40`, `run.py:83`, `publish.py:30`, `publish.py:34`, `hermetic_suite.py:17`, `lib/gate_manifest.py:159` | Non-GIT variables including PATH, HOME, loader/shell settings survive filtering; `protocol.py:37` snapshots ambient state on import; `test_support.py:6` independently filters fixture runtime state. | `test_hermetic.py:11`, `test_hermetic.py:22`; MISSING allowlist/context control. Residual: explicit per-role environment, resolved trusted tools, scoped credential capability; do not pass publisher credentials to gates. |
+| stdin (S11a P1), stdout/stderr, other inherited descriptors | Required same process-context owner; current git launch `protocol.py:40` | `run.py:28`, `publish.py:30`, `publish.py:34`, `hermetic_suite.py:79`, shell/watchdog boundaries below | stdin inherited except explicit note body; `test_observe.py:123` calls stdin-reading mktree. `lib/bounded_exec.py:91` reads an ambient slot descriptor. Python normally closes unrelated fds, but no common declared descriptor contract exists. | MISSING open never-closing pipe and descriptor allowlist controls. Existing slot propagation controls `test_slot.py:98`, `test_slot.py:114`, `test_slot.py:119` cover intentional lease inheritance only. Residual: explicit EOF or payload, explicit streams, validated slot capability only. |
+| cwd, filesystem roots, temporary storage, HOME/git configuration, umask | Required same process-context owner; trusted root `run.py:16`, registry root `protocol.py:17` | `run.py:99`, `run.py:109`, `run.py:134`, `protocol.py:40`, `publish.py:30`, `hermetic_suite.py:61` | Git without -C follows caller cwd; global/system git config and hooks remain available; TemporaryDirectory uses ambient temp policy; child umask inherited. Publisher writes local config at `workflows/gate_publish.yml:38`. | `test_hermetic.py:22`, `test_hermetic.py:42` cover GIT variables/canary only; MISSING cwd/config/umask isolation control. Residual: explicit roots, private home/config/temp and fixed mask; explicit transport/auth config for publication. |
+| Locale, timezone, wall clock and duration clock | Required invocation clock/context owner; UTC parser `protocol.py:44` | `run.py:18`, `run.py:129`, `collect.py:48`, `collect.py:116`, `collect.py:150`, `collect.py:164`, `observe.py:69`, `protocol.py:228` | UTC wall clock sampled independently in runner, collector and observer; locale/TZ inherited by children. Monotonic duration at `run.py:136` correctly differs from evidence time. | `test_protocol.py:71`, `test_protocol.py:135`, `test_collect.py:79`; MISSING clock/context control. Residual: inject one observation instant per operation and separate monotonic deadline, set locale/TZ explicitly; real clock is a declared external input. |
+| Registry schema, gate IDs, tiers, argv, tools/seeds, controls, artifacts, freshness windows | `checks/gates.json:1`, sole parser `lib/gate_manifest.py:39` | `lib/gate_manifest.py:91`, `lib/gate_manifest.py:104`, `lib/gate_manifest.py:150`, `run.py:119`, `protocol.py:16`, `protocol.py:62`, `protocol.py:77`, `observe.py:54` | Gate inventory not duplicated. Current-controller WINDOWS versus selected-SHA gate registry is implicit; daily/weekly enumeration is repeated at `workflows/gate_freshness.yml:24`, `collect.py:62`, `lib/gate_manifest.py:96`. Tools/seeds are copied as declarations at `run.py:125`, not measured tool identity. | `test_registry.py:17`, `test_registry.py:62`, `test_registry_evidence.py:179`; MISSING complete schema/tier/window provenance control. Residual: explicit current policy versus historical evidence, generate adapters from owner, preserve real tool/seed attestation obligation. |
+| Typed outcomes, transport codes, qualification, FAIL permanence and precedence | Event interpreter `lib/gate_outcome.py:22`; evidence authority `protocol.py:160`, `protocol.py:228` | `with_slot.sh:16`, `run.py:137`, `run.py:148`, `run.py:172`, `collect.py:92`, `publish.py:9`, `observe.py:22` | Reduction of PASS/FAIL/INCOMPLETE repeated in run and protocol; transport 125 is interpreted separately from semantic status by design but has no shared typed adapter. | `test_protocol.py:108`, `test_protocol.py:125`, `test_protocol.py:135`, `test_slot.py:79`, `test_slot.py:84`; MISSING common reducer equivalence control. Residual: shared typed reduction with explicit transport conversion; observation retains every permanent FAIL. |
+| Note refs, remote identity, publication lease, retry/idempotency | Lease algorithm `publish.py:7`; required shared note-ref constructor | `publish.py:10`, `protocol.py:253`, `observe.py:56`, `workflows/gate_freshness.yml:25` | Note prefix repeated in all four; origin remote/config is ambient transport configuration. | `test_publish.py:23`, `test_publish.py:29`, `test_publish.py:35`; MISSING ref/remote ownership control. Residual: one constructor and explicit remote capability, retain fetched-state lease and remote readback. |
+| Budgets, retries, grace, cancellation and process lifetime | Gate budget `checks/gates.json:7`; watchdog `lib/bounded_exec.py:65`, retry policy `lib/bounded.sh:82` | `lib/gate_manifest.py:140`, `lib/gate_manifest.py:159`, `run.py:21`, `run.py:135`, `run.py:145`, `with_slot.sh:22`, `protocol.py:42`, `publish.py:11`, `publish.py:35`, `hermetic_suite.py:80`, `collect.py:34` | Formula/reserves repeated in run and manifest; fixed workflow limits at `workflows/gate_schedule.yml:61`, `workflows/gate_schedule.yml:89`, `workflows/gate_publish.yml:16`, `workflows/gate_publish.yml:41`, `workflows/gate_freshness.yml:13`, `workflows/gate_freshness.yml:32`, `checks/scheduled_gates.sh:9`. `run.py:28` has a second process-group watchdog. | `test_registry.py:50`, `test_slot.py:48`, `test_workflows.py:16`; MISSING whole deadline composition control. Residual: one budget composition API, bounded cleanup, one process-tree supervisor; never shorten real campaigns to fit PR. |
+| Runner membership, host slots and resource capability | Binding adapter `lib/ci2_binding.py:11`, verifier `lib/ci2_binding.py:22`; host lease `lib/heavy_slots.sh:4` | `protocol.py:56`, `run.py:106`, `protocol.py:160`, `collect.py:158`, `publish.py:48`, `observe.py:69`, `with_slot.sh:19`, `lib/bounded_exec.py:91` | Workflow labels are routing rather than proof; slot directory override/fd enter via ambient environment; inventory dependency remains unavailable on this base. | `test_execution.py:30`, `test_protocol.py:145`, `test_slot.py:52`, `test_slot.py:60`, `test_slot.py:119`. Residual: explicit validated host capability, actual shared provisioning and ISS-0029 integration under R-0690. |
+| API provenance, selection log, pagination/size bounds, authentication and redirects | `collect.py:19`, `collect.py:22`, `collect.py:29`, `collect.py:39`, `collect.py:51` | `collect.py:106`, `collect.py:141`, `collect.py:67` | Proxy/CA/network configuration is ambient urllib input; schedule tier fallback depends on independently authored workflow title at `workflows/gate_schedule.yml:2`. | `test_collect.py:21`, `test_collect.py:29`, `test_collect.py:98`, `test_collect.py:120`; MISSING explicit network context/title derivation control. Residual: declared HTTPS transport policy and shared selection encoding; API data remains an external observation. |
+| Artifact binding, report bytes/digests, index/log retention and durable evidence | Preservation `run.py:44`, qualification `protocol.py:72`, archive bounds `collect.py:97` | `run.py:139`, `run.py:161`, `collect.py:120`, `collect.py:131`, `collect.py:139`, `protocol.py:214`; uploads `workflows/gate_schedule.yml:92` | Retention 90 repeated at `workflows/gate_schedule.yml:99` and `workflows/gate_schedule.yml:107`; stored digest and declared tool metadata alone do not establish durable independent attestation. | `test_registry_evidence.py:121`, `test_registry_evidence.py:129`, `test_registry_evidence.py:168`. Residual: durable archive and live partial/cancelled upload qualification under R-0690; shared retention policy. |
+| Test inventory, IDs, skips and results for every runner (S11a P2) | Required single inventory enumerator; current discovery `hermetic_suite.py:53` | `hermetic_suite.py:79`, `hermetic_suite.py:86`, `checks/scheduled_gates.sh:9`, direct main blocks `test_observe.py:81`, `test_protocol.py:156`, other test module main blocks | Direct execution exits before later classes at `test_observe.py:84`, `test_observe.py:109`, `test_observe.py:162`, `test_protocol.py:159`; clean/hostile comparison sees discovery only. Results recorder `hermetic_suite.py:39` records successes/skips, child exit records suite failure. | `test_hermetic.py:7` detects result drift; MISSING direct/discovery inventory parity. Residual: one canonical complete ID inventory consumed by each runner, compare IDs and outcomes without fixed counts; remove premature mains as part of that structural repair. |
+| Trigger cadence, queue age, observer coverage and required-check independence | Cadence `workflows/gate_schedule.yml:3`, `workflows/gate_publish.yml:7`, `workflows/gate_freshness.yml:3`; queue policy `collect.py:20` | Selector `workflows/gate_schedule.yml:43`, collector `collect.py:116`, `collect.py:150`, `collect.py:164`, freshness `observe.py:13` | Cron-to-tier mapping repeated in workflow title and selector; no persisted independent observer-occurrence ledger. | `test_collect.py:73`, `test_collect.py:79`; MISSING missed-observer control. Residual: one schedule policy with generated adapters and independent occurrence monitoring under R-0690, outside unrelated PR/landing qualification. |
+
+### Process-boundary contract and bypass census
+
+The one enforcement helper will be `lib/scheduled_process.py` (proposed, MISSING).
+It owns a validated process specification: resolved argv/tool, explicit cwd, complete
+allowlisted env, private HOME/git configuration/temp root, fixed umask, locale and
+TZ, stdin EOF by default or explicit bytes, stdout/stderr sinks, closed unrelated
+fds and an explicit validated slot-fd exception, deadline/retry/grace and cancellation
+policy. No other caller state is inherited. Identity, clock and network capabilities
+are explicit invocation data; a subprocess cannot literally be insulated from the
+kernel clock or network by an env filter. The helper must declare those dependencies
+and tests must inject/mediate them. Nix's resolved environment is an explicit stage
+output with a recorded tool identity, not permission to reuse the controller env.
+Use the existing bounded supervisor for process-tree lifecycle through this helper;
+do not add a third watchdog. Shell adapters submit the same specification through
+its CLI. Necessary lease descriptors are explicitly transferred capabilities, not
+an exception allowing arbitrary fd inheritance.
+
+Every current launch bypasses this future helper. The census below separates
+production launch sites from tests so migration cannot stop at the observed mktree.
+Shell utility children and command substitutions inherit the wrapper's already
+established context; wrappers must enter through the helper, and nested execution
+must retain or narrow that context, never reconstruct it from ambient state.
+
+| Boundary / all current call sites | Explicit inputs required |
+|---|---|
+| Git reader `protocol.py:41` (used by history, registry, observer and publication) | Repository cwd/-C, argv, git/config/transport policy, EOF stdin, captured streams, read budget; remove import-time fallback. |
+| Private clone/checkout `run.py:109`, `run.py:110` through `run.py:28` | Source/destination, selected SHA, private cwd/config/home, EOF, setup budget and log sinks. |
+| Nix gate/control `run.py:134`, `run.py:143` through `run.py:28` | Selected checkout, registry argv/budget, identity and outcome paths, resolved tool env, EOF, log/capture sinks, validated host-slot capability. |
+| Note write `publish.py:30`, push `publish.py:34` | Explicit note body only for write; EOF for push; trusted cwd, remote/auth/config, ref/lease, output sinks and deadline. |
+| Hermetic child `hermetic_suite.py:79` | Explicit interpreter, complete inventory, destination, clean/hostile context, EOF, isolated cwd/home/temp, captured streams, child budget. |
+| Registry executor `lib/gate_manifest.py:159`; watchdog `lib/bounded_exec.py:99`; shell dispatcher `lib/bounded.sh:99`, `lib/bounded.sh:108`, `lib/bounded.sh:110` | Fully materialized process spec including stream routing and only the validated slot fd. Preserve generic bounded-run users' contracts; scheduler adapters must explicitly select the hermetic policy. |
+| Gate wrapper `with_slot.sh:15`, outcome interpreter `with_slot.sh:16`, retry wrapper `with_slot.sh:22` | Gate argv/outcome stream/SHA, scoped env, EOF, checkout cwd, logs, lease and deadline; utilities at `with_slot.sh:4`, `with_slot.sh:11`, `with_slot.sh:14`, `with_slot.sh:20` use that same declared context. |
+| Workflow controller launches `workflows/gate_schedule.yml:51`, `workflows/gate_schedule.yml:89`; publication git/config/collector `workflows/gate_publish.yml:38`, `workflows/gate_publish.yml:39`, `workflows/gate_publish.yml:41`; freshness git/observer `workflows/gate_freshness.yml:26`, `workflows/gate_freshness.yml:27`, `workflows/gate_freshness.yml:32`; suite `checks/scheduled_gates.sh:9` | Trusted checkout/context, event/selection inputs, scoped token only where needed, explicit EOF, output/summary paths, operation budget. Workflow actions remain external checkout/upload service boundaries, not hermetic subprocess claims. |
+| Direct test subprocesses `test_slot.py:33`, `test_slot.py:53`, `test_slot.py:70`, `test_slot.py:75`, `test_slot.py:110`, `test_hermetic.py:38`, `test_workflows.py:30` | Fixture-owned spec; hostile state only as the planted input. `test_registry_evidence.py:57` saves the real run function for an interceptor, not an additional launch. Test gate shell payloads in `test_integration.py:143`, `test_integration.py:150`, `test_integration.py:157` exercise nested supervision through the same contract. |
+
+### Ordered structural implementation and exact controls
+
+All controls below are planned (MISSING unless explicitly identified above). Each
+must assert the expected exit/status and complete diagnostic, not just any failure.
+Use isolated copies for planted regressions and compare canonical IDs, not counts.
+The listed FAIL strings are required future control diagnostics, not existing output.
+
+1. Introduce invocation context and the single process-spec helper, backed by the
+   existing bounded supervisor. Migrate **all** boundaries in the census before
+   calling process isolation complete. Add a source/adapter coverage control: plant
+   a direct subprocess launch outside the helper; require exit 1 and exactly
+   `FAIL scheduled process boundary: unmanaged launch`. Validate required spec fields;
+   omit cwd and require exit 1 and `FAIL scheduled process specification: missing cwd`.
+2. Prove inherited-state closure by role. For S11a P1 keep a writer end of a pipe
+   open with no data until after the test completes (no timed EOF and no shell
+   pipeline wait). Run a child that reads stdin, including real empty-tree mktree,
+   through every adapter. It must see EOF promptly. Plant stdin inheritance in an
+   isolated helper copy; a separate short supervisor must identify the blocked
+   read, terminate/reap the whole child group, and emit exit 1 with exactly
+   `FAIL scheduled process stdin: inherited open pipe`. An unrelated timeout is
+   INCOMPLETE, never this planted PASS. Keep mktree as a stdin-sensitive probe;
+   merely replacing it with write-tree would conceal the class.
+3. Extend that same boundary probe across env, cwd, HOME/config/hooks, umask,
+   locale/TZ, temp root, descriptors and credential scoping. Plant one undeclared
+   key `SCHEDULER_FOREIGN`, cwd, HOME, umask, locale, timezone, temp root or fd 9;
+   each detector exits 1 with exactly `FAIL scheduled process context: FIELD`,
+   substituting respectively `env.SCHEDULER_FOREIGN`, `cwd`, `HOME`, `umask`,
+   `locale`, `timezone`, `temp`, `fd.9`. Assert a validated slot survives and a
+   forged slot still gives the existing exact invalid-descriptor diagnostic.
+   Plant publisher token exposure in gate env and require exit 1 with exactly
+   `FAIL scheduled process context: credential scope`. Inject one observation time
+   and monotonic deadline; plant a second wall-clock read and require exit 1 with
+   exactly `FAIL scheduled clock: undeclared read`. Test private git config while
+   retaining declared publisher transport; no global config dependence is allowed.
+4. Establish one inventory enumerator and common execution/reporting adapter for
+   direct modules and hermetic discovery. Move main dispatch after definitions,
+   and compare normalized complete test IDs (including skips) per module, then
+   results in clean/hostile contexts. For S11a P2 plant a main dispatch before
+   MergeHistory in an isolated module copy; require exit 1 with exactly
+   `FAIL scheduled inventory: direct/discovery mismatch test_observe`. Repeat for
+   ExplicitIdentity with exactly
+   `FAIL scheduled inventory: direct/discovery mismatch test_protocol`. The parity
+   check must observe what direct execution actually ran, not only import the
+   file. A failed module is a separate failure; zero tests or matching truncated
+   inventories cannot pass. Existing clean/hostile result and canary controls stay.
+5. Materialize shared history/identity, note-ref, occurrence, schedule/tier and
+   budget policy values and use them in every adapter, with generated workflow
+   projections checked against owners. Preserve independent verification of
+   untrusted evidence; do not replace it with trust in worker-supplied cached facts.
+   Plant one divergent consumer per fact and require exit 1 with exactly
+   `FAIL scheduled ownership: FACT`, with FACT one of `history`, `identity`,
+   `note-ref`, `occurrence`, `schedule`, `tier`, `window`, `budget`, `retention`.
+   Retain the real merge graph's exact per-tier recorded-attempt FAIL assertions.
+   Exercise deadline composition with a fake monotonic clock, not long sleeps.
+6. Share typed outcome reduction across execution/qualification adapters; keep
+   authoritative recomputation and irreversible FAIL. Plant a reducer that lets
+   INCOMPLETE or a later PASS mask FAIL; require exit 1 with exactly
+   `FAIL scheduled outcome precedence: FAIL masked`. Keep exact registry-control
+   diagnostics, wrong-SHA artifact controls and lease collision/readback controls.
+   Add tool/seed attestation substitution and require exit 1 with exactly
+   `FAIL scheduled provenance: tool/seed mismatch`. Plant redirected credential
+   forwarding and require exit 1 with exactly
+   `FAIL scheduled transport: redirected credential`. Plant missing observer
+   occurrence and require exit 1 with exactly
+   `FAIL scheduled observer: missed occurrence` using an independent observer.
+7. Coordinator runs reviews with the instruction to do the best long-term thing
+   rather than cut corners, then CI2/GitHub qualification under R-0690: cancellation,
+   occupied host slots, queued attempts, leases with dropped responses, replay,
+   durable archive and missed-observer detection. Archive corruption must produce
+   exactly `FAIL scheduled archive: digest mismatch` and exit 1. Cheap PR controls
+   cover the same contracts with deterministic fixtures; real full campaigns and
+   expensive qualification remain daily/weekly, never weakened to fit a PR budget.
+
+This round changes documentation only. No new control is claimed as executed and
+no residual is silently accepted as qualification. The coordinator owns subsequent
+implementation/review scheduling and any new issue/roadmap allocation.
