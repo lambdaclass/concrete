@@ -502,8 +502,7 @@ theorem envHandler_valid : Environment.Valid contract envHandler := by
       simp only [envHandler, Option.some.injEq] at h
       subst h
       refine ⟨rfl, ?_⟩
-      change req * 2 = req + req
-      omega
+      exact Nat.mul_two req
     | fourTimes =>
       change Nat at req resp
       simp only [envHandler, Option.some.injEq] at h
@@ -636,22 +635,30 @@ def contract : OperationContract Demo.signature where
 
 /-- Executable handler that leaves requests unanswered (`.blocked`). -/
 def blockingHandler : Environment Demo.signature Unit where
-  reply := fun _ _ _ _ => none
+  reply := fun _ hist _ n => if hist.isEmpty then some (n + n) else none
 
 /-- Helper (computation). `blockingHandler` satisfies `Environment.Valid` for `BlockingEnvDemo.contract`
 because `reply` is `none` and `mayBlock` is permitted. (approved: PENDING) -/
 theorem blockingHandler_valid : Environment.Valid contract blockingHandler := by
   constructor
   · intro input history k req resp h
-    cases h
+    cases k
+    simp only [blockingHandler] at h
+    split at h
+    · simp only [Option.some.injEq] at h
+      subst resp
+      exact Nat.mul_two req
+    · cases h
   · intro input history k req _
     trivial
 
-/-- Fault: fabricates a self-echoed reply when the handler returns `none` instead of leaving
-the C1 request unanswered. -/
-def fabricateReplyOnBlockOracle (_E : Environment Demo.signature Unit) (_input : Unit) :
-    Exec.Oracle (Environment.operands Demo.signature) :=
-  fun _ q _ _ store => some ⟨some (q, q), .ok (some q), store⟩
+/-- Fault: consults the handler at an empty history, fabricating an answer when the actual
+history-sensitive request blocks. It has exactly the polymorphic type of `Environment.oracle`. -/
+def fabricateReplyOnBlockOracle {S : EventSignature} {Input : Type}
+    (E : Environment S Input) (input : Input) : Exec.Oracle (Environment.operands S) :=
+  fun _ q _ _ store =>
+    (E.reply input [] q.1 q.2).map fun reply =>
+      ⟨some (q, ⟨q.1, reply⟩), .ok (some ⟨q.1, reply⟩), store⟩
 
 /-- Instance (law `ConcreteSpec.Core.Observe.environment_run_reply`, case `blocking_c1_call`). -/
 example : (∀ reply, blockingHandler.reply () (Environment.history [] ++ [.request ⟨.double, 3⟩]) .double 3 = some reply →
@@ -708,7 +715,7 @@ example : Environment.Valid contract blockingHandler ∧
   refine ⟨blockingHandler_valid, .idle, ?_⟩
   intro invalid
   obtain ⟨permitted, hrep⟩ := (invalid.2 rfl).1
-  change (some (.terminal ⟨[Demo.request 3, Demo.response 3], .exited 0, 7⟩) :
+  change (some (.terminal ⟨[Demo.request 3, Demo.response 6], .exited 0, 7⟩) :
       Option (FullObservation Demo.signature)) =
     some (.blocked [Demo.request 3] ⟨.double, 3⟩) at hrep
   cases hrep
