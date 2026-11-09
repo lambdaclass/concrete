@@ -17,6 +17,8 @@
 set -euo pipefail
 # shellcheck source=scripts/checks/lib/slice0_common.sh
 source scripts/checks/lib/slice0_common.sh
+# shellcheck source=scripts/checks/lib/has_match.sh
+source scripts/checks/lib/has_match.sh
 
 fail=0
 count=0
@@ -57,7 +59,7 @@ manifest_control() { # manifest_control LABEL EXPECTED-MESSAGE MUTATION-FUNCTION
   fi
   CONCRETE_TEST_MANIFEST="$copy" CONCRETE_TEST_MANIFEST_SKIP_CONTROLS=1 CONCRETE_TEST_EMIT_ONLY=1 \
     bash "$root/scripts/checks/compiler/tests.sh" >"$work/ctl/$label.log" 2>&1 || rc=$?
-  if [ "$rc" -ne 0 ] && grep -qF "$expected" "$work/ctl/$label.log"; then
+  if [ "$rc" -ne 0 ] && has_match -F "$expected" <"$work/ctl/$label.log"; then
     echo "ok   manifest control $label: refused for the planted reason"
   else
     echo "FAIL manifest control $label: not refused as '$expected'" >&2
