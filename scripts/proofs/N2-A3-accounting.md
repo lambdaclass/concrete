@@ -313,3 +313,108 @@ snapshot; standalone helper probes capture the current context themselves. The
 same-ID mutation controls and all scheduler/budget controls still pass. This
 removes repeated key construction while preserving complete keys and the existing
 proof-state work charges.
+
+## Fix-round-2 final record
+
+Forward implementation commits: `cb46908dc` (completed negative closures),
+`da10c9150` (provenance pruning, declaration-query memoization and inline contract
+control), `031b5cbf4` (alpha-canonical refutation memoization), `14b33ee83`
+(complete raw declaration keys and same-ID replacement control), and
+`ecc9c5509976aed317459314614b20188969dd8d` (one immutable snapshot per proof node).
+Final consumer blob: `2cea36f37ddd3eeb38b1b68c6a8ac113cada5558`.
+
+The implementation was committed as focused checks passed, with no history
+rewrite, push, review-tool invocation, spec edit, ROADMAP edit or ID allocation.
+Both the original refutation procedures and `certificateDependency` through
+`end Discharge` are byte-identical to `e692fa8e9`. The writer's final validation
+uses exactly the consumer bytes in `ecc9c5509`, including commands started just
+before that metadata-only commit.
+
+[Raw named analysis records](audits/N2-A3-round2-measurements.txt) distinguish
+intermediate checkpoints from the final complete-key implementation. Each wall
+measurement is one cold local analysis, excludes module elaboration, and is not a
+repeatable throughput guarantee on this shared host. Baseline and final runs
+retain the spec worker's Grant/Own imports and use the same archived source.
+
+The final cold per-analysis measurements are below. `HB` denotes user
+heartbeats, not the raw profiler units; wall is analysis-only seconds. Every row
+still labeled INCOMPLETE is an unavailable verdict.
+
+| Instance (historical file:line) | baseline HB / work / seconds | final HB / work / seconds | final result |
+| --- | --- | --- | --- |
+| Grant:1478, acquire_bounded | 1,029,916 / 20,000 / 34.054 | 706,499 / 20,000 / 23.486 | INCOMPLETE false-discharge-budget |
+| Own:4381, runFrom_erasure_of_accepted | 2,000,001 / 13,546 / 72.574 | 2,000,000 / 15,540 / 70.240 | INCOMPLETE heartbeats |
+| Own:4394, run_stuck_iff_of_accepted | 2,000,001 / 13,546 / 74.275 | 2,000,005 / 15,540 / 69.834 | INCOMPLETE heartbeats |
+| Own:4369, step_stuck_iff_of_accepted | 2,000,019 / 14,591 / 88.126 | 2,000,015 / 16,483 / 71.372 | INCOMPLETE heartbeats |
+
+The small heartbeat overshoots are the existing runtime exception/check
+observations, not larger configured allowances. Grant's heartbeat cost falls by
+about 31%; the Own cases make more proof-state progress before the same heartbeat
+cap, but **do not complete**. Earlier checkpoint records with less-complete front
+keys have better intermediate cost numbers; they are not the final measurements
+and are deliberately retained as such in the raw record.
+
+The two retained historical failures were checked individually at checkpoint
+`031b5cbf4`: Own line 4918 emits exactly `FAIL instance-application` for
+`ConcreteSpec.Core.Own.evalArgs_ok_erasure`, and line 4931 does the same for
+`ConcreteSpec.Core.Own.evalArgs_trap_erasure`; both have the initial-case key.
+Together with the three completed erasure instances and their exact smart-unfolding
+mutations, this accounts for all five historical application findings without
+claiming a scope census.
+
+### Focused checks and their revision
+
+All commands ran in `nix develop` under the repository's bounded runner. The
+[control transcript](audits/N2-A3-round2-controls.txt) retains every named result.
+
+| check | result and revision |
+| --- | --- |
+| `vacuity_budget.py` | final `ecc9c5509` bytes: 13 scheduler/budget controls, 2 DAG probes, 2 dependency probes (each also validates the inline witness/rejection), 3 refutation probes; all PASS |
+| `vacuity_round5.py controls` | final `ecc9c5509`: 32 PASS, 0 FAIL; embedded certificate probes 5 PASS, 0 FAIL |
+| `vacuity_reporting.py` | checkpoint `031b5cbf4`: retry/torn-journal and planted wall recovery, five exact injected errors, capped/uncapped name classification, repeated findings, 13 budgets, three selected consumers, exact replay rejection; all PASS |
+| `vacuity_controls.py` via `vacuity_driver.py --controls` | checkpoint `031b5cbf4`: 127 PASS, 0 FAIL; standalone reporting record listed separately |
+| `vacuity_certificates.py` | checkpoint `031b5cbf4`: 5 PASS, 0 FAIL; final round-5 run repeats all five |
+| `vacuity_inline_match.py` | checkpoint `031b5cbf4`: 2 PASS, 0 FAIL; final budget probes also exercise the inline-contract shape |
+| `vacuity_fixtures.py` | 10 exact historical provenance excerpts PASS; no historical-scope replay |
+
+The complete-key/snapshot delta after `031b5cbf4` is covered by the final budget
+and round-5/certificate runs, including both exact context-erasure mutations.
+The 127-control and standalone reporting runs are recorded against their actual
+checkpoint rather than being relabeled as final-revision runs. No test watchdog
+expiry is counted as a PASS. Analysis-budget INCOMPLETEs in the profile transcript
+are measurements, not successful control audits.
+
+### Exact coordinator command on concrete-ci-2
+
+Run in the coordinator's clone at the final reported branch commit after the
+coordinator pushes it. This prints the exact runtime SHA and checks the audited
+consumer blob. The 960s infrastructure bound includes `nix develop`; the 900s bound encloses
+the in-shell command. The actual driver still uses its unchanged default 120/240s watchdog and default allowances.
+The pinned source object must be present, as for N14/N14d.
+
+```bash
+bash scripts/checks/lib/bounded.sh 960 nix develop --command \
+  bash scripts/checks/lib/bounded.sh 900 bash -c '
+    set -euo pipefail
+    git rev-parse HEAD
+    test "$(git rev-parse HEAD:scripts/proofs/vacuity.lean)" = 2cea36f37ddd3eeb38b1b68c6a8ac113cada5558
+    scratch=$(mktemp -d)
+    trap '\''rm -rf "$scratch"'\'' EXIT
+    git archive --format=tar 6efdce6136752d51fc74265d61278d90937f24cd > "$scratch/source.tar"
+    mkdir "$scratch/source"
+    tar -xf "$scratch/source.tar" -C "$scratch/source"
+    set +e
+    python3 scripts/proofs/vacuity_driver.py --source "$scratch/source" --scope ConcreteSpec.Proofs.Grant,ConcreteSpec.Proofs.Own
+    rc=$?
+    printf "N2 CI2 EXIT %s\n" "$rc"
+    exit "$rc"
+  '
+```
+
+Save the full stdout and rc. Report N/attempted/unrun/completed/incomplete,
+FAIL classes, INCOMPLETE reasons, all five historical application identities and
+the three population equations. No wide-watchdog diagnostic may replace this
+qualifying gate result. The whole-scope result remains pending the coordinator;
+remaining wall-policy and search/budget questions remain pending owner.
+
+Coordinator reviewers must do the best long-term thing rather than cut corners.

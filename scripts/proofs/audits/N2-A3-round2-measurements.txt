@@ -1,0 +1,202 @@
+N2 amendment-3 fix-round-2 bounded single-Instance measurements
+Initial checkpoint: 031b5cbf46e0bcd4ee955d72e44ea7a2f08cc7cb
+Final implementation: ecc9c5509976aed317459314614b20188969dd8d
+Consumer blob: 2499effa710dca8b52a4043da72423d060335663
+Baseline consumer: e692fa8e9; archived source: 6efdce6136752d51fc74265d61278d90937f24cd
+No whole-scope audit was run. Every profile is a named bounded analysis.
+Before/after terminal measurements use the same Grant/Own import environment.
+Instrumented profiles are explicitly labeled; probe heartbeats are not gate results.
+
+=== Initial work-call profile (instrumented; attempted 20,001st charge included) ===
+N2 WALL audit-seconds=60 retry-seconds=120 elapsed-seconds=1.247
+SIZES constants=4865 modules=657 mentions=7 mutations=31
+CHARGES [(moduleDepends, 8452), (mayMention, 1616), (mutate, 52), (workConstants, 9398), (mentionsVisit, 475), (mentions, 8)]
+PROFILE elapsed-ms=254
+INCOMPLETE analysis-budget-or-error ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4258» stage=instance law=ConcreteSpec.Core.Own.Step_erasure case=ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig reason=work-budget heartbeats=4228/2000000 work=20000/20000 projection=0/4096
+DETAIL analysis-error ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4258» stage=instance law=ConcreteSpec.Core.Own.Step_erasure case=ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig work-budget
+NOTE analysis-result ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4258» stage=instance law=ConcreteSpec.Core.Own.Step_erasure case=ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig result=INCOMPLETE heartbeats=4229/2000000 work=20000/20000 projection=0/4096
+
+
+=== Baseline Own 4381 Meta-call timings (instrumented) ===
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=73.897
+TIMES [(isProof, (29620, 335850)), (refutableType, (48868, 149931121)), (whnfApplied, (2903, 2012365)), (whnf, (13546, 3035781)), (inferType, (43166, 698624)), (context, (3425, 1840724607))]
+SIZES constants=0 modules=0 mentions=0 mutations=0
+CHARGES [(falseDischarge, 13546)]
+PROFILE elapsed-ms=71320
+INCOMPLETE analysis-budget-or-error ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4381» stage=instance law=ConcreteSpec.Core.Own.runFrom_erasure_of_accepted case=ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuckConfig reason=heartbeats heartbeats=2000016/2000000 work=13546/20000 projection=0/4096
+DETAIL analysis-error ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4381» stage=instance law=ConcreteSpec.Core.Own.runFrom_erasure_of_accepted case=ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuckConfig (deterministic) timeout at `whnf`, maximum number of heartbeats (2000000) has been reached
+
+Note: Use `set_option maxHeartbeats <num>` to set the limit.(invalid MessageData.lazy, missing context)
+NOTE analysis-result ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4381» stage=instance law=ConcreteSpec.Core.Own.runFrom_erasure_of_accepted case=ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuckConfig result=INCOMPLETE heartbeats=2000017/2000000 work=13546/20000 projection=0/4096
+
+
+=== Baseline Grant 1478 (production, cold) ===
+PROFILE one-instance suffix=Grant.lean:1478» instrumentation=False
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=36.043
+PROFILE elapsed-ms=34054
+INCOMPLETE analysis-budget-or-error ConcreteSpec.Core.Grants.GrantWitnesses.«⟪example⟫ConcreteSpec/Proofs/Grant.lean:1478» stage=instance law=ConcreteSpec.Core.Grants.acquire_bounded case=ConcreteSpec.Core.Grants.Examples.initial reason=false-discharge-budget heartbeats=1029916/2000000 work=20000/20000 projection=0/4096
+DETAIL analysis-error ConcreteSpec.Core.Grants.GrantWitnesses.«⟪example⟫ConcreteSpec/Proofs/Grant.lean:1478» stage=instance law=ConcreteSpec.Core.Grants.acquire_bounded case=ConcreteSpec.Core.Grants.Examples.initial false-discharge-budget
+NOTE analysis-result ConcreteSpec.Core.Grants.GrantWitnesses.«⟪example⟫ConcreteSpec/Proofs/Grant.lean:1478» stage=instance law=ConcreteSpec.Core.Grants.acquire_bounded case=ConcreteSpec.Core.Grants.Examples.initial result=INCOMPLETE heartbeats=1029916/2000000 work=20000/20000 projection=0/4096
+
+=== Repaired Grant 1478 (production, cold) ===
+PROFILE one-instance suffix=Grant.lean:1478» instrumentation=False
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=22.174
+PROFILE elapsed-ms=20605
+INCOMPLETE analysis-budget-or-error ConcreteSpec.Core.Grants.GrantWitnesses.«⟪example⟫ConcreteSpec/Proofs/Grant.lean:1478» stage=instance law=ConcreteSpec.Core.Grants.acquire_bounded case=ConcreteSpec.Core.Grants.Examples.initial reason=false-discharge-budget heartbeats=597265/2000000 work=20000/20000 projection=0/4096
+DETAIL analysis-error ConcreteSpec.Core.Grants.GrantWitnesses.«⟪example⟫ConcreteSpec/Proofs/Grant.lean:1478» stage=instance law=ConcreteSpec.Core.Grants.acquire_bounded case=ConcreteSpec.Core.Grants.Examples.initial false-discharge-budget
+NOTE analysis-result ConcreteSpec.Core.Grants.GrantWitnesses.«⟪example⟫ConcreteSpec/Proofs/Grant.lean:1478» stage=instance law=ConcreteSpec.Core.Grants.acquire_bounded case=ConcreteSpec.Core.Grants.Examples.initial result=INCOMPLETE heartbeats=597265/2000000 work=20000/20000 projection=0/4096
+
+=== Repaired Own 4381 (production, cold) ===
+PROFILE one-instance suffix=Own.lean:4381» instrumentation=False
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=67.319
+PROFILE elapsed-ms=64695
+INCOMPLETE analysis-budget-or-error ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4381» stage=instance law=ConcreteSpec.Core.Own.runFrom_erasure_of_accepted case=ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuckConfig reason=heartbeats heartbeats=2000000/2000000 work=16811/20000 projection=0/4096
+DETAIL analysis-error ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4381» stage=instance law=ConcreteSpec.Core.Own.runFrom_erasure_of_accepted case=ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuckConfig (deterministic) timeout at `whnf`, maximum number of heartbeats (2000000) has been reached
+
+Note: Use `set_option maxHeartbeats <num>` to set the limit.(invalid MessageData.lazy, missing context)
+NOTE analysis-result ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4381» stage=instance law=ConcreteSpec.Core.Own.runFrom_erasure_of_accepted case=ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuckConfig result=INCOMPLETE heartbeats=2000000/2000000 work=16811/20000 projection=0/4096
+
+=== Baseline Own 4394 (production, cold) ===
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=76.881
+PROFILE elapsed-ms=74275
+INCOMPLETE analysis-budget-or-error ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4394» stage=instance law=ConcreteSpec.Core.Own.run_stuck_iff_of_accepted case=ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuckConfig reason=heartbeats heartbeats=2000001/2000000 work=13546/20000 projection=0/4096
+DETAIL analysis-error ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4394» stage=instance law=ConcreteSpec.Core.Own.run_stuck_iff_of_accepted case=ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuckConfig (deterministic) timeout at `whnf`, maximum number of heartbeats (2000000) has been reached
+
+Note: Use `set_option maxHeartbeats <num>` to set the limit.(invalid MessageData.lazy, missing context)
+NOTE analysis-result ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4394» stage=instance law=ConcreteSpec.Core.Own.run_stuck_iff_of_accepted case=ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuckConfig result=INCOMPLETE heartbeats=2000002/2000000 work=13546/20000 projection=0/4096
+
+
+=== Repaired Own 4394 (production, cold) ===
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=74.950
+PROFILE elapsed-ms=72228
+INCOMPLETE analysis-budget-or-error ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4394» stage=instance law=ConcreteSpec.Core.Own.run_stuck_iff_of_accepted case=ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuckConfig reason=heartbeats heartbeats=2000000/2000000 work=16811/20000 projection=0/4096
+DETAIL analysis-error ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4394» stage=instance law=ConcreteSpec.Core.Own.run_stuck_iff_of_accepted case=ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuckConfig (deterministic) timeout at `whnf`, maximum number of heartbeats (2000000) has been reached
+
+Note: Use `set_option maxHeartbeats <num>` to set the limit.(invalid MessageData.lazy, missing context)
+NOTE analysis-result ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4394» stage=instance law=ConcreteSpec.Core.Own.run_stuck_iff_of_accepted case=ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuckConfig result=INCOMPLETE heartbeats=2000000/2000000 work=16811/20000 projection=0/4096
+
+
+=== Three repaired historical Instances (production) ===
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=2.297
+PROFILE elapsed-ms=247
+NOTE analysis-result ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4237» stage=instance law=ConcreteSpec.Core.Own.step_request_erasure case=ConcreteSpec.Core.Own.ExecErasureWitnesses.primOneConfig result=PASS heartbeats=4272/2000000 work=19312/20000 projection=0/4096
+PROFILE elapsed-ms=249
+NOTE analysis-result ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4224» stage=instance law=ConcreteSpec.Core.Own.step_next_erasure case=ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig result=PASS heartbeats=4245/2000000 work=18822/20000 projection=0/4096
+PROFILE elapsed-ms=237
+NOTE analysis-result ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4258» stage=instance law=ConcreteSpec.Core.Own.Step_erasure case=ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig result=PASS heartbeats=4265/2000000 work=19136/20000 projection=0/4096
+
+
+=== Same three Instances, only smart unfolding restored (private mutation) ===
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=2.346
+PROFILE elapsed-ms=251
+FAIL instance-application ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4237» law=ConcreteSpec.Core.Own.step_request_erasure case=ConcreteSpec.Core.Own.ExecErasureWitnesses.primOneConfig
+NOTE analysis-result ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4237» stage=instance law=ConcreteSpec.Core.Own.step_request_erasure case=ConcreteSpec.Core.Own.ExecErasureWitnesses.primOneConfig result=FAIL heartbeats=4274/2000000 work=19312/20000 projection=0/4096
+PROFILE elapsed-ms=250
+FAIL instance-application ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4224» law=ConcreteSpec.Core.Own.step_next_erasure case=ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig
+NOTE analysis-result ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4224» stage=instance law=ConcreteSpec.Core.Own.step_next_erasure case=ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig result=FAIL heartbeats=4247/2000000 work=18822/20000 projection=0/4096
+PROFILE elapsed-ms=248
+FAIL instance-application ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4258» law=ConcreteSpec.Core.Own.Step_erasure case=ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig
+NOTE analysis-result ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4258» stage=instance law=ConcreteSpec.Core.Own.Step_erasure case=ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig result=FAIL heartbeats=4267/2000000 work=19136/20000 projection=0/4096
+
+
+=== Completed Own 4258 work-call profile (instrumented) ===
+PROFILE one-instance suffix=Own.lean:4258» instrumentation=True
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=1.299
+PROFILE charges=[(moduleDepends, 7068), (mayMention, 355), (mutate, 170), (workConstants, 10819), (withProtected, 342), (mentionsVisit, 156), (mentions, 226)]
+PROFILE times-raw-heartbeats=[]
+PROFILE elapsed-ms=257
+NOTE analysis-result ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4258» stage=instance law=ConcreteSpec.Core.Own.Step_erasure case=ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig result=PASS heartbeats=4275/2000000 work=19136/20000 projection=0/4096
+
+=== Baseline Own 4381 (production, cold; exact Grant/Own imports) ===
+PROFILE one-instance suffix=Own.lean:4381» instrumentation=False
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=75.324
+PROFILE elapsed-ms=72574
+INCOMPLETE analysis-budget-or-error ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4381» stage=instance law=ConcreteSpec.Core.Own.runFrom_erasure_of_accepted case=ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuckConfig reason=heartbeats heartbeats=2000001/2000000 work=13546/20000 projection=0/4096
+DETAIL analysis-error ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4381» stage=instance law=ConcreteSpec.Core.Own.runFrom_erasure_of_accepted case=ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuckConfig (deterministic) timeout at `whnf`, maximum number of heartbeats (2000000) has been reached
+
+Note: Use `set_option maxHeartbeats <num>` to set the limit.(invalid MessageData.lazy, missing context)
+NOTE analysis-result ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4381» stage=instance law=ConcreteSpec.Core.Own.runFrom_erasure_of_accepted case=ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuckConfig result=INCOMPLETE heartbeats=2000002/2000000 work=13546/20000 projection=0/4096
+
+=== Checkpoint 031b5cbf4: retained historical application failures ===
+PROFILE one-instance suffix=Own.lean:4918» instrumentation=False
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=1.248
+PROFILE elapsed-ms=242
+FAIL instance-application ConcreteSpec.Core.Own.ArgumentEvidence.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4918» law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=ConcreteSpec.Core.Own.Examples.initial
+NOTE analysis-result ConcreteSpec.Core.Own.ArgumentEvidence.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4918» stage=instance law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=ConcreteSpec.Core.Own.Examples.initial result=FAIL heartbeats=4274/2000000 work=12312/20000 projection=0/4096
+
+PROFILE one-instance suffix=Own.lean:4931» instrumentation=False
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=1.248
+PROFILE elapsed-ms=242
+FAIL instance-application ConcreteSpec.Core.Own.ArgumentEvidence.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4931» law=ConcreteSpec.Core.Own.evalArgs_trap_erasure case=ConcreteSpec.Core.Own.Examples.initial
+NOTE analysis-result ConcreteSpec.Core.Own.ArgumentEvidence.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4931» stage=instance law=ConcreteSpec.Core.Own.evalArgs_trap_erasure case=ConcreteSpec.Core.Own.Examples.initial result=FAIL heartbeats=4258/2000000 work=11836/20000 projection=0/4096
+
+
+=== Checkpoint 031b5cbf4: Own 4369 before/after ===
+PROFILE one-instance suffix=Own.lean:4369» instrumentation=False
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=91.117
+PROFILE elapsed-ms=88126
+INCOMPLETE analysis-budget-or-error ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4369» stage=instance law=ConcreteSpec.Core.Own.step_stuck_iff_of_accepted case=ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig reason=heartbeats heartbeats=2000019/2000000 work=14591/20000 projection=0/4096
+DETAIL analysis-error ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4369» stage=instance law=ConcreteSpec.Core.Own.step_stuck_iff_of_accepted case=ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig (deterministic) timeout at `whnf`, maximum number of heartbeats (2000000) has been reached
+
+Note: Use `set_option maxHeartbeats <num>` to set the limit.(invalid MessageData.lazy, missing context)
+NOTE analysis-result ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4369» stage=instance law=ConcreteSpec.Core.Own.step_stuck_iff_of_accepted case=ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig result=INCOMPLETE heartbeats=2000020/2000000 work=14591/20000 projection=0/4096
+
+PROFILE one-instance suffix=Own.lean:4369» instrumentation=False
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=91.752
+PROFILE elapsed-ms=88740
+INCOMPLETE analysis-budget-or-error ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4369» stage=instance law=ConcreteSpec.Core.Own.step_stuck_iff_of_accepted case=ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig reason=heartbeats heartbeats=2000020/2000000 work=17485/20000 projection=0/4096
+DETAIL analysis-error ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4369» stage=instance law=ConcreteSpec.Core.Own.step_stuck_iff_of_accepted case=ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig (deterministic) timeout at `whnf`, maximum number of heartbeats (2000000) has been reached
+
+Note: Use `set_option maxHeartbeats <num>` to set the limit.(invalid MessageData.lazy, missing context)
+NOTE analysis-result ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4369» stage=instance law=ConcreteSpec.Core.Own.step_stuck_iff_of_accepted case=ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig result=INCOMPLETE heartbeats=2000020/2000000 work=17485/20000 projection=0/4096
+
+
+=== Final source checkpoint ecc9c5509976aed317459314614b20188969dd8d ===
+Consumer blob: 2cea36f37ddd3eeb38b1b68c6a8ac113cada5558
+Complete declaration snapshots, explicit let transparency, once-per-node snapshot capture.
+
+=== Final Grant 1478 (production, cold) ===
+PROFILE one-instance suffix=Grant.lean:1478» instrumentation=False
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=25.071
+PROFILE elapsed-ms=23486
+INCOMPLETE analysis-budget-or-error ConcreteSpec.Core.Grants.GrantWitnesses.«⟪example⟫ConcreteSpec/Proofs/Grant.lean:1478» stage=instance law=ConcreteSpec.Core.Grants.acquire_bounded case=ConcreteSpec.Core.Grants.Examples.initial reason=false-discharge-budget heartbeats=706499/2000000 work=20000/20000 projection=0/4096
+DETAIL analysis-error ConcreteSpec.Core.Grants.GrantWitnesses.«⟪example⟫ConcreteSpec/Proofs/Grant.lean:1478» stage=instance law=ConcreteSpec.Core.Grants.acquire_bounded case=ConcreteSpec.Core.Grants.Examples.initial false-discharge-budget
+NOTE analysis-result ConcreteSpec.Core.Grants.GrantWitnesses.«⟪example⟫ConcreteSpec/Proofs/Grant.lean:1478» stage=instance law=ConcreteSpec.Core.Grants.acquire_bounded case=ConcreteSpec.Core.Grants.Examples.initial result=INCOMPLETE heartbeats=706499/2000000 work=20000/20000 projection=0/4096
+
+=== Final Own 4381 (production, cold) ===
+PROFILE one-instance suffix=Own.lean:4381» instrumentation=False
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=72.695
+PROFILE elapsed-ms=70240
+INCOMPLETE analysis-budget-or-error ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4381» stage=instance law=ConcreteSpec.Core.Own.runFrom_erasure_of_accepted case=ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuckConfig reason=heartbeats heartbeats=2000000/2000000 work=15540/20000 projection=0/4096
+DETAIL analysis-error ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4381» stage=instance law=ConcreteSpec.Core.Own.runFrom_erasure_of_accepted case=ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuckConfig (deterministic) timeout at `whnf`, maximum number of heartbeats (2000000) has been reached
+
+Note: Use `set_option maxHeartbeats <num>` to set the limit.(invalid MessageData.lazy, missing context)
+NOTE analysis-result ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4381» stage=instance law=ConcreteSpec.Core.Own.runFrom_erasure_of_accepted case=ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuckConfig result=INCOMPLETE heartbeats=2000000/2000000 work=15540/20000 projection=0/4096
+
+=== Final Own 4394 (production, cold) ===
+PROFILE one-instance suffix=Own.lean:4394» instrumentation=False
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=72.277
+PROFILE elapsed-ms=69834
+INCOMPLETE analysis-budget-or-error ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4394» stage=instance law=ConcreteSpec.Core.Own.run_stuck_iff_of_accepted case=ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuckConfig reason=heartbeats heartbeats=2000004/2000000 work=15540/20000 projection=0/4096
+DETAIL analysis-error ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4394» stage=instance law=ConcreteSpec.Core.Own.run_stuck_iff_of_accepted case=ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuckConfig (deterministic) timeout at `whnf`, maximum number of heartbeats (2000000) has been reached
+
+Note: Use `set_option maxHeartbeats <num>` to set the limit.(invalid MessageData.lazy, missing context)
+NOTE analysis-result ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4394» stage=instance law=ConcreteSpec.Core.Own.run_stuck_iff_of_accepted case=ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuckConfig result=INCOMPLETE heartbeats=2000005/2000000 work=15540/20000 projection=0/4096
+
+=== Final Own 4369 (production, cold) ===
+PROFILE one-instance suffix=Own.lean:4369» instrumentation=False
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=74.189
+PROFILE elapsed-ms=71372
+INCOMPLETE analysis-budget-or-error ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4369» stage=instance law=ConcreteSpec.Core.Own.step_stuck_iff_of_accepted case=ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig reason=heartbeats heartbeats=2000015/2000000 work=16483/20000 projection=0/4096
+DETAIL analysis-error ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4369» stage=instance law=ConcreteSpec.Core.Own.step_stuck_iff_of_accepted case=ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig (deterministic) timeout at `whnf`, maximum number of heartbeats (2000000) has been reached
+
+Note: Use `set_option maxHeartbeats <num>` to set the limit.(invalid MessageData.lazy, missing context)
+NOTE analysis-result ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4369» stage=instance law=ConcreteSpec.Core.Own.step_stuck_iff_of_accepted case=ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig result=INCOMPLETE heartbeats=2000015/2000000 work=16483/20000 projection=0/4096
+
+=== Final Own 4258 work-call profile (instrumented; exact Grant/Own imports) ===
+PROFILE one-instance suffix=Own.lean:4258» instrumentation=True
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=1.244
+PROFILE charges=[(moduleDepends, 7068), (mayMention, 355), (mutate, 170), (workConstants, 10819), (withProtected, 342), (mentionsVisit, 156), (mentions, 226)]
+PROFILE times-raw-heartbeats=[]
+PROFILE elapsed-ms=256
+NOTE analysis-result ConcreteSpec.Core.Own.ExecErasureWitnesses.«⟪example⟫ConcreteSpec/Proofs/Own.lean:4258» stage=instance law=ConcreteSpec.Core.Own.Step_erasure case=ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMoveConfig result=PASS heartbeats=4287/2000000 work=19136/20000 projection=0/4096

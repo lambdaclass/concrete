@@ -568,3 +568,10 @@ refutation queries. Standalone probes capture their own current snapshot. This
 shares key construction without omitting metadata or reusing a snapshot across
 a binder-context change. All original proof-state visits and analysis budgets
 remain unchanged.
+
+Final commit-bound measurements, exact named control records and the unchanged-
+watchdog ci-2 command are in [the fix-round-2 record](N2-A3-accounting.md#fix-round-2-final-record).
+The retained complete-key implementation reduces Grant line 1478 from 1,029,916
+to 706,499 heartbeats, while still reporting work-budget INCOMPLETE; all three
+profiled largest Own analyses still exhaust heartbeats. Those limits remain open
+owner questions, rather than successful gate results.

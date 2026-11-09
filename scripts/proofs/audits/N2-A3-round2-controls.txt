@@ -1,0 +1,282 @@
+N2 A3 round-2 focused control records
+Final consumer ecc9c5509976aed317459314614b20188969dd8d, blob 2cea36f37ddd3eeb38b1b68c6a8ac113cada5558.
+Earlier wide controls use checkpoint 031b5cbf46e0bcd4ee955d72e44ea7a2f08cc7cb, blob 2499effa710dca8b52a4043da72423d060335663.
+All outer test commands completed with rc=0. Planted failures below are required observations, not passing audits.
+
+=== FINAL budget/DAG/dependency/refutation probes (20 named probes) ===
+PASS DAG memoized: DAG depth=10 work=41 cached=22 root=true
+DAG depth=15 work=61 cached=32 root=true
+PASS DAG early-exit: DAG depth=10 work=4093 cached=2 root=false
+CONTROL dag-root-not-cached
+CONTROL work-budget
+PASS dependency memoized: /tmp/nix-shell.Z2yYZV/n2-dependencies-d2d883i5/Dependencies.lean:111:0: warning: Definition `witness` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.Z2yYZV/n2-dependencies-d2d883i5/Dependencies.lean:114:0: warning: Definition `changed` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+DEPENDENCIES complete work=2330
+NOTE analysis-result DependencyControls.witness stage=instance law=DependencyControls.law case=inline result=PASS heartbeats=778/2000000 work=1110/20000 projection=0/4096
+FAIL instance-application DependencyControls.changed law=DependencyControls.law case=inline
+NOTE analysis-result DependencyControls.changed stage=instance law=DependencyControls.law case=inline result=FAIL heartbeats=781/2000000 work=1146/20000 projection=0/4096
+PASS dependency uncached: /tmp/nix-shell.Z2yYZV/n2-dependencies-jd4qligz/Dependencies.lean:111:0: warning: Definition `witness` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.Z2yYZV/n2-dependencies-jd4qligz/Dependencies.lean:114:0: warning: Definition `changed` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+CONTROL work-budget work=20000
+NOTE analysis-result DependencyControls.witness stage=instance law=DependencyControls.law case=inline result=PASS heartbeats=764/2000000 work=1002/20000 projection=0/4096
+FAIL instance-application DependencyControls.changed law=DependencyControls.law case=inline
+NOTE analysis-result DependencyControls.changed stage=instance law=DependencyControls.law case=inline result=FAIL heartbeats=768/2000000 work=1038/20000 projection=0/4096
+PASS refutation memoized: CONTEXT SEARCH
+CONTEXT SEARCH
+CONTEXT SEARCH
+CONTEXT SEARCH
+CONTEXT CACHE complete shared=1 distinct=2 mutable=uncached
+PASS refutation context-erased: CONTEXT SEARCH
+CONTROL context-cache-crossed-context
+PASS refutation raw-type-erased: CONTEXT SEARCH
+CONTEXT SEARCH
+CONTEXT SEARCH
+CONTROL raw-context-cache-crossed-type
+PASS budget heavy-alone
+PASS budget bad-alone
+PASS budget repeated-instance-finding
+PASS budget starvation
+PASS budget reverse
+PASS budget heartbeat-starvation
+PASS budget cap-baseline
+PASS budget cap-population
+PASS budget cap-zero
+PASS budget empty
+PASS budget nested-reset-mentions
+PASS budget nested-reset-mutate
+PASS budget nested-reset-withProtected
+Budget controls: 13 PASS, 0 FAIL
+
+=== FINAL round-5 discharge and certificate controls ===
+PASS control joint-branch-decide-repro
+PASS control false-discharge
+PASS control absurd-discharge
+PASS control nomatch-discharge
+PASS control helper-false
+PASS control false-cases
+PASS control empty-elimination
+PASS control pempty-elimination
+PASS control helper-nomatch
+PASS control decide-hypothesis-positive
+PASS control nested-decide-discharge-1
+PASS control nested-decide-discharge-4
+PASS control nested-decide-discharge-12
+PASS control hypothetical-false-positive
+PASS control hypothetical-empty-positive
+PASS control hypothetical-pempty-positive
+PASS control open-helper-false
+PASS control open-helper-empty
+PASS control open-helper-pempty
+PASS control data-subtype-discharge
+PASS control data-psigma-discharge
+PASS control data-pprod-discharge
+PASS control finite-collection-decide-positive
+PASS control finite-collection-simp-positive
+PASS control finite-collection-cases-positive
+PASS control joint-hypothetical-positive
+PASS control joint-supplied-negative
+PASS control joint-open-supplied-negative
+PASS control reachable-open-impossible-negative
+PASS control reachable-joint-helper-negative
+PASS control unreachable-closed-supplier-positive
+PASS control context-cache-supplied-negative
+N2 selected controls: 32 PASS, 0 FAIL
+REPRO baseline: no context refutation
+REPRO kernel-checked certificate: of_eq_true injectedFalse._simp_1
+REPRO certificate type: False; local assumptions: 0
+REPRO supplied dependency: injectedFalse := impossible
+CERTIFICATE origin: rejected-supplied-contradiction supplier=impossible
+CERTIFICATE non-circular: rejected-supplied-contradiction supplier=impossible
+CERTIFICATE library-decide-matcher: admitted
+CERTIFICATE dependency-chain-baseline: admitted
+CERTIFICATE shared-budget: INCOMPLETE analysis-budget-or-error CertificateControl.instance stage=certificate-dependencies law=CertificateControl.law case=shared-budget false-discharge-budget
+Certificate controls: 5 PASS, 0 FAIL
+
+=== Checkpoint inline-match controls ===
+PASS control inline-match-positive
+PASS control inline-match-changed-branch
+N2 selected controls: 2 PASS, 0 FAIL
+
+=== Checkpoint standalone certificate controls ===
+REPRO baseline: no context refutation
+REPRO kernel-checked certificate: of_eq_true injectedFalse._simp_1
+REPRO certificate type: False; local assumptions: 0
+REPRO supplied dependency: injectedFalse := impossible
+CERTIFICATE origin: rejected-supplied-contradiction supplier=impossible
+CERTIFICATE non-circular: rejected-supplied-contradiction supplier=impossible
+CERTIFICATE library-decide-matcher: admitted
+CERTIFICATE dependency-chain-baseline: admitted
+CERTIFICATE shared-budget: INCOMPLETE analysis-budget-or-error CertificateControl.instance stage=certificate-dependencies law=CertificateControl.law case=shared-budget false-discharge-budget
+Certificate controls: 5 PASS, 0 FAIL
+
+=== Checkpoint standalone reporting controls ===
+PASS reporting retry-journal: earlier completed FAIL survives less-progress retry and torn record
+PASS reporting wall-watchdog: earlier exact FAIL, named interrupted/unrun analyses, population equations
+PASS reporting work-budget: exact named INCOMPLETE and unrelated FAIL retained
+PASS reporting analysis-error: exact named INCOMPLETE and unrelated FAIL retained
+PASS reporting heartbeat: exact named INCOMPLETE and unrelated FAIL retained
+PASS reporting scheduler-error: exact named scheduler INCOMPLETE and no partial population
+PASS reporting planted-error: exact Planted and paired Instance named; unrelated FAIL retained
+PASS reporting classification-unknown cap=None
+PASS reporting classification-unknown cap=100000
+PASS reporting repeated-job-findings
+PASS budget heavy-alone
+PASS budget bad-alone
+PASS budget repeated-instance-finding
+PASS budget starvation
+PASS budget reverse
+PASS budget heartbeat-starvation
+PASS budget cap-baseline
+PASS budget cap-population
+PASS budget cap-zero
+PASS budget empty
+PASS budget nested-reset-mentions
+PASS budget nested-reset-mutate
+PASS budget nested-reset-withProtected
+Budget controls: 13 PASS, 0 FAIL
+PASS control positive
+PASS control false-discharge
+PASS control positive-budget-chain
+N2 selected controls: 3 PASS, 0 FAIL
+PASS reporting replay-validator: exactly FAIL report-incomplete c9-new
+
+=== Historical fixture provenance (no replay) ===
+PASS real fixture provenance: 10 byte-for-byte excerpts
+
+=== Checkpoint 127 consumer controls (CLI reporting tail omitted; standalone reporting above) ===
+PASS control positive
+PASS control inline-match-positive
+PASS control inline-match-changed-branch
+PASS control joint-branch-decide-repro
+PASS control unclassified
+PASS control double
+PASS control unknown
+PASS control partial
+PASS control restated
+PASS control negated-premise
+PASS control fresh-arguments
+PASS control wrong-mutant-type
+PASS control returned-hypothesis
+PASS control applied-hypothesis
+PASS control repacked-witness
+PASS control and-left
+PASS control and-right
+PASS control expr-proj
+PASS control repackaging
+PASS control rfl
+PASS control obligation-theorem
+PASS control obligation-row
+PASS control self-approved
+PASS control authored-generated-suffix
+PASS control generated-provenance
+PASS control hidden-partial
+PASS control false-discharge
+PASS control missing-planted
+PASS control non-law-positive
+PASS control absurd-discharge
+PASS control nomatch-discharge
+PASS control final-carrier-positive
+PASS control literal-self-approval
+PASS control proof-definition-obligation
+PASS control law-definition
+PASS control resolved-name-identity
+PASS control shared-planted-example
+PASS control obtain
+PASS control cases
+PASS control id
+PASS control true-intro
+PASS control unfolded-hypothesis
+PASS control wrapped-rfl
+PASS control helper-false
+PASS control false-cases
+PASS control unclassified-def
+PASS control duplicate-field
+PASS control obligation-format
+PASS control annotated-only
+PASS control inequality-positive
+PASS control negation-positive
+PASS control defeq-mutant
+PASS control positive-budget-chain
+PASS control projection-long-complete
+PASS control projection-long-incomplete
+PASS control missing-close
+PASS control ancestor-namespace
+PASS control private-module-boundary
+PASS control closure-gap
+PASS control wrapper-positive
+PASS control wrapper-fresh-argument
+PASS control wrapper-erased-mutant
+PASS control wrapper-erased-instance
+PASS control vacuous-wrapper-branch
+PASS control empty-elimination
+PASS control pempty-elimination
+PASS control helper-nomatch
+PASS control non-proof-decidable-argument
+PASS control missing-provenance
+PASS control lexical-error
+PASS control scoped-obligation-only
+PASS control open-namespace
+PASS control open-only
+PASS control open-renaming
+PASS control open-hiding
+PASS control open-section-boundary
+PASS control open-in
+PASS control imported-matcher-provenance
+PASS control self-approved-exemption
+PASS control independent-exemption
+PASS control structure-cases
+PASS control partial-negation
+PASS control negation-alias-positive
+PASS control helper-reason-anchor
+PASS control approval-missing-close
+PASS control ambiguous-open
+PASS control nested-open-in
+PASS control unclassified-opaque
+PASS control opaque-helper-positive
+PASS control forged-example-provenance
+PASS control example-marker-literals-positive
+PASS control dependent-mutant-positive
+PASS control dependent-mutant-fresh-argument
+PASS control dependent-mutant-erased-boundary
+PASS control rooted-name-no-local-fallback
+PASS control rooted-name-positive
+PASS control forall-alias-full-application
+PASS control decide-hypothesis-positive
+PASS control nested-decide-discharge-1
+PASS control nested-decide-discharge-4
+PASS control nested-decide-discharge-12
+PASS control hypothetical-false-positive
+PASS control hypothetical-empty-positive
+PASS control hypothetical-pempty-positive
+PASS control open-helper-false
+PASS control open-helper-empty
+PASS control open-helper-pempty
+PASS control data-subtype-discharge
+PASS control data-psigma-discharge
+PASS control data-pprod-discharge
+PASS control finite-collection-decide-positive
+PASS control finite-collection-simp-positive
+PASS control finite-collection-cases-positive
+PASS control joint-hypothetical-positive
+PASS control joint-supplied-negative
+PASS control joint-open-supplied-negative
+PASS control reachable-open-impossible-negative
+PASS control reachable-joint-helper-negative
+PASS control unreachable-closed-supplier-positive
+PASS control context-cache-supplied-negative
+PASS control recursive-law-positive
+PASS control namespace-components
+PASS control root-and-open-ambiguous
+PASS control generated-recursor-provenance
+PASS control multiple-subjects-positive
+PASS control sibling-subject-erased
+PASS control partial-paired
+N2 controls: 127 PASS, 0 FAIL
