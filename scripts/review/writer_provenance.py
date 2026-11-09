@@ -108,6 +108,8 @@ import subprocess
 import sys
 import tempfile
 import threading
+from collections import namedtuple
+from types import MappingProxyType
 
 sys.dont_write_bytecode = True
 
@@ -194,12 +196,17 @@ class _VerifiedRepo(str):
 
 def canonical_git_run(repo: str, args: list[str], *, input=None,
                       text: bool = True, env=None, verify: bool = True,
-                      _discover_env: bool = False):
+                      _discover_env: bool = False, _interactive: bool = False):
     # Only discovery and view probes use the unchecked bootstrap path.
     if verify and not isinstance(repo, _VerifiedRepo):
         verify_canonical_repo_view(repo)
+    argv = ["git", "--no-replace-objects", "-c", "core.commitGraph=false", "-C", repo] + args
+    if _interactive:
+        return subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, text=text,
+                                env=canonical_git_env(env, _discover=_discover_env))
     return subprocess.run(
-        ["git", "--no-replace-objects", "-c", "core.commitGraph=false", "-C", repo] + args,
+        argv,
         input=input, capture_output=True, text=text,
         env=canonical_git_env(env, _discover=_discover_env), check=False,
     )
@@ -244,6 +251,140 @@ def git_run(repo: str, args: list[str], check: bool = True, input_text: str | No
         detail = (proc.stderr or proc.stdout or f"exit {proc.returncode}").strip()
         raise ProvenanceError(f"git {' '.join(args)} failed: {detail}")
     return proc
+
+
+class CheckpointSnapshot(namedtuple("_CheckpointSnapshot", "repo refs")):
+    """Complete, immutable ref map accepted at one transaction boundary.
+
+    Construct through capture_checkpoint_snapshot; None explicitly means ABSENT.
+    The fresh capability belongs to this boundary, never to a path-keyed cache.
+    """
+
+    __slots__ = ()
+
+    def __new__(cls, repo: _VerifiedRepo, refs: dict[str, str | None]):
+        return super().__new__(cls, repo, MappingProxyType(dict(refs)))
+
+
+class _CheckpointRace(ProvenanceError):
+    pass
+
+
+def _checkpoint_transaction(snapshot: CheckpointSnapshot,
+                            updates: dict[str, str | None], op: str) -> None:
+    repo = snapshot.repo
+    unknown = updates.keys() - snapshot.refs.keys()
+    if unknown:
+        raise ProvenanceError(f"checkpoint update outside snapshot: {sorted(unknown)[0]}")
+    commands = []
+    for ref, old in snapshot.refs.items():
+        if ref not in updates:
+            commands.append(f"verify {ref} {old or ZERO40}")
+        elif updates[ref] is None:
+            commands.append(f"delete {ref} {old or ZERO40}" if old else
+                            f"verify {ref} {ZERO40}")
+        else:
+            new = updates[ref]
+            if not HEX40_RE.fullmatch(new) or new == ZERO40:
+                raise ProvenanceError(f"invalid checkpoint update SHA for {ref}: {new}")
+            commands.append(f"update {ref} {new} {old or ZERO40}")
+    proc = canonical_git_run(repo, ["update-ref", "--no-deref", "--stdin"],
+                             _interactive=True)
+    try:
+        def exchange(command, expected):
+            proc.stdin.write(command + "\n")
+            proc.stdin.flush()
+            reply = proc.stdout.readline().rstrip("\n")
+            if reply != expected:
+                # Close the protocol before draining stderr: even an unexpected
+                # successful reply must not leave us waiting for a live child.
+                proc.stdin.close()
+                detail = proc.stderr.read().strip()
+                mismatch = (expected == "prepare: ok" and any(
+                    marker in detail for marker in ("but expected", "reference already exists")))
+                error = _CheckpointRace if mismatch else ProvenanceError
+                raise error(
+                    f"concurrent writer-notes ref update detected during {op}: {detail or reply}")
+        exchange("start", "start: ok")
+        exchange("\n".join([*commands, "prepare"]), "prepare: ok")
+        # prepare locks each name as itself, including verify-only and absent
+        # participants. A preflight outside these locks cannot enforce this.
+        for ref, expected in snapshot.refs.items():
+            symbolic = canonical_git_run(repo, ["symbolic-ref", "-q", ref])
+            if symbolic.returncode == 0:
+                raise ProvenanceError(f"symbolic checkpoint ref is forbidden: {ref}")
+            if symbolic.returncode != 1:
+                raise ProvenanceError(f"cannot inspect checkpoint ref: {ref}: {symbolic.stderr.strip()}")
+            actual = canonical_git_run(repo, ["rev-parse", "--verify", "--quiet", ref])
+            if actual.returncode not in (0, 1):
+                raise ProvenanceError(f"cannot read checkpoint ref: {ref}: {actual.stderr.strip()}")
+            value = actual.stdout.strip() if actual.returncode == 0 else None
+            if value != expected:
+                raise _CheckpointRace(
+                    f"checkpoint ref changed under lock: {ref}: expected {expected or 'ABSENT'}, "
+                    f"got {value or 'ABSENT'}")
+        exchange("commit", "commit: ok")
+        proc.stdin.close()
+        if proc.wait() != 0:
+            raise ProvenanceError(f"checkpoint transaction failed during {op}: {proc.stderr.read().strip()}")
+    finally:
+        # Explicitly abort a rejected prepared transaction, then close the
+        # protocol. EOF also aborts if Git has already rejected an operation.
+        if not proc.stdin.closed:
+            try:
+                if proc.poll() is None:
+                    proc.stdin.write("abort\n")
+                    proc.stdin.flush()
+            except BrokenPipeError:
+                pass
+            finally:
+                proc.stdin.close()
+        proc.wait()
+        proc.stdout.close()
+        proc.stderr.close()
+
+
+def cas_update_refs(snapshot: CheckpointSnapshot, updates: dict[str, str | None],
+                    *, op: str = "checkpoint installation") -> None:
+    """Install only against the entire captured map, even for an empty write set."""
+    _checkpoint_transaction(snapshot, updates, op)
+
+
+def capture_checkpoint_snapshot(repo: str, *, target_ref: str | None = None,
+                                old_refs=(), check_refs=()) -> CheckpointSnapshot:
+    """Capture default companions plus all named caller checkpoints; retry races.
+
+    Immutable caller revisions/sentinels are separate inputs to later predicates,
+    not ref names. No caller can subtract a default companion here.
+    """
+    names = tuple(dict.fromkeys([
+        WRITER_NOTES_REF, "refs/notes/concrete-writer",
+        "refs/notes/remote/concrete-writer", *([target_ref] if target_ref else []),
+        *old_refs, *check_refs,
+    ]))
+    while True:
+        boundary = _VerifiedRepo(repo)
+        backend = git_run(boundary, ["rev-parse", "--show-ref-format"]).stdout.strip()
+        if backend not in ("files", "reftable"):
+            raise ProvenanceError(f"unsupported checkpoint ref backend: {backend}")
+        for name in names:
+            if not name.startswith("refs/") or git_run(
+                    boundary, ["check-ref-format", name], check=False).returncode:
+                raise ProvenanceError(f"invalid checkpoint ref name: {name}")
+        rows = git_run(boundary, ["for-each-ref", "--format=%(refname) %(objectname) %(objecttype)"]).stdout
+        enumerated = {}
+        for row in rows.splitlines():
+            name, sha, kind = row.split()
+            if name in names:
+                if kind != "commit" or not HEX40_RE.fullmatch(sha):
+                    raise ProvenanceError(f"checkpoint ref does not name a 40-hex commit: {name}")
+                enumerated[name] = sha
+        snapshot = CheckpointSnapshot(boundary, {n: enumerated.get(n) for n in names})
+        try:
+            _checkpoint_transaction(snapshot, {}, "checkpoint capture")
+            return snapshot
+        except _CheckpointRace:
+            continue
 
 
 def sha256_file(path: str, label: str = "file") -> str:

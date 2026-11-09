@@ -24,6 +24,7 @@ SPLIT="$ROOT_DIR/scripts/review/split_diff.py"
 
 # Canonical object/history view and exhaustive Python Git routing (slice A).
 python3 -B -I "$ROOT_DIR/scripts/review/test_canonical_git.py" || exit 1
+python3 -B -I "$ROOT_DIR/scripts/review/test_checkpoint_snapshot.py" || exit 1
 
 PASS=0
 FAIL=0
