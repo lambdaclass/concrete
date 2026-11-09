@@ -8,6 +8,7 @@ PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `Concret
 
 namespace ConcreteSpec.Cleanup
 
+/-- Helper (inversion). Restrict the dependency-order derivation to the left append segment. (approved: PENDING). -/
 theorem depOrder_append_left : ∀ {l₁ l₂ : List Deferred}, DepOrder (l₁ ++ l₂) → DepOrder l₁
   | [], _, _ => .nil
   | d :: l₁, l₂, h => by
@@ -16,16 +17,20 @@ theorem depOrder_append_left : ∀ {l₁ l₂ : List Deferred}, DepOrder (l₁ +
       exact .cons hs (fun d' hd' => hall d' (List.mem_append_left _ hd'))
         (depOrder_append_left hrest)
 
+/-- Helper (inversion). Restrict the dependency-order derivation to the right append segment. (approved: PENDING). -/
 theorem depOrder_append_right : ∀ {l₁ l₂ : List Deferred}, DepOrder (l₁ ++ l₂) → DepOrder l₂
   | [], _, h => h
   | _ :: l₁, _, h => by cases h with | cons _ _ hrest => exact depOrder_append_right hrest
 
+/-- Representation lemma. The defining flattening equation for a stack frame. (approved: PENDING). -/
 theorem pending_cons (f : Frame) (st : Stack) : pending (f :: st) = f.defers ++ pending st := by
   simp [pending]
 
+/-- Representation lemma. Flattening distributes over stack concatenation. (approved: PENDING). -/
 theorem pending_append (fs st : List Frame) : pending (fs ++ st) = pending fs ++ pending st := by
   simp [pending]
 
+/-- Helper (inversion). Extract the cross-segment dependency constraint from the ordering derivation. (approved: PENDING). -/
 theorem depOrder_cross : ∀ {l₁ l₂ : List Deferred}, DepOrder (l₁ ++ l₂) →
     ∀ x ∈ l₁, ∀ y ∈ l₂, x.target ∉ y.needs
   | [], _, _, x, hx, _, _ => by cases hx
@@ -44,6 +49,7 @@ def RegInv (live : Res → Bool) (st : Stack) : Prop :=
   (∀ d ∈ pending st, live d.target = false) ∧
   (∀ d ∈ pending st, ∀ r ∈ d.needs, live r = true ∨ r ∈ targets (pending st))
 
+/-- Law (subject `ConcreteSpec.Cleanup.Reg`). -/
 theorem reg_inv {live : Res → Bool} {st : Stack} (h : Reg live st) : RegInv live st := by
   induction h with
   | empty => exact ⟨.nil, .nil, by simp [pending], by simp [pending]⟩
@@ -96,6 +102,7 @@ theorem reg_inv {live : Res → Bool} {st : Stack} (h : Reg live st) : RegInv li
           exact absurd hr (depOrder_cross hdo x hx d hd)
         · exact h
 
+/-- Helper (inversion). Decompose a successful recursive unwind into the removed prefix and retained suffix. (approved: PENDING). -/
 theorem unwindTo_prefix {p stop : FrameKind → Bool} :
     ∀ {st : Stack} {fs : List Frame}, unwindTo p stop st = some fs → ∃ rest, st = fs ++ rest
   | [], fs, h => by simp [unwindTo] at h
@@ -113,7 +120,7 @@ theorem unwindTo_prefix {p stop : FrameKind → Bool} :
         obtain ⟨rest, rfl⟩ := unwindTo_prefix hu
         exact ⟨rest, rfl⟩
 
-/-- An exit leaves a prefix of the scopes: the innermost ones. -/
+/-- Helper (inversion). Extract the stack-prefix decomposition from a successful exit unwind. The conclusion contains no mutable operation; it is used to restrict the registration invariant to the exited scopes. (approved: PENDING). An exit leaves a prefix of the scopes: the innermost ones. -/
 theorem unwound_prefix {e : Exit} {st : Stack} {fs : List Frame} (h : unwound e st = some fs) :
     ∃ rest, st = fs ++ rest := by
   cases e with
@@ -126,6 +133,7 @@ theorem unwound_prefix {e : Exit} {st : Stack} {fs : List Frame} (h : unwound e 
   | ret => exact unwindTo_prefix h
   | abort => simp [unwound] at h; subst h; exact ⟨st, rfl⟩
 
+/-- Law (subject `ConcreteSpec.Cleanup.RunCleanup`). -/
 theorem runCleanup_all_ok {ok : Deferred → Bool} :
     ∀ {ds : List Deferred}, (∀ d ∈ ds, ok d = true) →
       ∀ tr r, RunCleanup ok ds tr r ↔ tr = expected ds ∧ r = .done
@@ -147,6 +155,7 @@ theorem runCleanup_all_ok {ok : Deferred → Bool} :
       have := RunCleanup.step (ok := ok) hd ((ih (expected ds) .done).mpr ⟨rfl, rfl⟩)
       simpa [expected] using this
 
+/-- Law (subject `ConcreteSpec.Cleanup.RunCleanup`). -/
 theorem runCleanup_trap {ok : Deferred → Bool} {d : Deferred} {post : List Deferred} :
     ∀ {pre : List Deferred}, (∀ x ∈ pre, ok x = true) → ok d = false →
       ∀ tr r, RunCleanup ok (pre ++ d :: post) tr r ↔ tr = expected pre ++ [.call d] ∧ r = .trapped
@@ -173,7 +182,7 @@ theorem runCleanup_trap {ok : Deferred → Bool} {d : Deferred} {post : List Def
       have := RunCleanup.step (ok := ok) hx ((ih (expected pre ++ [.call d]) .trapped).mpr ⟨rfl, rfl⟩)
       simpa [expected] using this
 
-/-- In a dependency-ordered run list, a call runs before the release of an allocator it depends
+/-- Helper (inversion). Locate the two calls in the order mandated by the dependency-order derivation. (approved: PENDING). In a dependency-ordered run list, a call runs before the release of an allocator it depends
 on. -/
 theorem depOrder_before :
     ∀ {ds : List Deferred}, DepOrder ds → ∀ {d da : Deferred}, d ∈ ds → da ∈ ds →
@@ -204,19 +213,19 @@ theorem depOrder_before :
         obtain ⟨pre, mid, post, hsplit⟩ := depOrder_before hrest hd' hda' hdep
         exact ⟨x :: pre, mid, post, by simp [hsplit]⟩
 
-/-- In a dependency-ordered run list, no call consumes what a later call needs. -/
+/-- Helper (inversion). Extract inequality of an earlier target and a later dependency. (approved: PENDING). In a dependency-ordered run list, no call consumes what a later call needs. -/
 theorem depOrder_needs_unconsumed {pre post : List Deferred} {d : Deferred}
     (h : DepOrder (pre ++ d :: post)) : ∀ r ∈ d.needs, ∀ x ∈ pre, x.target ≠ r := by
   intro r hr x hx he
   subst he
   exact depOrder_cross h x hx d (List.mem_cons_self ..) hr
 
-/-- **`defer_cleanup_releases`** (Q9.14, Q9.8, Q1.5). For every cleanup stack a block can build
-from the resources it owns, and every structured exit (falling through, `break L`, `continue L`,
-`return`), the calls of the scopes the exit leaves:
+/-- Law (subject `ConcreteSpec.Cleanup.Reg`, `ConcreteSpec.Cleanup.RunCleanup`). **defer_cleanup_releases** (Q9.14, Q9.8, Q1.5). For every cleanup stack a block can build
+from the resources it owns, and every structured exit (falling through, break L, continue L,
+return), the calls of the scopes the exit leaves:
 
 1. when every call returns, run exactly in reverse registration order, innermost scope first,
-   each call immediately followed by the release of each loan it held (`expected`);
+   each call immediately followed by the release of each loan it held (expected);
 2. keep the allocator-dependency check: a call runs before the call that consumes anything it
    needs (an allocator it depends on, or a loan's source);
 3. when a call traps, stop there: the earlier calls ran with their loan releases, the trapping
@@ -262,7 +271,15 @@ theorem defer_cleanup_releases {ok : Deferred → Bool} {live : Res → Bool} {s
     rw [hst, pending_append, hsplit]
     exact List.mem_append_left _ (List.mem_append_right _ (List.mem_cons_self ..))
 
-/-- An abort runs no cleanup (Q9.8). -/
+/-- Representation lemma. The defining abort branch unwinds no scopes, whose flattened pending list is empty. (approved: PENDING). An abort runs no cleanup (Q9.8). -/
 theorem abort_no_cleanup (st : Stack) : unwound .abort st = some [] ∧ pending [] = [] := ⟨rfl, rfl⟩
+
+
+namespace Evidence
+
+/-- Instance (law `ConcreteSpec.Cleanup.reg_inv`, case `registeredStack`). -/
+example := reg_inv stack_reg
+
+end Evidence
 
 end ConcreteSpec.Cleanup
