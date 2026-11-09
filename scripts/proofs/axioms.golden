@@ -1447,6 +1447,7 @@ ConcreteSpec.Core.Mem.fromExposed_exists	Quot.sound propext
 ConcreteSpec.Core.Mem.fromExposed_none	Quot.sound propext
 ConcreteSpec.Core.Mem.fromExposed_onePast	Quot.sound propext
 ConcreteSpec.Core.Mem.fromExposed_sound	Quot.sound propext
+ConcreteSpec.Core.Mem.fromExposed_sound_inv	Quot.sound propext
 ConcreteSpec.Core.Mem.instDecidableEqAllocError._proof_1	
 ConcreteSpec.Core.Mem.instDecidableEqBlock.decEq._proof_1	
 ConcreteSpec.Core.Mem.instDecidableEqBlock.decEq._proof_2	
