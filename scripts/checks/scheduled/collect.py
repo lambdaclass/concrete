@@ -90,7 +90,7 @@ def record_for(run, job, selection, payload, artifact, repository, runners, *, c
         record.update(identity, artifact=artifact, started=job["started_at"], completed=job["completed_at"])
         # A worker cannot claim success if Actions did not observe successful execution.
         if job["conclusion"] != "success":
-            record["execution_error"] = "Actions job metadata"
+            record.setdefault("execution_error", "Actions job metadata")
             status = reduce_outcomes([record["status"], "INCOMPLETE"])
             record.update(status=status, conclusion="failure" if status == "FAIL" else "incomplete")
     return validate(record, sha, tier, runners, repository, attempt=identity["attempt"])
