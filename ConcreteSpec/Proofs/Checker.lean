@@ -9,6 +9,7 @@ PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `Concret
 namespace ConcreteSpec
 open Core (AList)
 
+/-- Representation lemma. Reflection between the executable checker and its rule-by-rule judgment; this is a representation equivalence, not an evaluator soundness claim. (approved: PENDING) -/
 theorem atomTy_iff {Γ : TyCtx} {a : Atom} {st : STy} : atomTy Γ a = some st ↔ AtomTy Γ a st := by
   constructor
   · intro h
@@ -36,6 +37,7 @@ theorem atomTy_iff {Γ : TyCtx} {a : Atom} {st : STy} : atomTy Γ a = some st �
     | copy h => simp [atomTy, h]
     | move h => simp [atomTy, h]
 
+/-- Representation lemma. Association-list coverage expressed as a Boolean traversal. (approved: PENDING) -/
 theorem covers_iff {α β : Type} {l : List (Name × α)} {m : List (Name × β)} :
     (∀ f a, AList.lookup l f = some a → ∃ b, AList.lookup m f = some b) ↔
       l.all (fun q => (AList.lookup m q.1).isSome) = true := by
@@ -50,6 +52,7 @@ theorem covers_iff {α β : Type} {l : List (Name × α)} {m : List (Name × β)
     simp only [Option.isSome_iff_exists] at this
     exact this
 
+/-- Representation lemma. Reflection between the executable checker and its rule-by-rule judgment; this is a representation equivalence, not an evaluator soundness claim. (approved: PENDING) -/
 theorem fieldsOkB_iff {Γ : TyCtx} {d : StructDecl} {fs : List (Name × Atom)} :
     fieldsOkB Γ d fs = true ↔ FieldsTy Γ d fs := by
   simp only [fieldsOkB, Bool.and_eq_true, decide_eq_true_eq, ← covers_iff]
@@ -68,6 +71,7 @@ theorem fieldsOkB_iff {Γ : TyCtx} {d : StructDecl} {fs : List (Name × Atom)} :
     obtain ⟨st, hst, ha⟩ := ht p hp
     simp [hst, atomTy_iff.mpr ha]
 
+/-- Representation lemma. Reflection between the executable checker and its rule-by-rule judgment; this is a representation equivalence, not an evaluator soundness claim. (approved: PENDING) -/
 theorem tyOf_iff {Δ : Decls} {Γ : TyCtx} {e : Expr} {ty : Ty} :
     tyOf Δ Γ e = some ty ↔ HasType Δ Γ e ty := by
   cases e with
@@ -123,6 +127,7 @@ theorem tyOf_iff {Δ : Decls} {Γ : TyCtx} {e : Expr} {ty : Ty} :
       cases h with
       | mk hd hf => simp [tyOf, hd, fieldsOkB_iff.mpr hf]
 
+/-- Representation lemma. Reflection between the executable checker and its rule-by-rule judgment; this is a representation equivalence, not an evaluator soundness claim. (approved: PENDING) -/
 theorem useAtom_iff {Δ : Decls} {Γ Γ' : Ctx} {a : Atom} :
     useAtom Δ Γ a = some Γ' ↔ UseAtom Δ Γ a Γ' := by
   constructor
@@ -153,6 +158,7 @@ theorem useAtom_iff {Δ : Decls} {Γ Γ' : Ctx} {a : Atom} :
     | copy hf hl hcp => simp [useAtom, hf, hl, hcp]
     | move hf hl hcp => simp [useAtom, hf, hl, hcp]
 
+/-- Representation lemma. Reflection between the executable checker and its rule-by-rule judgment; this is a representation equivalence, not an evaluator soundness claim. (approved: PENDING) -/
 theorem useAtoms_iff {Δ : Decls} :
     ∀ {Γ Γ' : Ctx} {as : List Atom}, useAtoms Δ Γ as = some Γ' ↔ UseAtoms Δ Γ as Γ'
   | Γ, Γ', [] => by
@@ -171,6 +177,7 @@ theorem useAtoms_iff {Δ : Decls} :
       cases h with
       | cons h₁ h₂ => rw [useAtom_iff.mpr h₁]; exact useAtoms_iff.mpr h₂
 
+/-- Representation lemma. Reflection between the executable checker and its rule-by-rule judgment; this is a representation equivalence, not an evaluator soundness claim. (approved: PENDING) -/
 theorem uses_iff {Δ : Decls} {Γ Γ' : Ctx} {e : Expr} : uses Δ Γ e = some Γ' ↔ Uses Δ Γ e Γ' := by
   cases e with
   | atom a =>
@@ -194,6 +201,7 @@ theorem uses_iff {Δ : Decls} {Γ Γ' : Ctx} {e : Expr} : uses Δ Γ e = some Γ
     · intro h; exact .mk (useAtoms_iff.mp h)
     · intro h; cases h with | mk h => exact useAtoms_iff.mpr h
 
+/-- Representation lemma. Reflection between the executable checker and its rule-by-rule judgment; this is a representation equivalence, not an evaluator soundness claim. (approved: PENDING) -/
 theorem patOkB_iff {d : StructDecl} {pat : List (Name × Binder)} : patOkB d pat = true ↔ PatOk d pat := by
   simp only [patOkB, Bool.and_eq_true, decide_eq_true_eq]
   constructor
@@ -208,6 +216,7 @@ theorem patOkB_iff {d : StructDecl} {pat : List (Name × Binder)} : patOkB d pat
     obtain ⟨st, hst⟩ := hd p hp
     simp [hst]
 
+/-- Representation lemma. Reflection between the executable checker and its rule-by-rule judgment; this is a representation equivalence, not an evaluator soundness claim. (approved: PENDING) -/
 theorem stmtOut_iff {Δ : Decls} {Γ Γ' : Ctx} {s : Stmt} :
     stmtOut Δ Γ s = some Γ' ↔ StmtOk Δ Γ s Γ' := by
   constructor
@@ -258,6 +267,7 @@ theorem stmtOut_iff {Δ : Decls} {Γ Γ' : Ctx} {s : Stmt} :
     | letStruct ht hk hd hp hu hf =>
       simp [stmtOut, tyOf_iff.mpr ht, hk, hd, patOkB_iff.mpr hp, uses_iff.mpr hu, hf]
 
+/-- Representation lemma. Reflection between the executable checker and its rule-by-rule judgment; this is a representation equivalence, not an evaluator soundness claim. (approved: PENDING) -/
 theorem bodyOkB_iff {Δ : Decls} :
     ∀ {Γ : Ctx} {ss : List Stmt} {r : Atom}, bodyOkB Δ Γ ss r = true ↔ BodyOk Δ Γ ss r
   | Γ, [], r => by
@@ -282,7 +292,8 @@ theorem bodyOkB_iff {Δ : Decls} :
       cases h with
       | cons hs hb => rw [stmtOut_iff.mpr hs]; exact bodyOkB_iff.mpr hb
 
-/-- **Checker correspondence.** The checker accepts a program exactly when the judgments do. -/
+/-- **Checker correspondence.** The checker accepts a program exactly when the judgments do.
+Representation lemma. Reflection between the executable checker and its rule-by-rule judgment; this is a representation equivalence, not an evaluator soundness claim. (approved: PENDING) -/
 theorem check_iff (p : Program) : check p = true ↔ Checked p := by
   simp only [check, Bool.and_eq_true, decide_eq_true_eq, bodyOkB_iff, Checked]
 
