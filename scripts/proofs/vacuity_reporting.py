@@ -44,6 +44,31 @@ def ownership_controls(meta):
     print('PASS reporting repeated-job-findings', flush=True)
 
 
+def retry_journal_controls():
+    import json
+    from vacuity_driver import recover_watchdog
+    records = ['BEGIN', 'P\t0\tRetry.bad\tstage=instance law=Retry.law case=bad\t',
+               'P\t1\tRetry.rest\tstage=projection law=Retry.law case=none\t', 'READY\t40000']
+    terminal = 'NOTE analysis-result Retry.bad stage=instance law=Retry.law case=bad result=FAIL heartbeats=1/2000000 work=1/20000 projection=0/4096'
+    records += ['JOB\t0', 'START\t0', 'F\tFAIL planted-retry Retry.bad exact-first-attempt',
+                'F\t' + terminal, 'END\t0\t2\ttrue']
+    # Retry makes less progress and is killed before its first terminal. A torn
+    # trailing record must not become a finding or overwrite the committed FAIL.
+    records += records[:4] + ['JOB\t0', 'START\t0']
+    with tempfile.TemporaryDirectory(prefix='n2-retry-journal-') as temp:
+        path = Path(temp) / 'journal'
+        path.write_text(''.join(json.dumps(r) + '\n' for r in records) + '\"F\\tFAIL torn')
+        report = recover_watchdog(path)
+    rows = report.splitlines()
+    assert rows.count('FAIL planted-retry Retry.bad exact-first-attempt') == 1, report
+    assert terminal in rows, report
+    assert 'INCOMPLETE analysis-budget-or-error Retry.rest stage=projection law=Retry.law case=none reason=wall-watchdog-unrun heartbeats=0/2000000 work=0/20000 projection=0/4096' in rows, report
+    assert 'NOTE analysis-summary [anonymous] N=2 C=40000 K=2 attempted=1 unrun=1 completed=1 incomplete=1 reported=2 reason=wall-watchdog usage=unavailable' in rows, report
+    assert len([r for r in rows if r.startswith('NOTE analysis-result ')]) == 2, report
+    assert not any('torn' in r for r in rows), report
+    print('PASS reporting retry-journal: earlier completed FAIL survives less-progress retry and torn record', flush=True)
+
+
 def watchdog_controls():
     consumer = (HERE / 'vacuity.lean').read_text()
     anchor = '        journal s!"START\\t{i}"\n        let complete ← isolated deadline job'
@@ -69,6 +94,7 @@ def watchdog_controls():
 
 
 def main():
+    retry_journal_controls()
     watchdog_controls()
     source = BASE.replace('end ConcreteSpecControl', '''axiom budgetSupplier : 2 = 2
 /-- Instance (law `ConcreteSpecControl.growth`, case `budget`). -/

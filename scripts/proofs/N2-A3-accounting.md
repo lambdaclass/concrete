@@ -126,10 +126,13 @@ of Grant/Own. Restoring the early-exit bug must produce exact
 `dag-root-not-cached` and `work-budget` diagnostics. Other traversal ownership
 and memoization were audited as documented in README.
 
-W: a READY/START/F/END journal makes results recoverable after process watchdog
+W: a BEGIN/P/READY/JOB/START/F/END journal makes results recoverable after process watchdog
 expiry. The control plants a 15s sleep at evidence-tags and uses 4/8s watchdogs;
 it requires the earlier exact unknown-name FAIL, named interrupted/unrun
-INCOMPLETEs, and all three population equations. Production watchdogs and work
+INCOMPLETEs, and all three population equations. A retry-journal control also
+requires an earlier completed exact FAIL to survive a less-progress retry and a
+torn final record. Planning restores Meta state on both success and error.
+Production watchdogs and work
 allowances are unchanged. Per-analysis interpretation stays **assumed, pending
 owner**, with shared-budget option B still open. README records wall-policy
 options and the coordinator-owned future worker design without allocating IDs.

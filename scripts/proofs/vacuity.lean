@@ -1155,7 +1155,6 @@ def schedulerPart (deadline : Core.Context) (ticks heartbeats : IO.Ref Nat)
 def runJobs (deadline : Core.Context) (jobs : Array AnalysisJob) (cap : Nat)
     (schedulerTicks schedulerHeartbeats : IO.Ref Nat) : Audit Unit := do
   if cap > jobs.size * 20000 then throwError "invalid-whole-run-cap"
-  if let some path ← IO.getEnv "VACUITY_JOURNAL" then IO.FS.writeFile path ""
   for i in [:jobs.size] do
     let job := jobs[i]!
     journal s!"P\t{i}\t{job.name}\t{job.fields}\t{job.extra}"
@@ -1172,6 +1171,7 @@ def runJobs (deadline : Core.Context) (jobs : Array AnalysisJob) (cap : Nat)
   let mut actualHeartbeats := 0
   for i in [:jobs.size] do
     let job := jobs[i]!
+    journal s!"JOB\t{i}"
     let decision ← schedulerPart deadline schedulerTicks schedulerHeartbeats do
       if capHit.isSome || reserved + 20000 > cap then
         emit "INCOMPLETE" "analysis-budget-or-error" job.name
@@ -1571,6 +1571,7 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
           s!"stage=scheduler law=none case=none reason={reason} heartbeats={((← IO.getNumHeartbeats) - schedulerStart) / 1000}/2000000 work={← schedulerWork.get}/20000 projection=0/4096"
         emit "DETAIL" "analysis-error" .anonymous (← ex.toMessageData.toString)
         return none)
+    liftM (saved.restore : MetaM Unit)
     emit "NOTE" "scheduler-usage" .anonymous
       s!"heartbeats={((← IO.getNumHeartbeats) - schedulerStart) / 1000}/2000000 work={← schedulerWork.get}/20000"
     let schedulerHeartbeats ← IO.mkRef ((← IO.getNumHeartbeats) - schedulerStart)

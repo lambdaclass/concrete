@@ -63,53 +63,79 @@ def compiled_consumer(*, consumer_text=None):
 
 
 def recover_watchdog(path):
-    """Recover only closed records from the last attempt's frozen population.
+    """Recover committed jobs across attempts, preserving every emitted FAIL.
 
-    READY commits the manifest; END commits an analysis' terminal result. Earlier
-    findings are durable independently, including FAILs from an interrupted job.
+    Only newline-terminated JSON records are closed. READY freezes the manifest;
+    END commits a terminal. An interrupted retry cannot erase an earlier result.
     """
     if not path.exists():
         return None
-    plans, ended, started, findings = {}, {}, set(), []
-    cap = None
+    attempts = []
+    current = None
+    active = None
     for line in path.read_text().split("\n")[:-1]:
         parts = json.loads(line).split('\t')
-        if parts[0] == 'P' and len(parts) == 5:
-            plans[int(parts[1])] = parts[2:]
-        elif parts[0] == 'READY' and len(parts) == 2:
-            cap = int(parts[1])
-        elif parts[0] == 'START' and len(parts) == 2:
-            started.add(int(parts[1]))
-        elif parts[0] == 'END' and len(parts) == 4:
-            ended[int(parts[1])] = (int(parts[2]), parts[3] == 'true')
-        elif parts[0] == 'F' and len(parts) >= 2:
-            findings.append('\t'.join(parts[1:]))
-    if cap is None or set(plans) != set(range(len(plans))):
+        tag = parts[0]
+        if tag == 'BEGIN':
+            current = dict(plans={}, cap=None, started=set(), jobs={})
+            attempts.append(current)
+            active = None
+        elif current is not None:
+            if tag == 'P' and len(parts) == 5:
+                current['plans'][int(parts[1])] = parts[2:]
+            elif tag == 'READY' and len(parts) == 2:
+                current['cap'] = int(parts[1])
+            elif tag == 'JOB' and len(parts) == 2:
+                active = int(parts[1])
+                current['jobs'][active] = dict(rows=[], end=None)
+            elif tag == 'START' and len(parts) == 2:
+                current['started'].add(int(parts[1]))
+            elif tag == 'END' and len(parts) == 4:
+                current['jobs'][int(parts[1])]['end'] = (int(parts[2]), parts[3] == 'true')
+            elif tag == 'F' and active is not None:
+                row = '\t'.join(parts[1:])
+                if not row.startswith(('NOTE analysis-summary ', 'NOTE scheduler-total ')):
+                    current['jobs'][active]['rows'].append(row)
+    valid = [a for a in attempts if a['cap'] is not None and
+             set(a['plans']) == set(range(len(a['plans'])))]
+    if not valid:
         return None
-    # A result printed before END was not committed; regenerate it as INCOMPLETE.
-    terminals = [f for f in findings if f.startswith('NOTE analysis-result ')]
-    committed_terminals = terminals[:len(ended)]
-    rows = list(dict.fromkeys(f for f in findings if not f.startswith(
-        ('NOTE analysis-result ', 'NOTE analysis-summary ', 'NOTE analysis-population '))))
-    rows.insert(0, f'NOTE analysis-population [anonymous] N={len(plans)} C={cap} K={cap // 20000}')
-    rows.extend(committed_terminals)
+    plans, cap = valid[0]['plans'], valid[0]['cap']
+    if any(a['plans'] != plans or a['cap'] != cap for a in valid):
+        return 'INCOMPLETE recovery-population-mismatch [anonymous]\nN2 INCOMPLETE\n'
+    selected, attempted, failures = {}, set(), []
+    for attempt in valid:
+        attempted.update(attempt['started'])
+        for i, job in attempt['jobs'].items():
+            end = job['end']
+            if end is not None and end[0] != 0:
+                attempted.add(i)
+            failures.extend(row for row in job['rows'] if row.startswith('FAIL '))
+            # Complete > ended INCOMPLETE > interrupted; prefer the latest tie.
+            rank = 2 if end is not None and end[1] else 1 if end is not None else 0
+            if i not in selected or rank >= selected[i][0]:
+                selected[i] = (rank, job)
+    n = len(plans)
+    rows = [f'NOTE analysis-population [anonymous] N={n} C={cap} K={cap // 20000}']
+    rows.extend(dict.fromkeys(failures))
+    completed = 0
     for i, (name, fields, extra) in plans.items():
-        if i in ended:
+        rank, job = selected.get(i, (-1, dict(rows=[], end=None)))
+        if rank >= 1:
+            rows.extend(row for row in job['rows'] if not row.startswith('FAIL '))
+            completed += int(job['end'][1])
             continue
-        reason = 'wall-watchdog' if i in started else 'wall-watchdog-unrun'
-        amount = 'unavailable' if i in started else '0'
+        rows.extend(row for row in job['rows'] if not row.startswith(('FAIL ', 'NOTE analysis-result ')))
+        reason = 'wall-watchdog' if i in attempted else 'wall-watchdog-unrun'
+        amount = 'unavailable' if i in attempted else '0'
         usage = f'heartbeats={amount}/2000000 work={amount}/20000 projection={amount}/4096' + (' ' + extra if extra else '')
         rows.append(f'INCOMPLETE analysis-budget-or-error {name} {fields} reason={reason} {usage}')
         rows.append(f'NOTE analysis-result {name} {fields} result=INCOMPLETE {usage}')
-    attempted = len(started | {i for i, (decision, _) in ended.items() if decision != 0})
-    completed = sum(complete for _, complete in ended.values())
-    n = len(plans)
     rows.append(f'NOTE analysis-summary [anonymous] N={n} C={cap} K={cap // 20000} '
-                f'attempted={attempted} unrun={n - attempted} completed={completed} '
+                f'attempted={len(attempted)} unrun={n - len(attempted)} completed={completed} '
                 f'incomplete={n - completed} reported={n} reason=wall-watchdog usage=unavailable')
     rows.append('N2 INCOMPLETE')
     return '\n'.join(rows) + '\n'
-
 
 
 def _run(source, scope, fixture=None, budget=4096, inventory=False, *, driver_text=None, proof_mode=None, meta_path=None, audit_seconds=120, whole_run_cap=None):
@@ -188,7 +214,7 @@ def _run(source, scope, fixture=None, budget=4096, inventory=False, *, driver_te
 set_option maxHeartbeats 2000000 in
 #eval show MetaM Unit from do
   try
-    if let some path ← IO.getEnv "VACUITY_JOURNAL" then IO.FS.writeFile path ""
+    Vacuity.journal "BEGIN"
     checkRowSafety (← getEnv)
     let findings ← Vacuity.check (populationConstants (← getEnv))
     for f in findings do

@@ -417,7 +417,8 @@ primitive trust rule or phase-B completion is claimed by the reproduction.
 
 ### N2 A3 fix round 1: state ownership and wall recovery
 
-Planning runs in a private `AuditState`, with journaling disabled. Evidence
+Planning runs in a private `AuditState`, with journaling disabled, and restores
+Lean Meta state on success as well as error. Evidence
 parsers also have private findings and resolution caches. Each admitted analysis
 owns fresh findings and resolutions, computes its terminal verdict locally, then
 merges diagnostics into the global deduplicated report. Terminal analysis records
@@ -430,18 +431,24 @@ children. `mentionsVisit` uses a query-local visited declaration set and delegat
 expression traversal to that cache; `mentions` and `mutate` insert their results
 outside their early-return helpers. `moduleDepends` caches completed module walks;
 its equality/missing-module exits are constant-time leaves, not recursive walks.
+The `resolve` and `direct` memo wrappers also insert after returning from their
+uncached/step helper; no compound-match early return bypasses those inserts.
 `withProtected` now visits each shared expression once while collecting terms and
 memoizes replacement by expression, protected term, and replacement value.
 The depth-15 shared application DAG control has a bound of 63 work units and
 requires the root cache entry. The early-exit mutation must report exactly
 `dag-root-not-cached` at depth 10 and `work-budget` at depth 15.
 
-The audit writes a private append-only JSON-string journal. A READY record commits
-the complete ordered population before admission. Findings are flushed when
+The audit writes a private append-only JSON-string journal. BEGIN separates attempts without truncating earlier progress. A READY record
+commits the complete ordered population before admission; JOB and START record
+selection and actual admission. Findings are flushed when
 emitted; END commits each terminal result. Planning and global report merging do
 not journal findings a second time. The bounded runner's private outcome file,
 not exit status or printed text, identifies watchdog expiry. After both attempts
-expire, the driver recovers the last attempt's complete journal records. It keeps
+expire, the driver reconciles complete journal records across both attempts by frozen
+job index. A completed result wins over a later interrupted retry; ended
+INCOMPLETE results win over unfinished attempts, and every emitted FAIL survives.
+A partial final JSON record is ignored. It keeps
 completed results and FAILs already emitted by an interrupted analysis, then emits
 one named terminal INCOMPLETE for every unfinished job: `reason=wall-watchdog`
 for a started job, `reason=wall-watchdog-unrun` for the remainder. Interrupted
