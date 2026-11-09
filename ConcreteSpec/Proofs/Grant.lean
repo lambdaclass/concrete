@@ -24,7 +24,7 @@ instance {α : Type} (P : α → Prop) (x : Option α) [∀ a, Decidable (P a)] 
   | none => isTrue trivial
   | some a => inferInstanceAs (Decidable (P a))
 
-/-- Helper (congruence). Allocating a fresh nominal binder preserves `WellFormed`. (approved: PENDING). -/
+/-- Helper (congruence). Allocating a fresh nominal binder preserves `WellFormed`. (approved: REVIEW7-agy). -/
 private theorem fresh_wf (s : State) (scope : BlockId) (hs : WellFormed s) :
     WellFormed { s with
       binders := ⟨⟨s.nextBrand⟩, ⟨s.nextLineage⟩, scope, true⟩ :: s.binders
@@ -53,7 +53,7 @@ private theorem fresh_wf (s : State) (scope : BlockId) (hs : WellFormed s) :
       obtain ⟨hbr, b, hb, he⟩ := hal i hi
       exact ⟨hbr, b, List.mem_cons_of_mem _ hb, he⟩
 
-/-- Helper (inversion). Structural preservation for `fresh` on a given output state. (approved: PENDING). -/
+/-- Helper (inversion). Structural preservation for `fresh` on a given output state. (approved: REVIEW7-agy). -/
 theorem fresh_preserves_result (s t : State) (scope : BlockId) (hs : WellFormed s)
     (h : fresh s scope = some t) : WellFormed t := by
   cases h
@@ -67,11 +67,11 @@ theorem fresh_preserves (s : State) (scope : BlockId) (hs : WellFormed s) :
   | none => trivial
   | some t => exact fresh_preserves_result s t scope hs h
 
-/-- Helper (computation). Computes the total constructor; fresh_nominal establishes that the new identity differs from every old scoped identity. (approved: PENDING). -/
+/-- Helper (computation). Computes the total constructor; fresh_nominal establishes that the new identity differs from every old scoped identity. (approved: REVIEW7-agy). -/
 theorem fresh_progress (s : State) (scope : BlockId) :
     ∃ t, fresh s scope = some t := ⟨_, rfl⟩
 
-/-- Helper (inversion). Structural preservation for `depend` on a given output state. (approved: PENDING). -/
+/-- Helper (inversion). Structural preservation for `depend` on a given output state. (approved: REVIEW7-agy). -/
 theorem depend_preserves_result (s t : State) (d : Dependency) (hs : WellFormed s)
     (h : depend s d = some t) : WellFormed t := by
   unfold depend at h
@@ -99,7 +99,7 @@ theorem depend_preserves (s : State) (d : Dependency) (hs : WellFormed s) :
   | none => trivial
   | some t => exact depend_preserves_result s t d hs h
 
-/-- Helper (inversion). Structural preservation for `consume` on a given output state. (approved: PENDING). -/
+/-- Helper (inversion). Structural preservation for `consume` on a given output state. (approved: REVIEW7-agy). -/
 theorem consume_preserves_result (s t : State) (p : Hybrid.Place) (hs : WellFormed s)
     (h : consume s p = some t) : WellFormed t := by
   unfold consume at h
@@ -118,7 +118,7 @@ theorem consume_preserves (s : State) (p : Hybrid.Place) (hs : WellFormed s) :
   | none => trivial
   | some t => exact consume_preserves_result s t p hs h
 
-/-- Helper (inversion). Structural preservation for `release` on a given output state. (approved: PENDING). -/
+/-- Helper (inversion). Structural preservation for `release` on a given output state. (approved: REVIEW7-agy). -/
 theorem release_preserves_result (s t : State) (i : BrandId) (hs : WellFormed s)
     (h : release s i = some t) : WellFormed t := by
   unfold release at h
@@ -159,7 +159,7 @@ theorem release_preserves (s : State) (i : BrandId) (hs : WellFormed s) :
   | none => trivial
   | some t => exact release_preserves_result s t i hs h
 
-/-- Helper (inversion). Structural preservation for `reset` on a given output state. (approved: PENDING). -/
+/-- Helper (inversion). Structural preservation for `reset` on a given output state. (approved: REVIEW7-agy). -/
 theorem reset_preserves_result (s t : State) (i : BrandId) (hs : WellFormed s)
     (h : reset s i = some t) : WellFormed t := by
   unfold reset at h
@@ -205,7 +205,7 @@ theorem reset_preserves (s : State) (i : BrandId) (hs : WellFormed s) :
   | none => trivial
   | some t => exact reset_preserves_result s t i hs h
 
-/-- Helper (inversion). Structural preservation for `endScope` on a given output state. (approved: PENDING). -/
+/-- Helper (inversion). Structural preservation for `endScope` on a given output state. (approved: REVIEW7-agy). -/
 theorem endScope_preserves_result (s t : State) (scope : BlockId) (hs : WellFormed s)
     (h : endScope s scope = some t) : WellFormed t := by
   unfold endScope at h
@@ -241,7 +241,7 @@ theorem endScope_preserves (s : State) (scope : BlockId) (hs : WellFormed s) :
   | none => trivial
   | some t => exact endScope_preserves_result s t scope hs h
 
-/-- Helper (computation). Normalizes dependency admission; depend_preserves establishes lexical and allocation lifetime safety. (approved: PENDING). -/
+/-- Helper (computation). Normalizes dependency admission; depend_preserves establishes lexical and allocation lifetime safety. (approved: REVIEW7-agy). -/
 theorem depend_progress (s : State) (d : Dependency)
     (unique : ∀ a ∈ s.dependencies, a.place ≠ d.place)
     (brands : ∀ i ∈ d.brands, ∃ b ∈ s.binders, b.brand = i)
@@ -256,7 +256,7 @@ theorem depend_progress (s : State) (d : Dependency)
   rw [ite_eq_left ⟨hu, brands, allocations⟩]
   exact ⟨_, rfl⟩
 
-/-- Helper (computation). Normalizes the dependency lookup guard; retired_never_revives establishes that consumption cannot revive ended identities. (approved: PENDING). -/
+/-- Helper (computation). Normalizes the dependency lookup guard; retired_never_revives establishes that consumption cannot revive ended identities. (approved: REVIEW7-agy). -/
 theorem consume_progress (s : State) (p : Hybrid.Place)
     (present : ∃ d ∈ s.dependencies, d.place = p) : ∃ t, consume s p = some t := by
   obtain ⟨d, hd, hp⟩ := present
@@ -264,7 +264,7 @@ theorem consume_progress (s : State) (p : Hybrid.Place)
     List.any_eq_true.mpr ⟨d, hd, by simp [hp]⟩
   simp [consume, hg]
 
-/-- Helper (computation). Normalizes the live-allocation exclusion guard; release_preserves and allocations_have_live_allocator establish allocator safety. (approved: PENDING). -/
+/-- Helper (computation). Normalizes the live-allocation exclusion guard; release_preserves and allocations_have_live_allocator establish allocator safety. (approved: REVIEW7-agy). -/
 theorem release_progress (s : State) (i : BrandId)
     (present : ∃ b ∈ s.binders, b.brand = i ∧ b.allocatorLive = true)
     (clear : ∀ d ∈ s.dependencies, i ∉ d.allocations) :
@@ -280,7 +280,7 @@ theorem release_progress (s : State) (i : BrandId)
   rw [ite_eq_left (by rw [hp, hc]; rfl)]
   exact ⟨_, rfl⟩
 
-/-- Helper (computation). Composes lookup and release computations; reset_preserves and retired_never_revives establish generativity and lifetime safety. (approved: PENDING). -/
+/-- Helper (computation). Composes lookup and release computations; reset_preserves and retired_never_revives establish generativity and lifetime safety. (approved: REVIEW7-agy). -/
 theorem reset_progress (s : State) (i : BrandId) (b : Binder)
     (found : s.binders.find? (·.brand == i) = some b)
     (live : b.allocatorLive = true)
@@ -293,7 +293,7 @@ theorem reset_progress (s : State) (i : BrandId) (b : Binder)
   obtain ⟨u, hu⟩ := release_progress s i ⟨b, hb, hi, live⟩ clear
   simp [reset, found, hu]
 
-/-- Helper (computation). Normalizes lexical exit guards; scope_exit_lifetime establishes non-escape and non-revival across later executions. (approved: PENDING). -/
+/-- Helper (computation). Normalizes lexical exit guards; scope_exit_lifetime establishes non-escape and non-revival across later executions. (approved: REVIEW7-agy). -/
 theorem endScope_progress (s : State) (scope : BlockId)
     (released : ∀ b ∈ s.binders, b.scope = scope → b.allocatorLive = false)
     (clear : ∀ d ∈ s.dependencies, ∀ b ∈ s.binders, b.scope = scope → b.brand ∉ d.brands) :
@@ -318,7 +318,7 @@ theorem endScope_progress (s : State) (scope : BlockId)
   exact ⟨_, rfl⟩
 
 /-- Helper (arithmetic). A new or reset generation is unequal to every previously scoped brand,
-because every active binder's brand ID is strictly below `s.nextBrand`. (approved: PENDING). -/
+because every active binder's brand ID is strictly below `s.nextBrand`. (approved: REVIEW7-agy). -/
 theorem nextBrand_fresh (s : State) (hs : WellFormed s) (b : Binder) (hb : b ∈ s.binders) :
     b.brand ≠ BrandId.mk s.nextBrand := by
   intro he
@@ -326,13 +326,13 @@ theorem nextBrand_fresh (s : State) (hs : WellFormed s) (b : Binder) (hb : b ∈
   rw [he] at hn
   exact Nat.lt_irrefl _ hn
 
-/-- Helper (inversion). Generation birth for `fresh` on a given output state. (approved: PENDING). -/
+/-- Helper (inversion). Generation birth for `fresh` on a given output state. (approved: REVIEW7-agy). -/
 theorem fresh_generation_result (s t : State) (scope : BlockId) (h : fresh s scope = some t) :
     t.nextBrand = s.nextBrand + 1 ∧ ∃ b ∈ t.binders, b.brand = ⟨s.nextBrand⟩ := by
   cases h
   exact ⟨rfl, _, List.mem_cons_self, rfl⟩
 
-/-- Helper (computation). Calculates constructor fields; fresh_nominal supplies independent nominal freshness evidence. (approved: PENDING). -/
+/-- Helper (computation). Calculates constructor fields; fresh_nominal supplies independent nominal freshness evidence. (approved: REVIEW7-agy). -/
 theorem fresh_generation (s : State) (scope : BlockId) :
     ResultSatisfies (fun t : State =>
       t.nextBrand = s.nextBrand + 1 ∧ ∃ b ∈ t.binders, b.brand = ⟨s.nextBrand⟩)
@@ -341,7 +341,7 @@ theorem fresh_generation (s : State) (scope : BlockId) :
   | none => trivial
   | some t => exact fresh_generation_result s t scope h
 
-/-- Helper (inversion). Generation birth for `reset` on a given output state. (approved: PENDING). -/
+/-- Helper (inversion). Generation birth for `reset` on a given output state. (approved: REVIEW7-agy). -/
 theorem reset_generation_result (s t : State) (i : BrandId) (h : reset s i = some t) :
     t.nextBrand = s.nextBrand + 1 ∧ ∃ b ∈ t.binders, b.brand = ⟨s.nextBrand⟩ := by
   unfold reset at h
@@ -350,7 +350,7 @@ theorem reset_generation_result (s t : State) (i : BrandId) (h : reset s i = som
   cases hh
   exact ⟨rfl, _, List.mem_cons_self, rfl⟩
 
-/-- Helper (computation). Calculates the reset birth counter; reset_preserves and retired_never_revives establish generation separation over executions. (approved: PENDING). -/
+/-- Helper (computation). Calculates the reset birth counter; reset_preserves and retired_never_revives establish generation separation over executions. (approved: REVIEW7-agy). -/
 theorem reset_generation (s : State) (i : BrandId) :
     ResultSatisfies (fun t : State =>
       t.nextBrand = s.nextBrand + 1 ∧ ∃ b ∈ t.binders, b.brand = ⟨s.nextBrand⟩)
@@ -359,7 +359,7 @@ theorem reset_generation (s : State) (i : BrandId) :
   | none => trivial
   | some t => exact reset_generation_result s t i h
 
-/-- Helper (inversion). Scope-exit non-escape on a given output state. (approved: PENDING). -/
+/-- Helper (inversion). Scope-exit non-escape on a given output state. (approved: REVIEW7-agy). -/
 theorem endScope_non_escape_result (s t : State) (scope : BlockId)
     (h : endScope s scope = some t) (b : Binder) (hb : b ∈ s.binders)
     (hscope : b.scope = scope) (d : Dependency) (hd : d ∈ t.dependencies) :
@@ -374,7 +374,7 @@ theorem endScope_non_escape_result (s t : State) (scope : BlockId)
     simpa [hscope] using hbg
   · contradiction
 
-/-- Helper (computation). Extracts the lexical admission check; scope_exit_lifetime establishes scoped dependencies and prevents later resurrection. (approved: PENDING). -/
+/-- Helper (computation). Extracts the lexical admission check; scope_exit_lifetime establishes scoped dependencies and prevents later resurrection. (approved: REVIEW7-agy). -/
 theorem endScope_non_escape (s : State) (scope : BlockId) :
     ResultSatisfies (fun t : State =>
       ∀ b ∈ s.binders, b.scope = scope → ∀ d ∈ t.dependencies, b.brand ∉ d.brands)
@@ -386,7 +386,7 @@ theorem endScope_non_escape (s : State) (scope : BlockId) :
     exact endScope_non_escape_result s t scope h b hb hscope d hd
 
 /-- Helper (projection). Extracts the live-allocator witness for an allocation dependency from
-`WellFormed`. (approved: PENDING). -/
+`WellFormed`. (approved: REVIEW7-agy). -/
 theorem allocations_have_live_allocator_of_wf (s : State) (hs : WellFormed s) (d : Dependency)
     (hd : d ∈ s.dependencies) (i : BrandId) (hi : i ∈ d.allocations) :
     ∃ b ∈ s.binders, b.brand = i ∧ b.allocatorLive = true :=
@@ -405,7 +405,7 @@ theorem allocations_have_live_allocator (s : State) (i : BrandId) (hs : WellForm
     intro d hd j hj
     exact allocations_have_live_allocator_of_wf t (release_preserves_result s t i hs h) d hd j hj
 
-/-- Helper (inversion). Single-command brand erasure on a given output pair. (approved: PENDING). -/
+/-- Helper (inversion). Single-command brand erasure on a given output pair. (approved: REVIEW7-agy). -/
 theorem instrument_erasure_result {σ α : Type} (transition : State → Option State)
     (operation : σ → Option (α × σ)) (s : σ × State) (a : α) (concrete : σ) (ghost : State)
     (h : instrument transition operation s = some (a, (concrete, ghost))) :
@@ -417,7 +417,7 @@ theorem instrument_erasure_result {σ α : Type} (transition : State → Option 
   cases hh
   exact hr
 
-/-- Helper (computation). Calculates one allocator wrapper; run_erasure establishes the independent finite execution contract. (approved: PENDING). -/
+/-- Helper (computation). Calculates one allocator wrapper; run_erasure establishes the independent finite execution contract. (approved: REVIEW7-agy). -/
 theorem instrument_erasure {σ α : Type} (transition : State → Option State)
     (operation : σ → Option (α × σ)) (s : σ × State) :
     ResultSatisfies (fun r : α × (σ × State) => operation s.1 = some (r.1, r.2.1))
@@ -426,7 +426,7 @@ theorem instrument_erasure {σ α : Type} (transition : State → Option State)
   | none => trivial
   | some r => exact instrument_erasure_result transition operation s r.1 r.2.1 r.2.2 h
 
-/-- Helper (inversion). Finite allocator stream erasure on a given output pair. (approved: PENDING). -/
+/-- Helper (inversion). Finite allocator stream erasure on a given output pair. (approved: REVIEW7-agy). -/
 theorem run_erasure_result {σ α : Type} (cs : List (Command σ α)) (s : σ × State)
     (results : List α) (t : σ × State) (h : run cs s = some (results, t)) :
     runErased cs s.1 = some (results, t.1) := by
@@ -734,7 +734,7 @@ example : run [resetCommand ⟨0⟩] (7, PreservationWitnesses.dependent) = none
 end RunWitnesses
 
 /-- Helper (inversion). Release preserves all nominal binder identities and the generation
-supply, even when it consumes the corresponding allocator. (approved: PENDING). -/
+supply, even when it consumes the corresponding allocator. (approved: REVIEW7-agy). -/
 private theorem release_retired (s t : State) (i j : BrandId) (hr : Retired s j)
     (h : release s i = some t) : Retired t j := by
   unfold release at h
@@ -747,7 +747,7 @@ private theorem release_retired (s t : State) (i j : BrandId) (hr : Retired s j)
   · contradiction
 
 /-- Helper (inversion). Each lifetime operation keeps ended nominal identities unavailable;
-new generations lie strictly above every retired identity. (approved: PENDING). -/
+new generations lie strictly above every retired identity. (approved: REVIEW7-agy). -/
 private theorem lifetime_retired_step (s t : State) (op : LifetimeOp) (i : BrandId)
     (hr : Retired s i) (h : lifetimeStep s op = some t) : Retired t i := by
   have bound := hr.1
@@ -886,7 +886,7 @@ example : WellFormed releasedWithPhantom ∧
 end LifetimeEvidence
 
 /-- Helper (inversion). The unique nominal binder table identifies two records with the same
-brand; lexical exit cannot confuse an outside binder with an exiting one. (approved: PENDING). -/
+brand; lexical exit cannot confuse an outside binder with an exiting one. (approved: REVIEW7-agy). -/
 private theorem binder_unique (xs : List Binder) (hn : (xs.map Binder.brand).Nodup)
     (a b : Binder) (ha : a ∈ xs) (hb : b ∈ xs) (he : a.brand = b.brand) : a = b := by
   induction xs with
@@ -903,7 +903,7 @@ private theorem binder_unique (xs : List Binder) (hn : (xs.map Binder.brand).Nod
       · exact ih hn.2 ha hb
 
 /-- Helper (inversion). Composes the structural preservation proof of each public lifetime
-operation through the finite lifetime interpreter. (approved: PENDING). -/
+operation through the finite lifetime interpreter. (approved: REVIEW7-agy). -/
 private theorem lifetime_wf (s t : State) (ops : List LifetimeOp) (hs : WellFormed s)
     (h : runLifetime s ops = some t) : WellFormed t := by
   unfold runLifetime at h
@@ -996,7 +996,7 @@ instance {α : Type} (P : α → Prop) (x : Option α) [∀ a, Decidable (P a)] 
   | some a => inferInstanceAs (Decidable (P a))
 
 /-- Helper (congruence). Updating a single entry in an association list preserves a pointwise
-property whenever the update function preserves it at the target key. (approved: PENDING). -/
+property whenever the update function preserves it at the target key. (approved: REVIEW7-agy). -/
 private theorem update_all {α : Type} (P : GrantId × α → Prop) (i : GrantId) (f : α → α)
     (hf : ∀ a, P (i, a) → P (i, f a)) (xs : AList GrantId α)
     (hxs : ∀ e ∈ xs, P e) : ∀ e ∈ AList.update xs i f, P e := by
@@ -1017,7 +1017,7 @@ private theorem update_all {α : Type} (P : GrantId × α → Prop) (i : GrantId
       · exact hxs e List.mem_cons_self
       · exact ih (fun q hq => hxs q (List.mem_cons_of_mem _ hq)) q hq
 
-/-- Helper (inversion). Successful usability exposes both the original resource and its live flag. (approved: PENDING). -/
+/-- Helper (inversion). Successful usability exposes both the original resource and its live flag. (approved: REVIEW7-agy). -/
 theorem usable_some (s : State H) (i : GrantId) (r : Resource H) (h : usable s i = some r) :
     AList.lookup s.resources i = some r ∧ r.live = true := by
   unfold usable at h
@@ -1026,18 +1026,18 @@ theorem usable_some (s : State H) (i : GrantId) (r : Resource H) (h : usable s i
   · cases hh; exact ⟨ha, by assumption⟩
   · contradiction
 
-/-- Helper (congruence). Marking a grant consumed preserves `Bounded`. (approved: PENDING). -/
+/-- Helper (congruence). Marking a grant consumed preserves `Bounded`. (approved: REVIEW7-agy). -/
 theorem consumed_bounded (budget : List Nat) (s : State H) (i : GrantId)
     (hs : Bounded budget s) : Bounded budget (consumed s i) :=
   update_all (fun (e : GrantId × Resource H) => ∀ right ∈ e.2.rights, right ∈ budget)
     i (fun r => { r with live := false }) (fun _ h => h) s.resources hs
 
-/-- Helper (congruence). Marking a grant consumed preserves `Fresh`. (approved: PENDING). -/
+/-- Helper (congruence). Marking a grant consumed preserves `Fresh`. (approved: REVIEW7-agy). -/
 theorem consumed_fresh (s : State H) (i : GrantId) (hs : Fresh s) : Fresh (consumed s i) :=
   update_all (fun (e : GrantId × Resource H) => e.1.id < s.next)
     i (fun r => { r with live := false }) (fun _ h => h) s.resources hs
 
-/-- Helper (congruence). Issuing a resource whose rights are within `budget` preserves `Bounded`. (approved: PENDING). -/
+/-- Helper (congruence). Issuing a resource whose rights are within `budget` preserves `Bounded`. (approved: REVIEW7-agy). -/
 theorem issue_bounded (budget : List Nat) (s : State H) (r : Resource H)
     (hs : Bounded budget s) (hr : ∀ x ∈ r.rights, x ∈ budget) : Bounded budget (issue s r) := by
   intro e he
@@ -1046,7 +1046,7 @@ theorem issue_bounded (budget : List Nat) (s : State H) (r : Resource H)
   · exact hr
   · exact hs e he
 
-/-- Helper (congruence). Issuing a resource at `⟨s.next⟩` and advancing `next` preserves `Fresh`. (approved: PENDING). -/
+/-- Helper (congruence). Issuing a resource at `⟨s.next⟩` and advancing `next` preserves `Fresh`. (approved: REVIEW7-agy). -/
 theorem issue_fresh (s : State H) (r : Resource H) (hs : Fresh s) : Fresh (issue s r) := by
   intro e he
   change e ∈ (⟨s.next⟩, r) :: s.resources at he
@@ -1054,7 +1054,7 @@ theorem issue_fresh (s : State H) (r : Resource H) (hs : Fresh s) : Fresh (issue
   · exact Nat.lt_succ_self _
   · exact Nat.lt_succ_of_lt (hs e he)
 
-/-- Helper (inversion). `Bounded` preservation for `narrow` on a given output state. (approved: PENDING). -/
+/-- Helper (inversion). `Bounded` preservation for `narrow` on a given output state. (approved: REVIEW7-agy). -/
 theorem narrow_bounded_result (budget : List Nat) (s t : State H) (i : GrantId) (requested : List Nat)
     (hs : Bounded budget s) (h : narrow s i requested = some t) : Bounded budget t := by
   unfold narrow at h
@@ -1072,7 +1072,7 @@ theorem narrow_bounded (budget : List Nat) (s : State H) (i : GrantId) (requeste
   | none => trivial
   | some t => exact narrow_bounded_result budget s t i requested hs h
 
-/-- Helper (inversion). `Bounded` preservation for `acquire` on a given output state. (approved: PENDING). -/
+/-- Helper (inversion). `Bounded` preservation for `acquire` on a given output state. (approved: REVIEW7-agy). -/
 theorem acquire_bounded_result (budget : List Nat) (s t : State H) (i : GrantId)
     (requested selected : List Nat) (permissions : List Cap) (allowed : Bool) (handle : H)
     (hs : Bounded budget s) (h : acquire s i requested selected permissions allowed handle = some t) :
@@ -1097,7 +1097,7 @@ theorem acquire_bounded (budget : List Nat) (s : State H) (i : GrantId)
   | none => trivial
   | some t => exact acquire_bounded_result budget s t i requested selected permissions allowed handle hs h
 
-/-- Helper (inversion). `Bounded` preservation for `close` on a given output state. (approved: PENDING). -/
+/-- Helper (inversion). `Bounded` preservation for `close` on a given output state. (approved: REVIEW7-agy). -/
 theorem close_bounded_result (budget : List Nat) (s t : State H) (i : GrantId) (result : CloseResult)
     (hs : Bounded budget s) (h : close s i result = some (result, t)) : Bounded budget t := by
   unfold close at h
@@ -1118,7 +1118,7 @@ theorem close_bounded (budget : List Nat) (s : State H) (i : GrantId) (result : 
     cases hh
     exact consumed_bounded budget s i hs
 
-/-- Helper (inversion). Inductive `Steps` preserves `Bounded`. (approved: PENDING). -/
+/-- Helper (inversion). Inductive `Steps` preserves `Bounded`. (approved: REVIEW7-agy). -/
 theorem rights_never_grow_steps (budget : List Nat) (s t : State H) (hs : Bounded budget s)
     (h : Steps s t) : Bounded budget t := by
   induction h with
@@ -1128,7 +1128,7 @@ theorem rights_never_grow_steps (budget : List Nat) (s t : State H) (hs : Bounde
   | close _ hc ih => exact close_bounded_result _ _ _ _ _ ih hc
 
 /-- Helper (inversion). Executing `runOps` from a state `s` with `Steps s₀ s` produces a state `t`
-with `Steps s₀ t`. (approved: PENDING). -/
+with `Steps s₀ t`. (approved: REVIEW7-agy). -/
 private theorem steps_of_runOps (s₀ : State H) :
     ∀ (ops : List (Op H)) (s t : State H),
       Steps s₀ s → runOps s ops = some t → Steps s₀ t
@@ -1165,7 +1165,7 @@ theorem rights_never_grow (budget : List Nat) (s : State H) (ops : List (Op H))
   | some t =>
     exact rights_never_grow_steps budget s t hs (steps_of_runOps s ops s t (.refl s) h)
 
-/-- Helper (inversion). `Fresh` preservation for `narrow` on a given output state. (approved: PENDING). -/
+/-- Helper (inversion). `Fresh` preservation for `narrow` on a given output state. (approved: REVIEW7-agy). -/
 theorem narrow_fresh_result (s t : State H) (i : GrantId) (requested : List Nat)
     (hs : Fresh s) (h : narrow s i requested = some t) : Fresh t := by
   unfold narrow at h
@@ -1180,7 +1180,7 @@ theorem narrow_fresh (s : State H) (i : GrantId) (requested : List Nat) (hs : Fr
   | none => trivial
   | some t => exact narrow_fresh_result s t i requested hs h
 
-/-- Helper (inversion). `Fresh` preservation for `acquire` on a given output state. (approved: PENDING). -/
+/-- Helper (inversion). `Fresh` preservation for `acquire` on a given output state. (approved: REVIEW7-agy). -/
 theorem acquire_fresh_result (s t : State H) (i : GrantId) (requested selected : List Nat)
     (permissions : List Cap) (allowed : Bool) (handle : H)
     (hs : Fresh s) (h : acquire s i requested selected permissions allowed handle = some t) : Fresh t := by
@@ -1198,7 +1198,7 @@ theorem acquire_fresh (s : State H) (i : GrantId) (requested selected : List Nat
   | none => trivial
   | some t => exact acquire_fresh_result s t i requested selected permissions allowed handle hs h
 
-/-- Helper (inversion). `Fresh` preservation for `close` on a given output state. (approved: PENDING). -/
+/-- Helper (inversion). `Fresh` preservation for `close` on a given output state. (approved: REVIEW7-agy). -/
 theorem close_fresh_result (s t : State H) (i : GrantId) (result : CloseResult)
     (hs : Fresh s) (h : close s i result = some (result, t)) : Fresh t := by
   unfold close at h
@@ -1230,18 +1230,18 @@ instance [DecidableEq H] (s : State H) (i : GrantId) : Decidable (Dead s i) :=
     else
       isFalse (by rintro ⟨r', hr', hl'⟩; rw [h] at hr'; injection hr' with hr'; subst hr'; exact hl hl')
 
-/-- Helper (computation). Unpacks the usability guard; consumed_never_revives establishes unavailability after every subsequent grant operation. (approved: PENDING). -/
+/-- Helper (computation). Unpacks the usability guard; consumed_never_revives establishes unavailability after every subsequent grant operation. (approved: REVIEW7-agy). -/
 theorem dead_unusable (s : State H) (i : GrantId) (h : Dead s i) : usable s i = none := by
   obtain ⟨r, hr, hd⟩ := h
   simp [usable, hr, hd]
 
-/-- Helper (congruence). Marking an existing grant consumed makes it `Dead`. (approved: PENDING). -/
+/-- Helper (congruence). Marking an existing grant consumed makes it `Dead`. (approved: REVIEW7-agy). -/
 theorem consumed_dead (s : State H) (i : GrantId) (r : Resource H)
     (hr : AList.lookup s.resources i = some r) : Dead (consumed s i) i := by
   refine ⟨{ r with live := false }, ?_, rfl⟩
   simp [consumed, AList.lookup_update, hr]
 
-/-- Helper (congruence). Consuming any grant preserves `Dead` on already-consumed grants. (approved: PENDING). -/
+/-- Helper (congruence). Consuming any grant preserves `Dead` on already-consumed grants. (approved: REVIEW7-agy). -/
 theorem consumed_keeps_dead (s : State H) (i j : GrantId) (h : Dead s i) :
     Dead (consumed s j) i := by
   obtain ⟨r, hr, hd⟩ := h
@@ -1249,7 +1249,7 @@ theorem consumed_keeps_dead (s : State H) (i j : GrantId) (h : Dead s i) :
   · subst j; exact consumed_dead s i r hr
   · exact ⟨r, by simp [consumed, AList.lookup_update, he, hr], hd⟩
 
-/-- Helper (congruence). Issuing a fresh grant preserves `Dead` on already-consumed grants. (approved: PENDING). -/
+/-- Helper (congruence). Issuing a fresh grant preserves `Dead` on already-consumed grants. (approved: REVIEW7-agy). -/
 theorem issue_keeps_dead (s : State H) (r : Resource H) (i : GrantId)
     (hs : Fresh s) (h : Dead s i) : Dead (issue s r) i := by
   obtain ⟨a, ha, hd⟩ := h
@@ -1258,7 +1258,7 @@ theorem issue_keeps_dead (s : State H) (r : Resource H) (i : GrantId)
     intro he; rw [← he] at hb; exact Nat.lt_irrefl _ hb
   exact ⟨a, by simp [issue, AList.lookup, hi, ha], hd⟩
 
-/-- Helper (inversion). `close` consumes on a given output state. (approved: PENDING). -/
+/-- Helper (inversion). `close` consumes on a given output state. (approved: REVIEW7-agy). -/
 theorem close_consumes_result (s t : State H) (i : GrantId) (result : CloseResult)
     (h : close s i result = some (result, t)) : Dead t i := by
   unfold close at h
@@ -1284,7 +1284,7 @@ theorem close_consumes (s : State H) (i : GrantId) (result : CloseResult) :
     subst hres
     exact ⟨rfl, close_consumes_result s t i res h⟩
 
-/-- Helper (inversion). `narrow` consumes the parent on a given output state. (approved: PENDING). -/
+/-- Helper (inversion). `narrow` consumes the parent on a given output state. (approved: REVIEW7-agy). -/
 theorem narrow_consumes_result (s t : State H) (i : GrantId) (requested : List Nat)
     (hs : Fresh s) (h : narrow s i requested = some t) : Dead t i := by
   unfold narrow at h
@@ -1301,7 +1301,7 @@ theorem narrow_consumes (s : State H) (i : GrantId) (requested : List Nat) (hs :
   | none => trivial
   | some t => exact narrow_consumes_result s t i requested hs h
 
-/-- Helper (inversion). Inductive `Steps` never revives a `Dead` grant. (approved: PENDING). -/
+/-- Helper (inversion). Inductive `Steps` never revives a `Dead` grant. (approved: REVIEW7-agy). -/
 theorem consumed_never_revives_steps (s t : State H) (i : GrantId) (hs : Fresh s) (hd : Dead s i)
     (h : Steps s t) : Dead t i ∧ Fresh t := by
   induction h with
@@ -1339,7 +1339,7 @@ theorem consumed_never_revives (s : State H) (i : GrantId) (ops : List (Op H))
   | some t =>
     exact consumed_never_revives_steps s t i hs hd (steps_of_runOps s ops s t (.refl s) h)
 
-/-- Helper (inversion). `narrow` intersection characterization on a given output state. (approved: PENDING). -/
+/-- Helper (inversion). `narrow` intersection characterization on a given output state. (approved: REVIEW7-agy). -/
 theorem narrow_intersection_result (s t : State H) (i : GrantId) (requested : List Nat)
     (h : narrow s i requested = some t) : ∃ r,
       usable s i = some r ∧ AList.lookup t.resources ⟨s.next⟩ =
@@ -1349,7 +1349,7 @@ theorem narrow_intersection_result (s t : State H) (i : GrantId) (requested : Li
   cases hh
   exact ⟨r, hr, by simp [issue, consumed, AList.lookup]⟩
 
-/-- Helper (computation). Calculates the issued child record; narrow_permissions establishes the extensional permission contract independently of list representation. (approved: PENDING). -/
+/-- Helper (computation). Calculates the issued child record; narrow_permissions establishes the extensional permission contract independently of list representation. (approved: REVIEW7-agy). -/
 theorem narrow_intersection (s : State H) (i : GrantId) (requested : List Nat) :
     ResultSatisfies (fun t : State H =>
       ∃ r, usable s i = some r ∧ AList.lookup t.resources ⟨s.next⟩ =
@@ -1359,7 +1359,7 @@ theorem narrow_intersection (s : State H) (i : GrantId) (requested : List Nat) :
   | none => trivial
   | some t => exact narrow_intersection_result s t i requested h
 
-/-- Helper (inversion). `acquire` parent-preservation on a given output state. (approved: PENDING). -/
+/-- Helper (inversion). `acquire` parent-preservation on a given output state. (approved: REVIEW7-agy). -/
 theorem acquire_keeps_parent_result (s t : State H) (i : GrantId) (requested selected : List Nat)
     (permissions : List Cap) (allowed : Bool) (handle : H) (hs : Fresh s)
     (h : acquire s i requested selected permissions allowed handle = some t) :

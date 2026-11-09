@@ -15,7 +15,7 @@ a separate restatement of each wrapper's definition would not establish that con
 -/
 namespace ConcreteSpec.Core.Own
 
-/-- Helper (congruence). Lifts a supplied one-step preservation proof through a monadic list fold. (approved: PENDING). -/
+/-- Helper (congruence). Lifts a supplied one-step preservation proof through a monadic list fold. (approved: REVIEW7-agy). -/
 private theorem fold_preserves {α : Type} (f : State → α → Option State)
     (hf : ∀ s a t, WellFormed s → f s a = some t → WellFormed t) (xs : List α)
     (s t : State) (hs : WellFormed s) (h : xs.foldlM f s = some t) : WellFormed t := by
@@ -27,7 +27,7 @@ private theorem fold_preserves {α : Type} (f : State → α → Option State)
     | none => simp [he] at h
     | some u => simp only [he] at h <;> dsimp at h; exact ih u (hf s a u hs he) h
 
-/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: PENDING). Move changes only the selected slot's status, after excluding every loan of its root. -/
+/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: REVIEW7-agy). Move changes only the selected slot's status, after excluding every loan of its root. -/
 theorem move_preserves_result (s t : State) (p : Hybrid.Place) (hs : WellFormed s)
     (h : move s p = some t) : WellFormed t := by
   unfold move at h
@@ -73,7 +73,7 @@ theorem move_preserves_result (s t : State) (p : Hybrid.Place) (hs : WellFormed 
         exact ⟨change b, List.mem_map.mpr ⟨b, hb, rfl⟩,
           (place b).trans he, (activation b).trans hact⟩
 
-/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: PENDING).  -/
+/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: REVIEW7-agy).  -/
 theorem reinitialize_preserves_result (s t : State) (p : Hybrid.Place) (hs : WellFormed s)
     (h : reinitialize s p = some t) : WellFormed t := by
   unfold reinitialize at h
@@ -115,7 +115,7 @@ theorem reinitialize_preserves_result (s t : State) (p : Hybrid.Place) (hs : Wel
           (place b).trans he, (activation b).trans hact⟩
   · contradiction
 
-/-- Helper (computation). Reorders the disjunction defining symmetric loan compatibility. (approved: PENDING). -/
+/-- Helper (computation). Reorders the disjunction defining symmetric loan compatibility. (approved: REVIEW7-agy). -/
 private theorem compatible_symm (a b : Loan) (h : Compatible a b) : Compatible b a := by
   unfold Compatible at *
   rcases h with h | h | h | h | h
@@ -125,7 +125,7 @@ private theorem compatible_symm (a b : Loan) (h : Compatible a b) : Compatible b
   · exact Or.inr (Or.inr (Or.inl h))
   · exact Or.inr (Or.inr (Or.inr (Or.inr h.symm)))
 
-/-- Helper (congruence). Repackages freshness, parent validity and compatibility proofs for a single loan insertion. (approved: PENDING). -/
+/-- Helper (congruence). Repackages freshness, parent validity and compatibility proofs for a single loan insertion. (approved: REVIEW7-agy). -/
 private theorem insert_loan (s : State) (a : Loan) (hs : WellFormed s)
     (hid : a.id = ⟨s.nextLoan⟩) (hact : a.activation < s.nextActivation)
     (hroot : ∃ x ∈ s.slots, x.place = a.root ∧ x.status = .owned)
@@ -168,7 +168,7 @@ private theorem insert_loan (s : State) (a : Loan) (hs : WellFormed s)
       · subst c; exact compatible_symm a b (hcompat b hb)
       · exact hs.2.2.2.2.1 b hb c hc
 
-/-- Helper (inversion). Extracts owned-root and whole-root permission facts from the owner access guard. (approved: PENDING). -/
+/-- Helper (inversion). Extracts owned-root and whole-root permission facts from the owner access guard. (approved: REVIEW7-agy). -/
 private theorem owner_guard (s : State) (p : Hybrid.Place) (m : Mode)
     (h : ownerAccess s p m = true) :
     (∃ x ∈ s.slots, x.place = p ∧ x.status = .owned) ∧
@@ -186,7 +186,7 @@ private theorem owner_guard (s : State) (p : Hybrid.Place) (m : Mode)
     have := List.all_eq_true.mp h.2 l hl
     simpa only [Bool.or_eq_true, bne_iff_ne, Bool.and_eq_true, beq_iff_eq] using this
 
-/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: PENDING).  -/
+/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: REVIEW7-agy).  -/
 theorem borrow_preserves_result (s t : State) (p : Hybrid.Place) (path : List Projection)
     (m : Mode) (hs : WellFormed s) (h : borrow s p path m = some t) : WellFormed t := by
   unfold borrow at h
@@ -204,7 +204,7 @@ theorem borrow_preserves_result (s t : State) (p : Hybrid.Place) (path : List Pr
     · exact Or.inr (Or.inr (Or.inr (Or.inr hm)))
   · contradiction
 
-/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: PENDING).  -/
+/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: REVIEW7-agy).  -/
 theorem reborrowTo_preserves_result (s t : State) (i : LoanId) (path : List Projection)
     (m : Mode) (activation : Nat) (hs : WellFormed s)
     (h : reborrowTo s i path m activation = some t) : WellFormed t := by
@@ -243,14 +243,14 @@ theorem reborrowTo_preserves_result (s t : State) (i : LoanId) (path : List Proj
       · exact Or.inr (Or.inr (Or.inr (Or.inr he)))
   · contradiction
 
-/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: PENDING).  -/
+/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: REVIEW7-agy).  -/
 theorem reborrow_preserves_result (s t : State) (i : LoanId) (path : List Projection)
     (m : Mode) (hs : WellFormed s) (h : reborrow s i path m = some t) : WellFormed t := by
   unfold reborrow at h
   obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
   exact reborrowTo_preserves_result s t i path m f.id hs h
 
-/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: PENDING).  -/
+/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: REVIEW7-agy).  -/
 theorem endLoan_preserves_result (s t : State) (i : LoanId) (hs : WellFormed s)
     (h : endLoan s i = some t) : WellFormed t := by
   unfold endLoan at h
@@ -279,7 +279,7 @@ theorem endLoan_preserves_result (s t : State) (i : LoanId) (hs : WellFormed s)
     · intro b hb c hc
       exact hs.2.2.2.2.1 b (List.mem_filter.mp hb).1 c (List.mem_filter.mp hc).1
 
-/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: PENDING). -/
+/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: REVIEW7-agy). -/
 theorem accessOwner_preserves_result (s t : State) (p : Hybrid.Place) (m : Mode)
     (hs : WellFormed s) (h : accessOwner s p m = some t) : WellFormed t := by
   unfold accessOwner at h
@@ -287,7 +287,7 @@ theorem accessOwner_preserves_result (s t : State) (p : Hybrid.Place) (m : Mode)
   · cases h; exact hs
   · contradiction
 
-/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: PENDING). -/
+/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: REVIEW7-agy). -/
 theorem accessLoan_preserves_result (s t : State) (i : LoanId) (m : Mode)
     (hs : WellFormed s) (h : accessLoan s i m = some t) : WellFormed t := by
   unfold accessLoan at h
@@ -295,7 +295,7 @@ theorem accessLoan_preserves_result (s t : State) (i : LoanId) (m : Mode)
   · cases h; exact hs
   · contradiction
 
-/-- Helper (computation). Normalizes the move guard; linear consumption soundness is established by move_preserves and moved_no_loan. (approved: PENDING). -/
+/-- Helper (computation). Normalizes the move guard; linear consumption soundness is established by move_preserves and moved_no_loan. (approved: REVIEW7-agy). -/
 theorem move_progress (s : State) (p : Hybrid.Place) (x : Slot)
     (found : slot s p = some x) (linear : x.desc.copy = false)
     (owned : x.status = .owned) (clear : ∀ l ∈ s.loans, l.root ≠ p) :
@@ -307,14 +307,14 @@ theorem move_progress (s : State) (p : Hybrid.Place) (x : Slot)
     exact clear l hl (by simpa using he)
   simp [move, found, linear, owned, hc]
 
-/-- Helper (computation). Normalizes the borrowing guard; live roots and conflict safety are established by borrow_preserves. (approved: PENDING). -/
+/-- Helper (computation). Normalizes the borrowing guard; live roots and conflict safety are established by borrow_preserves. (approved: REVIEW7-agy). -/
 theorem borrow_progress (s : State) (p : Hybrid.Place) (path : List Projection) (m : Mode)
     (f : Activation) (frame : s.frames.head? = some f)
     (issued : f.id < s.nextActivation) (allowed : ownerAccess s p m = true) :
     ∃ t, borrow s p path m = some t := by
   simp [borrow, frame, issued, allowed]
 
-/-- Helper (computation). Normalizes the explicit destination guard; downward_reborrow_protocol establishes the complete lending boundary. (approved: PENDING). -/
+/-- Helper (computation). Normalizes the explicit destination guard; downward_reborrow_protocol establishes the complete lending boundary. (approved: REVIEW7-agy). -/
 theorem reborrowTo_progress (s : State) (i : LoanId) (path : List Projection) (m : Mode)
     (activation : Nat) (a : Loan) (found : loan s i = some a)
     (issued : activation < s.nextActivation)
@@ -323,7 +323,7 @@ theorem reborrowTo_progress (s : State) (i : LoanId) (path : List Projection) (m
     ∃ t, reborrowTo s i path m activation = some t := by
   simp [reborrowTo, found, issued, current, allowed]
 
-/-- Helper (computation). Specializes the destination computation to the current frame; downward_reborrow_protocol supplies scoped soundness. (approved: PENDING). -/
+/-- Helper (computation). Specializes the destination computation to the current frame; downward_reborrow_protocol supplies scoped soundness. (approved: REVIEW7-agy). -/
 theorem reborrow_progress (s : State) (i : LoanId) (path : List Projection) (m : Mode)
     (f : Activation) (frame : s.frames.head? = some f) (issued : f.id < s.nextActivation)
     (a : Loan) (found : loan s i = some a) (allowed : loanAccess s i m = true) :
@@ -331,12 +331,12 @@ theorem reborrow_progress (s : State) (i : LoanId) (path : List Projection) (m :
   simpa [reborrow, frame] using
     reborrowTo_progress s i path m f.id a found issued (by simp [frame]) allowed
 
-/-- Helper (computation). Computes the successful identity transition from owner permission; execution soundness belongs to Steps_erasure. (approved: PENDING). -/
+/-- Helper (computation). Computes the successful identity transition from owner permission; execution soundness belongs to Steps_erasure. (approved: REVIEW7-agy). -/
 theorem accessOwner_progress (s : State) (p : Hybrid.Place) (m : Mode)
     (allowed : ownerAccess s p m = true) : accessOwner s p m = some s := by
   simp [accessOwner, allowed]
 
-/-- Helper (computation). Computes the successful identity transition from loan permission; execution soundness belongs to Steps_erasure. (approved: PENDING). -/
+/-- Helper (computation). Computes the successful identity transition from loan permission; execution soundness belongs to Steps_erasure. (approved: REVIEW7-agy). -/
 theorem accessLoan_progress (s : State) (i : LoanId) (m : Mode)
     (allowed : loanAccess s i m = true) : accessLoan s i m = some s := by
   simp [accessLoan, allowed]
@@ -368,7 +368,7 @@ example : ¬ (accessOwner shared ⟨0⟩ .mutable).isSome = true := by decide
 example : ¬ (accessLoan child ⟨0⟩ .mutable).isSome = true := by decide
 end PrimitiveWitnesses
 
-/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: PENDING).  -/
+/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: REVIEW7-agy).  -/
 theorem bind_preserves_result (types : Var → Option Descriptor) (s t : State) (x : Var)
     (hs : WellFormed s) (h : bind types x s = some t) : WellFormed t := by
   unfold bind at h
@@ -435,7 +435,7 @@ theorem bind_preserves_result (types : Var → Option Descriptor) (s t : State) 
               exact ⟨a, List.mem_cons_of_mem _ ha, he, hact⟩
     · contradiction
 
-/-- Helper (inversion). Uses a duplicate-free place index to identify two slot records. (approved: PENDING). -/
+/-- Helper (inversion). Uses a duplicate-free place index to identify two slot records. (approved: REVIEW7-agy). -/
 private theorem slot_unique (xs : List Slot) (hn : (xs.map Slot.place).Nodup)
     (x y : Slot) (hx : x ∈ xs) (hy : y ∈ xs) (he : x.place = y.place) : x = y := by
   induction xs with
@@ -452,7 +452,7 @@ private theorem slot_unique (xs : List Slot) (hn : (xs.map Slot.place).Nodup)
       · exact ih hn.2 hx hy
 
 
-/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: PENDING).  -/
+/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: REVIEW7-agy).  -/
 theorem drop_preserves_result (s t : State) (xs : List Var) (hs : WellFormed s)
     (h : drop xs s = some t) : WellFormed t := by
   unfold drop at h
@@ -522,7 +522,7 @@ theorem drop_preserves_result (s t : State) (xs : List Var) (hs : WellFormed s)
             exact hnodup.1 (List.mem_map.mpr ⟨g, hg, hgf⟩)
   · contradiction
 
-/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: PENDING).  -/
+/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: REVIEW7-agy).  -/
 theorem enter_preserves_result (types : Var → Option Descriptor) (s t : State) (xs : List Var)
     (hs : WellFormed s) (h : enter types xs s = some t) : WellFormed t := by
   have hw : WellFormed { s with
@@ -557,12 +557,12 @@ theorem enter_preserves_result (types : Var → Option Descriptor) (s t : State)
         · exact hs.2.2.2.2.2.2.2.2 g hg p hp
   exact fold_preserves _ (fun s x t hs h => bind_preserves_result types s t x hs h) xs _ t hw h
 
-/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: PENDING).  -/
+/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: REVIEW7-agy).  -/
 theorem endLocals_preserves_result (s t : State) (a : Nat) (hs : WellFormed s)
     (h : endLocals a s = some t) : WellFormed t :=
   fold_preserves _ (fun s l t hs h => endLoan_preserves_result s t l.id hs h) _ _ _ hs h
 
-/-- Helper (computation). Ending a loan leaves activation frames unchanged. (approved: PENDING). -/
+/-- Helper (computation). Ending a loan leaves activation frames unchanged. (approved: REVIEW7-agy). -/
 private theorem endLoan_frames (s t : State) (i : LoanId) (h : endLoan s i = some t) :
     t.frames = s.frames := by
   unfold endLoan at h
@@ -573,7 +573,7 @@ private theorem endLoan_frames (s t : State) (i : LoanId) (h : endLoan s i = som
     rfl
 
 
-/-- Helper (congruence). Lifts a supplied frame equality through a monadic fold. (approved: PENDING). -/
+/-- Helper (congruence). Lifts a supplied frame equality through a monadic fold. (approved: REVIEW7-agy). -/
 private theorem fold_frames {α : Type} (f : State → α → Option State)
     (hf : ∀ s a t, f s a = some t → t.frames = s.frames) (xs : List α)
     (s t : State) (h : xs.foldlM f s = some t) : t.frames = s.frames := by
@@ -585,7 +585,7 @@ private theorem fold_frames {α : Type} (f : State → α → Option State)
     exact (ih u hh).trans (hf s a u hu)
 
 
-/-- Helper (inversion). Inverts the slot-removal filter for a selected local place. (approved: PENDING). -/
+/-- Helper (inversion). Inverts the slot-removal filter for a selected local place. (approved: REVIEW7-agy). -/
 private theorem drop_absent (s t : State) (xs : List Var) (f : Activation)
     (hf : s.frames.head? = some f) (h : drop xs s = some t)
     (p : Hybrid.Place) (hp : p ∈ List.map Prod.snd (f.locals.filter fun e => decide (e.1 ∈ xs))) :
@@ -601,7 +601,7 @@ private theorem drop_absent (s t : State) (xs : List Var) (f : Activation)
   · contradiction
 
 
-/-- Helper (inversion). Structural result proof for the operation-result theorem, derived from `drop_absent` and the frame-local completeness clause of `WellFormed`. (approved: PENDING). -/
+/-- Helper (inversion). Structural result proof for the operation-result theorem, derived from `drop_absent` and the frame-local completeness clause of `WellFormed`. (approved: REVIEW7-agy). -/
 theorem leave_no_activation_slot_result (s t : State) (f : Activation)
     (hs : WellFormed s) (hf : s.frames.head? = some f) (h : leave s = some t) :
     ∀ x ∈ t.slots, x.activation ≠ f.id := by
@@ -634,7 +634,7 @@ theorem leave_no_activation_slot_result (s t : State) (f : Activation)
   exact drop_absent u v _ f (hframes ▸ hf) hv x.place hp x hx rfl
 
 
-/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: PENDING).  -/
+/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: REVIEW7-agy).  -/
 theorem leave_preserves_result (s t : State) (hs : WellFormed s)
     (h : leave s = some t) : WellFormed t := by
   obtain ⟨f, hf⟩ := Option.isSome_iff_exists.mp (show s.frames.head?.isSome = true from by
@@ -682,7 +682,7 @@ theorem leave_preserves_result (s t : State) (hs : WellFormed s)
   · intro g hg p hp
     exact hw.2.2.2.2.2.2.2.2 g (List.mem_of_mem_tail hg) p hp
 
-/-- Helper (congruence). Updating only the view-binding lookup table of the current frame preserves `WellFormed`. (approved: PENDING). -/
+/-- Helper (congruence). Updating only the view-binding lookup table of the current frame preserves `WellFormed`. (approved: REVIEW7-agy). -/
 private theorem set_views_preserves (s : State) (f : Activation) (views : AList Var LoanId)
     (hs : WellFormed s) (hf : s.frames.head? = some f) :
     WellFormed { s with frames := { f with views := views } :: s.frames.tail } := by
@@ -708,7 +708,7 @@ private theorem set_views_preserves (s : State) (f : Activation) (views : AList 
       · dsimp at hg
         exact hs.2.2.2.2.2.2.2.2 g (by simp [hframes, hg]) p hp
 
-/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: PENDING).  -/
+/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: REVIEW7-agy).  -/
 theorem enterDown_preserves_result (s t : State) (args : List (Var × LoanId)) (hs : WellFormed s)
     (h : enterDown s args = some t) : WellFormed t := by
   unfold enterDown at h
@@ -729,7 +729,7 @@ theorem enterDown_preserves_result (s t : State) (args : List (Var × LoanId)) (
   rw [← hv_frames] at hf
   exact set_views_preserves v f ((arg.1, ⟨v.nextLoan - 1⟩) :: f.views) hw hf
 
-/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: PENDING).  -/
+/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: REVIEW7-agy).  -/
 theorem life_preserves_result (types : Var → Option Descriptor) (e : Exec.Life) (s t : State)
     (hs : WellFormed s) (h : life types e s = some t) : WellFormed t := by
   cases e with
@@ -738,7 +738,7 @@ theorem life_preserves_result (types : Var → Option Descriptor) (e : Exec.Life
   | leave => exact leave_preserves_result s t hs h
   | drop xs => exact drop_preserves_result s t xs hs h
 
-/-- Helper (computation). Normalizes the replacement guard; reinitialize_preserves establishes resource-state soundness. (approved: PENDING). -/
+/-- Helper (computation). Normalizes the replacement guard; reinitialize_preserves establishes resource-state soundness. (approved: REVIEW7-agy). -/
 theorem reinitialize_progress (s : State) (p : Hybrid.Place) (x : Slot)
     (found : slot s p = some x)
     (available : x.status = .moved ∨ (x.desc.copy = true ∧ x.desc.mutable = true))
@@ -755,7 +755,7 @@ theorem reinitialize_progress (s : State) (p : Hybrid.Place) (x : Slot)
   rw [ha, hc]
   exact ⟨_, rfl⟩
 
-/-- Helper (computation). Normalizes the child-exclusion guard; downward_reborrow_protocol establishes restoration without consuming older loans. (approved: PENDING). -/
+/-- Helper (computation). Normalizes the child-exclusion guard; downward_reborrow_protocol establishes restoration without consuming older loans. (approved: REVIEW7-agy). -/
 theorem endLoan_progress (s : State) (i : LoanId) (a : Loan)
     (found : loan s i = some a) (children : ∀ b ∈ s.loans, b.parent ≠ some i) :
     ∃ t, endLoan s i = some t := by
@@ -766,14 +766,14 @@ theorem endLoan_progress (s : State) (i : LoanId) (a : Loan)
     exact children b hb (by simpa using he)
   simp [endLoan, found, hc]
 
-/-- Helper (computation). Computes a typed fresh binding; bind_preserves establishes ownership of its activation. (approved: PENDING). -/
+/-- Helper (computation). Computes a typed fresh binding; bind_preserves establishes ownership of its activation. (approved: REVIEW7-agy). -/
 theorem bind_fresh_progress (types : Var → Option Descriptor) (s : State) (x : Var)
     (f : Activation) (d : Descriptor) (frame : s.frames.head? = some f)
     (issued : f.id < s.nextActivation) (fresh : AList.lookup f.locals x = none)
     (descriptor : types x = some d) : ∃ t, bind types x s = some t := by
   simp [bind, frame, issued, fresh, descriptor]
 
-/-- Helper (congruence). Composes fresh typed bindings by induction over the parameter list. (approved: PENDING). -/
+/-- Helper (congruence). Composes fresh typed bindings by induction over the parameter list. (approved: REVIEW7-agy). -/
 private theorem bind_params_progress (types : Var → Option Descriptor) (xs : List Var)
     (s : State) (f : Activation) (frame : s.frames.head? = some f)
     (issued : f.id < s.nextActivation) (unique : xs.Nodup)
@@ -809,7 +809,7 @@ theorem enter_progress (types : Var → Option Descriptor) (s : State) (params :
     ⟨s.nextActivation, [], []⟩ rfl (Nat.lt_succ_self _) unique
     (fun _ _ => rfl) typed
 
-/-- Helper (computation). Normalizes discharge and conflict checks; drop_preserves and leave_no_activation_slot establish cleanup safety. (approved: PENDING). -/
+/-- Helper (computation). Normalizes discharge and conflict checks; drop_preserves and leave_no_activation_slot establish cleanup safety. (approved: REVIEW7-agy). -/
 theorem drop_progress (s : State) (xs : List Var) (f : Activation)
     (frame : s.frames.head? = some f)
     (discharged : ∀ a ∈ s.slots,
@@ -874,12 +874,12 @@ example : ¬ (bind (fun _ => none) y shared).isSome = true := by decide
 example : ¬ (drop [x] initial).isSome = true := by decide
 end LifecycleWitnesses
 
-/-- Helper (projection). Projects the owned-root clause of the well-formedness invariant for the operation-result law. (approved: PENDING). -/
+/-- Helper (projection). Projects the owned-root clause of the well-formedness invariant for the operation-result law. (approved: REVIEW7-agy). -/
 theorem loan_has_owned_root_of_wf (s : State) (hs : WellFormed s) (l : Loan) (hl : l ∈ s.loans) :
     ∃ x ∈ s.slots, x.place = l.root ∧ x.status = .owned := (hs.2.2.2.1 l hl).2.2.1
 
 
-/-- Helper (inversion). Invariant consequence using uniqueness of slot identities and owned roots for the operation-result law. (approved: PENDING). -/
+/-- Helper (inversion). Invariant consequence using uniqueness of slot identities and owned roots for the operation-result law. (approved: REVIEW7-agy). -/
 theorem moved_no_loan_of_wf (s : State) (hs : WellFormed s) (x : Slot) (hx : x ∈ s.slots)
     (hm : x.status = .moved) (l : Loan) (hl : l ∈ s.loans) : x.place ≠ l.root := by
   intro he
@@ -889,7 +889,7 @@ theorem moved_no_loan_of_wf (s : State) (hs : WellFormed s) (x : Slot) (hx : x �
   rw [hm] at ho
   cases ho
 
-/-- Helper (computation). Structural result proof for the operation-result theorem `instrument_erasure`. (approved: PENDING). -/
+/-- Helper (computation). Structural result proof for the operation-result theorem `instrument_erasure`. (approved: REVIEW7-agy). -/
 theorem instrument_erasure_result {σ α : Type} (permit : State → Option State)
     (operation : σ → Option (α × σ)) (s : Store σ) (a : α) (t : Store σ)
     (h : instrument permit operation s = some (a, t)) :
@@ -902,7 +902,7 @@ theorem instrument_erasure_result {σ α : Type} (permit : State → Option Stat
     | some r => cases r; simp [hc] at h
                 rcases h with ⟨rfl, rfl⟩; exact hc
 
-/-- Helper (computation). Structural result proof for the operation-result theorem `life_erasure`. (approved: PENDING). -/
+/-- Helper (computation). Structural result proof for the operation-result theorem `life_erasure`. (approved: REVIEW7-agy). -/
 theorem life_erasure_result {σ : Type} (types : Var → Option Descriptor) (e : Exec.Life)
     (s t : Store σ) (h : lifeStore types e s = some t) :
     erase t = erase s ∧ life types e s.own = some t.own := by
@@ -911,7 +911,7 @@ theorem life_erasure_result {σ : Type} (types : Var → Option Descriptor) (e :
   subst t
   exact ⟨rfl, he⟩
 
-/-- Helper (congruence). Transports the invariant through a loan map that retains semantic identity fields. (approved: PENDING). -/
+/-- Helper (congruence). Transports the invariant through a loan map that retains semantic identity fields. (approved: REVIEW7-agy). -/
 private theorem map_metadata_preserves (s : State) (hs : WellFormed s)
     (act : Loan → Nat) (pending : Loan → Bool)
     (issued : ∀ l ∈ s.loans, act l < s.nextActivation)
@@ -937,7 +937,7 @@ private theorem map_metadata_preserves (s : State) (hs : WellFormed s)
     obtain ⟨y, hy, rfl⟩ := List.mem_map.mp hb
     exact hs.2.2.2.2.1 x hx y hy
 
-/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: PENDING).  -/
+/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: REVIEW7-agy).  -/
 theorem adoptDown_preserves_result (s t : State) (args : List (Var × LoanId))
     (hs : WellFormed s) (h : adoptDown s args = some t) : WellFormed t := by
   unfold adoptDown at h
@@ -961,7 +961,7 @@ theorem adoptDown_preserves_result (s t : State) (args : List (Var × LoanId))
     exact set_views_preserves _ f (args ++ f.views) hw hf
   · contradiction
 
-/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: PENDING).  -/
+/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: REVIEW7-agy).  -/
 theorem passDown_preserves_result (s t : CallState) (i : LoanId) (parameter : Var)
     (hs : WellFormed s.own) (h : passDown s i parameter = some t) : WellFormed t.own := by
   unfold passDown at h
@@ -1002,7 +1002,7 @@ theorem passDown_preserves_result (s t : CallState) (i : LoanId) (parameter : Va
       exact hh
     · contradiction
 
-/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: PENDING). Pending metadata stays synchronized when argument evaluation adds a fresh child. -/
+/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: REVIEW7-agy). Pending metadata stays synchronized when argument evaluation adds a fresh child. -/
 theorem passDown_call_preserves_result (s t : CallState) (i : LoanId) (parameter : Var)
     (hs : CallState.WellFormed s) (h : passDown s i parameter = some t) :
     CallState.WellFormed t := by
@@ -1064,7 +1064,7 @@ theorem passDown_call_preserves_result (s t : CallState) (i : LoanId) (parameter
             using hs.2.2.2.2 b hb
     · contradiction
 
-/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: PENDING). C1's actual call/lifecycle callback preserves ownership, for both owner and view parameters. -/
+/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: REVIEW7-agy). C1's actual call/lifecycle callback preserves ownership, for both owner and view parameters. -/
 theorem callLife_preserves_result (types : Var → Option Descriptor) (e : Exec.Life)
     (s t : CallState) (hs : WellFormed s.own)
     (h : callLife types e s = some t) : WellFormed t.own := by
@@ -1099,7 +1099,7 @@ theorem callLife_preserves_result (types : Var → Option Descriptor) (e : Exec.
       exact life_preserves_result types (.drop xs) s.own own hs ho
     · contradiction
 
-/-- Helper (computation). Reinitialization changes slot status while leaving the loan table unchanged. (approved: PENDING). -/
+/-- Helper (computation). Reinitialization changes slot status while leaving the loan table unchanged. (approved: REVIEW7-agy). -/
 private theorem reinitialize_loans (s t : State) (p : Hybrid.Place)
     (h : reinitialize s p = some t) : t.loans = s.loans := by
   unfold reinitialize at h
@@ -1108,7 +1108,7 @@ private theorem reinitialize_loans (s t : State) (p : Hybrid.Place)
   · cases h; rfl
   · contradiction
 
-/-- Helper (computation). Both binding branches leave the loan table unchanged. (approved: PENDING). -/
+/-- Helper (computation). Both binding branches leave the loan table unchanged. (approved: REVIEW7-agy). -/
 private theorem bind_loans (types : Var → Option Descriptor) (s t : State) (x : Var)
     (h : bind types x s = some t) : t.loans = s.loans := by
   unfold bind at h
@@ -1120,7 +1120,7 @@ private theorem bind_loans (types : Var → Option Descriptor) (s t : State) (x 
     · cases h; rfl
     · contradiction
 
-/-- Helper (congruence). Lifts a supplied loan-table equality through a monadic fold. (approved: PENDING). -/
+/-- Helper (congruence). Lifts a supplied loan-table equality through a monadic fold. (approved: REVIEW7-agy). -/
 private theorem fold_loans {α : Type} (f : State → α → Option State)
     (hf : ∀ s a t, f s a = some t → ∀ l ∈ t.loans, l ∈ s.loans)
     (xs : List α) (s t : State) (h : xs.foldlM f s = some t) :
@@ -1132,7 +1132,7 @@ private theorem fold_loans {α : Type} (f : State → α → Option State)
     obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
     exact fun l hl => hf s a u hu l (ih u h l hl)
 
-/-- Helper (congruence). Composes binding loan-table equalities through parameter entry. (approved: PENDING). -/
+/-- Helper (congruence). Composes binding loan-table equalities through parameter entry. (approved: REVIEW7-agy). -/
 private theorem enter_loans (types : Var → Option Descriptor) (s t : State) (xs : List Var)
     (h : enter types xs s = some t) : t.loans = s.loans := by
   unfold enter at h
@@ -1151,7 +1151,7 @@ private theorem enter_loans (types : Var → Option Descriptor) (s t : State) (x
     obtain ⟨w, hw, h⟩ := Option.bind_eq_some_iff.mp h
     exact (ih w v h).trans (bind_loans types u w x hw)
 
-/-- Helper (computation). Dropping slots does not edit the loan table. (approved: PENDING). -/
+/-- Helper (computation). Dropping slots does not edit the loan table. (approved: REVIEW7-agy). -/
 private theorem drop_loans (s t : State) (xs : List Var) (h : drop xs s = some t) :
     t.loans = s.loans := by
   unfold drop at h
@@ -1161,7 +1161,7 @@ private theorem drop_loans (s t : State) (xs : List Var) (h : drop xs s = some t
   · cases h; rfl
   · contradiction
 
-/-- Helper (inversion). Inverts membership in the filtered loan table. (approved: PENDING). -/
+/-- Helper (inversion). Inverts membership in the filtered loan table. (approved: REVIEW7-agy). -/
 private theorem endLoan_subset (s t : State) (i : LoanId) (h : endLoan s i = some t) :
     ∀ l ∈ t.loans, l ∈ s.loans := by
   unfold endLoan at h
@@ -1171,7 +1171,7 @@ private theorem endLoan_subset (s t : State) (i : LoanId) (h : endLoan s i = som
   · cases h
     exact fun _ hl => (List.mem_filter.mp hl).1
 
-/-- Helper (inversion). Combines lifecycle branch inversions to trace surviving loans to their input. (approved: PENDING). -/
+/-- Helper (inversion). Combines lifecycle branch inversions to trace surviving loans to their input. (approved: REVIEW7-agy). -/
 private theorem life_subset (types : Var → Option Descriptor) (e : Exec.Life) (s t : State)
     (h : life types e s = some t) : ∀ l ∈ t.loans, l ∈ s.loans := by
   cases e with
@@ -1188,7 +1188,7 @@ private theorem life_subset (types : Var → Option Descriptor) (e : Exec.Life) 
     rw [drop_loans u v _ hv] at hl
     exact fold_loans _ (fun s l t h => endLoan_subset s t l.id h) _ s u hu l hl
 
-/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: PENDING). Entry consumes the pending metadata exactly once; other lifecycle events require an
+/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: REVIEW7-agy). Entry consumes the pending metadata exactly once; other lifecycle events require an
 empty argument buffer, so they cannot leave dangling argument identities. -/
 theorem callLife_call_preserves_result (types : Var → Option Descriptor) (e : Exec.Life)
     (s t : CallState) (hs : CallState.WellFormed s) (h : callLife types e s = some t) :
@@ -1250,7 +1250,7 @@ example : ¬ CallState.WellFormed { waiting with own := exclusive } := by decide
 example : ¬ CallState.WellFormed { waiting with own := initial } := by decide
 end CallWitnesses
 
-/-- Helper (computation). Structural result proof for the operation-result theorem `callLife_erasure`. (approved: PENDING). -/
+/-- Helper (computation). Structural result proof for the operation-result theorem `callLife_erasure`. (approved: REVIEW7-agy). -/
 theorem callLife_erasure_result {σ : Type} (types : Var → Option Descriptor) (e : Exec.Life)
     (s t : σ × CallState) (h : callLifeStore types e s = some t) :
     t.1 = s.1 ∧ callLife types e s.2 = some t.2 := by
@@ -1259,7 +1259,7 @@ theorem callLife_erasure_result {σ : Type} (types : Var → Option Descriptor) 
   subst t
   exact ⟨rfl, hu⟩
 
-/-- Helper (congruence). Structural result proof for the operation-result theorem `instrument_preserves`. (approved: PENDING). -/
+/-- Helper (congruence). Structural result proof for the operation-result theorem `instrument_preserves`. (approved: REVIEW7-agy). -/
 theorem instrument_preserves_result {σ α : Type} (permit : State → Option State)
     (hp : ∀ s t, WellFormed s → permit s = some t → WellFormed t) (operation : σ → Option (α × σ))
     (s : Store σ) (a : α) (t : Store σ) (hs : WellFormed s.own)
@@ -1272,7 +1272,7 @@ theorem instrument_preserves_result {σ α : Type} (permit : State → Option St
   cases hh
   exact hp _ _ hs ho
 
-/-- Helper (computation). Structural result proof for the operation-result theorem `readOwner_erasure`. (approved: PENDING). -/
+/-- Helper (computation). Structural result proof for the operation-result theorem `readOwner_erasure`. (approved: REVIEW7-agy). -/
 theorem readOwner_erasure_result (tgt : Target) (p : Hybrid.Place) (s t : Store Hybrid.State)
     (v : Hybrid.Value) (h : readOwner tgt p s = some (v, t)) :
     s.concrete.read tgt p = some v ∧ t.concrete = s.concrete := by
@@ -1282,7 +1282,7 @@ theorem readOwner_erasure_result (tgt : Target) (p : Hybrid.Place) (s t : Store 
   | none => simp [hc] at he
   | some w => simp [hc] at he; rcases he with ⟨rfl, hstore⟩; exact ⟨rfl, hstore.symm⟩
 
-/-- Helper (computation). Structural result proof for the operation-result theorem `writeOwner_erasure`. (approved: PENDING). -/
+/-- Helper (computation). Structural result proof for the operation-result theorem `writeOwner_erasure`. (approved: REVIEW7-agy). -/
 theorem writeOwner_erasure_result (tgt : Target) (p : Hybrid.Place) (s t : Store Hybrid.State)
     (v : Hybrid.Value) (h : writeOwner tgt p v s = some ((), t)) :
     s.concrete.write tgt p v = some t.concrete := by
@@ -1292,7 +1292,7 @@ theorem writeOwner_erasure_result (tgt : Target) (p : Hybrid.Place) (s t : Store
   | none => simp [hc] at he
   | some st => simp [hc] at he; rw [← he]
 
-/-- Helper (computation). Structural result proof for the operation-result theorem `readLoan_erasure`. (approved: PENDING). -/
+/-- Helper (computation). Structural result proof for the operation-result theorem `readLoan_erasure`. (approved: REVIEW7-agy). -/
 theorem readLoan_erasure_result (tgt : Target) (i : LoanId) (s t : Store Hybrid.State)
     (v : Hybrid.Value) (h : readLoan tgt i s = some (v, t)) :
     ∃ l, loan s.own i = some l ∧ l.path = [] ∧
@@ -1309,7 +1309,7 @@ theorem readLoan_erasure_result (tgt : Target) (i : LoanId) (s t : Store Hybrid.
                 exact ⟨l, hl, hpath, hc, hstore.symm⟩
   · contradiction
 
-/-- Helper (computation). Structural result proof for the operation-result theorem `writeLoan_erasure`. (approved: PENDING). -/
+/-- Helper (computation). Structural result proof for the operation-result theorem `writeLoan_erasure`. (approved: REVIEW7-agy). -/
 theorem writeLoan_erasure_result (tgt : Target) (i : LoanId) (s t : Store Hybrid.State)
     (v : Hybrid.Value) (h : writeLoan tgt i v s = some ((), t)) :
     ∃ l, loan s.own i = some l ∧ l.path = [] ∧
@@ -1325,7 +1325,7 @@ theorem writeLoan_erasure_result (tgt : Target) (i : LoanId) (s t : Store Hybrid
     | some st => simp [hc] at he; exact ⟨l, hl, hpath, he ▸ hc⟩
   · contradiction
 
-/-- Helper (arithmetic). Derived invariant or supplied-preservation fact; not independent soundness evidence. (approved: PENDING). The next identity has never belonged to any currently active loan. Combined with the
+/-- Helper (arithmetic). Derived invariant or supplied-preservation fact; not independent soundness evidence. (approved: REVIEW7-agy). The next identity has never belonged to any currently active loan. Combined with the
 unchanged/incremented supply laws, ending a loan cannot make its identity fresh again. -/
 theorem nextLoan_fresh (s : State) (hs : WellFormed s) (l : Loan) (hl : l ∈ s.loans) :
     l.id ≠ LoanId.mk s.nextLoan := by
@@ -1334,7 +1334,7 @@ theorem nextLoan_fresh (s : State) (hs : WellFormed s) (l : Loan) (hl : l ∈ s.
   rw [he] at hb
   exact Nat.lt_irrefl _ hb
 
-/-- Helper (computation). Structural result proof for the operation-result theorem `borrow_birth`. (approved: PENDING). -/
+/-- Helper (computation). Structural result proof for the operation-result theorem `borrow_birth`. (approved: REVIEW7-agy). -/
 theorem borrow_birth_result (s t : State) (p : Hybrid.Place) (path : List Projection)
     (m : Mode) (h : borrow s p path m = some t) :
     t.nextLoan = s.nextLoan + 1 ∧
@@ -1346,7 +1346,7 @@ theorem borrow_birth_result (s t : State) (p : Hybrid.Place) (path : List Projec
     exact ⟨rfl, _, List.mem_cons_self, rfl, rfl, rfl⟩
   · contradiction
 
-/-- Helper (computation). Structural result proof for the operation-result theorem `reborrow_birth`. (approved: PENDING). -/
+/-- Helper (computation). Structural result proof for the operation-result theorem `reborrow_birth`. (approved: REVIEW7-agy). -/
 theorem reborrow_birth_result (s t : State) (i : LoanId) (suffix : List Projection)
     (m : Mode) (activation : Nat) (h : reborrowTo s i suffix m activation = some t) :
     t.nextLoan = s.nextLoan + 1 ∧ ∃ a l, loan s i = some a ∧ l ∈ t.loans ∧
@@ -1360,7 +1360,7 @@ theorem reborrow_birth_result (s t : State) (i : LoanId) (suffix : List Projecti
   · contradiction
 
 
-/-- Helper (computation). Structural result proof for the operation-result theorem `endLoan_supply`. (approved: PENDING). -/
+/-- Helper (computation). Structural result proof for the operation-result theorem `endLoan_supply`. (approved: REVIEW7-agy). -/
 theorem endLoan_supply_result (s t : State) (i : LoanId) (h : endLoan s i = some t) :
     t.nextLoan = s.nextLoan := by
   unfold endLoan at h
@@ -1372,7 +1372,7 @@ theorem endLoan_supply_result (s t : State) (i : LoanId) (h : endLoan s i = some
 
 
 
-/-- Helper (inversion). Structural result proof for the operation-result theorem. (approved: PENDING). -/
+/-- Helper (inversion). Structural result proof for the operation-result theorem. (approved: REVIEW7-agy). -/
 theorem leave_no_local_loan_result (s t : State) (f : Activation)
     (hf : s.frames.head? = some f) (hs : WellFormed s) (h : leave s = some t)
     (entry : Var × Hybrid.Place) (he : entry ∈ f.locals)
@@ -1397,7 +1397,7 @@ theorem leave_no_local_loan_result (s t : State) (f : Activation)
     exact hx
   exact habsent x hxv (hxroot.trans hroot)
 
-/-- Helper (projection). Extracts the pending-argument witness checked by adoption. (approved: PENDING). -/
+/-- Helper (projection). Extracts the pending-argument witness checked by adoption. (approved: REVIEW7-agy). -/
 theorem adoptDown_only_arguments_result (s t : State) (args : List (Var × LoanId))
     (h : adoptDown s args = some t) (e : Var × LoanId) (he : e ∈ args) :
     ∃ l ∈ s.loans, l.id = e.2 ∧ l.pendingArgument = true := by
@@ -1409,7 +1409,7 @@ theorem adoptDown_only_arguments_result (s t : State) (args : List (Var × LoanI
   · contradiction
 
 
-/-- Helper (projection). Extracts the active-current-frame destination checked by reborrowing. (approved: PENDING). -/
+/-- Helper (projection). Extracts the active-current-frame destination checked by reborrowing. (approved: REVIEW7-agy). -/
 theorem reborrowTo_current_result (s t : State) (i : LoanId) (suffix : List Projection)
     (m : Mode) (activation : Nat) (h : reborrowTo s i suffix m activation = some t) :
     ∃ f ∈ s.frames, f.id = activation ∧ s.frames.head? = some f := by
@@ -1422,7 +1422,7 @@ theorem reborrowTo_current_result (s t : State) (i : LoanId) (suffix : List Proj
     exact ⟨f, List.mem_of_head? hf, he, hf⟩
   · contradiction
 
-/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: PENDING). A direct call argument adds a parentless pending root loan and preserves ownership. -/
+/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: REVIEW7-agy). A direct call argument adds a parentless pending root loan and preserves ownership. -/
 theorem passOwner_preserves_result (s t : CallState) (p : Hybrid.Place) (path : List Projection)
     (m : Mode) (x : Var) (hs : WellFormed s.own)
     (h : passOwner s p path m x = some t) : WellFormed t.own := by
@@ -1442,7 +1442,7 @@ theorem passOwner_preserves_result (s t : CallState) (p : Hybrid.Place) (path : 
       · exact Or.inr (Or.inr (Or.inr (Or.inr hm)))
     · contradiction
 
-/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: PENDING). Direct owner argument evaluation preserves synchronized call metadata as well as ownership. -/
+/-- Helper (inversion). Structural successful-result proof used by the operation-result theorem. (approved: REVIEW7-agy). Direct owner argument evaluation preserves synchronized call metadata as well as ownership. -/
 theorem passOwner_call_preserves_result (s t : CallState) (p : Hybrid.Place)
     (path : List Projection) (m : Mode) (x : Var) (hs : CallState.WellFormed s)
     (h : passOwner s p path m x = some t) : CallState.WellFormed t := by
@@ -1492,7 +1492,7 @@ theorem passOwner_call_preserves_result (s t : CallState) (p : Hybrid.Place)
         · simpa [List.map_append, fresh l hl] using hs.2.2.2.2 l hl
     · contradiction
 
-/-- Helper (inversion). Structural result proof for the operation-result theorem. (approved: PENDING). -/
+/-- Helper (inversion). Structural result proof for the operation-result theorem. (approved: REVIEW7-agy). -/
 theorem passOwner_freezes_result (s t : CallState) (p : Hybrid.Place) (path : List Projection)
     (m : Mode) (x : Var) (h : passOwner s p path m x = some t) :
     ownerAccess t.own p .mutable = false ∧
@@ -1506,7 +1506,7 @@ theorem passOwner_freezes_result (s t : CallState) (p : Hybrid.Place) (path : Li
       cases m <;> simp [ownerAccess, show (Mode.mutable == Mode.shared) = false from rfl]
     · contradiction
 
-/-- Helper (computation). Structural result proof for the operation-result theorem `passOwner_birth`. (approved: PENDING). -/
+/-- Helper (computation). Structural result proof for the operation-result theorem `passOwner_birth`. (approved: REVIEW7-agy). -/
 theorem passOwner_birth_result (s t : CallState) (p : Hybrid.Place) (path : List Projection)
     (m : Mode) (x : Var) (h : passOwner s p path m x = some t) :
     ∃ l, t.own.loans = l :: s.own.loans ∧ l.id = LoanId.mk s.own.nextLoan ∧
@@ -1520,7 +1520,7 @@ theorem passOwner_birth_result (s t : CallState) (p : Hybrid.Place) (path : List
     · cases h; exact ⟨_, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
     · contradiction
 
-/-- Helper (inversion). Unique loan identities identify the full loan record. (approved: PENDING). -/
+/-- Helper (inversion). Unique loan identities identify the full loan record. (approved: REVIEW7-agy). -/
 private theorem loan_unique (xs : List Loan) (hn : (xs.map Loan.id).Nodup)
     (x y : Loan) (hx : x ∈ xs) (hy : y ∈ xs) (he : x.id = y.id) : x = y := by
   induction xs with
@@ -1536,7 +1536,7 @@ private theorem loan_unique (xs : List Loan) (hn : (xs.map Loan.id).Nodup)
       · exact False.elim (hn.1 (List.mem_map.mpr ⟨x, hx, he⟩))
       · exact ih hn.2 hx hy
 
-/-- Helper (inversion). Ending a list of other identities retains the entire loan record. (approved: PENDING). -/
+/-- Helper (inversion). Ending a list of other identities retains the entire loan record. (approved: REVIEW7-agy). -/
 private theorem endLoans_retains (xs : List Loan) (l : Loan)
     (different : ∀ a ∈ xs, l.id ≠ a.id) (s t : State) (hl : l ∈ s.loans)
     (h : xs.foldlM (fun s a => endLoan s a.id) s = some t) : l ∈ t.loans := by
@@ -1553,7 +1553,7 @@ private theorem endLoans_retains (xs : List Loan) (l : Loan)
     · cases hu
       exact List.mem_filter.mpr ⟨hl, by simpa using different a List.mem_cons_self⟩
 
-/-- Helper (inversion). Structural result proof for the operation-result theorem. (approved: PENDING). -/
+/-- Helper (inversion). Structural result proof for the operation-result theorem. (approved: REVIEW7-agy). -/
 theorem leave_retains_caller_result (s t : State) (f : Activation) (l : Loan)
     (hs : WellFormed s) (hf : s.frames.head? = some f) (hl : l ∈ s.loans)
     (caller : l.activation ≠ f.id) (h : leave s = some t) : l ∈ t.loans := by
@@ -1573,7 +1573,7 @@ theorem leave_retains_caller_result (s t : State) (f : Activation) (l : Loan)
   cases h
   exact retained
 
-/-- Helper (inversion). Ending loans removes every scheduled identity and never adds loans. (approved: PENDING). -/
+/-- Helper (inversion). Ending loans removes every scheduled identity and never adds loans. (approved: REVIEW7-agy). -/
 private theorem endLoans_removed (xs : List Loan) (s t : State)
     (h : xs.foldlM (fun s a => endLoan s a.id) s = some t) :
     ∀ l ∈ t.loans, l ∈ s.loans ∧ ∀ a ∈ xs, l.id ≠ a.id := by
@@ -1596,7 +1596,7 @@ private theorem endLoans_removed (xs : List Loan) (s t : State)
       · simpa using hn
       · exact rest b hb
 
-/-- Helper (inversion). Structural result proof for the operation-result theorem. (approved: PENDING). -/
+/-- Helper (inversion). Structural result proof for the operation-result theorem. (approved: REVIEW7-agy). -/
 theorem leave_no_activation_loan_result (s t : State) (f : Activation)
     (hf : s.frames.head? = some f) (h : leave s = some t) :
     ∀ l ∈ t.loans, l.activation ≠ f.id := by
@@ -1611,7 +1611,7 @@ theorem leave_no_activation_loan_result (s t : State) (f : Activation)
   obtain ⟨hs, removed⟩ := endLoans_removed _ s u hu l hl
   exact removed l (List.mem_filter.mpr ⟨hs, by simpa using he⟩) rfl
 
-/-- Helper (computation). Structural result proof for the operation-result theorem `defer_keeps_store`. (approved: PENDING). -/
+/-- Helper (computation). Structural result proof for the operation-result theorem `defer_keeps_store`. (approved: REVIEW7-agy). -/
 theorem defer_keeps_store_result (O : Exec.Operands) (P : Exec.Program O)
     (f : FnId) (args : List O.Expr) (site : SiteId) (L : AList Var O.Val)
     (s : O.Store) (k : List (Exec.Frame O)) (c : Exec.Config O)
@@ -1840,7 +1840,7 @@ example : (do
 example : ¬ (called.own.loans = caller.own.loans) := by decide
 end DirectArgumentWitnesses
 
-/-- Helper (inversion). Structural result proof for the operation-result theorem. (approved: PENDING). -/
+/-- Helper (inversion). Structural result proof for the operation-result theorem. (approved: REVIEW7-agy). -/
 theorem reborrowTo_live_result (s t : State) (i : LoanId) (path : List Projection)
     (m : Mode) (activation : Nat) (hs : LiveDestinations s)
     (h : reborrowTo s i path m activation = some t) : LiveDestinations t := by
@@ -1857,7 +1857,7 @@ theorem reborrowTo_live_result (s t : State) (i : LoanId) (path : List Projectio
     · exact hs l hl
   · contradiction
 
-/-- Helper (inversion). Structural result proof for the operation-result theorem. (approved: PENDING). -/
+/-- Helper (inversion). Structural result proof for the operation-result theorem. (approved: REVIEW7-agy). -/
 theorem adoptDown_live_result (s t : State) (args : List (Var × LoanId))
     (hs : LiveDestinations s) (h : adoptDown s args = some t) : LiveDestinations t := by
   unfold adoptDown at h
@@ -1876,7 +1876,7 @@ theorem adoptDown_live_result (s t : State) (args : List (Var × LoanId))
       · simpa [hframes] using hs a ha
     · contradiction
 
-/-- Helper (projection). Successful return pops exactly the current activation frame. (approved: PENDING). -/
+/-- Helper (projection). Successful return pops exactly the current activation frame. (approved: REVIEW7-agy). -/
 private theorem leave_frames_proj (s t : State) (f : Activation)
     (hf : s.frames.head? = some f) (h : leave s = some t) :
     t.frames = s.frames.tail := by
@@ -1895,7 +1895,7 @@ private theorem leave_frames_proj (s t : State) (f : Activation)
     simp
   · contradiction
 
-/-- Helper (inversion). Structural result proof for the operation-result theorem. (approved: PENDING). -/
+/-- Helper (inversion). Structural result proof for the operation-result theorem. (approved: REVIEW7-agy). -/
 theorem leave_live_result (s t : State) (f : Activation) (hs : LiveDestinations s)
     (hf : s.frames.head? = some f) (h : leave s = some t) : LiveDestinations t := by
   intro l hl
@@ -1937,7 +1937,7 @@ section ExecErasure
 variable {O : Exec.Operands} {types : Var → Option Descriptor}
   {permit : AList Var O.Val → O.Expr → State → Option State}
 
-/-- Helper (inversion). Structural inversion for `eval_ok_erasure` on a given `.ok (v, t)` result. (approved: PENDING). -/
+/-- Helper (inversion). Structural inversion for `eval_ok_erasure` on a given `.ok (v, t)` result. (approved: REVIEW7-agy). -/
 theorem eval_ok_erasure_result (L : AList Var O.Val) (s t : Store O.Store) (e : O.Expr) (v : O.Val)
     (h : (instrumentOperands O types permit).eval L s e = .ok (v, t)) :
     O.eval L (erase s) e = .ok (v, erase t) := by
@@ -1955,7 +1955,7 @@ theorem eval_ok_erasure_result (L : AList Var O.Val) (s t : Store O.Store) (e : 
     | trap _ => rw [he] at h; cases h
     | stuck => rw [he] at h; cases h
 
-/-- Helper (computation). Calculates one lifted operand result; the independently stated finite execution contract is Steps_erasure. (approved: PENDING). -/
+/-- Helper (computation). Calculates one lifted operand result; the independently stated finite execution contract is Steps_erasure. (approved: REVIEW7-agy). -/
 theorem eval_ok_erasure (L : AList Var O.Val) (s : Store O.Store) (e : O.Expr) :
     match (instrumentOperands O types permit).eval L s e with
     | .ok (v, t) => O.eval L (erase s) e = .ok (v, erase t)
@@ -1965,7 +1965,7 @@ theorem eval_ok_erasure (L : AList Var O.Val) (s : Store O.Store) (e : O.Expr) :
   | trap _ => trivial
   | stuck => trivial
 
-/-- Helper (inversion). Structural inversion for `eval_trap_erasure` on a given `.trap kd` result. (approved: PENDING). -/
+/-- Helper (inversion). Structural inversion for `eval_trap_erasure` on a given `.trap kd` result. (approved: REVIEW7-agy). -/
 theorem eval_trap_erasure_result (L : AList Var O.Val) (s : Store O.Store) (e : O.Expr) (kd : TrapKind)
     (h : (instrumentOperands O types permit).eval L s e = .trap kd) :
     O.eval L (erase s) e = .trap kd := by
@@ -1979,7 +1979,7 @@ theorem eval_trap_erasure_result (L : AList Var O.Val) (s : Store O.Store) (e : 
     | trap _ => rw [he] at h; cases h; exact he
     | stuck => rw [he] at h; cases h
 
-/-- Helper (computation). Calculates one lifted trap result; runFrom_erasure establishes terminal execution agreement. (approved: PENDING). -/
+/-- Helper (computation). Calculates one lifted trap result; runFrom_erasure establishes terminal execution agreement. (approved: REVIEW7-agy). -/
 theorem eval_trap_erasure (L : AList Var O.Val) (s : Store O.Store) (e : O.Expr) :
     match (instrumentOperands O types permit).eval L s e with
     | .trap kd => O.eval L (erase s) e = .trap kd
@@ -1989,7 +1989,7 @@ theorem eval_trap_erasure (L : AList Var O.Val) (s : Store O.Store) (e : O.Expr)
   | trap kd => exact eval_trap_erasure_result L s e kd h
   | stuck => trivial
 
-/-- Helper (inversion). Structural induction for the argument-result law. (approved: PENDING). -/
+/-- Helper (inversion). Structural induction for the argument-result law. (approved: REVIEW7-agy). -/
 theorem evalArgs_ok_erasure_result (L : AList Var O.Val) :
     ∀ (args : List O.Expr) (s t : Store O.Store) (vs : List O.Val),
       Exec.evalArgs (instrumentOperands O types permit) L s args = .ok (vs, t) →
@@ -2023,7 +2023,7 @@ theorem evalArgs_ok_erasure_result (L : AList Var O.Val) :
     | trap _ => rw [he] at h; cases h
     | stuck => rw [he] at h; cases h
 
-/-- Helper (inversion). Structural induction for the argument-result law. (approved: PENDING). -/
+/-- Helper (inversion). Structural induction for the argument-result law. (approved: REVIEW7-agy). -/
 theorem evalArgs_trap_erasure_result (L : AList Var O.Val) :
     ∀ (args : List O.Expr) (s : Store O.Store) (kd : TrapKind),
       Exec.evalArgs (instrumentOperands O types permit) L s args = .trap kd →
@@ -2059,11 +2059,11 @@ theorem evalArgs_trap_erasure_result (L : AList Var O.Val) :
       rfl
     | stuck => rw [he] at h; cases h
 
-/-- Helper (projection). Condition tests are identical in the instrumented and erased operand instances. (approved: PENDING). -/
+/-- Helper (projection). Condition tests are identical in the instrumented and erased operand instances. (approved: REVIEW7-agy). -/
 theorem test_erasure_result (v : O.Val) :
     (instrumentOperands O types permit).test v = O.test v := rfl
 
-/-- Helper (computation). Projects the unchanged concrete test; Steps_erasure establishes agreement of actual branch execution. (approved: PENDING). -/
+/-- Helper (computation). Projects the unchanged concrete test; Steps_erasure establishes agreement of actual branch execution. (approved: REVIEW7-agy). -/
 theorem test_erasure (v : O.Val) :
     match (instrumentOperands O types permit).test v with
     | some b => O.test v = some b
@@ -2071,7 +2071,7 @@ theorem test_erasure (v : O.Val) :
   dsimp [instrumentOperands]
   cases O.test v <;> rfl
 
-/-- Helper (inversion). Structural inversion for `instrumentLife_erasure` on a given output store. (approved: PENDING). -/
+/-- Helper (inversion). Structural inversion for `instrumentLife_erasure` on a given output store. (approved: REVIEW7-agy). -/
 theorem instrumentLife_erasure_result (ev : Exec.Life) (s t : Store O.Store)
     (h : (instrumentOperands O types permit).life ev s = some t) :
     O.life ev (erase s) = some (erase t) := by
@@ -2087,7 +2087,7 @@ theorem instrumentLife_erasure_result (ev : Exec.Life) (s t : Store O.Store)
       cases h
       exact hc
 
-/-- Helper (computation). Calculates the lifted lifecycle result; Steps_erasure establishes execution agreement through cleanup. (approved: PENDING). -/
+/-- Helper (computation). Calculates the lifted lifecycle result; Steps_erasure establishes execution agreement through cleanup. (approved: REVIEW7-agy). -/
 theorem instrumentLife_erasure (ev : Exec.Life) (s : Store O.Store) :
     match (instrumentOperands O types permit).life ev s with
     | some t => O.life ev (erase s) = some (erase t) ∧ life types ev s.own = some t.own
@@ -2105,7 +2105,7 @@ theorem instrumentLife_erasure (ev : Exec.Life) (s : Store O.Store) :
       | none => rw [hc] at h; cases h
       | some concrete => rw [hc] at h; cases h; rfl
 
-/-- Helper (projection). Extracts the two defining conjuncts of the instrumented answer guard. (approved: PENDING). -/
+/-- Helper (projection). Extracts the two defining conjuncts of the instrumented answer guard. (approved: REVIEW7-agy). -/
 theorem allows_erasure_result (p : O.Prim) (vs : List O.Val) (s : Store O.Store)
     (a : Exec.Answer O.Val O.Event (Store O.Store))
     (h : (instrumentOperands O types permit).allows p vs s a = true) :
@@ -2114,7 +2114,7 @@ theorem allows_erasure_result (p : O.Prim) (vs : List O.Val) (s : Store O.Store)
   obtain ⟨ha, hown⟩ := Bool.and_eq_true_iff.mp h
   exact ⟨ha, of_decide_eq_true hown⟩
 
-/-- Helper (computation). Unpacks the primitive answer guard; Steps_erasure and runFrom_erasure establish actual primitive execution agreement. (approved: PENDING). -/
+/-- Helper (computation). Unpacks the primitive answer guard; Steps_erasure and runFrom_erasure establish actual primitive execution agreement. (approved: REVIEW7-agy). -/
 theorem allows_erasure (p : O.Prim) (vs : List O.Val) (s : Store O.Store)
     (a : Exec.Answer O.Val O.Event (Store O.Store)) :
     ((instrumentOperands O types permit).allows p vs s a = true ↔
@@ -2122,7 +2122,7 @@ theorem allows_erasure (p : O.Prim) (vs : List O.Val) (s : Store O.Store)
   dsimp [instrumentOperands, instrumentAllows]
   rw [Bool.and_eq_true_iff, decide_eq_true_eq]
 
-/-- Helper (projection). Result-binding lifecycle erases to the concrete `bindLife`. (approved: PENDING). -/
+/-- Helper (projection). Result-binding lifecycle erases to the concrete `bindLife`. (approved: REVIEW7-agy). -/
 private theorem bindLife_erasure_proj (dst : Option Var) (s t : Store O.Store)
     (h : Exec.bindLife (instrumentOperands O types permit) dst s = some t) :
     Exec.bindLife O dst (erase s) = some (erase t) := by
@@ -2130,13 +2130,13 @@ private theorem bindLife_erasure_proj (dst : Option Var) (s t : Store O.Store)
   | none => cases h; rfl
   | some x => exact instrumentLife_erasure_result (.bind x) s t h
 
-/-- Helper (projection). Scope-exit drop erases to the concrete `dropOut`. (approved: PENDING). -/
+/-- Helper (projection). Scope-exit drop erases to the concrete `dropOut`. (approved: REVIEW7-agy). -/
 private theorem dropOut_erasure_proj (dm : List Var) (L : AList Var O.Val) (s t : Store O.Store)
     (h : Exec.dropOut (instrumentOperands O types permit) dm L s = some t) :
     Exec.dropOut O dm L (erase s) = some (erase t) :=
   instrumentLife_erasure_result (.drop (Exec.dead dm L)) s t h
 
-/-- Helper (projection). Deferred cleanup registration commutes with frame erasure. (approved: PENDING). -/
+/-- Helper (projection). Deferred cleanup registration commutes with frame erasure. (approved: REVIEW7-agy). -/
 private theorem register_erasure_proj (d : Exec.Deferred (instrumentOperands O types permit)) :
     ∀ (k k' : List (Exec.Frame (instrumentOperands O types permit))),
       Exec.register d k = some k' →
@@ -2154,7 +2154,7 @@ private theorem register_erasure_proj (d : Exec.Deferred (instrumentOperands O t
   | .resume _ :: _, _, h => by cases h
   | .ret .. :: _, _, h => by cases h
 
-/-- Helper (projection). Function lookup in an erased program erases the looked-up function. (approved: PENDING). -/
+/-- Helper (projection). Function lookup in an erased program erases the looked-up function. (approved: REVIEW7-agy). -/
 private theorem lookup_eraseProgram_proj :
     ∀ (fns : AList FnId (Exec.Fn (instrumentOperands O types permit))) (f : FnId),
       AList.lookup (List.map (fun e => (e.1, eraseFn e.2)) fns) f =
@@ -2166,7 +2166,7 @@ private theorem lookup_eraseProgram_proj :
     · simp [h]
     · simp [h, lookup_eraseProgram_proj fns f]
 
-/-- Helper (projection). Structured exit unwinding commutes with configuration erasure. (approved: PENDING). -/
+/-- Helper (projection). Structured exit unwinding commutes with configuration erasure. (approved: REVIEW7-agy). -/
 private theorem stepExit_erasure_proj (L : AList Var O.Val) (s : Store O.Store)
     (e : Exec.Exit O.Val) (k : List (Exec.Frame (instrumentOperands O types permit)))
     (out : Exec.Out (instrumentOperands O types permit))
@@ -2231,7 +2231,7 @@ private theorem stepExit_erasure_proj (L : AList Var O.Val) (s : Store O.Store)
         rw [bindLife_erasure_proj (O := O) (permit := permit) dst st' st'' hst'']
         rfl
 
-/-- Helper (inversion). Silent machine-step forward simulation on a given `.next c'` result. (approved: PENDING). -/
+/-- Helper (inversion). Silent machine-step forward simulation on a given `.next c'` result. (approved: REVIEW7-agy). -/
 theorem step_next_erasure_result (P : Exec.Program (instrumentOperands O types permit))
     (c c' : Exec.Config (instrumentOperands O types permit))
     (h : Exec.step P c = some (.next c')) :
@@ -2455,7 +2455,7 @@ theorem step_next_erasure (P : Exec.Program (instrumentOperands O types permit))
     | next c' => exact step_next_erasure_result P c c' h
     | request _ _ _ _ _ => trivial
 
-/-- Helper (inversion). Primitive-request forward simulation on a given `.request` result. (approved: PENDING). -/
+/-- Helper (inversion). Primitive-request forward simulation on a given `.request` result. (approved: REVIEW7-agy). -/
 theorem step_request_erasure_result (P : Exec.Program (instrumentOperands O types permit))
     (c : Exec.Config (instrumentOperands O types permit))
     (p : O.Prim) (vs : List O.Val) (site : SiteId) (st : Store O.Store)
@@ -2614,18 +2614,18 @@ theorem step_request_erasure (P : Exec.Program (instrumentOperands O types permi
     | next _ => trivial
     | request p vs site st k => exact step_request_erasure_result P c p vs site st k h
 
-/-- Helper (projection). Erasing a step label preserves its emitted event list. (approved: PENDING). -/
+/-- Helper (projection). Erasing a step label preserves its emitted event list. (approved: REVIEW7-agy). -/
 private theorem eraseLabel_events_proj (l : Exec.Label (instrumentOperands O types permit)) :
     (eraseLabel l).events = l.events := by
   cases l <;> rfl
 
-/-- Helper (projection). Erasing an answer's step label equals the erased answer's label. (approved: PENDING). -/
+/-- Helper (projection). Erasing an answer's step label equals the erased answer's label. (approved: REVIEW7-agy). -/
 private theorem eraseLabel_answer_proj (a : Exec.Answer O.Val O.Event (Store O.Store)) :
     eraseLabel (O := O) (types := types) (permit := permit) a.label = (eraseAnswer a).label := by
   rcases a with ⟨ev, _, _⟩
   cases ev <;> rfl
 
-/-- Helper (inversion). Single-step forward simulation over `Exec.Step`. (approved: PENDING). -/
+/-- Helper (inversion). Single-step forward simulation over `Exec.Step`. (approved: REVIEW7-agy). -/
 theorem Step_erasure_result (P : Exec.Program (instrumentOperands O types permit))
     (c c' : Exec.Config (instrumentOperands O types permit))
     (l : Exec.Label (instrumentOperands O types permit))
@@ -2675,7 +2675,7 @@ theorem Steps_erasure (P : Exec.Program (instrumentOperands O types permit))
     have hstep := Step_erasure_result P _ _ _ (.prim hs ha hk)
     simpa [eraseLabel_events_proj] using Exec.Steps.step hstep ih
 
-/-- Helper (inversion). C1-closure specialization of the unconditional `Steps_erasure` protocol; retained for execution clients using C1 proofs directly. (approved: PENDING). -/
+/-- Helper (inversion). C1-closure specialization of the unconditional `Steps_erasure` protocol; retained for execution clients using C1 proofs directly. (approved: REVIEW7-agy). -/
 theorem Steps_erasure_result (P : Exec.Program (instrumentOperands O types permit))
     (c c' : Exec.Config (instrumentOperands O types permit))
     (tr : List O.Event)
@@ -2689,7 +2689,7 @@ theorem Steps_erasure_result (P : Exec.Program (instrumentOperands O types permi
     | silent hs => exact .silent hs ih
     | prim hs ha hk => exact .prim hs ha hk ih
 
-/-- Helper (projection). Configuration finality is invariant under erasure. (approved: PENDING). -/
+/-- Helper (projection). Configuration finality is invariant under erasure. (approved: REVIEW7-agy). -/
 private theorem final?_eraseConfig_proj (c : Exec.Config (instrumentOperands O types permit)) :
     (eraseConfig c).final? = c.final? := by
   rcases c with ⟨ctrl, L, st, frames⟩
@@ -2703,7 +2703,7 @@ private theorem final?_eraseConfig_proj (c : Exec.Config (instrumentOperands O t
     | ret _ => cases frames <;> rfl
   | trapped _ _ => rfl
 
-/-- Helper (projection). Lifting a concrete answer preserves the primitive contract check. (approved: PENDING). -/
+/-- Helper (projection). Lifting a concrete answer preserves the primitive contract check. (approved: REVIEW7-agy). -/
 private theorem allows_liftAnswer_proj (p : O.Prim) (vs : List O.Val) (s : Store O.Store)
     (a : Exec.Answer O.Val O.Event O.Store) :
     (instrumentOperands O types permit).allows p vs s (liftAnswer s.own a) =
@@ -2788,7 +2788,7 @@ theorem run_erasure (P : Exec.Program (instrumentOperands O types permit))
 
 
 /-- Helper (inversion). Under `EvalPermitted`, an instrumented operand evaluation that is
-stuck is also stuck in the erased operand instance. (approved: PENDING). -/
+stuck is also stuck in the erased operand instance. (approved: REVIEW7-agy). -/
 private theorem eval_stuck_of_permitted_inv (L : AList Var O.Val) (s : Store O.Store)
     (e : O.Expr) (hp : EvalPermitted O permit L s e)
     (hs : (instrumentOperands O types permit).eval L s e = .stuck) :
@@ -2809,7 +2809,7 @@ private theorem eval_stuck_of_permitted_inv (L : AList Var O.Val) (s : Store O.S
   | stuck => exact hc
 
 /-- Helper (inversion). Under `ArgsPermitted`, an instrumented argument list that is
-stuck is also stuck in the erased operand instance. (approved: PENDING). -/
+stuck is also stuck in the erased operand instance. (approved: REVIEW7-agy). -/
 private theorem evalArgs_stuck_of_permitted_inv (L : AList Var O.Val) :
     ∀ (args : List O.Expr) (s : Store O.Store),
       ArgsPermitted O types permit L s args →
@@ -2844,7 +2844,7 @@ private theorem evalArgs_stuck_of_permitted_inv (L : AList Var O.Val) :
       rfl
 
 /-- Helper (inversion). Under `LifePermitted`, an instrumented lifecycle transition that
-returns `none` also returns `none` on the erased store. (approved: PENDING). -/
+returns `none` also returns `none` on the erased store. (approved: REVIEW7-agy). -/
 private theorem life_none_of_permitted_inv (ev : Exec.Life) (s : Store O.Store)
     (hp : LifePermitted O types ev s)
     (hs : (instrumentOperands O types permit).life ev s = none) :
@@ -2859,7 +2859,7 @@ private theorem life_none_of_permitted_inv (ev : Exec.Life) (s : Store O.Store)
     cases hs
 
 /-- Helper (inversion). Under `BindDstPermitted`, an instrumented destination-binding
-lifecycle that returns `none` also returns `none` on the erased store. (approved: PENDING). -/
+lifecycle that returns `none` also returns `none` on the erased store. (approved: REVIEW7-agy). -/
 private theorem bindLife_none_of_permitted_inv (dst : Option Var) (s : Store O.Store)
     (hp : BindDstPermitted O types dst s)
     (hs : Exec.bindLife (instrumentOperands O types permit) dst s = none) :
@@ -2869,14 +2869,14 @@ private theorem bindLife_none_of_permitted_inv (dst : Option Var) (s : Store O.S
   | some x => exact life_none_of_permitted_inv (O := O) (permit := permit) (.bind x) s hp hs
 
 /-- Helper (inversion). Under `LifePermitted`, an instrumented scope-exit drop that
-returns `none` also returns `none` on the erased store. (approved: PENDING). -/
+returns `none` also returns `none` on the erased store. (approved: REVIEW7-agy). -/
 private theorem dropOut_none_of_permitted_inv (dm : List Var) (L : AList Var O.Val)
     (s : Store O.Store) (hp : LifePermitted O types (.drop (Exec.dead dm L)) s)
     (hs : Exec.dropOut (instrumentOperands O types permit) dm L s = none) :
     Exec.dropOut O dm L (erase s) = none :=
   life_none_of_permitted_inv (O := O) (permit := permit) (.drop (Exec.dead dm L)) s hp hs
 
-/-- Helper (projection). Deferred registration failure is invariant under frame erasure. (approved: PENDING). -/
+/-- Helper (projection). Deferred registration failure is invariant under frame erasure. (approved: REVIEW7-agy). -/
 private theorem register_none_proj (d : Exec.Deferred (instrumentOperands O types permit)) :
     ∀ (k : List (Exec.Frame (instrumentOperands O types permit))),
       Exec.register d k = none →
@@ -2892,7 +2892,7 @@ private theorem register_none_proj (d : Exec.Deferred (instrumentOperands O type
   | .ret .. :: _, _ => rfl
 
 /-- Helper (inversion). Under `ExitFramePermitted`, structured exit unwinding that returns
-`none` on the instrumented machine also returns `none` on the erased machine. (approved: PENDING). -/
+`none` on the instrumented machine also returns `none` on the erased machine. (approved: REVIEW7-agy). -/
 private theorem stepExit_none_of_permitted_inv (L : AList Var O.Val) (s : Store O.Store)
     (e : Exec.Exit O.Val) (k : List (Exec.Frame (instrumentOperands O types permit)))
     (hp : match k with
@@ -2948,7 +2948,7 @@ private theorem stepExit_none_of_permitted_inv (L : AList Var O.Val) (s : Store 
           rfl
 
 /-- Helper (inversion). Under `StepPermitted`, if `step` on the instrumented C1 machine
-returns `none`, then `step` on the erased machine also returns `none`. (approved: PENDING). -/
+returns `none`, then `step` on the erased machine also returns `none`. (approved: REVIEW7-agy). -/
 private theorem step_none_of_permitted_inv
     (P : Exec.Program (instrumentOperands O types permit))
     (c : Exec.Config (instrumentOperands O types permit))
@@ -3124,7 +3124,7 @@ private theorem step_none_of_permitted_inv
   | trapped _ _ => rfl
 
 /-- Helper (inversion). Under `StepPermitted`, if a primitive request continuation returns
-`none` on an allowed answer, the erased continuation also returns `none`. (approved: PENDING). -/
+`none` on an allowed answer, the erased continuation also returns `none`. (approved: REVIEW7-agy). -/
 private theorem request_none_of_permitted_inv
     (P : Exec.Program (instrumentOperands O types permit))
     (c : Exec.Config (instrumentOperands O types permit))
@@ -3262,7 +3262,7 @@ private theorem request_none_of_permitted_inv
     cases hc
   | trapped _ _ => cases hs
 
-/-- Helper (inversion). `CheckerAccepted` is preserved across any single machine step. (approved: PENDING). -/
+/-- Helper (inversion). `CheckerAccepted` is preserved across any single machine step. (approved: REVIEW7-agy). -/
 private theorem checkerAccepted_step_inv
     (P : Exec.Program (instrumentOperands O types permit))
     (c c' : Exec.Config (instrumentOperands O types permit))
@@ -3375,7 +3375,7 @@ theorem runFrom_erasure_of_accepted
               simp only [ha_inst, ha]
               rfl
 
-/-- Helper (projection). `Ending.IsStuck` is invariant under `eraseEnding`. (approved: PENDING). -/
+/-- Helper (projection). `Ending.IsStuck` is invariant under `eraseEnding`. (approved: REVIEW7-agy). -/
 private theorem isStuck_eraseEnding_proj (e : Exec.Ending (instrumentOperands O types permit)) :
     Ending.IsStuck (eraseEnding e) = Ending.IsStuck e := by
   cases e <;> rfl
@@ -3408,7 +3408,7 @@ def primOneConfig : Exec.Config instrumentedOps :=
   ⟨.exec (.prim (some y) () [.read x] ⟨0⟩), [(x, 7)], ⟨0, initial⟩, []⟩
 
 /-- Helper (inversion). A step from a configuration whose `step` is `some (.next c₁)` must
-land in `c₁`. (approved: PENDING). -/
+land in `c₁`. (approved: REVIEW7-agy). -/
 private theorem step_det_next_inv {O : Exec.Operands} {P : Exec.Program O}
     {c c₁ c' : Exec.Config O} {l : Exec.Label O}
     (hs : Exec.step P c = some (.next c₁)) (hstep : Exec.Step P c l c') :
@@ -3423,7 +3423,7 @@ private theorem step_det_next_inv {O : Exec.Operands} {P : Exec.Program O}
     rw [hs] at h
     cases h
 
-/-- Helper (inversion). A configuration whose `step` is `none` cannot take a `Step`. (approved: PENDING). -/
+/-- Helper (inversion). A configuration whose `step` is `none` cannot take a `Step`. (approved: REVIEW7-agy). -/
 private theorem step_det_none_inv {O : Exec.Operands} {P : Exec.Program O}
     {c c' : Exec.Config O} {l : Exec.Label O}
     (hs : Exec.step P c = none) (hstep : Exec.Step P c l c') : False := by
@@ -3433,7 +3433,7 @@ private theorem step_det_none_inv {O : Exec.Operands} {P : Exec.Program O}
 
 /-- Helper (inversion). The moved-owner program `moveConfig` is rejected by `CheckerAccepted`
 because after moving `x` to `y` it reaches `.ret (.read x)` where concrete evaluation succeeds
-while `permitE` refuses. (approved: PENDING). -/
+while `permitE` refuses. (approved: REVIEW7-agy). -/
 private theorem move_not_checkerAccepted_inv :
     ¬ CheckerAccepted erasedOps types permitE emptyProg moveConfig := by
   intro hacc
@@ -3445,7 +3445,7 @@ private theorem move_not_checkerAccepted_inv :
   cases hsome
 
 /-- Helper (inversion). The valid move-and-return program `acceptedMoveConfig`
-(`seq (bind y (move x)) (ret (read y))`) satisfies `CheckerAccepted`. (approved: PENDING). -/
+(`seq (bind y (move x)) (ret (read y))`) satisfies `CheckerAccepted`. (approved: REVIEW7-agy). -/
 private theorem acceptedMove_checkerAccepted_inv :
     CheckerAccepted erasedOps types permitE emptyProg acceptedMoveConfig := by
   intro tr c hsteps
@@ -3476,7 +3476,7 @@ private theorem acceptedMove_checkerAccepted_inv :
           | step hs₅ _ => exact False.elim (step_det_none_inv rfl hs₅)
 
 /-- Helper (inversion). The unbound-assignment configuration `acceptedStuckConfig`
-satisfies `CheckerAccepted` and gets stuck in both the instrumented and erased machines. (approved: PENDING). -/
+satisfies `CheckerAccepted` and gets stuck in both the instrumented and erased machines. (approved: REVIEW7-agy). -/
 private theorem acceptedStuck_checkerAccepted_inv :
     CheckerAccepted erasedOps types permitE emptyProg acceptedStuckConfig := by
   intro tr c hsteps
@@ -3762,7 +3762,7 @@ def UnconditionalRunConverse : Prop :=
 
 /-- Helper (computation). The owner-required moved-owner execution refutes the explicitly
 unconditional candidate. This makes no claim against the checker-accepted converse.
-(approved: PENDING). -/
+(approved: REVIEW7-agy). -/
 theorem unconditionalRunConverse_refuted : ¬ UnconditionalRunConverse := by
   intro h
   have he := congrArg (fun r => Ending.IsStuck r.ending) (h 100 moveConfig)
@@ -3836,7 +3836,7 @@ def primFrameStuckConfig : Exec.Config instrumentedOps :=
   ⟨.exec (.prim none () [.lit 0] ⟨0⟩), [(x, 7)], ⟨0, initial⟩,
     [.seq (.assign y (.lit 1) ⟨1⟩)]⟩
 
-/-- Helper (inversion). `primFrameStuckConfig` satisfies `CheckerAccepted`. (approved: PENDING). -/
+/-- Helper (inversion). `primFrameStuckConfig` satisfies `CheckerAccepted`. (approved: REVIEW7-agy). -/
 private theorem primFrameStuck_checkerAccepted_inv :
     CheckerAccepted erasedOps types permitE emptyProg primFrameStuckConfig := by
   intro tr c hsteps
@@ -4019,7 +4019,7 @@ def traceSuccessor : Exec.Config instrumentedOps :=
   ⟨.exiting (.ret 7), [(y, 7), (x, 7)], ⟨10, (bind types y initial).getD initial⟩, []⟩
 
 /-- Helper (computation). The seven-step execution emits both primitive events in order.
-(approved: PENDING). -/
+(approved: REVIEW7-agy). -/
 private theorem traceSteps : Exec.Steps emptyProg primTraceConfig [7, 3] traceSuccessor := by
   have hsteps : Exec.Steps emptyProg primTraceConfig _ _ :=
     .step (.silent rfl)
@@ -4083,7 +4083,7 @@ example : Ending.NotStuck (Exec.run emptyProg
   exact ⟨rfl, by intro h; have he := congrArg (fun r => r.events) h; cases he⟩
 
 /-- Helper (inversion). The single-step move-binding configuration `bindMoveConfig`
-satisfies `CheckerAccepted`. (approved: PENDING). -/
+satisfies `CheckerAccepted`. (approved: REVIEW7-agy). -/
 private theorem bindMove_checkerAccepted_inv :
     CheckerAccepted erasedOps types permitE emptyProg bindMoveConfig := by
   intro tr c hsteps
@@ -4301,13 +4301,13 @@ theorem passOwner_call_preserves (s : CallState) (p : Hybrid.Place) (path : List
   | none => trivial
   | some t => exact passOwner_call_preserves_result s t p path m x hs he
 
-/-- Helper (computation). The permission-only transition is identity; operation preservation is not independent soundness evidence here. (approved: PENDING). -/
+/-- Helper (computation). The permission-only transition is identity; operation preservation is not independent soundness evidence here. (approved: REVIEW7-agy). -/
 theorem accessOwner_preserves (s : State) (p : Hybrid.Place) (m : Mode) (hs : WellFormed s) : StateResult (accessOwner s p m) := by
   cases he : accessOwner s p m with
   | none => trivial
   | some t => exact accessOwner_preserves_result s t p m hs he
 
-/-- Helper (computation). The loan permission transition is identity; loan conflicts are justified by the invariant and scoped protocol laws. (approved: PENDING). -/
+/-- Helper (computation). The loan permission transition is identity; loan conflicts are justified by the invariant and scoped protocol laws. (approved: REVIEW7-agy). -/
 theorem accessLoan_preserves (s : State) (i : LoanId) (m : Mode) (hs : WellFormed s) : StateResult (accessLoan s i m) := by
   cases he : accessLoan s i m with
   | none => trivial
@@ -4961,7 +4961,7 @@ theorem moved_no_loan (s : State) (p : Hybrid.Place) (hs : WellFormed s) :
     intro x hx hstatus l hl
     exact moved_no_loan_of_wf t (move_preserves_result s t p hs h) x hx hstatus l hl
 
-/-- Helper (computation). Projects the concrete callback result; execution-level agreement is established independently by Steps_erasure. (approved: PENDING). -/
+/-- Helper (computation). Projects the concrete callback result; execution-level agreement is established independently by Steps_erasure. (approved: REVIEW7-agy). -/
 theorem instrument_erasure {σ α : Type} (permit : State → Option State)
     (operation : σ → Option (α × σ)) (s : Store σ) :
     ResultSatisfies (fun r : α × Store σ => operation (erase s) = some (r.1, erase r.2))
@@ -4970,7 +4970,7 @@ theorem instrument_erasure {σ α : Type} (permit : State → Option State)
   | none => trivial
   | some r => exact instrument_erasure_result permit operation s r.1 r.2 h
 
-/-- Helper (computation). Calculates the ownership-only lifecycle wrapper; cleanup safety is established by leave_preserves and leave_no_activation_slot. (approved: PENDING). -/
+/-- Helper (computation). Calculates the ownership-only lifecycle wrapper; cleanup safety is established by leave_preserves and leave_no_activation_slot. (approved: REVIEW7-agy). -/
 theorem life_erasure {σ : Type} (types : Var → Option Descriptor)
     (e : Exec.Life) (s : Store σ) :
     ResultSatisfies (fun t : Store σ => erase t = erase s ∧ life types e s.own = some t.own)
@@ -4979,7 +4979,7 @@ theorem life_erasure {σ : Type} (types : Var → Option Descriptor)
   | none => trivial
   | some t => exact life_erasure_result types e s t h
 
-/-- Helper (computation). Calculates the call lifecycle wrapper; directOwner_roundtrip and deferred_call_lifetime establish the call protocols. (approved: PENDING). -/
+/-- Helper (computation). Calculates the call lifecycle wrapper; directOwner_roundtrip and deferred_call_lifetime establish the call protocols. (approved: REVIEW7-agy). -/
 theorem callLife_erasure {σ : Type} (types : Var → Option Descriptor)
     (e : Exec.Life) (s : σ × CallState) :
     ResultSatisfies (fun t : σ × CallState => t.1 = s.1 ∧ callLife types e s.2 = some t.2)
@@ -4988,7 +4988,7 @@ theorem callLife_erasure {σ : Type} (types : Var → Option Descriptor)
   | none => trivial
   | some t => exact callLife_erasure_result types e s t h
 
-/-- Helper (computation). Transports a supplied preservation proof through the generic callback wrapper; it supplies no new soundness premise. (approved: PENDING). -/
+/-- Helper (computation). Transports a supplied preservation proof through the generic callback wrapper; it supplies no new soundness premise. (approved: REVIEW7-agy). -/
 theorem instrument_preserves {σ α : Type} (permit : State → Option State)
     (hp : ∀ s t, WellFormed s → permit s = some t → WellFormed t)
     (operation : σ → Option (α × σ)) (s : Store σ) (hs : WellFormed s.own) :
@@ -4998,7 +4998,7 @@ theorem instrument_preserves {σ α : Type} (permit : State → Option State)
   | none => trivial
   | some r => exact instrument_preserves_result permit hp operation s r.1 r.2 hs h
 
-/-- Helper (computation). Calculates the scalar read wrapper; Hybrid supplies concrete storage semantics and Steps_erasure supplies C1 execution agreement. (approved: PENDING). -/
+/-- Helper (computation). Calculates the scalar read wrapper; Hybrid supplies concrete storage semantics and Steps_erasure supplies C1 execution agreement. (approved: REVIEW7-agy). -/
 theorem readOwner_erasure (tgt : Target) (p : Hybrid.Place) (s : Store Hybrid.State) :
     ResultSatisfies (fun r : Hybrid.Value × Store Hybrid.State =>
       s.concrete.read tgt p = some r.1 ∧ r.2.concrete = s.concrete)
@@ -5007,7 +5007,7 @@ theorem readOwner_erasure (tgt : Target) (p : Hybrid.Place) (s : Store Hybrid.St
   | none => trivial
   | some r => exact readOwner_erasure_result tgt p s r.2 r.1 h
 
-/-- Helper (computation). Calculates the scalar write wrapper; Hybrid supplies concrete write semantics and Steps_erasure supplies C1 execution agreement. (approved: PENDING). -/
+/-- Helper (computation). Calculates the scalar write wrapper; Hybrid supplies concrete write semantics and Steps_erasure supplies C1 execution agreement. (approved: REVIEW7-agy). -/
 theorem writeOwner_erasure (tgt : Target) (p : Hybrid.Place) (v : Hybrid.Value)
     (s : Store Hybrid.State) :
     ResultSatisfies (fun r : Unit × Store Hybrid.State =>
@@ -5017,7 +5017,7 @@ theorem writeOwner_erasure (tgt : Target) (p : Hybrid.Place) (v : Hybrid.Value)
   | none => trivial
   | some r => exact writeOwner_erasure_result tgt p s r.2 v h
 
-/-- Helper (computation). Calculates the empty-projection loan read wrapper; live roots and lending scope are established by the loan protocol laws. (approved: PENDING). -/
+/-- Helper (computation). Calculates the empty-projection loan read wrapper; live roots and lending scope are established by the loan protocol laws. (approved: REVIEW7-agy). -/
 theorem readLoan_erasure (tgt : Target) (i : LoanId) (s : Store Hybrid.State) :
     ResultSatisfies (fun r : Hybrid.Value × Store Hybrid.State =>
       ∃ l, loan s.own i = some l ∧ l.path = [] ∧
@@ -5027,7 +5027,7 @@ theorem readLoan_erasure (tgt : Target) (i : LoanId) (s : Store Hybrid.State) :
   | none => trivial
   | some r => exact readLoan_erasure_result tgt i s r.2 r.1 h
 
-/-- Helper (computation). Calculates the empty-projection loan write wrapper; conflict soundness is carried by the loan invariant and scoped protocols. (approved: PENDING). -/
+/-- Helper (computation). Calculates the empty-projection loan write wrapper; conflict soundness is carried by the loan invariant and scoped protocols. (approved: REVIEW7-agy). -/
 theorem writeLoan_erasure (tgt : Target) (i : LoanId) (v : Hybrid.Value)
     (s : Store Hybrid.State) :
     ResultSatisfies (fun r : Unit × Store Hybrid.State =>
@@ -5038,7 +5038,7 @@ theorem writeLoan_erasure (tgt : Target) (i : LoanId) (v : Hybrid.Value)
   | none => trivial
   | some r => exact writeLoan_erasure_result tgt i s r.2 v h
 
-/-- Helper (computation). Calculates the inserted loan record; borrow_preserves establishes root validity; ended_loans_never_revive establishes identity non-reuse across loan executions. (approved: PENDING). -/
+/-- Helper (computation). Calculates the inserted loan record; borrow_preserves establishes root validity; ended_loans_never_revive establishes identity non-reuse across loan executions. (approved: REVIEW7-agy). -/
 theorem borrow_birth (s : State) (p : Hybrid.Place)
     (path : List Projection) (m : Mode) :
     ResultSatisfies (fun t : State =>
@@ -5049,7 +5049,7 @@ theorem borrow_birth (s : State) (p : Hybrid.Place)
   | none => trivial
   | some t => exact borrow_birth_result s t p path m h
 
-/-- Helper (computation). Calculates the inserted child record; downward_reborrow_protocol establishes that the fresh child ends without consuming its predecessors. (approved: PENDING). -/
+/-- Helper (computation). Calculates the inserted child record; downward_reborrow_protocol establishes that the fresh child ends without consuming its predecessors. (approved: REVIEW7-agy). -/
 theorem reborrow_birth (s : State) (i : LoanId)
     (suffix : List Projection) (m : Mode) (activation : Nat) :
     ResultSatisfies (fun t : State =>
@@ -5061,7 +5061,7 @@ theorem reborrow_birth (s : State) (i : LoanId)
   | none => trivial
   | some t => exact reborrow_birth_result s t i suffix m activation h
 
-/-- Helper (computation). Calculates the unchanged supply field; ended_loans_never_revive establishes identity non-reuse after ending and reborrowing. (approved: PENDING). -/
+/-- Helper (computation). Calculates the unchanged supply field; ended_loans_never_revive establishes identity non-reuse after ending and reborrowing. (approved: REVIEW7-agy). -/
 theorem endLoan_supply (s : State) (i : LoanId) :
     ResultSatisfies (fun t : State => t.nextLoan = s.nextLoan)
       (endLoan s i) := by
@@ -5069,7 +5069,7 @@ theorem endLoan_supply (s : State) (i : LoanId) :
   | none => trivial
   | some t => exact endLoan_supply_result s t i h
 
-/-- Helper (computation). Extracts the argument marks checked during adoption; callLife_call_preserves and deferred_call_lifetime establish the cross-call protocol. (approved: PENDING). -/
+/-- Helper (computation). Extracts the argument marks checked during adoption; callLife_call_preserves and deferred_call_lifetime establish the cross-call protocol. (approved: REVIEW7-agy). -/
 theorem adoptDown_only_arguments (s : State) (args : List (Var × LoanId)) :
     ResultSatisfies (fun t : State =>
       (∀ e ∈ args, ∃ l ∈ s.loans, l.id = e.2 ∧ l.pendingArgument = true) ∧
@@ -5101,7 +5101,7 @@ theorem adoptDown_only_arguments (s : State) (args : List (Var × LoanId)) :
         · simpa [hmem] using hl₀
       · contradiction
 
-/-- Helper (computation). Extracts the destination guard; downward_reborrow_protocol exercises both current-frame success and exact upward refusal. (approved: PENDING). -/
+/-- Helper (computation). Extracts the destination guard; downward_reborrow_protocol exercises both current-frame success and exact upward refusal. (approved: REVIEW7-agy). -/
 theorem reborrowTo_current (s : State) (i : LoanId) (suffix : List Projection)
     (m : Mode) (activation : Nat) :
     ResultSatisfies (fun t : State =>
@@ -5119,7 +5119,7 @@ theorem reborrowTo_current (s : State) (i : LoanId) (suffix : List Projection)
       exact ⟨f, hf, hact, hhead, _, List.mem_cons_self, rfl, hact.symm⟩
     · contradiction
 
-/-- Helper (computation). Calculates the call-root record; directOwner_roundtrip and deferred_call_lifetime establish its lifetime. (approved: PENDING). -/
+/-- Helper (computation). Calculates the call-root record; directOwner_roundtrip and deferred_call_lifetime establish its lifetime. (approved: REVIEW7-agy). -/
 theorem passOwner_birth (s : CallState) (p : Hybrid.Place)
     (path : List Projection) (m : Mode) (x : Var) :
     ResultSatisfies (fun t : CallState =>
@@ -5131,7 +5131,7 @@ theorem passOwner_birth (s : CallState) (p : Hybrid.Place)
   | none => trivial
   | some t => exact passOwner_birth_result s t p path m x h
 
-/-- Helper (computation). Computes a registration step; deferred_call_lifetime establishes retention through invocation and restoration on actual return. (approved: PENDING). -/
+/-- Helper (computation). Computes a registration step; deferred_call_lifetime establishes retention through invocation and restoration on actual return. (approved: REVIEW7-agy). -/
 theorem defer_keeps_store {O : Exec.Operands} (P : Exec.Program O)
     (f : FnId) (args : List O.Expr) (site : SiteId)
     (L : AList Var O.Val) (s : O.Store) (k : List (Exec.Frame O)) :
@@ -5779,7 +5779,7 @@ def DeferredLifetime
       some (s.slots, s.loans, [])
 
 /-- Helper (inversion). A view-only callee has no owning locals, so its C1 scope drop leaves
-its ownership and pending tables unchanged. (approved: PENDING). -/
+its ownership and pending tables unchanged. (approved: REVIEW7-agy). -/
 private theorem pending_enter_drop (s t : CallState) (parameter : Var) (i : LoanId)
     (pending : s.pending = [(parameter, i)])
     (h : callLife Examples.types (.enter [parameter]) s = some t) :
@@ -5984,7 +5984,7 @@ end MoveLifecycleEvidence
 
 /-- Helper (inversion). Every issuing loan operation advances the supply and inserts only
 its old counter; ending a loan filters identities without rewinding the supply.
-(approved: PENDING). -/
+(approved: REVIEW7-agy). -/
 private theorem loanSequence_retired_step (s t : State) (op : LoanAction) (i : LoanId)
     (hr : RetiredLoan s i) (h : loanAction s op = some t) : RetiredLoan t i := by
   have bound := hr.1
