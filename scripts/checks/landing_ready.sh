@@ -204,7 +204,10 @@ chmod +x "$TMP/fake-codex"
   && git add -A && git commit -qm rv-default \
   && python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" stamp-commit --repo "$A" --model claude --round 1 --branch wip/rv-default --brief-sha256 2222222222222222222222222222222222222222222222222222222222222222 >/dev/null \
   && git push -q -f origin HEAD:refs/heads/wip/rv-default refs/notes/concrete-writer )
+printf '__pycache__/\n*.pyc\n' >> "$A/.git/info/exclude"
 ( cd "$A" && mkdir -p scripts/review/__pycache__ && printf artifact > scripts/review/__pycache__/planted.pyc && printf artifact > scripts/review/untracked-control.txt )
+ignored="$(git -C "$A" check-ignore scripts/review/__pycache__/planted.pyc)"
+[ "$ignored" = scripts/review/__pycache__/planted.pyc ] && ok "planted Python cache is ignored" || no "Python cache control is not ignored: $ignored"
 if git -C "$A" diff --name-only "$BASE" HEAD | grep -F '__pycache__/' >/dev/null; then no "fixture committed Python build artifacts"; else ok "fixture diff excludes working-tree Python artifacts"; fi
 out="$(cd "$A" && unset LAND_REVIEW_CMD LAND_REVIEW_WRITER && PLANT_UNCITED=1 REVIEW_CODEX_BIN="$TMP/fake-codex" bash "$ROOT_DIR/scripts/land/ready.sh" wip/rv-default 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "invalid reviewer evidence: citation: positive verdict requires at least one resolvable file:line citation" && has "$out" "gates=fail review=blocked" \
