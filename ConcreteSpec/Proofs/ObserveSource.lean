@@ -12,17 +12,17 @@ namespace ConcreteSpec.Core.Observe
 open ConcreteSpec.Core
 
 /-- Law (subject `ConcreteSpec.Core.Observe.sourceSpan`).
-The diagnostic for a source-derived position differs from every diagnostic that supplies a
-wrong byte column. In particular a scalar-counting or tab-expanding source-position producer
-cannot satisfy this law by rejecting an admission premise about its own output. -/
+A candidate column renders the source-derived diagnostic exactly when it is the UTF-8 byte
+column. This includes both the matching-column case and rejection of every wrong column,
+without assuming a mismatch or admission property of the produced position. -/
 theorem source_trap_column (path : SourcePath) (line : Nat)
     (linePositive : 0 < line) (before : String) (kind : TrapKind) (site : SiteId) (column : Nat)
-    (columnPositive : 0 < column) (wrong : column ≠ before.utf8ByteSize + 1) :
-    trapLine kind site (sourceSpan path line linePositive before) ≠
-      trapLine kind site ⟨path, 0, 0, by decide, line, column, linePositive, columnPositive⟩ := by
-  intro equal
-  have fields := (trapLine_injective _ _ _ _ _ _).mp equal
-  exact wrong fields.2.2.2.2.symm
+    (columnPositive : 0 < column) :
+    (trapLine kind site (sourceSpan path line linePositive before) =
+      trapLine kind site ⟨path, 0, 0, by decide, line, column, linePositive, columnPositive⟩ ↔
+      column = before.utf8ByteSize + 1) := by
+  rw [trapLine_injective]
+  simp [sourceSpan, eq_comm]
 
 /-- A planted source-position producer counts Unicode scalars instead of UTF-8 bytes. -/
 def scalarColumnSpan (path : SourcePath) (line : Nat) (linePositive : 0 < line)
@@ -30,17 +30,30 @@ def scalarColumnSpan (path : SourcePath) (line : Nat) (linePositive : 0 < line)
   ⟨path, before.utf8ByteSize, before.utf8ByteSize, Nat.le_refl _, line, before.toList.length + 1, linePositive, Nat.zero_lt_succ _⟩
 
 /-- Instance (law `ConcreteSpec.Core.Observe.source_trap_column`, case `utf8_tab`). -/
-example : trapLine .overflow ⟨7⟩ (sourceSpan mainSourcePath 1 (by decide) "a\té") ≠
-    trapLine .overflow ⟨7⟩ ⟨mainSourcePath, 0, 0, by decide, 1, 4, by decide, by decide⟩ :=
-  source_trap_column mainSourcePath 1 (by decide) "a\té" .overflow ⟨7⟩ 4
-    (by decide) (by decide)
+example : (trapLine .overflow ⟨7⟩ (sourceSpan mainSourcePath 1 (by decide) "a\té") =
+    trapLine .overflow ⟨7⟩ ⟨mainSourcePath, 0, 0, by decide, 1, 4, by decide, by decide⟩ ↔
+    4 = "a\té".utf8ByteSize + 1) :=
+  source_trap_column mainSourcePath 1 (by decide) "a\té" .overflow ⟨7⟩ 4 (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Observe.source_trap_column`, case `utf8_tab`,
 subject `ConcreteSpec.Core.Observe.sourceSpan`, mutant `ConcreteSpec.Core.Observe.scalarColumnSpan`). -/
-example : (0 < 1) ∧ (0 < 4) ∧ (4 ≠ "a\té".utf8ByteSize + 1) ∧
-    ¬ (trapLine .overflow ⟨7⟩ (scalarColumnSpan mainSourcePath 1 (by decide) "a\té") ≠
-      trapLine .overflow ⟨7⟩ ⟨mainSourcePath, 0, 0, by decide, 1, 4, by decide, by decide⟩) := by
-  decide
+example : (0 < 1) ∧ (0 < 4) ∧
+    ¬ (trapLine .overflow ⟨7⟩ (scalarColumnSpan mainSourcePath 1 (by decide) "a\té") =
+      trapLine .overflow ⟨7⟩ ⟨mainSourcePath, 0, 0, by decide, 1, 4, by decide, by decide⟩ ↔
+      4 = "a\té".utf8ByteSize + 1) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Observe.source_trap_column`, case `matching_utf8_tab`). -/
+example : (trapLine .overflow ⟨7⟩ (sourceSpan mainSourcePath 1 (by decide) "a\té") =
+    trapLine .overflow ⟨7⟩ ⟨mainSourcePath, 0, 0, by decide, 1, 5, by decide, by decide⟩ ↔
+    5 = "a\té".utf8ByteSize + 1) :=
+  source_trap_column mainSourcePath 1 (by decide) "a\té" .overflow ⟨7⟩ 5 (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Observe.source_trap_column`, case `matching_utf8_tab`,
+subject `ConcreteSpec.Core.Observe.sourceSpan`, mutant `ConcreteSpec.Core.Observe.scalarColumnSpan`). -/
+example : (0 < 1) ∧ (0 < 5) ∧
+    ¬ (trapLine .overflow ⟨7⟩ (scalarColumnSpan mainSourcePath 1 (by decide) "a\té") =
+      trapLine .overflow ⟨7⟩ ⟨mainSourcePath, 0, 0, by decide, 1, 5, by decide, by decide⟩ ↔
+      5 = "a\té".utf8ByteSize + 1) := by decide
 
 /-- Helper (computation). Scanning a character list containing no newline preserves the newline
 count and appends the characters to the current line accumulator; feeds
