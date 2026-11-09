@@ -132,10 +132,10 @@
           # is a multi-GB closure, so they live in a separate shell — no contributor
           # pays for them unless they run `--report multi-kernel`.
           default = pkgs.mkShell ({
-            packages = base;
+            packages = base ++ pkgs.lib.optionals pkgs.stdenv.isLinux [ pkgs.systemd ];
             # Gate 9 evaluates this from the checked-in flake/lock, rather than trusting PATH
             # or caller-supplied store roots. Descendant wrappers live in these closures.
-            passthru.trustedLaunchPath = pkgs.lib.makeBinPath (base ++ [ pkgs.git ]);
+            passthru.trustedLaunchPath = pkgs.lib.makeBinPath (base ++ [ pkgs.git ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [ pkgs.systemd ]);
             passthru.trustedPipelineRoots = map builtins.toString pipelinePackages;
             passthru.trustedIdentity = {
               roots = map builtins.toString pipelinePackages;

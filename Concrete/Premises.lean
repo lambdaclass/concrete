@@ -180,8 +180,8 @@ def components : List Component := [
     why := "they select targets, construct the reduced environment, manage scratch files and resolve wrapper paths"
     removal := "replace the shell helper and Nix shell wrappers with a pinned, attested driver using direct filesystem APIs" },
   { id := "gate-analysis-tools", kind := .gateTool, slice := "slice0", premises := []
-    «matches» := ["gdb", "lldb", "llvm-objdump", "llvm-size", "python3", "strace"]
-    what := "gdb, lldb, llvm-objdump, llvm-size, python3 and strace used only by gates"
+    «matches» := ["gdb", "lldb", "llvm-objdump", "llvm-size", "python3", "strace", "systemd-run", "systemctl"]
+    what := "gdb, lldb, llvm-objdump, llvm-size, python3, strace, systemd cgroups used only by gates"
     why := "trusted only for the gates' analyses and verdicts, not as compilation-pipeline components"
     removal := "remove or replace the corresponding gate analyses; these tools are not needed to compile a program" }
 ]

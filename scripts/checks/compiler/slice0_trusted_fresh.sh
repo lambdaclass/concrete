@@ -34,6 +34,9 @@ bounded() {
   fi
   return "$rc"
 }
+# Full 8 GiB OOM control runs only in this server/daily leg; PR uses a real
+# 64 MiB version through the identical production launcher.
+bounded 120 python3 -I scripts/checks/tests/trusted_memory_bound_controls.py --full
 # Hooks export repository-local Git variables; clear them before materializing or cloning.
 # shellcheck source=scripts/checks/lib/git_sandbox.sh
 source scripts/checks/lib/git_sandbox.sh

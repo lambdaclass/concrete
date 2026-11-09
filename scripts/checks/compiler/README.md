@@ -319,17 +319,31 @@ Focused controls live in `scripts/checks/tests/test_execve_names.py`,
 `scripts/checks/tests/trusted_policy_controls.py`, plus the inline negative
 controls in `scripts/checks/compiler/slice0_trusted_base.sh`.
 
-The examples audit uses `slice0_common.sh`'s `bounded` launcher, which always
-runs `limited_exec.sh 65536`: on Linux, each launched process and its descendants
-inherit a hard RLIMIT_AS of at most 64 GiB (or a stricter inherited cap). This
-bounds virtual address space, not aggregate RSS. `gate_limits` also applies the
-hard gate-wide inherited cap before any build. The former optional 8 GiB
-systemd scope was unreachable inside the clean launch environment and has been
-removed; no 8 GiB aggregate memory guarantee is claimed. The per-file child
-isolation releases imported Lean regions between files without dropping or
-sampling any source. Darwin relies on the CI job's memory limit, as documented
-by the common launcher. A focused real allocation control checks the inherited
-hard limit and the exact ENOMEM result beyond it without allocating physical RAM.
+The examples audit is launched through `trusted_memory_bound.py`, on Linux cgroup
+v2 with **MemoryMax=8589934592 bytes (8 GiB)** and **MemorySwapMax=0** for the
+whole frontend process tree. The bound includes descendants and file cache;
+systemd kills the cgroup on OOM. Its exact diagnostic is
+`FAIL examples memory: cgroup MemoryMax exceeded (8589934592 bytes)`.
+The launcher reconnects only to the kernel-uid-owned local user manager; when
+none exists (GitHub runners), it uses the system manager through noninteractive
+`/usr/bin/sudo`, with explicit original uid/gid, working directory and the gate's
+clean environment. Checkout code never runs with elevated uid. The manager is
+outside the compilation trace; the traced frontend is inside the cgroup. Nix
+pins systemd. Failure to establish the service is INCOMPLETE, never a fallback
+to an uncapped audit. The service also has a 600 s runtime bound and is stopped
+and reset in a finally block.
+
+Systemd services do not inherit caller resource limits: inside the service,
+`limited_exec.sh 65536` explicitly reestablishes the hard 64 GiB RLIMIT_AS as a
+second layer before strace/Lean starts. The real small-allocation control asserts
+this hard limit; the real over-limit control uses the same launcher with a
+64 MiB cgroup and requires the exact OOM diagnostic, exercising both manager
+selection and enforcement without an 8 GiB local allocation. The complete
+8 GiB over-limit control (`trusted_memory_bound_controls.py --full`) is invoked by
+`slice0_trusted_fresh.sh` on the daily tier (existing R-0676 / R-0509); PR retains
+the real cheap 64 MiB version. Darwin reports INCOMPLETE: an enforceable
+aggregate frontend bound there requires a platform-specific launcher, owned by
+R-0678 / R-0509. No source is dropped or sampled.
 
 Kernel-created executable mappings are part of the same evidence boundary:
 `trusted_executable.py` reads the ELF program headers or shebang of every accepted
