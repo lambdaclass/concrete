@@ -101,8 +101,8 @@ All checks ran bounded in `nix develop`:
   `FAIL report-incomplete c9-new` to those two unchanged baseline diagnostics.
 - workflow_yaml: **3 PASS**; gates_registry and its exact substitution diagnostic
   control: **PASS**; doc_links: **12 PASS**; issues: **5 PASS**. These were repeated
-  after the production changes; final documentation links are checked after the
-  handoff commit.
+  after the production changes. The final documentation check at 907ad188f also
+  passed **12/12**, checking 1,123 links and 893 anchors.
 
 The final empty-domain ordering adjustment at 11a05ea55 passed all 13 affected
 controls, including three new positive hypothetical-domain cases and all ten
