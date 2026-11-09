@@ -158,3 +158,42 @@ whether each of the five instance-application names appears. Recovery accounting
 is not evidence that every independent analysis completed. Reviews of record
 must do the best long-term thing rather than cut corners. No push, review tool,
 OD decision, certificate/solver rewrite, or ROADMAP edit is authorized here.
+
+### Fix-round-1 commits and validation record
+
+Forward commits: `f5446bc9b` (analysis/planning state ownership), `a3fb150af`
+(compound and protected-expression DAG memoization), `bafa4f51c` (durable wall
+recovery), `45cbd074e` (stronger exact controls), and
+`96cec5321c6ad7f154ef8eea684688acd3ee304f` (cross-attempt durability and successful
+planning Meta-state restoration). The final consumer blob is
+`90ece64f34ae85d0e296d43ca15748d60969797c`.
+
+At `96cec5321c6ad7f154ef8eea684688acd3ee304f`, in `nix develop`,
+`vacuity_reporting.py` passed: retry-journal/torn-record recovery; the real planted
+wall watchdog with exact interrupted and unrun diagnostics; all five existing
+error-report controls; uncapped and capped unknown-name classification; repeated
+Planted verdicts; all 13 budget controls (including repeated Instance verdicts);
+three selected consumer controls; and exact replay-report rejection. Outer bound:
+600s. This final run covers the Meta-restoration and journal-reconciliation delta.
+
+The standalone budget controls also passed (13/13), including the two DAG probes:
+normal depth-15 root cached at 61 work units; early-exit mutation rejected by exact
+`dag-root-not-cached` and `work-budget`. Those helper/control bytes are unchanged
+since `45cbd074e`. The standalone certificate controls passed 5/5 at that revision;
+`certificateDependency` through `end Discharge` was separately confirmed identical
+to `a55d58809`. Earlier integration runs also passed `vacuity_round5.py controls`
+(32/32 plus 5/5 certificate probes) and `vacuity_inline_match.py` (2/2); the full
+fixture run below exercises those same consumer cases on the committed journal
+implementation. No full compiler/spec suite or whole-scope census was run.
+
+Full fixture controls: **127 PASS, 0 FAIL**, outer bound 900s, using the
+`bafa4f51c` compiled consumer/driver snapshot (consumer also unchanged at
+`45cbd074e`). This includes all 32 round-5 and both inline-match consumer cases.
+The later `96cec5321` delta has the complete final reporting run above, including
+freshly compiled normal and injected consumers. All focused processes exited 0;
+none was killed by its outer watchdog.
+
+The coordinator has not supplied the wide-watchdog diagnostic measurement during
+this run. The historical-scope F2 wall-cost improvement and retention of all five
+instance-application FAILs therefore remain **unmeasured/unverified** pending the
+ci-2 command above. The small local DAG measurements are not a substitute for it.
