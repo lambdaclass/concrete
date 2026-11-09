@@ -284,11 +284,29 @@ def _checkpoint_git(repo, args, *, check=True, input_text=None):
     return proc
 
 
+_CHECKPOINT_REF_SYNTAX = {}
+
+
+def _checkpoint_ref_syntax(repo, ref):
+    # Only syntax is cached: check-ref-format is repository-independent and
+    # immutable ref strings carry no repository state or authority.
+    if ref not in _CHECKPOINT_REF_SYNTAX:
+        valid = _checkpoint_git(repo, ["check-ref-format", ref], check=False).returncode == 0
+        if len(_CHECKPOINT_REF_SYNTAX) >= 256:
+            _CHECKPOINT_REF_SYNTAX.pop(next(iter(_CHECKPOINT_REF_SYNTAX)))
+        _CHECKPOINT_REF_SYNTAX[ref] = valid
+    return _CHECKPOINT_REF_SYNTAX[ref]
+
+
+CHECKPOINT_PROTOCOL_DEADLINE = 10
+
+
 class _CheckpointProtocol:
     """Nonblocking input and simultaneous output draining, with bounded teardown."""
 
-    def __init__(self, proc):
+    def __init__(self, proc, *, deadline_seconds=None):
         import selectors
+        self.deadline_seconds = (CHECKPOINT_PROTOCOL_DEADLINE if deadline_seconds is None else deadline_seconds)
         self.proc = proc
         self.selector = selectors.DefaultSelector()
         self.output = bytearray()
@@ -302,7 +320,7 @@ class _CheckpointProtocol:
         import selectors
         import time
         data = memoryview((command + "\n").encode())
-        deadline = time.monotonic() + 10
+        deadline = time.monotonic() + self.deadline_seconds
         self.selector.register(self.proc.stdin, selectors.EVENT_WRITE)
         try:
             while True:
@@ -383,8 +401,7 @@ def _checkpoint_transaction(snapshot: CheckpointSnapshot,
     if unknown:
         raise ProvenanceError(f"checkpoint update outside snapshot: {sorted(unknown)[0]}")
     for ref in snapshot.refs:
-        if not isinstance(ref, str) or not ref.startswith("refs/") or _checkpoint_git(
-                repo, ["check-ref-format", ref], check=False).returncode:
+        if not isinstance(ref, str) or not ref.startswith("refs/") or not _checkpoint_ref_syntax(repo, ref):
             raise ProvenanceError(f"invalid checkpoint ref name: {ref}")
         new = updates.get(ref)
         if new is not None and (not isinstance(new, str) or not HEX40_RE.fullmatch(new) or new == ZERO40):
@@ -419,25 +436,41 @@ def _checkpoint_transaction(snapshot: CheckpointSnapshot,
                 if b"cannot lock ref" in detail or b"cannot lock references" in detail:
                     raise _CheckpointRace(f"checkpoint ref race during {op}") from exc
                 raise
+            rows = _checkpoint_git(repo, [
+                "for-each-ref", "--format=%(refname) %(objectname) %(objecttype) %(symref)",
+                "--", *snapshot.refs]).stdout
+            # Git patterns also return descendants. Only exact participant names
+            # are authoritative; DWIM and prefix lookalikes cannot supply values.
+            exact = {fields[0]: fields for row in rows.splitlines()
+                     if (fields := row.split()) and fields[0] in snapshot.refs}
+            for ref in snapshot.refs:
+                fields = exact.get(ref)
+                if fields is not None:
+                    if len(fields) > 3:
+                        raise ProvenanceError(f"symbolic checkpoint ref is forbidden: {ref}")
+                else:
+                    # Enumeration omits dangling and looping symbolic refs. Only
+                    # these missing names need a separate no-recurse inspection.
+                    symbolic = _checkpoint_git(repo, ["symbolic-ref", "--no-recurse", "-q", ref], check=False)
+                    if symbolic.returncode == 0:
+                        raise ProvenanceError(f"symbolic checkpoint ref is forbidden: {ref}")
+                    if symbolic.returncode != 1:
+                        raise ProvenanceError(f"cannot inspect checkpoint ref: {ref}: {symbolic.stderr.strip()}")
+            targets = [new for new in updates.values() if new is not None]
+            if targets:
+                obj = _checkpoint_git(repo, ["cat-file", "--batch-check=%(objectname) %(objecttype)"],
+                                      input_text="\n".join(targets) + "\n", check=False)
+                objects = dict(zip(targets, obj.stdout.splitlines()))
             for ref, expected in snapshot.refs.items():
-                symbolic = _checkpoint_git(repo, ["symbolic-ref", "--no-recurse", "-q", ref], check=False)
-                if symbolic.returncode == 0:
-                    raise ProvenanceError(f"symbolic checkpoint ref is forbidden: {ref}")
-                if symbolic.returncode != 1:
-                    raise ProvenanceError(f"cannot inspect checkpoint ref: {ref}: {symbolic.stderr.strip()}")
-            for ref, expected in snapshot.refs.items():
-                rows = _checkpoint_git(repo, ["for-each-ref", "--format=%(refname) %(objectname) %(objecttype)", "--", ref]).stdout
-                exact = [row.split() for row in rows.splitlines() if row.split()[0] == ref]
-                value = exact[0][1] if exact else None
-                if exact and (exact[0][2] != "commit" or not HEX40_RE.fullmatch(value)):
+                fields = exact.get(ref)
+                value = fields[1] if fields else None
+                if fields and (fields[2] != "commit" or not HEX40_RE.fullmatch(value)):
                     raise ProvenanceError(f"checkpoint ref does not name a 40-hex commit: {ref}")
                 if value != expected:
                     raise _CheckpointRace(f"checkpoint ref race during {op}")
                 new = updates.get(ref)
                 if new is not None:
-                    obj = _checkpoint_git(repo, ["cat-file", "--batch-check=%(objectname) %(objecttype)"],
-                                          input_text=new + "\n", check=False)
-                    if obj.returncode or obj.stdout.strip() != f"{new} commit":
+                    if obj.returncode or len(obj.stdout.splitlines()) != len(targets) or objects.get(new) != f"{new} commit":
                         raise ProvenanceError(f"checkpoint update does not name an existing commit: {ref}: {new}")
             protocol.exchange("commit" if installing else "abort", "commit: ok" if installing else "abort: ok")
         proc.stdin.close()
@@ -471,8 +504,7 @@ def capture_checkpoint_snapshot(repo: str, *, target_ref: str | None = None,
     for attempt in range(3):
         boundary = _VerifiedRepo(repo)
         for name in names:
-            if not isinstance(name, str) or not name.startswith("refs/") or _checkpoint_git(
-                    boundary, ["check-ref-format", name], check=False).returncode:
+            if not isinstance(name, str) or not name.startswith("refs/") or not _checkpoint_ref_syntax(boundary, name):
                 raise ProvenanceError(f"invalid checkpoint ref name: {name}")
         rows = _checkpoint_git(boundary, ["for-each-ref", "--format=%(refname) %(objectname) %(objecttype)"]).stdout
         enumerated = {}

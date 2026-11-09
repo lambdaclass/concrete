@@ -3,6 +3,7 @@ import importlib.util
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 from unittest.mock import patch
 
@@ -14,6 +15,35 @@ spec.loader.exec_module(w)
 def git(repo, *args, input=None):
     return subprocess.run(['git', '-c', 'core.hooksPath=/dev/null', '-C', repo, *args], input=input, text=True,
                           capture_output=True, env=w.canonical_git_env())
+
+
+# Optional differential proof uses the former per-ref queries as an independent
+# oracle in the same prepared lock. Normal gate timing excludes oracle overhead.
+if '--compare-inspection' in sys.argv:
+    checkpoint_git = w._checkpoint_git
+    comparisons = [0]
+    def compare_inspection(repo, args, **kwargs):
+        result = checkpoint_git(repo, args, **kwargs)
+        if args[0] == 'for-each-ref' and '%(symref)' in args[1]:
+            names = args[args.index('--') + 1:]
+            batch = {f[0]: f for row in result.stdout.splitlines()
+                     if (f := row.split()) and f[0] in names}
+            for ref in names:
+                old = checkpoint_git(repo, ['for-each-ref',
+                    '--format=%(refname) %(objectname) %(objecttype)', '--', ref])
+                exact = [row.split() for row in old.stdout.splitlines() if row.split()[0] == ref]
+                fields = batch.get(ref)
+                assert (fields[:3] if fields else None) == (exact[0] if exact else None)
+                symbolic = checkpoint_git(repo, ['symbolic-ref', '--no-recurse', '-q', ref], check=False)
+                if fields:
+                    assert (len(fields) > 3) == (symbolic.returncode == 0)
+                else:
+                    # Missing rows still require the production fallback; both
+                    # true absence and omitted symbolic refs occur in controls.
+                    assert symbolic.returncode in (0, 1)
+                comparisons[0] += 1
+        return result
+    w._checkpoint_git = compare_inspection
 
 
 def require_error(call, expected):
@@ -48,6 +78,9 @@ with tempfile.TemporaryDirectory() as root:
             assert result.returncode == 0, result.stderr
             return result.stdout.strip()
         g('config', 'core.hooksPath', '/dev/null')
+        # Disposable competing writers should fail immediately on held locks.
+        g('config', 'core.filesRefLockTimeout', '0')
+        g('config', 'reftable.lockTimeout', '0')
         g('config', 'user.name', 'Checkpoint Control')
         g('config', 'user.email', 'checkpoint@example.invalid')
         tree = g('mktree', input='')
@@ -107,8 +140,20 @@ with tempfile.TemporaryDirectory() as root:
                         diagnostic = (f"cannot lock ref '{ref}'" if backend == 'files' else 'cannot lock references')
                         assert diagnostic in result.stderr, result.stderr
                         seen.append((ref, args[0]))
-            with at_prepare(competitors, after=True):
+            inspection_calls = []
+            runner = w.canonical_git_run
+            def count_inspection(repo_arg, args, **kwargs):
+                if args[0] in ('for-each-ref', 'symbolic-ref', 'cat-file', 'check-ref-format'):
+                    inspection_calls.append(args)
+                return runner(repo_arg, args, **kwargs)
+            with at_prepare(competitors, after=True), patch.object(w, 'canonical_git_run', count_inspection):
                 w.cas_update_refs(snap, {active: b})
+            if '--compare-inspection' not in sys.argv:
+                assert sum(args[0] == 'for-each-ref' for args in inspection_calls) == 2
+                assert sum(args[0] == 'cat-file' for args in inspection_calls) == 2
+                assert [args[-1] for args in inspection_calls if args[0] == 'symbolic-ref'] == [absent, absent]
+                assert not any(args[0] == 'check-ref-format' for args in inspection_calls)
+
             assert len(seen) == 16
             assert g('rev-parse', active) == b
             assert g('rev-parse', alias) == a
@@ -187,6 +232,19 @@ with tempfile.TemporaryDirectory() as root:
             g('update-ref', 'refs/heads/' + absent, b)
             assert capture().refs[absent] is None
             g('update-ref', '-d', 'refs/heads/' + absent)
+            # Prefix matches are not exact refs, in loose, packed and reftable
+            # stores. A live x/y must never stand in for the absent participant x.
+            reset()
+            child = absent + '/child'
+            g('update-ref', child, b)
+            if packed:
+                g('pack-refs', '--all')
+            # Git rejects parent/descendant namespace conflicts while preparing
+            # on both backends. Preserve that fail-closed boundary and diagnostic.
+            require_error(capture, 'checkpoint ref race during checkpoint capture'
+                          if backend == 'files' and not packed else
+                          'checkpoint transaction protocol failed')
+            g('update-ref', '-d', child)
             # Every symbolic target has the same diagnostic, including absence.
             blob = g('hash-object', '-w', '--stdin', input='blob')
             target = 'refs/notes/symbolic-target'
@@ -240,6 +298,7 @@ with tempfile.TemporaryDirectory() as root:
             # Hold an actual competing prepared transaction throughout capture.
             holder = w.canonical_git_run(snap.repo, ['update-ref', '--no-deref', '--stdin'], _interactive=True)
             holder_protocol = w._CheckpointProtocol(holder)
+            assert holder_protocol.deadline_seconds == 10
             try:
                 holder_protocol.exchange('start', 'start: ok')
                 holder_protocol.exchange(f'update {active} {a}\nprepare', 'prepare: ok')
@@ -288,7 +347,8 @@ with tempfile.TemporaryDirectory() as root:
                         children.append(p)
                         return p
                     return original_run(repo_arg, args, **kwargs)
-                with patch.object(w, 'canonical_git_run', stalled):
+                assert w.CHECKPOINT_PROTOCOL_DEADLINE == 10
+                with patch.object(w, 'CHECKPOINT_PROTOCOL_DEADLINE', 0.2), patch.object(w, 'canonical_git_run', stalled):
                     require_error(lambda: w.cas_update_refs(snap, {}),
                                   'checkpoint transaction timeout (INCOMPLETE)')
                 assert all(p.poll() is not None for p in children)
@@ -316,3 +376,6 @@ with tempfile.TemporaryDirectory() as root:
             assert all(p.poll() is not None for p in children)
             w.cas_update_refs(snap, {})
             print(f'checkpoint controls: {backend}, packed={packed}: PASS')
+
+if '--compare-inspection' in sys.argv:
+    print(f'under-lock per-ref/batch comparisons: {comparisons[0]}: PASS')

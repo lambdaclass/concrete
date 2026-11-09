@@ -8,3 +8,8 @@
   an aborted prepared transaction before preparing installation and rechecking the
   complete snapshot. Bound protocol I/O and teardown, reject empty names, enforce
   backend support in the transaction owner, and plant removal-sensitive controls.
+- Round 23: batch exact ref/symbolic inspection and update-object checks under
+  each prepared lock, cache only repository-independent ref syntax, and retain
+  every complete-snapshot check in both passes. Parameterize the protocol deadline
+  (production default 10 s); disposable controls use immediate lock contention and
+  a short stalled-child deadline, with optional per-ref/batch differential proof.
