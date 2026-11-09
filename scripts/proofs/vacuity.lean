@@ -806,8 +806,24 @@ end Discharge
 structure DischargeKey where
   closure : Expr
   instances : Array (Name × Expr)
-  declarations : Array (Nat × Option Expr)
+  declarations : Array (Nat × Option Expr × Bool)
   deriving BEq, Hashable
+
+structure DischargeRawContext where
+  declarations : Array (FVarId × Expr × Option Expr × BinderInfo × Nat × Bool)
+  instances : Array (Name × Expr)
+  deriving BEq, Hashable
+
+def dischargeDeclKind (decl : LocalDecl) : Nat :=
+  match decl.kind with
+  | .default => 0 | .implDetail => 1 | .auxDecl => 2
+
+def dischargeRawContext : MetaM DischargeRawContext := do
+  let mut declarations := #[]
+  for decl in (← getLCtx) do
+    declarations := declarations.push (decl.fvarId, decl.type,
+      decl.value? (allowNondep := true), decl.binderInfo, dischargeDeclKind decl, decl.isLet)
+  return ⟨declarations, (← getLocalInstances).map fun i => (i.className, i.fvar)⟩
 
 structure DischargeState where
   budget : Option WorkBudget := none
@@ -815,8 +831,8 @@ structure DischargeState where
   visited : Std.HashSet (Expr × Array FVarId) := {}
   refutedTypes : Std.HashMap DischargeKey Bool := {}
   refutedContexts : Std.HashMap (DischargeKey × Bool) Bool := {}
-  rawRefutedTypes : Std.HashMap (Expr × Array FVarId) Bool := {}
-  rawRefutedContexts : Std.HashMap (Array FVarId × Bool) Bool := {}
+  rawRefutedTypes : Std.HashMap (Expr × DischargeRawContext) Bool := {}
+  rawRefutedContexts : Std.HashMap (DischargeRawContext × Bool) Bool := {}
 
 /-- Alpha-canonical closed contexts retain every declaration and let value.
     Results are analysis-private; metavariables are never cached. Local instance
@@ -831,12 +847,11 @@ def dischargeClosure (e : Expr) : MetaM (Option DischargeKey) := do
     xs := xs.push decl.toExpr
   let mut declarations := #[]
   for decl in (← getLCtx) do
-    let kind := match decl.kind with
-      | .default => 0 | .implDetail => 1 | .auxDecl => 2
+    let kind := dischargeDeclKind decl
     let value := decl.value? (allowNondep := true)
     if let some v := value then
       if v.hasMVar || v.hasLevelMVar then return none
-    declarations := declarations.push (kind, value.map (·.abstract xs))
+    declarations := declarations.push (kind, value.map (·.abstract xs), decl.isLet)
   let mut instances := #[]
   for inst in (← getLocalInstances) do
     if inst.fvar.hasMVar || inst.fvar.hasLevelMVar then return none
@@ -845,7 +860,7 @@ def dischargeClosure (e : Expr) : MetaM (Option DischargeKey) := do
   return some ⟨closure, instances, declarations⟩
 
 def dischargeRefutableType (domain : Expr) : StateRefT DischargeState MetaM Bool := do
-  let raw := (domain, (← getLCtx).getFVarIds)
+  let raw := (domain, ← dischargeRawContext)
   if let some cached := (← get).rawRefutedTypes[raw]? then return cached
   let some key ← dischargeClosure domain | return ← refutableType domain
   let result ← match (← get).refutedTypes[key]? with
@@ -858,7 +873,7 @@ def dischargeRefutableType (domain : Expr) : StateRefT DischargeState MetaM Bool
   return result
 
 def dischargeRefutableContext (simplify : Bool := false) : StateRefT DischargeState MetaM Bool := do
-  let raw := ((← getLCtx).getFVarIds, simplify)
+  let raw := (← dischargeRawContext, simplify)
   if let some cached := (← get).rawRefutedContexts[raw]? then return cached
   let some closure ← dischargeClosure (mkConst ``False) | return ← refutableContext simplify
   let key := (closure, simplify)

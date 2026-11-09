@@ -283,6 +283,15 @@ set_option maxHeartbeats 2000000 in
       dischargeRefutableContext.run state
     unless impossible do throwError "context-cache-crossed-context"
     unless state.refutedContexts.size == 2 do throwError "context-cache-lost-context"
+    -- Replacing a declaration can retain its FVarId; identity alone is not a key.
+    let state : DischargeState := {}
+    let _ ← withLocalDeclD `sameId (mkConst ``Nat) fun x => do
+      let (before, state) ← dischargeRefutableContext.run state
+      if before then throwError "raw-context-invented-contradiction"
+      let changed := (← getLCtx).setType x.fvarId! (mkConst ``False)
+      let (after, _) ← withLCtx changed (← getLocalInstances) do
+        dischargeRefutableContext.run state
+      unless after do throwError "raw-context-cache-crossed-type"
     -- A mutable context must never acquire a refutation cache entry.
     let unknown ← mkFreshExprMVar (mkSort Level.zero)
     let (key, _) ← withLocalDeclD `unknown unknown fun _ => do
@@ -294,7 +303,8 @@ set_option maxHeartbeats 2000000 in
 '''
     instrumented = consumer.replace(instrument, '      IO.println "CONTEXT SEARCH"\n' + instrument)
     for label, text in [('memoized', instrumented), ('context-erased', instrumented.replace(anchor,
-            '  let key := (({ closure := mkConst ``False, instances := #[], declarations := #[] } : DischargeKey), simplify)'))]:
+            '  let key := (({ closure := mkConst ``False, instances := #[], declarations := #[] } : DischargeKey), simplify)')),
+            ('raw-type-erased', instrumented.replace('decl.fvarId, decl.type,', 'decl.fvarId, mkConst ``True,'))]:
         with compiled_consumer(consumer_text=text) as meta, tempfile.TemporaryDirectory(prefix='n2-refutation-') as temp:
             path = Path(temp) / 'Refutation.lean'
             path.write_text(driver)
@@ -302,10 +312,12 @@ set_option maxHeartbeats 2000000 in
         assert result.returncode == 0, result.stdout
         if label == 'memoized':
             assert 'CONTEXT CACHE complete shared=1 distinct=2 mutable=uncached' in result.stdout, result.stdout
-            assert result.stdout.splitlines().count('CONTEXT SEARCH') == 2, result.stdout
+            assert result.stdout.splitlines().count('CONTEXT SEARCH') == 4, result.stdout
             assert 'CONTROL ' not in result.stdout, result.stdout
-        else:
+        elif label == 'context-erased':
             assert 'CONTROL context-cache-crossed-context' in result.stdout, result.stdout
+        else:
+            assert 'CONTROL raw-context-cache-crossed-type' in result.stdout, result.stdout
         print(f'PASS refutation {label}: {result.stdout.strip()}', flush=True)
 
 def main():

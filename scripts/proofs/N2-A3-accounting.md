@@ -292,3 +292,17 @@ none is chosen and no budget/watchdog is raised.
 The single-instance reproduction tool retains both Grant/Own imports in the
 spec worker's order, even while selecting exactly one declaration. This preserves
 the original environment rather than profiling a different import context.
+
+### Front-cache context completeness
+
+Final validation added a same-FVarId context replacement control. A raw-ID-only
+front key could return a stale negative after `LocalContext.setType` changes a
+Nat binder into a False hypothesis. The front key now includes full raw declaration
+snapshots (type, value, let transparency, binder information and kind) and ordered
+local instances. The canonical key explicitly retains let transparency too.
+Renamed contexts still share completed results, but replacement contexts cannot
+hit the old front entry. Exact planted reasons are
+`CONTROL context-cache-crossed-context` (canonical-context erasure) and
+`CONTROL raw-context-cache-crossed-type` (raw-type erasure); the normal four-search
+control passes, including metavariable exclusion. This is an audit-cache repair,
+not a spec/OD decision or a solver rewrite.
