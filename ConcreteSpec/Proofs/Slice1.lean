@@ -909,18 +909,40 @@ example := @execStmt_ne_trap [] [] [] [] discard .nil discardOk .arithmeticOverf
 example : Corr [] [] [] ∧ StmtOk [] [] discard [] ∧
     ¬ (trapStmt [] [] discard ≠ .trap .arithmeticOverflow) := ⟨.nil, discardOk, by simp [trapStmt]⟩
 
-/-- Instance (law `ConcreteSpec.destructure_safe`, case `empty`). -/
-example := @destructure_safe [] ⟨"Empty", false, []⟩ [] []
-  (by intro f st h; cases h) (by intro f s h; cases h) [] [] [] .nil (by intro p hp; cases hp)
+def oneField : StructDecl := ⟨"Field", false, [("a", .int .u8)]⟩
+def fieldValues : List (Name × Scalar) := [("a", .int .u8 42)]
+def fieldPattern : List (Name × Binder) := [("a", .name slotVar)]
 
-/-- Planted (law `ConcreteSpec.destructure_safe`, case `empty`, subject `ConcreteSpec.destructure`, mutant `ConcreteSpec.Evidence.stuckDestructure`). -/
-example : (∀ f st, Core.AList.lookup ([] : List (Name × STy)) f = some st →
-      ∃ v, Core.AList.lookup ([] : List (Name × Scalar)) f = some v ∧ SVTy v st) ∧
-    FieldsHold [] [] ∧ Corr [] [] [] ∧
-    (∀ p ∈ ([] : List (Name × Binder)), ∃ st, Core.AList.lookup ([] : List (Name × STy)) p.1 = some st) ∧
-    ¬ (∃ env', stuckDestructure [] [] [] = .ok env' ∧ Corr [] (bindPat ⟨"Empty", false, []⟩ [] [] []) env') :=
-  ⟨(by intro f st h; cases h), (by intro f s h; cases h), .nil,
-    (by intro p hp; cases hp), by simp [stuckDestructure]⟩
+/-- Helper (computation). The concrete field value meets its declaration's scalar type. (approved: PENDING) -/
+theorem fieldTyped : ∀ f st, Core.AList.lookup oneField.fields f = some st →
+    ∃ v, Core.AList.lookup fieldValues f = some v ∧ SVTy v st := by
+  intro f st hf
+  simp only [oneField, Core.AList.lookup] at hf
+  split at hf
+  · rename_i he
+    cases hf
+    exact ⟨.int .u8 42, by simp [fieldValues, Core.AList.lookup, he], .int (by decide)⟩
+  · cases hf
+
+/-- Helper (computation). The concrete named-field pattern names a declared field. (approved: PENDING) -/
+theorem fieldDeclared : ∀ p ∈ fieldPattern, ∃ st, Core.AList.lookup oneField.fields p.1 = some st := by
+  intro p hp
+  cases hp with
+  | head => exact ⟨_, rfl⟩
+  | tail _ h => cases h
+
+/-- Instance (law `ConcreteSpec.destructure_safe`, case `namedField`). -/
+example := @destructure_safe [] oneField fieldValues [] fieldTyped (by intro f s h; cases h)
+  fieldPattern [] [] .nil fieldDeclared
+
+/-- Planted (law `ConcreteSpec.destructure_safe`, case `namedField`, subject `ConcreteSpec.destructure`, mutant `ConcreteSpec.Evidence.stuckDestructure`). -/
+example : (∀ f st, Core.AList.lookup oneField.fields f = some st →
+      ∃ v, Core.AList.lookup fieldValues f = some v ∧ SVTy v st) ∧
+    FieldsHold [] fieldValues ∧ Corr [] [] [] ∧
+    (∀ p ∈ fieldPattern, ∃ st, Core.AList.lookup oneField.fields p.1 = some st) ∧
+    ¬ (∃ env', stuckDestructure fieldPattern fieldValues [] = .ok env' ∧
+      Corr [] (bindPat oneField [] fieldPattern []) env') :=
+  ⟨fieldTyped, (by intro f s h; cases h), .nil, fieldDeclared, by simp [stuckDestructure]⟩
 
 /-- Instance (law `ConcreteSpec.execStmt_safe`, case `discard`). -/
 example := @execStmt_safe [] [] [] [] discard .nil discardOk
