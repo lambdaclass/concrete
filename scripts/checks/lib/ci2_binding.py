@@ -26,7 +26,8 @@ def verify(repository, environment, name, runners=None):
         raise BindingError('forged runner: not inventoried concrete-ci-2')
 
 if __name__ == '__main__':
+    environment = dict(os.environ)
     try:
-        verify(os.environ.get('GITHUB_REPOSITORY'),os.environ.get('RUNNER_ENVIRONMENT'),os.environ.get('RUNNER_NAME'))
+        verify(environment.get('GITHUB_REPOSITORY'),environment.get('RUNNER_ENVIRONMENT'),environment.get('RUNNER_NAME'))
     except BindingError as error:
         sys.exit(str(error))

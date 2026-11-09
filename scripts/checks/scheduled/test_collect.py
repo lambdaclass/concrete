@@ -47,7 +47,7 @@ class Collector(unittest.TestCase):
 
     def test_unstarted_workflow_publishes_real_missing_notes(self):
         with patch.object(collect, "pages", return_value=[]), patch.object(collect, "publish") as publish:
-            collect.collect(self.run, "example/repo", RUNNERS)
+            collect.collect(self.run, "example/repo", RUNNERS, {"GH_TOKEN": "test-token"})
             self.assertEqual(publish.call_count, 1)
             for call in publish.call_args_list:
                 r = call.args[0]
@@ -58,7 +58,7 @@ class Collector(unittest.TestCase):
         self.job.update(status="queued", conclusion=None, runner_name=None, completed_at=None, created_at="2027-01-01T00:00:00+00:00")
         jobs = [dict(name="select", conclusion="success", id=42), self.job]
         with patch.object(collect, "pages", return_value=jobs) as pages, patch.object(collect, "request", return_value=("SCHEDULE_SELECTION " + SHA + " daily\n").encode()), patch.object(collect, "publish") as publish:
-            collect.collect(self.run, "example/repo", RUNNERS)
+            collect.collect(self.run, "example/repo", RUNNERS, {"GH_TOKEN": "test-token"})
             self.assertEqual(pages.call_count, 1)
             r = publish.call_args.args[0]
             self.assertEqual((r["status"], r["conclusion"], r["gates"], r["artifact"]),
@@ -66,12 +66,12 @@ class Collector(unittest.TestCase):
 
     def test_rejected_dispatch_does_not_poison_main(self):
         self.run["event"] = "workflow_dispatch"
-        self.assertEqual(collect.selected("/base", [], self.run), [])
+        self.assertEqual(collect.selected("/base", [], self.run, token="test-token"), [])
 
     def test_active_execution_is_not_overdue_queue(self):
         self.job["status"] = "in_progress"
         with patch.object(collect, "pages", return_value=[self.job]), patch.object(collect, "publish") as publish:
-            collect.collect(self.run, "example/repo", RUNNERS)
+            collect.collect(self.run, "example/repo", RUNNERS, {"GH_TOKEN": "test-token"})
             publish.assert_not_called()
 
     def test_overdue_observation_time(self):
@@ -81,7 +81,7 @@ class Collector(unittest.TestCase):
         self.assertEqual(r["completed"], "2027-01-16T00:00:00+00:00")
         from protocol import observe, timestamp
         with self.assertRaisesRegex(EvidenceError, f"^MISSING daily {SHA}: recorded attempt$"):
-            observe([r], SHA, "daily", timestamp(r["completed"]), RUNNERS)
+            observe([r], SHA, "daily", timestamp(r["completed"]), RUNNERS, "example/repo")
 
     def test_crashed_execution_without_index(self):
         self.job["conclusion"] = "failure"
@@ -91,7 +91,7 @@ class Collector(unittest.TestCase):
         from protocol import observe
         from test_protocol import NOW
         with self.assertRaisesRegex(EvidenceError, f"^INCOMPLETE daily {SHA}: recorded attempt$"):
-            observe([r], SHA, "daily", NOW, RUNNERS)
+            observe([r], SHA, "daily", NOW, RUNNERS, "example/repo")
 
     def test_decompressed_index_bound(self):
         import io
@@ -106,24 +106,23 @@ class Collector(unittest.TestCase):
                 collect.read_index(archive)
 
     def test_absent_inventory_still_collects(self):
-        import os
         import tempfile
         import json
         self.run["status"] = "completed"
         with tempfile.NamedTemporaryFile(mode="w") as event:
             json.dump({"workflow_run": self.run}, event); event.flush()
-            with patch.dict(os.environ, GITHUB_REPOSITORY="example/repo", GITHUB_EVENT_PATH=event.name), patch.object(collect, "inventory", side_effect=EvidenceError("planted absent inventory")), patch.object(collect, "pages", return_value=[]), patch.object(collect, "publish") as publish:
-                self.assertEqual(collect.collect_event(), 0)
+            with patch.object(collect, "inventory", side_effect=EvidenceError("planted absent inventory")), patch.object(collect, "pages", return_value=[]), patch.object(collect, "publish") as publish:
+                self.assertEqual(collect.collect_event({"GH_TOKEN": "test-token", "GITHUB_REPOSITORY": "example/repo", "GITHUB_EVENT_PATH": event.name}), 0)
                 self.assertEqual(publish.call_args.args[0]["status"], "MISSING")
 
     def test_authoritative_selection(self):
         jobs = [dict(name="select", conclusion="success", id=42)]
         with patch.object(collect, "request", return_value=("2026-11-08T00:00:00Z SCHEDULE_SELECTION " + SHA + " weekly\n").encode()):
-            self.assertEqual(collect.selected("/base", jobs, self.run), [(SHA, "weekly")])
+            self.assertEqual(collect.selected("/base", jobs, self.run, token="test-token"), [(SHA, "weekly")])
         self.run["display_title"] = "unknown"
         with patch.object(collect, "request", return_value=b"some other failure"):
             with self.assertRaisesRegex(EvidenceError, "^INCOMPLETE: missing trusted schedule tier$"):
-                collect.selected("/base", jobs, self.run)
+                collect.selected("/base", jobs, self.run, token="test-token")
 
 if __name__ == "__main__":
     unittest.main()

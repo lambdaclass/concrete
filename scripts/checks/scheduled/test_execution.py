@@ -20,8 +20,8 @@ class Execution(unittest.TestCase):
             def fake_call(argv, **kwargs):
                 if argv[:2] == ["git", "clone"]:
                     Path(argv[-1]).mkdir()
-            with patch.dict(os.environ, self.environment()), patch.object(run, "inventory", return_value=RUNNERS), patch.object(run, "git", return_value=SHA), patch.object(run, "call", side_effect=fake_call):
-                self.assertEqual(run.run(SHA, "daily", work), 1)
+            with patch.dict(os.environ, self.environment(), clear=True), patch.object(run, "inventory", return_value=RUNNERS), patch.object(run, "git", return_value=SHA), patch.object(run, "call", side_effect=fake_call):
+                self.assertEqual(run.run(SHA, "daily", work, dict(os.environ)), 1)
             result = json.loads((Path(work) / "index.json").read_text())
             self.assertEqual(result["status"], "INCOMPLETE")
             self.assertEqual((Path(work) / "incomplete.log").read_text(),
@@ -29,15 +29,15 @@ class Execution(unittest.TestCase):
 
     def test_forged_runner_never_executes(self):
         env = self.environment(); env["RUNNER_NAME"] = "other-host"
-        with tempfile.TemporaryDirectory() as work, patch.dict(os.environ, env), patch.object(run, "inventory", return_value=RUNNERS), patch.object(run, "git", return_value=SHA), patch.object(run, "call") as execute:
-            self.assertEqual(run.run(SHA, "daily", work), 1)
+        with tempfile.TemporaryDirectory() as work, patch.dict(os.environ, env, clear=True), patch.object(run, "inventory", return_value=RUNNERS), patch.object(run, "git", return_value=SHA), patch.object(run, "call") as execute:
+            self.assertEqual(run.run(SHA, "daily", work, dict(os.environ)), 1)
             self.assertEqual(json.loads((Path(work) / "index.json").read_text())["status"], "INCOMPLETE")
             self.assertEqual((Path(work) / "incomplete.log").read_text(), "forged runner: not inventoried concrete-ci-2\n")
             execute.assert_not_called()
 
     def test_missing_inventory_writes_evidence(self):
-        with tempfile.TemporaryDirectory() as work, patch.dict(os.environ, self.environment()), patch.object(run, "inventory", side_effect=EvidenceError("INCOMPLETE dependency: ISS-0029 runner binding unavailable")), patch.object(run, "git", return_value=SHA):
-            self.assertEqual(run.run(SHA, "daily", work), 1)
+        with tempfile.TemporaryDirectory() as work, patch.dict(os.environ, self.environment(), clear=True), patch.object(run, "inventory", side_effect=EvidenceError("INCOMPLETE dependency: ISS-0029 runner binding unavailable")), patch.object(run, "git", return_value=SHA):
+            self.assertEqual(run.run(SHA, "daily", work, dict(os.environ)), 1)
             result = json.loads((Path(work) / "index.json").read_text())
             self.assertEqual(result["status"], "INCOMPLETE")
             self.assertEqual((Path(work) / "incomplete.log").read_text(), "INCOMPLETE dependency: ISS-0029 runner binding unavailable\n")
@@ -46,8 +46,8 @@ class Execution(unittest.TestCase):
         def fake_call(argv, **kwargs):
             if argv[:2] == ["git", "clone"]:
                 Path(argv[-1]).mkdir()
-        with tempfile.TemporaryDirectory() as work, patch.dict(os.environ, self.environment()), patch.object(run, "inventory", return_value=RUNNERS), patch.object(run, "git", side_effect=[SHA, SHA, "b" * 40]), patch.object(run, "call", side_effect=fake_call) as execute:
-            self.assertEqual(run.run(SHA, "daily", work), 1)
+        with tempfile.TemporaryDirectory() as work, patch.dict(os.environ, self.environment(), clear=True), patch.object(run, "inventory", return_value=RUNNERS), patch.object(run, "git", side_effect=[SHA, SHA, "b" * 40]), patch.object(run, "call", side_effect=fake_call) as execute:
+            self.assertEqual(run.run(SHA, "daily", work, dict(os.environ)), 1)
             result = json.loads((Path(work) / "index.json").read_text())
             self.assertEqual(result["status"], "INCOMPLETE")
             self.assertIsNone(result["gate_revision"])

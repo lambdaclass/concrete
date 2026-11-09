@@ -1,13 +1,14 @@
 """Independent main-history observation; ancestor coverage is not SHA qualification."""
 import datetime as dt
 import json
+import os
 import subprocess
 import sys
 from protocol import EvidenceError, WINDOWS, git, inventory, observe, read_note, timestamp
 
 ERRORS = (EvidenceError, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError)
 
-def observe_main(lineage, histories, tier, now, runners):
+def observe_main(lineage, histories, tier, now, runners, repository):
     annotated = [(sha, histories[sha]) for sha in lineage if sha in histories]
     if not annotated:
         return [f"MISSING {tier} {lineage[0]}: absent run"]
@@ -15,7 +16,7 @@ def observe_main(lineage, histories, tier, now, runners):
     fresh = []
     for sha, history in annotated:
         try:
-            message = observe(history, sha, tier, now, runners)
+            message = observe(history, sha, tier, now, runners, repository)
             fresh.append((sha, message))
         except ERRORS as error:
             # Old non-failing occurrences age into tier staleness, while FAIL never ages out.
@@ -39,25 +40,27 @@ def observe_main(lineage, histories, tier, now, runners):
     return [f"STALE {tier} {newest}: no fresh PASS"]
 
 def main():
+    environment = dict(os.environ)
     failed = False
     try:
-        lineage = git("rev-list", "--first-parent", "refs/remotes/origin/main").splitlines()
+        repository = environment["GITHUB_REPOSITORY"]
+        lineage = git("rev-list", "--first-parent", "refs/remotes/origin/main", environment=environment).splitlines()
         for tier in WINDOWS:
             try:
                 ref = "refs/notes/concrete-gates-" + tier
                 # No inventory needed to establish genuine absence.
-                refs = git("for-each-ref", "--format=%(refname)", ref).splitlines()
-                listing = git("notes", "--ref=" + ref, "list") if ref in refs else ""
+                refs = git("for-each-ref", "--format=%(refname)", ref, environment=environment).splitlines()
+                listing = git("notes", "--ref=" + ref, "list", environment=environment) if ref in refs else ""
                 shas = {line.split()[-1] for line in listing.splitlines()}
                 histories = {}; malformed = []
                 for sha in lineage:
                     if sha in shas:
                         try:
-                            histories[sha] = read_note(sha, tier, listed=True)
+                            histories[sha] = read_note(sha, tier, listed=True, environment=environment)
                         except ERRORS as error:
                             malformed.append(f"INCOMPLETE {tier} {sha}: {error}")
                 messages = (observe_main(lineage, histories, tier,
-                                        dt.datetime.now(dt.timezone.utc).timestamp(), inventory() if histories else {}) if histories or not malformed else []) + malformed
+                                        dt.datetime.now(dt.timezone.utc).timestamp(), inventory() if histories else {}, repository) if histories or not malformed else []) + malformed
                 for message in sorted(messages, key=lambda s: not s.startswith("FAIL ")):
                     print(message)
                     failed |= not message.startswith("PASS ")

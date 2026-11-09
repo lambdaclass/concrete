@@ -257,3 +257,31 @@ validated against the provisioned pool's inodes. The watchdog explicitly preserv
 that descriptor across its subprocess boundary. Release closes only the caller's
 copy, so a child cannot release its parent's lock. Invalid inheritance fails
 closed rather than consuming another host slot.
+
+
+## Explicit identity and hermetic controls
+
+The structural owner is R-0676's scheduled evidence protocol. CLI entry points
+snapshot the process environment once and pass it down explicitly. Validation
+requires the target repository, full SHA, tier, runner inventory and expected
+attempt as arguments; `attempt=None` explicitly denotes a history containing
+multiple attempts. Repository membership in an inventory does not select the
+target repository. The collector obtains the expected attempt from trusted Actions
+metadata. Publication and observation pass the target independently of note data.
+No library validator reads GitHub or scheduler environment variables.
+
+Execution receives a supplied environment mapping; gate environments override its
+selected SHA, tier and attempt with the selected inputs. API credentials, Git
+subprocess environments, registry output paths and structured-outcome SHA/path
+also arrive through arguments. `ci2_binding.py` continues to use only the shared
+ISS-0029 inventory adapter, with no alternative identity source.
+
+Tests own their fixture identities and subprocess environments. The scheduled gate
+runs the entire lightweight suite twice in separate processes, once without any
+`GITHUB_*`, `SELECTED_*`, `SCHEDULED_*` or `RUNNER_*` keys and once with foreign
+values for every known or ambient key in those namespaces, plus unknown keys.
+Both runs must pass and return identical per-test outcomes. The control itself
+has a planted result-drift test with an exact diagnostic. Each run retains the
+original 45-second suite budget; the enclosing 100-second bound allows both runs
+and reporting. These checks exercise controller behavior, without running heavy
+campaigns or replacing R-0690's live qualification.

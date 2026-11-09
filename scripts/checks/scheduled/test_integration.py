@@ -58,8 +58,8 @@ class Integrated(unittest.TestCase):
                  'PATH':str(bin_dir)+os.pathsep+os.environ['PATH']}
             if environment:env.update(environment)
             output=scratch/'result'
-            with patch.dict(os.environ,env), patch.object(run,'ROOT',controller), patch.object(run,'inventory',return_value=RUNNERS):
-                code=run.run(sha,'daily',output)
+            with patch.dict(os.environ,env,clear=True), patch.object(run,'ROOT',controller), patch.object(run,'inventory',return_value=RUNNERS):
+                code=run.run(sha,'daily',output, env)
             index=json.loads((output/'index.json').read_text())
             files={str(p.relative_to(output)):p.read_bytes() for p in output.rglob('*') if p.is_file()}
             for handle in handles:handle.close()

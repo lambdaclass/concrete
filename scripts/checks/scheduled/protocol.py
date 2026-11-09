@@ -2,7 +2,6 @@
 import datetime as dt
 import importlib.util
 import json
-import os
 import re
 import subprocess
 from pathlib import Path
@@ -20,12 +19,12 @@ def require(ok, message):
     if not ok:
         raise EvidenceError(message)
 
-def clean_env():
-    return {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+def clean_env(environment):
+    return {k: v for k, v in environment.items() if not k.startswith("GIT_")}
 
-def git(*args):
+def git(*args, environment=None):
     return subprocess.run(["git", *args], check=True, capture_output=True,
-                          text=True, timeout=60, env=clean_env()).stdout.strip()
+                          text=True, timeout=60, env=clean_env({} if environment is None else environment)).stdout.strip()
 
 def timestamp(value):
     try:
@@ -45,14 +44,14 @@ def inventory():
     except _binding.BindingError as error:
         raise EvidenceError(str(error)) from error
 
-def validate(record, sha, tier, runners, repository=None):
+def validate(record, sha, tier, runners, repository, attempt):
+    """Validate explicit target identity; attempt=None validates a multi-attempt history."""
     require(isinstance(record, dict), "invalid record shape")
     require(re.fullmatch(r"[0-9a-f]{40}", sha) is not None, "invalid full SHA")
     require(record.get("sha") == sha, "wrong SHA")
     require(record.get("tier") == tier and tier in WINDOWS, "wrong tier")
-    target = repository or os.environ.get("GITHUB_REPOSITORY")
     repo = record.get("repository")
-    require(isinstance(repo, str) and (repo == target if target else repo in runners), "wrong repository")
+    require(isinstance(repo, str) and repo == repository, "wrong repository")
     missing = record.get("status") == "MISSING"
     dependency = (record.get("status") == "INCOMPLETE" and record.get("gate_revision") is None)
     require(missing or dependency or (record.get("runner_environment") == "self-hosted" and
@@ -60,6 +59,7 @@ def validate(record, sha, tier, runners, repository=None):
             "forged runner: not inventoried concrete-ci-2")
     require(isinstance(record.get("attempt"), str) and re.fullmatch(r"[0-9]+/[0-9]+", record["attempt"]) is not None,
             "invalid attempt identity")
+    require(attempt is None or record["attempt"] == attempt, "wrong attempt")
     require(isinstance(record.get("status"), str) and record["status"] in STATUSES, "invalid status")
     require(isinstance(record.get("conclusion"), str) and record["conclusion"] in {"success", "failure", "cancelled", "skipped", "queued-too-long", "absent", "incomplete"}, "invalid conclusion")
     if record["conclusion"] in {"cancelled", "skipped", "queued-too-long", "absent"}:
@@ -99,18 +99,18 @@ def validate(record, sha, tier, runners, repository=None):
             (missing or record["conclusion"] == conclusions.get(expected)), "status/conclusion contradicts evidence")
     return record
 
-def append(history, record, sha, tier, runners):
-    validate(record, sha, tier, runners)
+def append(history, record, sha, tier, runners, repository):
+    validate(record, sha, tier, runners, repository, None)
     for old in history:
-        validate(old, sha, tier, runners)
+        validate(old, sha, tier, runners, repository, None)
         require(old["attempt"] != record["attempt"], "replay would overwrite attempt")
     return [*history, record]
 
-def observe(history, sha, tier, now, runners):
+def observe(history, sha, tier, now, runners, repository):
     if not history:
         raise EvidenceError(f"MISSING {tier} {sha}: absent run")
     for record in history:
-        validate(record, sha, tier, runners)
+        validate(record, sha, tier, runners, repository, None)
         require(timestamp(record["completed"]) <= now, "future completion")
     require(len({r["attempt"] for r in history}) == len(history), "replay would overwrite attempt")
     require(not any(r["status"] == "FAIL" for r in history), f"FAIL {tier} {sha}: recorded attempt")
@@ -120,12 +120,12 @@ def observe(history, sha, tier, now, runners):
     require(latest["status"] == "PASS", f"{latest['status']} {tier} {sha}: recorded attempt")
     return f"PASS {tier} {sha}"
 
-def read_note(sha, tier, listed=False):
+def read_note(sha, tier, listed=False, *, environment=None):
     ref = "refs/notes/concrete-gates-" + tier
     if not listed:
-        listing = git("notes", "--ref=" + ref, "list")
+        listing = git("notes", "--ref=" + ref, "list", environment=environment)
         if not any(line.split()[-1] == sha for line in listing.splitlines()):
             return []
-    lines = git("notes", "--ref=" + ref, "show", sha).splitlines()
+    lines = git("notes", "--ref=" + ref, "show", sha, environment=environment).splitlines()
     require(lines, "empty annotated note")
     return [json.loads(line) for line in lines]

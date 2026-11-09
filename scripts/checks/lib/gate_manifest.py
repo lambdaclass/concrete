@@ -147,28 +147,29 @@ def check_workflow(data=None, root=ROOT, workflow=None):
         require(len(matched)==1, f'registry: missing root gate row: {path.stem}')
     return data
 
-def execute(gid,tier):
+def execute(gid,tier,environment):
     matches=[r for r in tier_rows(tier) if r['id']==gid]
     require(len(matches)==1, f'registry: gate not registered in tier: {gid}/{tier}')
     row=matches[0]
-    if os.environ.get('GITHUB_OUTPUT'):
+    if environment.get('GITHUB_OUTPUT'):
         delimiter='gate-artifacts-'+uuid.uuid4().hex
-        with open(os.environ['GITHUB_OUTPUT'],'a') as stream:
+        with open(environment['GITHUB_OUTPUT'],'a') as stream:
             stream.write('artifact_paths<<'+delimiter+'\n'+'\n'.join(a['path'] for a in row['artifacts'])+'\n'+delimiter+'\n')
     # The same bounded runner owns CI and scheduled budgets; no command in YAML.
     return subprocess.run(['bash',str(ROOT/'scripts/checks/lib/bounded.sh'),str(row['budget_seconds']),*row['command']],
-                          timeout=row['budget_seconds']*3+60).returncode
+                          timeout=row['budget_seconds']*3+60, env=environment).returncode
 
 def main():
+    environment = dict(os.environ)
     parser=argparse.ArgumentParser(); parser.add_argument('operation',choices=['validate','check-workflow','tier','scheduled','execute','execute-root'])
     parser.add_argument('--tier'); parser.add_argument('--id'); parser.add_argument('--path');args=parser.parse_args()
     if args.operation=='validate':load()
     elif args.operation=='check-workflow':check_workflow()
-    elif args.operation=='execute':return execute(args.id,args.tier)
+    elif args.operation=='execute':return execute(args.id,args.tier,environment)
     elif args.operation=='execute-root':
         rows=[r for r in load()['gates'] if r['command']==['bash',args.path]]
         require(len(rows)==1, f'registry: missing root gate row: {Path(args.path).stem}')
-        return execute(rows[0]['id'], args.tier or 'qualification')
+        return execute(rows[0]['id'], args.tier or 'qualification',environment)
     else:print(json.dumps((scheduled_rows if args.operation=='scheduled' else tier_rows)(args.tier)))
     return 0
 
