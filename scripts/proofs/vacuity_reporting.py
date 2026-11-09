@@ -12,6 +12,38 @@ from vacuity_driver import HERE, ROOT, compiled_consumer, run
 from vacuity_fixtures import main as fixtures_main
 
 
+def ownership_controls(meta):
+    fixture = BASE.replace('Instance (law `ConcreteSpecControl.growth`',
+                           'Instance (law `ConcreteSpecControl.missingLaw`')
+    for cap in [None, 100000]:
+        code, report = run(ROOT, '', fixture, 64, meta_path=meta, whole_run_cap=cap)
+        name = 'ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:8»'
+        assert f'FAIL unknown-name {name} ConcreteSpecControl.missingLaw' in report, report
+        assert any(r.startswith(f'NOTE analysis-result {name} stage=classification ') and
+                   'result=FAIL ' in r for r in report.splitlines()), report
+        assert code == (1 if cap is None else 2), report
+        print(f'PASS reporting classification-unknown cap={cap}', flush=True)
+    # Both duplicate Instance analyses and both repeated Planted analyses must
+    # own their failure even when their diagnostics are globally identical.
+    fixture = BASE.replace('/-- Instance (law `ConcreteSpecControl.growth`, case `two`). -/',
+        '/-- Instance (law `ConcreteSpecControl.growth`, case `two`). '
+        'Instance (law `ConcreteSpecControl.growth`, case `two`). -/').replace(
+        '/-- Planted (', '/-- Planted (', 1)
+    tag = 'Planted (law `ConcreteSpecControl.growth`, case `two`, subject `ConcreteSpecControl.S`, mutant `ConcreteSpecControl.mutant`).'
+    fixture = fixture.replace(tag, tag + ' ' + tag.replace('case `two`', 'case `three`')).replace(
+        'example : 2 = 2 ∧', 'theorem badPlanted : 2 = 2 ∧')
+    code, report = run(ROOT, '', fixture, 64, meta_path=meta)
+    rows = report.splitlines()
+    for stage, diagnostic, count in [('evidence-tags', 'duplicate-instance', 1),
+                                      ('evidence-kind', 'evidence-not-example', 2)]:
+        assert any(r.startswith('FAIL ' + diagnostic + ' ') for r in rows), report
+        terminals = [r for r in rows if r.startswith('NOTE analysis-result ') and
+                     f'stage={stage} ' in r and
+                     ('badPlanted' in r if stage == 'evidence-kind' else 'ConcreteSpec.lean:8' in r)]
+        assert len(terminals) >= count and all('result=FAIL ' in r for r in terminals), report
+    print('PASS reporting repeated-job-findings', flush=True)
+
+
 def main():
     source = BASE.replace('end ConcreteSpecControl', '''axiom budgetSupplier : 2 = 2
 /-- Instance (law `ConcreteSpecControl.growth`, case `budget`). -/
@@ -89,6 +121,7 @@ end ConcreteSpecControl''')
     print('PASS reporting planted-error: exact Planted and paired Instance named; unrelated FAIL retained')
     from vacuity_budget import controls as budget_controls
     with compiled_consumer() as meta:
+        ownership_controls(meta)
         if budget_controls(meta):
             return 1
         if controls(functools.partial(run, meta_path=meta), ROOT,

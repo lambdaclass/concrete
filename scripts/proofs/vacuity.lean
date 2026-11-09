@@ -61,7 +61,7 @@ abbrev Audit := StateRefT AuditState MetaM
 def emit (status code : String) (n : Name) (detail : String := "") : Audit Unit :=
   modify fun state =>
     let f := { status, code, name := n, detail : Finding }
-    if state.findings.contains f then state
+    if code != "analysis-result" && state.findings.contains f then state
     else { state with findings := state.findings.push f }
 
 def fail (code : String) (n : Name) (detail : String := "") : Audit Unit := emit "FAIL" code n detail
@@ -1077,7 +1077,8 @@ def isolated (deadline : Core.Context) (job : AnalysisJob) : Audit Bool := do
   let work ← IO.mkRef ({} : AnalysisUsage)
   modify fun s => { s with budget := some work }
   let saved ← liftM (Meta.saveState : MetaM Meta.SavedState)
-  let before := (← get).findings.size
+  let global := (← get).findings
+  modify fun s => { s with findings := #[], resolutions := {} }
   let start ← IO.getNumHeartbeats
   tryCatchRuntimeEx
     (withTheReader Core.Context (fun _ => { deadline with initHeartbeats := start }) do
@@ -1097,10 +1098,13 @@ def isolated (deadline : Core.Context) (job : AnalysisJob) : Audit Bool := do
       emit "DETAIL" "analysis-error" job.name s!"{job.fields} {message}")
   let heartbeats := ((← IO.getNumHeartbeats) - start) / 1000
   liftM (saved.restore : MetaM Unit)
-  let findings := (← get).findings.extract before (← get).findings.size
+  let findings := (← get).findings
   let incomplete := findings.any (·.status == "INCOMPLETE")
   let result := if incomplete then "INCOMPLETE" else if findings.any (·.status == "FAIL") then "FAIL" else "PASS"
   emit "NOTE" "analysis-result" job.name s!"{job.fields} result={result} {job.usage heartbeats (← work.get)}"
+  let localFindings := (← get).findings
+  modify fun s => { s with findings := global }
+  for f in localFindings do emit f.status f.code f.name f.detail
   let usage ← work.get
   modify fun s => { s with budget := none, lastUsage := usage, lastHeartbeats := heartbeats }
   return !incomplete
@@ -1371,10 +1375,8 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
       let mut evidence : Array Evidence := #[]
       for t in tags do
         step
-        let before := (← get).findings
-        let parsed ← enumerateEvidence all #[t]
-        let findings := (← get).findings.extract before.size (← get).findings.size
-        modify fun s => { s with findings := before }
+        let (parsed, parserState) ← (enumerateEvidence all #[t]).run { (← get) with findings := #[], resolutions := {} }
+        let findings := parserState.findings
         evidence := evidence ++ parsed
         tagJobs := tagJobs.insert t.name jobs.size
         jobs := jobs.push {
@@ -1531,7 +1533,7 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
     let saved ← liftM (Meta.saveState : MetaM Meta.SavedState)
     let planned ← tryCatchRuntimeEx
       (withTheReader Core.Context (fun ctx => { ctx with initHeartbeats := schedulerStart, maxHeartbeats := deadline.maxHeartbeats }) do
-        let jobs ← build
+        let (jobs, _) ← build.run { (← get) with findings := #[], resolutions := {} }
         Core.checkMaxHeartbeats "vacuity-scheduler"
         return some jobs)
       (fun ex => do
