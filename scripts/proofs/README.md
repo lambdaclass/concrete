@@ -118,7 +118,9 @@ positive controls: both retained identities require zero FAIL/INCOMPLETE evidenc
 diagnostics. On the server, run `nix develop -c python3
 scripts/proofs/vacuity_fixtures.py --replay REPORT_DIRECTORY` to freshly elaborate
 all four historical cases and assert their exact diagnostics. Existing reports
-are immutable observations; `--reports DIRECTORY` never rewrites them. Unrecognized proof terms still need
+are immutable observations; `--reports DIRECTORY` never rewrites them. A report
+must end with a complete N2 PASS/FAIL verdict and contain no INCOMPLETE diagnostic;
+missing evidence in a truncated or incomplete report cannot certify a positive control. Unrecognized proof terms still need
 Instance and Planted evidence. Semantic adequacy, representativeness, completeness
 of subjects and runtime rechecking remain independent review questions.
 

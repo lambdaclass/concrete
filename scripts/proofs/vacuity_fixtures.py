@@ -60,6 +60,7 @@ def main():
         args.reports = args.replay
     failures = []
     cache = {}
+    checked_reports = set()
     for row in records:
         key = row['commit'], row['path']
         if key not in cache:
@@ -76,6 +77,15 @@ def main():
         if args.reports:
             label = row['fixture'].split('-trapLine')[0].split('-collectKeys')[0]
             report = (args.reports / (label + '.txt')).read_text()
+            if label not in checked_reports:
+                checked_reports.add(label)
+                # Clean evidence means a completed audit, never merely the
+                # absence of a diagnostic in a killed or partial report.
+                lines = report.splitlines()
+                if (not lines or lines[-1] not in {'N2 PASS', 'N2 FAIL'} or
+                        any(line.startswith('INCOMPLETE ') for line in lines)):
+                    failures.append('FAIL report-incomplete ' + label)
+
             provenance = f'N2 SOURCE-FILE {row["path"]} {row["source_sha256"]}'
             if provenance not in report.splitlines():
                 failures.append('FAIL report-source-provenance ' + row['fixture'])
