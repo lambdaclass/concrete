@@ -94,6 +94,33 @@ class Slot(unittest.TestCase):
                 'bash', marker], budget='0.1')
         self.assertEqual((result.returncode, result.stdout, result.stderr), (0, 'recovered\n', ''))
 
+    def test_child_reuses_parent_slot(self):
+        script = r'''source "$1"
+heavy_slot_acquire || exit 7
+parent_fd=$CONCRETE_HEAVY_SLOT_FD
+bash -c 'source "$1"; heavy_slot_acquire || exit 8; [ "$CONCRETE_HEAVY_SLOT_FD" = "$2" ] || { echo "child acquired another slot"; exit 9; }; heavy_slot_release' bash "$1" "$parent_fd" || exit $?
+# Child release must leave the parent's lock held.
+flock -n "$CONCRETE_HEAVY_SLOT_DIR/slot-1" true && { echo "parent lock lost"; exit 10; }
+heavy_slot_release
+echo inherited-slot
+'''
+        with tempfile.TemporaryDirectory() as work:
+            for n in (1, 2): (Path(work) / f'slot-{n}').touch()
+            result = subprocess.run(['bash', '-c', script, 'bash', str(ROOT / 'scripts/checks/lib/heavy_slots.sh')],
+                env={**clean_env(), 'CONCRETE_HEAVY_SLOT_DIR': work}, capture_output=True, text=True, timeout=5)
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (0, 'inherited-slot\n', ''))
+
+    def test_watchdog_child_reuses_slot(self):
+        result = self.invoke(['bash', '-c', 'source "$1"; heavy_slot_acquire || exit 8; echo inherited-slot; heavy_slot_release',
+            'bash', str(ROOT / 'scripts/checks/lib/heavy_slots.sh')])
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (0, 'inherited-slot\n', ''))
+
+    def test_invalid_inherited_slot_fails_closed(self):
+        result = self.invoke(['bash', '-c', 'export CONCRETE_HEAVY_SLOT_FD=9999; source "$1"; heavy_slot_acquire',
+            'bash', str(ROOT / 'scripts/checks/lib/heavy_slots.sh')])
+        self.assertEqual((result.returncode, result.stdout, result.stderr),
+            (1, '', 'INCOMPLETE heavy slots: invalid inherited slot descriptor\n'))
+
     def test_git_environment_sanitized(self):
         from unittest.mock import patch
         with patch.dict(os.environ, {"GIT_DIR": "/nonexistent/planted-git-dir", "GIT_WORK_TREE": "/nonexistent/planted-work-tree"}):

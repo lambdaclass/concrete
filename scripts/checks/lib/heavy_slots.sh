@@ -7,14 +7,24 @@ heavy_slot_acquire() {
      [ -L "$pool/slot-1" ] || [ -L "$pool/slot-2" ]; then
     echo 'INCOMPLETE heavy slots: host pool is not provisioned' >&2; return 1
   fi
-  [ -z "${CONCRETE_HEAVY_SLOT_FD:-}" ] || {
-    echo 'INCOMPLETE heavy slots: nested acquisition forbidden' >&2; return 1;
-  }
+  if [ -n "${CONCRETE_HEAVY_SLOT_FD:-}" ]; then
+    # Children inherit the same open file description. Closing their copy never
+    # unlocks the parent's copy; do not use flock -u on a shared description.
+    if [[ "$CONCRETE_HEAVY_SLOT_FD" =~ ^[0-9]+$ ]] &&
+       { [ "/dev/fd/$CONCRETE_HEAVY_SLOT_FD" -ef "$pool/slot-1" ] ||
+         [ "/dev/fd/$CONCRETE_HEAVY_SLOT_FD" -ef "$pool/slot-2" ]; } &&
+       flock -n "$CONCRETE_HEAVY_SLOT_FD"; then
+      export CONCRETE_HEAVY_SLOT_FD
+      return 0
+    fi
+    echo 'INCOMPLETE heavy slots: invalid inherited slot descriptor' >&2
+    return 1
+  fi
   for slot in 1 2; do
     if ! exec {CONCRETE_HEAVY_SLOT_FD}<>"$pool/slot-$slot"; then
       echo 'INCOMPLETE heavy slots: host pool is not accessible' >&2; return 1
     fi
-    if flock -n "$CONCRETE_HEAVY_SLOT_FD"; then return 0; fi
+    if flock -n "$CONCRETE_HEAVY_SLOT_FD"; then export CONCRETE_HEAVY_SLOT_FD; return 0; fi
     exec {CONCRETE_HEAVY_SLOT_FD}>&-
     unset CONCRETE_HEAVY_SLOT_FD
   done

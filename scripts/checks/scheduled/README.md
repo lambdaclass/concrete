@@ -251,3 +251,9 @@ artifact entry has `binding_status=INCOMPLETE`, `sha=null`, and an exact missing
 binding diagnostic; only verified bindings carry `sha`. Missing bindings cannot
 upgrade an INCOMPLETE gate to FAIL. Present mismatched bindings and unsafe paths
 remain FAIL. A successful command with an unfinished binding is INCOMPLETE.
+
+A child of a heavy-slot holder reuses its exported `CONCRETE_HEAVY_SLOT_FD`,
+validated against the provisioned pool's inodes. The watchdog explicitly preserves
+that descriptor across its subprocess boundary. Release closes only the caller's
+copy, so a child cannot release its parent's lock. Invalid inheritance fails
+closed rather than consuming another host slot.
