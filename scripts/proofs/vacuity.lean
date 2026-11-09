@@ -536,6 +536,233 @@ def compileTemplate (key : TemplateKey) : Solver Unit := do
   modify fun s => { s with graph.templates := s.graph.templates.insert key template }
   enqueue (.term root)
 
+/-- Identity of the retained consumer, even when dependency nodes are shared. -/
+structure CertificateEntry where
+  instanceName : Name
+  law : Name
+  caseName : String
+  query : Query
+  target : TermId
+  deriving Inhabited
+
+structure CertificateSupplier where
+  declaration : Name
+  input : Input
+  deriving Inhabited
+
+/-- No exclusion evidence is assumed while constructing this derivation. All
+    recorded transfers have completed; recursive pending lookups are unresolved.
+    Later solver slices may add *admitted* prerequisites with strictly lower rank. -/
+structure CertificateDerivation where
+  entry : CertificateEntry
+  candidate : Certificate
+  transfers : Array Input
+  environment : Environment
+  structuralExclusions : Array Input := #[]
+  rank : Nat := 0
+
+inductive CertificateResult where
+  | admitted (derivation : CertificateDerivation)
+  | rejectedSuppliedContradiction (supplier : CertificateSupplier)
+  | incomplete (finding : Finding)
+
+structure DependencyState where
+  pending : Std.HashSet (Expr × Array FVarId) := {}
+  completed : Std.HashSet (Expr × Array FVarId) := {}
+  transfers : Array Input := #[]
+  hypothetical : Array Input := #[]
+  structuralExclusions : Array Input := #[]
+
+abbrev Dependencies := ReaderT CertificateEntry (StateRefT DependencyState Solver)
+
+/-- Drain only construction work appended by this validation; the enclosing
+    solver's earlier obligations remain queued. Construction shares charge. -/
+def certificateConstruction (base : Nat) : Solver Unit := do
+  while (← get).worklist.size > base do
+    let work := (← get).worklist.back!
+    modify fun s => { s with worklist := s.worklist.pop }
+    charge
+    match work with
+    | .term id => compileNode id
+    | .template key => compileTemplate key
+    | _ => throwError "unexpected-certificate-construction-work"
+
+/-- Trace the actual application, not an opened declaration with fresh proof
+    parameters. This phase never calls refutableContext/simp or consumes a pending
+    exclusion, so an impossible producer cannot erase its own prerequisite.
+    Types are expressions too, and are checked through this same traversal. -/
+partial def certificateDependency (e : Expr) : Dependencies (Option CertificateSupplier) := do
+  let e := cleanSpine e
+  let key := (e, (collectFVars {} e).fvarIds)
+  if (← get).completed.contains key then return none
+  if (← get).pending.contains key then throwError "cyclic-certificate-dependency"
+  modify fun s => { s with pending := s.pending.insert key }
+  liftM (m := Solver) charge
+  let id ← liftM (m := Solver) (term e)
+  -- Use the slice-1 node identities and construction, charged to the same state.
+  let base := (← liftM (m := Solver) get).worklist.size
+  liftM (m := Solver) (enqueue (.term id))
+  liftM (m := Solver) (certificateConstruction base)
+  let finish : Dependencies (Option CertificateSupplier) := do
+    modify fun s => { s with pending := s.pending.erase key, completed := s.completed.insert key }
+    return none
+  if e.hasMVar then throwError "uninstantiated-certificate-metavariable"
+  if e.hasLooseBVars then throwError "unbound-certificate-variable"
+  -- inferType does not unfold or replace the producing expression.
+  unless e.isSort do
+    if let some bad ← certificateDependency (← inferType e) then return some bad
+  match e with
+  | .app .. | .const .. =>
+    let fn := e.getAppFn'
+    let args := e.getAppArgs
+    -- Arguments retain their actual origins, including proof and data arguments.
+    for arg in args do
+      if let some bad ← certificateDependency arg then return some bad
+    if let .const name levels := fn then
+      let ci ← getConstInfo name
+      -- Preserve domains erased from the application's result type. Earlier
+      -- parameters are substituted with actual arguments before later domains
+      -- are inspected; supplied proofs never become hypothetical binders.
+      let mut declared := ci.type.instantiateLevelParams ci.levelParams levels
+      for arg in args do
+        unless declared.isForall do
+          if let some bad ← certificateDependency declared then return some bad
+          declared ← whnfD declared
+        let .forallE _ domain body _ := declared
+          | throwError "unsupported-certificate-function-type {name}"
+        if let some bad ← certificateDependency domain then return some bad
+        declared := body.instantiate1 arg
+      if let some bad ← certificateDependency declared then return some bad
+      let type ← liftM (m := Solver) (term (← inferType e))
+      let (origin, graph) := internOrigin (.supplied (← readThe CertificateEntry).instanceName 0 id)
+        |>.run (← liftM (m := Solver) get).graph
+      liftM (m := Solver) (modify fun s => { s with graph })
+      let input : Input := { term := id, type, origin }
+      modify fun s => { s with transfers := s.transfers.push input }
+      let template : TemplateKey := { name, levels, mode := .transfer }
+      let base := (← liftM (m := Solver) get).worklist.size
+      liftM (m := Solver) (enqueue (.template template))
+      liftM (m := Solver) (certificateConstruction base)
+      if let some value := ci.value? (allowOpaque := true) then
+        let applied := (mkAppN (value.instantiateLevelParams ci.levelParams levels) args).headBeta
+        if let some bad ← certificateDependency applied then return some bad
+      else
+        match ci with
+        | .axiomInfo _ | .opaqueInfo _ =>
+          if ← refutableType (← inferType e) then
+            return some { declaration := name, input }
+          throwError "unavailable-certificate-transfer {name}"
+        | .recInfo _ =>
+          -- All motives, minors and actual inputs were validated above. The
+          -- kernel recursor metadata supplies its structural transfer rule;
+          -- reduction may additionally expose an instantiated transfer.
+          let reduced ← whnfD e
+          if reduced != e then
+            if let some bad ← certificateDependency reduced then return some bad
+        | .quotInfo _ => throwError "unresolved-certificate-quotient {name}"
+        | _ => pure () -- inductive and constructor metadata are structural rules
+    else
+      let reduced := e.headBeta
+      if reduced != e then
+        if let some bad ← certificateDependency reduced then return some bad
+      else
+        if let some bad ← certificateDependency fn then return some bad
+  | .lam name type body bi | .forallE name type body bi =>
+    if let some bad ← certificateDependency type then return some bad
+    let bad ← withLocalDecl name bi type fun x => do
+      let id ← liftM (m := Solver) (term x)
+      let typeId ← liftM (m := Solver) (term type)
+      let (origin, graph) := internOrigin (.hypothetical id id)
+        |>.run (← liftM (m := Solver) get).graph
+      liftM (m := Solver) (modify fun s => { s with graph })
+      let input : Input := { term := id, type := typeId, origin }
+      let previous := (← get).hypothetical
+      modify fun s => { s with hypothetical := previous.push input }
+      -- A direct empty-inductive assumption is a finite structural refutation,
+      -- independent of this candidate and of every global proof producer.
+      -- No simp/decide-generated exclusion is assumed here.
+      let empty ← match type.getAppFn' with
+        | .const n _ => pure <| match (← getEnv).find? n with
+          | some (.inductInfo info) => info.ctors.isEmpty
+          | _ => false
+        | _ => pure false
+      let bad ← if empty then do
+          modify fun s => { s with structuralExclusions := s.structuralExclusions.push input }
+          pure none
+        else certificateDependency (body.instantiate1 x)
+      modify fun s => { s with hypothetical := previous }
+      return bad
+    if bad.isSome then return bad
+  | .letE _ type value body _ =>
+    if let some bad ← certificateDependency type then return some bad
+    if let some bad ← certificateDependency value then return some bad
+    if let some bad ← certificateDependency (body.instantiate1 value) then return some bad
+  | .proj _ _ receiver =>
+    if let some bad ← certificateDependency receiver then return some bad
+  | .mdata _ body =>
+    if let some bad ← certificateDependency body then return some bad
+  | .fvar _ =>
+    let graph := (← liftM (m := Solver) get).graph
+    unless (← get).hypothetical.any (fun input => graph.terms[input.term]? == some e) do
+      throwError "unpermitted-certificate-assumption"
+  | .sort _ | .lit _ => pure ()
+  | _ => throwError "unsupported-certificate-expression"
+  finish
+
+/-- Validate a candidate without changing any consumer or admitting it into a
+    cache. The caller's SolverState supplies the existing 20,000-work allowance;
+    this function neither resets it nor starts a new heartbeat deadline. -/
+def validateCertificate (entry : CertificateEntry) (candidate : Certificate) :
+    Solver CertificateResult := do
+  let base := (← get).worklist.size
+  enqueue (.certificate entry.query candidate)
+  tryCatchRuntimeEx (do
+    -- Take this root from the shared worklist without consuming older work.
+    modify fun s => { s with worklist := s.worklist.pop }
+    charge
+    let graph := (← get).graph
+    let some proof := graph.terms[candidate.proof]? | throwError "missing-certificate-proof"
+    let some target := graph.terms[entry.target]? | throwError "missing-certificate-target"
+    if proof.hasMVar || target.hasMVar then throwError "uninstantiated-certificate-metavariable"
+    let mut permitted : Array FVarId := #[]
+    for input in candidate.assumptions do
+      charge
+      let some assumption := graph.terms[input.term]? | throwError "missing-certificate-assumption"
+      let .fvar f := assumption | throwError "nonlocal-certificate-assumption"
+      let some (.hypothetical ..) := graph.origins[input.origin]?
+        | throwError "supplied-certificate-assumption"
+      unless entry.query.hypothetical.contains input do throwError "unpermitted-certificate-origin"
+      let some type := graph.terms[input.type]? | throwError "missing-certificate-assumption-type"
+      unless ← isDefEq (← inferType assumption) type do throwError "certificate-assumption-type"
+      permitted := permitted.push f
+    for e in [proof, target] do
+      for f in (collectFVars {} e).fvarIds do
+        unless permitted.contains f do throwError "unpermitted-certificate-assumption"
+    unless candidate.guards == entry.query.guards do throwError "certificate-guard-mismatch"
+    Lean.Meta.check proof
+    Lean.Meta.check target
+    unless ← isDefEq (← inferType proof) target do throwError "certificate-type-mismatch"
+    let action : Dependencies (Option CertificateSupplier) := do
+      if let some bad ← certificateDependency proof then return some bad
+      if let some bad ← certificateDependency target then return some bad
+      for guard in candidate.guards do
+        for id in [guard.type, guard.lhs, guard.rhs] do
+          let some e := (← liftM (m := Solver) get).graph.terms[id]?
+            | throwError "missing-certificate-guard-term"
+          if let some bad ← certificateDependency e then return some bad
+        let graph := (← liftM (m := Solver) get).graph
+        for id in [guard.lhs, guard.rhs] do
+          unless ← isDefEq (← inferType graph.terms[id]!) graph.terms[guard.type]! do
+            throwError "certificate-guard-type"
+      return none
+    let (bad, dependencies) ← (action.run entry).run { hypothetical := candidate.assumptions }
+    if let some supplier := bad then return .rejectedSuppliedContradiction supplier
+    modify fun s => { s with certificates := s.certificates + 1 }
+    return .admitted { entry, candidate, environment := (← getEnv), transfers := dependencies.transfers, structuralExclusions := dependencies.structuralExclusions, rank := if dependencies.structuralExclusions.isEmpty then 0 else 1 }
+  ) (fun ex => do
+    modify fun s => { s with worklist := s.worklist.extract 0 base }
+    return .incomplete { status := "INCOMPLETE", code := "analysis-budget-or-error", name := entry.instanceName, detail := s!"stage=certificate-dependencies law={entry.law} case={entry.caseName} {← ex.toMessageData.toString}" })
+
 end Discharge
 
 structure DischargeState where

@@ -42,8 +42,11 @@ def main():
             data-psigma-discharge data-pprod-discharge
             finite-collection-decide-positive finite-collection-simp-positive
             finite-collection-cases-positive""".split())
+        from vacuity_certificates import controls as certificate_controls
         with compiled_consumer() as meta:
-            return controls(functools.partial(run, meta_path=meta), ROOT, labels=labels)
+            if controls(functools.partial(run, meta_path=meta), ROOT, labels=labels):
+                return 1
+            return certificate_controls(meta)
     commit, module, names = CASES[args.case]
     archive = subprocess.run(["bash", str(ROOT / "scripts/checks/lib/bounded.sh"), "30",
         "git", "archive", commit, "ConcreteSpec", "ConcreteSpec.lean", "ROADMAP.md"],

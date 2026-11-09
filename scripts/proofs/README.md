@@ -145,15 +145,47 @@ reporting only; summary solving requires the coordinator's valid independent
 ACCEPT and separate phase-B brief. Both C9-new and C6-current remain completion
 blockers. No measured completion bound for an unimplemented solver is claimed.
 
-**Phase B slice 2 certificate blocker (R-0219):**
-[the counterexample and missing validation protocol](N2-slice2-certificate-blocker.md)
-show why a kernel-checked context refutation with no supplied local assumptions
-can still depend on a global supplied False producer through simp. The long-term
-solver must validate certificate proof dependencies and their origins before
-using the certificate to exclude a branch, without circular self-exclusion,
-under the shared worklist and unchanged budgets. The accepted note states the
-soundness requirement but needs to specify that validation protocol. The solver
-and consumer switch remain unfinished; this probe supplies no completion claim.
+**Phase B slice 2a certificate dependencies (R-0219):** the accepted A2 protocol
+in [N2-discharge-solver.md](N2-discharge-solver.md) now has a direct entry point,
+`Vacuity.Discharge.validateCertificate : CertificateEntry → Certificate → Solver
+CertificateResult`, in `vacuity.lean`. It does not change the consumer. It retains
+the exact entry/query, target, permitted hypothetical origins, guards and immutable
+environment in a completed derivation. Actual applications transfer global
+supplier origins through exposed bodies (including opaque theorem values), types,
+implicit/proof/data arguments and generated simp declarations. Raw graph
+construction and dependency obligations share the existing 20,000-work counter;
+no validation phase renews the original heartbeat deadline.
+
+Admission uses only completed transfers and finite structural evidence. An empty
+inductive hypothetical domain has a direct metadata derivation; it cannot hide a
+supplied argument because substitution precedes binder opening. Pending candidates
+are never available as exclusion evidence. Pending execution/dependency cycles,
+unavailable non-refutable opaque transfers, unsupported quotient transfers and
+exhaustion return a retained Instance/law/case INCOMPLETE at
+`stage=certificate-dependencies`. A supplied impossible producer instead rejects
+the candidate and identifies its declaration and producing origin; this result is
+not an original Instance false-discharge finding.
+
+The R-0219 long-term design remains the A2 prerequisite graph and application-sensitive
+summary/SCC solver: extend finite admission derivations to independently admitted
+exclusions and invariants, preserve their exact prerequisite identities and ranks,
+and revalidate substitutions before any cache reuse. This slice has no persistent
+admission cache or caller-supplied exclusion evidence. General branch constraints,
+SCC invariants, consumer integration and measured historical completion remain
+later slices; the full solver is not claimed complete. The earlier
+[origin counterexample](N2-slice2-certificate-blocker.md) remains historical evidence.
+
+`vacuity_certificates.py` directly asserts exact results for the original injected
+simp certificate (supplier `impossible`), genuine library decide/matcher evidence,
+a complete dependency-chain baseline, that chain after the enclosing Instance has
+spent its shared allowance, and attempted self-exclusion of the injected producer.
+It also checks the retained origin, finite rank, unchanged aggregate budget and
+absence of admission on rejected/incomplete results. The focused runner includes
+these controls after its unchanged 32 discharge controls:
+
+```
+nix develop -c bash scripts/checks/lib/bounded.sh 140 python3 -u scripts/proofs/vacuity_round5.py controls
+```
 
 Analysis failures are isolated by declaration and evidence case. Each reports
 `INCOMPLETE analysis-budget-or-error <fully-qualified-name> stage=... law=... case=...`
