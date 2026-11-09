@@ -405,10 +405,9 @@ class PhysicalEffects (O : Exec.Operands) (Output : Type) where
   emit : O.Prim → List O.Val → O.Store → Exec.Answer O.Val O.Event O.Store → List Output
   past : O.Event → List Output
 
-/-- Adapter output correspondence against the operand language's fixed `PhysicalEffects` instance.
-Because `PhysicalEffects O S.Output` is fixed by `(O, S.Output)` rather than chosen per adapter,
-an output-erasing adapter cannot satisfy `OutputCorrespondence` by swapping in a zero-effect
-interpretation. The adapter does not check this obligation at runtime. -/
+/-- Adapter output correspondence against a selected execution model's primitive semantics.
+The typeclass parameter is internal plumbing; public physical laws select it from the semantic
+operand bundle, never from an adapter or ambient instance search. -/
 def ExecAdapter.OutputCorrespondence [F : PhysicalEffects O S.Output]
     (A : ExecAdapter O S) : Prop :=
   ∀ event, publicOutputs (A.events event) = F.past event
@@ -421,6 +420,28 @@ def PhysicalEffects.OracleFaithful (Output : Type) [F : PhysicalEffects O Output
   ∀ hist p vs site store a, ρ hist p vs site store = some a →
     O.allows p vs store a = true →
     a.event.toList.flatMap F.past = F.emit p vs store a
+
+/-- Authoritative operand/signature bundle for physical execution. Choosing a different effect
+interpretation creates a different semantic operand language, even if its erased C1 operands
+coincide. An adapter is admitted against this bundle; it cannot supply its own interpretation.
+The primitive oracle and its independently proved recording obligation travel with the operands. -/
+structure PhysicalOperands (Output : Type) where
+  operands : Exec.Operands
+  effects : PhysicalEffects operands Output
+  oracle : Exec.Oracle operands
+  faithful : @PhysicalEffects.OracleFaithful operands Output effects oracle
+
+/-- Execute the authoritative primitive oracle of the semantic operand bundle. -/
+abbrev PhysicalOperands.runFrom {Output : Type} (M : PhysicalOperands Output)
+    (P : Exec.Program M.operands) (fuel : Nat) (hist : List M.operands.Event)
+    (c : Exec.Config M.operands) : Exec.Report M.operands :=
+  Exec.runFrom P M.oracle fuel hist c
+
+/-- Adapter admission uses the effect interpretation owned by the semantic operands.
+There is no independently selectable interpretation argument. -/
+def PhysicalOperands.Admits {S : EventSignature} (M : PhysicalOperands S.Output)
+    (A : ExecAdapter M.operands S) : Prop :=
+  @ExecAdapter.OutputCorrespondence S M.operands M.effects A
 
 /-- Independent physical execution semantics from `(hist, c)` to a stopped or budget-exhausted
 evaluator ending `Exec.Ending O`. Every stopping constructor is guarded by the exact machine

@@ -4,7 +4,7 @@ import ConcreteSpec.Proofs.Observe2
 
 `project_physical_outputs` and `output_before_trap_kept` are stated as general C6 operational laws
 over `Exec.runFrom`, `ExecAdapter.project`, and `reportObservation`, parameterized by the operand
-language's fixed `[PhysicalEffects O S.Output]` typeclass instance and reaching the exact
+language's authoritative `PhysicalOperands` bundle and reaching the exact
 `Exec.Ending O` of `Exec.runFrom`. `OutputDemo` supplies their closed `Instance` and `Planted`
 witnesses using an adapter whose events distinguish non-output exchange records (`n < 0`) from
 physical output records (`0 ≤ n`), so `OutputCorrespondence` is checked against independently
@@ -118,25 +118,26 @@ theorem no_erasing_correspondence {O : Exec.Operands} {S : EventSignature}
 An actual evaluator run admits an independently specified physical execution reaching its exact
 `Exec.Ending O`, its public outputs are the incoming effects followed by that execution's primitive
 effects, and any nonempty emitted output refutes an output-erasing adapter against the operand
-language's fixed `PhysicalEffects` instance. -/
-theorem project_physical_outputs {O : Exec.Operands} {S : EventSignature}
-    [F : PhysicalEffects O S.Output]
-    (P : Exec.Program O) (A : ExecAdapter O S) (ρ : Exec.Oracle O)
-    (corresponds : A.OutputCorrespondence)
-    (faithful : PhysicalEffects.OracleFaithful S.Output ρ)
-    (fuel : Nat) (hist : List O.Event) (c : Exec.Config O) :
-    ∃ outputs, PhysicalEffects.Execution S.Output P ρ hist c outputs
-      (Exec.runFrom P ρ fuel hist c).events (Exec.runFrom P ρ fuel hist c).ending ∧
-      publicOutputs (A.project (Exec.runFrom P ρ fuel hist c).events) =
-        hist.flatMap F.past ++ outputs ∧
+language's authoritative physical operand bundle. -/
+theorem project_physical_outputs {S : EventSignature}
+    (M : PhysicalOperands S.Output)
+    (P : Exec.Program M.operands) (A : ExecAdapter M.operands S)
+    (corresponds : M.Admits A)
+    (fuel : Nat) (hist : List M.operands.Event) (c : Exec.Config M.operands) :
+    letI := M.effects
+    ∃ outputs, PhysicalEffects.Execution S.Output P M.oracle hist c outputs
+      (M.runFrom P fuel hist c).events (M.runFrom P fuel hist c).ending ∧
+      publicOutputs (A.project (M.runFrom P fuel hist c).events) =
+        hist.flatMap M.effects.past ++ outputs ∧
       (outputs ≠ [] → ¬ ExecAdapter.OutputCorrespondence (S := S) { A with events := fun _ => [] }) := by
-  obtain ⟨outputs, execution⟩ := physical_run_execution S.Output P ρ fuel hist c
-  have haccum := physical_execution_outputs S.Output P ρ faithful execution
+  letI := M.effects
+  obtain ⟨outputs, execution⟩ := physical_run_execution S.Output P M.oracle fuel hist c
+  have haccum := physical_execution_outputs S.Output P M.oracle M.faithful execution
   refine ⟨outputs, execution, ?_, ?_⟩
   · rw [project_physical_outputs_list A corresponds]
     exact haccum
   · intro hne
-    apply no_erasing_correspondence A (events := (Exec.runFrom P ρ fuel hist c).events)
+    apply no_erasing_correspondence A (events := (M.runFrom P fuel hist c).events)
     rw [haccum]
     intro hempty
     exact hne (List.append_eq_nil_iff.mp hempty).2
@@ -154,27 +155,27 @@ def reverseProjection {O : Exec.Operands} {S : EventSignature}
 An actual trapped run reports its full history, diagnostic and final external state. That
 history retains precisely the independently specified physical execution's ordered outputs up to
 the trapped `.final` ending, and any nonempty emitted output refutes an output-erasing adapter. -/
-theorem output_before_trap_kept {O : Exec.Operands} {S : EventSignature}
-    [F : PhysicalEffects O S.Output]
-    (P : Exec.Program O) (A : ExecAdapter O S) (C : OperationContract S) (input : C.Input)
-    (ρ : Exec.Oracle O)
-    (corresponds : A.OutputCorrespondence)
-    (faithful : PhysicalEffects.OracleFaithful S.Output ρ)
-    (fuel : Nat) (hist : List O.Event) (c : Exec.Config O)
-    (permitted : ExecAdapter.BlockingPermitted P A C input (Exec.runFrom P ρ fuel hist c))
-    (kind : TrapKind) (site : SiteId) (store : O.Store) (sp : Span)
-    (ending : (Exec.runFrom P ρ fuel hist c).ending = .final (.trapped kind site) store)
+theorem output_before_trap_kept {S : EventSignature}
+    (M : PhysicalOperands S.Output)
+    (P : Exec.Program M.operands) (A : ExecAdapter M.operands S) (C : OperationContract S) (input : C.Input)
+    (corresponds : M.Admits A)
+    (fuel : Nat) (hist : List M.operands.Event) (c : Exec.Config M.operands)
+    (permitted : ExecAdapter.BlockingPermitted P A C input (M.runFrom P fuel hist c))
+    (kind : TrapKind) (site : SiteId) (store : M.operands.Store) (sp : Span)
+    (ending : (M.runFrom P fuel hist c).ending = .final (.trapped kind site) store)
     (resolved : AList.lookup A.sites site = some sp) (pathOk : sp.PathOk) :
-    reportObservation P A C input (Exec.runFrom P ρ fuel hist c) permitted =
-      some (.terminal ⟨A.project (Exec.runFrom P ρ fuel hist c).events,
+    letI := M.effects
+    reportObservation P A C input (M.runFrom P fuel hist c) permitted =
+      some (.terminal ⟨A.project (M.runFrom P fuel hist c).events,
         .trapped kind site sp (trapLine kind site sp), A.state store⟩) ∧
-    ∃ outputs, PhysicalEffects.Execution S.Output P ρ hist c outputs
-      (Exec.runFrom P ρ fuel hist c).events (.final (.trapped kind site) store) ∧
-      publicOutputs (A.project (Exec.runFrom P ρ fuel hist c).events) =
-        hist.flatMap F.past ++ outputs ∧
+    ∃ outputs, PhysicalEffects.Execution S.Output P M.oracle hist c outputs
+      (M.runFrom P fuel hist c).events (.final (.trapped kind site) store) ∧
+      publicOutputs (A.project (M.runFrom P fuel hist c).events) =
+        hist.flatMap M.effects.past ++ outputs ∧
       (outputs ≠ [] → ¬ ExecAdapter.OutputCorrespondence (S := S) { A with events := fun _ => [] }) := by
+  letI := M.effects
   obtain ⟨outputs, execution, hproj, herase⟩ :=
-    project_physical_outputs P A ρ corresponds faithful fuel hist c
+    project_physical_outputs M P A corresponds fuel hist c
   rw [ending] at execution
   refine ⟨?_, outputs, execution, hproj, herase⟩
   simp [reportObservation, ending, ExecAdapter.terminal?, trapTerminal, resolved, pathOk]
@@ -212,8 +213,8 @@ while non-negative logging events produce `[toString n]`. -/
 def physical (n : Int) : List String :=
   if n < 0 then [] else [toString n]
 
-/-- Physical semantics are fixed by the `(Exec.Demo.ops, String)` typeclass instance,
-independently of the adapter. -/
+/-- Independently specified primitive effects; installed into `OutputDemo.model` with the
+operands and oracle, before adapter admission. The local instance supports relation notation. -/
 instance effects : PhysicalEffects Exec.Demo.ops String where
   past := physical
   emit := fun p vs _ _ => match p, vs with
@@ -243,6 +244,10 @@ theorem oracle_faithful : PhysicalEffects.OracleFaithful (O := Exec.Demo.ops) St
       subst a
       rfl
     | cons _ _ => simp [Exec.Demo.env] at answer
+
+/-- The concrete logging language owns its effects and primitive implementation. Adapters
+for this language must retain this bundle when choosing a different event projection. -/
+abbrev model : PhysicalOperands String := ⟨Exec.Demo.ops, effects, Exec.Demo.env, oracle_faithful⟩
 
 /-- Helper (computation). Proves `ExecAdapter.OutputCorrespondence adapter` by case-splitting
 on `n < 0` so exchange events (`[request, response]`) filter to `[]` while output events filter to
@@ -319,33 +324,31 @@ example : ∃ outputs, PhysicalEffects.Execution String program Exec.Demo.env [-
     publicOutputs (adapter.project (Exec.runFrom program Exec.Demo.env 7 [-2, 11] (initial [3, 4])).events) =
       [-2, 11].flatMap (PhysicalEffects.past (O := Exec.Demo.ops) (Output := String)) ++ outputs ∧
     (outputs ≠ [] → ¬ ExecAdapter.OutputCorrespondence (S := Demo.signature) { adapter with events := fun _ => [] }) :=
-  project_physical_outputs program adapter Exec.Demo.env adapter_correspondence oracle_faithful 7 [-2, 11] (initial [3, 4])
+  project_physical_outputs (S := Demo.signature) model program adapter adapter_correspondence 7 [-2, 11] (initial [3, 4])
 
 /-- Planted (law `ConcreteSpec.Core.Observe.project_physical_outputs`, case `ordered_physical_outputs_on_run`,
 subject `ConcreteSpec.Core.Observe.ExecAdapter.project`, mutant `ConcreteSpec.Core.Observe.eraseProjection`). -/
 example : adapter.OutputCorrespondence ∧
-    PhysicalEffects.OracleFaithful (O := Exec.Demo.ops) String Exec.Demo.env ∧
     ¬ (∃ outputs, PhysicalEffects.Execution String program Exec.Demo.env [-2, 11] (initial [3, 4])
       outputs (Exec.runFrom program Exec.Demo.env 7 [-2, 11] (initial [3, 4])).events
       (Exec.runFrom program Exec.Demo.env 7 [-2, 11] (initial [3, 4])).ending ∧
     publicOutputs (eraseProjection adapter (Exec.runFrom program Exec.Demo.env 7 [-2, 11] (initial [3, 4])).events) =
       [-2, 11].flatMap (PhysicalEffects.past (O := Exec.Demo.ops) (Output := String)) ++ outputs ∧
     (outputs ≠ [] → ¬ ExecAdapter.OutputCorrespondence (S := Demo.signature) { adapter with events := fun _ => [] })) := by
-  refine ⟨adapter_correspondence, oracle_faithful, ?_⟩
+  refine ⟨adapter_correspondence, ?_⟩
   rintro ⟨outputs, execution, equal, _⟩
   exact cannot_erase execution equal
 
 /-- Planted (law `ConcreteSpec.Core.Observe.project_physical_outputs`, case `ordered_physical_outputs_on_run`,
 subject `ConcreteSpec.Core.Observe.ExecAdapter.project`, mutant `ConcreteSpec.Core.Observe.reverseProjection`). -/
 example : adapter.OutputCorrespondence ∧
-    PhysicalEffects.OracleFaithful (O := Exec.Demo.ops) String Exec.Demo.env ∧
     ¬ (∃ outputs, PhysicalEffects.Execution String program Exec.Demo.env [-2, 11] (initial [3, 4])
       outputs (Exec.runFrom program Exec.Demo.env 7 [-2, 11] (initial [3, 4])).events
       (Exec.runFrom program Exec.Demo.env 7 [-2, 11] (initial [3, 4])).ending ∧
     publicOutputs (reverseProjection adapter (Exec.runFrom program Exec.Demo.env 7 [-2, 11] (initial [3, 4])).events) =
       [-2, 11].flatMap (PhysicalEffects.past (O := Exec.Demo.ops) (Output := String)) ++ outputs ∧
     (outputs ≠ [] → ¬ ExecAdapter.OutputCorrespondence (S := Demo.signature) { adapter with events := fun _ => [] })) := by
-  refine ⟨adapter_correspondence, oracle_faithful, ?_⟩
+  refine ⟨adapter_correspondence, ?_⟩
   rintro ⟨outputs, execution, equal, _⟩
   have hphys := physical_execution_outputs String program Exec.Demo.env oracle_faithful execution
   rw [← hphys] at equal
@@ -363,14 +366,13 @@ example : reportObservation program adapter Demo.contract ()
     publicOutputs (adapter.project (Exec.runFrom program Exec.Demo.env 7 [-2, 11] (initial [3, 4])).events) =
       [-2, 11].flatMap (PhysicalEffects.past (O := Exec.Demo.ops) (Output := String)) ++ outputs ∧
     (outputs ≠ [] → ¬ ExecAdapter.OutputCorrespondence (S := Demo.signature) { adapter with events := fun _ => [] }) :=
-  output_before_trap_kept program adapter Demo.contract () Exec.Demo.env
-    adapter_correspondence oracle_faithful 7 [-2, 11] (initial [3, 4])
+  output_before_trap_kept (S := Demo.signature) model program adapter Demo.contract ()
+    adapter_correspondence 7 [-2, 11] (initial [3, 4])
     (permitted [3, 4] [-2, 11]) .abort Exec.Demo.s .init trapSpan rfl rfl (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Observe.output_before_trap_kept`, case `two_outputs_then_trap_report`,
 subject `ConcreteSpec.Core.Observe.reportObservation`, mutant `ConcreteSpec.Core.Observe.dropTrapHistoryReport`). -/
 example : adapter.OutputCorrespondence ∧
-    PhysicalEffects.OracleFaithful (O := Exec.Demo.ops) String Exec.Demo.env ∧
     ExecAdapter.BlockingPermitted program adapter Demo.contract ()
       (Exec.runFrom program Exec.Demo.env 7 [-2, 11] (initial [3, 4])) ∧
     (Exec.runFrom program Exec.Demo.env 7 [-2, 11] (initial [3, 4])).ending =
@@ -386,7 +388,7 @@ example : adapter.OutputCorrespondence ∧
     publicOutputs (adapter.project (Exec.runFrom program Exec.Demo.env 7 [-2, 11] (initial [3, 4])).events) =
       [-2, 11].flatMap (PhysicalEffects.past (O := Exec.Demo.ops) (Output := String)) ++ outputs ∧
     (outputs ≠ [] → ¬ ExecAdapter.OutputCorrespondence (S := Demo.signature) { adapter with events := fun _ => [] })) := by
-  refine ⟨adapter_correspondence, oracle_faithful, permitted [3, 4] [-2, 11],
+  refine ⟨adapter_correspondence, permitted [3, 4] [-2, 11],
     rfl, rfl, by decide, ?_⟩
   intro invalid
   have equal := congrArg (fun r : Option (FullObservation Demo.signature) =>
@@ -397,7 +399,6 @@ example : adapter.OutputCorrespondence ∧
 /-- Planted (law `ConcreteSpec.Core.Observe.output_before_trap_kept`, case `two_outputs_then_trap_report`,
 subject `ConcreteSpec.Core.Observe.ExecAdapter.project`, mutant `ConcreteSpec.Core.Observe.eraseProjection`). -/
 example : adapter.OutputCorrespondence ∧
-    PhysicalEffects.OracleFaithful (O := Exec.Demo.ops) String Exec.Demo.env ∧
     ExecAdapter.BlockingPermitted program adapter Demo.contract ()
       (Exec.runFrom program Exec.Demo.env 7 [-2, 11] (initial [3, 4])) ∧
     (Exec.runFrom program Exec.Demo.env 7 [-2, 11] (initial [3, 4])).ending =
@@ -413,15 +414,15 @@ example : adapter.OutputCorrespondence ∧
     publicOutputs (eraseProjection adapter (Exec.runFrom program Exec.Demo.env 7 [-2, 11] (initial [3, 4])).events) =
       [-2, 11].flatMap (PhysicalEffects.past (O := Exec.Demo.ops) (Output := String)) ++ outputs ∧
     (outputs ≠ [] → ¬ ExecAdapter.OutputCorrespondence (S := Demo.signature) { adapter with events := fun _ => [] })) := by
-  refine ⟨adapter_correspondence, oracle_faithful, permitted [3, 4] [-2, 11],
+  refine ⟨adapter_correspondence, permitted [3, 4] [-2, 11],
     rfl, rfl, by decide, ?_⟩
   intro invalid
   obtain ⟨outputs, execution, erased, _⟩ := invalid.2
   exact cannot_erase execution erased
 
-/-- Refused: physical semantics stay fixed by the `(Exec.Demo.ops, String)` typeclass instance
-when the adapter erases outputs. -/
-example : ¬ ExecAdapter.OutputCorrespondence (S := Demo.signature) { adapter with events := fun _ => [] } := by
+/-- Refused: an erasing adapter is not admitted for the unchanged concrete semantic operand
+bundle. No ambient physical-effects instance is used by this admission proposition. -/
+example : ¬ PhysicalOperands.Admits (S := Demo.signature) model { adapter with events := fun _ => [] } := by
   intro correspondence
   have output := correspondence 3
   change [] = ["3"] at output
