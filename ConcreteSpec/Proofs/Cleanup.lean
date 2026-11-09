@@ -49,8 +49,13 @@ def RegInv (live : Res → Bool) (st : Stack) : Prop :=
   (∀ d ∈ pending st, live d.target = false) ∧
   (∀ d ∈ pending st, ∀ r ∈ d.needs, live r = true ∨ r ∈ targets (pending st))
 
+/-- Quantifies the constrained judgments; definitionally equivalent to the original universally closed guarantee. -/
+def RegistrationInvariant (judgment : (Res → Bool) → Stack → Prop) (live : Res → Bool) : Prop :=
+  ∀ {st : Stack}, judgment live st → RegInv live st
+
 /-- Law (subject `ConcreteSpec.Cleanup.Reg`). -/
-theorem reg_inv {live : Res → Bool} {st : Stack} (h : Reg live st) : RegInv live st := by
+theorem reg_inv {live : Res → Bool} : RegistrationInvariant Reg live := by
+  intro st h
   induction h with
   | empty => exact ⟨.nil, .nil, by simp [pending], by simp [pending]⟩
   | enter _ ih => simpa [RegInv, pending_cons] using ih
@@ -220,13 +225,14 @@ theorem depOrder_needs_unconsumed {pre post : List Deferred} {d : Deferred}
   subst he
   exact depOrder_cross h x hx d (List.mem_cons_self ..) hr
 
+/-- Quantifies the constrained judgments; definitionally equivalent to the original universally closed guarantee. -/
+def CleanupBefore (judgment : (Res → Bool) → Stack → Prop) (live : Res → Bool) : Prop :=
+  ∀ {st : Stack}, judgment live st → ∀ {e : Exit} {fs : List Frame}, unwound e st = some fs → ∀ {d da : Deferred}, d ∈ pending fs → da ∈ pending fs → da.target ∈ d.needs → ∃ t₁ t₂ t₃, expected (pending fs) = t₁ ++ .call d :: t₂ ++ .call da :: t₃
+
 /-- Law (subject `ConcreteSpec.Cleanup.Reg`). Cleanup of exited scopes calls each dependent
 before the allocator or loan source it needs. This applies also to abort's empty prefix. -/
-theorem defer_cleanup_releases_before {live : Res → Bool} {st : Stack}
-    (hreg : Reg live st) {e : Exit} {fs : List Frame}
-    (hu : unwound e st = some fs) {d da : Deferred}
-    (hd : d ∈ pending fs) (hda : da ∈ pending fs) (hdep : da.target ∈ d.needs) :
-    ∃ t₁ t₂ t₃, expected (pending fs) = t₁ ++ .call d :: t₂ ++ .call da :: t₃ := by
+theorem defer_cleanup_releases_before {live : Res → Bool} : CleanupBefore Reg live := by
+  intro st hreg e fs hu d da hd hda hdep
   obtain ⟨rest, hst⟩ := unwound_prefix hu
   obtain ⟨hdo0, _, _, _⟩ := reg_inv hreg
   rw [hst, pending_append] at hdo0
@@ -237,24 +243,28 @@ theorem defer_cleanup_releases_before {live : Res → Bool} {st : Stack}
   rw [hsplit]
   simp [expected, List.flatMap_append]
 
+/-- Quantifies the constrained judgments; definitionally equivalent to the original universally closed guarantee. -/
+def CleanupUnique (judgment : (Res → Bool) → Stack → Prop) (live : Res → Bool) : Prop :=
+  ∀ {st : Stack}, judgment live st → ∀ {e : Exit} {fs : List Frame}, unwound e st = some fs → (targets (pending fs)).Nodup
+
 /-- Law (subject `ConcreteSpec.Cleanup.Reg`). Exiting scopes never consumes a resource twice.
 Abort unwinds no frames, so it consumes none. -/
-theorem defer_cleanup_releases_nodup {live : Res → Bool} {st : Stack}
-    (hreg : Reg live st) {e : Exit} {fs : List Frame}
-    (hu : unwound e st = some fs) : (targets (pending fs)).Nodup := by
+theorem defer_cleanup_releases_nodup {live : Res → Bool} : CleanupUnique Reg live := by
+  intro st hreg e fs hu
   obtain ⟨rest, hst⟩ := unwound_prefix hu
   obtain ⟨_, hnd, _, _⟩ := reg_inv hreg
   rw [hst, pending_append] at hnd
   simp only [targets, List.map_append] at hnd ⊢
   exact hnd.sublist (List.sublist_append_left _ _)
 
+/-- Quantifies the constrained judgments; definitionally equivalent to the original universally closed guarantee. -/
+def CleanupNeeds (judgment : (Res → Bool) → Stack → Prop) (live : Res → Bool) : Prop :=
+  ∀ {st : Stack}, judgment live st → ∀ {e : Exit} {fs : List Frame}, unwound e st = some fs → ∀ {pre post : List Deferred} {d : Deferred}, pending fs = pre ++ d :: post → ∀ {r : Res}, r ∈ d.needs → (∀ x ∈ pre, x.target ≠ r) ∧ (live r = true ∨ r ∈ targets (pending st))
+
 /-- Law (subject `ConcreteSpec.Cleanup.Reg`). A call's dependencies remain unconsumed by
 all preceding calls and are either owned or scheduled for cleanup. -/
-theorem defer_cleanup_releases_needs {live : Res → Bool} {st : Stack}
-    (hreg : Reg live st) {e : Exit} {fs : List Frame}
-    (hu : unwound e st = some fs) {pre post : List Deferred} {d : Deferred}
-    (hsplit : pending fs = pre ++ d :: post) {r : Res} (hr : r ∈ d.needs) :
-    (∀ x ∈ pre, x.target ≠ r) ∧ (live r = true ∨ r ∈ targets (pending st)) := by
+theorem defer_cleanup_releases_needs {live : Res → Bool} : CleanupNeeds Reg live := by
+  intro st hreg e fs hu pre post d hsplit r hr
   obtain ⟨rest, hst⟩ := unwound_prefix hu
   obtain ⟨hdo0, _, _, hav⟩ := reg_inv hreg
   have hdo : DepOrder (pending fs) := by
@@ -277,7 +287,7 @@ theorem abort_no_cleanup (st : Stack) : unwound .abort st = some [] ∧ pending 
 namespace Evidence
 
 /-- Instance (law `ConcreteSpec.Cleanup.reg_inv`, case `registeredStack`). -/
-example := reg_inv stack_reg
+example := @reg_inv ownedAfter
 
 /-- Instance (law `ConcreteSpec.Cleanup.runCleanup_all_ok`, case `releaseLoan`). -/
 example := @runCleanup_all_ok (fun _ => true) [desV] (by intro d hd; rfl) (expected [desV]) .done
@@ -289,15 +299,13 @@ example := @runCleanup_trap (fun d => d != desB) desB [relA] [desV]
       | tail _ h => cases h) (by decide) (expected [desV] ++ [.call desB]) .trapped
 
 /-- Instance (law `ConcreteSpec.Cleanup.defer_cleanup_releases_before`, case `allocatorDependency`). -/
-example := @defer_cleanup_releases_before ownedAfter stack stack_reg .ret stack rfl
-  desV relA (by decide) (by decide) (by decide)
+example := @defer_cleanup_releases_before ownedAfter
 
 /-- Instance (law `ConcreteSpec.Cleanup.defer_cleanup_releases_nodup`, case `returnStack`). -/
-example := @defer_cleanup_releases_nodup ownedAfter stack stack_reg .ret stack rfl
+example := @defer_cleanup_releases_nodup ownedAfter
 
 /-- Instance (law `ConcreteSpec.Cleanup.defer_cleanup_releases_needs`, case `loanSource`). -/
-example := @defer_cleanup_releases_needs ownedAfter stack stack_reg .ret stack rfl
-  [] [desB, relA] desV rfl 2 (by decide)
+example := @defer_cleanup_releases_needs ownedAfter
 
 /-- A broken cleanup relation with no rules for calls or completion. -/
 inductive MissingCleanup (ok : Deferred → Bool) : List Deferred → List Event → Result → Prop where

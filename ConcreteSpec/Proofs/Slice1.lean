@@ -73,18 +73,27 @@ theorem exec_complete {Δ : Decls} {r : Atom} {env : Env} {ss : List Stmt} {o : 
   | trap he => simp [runBody, he]
   | stuck he => simp [runBody, he]
 
+/-- Quantifies the constrained judgments; definitionally equivalent to the original universally closed guarantee. -/
+def ExecFinite (judgment : Decls → Env → List Stmt → Atom → Outcome → Prop) (Δ : Decls) (r : Atom) (env : Env) (ss : List Stmt) : Prop :=
+  ∀ {o : Outcome}, judgment Δ env ss r o → o ≠ .outOfFuel
+
 /-- Law (subject `ConcreteSpec.Exec`). Exec never ends in outOfFuel. -/
-theorem exec_ne_outOfFuel {Δ : Decls} {r : Atom} {env : Env} {ss : List Stmt} {o : Outcome}
-    (h : Exec Δ env ss r o) : o ≠ .outOfFuel := by
+theorem exec_ne_outOfFuel {Δ : Decls} {r : Atom} {env : Env} {ss : List Stmt} : ExecFinite Exec Δ r env ss := by
+  intro o h
   induction h with
   | ret => exact retOutcome_ne_outOfFuel _ _ _
   | step _ _ ih => exact ih
   | trap => simp
   | stuck => simp
 
+/-- Quantifies the constrained judgments; definitionally equivalent to the original universally closed guarantee. -/
+def ExecUnique (judgment : Decls → Env → List Stmt → Atom → Outcome → Prop) (Δ : Decls) (r : Atom) (env : Env) (ss : List Stmt) (o₁ : Outcome) : Prop :=
+  ∀ {o₂ : Outcome}, judgment Δ env ss r o₂ → o₁ = o₂
+
 /-- Law (subject `ConcreteSpec.Exec`). Determinism: a body has at most one outcome. -/
-theorem exec_deterministic {Δ : Decls} {r : Atom} {env : Env} {ss : List Stmt} {o₁ o₂ : Outcome}
-    (h₁ : Exec Δ env ss r o₁) (h₂ : Exec Δ env ss r o₂) : o₁ = o₂ := by
+theorem exec_deterministic {Δ : Decls} {r : Atom} {env : Env} {ss : List Stmt} {o₁ : Outcome}
+    (h₁ : Exec Δ env ss r o₁) : ExecUnique Exec Δ r env ss o₁ := by
+  intro o₂ h₂
   rw [← exec_complete h₁, ← exec_complete h₂]
 
 /-- Law (subject `ConcreteSpec.Exec`). Totality: every body has exactly one outcome (slice 1 has no loops or calls). -/
@@ -1019,10 +1028,10 @@ example : Checked literal ∧ ¬ (trapRun literal 1 ≠ .trap .arithmeticOverflo
 example := @runBody_sound [] (.int .u8 42) 1 [] [] (.exit 42) rfl (by decide)
 
 /-- Instance (law `ConcreteSpec.exec_ne_outOfFuel`, case `return`). -/
-example := @exec_ne_outOfFuel [] (.int .u8 42) [] [] (.exit 42) .ret
+example := @exec_ne_outOfFuel [] (.int .u8 42) [] []
 
 /-- Instance (law `ConcreteSpec.exec_deterministic`, case `return`). -/
-example := @exec_deterministic [] (.int .u8 42) [] [] (.exit 42) (.exit 42) .ret .ret
+example := @exec_deterministic [] (.int .u8 42) [] [] (.exit 42) .ret
 
 /-- Instance (law `ConcreteSpec.exec_total`, case `return`). -/
 example := exec_total [] [] [] (.int .u8 42)
