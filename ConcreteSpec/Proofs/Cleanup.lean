@@ -49,7 +49,7 @@ def RegInv (live : Res → Bool) (st : Stack) : Prop :=
   (∀ d ∈ pending st, live d.target = false) ∧
   (∀ d ∈ pending st, ∀ r ∈ d.needs, live r = true ∨ r ∈ targets (pending st))
 
-/-- Helper (inversion). Induction extracts the registration invariant from its fixed derivation; mutating acceptance cannot change the invariant at that same stack. (approved: PENDING). -/
+/-- Helper (inversion). Induction extracts the registration invariant from its fixed derivation; mutating acceptance cannot change the invariant at that same stack. (approved: REV-base4-agy-942d74b39). -/
 theorem reg_inv {live : Res → Bool} {st : Stack} (h : Reg live st) : RegInv live st := by
   induction h with
   | empty => exact ⟨.nil, .nil, by simp [pending], by simp [pending]⟩

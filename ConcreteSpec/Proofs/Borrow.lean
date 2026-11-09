@@ -73,7 +73,7 @@ theorem ok_det {Γ ss Γ₁} (h : Ok Γ ss Γ₁) : UniqueContext Ok Γ ss Γ₁
       cases ihb hb2
       exact ih hr2
 
-/-- Helper (inversion). Induction on acceptance preserves entries already locked in the input; a fixed derivation has no premise-preserving acceptance mutant. (approved: PENDING). -/
+/-- Helper (inversion). Induction on acceptance preserves entries already locked in the input; a fixed derivation has no premise-preserving acceptance mutant. (approved: REV-base4-agy-942d74b39). -/
 theorem ok_keeps_locked {Γ ss Γ'} (h : Ok Γ ss Γ') {p q}
     (hp : AList.lookup Γ p = some q) (hq : q.lock ≠ .free) : AList.lookup Γ' p = some q := by
   revert p q
@@ -307,7 +307,7 @@ theorem enter_in_bounds {s : Source} {a b : Nat} {e : Bool} (h : openRange s a b
     · cases h; exact ⟨ha', hb'⟩
 
 /-- Helper (projection). Range acceptance contains ordinary borrow acceptance; the access
-refusal is owned by the mutable-open law. (approved: PENDING). -/
+refusal is owned by the mutable-open law. (approved: REV-base4-agy-942d74b39). -/
 theorem range_open_mut_freezes_root {Γ src v k body els rest Γ' q p q'}
     (h : RangeOk Γ true src v k body els rest Γ') (hs : AList.lookup Γ src = some q)
     (hp : AList.lookup Γ p = some q') (hr : q'.root = q.root) : ¬ Touches p body := by
@@ -877,7 +877,7 @@ example := @ok_keeps_locked lockedContext [.read 1] lockedContext (.read rfl (by
 example := @range_open_mut_freezes_root x0 0 1 ⟨some (.array 2), some 0, some 1⟩
   [.write 1] none [] x0 rootPlace 0 rootPlace ⟨mutableBlock, rfl⟩ rfl rfl rfl
 
-/-- Helper (computation). The closed read-only context grants neither writing nor ownership. (approved: PENDING). -/
+/-- Helper (computation). The closed read-only context grants neither writing nor ownership. (approved: REV-base4-agy-942d74b39). -/
 theorem readOnly_noWrite : NoWrite 0 readOnly := by
   intro p q hp _ _
   simp only [readOnly, AList.lookup] at hp

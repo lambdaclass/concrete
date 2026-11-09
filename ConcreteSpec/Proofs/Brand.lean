@@ -95,7 +95,7 @@ theorem inv_bind {s : State} (a : Nat) {env : AList Nat Val} (hi : Inv s)
     · omega
   · exact nodup_snoc hn (fun hm => by have := hg _ hm; omega)
 
-/-- Helper (inversion). Induction transports the input invariant through the single fixed run derivation; no premise-preserving run mutant tests its fixed output. (approved: PENDING). -/
+/-- Helper (inversion). Induction transports the input invariant through the single fixed run derivation; no premise-preserving run mutant tests its fixed output. (approved: REV-base4-agy-942d74b39). -/
 theorem run_inv {s ss s'} (h : Run s ss s') (hi : Inv s) : Inv s' := by
   revert hi
   induction h with
@@ -127,7 +127,7 @@ theorem reset_fresh_brand {s : State} {a' a β' : Nat} {rest : List Stmt} {s' : 
   cases h with
   | reset _ hr => exact ⟨_, rfl, hr, fun e he => Nat.ne_of_lt (hi.1 e he)⟩
 
-/-- Helper (projection). Specializes run preservation at initialization and extracts generated-brand uniqueness. (approved: PENDING). -/
+/-- Helper (projection). Specializes run preservation at initialization and extracts generated-brand uniqueness. (approved: REV-base4-agy-942d74b39). -/
 theorem reset_fresh_nodup {prog : List Stmt} {s' : State} (h : Run State.init prog s') : s'.gen.Nodup := by
   exact (run_inv h inv_init).2.2
 
@@ -673,7 +673,7 @@ example : ghost (fun _ => false) 2 0 State.init [.newAlloc 0 0] = .done (State.i
 example := @run_inv State.init [.newAlloc 0 0] (State.init.bind 0 []) (.newAlloc .nil) inv_init
 example := @reset_fresh_nodup [.newAlloc 0 0] (State.init.bind 0 []) (.newAlloc .nil)
 
-/-- Helper (computation). The singleton live handle has a brand in the closed allowed set. (approved: PENDING). -/
+/-- Helper (computation). The singleton live handle has a brand in the closed allowed set. (approved: REV-base4-agy-942d74b39). -/
 theorem liveBrandIn : BrandsIn [0, 2] [(1, .heap 2)] := by
   intro e he β ht
   simp only [List.mem_singleton] at he
