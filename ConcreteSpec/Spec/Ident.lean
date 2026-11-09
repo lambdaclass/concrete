@@ -701,13 +701,103 @@ question 10 (2026-11-08). -/
 def SourceText.columnAt (source : SourceText) (offset : Nat) : Nat :=
   ((source.take offset).reverse.takeWhile (fun byte => byte != 10)).length + 1
 
+/-- A Windows drive introducer is an ASCII alphabetic character followed by a colon. -/
+def SourcePath.DrivePrefix : List Char → Prop
+  | c :: ':' :: _ => c.isAlpha = true
+  | _ => False
+
+instance (cs : List Char) : Decidable (SourcePath.DrivePrefix cs) := by
+  unfold SourcePath.DrivePrefix
+  split <;> infer_instance
+
+/-- ASCII controls are U+0000 through U+001F and U+007F. AY-3: assumed-yes,
+pending owner confirmation. -/
+def SourcePath.Control (c : Char) : Prop := c.toNat < 32 ∨ c.toNat = 127
+
+instance (c : Char) : Decidable (SourcePath.Control c) := by
+  unfold SourcePath.Control
+  infer_instance
+
+/-- The component boundary excludes traversal, separators and drives. AY-2 refuses backslash;
+AY-3 refuses every ASCII control, including NUL; AY-4 accepts all other Unicode scalars with
+identity given by the exact scalar sequence, without normalization. These three character
+policies are assumed-yes pending owner confirmation. -/
+def SourcePath.ComponentOk (cs : List Char) : Prop :=
+  cs ≠ [] ∧ cs ≠ ['.'] ∧ cs ≠ ['.', '.'] ∧
+    '/' ∉ cs ∧ '\\' ∉ cs ∧ ¬ SourcePath.DrivePrefix cs ∧
+    ∀ c ∈ cs, ¬ SourcePath.Control c
+
+instance (cs : List Char) : Decidable (SourcePath.ComponentOk cs) := by
+  unfold SourcePath.ComponentOk
+  infer_instance
+
+/-- One project-relative source identity. There is no absolute/root constructor and no
+unchecked string constructor. Components retain their exact spelling, with no normalization. -/
+structure SourcePath where
+  components : List (List Char)
+  nonempty : components ≠ []
+  valid : ∀ cs ∈ components, SourcePath.ComponentOk cs
+  deriving DecidableEq, Repr
+
+/-- The sole external spelling: the nonempty components joined by a single forward slash. -/
+def SourcePath.render (path : SourcePath) : String :=
+  String.ofList (['/'].intercalate path.components)
+
+/-- Typed character refusals implement AY-2 and AY-3 (assumed-yes pending owner confirmation).
+AY-4 introduces no refusal for other Unicode scalars and performs no normalization. -/
+inductive SourcePath.Reason where
+  | empty | dot | outOfProject | absolute | drivePrefixed | emptyComponent | backslash
+  | controlCharacter
+  deriving DecidableEq, Repr
+
+/-- A refusal names both the entire input and the offending component, without rewriting either. -/
+structure SourcePath.Refusal where
+  input : String
+  component : List Char
+  reason : SourcePath.Reason
+  deriving DecidableEq, Repr
+
+/-- Diagnose the first malformed component; the raw input remains available in the refusal. -/
+def SourcePath.componentReason (cs : List Char) : Reason :=
+  if cs = [] then .emptyComponent
+  else if cs = ['.'] then .dot
+  else if cs = ['.', '.'] then .outOfProject
+  else if DrivePrefix cs then .drivePrefixed
+  else if '\\' ∈ cs then .backslash
+  else .controlCharacter
+
+/-- Parse at the source-identity boundary. Splitting preserves empty components, including a
+trailing slash. Admission checks the components once; rendering never rechecks or filters them. -/
+def SourcePath.parse (raw : String) : Except Refusal SourcePath :=
+  let parts := raw.toList.splitOn '/'
+  if raw.toList = [] then .error ⟨raw, [], .empty⟩
+  else if raw.toList.head? = some '/' then .error ⟨raw, [], .absolute⟩
+  else if good : ∀ cs ∈ parts, ComponentOk cs then
+    .ok ⟨parts, List.splitOn_ne_nil '/' raw.toList, good⟩
+  else
+    let bad? := parts.find? fun cs => !decide (ComponentOk cs)
+    have present : bad?.isSome := by
+      cases found : bad? with
+      | some _ => rfl
+      | none =>
+        have all := List.find?_eq_none.mp found
+        exact False.elim (good (by
+          intro cs member
+          simpa using all cs member))
+    let bad := bad?.get present
+    .error ⟨raw, bad, componentReason bad⟩
+
+/-- A closed source identity used by the existing examples. -/
+def mainSourcePath : SourcePath :=
+  ⟨["src".toList, "main.con".toList], by decide, by decide⟩
+
 /-- A source range and the start position used by the trap-line decision (R-0496). The path is
 relative to the project root with forward slashes; `startOffset` and `endOffset` are byte offsets
 with `startOffset ≤ endOffset`. Line and column are 1-based and describe the start. They are stored
 for diagnostics and rendering, while `Span.LocationOk` checks them against the actual source bytes.
-The path constraint is `Span.PathOk`; elaboration's normalized-path obligation remains O1. -/
+The structured path carries its syntactic invariants; the loader binds it to source bytes. -/
 structure Span where
-  path : String
+  path : SourcePath
   startOffset : Nat
   endOffset : Nat
   range_ok : startOffset ≤ endOffset
@@ -727,12 +817,11 @@ instance (sp : Span) (source : SourceText) : Decidable (sp.LocationOk source) :=
   unfold Span.LocationOk
   infer_instance
 
-/-- A span's path is relative to the project root and uses forward slashes: it is not empty,
-does not start with `/`, and holds no `\`. This is the minimal syntactic check; that the path is
-the one normalized path of its file (no drive prefix such as `C:`, no `.` or `..` segment, no
-empty segment) is part of elaboration's site-table obligation (README obligation O1). -/
+/-- A compatibility view of the older rendering properties. Every structured path satisfies
+this proposition; it is never a reporting admission check. `SourcePath` additionally excludes
+traversal, empty components and drive prefixes in its representation. -/
 def Span.PathOk (sp : Span) : Prop :=
-  sp.path.toList ≠ [] ∧ sp.path.toList.head? ≠ some '/' ∧ '\\' ∉ sp.path.toList
+  sp.path.render.toList ≠ [] ∧ sp.path.render.toList.head? ≠ some '/' ∧ '\\' ∉ sp.path.render.toList
 
 instance (sp : Span) : Decidable sp.PathOk := by unfold Span.PathOk; infer_instance
 
@@ -823,16 +912,9 @@ example : FieldId.mk (.variant ⟨⟨ModuleId.mk ⟨"p", ⟨"1"⟩⟩ ["m"] (by 
 /-- The first and the last slice. -/
 example : (SliceId.mk 0).n.val = 0 ∧ (SliceId.mk 28).n.val = 28 := ⟨rfl, rfl⟩
 
-/-- A span path is relative, with forward slashes. -/
-example : (Span.mk "src/main.con" 0 0 (by decide) 3 5 (by decide) (by decide)).PathOk := by decide
-
-example : ¬ (Span.mk "/abs/main.con" 0 0 (by decide) 3 5 (by decide) (by decide)).PathOk := by decide
-
-example : ¬ (Span.mk "src\\main.con" 0 0 (by decide) 3 5 (by decide) (by decide)).PathOk := by decide
-
 /-- Bytes for `a`, a tab, and `b`. After the tab, the range starts at line 1, byte column 3. -/
 def tabSource : SourceText := [97, 9, 98]
-def tabSpan : Span := ⟨"src/main.con", 2, 3, by decide, 1, 3, by decide, by decide⟩
+def tabSpan : Span := ⟨mainSourcePath, 2, 3, by decide, 1, 3, by decide, by decide⟩
 
 /-- Accepted: the tab advances exactly one byte column. -/
 example : tabSpan.LocationOk tabSource := by decide
