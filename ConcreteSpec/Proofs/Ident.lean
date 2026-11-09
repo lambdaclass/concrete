@@ -177,9 +177,11 @@ theorem SourcePath.parse_control (c : Char) (control : SourcePath.Control c) :
   have notSlash : c ≠ '/' := by intro h; subst c; exact (show ¬ SourcePath.Control _ from by decide) control
   have notBack : c ≠ '\\' := by intro h; subst c; exact (show ¬ SourcePath.Control _ from by decide) control
   have notDot : c ≠ '.' := by intro h; subst c; exact (show ¬ SourcePath.Control _ from by decide) control
-  simp only [SourcePath.parse, String.toList_ofList]
-  simp [SourcePath.ComponentOk, SourcePath.componentReason, SourcePath.DrivePrefix,
-    List.splitOn, List.splitOnP, List.splitOnPPrepend, notSlash, Ne.symm notBack, notDot, control]
+  have bad : ¬ ComponentOk [c] := by
+    intro good
+    exact good.2.2.2.2.2.2 c (by simp) control
+  have refused := parse_bad_component [c] (by simp) (by simpa using Ne.symm notSlash) bad
+  simpa [componentReason, DrivePrefix, Ne.symm notBack, notDot] using refused
 
 /-- A parser mutant accepting control-bearing inputs by discarding their identity. A genuine
 invalid SourcePath cannot be constructed: the representation itself enforces AY-3. -/
