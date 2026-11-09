@@ -770,3 +770,15 @@ checked definitions, with no generated-name rules. Provenance is included in
 projection memoization keys. The structural cause was treating unsupported
 multi-minor and data-major elimination as completed negative evidence; R-0219
 owns the generalized traversal. Unsupported carriers/eliminators are INCOMPLETE.
+
+Round-5 typed protection explicitly marks each reconstructed subject with a
+fresh per-call carrier identity, propagated through its raw field projections.
+Carrier fields never become minimal computation candidates. Subject-consuming
+computations are abstracted regardless of input values or result sort (inductive
+or structure). The structural cause was inferring subject identity from result
+type and allowing scalar representation fields to suppress the outer operation;
+R-0219 owns this repair. The seven genuine evalArgs contracts and six negative
+contracts are checked independently; the empty-list Ok store/wildcard and Trap
+counterfeits require exact `FAIL instance-application` diagnostics. Structure
+results, nested matchers, metadata, let aliases and Iff/Exists packaging have
+additional focused controls in `vacuity_protected_results.py`.

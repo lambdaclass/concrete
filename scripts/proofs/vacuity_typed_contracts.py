@@ -1,4 +1,4 @@
-"""Seven bounded single-contract probes; no scope census or source mutation."""
+"""Thirteen bounded single-contract probes; no scope census or source mutation."""
 import io
 from contextlib import nullcontext
 import subprocess
@@ -20,7 +20,9 @@ set_option maxHeartbeats 2000000 in
   let all := env.constants.map₁.toList ++ env.constants.map₂.toList
   for name in [`Confirm.inferredOk, `Confirm.restatedOk, `Confirm.inferredTrap,
       `Confirm.restatedTrap, `Confirm.changedStoreOk, `Confirm.unselectedRestatedOk,
-      `Confirm.unselectedChangedStoreOk] do
+      `Confirm.unselectedChangedStoreOk, `Confirm.emptyOk, `Confirm.emptyTrap,
+      `Confirm.counterfeitEmptyOk, `Confirm.counterfeitEmptyStore,
+      `Confirm.counterfeitEmptyWildcard, `Confirm.counterfeitTrapBranchEmpty] do
     let ci ← getConstInfo name
     let some value := ci.value? | throwError "typed-control-body"
     let .const law _ := (cleanSpine value).getAppFn' | throwError "typed-control-head"
@@ -53,11 +55,16 @@ def main(meta=None):
     print(output, end="", flush=True)
     assert code == 0, (code, output)
     findings = [r for r in output.splitlines() if r.startswith(("FAIL ", "INCOMPLETE "))]
-    assert findings == [f"FAIL instance-application Confirm.{name} law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed" for name in ["changedStoreOk", "unselectedChangedStoreOk"]], findings
-    for name in ["inferredOk", "restatedOk", "inferredTrap", "restatedTrap", "unselectedRestatedOk"]:
+    negatives = ["changedStoreOk", "unselectedChangedStoreOk", "counterfeitEmptyOk",
+                 "counterfeitEmptyStore", "counterfeitEmptyWildcard"]
+    expected = [f"FAIL instance-application Confirm.{name} law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed"
+                for name in negatives]
+    expected.append("FAIL instance-application Confirm.counterfeitTrapBranchEmpty law=ConcreteSpec.Core.Own.evalArgs_trap_erasure case=typed")
+    assert findings == expected, findings
+    for name in ["inferredOk", "restatedOk", "inferredTrap", "restatedTrap", "unselectedRestatedOk", "emptyOk", "emptyTrap"]:
         assert any(r.startswith(f"NOTE analysis-result Confirm.{name} ") and "result=PASS " in r
                    for r in output.splitlines()), output
-    print("Typed contract controls: 7 PASS, 0 FAIL", flush=True)
+    print("Typed contract controls: 13 PASS, 0 FAIL", flush=True)
     return 0
 
 
