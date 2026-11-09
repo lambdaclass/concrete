@@ -157,6 +157,125 @@ example : ¬ (SourcePath.refuseAll mainSourcePath.render = .ok mainSourcePath) :
   intro h; cases h
 
 
+/-- Law (subject `ConcreteSpec.Core.SourcePath.parse`). A nonempty separator-free malformed
+component is refused without rewriting its input, with the component's typed diagnostic. -/
+theorem SourcePath.parse_bad_component (cs : List Char) (nonempty : cs ≠ [])
+    (separatorFree : '/' ∉ cs) (bad : ¬ ComponentOk cs) :
+    parse (String.ofList cs) = .error ⟨String.ofList cs, cs, componentReason cs⟩ := by
+  have headSafe : cs.head? ≠ some '/' := by
+    cases cs with
+    | nil => contradiction
+    | cons c rest => simpa using (fun h => separatorFree (by simp [h]))
+  simp [parse, String.toList_ofList, nonempty, headSafe,
+    List.splitOn_eq_singleton separatorFree, bad]
+
+/-- Law (subject `ConcreteSpec.Core.SourcePath.parse`). Every ASCII control by itself is
+refused with its exact input and the dedicated AY-3 reason (assumed-yes pending confirmation). -/
+theorem SourcePath.parse_control (c : Char) (control : SourcePath.Control c) :
+    SourcePath.parse (String.ofList [c]) =
+      .error ⟨String.ofList [c], [c], .controlCharacter⟩ := by
+  have notSlash : c ≠ '/' := by intro h; subst c; exact (show ¬ SourcePath.Control _ from by decide) control
+  have notBack : c ≠ '\\' := by intro h; subst c; exact (show ¬ SourcePath.Control _ from by decide) control
+  have notDot : c ≠ '.' := by intro h; subst c; exact (show ¬ SourcePath.Control _ from by decide) control
+  simp only [SourcePath.parse, String.toList_ofList]
+  simp [SourcePath.ComponentOk, SourcePath.componentReason, SourcePath.DrivePrefix,
+    List.splitOn, List.splitOnP, List.splitOnPPrepend, notSlash, Ne.symm notBack, notDot, control]
+
+/-- A parser mutant accepting control-bearing inputs by discarding their identity. A genuine
+invalid SourcePath cannot be constructed: the representation itself enforces AY-3. -/
+def SourcePath.acceptControls (raw : String) : Except Refusal SourcePath :=
+  if raw.toList.any (fun c => decide (Control c)) then .ok mainSourcePath else parse raw
+
+/-- Closed NUL input for the AY-3 case. -/
+def SourcePath.nul : Char := Char.ofNat 0
+
+/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_control`, case `ConcreteSpec.Core.SourcePath.nul`). -/
+example : SourcePath.parse (String.ofList [SourcePath.nul]) =
+    .error ⟨String.ofList [SourcePath.nul], [SourcePath.nul], .controlCharacter⟩ :=
+  SourcePath.parse_control SourcePath.nul (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.parse_control`, case `ConcreteSpec.Core.SourcePath.nul`, subject `ConcreteSpec.Core.SourcePath.parse`, mutant `ConcreteSpec.Core.SourcePath.acceptControls`). -/
+example : SourcePath.Control SourcePath.nul ∧
+    ¬ (SourcePath.acceptControls (String.ofList [SourcePath.nul]) =
+      .error ⟨String.ofList [SourcePath.nul], [SourcePath.nul], .controlCharacter⟩) := by
+  constructor
+  · decide
+  · intro h; cases h
+
+/-- Closed DEL input for the AY-3 case. -/
+def SourcePath.del : Char := Char.ofNat 127
+
+/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_control`, case `ConcreteSpec.Core.SourcePath.del`). -/
+example : SourcePath.parse (String.ofList [SourcePath.del]) =
+    .error ⟨String.ofList [SourcePath.del], [SourcePath.del], .controlCharacter⟩ :=
+  SourcePath.parse_control SourcePath.del (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.parse_control`, case `ConcreteSpec.Core.SourcePath.del`, subject `ConcreteSpec.Core.SourcePath.parse`, mutant `ConcreteSpec.Core.SourcePath.acceptControls`). -/
+example : SourcePath.Control SourcePath.del ∧
+    ¬ (SourcePath.acceptControls (String.ofList [SourcePath.del]) =
+      .error ⟨String.ofList [SourcePath.del], [SourcePath.del], .controlCharacter⟩) := by
+  constructor
+  · decide
+  · intro h; cases h
+
+/-- Closed backslash-bearing component for AY-2 (assumed-yes pending owner confirmation). -/
+def SourcePath.backslashComponent : List Char := "a\\b".toList
+
+/-- A parser mutant that accepts backslash by substituting a valid identity. -/
+def SourcePath.acceptBackslash (raw : String) : Except Refusal SourcePath :=
+  if '\\' ∈ raw.toList then .ok mainSourcePath else parse raw
+
+/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_bad_component`, case `ConcreteSpec.Core.SourcePath.backslashComponent`). -/
+example : SourcePath.parse (String.ofList SourcePath.backslashComponent) =
+    .error ⟨String.ofList SourcePath.backslashComponent, SourcePath.backslashComponent,
+      SourcePath.componentReason SourcePath.backslashComponent⟩ :=
+  SourcePath.parse_bad_component SourcePath.backslashComponent (by decide) (by decide) (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.parse_bad_component`, case `ConcreteSpec.Core.SourcePath.backslashComponent`, subject `ConcreteSpec.Core.SourcePath.parse`, mutant `ConcreteSpec.Core.SourcePath.acceptBackslash`). -/
+example : SourcePath.backslashComponent ≠ [] ∧ '/' ∉ SourcePath.backslashComponent ∧
+    ¬ SourcePath.ComponentOk SourcePath.backslashComponent ∧
+    ¬ (SourcePath.acceptBackslash (String.ofList SourcePath.backslashComponent) =
+      .error ⟨String.ofList SourcePath.backslashComponent, SourcePath.backslashComponent,
+        SourcePath.componentReason SourcePath.backslashComponent⟩) := by
+  refine ⟨by decide, by decide, by decide, ?_⟩
+  intro h; cases h
+
+/-- Helper (computation). The AY-2 diagnostic is specifically backslash. (approved: PENDING). -/
+theorem SourcePath.backslash_reason : componentReason backslashComponent = .backslash := by rfl
+
+/-- A precomposed Unicode path; AY-4 is assumed-yes pending owner confirmation. -/
+def SourcePath.precomposed : SourcePath := ⟨["é".toList], by decide, by decide⟩
+
+/-- A canonically equivalent decomposed spelling, retained as a different scalar sequence. -/
+def SourcePath.decomposed : SourcePath := ⟨["é".toList], by decide, by decide⟩
+
+/-- A parser mutant performing a Unicode composition before admission. -/
+def SourcePath.normalize (raw : String) : Except Refusal SourcePath :=
+  parse (if raw = "é" then "é" else raw)
+
+/-- Helper (computation). Both Unicode spellings render exactly, and normalization-equivalent
+spellings have different identities under AY-4. (approved: PENDING). -/
+theorem SourcePath.unicode_exact :
+    precomposed.render = "é" ∧ decomposed.render = "é" ∧ precomposed ≠ decomposed := by decide
+
+/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_render`, case `ConcreteSpec.Core.SourcePath.precomposed`). -/
+example : SourcePath.parse SourcePath.precomposed.render = .ok SourcePath.precomposed :=
+  SourcePath.parse_render SourcePath.precomposed
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.parse_render`, case `ConcreteSpec.Core.SourcePath.precomposed`, subject `ConcreteSpec.Core.SourcePath.parse`, mutant `ConcreteSpec.Core.SourcePath.refuseAll`). -/
+example : ¬ (SourcePath.refuseAll SourcePath.precomposed.render = .ok SourcePath.precomposed) := by
+  intro h; cases h
+
+/-- Instance (law `ConcreteSpec.Core.SourcePath.parse_render`, case `ConcreteSpec.Core.SourcePath.decomposed`). -/
+example : SourcePath.parse SourcePath.decomposed.render = .ok SourcePath.decomposed :=
+  SourcePath.parse_render SourcePath.decomposed
+
+/-- Planted (law `ConcreteSpec.Core.SourcePath.parse_render`, case `ConcreteSpec.Core.SourcePath.decomposed`, subject `ConcreteSpec.Core.SourcePath.parse`, mutant `ConcreteSpec.Core.SourcePath.normalize`). -/
+example : ¬ (SourcePath.normalize SourcePath.decomposed.render = .ok SourcePath.decomposed) := by
+  change ¬ (Except.ok SourcePath.precomposed = Except.ok SourcePath.decomposed)
+  intro h
+  exact SourcePath.unicode_exact.2.2 (Except.ok.inj h)
+
 /-- Law (subject `ConcreteSpec.Core.SiteKeyTable.renumber`, `ConcreteSpec.Core.SiteKeyTable.NoDupSites`).
 **Injective renumbering preserves site-table well-formedness.** No two distinct old sites can
 become one new site, so the renamed table still has no duplicate sites. -/
