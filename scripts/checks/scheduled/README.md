@@ -45,13 +45,24 @@ visible; recovery never rewrites their occurrence. The latest fresh attempt reco
 operational MISSING/INCOMPLETE on its SHA; FAIL remains permanent. Newer main
 coverage recovers older operational gaps, while malformed evidence always surfaces.
 
-The executor also requires the root `scripts/checks/lib/heavy_slots.sh` interface
-`heavy_slot_acquire` / `heavy_slot_release`. The frozen legacy helper is not run.
-The root helper must coordinate two slots **across runner Unix users and with
-landing/repro/manual work**, not merely within a checkout or user home. Its shared
-directory and permissions must be provisioned by the coordinator if absent; this
-branch changes no host settings. Until available, execution is INCOMPLETE. R-0676
-owns this integration; do not substitute a private scheduler semaphore.
+The executor uses `scripts/checks/lib/heavy_slots.sh`, the shared Linux host-wide
+`heavy_slot_acquire` / `heavy_slot_release` API. Landing, reproducibility and manual
+heavy work must source this same helper; no private pools are permitted. Acquisition
+is nonblocking: two occupied slots report INCOMPLETE, leaving the coordinator to
+queue a new attempt. Nested acquisition is refused. File descriptors hold locks for
+the process lifetime, so cancellation releases them without deleting lock files.
+
+The coordinator provisions `/var/lib/concrete/heavy-slots` once: a root-owned,
+non-writable directory containing exactly the persistent regular files `slot-1` and
+`slot-2`, owned by root and group-writable by the shared runner group (mode 0660).
+Every runner Unix user and manual heavy-work user must belong to that group. Never
+unlink/replace these files while workers run. `CONCRETE_HEAVY_SLOT_DIR` is a host
+configuration override, shared by **all** heavy-work entry points on that host,
+not a per-checkout escape hatch. Missing provisioning, inaccessible files, or an
+occupied pool produces an exact INCOMPLETE diagnostic; the helper creates nothing.
+This branch makes no host settings changes. R-0676 owns adopting this helper in
+ISS-0029 and the landing host entry points; the coordinator must verify that
+integration and provision the pool before live scheduled qualification.
 
 ## Execution and evidence
 
