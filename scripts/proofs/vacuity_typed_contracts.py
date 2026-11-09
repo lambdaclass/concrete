@@ -1,6 +1,5 @@
 """Seven bounded single-contract probes; no scope census or source mutation."""
 import io
-from contextlib import nullcontext
 import subprocess
 import tarfile
 import tempfile
@@ -39,7 +38,7 @@ set_option maxHeartbeats 2000000 in
 '''
 
 
-def main(meta=None):
+def main():
     archive = subprocess.run(["bash", str(ROOT / "scripts/checks/lib/bounded.sh"), "30",
         "git", "archive", SOURCE, "ConcreteSpec", "ConcreteSpec.lean", "ROADMAP.md"],
         cwd=ROOT, stdout=subprocess.PIPE, check=True)
@@ -47,7 +46,7 @@ def main(meta=None):
     with tempfile.TemporaryDirectory(prefix="n2-typed-") as temp:
         with tarfile.open(fileobj=io.BytesIO(archive.stdout)) as tree:
             tree.extractall(temp, filter="data")
-        with (compiled_consumer() if meta is None else nullcontext(meta)) as meta:
+        with compiled_consumer() as meta:
             code, output = run(Path(temp), "ConcreteSpec.Proofs.Own", inventory=True,
                                driver_text=driver, meta_path=meta)
     print(output, end="", flush=True)

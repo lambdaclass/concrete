@@ -13,7 +13,6 @@ def extend(add, base, extra):
         ("obtain", "theorem projection (p q : Prop) (h : p ∧ q) : p := by obtain ⟨hp, _⟩ := h; exact hp"),
         ("cases", "theorem projection (p q : Prop) (h : p ∧ q) : q := by cases h with | intro _ hq => exact hq"),
         ("id", "theorem projection (p : Prop) (h : p) : p := id h"),
-        ("propext-hypothesis", "theorem projection (p q : Prop) (h : p ↔ q) : p = q := propext h"),
         ("true-intro", "theorem projection : True := True.intro"),
         ("unfolded-hypothesis", "theorem projection (n : Nat) (h : n < n + 1) : n < S n := Eq.mp rfl h"),
         ("wrapped-rfl", "theorem projection (n : Nat) : S n = n + 1 := Eq.symm rfl"),
