@@ -92,7 +92,7 @@ class Collector(RegistryFixture, unittest.TestCase):
         self.assertEqual(r["execution_error"], "Actions execution completed without index.json")
         from protocol import observe
         from test_protocol import NOW
-        with self.assertRaisesRegex(EvidenceError, "^INCOMPLETE registry: missing gate sample$"):
+        with self.assertRaisesRegex(EvidenceError, f"^INCOMPLETE daily {SHA}: INCOMPLETE registry: missing gate sample$"):
             observe([r], SHA, "daily", NOW, RUNNERS, "example/repo")
 
     def test_decompressed_index_bound(self):

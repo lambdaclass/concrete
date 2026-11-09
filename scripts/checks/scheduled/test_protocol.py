@@ -101,7 +101,7 @@ class Controls(RegistryFixture, unittest.TestCase):
 
     def test_control_and_artifact(self):
         r = record(); r["gates"][0]["controls"] = []
-        self.rejected("INCOMPLETE registry: missing control sample/refusal", lambda: observe([r], SHA, "daily", NOW, RUNNERS, "example/repo"))
+        self.rejected(f"INCOMPLETE daily {SHA}: INCOMPLETE registry: missing control sample/refusal", lambda: observe([r], SHA, "daily", NOW, RUNNERS, "example/repo"))
         r = record(); r["artifact"] = ""
         self.rejected("missing result-index artifact", lambda: observe([r], SHA, "daily", NOW, RUNNERS, "example/repo"))
 

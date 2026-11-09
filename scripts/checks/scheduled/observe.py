@@ -19,16 +19,16 @@ def observe_main(lineage, histories, tier, now, runners, repository):
             message = observe(history, sha, tier, now, runners, repository)
             fresh.append((sha, message))
         except ERRORS as error:
-            # Old non-failing occurrences age into tier staleness, while FAIL never ages out.
-            if not str(error).startswith("STALE "):
-                text = str(error)
-                if not text.startswith(("FAIL ", "INCOMPLETE ", "MISSING ")):
-                    text = f"INCOMPLETE {tier} {sha}: {error}"
-                # Only operational attempts on older ancestors can recover via
-                # newer coverage; corrupt evidence and FAIL remain visible.
-                operational = text == f"INCOMPLETE {tier} {sha}: recorded attempt" or text.startswith(f"MISSING {tier} {sha}:")
-                if not (operational and fresh):
-                    problems.append(text)
+            if isinstance(error, EvidenceError) and error.status == "STALE":
+                continue
+            typed = isinstance(error, EvidenceError) and error.operational
+            if typed and fresh:
+                continue
+            text = str(error)
+            if not (isinstance(error, EvidenceError) and
+                    text.startswith(f"{error.status} {tier} {sha}:")):
+                text = f"INCOMPLETE {tier} {sha}: {error}"
+            problems.append(text)
     if problems:
         # All exact-SHA defects are surfaced, with failures first.
         return sorted(problems, key=lambda s: not s.startswith("FAIL "))
