@@ -1,24 +1,49 @@
-# Axiom golden comparison: proposed design
+# Axiom property check and named-theorem golden
 
-Status: design only, 2026-11-09. No exception is implemented. The executable
-contract remains the header of `axioms.sh`. This design implements the coordinator’s
-four conditions, not the integration tool’s prose exception. Reviewers must judge
-and fix by the best long-term design, without cutting corners for speed, diff size,
-or review rounds. Population P and standard axioms A remain unchanged.
+Status: design, 2026-11-09. This document records the target design; it does not
+change executable checking behavior. The current P/A/G contract remains documented
+in the header of `axioms.sh`, including its full per-theorem golden comparison.
 
-## Pinned API evidence and blocking prerequisite
+The governing owner decisions are 2026-11-08, “yes to 6 things”, item 2 (the
+axioms golden becomes a property check over standard axioms, with only named
+theorems pinned), and 2026-11-09 (exact proof-axiom provenance comes from the
+compiler). Compiler provenance is decided, not an open policy question. A one-off
+manual review of the 27 unexplained golden lines cannot replace it.
 
-Read the supplied `REV-goldenrule-codex-0e0376f.md`, its Transitive reproduction,
-and `integration-golden-flow.sh` (reference only). Inspected the actual sources at
-`$(lean --print-prefix)/src/lean/Lean` on this host; `lean-toolchain` pins
-`leanprover/lean4:v4.34.1`. The prefix resolved to
-`/nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1`.
-Ran `timeout 20s` source searches/reads and `timeout 30s lean <temporary Probe.lean>`
-(no spec import or build). `#eval Lean.versionString` printed `"4.34.1"`.
-Successful `#check`s established these actual APIs:
+## Target contract
 
-- `Lean.LocalDecl.isAuxDecl` and `isImplementationDetail` take **LocalDecl**,
-  not ConstantInfo. They cannot certify imported theorem origin.
+- **P: complete population.** Retain the import-closure and source-module coverage
+  checks. Enumerate every constant in the ConcreteSpec population, of every kind,
+  including private declarations and every compiler-generated helper. The source
+  theorem-module check supplements environment enumeration; source text and name
+  patterns never select the population.
+- **A: standard axioms only.** Compute transitive axioms for every constant in that
+  population and require a subset of `Classical.choice`, `Quot.sound`, and
+  `propext`. Check generated helpers independently, including equations not reached
+  by their generating declaration and helpers generated for definitions. No
+  unchanged parent row or reachability witness can exempt a constant from A.
+- **G: source-named theorems only.** `axioms.golden` pins exactly the source-named
+  theorems and their transitive axiom sets, including private source theorems.
+  Compiler-produced provenance determines this subset. Added, removed, renamed,
+  or axiom-changed source-named theorems require an explicit golden update and
+  review. Generated helpers have no golden rows; helper renumbering alone needs
+  no golden edit. All helpers still undergo P, A, and provenance validation.
+
+There is no baseline-SHA removal exception in the target contract. It requires
+neither an old environment nor a helper-to-parent graph to excuse a golden delta.
+The generating declaration may be a definition without a golden row; an equation
+may be unreachable from its generator. Neither circumstance excludes it from A.
+Golden equality pins axiom accounting, not statement or proof-body equality.
+
+## Verified Lean API evidence
+
+`lean-toolchain` pins `leanprover/lean4:v4.34.1`. Source paths below are relative
+to `$(lean --print-prefix)/src/lean/Lean`. Source inspection and successful Lean
+`#check` probes establish the API names and limitations below. These existing APIs
+do not supply general persistent helper provenance.
+
+- `Lean.LocalDecl.isAuxDecl` and `Lean.LocalDecl.isImplementationDetail` take **LocalDecl**,
+  not ConstantInfo (`LocalContext.lean`). They cannot certify imported theorem origin.
 - `Lean.Meta.auxLemmasExt : EnvExtension AuxLemmas` is explicitly a local,
   non-olean cache in `Meta/Tactic/AuxLemma.lean`. `mkAuxLemma` creates ordinary
   theorem declarations; its cache maps type/privacy/defeq to name/universes,
@@ -33,8 +58,9 @@ Successful `#check`s established these actual APIs:
   change the population. `declFromEqLikeName` uses name structure and is not
   itself compiler-origin evidence. Matcher equations have a distinct route in
   `Meta/Match/MatchEqs.lean`; do not conflate these APIs.
-- `Lean.privateToUserName? : Name → Option Name` understands private names;
-  `Lean.Expr.getUsedConstants : Expr → Array Name` extracts graph edges.
+- `Lean.privateToUserName? : Name → Option Name` understands private names
+  (`PrivateName.lean`); `Lean.Expr.getUsedConstants : Expr → Array Name`
+  extracts graph edges (`Util/FoldConsts.lean`).
 
 A temporary probe checked the equation inverse after `#print equations eqParent`:
 `eq-parent-before=(some eqParent)` and `eq-parent-after=(some eqParent)` after
@@ -55,184 +81,104 @@ literal.) Here `axiom onlyHelper : True`, `theorem helper : True := onlyHelper`,
 `theorem parent : True := helper`; `eqParent` is a two-case Bool definition.
 No committed controls or acceptance claims follow from handwritten helper names.
 
-**Blocking question for the coordinator/owner:** the pinned imported environment
-cannot supply general helper origin plus exact ownership through the APIs above.
-Options are (a) add persistent compiler-produced origin/owner metadata at helper
-creation, retaining it in oleans; or (b) narrow the requested supported classes
-and keep all unsupported removals refused. Recommendation: (a), with an upstream
-or explicitly maintained toolchain change, because the requested genuine
-`_proof_`/`_simp_` renumbering acceptance otherwise lacks its required evidence.
-This is a toolchain scope decision; accepting inferred provenance instead would
-be a **trust-policy decision**, and is not authorized by this note. No such
-inference is chosen. The coordinator must allocate/name the owning ROADMAP row
-for persistent helper provenance before implementation; writers allocate no R IDs
-and this note does not invent one. There is no known existing row established here.
+## Compiler provenance persisted with declarations
 
-The structural design below requires that prerequisite. A partial implementation
-that merely rejects everything does not complete the task or its positive control.
+The compiler must record structured declaration-origin facts when declarations
+and helpers are created, and persist them with the declarations in oleans. Record
+whether each declaration is source-named or generated, its exact structured Lean
+Name, and, for each helper, the exact generating declaration and generator kind.
+Record cached-helper reuse explicitly without replacing the generating declaration
+with an arbitrary later user. Preserve actual multiple generation facts if a
+shared artifact has them; never invent a unique owner by choosing the first user.
+Every generator needs coverage, including equations, matchers, auxiliary proofs,
+and helpers whose generator is itself generated.
 
-## Origin, exact ownership, and graph evidence
+The imported environment must retain these facts without replaying elaboration or
+realizing new equations. Validate metadata completeness and consistency against
+the full population before selecting G. Missing, unknown, malformed, or conflicting
+origin records fail closed; they cannot silently remove a declaration from A or G.
+Exact generating identities must resolve in the environment, independent of
+whether their declarations are theorems or have golden rows.
 
-At compiler helper creation, persist structured `(helper Name, origin kind,
-owner Name)` facts, including cached-helper reuse. The metadata must describe the
-actual generating declaration, not a prefix inferred later. Reject zero or
-multiple distinct owners; do not pick the first owner or an arbitrary user of a
-shared helper. Audit each supported generator and persistence across imports.
-Existing matcher/equation facts can corroborate class-specific facts, but cannot
-stand in for absent general ownership. Explicit source declarations, including
-quoted identifiers and namespaces, acquire no generated-origin record. A name
-regex may optimize lookup, never grant eligibility. Unknown generators refuse.
+Names, regexes, missing source ranges, theorem kind, handwritten annotations, and
+manual review are never origin evidence. Explicit source declarations such as
+`foo_proof_1` or `bar.match_2` remain source-named. Preserve structured private
+scope/module components: `Lean.privateToUserName?` interprets private names but
+cannot establish origin or merge identities. Use the injective `enc` identity
+from `theorems.lean` for comparisons and reject ambiguous display serialization;
+a printed-name collision must not merge declarations or hide a golden difference.
 
-Resolve the exact baseline helper through the baseline environment metadata.
-Require one exact owner, then exactly one full inventory row keyed by that exact
-structured Name in **each** inventory. Compare complete row bytes, including the
-axiom field and empty trailing field. Neither a sibling nor a longer prefix is an
-owner. Parent definitions without theorem rows fail. Never deduplicate before
-checking multiplicity. Preserve the existing inventory serialization, but reject
-noninjective printed-name collisions using the enumerator’s `enc` identities.
+Transitive axioms come from `Lean.collectAxioms`, not the provenance records.
+`Util/CollectAxioms.lean` traverses types and values of definitions, theorems and
+opaque declarations; axiom/constructor/recursor types; and inductive types plus
+constructor edges. Quotient declarations add no graph edges. Imported precomputed
+axiom sets are axiom evidence, not helper ownership or reachability evidence.
+The earlier graph probes above explain why reachability cannot classify origin
+or replace checking independently generated equations.
 
-Private scope/module numeric components remain part of Name identity. Use Lean’s
-private-name API only to interpret metadata; do not strip scopes to match rows,
-use a regex to guess module boundaries, or transfer ownership between declarations
-with equal user names. A private helper may have a public owner; the stored exact
-owner resolves this without guessing. A renumbered private **parent** is not an
-identical row and fails this exception. Conflicting private owner records fail as
-ambiguous even if one candidate has an unchanged row.
+## Interim state and implementation prerequisites
 
-Use the **baseline** checked kernel environment for the removed helper’s graph.
-Match ConstantInfo as `CollectAxioms.collect` does in `Util/CollectAxioms.lean`:
-visit type and value for def/theorem/opaque, type for axiom/constructor/recursor,
-and type plus constructor edges for inductives; quotient has no edges. Extract
-expression constants with `getUsedConstants`. Missing bodies/declarations fail,
-rather than appearing as leaves. Use visited sets and memoized adjacency, sorted
-encoded Names, and deterministic BFS to emit a shortest owner-to-helper path.
-Require a positive-length path; the helper cannot justify itself. Record every
-edge and its origin (type, value, or constructor list), with declaration content
-hashes and the environment manifest. Recompute edges when checking the evidence;
-a supplied path alone is not trusted. Do not equate axiom-set inclusion with
-reachability. Imported precomputed axiom sets do not provide constant edges.
+Until compiler provenance is available and validated across imports, keep the
+current executable full-theorem golden check as an **interim** safeguard. This
+branch changes documentation and comments only. It introduces no baseline mode,
+name-based filtering, manual allowlist, or helper-removal exception. The interim
+full golden is not the agreed end state.
 
-Also recompute baseline parent/helper axioms and check against their inventory
-rows and helper-axiom inclusion in parent axioms. Inconsistent evidence refuses.
-The candidate parent’s identical axiom row then covers the baseline helper’s
-axioms; this does not assert identical statements or implementation. A is still
-run on every candidate row, including additions. No rule permits a surviving
-row’s axiom change or handwritten deletion. Added rows retain existing golden
-update/review requirements; this exception cannot silently authorize additions.
+Its exit condition is a pinned compiler/toolchain providing complete persistent
+origin/generating-declaration metadata, successful import and generator controls,
+and a validated consumer implementing P/A/G above. The coordinator must allocate
+the owning roadmap task and arrange the toolchain work; no new R ID is invented
+here. Task allocation and implementation remain prerequisites, not a request to
+redecide compiler provenance.
 
-Independently generated equations not reached by the parent are refused with a
-separate diagnostic even if their axiom sets happen to agree. No equation
-exception flag is proposed. A future policy needs an explicitly approved owning
-document specifying evidence, scope, controls and review obligations; allowing
-it is a trust-policy decision. Do not silently add it to this rule.
+Implement compiler metadata in a separate toolchain change, then extend
+`theorems.lean` to export full constant axiom facts and provenance without changing
+the population during enumeration. `lib.sh` supplies isolated artifact plumbing;
+`axioms.sh` validates full-population A and compares only the provenance-selected
+source-theorem rows for G. Migrate `axioms.golden` by verified compiler
+classification, removing generated rows while preserving all source-named rows
+and checking their freshly computed axiom sets. An explicit regeneration is not
+proof of provenance. Do not use manual classification of the 27 lines as the
+migration mechanism.
 
-## Explicit baseline and comparison
+Bind inventories, provenance and diagnostic artifacts to the exact source SHA,
+pinned toolchain, enumerator version and build manifest. Refuse stale or mismatched
+artifacts and preserve failure reports. Emit deterministic identities, origin,
+generating declarations and transitive axioms, with separate diagnostics for A,
+G and provenance failures. Infrastructure failures and resource exhaustion are
+INCOMPLETE, never successful empty populations. Measure runtime and memory on
+concrete-ci-2 before setting bounds; do not drop declarations to meet a budget.
 
-Proposed interface: `axioms.sh --baseline <full-commit-sha>`; no implicit HEAD~,
-merge-base search, reflog, environment-variable baseline, or network fetch.
-The coordinator chooses and records the baseline (for example an explicit merge
-base). Resolve the SHA locally, verify the pinned toolchain matches, and read its
-committed golden. Generate metadata/inventory from its freshly built sources in
-a private full checkout on concrete-ci-2. Require its golden to match that build
-exactly. Never import baseline oleans into the candidate checkout. Bind outputs
-to source SHA, golden hash, toolchain identity, enumerator version and build
-manifest; reject stale/mismatched artifacts. A candidate checkout with relevant
-uncommitted changes cannot produce SHA-bound acceptance evidence.
+## Implementation acceptance controls
 
-The current candidate golden still equals the fresh candidate inventory exactly
-(using the existing comment convention). Baseline mode adds a mechanical audit
-of the old-to-new golden delta: only proven eligible removed rows are excused;
-all other removals/changed rows fail. Additions undergo A and the existing golden
-review workflow. Compare by exact declaration identity before classifying deltas,
-so a changed axiom field cannot masquerade as a removed helper plus an addition.
-Without `--baseline`, preserve the existing byte-exact G comparison and behavior.
-`--update` remains an explicit regeneration operation, never proof of eligibility;
-combine neither baseline acceptance nor automatic golden writes with it.
+Controls must first pass without their planted defect, then assert the precise
+failure and offending structured declaration identity. An unrelated build failure
+or timeout does not satisfy a negative control.
 
-## Reports, refusal diagnostics, and controls
-
-Write a deterministic JSON report (schema `axiom-helper-removals-v1`) plus concise
-stdout. Each accepted removal includes baseline/candidate SHAs and manifest hashes,
-removed helper encoded/display Names, origin fact, exact parent encoded/display
-Names, both complete parent rows as escaped byte strings, their hashes, baseline
-helper row, and the ordered reachability edges/content hashes. JSON preserves
-trailing tabs and line endings. Emit `G-HELPER-ACCEPT helper=<H> parent=<P>`.
-Failure emits `G-HELPER-REFUSE code=<CODE> helper=<H> parent=<P-or-none>`.
-H/P are injectively encoded Names; structured report fields carry readable names.
-An ordinary unexplained delta emits `G-BASELINE-REFUSE code=ROW_CHANGED name=<N>`.
-Exit nonzero on any refusal; malformed/missing evidence is an infrastructure
-failure (exit 2), never an accepted empty comparison. Keep reports on failure.
-
-Controls must compare exit status **and exact diagnostic line**, with substituted
-fixture encoded Names, and inspect the full report. Each fixture first passes its
-unplanted leg. Do not accept arbitrary build failure, timeout, or unrelated error.
-Validate in this order: artifacts/serialization, same-name changes, provenance,
-unique ownership, parent row multiplicity/equality, reachability, axiom consistency.
-
-| Control and isolated planted condition | Exact expected diagnostic template |
+| Case | Required outcome |
 | --- | --- |
-| Genuine compiler renumbering: compile two source variants inducing different generated helper numbers, same exact inventoried owner row; compiler metadata and old graph present | `G-HELPER-ACCEPT helper=<H> parent=<P>` |
-| Explicit source `foo_proof_1`, then separately `bar.match_2`, removed | `G-HELPER-REFUSE code=NOT_GENERATED helper=<H> parent=none` |
-| Generated helper’s exact owner P absent, only prefix/sibling Pextra present on both sides | `G-HELPER-REFUSE code=PARENT_MISSING_BASELINE helper=<H> parent=<P>` |
-| Exact parent row missing only from baseline | `G-HELPER-REFUSE code=PARENT_MISSING_BASELINE helper=<H> parent=<P>` |
-| Exact parent row missing only from candidate | `G-HELPER-REFUSE code=PARENT_MISSING_CANDIDATE helper=<H> parent=<P>` |
-| Parent present twice in either inventory | `G-HELPER-REFUSE code=PARENT_DUPLICATE helper=<H> parent=<P>` |
-| Parent’s complete row differs | `G-BASELINE-REFUSE code=ROW_CHANGED name=<P>` |
-| Conflicting private owner records, individually valid candidates | `G-HELPER-REFUSE code=PARENT_AMBIGUOUS helper=<H> parent=none` |
-| Compiler equation metadata, unique inventoried owner but no owner-to-helper path | `G-HELPER-REFUSE code=EQUATION_UNREACHED helper=<H> parent=<P>` |
-| Other generated helper not reached by owner | `G-HELPER-REFUSE code=HELPER_UNREACHED helper=<H> parent=<P>` |
-| Plant helper-only axiom into evidence while claiming reached owner with unchanged row | `G-HELPER-REFUSE code=AXIOM_EVIDENCE_MISMATCH helper=<H> parent=<P>` |
-| Surviving helper axiom field changed (cannot be reclassified as removal) | `G-BASELINE-REFUSE code=ROW_CHANGED name=<H>` |
-| Stale baseline manifest or wrong golden hash | `G-BASELINE-ERROR code=ARTIFACT_MISMATCH` |
+| Genuine compiler helper renumbering between two source variants, same source-theorem axiom rows | P/A/provenance pass; G unchanged, with no helper rows |
+| Generated helper uses a nonstandard axiom | A fails naming the helper, even with unchanged source-theorem rows |
+| Independently generated equation not reached by its generator uses a nonstandard axiom | A fails naming the equation |
+| Helper generated for a definition without a golden row | A and provenance still check it |
+| Source theorem named `foo_proof_1` or `bar.match_2`, public or private | Included in G; removal or axiom change fails G |
+| Source theorem added, removed, renamed, or changed to use a different standard axiom | G differs until explicit reviewed regeneration |
+| Missing, unknown, conflicting, or malformed provenance | Provenance failure; no fallback to names or manual review |
+| Cached reuse, nested generation, private scopes and cross-module imports | Exact compiler generation facts survive; all constants still checked |
+| Duplicate identity, colliding printed names, stale manifest or missing declaration | Explicit evidence failure, never silent deduplication |
+| Source module outside the root import closure | P fails |
 
-The conflicting-metadata and impossible helper-only-axiom fixtures exercise the
-validator with deliberately corrupted evidence; do not claim Lean naturally
-produces them. Separate Lean transitivity regression: assert exact axiom arrays
-`[onlyHelper]` for both reached helper and parent, and a true reachability witness;
-then plant an extra axiom only into an independent equation proof and assert the
-parent does not reach it or acquire that axiom. The equation removal must produce
-`EQUATION_UNREACHED` above (keep parent rows present to isolate that cause).
-The supplied Transitive example additionally asserts propext on parent and eq_1
-without inferring reverse reachability. Standard nonstandard-axiom controls still
-exercise A with its existing exact `nonstandard` result; do not alter P or A to
-make any fixture pass. Add strict-mode byte mismatch, added nonstandard row,
-unsupported-origin, malformed report and missing-body controls with respectively
-existing G refusal, existing A refusal, `NOT_GENERATED`,
-`G-BASELINE-ERROR code=REPORT_INVALID`, and
-`G-BASELINE-ERROR code=GRAPH_INCOMPLETE`; pin their full existing messages when
-turning this design into executable controls.
+Retain the transitivity regression evidenced above: reached helper and parent both
+have exactly `[onlyHelper]`; an independently generated equation need not be
+reachable from the parent. This is a graph limitation test, not permission to
+skip A. Test metadata persistence in a fresh importing process, rather than only
+in the environment that created the helper. Test that classification does not
+realize equations or otherwise change the enumerated population.
 
-## Cost, implementation surface, and limits
-
-No concrete-ci-2 runtime measurements were made in this design round. Cost is two
-fresh-source build validations (baseline and candidate), one metadata/graph export
-per environment, O(V+E) graph storage/traversal per exported closure with memoized
-adjacency, and deterministic sorting. Reuse built inputs only with exact manifests;
-new baseline cache misses may require a full baseline spec build. Controls compile
-small independent Lean fixtures rather than rebuilding the spec for each mutation.
-Do not cap graph size by silently dropping edges; resource exhaustion is INCOMPLETE.
-The coordinator should measure wall time, peak RSS and report size on concrete-ci-2
-before choosing bounds. No gate or control is removed to meet a runtime budget.
-
-After prerequisite resolution, implementation touches `theorems.lean` (new evidence
-mode; existing inventory modes unchanged), `lib.sh` (explicit isolated baseline
-and artifact plumbing), `axioms.sh` (comparison/report/controls), a dedicated
-structured comparator and focused fixtures/tests, and this document/header.
-`axioms.golden` changes only if an actual reviewed regeneration requires it.
-Persistent compiler provenance requires a separate toolchain change outside this
-writer’s authorized surface, plus migration tests; no ConcreteSpec edit is proposed.
-
-Coordinator validation on concrete-ci-2, after implementation: in `nix develop`,
-use `bounded_run 1800 -- bash scripts/proofs/axioms.sh` for strict mode, then
-`bounded_run 1800 -- bash scripts/proofs/axioms.sh --baseline <full-baseline-SHA>`
-at the exact candidate SHA with its explicit baseline; run the dedicated fixture
-suite under the same bound. A timeout is incomplete, never a pass. Record both
-SHAs and individual control diagnostics. Adjust bounds only from measured costs.
-
-Limits: axiom rows do not establish statement/body equality or semantic coverage;
-unchanged parents are an axiom-accounting condition only. Shared cached helpers
-without unique compiler ownership, absent imported metadata/bodies, private parent
-renumbering, definitions without inventoried rows, unknown generators, and
-unreached equations remain refused. Existing Lean metadata is compiler evidence,
-not a defense against hostile metaprograms forging compiler extensions; changing
-that trust boundary requires a separate owner decision. This note does not make it.
+After implementation, run the property/golden gate and focused compiler-provenance
+fixtures under `nix develop` on concrete-ci-2, using `bounded_run` from
+`scripts/checks/lib/bounded.sh`. Record results against the exact candidate SHA
+and toolchain identity. This design round makes no runtime or implementation
+acceptance claim. Compiler metadata remains within the existing compiler trust
+boundary; protection against hostile metaprograms forging it is not established
+by these checks.
