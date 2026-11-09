@@ -321,16 +321,21 @@ def attributed_branch(snapshot, branch):
     return matches[0]
 
 
-def make_plan(root, snapshot, local, branch):
-    trees = dict(snapshot.trees)
+def make_plan(root, snapshot, local, branch, scope='all'):
+    # Bootstrap authoritative records without forcing unrelated drafts to migrate together.
+    trees = ({'main': snapshot.trees.get('main', {})} if scope == 'authoritative'
+             else dict(snapshot.trees))
     branch = attributed_branch(snapshot, branch)
-    # The current worktree replaces its remote version, rather than voting twice.
-    trees[canonical_branch(branch)] = local
+    # Replace only the writer's draft. Local main must never mask origin/main.
+    if branch != 'main':
+        trees.pop(branch, None)
+    inventory = [*trees.items(), (branch, local)]
     uses = {}
-    for name, entries in trees.items():
+    for name, entries in inventory:
         for key, (title, _) in entries.items():
             uses.setdefault(key, []).append((name, title))
-    conflicts = [f'{b}: {error}' for b, error in snapshot.tree_errors.items()]
+    conflicts = [f'{b}: {error}' for b, error in snapshot.tree_errors.items()
+                 if scope == 'all' or b == 'main']
     updates = []
     for key, rows in sorted(uses.items()):
         titles = {title for _, title in rows}
@@ -362,7 +367,7 @@ def make_plan(root, snapshot, local, branch):
                     value = metadata(root, key, 'Retired legacy reservation ' + key, 'main')
                     value['legacy_oid'] = oid
                     updates.append(dict(ref=ref, old=oid, value=value))
-    return dict(schema=1, heads=snapshot.remote_heads, updates=updates, conflicts=conflicts,
+    return dict(schema=1, scope=scope, heads=snapshot.remote_heads, updates=updates, conflicts=conflicts,
                 collision_resolution='ISS-0017 acceptance-shim -> ISS-0033; spec-* retains ISS-0017; lexer -> ISS-0032. Branches must actually be renumbered before publishing.')
 
 
@@ -382,6 +387,8 @@ def main():
     verify.add_argument('old')
     backfill = sub.add_parser('backfill')
     backfill.add_argument('--output', required=True)
+    backfill.add_argument('--scope', choices=['all', 'authoritative'], default='all',
+                          help='all advertised drafts, or only origin/main and this worktree')
     apply = sub.add_parser('publish-plan')
     apply.add_argument('plan')
     args = parser.parse_args()
@@ -432,7 +439,7 @@ def main():
                 check_change(root, snapshot)
             print('ID reservations: PASS')
         elif args.command == 'backfill':
-            plan = make_plan(root, snapshot, work_records(root), branch)
+            plan = make_plan(root, snapshot, work_records(root), branch, args.scope)
             Path(args.output).write_text(json.dumps(plan, indent=2, sort_keys=True) + '\n')
             print(f'{len(plan["updates"])} planned reservations; {len(plan["conflicts"])} conflicts. No refs pushed.')
             if plan['conflicts']:

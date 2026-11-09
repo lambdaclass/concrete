@@ -21,3 +21,12 @@ remote drafts separately. Backfill and verify reservation refs before landing en
 order in docs/ISSUE_IDS.md). Handle remote-only legacy objects, deleted files and malformed bug
 records; cover both metadata namespaces and mixed hook tiers, Python sandbox makers, and issue
 ledger append conflicts. No reservation refs were published by the writer.
+
+Round 5: the same allocator owns roadmap R-NNNN subjects under refs/reserved/roadmap/NNNN.
+One roadmap-row parser serves reserve, check, backfill and audit. Every main, HEAD and working-tree
+ISS, BUG and R identity requires its exact reservation; collisions name the reservation ref or
+main row, and unreadable authoritative inputs are INCOMPLETE. Controls cover stale ISS-0020 and
+R-row reuse before and after integration, concurrent R allocation, metadata, bootstrap and valid
+identity transfer. Authoritative backfill covers all 146 roadmap rows on main without requiring
+unrelated drafts to migrate together; the separate whole-inventory audit retains their conflicts.
+No reservation refs were published.

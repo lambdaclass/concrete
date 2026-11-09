@@ -99,6 +99,15 @@ def backfill(root):
     assert p.returncode == 1 and 'R-0620' in p.stderr and 'origin/main:ROADMAP.md' in p.stderr, p.stderr
     p = cli(root, 'backfill', '--output', str(path))
     assert p.returncode == 1 and json.loads(path.read_text())['conflicts']
+    # Draft reconciliation is separate from authoritative bootstrap, avoiding a flag day.
+    ok(cli(root, 'backfill', '--scope', 'authoritative', '--output', str(path)))
+    assert json.loads(path.read_text())['updates'] == []
+    ok(cli(root, 'publish-plan', str(path)))
+    ok(cli(root, 'check'))
+    assert cli(root, 'audit-wip').returncode == 1
+    save(root, 'roadmap', 'local main divergence')
+    p = cli(root, 'backfill', '--scope', 'authoritative', '--output', str(path))
+    assert p.returncode == 1 and json.loads(path.read_text())['conflicts'], 'local main masked origin/main'
 
 
 def unreserved(root):
@@ -135,6 +144,15 @@ def incomplete(root):
     assert p.returncode == 2 and 'INCOMPLETE' in p.stderr, p.stderr
 
 
+def unreadable_reservation(root):
+    oid = a.commit(root, a.metadata(root, 'R-0620', 'task', 'main'))
+    a.git(root, 'push', '-q', 'origin', oid + ':refs/reserved/roadmap/0620')
+    remote = Path(a.git(root, 'remote', 'get-url', 'origin').stdout.strip())
+    (remote / 'objects' / oid[:2] / oid[2:]).unlink()
+    p = cli(root, 'check')
+    assert p.returncode == 2 and 'INCOMPLETE' in p.stderr, p.stderr
+
+
 def parser(root):
     parse = a.read_roadmap_rows
     text = 'prose R-0620\n| heading | R-0620 |\n| R-0620 | subject with \\| pipe | obligation | — |\n'
@@ -153,7 +171,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='id-round5-') as tmp:
         tests = [('ISS-0020-before-main-and-merge-target', lambda r: collision(r, 'iss')),
                  ('R-before-main-and-merge-target', lambda r: collision(r, 'roadmap')),
-                 *[(f.__name__, f) for f in (race, backfill, unreserved, metadata, incomplete, parser)]]
+                 *[(f.__name__, f) for f in (race, backfill, unreserved, metadata, incomplete, unreadable_reservation, parser)]]
         for name, test in tests:
             directory = Path(tmp) / name
             directory.mkdir()

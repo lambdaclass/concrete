@@ -53,11 +53,13 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
   is not picking a side; what the review checks then is in
   [REVIEW.md](docs/REVIEW.md#owner-decisions-choosing-versus-recording).
 
-**Issue and bug numbers (ISS-0034).** Before writing any new issue or bug record, reserve its
-identity with `python3 -I scripts/ids/allocate.py reserve iss|bug "Short immutable title"`.
-Use the returned ID and exact title; never infer a number from local files. Origin must be
+**Project identities (ISS-0034).** Before writing any new issue, bug or roadmap task row, reserve its
+identity with `python3 -I scripts/ids/allocate.py reserve iss|bug|roadmap "Short immutable title or subject"`.
+Writers never pick IDs. Use the returned ID and exact title/subject; never infer a number from local
+files. If the coordinator must allocate it, leave an uncommitted `ISS-XXXX` or `R-XXXX` placeholder
+and report it; never commit a placeholder or substitute a guessed number. Origin must be
 reachable. The [reservation protocol and operator backfill](docs/ISSUE_IDS.md) define failure
-recovery, branch inheritance and legacy imports. `scripts/checks/id_reservations.sh` validates all reservation refs and every record in
+recovery, branch inheritance and legacy imports. `scripts/checks/id_reservations.sh` validates all reservation refs and every ISS, BUG and R record in
 origin/main, HEAD and the working tree. `allocate.py audit-wip` separately audits unrelated wip branches. The old filing
 instructions below describe frozen legacy tooling; no new filing runs the legacy allocator.
 
