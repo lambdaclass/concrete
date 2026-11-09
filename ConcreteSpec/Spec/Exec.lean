@@ -107,7 +107,8 @@ statements keep their meaning whatever the instance.
 - `Store`: the shared state, threaded through operands, calls and cleanup.
 - `life`: how a change in the life of locals (`Life`) changes the state. Like the state an
   operand returns, it may change only instrumentation; an instance without instrumentation
-  ignores it by returning `some st`. `none` refuses the event: execution is stuck.
+  ignores it by returning `some st`. `none` refuses the event: execution is stuck, including
+  cleanup steps (owner decision 2026-11-08, 15:08 UTC, item 21).
 - `test`: the truth value of a condition (`none`: not a condition; unsafe stuckness).
 - `Ty`, `unitTy`, `unitVal`, `isCopy`: the types, `Unit` and its value, and which types are `Copy`
   (a declared and checked instance; the checker owns that check, C9).
@@ -300,7 +301,8 @@ def register (d : Deferred O) : List (Frame O) → Option (List (Frame O))
   | _ => none
 
 /-- Request continuations are partial: `none` refuses result binding through lifecycle
-instrumentation. This is unsafe stuckness, not a different primitive answer or a trap;
+instrumentation (owner decision 2026-11-08, 15:08 UTC, item 21: a cleanup step may
+be refused, and refusal ends stuck). This is unsafe stuckness, not a different primitive answer or a trap;
 `Step.prim` requires success, and `runFrom` reports the requesting configuration as stuck
 without accepting the response event when continuation fails.
 
@@ -432,6 +434,237 @@ inductive Step (P : Program O) : Config O → Label O → Config O → Prop wher
   | prim {c c' p vs site st k a} : step P c = some (.request p vs site st k) →
       O.allows p vs st a = true → k a = some c' → Step P c a.label c'
 
+/-! ## Independent operational rules
+
+These rules specify exactly one machine transition, retaining the external answer as an
+input index. They do not invoke the executable dispatcher, its continuations, or its semantic
+helpers. Argument evaluation and defer registration have their own inductive judgments;
+operand evaluation, tests, lifecycle admission and primitive admission are the `Operands`
+interface. List and association-list operations below describe the configuration's data.
+No rule applies to a final or stuck configuration. In particular, a refused lifecycle event
+has no transition (owner decision 2026-11-08, item 21).
+-/
+
+/-- Left-to-right argument evaluation, independent of `evalArgs`. Stuck operands propagate
+stuckness. Traps carry no updated store; the transition rules retain the source store. -/
+inductive Arguments (O : Operands) (L : AList Var O.Val) :
+    O.Store → List O.Expr → Res (List O.Val × O.Store) → Prop where
+  | nil {st} : Arguments O L st [] (.ok ([], st))
+  | cons {st e v st₁ es vs st₂} : O.eval L st e = .ok (v, st₁) →
+      Arguments O L st₁ es (.ok (vs, st₂)) →
+      Arguments O L st (e :: es) (.ok (v :: vs, st₂))
+  | headTrap {st e kd es} : O.eval L st e = .trap kd →
+      Arguments O L st (e :: es) (.trap kd)
+  | tailTrap {st e v st₁ es kd} : O.eval L st e = .ok (v, st₁) →
+      Arguments O L st₁ es (.trap kd) → Arguments O L st (e :: es) (.trap kd)
+
+  | headStuck {st e es} : O.eval L st e = .stuck →
+      Arguments O L st (e :: es) .stuck
+  | tailStuck {st e v st₁ es} : O.eval L st e = .ok (v, st₁) →
+      Arguments O L st₁ es .stuck → Arguments O L st (e :: es) .stuck
+
+/-- Defer registration traverses sequencing frames and stops at the innermost scope. -/
+inductive Registered (d : Deferred O) : List (Frame O) → List (Frame O) → Prop where
+  | scope {b dm ds k} : Registered d (.scope b dm ds :: k) (.scope b dm (d :: ds) :: k)
+  | seq {t k k'} : Registered d k k' → Registered d (.seq t :: k) (.seq t :: k')
+
+/-- Result destination binding, including lifecycle admission for a fresh local. -/
+inductive Destination (O : Operands) : Option Var → O.Val → AList Var O.Val → O.Store →
+    AList Var O.Val → O.Store → Prop where
+  | discard {v L st} : Destination O none v L st L st
+  | bind {x v L st st'} : O.life (.bind x) st = some st' →
+      Destination O (some x) v L st ((x, v) :: L) st'
+
+/-- Normative answer-indexed small-step rules. Each constructor describes one statement or
+continuation case directly; `none` is an internal transition and `some a` consumes exactly `a`.
+Errors trap at the statement site; traps during a condition test discard its test frame, as
+in the existing small-step machine. -/
+inductive Rules (P : Program O) : Config O → Option (Answer O.Val O.Event O.Store) →
+    Label O → Config O → Prop where
+  | skip {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} :
+      Rules P ⟨.exec .skip, L, st, k⟩ none .silent ⟨.done, L, st, k⟩
+  | bind {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {x : Var} {e : O.Expr}
+      {site : SiteId} {v : O.Val} {st₁ : O.Store} {st₂ : O.Store} :
+      O.eval L st e = .ok (v, st₁) →
+      O.life (.bind x) st₁ = some st₂ →
+      Rules P ⟨.exec (.bind x e site), L, st, k⟩ none .silent ⟨.done, ((x, v) :: L), st₂, k⟩
+  | assign {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {x : Var} {e : O.Expr}
+      {site : SiteId} {v : O.Val} {old : O.Val} {st₁ : O.Store} {st₂ : O.Store} :
+      O.eval L st e = .ok (v, st₁) →
+      AList.lookup L x = some old →
+      O.life (.bind x) st₁ = some st₂ →
+      Rules P ⟨.exec (.assign x e site), L, st, k⟩ none .silent ⟨.done, (AList.update L x (fun _ => v)),
+        st₂, k⟩
+  | seq {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {s : Stmt O} {t : Stmt O} :
+      Rules P ⟨.exec (.seq s t), L, st, k⟩ none .silent ⟨.exec s, L, st, .seq t :: k⟩
+  | block {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {b : BlockId} {s : Stmt O} :
+      Rules P ⟨.exec (.block b s), L, st, k⟩ none .silent ⟨.exec s, L, st, .scope b (List.map Prod.fst L)
+        [] :: k⟩
+  | defer {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {f : FnId} {args : List O.Expr}
+      {site : SiteId} {k' : List (Frame O)} :
+      Registered ⟨f, args, site⟩ k k' →
+      Rules P ⟨.exec (.defer f args site), L, st, k⟩ none .silent ⟨.done, L, st, k'⟩
+  | condtrue {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {e : O.Expr} {yes : Stmt O}
+      {no : Stmt O} {site : SiteId} {v : O.Val} {st₁ : O.Store} :
+      O.eval L st e = .ok (v, st₁) →
+      O.test v = some true →
+      Rules P ⟨.exec (.cond e yes no site), L, st, k⟩ none .silent ⟨.exec yes, L, st₁, k⟩
+  | condfalse {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {e : O.Expr} {yes : Stmt O}
+      {no : Stmt O} {site : SiteId} {v : O.Val} {st₁ : O.Store} :
+      O.eval L st e = .ok (v, st₁) →
+      O.test v = some false →
+      Rules P ⟨.exec (.cond e yes no site), L, st, k⟩ none .silent ⟨.exec no, L, st₁, k⟩
+  | loop {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {l : LoopId} {cr : Stmt O}
+      {test : O.Expr} {body : Stmt O} {site : SiteId} :
+      Rules P ⟨.exec (.loop l cr test body site), L, st, k⟩ none .silent ⟨.exec cr, L, st, .test l cr
+        test body site (List.map Prod.fst L) :: k⟩
+  | brk {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {l : LoopId} :
+      Rules P ⟨.exec (.brk l), L, st, k⟩ none .silent ⟨.exiting (.brk l), L, st, k⟩
+  | cont {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {l : LoopId} :
+      Rules P ⟨.exec (.cont l), L, st, k⟩ none .silent ⟨.exiting (.cont l), L, st, k⟩
+  | ret {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {e : O.Expr} {site : SiteId}
+      {v : O.Val} {st₁ : O.Store} :
+      O.eval L st e = .ok (v, st₁) →
+      Rules P ⟨.exec (.ret e site), L, st, k⟩ none .silent ⟨.exiting (.ret v), L, st₁, k⟩
+  | call {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {dst : Option Var} {f : FnId}
+      {args : List O.Expr} {site : SiteId} {vs : List O.Val} {st₁ : O.Store} {st₂ : O.Store} {fn : Fn O} :
+      Arguments O L st args (.ok (vs, st₁)) →
+      AList.lookup P.fns f = some fn →
+      fn.params.length = vs.length →
+      O.life (.enter (fn.params.map Prod.fst)) st₁ = some st₂ →
+      Rules P ⟨.exec (.call dst f args site), L, st, k⟩ none .silent ⟨.exec fn.body, ((fn.params.map
+        Prod.fst).zip vs), st₂, .scope fn.block (fn.params.map Prod.fst) [] :: .ret dst L :: k⟩
+  | bindTrap {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {x : Var} {e : O.Expr}
+      {site : SiteId} {kd : TrapKind} :
+      O.eval L st e = .trap kd →
+      Rules P ⟨.exec (.bind x e site), L, st, k⟩ none .silent ⟨.trapped kd site, L, st, k⟩
+  | assignTrap {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {x : Var} {e : O.Expr}
+      {site : SiteId} {kd : TrapKind} :
+      O.eval L st e = .trap kd →
+      Rules P ⟨.exec (.assign x e site), L, st, k⟩ none .silent ⟨.trapped kd site, L, st, k⟩
+  | condTrap {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {e : O.Expr} {yes : Stmt O}
+      {no : Stmt O} {site : SiteId} {kd : TrapKind} :
+      O.eval L st e = .trap kd →
+      Rules P ⟨.exec (.cond e yes no site), L, st, k⟩ none .silent ⟨.trapped kd site, L, st, k⟩
+  | retTrap {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {e : O.Expr} {site : SiteId}
+      {kd : TrapKind} :
+      O.eval L st e = .trap kd →
+      Rules P ⟨.exec (.ret e site), L, st, k⟩ none .silent ⟨.trapped kd site, L, st, k⟩
+  | callTrap {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {dst : Option Var} {f : FnId}
+      {args : List O.Expr} {site : SiteId} {kd : TrapKind} :
+      Arguments O L st args (.trap kd) →
+      Rules P ⟨.exec (.call dst f args site), L, st, k⟩ none .silent ⟨.trapped kd site, L, st, k⟩
+  | primTrap {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {dst : Option Var} {p : O.Prim}
+      {args : List O.Expr} {site : SiteId} {kd : TrapKind} :
+      Arguments O L st args (.trap kd) →
+      Rules P ⟨.exec (.prim dst p args site), L, st, k⟩ none .silent ⟨.trapped kd site, L, st, k⟩
+  | primOk {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {dst : Option Var} {p : O.Prim}
+      {args : List O.Expr} {site : SiteId} {vs : List O.Val} {st₁ : O.Store} {st₂ : O.Store}
+      {a : Answer O.Val O.Event O.Store} {v : O.Val} {L' : AList Var O.Val} :
+      Arguments O L st args (.ok (vs, st₁)) →
+      O.allows p vs st₁ a = true →
+      a.result = .ok v →
+      Destination O dst v L a.store L' st₂ →
+      Rules P ⟨.exec (.prim dst p args site), L, st, k⟩ (some a) a.label ⟨.done, L', st₂, k⟩
+  | primError {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {dst : Option Var} {p : O.Prim}
+      {args : List O.Expr} {site : SiteId} {vs : List O.Val} {st₁ : O.Store}
+      {a : Answer O.Val O.Event O.Store} {kd : TrapKind} :
+      Arguments O L st args (.ok (vs, st₁)) →
+      O.allows p vs st₁ a = true →
+      a.result = .error kd →
+      Rules P ⟨.exec (.prim dst p args site), L, st, k⟩ (some a) a.label ⟨.trapped kd site, L, a.store,
+        k⟩
+  | abort {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {site : SiteId} :
+      Rules P ⟨.exec (.abort site), L, st, k⟩ none .silent ⟨.trapped .abort site, L, st, k⟩
+  | doneSeq {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {t : Stmt O} :
+      Rules P ⟨.done, L, st, .seq t :: k⟩ none .silent ⟨.exec t, L, st, k⟩
+  | doneCleanup {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {b : BlockId} {dm : List Var}
+      {d : Deferred O} {ds : List (Deferred O)} :
+      Rules P ⟨.done, L, st, .scope b dm (d :: ds) :: k⟩ none .silent ⟨.exec (.call none d.f d.args
+        d.site), L, st, .resume .fall :: .scope b dm ds :: k⟩
+  | doneScope {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {b : BlockId} {dm : List Var}
+      {st₁ : O.Store} :
+      O.life (.drop ((List.map Prod.fst L).filter (fun x => decide (x ∉ dm)))) st = some st₁ →
+      Rules P ⟨.done, L, st, .scope b dm [] :: k⟩ none .silent ⟨.done, (L.filter (fun e => decide (e.1 ∈
+        dm))), st₁, k⟩
+  | exitCleanup {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {ex : Exit O.Val}
+      {b : BlockId} {dm : List Var} {d : Deferred O} {ds : List (Deferred O)} :
+      Rules P ⟨.exiting ex, L, st, .scope b dm (d :: ds) :: k⟩ none .silent ⟨.exec (.call none d.f d.args
+        d.site), L, st, .resume (.exit ex) :: .scope b dm ds :: k⟩
+  | exitScope {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {ex : Exit O.Val} {b : BlockId}
+      {dm : List Var} {st₁ : O.Store} :
+      O.life (.drop ((List.map Prod.fst L).filter (fun x => decide (x ∉ dm)))) st = some st₁ →
+      Rules P ⟨.exiting ex, L, st, .scope b dm [] :: k⟩ none .silent ⟨.exiting ex, (L.filter (fun e =>
+        decide (e.1 ∈ dm))), st₁, k⟩
+  | exitSeq {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {ex : Exit O.Val} {t : Stmt O} :
+      Rules P ⟨.exiting ex, L, st, .seq t :: k⟩ none .silent ⟨.exiting ex, L, st, k⟩
+  | exitTest {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {ex : Exit O.Val} {l : LoopId}
+      {cr : Stmt O} {test : O.Expr} {body : Stmt O} {site : SiteId} {dm : List Var} {st₁ : O.Store} :
+      O.life (.drop ((List.map Prod.fst L).filter (fun x => decide (x ∉ dm)))) st = some st₁ →
+      Rules P ⟨.exiting ex, L, st, .test l cr test body site dm :: k⟩ none .silent ⟨.exiting ex,
+        (L.filter (fun e => decide (e.1 ∈ dm))), st₁, k⟩
+  | testtrue {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {l : LoopId} {cr : Stmt O}
+      {test : O.Expr} {body : Stmt O} {site : SiteId} {dm : List Var} {v : O.Val} {st₁ : O.Store}
+      {st₂ : O.Store} :
+      O.eval L st test = .ok (v, st₁) →
+      O.test v = some true →
+      O.life (.drop ((List.map Prod.fst L).filter (fun x => decide (x ∉ dm)))) st₁ = some st₂ →
+      Rules P ⟨.done, L, st, .test l cr test body site dm :: k⟩ none .silent ⟨.exec body, (L.filter (fun
+        e => decide (e.1 ∈ dm))), st₂, .body l cr test body site :: k⟩
+  | testfalse {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {l : LoopId} {cr : Stmt O}
+      {test : O.Expr} {body : Stmt O} {site : SiteId} {dm : List Var} {v : O.Val} {st₁ : O.Store}
+      {st₂ : O.Store} :
+      O.eval L st test = .ok (v, st₁) →
+      O.test v = some false →
+      O.life (.drop ((List.map Prod.fst L).filter (fun x => decide (x ∉ dm)))) st₁ = some st₂ →
+      Rules P ⟨.done, L, st, .test l cr test body site dm :: k⟩ none .silent ⟨.done, (L.filter (fun e =>
+        decide (e.1 ∈ dm))), st₂, k⟩
+  | testTrap {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {l : LoopId} {cr : Stmt O}
+      {test : O.Expr} {body : Stmt O} {site : SiteId} {dm : List Var} {kd : TrapKind} :
+      O.eval L st test = .trap kd →
+      Rules P ⟨.done, L, st, .test l cr test body site dm :: k⟩ none .silent ⟨.trapped kd site, L, st, k⟩
+  | doneBody {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {l : LoopId} {cr : Stmt O}
+      {test : O.Expr} {body : Stmt O} {site : SiteId} :
+      Rules P ⟨.done, L, st, .body l cr test body site :: k⟩ none .silent ⟨.exec (.loop l cr test body
+        site), L, st, k⟩
+  | resumeFall {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} :
+      Rules P ⟨.done, L, st, .resume .fall :: k⟩ none .silent ⟨.done, L, st, k⟩
+  | resumeExit {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {ex : Exit O.Val} :
+      Rules P ⟨.done, L, st, .resume (.exit ex) :: k⟩ none .silent ⟨.exiting ex, L, st, k⟩
+  | implicitReturn {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {dst : Option Var}
+      {caller : AList Var O.Val} {st₁ : O.Store} {st₂ : O.Store} {L' : AList Var O.Val} :
+      O.life .leave st = some st₁ →
+      Destination O dst O.unitVal caller st₁ L' st₂ →
+      Rules P ⟨.done, L, st, .ret dst caller :: k⟩ none .silent ⟨.done, L', st₂, k⟩
+  | explicitReturn {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {v : O.Val}
+      {dst : Option Var} {caller : AList Var O.Val} {st₁ : O.Store} {st₂ : O.Store}
+      {L' : AList Var O.Val} :
+      O.life .leave st = some st₁ →
+      Destination O dst v caller st₁ L' st₂ →
+      Rules P ⟨.exiting (.ret v), L, st, .ret dst caller :: k⟩ none .silent ⟨.done, L', st₂, k⟩
+  | brkHere {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {l : LoopId} {cr : Stmt O}
+      {test : O.Expr} {body : Stmt O} {site : SiteId} :
+      Rules P ⟨.exiting (.brk l), L, st, .body l cr test body site :: k⟩ none .silent ⟨.done, L, st, k⟩
+  | brkOuter {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {l : LoopId} {l' : LoopId}
+      {cr : Stmt O} {test : O.Expr} {body : Stmt O} {site : SiteId} :
+      l' ≠ l →
+      Rules P ⟨.exiting (.brk l'), L, st, .body l cr test body site :: k⟩ none .silent ⟨.exiting (.brk
+        l'), L, st, k⟩
+  | contHere {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {l : LoopId} {cr : Stmt O}
+      {test : O.Expr} {body : Stmt O} {site : SiteId} :
+      Rules P ⟨.exiting (.cont l), L, st, .body l cr test body site :: k⟩ none .silent ⟨.exec (.loop l cr
+        test body site), L, st, k⟩
+  | contOuter {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {l : LoopId} {l' : LoopId}
+      {cr : Stmt O} {test : O.Expr} {body : Stmt O} {site : SiteId} :
+      l' ≠ l →
+      Rules P ⟨.exiting (.cont l'), L, st, .body l cr test body site :: k⟩ none .silent ⟨.exiting (.cont
+        l'), L, st, k⟩
+  | returnBody {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)} {v : O.Val} {l : LoopId}
+      {cr : Stmt O} {test : O.Expr} {body : Stmt O} {site : SiteId} :
+      Rules P ⟨.exiting (.ret v), L, st, .body l cr test body site :: k⟩ none .silent ⟨.exiting (.ret v),
+        L, st, k⟩
+
+
 /-- Many steps, with the events they emitted in order. -/
 inductive Steps (P : Program O) : Config O → List O.Event → Config O → Prop where
   | refl (c : Config O) : Steps P c [] c
@@ -495,7 +728,7 @@ inductive RunsAll (P : Program O) (L : AList Var O.Val) :
 /-- The successful cleanup an exit through frames `pre` performs, from locals `L` and state `st`: each scope's
 calls run in turn (`RunsAll`), with the locals that scope restores passed on to the next, the
 innermost scope first. The calls it runs are exactly `plan pre`, in that order
-(`cleans_iff_runs_plan`, `planWith_calls`). -/
+(certificate helper `cleans_iff_runs_plan_inv`, `planWith_calls`). -/
 inductive Cleans (P : Program O) :
     List (Frame O) → AList Var O.Val → O.Store → List O.Event → O.Store → Prop where
   | nil (L : AList Var O.Val) (st : O.Store) : Cleans P [] L st [] st
@@ -511,6 +744,22 @@ inductive Cleans (P : Program O) :
       Cleans P (.body l cr t b site :: pre) L st tr st'
 
 /-! ## Destruction and receivers -/
+
+/-- Whether function `f` in `P` is a valid `Destroy` implementation for type `T` (OD60, Q2.7,
+Q2.8, owner decision 2026-11-08 item 7): `T` is not `Copy`, and `f` takes a single ordinary
+parameter of type `T` and returns `Unit`. -/
+def validDestroyFn [DecidableEq O.Ty] (P : Program O) (T : O.Ty) (f : FnId) : Bool :=
+  !O.isCopy T && match AList.lookup P.fns f with
+    | some fn => match fn.params with
+      | [(_, paramTy)] => decide (paramTy = T) && decide (fn.result = O.unitTy)
+      | _ => false
+    | none => false
+
+/-- The cleanup call that destroys a value of type `T`, given by the operand that moves it, when
+the candidate table `impl` assigns `T` a valid `Destroy` implementation in `P`. -/
+def checkedDestroyCall [DecidableEq O.Ty] (P : Program O) (impl : O.Ty → Option FnId) (T : O.Ty)
+    (arg : O.Expr) (site : SiteId) : Option (Deferred O) :=
+  (impl T).bind fun f => if validDestroyFn P T f then some ⟨f, [arg], site⟩ else none
 
 /-- The one consuming destruction protocol (OD60, Q2.7, owner decision 2026-11-08 item 7). For each
 type with `Destroy`, `impl` names the function that destroys it. That function's only parameter
@@ -617,6 +866,12 @@ def runFrom (P : Program O) (ρ : Oracle O) : Nat → List O.Event → Config O 
 /-- Run from `c` with no events yet. -/
 def run (P : Program O) (ρ : Oracle O) (fuel : Nat) (c : Config O) : Report O :=
   runFrom P ρ fuel [] c
+
+/-- Enter `fn` on argument values `vs` in state `st` and run for at most `fuel` steps, when the
+argument count matches `fn.params` and initial activation succeeds. -/
+def runFn (P : Program O) (ρ : Oracle O) (fuel : Nat) (fn : Fn O) (vs : List O.Val)
+    (st : O.Store) : Option (Report O) :=
+  if fn.params.length = vs.length then (enter fn vs st).map (run P ρ fuel) else none
 
 /-! ## Examples
 

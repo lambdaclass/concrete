@@ -98,6 +98,19 @@ Open obligations, by name:
   (C5) and the oracle's query record (C8); its
   storage can use C4's hybrid state; C5 must still supply ownership instrumentation. Lifecycle
   instrumentation may refuse an event (`Option.none`), making execution stuck, including initial
-  activation and primitive result binding; cleanup laws require successful lifecycle events. C2
+  activation and primitive result binding (owner decision 2026-11-08, 15:08 UTC, item 21).
+  C1 characterizes lifecycle blockage over actual transitions (`Step`) and top-level/driver entry
+  (`runFn`, `runFrom`) after successful predecessor checks, with relational primitive-bind refusal
+  (`prim_bind_step`) alongside the driver laws (`continuation_refused`, `prim_bind_refused`).
+  Raw first-boundary cleanup executions yield the segmented execution of `planWith`, restoring locals to
+  `unwindLocals`, and performing every planned call and drop in order (`raw_cleanup_runs_plan`,
+  `cleanup_runs_exact_plan`), with planted mutants for extra/missing calls, unexpected resume
+  paths, skipped `dropOut`, and skipped local `restrict`. Raw-path coverage is proved from the
+  machine stack rules; callers do not supply cleanup segmentation.
+  Answer-indexed relational determinism (`step_silent_deterministic`, `step_deterministic`)
+  covers internal steps and uniqueness for a fixed primitive answer. Independently admitted
+  destructors enter through the consuming call semantics (`destroyCall_enters`); executable
+  validator characterizations (`destroy_not_copy`, `destroyCall_sig`) are representation lemmas.
+  Each law has closed positive and premise-preserving planted-mutant witnesses. C2
   leaves floats (slice 26), and two owner questions: whether a failing operation may appear in a constant
   initializer, and whether the source may name a constant written later in the file.
