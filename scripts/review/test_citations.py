@@ -55,6 +55,15 @@ with tempfile.TemporaryDirectory() as directory:
     check("source.lean:1 `proposed:`", "clean")
     check("[`text:inventedLaw`](scripts/review/fixtures/fake.txt:1) source.lean:1", "clean")
     check("[`text:missingName`](scripts/review/fixtures/fake.txt:1) source.lean:1", ("invalid", "citation: text anchor 'missingName' absent from 'scripts/review/fixtures/fake.txt:1'"))
+    for label in ("text:", "text:inventedLaw"):
+        for suffix in ("", "](ISSUES.tsv)", "](https://example.com)"):
+            mention = "`" + label + "`"
+            if suffix:
+                mention = "[" + mention + suffix
+            check("source.lean:1 " + mention,
+                  ("invalid", f"citation: text name '{label}' requires a named location link"))
+    check("[`text:inventedLaw`](scripts/review/fixtures/fake.txt:1) source.lean:1 `text:inventedLaw`",
+          ("invalid", "citation: text name 'text:inventedLaw' requires a named location link"))
     check("No citations", ("invalid", "citation: positive verdict requires at least one resolvable file:line citation"))
     check("source.lean:1 `fictionalPart.realAnchor`", ("invalid", "citation: identifier 'fictionalPart.realAnchor' unresolved"))
     check("source.lean:1 `inventedLaw`", ("invalid", "citation: identifier 'inventedLaw' unresolved"), "findings")

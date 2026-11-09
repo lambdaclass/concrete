@@ -161,6 +161,7 @@ def citation_error(text, repo, commit, paths, positive, base=None, review_root=N
                  or text[:m.start()].endswith("](")]
 
     valid = 0
+    text_labels = set()
     for m in locations:
         raw = m.group("path")
         path = resolve(raw, exact=text[:m.start()].endswith("]("))
@@ -214,6 +215,7 @@ def citation_error(text, repo, commit, paths, positive, base=None, review_root=N
         prefix = text[:m.start()]
         named = re.search(r"\[`([^`]+)`\]\($", prefix)
         if named and named.group(1).startswith("text:"):
+            text_labels.add((named.start(1), named.end(1)))
             name = named.group(1)[5:]
             if not re.fullmatch(IDENTIFIER, name) or not token(name, "\n".join(selected)):
                 errors.append(f"citation: text anchor '{name}' absent from '{m.group()}'")
@@ -248,7 +250,7 @@ def citation_error(text, repo, commit, paths, positive, base=None, review_root=N
         if filename(name):
             continue
         if name.startswith("text:"):
-            if not re.search(r"\[`" + re.escape(name) + r"`\]\(", text):
+            if (m.start(1), m.end(1)) not in text_labels:
                 errors.append(f"citation: text name '{name}' requires a named location link")
             continue
         if name.startswith("proposed:") and name != "proposed:":
