@@ -25,9 +25,7 @@ def publish(record, runners, repository, environment):
             old = validate(old, sha, tier, runners, repository, None)
             if old["attempt"] == record["attempt"]:
                 if old["status"] == "MISSING" and old["conclusion"] == "queued-too-long":
-                    if record["qualification_status"] != "FAIL":
-                        return  # Absence remains closed to recovery, never to FAIL.
-                    continue  # Append failure evidence; preserve the overdue record.
+                    return  # The first overdue observation permanently closes this attempt.
                 require(old == record, "replay would overwrite attempt")
                 return  # Lost response after successful push, or identical collector retry.
         history = append(history, record, sha, tier, runners, repository)

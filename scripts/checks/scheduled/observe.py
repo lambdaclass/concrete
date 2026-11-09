@@ -44,7 +44,7 @@ def observe_main(lineage, histories, tier, now, runners, repository, freshness=N
     newest = max(annotated, key=lambda pair: max(timestamp(r["completed"]) for r in pair[1]))[0]
     return [f"STALE {tier} {newest}: no fresh PASS"]
 
-def main(*, clock=None, completion_output=None):
+def main(*, clock=None):
     clock = clock or operation_clock()
     environment = dict(os.environ)
     failed = False
@@ -76,15 +76,7 @@ def main(*, clock=None, completion_output=None):
                 print(f"INCOMPLETE {tier}: {error}"); failed = True
     except ERRORS as error:
         print(f"INCOMPLETE observer: {error}"); failed = True
-    # Completion is execution health, independent of the producer verdict.
-    if completion_output is not None:
-        with open(completion_output, "a") as output:
-            output.write("completed=true\n")
     return int(failed)
 
 if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--completion-output')
-    args = parser.parse_args()
-    sys.exit(main(completion_output=args.completion_output))
+    sys.exit(main())

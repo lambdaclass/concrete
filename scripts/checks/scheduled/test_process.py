@@ -223,7 +223,7 @@ class ProcessStdin(unittest.TestCase):
             root = Path(scratch)
             source = (ROOT / 'scripts/checks/lib/scheduled_process.py').read_text()
             planted = root / 'scheduled_process.py'
-            planted.write_text(source.replace("outcome = supervise(argv,", "argv = [sys.executable, '-c', 'import time; time.sleep(5)']\n            outcome = supervise(argv,"))
+            planted.write_text(source.replace("outcome = supervise(argv,", "argv = [sys.executable, '-c', 'import time; time.sleep(5)']\n        outcome = supervise(argv,"))
             shutil.copy(ROOT / 'scripts/checks/lib/bounded_exec.py', root)
             result = process_run([sys.executable, str(ROOT / 'scripts/checks/scheduled/stdin_control.py'),
                                   str(planted), str(root)], env=runtime_environment(),
@@ -303,7 +303,7 @@ class ProcessContext(unittest.TestCase):
                     if field == 'fd.9':
                         # Plant a real unrelated descriptor, not a made-up report.
                         text = text.replace('outcome = supervise(argv,',
-                            "os.dup2(source.fileno(), 9)\n            outcome = supervise(argv,")
+                            "os.dup2(source.fileno(), 9)\n        outcome = supervise(argv,")
                     planted.write_text(text)
                     result = process_run([sys.executable, str(ROOT / 'scripts/checks/scheduled/context_control.py'),
                                           str(planted), scratch], capture_output=True, text=True, timeout=5, cwd=Path(__file__).resolve().parents[3], env=runtime_environment())

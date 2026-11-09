@@ -18,7 +18,6 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Observe main history independently
-        id: observe
         run: |
           set -euo pipefail
           source scripts/checks/lib/scheduled_process.sh
@@ -30,7 +29,7 @@ jobs:
           out=$(mktemp)
           trap 'rm -f "$out"' EXIT
           rc=0
-          bounded_run @@budget:observation@@ -- python3 scripts/checks/scheduled/observe.py --completion-output "$GITHUB_OUTPUT" > "$out" 2>&1 || rc=$?
+          bounded_run @@budget:observation@@ -- python3 scripts/checks/scheduled/observe.py > "$out" 2>&1 || rc=$?
           cat "$out"
           cat "$out" >> "$GITHUB_STEP_SUMMARY"
           if bounded_is_incomplete "$rc"; then
@@ -38,8 +37,3 @@ jobs:
             exit 1
           fi
           exit "$rc"
-      - name: Observer execution completed
-        if: ${{ always() && steps.observe.outputs.completed == 'true' }}
-        run: |
-          source scripts/checks/lib/scheduled_process.sh
-          :

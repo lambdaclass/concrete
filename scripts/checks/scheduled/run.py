@@ -10,7 +10,6 @@ import subprocess
 import sys
 import tempfile
 from protocol import EvidenceError, git, inventory, require, clean_env, _registry, _binding
-from scheduled_outcome import reduce_outcomes, execution_record
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -127,25 +126,30 @@ def run(sha, tier, output, environment, *, clock=None):
                         passed = control_run.returncode == control["exit_code"] and control_run.returncode not in (0, 125) and diagnostic == control["diagnostic"]
                         status = "PASS" if passed else "INCOMPLETE" if control_run.returncode == 125 else "FAIL"
                         gate["controls"].append(dict(id=control["id"], status=status, diagnostic=diagnostic))
-                        gate["status"] = reduce_outcomes([gate["status"], status])
+                        if status == "FAIL" or (status == "INCOMPLETE" and gate["status"] != "FAIL"):
+                            gate["status"] = status
                 except (EvidenceError, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
                     gate["error"] = str(error)
-                    gate["status"] = reduce_outcomes([gate["status"],
-                        "FAIL" if str(error).startswith("FAIL scheduled artifact:") else "INCOMPLETE"])
+                    if str(error).startswith("FAIL scheduled artifact:"):
+                        gate["status"] = "FAIL"
+                    elif gate["status"] != "FAIL":
+                        gate["status"] = "INCOMPLETE"
                 finally:
                     if not artifacts_attempted:
                         try:
                             preserve_artifacts(row, checkout, output, number, sha, False, gate["artifacts"])
                         except (EvidenceError, OSError, ValueError) as error:
                             gate["artifact_error"] = str(error)
-                            gate["status"] = reduce_outcomes([gate["status"],
-                                "FAIL" if str(error).startswith("FAIL scheduled artifact:") else "INCOMPLETE"])
+                            if str(error).startswith("FAIL scheduled artifact:"):
+                                gate["status"] = "FAIL"
         except (EvidenceError, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
             (output / "incomplete.log").write_text(str(error) + "\n")
             print(error, file=sys.stderr)
             # A dependency failure is evidence about availability, never a dummy passed gate.
             record["execution_error"] = str(error)
-    record = execution_record(record)
+    statuses = {g["status"] for g in record["gates"]}
+    record["status"] = "FAIL" if "FAIL" in statuses else "INCOMPLETE" if "INCOMPLETE" in statuses else "INCOMPLETE" if record.get("execution_error") else "PASS"
+    record["conclusion"] = {"PASS": "success", "FAIL": "failure", "INCOMPLETE": "incomplete"}[record["status"]]
     record["completed"] = clock.instant().isoformat()
     (output / "index.json").write_text(json.dumps(record, sort_keys=True) + "\n")
     return 0 if record["status"] == "PASS" else 1

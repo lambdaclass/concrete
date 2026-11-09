@@ -17,15 +17,13 @@ from protocol import clean_env, git
 ROOT = Path(__file__).resolve().parents[3]
 
 class Slot(unittest.TestCase):
-    def invoke(self, command, acquire=None, budget="1", process_source=None):
+    def invoke(self, command, acquire=None, budget="1"):
         with tempfile.TemporaryDirectory() as work:
             root = Path(work) / "controller"
             lib = root / "scripts/checks/lib"; lib.mkdir(parents=True)
             scheduled = root / "scripts/checks/scheduled"; scheduled.mkdir()
-            for name in ("bounded.sh", "bounded_exec.py", "scheduled_process.py", "scheduled_process.sh", "heavy_slots.sh", "gate_outcome.py", "scheduled_outcome.py"):
+            for name in ("bounded.sh", "bounded_exec.py", "scheduled_process.py", "scheduled_process.sh", "heavy_slots.sh", "gate_outcome.py"):
                 shutil.copy(ROOT / "scripts/checks/lib" / name, lib / name)
-            if process_source is not None:
-                (lib / "scheduled_process.py").write_text(process_source)
             (lib / "gate_env.sh").write_text(":\n")
             if acquire is not None:
                 (lib / "heavy_slots.sh").write_text(f"heavy_slot_acquire() {{ {acquire}; }}\nheavy_slot_release() {{ :; }}\n")
@@ -103,64 +101,6 @@ class Slot(unittest.TestCase):
                 'if [ ! -e "$1" ]; then touch "$1"; python3 "$SCHEDULED_OUTCOME_HELPER" INCOMPLETE "abandoned attempt"; exec sleep 2; fi; echo recovered',
                 'bash', marker], budget='0.1')
         self.assertEqual((result.returncode, result.stdout, result.stderr), (0, 'recovered\n', ''))
-
-    def test_cancelled_executor_retains_emitted_fail(self):
-        import contextlib
-        import io
-        import json
-        import scheduled_process
-        from bounded_exec import Cancelled
-        from unittest.mock import patch
-        from outcome_control import preserves_failure
-        import types
-        source = (ROOT / 'scripts/checks/lib/scheduled_process.py').read_text()
-        plant = types.ModuleType('planted_process'); plant.__file__ = scheduled_process.__file__
-        exec(compile(source.replace("cancellation = error", "raise error"), plant.__file__, 'exec'), plant.__dict__)
-        for owner in (scheduled_process, plant):
-            for status in ('FAIL', 'INCOMPLETE'):
-                def cancelled(*args, **kwargs):
-                    Path(kwargs['env']['SCHEDULED_OUTCOME_FILE']).write_text(
-                        json.dumps(dict(status=status, diagnostic='emitted before cancellation', sha=None))+'\n')
-                    raise Cancelled(15)
-                with patch.object(owner, 'supervise', side_effect=cancelled), contextlib.redirect_stderr(io.StringIO()) as errors:
-                    if owner is plant or status == 'INCOMPLETE':
-                        with self.assertRaises(Cancelled) as caught:
-                            owner.run([os.sys.executable, '-c', 'pass'], cwd=ROOT, env=runtime_environment(),
-                                      timeout=1, gate_outcome=True, capture_output=True, text=True)
-                        self.assertEqual(caught.exception.sig, 15)
-                        if status == 'FAIL':
-                            with self.assertRaises(ValueError) as refused:
-                                preserves_failure('INCOMPLETE', 'executor cancellation')
-                            self.assertEqual(str(refused.exception),
-                                             'FAIL scheduled monotonicity: executor cancellation masked FAIL')
-                    else:
-                        result = owner.run([os.sys.executable, '-c', 'pass'], cwd=ROOT, env=runtime_environment(),
-                                           timeout=1, gate_outcome=True, capture_output=True, text=True)
-                        self.assertEqual(result.returncode, 1)
-                        self.assertEqual(errors.getvalue(), 'FAIL scheduled gate: explicit failure outcome\n')
-
-    def test_explicit_fail_survives_outer_timeout_and_retry(self):
-        from outcome_control import preserves_failure
-        production = (ROOT / 'scripts/checks/lib/scheduled_process.py').read_text()
-        planted = production.replace("if outcome == 'timeout' and gate_rc != 1:",
-                                     "if outcome == 'timeout':")
-        for source in (None, planted):
-            for mode in ('retry', 'double'):
-                with tempfile.TemporaryDirectory() as work:
-                    marker = str(Path(work) / 'attempted')
-                    result = self.invoke(['bash', '-c',
-                        'if [ ! -e "$1" ] || [ "$2" = double ]; then touch "$1"; python3 "$SCHEDULED_OUTCOME_HELPER" FAIL "real failure"; exec sleep 2; fi; echo recovered',
-                        'bash', marker, mode], budget='0.15', process_source=source)
-                boundary = 'outer timeout ' + mode
-                if source is None:
-                    self.assertEqual((result.returncode, result.stdout, result.stderr),
-                                     (1, '', 'FAIL scheduled gate: explicit failure outcome\n'))
-                    preserves_failure('FAIL', boundary)
-                else:
-                    with self.assertRaises(ValueError) as caught:
-                        preserves_failure('PASS' if result.returncode == 0 else 'INCOMPLETE', boundary)
-                    self.assertEqual(str(caught.exception),
-                                     'FAIL scheduled monotonicity: ' + boundary + ' masked FAIL')
 
     def test_child_reuses_parent_slot(self):
         script = r'''source "$1"

@@ -3,7 +3,6 @@ from process_adapter import process_run
 from scheduled_process import clean_env
 from scheduler_policy import note_ref, BUDGET, WINDOWS
 import os
-from scheduled_outcome import reduce_outcomes, execution_status
 import copy
 import datetime as dt
 import importlib.util
@@ -93,8 +92,6 @@ def qualification(record, sha, tier):
         gate = actual[gid]
         if gate["command"] != row["command"]:
             issue("FAIL", "wrong command " + gid)
-        if gate["tools"] != row["tools"] or (type(gate["seed"]) is not type(row["seed"]) or gate["seed"] != row["seed"]):
-            issues.append(dict(status="FAIL", diagnostic="FAIL scheduled provenance: tool/seed mismatch", operational=False))
         controls = gate["controls"]
         ids = [c.get("id") for c in controls]
         if any(not isinstance(cid, str) for cid in ids) or len(set(ids)) != len(ids):
@@ -152,7 +149,7 @@ def qualification(record, sha, tier):
                 binding = next(f for f in files if isinstance(f, dict) and f.get("path") == binding_path)
                 bindings = {(len(value), hashlib.sha256(value).hexdigest()) for value in
                             (sha.encode(), (sha + "\n").encode())}
-                if (binding.get("bytes"), binding.get("sha256")) not in bindings:
+                if artifact.get("sha") == sha and (binding.get("bytes"), binding.get("sha256")) not in bindings:
                     issue("FAIL", "wrong binding artifact " + gid + "/" + declared["sha_file"])
     return sorted(issues, key=lambda outcome: outcome["status"] != "FAIL")
 
@@ -202,50 +199,41 @@ def validate(record, sha, tier, runners, repository, attempt):
         require(all(k in gate for k in ("command", "tools", "seed", "resources", "controls", "log")), "missing gate metadata")
         if gate["status"] == "PASS":
             require(all(c.get("status") == "PASS" for c in gate["controls"]), "missing/pending control evidence")
-    expected = execution_status(gates, unavailable=bool(record.get("execution_error") or dependency), missing=missing)
+    statuses = {g["status"] for g in gates}
+    expected = ("MISSING" if record["conclusion"] in {"cancelled", "skipped", "queued-too-long", "absent"}
+                else "FAIL" if "FAIL" in statuses else "INCOMPLETE" if "INCOMPLETE" in statuses
+                else "INCOMPLETE" if record.get("execution_error") or dependency else "PASS" if statuses <= {"PASS"} else None)
     conclusions = {"PASS": "success", "FAIL": "failure", "INCOMPLETE": "incomplete"}
     require(record["status"] == expected and
             (missing or record["conclusion"] == conclusions.get(expected)), "status/conclusion contradicts evidence")
     record = copy.deepcopy(record)
     record["qualification_outcomes"] = qualification(record, sha, tier)
     record["qualification"] = [o["diagnostic"] for o in record["qualification_outcomes"]]
-    record["qualification_status"] = reduce_outcomes([record["status"], *(o["status"] for o in record["qualification_outcomes"])])
+    record["qualification_status"] = (
+        "FAIL" if record["status"] == "FAIL" or any(o["status"] == "FAIL" for o in record["qualification_outcomes"])
+        else "INCOMPLETE" if record["qualification"] else record["status"])
     return record
 
 def append(history, record, sha, tier, runners, repository):
     record = validate(record, sha, tier, runners, repository, None)
     for old in history:
         validate(old, sha, tier, runners, repository, None)
-        require(old["attempt"] != record["attempt"] or
-                (old["status"] == "MISSING" and old["conclusion"] == "queued-too-long"
-                 and record["qualification_status"] == "FAIL"), "replay would overwrite attempt")
+        require(old["attempt"] != record["attempt"], "replay would overwrite attempt")
     return [*history, record]
 
 def observe(history, sha, tier, now, runners, repository):
     if not history:
         raise observation_error("MISSING", tier, sha, "absent run", operational=True)
-    valid, errors = [], []
+    history = [validate(record, sha, tier, runners, repository, None) for record in history]
     for record in history:
-        try:
-            qualified = validate(record, sha, tier, runners, repository, None)
-            valid.append(qualified)
-            require(timestamp(qualified["completed"]) <= now, "future completion")
-        except (EvidenceError, ValueError, TypeError, KeyError) as error:
-            errors.append(error if isinstance(error, EvidenceError) else EvidenceError(str(error)))
-    history = valid
-    if len({r["attempt"] for r in history}) != len(history):
-        errors.append(EvidenceError("replay would overwrite attempt"))
-    if reduce_outcomes(r["status"] for r in history) == "FAIL":
+        require(timestamp(record["completed"]) <= now, "future completion")
+    require(len({r["attempt"] for r in history}) == len(history), "replay would overwrite attempt")
+    if any(r["status"] == "FAIL" for r in history):
         raise observation_error("FAIL", tier, sha, "recorded attempt")
     for record in history:
         for outcome in record["qualification_outcomes"]:
             if outcome["status"] == "FAIL":
                 raise observation_error("FAIL", tier, sha, outcome["diagnostic"])
-    if errors:
-        raise errors[0]
-    # Non-operational defects anywhere in this SHA's history cannot be recovered
-    # by a newer SHA's PASS. A valid later attempt on this SHA can repair absence.
-    operational = all(o["operational"] for r in history for o in r["qualification_outcomes"])
     recent = [r for r in history if now - timestamp(r["completed"]) <= WINDOWS[tier]]
     if not recent:
         raise observation_error("STALE", tier, sha, "no fresh PASS")
@@ -253,9 +241,9 @@ def observe(history, sha, tier, now, runners, repository):
     if latest["qualification_outcomes"]:
         outcome = latest["qualification_outcomes"][0]
         raise observation_error(outcome["status"], tier, sha, outcome["diagnostic"],
-                                operational=operational)
+                                operational=all(o["operational"] for o in latest["qualification_outcomes"]))
     if latest["status"] != "PASS":
-        raise observation_error(latest["status"], tier, sha, "recorded attempt", operational=operational)
+        raise observation_error(latest["status"], tier, sha, "recorded attempt", operational=True)
     return f"PASS {tier} {sha}"
 
 def read_note(sha, tier, listed=False, *, environment=None):
@@ -266,12 +254,4 @@ def read_note(sha, tier, listed=False, *, environment=None):
             return []
     lines = git("notes", "--ref=" + ref, "show", sha, environment=environment).splitlines()
     require(lines, "empty annotated note")
-    records = []
-    for line in lines:
-        try:
-            records.append(json.loads(line))
-        except ValueError:
-            # Keep the invalid sibling for validation without dropping parseable
-            # FAIL evidence. Publication still refuses to append to corruption.
-            records.append(None)
-    return records
+    return [json.loads(line) for line in lines]

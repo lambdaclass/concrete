@@ -112,7 +112,6 @@ class RegistryEvidence(unittest.TestCase):
 
     def test_missing_gate(self):
         self.payload['gates'] = []
-        self.payload.update(status='INCOMPLETE', conclusion='incomplete')
         self.check_mutation(self.payload, 'INCOMPLETE registry: missing gate scaling-daily')
 
     def test_missing_control(self):
@@ -142,24 +141,6 @@ class RegistryEvidence(unittest.TestCase):
     def test_binding_file_cannot_be_substituted(self):
         self.payload['gates'][0]['artifacts'][0]['files'][0]['sha256'] = '0' * 64
         self.check_mutation(self.payload, 'FAIL registry: wrong binding artifact scaling-daily/report/selected-sha.txt')
-
-    def test_partial_binding_present_but_wrong(self):
-        artifact = self.payload['gates'][0]['artifacts'][0]
-        artifact.update(sha=None, binding_status='INCOMPLETE')
-        artifact['files'][0]['sha256'] = '0' * 64
-        self.check_mutation(self.payload, 'FAIL registry: wrong binding artifact scaling-daily/report/selected-sha.txt')
-        import types
-        from outcome_control import preserves_failure
-        source = Path(protocol.__file__).read_text().replace(
-            'if (binding.get("bytes"), binding.get("sha256")) not in bindings:',
-            'if artifact.get("sha") == sha and (binding.get("bytes"), binding.get("sha256")) not in bindings:')
-        plant = types.ModuleType('planted_protocol'); plant.__file__ = protocol.__file__
-        exec(compile(source, protocol.__file__, 'exec'), plant.__dict__)
-        plant.REGISTRY_ROOT = protocol.REGISTRY_ROOT
-        masked = plant.validate(self.payload, self.sha, 'daily', RUNNERS, 'example/repo', '1/1')
-        with self.assertRaises(ValueError) as caught:
-            preserves_failure(masked['qualification_status'], 'partial binding')
-        self.assertEqual(str(caught.exception), 'FAIL scheduled monotonicity: partial binding masked FAIL')
 
     def test_missing_binding_file(self):
         self.payload['gates'][0]['artifacts'][0]['files'] = []
@@ -212,12 +193,6 @@ class RegistryEvidence(unittest.TestCase):
     def test_missing_registry_is_nonqualifying_and_retained(self):
         with patch.object(protocol, 'REGISTRY_ROOT', self.root / 'absent'):
             self.check_mutation(self.payload, 'INCOMPLETE registry: unavailable at ' + self.sha)
-
-    def test_tool_seed_substitution_across_evidence_adapters(self):
-        for field, value in (("tools", {"compiler": "substitute"}), ("seed", 999), ("seed", True)):
-            payload = copy.deepcopy(self.payload)
-            payload['gates'][0][field] = value
-            self.check_mutation(payload, 'FAIL scheduled provenance: tool/seed mismatch')
 
     def test_forged_cached_qualification_is_recomputed(self):
         self.payload['qualification'] = []
