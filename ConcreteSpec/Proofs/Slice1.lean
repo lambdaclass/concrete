@@ -1030,6 +1030,24 @@ example := exec_total [] [] [] (.int .u8 42)
 /-- Instance (law `ConcreteSpec.checked_exits`, case `return`). -/
 example := @checked_exits literal ⟨by decide, .ret (.int (by decide)) (.atom .int) (by decide)⟩
 
+/-- A broken operational relation with no execution rules. -/
+inductive MissingExec : Decls → Env → List Stmt → Atom → Outcome → Prop where
+
+/-- Planted (law `ConcreteSpec.runBody_sound`, case `return`, subject `ConcreteSpec.Exec`, mutant `ConcreteSpec.Evidence.MissingExec`). -/
+example : runBody [] 1 [] [] (.int .u8 42) = .exit 42 ∧
+    (.exit 42 : Outcome) ≠ .outOfFuel ∧ ¬ MissingExec [] [] [] (.int .u8 42) (.exit 42) := by
+  exact ⟨rfl, by decide, fun h => nomatch h⟩
+
+/-- Planted (law `ConcreteSpec.exec_total`, case `return`, subject `ConcreteSpec.Exec`, mutant `ConcreteSpec.Evidence.MissingExec`). -/
+example : ¬ ∃ o, MissingExec [] [] [] (.int .u8 42) o := by
+  rintro ⟨_, h⟩; cases h
+
+/-- Planted (law `ConcreteSpec.checked_exits`, case `return`, subject `ConcreteSpec.Exec`, mutant `ConcreteSpec.Evidence.MissingExec`). -/
+example : Checked literal ∧
+    ¬ (∃ o, MissingExec literal.decls [] literal.body literal.ret o ∧ ∃ c, o = .exit c) := by
+  refine ⟨⟨by decide, .ret (.int (by decide)) (.atom .int) (by decide)⟩, ?_⟩
+  rintro ⟨_, h, _⟩; cases h
+
 end Evidence
 
 end ConcreteSpec

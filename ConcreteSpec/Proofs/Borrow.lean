@@ -849,6 +849,39 @@ example := @root_restored x0 true 0 1 [.write 1] [] rootPlace x0 mutableBlock rf
 example := @utf8_split [65, 66]
   (.cons (s := [65]) (by decide) (.cons (s := [66]) (by decide) .nil)) 1 (by decide) rfl
 
+/-- A broken checker admitting a borrow but no derivations for its body or continuation. -/
+inductive MissingBorrowBody : Ctx → List Stmt → Ctx → Prop where
+  | block : MissingBorrowBody x0 [.borrow true 0 1 [.write 1]] x0
+
+/-- Planted (law `ConcreteSpec.Borrow.root_restored`, case `writeThroughView`, subject `ConcreteSpec.Borrow.Ok`, mutant `ConcreteSpec.Borrow.Evidence.MissingBorrowBody`). -/
+example : MissingBorrowBody x0 [.borrow true 0 1 [.write 1]] x0 ∧
+    AList.lookup x0 0 = some rootPlace ∧
+    ¬ (∃ Γb, MissingBorrowBody (bodyCtx true 1 rootPlace x0) [.write 1] Γb ∧
+      MissingBorrowBody (restore x0 Γb) [] x0 ∧
+      ∀ p q', AList.lookup x0 p = some q' → q'.root = rootPlace.root →
+        AList.lookup (restore x0 Γb) p = some q') := by
+  refine ⟨.block, rfl, ?_⟩
+  rintro ⟨_, h, _⟩; cases h
+
+/-- A broken text relation accepting a pair but not its scalar-boundary halves. -/
+inductive UnsplitUtf8 : List Nat → Prop where
+  | pair : UnsplitUtf8 [65, 66]
+
+/-- Planted (law `ConcreteSpec.Borrow.utf8_split`, case `twoScalars`, subject `ConcreteSpec.Borrow.Utf8`, mutant `ConcreteSpec.Borrow.Evidence.UnsplitUtf8`). -/
+example : UnsplitUtf8 [65, 66] ∧ 1 ≤ [65, 66].length ∧ boundary [65, 66] 1 = true ∧
+    ¬ (UnsplitUtf8 ([65, 66].take 1) ∧ UnsplitUtf8 ([65, 66].drop 1)) := by
+  refine ⟨.pair, by decide, rfl, ?_⟩
+  intro h
+  cases h.1
+
+/-- A broken borrow checker allowing moves of non-owning views. -/
+inductive PermissiveBorrow : Ctx → List Stmt → Ctx → Prop where
+  | accept {Γ ss Γ'} : PermissiveBorrow Γ ss Γ'
+
+/-- Planted (law `ConcreteSpec.Borrow.view_not_moved`, case `mutableView`, subject `ConcreteSpec.Borrow.Ok`, mutant `ConcreteSpec.Borrow.Evidence.PermissiveBorrow`). -/
+example : ¬ (¬ PermissiveBorrow (bodyCtx true 1 rootPlace x0) [.move 1] x0) := by
+  intro h; exact h .accept
+
 end Evidence
 
 end ConcreteSpec.Borrow

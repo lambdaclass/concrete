@@ -634,6 +634,62 @@ example := @run_append State.init [.newAlloc 0 0] (State.init.bind 0 []) (.newAl
 /-- Instance (law `ConcreteSpec.Brand.ghost_run`, case `firstAllocation`). -/
 example := @ghost_run (fun _ => false) 2 0 State.init [.newAlloc 0 0] (State.init.bind 0 []) 0 rfl
 
+/-- A broken check that accepts arbitrary brand combinations. -/
+inductive PermissiveOk : List Nat → Ctx → List Stmt → Ctx → Prop where
+  | accept {B Γ ss Γ'} : PermissiveOk B Γ ss Γ'
+
+/-- Planted (law `ConcreteSpec.Brand.brand_mismatch_refused`, case `distinctBrands`, subject `ConcreteSpec.Brand.Ok`, mutant `ConcreteSpec.Brand.Evidence.PermissiveOk`). -/
+example : AList.lookup [(1, STy.heap 10), (0, .alloc 11)] 1 = some (.heap 10) ∧
+    AList.lookup [(1, STy.heap 10), (0, .alloc 11)] 0 = some (.alloc 11) ∧
+    (10 : Nat) ≠ 11 ∧
+    ¬ (¬ PermissiveOk [10, 11] [(1, .heap 10), (0, .alloc 11)] [.use 1 0]
+          [(1, .heap 10), (0, .alloc 11)] ∧
+       ¬ PermissiveOk [10, 11] [(1, .heap 10), (0, .alloc 11)] [.free 1 0]
+          [(1, .heap 10), (0, .alloc 11)]) := by
+  exact ⟨rfl, rfl, by decide, fun h => h.1 .accept⟩
+
+/-- A broken ghost relation that can reset, but has lost the continuation rules. -/
+inductive ResetWithoutContinuation : State → List Stmt → State → Prop where
+  | reset : ResetWithoutContinuation beforeReset [.reset 0 0 1] afterReset
+
+/-- Planted (law `ConcreteSpec.Brand.reset_fresh_brand`, case `liveOldBrand`, subject `ConcreteSpec.Brand.Run`, mutant `ConcreteSpec.Brand.Evidence.ResetWithoutContinuation`). -/
+example : Inv beforeReset ∧ ResetWithoutContinuation beforeReset [.reset 0 0 1] afterReset ∧
+    ¬ (∃ mid, mid.env = (0, .allocV beforeReset.next) :: AList.erase beforeReset.env 0 ∧
+      ResetWithoutContinuation mid [] afterReset ∧
+      ∀ e ∈ beforeReset.env, brandOf e.2 ≠ beforeReset.next) := by
+  refine ⟨beforeResetInv, .reset, ?_⟩
+  rintro ⟨_, _, h, _⟩; cases h
+
+/-- A broken ghost relation that permits old handles after reset. -/
+inductive PermissiveRun : State → List Stmt → State → Prop where
+  | accept {s ss s'} : PermissiveRun s ss s'
+
+/-- Planted (law `ConcreteSpec.Brand.reset_fresh_refuses`, case `liveOldHandle`, subject `ConcreteSpec.Brand.Run`, mutant `ConcreteSpec.Brand.Evidence.PermissiveRun`). -/
+example : Inv beforeReset ∧ (1 : Nat) ≠ 0 ∧
+    ¬ (¬ PermissiveRun beforeReset [.reset 0 0 1, .use 1 0] afterReset ∧
+       ¬ PermissiveRun beforeReset [.reset 0 0 1, .free 1 0] afterReset) := by
+  exact ⟨beforeResetInv, by decide, fun h => h.1 .accept⟩
+
+/-- A broken ghost relation supporting individual allocations but not their composition. -/
+inductive SingleAllocation : State → List Stmt → State → Prop where
+  | alloc {s a β} : SingleAllocation s [.newAlloc a β] (s.bind a s.env)
+
+/-- Planted (law `ConcreteSpec.Brand.run_append`, case `twoAllocations`, subject `ConcreteSpec.Brand.Run`, mutant `ConcreteSpec.Brand.Evidence.SingleAllocation`). -/
+example : SingleAllocation State.init [.newAlloc 0 0] (State.init.bind 0 []) ∧
+    SingleAllocation (State.init.bind 0 []) [.newAlloc 1 1]
+      ((State.init.bind 0 []).bind 1 (State.init.bind 0 []).env) ∧
+    ¬ SingleAllocation State.init ([.newAlloc 0 0] ++ [.newAlloc 1 1])
+      ((State.init.bind 0 []).bind 1 (State.init.bind 0 []).env) := by
+  exact ⟨.alloc, .alloc, fun h => nomatch h⟩
+
+/-- A broken ghost relation with no operational rules. -/
+inductive MissingRun : State → List Stmt → State → Prop where
+
+/-- Planted (law `ConcreteSpec.Brand.ghost_run`, case `firstAllocation`, subject `ConcreteSpec.Brand.Run`, mutant `ConcreteSpec.Brand.Evidence.MissingRun`). -/
+example : ghost (fun _ => false) 2 0 State.init [.newAlloc 0 0] = .done (State.init.bind 0 []) 0 ∧
+    ¬ MissingRun State.init [.newAlloc 0 0] (State.init.bind 0 []) := by
+  exact ⟨rfl, fun h => nomatch h⟩
+
 end Evidence
 
 end ConcreteSpec.Brand

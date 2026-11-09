@@ -299,6 +299,27 @@ example := @defer_cleanup_releases_nodup ownedAfter stack stack_reg .ret stack r
 example := @defer_cleanup_releases_needs ownedAfter stack stack_reg .ret stack rfl
   [] [desB, relA] desV rfl 2 (by decide)
 
+/-- A broken cleanup relation with no rules for calls or completion. -/
+inductive MissingCleanup (ok : Deferred → Bool) : List Deferred → List Event → Result → Prop where
+
+/-- Planted (law `ConcreteSpec.Cleanup.runCleanup_all_ok`, case `releaseLoan`, subject `ConcreteSpec.Cleanup.RunCleanup`, mutant `ConcreteSpec.Cleanup.Evidence.MissingCleanup`). -/
+example : (∀ d ∈ [desV], (fun _ : Deferred => true) d = true) ∧
+    ¬ (MissingCleanup (fun _ => true) [desV] (expected [desV]) .done ↔
+      expected [desV] = expected [desV] ∧ Result.done = .done) := by
+  refine ⟨by intro _ _; rfl, ?_⟩
+  intro h
+  cases h.mpr ⟨rfl, rfl⟩
+
+/-- Planted (law `ConcreteSpec.Cleanup.runCleanup_trap`, case `secondCallTraps`, subject `ConcreteSpec.Cleanup.RunCleanup`, mutant `ConcreteSpec.Cleanup.Evidence.MissingCleanup`). -/
+example : (∀ x ∈ [desV], (fun d => d != desB) x = true) ∧
+    (desB != desB) = false ∧
+    ¬ (MissingCleanup (fun d => d != desB) ([desV] ++ desB :: [relA])
+      (expected [desV] ++ [.call desB]) .trapped ↔
+      expected [desV] ++ [.call desB] = expected [desV] ++ [.call desB] ∧ Result.trapped = .trapped) := by
+  refine ⟨by decide, by decide, ?_⟩
+  intro h
+  cases h.mpr ⟨rfl, rfl⟩
+
 end Evidence
 
 end ConcreteSpec.Cleanup
