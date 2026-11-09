@@ -1,0 +1,222 @@
+VERDICT-s2-1: PARTLY CONFIRMED
+
+The identity disagreement is real. Association-list lookup compares the entire key (ConcreteSpec/Spec/Basics.lean:27-29), and variable equality includes both fields (ConcreteSpec/Spec/Ident.lean:41-44). Primitive lookup compares only the numeric identity (ConcreteSpec/Spec/Prim.lean:91-103). Assignment uses full-key lookup (ConcreteSpec/Spec/Exec.lean:363-366).
+
+These are not definitionally equivalent lookups. Neither implementation references the other; searches found no correspondence theorem. Primitive evaluation does use its numeric lookup directly (ConcreteSpec/Spec/Prim.lean:97-103).
+
+The coordinator can run these examples after importing the primitive specification:
+
+```lean
+open ConcreteSpec.Core
+
+example :
+    Prim.Term.eval [(⟨"x", 0⟩, 3)] (.var ⟨"y", 0⟩) = .ok 3 := rfl
+
+example :
+    AList.lookup ([(⟨"x", 0⟩, (3 : Int))] : AList Var Int)
+      ⟨"y", 0⟩ = none := rfl
+
+example (P : Exec.Program Prim.operands) :
+    Exec.step P
+      ⟨.exec (.assign ⟨"y", 0⟩ (.lit 4) ⟨0⟩),
+        [(⟨"x", 0⟩, 3)], (), []⟩ = none := rfl
+```
+
+These are proposed reproductions, not locally executed results. Their constructors and configuration fields are defined at ConcreteSpec/Spec/Prim.lean:48-52, ConcreteSpec/Spec/Exec.lean:141-148, ConcreteSpec/Spec/Exec.lean:226-231 and ConcreteSpec/Spec/Ident.lean:66-68.
+
+The finding overstates “weakened laws”: the rehinting theorems accurately prove invariance for the numeric evaluator they name; they do not claim assignment correspondence (ConcreteSpec/Proofs/Prim.lean:86-103). The defect is incompatible identity policies across the adapter boundary.
+
+The obligation-table lookup is an additional confirmed ownership violation: its recursive intrinsic-name search (ConcreteSpec/Spec/Prim.lean:288-295) disregards the explicit instruction to use the library declaration search (ConcreteSpec/Spec/Basics.lean:7-13).
+
+Structural causes: an operand adapter independently selects variable identity, and a declaration table independently implements search. Both are separate from the supplied scope of ISS-0044. **OWNER QUESTION:** resolving variable identity changes program behavior; neither proposed equality policy is authorized by this review.
+
+VERDICT-s2-2: CONFIRMED
+
+The duplicate pair is the ghost driver (ConcreteSpec/Spec/Prim.lean:414-433) and the execution driver (ConcreteSpec/Spec/Exec.lean:848-865). They repeat the same stopping tests, oracle handling, continuation handling and fuel recursion.
+
+Their return types differ: the ghost report additionally retains configuration and fuel (ConcreteSpec/Spec/Prim.lean:407-411), while the ordinary report contains events and ending (ConcreteSpec/Spec/Exec.lean:842-844). Thus they implement the same underlying execution policy, but are not definitionally identical functions.
+
+Neither implementation calls the other. Searches found no report-projection correspondence law. The existing ghost theorem establishes an execution path and event extension, not equality with the ordinary driver (ConcreteSpec/Proofs/Prim.lean:299-304).
+
+The finding is substantively accurate. Structural cause: the execution interface does not expose the residual state needed for sequential composition, so another module copied the driver. Separate from ISS-0044. Sharing the driver while preserving existing results need not change program meaning.
+
+VERDICT-s2-3: NOT CONFIRMED
+
+The cited declarations repeat machine guards, but specify different observations:
+
+- Physical execution accumulates interpreted outputs and uses the ordinary oracle (ConcreteSpec/Spec/Observe.lean:526-570).
+- The adequacy transition tracks issued queries and uses a query-level oracle (ConcreteSpec/Spec/Adequacy.lean:121-129).
+- Its conclusion classifies the ending at a position rather than executing a fuel-indexed computation (ConcreteSpec/Spec/Adequacy.lean:139-158).
+- The executable driver returns a fuel-bounded report (ConcreteSpec/Spec/Exec.lean:848-865).
+
+They are not definitionally the same relation or function. The cited relation definitions do not reference each other, but proved correspondence exists: query erasure agrees with the ordinary driver (ConcreteSpec/Proofs/Adequacy.lean:244-247), ordinary reports have relational execution witnesses (ConcreteSpec/Proofs/Adequacy.lean:619-626), and every ordinary report has a physical execution witness (ConcreteSpec/Proofs/ObserveOutput.lean:34-42).
+
+Project policy expressly permits checked views of authoritative facts (docs/PHILOSOPHY.md:68-73). The finding mistakes independently useful, checked semantics for an unchecked duplicate. No contradiction or weakened law is demonstrated.
+
+VERDICT-s2-4: NOT CONFIRMED
+
+The textual expansions are present:
+
+- Domain helper versus its expansion: ConcreteSpec/Spec/Exec.lean:264 and ConcreteSpec/Spec/Exec.lean:501-502,520.
+- Deferred-statement helper versus its expansions: ConcreteSpec/Spec/Exec.lean:180 and ConcreteSpec/Spec/Exec.lean:583-584,592-593.
+- Cleanup helpers versus their expansions: ConcreteSpec/Spec/Exec.lean:260-261,280-285 and ConcreteSpec/Spec/Exec.lean:587-621.
+
+These expressions are definitionally the same computations. The expanded clauses do not call the helpers, but the independent operational rules are checked against the dispatcher by soundness, completeness and exact correspondence (ConcreteSpec/Proofs/Exec.lean:1878-1884,1895-1908,1919-1928).
+
+Using the helpers could improve maintenance, but this is already a checked view permitted by docs/PHILOSOPHY.md:68-73. The finding does not establish a defect.
+
+VERDICT-s2-5: PARTLY CONFIRMED
+
+Parallel identity models remain: the Slice-1 variable declaration (ConcreteSpec/Spec/Slice1Syntax.lean:85-90) and the foundation declaration (ConcreteSpec/Spec/Ident.lean:35-44) independently declare the same two-field representation. They are distinct nominal types, not definitionally interchangeable. Neither declaration references the other; searches found no correspondence law connecting them.
+
+This supports the integration-debt portion of the finding. The project already identifies the fragments as separate pending unification (ConcreteSpec/README.md:49-50), including retirement of old representation machinery (ConcreteSpec/README.md:122-127).
+
+The context alias itself is not another lookup implementation: its list representation (ConcreteSpec/Spec/Statics.lean:16) is definitionally the association-list representation (ConcreteSpec/Spec/Basics.lean:20), and its typing rules already call the shared lookup (ConcreteSpec/Spec/Statics.lean:21-25,42-46). Replacing that spelling alone would not perform the migration.
+
+Structural cause: pre-foundation fragments remain independently owned during integration. This fits the supplied description of ISS-0044. The broader claim that every differently scoped program or observation type is a duplicate is overstated. Any migration changing accepted programs requires an **OWNER QUESTION**.
+
+VERDICT-s3d-1: NOT CONFIRMED
+
+The exact pair is the hybrid place declaration (ConcreteSpec/Spec/Hybrid.lean:98-101) and the foundation place identifier (ConcreteSpec/Spec/Ident.lean:46-50). Their representations match, but separate structures are not definitionally equal.
+
+The consumer split is real: hybrid storage and ownership use hybrid places (ConcreteSpec/Spec/Hybrid.lean:105-106; ConcreteSpec/Spec/Own.lean:43-44,52-54,64-66), while the primitive footprint uses the foundation identifier (ConcreteSpec/Spec/Prim.lean:168-181).
+
+Neither declaration references the other; searches found no conversion or correspondence law. However, the foundation declaration explicitly describes this as a C9 identity whose relationship to C4 and C5 remains to be supplied, and explicitly declines to choose that mapping (ConcreteSpec/Spec/Ident.lean:46-50). Matching natural-number wrappers does not establish that this mapping must be identity.
+
+The finding therefore overstates a documented integration boundary as a proven duplicate. **OWNER QUESTION:** choosing an alias would decide that unresolved mapping. This review does not authorize it.
+
+VERDICT-s6a-1: CONFIRMED
+
+The three duplicate definitions are:
+
+- Ownership partial-result predicate and instance: ConcreteSpec/Proofs/Own.lean:40-45.
+- Generative partial-result predicate and instance: ConcreteSpec/Proofs/Grant.lean:17-25.
+- Grant partial-result predicate and instance: ConcreteSpec/Proofs/Grant.lean:1009-1017.
+
+All predicates definitionally express the same function: absence satisfies every postcondition; success applies the supplied postcondition. The instances independently implement the corresponding decision procedure.
+
+None references either other definition. Searches found no correspondence theorem linking the three. Unlike domain-specific simulation relations, these declarations have no distinct semantic scope: each abstracts over an arbitrary result type and predicate.
+
+Structural cause: reusable partial-result semantics were introduced separately in each proof namespace. Separate from ISS-0044. Consolidation can preserve every proposition and behavior.
+
+VERDICT-s6a-2: CONFIRMED
+
+The three specialized wrappers independently repeat the same partial-result policy and decision procedure (ConcreteSpec/Proofs/Own.lean:20-37), immediately before its generic implementation (ConcreteSpec/Proofs/Own.lean:40-45).
+
+Each specialized wrapper is definitionally the generic predicate applied to its displayed postcondition. Their postconditions differ appropriately; the duplicated fact is how an optional result satisfies a postcondition. They do not reference the generic implementation, and searches found no explicit correspondence law.
+
+The finding is accurate as a small instance of s6a-1, not a separate semantic failure. Structural cause: specialized wrappers bypass the reusable owner of partial-result semantics. Separate from ISS-0044.
+
+VERDICT-s6a-3: NOT CONFIRMED
+
+The historical consumed-resource predicate is indeed defined in the proof module (ConcreteSpec/Proofs/Grant.lean:1210-1222) and used by the consumption and persistence laws (ConcreteSpec/Proofs/Grant.lean:1244-1245,1254-1256,1267-1268,1280-1282).
+
+Its alleged counterparts are not duplicates: retired loans mean issued identities absent from active loans (ConcreteSpec/Spec/Own.lean:216-218); retired brands mean issued identities absent from binders (ConcreteSpec/Spec/Grant.lean:155-157); dead grants require an existing historical resource marked non-live (ConcreteSpec/Proofs/Grant.lean:1211-1212). These predicates concern different domains and representations.
+
+Grant usability and consumption already have authoritative executable definitions in the specification (ConcreteSpec/Spec/Grant.lean:216-218,225-227). The proof predicate names a property of that state; it does not introduce competing operational behavior. Moving it might improve discovery, but placement alone does not establish a defect.
+
+VERDICT-s6a-4: NOT CONFIRMED
+
+The reported equalities exist:
+
+- Operand mutants: ConcreteSpec/Proofs/Own.lean:4037-4045 and ConcreteSpec/Proofs/Own.lean:4908-4916.
+- Adoption witnesses: ConcreteSpec/Proofs/Own.lean:4421-4422 and ConcreteSpec/Proofs/Own.lean:4724-4725.
+- Held-state aliases: ConcreteSpec/Proofs/Own.lean:5858-5859; the other aliases occur at ConcreteSpec/Proofs/Own.lean:5424,5975.
+
+Within each pair, the resulting definitions are definitionally equal. The operand and adoption copies do not reference their counterparts; no explicit correspondence theorem was found. The held-state aliases already reference the same caller state rather than copying its construction.
+
+These are local mutants and explanatory witnesses, not competing authoritative language facts. The separate held-state names identify different planted failure scenarios (ConcreteSpec/Proofs/Own.lean:5884-5888,5898-5907). Explanatory examples are expressly exempt from the “second definition” prohibition (docs/PHILOSOPHY.md:68-73). Consolidation is optional maintenance, not a demonstrated defect.
+
+VERDICT-s6a-5: NOT CONFIRMED
+
+The three protocol predicates are located as reported (ConcreteSpec/Proofs/Own.lean:5665-5669,5777-5787,5919-5921). Each is parameterized by the operation being tested and packages a distinct protocol claim.
+
+The specification’s finite-simulation predicate serves a different purpose (ConcreteSpec/Spec/Own.lean:535-542). Its placement does not establish a requirement that every theorem-supporting predicate must move into the specification. No duplicate fact, contradiction, weakened obligation or inaccessible operational rule is demonstrated. The audit correctly labels this a preference; it should not become a defect issue.
+
+## OVERLAPS
+
+- s6a-1 and s6a-2 are one defect: repeated optional-result postcondition semantics.
+- s2-1 contains two separable defects: variable-identity disagreement and independently implemented declaration-table search.
+- s2-2 and s2-3 concern execution machinery, but are not one confirmed defect: the former is an unchecked executable copy; the latter comprises differently scoped relations with correspondence proofs.
+- s2-5 is pre-foundation integration debt. It should not absorb duplication introduced wholly within the foundation.
+- No additional supplied findings establish another overlap.
+
+## PROPOSED ISSUES
+
+- Inconsistent variable identity across primitive operands and assignment — covers s2-1 identity portion; structural cause: the operand adapter independently selects key equality; ISS-0044: no; OWNER QUESTION.
+- Obligation-table search bypasses the mandated shared declaration-search mechanism — covers s2-1 table portion; structural cause: intrinsic-name tables lack enforced search ownership; ISS-0044: no.
+- Ghost composition copies the fuel-indexed execution driver — covers s2-2; structural cause: the execution interface omits reusable residual configuration and fuel; ISS-0044: no.
+- Consolidate optional-result postcondition semantics — covers s6a-1 and s6a-2; structural cause: proof namespaces independently own the same generic policy; ISS-0044: no.
+- Retire parallel pre-foundation identity models during integration — covers the confirmed portion of s2-5; structural cause: fragment migration has not eliminated old model ownership; ISS-0044: yes, under its supplied scope.
+
+ISS-0044 classifications above use the supplied issue description. The archive’s ledger contains no such row; its final recorded issue is ISS-0039 (ISSUES.tsv:22).
+
+All actions were read-only and offline. No builds or gates were run. The following read inventory includes files searched with grep, without implying that every file was read in full.
+
+READ: PROMPT.md
+READ: ISSUES.tsv
+READ: docs/PHILOSOPHY.md
+READ: ConcreteSpec/README.md
+READ: ConcreteSpec/Spec/Adequacy.lean
+READ: ConcreteSpec/Spec/Authority.lean
+READ: ConcreteSpec/Spec/Basics.lean
+READ: ConcreteSpec/Spec/Borrow.lean
+READ: ConcreteSpec/Spec/Brand.lean
+READ: ConcreteSpec/Spec/Cleanup.lean
+READ: ConcreteSpec/Spec/Const.lean
+READ: ConcreteSpec/Spec/Examples.lean
+READ: ConcreteSpec/Spec/Exec.lean
+READ: ConcreteSpec/Spec/Frame.lean
+READ: ConcreteSpec/Spec/Grant.lean
+READ: ConcreteSpec/Spec/Hybrid.lean
+READ: ConcreteSpec/Spec/Ident.lean
+READ: ConcreteSpec/Spec/Leak.lean
+READ: ConcreteSpec/Spec/Memory.lean
+READ: ConcreteSpec/Spec/Observation.lean
+READ: ConcreteSpec/Spec/Observe.lean
+READ: ConcreteSpec/Spec/Outcome.lean
+READ: ConcreteSpec/Spec/Own.lean
+READ: ConcreteSpec/Spec/Prim.lean
+READ: ConcreteSpec/Spec/Rep.lean
+READ: ConcreteSpec/Spec/Rules.lean
+READ: ConcreteSpec/Spec/Scalar.lean
+READ: ConcreteSpec/Spec/Slice0.lean
+READ: ConcreteSpec/Spec/Slice1Checker.lean
+READ: ConcreteSpec/Spec/Slice1Ownership.lean
+READ: ConcreteSpec/Spec/Slice1Semantics.lean
+READ: ConcreteSpec/Spec/Slice1Syntax.lean
+READ: ConcreteSpec/Spec/Statics.lean
+READ: ConcreteSpec/Spec/Target.lean
+READ: ConcreteSpec/Proofs/Adequacy.lean
+READ: ConcreteSpec/Proofs/Authority.lean
+READ: ConcreteSpec/Proofs/Basics.lean
+READ: ConcreteSpec/Proofs/Borrow.lean
+READ: ConcreteSpec/Proofs/Brand.lean
+READ: ConcreteSpec/Proofs/Checker.lean
+READ: ConcreteSpec/Proofs/Cleanup.lean
+READ: ConcreteSpec/Proofs/Const.lean
+READ: ConcreteSpec/Proofs/Examples.lean
+READ: ConcreteSpec/Proofs/Exec.lean
+READ: ConcreteSpec/Proofs/Frame.lean
+READ: ConcreteSpec/Proofs/Grant.lean
+READ: ConcreteSpec/Proofs/Hybrid.lean
+READ: ConcreteSpec/Proofs/Ident.lean
+READ: ConcreteSpec/Proofs/Leak.lean
+READ: ConcreteSpec/Proofs/Memory.lean
+READ: ConcreteSpec/Proofs/Observe.lean
+READ: ConcreteSpec/Proofs/Observe2.lean
+READ: ConcreteSpec/Proofs/ObserveEnvironment.lean
+READ: ConcreteSpec/Proofs/ObserveEvidence.lean
+READ: ConcreteSpec/Proofs/ObserveOutput.lean
+READ: ConcreteSpec/Proofs/ObserveReport.lean
+READ: ConcreteSpec/Proofs/ObserveSource.lean
+READ: ConcreteSpec/Proofs/ObserveTransform.lean
+READ: ConcreteSpec/Proofs/Own.lean
+READ: ConcreteSpec/Proofs/Prim.lean
+READ: ConcreteSpec/Proofs/Rep.lean
+READ: ConcreteSpec/Proofs/Scalar.lean
+READ: ConcreteSpec/Proofs/Slice0.lean
+READ: ConcreteSpec/Proofs/Slice1.lean
+
+REPOSITORY: readable
+VERDICT: CHANGES

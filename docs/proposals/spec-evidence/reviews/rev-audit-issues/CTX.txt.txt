@@ -1,0 +1,12 @@
+Review of seven new issue rows ISS-0045 to ISS-0051 in ISSUES.tsv, on branch wip/spec-audit-issues (aa44140a3 -> 3b4d01d6), written by Codex. No Lean changed.
+
+The rows file the confirmed findings of the scoped audit of the integration head aa44140a3. The findings were confirmed by an independent Codex run; that confirmation is quoted in PROMPT.md as CONFIRM-auditA and CONFIRM-auditB. The two semantic disagreements, P2 (ISS-0046, variable identity) and P4 (ISS-0048, startup-refusal state), were checked by actually running Lean examples. The scratch file and its real output are quoted as EXAMPLES.md.
+
+Check, with the best long-term design as the only standard:
+- Each row follows the header's eight columns exactly, and passes the column rules in scripts/checks/issues.sh.
+- Each row states only what the tree and the confirmation show. Every path:line cited in a row is correct at 3b4d01d6, and the structural cause is right.
+- Nothing NOT CONFIRMED in the confirmation is filed, and nothing ISS-0044 owns (the earlier exit-status policy, the Slice-1 Var model) is filed again.
+- For P2 and P4: the executed output really demonstrates the disagreement between the two named definitions.
+  - For P4 in particular, the example compares Observe.launch with the adapter's state projection, not with a call of Observe.launchObservation. Check against ConcreteSpec/Spec/Observe.lean whether the refusal branch of launchObservation returns exactly that projection, so that the run is evidence for the row as stated.
+- Each closure condition is checkable, and P2 and P4 state their owner question in plain words without deciding it.
+- The severities are justified.

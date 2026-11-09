@@ -1,0 +1,19 @@
+Design review of ISS-0045, on branch wip/spec-audit-issues (3b4d01d6 -> 2bef2b5e), written by Codex. No Lean changed.
+
+SCOPE OF THIS REVIEW: only docs/proposals/ISS-0045-SOURCE-COORDINATES.md and the ISSUES.tsv row ISS-0045. The other notes in REVIEW.diff are reviewed separately; do not review them.
+
+The issue was filed from the confirmed audit of the integration head. The confirmation is quoted in PROMPT.md as CONFIRM-auditA and CONFIRM-auditB; the row is in ISSUES.tsv.
+
+The binding rules for the design:
+- Never keep two independent copies of one fact. A second definition is acceptable only as a real abstraction with its own purpose, kept as a derived view with a proved correspondence law.
+- Every new or changed law needs its subject in the conclusion, a closed instance, and a same-type mutant that it refutes with the premises unchanged.
+- No existing law may be weakened.
+- No owner question may be decided: any change in what a program means, or in what the checker or loader accepts, must be listed as a QUESTION.
+
+Check, with the best long-term design as the only standard:
+- whether the duplicate pair and the list of users are complete and correct at 2bef2b5e;
+- whether the RETIRE or VIEW decision is right;
+- whether each law is strong enough to rule out drift. A law about one case is not a link for the whole definition;
+- whether each existing law keeps its strength;
+- whether the migration order is sound;
+- whether the note's claim that no owner question arises is true.

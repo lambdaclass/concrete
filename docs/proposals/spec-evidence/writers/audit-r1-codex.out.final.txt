@@ -1,0 +1,24 @@
+Committed seven rows in `3b4d01d6fee3910436eb7b63e49847f1e734a3d3`. No push, reviewers, or git notes.
+
+Severities:
+
+- ISS-0045: low — coordinate algorithms lack correspondence; no admitted failure demonstrated.
+- ISS-0046: medium — executed variable-identity disagreement.
+- ISS-0047: low — overlapping invariant ownership; loader still rejects duplicate sites.
+- ISS-0048: medium — executed refusal-state disagreement.
+- ISS-0049: low — copied execution driver lacks report correspondence.
+- ISS-0050: low — search convention violation; no wrong result demonstrated.
+- ISS-0051: low — duplicated semantics currently agree definitionally.
+
+Executed outputs verbatim, P2 followed by P4:
+
+```text
+ConcreteSpec.Core.Res.ok 7
+none
+some 0
+1
+```
+
+The conjunction proof needed `constructor <;> rfl`; P4 prints the state projection because `FullObservation` lacks `Repr`. Complete output is saved in `_review/EXAMPLES.out`.
+
+The prescribed Lean build passed. The issue gate passed inside `nix develop`: `PASS=5 FAIL=0`.

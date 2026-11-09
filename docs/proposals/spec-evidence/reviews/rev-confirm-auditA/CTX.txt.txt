@@ -1,0 +1,18 @@
+Confirmation of audit findings, under the coordinator's confirm-every-bug rule. Tree: the integration head aa44140a3 (wip/spec-integration-head).
+
+The scoped agy audit of aa44140a3 checked semantic consistency across the merged parts: one owner per definition, no duplicate facts (in particular no duplicate SiteTable or Span facts), no weakened law, and no contradiction. The findings of scopes s1a s1b s1c are quoted in PROMPT.md as findings.md, numbered within each scope. You are the independent confirmer. Codex did not write that audit.
+
+For EACH finding give a verdict: CONFIRMED, PARTLY CONFIRMED (say which part) or NOT CONFIRMED.
+
+Evidence for each finding:
+- For a duplication: give the exact duplicate pair, with each declaration's file:line. Then say:
+  - whether the two are definitionally the same concept;
+  - whether one references the other anywhere (grep for uses);
+  - whether any proved correspondence law links them.
+- For a contradiction or a weakened law: give the exact definitions on both sides with file:line, and a concrete input on which they differ. Write it as a Lean example the coordinator can run (you cannot build here).
+- Say whether the finding is overstated. A deliberately separate abstraction with a different scope is not a duplicate unless it states the same fact. A suggested refactor of style is not a defect.
+- Several findings overlap across scopes (for example Prim.lookupId, Ghost.drive versus Exec.runFrom, and Span.PathOk). For each overlap, name the findings that are the same defect, so that one issue can be filed for them.
+- For each confirmed finding, state its structural cause, and say whether it falls under the existing ISS-0044 (pre-foundation base models restating Core facts) or is a separate defect.
+- If a fix would change what a program means, or what the checker accepts, mark it OWNER QUESTION. Do not decide it.
+
+Be strict both ways: confirm only what the tree shows, and reject anything the audit inflated.

@@ -1,0 +1,224 @@
+VERDICT-s1a-1: NOT CONFIRMED
+
+The exact pair is the compatibility predicate at ConcreteSpec/Spec/Ident.lean:820-824 and the stronger representation and rendering law at ConcreteSpec/Spec/Ident.lean:736-740 and ConcreteSpec/Proofs/Ident.lean:29-32. They are not equivalent concepts: the former exposes three consequences of the latter. Its documentation explicitly says every structured path satisfies it and that it is never reporting admission. It references the structured path’s renderer; the rendering theorem proves all three conjuncts.
+
+Only the path conjunct is tautological. Source resolution and coordinate conclusions remain substantive at ConcreteSpec/Proofs/Observe2.lean:423-425 and ConcreteSpec/Proofs/ObserveReport.lean:304-307. Removing this compatibility view is a possible cleanup, but the finding does not establish a defective or weakened law.
+
+VERDICT-s1a-2: CONFIRMED
+
+The duplicate calculation pairs are:
+
+- Byte line and column calculations: ConcreteSpec/Spec/Ident.lean:695-702 versus the character scan and byte-length calculation at ConcreteSpec/Spec/Observe.lean:278-304.
+- Source-coordinate correspondence: ConcreteSpec/Spec/Ident.lean:812-814 versus the separate column predicate at ConcreteSpec/Spec/Observe.lean:306-307.
+
+These compute the same intended coordinates on corresponding UTF-8 prefixes, but are not definitionally identical: their inputs and algorithms differ. The observation constructors do not reference the byte-coordinate definitions. Searches found no theorem connecting those constructors to byte-derived location validity. The independent newline and tab laws at ConcreteSpec/Proofs/Ident.lean:1265-1297 do not provide that missing bridge.
+
+The finding overstates the duplication of the span type: the observation constructors already return the shared span representation, rather than defining another one.
+
+Structural cause: coordinate construction predates the shared byte model and remains independently maintained. Separate foundation-integration defect; it does not match the supplied description of ISS-0044.
+
+VERDICT-s1a-3: CONFIRMED
+
+The conflicting lookup pair is whole-record equality at ConcreteSpec/Spec/Basics.lean:27-29, used by assignment at ConcreteSpec/Spec/Exec.lean:364-366, versus numeric-only lookup at ConcreteSpec/Spec/Prim.lean:91-101. Variable equality includes both fields at ConcreteSpec/Spec/Ident.lean:41-44.
+
+The numeric lookup does not delegate to the common lookup. No correspondence theorem makes these different key relations equivalent. Consistent rehinting is explicitly required for C1 at ConcreteSpec/Spec/Ident.lean:37-40; the primitive rehint theorem establishes only primitive-term invariance at ConcreteSpec/Proofs/Prim.lean:98-121.
+
+Coordinator example, unexecuted:
+
+```lean
+open ConcreteSpec.Core
+
+example :
+    Prim.Term.eval [(⟨"binder", 0⟩, 7)] (.var ⟨"occurrence", 0⟩) = .ok 7 ∧
+    AList.lookup ([(⟨"binder", 0⟩, 7)] : AList Var Int)
+      ⟨"occurrence", 0⟩ = none := by
+  decide
+```
+
+This demonstrates the inconsistent raw-model behavior. The audit does not establish that elaboration produces such inconsistent hints.
+
+Structural cause: presentation-bearing keys and semantic numeric keys coexist without one identity contract. Separate defect. OWNER QUESTION: choosing the identity policy or changing evaluation behavior requires an owner decision.
+
+VERDICT-s1a-4: NOT CONFIRMED
+
+The exact pair is the semantic premise identity at ConcreteSpec/Spec/Ident.lean:571-574 and its versioned evidence record at ConcreteSpec/Spec/Ident.lean:851-856. They share two fields but are not the same complete concept: the evidence record additionally carries a version and participates in encoding at ConcreteSpec/Spec/Ident.lean:867-870.
+
+Searches found no identity projection or correspondence theorem between the records. Nevertheless, neither declaration states a competing identity law. The schema deliberately exposes named fields, whose interface significance is documented at ConcreteSpec/Spec/Ident.lean:28-30. A projection might be useful, but shared fields alone do not establish a defect.
+
+VERDICT-s1b-1: PARTLY CONFIRMED
+
+The unlinked coordinate calculations are confirmed as s1a-2. The additional invalid-candidate example is also real:
+
+```lean
+open ConcreteSpec.Core
+
+example :
+    ¬ (Observe.sourceSpan mainSourcePath 2 (by decide) "").LocationOk
+      ([10] : SourceText) := by
+  decide
+```
+
+The constructor stores offset zero and line two at ConcreteSpec/Spec/Observe.lean:283-285; offset zero has line one under ConcreteSpec/Spec/Ident.lean:695-696.
+
+However, this is explicitly a candidate constructor with prefix-relative offsets, not a guarantee of whole-file validity: ConcreteSpec/Spec/Observe.lean:280-282. The loader checks the candidate against source bytes at ConcreteSpec/Spec/Observe.lean:220-224. Consequently, the claim that this alone violates reporting admission is overstated. Nor does every candidate with a line greater than one necessarily fail against every possible source.
+
+Structural cause and issue classification: same as s1a-2. OWNER QUESTION only if replacing this candidate API changes accepted inputs or observable diagnostics.
+
+VERDICT-s1b-2: PARTLY CONFIRMED
+
+The pair is lookup-visible location validity at ConcreteSpec/Spec/Observe.lean:167-169 and whole-input realization at ConcreteSpec/Spec/Observe.lean:251-256. They overlap in coordinate correspondence but are not equivalent concepts: realization additionally specifies exact input preservation and uniqueness.
+
+Realization does not reference validity directly. There is nevertheless a proved connection through admission: loader uniqueness is established at ConcreteSpec/Proofs/Observe2.lean:305-315, and admitted adapters obtain location validity at ConcreteSpec/Proofs/Observe2.lean:1075-1082. The claim of wholly unlinked predicates is therefore overstated.
+
+The shadowing weakness is real. A concrete lookup witness is:
+
+```lean
+open ConcreteSpec.Core
+
+example :
+    let good := Observe.sourceSpan mainSourcePath 1 (by decide) ""
+    let bad := Observe.sourceSpan mainSourcePath 2 (by decide) ""
+    AList.lookup [(SiteId.mk 0, good), (SiteId.mk 0, bad)]
+      (SiteId.mk 0) = some good ∧
+    good.LocationOk [] ∧ ¬ bad.LocationOk [] := by
+  decide
+```
+
+The validity predicate observes only that first entry. The loader independently rejects the duplicate key at ConcreteSpec/Spec/Observe.lean:241-244. Thus this is an invariant-ownership gap, not evidence that admitted projects accept the malformed table.
+
+Structural cause: lookup validity and whole-table admission maintain overlapping obligations separately. Separate foundation-integration defect, outside the supplied ISS-0044 scope.
+
+VERDICT-s1b-3: NOT CONFIRMED
+
+Same compatibility-view claim as s1a-1. The predicate and its stronger owner are ConcreteSpec/Spec/Ident.lean:820-824 and ConcreteSpec/Proofs/Ident.lean:29-32. The loader theorem retains actual byte correspondence at ConcreteSpec/Proofs/Observe2.lean:423-425; source-trap observations retain source membership and byte-derived decoding at ConcreteSpec/Proofs/Observe2.lean:1550-1557.
+
+An unconditional syntactic consequence does not make these source-binding conclusions vacuous.
+
+VERDICT-s1b-4: PARTLY CONFIRMED
+
+The conflicting refusal-state pair is ConcreteSpec/Spec/Observe.lean:350-351 versus ConcreteSpec/Spec/Observe.lean:639-647. The first selects the signature’s initial state; the second selects the supplied store projection. Neither the adapter fields nor its well-formedness obligations equate them: ConcreteSpec/Spec/Observe.lean:454-461 and ConcreteSpec/Spec/Observe.lean:576-589.
+
+A concrete state-selection witness, using the existing signature whose initial state is zero at ConcreteSpec/Spec/Observe.lean:711-717:
+
+```lean
+open ConcreteSpec.Core
+
+example :
+    Observe.launch (S := Observe.Demo.signature) false
+      (fun _ => .finiteDivergence []) =
+        .terminal ⟨[], .startupRefused, 0⟩ ∧
+    (Observe.Environment.adapter Observe.Demo.signature).state 1 = 1 := by
+  rfl
+```
+
+Thus the two refusal branches select different states for store one. The launcher does not delegate to the generic launch operation, and searches found no initial-state correspondence law.
+
+The duplicated status policy is also real: ConcreteSpec/Spec/Observation.lean:47-50 versus ConcreteSpec/Spec/Observe.lean:322-325. These express the same exit-status fact without delegation or a translation theorem.
+
+The frame abstraction is overstated: ConcreteSpec/Spec/Frame.lean:868-875 models stack admission and encodes refusal 125; it does not define trap status 134 or duplicate the complete terminal model.
+
+Structural causes: unconstrained launch-state representations, and an unmigrated earlier status model. The former is separate; the latter fits the supplied ISS-0044 description. OWNER QUESTION: resolve which state refusal must expose.
+
+VERDICT-s1b-5: NOT CONFIRMED
+
+The physical relation at ConcreteSpec/Spec/Observe.lean:526-569 and evaluator at ConcreteSpec/Spec/Exec.lean:848-866 share stopping conditions, but are deliberately different abstractions: one records physical outputs across a finite execution; the other selects a report for a particular fuel budget.
+
+The relation directly references machine finality, stepping, contracts and continuations. A proved evaluator-to-relation correspondence exists at ConcreteSpec/Proofs/ObserveOutput.lean:37-76, and physical-output accumulation is proved at ConcreteSpec/Proofs/ObserveOutput.lean:80-96.
+
+Budget exhaustion at any non-final point is appropriate for this budget-erased relation. The adequacy conclusion uses the same condition at ConcreteSpec/Spec/Adequacy.lean:157-158; the evaluator returns that ending with zero fuel at ConcreteSpec/Spec/Exec.lean:850-852. No contradictory input is established. Independent relational semantics with an explicit correspondence proof is not an implementation shortcut.
+
+VERDICT-s1b-6: NOT CONFIRMED
+
+The label pair is ConcreteSpec/Spec/Observe.lean:356-358 and ConcreteSpec/Spec/Exec.lean:415-417. These have the same generic shape but different event domains; the adapter may expand one C1 event into several external events at ConcreteSpec/Spec/Observe.lean:449-455. They are not definitionally the same semantic label.
+
+The terminal construction pair at ConcreteSpec/Spec/Observe.lean:600-602 and ConcreteSpec/Spec/Observe.lean:618-628 already shares terminal classification through the adapter at ConcreteSpec/Spec/Observe.lean:593-596. Factoring the remaining record construction is a style refactor, not an established defect.
+
+The alleged duplicate infinite relation also has different scope: ConcreteSpec/Spec/Adequacy.lean:302-306 relates machine-position histories to an external stream, whereas ConcreteSpec/Spec/Observe.lean:407-413 compares two external streams. A correspondence theorem explicitly links them at ConcreteSpec/Proofs/Adequacy.lean:1154-1158.
+
+The requested finite and blocked bridges may improve completeness, but the finding supplies no violated obligation that makes their absence a defect.
+
+VERDICT-s1b-7: NOT CONFIRMED
+
+The exact repeated expansion is ConcreteSpec/Spec/Observe.lean:672-674 versus ConcreteSpec/Spec/Observe.lean:688-689, composed with ConcreteSpec/Spec/Observe.lean:469-470. These are definitionally the same history projection after unfolding.
+
+Neither definition delegates to the other, but their correspondence is already used by unfolding in ConcreteSpec/Proofs/ObserveEnvironment.lean:59-62. There is no divergent policy or weakened law. Sharing the expression is a reasonable refactor; the audit inflates it into a defect.
+
+VERDICT-s1c-1: CONFIRMED
+
+The duplicate status pair is ConcreteSpec/Spec/Observation.lean:47-50 and ConcreteSpec/Spec/Observe.lean:322-325. The observation types differ in scope and information content at ConcreteSpec/Spec/Observation.lean:37-44 and ConcreteSpec/Spec/Observe.lean:311-336, but their startup, exit and trap status policy is the same fact.
+
+The earlier implementation neither delegates to the newer status definition nor has a translation correspondence theorem. It remains imported at ConcreteSpec/Spec.lean:15. Its omitted location and trap-line information is explicitly acknowledged at ConcreteSpec/Spec/Observation.lean:28-30, so omission alone is not a newly discovered contradiction.
+
+Structural cause: the pre-foundation observation model remains an independent owner of process status policy. Fits the supplied ISS-0044 description. OWNER QUESTION if migration changes observable behavior rather than preserving the old model through projection.
+
+VERDICT-s1c-2: CONFIRMED
+
+The duplicate loop pair is ConcreteSpec/Spec/Prim.lean:414-432 and ConcreteSpec/Spec/Exec.lean:848-866; their report fields overlap at ConcreteSpec/Spec/Prim.lean:407-411 and ConcreteSpec/Spec/Exec.lean:842-844.
+
+They implement the same fuel, oracle, contract and continuation dispatch, with the ghost driver additionally retaining configuration and fuel. They are not definitionally identical functions. The ghost driver calls the shared step operation but does not call the evaluator. Searches found no evaluator-equality bridge.
+
+The finding should acknowledge existing step soundness at ConcreteSpec/Proofs/Prim.lean:299-304. That theorem connects the retained configuration to machine steps, but does not establish equality of evaluator endings and event histories for the same budget.
+
+Structural cause: the evaluator interface omits continuation metadata, prompting a copied driver rather than one shared implementation. Separate foundation-integration defect, outside the supplied ISS-0044 scope.
+
+VERDICT-s1c-3: CONFIRMED
+
+Same inconsistent lookup defect as s1a-3, with the same runnable witness above. The custom recursion at ConcreteSpec/Spec/Prim.lean:91-93 also violates the explicit common-lookup ownership rule at ConcreteSpec/Spec/Basics.lean:7-13.
+
+The arbitrary rehint function is supported by numeric lookup at ConcreteSpec/Proofs/Prim.lean:101-107. However, saying whole-record lookup inherently requires a function on numeric identities is overstated: alternative constraints, such as injective key transformations, can preserve lookup too.
+
+Structural cause and classification: same as s1a-3. OWNER QUESTION: semantic identity and any resulting evaluation change.
+
+VERDICT-s1c-4: CONFIRMED
+
+The manual search is ConcreteSpec/Spec/Prim.lean:292-295. The architectural rule expressly requires intrinsically named declaration tables to use the standard list search at ConcreteSpec/Spec/Basics.lean:9-13.
+
+The recursion implements the same first-matching-identity search, without delegation. No separate correspondence law was found. This is a confirmed ownership-rule shortcut, not a demonstrated wrong-result bug.
+
+Structural cause: a declaration table bypasses the mandated common search pattern. Separate tooling/spec-maintenance defect, outside the supplied ISS-0044 scope.
+
+## OVERLAPS
+
+- s1a-2 and s1b-1: one unlinked source-coordinate pipeline.
+- s1a-3 and s1c-3: one inconsistent local-identity lookup policy.
+- s1a-1 and s1b-3: one rejected compatibility-predicate allegation.
+- The earlier observation/status portion of s1b-4 and s1c-1: one unmigrated status-policy owner.
+- The refusal-state discrepancy in s1b-4 is separate from that migration.
+- s1c-2 and s1b-5 concern different execution abstractions; they are not one defect.
+
+## PROPOSED ISSUES
+
+ISS-0044 is not present in the archived issue ledger; classifications below use its supplied scope description.
+
+- Unify source-coordinate construction with the byte model — s1a-2, confirmed portion of s1b-1; cause: parallel coordinate algorithms without a correspondence law; under ISS-0044: no.
+- Resolve numeric versus presentation-bearing local identity — s1a-3, s1c-3; cause: incompatible environment key relations; under ISS-0044: no; OWNER QUESTION.
+- Centralize shared site-table correspondence obligations — confirmed portion of s1b-2; cause: independently maintained lookup and whole-table invariants; under ISS-0044: no.
+- Specify and connect refusal-state initialization — state portion of s1b-4; cause: unconstrained signature state and store projection; under ISS-0044: no; OWNER QUESTION.
+- Migrate earlier observation status policy to Core — status portion of s1b-4, s1c-1; cause: retained pre-foundation policy implementation; under ISS-0044: yes.
+- Give ghost execution one authoritative fuel driver — s1c-2; cause: missing retained metadata leads to copied dispatch; under ISS-0044: no.
+- Use the prescribed declaration-table search — s1c-4; cause: bypassed shared search convention; under ISS-0044: no.
+
+READ: PROMPT.md
+READ: ISSUES.tsv
+READ: ConcreteSpec/Spec.lean
+READ: ConcreteSpec/Spec/Basics.lean
+READ: ConcreteSpec/Spec/Ident.lean
+READ: ConcreteSpec/Spec/Exec.lean
+READ: ConcreteSpec/Spec/Observe.lean
+READ: ConcreteSpec/Spec/Prim.lean
+READ: ConcreteSpec/Spec/Adequacy.lean
+READ: ConcreteSpec/Spec/Observation.lean
+READ: ConcreteSpec/Spec/Frame.lean
+READ: ConcreteSpec/Spec/Outcome.lean
+READ: ConcreteSpec/Spec/Slice1Semantics.lean
+READ: ConcreteSpec/Proofs/Ident.lean
+READ: ConcreteSpec/Proofs/Prim.lean
+READ: ConcreteSpec/Proofs/Observe2.lean
+READ: ConcreteSpec/Proofs/ObserveReport.lean
+READ: ConcreteSpec/Proofs/ObserveOutput.lean
+READ: ConcreteSpec/Proofs/ObserveSource.lean
+READ: ConcreteSpec/Proofs/ObserveEnvironment.lean
+READ: ConcreteSpec/Proofs/Adequacy.lean
+READ: ConcreteSpec/Proofs/ObserveEvidence.lean
+REPOSITORY: readable
+VERDICT: CHANGES

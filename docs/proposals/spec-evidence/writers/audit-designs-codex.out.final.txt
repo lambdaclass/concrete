@@ -1,0 +1,11 @@
+Committed `2bef2b5e20dffb5b277f9451be6fef969cf6c898`.
+
+- ISS-0045: VIEW — Ident owns coordinate arithmetic.
+- ISS-0047: VIEW — one whole-table validity predicate; uniqueness stays separate.
+- ISS-0049: VIEW — one Exec driver supplies ordinary and ghost reports.
+- ISS-0050: VIEW — obligation lookup delegates to List.find?.
+- ISS-0051: RETIRE generic copies; retain specialized postcondition views.
+
+QUESTIONS: No owner decisions required by these designs. Changes to admission, diagnostics, duplicate handling or execution policy remain separate owner questions.
+
+Issue checks and whitespace checks passed. Working tree clean. No implementation, reviewers, git notes or push.
