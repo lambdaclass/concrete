@@ -1,0 +1,9 @@
+C2 (branch wip/spec-c2-audit) round 8, written by Codex. Base a5c27d6a6 (round 7 with its regenerated axioms golden; seven gates pass) -> head 67cb19abd.
+
+The round records approvals and nothing else. It replaces `(approved: PENDING)` with `(approved: REV-C2-agy-59d4c501d)` on the six Helper declarations that an independent, contract-valid agy review of round 7 approved. That review is quoted in PROMPT.md.
+
+Check:
+- every replaced reference sits on a declaration that review approves, matched by fully qualified name and tag line;
+- no other text changed;
+- no PENDING remains in ConcreteSpec/Proofs/Const.lean or ConcreteSpec/Proofs/Scalar.lean.
+Also re-audit every Law of ConcreteSpec/Proofs/Const.lean under the final convention and report any defect.

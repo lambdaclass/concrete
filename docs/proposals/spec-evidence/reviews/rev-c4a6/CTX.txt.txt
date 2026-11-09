@@ -1,0 +1,9 @@
+C4 (branch wip/spec-c4-audit) round 6, written by Codex. Base 9d78b23cc (seven gates pass) -> head f6f112462.
+
+The round records exactly one approval. It replaces `(approved: PENDING)` with `(approved: APPR-C4-agy-951060caa)` on the Helper (inversion) tag of ConcreteSpec.Core.Mem.fromExposed_sound_inv. A contract-valid agy approval review of 314a4f068..951060caa approved that declaration; that review is quoted in PROMPT.md.
+
+Check:
+- the replaced reference sits on that declaration's tag;
+- no other text changed;
+- no PENDING remains in the C4 files (ConcreteSpec/Spec/Memory.lean, ConcreteSpec/Proofs/Memory.lean).
+Also re-audit every Law of ConcreteSpec/Proofs/Memory.lean under the final convention and report any defect.

@@ -1,0 +1,15 @@
+C5 (branch wip/spec-c5) round 9, written by agy. Base 902ce88a (seven gates pass) -> head a76584c6. Files: ConcreteSpec/Proofs/Grant.lean and ConcreteSpec/Proofs/Own.lean.
+
+The round acts on a contract-valid Codex approval review of 902ce88a (APPR-C5-codex-902ce88a, quoted in PROMPT.md together with the round brief). The writer reports four things:
+- (1) it recorded the 132 APPROVE rows;
+- (2) it resolved the 64 REJECT rows (finding F1) by folding 60 helpers into the public Laws that used them and promoting 4 to Laws with Instance and Planted evidence;
+- (3) no PENDING is left;
+- (4) it changed the evidence so that the N2 gate passes.
+
+Check, with the best long-term design as the only standard:
+- Approvals. Every `(approved: APPR-C5-codex-902ce88a)` must sit on a declaration that the approval review APPROVES, matched by fully qualified name. No approval may sit on a declaration the review rejected, or on a declaration whose statement or proof changed materially since the review.
+- Folding. For each folded helper, say whether folding it is the right long-term structure, or whether it should be a Law or stay a separately approved Helper. Check that no public Law lost strength, coverage or evidence through the folding.
+- The 4 promoted Laws: their tags, Instances and Planted examples under the final convention.
+- Item (4) is the critical point. The brief says the instance-false-discharge findings on `by decide`/simp premises are a confirmed gate defect (the gate unfolds core-library proofs and flags False.rec or empty matchers in their branches), and that the evidence must NOT be reshaped around it. The writer instead added custom `Decidable` instances (decidableBAllSafe, decidableBExSafe, decidableMemSafe, decidableIsPrefixSafe, decidablePairwiseSafe, decidableNodupSafe), explicit Eq.rec/Decidable.rec eliminators in the erasure witnesses, and reducible conclusion predicates for 5 erasure laws. Judge whether each of these is a better long-term structure in its own right, or a workaround of the gate defect (a REAL DEFECT, to be reverted). For the reducible conclusion predicates, also check that the laws' statements keep their meaning.
+- Vacuity of every Law in the two files, with a verdict and witness each.
+- For each Helper or Representation lemma whose approval this round set or kept, an explicit APPROVE or REJECT by fully qualified name.

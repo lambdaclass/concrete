@@ -1,0 +1,291 @@
+Changes required: the contract restructuring is sound, but the patch works around a confirmed gate defect and carries forward approvals onto materially changed proofs.
+
+No files were modified. No network, git writes, builds or gates were run.
+
+**Findings**
+
+- **ConcreteSpec/Proofs/Grant.lean:424-500; ConcreteSpec/Proofs/Grant.lean:1437-1447; ConcreteSpec/Proofs/Own.lean:3704-3830 — major — REAL DEFECT.** The custom decision procedures duplicate standard list decision procedures and install high-priority instances to change the proof terms inspected by the gate. Existing decision instances already cover these predicates, for example ConcreteSpec/Spec/Grant.lean:45-51 and ConcreteSpec/Spec/Own.lean:107-132. This adds maintenance burden and changes downstream instance selection without improving the contract. **Concrete fix:** remove these replacements and their instance overrides; retain ordinary decidable premises. Repair the gate to distinguish contradiction elimination in unreachable branches of a decision procedure from discharge of an actually false closed Instance premise.
+
+- **ConcreteSpec/Proofs/Own.lean:3844-3906; ConcreteSpec/Proofs/Own.lean:4320-4378 — major — REAL DEFECT.** Manual equality and decision recursors replace ordinary constructor inversion specifically around impossible branches. In particular, the helper at ConcreteSpec/Proofs/Own.lean:3888-3906 now derives an arbitrary proposition instead of concluding false. This disguises the same logical elimination rather than addressing the gate defect. The retained approval references also no longer describe the reviewed proof bodies; the additional changed acceptance proofs are at ConcreteSpec/Proofs/Own.lean:3921-3949 and ConcreteSpec/Proofs/Own.lean:4591-4609. **Concrete fix:** restore the standard inversion proofs and original helper statement, remove the gate-oriented motive definitions, and repair proof inspection in the gate. Any materially changed proof retained afterward needs fresh approval.
+
+- **ConcreteSpec/Proofs/Own.lean:2226-2237; ConcreteSpec/Proofs/Own.lean:2272-2282; ConcreteSpec/Proofs/Own.lean:2427-2444; ConcreteSpec/Proofs/Own.lean:2721-2744; ConcreteSpec/Proofs/Own.lean:2918-2940 — major — REAL DEFECT.** The five new reducible conclusion predicates move the same matches behind definitions as part of reshaping evidence around proof inspection. They preserve the mathematical statements, but provide no independent contract strengthening or reusable abstraction that justifies this workaround. **Concrete fix:** restore the direct conclusions and matching evidence while fixing the gate. Preserve the folded substantive proofs.
+
+These findings require no language-rule or owner-decision change.
+
+**Folding and promotions**
+
+Folding the 60 rejected internal proofs into the corresponding public Laws is the right structure. It puts the substantive obligation under one classification and its own mutation evidence.
+
+For every removed declaration ending in _result, the destination is the Law obtained by removing that suffix. This mapping covers each such folded declaration individually. Its fixed-output premise becomes case analysis inside the operation-result Law; its substantive postcondition remains present. The Law audit below supplies the destination and evidence citations.
+
+The remaining folded declarations have these dispositions:
+
+| Folded declaration | Judgment and destination |
+|---|---|
+| ConcreteSpec.Core.Generative.fresh_wf | Correct: allocation preservation belongs inside the fresh preservation Law, ConcreteSpec/Proofs/Grant.lean:27-56. |
+| ConcreteSpec.Core.Grants.rights_never_grow_steps | Correct: induction belongs inside the finite-execution attenuation Law, ConcreteSpec/Proofs/Grant.lean:1227-1249. |
+| ConcreteSpec.Core.Grants.consumed_never_revives_steps | Correct: induction belongs inside the finite non-revival Law, ConcreteSpec/Proofs/Grant.lean:1354-1397. |
+| ConcreteSpec.Core.Own.insert_loan | Correct: insertion preservation is incorporated into borrowing and reborrowing contracts, ConcreteSpec/Proofs/Own.lean:182-314. |
+| ConcreteSpec.Core.Own.bind_params_progress | Correct: changing-state parameter induction belongs inside entry progress, ConcreteSpec/Proofs/Own.lean:895-928. |
+| ConcreteSpec.Core.Own.stepExit_erasure_proj | Correct: exit simulation belongs inside machine-step simulation, ConcreteSpec/Proofs/Own.lean:2437-2719. |
+| ConcreteSpec.Core.Own.evalArgs_stuck_of_permitted_inv | Correct: argument-list induction belongs inside accepted stuck equivalence, ConcreteSpec/Proofs/Own.lean:3163-3441. |
+| ConcreteSpec.Core.Own.stepExit_none_of_permitted_inv | Correct: exit refusal belongs inside accepted stuck equivalence, ConcreteSpec/Proofs/Own.lean:3163-3441. |
+| ConcreteSpec.Core.Own.step_none_of_permitted_inv | Correct: whole-step refusal belongs inside accepted stuck equivalence, ConcreteSpec/Proofs/Own.lean:3163-3441. |
+| ConcreteSpec.Core.Own.request_none_of_permitted_inv | Correct: continuation refusal belongs inside accepted run simulation, ConcreteSpec/Proofs/Own.lean:3443-3681. |
+
+The four promotions are appropriate independent Laws:
+
+| Fully qualified Law | Judgment | Instance and Planted witness |
+|---|---|---|
+| ConcreteSpec.Core.Generative.lifetime_retired_step | PASS: single-transition retirement preservation, ConcreteSpec/Proofs/Grant.lean:796-855. | ConcreteSpec/Proofs/Grant.lean:913-919 |
+| ConcreteSpec.Core.Generative.lifetime_wf | PASS: finite lifetime preservation, ConcreteSpec/Proofs/Grant.lean:970-1002. | ConcreteSpec/Proofs/Grant.lean:1054-1060 |
+| ConcreteSpec.Core.Grants.issue_keeps_dead | PASS: fresh issuance preserves historical consumption, ConcreteSpec/Proofs/Grant.lean:1318-1326. | ConcreteSpec/Proofs/Grant.lean:1547-1553 |
+| ConcreteSpec.Core.Own.loanSequence_retired_step | PASS: single loan-action retirement preservation, ConcreteSpec/Proofs/Own.lean:6240-6288. | ConcreteSpec/Proofs/Own.lean:6327-6336 |
+
+**Vacuity audit**
+
+All 74 Laws have one classification and appropriate semantic subjects. None is a projection Law. Each cited evidence range contains a closed full application and its corresponding Planted proposition at the same arguments. Hypotheses are retained, with subject substitution wherever applicable. The two deferred-lifetime cases are audited separately.
+
+PASS here means the source-level vacuity convention is satisfied; it does not approve the gate workarounds above or assert successful elaboration.
+
+For the following table, every name is in ConcreteSpec.Core.Generative.
+
+| Law | Verdict | Instance and Planted witness |
+|---|---|---|
+| fresh_preserves | PASS | ConcreteSpec/Proofs/Grant.lean:574-580 |
+| depend_preserves | PASS | ConcreteSpec/Proofs/Grant.lean:582-588 |
+| consume_preserves | PASS | ConcreteSpec/Proofs/Grant.lean:590-596 |
+| release_preserves | PASS | ConcreteSpec/Proofs/Grant.lean:598-604 |
+| reset_preserves | PASS | ConcreteSpec/Proofs/Grant.lean:606-612 |
+| endScope_preserves | PASS | ConcreteSpec/Proofs/Grant.lean:614-620 |
+| allocations_have_live_allocator | PASS | ConcreteSpec/Proofs/Grant.lean:718-731 |
+| run_erasure | PASS | ConcreteSpec/Proofs/Grant.lean:769-777 |
+| lifetime_retired_step | PASS | ConcreteSpec/Proofs/Grant.lean:913-919 |
+| retired_never_revives | PASS | ConcreteSpec/Proofs/Grant.lean:921-927 |
+| fresh_nominal | PASS | ConcreteSpec/Proofs/Grant.lean:929-949 |
+| lifetime_wf | PASS | ConcreteSpec/Proofs/Grant.lean:1054-1060 |
+| scope_exit_lifetime | PASS | ConcreteSpec/Proofs/Grant.lean:1062-1073 |
+
+For the following table, every name is in ConcreteSpec.Core.Grants.
+
+| Law | Verdict | Instance and Planted witness |
+|---|---|---|
+| narrow_bounded | PASS | ConcreteSpec/Proofs/Grant.lean:1555-1561 |
+| acquire_bounded | PASS | ConcreteSpec/Proofs/Grant.lean:1563-1570 |
+| close_bounded | PASS | ConcreteSpec/Proofs/Grant.lean:1572-1580 |
+| rights_never_grow | PASS | ConcreteSpec/Proofs/Grant.lean:1582-1588 |
+| narrow_fresh | PASS | ConcreteSpec/Proofs/Grant.lean:1590-1596 |
+| acquire_fresh | PASS | ConcreteSpec/Proofs/Grant.lean:1598-1604 |
+| close_fresh | PASS | ConcreteSpec/Proofs/Grant.lean:1606-1615 |
+| issue_keeps_dead | PASS | ConcreteSpec/Proofs/Grant.lean:1547-1553 |
+| close_consumes | PASS | ConcreteSpec/Proofs/Grant.lean:1624-1631 |
+| narrow_consumes | PASS | ConcreteSpec/Proofs/Grant.lean:1633-1640 |
+| consumed_never_revives | PASS | ConcreteSpec/Proofs/Grant.lean:1642-1652 |
+| acquire_keeps_parent | PASS | ConcreteSpec/Proofs/Grant.lean:1671-1680 |
+| narrow_permissions | PASS | ConcreteSpec/Proofs/Grant.lean:1704-1718 |
+
+For the following table, every name is in ConcreteSpec.Core.Own.
+
+| Law | Verdict | Instance and Planted witness |
+|---|---|---|
+| move_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4808-4813 |
+| reinitialize_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4815-4820 |
+| borrow_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4822-4827 |
+| reborrowTo_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4829-4834 |
+| reborrow_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4836-4841 |
+| endLoan_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4843-4848 |
+| bind_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4864-4869 |
+| drop_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4871-4876 |
+| enter_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4878-4883 |
+| endLocals_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4885-4890 |
+| leave_no_activation_slot | PASS | ConcreteSpec/Proofs/Own.lean:4997-5002 |
+| leave_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4892-4897 |
+| enterDown_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4899-4904 |
+| life_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4906-4911 |
+| enter_progress | PASS | ConcreteSpec/Proofs/Own.lean:5091-5099 |
+| adoptDown_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4913-4918 |
+| passDown_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4920-4925 |
+| passDown_call_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4927-4932 |
+| callLife_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4934-4939 |
+| callLife_call_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4941-4946 |
+| leave_no_local_loan | PASS | ConcreteSpec/Proofs/Own.lean:4988-4993 |
+| passOwner_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4948-4953 |
+| passOwner_call_preserves | PASS | ConcreteSpec/Proofs/Own.lean:4955-4960 |
+| passOwner_freezes | PASS | ConcreteSpec/Proofs/Own.lean:5006-5011 |
+| leave_retains_caller | PASS | ConcreteSpec/Proofs/Own.lean:5015-5020 |
+| leave_no_activation_loan | PASS | ConcreteSpec/Proofs/Own.lean:5024-5029 |
+| directOwner_roundtrip | PASS | ConcreteSpec/Proofs/Own.lean:5112-5136 |
+| reborrowTo_live | PASS | ConcreteSpec/Proofs/Own.lean:5033-5038 |
+| adoptDown_live | PASS | ConcreteSpec/Proofs/Own.lean:5042-5047 |
+| leave_live | PASS | ConcreteSpec/Proofs/Own.lean:5051-5056 |
+| evalArgs_ok_erasure | PASS | ConcreteSpec/Proofs/Own.lean:5165-5174 |
+| evalArgs_trap_erasure | PASS | ConcreteSpec/Proofs/Own.lean:5176-5185 |
+| step_next_erasure | PASS | ConcreteSpec/Proofs/Own.lean:4489-4498 |
+| step_request_erasure | PASS | ConcreteSpec/Proofs/Own.lean:4500-4509 |
+| Step_erasure | PASS | ConcreteSpec/Proofs/Own.lean:4511-4522 |
+| Steps_erasure | PASS | ConcreteSpec/Proofs/Own.lean:4541-4565 |
+| runFrom_erasure | PASS | ConcreteSpec/Proofs/Own.lean:4567-4577 |
+| run_erasure | PASS | ConcreteSpec/Proofs/Own.lean:4579-4589 |
+| step_stuck_iff_of_accepted | PASS | ConcreteSpec/Proofs/Own.lean:4611-4621 |
+| runFrom_erasure_of_accepted | PASS | ConcreteSpec/Proofs/Own.lean:4623-4634 |
+| run_stuck_iff_of_accepted | PASS | ConcreteSpec/Proofs/Own.lean:4636-4647 |
+| loan_has_owned_root | PASS | ConcreteSpec/Proofs/Own.lean:5657-5666 |
+| moved_no_loan | PASS | ConcreteSpec/Proofs/Own.lean:5675-5684 |
+| downward_reborrow_protocol | PASS | ConcreteSpec/Proofs/Own.lean:5975-5991 |
+| deferred_call_lifetime | PASS, registration case | ConcreteSpec/Proofs/Own.lean:6123-6140 |
+| deferred_call_lifetime | PASS, return case | ConcreteSpec/Proofs/Own.lean:6142-6159 |
+| move_reinitialize_protocol | PASS | ConcreteSpec/Proofs/Own.lean:6225-6235 |
+| loanSequence_retired_step | PASS | ConcreteSpec/Proofs/Own.lean:6327-6336 |
+| ended_loans_never_revive | PASS | ConcreteSpec/Proofs/Own.lean:6341-6348 |
+
+The five extracted predicates retain the original success, trap, request and labeled-step conditions. In particular, they do not turn the conclusion into a premise or fix an output before mutation. Their defect is the gate-driven restructuring, not weakened mathematical meaning.
+
+**Helper approvals**
+
+There are no pending approvals and no Representation lemma tags in either file. All 132 retained approval references match fully qualified names approved in the supplied prior review. I approve 127 current Helper declarations and reject five current approval carryovers below.
+
+Each row cites its tag. The reason applies to that declaration, rather than granting approval merely because another theorem uses it.
+
+| Fully qualified declaration | Tag | Judgment and reason |
+|---|---|---|
+| ConcreteSpec.Core.Generative.fresh_progress | ConcreteSpec/Proofs/Grant.lean:58 | APPROVE: computes the total constructor. |
+| ConcreteSpec.Core.Generative.depend_progress | ConcreteSpec/Proofs/Grant.lean:214 | APPROVE: evaluates supplied admission conditions. |
+| ConcreteSpec.Core.Generative.consume_progress | ConcreteSpec/Proofs/Grant.lean:229 | APPROVE: evaluates dependency presence. |
+| ConcreteSpec.Core.Generative.release_progress | ConcreteSpec/Proofs/Grant.lean:237 | APPROVE: evaluates supplied release guards. |
+| ConcreteSpec.Core.Generative.reset_progress | ConcreteSpec/Proofs/Grant.lean:253 | APPROVE: composes lookup and release computation. |
+| ConcreteSpec.Core.Generative.endScope_progress | ConcreteSpec/Proofs/Grant.lean:266 | APPROVE: evaluates supplied exit guards. |
+| ConcreteSpec.Core.Generative.nextBrand_fresh | ConcreteSpec/Proofs/Grant.lean:290 | APPROVE: arithmetic consequence of the counter bound. |
+| ConcreteSpec.Core.Generative.fresh_generation_result | ConcreteSpec/Proofs/Grant.lean:299 | APPROVE: extracts constructor fields. |
+| ConcreteSpec.Core.Generative.fresh_generation | ConcreteSpec/Proofs/Grant.lean:305 | APPROVE: packages constructor calculations. |
+| ConcreteSpec.Core.Generative.reset_generation_result | ConcreteSpec/Proofs/Grant.lean:314 | APPROVE: extracts reset constructor fields. |
+| ConcreteSpec.Core.Generative.reset_generation | ConcreteSpec/Proofs/Grant.lean:323 | APPROVE: packages reset calculations. |
+| ConcreteSpec.Core.Generative.endScope_non_escape_result | ConcreteSpec/Proofs/Grant.lean:332 | APPROVE: extracts the explicit exclusion guard. |
+| ConcreteSpec.Core.Generative.endScope_non_escape | ConcreteSpec/Proofs/Grant.lean:347 | APPROVE: packages that guard. |
+| ConcreteSpec.Core.Generative.allocations_have_live_allocator_of_wf | ConcreteSpec/Proofs/Grant.lean:358 | APPROVE: projects the invariant witness. |
+| ConcreteSpec.Core.Generative.instrument_erasure_result | ConcreteSpec/Proofs/Grant.lean:381 | APPROVE: extracts the callback result. |
+| ConcreteSpec.Core.Generative.instrument_erasure | ConcreteSpec/Proofs/Grant.lean:393 | APPROVE: computes one wrapper. |
+| ConcreteSpec.Core.Generative.release_retired | ConcreteSpec/Proofs/Grant.lean:783 | APPROVE: transports unchanged identity fields. |
+| ConcreteSpec.Core.Generative.binder_unique | ConcreteSpec/Proofs/Grant.lean:953 | APPROVE: duplicate-free indexing identifies records. |
+| ConcreteSpec.Core.Grants.update_all | ConcreteSpec/Proofs/Grant.lean:1095 | APPROVE: generic supplied-property transport. |
+| ConcreteSpec.Core.Grants.usable_some | ConcreteSpec/Proofs/Grant.lean:1117 | APPROVE: extracts lookup and live guard. |
+| ConcreteSpec.Core.Grants.consumed_bounded | ConcreteSpec/Proofs/Grant.lean:1126 | APPROVE: consumption retains inspected rights. |
+| ConcreteSpec.Core.Grants.consumed_fresh | ConcreteSpec/Proofs/Grant.lean:1132 | APPROVE: consumption retains identities and supply. |
+| ConcreteSpec.Core.Grants.issue_bounded | ConcreteSpec/Proofs/Grant.lean:1137 | APPROVE: transports supplied rights bounds through insertion. |
+| ConcreteSpec.Core.Grants.issue_fresh | ConcreteSpec/Proofs/Grant.lean:1146 | APPROVE: transports counter bounds through insertion. |
+| ConcreteSpec.Core.Grants.steps_of_runOps | ConcreteSpec/Proofs/Grant.lean:1200 | APPROVE: reconstructs the execution relation. |
+| ConcreteSpec.Core.Grants.dead_unusable | ConcreteSpec/Proofs/Grant.lean:1299 | APPROVE: computes usability from a dead witness. |
+| ConcreteSpec.Core.Grants.consumed_dead | ConcreteSpec/Proofs/Grant.lean:1304 | APPROVE: computes the updated live flag. |
+| ConcreteSpec.Core.Grants.consumed_keeps_dead | ConcreteSpec/Proofs/Grant.lean:1310 | APPROVE: transports an existing dead witness. |
+| ConcreteSpec.Core.Grants.narrow_intersection_result | ConcreteSpec/Proofs/Grant.lean:1399 | APPROVE: extracts the inserted constructor. |
+| ConcreteSpec.Core.Grants.narrow_intersection | ConcreteSpec/Proofs/Grant.lean:1409 | APPROVE: packages the constructor calculation. |
+| ConcreteSpec.Core.Own.fold_preserves | ConcreteSpec/Proofs/Own.lean:47 | APPROVE: lifts explicitly supplied preservation. |
+| ConcreteSpec.Core.Own.compatible_symm | ConcreteSpec/Proofs/Own.lean:154 | APPROVE: rearranges a symmetric disjunction. |
+| ConcreteSpec.Core.Own.owner_guard | ConcreteSpec/Proofs/Own.lean:164 | APPROVE: extracts checked permission facts. |
+| ConcreteSpec.Core.Own.accessOwner_preserves_result | ConcreteSpec/Proofs/Own.lean:360 | APPROVE: successful transition is identity. |
+| ConcreteSpec.Core.Own.accessLoan_preserves_result | ConcreteSpec/Proofs/Own.lean:368 | APPROVE: successful transition is identity. |
+| ConcreteSpec.Core.Own.move_progress | ConcreteSpec/Proofs/Own.lean:376 | APPROVE: normalizes supplied guards. |
+| ConcreteSpec.Core.Own.borrow_progress | ConcreteSpec/Proofs/Own.lean:388 | APPROVE: normalizes supplied frame and permission guards. |
+| ConcreteSpec.Core.Own.reborrowTo_progress | ConcreteSpec/Proofs/Own.lean:395 | APPROVE: evaluates destination guards. |
+| ConcreteSpec.Core.Own.reborrow_progress | ConcreteSpec/Proofs/Own.lean:404 | APPROVE: specializes destination computation. |
+| ConcreteSpec.Core.Own.accessOwner_progress | ConcreteSpec/Proofs/Own.lean:412 | APPROVE: computes the identity branch. |
+| ConcreteSpec.Core.Own.accessLoan_progress | ConcreteSpec/Proofs/Own.lean:417 | APPROVE: computes the identity branch. |
+| ConcreteSpec.Core.Own.slot_unique | ConcreteSpec/Proofs/Own.lean:522 | APPROVE: duplicate-free indexing identifies records. |
+| ConcreteSpec.Core.Own.endLoan_frames | ConcreteSpec/Proofs/Own.lean:662 | APPROVE: reads an unchanged field. |
+| ConcreteSpec.Core.Own.fold_frames | ConcreteSpec/Proofs/Own.lean:672 | APPROVE: lifts supplied field equality. |
+| ConcreteSpec.Core.Own.drop_absent | ConcreteSpec/Proofs/Own.lean:683 | APPROVE: inverts the removal filter. |
+| ConcreteSpec.Core.Own.set_views_preserves | ConcreteSpec/Proofs/Own.lean:794 | APPROVE: transports invariant fields unaffected by views. |
+| ConcreteSpec.Core.Own.reinitialize_progress | ConcreteSpec/Proofs/Own.lean:860 | APPROVE: evaluates replacement and exclusion guards. |
+| ConcreteSpec.Core.Own.endLoan_progress | ConcreteSpec/Proofs/Own.lean:877 | APPROVE: evaluates lookup and child exclusion. |
+| ConcreteSpec.Core.Own.bind_fresh_progress | ConcreteSpec/Proofs/Own.lean:888 | APPROVE: computes a supplied typed fresh binding. |
+| ConcreteSpec.Core.Own.drop_progress | ConcreteSpec/Proofs/Own.lean:930 | APPROVE: evaluates supplied discharge guards. |
+| ConcreteSpec.Core.Own.loan_has_owned_root_of_wf | ConcreteSpec/Proofs/Own.lean:995 | APPROVE: projects an invariant clause. |
+| ConcreteSpec.Core.Own.moved_no_loan_of_wf | ConcreteSpec/Proofs/Own.lean:1000 | APPROVE: combines invariant projection with index uniqueness. |
+| ConcreteSpec.Core.Own.instrument_erasure_result | ConcreteSpec/Proofs/Own.lean:1010 | APPROVE: extracts the callback result. |
+| ConcreteSpec.Core.Own.life_erasure_result | ConcreteSpec/Proofs/Own.lean:1023 | APPROVE: computes wrapper fields. |
+| ConcreteSpec.Core.Own.map_metadata_preserves | ConcreteSpec/Proofs/Own.lean:1032 | APPROVE: transports retained semantic fields under supplied metadata conditions. |
+| ConcreteSpec.Core.Own.reinitialize_loans | ConcreteSpec/Proofs/Own.lean:1248 | APPROVE: computes an unchanged table. |
+| ConcreteSpec.Core.Own.bind_loans | ConcreteSpec/Proofs/Own.lean:1257 | APPROVE: computes an unchanged table in both branches. |
+| ConcreteSpec.Core.Own.fold_loans | ConcreteSpec/Proofs/Own.lean:1269 | APPROVE: lifts supplied membership transport. |
+| ConcreteSpec.Core.Own.enter_loans | ConcreteSpec/Proofs/Own.lean:1281 | APPROVE: composes binding field equalities. |
+| ConcreteSpec.Core.Own.drop_loans | ConcreteSpec/Proofs/Own.lean:1300 | APPROVE: computes an unchanged table. |
+| ConcreteSpec.Core.Own.endLoan_subset | ConcreteSpec/Proofs/Own.lean:1310 | APPROVE: inverts filtered membership. |
+| ConcreteSpec.Core.Own.life_subset | ConcreteSpec/Proofs/Own.lean:1320 | APPROVE: composes branch membership inversions. |
+| ConcreteSpec.Core.Own.callLife_erasure_result | ConcreteSpec/Proofs/Own.lean:1405 | APPROVE: computes wrapper fields. |
+| ConcreteSpec.Core.Own.instrument_preserves_result | ConcreteSpec/Proofs/Own.lean:1414 | APPROVE: transports explicitly supplied preservation. |
+| ConcreteSpec.Core.Own.readOwner_erasure_result | ConcreteSpec/Proofs/Own.lean:1427 | APPROVE: computes the scalar read wrapper. |
+| ConcreteSpec.Core.Own.writeOwner_erasure_result | ConcreteSpec/Proofs/Own.lean:1437 | APPROVE: computes the scalar write wrapper. |
+| ConcreteSpec.Core.Own.readLoan_erasure_result | ConcreteSpec/Proofs/Own.lean:1447 | APPROVE: extracts the empty-path guard and callback. |
+| ConcreteSpec.Core.Own.writeLoan_erasure_result | ConcreteSpec/Proofs/Own.lean:1464 | APPROVE: extracts the empty-path guard and callback. |
+| ConcreteSpec.Core.Own.nextLoan_fresh | ConcreteSpec/Proofs/Own.lean:1480 | APPROVE: arithmetic consequence of a strict bound. |
+| ConcreteSpec.Core.Own.borrow_birth_result | ConcreteSpec/Proofs/Own.lean:1489 | APPROVE: computes the inserted record. |
+| ConcreteSpec.Core.Own.reborrow_birth_result | ConcreteSpec/Proofs/Own.lean:1501 | APPROVE: computes the child record and retained parent. |
+| ConcreteSpec.Core.Own.endLoan_supply_result | ConcreteSpec/Proofs/Own.lean:1515 | APPROVE: computes an unchanged supply. |
+| ConcreteSpec.Core.Own.adoptDown_only_arguments_result | ConcreteSpec/Proofs/Own.lean:1556 | APPROVE: projects the checked argument witness. |
+| ConcreteSpec.Core.Own.reborrowTo_current_result | ConcreteSpec/Proofs/Own.lean:1568 | APPROVE: extracts the destination guard. |
+| ConcreteSpec.Core.Own.passOwner_birth_result | ConcreteSpec/Proofs/Own.lean:1717 | APPROVE: computes the call-root record. |
+| ConcreteSpec.Core.Own.loan_unique | ConcreteSpec/Proofs/Own.lean:1731 | APPROVE: duplicate-free indexing identifies records. |
+| ConcreteSpec.Core.Own.endLoans_retains | ConcreteSpec/Proofs/Own.lean:1747 | APPROVE: transports membership through exclusion filters. |
+| ConcreteSpec.Core.Own.endLoans_removed | ConcreteSpec/Proofs/Own.lean:1789 | APPROVE: inverts repeated identity filtering. |
+| ConcreteSpec.Core.Own.defer_keeps_store_result | ConcreteSpec/Proofs/Own.lean:1831 | APPROVE: computes registration’s unchanged store. |
+| ConcreteSpec.Core.Own.leave_frames_proj | ConcreteSpec/Proofs/Own.lean:2105 | APPROVE: projects the popped frame list. |
+| ConcreteSpec.Core.Own.eval_ok_erasure_result | ConcreteSpec/Proofs/Own.lean:2174 | APPROVE: inverts one lifted operand result. |
+| ConcreteSpec.Core.Own.eval_ok_erasure | ConcreteSpec/Proofs/Own.lean:2192 | APPROVE: packages one operand calculation. |
+| ConcreteSpec.Core.Own.eval_trap_erasure_result | ConcreteSpec/Proofs/Own.lean:2202 | APPROVE: inverts one lifted trap result. |
+| ConcreteSpec.Core.Own.eval_trap_erasure | ConcreteSpec/Proofs/Own.lean:2216 | APPROVE: packages one trap calculation. |
+| ConcreteSpec.Core.Own.test_erasure_result | ConcreteSpec/Proofs/Own.lean:2320 | APPROVE: projects the unchanged test. |
+| ConcreteSpec.Core.Own.test_erasure | ConcreteSpec/Proofs/Own.lean:2324 | APPROVE: computes that test’s branches. |
+| ConcreteSpec.Core.Own.instrumentLife_erasure_result | ConcreteSpec/Proofs/Own.lean:2332 | APPROVE: inverts one lifecycle wrapper. |
+| ConcreteSpec.Core.Own.instrumentLife_erasure | ConcreteSpec/Proofs/Own.lean:2348 | APPROVE: computes lifecycle wrapper fields. |
+| ConcreteSpec.Core.Own.allows_erasure_result | ConcreteSpec/Proofs/Own.lean:2366 | APPROVE: projects the checked conjuncts. |
+| ConcreteSpec.Core.Own.allows_erasure | ConcreteSpec/Proofs/Own.lean:2375 | APPROVE: computes the primitive guard. |
+| ConcreteSpec.Core.Own.bindLife_erasure_proj | ConcreteSpec/Proofs/Own.lean:2383 | APPROVE: projects destination lifecycle erasure. |
+| ConcreteSpec.Core.Own.dropOut_erasure_proj | ConcreteSpec/Proofs/Own.lean:2391 | APPROVE: specializes lifecycle projection. |
+| ConcreteSpec.Core.Own.register_erasure_proj | ConcreteSpec/Proofs/Own.lean:2397 | APPROVE: transports frame registration structurally. |
+| ConcreteSpec.Core.Own.lookup_eraseProgram_proj | ConcreteSpec/Proofs/Own.lean:2415 | APPROVE: lookup commutes with mapping. |
+| ConcreteSpec.Core.Own.eraseLabel_events_proj | ConcreteSpec/Proofs/Own.lean:2907 | APPROVE: projects unchanged events. |
+| ConcreteSpec.Core.Own.eraseLabel_answer_proj | ConcreteSpec/Proofs/Own.lean:2912 | APPROVE: computes the answer label. |
+| ConcreteSpec.Core.Own.final?_eraseConfig_proj | ConcreteSpec/Proofs/Own.lean:2980 | APPROVE: computes finality from unchanged control shape. |
+| ConcreteSpec.Core.Own.allows_liftAnswer_proj | ConcreteSpec/Proofs/Own.lean:2994 | APPROVE: computes the lifted answer guard. |
+| ConcreteSpec.Core.Own.eval_stuck_of_permitted_inv | ConcreteSpec/Proofs/Own.lean:3084 | APPROVE: inverts a supplied permission and stuck result. |
+| ConcreteSpec.Core.Own.life_none_of_permitted_inv | ConcreteSpec/Proofs/Own.lean:3105 | APPROVE: inverts permitted lifecycle refusal. |
+| ConcreteSpec.Core.Own.bindLife_none_of_permitted_inv | ConcreteSpec/Proofs/Own.lean:3120 | APPROVE: specializes lifecycle refusal. |
+| ConcreteSpec.Core.Own.dropOut_none_of_permitted_inv | ConcreteSpec/Proofs/Own.lean:3130 | APPROVE: specializes lifecycle refusal. |
+| ConcreteSpec.Core.Own.register_none_proj | ConcreteSpec/Proofs/Own.lean:3138 | APPROVE: computes registration refusal structurally. |
+| ConcreteSpec.Core.Own.checkerAccepted_step_inv | ConcreteSpec/Proofs/Own.lean:3153 | APPROVE: projects acceptance at a reachable successor. |
+| ConcreteSpec.Core.Own.isStuck_eraseEnding_proj | ConcreteSpec/Proofs/Own.lean:3683 | APPROVE: computes the ending discriminator. |
+| ConcreteSpec.Core.Own.ExecErasureWitnesses.step_det_next_inv | ConcreteSpec/Proofs/Own.lean:3866 | REJECT: major REAL DEFECT; materially rewritten gate workaround. Restore constructor inversion and re-review retained changes. |
+| ConcreteSpec.Core.Own.ExecErasureWitnesses.step_det_none_inv | ConcreteSpec/Proofs/Own.lean:3888 | REJECT: major REAL DEFECT; changed conclusion and manual recursors evade proof inspection. Restore the original statement and inversion proof. |
+| ConcreteSpec.Core.Own.ExecErasureWitnesses.move_not_checkerAccepted_inv | ConcreteSpec/Proofs/Own.lean:3908 | APPROVE: concrete reachable refusal witness. |
+| ConcreteSpec.Core.Own.ExecErasureWitnesses.acceptedMove_checkerAccepted_inv | ConcreteSpec/Proofs/Own.lean:3921 | REJECT: major REAL DEFECT; approval carried over a materially reshaped evidence proof. Restore ordinary inversion or obtain fresh approval for independently justified changes. |
+| ConcreteSpec.Core.Own.ExecErasureWitnesses.acceptedStuck_checkerAccepted_inv | ConcreteSpec/Proofs/Own.lean:3953 | APPROVE: concrete acceptance inversion; its caller adjustment adds no substantive contract. |
+| ConcreteSpec.Core.Own.ExecErasureWitnesses.unconditionalRunConverse_refuted | ConcreteSpec/Proofs/Own.lean:4244 | APPROVE: computes the required concrete counterexample. |
+| ConcreteSpec.Core.Own.ExecErasureWitnesses.primFrameStuck_checkerAccepted_inv | ConcreteSpec/Proofs/Own.lean:4320 | REJECT: major REAL DEFECT; extensive manual recursors replace standard inversion to satisfy the defective gate. Restore the reviewed proof and fix the gate. |
+| ConcreteSpec.Core.Own.ExecErasureWitnesses.traceSteps | ConcreteSpec/Proofs/Own.lean:4527 | APPROVE: constructs a concrete finite execution. |
+| ConcreteSpec.Core.Own.ExecErasureWitnesses.bindMove_checkerAccepted_inv | ConcreteSpec/Proofs/Own.lean:4591 | REJECT: major REAL DEFECT; approval carried over a materially reshaped evidence proof. Restore ordinary inversion or obtain fresh approval for independently justified changes. |
+| ConcreteSpec.Core.Own.accessOwner_preserves | ConcreteSpec/Proofs/Own.lean:4650 | APPROVE: packages an identity transition. |
+| ConcreteSpec.Core.Own.accessLoan_preserves | ConcreteSpec/Proofs/Own.lean:4656 | APPROVE: packages an identity transition. |
+| ConcreteSpec.Core.Own.instrument_erasure | ConcreteSpec/Proofs/Own.lean:5216 | APPROVE: packages callback computation. |
+| ConcreteSpec.Core.Own.life_erasure | ConcreteSpec/Proofs/Own.lean:5225 | APPROVE: packages lifecycle wrapper computation. |
+| ConcreteSpec.Core.Own.callLife_erasure | ConcreteSpec/Proofs/Own.lean:5234 | APPROVE: packages call wrapper computation. |
+| ConcreteSpec.Core.Own.instrument_preserves | ConcreteSpec/Proofs/Own.lean:5243 | APPROVE: lifts explicitly supplied preservation. |
+| ConcreteSpec.Core.Own.readOwner_erasure | ConcreteSpec/Proofs/Own.lean:5253 | APPROVE: packages scalar read computation. |
+| ConcreteSpec.Core.Own.writeOwner_erasure | ConcreteSpec/Proofs/Own.lean:5262 | APPROVE: packages scalar write computation. |
+| ConcreteSpec.Core.Own.readLoan_erasure | ConcreteSpec/Proofs/Own.lean:5272 | APPROVE: packages empty-path read computation. |
+| ConcreteSpec.Core.Own.writeLoan_erasure | ConcreteSpec/Proofs/Own.lean:5282 | APPROVE: packages empty-path write computation. |
+| ConcreteSpec.Core.Own.borrow_birth | ConcreteSpec/Proofs/Own.lean:5293 | APPROVE: packages constructor fields. |
+| ConcreteSpec.Core.Own.reborrow_birth | ConcreteSpec/Proofs/Own.lean:5304 | APPROVE: packages child constructor fields. |
+| ConcreteSpec.Core.Own.endLoan_supply | ConcreteSpec/Proofs/Own.lean:5316 | APPROVE: packages an unchanged supply. |
+| ConcreteSpec.Core.Own.adoptDown_only_arguments | ConcreteSpec/Proofs/Own.lean:5324 | APPROVE: extracts checked adoption metadata. |
+| ConcreteSpec.Core.Own.reborrowTo_current | ConcreteSpec/Proofs/Own.lean:5356 | APPROVE: extracts the checked destination. |
+| ConcreteSpec.Core.Own.passOwner_birth | ConcreteSpec/Proofs/Own.lean:5374 | APPROVE: packages call-root constructor fields. |
+| ConcreteSpec.Core.Own.defer_keeps_store | ConcreteSpec/Proofs/Own.lean:5386 | APPROVE: computes registration’s unchanged store. |
+| ConcreteSpec.Core.Own.pending_enter_drop | ConcreteSpec/Proofs/Own.lean:6033 | APPROVE: computes cleanup of a view-only callee. |
+
+READ: PROMPT.md
+READ: REVIEW.diff
+READ: ConcreteSpec/Proofs/Grant.lean
+READ: ConcreteSpec/Proofs/Own.lean
+READ: ConcreteSpec/Spec/Grant.lean
+READ: ConcreteSpec/Spec/Own.lean
+REPOSITORY: readable
+VERDICT: CHANGES

@@ -1,0 +1,16 @@
+1. Done: removed `tryConvert` throughout CExpr and its semantics/proofs; retained lossless `convert`. No laws weakened or made vacuous.
+2. Done: documented the scalar boundary, owner authority and sole reopening path with all preconditions.
+3. Done: no checked arithmetic or Result-typed surface operation remains reachable from CExpr.
+4. Done: closed ISS-0039 with commit evidence. Issue gate: **5 passed, 0 failed**.
+5. Done: six changed helpers tagged `PENDING`; N2 ran on Const and Scalar. Compared with baseline, its only six new findings are those required pending approvals.
+
+Preserved **11 laws, 13 instances and 17 planted examples**. Changed `eval_wellTyped_progress` retains its `div_zero` instance and `noConstValues` planted evidence. Required Lean builds pass.
+
+Commits:
+
+- `07534c258` — restrict constant initializers to scalar surface operations.
+- `59d4c501d` — close ISS-0039.
+
+Working tree clean. No push, reviewers or git notes.
+
+QUESTIONS: none. Independent approval of the six changed helpers remains pending.

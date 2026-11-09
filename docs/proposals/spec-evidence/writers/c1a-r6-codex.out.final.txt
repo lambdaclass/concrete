@@ -1,0 +1,7 @@
+Corrected only the two Law doc comments in `Scalar.lean`, preserving their subject tags and removing approval fields.
+
+Required Lean build passed.
+
+Commit: `368bd96f5eddd76008d353c1238e60491890e305`
+
+QUESTIONS: None.

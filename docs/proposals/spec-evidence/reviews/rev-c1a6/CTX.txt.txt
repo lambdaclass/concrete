@@ -1,0 +1,11 @@
+C1 (execution, Scalar) round 6 on wip/spec-c1-audit, written by Codex. Base f0c7491db -> head 368bd96f5.
+
+The round fixes the two minor findings of the contract-valid Codex review of round 5, quoted in PROMPT.md: the stale copied description and the approval field in the Law doc comments at ConcreteSpec/Proofs/Scalar.lean:108 (bitNot_inRange) and :216 (saturating_of_checked).
+
+Check:
+- both comments now describe accurately what each Law states;
+- each keeps its Law tag and has no approval field;
+- every backticked name resolves;
+- nothing else changed.
+
+The held Step/AnswerStep determinism Laws and the inductive-subject question are out of scope.

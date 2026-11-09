@@ -1,0 +1,17 @@
+C2 (branch wip/spec-c2-audit) round 7, written by Codex. Base e19a4248c (accepted, seven gates pass) -> head 59d4c501d.
+
+The round carries out the owner's C2 constants decision of 2026-11-09, options (a)+(i). The owner's words: "ok tell me again the options choose the best long term options for everything". Under the decision:
+- constants stay scalar;
+- checked forms are excluded from initializers;
+- tryConvert is removed from CExpr;
+- the single reopening path is (c), aggregate/enum constants, with these preconditions: a ConstTy separate from C4's CTy, ofC_copy revisited, the Err-as-value question, and a workload.
+The decision text is quoted in PROMPT.md.
+
+Check, with the best long-term design as the only standard:
+- tryConvert is gone completely: the constructor, eval, ConstEval rules, typing, child relations, proofs and examples.
+- No checked or Result-typed surface operation remains reachable from CExpr, and no substitute conversion was added.
+- The Spec/Const.lean module doc states the boundary and the reopening preconditions correctly.
+- No Law was weakened or made vacuous by the removal. List every Law of Proofs/Const.lean with your vacuity verdict and witness.
+- The tags follow the final convention.
+- ISSUES.tsv closes ISS-0039 correctly, and nothing else in that file changed.
+- For each Helper or Representation lemma marked (approved: PENDING), give an explicit APPROVE or REJECT verdict by fully qualified name, with the reason.

@@ -1,0 +1,28 @@
+1. **ConcreteSpec/Proofs/Scalar.lean:108 — minor — REAL DEFECT.** The bitwise-not Law retains a pending exemption approval and an unrelated description about extracting a range validator. Its proof establishes the bitwise-not range bound. **Concrete fix:** remove the exemption approval field and replace the copied description with an accurate statement of the Law.
+
+2. **ConcreteSpec/Proofs/Scalar.lean:216 — minor — REAL DEFECT.** The saturating-arithmetic Law retains a pending exemption approval and an unrelated description about the lossless relation. **Concrete fix:** remove the exemption approval field and describe agreement between saturating arithmetic and successful checked arithmetic.
+
+The diff contains exactly **84 approval substitutions**, with no other text changes. All match the prior approvals by fully qualified declaration name and tag location: 63 execution declarations and 21 scalar declarations. No Helper or Representation lemma remains pending, so there are no outstanding exemption decisions to APPROVE or REJECT.
+
+I audited all **80 Laws** against the specified convention: one classification per theorem, full closed Instance applications, and Planted statements preserving the mutated hypotheses at those exact arguments while negating the mutated conclusion. No additional finding emerged beyond the deferred owner matters, which I have not re-reported. Witness coverage:
+
+| Laws | Source evidence |
+|---|---|
+| Execution: cleanup observations and segmentation | ConcreteSpec/Proofs/Exec.lean:1978-2149,2218-2241,2263-2330,2370-2440,2465-2490 |
+| Execution: lifecycle refusal and primitive errors | ConcreteSpec/Proofs/Exec.lean:2569-3086 |
+| Execution: requests, scopes, exits, plans, traps and evaluation | ConcreteSpec/Proofs/Exec.lean:3198-3576 |
+| Execution: determinism, destruction and caller preservation | ConcreteSpec/Proofs/Exec.lean:3581-3721,3800-3842 |
+| Scalars: independent width preservation | ConcreteSpec/Proofs/Scalar.lean:466-511 |
+| Scalars: encodings, arithmetic, conversions and bit correspondence | ConcreteSpec/Proofs/Scalar.lean:653-864 |
+
+This was a source audit; no files were modified, builds or gates run, network connections made, or writing git commands used.
+
+READ: PROMPT.md
+READ: REVIEW.diff
+READ: ConcreteSpec/Proofs/Exec.lean
+READ: ConcreteSpec/Proofs/Scalar.lean
+READ: ConcreteSpec/Spec/Exec.lean
+READ: ConcreteSpec/Spec/Scalar.lean
+
+REPOSITORY: readable
+VERDICT: CHANGES

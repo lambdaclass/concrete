@@ -1,0 +1,9 @@
+Integration (wip/spec-core, clone branch wip/spec-integrate) round 7, written by Codex. Base 0dbeba29e (accepted head; seven gates pass) -> head db4eda38f.
+
+The round records approvals and nothing else. It replaces `(approved: PENDING)` with `(approved: APPR-integ-agy-0dbeba29e)` on the Helper and Representation lemma declarations that an independent, contract-valid approval review of 0dbeba29e approved (96 declarations). That review is quoted in PROMPT.md.
+
+Check:
+- every replaced reference sits on a declaration that the approval review approves, matched by fully qualified name and tag line;
+- no other text changed;
+- no PENDING remains in ConcreteSpec/Proofs/Adequacy.lean.
+Also re-audit every Law of ConcreteSpec/Proofs/Adequacy.lean under the final convention and report any defect.

@@ -1,0 +1,49 @@
+Committed **`f6f3683ff` — `spec(exec): prove determinism over independent operational rules`**. Working tree clean; no push, reviewers or git notes.
+
+1. **Done:** reclassified both function-backed determinism theorems as Representation lemmas, with pending approvals.
+2. **Done:** added 42 independent operational rules, correspondence in both directions, and determinism by rule inversion. Every construct matches the existing transition granularity.
+3. **Done:** retained the other 34 held Laws and their Instances; all have premise-preserving inductive Planted evidence.
+4. **Done:** retagged changes and ran N2 on Exec and Scalar. Only new findings outside the excluded categories: **16 unresolved exemption approvals**, intentionally `PENDING`.
+
+Validation: committed-SHA build passes; rule checks **32/32**; trust checks **23/23**.
+
+New declarations below are in `ConcreteSpec.Core.Exec`, except the two marked `CoreEvidence`.
+
+| Declaration | Statement |
+|---|---|
+| `Arguments` | Independent left-to-right argument evaluation judgment. |
+| `Registered` | Independent defer-registration judgment over frames. |
+| `Destination` | Independent destination binding and lifecycle-admission judgment. |
+| `Rules` | Answer-indexed operational transitions over configurations. |
+| `Dispatches` | Observable transition produced by a parameterized dispatcher. |
+| `DispatchComplete` | Every dispatcher outcome has an operational derivation. |
+| `arguments_representation` | `Arguments … r ↔ evalArgs … = r`. |
+| `registered_representation` | `Registered d k k' ↔ register d k = some k'`. |
+| `destination_representation` | `Destination … ↔ bindLife … = some st' ∧ L' = bindDst …`. |
+| `arguments_unique_inv` | Two argument derivations have equal results. |
+| `registered_unique_inv` | Two registration derivations have equal destinations. |
+| `destination_unique_inv` | Two destination derivations have equal locals and stores. |
+| `rules_answer_sound_inv` | `Rules P c a l c' → AnswerStep P c a l c'`. |
+| `rules_exec_complete_inv` | Successful statement dispatch has an operational derivation. |
+| `rules_done_complete_inv` | Successful completion dispatch has an operational derivation. |
+| `rules_exit_complete_inv` | Successful exit dispatch has an operational derivation. |
+| `rules_silent_complete_inv` | `step P c = some (.next c') → Rules P c none .silent c'`. |
+| `rules_request_complete_inv` | An admitted request with successful continuation has an operational derivation. |
+| `rules_sound` | `Rules … → Dispatches step …`. |
+| `rules_complete` | `DispatchComplete step P c a`. |
+| `rules_iff_answerStep` | `Rules … ↔ AnswerStep …`. |
+| `step_iff_rules` | `Step P c l c' ↔ ∃ a, Rules P c a l c'`. |
+| `rules_deterministic` | A fixed answer determines the operational label and destination. |
+| `rules_silent_deterministic` | Internal operational transitions have unique labels and destinations. |
+| `CoreEvidence.CompetingRules` | Inductive mutant retaining ordinary rules and adding overlapping outcomes. |
+| `CoreEvidence.trapSkipStep` | Dispatcher mutant replacing skip completion with an abort trap. |
+
+New Law evidence pairs:
+
+- `rules_sound`: `log_answer`, against `stuckStep`.
+- `rules_complete`: `skip`, against `trapSkipStep`.
+- `rules_deterministic`: `log_answer`, against `CompetingRules`.
+- `rules_silent_deterministic`: `skip`, against `CompetingRules`.
+
+**Left:** independent exemption approvals and known N2 gate updates.  
+**QUESTIONS:** none.

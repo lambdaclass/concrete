@@ -1,0 +1,9 @@
+C7 (leak) round 8 on wip/spec-c7, written by Codex. Base 5b48475df (round 7 plus golden; seven gates pass) -> head fb8f565c2.
+
+The round records approvals and nothing else. It replaces `(approved: PENDING)` with `(approved: APPR-C7-agy-f2e93a7e0)` on the Helper and Representation lemma declarations that an independent, contract-valid approval review of round 7 (5d94c4b4d..f2e93a7e0) approved (12 declarations). That review is quoted in PROMPT.md.
+
+Check:
+- every replaced reference sits on a declaration that the approval review approves, matched by fully qualified name and tag line;
+- no other text changed;
+- no PENDING remains in ConcreteSpec/Proofs/Leak.lean, and the only approval references are APPR-C7-agy-5d94c4b4d (65, unchanged) and APPR-C7-agy-f2e93a7e0 (12).
+Also re-audit every Law of C7 under the final convention and report any defect.

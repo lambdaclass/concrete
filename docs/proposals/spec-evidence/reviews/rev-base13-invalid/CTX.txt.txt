@@ -1,0 +1,16 @@
+Base migration (branch wip/spec-base-migration) round 1, written by Codex. Base 0dbeba29e (the accepted spec integration head; seven gates pass) -> head 01025713b. This review covers only these files: ConcreteSpec/Proofs/Authority.lean ConcreteSpec/Proofs/Checker.lean ConcreteSpec/Proofs/Rep.lean ConcreteSpec/Proofs/Observe.lean  and the spec definitions they use. Other reviewers cover the other base modules.
+
+The round migrates these modules to the final vacuity convention, which is quoted in PROMPT.md:
+- every authored theorem gets exactly one class;
+- every Law gets closed Instance examples and, where it names a mutable definition subject, Planted examples;
+- Helper and Representation lemma exemptions carry (approved: PENDING) for this review to decide.
+
+Laws whose subject is an inductive relation (Step/Steps/AnswerStep-style) were on an owner hold during this round, so their planted evidence is still open. The owner has since allowed inductive subjects with same-signature inductive mutants, and the next round adds that evidence. Do not count its absence as a defect here, but do report any change to those laws' statements.
+
+Check, with the best long-term design as the only standard:
+- Statement changes. For each theorem in your files whose statement changed between 0dbeba29e and the head, say whether the new statement is at least as strong as the old one and keeps the same normative meaning. A weakened statement, a changed definition, a premise that switches off the obligation, or a change of a rule's meaning is a REAL DEFECT (blocker).
+- Tags against the convention.
+- Vacuity of every Law in your files, with a verdict and witness each.
+- For each Helper or Representation lemma in your files marked approved: PENDING, an explicit APPROVE or REJECT by fully qualified name, with the reason.
+
+Citation discipline (binding): every identifier you write in backticks must be one you found with grep in this tree, written with its real namespace (these modules use namespaces such as ConcreteSpec.Borrow, ConcreteSpec.Slice0 and their Evidence sub-namespaces; check each). Every file:line range must lie inside the file. Never cite a name you did not see. A previous review of this round was discarded because it cited a dozen declarations that do not exist.

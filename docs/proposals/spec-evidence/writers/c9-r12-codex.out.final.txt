@@ -1,0 +1,18 @@
+Implemented all five items: structured paths, strict parsing, complete project admission, loader laws/mutants, and the C6 trap-resolution interface.
+
+- `bac0247cf` — structured source identities and rendering/parser proofs.
+- `ac447ce9f` — project loader, refusal diagnostics, laws, witnesses, and C6 interface.
+- `869c75f1a` — corrected downstream declaration references.
+
+Every commit passed the prescribed Lean build. Working tree is clean; nothing was pushed.
+
+The [declaration inventory](/tmp/c9-round12-inventory.md) lists all 96 new named definitions and theorems with one-line statements.
+
+N2 ran against both the final head and starting snapshot. New findings remaining: **28 required `PENDING` approvals**, plus cascades from the acknowledged false-discharge defect. N2 clearance remains outstanding; evidence was not reshaped around that defect. [Final log](/tmp/c9-n2-final.log).
+
+QUESTIONS:
+- Backslash: retain the existing refusal permanently?
+- NUL: permit or refuse?
+- Non-ASCII: what repertoire and identity policy should apply?
+
+Existing backslash refusal and existing NUL/non-ASCII acceptance remain unchanged.

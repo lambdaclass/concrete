@@ -1,0 +1,23 @@
+Migrated all 11 files: 186 theorems classified, 77 laws given closed instances, and all 49 laws with mutable definition subjects given planted evidence.
+
+| File | Work and commits |
+|---|---|
+| Basics | Representation classifications — `783f64a5a` |
+| Checker | Checker/judgment reflection classifications — `c1b3a4d70` |
+| Rep | Round trip; encoder, decoder, layout mutants — `2d310fca7` |
+| Observe | Result-based exit bound and observation evidence — `9e2b3cadc` |
+| Slice0 | Embeddings, known values, exit evidence — `d0cdb082a` |
+| Examples | Addition safety at the upper bound — `3c801ea08` |
+| Cleanup | Classifications and closed instances; mutations await owner — `145690579`, `edfebfae4` |
+| Brand | Allocation, ghost safety, erasure evidence; seven laws await owner — `f434f2342`, `5d78d4697` |
+| Authority | Trace containment and forged-grant mutants — `a17300bd7` |
+| Borrow | Indexing, access, frame evidence; twelve laws await owner — `0be1f6ba0`, `108e473df` |
+| Slice1 | Evaluator safety and named-field destructuring evidence; five laws await owner — `642552f16`, `b4c69a031`, `01025713b` |
+
+Every theorem’s statement and exact Instance/Planted examples are indexed in [ROUND1_RESULTS.txt](_review/ROUND1_RESULTS.txt).
+
+Final validation: **build passed**, rules **32/32**, trust **23/23**. N2 remains failing only on pending approvals, the known false-discharge issue and cascades, and inductive-subject findings.
+
+**QUESTIONS:** Twenty-eight laws await the inductive-subject decision; their planted evidence remains unfinished. Recommend preserving canonical inductive representations and deciding an explicit relation-specific evidence convention. The report lists every affected law and the alternatives.
+
+Working tree clean. No pushes, reviewers, or git notes.

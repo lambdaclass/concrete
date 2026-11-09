@@ -115,3 +115,5 @@ Goldens: golden-and-gates retired; golden-flow.sh = coordinator runs generator o
 04:29 C4 314a4f068 (55 recorded; codex CHANGES 2 major partial-app) lane-c4a4 running, C4 r5 codex queued; C6 5120f5210 (68 recorded) rev-c6a6b agy; C7 f2e93a7e0 rev-c7r7 agy; lane-c67 queued; C2 r6 codex running (APPR-C2 48 + ConstOrderIndependent)
 04:36 ACCEPT(valid): C6 5120f5210 rev-c6a6b, C2 e19a4248c rev-c2a6, C7 f2e93a7e0 rev-c7r7 (12 PENDING approved -> r8 queued after lane-c67). C9 0551add93 rev-c9r11b + lane-c9r11; C10 de0e8bfd2 rev-c10r10 + lane-c10r10. C4 314a4f068 gates 7/7 pushed; C4 r5 codex (partial-app x2). lanes sequential: c67 -> c2a6 -> c9r11 -> c10r10
 04:39 valid ACCEPT: C9 0551add93, C10 de0e8bfd2, C4 951060caa (1 new helper approved, record later). C1 r4 5531d9e34 rev-c1a4 codex running
+04:49 C6 5120f5210 + C7 5b48475df 7/7 pushed. C1 368bd96f5 rev-c1a6 agy + lane-c1c; integ r7 codex recording 96; C7 r8 codex (12); base r1 codex; C5 r9 agy
+04:52 valid ACCEPT: C1 368bd96f5, C7 fb8f565c2

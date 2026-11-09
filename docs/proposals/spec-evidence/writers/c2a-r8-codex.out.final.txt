@@ -1,0 +1,7 @@
+Recorded `REV-C2-agy-59d4c501d` for all six approved helpers: `eval_derivation_inv`, `eval_derivation_unique_inv`, `eval_sound_inv`, `not_inExpr_of_fallibleFree`, `ty?_congr_refs`, and `eval_congr_refs`.
+
+Only the six approval markers changed. No C2 `PENDING` approvals remain. Prescribed build passed.
+
+Commit: `67cb19abd3c190f9d1bec4f9a4b2d0a3f83126e0`. Not pushed.
+
+QUESTIONS: None.

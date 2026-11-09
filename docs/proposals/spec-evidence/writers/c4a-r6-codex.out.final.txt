@@ -1,0 +1,8 @@
+Recorded `APPR-C4-agy-951060caa` on `ConcreteSpec.Core.Mem.fromExposed_sound_inv`. Nothing else changed.
+
+- C4 PENDING approvals remaining: none.
+- Prescribed Lean build: passed.
+- Commit: `f6f11246280704cac7efbe21d6083bf82b18e00b`
+- QUESTIONS: none.
+
+Working tree clean; no push, reviewers, or git notes.
