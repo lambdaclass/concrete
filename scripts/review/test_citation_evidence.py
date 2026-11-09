@@ -52,6 +52,7 @@ def run(name, review, positive=True, removed=False):
         roots = {
             'scheduled': '/home/unbalancedparen/projects/gates-briefs/ro-S3',
             'anchors': '/home/unbalancedparen/projects/gates-briefs/ro-AKa',
+            'cross-check': manifest['cross-check']['review_root'],
             'rev-c1a3': '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree',
         }
         return c.citation_error(text, directory, sha, c.commit_blob_paths(directory, sha), positive, base, roots.get(name, '/home/unbalancedparen'))
@@ -71,3 +72,12 @@ assert run('anchors', 'AKc-codex.md') == 'citation: positive verdict requires at
 status, reason = c.evaluate_output((FIX / 'AKc-codex.md').read_text(), '', 'HEAD', str(HERE.parents[1]), ['clean', 'findings'])
 assert (status, reason) == ('invalid', 'citation: positive verdict requires at least one resolvable file:line citation'), (status, reason)
 print('original citation evidence: PASS (hashes, honest reviews, fabricated reviews, fake anchors, uncited CLEAN)')
+
+# CHa remains invalid for precisely two defects, with both spellings of the bad range.
+cross_result = run('cross-check', 'CHa-agy.log', positive=False)
+assert cross_result == (
+    "citation: range 'file:///home/unbalancedparen/projects/gates-briefs/ro-CHa/scripts/checks/run.sh#L1-L59' outside 1..27; "
+    "citation: range 'scripts/checks/run.sh:1-59' outside 1..27; "
+    "citation: identifier 'ALL_CONTROLS_OK' unresolved"
+), cross_result
+print('CHa original evidence: PASS (root twins, adjacent basename, LLVM anchors, exact two defects)')

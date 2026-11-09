@@ -1,0 +1,7 @@
+Baseline 113e26c5bc233450d3795aec15fab53c2d274f1f
+Fetch: origin wip/gate-scaling-determinism (historical fixture SHA exists)
+A1 CONFIRMED: citation: file 'ISSUES.tsv' does not resolve uniquely; citation: file 'ROADMAP.md' does not resolve uniquely; citation: file 'README.md' does not resolve uniquely; citation: file 'review.sh' does not resolve uniquely; citation: positive verdict requires at least one resolvable file:line citation
+A2 CONFIRMED: citation: unsupported location grammar 'lean-toolchain#L1'; citation: anchor 'flake.nix' absent from 'flake.nix#L1'
+A3 CONFIRMED: identifier_source helpers = {'REVIEW.diff': True, 'DELTA.diff': True, 'PROMPT.md': True, 'RANGE.txt': True, '_review/export.md': True}
+A4 CONFIRMED: prompt uses "Absolute file:// links are normalized"; manual section 158–175 lists READ/REPOSITORY/VERDICT only, omits citation validation and invalid status (the word invalid occurs elsewhere).
+B CONFIRMED: citation: file 'ISSUES.tsv' does not resolve uniquely; citation: range 'file:///home/unbalancedparen/projects/gates-briefs/ro-CHa/scripts/checks/run.sh#L1-L59' outside 1..27; citation: range 'scripts/checks/run.sh:1-59' outside 1..27; citation: file 'required-checks.txt' does not resolve uniquely; citation: file 'lean_action_ci.yml' does not resolve uniquely; citation: file 'README.md' does not resolve uniquely; citation: file 'ROADMAP.md' does not resolve uniquely; citation: identifier 'ALL_CONTROLS_OK' unresolved

@@ -70,7 +70,7 @@ with tempfile.TemporaryDirectory() as directory:
     check("ROADMAP.md:1 README.md:1 ISSUES.tsv:1", "clean")
     check(f"[source.lean:1](file://{directory}/source.lean#L1)", "clean")
     check("[source.lean:1–2,2](source.lean#L1)", "clean")
-    check("source.lean:1", ("invalid", "citation: file 'source.lean' does not resolve uniquely; citation: positive verdict requires at least one resolvable file:line citation"))
+    check("source.lean:1", "clean")
     check("[source.lean:1–2,2](legacy/source.lean#L1)", ("invalid", "citation: range 'source.lean:1–2,2' outside 1..1"))
     check("[source.lean:2](source.lean#L1)", ("invalid", "citation: basename label 'source.lean:2' disagrees with link target"))
     (root / "legacy/only.lean").write_text("legacyOnly\n")
@@ -78,6 +78,50 @@ with tempfile.TemporaryDirectory() as directory:
     git("-c", "user.name=Control", "-c", "user.email=control@example.invalid", "commit", "-qm", "legacy-only basename")
     sha = git("rev-parse", "HEAD")
     check("only.lean:1", ("invalid", "citation: file 'only.lean' does not resolve uniquely; citation: positive verdict requires at least one resolvable file:line citation"))
+    # The reviewed tree defines filenames, including dotfiles and arbitrary suffixes.
+    for name in ["LICENSE", ".envrc", ".githooks/pre-push", "scripts/review/allowed_writer_log_signers",
+                 "SHA256SUMS", "flake.nix", "flake.lock", "smoke.con", "sub/README.md",
+                 "active/unit.lean", "legacy/unit.lean", "active/unique.lean", "legacy/unique.lean", "legacy/README.md", "other/unit.lean"]:
+        path = root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("first\nsecond\n")
+    for name in ["REVIEW.diff", "DELTA.diff", "PROMPT.md", "RANGE.txt", "_review/export.txt"]:
+        path = root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("exportOnlyName\n")
+    git("add", ".")
+    git("-c", "user.name=Control", "-c", "user.email=control@example.invalid", "commit", "-qm", "tracked path authority")
+    sha = git("rev-parse", "HEAD")
+    for name in ["lean-toolchain", "LICENSE", ".envrc", ".githooks/pre-push",
+                 "scripts/review/allowed_writer_log_signers", "SHA256SUMS", "flake.nix", "flake.lock", "smoke.con"]:
+        check(f"{name}:1", "clean")
+        check(f"[`{name}`]({name}#L1)", "clean")
+        count = 1 if name == "lean-toolchain" else 2
+        check(f"source.lean:1 {name}:999", ("invalid", f"citation: range '{name}:999' outside 1..{count}"))
+    check("README.md:1", "clean")
+    check("unique.lean:1", "clean")
+    check("source.lean:1 UTC-5:30", "clean")
+    check("[missing](unknown#L1)", ("invalid", "citation: file 'unknown' does not resolve uniquely; citation: positive verdict requires at least one resolvable file:line citation"))
+    check("[README.md:2](sub/README.md#L2)", "clean")
+    check("unit.lean:1", ("invalid", "citation: file 'unit.lean' does not resolve uniquely; citation: positive verdict requires at least one resolvable file:line citation"))
+    for body in ["[unit.lean](active/unit.lean#L1) (`unit.lean:1`)",
+                 "(`unit.lean:1`) [unit.lean](active/unit.lean#L1)"]:
+        check(body, "clean")
+    check("[unit.lean](active/unit.lean#L1) (`unit.lean:2`)",
+          ("invalid", "citation: basename label 'unit.lean:2' disagrees with link target"))
+    check("source.lean:1 `exportOnlyName`", ("invalid", "citation: identifier 'exportOnlyName' unresolved"))
+    # Untracked helper text cannot authorize identifiers either.
+    (root / "untracked.txt").write_text("untrackedOnlyName\n")
+    check("source.lean:1 `untrackedOnlyName`", ("invalid", "citation: identifier 'untrackedOnlyName' unresolved"))
+    export_base = sha
+    for name in ["REVIEW.diff", "DELTA.diff", "PROMPT.md", "RANGE.txt", "_review/export.txt"]:
+        (root / name).write_text("replacement\n")
+    git("add", ".")
+    git("-c", "user.name=Control", "-c", "user.email=control@example.invalid", "commit", "-qm", "remove export identifiers")
+    sha = git("rev-parse", "HEAD")
+    result = contract.citation_error("source.lean:1 `exportOnlyName`", directory, sha,
+                                     contract.commit_blob_paths(directory, sha), True, base=export_base)
+    assert result == "citation: identifier 'exportOnlyName' unresolved", result
     # Explicit link targets can name an exact root file despite legacy copies.
     check("[`realAnchor`](source.lean#L1)", "clean")
     check("[source.lean](source.lean:1) file:///tmp/scripts/missing/README.md:1", ("invalid", "citation: file 'file:///tmp/scripts/missing/README.md' does not resolve uniquely"))

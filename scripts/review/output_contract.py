@@ -99,7 +99,7 @@ def is_clean_relative_path(path: str) -> bool:
 
 # Fixed grammar: Markdown links or bare path:line[-line][,line] locations.
 IDENTIFIER = r"[A-Za-z_][\w]*[!?']?(?:\.[A-Za-z_][\w]*[!?']?)*"
-LOCATION = re.compile(r"(?P<path>(?:file://)?[A-Za-z0-9_./-]+\.[A-Za-z0-9]+)(?::(?P<lines>[0-9]+(?:[-–][0-9]+)?(?:,[0-9]+(?:[-–][0-9]+)?)*)|#L(?P<anchor>[0-9]+(?:-L[0-9]+)?))")
+LOCATION = re.compile(r"(?P<path>(?:file://)?[A-Za-z0-9_./-]+)(?::(?P<lines>[0-9]+(?:[-–][0-9]+)?(?:,[0-9]+(?:[-–][0-9]+)?)*)|#L(?P<anchor>[0-9]+(?:-L[0-9]+)?))")
 
 
 # Evidence about the validator must not bootstrap identifier authority. Keep this
@@ -107,6 +107,7 @@ LOCATION = re.compile(r"(?P<path>(?:file://)?[A-Za-z0-9_./-]+\.[A-Za-z0-9]+)(?::
 IDENTIFIER_EXCLUSIONS = (
     "legacy/*", "ISSUES.tsv", "scripts/review/fixtures/*",
     "scripts/review/test_*.py", "scripts/review/external-names.tsv",
+    "REVIEW.diff", "DELTA.diff", "PROMPT.md", "RANGE.txt", "_review/*",
 )
 
 
@@ -133,19 +134,28 @@ def citation_error(text, repo, commit, paths, positive, base=None, review_root=N
                     candidate = absolute[len(root.rstrip("/")) + 1:]
                     return candidate if is_clean_relative_path(candidate) and candidate in paths else None
             return None
-        if "/" not in path and not exact:
-            candidates = [p for p in paths if p.rsplit("/", 1)[-1] == path]
-            return candidates[0] if len(candidates) == 1 and not candidates[0].startswith("legacy/") else None
         if path in paths and is_clean_relative_path(path):
             return path
+        if "/" not in path and not exact:
+            candidates = [p for p in paths if not p.startswith("legacy/") and p.rsplit("/", 1)[-1] == path]
+            return candidates[0] if len(candidates) == 1 else None
         return None
+    basenames = {p.rsplit("/", 1)[-1] for p in paths}
     def filename(name):
-        return bool(re.search(r"\.(lean|py|sh|md|tsv|json|yml|yaml|toml|txt|log)$", name))
+        return name in paths or name in basenames
+    def start(location):
+        return int(re.split(r"[-–,]", location.group("lines") or location.group("anchor"))[0])
     for link in re.finditer(r"\]\(([^)\s]+)\)", text):
         target = link.group(1)
-        if ("#L" in target or re.search(r"\.[A-Za-z0-9]+:", target)) and not LOCATION.fullmatch(target):
+        if ("#L" in target or re.search(r":[0-9]", target)) and not LOCATION.fullmatch(target):
             errors.append(f"citation: unsupported location grammar '{target}'")
-    locations = list(LOCATION.finditer(text))
+    # Extensionless prose (for example UTC-5:30) is a location only when the
+    # reviewed tree supplies that filename. Dotted/slash paths remain checked
+    # even when missing, so fabricated source paths still fail closed.
+    locations = [m for m in LOCATION.finditer(text)
+                 if filename(m.group("path")) or "." in m.group("path") or "/" in m.group("path")
+                 or text[:m.start()].endswith("](")]
+
     valid = 0
     for m in locations:
         raw = m.group("path")
@@ -154,13 +164,24 @@ def citation_error(text, repo, commit, paths, positive, base=None, review_root=N
         following = re.match(r"`?\]\(([^)]+)\)", text[m.end():])
         if "/" not in raw and following:
             full = LOCATION.fullmatch(following.group(1))
-            def start(location):
-                return int(re.split(r"[-–,]", location.group("lines") or location.group("anchor"))[0])
             if full and full.group("path").rsplit("/", 1)[-1] == raw and start(full) == start(m):
                 path = resolve(full.group("path"), exact=True)
             else:
                 errors.append(f"citation: basename label '{m.group()}' disagrees with link target")
                 continue
+        # A separate parenthesized basename citation may sit on either side of
+        # its own full Markdown link. Only immediate adjacency supplies context.
+        if "/" not in raw and not following:
+            before = re.search(r"\[[^\]\n]*\]\(([^)]+)\)\s*\(`?$", text[:m.start()])
+            after = re.match(r"`?\)\s*\[[^\]\n]*\]\(([^)]+)\)", text[m.end():])
+            adjacent = before or after
+            if adjacent:
+                full = LOCATION.fullmatch(adjacent.group(1))
+                if full and full.group("path").rsplit("/", 1)[-1] == raw and start(full) == start(m):
+                    path = resolve(full.group("path"), exact=True)
+                else:
+                    errors.append(f"citation: basename label '{m.group()}' disagrees with link target")
+                    continue
         if path is None:
             errors.append(f"citation: file '{raw}' does not resolve uniquely")
             continue
