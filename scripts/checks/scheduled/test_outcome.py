@@ -6,7 +6,6 @@ import datetime as dt
 import tempfile
 import sys
 import unittest
-from unittest.mock import patch
 from process_adapter import process_run
 import protocol
 import observer_watch
@@ -100,18 +99,27 @@ class Outcome(RegistryFixture, unittest.TestCase):
             missing = runs[:index] + runs[index+1:]
             with self.assertRaisesRegex(ValueError, '^FAIL scheduled observer: missed occurrence$'):
                 observer_watch.verify_occurrences(missing, now)
-        # Publisher runs on another workflow and uses external Actions history.
-        import collect
-        import contextlib, io, json
+        # Exercise the real publisher CLI, with only external Actions I/O replaced.
+        import json
+        code = '\n'.join([
+            'import runpy,sys,json,datetime as dt',
+            'from pathlib import Path',
+            'runpy.run_path(str(Path(sys.argv[1])/"suite_bootstrap.py"))',
+            'import collect',
+            'from process_adapter import operation_clock',
+            'runs=json.loads(sys.argv[2])',
+            'collect.pages=lambda path,key,**kwargs: runs if "gate_freshness.yml" in path else []',
+            'collect.inventory=lambda: {}',
+            'collect.operation_clock=lambda: operation_clock(observation=dt.datetime.fromisoformat(sys.argv[3]))',
+            'sys.exit(collect.main())',
+        ])
         with tempfile.TemporaryDirectory() as scratch:
             event = Path(scratch) / 'event.json'; event.write_text('{}')
-            output = io.StringIO()
-            def pages(path, key, **kwargs):
-                return runs[1:] if 'gate_freshness.yml' in path else []
-            with patch.object(collect, 'pages', side_effect=pages), patch.object(collect, 'inventory', return_value={}), contextlib.redirect_stdout(output):
-                from process_adapter import operation_clock
-                result = collect.collect_event({'GITHUB_REPOSITORY':'example/repo', 'GH_TOKEN':'fixture', 'GITHUB_EVENT_PATH':str(event)}, clock=operation_clock(observation=now))
-            self.assertEqual((result, output.getvalue()), (1, 'FAIL scheduled observer: missed occurrence\n'))
+            environment = {'GITHUB_REPOSITORY':'example/repo', 'GH_TOKEN':'fixture', 'GITHUB_EVENT_PATH':str(event)}
+            for history, expected in ((runs, (0, '', '')), (runs[1:], (1, 'FAIL scheduled observer: missed occurrence\n', ''))):
+                result = process_run([sys.executable, '-c', code, str(ROOT), json.dumps(history), now.isoformat()],
+                                     cwd=ROOT, env=environment, role='publisher', capture_output=True, text=True, timeout=10)
+                self.assertEqual((result.returncode, result.stdout, result.stderr), expected)
 
 if __name__ == '__main__':
     from suite_adapter import direct_main
