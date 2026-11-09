@@ -1,4 +1,5 @@
 import ConcreteSpec.Spec.Basics
+import ConcreteSpec.Spec.Surface0
 import ConcreteSpec.Spec.Slice1Syntax
 import ConcreteSpec.Spec.Statics
 import ConcreteSpec.Spec.Slice1Ownership

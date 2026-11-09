@@ -881,6 +881,132 @@ ConcreteSpec.Stuck.ofNat_ctorIdx
 ConcreteSpec.Stuck.typeError.sizeOf_spec	
 ConcreteSpec.Stuck.unbound.sizeOf_spec	
 ConcreteSpec.Stuck.wrongMode.sizeOf_spec	
+ConcreteSpec.Surface0.CommentBody.brecOn	
+ConcreteSpec.Surface0.SourceFailure.brecOn	propext
+ConcreteSpec.Surface0.Utf8.Decodes.brecOn	propext
+ConcreteSpec.Surface0.Utf8.Encodes._sparseCasesOn_1.else_eq	propext
+ConcreteSpec.Surface0.Utf8.Encodes._sparseCasesOn_2.else_eq	propext
+ConcreteSpec.Surface0.Utf8.Encodes.eq_1	propext
+ConcreteSpec.Surface0.Utf8.Encodes.eq_2	propext
+ConcreteSpec.Surface0.Utf8.Encodes.eq_3	propext
+ConcreteSpec.Surface0.Utf8.Encodes.eq_4	propext
+ConcreteSpec.Surface0.Utf8.Encodes.eq_5	propext
+ConcreteSpec.Surface0.Utf8.Four.eq_1	propext
+ConcreteSpec.Surface0.Utf8.One.eq_1	propext
+ConcreteSpec.Surface0.Utf8.Three.eq_1	propext
+ConcreteSpec.Surface0.Utf8.Two.eq_1	propext
+ConcreteSpec.Surface0.Utf8.four_iff	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.Utf8.four_iff._proof_1_9	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.Utf8.one_iff	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.Utf8.one_iff._proof_1_8	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.Utf8.three_iff	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.Utf8.three_iff._proof_1_9	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.Utf8.two_iff	propext
+ConcreteSpec.Surface0.Utf8.two_iff._simp_1_9	propext
+ConcreteSpec.Surface0.commentBody_unique	propext
+ConcreteSpec.Surface0.decodes_exists_iff_utf8	Quot.sound propext
+ConcreteSpec.Surface0.decodes_head_inv	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.decodes_unique	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.decodes_utf8	propext
+ConcreteSpec.Surface0.encodes_determ	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.encodes_exists_iff	propext
+ConcreteSpec.Surface0.encodes_isScalar	propext
+ConcreteSpec.Surface0.encodes_nonempty	propext
+ConcreteSpec.Surface0.encodes_scalar	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.encodes_scalar._proof_1_6	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.encodes_scalar._proof_1_7	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.encodes_scalar._proof_1_8	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.encodes_scalar._proof_1_9	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.encodes_scalar._simp_1_2	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.encodes_scalar._simp_1_3	propext
+ConcreteSpec.Surface0.encodes_scalar._simp_1_4	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.encodes_scalar._simp_1_5	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.encodes_step_unique	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.encodes_step_unique._proof_1_10	Quot.sound propext
+ConcreteSpec.Surface0.encodes_step_unique._proof_1_11	Quot.sound propext
+ConcreteSpec.Surface0.encodes_step_unique._proof_1_12	Quot.sound propext
+ConcreteSpec.Surface0.encodes_step_unique._proof_1_13	Quot.sound propext
+ConcreteSpec.Surface0.encodes_step_unique._proof_1_14	Quot.sound propext
+ConcreteSpec.Surface0.encodes_step_unique._proof_1_15	Quot.sound propext
+ConcreteSpec.Surface0.encodes_step_unique._proof_1_16	Quot.sound propext
+ConcreteSpec.Surface0.encodes_step_unique._proof_1_17	Quot.sound propext
+ConcreteSpec.Surface0.encodes_step_unique._proof_1_18	Quot.sound propext
+ConcreteSpec.Surface0.encodes_step_unique._proof_1_19	Quot.sound propext
+ConcreteSpec.Surface0.encodes_step_unique._proof_1_20	Quot.sound propext
+ConcreteSpec.Surface0.encodes_step_unique._proof_1_21	Quot.sound propext
+ConcreteSpec.Surface0.encodes_step_unique._proof_1_6	Quot.sound propext
+ConcreteSpec.Surface0.encodes_step_unique._proof_1_7	Quot.sound propext
+ConcreteSpec.Surface0.encodes_step_unique._proof_1_8	Quot.sound propext
+ConcreteSpec.Surface0.encodes_step_unique._proof_1_9	Quot.sound propext
+ConcreteSpec.Surface0.encodes_step_unique._simp_1_2	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.encodes_step_unique._simp_1_3	propext
+ConcreteSpec.Surface0.encodes_step_unique._simp_1_4	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.encodes_step_unique._simp_1_5	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.firstError_cons	propext
+ConcreteSpec.Surface0.firstError_cons_inv	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.firstError_here	propext
+ConcreteSpec.Surface0.firstError_not_decodes	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.firstError_unique	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.instDecidableEncodes._proof_1	
+ConcreteSpec.Surface0.instDecidableEncodes._proof_2	
+ConcreteSpec.Surface0.instDecidableEncodes._proof_3	
+ConcreteSpec.Surface0.instDecidableEncodes._proof_4	
+ConcreteSpec.Surface0.instDecidableEncodes._proof_5	propext
+ConcreteSpec.Surface0.instDecidableEncodes._proof_6	
+ConcreteSpec.Surface0.lineComment_unique	propext
+ConcreteSpec.Surface0.scalarFailure_byte	propext
+ConcreteSpec.Surface0.scalarFailure_eof	Quot.sound propext
+ConcreteSpec.Surface0.scalarFailure_nil	Quot.sound propext
+ConcreteSpec.Surface0.scalarFailure_no_head	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.scalarFailure_no_head._proof_1_1	Quot.sound propext
+ConcreteSpec.Surface0.scalarFailure_no_head._proof_1_2	Quot.sound propext
+ConcreteSpec.Surface0.scalarFailure_no_head._proof_1_3	Quot.sound propext
+ConcreteSpec.Surface0.scalarFailure_unique	Quot.sound propext
+ConcreteSpec.Surface0.scalarFailure_unique._proof_1_1	Quot.sound propext
+ConcreteSpec.Surface0.scalarFailure_unique._proof_1_2	Quot.sound propext
+ConcreteSpec.Surface0.scalarFailure_unique._proof_1_3	Quot.sound propext
+ConcreteSpec.Surface0.scalarFailure_unique._proof_1_4	Quot.sound propext
+ConcreteSpec.Surface0.scalarFailure_unique._proof_1_5	Quot.sound propext
+ConcreteSpec.Surface0.scalarFailure_unique._proof_1_6	Quot.sound propext
+ConcreteSpec.Surface0.scalarFailure_unique._proof_1_7	Quot.sound propext
+ConcreteSpec.Surface0.scalarFailure_unique._proof_1_8	Quot.sound propext
+ConcreteSpec.Surface0.scalarPrefix_four	propext
+ConcreteSpec.Surface0.scalarPrefix_nil	propext
+ConcreteSpec.Surface0.scalarPrefix_one	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.scalarPrefix_one._proof_1_13	Quot.sound propext
+ConcreteSpec.Surface0.scalarPrefix_one._proof_1_14	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.scalarPrefix_one._proof_1_15	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.scalarPrefix_one._proof_1_16	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.scalarPrefix_one._proof_1_17	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.scalarPrefix_one._proof_1_18	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.scalarPrefix_one._proof_1_19	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.scalarPrefix_one._proof_1_20	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.scalarPrefix_one._proof_1_21	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.scalarPrefix_one._proof_1_22	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.scalarPrefix_one._simp_1_10	propext
+ConcreteSpec.Surface0.scalarPrefix_one._simp_1_11	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.scalarPrefix_one._simp_1_12	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.scalarPrefix_one._simp_1_9	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.scalarPrefix_take	propext
+ConcreteSpec.Surface0.scalarPrefix_take._simp_1_1	propext
+ConcreteSpec.Surface0.scalarPrefix_three	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.scalarPrefix_three._proof_1_11	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.scalarPrefix_three._proof_1_12	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.scalarPrefix_three._simp_1_10	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.scalarPrefix_three._simp_1_9	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.scalarPrefix_two	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.scalarPrefix_two._proof_1_12	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.scalarPrefix_two._proof_1_13	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.scalarPrefix_two._proof_1_14	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.scalarPrefix_two._simp_1_10	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.scalarPrefix_two._simp_1_11	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.scalarPrefix_two._simp_1_9	propext
+ConcreteSpec.Surface0.scalarPrefix_unfinished_no_head	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.sourceFailure_cons_inv	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.sourceFailure_forbidden_offset	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.sourceFailure_not_sourceOk	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.sourceFailure_unique	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.sourceFailure_unique._proof_1_1	Quot.sound propext
 ConcreteSpec.Trap.arithmeticOverflow.sizeOf_spec	
 ConcreteSpec.Trap.ofNat_ctorIdx	
 ConcreteSpec.Ty.scalar.inj	
@@ -1436,3 +1562,18 @@ _private.ConcreteSpec.Proofs.Slice1.0.ConcreteSpec.runBody.match_1.eq_3
 _private.ConcreteSpec.Proofs.Slice1.0.ConcreteSpec.runBody.match_3.eq_1	
 _private.ConcreteSpec.Proofs.Slice1.0.ConcreteSpec.runBody.match_3.eq_2	
 _private.ConcreteSpec.Proofs.Slice1.0.ConcreteSpec.runBody.match_3.eq_3	
+_private.ConcreteSpec.Proofs.Surface0.0.ConcreteSpec.Borrow.isScalar.match_1.eq_1	propext
+_private.ConcreteSpec.Proofs.Surface0.0.ConcreteSpec.Borrow.isScalar.match_1.eq_2	propext
+_private.ConcreteSpec.Proofs.Surface0.0.ConcreteSpec.Borrow.isScalar.match_1.eq_3	propext
+_private.ConcreteSpec.Proofs.Surface0.0.ConcreteSpec.Borrow.isScalar.match_1.eq_4	propext
+_private.ConcreteSpec.Proofs.Surface0.0.ConcreteSpec.Borrow.isScalar.match_1.eq_5	propext
+_private.ConcreteSpec.Proofs.Surface0.0.ConcreteSpec.Surface0.Utf8.Encodes.match_1.eq_1	propext
+_private.ConcreteSpec.Proofs.Surface0.0.ConcreteSpec.Surface0.Utf8.Encodes.match_1.eq_2	propext
+_private.ConcreteSpec.Proofs.Surface0.0.ConcreteSpec.Surface0.Utf8.Encodes.match_1.eq_3	propext
+_private.ConcreteSpec.Proofs.Surface0.0.ConcreteSpec.Surface0.Utf8.Encodes.match_1.eq_4	propext
+_private.ConcreteSpec.Proofs.Surface0.0.ConcreteSpec.Surface0.Utf8.Encodes.match_1.eq_5	propext
+_private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.Utf8.Encodes.match_1.eq_1	propext
+_private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.Utf8.Encodes.match_1.eq_2	propext
+_private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.Utf8.Encodes.match_1.eq_3	propext
+_private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.Utf8.Encodes.match_1.eq_4	propext
+_private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.Utf8.Encodes.match_1.eq_5	propext
