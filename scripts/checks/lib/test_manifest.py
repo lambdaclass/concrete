@@ -73,7 +73,14 @@ def validate_source(path, line, program, seen_sources):
     if len(parts) > 1 and parts[1] == "golden":
         fail(path, line, f"con: path {relative!r} must not be under tests/golden/")
     tests_dir = path.parent.resolve()
-    source = tests_dir.joinpath(*parts[1:])
+    cur = tests_dir
+    for part in parts[1:]:
+        cur = cur / part
+        if cur.is_symlink():
+            if not cur.exists():
+                fail(path, line, f"con: path {relative!r} is a dangling symlink")
+            fail(path, line, f"con: path {relative!r} must not be or traverse a symlink")
+    source = cur
     try:
         resolved = source.resolve(strict=True)
     except OSError:
@@ -152,6 +159,8 @@ def self_test():
         tests.mkdir()
         (tests / "slice0").mkdir()
         (tests / "slice0" / "ok.con").write_text("return 0;\n", encoding="utf-8")
+        (tests / "slice0" / "link.con").symlink_to(tests / "slice0" / "ok.con")
+        (tests / "slice0" / "dangling.con").symlink_to(tests / "slice0" / "missing.con")
         valid = ("id\tprogram\texpect\tslice\n"
                  "a\tbir:answer\texit 42\tslice0\n"
                  "b\tcon:tests/slice0/ok.con\trefuse SYN-5@1\tslice0\n")
@@ -164,6 +173,8 @@ def self_test():
             valid + "c\tbir:answer\texit 0\tslice0\n",
             valid + "c\tbir:other\trefuse SYN-5\tslice0\n",
             valid + "c\tcon:tests/slice0/missing.con\texit 0\tslice0\n",
+            valid + "c\tcon:tests/slice0/link.con\texit 0\tslice0\n",
+            valid + "c\tcon:tests/slice0/dangling.con\texit 0\tslice0\n",
         ]
         for text in bad:
             try:
