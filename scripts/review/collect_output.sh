@@ -119,7 +119,7 @@ validate_reviewer_output() {
   fi
   local parsed status
   parsed="$(python3 -I "$COLLECT_OUTPUT_DIR/output_contract.py" \
-    --repo "$repo" --commit "$commit" "${base_flag[@]}" --verdicts "$verdicts" \
+    --repo "$repo" --review-root "$review_tree" --commit "$commit" "${base_flag[@]}" --verdicts "$verdicts" \
     --rc "$rc" "${incomplete_flag[@]}" --log "$log_file" "$out_file")" || return 2
   status="$(printf '%s\n' "$parsed" | sed -n 's/^status: //p')"
   case "$status" in

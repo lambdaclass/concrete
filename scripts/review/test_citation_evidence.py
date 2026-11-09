@@ -48,7 +48,13 @@ def run(name, review, positive=True, removed=False):
         unpack(name)
         sha = commit()
         text = (FIX / review).read_text()
-        return c.citation_error(text, directory, sha, c.commit_blob_paths(directory, sha), positive, base)
+        # Historical archive roots are fixture metadata, never inferred by the resolver.
+        roots = {
+            'scheduled': '/home/unbalancedparen/projects/gates-briefs/ro-S3',
+            'anchors': '/home/unbalancedparen/projects/gates-briefs/ro-AKa',
+            'rev-c1a3': '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree',
+        }
+        return c.citation_error(text, directory, sha, c.commit_blob_paths(directory, sha), positive, base, roots.get(name, '/home/unbalancedparen'))
 
 assert run('rev-c1a3', 'rev-c1a3/agy.out') is None
 assert run('rev-c2a4', 'rev-c2a4/codex.final', positive=False, removed=True) is None

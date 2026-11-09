@@ -42,7 +42,7 @@ with tempfile.TemporaryDirectory() as directory:
     check("source.lean:3", ("invalid", "citation: range 'source.lean:3' outside 1..2; citation: positive verdict requires at least one resolvable file:line citation"))
     check("source.lean:1 `inventedLaw` `mutantFake` `caseFake`", ("invalid", "citation: identifier 'inventedLaw' unresolved; citation: identifier 'mutantFake' unresolved; citation: identifier 'caseFake' unresolved"))
     check("source.lean:1–2,2 `realAnchor`", "clean")
-    check("[source.lean:1](file:///arbitrary/export/source.lean:1)", "clean")
+    check(f"[source.lean:1](file://{directory}/source.lean:1)", "clean")
     check("source.lean:1 `declModifiers`", "clean")
     check("source.lean:1 `c2245c99..21ad148b` `plainword`", "clean")
     check("source.lean:1 `missingName`\nABSENT: missingName", "clean")
@@ -63,7 +63,7 @@ with tempfile.TemporaryDirectory() as directory:
     git("-c", "user.name=Control", "-c", "user.email=control@example.invalid", "commit", "-qm", "duplicate basename")
     sha = git("rev-parse", "HEAD")
     check("ROADMAP.md:1 README.md:1 ISSUES.tsv:1", "clean")
-    check("[source.lean:1](file:///unusual/absolute/source.lean#L1)", "clean")
+    check(f"[source.lean:1](file://{directory}/source.lean#L1)", "clean")
     check("source.lean:1", ("invalid", "citation: file 'source.lean' does not resolve uniquely; citation: positive verdict requires at least one resolvable file:line citation"))
     check("[source.lean:1–2,2](legacy/source.lean#L1)", ("invalid", "citation: range 'source.lean:1–2,2' outside 1..1"))
     check("[source.lean:2](source.lean#L1)", ("invalid", "citation: basename label 'source.lean:2' disagrees with link target"))
@@ -75,6 +75,11 @@ with tempfile.TemporaryDirectory() as directory:
     # Explicit link targets can name an exact root file despite legacy copies.
     check("[`realAnchor`](source.lean#L1)", "clean")
     check("[source.lean](source.lean:1) file:///tmp/scripts/missing/README.md:1", ("invalid", "citation: file 'file:///tmp/scripts/missing/README.md' does not resolve uniquely"))
+    check("[README.md](file:///etc/arbitrary/nonexistent/dir/README.md:1)", ("invalid", "citation: file 'file:///etc/arbitrary/nonexistent/dir/README.md' does not resolve uniquely; citation: positive verdict requires at least one resolvable file:line citation"))
+    # Parent directories matching tracked top-level directories cannot mask the root.
+    archive_root = "/tmp/.claude/worktrees/topic"
+    result = contract.citation_error("file://" + archive_root + "/source.lean:1", directory, sha, contract.commit_blob_paths(directory, sha), True, review_root=archive_root)
+    assert result is None, result
     (root / "lean-toolchain").write_text("different-pin\n")
     git("add", ".")
     git("-c", "user.name=Control", "-c", "user.email=control@example.invalid", "commit", "-qm", "different toolchain pin")

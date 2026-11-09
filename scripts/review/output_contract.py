@@ -31,6 +31,7 @@ CLI output (stdout, two lines):
 
 import argparse
 import fnmatch
+import os
 import posixpath
 import re
 import subprocess
@@ -113,7 +114,7 @@ def identifier_source(path):
     return not any(fnmatch.fnmatchcase(path, pattern) for pattern in IDENTIFIER_EXCLUSIONS)
 
 
-def citation_error(text, repo, commit, paths, positive, base=None):
+def citation_error(text, repo, commit, paths, positive, base=None, review_root=None):
     errors = []
     cache = {}
     def blob(path):
@@ -125,15 +126,13 @@ def citation_error(text, repo, commit, paths, positive, base=None):
         return re.search(r"(?<![\w])" + re.escape(name) + r"(?![\w])", content) is not None
     def resolve(path, exact=False):
         if path.startswith("file://"):
-            parts = path[7:].split("/")
-            roots = {p.split("/", 1)[0] for p in paths if "/" in p}
-            for i, part in enumerate(parts):
-                if part in roots:
-                    candidate = "/".join(parts[i:])
-                    return candidate if candidate in paths else None
-            # Root-level files have no directory component to recognize.
-            candidate = parts[-1]
-            return candidate if candidate in paths else None
+            absolute = path[7:]
+            # Roots come from the caller, never from components guessed from a URL.
+            for root in (review_root, os.path.abspath(repo)):
+                if root and absolute.startswith(root.rstrip("/") + "/"):
+                    candidate = absolute[len(root.rstrip("/")) + 1:]
+                    return candidate if is_clean_relative_path(candidate) and candidate in paths else None
+            return None
         if "/" not in path and not exact:
             candidates = [p for p in paths if p.rsplit("/", 1)[-1] == path]
             return candidates[0] if len(candidates) == 1 and not candidates[0].startswith("legacy/") else None
@@ -222,6 +221,7 @@ def evaluate_output(
     rc: int = 0,
     incomplete: bool = False,
     base: str | None = None,
+    review_root: str | None = None,
 ) -> tuple[str, str]:
     combined = f"{text}\n{log_text}" if log_text else text
     norm_nonempty = [normalize_line(line) for line in text.splitlines()]
@@ -263,7 +263,7 @@ def evaluate_output(
     try:
         valid_blobs = commit_blob_paths(repo, commit)
         problem = citation_error(strip_directives(text), repo, commit, valid_blobs,
-                                 matched_verdict.lower() in ("clean", "accept"), base)
+                                 matched_verdict.lower() in ("clean", "accept"), base, review_root)
     except (ValueError, OSError, subprocess.SubprocessError) as exc:
         return "blocked", f"citation lookup failed: {exc}"
     if problem:
@@ -318,6 +318,7 @@ def strip_directives(text: str) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate reviewer output against the Concrete contract.")
     parser.add_argument("--commit", help="Reviewed commit SHA whose tree validates READ: paths")
+    parser.add_argument("--review-root", help="Exact absolute root of the verified review archive")
     parser.add_argument("--base", help="Base of reviewed diff for removed identifiers")
     parser.add_argument("--repo", default=".", help="Git repository path (default: .)")
     parser.add_argument("--verdicts", help="Comma-separated allowed VERDICT values (e.g. clean,findings)")
@@ -361,6 +362,7 @@ def main() -> int:
         rc=args.rc,
         incomplete=args.incomplete,
         base=args.base,
+        review_root=args.review_root,
     )
     print(f"status: {status}")
     print(f"reason: {reason}")
