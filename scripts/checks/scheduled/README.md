@@ -245,3 +245,9 @@ collector, publication and history-observer controls through the bounded runner.
 These are controller controls, not evidence that actual campaign/collector integration
 has run. Qualification requires coordinator CI2 checks after the dependencies above
 land; do not run heavy campaigns locally or weaken campaigns to make them cheap.
+
+Partial report trees are preserved even before their SHA binding is written. Their
+artifact entry has `binding_status=INCOMPLETE`, `sha=null`, and an exact missing
+binding diagnostic; only verified bindings carry `sha`. Missing bindings cannot
+upgrade an INCOMPLETE gate to FAIL. Present mismatched bindings and unsafe paths
+remain FAIL. A successful command with an unfinished binding is INCOMPLETE.

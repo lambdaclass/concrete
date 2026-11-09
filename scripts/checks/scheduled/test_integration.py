@@ -108,6 +108,16 @@ printf 'depth=128\\n' > report-{n}/depth.txt
         self.assertEqual((code,index['status']),(1,'FAIL'))
         self.assertEqual(index['gates'][0]['error'],'FAIL scheduled artifact: missing report-0')
 
+    def test_partial_report_without_binding_stays_incomplete(self):
+        program = "mkdir report-0; echo partial > report-0/raw.txt; python3 \"$SCHEDULED_OUTCOME_HELPER\" INCOMPLETE 'measurement unavailable'; exit 1"
+        code,index,files,_=self.invoke([program])
+        self.assertEqual((code,index['status']),(1,'INCOMPLETE'))
+        artifact=index['gates'][0]['artifacts'][0]
+        self.assertEqual(artifact['binding_status'], 'INCOMPLETE')
+        self.assertEqual(artifact['diagnostic'], 'INCOMPLETE scheduled artifact: missing SHA binding report-0/selected-sha.txt')
+        self.assertIsNone(artifact['sha'])
+        self.assertEqual(files['gate-0-artifacts/report-0/raw.txt'], b'partial\n')
+
     def test_real_unprovisioned_or_busy_pool_cannot_pass(self):
         code,index,files,_=self.invoke([self.report()],occupied=True)
         self.assertEqual((code,index['status']),(1,'INCOMPLETE'))

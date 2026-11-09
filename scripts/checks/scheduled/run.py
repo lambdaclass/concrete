@@ -65,10 +65,19 @@ def preserve_artifacts(row, checkout, output, number, sha, required, saved):
                 with path.open("rb") as stream:
                     digest=hashlib.file_digest(stream,"sha256").hexdigest()
                 entries.append(dict(path=str(path.relative_to(output)), bytes=path.stat().st_size, sha256=digest))
-        saved.append(dict(path=str(target.relative_to(output)), files=entries, sha=sha))
+        artifact = dict(path=str(target.relative_to(output)), files=entries, sha=None,
+                        binding_status="INCOMPLETE")
+        saved.append(artifact)
         binding=checkout / declared["sha_file"]
-        require(binding.is_file() and not binding.is_symlink(), f"FAIL scheduled artifact: missing SHA binding {declared['sha_file']}")
+        require(not binding.is_symlink(), f"FAIL scheduled artifact: unsafe path {declared['sha_file']}")
+        if not binding.exists():
+            diagnostic = f"INCOMPLETE scheduled artifact: missing SHA binding {declared['sha_file']}"
+            artifact["diagnostic"] = diagnostic
+            require(not required, diagnostic)
+            continue
+        require(binding.is_file(), f"FAIL scheduled artifact: unsafe path {declared['sha_file']}")
         require(binding.stat().st_size <= 41 and binding.read_text().strip() == sha, f"FAIL scheduled artifact: selected SHA mismatch {declared['path']}")
+        artifact.update(sha=sha, binding_status="PASS")
     return saved
 
 def gate_environment(sha, tier, attempt):
