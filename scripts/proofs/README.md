@@ -591,3 +591,16 @@ Module dependency pruning uses Lean's import-before-importer module order
 `moduleNames`). An earlier module cannot reference a later subject. Unknown
 module provenance remains conservative. `vacuity_cache_identity.py` checks this
 contract on the loaded import graph and checks both dependency directions.
+
+Round-3 refutation scheduling follows transparent producers to suppliers and
+requests hypothetical-context certificates only for suspicious discharges. It
+retains certificate checks and never treats missing certificates as exemptions.
+This removes thousands of consistency searches on harmless lambdas. Own:4381
+drops from ~70s to ~18s in diagnostic single-example probes, but still exhausts
+20,000 proof/context visits; the other heavy examples likewise remain explicitly
+INCOMPLETE. R-0219 and slice-2a own structural proof-state sharing, including
+reconciling certificate dependency context identities with the complete keys used
+here. This is still a pending-owner search/budget question. N15's 1,187s census
+and 1,809/2,152 attempted default-watchdog population are historical measurements;
+no round-3 whole-scope wall result is claimed. Daily/weekly must retain the real
+full census even if PR uses these bounded controls.

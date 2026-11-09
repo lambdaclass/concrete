@@ -453,3 +453,46 @@ mutation 651, withProtected 354, mentions 258, DFS 157. Thus the former bound
 was dominated by avoidable module traversal, not a genuine >20,000 obligation.
 The control checks every loaded import edge respects Lean's import-before-
 importer invariant, plus positive, negative and self dependency queries.
+
+### Demand-driven refutation (round 3)
+
+Refutation certificates exempt suspicious discharges. Transparent producers are
+now followed to their suppliers before deciding their result proposition; lambda
+contexts are refuted only after their body reports a suspicious discharge. No
+exemption is granted without the same checked certificate. A harmless lambda
+control asserts zero refutation-cache entries. Exact supplied-False, unreachable-
+branch and both BinderInfo orders remain required controls.
+
+Diagnostic Own:4381 before this change: 70,227 ms, 2,000,014 heartbeats, 12,295
+work; 3,025 context searches consumed 1,503,882,132 raw heartbeat ticks. Merely
+deferring result-type decide was insufficient (70,302 ms, 2,000,022 heartbeats).
+Demand-driven context certificates: 17,616 ms, 614,672 heartbeats, work=20,000;
+zero context searches. Own:4394: 18,388 ms / 614,672 heartbeats; Own:4369:
+15,628 ms / 499,945 heartbeats; Grant:1478: 12,234 ms / 402,658 heartbeats. All
+four remain INCOMPLETE `false-discharge-budget` at 20,000 work. These diagnostic
+probes instrument the consumer, so their heartbeat counts are not gate results.
+The remaining distinct proof/context traversal is an open structural sharing and
+budget question pending owner, owned by R-0219 and the reserved slice-2a line;
+this writer does not change its protected dependency/certificate region.
+
+The other two planted companions also complete: Own:4230 PASS at 12,418 work /
+624 diagnostic heartbeats; Own:4247 PASS at 13,224 work / 697 heartbeats.
+Own:4258 instance PASS at 12,324 work / 4,510 diagnostic heartbeats, compared
+with 19,136 work previously. Constant enumeration (10,837) now dominates it;
+module ancestry is 232. The ~38% headroom comes from an import-graph invariant,
+not a larger allowance or an empirical cutoff.
+
+Cache audit boundary: source/name resolution maps are scoped to one inventory;
+module/name dependency maps to one immutable environment; constants/mentions
+ignore binder annotations semantically but now also use exact syntax. Mutation,
+replacement, projection answers and graph term interning preserve exact syntax.
+Discharge query/template maps contain structural IDs and explicit modes/levels.
+The protected certificate dependency pending/completed keys still encode FVarIds
+and require reconciliation by slice-2a if it permits same-ID declaration updates;
+this writer has deliberately not changed that region or claimed it audited away.
+
+Open supplied producers remain evidence even when their argument contains a
+hypothetical variable: the focused `reachable-open-impossible-negative` and
+`joint-open-supplied-negative` controls require exactly `instance-false-discharge`.
+The refutation demand change must retain that rule; a local four-case rerun
+passes both negatives and both hypothetical positives.

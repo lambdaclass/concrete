@@ -829,7 +829,7 @@ def dischargeSettings : MetaM DischargeSettings := do
 structure DischargeKey where
   closure : Expr
   instances : Array (Name × Expr)
-  declarations : Array (Name × BinderInfo × Nat × Option Expr × Bool)
+  declarations : Array (Name × BinderInfo × Nat × Option Expr × Bool × Nat)
   settings : DischargeSettings
   deriving BEq, Hashable
 
@@ -877,7 +877,7 @@ def dischargeClosure (e : Expr) : MetaM (Option DischargeKey) := do
     let value := decl.value? (allowNondep := true)
     if let some v := value then
       if v.hasMVar || v.hasLevelMVar then return none
-    declarations := declarations.push (decl.userName, decl.binderInfo, kind, value.map (·.abstract xs), decl.isLet)
+    declarations := declarations.push (decl.userName, decl.binderInfo, kind, value.map (·.abstract xs), decl.isLet, decl.index)
   let mut instances := #[]
   for inst in (← getLocalInstances) do
     if inst.fvar.hasMVar || inst.fvar.hasLevelMVar then return none
@@ -888,7 +888,8 @@ def dischargeClosure (e : Expr) : MetaM (Option DischargeKey) := do
 /-- Mutable metavariables and executable unfolding predicates cannot have a
     structural identity. Such calls compute normally and never publish entries. -/
 def dischargeCacheable (context : DischargeRawContext) (e : Expr) : MetaM Bool := do
-  if (← readThe Meta.Context).customCanUnfoldPredicate?.isSome then return false
+  let ctx ← readThe Meta.Context
+  if ctx.customCanUnfoldPredicate?.isSome || ctx.defEqCtx?.isSome || ctx.trackZetaDelta then return false
   if e.hasMVar || e.hasLevelMVar then return false
   for (_, type, value, _, _, _, _, _) in context.declarations do
     if type.hasMVar || type.hasLevelMVar then return false
@@ -952,8 +953,9 @@ partial def falseDischarge (e : Expr) : StateRefT DischargeState MetaM Bool := d
   if let some budget := (← get).budget then chargeWork budget "false-discharge-budget"
   else if fuel == 0 then throwError "false-discharge-budget"
   modify fun state => { state with remaining := fuel - 1, visited := if cacheable then state.visited.insert key else state.visited }
-  let refuted ← dischargeRefutableTypeAt context (← inferType e)
-  if refuted && !e.hasFVar then return !(← dischargeRefutableContextAt context true)
+  -- Follow transparent producers before asking decide to normalize their result
+  -- proposition. Their suppliers are the evidence we audit; deciding the whole
+  -- operational judgment at every intermediate proof node repeats real reduction.
   let e ← whnfD e
   if let .const n levels := e.getAppFn' then
     if [``False.elim, ``False.casesOn, ``absurd, ``Empty.elim, ``Empty.casesOn,
@@ -968,7 +970,7 @@ partial def falseDischarge (e : Expr) : StateRefT DischargeState MetaM Bool := d
         let applied := (mkAppN body e.getAppArgs).headBeta
         let reduced ← whnfD applied
         if ← falseDischarge reduced then return true
-      else if refuted then
+      else if ← dischargeRefutableTypeAt context (← inferType e) then
         -- An opaque supplied producer of an impossible inhabitant is real
         -- evidence. Transparent derivations are followed to their suppliers;
         -- hypothetical local contradictions are not mistaken for suppliers.
@@ -980,11 +982,15 @@ partial def falseDischarge (e : Expr) : StateRefT DischargeState MetaM Bool := d
         if ← falseDischarge arg then return true
     return false
   | .lam .. => lambdaTelescope e fun xs body => do
+    -- Refutations are exemptions for a discovered bad discharge. Search only
+    -- when the body actually needs an exemption, rather than proving thousands
+    -- of harmless hypothetical contexts consistent on the way down.
+    unless ← falseDischarge body do return false
     let context ← dischargeRawContext
     for x in xs do
       if ← dischargeRefutableTypeAt context (← inferType x) then return false
     if ← dischargeRefutableContextAt context then return false
-    falseDischarge body
+    return true
   | .letE _ _ v b _ => falseDischarge (b.instantiate1 v)
   | .mdata _ e | .proj _ _ e => falseDischarge e
   | _ => return false
