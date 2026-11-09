@@ -1,0 +1,50 @@
+Implemented ROUND4. All four review findings and the doc-comment nit are fixed; two approvals are recorded. No reviewers, git notes, or pushes. Working tree is clean.
+
+All commits passed the required Lean build. Rules: **32 passed**. Trust: **23 passed**. Final N2 ran on all eleven modules: **FAIL**, with only the allowed categories and their cascades; no new independent failures or INCOMPLETE results.
+
+For the eight refusal laws, the old universally wrapped guarantees now take every input and premise explicitly and conclude `¬ Ok`. Their logical strength is preserved:
+
+| Law | Old guarantee → new refusal | Paired Instance/Planted case |
+|---|---|---|
+| Borrow.excl_untouched | Accepted exclusive place is untouched → touching it is refused | `frozenRead` |
+| Borrow.open_mut_freezes_root | Accepted mutable borrow leaves old same-root places untouched → touching one is refused | `rootRead` |
+| Borrow.noWrite_sound | Accepted trace cannot write a root granting no write → such writing is refused | `readOnlyWrite` |
+| Borrow.shared_open_grants_no_write | Accepted shared borrow grants no write → writing its root is refused | `sharedWrite` |
+| Borrow.fresh_not_used | Accepted trace cannot use an absent name → that use is refused | `freshRead` |
+| Borrow.view_not_used_after | Accepted borrow cannot use its view afterward → escaped use is refused | `escapedRead` |
+| Brand.reset_requires_no_old | Accepted reset has no live old-brand handle → reset with such a handle is refused | `liveOldHandle` |
+| Brand.reset_refuses_old | Accepted reset has a distinct brand and cannot use/free an old handle → either violation is refused | `reusedLiveBrand`, `oldHandleUse`, `oldHandleFree` |
+
+Borrow cases use `PermissiveBorrow`; Brand cases use `PermissiveOk`.
+
+The three cleanup laws retain their conclusions and restore explicit registration derivations and premises:
+
+| Law | Old → new subject/form | Paired evidence |
+|---|---|---|
+| defer_cleanup_releases_before | Wrapped registration implication → explicit premises; subject `expected` | `allocatorDependency` / `missingCalls` |
+| defer_cleanup_releases_nodup | Wrapped registration implication → explicit premises; subject `targets` | `returnStack` / `duplicateTargets` |
+| defer_cleanup_releases_needs | Wrapped registration implication → explicit premises; subject `targets` | `loanSource` / `missingTargets` |
+
+Five former Laws became Helpers, preserving their guarantees with explicit parameters:
+
+- `Borrow.ok_keeps_locked`: inversion.
+- `Borrow.range_open_mut_freezes_root`: projection, explicitly using `RangeOk`.
+- `Brand.run_inv`: inversion.
+- `Brand.reset_fresh_nodup`: projection.
+- `Cleanup.reg_inv`: inversion.
+
+These five remain **PENDING**, together with the new computation helpers `Borrow.Evidence.readOnly_noWrite` and `Brand.Evidence.liveBrandIn`.
+
+Counts across eleven modules: **89 Laws, 95 Instances, 106 Planted examples, 7 PENDING exemptions**.
+
+Commits:
+
+- `abe2a6a75` — Borrow refusal contracts and evidence.
+- `f72d6d5a9` — Brand refusals and preservation Helpers.
+- `83f9d59fb` — Cleanup function subjects and registered-stack evidence.
+- `7bab44d5a` — Explicit preservation premises, reset use/free cases, documentation nit.
+- `942d74b39` — Normalize spacing.
+
+Exact old/new statements, evidence mappings, and validation details are in [_review/ROUND4_RESULTS.txt](_review/ROUND4_RESULTS.txt).
+
+QUESTIONS: No new language questions. AY-1 remains pending owner confirmation as recorded in ROUND4; seven exemption approvals await independent review.

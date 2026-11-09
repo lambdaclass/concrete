@@ -1,0 +1,16 @@
+Integration head (branch wip/spec-integration-head), round 3, written by Codex. Base 3b54f736d (round 2) -> head f68840b0e. Approval tags change; nothing else does.
+- 5dcf03058 resets to PENDING the approvals of ConcreteSpec.Core.Exec.Demo.erasing_internal_infinite and ConcreteSpec.Core.Exec.Demo.bumpedMove, whose text changed in the C6 merge (env became observationEnv). These are Findings 1 and 2 of the round-2 review quoted in PROMPT.md.
+- f68840b0e records the 24 approvals that review gave, as REV-integ-agy-3b54f736d.
+The golden is deliberately not regenerated (owner decision pending); do not report it.
+
+Check:
+- every recorded tag sits on a declaration that review approves, matched by fully qualified name and tag line;
+- the two resets are correct, and no other declaration in ConcreteSpec/Proofs/Adequacy.lean whose text changed in merge 51ea5c7e2 keeps a stale approval;
+- no non-tag text changed.
+Then give an explicit APPROVE or REJECT, by fully qualified name, for every declaration still marked approved: PENDING in ConcreteSpec/Proofs/Adequacy.lean and the Leak module:
+- ConcreteSpec.Core.Exec.Demo.erasing_internal_infinite;
+- ConcreteSpec.Core.Exec.Demo.bumpedMove;
+- the Demo observationEnv definition or lemma;
+- the Leak no_step_of_none lemma;
+- any other you find.
+For each, also audit the vacuity of the Laws it feeds.

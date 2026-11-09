@@ -1,0 +1,81 @@
+CHANGES: the transitive dependency argument is sound for helpers actually referenced by the parent, but the rule extends that argument to auxiliaries without establishing that relationship. This weakens the inventory review.
+
+(a) Lean 4.34.1 reproduction
+
+File: Transitive.lean in the authorized lean-repro directory. I wrote only that file and ran the prescribed command three times. The first two attempts failed to produce the required auxiliary; the final run succeeded with exit code 0.
+
+Final file contents:
+
+    import Lean
+    #eval Lean.versionString
+    set_option pp.proofs true
+    def parent (p q : Prop) (h : p ↔ q) : Bool → { r : Prop // r = q }
+      | true => ⟨p, propext h⟩
+      | false => ⟨q, rfl⟩
+    #print parent
+    #print equations parent
+    #print axioms parent
+    #print axioms parent.eq_1
+
+Exact final output:
+
+    "4.34.1"
+    def parent : (p q : Prop) → (p ↔ q) → Bool → { r // r = q } :=
+    fun p q h x =>
+      match x with
+      | true => ⟨p, propext h⟩
+      | false => ⟨q, rfl⟩
+    equations:
+    @[backward_defeq] theorem parent.eq_1 : ∀ (p q : Prop) (h : p ↔ q), parent p q h true = ⟨p, propext h⟩
+    @[backward_defeq] theorem parent.eq_2 : ∀ (p q : Prop) (h : p ↔ q), parent p q h false = ⟨q, rfl⟩
+    'parent' depends on axioms: [propext]
+    'parent.eq_1' depends on axioms: [propext]
+
+Thus the requested parent and generated equation lemma both report propext. This example supports the stated behavior, but does **not** prove that every equation lemma’s dependencies flow into its parent.
+
+The inventory explicitly measures transitive axioms per theorem, and lists parents and helpers separately: context/axioms.sh:2-12; context/axioms.golden:333-334,3218-3219.
+
+For a helper referenced transitively by an inventoried parent, an axiom cannot occur only on the helper’s line relative to that parent. For an independently generated equation lemma, that guarantee does not follow: the lemma can depend on the definition without the definition depending on the lemma. Its proof’s axioms therefore need not propagate backwards. The unconditional assurance in tools/golden-flow.sh:21 is too broad.
+
+(b) Names do not establish generated provenance
+
+Yes. A person can write names such as foo_proof_1 or bar.match_2. The former should fail a correctly delimited pattern; the latter can satisfy one exactly. Even names containing a dot followed by an underscore are not reserved proof of compiler origin.
+
+Tighten the rule to require a **full-name match**, with an escaped, independently identified parent followed by exactly one of these suffixes:
+
+    \._proof_[0-9]+(_[0-9]+)*
+    \._simp_[0-9]+(_[0-9]+)*
+    \.match_[0-9]+(_[0-9]+)*(\.eq_[0-9]+)?
+
+Anchor the complete expression with ^ and $. Numeric disambiguation suffixes are necessary: the inventory contains them at context/axioms.golden:334,3219.
+
+For private names, parse Lean’s actual structured prefix: _private, module components, a numeric scope component, then the declaration name. The inventory uses that representation, not the abbreviated P prefix in the new instruction: context/axioms.golden:3200-3201,3218-3219; tools/golden-flow.sh:21.
+
+Also require that the candidate is **not explicitly declared in source on either side**, resolving namespaces, private names, and quoted identifiers. Textual grep alone is insufficient. Require compiler provenance or declaration metadata as well; an anchored regex remains only a candidate filter.
+
+(c) Exact parent equality
+
+The wording “whose own golden line is unchanged” naturally means the exact declaration, but it supplies neither a parent-resolution procedure nor an executable check. The surrounding script checks generated-file equality and commit state, not this condition: tools/golden-flow.sh:21,29-30.
+
+Use this wording:
+
+> Resolve one exact parent declaration from compiler metadata. Require exactly one inventory row for that fully qualified declaration in both baseline and candidate inventories, with byte-identical complete rows. A prefix match, sibling declaration, missing row, or ambiguous mapping fails. Record the removed auxiliary, exact parent, and both matching rows.
+
+This matters because some apparent parents are definitions and have no theorem inventory row. For example, the lookup inventory segment contains equation rows rather than an own lookup row: context/axioms.golden:633-636. Such cases must fail this exception or receive a separately designed, explicit policy.
+
+(d) Remaining defect and gates-owner follow-up
+
+An unchanged axiom set does not establish unchanged theorem coverage, statement, or implementation. Misclassifying a handwritten declaration would silently authorize its disappearance. Likewise, a private-name prefix cannot justify dropping every declaration beneath it. Those are real population-review weakenings, even when all remaining axioms are standard. The existing gate deliberately treats removal, renaming, and axiom changes as reviewable differences: context/axioms.sh:10-17,78-95.
+
+Follow-up for the gates owner: move this decision into the repository’s golden gate using structured declaration provenance, exact parent mapping, and baseline dependency information. Require dependency reachability before invoking the transitivity argument; give independently generated equation lemmas a separate policy. Preserve the standard-axiom and population checks.
+
+Add tests accepting genuine generated renumbering with an identical exact parent row, and rejecting handwritten lookalikes, prefix collisions, missing or changed parent rows, ambiguous private mappings, and auxiliary-only dependencies. Include a Lean transitivity regression. The current natural-language exception plus byte comparison is a shortcut, not that long-term gate: tools/golden-flow.sh:21-23,29-30.
+
+READ: PROMPT.md
+READ: REVIEW.diff
+READ: tools/golden-flow.sh
+READ: context/axioms.sh
+READ: context/axioms.golden
+READ: context/ihead1-golden-refusal.txt
+REPOSITORY: readable
+VERDICT: CHANGES

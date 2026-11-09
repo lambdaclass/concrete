@@ -1,0 +1,17 @@
+Seven merges completed; C6 is blocked by contradictory trap-line laws.
+
+| Commit | Resolution |
+|---|---|
+| `0946c061e` C1 | Kept integration-side axiom inventory. |
+| `ab1cf6118` C2 | Preserved C1 tags, C2 negation laws and removal; combined README updates. |
+| `bc2ab71a4` C4 | No conflicts. |
+| `b14ae2274` C5 | Kept integration-side axiom inventory. |
+| `deaba41d2` C7 | Added local inversion helper for C1 compatibility. |
+| `f279344c5` C10 | Unioned imports/docs; adapted proofs to C4 signatures. |
+| `0cbd2ba33` C9 | Used exact requested SHA; migrated fixture module identities. |
+
+All seven passed pre-commit and post-commit builds. No existing approvals reset; new `Leak.no_step_of_none` is marked `PENDING`.
+
+**QUESTIONS:** C6 requires trap-line equality to imply full-span equality; C9 proves that differing byte ranges can render identically. ROUND1 requires stopping before changing normative meaning. Recommend authorizing C6’s law to use rendered-field equality. Site-table validity signatures also need reconciliation.
+
+Details and options are in [_review/QUESTIONS.md](_review/QUESTIONS.md). C6 remains an unresolved, uncommitted merge. Final rules/trust checks have not run. No pushes, reviewers or git notes.

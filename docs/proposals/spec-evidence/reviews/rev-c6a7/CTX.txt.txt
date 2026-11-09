@@ -1,0 +1,24 @@
+C6 (branch wip/spec-c6-audit) round 7, written by Codex. Base 5120f5210 (accepted; seven gates pass) -> head 285cf57db. Merge commit 9a41764cc brings in C9 at 115a73b2d (accepted: structured SourcePath, strict parser, whole-project loader).
+
+The round carries out C6's part of the owner's source-path decision (option (a); quoted in PROMPT.md). The owner's words: "ok tell me again the options choose the best long term options for everything". Under the decision:
+- one structured project-relative path per file;
+- the loader refuses malformed paths, out-of-project paths and duplicate sites, naming the input; nothing is dropped;
+- C9 owns source identity and the trap-site table;
+- C6 drops its two now-redundant assumptions (`found` and `pathOk`) from runFrom_source_trap.
+
+This answers REVIEW4 finding 2 and its QUESTION (quoted in PROMPT.md). The round also resolves the C6/C9 conflict the integration merge found:
+- trapLine_injective is restated as injectivity on exactly the rendered fields (kind, site, path, line, column), because C9's Span now carries unrendered byte offsets;
+- there is a single SiteTable.Valid, C9's;
+- C6's string PathOk and filtering sourceSites are removed.
+
+Check, with the best long-term design as the only standard:
+- No run-time path re-check or filtering remains. runFrom_source_trap derives its coordinates from the loaded project through C9's interface, without the old premises, and keeps every other conjunct.
+- Each changed Law in the table (trapLine_injective, runFrom_source_trap, source_trap_column, sourcePrefixSpan_second_line, sourceSpan_ascii_eq_char_col, sourceSpan_multibyte_gt_char_col, output_before_trap_kept, Ghost.runStmts_terminal) is at least as strong as its old statement in meaning, with the only exception the rendered-fields restatement, which must be exactly what the renderer determines.
+- The decided trap-line bytes and statuses are unchanged.
+- There is exactly one SiteTable.Valid, and no duplicate path rule.
+- Instances are closed. Planted mutants are premise-preserving and of the subject's type, including the refused-project cases.
+- Vacuity of every Law in the C6 modules (Proofs/Observe*.lean), with a verdict and witness each.
+- The writer reports 114 unknown-name N2 diagnostics in the C6 modules as inherited, meaning backticked names in doc tags that do not resolve. Each is a real defect under the convention, whoever introduced it. Confirm, and give the files and a representative sample, so the next round fixes all of them.
+- For each Helper or Representation lemma marked approved: PENDING, an explicit APPROVE or REJECT by fully qualified name.
+
+Every identifier you write in backticks must be one you found with grep in this tree. Core-library names are not declarations of this tree, so never put them in backticks.

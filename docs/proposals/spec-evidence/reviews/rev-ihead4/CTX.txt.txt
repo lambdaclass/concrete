@@ -1,0 +1,12 @@
+Integration head (branch wip/spec-integration-head), round 4, written by Codex. Base f68840b0e (round 3) -> head aa44140a3. It records approvals and nothing else: `(approved: REV-integ-agy-f68840b0e)` on the four declarations the round-3 review (quoted in PROMPT.md) approved:
+- ConcreteSpec.Core.Exec.Demo.observationEnv
+- ConcreteSpec.Core.Exec.Demo.erasing_internal_infinite
+- ConcreteSpec.Core.Exec.Demo.bumpedMove
+- ConcreteSpec.Core.Leak.no_step_of_none
+The golden is deliberately not regenerated (owner decision pending); do not report it.
+
+Check:
+- each tag sits on the approved declaration, matched by fully qualified name and tag line;
+- no other text changed;
+- no `(approved: PENDING)` remains anywhere under ConcreteSpec/ (grep for it).
+Also re-audit the vacuity of the Adequacy Laws those four helpers feed.

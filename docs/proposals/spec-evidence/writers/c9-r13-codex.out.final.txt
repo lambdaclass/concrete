@@ -1,0 +1,17 @@
+All three items done. Builds passed before each commit; working tree clean.
+
+Commits:
+- `5c2e6d446`: character invariant, typed refusal, rendering safety.
+- `43d225940`: laws, closed Instances, Planted mutants, Unicode identity.
+- `115a73b2d`: structural control-refusal proof.
+
+New theorems:
+- `render_no_controls`: rendered paths contain no ASCII controls.
+- `parse_bad_component`: malformed components retain their input and typed diagnostic.
+- `parse_control`: every ASCII control receives `controlCharacter`.
+- `backslash_reason`: the backslash witness receives `backslash`.
+- `unicode_exact`: both Unicode spellings render exactly and have distinct identities.
+
+N2 completed. New FAILs: three required `PENDING` approvals, plus the known false-discharge defect on the backslash instance and its pairing consequences. Details: `_review/c9-round13-inventory.md`.
+
+QUESTIONS: owner confirmation of assumed-yes AY-2, AY-3 and AY-4 remains pending.

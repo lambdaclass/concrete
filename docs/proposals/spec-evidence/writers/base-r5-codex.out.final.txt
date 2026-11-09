@@ -1,0 +1,15 @@
+Committed `9e48fdb06ed26d6981392f5692d13bebbf18bfb0` — Record round 4 independent approvals for base helpers.
+
+Recorded `REV-base4-agy-942d74b39` for:
+
+- `ConcreteSpec.Borrow.ok_keeps_locked`
+- `ConcreteSpec.Borrow.range_open_mut_freezes_root`
+- `ConcreteSpec.Borrow.Evidence.readOnly_noWrite`
+- `ConcreteSpec.Brand.run_inv`
+- `ConcreteSpec.Brand.reset_fresh_nodup`
+- `ConcreteSpec.Brand.Evidence.liveBrandIn`
+- `ConcreteSpec.Cleanup.reg_inv`
+
+Only the seven approval references changed. No `PENDING` approvals remain in the eleven base modules. The required build passed; working tree is clean. Nothing pushed.
+
+QUESTIONS: None.

@@ -1,0 +1,14 @@
+Completed at `3b54f736d`, with a clean working tree.
+
+- `eecb00e8b` — C9: retained integration’s axiom golden on conflict.
+- `50dd56ca2` — C10: used C10’s three Frame fixture identities; retained existing proof adaptations and integration’s golden.
+- `51ea5c7e2` — C6: unioned imports; retained integration’s golden. Preserved C9’s loader/site-table definitions and C6’s observation/report definitions. Migrated Own, Exec, Prim and Adequacy consumers to final stores; repaired incompatible demo oracle claims.
+- `3b54f736d` — base migration: no conflicts or semantic overlaps requiring redesign. Retained its automatic golden merge without regeneration.
+
+Approvals reset to `PENDING`, all in `Proofs/Adequacy.lean`: `runFrom_complete`, `runFrom_complete_le`, `runFrom_final_sound`, `spin_move_01`, `spin_move_12`, `spin_move_23`, `spin_move_34`, `spin_move_40`, `spin_move`, `spin_internal_silent_divergence`, `event_move_01`, `event_move_12`, `event_move_23`, `event_move_40`, `event_move_34`, `event_move`, `erasingWellFormed`, `keepingWellFormed`, `erasing_silent_divergence`, `keeping_infinite_interaction`, `logThenSpin_move`, `terminalPath`.
+
+Every merge passed candidate and post-commit builds. Final checks passed: rules **32/32**, trust **23/23**. No duplicate issue IDs.
+
+No new owner questions. Golden regeneration remains deferred. No pushes, reviewers or git notes.
+
+Full conflict, overlap, approval and validation record: [ROUND2_RESULTS.md](_review/ROUND2_RESULTS.md).

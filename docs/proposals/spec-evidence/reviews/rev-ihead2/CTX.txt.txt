@@ -1,0 +1,18 @@
+Integration head (branch wip/spec-integration-head), merge round 2, written by Codex. Base 0cbd2ba33 (round 1: C1, C2, C4, C5, C7, C10 de0e8bfd2 and C9 0551add93 merged) -> head 3b54f736d.
+
+Four merge commits, each of an accepted head at an exact SHA:
+- eecb00e8b: C9 at 971eb025d;
+- 50dd56ca2: C10 at 871db4e19;
+- 51ea5c7e2: C6 at f2321db98;
+- 3b54f736d: base migration at 9e48fdb06.
+The round brief and the writer's result are quoted in PROMPT.md. The writer reset 22 approvals in Proofs/Adequacy.lean to PENDING. In the C6 merge it also "migrated Own, Exec, Prim and Adequacy consumers to final stores" and "repaired incompatible demo oracle claims". Those are edits beyond conflict resolution, so they need the closest scrutiny.
+
+The golden (scripts/proofs/axioms.golden) is deliberately NOT regenerated: that step is blocked on an owner decision. Do not report the stale golden as a defect.
+
+Check, with the best long-term design as the only standard:
+- Each merge keeps both sides' substance: no law, definition, tag or approval of either side is weakened, dropped or silently rewritten. Compare each merge with both parents, in particular in Spec/Observe.lean, Proofs/Observe2.lean, Spec/Exec.lean, Proofs/Adequacy.lean, Proofs/Own.lean and Spec/Prim.lean.
+- Every consumer migration and every "repaired" demo oracle claim: is the new statement at least as strong as the old one, and the fixture still meaningful? Or was a claim weakened to make it compile? Cite each one.
+- Every reset approval (the 22 in Adequacy) really needed resetting, and no changed declaration kept a stale approval.
+- Ownership: C9's form for source identity, the loader and the site table; C6's for observation and the trap report; C10's for Frame; the base migration's for its modules.
+- Vacuity of every Law whose text changed in these merges.
+- For each Helper or Representation lemma now marked approved: PENDING in Proofs/Adequacy.lean, an explicit APPROVE or REJECT by fully qualified name.

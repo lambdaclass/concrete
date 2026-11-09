@@ -1,0 +1,20 @@
+C10 (branch wip/spec-c10) round 11, written by Codex. Base de0e8bfd2 (accepted; seven gates pass) -> head 367764f3b. The round merges C9 at 115a73b2d (accepted; source identity and loader), in merge commit 4ea6fdc53, and adds 367764f3b.
+
+The round carries out C10's part of the owner's source-path decision (option (a); quoted in PROMPT.md). The coordinator's interpretation, recorded in the brief, is: one owner per fact.
+- C9 owns the loader refusals and their Refused examples.
+- C10 owns the end-to-end consequence: a project that C9 refuses yields no launchable image, so there is no launch, no trap site and no exit-125 startup.
+- Startup refusal (125) is a different, run-time event.
+- C10 writes one end-to-end law per refusal class, stated over C9's admission predicate by reference, with a Planted mutant: a loader that admits the bad path.
+
+The writer chose one law parameterized by the class, inadmissible_no_artifact, with eight closed Instance/Planted pairs. It added derived proofs that exclude source-originated runs, startup outcomes and trap reports, and it shows that status 125 implies an admitted project. It reports a gap for C9 to fill: a loader-level control-character Refused example.
+
+Check, with the best long-term design as the only standard:
+- No C9 refusal rule is restated in C10. Everything is stated by reference to C9's admission predicate.
+- The connection from admission to artifact and launcher is normative and not circular, and it does not hold by construction (for example, an artifact type that simply bundles an admission proof would make the law trivial). Say whether the law constrains a real artifact-construction step.
+- Load refusal and startup refusal (125) are kept distinct.
+- The parameterized law versus one law per class: which is the better long-term structure, and why?
+- The merge of C9 changed no C9 content beyond what the merge required.
+- Vacuity of every Law in Proofs/Frame.lean that the round touches, and of the new laws, with a verdict and witness each.
+- For each Helper or Representation lemma marked approved: PENDING, an explicit APPROVE or REJECT by fully qualified name.
+
+Every identifier you write in backticks must be one you found with grep in this tree. Core-library names are not declarations of this tree, so never put them in backticks.

@@ -1,0 +1,14 @@
+Completed all four items.
+
+- `4ea6fdc53`: merged C9 at `115a73b2d`; updated Frame identity fixtures.
+- `367764f3b`: connected source admission to artifact construction and launcher provenance.
+
+New law: `inadmissible_no_artifact` — input failing C9’s admission predicate yields no artifact. One parameterized law avoids duplicating refusal rules, with eight closed Instance/Planted pairs.
+
+Derived proofs exclude source-originated runs, startup outcomes and trap reports. Status 125 separately implies an admitted project with insufficient stack reservation.
+
+Validation: build, rules and trust checks passed. N2 reported only PENDING approvals, known `instance-false-discharge` findings and their cascades; no other new failures.
+
+Missing from C9: a loader-level control-character refusal example; parser examples exist. Left for C9 as instructed.
+
+QUESTIONS: none. No push, reviewers or git notes. Working tree clean.

@@ -1,0 +1,9 @@
+C10 (branch wip/spec-c10) round 12, written by Codex. Base 367764f3b (round 11; an independent agy review returned ACCEPT) -> head 871db4e19.
+
+The round records approvals and nothing else. It replaces `(approved: PENDING)` with `(approved: REV-C10-agy-367764f3b)` on the nine ConcreteSpec/Proofs/Frame.lean Helper and Representation lemma declarations that the review of round 11 approved. That review is quoted in PROMPT.md. The Ident.lean and Observe2.lean rows are deliberately left for C9, which records them on its own branch.
+
+Check:
+- every replaced reference sits on a declaration that review approves, matched by fully qualified name and tag line;
+- no other text changed;
+- no PENDING remains in the C10-owned files (ConcreteSpec/Spec/Frame.lean and ConcreteSpec/Proofs/Frame.lean).
+Also re-audit the round-11 source-admission Laws in ConcreteSpec/Proofs/Frame.lean (inadmissible_no_artifact and its corollaries, and the LoadBoundaryDemo witnesses) under the final convention, and report any defect.

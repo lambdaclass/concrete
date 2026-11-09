@@ -1,0 +1,14 @@
+C9 (branch wip/spec-c9) round 16, written by Codex. Base 8a37ceaee (round 15; its agy review, quoted in PROMPT.md, returned CHANGES with three real findings and a nit) -> head 971eb025d. The round brief is also quoted.
+
+Coordinator ruling: rule IDs are the owner's. Registering the loader as a rule is option (a), recommended to the owner as assumed-yes. Until the owner answers:
+- the loader's Refused examples use the unregistered `Refused:` form;
+- ONE ordinary comment in Observe2.lean records the pending state and the exact switch to (a);
+- Rules.lean is not touched, and there is no Rules-to-Observe import.
+
+Check, with the best long-term design as the only standard:
+- Finding 1: no (rule ...) citation of an unregistered rule remains; rules.sh passes; the pending-state comment exists exactly once, is accurate, and gives a correct switch.
+- Finding 2: no Helper or approval tag remains on an anonymous example, and the control-character Instance/Planted pair is still complete and closed (full application; Planted at the Instance's exact arguments; the mutant has the subject's exact type).
+- Finding 3: every SourceLoadRefusal constructor and every SourcePath.Reason has a loader-level Refused example, matching the writer's map in PROMPT.md; none is missing and none is invented.
+- The nit is fixed.
+- No rule or normative definition changed.
+- Vacuity of the loader refusal Laws in ConcreteSpec/Proofs/Observe2.lean.

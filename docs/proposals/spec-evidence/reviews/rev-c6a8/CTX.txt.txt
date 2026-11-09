@@ -1,0 +1,17 @@
+C6 (branch wip/spec-c6-audit) round 8, written by Codex. Base 285cf57db (round 7) -> head f2321db98. It acts on an independent agy review of round 7 (status CHANGES), quoted in PROMPT.md with the round brief.
+
+Two commits:
+- fa60a709a changes doc comments only. A mechanical check confirms that every file is identical outside comments. It fixes the review's Finding 1, the 114 unknown-name N2 diagnostics:
+  - 26 tokens became fully qualified declaration names;
+  - the others (locals, expressions, numerals, file names, tag words) lost their backticks.
+  N2 unknown-name in the C6 modules goes from 114 to 0, and no other category changes.
+- f2321db98 replaces `(approved: PENDING)` with `(approved: REV-C6-agy-285cf57db)` on the nine C6-owned declarations that review approves (rows 21, 22 and 26-32). The C9-owned rows are left for C9.
+
+The review also asked that Instance and Planted `case` labels become declaration names. The coordinator disputes that: a case value is a label, the N2 gate does not resolve it, and the accepted C1, C9 and C10 heads use free labels. Case labels are unchanged. Give your view on the dispute, but do not count it as a defect unless you show a rule of the final convention that requires it and that the gate enforces.
+
+Check:
+- every new fully qualified name resolves and means what the prose meant;
+- no prose lost meaning when backticks were removed;
+- each recorded tag sits on an approved declaration (matched by fully qualified name and tag line);
+- no other change.
+Re-audit the vacuity of the Laws whose doc comments changed.

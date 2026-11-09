@@ -1,0 +1,17 @@
+Committed as `8a37ceaeee7f2b95c0cb46ad91c7adf03a1b7dc5`.
+
+Added the exact control-character loader refusal and its Instance/Planted pair. Tagged all requested classes under `SourceLoadDemo`:
+
+| Class | Example input |
+|---|---|
+| Malformed | `emptyInput` |
+| Out-of-project | `parentInput` |
+| Duplicate file | `duplicateFiles` |
+| Duplicate site | `duplicate` |
+| Site without loaded file | `missing` |
+| Control character | `controlInput` |
+| Backslash | `backslashInput` |
+
+Prescribed build passed. N2 on Ident: no new FAILs. No push, reviewers, or git notes.
+
+QUESTIONS: AY-3 remains pending owner confirmation; the new computation helper’s independent approval remains `PENDING`.

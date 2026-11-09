@@ -1,0 +1,7 @@
+Review of a coordinator change to lane tooling: tools/golden-flow.sh, commit 5c01580 -> 0e0376f.
+
+golden-flow.sh briefs a Codex writer, which compares a regenerated axioms golden (context/axioms.sh, a per-declaration "name<TAB>axioms" inventory; context/axioms.golden is an example) against the committed golden and commits it only when every removed and added line is justified. The change adds one rule. In a merge or integration head, a REMOVED compiler-generated auxiliary (._proof_N, ._simp_N, .match_N, .match_N.eq_N, or a P.<Module>.N.-prefixed private equation lemma) of a declaration whose own golden line is unchanged is allowed, and must be listed with its parent.
+
+Motivation: context/ihead1-golden-refusal.txt. The integration merge renumbered Borrow.viewsOk_put._proof_1_2 to _proof_1_1, dropped Mem.canonical_of_unique._simp_1_2, and moved private AList.lookup.match_1 equation lemmas between modules. The old rule refused this.
+
+The coordinator asked for this review before any golden is committed under the new rule. Best long-term design: this rule should later move into the repository's own golden gate, with a test, rather than stay in lane tooling.

@@ -1,0 +1,29 @@
+Committed `971eb025de01aeb1092325b71ec0587e85673c7c` — correct loader refusal evidence tags.
+
+1. Replaced unregistered rule citations with `Refused:` and added one pending-registration comment with migration instructions.
+2. Removed the anonymous Helper classification: the diagnostic needs no reusable theorem. Its closed Instance/Planted pair remains.
+3. Tagged every loader refusal class and malformed reason.
+4. Added control-character refusal to `load_refuses_malformed`’s documentation.
+
+| SourceLoadRefusal | Example |
+|---|---|
+| malformed | Inputs below |
+| duplicateFile | duplicateFiles |
+| duplicateSite | duplicate |
+| missingFile | missing |
+| invalidLocation | badLocation |
+
+| SourcePath.Reason | Example |
+|---|---|
+| empty | emptyInput |
+| dot | dotInput, innerDotInput |
+| outOfProject | parentInput, innerParentInput |
+| absolute | absoluteInput |
+| drivePrefixed | driveInput |
+| emptyComponent | emptyComponentInput, trailingSlashInput |
+| backslash | backslashInput |
+| controlCharacter | controlInput |
+
+Build, rules.sh, and trust_ban.sh passed. N2: **no new FAILs**, compared with unchanged HEAD using the same checker. Working tree clean; no push, reviewers, or git notes.
+
+QUESTIONS: Owner decision remains pending on registering `LoadedProject.load` as a rule.

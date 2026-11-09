@@ -1,0 +1,12 @@
+Committed separately:
+
+- `fa60a709a`: fixed 114 diagnostics—26 declaration references; removed backticks from 21 locals, 52 expressions, 3 numerals, 3 namespace labels, 3 filenames and 6 tag words.
+- `f2321db98`: recorded nine C6 approvals.
+
+N2 unknown names: **114 → 0**. Other counts stayed unchanged, except pending approvals **32 → 23** after recording approvals. N2 still fails on inherited diagnostics.
+
+Build, rules and trust checks passed before both commits. Only doc comments changed; case labels remain unchanged. No pushes, reviewers or git notes.
+
+All 23 remaining approvals and their C9 ownership reasons appear in [ROUND8_RESULT.md](<./_review/ROUND8_RESULT.md>).
+
+QUESTIONS: none.

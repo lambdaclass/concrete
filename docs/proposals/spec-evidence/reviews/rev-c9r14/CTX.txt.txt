@@ -1,0 +1,9 @@
+C9 (branch wip/spec-c9) round 14, written by Codex. Base 029906d71 (round 13 with its regenerated axioms golden; seven gates pass) -> head 73e76ea0c.
+
+The round records approvals and nothing else. It replaces `(approved: PENDING)` with `(approved: REV-C9-agy-115a73b2d)` on the 31 Helper and Representation lemma declarations that an independent, contract-valid agy review of rounds 12 and 13 approved. That review is quoted in PROMPT.md.
+
+Check:
+- every replaced reference sits on a declaration that review approves, matched by fully qualified name and tag line;
+- no other text changed;
+- no PENDING remains in ConcreteSpec/Proofs/Ident.lean, ConcreteSpec/Proofs/Prim.lean or the C9 part of ConcreteSpec/Proofs/Observe2.lean.
+Also re-audit the source-path Laws (SourcePath rendering and parsing, and the project loader) under the final convention, and report any defect.

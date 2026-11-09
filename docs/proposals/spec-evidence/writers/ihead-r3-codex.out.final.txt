@@ -1,0 +1,14 @@
+Changed only approval tags, in two commits:
+
+- `5dcf03058`: reset `Demo.erasing_internal_infinite` and `Demo.bumpedMove` because their text changed from `env` to `observationEnv`. The whole-file audit found no additional stale approvals.
+- `f68840b0e`: recorded all 24 explicit approvals as `REV-integ-agy-3b54f736d`.
+
+PENDING remains on:
+
+- The two reset declarations: this review did not approve their new text.
+- `Demo.observationEnv`: described as sound, without explicit approval.
+- `Leak.no_step_of_none`: pre-existing and outside this review’s scope.
+
+Both commits passed the prescribed build, rules (`32/0`), and trust ban (`23/0`). Working tree is clean. No push, reviewer runs, or git notes.
+
+QUESTIONS: None.

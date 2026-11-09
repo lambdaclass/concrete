@@ -1,0 +1,9 @@
+Base migration (branch wip/spec-base-migration) round 5, written by Codex. Base f96b26cdc (round 4 with its regenerated axioms golden; seven gates pass) -> head 9e48fdb06.
+
+The round records approvals and nothing else. It replaces `(approved: PENDING)` with `(approved: REV-base4-agy-942d74b39)` on the seven Helper and Representation lemma declarations in ConcreteSpec/Proofs/Borrow.lean, Brand.lean and Cleanup.lean that an independent, contract-valid agy review of round 4 approved. That review is quoted in PROMPT.md.
+
+Check:
+- every replaced reference sits on a declaration that review approves, matched by fully qualified name and tag line;
+- no other text changed;
+- no PENDING remains in the eleven base modules.
+Also re-audit the Borrow, Brand and Cleanup Laws under the final convention (including the revised assumed-yes form order quoted in the review), and report any defect.

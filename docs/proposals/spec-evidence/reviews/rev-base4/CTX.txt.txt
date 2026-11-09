@@ -1,0 +1,20 @@
+Base migration (branch wip/spec-base-migration) round 4, written by Codex. Base 980e80550 (round 3 with its regenerated golden; seven gates pass) -> head 942d74b39. Files changed: see REVIEW.diff, mainly ConcreteSpec/Proofs/Borrow.lean, Brand.lean and Cleanup.lean.
+
+The round acts on three contract-valid agy reviews of rounds 2 and 3: REV-base23a (ACCEPT), REV-base23b (CHANGES) and REV-base23c (ACCEPT). The CHANGES review is quoted in PROMPT.md with the round brief. It also applies the coordinator's revised assumed-yes resolution AY-1, pending owner confirmation, which is also in the brief. AY-1 sets the order of forms:
+1. refusal laws state the refusal (¬ Ok ...) with every input and premise as a theorem parameter;
+2. laws fixed by a normative function take that function as subject, with a function mutant;
+3. determinism keeps the curried form;
+4. otherwise the theorem is reclassified as a Helper with (approved: PENDING).
+
+Check, with the best long-term design as the only standard:
+- Each restated refusal Law is logically equivalent to its round-2 statement (contrapositive form) and never weaker.
+- Its Instance closes every input and premise and supplies a real accepted context.
+- Its Planted example refutes it at those exact arguments with a premise-preserving permissive mutant.
+- The cleanup laws with function subjects (expected, targets) keep explicit registration derivations, and their function mutants are premise-preserving and of the subject's type.
+- Each of the five reclassified Helpers (Borrow.ok_keeps_locked, Borrow.range_open_mut_freezes_root, Brand.run_inv, Brand.reset_fresh_nodup, Cleanup.reg_inv) is correctly a Helper. For each, check that another Law still supplies closed derivations for the property.
+- Every finding of REV-base23b is fixed.
+- Recorded approval references sit on declarations that the cited review approved, in unchanged form.
+- Vacuity of every Law in Borrow.lean, Brand.lean and Cleanup.lean, with a verdict and witness each.
+- For each Helper or Representation lemma marked approved: PENDING (7), an explicit APPROVE or REJECT by fully qualified name.
+
+Known gate-side N2 findings (subject-kind on inductive subjects, instance-false-discharge, and their cascades) are not spec defects. Every identifier you write in backticks must be one you found with grep in this tree, with its real namespace. Core-library names are not declarations of this tree, so never put them in backticks.

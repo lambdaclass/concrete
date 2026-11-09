@@ -1,0 +1,25 @@
+C9 (branch wip/spec-c9) rounds 12 and 13, written by Codex. Base 0551add93 (accepted; seven gates pass) -> head 115a73b2d.
+
+The rounds carry out the owner's source-path decision of 2026-11-09, option (a), quoted in PROMPT.md. The owner's words: "ok tell me again the options choose the best long term options for everything". Under it:
+- every source file has one structured, project-relative path, which is never empty, ".", "..", absolute or drive-prefixed, and has a single "/" rendering;
+- the loader refuses malformed or out-of-project paths and duplicate sites, with an error naming the input; nothing is dropped;
+- C9 owns source identity and the trap-site table;
+- C6 will later drop the premises `found` and `pathOk` from its runFrom_source_trap theorem, using the interface C9 provides.
+
+The decision answers C6 review-4 finding 2 and its QUESTION, also quoted in PROMPT.md.
+
+Round 13 encodes three character rules taken as assumed-yes pending owner confirmation:
+- AY-2: a backslash is refused;
+- AY-3: NUL and every other control character are refused;
+- AY-4: other Unicode is accepted, and a path's identity is its exact scalar sequence, with no normalization.
+
+Check, with the best long-term design as the only standard:
+- SourcePath carries its invariants in the type, not in a separately re-checked predicate. Its rendering is injective, and parsing a rendering returns the same path.
+- The parser refuses without silent normalization and gives typed reasons. The loader admits the complete input or refuses it, never drops an entry, and has no fallback. Its completeness, uniqueness and refusal laws are not vacuous, and its mutants (dropping, keep-first, accepting "..", accepting controls, normalizing) are premise-preserving and of the subject's type.
+- Span's path change keeps the trap-line rendering byte-identical to the decided format.
+- The C6 consumer interface really lets C6 drop `found` and `pathOk` without re-checking the invariant at run time.
+- The character rules are encoded exactly as stated, and nothing beyond them was decided.
+- Vacuity of every Law in Proofs/Ident.lean, Proofs/Prim.lean and the C9 part of Proofs/Observe2.lean, with a verdict and witness each.
+- For each Helper or Representation lemma marked approved: PENDING, an explicit APPROVE or REJECT by fully qualified name.
+
+Core-library names are not declarations of this tree, so never put them in backticks. Every identifier you write in backticks must be one you found with grep in this tree.

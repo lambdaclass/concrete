@@ -1,0 +1,9 @@
+Recorded `REV-integ-agy-f68840b0e` for all four declarations: `observationEnv`, `erasing_internal_infinite`, `bumpedMove`, and `no_step_of_none`. Only their approval tags changed.
+
+PENDING remaining in `ConcreteSpec/`: none.
+
+Build, `rules.sh`, and `trust_ban.sh` passed before commit.
+
+Commit: `aa44140a33747fa37ece59c76090972e564c65b4`. Not pushed.
+
+QUESTIONS: none.

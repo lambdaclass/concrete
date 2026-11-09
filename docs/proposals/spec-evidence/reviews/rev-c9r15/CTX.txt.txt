@@ -1,0 +1,18 @@
+C9 (branch wip/spec-c9) round 15, written by Codex. Base 73e76ea0c (round 14; seven gates pass) -> head 8a37ceaee. The round brief is quoted in PROMPT.md.
+
+The round adds the loader-level Refused example for a source path that contains a control character (assumed-yes item AY-3, pending owner confirmation), with an Instance/Planted pair for the loader's malformed-path refusal law. The mutant loader admits the control character. It also tags the Refused examples of every refusal class under SourceLoadDemo:
+- malformed;
+- out-of-project;
+- duplicate file;
+- duplicate site;
+- site without a loaded file;
+- control character;
+- backslash.
+
+Check, with the best long-term design as the only standard:
+- The new example is refused by the loader with the typed reason and the offending input named. It is a genuine loader-level refusal, not a parser-only one.
+- The Instance is a full closed application. The Planted example sits at the Instance's exact arguments, preserves the premises, and uses a mutant of the subject's exact type that admits the control character.
+- Every refusal class has a loader-level Refused example, and the class list matches the loader's actual refusal reasons (no class missing, none invented).
+- No rule or normative definition changed.
+- Vacuity of the loader refusal Laws in ConcreteSpec/Proofs/Observe2.lean.
+- An explicit APPROVE or REJECT, by fully qualified name, for the new Helper marked approved: PENDING.

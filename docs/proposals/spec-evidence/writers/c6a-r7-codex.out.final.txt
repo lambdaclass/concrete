@@ -1,0 +1,26 @@
+All six items completed. Commits:
+
+- `9a41764cc` — merge C9 and derive trap reports from admitted projects.
+- `bcf4b3fb7` — strengthen column discrimination.
+- `285cf57db` — test refusal of an unloaded source identity.
+
+Changed Laws:
+
+| Law | Old → new | Instance / mutant evidence |
+|---|---|---|
+| `trapLine_injective` | Full-span equality → equality of rendered fields only | Distinct sites/columns; omitted-site/column mutants |
+| `runFrom_source_trap` | `found` and `pathOk` premises → loader-derived provenance and coordinates | `source_path_to_trap`; wrong-file/scalar-column mutants |
+| `source_trap_column` | Wrong column implies unequal diagnostic → diagnostic equality **iff** the column is correct | `utf8_tab`, `matching_utf8_tab`; scalar-counting mutant |
+| `sourcePrefixSpan_second_line` | String-path span → structured path with whole-prefix byte offsets | `multiline_utf8_tab`; scalar-column/single-line mutants |
+| `sourceSpan_ascii_eq_char_col` | String plus path proof → `SourcePath`; column equation retained | `ascii_tab`; expanded-tab mutant |
+| `sourceSpan_multibyte_gt_char_col` | String plus path proof → `SourcePath`; strict byte excess retained | `multibyte_tab`; scalar-counting mutant |
+| `output_before_trap_kept` | Separate path premise → admitted project; output guarantees retained | `two_outputs_then_trap_report`; erasure/history-drop mutants |
+| `Ghost.runStmts_terminal` | `.final f` → `.final f c.store` | Returned/trapped instances; restarting mutant |
+
+Only C9’s `SiteTable.Valid` remains. Filtering and reporting-time path validation are removed. Missing-file and traversal-path examples prove that refused projects cannot produce adapters. Renderer bytes and statuses remain unchanged.
+
+At final HEAD, build, rules (32/0), and trust (23/0) pass. N2 returns **FAIL**, but has **no new failures** outside PENDING, false-discharge and their cascades; all 114 standalone `unknown-name` diagnostics are inherited.
+
+Left: independent approvals, inherited N2 diagnostics, and subsequent C9 review fixes. **QUESTIONS: none.** Nothing pushed; no reviewers or git notes used.
+
+[Detailed results and evidence](/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6a/_review/ROUND7_RESULT.md)
