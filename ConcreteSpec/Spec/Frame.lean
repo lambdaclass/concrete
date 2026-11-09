@@ -246,7 +246,7 @@ def storingOperands (tgt : Target) (pointer : Ptr) (bytes : List MByte) (alignme
   allows := fun _ _ _ _ => false
 
 /-- Identity of the modifying toy function, unrelated to any native ABI convention. -/
-def storingFn : FnId := ⟨⟨[]⟩, "store_then_return"⟩
+def storingFn : FnId := ⟨⟨⟨"frame", ⟨"0"⟩⟩, ["frame"], by decide⟩, "store_then_return"⟩
 
 /-- A C1 function whose return expression performs the store and returns 7. -/
 def storingProgram (tgt : Target) (pointer : Ptr) (bytes : List MByte) (alignment : Nat) :
