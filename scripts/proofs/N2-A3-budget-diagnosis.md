@@ -3,7 +3,8 @@
 Diagnosis date: 2026-11-09. Design/diagnosis only. Structural owner: R-0219,
 phase-B discharge solver (slice 2a), with accounting design in the
 [A3 amendment](N2-discharge-solver.md#a3-amendment-per-analysis-accounting-and-the-round-5-regression).
-Reviewers: **do the best long-term thing rather than cut corners**.
+**Status: per-analysis interpretation assumed, pending owner** (coordinator's
+assumed-yes option C). Reviewers: **do the best long-term thing rather than cut corners**.
 No vacuity.lean, spec, ROADMAP or other branch changes accompany this record.
 
 ## Inputs and bounded measurement method
@@ -133,7 +134,29 @@ Findings changing to INCOMPLETE do not demonstrate repaired proofs. There are tw
 structural owners within R-0219: the application-sensitive solver removes the
 cost regression; the per-analysis scheduler prevents it hiding unrelated results.
 The owner must still resolve the whole-scope/per-analysis exit-criterion question
-in A3. This diagnosis chooses neither interpretation.
+in A3. **Status: per-analysis interpretation assumed, pending owner.** The
+coordinator assumes option C: unchanged per-analysis limits with A3's separate,
+deterministic, reported admission cap C ≤ N × 20,000 reserved work units. Each
+admitted analysis reserves 20,000 without refund; every unrun analysis after a cap
+hit is named INCOMPLETE with exact `reason=whole-run-cap` and zero usage, preserving
+all earlier results and reporting exactly N terminal analysis results. Option B
+is the alternative: today's one shared heartbeat budget across the scope; one
+heavy analysis can consume it and starve every later analysis. This records the
+coordinator's assumption, not an owner answer or implementation authorization.
+
+Current-tree verification at ef139c406: `isolated` reinstalls the shared deadline
+and checks it at entry; `check` captures that deadline once. `mentions` and
+`mutate` each throw `subject-budget` from separate fuel state; `mutate` starts
+`mentions ... .run (20000, {})` inside constant traversal. `counterexample` and
+both sides of each `withProtected` subject start `mutate ... .run 20000`.
+Thus A3 must fold all these pools and protected traversal work into the same
+20,000-unit analysis counter with no nested reset. Non-discharge exhaustion uses
+exact `reason=work-budget` and `work=20000/20000`, rather than `analysis-error`.
+The driver still defaults to a 120-second subprocess bound and
+`populationConstants` supplies declarations, not flattened named analysis jobs;
+the cap scheduler and its starvation/cap-hit controls remain design work in
+slice 2a. These source facts confirm the review findings, not implementation of
+the amendment.
 
 ## Focused document validation
 

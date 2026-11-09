@@ -759,6 +759,9 @@ Condition for starting phase B: a valid ACCEPT (VERDICT: CLEAN under checker-609
 
 ## A3 amendment: per-analysis accounting and the round-5 regression
 
+**Status: per-analysis interpretation assumed, pending owner.** This is the
+coordinator's assumed-yes option C, not an owner decision.
+
 Design only; no checker implementation is authorized by this amendment. R-0219
 owns the structural repair in phase B / slice 2a; the coordinator records any
 additional roadmap scheduling row. Independent reviewers must **do the best
@@ -772,12 +775,22 @@ Proposed accounting unit: a named analysis identified by environment/source
 identity, retained declaration, stage, law, case and (where applicable) subject,
 mutant and Instance. Enumerate these identities in a stable order. Each analysis
 gets a fresh heartbeat baseline and exactly 2,000,000 user heartbeats, 20,000
-charged discharge-work units and 4,096 projection visits. A caller's existing
+charged analysis-work units and 4,096 projection visits. A caller's existing
 explicit projection control limit remains effective. These limits are unchanged.
 Every argument, helper, template, substitution, certificate dependency, invariant,
 SCC iteration and retry belonging to that analysis uses its one budget object.
 No helper or internal phase renews it. In particular, do not reset the work state
-for each hypothesis argument as the historical Instance loop did.
+for each hypothesis argument as the historical Instance loop did. Fold every fuel
+pool into this one 20,000-unit work object: discharge, template/transfer search,
+`mentions`, `mutate`, and all `withProtected` traversals (including collection,
+replacement and comparison preparation). Charge each traversal/worklist step
+before executing it; memoization does not authorize uncharged traversal.
+Today `mutate` creates a fresh `mentions ... .run (20000, {})` at each definition,
+`counterexample` starts `mutate ... .run 20000`, and `withProtected` starts separate
+`mutate ... .run 20000` calls for each side and subject. Remove these nested fuel
+initializations; visited sets may be query-local, but their work counter is the
+analysis's shared counter. No subject, mutation, protected comparison or nested
+helper resets or adds fuel.
 
 At entry set the Core context's initial heartbeat count to the current counter,
 retain the configured maximum, and restore the scheduler context at exit. Use the
@@ -798,14 +811,43 @@ construction charged and dependencies validated; cache hits must not make budget
 outcomes depend on incidental scheduler history. Use deterministic per-analysis
 logical work charges and deterministic cache policy (or private query caches).
 
-For N scheduled analysis identities the analysis allowance is at most
-N × 2,000,000 user heartbeats, N × 20,000 discharge-work units and
-N × 4,096 projection visits, plus the separately declared bounded scheduler
-allowance. Report N, attempted/completed/incomplete counts, per-analysis usage,
-and these aggregate bounds and actual totals. No dynamic retry creates another
-identity. Bound the driver's wall watchdog for this schedule explicitly: its
-current fixed 120-second audit subprocess is not evidence that N jobs completed.
-Report wall time separately from deterministic heartbeat/work limits.
+Before execution freeze the complete, stably ordered population of N analysis
+identities (not merely the declaration population returned by `populationConstants`).
+Use a separate whole-run admission cap C, in reserved analysis-work units:
+default C = N × 20,000; an explicit run configuration may lower C to any integer
+in [0, N × 20,000], never raise it. Record C before executing any job. Each
+attempt reserves its full 20,000 work allowance before entry, without refunds;
+if the next reservation would exceed C, latch the cap hit and run no further
+analysis bodies. This conservative reservation policy makes the stopping identity
+deterministic for the same population/configuration, independent of runtime,
+cache hits or observed heartbeat consumption. It never shortens an admitted
+analysis's unchanged allowance. The reservation cap is distinct from actual work
+usage: report both. At most K = floor(C / 20,000) analyses can be attempted, so
+the aggregate analysis bounds are K × 2,000,000 heartbeats, K × 20,000 work units
+and K × 4,096 projection visits, each no larger than N times its per-analysis
+budget. N=0 gives C=0 and no cap-hit records.
+
+On a cap hit emit one result for EVERY remaining identity, by its own retained
+name and stage/law/case (and full identity metadata), using exactly:
+
+```text
+INCOMPLETE analysis-budget-or-error <retained-name> stage=<stage> law=<law-or-none> case=<case-or-none> reason=whole-run-cap heartbeats=0/2000000 work=0/20000 projection=0/4096
+```
+
+Do not drop identities, execute their bodies, overwrite earlier results, or
+reclassify any analysis that ran. Earlier PASS, FAIL and INCOMPLETE records remain
+unchanged. Emit these cap records even for unrun dependent jobs; their reason is
+`whole-run-cap`. Ordinary dependency handling applies before the cap is latched.
+Report N, C, reserved work, K, the cap-hit identity (or none), attempted, unrun,
+completed and incomplete counts, per-analysis usage, aggregate bounds and actual
+totals. Every identity has exactly one terminal analysis result (possibly with
+multiple finding/detail records); reported-analysis count equals N, attempted +
+unrun equals N, and completed + incomplete equals N. Enumeration/bookkeeping has
+its separately bounded, reported scheduler allowance, outside the analysis cap;
+no solver work may be charged there. No dynamic retry creates another identity.
+Bound the driver's wall watchdog for this schedule explicitly: its current fixed
+120-second audit subprocess is not evidence that N jobs completed. Report wall
+time separately from deterministic heartbeat/work limits.
 
 This **replaces round 6's “without renewing” rule** and supersedes A2 and the
 Costs section wherever “original deadline” meant the entire audit command.
@@ -821,11 +863,16 @@ Planned exact diagnostic grammar (one line, stable field order):
 INCOMPLETE analysis-budget-or-error <retained-name> stage=<stage> law=<law-or-none> case=<case-or-none> reason=<reason> heartbeats=<used>/2000000 work=<used>/20000 projection=<used>/4096
 ```
 
-Budget reasons are exactly `heartbeats`, `false-discharge-budget`, or
-`projection-budget`; other reasons are `dependency-incomplete`,
+Budget reasons are exactly `heartbeats`, `false-discharge-budget`, `work-budget`,
+`projection-budget`, or `whole-run-cap`; other reasons are `dependency-incomplete`,
 `unsupported-obligation`, or `analysis-error`. Preserve the underlying exception
-as a separate detail record. A2 dependency stages keep their names and the same
-originating retained Instance. Heartbeat sampling can cross the threshold inside
+as a separate detail record. Discharge exhaustion keeps
+`reason=false-discharge-budget`; every non-discharge work exhaustion, including
+`mentions`, `mutate` and `withProtected`, uses exactly `reason=work-budget` and
+`work=20000/20000` in the grammar above, with the current named job's stage.
+The historical `subject-budget` exception is replaced by this shared-counter
+exhaustion path, never classified as `analysis-error`. A2 dependency stages keep
+their names and the same originating retained Instance. Heartbeat sampling can cross the threshold inside
 a Meta primitive; report actual usage, not a fabricated capped value. Exhaustion
 must identify the current analysis even if it happens before its first solver
 step. A scheduler failure uses stage `scheduler` and its own reported allowance.
@@ -845,7 +892,26 @@ Repeat with the heavy job alone and the failing job alone, and reverse order:
 individual diagnostics and logical costs must agree. Add a separate heartbeat
 control that exhausts inside a Meta operation, with exact `reason=heartbeats`,
 followed by that same exact FAIL. Never accept merely a nonzero exit or any error.
-These are proposed controls, not claims of implemented/observed behavior.
+Keep these starvation controls with a cap sufficient to admit both jobs.
+
+Separate planted cap control: freeze four identities in order: an ordinary PASS,
+`BudgetControls.nextBad`, `BudgetControls.unrunA`, `BudgetControls.unrunB`.
+Set C=40,000, so two reservations succeed and the third hits the cap. Assert the
+first two computed verdicts and finding diagnostics match their uncapped runs
+byte for byte, including the exact `nextBad` FAIL above; assert the cap leaves
+their already-recorded usage and result records unchanged. For each unrun name assert exactly
+`INCOMPLETE analysis-budget-or-error BudgetControls.unrunA stage=instance law=BudgetControls.capLaw case=unrunA reason=whole-run-cap heartbeats=0/2000000 work=0/20000 projection=0/4096`
+and the corresponding exact line with `BudgetControls.unrunB` / `case=unrunB`.
+Assert neither unrun body executes, both names occur once as terminal results,
+reported analyses=N=4, attempted=2, unrun=2, completed=2, incomplete=2,
+reserved work=C=40,000, and the aggregate verdict is INCOMPLETE with FAIL retained.
+Also exercise C=0: every identity gets its own exact cap diagnostic, no body runs,
+and reported analyses still equals N. Wire these exact assertions into the
+reporting controls, never accept just a nonzero exit or any failure.
+Add focused non-discharge exhaustion controls for `mentions`, `mutate` and
+`withProtected`: each must exhaust the shared counter with its named stage,
+exact `reason=work-budget`, and `work=20000/20000`; verify nested helpers cannot
+renew fuel. These are proposed controls, not claims of implemented/observed behavior.
 
 ### Remove expansion cost without restoring the round-5 soundness hole
 
@@ -887,15 +953,20 @@ revise this structural design; do not raise budgets or weaken gate coverage.
 
 ### Owner interpretation question: phase-B exit criterion
 
-The quoted phase-B criterion above requires the *whole replay scopes* to COMPLETE
-under “2,000,000 heartbeats.” Does that number mean:
+**Status: per-analysis interpretation assumed, pending owner.** The coordinator's
+assumed-yes design is **option C**: unchanged per-analysis limits of 2,000,000
+heartbeats, 20,000 shared work units and 4,096 projection visits, with the separate
+deterministic, reported whole-run cap specified above. Whole replay scopes must
+finish every analysis without INCOMPLETE for phase-B acceptance.
 
-1. **Per named analysis:** each analysis has the unchanged limit, and the whole
-   scope must finish every analysis with no INCOMPLETE; report the N-times total.
-2. **Per whole replay scope:** the entire C9-new or C6-current scope must complete
-   within 2,000,000 total, in addition to any per-analysis isolation caps.
+**Option B**, the alternative, retains today's single shared 2,000,000-heartbeat
+budget across the whole replay scope. It bounds cumulative heartbeat expenditure
+at that allowance; one heavy analysis can spend it and starve every later one,
+which then reports INCOMPLETE. Option C isolates each analysis's allowance and
+bounds aggregate admission separately; its total may exceed B's shared allowance
+while remaining at most N times the unchanged per-analysis budget.
 
-No option is chosen here. The per-analysis scheduler is the proposed accounting
-design, not an interpretation that silently changes the exit criterion. Until the
-owner answers, do not claim phase-B acceptance from per-analysis completion alone;
-retain and report whole-scope totals as well. No language/spec OD is decided.
+The quoted criterion's interpretation still awaits the owner's explicit answer.
+Do not implement this assumed design or claim phase-B acceptance from per-analysis
+completion alone pending that answer. Retain whole-scope totals and the cap report
+for the owner's comparison. No language/spec OD is decided by this amendment.
