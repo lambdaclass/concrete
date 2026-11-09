@@ -1,0 +1,16 @@
+CHECKER COMMIT cc21095890e11195106179ab46b7ed14c48d498e
+EXIT 1
+FAIL exact-c9-control
+INCOMPLETE enumerator
+/tmp/nix-shell.xJXBMX/vacuity-xw1d1lf4/audit.lean:5:0: error: (deterministic) timeout at `isDefEq`, maximum number of heartbeats (2000000) has been reached
+
+Note: Use `set_option maxHeartbeats <num>` to set the limit.
+
+Hint: Additional diagnostic information may be available using the `set_option diagnostics true` command.
+
+N2 LAST PROGRESS
+645506209	classification	ConcreteSpec.Core.Vacuity.«⟪example⟫ConcreteSpec/Proofs/Ident.lean:1266»
+645506355	classification	ConcreteSpec.Core.KeyConstruct.collectKeysIn_sound
+645506356	classification	ConcreteSpec.Core.Vacuity.«⟪example⟫ConcreteSpec/Proofs/Ident.lean:1273»
+645506357	instance	ConcreteSpec.Core.Vacuity.«⟪example⟫ConcreteSpec/Proofs/Ident.lean:1266»
+

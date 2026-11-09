@@ -70,11 +70,12 @@ allocated. R-0691 environment sharding does not fix expansion inside one proof.
 
 ## Focused validation
 
-All commands are externally bounded; Lean checks use nix develop. No full local
+Validation commands are externally bounded; Lean checks use nix develop. No full local
 suite, heavy build, review tool, push, history rewrite, other-branch edit,
 ConcreteSpec edit or ROADMAP edit was performed.
 
-- `vacuity_round5.py controls`: see `audits/N2-round5-controls-final.txt`.
+- `vacuity_round5.py controls`: **26 PASS, 0 FAIL**, exact finding sets;
+  see `audits/N2-round5-controls-final.txt`.
 - `vacuity_round5.py c1|c2 --baseline`: exact true verdicts for all three helpers;
   own diagnostics in `audits/N2-round5-c1-baseline.txt` and
   `audits/N2-round5-c2-baseline.txt`.
@@ -116,3 +117,15 @@ that boundary; the writer has not established these full-run outcomes. Other
 real findings (including approvals, classifications and planted witnesses) remain
 findings, so zero false-discharge findings does not imply whole-report N2 PASS.
 If the current checker exhausts, record the actual INCOMPLETE and stop promotion.
+
+## Writer commits and exact validation identity
+
+- `cc21095890e11195106179ab46b7ed14c48d498e` — structural supplied/hypothetical
+  discharge repair, positive repro, exact negatives and explicit staging blocker.
+- Consumer SHA-256: `c479e1a9bad3c18bcdb0d93ec85e151dd3932d924fc6044e9e9e793d529c2c3a`.
+  The 26 focused controls and three final helper probes used these exact consumer
+  bytes before commit. The exact-commit C9 recheck is retained in
+  `audits/N2-round5-c9-completion-final.txt`.
+
+These results are writer validation only. The coordinator runs independent
+reviews with a different model and pushes; neither action was performed here.
