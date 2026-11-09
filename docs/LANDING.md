@@ -246,9 +246,13 @@ With a gate host, `check`'s impact leg is `scripts/land/gates_remote.sh`:
    host's login shell sees only `bash land-remote-<id>/run.sh`. That script runs `git fetch origin`
    in the host's gate clone (`~/concrete2`, a path name only: its origin is lambdaclass/concrete), runs `run-at-ref.sh` on the bundle, and removes the
    directory. The host therefore needs no GitHub credentials and no copy of the landing scripts.
-3. `run-at-ref.sh` clones objects locally from the gate clone via a temporary remote (`--origin source`,
-   removed after fetching), configures and validates the execution checkout's canonical `origin` from
-   the gate clone's `origin` (`land_check_destination`), and then runs `impact_gates.sh`: the same hook, with the
+3. `run-at-ref.sh` validates the gate clone's effective (Git-resolved) canonical `origin`
+   (`land_check_destination`), clones objects locally from the gate clone via a temporary remote
+   (`--origin source`, removed after fetching), configures the execution checkout's `origin` with
+   those exact Git-resolved fetch and push URLs under controlled configuration in which no URL
+   rewrite rule applies (refusing any `url.*.insteadOf` or `url.*.pushInsteadOf` config in the
+   execution checkout) and re-validates so both validations must agree (`land_transfer_destination`),
+   and then runs `impact_gates.sh`: the same hook, with the
    same input line the `ci` push will present. The command first unsets `CONCRETE_SKIP_GATES`
    (whatever the host's environment holds) and the hook's re-entry marker. Then it exports this
    checkout's `CONCRETE_*` variables, NUL-delimited, with validated names and `%q`-quoted values.

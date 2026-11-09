@@ -422,12 +422,23 @@ git config --unset land.gatesHost
 unset LAND_GATES_TRANSPORT
 
 # run-at-ref.sh fetches the train head from a bundle into a gate clone that has only main,
-# configures and validates the execution checkout's canonical origin (never leaving origin
-# pointing at the local gate clone), and runs the real impact_gates.sh.
+# validates the gate clone's effective (Git-resolved) canonical origin, transfers the resolved
+# fetch and push URLs into the execution checkout under controlled configuration with no rewrite
+# rules, re-validates there (both validations must agree), and runs the real impact_gates.sh.
+git init -q --bare "$TMP/concrete2.git"
+git push -q "$TMP/concrete2.git" "$BASE:refs/heads/main"
 git clone -q --bare "$TMP/origin.git" "$TMP/gateclone.git"
 git update-ref refs/land-remote/test "$HEAD1"
 git bundle create "$TMP/cand.bundle" refs/land-remote/test "^$BASE" >/dev/null 2>&1
 git update-ref -d refs/land-remote/test
+snap_rar_refs() {
+  local d
+  for d in "$TMP/origin.git" "$TMP/fork.git" "$TMP/concrete2.git" "$TMP/gateclone.git"; do
+    [ -d "$d" ] || continue
+    printf '=== %s ===\n' "$d"
+    git --git-dir="$d" for-each-ref --format='%(refname) %(objectname)'
+  done
+}
 out="$(RUN_AT_REF_REPO="$TMP/gateclone.git" RUN_AT_REF_RUNS="$TMP/runs" RUN_AT_REF_SOURCE="$TMP/cand.bundle" RUN_AT_REF_NO_NIX=1 \
   bash "$ROOT_DIR/scripts/land/run-at-ref.sh" refs/land-remote/test \
   'echo at=$(git rev-parse HEAD) remotes=$(git remote | tr "\n" ",") origin_fetch=$(git remote get-url origin) origin_push=$(git remote get-url --push origin)' 2>&1)"; rc=$?
@@ -456,6 +467,63 @@ git -C "$TMP/gateclone.git" remote set-url origin "$TMP/origin.git"
   && has "$out" "exit=0 " \
   && ok "production mode (CONCRETE_TEST_CANONICAL_DIR unset): real run-at-ref.sh + real impact_gates.sh succeeds when gate clone origin is https://github.com/lambdaclass/concrete.git" \
   || { no "prod mode run-at-ref.sh + impact_gates.sh: exit $rc"; echo "$out" | sed 's/^/      /'; }
+# Codex Case 1 (direct run-at-ref.sh, sandbox & prod modes): source gate clone uses an alias URL with
+# repository-local insteadOf / pushInsteadOf that resolves to canonical; run-at-ref.sh transfers the
+# resolved URLs into the execution checkout (with no rewrite config copied) and succeeds.
+git -C "$TMP/gateclone.git" remote set-url origin "concrete-alias:lambdaclass/concrete.git"
+git -C "$TMP/gateclone.git" config "url.$TMP/origin.git.insteadOf" "concrete-alias:lambdaclass/concrete.git"
+git -C "$TMP/gateclone.git" config "url.file://$TMP/origin.git.pushInsteadOf" "concrete-alias:lambdaclass/concrete.git"
+rm -f "$FAKE_GH_DIR/hook.stdin"
+out="$(RUN_AT_REF_REPO="$TMP/gateclone.git" RUN_AT_REF_RUNS="$TMP/runs" RUN_AT_REF_SOURCE="$TMP/cand.bundle" RUN_AT_REF_NO_NIX=1 \
+  bash "$ROOT_DIR/scripts/land/run-at-ref.sh" refs/land-remote/test \
+  "echo fetch=\$(git remote get-url origin) push=\$(git remote get-url --push origin) rewrites=\$(git config --get-regexp '^url\\..*\\.(push)?insteadof\$' || true) && bash '$ROOT_DIR/scripts/land/impact_gates.sh' --base $BASE --head $HEAD1 --src-ref refs/heads/train/t1 --dst-ref refs/heads/ci/t1" 2>&1)"; rc=$?
+git -C "$TMP/gateclone.git" config --unset "url.$TMP/origin.git.insteadOf"
+git -C "$TMP/gateclone.git" config --unset "url.file://$TMP/origin.git.pushInsteadOf"
+git -C "$TMP/gateclone.git" remote set-url origin "$TMP/origin.git"
+[ "$rc" = 0 ] && has "$out" "fetch=$TMP/origin.git push=file://$TMP/origin.git rewrites=" \
+  && has "$out" "impact: gates passed for ${BASE:0:10}..${HEAD1:0:10}" \
+  && [ "$(cat "$FAKE_GH_DIR/hook.stdin" 2>/dev/null)" = "refs/heads/train/t1 $HEAD1 refs/heads/ci/t1 $BASE" ] \
+  && ok "run-at-ref.sh resolves a gate clone's repo-local alias (insteadOf + pushInsteadOf) to canonical URLs in the execution checkout without copying rewrite rules" \
+  || { no "run-at-ref repo-local alias to canonical: exit $rc"; echo "$out" | sed 's/^/      /'; }
+git -C "$TMP/gateclone.git" remote set-url origin "concrete-gh:lambdaclass/concrete.git"
+git -C "$TMP/gateclone.git" config "url.https://github.com/.insteadOf" "concrete-gh:"
+git -C "$TMP/gateclone.git" config "url.git@github.com:.pushInsteadOf" "concrete-gh:"
+rm -f "$FAKE_GH_DIR/hook.stdin"
+out="$(env -u CONCRETE_TEST_CANONICAL_DIR RUN_AT_REF_REPO="$TMP/gateclone.git" RUN_AT_REF_RUNS="$TMP/runs" RUN_AT_REF_SOURCE="$TMP/cand.bundle" RUN_AT_REF_NO_NIX=1 \
+  bash "$ROOT_DIR/scripts/land/run-at-ref.sh" refs/land-remote/test \
+  "echo fetch=\$(git remote get-url origin) push=\$(git remote get-url --push origin) rewrites=\$(git config --get-regexp '^url\\..*\\.(push)?insteadof\$' || true) && bash '$ROOT_DIR/scripts/land/impact_gates.sh' --base $BASE --head $HEAD1 --src-ref refs/heads/train/t1 --dst-ref refs/heads/ci/t1" 2>&1)"; rc=$?
+git -C "$TMP/gateclone.git" config --unset "url.https://github.com/.insteadOf"
+git -C "$TMP/gateclone.git" config --unset "url.git@github.com:.pushInsteadOf"
+git -C "$TMP/gateclone.git" remote set-url origin "$TMP/origin.git"
+[ "$rc" = 0 ] && has "$out" "fetch=https://github.com/lambdaclass/concrete.git push=git@github.com:lambdaclass/concrete.git rewrites=" \
+  && has "$out" "impact: gates passed for ${BASE:0:10}..${HEAD1:0:10}" \
+  && [ "$(cat "$FAKE_GH_DIR/hook.stdin" 2>/dev/null)" = "refs/heads/train/t1 $HEAD1 refs/heads/ci/t1 $BASE" ] \
+  && ok "production mode: run-at-ref.sh resolves a gate clone's repo-local alias (HTTPS fetch + SSH push) into the execution checkout" \
+  || { no "prod mode run-at-ref repo-local alias: exit $rc"; echo "$out" | sed 's/^/      /'; }
+# Codex Case 2 (direct run-at-ref.sh, sandbox & prod modes): source gate clone has a canonical-looking URL
+# that resolves via repo-local pushInsteadOf / insteadOf to a foreign destination; refused before transfer, no ref moved.
+git -C "$TMP/gateclone.git" config "url.$TMP/concrete2.git.pushInsteadOf" "$TMP/origin.git"
+before_rar="$(snap_rar_refs)"
+out="$(RUN_AT_REF_REPO="$TMP/gateclone.git" RUN_AT_REF_RUNS="$TMP/runs" RUN_AT_REF_SOURCE="$TMP/cand.bundle" RUN_AT_REF_NO_NIX=1 \
+  bash "$ROOT_DIR/scripts/land/run-at-ref.sh" refs/land-remote/test 'echo RAN_CMD' 2>&1)"; rc=$?
+after_rar="$(snap_rar_refs)"
+git -C "$TMP/gateclone.git" config --unset "url.$TMP/concrete2.git.pushInsteadOf"
+[ "$rc" != 0 ] && has "$out" "run-at-ref: refusing remote 'origin': push URL '$TMP/origin.git' rewrites to '$TMP/concrete2.git' (local:$TMP/concrete2.git; fetch URL '$TMP/origin.git'), not the canonical repository lambdaclass/concrete (local:$TMP/origin.git)" \
+  && ! has "$out" "RAN_CMD" && ! has "$out" "[concrete-remote] ref=" && [ "$before_rar" = "$after_rar" ] \
+  && ok "run-at-ref.sh refuses a gate clone whose canonical-looking URL rewrites via repo-local pushInsteadOf to a foreign destination (no ref moved)" \
+  || { no "run-at-ref repo-local foreign pushInsteadOf: exit $rc"; echo "$out" | sed 's/^/      /'; }
+git -C "$TMP/gateclone.git" remote set-url origin https://github.com/lambdaclass/concrete.git
+git -C "$TMP/gateclone.git" config "url.https://github.com/unbalancedparentheses/concrete2.git.pushInsteadOf" "https://github.com/lambdaclass/concrete.git"
+before_rar="$(snap_rar_refs)"
+out="$(env -u CONCRETE_TEST_CANONICAL_DIR RUN_AT_REF_REPO="$TMP/gateclone.git" RUN_AT_REF_RUNS="$TMP/runs" RUN_AT_REF_SOURCE="$TMP/cand.bundle" RUN_AT_REF_NO_NIX=1 \
+  bash "$ROOT_DIR/scripts/land/run-at-ref.sh" refs/land-remote/test 'echo RAN_CMD' 2>&1)"; rc=$?
+after_rar="$(snap_rar_refs)"
+git -C "$TMP/gateclone.git" config --unset "url.https://github.com/unbalancedparentheses/concrete2.git.pushInsteadOf"
+git -C "$TMP/gateclone.git" remote set-url origin "$TMP/origin.git"
+[ "$rc" != 0 ] && has "$out" "run-at-ref: refusing remote 'origin': push URL 'https://github.com/lambdaclass/concrete.git' rewrites to 'https://github.com/unbalancedparentheses/concrete2.git' (github.com/unbalancedparentheses/concrete2; fetch URL 'https://github.com/lambdaclass/concrete.git'), not the canonical repository lambdaclass/concrete (github.com/lambdaclass/concrete)" \
+  && ! has "$out" "RAN_CMD" && ! has "$out" "[concrete-remote] ref=" && [ "$before_rar" = "$after_rar" ] \
+  && ok "production mode: run-at-ref.sh refuses a gate clone whose canonical HTTPS URL rewrites via repo-local pushInsteadOf to concrete2 (no ref moved)" \
+  || { no "prod mode run-at-ref repo-local foreign pushInsteadOf: exit $rc"; echo "$out" | sed 's/^/      /'; }
 rm -f "$FAKE_GH_DIR/hook.stdin"
 out="$(RUN_AT_REF_REPO="$TMP/gateclone.git" RUN_AT_REF_RUNS="$TMP/runs" RUN_AT_REF_SOURCE="$TMP/cand.bundle" RUN_AT_REF_NO_NIX=1 \
   bash "$ROOT_DIR/scripts/land/run-at-ref.sh" refs/land-remote/test \
@@ -464,11 +532,13 @@ out="$(RUN_AT_REF_REPO="$TMP/gateclone.git" RUN_AT_REF_RUNS="$TMP/runs" RUN_AT_R
   && ok "CONTROL: real impact_gates.sh refuses an execution checkout whose origin is left pointing at the local gate clone ($TMP/gateclone.git)" \
   || { no "CONTROL: local-path origin accepted by impact_gates.sh (exit $rc)"; echo "$out" | sed 's/^/      /'; }
 git -C "$TMP/gateclone.git" remote set-url origin "$TMP/concrete2.git"
+before_rar="$(snap_rar_refs)"
 out="$(RUN_AT_REF_REPO="$TMP/gateclone.git" RUN_AT_REF_RUNS="$TMP/runs" RUN_AT_REF_SOURCE="$TMP/cand.bundle" RUN_AT_REF_NO_NIX=1 \
   bash "$ROOT_DIR/scripts/land/run-at-ref.sh" refs/land-remote/test 'echo RAN_CMD' 2>&1)"; rc=$?
+after_rar="$(snap_rar_refs)"
 git -C "$TMP/gateclone.git" remote set-url origin "$TMP/origin.git"
-[ "$rc" != 0 ] && has "$out" "run-at-ref: refusing remote 'origin'" && ! has "$out" "RAN_CMD" && ! has "$out" "[concrete-remote] ref=" \
-  && ok "run-at-ref.sh refuses a gate clone with a non-canonical origin before executing the command" \
+[ "$rc" != 0 ] && has "$out" "run-at-ref: refusing remote 'origin'" && ! has "$out" "RAN_CMD" && ! has "$out" "[concrete-remote] ref=" && [ "$before_rar" = "$after_rar" ] \
+  && ok "run-at-ref.sh refuses a gate clone with a non-canonical origin before executing the command (no ref moved)" \
   || { no "run-at-ref non-canonical gate clone: exit $rc"; echo "$out" | sed 's/^/      /'; }
 
 echo "=== gate host: the pushing hook reuses the attestation only for this exact push ==="
@@ -605,7 +675,15 @@ RIATT="$(cd "$RI" && git rev-parse --git-path concrete-prepush-remote-record)"; 
   && grep -qx "head=$RIH" "$RIATT" 2>/dev/null \
   && ok "the real transport + run-at-ref.sh + real impact_gates.sh runs the head on the host with canonical origin and attests the pass" \
   || { no "e2e transport: exit $rc"; echo "$out" | sed 's/^/      /'; }
-# Control: if run-at-ref.sh leaves the execution checkout's origin pointing at the local gate clone
+snap_e2e_refs() {
+  local d
+  for d in "$TMP/ri-origin.git" "$RI" "$HH/concrete2" "$TMP/origin.git" "$TMP/fork.git" "$TMP/concrete2.git"; do
+    [ -d "$d" ] || continue
+    printf '=== %s ===\n' "$d"
+    git -C "$d" for-each-ref --format='%(refname) %(objectname)'
+  done
+}
+# Control 1: if run-at-ref.sh leaves the execution checkout's origin pointing at the local gate clone
 # ($HH/concrete2, as a plain `git clone --local` does without the origin fix), the real impact_gates.sh
 # in the end-to-end path refuses it and fails the check.
 mkdir -p "$TMP/unfixed-land/scripts/land" "$TMP/unfixed-land/scripts/checks/lib"
@@ -631,6 +709,108 @@ unfixed_out="$(cd "$RI" && GATEHOST_HOME="$HH" LAND_GATES_SSH="$TMP/ssh-shim" LA
 [ "$unfixed_rc" = 1 ] && has "$unfixed_out" "impact: refusing remote 'origin'" && has "$unfixed_out" "$HH/concrete2" && [ ! -f "$RIATT" ] \
   && ok "CONTROL: without run-at-ref.sh's canonical-origin configuration, the real e2e impact path fails closed on the local-path origin ($HH/concrete2)" \
   || { no "CONTROL: unfixed run-at-ref.sh accepted in e2e (exit $unfixed_rc)"; echo "$unfixed_out" | sed 's/^/      /'; }
+# Control 2: an unfixed runner that copies raw remote.origin.url / pushurl without resolving repo-local
+# insteadOf / pushInsteadOf rules and without validating the source checkout first (round 2's bug).
+mkdir -p "$TMP/unfixed-raw/scripts/land" "$TMP/unfixed-raw/scripts/checks/lib"
+cp "$ROOT_DIR/scripts/land/lib.sh" "$TMP/unfixed-raw/scripts/land/"
+cp "$ROOT_DIR/scripts/checks/lib/git_sandbox.sh" "$TMP/unfixed-raw/scripts/checks/lib/"
+grep -v 'land_check_destination "run-at-ref"' "$ROOT_DIR/scripts/land/gates_transport_ssh.sh" > "$TMP/unfixed-raw/scripts/land/gates_transport_ssh.sh"
+awk '
+  /^\( cd "\$REPO" && land_check_destination "run-at-ref" \)/ { next }
+  /^land_transfer_destination "run-at-ref"/ {
+    print "while IFS= read -r u; do [ -n \"$u\" ] || continue; git -C \"$WT\" remote add \"$LAND_CANONICAL_REMOTE\" \"$u\" 2>/dev/null || git -C \"$WT\" config --add \"remote.$LAND_CANONICAL_REMOTE.url\" \"$u\"; done < <(git -C \"$REPO\" config --get-all \"remote.$LAND_CANONICAL_REMOTE.url\" 2>/dev/null || true)"
+    print "while IFS= read -r u; do [ -n \"$u\" ] || continue; git -C \"$WT\" config --add \"remote.$LAND_CANONICAL_REMOTE.pushurl\" \"$u\"; done < <(git -C \"$REPO\" config --get-all \"remote.$LAND_CANONICAL_REMOTE.pushurl\" 2>/dev/null || true)"
+    next
+  }
+  { print }
+' "$ROOT_DIR/scripts/land/run-at-ref.sh" > "$TMP/unfixed-raw/scripts/land/run-at-ref.sh"
+chmod +x "$TMP/unfixed-raw/scripts/land/gates_transport_ssh.sh" "$TMP/unfixed-raw/scripts/land/run-at-ref.sh"
+e2e_unfixed_raw() {
+  unfixed_raw_out="$(cd "$RI" && GATEHOST_HOME="$HH" LAND_GATES_SSH="$TMP/ssh-shim" LAND_GATES_SCP="$TMP/scp-shim" \
+    LAND_GATES_TRANSPORT="$TMP/unfixed-raw/scripts/land/gates_transport_ssh.sh" \
+    CONCRETE_TEST_CANONICAL_DIR="$TMP/ri-origin.git" \
+    CONCRETE_TEST_OUT="$TMP" CONCRETE_TEST_LIB="$ROOT_DIR/scripts/checks/lib/prepush_record.sh" CONCRETE_INJ="$INJ" \
+    bash "$ROOT_DIR/scripts/land/gates_remote.sh" --host fakehost --base "$RIB" --head "$RIH" 2>&1)"; unfixed_raw_rc=$?
+}
+# Codex Case 1 in real e2e runner: gate clone uses an alias URL that resolves via repo-local insteadOf /
+# pushInsteadOf to the canonical repository. Fixed runner succeeds and passes the resolved push URL to the hook;
+# unfixed raw-transfer runner fails on the unresolved alias.
+git -C "$HH/concrete2" remote set-url origin "concrete-alias:lambdaclass/concrete.git"
+git -C "$HH/concrete2" config "url.$TMP/ri-origin.git.insteadOf" "concrete-alias:lambdaclass/concrete.git"
+git -C "$HH/concrete2" config "url.file://$TMP/ri-origin.git.pushInsteadOf" "concrete-alias:lambdaclass/concrete.git"
+rm -f "$TMP/remote.hook_args" "$TMP/remote.stdin" "$RIATT"
+e2e
+[ "$rc" = 0 ] && has "$out" "stub gates passed" \
+  && has "$out" "impact: gates passed for ${RIB:0:10}..${RIH:0:10}" \
+  && [ "$(tr '\n' ' ' < "$TMP/remote.hook_args" 2>/dev/null)" = "origin file://$TMP/ri-origin.git " ] \
+  && [ "$(cat "$TMP/remote.stdin" 2>/dev/null)" = "refs/heads/impact $RIH refs/heads/ci/impact $RIB" ] \
+  && grep -qx "head=$RIH" "$RIATT" 2>/dev/null \
+  && ok "e2e runner resolves a gate clone's repo-local alias (insteadOf + pushInsteadOf) into the execution checkout and attests the pass" \
+  || { no "e2e repo-local alias to canonical: exit $rc"; echo "$out" | sed 's/^/      /'; }
+rm -f "$TMP/remote.hook_args" "$TMP/remote.stdin" "$RIATT"
+before_e2e="$(snap_e2e_refs)"
+e2e_unfixed_raw
+after_e2e="$(snap_e2e_refs)"
+[ "$unfixed_raw_rc" = 3 ] && has "$unfixed_raw_out" "run-at-ref: refusing remote 'origin': push URL 'concrete-alias:lambdaclass/concrete.git' (raw:concrete-alias:lambdaclass/concrete.git) is not the canonical repository lambdaclass/concrete (local:$TMP/ri-origin.git)" \
+  && [ ! -f "$TMP/remote.stdin" ] && [ ! -f "$RIATT" ] && [ "$before_e2e" = "$after_e2e" ] \
+  && ok "CONTROL: unfixed raw-URL transfer fails on a gate clone whose alias resolves to canonical via repo-local insteadOf" \
+  || { no "CONTROL: unfixed raw-URL transfer on canonical alias (exit $unfixed_raw_rc)"; echo "$unfixed_raw_out" | sed 's/^/      /'; }
+git -C "$HH/concrete2" config --unset "url.$TMP/ri-origin.git.insteadOf"
+git -C "$HH/concrete2" config --unset "url.file://$TMP/ri-origin.git.pushInsteadOf"
+git -C "$HH/concrete2" remote set-url origin "$TMP/ri-origin.git"
+# Codex Case 2 in real e2e runner: gate clone has a canonical-looking URL that resolves via repo-local
+# pushInsteadOf (or insteadOf) to a foreign destination ($TMP/concrete2.git). Fixed runner refuses before
+# transfer with the exact diagnostic and moves no ref; unfixed raw-transfer runner fails open (passes).
+git -C "$HH/concrete2" config "url.$TMP/concrete2.git.pushInsteadOf" "$TMP/ri-origin.git"
+rm -f "$TMP/remote.hook_args" "$TMP/remote.stdin" "$RIATT"
+before_e2e="$(snap_e2e_refs)"
+e2e
+after_e2e="$(snap_e2e_refs)"
+[ "$rc" = 3 ] && has "$out" "run-at-ref: refusing remote 'origin': push URL '$TMP/ri-origin.git' rewrites to '$TMP/concrete2.git' (local:$TMP/concrete2.git; fetch URL '$TMP/ri-origin.git'), not the canonical repository lambdaclass/concrete (local:$TMP/ri-origin.git)" \
+  && [ ! -f "$TMP/remote.stdin" ] && [ ! -f "$RIATT" ] && [ "$before_e2e" = "$after_e2e" ] \
+  && ok "e2e runner refuses a gate clone whose canonical-looking URL rewrites via repo-local pushInsteadOf to a foreign destination (no ref moved)" \
+  || { no "e2e repo-local foreign pushInsteadOf: exit $rc"; echo "$out" | sed 's/^/      /'; }
+e2e_unfixed_raw
+rm -f "$TMP/remote.hook_args" "$TMP/remote.stdin" "$RIATT"
+git -C "$HH/concrete2" config --unset "url.$TMP/concrete2.git.pushInsteadOf"
+[ "$unfixed_raw_rc" = 0 ] && has "$unfixed_raw_out" "stub gates passed" \
+  && ok "CONTROL: unfixed raw-URL transfer fails open (passes) when a canonical-looking URL has a repo-local foreign pushInsteadOf" \
+  || { no "CONTROL: unfixed raw-URL transfer did not reproduce fail-open (exit $unfixed_raw_rc)"; echo "$unfixed_raw_out" | sed 's/^/      /'; }
+git -C "$HH/concrete2" config "url.$TMP/concrete2.git.insteadOf" "$TMP/ri-origin.git"
+rm -f "$TMP/remote.hook_args" "$TMP/remote.stdin" "$RIATT"
+before_e2e="$(snap_e2e_refs)"
+e2e
+after_e2e="$(snap_e2e_refs)"
+git -C "$HH/concrete2" config --unset "url.$TMP/concrete2.git.insteadOf"
+[ "$rc" = 3 ] && has "$out" "run-at-ref: refusing remote 'origin': push URL '$TMP/ri-origin.git' rewrites to '$TMP/concrete2.git' (local:$TMP/concrete2.git; fetch URL '$TMP/concrete2.git'), not the canonical repository lambdaclass/concrete (local:$TMP/ri-origin.git)" \
+  && [ ! -f "$TMP/remote.stdin" ] && [ ! -f "$RIATT" ] && [ "$before_e2e" = "$after_e2e" ] \
+  && ok "e2e runner refuses a gate clone whose canonical-looking URL rewrites via repo-local insteadOf to a foreign destination (no ref moved)" \
+  || { no "e2e repo-local foreign insteadOf: exit $rc"; echo "$out" | sed 's/^/      /'; }
+# Execution checkout rewrite-config refusal & source/execution disagreement refusal:
+# any url.*.insteadOf / pushInsteadOf present in the execution checkout is refused fail-closed, and no ref moves.
+mkdir -p "$TMP/rewrite-tmpl"
+printf '[url "file://%s"]\n\tpushInsteadOf = https://example.invalid/\n' "$TMP/concrete2.git" > "$TMP/rewrite-tmpl/config"
+git config --global init.templateDir "$TMP/rewrite-tmpl"
+rm -f "$TMP/remote.hook_args" "$TMP/remote.stdin" "$RIATT"
+before_e2e="$(snap_e2e_refs)"
+e2e
+after_e2e="$(snap_e2e_refs)"
+git config --global --unset init.templateDir
+rm -rf "$TMP/rewrite-tmpl"
+[ "$rc" = 3 ] && has "$out" "run-at-ref: refusing URL rewrite configuration in execution checkout (url.file://$TMP/concrete2.git.pushinsteadof https://example.invalid/); execution checkout must use pre-resolved canonical URLs without rewrite rules" \
+  && [ ! -f "$TMP/remote.stdin" ] && [ ! -f "$RIATT" ] && [ "$before_e2e" = "$after_e2e" ] \
+  && ok "e2e runner refuses any URL rewrite configuration present in the execution checkout (no ref moved)" \
+  || { no "e2e execution checkout rewrite config accepted: exit $rc"; echo "$out" | sed 's/^/      /'; }
+rm -f "$FAKE_GH_DIR/hook.stdin"
+before_rar="$(snap_rar_refs)"
+out="$(RUN_AT_REF_REPO="$TMP/gateclone.git" RUN_AT_REF_RUNS="$TMP/runs" RUN_AT_REF_SOURCE="$TMP/cand.bundle" RUN_AT_REF_NO_NIX=1 \
+  bash "$ROOT_DIR/scripts/land/run-at-ref.sh" refs/land-remote/test \
+  "git config concrete.sourceResolvedPushUrl 'file://$TMP/origin.git' && bash '$ROOT_DIR/scripts/land/impact_gates.sh' --base $BASE --head $HEAD1 --src-ref refs/heads/train/t1 --dst-ref refs/heads/ci/t1" 2>&1)"; rc=$?
+after_rar="$(snap_rar_refs)"
+[ "$rc" != 0 ] && has "$out" "impact: refusing remote 'origin' in execution checkout: destination ('$TMP/origin.git' / '$TMP/origin.git' -> local:$TMP/origin.git) disagrees with validated source checkout ('$TMP/origin.git' / 'file://$TMP/origin.git' -> local:$TMP/origin.git)" \
+  && [ ! -f "$FAKE_GH_DIR/hook.stdin" ] && [ "$before_rar" = "$after_rar" ] \
+  && ok "execution checkout re-validation refuses any disagreement with the validated source checkout's resolved URLs (no ref moved)" \
+  || { no "execution checkout source-agreement check: exit $rc"; echo "$out" | sed 's/^/      /'; }
 e2e
 [ ! -e "$TMP/PWNED" ] && [ ! -e "$TMP/PWNED2" ] && ! grep -qz '^CONCRETE_Y' "$TMP/remote.env" && grep -qz '^CONCRETE_TEST_LIB=' "$TMP/remote.env" \
   && ok "a forwarded value with newlines, \$( ) and quotes runs nothing on the host" || no "forwarded env executed on the host"
@@ -720,21 +900,22 @@ cat > "$TMP/gitlog/git" <<EOF
 exec "$real_git" "\$@"
 EOF
 chmod +x "$TMP/gitlog/git"
-git init -q --bare "$TMP/concrete2.git"
-git push -q "$TMP/concrete2.git" "$BASE:refs/heads/main"
 git remote add concrete2 "$TMP/concrete2.git"
 
 echo "=== destination identity: one owner in scripts/land/lib.sh, resolved URL matching, fail-closed refusals ==="
 # 1. Single owner of canonical repository identity and URL resolution: only scripts/land/lib.sh defines
-# lambdaclass/concrete, and URL rewrites are resolved solely by git itself (no second rewrite parser in lib.sh).
+# lambdaclass/concrete and resolves remote URLs via git (no second rewrite parser or raw-URL copy in run-at-ref.sh).
 dup_repo="$(grep -rnE '^[^#]*lambdaclass/concrete' "$ROOT_DIR"/scripts/land/*.sh "$ROOT_DIR/scripts/push-both.sh" "$ROOT_DIR/.githooks/pre-push" \
   | grep -v "^$ROOT_DIR/scripts/land/lib.sh:" || true)"
-second_rewrite="$(grep -vE '^[[:space:]]*#' "$ROOT_DIR/scripts/land/lib.sh" | grep -niE 'insteadof|land_rewrite_push_url' || true)"
-[ -z "$dup_repo" ] && [ -z "$second_rewrite" ] \
+second_rewrite="$(grep -rnE '^[^#]*(land_rewrite_push_url|remote get-url --(push --)?all)' "$ROOT_DIR"/scripts/land/*.sh "$ROOT_DIR/scripts/push-both.sh" "$ROOT_DIR/.githooks/pre-push" \
+  | grep -v "^$ROOT_DIR/scripts/land/lib.sh:" || true)"
+raw_transfer="$(grep -nE '^[^#]*config --get-all "remote\.' "$ROOT_DIR/scripts/land/run-at-ref.sh" || true)"
+[ -z "$dup_repo" ] && [ -z "$second_rewrite" ] && [ -z "$raw_transfer" ] \
   && grep -qxF 'LAND_CANONICAL_REPO="lambdaclass/concrete"' "$ROOT_DIR/scripts/land/lib.sh" \
   && grep -qxF 'LAND_CANONICAL_REMOTE="origin"' "$ROOT_DIR/scripts/land/lib.sh" \
-  && ok "scripts/land/lib.sh is the single owner of canonical identity and delegates URL rewriting solely to git" \
-  || { no "duplicate canonical repo or second URL-rewrite parser: repo='$dup_repo' rewrite='$second_rewrite'"; }
+  && grep -qxF 'land_transfer_destination "run-at-ref" "$REPO" "$WT" || exit 1' "$ROOT_DIR/scripts/land/run-at-ref.sh" \
+  && ok "scripts/land/lib.sh is the single owner of canonical identity and URL resolution (used by run-at-ref.sh via land_transfer_destination)" \
+  || { no "duplicate canonical repo or URL-resolution owner: repo='$dup_repo' rewrite='$second_rewrite' raw='$raw_transfer'"; }
 
 # 2. URL normalization: HTTPS and SSH spellings of lambdaclass/concrete normalize to one identity; concrete2 differs.
 norm_ok="$(

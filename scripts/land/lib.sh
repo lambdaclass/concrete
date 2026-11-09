@@ -7,6 +7,7 @@
 #   land_canonical_target caller          expected identity (or sandbox test seam)
 #   land_check_remote caller [remote]     verify remote's resolved fetch/push URLs match canonical
 #   land_check_destination caller         verify env selectors and origin's resolved URLs
+#   land_transfer_destination c src dst   validate src, configure dst with resolved URLs (no rewrites), re-validate dst
 #   land_check_hook_destination c r u     verify .githooks/pre-push's ($1, $2) when pushing main
 #   land_in_nix cmd...                    run cmd inside `nix develop` unless already there (LAND_NO_NIX=1 never)
 #   land_assert_no_op what                die if a merge, rebase, cherry-pick or revert is in progress
@@ -108,7 +109,10 @@ land_canonical_target() {
         return 1 ;;
     esac
     top="$(cd "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null && pwd -P)" || top=""
-    if [ -z "$top" ] || [ "$top" = "$LAND_LIB_ROOT" ]; then
+    if [ -z "$top" ] && [ "$(git rev-parse --is-bare-repository 2>/dev/null)" = true ]; then
+      top="$(cd "$(git rev-parse --git-dir 2>/dev/null)" 2>/dev/null && pwd -P)" || top=""
+    fi
+    if [ -z "$top" ] || [ "$top" = "$LAND_LIB_ROOT" ] || [ "$top" = "$LAND_LIB_ROOT/.git" ]; then
       case "$top/" in
         "$gcfg_dir/"*) ;;
         *)
@@ -142,8 +146,12 @@ land_canonical_target() {
 # Verify that remote $2 (must be $LAND_CANONICAL_REMOTE, i.e. `origin`) exists, has a single fetch
 # URL and a single push URL, that its resolved fetch and push URLs agree, and that both resolve
 # (via git's own pushurl, insteadOf and pushInsteadOf resolution) to the canonical repository identity.
+# On success, sets LAND_RESOLVED_FETCH_URL, LAND_RESOLVED_PUSH_URL and LAND_RESOLVED_TARGET.
 land_check_remote() {
   local caller="${1:-land}" remote="${2:-$LAND_CANONICAL_REMOTE}" target
+  LAND_RESOLVED_FETCH_URL=""
+  LAND_RESOLVED_PUSH_URL=""
+  LAND_RESOLVED_TARGET=""
   target="$(land_canonical_target "$caller")" || return 1
   if [ "$remote" = "fork" ]; then
     echo "$caller: refusing the remote named 'fork' (a divergent repository)" >&2
@@ -154,6 +162,14 @@ land_check_remote() {
     o_url="$(git remote get-url --push "$remote" 2>/dev/null || true)"
     echo "$caller: refusing remote '$remote'${o_url:+ ($o_url)}: publication must use remote '$LAND_CANONICAL_REMOTE' ($LAND_CANONICAL_REPO)" >&2
     return 1
+  fi
+  if [ "$(git config --bool concrete.executionCheckout 2>/dev/null || true)" = true ]; then
+    local rewrites
+    rewrites="$(git config --get-regexp '^url\..*\.(push)?insteadof$' 2>/dev/null || true)"
+    if [ -n "$rewrites" ]; then
+      echo "$caller: refusing URL rewrite configuration in execution checkout ($(printf '%s\n' "$rewrites" | tr '\n' ' ' | sed 's/ $//')); execution checkout must use pre-resolved canonical URLs without rewrite rules" >&2
+      return 1
+    fi
   fi
   local raw_fetch raw_push res_fetch res_push
   raw_fetch="$(git config --get-all "remote.$remote.url" 2>/dev/null || true)"
@@ -201,12 +217,34 @@ land_check_remote() {
     echo "$caller: refusing remote '$remote': push URL '$res_push' ($norm_push) is not the canonical repository $LAND_CANONICAL_REPO ($target)" >&2
     return 1
   fi
+  if [ "$(git config --bool concrete.executionCheckout 2>/dev/null || true)" = true ]; then
+    if [ "$res_fetch" != "$raw_fetch" ] || [ "$res_push" != "$raw_eff_push" ]; then
+      echo "$caller: refusing remote '$remote' in execution checkout: configured URLs ('$raw_fetch' / '$raw_eff_push') were rewritten to ('$res_fetch' / '$res_push')" >&2
+      return 1
+    fi
+    local exp_fetch exp_push exp_target
+    exp_fetch="$(git config --get concrete.sourceResolvedFetchUrl 2>/dev/null || true)"
+    exp_push="$(git config --get concrete.sourceResolvedPushUrl 2>/dev/null || true)"
+    exp_target="$(git config --get concrete.sourceResolvedTarget 2>/dev/null || true)"
+    if { [ -n "$exp_fetch" ] && [ "$res_fetch" != "$exp_fetch" ]; } \
+       || { [ -n "$exp_push" ] && [ "$res_push" != "$exp_push" ]; } \
+       || { [ -n "$exp_target" ] && [ "$norm_push" != "$exp_target" ]; }; then
+      echo "$caller: refusing remote '$remote' in execution checkout: destination ('$res_fetch' / '$res_push' -> $norm_push) disagrees with validated source checkout ('$exp_fetch' / '$exp_push' -> $exp_target)" >&2
+      return 1
+    fi
+  fi
+  LAND_RESOLVED_FETCH_URL="$res_fetch"
+  LAND_RESOLVED_PUSH_URL="$res_push"
+  LAND_RESOLVED_TARGET="$norm_push"
   return 0
 }
 
 # Validate all repository and remote selector environment variables and the configured remote.
 land_check_destination() {
   local caller="${1:-land}"
+  LAND_RESOLVED_FETCH_URL=""
+  LAND_RESOLVED_PUSH_URL=""
+  LAND_RESOLVED_TARGET=""
   land_canonical_target "$caller" >/dev/null || return 1
   local var val rurl
   for var in LAND_REPO ACCEPT_REPO GH_REPO; do
@@ -237,6 +275,66 @@ land_check_destination() {
     return 1
   fi
   land_check_remote "$caller" "$LAND_CANONICAL_REMOTE"
+}
+
+# Validate the source checkout's effective (Git-resolved) fetch and push destinations, configure the
+# execution checkout's `origin` with those exact resolved URLs under controlled configuration in
+# which no URL rewrite rule applies, and re-validate there so both validations must agree.
+land_transfer_destination() {
+  local caller="${1:-run-at-ref}" src_repo="${2:-}" dst_repo="${3:-}"
+  if [ -z "$src_repo" ] || [ -z "$dst_repo" ]; then
+    echo "$caller: land_transfer_destination requires source and execution checkout paths" >&2
+    return 1
+  fi
+  local orig_pwd="$PWD" src_fetch src_push src_target
+  cd "$src_repo" 2>/dev/null || {
+    echo "$caller: cannot enter source checkout '$src_repo'" >&2
+    return 1
+  }
+  if ! land_check_destination "$caller"; then
+    cd "$orig_pwd" 2>/dev/null || true
+    return 1
+  fi
+  src_fetch="$LAND_RESOLVED_FETCH_URL"
+  src_push="$LAND_RESOLVED_PUSH_URL"
+  src_target="$LAND_RESOLVED_TARGET"
+  cd "$orig_pwd" 2>/dev/null || return 1
+  if [ -z "$src_fetch" ] || [ -z "$src_push" ] || [ -z "$src_target" ]; then
+    echo "$caller: source checkout validation did not produce resolved URLs" >&2
+    return 1
+  fi
+  export GIT_CONFIG_NOSYSTEM=1
+  if [ -z "${GIT_CONFIG_GLOBAL:-}" ]; then
+    local empty_gcfg
+    empty_gcfg="$(git -C "$dst_repo" rev-parse --git-path concrete-empty-gitconfig 2>/dev/null)" || return 1
+    case "$empty_gcfg" in /*) ;; *) empty_gcfg="$dst_repo/$empty_gcfg" ;; esac
+    : > "$empty_gcfg" || return 1
+    export GIT_CONFIG_GLOBAL="$empty_gcfg"
+  fi
+  git -C "$dst_repo" remote remove "$LAND_CANONICAL_REMOTE" 2>/dev/null || true
+  git -C "$dst_repo" remote add "$LAND_CANONICAL_REMOTE" "$src_fetch" || return 1
+  git -C "$dst_repo" remote set-url --push "$LAND_CANONICAL_REMOTE" "$src_push" || return 1
+  git -C "$dst_repo" config concrete.executionCheckout true || return 1
+  git -C "$dst_repo" config concrete.sourceResolvedFetchUrl "$src_fetch" || return 1
+  git -C "$dst_repo" config concrete.sourceResolvedPushUrl "$src_push" || return 1
+  git -C "$dst_repo" config concrete.sourceResolvedTarget "$src_target" || return 1
+  cd "$dst_repo" 2>/dev/null || {
+    echo "$caller: cannot enter execution checkout '$dst_repo'" >&2
+    return 1
+  }
+  if ! land_check_destination "$caller"; then
+    cd "$orig_pwd" 2>/dev/null || true
+    return 1
+  fi
+  if [ "$LAND_RESOLVED_FETCH_URL" != "$src_fetch" ] \
+     || [ "$LAND_RESOLVED_PUSH_URL" != "$src_push" ] \
+     || [ "$LAND_RESOLVED_TARGET" != "$src_target" ]; then
+    echo "$caller: refusing remote '$LAND_CANONICAL_REMOTE' in execution checkout: destination ('$LAND_RESOLVED_FETCH_URL' / '$LAND_RESOLVED_PUSH_URL' -> $LAND_RESOLVED_TARGET) disagrees with validated source checkout ('$src_fetch' / '$src_push' -> $src_target)" >&2
+    cd "$orig_pwd" 2>/dev/null || true
+    return 1
+  fi
+  cd "$orig_pwd" 2>/dev/null || return 1
+  return 0
 }
 
 # Validate the destination arguments git passes to .githooks/pre-push ($1 = remote name or URL,

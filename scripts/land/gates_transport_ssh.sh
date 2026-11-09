@@ -43,6 +43,7 @@ cp "$bundle" "$tmp/$id/c.bundle" && cp "$SELF_DIR/run-at-ref.sh" "$SELF_DIR/lib.
   # A gate clone is a work tree whose top level is $gc (a clone, or a worktree whose .git is a file).
   echo 'top="$(git -C "$gc" rev-parse --show-toplevel 2>/dev/null)"'
   echo '[ -n "$top" ] && [ "$(cd "$gc" && pwd -P)" = "$(cd "$top" && pwd -P)" ] || { echo "transport: no gate clone at $gc for $who (RUN_AT_REF_REPO); is the ssh destination the gate user?" >&2; exit 255; }'
+  echo '( source "$dir/scripts/checks/lib/git_sandbox.sh" && git_sandbox && cd "$gc" && source "$dir/scripts/land/lib.sh" && land_check_destination "run-at-ref" ) || exit 1'
   echo 'git -C "$gc" fetch -q origin || { echo "transport: fetch in the gate clone failed" >&2; exit 255; }'
   printf 'RUN_AT_REF_SOURCE="$dir/c.bundle" bash "$dir/scripts/land/run-at-ref.sh" %q %q\n' "$ref" "$cmd"
 } > "$tmp/$id/run.sh"
