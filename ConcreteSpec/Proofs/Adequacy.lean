@@ -1934,7 +1934,7 @@ theorem erasing_silent_divergence : SilentDivergence prog erasingAdapter observa
   ⟨event_infinite, ⟨0, fun n => by simp [event_infinite, eventPosition, erasing_project]⟩⟩
 
 /-- Helper (computation). Internally that same run has infinitely many raw events. (approved:
-APPR-integ-agy-0dbeba29e). -/
+PENDING). -/
 theorem erasing_internal_infinite : InternalInfiniteInteraction prog observationEnv eventConfig := by
   refine ⟨event_infinite, fun bound => ⟨5 * (bound + 1), ?_⟩⟩
   simp [event_infinite, eventPosition, eventCount, rawEvents]
@@ -2063,7 +2063,7 @@ def bumpK : Answer ops.Val ops.Event ops.Store → Option (Config ops) := fun a 
   | .error kd => some ⟨.trapped kd s, [], a.store, []⟩
 
 /-- Helper (computation). A real transition under the lifted ordinary demo oracle. (approved:
-APPR-integ-agy-0dbeba29e). -/
+PENDING). -/
 theorem bumpedMove : Move prog observationEnv ⟨bumpConfig, [], []⟩ ⟨bumpContinued, [], [bumpQuery]⟩ :=
   Move.prim (P := prog) (ρ := observationEnv) (c := bumpConfig) (c' := bumpContinued) (events := [])
     (issued := []) (p := .bump) (vs := []) (site := s) (st := .init)
