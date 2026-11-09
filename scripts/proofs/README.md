@@ -869,9 +869,10 @@ fields of data carriers), and inspect function results under arbitrary output
 hypotheses. Generalize the major to an arbitrary value before checking all
 kernel rules, so a computed carrier's outer shape cannot hide a recursive
 child's premise. Only within this checked induction are recursive results
-assumed strongly independent. A successful invariant can justify a complete
-proof query; it cannot answer a later selected-field demand using aggregate
-provenance. Otherwise the actual recursive source is followed. Validation,
+assumed strongly independent. A successful strong invariant covers every accessible proof-bearing field and
+function result, so projection and application demands can reuse it. A weak
+aggregate answer cannot justify a selected-field demand. Otherwise the actual
+recursive source is followed. Validation,
 source traversal and caches share the existing allowance without a fresh
 budget. Cache identity includes this analysis strength and the source maps.
 The paired recursive-transfer, independent-base, two-IH and cast controls are
@@ -885,3 +886,9 @@ fieldless or representation-only record. The metadata controls supply both a
 guessed name and a guessed flag and require `equal=false`; the paired fieldless
 subject controls require a genuine match and a rejected counterfeit. Ordinary
 metadata and let wrappers remain transparent. R-0219 owns this carrier protocol.
+
+The strong invariant is also used when recursion is reached through a data
+carrier projection (such as the compiler's brecOn result). This is reuse of the
+validated all-fields/all-arguments property, not aggregate provenance. The
+existing `recursive-law-positive` control remains complete under its unchanged
+64-visit limit and retains exactly its unrelated `missing-instance` finding.

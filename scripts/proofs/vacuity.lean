@@ -478,7 +478,7 @@ partial def directStep (n : Name) (e : Expr) : StateRefT ProjectionState Audit B
   if (← get).origins.strong && !proof then
     if !(← projectionCarriesProof (← inferType e)) then return false
   if let .fvar id := e.getAppFn' then
-    return ← throughProjectionOrigin n id e.getAppArgs (direct n) true
+    return ← throughProjectionOrigin n id e.getAppArgs (direct n)
   if let .proj name i receiver := e.getAppFn' then
     return ← directField n name i receiver e.getAppArgs
   match e with
@@ -498,7 +498,7 @@ partial def directStep (n : Name) (e : Expr) : StateRefT ProjectionState Audit B
       if [``Eq.refl, ``rfl, ``HEq.refl, ``Iff.refl, ``True.intro].contains h then
         return !(← get).origins.premiseOnly
       if let some (.recInfo _) := (← getEnv).find? h then
-        return ← directEliminator n e (direct n) false true
+        return ← directEliminator n e (direct n)
       if let some (.ctorInfo c) := (← getEnv).find? h then
         let mut all := true
         let mut hasEvidence := false
@@ -545,7 +545,7 @@ partial def directStep (n : Name) (e : Expr) : StateRefT ProjectionState Audit B
     type, before instantiating its motives. A motive may itself return a function;
     its binders are not constructor fields. Extra applications are preserved. -/
 partial def directEliminator (n : Name) (e : Expr)
-    (finish : Expr → StateRefT ProjectionState Audit Bool) (assuming := false) (complete := false)
+    (finish : Expr → StateRefT ProjectionState Audit Bool) (assuming := false)
     : StateRefT ProjectionState Audit Bool := do
   let .const head levels := e.getAppFn' | throwError "projection-recursor-head"
   let .recInfo r ← getConstInfo head | throwError "projection-recursor-kind {head}"
@@ -594,7 +594,7 @@ partial def directEliminator (n : Name) (e : Expr)
       modify fun s => { s with origins := { origins with minorOrigins, fieldOrigins, derivedOrigins, recursiveOrigins, premiseOnly := true } }
       try
         let body := (mkAppN (mkAppN minor fields) (args.extract (r.getMajorIdx + 1) args.size)).headBeta
-        if complete && !assuming then
+        if !assuming then
           if sources.zip fields |>.any (fun (source, field) => match source with
               | .recur _ => body.containsFVar field.fvarId!
               | _ => false) then
@@ -656,13 +656,13 @@ partial def projectionHeadStep (n : Name) (e : Expr) : StateRefT ProjectionState
 /-- Resolve field origins only when the proof actually demands them. Unused
     constructor fields cannot consume the budget or contaminate other fields. -/
 partial def projectionOrigin (n : Name) (id : FVarId) : StateRefT ProjectionState Audit Bool :=
-  throughProjectionOrigin n id #[] (direct n) true
+  throughProjectionOrigin n id #[] (direct n)
 
 /-- Keep the complete remaining demand through an eliminator's local alias.
     A field's aggregate provenance cannot answer a query about one of its fields
     or about its value after application. -/
 partial def throughProjectionOrigin (n : Name) (id : FVarId) (args : Array Expr)
-    (finish : Expr → StateRefT ProjectionState Audit Bool) (complete := false)
+    (finish : Expr → StateRefT ProjectionState Audit Bool)
     : StateRefT ProjectionState Audit Bool := do
   let origins := (← get).origins
   if let some value := origins.minorOrigins.findSomeRev? (fun (key, value) =>
@@ -676,8 +676,7 @@ partial def throughProjectionOrigin (n : Name) (id : FVarId) (args : Array Expr)
     return ← finish (mkAppN value args).headBeta
   if let some (value, question) := origins.recursiveOrigins.findSomeRev? (fun (key, value, question) =>
       if key == id then some (value, question) else none) then
-    if complete then
-      if ← projectionIndependent n question then return false
+    if ← projectionIndependent n question then return false
     return ← finish (mkAppN value args).headBeta
   return true
 
@@ -705,7 +704,7 @@ partial def projectionIndependent (n : Name) (question : Expr)
       -- just the original computed carrier's top-level constructor fields.
       withLocalDeclD `projectionMajor (← inferType major) fun arbitrary => do
         let generalized := mkAppN question.getAppFn' (args.set! r.getMajorIdx arbitrary)
-        let projected ← directEliminator n generalized (direct n) true true
+        let projected ← directEliminator n generalized (direct n) true
         pure (!projected)
     finally
       modify fun s => { s with origins }
