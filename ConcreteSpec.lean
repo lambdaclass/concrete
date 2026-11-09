@@ -10,6 +10,7 @@ import ConcreteSpec.Proofs.Observe2
 import ConcreteSpec.Proofs.Adequacy
 import ConcreteSpec.Proofs.Scalar
 import ConcreteSpec.Proofs.Const
+import ConcreteSpec.Proofs.Leak
 
 import ConcreteSpec.Proofs.Memory
 

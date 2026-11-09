@@ -20,6 +20,7 @@ import ConcreteSpec.Spec.Observe
 import ConcreteSpec.Spec.Adequacy
 import ConcreteSpec.Spec.Scalar
 import ConcreteSpec.Spec.Const
+import ConcreteSpec.Spec.Leak
 import ConcreteSpec.Spec.Memory
 import ConcreteSpec.Spec.Hybrid
 import ConcreteSpec.Spec.Own
