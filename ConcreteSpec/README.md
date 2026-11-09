@@ -61,9 +61,19 @@ Open obligations, by name:
   proves cycle exclusion, acyclic-order completeness via `sortConsts`, and order-independence of
   admission and values).
 - **O2 The lexer, model-translation and native-image obligations.**
-- **O3 Instrumentation erasure** (Q9.10): the ownership instrumentation (`Slot.moved`, the
-  `used`, `live`, `known` and `kfields` fields of `Entry`) is stated as intent, with no erasure
-  definition or theorem yet. (Brand erasure, part 5, is done.)
+- **O3 Instrumentation erasure** (Q9.10, owner decision 2026-11-08 Q3): C5 supplies the
+  single-operation erasure calculations for ownership instrumentation, scalar C4 access and
+  generative allocator instrumentation. Its independent execution contracts are finite allocator
+  simulation (`Generative.run_erasure`), unconditional finite C1 simulation
+  (`Own.Steps_erasure`, over `FiniteExecution`), non-stuck oracle-run simulation
+  (`Own.runFrom_erasure`, `Own.run_erasure`), and the checker-accepted converse
+  (`step_stuck_iff_of_accepted`, `runFrom_erasure_of_accepted`, `run_stuck_iff_of_accepted`).
+  Finite simulation includes operand values, tests, lifecycle events and primitive answers,
+  preserving concrete stores and event order; its statement has no oracle or non-stuck premise.
+  The converse uses the explicit obligation interface `Own.CheckerAccepted`. Discharging that
+  interface from the ownership and borrow checker (`R-0571`, slice 1) and erasing the old slice-1
+  instrumentation (`Slot.moved` and `Entry.used/live/known/kfields`, `R-0571`) remain.
+  Slice-1 brand erasure (part 5) is done.
 - **O4 Trap diagnostics** (Q7.10, OD101): C6 defines the exact trap-line bytes and their
   injectivity. Producing each operation's source span remains O1; the startup refusal's bytes are
   not yet defined.
@@ -97,10 +107,15 @@ Open obligations, by name:
   encoding over the old type universe. The slice-1-to-Core integration slice must port that
   layer to `Mem.MByte`/`Mem.encodeInt` and retire the old encoders while preserving its proofs;
   C4 has not completed that port. Core constants and Hybrid share `CTy`/`CVal` from `Scalar`.
-  C5 and C7–C10 remain. C1 leaves to later slices the source-level
-  evaluation orders (elaboration, O1), counted loops (slice 4), and ownership of moved values
-  (C5) and the oracle's query record (C8); its
-  storage can use C4's hybrid state; C5 must still supply ownership instrumentation. Lifecycle
+  C5 (`Own`, `Grant`) now supplies ownership/loan transitions with structural preservation proofs,
+  C1 lifecycle and downward-call adapters, C1 execution-level forward simulation and the
+  `Own.CheckerAccepted` converse (`R-0571`), scalar C4 access erasure, generative brand lifetimes,
+  and grant attenuation/consumption laws. Nonempty projection resolution, semantic type/Copy
+  admission, existential package elaboration and concrete grant instances remain integration
+  duties (`R-0571`); these modules do not claim their checker correspondence. C7–C10 remain.
+  C1 leaves to later slices the source-level evaluation orders (elaboration, O1), counted loops
+  (slice 4), the oracle's query record (C8).
+  Its storage can use C4's hybrid state and C5's ownership adapters. Lifecycle
   instrumentation may refuse an event (`Option.none`), making execution stuck, including initial
   activation and primitive result binding (owner decision 2026-11-08, 15:08 UTC, item 21).
   C1 characterizes lifecycle blockage over actual transitions (`Step`) and top-level/driver entry

@@ -1,4 +1,6 @@
 import ConcreteSpec.Spec.Const
+import ConcreteSpec.Spec.Own
+import ConcreteSpec.Spec.Grant
 
 /-!
 # The rule registry
@@ -27,6 +29,8 @@ namespace ConcreteSpec.Core
 
 /-- The registered rules, in the order the specification introduces them. -/
 def registeredRules : List RuleId :=
-  [⟨``ConstsAdmitted, 1⟩]
+  [⟨``ConstsAdmitted, 1⟩, ⟨``Own.ownerAccess, 1⟩, ⟨``Own.loanAccess, 1⟩,
+   ⟨``Own.endLoan, 1⟩, ⟨``Generative.reset, 1⟩, ⟨``Generative.endScope, 1⟩,
+   ⟨``Grants.narrow, 1⟩, ⟨``Grants.acquire, 1⟩, ⟨``Grants.close, 1⟩]
 
 end ConcreteSpec.Core
