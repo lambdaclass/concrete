@@ -134,6 +134,25 @@ class Outcome(RegistryFixture, unittest.TestCase):
             protocol.observe([partial, missing], SHA, 'daily', NOW, RUNNERS, 'example/repo')
         self.assertEqual(str(caught.exception), f'MISSING daily {SHA}: recorded attempt')
         self.assertFalse(caught.exception.operational)
+        import observe
+        import types
+        from unittest.mock import patch
+        newer = 'b' * 40
+        passing = record(); passing.update(sha=newer, gate_revision=newer)
+        histories = {newer: [passing], SHA: [partial, missing]}
+        messages = observe.observe_main([newer, SHA], histories, 'daily', NOW, RUNNERS, 'example/repo')
+        self.assertEqual(messages, [f'MISSING daily {SHA}: recorded attempt'])
+        source = Path(protocol.__file__).read_text().replace(
+            'operational=operational)', 'operational=True)')
+        plant = types.ModuleType('planted_history'); plant.__file__ = protocol.__file__
+        exec(compile(source, protocol.__file__, 'exec'), plant.__dict__)
+        plant.registry_at = protocol.registry_at
+        with patch.object(observe, 'observe', plant.observe):
+            masked = observe.observe_main([newer, SHA], histories, 'daily', NOW, RUNNERS, 'example/repo')
+        with self.assertRaises(ValueError) as refused:
+            if masked != messages:
+                raise ValueError('FAIL scheduled history: nonoperational defect masked')
+        self.assertEqual(str(refused.exception), 'FAIL scheduled history: nonoperational defect masked')
 
     def test_empty_execution_and_nested_reducer_plants(self):
         source = (LIB / 'scheduled_outcome.py').read_text()
@@ -180,6 +199,17 @@ class Outcome(RegistryFixture, unittest.TestCase):
                                     status='completed',conclusion='success')])]
         observer_watch.check('example/repo', 'fixture', now, pages)
         self.assertEqual(calls[0], '/repos/example/repo/actions/workflows/gate_freshness.yml/runs?branch=main&created=%3E%3D2027-01-13T08%3A29%3A00Z')
+        raw_source = Path(observer_watch.__file__).read_text().replace(
+            'urllib.parse.urlencode(values)', "'&'.join(str(k)+'='+str(v) for k,v in values.items())")
+        raw = types.ModuleType('planted_query')
+        exec(compile(raw_source, observer_watch.__file__, 'exec'), raw.__dict__)
+        def require_encoded(path, key, **kwargs):
+            if key == 'workflow_runs' and path != calls[0]:
+                raise ValueError('FAIL scheduled Actions query: unencoded filter')
+            return pages(path, key, **kwargs)
+        with self.assertRaises(ValueError) as refused:
+            raw.check('example/repo', 'fixture', now, require_encoded)
+        self.assertEqual(str(refused.exception), 'FAIL scheduled Actions query: unencoded filter')
         # Plant coupling to workflow conclusion; the independent control rejects it.
         observed = [dict(r, observation_complete=True) for r in runs]
         source = Path(observer_watch.__file__).read_text().replace(

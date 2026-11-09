@@ -40,4 +40,6 @@ jobs:
           exit "$rc"
       - name: Observer execution completed
         if: ${{ always() && steps.observe.outputs.completed == 'true' }}
-        run: 'true'
+        run: |
+          source scripts/checks/lib/scheduled_process.sh
+          :

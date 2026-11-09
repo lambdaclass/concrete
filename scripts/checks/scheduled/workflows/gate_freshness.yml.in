@@ -18,6 +18,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Observe main history independently
+        id: observe
         run: |
           set -euo pipefail
           source scripts/checks/lib/scheduled_process.sh
@@ -37,3 +38,8 @@ jobs:
             exit 1
           fi
           exit "$rc"
+      - name: Observer execution completed
+        if: ${{ always() && steps.observe.outputs.completed == 'true' }}
+        run: |
+          source scripts/checks/lib/scheduled_process.sh
+          :

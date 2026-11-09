@@ -999,6 +999,9 @@ production adapters and isolated regressions with exact diagnostics:
 | Future / duplicate / invalid sibling plants | `FAIL scheduled monotonicity: future masked FAIL` / `FAIL scheduled monotonicity: duplicate masked FAIL` / `FAIL scheduled monotonicity: invalid sibling masked FAIL` |
 | Partial binding plant | `FAIL scheduled monotonicity: partial binding masked FAIL` |
 | Partial binding production | `FAIL registry: wrong binding artifact scaling-daily/report/selected-sha.txt` |
+| Specific error overwrite plant | `FAIL scheduled execution error: specific diagnostic overwritten` |
+| Non-operational history plant | `FAIL scheduled history: nonoperational defect masked` |
+| Unencoded API query plant | `FAIL scheduled Actions query: unencoded filter` |
 | Overdue publication plant | `FAIL scheduled monotonicity: overdue publication masked FAIL` |
 | Producer-coupled observer plant / missing completion step | `FAIL scheduled observer: missed occurrence` |
 | Producer FAIL with completed observation | observation exits 1, output record `completed=true\n`; census passes |
@@ -1008,6 +1011,10 @@ the upload control includes a nested failed control with a stale cached summary
 and asserts preservation of `specific worker failure`. JSON sibling and late
 overdue publication controls assert `FAIL daily <sha>: recorded attempt`.
 The existing `test_outer_retry_discards_abandoned_outcome` remains required.
+The workflow completion step is authored in its owning template and regenerated;
+it enters the scheduled shell adapter like every other controller step. Existing
+process-context and unrelated-timeout plants use the executor's current
+supervision indentation, preserving their exact diagnostics.
 
 Step 7 and R-0690's deployment baseline, durable archive, independent watchdog and
 real GitHub/concrete-ci-2 qualification remain outstanding as described above.

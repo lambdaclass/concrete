@@ -57,6 +57,34 @@ class Collector(RegistryFixture, unittest.TestCase):
         self.assertEqual((r["status"], r["conclusion"]), ("INCOMPLETE", "incomplete"))
         self.assertEqual(r["execution_error"], "Actions job metadata")
 
+    def test_empty_worker_error_cannot_hide_actions_unavailability(self):
+        for error in (None, ''):
+            self.payload['execution_error'] = error
+            self.job['conclusion'] = 'failure'
+            result = collect.record_for(self.run, self.job, (SHA, 'daily'), self.payload,
+                                        'artifact', 'example/repo', RUNNERS)
+            self.assertEqual((result['status'], result['execution_error']),
+                             ('INCOMPLETE', 'Actions job metadata'))
+
+    def test_specific_error_overwrite_plant(self):
+        import types
+        import scheduled_outcome
+        source = Path(scheduled_outcome.__file__).read_text().replace(
+            "if error and not result.get('execution_error'):", "if error:")
+        plant = types.ModuleType('planted_reduction')
+        exec(compile(source, scheduled_outcome.__file__, 'exec'), plant.__dict__)
+        payload = dict(self.payload, execution_error='specific worker failure')
+        for owner in (scheduled_outcome, plant):
+            result = owner.execution_record(payload, error='Actions upload metadata')
+            if owner is scheduled_outcome:
+                self.assertEqual(result['execution_error'], 'specific worker failure')
+            else:
+                with self.assertRaises(ValueError) as caught:
+                    if result['execution_error'] != payload['execution_error']:
+                        raise ValueError('FAIL scheduled execution error: specific diagnostic overwritten')
+                self.assertEqual(str(caught.exception),
+                                 'FAIL scheduled execution error: specific diagnostic overwritten')
+
     def test_upload_and_job_metadata_recompute_and_preserve_specific_error(self):
         import io
         import json

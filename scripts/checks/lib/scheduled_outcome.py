@@ -31,8 +31,8 @@ def execution_status(gates, *, unavailable=False, missing=False) -> Status:
 def execution_record(record, *, error=None):
     """Recompute from evidence, retaining the first specific execution error."""
     result = dict(record)
-    if error:
-        result.setdefault('execution_error', error)
+    if error and not result.get('execution_error'):
+        result['execution_error'] = error
     status = execution_status(result['gates'], unavailable=bool(result.get('execution_error')))
     result.update(status=status, conclusion={Status.PASS: 'success', Status.FAIL: 'failure',
                                             Status.INCOMPLETE: 'incomplete', Status.MISSING: 'absent'}[status])
