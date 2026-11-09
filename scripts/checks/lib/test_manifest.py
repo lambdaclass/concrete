@@ -21,7 +21,6 @@ ID_RE = re.compile(r"[a-z0-9_]+")
 SLICE_RE = re.compile(r"[a-z0-9_]+")
 RULE_RE = re.compile(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*(?:@[0-9]+)?")
 TRAP_KIND_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
-TRAP_KINDS = frozenset({"arithmeticOverflow"})
 
 
 class Row(NamedTuple):
@@ -56,8 +55,6 @@ def validate_expect(path, line, expect):
         return
     if (len(parts) == 4 and parts[0] == "trap" and parts[2] == "site"
             and TRAP_KIND_RE.fullmatch(parts[1]) and re.fullmatch(r"[0-9]+", parts[3])):
-        if parts[1] not in TRAP_KINDS:
-            fail(path, line, f"unknown ConcreteSpec.Trap constructor {parts[1]!r}")
         natural(path, line, parts[3])
         return
     if len(parts) == 2 and parts[0] == "refuse" and RULE_RE.fullmatch(parts[1]):

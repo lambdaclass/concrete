@@ -43,6 +43,7 @@ rows=$(manifest_rows bir)
 
 wrong_expectation() { awk -F '\t' -v OFS='\t' '$1 == "answer" {$3 = "exit 41"} {print}' "$1" >"$1.new"; mv "$1.new" "$1"; }
 wrong_trap_expectation() { awk -F '\t' -v OFS='\t' '$1 == "overflow" {$3 = "trap arithmeticOverflow site 1"} {print}' "$1" >"$1.new"; mv "$1.new" "$1"; }
+wrong_trap_kind() { awk -F '\t' -v OFS='\t' '$1 == "overflow" {$3 = "trap divisionByZero site 0"} {print}' "$1" >"$1.new"; mv "$1.new" "$1"; }
 missing_row() { awk -F '\t' '$1 != "answer"' "$1" >"$1.new"; mv "$1.new" "$1"; }
 nonexistent_program() { printf 'no_such_program\tbir:no_such_program\texit 0\tslice0\n' >>"$1"; }
 manifest_control() { # manifest_control LABEL EXPECTED-MESSAGE MUTATION-FUNCTION
@@ -68,6 +69,7 @@ mkdir -p "$work/ctl"
 if [ "${CONCRETE_TEST_MANIFEST_SKIP_CONTROLS:-0}" != 1 ]; then
   manifest_control wrong-expectation "answer: expectation mismatch: BIR run gives" wrong_expectation
   manifest_control wrong-trap-expectation "overflow: expectation mismatch: BIR run gives" wrong_trap_expectation
+  manifest_control wrong-trap-kind "overflow: expectation mismatch: trap site 0 has kind ConcreteSpec.Trap.arithmeticOverflow, expected divisionByZero" wrong_trap_kind
   manifest_control missing-row "program without a manifest row: answer" missing_row
   manifest_control nonexistent-program "manifest row names no program: no_such_program" nonexistent_program
 fi
