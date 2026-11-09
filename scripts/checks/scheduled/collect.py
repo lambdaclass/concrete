@@ -155,6 +155,12 @@ def collect_event(environment, *, clock=None):
             candidates.extend(pages(path + "&status=" + status, "workflow_runs", token=token))
         runs = list({run["id"]: run for run in candidates}.values())
     failed = False
+    if "workflow_run" not in event:
+        from observer_watch import check as check_observer
+        try:
+            check_observer(repository, token, clock.observation, pages)
+        except ValueError as error:
+            print(str(error)); failed = True
     try:
         runners = inventory()
     except (EvidenceError, OSError, ValueError, subprocess.SubprocessError) as error:

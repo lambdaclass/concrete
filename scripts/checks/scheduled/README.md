@@ -412,10 +412,10 @@ tests using fixture data are controls, not alternate production authorities.
 | Note refs, remote identity, publication lease, retry/idempotency | Lease algorithm `publish.py:7`; required shared note-ref constructor | `publish.py:10`, `protocol.py:253`, `observe.py:56`, `workflows/gate_freshness.yml:25` | Note prefix repeated in all four; origin remote/config is ambient transport configuration. | `scheduler_policy.note_ref` and `REMOTE` are consumed by all adapters, including hosted fetch through `selection.py --note-refs`. Exact note-ref plant and workflow drift controls are implemented; lease/readback controls remain. |
 | Budgets, retries, grace, cancellation and process lifetime | Gate budget `checks/gates.json:7`; watchdog `lib/bounded_exec.py:65`, retry policy `lib/bounded.sh:82` | `lib/gate_manifest.py:140`, `lib/gate_manifest.py:159`, `run.py:21`, `run.py:135`, `run.py:145`, `with_slot.sh:22`, `protocol.py:42`, `publish.py:11`, `publish.py:35`, `hermetic_suite.py:80`, `collect.py:34` | Formula/reserves repeated in run and manifest; fixed workflow limits at `workflows/gate_schedule.yml:61`, `workflows/gate_schedule.yml:89`, `workflows/gate_publish.yml:16`, `workflows/gate_publish.yml:41`, `workflows/gate_freshness.yml:13`, `workflows/gate_freshness.yml:32`, `checks/scheduled_gates.sh:9`. The former `run.py:28` watchdog is removed; all scheduler lifecycle calls use `bounded_exec.supervise`. | `scheduler_policy` owns operation/job limits and gate/job composition; suite and slot bootstraps consume it. Production budget plants and fake-monotonic deadline composition are implemented; no real campaign budget is reduced. |
 | Runner membership, host slots and resource capability | Binding adapter `lib/ci2_binding.py:11`, verifier `lib/ci2_binding.py:22`; host lease `lib/heavy_slots.sh:4` | `protocol.py:56`, `run.py:106`, `protocol.py:160`, `collect.py:158`, `publish.py:48`, `observe.py:69`, `with_slot.sh:19`, `lib/bounded_exec.py:91` | Workflow labels are routing rather than proof; slot directory override/fd enter via ambient environment; inventory dependency remains unavailable on this base. | `test_execution.py:30`, `test_protocol.py:145`, `test_slot.py:52`, `test_slot.py:60`, `test_slot.py:119`. Residual: explicit validated host capability, actual shared provisioning and ISS-0029 integration under R-0690. |
-| API provenance, selection log, pagination/size bounds, authentication and redirects | `collect.py:19`, `collect.py:22`, `collect.py:29`, `collect.py:39`, `collect.py:51` | `collect.py:106`, `collect.py:141`, `collect.py:67` | Proxy/CA/network configuration is ambient urllib input; schedule tier fallback depends on independently authored workflow title at `workflows/gate_schedule.yml:2`. | `test_collect.py:21`, `test_collect.py:29`, `test_collect.py:98`, `test_collect.py:120`; MISSING explicit network context/title derivation control. Residual: declared HTTPS transport policy and shared selection encoding; API data remains an external observation. |
+| API provenance, selection log, pagination/size bounds, authentication and redirects | `collect.py:19`, `collect.py:22`, `collect.py:29`, `collect.py:39`, `collect.py:51` | `collect.py:106`, `collect.py:141`, `collect.py:67` | Proxy/CA/network configuration is ambient urllib input; schedule tier fallback depends on independently authored workflow title at `workflows/gate_schedule.yml:2`. | `test_collect.py:21`, `test_collect.py:29`, `test_collect.py:98`, `test_collect.py:120`; `Outcome.test_redirect_production_and_credential_plant` checks the production redirect handler and an isolated forwarding plant with the exact transport diagnostic. Residual: declared HTTPS transport policy and shared selection encoding; API data remains an external observation. |
 | Artifact binding, report bytes/digests, index/log retention and durable evidence | Preservation `run.py:44`, qualification `protocol.py:72`, archive bounds `collect.py:97` | `run.py:139`, `run.py:161`, `collect.py:120`, `collect.py:131`, `collect.py:139`, `protocol.py:214`; uploads `workflows/gate_schedule.yml:92` | Retention 90 repeated at `workflows/gate_schedule.yml:99` and `workflows/gate_schedule.yml:107`; stored digest and declared tool metadata alone do not establish durable independent attestation. | Retention projections share `policy.json`; exact retention plant is implemented. Independent binding verification is retained. Durable archive and live partial/cancelled upload qualification remain R-0690 work. |
 | Test inventory, IDs, skips and results for every runner (S11a P2) | `suite_adapter.inventory` | `suite_adapter.execute`, direct module mains, `hermetic_suite.child` | One imported complete inventory per module is compared against both adapters' inventories, actually started IDs and complete outcomes; direct main dispatch follows all definitions. | `test_inventory.Inventory` plants both early dispatches, a failed module, zero tests and matching truncated reports; skip IDs are explicit. `test_hermetic` retains result-drift and canary controls. Steps 5–6 remain separate obligations. |
-| Trigger cadence, queue age, observer coverage and required-check independence | Cadence `workflows/gate_schedule.yml:3`, `workflows/gate_publish.yml:7`, `workflows/gate_freshness.yml:3`; queue policy `collect.py:20` | Selector `workflows/gate_schedule.yml:43`, collector `collect.py:116`, `collect.py:150`, `collect.py:164`, freshness `observe.py:13` | Cron-to-tier mapping repeated in workflow title and selector; no persisted independent observer-occurrence ledger. | Policy cadence generates workflow triggers/title and supplies strict selector mapping. Exact schedule plant is implemented. Independent missed-observer monitoring remains a later plan step under R-0690. |
+| Trigger cadence, queue age, observer coverage and required-check independence | Cadence `workflows/gate_schedule.yml:3`, `workflows/gate_publish.yml:7`, `workflows/gate_freshness.yml:3`; queue policy `collect.py:20` | Selector `workflows/gate_schedule.yml:43`, collector `collect.py:116`, `collect.py:150`, `collect.py:164`, freshness `observe.py:13` | Cron-to-tier mapping repeated in workflow title and selector; no persisted independent observer-occurrence ledger. | Policy cadence generates workflow triggers/title and supplies strict selector mapping. Exact schedule plant is implemented. Publisher-side `observer_watch` independently reads Actions observer-run history; missing-occurrence controls run in the PR tier. Durable occurrence history and live qualification remain R-0690. |
 
 ### Process-boundary contract and bypass census
 
@@ -531,9 +531,9 @@ The listed FAIL strings are required future control diagnostics, not existing ou
    cover the same contracts with deterministic fixtures; real full campaigns and
    expensive qualification remain daily/weekly, never weakened to fit a PR budget.
 
-This round changes documentation only. No new control is claimed as executed and
-no residual is silently accepted as qualification. The coordinator owns subsequent
-implementation/review scheduling and any new issue/roadmap allocation.
+The original round-12 audit above was documentation-only. Steps 1–6 are now
+implemented by the slices recorded below; implementation is not live qualification.
+The coordinator owns step 7, review scheduling and any new issue/roadmap allocation.
 
 
 ### Round 13, implementation slice 1: steps 1–2
@@ -876,3 +876,54 @@ orphan reaping and derived deadlines remain required.
 This implements step 5 only. Step 6's typed outcome reducer is unchanged. R-0690
 still owns real schedule/cancellation/queue/publication and durable archive
 qualification on concrete-ci-2; fixture controls do not discharge that obligation.
+
+
+### Round 20, implementation slice 5: step 6
+
+R-0676 owns the shared typed outcome reduction in `lib/scheduled_outcome.py`.
+Execution, structured nested events and qualification use this owner; adapters
+only translate their evidence into statuses. `FAIL` is absorbing across gate/control
+updates, exceptions, qualification and attempt history. Qualification is always
+recomputed from the selected commit's registry, replacing cached verdict fields.
+Tool identities and seed attestations must equal that registry, including seed
+type; substitution cannot qualify through collection, serialization or observation.
+This verifies retained attestations, not independent proof of campaign tool use.
+Live consumed-tool provenance remains part of R-0690 campaign qualification.
+
+The publisher's scheduled sweep now checks observer coverage separately from the
+observer workflow. `observer_watch.py` derives due four-hour occurrences from the
+policy cadence and reads successful scheduled observer runs from Actions, not an
+observer-written heartbeat or producer claim. Manual runs and unsuccessful runs
+cannot fill an occurrence. It allows one cadence period for completion and checks
+the existing two-queue-age collection horizon. Missing coverage exits nonzero even
+when there are no campaign records to collect. Completion-triggered publication
+continues independently; the hourly sweep owns this additional check.
+
+**Staging boundary under R-0690:** Actions' rolling history is not a durable
+occurrence ledger. Before qualification, provide an explicit trusted deployment
+baseline, persist every expected occurrence and its independently observed Actions
+identity/terminal result in the durable archive, and retain missed occurrences
+beyond API retention and this rolling horizon. Verify publisher/observer outages
+from an independently operated watchdog so the publisher cannot certify its own
+absence. No deployment baseline, durable-store setting or live qualification is
+invented here. The cheap deterministic controls exercise the production census;
+they do not establish that GitHub delivered a real schedule.
+
+| Control | Status | Exact observed contract |
+|---|---|---|
+| Shared typed reducer / precedence | IMPLEMENTED | `Outcome.test_reducer_production_and_plants`: independent exhaustive oracle checks all status sequences of lengths 1–4. Two isolated copies of the production reducer plant INCOMPLETE precedence and later-PASS precedence; each exits 1, empty stdout, stderr exactly `FAIL scheduled outcome precedence: FAIL masked\n`. |
+| Tool/seed attestation substitution | IMPLEMENTED | `Outcome.test_provenance_substitution_and_authoritative_recomputation`: tool and seed substitutions each exit 1, empty stdout, stderr exactly `FAIL scheduled provenance: tool/seed mismatch\n`. `RegistryEvidence.test_tool_seed_substitution_across_evidence_adapters` also checks collection, real publication serialization and permanent observation failure, including a boolean masquerading as seed 1. |
+| Redirected credential | IMPLEMENTED | `Outcome.test_redirect_production_and_credential_plant`: production strips credentials on same-origin and foreign HTTPS redirects; isolated production forwarding plant exits 1, empty stdout, stderr exactly `FAIL scheduled transport: redirected credential\n`. |
+| Independently missed observer occurrence | IMPLEMENTED | `Outcome.test_observer_independent_occurrence_census`: successful independent Actions history passes; removing several distinct occurrences is rejected. Publisher sweep with a missing occurrence returns 1 and stdout exactly `FAIL scheduled observer: missed occurrence\n`, even with no campaign runs. |
+| Registry/control diagnostics, wrong-SHA artifacts, immutable history, lease collision/readback | RETAINED | Existing `test_registry_evidence`, `test_integration`, `test_protocol`, `test_publish` controls remain; no diagnostic or refusal was weakened. |
+| Accepted steps 1–5 | RETAINED | Process census, clean/hostile equality, stdin-open-pipe proof, sandbox isolation, direct/discovery inventory, orphan reaping, derived absolute deadlines, all nine ownership plants and generated workflow projections remain. |
+
+Step 7 remains coordinator work: different-model reviews instructed to do the best
+long-term thing rather than cut corners, then exact-commit concrete-ci-2 focused
+checks in both stdin modes and real GitHub/R-0690 qualification. That qualification
+includes cancellation, occupied shared slots, queues, dropped-response lease
+readback, replay, durable artifacts/tool provenance, independent missed-observer
+history and archive-corruption refusal (`FAIL scheduled archive: digest mismatch`,
+exit 1). Full campaigns retain their daily/weekly tiers. No reviews, pushes,
+roadmap edits, ID allocation, language decisions or heavy local suites were run
+by this implementation slice.

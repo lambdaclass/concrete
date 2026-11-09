@@ -138,6 +138,10 @@ class Collector(RegistryFixture, unittest.TestCase):
                 for n in (1, 2)]
         job = dict(self.job, status='queued', completed_at=None, created_at=runs[0]['created_at'])
         def pages(path, key, **kwargs):
+            if 'gate_freshness.yml' in path:
+                return [dict(id=n, event='schedule', status='completed', conclusion='success',
+                             created_at=(observation.replace(hour=0, minute=11, second=0, microsecond=0) - dt.timedelta(hours=4*n)).isoformat())
+                        for n in range(-6, 14)]
             if key == 'jobs':
                 return [job]
             return runs if '&created=' in path else []
