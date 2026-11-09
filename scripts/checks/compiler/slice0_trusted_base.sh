@@ -85,13 +85,7 @@ check_tools() {
   shift 2
   tool_names "$names" "$@" || return 1
   [ -s "$names" ] || { echo "FAIL tools: no successful execve records"; return 1; }
-  local unlisted
-  unlisted=$(comm -23 "$names" "$allowed")
-  if [ -n "$unlisted" ]; then
-    local tool
-    while IFS= read -r tool; do echo "FAIL tools: unlisted program '$tool'"; done <<<"$unlisted"
-    return 1
-  fi
+  bounded 30 python3 -I "$root/scripts/checks/lib/execve_names.py" --check-names "$allowed" "$names" || return 1
   if [ "$mode" != parser-only ]; then
     bounded 120 python3 -I "$root/scripts/checks/lib/trusted_identity.py" check \
       "$mode" "$@" "$allowed" "$work/identity.json" "$lcb" || return 1
@@ -667,7 +661,7 @@ EOF
       tool_names "$work/emitter.tools" "${emitter_logs[@]}" || fail=1
       tool_names "$work/native.tools" "${native_logs[@]}" || fail=1
       for phase in build emitter native; do
-        echo "tools $phase: $(tr '\n' ' ' <"$work/$phase.tools")"
+        echo "tools $phase: $(cat "$work/$phase.tools")"
       done
 
       first=$(manifest_rows bir | head -n 1)

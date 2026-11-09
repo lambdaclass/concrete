@@ -15,6 +15,15 @@ spec.loader.exec_module(parser)
 parse = parser.parse
 parse_many = parser.parse_many
 
+def realpath(path):
+    parser.checked_path(str(path))
+    return parser.checked_path(os.path.realpath(path), "resolved executable path")
+
+def display(value):
+    """Keep human diagnostics on one line with literal quotes/backslashes escaped."""
+    return json.dumps(str(value), ensure_ascii=True)[1:-1].replace("'", "\\u0027")
+
+
 RESOLVED_NAMES = {
     "lean": {"lean"},
     "leanc": {"leanc"},
@@ -59,12 +68,12 @@ def store_evidence():
     roots = sorted(set(identity["roots"]))
     lean = identity["lean"]
     native_clang = identity["nativeClang"]
-    if os.path.realpath(os.environ.get("CONCRETE_SLICE0_CLANG", "")) != os.path.realpath(native_clang):
+    if realpath(os.environ.get("CONCRETE_SLICE0_CLANG", "")) != realpath(native_clang):
         raise ValueError("consumed native clang differs from the lock-derived compiler: " + os.environ.get("CONCRETE_SLICE0_CLANG", "<unset>"))
     expected_git = identity["git"]
-    actual_git = os.path.realpath(shutil.which("git") or "")
-    if actual_git != os.path.realpath(expected_git):
-        raise ValueError(f"consumed git: {actual_git}, expected {expected_git}")
+    actual_git = realpath(shutil.which("git") or "")
+    if actual_git != realpath(expected_git):
+        raise ValueError(f"consumed git: {display(actual_git)}, expected {display(expected_git)}")
     closure = json.loads(run("nix", "path-info", "--json", "--recursive", *roots))
     # Nix versions encode path-info as either an object keyed by path or an array.
     if isinstance(closure, list): closure = {r["path"]: r for r in closure}
@@ -94,19 +103,19 @@ def store_evidence():
         role: sorted(set(tools))
         for role, tools in identity["roleLocalTools"].items()
     }
-    role_compilers = {role: sorted({os.path.realpath(p) for p in paths})
+    role_compilers = {role: sorted({realpath(p) for p in paths})
                       for role, paths in identity["roleCompilers"].items()}
     role_linkers = {
-        role: {tool: sorted({os.path.realpath(str(Path(root) / "bin" / alias))
+        role: {tool: sorted({realpath(str(Path(root) / "bin" / alias))
                             for root in roots for alias in RESOLVED_NAMES[tool]
                             if (Path(root) / "bin" / alias).is_file()})
                for tool in ("ar", "ld", "ld64", "ld.lld", "as")}
         for role, roots in identity["roleLinkers"].items()
     }
     for tool in ("lean", "lake"):
-        actual = os.path.realpath(shutil.which(tool) or "")
-        expected = os.path.realpath(lean + "/bin/" + tool)
-        if actual != expected: raise ValueError(f"consumed {tool}: {actual}, expected {expected}")
+        actual = realpath(shutil.which(tool) or "")
+        expected = realpath(lean + "/bin/" + tool)
+        if actual != expected: raise ValueError(f"consumed {tool}: {display(actual)}, expected {display(expected)}")
     pin = Path("lean-toolchain").read_text().strip().split(":")[-1].removeprefix("v")
     if not re.match(rf"^Lean \(version {re.escape(pin)}, ", run(lean + "/bin/lean", "--version")):
         raise ValueError("Lean version differs from lean-toolchain")
@@ -136,7 +145,7 @@ def check(logs, allowed, evidence, lcb, role):
     failed = False
     paths = parse_many(logs, paths=True)
     if not paths: raise ValueError("no successful exec records")
-    lcb_real = os.path.realpath(lcb)
+    lcb_real = realpath(lcb)
     if role not in evidence["role_closures"]:
         raise ValueError(f"unknown pipeline role: {role}")
     tool_closures = evidence["role_closures"][role]
@@ -145,16 +154,16 @@ def check(logs, allowed, evidence, lcb, role):
         norm_path = os.path.normpath(path)
         name = os.path.basename(norm_path)
         if name not in allowed:
-            print(f"FAIL tools: unlisted program '{name}'")
+            print(f"FAIL tools: unlisted program '{display(name)}'")
             failed = True
-        real = os.path.realpath(path)
+        real = realpath(path)
         real_name = os.path.basename(real)
         path_root = "/".join(norm_path.split("/")[:4]) if norm_path.startswith("/nix/store/") else ""
         root = "/".join(real.split("/")[:4]) if real.startswith("/nix/store/") else ""
         local = (name == "lcb" and "lcb" in allowed_local and real_name == "lcb" and real == lcb_real)
         if local and (real != evidence.get("lcb") or
                 hashlib.sha256(Path(real).read_bytes()).hexdigest() != evidence.get("lcb_sha256")):
-            print(f"FAIL tools: changed local LCB executable: {real}")
+            print(f"FAIL tools: changed local LCB executable: {display(real)}")
             failed = True
         allowed_roots = set(tool_closures.get(name, []))
         valid_store = (
@@ -167,15 +176,15 @@ def check(logs, allowed, evidence, lcb, role):
             and real_name in RESOLVED_NAMES.get(name, {name})
         )
         if name in {"clang", "clang-21"} and real not in evidence["role_compilers"][role]:
-            print(f"FAIL tools: identity-mismatch role '{role}' program '{name}': {real}")
+            print(f"FAIL tools: identity-mismatch role '{display(role)}' program '{display(name)}': {display(real)}")
             failed = True
             continue
         if name in {"ar", "ld", "ld64", "ld.lld", "as"} and real not in evidence["role_linkers"][role][name]:
-            print(f"FAIL tools: identity-mismatch role '{role}' program '{name}': {real}")
+            print(f"FAIL tools: identity-mismatch role '{display(role)}' program '{display(name)}': {display(real)}")
             failed = True
             continue
         if not local and not valid_store:
-            print(f"FAIL tools: identity-mismatch role '{role}' program '{name}': {real}")
+            print(f"FAIL tools: identity-mismatch role '{display(role)}' program '{display(name)}': {display(real)}")
             failed = True
         else:
             info = evidence["closure"].get(root, {})

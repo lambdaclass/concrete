@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Print basenames of successful execve calls in a strace -f execve log."""
 
+import json
+import unicodedata
 import os
 import re
 import sys
@@ -28,6 +30,12 @@ _SIMPLE_ESCAPES = {
 _ARG_TOKEN_CHARS = frozenset(
     ',0123456789abcdefABCDEFxX_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.|+-'
 )
+
+
+def checked_path(path, context="executable path"):
+    if any(unicodedata.category(c) == "Cc" for c in path):
+        raise ValueError(f"control character in {context}: {json.dumps(path, ensure_ascii=True)}")
+    return path
 
 
 def _skip_ws(text, idx):
@@ -178,6 +186,10 @@ def parse(lines, paths=False):
             if idx >= len(body) or body[idx] != '"':
                 raise ValueError(f"line {line_number}: missing quoted executable path")
             path, idx, truncated = _scan_quoted_string(body, idx, line_number)
+            try:
+                checked_path(path)
+            except ValueError as error:
+                raise ValueError(f"line {line_number}: {error}") from error
             if truncated:
                 raise ValueError(f"line {line_number}: truncated executable path")
             idx = _skip_ws(body, idx)
@@ -231,12 +243,24 @@ def parse_many(log_paths, paths=False):
 
 
 def main():
+    if len(sys.argv) == 4 and sys.argv[1] == "--check-names":
+        with open(sys.argv[2]) as f:
+            allowed = set(f.read().splitlines())
+        with open(sys.argv[3]) as f:
+            names = json.load(f)
+        if not names:
+            raise ValueError("no successful exec records")
+        unlisted = sorted(set(names) - allowed)
+        for name in unlisted:
+            print(f"FAIL tools: unlisted program '{checked_path(name)}'")
+        if unlisted:
+            sys.exit(1)
+        return
     paths = "--paths" in sys.argv
     if paths: sys.argv.remove("--paths")
     if len(sys.argv) < 2:
         raise ValueError("usage: execve_names.py [--paths] LOG [LOG ...]")
-    for name in parse_many(sys.argv[1:], paths=paths):
-        print(name)
+    print(json.dumps(parse_many(sys.argv[1:], paths=paths), ensure_ascii=True))
 
 
 if __name__ == "__main__":

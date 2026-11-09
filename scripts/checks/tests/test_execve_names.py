@@ -14,6 +14,49 @@ spec.loader.exec_module(m)
 
 
 class TraceTests(unittest.TestCase):
+    def test_control_paths_real_trace(self):
+        if not shutil.which("strace"):
+            self.fail("strace required for executable framing controls")
+        identity_spec = importlib.util.spec_from_file_location("identity", Path(__file__).parents[1] / "lib/trusted_identity.py")
+        identity = importlib.util.module_from_spec(identity_spec)
+        identity_spec.loader.exec_module(identity)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "clang\nsh"
+            shutil.copyfile(shutil.which("bash"), target)
+            target.chmod(0o755)
+            log = root / "trace"
+            subprocess.run(["strace", "-f", "-qq", "-s", "4096", "-e", "trace=execve,execveat",
+                            "-o", str(log), str(target), "-c", "exit 0"], check=True, timeout=15)
+            import json
+            expected = "line 1: control character in executable path: " + json.dumps(str(target))
+            for paths in (False, True):
+                with self.assertRaises(ValueError) as error:
+                    m.parse_many([log], paths=paths)
+                self.assertEqual(str(error.exception), expected)
+            # Both production audit entry points reject the actual trace for the same reason.
+            allowed = root / "allowed"
+            allowed.write_text("clang\nsh\n")
+            evidence = root / "evidence"
+            evidence.write_text(json.dumps({"inputs": {}}))
+            with self.assertRaises(ValueError) as error:
+                identity.check([log], allowed, evidence, "/unused/lcb", "native")
+            self.assertEqual(str(error.exception), expected)
+            result = subprocess.run(["python3", "-I", str(Path(m.__file__)), str(log)],
+                                    capture_output=True, text=True, timeout=15)
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.stderr.strip(), "execve_names: " + expected)
+            # A clean executed path can resolve through a symlink to a hostile target.
+            link = root / "clang"
+            link.symlink_to(target)
+            subprocess.run(["strace", "-f", "-qq", "-e", "trace=execve,execveat",
+                            "-o", str(log), str(link), "-c", "exit 0"], check=True, timeout=15)
+            self.assertEqual(m.parse_many([log]), ["clang"])
+            evidence.write_text(json.dumps({"inputs": {}, "role_closures": {"native": {}}}))
+            with self.assertRaises(ValueError) as error:
+                identity.check([log], allowed, evidence, "/unused/lcb", "native")
+            self.assertEqual(str(error.exception), "control character in resolved executable path: " + json.dumps(str(target)))
+
     def test_split_success_and_errno(self):
         lines = [
             '20402 execve("/nix/store/tool/bin/env", ["env", ") = -1 ", "<unfinished ...>", "<... execve resumed>) = -1 "], 0x0 /* 144 vars */ <unfinished ...>',

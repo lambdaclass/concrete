@@ -77,6 +77,17 @@ closed. Real-trace controls produced by `strace` test result-like,
 unfinished-like, resumed-like, escaped-quote, and `-s`-truncated arguments
 alongside genuinely failed executions.
 
+Executable paths are validated immediately after C-string decoding, before either
+successful or failed calls can enter an audit. Unicode control characters are
+rejected with `line N: control character in executable path: <JSON string>`.
+Resolved paths pass the same validator and report
+`control character in resolved executable path: <JSON string>`. The parser CLI
+hands the shell a JSON array; the name checker decodes that array directly rather
+than splitting executable values on newlines. The identity checker consumes the
+same parser in process and emits JSON identity records; human failure diagnostics
+escape path values. Real strace controls execute a newline-bearing filename and a
+clean symlink resolving to it, asserting the exact rejection in both audits.
+
 `flake.nix` narrows `trustedPipelineRoots` to the pipeline packages
 (`llvmPackages_21.clang`, `clang`, `leanRelease`, `git`, `bash`, `coreutils`) and
 exposes `passthru.trustedIdentity` (including per-tool root closures `toolRoots`,
