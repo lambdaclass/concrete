@@ -1,0 +1,7 @@
+Checker source commit: 0053d556f
+Consumer blob: 59b6faed3d5dd998848ce738d817a11a74729d4c
+Consumer SHA-256: a9804eb0909e63b129a4a95e8e5054c1b7edf78075ff02c248cabcb06321ef69
+Reserved region SHA-256: 474a74f351984565847d5239a86707b389970bf1eba33d2b45c4486c1ec11fd4
+PASS reserved region byte-identical; no propext-specific code or metadata carrier-name authority
+PASS only scripts/proofs tracked paths changed; forward ancestry; no merge/rebase/cherry-pick/revert in progress
+PASS ci-2 script pins final consumer; watchdog, heartbeat, work and projection bounds unchanged

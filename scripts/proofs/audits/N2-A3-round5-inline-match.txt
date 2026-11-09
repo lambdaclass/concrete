@@ -1,0 +1,107 @@
+FINAL consumer-blob=59b6faed3d5dd998848ce738d817a11a74729d4c
+PASS control inline-match-positive
+PASS control inline-match-changed-branch
+N2 selected controls: 2 PASS, 0 FAIL
+N2 WALL audit-seconds=120 retry-seconds=240 elapsed-seconds=4.249
+/tmp/nix-shell.J3EUzR/vacuity-3suh6yap/audit.lean:13:0: warning: Definition `inferredOk` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.J3EUzR/vacuity-3suh6yap/audit.lean:15:0: warning: Definition `inferredTrap` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.J3EUzR/vacuity-3suh6yap/audit.lean:18:0: warning: Definition `restatedOk` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.J3EUzR/vacuity-3suh6yap/audit.lean:26:15: warning: Variable name `t` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _t
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+/tmp/nix-shell.J3EUzR/vacuity-3suh6yap/audit.lean:25:0: warning: Definition `changedStoreOk` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.J3EUzR/vacuity-3suh6yap/audit.lean:31:0: warning: Definition `restatedTrap` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.J3EUzR/vacuity-3suh6yap/audit.lean:38:0: warning: Definition `unselectedRestatedOk` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.J3EUzR/vacuity-3suh6yap/audit.lean:46:15: warning: Variable name `t` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _t
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+/tmp/nix-shell.J3EUzR/vacuity-3suh6yap/audit.lean:45:0: warning: Definition `unselectedChangedStoreOk` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.J3EUzR/vacuity-3suh6yap/audit.lean:53:0: warning: Definition `emptyOk` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.J3EUzR/vacuity-3suh6yap/audit.lean:58:0: warning: Definition `emptyTrap` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.J3EUzR/vacuity-3suh6yap/audit.lean:64:15: warning: Variable name `t` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _t
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+/tmp/nix-shell.J3EUzR/vacuity-3suh6yap/audit.lean:63:0: warning: Definition `counterfeitEmptyOk` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.J3EUzR/vacuity-3suh6yap/audit.lean:69:15: warning: Variable name `t` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _t
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+/tmp/nix-shell.J3EUzR/vacuity-3suh6yap/audit.lean:68:0: warning: Definition `counterfeitEmptyStore` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.J3EUzR/vacuity-3suh6yap/audit.lean:73:0: warning: Definition `counterfeitEmptyWildcard` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.J3EUzR/vacuity-3suh6yap/audit.lean:79:12: warning: Variable name `kd` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _kd
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+/tmp/nix-shell.J3EUzR/vacuity-3suh6yap/audit.lean:78:0: warning: Definition `counterfeitTrapBranchEmpty` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+TYPED Confirm.inferredOk elapsed-ms=299
+NOTE analysis-result Confirm.inferredOk stage=instance law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed result=PASS heartbeats=4279/2000000 work=5354/20000 projection=0/4096
+TYPED Confirm.restatedOk elapsed-ms=323
+NOTE analysis-result Confirm.restatedOk stage=instance law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed result=PASS heartbeats=4342/2000000 work=6256/20000 projection=0/4096
+TYPED Confirm.inferredTrap elapsed-ms=266
+NOTE analysis-result Confirm.inferredTrap stage=instance law=ConcreteSpec.Core.Own.evalArgs_trap_erasure case=typed result=PASS heartbeats=4239/2000000 work=4898/20000 projection=0/4096
+TYPED Confirm.restatedTrap elapsed-ms=236
+NOTE analysis-result Confirm.restatedTrap stage=instance law=ConcreteSpec.Core.Own.evalArgs_trap_erasure case=typed result=PASS heartbeats=4294/2000000 work=5568/20000 projection=0/4096
+TYPED Confirm.changedStoreOk elapsed-ms=237
+FAIL instance-application Confirm.changedStoreOk law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed
+NOTE analysis-result Confirm.changedStoreOk stage=instance law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed result=FAIL heartbeats=4345/2000000 work=6266/20000 projection=0/4096
+TYPED Confirm.unselectedRestatedOk elapsed-ms=235
+NOTE analysis-result Confirm.unselectedRestatedOk stage=instance law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed result=PASS heartbeats=4338/2000000 work=6213/20000 projection=0/4096
+TYPED Confirm.unselectedChangedStoreOk elapsed-ms=232
+FAIL instance-application Confirm.unselectedChangedStoreOk law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed
+NOTE analysis-result Confirm.unselectedChangedStoreOk stage=instance law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed result=FAIL heartbeats=4340/2000000 work=6223/20000 projection=0/4096
+TYPED Confirm.emptyOk elapsed-ms=233
+NOTE analysis-result Confirm.emptyOk stage=instance law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed result=PASS heartbeats=4332/2000000 work=6152/20000 projection=0/4096
+TYPED Confirm.emptyTrap elapsed-ms=234
+NOTE analysis-result Confirm.emptyTrap stage=instance law=ConcreteSpec.Core.Own.evalArgs_trap_erasure case=typed result=PASS heartbeats=4284/2000000 work=5464/20000 projection=0/4096
+TYPED Confirm.counterfeitEmptyOk elapsed-ms=239
+FAIL instance-application Confirm.counterfeitEmptyOk law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed
+NOTE analysis-result Confirm.counterfeitEmptyOk stage=instance law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed result=FAIL heartbeats=4334/2000000 work=6162/20000 projection=0/4096
+TYPED Confirm.counterfeitEmptyStore elapsed-ms=242
+FAIL instance-application Confirm.counterfeitEmptyStore law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed
+NOTE analysis-result Confirm.counterfeitEmptyStore stage=instance law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed result=FAIL heartbeats=4334/2000000 work=6162/20000 projection=0/4096
+TYPED Confirm.counterfeitEmptyWildcard elapsed-ms=280
+FAIL instance-application Confirm.counterfeitEmptyWildcard law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed
+NOTE analysis-result Confirm.counterfeitEmptyWildcard stage=instance law=ConcreteSpec.Core.Own.evalArgs_ok_erasure case=typed result=FAIL heartbeats=4332/2000000 work=6152/20000 projection=0/4096
+TYPED Confirm.counterfeitTrapBranchEmpty elapsed-ms=296
+FAIL instance-application Confirm.counterfeitTrapBranchEmpty law=ConcreteSpec.Core.Own.evalArgs_trap_erasure case=typed
+NOTE analysis-result Confirm.counterfeitTrapBranchEmpty stage=instance law=ConcreteSpec.Core.Own.evalArgs_trap_erasure case=typed result=FAIL heartbeats=4275/2000000 work=5398/20000 projection=0/4096
+Typed contract controls: 13 PASS, 0 FAIL

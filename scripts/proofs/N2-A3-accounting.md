@@ -904,3 +904,13 @@ complete PASS under the same unchanged 64-visit control limit. No synthetic or
 production projection allowance was increased. The six real-spec names in the
 round-4r census record remain historical coordinator observations; no new scope
 census has been run locally.
+
+### Round 5: final structural implementation and receipts
+
+The implementation consumer is committed at `0053d556f` with blob `59b6faed3d5dd998848ce738d817a11a74729d4c`. All requested focused checks passed against those final bytes. [The final receipt](audits/N2-A3-round5-results.md) records every commit, all original reproducer outcomes, every expanded control outcome, per-analysis measurements and the ci-2 command.
+
+The structural repair selects demanded constructor fields, follows proof-carrying data, opens checked kernel recursor minors, preserves actual recursive source arguments and cast demands, and validates strong recursive independence before reuse. Typed contracts use explicit locally sealed subject carriers and a single well-typed transformation of domains and bodies at shared arbitrary results. Source metadata cannot assert carrier identity, and fieldless records retain subject dependence. The original four N17a findings were confirmed at `2dcdaff77`; the direct Iff/Exists probes already rejected there and are retained as regression controls.
+
+Bounds and watchdog defaults are unchanged. The certificateDependency through end Discharge region is byte-identical (SHA-256 `474a74f351984565847d5239a86707b389970bf1eba33d2b45c4486c1ec11fd4`). No full local census, review tooling, push or history rewrite was run. ConcreteSpec/, ROADMAP.md and owner decisions were not edited. Per-analysis interpretation, wall policy, hidden Law/Planted contract C and `propext: pending owner question 8` remain pending. The six N17d real-spec names above remain historical coordinator observations; no new scope result is claimed.
+
+After the coordinator pushes, run `bash scripts/proofs/audits/N2-A3-round5-ci2.sh` on concrete-ci-2. Reviews of record belong to the coordinator using a different model; reviewers must do the best long-term thing rather than cut corners.

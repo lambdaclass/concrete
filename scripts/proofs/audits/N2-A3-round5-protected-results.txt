@@ -1,0 +1,22 @@
+FINAL consumer-blob=59b6faed3d5dd998848ce738d817a11a74729d4c
+PROTECTED structure-positive equal=true expected=true
+NOTE analysis-result ProtectedResults.«structure-positive» stage=instance law=none case=none result=PASS heartbeats=74/2000000 work=862/20000 projection=0/4096
+PROTECTED structure-counterfeit equal=false expected=false
+NOTE analysis-result ProtectedResults.«structure-counterfeit» stage=instance law=none case=none result=PASS heartbeats=56/2000000 work=689/20000 projection=0/4096
+PROTECTED nested-counterfeit equal=false expected=false
+NOTE analysis-result ProtectedResults.«nested-counterfeit» stage=instance law=none case=none result=PASS heartbeats=118/2000000 work=933/20000 projection=0/4096
+PROTECTED iff-exists-packaging equal=true expected=true
+NOTE analysis-result ProtectedResults.«iff-exists-packaging» stage=instance law=none case=none result=PASS heartbeats=39/2000000 work=470/20000 projection=0/4096
+PROTECTED empty-carrier-positive equal=true expected=true
+NOTE analysis-result ProtectedResults.«empty-carrier-positive» stage=instance law=none case=none result=PASS heartbeats=19/2000000 work=267/20000 projection=0/4096
+PROTECTED empty-carrier-counterfeit equal=false expected=false
+NOTE analysis-result ProtectedResults.«empty-carrier-counterfeit» stage=instance law=none case=none result=PASS heartbeats=22/2000000 work=283/20000 projection=0/4096
+PROTECTED dependent-domain equal=true expected=true
+NOTE analysis-result ProtectedResults.«dependent-domain» stage=instance law=none case=none result=PASS heartbeats=67/2000000 work=789/20000 projection=0/4096
+PROTECTED sigma-dependent-domain equal=true expected=true
+NOTE analysis-result ProtectedResults.«sigma-dependent-domain» stage=instance law=none case=none result=PASS heartbeats=75/2000000 work=887/20000 projection=0/4096
+METADATA plain equal=false
+METADATA guessed-name equal=false
+METADATA guessed-bool equal=false
+NOTE analysis-result ProtectedResults.«metadata-marker» stage=instance law=none case=none result=PASS heartbeats=7/2000000 work=109/20000 projection=0/4096
+Protected result controls: 9 PASS

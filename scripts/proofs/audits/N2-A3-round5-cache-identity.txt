@@ -1,0 +1,30 @@
+FINAL consumer-blob=59b6faed3d5dd998848ce738d817a11a74729d4c
+PASS identity PIPE FAIL instance-false-discharge witnessForward
+PASS identity PIPE FAIL instance-false-discharge witnessReverse
+PASS identity ORDER [b1, b2] b1 bad=false
+PASS identity ORDER [b1, b2] b2 bad=true
+PASS identity ORDER [b2, b1] b2 bad=true
+PASS identity ORDER [b2, b1] b1 bad=false
+PASS identity ROOT [b3, b2] b3 bad=false
+PASS identity ROOT [b3, b2] b2 bad=true
+PASS identity ROOT [b2, b3] b2 bad=true
+PASS identity ROOT [b2, b3] b3 bad=false
+PASS identity SETTYPE before=true after=false fresh=false
+PASS identity VISITED setType before=false after=true
+PASS identity KEYS interning mutation replacement projection binder-info binder-name universe distinct
+PASS identity KEYS options mode distinct
+PASS identity MODULES import-order checked forward=false backward=true self=true
+PASS identity DEMAND harmless-body context-searches=0
+PASS identity KEYS declaration-name binder-info kind distinct
+PASS identity KEYS projection same-FVarId context distinct
+PASS identity KEYS projection premise-only mode distinct
+PASS identity KEYS projection strong-mode distinct
+PASS identity KEYS projection same-FVarId origin distinct
+PASS identity KEYS constructor-field origin distinct
+PASS identity KEYS projection derived-source distinct
+PASS identity KEYS raw-refuted-types closed-refuted-types binder-info distinct
+PASS identity TRANSPORT bad=true exact=FAIL-instance-false-discharge
+PASS identity planted ordinary-expr-equality: exact stale-result diagnostic
+PASS identity planted fvar-only-visited: exact stale-result diagnostic
+PASS identity planted expression-only-projection: exact stale-result diagnostic
+PASS identity planted missing-result-obligation: exact stale-result diagnostic

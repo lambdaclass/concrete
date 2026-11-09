@@ -1,0 +1,2 @@
+FINAL consumer-blob=59b6faed3d5dd998848ce738d817a11a74729d4c
+PASS real fixture provenance: 10 byte-for-byte excerpts

@@ -1,0 +1,11 @@
+FINAL consumer-blob=59b6faed3d5dd998848ce738d817a11a74729d4c
+REPRO baseline: no context refutation
+REPRO kernel-checked certificate: of_eq_true injectedFalse._simp_1
+REPRO certificate type: False; local assumptions: 0
+REPRO supplied dependency: injectedFalse := impossible
+CERTIFICATE origin: rejected-supplied-contradiction supplier=impossible
+CERTIFICATE non-circular: rejected-supplied-contradiction supplier=impossible
+CERTIFICATE library-decide-matcher: admitted
+CERTIFICATE dependency-chain-baseline: admitted
+CERTIFICATE shared-budget: INCOMPLETE analysis-budget-or-error CertificateControl.instance stage=certificate-dependencies law=CertificateControl.law case=shared-budget false-discharge-budget
+Certificate controls: 5 PASS, 0 FAIL

@@ -1,0 +1,76 @@
+FINAL consumer-blob=59b6faed3d5dd998848ce738d817a11a74729d4c
+PASS DAG memoized: DAG depth=10 work=41 cached=22 root=true
+DAG depth=15 work=61 cached=32 root=true
+PASS DAG early-exit: DAG depth=10 work=4093 cached=2 root=false
+CONTROL dag-root-not-cached
+CONTROL work-budget
+PASS dependency memoized: /tmp/nix-shell.J3EUzR/n2-dependencies-lw5s4krf/Dependencies.lean:111:0: warning: Definition `witness` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.J3EUzR/n2-dependencies-lw5s4krf/Dependencies.lean:114:0: warning: Definition `changed` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+DEPENDENCIES complete work=2330
+NOTE analysis-result DependencyControls.witness stage=instance law=DependencyControls.law case=inline result=PASS heartbeats=814/2000000 work=1198/20000 projection=0/4096
+FAIL instance-application DependencyControls.changed law=DependencyControls.law case=inline
+NOTE analysis-result DependencyControls.changed stage=instance law=DependencyControls.law case=inline result=FAIL heartbeats=815/2000000 work=1223/20000 projection=0/4096
+PASS dependency uncached: /tmp/nix-shell.J3EUzR/n2-dependencies-n8uq87nz/Dependencies.lean:111:0: warning: Definition `witness` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+/tmp/nix-shell.J3EUzR/n2-dependencies-n8uq87nz/Dependencies.lean:114:0: warning: Definition `changed` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+CONTROL work-budget work=20000
+NOTE analysis-result DependencyControls.witness stage=instance law=DependencyControls.law case=inline result=PASS heartbeats=801/2000000 work=1090/20000 projection=0/4096
+FAIL instance-application DependencyControls.changed law=DependencyControls.law case=inline
+NOTE analysis-result DependencyControls.changed stage=instance law=DependencyControls.law case=inline result=FAIL heartbeats=802/2000000 work=1115/20000 projection=0/4096
+PASS refutation memoized: CONTEXT SEARCH
+CONTEXT SEARCH
+CONTEXT SEARCH
+CONTEXT SEARCH
+CONTEXT CACHE complete shared=1 distinct=2 mutable=uncached
+PASS refutation context-erased: CONTEXT SEARCH
+CONTROL context-cache-crossed-context
+PASS refutation raw-type-erased: CONTEXT SEARCH
+CONTEXT SEARCH
+CONTEXT SEARCH
+CONTROL raw-context-cache-crossed-type
+PASS identity PIPE FAIL instance-false-discharge witnessForward
+PASS identity PIPE FAIL instance-false-discharge witnessReverse
+PASS identity ORDER [b1, b2] b1 bad=false
+PASS identity ORDER [b1, b2] b2 bad=true
+PASS identity ORDER [b2, b1] b2 bad=true
+PASS identity ORDER [b2, b1] b1 bad=false
+PASS identity ROOT [b3, b2] b3 bad=false
+PASS identity ROOT [b3, b2] b2 bad=true
+PASS identity ROOT [b2, b3] b2 bad=true
+PASS identity ROOT [b2, b3] b3 bad=false
+PASS identity SETTYPE before=true after=false fresh=false
+PASS identity VISITED setType before=false after=true
+PASS identity KEYS interning mutation replacement projection binder-info binder-name universe distinct
+PASS identity KEYS options mode distinct
+PASS identity MODULES import-order checked forward=false backward=true self=true
+PASS identity DEMAND harmless-body context-searches=0
+PASS identity KEYS declaration-name binder-info kind distinct
+PASS identity KEYS projection same-FVarId context distinct
+PASS identity KEYS projection premise-only mode distinct
+PASS identity KEYS projection strong-mode distinct
+PASS identity KEYS projection same-FVarId origin distinct
+PASS identity KEYS constructor-field origin distinct
+PASS identity KEYS projection derived-source distinct
+PASS identity KEYS raw-refuted-types closed-refuted-types binder-info distinct
+PASS identity TRANSPORT bad=true exact=FAIL-instance-false-discharge
+PASS budget heavy-alone
+PASS budget bad-alone
+PASS budget repeated-instance-finding
+PASS budget starvation
+PASS budget reverse
+PASS budget heartbeat-starvation
+PASS budget cap-baseline
+PASS budget cap-population
+PASS budget cap-zero
+PASS budget empty
+PASS budget nested-reset-mentions
+PASS budget nested-reset-mutate
+PASS budget nested-reset-withProtected
+Budget controls: 13 PASS, 0 FAIL
