@@ -1,4 +1,5 @@
 """Exact-SHA append-only scheduled evidence. No gate list lives here."""
+import os
 import copy
 import datetime as dt
 import importlib.util
@@ -16,7 +17,15 @@ WINDOWS = _registry.load()["windows"]
 REGISTRY_ROOT = Path(__file__).resolve().parents[3]
 
 class EvidenceError(ValueError):
-    pass
+    def __init__(self, message, *, status="INCOMPLETE", operational=False):
+        super().__init__(message)
+        self.status = status
+        self.operational = operational
+
+
+def observation_error(status, tier, sha, detail, *, operational=False):
+    return EvidenceError(f"{status} {tier} {sha}: {detail}",
+                         status=status, operational=operational)
 
 def require(ok, message):
     if not ok:
@@ -25,9 +34,12 @@ def require(ok, message):
 def clean_env(environment):
     return {k: v for k, v in environment.items() if not k.startswith("GIT_")}
 
+GIT_ENVIRONMENT = {k: v for k, v in clean_env(os.environ).items()
+                   if not k.startswith(("GITHUB_", "SELECTED_", "SCHEDULED_", "RUNNER_"))}
+
 def git(*args, environment=None):
     return subprocess.run(["git", *args], check=True, capture_output=True,
-                          text=True, timeout=60, env=clean_env({} if environment is None else environment)).stdout.strip()
+                          text=True, timeout=60, env=GIT_ENVIRONMENT if environment is None else clean_env(environment)).stdout.strip()
 
 def timestamp(value):
     try:
@@ -64,10 +76,11 @@ def qualification(record, sha, tier):
     try:
         rows = _registry.scheduled_rows(tier, registry_at(sha))
     except (EvidenceError, _registry.GateManifestError) as error:
-        return [str(error)]
+        return [dict(status="INCOMPLETE", diagnostic=str(error), operational=False)]
     issues = []
     def issue(status, message):
-        issues.append(status + " registry: " + message)
+        issues.append(dict(status=status, diagnostic=status + " registry: " + message,
+                           operational=status == "INCOMPLETE" and record["status"] == "INCOMPLETE"))
     expected = {row["id"]: row for row in rows}
     actual = {gate["id"]: gate for gate in record["gates"]}
     if not expected:
@@ -142,7 +155,7 @@ def qualification(record, sha, tier):
                             (sha.encode(), (sha + "\n").encode())}
                 if artifact.get("sha") == sha and (binding.get("bytes"), binding.get("sha256")) not in bindings:
                     issue("FAIL", "wrong binding artifact " + gid + "/" + declared["sha_file"])
-    return sorted(issues, key=lambda message: not message.startswith("FAIL "))
+    return sorted(issues, key=lambda outcome: outcome["status"] != "FAIL")
 
 def validate(record, sha, tier, runners, repository, attempt):
     """Validate explicit target identity; attempt=None validates a multi-attempt history."""
@@ -198,9 +211,10 @@ def validate(record, sha, tier, runners, repository, attempt):
     require(record["status"] == expected and
             (missing or record["conclusion"] == conclusions.get(expected)), "status/conclusion contradicts evidence")
     record = copy.deepcopy(record)
-    record["qualification"] = qualification(record, sha, tier)
+    record["qualification_outcomes"] = qualification(record, sha, tier)
+    record["qualification"] = [o["diagnostic"] for o in record["qualification_outcomes"]]
     record["qualification_status"] = (
-        "FAIL" if record["status"] == "FAIL" or any(message.startswith("FAIL ") for message in record["qualification"])
+        "FAIL" if record["status"] == "FAIL" or any(o["status"] == "FAIL" for o in record["qualification_outcomes"])
         else "INCOMPLETE" if record["qualification"] else record["status"])
     return record
 
@@ -213,20 +227,27 @@ def append(history, record, sha, tier, runners, repository):
 
 def observe(history, sha, tier, now, runners, repository):
     if not history:
-        raise EvidenceError(f"MISSING {tier} {sha}: absent run")
+        raise observation_error("MISSING", tier, sha, "absent run", operational=True)
     history = [validate(record, sha, tier, runners, repository, None) for record in history]
     for record in history:
         require(timestamp(record["completed"]) <= now, "future completion")
     require(len({r["attempt"] for r in history}) == len(history), "replay would overwrite attempt")
-    require(not any(r["status"] == "FAIL" for r in history), f"FAIL {tier} {sha}: recorded attempt")
+    if any(r["status"] == "FAIL" for r in history):
+        raise observation_error("FAIL", tier, sha, "recorded attempt")
     for record in history:
-        failures = [message for message in record["qualification"] if message.startswith("FAIL ")]
-        require(not failures, failures[0] if failures else "")
+        for outcome in record["qualification_outcomes"]:
+            if outcome["status"] == "FAIL":
+                raise observation_error("FAIL", tier, sha, outcome["diagnostic"])
     recent = [r for r in history if now - timestamp(r["completed"]) <= WINDOWS[tier]]
-    require(recent, f"STALE {tier} {sha}: no fresh PASS")
+    if not recent:
+        raise observation_error("STALE", tier, sha, "no fresh PASS")
     latest = max(recent, key=lambda r: (timestamp(r["completed"]), timestamp(r["started"]), tuple(map(int, r["attempt"].split("/")))))
-    require(not latest["qualification"], latest["qualification"][0] if latest["qualification"] else "")
-    require(latest["status"] == "PASS", f"{latest['status']} {tier} {sha}: recorded attempt")
+    if latest["qualification_outcomes"]:
+        outcome = latest["qualification_outcomes"][0]
+        raise observation_error(outcome["status"], tier, sha, outcome["diagnostic"],
+                                operational=all(o["operational"] for o in latest["qualification_outcomes"]))
+    if latest["status"] != "PASS":
+        raise observation_error(latest["status"], tier, sha, "recorded attempt", operational=True)
     return f"PASS {tier} {sha}"
 
 def read_note(sha, tier, listed=False, *, environment=None):

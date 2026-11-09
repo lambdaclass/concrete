@@ -47,8 +47,7 @@ class RegistryEvidence(unittest.TestCase):
                         started_at=self.payload['started'], completed_at=self.payload['completed'])
 
     def git(self, *args):
-        return subprocess.run(['git', '-C', str(self.root), *args], check=True,
-                              capture_output=True, text=True, timeout=10).stdout.strip()
+        return protocol.git('-C', str(self.root), *args)
 
     def validate(self, payload):
         return protocol.validate(payload, self.sha, 'daily', RUNNERS, 'example/repo', '1/1')
@@ -80,7 +79,7 @@ class RegistryEvidence(unittest.TestCase):
             self.assertEqual(result['gates'], before['gates'])
             with self.assertRaises(protocol.EvidenceError) as caught:
                 protocol.observe([result], self.sha, 'daily', NOW, RUNNERS, 'example/repo')
-            self.assertEqual(str(caught.exception), diagnostic)
+            self.assertEqual(str(caught.exception), f"{diagnostic.split()[0]} daily {self.sha}: {diagnostic}")
         self.assertEqual(payload, before)
 
     def test_registered_evidence_qualifies(self):
@@ -175,7 +174,7 @@ class RegistryEvidence(unittest.TestCase):
         partial['gates'][0]['controls'].pop()
         with self.assertRaises(protocol.EvidenceError) as caught:
             protocol.observe([self.payload, partial], self.sha, 'daily', NOW, RUNNERS, 'example/repo')
-        self.assertEqual(str(caught.exception), 'INCOMPLETE registry: missing control scaling-daily/control-4')
+        self.assertEqual(str(caught.exception), f'INCOMPLETE daily {self.sha}: INCOMPLETE registry: missing control scaling-daily/control-4')
 
     def test_selected_commit_owns_registry(self):
         # Both the working copy and a newer committed registry disagree with the target.
@@ -205,4 +204,4 @@ class RegistryEvidence(unittest.TestCase):
         partial['gates'][0]['command'] = ['false']
         with self.assertRaises(protocol.EvidenceError) as caught:
             protocol.observe([partial, complete], self.sha, 'daily', NOW, RUNNERS, 'example/repo')
-        self.assertEqual(str(caught.exception), 'FAIL registry: wrong command scaling-daily')
+        self.assertEqual(str(caught.exception), f'FAIL daily {self.sha}: FAIL registry: wrong command scaling-daily')

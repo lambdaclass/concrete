@@ -328,3 +328,25 @@ registry identity, partial recovery and cached-verdict recomputation. Production
 executor report fixtures must qualify under their own committed registry. These
 controls remain in both clean and hostile environment runs; campaign-scale live
 qualification remains with R-0690 on concrete-ci-2.
+
+Git isolation and observation recovery (R-0676): the structural cause of caller
+corruption ([ISS-0043](../../../ISSUES.tsv)) was repository-making fixtures
+inheriting hook-local Git variables.
+The shell entry uses `git_sandbox`; Python Git subprocesses use the shared
+`protocol.clean_env` owner, including fixture helpers. The protocol captures its
+Git environment once at entry, retaining the gate shell PATH and removing Git
+and scheduler identity namespaces. The Python sandbox audit in
+`sandbox_isolation.sh` checks repository-making scripts at every depth. The
+hostile suite points Git directory, work tree, index and object storage at a
+committed canary and compares every file byte afterwards; a planted index change
+must produce the exact canary-change diagnostic.
+
+Observation uses recomputed typed qualification outcomes (`status`, `diagnostic`,
+`operational`), never diagnostic wording to decide recovery. Missing registry
+evidence is operational only for a producer-recorded INCOMPLETE attempt; missing
+evidence in a claimed PASS and an unavailable registry remain nonrecoverable
+qualification defects. A newer qualified ancestor or tip PASS covers older
+operational INCOMPLETE/MISSING occurrences. Every registry substitution FAIL is
+permanent, regardless of age or later PASS, and observation diagnostics include
+the exact tier and SHA. The owning protocol and hermetic controls enforce this
+contract in the cheap PR tier; full campaigns retain their scheduled tiers.

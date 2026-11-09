@@ -79,3 +79,27 @@ class History(RegistryFixture, unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class RecoveryControls(RegistryFixture, unittest.TestCase):
+    def test_realistic_operational_ancestors_recover(self):
+        import copy
+        good = record(); good.update(sha=TIP, gate_revision=TIP)
+        crashed = record(); crashed.update(status='INCOMPLETE', conclusion='incomplete',
+                                          execution_error='worker exited without index', gates=[])
+        dependency = copy.deepcopy(crashed); dependency['gate_revision'] = None
+        partial = record(); partial.update(status='INCOMPLETE', conclusion='incomplete')
+        partial['gates'][0].update(status='INCOMPLETE', controls=[])
+        for old in (crashed, dependency, partial):
+            with self.subTest(old=old):
+                self.assertEqual(observe.observe_main([TIP, SHA], {TIP:[good], SHA:[old]},
+                                 'daily', NOW, RUNNERS, 'example/repo'), [f'PASS daily {TIP}'])
+                messages = observe.observe_main([SHA], {SHA:[old]}, 'daily', NOW, RUNNERS, 'example/repo')
+                self.assertEqual(messages, [f'INCOMPLETE daily {SHA}: INCOMPLETE registry: ' +
+                                            ('missing gate sample' if not old['gates'] else 'missing control sample/refusal')])
+
+    def test_ancestor_substitution_never_recovers(self):
+        good = record(); good.update(sha=TIP, gate_revision=TIP)
+        old = record(); old['gates'][0]['command'] = ['false']
+        self.assertEqual(observe.observe_main([TIP, SHA], {TIP:[good], SHA:[old]},
+                         'daily', NOW, RUNNERS, 'example/repo'),
+                         [f'FAIL daily {SHA}: FAIL registry: wrong command sample'])
