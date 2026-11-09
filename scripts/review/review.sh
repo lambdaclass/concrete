@@ -318,6 +318,13 @@ fi
 SCOPE_ROUND1="The patch below is the complete change of a branch against its base commit $BASE_SHA."
 SCOPE_DELTA="The patch below is only the change since commit $FROM, which was reviewed in round $REVIEWED_ROUNDS. Earlier rounds covered the rest of the branch."
 VERDICT_RULE="$(sed -n '3p' "$SCRIPT_DIR/README.md")"
+VERDICT_RULE+='
+For every repository file you opened for context, write a line `READ: <path>` (using its path relative to the repository root; at least one such line is required) before the final two lines.
+Your penultimate non-empty line must be exactly `REPOSITORY: readable` or `REPOSITORY: unreadable`. Use readable only after you have successfully opened repository files for context; if the sandbox or any repository read failed, use unreadable.
+The last non-empty line of your reply must be exactly one of these two lines, with nothing after it:
+VERDICT: clean
+VERDICT: findings
+Use `VERDICT: findings` when you report any finding, including an earlier finding that is still open.'
 OWNER_RULE='OWNER RULE (2026-11-08, verbatim: "ALWAYS tell the reviewrs to do the best long term thing rather than cuitting corners"): judge and fix by the best long-term design. Never cut corners for speed, a smaller diff or fewer rounds. As a reviewer, report any shortcut, containment patch or corner cut as a real finding and say what the long-term fix is. As a writer, implement the structural fix, not a containment patch; if staging is truly unavoidable, record the long-term design and name its roadmap row.'
 
 prompt_for() { # prompt_for <standard|neutral> <piece label> <group> <paths>
