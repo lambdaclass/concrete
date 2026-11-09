@@ -1459,6 +1459,7 @@ ConcreteSpec.Core.KeyConstruct.collectKeysIn.eq_1	Quot.sound propext
 ConcreteSpec.Core.KeyConstruct.collectKeysIn.eq_2	Quot.sound propext
 ConcreteSpec.Core.KeyConstruct.collectKeysIn.eq_def	Quot.sound propext
 ConcreteSpec.Core.KeyConstruct.collectKeysIn_append	Quot.sound propext
+ConcreteSpec.Core.KeyConstruct.collectKeysIn_collectionSound	Quot.sound propext
 ConcreteSpec.Core.KeyConstruct.collectKeysIn_complete	Quot.sound propext
 ConcreteSpec.Core.KeyConstruct.collectKeysIn_complete._simp_1_10	Quot.sound propext
 ConcreteSpec.Core.KeyConstruct.collectKeysIn_complete._simp_1_8	propext
