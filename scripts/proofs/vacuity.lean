@@ -349,6 +349,10 @@ def dischargeCacheable (context : DischargeRawContext) (e : Expr) : MetaM Bool :
     if inst.hasMVar || inst.hasLevelMVar then return false
   return true
 
+/-- Type-valued representation fields must remain definitionally fixed. -/
+def representationField (type : Expr) : MetaM Bool :=
+  forallTelescopeReducing type fun _ result => return (← whnfD result).isSort
+
 /-- Cache complete answers by elaborated expression, including local identities.
     Every reachable proof field is inspected; sharing does not consume fuel twice. -/
 structure ProjectionState where
@@ -389,7 +393,7 @@ partial def direct (n : Name) (e : Expr) : StateRefT ProjectionState Audit Bool 
 partial def directStep (n : Name) (e : Expr) : StateRefT ProjectionState Audit Bool := do
   let proof ← isProof e
   -- A data major can carry premise evidence. Types themselves are not evidence.
-  if (← whnfD (← inferType e)).isSort then return false
+  if ← representationField (← inferType e) then return false
   if let .fvar id := e.getAppFn' then return ← projectionOrigin id
   if let .proj name i receiver := e.getAppFn' then
     return ← directField n name i receiver e.getAppArgs
@@ -1266,9 +1270,7 @@ def counterexample (law : ConstantInfo) (ic : InstanceCase) (s m : Name) (subjec
   for h in hyps.reverse do result ← mkAppM ``And #[h, result]
   return result
 
-/-- Type-valued representation fields must remain definitionally fixed. -/
-def representationField (type : Expr) : MetaM Bool :=
-  forallTelescopeReducing type fun _ result => return (← whnfD result).isSort
+
 
 /-- Rebuild a structure-valued subject with its original representation fields.
     Only computational fields become arbitrary functions of the full telescope.

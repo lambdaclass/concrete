@@ -201,8 +201,11 @@ def planted_controls():
                                'visited : Std.HashSet (Expr × Array FVarId)')
     prefix, body = visited.split('partial def falseDischarge', 1)
     visited = prefix + 'partial def falseDischarge' + body.replace('  let key := (e, context)', '  let key := (e, (← getLCtx).getFVarIds)', 1)
-    projection = consumer.replace('answers : Std.HashMap (Expr × DischargeRawContext) Bool', 'answers : Std.HashMap Expr Bool')
-    projection = projection.replace('  let key := (e, context)', '  let key := e', 1)
+    projection_type = 'answers : Std.HashMap (Expr × DischargeRawContext × Array (FVarId × Bool)) Bool'
+    projection_key = '  let key := (e, context, (← get).minorOrigins)'
+    assert consumer.count(projection_type) == consumer.count(projection_key) == 1
+    projection = consumer.replace(projection_type, 'answers : Std.HashMap Expr Bool')
+    projection = projection.replace(projection_key, '  let key := e', 1)
     missing_type = consumer.replace('  let refuted ← dischargeRefutableTypeAt context (← inferType e)\n  if refuted && !e.hasFVar then return !(← dischargeRefutableContextAt context true)', '  let refuted := false')
     for label, text in [('ordinary-expr-equality', ordinary), ('fvar-only-visited', visited), ('expression-only-projection', projection), ('missing-result-obligation', missing_type)]:
         assert text != consumer
