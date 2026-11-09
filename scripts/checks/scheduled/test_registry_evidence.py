@@ -47,8 +47,7 @@ class RegistryEvidence(unittest.TestCase):
                         started_at=self.payload['started'], completed_at=self.payload['completed'])
 
     def git(self, *args):
-        return subprocess.run(['git', '-C', str(self.root), *args], check=True,
-                              capture_output=True, text=True, timeout=10).stdout.strip()
+        return protocol.git('-C', str(self.root), *args)
 
     def validate(self, payload):
         return protocol.validate(payload, self.sha, 'daily', RUNNERS, 'example/repo', '1/1')

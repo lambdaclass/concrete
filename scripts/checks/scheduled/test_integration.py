@@ -51,7 +51,7 @@ class Integrated(unittest.TestCase):
                 for row in rows:row['controls'][0]['command']=control_command
             (controller/'scripts/checks/gates.json').write_text(json.dumps(dict(schema=1,windows=dict(daily=129600,weekly=691200),gates=rows)))
             def git(*args):
-                return subprocess.run(['git','-C',str(controller),*args],capture_output=True,text=True,check=True,timeout=10).stdout.strip()
+                return protocol.git('-C', str(controller), *args)
             git('init','-q');git('add','.')
             git('-c','user.name=Scheduled control','-c','user.email=scheduled@example.invalid','-c','core.hooksPath=/dev/null','commit','-qm','fixture')
             sha=git('rev-parse','HEAD')

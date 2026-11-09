@@ -57,6 +57,7 @@ shell_scripts() {
 # called, as statements, before the first repository is made.
 scan_makers() {
   local dir="$1" f first_make src_line call_line
+  python3 -I "$ROOT_DIR/scripts/checks/lib/python_git_sandbox.py" "$dir"
   shell_scripts "$dir" | while IFS= read -r f; do
     [ "$f" = scripts/checks/sandbox_isolation.sh ] && continue
     case "$EXEMPT" in *" $f "*) continue ;; esac
@@ -88,6 +89,8 @@ mkdir -p "$CTL_TREE/scripts/a/b/c"
 printf '#!/usr/bin/env bash\ngit init -q "$1"\n' > "$CTL_TREE/scripts/a/b/c/deep.sh"
 printf '#!/bin/bash\ngit clone -q "$1" "$2"\n' > "$CTL_TREE/scripts/a/b/nosuffix"
 printf '#!/usr/bin/env bash\nsource "$(dirname "$0")/../../checks/lib/git_sandbox.sh"\ngit_sandbox "$1"\ngit init -q "$2"\n' > "$CTL_TREE/scripts/a/b/good.sh"
+printf 'import subprocess\nsubprocess.run(["git", "init", "scratch"])\n' > "$CTL_TREE/scripts/a/b/c/leaky.py"
+printf 'from protocol import clean_env\nimport os, subprocess\nsubprocess.run(["git", "init", "scratch"], env=clean_env(os.environ))\n' > "$CTL_TREE/scripts/a/b/c/safe.py"
 ctl="$(scan_makers "$CTL_TREE")"; rm -rf "${CTL_TREE:?}"
 printf '%s\n' "$ctl" | grep -q $'^FAIL\tscripts/a/b/c/deep.sh\t' \
   && ok "an unsandboxed maker three directories down is refused" || no "the scan missed scripts/a/b/c/deep.sh: $ctl"
@@ -95,6 +98,11 @@ printf '%s\n' "$ctl" | grep -q $'^FAIL\tscripts/a/b/nosuffix\t' \
   && ok "an unsandboxed maker with a bash shebang and no .sh suffix is refused" || no "the scan missed scripts/a/b/nosuffix: $ctl"
 printf '%s\n' "$ctl" | grep -q $'^ok\tscripts/a/b/good.sh\t' \
   && ok "a sandboxed maker at depth passes" || no "the scan did not accept scripts/a/b/good.sh: $ctl"
+
+printf '%s\n' "$ctl" | grep -q $'^FAIL\tscripts/a/b/c/leaky.py\tPython git subprocess requires protocol.clean_env environment (line 2)$' \
+  && ok "Python inherited git environment is refused for its exact reason" || no "Python unsafe control missed: $ctl"
+printf '%s\n' "$ctl" | grep -q $'^ok\tscripts/a/b/c/safe.py\t' \
+  && ok "Python shared sanitizer is accepted" || no "Python safe control refused: $ctl"
 
 # The harness itself is a sandbox: it must not be steered by whatever environment started it.
 source "$HELPER" || exit 2
