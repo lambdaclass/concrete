@@ -354,7 +354,15 @@ def dischargeCacheable (context : DischargeRawContext) (e : Expr) : MetaM Bool :
 structure ProjectionState where
   budget : Option WorkBudget := none
   remaining : Nat
-  answers : Std.HashMap (Expr × DischargeRawContext) Bool := {}
+  -- Minor binders inherit premise provenance from the major. Their identities
+  -- also belong to the cache key; the same local context can have different
+  -- provenance during separate eliminations.
+  minorOrigins : Array (FVarId × Bool) := #[]
+  answers : Std.HashMap (Expr × DischargeRawContext × Array (FVarId × Bool)) Bool := {}
+
+def projectionOrigin (id : FVarId) : StateRefT ProjectionState Audit Bool := do
+  return ((← get).minorOrigins.findSomeRev? fun (key, value) =>
+    if key == id then some value else none).getD true
 
 mutual
 /-- Inspect the complete proof DAG under one declared distinct-expression bound.
@@ -363,7 +371,7 @@ partial def direct (n : Name) (e : Expr) : StateRefT ProjectionState Audit Bool 
   let e := cleanSpine e
   let context ← dischargeRawContext
   let cacheable ← dischargeCacheable context e
-  let key := (e, context)
+  let key := (e, context, (← get).minorOrigins)
   if cacheable then
     if let some answer := (← get).answers[key]? then return answer
   let fuel := (← get).remaining
@@ -376,15 +384,17 @@ partial def direct (n : Name) (e : Expr) : StateRefT ProjectionState Audit Bool 
   return answer
 
 partial def directStep (n : Name) (e : Expr) : StateRefT ProjectionState Audit Bool := do
-  -- Type/data nodes are supported non-evidence, not unavailable proof bodies.
-  unless ← isProof e do return false
-  if e.getAppFn'.isFVar then return true
+  let proof ← isProof e
+  -- A data major can carry premise evidence. Types themselves are not evidence.
+  if (← whnfD (← inferType e)).isSort then return false
+  if let .fvar id := e.getAppFn' then return ← projectionOrigin id
   if let .proj name i receiver := e.getAppFn' then
     return ← directField n name i receiver e.getAppArgs
   match e with
   | .lam _ _ _ _ => lambdaTelescope e fun _ body => direct n body
   | .letE _ _ v b _ => direct n (b.instantiate1 v)
-  | .fvar _ => return true
+  | .fvar id => projectionOrigin id
+  | .lit _ => return false
   | .proj name i receiver => directField n name i receiver #[]
   | _ =>
     if let .const h _ := e.getAppFn' then
@@ -395,24 +405,23 @@ partial def directStep (n : Name) (e : Expr) : StateRefT ProjectionState Audit B
             (e.getAppArgs.extract (projection.numParams + 1) e.getAppArgs.size)
         throwError "projection-under-applied {h}"
       if [``Eq.refl, ``rfl, ``HEq.refl, ``Iff.refl, ``True.intro].contains h then return true
-      if let some (.recInfo r) := (← getEnv).find? h then
-        if r.numMinors == 1 then
-          let args := e.getAppArgs
-          let majorIndex := r.numParams + r.numMotives + r.numMinors + r.numIndices
-          if let some major := args[majorIndex]? then
-            if ← direct n major then
-              if let some minor := args[r.numParams + r.numMotives]? then
-                if ← direct n minor then return true
+      if let some (.recInfo _) := (← getEnv).find? h then
+        return ← directEliminator n e (direct n)
       if let some (.ctorInfo c) := (← getEnv).find? h then
         let mut all := true
         let mut hasEvidence := false
+        let mut dataEvidence := false
         for arg in e.getAppArgs[c.numParams:] do
           if ← isProof arg then
             hasEvidence := true
-            if !(← direct n arg) then all := false
+            let found ← direct n arg
+            dataEvidence := dataEvidence || found
+            if !found then all := false
+          else if !proof && !(← whnfD (← inferType arg)).isSort then
+            dataEvidence := dataEvidence || (← direct n arg)
         -- A nullary proof constructor can establish real computational facts
         -- (e.g. Nat.le.refl). It is not evidence projected from a premise.
-        return hasEvidence && all
+        return if proof then hasEvidence && all else dataEvidence
     -- Proof evidence has explicit theorem/opaque access. This is NOT the
     -- transparency policy for computational conversion or subject mutation.
     -- Instantiate actual universes and arguments before memoizing the query.
@@ -423,14 +432,45 @@ partial def directStep (n : Name) (e : Expr) : StateRefT ProjectionState Audit B
           throwError "projection-universe-arity {h}"
         let body := value.instantiateLevelParams ci.levelParams levels
         return ← direct n (mkAppN body e.getAppArgs).headBeta
-      -- Constructors and recursors are kernel primitives, not missing bodies.
-      -- Non-projecting kernel elimination is genuine negative evidence.
-      match ci with
-      | .recInfo _ => return false
-      | _ => throwError "projection-body-unavailable {h}"
+      throwError "projection-body-unavailable {h}"
     let reduced := e.headBeta
     if reduced != e then direct n reduced
     else throwError "projection-unsupported-expression {e}"
+
+/-- Open precisely the constructor-field/IH telescope from the kernel recursor
+    type, before instantiating its motives. A motive may itself return a function;
+    its binders are not constructor fields. Extra applications are preserved. -/
+partial def directEliminator (n : Name) (e : Expr)
+    (finish : Expr → StateRefT ProjectionState Audit Bool) : StateRefT ProjectionState Audit Bool := do
+  let .const head _ := e.getAppFn' | throwError "projection-recursor-head"
+  let .recInfo r ← getConstInfo head | throwError "projection-recursor-kind {head}"
+  let args := e.getAppArgs
+  let some major := args[r.getMajorIdx]?
+    | throwError "projection-recursor-under-applied {head}"
+  let reduced ← whnfD e
+  if reduced != e then return ← finish reduced
+  let arities ← forallBoundedTelescope (← inferType e.getAppFn')
+      (r.numParams + r.numMotives + r.numMinors) fun formal _ => do
+    let mut arities := #[]
+    for i in [:r.numMinors] do
+      let minor := formal[r.numParams + r.numMotives + i]!
+      let arity ← forallTelescopeReducing (← inferType minor) fun fields _ => pure fields.size
+      arities := arities.push arity
+    pure arities
+  let mut projected := false
+  for i in [:r.numMinors] do
+    let minor := args[r.numParams + r.numMotives + i]!
+    let found ← forallBoundedTelescope (← inferType minor) arities[i]! fun fields _ => do
+      -- Nullary alternatives introduce no evidence from the discriminant.
+      let derived ← if fields.isEmpty then pure false else direct n major
+      let origins := (← get).minorOrigins
+      modify fun s => { s with minorOrigins := origins ++ fields.map (fun x => (x.fvarId!, derived)) }
+      try
+        finish (mkAppN (mkAppN minor fields) (args.extract (r.getMajorIdx + 1) args.size)).headBeta
+      finally
+        modify fun s => { s with minorOrigins := origins }
+    projected := projected || found
+  return projected
 
 /-- A projection demands one field, not every field of its carrier. Rebuilding
     the demand after each raw delta step shares the ordinary projection budget.
@@ -443,7 +483,7 @@ partial def directField (n name : Name) (i : Nat) (receiver : Expr)
   if reduced != receiver then return ← direct n (demand reduced)
   match receiver with
   | .letE _ _ value body _ => direct n (demand (body.instantiate1 value))
-  | .fvar _ => return true
+  | .fvar id => projectionOrigin id
   | _ =>
     if let .const head levels := receiver.getAppFn' then
       let ci ← getConstInfo head
@@ -452,6 +492,8 @@ partial def directField (n name : Name) (i : Nat) (receiver : Expr)
         let some field := receiver.getAppArgs[ctor.numParams + i]?
           | throwError "projection-carrier-field {head} {i}"
         return ← direct n (mkAppN field args).headBeta
+      if let .recInfo _ := ci then
+        return ← directEliminator n receiver (fun branch => direct n (demand branch))
       if let some value := ci.value? (allowOpaque := true) then
         unless ci.levelParams.length == levels.length do
           throwError "projection-universe-arity {head}"

@@ -760,3 +760,13 @@ selected-field query. R-0219 owns this traversal; no language rule is changed.
 The bounded regression controls include an independently proved selected field
 beside an unused projected field, which must stay PASS. Baseline observations
 are in [the round-5 reproduction record](audits/N2-A3-round5-reproduction.md).
+
+Round-5 eliminators use the checked kernel recursor type to separate constructor
+fields/induction hypotheses from function-valued motive binders. Constructor
+majors iota-reduce; unresolved majors inspect every minor with provenance
+inherited only by its actual field/IH binders. Extra applications and demanded
+projection fields survive branch inspection. Generated matchers use their raw
+checked definitions, with no generated-name rules. Provenance is included in
+projection memoization keys. The structural cause was treating unsupported
+multi-minor and data-major elimination as completed negative evidence; R-0219
+owns the generalized traversal. Unsupported carriers/eliminators are INCOMPLETE.
