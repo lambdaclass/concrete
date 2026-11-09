@@ -710,11 +710,22 @@ instance (cs : List Char) : Decidable (SourcePath.DrivePrefix cs) := by
   unfold SourcePath.DrivePrefix
   split <;> infer_instance
 
-/-- The component boundary excludes traversal, separators, drives, and the previously refused
-backslash. NUL and non-ASCII policy are pending owner questions; neither is newly refused here. -/
+/-- ASCII controls are U+0000 through U+001F and U+007F. AY-3: assumed-yes,
+pending owner confirmation. -/
+def SourcePath.Control (c : Char) : Prop := c.toNat < 32 ∨ c.toNat = 127
+
+instance (c : Char) : Decidable (SourcePath.Control c) := by
+  unfold SourcePath.Control
+  infer_instance
+
+/-- The component boundary excludes traversal, separators and drives. AY-2 refuses backslash;
+AY-3 refuses every ASCII control, including NUL; AY-4 accepts all other Unicode scalars with
+identity given by the exact scalar sequence, without normalization. These three character
+policies are assumed-yes pending owner confirmation. -/
 def SourcePath.ComponentOk (cs : List Char) : Prop :=
   cs ≠ [] ∧ cs ≠ ['.'] ∧ cs ≠ ['.', '.'] ∧
-    '/' ∉ cs ∧ '\\' ∉ cs ∧ ¬ SourcePath.DrivePrefix cs
+    '/' ∉ cs ∧ '\\' ∉ cs ∧ ¬ SourcePath.DrivePrefix cs ∧
+    ∀ c ∈ cs, ¬ SourcePath.Control c
 
 instance (cs : List Char) : Decidable (SourcePath.ComponentOk cs) := by
   unfold SourcePath.ComponentOk
@@ -732,9 +743,11 @@ structure SourcePath where
 def SourcePath.render (path : SourcePath) : String :=
   String.ofList (['/'].intercalate path.components)
 
-/-- Raw-path refusal categories. Backslash retains the pre-decision refusal policy. -/
+/-- Typed character refusals implement AY-2 and AY-3 (assumed-yes pending owner confirmation).
+AY-4 introduces no refusal for other Unicode scalars and performs no normalization. -/
 inductive SourcePath.Reason where
   | empty | dot | outOfProject | absolute | drivePrefixed | emptyComponent | backslash
+  | controlCharacter
   deriving DecidableEq, Repr
 
 /-- A refusal names both the entire input and the offending component, without rewriting either. -/
@@ -750,7 +763,8 @@ def SourcePath.componentReason (cs : List Char) : Reason :=
   else if cs = ['.'] then .dot
   else if cs = ['.', '.'] then .outOfProject
   else if DrivePrefix cs then .drivePrefixed
-  else .backslash
+  else if '\\' ∈ cs then .backslash
+  else .controlCharacter
 
 /-- Parse at the source-identity boundary. Splitting preserves empty components, including a
 trailing slash. Admission checks the components once; rendering never rechecks or filters them. -/

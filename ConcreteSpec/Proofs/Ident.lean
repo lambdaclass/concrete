@@ -40,7 +40,7 @@ theorem SourcePath.render_safe (path : SourcePath) :
     | nil => exact False.elim (nonempty rfl)
     | cons first rest ih =>
       have hf := valid first (by simp)
-      rcases hf with ⟨hne, hdot, hdotdot, hslash, hback, hdrive⟩
+      rcases hf with ⟨hne, hdot, hdotdot, hslash, hback, hdrive, _hcontrols⟩
       have headSafe : first.head? ≠ some '/' := by
         cases first with
         | nil => contradiction
@@ -81,6 +81,31 @@ theorem SourcePath.render_safe (path : SourcePath) :
   simp only [SourcePath.render, String.toList_ofList]
   exact ⟨h.1, (fun eq => h.2.1 (by simpa only [String.toList_ofList] using (congrArg String.toList eq).trans (by decide))),
     (fun eq => h.2.2.1 (by simpa only [String.toList_ofList] using (congrArg String.toList eq).trans (by decide))), h.2.2.2⟩
+
+/-- Representation lemma. AY-3 (assumed-yes pending owner confirmation): every scalar
+in a rendered path is free of ASCII controls, including separators. (approved: PENDING). -/
+theorem SourcePath.render_no_controls (path : SourcePath) :
+    ∀ c ∈ path.render.toList, ¬ SourcePath.Control c := by
+  have joinSafe : ∀ parts : List (List Char),
+      (∀ cs ∈ parts, SourcePath.ComponentOk cs) →
+      ∀ c ∈ ['/'].intercalate parts, ¬ SourcePath.Control c := by
+    intro parts valid
+    induction parts with
+    | nil => simp
+    | cons first rest ih =>
+      have hf := (valid first (by simp)).2.2.2.2.2.2
+      cases rest with
+      | nil => simpa using hf
+      | cons next tail =>
+        have ht := ih (fun cs h => valid cs (by simp [h]))
+        intro c member
+        simp only [List.intercalate_cons_cons, List.append_assoc, List.cons_append,
+          List.nil_append, List.mem_append, List.mem_cons] at member
+        rcases member with h | h | h
+        · exact hf c h
+        · subst c; decide
+        · exact ht c h
+  simpa only [SourcePath.render, String.toList_ofList] using joinSafe path.components path.valid
 
 /-- Law (subject `ConcreteSpec.Core.SourcePath.parse`). Parsing the sole spelling recovers the
 same structured path, with no normalization or loss of components. -/
