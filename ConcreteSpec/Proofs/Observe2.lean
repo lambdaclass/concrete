@@ -718,7 +718,8 @@ example : ¬ (match loseSites good with
   obtain ⟨sp, _, impossible, _⟩ := resolves [⟨0⟩] rfl ⟨0⟩ (by decide)
   cases impossible
 
-/-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.duplicate`). -/
+/-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.duplicate`).
+Refused (rule `ConcreteSpec.Core.Observe.LoadedProject.load`): duplicate site identity. -/
 example : ∃ issue, LoadedProject.load duplicate = .refused issue :=
   LoadedProject.load_refuses duplicate duplicate_invalid
 
@@ -744,7 +745,8 @@ example : ¬ (match fabricatedRefusal duplicate with
   change ¬ (SiteId.mk 99 ∈ List.map Prod.fst duplicate.sites)
   decide
 
-/-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.duplicateFiles`). -/
+/-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.duplicateFiles`).
+Refused (rule `ConcreteSpec.Core.Observe.LoadedProject.load`): duplicate file identity. -/
 example : ∃ issue, LoadedProject.load duplicateFiles = .refused issue :=
   LoadedProject.load_refuses duplicateFiles duplicateFiles_invalid
 
@@ -770,7 +772,8 @@ example : ¬ (match fabricatedRefusal duplicateFiles with
   change ¬ (SiteId.mk 99 ∈ List.map Prod.fst duplicateFiles.sites)
   decide
 
-/-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.missing`). -/
+/-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.missing`).
+Refused (rule `ConcreteSpec.Core.Observe.LoadedProject.load`): site without a loaded file. -/
 example : ∃ issue, LoadedProject.load missing = .refused issue :=
   LoadedProject.load_refuses missing missing_invalid
 
@@ -835,7 +838,8 @@ def forgiveMalformed (input : ProjectSources) : SourceLoadResult :=
 def emptyInput : ProjectSources := malformedInput ""
 def emptyDiagnostic : SourcePath.Refusal := ⟨"", "".toList, .empty⟩
 
-/-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.emptyInput`). -/
+/-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.emptyInput`).
+Refused (rule `ConcreteSpec.Core.Observe.LoadedProject.load`): malformed empty path. -/
 example : ∃ issue, LoadedProject.load emptyInput = .refused issue ∧ issue.Names emptyInput :=
   LoadedProject.load_refuses_malformed emptyInput ("", tabSource) emptyDiagnostic
     (by decide) (by rfl)
@@ -873,7 +877,8 @@ example : ((".", tabSource) ∈ dotInput.files ∧
 def parentInput : ProjectSources := malformedInput ".."
 def parentDiagnostic : SourcePath.Refusal := ⟨"..", "..".toList, .outOfProject⟩
 
-/-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.parentInput`). -/
+/-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.parentInput`).
+Refused (rule `ConcreteSpec.Core.Observe.LoadedProject.load`): out-of-project path. -/
 example : ∃ issue, LoadedProject.load parentInput = .refused issue ∧ issue.Names parentInput :=
   LoadedProject.load_refuses_malformed parentInput ("..", tabSource) parentDiagnostic
     (by decide) (by rfl)
@@ -949,7 +954,8 @@ example : (("src//main", tabSource) ∈ emptyComponentInput.files ∧
 def backslashInput : ProjectSources := malformedInput "src\\main"
 def backslashDiagnostic : SourcePath.Refusal := ⟨"src\\main", "src\\main".toList, .backslash⟩
 
-/-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.backslashInput`). -/
+/-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.backslashInput`).
+Refused (rule `ConcreteSpec.Core.Observe.LoadedProject.load`): backslash in a path (AY-2, assumed-yes pending owner confirmation). -/
 example : ∃ issue, LoadedProject.load backslashInput = .refused issue ∧ issue.Names backslashInput :=
   LoadedProject.load_refuses_malformed backslashInput ("src\\main", tabSource) backslashDiagnostic
     (by decide) (by rfl)
@@ -961,6 +967,34 @@ example : (("src\\main", tabSource) ∈ backslashInput.files ∧
   refine ⟨⟨by decide, rfl⟩, ?_⟩
   rintro ⟨issue, impossible, _⟩
   have accepted : forgiveMalformed backslashInput = .admitted ⟨[], []⟩ := rfl
+  rw [accepted] at impossible
+  cases impossible
+
+/-- Closed control-character path (AY-3, assumed-yes pending owner confirmation).
+The tab is part of the file name, not source whitespace. -/
+def controlInput : ProjectSources := malformedInput "src/ma\tin.con"
+def controlDiagnostic : SourcePath.Refusal :=
+  ⟨"src/ma\tin.con", "ma\tin.con".toList, .controlCharacter⟩
+
+/-- Helper (computation). The exact loader diagnostic retains the offending raw file,
+component and typed control-character reason. (approved: PENDING).
+Refused (rule `ConcreteSpec.Core.Observe.LoadedProject.load`): control character in a file path
+(AY-3, assumed-yes pending owner confirmation). -/
+example : LoadedProject.load controlInput =
+    .refused (.malformed ("src/ma\tin.con", tabSource) controlDiagnostic) := by rfl
+
+/-- Instance (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.controlInput`). -/
+example : ∃ issue, LoadedProject.load controlInput = .refused issue ∧ issue.Names controlInput :=
+  LoadedProject.load_refuses_malformed controlInput ("src/ma\tin.con", tabSource) controlDiagnostic
+    (by decide) (by rfl)
+
+/-- Planted (law `ConcreteSpec.Core.Observe.LoadedProject.load_refuses_malformed`, case `ConcreteSpec.Core.Observe.SourceLoadDemo.controlInput`, subject `ConcreteSpec.Core.Observe.LoadedProject.load`, mutant `ConcreteSpec.Core.Observe.SourceLoadDemo.forgiveMalformed`). -/
+example : (("src/ma\tin.con", tabSource) ∈ controlInput.files ∧
+    SourcePath.parse "src/ma\tin.con" = .error controlDiagnostic) ∧
+    ¬ (∃ issue, forgiveMalformed controlInput = .refused issue ∧ issue.Names controlInput) := by
+  refine ⟨⟨by decide, rfl⟩, ?_⟩
+  rintro ⟨issue, impossible, _⟩
+  have accepted : forgiveMalformed controlInput = .admitted ⟨[], []⟩ := rfl
   rw [accepted] at impossible
   cases impossible
 
