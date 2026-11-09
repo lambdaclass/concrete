@@ -55,6 +55,10 @@ class Registry(unittest.TestCase):
         self.workflow['jobs']['backends']['runs-on'] = 'ubuntu-latest'
         self.rejected('registry: workflow runner class drift: backends')
 
+    def test_artifact_path_drift(self):
+        self.workflow['jobs']['artifacts']['steps'][-1]['with']['path']='copied-literal-report'
+        self.rejected('registry: workflow artifact path drift: artifacts')
+
     def test_no_gate_specific_tier_assumptions(self):
         row = copy.deepcopy(self.data['gates'][0])
         row.update(id='future-campaign', tiers=['daily','weekly'], runner_class='concrete-ci-2', workflow=None,

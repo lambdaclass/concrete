@@ -386,12 +386,13 @@ jobs:
       - name: Install Nix
         uses: cachix/install-nix-action@v31
       - name: Sanitizers, binary size (report-only) and stack bound (gates 10, 11, 12)
+        id: gate-artifacts
         run: python3 scripts/checks/lib/gate_manifest.py execute --id artifacts --tier ${{ github.event_name == 'pull_request' && 'pr' || 'qualification' }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: artifacts-${{ matrix.arch }}
-          path: report
+          path: ${{ steps.gate-artifacts.outputs.artifact_paths }}
           if-no-files-found: error
 
   trusted-base:
@@ -449,11 +450,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
       - name: Compare every stage in distinct build directories
+        id: gate-reproducibility
         run: python3 scripts/checks/lib/gate_manifest.py execute --id reproducibility --tier ${{ github.event_name == 'pull_request' && 'pr' || 'qualification' }}
       - uses: actions/upload-artifact@v4
         with:
           name: reproducibility-${{ matrix.id }}
-          path: manifest.txt
+          path: ${{ steps.gate-reproducibility.outputs.artifact_paths }}
           if-no-files-found: error
 
   compare-linux:

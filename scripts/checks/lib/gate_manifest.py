@@ -4,6 +4,8 @@ import argparse
 import copy
 import json
 import math
+import os
+import uuid
 from pathlib import Path
 import re
 import subprocess
@@ -32,7 +34,7 @@ def argv(value):
     return isinstance(value, list) and bool(value) and all(isinstance(x, str) and x for x in value)
 
 def relative(value):
-    return isinstance(value, str) and bool(value) and not Path(value).is_absolute() and '..' not in Path(value).parts and value != '.'
+    return isinstance(value, str) and bool(value) and not Path(value).is_absolute() and '..' not in Path(value).parts and value != '.' and '\n' not in value and '\r' not in value
 
 def validate_manifest(data):
     exact_fields(data, {'schema', 'windows', 'gates'}, 'document')
@@ -63,6 +65,7 @@ def validate_manifest(data):
             require(relative(artifact['path']) and artifact['path'] not in paths, f'registry: invalid artifact path: {gid}')
             paths.add(artifact['path'])
             require((artifact['sha_file'] is None and not scheduled) or relative(artifact['sha_file']), f'registry: missing artifact SHA binding: {gid}')
+            require(artifact['sha_file'] is None or Path(artifact['sha_file']).is_relative_to(artifact['path']), f'registry: artifact SHA binding outside artifact: {gid}')
         require(isinstance(row['controls'], list) and (row['controls'] or not scheduled), f'registry: missing scheduled controls: {gid}')
         controls = set()
         for control in row['controls']:
@@ -112,6 +115,7 @@ def check_workflow(data=None, root=ROOT, workflow=None):
     found=set()
     for jobid,job in jobs.items():
         budget=0
+        artifact_outputs=set()
         for step in job['steps']:
             if 'run' not in step: continue
             command=step['run']
@@ -122,11 +126,17 @@ def check_workflow(data=None, root=ROOT, workflow=None):
             require(command == invocation(row['id']), f'registry: workflow command drift: {row["id"]}')
             require(pair not in found, f'registry: duplicate workflow invocation: {row["id"]}')
             found.add(pair); budget += row['budget_seconds']
+            if row['artifacts']:
+                stepid='gate-'+row['id']
+                require(step.get('id')==stepid, f'registry: workflow artifact producer drift: {row["id"]}')
+                artifact_outputs.add('${{ steps.'+stepid+'.outputs.artifact_paths }}')
             host=job['runs-on']; kind=row['runner_class']
             require((kind=='native-matrix' and host=='${{ matrix.runner }}') or
                     (kind=='github-hosted' and isinstance(host,str) and host.startswith(('ubuntu-','macos-'))) or
                     (kind=='ci' and isinstance(host,str) and "github.event_name != 'pull_request'" in host),
                     f'registry: workflow runner class drift: {row["id"]}')
+        uploads=[s.get('with',{}).get('path') for s in job['steps'] if s.get('uses','').startswith('actions/upload-artifact@')]
+        require(set(uploads)==artifact_outputs and len(uploads)==len(artifact_outputs), f'registry: workflow artifact path drift: {jobid}')
         require(job.get('timeout-minutes') == math.ceil(budget*3/60)+10, f'registry: workflow budget drift: {jobid}')
     for pair,row in expected.items():
         require(pair in found, f'registry: missing workflow invocation: {row["id"]}')
@@ -141,6 +151,10 @@ def execute(gid,tier):
     matches=[r for r in tier_rows(tier) if r['id']==gid]
     require(len(matches)==1, f'registry: gate not registered in tier: {gid}/{tier}')
     row=matches[0]
+    if os.environ.get('GITHUB_OUTPUT'):
+        delimiter='gate-artifacts-'+uuid.uuid4().hex
+        with open(os.environ['GITHUB_OUTPUT'],'a') as stream:
+            stream.write('artifact_paths<<'+delimiter+'\n'+'\n'.join(a['path'] for a in row['artifacts'])+'\n'+delimiter+'\n')
     # The same bounded runner owns CI and scheduled budgets; no command in YAML.
     return subprocess.run(['bash',str(ROOT/'scripts/checks/lib/bounded.sh'),str(row['budget_seconds']),*row['command']],
                           timeout=row['budget_seconds']*3+60).returncode
