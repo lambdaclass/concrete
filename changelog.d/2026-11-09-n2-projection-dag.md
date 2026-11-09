@@ -1,0 +1,1 @@
+N2 audits projection proofs as a memoized expression DAG under a declared 4,096-node production bound, reporting per-law cost. Preserve complete constructor-field traversal and INCOMPLETE on exhaustion, with paired completion/exhaustion controls beyond the former 64-visit limit.

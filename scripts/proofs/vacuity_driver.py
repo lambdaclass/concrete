@@ -47,7 +47,7 @@ def compiled_consumer():
         yield work
 
 
-def _run(source, scope, fixture=None, budget=64, inventory=False, *, driver_text=None, proof_mode=None, meta_path=None):
+def _run(source, scope, fixture=None, budget=4096, inventory=False, *, driver_text=None, proof_mode=None, meta_path=None):
     with tempfile.TemporaryDirectory(prefix="vacuity-") as temp:
         work = Path(temp)
         if fixture is None:

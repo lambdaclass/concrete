@@ -93,8 +93,20 @@ functions (including And.left/right), single-constructor recursor projections,
 constructor repackaging (including empty proof constructors), and reflexivity.
 It also compares the conclusion semantically against hypotheses and the two sides
 of equality/iff conclusions, catching unfolded-premise and wrapped-rfl identities.
-Raw delta reduction spends a shared proof-traversal counter for each definition unfolded; it does not ask
-whnfR to unfold an arbitrary definition chain in one step. Exhaustion is INCOMPLETE.
+Raw delta reduction spends a shared proof-traversal counter for each distinct
+elaborated expression, including each definition unfolded; it does not ask whnfR
+to unfold an arbitrary definition chain in one step. Completed results are cached
+by expression (including local-variable identities), per law, so substituted let
+bindings and repeated constructor fields reuse complete answers. All constructor
+proof fields are inspected; none is sampled or omitted. Production audits declare
+a 4,096 distinct-expression bound per law and report `NOTE projection-cost` with
+the actual visits and limit. Explicit low-budget controls still run at 3 and 64;
+exhaustion is INCOMPLETE and cannot become PASS through the cache. Process and
+heartbeat bounds also remain enforced. The C2 historical law combines typing,
+evaluation, admission and lookup proofs, sharing the first two proofs in admission;
+the former 64-visit tree walk charged repeated expanded subproofs again. Server
+replay must confirm its measured DAG cost and completion at the declared bound;
+local synthetic controls alone do not certify historical-head completion.
 Hypothesis discharge scanning follows proof helpers transitively with a visited
 set and a shared traversal budget; data/typeclass arguments are excluded.
 Closed proof reduction uses kernel reduction at all transparency levels, including

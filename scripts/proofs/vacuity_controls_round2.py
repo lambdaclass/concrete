@@ -57,6 +57,19 @@ end ConcreteSpecControl
     # Restore d1 after replacing the law's proof.
     chain_fixture = chain_fixture.replace("def d1 (n : Nat) : n < n + 1 := d5 n", "def d1 (n : Nat) : n < n + 1 := Nat.lt_succ_self n")
     add("positive-budget-chain", chain_fixture, {("INCOMPLETE", "projection-budget", "ConcreteSpecControl.growth")}, budget=3, status=2)
+    long_chain = ""
+    for i in range(1, 97):
+        body = "Nat.lt_succ_self n" if i == 1 else f"long{i-1} n"
+        long_chain += ("/-- Helper (computation). Long projection traversal control "
+                       "(approved: independent:r4). -/\n"
+                       f"def long{i} (n : Nat) : n < n + 1 := {body}\n")
+    long_fixture = base.replace("/-- Law", long_chain + "/-- Law", 1)
+    long_fixture = long_fixture.replace("theorem growth (n : Nat) (_h : n = 2) : n < S n := Nat.lt_succ_self n",
+                                        "theorem growth (n : Nat) (_h : n = 2) : n < S n := long96 n")
+    add("projection-long-complete", long_fixture, set(), budget=4096, status=0)
+    add("projection-long-incomplete", long_fixture,
+        {("INCOMPLETE", "projection-budget", "ConcreteSpecControl.growth")}, budget=64, status=2)
+
 
     add("missing-close", base.replace("case `two`).", "case `two`.", 1), bad("evidence-tag") | bad("unpaired-planted") | bad("missing-instance", "ConcreteSpecControl.growth"))
     add("ancestor-namespace", extra("", "namespace Inner\n/-- Helper (computation). Mentions `S` in the parent namespace (approved: independent:r2). -/\ntheorem parent : True := trivial\nend Inner"), set(), status=0)

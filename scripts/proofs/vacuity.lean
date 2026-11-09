@@ -254,13 +254,26 @@ def cleanSpine : Expr → Expr
   | .app f a => mkApp (cleanSpine f) a
   | e => e
 
-/-- Inspect the proof head, recursor branches and constructor proof fields. One shared
-    counter bounds traversal and every raw definition unfolding; heartbeats bound meta work. -/
-partial def direct (n : Name) (e : Expr) : StateRefT Nat Audit Bool := do
-  let fuel ← get
-  if fuel == 0 then emit "INCOMPLETE" "projection-budget" n; return false
-  set (fuel - 1)
+/-- Cache complete answers by elaborated expression, including local identities.
+    Every reachable proof field is inspected; sharing does not consume fuel twice. -/
+structure ProjectionState where
+  remaining : Nat
+  answers : Std.HashMap Expr Bool := {}
+
+mutual
+/-- Inspect the complete proof DAG under one declared distinct-expression bound.
+    Raw delta unfolds one definition per visit; heartbeats also bound meta work. -/
+partial def direct (n : Name) (e : Expr) : StateRefT ProjectionState Audit Bool := do
   let e := cleanSpine e
+  if let some answer := (← get).answers[e]? then return answer
+  let fuel := (← get).remaining
+  if fuel == 0 then emit "INCOMPLETE" "projection-budget" n; return false
+  modify fun state => { state with remaining := fuel - 1 }
+  let answer ← directStep n e
+  modify fun state => { state with answers := state.answers.insert e answer }
+  return answer
+
+partial def directStep (n : Name) (e : Expr) : StateRefT ProjectionState Audit Bool := do
   if e.getAppFn'.isFVar then return true
   if let .proj _ _ receiver := e.getAppFn' then return ← direct n receiver
   match e with
@@ -296,6 +309,8 @@ partial def direct (n : Name) (e : Expr) : StateRefT Nat Audit Bool := do
         return ← direct n (mkAppN body e.getAppArgs).headBeta
     let reduced := e.headBeta
     if reduced != e then direct n reduced else return false
+
+end
 
 /-- Follow only the supplied hypothesis proof, including opaque proof helpers.
     Kernel reduction uses all transparency levels: opaque proofs supplied inside
@@ -461,7 +476,7 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
   let all := env.constants.map₁.toList ++ env.constants.map₂.toList
   let scope := (← IO.getEnv "VACUITY_SCOPE").getD ""
   let scopes := scope.splitOn ","
-  let budget := ((← IO.getEnv "VACUITY_BUDGET").getD "64").toNat?.getD 64
+  let budget := ((← IO.getEnv "VACUITY_BUDGET").getD "4096").toNat?.getD 4096
   let roadmap ← IO.FS.readFile "ROADMAP.md"
   let run : Audit Unit := do
     let mut tags : Array Tagged := #[]
@@ -637,7 +652,8 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
         return false
       if trivialStatement then fail "projection-law" law.name
       if let some proof := law.info.value? (allowOpaque := true) then
-        let (projection, _) ← (direct law.name proof).run budget
+        let (projection, cost) ← (direct law.name proof).run { remaining := budget }
+        emit "NOTE" "projection-cost" law.name s!"visited={budget - cost.remaining} limit={budget} cached={cost.answers.size}"
         if projection then fail "projection-law" law.name
       let subjects := quoted ((between law.doc "Law (subject " ").").getD "")
       if subjects.isEmpty then fail "law-subject" law.name
