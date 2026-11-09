@@ -559,3 +559,119 @@ It ran at 8061f277b before the additional Planted diagnostic isolation; the fina
 reporting control exercises that additional isolation and records its consumer
 SHA-256. The discharge and projection algorithms remain byte-identical to the
 phase-A baseline 0acd435ccefe3aaa04d761c1ee75bbe984cba001.
+
+## Design amendment 2: primitive axiom applications — owner decision required
+
+Owner: R-0219. DESIGN ONLY; blocked at a trust-policy question. For the
+coordinator's independent reviewers: **do the best long-term thing rather than
+cut corners**. This section records the decision boundary, not an accepted
+primitive-transfer rule or authorization to implement one. It does not supersede
+A2's unresolved-transfer rule until the owner answers and the completed amendment
+receives independent acceptance. No OD/spec decision is made here.
+
+### Kernel classification and retained relation
+
+A primitive application is a constant application whose environment declaration
+is `axiomInfo` with no value, at its exact universe instantiation. Classify from
+the declaration, never its printed name, namespace, library, or proposition shape.
+This includes user-declared axioms. An opaque theorem/definition whose value
+cannot be obtained remains an unavailable implementation; it is not reclassified
+as a primitive axiom. Constructors and recursors retain their metadata rules.
+
+The pending relation is
+`PrimitiveApp(consumer, a, levels, Γ, σ, args, resultType, resultOrigin, inputOrigins)`.
+Here Γ is the exact permitted context and guards; σ is the typed substitution;
+args includes every implicit, explicit, proof and data argument in application
+order; and resultType is obtained by dependent instantiation of the declaration
+signature, checked by protected conversion. A partial application retains its
+remaining dependent telescope and extends the same relation when applied.
+resultOrigin is a supplied producer identified by declaration, levels, exact
+application expression and consumer. inputOrigins retains each actual argument's
+origin and its type dependencies, including joint dependencies. Neither result
+nor inputs become hypothetical merely because this declaration has no body.
+This is a representation contract only: creating the relation admits no safety
+fact. A non-refutable result type alone **never** closes a safety-bearing transfer.
+
+### Stop: which evidence may justify a primitive transport?
+
+The accepted A2 note requires more than kernel validity and forbids a proof
+allowlist: see scripts/proofs/N2-discharge-solver.md:127 and
+scripts/proofs/N2-discharge-solver.md:152. The existing project proof policy permits
+`propext`, `Quot.sound` and `Classical.choice` as logical axioms in authoritative
+proofs (docs/decisions.md:462). That permission does not specify N2's provenance
+transfer for an arbitrary bodyless axiom or authorize treating a user-declared
+axiom as a safe transport. Honest trust boundaries require naming the assumption,
+rather than inferring safety from trusted-base membership
+(docs/PHILOSOPHY.md:116).
+
+**Question to the owner:** may an N2 safety-bearing transport use the logical
+content of a bodyless axiom as evidence, or must its effect on each demanded
+observation be independently justified without that axiom?
+
+The options are:
+
+1. Require independent constructive evidence for every demanded observation.
+   Such evidence must simulate the actual transport, preserve actual suppliers
+   and validate under A2; merely reproving the final proposition cannot erase a
+   supplied contradiction. This would treat standard and user axioms generically,
+   with no privileged names. A completed amendment must specify the finite
+   simulation judgment and its checking rules, including how the required simp
+   transports obtain that evidence. Those rules have not yet been established;
+   this option does not claim that the positive already completes.
+2. Authorize an explicit logical-axiom trust premise for N2 transports, with the
+   owner defining its scope. The existing three-name authoritative-proof policy
+   alone cannot provide the required generic rule for same-shaped user axioms.
+   The owner must say whether and on what evidence those applications qualify.
+   Kernel acceptance by itself cannot be the evidence: Lean accepts a declaration
+   of an inconsistent axiom too. This option would amend the N2 trust boundary.
+
+**Recommendation:** option 1, because it preserves A2's application-sensitive
+provenance claim and the generic treatment required here without expanding the
+trusted base. This is a recommendation, not an owner answer. Do not implement
+or provisionally admit either option. The missing finite evidence, its soundness
+argument, and exact backward demand/transport propagation rules must be completed
+and independently accepted after the answer. Choosing a trust premise now would
+violate the stop rule at scripts/proofs/N2-discharge-solver.md:213.
+
+Until then, retain the exact existing unresolved result for the boundary probe:
+
+```text
+INCOMPLETE analysis-budget-or-error Boundary.instance stage=certificate-dependencies law=Boundary.law case=finite-collection-simp-positive unavailable-certificate-transfer propext
+```
+
+That line is a blocker observation, not an acceptable positive-control outcome.
+It never suppresses other findings. Pending primitive relations and all later
+incoming demands remain unresolved in the same charged worklist, with the full
+consumer identities; no relation is cached as safe. They get no fresh discharge
+budget, heartbeat deadline, exclusion rank, retry budget or SCC safety assumption.
+The existing bounded-work/INCOMPLETE rule remains in force; this amendment does
+not claim a new completion bound.
+
+### Controls and completion status at the decision boundary
+
+The existing 33-control completion target is unchanged by this documentation
+commit. No control is added, removed, implemented or claimed complete. Once the
+owner answers, the completed design must enumerate any added controls and give
+its resulting total before implementation. In particular it must specify:
+
+- The required `∀ x : Nat, x ∈ [2] → x = 2 := by simp` positive and the
+  simp-generated exclusion in `unreachable-closed-supplier-positive`: complete
+  PASS, with no FAIL or INCOMPLETE, by the accepted evidence rule.
+- Supplied contradictory-equality and transport negatives: each live planted
+  impossible discharge must yield exactly `FAIL instance-false-discharge EXAMPLE`,
+  rather than count an arbitrary error or unfinished analysis as a rejection.
+- A fresh user-declared axiom with the same dependent type as the primitive in
+  the positive, with the same actual arguments and demand: identical rule and
+  evidence obligations after renaming the supplied origin. Its exact expected
+  verdict cannot be selected before the trust-policy answer. No name privilege.
+
+These are requirements for the resumed design, not a substitute for the missing
+finite evidence or executable control specifications. Phase B stays stopped.
+The coordinator's fixed exit criterion follows verbatim from
+/home/unbalancedparen/projects/gates-briefs/N2-fix6b-exit.md:1:
+
+```text
+PHASE B EXIT CRITERION (fixed by the coordinator 2026-11-09 before phase B starts; include verbatim in the phase-B brief N2-fix6b.md):
+The exact historical C9-new and C6-current controls (whole replay scopes, not selected roots) must COMPLETE under the unchanged budgets: 2,000,000 heartbeats, projection 4,096, discharge work 20,000, with the measured cost reported for each (exact source/checker SHA, heartbeats, discharge work units, worklist/SCC/query counts, projection visits) and with their historical diagnostics unchanged. If either control does not complete, phase B STOPS: report the measured cut-short point and return the design for revision. Never raise a budget, never add a staged exception, never record a partial completion as a pass. All negative controls keep failing with their exact diagnostics and the F3b repro passes; otherwise phase B also stops.
+Condition for starting phase B: a valid ACCEPT (VERDICT: CLEAN under checker-60934a193, output unmodified) from agy's N6a review of the note at 25907fb41.
+```

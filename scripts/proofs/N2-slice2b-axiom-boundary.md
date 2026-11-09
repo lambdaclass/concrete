@@ -45,7 +45,7 @@ supplier declaration; an arbitrary failure does not satisfy the probe.
 
 ## Specific gap in the accepted note
 
-[N2-discharge-solver.md:127–137](N2-discharge-solver.md#L127) requires expression
+[N2-discharge-solver.md:127–137](N2-discharge-solver.md#a2-amendment-dependency-validation-and-non-circular-admission) requires expression
 and type dependency closure, makes unavailable required transfers unresolved, and
 permits generic recursor/constructor metadata rather than a trusted proof list.
 The A2 trust-boundary sweep at lines 192–203 applies this requirement to helper
@@ -106,3 +106,15 @@ Focused results on the unchanged production implementation at
 - Existing direct certificate controls: 5 PASS, 0 FAIL, including exact supplier
   `impossible`, non-circular rejection and shared-budget diagnostic.
 - No completed 33-case new-entry run; no heavy gates or review tooling run.
+
+## Design amendment 2 disposition
+
+The owning [design amendment 2](N2-discharge-solver.md#design-amendment-2-primitive-axiom-applications--owner-decision-required)
+records the generic kernel classification and retained typed relation, then stops
+at an explicit owner trust-policy question. It gives options and a recommendation,
+not a chosen policy or an implementation-ready transfer rule. The existing
+three-axiom authoritative-proof permission does not itself settle the N2 provenance
+question for same-shaped user axioms. No positive completion, new control count,
+or primitive transport admission is claimed. R-0219 remains the owner; resume the
+finite-evidence and backward-propagation design only after the owner's answer,
+then obtain the coordinator's independent acceptance before implementation.
