@@ -17,12 +17,21 @@ The shape of Core was approved provisionally on 2026-11-05 ([stage A2a](#decided
 <a id="waiting-for-the-owner"></a>
 ## Waiting for the owner
 
-Links only; each item's text lives where it is linked.
+Existing proposals are linked below; the questions of 2026-11-09 record the three positions here.
 
 1. The spec read and the Core freeze, A2c ([queue](../ROADMAP.md#the-queue)).
 2. The items the reviews leave open until they are fully dispositioned: SPARK review items 4(b) and
    4(c) ([SPARK review](proposals/SPARK.md)). Quantitative step and time bounds were decided on
    2026-11-07 ([row](#decided-2026-11-07-step-bounds)); the reviews' remaining disposition is unchanged.
+
+3. <a id="waiting-2026-11-09-review-commands"></a>Which commands may review tools run?
+   Claude would approve the listed commands; Codex would approve none yet; agy would approve
+   `ssh-keygen` only. No answer is decided.
+4. <a id="waiting-2026-11-09-launcher"></a>The locked-down launcher: Claude would approve it;
+   Codex and agy would wait for the exact design. No answer is decided.
+5. <a id="waiting-2026-11-09-macos-containment"></a>The containment check on macOS: Claude and
+   Codex would make it informational only and exclude it from qualification; agy would drop it,
+   or split it so the portable checks stay required on macOS. No answer is decided.
 
 A decided proposal moves to `docs/archive/<topic>-<date>/`.
 
@@ -70,6 +79,9 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 - Capabilities stay as decided, `with(...)` permission sets plus grant values; confirmed, no revision ([row](#decided-2026-11-08-capabilities-kept)).
 - Every branch gets an agy review too ([row](#decided-project-review)).
 - Eleven plan and process decisions: UBSan dropped, a complete adapter theorem, smaller landing scripts, Claude's quota on the critical path, the front end now, one decisions writer, risk-capped reviews, one clones folder, a later no-libc runtime, a compile-speed budget and the termination wording ([row](#decided-2026-11-08-eleven)).
+
+- The agreed answers of 2026-11-09: branch qualification, independent reviews, hard round limits,
+  gate budgets, proof provenance, spec corrections and offline builds ([row](#decided-2026-11-09-agreed)).
 
 <a id="rules-a-decision-changed"></a>
 ## Rules a decision has changed
@@ -1171,6 +1183,71 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   checked ceiling in a function's signature when structs own capabilities. Follow-up for the
   allocation slice: whether destroying a collection still needs `with(Alloc)` when its release
   metadata travels with it (R-0624, raised by agy).
+- <a id="decided-2026-11-08-axiom-property"></a>**The axiom golden becomes a property check**
+  (owner, 2026-11-08; recorded from the owner's 2026-11-09 confirmation).
+  Check the standard axioms as a property, with only named theorems pinned.
+- <a id="decided-2026-11-09-agreed"></a>**The answers Claude, Codex and agy agreed on**
+  (owner, 2026-11-09: "ok too many questions do what all of you agree"). The coordinator
+  (Claude), Codex and agy answered the owner's question list independently. The owner approved
+  exactly the answers all three agreed on. Each item below is decided 2026-11-09 under that
+  rule; disagreement remains [waiting for the owner](#waiting-for-the-owner).
+
+  1. <a id="decided-2026-11-09-branch-qualification"></a>*Merging resumes branch by branch.*
+     Only a branch qualified on its own may land: its full required checks and an independent
+     review must cover its exact head. A branch stacked on an unlanded branch, such as the
+     citation checker on review-access, waits for its base to land or rebases onto main and
+     qualifies again.
+  2. <a id="decided-2026-11-09-assumed-yes"></a>*The 33 proposals are not decisions.* Each
+     "assumed yes" proposal of 2026-11-09 on `wip/assumed-yes-2026-11-09` is checked individually
+     by Codex and agy and returned to the owner with alternatives and costs.
+  3. <a id="decided-2026-11-09-spec-report-review"></a>*The spec-change report check needs an
+     independent review.* It is not signed off until a reviewer who wrote no part of it reviews it.
+  4. <a id="decided-2026-11-09-owner-key"></a>*The owner supplies the public SSH signing key
+     for approvals.* This is an owner action.
+  5. <a id="decided-2026-11-09-signoff-containment"></a>*Approval and containment.* Only the
+     owner signs approvals, using the owner's SSH signing key. The memory-limit control group
+     is created once at machine setup. If the containment guarantees cannot be established,
+     the check fails; it never silently passes.
+  6. <a id="decided-2026-11-09-independent-reviewer"></a>*Question 6, answer B.* A branch
+     whose writers include the reviewer waits for an eligible independent reviewer.
+  7. <a id="decided-2026-11-09-hard-round-limits"></a>*Round limits are hard, counted per branch:*
+     docs 2, scripts 3, compiler/spec 5. At the limit the branch stops and the unresolved design
+     goes to the owner. There are no extra rounds. `wip/gate-vacuity` stops and is redesigned,
+     starting with a short written specification of the expression spine. Its next-part design
+     line, `wip/gate-vacuity-2a`, also stops and is redesigned. The two spec designs returned with
+     changes requested, ISS-0047 and ISS-0050, go to redesign instead of more rounds.
+  8. <a id="decided-2026-11-09-kernel-origin"></a>*Question 8, option 2.* Kernel-origin
+     classification is a general rule based on declaration kind and origin, never a hardcoded
+     list of names.
+  9. <a id="decided-2026-11-09-gate-budgets"></a>*Gate time.* Each check gets its own deterministic
+     time budget, plus a whole-run cap that names every check that did not run. Speed up the
+     checker's algorithmic bottlenecks first. Coverage must be complete.
+  10. <a id="decided-2026-11-09-axiom-provenance"></a>*Exact proof-axiom provenance comes from
+      the compiler in the long term.* A one-off manual review of the 27 lines is no substitute.
+      This confirms the [2026-11-08 axiom-golden decision](#decided-2026-11-08-axiom-property).
+  11. <a id="decided-2026-11-09-layout-proposals"></a>*Struct layout and pointer representation
+      are not decided now.* Proposals with alternatives and costs come first.
+  12. <a id="decided-2026-11-09-vacuity-extension"></a>*Design the helper-theorem extension first.*
+      The vacuous-law checker must catch contradictions hidden in helper theorems only after a
+      reviewed, bounded extension design is accepted.
+  13. <a id="decided-2026-11-09-local-identity"></a>*ISS-0046: a local variable's identity is its
+      number alone.* The source name is presentation only, held in a diagnostics side table.
+      There is one lookup.
+  14. <a id="decided-2026-11-09-launch-state"></a>*ISS-0048: each launch passes its own initial
+      outside-world state.* The environment description holds static types only.
+  15. <a id="decided-2026-11-09-main-protection"></a>*The owner applies main-branch protection
+      on GitHub*, following `docs/proposals/MAIN_PROTECTION.md` (not yet present in this clone). This is an
+      owner action.
+  16. <a id="decided-2026-11-09-no-landing-service"></a>*No landing-bot service runs on the servers.*
+      Verified 2026-11-09: none is deployed on fede-256gb or concrete-ci-2. Any future deployment
+      needs owner approval.
+  17. <a id="decided-2026-11-09-offline-builds"></a>*Builds and gate runs become hermetic and
+      offline.* They fail closed on network access. This needs new roadmap work.
+  18. <a id="decided-2026-11-09-committed-stamps"></a>*Review-access stamps cover only committed
+      content.* Stamping refuses when the working tree has staged or unstaged changes.
+  19. <a id="decided-2026-11-09-older-proposals"></a>*Bring the older open questions back as full
+      proposals with alternatives and costs before deciding:* the lifecycle signature, std coverage
+      S1/S3/S4/S5, slice-1 questions, the R-0625 spelling round and canonical NaN.
 - <a id="decided-project-spark-2026-11-06"></a>**What Concrete takes from SPARK** (owner, 2026-11-06: "ok do everything", after Claude, Codex, agy and Kimi chose unanimously; the
   [review](proposals/SPARK.md) items 1, 2, 3, 6, 7, 9 and 10).
   - *Function values with safety preconditions.* A function whose `#[requires]` is a safety
