@@ -31,6 +31,7 @@ open ConcreteSpec (Trap)
 structure Expectation where
   outcome : Outcome
   trapKind : Option Trap
+  trapKindName : String := ""
 
 def trapOfName : String → Option Trap
   | "arithmeticOverflow" => some .arithmeticOverflow
@@ -38,11 +39,11 @@ def trapOfName : String → Option Trap
 
 def parseExpectation : List String → Option Expectation
   | ["exit", c] => match c.toNat? with
-    | some n => if n ≤ 255 then some ⟨.exited n, none⟩ else none
+    | some n => if n ≤ 255 then some ⟨.exited n, none, ""⟩ else none
     | none => none
-  | ["trap", kind, "site", s] => match trapOfName kind, s.toNat? with
-    | some k, some n => some ⟨.trapped n, some k⟩
-    | _, _ => none
+  | ["trap", kind, "site", s] => match s.toNat? with
+    | some n => if !kind.isEmpty then some ⟨.trapped n, trapOfName kind, kind⟩ else none
+    | none => none
   | _ => none
 
 def writeExpected (dir : System.FilePath) (status : String) (stderr : String) : IO Unit := do
@@ -115,7 +116,7 @@ def emit (name : String) (dir : System.FilePath) (expectation : List String)
     | .trapped s => match tbl[s]? with
       | some e =>
         unless expected.trapKind == some e.kind do
-          IO.eprintln s!"{name}: expectation mismatch: trap site {s} has kind {repr e.kind}, expected {repr expected.trapKind}"; return 1
+          IO.eprintln s!"{name}: expectation mismatch: trap site {s} has kind {repr e.kind}, expected {expected.trapKindName}"; return 1
         writeExpected dir "134" (Runtime.trapLine e ++ "\n")
       | none => IO.eprintln s!"{name}: no site {s}"; return 1
     | _ => IO.eprintln s!"{name}: no observation"; return 1
