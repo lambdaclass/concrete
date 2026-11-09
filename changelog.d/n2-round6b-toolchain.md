@@ -1,0 +1,1 @@
+N2 (R-0219): share Nix and pinned Lean setup across the required PR, manual, and daily proof-vacuity jobs, including the existing Lean-install retry. The scheduled audit no longer depends on an ambient toolchain.

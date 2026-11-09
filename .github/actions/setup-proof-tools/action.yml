@@ -1,0 +1,26 @@
+name: Set up proof audit tools
+description: Install Nix and the pinned Lean toolchain for N2 audit jobs.
+runs:
+  using: composite
+  steps:
+    - name: Install Nix (GitHub-hosted only)
+      if: runner.environment != 'self-hosted'
+      uses: cachix/install-nix-action@v31
+      with:
+        extra_nix_config: |
+          experimental-features = nix-command flakes
+    - name: Install Lean and build the specification (via lean-action)
+      id: lean_install
+      continue-on-error: true
+      uses: leanprover/lean-action@v1
+      with:
+        build-args: "--log-level=warning"
+    - name: Wait before retrying the Lean install
+      if: steps.lean_install.outcome == 'failure'
+      shell: bash
+      run: sleep 60
+    - name: Install Lean and build the specification (via lean-action) (retry)
+      if: steps.lean_install.outcome == 'failure'
+      uses: leanprover/lean-action@v1
+      with:
+        build-args: "--log-level=warning"

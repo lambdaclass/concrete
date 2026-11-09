@@ -24,15 +24,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Install Nix (GitHub-hosted only)
-        if: runner.environment != 'self-hosted'
-        uses: cachix/install-nix-action@v31
-        with:
-          extra_nix_config: |
-            experimental-features = nix-command flakes
-      - uses: leanprover/lean-action@v1
-        with:
-          build-args: "--log-level=warning"
+      - uses: ./.github/actions/setup-proof-tools
       - name: Exact-diagnostic controls
         run: nix develop .#gates --command bash scripts/proofs/vacuity.sh --controls
       - name: Structural audit of the required migrated scope
@@ -49,5 +41,6 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-proof-tools
       - name: Full structural audit (registry daily tier)
         run: nix develop .#gates --command python3 scripts/checks/gates_registry.py --run proof-vacuity --tier daily
