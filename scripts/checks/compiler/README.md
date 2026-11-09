@@ -21,3 +21,17 @@ status/diagnostic assertions. Full runs additionally perform ci2 binding before
 building. `hermetic_controls.py` runs all cheap C controls with clean and hostile
 CI identities and compares their evidence; `workflow_yaml.sh` runs this in PRs.
 The full scaling and native determinism campaigns retain their registry tiers.
+
+Scheduled evidence qualification is owned by R-0676's public
+`scripts/checks/scheduled/protocol.py` validator (ISS-0042). C campaigns emit raw
+reports and lifecycle outcomes; the shared scheduler preserves them, and collection,
+publication and observation validate against the selected commit's registry.
+C has no independent scheduled-evidence parser or qualification verdict.
+Determinism currently has PR/qualification rows only; scaling-daily is C's
+scheduled entry. `scheduled_evidence_controls.py` constructs synthetic metadata
+from the actual committed daily registry and exercises public validation,
+collection, append and observation with exact diagnostics for substituted gates,
+invented/missing controls, wrong diagnostics, missing reports and wrong commands.
+These cheap controls run in clean and hostile environments via `workflow_yaml.sh`;
+they never run campaigns or publish evidence. Shared protocol tests additionally
+exercise publication and artifact binding. Full campaigns retain their existing tiers.
