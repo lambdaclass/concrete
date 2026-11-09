@@ -813,6 +813,24 @@ Pending-owner list:
 - The open Law/Planted supplied-contradiction contract (question C), per-analysis
   budget interpretation and whole-scope wall policy remain pending owner.
 
+
+The coordinator's N17d census at `2dcdaff775bdb4bf69a1be19f3609e544e2db7a0`
+(2400-second diagnostic watchdog) attempted 2152/2152 analyses: 2051 complete,
+101 INCOMPLETE (71 dependency-incomplete, 24 false-discharge-budget, six
+`projection-body-unavailable propext`), zero FAIL. The six real laws under
+`propext: pending owner question 8` are:
+
+- `ConcreteSpec.Core.Generative.fresh_preserves`
+- `ConcreteSpec.Core.Grants.issue_keeps_dead`
+- `ConcreteSpec.Core.Own.deferred_call_lifetime`
+- `ConcreteSpec.Core.Own.directOwner_roundtrip`
+- `ConcreteSpec.Core.Own.downward_reborrow_protocol`
+- `ConcreteSpec.Core.Own.move_reinitialize_protocol`
+
+The default-watchdog N17 attempted 1819/2152 and was INCOMPLETE with zero FAIL.
+These are coordinator observations of the round-4r bytes, not a new local
+census or an owner answer.
+
 There is no constant-specific production rule for propext. The retained
 `propext-hypothesis` fixture exits 2 with `INCOMPLETE analysis-budget-or-error
 ConcreteSpecControl.projection` and exact detail

@@ -379,18 +379,21 @@ partial def directStep (n : Name) (e : Expr) : StateRefT ProjectionState Audit B
   -- Type/data nodes are supported non-evidence, not unavailable proof bodies.
   unless ← isProof e do return false
   if e.getAppFn'.isFVar then return true
-  if let .proj _ _ receiver := e.getAppFn' then return ← direct n receiver
+  if let .proj name i receiver := e.getAppFn' then
+    return ← directField n name i receiver e.getAppArgs
   match e with
   | .lam _ _ _ _ => lambdaTelescope e fun _ body => direct n body
   | .letE _ _ v b _ => direct n (b.instantiate1 v)
   | .fvar _ => return true
-  | .proj _ _ receiver => direct n receiver
+  | .proj name i receiver => directField n name i receiver #[]
   | _ =>
     if let .const h _ := e.getAppFn' then
       if let some projection ← getProjectionFnInfo? h then
         if let some receiver := e.getAppArgs[projection.numParams]? then
-          return ← direct n receiver
-        return false
+          let ctor ← getConstInfoCtor projection.ctorName
+          return ← directField n ctor.induct projection.i receiver
+            (e.getAppArgs.extract (projection.numParams + 1) e.getAppArgs.size)
+        throwError "projection-under-applied {h}"
       if [``Eq.refl, ``rfl, ``HEq.refl, ``Iff.refl, ``True.intro].contains h then return true
       if let some (.recInfo r) := (← getEnv).find? h then
         if r.numMinors == 1 then
@@ -428,6 +431,37 @@ partial def directStep (n : Name) (e : Expr) : StateRefT ProjectionState Audit B
     let reduced := e.headBeta
     if reduced != e then direct n reduced
     else throwError "projection-unsupported-expression {e}"
+
+/-- A projection demands one field, not every field of its carrier. Rebuilding
+    the demand after each raw delta step shares the ordinary projection budget.
+    Data carriers are intentionally inspected here without an isProof guard. -/
+partial def directField (n name : Name) (i : Nat) (receiver : Expr)
+    (args : Array Expr) : StateRefT ProjectionState Audit Bool := do
+  let receiver := cleanSpine receiver
+  let demand (value : Expr) := mkAppN (.proj name i value) args
+  let reduced := receiver.headBeta
+  if reduced != receiver then return ← direct n (demand reduced)
+  match receiver with
+  | .letE _ _ value body _ => direct n (demand (body.instantiate1 value))
+  | .fvar _ => return true
+  | _ =>
+    if let .const head levels := receiver.getAppFn' then
+      let ci ← getConstInfo head
+      if let .ctorInfo ctor := ci then
+        unless ctor.induct == name do throwError "projection-carrier-constructor {head}"
+        let some field := receiver.getAppArgs[ctor.numParams + i]?
+          | throwError "projection-carrier-field {head} {i}"
+        return ← direct n (mkAppN field args).headBeta
+      if let some value := ci.value? (allowOpaque := true) then
+        unless ci.levelParams.length == levels.length do
+          throwError "projection-universe-arity {head}"
+        return ← direct n (demand (mkAppN
+          (value.instantiateLevelParams ci.levelParams levels) receiver.getAppArgs).headBeta)
+    -- Kernel iota/projection reduction only. Unresolved carriers cannot supply
+    -- negative evidence about the demanded field.
+    let reduced ← whnfD (demand receiver)
+    if reduced != demand receiver then direct n reduced
+    else throwError "projection-carrier-unavailable {name} {i}"
 
 end
 

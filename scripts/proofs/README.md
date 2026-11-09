@@ -698,6 +698,24 @@ Pending-owner list:
 - The open Law/Planted supplied-contradiction contract (question C), per-analysis
   budget interpretation and whole-scope wall policy remain pending owner.
 
+
+The coordinator's N17d census at `2dcdaff775bdb4bf69a1be19f3609e544e2db7a0`
+(2400-second diagnostic watchdog) attempted 2152/2152 analyses: 2051 complete,
+101 INCOMPLETE (71 dependency-incomplete, 24 false-discharge-budget, six
+`projection-body-unavailable propext`), zero FAIL. The six real laws under
+`propext: pending owner question 8` are:
+
+- `ConcreteSpec.Core.Generative.fresh_preserves`
+- `ConcreteSpec.Core.Grants.issue_keeps_dead`
+- `ConcreteSpec.Core.Own.deferred_call_lifetime`
+- `ConcreteSpec.Core.Own.directOwner_roundtrip`
+- `ConcreteSpec.Core.Own.downward_reborrow_protocol`
+- `ConcreteSpec.Core.Own.move_reinitialize_protocol`
+
+The default-watchdog N17 attempted 1819/2152 and was INCOMPLETE with zero FAIL.
+These are coordinator observations of the round-4r bytes, not a new local
+census or an owner answer.
+
 There is no constant-specific production rule for propext. The retained
 `propext-hypothesis` fixture exits 2 with `INCOMPLETE analysis-budget-or-error
 ConcreteSpecControl.projection` and exact detail
@@ -729,3 +747,16 @@ Round-4r focused validation: all 134 core driver assertions and all requested
 standalone checks passed on the pinned consumer blob. These assertions require
 the six INCOMPLETE outcomes above. Exact receipts and commit accounting are in
 [N2-A3-accounting.md](N2-A3-accounting.md).
+
+#### Round 5: selected projection fields
+
+Projection demands follow the selected constructor field after bounded raw
+proof delta, beta, let and kernel projection/iota reduction. They do not judge
+all fields of a reconstructed package together. The receiver of a demanded
+proof field may live in Type (Subtype, PProd, PSigma, Sigma/PLift); its sort is
+not negative evidence. An unresolved carrier is INCOMPLETE. The structural
+cause was dropping data carriers and using whole-package evidence for a
+selected-field query. R-0219 owns this traversal; no language rule is changed.
+The bounded regression controls include an independently proved selected field
+beside an unused projected field, which must stay PASS. Baseline observations
+are in [the round-5 reproduction record](audits/N2-A3-round5-reproduction.md).
