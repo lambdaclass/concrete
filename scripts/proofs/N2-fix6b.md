@@ -11,5 +11,13 @@ The exact historical C9-new and C6-current controls (whole replay scopes, not se
 The accepted design remains [N2-discharge-solver.md](N2-discharge-solver.md).
 The representation slice is committed at c64d542d5. The solver and consumer
 switch are unfinished. No new-solver whole-scope cost has been measured and no
-design defect or measured cut-short point is claimed. This is not a completed
+measured cut-short point is claimed. This is not a completed
 phase-B outcome. See [the implementation record](N2-round6b.md).
+
+Slice 2 stopped at the certificate dependency-validation specification gap
+recorded in [the precise counterexample](N2-slice2-certificate-blocker.md).
+Kernel checking and excluding supplied local assumptions alone do not validate
+global supplier dependencies of a context refutation. The note's soundness
+requirement forbids such dependencies; its constructive validation protocol
+needs clarification. No callable solver or consumer switch was added, and no
+new-solver cost or measured budget exhaustion is claimed.

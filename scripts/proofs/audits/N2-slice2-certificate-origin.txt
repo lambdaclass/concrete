@@ -1,0 +1,8 @@
+Representation/checker source: 22e2d8f8dbe07559a564ae67775158a8ab62264a (consumer unchanged)
+Lean (version 4.34.1, x86_64-unknown-linux-gnu, commit 5045d0056413266e57c625dcd7c365b10e377c52, Release)
+Command: bash scripts/checks/lib/bounded.sh 30 lean scripts/proofs/fixtures/N2-Certificate-Origin-Repro.lean
+REPRO baseline: no context refutation
+REPRO kernel-checked certificate: of_eq_true injectedFalse._simp_1
+REPRO certificate type: False; local assumptions: 0
+REPRO supplied dependency: injectedFalse := impossible
+EXACT-OUTPUT MATCH; rc=0. Counterexample probe only; no solver verdict or completion claim.

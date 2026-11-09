@@ -145,6 +145,16 @@ reporting only; summary solving requires the coordinator's valid independent
 ACCEPT and separate phase-B brief. Both C9-new and C6-current remain completion
 blockers. No measured completion bound for an unimplemented solver is claimed.
 
+**Phase B slice 2 certificate blocker (R-0219):**
+[the counterexample and missing validation protocol](N2-slice2-certificate-blocker.md)
+show why a kernel-checked context refutation with no supplied local assumptions
+can still depend on a global supplied False producer through simp. The long-term
+solver must validate certificate proof dependencies and their origins before
+using the certificate to exclude a branch, without circular self-exclusion,
+under the shared worklist and unchanged budgets. The accepted note states the
+soundness requirement but needs to specify that validation protocol. The solver
+and consumer switch remain unfinished; this probe supplies no completion claim.
+
 Analysis failures are isolated by declaration and evidence case. Each reports
 `INCOMPLETE analysis-budget-or-error <fully-qualified-name> stage=... law=... case=...`
 (for evidence); existing findings survive and later analysis units continue.
