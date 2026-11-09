@@ -8,6 +8,8 @@ import json
 from pathlib import Path
 import re
 import sys
+import subprocess
+import base64
 
 INPUT_FILES = ("flake.nix", "flake.lock", "lean-toolchain", "lake-manifest.json")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -126,20 +128,54 @@ def canonical_digest(candidate):
     return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
-def authenticate_owner(digest):
-    """Single integration point for the OWNER-CHOSEN authenticator.
+# Registry-owned trust root. Only the coordinator may insert the owner's key.
+OWNER_SIGNERS = Path(__file__).resolve().parents[3] / "Concrete/owner.allowed_signers"
+OWNER_PRINCIPAL = "concrete-owner"
+OWNER_NAMESPACE = "concrete-trusted-base-v1"
 
-    Do not accept branch metadata, citations, environment variables or an agent's
-    choice of authentication policy here. No mechanism has been authorized yet.
-    """
-    raise ValueError("owner authorization is not established (T1): authenticator and initial digest await owner decision")
+
+def validate_owner_signers(path):
+    entries = []
+    for line in Path(path).read_text().splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        fields = line.split()
+        if len(fields) < 3 or fields[0] != OWNER_PRINCIPAL:
+            raise ValueError("allowed-signers contains a non-owner entry")
+        # No wildcard principals or signer-controlled options. Namespace binding
+        # is mandatory at verification; this file contains plain public keys.
+        if fields[1] not in ("ssh-ed25519", "ssh-rsa", "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521"):
+            raise ValueError("invalid owner allowed-signers key type")
+        try:
+            base64.b64decode(fields[2], validate=True)
+        except ValueError:
+            raise ValueError("invalid owner allowed-signers key encoding") from None
+        entries.append(line)
+    if not entries:
+        raise ValueError("awaiting owner key")
+
+
+def verify_owner_signature(digest, signature, allowed_signers):
+    validate_owner_signers(allowed_signers)
+    try:
+        result = subprocess.run(["ssh-keygen", "-Y", "verify", "-f", str(allowed_signers),
+            "-I", OWNER_PRINCIPAL, "-n", OWNER_NAMESPACE, "-s", str(signature)],
+            input=(digest + "\n").encode(), capture_output=True, timeout=15)
+    except subprocess.TimeoutExpired:
+        raise ValueError("INCOMPLETE owner signature verification timed out") from None
+    if result.returncode:
+        raise ValueError("owner signature verification failed")
+
+
+def authenticate_owner(digest, signature):
+    verify_owner_signature(digest, signature, OWNER_SIGNERS)
 
 
 def verify(report, record, decisions_file="docs/decisions.md"):
     candidate = verify_candidate(report, record, decisions_file)
     digest = canonical_digest(candidate)
     print(f"trust-candidate sha256:{digest}")
-    authenticate_owner(digest)
+    authenticate_owner(digest, str(record) + ".sig")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,4 @@
+# SINGLE OWNER TRUST ROOT — awaiting owner key.
+# Coordinator inserts the owner-provided entry here, and only here:
+# concrete-owner <owner SSH public key type> <owner SSH public key base64>
+# No CI or writer keys. No test keys. Namespace: concrete-trusted-base-v1.

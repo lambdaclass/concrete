@@ -15,11 +15,11 @@
   ],
   "inputs": {
     "flake.lock": "d0a75387719c81fc35e16c0242b7b099f896235959d3936ec510cd2e9c0d9a3d",
-    "flake.nix": "e964cf79ca3e38920767bd78cbe58be29beff8ee0126c0ac2683e78a6d8fae44",
+    "flake.nix": "b45ef99d2ad1c15cb8b3aff75cc5b71eaecb2ebacc0b1b4a1b5e39e734d7d8aa",
     "lake-manifest.json": "2aedd85285d989bc0a6d8ee249787140cf7e9ab3edf1e9abef7f28a1f99e5c15",
     "lean-toolchain": "d5edba4e4b8faad9c1baeadb265716d20d03be4d1a2647dc5e35b0c0325bea7b"
   },
-  "registry_sha256": "1624d6265e714896e4d52ba8070474daea9d0a79dfa4be07d1edb47caa54124e",
+  "registry_sha256": "5fbf5eb13c493e6cf41600b91dcfaa72873ce3e6fab22464b9aa97a92e2645c1",
   "schema": 1,
   "theorems_sha256": "b8362ba53a69c20fdaa38b73d0e53b9a31e97d29fea3ef71b3fa67c2c0434a47"
 }

@@ -90,28 +90,45 @@ No external declaration list is read.
 
 ## Approval authority (T1)
 
-Owner authorization is **not established**. Historical citations in
-`tests/golden/slice0_trusted_base_approval.json` do not approve this registry or
-its digests. A writer can regenerate that JSON; neither matching it nor the
-single-writer/review rules authenticates owner approval. Gate 9 reports exactly
-`FAIL approval: owner authorization is not established (T1): authenticator and initial digest await owner decision`
-for a consistent candidate, and cannot pass or update the golden.
+Owner decision X4 (2026-11-09, relayed by the coordinator) selects the owner's
+SSH signing key. `Concrete/owner.allowed_signers` is the registry-owned, single
+production trust root, referenced beside `Concrete.Premises.components`. It
+currently contains only a clearly marked insertion point. Only the coordinator
+obtains the public key/fingerprint from the owner and inserts the entry:
+`concrete-owner <key-type> <public-key-base64>`. No CI or writer key is authorized.
+Until the key arrives, a consistent candidate fails with exactly
+`FAIL approval: awaiting owner key`. Gate checks and golden updates remain
+blocked. Round 14 refreshes only unsigned candidate JSON from the registry
+renderer and consumed input hashes; the trusted-base golden remains unchanged
+until owner authorization permits the gated update. Historical citations and regenerated JSON authenticate nothing.
 
-`trusted_approval.py` separates candidate consistency (`verify_candidate`) from
-`authenticate_owner`, the single integration point for the owner-chosen
-authenticator. Its versioned canonical digest is SHA-256 of compact, sorted-key
-JSON containing `schema: 1`, the component/premise row digest, the theorem/axiom
-closure row digest, and the consumed input digests (`flake.nix`, `flake.lock`,
-`lean-toolchain`, `lake-manifest.json`). It prints `trust-candidate sha256:...`
-as the input for owner approval, never as authorization. Controls include the
-reviewer's bypass: growing the report and regenerating JSON with old citations.
+`trusted_approval.py` first checks candidate consistency, then verifies an SSH
+signature using `ssh-keygen -Y verify`, allowed principal **concrete-owner** and
+namespace **concrete-trusted-base-v1**. OpenSSH is pinned by the devshell. The
+signature file is `tests/golden/slice0_trusted_base_approval.json.sig`. The exact
+signed bytes are the canonical digest's 64 lowercase hexadecimal characters
+followed by one LF, without the printed `trust-candidate sha256:` prefix. The
+canonical digest is SHA-256 of compact sorted-key JSON containing `schema: 1`,
+the registry row digest, theorem/axiom row digest and input digests (`flake.nix`,
+`flake.lock`, `lean-toolchain`, `lake-manifest.json`). Any change needs a fresh
+owner signature. Every allowed-signers entry must have precisely the owner's
+principal, without wildcards or options; other principals fail closed.
 
-Pending owner decision, owned by **R-0678** with **R-0509**: choose authentication
-against authority outside the branch writer's control and explicitly approve the
-initial canonical digest. The coordinator takes this to the owner and maintains
-the roadmap rows. No signature scheme, protected channel, or historical quote is
-selected or inferred here. After that decision, implement its verifier at
-`authenticate_owner` and test tampering and replay against the chosen authority.
+The coordinator sends the canonical digest to the owner through the established
+owner channel. The owner signs those exact bytes using their existing private
+key and `ssh-keygen -Y sign -n concrete-trusted-base-v1 -f OWNER_KEY DIGEST_FILE`;
+the coordinator commits the returned detached signature. Writers never generate
+or access a production private key. Key rotation is a coordinator/owner action,
+not inferred from a new branch-provided signer. Initial owner key, fingerprint
+confirmation and signature remain outstanding under **R-0678 / R-0509**.
+
+`trusted_approval_controls.py` generates two fresh throwaway keys only in its
+private temporary directory, with a test-only allowed-signers file there. It
+checks the positive signature, wrong signer, tampered digest and wrong namespace
+with exact rejection diagnostics. It checks the production principal policy
+and plants a non-owner entry only in a private copy. No test key enters the
+production trust root. Candidate regeneration with old decision citations is
+still rejected by the authentication boundary.
 
 ## PR and scheduled evidence (X2 / N8)
 

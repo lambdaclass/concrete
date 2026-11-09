@@ -91,11 +91,11 @@ with tempfile.TemporaryDirectory() as tmp:
         report.write_text(base_report + "component growth [fixture]\n")
         record.write_text(json.dumps(make_record()))
         rejects(lambda: approval.verify(report, record),
-                "owner authorization is not established (T1): authenticator and initial digest await owner decision", exact=True)
+                "awaiting owner key", exact=True)
         report.write_text(base_report)
         record.write_text(json.dumps(make_record()))
         rejects(lambda: approval.verify(report, record),
-                "owner authorization is not established (T1): authenticator and initial digest await owner decision", exact=True)
+                "awaiting owner key", exact=True)
 
         # Tampered decision quote or missing anchor in docs/decisions.md must be refused.
         decisions.write_text(decisions_text.replace("ok let's do 1, 2, 3, 4, 5", "forged quote"))
