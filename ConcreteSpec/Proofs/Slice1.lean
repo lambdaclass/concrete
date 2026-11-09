@@ -73,8 +73,9 @@ theorem exec_complete {Δ : Decls} {r : Atom} {env : Env} {ss : List Stmt} {o : 
   | trap he => simp [runBody, he]
   | stuck he => simp [runBody, he]
 
-/-- Quantifies the constrained judgments; definitionally equivalent to the original universally closed guarantee. -/
-def ExecFinite (judgment : Decls → Env → List Stmt → Atom → Outcome → Prop) (Δ : Decls) (r : Atom) (env : Env) (ss : List Stmt) : Prop :=
+/-- Quantifies the constrained judgments. Universal closure recovers the original guarantee. -/
+def ExecFinite (judgment : Decls → Env → List Stmt → Atom → Outcome → Prop) (Δ : Decls) (r : Atom) (env :
+    Env) (ss : List Stmt) : Prop :=
   ∀ {o : Outcome}, judgment Δ env ss r o → o ≠ .outOfFuel
 
 /-- Law (subject `ConcreteSpec.Exec`). Exec never ends in outOfFuel. -/
@@ -86,8 +87,9 @@ theorem exec_ne_outOfFuel {Δ : Decls} {r : Atom} {env : Env} {ss : List Stmt} :
   | trap => simp
   | stuck => simp
 
-/-- Quantifies the constrained judgments; definitionally equivalent to the original universally closed guarantee. -/
-def ExecUnique (judgment : Decls → Env → List Stmt → Atom → Outcome → Prop) (Δ : Decls) (r : Atom) (env : Env) (ss : List Stmt) (o₁ : Outcome) : Prop :=
+/-- Quantifies the constrained judgments. Universal closure recovers the original guarantee. -/
+def ExecUnique (judgment : Decls → Env → List Stmt → Atom → Outcome → Prop) (Δ : Decls) (r : Atom) (env :
+    Env) (ss : List Stmt) (o₁ : Outcome) : Prop :=
   ∀ {o₂ : Outcome}, judgment Δ env ss r o₂ → o₁ = o₂
 
 /-- Law (subject `ConcreteSpec.Exec`). Determinism: a body has at most one outcome. -/

@@ -49,7 +49,7 @@ def RegInv (live : Res → Bool) (st : Stack) : Prop :=
   (∀ d ∈ pending st, live d.target = false) ∧
   (∀ d ∈ pending st, ∀ r ∈ d.needs, live r = true ∨ r ∈ targets (pending st))
 
-/-- Quantifies the constrained judgments; definitionally equivalent to the original universally closed guarantee. -/
+/-- Quantifies the constrained judgments. Universal closure recovers the original guarantee. -/
 def RegistrationInvariant (judgment : (Res → Bool) → Stack → Prop) (live : Res → Bool) : Prop :=
   ∀ {st : Stack}, judgment live st → RegInv live st
 
@@ -225,9 +225,11 @@ theorem depOrder_needs_unconsumed {pre post : List Deferred} {d : Deferred}
   subst he
   exact depOrder_cross h x hx d (List.mem_cons_self ..) hr
 
-/-- Quantifies the constrained judgments; definitionally equivalent to the original universally closed guarantee. -/
+/-- Quantifies the constrained judgments. Universal closure recovers the original guarantee. -/
 def CleanupBefore (judgment : (Res → Bool) → Stack → Prop) (live : Res → Bool) : Prop :=
-  ∀ {st : Stack}, judgment live st → ∀ {e : Exit} {fs : List Frame}, unwound e st = some fs → ∀ {d da : Deferred}, d ∈ pending fs → da ∈ pending fs → da.target ∈ d.needs → ∃ t₁ t₂ t₃, expected (pending fs) = t₁ ++ .call d :: t₂ ++ .call da :: t₃
+    ∀ {st : Stack}, judgment live st → ∀ {e : Exit} {fs : List Frame}, unwound e st = some fs → ∀ {d da :
+    Deferred}, d ∈ pending fs → da ∈ pending fs → da.target ∈ d.needs → ∃ t₁ t₂ t₃, expected (pending fs) =
+    t₁ ++ .call d :: t₂ ++ .call da :: t₃
 
 /-- Law (subject `ConcreteSpec.Cleanup.Reg`). Cleanup of exited scopes calls each dependent
 before the allocator or loan source it needs. This applies also to abort's empty prefix. -/
@@ -243,9 +245,10 @@ theorem defer_cleanup_releases_before {live : Res → Bool} : CleanupBefore Reg 
   rw [hsplit]
   simp [expected, List.flatMap_append]
 
-/-- Quantifies the constrained judgments; definitionally equivalent to the original universally closed guarantee. -/
+/-- Quantifies the constrained judgments. Universal closure recovers the original guarantee. -/
 def CleanupUnique (judgment : (Res → Bool) → Stack → Prop) (live : Res → Bool) : Prop :=
-  ∀ {st : Stack}, judgment live st → ∀ {e : Exit} {fs : List Frame}, unwound e st = some fs → (targets (pending fs)).Nodup
+    ∀ {st : Stack}, judgment live st → ∀ {e : Exit} {fs : List Frame}, unwound e st = some fs → (targets
+    (pending fs)).Nodup
 
 /-- Law (subject `ConcreteSpec.Cleanup.Reg`). Exiting scopes never consumes a resource twice.
 Abort unwinds no frames, so it consumes none. -/
@@ -257,9 +260,11 @@ theorem defer_cleanup_releases_nodup {live : Res → Bool} : CleanupUnique Reg l
   simp only [targets, List.map_append] at hnd ⊢
   exact hnd.sublist (List.sublist_append_left _ _)
 
-/-- Quantifies the constrained judgments; definitionally equivalent to the original universally closed guarantee. -/
+/-- Quantifies the constrained judgments. Universal closure recovers the original guarantee. -/
 def CleanupNeeds (judgment : (Res → Bool) → Stack → Prop) (live : Res → Bool) : Prop :=
-  ∀ {st : Stack}, judgment live st → ∀ {e : Exit} {fs : List Frame}, unwound e st = some fs → ∀ {pre post : List Deferred} {d : Deferred}, pending fs = pre ++ d :: post → ∀ {r : Res}, r ∈ d.needs → (∀ x ∈ pre, x.target ≠ r) ∧ (live r = true ∨ r ∈ targets (pending st))
+    ∀ {st : Stack}, judgment live st → ∀ {e : Exit} {fs : List Frame}, unwound e st = some fs → ∀ {pre post
+    : List Deferred} {d : Deferred}, pending fs = pre ++ d :: post → ∀ {r : Res}, r ∈ d.needs → (∀ x ∈ pre,
+    x.target ≠ r) ∧ (live r = true ∨ r ∈ targets (pending st))
 
 /-- Law (subject `ConcreteSpec.Cleanup.Reg`). A call's dependencies remain unconsumed by
 all preceding calls and are either owned or scheduled for cleanup. -/

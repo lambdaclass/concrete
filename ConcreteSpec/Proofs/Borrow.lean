@@ -54,7 +54,7 @@ theorem lookup_restore_some {Γ Γb p q} (h : AList.lookup (restore Γ Γb) p = 
 theorem lockFor_nonfree {m r q} (h : q.lock ≠ .free) : (lockFor m r q).lock ≠ .free := by
   unfold lockFor; split <;> (try split) <;> (try split) <;> simp_all
 
-/-- Quantifies the constrained judgments; definitionally equivalent to the original universally closed guarantee. -/
+/-- Quantifies the constrained judgments. Universal closure recovers the original guarantee. -/
 def UniqueContext (judgment : Ctx → List Stmt → Ctx → Prop) (Γ : Ctx) (ss : List Stmt) (Γ₁ : Ctx) : Prop :=
   ∀ {Γ₂}, judgment Γ ss Γ₂ → Γ₁ = Γ₂
 
@@ -73,9 +73,10 @@ theorem ok_det {Γ ss Γ₁} (h : Ok Γ ss Γ₁) : UniqueContext Ok Γ ss Γ₁
       cases ihb hb2
       exact ih hr2
 
-/-- Quantifies the constrained judgments; definitionally equivalent to the original universally closed guarantee. -/
+/-- Quantifies the constrained judgments. Universal closure recovers the original guarantee. -/
 def KeepsLocked (judgment : Ctx → List Stmt → Ctx → Prop) (Γ : Ctx) (ss : List Stmt) : Prop :=
-  ∀ {Γ'}, judgment Γ ss Γ' → ∀ {p q}, AList.lookup Γ p = some q → q.lock ≠ .free → AList.lookup Γ' p = some q
+    ∀ {Γ'}, judgment Γ ss Γ' → ∀ {p q}, AList.lookup Γ p = some q → q.lock ≠ .free → AList.lookup Γ' p =
+    some q
 
 /-- Law (subject `ConcreteSpec.Borrow.Ok`). A place a statement list cannot touch (locked) keeps its entry. -/
 theorem ok_keeps_locked {Γ ss} : KeepsLocked Ok Γ ss := by
@@ -94,7 +95,7 @@ theorem ok_keeps_locked {Γ ss} : KeepsLocked Ok Γ ss := by
       ihb (by rw [lookup_bodyCtx (ne_of_lookup hp hv), hp]; rfl) (lockFor_nonfree hq)
     exact ih (by rw [lookup_restore, hb]; exact hp) hq
 
-/-- Quantifies the constrained judgments; definitionally equivalent to the original universally closed guarantee. -/
+/-- Quantifies the constrained judgments. Universal closure recovers the original guarantee. -/
 def ExclusiveUntouched (judgment : Ctx → List Stmt → Ctx → Prop) (Γ : Ctx) : Prop :=
   ∀ {ss Γ'}, judgment Γ ss Γ' → ∀ {p q}, AList.lookup Γ p = some q → q.lock = .excl → ¬ Touches p ss
 
@@ -133,9 +134,10 @@ theorem excl_untouched {Γ} : ExclusiveUntouched Ok Γ := by
       have hb := ok_keeps_locked hbody hpb (lockFor_nonfree (by rw [hq]; decide))
       exact ih (by rw [lookup_restore, hb]; exact hp) hq ht
 
-/-- Quantifies the constrained judgments; definitionally equivalent to the original universally closed guarantee. -/
+/-- Quantifies the constrained judgments. Universal closure recovers the original guarantee. -/
 def MutableFreezes (judgment : Ctx → List Stmt → Ctx → Prop) (Γ : Ctx) (s v : Nat) : Prop :=
-  ∀ {body rest q Γ'}, judgment Γ (.borrow true s v body :: rest) Γ' → AList.lookup Γ s = some q → ∀ p q', AList.lookup Γ p = some q' → q'.root = q.root → ¬ Touches p body
+    ∀ {body rest q Γ'}, judgment Γ (.borrow true s v body :: rest) Γ' → AList.lookup Γ s = some q → ∀ p q',
+    AList.lookup Γ p = some q' → q'.root = q.root → ¬ Touches p body
 
 /-- Law (subject `ConcreteSpec.Borrow.Ok`). **open_mut_freezes_root** (Q9.14, Q3.3, Q3.4, REF-11). Inside an accepted
 borrow mut src as v { body }, no place of src's root that existed before the open (the root
@@ -188,7 +190,7 @@ theorem noWrite_bodyCtx {r Γ m v q0} (h : NoWrite r Γ)
       · simp only [lockFor, h1, ↓reduceIte] at hr hl ⊢
         exact h p q1 hq hr hl
 
-/-- Quantifies the constrained judgments; definitionally equivalent to the original universally closed guarantee. -/
+/-- Quantifies the constrained judgments. Universal closure recovers the original guarantee. -/
 def NoWriteSound (judgment : Ctx → List Stmt → Ctx → Prop) (Γ : Ctx) : Prop :=
   ∀ {ss Γ'}, judgment Γ ss Γ' → ∀ {r}, NoWrite r Γ → ¬ WritesRoot r Γ ss
 
@@ -227,9 +229,10 @@ theorem noWrite_sound {Γ} : NoWriteSound Ok Γ := by
         cases h0
         exact ih (noWrite_restore hn) hw
 
-/-- Quantifies the constrained judgments; definitionally equivalent to the original universally closed guarantee. -/
+/-- Quantifies the constrained judgments. Universal closure recovers the original guarantee. -/
 def SharedNoWrite (judgment : Ctx → List Stmt → Ctx → Prop) (Γ : Ctx) (s v : Nat) : Prop :=
-  ∀ {body rest q Γ'}, judgment Γ (.borrow false s v body :: rest) Γ' → AList.lookup Γ s = some q → ¬ WritesRoot q.root (bodyCtx false v q Γ) body
+    ∀ {body rest q Γ'}, judgment Γ (.borrow false s v body :: rest) Γ' → AList.lookup Γ s = some q → ¬
+    WritesRoot q.root (bodyCtx false v q Γ) body
 
 /-- Law (subject `ConcreteSpec.Borrow.Ok`). **open_mut_freezes_root, shared half** (Q9.14, Q3.3). A shared open never grants a write:
 inside an accepted borrow src as v { body }, nothing at any depth writes, moves or mutably
@@ -317,9 +320,16 @@ theorem enter_in_bounds {s : Source} {a b : Nat} {e : Bool} (h : openRange s a b
     · simp only [viewIndex, Source.len]; omega
     · cases h; exact ⟨ha', hb'⟩
 
-/-- Quantifies the constrained judgments; definitionally equivalent to the original universally closed guarantee. -/
-def RangeMutableFreezes (judgment : Ctx → List Stmt → Ctx → Prop) (Γ : Ctx) (src v : Nat) (k : RangeFacts) : Prop :=
-  ∀ {body els rest Γ' q}, (judgment Γ (.borrow true src v body :: rest) Γ' ∧ match els with | none => knownValid k = true | some e => judgment Γ (e ++ rest) Γ') → AList.lookup Γ src = some q → ∀ p q', AList.lookup Γ p = some q' → q'.root = q.root → ¬ Touches p body
+/-- Quantifies the constrained judgments. Universal closure recovers the original guarantee. -/
+def RangeMutableFreezes (judgment : Ctx → List Stmt → Ctx → Prop) (Γ : Ctx) (src v : Nat) (k : RangeFacts) :
+    Prop :=
+  ∀ {body els rest Γ' q},
+    (judgment Γ (.borrow true src v body :: rest) Γ' ∧
+      match els with
+      | none => knownValid k = true
+      | some e => judgment Γ (e ++ rest) Γ') →
+    AList.lookup Γ src = some q → ∀ p q',
+      AList.lookup Γ p = some q' → q'.root = q.root → ¬ Touches p body
 
 /-- Law (subject `ConcreteSpec.Borrow.Ok`). **open_mut_freezes_root for range opens.** Inside an accepted
 borrow mut src from a until b as v { body } [else { … }], no place of src's root that existed
@@ -337,7 +347,7 @@ theorem view_not_moved {m v q Γ rest Γ'} : ¬ Ok (bodyCtx m v q Γ) (.move v :
   cases h with
   | move hf _ ho _ => simp [bodyCtx, AList.lookup, view] at hf; subst hf; simp at ho
 
-/-- Quantifies the constrained judgments; definitionally equivalent to the original universally closed guarantee. -/
+/-- Quantifies the constrained judgments. Universal closure recovers the original guarantee. -/
 def FreshUnused (judgment : Ctx → List Stmt → Ctx → Prop) (Γ : Ctx) : Prop :=
   ∀ {ss Γ'}, judgment Γ ss Γ' → ∀ {p}, AList.lookup Γ p = none → ¬ FreeUse p ss
 
@@ -369,7 +379,7 @@ theorem fresh_not_used {Γ} : FreshUnused Ok Γ := by
       exact ihb (by rw [lookup_bodyCtx (fun h => hne h.symm), hp]; rfl) hu
     | tail hu => exact ih (by rw [lookup_restore, hp]; split <;> rfl) hu
 
-/-- Quantifies the constrained judgments; definitionally equivalent to the original universally closed guarantee. -/
+/-- Quantifies the constrained judgments. Universal closure recovers the original guarantee. -/
 def ViewScoped (judgment : Ctx → List Stmt → Ctx → Prop) (Γ : Ctx) (m : Bool) (s v : Nat) : Prop :=
   ∀ {body rest Γ'}, judgment Γ (.borrow m s v body :: rest) Γ' → ¬ FreeUse v rest
 

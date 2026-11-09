@@ -77,6 +77,8 @@ namespace RoundtripEvidence
 def dropBytes : Val → List MByte := fun _ => []
 
 /-- A broken decoder refuses initialized, correctly sized Boolean encodings. -/
+def spuriousByte : Val → List MByte := fun _ => [.undef]
+
 def rejectValue : Decls → Ty → List MByte → Option Val := fun _ _ _ => none
 
 /-- A broken layout refuses the size of a scalar. -/
@@ -143,6 +145,16 @@ example : RepVal [⟨"Token", false, []⟩] (.struct "Token" []) (.struct "Token
 
 /-- Planted (law `ConcreteSpec.Rep.rep_roundtrip`, case `emptyStruct`, subject `ConcreteSpec.Rep.Ty.size`, mutant `ConcreteSpec.Rep.RoundtripEvidence.missingSize`). -/
 example : RepVal [⟨"Token", false, []⟩] (.struct "Token" []) (.struct "Token") ∧ ¬ (missingSize [⟨"Token", false, []⟩] (.struct "Token") = some (encodeVal (.struct "Token" [])).length ∧ decodeVal [⟨"Token", false, []⟩] (.struct "Token") (encodeVal (.struct "Token" [])) = some (.struct "Token" [])) := ⟨(.empty rfl rfl), by decide⟩
+
+/-- Planted (law `ConcreteSpec.Rep.rep_roundtrip`, case `negativeSigned`, subject `ConcreteSpec.Rep.encodeVal`, mutant `ConcreteSpec.Rep.RoundtripEvidence.spuriousByte`). -/
+example : RepVal [] (.scalar (.int .i16 (-2))) (.scalar (.int .i16)) ∧
+    ¬ (Ty.size [] (.scalar (.int .i16)) = some (spuriousByte (.scalar (.int .i16 (-2)))).length ∧
+      decodeVal [] (.scalar (.int .i16)) (spuriousByte (.scalar (.int .i16 (-2)))) = some (.scalar (.int .i16 (-2)))) := ⟨(.scalar (.int (by decide))), by decide⟩
+
+/-- Planted (law `ConcreteSpec.Rep.rep_roundtrip`, case `emptyStruct`, subject `ConcreteSpec.Rep.encodeVal`, mutant `ConcreteSpec.Rep.RoundtripEvidence.spuriousByte`). -/
+example : RepVal [⟨"Token", false, []⟩] (.struct "Token" []) (.struct "Token") ∧
+    ¬ (Ty.size [⟨"Token", false, []⟩] (.struct "Token") = some (spuriousByte (.struct "Token" [])).length ∧
+      decodeVal [⟨"Token", false, []⟩] (.struct "Token") (spuriousByte (.struct "Token" [])) = some (.struct "Token" [])) := ⟨(.empty rfl rfl), by decide⟩
 
 end RoundtripEvidence
 

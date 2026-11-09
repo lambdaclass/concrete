@@ -20,9 +20,10 @@ theorem brand_mismatch_refused {B Γ h a β1 β2 r Γ'} (hh : AList.lookup Γ h 
   · cases hok with
     | free h1 h2 _ => rw [hh] at h1; rw [ha] at h2; cases h1; cases h2; exact hne rfl
 
-/-- Quantifies the constrained judgments; definitionally equivalent to the original universally closed guarantee. -/
+/-- Quantifies the constrained judgments. Universal closure recovers the original guarantee. -/
 def ResetNoOld (judgment : List Nat → Ctx → List Stmt → Ctx → Prop) (B : List Nat) : Prop :=
-  ∀ {Γ a' a β' rest Γ' β}, judgment B Γ (.reset a' a β' :: rest) Γ' → AList.lookup Γ a = some (.alloc β) → ∀ hv, AList.lookup Γ hv ≠ some (.heap β)
+    ∀ {Γ a' a β' rest Γ' β}, judgment B Γ (.reset a' a β' :: rest) Γ' → AList.lookup Γ a = some (.alloc β) →
+    ∀ hv, AList.lookup Γ hv ≠ some (.heap β)
 
 /-- Law (subject `ConcreteSpec.Brand.Ok`). A checked reset leaves no value of the old brand (Q1.5): none is live at the reset. -/
 theorem reset_requires_no_old {B} : ResetNoOld Ok B := by
@@ -33,9 +34,10 @@ theorem reset_requires_no_old {B} : ResetNoOld Ok B := by
     rw [ha] at ha'; cases ha'
     exact hno _ (AList.lookup_mem hh) rfl
 
-/-- Quantifies the constrained judgments; definitionally equivalent to the original universally closed guarantee. -/
+/-- Quantifies the constrained judgments. Universal closure recovers the original guarantee. -/
 def ResetRefusesOld (judgment : List Nat → Ctx → List Stmt → Ctx → Prop) (B : List Nat) : Prop :=
-  ∀ {Γ a' a β' rest Γ'}, BrandsIn B Γ → judgment B Γ (.reset a' a β' :: rest) Γ' → ∀ {hv βh}, AList.lookup Γ hv = some (.heap βh) → βh ≠ β' ∧ ∀ r, rest = .use hv a' :: r ∨ rest = .free hv a' :: r → False
+    ∀ {Γ a' a β' rest Γ'}, BrandsIn B Γ → judgment B Γ (.reset a' a β' :: rest) Γ' → ∀ {hv βh}, AList.lookup
+    Γ hv = some (.heap βh) → βh ≠ β' ∧ ∀ r, rest = .use hv a' :: r ∨ rest = .free hv a' :: r → False
 
 /-- Law (subject `ConcreteSpec.Brand.Ok`). **reset_fresh, static part** (Q1.2, Q1.4). The brand of a reset allocator differs from the
 brand of every value live before the reset, so each operation of the new allocator on such a
@@ -98,7 +100,7 @@ theorem inv_bind {s : State} (a : Nat) {env : AList Nat Val} (hi : Inv s)
     · omega
   · exact nodup_snoc hn (fun hm => by have := hg _ hm; omega)
 
-/-- Quantifies the constrained judgments; definitionally equivalent to the original universally closed guarantee. -/
+/-- Quantifies the constrained judgments. Universal closure recovers the original guarantee. -/
 def RunInvariant (judgment : State → List Stmt → State → Prop) (s : State) (ss : List Stmt) : Prop :=
   ∀ {s'}, judgment s ss s' → Inv s → Inv s'
 
@@ -134,7 +136,7 @@ theorem reset_fresh_brand {s : State} {a' a β' : Nat} {rest : List Stmt} {s' : 
   cases h with
   | reset _ hr => exact ⟨_, rfl, hr, fun e he => Nat.ne_of_lt (hi.1 e he)⟩
 
-/-- Quantifies the constrained judgments; definitionally equivalent to the original universally closed guarantee. -/
+/-- Quantifies the constrained judgments. Universal closure recovers the original guarantee. -/
 def GeneratedUnique (judgment : State → List Stmt → State → Prop) (prog : List Stmt) : Prop :=
   ∀ {s' : State}, judgment State.init prog s' → s'.gen.Nodup
 
