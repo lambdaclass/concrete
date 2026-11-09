@@ -525,9 +525,89 @@ theorem plainNeg_trap_iff (t : IntTy) (a : Int) (k : TrapKind) :
   unfold plainNeg
   cases checkedNeg t a <;> simp
 
-/-- Representation lemma. Extracts the checked-negation range validator (approved: APPR-C1-codex-5531d9e34). -/
-theorem checkedNeg_inRange {t : IntTy} {a r : Int} (h : checkedNeg t a = .ok r) : t.InRange r :=
-  inRangeOr_inRange h
+/-- Helper (arithmetic). Plain negation is never stuck: it has a result or a trap.
+(approved: APPR-C2-agy-5372ad2a0) -/
+theorem plainNeg_not_stuck (t : IntTy) (a : Int) : plainNeg t a ≠ .stuck := by
+  unfold plainNeg
+  cases checkedNeg t a <;> simp
+
+/-- Helper (arithmetic). Representability of mathematical negation, independently of the
+`checkedNeg` result wrapper. (approved: APPR-C2-agy-5372ad2a0) -/
+private theorem neg_inRange_iff (t : IntTy) (a : Int) (ha : t.InRange a) :
+    t.InRange (-a) ↔ (if t.signed = true then a ≠ t.min else a = 0) := by
+  cases t <;> simp [IntTy.InRange, IntTy.min, IntTy.max, IntTy.signed, IntTy.bits] at * <;> omega
+
+/-- Law (subject `ConcreteSpec.Core.checkedNeg`). Checked negation succeeds exactly with the mathematical negation, when that integer is
+representable: signed MIN and nonzero unsigned inputs are the only invalid values in range. -/
+theorem checkedNeg_ok_arithmetic (t : IntTy) (a r : Int) (ha : t.InRange a) :
+    checkedNeg t a = .ok r ↔ r = -a ∧
+      (if t.signed = true then a ≠ t.min else a = 0) := by
+  unfold checkedNeg inRangeOr
+  split
+  · rename_i hn
+    have hc := (neg_inRange_iff t a ha).1 hn
+    constructor
+    · intro h
+      cases h
+      exact ⟨rfl, hc⟩
+    · rintro ⟨rfl, _⟩
+      rfl
+  · rename_i hn
+    simp only [reduceCtorEq, false_iff, not_and]
+    intro _ hc
+    exact hn ((neg_inRange_iff t a ha).2 hc)
+
+/-- Law (subject `ConcreteSpec.Core.checkedNeg`). Checked negation fails only with Overflow, exactly for signed MIN or a nonzero unsigned
+input. -/
+theorem checkedNeg_error_iff (t : IntTy) (a : Int) (e : ArithmeticError) (ha : t.InRange a) :
+    checkedNeg t a = .error e ↔ e = .overflow ∧
+      ¬(if t.signed = true then a ≠ t.min else a = 0) := by
+  unfold checkedNeg inRangeOr
+  split
+  · rename_i hn
+    have hc := (neg_inRange_iff t a ha).1 hn
+    constructor
+    · intro h
+      cases h
+    · rintro ⟨_, hnc⟩
+      exact (hnc hc).elim
+  · rename_i hn
+    have hc : ¬(if t.signed = true then a ≠ t.min else a = 0) := by
+      intro hc
+      exact hn ((neg_inRange_iff t a ha).2 hc)
+    constructor
+    · intro h
+      cases h
+      exact ⟨rfl, hc⟩
+    · rintro ⟨rfl, _⟩
+      rfl
+
+/-- Incorrect negation that preserves its input. -/
+def identityNeg (_t : IntTy) (a : Int) : Except ArithmeticError Int := .ok a
+
+/-- Incorrect negation that never reports overflow. -/
+def uncheckedNeg (_t : IntTy) (a : Int) : Except ArithmeticError Int := .ok (-a)
+
+/-- Instance (law `ConcreteSpec.Core.checkedNeg_ok_arithmetic`, case `signed`). -/
+example : checkedNeg .i8 5 = .ok (-5) ↔ (-5 : Int) = -5 ∧
+    (if IntTy.i8.signed = true then (5 : Int) ≠ IntTy.i8.min else (5 : Int) = 0) :=
+  checkedNeg_ok_arithmetic .i8 5 (-5) (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.checkedNeg_ok_arithmetic`, case `signed`,
+subject `ConcreteSpec.Core.checkedNeg`, mutant `ConcreteSpec.Core.identityNeg`). -/
+example : IntTy.i8.InRange 5 ∧ ¬(identityNeg .i8 5 = .ok (-5) ↔ (-5 : Int) = -5 ∧
+    (if IntTy.i8.signed = true then (5 : Int) ≠ IntTy.i8.min else (5 : Int) = 0)) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.checkedNeg_error_iff`, case `minimum`). -/
+example : checkedNeg .i8 (-128) = .error .overflow ↔ ArithmeticError.overflow = .overflow ∧
+    ¬(if IntTy.i8.signed = true then (-128 : Int) ≠ IntTy.i8.min else (-128 : Int) = 0) :=
+  checkedNeg_error_iff .i8 (-128) .overflow (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.checkedNeg_error_iff`, case `minimum`,
+subject `ConcreteSpec.Core.checkedNeg`, mutant `ConcreteSpec.Core.uncheckedNeg`). -/
+example : IntTy.i8.InRange (-128) ∧ ¬(uncheckedNeg .i8 (-128) = .error .overflow ↔
+    ArithmeticError.overflow = .overflow ∧
+      ¬(if IntTy.i8.signed = true then (-128 : Int) ≠ IntTy.i8.min else (-128 : Int) = 0)) := by decide
 
 /-- Law (subject `ConcreteSpec.Core.boolOfBits`). -/
 theorem boolOfBits_boolToBits (b : Bool) : boolOfBits (boolToBits b) = some b := by
