@@ -108,7 +108,8 @@ __attribute__((constructor)) static void injected(void) {
     probe = ('import json,os,shutil; '
              'print(json.dumps({"env":dict(os.environ),"lean":shutil.which("lean")}))')
     result = run(['bash', '-c',
-        'source "$1"; probe() { python3 -I -c "$1"; }; '
+        'source "$1"; probe() { case $- in *e*u*) ;; *) echo "missing shell safety options"; return 1;; esac; '
+        'set -o | grep -qxE "pipefail[[:space:]]+on" || return 1; python3 -I -c "$1"; }; '
         'export PATH="$2:$PATH"; shift 2; code=$1; shift; '
         'for key in "$@"; do export "$key=ambient-poison"; done; '
         'slice0_gate_environment probe "$code"',

@@ -23,6 +23,6 @@ slice0_gate_environment() (
   slice0_clean_environment "$launch_path" "$sandbox/home" "$sandbox/tmp"
   bounded_run 86400 -- "${clean[@]}" "CONCRETE_SLICE0_CLANG=$clang" \
     LAKE_ARTIFACT_CACHE=false "LAKE_CACHE_DIR=$sandbox/lake-cache" LEAN_NUM_THREADS=2 \
-    bash --noprofile --norc -c "$(declare -f "$entry"); $entry \"\$@\"" bash "$@" || rc=$?
+    bash --noprofile --norc -euo pipefail -c "$(declare -f "$entry"); $entry \"\$@\"" bash "$@" || rc=$?
   return "$rc"
 )
