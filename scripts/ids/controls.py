@@ -40,6 +40,7 @@ def main():
         base = Path(directory)
         remote = base / 'origin.git'
         a.git(base, 'init', '--bare', str(remote))
+        a.git(remote, 'symbolic-ref', 'HEAD', 'refs/heads/main')
         a.git(remote, 'config', 'user.name', 'Remote')
         a.git(remote, 'config', 'user.email', 'remote@example.invalid')
         writer = base / 'writer'
@@ -53,6 +54,7 @@ def main():
         (writer / 'scripts/ids').mkdir(parents=True)
         shutil.copy(SOURCE / 'allocate.py', writer / 'scripts/ids/allocate.py')
         shutil.copy(SOURCE / 'issues.py', writer / 'scripts/ids/issues.py')
+        shutil.copy(SOURCE / 'roadmap.py', writer / 'scripts/ids/roadmap.py')
         shutil.copy(SOURCE / 'branch.py', writer / 'scripts/ids/branch.py')
         hooks = writer / '.githooks'
         hooks.mkdir()
@@ -72,10 +74,11 @@ def main():
         (wt / 'scripts/ids').mkdir(parents=True, exist_ok=True)
         shutil.copy(SOURCE / 'allocate.py', wt / 'scripts/ids/allocate.py')
         shutil.copy(SOURCE / 'issues.py', wt / 'scripts/ids/issues.py')
+        shutil.copy(SOURCE / 'roadmap.py', wt / 'scripts/ids/roadmap.py')
         shutil.copy(SOURCE / 'branch.py', wt / 'scripts/ids/branch.py')
         head = a.git(writer, 'rev-parse', 'HEAD').stdout.strip()
         zero = '0' * 40
-        for key in ('ISS-0088', 'BUG-088'):
+        for key in ('ISS-0088', 'BUG-088', 'R-0088'):
             oid = a.commit(writer, a.metadata(writer, key, 'tier control', 'wip/a'))
             line = f'refs/x {oid} {a.ref_for(key)} {zero}\n'
             for extra, tier, rc in [('', 'metadata push', 0),
@@ -294,6 +297,8 @@ def main():
     assert result.returncode == 0, 'round 3 regression controls failed'
     result = subprocess.run(['python3', '-I', '-B', str(SOURCE / 'round4_controls.py')])
     assert result.returncode == 0, 'round 4 regression controls failed'
+    result = subprocess.run(['python3', '-I', '-B', str(SOURCE / 'round5_controls.py')])
+    assert result.returncode == 0, 'round 5 regression controls failed'
     print('ID reservation controls: PASS')
 
 

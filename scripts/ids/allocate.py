@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One online allocator for ISS and bug identities. See docs/ISSUE_IDS.md."""
+"""One online allocator for ISS, BUG and roadmap identities. See docs/ISSUE_IDS.md."""
 import argparse
 import datetime
 import json
@@ -15,12 +15,22 @@ import tempfile
 import uuid
 
 
+read_roadmap_rows = runpy.run_path(str(Path(__file__).with_name("roadmap.py")))["read_rows"]
+
+KINDS = {"iss": ("ISS", 4, "refs/reserved/iss/"),
+         "bug": ("BUG", 3, "refs/bug-reservations/"),
+         "roadmap": ("R", 4, "refs/reserved/roadmap/")}
+
 read_issue_rows = runpy.run_path(str(Path(__file__).with_name("issues.py")))["read_rows"]
 
 canonical_branch = runpy.run_path(str(Path(__file__).with_name("branch.py")))["canonical_branch"]
 
 
 class Refused(Exception):
+    pass
+
+
+class Incomplete(Exception):
     pass
 
 
@@ -41,18 +51,28 @@ def git(root, *args, data=None, check=True):
     p = subprocess.run(['git', '-C', str(root), *args], input=data, text=True,
                        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if check and p.returncode:
-        raise Refused(f"git {' '.join(args[:3])}: {p.stderr.strip()}")
+        error = Incomplete if args[0] in {"fetch", "ls-remote", "cat-file", "show", "ls-tree", "rev-list"} else Refused
+        raise error(f"git {' '.join(args[:3])}: {p.stderr.strip()}")
     return p
 
 
 def ref_for(key):
+    valid_key(key)
     kind, number = key.split('-')
-    return (f'refs/reserved/iss/{number}' if kind == 'ISS'
-            else f'refs/bug-reservations/{number}')
+    return next(prefix + number for tag, _, prefix in KINDS.values() if tag == kind)
+
+
+def key_for_ref(ref):
+    for tag, _, prefix in KINDS.values():
+        if ref.startswith(prefix):
+            key = valid_key(tag + '-' + ref[len(prefix):])
+            if ref_for(key) == ref:
+                return key
+    raise Refused(f'invalid reservation ref: {ref}')
 
 
 def valid_key(key):
-    if not re.fullmatch(r'(ISS-\d{4}|BUG-\d{3,})', key):
+    if not re.fullmatch(r'(ISS-\d{4}|BUG-\d{3,}|R-\d{4})', key):
         raise Refused(f'invalid ID: {key}')
     return key
 
@@ -78,6 +98,12 @@ def records(read, paths):
             raise Refused(f'ISSUES.tsv: {error}') from error
         for row in rows.values():
             add(row['id'], row['title'] if 'title' in row else issue_title(row['evidence']), 'ISSUES.tsv')
+    if 'ROADMAP.md' in paths:
+        try:
+            for key, (subject, _) in read_roadmap_rows(read('ROADMAP.md')).items():
+                add(key, subject, 'ROADMAP.md')
+        except ValueError as error:
+            raise Refused(str(error)) from error
     for path in paths:
         m = re.fullmatch(r'(?:legacy/)?docs/bugs/(\d{3,})_[^/]+\.md', path)
         if re.fullmatch(r'(?:legacy/)?docs/bugs/[^/]+\.md', path) and Path(path).name[0].isdigit() and not m:
@@ -170,6 +196,11 @@ class Snapshot:
         self.remote_heads = dict(self.heads)
         git(self.repo, 'fetch', '--quiet', '--no-tags', str(root), 'HEAD:refs/local/head')
         self.local_head = git(root, 'rev-parse', 'HEAD').stdout.strip()
+        # Every operation reads the same complete namespace, including allocation and
+        # planning. A poisoned reservation cannot silently become numbering authority.
+        for ref in self.refs:
+            if ref.startswith(('refs/reserved/', 'refs/bug-reservations/')):
+                self.reservation(key_for_ref(ref))
 
     def reservation(self, key):
         ref = ref_for(key)
@@ -250,15 +281,20 @@ def publish(root, updates):
 
 def check_entries(snapshot, entries, label):
     for key, (title, _) in entries.items():
+        main = snapshot.trees.get('main', {}).get(key)
+        if main and main[0] != title:
+            raise Refused(f'{label}: {key} title {title!r} collides with origin/main:{main[1]} {key} title {main[0]!r}')
         reservation = snapshot.reservation(key)
         if not reservation or 'schema' not in reservation:
-            raise Refused(f'{label}: {key} has no schema-1 reservation; run backfill')
+            raise Refused(f'{label}: {key} has no schema-1 reservation at {ref_for(key)}; run backfill')
         if reservation['title'] != title:
-            raise Refused(f'{label}: {key} title differs from reservation ({title!r})')
+            raise Refused(f'{label}: {key} title {title!r} differs from {ref_for(key)} title {reservation["title"]!r}')
 
 
 def check_snapshot(snapshot):
     # Operator audit only; ordinary gates never couple unrelated draft branches.
+    if 'main' in snapshot.tree_errors:
+        raise Incomplete('origin/main: ' + snapshot.tree_errors['main'])
     if snapshot.tree_errors:
         raise Refused('remote record audit: ' + repr(snapshot.tree_errors))
     for branch, entries in snapshot.trees.items():
@@ -269,7 +305,7 @@ def check_change(root, snapshot):
     # Enforcement is activated by landing the tools only AFTER the metadata backfill.
     # There are no historical exemptions once active, and unstaged edits cannot hide HEAD.
     if 'main' in snapshot.tree_errors:
-        raise Refused('origin/main: ' + snapshot.tree_errors['main'])
+        raise Incomplete('origin/main: ' + snapshot.tree_errors['main'])
     check_entries(snapshot, snapshot.trees['main'], 'origin/main')
     check_entries(snapshot, tree_records(snapshot.repo, 'refs/local/head'), 'HEAD')
     check_entries(snapshot, work_records(root), 'worktree')
@@ -335,7 +371,7 @@ def main():
     parser.add_argument('--root', default='.')
     sub = parser.add_subparsers(dest='command', required=True)
     reserve = sub.add_parser('reserve')
-    reserve.add_argument('kind', choices=['iss', 'bug'])
+    reserve.add_argument('kind', choices=list(KINDS))
     reserve.add_argument('title')
     reserve.add_argument('--number', type=int, help='explicit coordinator-assigned number; never overwrites')
     sub.add_parser('check')
@@ -363,7 +399,7 @@ def main():
         if set(old) != {'0'} and git(root, 'cat-file', '-e', old, check=False).returncode:
             git(root, 'fetch', '--no-tags', '--no-write-fetch-head', 'origin', ref)
         # The ref determines the identity; never trust payload fields before validation.
-        key = ('ISS-' if ref.startswith('refs/reserved/iss/') else 'BUG-') + ref.rsplit('/', 1)[1]
+        key = key_for_ref(ref)
         if ref != ref_for(valid_key(key)):
             raise Refused('invalid reservation ref')
         value = reservation_commit(root, key, oid)
@@ -384,7 +420,7 @@ def main():
             # Validate reservation namespace integrity even when there are no changed records.
             for ref in snapshot.refs:
                 if ref.startswith(('refs/reserved/', 'refs/bug-reservations/')):
-                    key = ('ISS-' if ref.startswith('refs/reserved/iss/') else 'BUG-') + ref.rsplit('/', 1)[1]
+                    key = key_for_ref(ref)
                     valid_key(key)
                     if ref != ref_for(key):
                         raise Refused(f'malformed reservation ref: {ref}')
@@ -424,17 +460,16 @@ def main():
         else:
             # Refuse an unreadable authoritative inventory; drafts cannot claim numbers.
             if 'main' in snapshot.tree_errors:
-                raise Refused('origin/main: ' + snapshot.tree_errors['main'])
-            kind = args.kind.upper()
+                raise Incomplete('origin/main: ' + snapshot.tree_errors['main'])
+            kind, width, prefix = KINDS[args.kind]
             used = [int(k.split('-')[1]) for k in snapshot.occupied if k.startswith(kind + '-')]
-            prefix = 'refs/reserved/iss/' if kind == 'ISS' else 'refs/bug-reservations/'
             used += [int(r.rsplit('/', 1)[1]) for r in snapshot.refs if r.startswith(prefix)]
             number = args.number if args.number is not None else max(used, default=0) + 1
-            if number <= 0 or (kind == 'ISS' and number > 9999):
+            if number <= 0 or (width == 4 and number > 9999):
                 raise Refused('number out of range')
-            key = f'{kind}-{number:04d}' if kind == 'ISS' else f'{kind}-{number:03d}'
+            key = f'{kind}-{number:0{width}d}'
             if ref_for(key) in snapshot.refs or key in snapshot.occupied:
-                raise Refused(f'{key} already taken')
+                raise Refused(f'{key} already taken at {ref_for(key)} or origin/main')
             value = metadata(root, key, args.title, branch)
             publish(root, [(ref_for(key), '', commit(root, value))])
             print(key)
@@ -443,6 +478,9 @@ def main():
 if __name__ == '__main__':
     try:
         main()
+    except Incomplete as error:
+        print(f'ids: INCOMPLETE: {error}', file=sys.stderr)
+        sys.exit(2)
     except (Refused, OSError, ValueError, KeyError, TypeError) as error:
         print(f'ids: REFUSED: {error}', file=sys.stderr)
         sys.exit(1)

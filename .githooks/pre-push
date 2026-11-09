@@ -42,7 +42,7 @@ HOOK_STDIN="$(cat)"
 while read -r _localref localsha remoteref _remotesha; do
   [ -z "${localsha:-}" ] && continue
   case "${remoteref:-}" in
-    refs/reserved/iss/*|refs/bug-reservations/*)
+    refs/reserved/iss/*|refs/reserved/roadmap/*|refs/bug-reservations/*)
       if ! python3 -I scripts/ids/allocate.py verify-ref "$remoteref" "$localsha" "$_remotesha"; then
         echo "pre-push: invalid reservation update — refusing" >&2; exit 1
       fi
