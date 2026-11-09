@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """One online allocator for ISS and bug identities. See docs/ISSUE_IDS.md."""
 import argparse
-import csv
 import datetime
 import json
 import functools
@@ -15,6 +14,8 @@ import sys
 import tempfile
 import uuid
 
+
+read_issue_rows = runpy.run_path(str(Path(__file__).with_name("issues.py")))["read_rows"]
 
 canonical_branch = runpy.run_path(str(Path(__file__).with_name("branch.py")))["canonical_branch"]
 
@@ -32,17 +33,8 @@ def sandbox_environment(root=None):
                             text=True, capture_output=True, check=True)
     for name in result.stdout.splitlines():
         os.environ.pop(name, None)
-    # Preserve only writer identity before isolating config; temporary repos must never
-    # inherit hooks, signing, URL rewriting or arbitrary global/system configuration.
-    if root is not None:
-        for field, suffix in (('name', 'NAME'), ('email', 'EMAIL')):
-            value = git(root, 'config', 'user.' + field, check=False).stdout.strip()
-            if value:
-                for role in ('AUTHOR', 'COMMITTER'):
-                    os.environ.setdefault('GIT_' + role + '_' + suffix, value)
-    os.environ['GIT_CONFIG_NOSYSTEM'] = '1'
-    os.environ['GIT_CONFIG_SYSTEM'] = '/dev/null'
-    os.environ['GIT_CONFIG_GLOBAL'] = '/dev/null'
+    # Operator transport config remains active for live fetch/push. Offline controls
+    # isolate global/system configuration explicitly in their own harness.
 
 
 def git(root, *args, data=None, check=True):
@@ -80,9 +72,12 @@ def records(read, paths):
             raise Refused(f'{key}: invalid title')
         found[key] = (title, path)
     if 'ISSUES.tsv' in paths:
-        lines = [s for s in read('ISSUES.tsv').splitlines() if s and not s.startswith('#')]
-        for row in csv.DictReader(lines, delimiter='\t'):
-            add(row['id'], row.get('title') or issue_title(row['evidence']), 'ISSUES.tsv')
+        try:
+            rows = read_issue_rows(read('ISSUES.tsv'), allow_legacy=True)
+        except ValueError as error:
+            raise Refused(f'ISSUES.tsv: {error}') from error
+        for row in rows.values():
+            add(row['id'], row['title'] if 'title' in row else issue_title(row['evidence']), 'ISSUES.tsv')
     for path in paths:
         m = re.fullmatch(r'(?:legacy/)?docs/bugs/(\d{3,})_[^/]+\.md', path)
         if re.fullmatch(r'(?:legacy/)?docs/bugs/[^/]+\.md', path) and Path(path).name[0].isdigit() and not m:
@@ -138,7 +133,19 @@ class Snapshot:
     def __init__(self, root, directory):
         self.root = root
         self.repo = Path(directory) / 'snapshot.git'
-        git(directory, 'init', '--bare', str(self.repo))
+        git(directory, '-c', 'core.hooksPath=/dev/null', 'init', '--bare', '--template=', str(self.repo))
+        git(self.repo, 'config', 'core.hooksPath', '/dev/null')
+        git(self.repo, 'config', 'commit.gpgsign', 'false')
+        # Carry effective repo-local authentication/transport into the private fetch,
+        # without copying repository-location, hooks or signing settings. Global and
+        # system transport settings remain inherited normally. Never print credentials.
+        config = git(root, 'config', '--show-scope', '--null', '--list').stdout.split('\0')
+        for scope, entry in zip(config[0::2], config[1::2]):
+            if scope not in ('local', 'worktree') or '\n' not in entry:
+                continue
+            key, value = entry.split('\n', 1)
+            if key.startswith(('credential.', 'http.', 'https.', 'url.', 'protocol.', 'remote.origin.')) or key in ('core.sshcommand', 'ssh.variant'):
+                git(self.repo, 'config', '--add', key, value)
         self.url = git(root, 'remote', 'get-url', 'origin').stdout.strip()
         git(self.repo, 'fetch', '--quiet', '--no-tags', self.url,
             '+refs/heads/main:refs/heads/main',
@@ -151,19 +158,15 @@ class Snapshot:
                       if r.startswith('refs/heads/')}
         self.trees = {}
         self.tree_errors = {}
-        self.occupied = set()
         for branch, sha in self.heads.items():
-            # Allocation inventory must remain available even for a malformed draft.
-            text = git(self.repo, 'show', f'{sha}:ISSUES.tsv', check=False).stdout
-            self.occupied.update(re.findall(r'^ISS-\d{4}(?=\t)', text, re.M))
-            listing = git(self.repo, 'ls-tree', '-r', '--name-only', sha).stdout
-            self.occupied.update('BUG-' + m for m in re.findall(
-                r'^(?:legacy/)?docs/bugs/(\d{3,})[^/]*\.md$', listing, re.M))
             try:
                 self.trees[branch] = tree_records(self.repo, sha)
             except (Refused, KeyError, ValueError) as error:
                 self.tree_errors[branch] = str(error)
 
+        # Only main and reservation refs own numbers. Unreserved drafts are audit
+        # material, never an allocation lock or a source of numbering authority.
+        self.occupied = set(self.trees.get('main', {}))
         self.remote_heads = dict(self.heads)
         git(self.repo, 'fetch', '--quiet', '--no-tags', str(root), 'HEAD:refs/local/head')
         self.local_head = git(root, 'rev-parse', 'HEAD').stdout.strip()
@@ -272,47 +275,31 @@ def check_change(root, snapshot):
     check_entries(snapshot, work_records(root), 'worktree')
 
 
-def legacy_signature(repo, sha, key):
-    text = git(repo, 'show', f'{sha}:ISSUES.tsv', check=False).stdout
-    for row in csv.DictReader((x for x in text.splitlines() if x and not x.startswith('#')), delimiter='\t'):
-        if row['id'] == key:
-            return tuple(row.get(k, '') for k in ('date', 'opened', 'area', 'kind'))
-    return None
+def attributed_branch(snapshot, branch):
+    if branch:
+        return canonical_branch(branch)
+    matches = [b for b, sha in snapshot.remote_heads.items()
+               if b.startswith('wip/') and sha == snapshot.local_head]
+    if len(matches) != 1:
+        raise Refused('detached allocation requires id.branch or exactly one matching wip head')
+    return matches[0]
 
 
 def make_plan(root, snapshot, local, branch):
-    trees = list(snapshot.trees.items())
-    if branch:
-        trees.append((canonical_branch(branch), local))
-    elif local != tree_records(snapshot.repo, 'refs/local/head'):
-        raise Refused('detached backfill with local edits requires id.branch')
+    trees = dict(snapshot.trees)
+    branch = attributed_branch(snapshot, branch)
+    # The current worktree replaces its remote version, rather than voting twice.
+    trees[canonical_branch(branch)] = local
     uses = {}
-    for name, entries in trees:
+    for name, entries in trees.items():
         for key, (title, _) in entries.items():
             uses.setdefault(key, []).append((name, title))
     conflicts = [f'{b}: {error}' for b, error in snapshot.tree_errors.items()]
     updates = []
-    legacy_matches = []
     for key, rows in sorted(uses.items()):
         titles = {title for _, title in rows}
-        # Six-column pre-migration rows have mutable evidence, not immutable titles.
-        # Canonical explicit titles win only when stable legacy fields agree.
-        if key.startswith('ISS-') and len(titles) > 1:
-            signatures = {legacy_signature(snapshot.repo, snapshot.heads[b], key)
-                          for b, _ in rows if b in snapshot.heads}
-            explicit = {title for b, title in rows if b in snapshot.heads and
-                        'id\ttitle\t' in git(snapshot.repo, 'show', f'{snapshot.heads[b]}:ISSUES.tsv', check=False).stdout}
-            if len(signatures) == 1 and None not in signatures and any(next(iter(signatures))) and len(explicit) <= 1:
-                if explicit:
-                    titles = explicit
-                else:
-                    # A legacy-only inventory has no immutable column yet. Choose the
-                    # most widely preserved historical title, and expose every match
-                    # in the operator plan for review before it becomes immutable.
-                    titles = {min(titles, key=lambda t: (-sum(v == t for _, v in rows), t))}
-                legacy_matches.append(dict(id=key, rows=rows, signature=list(next(iter(signatures))),
-                                           title=next(iter(titles))))
-
+        # History already recovers first-introduction titles. Distinct remaining titles
+        # require operator reconciliation; no signature or majority can prove identity.
         if len(titles) != 1:
             conflicts.append(f'{key}: ' + repr(rows))
             continue
@@ -340,7 +327,6 @@ def make_plan(root, snapshot, local, branch):
                     value['legacy_oid'] = oid
                     updates.append(dict(ref=ref, old=oid, value=value))
     return dict(schema=1, heads=snapshot.remote_heads, updates=updates, conflicts=conflicts,
-                legacy_matches=legacy_matches,
                 collision_resolution='ISS-0017 acceptance-shim -> ISS-0033; spec-* retains ISS-0017; lexer -> ISS-0032. Branches must actually be renumbered before publishing.')
 
 
@@ -392,6 +378,8 @@ def main():
         return
     with tempfile.TemporaryDirectory(prefix='concrete-ids-') as temp:
         snapshot = Snapshot(root, temp)
+        if args.command in ('reserve', 'backfill'):
+            branch = attributed_branch(snapshot, branch)
         if args.command in ('check', 'audit-wip'):
             # Validate reservation namespace integrity even when there are no changed records.
             for ref in snapshot.refs:
@@ -434,7 +422,9 @@ def main():
             publish(root, updates)
             print('backfill reservations published and read back')
         else:
-            # Inventory draft numbers without requiring unrelated branches to pass an audit.
+            # Refuse an unreadable authoritative inventory; drafts cannot claim numbers.
+            if 'main' in snapshot.tree_errors:
+                raise Refused('origin/main: ' + snapshot.tree_errors['main'])
             kind = args.kind.upper()
             used = [int(k.split('-')[1]) for k in snapshot.occupied if k.startswith(kind + '-')]
             prefix = 'refs/reserved/iss/' if kind == 'ISS' else 'refs/bug-reservations/'

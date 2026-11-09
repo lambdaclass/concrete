@@ -5,16 +5,20 @@ An optional source root permits running these same controls against an earlier r
 """
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+
+sys.dont_write_bytecode = True
 
 SOURCE = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location('allocator', SOURCE / 'scripts/ids/allocate.py')
 a = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(a)
 a.sandbox_environment()
+os.environ.update(GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_SYSTEM="/dev/null", GIT_CONFIG_NOSYSTEM="1")
 HEADER = 'id\ttitle\tdate\tarea\tevidence\towner\tseverity\tclosure_condition\tstatus\n'
 def row(n, title='title'):
     return f'ISS-{n:04d}\t{title}\t2026-11-08\tci\tevidence\tR-0542\thigh\tfixed\topen\n'
@@ -103,7 +107,11 @@ def main():
             write(wt, HEADER + row(1, 'plain title'))
             cli(wt, 'backfill', '--output', str(root.parent / 'plain.json'))
             a.git(wt, 'checkout', '--detach', '-q')
+            cli(wt, 'backfill', '--output', str(root.parent / 'detached.json'), good=False)
+            a.git(wt, 'config', 'id.branch', 'plain-name')
             cli(wt, 'backfill', '--output', str(root.parent / 'detached.json'))
+            assert json.loads((root.parent / 'detached.json').read_text())['updates'] == []
+            cli(wt, 'check')
         case('shared-worktree-branch-policy', worktree)
         for index, (field, bad) in enumerate([('title', 'bad\ttitle'), ('title', 'bad\ntitle'), ('branch', 'ordinary'), ('branch', 'wip/bad..ref')]):
             def invalid(root, remote, field=field, bad=bad):

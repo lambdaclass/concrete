@@ -8,12 +8,16 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import sys
+
+sys.dont_write_bytecode = True
 
 SOURCE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location('allocator', SOURCE / 'allocate.py')
 a = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(a)
 a.sandbox_environment()
+os.environ.update(GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_SYSTEM="/dev/null", GIT_CONFIG_NOSYSTEM="1")
 
 
 def run(root, *args, expect=0):
@@ -48,6 +52,7 @@ def main():
         # Use the real hook for every allocator push, including concurrent reservations.
         (writer / 'scripts/ids').mkdir(parents=True)
         shutil.copy(SOURCE / 'allocate.py', writer / 'scripts/ids/allocate.py')
+        shutil.copy(SOURCE / 'issues.py', writer / 'scripts/ids/issues.py')
         shutil.copy(SOURCE / 'branch.py', writer / 'scripts/ids/branch.py')
         hooks = writer / '.githooks'
         hooks.mkdir()
@@ -60,21 +65,13 @@ def main():
         a.git(writer, 'push', '-q', 'origin', 'HEAD:refs/heads/wip/a')
         run(writer, 'check')
         print('PASS: reserved ID on its branch, through real hook')
-        hostile = base / 'hostile.gitconfig'
-        hostile.write_text('[commit]\n gpgsign = true\n[core]\n hooksPath = /nonexistent/hooks\n'
-                           f'[url "{base / "missing"}"]\n insteadOf = {remote}\n')
-        result = subprocess.run(['python3', '-I', str(SOURCE / 'allocate.py'), '--root', str(writer), 'check'],
-                                env={**os.environ, 'GIT_CONFIG_GLOBAL': str(hostile),
-                                     'GIT_CONFIG_SYSTEM': str(hostile)}, capture_output=True, text=True)
-        assert result.returncode == 0, result.stderr
-        print('PASS: hostile global/system config cannot steer temporary Git repositories')
-
         # Test both metadata namespaces alone and in mixed pushes; full-tier detection
         # uses a linked worktree refusal, so these probes never run real gates.
         wt = base / 'tier-worktree'
         a.git(writer, 'worktree', 'add', '--detach', str(wt))
         (wt / 'scripts/ids').mkdir(parents=True, exist_ok=True)
         shutil.copy(SOURCE / 'allocate.py', wt / 'scripts/ids/allocate.py')
+        shutil.copy(SOURCE / 'issues.py', wt / 'scripts/ids/issues.py')
         shutil.copy(SOURCE / 'branch.py', wt / 'scripts/ids/branch.py')
         head = a.git(writer, 'rev-parse', 'HEAD').stdout.strip()
         zero = '0' * 40
@@ -123,9 +120,9 @@ def main():
         a.git(writer, 'push', '-q', 'origin', ':refs/heads/wip/duplicate')
         a.git(writer, 'push', '-q', 'origin', 'HEAD:refs/heads/wip/legacy-evolved')
         a.git(writer, 'switch', '-q', 'wip/a')
-        run(writer, 'backfill', '--output', str(base / 'evolved-plan.json'))
-        assert not json.loads((base / 'evolved-plan.json').read_text())['conflicts']
-        print('PASS: legacy evolving evidence maps to canonical reserved title across a squash')
+        run(writer, 'backfill', '--output', str(base / 'evolved-plan.json'), expect=1)
+        assert json.loads((base / 'evolved-plan.json').read_text())['conflicts']
+        print('PASS: squashed legacy title ambiguity requires reconciliation')
         for suffix, evidence in [('one', 'earlier mutable evidence'), ('two', 'edited mutable evidence')]:
             a.git(writer, 'switch', '-qc', 'wip/legacy-' + suffix, 'main')
             (writer / 'ISSUES.tsv').write_text('id\tdate\tarea\tevidence\towner\tstatus\n'
@@ -135,11 +132,11 @@ def main():
             a.git(writer, 'push', '-q', 'origin', 'HEAD:refs/heads/wip/legacy-' + suffix)
         a.git(writer, 'switch', '-q', 'wip/a')
         legacy_plan = base / 'legacy-only-plan.json'
-        run(writer, 'backfill', '--output', str(legacy_plan))
-        assert any(row['id'] == 'ISS-0084' for row in json.loads(legacy_plan.read_text())['legacy_matches'])
+        run(writer, 'backfill', '--output', str(legacy_plan), expect=1)
+        assert any('ISS-0084' in conflict for conflict in json.loads(legacy_plan.read_text())['conflicts'])
         for suffix in ('one', 'two'):
             a.git(writer, 'push', '-q', 'origin', ':refs/heads/wip/legacy-' + suffix)
-        print('PASS: legacy-only edited rows expose their stable-field match in the operator plan')
+        print('PASS: distinct legacy introductions are conflicts, never majority votes')
 
         a.git(writer, 'push', '-q', 'origin', ':refs/heads/wip/legacy-evolved')
 
@@ -295,6 +292,8 @@ def main():
 
     result = subprocess.run(['python3', '-I', str(SOURCE / 'round3_controls.py')])
     assert result.returncode == 0, 'round 3 regression controls failed'
+    result = subprocess.run(['python3', '-I', '-B', str(SOURCE / 'round4_controls.py')])
+    assert result.returncode == 0, 'round 4 regression controls failed'
     print('ID reservation controls: PASS')
 
 

@@ -37,7 +37,7 @@ def plan(root):
 def collision(root):
     for branch, title in [('wip/a', 'distinct A'), ('wip/b', 'distinct B')]:
         a.git(root, 'switch', '-qc', branch, 'main')
-        write(root, OLD + row(50, title).replace(title + '\tevidence', title + '\tevidence') .replace(title + '\t', '', 1).replace('evidence', title))
+        write(root, OLD + row(50, title).replace(title + '\t', '', 1).replace('evidence', title))
         push(root, branch)
     p, value = plan(root)
     assert p.returncode != 0 and value['conflicts'], (p.returncode, value)
@@ -109,6 +109,16 @@ def transport(root):
     a.git(root, 'config', f'url.{remote}.insteadOf', alias)
     a.git(root, 'remote', 'set-url', 'origin', alias)
     ok(cli(root, 'check'))
+    # No real network: a private SSH transport serves the local bare repository.
+    import shlex
+    helper = root.parent / 'ssh-transport'
+    helper.write_text('#!/bin/sh\ncase "$*" in\n*git-receive-pack*) exec git-receive-pack ' + shlex.quote(remote) + ';;\n*) exec git-upload-pack ' + shlex.quote(remote) + ';;\nesac\n')
+    helper.chmod(0o755)
+    a.git(root, 'config', 'core.sshCommand', str(helper))
+    a.git(root, 'config', 'ssh.variant', 'ssh')
+    a.git(root, 'remote', 'set-url', 'origin', 'ssh://transport.invalid/repository')
+    ok(cli(root, 'check'))
+    ok(cli(root, 'reserve', 'iss', 'local SSH identity'))
 
 def scanner(root):
     script = (SOURCE / 'scripts/checks/sandbox_isolation.sh').read_text()
@@ -132,7 +142,6 @@ def bytecode(root):
     for name in ('controls.py', 'round3_controls.py'):
         path = copy / 'scripts/ids' / name
         prefix = path.read_text().split('\ndef ', 1)[0]
-        p = subprocess.run(['python3', '-I', '-c', prefix], cwd=copy, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': ''}, capture_output=True, text=True)
         # __file__ is needed for each harness's normal source selection.
         p = subprocess.run(['python3', '-I', '-c', '__file__=' + repr(str(path)) + '\n' + prefix], cwd=copy, capture_output=True, text=True)
         ok(p)
