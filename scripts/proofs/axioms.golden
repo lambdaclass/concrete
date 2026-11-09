@@ -1355,7 +1355,6 @@ ConcreteSpec.Core.Frame.ABI.ToyInstruction.slot.sizeOf_spec
 ConcreteSpec.Core.Frame.ABI.ToyRun.mk.inj	
 ConcreteSpec.Core.Frame.ABI.ToyRun.mk.injEq	propext
 ConcreteSpec.Core.Frame.ABI.ToyRun.mk.sizeOf_spec	
-ConcreteSpec.Core.Frame.ABI.ToyTraceSafe.stepsSafe	
 ConcreteSpec.Core.Frame.ABI.TransferCorrect.eq_1	propext
 ConcreteSpec.Core.Frame.ABI.TransferCorrect.eq_2	propext
 ConcreteSpec.Core.Frame.ABI.checkKeptPair._sparseCasesOn_1.else_eq	propext
@@ -1407,7 +1406,6 @@ ConcreteSpec.Core.Frame.ABI.instDecidableKeptStepOfDecidableEq._proof_4
 ConcreteSpec.Core.Frame.ABI.instDecidableKeptStepOfDecidableEq._proof_5	
 ConcreteSpec.Core.Frame.ABI.instDecidableSafe._proof_1	
 ConcreteSpec.Core.Frame.ABI.instDecidableSafe._proof_2	
-ConcreteSpec.Core.Frame.ABI.instDecidableToyTraceSafe._proof_1	
 ConcreteSpec.Core.Frame.ABI.instDecidableValid._proof_1	
 ConcreteSpec.Core.Frame.ABI.instDecidableValid._proof_2	
 ConcreteSpec.Core.Frame.ABI.instDecidableValid._proof_3	
