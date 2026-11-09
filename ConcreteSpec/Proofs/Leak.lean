@@ -19,14 +19,14 @@ and live bytes, preserves well-formedness, never lowers either historical or fun
 and tracks the local peak over the live-byte trajectory. Reset outflow is read from actual
 intermediate states. Zero-byte allocation is the identity on a well-formed abstract memory.
 `report_certified` connects independent trajectory and flow bounds to arbitrary lineage reports,
-including partial (`.notEstablished`) reports and allocators with no defined footprint.
+including partial (.notEstablished) reports and allocators with no defined footprint.
 -/
 
 namespace ConcreteSpec.Core.Leak
 open ConcreteSpec.Core
 open ConcreteSpec.Core.Exec
 
-/-- Helper (projection). Forgets C7 instrumentation traces from an `InstrumentedSteps` derivation to recover the underlying C1 `Steps` derivation (approved: REVIEW5-codex.md).
+/-- Helper (projection). Forgets C7 instrumentation traces from an `InstrumentedSteps` derivation to recover the underlying C1 `Steps` derivation (approved: APPR-C7-agy-5d94c4b4d).
 
 Forget only the C7 instrumentation: an instrumented execution projects to the C1 steps and their
 ordinary event trace, with every machine transition unchanged. -/
@@ -239,7 +239,7 @@ abbrev labelling : Labelling ops where
 /-- The policy authorizes exactly the typed release site used by the examples. -/
 abbrev policy : ReleasePolicy Unit := ⟨[⟨⟨0⟩, ()⟩]⟩
 
-/-- Helper (computation). Discharges primitive-answer determinism for the three-operation `Demo.allowed` oracle by case analysis on the request (approved: REVIEW5-codex.md). -/
+/-- Helper (computation). Discharges primitive-answer determinism for the three-operation `Demo.allowed` oracle by case analysis on the request (approved: APPR-C7-agy-5d94c4b4d). -/
 theorem allowed_unique {p : Prim} {vs : List Int} {st : Int} {a b : Answer Int Int Int}
     (ha : ops.allows p vs st a = true) (hb : ops.allows p vs st b = true) : a = b := by
   change allowed p vs st a = true at ha
@@ -253,7 +253,7 @@ theorem allowed_unique {p : Prim} {vs : List Int} {st : Int} {a b : Answer Int I
       exact ha.trans hb.symm
     | cons w vs => simp [allowed] at ha
 
-/-- Helper (inversion). Determinism of a single C1 step under `Demo.ops`, used to unroll complete runs in the trace inversion helpers and `step_unique` (approved: REVIEW5-codex.md). -/
+/-- Helper (inversion). Determinism of a single C1 step under `Demo.ops`, used to unroll complete runs in the trace inversion helpers and `step_unique` (approved: APPR-C7-agy-5d94c4b4d). -/
 theorem step_det {P : Program ops} {c c₁ c₂ : Config ops} {l₁ l₂ : Label ops}
     (h₁ : Step P c l₁ c₁) (h₂ : Step P c l₂ c₂) : l₁ = l₂ ∧ c₁ = c₂ := by
   cases h₁ with
@@ -294,9 +294,9 @@ theorem step_unique (p : Prim) (arg : Int) (st : Int) (site : SiteId)
   obtain ⟨l, c', hstep⟩ := hex
   exact ⟨l, c', hstep, fun _ _ h₂ => step_det hstep h₂⟩
 
-/-- Helper (inversion). Unrolls the four-step C1 derivation from `Demo.start` to compute its exact observation, leakage, release, choice, and final-state traces (approved: REVIEW5-codex.md).
+/-- Helper (inversion). Unrolls the four-step C1 derivation from `Demo.start` to compute its exact observation, leakage, release, choice, and final-state traces (approved: APPR-C7-agy-5d94c4b4d).
 
-Every complete run of the secure four-step example releases and outputs `secret + Int.ofNat hidden`. -/
+Every complete run of the secure four-step example releases and outputs secret + Int.ofNat hidden. -/
 theorem secure_run_unique (secret : Int) (hidden : Nat := 0)
     (r : Run instrumentation program (start secret hidden)) :
     r.observations = [.output (secret + Int.ofNat hidden)] ∧
@@ -401,23 +401,21 @@ def exposingRun (secret : Int) (hidden : Nat := 0) : Run instrumentation program
 /-- Law (subject `start`).
 
 **Delimited-release NI, proved for the secure example.** Equality of the ordered release records
-equates `s₁ + Int.ofNat hidden₁` and `s₂ + Int.ofNat hidden₂` across distinct secret pairs,
+equates s₁ + Int.ofNat hidden₁ and s₂ + Int.ofNat hidden₂ across distinct secret pairs,
 yielding equal public observations for every pair of complete runs. -/
 theorem secure_ni (s₁ s₂ : Int) (hidden₁ hidden₂ : Nat)
     (_hlow : LowEquivalent labelling (start s₁ hidden₁) (start s₂ hidden₂))
     (hrel : ∃ (r₁ : Run instrumentation program (start s₁ hidden₁))
               (r₂ : Run instrumentation program (start s₂ hidden₂)),
               r₁.choices = r₂.choices ∧ r₁.releases = r₂.releases) :
-    ∀ (r₁ : Run instrumentation program (start s₁ hidden₁))
-      (r₂ : Run instrumentation program (start s₂ hidden₂)),
-      r₁.publicObservations = r₂.publicObservations := by
+    DelimitedReleaseNI instrumentation program labelling (start s₁ hidden₁) (start s₂ hidden₂) := by
   obtain ⟨r₁₀, r₂₀, _, hreleases⟩ := hrel
   have h₁₀ := secure_run_unique s₁ hidden₁ r₁₀
   have h₂₀ := secure_run_unique s₂ hidden₂ r₂₀
   have hsum : s₁ + Int.ofNat hidden₁ = s₂ + Int.ofNat hidden₂ := by
     rw [h₁₀.2.2.1, h₂₀.2.2.1] at hreleases
     simpa [releaseValue] using hreleases
-  intro r₁ r₂
+  intro r₁ r₂ _ _ _
   have h₁ := secure_run_unique s₁ hidden₁ r₁
   have h₂ := secure_run_unique s₂ hidden₂ r₂
   simp only [Run.publicObservations, h₁.1, h₂.1, h₁.2.2.2.2, h₂.2.2.2.2, hsum, Config.final?]
@@ -431,16 +429,14 @@ theorem secure_ct (s₁ s₂ : Int) (hidden₁ hidden₂ : Nat)
     (hrel : ∃ (r₁ : Run instrumentation program (start s₁ hidden₁))
               (r₂ : Run instrumentation program (start s₂ hidden₂)),
               r₁.choices = r₂.choices ∧ r₁.releases = r₂.releases) :
-    ∀ (r₁ : Run instrumentation program (start s₁ hidden₁))
-      (r₂ : Run instrumentation program (start s₂ hidden₂)),
-      r₁.leakage = r₂.leakage := by
+    ConstantTime instrumentation program labelling (start s₁ hidden₁) (start s₂ hidden₂) := by
   obtain ⟨r₁₀, r₂₀, _, hreleases⟩ := hrel
   have h₁₀ := secure_run_unique s₁ hidden₁ r₁₀
   have h₂₀ := secure_run_unique s₂ hidden₂ r₂₀
   have hsum : s₁ + Int.ofNat hidden₁ = s₂ + Int.ofNat hidden₂ := by
     rw [h₁₀.2.2.1, h₂₀.2.2.1] at hreleases
     simpa [releaseValue] using hreleases
-  intro r₁ r₂
+  intro r₁ r₂ _ _ _
   have h₁ := secure_run_unique s₁ hidden₁ r₁
   have h₂ := secure_run_unique s₂ hidden₂ r₂
   rw [h₁.2.1, h₂.2.1, hsum]
@@ -471,7 +467,7 @@ def leakyRun (secret : Int) : Run instrumentation program (leakyStart secret) wh
         (a := (⟨some secret, .ok 0, secret⟩ : Answer Int Int Int)) rfl (by simp [allowed]) rfl) <|
     InstrumentedSteps.refl (I := instrumentation) (P := program) (finished secret)
 
-/-- Helper (inversion). Unrolls the four-step C1 derivation from `Demo.leakyStart` to show every complete run releases only `releaseZero` (approved: REVIEW5-codex.md). -/
+/-- Helper (inversion). Unrolls the four-step C1 derivation from `Demo.leakyStart` to show every complete run releases only `releaseZero` (approved: APPR-C7-agy-5d94c4b4d). -/
 theorem leaky_run_releases (secret : Int)
     (r : Run instrumentation program (leakyStart secret)) :
     r.releases = [releaseZero] := by
@@ -528,7 +524,7 @@ def ctRun (secret : Int) : Run instrumentation program (ctStart secret) where
         (a := (⟨some 7, .ok 0, secret⟩ : Answer Int Int Int)) rfl (by simp [allowed]) rfl) <|
     InstrumentedSteps.refl (I := instrumentation) (P := program) (finished secret)
 
-/-- Helper (inversion). Unrolls the four-step C1 derivation from `Demo.ctStart` to compute its constant-time observation, leakage, release, choice, and final-state traces (approved: REVIEW5-codex.md). -/
+/-- Helper (inversion). Unrolls the four-step C1 derivation from `Demo.ctStart` to compute its constant-time observation, leakage, release, choice, and final-state traces (approved: APPR-C7-agy-5d94c4b4d). -/
 theorem ct_run_unique (secret : Int)
     (r : Run instrumentation program (ctStart secret)) :
     r.observations = [.output 7] ∧
@@ -561,13 +557,13 @@ theorem ct_run_unique (secret : Int)
           | step hs _ => exact (no_step_of_none (P := program)
             (c := (⟨.done, [], secret, []⟩ : Config ops)) rfl _ _ hs).elim
 
-/-- Representation lemma. Concrete projection check showing `secureRun 1` maps via `InstrumentedSteps.toSteps` to an underlying C1 `Steps` derivation (approved: REVIEW5-codex.md).
+/-- Representation lemma. Concrete projection check showing secureRun 1 maps via `InstrumentedSteps.toSteps` to an underlying C1 `Steps` derivation (approved: APPR-C7-agy-5d94c4b4d).
 
 The concrete instrumented run projects to C1, not to a second semantics. -/
 example : ∃ events, Steps program (start 1) events (finished 1 (hiddenLocals 0)) :=
   (secureRun 1).steps.toSteps
 
-/-- Helper (inversion). Unrolls the seven-step C1 derivation from `Demo.timingStart` to compute its exact observation, leakage, release, choice, and final-state traces (approved: REVIEW5-codex.md).
+/-- Helper (inversion). Unrolls the seven-step C1 derivation from `Demo.timingStart` to compute its exact observation, leakage, release, choice, and final-state traces (approved: APPR-C7-agy-5d94c4b4d).
 
 Every complete timing run has public output seven but leaks its secret work operand. -/
 theorem timing_run_unique (secret : Int)
@@ -661,21 +657,21 @@ def timingRun (secret : Int) : Run instrumentation program (timingStart secret) 
 /-- Law (subject `timingStart`).
 
 Every pair of timing runs from low-equivalent entries with matched choices and releases emits the
-same public observations (`[.output 7, .final .normal]`). -/
+same public observations ([.output 7, .final .normal]). -/
 theorem timing_ni (s₁ s₂ : Int)
     (_hlow : LowEquivalent labelling (timingStart s₁) (timingStart s₂))
     (_hrel : ∃ (r₁ : Run instrumentation program (timingStart s₁))
                (r₂ : Run instrumentation program (timingStart s₂)),
                r₁.choices = r₂.choices ∧ r₁.releases = r₂.releases) :
-    ∀ (r₁ : Run instrumentation program (timingStart s₁))
-      (r₂ : Run instrumentation program (timingStart s₂)),
-      r₁.publicObservations = r₂.publicObservations := by
-  intro r₁ r₂
+    DelimitedReleaseNI instrumentation program labelling (timingStart s₁) (timingStart s₂) := by
+  intro r₁ r₂ _ _ _
   have h₁ := timing_run_unique s₁ r₁
   have h₂ := timing_run_unique s₂ r₂
   simp only [Run.publicObservations, h₁.1, h₂.1, h₁.2.2.2.2, h₂.2.2.2.2, Config.final?]
 
-/-- Law (subject `timingStart`).
+/-- Helper (inversion). Inverts the concrete complete runs to refute the corresponding
+noninterference claim. The proof applies the distinct-secret premise, so it is excluded
+from Law evidence by the projection convention (approved: PENDING).
 
 The timing program is not constant-time for any two distinct secrets: secret-dependent work
 produces different nonempty leakage traces. -/
@@ -694,17 +690,17 @@ def permissiveAllowed (p : Prim) (vs : List Int) (st : Int) (a : Answer Int Int 
   | .output, [_] => true
   | _, _ => allowed p vs st a
 
-/-- Representation lemma. Concrete order-sensitivity check showing `secureRun 1`'s leakage list is not equal to its reversal (approved: REVIEW5-codex.md).
+/-- Representation lemma. Concrete order-sensitivity check showing secureRun 1's leakage list is not equal to its reversal (approved: APPR-C7-agy-5d94c4b4d).
 
 Planted trace mutations: reversed leakage and a missing final observation are detectable. -/
 example : (secureRun 1).leakage ≠ [.variableTime ⟨1⟩ [1], .variableTime ⟨0⟩ [1]] := by
   intro h
   simp [secureRun] at h
 
-/-- Representation lemma. Concrete finality check showing `Run.publicObservations` includes `.final .normal` beyond the step output (approved: REVIEW5-codex.md). -/
+/-- Representation lemma. Concrete finality check showing `Run.publicObservations` includes .final .normal beyond the step output (approved: APPR-C7-agy-5d94c4b4d). -/
 example : (secureRun 1).publicObservations ≠ [.output 1] := by decide
 
-/-- Representation lemma. Concrete non-finality check showing the intermediate `afterRelease` state has `final? = none` (approved: REVIEW5-codex.md).
+/-- Representation lemma. Concrete non-finality check showing the intermediate `afterRelease` state has final? = none (approved: APPR-C7-agy-5d94c4b4d).
 
 A nonfinal execution prefix is not a complete run. -/
 example : ¬ ∃ ending, (afterRelease .secret 1).final? = some ending := by
@@ -714,13 +710,13 @@ example : ¬ ∃ ending, (afterRelease .secret 1).final? = some ending := by
 def mixedConfig (secret publicValue : Int) : Config ops :=
   ⟨.done, [(⟨"secret", 0⟩, secret), (⟨"public", 1⟩, publicValue)], 0, []⟩
 
-/-- Representation lemma. Concrete `LowEquivalent` acceptance check when only negative (secret) local bindings differ (approved: REVIEW5-codex.md).
+/-- Representation lemma. Concrete `LowEquivalent` acceptance check when only negative (secret) local bindings differ (approved: APPR-C7-agy-5d94c4b4d).
 
 Secret local changes are invisible; a planted public local change rejects low-equivalence. -/
 example : LowEquivalent labelling (mixedConfig (-1) 7) (mixedConfig (-2) 7) := by
   simp [LowEquivalent, publicLocals, labelling, mixedConfig]
 
-/-- Representation lemma. Concrete `LowEquivalent` refusal check when non-negative (public) local bindings differ (approved: REVIEW5-codex.md). -/
+/-- Representation lemma. Concrete `LowEquivalent` refusal check when non-negative (public) local bindings differ (approved: APPR-C7-agy-5d94c4b4d). -/
 example : ¬ LowEquivalent labelling (mixedConfig (-1) 7) (mixedConfig (-2) 8) := by
   simp [LowEquivalent, publicLocals, labelling, mixedConfig]
 
@@ -730,32 +726,34 @@ abbrev storeSensitiveLabelling : Labelling ops where
   project := fun _ => none
   lowStore := fun s₁ s₂ => s₁ = s₂
 
-/-- Representation lemma. Concrete `LowEquivalent` refusal check under `storeSensitiveLabelling` when store states differ (approved: REVIEW5-codex.md). -/
+/-- Representation lemma. Concrete `LowEquivalent` refusal check under `storeSensitiveLabelling` when store states differ (approved: APPR-C7-agy-5d94c4b4d). -/
 example : ¬ LowEquivalent storeSensitiveLabelling (leakyStart 1) (leakyStart 2) := by
   simp [LowEquivalent, storeSensitiveLabelling, leakyStart]
 
-/-- Helper (computation). Evaluates `publicLocals` on `Demo.leakyStart` to show secret store states are `LowEquivalent` under `Demo.labelling` (approved: REVIEW5-codex.md). -/
+/-- Helper (computation). Evaluates `publicLocals` on `Demo.leakyStart` to show secret store states are `LowEquivalent` under `Demo.labelling` (approved: APPR-C7-agy-5d94c4b4d). -/
 theorem leaky_low (s₁ s₂ : Int) : LowEquivalent labelling (leakyStart s₁) (leakyStart s₂) := by
   simp [LowEquivalent, publicLocals, labelling, leakyStart]
 
-/-- Helper (computation). Checks that every run from `Demo.leakyStart` emits only releases permitted by `Demo.policy` (approved: REVIEW5-codex.md). -/
+/-- Helper (computation). Checks that every run from `Demo.leakyStart` emits only releases permitted by `Demo.policy` (approved: APPR-C7-agy-5d94c4b4d). -/
 theorem release_authorized (secret : Int) :
     policy.RunsAuthorized instrumentation program (leakyStart secret) := by
   intro r
   rw [leaky_run_releases secret r]
   simp [ReleasePolicy.Authorized, ReleasePolicy.Permits, releaseZero, releaseValue]
 
-/-- Helper (computation). Checks that every run from `Demo.ctStart` emits only releases permitted by `Demo.policy` (approved: REVIEW5-codex.md). -/
+/-- Helper (computation). Checks that every run from `Demo.ctStart` emits only releases permitted by `Demo.policy` (approved: APPR-C7-agy-5d94c4b4d). -/
 theorem ct_release_authorized (secret : Int) :
     policy.RunsAuthorized instrumentation program (ctStart secret) := by
   intro r
   rw [(ct_run_unique secret r).2.2.1]
   simp [ReleasePolicy.Authorized, ReleasePolicy.Permits, releaseZero, releaseValue]
 
-/-- Law (subject `leakyStart`).
+/-- Helper (inversion). Inverts the concrete complete runs to refute the corresponding
+noninterference claim. The proof applies the distinct-secret premise, so it is excluded
+from Law evidence by the projection convention (approved: PENDING).
 
-**Authorization does not imply NI.** All runs from `leakyStart s₁` and `leakyStart s₂` emit only
-policy-authorized releases, yet `DelimitedReleaseNI` fails for any distinct secrets `s₁ ≠ s₂`
+**Authorization does not imply NI.** All runs from leakyStart s₁ and leakyStart s₂ emit only
+policy-authorized releases, yet `DelimitedReleaseNI` fails for any distinct secrets s₁ ≠ s₂
 because their public outputs differ. -/
 theorem authorized_release_not_ni (s₁ s₂ : Int)
     (_hauth₁ : policy.RunsAuthorized instrumentation program (leakyStart s₁))
@@ -768,10 +766,12 @@ theorem authorized_release_not_ni (s₁ s₂ : Int)
   simp [Run.publicObservations, leakyRun, finished, Config.final?] at hobs
   exact hs hobs
 
-/-- Law (subject `leakyStart`).
+/-- Helper (inversion). Inverts the concrete complete runs to refute the corresponding
+noninterference claim. The proof applies the distinct-secret premise, so it is excluded
+from Law evidence by the projection convention (approved: PENDING).
 
-**Authorization does not imply CT.** All runs from `leakyStart s₁` and `leakyStart s₂` emit only
-policy-authorized releases, yet `ConstantTime` fails for any distinct secrets `s₁ ≠ s₂` because
+**Authorization does not imply CT.** All runs from leakyStart s₁ and leakyStart s₂ emit only
+policy-authorized releases, yet `ConstantTime` fails for any distinct secrets s₁ ≠ s₂ because
 their variable-time leakage traces differ. -/
 theorem authorized_release_not_ct (s₁ s₂ : Int)
     (_hauth₁ : policy.RunsAuthorized instrumentation program (leakyStart s₁))
@@ -802,24 +802,24 @@ theorem Memory.set_same (m : Memory) (lineage : LineageId) :
   by_cases h : l = lineage <;> simp [Memory.set, h]
 
 /-- Helper (arithmetic). Initializes the local peak at live bytes and retains the historical
-peak bound; used to initialize `function_entry_peak` (approved: PENDING). -/
+peak bound; used to initialize `function_entry_peak` (approved: APPR-C7-agy-5d94c4b4d). -/
 theorem Account.enter_wf (a : Account) (h : a.WF) : a.enter.WF := by
   cases a
   simp_all [Account.enter, Account.WF]
 
-/-- Helper (arithmetic). Upper-bounds `live + bytes` by both `max` expressions in `Account.alloc` for single-step WF preservation (approved: REVIEW5-codex.md). -/
+/-- Helper (arithmetic). Upper-bounds live + bytes by both `max` expressions in `Account.alloc` for single-step WF preservation (approved: APPR-C7-agy-5d94c4b4d). -/
 theorem Account.alloc_wf (a : Account) (bytes : Nat) : (a.alloc bytes).WF := by
   exact ⟨Nat.le_max_right _ _, Nat.le_max_right _ _⟩
 
-/-- Helper (arithmetic). Uses `Nat.sub_le` transitivity to preserve peak bounds across `Account.free` for single-step WF preservation (approved: REVIEW5-codex.md). -/
+/-- Helper (arithmetic). Uses `Nat.sub_le` transitivity to preserve peak bounds across `Account.free` for single-step WF preservation (approved: APPR-C7-agy-5d94c4b4d). -/
 theorem Account.free_wf (a : Account) (bytes : Nat) (h : a.WF) : (a.free bytes).WF := by
   exact ⟨Nat.le_trans (Nat.sub_le _ _) h.1, Nat.le_trans (Nat.sub_le _ _) h.2⟩
 
-/-- Helper (arithmetic). Shows zero live bytes after `Account.reset` satisfy the non-negative peak bounds for single-step WF preservation (approved: REVIEW5-codex.md). -/
+/-- Helper (arithmetic). Shows zero live bytes after `Account.reset` satisfy the non-negative peak bounds for single-step WF preservation (approved: APPR-C7-agy-5d94c4b4d). -/
 theorem Account.reset_wf (a : Account) : a.reset.WF := by
   simp [Account.WF, Account.reset]
 
-/-- Helper (inversion). Lifts `Account.alloc_wf`, `Account.free_wf`, and `Account.reset_wf` across one successful `apply` transition for `run_wf` and `run_peak_exact` (approved: REVIEW5-codex.md).
+/-- Helper (inversion). Lifts `Account.alloc_wf`, `Account.free_wf`, and `Account.reset_wf` across one successful `apply` transition for `run_wf` and `run_peak_exact` (approved: APPR-C7-agy-5d94c4b4d).
 
 Every successful accounting action preserves well-formedness at every lineage. -/
 theorem apply_wf {m : Memory} {action : Action} {m' : Memory}
@@ -877,7 +877,7 @@ theorem apply_alloc_zero {m : Memory} (hwf : ∀ l, (m l).WF) (lineage : Lineage
   simp only [apply, Account.alloc_zero (m lineage) (hwf lineage), Memory.set_same]
 
 /-- Helper (computation). Exposes the fields of a successful free and its frame for the
-independent byte-balance theorem `free_conservation` (approved: PENDING). -/
+independent byte-balance theorem `free_conservation` (approved: APPR-C7-agy-5d94c4b4d). -/
 theorem free_update (m : Memory) (lineage : LineageId) (bytes : Nat)
     (hle : bytes ≤ (m lineage).live) :
     ∃ m', apply m (.free lineage bytes) = some m' ∧
@@ -922,7 +922,7 @@ theorem reset_conservation (m : Memory) (lineage : LineageId) :
   · intro l hl
     simp [Memory.set, hl]
 
-/-- Helper (computation). Unfolds one cons step of `resetBytes` on a successful `apply` transition for `run_conservation` (approved: REVIEW5-codex.md). -/
+/-- Helper (computation). Unfolds one cons step of `resetBytes` on a successful `apply` transition for `run_conservation` (approved: APPR-C7-agy-5d94c4b4d). -/
 @[simp] theorem resetBytes_cons {m m' : Memory} {action : Action} {rest : List Action}
     (lineage : LineageId) (h : apply m action = some m') :
     resetBytes lineage m (action :: rest) =
@@ -984,7 +984,7 @@ theorem run_conservation (m : Memory) (actions : List Action) (lineage : Lineage
         · simp [Memory.set, hl, Ne.symm hl, allocated, freed, resetOutflow] at hc ⊢
           omega
 
-/-- Helper (arithmetic). Shows one successful `apply` transition never decreases `peak` or `functionPeak` for `run_peak_monotone` (approved: REVIEW5-codex.md).
+/-- Helper (arithmetic). Shows one successful `apply` transition never decreases peak or functionPeak for `run_peak_monotone` (approved: APPR-C7-agy-5d94c4b4d).
 
 No successful action lowers either the historical or function-local peak of any lineage. -/
 theorem apply_peak_monotone {m m' : Memory} {action : Action}
@@ -1035,7 +1035,7 @@ theorem run_peak_monotone (m : Memory) (actions : List Action) (lineage : Lineag
       have hr' := ih m₁ hr
       exact ⟨Nat.le_trans ha'.1 hr'.1, Nat.le_trans ha'.2 hr'.2⟩
 
-/-- Helper (computation). Expresses the post-step `functionPeak` as `max` of the pre-step `functionPeak` and post-step `live` bytes for `run_peak_exact` (approved: REVIEW5-codex.md).
+/-- Helper (computation). Expresses the post-step functionPeak as `max` of the pre-step functionPeak and post-step live bytes for `run_peak_exact` (approved: APPR-C7-agy-5d94c4b4d).
 
 Each successful transition records the maximum of its old peak and new live bytes. -/
 theorem apply_peak_exact {m m' : Memory} {action : Action}
@@ -1066,7 +1066,7 @@ theorem apply_peak_exact {m m' : Memory} {action : Action}
 
 /-- Law (subject `run`).
 
-The recorded local peak equals the maximum of the entry `functionPeak` and the independently
+The recorded local peak equals the maximum of the entry functionPeak and the independently
 observed maximum `observedPeak` over the live-byte trajectory. -/
 theorem run_peak_exact (m : Memory) (actions : List Action) (lineage : LineageId)
     (hwf : ∀ l, (m l).WF) (hrun : (run m actions).isSome = true) :
@@ -1125,9 +1125,9 @@ theorem function_entry_peak (m : Memory) (actions : List Action) (lineage : Line
 /-- Law (subject `run`).
 
 Independent analysis bounds certify any `LineageReport` (whether all bounds are established, some
-fields are `.notEstablished`, or the allocator defines no footprint) for an actual function run.
+fields are .notEstablished, or the allocator defines no footprint) for an actual function run.
 Peak evidence is derived from the independent live-state trajectory `observedPeak` and function
-entry initialization `(m lineage).functionPeak = (m lineage).live`, never from the exit peak. -/
+entry initialization (m lineage).functionPeak = (m lineage).live, never from the exit peak. -/
 theorem report_certified (m : Memory) (actions : List Action) (allocator : AllocatorContract)
     (lineage : LineageId) (r : LineageReport)
     (hlineage : r.lineage = lineage)
@@ -1180,11 +1180,10 @@ def twoLineageActions : List Action :=
   [.alloc ⟨0⟩ 8, .alloc ⟨1⟩ 4, .free ⟨0⟩ 3, .reset ⟨0⟩,
     .alloc ⟨0⟩ 6, .reset ⟨1⟩, .reset ⟨0⟩]
 
-/-- Peaks lowered below live bytes, and a reset that incorrectly clears both peaks. -/
+/-- Peaks lowered below live bytes. -/
 def badPeakAccount : Account := { accountA.alloc 10 with peak := 14, functionPeak := 14 }
-def badResetPeaks : Account := { accountA.reset with peak := 0, functionPeak := 0 }
 
-/-- Helper (computation). Evaluates `Account.WF` across all lineages of the concrete `memoryA` fixture for `Audit` instances and mutants (approved: REVIEW5-codex.md). -/
+/-- Helper (computation). Evaluates `Account.WF` across all lineages of the concrete `memoryA` fixture for Audit instances and mutants (approved: APPR-C7-agy-5d94c4b4d). -/
 theorem memoryA_wf : ∀ l, (memoryA l).WF := by
   intro l
   by_cases h₀ : l = ⟨0⟩
@@ -1195,54 +1194,54 @@ theorem memoryA_wf : ∀ l, (memoryA l).WF := by
       simp [memoryA, Memory.set, Account.WF, accountB]
     · simp [memoryA, Memory.set, h₀, h₁, Account.WF, Memory.empty, Account.empty]
 
-/-- Representation lemma. Concrete initialization check showing `Account.empty` is well-formed and `Memory.empty` maps lineage 0 to `Account.empty` (approved: REVIEW5-codex.md). -/
+/-- Representation lemma. Concrete initialization check showing `Account.empty` is well-formed and `Memory.empty` maps lineage 0 to `Account.empty` (approved: APPR-C7-agy-5d94c4b4d). -/
 example : Account.empty.WF ∧ Memory.empty ⟨0⟩ = Account.empty := by
   simp [Account.WF, Memory.empty, Account.empty]
 
-/-- Representation lemma. Concrete refusal check showing an account whose `live` exceeds `peak` and `functionPeak` fails `Account.WF` (approved: REVIEW5-codex.md). -/
+/-- Representation lemma. Concrete refusal check showing an account whose live exceeds peak and functionPeak fails `Account.WF` (approved: APPR-C7-agy-5d94c4b4d). -/
 example : ¬ (⟨0, 5, 0, 0⟩ : Account).WF := by simp [Account.WF]
 
-/-- Representation lemma. Concrete frame check showing `Memory.set` on lineage 0 leaves lineage 1 unchanged at `accountB` (approved: REVIEW5-codex.md). -/
+/-- Representation lemma. Concrete frame check showing `Memory.set` on lineage 0 leaves lineage 1 unchanged at `accountB` (approved: APPR-C7-agy-5d94c4b4d). -/
 example : Memory.set memoryA ⟨0⟩ (accountA.alloc 1) ⟨1⟩ = accountB := rfl
 
-/-- Representation lemma. Concrete refusal check showing `badPeakAccount` (where peaks are 14 but live is 15) fails `Account.WF` (approved: REVIEW5-codex.md). -/
+/-- Representation lemma. Concrete refusal check showing `badPeakAccount` (where peaks are 14 but live is 15) fails `Account.WF` (approved: APPR-C7-agy-5d94c4b4d). -/
 example : ¬ badPeakAccount.WF := by
   simp [badPeakAccount, Account.WF, accountA, Account.alloc]
 
-/-- Representation lemma. Concrete refusal check showing `run` returns `none` when an intermediate `.free` exceeds current live bytes (approved: REVIEW5-codex.md). -/
+/-- Representation lemma. Concrete refusal check showing `run` returns `none` when an intermediate .free exceeds current live bytes (approved: APPR-C7-agy-5d94c4b4d). -/
 example : run Memory.empty [.alloc ⟨0⟩ 8, .free ⟨0⟩ 9, .alloc ⟨0⟩ 1] = none := by decide
 
-/-- Representation lemma. Concrete witness showing `live` bytes (unlike `peak` and `functionPeak`) strictly decrease on a non-zero `.free` transition (approved: REVIEW5-codex.md). -/
+/-- Representation lemma. Concrete witness showing live bytes (unlike peak and functionPeak) strictly decrease on a non-zero .free transition (approved: APPR-C7-agy-5d94c4b4d). -/
 example : ∃ m m' : Memory, ∃ l : LineageId,
     apply m (.free l 3) = some m' ∧ ¬ (m l).live ≤ (m' l).live := by
   refine ⟨memoryA, Memory.set memoryA ⟨0⟩ (accountA.free 3), ⟨0⟩, rfl, ?_⟩
   decide
 
-/-- Representation lemma. Concrete per-lineage sum check for `allocated` on interleaved `twoLineageActions` (approved: REVIEW5-codex.md). -/
+/-- Representation lemma. Concrete per-lineage sum check for `allocated` on interleaved `twoLineageActions` (approved: APPR-C7-agy-5d94c4b4d). -/
 example : allocated ⟨0⟩ twoLineageActions = 14 ∧ allocated ⟨1⟩ twoLineageActions = 4 := by decide
 
-/-- Representation lemma. Concrete per-lineage sum check for `freed` on interleaved `twoLineageActions` (approved: REVIEW5-codex.md). -/
+/-- Representation lemma. Concrete per-lineage sum check for `freed` on interleaved `twoLineageActions` (approved: APPR-C7-agy-5d94c4b4d). -/
 example : freed ⟨0⟩ twoLineageActions = 3 ∧ freed ⟨1⟩ twoLineageActions = 0 := by decide
 
-/-- Representation lemma. Concrete per-lineage outflow check for `resetBytes` across multiple resets in `twoLineageActions` (approved: REVIEW5-codex.md). -/
+/-- Representation lemma. Concrete per-lineage outflow check for `resetBytes` across multiple resets in `twoLineageActions` (approved: APPR-C7-agy-5d94c4b4d). -/
 example : resetBytes ⟨0⟩ memoryA twoLineageActions = 16 ∧
     resetBytes ⟨1⟩ memoryA twoLineageActions = 6 := by decide
 
-/-- Representation lemma. Concrete check that `Bound.Sound` holds when an `.boundEstablished` limit is at least the actual value (approved: REVIEW5-codex.md). -/
+/-- Representation lemma. Concrete check that `Bound.Sound` holds when an .boundEstablished limit is at least the actual value (approved: APPR-C7-agy-5d94c4b4d). -/
 example : Bound.Sound 10 ⟨12, .boundEstablished⟩ := by simp [Bound.Sound]
 
-/-- Representation lemma. Concrete check that `Bound.Sound` fails when an `.boundEstablished` limit is strictly less than the actual value (approved: REVIEW5-codex.md). -/
+/-- Representation lemma. Concrete check that `Bound.Sound` fails when an .boundEstablished limit is strictly less than the actual value (approved: APPR-C7-agy-5d94c4b4d). -/
 example : ¬ Bound.Sound 10 ⟨9, .boundEstablished⟩ := by simp [Bound.Sound]
 
-/-- Representation lemma. Concrete check that `Bound.SoundOptional` holds when an optional footprint is `some 10` and the established limit is 12 (approved: REVIEW5-codex.md). -/
+/-- Representation lemma. Concrete check that `Bound.SoundOptional` holds when an optional footprint is some 10 and the established limit is 12 (approved: APPR-C7-agy-5d94c4b4d). -/
 example : Bound.SoundOptional (some 10) ⟨12, .boundEstablished⟩ := by
   simp [Bound.SoundOptional]
 
-/-- Representation lemma. Concrete check that `Bound.SoundOptional` fails when an optional footprint is `some 10` and the established limit is 9 (approved: REVIEW5-codex.md). -/
+/-- Representation lemma. Concrete check that `Bound.SoundOptional` fails when an optional footprint is some 10 and the established limit is 9 (approved: APPR-C7-agy-5d94c4b4d). -/
 example : ¬ Bound.SoundOptional (some 10) ⟨9, .boundEstablished⟩ := by
   simp [Bound.SoundOptional]
 
-/-- Representation lemma. Concrete check that `Bound.SoundOptional` fails when the allocator footprint is `none` but the bound claims `.boundEstablished` (approved: REVIEW5-codex.md). -/
+/-- Representation lemma. Concrete check that `Bound.SoundOptional` fails when the allocator footprint is `none` but the bound claims .boundEstablished (approved: APPR-C7-agy-5d94c4b4d). -/
 example : ¬ Bound.SoundOptional none ⟨12, .boundEstablished⟩ := by
   simp [Bound.SoundOptional]
 
@@ -1251,7 +1250,7 @@ A real allocator may include metadata and slack; no such equality is assumed gen
 def demoAllocator : AllocatorContract := ⟨fun lineage m actions =>
   some (observedPeak lineage m actions)⟩
 
-/-- Allocator contract that defines no footprint (`none`), exercising `.notEstablished` footprint
+/-- Allocator contract that defines no footprint (`none`), exercising .notEstablished footprint
 reports. -/
 def noFootprintAllocator : AllocatorContract := ⟨fun _ _ _ => none⟩
 
@@ -1274,19 +1273,19 @@ def establishedReport : LineageReport :=
   ⟨⟨0⟩, ⟨8, .boundEstablished⟩, ⟨5, .boundEstablished⟩,
     ⟨10, .boundEstablished⟩, ⟨12, .boundEstablished⟩⟩
 
-/-- A mixed-evidence report: net change is `.notEstablished`, while the other three fields are
-`.boundEstablished`. -/
+/-- A mixed-evidence report: net change is .notEstablished, while the other three fields are
+.boundEstablished. -/
 def mixedStatusReport : LineageReport :=
   ⟨⟨0⟩, ⟨8, .boundEstablished⟩, ⟨-100, .notEstablished⟩,
     ⟨10, .boundEstablished⟩, ⟨12, .boundEstablished⟩⟩
 
 /-- Report for an empty function run under `noFootprintAllocator`: zero local request, net, and
-peak bounds are `.boundEstablished`, while footprint is `.notEstablished`. -/
+peak bounds are .boundEstablished, while footprint is .notEstablished. -/
 def emptyFunctionReport : LineageReport :=
   ⟨⟨0⟩, ⟨0, .boundEstablished⟩, ⟨0, .boundEstablished⟩,
     ⟨0, .boundEstablished⟩, ⟨0, .notEstablished⟩⟩
 
-/-- Representation lemma. Concrete refusal check showing `LineageReport.Sound` rejects a report whose `lineage` field (`⟨1⟩`) does not match the queried lineage (`⟨0⟩`) (approved: REVIEW5-codex.md). -/
+/-- Representation lemma. Concrete refusal check showing `LineageReport.Sound` rejects a report whose lineage field (⟨1⟩) does not match the queried lineage (⟨0⟩) (approved: APPR-C7-agy-5d94c4b4d). -/
 example : ¬ LineageReport.Sound ⟨0⟩ reportEntry reportExit (some 10)
     { establishedReport with lineage := ⟨1⟩ } := by
   simp [LineageReport.Sound, establishedReport]
@@ -1324,7 +1323,7 @@ example : accountA.WF ∧ ¬ (allocInventsByte accountA 0 = accountA) := by
   · simp [Account.WF, accountA]
   · decide
 
-/-- A setter with the same signature corrupts `live` even when writing back the existing account. -/
+/-- A setter with the same signature corrupts live even when writing back the existing account. -/
 def corruptSetter (m : Memory) (lineage : LineageId) (a : Account) : Memory :=
   Memory.set m lineage { a with live := a.live + 1 }
 
@@ -1339,7 +1338,7 @@ example : ¬ (corruptSetter memoryA ⟨0⟩ (memoryA ⟨0⟩) = memoryA) := by
   change (6 : Nat) = 5 at hc
   omega
 
-/-- Mutant function-entry operation that clears `functionPeak` to zero instead of `a.live`. -/
+/-- Mutant function-entry operation that clears functionPeak to zero instead of `a.live`. -/
 def enterLowersPeak (a : Account) : Account :=
   { a.enter with functionPeak := 0 }
 
@@ -1399,7 +1398,7 @@ example : 3 ≤ (memoryA ⟨0⟩).live ∧
   change (5 : Nat) + 3 = 5 at hlive
   omega
 
-/-- Mutant transition that clears `peak` and `functionPeak` on a reset instead of retaining them. -/
+/-- Mutant transition that clears peak and functionPeak on a reset instead of retaining them. -/
 def applyBadReset (m : Memory) : Action → Option Memory
   | .reset lineage => some (Memory.set m lineage { (m lineage).reset with peak := 0, functionPeak := 0 })
   | action => apply m action
@@ -1490,14 +1489,14 @@ example : (∀ l, (memoryA l).WF) ∧ (brokenRun memoryA conservationActions).is
   change (0 : Nat) = 13 at hpeak
   omega
 
-/-- Helper (computation). Evaluates `Account.WF` across all lineages of `reportEntryMemory` for `report_certified` instances and mutants (approved: REVIEW5-codex.md). -/
+/-- Helper (computation). Evaluates `Account.WF` across all lineages of `reportEntryMemory` for `report_certified` instances and mutants (approved: APPR-C7-agy-5d94c4b4d). -/
 theorem reportEntry_wf : ∀ l, (reportEntryMemory l).WF := by
   intro l
   by_cases hl : l = ⟨0⟩
   · subst l; simp [reportEntryMemory, Memory.set, reportEntry, Account.WF]
   · simp [reportEntryMemory, Memory.set, hl, Memory.empty, Account.empty, Account.WF]
 
-/-- Helper (computation). Evaluates `Account.WF` across all lineages of `emptyFunctionEntryMemory` for the `emptyFunction` instance and mutant of `report_certified` (approved: REVIEW5-codex.md). -/
+/-- Helper (computation). Evaluates `Account.WF` across all lineages of `emptyFunctionEntryMemory` for the emptyFunction instance and mutant of `report_certified` (approved: APPR-C7-agy-5d94c4b4d). -/
 theorem emptyFunctionEntry_wf : ∀ l, (emptyFunctionEntryMemory l).WF := by
   intro l
   by_cases hl : l = ⟨0⟩
@@ -1564,7 +1563,7 @@ example : mixedStatusReport.lineage = ⟨0⟩ ∧
   have hreq : (899 : Nat) ≤ 8 := hsound.2.1 rfl
   omega
 
-/-- Instance (law `report_certified`, case `emptyFunction`). -/
+/-- Instance (law `report_certified`, case emptyFunction). -/
 example : ∃ m', run emptyFunctionEntryMemory [] = some m' ∧
     LineageReport.Sound ⟨0⟩ (emptyFunctionEntryMemory ⟨0⟩) (m' ⟨0⟩)
       (noFootprintAllocator.footprint ⟨0⟩ emptyFunctionEntryMemory []) emptyFunctionReport :=
@@ -1572,7 +1571,7 @@ example : ∃ m', run emptyFunctionEntryMemory [] = some m' ∧
     rfl emptyFunctionEntry_wf rfl rfl
     (fun _ => by decide) (fun _ => by decide) (fun _ => by decide) nofun
 
-/-- Planted (law `report_certified`, case `emptyFunction`, subject `run`, mutant `brokenRun`). -/
+/-- Planted (law `report_certified`, case emptyFunction, subject `run`, mutant `brokenRun`). -/
 example : emptyFunctionReport.lineage = ⟨0⟩ ∧
     (∀ l, (emptyFunctionEntryMemory l).WF) ∧
     (emptyFunctionEntryMemory ⟨0⟩).functionPeak = (emptyFunctionEntryMemory ⟨0⟩).live ∧
@@ -1593,7 +1592,7 @@ example : emptyFunctionReport.lineage = ⟨0⟩ ∧
   have hreq : (899 : Nat) ≤ 0 := hsound.2.1 rfl
   omega
 
-/-- Representation lemma. Concrete trajectory calculation showing `observedPeak` records 10 across `reportActions` (including 2 bytes live at entry) and 2 on an empty action list (approved: REVIEW5-codex.md). -/
+/-- Representation lemma. Concrete trajectory calculation showing `observedPeak` records 10 across `reportActions` (including 2 bytes live at entry) and 2 on an empty action list (approved: APPR-C7-agy-5d94c4b4d). -/
 example : observedPeak ⟨0⟩ reportEntryMemory reportActions = 10 ∧
     observedPeak ⟨0⟩ reportEntryMemory [] = 2 := by decide
 
@@ -1642,58 +1641,55 @@ example : (∃ (l : Label (opsWith permissiveAllowed)) (c' : Config (opsWith per
   exact (by decide : (7 : Int) ≠ 8) hv
 
 /-- Instance (law `secure_ni`, case `maskedSecrets`). -/
-example : (secureRun 6 1).publicObservations = (secureRun 5 2).publicObservations :=
+example : DelimitedReleaseNI instrumentation program labelling (start 6 1) (start 5 2) :=
   secure_ni 6 5 1 2 ⟨rfl, trivial⟩ ⟨secureRun 6 1, secureRun 5 2, rfl, rfl⟩
-    (secureRun 6 1) (secureRun 5 2)
 
-/-- Planted (law `secure_ni`, case `maskedSecrets`, subject `start`, mutant `exposingStart`). -/
+/-- Planted (law `secure_ni`, case `maskedSecrets`, subject `ConcreteSpec.Core.Leak.Demo.start`, mutant `exposingStart`). -/
 example : LowEquivalent labelling (exposingStart 6 1) (exposingStart 5 2) ∧
     (∃ (r₁ : Run instrumentation program (exposingStart 6 1))
        (r₂ : Run instrumentation program (exposingStart 5 2)),
        r₁.choices = r₂.choices ∧ r₁.releases = r₂.releases) ∧
-    ¬ ((exposingRun 6 1).publicObservations = (exposingRun 5 2).publicObservations) := by
+    ¬ DelimitedReleaseNI instrumentation program labelling (exposingStart 6 1) (exposingStart 5 2) := by
   refine ⟨⟨rfl, trivial⟩, ⟨exposingRun 6 1, exposingRun 5 2, rfl, rfl⟩, ?_⟩
   intro h
-  have hobs := h
+  have hobs := h (exposingRun 6 1) (exposingRun 5 2) ⟨rfl, trivial⟩ rfl rfl
   exact (by decide : (exposingRun 6 1).publicObservations ≠ (exposingRun 5 2).publicObservations) hobs
 
 /-- Instance (law `secure_ct`, case `maskedSecrets`). -/
-example : (secureRun 6 1).leakage = (secureRun 5 2).leakage :=
+example : ConstantTime instrumentation program labelling (start 6 1) (start 5 2) :=
   secure_ct 6 5 1 2 ⟨rfl, trivial⟩ ⟨secureRun 6 1, secureRun 5 2, rfl, rfl⟩
-    (secureRun 6 1) (secureRun 5 2)
 
-/-- Planted (law `secure_ct`, case `maskedSecrets`, subject `start`, mutant `exposingStart`). -/
+/-- Planted (law `secure_ct`, case `maskedSecrets`, subject `ConcreteSpec.Core.Leak.Demo.start`, mutant `exposingStart`). -/
 example : LowEquivalent labelling (exposingStart 6 1) (exposingStart 5 2) ∧
     (∃ (r₁ : Run instrumentation program (exposingStart 6 1))
        (r₂ : Run instrumentation program (exposingStart 5 2)),
        r₁.choices = r₂.choices ∧ r₁.releases = r₂.releases) ∧
-    ¬ ((exposingRun 6 1).leakage = (exposingRun 5 2).leakage) := by
+    ¬ ConstantTime instrumentation program labelling (exposingStart 6 1) (exposingStart 5 2) := by
   refine ⟨⟨rfl, trivial⟩, ⟨exposingRun 6 1, exposingRun 5 2, rfl, rfl⟩, ?_⟩
   intro h
-  have hleak := h
+  have hleak := h (exposingRun 6 1) (exposingRun 5 2) ⟨rfl, trivial⟩ rfl rfl
   simp [exposingRun] at hleak
 
 /-- Instance (law `timing_ni`, case `timingStart`). -/
-example : (timingRun 1).publicObservations = (timingRun 2).publicObservations :=
+example : DelimitedReleaseNI instrumentation program labelling (timingStart 1) (timingStart 2) :=
   timing_ni 1 2 ⟨rfl, trivial⟩ ⟨timingRun 1, timingRun 2, rfl, rfl⟩
-    (timingRun 1) (timingRun 2)
 
 /-- Planted (law `timing_ni`, case `timingStart`, subject `timingStart`, mutant `leakyStart`). -/
 example : LowEquivalent labelling (leakyStart 1) (leakyStart 2) ∧
     (∃ (r₁ : Run instrumentation program (leakyStart 1))
        (r₂ : Run instrumentation program (leakyStart 2)),
        r₁.choices = r₂.choices ∧ r₁.releases = r₂.releases) ∧
-    ¬ ((leakyRun 1).publicObservations = (leakyRun 2).publicObservations) := by
+    ¬ DelimitedReleaseNI instrumentation program labelling (leakyStart 1) (leakyStart 2) := by
   refine ⟨leaky_low 1 2, ⟨leakyRun 1, leakyRun 2, rfl, rfl⟩, ?_⟩
   intro h
-  have hobs := h
+  have hobs := h (leakyRun 1) (leakyRun 2) ⟨rfl, trivial⟩ rfl rfl
   exact (by decide : (leakyRun 1).publicObservations ≠ (leakyRun 2).publicObservations) hobs
 
-/-- Instance (law `timing_not_ct`, case `timingStart`). -/
+/-- Representation lemma. Concrete counterexample or mutant check for `timing_not_ct`; retained separately from Law evidence (approved: PENDING). -/
 example : ¬ ConstantTime instrumentation program labelling (timingStart 1) (timingStart 2) :=
   timing_not_ct 1 2 ⟨rfl, trivial⟩ (by decide)
 
-/-- Planted (law `timing_not_ct`, case `timingStart`, subject `timingStart`, mutant `ctStart`). -/
+/-- Representation lemma. Concrete counterexample or mutant check for `timing_not_ct`; retained separately from Law evidence (approved: PENDING). -/
 example : LowEquivalent labelling (ctStart 1) (ctStart 2) ∧ (1 : Int) ≠ 2 ∧
     ¬ (¬ ConstantTime instrumentation program labelling (ctStart 1) (ctStart 2)) := by
   refine ⟨⟨rfl, trivial⟩, by decide, ?_⟩
@@ -1702,7 +1698,7 @@ example : LowEquivalent labelling (ctStart 1) (ctStart 2) ∧ (1 : Int) ≠ 2 �
   intro r₁ r₂ _ _ _
   rw [(ct_run_unique 1 r₁).2.1, (ct_run_unique 2 r₂).2.1]
 
-/-- Representation lemma. Concrete witness confirming that `ctRun 1` and `ctRun 2` inhabit all `ConstantTime` and `DelimitedReleaseNI` premises (`LowEquivalent`, equal `choices`, equal `releases`) for `ctStart` (approved: REVIEW5-codex.md). -/
+/-- Representation lemma. Concrete witness confirming that ctRun 1 and ctRun 2 inhabit all `ConstantTime` and `DelimitedReleaseNI` premises (`LowEquivalent`, equal choices, equal releases) for `ctStart` (approved: APPR-C7-agy-5d94c4b4d). -/
 example : ctStart 1 ≠ ctStart 2 ∧
     LowEquivalent labelling (ctStart 1) (ctStart 2) ∧
     (ctRun 1).choices = (ctRun 2).choices ∧
@@ -1712,12 +1708,12 @@ example : ctStart 1 ≠ ctStart 2 ∧
   have hs := congrArg Config.store h
   exact (by decide : (1 : Int) ≠ 2) hs
 
-/-- Instance (law `authorized_release_not_ni`, case `leakyStart`). -/
+/-- Representation lemma. Concrete counterexample or mutant check for `authorized_release_not_ni`; retained separately from Law evidence (approved: PENDING). -/
 example : ¬ DelimitedReleaseNI instrumentation program labelling (leakyStart 1) (leakyStart 2) :=
   authorized_release_not_ni 1 2 (release_authorized 1) (release_authorized 2)
     (leaky_low 1 2) (by decide)
 
-/-- Planted (law `authorized_release_not_ni`, case `leakyStart`, subject `leakyStart`, mutant `ctStart`). -/
+/-- Representation lemma. Concrete counterexample or mutant check for `authorized_release_not_ni`; retained separately from Law evidence (approved: PENDING). -/
 example : policy.RunsAuthorized instrumentation program (ctStart 1) ∧
     policy.RunsAuthorized instrumentation program (ctStart 2) ∧
     LowEquivalent labelling (ctStart 1) (ctStart 2) ∧
@@ -1731,12 +1727,12 @@ example : policy.RunsAuthorized instrumentation program (ctStart 1) ∧
   have h₂ := ct_run_unique 2 r₂
   simp only [Run.publicObservations, h₁.1, h₂.1, h₁.2.2.2.2, h₂.2.2.2.2, Config.final?]
 
-/-- Instance (law `authorized_release_not_ct`, case `leakyStart`). -/
+/-- Representation lemma. Concrete counterexample or mutant check for `authorized_release_not_ct`; retained separately from Law evidence (approved: PENDING). -/
 example : ¬ ConstantTime instrumentation program labelling (leakyStart 1) (leakyStart 2) :=
   authorized_release_not_ct 1 2 (release_authorized 1) (release_authorized 2)
     (leaky_low 1 2) (by decide)
 
-/-- Planted (law `authorized_release_not_ct`, case `leakyStart`, subject `leakyStart`, mutant `ctStart`). -/
+/-- Representation lemma. Concrete counterexample or mutant check for `authorized_release_not_ct`; retained separately from Law evidence (approved: PENDING). -/
 example : policy.RunsAuthorized instrumentation program (ctStart 1) ∧
     policy.RunsAuthorized instrumentation program (ctStart 2) ∧
     LowEquivalent labelling (ctStart 1) (ctStart 2) ∧
@@ -1798,6 +1794,13 @@ theorem erasePure_preserves_wipes (s : Program) :
   | cons statement rest ih =>
     cases statement <;> simp [erasePure, wipes, ih]
 
+/-- Helper (congruence). Transports the erasure law along the optimization relation
+so that the public wipe obligation is explicitly discharged (approved: PENDING). -/
+theorem optimized_preserves_wipes : WipePreservation optimized wipes wipes := by
+  intro source target h
+  subst target
+  exact (erasePure_preserves_wipes source).symm
+
 def firstWipe : WipeEvent := ⟨⟨0⟩, ⟨0⟩, 4⟩
 def secondWipe : WipeEvent := ⟨⟨1⟩, ⟨0⟩, 2⟩
 
@@ -1834,7 +1837,7 @@ example : ¬ (wipes (changeWipes source) = wipes source) := by decide
 /-- Planted (law `erasePure_preserves_wipes`, case `source`, subject `erasePure`, mutant `reorderWipes`). -/
 example : ¬ (wipes (reorderWipes source) = wipes source) := by decide
 
-/-- Representation lemma. Concrete check that `observationRelated` alone fails `WipePreservation` because `dropWipes source` preserves `observations` while dropping wipes (approved: REVIEW5-codex.md). -/
+/-- Representation lemma. Concrete check that `observationRelated` alone fails `WipePreservation` because dropWipes source preserves `observations` while dropping wipes (approved: APPR-C7-agy-5d94c4b4d). -/
 example : observationRelated source (dropWipes source) ∧
     ¬ WipePreservation observationRelated wipes wipes := by
   refine ⟨rfl, ?_⟩
