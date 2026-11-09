@@ -180,3 +180,46 @@ not change identity. A delete followed by a later re-add is a new introduction a
 as such. Rebases and cherry-picks retain the original authored provenance; squash copies that discard
 it must retain the reservation owner's branch attribution (before main owns the number), or
 reconcile with main's introduction history. Matching text alone cannot establish identity.
+
+## Round-6 validation and inventory (2026-11-09)
+
+At `56019fb18f137a74c2c4d391877113f881a600df`, with origin/main
+`9cddd589182910be056ea9a0be4cd2963663a82f` and 115 advertised main/wip heads,
+the whole-inventory plan exited 1: **578 planned reservations, one conflict**. All 81
+round-5 roadmap wording conflicts are gone, as are the rebased ISS-0018 ambiguities.
+The authoritative plan exited 0: **488 planned reservations, zero conflicts**.
+Neither plan was published.
+
+The remaining conflict is **ISS-0015 on `wip/sandbox-isolation-r2`**. Its introduction is
+`d11ebc6829a70d3485feb6189f39500b0e462383`; main introduced the record through
+`0d1a1b84a665b36cd413a9f7d560d9b993a9c9a8`, whose message describes squashing that
+branch. The squash changed the authored timestamp and message, so the original authored
+provenance was lost. Matching wording cannot repair that missing provenance. This stale
+branch needs reconciliation against main's existing record; it is not a roadmap subject
+conflict and does not block the authoritative bootstrap. No automatic renumbering or
+wording constraint is applied.
+
+All checks below ran bounded inside `nix develop .#gates` with
+`PYTHONDONTWRITEBYTECODE=1`, against the commit above:
+
+| check | exit status |
+| --- | --- |
+| all reservation controls (including rounds 3–6) | 0 |
+| `issues.sh` | 0 |
+| `review_tool.sh` (temporary repositories and mock reviewers) | 0 |
+| `sandbox_isolation.sh` | 0 |
+| full `run.sh` | 1 |
+
+The full suite's only failed check was `id_reservations.sh`: its controls exited 0,
+then its live check exited 1 because `refs/bug-reservations/200` still contains legacy
+metadata requiring backfill. All other root checks passed. This is the enforced rollout
+block; it is not a passing full suite. No source-gate exemption was added.
+
+Before/after controls reproduced all four agy findings against `c3a3f7aa2` (exit 1)
+and pass in the current controls (exit 0). Round-6 controls also fail against
+`458658b4e` (exit 1), reproducing rejection of legitimate inherited wording changes.
+They cover independent ISS and R additions on stale branches and integrated candidates,
+identical-text reuse, two unreserved introductions, rewording inherited records,
+`cherry-pick -x` provenance, bug-file moves and examples that must not declare identities.
+The example-row control separately fails against `36f759526` and passes after the fix.
+No reviewers were invoked, and no caller notes or reservation refs were modified.
