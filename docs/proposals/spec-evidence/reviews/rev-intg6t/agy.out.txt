@@ -69,20 +69,117 @@ With `InfiniteExecution.projectedTrace_valid` (`ConcreteSpec/Proofs/Adequacy.lea
 | C6 Bridge Theorem (`ConcreteSpec/Proofs/Observe2.lean`) | Role in C8 (`ConcreteSpec/Proofs/Adequacy.lean`) | Audit Verdict (for C6 migration) |
 |---|---|---|
 | [`ConcreteSpec.Core.Observe.PrefixEventually.trans`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-intg6t/tree/ConcreteSpec/Proofs/Observe2.lean#L68) (`ConcreteSpec/Proofs/Observe2.lean:68`) | Transitive dependency of `SameInfiniteObservation.trans` (`ConcreteSpec/Proofs/Observe2.lean:81`) | Relational transitivity helper; classify `Helper` in C6 migration |
-| [`ConcreteSpec.Core.Observe.SameInfiniteObservation.trans`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-81ion)` | APPROVE |
-| `:1907` / `:1908` | `ConcreteSpec.Core.Exec.Demo.erasing_silent_divergence` | `Helper (computation)` | APPROVE |
-| `:1911` / `:1913` | `ConcreteSpec.Core.Exec.Demo.erasing_internal_infinite` | `Helper (computation)` | APPROVE |
-| `:1917` / `:1919` | `ConcreteSpec.Core.Exec.Demo.keeping_infinite_interaction` | `Helper (computation)` | APPROVE |
-| `:2040` / `:2042` | `ConcreteSpec.Core.Exec.Demo.bumpedMove` | `Helper (computation)` | APPROVE |
-| `:2297` / `:2299` | `ConcreteSpec.Core.Exec.Demo.terminalRequest` | `Helper (computation)` | APPROVE |
-| `:2402` / `:2403` | `ConcreteSpec.Core.Exec.Demo.erasedFinite` | `Helper (computation)` | APPROVE |
-| `:2405` / `:2406` | `ConcreteSpec.Core.Exec.Demo.keptInfinite` | `Helper (computation)` | APPROVE |
-| `:2425` / `:2427` | `ConcreteSpec.Core.Exec.Demo.logThenSpin_move` | `Helper (computation)` | APPROVE |
-| `:2464` / `:2466` | `ConcreteSpec.Core.Exec.Demo.logThenSpinFinite` | `Helper (computation)` | APPROVE |
-| `:2522` / `:2524` | `ConcreteSpec.Core.Exec.Demo.visiblePrefix_silentObserveSteps` | `Helper (computation)` | APPROVE |
-| `:2692` / `:2694` | `ConcreteSpec.Core.Exec.Demo.refusingBindRequest` | `Helper (computation)` | APPROVE |
-| `:2789` / `:2792` | `ConcreteSpec.Core.Exec.Demo.terminalPath` | `Helper (computation)` | APPROVE |
-| `:2818` / `:2821` | `ConcreteSpec.Core.Exec.Demo.unanswered_no_move` | `Helper (inversion)` | APPROVE |
+| [`ConcreteSpec.Core.Observe.SameInfiniteObservation.trans`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-intg6t/tree/ConcreteSpec/Proofs/Observe2.lean#L81) (`ConcreteSpec/Proofs/Observe2.lean:81`) | Used at `ConcreteSpec/Proofs/Adequacy.lean:1455`, `1523` | Relational transitivity helper; classify `Helper` in C6 migration |
+| [`ConcreteSpec.Core.Observe.visiblePrefix_succ`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-intg6t/tree/ConcreteSpec/Proofs/Observe2.lean#L86) (`ConcreteSpec/Proofs/Observe2.lean:86`) | Used at `ConcreteSpec/Proofs/Adequacy.lean:1104`, `1116`, `1964`, `2530` | Step-unfolding computation helper; classify `Helper (computation)` in C6 migration |
+| [`ConcreteSpec.Core.Observe.visiblePrefix_prefix`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-intg6t/tree/ConcreteSpec/Proofs/Observe2.lean#L92) (`ConcreteSpec/Proofs/Observe2.lean:92`) | Used at `ConcreteSpec/Proofs/Adequacy.lean:1347` | Prefix-monotonicity helper; classify `Helper (computation)` in C6 migration |
+| [`ConcreteSpec.Core.Observe.ValidTrace.outputs`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-intg6t/tree/ConcreteSpec/Proofs/Observe2.lean#L388) (`ConcreteSpec/Proofs/Observe2.lean:388`) | Used at `ConcreteSpec/Proofs/Adequacy.lean:1371` and by `ValidTrace.answer_projection` (`ConcreteSpec/Proofs/Observe2.lean:397`) | Inductive constructor-closure helper over output lists; classify `Helper (computation)` in C6 migration |
+| [`ConcreteSpec.Core.Observe.ValidTrace.answer_projection`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-intg6t/tree/ConcreteSpec/Proofs/Observe2.lean#L397) (`ConcreteSpec/Proofs/Observe2.lean:397`) | Used at `ConcreteSpec/Proofs/Adequacy.lean:1376` | Constructor-closure helper combining `ValidTrace.outputs`, `ValidTrace.request`, and `ValidTrace.response`; classify `Helper (computation)` in C6 migration |
+| [`ConcreteSpec.Core.Observe.ExecAdapter.project_append`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-intg6t/tree/ConcreteSpec/Proofs/Observe2.lean#L412) (`ConcreteSpec/Proofs/Observe2.lean:412`) | Used at `ConcreteSpec/Proofs/Adequacy.lean:1085`, `1277`, `1366`, `1878` | `List.flatMap_append` distribution helper; classify `Helper (computation)` in C6 migration |
+
+---
+
+### Verdict on All 96 `(approved: PENDING)` Exemptions in `ConcreteSpec/Proofs/Adequacy.lean`
+
+Every one of the 96 `Helper` / `Representation lemma` declarations in `ConcreteSpec/Proofs/Adequacy.lean` is **APPROVED**:
+
+| # | Tag & Theorem Line (`ConcreteSpec/Proofs/Adequacy.lean`) | Declaration (fully qualified) | Class | Verdict |
+|---|---|---|---|---|
+| 1 | `:30-31` / `:34` | `ConcreteSpec.Core.Exec.issue_occurrence` | `Helper (projection)` | **APPROVE** |
+| 2 | `:38-39` / `:41` | `ConcreteSpec.Core.Exec.issue_next_occurrence` | `Helper (arithmetic)` | **APPROVE** |
+| 3 | `:47` / `:50` | `ConcreteSpec.Core.Exec.answer_deterministic` | `Helper (congruence)` | **APPROVE** |
+| 4 | `:53-54` / `:57` | `ConcreteSpec.Core.Exec.answer_toQueryOracle` | `Helper (projection)` | **APPROVE** |
+| 5 | `:60-61` / `:63` | `ConcreteSpec.Core.Exec.QueryHistoryValid.append` | `Helper (arithmetic)` | **APPROVE** |
+| 6 | `:117` / `:118` | `ConcreteSpec.Core.Exec.QueryHistoryValid.nil` | `Helper (computation)` | **APPROVE** |
+| 7 | `:122-123` / `:124` | `ConcreteSpec.Core.Exec.runQ_queryHistoryValid` | `Helper (projection)` | **APPROVE** |
+| 8 | `:128-129` / `:131` | `ConcreteSpec.Core.Exec.occurrenceAt_take_interval` | `Helper (arithmetic)` | **APPROVE** |
+| 9 | `:155-156` / `:157` | `ConcreteSpec.Core.Exec.occurrenceAt_take_no_other` | `Helper (arithmetic)` | **APPROVE** |
+| 10 | `:183-185` / `:186` | `ConcreteSpec.Core.Exec.runFromQ_interleaved_other_sites` | `Helper (arithmetic)` | **APPROVE** |
+| 11 | `:199-200` / `:203` | `ConcreteSpec.Core.Exec.runFromQ_consecutive_same_site` | `Helper (arithmetic)` | **APPROVE** |
+| 12 | `:217-218` / `:221` | `ConcreteSpec.Core.Exec.runFromQ_consecutive_other_site` | `Helper (arithmetic)` | **APPROVE** |
+| 13 | `:275-276` / `:280` | `ConcreteSpec.Core.Exec.Move.toQueryOracle_answer` | `Helper (projection)` | **APPROVE** |
+| 14 | `:305-308` / `:309` | `ConcreteSpec.Core.Exec.runFromQ_request` | `Helper (computation)` | **APPROVE** |
+| 15 | `:325-326` / `:327` | `ConcreteSpec.Core.Exec.runFromQ_queries_from` | `Helper (computation)` | **APPROVE** |
+| 16 | `:359-360` / `:361` | `ConcreteSpec.Core.Exec.runFromQ_queries_prefix` | `Helper (computation)` | **APPROVE** |
+| 17 | `:399-400` / `:401` | `ConcreteSpec.Core.Exec.runFromQ_queries_prefix_le` | `Helper (computation)` | **APPROVE** |
+| 18 | `:415-417` / `:418` | `ConcreteSpec.Core.Exec.runFromQ_query_fuel_independent` | `Helper (computation)` | **APPROVE** |
+| 19 | `:435-436` / `:438` | `ConcreteSpec.Core.Exec.Move.toStep` | `Helper (projection)` | **APPROVE** |
+| 20 | `:447-448` / `:450` | `ConcreteSpec.Core.Exec.Moves.toSteps` | `Helper (projection)` | **APPROVE** |
+| 21 | `:462-463` / `:464` | `ConcreteSpec.Core.Exec.final?_none_of_step` | `Helper (computation)` | **APPROVE** |
+| 22 | `:608-609` / `:612` | `ConcreteSpec.Core.Exec.runFrom_sound` | `Helper (projection)` | **APPROVE** |
+| 23 | `:629-630` / `:631` | `ConcreteSpec.Core.Exec.runFrom_events_from` | `Helper (computation)` | **APPROVE** |
+| 24 | `:656-657` / `:660` | `ConcreteSpec.Core.Exec.runFrom_complete` | `Helper (projection)` | **APPROVE** |
+| 25 | `:715-717` / `:718` | `ConcreteSpec.Core.Exec.runFrom_complete_le` | `Helper (computation)` | **APPROVE** |
+| 26 | `:771-772` / `:773` | `ConcreteSpec.Core.Exec.runFrom_trace_prefix` | `Helper (computation)` | **APPROVE** |
+| 27 | `:777-779` / `:780` | `ConcreteSpec.Core.Exec.runFrom_final_sound` | `Helper (computation)` | **APPROVE** |
+| 28 | `:794-796` / `:797` | `ConcreteSpec.Core.Exec.runFromQ_add_of_outOfFuel` | `Helper (computation)` | **APPROVE** |
+| 29 | `:843-844` / `:845` | `ConcreteSpec.Core.Exec.eq_of_runFromQ_zero_out` | `Helper (computation)` | **APPROVE** |
+| 30 | `:858-859` / `:860` | `ConcreteSpec.Core.Exec.Move.runFromQ_one` | `Helper (computation)` | **APPROVE** |
+| 31 | `:868` / `:869` | `ConcreteSpec.Core.Exec.Move.not_final` | `Helper (computation)` | **APPROVE** |
+| 32 | `:930-931` / `:933` | `ConcreteSpec.Core.Exec.InfiniteExecution.not_final` | `Helper (projection)` | **APPROVE** |
+| 33 | `:984-985` / `:987` | `ConcreteSpec.Core.Exec.infinite_iff_fuelLimit` | `Representation lemma` | **APPROVE** |
+| 34 | `:990-991` / `:993` | `ConcreteSpec.Core.Exec.InfiniteExecution.toFuelLimit_toInfiniteExecution` | `Representation lemma` | **APPROVE** |
+| 35 | `:996-997` / `:999` | `ConcreteSpec.Core.Exec.FuelLimit.toInfiniteExecution_toFuelLimit` | `Representation lemma` | **APPROVE** |
+| 36 | `:1002-1003` / `:1004` | `ConcreteSpec.Core.Exec.fuelLimit_states_unique` | `Helper (computation)` | **APPROVE** |
+| 37 | `:1022-1024` / `:1025` | `ConcreteSpec.Core.Exec.FuelLimit.unique` | `Helper (computation)` | **APPROVE** |
+| 38 | `:1034-1035` / `:1036` | `ConcreteSpec.Core.Exec.InfiniteExecution.unique_execution` | `Helper (congruence)` | **APPROVE** |
+| 39 | `:1055-1056` / `:1058` | `ConcreteSpec.Core.Exec.Move.events_prefix` | `Helper (projection)` | **APPROVE** |
+| 40 | `:1064-1065` / `:1067` | `ConcreteSpec.Core.Exec.InfiniteExecution.events_prefix` | `Helper (arithmetic)` | **APPROVE** |
+| 41 | `:1078-1079` / `:1081` | `ConcreteSpec.Core.Exec.InfiniteExecution.projected_prefix` | `Helper (arithmetic)` | **APPROVE** |
+| 42 | `:1087-1088` / `:1090` | `ConcreteSpec.Core.Exec.getElem?_eq_of_prefix` | `Helper (arithmetic)` | **APPROVE** |
+| 43 | `:1095-1097` / `:1098` | `ConcreteSpec.Core.Exec.visiblePrefix_finiteDivergenceSteps` | `Helper (computation)` | **APPROVE** |
+| 44 | `:1109-1110` / `:1111` | `ConcreteSpec.Core.Exec.visiblePrefix_emitTrace` | `Helper (computation)` | **APPROVE** |
+| 45 | `:1118-1119` / `:1121` | `ConcreteSpec.Core.Exec.eventually_constant_of_bounded` | `Helper (arithmetic)` | **APPROVE** |
+| 46 | `:1143-1146` / `:1147` | `ConcreteSpec.Core.Exec.MatchesProjectedHistory.sameObservation` | `Helper (computation)` | **APPROVE** |
+| 47 | `:1162-1163` / `:1164` | `ConcreteSpec.Core.Exec.blockPrefix_prefix` | `Helper (computation)` | **APPROVE** |
+| 48 | `:1173-1174` / `:1175` | `ConcreteSpec.Core.Exec.InfiniteExecution.boundary_growth` | `Helper (arithmetic)` | **APPROVE** |
+| 49 | `:1184-1185` / `:1186` | `ConcreteSpec.Core.Exec.InfiniteExecution.boundary_ge` | `Helper (arithmetic)` | **APPROVE** |
+| 50 | `:1193-1194` / `:1195` | `ConcreteSpec.Core.Exec.InfiniteExecution.boundary_strict` | `Helper (arithmetic)` | **APPROVE** |
+| 51 | `:1206-1207` / `:1208` | `ConcreteSpec.Core.Exec.InfiniteExecution.boundary_injective` | `Helper (arithmetic)` | **APPROVE** |
+| 52 | `:1217-1218` / `:1219` | `ConcreteSpec.Core.Exec.InfiniteExecution.flatten_get` | `Helper (computation)` | **APPROVE** |
+| 53 | `:1231-1232` / `:1233` | `ConcreteSpec.Core.Exec.InfiniteExecution.flatten_boundary` | `Helper (computation)` | **APPROVE** |
+| 54 | `:1244-1245` / `:1246` | `ConcreteSpec.Core.Exec.InfiniteExecution.visible_block` | `Helper (computation)` | **APPROVE** |
+| 55 | `:1252-1253` / `:1254` | `ConcreteSpec.Core.Exec.InfiniteExecution.transition_append` | `Helper (arithmetic)` | **APPROVE** |
+| 56 | `:1261-1262` / `:1263` | `ConcreteSpec.Core.Exec.Move.silent_events` | `Helper (inversion)` | **APPROVE** |
+| 57 | `:1270-1271` / `:1272` | `ConcreteSpec.Core.Exec.InfiniteExecution.transitionEvents_eq` | `Helper (computation)` | **APPROVE** |
+| 58 | `:1279-1280` / `:1281` | `ConcreteSpec.Core.Exec.InfiniteExecution.observeBlock_erased` | `Helper (computation)` | **APPROVE** |
+| 59 | `:1286-1287` / `:1288` | `ConcreteSpec.Core.Exec.InfiniteExecution.observeBlock_silent` | `Helper (inversion)` | **APPROVE** |
+| 60 | `:1296-1297` / `:1298` | `ConcreteSpec.Core.Exec.InfiniteExecution.visible_blocks` | `Helper (computation)` | **APPROVE** |
+| 61 | `:1310-1311` / `:1312` | `ConcreteSpec.Core.Exec.InfiniteExecution.visiblePrefix_toObserveSteps` | `Helper (computation)` | **APPROVE** |
+| 62 | `:1319-1320` / `:1321` | `ConcreteSpec.Core.Exec.InfiniteExecution.flatten_interval` | `Helper (computation)` | **APPROVE** |
+| 63 | `:1384-1386` / `:1389` | `ConcreteSpec.Core.Exec.InfiniteExecution.projected_completeTrace` | `Helper (projection)` | **APPROVE** |
+| 64 | `:1525-1526` / `:1529` | `ConcreteSpec.Core.Exec.finite_or_infinite_events` | `Helper (arithmetic)` | **APPROVE** |
+| 65 | `:1541-1542` / `:1544` | `ConcreteSpec.Core.Exec.finite_not_infinite_events` | `Helper (arithmetic)` | **APPROVE** |
+| 66 | `:1561-1562` / `:1564` | `ConcreteSpec.Core.Exec.internal_finite_or_infinite_events` | `Helper (arithmetic)` | **APPROVE** |
+| 67 | `:1708` / `:1709` | `ConcreteSpec.Core.Exec.Demo.spin_move_01` | `Helper (computation)` | **APPROVE** |
+| 68 | `:1710` / `:1711` | `ConcreteSpec.Core.Exec.Demo.spin_move_12` | `Helper (computation)` | **APPROVE** |
+| 69 | `:1712` / `:1713` | `ConcreteSpec.Core.Exec.Demo.spin_move_23` | `Helper (computation)` | **APPROVE** |
+| 70 | `:1714` / `:1715` | `ConcreteSpec.Core.Exec.Demo.spin_move_34` | `Helper (computation)` | **APPROVE** |
+| 71 | `:1716` / `:1717` | `ConcreteSpec.Core.Exec.Demo.spin_move_40` | `Helper (computation)` | **APPROVE** |
+| 72 | `:1719-1720` / `:1721` | `ConcreteSpec.Core.Exec.Demo.spin_move` | `Helper (computation)` | **APPROVE** |
+| 73 | `:1742-1743` / `:1744` | `ConcreteSpec.Core.Exec.Demo.spin_internal_silent_divergence` | `Helper (computation)` | **APPROVE** |
+| 74 | `:1782` / `:1783` | `ConcreteSpec.Core.Exec.Demo.event_move_01` | `Helper (computation)` | **APPROVE** |
+| 75 | `:1786` / `:1787` | `ConcreteSpec.Core.Exec.Demo.event_move_12` | `Helper (computation)` | **APPROVE** |
+| 76 | `:1790` / `:1791` | `ConcreteSpec.Core.Exec.Demo.event_move_23` | `Helper (computation)` | **APPROVE** |
+| 77 | `:1794` / `:1795` | `ConcreteSpec.Core.Exec.Demo.event_move_40` | `Helper (computation)` | **APPROVE** |
+| 78 | `:1799-1800` / `:1801` | `ConcreteSpec.Core.Exec.Demo.event_move_34` | `Helper (computation)` | **APPROVE** |
+| 79 | `:1823-1824` / `:1825` | `ConcreteSpec.Core.Exec.Demo.event_move` | `Helper (computation)` | **APPROVE** |
+| 80 | `:1865` / `:1866` | `ConcreteSpec.Core.Exec.Demo.erasing_project` | `Helper (computation)` | **APPROVE** |
+| 81 | `:1871` / `:1872` | `ConcreteSpec.Core.Exec.Demo.keeping_project_rawEvents` | `Helper (computation)` | **APPROVE** |
+| 82 | `:1881-1882` / `:1883` | `ConcreteSpec.Core.Exec.Demo.erasingWellFormed` | `Helper (computation)` | **APPROVE** |
+| 83 | `:1892-1893` / `:1894` | `ConcreteSpec.Core.Exec.Demo.keepingWellFormed` | `Helper (computation)` | **APPROVE** |
+| 84 | `:1907` / `:1908` | `ConcreteSpec.Core.Exec.Demo.erasing_silent_divergence` | `Helper (computation)` | **APPROVE** |
+| 85 | `:1911-1912` / `:1913` | `ConcreteSpec.Core.Exec.Demo.erasing_internal_infinite` | `Helper (computation)` | **APPROVE** |
+| 86 | `:1917-1918` / `:1919` | `ConcreteSpec.Core.Exec.Demo.keeping_infinite_interaction` | `Helper (computation)` | **APPROVE** |
+| 87 | `:2040-2041` / `:2042` | `ConcreteSpec.Core.Exec.Demo.bumpedMove` | `Helper (computation)` | **APPROVE** |
+| 88 | `:2297-2298` / `:2299` | `ConcreteSpec.Core.Exec.Demo.terminalRequest` | `Helper (computation)` | **APPROVE** |
+| 89 | `:2402` / `:2403` | `ConcreteSpec.Core.Exec.Demo.erasedFinite` | `Helper (computation)` | **APPROVE** |
+| 90 | `:2405` / `:2406` | `ConcreteSpec.Core.Exec.Demo.keptInfinite` | `Helper (computation)` | **APPROVE** |
+| 91 | `:2425-2426` / `:2427` | `ConcreteSpec.Core.Exec.Demo.logThenSpin_move` | `Helper (computation)` | **APPROVE** |
+| 92 | `:2464-2465` / `:2466` | `ConcreteSpec.Core.Exec.Demo.logThenSpinFinite` | `Helper (computation)` | **APPROVE** |
+| 93 | `:2522-2523` / `:2524` | `ConcreteSpec.Core.Exec.Demo.visiblePrefix_silentObserveSteps` | `Helper (computation)` | **APPROVE** |
+| 94 | `:2692-2693` / `:2694` | `ConcreteSpec.Core.Exec.Demo.refusingBindRequest` | `Helper (computation)` | **APPROVE** |
+| 95 | `:2789-2790` / `:2792` | `ConcreteSpec.Core.Exec.Demo.terminalPath` | `Helper (computation)` | **APPROVE** |
+| 96 | `:2818` / `:2821` | `ConcreteSpec.Core.Exec.Demo.unanswered_no_move` | `Helper (inversion)` | **APPROVE** |
 
 VERDICT: ACCEPT
 rc=0

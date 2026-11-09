@@ -1,0 +1,292 @@
+ACCEPT. The diff changes exactly 196 comment lines: 144 in Own and 52 in Grant. Every change replaces `(approved: PENDING)` with `(approved: REVIEW7-agy)`. No statement, proof, classification, reason, or other tag changes.
+
+All 196 changed declarations have an unconditional, exact-name **APPROVE** verdict. The prior review’s summary counts are inconsistent, but its individual verdicts cover every changed declaration.
+
+I independently approve these helper exemptions: they support separately stated contract laws through inversion, projection, congruence, arithmetic, computation, or concrete witness proofs. I found no contract obligation concealed solely behind an exemption. There are no remaining Helper or Representation exemptions marked `approved: PENDING` in either file.
+
+No REAL DEFECT or PREFERENCE findings. This was a static, read-only review; no builds, gates, network access, or writes were performed.
+
+The following tables give every changed declaration, its tag location, and its approval line in `_review/REVIEW7-agy.md`. Every row’s verdict is unconditional APPROVE.
+
+| Declaration | Tag | Approval line |
+|---|---|---:|
+| `fold_preserves` | ConcreteSpec/Proofs/Own.lean:18 | 438 |
+| `move_preserves_result` | ConcreteSpec/Proofs/Own.lean:30 | 439 |
+| `reinitialize_preserves_result` | ConcreteSpec/Proofs/Own.lean:76 | 440 |
+| `compatible_symm` | ConcreteSpec/Proofs/Own.lean:118 | 441 |
+| `insert_loan` | ConcreteSpec/Proofs/Own.lean:128 | 442 |
+| `owner_guard` | ConcreteSpec/Proofs/Own.lean:171 | 443 |
+| `borrow_preserves_result` | ConcreteSpec/Proofs/Own.lean:189 | 444 |
+| `reborrowTo_preserves_result` | ConcreteSpec/Proofs/Own.lean:207 | 445 |
+| `reborrow_preserves_result` | ConcreteSpec/Proofs/Own.lean:246 | 446 |
+| `endLoan_preserves_result` | ConcreteSpec/Proofs/Own.lean:253 | 447 |
+| `accessOwner_preserves_result` | ConcreteSpec/Proofs/Own.lean:282 | 448 |
+| `accessLoan_preserves_result` | ConcreteSpec/Proofs/Own.lean:290 | 449 |
+| `move_progress` | ConcreteSpec/Proofs/Own.lean:298 | 450 |
+| `borrow_progress` | ConcreteSpec/Proofs/Own.lean:310 | 451 |
+| `reborrowTo_progress` | ConcreteSpec/Proofs/Own.lean:317 | 452 |
+| `reborrow_progress` | ConcreteSpec/Proofs/Own.lean:326 | 453 |
+| `accessOwner_progress` | ConcreteSpec/Proofs/Own.lean:334 | 454 |
+| `accessLoan_progress` | ConcreteSpec/Proofs/Own.lean:339 | 455 |
+| `bind_preserves_result` | ConcreteSpec/Proofs/Own.lean:371 | 456 |
+| `slot_unique` | ConcreteSpec/Proofs/Own.lean:438 | 457 |
+| `drop_preserves_result` | ConcreteSpec/Proofs/Own.lean:455 | 458 |
+| `enter_preserves_result` | ConcreteSpec/Proofs/Own.lean:525 | 459 |
+| `endLocals_preserves_result` | ConcreteSpec/Proofs/Own.lean:560 | 460 |
+| `endLoan_frames` | ConcreteSpec/Proofs/Own.lean:565 | 461 |
+| `fold_frames` | ConcreteSpec/Proofs/Own.lean:576 | 462 |
+| `drop_absent` | ConcreteSpec/Proofs/Own.lean:588 | 463 |
+| `leave_no_activation_slot_result` | ConcreteSpec/Proofs/Own.lean:604 | 464 |
+| `leave_preserves_result` | ConcreteSpec/Proofs/Own.lean:637 | 465 |
+| `set_views_preserves` | ConcreteSpec/Proofs/Own.lean:685 | 466 |
+| `enterDown_preserves_result` | ConcreteSpec/Proofs/Own.lean:711 | 467 |
+| `life_preserves_result` | ConcreteSpec/Proofs/Own.lean:732 | 468 |
+| `reinitialize_progress` | ConcreteSpec/Proofs/Own.lean:741 | 469 |
+| `endLoan_progress` | ConcreteSpec/Proofs/Own.lean:758 | 470 |
+| `bind_fresh_progress` | ConcreteSpec/Proofs/Own.lean:769 | 471 |
+| `bind_params_progress` | ConcreteSpec/Proofs/Own.lean:776 | 472 |
+| `drop_progress` | ConcreteSpec/Proofs/Own.lean:812 | 473 |
+| `loan_has_owned_root_of_wf` | ConcreteSpec/Proofs/Own.lean:877 | 474 |
+| `moved_no_loan_of_wf` | ConcreteSpec/Proofs/Own.lean:882 | 475 |
+| `instrument_erasure_result` | ConcreteSpec/Proofs/Own.lean:892 | 476 |
+| `life_erasure_result` | ConcreteSpec/Proofs/Own.lean:905 | 477 |
+| `map_metadata_preserves` | ConcreteSpec/Proofs/Own.lean:914 | 478 |
+| `adoptDown_preserves_result` | ConcreteSpec/Proofs/Own.lean:940 | 479 |
+| `passDown_preserves_result` | ConcreteSpec/Proofs/Own.lean:964 | 480 |
+| `passDown_call_preserves_result` | ConcreteSpec/Proofs/Own.lean:1005 | 481 |
+| `callLife_preserves_result` | ConcreteSpec/Proofs/Own.lean:1067 | 482 |
+| `reinitialize_loans` | ConcreteSpec/Proofs/Own.lean:1102 | 483 |
+| `bind_loans` | ConcreteSpec/Proofs/Own.lean:1111 | 484 |
+| `fold_loans` | ConcreteSpec/Proofs/Own.lean:1123 | 485 |
+| `enter_loans` | ConcreteSpec/Proofs/Own.lean:1135 | 486 |
+| `drop_loans` | ConcreteSpec/Proofs/Own.lean:1154 | 487 |
+| `endLoan_subset` | ConcreteSpec/Proofs/Own.lean:1164 | 488 |
+| `life_subset` | ConcreteSpec/Proofs/Own.lean:1174 | 489 |
+| `callLife_call_preserves_result` | ConcreteSpec/Proofs/Own.lean:1191 | 490 |
+| `callLife_erasure_result` | ConcreteSpec/Proofs/Own.lean:1253 | 491 |
+| `instrument_preserves_result` | ConcreteSpec/Proofs/Own.lean:1262 | 492 |
+| `readOwner_erasure_result` | ConcreteSpec/Proofs/Own.lean:1275 | 493 |
+| `writeOwner_erasure_result` | ConcreteSpec/Proofs/Own.lean:1285 | 494 |
+| `readLoan_erasure_result` | ConcreteSpec/Proofs/Own.lean:1295 | 495 |
+| `writeLoan_erasure_result` | ConcreteSpec/Proofs/Own.lean:1312 | 496 |
+| `nextLoan_fresh` | ConcreteSpec/Proofs/Own.lean:1328 | 497 |
+| `borrow_birth_result` | ConcreteSpec/Proofs/Own.lean:1337 | 498 |
+| `reborrow_birth_result` | ConcreteSpec/Proofs/Own.lean:1349 | 499 |
+| `endLoan_supply_result` | ConcreteSpec/Proofs/Own.lean:1363 | 500 |
+| `leave_no_local_loan_result` | ConcreteSpec/Proofs/Own.lean:1375 | 501 |
+| `adoptDown_only_arguments_result` | ConcreteSpec/Proofs/Own.lean:1400 | 502 |
+| `reborrowTo_current_result` | ConcreteSpec/Proofs/Own.lean:1412 | 503 |
+| `passOwner_preserves_result` | ConcreteSpec/Proofs/Own.lean:1425 | 504 |
+| `passOwner_call_preserves_result` | ConcreteSpec/Proofs/Own.lean:1445 | 505 |
+| `passOwner_freezes_result` | ConcreteSpec/Proofs/Own.lean:1495 | 506 |
+| `passOwner_birth_result` | ConcreteSpec/Proofs/Own.lean:1509 | 507 |
+| `loan_unique` | ConcreteSpec/Proofs/Own.lean:1523 | 508 |
+| `endLoans_retains` | ConcreteSpec/Proofs/Own.lean:1539 | 509 |
+| `leave_retains_caller_result` | ConcreteSpec/Proofs/Own.lean:1556 | 510 |
+| `endLoans_removed` | ConcreteSpec/Proofs/Own.lean:1576 | 511 |
+| `leave_no_activation_loan_result` | ConcreteSpec/Proofs/Own.lean:1599 | 512 |
+| `defer_keeps_store_result` | ConcreteSpec/Proofs/Own.lean:1614 | 513 |
+| `reborrowTo_live_result` | ConcreteSpec/Proofs/Own.lean:1843 | 514 |
+| `adoptDown_live_result` | ConcreteSpec/Proofs/Own.lean:1860 | 515 |
+| `leave_frames_proj` | ConcreteSpec/Proofs/Own.lean:1879 | 516 |
+| `leave_live_result` | ConcreteSpec/Proofs/Own.lean:1898 | 517 |
+| `eval_ok_erasure_result` | ConcreteSpec/Proofs/Own.lean:1940 | 518 |
+| `eval_ok_erasure` | ConcreteSpec/Proofs/Own.lean:1958 | 519 |
+| `eval_trap_erasure_result` | ConcreteSpec/Proofs/Own.lean:1968 | 520 |
+| `eval_trap_erasure` | ConcreteSpec/Proofs/Own.lean:1982 | 521 |
+| `evalArgs_ok_erasure_result` | ConcreteSpec/Proofs/Own.lean:1992 | 522 |
+| `evalArgs_trap_erasure_result` | ConcreteSpec/Proofs/Own.lean:2026 | 523 |
+| `test_erasure_result` | ConcreteSpec/Proofs/Own.lean:2062 | 524 |
+| `test_erasure` | ConcreteSpec/Proofs/Own.lean:2066 | 525 |
+| `instrumentLife_erasure_result` | ConcreteSpec/Proofs/Own.lean:2074 | 526 |
+| `instrumentLife_erasure` | ConcreteSpec/Proofs/Own.lean:2090 | 527 |
+| `allows_erasure_result` | ConcreteSpec/Proofs/Own.lean:2108 | 528 |
+| `allows_erasure` | ConcreteSpec/Proofs/Own.lean:2117 | 529 |
+| `bindLife_erasure_proj` | ConcreteSpec/Proofs/Own.lean:2125 | 530 |
+| `dropOut_erasure_proj` | ConcreteSpec/Proofs/Own.lean:2133 | 531 |
+| `register_erasure_proj` | ConcreteSpec/Proofs/Own.lean:2139 | 532 |
+| `lookup_eraseProgram_proj` | ConcreteSpec/Proofs/Own.lean:2157 | 533 |
+| `stepExit_erasure_proj` | ConcreteSpec/Proofs/Own.lean:2169 | 534 |
+| `step_next_erasure_result` | ConcreteSpec/Proofs/Own.lean:2234 | 535 |
+| `step_request_erasure_result` | ConcreteSpec/Proofs/Own.lean:2458 | 536 |
+| `eraseLabel_events_proj` | ConcreteSpec/Proofs/Own.lean:2617 | 537 |
+| `eraseLabel_answer_proj` | ConcreteSpec/Proofs/Own.lean:2622 | 538 |
+| `Step_erasure_result` | ConcreteSpec/Proofs/Own.lean:2628 | 539 |
+| `Steps_erasure_result` | ConcreteSpec/Proofs/Own.lean:2678 | 540 |
+| `final?_eraseConfig_proj` | ConcreteSpec/Proofs/Own.lean:2692 | 541 |
+| `allows_liftAnswer_proj` | ConcreteSpec/Proofs/Own.lean:2706 | 542 |
+| `eval_stuck_of_permitted_inv` | ConcreteSpec/Proofs/Own.lean:2790 | 543 |
+| `evalArgs_stuck_of_permitted_inv` | ConcreteSpec/Proofs/Own.lean:2811 | 544 |
+| `life_none_of_permitted_inv` | ConcreteSpec/Proofs/Own.lean:2846 | 545 |
+| `bindLife_none_of_permitted_inv` | ConcreteSpec/Proofs/Own.lean:2861 | 546 |
+| `dropOut_none_of_permitted_inv` | ConcreteSpec/Proofs/Own.lean:2871 | 547 |
+| `register_none_proj` | ConcreteSpec/Proofs/Own.lean:2879 | 548 |
+| `stepExit_none_of_permitted_inv` | ConcreteSpec/Proofs/Own.lean:2894 | 549 |
+| `step_none_of_permitted_inv` | ConcreteSpec/Proofs/Own.lean:2950 | 550 |
+| `request_none_of_permitted_inv` | ConcreteSpec/Proofs/Own.lean:3126 | 551 |
+| `checkerAccepted_step_inv` | ConcreteSpec/Proofs/Own.lean:3265 | 552 |
+| `isStuck_eraseEnding_proj` | ConcreteSpec/Proofs/Own.lean:3378 | 553 |
+| `step_det_next_inv` | ConcreteSpec/Proofs/Own.lean:3410 | 554 |
+| `step_det_none_inv` | ConcreteSpec/Proofs/Own.lean:3426 | 555 |
+| `move_not_checkerAccepted_inv` | ConcreteSpec/Proofs/Own.lean:3434 | 556 |
+| `acceptedMove_checkerAccepted_inv` | ConcreteSpec/Proofs/Own.lean:3447 | 557 |
+| `acceptedStuck_checkerAccepted_inv` | ConcreteSpec/Proofs/Own.lean:3478 | 558 |
+| `unconditionalRunConverse_refuted` | ConcreteSpec/Proofs/Own.lean:3763 | 559 |
+| `primFrameStuck_checkerAccepted_inv` | ConcreteSpec/Proofs/Own.lean:3839 | 560 |
+| `traceSteps` | ConcreteSpec/Proofs/Own.lean:4021 | 561 |
+| `bindMove_checkerAccepted_inv` | ConcreteSpec/Proofs/Own.lean:4085 | 562 |
+| `accessOwner_preserves` | ConcreteSpec/Proofs/Own.lean:4304 | 563 |
+| `accessLoan_preserves` | ConcreteSpec/Proofs/Own.lean:4310 | 564 |
+| `instrument_erasure` | ConcreteSpec/Proofs/Own.lean:4964 | 565 |
+| `life_erasure` | ConcreteSpec/Proofs/Own.lean:4973 | 566 |
+| `callLife_erasure` | ConcreteSpec/Proofs/Own.lean:4982 | 567 |
+| `instrument_preserves` | ConcreteSpec/Proofs/Own.lean:4991 | 568 |
+| `readOwner_erasure` | ConcreteSpec/Proofs/Own.lean:5001 | 569 |
+| `writeOwner_erasure` | ConcreteSpec/Proofs/Own.lean:5010 | 570 |
+| `readLoan_erasure` | ConcreteSpec/Proofs/Own.lean:5020 | 571 |
+| `writeLoan_erasure` | ConcreteSpec/Proofs/Own.lean:5030 | 572 |
+| `borrow_birth` | ConcreteSpec/Proofs/Own.lean:5041 | 573 |
+| `reborrow_birth` | ConcreteSpec/Proofs/Own.lean:5052 | 574 |
+| `endLoan_supply` | ConcreteSpec/Proofs/Own.lean:5064 | 575 |
+| `adoptDown_only_arguments` | ConcreteSpec/Proofs/Own.lean:5072 | 576 |
+| `reborrowTo_current` | ConcreteSpec/Proofs/Own.lean:5104 | 577 |
+| `passOwner_birth` | ConcreteSpec/Proofs/Own.lean:5122 | 578 |
+| `defer_keeps_store` | ConcreteSpec/Proofs/Own.lean:5134 | 579 |
+| `pending_enter_drop` | ConcreteSpec/Proofs/Own.lean:5781 | 580 |
+| `loanSequence_retired_step` | ConcreteSpec/Proofs/Own.lean:5985 | 581 |
+
+| Declaration | Tag | Approval line |
+|---|---|---:|
+| `fresh_wf` | ConcreteSpec/Proofs/Grant.lean:27 | 587 |
+| `fresh_preserves_result` | ConcreteSpec/Proofs/Grant.lean:56 | 588 |
+| `fresh_progress` | ConcreteSpec/Proofs/Grant.lean:70 | 589 |
+| `depend_preserves_result` | ConcreteSpec/Proofs/Grant.lean:74 | 590 |
+| `consume_preserves_result` | ConcreteSpec/Proofs/Grant.lean:102 | 591 |
+| `release_preserves_result` | ConcreteSpec/Proofs/Grant.lean:121 | 592 |
+| `reset_preserves_result` | ConcreteSpec/Proofs/Grant.lean:162 | 593 |
+| `endScope_preserves_result` | ConcreteSpec/Proofs/Grant.lean:208 | 594 |
+| `depend_progress` | ConcreteSpec/Proofs/Grant.lean:244 | 595 |
+| `consume_progress` | ConcreteSpec/Proofs/Grant.lean:259 | 596 |
+| `release_progress` | ConcreteSpec/Proofs/Grant.lean:267 | 597 |
+| `reset_progress` | ConcreteSpec/Proofs/Grant.lean:283 | 598 |
+| `endScope_progress` | ConcreteSpec/Proofs/Grant.lean:296 | 599 |
+| `nextBrand_fresh` | ConcreteSpec/Proofs/Grant.lean:320 | 600 |
+| `fresh_generation_result` | ConcreteSpec/Proofs/Grant.lean:329 | 601 |
+| `fresh_generation` | ConcreteSpec/Proofs/Grant.lean:335 | 602 |
+| `reset_generation_result` | ConcreteSpec/Proofs/Grant.lean:344 | 603 |
+| `reset_generation` | ConcreteSpec/Proofs/Grant.lean:353 | 604 |
+| `endScope_non_escape_result` | ConcreteSpec/Proofs/Grant.lean:362 | 605 |
+| `endScope_non_escape` | ConcreteSpec/Proofs/Grant.lean:377 | 606 |
+| `allocations_have_live_allocator_of_wf` | ConcreteSpec/Proofs/Grant.lean:388 | 607 |
+| `instrument_erasure_result` | ConcreteSpec/Proofs/Grant.lean:408 | 608 |
+| `instrument_erasure` | ConcreteSpec/Proofs/Grant.lean:420 | 609 |
+| `run_erasure_result` | ConcreteSpec/Proofs/Grant.lean:429 | 610 |
+| `release_retired` | ConcreteSpec/Proofs/Grant.lean:736 | 611 |
+| `lifetime_retired_step` | ConcreteSpec/Proofs/Grant.lean:749 | 612 |
+| `binder_unique` | ConcreteSpec/Proofs/Grant.lean:888 | 613 |
+| `lifetime_wf` | ConcreteSpec/Proofs/Grant.lean:905 | 614 |
+| `update_all` | ConcreteSpec/Proofs/Grant.lean:998 | 615 |
+| `usable_some` | ConcreteSpec/Proofs/Grant.lean:1020 | 616 |
+| `consumed_bounded` | ConcreteSpec/Proofs/Grant.lean:1029 | 617 |
+| `consumed_fresh` | ConcreteSpec/Proofs/Grant.lean:1035 | 618 |
+| `issue_bounded` | ConcreteSpec/Proofs/Grant.lean:1040 | 619 |
+| `issue_fresh` | ConcreteSpec/Proofs/Grant.lean:1049 | 620 |
+| `narrow_bounded_result` | ConcreteSpec/Proofs/Grant.lean:1057 | 621 |
+| `acquire_bounded_result` | ConcreteSpec/Proofs/Grant.lean:1075 | 622 |
+| `close_bounded_result` | ConcreteSpec/Proofs/Grant.lean:1100 | 623 |
+| `rights_never_grow_steps` | ConcreteSpec/Proofs/Grant.lean:1121 | 624 |
+| `steps_of_runOps` | ConcreteSpec/Proofs/Grant.lean:1130 | 625 |
+| `narrow_fresh_result` | ConcreteSpec/Proofs/Grant.lean:1168 | 626 |
+| `acquire_fresh_result` | ConcreteSpec/Proofs/Grant.lean:1183 | 627 |
+| `close_fresh_result` | ConcreteSpec/Proofs/Grant.lean:1201 | 628 |
+| `dead_unusable` | ConcreteSpec/Proofs/Grant.lean:1233 | 629 |
+| `consumed_dead` | ConcreteSpec/Proofs/Grant.lean:1238 | 630 |
+| `consumed_keeps_dead` | ConcreteSpec/Proofs/Grant.lean:1244 | 631 |
+| `issue_keeps_dead` | ConcreteSpec/Proofs/Grant.lean:1252 | 632 |
+| `close_consumes_result` | ConcreteSpec/Proofs/Grant.lean:1261 | 633 |
+| `narrow_consumes_result` | ConcreteSpec/Proofs/Grant.lean:1287 | 634 |
+| `consumed_never_revives_steps` | ConcreteSpec/Proofs/Grant.lean:1304 | 635 |
+| `narrow_intersection_result` | ConcreteSpec/Proofs/Grant.lean:1342 | 636 |
+| `narrow_intersection` | ConcreteSpec/Proofs/Grant.lean:1352 | 637 |
+| `acquire_keeps_parent_result` | ConcreteSpec/Proofs/Grant.lean:1362 | 638 |
+
+I checked all 70 Laws against the final convention: one classification per theorem; closed, full law applications for Instances; matching arguments and hypotheses with a negated mutated conclusion for Planted examples; and no direct projection Law. The preservation laws derive consequences of transitions rather than checking the complete resulting invariant at run time. The guard and constructor restatements are classified as Helpers.
+
+Every law below has verdict **NON-VACUOUS**. Witness columns identify the Instance and Planted tag lines in the same file as the law’s tag. These are 71 pairs because the deferred lifetime law has two controls.
+
+| Law | Law tag | Instance line | Planted line |
+|---|---|---:|---:|
+| `enter_progress` | ConcreteSpec/Proofs/Own.lean:802 | 4817 | 4821 |
+| `directOwner_roundtrip` | ConcreteSpec/Proofs/Own.lean:1704 | 4838 | 4849 |
+| `step_next_erasure` | ConcreteSpec/Proofs/Own.lean:2443 | 3959 | 3965 |
+| `step_request_erasure` | ConcreteSpec/Proofs/Own.lean:2597 | 3972 | 3982 |
+| `Step_erasure` | ConcreteSpec/Proofs/Own.lean:2642 | 3993 | 4004 |
+| `Steps_erasure` | ConcreteSpec/Proofs/Own.lean:2664 | 4035 | 4044 |
+| `runFrom_erasure` | ConcreteSpec/Proofs/Own.lean:2713 | 4061 | 4066 |
+| `run_erasure` | ConcreteSpec/Proofs/Own.lean:2780 | 4073 | 4078 |
+| `step_stuck_iff_of_accepted` | ConcreteSpec/Proofs/Own.lean:3275 | 4104 | 4110 |
+| `runFrom_erasure_of_accepted` | ConcreteSpec/Proofs/Own.lean:3300 | 4116 | 4122 |
+| `run_stuck_iff_of_accepted` | ConcreteSpec/Proofs/Own.lean:3383 | 4129 | 4135 |
+| `move_preserves` | ConcreteSpec/Proofs/Own.lean:4164 | 4462 | 4466 |
+| `reinitialize_preserves` | ConcreteSpec/Proofs/Own.lean:4171 | 4469 | 4473 |
+| `borrow_preserves` | ConcreteSpec/Proofs/Own.lean:4178 | 4476 | 4480 |
+| `reborrowTo_preserves` | ConcreteSpec/Proofs/Own.lean:4185 | 4483 | 4487 |
+| `reborrow_preserves` | ConcreteSpec/Proofs/Own.lean:4192 | 4490 | 4494 |
+| `endLoan_preserves` | ConcreteSpec/Proofs/Own.lean:4199 | 4497 | 4501 |
+| `bind_preserves` | ConcreteSpec/Proofs/Own.lean:4206 | 4518 | 4522 |
+| `drop_preserves` | ConcreteSpec/Proofs/Own.lean:4213 | 4525 | 4529 |
+| `enter_preserves` | ConcreteSpec/Proofs/Own.lean:4220 | 4532 | 4536 |
+| `endLocals_preserves` | ConcreteSpec/Proofs/Own.lean:4227 | 4539 | 4543 |
+| `leave_preserves` | ConcreteSpec/Proofs/Own.lean:4234 | 4546 | 4550 |
+| `enterDown_preserves` | ConcreteSpec/Proofs/Own.lean:4241 | 4553 | 4557 |
+| `life_preserves` | ConcreteSpec/Proofs/Own.lean:4248 | 4560 | 4564 |
+| `adoptDown_preserves` | ConcreteSpec/Proofs/Own.lean:4255 | 4567 | 4571 |
+| `passDown_preserves` | ConcreteSpec/Proofs/Own.lean:4262 | 4574 | 4578 |
+| `passDown_call_preserves` | ConcreteSpec/Proofs/Own.lean:4269 | 4581 | 4585 |
+| `callLife_preserves` | ConcreteSpec/Proofs/Own.lean:4276 | 4588 | 4592 |
+| `callLife_call_preserves` | ConcreteSpec/Proofs/Own.lean:4283 | 4595 | 4599 |
+| `passOwner_preserves` | ConcreteSpec/Proofs/Own.lean:4290 | 4602 | 4606 |
+| `passOwner_call_preserves` | ConcreteSpec/Proofs/Own.lean:4297 | 4609 | 4613 |
+| `leave_no_local_loan` | ConcreteSpec/Proofs/Own.lean:4626 | 4714 | 4718 |
+| `leave_no_activation_slot` | ConcreteSpec/Proofs/Own.lean:4634 | 4723 | 4727 |
+| `passOwner_freezes` | ConcreteSpec/Proofs/Own.lean:4642 | 4732 | 4736 |
+| `leave_retains_caller` | ConcreteSpec/Proofs/Own.lean:4650 | 4741 | 4745 |
+| `leave_no_activation_loan` | ConcreteSpec/Proofs/Own.lean:4658 | 4750 | 4754 |
+| `reborrowTo_live` | ConcreteSpec/Proofs/Own.lean:4666 | 4759 | 4763 |
+| `adoptDown_live` | ConcreteSpec/Proofs/Own.lean:4674 | 4768 | 4772 |
+| `leave_live` | ConcreteSpec/Proofs/Own.lean:4682 | 4777 | 4781 |
+| `evalArgs_ok_erasure` | ConcreteSpec/Proofs/Own.lean:4872 | 4913 | 4919 |
+| `evalArgs_trap_erasure` | ConcreteSpec/Proofs/Own.lean:4886 | 4926 | 4932 |
+| `loan_has_owned_root` | ConcreteSpec/Proofs/Own.lean:4941 | 5405 | 5410 |
+| `moved_no_loan` | ConcreteSpec/Proofs/Own.lean:4953 | 5423 | 5428 |
+| `downward_reborrow_protocol` | ConcreteSpec/Proofs/Own.lean:5663 | 5723 | 5728 |
+| `deferred_call_lifetime` | ConcreteSpec/Proofs/Own.lean:5806 | 5868, 5887 | 5873, 5892 |
+| `move_reinitialize_protocol` | ConcreteSpec/Proofs/Own.lean:5912 | 5970 | 5974 |
+| `ended_loans_never_revive` | ConcreteSpec/Proofs/Own.lean:6031 | 6065 | 6069 |
+| `fresh_preserves` | ConcreteSpec/Proofs/Grant.lean:62 | 527 | 531 |
+| `depend_preserves` | ConcreteSpec/Proofs/Grant.lean:95 | 535 | 539 |
+| `consume_preserves` | ConcreteSpec/Proofs/Grant.lean:114 | 543 | 547 |
+| `release_preserves` | ConcreteSpec/Proofs/Grant.lean:155 | 551 | 555 |
+| `reset_preserves` | ConcreteSpec/Proofs/Grant.lean:200 | 559 | 563 |
+| `endScope_preserves` | ConcreteSpec/Proofs/Grant.lean:236 | 567 | 571 |
+| `allocations_have_live_allocator` | ConcreteSpec/Proofs/Grant.lean:395 | 671 | 678 |
+| `run_erasure` | ConcreteSpec/Proofs/Grant.lean:444 | 722 | 727 |
+| `retired_never_revives` | ConcreteSpec/Proofs/Grant.lean:807 | 856 | 860 |
+| `fresh_nominal` | ConcreteSpec/Proofs/Grant.lean:823 | 864 | 870 |
+| `scope_exit_lifetime` | ConcreteSpec/Proofs/Grant.lean:924 | 965 | 971 |
+| `narrow_bounded` | ConcreteSpec/Proofs/Grant.lean:1067 | 1481 | 1485 |
+| `acquire_bounded` | ConcreteSpec/Proofs/Grant.lean:1090 | 1489 | 1493 |
+| `close_bounded` | ConcreteSpec/Proofs/Grant.lean:1108 | 1498 | 1503 |
+| `rights_never_grow` | ConcreteSpec/Proofs/Grant.lean:1157 | 1508 | 1512 |
+| `narrow_fresh` | ConcreteSpec/Proofs/Grant.lean:1176 | 1516 | 1520 |
+| `acquire_fresh` | ConcreteSpec/Proofs/Grant.lean:1193 | 1524 | 1528 |
+| `close_fresh` | ConcreteSpec/Proofs/Grant.lean:1209 | 1532 | 1537 |
+| `close_consumes` | ConcreteSpec/Proofs/Grant.lean:1269 | 1550 | 1555 |
+| `narrow_consumes` | ConcreteSpec/Proofs/Grant.lean:1296 | 1559 | 1563 |
+| `consumed_never_revives` | ConcreteSpec/Proofs/Grant.lean:1332 | 1568 | 1573 |
+| `acquire_keeps_parent` | ConcreteSpec/Proofs/Grant.lean:1377 | 1597 | 1602 |
+| `narrow_permissions` | ConcreteSpec/Proofs/Grant.lean:1609 | 1630 | 1636 |
+
+The witnesses exercise successful transitions, relevant live loans/dependencies/rights, actual execution or traps, and inhabited checker-acceptance premises. Their controls falsify the corresponding conclusion while retaining the required premises. In particular, the finite simulation is unconditional; the accepted converse has concrete accepted configurations; and lifetime controls exercise retirement, subsequent issuance, upward refusal, premature termination, and return leakage.
+
+VERDICT: ACCEPT

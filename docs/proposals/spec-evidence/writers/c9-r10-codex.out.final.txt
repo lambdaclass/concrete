@@ -1,0 +1,14 @@
+- Fixed `collectKeysIn_sound`: fully closed concrete-key Instance and premise-preserving mutant resolver.
+- Added `CollectionSound` and proved whole-output soundness, with a faulty-collector counterexample.
+- Swept all 54 C9 Laws and their witnesses; no other partial applications found.
+- Repaired all 14 approval references using `REVIEW9-codex`; none remain pending.
+- Left `Observe.trapLine_injective` unchanged as required; C6 owns that finding.
+
+Commits:
+
+- `f2b017ffe` — repair helper approval provenance.
+- `69703bb84` — close collector witnesses and certify whole output.
+
+Validation passed: semaphore build, rules (32), trust-ban (23). Working tree clean. No pushes, reviewers, or git notes.
+
+QUESTIONS: None.

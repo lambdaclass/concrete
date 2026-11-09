@@ -1,0 +1,402 @@
+Read-only review of commit `69703bb84` (`REVIEW.diff`, `dac39d319..69703bb84`) completed without modifying any file, running any write git commands, building, or connecting to a network.
+
+---
+
+### Task (1): Verification of `KeyConstruct.collectKeysIn_sound` and `KeyConstruct.collectKeysIn_collectionSound` Witnesses
+
+1. **`ConcreteSpec.Core.KeyConstruct.collectKeysIn_sound`** ([Ident.lean](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c9r10/tree/ConcreteSpec/Proofs/Ident.lean#L103), `tag :101`):
+   - **Tag:** `/-- Law (subject `ConcreteSpec.Core.KeyConstruct.collectKeysIn`, `ConcreteSpec.Core.KeyConstruct.pathAtIn`).`
+   - **Instance** ([Ident.lean](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c9r10/tree/ConcreteSpec/Proofs/Ident.lean#L1265), `tag :1265`):
+     ```lean
+     example : ∃ route, route ≠ [] ∧
+         KeyConstruct.pathAtIn [] [nestedBody] route = some nestedPath :=
+       KeyConstruct.collectKeysIn_sound [] [nestedBody] nestedPath
+         (KeyConstruct.collectKeysIn_complete [] [nestedBody] [0, 0, 0] nestedPath
+           (by decide) (by decide))
+     ```
+     **Verified:** This is a **full closed application** of `KeyConstruct.collectKeysIn_sound` to `scope := []`, `forest := [nestedBody]`, `key := nestedPath`, and the closed membership proof. Its example type contains no `∀` or `→` left over from the theorem's binders.
+   - **Planted** ([Ident.lean](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c9r10/tree/ConcreteSpec/Proofs/Ident.lean#L1272), `tag :1272`):
+     ```lean
+     example : nestedPath ∈ KeyConstruct.collectKeysIn [] [nestedBody] ∧
+         ¬ (∃ route, route ≠ [] ∧ missingPathAtIn [] [nestedBody] route = some nestedPath) := by
+     ```
+     **Verified:** `ConcreteSpec.Core.Vacuity.missingPathAtIn` ([Ident.lean](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c9r10/tree/ConcreteSpec/Proofs/Ident.lean#L1262)) has the exact type of `ConcreteSpec.Core.KeyConstruct.pathAtIn` ([Ident.lean](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c9r10/tree/ConcreteSpec/Spec/Ident.lean#L433)). The Planted keeps the law's premise `nestedPath ∈ KeyConstruct.collectKeysIn [] [nestedBody]` at those exact closed arguments and negates the mutated conclusion.
+
+2. **`ConcreteSpec.Core.KeyConstruct.collectKeysIn_collectionSound`** ([Ident.lean](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c9r10/tree/ConcreteSpec/Proofs/Ident.lean#L136), `tag :132`):
+   - **Contract predicate:** `ConcreteSpec.Core.KeyConstruct.CollectionSound` ([Ident.lean](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c9r10/tree/ConcreteSpec/Spec/Ident.lean#L518)) states whole-output occurrence soundness over the returned collection `keys : List FunctionRelativeKey`.
+   - **Instance** ([Ident.lean](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c9r10/tree/ConcreteSpec/Proofs/Ident.lean#L1280), `tag :1280`):
+     ```lean
+     example : KeyConstruct.CollectionSound [] [nestedBody]
+         (KeyConstruct.collectKeysIn [] [nestedBody]) :=
+       KeyConstruct.collectKeysIn_collectionSound [] [nestedBody]
+     ```
+   - **Planted** ([Ident.lean](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c9r10/tree/ConcreteSpec/Proofs/Ident.lean#L1285), `tag :1285`):
+     ```lean
+     example : ¬ KeyConstruct.CollectionSound [] [nestedBody]
+         (unprefixedCollect [] [nestedBody]) := by
+     ```
+     **Verified:** Both are full closed applications; the Planted substitutes same-typed mutant collector `ConcreteSpec.Core.Vacuity.unprefixedCollect` ([Ident.lean](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c9r10/tree/ConcreteSpec/Proofs/Ident.lean#L1250)) for `ConcreteSpec.Core.KeyConstruct.collectKeysIn` at the same closed arguments `[] [nestedBody]` and refutes the conclusion.
+
+---
+
+### Task (2): Full Sweep of Every `Instance` and `Planted` in `Ident.lean` and `Prim.lean`
+
+No `Instance` or `Planted` tags exist in `ConcreteSpec/Spec/Ident.lean` or `ConcreteSpec/Spec/Prim.lean`. Every `Instance` and `Planted` in `ConcreteSpec/Proofs/Ident.lean` and `ConcreteSpec/Proofs/Prim.lean` is listed below with its `tag :N`, `file:line`, and quoted example type line(s). None leaves a residual `∀` or `→` from unapplied theorem binders (where `∀`/`→` appears in a `Planted` at `ConcreteSpec/Proofs/Ident.lean:1225` and `ConcreteSpec/Proofs/Ident.lean:2119`, it is a universally quantified hypothesis of the theorem conjoined as a premise, never an unapplied binder).
+
+#### `ConcreteSpec/Proofs/Ident.lean`
+- `tag :1171` (`ConcreteSpec/Proofs/Ident.lean:1172-1173`, Instance for `ConcreteSpec.Core.SiteKeyTable.lookup_renumber`):
+  `example : AList.lookup (siteTable.renumber successor) ⟨successor.apply (⟨1⟩ : SiteId).id⟩ = AList.lookup siteTable ⟨1⟩ :=`
+- `tag :1176` (`ConcreteSpec/Proofs/Ident.lean:1177-1178`, Planted for `ConcreteSpec.Core.SiteKeyTable.lookup_renumber`):
+  `example : ¬ (AList.lookup (collapseRenumber successor siteTable) ⟨successor.apply (⟨1⟩ : SiteId).id⟩ = AList.lookup siteTable ⟨1⟩) := by decide`
+- `tag :1180` (`ConcreteSpec/Proofs/Ident.lean:1181`, Instance for `ConcreteSpec.Core.SiteKeyTable.nodup_renumber`):
+  `example : (siteTable.renumber successor).NoDupSites :=`
+- `tag :1184` (`ConcreteSpec/Proofs/Ident.lean:1185`, Planted for `ConcreteSpec.Core.SiteKeyTable.nodup_renumber`):
+  `example : siteTable.NoDupSites ∧ ¬ (collapseRenumber successor siteTable).NoDupSites :=`
+- `tag :1215` (`ConcreteSpec/Proofs/Ident.lean:1216-1219`, Instance for `ConcreteSpec.Core.KeyConstruct.assignProgramTables_outsideEdit`):
+  `example : OutsideFunctionEdit (KeyConstruct.assignProgramTables bodiesBefore startSitesBefore) (KeyConstruct.assignProgramTables bodiesAfter startSitesAfter) otherFunction :=`
+- `tag :1224` (`ConcreteSpec/Proofs/Ident.lean:1225-1229`, Planted for `ConcreteSpec.Core.KeyConstruct.assignProgramTables_outsideEdit`):
+  `example : (∀ f, f ≠ otherFunction → bodiesAfter f = bodiesBefore f) ∧ ¬ OutsideFunctionEdit (assignProgramTablesFromSiteOffset bodiesBefore startSitesBefore) (assignProgramTablesFromSiteOffset bodiesAfter startSitesAfter) otherFunction := by`
+- `tag :1265` (`ConcreteSpec/Proofs/Ident.lean:1266-1267`, Instance for `ConcreteSpec.Core.KeyConstruct.collectKeysIn_sound`):
+  `example : ∃ route, route ≠ [] ∧ KeyConstruct.pathAtIn [] [nestedBody] route = some nestedPath :=`
+- `tag :1272` (`ConcreteSpec/Proofs/Ident.lean:1273-1274`, Planted for `ConcreteSpec.Core.KeyConstruct.collectKeysIn_sound`):
+  `example : nestedPath ∈ KeyConstruct.collectKeysIn [] [nestedBody] ∧ ¬ (∃ route, route ≠ [] ∧ missingPathAtIn [] [nestedBody] route = some nestedPath) := by`
+- `tag :1280` (`ConcreteSpec/Proofs/Ident.lean:1281-1282`, Instance for `ConcreteSpec.Core.KeyConstruct.collectKeysIn_collectionSound`):
+  `example : KeyConstruct.CollectionSound [] [nestedBody] (KeyConstruct.collectKeysIn [] [nestedBody]) :=`
+- `tag :1285` (`ConcreteSpec/Proofs/Ident.lean:1286-1287`, Planted for `ConcreteSpec.Core.KeyConstruct.collectKeysIn_collectionSound`):
+  `example : ¬ KeyConstruct.CollectionSound [] [nestedBody] (unprefixedCollect [] [nestedBody]) := by`
+- `tag :1310` (`ConcreteSpec/Proofs/Ident.lean:1311`, Instance for `ConcreteSpec.Core.KeyConstruct.collectKeysIn_complete`):
+  `example : nestedPath ∈ KeyConstruct.collectKeysIn [] [nestedBody] :=`
+- `tag :1314` (`ConcreteSpec/Proofs/Ident.lean:1315-1317`, Planted for `ConcreteSpec.Core.KeyConstruct.collectKeysIn_complete`):
+  `example : (([0, 0, 0] : List Nat) ≠ [] ∧ KeyConstruct.pathAtIn [] [nestedBody] [0, 0, 0] = some nestedPath) ∧ ¬ nestedPath ∈ shallowCollect [] [nestedBody] := by decide`
+- `tag :1323` (`ConcreteSpec/Proofs/Ident.lean:1324-1326`, Instance for `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_occurrences`):
+  `example : (⟨.function function, nestedPath⟩ : StableKey) ∈ (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7 [nestedBody])) ↔ ∃ route, route ≠ [] ∧ KeyConstruct.pathAt [nestedBody] route = some nestedPath :=`
+- `tag :1329` (`ConcreteSpec/Proofs/Ident.lean:1330-1332`, Planted for `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_occurrences`):
+  `example : ¬ ((⟨.function function, nestedPath⟩ : StableKey) ∈ (List.map Prod.snd (shallowAssign function 7 [nestedBody])) ↔ ∃ route, route ≠ [] ∧ KeyConstruct.pathAt [nestedBody] route = some nestedPath) := by`
+- `tag :1338` (`ConcreteSpec/Proofs/Ident.lean:1339-1342`, Instance for `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_lookup`):
+  `example : AList.lookup (KeyConstruct.assignFunctionTable function 7 [nestedBody]) ⟨7 + 2⟩ = some ⟨.function function, nestedPath⟩ ↔ (KeyConstruct.collectKeys [nestedBody])[2]? = some nestedPath ∧ ∃ route, route ≠ [] ∧ KeyConstruct.pathAt [nestedBody] route = some nestedPath :=`
+- `tag :1345` (`ConcreteSpec/Proofs/Ident.lean:1346-1349`, Planted for `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_lookup`):
+  `example : ¬ (AList.lookup (shallowAssign function 7 [nestedBody]) ⟨7 + 2⟩ = some ⟨.function function, nestedPath⟩ ↔ (KeyConstruct.collectKeys [nestedBody])[2]? = some nestedPath ∧ ∃ route, route ≠ [] ∧ KeyConstruct.pathAt [nestedBody] route = some nestedPath) := by`
+- `tag :1388` (`ConcreteSpec/Proofs/Ident.lean:1389-1396`, Instance for `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_named_scope`):
+  `example : ((List.map Prod.snd (KeyConstruct.assignFunctionTable function 7 ([unnamedLoop] ++ KeyConstruct.mk .block (.named "body") nestedBody.children :: [namedCall]))).drop (KeyConstruct.collectKeys [unnamedLoop]).length).take (KeyConstruct.collectKeys [KeyConstruct.mk .block (.named "body") nestedBody.children]).length = ((List.map Prod.snd (KeyConstruct.assignFunctionTable function 19 ([] ++ KeyConstruct.mk .block (.named "body") nestedBody.children :: [unnamedBinding]))).drop (KeyConstruct.collectKeys []).length).take (KeyConstruct.collectKeys [KeyConstruct.mk .block (.named "body") nestedBody.children]).length :=`
+- `tag :1400` (`ConcreteSpec/Proofs/Ident.lean:1401-1408`, Planted for `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_named_scope`):
+  `example : ¬ (((List.map Prod.snd (unresetScopeAssign function 7 ([unnamedLoop] ++ KeyConstruct.mk .block (.named "body") nestedBody.children :: [namedCall]))).drop (KeyConstruct.collectKeys [unnamedLoop]).length).take (KeyConstruct.collectKeys [KeyConstruct.mk .block (.named "body") nestedBody.children]).length = ((List.map Prod.snd (unresetScopeAssign function 19 ([] ++ KeyConstruct.mk .block (.named "body") nestedBody.children :: [unnamedBinding]))).drop (KeyConstruct.collectKeys []).length).take (KeyConstruct.collectKeys [KeyConstruct.mk .block (.named "body") nestedBody.children]).length) := by`
+- `tag :1414` (`ConcreteSpec/Proofs/Ident.lean:1415-1420`, Instance for `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_rename_named`):
+  `example : (⟨.function function, renamedRootKey⟩ : StableKey) ∈ (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7 ([unnamedLoop] ++ (KeyConstruct.mk .block (.named "old") nestedBody.children).rename "new" :: []))) ∧ (⟨.function function, renamedPath⟩ : StableKey) ∈ (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7 ([unnamedLoop] ++ (KeyConstruct.mk .block (.named "old") nestedBody.children).rename "new" :: []))) :=`
+- `tag :1424` (`ConcreteSpec/Proofs/Ident.lean:1425-1431`, Planted for `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_rename_named`):
+  `example : KeyConstruct.pathAt nestedBody.children [0, 0] = some nestedSuffix ∧ ¬ ((⟨.function function, renamedRootKey⟩ : StableKey) ∈ (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7 ([unnamedLoop] ++ noopRename (KeyConstruct.mk .block (.named "old") nestedBody.children) "new" :: []))) ∧ (⟨.function function, renamedPath⟩ : StableKey) ∈ (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7 ([unnamedLoop] ++ noopRename (KeyConstruct.mk .block (.named "old") nestedBody.children) "new" :: [])))) := by`
+- `tag :1438` (`ConcreteSpec/Proofs/Ident.lean:1439-1445`, Planted for `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_rename_named`):
+  `example : KeyConstruct.pathAt nestedBody.children [0, 0] = some nestedSuffix ∧ ¬ ((⟨.function function, renamedRootKey⟩ : StableKey) ∈ (List.map Prod.snd (unresetScopeAssign function 7 ([unnamedLoop] ++ (KeyConstruct.mk .block (.named "old") nestedBody.children).rename "new" :: []))) ∧ (⟨.function function, renamedPath⟩ : StableKey) ∈ (List.map Prod.snd (unresetScopeAssign function 7 ([unnamedLoop] ++ (KeyConstruct.mk .block (.named "old") nestedBody.children).rename "new" :: [])))) := by`
+- `tag :1454` (`ConcreteSpec/Proofs/Ident.lean:1455-1460`, Instance for `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_rename_named`):
+  `example : (⟨.function function, ⟨[⟨.call, .named "renamed"⟩]⟩⟩ : StableKey) ∈ (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7 ([] ++ (KeyConstruct.mk .call (.named "work") []).rename "renamed" :: []))) ∧ (⟨.function function, ⟨⟨.call, .named "renamed"⟩ :: ([] : List KeySegment)⟩⟩ : StableKey) ∈ (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7 ([] ++ (KeyConstruct.mk .call (.named "work") []).rename "renamed" :: []))) :=`
+- `tag :1464` (`ConcreteSpec/Proofs/Ident.lean:1465-1471`, Planted for `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_rename_named`):
+  `example : KeyConstruct.pathAt ([] : List KeyConstruct) [] = some ⟨[]⟩ ∧ ¬ ((⟨.function function, ⟨[⟨.call, .named "renamed"⟩]⟩⟩ : StableKey) ∈ (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7 ([] ++ noopRename (KeyConstruct.mk .call (.named "work") []) "renamed" :: []))) ∧ (⟨.function function, ⟨⟨.call, .named "renamed"⟩ :: ([] : List KeySegment)⟩⟩ : StableKey) ∈ (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7 ([] ++ noopRename (KeyConstruct.mk .call (.named "work") []) "renamed" :: [])))) := by`
+- `tag :1478` (`ConcreteSpec/Proofs/Ident.lean:1479-1484`, Instance for `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_pin`):
+  `example : (⟨.function function, pinnedRootKey⟩ : StableKey) ∈ (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7 ([] ++ (KeyConstruct.mk .block (.unnamed none) nestedBody.children).pin (some "pin") :: []))) ∧ (⟨.function function, pinnedPath⟩ : StableKey) ∈ (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7 ([] ++ (KeyConstruct.mk .block (.unnamed none) nestedBody.children).pin (some "pin") :: []))) :=`
+- `tag :1488` (`ConcreteSpec/Proofs/Ident.lean:1489-1495`, Planted for `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_pin`):
+  `example : KeyConstruct.pathAtIn [] nestedBody.children [0, 0] = some nestedSuffix ∧ ¬ ((⟨.function function, pinnedRootKey⟩ : StableKey) ∈ (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7 ([] ++ noopPin (KeyConstruct.mk .block (.unnamed none) nestedBody.children) (some "pin") :: []))) ∧ (⟨.function function, pinnedPath⟩ : StableKey) ∈ (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7 ([] ++ noopPin (KeyConstruct.mk .block (.unnamed none) nestedBody.children) (some "pin") :: [])))) := by`
+- `tag :1502` (`ConcreteSpec/Proofs/Ident.lean:1503-1508`, Instance for `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_pin`):
+  `example : (⟨.function function, ⟨[⟨.binding, .pinned "pinned"⟩]⟩⟩ : StableKey) ∈ (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7 ([] ++ (KeyConstruct.mk .binding (.unnamed none) []).pin (some "pinned") :: []))) ∧ (⟨.function function, ⟨⟨.binding, .pinned "pinned"⟩ :: ([] : List KeySegment)⟩⟩ : StableKey) ∈ (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7 ([] ++ (KeyConstruct.mk .binding (.unnamed none) []).pin (some "pinned") :: []))) :=`
+- `tag :1511` (`ConcreteSpec/Proofs/Ident.lean:1512-1518`, Planted for `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_pin`):
+  `example : KeyConstruct.pathAtIn [] ([] : List KeyConstruct) [] = some ⟨[]⟩ ∧ ¬ ((⟨.function function, ⟨[⟨.binding, .pinned "pinned"⟩]⟩⟩ : StableKey) ∈ (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7 ([] ++ noopPin (KeyConstruct.mk .binding (.unnamed none) []) (some "pinned") :: []))) ∧ (⟨.function function, ⟨⟨.binding, .pinned "pinned"⟩ :: ([] : List KeySegment)⟩⟩ : StableKey) ∈ (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7 ([] ++ noopPin (KeyConstruct.mk .binding (.unnamed none) []) (some "pinned") :: [])))) := by`
+- `tag :1529` (`ConcreteSpec/Proofs/Ident.lean:1530`, Instance for `ConcreteSpec.Core.KeyConstruct.key_insert_differentKind`):
+  `example : unnamedBinding.key ([] ++ insertedCall :: []) = unnamedBinding.key ([] ++ []) :=`
+- `tag :1533` (`ConcreteSpec/Proofs/Ident.lean:1534-1536`, Planted for `ConcreteSpec.Core.KeyConstruct.key_insert_differentKind`):
+  `example : insertedCall.kind ≠ unnamedBinding.kind ∧ ¬ (allKindsOrdinal ([] ++ insertedCall :: []) unnamedBinding = allKindsOrdinal ([] ++ []) unnamedBinding) :=`
+- `tag :1543` (`ConcreteSpec/Proofs/Ident.lean:1544-1545`, Instance for `ConcreteSpec.Core.KeyConstruct.key_insert_named`):
+  `example : unnamedBinding.key ([] ++ KeyConstruct.mk .binding (.named "x") [] :: []) = unnamedBinding.key ([] ++ []) :=`
+- `tag :1548` (`ConcreteSpec/Proofs/Ident.lean:1549-1550`, Planted for `ConcreteSpec.Core.KeyConstruct.key_insert_named`):
+  `example : ¬ (countNamedKey ([] ++ KeyConstruct.mk .binding (.named "x") [] :: []) unnamedBinding = countNamedKey ([] ++ []) unnamedBinding) := by decide`
+- `tag :1557` (`ConcreteSpec/Proofs/Ident.lean:1558-1559`, Instance for `ConcreteSpec.Core.KeyConstruct.key_rename_other`):
+  `example : unnamedBinding.key ([] ++ namedBinding.rename "y" :: [unnamedBinding]) = unnamedBinding.key ([] ++ namedBinding :: [unnamedBinding]) :=`
+- `tag :1562` (`ConcreteSpec/Proofs/Ident.lean:1563-1564`, Planted for `ConcreteSpec.Core.KeyConstruct.key_rename_other`):
+  `example : ¬ (unnamedBinding.key ([] ++ demoteRename namedBinding "y" :: [unnamedBinding]) = unnamedBinding.key ([] ++ namedBinding :: [unnamedBinding])) := by decide`
+- `tag :1572` (`ConcreteSpec/Proofs/Ident.lean:1573-1574`, Instance for `ConcreteSpec.Core.KeyConstruct.key_pin_other`):
+  `example : unnamedBinding.key ([] ++ unnamedBinding.pin (some "x") :: [unnamedBinding]) = unnamedBinding.key ([] ++ unnamedBinding :: [unnamedBinding]) :=`
+- `tag :1577` (`ConcreteSpec/Proofs/Ident.lean:1578-1579`, Planted for `ConcreteSpec.Core.KeyConstruct.key_pin_other`):
+  `example : ¬ (labelOnlyOrdinal ([] ++ unnamedBinding.pin (some "x") :: [unnamedBinding]) unnamedBinding = labelOnlyOrdinal ([] ++ unnamedBinding :: [unnamedBinding]) unnamedBinding) := by decide`
+- `tag :1597` (`ConcreteSpec/Proofs/Ident.lean:1598-1599`, Instance for `ConcreteSpec.Core.KeyConstruct.descendant_insert_differentKind`):
+  `example : nestedBody.descendantKey ([] ++ insertedCall :: []) [0, 0] = nestedBody.descendantKey ([] ++ []) [0, 0] :=`
+- `tag :1602` (`ConcreteSpec/Proofs/Ident.lean:1603-1605`, Planted for `ConcreteSpec.Core.KeyConstruct.descendant_insert_differentKind`):
+  `example : KeyConstruct.SubtreeAvoidsKind insertedCall.kind nestedBody [0, 0] ∧ ¬ (allKindsDescendantKey ([] ++ insertedCall :: []) nestedBody [0, 0] = allKindsDescendantKey ([] ++ []) nestedBody [0, 0]) :=`
+- `tag :1614` (`ConcreteSpec/Proofs/Ident.lean:1615-1616`, Instance for `ConcreteSpec.Core.KeyConstruct.descendant_insert_named`):
+  `example : nestedBody.descendantKey ([] ++ KeyConstruct.mk .block (.named "body") nestedBody.children :: []) [0, 0] = nestedBody.descendantKey ([] ++ []) [0, 0] :=`
+- `tag :1619` (`ConcreteSpec/Proofs/Ident.lean:1620-1621`, Planted for `ConcreteSpec.Core.KeyConstruct.descendant_insert_named`):
+  `example : ¬ (countNamedDescendantKey ([] ++ KeyConstruct.mk .block (.named "body") nestedBody.children :: []) nestedBody [0, 0] = countNamedDescendantKey ([] ++ []) nestedBody [0, 0]) := by decide`
+- `tag :1632` (`ConcreteSpec/Proofs/Ident.lean:1633-1636`, Instance for `ConcreteSpec.Core.KeyConstruct.pathAt_insert_after`):
+  `example : KeyConstruct.pathAt ([] ++ nestedBody :: ([] ++ unnamedBlock :: [])) (([] : List KeyConstruct).length :: [0, 0]) = KeyConstruct.pathAt ([] ++ nestedBody :: ([] ++ [])) (([] : List KeyConstruct).length :: [0, 0]) :=`
+- `tag :1639` (`ConcreteSpec/Proofs/Ident.lean:1640-1643`, Planted for `ConcreteSpec.Core.KeyConstruct.pathAt_insert_after`):
+  `example : ¬ (wholeForestPathAt ([] ++ nestedBody :: ([] ++ unnamedBlock :: [])) (([] : List KeyConstruct).length :: [0, 0]) = wholeForestPathAt ([] ++ nestedBody :: ([] ++ [])) (([] : List KeyConstruct).length :: [0, 0])) := by decide`
+- `tag :1654` (`ConcreteSpec/Proofs/Ident.lean:1655-1660`, Instance for `ConcreteSpec.Core.KeyConstruct.pathAt_insert_named`):
+  `example : KeyConstruct.pathAt (([] ++ KeyConstruct.mk .block (.named "body") nestedBody.children :: []) ++ nestedBody :: []) (([] ++ KeyConstruct.mk .block (.named "body") nestedBody.children :: []).length :: [0, 0]) = KeyConstruct.pathAt (([] ++ []) ++ nestedBody :: []) (([] ++ ([] : List KeyConstruct)).length :: [0, 0]) :=`
+- `tag :1663` (`ConcreteSpec/Proofs/Ident.lean:1664-1669`, Planted for `ConcreteSpec.Core.KeyConstruct.pathAt_insert_named`):
+  `example : ¬ (countNamedPathAt (([] ++ KeyConstruct.mk .block (.named "body") nestedBody.children :: []) ++ nestedBody :: []) (([] ++ KeyConstruct.mk .block (.named "body") nestedBody.children :: []).length :: [0, 0]) = countNamedPathAt (([] ++ []) ++ nestedBody :: []) (([] ++ ([] : List KeyConstruct)).length :: [0, 0])) := by decide`
+- `tag :1680` (`ConcreteSpec/Proofs/Ident.lean:1681-1686`, Instance for `ConcreteSpec.Core.KeyConstruct.pathAt_insert_differentKind`):
+  `example : KeyConstruct.pathAt (([] ++ insertedCall :: []) ++ nestedBody :: []) (([] ++ insertedCall :: []).length :: [0, 0]) = KeyConstruct.pathAt (([] ++ []) ++ nestedBody :: []) (([] ++ ([] : List KeyConstruct)).length :: [0, 0]) :=`
+- `tag :1689` (`ConcreteSpec/Proofs/Ident.lean:1690-1696`, Planted for `ConcreteSpec.Core.KeyConstruct.pathAt_insert_differentKind`):
+  `example : KeyConstruct.SubtreeAvoidsKind insertedCall.kind nestedBody [0, 0] ∧ ¬ (allKindsPathAt (([] ++ insertedCall :: []) ++ nestedBody :: []) (([] ++ insertedCall :: []).length :: [0, 0]) = allKindsPathAt (([] ++ []) ++ nestedBody :: []) (([] ++ ([] : List KeyConstruct)).length :: [0, 0])) :=`
+- `tag :1733` (`ConcreteSpec/Proofs/Ident.lean:1734-1735`, Instance for `ConcreteSpec.Core.KeyConstruct.descendant_rename_other`):
+  `example : nestedBody.descendantKey ([] ++ namedNested.rename "otherName" :: []) [0, 0] = nestedBody.descendantKey ([] ++ namedNested :: []) [0, 0] :=`
+- `tag :1738` (`ConcreteSpec/Proofs/Ident.lean:1739-1740`, Planted for `ConcreteSpec.Core.KeyConstruct.descendant_rename_other`):
+  `example : ¬ (nestedBody.descendantKey ([] ++ demoteRename namedNested "otherName" :: []) [0, 0] = nestedBody.descendantKey ([] ++ namedNested :: []) [0, 0]) := by decide`
+- `tag :1748` (`ConcreteSpec/Proofs/Ident.lean:1749-1750`, Instance for `ConcreteSpec.Core.KeyConstruct.descendant_pin_other`):
+  `example : nestedBody.descendantKey ([] ++ nestedBody.pin (some "pinned") :: []) [0, 0] = nestedBody.descendantKey ([] ++ nestedBody :: []) [0, 0] :=`
+- `tag :1753` (`ConcreteSpec/Proofs/Ident.lean:1754-1755`, Planted for `ConcreteSpec.Core.KeyConstruct.descendant_pin_other`):
+  `example : ¬ (labelOnlyDescendantKey ([] ++ nestedBody.pin (some "pinned") :: []) nestedBody [0, 0] = labelOnlyDescendantKey ([] ++ nestedBody :: []) nestedBody [0, 0]) := by decide`
+- `tag :1785` (`ConcreteSpec/Proofs/Ident.lean:1786-1789`, Instance for `ConcreteSpec.Core.SpecializationTable.canonicalize_complete`):
+  `example : ∃ edge ∈ (SpecializationTable.canonicalize [requestZero, requestOne]).edges, edge.request = requestZero ∧ SpecializationTable.entryAt (SpecializationTable.canonicalize [requestZero, requestOne]).entries edge.entry = some requestZero.specialization :=`
+- `tag :1792` (`ConcreteSpec/Proofs/Ident.lean:1793-1797`, Planted for `ConcreteSpec.Core.SpecializationTable.canonicalize_complete`):
+  `example : requestZero ∈ [requestZero, requestOne] ∧ ¬ (∃ edge ∈ (dropFirstEdges [requestZero, requestOne]).edges, edge.request = requestZero ∧ SpecializationTable.entryAt (dropFirstEdges [requestZero, requestOne]).entries edge.entry = some requestZero.specialization) :=`
+- `tag :1805` (`ConcreteSpec/Proofs/Ident.lean:1806-1808`, Instance for `ConcreteSpec.Core.SpecializationTable.canonicalize_edge_sound`):
+  `example : SpecializationTable.entryAt (SpecializationTable.canonicalize [requestZero, requestOne]).entries edgeZero.entry = some edgeZero.request.specialization :=`
+- `tag :1811` (`ConcreteSpec/Proofs/Ident.lean:1812-1814`, Planted for `ConcreteSpec.Core.SpecializationTable.canonicalize_edge_sound`):
+  `example : edgeZero ∈ (SpecializationTable.canonicalize [requestZero, requestOne]).edges ∧ ¬ (oobEntryAt (SpecializationTable.canonicalize [requestZero, requestOne]).entries edgeZero.entry = some edgeZero.request.specialization) :=`
+- `tag :1817` (`ConcreteSpec/Proofs/Ident.lean:1818-1821`, Instance for `ConcreteSpec.Core.SpecializationTable.canonicalize_share`):
+  `example : ∃ zeroEdge oneEdge, zeroEdge ∈ (SpecializationTable.canonicalize [requestZero, requestOne]).edges ∧ oneEdge ∈ (SpecializationTable.canonicalize [requestZero, requestOne]).edges ∧ zeroEdge.request = requestZero ∧ oneEdge.request = requestOne ∧ zeroEdge.entry = oneEdge.entry :=`
+- `tag :1846` (`ConcreteSpec/Proofs/Ident.lean:1847-1852`, Planted for `ConcreteSpec.Core.SpecializationTable.canonicalize_share`):
+  `example : (requestZero ∈ [requestZero, requestOne] ∧ requestOne ∈ [requestZero, requestOne] ∧ requestZero.specialization = requestOne.specialization) ∧ ¬ (∃ first second, first ∈ (bySite [requestZero, requestOne]).edges ∧ second ∈ (bySite [requestZero, requestOne]).edges ∧ first.request = requestZero ∧ second.request = requestOne ∧ first.entry = second.entry) := by`
+- `tag :1856` (`ConcreteSpec/Proofs/Ident.lean:1857-1860`, Instance for `ConcreteSpec.Core.SpecializationTable.canonicalize_distinct`):
+  `example : ∃ typeEdge otherEdge, typeEdge ∈ (SpecializationTable.canonicalize [requestZero, requestOtherType]).edges ∧ otherEdge ∈ (SpecializationTable.canonicalize [requestZero, requestOtherType]).edges ∧ typeEdge.request = requestZero ∧ otherEdge.request = requestOtherType ∧ typeEdge.entry ≠ otherEdge.entry :=`
+- `tag :1864` (`ConcreteSpec/Proofs/Ident.lean:1865-1868`, Instance for `ConcreteSpec.Core.SpecializationTable.canonicalize_distinct`):
+  `example : ∃ capabilityEdge otherEdge, capabilityEdge ∈ (SpecializationTable.canonicalize [requestZero, requestOtherCapability]).edges ∧ otherEdge ∈ (SpecializationTable.canonicalize [requestZero, requestOtherCapability]).edges ∧ capabilityEdge.request = requestZero ∧ otherEdge.request = requestOtherCapability ∧ capabilityEdge.entry ≠ otherEdge.entry :=`
+- `tag :1878` (`ConcreteSpec/Proofs/Ident.lean:1879-1884`, Planted for `ConcreteSpec.Core.SpecializationTable.canonicalize_distinct`):
+  `example : (requestZero ∈ [requestZero, requestOtherType] ∧ requestOtherType ∈ [requestZero, requestOtherType] ∧ requestZero.specialization ≠ requestOtherType.specialization) ∧ ¬ (∃ first second, first ∈ (onlyGeneric [requestZero, requestOtherType]).edges ∧ second ∈ (onlyGeneric [requestZero, requestOtherType]).edges ∧ first.request = requestZero ∧ second.request = requestOtherType ∧ first.entry ≠ second.entry) := by`
+- `tag :1888` (`ConcreteSpec/Proofs/Ident.lean:1889-1894`, Planted for `ConcreteSpec.Core.SpecializationTable.canonicalize_distinct`):
+  `example : (requestZero ∈ [requestZero, requestOtherCapability] ∧ requestOtherCapability ∈ [requestZero, requestOtherCapability] ∧ requestZero.specialization ≠ requestOtherCapability.specialization) ∧ ¬ (∃ first second, first ∈ (onlyGeneric [requestZero, requestOtherCapability]).edges ∧ second ∈ (onlyGeneric [requestZero, requestOtherCapability]).edges ∧ first.request = requestZero ∧ second.request = requestOtherCapability ∧ first.entry ≠ second.entry) := by`
+- `tag :1898` (`ConcreteSpec/Proofs/Ident.lean:1899`, Instance for `ConcreteSpec.Core.SpecializationTable.canonicalize_nodup`):
+  `example : (SpecializationTable.canonicalize [requestZero, requestOne]).entries.Nodup :=`
+- `tag :1902` (`ConcreteSpec/Proofs/Ident.lean:1903`, Planted for `ConcreteSpec.Core.SpecializationTable.canonicalize_nodup`):
+  `example : ¬ (bySite [requestZero, requestOne]).entries.Nodup := by decide`
+- `tag :1917` (`ConcreteSpec/Proofs/Ident.lean:1918-1921`, Instance for `ConcreteSpec.Core.LoadedModules.load_refusal_sound`):
+  `example : match LoadedModules.load [firstModule, collidingModule] with | .refused collision => LoadedModules.HasCollision [firstModule, collidingModule] collision | .admitted admitted => admitted = [firstModule, collidingModule] ∧ LoadedModules.WellFormed [firstModule, collidingModule] :=`
+- `tag :1924` (`ConcreteSpec/Proofs/Ident.lean:1925-1928`, Planted for `ConcreteSpec.Core.LoadedModules.load_refusal_sound`):
+  `example : ¬ (match fabricatedRefusalLoad [firstModule, collidingModule] with | .refused collision => LoadedModules.HasCollision [firstModule, collidingModule] collision | .admitted admitted => admitted = [firstModule, collidingModule] ∧ LoadedModules.WellFormed [firstModule, collidingModule]) := by`
+- `tag :1936` (`ConcreteSpec/Proofs/Ident.lean:1937-1940`, Planted for `ConcreteSpec.Core.LoadedModules.load_refusal_sound`):
+  `example : ¬ (match admitAll [firstModule, collidingModule] with | .refused collision => LoadedModules.HasCollision [firstModule, collidingModule] collision | .admitted admitted => admitted = [firstModule, collidingModule] ∧ LoadedModules.WellFormed [firstModule, collidingModule]) := by`
+- `tag :1944` (`ConcreteSpec/Proofs/Ident.lean:1945`, Instance for `ConcreteSpec.Core.LoadedModules.load_refusal_complete`):
+  `example : ∃ detected, LoadedModules.load [firstModule, samePackageOtherOrigin] = .refused detected :=`
+- `tag :1949` (`ConcreteSpec/Proofs/Ident.lean:1950-1951`, Planted for `ConcreteSpec.Core.LoadedModules.load_refusal_complete`):
+  `example : LoadedModules.HasCollision [firstModule, samePackageOtherOrigin] collidingOrigin ∧ ¬ (∃ detected, admitAll [firstModule, samePackageOtherOrigin] = .refused detected) := by`
+- `tag :1956` (`ConcreteSpec/Proofs/Ident.lean:1957-1960`, Instance for `ConcreteSpec.Core.LoadedModules.load_admitted`):
+  `example : LoadedModules.load [firstModule, secondModule] = .admitted [firstModule, secondModule] ↔ [firstModule, secondModule] = [firstModule, secondModule] ∧ LoadedModules.WellFormed [firstModule, secondModule] :=`
+- `tag :1966` (`ConcreteSpec/Proofs/Ident.lean:1967-1970`, Planted for `ConcreteSpec.Core.LoadedModules.load_admitted`):
+  `example : ¬ (discardLoad [firstModule, secondModule] = .admitted [firstModule, secondModule] ↔ [firstModule, secondModule] = [firstModule, secondModule] ∧ LoadedModules.WellFormed [firstModule, secondModule]) := by`
+- `tag :1976` (`ConcreteSpec/Proofs/Ident.lean:1977-1980`, Instance for `ConcreteSpec.Core.LoadedModules.load_admitted`):
+  `example : LoadedModules.load [firstModule, collidingModule] = .admitted [firstModule, collidingModule] ↔ [firstModule, collidingModule] = [firstModule, collidingModule] ∧ LoadedModules.WellFormed [firstModule, collidingModule] :=`
+- `tag :1983` (`ConcreteSpec/Proofs/Ident.lean:1984-1987`, Planted for `ConcreteSpec.Core.LoadedModules.load_admitted`):
+  `example : ¬ (admitAll [firstModule, collidingModule] = .admitted [firstModule, collidingModule] ↔ [firstModule, collidingModule] = [firstModule, collidingModule] ∧ LoadedModules.WellFormed [firstModule, collidingModule]) := by`
+- `tag :2007` (`ConcreteSpec/Proofs/Ident.lean:2008`, Instance for `ConcreteSpec.Core.SourceText.lineAt_append_newline`):
+  `example : (aSource ++ [10]).lineAt (aSource.length + 1) = aSource.lineAt aSource.length + 1 :=`
+- `tag :2011` (`ConcreteSpec/Proofs/Ident.lean:2012-2013`, Planted for `ConcreteSpec.Core.SourceText.lineAt_append_newline`):
+  `example : ¬ (constantLine (aSource ++ [10]) (aSource.length + 1) = constantLine aSource aSource.length + 1) := by decide`
+- `tag :2015` (`ConcreteSpec/Proofs/Ident.lean:2016`, Instance for `ConcreteSpec.Core.SourceText.lineAt_append_other`):
+  `example : (aSource ++ [9]).lineAt (aSource.length + 1) = aSource.lineAt aSource.length :=`
+- `tag :2019` (`ConcreteSpec/Proofs/Ident.lean:2020-2021`, Planted for `ConcreteSpec.Core.SourceText.lineAt_append_other`):
+  `example : (9 : UInt8) ≠ 10 ∧ ¬ (offsetLine (aSource ++ [9]) (aSource.length + 1) = offsetLine aSource aSource.length) :=`
+- `tag :2029` (`ConcreteSpec/Proofs/Ident.lean:2030`, Instance for `ConcreteSpec.Core.SourceText.columnAt_append_tab`):
+  `example : (aSource ++ [9]).columnAt (aSource.length + 1) = aSource.columnAt aSource.length + 1 :=`
+- `tag :2033` (`ConcreteSpec/Proofs/Ident.lean:2034-2035`, Planted for `ConcreteSpec.Core.SourceText.columnAt_append_tab`):
+  `example : ¬ (tabStopFour (aSource ++ [9]) (aSource.length + 1) = tabStopFour aSource aSource.length + 1) := by decide`
+- `tag :2041` (`ConcreteSpec/Proofs/Ident.lean:2042`, Instance for `ConcreteSpec.Core.SourceText.columnAt_append_newline`):
+  `example : (aTab ++ [10]).columnAt (aTab.length + 1) = 1 :=`
+- `tag :2045` (`ConcreteSpec/Proofs/Ident.lean:2046`, Planted for `ConcreteSpec.Core.SourceText.columnAt_append_newline`):
+  `example : ¬ (noResetColumn (aTab ++ [10]) (aTab.length + 1) = 1) := by decide`
+- `tag :2048` (`ConcreteSpec/Proofs/Ident.lean:2049-2050`, Instance for `ConcreteSpec.Core.SourceText.lineAt_append`):
+  `example : (aSource ++ [10]).lineAt (aSource.length + 1) = aSource.lineAt aSource.length + if (10 : UInt8) = 10 then 1 else 0 :=`
+- `tag :2053` (`ConcreteSpec/Proofs/Ident.lean:2054-2055`, Planted for `ConcreteSpec.Core.SourceText.lineAt_append`):
+  `example : ¬ (constantLine (aSource ++ [10]) (aSource.length + 1) = constantLine aSource aSource.length + if (10 : UInt8) = 10 then 1 else 0) := by decide`
+- `tag :2062` (`ConcreteSpec/Proofs/Ident.lean:2063-2064`, Instance for `ConcreteSpec.Core.SourceText.columnAt_append`):
+  `example : (utf8Prefix ++ [169]).columnAt (utf8Prefix.length + 1) = if (169 : UInt8) = 10 then 1 else utf8Prefix.columnAt utf8Prefix.length + 1 :=`
+- `tag :2067` (`ConcreteSpec/Proofs/Ident.lean:2068-2069`, Planted for `ConcreteSpec.Core.SourceText.columnAt_append`):
+  `example : ¬ (scalarColumn (utf8Prefix ++ [169]) (utf8Prefix.length + 1) = if (169 : UInt8) = 10 then 1 else scalarColumn utf8Prefix utf8Prefix.length + 1) := by decide`
+- `tag :2096` (`ConcreteSpec/Proofs/Ident.lean:2097`, Instance for `ConcreteSpec.Core.EncodedPremise.read_encode`):
+  `example : stackRecord.encode.read specVersion = some stackRecord :=`
+- `tag :2105` (`ConcreteSpec/Proofs/Ident.lean:2106-2107`, Planted for `ConcreteSpec.Core.EncodedPremise.read_encode`):
+  `example : stackRecord.spec = specVersion ∧ ¬ ((encodeDroppingKind stackRecord).read specVersion = some stackRecord) :=`
+- `tag :2110` (`ConcreteSpec/Proofs/Ident.lean:2111`, Instance for `ConcreteSpec.Core.EncodedPremise.read_unknown`):
+  `example : unknownRecord.read specVersion = none :=`
+- `tag :2118` (`ConcreteSpec/Proofs/Ident.lean:2119-2120`, Planted for `ConcreteSpec.Core.EncodedPremise.read_unknown`):
+  `example : (∀ kind : PremiseKind, kind.encode ≠ unknownRecord.category) ∧ ¬ (catchAllRead specVersion unknownRecord = none) :=`
+- `tag :2130` (`ConcreteSpec/Proofs/Ident.lean:2131-2134`, Instance for `ConcreteSpec.Core.EncodedPremise.read_iff`):
+  `example : mismatchedRecord.read specVersion = some mismatchedDecoded ↔ mismatchedRecord.spec = specVersion ∧ specVersion = specVersion ∧ ∃ kind : PremiseKind, kind.encode = mismatchedRecord.category ∧ mismatchedDecoded = ⟨kind, mismatchedRecord.scope, mismatchedRecord.spec⟩ :=`
+- `tag :2137` (`ConcreteSpec/Proofs/Ident.lean:2138-2141`, Planted for `ConcreteSpec.Core.EncodedPremise.read_iff`):
+  `example : ¬ (versionIgnoringRead specVersion mismatchedRecord = some mismatchedDecoded ↔ mismatchedRecord.spec = specVersion ∧ specVersion = specVersion ∧ ∃ kind : PremiseKind, kind.encode = mismatchedRecord.category ∧ mismatchedDecoded = ⟨kind, mismatchedRecord.scope, mismatchedRecord.spec⟩) := by`
+- `tag :2147` (`ConcreteSpec/Proofs/Ident.lean:2148-2151`, Instance for `ConcreteSpec.Core.EncodedPremise.read_iff`):
+  `example : stackRecord.encode.read futureVersion = some stackRecord ↔ stackRecord.encode.spec = futureVersion ∧ futureVersion = specVersion ∧ ∃ kind : PremiseKind, kind.encode = stackRecord.encode.category ∧ stackRecord = ⟨kind, stackRecord.encode.scope, stackRecord.encode.spec⟩ :=`
+- `tag :2154` (`ConcreteSpec/Proofs/Ident.lean:2155-2158`, Planted for `ConcreteSpec.Core.EncodedPremise.read_iff`):
+  `example : ¬ (versionIgnoringRead futureVersion stackRecord.encode = some stackRecord ↔ stackRecord.encode.spec = futureVersion ∧ futureVersion = specVersion ∧ ∃ kind : PremiseKind, kind.encode = stackRecord.encode.category ∧ stackRecord = ⟨kind, stackRecord.encode.scope, stackRecord.encode.spec⟩) := by`
+
+#### `ConcreteSpec/Proofs/Prim.lean`
+- `tag :482` (`ConcreteSpec/Proofs/Prim.lean:483`, Instance for `ConcreteSpec.Core.Prim.lookupId_rename`):
+  `example : lookupId (renameLocals swap locals) (swap.toFun 1) = lookupId locals 1 :=`
+- `tag :486` (`ConcreteSpec/Proofs/Prim.lean:487`, Planted for `ConcreteSpec.Core.Prim.lookupId_rename`):
+  `example : ¬ (lookupId (unrenamedLocals swap locals) (swap.toFun 1) = lookupId locals 1) := by decide`
+- `tag :489` (`ConcreteSpec/Proofs/Prim.lean:490`, Instance for `ConcreteSpec.Core.Prim.eval_rename`):
+  `example : Term.eval (renameLocals swap locals) (renameTerm swap source) = Term.eval locals source :=`
+- `tag :493` (`ConcreteSpec/Proofs/Prim.lean:494`, Planted for `ConcreteSpec.Core.Prim.eval_rename`):
+  `example : ¬ (Term.eval (unrenamedLocals swap locals) (renameTerm swap source) = Term.eval locals source) := by`
+- `tag :497` (`ConcreteSpec/Proofs/Prim.lean:498-499`, Instance for `ConcreteSpec.Core.Prim.eval_operands_rename`):
+  `example : operands.eval (renameLocals swap locals) () (renameTerm swap source) = operands.eval locals () source :=`
+- `tag :502` (`ConcreteSpec/Proofs/Prim.lean:503-504`, Planted for `ConcreteSpec.Core.Prim.eval_operands_rename`):
+  `example : ¬ ((operands.eval (unrenamedLocals swap locals) () (renameTerm swap source) : Res (Int × Unit)) = operands.eval locals () source) := by`
+- `tag :508` (`ConcreteSpec/Proofs/Prim.lean:509`, Instance for `ConcreteSpec.Core.Prim.rename_inverse`):
+  `example : renameTerm swap.symm (renameTerm swap source) = source :=`
+- `tag :512` (`ConcreteSpec/Proofs/Prim.lean:513`, Planted for `ConcreteSpec.Core.Prim.rename_inverse`):
+  `example : ¬ (renameTerm (idSymm swap) (renameTerm swap source) = source) := by decide`
+- `tag :515` (`ConcreteSpec/Proofs/Prim.lean:516`, Instance for `ConcreteSpec.Core.Prim.rename_id`):
+  `example : renameTerm .id source = source :=`
+- `tag :519` (`ConcreteSpec/Proofs/Prim.lean:520`, Planted for `ConcreteSpec.Core.Prim.rename_id`):
+  `example : ¬ (renameTerm swap source = source) := by decide`
+- `tag :522` (`ConcreteSpec/Proofs/Prim.lean:523`, Instance for `ConcreteSpec.Core.Prim.lookupId_rehint`):
+  `example : lookupId (rehintLocals hints locals) 1 = lookupId locals 1 :=`
+- `tag :526` (`ConcreteSpec/Proofs/Prim.lean:527`, Planted for `ConcreteSpec.Core.Prim.lookupId_rehint`):
+  `example : ¬ (lookupId (corruptIdRehintLocals hints locals) 1 = lookupId locals 1) := by decide`
+- `tag :529` (`ConcreteSpec/Proofs/Prim.lean:530`, Instance for `ConcreteSpec.Core.Prim.eval_rehint`):
+  `example : Term.eval (rehintLocals hints locals) (rehintTerm hints source) = Term.eval locals source :=`
+- `tag :533` (`ConcreteSpec/Proofs/Prim.lean:534-535`, Planted for `ConcreteSpec.Core.Prim.eval_rehint`):
+  `example : ¬ (Term.eval (rehintLocals hints locals) (corruptIdRehintTerm hints source) = Term.eval locals source) := by decide`
+- `tag :537` (`ConcreteSpec/Proofs/Prim.lean:538-539`, Instance for `ConcreteSpec.Core.Prim.eval_operands_rehint`):
+  `example : operands.eval (rehintLocals hints locals) () (rehintTerm hints source) = operands.eval locals () source :=`
+- `tag :542` (`ConcreteSpec/Proofs/Prim.lean:543-544`, Planted for `ConcreteSpec.Core.Prim.eval_operands_rehint`):
+  `example : ¬ ((operands.eval (rehintLocals hints locals) () (corruptIdRehintTerm hints source) : Res (Int × Unit)) = operands.eval locals () source) := by`
+- `tag :582` (`ConcreteSpec/Proofs/Prim.lean:583-590`, Instance for `ConcreteSpec.Core.SafetyEvidence.discharge_sound`):
+  `example : match evidence.discharge obligations EvidenceDemo.current obligation.id with | none => ¬ evidence.Usable EvidenceDemo.current ∨ EvidenceDemo.current.obligation ≠ obligation.id ∨ ObligationTable.lookup obligations obligation.id = none | some result => evidence.Usable EvidenceDemo.current ∧ EvidenceDemo.current.obligation = obligation.id ∧ ObligationTable.lookup obligations obligation.id = some result.obligation ∧ result.obligation.id = obligation.id :=`
+- `tag :593` (`ConcreteSpec/Proofs/Prim.lean:594-601`, Planted for `ConcreteSpec.Core.SafetyEvidence.discharge_sound`):
+  `example : ¬ (match dischargeWrongKey evidence obligations EvidenceDemo.current obligation.id with | none => ¬ evidence.Usable EvidenceDemo.current ∨ EvidenceDemo.current.obligation ≠ obligation.id ∨ ObligationTable.lookup obligations obligation.id = none | some result => evidence.Usable EvidenceDemo.current ∧ EvidenceDemo.current.obligation = obligation.id ∧ ObligationTable.lookup obligations obligation.id = some result.obligation ∧ result.obligation.id = obligation.id) := by`
+- `tag :606` (`ConcreteSpec/Proofs/Prim.lean:607-614`, Planted for `ConcreteSpec.Core.SafetyEvidence.discharge_sound`):
+  `example : ¬ (match alwaysRefuseDischarge evidence obligations EvidenceDemo.current obligation.id with | none => ¬ evidence.Usable EvidenceDemo.current ∨ EvidenceDemo.current.obligation ≠ obligation.id ∨ ObligationTable.lookup obligations obligation.id = none | some result => evidence.Usable EvidenceDemo.current ∧ EvidenceDemo.current.obligation = obligation.id ∧ ObligationTable.lookup obligations obligation.id = some result.obligation ∧ result.obligation.id = obligation.id) := by`
+- `tag :624` (`ConcreteSpec/Proofs/Prim.lean:625-632`, Instance for `ConcreteSpec.Core.SafetyEvidence.discharge_sound`):
+  `example : match evidence.discharge mismatchedObligations EvidenceDemo.current mismatchedObligation.id with | none => ¬ evidence.Usable EvidenceDemo.current ∨ EvidenceDemo.current.obligation ≠ mismatchedObligation.id ∨ ObligationTable.lookup mismatchedObligations mismatchedObligation.id = none | some result => evidence.Usable EvidenceDemo.current ∧ EvidenceDemo.current.obligation = mismatchedObligation.id ∧ ObligationTable.lookup mismatchedObligations mismatchedObligation.id = some result.obligation ∧ result.obligation.id = mismatchedObligation.id :=`
+- `tag :635` (`ConcreteSpec/Proofs/Prim.lean:636-644`, Planted for `ConcreteSpec.Core.SafetyEvidence.discharge_sound`):
+  `example : ¬ (match dischargeIgnoringObligation evidence mismatchedObligations EvidenceDemo.current mismatchedObligation.id with | none => ¬ evidence.Usable EvidenceDemo.current ∨ EvidenceDemo.current.obligation ≠ mismatchedObligation.id ∨ ObligationTable.lookup mismatchedObligations mismatchedObligation.id = none | some result => evidence.Usable EvidenceDemo.current ∧ EvidenceDemo.current.obligation = mismatchedObligation.id ∧ ObligationTable.lookup mismatchedObligations mismatchedObligation.id = some result.obligation ∧ result.obligation.id = mismatchedObligation.id) := by`
+- `tag :664` (`ConcreteSpec/Proofs/Prim.lean:665-672`, Instance for `ConcreteSpec.Core.SafetyEvidence.discharge_sound`):
+  `example : match evidence.discharge obligations contractChanged obligation.id with | none => ¬ evidence.Usable contractChanged ∨ contractChanged.obligation ≠ obligation.id ∨ ObligationTable.lookup obligations obligation.id = none | some result => evidence.Usable contractChanged ∧ contractChanged.obligation = obligation.id ∧ ObligationTable.lookup obligations obligation.id = some result.obligation ∧ result.obligation.id = obligation.id :=`
+- `tag :675` (`ConcreteSpec/Proofs/Prim.lean:676-683`, Planted for `ConcreteSpec.Core.SafetyEvidence.discharge_sound`):
+  `example : ¬ (match dischargeIgnoringContext evidence obligations contractChanged obligation.id with | none => ¬ evidence.Usable contractChanged ∨ contractChanged.obligation ≠ obligation.id ∨ ObligationTable.lookup obligations obligation.id = none | some result => evidence.Usable contractChanged ∧ contractChanged.obligation = obligation.id ∧ ObligationTable.lookup obligations obligation.id = some result.obligation ∧ result.obligation.id = obligation.id) := by`
+- `tag :689` (`ConcreteSpec/Proofs/Prim.lean:690-697`, Instance for `ConcreteSpec.Core.SafetyEvidence.discharge_sound`):
+  `example : match evidence.discharge [] EvidenceDemo.current obligation.id with | none => ¬ evidence.Usable EvidenceDemo.current ∨ EvidenceDemo.current.obligation ≠ obligation.id ∨ ObligationTable.lookup [] obligation.id = none | some result => evidence.Usable EvidenceDemo.current ∧ EvidenceDemo.current.obligation = obligation.id ∧ ObligationTable.lookup [] obligation.id = some result.obligation ∧ result.obligation.id = obligation.id :=`
+- `tag :700` (`ConcreteSpec/Proofs/Prim.lean:701-708`, Planted for `ConcreteSpec.Core.SafetyEvidence.discharge_sound`):
+  `example : ¬ (match dischargeWithoutTable evidence [] EvidenceDemo.current obligation.id with | none => ¬ evidence.Usable EvidenceDemo.current ∨ EvidenceDemo.current.obligation ≠ obligation.id ∨ ObligationTable.lookup [] obligation.id = none | some result => evidence.Usable EvidenceDemo.current ∧ EvidenceDemo.current.obligation = obligation.id ∧ ObligationTable.lookup [] obligation.id = some result.obligation ∧ result.obligation.id = obligation.id) := by`
+- `tag :712` (`ConcreteSpec/Proofs/Prim.lean:716`, Instance for `ConcreteSpec.Core.SafetyEvidence.discharge_target_mismatch`):
+  `example : evidence.discharge mismatchedObligations EvidenceDemo.current mismatchedObligation.id = none :=`
+- `tag :720` (`ConcreteSpec/Proofs/Prim.lean:721-725`, Planted for `ConcreteSpec.Core.SafetyEvidence.discharge_target_mismatch`):
+  `example : (ObligationTable.lookup mismatchedObligations mismatchedObligation.id = some mismatchedObligation ∧ evidence.context.obligation ≠ mismatchedObligation.id) ∧ ¬ (dischargeWithoutTable evidence mismatchedObligations EvidenceDemo.current mismatchedObligation.id = none) := by`
+- `tag :730` (`ConcreteSpec/Proofs/Prim.lean:731`, Instance for `ConcreteSpec.Core.SafetyEvidence.discharge_unregistered`):
+  `example : evidence.discharge [] EvidenceDemo.current obligation.id = none :=`
+- `tag :734` (`ConcreteSpec/Proofs/Prim.lean:735-736`, Planted for `ConcreteSpec.Core.SafetyEvidence.discharge_unregistered`):
+  `example : ObligationTable.lookup [] obligation.id = none ∧ ¬ (dischargeWithoutTable evidence [] EvidenceDemo.current obligation.id = none) := by`
+- `tag :785` (`ConcreteSpec/Proofs/Prim.lean:786`, Instance for `ConcreteSpec.Core.PrimRegistry.unknown_primitive_stuck`):
+  `example : ¬ Exec.Step requestProgram unknownStart .silent finishedConfig :=`
+- `tag :790` (`ConcreteSpec/Proofs/Prim.lean:791-794`, Planted for `ConcreteSpec.Core.PrimRegistry.unknown_primitive_stuck`):
+  `example : (Exec.step requestProgram unknownStart = some (.request ⟨1⟩ [] ⟨0⟩ unknownStart.store unknownCont) ∧ AList.lookup PrimDemo.registry.entries ⟨1⟩ = none) ∧ ¬ ¬ uncheckedPrimStep requestProgram unknownStart .silent finishedConfig := by`
+- `tag :816` (`ConcreteSpec/Proofs/Prim.lean:817-821`, Instance for `ConcreteSpec.Core.Ghost.drive_steps_result`):
+  `example : ∃ tr, (Ghost.drive requestProgram answerOracle 2 initialHist registeredStart).events = initialHist ++ tr ∧ Exec.Steps requestProgram registeredStart tr (Ghost.drive requestProgram answerOracle 2 initialHist registeredStart).config :=`
+- `tag :824` (`ConcreteSpec/Proofs/Prim.lean:825-829`, Planted for `ConcreteSpec.Core.Ghost.drive_steps_result`):
+  `example : ¬ ∃ tr, (dropHistoryDrive requestProgram answerOracle 2 initialHist registeredStart).events = initialHist ++ tr ∧ Exec.Steps requestProgram registeredStart tr (dropHistoryDrive requestProgram answerOracle 2 initialHist registeredStart).config := by`
+- `tag :860` (`ConcreteSpec/Proofs/Prim.lean:861-862`, Instance for `ConcreteSpec.Core.Ghost.runStmts_terminal`):
+  `example : Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] [.abort ⟨4⟩] returnedStart = ⟨[], .final (.returned 1), returnedStart, 20⟩ :=`
+- `tag :866` (`ConcreteSpec/Proofs/Prim.lean:867-868`, Instance for `ConcreteSpec.Core.Ghost.runStmts_terminal`):
+  `example : Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] [.abort ⟨4⟩] trappedStart = ⟨[], .final (.trapped .abort ⟨3⟩), trappedStart, 20⟩ :=`
+- `tag :872` (`ConcreteSpec/Proofs/Prim.lean:873-875`, Planted for `ConcreteSpec.Core.Ghost.runStmts_terminal`):
+  `example : (returnedStart.final? = some (.returned 1) ∧ Exec.Final.returned (1 : Int) ≠ .normal) ∧ ¬ (restartingRunStmts GhostDemo.program GhostDemo.oracle 20 [] [.abort ⟨4⟩] returnedStart = ⟨[], .final (.returned 1), returnedStart, 20⟩) := by`
+- `tag :887` (`ConcreteSpec/Proofs/Prim.lean:888-891`, Instance for `ConcreteSpec.Core.Ghost.ghost_erasure_run`):
+  `example : Ghost.runPieces GhostDemo.language GhostDemo.program GhostDemo.oracle 20 [] GhostDemo.pieces [] GhostDemo.start = Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] (Ghost.erase GhostDemo.pieces) GhostDemo.start :=`
+- `tag :895` (`ConcreteSpec/Proofs/Prim.lean:896-899`, Planted for `ConcreteSpec.Core.Ghost.ghost_erasure_run`):
+  `example : ¬ (Ghost.runPieces GhostDemo.language GhostDemo.program GhostDemo.oracle 20 [] GhostDemo.pieces [] GhostDemo.start = Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] (eraseAllPieces GhostDemo.pieces) GhostDemo.start) := by`
+
+---
+
+### Task (3): Verification of the 14 Replaced Approvals Against `_review/REVIEW9-codex.md`
+
+All 14 helpers that previously cited `rev-c9r4-agy` now cite `(approved: REVIEW9-codex)` and match `_review/REVIEW9-codex.md` lines 22–35 by exact fully qualified name:
+
+| # | Fully qualified name | Current declaration (`file:line` & `tag :N`) | Approval line in `_review/REVIEW9-codex.md` |
+|---|---|---|---|
+| 1 | `ConcreteSpec.Core.ConstructName.isUnnamed_rename` | `ConcreteSpec/Proofs/Ident.lean:256` (`tag :254`) | `_review/REVIEW9-codex.md:22` (`APPROVE, Helper (projection)`) |
+| 2 | `ConcreteSpec.Core.SpecializationTable.entryAt_lt_length` | `ConcreteSpec/Proofs/Ident.lean:651` (`tag :649`) | `_review/REVIEW9-codex.md:23` (`APPROVE, Helper (projection)`) |
+| 3 | `ConcreteSpec.Core.SpecializationTable.entryIndex_sound` | `ConcreteSpec/Proofs/Ident.lean:658` (`tag :656`) | `_review/REVIEW9-codex.md:24` (`APPROVE, Helper (projection)`) |
+| 4 | `ConcreteSpec.Core.SpecializationTable.intern_sound` | `ConcreteSpec/Proofs/Ident.lean:675` (`tag :673`) | `_review/REVIEW9-codex.md:25` (`APPROVE, Helper (projection)`) |
+| 5 | `ConcreteSpec.Core.SpecializationTable.intern_preserves` | `ConcreteSpec/Proofs/Ident.lean:685` (`tag :683`) | `_review/REVIEW9-codex.md:26` (`APPROVE, Helper (projection)`) |
+| 6 | `ConcreteSpec.Core.SpecializationTable.entryIndex_none_not_mem` | `ConcreteSpec/Proofs/Ident.lean:701` (`tag :699`) | `_review/REVIEW9-codex.md:27` (`APPROVE, Helper (projection)`) |
+| 7 | `ConcreteSpec.Core.SpecializationTable.entry_unique` | `ConcreteSpec/Proofs/Ident.lean:778` (`tag :776`) | `_review/REVIEW9-codex.md:28` (`APPROVE, Helper (projection)`) |
+| 8 | `ConcreteSpec.Core.LoadCollision.between?_sound` | `ConcreteSpec/Proofs/Ident.lean:827` (`tag :825`) | `_review/REVIEW9-codex.md:29` (`APPROVE, Helper (projection)`) |
+| 9 | `ConcreteSpec.Core.LoadCollision.withModule_sound` | `ConcreteSpec/Proofs/Ident.lean:844` (`tag :842`) | `_review/REVIEW9-codex.md:30` (`APPROVE, Helper (projection)`) |
+| 10 | `ConcreteSpec.Core.LoadedModules.findCollisionFrom_sound` | `ConcreteSpec/Proofs/Ident.lean:865` (`tag :863`) | `_review/REVIEW9-codex.md:31` (`APPROVE, Helper (projection)`) |
+| 11 | `ConcreteSpec.Core.LoadCollision.between?_complete` | `ConcreteSpec/Proofs/Ident.lean:886` (`tag :884`) | `_review/REVIEW9-codex.md:32` (`APPROVE, Helper (projection)`) |
+| 12 | `ConcreteSpec.Core.LoadCollision.withModule_complete` | `ConcreteSpec/Proofs/Ident.lean:901` (`tag :899`) | `_review/REVIEW9-codex.md:33` (`APPROVE, Helper (projection)`) |
+| 13 | `ConcreteSpec.Core.Span.locationOk_iff` | `ConcreteSpec/Proofs/Ident.lean:1032` (`tag :1030`) | `_review/REVIEW9-codex.md:34` (`APPROVE, Helper (projection)`) |
+| 14 | `ConcreteSpec.Core.ObligationTable.lookup_id` | `ConcreteSpec/Spec/Prim.lean:299` (`tag :297`) | `_review/REVIEW9-codex.md:35` (`APPROVE, Helper (inversion)`) |
+
+No `approved: PENDING` or `rev-c9r4-agy` tags remain anywhere in `ConcreteSpec`.
+
+---
+
+### Task (4): Complete C9 Law Inventory and Vacuity Audit under `_review/VACUITY_CONVENTION_FINAL.md`
+
+Every authored theorem in `ConcreteSpec/Spec/Ident.lean`, `ConcreteSpec/Proofs/Ident.lean`, `ConcreteSpec/Spec/Prim.lean`, and `ConcreteSpec/Proofs/Prim.lean` carries exactly one classification tag (`Law` or `Helper` with an approved reference). The single `Obligation` (`ConcreteSpec.Core.OutsideFunctionEdit` at `ConcreteSpec/Spec/Ident.lean:646`, `tag :643`) is a `def … : Prop` citing `R-0492`. No `Law` proof is a projection, constructor repackaging, or `Eq.refl`/`rfl` of its subject. (`ConcreteSpec.Core.Observe.trapLine_injective` at `ConcreteSpec/Proofs/Observe2.lean:365` belongs to C6 in the migration order and is deliberately unchanged here; C9's byte-column trap-location law `ConcreteSpec.Core.Observe.trapTerminal_valid_location` at `ConcreteSpec/Proofs/Observe2.lean:461` is also included at the end of the table below and passes.)
+
+| # | Fully qualified Law name | Declaration (`file:line` & `tag :N`) | Vacuity verdict | Instance witness (`file:line` & `tag :N`) | Planted witness (`file:line` & `tag :N`) |
+|---|---|---|---|---|---|
+| 1 | `ConcreteSpec.Core.SiteKeyTable.nodup_renumber` | `ConcreteSpec/Proofs/Ident.lean:14` (`tag :11`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:1181` (`tag :1180`) | `ConcreteSpec/Proofs/Ident.lean:1185` (`tag :1184`) |
+| 2 | `ConcreteSpec.Core.SiteKeyTable.lookup_renumber` | `ConcreteSpec/Proofs/Ident.lean:40` (`tag :37`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:1172` (`tag :1171`) | `ConcreteSpec/Proofs/Ident.lean:1177` (`tag :1176`) |
+| 3 | `ConcreteSpec.Core.KeyConstruct.collectKeysIn_sound` | `ConcreteSpec/Proofs/Ident.lean:103` (`tag :101`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:1266` (`tag :1265`) | `ConcreteSpec/Proofs/Ident.lean:1273` (`tag :1272`) |
+| 4 | `ConcreteSpec.Core.KeyConstruct.collectKeysIn_collectionSound` | `ConcreteSpec/Proofs/Ident.lean:136` (`tag :132`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:1281` (`tag :1280`) | `ConcreteSpec/Proofs/Ident.lean:1286` (`tag :1285`) |
+| 5 | `ConcreteSpec.Core.KeyConstruct.collectKeysIn_complete` | `ConcreteSpec/Proofs/Ident.lean:143` (`tag :141`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:1311` (`tag :1310`) | `ConcreteSpec/Proofs/Ident.lean:1315` (`tag :1314`) |
+| 6 | `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_occurrences` | `ConcreteSpec/Proofs/Ident.lean:186` (`tag :183`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:1324` (`tag :1323`) | `ConcreteSpec/Proofs/Ident.lean:1330` (`tag :1329`) |
+| 7 | `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_lookup` | `ConcreteSpec/Proofs/Ident.lean:204` (`tag :200`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:1339` (`tag :1338`) | `ConcreteSpec/Proofs/Ident.lean:1346` (`tag :1345`) |
+| 8 | `ConcreteSpec.Core.KeyConstruct.assignProgramTables_outsideEdit` | `ConcreteSpec/Proofs/Ident.lean:225` (`tag :221`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:1216` (`tag :1215`) | `ConcreteSpec/Proofs/Ident.lean:1225` (`tag :1224`) |
+| 9 | `ConcreteSpec.Core.KeyConstruct.key_insert_differentKind` | `ConcreteSpec/Proofs/Ident.lean:240` (`tag :237`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:1530` (`tag :1529`) | `ConcreteSpec/Proofs/Ident.lean:1534` (`tag :1533`) |
+| 10 | `ConcreteSpec.Core.KeyConstruct.key_insert_named` | `ConcreteSpec/Proofs/Ident.lean:248` (`tag :245`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:1544` (`tag :1543`) | `ConcreteSpec/Proofs/Ident.lean:1549` (`tag :1548`) |
+| 11 | `ConcreteSpec.Core.KeyConstruct.key_rename_other` | `ConcreteSpec/Proofs/Ident.lean:278` (`tag :275`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:1558` (`tag :1557`) | `ConcreteSpec/Proofs/Ident.lean:1563` (`tag :1562`) |
+| 12 | `ConcreteSpec.Core.KeyConstruct.key_pin_other` | `ConcreteSpec/Proofs/Ident.lean:289` (`tag :285`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:1573` (`tag :1572`) | `ConcreteSpec/Proofs/Ident.lean:1578` (`tag :1577`) |
+| 13 | `ConcreteSpec.Core.KeyConstruct.descendant_insert_differentKind` | `ConcreteSpec/Proofs/Ident.lean:415` (`tag :412`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:1598` (`tag :1597`) | `ConcreteSpec/Proofs/Ident.lean:1603` (`tag :1602`) |
+| 14 | `ConcreteSpec.Core.KeyConstruct.descendant_insert_named` | `ConcreteSpec/Proofs/Ident.lean:435` (`tag :433`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:1615` (`tag :1614`) | `ConcreteSpec/Proofs/Ident.lean:1620` (`tag :1619`) |
+| 15 | `ConcreteSpec.Core.KeyConstruct.pathAt_insert_after` | `ConcreteSpec/Proofs/Ident.lean:454` (`tag :451`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:1633` (`tag :1632`) | `ConcreteSpec/Proofs/Ident.lean:1640` (`tag :1639`) |
+| 16 | `ConcreteSpec.Core.KeyConstruct.pathAt_insert_named` | `ConcreteSpec/Proofs/Ident.lean:463` (`tag :460`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:1655` (`tag :1654`) | `ConcreteSpec/Proofs/Ident.lean:1664` (`tag :1663`) |
+| 17 | `ConcreteSpec.Core.KeyConstruct.pathAt_insert_differentKind` | `ConcreteSpec/Proofs/Ident.lean:478` (`tag :475`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:1681` (`tag :1680`) | `ConcreteSpec/Proofs/Ident.lean:1690` (`tag :1689`) |
+| 18 | `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_named_scope` | `ConcreteSpec/Proofs/Ident.lean:507` (`tag :502`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:1389` (`tag :1388`) | `ConcreteSpec/Proofs/Ident.lean:1401` (`tag :1400`) |
+| 19 | `ConcreteSpec.Core.KeyConstruct.descendant_rename_other` | `ConcreteSpec/Proofs/Ident.lean:551` (`tag :549`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:1734` (`tag :1733`) | `ConcreteSpec/Proofs/Ident.lean:1739` (`tag :1738`) |
+| 20 | `ConcreteSpec.Core.KeyConstruct.descendant_pin_other` | `ConcreteSpec/Proofs/Ident.lean:568` (`tag :565`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:1749` (`tag :1748`) | `ConcreteSpec/Proofs/Ident.lean:1754` (`tag :1753`) |
+| 21 | `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_rename_named` | `ConcreteSpec/Proofs/Ident.lean:609` (`tag :604`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:1415` (`tag :1414`); `ConcreteSpec/Proofs/Ident.lean:1455` (`tag :1454`) | `ConcreteSpec/Proofs/Ident.lean:1425` (`tag :1424`); `ConcreteSpec/Proofs/Ident.lean:1439` (`tag :1438`); `ConcreteSpec/Proofs/Ident.lean:1465` (`tag :1464`) |
+| 22 | `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_pin` | `ConcreteSpec/Proofs/Ident.lean:630` (`tag :627`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:1479` (`tag :1478`); `ConcreteSpec/Proofs/Ident.lean:1503` (`tag :1502`) | `ConcreteSpec/Proofs/Ident.lean:1489` (`tag :1488`); `ConcreteSpec/Proofs/Ident.lean:1512` (`tag :1511`) |
+| 23 | `ConcreteSpec.Core.SpecializationTable.canonicalize_nodup` | `ConcreteSpec/Proofs/Ident.lean:715` (`tag :713`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:1899` (`tag :1898`) | `ConcreteSpec/Proofs/Ident.lean:1903` (`tag :1902`) |
+| 24 | `ConcreteSpec.Core.SpecializationTable.canonicalize_edge_sound` | `ConcreteSpec/Proofs/Ident.lean:737` (`tag :734`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:1806` (`tag :1805`) | `ConcreteSpec/Proofs/Ident.lean:1812` (`tag :1811`) |
+| 25 | `ConcreteSpec.Core.SpecializationTable.canonicalize_complete` | `ConcreteSpec/Proofs/Ident.lean:755` (`tag :752`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:1786` (`tag :1785`) | `ConcreteSpec/Proofs/Ident.lean:1793` (`tag :1792`) |
+| 26 | `ConcreteSpec.Core.SpecializationTable.canonicalize_share` | `ConcreteSpec/Proofs/Ident.lean:789` (`tag :786`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:1818` (`tag :1817`) | `ConcreteSpec/Proofs/Ident.lean:1847` (`tag :1846`) |
+| 27 | `ConcreteSpec.Core.SpecializationTable.canonicalize_distinct` | `ConcreteSpec/Proofs/Ident.lean:808` (`tag :805`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:1857` (`tag :1856`); `ConcreteSpec/Proofs/Ident.lean:1865` (`tag :1864`) | `ConcreteSpec/Proofs/Ident.lean:1879` (`tag :1878`); `ConcreteSpec/Proofs/Ident.lean:1889` (`tag :1888`) |
+| 28 | `ConcreteSpec.Core.LoadedModules.load_refusal_complete` | `ConcreteSpec/Proofs/Ident.lean:922` (`tag :919`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:1945` (`tag :1944`) | `ConcreteSpec/Proofs/Ident.lean:1950` (`tag :1949`) |
+| 29 | `ConcreteSpec.Core.LoadedModules.load_refusal_sound` | `ConcreteSpec/Proofs/Ident.lean:950` (`tag :947`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:1918` (`tag :1917`) | `ConcreteSpec/Proofs/Ident.lean:1925` (`tag :1924`); `ConcreteSpec/Proofs/Ident.lean:1937` (`tag :1936`) |
+| 30 | `ConcreteSpec.Core.LoadedModules.load_admitted` | `ConcreteSpec/Proofs/Ident.lean:966` (`tag :963`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:1957` (`tag :1956`); `ConcreteSpec/Proofs/Ident.lean:1977` (`tag :1976`) | `ConcreteSpec/Proofs/Ident.lean:1967` (`tag :1966`); `ConcreteSpec/Proofs/Ident.lean:1984` (`tag :1983`) |
+| 31 | `ConcreteSpec.Core.SourceText.lineAt_append` | `ConcreteSpec/Proofs/Ident.lean:987` (`tag :985`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:2049` (`tag :2048`) | `ConcreteSpec/Proofs/Ident.lean:2054` (`tag :2053`) |
+| 32 | `ConcreteSpec.Core.SourceText.lineAt_append_newline` | `ConcreteSpec/Proofs/Ident.lean:997` (`tag :995`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:2008` (`tag :2007`) | `ConcreteSpec/Proofs/Ident.lean:2012` (`tag :2011`) |
+| 33 | `ConcreteSpec.Core.SourceText.lineAt_append_other` | `ConcreteSpec/Proofs/Ident.lean:1003` (`tag :1001`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:2016` (`tag :2015`) | `ConcreteSpec/Proofs/Ident.lean:2020` (`tag :2019`) |
+| 34 | `ConcreteSpec.Core.SourceText.columnAt_append` | `ConcreteSpec/Proofs/Ident.lean:1009` (`tag :1007`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:2063` (`tag :2062`) | `ConcreteSpec/Proofs/Ident.lean:2068` (`tag :2067`) |
+| 35 | `ConcreteSpec.Core.SourceText.columnAt_append_tab` | `ConcreteSpec/Proofs/Ident.lean:1020` (`tag :1018`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:2030` (`tag :2029`) | `ConcreteSpec/Proofs/Ident.lean:2034` (`tag :2033`) |
+| 36 | `ConcreteSpec.Core.SourceText.columnAt_append_newline` | `ConcreteSpec/Proofs/Ident.lean:1026` (`tag :1024`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:2042` (`tag :2041`) | `ConcreteSpec/Proofs/Ident.lean:2046` (`tag :2045`) |
+| 37 | `ConcreteSpec.Core.EncodedPremise.read_encode` | `ConcreteSpec/Proofs/Ident.lean:1038` (`tag :1036`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:2097` (`tag :2096`) | `ConcreteSpec/Proofs/Ident.lean:2106` (`tag :2105`) |
+| 38 | `ConcreteSpec.Core.EncodedPremise.read_unknown` | `ConcreteSpec/Proofs/Ident.lean:1067` (`tag :1064`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:2111` (`tag :2110`) | `ConcreteSpec/Proofs/Ident.lean:2119` (`tag :2118`) |
+| 39 | `ConcreteSpec.Core.EncodedPremise.read_iff` | `ConcreteSpec/Proofs/Ident.lean:1088` (`tag :1084`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Ident.lean:2131` (`tag :2130`); `ConcreteSpec/Proofs/Ident.lean:2148` (`tag :2147`) | `ConcreteSpec/Proofs/Ident.lean:2138` (`tag :2137`); `ConcreteSpec/Proofs/Ident.lean:2155` (`tag :2154`) |
+| 40 | `ConcreteSpec.Core.Prim.lookupId_rename` | `ConcreteSpec/Proofs/Prim.lean:15` (`tag :13`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Prim.lean:483` (`tag :482`) | `ConcreteSpec/Proofs/Prim.lean:487` (`tag :486`) |
+| 41 | `ConcreteSpec.Core.Prim.eval_rename` | `ConcreteSpec/Proofs/Prim.lean:35` (`tag :32`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Prim.lean:490` (`tag :489`) | `ConcreteSpec/Proofs/Prim.lean:494` (`tag :493`) |
+| 42 | `ConcreteSpec.Core.Prim.eval_operands_rename` | `ConcreteSpec/Proofs/Prim.lean:59` (`tag :57`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Prim.lean:498` (`tag :497`) | `ConcreteSpec/Proofs/Prim.lean:503` (`tag :502`) |
+| 43 | `ConcreteSpec.Core.Prim.rename_inverse` | `ConcreteSpec/Proofs/Prim.lean:65` (`tag :63`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Prim.lean:509` (`tag :508`) | `ConcreteSpec/Proofs/Prim.lean:513` (`tag :512`) |
+| 44 | `ConcreteSpec.Core.Prim.rename_id` | `ConcreteSpec/Proofs/Prim.lean:77` (`tag :75`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Prim.lean:516` (`tag :515`) | `ConcreteSpec/Proofs/Prim.lean:520` (`tag :519`) |
+| 45 | `ConcreteSpec.Core.Prim.lookupId_rehint` | `ConcreteSpec/Proofs/Prim.lean:88` (`tag :86`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Prim.lean:523` (`tag :522`) | `ConcreteSpec/Proofs/Prim.lean:527` (`tag :526`) |
+| 46 | `ConcreteSpec.Core.Prim.eval_rehint` | `ConcreteSpec/Proofs/Prim.lean:101` (`tag :98`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Prim.lean:530` (`tag :529`) | `ConcreteSpec/Proofs/Prim.lean:534` (`tag :533`) |
+| 47 | `ConcreteSpec.Core.Prim.eval_operands_rehint` | `ConcreteSpec/Proofs/Prim.lean:125` (`tag :123`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Prim.lean:538` (`tag :537`) | `ConcreteSpec/Proofs/Prim.lean:543` (`tag :542`) |
+| 48 | `ConcreteSpec.Core.SafetyEvidence.discharge_sound` | `ConcreteSpec/Proofs/Prim.lean:155` (`tag :151`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Prim.lean:583` (`tag :582`); `ConcreteSpec/Proofs/Prim.lean:625` (`tag :624`); `ConcreteSpec/Proofs/Prim.lean:665` (`tag :664`); `ConcreteSpec/Proofs/Prim.lean:690` (`tag :689`) | `ConcreteSpec/Proofs/Prim.lean:594` (`tag :593`); `ConcreteSpec/Proofs/Prim.lean:607` (`tag :606`); `ConcreteSpec/Proofs/Prim.lean:636` (`tag :635`); `ConcreteSpec/Proofs/Prim.lean:676` (`tag :675`); `ConcreteSpec/Proofs/Prim.lean:701` (`tag :700`) |
+| 49 | `ConcreteSpec.Core.SafetyEvidence.discharge_target_mismatch` | `ConcreteSpec/Proofs/Prim.lean:191` (`tag :188`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Prim.lean:716` (`tag :712`) | `ConcreteSpec/Proofs/Prim.lean:721` (`tag :720`) |
+| 50 | `ConcreteSpec.Core.SafetyEvidence.discharge_unregistered` | `ConcreteSpec/Proofs/Prim.lean:210` (`tag :208`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Prim.lean:731` (`tag :730`) | `ConcreteSpec/Proofs/Prim.lean:735` (`tag :734`) |
+| 51 | `ConcreteSpec.Core.PrimRegistry.unknown_primitive_stuck` | `ConcreteSpec/Proofs/Prim.lean:237` (`tag :234`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Prim.lean:786` (`tag :785`) | `ConcreteSpec/Proofs/Prim.lean:791` (`tag :790`) |
+| 52 | `ConcreteSpec.Core.Ghost.drive_steps_result` | `ConcreteSpec/Proofs/Prim.lean:299` (`tag :296`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Prim.lean:817` (`tag :816`) | `ConcreteSpec/Proofs/Prim.lean:825` (`tag :824`) |
+| 53 | `ConcreteSpec.Core.Ghost.runStmts_terminal` | `ConcreteSpec/Proofs/Prim.lean:380` (`tag :376`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Prim.lean:861` (`tag :860`); `ConcreteSpec/Proofs/Prim.lean:867` (`tag :866`) | `ConcreteSpec/Proofs/Prim.lean:873` (`tag :872`) |
+| 54 | `ConcreteSpec.Core.Ghost.ghost_erasure_run` | `ConcreteSpec/Proofs/Prim.lean:392` (`tag :388`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Prim.lean:888` (`tag :887`) | `ConcreteSpec/Proofs/Prim.lean:896` (`tag :895`) |
+| 55 | `ConcreteSpec.Core.Observe.trapTerminal_valid_location` | `ConcreteSpec/Proofs/Observe2.lean:461` (`tag :458`) | PASS (non-vacuous) | `ConcreteSpec/Proofs/Observe2.lean:486` (`tag :485`) | `ConcreteSpec/Proofs/Observe2.lean:491` (`tag :490`); `ConcreteSpec/Proofs/Observe2.lean:507` (`tag :506`) |
+
+---
+
+### Findings
+
+None.
+
+VERDICT: ACCEPT
+rc=0

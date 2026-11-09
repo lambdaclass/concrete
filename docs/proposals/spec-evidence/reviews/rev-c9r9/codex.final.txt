@@ -1,0 +1,109 @@
+The four provenance edits are accurate. I independently APPROVE all 14 requested exemptions. However, the broader convention audit finds two inherited witness defects, so the overall verdict is CHANGES.
+
+Read-only review completed: no files modified, no builds, and no network access. Historical Git objects are unavailable here; unchanged-scope confirmation is based on the supplied `REVIEW.diff`.
+
+The diff contains exactly four removed lines and four added lines, each substituting `approved: REVIEW8-agy` for `approved: PENDING`. No declaration, proof, definition, or other comment changes. Thus the rest of C9 is unchanged from accepted round 8 **as represented by that diff**.
+
+The four approvals are unconditional:
+
+| Declaration | Approval record and exact quotation |
+|---|---|
+| `ConcreteSpec.Core.KeyConstruct.collectKeysIn_append`, ConcreteSpec/Proofs/Ident.lean:484 | _review/REVIEW8-agy.md:23: “**APPROVE**: Structural computation lemma splitting” |
+| `ConcreteSpec.Core.KeyConstruct.pathAt_named_ancestor_resets_scope`, ConcreteSpec/Proofs/Ident.lean:528 | _review/REVIEW8-agy.md:24: “**APPROVE**: Reclassified from `Law` to `Helper (computation)`” |
+| `ConcreteSpec.Core.PrimRegistry.allows_unknown`, ConcreteSpec/Proofs/Prim.lean:229 | _review/REVIEW8-agy.md:25: “**APPROVE**: Reclassified from `Law` to `Helper (computation)`” |
+| `ConcreteSpec.Core.Ghost.ghost_erasure_ending`, ConcreteSpec/Proofs/Prim.lean:428 | _review/REVIEW8-agy.md:26: “**APPROVE**: Reclassified from `Law` to `Helper (projection)`” |
+
+I also approve those four exemptions independently: append decomposition and locator transport are computation support; absent-registry evaluation computes a guard branch; the erasure corollary projects an established complete-report equality. None supplies independent Law evidence. No `approved: PENDING` tags remain in `ConcreteSpec`.
+
+For provenance repair, the following are my independent verdicts under `_review/VACUITY_CONVENTION_FINAL.md`. These approvals do not rely on the voided round-4 review.
+
+| Exact declaration and location | Verdict and reason |
+|---|---|
+| `ConcreteSpec.Core.ConstructName.isUnnamed_rename` — ConcreteSpec/Proofs/Ident.lean:247 | **APPROVE, Helper (projection).** Constructor-wise preservation of the unnamed discriminator, supporting sibling-preservation proofs. |
+| `ConcreteSpec.Core.SpecializationTable.entryAt_lt_length` — ConcreteSpec/Proofs/Ident.lean:642 | **APPROVE, Helper (projection).** Extracts bounds from successful optional list indexing. |
+| `ConcreteSpec.Core.SpecializationTable.entryIndex_sound` — ConcreteSpec/Proofs/Ident.lean:649 | **APPROVE, Helper (projection).** Internal search-to-lookup correspondence; supports canonicalization’s public contracts. |
+| `ConcreteSpec.Core.SpecializationTable.intern_sound` — ConcreteSpec/Proofs/Ident.lean:666 | **APPROVE, Helper (projection).** Establishes the interner’s returned-index correspondence for the canonicalization induction. |
+| `ConcreteSpec.Core.SpecializationTable.intern_preserves` — ConcreteSpec/Proofs/Ident.lean:676 | **APPROVE, Helper (projection).** Internal preservation of old indexed entries across reuse or append. |
+| `ConcreteSpec.Core.SpecializationTable.entryIndex_none_not_mem` — ConcreteSpec/Proofs/Ident.lean:692 | **APPROVE, Helper (projection).** Extracts absence from the recursive search result; supports duplicate-freedom. |
+| `ConcreteSpec.Core.SpecializationTable.entry_unique` — ConcreteSpec/Proofs/Ident.lean:769 | **APPROVE, Helper (projection).** Applies duplicate-free list indexing uniqueness; does not establish canonical sharing independently. |
+| `ConcreteSpec.Core.LoadCollision.between?_sound` — ConcreteSpec/Proofs/Ident.lean:818 | **APPROVE, Helper (projection).** Recovers the checked pair from the constructed diagnostic. |
+| `ConcreteSpec.Core.LoadCollision.withModule_sound` — ConcreteSpec/Proofs/Ident.lean:835 | **APPROVE, Helper (projection).** Lifts pair-check provenance through one recursive scan. |
+| `ConcreteSpec.Core.LoadedModules.findCollisionFrom_sound` — ConcreteSpec/Proofs/Ident.lean:856 | **APPROVE, Helper (projection).** Internal search-result membership bookkeeping supporting the loader contract. |
+| `ConcreteSpec.Core.LoadCollision.between?_complete` — ConcreteSpec/Proofs/Ident.lean:877 | **APPROVE, Helper (projection).** Inverts a collision certificate’s cases to establish pair-check detection. |
+| `ConcreteSpec.Core.LoadCollision.withModule_complete` — ConcreteSpec/Proofs/Ident.lean:892 | **APPROVE, Helper (projection).** Recursive detection support for the public loader-completeness Law. |
+| `ConcreteSpec.Core.Span.locationOk_iff` — ConcreteSpec/Proofs/Ident.lean:1023 | **APPROVE, Helper (projection).** Explicit definitional expansion, appropriately exempted and never soundness evidence. |
+| `ConcreteSpec.Core.ObligationTable.lookup_id` — ConcreteSpec/Spec/Prim.lean:299 | **APPROVE, Helper (inversion).** Derives intrinsic identity from successful recursive lookup; supports the evidence-consumption contract. |
+
+The coordinator can replace the 14 voided approval references with the persisted reference for this review.
+
+Findings:
+
+- **Major — REAL DEFECT — ConcreteSpec/Proofs/Ident.lean:1252.** The tagged Instance for `ConcreteSpec.Core.KeyConstruct.collectKeysIn_sound` applies the theorem only to scope and forest. The key and membership proof remain unapplied. Its paired Planted example at ConcreteSpec/Proofs/Ident.lean:1257 negates a universal implication instead of supplying mutated hypotheses and a negated conclusion at fully closed instance arguments. This violates the convention’s explicit full-application and Planted requirements. **Long-term fix:** formulate an explicit whole-collection output contract over the collector operation, prove that contract, and provide a fully closed application plus a mutant violating the same contract on the same forest. Merely retaining the universal partial application does not repair the evidence.
+
+- **Major — REAL DEFECT — ConcreteSpec/Proofs/Observe2.lean:379.** The tagged Instance for `ConcreteSpec.Core.Observe.trapLine_injective` leaves the second kind, site, span, and equality proof unapplied at ConcreteSpec/Proofs/Observe2.lean:383. The Planted example at ConcreteSpec/Proofs/Observe2.lean:397 negates the residual universally quantified implication. It consequently fails the same convention requirements. **Long-term fix:** state and prove an explicit whole-renderer injectivity contract, with closed renderer inputs to that contract and matching positive/mutated witnesses. Preserve the current substantive rendered-field guarantee.
+
+Both defects predate this provenance-only diff. Neither means the underlying mathematical theorem is false; the defect is claiming convention-compliant non-vacuity evidence through partial applications.
+
+The complete C9 Law inventory follows. Names are relative to `ConcreteSpec.Core`. **PASS** means the source audit found substantive, non-vacuous behavior and matching closed positive/Planted evidence. **FAIL evidence** identifies the findings above. Locations in the witness columns identify their tags. No projection Law was found.
+
+| Law | Vacuity verdict | Instance witness | Planted witness |
+|---|---|---|---|
+| `SiteKeyTable.nodup_renumber` | PASS | ConcreteSpec/Proofs/Ident.lean:1171 | ConcreteSpec/Proofs/Ident.lean:1175 |
+| `SiteKeyTable.lookup_renumber` | PASS | ConcreteSpec/Proofs/Ident.lean:1162 | ConcreteSpec/Proofs/Ident.lean:1167 |
+| `KeyConstruct.collectKeysIn_sound` | **FAIL evidence** | ConcreteSpec/Proofs/Ident.lean:1252 | ConcreteSpec/Proofs/Ident.lean:1257 |
+| `KeyConstruct.collectKeysIn_complete` | PASS | ConcreteSpec/Proofs/Ident.lean:1282 | ConcreteSpec/Proofs/Ident.lean:1286 |
+| `KeyConstruct.assignFunctionTable_occurrences` | PASS | ConcreteSpec/Proofs/Ident.lean:1295 | ConcreteSpec/Proofs/Ident.lean:1301 |
+| `KeyConstruct.assignFunctionTable_lookup` | PASS | ConcreteSpec/Proofs/Ident.lean:1310 | ConcreteSpec/Proofs/Ident.lean:1317 |
+| `KeyConstruct.assignProgramTables_outsideEdit` | PASS | ConcreteSpec/Proofs/Ident.lean:1206 | ConcreteSpec/Proofs/Ident.lean:1215 |
+| `KeyConstruct.key_insert_differentKind` | PASS | ConcreteSpec/Proofs/Ident.lean:1501 | ConcreteSpec/Proofs/Ident.lean:1505 |
+| `KeyConstruct.key_insert_named` | PASS | ConcreteSpec/Proofs/Ident.lean:1515 | ConcreteSpec/Proofs/Ident.lean:1520 |
+| `KeyConstruct.key_rename_other` | PASS | ConcreteSpec/Proofs/Ident.lean:1529 | ConcreteSpec/Proofs/Ident.lean:1534 |
+| `KeyConstruct.key_pin_other` | PASS | ConcreteSpec/Proofs/Ident.lean:1544 | ConcreteSpec/Proofs/Ident.lean:1549 |
+| `KeyConstruct.descendant_insert_differentKind` | PASS | ConcreteSpec/Proofs/Ident.lean:1569 | ConcreteSpec/Proofs/Ident.lean:1574 |
+| `KeyConstruct.descendant_insert_named` | PASS | ConcreteSpec/Proofs/Ident.lean:1586 | ConcreteSpec/Proofs/Ident.lean:1591 |
+| `KeyConstruct.pathAt_insert_after` | PASS | ConcreteSpec/Proofs/Ident.lean:1604 | ConcreteSpec/Proofs/Ident.lean:1611 |
+| `KeyConstruct.pathAt_insert_named` | PASS | ConcreteSpec/Proofs/Ident.lean:1626 | ConcreteSpec/Proofs/Ident.lean:1635 |
+| `KeyConstruct.pathAt_insert_differentKind` | PASS | ConcreteSpec/Proofs/Ident.lean:1652 | ConcreteSpec/Proofs/Ident.lean:1661 |
+| `KeyConstruct.assignFunctionTable_named_scope` | PASS | ConcreteSpec/Proofs/Ident.lean:1360 | ConcreteSpec/Proofs/Ident.lean:1372 |
+| `KeyConstruct.descendant_rename_other` | PASS | ConcreteSpec/Proofs/Ident.lean:1705 | ConcreteSpec/Proofs/Ident.lean:1710 |
+| `KeyConstruct.descendant_pin_other` | PASS | ConcreteSpec/Proofs/Ident.lean:1720 | ConcreteSpec/Proofs/Ident.lean:1725 |
+| `KeyConstruct.assignFunctionTable_rename_named` | PASS | ConcreteSpec/Proofs/Ident.lean:1386; ConcreteSpec/Proofs/Ident.lean:1426 | ConcreteSpec/Proofs/Ident.lean:1396; ConcreteSpec/Proofs/Ident.lean:1410; ConcreteSpec/Proofs/Ident.lean:1436 |
+| `KeyConstruct.assignFunctionTable_pin` | PASS | ConcreteSpec/Proofs/Ident.lean:1450; ConcreteSpec/Proofs/Ident.lean:1474 | ConcreteSpec/Proofs/Ident.lean:1460; ConcreteSpec/Proofs/Ident.lean:1483 |
+| `SpecializationTable.canonicalize_nodup` | PASS | ConcreteSpec/Proofs/Ident.lean:1870 | ConcreteSpec/Proofs/Ident.lean:1874 |
+| `SpecializationTable.canonicalize_edge_sound` | PASS | ConcreteSpec/Proofs/Ident.lean:1777 | ConcreteSpec/Proofs/Ident.lean:1783 |
+| `SpecializationTable.canonicalize_complete` | PASS | ConcreteSpec/Proofs/Ident.lean:1757 | ConcreteSpec/Proofs/Ident.lean:1764 |
+| `SpecializationTable.canonicalize_share` | PASS | ConcreteSpec/Proofs/Ident.lean:1789 | ConcreteSpec/Proofs/Ident.lean:1818 |
+| `SpecializationTable.canonicalize_distinct` | PASS | ConcreteSpec/Proofs/Ident.lean:1828; ConcreteSpec/Proofs/Ident.lean:1836 | ConcreteSpec/Proofs/Ident.lean:1850; ConcreteSpec/Proofs/Ident.lean:1860 |
+| `LoadedModules.load_refusal_complete` | PASS | ConcreteSpec/Proofs/Ident.lean:1916 | ConcreteSpec/Proofs/Ident.lean:1921 |
+| `LoadedModules.load_refusal_sound` | PASS | ConcreteSpec/Proofs/Ident.lean:1889 | ConcreteSpec/Proofs/Ident.lean:1896; ConcreteSpec/Proofs/Ident.lean:1908 |
+| `LoadedModules.load_admitted` | PASS | ConcreteSpec/Proofs/Ident.lean:1928; ConcreteSpec/Proofs/Ident.lean:1948 | ConcreteSpec/Proofs/Ident.lean:1938; ConcreteSpec/Proofs/Ident.lean:1955 |
+| `SourceText.lineAt_append` | PASS | ConcreteSpec/Proofs/Ident.lean:2020 | ConcreteSpec/Proofs/Ident.lean:2025 |
+| `SourceText.lineAt_append_newline` | PASS | ConcreteSpec/Proofs/Ident.lean:1979 | ConcreteSpec/Proofs/Ident.lean:1983 |
+| `SourceText.lineAt_append_other` | PASS | ConcreteSpec/Proofs/Ident.lean:1987 | ConcreteSpec/Proofs/Ident.lean:1991 |
+| `SourceText.columnAt_append` | PASS | ConcreteSpec/Proofs/Ident.lean:2034 | ConcreteSpec/Proofs/Ident.lean:2039 |
+| `SourceText.columnAt_append_tab` | PASS | ConcreteSpec/Proofs/Ident.lean:2001 | ConcreteSpec/Proofs/Ident.lean:2005 |
+| `SourceText.columnAt_append_newline` | PASS | ConcreteSpec/Proofs/Ident.lean:2013 | ConcreteSpec/Proofs/Ident.lean:2017 |
+| `EncodedPremise.read_encode` | PASS | ConcreteSpec/Proofs/Ident.lean:2068 | ConcreteSpec/Proofs/Ident.lean:2077 |
+| `EncodedPremise.read_unknown` | PASS | ConcreteSpec/Proofs/Ident.lean:2082 | ConcreteSpec/Proofs/Ident.lean:2090 |
+| `EncodedPremise.read_iff` | PASS | ConcreteSpec/Proofs/Ident.lean:2102; ConcreteSpec/Proofs/Ident.lean:2119 | ConcreteSpec/Proofs/Ident.lean:2109; ConcreteSpec/Proofs/Ident.lean:2126 |
+| `Prim.lookupId_rename` | PASS | ConcreteSpec/Proofs/Prim.lean:482 | ConcreteSpec/Proofs/Prim.lean:486 |
+| `Prim.eval_rename` | PASS | ConcreteSpec/Proofs/Prim.lean:489 | ConcreteSpec/Proofs/Prim.lean:493 |
+| `Prim.eval_operands_rename` | PASS | ConcreteSpec/Proofs/Prim.lean:497 | ConcreteSpec/Proofs/Prim.lean:502 |
+| `Prim.rename_inverse` | PASS | ConcreteSpec/Proofs/Prim.lean:508 | ConcreteSpec/Proofs/Prim.lean:512 |
+| `Prim.rename_id` | PASS | ConcreteSpec/Proofs/Prim.lean:515 | ConcreteSpec/Proofs/Prim.lean:519 |
+| `Prim.lookupId_rehint` | PASS | ConcreteSpec/Proofs/Prim.lean:522 | ConcreteSpec/Proofs/Prim.lean:526 |
+| `Prim.eval_rehint` | PASS | ConcreteSpec/Proofs/Prim.lean:529 | ConcreteSpec/Proofs/Prim.lean:533 |
+| `Prim.eval_operands_rehint` | PASS | ConcreteSpec/Proofs/Prim.lean:537 | ConcreteSpec/Proofs/Prim.lean:542 |
+| `SafetyEvidence.discharge_sound` | PASS | ConcreteSpec/Proofs/Prim.lean:582; ConcreteSpec/Proofs/Prim.lean:624; ConcreteSpec/Proofs/Prim.lean:664; ConcreteSpec/Proofs/Prim.lean:689 | ConcreteSpec/Proofs/Prim.lean:593; ConcreteSpec/Proofs/Prim.lean:606; ConcreteSpec/Proofs/Prim.lean:635; ConcreteSpec/Proofs/Prim.lean:675; ConcreteSpec/Proofs/Prim.lean:700 |
+| `SafetyEvidence.discharge_target_mismatch` | PASS | ConcreteSpec/Proofs/Prim.lean:712 | ConcreteSpec/Proofs/Prim.lean:720 |
+| `SafetyEvidence.discharge_unregistered` | PASS | ConcreteSpec/Proofs/Prim.lean:730 | ConcreteSpec/Proofs/Prim.lean:734 |
+| `PrimRegistry.unknown_primitive_stuck` | PASS | ConcreteSpec/Proofs/Prim.lean:785 | ConcreteSpec/Proofs/Prim.lean:790 |
+| `Ghost.drive_steps_result` | PASS | ConcreteSpec/Proofs/Prim.lean:816 | ConcreteSpec/Proofs/Prim.lean:824 |
+| `Ghost.runStmts_terminal` | PASS | ConcreteSpec/Proofs/Prim.lean:860; ConcreteSpec/Proofs/Prim.lean:866 | ConcreteSpec/Proofs/Prim.lean:872 |
+| `Ghost.ghost_erasure_run` | PASS | ConcreteSpec/Proofs/Prim.lean:887 | ConcreteSpec/Proofs/Prim.lean:895 |
+| `Observe.trapLine_injective` | **FAIL evidence** | ConcreteSpec/Proofs/Observe2.lean:379 | ConcreteSpec/Proofs/Observe2.lean:397 |
+| `Observe.trapTerminal_valid_location` | PASS | ConcreteSpec/Proofs/Observe2.lean:485 | ConcreteSpec/Proofs/Observe2.lean:490; ConcreteSpec/Proofs/Observe2.lean:506 |
+
+These are source-review verdicts, not a claim of independently rerunning the coordinator’s gates.
+
+VERDICT: CHANGES

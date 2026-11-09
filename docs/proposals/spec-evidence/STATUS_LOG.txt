@@ -92,3 +92,19 @@ Goldens: golden-and-gates retired; golden-flow.sh = coordinator runs generator o
 00:37 rev-c7r6s: VERDICT: ACCEPT; SUMMARY rev-c7r6s: 316 locations ok, 193 identifiers ok, 0 unresolved
 00:37 C7 strict agy ACCEPT VERIFIED (rev-c7r6s: 0 unresolved, 20 laws, all cited tags name their law) -> C7 accepted again at 5d94c4b4d pending Kimi
 00:43 c6ag5 PASS 6477c65a7 (7/7). C6 audit accepted (agy verified) except finding 2 (owner Q); next C6 round = owner answer + record 58 approvals from REVIEW5-agy
+00:46 C5 r7 strict agy ACCEPT VERIFIED (rev-c5r7s: 0 unresolved/1512, 70 laws 138/138 tags, all 196 PENDING given verdicts) -> C5 accepted at 02074d4f (c5g7 7/7) pending Kimi; approvals to be recorded in source
+00:46 approval-recording rounds queued: C5 r8 agy (196 from REVIEW7-agy), C9 r9 agy (4 from REVIEW8-agy)
+00:47 integ r6 strict agy ACCEPT VERIFIED (rev-intg6t: 0 unresolved, 22 laws 51/51 tags, 96 PENDING approved, 1 nit) -> wip/spec-core 0dbeba29e acceptance restored, pending Kimi
+00:48 PROVENANCE: REVIEW7-agy(c5)=rev-c5r7s, REVIEW8-agy(c9)=rev-c9r8s, REVIEW6-agy(integ)=rev-intg6t, REVIEW5-agy(c6)=rev-c6a5, REVIEW9-agy(c10)=rev-c10r9 (sha256 identical). OLDER VOIDED SOURCES ALREADY IN SOURCE: C9 14x 'approved: rev-c9r4-agy' (rev-c9r4 unresolved trapLine_uses_byte_columns) -> C9 r9 Codex review must give verdicts on those 14, then recording round replaces citation; C10 12x approvals citing REVIEW7-agy (rev-c10r7 unresolved evalConcreteOperand/concreteCallee) alongside REVIEW6-codex -> next C10 agy round drops REVIEW7-agy from them (still backed by REVIEW6-codex).
+00:49 C9 r9 agy recording done dac39d319 (4 approvals); rev-c9r9 codex (+verdicts on 14 rev-c9r4-agy helpers) + lane-c9q2
+00:51 C5 r8 agy recording done 902ce88a (196 approvals, tags only); rev-c5r8 codex + lane-c5q2
+00:52 C9 r9 codex CHANGES (2 major: partial-application Instances collectKeysIn_sound [C9] + trapLine_injective [C6, carried]); 14 rev-c9r4-agy helpers APPROVED by REVIEW9-codex. C9 acceptance WITHDRAWN (agy strict ACCEPT missed these). chain-c9r10 (Codex) queued after lane-c9q2
+00:53 ALL accepted heads = 'review verified, N2 pending' (coordinator). Asked gates worker: N2 round 2 negative control for partial-application Instance (C9 Ident.lean:1252 fixture) + sweep of accepted heads within ci-2 limit; diagnostics routed by me to writers.
+00:53 c10g9 PASS 17aa93314 (7/7): C10 r9 review verified, N2 pending. Gates worker owns N2 sweep (one sequential ci-2 job) after round 2 (+ round 3 if partial-application control missing). C10 provenance fix (drop REVIEW7-agy) held to combine with N2 diagnostics.
+00:56 C5 r8 codex ACCEPT (0 unresolved; 196 approvals each matched; no disguised laws). C5 = review verified, N2 pending (after c5g8)
+01:01 c9g9 PASS dac39d319 (7/7)
+01:01 chain c9g9: ROUND10 written at dac39d319; queueing Codex writer spec-c9-codex-r10
+01:05 C9 r10 codex done 69703bb84; rev-c9r10 agy + lane-c9q3
+01:10 c5g8 PASS 902ce88a (7/7) -> C5 N2-sweep head sent to gates worker
+01:12 C9 r10 agy ACCEPT VERIFIED (0 unresolved, 131/131 tags; collectKeysIn_sound Instance independently checked closed). Pending c9g10.
+01:24 c9g10 PASS 3e22e6417 (7/7). C9 = review verified, N2 pending; sent to gates worker sweep
