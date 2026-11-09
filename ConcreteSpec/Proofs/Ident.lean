@@ -98,7 +98,7 @@ theorem KeyConstruct.pathAtIn_succ (scope : List KeyConstruct) (root : KeyConstr
       pathAtIn (scope ++ [root]) rest (index :: route) := by
   simp [pathAtIn, List.take_succ_cons, List.append_assoc]
 
-/-- Law (subject `ConcreteSpec.Core.KeyConstruct.collectKeysIn`).
+/-- Law (subject `ConcreteSpec.Core.KeyConstruct.collectKeysIn`, `ConcreteSpec.Core.KeyConstruct.pathAtIn`).
 Every collected key belongs to a real nonempty occurrence route, including descendants. -/
 theorem KeyConstruct.collectKeysIn_sound (scope forest : List KeyConstruct) :
     ∀ (key : FunctionRelativeKey), key ∈ collectKeysIn scope forest →
@@ -128,6 +128,15 @@ termination_by sizeOf forest
 decreasing_by
   all_goals simp_wf
   all_goals cases root <;> simp_all <;> omega
+
+/-- Law (subject `ConcreteSpec.Core.KeyConstruct.collectKeysIn`).
+The complete output of collection satisfies occurrence soundness, including every descendant.
+The contract is stated over the returned collection so faulty collectors can be tested at the
+same closed scope and forest without changing a pointwise membership premise. -/
+theorem KeyConstruct.collectKeysIn_collectionSound (scope forest : List KeyConstruct) :
+    CollectionSound scope forest (collectKeysIn scope forest) := by
+  intro key member
+  exact collectKeysIn_sound scope forest key member
 
 /-- Law (subject `ConcreteSpec.Core.KeyConstruct.collectKeysIn`).
 Every successfully located occurrence is collected; no nested site can disappear. -/
@@ -1249,14 +1258,33 @@ decreasing_by
   all_goals simp_wf
   all_goals cases construct <;> simp_all <;> omega
 
-/-- Instance (law `ConcreteSpec.Core.KeyConstruct.collectKeysIn_sound`, case `ConcreteSpec.Core.Vacuity.nestedBody`). -/
-example : ∀ (key : FunctionRelativeKey), key ∈ KeyConstruct.collectKeysIn [] [nestedBody] →
-    ∃ route, route ≠ [] ∧ KeyConstruct.pathAtIn [] [nestedBody] route = some key :=
-  KeyConstruct.collectKeysIn_sound [] [nestedBody]
+/-- Mutant occurrence resolver that loses every route, with exactly the resolver's type. -/
+def missingPathAtIn (_scope _forest : List KeyConstruct) (_route : List Nat) :
+    Option FunctionRelativeKey := none
 
-/-- Planted (law `ConcreteSpec.Core.KeyConstruct.collectKeysIn_sound`, case `ConcreteSpec.Core.Vacuity.nestedBody`, subject `ConcreteSpec.Core.KeyConstruct.collectKeysIn`, mutant `ConcreteSpec.Core.Vacuity.unprefixedCollect`). -/
-example : ¬ (∀ (key : FunctionRelativeKey), key ∈ unprefixedCollect [] [nestedBody] →
-    ∃ route, route ≠ [] ∧ KeyConstruct.pathAtIn [] [nestedBody] route = some key) := by
+/-- Instance (law `ConcreteSpec.Core.KeyConstruct.collectKeysIn_sound`, case `ConcreteSpec.Core.Vacuity.nestedBody`). -/
+example : ∃ route, route ≠ [] ∧
+    KeyConstruct.pathAtIn [] [nestedBody] route = some nestedPath :=
+  KeyConstruct.collectKeysIn_sound [] [nestedBody] nestedPath
+    (KeyConstruct.collectKeysIn_complete [] [nestedBody] [0, 0, 0] nestedPath
+      (by decide) (by decide))
+
+/-- Planted (law `ConcreteSpec.Core.KeyConstruct.collectKeysIn_sound`, case `ConcreteSpec.Core.Vacuity.nestedBody`, subject `ConcreteSpec.Core.KeyConstruct.pathAtIn`, mutant `ConcreteSpec.Core.Vacuity.missingPathAtIn`). -/
+example : nestedPath ∈ KeyConstruct.collectKeysIn [] [nestedBody] ∧
+    ¬ (∃ route, route ≠ [] ∧ missingPathAtIn [] [nestedBody] route = some nestedPath) := by
+  refine ⟨KeyConstruct.collectKeysIn_complete [] [nestedBody] [0, 0, 0] nestedPath
+    (by decide) (by decide), ?_⟩
+  rintro ⟨route, _, found⟩
+  cases found
+
+/-- Instance (law `ConcreteSpec.Core.KeyConstruct.collectKeysIn_collectionSound`, case `ConcreteSpec.Core.Vacuity.nestedBody`). -/
+example : KeyConstruct.CollectionSound [] [nestedBody]
+    (KeyConstruct.collectKeysIn [] [nestedBody]) :=
+  KeyConstruct.collectKeysIn_collectionSound [] [nestedBody]
+
+/-- Planted (law `ConcreteSpec.Core.KeyConstruct.collectKeysIn_collectionSound`, case `ConcreteSpec.Core.Vacuity.nestedBody`, subject `ConcreteSpec.Core.KeyConstruct.collectKeysIn`, mutant `ConcreteSpec.Core.Vacuity.unprefixedCollect`). -/
+example : ¬ KeyConstruct.CollectionSound [] [nestedBody]
+    (unprefixedCollect [] [nestedBody]) := by
   intro sound
   obtain ⟨route, nonempty, found⟩ := sound ⟨[⟨.loop, .ordinal 0⟩]⟩ (by
     simp [unprefixedCollect, nestedBody, KeyConstruct.key, KeyConstruct.segment,

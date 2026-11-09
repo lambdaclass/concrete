@@ -512,6 +512,14 @@ decreasing_by
   all_goals simp_wf
   all_goals cases construct <;> simp_all <;> omega
 
+/-- A whole-collection output contract: every returned key names an actual nonempty
+occurrence in the input forest. The occurrence resolver supplies the independent semantics;
+this predicate neither repeats the collector's recursion nor checks an admission guard. -/
+def KeyConstruct.CollectionSound (scope forest : List KeyConstruct)
+    (keys : List FunctionRelativeKey) : Prop :=
+  ∀ key, key ∈ keys →
+    ∃ route, route ≠ [] ∧ KeyConstruct.pathAtIn scope forest route = some key
+
 /-- Collect the persistent function-relative keys of a function body's construct forest in order. -/
 def KeyConstruct.collectKeys (body : List KeyConstruct) : List FunctionRelativeKey :=
   KeyConstruct.collectKeysIn [] body
