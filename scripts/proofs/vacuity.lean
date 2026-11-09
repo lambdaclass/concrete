@@ -364,6 +364,12 @@ def projectionOrigin (id : FVarId) : StateRefT ProjectionState Audit Bool := do
   return ((← get).minorOrigins.findSomeRev? fun (key, value) =>
     if key == id then some value else none).getD true
 
+def chargeProjection : StateRefT ProjectionState Audit Unit := do
+  let fuel := (← get).remaining
+  if fuel == 0 then throwError "projection-budget"
+  if let some b := (← get).budget then b.modify fun s => { s with projection := s.projection + 1 }
+  modify fun state => { state with remaining := fuel - 1 }
+
 mutual
 /-- Inspect the complete proof DAG under one declared distinct-expression bound.
     Raw proof delta unfolds one available body per visit; heartbeats also bound meta work. -/
@@ -374,10 +380,7 @@ partial def direct (n : Name) (e : Expr) : StateRefT ProjectionState Audit Bool 
   let key := (e, context, (← get).minorOrigins)
   if cacheable then
     if let some answer := (← get).answers[key]? then return answer
-  let fuel := (← get).remaining
-  if fuel == 0 then throwError "projection-budget"
-  if let some b := (← get).budget then b.modify fun s => { s with projection := s.projection + 1 }
-  modify fun state => { state with remaining := fuel - 1 }
+  chargeProjection
   let answer ← directStep n e
   if cacheable then
     modify fun state => { state with answers := state.answers.insert key answer }
@@ -476,11 +479,21 @@ partial def directEliminator (n : Name) (e : Expr)
     the demand after each raw delta step shares the ordinary projection budget.
     Data carriers are intentionally inspected here without an isProof guard. -/
 partial def directField (n name : Name) (i : Nat) (receiver : Expr)
-    (args : Array Expr) : StateRefT ProjectionState Audit Bool := do
+    (args : Array Expr) : StateRefT ProjectionState Audit Bool :=
+  directFieldAlong n name i receiver args id
+
+/-- Preserve a chain of demanded fields while exposing inner carriers. -/
+partial def directFieldAlong (n name : Name) (i : Nat) (receiver : Expr)
+    (args : Array Expr) (outer : Expr → Expr) (nested := false)
+    : StateRefT ProjectionState Audit Bool := do
+  if nested then chargeProjection
   let receiver := cleanSpine receiver
-  let demand (value : Expr) := mkAppN (.proj name i value) args
+  let demand (value : Expr) := outer (mkAppN (.proj name i value) args)
   let reduced := receiver.headBeta
   if reduced != receiver then return ← direct n (demand reduced)
+  if let .fvar id := receiver.getAppFn' then return ← projectionOrigin id
+  if let .proj inner j base := receiver.getAppFn' then
+    return ← directFieldAlong n inner j base receiver.getAppArgs demand true
   match receiver with
   | .letE _ _ value body _ => direct n (demand (body.instantiate1 value))
   | .fvar id => projectionOrigin id
@@ -491,7 +504,14 @@ partial def directField (n name : Name) (i : Nat) (receiver : Expr)
         unless ctor.induct == name do throwError "projection-carrier-constructor {head}"
         let some field := receiver.getAppArgs[ctor.numParams + i]?
           | throwError "projection-carrier-field {head} {i}"
-        return ← direct n (mkAppN field args).headBeta
+        return ← direct n (outer (mkAppN field args).headBeta)
+      if let some projection ← getProjectionFnInfo? head then
+        let fields := receiver.getAppArgs
+        let some base := fields[projection.numParams]?
+          | throwError "projection-under-applied {head}"
+        let ctor ← getConstInfoCtor projection.ctorName
+        return ← directFieldAlong n ctor.induct projection.i base
+          (fields.extract (projection.numParams + 1) fields.size) demand true
       if let .recInfo _ := ci then
         return ← directEliminator n receiver (fun branch => direct n (demand branch))
       if let some value := ci.value? (allowOpaque := true) then

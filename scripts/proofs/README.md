@@ -794,3 +794,10 @@ cause of the two-pass mismatch (different binder types during collection and
 replacement); R-0219 owns the typed transformation. The genuine dependent
 Subtype contract now passes, as do dependent Sigma/Fin domains. There is no
 fallback to concrete computation and no change to any budget or owner policy.
+
+The carrier audit also covers premise functions returning proof-carrying data
+and nested Sigma/PLift projections. A composed field demand is preserved across
+inner projections rather than inspecting an entire inner package. Each inner
+projection step consumes the unchanged shared projection allowance. Both
+controls formerly reported carrier-unavailable and now require the exact
+`FAIL projection-law ConcreteSpecControl.growth` finding.

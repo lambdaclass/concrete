@@ -40,6 +40,16 @@ DEPENDENT = BASE.replace(
     "2 = 2 ∧ ¬ 2 < mutant 2", "¬ (∃ (x : {v : Nat // v ≤ mutant 2}), x.1 < mutant x.1)").replace(":= by decide", ":= by intro ⟨x, h⟩; exact Nat.lt_irrefl _ h")
 
 
+def premise_carriers():
+    for label, domain, body, argument in [
+        ("function-carrier", "Nat → {_k : Nat // n < n+1}", "(f 0).2", "(fun _ => ⟨0, by decide⟩)"),
+        ("nested-carrier", "Sigma (fun _ : Nat => PLift (n < n+1))", "f.2.down", "⟨0, ⟨by decide⟩⟩"),
+    ]:
+        yield label, (BASE.replace("(n : Nat) (_h : n = 2)", f"(n : Nat) (f : {domain})")
+                      .replace(":= Nat.lt_succ_self n", f":= {body}")
+                      .replace("growth 2 rfl", "growth 2 " + argument).replace("2 = 2 ∧ ¬", "¬"))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--baseline", action="store_true")
@@ -57,6 +67,11 @@ def main():
                 assert [r for r in output.splitlines() if r.startswith(("FAIL ", "INCOMPLETE "))] == [
                     "FAIL projection-law ConcreteSpecControl.growth "], output
         if args.group in {"fields", "all"}:
+            for label, fixture in premise_carriers():
+                code, output = run(ROOT, "", fixture, 4096, meta_path=meta)
+                print(f"ROUND5 {label} exit={code}\n{output}", flush=True)
+                if not args.baseline:
+                    assert code == 1 and [r for r in output.splitlines() if r.startswith(("FAIL ", "INCOMPLETE "))] == ["FAIL projection-law ConcreteSpecControl.growth "], output
             code, output = run(ROOT, "", projection("(⟨h.1, Nat.lt_succ_self n⟩ : n < n+1 ∧ n < n+1).2"), 4096, meta_path=meta)
             print(f"ROUND5 independent-selected exit={code}\n{output}", flush=True)
             assert code == 0 and "N2 PASS" in output, output
