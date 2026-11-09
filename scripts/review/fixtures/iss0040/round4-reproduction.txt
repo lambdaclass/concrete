@@ -1,0 +1,37 @@
+2: CONFIRMED
+ input: 'README.md:1 `alwaysEmitSteps` `invalidTwo` `mutateStoreGhostStep`'
+ observed: None
+ expected: three unresolved-identifier diagnostics
+2 framed CLEAN observed: ('clean', 'verified 1 READ path(s), REPOSITORY: readable, VERDICT: clean') ; expected: invalid
+3a: CONFIRMED
+ input: 'only.lean:1'
+ observed: None
+ expected: unresolved basename; implicit legacy selection forbidden
+3b: CONFIRMED
+ input: '[README.md:1-2](legacy/README.md#L1)'
+ observed: None
+ expected: label range outside legacy file 1..1
+3c: CONFIRMED
+ input: '[unit.lean:1–2,2](a/unit.lean#L1)'
+ observed: "citation: file 'unit.lean' does not resolve uniquely"
+ expected: valid label, normalized start line 1
+4a: CONFIRMED
+ input: 'file:///tmp/tmpt4d0eeyg/.claude/worktrees/topic/scripts/a.py:1'
+ observed: "citation: file 'file:///tmp/tmpt4d0eeyg/.claude/worktrees/topic/scripts/a.py' does not resolve uniquely; citation: positive verdict requires at least one resolvable file:line citation"
+ expected: valid exact checkout path
+4b: CONFIRMED
+ input: 'file:///etc/arbitrary/nonexistent/dir/README.md:1'
+ observed: None
+ expected: unresolved absolute URL
+5: CONFIRMED
+ input: '[`Ghost.realAnchor`](source.lean#L2)'
+ observed: "citation: anchor 'Ghost.realAnchor' absent from 'source.lean#L2'"
+ expected: valid namespaced declaration
+6: CONFIRMED
+ input: production cmd_collect rejection tail; invalid status, existing --out
+ observed: rc=1; exact invalid-evidence diagnostic; --out still exists
+ expected: rc=1; same diagnostic; --out absent
+audit: CONFIRMED
+ input: '[numeric](source.123:1junk)'
+ observed: None
+ expected: unsupported location grammar

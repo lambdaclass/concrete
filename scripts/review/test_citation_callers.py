@@ -14,11 +14,13 @@ def function(path, name):
     match = re.search(r'^' + name + r'\(\).*?^}', source(path), re.M | re.S)
     assert match, (path, name)
     return match.group()
-def shell(code, expected=0, diagnostic=None, env=None):
+def shell(code, expected=0, diagnostic=None, env=None, exact=False):
     proc = subprocess.run(['bash', '-c', 'set -euo pipefail\n' + code], text=True, capture_output=True, env=env, timeout=15)
     assert proc.returncode == expected, (code, proc.returncode, proc.stdout, proc.stderr)
     if diagnostic:
         assert diagnostic in proc.stdout + proc.stderr, (diagnostic, proc.stdout, proc.stderr)
+    if exact:
+        assert (proc.stdout + proc.stderr).strip() == diagnostic, (proc.stdout, proc.stderr, diagnostic)
     return proc.stdout
 
 review = source('scripts/review/review.sh')
@@ -80,9 +82,9 @@ with tempfile.TemporaryDirectory() as directory:
     for status in ('invalid', 'blocked', 'future-status'):
         out.write_text('planted rejected evidence')
         diagnostic = ('signoff: collect invalid reviewer evidence (planted invalid)' if status == 'invalid'
-                      else 'failed: status=' + status + ' (planted invalid, exit 0)')
+                      else 'signoff: collect (codex on 1111111111) failed: status=' + status + ' (planted invalid, exit 0)')
         shell('out=' + shlex.quote(str(out)) + '; rc=0; c_status=' + status + '; c_reason="planted invalid"; reviewer=codex; sha=1111111111111111111111111111111111111111\n'
-              + 'collect_tail() {\n' + signoff[a:b] + '\n}\ncollect_tail', 1, diagnostic)
+              + 'collect_tail() {\n' + signoff[a:b] + '\n}\ncollect_tail', 1, diagnostic, exact=True)
         assert not out.exists(), status
 # Readiness's reporting tail must retain failure after notes readiness rejects invalid.
 ready = source('scripts/land/ready.sh')

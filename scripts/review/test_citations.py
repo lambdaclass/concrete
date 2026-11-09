@@ -23,6 +23,8 @@ with tempfile.TemporaryDirectory() as directory:
     def git(*args):
         return subprocess.check_output(["git", "-C", directory, *args], env=env, stderr=subprocess.PIPE).decode().strip()
     git("init", "-q")
+    (root / ".claude").mkdir()
+    (root / ".claude/marker.txt").write_text("checkout parent collision control\n")
     (root / "source.lean").write_text("def realAnchor := 1\ndef otherAnchor := 2\n")
     (root / "source.123").write_text("numeric extension\n")
     (root / "lean-toolchain").write_text("leanprover/lean4:v4.34.1\n")
@@ -67,6 +69,7 @@ with tempfile.TemporaryDirectory() as directory:
     sha = git("rev-parse", "HEAD")
     check("ROADMAP.md:1 README.md:1 ISSUES.tsv:1", "clean")
     check(f"[source.lean:1](file://{directory}/source.lean#L1)", "clean")
+    check("[source.lean:1–2,2](source.lean#L1)", "clean")
     check("source.lean:1", ("invalid", "citation: file 'source.lean' does not resolve uniquely; citation: positive verdict requires at least one resolvable file:line citation"))
     check("[source.lean:1–2,2](legacy/source.lean#L1)", ("invalid", "citation: range 'source.lean:1–2,2' outside 1..1"))
     check("[source.lean:2](source.lean#L1)", ("invalid", "citation: basename label 'source.lean:2' disagrees with link target"))
@@ -106,5 +109,5 @@ print("citation controls: PASS")
 
 # The actual branch tree must never gain authority from its fabricated evidence.
 repo = str(Path(__file__).resolve().parents[2])
-result = contract.citation_error("[README.md](README.md:1) `alwaysEmitSteps` `invalidTwo` `mutateStoreGhostStep`", repo, "HEAD", contract.commit_blob_paths(repo, "HEAD"), True)
-assert result == "citation: identifier 'alwaysEmitSteps' unresolved; citation: identifier 'invalidTwo' unresolved; citation: identifier 'mutateStoreGhostStep' unresolved", result
+result = contract.citation_error("[README.md](README.md:1) `alwaysEmitSteps` `invalidTwo` `mutateStoreGhostStep` `register_generation` `verify_saved_replay`", repo, "HEAD", contract.commit_blob_paths(repo, "HEAD"), True)
+assert result == "citation: identifier 'alwaysEmitSteps' unresolved; citation: identifier 'invalidTwo' unresolved; citation: identifier 'mutateStoreGhostStep' unresolved; citation: identifier 'register_generation' unresolved; citation: identifier 'verify_saved_replay' unresolved", result
