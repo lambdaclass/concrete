@@ -5764,4 +5764,169 @@ example : WellFormed LifecycleWitnesses.called ∧
 
 end DownwardProtocolEvidence
 
+/-- The actual C1 transition for the direct-argument operand instance. Keeping the transition
+as a subject lets the lifetime controls mutate execution without changing its observations. -/
+def deferredStep := @Exec.step Examples.callOps
+
+/-- A finite prefix of silent C1 transitions. Deferred calls here have no primitives; a request
+or refused step cannot masquerade as a completed prefix. -/
+def silentPrefix (advance : Exec.Config Examples.callOps → Option (Exec.Out Examples.callOps)) :
+    Nat → Exec.Config Examples.callOps → Option (Exec.Config Examples.callOps)
+  | 0, c => some c
+  | n + 1, c => do
+    let out ← advance c
+    match out with
+    | .next d => silentPrefix advance n d
+    | .request p _ _ _ _ => nomatch p
+
+def heldProgram (parameter : Var) : Exec.Program Examples.callOps :=
+  ⟨[(Examples.callee, ⟨[(parameter, ())], (), ⟨1⟩, .skip⟩)]⟩
+
+def heldRegistration (waiting : CallState) : Exec.Config Examples.callOps :=
+  ⟨.exec (.defer Examples.callee [.value (.lit 0)] ⟨0⟩), [], waiting,
+    [.scope ⟨0⟩ [] []]⟩
+
+def callSnapshot (c : Exec.Config Examples.callOps) : List Slot × List Loan × List (Var × LoanId) :=
+  (c.store.own.slots, c.store.own.loans, c.store.pending)
+
+/-- The held loan survives registration and every silent prefix before invocation. Five actual
+C1 steps then enter the deferred callee, run its body, clean its scope and return. At return the
+caller has its exact original slots and loans, with no pending argument or leaked call loan. -/
+def DeferredLifetime
+    (advance : Exec.Program Examples.callOps → Exec.Config Examples.callOps → Option (Exec.Out Examples.callOps))
+    (s : State) (root : Hybrid.Place) (path : List Projection) (parameter : Var) : Prop :=
+  ∃ waiting registered,
+    passOwner ⟨s, []⟩ root path .mutable parameter = some waiting ∧
+    advance (heldProgram parameter) (heldRegistration waiting) = some (.next registered) ∧
+    (∀ n, n ≤ 1 → ∃ c, silentPrefix (advance (heldProgram parameter)) n registered = some c ∧
+      (∃ l ∈ c.store.own.loans, l.id = ⟨s.nextLoan⟩ ∧ l.root = root) ∧
+      ownerAccess c.store.own root .mutable = false) ∧
+    (silentPrefix (advance (heldProgram parameter)) 5 registered).map callSnapshot =
+      some (s.slots, s.loans, [])
+
+/-- Helper (inversion). A view-only callee has no owning locals, so its C1 scope drop leaves
+its ownership and pending tables unchanged. (approved: PENDING). -/
+private theorem pending_enter_drop (s t : CallState) (parameter : Var) (i : LoanId)
+    (pending : s.pending = [(parameter, i)])
+    (h : callLife Examples.types (.enter [parameter]) s = some t) :
+    callLife Examples.types (.drop []) t = some t := by
+  have check : s.pending.all (fun e => decide (e.1 ∈ [parameter])) = true := by simp [pending]
+  have he : enter Examples.types ([parameter].filter fun x => decide (x ∉ s.pending.map Prod.fst)) s.own =
+      some { s.own with
+        nextActivation := s.own.nextActivation + 1
+        frames := ⟨s.own.nextActivation, [], []⟩ :: s.own.frames } := by
+    simp [pending, enter]
+  simp only [callLife] at h
+  dsimp at h
+  rw [check] at h
+  dsimp at h
+  rw [he] at h
+  dsimp at h
+  unfold adoptDown at h
+  dsimp at h
+  split at h
+  · cases h
+    simp [callLife, life, drop]
+  · contradiction
+
+/-- Law (subject `ConcreteSpec.Core.Own.deferredStep`). A direct root loan already held at
+registration stays live and freezes its owner until invocation; actual C1 deferred execution
+ends precisely that call's loan at return and restores every previous caller loan (Q2). -/
+theorem deferred_call_lifetime (s : State) (root : Hybrid.Place) (path : List Projection)
+    (parameter : Var) (f : Activation) (hs : WellFormed s)
+    (hf : s.frames.head? = some f) (allowed : ownerAccess s root .mutable = true) :
+    DeferredLifetime deferredStep s root path parameter := by
+  have issued := (hs.2.2.2.2.2.2.1 f (List.mem_of_head? hf)).1
+  obtain ⟨waiting, hpass⟩ : ∃ waiting, passOwner ⟨s, []⟩ root path .mutable parameter = some waiting := by
+    simp [passOwner, hf, allowed, issued]
+  have hpending : waiting.pending = [(parameter, ⟨s.nextLoan⟩)] := by
+    unfold passOwner at hpass
+    simp [hf, allowed, issued] at hpass
+    subst waiting
+    rfl
+  have birth := passOwner_birth_result ⟨s, []⟩ waiting root path .mutable parameter hpass
+  obtain ⟨held, hheld, hid, hroot, _⟩ := birth
+  have freeze := (passOwner_freezes_result ⟨s, []⟩ waiting root path .mutable parameter hpass).1
+  have roundtrip := directOwner_roundtrip s root path .mutable parameter Examples.types f hs hf issued allowed
+  rw [hpass] at roundtrip
+  dsimp at roundtrip
+  obtain ⟨called, henter, hleave⟩ := Option.bind_eq_some_iff.mp roundtrip
+  have hdrop := pending_enter_drop waiting called parameter ⟨s.nextLoan⟩ hpending henter
+  let registered : Exec.Config Examples.callOps :=
+    ⟨.done, [], waiting, [.scope ⟨0⟩ [] [⟨Examples.callee, [.value (.lit 0)], ⟨0⟩⟩]]⟩
+  refine ⟨waiting, registered, hpass, rfl, ?_, ?_⟩
+  · intro n hn
+    have hc : n = 0 ∨ n = 1 := by omega
+    rcases hc with rfl | rfl
+    · refine ⟨registered, rfl, ?_, freeze⟩
+      exact ⟨held, by rw [hheld]; exact List.mem_cons_self, hid, hroot⟩
+    · refine ⟨_, rfl, ?_, freeze⟩
+      exact ⟨held, by rw [hheld]; exact List.mem_cons_self, hid, hroot⟩
+  · simp [silentPrefix, deferredStep, registered, heldProgram, Exec.step, Exec.startCleanup,
+      Exec.Deferred.stmt, Exec.evalArgs, Exec.onRes, Examples.callEval, Examples.eval, Res.map, Res.bind,
+      AList.lookup, henter, Exec.dropOut, Exec.dead, Exec.dom, Exec.restrict, hdrop, hleave,
+      Exec.bindLife, Exec.bindDst, callSnapshot]
+
+namespace DeferredLifetimeEvidence
+open Examples DirectArgumentWitnesses
+
+def heldSource : State := caller.own
+def heldSourceForLeak : State := caller.own
+
+/-- Mutant: registration prematurely ends the already held direct root loan. -/
+def endAtRegistration (P : Exec.Program callOps) (c : Exec.Config callOps) : Option (Exec.Out callOps) := do
+  let out ← deferredStep P c
+  match c.ctrl, out with
+  | .exec (.defer _ _ _), .next d =>
+    some (.next { d with store := { d.store with own := { d.store.own with
+      loans := d.store.own.loans.filter (fun l => !l.callRoot) } } })
+  | _, out => some out
+
+/-- Mutant: return restores a call-duration root loan that C1 just ended. -/
+def leakAtReturn (P : Exec.Program callOps) (c : Exec.Config callOps) : Option (Exec.Out callOps) := do
+  let out ← deferredStep P c
+  match c.ctrl, c.frames, out with
+  | .done, .ret _ _ :: _, .next d =>
+    some (.next { d with store := { d.store with own := { d.store.own with
+      loans := c.store.own.loans.filter (·.callRoot) ++ d.store.own.loans } } })
+  | _, _, out => some out
+
+/-- Instance (law `ConcreteSpec.Core.Own.deferred_call_lifetime`, case `ConcreteSpec.Core.Own.DeferredLifetimeEvidence.heldSource`). -/
+example : DeferredLifetime deferredStep heldSource ⟨1⟩ [.index 3] z :=
+  @deferred_call_lifetime heldSource ⟨1⟩ [.index 3] z ⟨0, [(x, ⟨0⟩), (y, ⟨1⟩)], []⟩
+    (by decide) rfl (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.deferred_call_lifetime`, case `ConcreteSpec.Core.Own.DeferredLifetimeEvidence.heldSource`, subject `ConcreteSpec.Core.Own.deferredStep`, mutant `ConcreteSpec.Core.Own.DeferredLifetimeEvidence.endAtRegistration`). -/
+example : WellFormed heldSource ∧
+    heldSource.frames.head? = some (⟨0, [(x, ⟨0⟩), (y, ⟨1⟩)], []⟩ : Activation) ∧
+    ownerAccess heldSource ⟨1⟩ .mutable = true ∧
+    ¬ DeferredLifetime endAtRegistration heldSource ⟨1⟩ [.index 3] z := by
+  refine ⟨by decide, rfl, by decide, ?_⟩
+  rintro ⟨w, r, hp, hr, keep, _⟩
+  cases hp
+  cases hr
+  obtain ⟨c, hc, hloan, _⟩ := keep 0 (by decide)
+  cases hc
+  revert hloan
+  decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.deferred_call_lifetime`, case `ConcreteSpec.Core.Own.DeferredLifetimeEvidence.heldSourceForLeak`). -/
+example : DeferredLifetime deferredStep heldSourceForLeak ⟨1⟩ [.index 3] z :=
+  @deferred_call_lifetime heldSourceForLeak ⟨1⟩ [.index 3] z ⟨0, [(x, ⟨0⟩), (y, ⟨1⟩)], []⟩
+    (by decide) rfl (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.deferred_call_lifetime`, case `ConcreteSpec.Core.Own.DeferredLifetimeEvidence.heldSourceForLeak`, subject `ConcreteSpec.Core.Own.deferredStep`, mutant `ConcreteSpec.Core.Own.DeferredLifetimeEvidence.leakAtReturn`). -/
+example : WellFormed heldSourceForLeak ∧
+    heldSourceForLeak.frames.head? = some (⟨0, [(x, ⟨0⟩), (y, ⟨1⟩)], []⟩ : Activation) ∧
+    ownerAccess heldSourceForLeak ⟨1⟩ .mutable = true ∧
+    ¬ DeferredLifetime leakAtReturn heldSourceForLeak ⟨1⟩ [.index 3] z := by
+  refine ⟨by decide, rfl, by decide, ?_⟩
+  rintro ⟨w, r, hp, hr, _, restore⟩
+  cases hp
+  cases hr
+  revert restore
+  decide
+
+end DeferredLifetimeEvidence
+
 end ConcreteSpec.Core.Own
