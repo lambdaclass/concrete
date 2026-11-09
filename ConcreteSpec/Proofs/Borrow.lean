@@ -140,7 +140,7 @@ theorem open_mut_freezes_root {Γ s v body rest q Γ' p q'}
   cases h with
   | borrow hs' _ _ hv hb _ =>
     rw [hs] at hs'; cases hs'
-    refine excl_untouched (q := lockFor true q.root q') ?_ (by simp [lockFor, hr]) ht hb 
+    refine excl_untouched (q := lockFor true q.root q') ?_ (by simp [lockFor, hr]) ht hb
     rw [lookup_bodyCtx (ne_of_lookup hp hv), hp]; rfl
 
 /-- The places of root r grant no write: each is locked, or neither writable nor an owner. -/
@@ -821,16 +821,8 @@ theorem sharedBlock : Ok x0 [.borrow false 0 1 [.read 1]] x0 := by
 /-- Instance (law `ConcreteSpec.Borrow.ok_det`, case `read`). -/
 example := @ok_det x0 [.read 0] x0 (.read rfl (by decide) .nil)
 
-
-
-
-
-
-
 /-- Instance (law `ConcreteSpec.Borrow.view_not_moved`, case `mutableView`). -/
 example := @view_not_moved true 1 rootPlace x0 [] x0
-
-
 
 /-- Instance (law `ConcreteSpec.Borrow.root_restored`, case `writeThroughView`). -/
 example := @root_restored x0 true 0 1 [.write 1] [] rootPlace x0 mutableBlock rfl
@@ -878,14 +870,6 @@ example : PermissiveBorrow x0 [.read 0] x0 ∧ ¬ UniqueContext PermissiveBorrow
   intro h
   have bad := h (Γ₂ := []) .accept
   cases bad
-
-
-
-
-
-
-
-
 
 /-! Closed uses of the preservation and range-projection helpers. -/
 example := @ok_keeps_locked lockedContext [.read 1] lockedContext (.read rfl (by decide) .nil)

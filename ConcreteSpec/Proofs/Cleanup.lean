@@ -271,9 +271,7 @@ an empty frame prefix, so these prefix properties require no structured-exit res
 /-- Representation lemma. The defining abort branch unwinds no scopes, whose flattened pending list is empty. (approved: REV-base1b-agy-01025713b). An abort runs no cleanup (Q9.8). -/
 theorem abort_no_cleanup (st : Stack) : unwound .abort st = some [] ∧ pending [] = [] := ⟨rfl, rfl⟩
 
-
 namespace Evidence
-
 
 /-- Instance (law `ConcreteSpec.Cleanup.runCleanup_all_ok`, case `releaseLoan`). -/
 example := @runCleanup_all_ok (fun _ => true) [desV] (by intro d hd; rfl) (expected [desV]) .done
@@ -283,9 +281,6 @@ example := @runCleanup_trap (fun d => d != desB) desB [relA] [desV]
   (by intro d hd; cases hd with
       | head => decide
       | tail _ h => cases h) (by decide) (expected [desV] ++ [.call desB]) .trapped
-
-
-
 
 /-- A broken cleanup relation with no rules for calls or completion. -/
 inductive MissingCleanup (ok : Deferred → Bool) : List Deferred → List Event → Result → Prop where
@@ -307,10 +302,6 @@ example : (∀ x ∈ [desV], (fun d => d != desB) x = true) ∧
   refine ⟨by decide, by decide, ?_⟩
   intro h
   cases h.mpr ⟨rfl, rfl⟩
-
-
-
-
 
 /-! Every cleanup Instance supplies the registered stack and all exit/dependency premises. -/
 example := reg_inv stack_reg

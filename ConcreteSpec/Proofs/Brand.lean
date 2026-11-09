@@ -159,7 +159,6 @@ theorem reset_fresh_refuses {s : State} {a' a β' h : Nat} {r : List Stmt} {s' :
         simp only [State.bind] at h1 h2
         rw [hnew] at h2; cases h2; exact key _ h1 rfl
 
-
 /-! ### Erasure (Q1.1): a checked program passes every ghost brand check -/
 
 /-- A static type's run-time value under the brand assignment φ. -/
@@ -587,9 +586,6 @@ example : Ok [] [] [.newAlloc 0 0] [(0, .alloc 0)] ∧
 example := @brand_mismatch_refused [10, 11] [(1, .heap 10), (0, .alloc 11)] 1 0 10 11 []
   [(1, .heap 10), (0, .alloc 11)] rfl rfl (by decide)
 
-
-
-
 def beforeReset : State := ⟨[(0, .allocV 0), (1, .heapV 0)], 1, [0]⟩
 def afterReset : State := beforeReset.bind 0 (AList.erase beforeReset.env 0)
 
@@ -606,7 +602,6 @@ theorem beforeResetInv : Inv beforeReset := by
 
 /-- Instance (law `ConcreteSpec.Brand.reset_fresh_brand`, case `liveOldBrand`). -/
 example := @reset_fresh_brand beforeReset 0 0 1 [] afterReset beforeResetInv (.reset rfl .nil)
-
 
 /-- Instance (law `ConcreteSpec.Brand.reset_fresh_refuses`, case `liveOldHandle`). -/
 example := @reset_fresh_refuses beforeReset 0 0 1 1 [] afterReset beforeResetInv (by decide)
@@ -673,10 +668,6 @@ inductive MissingRun : State → List Stmt → State → Prop where
 example : ghost (fun _ => false) 2 0 State.init [.newAlloc 0 0] = .done (State.init.bind 0 []) 0 ∧
     ¬ MissingRun State.init [.newAlloc 0 0] (State.init.bind 0 []) := by
   exact ⟨rfl, fun h => nomatch h⟩
-
-
-
-
 
 /-! Closed uses of the preservation helpers. -/
 example := @run_inv State.init [.newAlloc 0 0] (State.init.bind 0 []) (.newAlloc .nil) inv_init
