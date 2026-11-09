@@ -6,6 +6,11 @@ The coordinator runs agy's review under its citation contract. Only a valid
 ACCEPT and a separate phase-B brief authorize implementation. No language/OD
 choice, new ISS/R identifier, trust exception, or migration exception is proposed.
 
+**A2 amendment markers:** sections and paragraphs labelled A2 below supersede
+the earlier meaning of “checked” wherever it meant kernel checking alone. This
+is design only; the slice-2 blocker remains the implementation stop until the
+coordinator obtains a valid independent ACCEPT. R-0219 remains the sole owner.
+
 ## Contract and the exact semantic boundary
 
 The owner-approved N2-FINAL-CONVENTION.md supplied with this task is normative.
@@ -79,8 +84,10 @@ owner rather than extending this convention.
 5. Accumulate branch constraints from generic recursor/matcher metadata, actual
    discriminants, constructor equations and unsupplied binder types. Record a
    checked certificate for each branch excluded as inconsistent. The certificate
-   is reconstructed without supplied proof assumptions and checked by Lean.
-   Substitution must preserve that certificate's permitted assumptions. If a
+   is reconstructed without supplied proof assumptions, kernel checked, and
+   dependency validated by the A2 protocol below before it can exclude a branch.
+   Substitution must preserve that certificate's permitted assumptions and validated
+   global-origin transfers. If a
    certificate ceases to apply after substitution, invalidate it and re-evaluate
    the guarded effect; do not reuse an earlier safe application verdict.
 6. At an impossible demand, trace its producers through the instantiated graph.
@@ -100,6 +107,113 @@ unsupported form enters an explicit unresolved obligation; it does not silently
 return `false`. Generic treatment of Lean's expression forms and recursor metadata
 is not a name/shape exemption. There is no library trust list, depth cutoff,
 argument sampling or name-based shortcut.
+
+## A2 amendment: dependency validation and non-circular admission
+
+“Checked certificate” means both kernel validity and completed N2 dependency
+validation. Reconstruction is only candidate generation. Neither `Lean.Meta.check`,
+a closed proof, a proved equality used for normalization, nor a tactic's success
+is a provenance verdict. This includes simp-generated declarations and proofs.
+
+For each candidate, retain its exact expression, target branch/entry, typed
+substitution, permitted unsupplied context, guard equations and environment.
+Reject metavariables, unpermitted free assumptions and a mismatched certificate
+type. Kernel check the term and its instantiated type under that context. Then
+queue its dependency-validation root in the **same instantiated effect graph and
+shared charged worklist** as the Instance. Record the originating retained
+Instance and law/case on every dependent obligation; graph sharing must preserve
+all consumers for diagnostics.
+
+Enumerate constants in the certificate expression **and types**, following their
+instantiated declaration bodies and types through the ordinary template/transfer
+machinery. Include theorem bodies (including opaque theorem values where exposed
+by the environment), generated helper declarations, implicit arguments, instance
+arguments, motives, transports and branch-controlling data. Do not inspect the
+whole unrelated environment. An unavailable body is not silently safe: apply the
+ordinary opaque-supplier transfer rule if its instantiated result is refutable;
+otherwise any required transfer that cannot be established is unresolved.
+Recursor/constructor metadata supplies generic structural rules, not a whitelist
+of trusted proofs. No library trust list, name/shape allowlist or simp exception
+is permitted.
+
+Origins are assigned at the actual certificate entry: only the explicitly
+permitted unsupplied binders and their hypothetical constructor fields are
+hypothetical. A global proof reference is a supplied producer at that use site,
+identified by declaration, universe/typed argument substitution and producing
+expression; its body transfers origins from actual arguments and global uses.
+Global constants do not acquire hypothetical status because they have no free
+locals or because their theorem type is used as an assumption during elaboration.
+An ordinary global lemma can validate through its body and parameter transfers;
+this rule does not declare all global lemmas impossible suppliers. In particular,
+`injectedFalse._simp_1` transfers through `injectedFalse` to the supplied
+`impossible : False`; that refutable opaque result is a bad demand even with an
+empty local context. The Nat binder in the repro supplies no exclusion.
+
+Validate every reachable certificate transfer, impossible demand and callee/SCC
+obligation by the same application-sensitive rules as the original query.
+A hypothetical contradiction remains permitted, including one requiring several
+unsupplied binders jointly. A supplied contradiction in a candidate invalidates
+that candidate; it is not by itself a false-discharge finding on an otherwise
+safe original term. Resume the original branch without that exclusion and try
+other independently valid certificates or analyze its live effects. Only a live
+bad demand of the original Instance warrants its false-discharge FAIL. An
+unfinished dependency check cannot be discarded as a failed search and then
+reported clean: retain a named INCOMPLETE for every dependent Instance.
+
+**Non-circular admission.** Keep candidates pending outside the checked cache.
+Validation evidence forms a separate prerequisite graph, distinct from recursive
+execution edges. An exclusion may use only already admitted evidence with a
+finite admission derivation; no pending candidate, nor anything depending on it,
+may discharge a prerequisite of that candidate. Worklist admission computes the
+least closure from directly validated transfers and kernel/structural rules.
+Each admitted certificate has a finite rank greater than all exclusion evidence
+used in its validation. A cycle of pending exclusion prerequisites has no base
+case: leave it unresolved, never bootstrap it by simultaneous “safe” verdicts.
+This also forbids mutual-certificate and summary/cache laundering of self-use.
+Recursive execution SCCs still use the invariant protocol below; their induction
+hypotheses are typed transfer obligations, not admitted branch exclusions.
+Checking an invariant's proof dependencies obeys this same prerequisite rule.
+
+A candidate may enter the checked cache only after its kernel/type/context checks,
+all instantiated global-dependency transfers and all required invariants complete,
+with no bad or unresolved demand. Store its validation derivation and prerequisite
+identities, not merely a Boolean. Replay requires structural equality of the full
+query key, permitted-origin context and validated prerequisites; substitution
+changes require revalidation of affected transfers before reuse. A cached failure
+or INCOMPLETE likewise retains exact consumer/context and must not certify safety.
+A pending lookup creates a dependency edge, never a successful cache hit.
+
+Thus the repro's candidate cannot prune the path to its own `impossible` producer:
+it is unavailable throughout that validation, and any indirect evidence that
+requires it is unavailable too. Independently certified impossible hypothetical
+branches may still prune effects, including a closed supplier inside such a
+branch; that is the existing convention, not a new exception.
+
+### A2 trust-boundary sweep
+
+Apply this protocol to every proof-bearing object used to drop an effect or
+establish safety, not just branch certificates:
+
+| object previously described as checked/reusable | required dependency closure before use |
+| --- | --- |
+| Declaration templates and helper effects | Traverse live body/type dependencies and preserve global origins; a symbolic template alone grants no instantiated safety. |
+| Reused transfer summaries and callee/SCC safety invariants | Validate instantiated outgoing obligations, invariant proof dependencies and origin substitutions; an SCC cannot justify its own exclusions through a cached summary. |
+| Cached application verdicts and lambda/body entries | Reuse only completed derivations with the exact typed/provenance/guard/mode key and admitted prerequisites; no cross-entry or weaker-context reuse. |
+| Guard equalities, normalization/definitional-equality evidence, congruence and transport | Kernel conversion establishes type compatibility only; any proof or unfolded producer used to suppress a live effect must retain its origin and complete dependency validation. |
+| Recursor/well-founded helper effects, motives and decrease/accessibility proofs | Preserve their instantiated transfers and trace proof dependencies used by the safety invariant; kernel validity or termination of the source is insufficient. |
+
+All these obligations debit the existing 20,000 discharge-work limit and original
+2,000,000-heartbeat deadline; projection limits remain unchanged. No new cache,
+validation phase, prerequisite rank or retry starts a fresh budget. Unsupported,
+unavailable, cyclic or exhausted validation reports
+`INCOMPLETE analysis-budget-or-error <retained-instance-name> stage=certificate-dependencies law=<resolved-law> case=<case>`
+for certificate dependencies (use `stage=summary-dependencies` or
+`stage=invariant-dependencies` for those roots). Retain other findings and the
+existing INCOMPLETE precedence. These are planned diagnostic contracts, not
+claims that an unimplemented solver already emits them. If the normative
+convention does not settle a transfer, stop for the owner rather than invent a
+trust rule. Phase-B completion measurements and its fixed exit criterion are
+unchanged; additional dependency work must fit the original limits.
 
 ## Recursive components, well-founded fixpoints and congruence
 
@@ -144,8 +258,10 @@ completion. Phase B must establish completion for the exact required controls.
 
 The transfer relation must simulate every reachable proof branch of its source
 term, preserving both argument substitution and supplier origin. Each excluded
-branch must have a kernel-checked certificate from permitted hypothetical
-assumptions only. Each recursive safety invariant must imply its own transfer
+branch must have a kernel-checked, A2 dependency-validated certificate from
+permitted hypothetical assumptions only, with a finite non-circular admission
+derivation. All safety-bearing summaries and invariant proofs have the same
+global-dependency closure. Each recursive safety invariant must imply its own transfer
 obligations for all permitted substitutions. Composition at applications must
 preserve those invariants and retain every impossible demand. A clean result is
 allowed only when every reachable demand is either excluded by a valid certificate
@@ -226,6 +342,36 @@ heartbeats and projection visits, and require unchanged historical diagnostics.
 If those limits cannot accommodate a sound solver, report the blocker to the
 coordinator. Keep a real cheap PR check and put genuinely more extensive checks
 in the scheduled tier; never let an incomplete full check count as a cheap PASS.
+
+## A2 amendment: control preservation and planned certificate negative
+
+The following arguments specify required outcomes, not new-solver test results.
+All rows in the existing exact-finding table below remain individually binding;
+A2 adds no exemption to any row.
+
+Planned negative **`certificate-global-supplied-negative`** is based on the exact
+standalone [certificate-origin repro](fixtures/N2-Certificate-Origin-Repro.lean).
+Phase B must retain that meta-level probe and add an Instance/valid paired
+Planted wrapper outside the real spec, preserving its Nat-lambda term and local
+simp injection. Require exactly
+`FAIL instance-false-discharge <retained-instance-name>` with the wrapper's exact
+original file/line identity, law/case and no substituted missing-planted or
+unrelated failure. Check the exact finding set, not any nonzero exit. The
+certificate traverses `injectedFalse._simp_1 -> injectedFalse -> impossible`;
+it cannot enter the checked cache. The original reachable False elimination
+therefore fails for its supplied producer. Resource exhaustion instead requires
+the named certificate-dependencies INCOMPLETE and does not satisfy this control.
+The standalone probe alone is not an Instance control or a solver PASS.
+
+| existing control(s) | A2 preservation argument and required outcome |
+| --- | --- |
+| `joint-hypothetical-positive`; `hypothetical-false-positive`; `hypothetical-empty-positive`; `hypothetical-pempty-positive` | Refutations use only unsupplied inputs (jointly where needed); their global elimination/constructor transfers close independently, so PASS with no FAIL/INCOMPLETE. |
+| F3b `joint-branch-decide-repro` | The decide/matcher relation and joint hypothetical contradiction validate through their actual global helper transfers; no supplied producer or pending self-exclusion is needed. Entire retained repro must PASS with no FAIL/INCOMPLETE. |
+| `unreachable-closed-supplier-positive` | An independently admitted hypothetical refutation excludes the branch before its closed supplier matters; the exclusion does not depend on that supplier. PASS. |
+| `decide-hypothesis-positive`; `nested-decide-discharge-1`, `-4`, `-12` | Validate every composed branch/helper dependency with actual origins and no depth cutoff; no new supplied contradiction is introduced. PASS. |
+| Every discharge-negative row below | Supplied eliminator/empty/joint/open-helper origins remain supplied through certificate validation too; no candidate can hide them using itself or supplied assumptions. Preserve each exact `instance-false-discharge` identity. |
+| Every other negative and budget row below | Classification, application, pairing, provenance, projection and input checks remain independent; dependency validation cannot waive them. Preserve each row's entire exact finding set, including named INCOMPLETE where specified. |
+| Other existing positive controls | No classification/argument/projection rule changes; any safety-bearing global dependency must actually close. Preserve PASS, with completion still a phase-B obligation rather than an assumption. |
 
 ## Negative and positive controls
 
