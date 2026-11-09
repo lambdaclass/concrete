@@ -11,7 +11,7 @@ def before : List (Step signature) := [.emit event]
 def after : List (Step signature) := [.silent, .emit event]
 
 /-- Helper (computation). Closed witness of a genuine inserted step, used by the finite law
-instances; not an independent contract law. (approved: PENDING) -/
+instances; not an independent contract law. (approved: APPR-C6-agy-6477c65a7) -/
 theorem insertion : SilentInsertion before after := .silent (.emit event .nil)
 
 /-- Fault: observes only the first internal step, losing later visible output. -/
@@ -80,7 +80,7 @@ def delayed : Nat → Step signature
   | _ + 1 => .emit event
 
 /-- Helper (computation). Closed step-index witness for the infinite law instance, including
-both retained emissions and an unretained silent step. (approved: PENDING) -/
+both retained emissions and an unretained silent step. (approved: APPR-C6-agy-6477c65a7) -/
 theorem shifted : InfiniteStuttering emitting (fun n => n + 1) delayed := by
   refine ⟨?_, ?_, ?_⟩
   · intro n

@@ -16,7 +16,7 @@ open ConcreteSpec.Core
 /-- Helper (computation). By induction on an event list `history`, `publicOutputs (A.project history)`
 equals `history.flatMap F.past` whenever `A` satisfies `ExecAdapter.OutputCorrespondence A`;
 feeds the operational laws `project_physical_outputs` and `output_before_trap_kept`.
-(approved: PENDING) -/
+(approved: APPR-C6-agy-6477c65a7) -/
 theorem project_physical_outputs_list {O : Exec.Operands} {S : EventSignature}
     [F : PhysicalEffects O S.Output]
     (A : ExecAdapter O S) (corresponds : A.OutputCorrespondence) (history : List O.Event) :
@@ -33,7 +33,7 @@ theorem project_physical_outputs_list {O : Exec.Operands} {S : EventSignature}
 
 /-- Helper (computation). Every fuel-driver report has a physical execution reaching its exact
 `Exec.Ending O` through guarded terminal/stopped constructors. This is an evaluator-to-relation
-proof, not a second implementation of the evaluator. (approved: PENDING) -/
+proof, not a second implementation of the evaluator. (approved: APPR-C6-agy-6477c65a7) -/
 theorem physical_run_execution {O : Exec.Operands} (Output : Type) [F : PhysicalEffects O Output]
     (P : Exec.Program O) (ρ : Exec.Oracle O)
     (fuel : Nat) (hist : List O.Event) (c : Exec.Config O) :
@@ -76,7 +76,7 @@ theorem physical_run_execution {O : Exec.Operands} (Output : Type) [F : Physical
               exact ⟨[], .badAnswer hf hs ha disallowed⟩
 
 /-- Helper (computation). Primitive faithfulness accumulates along an independently specified
-physical execution to any guarded ending, preserving effect order. (approved: PENDING) -/
+physical execution to any guarded ending, preserving effect order. (approved: APPR-C6-agy-6477c65a7) -/
 theorem physical_execution_outputs {O : Exec.Operands} (Output : Type) [F : PhysicalEffects O Output]
     (P : Exec.Program O) (ρ : Exec.Oracle O)
     (faithful : PhysicalEffects.OracleFaithful Output ρ) {hist : List O.Event} {c : Exec.Config O}
@@ -97,7 +97,7 @@ theorem physical_execution_outputs {O : Exec.Operands} (Output : Type) [F : Phys
 
 /-- Helper (computation). Whenever an event history has a nonempty physical output interpretation
 under the fixed `[PhysicalEffects O S.Output]` instance, an output-erasing adapter cannot satisfy
-`ExecAdapter.OutputCorrespondence`. (approved: PENDING) -/
+`ExecAdapter.OutputCorrespondence`. (approved: APPR-C6-agy-6477c65a7) -/
 theorem no_erasing_correspondence {O : Exec.Operands} {S : EventSignature}
     [F : PhysicalEffects O S.Output] (A : ExecAdapter O S)
     {events : List O.Event} (nonempty : events.flatMap F.past ≠ []) :
@@ -222,7 +222,7 @@ instance effects : PhysicalEffects Exec.Demo.ops String where
     | _, _ => []
 
 /-- Helper (computation). The actual C1 oracle records the argument-derived physical effect,
-including counter updates with no output. (approved: PENDING) -/
+including counter updates with no output. (approved: APPR-C6-agy-6477c65a7) -/
 theorem oracle_faithful : PhysicalEffects.OracleFaithful (O := Exec.Demo.ops) String Exec.Demo.env := by
   intro hist p vs site store a answer allowed
   cases p with
@@ -252,7 +252,7 @@ abbrev model : PhysicalOperands String := ⟨Exec.Demo.ops, effects, Exec.Demo.e
 /-- Helper (computation). Proves `ExecAdapter.OutputCorrespondence adapter` by case-splitting
 on `n < 0` so exchange events (`[request, response]`) filter to `[]` while output events filter to
 `[toString n]`; feeds the closed `Instance` and `Planted` witnesses of `project_physical_outputs`
-and `output_before_trap_kept`. (approved: PENDING) -/
+and `output_before_trap_kept`. (approved: APPR-C6-agy-6477c65a7) -/
 theorem adapter_correspondence : adapter.OutputCorrespondence := by
   intro n
   change publicOutputs (if n < 0 then [Demo.request n.natAbs, Demo.response (n.natAbs * 2)]
@@ -273,7 +273,7 @@ def initial (values : List Int) : Exec.Config Exec.Demo.ops :=
   ⟨.exec (writeThenTrap values), [], .init, []⟩
 
 /-- Helper (computation). Induction over executed logging operations establishes their actual
-C1 events before the final trap, including a nonempty incoming history; feeds the permission witness and trap-ending premises for the closed `output_before_trap_kept` instances. (approved: PENDING) -/
+C1 events before the final trap, including a nonempty incoming history; feeds the permission witness and trap-ending premises for the closed `output_before_trap_kept` instances. (approved: APPR-C6-agy-6477c65a7) -/
 theorem run_writes (values : List Int) (history : List Int) :
     Exec.runFrom program Exec.Demo.env (3 * values.length + 1) history (initial values) =
       ⟨history ++ values, .final (.trapped .abort Exec.Demo.s) .init⟩ := by
@@ -297,7 +297,7 @@ theorem run_writes (values : List Int) (history : List Int) :
 
 /-- Helper (computation). A completed concrete run cannot have a pending request; supplies the
 `BlockingPermitted` argument for the closed `output_before_trap_kept` instances.
-(approved: PENDING) -/
+(approved: APPR-C6-agy-6477c65a7) -/
 theorem permitted (values : List Int) (history : List Int) :
     ExecAdapter.BlockingPermitted program adapter Demo.contract ()
       (Exec.runFrom program Exec.Demo.env (3 * values.length + 1) history (initial values)) := by
@@ -306,7 +306,7 @@ theorem permitted (values : List Int) (history : List Int) :
   cases ending
 
 /-- Helper (computation). Any physical execution to the actual history has a nonempty effect
-list, as forced by primitive semantics and the unchanged incoming effects. (approved: PENDING) -/
+list, as forced by primitive semantics and the unchanged incoming effects. (approved: APPR-C6-agy-6477c65a7) -/
 theorem cannot_erase {outputs : List String} {ending : Exec.Ending Exec.Demo.ops}
     (execution : PhysicalEffects.Execution String program Exec.Demo.env [-2, 11] (initial [3, 4])
       outputs (Exec.runFrom program Exec.Demo.env 7 [-2, 11] (initial [3, 4])).events ending) :

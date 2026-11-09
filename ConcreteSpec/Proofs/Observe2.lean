@@ -19,14 +19,14 @@ open ConcreteSpec.Core
 
 variable {S : EventSignature}
 
-/-- Helper (inversion). Inverts the same-kind constructor; this is not independent producer correctness. (approved: PENDING)
+/-- Helper (inversion). Inverts the same-kind constructor; this is not independent producer correctness. (approved: APPR-C6-agy-6477c65a7)
  Matching responses really do have the request's operation kind. -/
 theorem RequestResponse.kind {q : Request S} {r : Response S} (h : RequestResponse q r) :
     q.fst = r.fst := by
   cases h
   rfl
 
-/-- Helper (inversion). Inverts admission; contract compliance must instead be established for an independent producer. (approved: PENDING)
+/-- Helper (inversion). Inverts admission; contract compliance must instead be established for an independent producer. (approved: APPR-C6-agy-6477c65a7)
  Every response admitted by the environment relation satisfies its operation contract. -/
 theorem Responds.allows {C : OperationContract S} {input : C.Input} {hist : List (Event S)}
     {q : Request S} {r : Response S} (h : Responds C input hist q (.response r)) :
@@ -34,7 +34,7 @@ theorem Responds.allows {C : OperationContract S} {input : C.Input} {hist : List
   cases h with
   | response _ allows => exact allows
 
-/-- Helper (inversion). Inverts admission; this is not independent evidence of correct response routing. (approved: PENDING)
+/-- Helper (inversion). Inverts admission; this is not independent evidence of correct response routing. (approved: APPR-C6-agy-6477c65a7)
  Every response admitted by the environment relation matches its request. -/
 theorem Responds.matches {C : OperationContract S} {input : C.Input} {hist : List (Event S)}
     {q : Request S} {r : Response S} (h : Responds C input hist q (.response r)) :
@@ -44,7 +44,7 @@ theorem Responds.matches {C : OperationContract S} {input : C.Input} {hist : Lis
 
 /-- Helper (computation). Induction on `SilentInsertion` showing that inserting or keeping `.silent`
 steps preserves `visible`; feeds `silent_internal_steps` and `blocked_silent_internal_steps`.
-(approved: PENDING)
+(approved: APPR-C6-agy-6477c65a7)
  Inserting silent steps leaves exactly the same visible events, in the same order. -/
 theorem SilentInsertion.visible {before after : List (Step S)} (h : SilentInsertion before after) :
     visible before = visible after := by
@@ -70,14 +70,14 @@ theorem blocked_silent_internal_steps {before after : List (Step S)}
   exact ⟨h.visible, rfl⟩
 
 /-- Representation lemma. Reflexivity of eventual prefix containment `PrefixEventually` with empty
-suffix `rest = []`; feeds `SameInfiniteObservation.refl`. (approved: PENDING)
+suffix `rest = []`; feeds `SameInfiniteObservation.refl`. (approved: APPR-C6-agy-6477c65a7)
  Any finite visible prefix is immediately a prefix of the same execution's prefix. -/
 theorem PrefixEventually.refl (steps : Nat → Step S) : PrefixEventually steps steps := by
   intro n
   exact ⟨n, [], by simp⟩
 
 /-- Representation lemma. Transitivity of eventual prefix containment `PrefixEventually` by
-concatenating suffixes `rest₁ ++ rest₂`; feeds `SameInfiniteObservation.trans`. (approved: PENDING)
+concatenating suffixes `rest₁ ++ rest₂`; feeds `SameInfiniteObservation.trans`. (approved: APPR-C6-agy-6477c65a7)
  Eventual prefix containment composes; the second execution may need more internal steps. -/
 theorem PrefixEventually.trans {xs ys zs : Nat → Step S}
     (hxy : PrefixEventually xs ys) (hyz : PrefixEventually ys zs) : PrefixEventually xs zs := by
@@ -87,25 +87,25 @@ theorem PrefixEventually.trans {xs ys zs : Nat → Step S}
   exact ⟨p, rest₁ ++ rest₂, by rw [h₂, h₁, List.append_assoc]⟩
 
 /-- Representation lemma. Reflexivity of `SameInfiniteObservation` from `PrefixEventually.refl`;
-feeds `SameObservation.refl` in the `.infinite` branch. (approved: PENDING) -/
+feeds `SameObservation.refl` in the `.infinite` branch. (approved: APPR-C6-agy-6477c65a7) -/
 theorem SameInfiniteObservation.refl (steps : Nat → Step S) : SameInfiniteObservation steps steps :=
   ⟨PrefixEventually.refl steps, PrefixEventually.refl steps⟩
 
 /-- Representation lemma. Symmetry of `SameInfiniteObservation` by swapping the two
 `PrefixEventually` directions; feeds `SameObservation.symm` and `full_observation_preservation`.
-(approved: PENDING) -/
+(approved: APPR-C6-agy-6477c65a7) -/
 theorem SameInfiniteObservation.symm {xs ys : Nat → Step S}
     (h : SameInfiniteObservation xs ys) : SameInfiniteObservation ys xs := ⟨h.2, h.1⟩
 
 /-- Representation lemma. Transitivity of `SameInfiniteObservation` from `PrefixEventually.trans`;
-feeds `SameObservation.trans` and `full_observation_preservation`. (approved: PENDING) -/
+feeds `SameObservation.trans` and `full_observation_preservation`. (approved: APPR-C6-agy-6477c65a7) -/
 theorem SameInfiniteObservation.trans {xs ys zs : Nat → Step S}
     (hxy : SameInfiniteObservation xs ys) (hyz : SameInfiniteObservation ys zs) :
     SameInfiniteObservation xs zs := ⟨hxy.1.trans hyz.1, hyz.2.trans hxy.2⟩
 
 /-- Helper (computation). Unfolds `visiblePrefix` on `List.range (n + 1)` to append
 `(steps n).event?.toList`; feeds `visiblePrefix_prefix` and `InfiniteStuttering.prefix_indices`.
-(approved: PENDING)
+(approved: APPR-C6-agy-6477c65a7)
  One more step adds exactly its optional event to the visible prefix. -/
 theorem visiblePrefix_succ (steps : Nat → Step S) (n : Nat) :
     visiblePrefix steps (n + 1) = visiblePrefix steps n ++ (steps n).event?.toList := by
@@ -114,7 +114,7 @@ theorem visiblePrefix_succ (steps : Nat → Step S) (n : Nat) :
 
 /-- Helper (computation). Induction on `n - m` showing `visiblePrefix steps m` is a prefix of
 `visiblePrefix steps n` for `m ≤ n`; feeds the reverse direction of `infinite_stuttering`.
-(approved: PENDING)
+(approved: APPR-C6-agy-6477c65a7)
  A shorter step prefix's events are a prefix of a longer step prefix's events. -/
 theorem visiblePrefix_prefix (steps : Nat → Step S) {m n : Nat} (h : m ≤ n) :
     ∃ rest, visiblePrefix steps n = visiblePrefix steps m ++ rest := by
@@ -128,7 +128,7 @@ theorem visiblePrefix_prefix (steps : Nat → Step S) {m n : Nat} (h : m ≤ n) 
 
 /-- Helper (arithmetic). Induction on `n` lifting one-step `StepIndexIncreasing` (`f n < f (n + 1)`)
 to pairwise monotonicity `m ≤ n → f m ≤ f n`; feeds `StepIndexIncreasing.strict`.
-(approved: PENDING)
+(approved: APPR-C6-agy-6477c65a7)
  A strictly increasing step-index map is monotone on every pair of indices. -/
 theorem StepIndexIncreasing.monotone {f : Nat → Nat} (increasing : StepIndexIncreasing f)
     {m n : Nat} (h : m ≤ n) : f m ≤ f n := by
@@ -141,7 +141,7 @@ theorem StepIndexIncreasing.monotone {f : Nat → Nat} (increasing : StepIndexIn
 
 /-- Helper (arithmetic). Combines `increasing m` with `StepIndexIncreasing.monotone` on `m + 1 ≤ n`
 to obtain strict monotonicity `m < n → f m < f n`; feeds `InfiniteStuttering.prefix_indices` and
-`InfiniteStuttering.visiblePrefix_at`. (approved: PENDING)
+`InfiniteStuttering.visiblePrefix_at`. (approved: APPR-C6-agy-6477c65a7)
  A strictly increasing step-index map strictly increases on every ordered pair. -/
 theorem StepIndexIncreasing.strict {f : Nat → Nat} (increasing : StepIndexIncreasing f)
     {m n : Nat} (h : m < n) : f m < f n := by
@@ -150,7 +150,7 @@ theorem StepIndexIncreasing.strict {f : Nat → Nat} (increasing : StepIndexIncr
   omega
 
 /-- Helper (arithmetic). Induction on `n` proving the lower bound `n ≤ f n` for any strictly
-increasing index map `f : Nat → Nat`. (approved: PENDING)
+increasing index map `f : Nat → Nat`. (approved: APPR-C6-agy-6477c65a7)
  A strictly increasing map on natural step indices is unbounded. -/
 theorem StepIndexIncreasing.apply_le {f : Nat → Nat} (increasing : StepIndexIncreasing f) (n : Nat) :
     n ≤ f n := by
@@ -160,7 +160,7 @@ theorem StepIndexIncreasing.apply_le {f : Nat → Nat} (increasing : StepIndexIn
 
 /-- Helper (computation). Induction on stuttered index `m` finding the corresponding unstuttered
 prefix length `n` with `visiblePrefix stutter m = visiblePrefix steps n`; feeds
-`InfiniteStuttering.visiblePrefix_at` and `infinite_stuttering`. (approved: PENDING)
+`InfiniteStuttering.visiblePrefix_at` and `infinite_stuttering`. (approved: APPR-C6-agy-6477c65a7)
  At every stuttered index `m`, some old prefix `n` has exactly the same events: all retained
 indices below `m` are below `n`, and `f n` is the next retained index at or after `m`. -/
 theorem InfiniteStuttering.prefix_indices {steps : Nat → Step S} {f : Nat → Nat}
@@ -204,7 +204,7 @@ theorem InfiniteStuttering.prefix_indices {steps : Nat → Step S} {f : Nat → 
 
 /-- Helper (computation). Specializes `InfiniteStuttering.prefix_indices` at `m = f n` and uses
 `StepIndexIncreasing.strict` to force `k = n`; feeds the forward direction of
-`infinite_stuttering`. (approved: PENDING)
+`infinite_stuttering`. (approved: APPR-C6-agy-6477c65a7)
  The stuttered prefix through the position just before `f n` is exactly the old prefix before
 `n`; leading and intermediate silent steps contribute nothing. -/
 theorem InfiniteStuttering.visiblePrefix_at {steps : Nat → Step S} {f : Nat → Nat}
@@ -242,7 +242,7 @@ theorem infinite_stuttering {steps : Nat → Step S} {f : Nat → Nat} {stutter 
     obtain ⟨rest, extended⟩ := visiblePrefix_prefix steps oldBound
     exact ⟨m, rest, by rw [extended, pref]⟩
 
-/-- Representation lemma. Reflexivity of full-observation equivalence across finite, blocked and infinite executions. (approved: PENDING)
+/-- Representation lemma. Reflexivity of full-observation equivalence across finite, blocked and infinite executions. (approved: APPR-C6-agy-6477c65a7)
  Full-observation equivalence is reflexive. -/
 theorem SameObservation.refl (execution : Execution S) : SameObservation execution execution := by
   cases execution with
@@ -250,14 +250,14 @@ theorem SameObservation.refl (execution : Execution S) : SameObservation executi
   | blocked steps request => exact ⟨rfl, rfl⟩
   | infinite steps => exact SameInfiniteObservation.refl steps
 
-/-- Representation lemma. Symmetry of full-observation equivalence across finite, blocked and infinite executions. (approved: PENDING)
+/-- Representation lemma. Symmetry of full-observation equivalence across finite, blocked and infinite executions. (approved: APPR-C6-agy-6477c65a7)
  Full-observation equivalence is symmetric. -/
 theorem SameObservation.symm {x y : Execution S} (h : SameObservation x y) : SameObservation y x := by
   cases x <;> cases y <;> simp only [SameObservation] at h ⊢
   all_goals first | exact h.elim | exact ⟨h.1.symm, h.2.1.symm, h.2.2.symm⟩ |
     exact ⟨h.1.symm, h.2.symm⟩ | exact h.symm
 
-/-- Representation lemma. Transitivity of full-observation equivalence across finite, blocked and infinite executions. (approved: PENDING)
+/-- Representation lemma. Transitivity of full-observation equivalence across finite, blocked and infinite executions. (approved: APPR-C6-agy-6477c65a7)
  Full-observation equivalence is transitive. -/
 theorem SameObservation.trans {x y z : Execution S}
     (hxy : SameObservation x y) (hyz : SameObservation y z) : SameObservation x z := by
@@ -310,7 +310,7 @@ theorem full_observation_preservation {x y : Execution S} {observation : FullObs
     | finite ys terminal state => exact h.elim
     | blocked ys request => exact h.elim
 
-/-- Representation lemma. Constructor disjointness between infinite and finite `Execution` cases in `SameObservation`. (approved: PENDING)
+/-- Representation lemma. Constructor disjointness between infinite and finite `Execution` cases in `SameObservation`. (approved: APPR-C6-agy-6477c65a7)
  No infinite execution, including one that eventually becomes silent forever, is equivalent to
 any finite successful or trapped termination. -/
 theorem infinite_not_termination (steps : Nat → Step S) (finiteSteps : List (Step S))
@@ -318,7 +318,7 @@ theorem infinite_not_termination (steps : Nat → Step S) (finiteSteps : List (S
     ¬ SameObservation (.infinite steps) (.finite finiteSteps terminal state) := by
   simp [SameObservation]
 
-/-- Representation lemma. Specializes `infinite_not_termination` to the all-silent stream and empty finite trace. (approved: PENDING)
+/-- Representation lemma. Specializes `infinite_not_termination` to the all-silent stream and empty finite trace. (approved: APPR-C6-agy-6477c65a7)
  In particular, an infinite silent run never acquires a terminal observation. -/
 theorem infinite_silent_not_termination (terminal : Terminal) (state : S.State) :
     ¬ SameObservation (.infinite (fun _ => Step.silent)) (.finite (S := S) [] terminal state) :=
@@ -332,7 +332,7 @@ private def stripPrefix : List Char → List Char → Option (List Char)
   | c :: cs, d :: ds => if c = d then stripPrefix cs ds else none
 
 /-- Helper (computation). Induction on `pre` showing `stripPrefix pre (pre ++ rest) = some rest`;
-feeds `decodeWithKind_render` for `trapLine_injective`. (approved: PENDING) -/
+feeds `decodeWithKind_render` for `trapLine_injective`. (approved: APPR-C6-agy-6477c65a7) -/
 private theorem stripPrefix_append (pre rest : List Char) :
     stripPrefix pre (pre ++ rest) = some rest := by
   induction pre with
@@ -347,7 +347,7 @@ private def parseRevNat (cs : List Char) : Option (Nat × List Char) :=
 
 /-- Helper (computation). Uses `Nat.isDigit_of_mem_toDigits` and `hc : c.isDigit = false` to invert
 reversed decimal rendering before a non-digit delimiter `c`; feeds `decodeWithKind_render`.
-(approved: PENDING) -/
+(approved: APPR-C6-agy-6477c65a7) -/
 private theorem parseRevNat_digits (n : Nat) (c : Char) (rest : List Char)
     (hc : c.isDigit = false) :
     parseRevNat ((Nat.toDigits 10 n).reverse ++ c :: rest) = some (n, c :: rest) := by
@@ -368,7 +368,7 @@ private def decodeKinds : List TrapKind → List Char → Option TrapKind
 private def decodeKind (cs : List Char) : Option TrapKind := decodeKinds TrapKind.all cs
 
 /-- Helper (computation). Case analysis on `TrapKind` showing `decodeKind` recovers `kind` from
-`trapLineChars kind site sp`; feeds `decodeTrapLine_render`. (approved: PENDING) -/
+`trapLineChars kind site sp`; feeds `decodeTrapLine_render`. (approved: APPR-C6-agy-6477c65a7) -/
 private theorem decodeKind_render (kind : TrapKind) (site : SiteId) (sp : Span) :
     decodeKind (trapLineChars kind site sp) = some kind := by
   cases kind <;>
@@ -396,7 +396,7 @@ private def decodeTrapLine (line : String) : Option (TrapKind × SiteId × Span)
   some (kind, site, sp)
 
 /-- Helper (computation). Reassociates `trapLineChars kind site sp` to isolate `linePrefix kind`
-at the front; feeds `decodeWithKind_render`. (approved: PENDING) -/
+at the front; feeds `decodeWithKind_render`. (approved: APPR-C6-agy-6477c65a7) -/
 private theorem trapLineChars_prefix (kind : TrapKind) (site : SiteId) (sp : Span) :
     trapLineChars kind site sp = linePrefix kind ++
       (sp.path.toList ++ ":".toList ++ (toString sp.line).toList ++ ":".toList ++
@@ -405,7 +405,7 @@ private theorem trapLineChars_prefix (kind : TrapKind) (site : SiteId) (sp : Spa
 
 /-- Helper (computation). Combines `trapLineChars_prefix`, `stripPrefix_append`, and right-to-left
 `parseRevNat_digits` to recover `(site, sp)` from `trapLineChars`; feeds `decodeTrapLine_render`.
-(approved: PENDING) -/
+(approved: APPR-C6-agy-6477c65a7) -/
 private theorem decodeWithKind_render (kind : TrapKind) (site : SiteId) (sp : Span) :
     decodeWithKind kind (trapLineChars kind site sp) = some (site, sp) := by
   have hline : 0 < sp.line := sp.line_pos
@@ -415,7 +415,7 @@ private theorem decodeWithKind_render (kind : TrapKind) (site : SiteId) (sp : Sp
   simp [List.reverse_append, stripPrefix, parseRevNat_digits, hline, hcol]
 
 /-- Helper (computation). Left-inverse lemma `decodeTrapLine (trapLine kind site sp) =
-some (kind, site, sp)`; feeds `trapLine_injective`. (approved: PENDING) -/
+some (kind, site, sp)`; feeds `trapLine_injective`. (approved: APPR-C6-agy-6477c65a7) -/
 private theorem decodeTrapLine_render (kind : TrapKind) (site : SiteId) (sp : Span) :
     decodeTrapLine (trapLine kind site sp) = some (kind, site, sp) := by
   simp [decodeTrapLine, trapLine, decodeKind_render, decodeWithKind_render]
@@ -448,7 +448,7 @@ variable {O : Exec.Operands}
 
 /-- Helper (computation). Induction on `outputs` iterating `ValidTrace.output` when no request is
 outstanding (`none`); feeds `ValidTrace.answer_projection` and the internal-answer branch of
-`runFrom_validTrace`. (approved: PENDING)
+`runFrom_validTrace`. (approved: APPR-C6-agy-6477c65a7)
  Output-only extensions preserve a complete valid trace. -/
 theorem ValidTrace.outputs {C : OperationContract S} {input : C.Input} {hist : List (Event S)}
     (h : ValidTrace C input none hist) (outputs : List S.Output) :
@@ -460,7 +460,7 @@ theorem ValidTrace.outputs {C : OperationContract S} {input : C.Input} {hist : L
 
 /-- Helper (computation). Chains `ValidTrace.outputs`, `ValidTrace.request`, `ValidTrace.response`,
 and `ValidTrace.outputs` for a well-formed answered primitive step; feeds `runFrom_validTrace`.
-(approved: PENDING)
+(approved: APPR-C6-agy-6477c65a7)
  The adapter's output/request/response/output answer shape extends a complete valid trace. -/
 theorem ValidTrace.answer_projection {C : OperationContract S} {input : C.Input}
     {hist before after : List (Event S)} {q : Request S} {r : Response S}
@@ -477,7 +477,7 @@ theorem ValidTrace.answer_projection {C : OperationContract S} {input : C.Input}
   simpa [CompleteTrace, List.append_assoc] using answered.outputs afterOutputs
 
 /-- Helper (computation). Distributes `ExecAdapter.project` (`List.flatMap`) over list append
-`xs ++ ys`; feeds the recursive step of `runFrom_validTrace`. (approved: PENDING)
+`xs ++ ys`; feeds the recursive step of `runFrom_validTrace`. (approved: APPR-C6-agy-6477c65a7)
  Projection distributes over the C1 event-history append performed by `runFrom`. -/
 theorem ExecAdapter.project_append (A : ExecAdapter O S) (xs ys : List O.Event) :
     A.project (xs ++ ys) = A.project xs ++ A.project ys := by
@@ -549,7 +549,7 @@ theorem runFrom_validTrace (P : Exec.Program O) (A : ExecAdapter O S) (C : Opera
 
 /-- Helper (projection). Combines `runFrom_validTrace` with `ValidTrace.request` to package the
 pending-trace and `mayBlock` obligations for `runFrom_blocked_report` and `runFrom_report_trace`.
-(approved: PENDING)
+(approved: APPR-C6-agy-6477c65a7)
  A blocked C1 observation has the pending `ValidTrace` state and history that its operation
 contract uses. -/
 theorem runFrom_noAnswer_pending_valid (P : Exec.Program O) (A : ExecAdapter O S)
@@ -574,7 +574,7 @@ theorem runFrom_noAnswer_pending_valid (P : Exec.Program O) (A : ExecAdapter O S
   exact ⟨ValidTrace.request laws.1, mayBlock'⟩
 
 /-- Helper (projection). Supplies the `BlockingPermitted` proof argument of `reportObservation`
-from `runFrom_validTrace`. (approved: PENDING)
+from `runFrom_validTrace`. (approved: APPR-C6-agy-6477c65a7)
  A well-formed C1 run supplies the blocking premise required by `reportObservation`. -/
 theorem runFrom_blockingPermitted (P : Exec.Program O) (A : ExecAdapter O S)
     (C : OperationContract S) (input : C.Input) (ρ : Exec.Oracle O)
@@ -587,7 +587,7 @@ theorem runFrom_blockingPermitted (P : Exec.Program O) (A : ExecAdapter O S)
 
 /-- Helper (computation). Projects a certified `Exec.Steps` history to its terminal `Observation`;
 feeds the `Steps`-level bridge while `output_before_trap_kept` in `ObserveOutput.lean` proves the
-operational `runFrom`/`reportObservation` law. (approved: PENDING)
+operational `runFrom`/`reportObservation` law. (approved: APPR-C6-agy-6477c65a7)
  The terminal `Steps` observation contains the projection of the whole `Steps` history, the exact
 trap line, and the final external state. -/
 theorem steps_trap_observation (A : ExecAdapter O S) {P : Exec.Program O} {c c' : Exec.Config O}
@@ -676,7 +676,7 @@ def answeredReport : Exec.Report ops := Exec.run program answeringOracle 1 (requ
 def blockedReport : Exec.Report ops := Exec.run program blockingOracle 1 (requesting 3)
 
 /-- Helper (computation). Well-formedness witness for `answeringOracle` in `AdapterDemo`,
-feeding the closed instances in `ObserveReport.lean`. (approved: PENDING)
+feeding the closed instances in `ObserveReport.lean`. (approved: APPR-C6-agy-6477c65a7)
  The answering oracle satisfies the adapter contract for either blocking policy. -/
 theorem answeringWellFormed (blocking : Unit → List (Event signature) → Request signature → Prop) :
     ExecAdapter.WellFormed adapter (makeContract blocking) () answeringOracle := by
@@ -694,7 +694,7 @@ theorem answeringWellFormed (blocking : Unit → List (Event signature) → Requ
     cases resolved
 
 /-- Helper (computation). Well-formedness witness for `blockingOracle` in `AdapterDemo`,
-feeding the closed instances in `ObserveReport.lean`. (approved: PENDING)
+feeding the closed instances in `ObserveReport.lean`. (approved: APPR-C6-agy-6477c65a7)
  The blocking oracle is well formed because this contract permits blocking. -/
 theorem blockingWellFormed : ExecAdapter.WellFormed adapter permittingContract () blockingOracle := by
   constructor
@@ -754,7 +754,7 @@ example : ¬ (ValidTrace forbiddingContract () (some (query 3)) [request 3] ∧
   intro invalid
   exact invalid.2
 
-/-- Helper (projection). Closed `BlockingPermitted` witness for `blockedReport` in `AdapterDemo`. (approved: PENDING) -/
+/-- Helper (projection). Closed `BlockingPermitted` witness for `blockedReport` in `AdapterDemo`. (approved: APPR-C6-agy-6477c65a7) -/
 theorem blockedPermitted : ExecAdapter.BlockingPermitted program adapter permittingContract ()
     blockedReport :=
   runFrom_blockingPermitted program adapter permittingContract () blockingOracle

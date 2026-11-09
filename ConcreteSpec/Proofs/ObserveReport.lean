@@ -124,7 +124,7 @@ def alwaysNoneReport {S : EventSignature} {O : Exec.Operands}
 
 /-- Helper (computation). By induction on evaluator fuel, an `.outOfFuel c'` ending occurs only at a
 non-final configuration `c'.final? = none`, feeding `runFrom_outOfFuel_report_none`.
-(approved: PENDING) -/
+(approved: APPR-C6-agy-6477c65a7) -/
 theorem runFrom_outOfFuel_not_final {O : Exec.Operands}
     (P : Exec.Program O) (ρ : Exec.Oracle O) (fuel : Nat) (hist : List O.Event)
     (c c' : Exec.Config O)
@@ -287,7 +287,7 @@ def wrongTrapStatus : Terminal → Nat
   | .startupRefused => 125
 
 /-- Helper (computation). Lookup/validation branch equation, not independent path-production
-correctness; `runFrom_source_trap` covers source-produced trap reports. (approved: PENDING) -/
+correctness; `runFrom_source_trap` covers source-produced trap reports. (approved: APPR-C6-agy-6477c65a7) -/
 theorem trapTerminal_eq_some_iff (sites : SiteTable) (kind : TrapKind) (site : SiteId)
     (sp : Span) (line : String) :
     trapTerminal sites kind site = some (.trapped kind site sp line) ↔
@@ -310,7 +310,7 @@ theorem trapTerminal_eq_some_iff (sites : SiteTable) (kind : TrapKind) (site : S
       simp [hpath]
 
 /-- Helper (computation). Every entry produced by `sourceSites` has a valid project-relative
-forward-slash path, proved by induction on the raw source list. (approved: PENDING) -/
+forward-slash path, proved by induction on the raw source list. (approved: APPR-C6-agy-6477c65a7) -/
 theorem sourceSites_valid (sources : AList SiteId SourcePosition) :
     SiteTable.Valid (sourceSites sources) := by
   induction sources with
@@ -333,7 +333,7 @@ theorem sourceSites_valid (sources : AList SiteId SourcePosition) :
       exact ih site sp found
 
 /-- Helper (computation). Mapping source inputs preserves a successful site lookup when the
-source path satisfies `PathOk`. This supports the operational source-to-report law. (approved: PENDING) -/
+source path satisfies `PathOk`. This supports the operational source-to-report law. (approved: APPR-C6-agy-6477c65a7) -/
 theorem sourceSites_lookup (sources : AList SiteId SourcePosition) (site : SiteId)
     (src : SourcePosition) (found : AList.lookup sources site = some src)
     (pathOk : PathOk src.path) :
@@ -424,7 +424,7 @@ namespace ReportDemo
 open AdapterDemo
 
 /-- Helper (computation). A closed witness for the nonempty completed history used in the
-operational instance, not an independent contract law. (approved: PENDING) -/
+operational instance, not an independent contract law. (approved: APPR-C6-agy-6477c65a7) -/
 theorem prior_complete : CompleteTrace permittingContract () (adapter.project [1]) :=
   .response (.request .idle) (RequestResponse.matched (S := signature) Op.double 1 2) rfl
 
@@ -511,7 +511,7 @@ def continuation (a : Exec.Answer Int Int Unit) : Option (Exec.Config ops) :=
   | .error kind => some ⟨.trapped kind ⟨0⟩, [], a.store, []⟩
 
 /-- Helper (computation). Exposes the actual evaluator continuation for the closed report
-instance; no observation property is assumed. (approved: PENDING) -/
+instance; no observation property is assumed. (approved: APPR-C6-agy-6477c65a7) -/
 theorem pending_step : Exec.step program (requesting 3) =
     some (.request 3 [] ⟨0⟩ () continuation) := by
   change some (Exec.Out.request (O := ops) 3 [] ⟨0⟩ () _) = _
@@ -568,7 +568,7 @@ def relativePathAdapter : ExecAdapter ops signature :=
   { adapter with sites := Demo.sites }
 
 /-- Helper (computation). A concrete well-formedness witness, including a nonempty valid site
-table. This is not independent evidence about elaboration. (approved: PENDING) -/
+table. This is not independent evidence about elaboration. (approved: APPR-C6-agy-6477c65a7) -/
 theorem relativePathWellFormed :
     ExecAdapter.WellFormed relativePathAdapter permittingContract () blockingOracle := by
   refine ⟨blockingWellFormed.internal, blockingWellFormed.answered,
@@ -796,7 +796,7 @@ def sourceInput : SourcePosition := ⟨"src/main.con", "first\na\té"⟩
 def sourceInputs : AList SiteId SourcePosition := [(Demo.site, sourceInput)]
 
 /-- Helper (computation). This concrete run ends in a trap, so the pending-report permission
-argument is bookkeeping only. (approved: PENDING) -/
+argument is bookkeeping only. (approved: APPR-C6-agy-6477c65a7) -/
 theorem sourcePermitted (sites : SiteTable) :
     ExecAdapter.BlockingPermitted program { adapter with sites := sites } permittingContract ()
       (Exec.runFrom program blockingOracle 1 [1] abortingConfig) := by

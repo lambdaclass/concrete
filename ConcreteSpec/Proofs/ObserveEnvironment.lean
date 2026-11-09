@@ -14,7 +14,7 @@ namespace ConcreteSpec.Core.Observe
 open ConcreteSpec.Core
 
 /-- Helper (computation). Admission bridge for typed handlers: repackages handler compliance
-and dependent routing. Operational C1 evidence is `environment_run_reply`. (approved: PENDING) -/
+and dependent routing. Operational C1 evidence is `environment_run_reply`. (approved: APPR-C6-agy-6477c65a7) -/
 theorem environment_respond_valid {S : EventSignature} (C : OperationContract S)
     (E : Environment S C.Input) (valid : Environment.Valid C E)
     (input : C.Input) (history : List (Event S)) (q : Request S) :
@@ -38,7 +38,7 @@ theorem environment_respond_valid {S : EventSignature} (C : OperationContract S)
 
 /-- Helper (computation). Establishes every C1 adapter obligation for the oracle actually built
 from typed handlers. Contract admission is inherited from the handler's independent proof;
-answer encoding, histories and stores are computed by the bridge. (approved: PENDING) -/
+answer encoding, histories and stores are computed by the bridge. (approved: APPR-C6-agy-6477c65a7) -/
 theorem environment_oracle_wellFormed {S : EventSignature} (C : OperationContract S)
     (E : Environment S C.Input) (valid : Environment.Valid C E) (input : C.Input) :
     ExecAdapter.WellFormed (Environment.adapter S) C input (E.oracle input) := by
@@ -238,7 +238,7 @@ def Demo.envHandler : Environment Demo.signature Unit where
 /-- Helper (computation). Proves that `Demo.envHandler` satisfies `Environment.Valid` for
 `Demo.contract` by arithmetic (`n * 2 = n + n`), feeding the closed `Instance` and `Planted`
 witnesses of `environment_run_reply` and `environment_stepHistory_valid`.
-(approved: PENDING) -/
+(approved: APPR-C6-agy-6477c65a7) -/
 theorem Demo.envHandler_valid : Environment.Valid Demo.contract Demo.envHandler := by
   constructor
   · intro input history k req resp h
@@ -378,7 +378,7 @@ def handler : Environment Demo.signature Unit where
   reply := fun _ history _ n => some (n + n + history.length)
 
 /-- Helper (arithmetic). Proves the independent history-sensitive operation policy for its
-addition-based handler; no admission or response guard is executed. (approved: PENDING) -/
+addition-based handler; no admission or response guard is executed. (approved: APPR-C6-agy-6477c65a7) -/
 theorem handler_valid : Environment.Valid contract handler := by
   constructor
   · intro input history k req resp answer
@@ -395,7 +395,7 @@ def prior : List (Request Demo.signature × Response Demo.signature) :=
   [(⟨.double, 1⟩, ⟨.double, 3⟩)]
 
 /-- Helper (computation). The first exchange satisfies the policy at its own request history.
-It is used as a closed premise of the actual second C1 call. (approved: PENDING) -/
+It is used as a closed premise of the actual second C1 call. (approved: APPR-C6-agy-6477c65a7) -/
 theorem prior_valid : CompleteTrace contract () (Environment.history prior) :=
   .response (.request .idle) (RequestResponse.matched _ _ _) rfl
 
@@ -492,7 +492,7 @@ def envHandler : Environment signature Unit where
 /-- Helper (computation). Proves that `RoutingDemo.envHandler` satisfies `Environment.Valid` for
 both `.twice` and `.fourTimes` operation kinds, feeding the closed `Instance` and `Planted`
 witnesses of `environment_run_reply` and `environment_stepHistory_valid`.
-(approved: PENDING) -/
+(approved: APPR-C6-agy-6477c65a7) -/
 theorem envHandler_valid : Environment.Valid contract envHandler := by
   constructor
   · intro input history k req resp h
@@ -640,7 +640,7 @@ def blockingHandler : Environment Demo.signature Unit where
 
 /-- Helper (computation). `blockingHandler` satisfies `Environment.Valid` for `BlockingEnvDemo.contract`
 because answered probes double their arguments and unanswered requests may block.
-(approved: PENDING) -/
+(approved: APPR-C6-agy-6477c65a7) -/
 theorem blockingHandler_valid : Environment.Valid contract blockingHandler := by
   constructor
   · intro input history k req resp h

@@ -45,7 +45,7 @@ example : PathOk "src/main.con" ∧ (0 < 1) ∧ (0 < 4) ∧ (4 ≠ "a\té".utf8B
 
 /-- Helper (computation). Scanning a character list containing no newline preserves the newline
 count and appends the characters to the current line accumulator; feeds
-`ConcreteSpec.Core.Observe.sourcePrefixSpan_second_line`. (approved: PENDING) -/
+`ConcreteSpec.Core.Observe.sourcePrefixSpan_second_line`. (approved: APPR-C6-agy-6477c65a7) -/
 theorem scanSourcePrefix_no_newline (cs rest : List Char) (newlines : Nat)
     (current : List Char) (noNewline : '\n' ∉ cs) :
     scanSourcePrefix (cs ++ rest) newlines current =
@@ -112,7 +112,7 @@ example : PathOk "src/main.con" ∧ ('\n' ∉ "let x = 1;".toList) ∧ ('\n' ∉
   decide
 
 /-- Helper (arithmetic). Each Unicode scalar occupies at least one UTF-8 byte. Used to
-compare source-produced byte columns with scalar columns. (approved: PENDING) -/
+compare source-produced byte columns with scalar columns. (approved: APPR-C6-agy-6477c65a7) -/
 theorem source_bytes_ge_scalars (cs : List Char) :
     cs.length ≤ (String.ofList cs).utf8ByteSize := by
   induction cs with
@@ -124,7 +124,7 @@ theorem source_bytes_ge_scalars (cs : List Char) :
     omega
 
 /-- Helper (computation). ASCII encoding contributes exactly one byte per character, independently
-of source-position production. (approved: PENDING) -/
+of source-position production. (approved: APPR-C6-agy-6477c65a7) -/
 theorem source_ascii_bytes (cs : List Char) (ascii : ∀ c ∈ cs, c.val ≤ 127) :
     (String.ofList cs).utf8ByteSize = cs.length := by
   induction cs with
@@ -135,7 +135,7 @@ theorem source_ascii_bytes (cs : List Char) (ascii : ∀ c ∈ cs, c.val ≤ 127
     simp [String.utf8ByteSize_append, String.utf8ByteSize_singleton, one, rest, Nat.add_comm]
 
 /-- Helper (arithmetic). A non-ASCII scalar contributes more than one UTF-8 byte; the other
-scalars cannot cancel this excess. (approved: PENDING) -/
+scalars cannot cancel this excess. (approved: APPR-C6-agy-6477c65a7) -/
 theorem source_multibyte_bytes (cs : List Char) (multi : ∃ c ∈ cs, 127 < c.val) :
     cs.length < (String.ofList cs).utf8ByteSize := by
   induction cs with
@@ -211,7 +211,7 @@ example : PathOk "src/main.con" ∧ (0 < 1) ∧
 
 /-- Helper (computation). On a single source line the scanner retains the complete prefix,
 so its span has the byte column computed from that text. This equation is assembly support,
-not independent column-law evidence. (approved: PENDING) -/
+not independent column-law evidence. (approved: APPR-C6-agy-6477c65a7) -/
 theorem sourcePrefixSpan_hasByteColumn (path : String) (ok : PathOk path) (before : String)
     (singleLine : '\n' ∉ before.toList) :
     Span.HasByteColumn (sourcePrefixSpan path ok before) before := by

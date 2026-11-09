@@ -739,7 +739,7 @@ def refusingAdapter : ExecAdapter refusingBindOps signature where
   sites := []
 
 /-- Helper (computation). Bookkeeping for a stuck report: its `noAnswer` antecedent is
-impossible. This is not a contract law or evidence of blocking correctness. (approved: PENDING) -/
+impossible. This is not a contract law or evidence of blocking correctness. (approved: APPR-C6-agy-6477c65a7) -/
 theorem refusedReportPermitted :
     ExecAdapter.BlockingPermitted ⟨[]⟩ refusingAdapter contract () refusedReport := by
   intro c p vs site store k q ending pending typed
