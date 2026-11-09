@@ -1,0 +1,15 @@
+C2 (constants) round 6 on wip/spec-c2-audit, written by Codex. Base 5372ad2a0 (seven gates pass) -> head e19a4248c.
+
+The round acts on the contract-valid agy review of round 5, quoted in PROMPT.md. It claims to have:
+- added Planted witnesses for both subjects of both ConstOrderIndependent cases (evaluation nested inside admission mutated);
+- consolidated the duplicate cases of admitted_copy and semantic_failure_refuses, each keeping a witness for both subjects;
+- recorded the 48 approvals as APPR-C2-agy-5372ad2a0.
+
+Still expected: N2 instance-false-discharge on `by decide` premises (a confirmed gate defect being fixed) and the 46 pre-existing Scalar classifications owned by C1.
+
+Check:
+- that each new Planted is premise-preserving and exact under the final convention;
+- that the consolidation keeps every case covered for every subject and loses no evidence;
+- that each recorded approval sits on a declaration approved in the round-5 review, matched by name and tag;
+- every C2 Law (ConcreteSpec/Proofs/Const.lean, checked negation in ConcreteSpec/Proofs/Scalar.lean).
+Report any new Helper or reclassification without an approval verdict.

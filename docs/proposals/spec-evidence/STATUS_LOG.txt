@@ -108,3 +108,10 @@ Goldens: golden-and-gates retired; golden-flow.sh = coordinator runs generator o
 01:10 c5g8 PASS 902ce88a (7/7) -> C5 N2-sweep head sent to gates worker
 01:12 C9 r10 agy ACCEPT VERIFIED (0 unresolved, 131/131 tags; collectKeysIn_sound Instance independently checked closed). Pending c9g10.
 01:24 c9g10 PASS 3e22e6417 (7/7). C9 = review verified, N2 pending; sent to gates worker sweep
+03:59 N2 c1/c2 classified; F3-residual gate false positive reproduced (n2/repro); official checker 60934a193 voids/blocks all 13 approval-source reviews; C6 CARRY trapLine item withdrawn
+04:04 writers: spec-c1a-agy-r4, spec-c2a-codex-r5 (N2 real defects). rev2.sh (official contract 60934a193) approval reviews: appr-C4b agy, appr-C5 codex, appr-C6 agy, appr-C7 agy. Recorded approvals all rest on failing reviews: C5 196, C7 63, C9 42, C10 53
+04:06 ci-2 slot granted (1, sequential). lane-c2a5 (golden+7 gates) at 5372ad2a0; C1 r4 next
+04:23 writers: c1a agy r4, c4a agy r4 (record 55), c5 agy r9 (132 rerecord + 64 promote), c7 codex r7 (NI blocker + Bound.Sound + 65). Reviews: rev-c2a5b, appr-C6b, appr-queue(C9,C10,integ). C2 5372ad2a0 gates 7/7 pushed.
+04:29 C4 314a4f068 (55 recorded; codex CHANGES 2 major partial-app) lane-c4a4 running, C4 r5 codex queued; C6 5120f5210 (68 recorded) rev-c6a6b agy; C7 f2e93a7e0 rev-c7r7 agy; lane-c67 queued; C2 r6 codex running (APPR-C2 48 + ConstOrderIndependent)
+04:36 ACCEPT(valid): C6 5120f5210 rev-c6a6b, C2 e19a4248c rev-c2a6, C7 f2e93a7e0 rev-c7r7 (12 PENDING approved -> r8 queued after lane-c67). C9 0551add93 rev-c9r11b + lane-c9r11; C10 de0e8bfd2 rev-c10r10 + lane-c10r10. C4 314a4f068 gates 7/7 pushed; C4 r5 codex (partial-app x2). lanes sequential: c67 -> c2a6 -> c9r11 -> c10r10
+04:39 valid ACCEPT: C9 0551add93, C10 de0e8bfd2, C4 951060caa (1 new helper approved, record later). C1 r4 5531d9e34 rev-c1a4 codex running

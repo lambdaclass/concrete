@@ -1,0 +1,18 @@
+C7 (leak: non-interference, constant time, resource accounting) round 7 on wip/spec-c7, written by Codex. Base 5d94c4b4d (accepted head; seven gates pass) -> head f2e93a7e0, two commits.
+
+The round acts on a contract-valid agy approval review of 5d94c4b4d, quoted in PROMPT.md. Its findings:
+- blocker: the evidence for secure_ni, secure_ct and timing_ni must restate their conclusions as the non-interference statements;
+- major: Bound.Sound and SoundOptional are implication definitions.
+The round's approvals are migrated to APPR-C7-agy-5d94c4b4d.
+
+Writer's claims:
+- the three NI/CT conclusions now have full closed Instances and premise-preserving Planted;
+- the partial-report evidence is fixed entirely in proofs, using status-case premises and conversion lemmas, with no normative definition changed;
+- 3 Laws failed the projection convention and became PENDING helpers;
+- the final counts are 17 Laws, 19 Instances, 21 Planted, 65 approvals and 12 PENDING.
+
+Check:
+- that each fix is real and leaves every normative definition in ConcreteSpec/Spec/Leak.lean unchanged in meaning; report any change of meaning as a blocker;
+- that no approval stands without an APPROVE row in the approval review;
+- every C7 Law under the final convention.
+Give APPROVE or REJECT on each of the 12 PENDING declarations, with fully qualified name and tag path:N.

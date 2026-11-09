@@ -1,0 +1,18 @@
+Audited all 54 Laws. Two violate the full closed application requirement.
+
+- **Major — REAL DEFECT — ConcreteSpec/Proofs/Memory.lean:1514-1531.** The Instance for `ConcreteSpec.Core.Mem.access_valid` leaves the pointer universally quantified, so its proof is a partial application. The Planted witness negates that universal statement rather than the conclusion at one exact closed pointer. **Fix:** supply a closed pointer argument and write the corresponding Planted proposition at that same pointer, retaining all hypotheses. Keep successful-access coverage separately.
+
+- **Major — REAL DEFECT — ConcreteSpec/Proofs/Memory.lean:1771-1785.** The Instance for `ConcreteSpec.Core.Mem.fromExposed_sound` leaves both the block identity and successful-reconstruction hypothesis unapplied. Its Planted witness instead negates the universally quantified implication and chooses a different identity inside the contradiction. Moving these arguments after the statement colon does not make the application full. **Long-term fix:** reformulate the Law as a match on the reconstruction result, with the block properties in its successful branch. Supply a full closed Instance and the exact mutated conclusion. Retain the current inversion formulation as an independently approved Helper if needed.
+
+The other 52 Laws have no additional findings from this source audit. No builds or gates were run.
+
+The diff contains exactly 55 approval-reference replacements and no other changes. No pending Helper or Representation tags remain in the three C4 files, so there are no currently pending declarations requiring APPROVE or REJECT verdicts.
+
+READ: PROMPT.md
+READ: REVIEW.diff
+READ: ConcreteSpec/Proofs/Memory.lean
+READ: ConcreteSpec/Proofs/Hybrid.lean
+READ: ConcreteSpec/Spec/Memory.lean
+READ: ConcreteSpec/Spec/Hybrid.lean
+REPOSITORY: readable
+VERDICT: CHANGES

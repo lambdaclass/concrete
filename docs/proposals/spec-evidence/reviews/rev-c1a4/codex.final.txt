@@ -1,0 +1,148 @@
+One major REAL DEFECT remains in the contract audit. The new left-shift Planted and destroy-call Planted satisfy the requested premise-preserving convention. I approve all **84 pending Helper or Representation exemptions**: 63 in execution and 21 in scalars.
+
+No files were modified; no builds, network access, or writing git commands were used. This is a source audit, without kernel or gate verification.
+
+1. **ConcreteSpec/Proofs/Exec.lean:1492-1521 — major — REAL DEFECT.** The two determinism Laws still obtain uniqueness by construction. The answer-indexed relation is backed by the step function and its continuation; the proofs compare their equal results and repackage constructor equalities. Retaining the external answer fixes which function application to compare, but supplies no independent determinism argument. The always-true mutant demonstrates that an arbitrary relation can be nondeterministic; it does not remove this construction shortcut. The relation’s constructors are at ConcreteSpec/Proofs/Exec.lean:1469-1472, and the witnesses are at ConcreteSpec/Proofs/Exec.lean:3581-3616.
+
+   **Concrete fix:** classify these results as representation lemmas, and establish contract determinism over independently specified operational rules, with correspondence to the executable step function and premise-preserving mutants of those rules. This finding concerns construction-based evidence, not the deferred question about allowing inductive subjects.
+
+The law audit covered **80 Laws**, each carrying one Law classification. All have closed Instance applications and corresponding Planted examples in the source. Apart from the determinism finding above, I found no additional source-level violation of the requested checks. The deferred inductive-subject question and the reported checker false positives are excluded from that assessment.
+
+| Execution Laws audited | Witness evidence |
+|---|---|
+| steps_request; lookup_restrict; restrict_dom_drops | ConcreteSpec/Proofs/Exec.lean:3198-3250 |
+| two_defers_register; step_ret; step_return_caller | ConcreteSpec/Proofs/Exec.lean:3255-3297 |
+| exit_scope_next; done_scope_next | ConcreteSpec/Proofs/Exec.lean:3299-3339 |
+| exit_scope_runs_defers; done_scope_runs_defers; unwind_runs_plan | ConcreteSpec/Proofs/Exec.lean:3343-3402 |
+| return_reaches_caller; break_reaches_loop; continue_reaches_loop | ConcreteSpec/Proofs/Exec.lean:3404-3472 |
+| planWith_calls | ConcreteSpec/Proofs/Exec.lean:3474-3494 |
+| boundary_scope_calls; boundary_of_performed | ConcreteSpec/Proofs/Exec.lean:2263-2330 |
+| cleanup_runs_exact_plan | ConcreteSpec/Proofs/Exec.lean:1978-2149 |
+| step_trapped; steps_from_trapped; abort_runs_no_cleanup | ConcreteSpec/Proofs/Exec.lean:3496-3557 |
+| register_protected; protected_step; call_protects; exit_label | ConcreteSpec/Proofs/Exec.lean:3672-3721 |
+| FirstStepsN.split_return; FirstStepsN.call_return | ConcreteSpec/Proofs/Exec.lean:2370-2440 |
+| boundary_complete; raw_cleanup_runs_plan | ConcreteSpec/Proofs/Exec.lean:2465-2490; ConcreteSpec/Proofs/Exec.lean:2218-2241 |
+| evalArgs_first_trap | ConcreteSpec/Proofs/Exec.lean:3559-3576 |
+| step_silent_deterministic; step_deterministic — finding above | ConcreteSpec/Proofs/Exec.lean:3581-3616 |
+| bind_refused; assign_refused; enter_refused; call_refused | ConcreteSpec/Proofs/Exec.lean:2569-2690 |
+| scope_drop_refused; exit_drop_refused; exit_test_drop_refused; test_drop_refused | ConcreteSpec/Proofs/Exec.lean:2692-2802 |
+| return_refused; continuation_refused | ConcreteSpec/Proofs/Exec.lean:2804-2958 |
+| prim_bind_refused; prim_bind_step; prim_error_bypasses_bind | ConcreteSpec/Proofs/Exec.lean:2960-3086 |
+| destroyCall_enters — both subjects paired | ConcreteSpec/Proofs/Exec.lean:3622-3666 |
+| seqDestroyOrder_elem; seqDestroyOrder_storage; mapDestroyOrder_entry; mapDestroyOrder_storage | ConcreteSpec/Proofs/Exec.lean:3800-3842 |
+
+| Scalar Laws audited | Witness evidence |
+|---|---|
+| TrapKind.name_injective; ArithmeticError.trapKind_injective; toBits_lt | ConcreteSpec/Proofs/Scalar.lean:653-678 |
+| ofBits_inRange; ofBits_toBits; wrap_inRange; wrap_of_inRange | ConcreteSpec/Proofs/Scalar.lean:680-709 |
+| saturate_inRange; saturate_of_inRange; bitwise_inRange; bitNot_inRange | ConcreteSpec/Proofs/Scalar.lean:711-738 |
+| wrapping_of_checked; saturating_of_checked; boolToInt_inRange | ConcreteSpec/Proofs/Scalar.lean:740-761 |
+| lossless_iff | ConcreteSpec/Proofs/Scalar.lean:856-864 |
+| machine_plain_eq_exact; eval_toExact | ConcreteSpec/Proofs/Scalar.lean:840-854 |
+| typed_eval_range; machine_operands; machine_inRange | ConcreteSpec/Proofs/Scalar.lean:466-511 |
+| boolOfBits_boolToBits; toBits_ofBits; toBits_wrap; toBits_wrapping | ConcreteSpec/Proofs/Scalar.lean:763-790 |
+| toBits_shl; toBits_shr_unsigned | ConcreteSpec/Proofs/Scalar.lean:792-808 |
+| toBits_bitwise; toBits_bitNot; saturate_below; saturate_above | ConcreteSpec/Proofs/Scalar.lean:810-838 |
+
+The revised left-shift premise follows the checked shift through wrapping and substitutes the mutant encoder there as well as in the conclusion; its concrete input still produces the required result. See ConcreteSpec/Spec/Scalar.lean:110-110, ConcreteSpec/Spec/Scalar.lean:220-220 and ConcreteSpec/Proofs/Scalar.lean:792-800. The new destroy-call mutant preserves admission, lookup, parameter shape, evaluation and activation premises while removing the synthesized argument; the ordinary singleton call consequently cannot enter. See ConcreteSpec/Proofs/Exec.lean:3618-3650.
+
+The following approvals concern **exemption classification only**. Representation lemmas are not independent soundness evidence.
+
+| Fully qualified declaration | Pending tag | Class | Verdict | Reason |
+|---|---|---|---|---|
+| ConcreteSpec.Core.Exec.Steps.single | ConcreteSpec/Proofs/Exec.lean:52 | Representation | APPROVE | Single-step trace embedding. |
+| ConcreteSpec.Core.Exec.Steps.trans | ConcreteSpec/Proofs/Exec.lean:58 | Representation | APPROVE | Trace concatenation by induction. |
+| ConcreteSpec.Core.Exec.steps_next | ConcreteSpec/Proofs/Exec.lean:66 | Representation | APPROVE | Silent-step trace adapter. |
+| ConcreteSpec.Core.Exec.steps_request_inv | ConcreteSpec/Proofs/Exec.lean:72 | Representation | APPROVE | Request constructor prepended to a trace. |
+| ConcreteSpec.Core.Exec.step_seq | ConcreteSpec/Proofs/Exec.lean:96 | Helper: computation | APPROVE | Direct sequencing equation. |
+| ConcreteSpec.Core.Exec.step_done_seq | ConcreteSpec/Proofs/Exec.lean:102 | Helper: computation | APPROVE | Direct completed-sequence equation. |
+| ConcreteSpec.Core.Exec.step_exit_seq | ConcreteSpec/Proofs/Exec.lean:108 | Helper: computation | APPROVE | Direct sequence-exit equation. |
+| ConcreteSpec.Core.Exec.step_block | ConcreteSpec/Proofs/Exec.lean:113 | Helper: computation | APPROVE | Direct block-entry equation. |
+| ConcreteSpec.Core.Exec.register_scope | ConcreteSpec/Proofs/Exec.lean:150 | Helper: computation | APPROVE | Scope registration unfolding. |
+| ConcreteSpec.Core.Exec.register_seq | ConcreteSpec/Proofs/Exec.lean:155 | Helper: computation | APPROVE | Sequencing registration unfolding. |
+| ConcreteSpec.Core.Exec.step_break_loop | ConcreteSpec/Proofs/Exec.lean:179 | Helper: computation | APPROVE | Matching-loop break equation. |
+| ConcreteSpec.Core.Exec.step_continue_loop | ConcreteSpec/Proofs/Exec.lean:187 | Helper: computation | APPROVE | Matching-loop continue equation. |
+| ConcreteSpec.Core.Exec.plan_scopes | ConcreteSpec/Proofs/Exec.lean:299 | Helper: computation | APPROVE | Nested-scope plan unfolding. |
+| ConcreteSpec.Core.Exec.RunsAll.each | ConcreteSpec/Proofs/Exec.lean:401 | Helper: inversion | APPROVE | Structural cleanup-certificate composition. |
+| ConcreteSpec.Core.Exec.RunsEach.split_calls | ConcreteSpec/Proofs/Exec.lean:411 | Helper: inversion | APPROVE | Splits mapped-call certificates. |
+| ConcreteSpec.Core.Exec.cleans_iff_runs_plan_inv | ConcreteSpec/Proofs/Exec.lean:430 | Helper: inversion | APPROVE | Relates abstract cleanup certificates. |
+| ConcreteSpec.Core.Exec.Passes.passable | ConcreteSpec/Proofs/Exec.lean:471 | Helper: inversion | APPROVE | Extracts frame passability. |
+| ConcreteSpec.Core.Exec.FirstSteps.steps_inv | ConcreteSpec/Proofs/Exec.lean:495 | Helper: inversion | APPROVE | Forgets first-arrival restrictions. |
+| ConcreteSpec.Core.Exec.performed_append_inv | ConcreteSpec/Proofs/Exec.lean:550 | Helper: inversion | APPROVE | Structural action-certificate composition. |
+| ConcreteSpec.Core.Exec.stepExit_no_request_inv | ConcreteSpec/Proofs/Exec.lean:561 | Helper: inversion | APPROVE | Exhaustive dispatcher-shape decomposition. |
+| ConcreteSpec.Core.Exec.exit_step_next_inv | ConcreteSpec/Proofs/Exec.lean:593 | Helper: inversion | APPROVE | Extracts the silent implementation step. |
+| ConcreteSpec.Core.Exec.exit_pass_plan_inv | ConcreteSpec/Proofs/Exec.lean:603 | Helper: inversion | APPROVE | Decomposes direct frame passing. |
+| ConcreteSpec.Core.Exec.exit_call_plan_inv | ConcreteSpec/Proofs/Exec.lean:711 | Helper: inversion | APPROVE | Decomposes cleanup dispatch. |
+| ConcreteSpec.Core.Exec.no_step_of_none_inv | ConcreteSpec/Proofs/Exec.lean:877 | Helper: inversion | APPROVE | Missing function result excludes constructors. |
+| ConcreteSpec.Core.Exec.FirstSteps.sized_inv | ConcreteSpec/Proofs/Exec.lean:1085 | Helper: inversion | APPROVE | Adds an induction index. |
+| ConcreteSpec.Core.Exec.FirstStepsN.unsized_inv | ConcreteSpec/Proofs/Exec.lean:1093 | Helper: inversion | APPROVE | Erases the induction index. |
+| ConcreteSpec.Core.Exec.protected_height_inv | ConcreteSpec/Proofs/Exec.lean:1101 | Helper: inversion | APPROVE | Saved-boundary length consequence. |
+| ConcreteSpec.Core.Exec.protected_not_return_inv | ConcreteSpec/Proofs/Exec.lean:1108 | Helper: inversion | APPROVE | Saved-boundary length contradiction. |
+| ConcreteSpec.Core.Exec.FirstStepsN.end_stop_inv | ConcreteSpec/Proofs/Exec.lean:1170 | Helper: inversion | APPROVE | Extracts the endpoint predicate. |
+| ConcreteSpec.Core.Exec.FirstStepsN.trap_impossible_inv | ConcreteSpec/Proofs/Exec.lean:1177 | Helper: inversion | APPROVE | Combines terminality with endpoint bounds. |
+| ConcreteSpec.Core.Exec.resume_step_inv | ConcreteSpec/Proofs/Exec.lean:1226 | Helper: computation | APPROVE | Computes resume-dispatch representation. |
+| ConcreteSpec.Core.Exec.step_silent_deterministic_inv | ConcreteSpec/Proofs/Exec.lean:1403 | Helper: congruence | APPROVE | Equal function results have equal payloads. |
+| ConcreteSpec.Core.Exec.step_silent_representation | ConcreteSpec/Proofs/Exec.lean:1409 | Representation | APPROVE | Function/relation constructor bridge. |
+| ConcreteSpec.Core.Exec.step_deterministic_inv | ConcreteSpec/Proofs/Exec.lean:1422 | Helper: inversion | APPROVE | Separates silent and request constructors. |
+| ConcreteSpec.Core.Exec.step_pair_representation | ConcreteSpec/Proofs/Exec.lean:1442 | Representation | APPROVE | Characterizes paired relation constructors. |
+| ConcreteSpec.Core.Exec.AnswerStep.step_inv | ConcreteSpec/Proofs/Exec.lean:1476 | Representation | APPROVE | Erases the answer index. |
+| ConcreteSpec.Core.Exec.blocked_map_inv | ConcreteSpec/Proofs/Exec.lean:1535 | Helper: inversion | APPROVE | Converts optional-result refusal to blockedness. |
+| ConcreteSpec.Core.Exec.runFrom_zero_ne_stuck_inv | ConcreteSpec/Proofs/Exec.lean:1633 | Helper: inversion | APPROVE | Zero-fuel result-shape exclusion. |
+| ConcreteSpec.Core.Exec.destroy_not_copy_proj | ConcreteSpec/Proofs/Exec.lean:1731 | Helper: projection | APPROVE | Explicit protocol-obligation projection. |
+| ConcreteSpec.Core.Exec.destroy_not_copy | ConcreteSpec/Proofs/Exec.lean:1738 | Representation | APPROVE | Characterizes validator acceptance. |
+| ConcreteSpec.Core.Exec.destroyCall_sig | ConcreteSpec/Proofs/Exec.lean:1769 | Representation | APPROVE | Characterizes checked-builder acceptance. |
+| ConcreteSpec.Core.Exec.entryParts_succ | ConcreteSpec/Proofs/Exec.lean:1835 | Helper: arithmetic | APPROVE | Successor decomposition of indexed schedule. |
+| ConcreteSpec.Core.Exec.entryParts_length | ConcreteSpec/Proofs/Exec.lean:1840 | Helper: arithmetic | APPROVE | Computes indexed schedule length. |
+| ConcreteSpec.Core.Exec.entryParts_get | ConcreteSpec/Proofs/Exec.lean:1846 | Helper: arithmetic | APPROVE | Computes alternating visit positions. |
+| ConcreteSpec.Core.Exec.demo_log_completes | ConcreteSpec/Proofs/Exec.lean:1891 | Representation | APPROVE | Concrete demo execution certificate. |
+| ConcreteSpec.Core.Exec.demo_bump_completes | ConcreteSpec/Proofs/Exec.lean:1901 | Representation | APPROVE | Concrete demo execution certificate. |
+| ConcreteSpec.Core.Exec.CleanupEvidence.logSegment | ConcreteSpec/Proofs/Exec.lean:1916 | Representation | APPROVE | Concrete first-return segment. |
+| ConcreteSpec.Core.Exec.CleanupEvidence.logContinue_inv | ConcreteSpec/Proofs/Exec.lean:2152 | Representation | APPROVE | Concrete execution-prefix composition. |
+| ConcreteSpec.Core.Exec.CleanupEvidence.inner_raw_run | ConcreteSpec/Proofs/Exec.lean:2174 | Representation | APPROVE | Concrete raw cleanup witness. |
+| ConcreteSpec.Core.Exec.CleanupEvidence.inner_passes | ConcreteSpec/Proofs/Exec.lean:2210 | Helper: computation | APPROVE | Computes singleton-frame passability. |
+| ConcreteSpec.Core.Exec.CleanupEvidence.empty_passes | ConcreteSpec/Proofs/Exec.lean:2252 | Helper: inversion | APPROVE | Singleton membership decomposition. |
+| ConcreteSpec.Core.Exec.CleanupEvidence.drop_performed | ConcreteSpec/Proofs/Exec.lean:2259 | Representation | APPROVE | Concrete independent drop certificate. |
+| ConcreteSpec.Core.Exec.CleanupEvidence.single_performed | ConcreteSpec/Proofs/Exec.lean:2283 | Representation | APPROVE | Concrete call-and-drop certificate. |
+| ConcreteSpec.Core.Exec.CleanupEvidence.base_execution | ConcreteSpec/Proofs/Exec.lean:2289 | Representation | APPROVE | Specializes the performed-plan execution law. |
+| ConcreteSpec.Core.Exec.CleanupEvidence.mutant_base_execution | ConcreteSpec/Proofs/Exec.lean:2297 | Representation | APPROVE | Certifies the mutant’s retained base case. |
+| ConcreteSpec.Core.Exec.CleanupEvidence.skip_no_done | ConcreteSpec/Proofs/Exec.lean:2338 | Helper: inversion | APPROVE | Extracts a planted-relation shape invariant. |
+| ConcreteSpec.Core.Exec.CleanupEvidence.saved_three | ConcreteSpec/Proofs/Exec.lean:2352 | Representation | APPROVE | Concrete restored-return path. |
+| ConcreteSpec.Core.Exec.CleanupEvidence.skipped_three | ConcreteSpec/Proofs/Exec.lean:2362 | Representation | APPROVE | Concrete mutant path. |
+| ConcreteSpec.Core.Exec.CleanupEvidence.bump_five | ConcreteSpec/Proofs/Exec.lean:2396 | Representation | APPROVE | Concrete deferred-call path. |
+| ConcreteSpec.Core.Exec.CleanupEvidence.skipped_five | ConcreteSpec/Proofs/Exec.lean:2411 | Representation | APPROVE | Concrete mutant path. |
+| ConcreteSpec.Core.Exec.CleanupEvidence.two_passes | ConcreteSpec/Proofs/Exec.lean:2451 | Helper: inversion | APPROVE | Two-frame membership decomposition. |
+| ConcreteSpec.Core.Exec.CleanupEvidence.drop_two | ConcreteSpec/Proofs/Exec.lean:2458 | Representation | APPROVE | Concrete two-step exit path. |
+| ConcreteSpec.Core.Exec.CoreEvidence.passes_single_scope | ConcreteSpec/Proofs/Exec.lean:3378 | Helper: inversion | APPROVE | Singleton scope-membership decomposition. |
+| ConcreteSpec.Core.IntTy.min_le_max | ConcreteSpec/Proofs/Scalar.lean:77 | Helper: arithmetic | APPROVE | Finite endpoint ordering. |
+| ConcreteSpec.Core.inRangeOr_inRange | ConcreteSpec/Proofs/Scalar.lean:116 | Helper: inversion | APPROVE | Explicit range-validator inversion. |
+| ConcreteSpec.Core.shr_inRange | ConcreteSpec/Proofs/Scalar.lean:123 | Helper: arithmetic | APPROVE | Independent division interval bound. |
+| ConcreteSpec.Core.tmod_inRange | ConcreteSpec/Proofs/Scalar.lean:142 | Helper: arithmetic | APPROVE | Independent remainder interval bound. |
+| ConcreteSpec.Core.checked_inRange | ConcreteSpec/Proofs/Scalar.lean:155 | Helper: inversion | APPROVE | Validator inversion plus arithmetic bounds. |
+| ConcreteSpec.Core.plain_ok_iff | ConcreteSpec/Proofs/Scalar.lean:179 | Representation | APPROVE | Success-adapter characterization. |
+| ConcreteSpec.Core.plain_trap_iff | ConcreteSpec/Proofs/Scalar.lean:185 | Representation | APPROVE | Error-adapter characterization. |
+| ConcreteSpec.Core.plain_not_stuck | ConcreteSpec/Proofs/Scalar.lean:191 | Helper: inversion | APPROVE | Adapter result-shape exclusion. |
+| ConcreteSpec.Core.checked_wrapOp | ConcreteSpec/Proofs/Scalar.lean:202 | Helper: computation | APPROVE | Finite operation-adapter unfolding. |
+| ConcreteSpec.Core.tryConvert_ok_iff | ConcreteSpec/Proofs/Scalar.lean:242 | Representation | APPROVE | Conversion-validator characterization. |
+| ConcreteSpec.Core.exact_defined | ConcreteSpec/Proofs/Scalar.lean:252 | Helper: computation | APPROVE | Evaluation after successful operands. |
+| ConcreteSpec.Core.machine_operands_inv | ConcreteSpec/Proofs/Scalar.lean:280 | Helper: inversion | APPROVE | Explicit runtime-guard extraction. |
+| ConcreteSpec.Core.machine_inRange_inv | ConcreteSpec/Proofs/Scalar.lean:301 | Helper: inversion | APPROVE | Guard inversion and result bounds. |
+| ConcreteSpec.Core.exactOf?_some | ConcreteSpec/Proofs/Scalar.lean:317 | Helper: inversion | APPROVE | Decodes operation representation. |
+| ConcreteSpec.Core.ScalarEvidence.empty_width_env | ConcreteSpec/Proofs/Scalar.lean:461 | Helper: inversion | APPROVE | Empty assignment excludes lookup premises. |
+| ConcreteSpec.Core.plainNeg_ok_iff | ConcreteSpec/Proofs/Scalar.lean:517 | Representation | APPROVE | Negation success-adapter characterization. |
+| ConcreteSpec.Core.plainNeg_trap_iff | ConcreteSpec/Proofs/Scalar.lean:522 | Representation | APPROVE | Negation error-adapter characterization. |
+| ConcreteSpec.Core.checkedNeg_inRange | ConcreteSpec/Proofs/Scalar.lean:528 | Representation | APPROVE | Checked-negation validator consequence. |
+| ConcreteSpec.Core.boolOfBits_some_iff | ConcreteSpec/Proofs/Scalar.lean:536 | Representation | APPROVE | Finite Boolean decoder characterization. |
+| ConcreteSpec.Core.lossyConvert_inRange | ConcreteSpec/Proofs/Scalar.lean:543 | Helper: computation | APPROVE | Alias consequence of wrapping range. |
+| ConcreteSpec.Core.lossyConvert_of_inRange | ConcreteSpec/Proofs/Scalar.lean:546 | Helper: computation | APPROVE | Alias consequence of wrapping identity. |
+
+The two additional pending markers occur on Laws, rather than exemptions, at ConcreteSpec/Proofs/Scalar.lean:108 and ConcreteSpec/Proofs/Scalar.lean:216; they are excluded from the 84 exemption decisions.
+
+READ: PROMPT.md
+READ: REVIEW.diff
+READ: ConcreteSpec/Proofs/Exec.lean
+READ: ConcreteSpec/Proofs/Scalar.lean
+READ: ConcreteSpec/Spec/Exec.lean
+READ: ConcreteSpec/Spec/Scalar.lean
+
+REPOSITORY: readable
+VERDICT: CHANGES

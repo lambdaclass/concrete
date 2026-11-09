@@ -1,0 +1,9 @@
+C9 (identity, primitives) round 11 on wip/spec-c9, written by Codex. Base 3e22e6417 (accepted head; seven gates pass) -> head 0551add93.
+
+The round records approvals and nothing else. It replaces the old approval references (which rest on reviews failing the contract) with `(approved: APPR-C9-agy-3e22e6417)` on the Helper and Representation lemma declarations that an independent, contract-valid approval review of 3e22e6417 approved. That review is quoted in PROMPT.md.
+
+Check:
+- every replaced reference sits on a declaration that the approval review approves, matched by fully qualified name and tag line;
+- no other text changed;
+- no PENDING remains in the C9 files: ConcreteSpec/Proofs/Ident.lean, ConcreteSpec/Proofs/Prim.lean and the C9 part of ConcreteSpec/Proofs/Observe2.lean; no old reference (REVIEW9-codex, REVIEW7-codex, REVIEW5-codex, REVIEW8-agy) may remain.
+Also re-audit every Law of C9 under the final convention and report any defect.

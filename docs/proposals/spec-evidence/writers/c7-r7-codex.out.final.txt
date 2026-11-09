@@ -1,0 +1,12 @@
+Completed in two commits:
+
+- `0e6e1dec9`: fixed all three NI/CT conclusions, full Instances and premise-preserving Planted examples; migrated 65 approvals; added positive wipe-preservation evidence; removed dead reset code.
+- `f2e93a7e0`: fixed partial-report evidence entirely in proofs, using status-case premises and conversion lemmas. Normative definitions remain unchanged.
+
+Audited all 20 original Laws. Three failed the projection convention and became PENDING helpers. Final counts: **17 Laws, 19 Instances, 21 Planted examples, 65 approvals, 12 PENDING approvals, zero stale references**.
+
+Prescribed Lean builds passed before both commits. Final N2 on `f2e93a7e0` reports only permitted failures: **12 PENDING approvals and 30 false-discharge/cascade failures**.
+
+Working tree is clean. No reviewers, git notes or pushes.
+
+**QUESTIONS:** None requiring an owner decision. The 12 PENDING classifications await independent approval.

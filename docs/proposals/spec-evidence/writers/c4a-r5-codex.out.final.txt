@@ -1,0 +1,14 @@
+1. **Done:** `access_valid` now has an exact closed Instance and matching Planted at `badPtr`; successful-access coverage remains.
+2. **Done:** `fromExposed_sound` now matches on reconstruction provenance, with closed Instance and exact Planted. Existing callers use `fromExposed_sound_inv`, marked `(approved: PENDING)`.
+3. **Done:** swept all 64 Instances across 54 Laws; no further partial applications found.
+4. **Done:** no approvals written.
+5. **Run, failed:** N2 reports 1 pending approval and 28 false-discharge findings, with cascading pairing failures. [Full log](/tmp/c4a-n2.log).
+
+Both commits passed the required Lean build:
+
+- `d7d2ab165` — Close access validity evidence at an exact pointer.
+- `951060caa` — State reconstruction soundness over the closed operation result.
+
+Working tree clean. No push, reviewers, or git notes.
+
+QUESTIONS: No language decisions needed. N2’s recursive false-discharge findings need reconciliation; the new Helper needs independent approval.

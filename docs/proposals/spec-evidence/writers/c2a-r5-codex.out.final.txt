@@ -1,0 +1,10 @@
+Committed `5372ad2a0` — complete C2 mutation witnesses and resolve doc names.
+
+- Done: all reported unknown names in Const and Scalar comments.
+- Done: corrected mutant premises for `evalConsts_sound/division` and both `admitted_copy` cases.
+- Done: both division cases now witness each `admitted_copy` subject; both unused-after-prefix cases witness each `semantic_failure_refuses` subject.
+- Left as instructed: pending approvals, confirmed gate false positives and cascades, pre-existing Scalar classifications, ISS-0039 and CTy decisions.
+
+Required build passed. N2 confirms all targeted findings are gone; only excluded findings remain. Working tree clean. No push, reviewers, or git notes.
+
+QUESTIONS: none.

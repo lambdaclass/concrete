@@ -1,0 +1,10 @@
+Committed `e19a4248c` — complete C2 mutation witnesses and record approvals.
+
+1. Done: both `ConstOrderIndependent` cases have Planted witnesses for both subjects, including evaluation nested inside admission.
+2. Done: consolidated duplicate cases for `admitted_copy` and `semantic_failure_refuses`; each retains both subject witnesses.
+3. Done: applied all 48 approvals by declaration name and cited tag. Zero PENDING remain in Const/Scalar.
+4. Ran N2: **FAIL** — 46 classification findings, 5 false-discharge findings, and downstream pairing/missing-instance failures. Preserved Instances as instructed.
+
+Validation passed: Lean build, rules 32/32, trust 23/23. Working tree clean. No push, reviewers, or git notes.
+
+QUESTIONS: None. N2 gate repair remains external.

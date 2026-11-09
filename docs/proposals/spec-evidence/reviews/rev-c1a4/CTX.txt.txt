@@ -1,0 +1,18 @@
+C1 (execution: Exec, cleanup, lifecycle, Scalar) round 4 on wip/spec-c1-audit, written by agy. Base ccca4abaa (accepted head; seven gates pass) -> head 5531d9e34.
+
+The round fixed real N2 law-to-witness diagnostics (checker 550fab85e):
+- unknown-name in tagged doc comments of Exec.lean (228) and Scalar.lean (3);
+- the toBits_shl Planted premise, now stated under the mutant toBits;
+- a missing destroyCall Planted for destroyCall_enters/consume_tok;
+- a classification-count on an auxiliary of register_protected.
+
+Deliberately unchanged:
+- instance-false-discharge on `by decide`/simp premises (a confirmed gate defect being fixed) and its cascade;
+- subject-kind for the 36 Laws whose subject is the inductive Step/Steps/AnswerStep (an open owner question; do not report it as a defect of this round);
+- the 84 `(approved: PENDING)` declarations.
+
+Check:
+- every rewritten doc comment keeps its meaning, and every new backticked reference names the right declaration;
+- the new mutant and Planted are premise-preserving and exact;
+- every Law of C1 (ConcreteSpec/Proofs/Exec.lean, ConcreteSpec/Proofs/Scalar.lean) under the final convention.
+Give APPROVE or REJECT on EVERY `(approved: PENDING)` Helper and Representation lemma in those two files, as a table with fully qualified name, tag path:N, class, verdict and reason. These verdicts are the approval source the next round records. State the count.

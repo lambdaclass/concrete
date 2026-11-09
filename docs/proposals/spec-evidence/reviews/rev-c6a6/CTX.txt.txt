@@ -1,0 +1,10 @@
+C6 (observation) round 6 on wip/spec-c6-audit, written by Codex. Base 6477c65a7 (accepted head; seven gates pass) -> head 5120f5210.
+
+The round records approvals and nothing else. It replaces `(approved: PENDING)` with `(approved: APPR-C6-agy-6477c65a7)` on the Helper and Representation lemma declarations that an independent, contract-valid approval review of 6477c65a7 approved. That review is quoted in PROMPT.md.
+
+Check:
+- every replaced reference sits on a declaration that the approval review approves, matched by fully qualified name and tag line;
+- no other text changed;
+- no PENDING remains in the C4 files: ConcreteSpec/Proofs/Observe2.lean (C6 part), the ConcreteSpec/Proofs/Observe*.lean files C6 added and ConcreteSpec/Spec/Observe.lean.
+Also re-audit every Law of C6 under the final convention and report any defect.
+Note: the approval review states 69 judged declarations but has 68 APPROVE rows; say which declaration, if any, lacks a verdict. REVIEW4 finding 2 (source paths) is an open owner question and is out of scope.

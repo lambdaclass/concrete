@@ -1,0 +1,9 @@
+C4 (memory, hybrid) round 4 on wip/spec-c4-audit, written by agy. Base 78ee5a2db (accepted head; seven gates pass) -> head 314a4f068.
+
+The round records approvals and nothing else. It replaces `(approved: PENDING)` with `(approved: APPR-C4-agy-78ee5a2db)` on the 55 Helper and Representation lemma declarations that an independent, contract-valid approval review of 78ee5a2db approved. That review is quoted in PROMPT.md.
+
+Check:
+- every replaced reference sits on a declaration that the approval review approves, matched by fully qualified name and tag line;
+- no other text changed;
+- no PENDING remains in the C4 files: ConcreteSpec/Proofs/Memory.lean, ConcreteSpec/Proofs/Hybrid.lean and ConcreteSpec/Spec/Hybrid.lean.
+Also re-audit every Law of C4 under the final convention and report any defect.

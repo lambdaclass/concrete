@@ -1,0 +1,9 @@
+C10 (frames) round 10 on wip/spec-c10, written by Codex. Base 17aa93314 (accepted head; seven gates pass) -> head de0e8bfd2.
+
+The round records approvals and nothing else. It replaces the old approval references (which rest on reviews failing the contract) with `(approved: APPR-C10-agy-17aa93314)` on the Helper and Representation lemma declarations that an independent, contract-valid approval review of 17aa93314 approved. That review is quoted in PROMPT.md.
+
+Check:
+- every replaced reference sits on a declaration that the approval review approves, matched by fully qualified name and tag line;
+- no other text changed;
+- no PENDING remains in the C10 file ConcreteSpec/Proofs/Frame.lean; no old reference (_review/REVIEW5-agy.md, _review/REVIEW6-codex.md, _review/REVIEW7-agy.md) may remain.
+Also re-audit every Law of C10 under the final convention and report any defect.

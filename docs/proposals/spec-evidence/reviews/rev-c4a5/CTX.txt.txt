@@ -1,0 +1,13 @@
+C4 (memory, hybrid) round 5 on wip/spec-c4-audit, written by Codex. Base 314a4f068 (seven gates pass; 55 contract-valid approvals recorded) -> head 951060caa, two commits.
+
+The round acts on the contract-valid Codex review of round 4, quoted in PROMPT.md. That review found two partial-application Instances:
+- access_valid, now closed at an exact pointer;
+- fromExposed_sound, now restated over the closed operation result, with the old inversion form kept as a Helper with `(approved: PENDING)`.
+It also swept every C4 Instance for the same shape.
+
+Check that both fixes are real:
+- each Instance is a full closed application;
+- each Planted is exact and premise-preserving;
+- the restated law is no weaker than the old one;
+- the coverage of successful access is kept.
+Also audit every Law of C4 under the final convention. Give APPROVE or REJECT on every `(approved: PENDING)` declaration, with fully qualified name and tag path:N. N2 instance-false-discharge on `by decide`/simp premises is a confirmed gate defect being fixed; do not report it.

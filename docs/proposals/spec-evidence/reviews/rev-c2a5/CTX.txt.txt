@@ -1,0 +1,15 @@
+C2 (constants; owner items 18 and 19; vacuity audit) round 5 on wip/spec-c2-audit, written by Codex. Base 9cb0ef7fe (round 4 by agy, golden, ISS-0039; seven gates pass) -> head 5372ad2a0.
+
+The round fixed real N2 law-to-witness diagnostics reported by checker 550fab85e:
+- unknown-name in doc comments of Const and of C2's checked-negation part of Scalar;
+- Planted premises not stated under the mutant (evalConsts_sound/division, admitted_copy/division_type, admitted_copy/division_value);
+- missing per-subject Planted evidence for admitted_copy and semantic_failure_refuses.
+
+Deliberately not changed:
+- instance-false-discharge on `by decide` premises (a confirmed gate false positive, fixed by the gates worker);
+- pre-existing Scalar classifications (owned by C1);
+- ISS-0039 and the owner's CTy question.
+
+Check that each fix is real and premise-preserving (no vacuous mutant, no premise discharged by rfl or assumed, mutants same-typed). Audit EVERY Law of C2 (ConcreteSpec/Proofs/Const.lean and checked negation in ConcreteSpec/Proofs/Scalar.lean).
+
+Give an APPROVE or REJECT verdict on EVERY `(approved: PENDING)` Helper and Representation lemma in those files. These verdicts are the approval source the next round records, so give one per declaration, as a table: fully qualified name, tag path:N, class, verdict, reason.

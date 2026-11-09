@@ -1,0 +1,5 @@
+Recorded 68 approvals, including both Observe2 helpers. Only approval tags changed; no C6 tags remain PENDING.
+
+Required Lean build passed. Commit: `5120f521097f38f11143d4c06baaaffd88681d7b`. No push, reviewers, or git notes.
+
+QUESTIONS: The review states 69 declarations but contains 68 approval rows. REVIEW4 finding 2 remains untouched, pending the owner’s decision.

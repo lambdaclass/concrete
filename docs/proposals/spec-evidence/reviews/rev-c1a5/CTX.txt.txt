@@ -1,0 +1,12 @@
+C1 (execution, Scalar) round 5 on wip/spec-c1-audit, written by agy. Base 5531d9e34 (round 4) -> head f0c7491db.
+
+The round only records approvals. It replaces `(approved: PENDING)` with `(approved: APPR-C1-codex-5531d9e34)` on the 84 Helper and Representation lemma declarations that the contract-valid Codex review of round 4 approved; that review is quoted in PROMPT.md.
+
+Check:
+- every replaced reference sits on a declaration the review approves, matched by fully qualified name and tag line;
+- no other text changed;
+- no Helper or Representation lemma in ConcreteSpec/Proofs/Exec.lean or ConcreteSpec/Proofs/Scalar.lean is left PENDING.
+
+Two Law doc comments, at Scalar.lean:108 and :216, carry stale copied "(approved: PENDING)" text from an older round. Report them as a finding with the long-term fix.
+
+The determinism finding of the round-4 review (Exec.lean:1492-1521) and the inductive-subject question are held for the owner; do not re-report them.
