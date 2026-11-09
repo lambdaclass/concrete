@@ -458,7 +458,9 @@ def make_plan(root, snapshot, local, branch, scope='all'):
                                                 introduction_content(snapshot.repo, oid, key)))
                              for name, _, sha in rows
                              for oid in sorted(state_introductions(snapshot, sha).get(key, set()))]
-            names = ', '.join(sorted({name for name, _, _ in rows if name != 'main'}))
+            main_roots = introductions(snapshot.repo, snapshot.remote_heads['main']).get(key, set())
+            names = ', '.join(sorted({name for name, _, sha in rows if name != 'main' and
+                                      (not main_roots or not state_introductions(snapshot, sha).get(key, set()) <= main_roots)}))
             resolutions.append(f'{key} ({names}): compare the listed introducing commits and first records. '
                                'For an already landed copy, reconcile the branch onto origin/main so it inherits '
                                'the main introduction, or retire its stale advertised ref. For a distinct task, '

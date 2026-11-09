@@ -11,6 +11,7 @@ import os
 SOURCE = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(__file__).resolve().parents[2]
 c = runpy.run_path(str(SOURCE / 'scripts/ids/round6_controls.py'))
 a, cli, ok, save = (c[n] for n in ('a', 'cli', 'ok', 'save'))
+a.sandbox_environment()
 
 def head(root):
     return a.git(root, 'rev-parse', 'HEAD').stdout.strip()
