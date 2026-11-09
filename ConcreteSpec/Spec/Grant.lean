@@ -131,6 +131,35 @@ def runErased {σ α : Type} : List (Command σ α) → σ → Option (List α �
     let (as, u) ← runErased cs t
     pure (a :: as, u)
 
+/-- The executable brand operations; arbitrary allocator callbacks cannot certify a lifetime
+transition. The finite interpreter below uses precisely these six public operations. -/
+inductive LifetimeOp where
+  | fresh (scope : BlockId)
+  | depend (dependency : Dependency)
+  | consume (place : Hybrid.Place)
+  | release (brand : BrandId)
+  | reset (brand : BrandId)
+  | endScope (scope : BlockId)
+
+def lifetimeStep (s : State) : LifetimeOp → Option State
+  | .fresh b => fresh s b
+  | .depend d => depend s d
+  | .consume p => consume s p
+  | .release i => release s i
+  | .reset i => reset s i
+  | .endScope b => endScope s b
+
+def runLifetime (s : State) (ops : List LifetimeOp) : Option State :=
+  ops.foldlM lifetimeStep s
+
+/-- A scoped identity has ended, but remains below the issued generation supply. -/
+def Retired (s : State) (i : BrandId) : Prop :=
+  i.id < s.nextBrand ∧ ∀ b ∈ s.binders, b.brand ≠ i
+instance (s : State) (i : BrandId) : Decidable (Retired s i) := by
+  unfold Retired
+  infer_instance
+
+
 namespace Examples
 
 def initial : State := (fresh {} ⟨0⟩).getD {}
@@ -187,6 +216,11 @@ structure State (Handle : Type) where
 def usable {H : Type} (s : State H) (i : GrantId) : Option (Resource H) := do
   let r ← AList.lookup s.resources i
   if r.live then some r else none
+
+/-- Extensional permission of a live grant, independent of the representation/order of rights. -/
+def Permits {H : Type} (s : State H) (i : GrantId) (right : Nat) : Prop :=
+  ∃ r, usable s i = some r ∧ right ∈ r.rights
+
 
 /-- Mark consumption without removing the historical identity. -/
 def consumed {H : Type} (s : State H) (i : GrantId) : State H :=

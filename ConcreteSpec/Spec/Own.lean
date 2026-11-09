@@ -199,6 +199,27 @@ def endLoan (s : State) (i : LoanId) : Option State := do
   if s.loans.any (·.parent == some i) then none else
     some { s with loans := s.loans.filter (·.id != i) }
 
+/-- The public loan-creation and ending operations, as a finite lifetime protocol. -/
+inductive LoanAction where
+  | borrow (root : Hybrid.Place) (path : List Projection) (mode : Mode)
+  | reborrow (parent : LoanId) (path : List Projection) (mode : Mode) (activation : Nat)
+  | endLoan (loan : LoanId)
+
+def loanAction (s : State) : LoanAction → Option State
+  | .borrow p path m => borrow s p path m
+  | .reborrow i path m a => reborrowTo s i path m a
+  | .endLoan i => endLoan s i
+
+def runLoanSequence (s : State) (ops : List LoanAction) : Option State :=
+  ops.foldlM loanAction s
+
+/-- The identity was issued, and its active loan has ended. Ending its root is not required. -/
+def RetiredLoan (s : State) (i : LoanId) : Prop :=
+  i.id < s.nextLoan ∧ ∀ l ∈ s.loans, l.id ≠ i
+instance (s : State) (i : LoanId) : Decidable (RetiredLoan s i) := by
+  unfold RetiredLoan
+  infer_instance
+
 /-- Read/write permissions are partial identity transitions on the instrumentation. Concrete
 reads/writes are supplied separately by `instrument`; they cannot manufacture permission. -/
 def accessOwner (s : State) (p : Hybrid.Place) (m : Mode) : Option State :=

@@ -57,17 +57,19 @@ Open obligations, by name:
   identities, how nested expressions and grouping become A-normal form, source positions, and that
   acceptance of a source program does not depend on how the elaborator names temporaries.
 - **O2 The lexer, model-translation and native-image obligations.**
-- **O3 Instrumentation erasure** (Q9.10, owner decision 2026-11-08 Q3): C5 proves single-operation
-  erasure for `Own.instrument`, scalar C4 access and `Generative.instrument`, finite-run erasure
-  for `Generative.run_erasure`, unconditional C1 execution-level forward simulation for
-  `Own.instrumentOperands` (`eval_ok_erasure`, `eval_trap_erasure`, `evalArgs_ok_erasure`,
-  `evalArgs_trap_erasure`, `test_erasure`, `instrumentLife_erasure`, `allows_erasure`,
-  `step_next_erasure`, `step_request_erasure`, `Step_erasure`, `Steps_erasure`, `runFrom_erasure`,
-  `run_erasure`), and the checker-accepted converse (`step_stuck_iff_of_accepted`,
-  `runFrom_erasure_of_accepted`, `run_stuck_iff_of_accepted`) over the explicit obligation
-  interface `Own.CheckerAccepted`. Discharging `Own.CheckerAccepted` from the ownership and borrow
-  checker (`R-0571`, slice 1) and erasing the old slice-1 instrumentation (`Slot.moved` and
-  `Entry.used/live/known/kfields`, `R-0571`) remain. Slice-1 brand erasure (part 5) is done.
+- **O3 Instrumentation erasure** (Q9.10, owner decision 2026-11-08 Q3): C5 supplies the
+  single-operation erasure calculations for ownership instrumentation, scalar C4 access and
+  generative allocator instrumentation. Its independent execution contracts are finite allocator
+  simulation (`Generative.run_erasure`), unconditional finite C1 simulation
+  (`Own.Steps_erasure`, over `FiniteExecution`), non-stuck oracle-run simulation
+  (`Own.runFrom_erasure`, `Own.run_erasure`), and the checker-accepted converse
+  (`step_stuck_iff_of_accepted`, `runFrom_erasure_of_accepted`, `run_stuck_iff_of_accepted`).
+  Finite simulation includes operand values, tests, lifecycle events and primitive answers,
+  preserving concrete stores and event order; its statement has no oracle or non-stuck premise.
+  The converse uses the explicit obligation interface `Own.CheckerAccepted`. Discharging that
+  interface from the ownership and borrow checker (`R-0571`, slice 1) and erasing the old slice-1
+  instrumentation (`Slot.moved` and `Entry.used/live/known/kfields`, `R-0571`) remain.
+  Slice-1 brand erasure (part 5) is done.
 - **O4 Trap diagnostics** (Q7.10, OD101): C6 defines the exact trap-line bytes and their
   injectivity. Producing each operation's source span remains O1; the startup refusal's bytes are
   not yet defined.

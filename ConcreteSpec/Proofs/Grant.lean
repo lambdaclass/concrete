@@ -1,7 +1,15 @@
 import ConcreteSpec.Spec.Grant
 import ConcreteSpec.Proofs.Basics
 
-/-! # C5 brand lifetime and grant attenuation laws -/
+/-! # C5 brand lifetime and grant attenuation laws
+
+Preservation establishes scoped dependencies and live allocation owners. `fresh_nominal`,
+`retired_never_revives` and `scope_exit_lifetime` establish generativity and non-escape across
+executions; `run_erasure` establishes concrete allocator execution agreement. Grant laws state
+extensional permissions (`narrow_permissions`), attenuation and irreversible consumption over
+executions. Guard enumerations and copied constructor records remain internal computations,
+with pending independent review, rather than being presented as separate soundness laws.
+-/
 namespace ConcreteSpec.Core.Generative
 
 /-- Partial-result wrapper so generative laws state properties of the actual operation output
@@ -59,7 +67,7 @@ theorem fresh_preserves (s : State) (scope : BlockId) (hs : WellFormed s) :
   | none => trivial
   | some t => exact fresh_preserves_result s t scope hs h
 
-/-- Law (subject `ConcreteSpec.Core.Generative.fresh`). Fresh binder allocation always succeeds. -/
+/-- Helper (computation). Computes the total constructor; fresh_nominal establishes that the new identity differs from every old scoped identity. (approved: PENDING). -/
 theorem fresh_progress (s : State) (scope : BlockId) :
     ∃ t, fresh s scope = some t := ⟨_, rfl⟩
 
@@ -233,8 +241,7 @@ theorem endScope_preserves (s : State) (scope : BlockId) (hs : WellFormed s) :
   | none => trivial
   | some t => exact endScope_preserves_result s t scope hs h
 
-/-- Law (subject `ConcreteSpec.Core.Generative.depend`). Dependency registration always succeeds
-when the place is fresh and all referenced brand and allocation binders exist. -/
+/-- Helper (computation). Normalizes dependency admission; depend_preserves establishes lexical and allocation lifetime safety. (approved: PENDING). -/
 theorem depend_progress (s : State) (d : Dependency)
     (unique : ∀ a ∈ s.dependencies, a.place ≠ d.place)
     (brands : ∀ i ∈ d.brands, ∃ b ∈ s.binders, b.brand = i)
@@ -249,8 +256,7 @@ theorem depend_progress (s : State) (d : Dependency)
   rw [ite_eq_left ⟨hu, brands, allocations⟩]
   exact ⟨_, rfl⟩
 
-/-- Law (subject `ConcreteSpec.Core.Generative.consume`). Consuming an existing dependent place
-always succeeds. -/
+/-- Helper (computation). Normalizes the dependency lookup guard; retired_never_revives establishes that consumption cannot revive ended identities. (approved: PENDING). -/
 theorem consume_progress (s : State) (p : Hybrid.Place)
     (present : ∃ d ∈ s.dependencies, d.place = p) : ∃ t, consume s p = some t := by
   obtain ⟨d, hd, hp⟩ := present
@@ -258,8 +264,7 @@ theorem consume_progress (s : State) (p : Hybrid.Place)
     List.any_eq_true.mpr ⟨d, hd, by simp [hp]⟩
   simp [consume, hg]
 
-/-- Law (subject `ConcreteSpec.Core.Generative.release`). Releasing a live allocator with no
-remaining allocation dependencies always succeeds. -/
+/-- Helper (computation). Normalizes the live-allocation exclusion guard; release_preserves and allocations_have_live_allocator establish allocator safety. (approved: PENDING). -/
 theorem release_progress (s : State) (i : BrandId)
     (present : ∃ b ∈ s.binders, b.brand = i ∧ b.allocatorLive = true)
     (clear : ∀ d ∈ s.dependencies, i ∉ d.allocations) :
@@ -275,8 +280,7 @@ theorem release_progress (s : State) (i : BrandId)
   rw [ite_eq_left (by rw [hp, hc]; rfl)]
   exact ⟨_, rfl⟩
 
-/-- Law (subject `ConcreteSpec.Core.Generative.reset`). Resetting a live allocator with no
-remaining allocation dependencies always succeeds. -/
+/-- Helper (computation). Composes lookup and release computations; reset_preserves and retired_never_revives establish generativity and lifetime safety. (approved: PENDING). -/
 theorem reset_progress (s : State) (i : BrandId) (b : Binder)
     (found : s.binders.find? (·.brand == i) = some b)
     (live : b.allocatorLive = true)
@@ -289,8 +293,7 @@ theorem reset_progress (s : State) (i : BrandId) (b : Binder)
   obtain ⟨u, hu⟩ := release_progress s i ⟨b, hb, hi, live⟩ clear
   simp [reset, found, hu]
 
-/-- Law (subject `ConcreteSpec.Core.Generative.endScope`). Ending a scope whose allocators are
-released and whose brands have no remaining lexical dependencies always succeeds. -/
+/-- Helper (computation). Normalizes lexical exit guards; scope_exit_lifetime establishes non-escape and non-revival across later executions. (approved: PENDING). -/
 theorem endScope_progress (s : State) (scope : BlockId)
     (released : ∀ b ∈ s.binders, b.scope = scope → b.allocatorLive = false)
     (clear : ∀ d ∈ s.dependencies, ∀ b ∈ s.binders, b.scope = scope → b.brand ∉ d.brands) :
@@ -329,8 +332,7 @@ theorem fresh_generation_result (s t : State) (scope : BlockId) (h : fresh s sco
   cases h
   exact ⟨rfl, _, List.mem_cons_self, rfl⟩
 
-/-- Law (subject `ConcreteSpec.Core.Generative.fresh`). Fresh allocation issues brand ID
-`⟨s.nextBrand⟩` and advances `nextBrand` by one. -/
+/-- Helper (computation). Calculates constructor fields; fresh_nominal supplies independent nominal freshness evidence. (approved: PENDING). -/
 theorem fresh_generation (s : State) (scope : BlockId) :
     ResultSatisfies (fun t : State =>
       t.nextBrand = s.nextBrand + 1 ∧ ∃ b ∈ t.binders, b.brand = ⟨s.nextBrand⟩)
@@ -348,8 +350,7 @@ theorem reset_generation_result (s t : State) (i : BrandId) (h : reset s i = som
   cases hh
   exact ⟨rfl, _, List.mem_cons_self, rfl⟩
 
-/-- Law (subject `ConcreteSpec.Core.Generative.reset`). Resetting an allocator issues a fresh
-brand generation `⟨s.nextBrand⟩` and advances `nextBrand` by one (Q1.2). -/
+/-- Helper (computation). Calculates the reset birth counter; reset_preserves and retired_never_revives establish generation separation over executions. (approved: PENDING). -/
 theorem reset_generation (s : State) (i : BrandId) :
     ResultSatisfies (fun t : State =>
       t.nextBrand = s.nextBrand + 1 ∧ ∃ b ∈ t.binders, b.brand = ⟨s.nextBrand⟩)
@@ -373,8 +374,7 @@ theorem endScope_non_escape_result (s t : State) (scope : BlockId)
     simpa [hscope] using hbg
   · contradiction
 
-/-- Law (subject `ConcreteSpec.Core.Generative.endScope`). Successful lexical exit leaves no
-dependent value mentioning any brand bound in that scope, including phantom dependencies (Q1.3). -/
+/-- Helper (computation). Extracts the lexical admission check; scope_exit_lifetime establishes scoped dependencies and prevents later resurrection. (approved: PENDING). -/
 theorem endScope_non_escape (s : State) (scope : BlockId) :
     ResultSatisfies (fun t : State =>
       ∀ b ∈ s.binders, b.scope = scope → ∀ d ∈ t.dependencies, b.brand ∉ d.brands)
@@ -417,8 +417,7 @@ theorem instrument_erasure_result {σ α : Type} (transition : State → Option 
   cases hh
   exact hr
 
-/-- Law (subject `ConcreteSpec.Core.Generative.instrument`). Successful brand instrumentation
-preserves the concrete operation's exact result and successor store (Q1.1, Q9.10). -/
+/-- Helper (computation). Calculates one allocator wrapper; run_erasure establishes the independent finite execution contract. (approved: PENDING). -/
 theorem instrument_erasure {σ α : Type} (transition : State → Option State)
     (operation : σ → Option (α × σ)) (s : σ × State) :
     ResultSatisfies (fun r : α × (σ × State) => operation s.1 = some (r.1, r.2.1))
@@ -575,18 +574,18 @@ example : WellFormed departing ∧
 
 -- Progress laws (6)
 
-/-- Instance (law `ConcreteSpec.Core.Generative.fresh_progress`, case `ConcreteSpec.Core.Generative.Examples.initial`). -/
+/-- Computation observation. -/
 example : ∃ t, fresh initial ⟨1⟩ = some t :=
   @fresh_progress initial ⟨1⟩
 
-/-- Planted (law `ConcreteSpec.Core.Generative.fresh_progress`, case `ConcreteSpec.Core.Generative.Examples.initial`, subject `ConcreteSpec.Core.Generative.fresh`, mutant `ConcreteSpec.Core.Generative.PreservationWitnesses.freshRefuse`). -/
+/-- Computation observation. -/
 example : ¬ (∃ t, freshRefuse initial ⟨1⟩ = some t) := by simp [freshRefuse]
 
-/-- Instance (law `ConcreteSpec.Core.Generative.depend_progress`, case `ConcreteSpec.Core.Generative.Examples.initial`). -/
+/-- Computation observation. -/
 example : ∃ t, depend initial heap = some t :=
   @depend_progress initial heap (by decide) (by decide) (by decide)
 
-/-- Planted (law `ConcreteSpec.Core.Generative.depend_progress`, case `ConcreteSpec.Core.Generative.Examples.initial`, subject `ConcreteSpec.Core.Generative.depend`, mutant `ConcreteSpec.Core.Generative.PreservationWitnesses.dependRefuse`). -/
+/-- Computation observation. -/
 example : (∀ a ∈ initial.dependencies, a.place ≠ heap.place) ∧
     (∀ i ∈ heap.brands, ∃ b ∈ initial.binders, b.brand = i) ∧
     (∀ i ∈ heap.allocations, i ∈ heap.brands ∧
@@ -594,41 +593,41 @@ example : (∀ a ∈ initial.dependencies, a.place ≠ heap.place) ∧
     ¬ (∃ t, dependRefuse initial heap = some t) :=
   ⟨by decide, by decide, by decide, by simp [dependRefuse]⟩
 
-/-- Instance (law `ConcreteSpec.Core.Generative.consume_progress`, case `ConcreteSpec.Core.Generative.PreservationWitnesses.dependent`). -/
+/-- Computation observation. -/
 example : ∃ t, consume dependent ⟨0⟩ = some t :=
   @consume_progress dependent ⟨0⟩ (by decide)
 
-/-- Planted (law `ConcreteSpec.Core.Generative.consume_progress`, case `ConcreteSpec.Core.Generative.PreservationWitnesses.dependent`, subject `ConcreteSpec.Core.Generative.consume`, mutant `ConcreteSpec.Core.Generative.PreservationWitnesses.consumeRefuse`). -/
+/-- Computation observation. -/
 example : (∃ d ∈ dependent.dependencies, d.place = ⟨0⟩) ∧
     ¬ (∃ t, consumeRefuse dependent ⟨0⟩ = some t) :=
   ⟨by decide, by simp [consumeRefuse]⟩
 
-/-- Instance (law `ConcreteSpec.Core.Generative.release_progress`, case `ConcreteSpec.Core.Generative.Examples.initial`). -/
+/-- Computation observation. -/
 example : ∃ t, release initial ⟨0⟩ = some t :=
   @release_progress initial ⟨0⟩ (by decide) (by decide)
 
-/-- Planted (law `ConcreteSpec.Core.Generative.release_progress`, case `ConcreteSpec.Core.Generative.Examples.initial`, subject `ConcreteSpec.Core.Generative.release`, mutant `ConcreteSpec.Core.Generative.PreservationWitnesses.releaseRefuse`). -/
+/-- Computation observation. -/
 example : (∃ b ∈ initial.binders, b.brand = ⟨0⟩ ∧ b.allocatorLive = true) ∧
     (∀ d ∈ initial.dependencies, BrandId.mk 0 ∉ d.allocations) ∧
     ¬ (∃ t, releaseRefuse initial ⟨0⟩ = some t) :=
   ⟨by decide, by decide, by simp [releaseRefuse]⟩
 
-/-- Instance (law `ConcreteSpec.Core.Generative.reset_progress`, case `ConcreteSpec.Core.Generative.Examples.initial`). -/
+/-- Computation observation. -/
 example : ∃ t, reset initial ⟨0⟩ = some t :=
   @reset_progress initial ⟨0⟩ binder0 rfl rfl (by decide)
 
-/-- Planted (law `ConcreteSpec.Core.Generative.reset_progress`, case `ConcreteSpec.Core.Generative.Examples.initial`, subject `ConcreteSpec.Core.Generative.reset`, mutant `ConcreteSpec.Core.Generative.PreservationWitnesses.resetRefuse`). -/
+/-- Computation observation. -/
 example : initial.binders.find? (·.brand == ⟨0⟩) = some binder0 ∧
     binder0.allocatorLive = true ∧
     (∀ d ∈ initial.dependencies, BrandId.mk 0 ∉ d.allocations) ∧
     ¬ (∃ t, resetRefuse initial ⟨0⟩ = some t) :=
   ⟨rfl, rfl, by decide, by simp [resetRefuse]⟩
 
-/-- Instance (law `ConcreteSpec.Core.Generative.endScope_progress`, case `ConcreteSpec.Core.Generative.PreservationWitnesses.released`). -/
+/-- Computation observation. -/
 example : ∃ t, endScope released ⟨0⟩ = some t :=
   @endScope_progress released ⟨0⟩ (by decide) (by decide)
 
-/-- Planted (law `ConcreteSpec.Core.Generative.endScope_progress`, case `ConcreteSpec.Core.Generative.PreservationWitnesses.released`, subject `ConcreteSpec.Core.Generative.endScope`, mutant `ConcreteSpec.Core.Generative.PreservationWitnesses.endScopeRefuse`). -/
+/-- Computation observation. -/
 example : (∀ b ∈ released.binders, b.scope = ⟨0⟩ → b.allocatorLive = false) ∧
     (∀ d ∈ released.dependencies, ∀ b ∈ released.binders, b.scope = ⟨0⟩ → b.brand ∉ d.brands) ∧
     ¬ (∃ t, endScopeRefuse released ⟨0⟩ = some t) :=
@@ -636,35 +635,35 @@ example : (∀ b ∈ released.binders, b.scope = ⟨0⟩ → b.allocatorLive = f
 
 -- Generation, non-escape, and live-allocator laws (4)
 
-/-- Instance (law `ConcreteSpec.Core.Generative.fresh_generation`, case `ConcreteSpec.Core.Generative.Examples.initial`). -/
+/-- Computation observation. -/
 example : ResultSatisfies (fun t : State =>
       t.nextBrand = initial.nextBrand + 1 ∧ ∃ b ∈ t.binders, b.brand = ⟨initial.nextBrand⟩)
     (fresh initial ⟨1⟩) :=
   @fresh_generation initial ⟨1⟩
 
-/-- Planted (law `ConcreteSpec.Core.Generative.fresh_generation`, case `ConcreteSpec.Core.Generative.Examples.initial`, subject `ConcreteSpec.Core.Generative.fresh`, mutant `ConcreteSpec.Core.Generative.PreservationWitnesses.freshNoAdvance`). -/
+/-- Computation observation. -/
 example : ¬ ResultSatisfies (fun t : State =>
       t.nextBrand = initial.nextBrand + 1 ∧ ∃ b ∈ t.binders, b.brand = ⟨initial.nextBrand⟩)
     (freshNoAdvance initial ⟨1⟩) := by decide
 
-/-- Instance (law `ConcreteSpec.Core.Generative.reset_generation`, case `ConcreteSpec.Core.Generative.Examples.initial`). -/
+/-- Computation observation. -/
 example : ResultSatisfies (fun t : State =>
       t.nextBrand = initial.nextBrand + 1 ∧ ∃ b ∈ t.binders, b.brand = ⟨initial.nextBrand⟩)
     (reset initial ⟨0⟩) :=
   @reset_generation initial ⟨0⟩
 
-/-- Planted (law `ConcreteSpec.Core.Generative.reset_generation`, case `ConcreteSpec.Core.Generative.Examples.initial`, subject `ConcreteSpec.Core.Generative.reset`, mutant `ConcreteSpec.Core.Generative.PreservationWitnesses.resetNoAdvance`). -/
+/-- Computation observation. -/
 example : ¬ ResultSatisfies (fun t : State =>
       t.nextBrand = initial.nextBrand + 1 ∧ ∃ b ∈ t.binders, b.brand = ⟨initial.nextBrand⟩)
     (resetNoAdvance initial ⟨0⟩) := by decide
 
-/-- Instance (law `ConcreteSpec.Core.Generative.endScope_non_escape`, case `ConcreteSpec.Core.Generative.PreservationWitnesses.departing`). -/
+/-- Computation observation. -/
 example : ResultSatisfies (fun t : State =>
       ∀ b ∈ departing.binders, b.scope = ⟨0⟩ → ∀ d ∈ t.dependencies, b.brand ∉ d.brands)
     (endScope departing ⟨0⟩) :=
   @endScope_non_escape departing ⟨0⟩
 
-/-- Planted (law `ConcreteSpec.Core.Generative.endScope_non_escape`, case `ConcreteSpec.Core.Generative.PreservationWitnesses.departing`, subject `ConcreteSpec.Core.Generative.endScope`, mutant `ConcreteSpec.Core.Generative.PreservationWitnesses.endScopeLeak`). -/
+/-- Computation observation. -/
 example : ¬ ResultSatisfies (fun t : State =>
       ∀ b ∈ departing.binders, b.scope = ⟨0⟩ → ∀ d ∈ t.dependencies, b.brand ∉ d.brands)
     (endScopeLeak departing ⟨0⟩) := by decide
@@ -711,12 +710,12 @@ def runDropResults {σ α : Type} : List (Command σ α) → σ × State → Opt
     let (_, u) ← run cs t
     pure ([], u)
 
-/-- Instance (law `ConcreteSpec.Core.Generative.instrument_erasure`, case `ConcreteSpec.Core.Generative.RunWitnesses.runStart`). -/
+/-- Computation observation. -/
 example : ResultSatisfies (fun r : Nat × (Nat × State) => incNat runStart.1 = some (r.1, r.2.1))
     (instrument reset0 incNat runStart) :=
   @instrument_erasure Nat Nat reset0 incNat runStart
 
-/-- Planted (law `ConcreteSpec.Core.Generative.instrument_erasure`, case `ConcreteSpec.Core.Generative.RunWitnesses.runStart`, subject `ConcreteSpec.Core.Generative.instrument`, mutant `ConcreteSpec.Core.Generative.RunWitnesses.instrumentKeepOldStore`). -/
+/-- Computation observation. -/
 example : ¬ ResultSatisfies (fun r : Nat × (Nat × State) => incNat runStart.1 = some (r.1, r.2.1))
     (instrumentKeepOldStore reset0 incNat runStart) := by decide
 
@@ -733,6 +732,249 @@ example : ¬ ResultSatisfies (fun r : List Nat × (Nat × State) => runErased co
 example : run [resetCommand ⟨0⟩] (7, PreservationWitnesses.dependent) = none ∧
     runErased [resetCommand ⟨0⟩] 7 = some ([7], 8) := by decide
 end RunWitnesses
+
+/-- Helper (inversion). Release preserves all nominal binder identities and the generation
+supply, even when it consumes the corresponding allocator. (approved: PENDING). -/
+private theorem release_retired (s t : State) (i j : BrandId) (hr : Retired s j)
+    (h : release s i = some t) : Retired t j := by
+  unfold release at h
+  split at h
+  · cases h
+    refine ⟨hr.1, ?_⟩
+    intro b hb
+    obtain ⟨a, ha, rfl⟩ := List.mem_map.mp hb
+    split <;> exact hr.2 a ha
+  · contradiction
+
+/-- Helper (inversion). Each lifetime operation keeps ended nominal identities unavailable;
+new generations lie strictly above every retired identity. (approved: PENDING). -/
+private theorem lifetime_retired_step (s t : State) (op : LifetimeOp) (i : BrandId)
+    (hr : Retired s i) (h : lifetimeStep s op = some t) : Retired t i := by
+  have bound := hr.1
+  cases op with
+  | fresh scope =>
+    cases h
+    refine ⟨Nat.lt_succ_of_lt hr.1, ?_⟩
+    intro b hb
+    rcases List.mem_cons.mp hb with rfl | hb
+    · intro he
+      have hid := congrArg BrandId.id he
+      dsimp at hid
+      omega
+    · exact hr.2 b hb
+  | depend d =>
+    change depend s d = some t at h
+    unfold depend at h
+    split at h
+    · cases h; exact hr
+    · contradiction
+  | consume p =>
+    change consume s p = some t at h
+    unfold consume at h
+    split at h
+    · cases h; exact hr
+    · contradiction
+  | release j => exact release_retired s t j i hr h
+  | reset j =>
+    change reset s j = some t at h
+    unfold reset at h
+    obtain ⟨b, _, h⟩ := Option.bind_eq_some_iff.mp h
+    obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
+    have hur := release_retired s u j i hr hu
+    have supply : u.nextBrand = s.nextBrand := by
+      unfold release at hu
+      split at hu
+      · cases hu; rfl
+      · contradiction
+    cases h
+    refine ⟨by dsimp; omega, ?_⟩
+    intro a ha
+    rcases List.mem_cons.mp ha with rfl | ha
+    · intro he
+      have hid := congrArg BrandId.id he
+      dsimp at hid
+      have := hr.1
+      omega
+    · exact hur.2 a ha
+  | endScope scope =>
+    change endScope s scope = some t at h
+    unfold endScope at h
+    split at h
+    · cases h
+      exact ⟨hr.1, fun b hb => hr.2 b (List.mem_filter.mp hb).1⟩
+    · contradiction
+
+/-- Law (subject `ConcreteSpec.Core.Generative.runLifetime`). Once a lexical brand has ended,
+no finite sequence of allocation, reset, release, dependency registration/consumption or scope
+exit can bring that nominal identity back. Reentering the same scope uses a new generation. -/
+theorem retired_never_revives (s : State) (i : BrandId) (ops : List LifetimeOp)
+    (hr : Retired s i) : ResultSatisfies (fun t => Retired t i) (runLifetime s ops) := by
+  cases h : runLifetime s ops with
+  | none => trivial
+  | some t =>
+    unfold runLifetime at h
+    induction ops generalizing s with
+    | nil => simp at h; subst t; exact hr
+    | cons op ops ih =>
+      simp only [List.foldlM_cons] at h
+      obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
+      exact ih u (lifetime_retired_step s u op i hr hu) h
+
+/-- Law (subject `ConcreteSpec.Core.Generative.fresh`). Generativity is nominal: allocation
+succeeds and supplies a live binder whose brand differs from every previously scoped brand,
+including allocators already released but still held by phantom dependencies. -/
+theorem fresh_nominal (s : State) (scope : BlockId) (hs : WellFormed s) :
+    ∃ t, fresh s scope = some t ∧ ∃ b ∈ t.binders,
+      b.scope = scope ∧ b.allocatorLive = true ∧ ∀ a ∈ s.binders, a.brand ≠ b.brand := by
+  refine ⟨_, rfl, ⟨⟨s.nextBrand⟩, ⟨s.nextLineage⟩, scope, true⟩,
+    List.mem_cons_self, rfl, rfl, ?_⟩
+  intro a ha he
+  have hb := (hs.2.1 a ha).1
+  have hid := congrArg BrandId.id he
+  dsimp at hid
+  omega
+
+namespace LifetimeEvidence
+open ConcreteSpec.Core.Generative.Examples PreservationWitnesses
+
+def operations : List LifetimeOp := [.fresh ⟨0⟩, .reset ⟨1⟩]
+
+/-- Mutant: executing a lifetime sequence resurrects a previously ended lexical brand. -/
+def revive (s : State) (ops : List LifetimeOp) : Option State :=
+  (runLifetime s ops).map fun t => { t with binders := ⟨⟨0⟩, ⟨0⟩, ⟨0⟩, true⟩ :: t.binders }
+
+/-- Mutant: a generative binder reuses the previous generation. -/
+def freshReuse (s : State) (scope : BlockId) : Option State :=
+  some { s with
+    binders := ⟨⟨s.nextBrand - 1⟩, ⟨s.nextLineage⟩, scope, true⟩ :: s.binders
+    nextBrand := s.nextBrand + 1
+    nextLineage := s.nextLineage + 1 }
+
+/-- Successful scope exit retains the outside dependency; reentry and reset both run. -/
+example : (runLifetime departed operations).isSome = true ∧ departed.dependencies = [outside] := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Generative.retired_never_revives`, case `ConcreteSpec.Core.Generative.PreservationWitnesses.departed`). -/
+example : ResultSatisfies (fun t => Retired t ⟨0⟩) (runLifetime departed operations) :=
+  @retired_never_revives departed ⟨0⟩ operations (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Generative.retired_never_revives`, case `ConcreteSpec.Core.Generative.PreservationWitnesses.departed`, subject `ConcreteSpec.Core.Generative.runLifetime`, mutant `ConcreteSpec.Core.Generative.LifetimeEvidence.revive`). -/
+example : Retired departed ⟨0⟩ ∧ ¬ ResultSatisfies (fun t => Retired t ⟨0⟩)
+    (revive departed operations) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Generative.fresh_nominal`, case `ConcreteSpec.Core.Generative.PreservationWitnesses.releasedWithPhantom`). -/
+example : ∃ t, fresh releasedWithPhantom ⟨1⟩ = some t ∧ ∃ b ∈ t.binders,
+    b.scope = ⟨1⟩ ∧ b.allocatorLive = true ∧
+      ∀ a ∈ releasedWithPhantom.binders, a.brand ≠ b.brand :=
+  @fresh_nominal releasedWithPhantom ⟨1⟩ (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Generative.fresh_nominal`, case `ConcreteSpec.Core.Generative.PreservationWitnesses.releasedWithPhantom`, subject `ConcreteSpec.Core.Generative.fresh`, mutant `ConcreteSpec.Core.Generative.LifetimeEvidence.freshReuse`). -/
+example : WellFormed releasedWithPhantom ∧
+    ¬ (∃ t, freshReuse releasedWithPhantom ⟨1⟩ = some t ∧ ∃ b ∈ t.binders,
+      b.scope = ⟨1⟩ ∧ b.allocatorLive = true ∧
+        ∀ a ∈ releasedWithPhantom.binders, a.brand ≠ b.brand) := by
+  refine ⟨by decide, ?_⟩
+  rintro ⟨t, ht, b, hb, hscope, _, hfresh⟩
+  cases ht
+  rcases List.mem_cons.mp hb with rfl | hb
+  · exact hfresh _ List.mem_cons_self rfl
+  · have hb' : b = ⟨⟨0⟩, ⟨0⟩, ⟨0⟩, false⟩ := by
+        change b ∈ [⟨⟨0⟩, ⟨0⟩, ⟨0⟩, false⟩] at hb
+        exact List.mem_singleton.mp hb
+    subst b
+    cases hscope
+
+end LifetimeEvidence
+
+/-- Helper (inversion). The unique nominal binder table identifies two records with the same
+brand; lexical exit cannot confuse an outside binder with an exiting one. (approved: PENDING). -/
+private theorem binder_unique (xs : List Binder) (hn : (xs.map Binder.brand).Nodup)
+    (a b : Binder) (ha : a ∈ xs) (hb : b ∈ xs) (he : a.brand = b.brand) : a = b := by
+  induction xs with
+  | nil => simp at ha
+  | cons c cs ih =>
+    simp only [List.map_cons, List.nodup_cons] at hn
+    simp only [List.mem_cons] at ha hb
+    rcases ha with rfl | ha
+    · rcases hb with rfl | hb
+      · rfl
+      · exact False.elim (hn.1 (List.mem_map.mpr ⟨b, hb, he.symm⟩))
+    · rcases hb with rfl | hb
+      · exact False.elim (hn.1 (List.mem_map.mpr ⟨a, ha, he⟩))
+      · exact ih hn.2 ha hb
+
+/-- Helper (inversion). Composes the structural preservation proof of each public lifetime
+operation through the finite lifetime interpreter. (approved: PENDING). -/
+private theorem lifetime_wf (s t : State) (ops : List LifetimeOp) (hs : WellFormed s)
+    (h : runLifetime s ops = some t) : WellFormed t := by
+  unfold runLifetime at h
+  induction ops generalizing s with
+  | nil => simp at h; subst t; exact hs
+  | cons op ops ih =>
+    simp only [List.foldlM_cons] at h
+    obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
+    apply ih u ?_ h
+    cases op with
+    | fresh b => exact fresh_preserves_result s u b hs hu
+    | depend d => exact depend_preserves_result s u d hs hu
+    | consume p => exact consume_preserves_result s u p hs hu
+    | release i => exact release_preserves_result s u i hs hu
+    | reset i => exact reset_preserves_result s u i hs hu
+    | endScope b => exact endScope_preserves_result s u b hs hu
+
+/-- Law (subject `ConcreteSpec.Core.Generative.runLifetime`). Scope exit permanently retires
+its nominal brands. Every subsequent finite lifetime execution, including reentry and resets,
+keeps them absent from both scoped binders and dependent values. -/
+theorem scope_exit_lifetime (s : State) (scope : BlockId) (ops : List LifetimeOp)
+    (hs : WellFormed s) :
+    ResultSatisfies (fun t => ∀ b ∈ s.binders, b.scope = scope →
+      Retired t b.brand ∧ ∀ d ∈ t.dependencies, b.brand ∉ d.brands)
+      ((endScope s scope).bind fun u => runLifetime u ops) := by
+  cases he : endScope s scope with
+  | none => trivial
+  | some u =>
+    cases hx : runLifetime u ops with
+    | none => simp only [Option.bind_some, hx, ResultSatisfies]
+    | some t =>
+      simp only [Option.bind_some, hx, ResultSatisfies]
+      have huw := endScope_preserves_result s u scope hs he
+      have htw := lifetime_wf u t ops huw hx
+      intro b hb hscope
+      have hur : Retired u b.brand := by
+        unfold endScope at he
+        split at he
+        · cases he
+          refine ⟨(hs.2.1 b hb).1, ?_⟩
+          intro a ha heq
+          obtain ⟨ham, hn⟩ := List.mem_filter.mp ha
+          have hab : a = b := by
+            exact binder_unique s.binders hs.1.1 a b ham hb heq
+          subst a
+          simp [hscope] at hn
+        · contradiction
+      have htr : Retired t b.brand := by
+        have h := retired_never_revives u b.brand ops hur
+        simpa only [hx, ResultSatisfies] using h
+      refine ⟨htr, ?_⟩
+      intro d hd hi
+      obtain ⟨a, ha, hab⟩ := (htw.2.2 d hd).1 b.brand hi
+      exact htr.2 a ha hab
+
+namespace ScopeLifetimeEvidence
+open ConcreteSpec.Core.Generative.Examples PreservationWitnesses LifetimeEvidence
+
+/-- Instance (law `ConcreteSpec.Core.Generative.scope_exit_lifetime`, case `ConcreteSpec.Core.Generative.PreservationWitnesses.departing`). -/
+example : ResultSatisfies (fun t => ∀ b ∈ departing.binders, b.scope = ⟨0⟩ →
+    Retired t b.brand ∧ ∀ d ∈ t.dependencies, b.brand ∉ d.brands)
+    ((endScope departing ⟨0⟩).bind fun u => runLifetime u operations) :=
+  @scope_exit_lifetime departing ⟨0⟩ operations (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Generative.scope_exit_lifetime`, case `ConcreteSpec.Core.Generative.PreservationWitnesses.departing`, subject `ConcreteSpec.Core.Generative.runLifetime`, mutant `ConcreteSpec.Core.Generative.LifetimeEvidence.revive`). -/
+example : WellFormed departing ∧
+    ¬ ResultSatisfies (fun t => ∀ b ∈ departing.binders, b.scope = ⟨0⟩ →
+      Retired t b.brand ∧ ∀ d ∈ t.dependencies, b.brand ∉ d.brands)
+      ((endScope departing ⟨0⟩).bind fun u => revive u operations) := by decide
+
+end ScopeLifetimeEvidence
 
 end ConcreteSpec.Core.Generative
 
@@ -988,7 +1230,7 @@ instance [DecidableEq H] (s : State H) (i : GrantId) : Decidable (Dead s i) :=
     else
       isFalse (by rintro ⟨r', hr', hl'⟩; rw [h] at hr'; injection hr' with hr'; subst hr'; exact hl hl')
 
-/-- Law (subject `ConcreteSpec.Core.Grants.usable`). A consumed grant identity is never usable. -/
+/-- Helper (computation). Unpacks the usability guard; consumed_never_revives establishes unavailability after every subsequent grant operation. (approved: PENDING). -/
 theorem dead_unusable (s : State H) (i : GrantId) (h : Dead s i) : usable s i = none := by
   obtain ⟨r, hr, hd⟩ := h
   simp [usable, hr, hd]
@@ -1107,9 +1349,7 @@ theorem narrow_intersection_result (s t : State H) (i : GrantId) (requested : Li
   cases hh
   exact ⟨r, hr, by simp [issue, consumed, AList.lookup]⟩
 
-/-- Law (subject `ConcreteSpec.Core.Grants.narrow`). Narrowing's result is issued at `⟨s.next⟩`
-with the exact intersection of the parent's rights and `requested`, keeping the same opaque
-resource identity (Q7.2). -/
+/-- Helper (computation). Calculates the issued child record; narrow_permissions establishes the extensional permission contract independently of list representation. (approved: PENDING). -/
 theorem narrow_intersection (s : State H) (i : GrantId) (requested : List Nat) :
     ResultSatisfies (fun t : State H =>
       ∃ r, usable s i = some r ∧ AList.lookup t.resources ⟨s.next⟩ =
@@ -1299,11 +1539,11 @@ example : Fresh initial ∧
     ¬ ResultSatisfies (fun r : CloseResult × State Nat => Fresh r.2)
       (closeRewindSupply initial ⟨0⟩ (.error 5)) := by decide
 
-/-- Instance (law `ConcreteSpec.Core.Grants.dead_unusable`, case `ConcreteSpec.Core.Grants.GrantWitnesses.afterClose0`). -/
+/-- Computation observation. -/
 example : usable afterClose0 ⟨0⟩ = none :=
   @dead_unusable Nat afterClose0 ⟨0⟩ (by decide)
 
-/-- Planted (law `ConcreteSpec.Core.Grants.dead_unusable`, case `ConcreteSpec.Core.Grants.GrantWitnesses.afterClose0`, subject `ConcreteSpec.Core.Grants.usable`, mutant `ConcreteSpec.Core.Grants.GrantWitnesses.usableIgnoreLive`). -/
+/-- Computation observation. -/
 example : Dead afterClose0 ⟨0⟩ ∧
     ¬ (usableIgnoreLive afterClose0 ⟨0⟩ = none) := by decide
 
@@ -1336,14 +1576,14 @@ example : Fresh afterClose0 ∧
     ¬ ResultSatisfies (fun t : State Nat => Dead t ⟨0⟩ ∧ Fresh t)
       (runOpsRevive afterClose0 postCloseOps) := by decide
 
-/-- Instance (law `ConcreteSpec.Core.Grants.narrow_intersection`, case `ConcreteSpec.Core.Grants.Examples.initial`). -/
+/-- Computation observation. -/
 example : ResultSatisfies (fun t : State Nat =>
       ∃ r, usable initial ⟨0⟩ = some r ∧ AList.lookup t.resources ⟨initial.next⟩ =
         some { r with rights := r.rights.filter (fun x => decide (x ∈ [1, 2])) })
     (narrow initial ⟨0⟩ [1, 2]) :=
   @narrow_intersection Nat initial ⟨0⟩ [1, 2]
 
-/-- Planted (law `ConcreteSpec.Core.Grants.narrow_intersection`, case `ConcreteSpec.Core.Grants.Examples.initial`, subject `ConcreteSpec.Core.Grants.narrow`, mutant `ConcreteSpec.Core.Grants.GrantWitnesses.narrowTakeRequested`). -/
+/-- Computation observation. -/
 example : ¬ ResultSatisfies (fun t : State Nat =>
       ∃ r, usable initial ⟨0⟩ = some r ∧ AList.lookup t.resources ⟨initial.next⟩ =
         some { r with rights := r.rights.filter (fun x => decide (x ∈ [1, 2])) })
@@ -1365,5 +1605,44 @@ example : Fresh initial ∧
       (acquireConsumeParent initial ⟨0⟩ [1] [1] [.fs] true 99) := by decide
 
 end GrantWitnesses
+
+/-- Law (subject `ConcreteSpec.Core.Grants.narrow`). A narrowed child permits exactly those
+operations that both its parent permitted and its requested policy permits. This includes
+completeness of the intersection, not just a budget bound or a copied resource constructor. -/
+theorem narrow_permissions (s : State H) (i : GrantId) (requested : List Nat) :
+    ResultSatisfies (fun t => ∀ right,
+      Permits t ⟨s.next⟩ right ↔ Permits s i right ∧ right ∈ requested)
+      (narrow s i requested) := by
+  cases h : narrow s i requested with
+  | none => trivial
+  | some t =>
+    obtain ⟨r, hr, hc⟩ := narrow_intersection_result s t i requested h
+    have live := (usable_some s i r hr).2
+    have hu : usable t ⟨s.next⟩ =
+        some { r with rights := r.rights.filter (fun x => decide (x ∈ requested)) } := by
+      simp [usable, hc, live]
+    intro right
+    simp [Permits, hu, hr]
+
+namespace PermissionEvidence
+open ConcreteSpec.Core.Grants.Examples GrantWitnesses
+
+/-- Instance (law `ConcreteSpec.Core.Grants.narrow_permissions`, case `ConcreteSpec.Core.Grants.Examples.initial`). -/
+example : ResultSatisfies (fun t => ∀ right,
+    Permits t ⟨initial.next⟩ right ↔ Permits initial ⟨0⟩ right ∧ right ∈ [1, 2])
+    (narrow initial ⟨0⟩ [1, 2]) :=
+  @narrow_permissions Nat initial ⟨0⟩ [1, 2]
+
+/-- Planted (law `ConcreteSpec.Core.Grants.narrow_permissions`, case `ConcreteSpec.Core.Grants.Examples.initial`, subject `ConcreteSpec.Core.Grants.narrow`, mutant `ConcreteSpec.Core.Grants.GrantWitnesses.narrowTakeRequested`). -/
+example : ¬ ResultSatisfies (fun t => ∀ right,
+    Permits t ⟨initial.next⟩ right ↔ Permits initial ⟨0⟩ right ∧ right ∈ [1, 2])
+    (narrowTakeRequested initial ⟨0⟩ [1, 2]) := by
+  intro h
+  have bad := (h 2).mp ⟨⟨42, [1, 2], .fs, true⟩, rfl, by decide⟩
+  have no : ¬ Permits initial ⟨0⟩ 2 := by
+    simp [Permits, Examples.initial, usable, AList.lookup]
+  exact no bad.1
+
+end PermissionEvidence
 
 end ConcreteSpec.Core.Grants
