@@ -1,7 +1,7 @@
 """Authoritative parser for task identity rows in ROADMAP.md.
 
 Only the first cell declares an identity; references in prose and dependencies do not.
-The second cell is the immutable subject. Other cells describe mutable obligations.
+The second cell is the current, editable subject. Other cells describe mutable obligations.
 """
 import re
 

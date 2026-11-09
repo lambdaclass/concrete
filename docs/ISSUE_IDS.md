@@ -84,7 +84,7 @@ path: stale unrelated drafts need not migrate on the same day. It never exempts 
 or worktree record from the live gate. The default whole-inventory plan and `audit-wip` expose
 draft conflicts separately; each writer reconciles its draft before passing its own gate. Local
 main cannot replace origin/main in either plan scope. Initial titles are preserved in reservation
-metadata and never constrain later wording. First-introduction commits establish record identity;
+metadata and never constrain later wording. First-introduction provenance establishes record identity;
 date/area signatures and majority votes do not.
 The local branch replaces its remote inventory entry rather than being counted twice.
 Detached allocation or backfill requires `id.branch` or exactly one matching advertised wip HEAD;
@@ -146,7 +146,13 @@ heads before publication. No round-5 backfill was published.
 ## Edits and independent additions
 
 An introduction is a commit containing an ID when none of its parents contains that ID.
-The allocator reads ledger patches and checks candidate parents for presence. It inspects all
+The allocator reads ledger patches and checks candidate parents for presence.
+Its provenance fingerprint binds the original record payload, original author name/email,
+authored timestamp and complete introduction commit message. Parent/tree/committer changes
+from a rebase or cherry-pick preserve that authored introduction. Matching current titles,
+row dates or areas cannot do so. Two independent authored additions conflict even when their
+row text matches. As with Git's authored history itself, copying the complete authored change
+is a provenance transfer, not a new authorship claim; these tools do not authenticate authors. It inspects all
 merge parents and all reachable introductions, so resolving a merge to one row cannot erase
 an independent addition in its history. Historical presence uses a tolerant reader: old schema
 versions and historically repaired duplicates do not have to satisfy today's record validator.
@@ -170,6 +176,6 @@ remains the original metadata; it is never rewritten to match the current row.
 No extra row-position rule is needed: each kind has its own number namespace, and each current
 ledger refuses duplicate IDs. Physical line numbers, sorting and legitimate bug-file moves do
 not change identity. A delete followed by a later re-add is a new introduction and is checked
-as such. Independent rebases or squash copies that lose introduction ancestry must retain the
-reservation owner's branch attribution (before main owns the number), or reconcile with main's
-introduction history; matching text alone cannot establish identity.
+as such. Rebases and cherry-picks retain the original authored provenance; squash copies that discard
+it must retain the reservation owner's branch attribution (before main owns the number), or
+reconcile with main's introduction history. Matching text alone cannot establish identity.

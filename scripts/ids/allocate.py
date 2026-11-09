@@ -4,6 +4,7 @@ import argparse
 import datetime
 import json
 import functools
+import hashlib
 import os
 from pathlib import Path
 import re
@@ -143,7 +144,7 @@ def historical_keys(repo, sha):
     for path in ('ISSUES.tsv', 'ROADMAP.md'):
         if path in paths:
             text = git(repo, 'show', f'{sha}:{path}').stdout
-            pattern = r'^(ISS-\d{4})\t' if path == 'ISSUES.tsv' else r'^\|\s*(R-\d{4})\s*\|'
+            pattern = r'^(ISS-\d{4})\t' if path == 'ISSUES.tsv' else r'^\s*\|\s*(R-\d{4})\s*\|'
             keys.update(re.findall(pattern, text, re.M))
     for path in paths:
         match = re.fullmatch(r'(?:legacy/)?docs/bugs/(\d{3,})_[^/]+\.md', path)
@@ -153,15 +154,35 @@ def historical_keys(repo, sha):
 
 
 @functools.lru_cache(maxsize=None)
+def introduction_provenance(repo, revision, key):
+    # Rebase/cherry-pick preserve the authored change, while changing parents/tree
+    # and committer. Bind the original record payload, author (including authored
+    # timestamp), and complete message, never the current row's wording.
+    author = git(repo, 'show', '-s', '--format=%an%x00%ae%x00%at%x00%B', revision).stdout
+    paths = git(repo, 'ls-tree', '-r', '--format=%(path)', revision).stdout.splitlines()
+    if key.startswith('ISS-'):
+        text = git(repo, 'show', f'{revision}:ISSUES.tsv').stdout
+        payload = '\n'.join(line for line in text.splitlines() if line.startswith(key + '\t'))
+    elif key.startswith('R-'):
+        text = git(repo, 'show', f'{revision}:ROADMAP.md').stdout
+        payload = '\n'.join(line for line in text.splitlines() if re.match(r'^\s*\|\s*' + key + r'\s*\|', line))
+    else:
+        number = key.split('-')[1]
+        payload = '\n'.join(git(repo, 'show', f'{revision}:{path}').stdout for path in paths
+                            if re.fullmatch(r'(?:legacy/)?docs/bugs/' + number + r'_[^/]+\.md', path))
+    return hashlib.sha256((author + '\0' + payload).encode()).hexdigest()
+
+
+@functools.lru_cache(maxsize=None)
 def introductions(repo, sha):
-    """ID -> introduction commits reachable from sha, independent of mutable wording.
+    """ID -> authored introduction fingerprints reachable from sha, independent of current wording.
 
     Read all ledger patches once. A candidate introduces an ID only when no parent
     contains it. Inspect every merge parent, so integration cannot hide a second
     independent introduction by selecting one side's row.
     """
     patch = git(repo, 'log', '--full-history', '-m', '--format=COMMIT %H %P',
-                '--no-ext-diff', '--no-renames', '-p', sha, '--', 'ISSUES.tsv',
+                '--no-ext-diff', '--no-textconv', '--no-color', '--no-renames', '-p', sha, '--', 'ISSUES.tsv',
                 'ROADMAP.md', 'docs/bugs', 'legacy/docs/bugs').stdout
     candidates = {}
     revision = None
@@ -173,7 +194,7 @@ def introductions(repo, sha):
         elif revision and line[:1] in ('+', '-') and not line.startswith(('+++', '---')):
             text = line[1:]
             match = (re.match(r'^(ISS-\d{4})\t', text) or
-                     re.match(r'^\|\s*(R-\d{4})\s*\|', text))
+                     re.match(r'^\s*\|\s*(R-\d{4})\s*\|', text))
             bug = re.match(r'^# Bug (\d{3,})\s*[:—–-]', text, re.I)
             key = match[1] if match else ('BUG-' + bug[1] if bug else None)
             if key:
@@ -182,7 +203,7 @@ def introductions(repo, sha):
     for revision, (parents, added, removed) in candidates.items():
         for key in added - removed:
             if not any(key in historical_keys(repo, parent) for parent in parents):
-                result.setdefault(key, set()).add(revision)
+                result.setdefault(key, set()).add(introduction_provenance(repo, revision, key))
     return result
 
 
@@ -259,6 +280,7 @@ class Snapshot:
             if ref.startswith(('refs/reserved/', 'refs/bug-reservations/')):
                 self.reservation(key_for_ref(ref))
 
+    @functools.lru_cache(maxsize=None)
     def reservation(self, key):
         ref = ref_for(key)
         oid = self.refs.get(ref)

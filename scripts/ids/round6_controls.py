@@ -48,6 +48,15 @@ def collision(root, kind):
         if phase == 'branch':
             a.git(root, 'switch', '-qc', 'candidate', 'main')
             a.git(root, 'merge', '--no-ff', '-X', 'theirs', '-m', 'integrate stale branch', 'stale-writer')
+    # A cherry-pick changes the commit OID but preserves authored introduction provenance.
+    introduced = a.git(root, 'rev-parse', 'main').stdout.strip()
+    a.git(root, 'switch', '-qc', 'rebased-copy', base)
+    (root / 'unrelated').write_text('different parent')
+    a.git(root, 'add', 'unrelated')
+    a.git(root, 'commit', '-qm', 'unrelated history')
+    a.git(root, 'cherry-pick', introduced)
+    assert a.git(root, 'rev-parse', 'HEAD').stdout.strip() != introduced
+    ok(cli(root, 'check'))
     # Edits inherit the introduction, regardless of title wording or row line number.
     a.git(root, 'switch', '-qc', 'positive', 'main')
     save(root, kind, 'reworded existing item')
@@ -129,6 +138,22 @@ def historical_baseline(root):
     assert json.loads(plan.read_text())['conflicts'] == []
 
 
+def bug_edits(root):
+    ok(cli(root, 'reserve', 'bug', 'initial bug', '--number', '20'))
+    old = root / 'docs/bugs/020_original.md'
+    old.parent.mkdir(parents=True)
+    old.write_text('# Bug 020: initial bug\n')
+    a.git(root, 'add', '.')
+    a.git(root, 'commit', '-qm', 'introduce bug')
+    a.git(root, 'push', '-q', 'origin', 'main')
+    a.git(root, 'switch', '-qc', 'bug-editor')
+    old.unlink()
+    (old.parent / '020_reworded.md').write_text('# Bug 020: improved bug wording\n')
+    a.git(root, 'add', '.')
+    a.git(root, 'commit', '-qm', 'rename and reword inherited bug')
+    ok(cli(root, 'check'))
+
+
 def unreserved(root):
     save(root, 'roadmap', 'unreserved task')
     p = cli(root, 'check')
@@ -190,7 +215,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='id-round6-') as tmp:
         tests = [('ISS-0020-before-main-and-merge-target', lambda r: collision(r, 'iss')),
                  ('R-before-main-and-merge-target', lambda r: collision(r, 'roadmap')),
-                 *[(f.__name__, f) for f in (race, backfill, independent_unreserved, historical_baseline, unreserved, metadata, incomplete, unreadable_reservation, parser)]]
+                 *[(f.__name__, f) for f in (race, backfill, independent_unreserved, historical_baseline, bug_edits, unreserved, metadata, incomplete, unreadable_reservation, parser)]]
         for name, test in tests:
             directory = Path(tmp) / name
             directory.mkdir()

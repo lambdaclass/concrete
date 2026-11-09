@@ -30,3 +30,9 @@ R-row reuse before and after integration, concurrent R allocation, metadata, boo
 identity transfer. Authoritative backfill covers all 146 roadmap rows on main without requiring
 unrelated drafts to migrate together; the separate whole-inventory audit retains their conflicts.
 No reservation refs were published.
+
+Round 6: wording is mutable for every ISS, BUG and R record. Identity follows the reserved
+number and authored introduction provenance, preserved across rebase/cherry-pick. Independent
+introductions fail on stale branches and integrated candidates even with matching wording.
+Backfill compares provenance, never current titles; the authoritative main history remains the
+migration baseline. No reservation refs were published.
