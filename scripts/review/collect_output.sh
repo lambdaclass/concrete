@@ -83,19 +83,20 @@ prepare_review_context() {
   local tree="$1" manifest="$2" prompt="$3" diff="$4" base="$5" commit="$6"
   chmod u+w "$tree"
   local name
-  for name in PROMPT.md REVIEW.diff DELTA.diff RANGE.txt; do
+  while IFS= read -r name; do
     if git -C "$7" cat-file -e "$commit:$name" 2>/dev/null; then
       echo "collect_output: harness path collides with reviewed tree: $name" >&2
       return 2
     fi
     chmod u+w "$tree/$name" 2>/dev/null || true
-  done
+  done <"$COLLECT_OUTPUT_DIR/harness-files.txt"
   cp "$prompt" "$tree/PROMPT.md"
   git -C "$7" diff --no-ext-diff "$base" "$commit" >"$tree/REVIEW.diff"
   cp "$diff" "$tree/DELTA.diff"
   printf '%s..%s\n' "$base" "$commit" >"$tree/RANGE.txt"
-  printf '%s\n' PROMPT.md REVIEW.diff DELTA.diff RANGE.txt >"${manifest}.harness"
-  chmod a-w "$tree/"{PROMPT.md,REVIEW.diff,DELTA.diff,RANGE.txt} "$tree"
+  cp "$COLLECT_OUTPUT_DIR/harness-files.txt" "${manifest}.harness"
+  while IFS= read -r name; do chmod a-w "$tree/$name"; done <"${manifest}.harness"
+  chmod a-w "$tree"
   snapshot_review_archive "$tree" >"$manifest"
 }
 

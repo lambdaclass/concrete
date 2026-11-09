@@ -94,3 +94,35 @@ shell('SELF_DIR=control; head=1111111111111111111111111111111111111111; base=$he
       'bash() { case "$*" in *" get review "*) echo invalid ;; *" ready "*) return 1 ;; *) exit 23 ;; esac; }\n' + tail,
       1, 'review=invalid (not a verdict)')
 print('citation caller controls: PASS (review, collector, signoff evidence, verifier, notes, readiness, train)')
+
+# Replay sign-off check's production parser invocation, also used by record/verify.
+a = signoff.index('    local c_out c_status c_reason helper')
+b = signoff.index('    case "$c_status" in', a)
+parser = signoff[a:b]
+with tempfile.TemporaryDirectory() as directory:
+    tmp = Path(directory)
+    manifest = tmp / 'manifest'
+    (tmp / 'manifest.harness').write_text(source('scripts/review/harness-files.txt'))
+    for claim, expected in [
+        ('ISSUES.tsv:1', 'ACCEPT'),
+        ('ISSUES.tsv:1 REVIEW.diff:1', 'invalid'),
+    ]:
+        body = claim + '\nREAD: ISSUES.tsv\nREAD: REVIEW.diff\nREPOSITORY: readable\nVERDICT: ACCEPT\n'
+        out = tmp / 'out'
+        out.write_text(body)
+        code = 'source ' + shlex.quote(str(ROOT / 'scripts/review/collect_output.sh')) + '\n'
+        code += 'REVIEW_DIR=' + shlex.quote(str(ROOT / 'scripts/review')) + '\n'
+        code += 'OUTPUT_CONTRACT="$REVIEW_DIR/output_contract.py"; sha=HEAD; base=HEAD; obj=control; file=control; r=codex\n'
+        code += 'git() { if [ "$1" = cat-file ]; then cat ' + shlex.quote(str(out)) + '; else command git "$@"; fi; }\n'
+        code += 'bad() { echo "$*"; exit 23; }\nparse() {\n' + parser + '\nprintf "%s" "$c_out";\n}\nparse'
+        recorded = shell(code)
+        code = 'source ' + shlex.quote(str(ROOT / 'scripts/review/collect_output.sh')) + '\n'
+        code += 'verify_review_archive() { return 0; }\nbounded_is_incomplete() { return 1; }\n'
+        code += 'validate_reviewer_output ' + shlex.quote(str(ROOT)) + ' HEAD tree ' + shlex.quote(str(manifest)) + ' ' + shlex.quote(str(out)) + ' ' + shlex.quote(str(out)) + '.log ACCEPT,REJECT 0 HEAD'
+        (tmp / 'out.log').write_text('')
+        collected = shell(code)
+        assert recorded.strip() == collected.strip(), (recorded, collected)
+        assert recorded.splitlines()[0] == 'status: ' + expected, recorded
+        if expected == 'invalid':
+            assert recorded.splitlines()[1] == "reason: citation: harness file 'REVIEW.diff' is not evidence", recorded
+print('signoff collect/record/verify harness parity: PASS')

@@ -26,7 +26,7 @@ Dotted named anchors check the final declaration component inside the selected l
 
 Harness ownership: collect_output.sh:prepare_review_context creates the supplied PROMPT.md,
 REVIEW.diff (the full base-to-head diff), DELTA.diff (the supplied piece), and RANGE.txt.
-It writes an explicit sidecar declaration beside the integrity manifest. Validation passes
+The canonical declaration is harness-files.txt; the builder copies it beside the integrity manifest. Sign-off record and verify read the same declaration. Validation passes
 only those declarations through repeatable --harness-file arguments. No root scan or checker
 filename allowlist grants READ access. Tracked-path collisions stop archive construction.
 Harness citations report “harness file 'PATH' is not evidence”; outside-root URLs report

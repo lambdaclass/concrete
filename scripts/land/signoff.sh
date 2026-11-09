@@ -208,8 +208,10 @@ check() {
     [ "$file" = "$r.txt" ] && [[ "$hash" =~ ^[0-9a-f]{64}$ ]] || bad "verdict-$r is '$entry', not '$r.txt <sha256>'"
     got="$(git cat-file blob "$obj:$file" | sha256)"
     [ "$got" = "$hash" ] || bad "the sha256 of $file is $got, not the recorded $hash"
-    local c_out c_status c_reason
-    c_out="$(git cat-file blob "$obj:$file" | python3 -I "$OUTPUT_CONTRACT" --commit "$sha" --base "$(git merge-base "$base" "$sha")" --verdicts ACCEPT,REJECT)" \
+    local c_out c_status c_reason helper
+    local harness_flag=()
+    while IFS= read -r helper; do harness_flag+=(--harness-file "$helper"); done <"$REVIEW_DIR/harness-files.txt"
+    c_out="$(git cat-file blob "$obj:$file" | python3 -I "$OUTPUT_CONTRACT" --commit "$sha" "${harness_flag[@]}" --base "$(git merge-base "$base" "$sha")" --verdicts ACCEPT,REJECT)" \
       || bad "the $r output could not be parsed by output_contract.py"
     c_status="$(printf '%s\n' "$c_out" | sed -n 's/^status: //p' | head -1)"
     c_reason="$(printf '%s\n' "$c_out" | sed -n 's/^reason: //p' | head -1)"

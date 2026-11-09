@@ -53,7 +53,7 @@ def run(name, review, positive=True, removed=False, framed=False):
             for path, digest in row['blob_sha256'].items():
                 assert hashlib.sha256((Path(directory) / path).read_bytes()).hexdigest() == digest, path
             return c.evaluate_output(text, '', sha, directory, ['clean', 'findings'],
-                review_root=row['review_root'], harness_files=('REVIEW.diff', 'DELTA.diff', 'PROMPT.md', 'RANGE.txt'))
+                review_root=row['review_root'], harness_files=c.REVIEW_HARNESS_FILES)
         # Historical archive roots are fixture metadata, never inferred by the resolver.
         roots = {
             'scheduled': '/home/unbalancedparen/projects/gates-briefs/ro-S3',

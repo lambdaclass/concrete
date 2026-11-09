@@ -32,6 +32,8 @@ CLI output (stdout, two lines):
   reason: <human-readable explanation>
 """
 
+from pathlib import Path
+
 import argparse
 import fnmatch
 import os
@@ -107,10 +109,11 @@ LOCATION = re.compile(r"(?P<path>(?:file://)?[A-Za-z0-9_./-]+)(?::(?P<lines>[0-9
 
 # Evidence about the validator must not bootstrap identifier authority. Keep this
 # declared scope beside the contract; explicit locations may still cite these files.
+REVIEW_HARNESS_FILES = tuple(Path(__file__).with_name("harness-files.txt").read_text().splitlines())
 IDENTIFIER_EXCLUSIONS = (
     "legacy/*", "ISSUES.tsv", "scripts/review/fixtures/*",
     "scripts/review/test_*.py", "scripts/review/external-names.tsv",
-    "REVIEW.diff", "DELTA.diff", "PROMPT.md", "RANGE.txt", "_review/*",
+    *REVIEW_HARNESS_FILES, "_review/*",
 )
 
 
