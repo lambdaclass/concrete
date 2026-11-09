@@ -135,3 +135,19 @@ Requested server runs, with each exact checker commit recorded:
 A broader controls run was launched before the final source-text cache and
 universe substitution refinement; its result must be labelled with that earlier
 checker state, rather than attributed to the final checker SHA.
+
+Final complete focused controls were rerun with checker/control code exactly at
+**a3eda3a13** (documentation-only changes were present): **100 PASS, 0 FAIL**.
+The [verbatim run log](audits/N2-round3-controls.txt) includes the paired partial
+control and both multiple-subject controls. The earlier pre-final-cache run was
+**99 PASS, 0 FAIL** and is not used as the final code's certification.
+After the handoff documentation commit **223cb22c1**, doc_links was rerun:
+**12 PASS**, checking 1121 links and 893 anchors. No production checker or control
+code changed during the final complete control run. Workflow_yaml, gates_registry,
+fixture provenance and issues passed on a3eda3a13; their production inputs are
+unchanged in the later documentation commits.
+
+The writer's remaining unverified deliverables are the fresh historical-head
+reports/discrimination assertion and the concrete-ci-2 full-head completion bound.
+The exact coordinator runs above are required before promotion. No post-fix C9
+remainder or full-head PASS is claimed by this local validation record.
