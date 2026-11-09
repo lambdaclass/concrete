@@ -243,7 +243,7 @@ theorem KeyConstruct.key_insert_named (before after : List KeyConstruct)
   simp [KeyConstruct.key, KeyConstruct.segment, List.filter_append, ConstructName.isUnnamed]
 
 /-- Helper (projection). Renaming preserves participation in unnamed-sibling ordinals.
-(approved: rev-c9r4-agy). -/
+(approved: REVIEW9-codex). -/
 theorem ConstructName.isUnnamed_rename (constructName : ConstructName) (name : String) :
     (constructName.rename name).isUnnamed = constructName.isUnnamed := by
   cases constructName <;> rfl
@@ -638,14 +638,14 @@ theorem KeyConstruct.assignFunctionTable_pin (f : FnId) (startSite : Nat)
     rfl
 
 /-- Helper (projection). A successful table lookup is in bounds.
-(approved: rev-c9r4-agy). -/
+(approved: REVIEW9-codex). -/
 theorem SpecializationTable.entryAt_lt_length {Ty Cap : Type}
     {entries : List (SpecializationId Ty Cap)} {index : Nat} {requested : SpecializationId Ty Cap}
     (present : entryAt entries index = some requested) : index < entries.length :=
   (List.getElem?_eq_some_iff.1 present).1
 
 /-- Helper (projection). A successful entry search resolves to the requested specialization.
-(approved: rev-c9r4-agy). -/
+(approved: REVIEW9-codex). -/
 theorem SpecializationTable.entryIndex_sound {Ty Cap : Type} [DecidableEq Ty] [DecidableEq Cap] :
     ∀ (entries : List (SpecializationId Ty Cap)) (requested : SpecializationId Ty Cap) (index : Nat),
       entryIndex entries requested = some index → entryAt entries index = some requested
@@ -662,7 +662,7 @@ theorem SpecializationTable.entryIndex_sound {Ty Cap : Type} [DecidableEq Ty] [D
       exact entryIndex_sound rest requested old oldIndex
 
 /-- Helper (projection). Interning resolves its requested specialization at the returned index.
-(approved: rev-c9r4-agy). -/
+(approved: REVIEW9-codex). -/
 theorem SpecializationTable.intern_sound {Ty Cap : Type} [DecidableEq Ty] [DecidableEq Cap]
     (entries : List (SpecializationId Ty Cap)) (requested : SpecializationId Ty Cap) :
     entryAt (intern entries requested).1 (intern entries requested).2 = some requested := by
@@ -672,7 +672,7 @@ theorem SpecializationTable.intern_sound {Ty Cap : Type} [DecidableEq Ty] [Decid
   | some index => exact entryIndex_sound entries requested index found
 
 /-- Helper (projection). Interning preserves every old numeric entry.
-(approved: rev-c9r4-agy). -/
+(approved: REVIEW9-codex). -/
 theorem SpecializationTable.intern_preserves {Ty Cap : Type} [DecidableEq Ty] [DecidableEq Cap]
     (entries : List (SpecializationId Ty Cap)) (requested : SpecializationId Ty Cap)
     (index : Nat) (old : SpecializationId Ty Cap)
@@ -688,7 +688,7 @@ theorem SpecializationTable.intern_preserves {Ty Cap : Type} [DecidableEq Ty] [D
     exact present
 
 /-- Helper (projection). A failed entry search really means the specialization is absent.
-(approved: rev-c9r4-agy). -/
+(approved: REVIEW9-codex). -/
 theorem SpecializationTable.entryIndex_none_not_mem {Ty Cap : Type} [DecidableEq Ty]
     [DecidableEq Cap] : ∀ (entries : List (SpecializationId Ty Cap))
     (requested : SpecializationId Ty Cap), entryIndex entries requested = none → requested ∉ entries
@@ -765,7 +765,7 @@ theorem SpecializationTable.canonicalize_complete {Ty Cap : Type} [DecidableEq T
       exact Or.inr kept
 
 /-- Helper (projection). Two numeric entries holding one specialization in a duplicate-free table
-are one entry. (approved: rev-c9r4-agy). -/
+are one entry. (approved: REVIEW9-codex). -/
 theorem SpecializationTable.entry_unique {Ty Cap : Type}
     {entries : List (SpecializationId Ty Cap)} (distinct : entries.Nodup)
     {first second : Nat} {requested : SpecializationId Ty Cap}
@@ -814,7 +814,7 @@ theorem SpecializationTable.canonicalize_distinct {Ty Cap : Type} [DecidableEq T
   rw [← firstResolved, ← secondResolved, sameEntry]
 
 /-- Helper (projection). A collision returned by the pair check has exactly the checked modules as
-its two sides. (approved: rev-c9r4-agy). -/
+its two sides. (approved: REVIEW9-codex). -/
 theorem LoadCollision.between?_sound (first second : LoadedModule) (collision : LoadCollision)
     (found : between? first second = some collision) :
     collision.first = first ∧ collision.second = second := by
@@ -831,7 +831,7 @@ theorem LoadCollision.between?_sound (first second : LoadedModule) (collision : 
     · simp [between?, package, top] at found
 
 /-- Helper (projection). A collision returned by the one-module scan names that module and a member
-of the scanned list. (approved: rev-c9r4-agy). -/
+of the scanned list. (approved: REVIEW9-codex). -/
 theorem LoadCollision.withModule_sound (first : LoadedModule) :
     ∀ (modules : List LoadedModule) (collision : LoadCollision),
       withModule first modules = some collision →
@@ -852,7 +852,7 @@ theorem LoadCollision.withModule_sound (first : LoadedModule) :
       exact ⟨same, List.mem_cons.2 (Or.inr member)⟩
 
 /-- Helper (projection). Soundness of the complete ordered-pair search.
-(approved: rev-c9r4-agy). -/
+(approved: REVIEW9-codex). -/
 theorem LoadedModules.findCollisionFrom_sound (candidates modules : List LoadedModule)
     (collision : LoadCollision) (found : findCollisionFrom candidates modules = some collision) :
     collision.first ∈ candidates ∧ collision.second ∈ modules := by
@@ -873,7 +873,7 @@ theorem LoadedModules.findCollisionFrom_sound (candidates modules : List LoadedM
       exact ⟨List.mem_cons.2 (Or.inr firstMember), secondMember⟩
 
 /-- Helper (projection). A real pair collision is visible to the ordered-pair checker.
-(approved: rev-c9r4-agy). -/
+(approved: REVIEW9-codex). -/
 theorem LoadCollision.between?_complete (first second : LoadedModule) (collision : LoadCollision)
     (sides : collision.first = first ∧ collision.second = second) :
     ∃ detected, between? first second = some detected := by
@@ -888,7 +888,7 @@ theorem LoadCollision.between?_complete (first second : LoadedModule) (collision
       simp [between?, LoadCollision.first, LoadCollision.second, samePackage, differentOrigins]⟩
 
 /-- Helper (projection). The one-module scan finds every collision with a member of its input list.
-(approved: rev-c9r4-agy). -/
+(approved: REVIEW9-codex). -/
 theorem LoadCollision.withModule_complete (first : LoadedModule) :
     ∀ (modules : List LoadedModule) (collision : LoadCollision),
       collision.first = first → collision.second ∈ modules →
@@ -1019,7 +1019,7 @@ theorem SourceText.columnAt_append_newline (source : SourceText) :
   simpa using SourceText.columnAt_append source 10
 
 /-- Helper (projection). `LocationOk` projects to bounds and the two computed coordinates.
-(approved: rev-c9r4-agy). -/
+(approved: REVIEW9-codex). -/
 theorem Span.locationOk_iff (source : SourceText) (sp : Span) :
     sp.LocationOk source ↔ sp.endOffset ≤ source.length ∧
       sp.line = source.lineAt sp.startOffset ∧ sp.col = source.columnAt sp.startOffset := Iff.rfl
