@@ -76,7 +76,7 @@ def preserve_artifacts(row, checkout, output, number, sha, required, saved):
             require(not required, diagnostic)
             continue
         require(binding.is_file(), f"FAIL scheduled artifact: unsafe path {declared['sha_file']}")
-        require(binding.stat().st_size <= 41 and binding.read_text().strip() == sha, f"FAIL scheduled artifact: selected SHA mismatch {declared['path']}")
+        require(binding.stat().st_size <= 41 and binding.read_bytes() in (sha.encode(), (sha + "\n").encode()), f"FAIL scheduled artifact: selected SHA mismatch {declared['path']}")
         artifact.update(sha=sha, binding_status="PASS")
     return saved
 
@@ -167,10 +167,9 @@ def run(sha, tier, output, environment):
             (output / "incomplete.log").write_text(str(error) + "\n")
             print(error, file=sys.stderr)
             # A dependency failure is evidence about availability, never a dummy passed gate.
-            record["gates"].append(dict(id="scheduler-dependencies", status="INCOMPLETE", command=[],
-                                       tools={}, seed=None, resources={}, controls=[], log="incomplete.log"))
+            record["execution_error"] = str(error)
     statuses = {g["status"] for g in record["gates"]}
-    record["status"] = "FAIL" if "FAIL" in statuses else "INCOMPLETE" if "INCOMPLETE" in statuses else "PASS"
+    record["status"] = "FAIL" if "FAIL" in statuses else "INCOMPLETE" if "INCOMPLETE" in statuses else "INCOMPLETE" if record.get("execution_error") else "PASS"
     record["conclusion"] = {"PASS": "success", "FAIL": "failure", "INCOMPLETE": "incomplete"}[record["status"]]
     record["completed"] = now()
     (output / "index.json").write_text(json.dumps(record, sort_keys=True) + "\n")

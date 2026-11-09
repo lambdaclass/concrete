@@ -285,3 +285,46 @@ has a planted result-drift test with an exact diagnostic. Each run retains the
 original 45-second suite budget; the enclosing 100-second bound allows both runs
 and reporting. These checks exercise controller behavior, without running heavy
 campaigns or replacing R-0690's live qualification.
+
+
+## Registry qualification of retained evidence
+
+The structural cause of ISS-XXXX was treating shape-valid worker metadata as a
+complete campaign attestation. R-0676 owns the structural repair: `validate` now
+reads `scripts/checks/gates.json` from the selected full commit with trusted
+`gate_manifest` code. Neither the controller working copy nor a newer registry
+can substitute for that revision. No scheduled gate inventory is duplicated in
+the protocol.
+
+Collection, publication (including existing history), and observation all use
+this validator. It returns a copy retaining the worker's `status`, gates, controls,
+logs and partial artifact manifests, with a recomputed `qualification_status` and
+`qualification` diagnostic list. A worker PASS alone is insufficient: qualifying
+PASS requires `qualification_status=PASS` and no diagnostics. Incoming cached
+qualification fields are always replaced. Operational scheduler/Actions failures
+are record metadata (`execution_error`), never invented registry gates.
+
+Qualification requires the exact tier gate IDs, exact registered command, exact
+control IDs and every passing control's exact registered diagnostic. Interrupted
+or failed controls retain their observed diagnostics and cannot qualify. Each
+declared artifact must appear at its registry-derived retained path and carry the
+selected SHA and PASS binding status. Its file manifest must contain the declared
+`sha_file` with the digest and size of that exact full SHA, optionally followed by
+a newline; malformed, duplicate or escaping file entries fail qualification.
+The executor applies the same binding-byte contract before preserving reports.
+
+Missing gates, controls, artifacts or bindings yield INCOMPLETE qualification;
+substitutions, invented inventories, wrong commands/diagnostics and wrong SHA
+bindings yield FAIL qualification. Both retain exact diagnostics in published
+notes, without converting partial evidence into success or discarding it. A
+later complete attempt can recover an incomplete attempt; a substitution FAIL
+remains visible permanently. Shape/provenance contradictions still reject invalid
+records. Absence/cancellation continues to record MISSING without campaign data.
+
+The lightweight controls commit a hermetic five-control registry and report
+contract, then remove or substitute each required component through collection,
+real publication serialization, and observation. They also prove selected-commit
+registry identity, partial recovery and cached-verdict recomputation. Production
+executor report fixtures must qualify under their own committed registry. These
+controls remain in both clean and hostile environment runs; campaign-scale live
+qualification remains with R-0690 on concrete-ci-2.

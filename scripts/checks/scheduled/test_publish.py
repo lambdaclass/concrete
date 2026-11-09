@@ -1,3 +1,4 @@
+from test_protocol import RegistryFixture
 """Publication controls do not contact remotes."""
 import subprocess
 import unittest
@@ -6,7 +7,7 @@ import publish
 from protocol import EvidenceError
 from test_protocol import SHA, RUNNERS, record
 
-class Publication(unittest.TestCase):
+class Publication(RegistryFixture, unittest.TestCase):
     def test_idempotent_attempt(self):
         r = record()
         with patch.object(publish, "git", side_effect=["remote ref", "", "remote"]), patch.object(publish, "read_note", return_value=[r]), patch.object(publish.subprocess, "run") as push:

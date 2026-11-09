@@ -6,6 +6,21 @@ SHA = "a" * 40
 RUNNERS = {"example/repo": {"ci2-heavy"}}
 NOW = 1800000000
 
+def fixture_registry():
+    return dict(schema=1, windows=dict(daily=129600, weekly=691200), gates=[dict(
+        id="sample", tiers=["daily", "weekly"], command=["true"], budget_seconds=1,
+        runner_class="concrete-ci-2", tools={}, seed=1, workflow=None,
+        controls=[dict(id="refusal", command=["false"], exit_code=1, diagnostic="planted refusal")],
+        artifacts=[])])
+
+class RegistryFixture:
+    def setUp(self):
+        from unittest.mock import patch
+        registry = patch("protocol.registry_at", side_effect=lambda sha: fixture_registry())
+        registry.start()
+        self.addCleanup(registry.stop)
+        super().setUp()
+
 def record():
     import datetime as dt
     stamp = dt.datetime.fromtimestamp(NOW, dt.timezone.utc).isoformat()
@@ -14,9 +29,9 @@ def record():
                 status="PASS", conclusion="success", started=stamp, completed=stamp,
                 occurrence="daily/2027-01-15", artifact="https://example/artifact/1",
                 gate_revision=SHA, gates=[dict(id="sample", status="PASS", command=["true"],
-                tools={}, seed=1, resources={}, controls=[dict(status="PASS")], log="sample.log")])
+                tools={}, seed=1, resources={}, controls=[dict(id="refusal", status="PASS", diagnostic="planted refusal")], log="sample.log")])
 
-class Controls(unittest.TestCase):
+class Controls(RegistryFixture, unittest.TestCase):
     def rejected(self, diagnostic, fn):
         with self.assertRaises(EvidenceError) as caught:
             fn()
@@ -86,7 +101,7 @@ class Controls(unittest.TestCase):
 
     def test_control_and_artifact(self):
         r = record(); r["gates"][0]["controls"] = []
-        self.rejected("missing/pending control evidence", lambda: observe([r], SHA, "daily", NOW, RUNNERS, "example/repo"))
+        self.rejected("INCOMPLETE registry: missing control sample/refusal", lambda: observe([r], SHA, "daily", NOW, RUNNERS, "example/repo"))
         r = record(); r["artifact"] = ""
         self.rejected("missing result-index artifact", lambda: observe([r], SHA, "daily", NOW, RUNNERS, "example/repo"))
 
@@ -140,7 +155,7 @@ class Controls(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 
-class ExplicitIdentity(unittest.TestCase):
+class ExplicitIdentity(RegistryFixture, unittest.TestCase):
     def test_repository_is_target_not_inventory_membership(self):
         from protocol import validate
         runners = dict(RUNNERS, **{"foreign/repo": {"ci2-heavy"}})

@@ -12,6 +12,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 import run
+import protocol
 import test_execution
 from test_protocol import RUNNERS
 
@@ -61,6 +62,11 @@ class Integrated(unittest.TestCase):
             with patch.dict(os.environ,env,clear=True), patch.object(run,'ROOT',controller), patch.object(run,'inventory',return_value=RUNNERS):
                 code=run.run(sha,'daily',output, env)
             index=json.loads((output/'index.json').read_text())
+            if index['status'] == 'PASS':
+                with patch.object(protocol, 'REGISTRY_ROOT', controller):
+                    validated = protocol.validate(index, sha, 'daily', RUNNERS, 'example/repo', '1/1')
+                self.assertEqual(validated['qualification_status'], 'PASS')
+                self.assertEqual(validated['qualification'], [])
             files={str(p.relative_to(output)):p.read_bytes() for p in output.rglob('*') if p.is_file()}
             for handle in handles:handle.close()
             return code,index,files,sha

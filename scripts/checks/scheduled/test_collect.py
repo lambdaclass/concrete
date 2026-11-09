@@ -1,3 +1,4 @@
+from test_protocol import RegistryFixture
 """Trusted collection controls, including empty real-world MISSING payloads."""
 import copy
 import unittest
@@ -6,8 +7,9 @@ import collect
 from protocol import EvidenceError
 from test_protocol import SHA, RUNNERS, record
 
-class Collector(unittest.TestCase):
+class Collector(RegistryFixture, unittest.TestCase):
     def setUp(self):
+        super().setUp()
         self.payload = record()
         clock = patch.object(collect, "stamp", return_value=self.payload["completed"])
         clock.start(); self.addCleanup(clock.stop)
@@ -43,7 +45,7 @@ class Collector(unittest.TestCase):
         self.job["conclusion"] = "failure"
         r = collect.record_for(self.run, self.job, (SHA, "daily"), self.payload, "artifact", "example/repo", RUNNERS)
         self.assertEqual((r["status"], r["conclusion"]), ("INCOMPLETE", "incomplete"))
-        self.assertEqual(r["gates"][-1]["id"], "actions-job")
+        self.assertEqual(r["execution_error"], "Actions job metadata")
 
     def test_unstarted_workflow_publishes_real_missing_notes(self):
         with patch.object(collect, "pages", return_value=[]), patch.object(collect, "publish") as publish:
@@ -87,10 +89,10 @@ class Collector(unittest.TestCase):
         self.job["conclusion"] = "failure"
         r = collect.record_for(self.run, self.job, (SHA, "daily"), None, None, "example/repo", {})
         self.assertEqual((r["status"], r["conclusion"]), ("INCOMPLETE", "incomplete"))
-        self.assertEqual(r["gates"][0]["log"], "Actions execution completed without index.json")
+        self.assertEqual(r["execution_error"], "Actions execution completed without index.json")
         from protocol import observe
         from test_protocol import NOW
-        with self.assertRaisesRegex(EvidenceError, f"^INCOMPLETE daily {SHA}: recorded attempt$"):
+        with self.assertRaisesRegex(EvidenceError, "^INCOMPLETE registry: missing gate sample$"):
             observe([r], SHA, "daily", NOW, RUNNERS, "example/repo")
 
     def test_decompressed_index_bound(self):
