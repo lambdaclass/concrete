@@ -289,7 +289,7 @@ campaigns or replacing R-0690's live qualification.
 
 ## Registry qualification of retained evidence
 
-The structural cause of ISS-XXXX was treating shape-valid worker metadata as a
+The structural cause of ISS-0042 was treating shape-valid worker metadata as a
 complete campaign attestation. R-0676 owns the structural repair: `validate` now
 reads `scripts/checks/gates.json` from the selected full commit with trusted
 `gate_manifest` code. Neither the controller working copy nor a newer registry
