@@ -11,6 +11,14 @@
 #      removed or renamed, or one that starts or stops using an axiom, changes the golden in the same
 #      commit, where review sees it. `--update` rewrites it from the build.
 #
+# Status: design. README.md records the owner-decided target: check standard axioms over every
+# ConcreteSpec constant, including generated helpers; pin only source-named theorems in the golden.
+# Classification and exact generating declarations must come from compiler-produced provenance
+# persisted with declarations in oleans, never names or manual review. Compiler provenance is
+# decided; toolchain implementation and task allocation remain prerequisites. Until validated
+# persistent provenance and its consumer exist, the full-theorem G above is an interim safeguard.
+# No baseline-SHA removal exception is the end state. Executable behavior here is unchanged.
+#
 # NEGATIVE CONTROLS run the same code on bad inputs and require the failure: an axiom declared and
 # used by a control theorem fails A naming it; new theorems, a private one included, differ from the
 # golden; a golden missing a theorem, carrying an extra one, or
