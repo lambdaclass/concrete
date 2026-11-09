@@ -1319,7 +1319,7 @@ frame releases stay inside the active allocation, for any initial pointer and re
 theorem toyBody_stack_safe (before : Machine Nat Nat) (resultReg result : Nat) :
     ToyTraceSafe before.stackPointer toySignature.stackBound
       (toyTrace (toyBodyAt resultReg result) before) := by
-  refine ⟨fun sample hs => ?_⟩
+  intro sample hs
   have hModel := (toyBody_stack_model toyStackCode (toyFrameOps resultReg result)
     before rfl).2 sample hs
   have hUpper : sample.1 ≤ before.stackPointer + toySignature.stackBound :=
@@ -1634,12 +1634,12 @@ theorem toyCallSeq_conforms (base : Machine Nat Nat) (arg result₁ result₂ : 
   have h₂ := toyBodyAt_preserved (toyCall base arg result₁).machine 2 result₂ (by decide)
   rw [hMach]
   refine ⟨machine_preserved_trans h₁.preserved h₂.1,
-    machine_registerFrame_union h₁.clobbers h₂.2, ⟨?_⟩⟩
+    machine_registerFrame_union h₁.clobbers h₂.2, ?_⟩
   intro sample hs
   dsimp [toyCallSeq, executeToy] at hs
   rcases hTraceAppend (toyBody result₁) (toyBodyAt 2 result₂) (toyInput base arg) sample hs with hs₁ | hs₂
-  · exact h₁.traceSafe.stepsSafe sample hs₁
-  · have hSafe₂ := (toyBody_stack_safe (runToy (toyBody result₁) (toyInput base arg)) 2 result₂).stepsSafe
+  · exact h₁.traceSafe sample hs₁
+  · have hSafe₂ := (toyBody_stack_safe (runToy (toyBody result₁) (toyInput base arg)) 2 result₂)
       sample hs₂
     have hSp : (runToy (toyBody result₁) (toyInput base arg)).stackPointer = base.stackPointer :=
       h₁.preserved.2.2
@@ -2067,7 +2067,7 @@ example : (0 : Nat) ≠ 1 ∧
       (droppingKeptTransfer ⟨0, 1, 7⟩ .complete (.kept 7)) := by
   refine ⟨by decide, ?_⟩
   intro h
-  exact h.mp rfl
+  exact h rfl
 
 /-- Helper (computation). The loader retains all and only reachable modules, so
 extra retained modules cannot satisfy the exact closure contract.

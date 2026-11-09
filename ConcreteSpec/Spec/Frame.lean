@@ -461,17 +461,14 @@ instance (origin sp : Nat) (ev : StackEvent) : Decidable (ev.Safe origin sp) := 
 slot access or frame release stays within the active callee allocation `[origin, sample.1)`.
 Caller slots and slots at or above the active allocation are excluded throughout execution,
 including at `origin = 0`. -/
-structure ToyTraceSafe (origin bound : Nat) (samples : List (Nat × StackEvent)) : Prop where
-  stepsSafe : ∀ sample ∈ samples,
+def ToyTraceSafe (origin bound : Nat) (samples : List (Nat × StackEvent)) : Prop :=
+  ∀ sample ∈ samples,
     origin ≤ sample.1 ∧ sample.1 ≤ origin + bound ∧ sample.2.Safe origin sample.1
 
 instance (origin bound : Nat) (samples : List (Nat × StackEvent)) :
-    Decidable (ToyTraceSafe origin bound samples) :=
-  if h : ∀ sample ∈ samples,
-      origin ≤ sample.1 ∧ sample.1 ≤ origin + bound ∧ sample.2.Safe origin sample.1 then
-    isTrue ⟨h⟩
-  else
-    isFalse fun ⟨h'⟩ => h h'
+    Decidable (ToyTraceSafe origin bound samples) := by
+  unfold ToyTraceSafe
+  infer_instance
 
 /-- A returning ABI call: typed arguments occupy their entry locations, the typed result occupies
 its return locations, preserved machine state is restored exactly, only clobbers may change
@@ -816,7 +813,7 @@ endpoint and receipt exclusivity. -/
 def TransferCorrect {F H : Type} (pair : KeptPair F H)
     (instruction : RetentionInstruction) (before : RetentionState H) :
     Option (ForeignEvent F H × RetentionState H) → Prop
-  | none => instruction.Matches pair before ↔ False
+  | none => ¬ instruction.Matches pair before
   | some (event, after) =>
     instruction.Matches pair before ∧
     KeptStep pair before event after ∧
