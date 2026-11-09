@@ -780,3 +780,37 @@ existing isolated-copy failure, truncation and skip controls also pass.
 `test_process.py` passed directly under `-I` (24 tests, 6.3 seconds, closed stdin).
 The complete module matrix remains part of the focused scheduled gate and the
 coordinator's final-SHA concrete-ci-2 checks. This is still R-0676 step 4.
+
+
+### Round 18, step 4: suite deadline composition (P3)
+
+`suite_budget.py` owns the complete 180-second suite allowance. Its entry adapter
+captures one monotonic absolute deadline before launching the shell. The shell
+forwards it through `scheduled_process.py --deadline --forward-deadline`; that
+owner charges context setup and startup against the same deadline. There is no
+independent shell retry budget. Each sequential clean/hostile child receives
+90% of the remaining allowance divided by the number of children still to run.
+The retained 10% is startup/comparison/cleanup headroom. Each module shares its
+child's absolute deadline, retaining another 10% of the remaining allowance for
+reporting and cleanup; discovery consumes that allocation before direct
+execution. Costs differ substantially, so modules do not get equal slices.
+Expired allocations fail exactly `INCOMPLETE scheduled suite: deadline
+exhausted`. No child or direct-module timer restarts an independent 45 seconds.
+Standalone module checks use the same owner/policy.
+
+At entry this gives the first child at most 81 seconds (before setup costs),
+with unused first-child time available to the second. The review measured an
+unloaded child at 29.35 seconds (process 11.38, integration 7.62, slot 3.74,
+registry evidence 3.10, inventory 1.81); its full scheduled run was about 63
+seconds. The first local Nix run after this repair passed 154 identical
+clean/hostile results within the 90-second diagnostic bound (about 65 seconds).
+The prior checked-in wrapper actually had 110/100-second nested limits; this
+change replaces those independent numbers with the reviewed 180-second outer
+allowance and a stated headroom policy, without removing work or controls.
+
+Fake-clock controls cover exact first/second-child and module allocations,
+consumption of elapsed work, and expiry. A planted relative-deadline reset must
+fail exactly `FAIL scheduled suite: deadline restarted`. The focused hermetic
+and process modules passed (5 and 24 tests). Final-SHA concrete-ci-2 evidence
+must repeat the clean/hostile/stdin matrix and measure child/module durations;
+R-0676 remains the owner and R-0690 qualification is still outstanding.

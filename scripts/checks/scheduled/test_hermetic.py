@@ -10,6 +10,31 @@ from hermetic_suite import compare, compare_canary, environments, PREFIXES
 
 
 class Hermeticity(unittest.TestCase):
+    def test_absolute_suite_allocation(self):
+        import suite_budget
+        from unittest.mock import patch
+        with patch.object(suite_budget.time, 'monotonic', return_value=100):
+            end = suite_budget.deadline()
+            self.assertEqual(end, 280)
+            first = suite_budget.allocate(end, 2)
+            self.assertEqual(first, 181)
+        with patch.object(suite_budget.time, 'monotonic', return_value=130):
+            second = suite_budget.allocate(end)
+            self.assertEqual(second, 265)
+            module = suite_budget.allocate(first)
+            self.assertAlmostEqual(module, 175.9)
+        with patch.object(suite_budget.time, 'monotonic', return_value=281):
+            with self.assertRaisesRegex(ValueError, '^INCOMPLETE scheduled suite: deadline exhausted$'):
+                suite_budget.allocate(end)
+        # Exercise the same boundary probe against a real relative-reset plant.
+        def probe(allocate):
+            with patch.object(suite_budget.time, 'monotonic', return_value=130):
+                if allocate(end, 2) != 197.5:
+                    raise ValueError('FAIL scheduled suite: deadline restarted')
+        probe(suite_budget.allocate)
+        with self.assertRaisesRegex(ValueError, '^FAIL scheduled suite: deadline restarted$'):
+            probe(lambda end, count: suite_budget.allocate(suite_budget.deadline(), count))
+
     def test_planted_result_drift(self):
         with self.assertRaisesRegex(ValueError, '^FAIL scheduled hermeticity: clean and hostile test results differ$'):
             compare([['planted', 'PASS']], [['planted', 'FAIL']])

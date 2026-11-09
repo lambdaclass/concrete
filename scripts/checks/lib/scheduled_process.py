@@ -229,6 +229,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--cwd')
     parser.add_argument('--timeout', type=float)
+    parser.add_argument('--deadline', type=float)
+    parser.add_argument('--forward-deadline', action='store_true')
     parser.add_argument('--kill-after', type=float, default=10)
     parser.add_argument('--role', choices=('gate', 'publisher'), default='gate')
     parser.add_argument('--status')
@@ -237,9 +239,18 @@ def main():
     parser.add_argument('argv', nargs=argparse.REMAINDER)
     args = parser.parse_args()
     command = args.argv[1:] if args.argv[:1] == ['--'] else args.argv
+    deadline = args.deadline
+    timeout = args.timeout
+    if timeout is None and deadline is not None:
+        timeout = deadline - time.monotonic()
+        if timeout <= 0: raise ValueError('INCOMPLETE scheduled suite: deadline exhausted')
+    if args.forward_deadline:
+        if deadline is None:
+            deadline = time.monotonic() + timeout
+        command += ['--deadline', str(deadline)]
     try:
         result = run(command, cwd=args.cwd, env=dict(os.environ), role=args.role,
-                     timeout=args.timeout, grace=args.kill_after, gate_outcome=args.gate_outcome,
+                     timeout=timeout, deadline=deadline, grace=args.kill_after, gate_outcome=args.gate_outcome,
                      input=Path(args.input_file).read_bytes() if args.input_file else None)
         outcome = 'exit ' + str(result.returncode)
     except subprocess.TimeoutExpired:

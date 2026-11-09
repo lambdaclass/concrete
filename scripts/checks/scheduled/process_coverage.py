@@ -46,7 +46,10 @@ def check(root):
     # controllers explicitly select the scheduler dispatcher, never generic policy.
     for relative in ('scripts/checks/scheduled_gates.sh', 'scripts/checks/scheduled/with_slot.sh'):
         text = (root / relative).read_text()
-        if 'exec python3 -I "$ROOT/scripts/checks/lib/scheduled_process.py" --cwd "$PWD" --timeout ' not in text:
+        bootstrap = ('exec python3 -I "$ROOT/scripts/checks/scheduled/suite_budget.py"'
+                     if relative.endswith('scheduled_gates.sh') else
+                     'exec python3 -I "$ROOT/scripts/checks/lib/scheduled_process.py" --cwd "$PWD" --timeout ')
+        if bootstrap not in text:
             raise ValueError(DIAGNOSTIC)
         if 'source "$ROOT/scripts/checks/lib/scheduled_process.sh"' not in text:
             raise ValueError(DIAGNOSTIC)
@@ -78,7 +81,9 @@ def check_shell_launches(script, *, bootstrap=False):
         segments = re.split(r';|&&|\|\||\|(?!=)|\$\(|[(){}]', line)
         for segment in segments:
             segment = re.sub(r'\bbounded_run\s+[^;]*?--(?:role\s+\S+\s+--)?\s+.*$', '', segment)
-            # The sole bootstrap is the explicit process owner itself.
+            # Bootstraps enter the same process owner through explicit adapters.
+            if bootstrap:
+                segment = re.sub(r'exec\s+python3\s+-I\s+"\$ROOT/scripts/checks/scheduled/suite_budget\.py"\s+.*$', '', segment)
             segment = re.sub(r'(?:exec\s+)?python3\s+(?:-I\s+)?["\S]*scripts/checks/lib/scheduled_process\.py["\S]*\s+--cwd\s+.*$', '', segment)
             tool = r"(?<![\w/.-])[\"']?(?:[^\s\"'(){};|&]*/)?(?:python3|git|nix|bash|sh|env)[\"']?(?:\s|$)"
             dynamic = r"(?:^|\bthen\s+|\belse\s+|\bdo\s+)\s*(?:(?:if|elif|while|until|exec|command|!)\s+)*[\"']?\$(?:@|[A-Za-z_0-9]|\{)"

@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from process_adapter import process_run
 import os
 import tempfile
+import suite_budget
 
 
 def inventory(module):
@@ -102,7 +103,8 @@ def direct_main():
     sys.exit(0)
 
 
-def check_module(module, directory):
+def check_module(module, directory, *, deadline=None):
+    end = suite_budget.allocate(deadline if deadline is not None else suite_budget.deadline())
     expected = sorted(identifier(t, module) for t in inventory(module))
     discovery = execute(module)
     with tempfile.TemporaryDirectory(prefix='scheduled-direct-') as scratch:
@@ -110,7 +112,7 @@ def check_module(module, directory):
         direct = process_run([sys.executable, '-I', str(Path(module.__file__).absolute()),
                               '--scheduled-report', str(target)],
                              env=dict(os.environ), cwd=Path(__file__).resolve().parents[3],
-                             timeout=45, text=True, capture_output=True)
+                             timeout=suite_budget.remaining(end), deadline=end, text=True, capture_output=True)
         if target.is_file():
             validate(module.__name__, expected, discovery, json.loads(target.read_text()))
         if direct.returncode or not target.is_file():

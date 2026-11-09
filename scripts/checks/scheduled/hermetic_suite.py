@@ -10,6 +10,7 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from protocol import clean_env, git
 from process_adapter import process_run
+import suite_budget
 
 ROOT = Path(__file__).resolve().parent
 PREFIXES = ('GITHUB_', 'SELECTED_', 'SCHEDULED_', 'RUNNER_')
@@ -37,7 +38,7 @@ def compare_canary(before, after):
         raise ValueError('FAIL scheduled hermeticity: canary repository changed')
 
 
-def child(destination):
+def child(destination, deadline):
     import importlib
     from suite_adapter import check_module
     if sys.stdin.buffer.read() != b'':
@@ -45,12 +46,12 @@ def child(destination):
     reports = {}
     for path in sorted(ROOT.glob('test_*.py')):
         module = importlib.import_module(path.stem)
-        reports[path.stem] = check_module(module, ROOT)
+        reports[path.stem] = check_module(module, ROOT, deadline=deadline)
     Path(destination).write_text(json.dumps(reports, sort_keys=True))
     return 0
 
 
-def main(environment):
+def main(environment, deadline):
     with tempfile.TemporaryDirectory(prefix='scheduled-hermetic-') as scratch:
         canary = Path(scratch) / 'canary'
         canary.mkdir()
@@ -63,14 +64,15 @@ def main(environment):
             return {str(p.relative_to(canary)): p.read_bytes() for p in canary.rglob('*') if p.is_file()}
         before = snapshot()
         reports = []
-        for name, env in zip(('clean', 'hostile'), environments(environment)):
+        for index, (name, env) in enumerate(zip(('clean', 'hostile'), environments(environment))):
+            child_deadline = suite_budget.allocate(deadline, 2 - index)
             if name == 'hostile':
                 env.update(GIT_DIR=str(canary / '.git'), GIT_WORK_TREE=str(canary),
                            GIT_INDEX_FILE=str(canary / '.git/index'),
                            GIT_OBJECT_DIRECTORY=str(canary / '.git/objects'))
             destination = str(Path(scratch) / (name + '.json'))
-            result = process_run([sys.executable, '-I', str(Path(__file__).resolve()), '--child', destination],
-                                    env=env, capture_output=True, text=True, timeout=45, cwd=Path(__file__).resolve().parents[3])
+            result = process_run([sys.executable, '-I', str(Path(__file__).resolve()), '--child', destination, '--deadline', str(child_deadline)],
+                                    env=env, capture_output=True, text=True, timeout=suite_budget.remaining(child_deadline), deadline=child_deadline, cwd=Path(__file__).resolve().parents[3])
             if result.returncode:
                 print(result.stdout, end=''); print(result.stderr, end='', file=sys.stderr)
                 raise ValueError(f'FAIL scheduled hermeticity: {name} suite failed')
@@ -83,7 +85,12 @@ def main(environment):
 
 if __name__ == '__main__':
     try:
-        sys.exit(child(sys.argv[2]) if len(sys.argv) == 3 and sys.argv[1] == '--child'
-                 else main(dict(os.environ)))
+        import argparse
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--child')
+        parser.add_argument('--deadline', type=float)
+        args = parser.parse_args()
+        end = args.deadline if args.deadline is not None else suite_budget.deadline()
+        sys.exit(child(args.child, end) if args.child else main(dict(os.environ), end))
     except (ValueError, OSError, subprocess.SubprocessError) as error:
         sys.exit(str(error))
