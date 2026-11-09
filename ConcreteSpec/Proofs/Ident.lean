@@ -480,7 +480,7 @@ theorem KeyConstruct.pathAt_insert_differentKind (before mid after : List KeyCon
 
 /-- Helper (computation). Splits collection at a forest boundary, carrying all preceding roots
 into the suffix scope. Used to isolate actual subtree entries in the assigned table.
-(approved: PENDING). -/
+(approved: REVIEW8-agy). -/
 theorem KeyConstruct.collectKeysIn_append (scope before after : List KeyConstruct) :
     collectKeysIn scope (before ++ after) =
       collectKeysIn scope before ++ collectKeysIn (scope ++ before) after := by
@@ -524,7 +524,7 @@ theorem KeyConstruct.descendant_named_ancestor_resets_scope
 
 /-- Helper (computation). Transports the named-root scope equation through forest locators.
 This is not assignment soundness; `KeyConstruct.assignFunctionTable_named_scope` establishes
-preservation of the complete assigned subtree. (approved: PENDING). -/
+preservation of the complete assigned subtree. (approved: REVIEW8-agy). -/
 theorem KeyConstruct.pathAt_named_ancestor_resets_scope
     (before₁ after₁ before₂ after₂ : List KeyConstruct)
     (kind : ConstructKind) (name : String) (children : List KeyConstruct) (route : List Nat) :

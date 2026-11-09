@@ -225,7 +225,7 @@ theorem SafetyEvidence.discharge_unregistered {claim : ObligationId → Prop}
 
 /-- Helper (computation). Computes the absent-registry branch of `PrimRegistry.allows`;
 execution safety is established by `PrimRegistry.unknown_primitive_stuck`.
-(approved: PENDING). -/
+(approved: REVIEW8-agy). -/
 theorem PrimRegistry.allows_unknown {Val Ty Store Event : Type} (R : PrimRegistry Val Ty Store Event)
     (p : PrimId) (hnone : AList.lookup R.entries p = none) (args : List Val) (st : Store)
     (a : Exec.Answer Val Event Store) : R.allows p args st a = false := by
@@ -424,7 +424,7 @@ theorem ghost_erasure_run (G : Language O) (P : Exec.Program O) (ρ : Exec.Oracl
 
 /-- Helper (projection). Projects event and ending equality from the complete-report
 soundness law `Ghost.ghost_erasure_run`; supplies no independent erasure evidence.
-(approved: PENDING). -/
+(approved: REVIEW8-agy). -/
 theorem ghost_erasure_ending (G : Language O) (P : Exec.Program O) (ρ : Exec.Oracle O)
     (fuel : Nat) (hist : List O.Event) (ps : List (Piece G)) (Γ : AList Var G.Val)
     (c : Exec.Config O) :
