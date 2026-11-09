@@ -111,4 +111,112 @@ example : PathOk "src/main.con" ∧ ('\n' ∉ "let x = 1;".toList) ∧ ('\n' ∉
       sourceSpan "src/main.con" (by decide) 2 (by decide) "a\té") := by
   decide
 
+/-- Helper (arithmetic). Each Unicode scalar occupies at least one UTF-8 byte. Used to
+compare source-produced byte columns with scalar columns. (approved: PENDING) -/
+theorem source_bytes_ge_scalars (cs : List Char) :
+    cs.length ≤ (String.ofList cs).utf8ByteSize := by
+  induction cs with
+  | nil => simp
+  | cons c cs ih =>
+    have positive := c.utf8Size_pos
+    simp only [String.ofList_cons, String.utf8ByteSize_append,
+      String.utf8ByteSize_singleton, List.length_cons]
+    omega
+
+/-- Helper (computation). ASCII encoding contributes exactly one byte per character, independently
+of source-position production. (approved: PENDING) -/
+theorem source_ascii_bytes (cs : List Char) (ascii : ∀ c ∈ cs, c.val ≤ 127) :
+    (String.ofList cs).utf8ByteSize = cs.length := by
+  induction cs with
+  | nil => simp
+  | cons c cs ih =>
+    have one := Char.utf8Size_eq_one_iff.mpr (ascii c (by simp))
+    have rest := ih (fun c hc => ascii c (by simp [hc]))
+    simp [String.utf8ByteSize_append, String.utf8ByteSize_singleton, one, rest, Nat.add_comm]
+
+/-- Helper (arithmetic). A non-ASCII scalar contributes more than one UTF-8 byte; the other
+scalars cannot cancel this excess. (approved: PENDING) -/
+theorem source_multibyte_bytes (cs : List Char) (multi : ∃ c ∈ cs, 127 < c.val) :
+    cs.length < (String.ofList cs).utf8ByteSize := by
+  induction cs with
+  | nil => simp at multi
+  | cons c cs ih =>
+    have positive := c.utf8Size_pos
+    have lower := source_bytes_ge_scalars cs
+    simp only [String.ofList_cons, String.utf8ByteSize_append,
+      String.utf8ByteSize_singleton, List.length_cons]
+    obtain ⟨d, member, large⟩ := multi
+    cases member with
+    | head =>
+      have notOne : c.utf8Size ≠ 1 := by
+        intro one
+        have small := Char.utf8Size_eq_one_iff.mp one
+        exact (UInt32.not_lt.mpr small) large
+      omega
+    | tail _ member =>
+      have strict := ih ⟨d, member, large⟩
+      omega
+
+/-- Law (subject `ConcreteSpec.Core.Observe.sourceSpan`).
+For ASCII source text, the produced byte column coincides with the 1-based scalar column.
+The premise describes the source alphabet, never the computed position. -/
+theorem sourceSpan_ascii_eq_char_col (path : String) (ok : PathOk path)
+    (line : Nat) (positive : 0 < line) (before : String)
+    (ascii : ∀ c ∈ before.toList, c.val ≤ 127) :
+    (sourceSpan path ok line positive before).col = before.toList.length + 1 := by
+  have bytes := source_ascii_bytes before.toList ascii
+  simpa [sourceSpan] using bytes
+
+/-- Law (subject `ConcreteSpec.Core.Observe.sourceSpan`).
+Any non-ASCII scalar makes the produced byte column strictly exceed the scalar column. -/
+theorem sourceSpan_multibyte_gt_char_col (path : String) (ok : PathOk path)
+    (line : Nat) (positive : 0 < line) (before : String)
+    (multi : ∃ c ∈ before.toList, 127 < c.val) :
+    before.toList.length + 1 < (sourceSpan path ok line positive before).col := by
+  have bytes := source_multibyte_bytes before.toList multi
+  simp only [String.ofList_toList] at bytes
+  change before.toList.length + 1 < before.utf8ByteSize + 1
+  omega
+
+/-- Fault: expands tabs to eight columns, even in ASCII source. -/
+def expandedTabSpan (path : String) (ok : PathOk path) (line : Nat) (positive : 0 < line)
+    (before : String) : Span :=
+  let sp := sourceSpan path ok line positive before
+  { sp with col := sp.col + 7 * (before.toList.filter (· == '\t')).length,
+            col_pos := by have h := sp.col_pos; omega }
+
+/-- Instance (law `ConcreteSpec.Core.Observe.sourceSpan_ascii_eq_char_col`, case `ascii_tab`). -/
+example : (sourceSpan "src/main.con" (by decide) 1 (by decide) "a\tb").col =
+    "a\tb".toList.length + 1 :=
+  sourceSpan_ascii_eq_char_col "src/main.con" (by decide) 1 (by decide) "a\tb" (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Observe.sourceSpan_ascii_eq_char_col`, case `ascii_tab`,
+subject `ConcreteSpec.Core.Observe.sourceSpan`, mutant `ConcreteSpec.Core.Observe.expandedTabSpan`). -/
+example : PathOk "src/main.con" ∧ (0 < 1) ∧
+    (∀ c ∈ "a\tb".toList, c.val ≤ 127) ∧
+    ¬ ((expandedTabSpan "src/main.con" (by decide) 1 (by decide) "a\tb").col =
+      "a\tb".toList.length + 1) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Observe.sourceSpan_multibyte_gt_char_col`, case `multibyte_tab`). -/
+example : "a\té".toList.length + 1 <
+    (sourceSpan "src/main.con" (by decide) 1 (by decide) "a\té").col :=
+  sourceSpan_multibyte_gt_char_col "src/main.con" (by decide) 1 (by decide) "a\té" (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Observe.sourceSpan_multibyte_gt_char_col`, case `multibyte_tab`,
+subject `ConcreteSpec.Core.Observe.sourceSpan`, mutant `ConcreteSpec.Core.Observe.scalarColumnSpan`). -/
+example : PathOk "src/main.con" ∧ (0 < 1) ∧
+    (∃ c ∈ "a\té".toList, 127 < c.val) ∧
+    ¬ ("a\té".toList.length + 1 <
+      (scalarColumnSpan "src/main.con" (by decide) 1 (by decide) "a\té").col) := by decide
+
+/-- Helper (computation). On a single source line the scanner retains the complete prefix,
+so its span has the byte column computed from that text. This equation is assembly support,
+not independent column-law evidence. (approved: PENDING) -/
+theorem sourcePrefixSpan_hasByteColumn (path : String) (ok : PathOk path) (before : String)
+    (singleLine : '\n' ∉ before.toList) :
+    Span.HasByteColumn (sourcePrefixSpan path ok before) before := by
+  have scan := scanSourcePrefix_no_newline before.toList [] 0 [] singleLine
+  simp only [List.append_nil, List.nil_append] at scan
+  simp [sourcePrefixSpan, scan, scanSourcePrefix, Span.HasByteColumn, sourceSpan, byteColumn]
+
 end ConcreteSpec.Core.Observe
