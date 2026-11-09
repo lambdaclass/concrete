@@ -53,3 +53,30 @@ The remaining structural work is exactly the accepted
 actual supplied provenance, application-specific queries, checked branch
 certificates, SCC safety invariants, and bounded complete historical validation.
 The owning README still records this unresolved R-0219 completion blocker.
+
+## Continued implementation: representation only
+
+Commit c64d542d5 adds the first implementation slice: hash-consed expression
+identities, a separate origin DAG, typed input substitutions, guard and
+certificate records, application-specific query keys, transfer nodes, raw
+declaration templates, and a shared worklist state with the unchanged 20,000
+allowance. The graph compiler retains formal expressions instead of applying
+actual arguments to a declaration body. Graphs are scoped to one immutable
+environment and Instance.
+
+This slice does **not** implement the solver, SCC invariants, certificate
+reconstruction, query interpretation, or consumer switch. The existing
+`falseDischarge` remains the sole active implementation. These missing pieces
+are implementation work, not an experimentally established flaw in the accepted
+design. This continuation does not satisfy phase B and does not invoke its
+measurement-based stop condition. No historical solver measurements were run;
+the cost table above remains unestablished. No budget was changed.
+
+Focused validation: all 32 discharge controls passed, including exact negative
+diagnostics and the full F3b repro, with the new representation disconnected
+from verdicts. The bounded runner recovered after its initial 180-second
+wall-clock allowance, completing under its 360-second retry; the internal
+analysis budgets were unchanged. After the graph-construction additions, the
+consumer elaborated successfully in a separate bounded compile. `git diff
+--check` passed. These checks establish representation elaboration and retained
+baseline behavior only; they supply no new-solver soundness or completion evidence.
