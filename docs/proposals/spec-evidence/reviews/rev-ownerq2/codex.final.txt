@@ -1,0 +1,35 @@
+1. **question A, option 2 — major — REAL DEFECT.** Assigning replacement names by number does not necessarily keep distinct composite identities distinct. Variables named “a” and “b” with number 7 both become the same pair if assigned one replacement name for 7. Shared lookup then selects the first binding, potentially changing evaluation. Composite equality and first-match lookup are defined at ConcreteSpec/Spec/Ident.lean:41-44 and ConcreteSpec/Spec/Basics.lean:26-29.
+
+   **Fix:** say: “Numeric bijective renaming remains valid. Changing names must preserve distinctions between composite identities, or operate on an explicitly enforced domain with unique numbers and consistent names.” Explain that naming by number is safe only under that domain restriction. This round-one finding remains unresolved.
+
+2. **question A, option 1a — major — REAL DEFECT.** “The rename-the-names proofs become unnecessary” still promises deletion without preserving their guarantee. The existing laws establish that presentation changes preserve evaluation, including through the operand interface: ConcreteSpec/Proofs/Prim.lean:98-127. Moving names into a table changes how that property is expressed; it does not remove the obligation to keep presentation independent of semantics.
+
+   **Fix:** replace with: “The existing inline-name transformations are retired. Preserve their guarantee by showing that changing the presentation table leaves semantic execution unchanged; this may become immediate because execution never consumes that table.” Include this replacement law in migration costs.
+
+3. **question B, option 3 — major — REAL DEFECT.** The knowingly inconsistent “do nothing” placeholder remains an unfair alternative. The two refused branches demonstrably select different states at ConcreteSpec/Spec/Observe.lean:350-351 and ConcreteSpec/Spec/Observe.lean:639-647. Unchecked competing definitions contradict docs/PHILOSOPHY.md:68-73. Calling the placeholder explicit does not address the round-one objection.
+
+   **Fix:** remove it from the owner’s choices and state that retaining the disagreement is rejected. Present options 1 and 2 as the coherent alternatives, with option 2 recommended on structural grounds.
+
+4. **question B, option 2 — minor — REAL DEFECT.** Migration costs omit the hosted refusal law and its witnesses. Delegating refusal changes the proof’s unfolding dependencies even when its public statement remains unchanged: ConcreteSpec/Proofs/ObserveReport.lean:212-227. Its concrete witness and fault controls also require verification: ConcreteSpec/Proofs/ObserveReport.lean:602-645.
+
+   **Fix:** add: “Preserve the existing hosted refusal theorem without an initial-state premise, update its proof for delegation, and retain its witness and fault controls.”
+
+The supplied revised executions address the earlier demonstration gaps. The reachability qualification is appropriate: elaboration remains open at ConcreteSpec/README.md:54-58. No additional execution is needed to establish these constructed disagreements.
+
+READ: PROMPT.md
+READ: ConcreteSpec/README.md
+READ: ConcreteSpec/Spec/Ident.lean
+READ: ConcreteSpec/Spec/Basics.lean
+READ: ConcreteSpec/Spec/Exec.lean
+READ: ConcreteSpec/Spec/Prim.lean
+READ: ConcreteSpec/Spec/Observe.lean
+READ: ConcreteSpec/Spec/Slice1Syntax.lean
+READ: ConcreteSpec/Proofs/Prim.lean
+READ: ConcreteSpec/Proofs/Observe2.lean
+READ: ConcreteSpec/Proofs/ObserveEnvironment.lean
+READ: ConcreteSpec/Proofs/ObserveReport.lean
+READ: ConcreteSpec/Proofs/ObserveTransform.lean
+READ: docs/PHILOSOPHY.md
+
+REPOSITORY: readable
+VERDICT: CHANGES

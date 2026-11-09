@@ -1,0 +1,15 @@
+Review of two owner questions BEFORE they reach the owner (coordinator rule: every owner question gets a Codex and an agy review round first). Tree: wip/spec-audit-issues at 2bef2b5e, which holds the issue rows ISS-0046 (question A, variable identity) and ISS-0048 (question B, startup-refusal state) in ISSUES.tsv.
+
+PROMPT.md quotes the questions as drafted (OWNER-QUESTIONS.md) and the executed Lean examples with their real output (EXAMPLES.md). REVIEW.diff is unrelated context. Review the questions, not the diff.
+
+The owner rule for questions: each needs plain-language background, every option with what it means and what it costs, and a recommendation. No commit hashes or internal labels. Options must be presented fairly: the non-recommended options must be stated at their strongest, not as straw men.
+
+For EACH question, check against the code:
+1. Is the background factually right?
+   - A: what the Var comment says (ConcreteSpec/Spec/Ident.lean); which lookups compare what (ConcreteSpec/Spec/Basics.lean, ConcreteSpec/Spec/Prim.lean, ConcreteSpec/Spec/Exec.lean); whether "no compiled program behaves differently today" is supported by anything in the tree, or is an unsupported claim.
+   - B: ConcreteSpec/Spec/Observe.lean launch and launchObservation, EventSignature.initState and its uses (including the proof-side uses), and ExecAdapter.WellFormed.
+2. Are the costs complete and correct for each option? Name any proof, law, interface field or consumer that an option would change and that the question omits. Say whether option 1 of A really leaves the diagnostics or JSON interface unchanged (the Var field names are part of the interface, per Ident.lean).
+3. Is any option missing or unfairly weak? In particular, is option 2 or 3 stated at its strongest?
+4. Is the evidence enough? Do the executed examples really demonstrate each disagreement as the question states it? Is any further evidence needed before the owner can decide? For example, a run that calls launchObservation itself, or a check of whether elaboration can ever produce inconsistent hints.
+5. Is the recommendation justified by the project's philosophy (docs/PHILOSOPHY.md), or does the question decide something it should leave open?
+Give concrete rewording where needed.

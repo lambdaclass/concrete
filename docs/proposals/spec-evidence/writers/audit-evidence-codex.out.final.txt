@@ -1,0 +1,22 @@
+Build and both evidence runs passed. No tracked files changed; no commits, reviewers or git notes.
+
+Complete `_review/EvidenceB.out`:
+```text
+"launch: events=[], terminal=ConcreteSpec.Core.Observe.Terminal.startupRefused, state=0, status=125"
+"launchObservation: events=[], terminal=ConcreteSpec.Core.Observe.Terminal.startupRefused, state=1, status=125"
+```
+
+Complete `_review/EvidenceA.out`:
+```text
+ConcreteSpec.Core.Res.ok (42, ())
+none
+true
+[]
+[{ hint := "stored", id := 7 }]
+```
+
+These show, respectively: the operand read succeeds; full-variable lookup fails; assignment has no step; restriction removes the local; and `dead` classifies it as dropped. Both files also prove their results with `rfl` or `decide`.
+
+Check 3: **No.** Searching the current specification found neither an elaborator nor a proved invariant guaranteeing equal hints for equal numeric ids. [README.md](ConcreteSpec/README.md:56) explicitly leaves name-to-identity elaboration open. [Ident.lean](ConcreteSpec/Spec/Ident.lean:35) describes consistent hints but defines `Var` as unrestricted `hint` and `id` fields with derived equality. [Prim.lean](ConcreteSpec/Proofs/Prim.lean:125) proves preservation of operand evaluation under rehinting, not the required consistency invariant or preservation of C1 assignment.
+
+Elaboration fix: annotated both `42` literals as `Int`; Lean could not synthesize numeral instances through the unreduced `Prim.operands.Val` projection. No other elaboration fixes were needed.
