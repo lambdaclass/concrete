@@ -77,7 +77,9 @@ def main():
             try:
                 protocol.observe([result], sha, 'daily', now, runners, 'example/repo')
             except protocol.EvidenceError as error:
-                assert str(error) == diagnostic, (label, str(error))
+                expected = diagnostic.split(' ', 1)[0]+' daily '+sha+': '+diagnostic
+                assert str(error) == expected, (label, str(error))
+                assert error.status == diagnostic.split(' ', 1)[0], (label, error.status)
             else:
                 raise AssertionError(label+': planted evidence qualified')
         print('ok C scheduled evidence '+label+': '+diagnostic)

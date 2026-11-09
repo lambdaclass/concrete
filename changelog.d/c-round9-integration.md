@@ -1,0 +1,1 @@
+Gate C uses the scheduler observation diagnostic with its exact tier and SHA prefix, and documents the registered real scaling commands, workflow consumption and missing ISS-0029 qualification dependency.

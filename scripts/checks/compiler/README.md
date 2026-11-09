@@ -35,3 +35,48 @@ invented/missing controls, wrong diagnostics, missing reports and wrong commands
 These cheap controls run in clean and hostile environments via `workflow_yaml.sh`;
 they never run campaigns or publish evidence. Shared protocol tests additionally
 exercise publication and artifact binding. Full campaigns retain their existing tiers.
+
+## Real scaling qualification
+
+The registry already exposes one bounded command per mode; invoke its executor,
+never copy a row's campaign command into another script. On concrete-ci-2, in the
+exact candidate checkout and the real runner service environment, run:
+
+```sh
+nix develop --command python3 scripts/checks/lib/gate_manifest.py execute --id scaling-qualification --tier qualification
+```
+
+`SELECTED_SHA` must be the full candidate commit; `GITHUB_EVENT_NAME` must be
+`workflow_dispatch` (or `push`), `GITHUB_REF` its authorized main/ci/wip ref,
+`GITHUB_REPOSITORY` the real repository, `RUNNER_ENVIRONMENT=self-hosted`, and
+`RUNNER_NAME` the actual inventoried runner service name. Preserve the real run
+ID/attempt as `SCHEDULED_ATTEMPT_ID`. Do not substitute a fixture inventory or
+invent runner identity for an SSH shell. The registry owns the watchdog budget
+and produces `scaling-qualification-report/` with SHA, provenance, raw samples,
+analysis and control diagnostics. Exit zero from policy probes or PR coverage
+is not qualification. Preserve the report even on INCOMPLETE or FAIL.
+
+A real `CI` workflow_dispatch at the candidate wip ref checks out `github.sha`,
+routes Scaling to concrete-ci-2, invokes this same registry entry and uploads
+its declared artifact paths. It runs fresh measurements; it does not accept a
+previous PR result as qualification. After landing, dispatch `gate_schedule.yml`
+on main with `sha=<full main-history SHA>` and `tier=daily`: its trusted controller
+selects the committed `scaling-daily` registry row, runs it on the inventoried
+host and collects the reports and exact-diagnostic controls through R-0676's
+shared protocol. For a direct daily campaign (raw reports only), the registered
+command is:
+
+```sh
+nix develop --command python3 scripts/checks/lib/gate_manifest.py execute --id scaling-daily --tier daily
+```
+
+Qualification remains **INCOMPLETE** in this checkout: ISS-0029's authoritative
+`scripts/checks/lib/repro_manifest_compare.py` inventory API is absent. Both the
+campaign and scheduler refuse with `INCOMPLETE dependency: ISS-0029 runner binding
+unavailable`; merely running on concrete-ci-2 does not satisfy that dependency.
+The structural completion is to land ISS-0029's authoritative parser and provisioned
+inventory, shared by all consumers, then run the real commands above. The
+coordinator must name/file the ISS-0029 runner-binding roadmap row in its sweep
+before calling this staged work complete; no R ID for that dependency is present
+in this checkout. R-0676 owns scheduled evidence integration, not a replacement
+inventory. No real qualification or daily measurement has been run here.
