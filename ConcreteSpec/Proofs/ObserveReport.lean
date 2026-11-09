@@ -505,7 +505,7 @@ def relativePathAdapter : ExecAdapter ops signature :=
     loaded := by decide }
 
 /-- Helper (computation). A concrete well-formedness witness, including a nonempty valid site
-table. This is not independent evidence about elaboration. (approved: PENDING) -/
+table. This is not independent evidence about elaboration. (approved: REV-C6-agy-285cf57db) -/
 theorem relativePathWellFormed :
     ExecAdapter.WellFormed relativePathAdapter permittingContract () blockingOracle := by
   exact ⟨blockingWellFormed.internal, blockingWellFormed.answered, blockingWellFormed.blocked⟩
@@ -732,7 +732,7 @@ def sourceAdapter : ExecAdapter ops signature :=
                  loaded := by decide }
 
 /-- Helper (computation). This run traps, so blocking permission is unreachable bookkeeping.
-(approved: PENDING). -/
+(approved: REV-C6-agy-285cf57db). -/
 theorem sourcePermitted :
     ExecAdapter.BlockingPermitted program sourceAdapter permittingContract ()
       (Exec.runFrom program blockingOracle 1 [1] abortingConfig) := by

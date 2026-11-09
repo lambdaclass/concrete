@@ -1025,7 +1025,7 @@ end SourceLoadDemo
 
 /-- Helper (projection). C9's loader establishes the single site-table invariant for an
 adapter's admitted project; no adapter-private predicate or runtime check is needed.
-(approved: PENDING). -/
+(approved: REV-C6-agy-285cf57db). -/
 theorem ExecAdapter.sites_valid {O : Exec.Operands} {S : EventSignature} (A : ExecAdapter O S) :
     SiteTable.Valid A.sourceProject.sources A.sites := by
   have valid := LoadedProject.load_locations A.sourceInput
@@ -1381,7 +1381,7 @@ private def decodeKinds : List TrapKind → List Char → Option TrapKind
 private def decodeKind (cs : List Char) : Option TrapKind := decodeKinds TrapKind.all cs
 
 /-- Helper (computation). Case analysis on `TrapKind` showing `decodeKind` recovers `kind` from
-trapLineChars kind site sp; feeds `decodeTrapLine_render`. (approved: PENDING) -/
+trapLineChars kind site sp; feeds `decodeTrapLine_render`. (approved: REV-C6-agy-285cf57db) -/
 private theorem decodeKind_render (kind : TrapKind) (site : SiteId) (sp : Span) :
     decodeKind (trapLineChars kind site sp) = some kind := by
   cases kind <;>
@@ -1715,7 +1715,7 @@ theorem runFrom_blockingPermitted (P : Exec.Program O) (A : ExecAdapter O S)
 
 /-- Helper (computation). Projects a certified `Exec.Steps` history to its terminal `Observation`;
 feeds the `ConcreteSpec.Core.Exec.Steps`-level bridge while `output_before_trap_kept` in ObserveOutput.lean proves the
-operational `ConcreteSpec.Core.Exec.runFrom`/`reportObservation` law. (approved: PENDING)
+operational `ConcreteSpec.Core.Exec.runFrom`/`reportObservation` law. (approved: REV-C6-agy-285cf57db)
  The terminal `ConcreteSpec.Core.Exec.Steps` observation contains the projection of the whole `ConcreteSpec.Core.Exec.Steps` history, the exact
 trap line, and the final external state. -/
 theorem steps_trap_observation (A : ExecAdapter O S) {P : Exec.Program O} {c c' : Exec.Config O}
@@ -1806,7 +1806,7 @@ def answeredReport : Exec.Report ops := Exec.run program answeringOracle 1 (requ
 def blockedReport : Exec.Report ops := Exec.run program blockingOracle 1 (requesting 3)
 
 /-- Helper (computation). Well-formedness witness for `answeringOracle` in AdapterDemo,
-feeding the closed instances in ObserveReport.lean. (approved: PENDING)
+feeding the closed instances in ObserveReport.lean. (approved: REV-C6-agy-285cf57db)
  The answering oracle satisfies the adapter contract for either blocking policy. -/
 theorem answeringWellFormed (blocking : Unit → List (Event signature) → Request signature → Prop) :
     ExecAdapter.WellFormed adapter (makeContract blocking) () answeringOracle := by
@@ -1822,7 +1822,7 @@ theorem answeringWellFormed (blocking : Unit → List (Event signature) → Requ
     simp [answeringOracle] at answer
 
 /-- Helper (computation). Well-formedness witness for `blockingOracle` in AdapterDemo,
-feeding the closed instances in ObserveReport.lean. (approved: PENDING)
+feeding the closed instances in ObserveReport.lean. (approved: REV-C6-agy-285cf57db)
  The blocking oracle is well formed because this contract permits blocking. -/
 theorem blockingWellFormed : ExecAdapter.WellFormed adapter permittingContract () blockingOracle := by
   constructor

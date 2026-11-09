@@ -238,7 +238,7 @@ example : (0 < 1) ∧
 
 /-- Helper (computation). On a single source line the scanner retains the complete prefix,
 so its span has the byte column computed from that text. This equation is assembly support,
-not independent column-law evidence. (approved: PENDING) -/
+not independent column-law evidence. (approved: REV-C6-agy-285cf57db) -/
 theorem sourcePrefixSpan_hasByteColumn (path : SourcePath) (before : String)
     (singleLine : '\n' ∉ before.toList) :
     Span.HasByteColumn (sourcePrefixSpan path before) before := by
