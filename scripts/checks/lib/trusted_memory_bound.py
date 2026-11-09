@@ -31,11 +31,12 @@ def run(command, limit=LIMIT, seconds=600):
     args = prefix + ["systemd-run", *manager, "--quiet", "--wait", "--pipe",
         "--service-type=exec", "--unit=" + unit,
         "--property=MemoryMax=" + str(limit), "--property=MemorySwapMax=0",
+        "--property=MemoryAccounting=yes",
         "--property=OOMPolicy=kill", "--property=KillMode=control-group",
         "--property=RuntimeMaxSec=" + str(seconds)]
     if not user:
         args += ["--uid=" + str(os.getuid()), "--gid=" + str(os.getgid())]
-    args += ["--working-directory=" + os.getcwd(), "--", "env", "-i"]
+    args += ["--working-directory=" + os.getcwd(), "--", shutil.which("env"), "-i"]
     args += [f"{k}={v}" for k, v in os.environ.items()]
     args += [shutil.which("bash"), str(Path(__file__).with_name("limited_exec.sh")), "65536", *command]
     ctl = prefix + ["systemctl", *manager]
@@ -44,6 +45,12 @@ def run(command, limit=LIMIT, seconds=600):
         state = subprocess.run([*ctl, "show", unit, "--property=Result", "--value"],
                                env=env, capture_output=True, text=True, timeout=10)
         if state.stdout.strip() == "oom-kill":
+            peak = subprocess.run([*ctl, "show", unit, "--property=MemoryPeak", "--value"],
+                                  env=env, capture_output=True, text=True, timeout=10).stdout.strip()
+            if not peak.isdecimal():
+                raise RuntimeError("INCOMPLETE examples memory: OOM memory peak unavailable")
+            if int(peak) < limit:
+                raise RuntimeError("INCOMPLETE examples memory: OOM before MemoryMax reached")
             raise ValueError(f"FAIL examples memory: cgroup MemoryMax exceeded ({limit} bytes)")
         if state.stdout.strip() == "timeout":
             raise RuntimeError("INCOMPLETE examples memory: service timeout")
