@@ -187,8 +187,50 @@ set_option maxHeartbeats 2000000 in
         print(f'PASS DAG {label}: {result.stdout.strip()}', flush=True)
 
 
+
+def dependency_controls():
+    """Completed negative closures are reusable; partial DFS states never are."""
+    from vacuity_driver import HERE
+    consumer = (HERE / 'vacuity.lean').read_text()
+    anchor = '    if !result && completeQuery then'
+    assert consumer.count(anchor) == 1
+    declarations = 'def subject (n : Nat) := n + 1\ndef dep0 (n : Nat) := n + 2\n'
+    declarations += ''.join(f'def dep{i} (n : Nat) := dep{i-1} n\n' for i in range(1, 101))
+    driver = r'''import N2Meta
+open Lean Meta Vacuity
+namespace DependencyControls
+DECLARATIONS
+set_option maxHeartbeats 2000000 in
+#eval show MetaM Unit from do
+  let budget ← IO.mkRef ({} : AnalysisUsage)
+  try
+    for i in [:100] do
+      let e := mkApp (mkConst `DependencyControls.dep100) (mkNatLit i)
+      let (found, _) ← (mentions e `DependencyControls.subject (some budget)).run (0, {})
+      if found then throwError "negative-dependency-became-positive"
+    unless (← budget.get).mentions.contains ((← getConstInfo `DependencyControls.dep0).value!.headBeta, `DependencyControls.subject) do
+      throwError "negative-closure-not-cached"
+    IO.println s!"DEPENDENCIES complete work={(← budget.get).work}"
+  catch ex => IO.println s!"CONTROL {← ex.toMessageData.toString} work={(← budget.get).work}"
+end DependencyControls
+'''
+    driver = driver.replace('DECLARATIONS', declarations)
+    for label, text in [('memoized', consumer), ('uncached', consumer.replace(anchor, '    if false then'))]:
+        with compiled_consumer(consumer_text=text) as meta, tempfile.TemporaryDirectory(prefix='n2-dependencies-') as temp:
+            path = Path(temp) / 'Dependencies.lean'
+            path.write_text(driver)
+            result = command(['lean', path], temp, dict(os.environ, LEAN_PATH=str(meta)), seconds=60)
+        assert result.returncode == 0, result.stdout
+        if label == 'memoized':
+            assert re.search(r'^DEPENDENCIES complete work=\d+$', result.stdout, re.M), result.stdout
+            assert 'CONTROL ' not in result.stdout, result.stdout
+        else:
+            assert 'CONTROL work-budget work=20000' in result.stdout, result.stdout
+        print(f'PASS dependency {label}: {result.stdout.strip()}', flush=True)
+
 def main():
     dag_controls()
+    dependency_controls()
     with compiled_consumer() as meta:
         return controls(meta)
 

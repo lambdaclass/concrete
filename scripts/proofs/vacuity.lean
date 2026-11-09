@@ -902,6 +902,8 @@ partial def mentionsVisit (e : Expr) (subject : Name) (budget : Option WorkBudge
   if budget.isSome then useWork budget
   else if fuel == 0 then throwError "work-budget"
   modify fun (_, visited) => (fuel - 1, visited)
+  if let some b := budget then
+    if let some cached := (← b.get).mentions[(e, subject)]? then return cached
   let constants ← workConstants e budget
   if constants.contains subject then return true
   for n in constants do
@@ -916,8 +918,20 @@ def mentions (e : Expr) (subject : Name) (budget : Option WorkBudget := none) : 
   useWork budget
   if let some b := budget then
     if let some cached := (← b.get).mentions[(e, subject)]? then return cached
+  let completeQuery := (← get).2.isEmpty
   let result ← mentionsVisit e subject budget
-  if let some b := budget then b.modify fun s => { s with mentions := s.mentions.insert (e, subject) result }
+  if let some b := budget then
+    -- Only a completed negative query certifies every visited dependency negative.
+    -- Publishing negatives during DFS would be unsound for recursive components.
+    if !result && completeQuery then
+      let env ← getEnv
+      for n in (← get).2 do
+        if let some (.defnInfo d) := env.find? n then
+          unless (← b.get).mentions.contains (d.value, subject) do
+            useWork budget
+            b.modify fun s => { s with mentions := s.mentions.insert (d.value, subject) false }
+    if result || completeQuery then
+      b.modify fun s => { s with mentions := s.mentions.insert (e, subject) result }
   return result
 
 partial def mutate (e : Expr) (subject mutant : Name) (boundaries : Array Name := #[])

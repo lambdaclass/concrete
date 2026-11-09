@@ -197,3 +197,26 @@ The coordinator has not supplied the wide-watchdog diagnostic measurement during
 this run. The historical-scope F2 wall-cost improvement and retention of all five
 instance-application FAILs therefore remain **unmeasured/unverified** pending the
 ci-2 command above. The small local DAG measurements are not a substitute for it.
+
+## Fix round 2: dependency measurement and reuse
+
+The coordinator's N14 at `e692fa8e9` is INCOMPLETE (389s, 1,808/2,152
+attempted, 344 unrun). N14d with the diagnostic-only 2,400s watchdog takes
+1,369s, attempts all 2,152, and leaves 119 INCOMPLETE. These are supplied
+ci-2 measurements, not writer runs or a passing gate result.
+
+A bounded single-instance replay of historical Own line 4258 instruments the
+production analysis work calls. At the first exhausted charge it records:
+`workConstants=9398`, `moduleDepends=8452`, `mayMention=1616`,
+`mentionsVisit=475`, `mentions=8`, `mutate=52` (the attempted 20,001st
+charge is included). Only 4,865 expression entries and 657 module entries exist;
+seven root mention queries completed. Negative dependency closures were being
+rediscovered across different roots. Completed-closure reuse fixes that defect,
+without dropping cache-lookup charges or increasing any budget. The instrumented
+heartbeat count is not comparable with a production census.
+
+Focused budget validation: both DAG controls PASS, the new dependency control
+completes with 2,430 units, its disabled-publication mutation reports exactly
+`CONTROL work-budget work=20000`, and all 13 production scheduler/budget controls
+PASS. No scope census or review tooling was run; coordinator reviews must do the
+best long-term thing rather than cut corners.

@@ -469,3 +469,18 @@ watchdog, 2,000,000 heartbeats, or 20,000 work units. The coordinator owns any
 roadmap row for that worker design; this writer allocates no IDs.
 
 Reviews of record must do the best long-term thing rather than cut corners.
+
+### N2 A3 fix round 2: completed dependency closures
+
+Under R-0219, dependency queries publish negative results for all visited
+transparent bodies only after a complete, initially unvisited query returns
+false. A partial DFS state cannot certify a negative result. Recursive components
+therefore receive no provisional negative entries. Publication is charged to the
+same analysis budget. Later queries reuse those completed results instead of
+rediscovering the same helper closure. The production work units and budgets are
+unchanged, including charging cache lookups.
+
+The dependency control builds 100 aliases and queries 100 distinct applications.
+The normal query completes at 2,430 work units; disabling completed-closure
+publication must report exactly `CONTROL work-budget work=20000`. This targets
+repeated dependency discovery, not just shared expression children.
