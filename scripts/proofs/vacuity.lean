@@ -298,9 +298,12 @@ partial def direct (n : Name) (e : Expr) : StateRefT Nat Audit Bool := do
     if reduced != e then direct n reduced else return false
 
 /-- Follow only the supplied hypothesis proof, including opaque proof helpers.
+    Kernel reduction uses all transparency levels: opaque proofs supplied inside
+    discharging lemmas must select their reachable branches before inspection.
+    This is semantic reduction, independent of proof names or nesting depth.
     The visited set and shared budget bound the entire dependency traversal. -/
 partial def falseDischarge (e : Expr) : StateRefT (Nat × Std.HashSet Expr) MetaM Bool := do
-  let e ← whnfD (cleanSpine e)
+  let e ← withTransparency .all <| whnf (cleanSpine e)
   let (fuel, visited) ← get
   if fuel == 0 then throwError "false-discharge-budget"
   set (fuel - 1, visited)

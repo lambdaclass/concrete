@@ -10,16 +10,54 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import io
+import tarfile
+import tempfile
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 
 
+def replay(records, directory):
+    """Server-only historical controls: fresh sources, exact retained evidence.
+
+    Each report is produced by the ordinary audit, then checked by the same
+    exact diagnostic assertions as supplied reports. Never synthesize a PASS.
+    """
+    directory.mkdir(parents=True, exist_ok=True)
+    scopes = {
+        'c9-old': ['Ident', 'Prim'], 'c9-new': ['Ident', 'Prim'],
+        'c6-old': ['Observe2'], 'c6-current': ['Observe2', 'ObserveEvidence'],
+    }
+    for label, modules in scopes.items():
+        row = next(row for row in records if row['fixture'].startswith(label + '-'))
+        with tempfile.TemporaryDirectory(prefix='n2-historical-') as temp:
+            archive = subprocess.run(
+                ['bash', str(ROOT / 'scripts/checks/lib/bounded.sh'), '30', 'git',
+                 'archive', row['commit'], 'ConcreteSpec', 'ConcreteSpec.lean', 'ROADMAP.md'],
+                cwd=ROOT, stdout=subprocess.PIPE, check=True)
+            with tarfile.open(fileobj=io.BytesIO(archive.stdout)) as tree:
+                tree.extractall(temp, filter='data')
+            command = ['bash', str(ROOT / 'scripts/checks/lib/bounded.sh'), '600',
+                       sys.executable, str(HERE / 'vacuity_driver.py'), '--source', temp]
+            for module in modules:
+                command.extend(['--scope', 'ConcreteSpec.Proofs.' + module])
+            result = subprocess.run(command, cwd=ROOT, stdout=subprocess.PIPE,
+                                    stderr=subprocess.STDOUT)
+            (directory / (label + '.txt')).write_bytes(result.stdout)
+            if result.returncode not in {0, 1, 2}:
+                raise RuntimeError(f'INCOMPLETE historical-replay {label} rc={result.returncode}')
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--reports', type=Path)
+    parser.add_argument('--replay', type=Path, help='server: re-elaborate all exact historical controls into this report directory')
     args = parser.parse_args()
     records = json.loads((HERE / 'fixtures/provenance.json').read_text())
+    if args.replay:
+        replay(records, args.replay)
+        args.reports = args.replay
     failures = []
     cache = {}
     for row in records:

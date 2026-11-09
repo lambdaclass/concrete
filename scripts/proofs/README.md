@@ -96,7 +96,17 @@ of equality/iff conclusions, catching unfolded-premise and wrapped-rfl identitie
 Raw delta reduction spends a shared proof-traversal counter for each definition unfolded; it does not ask
 whnfR to unfold an arbitrary definition chain in one step. Exhaustion is INCOMPLETE.
 Hypothesis discharge scanning follows proof helpers transitively with a visited
-set and a shared traversal budget; data/typeclass arguments are excluded. Unrecognized proof terms still need
+set and a shared traversal budget; data/typeclass arguments are excluded.
+Closed proof reduction uses kernel reduction at all transparency levels, including
+opaque proof arguments nested inside discharging lemmas. Impossible branches are
+inspected only after the supplied arguments select the reachable computation;
+there is no name/shape allowlist or limit on decidable-proof nesting depth.
+The exact C9-new instance and planted excerpts in `fixtures/provenance.json` are
+positive controls: both retained identities require zero FAIL/INCOMPLETE evidence
+diagnostics. On the server, run `nix develop -c python3
+scripts/proofs/vacuity_fixtures.py --replay REPORT_DIRECTORY` to freshly elaborate
+all four historical cases and assert their exact diagnostics. Existing reports
+are immutable observations; `--reports DIRECTORY` never rewrites them. Unrecognized proof terms still need
 Instance and Planted evidence. Semantic adequacy, representativeness, completeness
 of subjects and runtime rechecking remain independent review questions.
 

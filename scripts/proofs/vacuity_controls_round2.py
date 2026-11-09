@@ -160,6 +160,19 @@ end ConcreteSpecControl
     universal = positive.replace("/-- Law", "def Nonzero (n : Nat) : Prop := ∀ _k : Nat, S n ≠ 0\n/-- Law", 1).replace("theorem nonzero (n : Nat) : S n ≠ 0 := Nat.succ_ne_zero n", "theorem nonzero (n : Nat) : Nonzero n := fun _ => Nat.succ_ne_zero n").replace("example : S 0 ≠ 0", "example : Nonzero 0").replace("¬ (mutant 0 ≠ 0) := by decide", "¬ (∀ _k : Nat, mutant 0 ≠ 0) := by intro h; exact h 0 rfl")
     add("forall-alias-full-application", universal, set(), status=0)
     add("decide-hypothesis-positive", base.replace("growth 2 rfl", "growth 2 (by decide)"), set(), status=0)
+    # Opaque discharging lemmas must reduce their closed proof arguments, at
+    # arbitrary nesting depth, before unreachable branches are inspected.
+    for depth in [1, 4, 12]:
+        helpers = ""
+        proof = "(by decide)"
+        for i in range(depth):
+            helpers += ("/-- Helper (computation). Closed discharge wrapper "
+                        "(approved: independent:r4). -/\n"
+                        f"theorem discharge{i} (h : 2 = 2) : 2 = 2 := by cases h; decide\n")
+            proof = f"(discharge{i} {proof})"
+        fixture = base.replace("/-- Law", helpers + "/-- Law", 1).replace("growth 2 rfl", f"growth 2 {proof}")
+        add(f"nested-decide-discharge-{depth}", fixture, set(), status=0)
+
 
     add("recursive-law-positive", extra("/-- Law (subject `ConcreteSpecControl.S`). -/", "theorem recursiveLaw (n : Nat) : n < S n := match n with\n  | 0 => Nat.zero_lt_succ 0\n  | n + 1 => Nat.succ_lt_succ (recursiveLaw n)"), bad("missing-instance", "ConcreteSpecControl.recursiveLaw"))
     add("namespace-components", base + "namespace Left.Right\nopen ConcreteSpecControl\n/-- Helper (computation). References `S` (approved: independent:r3). -/\ntheorem marker : True := trivial\nend Left.Right\n", set(), status=0)

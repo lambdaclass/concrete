@@ -1,0 +1,1 @@
+N2 reduces closed hypothesis proofs through opaque nested lemma arguments before inspecting impossible eliminations. Add nesting-depth controls and exact historical fixture replay; retain all negative discharge checks.
