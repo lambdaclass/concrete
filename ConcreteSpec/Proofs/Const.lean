@@ -45,7 +45,7 @@ private theorem agree_nil : Agree [] [] := by
 
 /-- Helper (computation). Every evaluator result has an independent syntax-directed derivation,
 proved by induction on fuel and case analysis on the expression and primitive outcomes.
-(approved: PENDING) -/
+(approved: REV-C2-agy-59d4c501d) -/
 private theorem eval_derivation_inv (env : AList ConstId CVal) :
     ∀ (fuel : Nat) (e : CExpr), ConstEval env fuel e (e.eval env fuel)
   | 0, e => .exhausted e
@@ -388,7 +388,7 @@ private theorem eval_derivation_inv (env : AList ConstId CVal) :
       exact .binary_nonValue_left (.or a b) iha trivial
 
 /-- Helper (inversion). Independent syntax-directed derivations determine the evaluator result.
-(approved: PENDING) -/
+(approved: REV-C2-agy-59d4c501d) -/
 private theorem eval_derivation_unique_inv {env : AList ConstId CVal} {fuel : Nat}
     {e : CExpr} {r : CEvalResult} (h : ConstEval env fuel e r) : e.eval env fuel = r := by
   induction h with
@@ -481,7 +481,7 @@ private theorem twoBools_some_inv {x y : CVal} {a b : Bool}
   exact ⟨rfl, rfl⟩
 
 /-- Helper (computation). Structural preservation for successful initializer evaluation;
-used by declaration soundness rather than counted as independent evidence. (approved: PENDING) -/
+used by declaration soundness rather than counted as independent evidence. (approved: REV-C2-agy-59d4c501d) -/
 private theorem eval_sound_inv (env : AList ConstId CVal) (Γ : AList ConstId CTy)
     (hm : ∀ c v, AList.lookup env c = some v → AList.lookup Γ c = some v.ty ∧ v.Valid) :
     ∀ (e : CExpr) (fuel : Nat) (v : CVal), e.eval env fuel = .value v →
@@ -646,7 +646,7 @@ private theorem bothBool_true {x y : Option CTy} (h : bothBool x y = true) :
   | some .bool, some .bool, _ => exact ⟨rfl, rfl⟩
 
 /-- Helper (inversion). A fallible-free expression contains no located operation failure.
-(approved: PENDING) -/
+(approved: REV-C2-agy-59d4c501d) -/
 private theorem not_inExpr_of_fallibleFree (f : ConstFailure) :
     ∀ e : CExpr, e.fallibleFree = true → ¬ f.InExpr e := by
   intro e
@@ -1935,7 +1935,7 @@ example : SourceNamesResolved ConstDemo.U
 /-! ### Order independence (`ConstOrderIndependent`) -/
 
 /-- Helper (congruence). Static expression typing depends only on the bindings of e.refs.
-(approved: PENDING) -/
+(approved: REV-C2-agy-59d4c501d) -/
 private theorem ty?_congr_refs (Γ₁ Γ₂ : AList ConstId CTy) :
     ∀ (e : CExpr), (∀ c ∈ e.refs, AList.lookup Γ₁ c = AList.lookup Γ₂ c) →
       e.ty? Γ₁ = e.ty? Γ₂ := by
@@ -1955,7 +1955,7 @@ private theorem ty?_congr_refs (Γ₁ Γ₂ : AList ConstId CTy) :
     simp [CExpr.ty?, ha]
 
 /-- Helper (congruence). Initializer evaluation depends only on the bindings of e.refs.
-(approved: PENDING) -/
+(approved: REV-C2-agy-59d4c501d) -/
 private theorem eval_congr_refs (env₁ env₂ : AList ConstId CVal) :
     ∀ (e : CExpr) (fuel : Nat), (∀ c ∈ e.refs, AList.lookup env₁ c = AList.lookup env₂ c) →
       e.eval env₁ fuel = e.eval env₂ fuel := by
