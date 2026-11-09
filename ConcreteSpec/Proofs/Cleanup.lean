@@ -280,6 +280,19 @@ namespace Evidence
 /-- Instance (law `ConcreteSpec.Cleanup.reg_inv`, case `registeredStack`). -/
 example := reg_inv stack_reg
 
+/-- Instance (law `ConcreteSpec.Cleanup.runCleanup_all_ok`, case `releaseLoan`). -/
+example := @runCleanup_all_ok (fun _ => true) [desV] (by intro d hd; rfl) (expected [desV]) .done
+
+/-- Instance (law `ConcreteSpec.Cleanup.runCleanup_trap`, case `secondCallTraps`). -/
+example := @runCleanup_trap (fun d => d != desB) desB [relA] [desV]
+  (by intro d hd; cases hd with
+      | head => decide
+      | tail _ h => cases h) (by decide) (expected [desV] ++ [.call desB]) .trapped
+
+/-- Instance (law `ConcreteSpec.Cleanup.defer_cleanup_releases`, case `returnStack`). -/
+example := defer_cleanup_releases (ok := fun _ => true) stack_reg (e := .ret) (by decide)
+  (fs := stack) rfl
+
 end Evidence
 
 end ConcreteSpec.Cleanup
