@@ -972,6 +972,21 @@ example := @checked_no_implicit_traps literal
 example : Checked literal ∧ ¬ (trapRun literal 1 ≠ .trap .arithmeticOverflow) :=
   ⟨⟨by decide, .ret (.int (by decide)) (.atom .int) (by decide)⟩, by simp [trapRun]⟩
 
+/-- Instance (law `ConcreteSpec.runBody_sound`, case `return`). -/
+example := @runBody_sound [] (.int .u8 42) 1 [] [] (.exit 42) rfl (by decide)
+
+/-- Instance (law `ConcreteSpec.exec_ne_outOfFuel`, case `return`). -/
+example := @exec_ne_outOfFuel [] (.int .u8 42) [] [] (.exit 42) .ret
+
+/-- Instance (law `ConcreteSpec.exec_deterministic`, case `return`). -/
+example := @exec_deterministic [] (.int .u8 42) [] [] (.exit 42) (.exit 42) .ret .ret
+
+/-- Instance (law `ConcreteSpec.exec_total`, case `return`). -/
+example := exec_total [] [] [] (.int .u8 42)
+
+/-- Instance (law `ConcreteSpec.checked_exits`, case `return`). -/
+example := @checked_exits literal ⟨by decide, .ret (.int (by decide)) (.atom .int) (by decide)⟩
+
 end Evidence
 
 end ConcreteSpec
