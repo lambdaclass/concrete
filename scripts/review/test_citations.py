@@ -25,25 +25,21 @@ with tempfile.TemporaryDirectory() as directory:
         actual = contract.evaluate_output(body + "\nREAD: source.lean\nREPOSITORY: readable\nVERDICT: " + verdict,
                                           "", sha, directory, ["clean", "findings", "ACCEPT"])
         assert actual == expected if isinstance(expected, tuple) else actual[0] == expected, (body, actual, expected)
-    check("[`realAnchor`](source.lean#L2)", ("blocked", "citation: anchor 'realAnchor' absent from 'source.lean#L2-L2'"))
-    check("[`realAnchor`](source.lean#L1-L3)", ("blocked", "citation: range 'source.lean#L1-L3' outside 1..2"))
-    check("[`realAnchor`](missing.lean#L1)", ("blocked", "citation: file 'missing.lean' does not exist"))
-    for verdict in ("clean", "ACCEPT"):
-        check("`inventedLaw`", ("blocked", "citation: identifier 'inventedLaw' absent from reviewed tree and pinned external names"), verdict)
-    check("[`realAnchor`](source.lean#L1) and `otherAnchor`", "clean")
-    check("Introduce `proposed:newLaw`", "findings", "findings")
-    check("`declModifiers`", "clean")
-    check("`c2245c99..21ad148b`", "clean")
-    check("`proposed:newLaw`", ("blocked", "citation: proposed names require a FINDINGS/REJECT verdict"))
-    (root / "lean-toolchain").write_text("some-other-pin\n")
-    git("add", "lean-toolchain")
-    git("-c", "user.name=Control", "-c", "user.email=control@example.invalid", "commit", "-qm", "changed pin")
-    old_sha = sha
+    check("[`realAnchor`](source.lean#L2)", ("invalid", "citation: anchor 'realAnchor' absent from 'source.lean#L2'"))
+    check("source.lean:3", ("invalid", "citation: range 'source.lean:3' outside 1..2; citation: positive verdict requires at least one resolvable file:line citation"))
+    check("source.lean:1 `inventedLaw` `mutantFake` `caseFake`", ("invalid", "citation: identifier 'inventedLaw' unresolved; citation: identifier 'mutantFake' unresolved; citation: identifier 'caseFake' unresolved"))
+    check("source.lean:1–2,2 `realAnchor`", "clean")
+    check("[source.lean:1](file:///arbitrary/export/source.lean:1)", "clean")
+    check("source.lean:1 `declModifiers`", "clean")
+    check("source.lean:1 `c2245c99..21ad148b` `plainword`", "clean")
+    check("source.lean:1 `missingName`\nABSENT: missingName", "clean")
+    check("source.lean:1 Introduce `proposed:newLaw`", "findings", "findings")
+    check("No citations", ("invalid", "citation: positive verdict requires at least one resolvable file:line citation"))
+    base = sha
+    (root / "source.lean").write_text("def realAnchor := 1\n")
+    git("add", ".")
+    git("-c", "user.name=Control", "-c", "user.email=control@example.invalid", "commit", "-qm", "remove name")
     sha = git("rev-parse", "HEAD")
-    check("`declModifiers`", ("blocked", "citation: identifier 'declModifiers' absent from reviewed tree and pinned external names"))
-    sha = old_sha
-    check("source.lean:2", ("blocked", "citation: unnamed location 'source.lean:2' requires a named source link"))
-    # Working-tree edits cannot repair invalid evidence at the reviewed SHA.
-    (root / "source.lean").write_text("def inventedLaw := 1\n")
-    check("`inventedLaw`", ("blocked", "citation: identifier 'inventedLaw' absent from reviewed tree and pinned external names"))
+    result = contract.evaluate_output("source.lean:1 `otherAnchor`\nREAD: source.lean\nREPOSITORY: readable\nVERDICT: clean", "", sha, directory, ["clean"], base=base)
+    assert result[0] == "clean", result
 print("citation controls: PASS")

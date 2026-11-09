@@ -387,7 +387,7 @@ run_one() {
   collect_reviewer_output "$REVIEWER" "$REVIEW_TREE" "$prompt" "$out" "$log" "$TIMEOUT" "$REVIEWER_BIN" || rc=$?
   msg="$(cat "$out")"
   LAST_BODY="$msg"
-  contract_out="$(validate_reviewer_output "$ROOT" "$HEAD_SHA" "$REVIEW_TREE" "$WORK/tree.manifest" "$out" "$log" "clean,findings" "$rc")"
+  contract_out="$(validate_reviewer_output "$ROOT" "$HEAD_SHA" "$REVIEW_TREE" "$WORK/tree.manifest" "$out" "$log" "clean,findings" "$rc" "$FROM")"
   LAST_RESULT="$(note_field "$contract_out" status)"
   reason="$(note_field "$contract_out" reason)"
   if [ "$(note_field "$contract_out" tree_modified)" = yes ]; then
@@ -463,12 +463,14 @@ $LAST_BODY" ;;
 [$label: $group]
 $stripped"
       ;;
-    blocked)
+    invalid|blocked|refused|noverdict|error)
       N_BLOCKED=$((N_BLOCKED + 1))
       FINDINGS_TEXT="$FINDINGS_TEXT
 [$label: $group] blocked: the reviewer could not review this piece or read the repository. Files: $paths
 $stripped"
       ;;
+    clean) ;;
+    *) die "unknown reviewer-output status: $result" ;;
   esac
 done <"$WORK/pieces/manifest.tsv"
 

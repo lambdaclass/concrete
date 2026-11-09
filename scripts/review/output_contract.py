@@ -21,10 +21,10 @@ Contract for a reviewer's raw output:
      (blob or symlink blob) in `--commit`'s git tree. Otherwise `blocked`.
   6. Source links must name an identifier present within their exact line range;
      positive verdicts also require standalone backticked identifiers to resolve
-     in the reviewed tree or its pinned external-name list. Otherwise `blocked`.
+     in the reviewed tree or its pinned external-name list. Otherwise `invalid`.
 
 CLI output (stdout, two lines):
-  status: <verdict|blocked|refused|noverdict|error>
+  status: <verdict|invalid|blocked|refused|noverdict|error>
   reason: <human-readable explanation>
 """
 
@@ -94,70 +94,88 @@ def is_clean_relative_path(path: str) -> bool:
 
 
 
-# Citation syntax is deliberately closed: named relative Markdown source links,
-# and single-backtick identifiers. See README.md beside this reader.
+# Fixed grammar: Markdown links or bare path:line[-line][,line] locations.
 IDENTIFIER = r"[A-Za-z_][\w]*[!?']?(?:\.[A-Za-z_][\w]*[!?']?)*"
-LINK = re.compile(r"\[`([^`\n]+)`\]\(([^)\s]+)#L(\d+)(?:-L(\d+))?\)")
+LOCATION = re.compile(r"(?P<path>(?:file://)?[A-Za-z0-9_./-]+\.[A-Za-z0-9]+)(?::(?P<lines>[0-9]+(?:[-–][0-9]+)?(?:,[0-9]+(?:[-–][0-9]+)?)*)|#L(?P<anchor>[0-9]+(?:-L[0-9]+)?))")
 
 
-def citation_error(text: str, repo: str, commit: str, paths: set[str], positive: bool) -> str | None:
-    def blob(path: str) -> str:
-        proc = subprocess.run(["git", "-C", repo, "show", f"{commit}:{path}"],
-                              capture_output=True, check=False)
-        if proc.returncode:
-            raise ValueError(f"citation: cannot read '{path}'")
-        return proc.stdout.decode("utf-8", errors="replace")
-
-    def contains(name: str, content: str) -> bool:
-        return re.search(r"(?<![\w.])" + re.escape(name) + r"(?![\w.])", content) is not None
-
-    try:
-        remainder = text
-        for match in LINK.finditer(text):
-            name, path, start, end = match.groups()
-            label = match.group(0)
-            if not is_clean_relative_path(path) or path not in paths:
-                return f"citation: file '{path}' does not exist"
-            lines = blob(path).splitlines()
-            a, b = int(start), int(end or start)
-            if not 1 <= a <= b <= len(lines):
-                return f"citation: range '{path}#L{a}-L{b}' outside 1..{len(lines)}"
-            if not re.fullmatch(IDENTIFIER, name) or not contains(name, "\n".join(lines[a-1:b])):
-                return f"citation: anchor '{name}' absent from '{path}#L{a}-L{b}'"
-            remainder = remainder.replace(label, " " * len(label), 1)
-        # Bare locations have no checkable anchor and must be rewritten as named links.
-        location = re.search(r"[\w./-]+\.[A-Za-z]+(?::\d+|#L\d+)", remainder)
-        if location:
-            return f"citation: unnamed location '{location.group()}' requires a named source link"
-        if re.search(r"\]\([^)]*#L", remainder):
-            return "citation: malformed source link requires [`identifier`](relative/path#Lstart-Lend)"
-        if positive:
-            if re.search(r"`proposed:[^`]+`", remainder):
-                return "citation: proposed names require a FINDINGS/REJECT verdict"
-            external = {}
-            allow = "scripts/review/external-names.tsv"
-            if allow in paths and "lean-toolchain" in paths:
-                pin = blob("lean-toolchain").strip()
-                for row in blob(allow).splitlines():
-                    if row and not row.startswith("#"):
-                        toolchain, name, source = row.split("\t")
-                        if toolchain == pin and source:
-                            external[name] = source
-            for match in re.finditer(r"`([^`\n]+)`", remainder):
-                name = match.group(1)
-                if not re.fullmatch(IDENTIFIER, name):
-                    continue
-                if name in external:
-                    continue
-                proc = subprocess.run(["git", "-C", repo, "grep", "-I", "-w", "-F", "-q",
-                                       "-e", name, commit, "--", ".", ":(exclude)scripts/review/external-names.tsv"], capture_output=True, check=False)
-                if proc.returncode == 1:
-                    return f"citation: identifier '{name}' absent from reviewed tree and pinned external names"
-                if proc.returncode != 0:
-                    return f"citation: identifier lookup failed for '{name}'"
-    except (ValueError, OSError) as exc:
-        return str(exc)
-    return None
+def citation_error(text, repo, commit, paths, positive, base=None):
+    errors = []
+    cache = {}
+    def blob(path):
+        if path not in cache:
+            proc = subprocess.run(["git", "-C", repo, "show", f"{commit}:{path}"], capture_output=True, check=True)
+            cache[path] = proc.stdout.decode("utf-8", errors="replace")
+        return cache[path]
+    def token(name, content):
+        return re.search(r"(?<![\w])" + re.escape(name) + r"(?![\w])", content) is not None
+    def resolve(path):
+        if path.startswith("file://"):
+            parts = path[7:].split("/")
+            candidates = ["/".join(parts[i:]) for i in range(len(parts)) if "/".join(parts[i:]) in paths]
+            return candidates[0] if len(candidates) == 1 else None
+        if path in paths and is_clean_relative_path(path):
+            return path
+        if "/" not in path:
+            candidates = [p for p in paths if p.rsplit("/", 1)[-1] == path]
+            return candidates[0] if len(candidates) == 1 else None
+        return None
+    locations = list(LOCATION.finditer(text))
+    valid = 0
+    for m in locations:
+        raw = m.group("path")
+        path = resolve(raw)
+        # A basename label can be disambiguated only by its immediately following link.
+        following = re.match(r"`?\]\(([^)]+)\)", text[m.end():])
+        if path is None and "/" not in raw and following:
+            full = LOCATION.fullmatch(following.group(1))
+            if full and full.group("path").rsplit("/", 1)[-1] == raw and (full.group("lines") or full.group("anchor")) == (m.group("lines") or m.group("anchor")):
+                path = resolve(full.group("path"))
+        if path is None:
+            errors.append(f"citation: file '{raw}' does not resolve uniquely")
+            continue
+        ranges = (m.group("lines") or m.group("anchor").replace("-L", "-")).replace("–", "-").split(",")
+        lines = blob(path).splitlines()
+        selected = []
+        for item in ranges:
+            nums = item.split("-"); lo, hi = int(nums[0]), int(nums[-1])
+            if not 1 <= lo <= hi <= len(lines):
+                errors.append(f"citation: range '{m.group()}' outside 1..{len(lines)}")
+            else:
+                selected.extend(lines[lo-1:hi])
+        # A named link is a stronger claim: its identifier occurs in the range.
+        prefix = text[:m.start()]
+        named = re.search(r"\[`([^`]+)`\]\($", prefix)
+        if named and re.fullmatch(IDENTIFIER, named.group(1)) and not token(named.group(1), "\n".join(selected)):
+            errors.append(f"citation: anchor '{named.group(1)}' absent from '{m.group()}'")
+        if selected:
+            valid += 1
+    # Resolve identifiers against actual blobs, never prompt text or the allowlist itself.
+    content = "\n".join(blob(p) for p in sorted(paths) if p != "scripts/review/external-names.tsv")
+    removed = ""
+    if base:
+        proc = subprocess.run(["git", "-C", repo, "diff", "--no-ext-diff", "--unified=0", base, commit, "--"], capture_output=True, text=True, check=True)
+        removed = "\n".join(l[1:] for l in proc.stdout.splitlines() if l.startswith("-") and not l.startswith("---"))
+    absent = set(re.findall(r"^ABSENT: (" + IDENTIFIER + r")$", text, re.M))
+    external = set()
+    if "scripts/review/external-names.tsv" in paths and "lean-toolchain" in paths:
+        for row in blob("scripts/review/external-names.tsv").splitlines():
+            fields = row.split("\t")
+            if len(fields) == 3 and fields[0] == blob("lean-toolchain").strip() and fields[2]:
+                external.add(fields[1])
+    for m in re.finditer(r"`([^`\n]+)`", text):
+        name = m.group(1)
+        if name.startswith("proposed:") and not positive:
+            continue
+        if not re.fullmatch(IDENTIFIER, name) or not ("." in name or "_" in name or re.search(r"[a-z][A-Z]", name)):
+            continue
+        if name in absent or name in external:
+            continue
+        if not all(token(part, content) or token(part, removed) for part in name.split(".")):
+            errors.append(f"citation: identifier '{name}' unresolved")
+    if positive and not valid:
+        errors.append("citation: positive verdict requires at least one resolvable file:line citation")
+    return "; ".join(dict.fromkeys(errors)) or None
 
 
 def evaluate_output(
@@ -168,6 +186,7 @@ def evaluate_output(
     verdicts: list[str],
     rc: int = 0,
     incomplete: bool = False,
+    base: str | None = None,
 ) -> tuple[str, str]:
     combined = f"{text}\n{log_text}" if log_text else text
     norm_nonempty = [normalize_line(line) for line in text.splitlines()]
@@ -246,9 +265,9 @@ def evaluate_output(
             )
 
     problem = citation_error(strip_directives(text), repo, commit, valid_blobs,
-                             matched_verdict.lower() in ("clean", "accept"))
+                             matched_verdict.lower() in ("clean", "accept"), base)
     if problem:
-        return "blocked", problem
+        return "invalid", problem
 
     return matched_verdict, f"verified {len(read_paths)} READ path(s), REPOSITORY: readable, VERDICT: {matched_verdict}"
 
@@ -266,6 +285,7 @@ def strip_directives(text: str) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate reviewer output against the Concrete contract.")
     parser.add_argument("--commit", help="Reviewed commit SHA whose tree validates READ: paths")
+    parser.add_argument("--base", help="Base of reviewed diff for removed identifiers")
     parser.add_argument("--repo", default=".", help="Git repository path (default: .)")
     parser.add_argument("--verdicts", help="Comma-separated allowed VERDICT values (e.g. clean,findings)")
     parser.add_argument("--rc", type=int, default=0, help="Reviewer process exit status")
@@ -307,6 +327,7 @@ def main() -> int:
         verdicts=verdicts,
         rc=args.rc,
         incomplete=args.incomplete,
+        base=args.base,
     )
     print(f"status: {status}")
     print(f"reason: {reason}")

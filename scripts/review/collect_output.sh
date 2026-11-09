@@ -95,7 +95,7 @@ verify_review_archive() {
 }
 
 validate_reviewer_output() {
-  if [ "$#" -ne 8 ]; then
+  if [ "$#" -ne 8 ] && [ "$#" -ne 9 ]; then
     echo "collect_output: usage: validate_reviewer_output <repo> <commit> <review-tree> <manifest-file> <out-file> <log-file> <verdicts> <rc>" >&2
     return 2
   fi
@@ -112,12 +112,13 @@ validate_reviewer_output() {
     printf 'status: blocked\nreason: reviewer modified the read-only archived review tree\ntree_modified: yes\n'
     return 0
   fi
-  local incomplete_flag=()
+  local incomplete_flag=() base_flag=()
+  if [ -n "${9:-}" ]; then base_flag=(--base "$9"); fi
   if bounded_is_incomplete "$rc"; then
     incomplete_flag=(--incomplete)
   fi
   python3 -I "$COLLECT_OUTPUT_DIR/output_contract.py" \
-    --repo "$repo" --commit "$commit" --verdicts "$verdicts" \
+    --repo "$repo" --commit "$commit" "${base_flag[@]}" --verdicts "$verdicts" \
     --rc "$rc" "${incomplete_flag[@]}" --log "$log_file" "$out_file"
 }
 

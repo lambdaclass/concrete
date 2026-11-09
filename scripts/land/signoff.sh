@@ -215,6 +215,7 @@ check() {
     c_reason="$(printf '%s\n' "$c_out" | sed -n 's/^reason: //p' | head -1)"
     case "$c_status" in
       ACCEPT|REJECT) verdicts="$verdicts${verdicts:+, }$r $c_status" ;;
+      invalid) bad "the $r output is invalid ($c_reason)" ;;
       noverdict|refused) bad "the $r output has no verdict ($c_reason)" ;;
       *) bad "the $r output fails the reviewer-output contract: $c_reason" ;;
     esac
