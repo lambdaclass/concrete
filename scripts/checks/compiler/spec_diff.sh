@@ -1027,8 +1027,8 @@ run_replay() {
   esac
   if [ "${SPEC_DIFF_REPLAY_CONTROL:-}" = spec-oracle ]; then
     require_bounded "${driver[@]}" control-spec-oracle "$d" "$target" --control SPEC_DIFF_PLANTED_CONTROL
-    cp "$d/spec-expected/status" "$d/status"
-    cp "$d/spec-expected/stderr" "$d/stderr"
+    cp "$d/wrong-expected/status" "$d/status"
+    cp "$d/wrong-expected/stderr" "$d/stderr"
   elif [ "$replay_leg" = spec ] && [ "${SPEC_DIFF_REPLAY_CONTROL:-}" = report-mismatch ]; then
     bounded_remaining "${driver[@]}" replay-spec "$replay_seed" "$replay_index" "$d" "$target" || rc=$?
     [ "$rc" -eq 0 ] || [ "$rc" -eq 4 ] || exit "$rc"
@@ -1412,7 +1412,7 @@ control_lcb_off_by_one() {
 }
 
 control_spec_oracle() {
-  local d="$work/control-spec-oracle" leg_obs
+  local d="$work/control-spec-oracle" leg_obs bundle reproduced
   control_bounded "${driver[@]}" control-spec-oracle "$d" "$target" --control SPEC_DIFF_PLANTED_CONTROL || return $?
   cp "$d/spec-expected/status" "$d/status"
   cp "$d/spec-expected/stderr" "$d/stderr"
@@ -1421,11 +1421,26 @@ control_spec_oracle() {
   control_match "$d/spec-expected" "$d/llvm" "stand-in LLVM does not match the spec" || return 1
   control_match "$d/spec-expected" "$d/lcb" "stand-in LCB does not match the spec" || return 1
   control_match "$d/spec-expected" "$d/lcb_eval" "stand-in evaluator does not match the spec" || return 1
-  for leg_obs in "$d/llvm" "$d/lcb" "$d/lcb_eval"; do
-    if judge "$d/wrong-expected" "$leg_obs"; then
-      echo "control setup: judge accepted planted expected exit 43 on $leg_obs" >&2
-      return 1
-    fi
+  # First prove the actual spec oracle, then plant the wrong oracle through
+  # the same lifecycle and durable recorder used by every candidate mismatch.
+  cp "$d/wrong-expected/status" "$d/status"
+  cp "$d/wrong-expected/stderr" "$d/stderr"
+  reset_observations "$d"
+  control_candidate "$d" mismatch || return $?
+  for leg_obs in lcb_eval llvm lcb; do
+    grep -qxF "FAIL spec seed control-spec-oracle index 0 [$leg_obs]: observation mismatch" \
+      "$d/diagnostics.txt" || {
+        echo "control setup: spec-oracle missing exact $leg_obs mismatch" >&2
+        return 1
+      }
+    control_match "$d/spec-expected" "$d/$leg_obs" "stand-in $leg_obs changed under wrong expectation" || return 1
+  done
+  bundle=$(candidate_bundle_path spec "$d")
+  verify_saved_replay "$bundle" "$work/spec-oracle-reproduced" "$work/spec-oracle-replayed.log" || return $?
+  reproduced=$(cat "$work/spec-oracle-reproduced")
+  cmp -s "$bundle/expected/status" "$reproduced/expected/status" || return 1
+  for leg_obs in lcb_eval llvm lcb; do
+    cmp -s "$bundle/observed-$leg_obs/status" "$reproduced/observed-$leg_obs/status" || return 1
   done
   echo "FAIL spec-oracle: judge rejected planted exit 43 against spec exit 42 on all 3 legs"
   return "$PLANTED_FAIL_RC"

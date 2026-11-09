@@ -27,7 +27,7 @@ class Orchestration(unittest.TestCase):
                 'judge_available', 'reset_observations', 'control_candidate', 'native_one', 'absorb_native_result', 'collect_available',
                 'reconcile_worker_exit', 'finish_diff', 'run_control', 'run_replay', 'first_outcome_index',
                 'control_drop_overflow', 'control_lcb_off_by_one', 'control_spec_oracle',
-                'verify_failure_bundle_and_replay', 'collect_control_failures', 'control_expected_record'))
+                'control_match', 'verify_failure_bundle_and_replay', 'collect_control_failures', 'control_expected_record'))
             setup = f'''set -euo pipefail
 work={work}
 seed=test
@@ -146,6 +146,53 @@ if control_expected_record observation-failure "$b" observation lcb_eval \
  'FAIL bir seed test index 0 [lcb_eval]: observation failed'; then exit 9; fi
 echo 'ok observer plant requires exact backend diagnostic'
 ''', 0, 'ok observer plant requires exact backend diagnostic')
+
+    def test_spec_oracle_wrong_expectation_uses_lifecycle_and_replay(self):
+        for mode in ('control', 'replay'):
+            with self.subTest(mode=mode):
+                diagnostics = tuple(f'FAIL spec seed control-spec-oracle index 0 [{b}]: observation mismatch'
+                                    for b in ('lcb_eval', 'llvm', 'lcb'))
+                def check(work, regressions):
+                    self.assertFalse(work.exists())
+                    self.assert_bundle(regressions, 'spec', 'control-spec-oracle', 0,
+                                       'mismatch', diagnostics,
+                                       ('expected/status', 'observed-lcb_eval/status',
+                                        'observed-llvm/status', 'observed-lcb/status'))
+                    b = next(regressions.rglob('latest'))
+                    self.assertEqual((b / 'expected/status').read_text().strip(), '43')
+                    self.assertIn('SPEC_DIFF_REPLAY_CONTROL=spec-oracle', (b / 'replay.sh').read_text())
+                self.run_shell('''
+trap 'finish_diff $?' EXIT
+target=stub; driver=(stub)
+native_build() { return 0; }
+observe_remaining() { echo 42 >"$2.status"; : >"$2.stderr"; : >"$2.stdout"; }
+control_bounded() {
+ local dest=$3
+ register_candidate spec control-spec-oracle 0 "$dest" spec-oracle
+ mkdir -p "$dest/spec-expected" "$dest/wrong-expected"
+ echo 42 >"$dest/spec-expected/status"; : >"$dest/spec-expected/stderr"
+ echo 43 >"$dest/wrong-expected/status"; : >"$dest/wrong-expected/stderr"
+ echo 42 >"$dest/status"; : >"$dest/stderr"
+ echo 42 >"$dest/lcb_eval.status"; : >"$dest/lcb_eval.stderr"
+ echo term >"$dest/program.lean.txt"
+}
+require_bounded() { control_bounded "$@"; }
+verify_saved_replay() {
+ [ "$(cat "$1/expected/status")" = 43 ] || return 1
+ [ "$(wc -l <"$1/failure-record.tsv")" -eq 3 ] || return 1
+ printf '%s\\n' "$1" >"$2"
+ echo 'ok spec-oracle saved wrong expectation and all exact mismatches'
+}
+''' + ('''
+run_control spec-oracle '^FAIL spec-oracle: judge rejected planted exit 43 against spec exit 42 on all 3 legs$' control_spec_oracle
+exit "$fail"
+''' if mode == 'control' else '''
+replay=spec:control-spec-oracle:0
+SPEC_DIFF_REPLAY_CONTROL=spec-oracle
+run_replay
+'''), 0 if mode == 'control' else 1,
+                    ('ok   control spec-oracle: failed for the planted reason',)
+                    if mode == 'control' else diagnostics, check)
 
     def test_unrelated_exit_cannot_reclassify_timed_out_candidate(self):
         self.run_shell('''
