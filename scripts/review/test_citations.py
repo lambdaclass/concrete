@@ -120,10 +120,22 @@ with tempfile.TemporaryDirectory() as directory:
     sha = git("rev-parse", "HEAD")
     check("ROADMAP.md:1 README.md:1 ISSUES.tsv:1", "clean")
     check(f"[source.lean:1](file://{directory}/source.lean#L1)", "clean")
-    check("[source.lean:1–2,2](source.lean#L1)", "clean")
+    check("[source.lean:1–2,2](source.lean#L1-L2)", "clean")
     check("source.lean:1", "clean")
-    check("[source.lean:1–2,2](legacy/source.lean#L1)", ("invalid", "citation: range 'source.lean:1–2,2' outside 1..1"))
-    check("[source.lean:2](source.lean#L1)", ("invalid", "citation: basename label 'source.lean:2' disagrees with link target"))
+    check("[source.lean:1–2,2](legacy/source.lean#L1)", ("invalid", "citation: basename label 'source.lean:1–2,2' is not contained in the same file and link target range"))
+    # A target with disjoint intervals cannot authorize the gap between them.
+    check("[source.lean:2](source.lean:1,1)",
+          ("invalid", "citation: basename label 'source.lean:2' is not contained in the same file and link target range"))
+    check("[source.lean:2,1](source.lean#L1-L2)", "clean")
+    check("[source.lean:2](source.lean#L1-L2)", "clean")
+    check("[source.lean:1–2](source.lean:1,2)", "clean")
+    check("[source](source.lean#L1-L2) (`source.lean:2`)", "clean")
+    check("(`source.lean:2`) [source](source.lean#L1-L2)", "clean")
+    check("[source.lean:1-2](source.lean#L1)",
+          ("invalid", "citation: basename label 'source.lean:1-2' is not contained in the same file and link target range"))
+    check("[source.lean:3](source.lean#L1-L3)",
+          ("invalid", "citation: range 'source.lean:3' outside 1..2; citation: range 'source.lean#L1-L3' outside 1..2; citation: positive verdict requires at least one resolvable file:line citation"))
+    check("[source.lean:2](source.lean#L1)", ("invalid", "citation: basename label 'source.lean:2' is not contained in the same file and link target range"))
     (root / "legacy/only.lean").write_text("legacyOnly\n")
     git("add", ".")
     git("-c", "user.name=Control", "-c", "user.email=control@example.invalid", "commit", "-qm", "legacy-only basename")
@@ -159,7 +171,7 @@ with tempfile.TemporaryDirectory() as directory:
                  "(`unit.lean:1`) [unit.lean](active/unit.lean#L1)"]:
         check(body, "clean")
     check("[unit.lean](active/unit.lean#L1) (`unit.lean:2`)",
-          ("invalid", "citation: basename label 'unit.lean:2' disagrees with link target"))
+          ("invalid", "citation: basename label 'unit.lean:2' is not contained in the same file and link target range"))
     check("source.lean:1 `exportOnlyName`", ("invalid", "citation: identifier 'exportOnlyName' unresolved"))
     # Untracked helper text cannot authorize identifiers either.
     (root / "untracked.txt").write_text("untrackedOnlyName\n")

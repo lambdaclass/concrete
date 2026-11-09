@@ -5,3 +5,5 @@ Round 5 resolves filenames from the reviewed tracked tree, gives exact root path
 Round 6 declares harness files as READ-only context, validates quoted-text anchors without granting identifier authority, rejects outside-root links, and preserves CIa/I5a reviewer evidence. Round 7 centralizes the citation contract in the reviewer README so prompts and manuals cannot drift.
 
 Round 7 binds quoted-text labels to individual validated targets, shares harness declarations across sign-off collection and verification, and extends exact pinned external-name authority to Python and Bash.
+
+Basename labels may cite a narrower range within their link target; all cited lines must exist, and labels outside the target fail with an explicit containment diagnostic.

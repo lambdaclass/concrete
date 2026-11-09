@@ -151,8 +151,20 @@ def citation_error(text, repo, commit, paths, positive, base=None, review_root=N
     basenames = {p.rsplit("/", 1)[-1] for p in paths}
     def filename(name):
         return name in paths or name in basenames
-    def start(location):
-        return int(re.split(r"[-–,]", location.group("lines") or location.group("anchor"))[0])
+    def intervals(location):
+        spec = location.group("lines") or location.group("anchor").replace("-L", "-")
+        return [tuple(map(int, (item.split("-")[0], item.split("-")[-1])))
+                for item in spec.replace("–", "-").split(",")]
+    def contained(label, target):
+        # Merge adjacent target intervals without expanding untrusted line numbers.
+        merged = []
+        for lo, hi in sorted(intervals(target)):
+            if merged and lo <= merged[-1][1] + 1:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], hi))
+            else:
+                merged.append((lo, hi))
+        return all(any(a <= lo <= hi <= b for a, b in merged)
+                   for lo, hi in intervals(label))
     for link in re.finditer(r"\]\(([^)\s]+)\)", text):
         target = link.group(1)
         if ("#L" in target or re.search(r":[0-9]", target)) and not LOCATION.fullmatch(target):
@@ -173,10 +185,10 @@ def citation_error(text, repo, commit, paths, positive, base=None, review_root=N
         following = re.match(r"`?\]\(([^)]+)\)", text[m.end():])
         if "/" not in raw and following:
             full = LOCATION.fullmatch(following.group(1))
-            if full and full.group("path").rsplit("/", 1)[-1] == raw and start(full) == start(m):
+            if full and full.group("path").rsplit("/", 1)[-1] == raw and contained(m, full):
                 path = resolve(full.group("path"), exact=True)
             else:
-                errors.append(f"citation: basename label '{m.group()}' disagrees with link target")
+                errors.append(f"citation: basename label '{m.group()}' is not contained in the same file and link target range")
                 continue
         # A separate parenthesized basename citation may sit on either side of
         # its own full Markdown link. Only immediate adjacency supplies context.
@@ -186,10 +198,10 @@ def citation_error(text, repo, commit, paths, positive, base=None, review_root=N
             adjacent = before or after
             if adjacent:
                 full = LOCATION.fullmatch(adjacent.group(1))
-                if full and full.group("path").rsplit("/", 1)[-1] == raw and start(full) == start(m):
+                if full and full.group("path").rsplit("/", 1)[-1] == raw and contained(m, full):
                     path = resolve(full.group("path"), exact=True)
                 else:
-                    errors.append(f"citation: basename label '{m.group()}' disagrees with link target")
+                    errors.append(f"citation: basename label '{m.group()}' is not contained in the same file and link target range")
                     continue
         relative = raw
         if raw.startswith("file://"):
