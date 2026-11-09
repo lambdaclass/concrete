@@ -1020,3 +1020,263 @@ supervision indentation, preserving their exact diagnostics.
 Step 7 and R-0690's deployment baseline, durable archive, independent watchdog and
 real GitHub/concrete-ci-2 qualification remain outstanding as described above.
 No local fixture or completion-step marker discharges those live obligations.
+
+
+### Round 22 design only: step 6 evidence and lifecycle contract
+
+This section supersedes the implementation-completeness claims in rounds 20 and
+21 above. It is a proposed structural design, not an implemented guarantee.
+Round 21 still masks evidence at inventory lookup, runner validation and the
+age filter, and can certify observer completion after execution errors. Its
+server slot-release failure is unresolved. Implementation requires the owner's
+explicit decision in a later round; this round changes documentation only.
+R-0676 owns this controller repair. No language/spec decision is proposed.
+The inputs are the round-20 and round-21 agy findings and the coordinator's
+concrete-ci-2 evidence for b2e80ba4d; passing the prior controls did not establish
+the invariant across all adapters. Reviewers must do the best long-term thing
+rather than cut corners.
+
+#### One evidence reduction owner
+
+`lib/scheduled_outcome.py` must own the typed reduction for every computed
+status, including observation summaries. A FAIL is an explicit gate/control
+failure in the private structured stream, a recomputed failure in gate/control
+evidence, or a trusted validation/qualification defect classified as FAIL.
+Malformed structured streams and identity/binding/provenance contradictions
+are defects, not unavailable measurements. An arbitrary untrusted cached
+`status` is not authority. A numeric exit alone does not add an explicit FAIL
+when a valid structured INCOMPLETE explains the gate exit. Without structured
+evidence, numeric exits retain the existing gate-result interpretation.
+
+The first record is the flushed structured event at execution, or the typed
+qualification/validation fact at its trusted reader. Facts carry exact scope
+(repository, SHA, tier, occurrence, attempt and gate/control where applicable),
+diagnostic, source and recoverability. Readers retain safely attributable
+failure facts even if other fields or sibling records are invalid. Identity
+validation must not lend a foreign record authority over the requested SHA:
+unattributable data becomes a local evidence-validation defect while valid
+siblings still contribute their own facts. Never accept a forged cached FAIL
+as proof of execution, or forged cached PASS as proof of qualification.
+
+The owner reduces a fact collection to a typed result containing status,
+ordered diagnostics, retained defects and operational recovery eligibility.
+The existing status precedence remains FAIL > INCOMPLETE > MISSING > PASS;
+empty execution is INCOMPLETE. STALE is a freshness disposition of otherwise
+qualified PASS, not a gate status or a way to erase evidence. Completion of an
+observer run is a separate execution fact, never a producer verdict.
+
+Ordering is part of this same reduction, not adapter-local early returns:
+
+1. Collect safely attributable evidence and all defects, including FAIL and
+   non-operational qualification outcomes, across the entire relevant history.
+2. Reduce defects before availability, provenance-dependency and freshness
+   judgments. FAIL is absorbing within the retained exact-SHA history. A
+   non-operational INCOMPLETE cannot be repaired by a newer SHA's PASS. Retain
+   the actual defect diagnostic even if the latest attempt is MISSING.
+3. Apply explicitly permitted recovery to operational absence only. A complete
+   same-SHA attempt may repair missing evidence; a fresh eligible ancestor can
+   cover operational availability without qualifying the tip. Neither rule
+   discards an earlier retained defect.
+4. Only then evaluate PASS prerequisites and age. Only an otherwise qualified
+   passing observation may become STALE. Sorting messages cannot substitute
+   for this reduction.
+
+Adapters translate observations into facts and render the owner's result. They
+must not select a status with an exception, boolean, first-error return, string
+prefix, timestamp filter or retry decision before this reduction. Independent
+errors accumulate; preserve the first specific execution error and additional
+diagnostics rather than replacing it with generic upload metadata. A defect
+found before an I/O error survives that error. An I/O error does not invent a
+FAIL for evidence that could not be read.
+
+The following is the required production-path census. Each row is an obligation
+on the same owner, not a new reducer.
+
+| Path deriving, replacing or hiding a status | Required fact/reduction boundary |
+|---|---|
+| `gate_outcome.result`: stream parsing, SHA check, nested events, numeric exit | Parse all available events; retain explicit failures and invalid-stream defects; reduce before exit translation. |
+| `scheduled_process.execute`: ordinary exit, timeout, cancellation, context cleanup | Reap writers, read the private stream before deletion, reduce retained defects before returning timeout/cancellation. |
+| `bounded_run` / `with_slot.sh`: watchdog translation, retry and slot errors | Retry only abandoned INCOMPLETE-only attempts after cleanup acknowledgement; FAIL never retries into PASS. Final timeout and slot unavailability are availability facts. |
+| `run.py`: gates, nested controls, exceptions, execution summary | Recompute nonempty execution and retain specific errors; feed exceptions as facts without overriding nested FAIL. |
+| `collect.py`: missing index, cancellation/skipping, overdue queue, missing logs/job metadata, absent inventory | Preserve uploaded evidence, add availability facts, recompute gate/control and qualification results; synthesize MISSING only for genuine absence. |
+| `protocol.validate` / `qualification`: shapes, identity, summary contradictions, runner, registry, commands, controls, artifacts, bindings, tools and seeds | Accumulate independent defects before reduction; recompute from the selected commit registry. Check present bindings even when the artifact SHA field is absent. Cached summaries never override evidence. |
+| `publish.py` / `append`: validation, collision, overdue replacement, retry, lease/readback | Preserve immutable attempt evidence; append late FAIL alongside overdue MISSING, retain collision defects, permit identical failure retries idempotently; refuse other overwrite. Publication errors cannot erase locally collected FAIL. |
+| `read_note` / history: malformed JSON, malformed sibling, future timestamp, duplicate attempt, lineage eligibility | Keep parseable siblings and typed errors together; reduce all retained defects before selecting latest eligible availability. A corrupt sibling cannot abort the scan before FAIL. |
+| `observe.main`: runner-inventory lookup before history observation (round-21 HIGH) | Inventory returns an explicit available/unavailable qualification input; it cannot prevent history evaluation. Genuine MISSING remains MISSING without inventory. |
+| `validate`: empty runner set raises forged-runner before FAIL (round-21 HIGH) | Move membership into qualification facts. Distinguish unavailable inventory from available inventory proving nonmembership; neither throws away recorded execution FAIL. |
+| `protocol.observe`: age-window filtering before defects (round-21 MEDIUM) | Reduce defects over all attempts before latest selection and freshness. Aged missing controls, unavailable registry and recorded FAIL retain their diagnostic and recovery eligibility. |
+| `observe_main`: per-SHA results, newer PASS, ancestor coverage, tier aggregation and CLI exit | Use typed results, never prefix tests or unconditional STALE skipping to determine recovery. Surface every exact-SHA defect with FAIL first. |
+| `observer_watch`: occurrence inventory, pagination, completion step and attempt lookup; collector/publisher sweep aggregation | Shared encoded queries and attempt-specific independent completion evidence; missing occurrence is a FAIL fact even with no campaign runs. Reduce sweep defects before aggregate exit. |
+
+Runner inventory is a qualification input with three states: verified member,
+verified nonmember and dependency unavailable. A PASS requires verified
+self-hosted membership. Known nonmembership is a forged-runner defect;
+unavailable inventory yields dependency INCOMPLETE for a would-be PASS.
+Membership never strengthens execution evidence or hides FAIL. MISSING needs
+no invented runner. Empty inventory and unavailable inventory are distinct
+values, not the same empty-set fallback. Keep the existing ISS-0029 dependency
+identity; allocate no new issue or roadmap ID here.
+
+#### Observer completion is a committed execution fact
+
+Observation success means main history was read, every configured tier was
+visited, evidence judgments were produced and reported, and no observer
+execution error occurred. Reporting producer FAIL, MISSING or a qualification
+defect is successful observation, with a failing producer verdict. A git/API
+timeout, exception while reading a tier, reporting failure or incomplete tier
+loop is unsuccessful execution even if earlier tiers were reported. Explicit
+inventory unavailability handled as a qualification input is distinguishable
+from an unexpected observer execution exception.
+
+The observer returns a structured execution receipt separate from its verdict
+exit code. Each bounded attempt has a fresh private receipt location and
+attempt identity; it cannot access live `GITHUB_OUTPUT`. It prepares a receipt
+only after all tiers and reporting finish without execution errors. Preparation
+is not completion certification. The nonretryable parent commits completion
+only after the bounded owner acknowledges terminal execution and cleanup,
+checks the receipt identity and completeness, and verifies that the outcome is
+a completed observation (including a completed producer FAIL). An abandoned
+attempt's receipt is discarded, even if it wrote one immediately before hanging.
+A successful later retry must supply its own receipt.
+
+Only that final commit may append `completed=true` to the live Actions output;
+the always-eligible completion step consumes it. No write after a caught error
+or inside a retryable bounded attempt can certify execution. Timeout, crash,
+cancellation and abandonment cannot pass the parent commit predicate. If the
+parent crashes before commit there is no completion output; after commit the
+observation has already finished and the receipt certifies a real completed
+run. The independent watcher still requires the named completion step itself
+to finish successfully and matches the scheduled occurrence/run attempt.
+
+#### Slot release is a lifecycle acknowledgement
+
+Observed coordinator evidence: b2e80ba4d's closed-stdin scheduled gate failed
+with BlockingIOError at test_slot.py:247 for cancel=False. The isolated test
+passed 60/60 on both candidate and 7de83e5dc. Whole-gate candidate runs failed
+3/6 (two lock errors and one clean-suite module failure). The base whole-gate
+comparison is pending with the coordinator; this note draws no regression
+conclusion from it. No additional probes or suites were run in this round.
+
+Code supplies a concrete descriptor-lifetime gap. `_client` transfers the slot
+open-file description over IPC. `_Tree.handle` retains the received descriptor
+in `handles` until its finally block, after `attempt` returns. `terminate`
+computes a transitive request census, sets cancellation flags, signals process
+groups and polls group disappearance; it does not wait for each selected
+handler to close its received handles. `attempt` removes its request before
+the handler closes those descriptors. A nested client can receive its outer
+timeout acknowledgement while another selected handler is still in that gap.
+The broker descriptor is outside the killed process groups and can retain the
+flock after the gate PIDs disappear. Root `close` joins a snapshot of threads
+with timeouts, without asserting every join completed. Adopted children that
+escape sessions are drained at root shutdown, not necessarily before a nested
+request's completion. These are structural gaps, not proof that one particular
+gap caused each server failure.
+
+The current test records only the gate leader and one fork, asserts those PIDs
+absent, then immediately attempts nonblocking flock. It does not prove handler
+completion, transferred-descriptor closure, or absence of other descendants.
+Standalone execution and execution under the full hermetic module use different
+broker nesting and timing; more isolated repetitions cannot establish safety.
+
+The lifecycle owner must retain a request until its complete subtree is drained:
+seal it against new descendants, account for accepted/in-flight registrations,
+cancel every descendant, reap leaders and adopted descendants, await every
+child handler's descriptor-close acknowledgement, close its own transferred
+handles, then publish terminal outcome and retire membership. Parent completion
+waits on these acknowledgements, not just group disappearance or a census
+snapshot. Track explicit request states and ownership of every duplicated slot
+descriptor; a handler must not wait for itself or join while holding the registry
+lock. Launch/registration and sealing share synchronization. Escaped sessions
+need attributable containment/reaping, not killing unrelated shared-host PIDs.
+If attribution cannot be guaranteed with the current broker, the later design
+must use an owned kernel containment boundary rather than claim a PID snapshot
+is complete. Reuse inherited slots without `flock -u`, which would unlock the
+shared open-file description prematurely.
+
+Drain uses one absolute cleanup deadline including grace and acknowledgements.
+Deadline expiry returns an explicit cleanup INCOMPLETE, never normal terminal
+success or retry permission; retain any earlier FAIL and attach cleanup detail.
+Do not free capacity while a live descendant could still run. This is a bounded
+protocol failure, not an invitation to sleep longer or poll until a flaky lock
+assertion eventually passes.
+
+The deterministic test will stop a real nested handler at the point after its
+groups are reaped but before it closes the transferred slot descriptor, using
+a private test handshake. Verify an independent contender reports locked and
+the outer caller has not received completion. Release the barrier; require
+close acknowledgements, full subtree reaping and immediate lock acquisition
+after completion. A second barrier delays descendant registration across
+cancellation and proves sealing accounts for it. Include a session-escaping
+descendant and a stalled close acknowledgement to prove bounded refusal. All
+barriers have absolute deadlines and private scratch paths. Exercise timeout
+and cancellation under a shared broker, closed stdin, clean/hostile environments
+and full test_slot module discovery/direct execution on concrete-ci-2. No
+production sleep or probabilistic repeat count is the correctness oracle.
+
+#### Mechanical control contract for the implementation round
+
+These are required future controls, not results claimed by this note. Each
+plant changes an isolated production copy and must hit the named boundary;
+the control harness checks exactly exit 1, empty stdout and the stderr line
+shown plus one newline. A syntax error, timeout, import error or unrelated
+failure is not a successful plant. Production assertions check typed facts,
+diagnostics, exit and streams (not merely nonzero). Parametric rows enumerate
+all required cases. Existing exact refusals remain in force.
+
+| Boundary / plant | Exact planted diagnostic (stderr) | Production oracle |
+|---|---|---|
+| Reducer precedence, nested control omitted, empty execution accepted | `FAIL scheduled outcome precedence: FAIL masked` | Independent exhaustive status oracle; nested FAIL remains FAIL; empty execution INCOMPLETE. |
+| Executor deletes stream before timeout/cancel; wrapper retries FAIL (retry and double timeout cases) | `FAIL scheduled monotonicity: <case> masked FAIL`, cases `executor cancellation`, `outer timeout retry`, `outer timeout double` | Exit 1, empty stdout, stderr `FAIL scheduled gate: explicit failure outcome` plus newline; no passing retry. INCOMPLETE-only abandoned attempt still exits 0 with stdout `recovered` plus newline, empty stderr. |
+| Collector drops cancelled/skipped index | `FAIL scheduled monotonicity: <case> masked FAIL`, cases `cancelled`, `skipped` | Gate FAIL, nested-control FAIL and qualification FAIL survive each job conclusion with evidence retained. |
+| Run/collector generic error overwrites specific worker error | `FAIL scheduled execution error: specific diagnostic overwritten` | `specific worker failure` retained through run, missing logs and job metadata; execution summary recomputed. |
+| Registry validation trusts cached outcomes, hides wrong partial binding, tool/seed substitution | `FAIL scheduled monotonicity: partial binding masked FAIL`; `FAIL scheduled provenance: tool/seed mismatch` | Wrong present binding gives `FAIL registry: wrong binding artifact scaling-daily/report/selected-sha.txt`; tool/seed substitutions remain FAIL through collect, serialized publication and observe; cached qualification ignored. |
+| Sibling validation early return: future, duplicate, invalid sibling, malformed JSON | `FAIL scheduled monotonicity: <case> masked FAIL`, cases `future`, `duplicate`, `invalid sibling`, `malformed JSON` | stdout `FAIL daily <sha>: recorded attempt` plus newline for histories with valid FAIL; wrong-SHA evidence never qualifies target; each independent defect retained. |
+| Publisher skips late FAIL after overdue; replay erases failure | `FAIL scheduled monotonicity: overdue publication masked FAIL` | Append-only overdue plus FAIL, exact FAIL observation; identical retry no duplicate; other collisions retain `replay would overwrite attempt`; lease dropped-response readback verifies exact content. |
+| Observer inventory preempts history | `FAIL scheduled monotonicity: observer inventory masked FAIL` | Unavailable inventory plus recorded FAIL prints `FAIL daily <sha>: recorded attempt`; genuine absent note still prints `MISSING daily <sha>: absent run`; no lookup exception skips history. |
+| Validator empty/unavailable runner preempts evidence | `FAIL scheduled monotonicity: runner qualification masked FAIL` | Existing gate/control FAIL stays FAIL for member/nonmember/unavailable inventory in collector, publisher and observer. Would-be PASS with unavailable inventory gives `INCOMPLETE dependency: ISS-0029 runner binding unavailable`; known nonmember gives `FAIL runner: forged runner: not inventoried concrete-ci-2`. |
+| Freshness before defect / latest MISSING hides non-operational defect / newer SHA recovers it | `FAIL scheduled history: nonoperational defect masked` | Fake-clock daily/weekly checks before, at and after window: exact original qualification diagnostic and operational=False persist with later MISSING and newer PASS. Only qualified old PASS gives `STALE <tier> <sha>: no fresh PASS`. |
+| Observer certifies after caught timeout, git/API error, tier error, missing environment or reporting error | `FAIL scheduled observer completion: execution error certified` | Each error produces no committed receipt/output; all tiers reporting producer FAIL completes with receipt, verdict exit 1 and exact producer diagnostics. |
+| Retry attempt writes live output / pre-timeout receipt reused / parent crashes before commit | `FAIL scheduled observer completion: abandoned attempt certified` | No `completed=true` after timeout, crash or cancellation; passing retry uses its own identity; completed producer FAIL alone commits `completed=true` plus newline. |
+| Watcher couples completion to producer conclusion or accepts missing/foreign-attempt step | `FAIL scheduled observer: missed occurrence` | Real matching completion passes even for producer FAIL; missing completion, manual or wrong-attempt run fails with this exact stdout line and exit 1, empty stderr, including an empty campaign sweep. |
+| Actions query loses encoding/pagination, transport forwards credentials | `FAIL scheduled Actions query: unencoded filter`; `FAIL scheduled transport: redirected credential` | Encoded query preserved on every page; same-origin and foreign redirects strip credentials; successful census exits 0 silently. |
+| Lifecycle acknowledges before handler closes FD | `FAIL scheduled slot lifecycle: completion before descriptor close` | Barrier holds lock and outer completion; releasing it yields acknowledgement then immediate independent flock success, timeout and cancellation. |
+| Lifecycle census misses late registration or escaped descendant | `FAIL scheduled slot lifecycle: descendant escaped drain` | Sealing rejects late launch or includes registered child; no attributable live process or descriptor remains at acknowledgement. |
+| Cleanup wait unbounded or deadline expiry called success | `FAIL scheduled slot lifecycle: cleanup deadline ignored` | Fake deadline/stalled acknowledgement returns bounded `INCOMPLETE scheduled process: cleanup deadline exhausted`; prior FAIL remains FAIL with that attached detail; no retry until drained. |
+
+For parametric diagnostics, substitute the literal case listed; `<sha>` and
+`<tier>` in production outputs are the fixture's independently specified exact
+identity. New runner/cleanup diagnostic spellings above are proposed contracts
+for owner approval, not claims about current output. Keep wrong-SHA artifacts,
+control-log refusal, immutable history, archive digest checks, process-context
+plants, stdin pipe proof, sandbox canaries and all steps 1–5 controls. Cheap PR
+controls exercise real adapters and deterministic handshakes; expensive complete
+campaigns stay daily/weekly. No gate is weakened to meet the PR budget.
+
+#### Ordered later implementation and remaining qualification
+
+1. Obtain the owner's decision on this design and diagnostic contracts. Have
+   the coordinator record any needed roadmap extension; writers allocate no IDs
+   and do not edit ROADMAP.md. No implementation begins in this round.
+2. Define typed facts/results and recovery rules in the single outcome owner,
+   with an independent exhaustive oracle and production-path census coverage.
+3. Migrate execution/retry and run/collection/validation, including explicit
+   inventory state and authoritative recomputation. Retain abandoned
+   INCOMPLETE-only retry semantics and specific diagnostics.
+4. Migrate publication/history/observation to accumulated facts before recovery
+   and freshness. Add every boundary plant, including the three round-21 paths.
+5. Implement the lifecycle seal/drain/descriptor acknowledgement protocol and
+   deterministic race controls; do not simply add a delay to the existing test.
+6. Implement observer prepare/commit receipt and independent occurrence census
+   integration in the owning workflow template, with abandoned-attempt controls.
+7. Commit validated logical slices forward. The coordinator runs different-model
+   reviews and exact-SHA concrete-ci-2 qualification, including full module and
+   clean/hostile closed-stdin/open-pipe matrices and the pending base comparison.
+
+Step 7 remains outstanding. R-0690 still owns real schedule delivery, queue and
+occupied-slot behavior, cancellation, replay and dropped-response publication,
+consumed-tool provenance, durable artifacts and occurrence archive beyond Actions
+retention, trusted deployment baseline, independent watchdog and archive-corruption
+refusal (`FAIL scheduled archive: digest mismatch`, exit 1). Rolling Actions
+history, local receipts, deterministic fixtures and this design note do not
+discharge those obligations. The coordinator must not mark step 6 or the live
+qualification complete based on the older README's claims.
