@@ -21,3 +21,5 @@ Identifier authority excludes the declared IDENTIFIER_EXCLUSIONS in output_contr
 Bare basenames must be unique across the whole tree and cannot resolve implicitly into legacy/. An exact Markdown link target may name a root file despite duplicate basenames. A basename label always resolves through its immediately following target and must agree on the numeric starting line, including en-dash and comma range syntax.
 
 Absolute file:// locations must be beneath the exact checkout root or the caller-supplied --review-root of the verified archive. The collector supplies that archive root after verifying its manifest. No suffix guessing or basename fallback is allowed. Historical evidence tests supply their recorded archive roots explicitly.
+
+Dotted named anchors check the final declaration component inside the selected lines and every namespace component in the cited file. This supports Lean namespace blocks without requiring a fully qualified spelling at the declaration. Wrong ranges and missing namespace components remain invalid.

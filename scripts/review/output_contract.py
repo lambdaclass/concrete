@@ -176,8 +176,10 @@ def citation_error(text, repo, commit, paths, positive, base=None, review_root=N
         # A named link is a stronger claim: its identifier occurs in the range.
         prefix = text[:m.start()]
         named = re.search(r"\[`([^`]+)`\]\($", prefix)
-        if named and not filename(named.group(1)) and re.fullmatch(IDENTIFIER, named.group(1)) and not token(named.group(1), "\n".join(selected)):
-            errors.append(f"citation: anchor '{named.group(1)}' absent from '{m.group()}'")
+        if named and not filename(named.group(1)) and re.fullmatch(IDENTIFIER, named.group(1)):
+            components = named.group(1).split(".")
+            if not token(components[-1], "\n".join(selected)) or not all(token(part, blob(path)) for part in components[:-1]):
+                errors.append(f"citation: anchor '{named.group(1)}' absent from '{m.group()}'")
         if selected:
             valid += 1
     # Resolve identifiers against actual blobs, never prompt text or the allowlist itself.

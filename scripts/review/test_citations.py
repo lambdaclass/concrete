@@ -80,6 +80,13 @@ with tempfile.TemporaryDirectory() as directory:
     archive_root = "/tmp/.claude/worktrees/topic"
     result = contract.citation_error("file://" + archive_root + "/source.lean:1", directory, sha, contract.commit_blob_paths(directory, sha), True, review_root=archive_root)
     assert result is None, result
+    (root / "namespaced.lean").write_text("namespace Ghost\ndef realAnchor := 1\nend Ghost\n")
+    git("add", ".")
+    git("-c", "user.name=Control", "-c", "user.email=control@example.invalid", "commit", "-qm", "namespace declaration")
+    sha = git("rev-parse", "HEAD")
+    check("[`Ghost.realAnchor`](namespaced.lean#L2)", "clean")
+    check("[`Ghost.realAnchor`](namespaced.lean#L1)", ("invalid", "citation: anchor 'Ghost.realAnchor' absent from 'namespaced.lean#L1'"))
+    check("[`Missing.realAnchor`](namespaced.lean#L2)", ("invalid", "citation: anchor 'Missing.realAnchor' absent from 'namespaced.lean#L2'; citation: identifier 'Missing.realAnchor' unresolved"))
     (root / "lean-toolchain").write_text("different-pin\n")
     git("add", ".")
     git("-c", "user.name=Control", "-c", "user.email=control@example.invalid", "commit", "-qm", "different toolchain pin")
