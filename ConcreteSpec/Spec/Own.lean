@@ -997,7 +997,7 @@ abbrev callOps : Exec.Operands where
   test := fun n => some (n != 0)
   allows := fun p => nomatch p
 
-def callee : FnId := ⟨⟨[]⟩, "callee"⟩
+def callee : FnId := ⟨ModuleId.mk ⟨"integration-fixtures", ⟨"0"⟩⟩ ["fixtures"] (by decide), "callee"⟩
 def callProgram : Exec.Program callOps :=
   ⟨[(callee, ⟨[(y, ())], (), ⟨1⟩,
     .cond (.useView y) .skip .skip ⟨0⟩⟩)]⟩

@@ -10,7 +10,8 @@ is equivalent to a finite terminated execution.
 
 The trap-line theorem is proved by decoding the line, not by restricting source paths. Decimal
 fields are parsed from right to left, so colons and parentheses in a path cannot make two different
-`(kind, site, span)` triples render identically. The only numeric decoder needed is Lean core's
+`(kind, site, path, line, col)` rendered tuples identical. Byte ranges are not printed or recovered.
+The only numeric decoder needed is Lean core's
 `Nat.ofDigitChars`, whose round trip through `Nat.toDigits` is already proved.
 -/
 
@@ -317,7 +318,8 @@ private theorem decodeKind_render (kind : TrapKind) (site : SiteId) (sp : Span) 
     simp [decodeKind, decodeKinds, TrapKind.all, linePrefix, trapLineChars, TrapKind.name,
       stripPrefix, List.append_assoc]
 
-private def decodeWithKind (kind : TrapKind) (cs : List Char) : Option (SiteId × Span) := do
+private def decodeWithKind (kind : TrapKind) (cs : List Char) :
+    Option (SiteId × String × Nat × Nat) := do
   let rest ← stripPrefix (linePrefix kind) cs
   let rest ← stripPrefix ")".toList rest.reverse
   let (site, rest) ← parseRevNat rest
@@ -326,16 +328,17 @@ private def decodeWithKind (kind : TrapKind) (cs : List Char) : Option (SiteId �
   let rest ← stripPrefix ":".toList rest
   let (line, rest) ← parseRevNat rest
   let rest ← stripPrefix ":".toList rest
-  if hline : 0 < line then
-    if hcol : 0 < col then
-      some (⟨site⟩, ⟨String.ofList rest.reverse, line, col, hline, hcol⟩)
+  if 0 < line then
+    if 0 < col then
+      some (⟨site⟩, String.ofList rest.reverse, line, col)
     else none
   else none
 
-private def decodeTrapLine (line : String) : Option (TrapKind × SiteId × Span) := do
+private def decodeTrapLine (line : String) :
+    Option (TrapKind × SiteId × String × Nat × Nat) := do
   let kind ← decodeKind line.toList
-  let (site, sp) ← decodeWithKind kind line.toList
-  some (kind, site, sp)
+  let (site, path, line, col) ← decodeWithKind kind line.toList
+  some (kind, site, path, line, col)
 
 private theorem trapLineChars_prefix (kind : TrapKind) (site : SiteId) (sp : Span) :
     trapLineChars kind site sp = linePrefix kind ++
@@ -344,7 +347,7 @@ private theorem trapLineChars_prefix (kind : TrapKind) (site : SiteId) (sp : Spa
   simp [trapLineChars, linePrefix, List.append_assoc]
 
 private theorem decodeWithKind_render (kind : TrapKind) (site : SiteId) (sp : Span) :
-    decodeWithKind kind (trapLineChars kind site sp) = some (site, sp) := by
+    decodeWithKind kind (trapLineChars kind site sp) = some (site, sp.path, sp.line, sp.col) := by
   have hline : 0 < sp.line := sp.line_pos
   have hcol : 0 < sp.col := sp.col_pos
   unfold decodeWithKind
@@ -352,19 +355,161 @@ private theorem decodeWithKind_render (kind : TrapKind) (site : SiteId) (sp : Sp
   simp [List.reverse_append, stripPrefix, parseRevNat_digits, hline, hcol]
 
 private theorem decodeTrapLine_render (kind : TrapKind) (site : SiteId) (sp : Span) :
-    decodeTrapLine (trapLine kind site sp) = some (kind, site, sp) := by
+    decodeTrapLine (trapLine kind site sp) = some (kind, site, sp.path, sp.line, sp.col) := by
   simp [decodeTrapLine, trapLine, decodeKind_render, decodeWithKind_render]
 
-/-- **Trap-line injectivity.** Equal rendered lines have the same trap kind, typed site and full
-source span (path, 1-based line and byte column). No restriction on punctuation in the path is
-needed. -/
-theorem trapLine_injective {kind₁ kind₂ : TrapKind} {site₁ site₂ : SiteId} {sp₁ sp₂ : Span}
-    (h : trapLine kind₁ site₁ sp₁ = trapLine kind₂ site₂ sp₂) :
-    kind₁ = kind₂ ∧ site₁ = site₂ ∧ sp₁ = sp₂ := by
+/-- Law (subject `ConcreteSpec.Core.Observe.trapLine`).
+**Trap-line injectivity over the rendered fields.** Equal rendered lines have the same trap
+kind, typed site, path, 1-based line and byte column. Byte offsets are deliberately absent from the
+trap-line format and are not claimed to be recovered. -/
+theorem trapLine_injective (kind₁ : TrapKind) (site₁ : SiteId) (sp₁ : Span) :
+    ∀ (kind₂ : TrapKind) (site₂ : SiteId) (sp₂ : Span),
+    trapLine kind₁ site₁ sp₁ = trapLine kind₂ site₂ sp₂ →
+    kind₁ = kind₂ ∧ site₁ = site₂ ∧ sp₁.path = sp₂.path ∧
+      sp₁.line = sp₂.line ∧ sp₁.col = sp₂.col := by
+  intro kind₂ site₂ sp₂ h
   have decoded := congrArg decodeTrapLine h
   rw [decodeTrapLine_render, decodeTrapLine_render] at decoded
-  cases decoded
-  exact ⟨rfl, rfl, rfl⟩
+  simpa only [Option.some.injEq, Prod.mk.injEq] using decoded
+
+/-- A second range with exactly the fields rendered by the trap line. -/
+def spDifferentRange : Span :=
+  ⟨Demo.sp.path, 41, 41, by decide, Demo.sp.line, Demo.sp.col, Demo.sp.line_pos, Demo.sp.col_pos⟩
+
+/-- Instance (law `ConcreteSpec.Core.Observe.trapLine_injective`, case `ConcreteSpec.Core.Observe.Demo.sp`). -/
+example : ∀ kind site sp, trapLine .overflow Demo.site Demo.sp = trapLine kind site sp →
+    TrapKind.overflow = kind ∧ Demo.site = site ∧ Demo.sp.path = sp.path ∧
+      Demo.sp.line = sp.line ∧ Demo.sp.col = sp.col :=
+  trapLine_injective .overflow Demo.site Demo.sp
+
+/-- Counter-example to the old full-span claim: the lines agree but the ranges do not. -/
+example : trapLine .overflow Demo.site Demo.sp = trapLine .overflow Demo.site spDifferentRange ∧
+    Demo.sp ≠ spDifferentRange := by decide
+
+/-- A renderer mutant that omits the byte column while retaining every other rendered field. -/
+def trapLineWithoutColumn (kind : TrapKind) (site : SiteId) (sp : Span) : String :=
+  "concrete: trap: " ++ kind.name ++ " at " ++ sp.path ++ ":" ++ toString sp.line ++
+    " (site " ++ toString site.id ++ ")"
+
+/-- A span differing from the demo only in its rendered byte column. -/
+def spDifferentColumn : Span := { Demo.sp with col := Demo.sp.col + 1, col_pos := by omega }
+
+/-- Planted (law `ConcreteSpec.Core.Observe.trapLine_injective`, case `ConcreteSpec.Core.Observe.Demo.sp`, subject `ConcreteSpec.Core.Observe.trapLine`, mutant `ConcreteSpec.Core.Observe.trapLineWithoutColumn`). -/
+example : ¬ (∀ kind site sp,
+    trapLineWithoutColumn .overflow Demo.site Demo.sp = trapLineWithoutColumn kind site sp →
+      TrapKind.overflow = kind ∧ Demo.site = site ∧ Demo.sp.path = sp.path ∧
+        Demo.sp.line = sp.line ∧ Demo.sp.col = sp.col) := by
+  intro injective
+  have equal := injective .overflow Demo.site spDifferentColumn (by decide)
+  have different : Demo.sp.col ≠ spDifferentColumn.col := by decide
+  exact different equal.2.2.2.2
+
+/-- Helper (inversion). Recovers the validated span and the renderer equation from a returned
+trap. This is lookup plumbing, never independent soundness evidence. (approved: APPR-C9-agy-3e22e6417). -/
+theorem trapTerminal_valid_location_inv (sources : SourceTable) (sites : SiteTable)
+    (valid : SiteTable.Valid sources sites) (kind : TrapKind) (site : SiteId)
+    (sp : Span) (line : String)
+    (trapped : trapTerminal sites kind site = some (.trapped kind site sp line)) :
+    sp.PathOk ∧ ∃ source, AList.lookup sources sp.path = some source ∧
+      sp.endOffset ≤ source.length ∧
+      sp.line = source.lineAt sp.startOffset ∧
+      sp.col = source.columnAt sp.startOffset ∧
+      line = trapLine kind site sp := by
+  unfold trapTerminal at trapped
+  cases hlookup : AList.lookup sites site with
+  | none => simp [hlookup] at trapped
+  | some found =>
+    simp only [hlookup, Option.map_some, Option.some.injEq, Terminal.trapped.injEq,
+      true_and] at trapped
+    rcases trapped with ⟨rfl, rfl⟩
+    obtain ⟨pathOk, source, hsource, locOk⟩ := valid site found hlookup
+    exact ⟨pathOk, source, hsource, locOk.1, locOk.2.1, locOk.2.2, rfl⟩
+
+/-- Concrete source and site tables connecting `SiteTable.Valid`, `tabSource`/`tabSpan`, and
+`trapTerminal`. -/
+def validSources : SourceTable := [("src/main.con", tabSource)]
+def validSites : SiteTable := [(⟨0⟩, tabSpan)]
+def badTabSpan : Span := { tabSpan with col := 1, col_pos := by decide }
+
+/-- Mutant `trapTerminal` that preserves the registered span in the terminal structure while
+rendering a fabricated column-1 line instead of the source-derived byte column. -/
+def fabricatedTrapTerminal (sites : SiteTable) (kind : TrapKind) (site : SiteId) : Option Terminal :=
+  (AList.lookup sites site).map fun sp =>
+    let badSpan : Span := { sp with col := 1, col_pos := by decide }
+    .trapped kind site sp (trapLine kind site badSpan)
+
+/-- Mutant `trapTerminal` that silently drops every trap observation instead of consulting `sites`. -/
+def silentTrapTerminal (_sites : SiteTable) (_kind : TrapKind) (_site : SiteId) : Option Terminal :=
+  none
+
+/-- Independently specified source observation: an unregistered site produces `none`, while a
+registered site produces a trap terminal for that exact site's span whose decoded line recovers the
+requested identity and byte-derived source coordinates. Non-trap terminals cannot describe a trap. -/
+def SourceTrapObservation (sources : SourceTable) (sites : SiteTable) (kind : TrapKind)
+    (site : SiteId) : Option Terminal → Prop
+  | none => AList.lookup sites site = none
+  | some (.trapped actualKind actualSite sp line) =>
+    actualKind = kind ∧ actualSite = site ∧ AList.lookup sites site = some sp ∧ sp.PathOk ∧
+      ∃ source, AList.lookup sources sp.path = some source ∧ sp.endOffset ≤ source.length ∧
+        decodeTrapLine line = some (kind, site, sp.path,
+          source.lineAt sp.startOffset, source.columnAt sp.startOffset)
+  | some _ => False
+
+/-- Law (subject `ConcreteSpec.Core.Observe.trapTerminal`).
+Parsing a produced trap observation recovers the requested identity, its registered site span, and
+its source-derived coordinates, while an unregistered site is refused (`none`). -/
+theorem trapTerminal_valid_location (sources : SourceTable) (sites : SiteTable)
+    (valid : SiteTable.Valid sources sites) (kind : TrapKind) (site : SiteId) :
+    SourceTrapObservation sources sites kind site (trapTerminal sites kind site) := by
+  cases found : AList.lookup sites site with
+  | none => simp [trapTerminal, found, SourceTrapObservation]
+  | some sp =>
+    obtain ⟨pathOk, source, sourceFound, bounds, line, col, _⟩ :=
+      trapTerminal_valid_location_inv sources sites valid kind site sp (trapLine kind site sp)
+        (by simp [trapTerminal, found])
+    simp only [trapTerminal, found, Option.map_some, SourceTrapObservation]
+    refine ⟨True.intro, True.intro, True.intro, pathOk, source, sourceFound, bounds, ?_⟩
+    rw [decodeTrapLine_render, line, col]
+
+/-- Helper (computation). The concrete tab source and site table satisfy the table invariant.
+(approved: APPR-C9-agy-3e22e6417). -/
+theorem validSites_valid : SiteTable.Valid validSources validSites := by
+  intro site sp hlookup
+  by_cases h : (⟨0⟩ : SiteId) = site
+  · subst site
+    simp [validSites, AList.lookup] at hlookup
+    subst sp
+    exact ⟨by decide, tabSource, rfl, by decide⟩
+  · simp [validSites, AList.lookup, h] at hlookup
+
+/-- Instance (law `ConcreteSpec.Core.Observe.trapTerminal_valid_location`, case `ConcreteSpec.Core.Observe.validSites`). -/
+example : SourceTrapObservation validSources validSites .abort ⟨0⟩
+    (trapTerminal validSites .abort ⟨0⟩) :=
+  trapTerminal_valid_location validSources validSites validSites_valid .abort ⟨0⟩
+
+/-- Planted (law `ConcreteSpec.Core.Observe.trapTerminal_valid_location`, case `ConcreteSpec.Core.Observe.validSites`, subject `ConcreteSpec.Core.Observe.trapTerminal`, mutant `ConcreteSpec.Core.Observe.fabricatedTrapTerminal`). -/
+example : SiteTable.Valid validSources validSites ∧
+    ¬ SourceTrapObservation validSources validSites .abort ⟨0⟩
+      (fabricatedTrapTerminal validSites .abort ⟨0⟩) := by
+  refine ⟨validSites_valid, ?_⟩
+  rintro ⟨_, _, _, _, source, found, _, decoded⟩
+  have equal : source = tabSource := by
+    have hf : "src/main.con" = tabSpan.path ∧ tabSource = source := by
+      simpa [validSources, fabricatedTrapTerminal, validSites, AList.lookup] using found
+    exact hf.2.symm
+  subst source
+  rw [decodeTrapLine_render] at decoded
+  have badColumn := congrArg (fun tuple => tuple.2.2.2.2) (Option.some.inj decoded)
+  revert badColumn
+  decide
+
+/-- Planted (law `ConcreteSpec.Core.Observe.trapTerminal_valid_location`, case `ConcreteSpec.Core.Observe.validSites`, subject `ConcreteSpec.Core.Observe.trapTerminal`, mutant `ConcreteSpec.Core.Observe.silentTrapTerminal`). -/
+example : SiteTable.Valid validSources validSites ∧
+    ¬ SourceTrapObservation validSources validSites .abort ⟨0⟩
+      (silentTrapTerminal validSites .abort ⟨0⟩) := by
+  refine ⟨validSites_valid, ?_⟩
+  dsimp [silentTrapTerminal, SourceTrapObservation]
+  decide
 
 /-- Rendering uses the byte column supplied by elaboration, not a Unicode-scalar column. -/
 theorem trap_line_uses_byte_columns (kind : TrapKind) (site : SiteId) (sp : Span) (before : String)

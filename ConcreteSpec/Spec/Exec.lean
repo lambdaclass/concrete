@@ -981,9 +981,9 @@ def a : Var := ⟨"a", 2⟩
 def t : Var := ⟨"t", 3⟩
 def p : Var := ⟨"p", 4⟩
 def s : SiteId := ⟨0⟩
-def logF : FnId := ⟨⟨[]⟩, "log"⟩
-def boomF : FnId := ⟨⟨[]⟩, "boom"⟩
-def mainF : FnId := ⟨⟨[]⟩, "main"⟩
+def logF : FnId := FnId.mk (ModuleId.mk ⟨"exec", ⟨"0"⟩⟩ ["exec"] (by decide)) "log"
+def boomF : FnId := FnId.mk (ModuleId.mk ⟨"exec", ⟨"0"⟩⟩ ["exec"] (by decide)) "boom"
+def mainF : FnId := FnId.mk (ModuleId.mk ⟨"exec", ⟨"0"⟩⟩ ["exec"] (by decide)) "main"
 
 /-- `fn log(x: Int) -> Unit { log x }` -/
 def logFn : Fn ops := ⟨[(x, .int)], .unit, ⟨100⟩, .prim none .log [.var x] s⟩
@@ -991,12 +991,12 @@ def logFn : Fn ops := ⟨[(x, .int)], .unit, ⟨100⟩, .prim none .log [.var x]
 /-- `fn boom() -> Unit { abort() }` -/
 def boomFn : Fn ops := ⟨[], .unit, ⟨101⟩, .abort ⟨9⟩⟩
 
-def bumpF : FnId := ⟨⟨[]⟩, "bump"⟩
+def bumpF : FnId := FnId.mk (ModuleId.mk ⟨"exec", ⟨"0"⟩⟩ ["exec"] (by decide)) "bump"
 
 /-- `fn bump() -> Unit { bump }` -/
 def bumpFn : Fn ops := ⟨[], .unit, ⟨102⟩, .prim none .bump [] s⟩
 
-def eatF : FnId := ⟨⟨[]⟩, "eat"⟩
+def eatF : FnId := FnId.mk (ModuleId.mk ⟨"exec", ⟨"0"⟩⟩ ["exec"] (by decide)) "eat"
 
 /-- `fn eat(p: Tok) -> Unit { log(move p) }` -/
 def eatFn : Fn ops := ⟨[(p, .tok)], .unit, ⟨103⟩, .prim none .log [.move p] s⟩

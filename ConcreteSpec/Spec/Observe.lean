@@ -112,10 +112,15 @@ abbrev InfiniteTrace (S : EventSignature) := Nat → Event S
 /-- A program's mapping from typed source sites to source spans. -/
 abbrev SiteTable := AList SiteId Span
 
-/-- A well-formed site table gives every resolved site a project-relative, forward-slash path.
-Elaboration's stronger normalized-path obligation remains O1. -/
-def SiteTable.Valid (sites : SiteTable) : Prop :=
-  ∀ site sp, AList.lookup sites site = some sp → sp.PathOk
+/-- Source files by their project-relative paths, used to validate stored diagnostic coordinates. -/
+abbrev SourceTable := AList String SourceText
+
+/-- A well-formed site table gives every resolved site a project-relative, forward-slash path and
+checks its range, line and byte column against that path's actual source bytes. Elaboration's
+stronger normalized-path obligation remains O1. -/
+def SiteTable.Valid (sources : SourceTable) (sites : SiteTable) : Prop :=
+  ∀ site sp, AList.lookup sites site = some sp → sp.PathOk ∧
+    ∃ source, AList.lookup sources sp.path = some source ∧ sp.LocationOk source
 
 /-- The character form of the decided trap line (OD101, Q7.10, runtime decision 2026-11-06).
 Keeping the append structure explicit also makes the exact delimiter bytes auditable. -/
@@ -397,8 +402,27 @@ example : ¬ SameObservation (S := signature) (.infinite (fun _ => Step.silent))
   simp [SameObservation]
 
 def site : SiteId := ⟨7⟩
-def sp : Span := ⟨"src/main.con", 3, 9, by decide, by decide⟩
+def sp : Span := ⟨"src/main.con", 40, 50, by decide, 3, 9, by decide, by decide⟩
 def sites : SiteTable := [(site, sp)]
+
+/-- The actual bytes behind the demo path and a span whose stored coordinates agree with them. -/
+def locationSources : SourceTable := [(sp.path, tabSource)]
+def badLocationSpan : Span := { tabSpan with col := 2, col_pos := by decide }
+
+/-- Accepted: path syntax, range bounds, line and byte column all validate against the source. -/
+example : SiteTable.Valid locationSources [(site, tabSpan)] := by
+  intro resolved span found
+  simp [AList.lookup] at found
+  rcases found with ⟨_, rfl⟩
+  exact ⟨by decide, tabSource, by decide, by decide⟩
+
+/-- Refused: a wrong stored column cannot pass site-table validation even when its path resolves. -/
+example : ¬ SiteTable.Valid locationSources [(site, badLocationSpan)] := by
+  intro valid
+  obtain ⟨_, source, resolved, location⟩ := valid site badLocationSpan (by simp [AList.lookup])
+  simp [locationSources, AList.lookup] at resolved
+  rcases resolved with ⟨_, rfl⟩
+  exact (by decide : ¬ badLocationSpan.LocationOk tabSource) location
 
 /-- The exact decided line, including the byte column and typed site identity. -/
 example : trapLine .overflow site sp =
@@ -418,7 +442,8 @@ example : (Terminal.exited 134).status = 134 ∧ Terminal.exited 134 ≠
 `a`, tab and `é`, not four after three Unicode scalar values. -/
 example : byteColumn "a\té" = 5 := by decide
 
-example : Span.HasByteColumn (Span.mk "src/main.con" 1 5 (by decide) (by decide)) "a\té" := rfl
+example : Span.HasByteColumn
+    (Span.mk "src/main.con" 4 4 (by decide) 1 5 (by decide) (by decide)) "a\té" := rfl
 
 /-- Refusing result binding through lifecycle instrumentation; all other demo operations are
 unchanged. -/

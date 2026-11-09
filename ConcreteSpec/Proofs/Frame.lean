@@ -473,7 +473,7 @@ private def c1Operands : Exec.Operands where
   test := fun n => some (n != 0)
   allows := fun _ _ _ _ => false
 
-private def c1FnId : FnId := ⟨⟨[]⟩, "seven"⟩
+private def c1FnId : FnId := ⟨ModuleId.mk ⟨"integration-fixtures", ⟨"0"⟩⟩ ["fixtures"] (by decide), "seven"⟩
 
 private def c1Fn : Exec.Fn c1Operands := ⟨[], (), ⟨0⟩, .ret (7 : Nat) ⟨0⟩⟩
 
@@ -509,7 +509,7 @@ private theorem c1ExplicitCall : C1Call c1Operands c1FnId c1Program c1Entry c1Ex
 callee, then takes the final return step. -/
 example : C1Call c1Operands c1FnId c1Program c1Entry c1Exit := c1ExplicitCall
 
-private def c1UnitFnId : FnId := ⟨⟨[]⟩, "unit"⟩
+private def c1UnitFnId : FnId := ⟨ModuleId.mk ⟨"integration-fixtures", ⟨"0"⟩⟩ ["fixtures"] (by decide), "unit"⟩
 
 private def c1UnitFn : Exec.Fn c1Operands := ⟨[], (), ⟨0⟩, .skip⟩
 
