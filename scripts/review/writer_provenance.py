@@ -100,6 +100,7 @@ import argparse
 import atexit
 import concurrent.futures
 import hashlib
+import functools
 import os
 import re
 import shutil
@@ -147,24 +148,60 @@ GIT_VIEW_ENV = (
 )
 
 
-def canonical_git_env(env: dict[str, str] | None = None) -> dict[str, str]:
-    result = (os.environ if env is None else env).copy()
-    for key in GIT_VIEW_ENV:
-        result.pop(key, None)
+# These two controls are deliberately inherited: git_sandbox uses them to
+# isolate global/system configuration for gate fixtures. All other GIT_CONFIG_*
+# variables can inject configuration and must be removed, including future keys.
+_SANDBOX_CONFIG_ENV = frozenset(("GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM"))
+
+
+@functools.lru_cache(maxsize=1)
+def _git_local_env_vars() -> frozenset[str]:
+    # Cache only Git's immutable vocabulary, never repository state. Bootstrap
+    # with every GIT_* variable removed except the sandbox isolation controls.
+    proc = canonical_git_run(".", ["rev-parse", "--local-env-vars"],
+                             verify=False, _discover_env=True)
+    if proc.returncode or not proc.stdout.strip():
+        raise ProvenanceError("cannot discover Git repository-local environment variables")
+    return frozenset(proc.stdout.splitlines())
+
+
+def canonical_git_env(env: dict[str, str] | None = None, *,
+                      _discover: bool = False) -> dict[str, str]:
+    source = os.environ if env is None else env
+    local_vars = frozenset() if _discover else _git_local_env_vars()
+    result = {key: value for key, value in source.items()
+              if key in _SANDBOX_CONFIG_ENV or not (
+                  key in local_vars or key in GIT_VIEW_ENV or key == "GIT_CONFIG"
+                  or key.startswith("GIT_CONFIG_")
+                  or (_discover and key.startswith("GIT_")))}
     result.update(GIT_NO_REPLACE_OBJECTS="1", GIT_OPTIONAL_LOCKS="0")
     return result
 
 
+class _VerifiedRepo(str):
+    """Operation-local capability; no repository state survives an invocation.
+
+    Helpers preserve this immutable path object, so their Git calls share the
+    entry verification. Plain-path library calls still verify independently.
+    A new command always constructs a fresh capability, even given an old one.
+    """
+
+    def __new__(cls, repo: str):
+        path = os.path.abspath(repo)
+        verify_canonical_repo_view(path)
+        return super().__new__(cls, path)
+
+
 def canonical_git_run(repo: str, args: list[str], *, input=None,
-                      text: bool = True, env=None, verify: bool = True):
-    # The unchecked path is private to the view probes: they cannot recursively
-    # verify themselves, but use precisely the same command and environment.
-    if verify:
+                      text: bool = True, env=None, verify: bool = True,
+                      _discover_env: bool = False):
+    # Only discovery and view probes use the unchecked bootstrap path.
+    if verify and not isinstance(repo, _VerifiedRepo):
         verify_canonical_repo_view(repo)
     return subprocess.run(
         ["git", "--no-replace-objects", "-c", "core.commitGraph=false", "-C", repo] + args,
         input=input, capture_output=True, text=text,
-        env=canonical_git_env(env), check=False,
+        env=canonical_git_env(env, _discover=_discover_env), check=False,
     )
 
 
@@ -1321,6 +1358,8 @@ def format_provenance_summary(
 
 def cmd_derive(args: argparse.Namespace) -> int:
     try:
+        args = argparse.Namespace(**vars(args))
+        args.repo = _VerifiedRepo(str(args.repo))
         writers, entries, histories = derive_range_provenance(
             repo=args.repo,
             base_rev=args.base,
@@ -1352,6 +1391,8 @@ def cmd_derive(args: argparse.Namespace) -> int:
 
 def cmd_report(args: argparse.Namespace) -> int:
     try:
+        args = argparse.Namespace(**vars(args))
+        args.repo = _VerifiedRepo(str(args.repo))
         writers, entries, histories = derive_range_provenance(
             repo=args.repo,
             base_rev=args.base,
@@ -1371,6 +1412,8 @@ def cmd_report(args: argparse.Namespace) -> int:
 
 def cmd_verify(args: argparse.Namespace) -> int:
     try:
+        args = argparse.Namespace(**vars(args))
+        args.repo = _VerifiedRepo(str(args.repo))
         if args.reviewer not in VALID_MODELS:
             raise ProvenanceError(f"invalid reviewer '{args.reviewer}'")
         claimed = parse_writer_csv(args.claimed_writer, "note writer")
@@ -1403,6 +1446,8 @@ def cmd_verify(args: argparse.Namespace) -> int:
 
 def cmd_export_log(args: argparse.Namespace) -> int:
     try:
+        args = argparse.Namespace(**vars(args))
+        args.repo = _VerifiedRepo(str(args.repo))
         _, entries, histories = derive_range_provenance(
             repo=args.repo,
             base_rev=args.base,
@@ -1438,6 +1483,8 @@ def cmd_export_log(args: argparse.Namespace) -> int:
 def cmd_stamp_commit(args: argparse.Namespace) -> int:
     """Stamp HEAD with writer author, trailer(s), and an SSH-signed writer-log note."""
     try:
+        args = argparse.Namespace(**vars(args))
+        args.repo = _VerifiedRepo(str(args.repo))
         if args.model not in VALID_MODELS:
             raise ProvenanceError(f"invalid model '{args.model}'")
         if not POS_INT_RE.match(str(args.round)):
@@ -1537,6 +1584,8 @@ def cmd_stamp_commit(args: argparse.Namespace) -> int:
 def cmd_backfill(args: argparse.Namespace) -> int:
     """Record an explicit SSH-signed backfilled writer-log entry (or append-only correction) for an unstamped commit."""
     try:
+        args = argparse.Namespace(**vars(args))
+        args.repo = _VerifiedRepo(str(args.repo))
         target_rev = args.commit or args.commit_pos
         if not target_rev:
             raise ProvenanceError("backfill requires --commit <commit> (or positional <commit>)")
@@ -2668,6 +2717,8 @@ def sync_notes_refs(
 
 def cmd_validate_notes(args: argparse.Namespace) -> int:
     try:
+        args = argparse.Namespace(**vars(args))
+        args.repo = _VerifiedRepo(str(args.repo))
         n = validate_notes_ref(
             repo=args.repo,
             notes_rev=args.notes_rev,
@@ -2684,6 +2735,8 @@ def cmd_validate_notes(args: argparse.Namespace) -> int:
 
 def cmd_fetch_notes(args: argparse.Namespace) -> int:
     try:
+        args = argparse.Namespace(**vars(args))
+        args.repo = _VerifiedRepo(str(args.repo))
         sha = fetch_notes_ref(
             repo=args.repo,
             remote=args.remote,
@@ -2707,6 +2760,8 @@ def cmd_fetch_notes(args: argparse.Namespace) -> int:
 
 def cmd_sync_notes(args: argparse.Namespace) -> int:
     try:
+        args = argparse.Namespace(**vars(args))
+        args.repo = _VerifiedRepo(str(args.repo))
         sha = sync_notes_refs(
             repo=args.repo,
             from_rev=args.from_rev,
@@ -2723,6 +2778,8 @@ def cmd_sync_notes(args: argparse.Namespace) -> int:
 
 def cmd_publish_notes(args: argparse.Namespace) -> int:
     try:
+        args = argparse.Namespace(**vars(args))
+        args.repo = _VerifiedRepo(str(args.repo))
         sha = sync_notes_refs(
             repo=args.repo,
             from_rev=None,

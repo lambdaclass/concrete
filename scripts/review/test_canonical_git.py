@@ -61,6 +61,43 @@ with tempfile.TemporaryDirectory() as tmp:
     refused(repo, f"repository has git replacement refs (refs/replace/{sha}): "
             "writer-notes continuity and ancestry forbid replacement objects")
     git(repo, "update-ref", "-d", "refs/replace/" + sha)
+    git(repo, "config", "remote.origin.url", "repository-url")
+    # Obtain the exact encoding Git exports for -c, including its shell quoting.
+    exported = git(repo, "-c", "remote.origin.url=ambient-parameters",
+                   "-c", "alias.canonical-env=!env", "canonical-env")
+    parameters = next(line.partition("=")[2] for line in exported.splitlines()
+                      if line.startswith("GIT_CONFIG_PARAMETERS="))
+    controls = {
+        "GIT_CONFIG_PARAMETERS": {"GIT_CONFIG_PARAMETERS": parameters},
+        "GIT_CONFIG_COUNT/KEY_0/VALUE_0": {
+            "GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "remote.origin.url",
+            "GIT_CONFIG_VALUE_0": "ambient-count"},
+    }
+    for label, planted in controls.items():
+        old = os.environ.copy()
+        try:
+            os.environ.update(planted)
+            actual = wp.git_run(str(repo), ["config", "--get", "remote.origin.url"]).stdout.strip()
+            assert actual == "repository-url", (
+                f"{label} leaked into canonical Git: expected repository value "
+                f"'repository-url', got {actual!r}")
+        finally:
+            os.environ.clear()
+            os.environ.update(old)
+    # One capability per operation: later calls share it, but a new operation
+    # must notice view mutations. Nothing is cached by repository path.
+    operation = wp._VerifiedRepo(str(repo))
+    assert wp.git_run(operation, ["rev-parse", "HEAD"]).stdout.strip() == sha
+    grafts.write_text(sha + "\n")
+    try:
+        wp._VerifiedRepo(str(operation))
+    except wp.ProvenanceError as exc:
+        assert str(exc) == (f"repository has grafted history ({grafts}): "
+                            "writer-notes continuity and ancestry forbid git grafts")
+    else:
+        raise AssertionError("new operation reused stale repository-view verification")
+    grafts.unlink()
+    assert wp.git_run(wp._VerifiedRepo(str(repo)), ["rev-parse", "HEAD"]).stdout.strip() == sha
     # Ambient redirections cannot change the selected repository or history.
     old = os.environ.copy()
     try:
@@ -73,6 +110,15 @@ with tempfile.TemporaryDirectory() as tmp:
     finally:
         os.environ.clear()
         os.environ.update(old)
+
+# The sandbox's deliberate isolation settings survive; all other config family
+# members and every Git-owned local variable disappear (apart from forced flags).
+local_vars = set(git(Path.cwd(), "rev-parse", "--local-env-vars").splitlines())
+planted = {key: "ambient" for key in local_vars | {"GIT_CONFIG_KEY_99", "GIT_CONFIG_VALUE_99"}}
+planted.update(GIT_CONFIG_GLOBAL="sandbox-config", GIT_CONFIG_NOSYSTEM="1")
+clean = wp.canonical_git_env(planted)
+assert clean == {"GIT_CONFIG_GLOBAL": "sandbox-config", "GIT_CONFIG_NOSYSTEM": "1",
+                 "GIT_NO_REPLACE_OBJECTS": "1", "GIT_OPTIONAL_LOCKS": "0"}, clean
 
 # Assert flags/environment at the actual spawn boundary, including probe commands.
 real_run = wp.subprocess.run
@@ -89,6 +135,29 @@ try:
     wp.git_run(".", ["status"])
     wp.canonical_git_run(".", ["cat-file", "--batch"], text=False, input=b"")
     assert len(seen) == 6
+    seen.clear()
+    operation = wp._VerifiedRepo(".")
+    wp.git_run(operation, ["status"])
+    wp.canonical_git_run(operation, ["cat-file", "--batch"], text=False, input=b"")
+    assert len(seen) == 4, "operation must verify once, not once per Git call"
+    # Commands mint fresh handles without changing the caller's namespace.
+    original_validate = wp.validate_notes_ref
+    def validate(**kwargs):
+        assert isinstance(kwargs["repo"], wp._VerifiedRepo)
+        wp.git_run(kwargs["repo"], ["status"])
+        wp.git_run(kwargs["repo"], ["status"])
+        return 0
+    wp.validate_notes_ref = validate
+    try:
+        args = wp.argparse.Namespace(repo=".", notes_rev=None, old_notes_rev=None,
+                                     allowed_signers=None)
+        seen.clear()
+        assert wp.cmd_validate_notes(args) == 0
+        assert wp.cmd_validate_notes(args) == 0
+        assert len(seen) == 8, "each command must verify afresh exactly once"
+        assert type(args.repo) is str, "verified handles must remain operation-local"
+    finally:
+        wp.validate_notes_ref = original_validate
 finally:
     wp.subprocess.run = real_run
 print("canonical Git runner controls passed")
