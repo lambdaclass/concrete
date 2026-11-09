@@ -45,7 +45,7 @@ private theorem agree_nil : Agree [] [] := by
 
 /-- Helper (computation). Every evaluator result has an independent syntax-directed derivation,
 proved by induction on fuel and case analysis on the expression and primitive outcomes.
-(approved: APPR-C2-agy-5372ad2a0) -/
+(approved: PENDING) -/
 private theorem eval_derivation_inv (env : AList ConstId CVal) :
     ∀ (fuel : Nat) (e : CExpr), ConstEval env fuel e (e.eval env fuel)
   | 0, e => .exhausted e
@@ -137,28 +137,6 @@ private theorem eval_derivation_inv (env : AList ConstId CVal) :
       rw [ha] at iha
       simp only [CExpr.eval, ha, CEvalResult.bind]
       exact .unary_nonValue (.convert t a) iha trivial
-  | fuel + 1, .tryConvert t a => by
-    have iha := eval_derivation_inv env fuel a
-    cases ha : a.eval env fuel with
-    | value va =>
-      rw [ha] at iha
-      cases va with
-      | int s x =>
-        cases hop : Core.tryConvert t x with
-        | ok n =>
-          simp only [CExpr.eval, ha, CEvalResult.bind, hop]
-          exact .tryConvert_ok iha hop
-        | error err =>
-          cases err
-          simp only [CExpr.eval, ha, CEvalResult.bind, hop]
-          exact .tryConvert_failure iha hop
-      | bool _ | unit =>
-        simp only [CExpr.eval, ha, CEvalResult.bind]
-        exact .intUnary_invalid (.tryConvert t a) iha (by intro _ _ h; cases h)
-    | failure _ | outOfFuel | invalid _ =>
-      rw [ha] at iha
-      simp only [CExpr.eval, ha, CEvalResult.bind]
-      exact .unary_nonValue (.tryConvert t a) iha trivial
   | fuel + 1, .wrapping op a b => by
     have iha := eval_derivation_inv env fuel a
     have ihb := eval_derivation_inv env fuel b
@@ -410,7 +388,7 @@ private theorem eval_derivation_inv (env : AList ConstId CVal) :
       exact .binary_nonValue_left (.or a b) iha trivial
 
 /-- Helper (inversion). Independent syntax-directed derivations determine the evaluator result.
-(approved: APPR-C2-agy-5372ad2a0) -/
+(approved: PENDING) -/
 private theorem eval_derivation_unique_inv {env : AList ConstId CVal} {fuel : Nat}
     {e : CExpr} {r : CEvalResult} (h : ConstEval env fuel e r) : e.eval env fuel = r := by
   induction h with
@@ -443,8 +421,6 @@ private theorem eval_derivation_unique_inv {env : AList ConstId CVal} {fuel : Na
   | convert_int_invalid _ hloss iha => simp [CExpr.eval, CEvalResult.bind, iha, hloss]
   | convert_bool_ok _ iha => simp [CExpr.eval, CEvalResult.bind, iha]
   | convert_unit_invalid _ iha => simp [CExpr.eval, CEvalResult.bind, iha]
-  | tryConvert_ok _ hop iha => simp [CExpr.eval, CEvalResult.bind, iha, hop]
-  | tryConvert_failure _ hop iha => simp [CExpr.eval, CEvalResult.bind, iha, hop]
   | @intUnary_invalid fuel e a va hchild ha hnot iha =>
     cases hchild <;> cases va with
     | int t x => exact (hnot t x rfl).elim
@@ -505,7 +481,7 @@ private theorem twoBools_some_inv {x y : CVal} {a b : Bool}
   exact ⟨rfl, rfl⟩
 
 /-- Helper (computation). Structural preservation for successful initializer evaluation;
-used by declaration soundness rather than counted as independent evidence. (approved: APPR-C2-agy-5372ad2a0) -/
+used by declaration soundness rather than counted as independent evidence. (approved: PENDING) -/
 private theorem eval_sound_inv (env : AList ConstId CVal) (Γ : AList ConstId CTy)
     (hm : ∀ c v, AList.lookup env c = some v → AList.lookup Γ c = some v.ty ∧ v.Valid) :
     ∀ (e : CExpr) (fuel : Nat) (v : CVal), e.eval env fuel = .value v →
@@ -638,26 +614,6 @@ private theorem eval_sound_inv (env : AList ConstId CVal) (Γ : AList ConstId CT
         cases h
         exact ⟨by simp [CExpr.ty?, hta, CVal.ty], boolToInt_inRange _ _⟩
       | unit => cases h
-  | tryConvert t a ih =>
-    intro fuel v h; cases fuel with
-    | zero => cases h
-    | succ fuel =>
-      simp only [CExpr.eval, bind_value_inv] at h
-      obtain ⟨va, ha, h⟩ := h
-      obtain ⟨hta, hva⟩ := ih fuel va ha
-      cases va with
-      | int src x =>
-        simp only at h
-        cases hr : Core.tryConvert t x with
-        | ok r =>
-          simp only [hr] at h; cases h
-          exact ⟨by simp [CExpr.ty?, hta, CVal.ty], (by
-              obtain ⟨hrange, rfl⟩ := (tryConvert_ok_iff _ _ _).1 hr
-              exact hrange)⟩
-        | error err => cases err; simp [hr] at h
-      | bool b =>
-        cases h
-      | unit => cases h
 
 /-- Helper (inversion). Operand typing inversion. (approved: APPR-C2-agy-5372ad2a0) -/
 private theorem CVal.int_of_ty {v : CVal} {t : IntTy} (h : v.ty = .int t) : ∃ n, v = .int t n := by
@@ -690,7 +646,7 @@ private theorem bothBool_true {x y : Option CTy} (h : bothBool x y = true) :
   | some .bool, some .bool, _ => exact ⟨rfl, rfl⟩
 
 /-- Helper (inversion). A fallible-free expression contains no located operation failure.
-(approved: APPR-C2-agy-5372ad2a0) -/
+(approved: PENDING) -/
 private theorem not_inExpr_of_fallibleFree (f : ConstFailure) :
     ∀ e : CExpr, e.fallibleFree = true → ¬ f.InExpr e := by
   intro e
@@ -707,7 +663,7 @@ private theorem not_inExpr_of_fallibleFree (f : ConstFailure) :
   | bitNot a iha | not a iha | convert _ a iha =>
     intro hff hf
     exact iha hff hf
-  | plain _ _ _ | plainNeg _ | tryConvert _ _ =>
+  | plain _ _ _ | plainNeg _ =>
     intro hff
     simp [CExpr.fallibleFree] at hff
 
@@ -950,30 +906,6 @@ theorem eval_wellTyped_progress (env : AList ConstId CVal) (Γ : AList ConstId C
           exact Or.inl ⟨.int t (boolToInt x),
             by simp [CExpr.eval, hea, CEvalResult.bind], rfl, boolToInt_inRange t x⟩
         · exact Or.inr ⟨f, by simp [CExpr.eval, hea, CEvalResult.bind], hfa⟩
-      · cases h
-  | .tryConvert t a, T, h, fuel, hn => by
-    cases fuel with
-    | zero => simp [CExpr.height] at hn
-    | succ fuel =>
-      have hna : a.height ≤ fuel := by simpa [CExpr.height] using hn
-      simp only [CExpr.ty?] at h
-      split at h
-      · rename_i s ha
-        cases h
-        rcases eval_wellTyped_progress env Γ hag a _ ha fuel hna with ⟨va, hea, hta, _⟩ | ⟨f, hea, hfa⟩
-        · obtain ⟨x, rfl⟩ := CVal.int_of_ty hta
-          cases hr : Core.tryConvert t x with
-          | ok n =>
-            obtain ⟨hrange, heq⟩ := (tryConvert_ok_iff t x n).1 hr
-            subst n
-            exact Or.inl ⟨.int t x,
-              by simp [CExpr.eval, hea, hr, CEvalResult.bind], rfl, hrange⟩
-          | error err =>
-            cases err
-            exact Or.inr ⟨⟨.tryConvert t, .tryConvert t a, .outOfRange⟩,
-              by simp [CExpr.eval, hea, hr, CEvalResult.bind],
-              Or.inl rfl⟩
-        · exact Or.inr ⟨f, by simp [CExpr.eval, hea, CEvalResult.bind], Or.inr hfa⟩
       · cases h
 
 /-- A deliberately broken evaluator, retaining the exact evaluator interface. -/
@@ -2003,7 +1935,7 @@ example : SourceNamesResolved ConstDemo.U
 /-! ### Order independence (`ConstOrderIndependent`) -/
 
 /-- Helper (congruence). Static expression typing depends only on the bindings of e.refs.
-(approved: APPR-C2-agy-5372ad2a0) -/
+(approved: PENDING) -/
 private theorem ty?_congr_refs (Γ₁ Γ₂ : AList ConstId CTy) :
     ∀ (e : CExpr), (∀ c ∈ e.refs, AList.lookup Γ₁ c = AList.lookup Γ₂ c) →
       e.ty? Γ₁ = e.ty? Γ₂ := by
@@ -2017,13 +1949,13 @@ private theorem ty?_congr_refs (Γ₁ Γ₂ : AList ConstId CTy) :
     have ha := iha (fun c hc => h c (List.mem_append_left _ hc))
     have hb := ihb (fun c hc => h c (List.mem_append_right _ hc))
     simp [CExpr.ty?, ha, hb]
-  | plainNeg a iha | bitNot a iha | not a iha | convert _ a iha | tryConvert _ a iha =>
+  | plainNeg a iha | bitNot a iha | not a iha | convert _ a iha =>
     intro h
     have ha := iha h
     simp [CExpr.ty?, ha]
 
 /-- Helper (congruence). Initializer evaluation depends only on the bindings of e.refs.
-(approved: APPR-C2-agy-5372ad2a0) -/
+(approved: PENDING) -/
 private theorem eval_congr_refs (env₁ env₂ : AList ConstId CVal) :
     ∀ (e : CExpr) (fuel : Nat), (∀ c ∈ e.refs, AList.lookup env₁ c = AList.lookup env₂ c) →
       e.eval env₁ fuel = e.eval env₂ fuel := by
@@ -2046,7 +1978,7 @@ private theorem eval_congr_refs (env₁ env₂ : AList ConstId CVal) :
       have ha := iha fuel (fun c hc => h c (List.mem_append_left _ hc))
       have hb := ihb fuel (fun c hc => h c (List.mem_append_right _ hc))
       simp [CExpr.eval, ha, hb]
-  | plainNeg a iha | bitNot a iha | not a iha | convert _ a iha | tryConvert _ a iha =>
+  | plainNeg a iha | bitNot a iha | not a iha | convert _ a iha =>
     intro fuel h
     cases fuel with
     | zero => rfl

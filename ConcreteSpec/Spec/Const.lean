@@ -11,15 +11,18 @@ A module constant (`const N: T = e;`) is computed once at compile time, and its 
 `Copy` type (item 26). Its initializer is in a *closed grammar*: integer literals in range, `true`,
 `false`, `()`, references to earlier Core constants, wrapping and saturating arithmetic, bitwise
 operations, integer comparisons, boolean operations, lossless conversion, and the fallible scalar
-operations `plain` / `plainNeg` and `tryConvert` (item 18, revising TYPE-22). There are no calls,
+operations `plain` / `plainNeg` (item 18, revising TYPE-22). There are no calls,
 loops, effects, state, authority or target-profile inputs. Even the scalar operations depend only
 on the fixed width in their `IntTy`, not on a target profile.
 
 Evaluation is partial and fuel-bounded. A fallible operation is evaluated with the definitions in
 `Spec/Scalar.lean`; its failure is a compile-time refusal carrying the operation and the exact
-sub-expression, never a trap. Checked arithmetic forms are not constructors here: their
-`Result<T, ArithmeticError>` values have no type in `CTy`, and widening that constant universe is
-a separate owner decision. Every operation terminates; fuel bounds the evaluator as item 18
+sub-expression, never a trap. Constants are scalar. Checked forms (`Result<T, ArithmeticError>`) and
+`try_convert` (`Result<T, OutOfRange>`) are excluded from initializers because their surface types
+are not scalar. Authority: owner decision 2026-11-09, item 2, “ok tell me again the options choose
+the best long term options for everything”, selecting (a)+(i). The single reopening path is
+option (c), aggregate/enum constants: it requires a ConstTy separate from C4's CTy, revisiting
+`ofC_copy`, an answer to the Err-as-value question, and a motivating workload. Every operation terminates; fuel bounds the evaluator as item 18
 requires, rather than making an operation partial.
 
 **Static admission and kernel checking.** `typeConsts` checks the closed grammar, declared-type
@@ -52,13 +55,12 @@ continues to receive only the ordered form.
 
 The constant types are an interface (`ConstTypes`): the language's type universe, a `Copy`
 predicate and an injective embedding of the scalar types (`ofC`), which are all `Copy`
-(`ofC_copy`), while `Ty` may also contain non-`Copy` types outside `ofC`. Widening `CTy`, `CVal`
-and `CExpr` to other values remains an owner decision.
+(`ofC_copy`), while `Ty` may also contain non-`Copy` types outside `ofC`. Aggregate/enum constants may reopen only under the preconditions above.
 -/
 
 namespace ConcreteSpec.Core
 
-/-- An initializer of the closed subset. `plain`, `plainNeg` and `tryConvert` are the only
+/-- An initializer of the closed subset. `plain` and `plainNeg` are the only
 fallible operations; their meanings come from `Spec/Scalar.lean`. -/
 inductive CExpr where
   | int (t : IntTy) (n : Int)
@@ -77,8 +79,6 @@ inductive CExpr where
   | or (a b : CExpr)
   /-- The lossless conversion to `t`. -/
   | convert (t : IntTy) (a : CExpr)
-  /-- The checked conversion to `t`, with `OutOfRange` a compile-time refusal here. -/
-  | tryConvert (t : IntTy) (a : CExpr)
   deriving DecidableEq, Repr
 
 namespace CExpr
@@ -89,7 +89,7 @@ def refs : CExpr → List ConstId
   | .ref c => [c]
   | .wrapping _ a b | .saturating _ a b | .plain _ a b | .bit _ a b | .cmp _ a b
   | .and a b | .or a b => a.refs ++ b.refs
-  | .plainNeg a | .bitNot a | .not a | .convert _ a | .tryConvert _ a => a.refs
+  | .plainNeg a | .bitNot a | .not a | .convert _ a => a.refs
 
 /-- The old fragment, in which no operation can fail. -/
 def fallibleFree : CExpr → Bool
@@ -97,7 +97,7 @@ def fallibleFree : CExpr → Bool
   | .wrapping _ a b | .saturating _ a b | .bit _ a b | .cmp _ a b | .and a b | .or a b =>
     a.fallibleFree && b.fallibleFree
   | .bitNot a | .not a | .convert _ a => a.fallibleFree
-  | .plain _ _ _ | .plainNeg _ | .tryConvert _ _ => false
+  | .plain _ _ _ | .plainNeg _ => false
 
 /-- Sufficient fuel for every path through an initializer; operands share the remaining depth
 budget, so this is a depth bound rather than an operation-count bound. -/
@@ -105,7 +105,7 @@ def height : CExpr → Nat
   | .int _ _ | .bool _ | .unit | .ref _ => 1
   | .wrapping _ a b | .saturating _ a b | .plain _ a b | .bit _ a b | .cmp _ a b
   | .and a b | .or a b => max a.height b.height + 1
-  | .plainNeg a | .bitNot a | .not a | .convert _ a | .tryConvert _ a => a.height + 1
+  | .plainNeg a | .bitNot a | .not a | .convert _ a => a.height + 1
 
 end CExpr
 
@@ -113,14 +113,12 @@ end CExpr
 inductive ConstOperation where
   | plain (op : ArithOp)
   | plainNeg
-  | tryConvert (t : IntTy)
   deriving DecidableEq, Repr
 
 /-- The scalar reason for an operation failure. Plain arithmetic carries its `TrapKind` only as a
 diagnostic category; `CEvalResult.failure` is a refusal, not execution of a trap. -/
 inductive ConstFailureError where
   | arithmetic (k : TrapKind)
-  | outOfRange
   deriving DecidableEq, Repr
 
 /-- A located scalar failure: this operation failed at exactly this initializer sub-expression. -/
@@ -142,8 +140,6 @@ def ConstFailure.InExpr (f : ConstFailure) : CExpr → Prop
     (∃ k, f = ⟨.plain op, .plain op a b, .arithmetic k⟩) ∨ f.InExpr a ∨ f.InExpr b
   | .plainNeg a =>
     (∃ k, f = ⟨.plainNeg, .plainNeg a, .arithmetic k⟩) ∨ f.InExpr a
-  | .tryConvert t a =>
-    f = ⟨.tryConvert t, .tryConvert t a, .outOfRange⟩ ∨ f.InExpr a
 
 /-- The result of fuel-bounded initializer evaluation. `invalid` is static refusal (bad typing, an
 out-of-range literal or an unknown reference), distinct from a successfully typed operation that
@@ -238,12 +234,6 @@ def CExpr.eval (env : AList ConstId CVal) : Nat → CExpr → CEvalResult
     | .int s x => if Lossless s t then .value (.int t x) else .invalid (.convert t a)
     | .bool b => .value (.int t (boolToInt b))
     | .unit => .invalid (.convert t a)
-  | fuel + 1, .tryConvert t a => (a.eval env fuel).bind fun va =>
-    match va with
-    | .int _ x => match Core.tryConvert t x with
-      | .ok n => .value (.int t n)
-      | .error .outOfRange => .failure ⟨.tryConvert t, .tryConvert t a, .outOfRange⟩
-    | _ => .invalid (.tryConvert t a)
 
 /-- A non-value evaluation outcome (`.failure`, `.outOfFuel`, or `.invalid`), which propagates
 immediately left-to-right through enclosing operations. -/
@@ -257,7 +247,6 @@ inductive CExpr.UnaryChild : CExpr → CExpr → Prop where
   | bitNot (a) : UnaryChild (.bitNot a) a
   | not (a) : UnaryChild (.not a) a
   | convert (t a) : UnaryChild (.convert t a) a
-  | tryConvert (t a) : UnaryChild (.tryConvert t a) a
 
 /-- Immediate left and right children of a binary initializer form. -/
 inductive CExpr.BinaryChildren : CExpr → CExpr → CExpr → Prop where
@@ -273,7 +262,6 @@ inductive CExpr.BinaryChildren : CExpr → CExpr → CExpr → Prop where
 inductive CExpr.IntUnaryChild : CExpr → CExpr → Prop where
   | plainNeg (a) : IntUnaryChild (.plainNeg a) a
   | bitNot (a) : IntUnaryChild (.bitNot a) a
-  | tryConvert (t a) : IntUnaryChild (.tryConvert t a) a
 
 /-- Binary forms that require two integer operand values of the same integer type. -/
 inductive CExpr.IntBinaryChildren : CExpr → CExpr → CExpr → Prop where
@@ -291,7 +279,7 @@ inductive CExpr.BoolBinaryChildren : CExpr → CExpr → CExpr → Prop where
 /-- Independent syntax-directed, fuel-indexed evaluation semantics. Each constructor specifies
 an inference rule over immediate sub-expressions at the smaller budget `fuel` and grounds scalar
 outcomes directly in `Core.wrapping`, `Core.saturating`, `Core.plain`, `Core.plainNeg`,
-`Core.bitwise`, `Core.bitNot`, `CmpOp.eval`, `Lossless`, `boolToInt` and `Core.tryConvert`,
+`Core.bitwise`, `Core.bitNot`, `CmpOp.eval`, `Lossless` and `boolToInt`,
 without calling `CExpr.eval`, `CEvalResult.bind`, `sameInt` or `twoBools`. -/
 inductive ConstEval (env : AList ConstId CVal) : Nat → CExpr → CEvalResult → Prop where
   | exhausted (e) : ConstEval env 0 e .outOfFuel
@@ -379,15 +367,6 @@ inductive ConstEval (env : AList ConstId CVal) : Nat → CExpr → CEvalResult �
   | convert_unit_invalid {fuel t a}
       (ha : ConstEval env fuel a (.value .unit)) :
       ConstEval env (fuel + 1) (.convert t a) (.invalid (.convert t a))
-  | tryConvert_ok {fuel t a s x n}
-      (ha : ConstEval env fuel a (.value (.int s x)))
-      (hop : Core.tryConvert t x = .ok n) :
-      ConstEval env (fuel + 1) (.tryConvert t a) (.value (.int t n))
-  | tryConvert_failure {fuel t a s x}
-      (ha : ConstEval env fuel a (.value (.int s x)))
-      (hop : Core.tryConvert t x = .error .outOfRange) :
-      ConstEval env (fuel + 1) (.tryConvert t a)
-        (.failure ⟨.tryConvert t, .tryConvert t a, .outOfRange⟩)
   | intUnary_invalid {fuel e a va} (hchild : CExpr.IntUnaryChild e a)
       (ha : ConstEval env fuel a (.value va))
       (hnot : ∀ t x, va ≠ .int t x) :
@@ -437,9 +416,6 @@ def CExpr.ty? (Γ : AList ConstId CTy) : CExpr → Option CTy
   | .convert t a => match a.ty? Γ with
     | some (.int s) => if Lossless s t then some (.int t) else none
     | some .bool => some (.int t)
-    | _ => none
-  | .tryConvert t a => match a.ty? Γ with
-    | some (.int _) => some (.int t)
     | _ => none
 
 /-- The language's types as far as constants need them. Every scalar constant type in `CTy` is
@@ -690,9 +666,8 @@ example : (evalConsts U 20 [⟨cid "QUOT", .c (.int .i16),
     ⟨cid "UNUSED", .c (.int .u8), .plain .add (.int .u8 2) (.int .u8 3)⟩] []).toOption.bind
       (fun env => AList.lookup env (cid "QUOT")) = some (.int .i16 14) := by decide
 
-/-- Accepted (rule `ConcreteSpec.Core.ConstsAdmitted`): fallible conversion and negation succeed. -/
-example : ConstsAdmitted U 20 [⟨cid "N", .c (.int .u8), .tryConvert .u8 (.int .i16 255)⟩,
-    ⟨cid "M", .c (.int .i8), .plainNeg (.int .i8 5)⟩] := by decide
+/-- Accepted (rule `ConcreteSpec.Core.ConstsAdmitted`): fallible negation succeeds. -/
+example : ConstsAdmitted U 20 [⟨cid "M", .c (.int .i8), .plainNeg (.int .i8 5)⟩] := by decide
 
 /-- Refused (rule `ConcreteSpec.Core.ConstsAdmitted`): `1 / 0` reports division by zero at the
 plain-division sub-expression; it is not a trap. -/
@@ -726,10 +701,6 @@ example : ¬ ConstsAdmitted U 1 [⟨cid "DEEP", .c (.int .u8),
 /-- The same finite initializer succeeds with adequate fuel. -/
 example : ConstsAdmitted U 5 [⟨cid "DEEP", .c (.int .u8),
     .plain .add (.plain .add (.int .u8 1) (.int .u8 2)) (.int .u8 3)⟩] := by decide
-
-/-- Refused (rule `ConcreteSpec.Core.ConstsAdmitted`): the checked conversion reports `OutOfRange`. -/
-example : ¬ ConstsAdmitted U 20 [⟨cid "BAD", .c (.int .u8),
-    .tryConvert .u8 (.int .i16 256)⟩] := by decide
 
 /-- Refused (rule `ConcreteSpec.Core.ConstsAdmitted`): a non-`Copy` declared type (`text`) lies
 outside the `Copy` scalar constant universe (`U.ofC_copy`), so no constant initializer can inhabit
