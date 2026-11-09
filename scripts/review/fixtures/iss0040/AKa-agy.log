@@ -1,0 +1,29 @@
+**Round authorship disclosure:** agy (this model) wrote Round 2 (`8e4e5883`, `9125a47d`, `b64539da`, `85cb6a12`), Round 4 (`f37b555e`), and Round 6 (`12495e06`). Kimi wrote the initial gate and Round 1 (`ad7e8fc9`, `a1df394f`, `64db2932`, `83fb12da`), and Codex wrote Rounds 3 (`20124370`, `e801644d`, `2de76aff`, `6a8acb16`), 5 (`ccee041e`), 7 (`018d5f24`), and 8 (`772435c4`, `21ad148b`).
+
+### Full-Branch Verification Summary (`c2245c99..21ad148b`)
+
+1. **Non-vacuity and planted controls ([`spec_diff.sh`](file:///home/unbalancedparen/projects/gates-briefs/ro-AKa/scripts/checks/compiler/spec_diff.sh#L2036-L2840), [`spec_diff.lean`](file:///home/unbalancedparen/projects/gates-briefs/ro-AKa/scripts/checks/compiler/spec_diff.lean#L908-L1298)):**
+   - Every planted control (`selective-refusal`, `assembly-failure`, `native-compilation-failure`, `native-setup-failure`, `drop-overflow-llvm`, `observation-failure`, `lcb-off-by-one`, `spec-oracle`, `partial-lowering`, `report-mismatch`, plus `determinism`) runs under `set -euo pipefail`, proves its unmutated baseline first, verifies that the planted mutation changed the artifact, asserts the exact anchored diagnostic and dedicated exit code (`99`), and verifies bundle persistence and standalone `replay.sh` execution in a fresh shell.
+   - Coverage and exit/trap vacuity are computed strictly over candidates judged across all three legs (`lcb_eval`, `llvm`, `lcb`), never over generated counts alone.
+
+2. **Unified failure/completion model, pre-generation registration, and standalone replay ([`spec_diff.sh`](file:///home/unbalancedparen/projects/gates-briefs/ro-AKa/scripts/checks/compiler/spec_diff.sh#L1403-L2333), [`test_spec_diff_orchestration.py`](file:///home/unbalancedparen/projects/gates-briefs/ro-AKa/scripts/checks/compiler/test_spec_diff_orchestration.py#L1-L377)):**
+   - Round 8 (`772435c4`, `21ad148b`) registers candidate identity (`leg`, `seed`, `index`), lifecycle tracking (`$work/lifecycle-dirs`), and control ownership (`$d/control-owner`, `$d/control-replay`) in [`register_generation`](file:///home/unbalancedparen/projects/gates-briefs/ro-AKa/scripts/checks/compiler/spec_diff.sh#L1421-L1453) *before* launching the bounded driver or native run.
+   - Any observed failure across all 7 failure kinds (`lowering`, `emission`, `assembly`, `native_compilation`, `native_setup`, `observation`, `mismatch`) is sticky (`fail=1`) and takes precedence over `INCOMPLETE` (`3`) across live execution, replay, and exit collection in [`finish_diff`](file:///home/unbalancedparen/projects/gates-briefs/ro-AKa/scripts/checks/compiler/spec_diff.sh#L2020-L2034).
+   - Completed controls only acknowledge their own registered directories and first judge any unplanted baseline observations (`lcb_eval`, `llvm`, `lcb`) so a passing control cannot mask a baseline failure.
+   - [`verify_saved_replay`](file:///home/unbalancedparen/projects/gates-briefs/ro-AKa/scripts/checks/compiler/spec_diff.sh#L2176-L2206) executes the saved `replay.sh` in a clean `bash --noprofile --norc` process without function injection, reconstructing planted driver/build/observer/timeout scenarios via `SPEC_DIFF_REPLAY_CONTROL` and isolating control bundles under `regressions/controls/<scenario>/<leg>/<safe-seed>-<index>/`.
+
+3. **Backend-independent admission and X3 capability contract ([`spec_diff.lean`](file:///home/unbalancedparen/projects/gates-briefs/ro-AKa/scripts/checks/compiler/spec_diff.lean#L648-L655), [`spec_diff.lean`](file:///home/unbalancedparen/projects/gates-briefs/ro-AKa/scripts/checks/compiler/spec_diff.lean#L988-L1168)):**
+   - BIR admission depends solely on `wf`; any `LCB.emit` or `LCB.assemble` refusal on an admitted candidate is a `FAIL` with a persisted regression bundle.
+   - `loweringAvailable` and `compileCore` enforce the X3 contract: loud zero-compiled reporting while `false`, and fail-closed `compiled = supportedAccepted = accepted = judged` once `true`.
+
+4. **Shared watchdog isolation ([`bounded.sh`](file:///home/unbalancedparen/projects/gates-briefs/ro-AKa/scripts/checks/lib/bounded.sh#L104-L111), [`bounded_exec.py`](file:///home/unbalancedparen/projects/gates-briefs/ro-AKa/scripts/checks/lib/bounded_exec.py#L68-L162), [`test_bounded_exec.py`](file:///home/unbalancedparen/projects/gates-briefs/ro-AKa/scripts/checks/lib/test_bounded_exec.py#L1-L48)):**
+   - `BOUNDED_DEADLINE_MONO` is strictly opt-in, never expands an attempt's execution budget, clamps termination grace to the monotonic deadline, and leaves legacy callers unchanged.
+
+5. **Generator distribution, coverage floors, and import layering ([`spec_diff.lean`](file:///home/unbalancedparen/projects/gates-briefs/ro-AKa/scripts/checks/compiler/spec_diff.lean#L234-L626), [`import_layering.sh`](file:///home/unbalancedparen/projects/gates-briefs/ro-AKa/scripts/checks/import_layering.sh#L1-L361)):**
+   - Single weighted production tables for both generators, deterministic `(seed, index)` mapping with no hidden retries, `>= 50%` acceptance yield floor, and N11 import layering enforced with negative controls.
+
+6. **CI, required checks, docs, and governance consistency ([`.github/workflows/lean_action_ci.yml`](file:///home/unbalancedparen/projects/gates-briefs/ro-AKa/.github/workflows/lean_action_ci.yml#L385-L415), [`required-checks.txt`](file:///home/unbalancedparen/projects/gates-briefs/ro-AKa/required-checks.txt#L16-L17), [`Concrete/README.md`](file:///home/unbalancedparen/projects/gates-briefs/ro-AKa/Concrete/README.md#L577-L595)):**
+   - Workflow jobs, `required-checks.txt`, `RETENTION.tsv`, `scripts/checks/run.sh`, `Concrete/README.md`, and `changelog.d/` fragments are consistent and truthful. No owner decision (OD) is taken.
+
+VERDICT: CLEAN
+agy rc=0

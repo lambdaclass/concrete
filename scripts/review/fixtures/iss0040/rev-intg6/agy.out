@@ -1,0 +1,65 @@
+### Verification of Round 6 Fixes (`18747a8ef..61bc6635b`)
+
+1. **Multi-event block embedding and boundary alignment (`Spec/Adequacy.lean:308-347`, `Proofs/Adequacy.lean:1164-1348`)**:
+   - Each machine transition `n` is mapped to its exact projected event delta `InfiniteExecution.transitionEvents A X n` and embedded as a finite non-empty block `InfiniteExecution.observeBlock A X n` (`[.silent]` when silent or erased by `A`; `(e :: es).map .emit` when non-empty).
+   - `InfiniteExecution.observeBoundary A X n` strictly embeds machine indices into C6 step indices (`boundary_growth`, `boundary_strict`, `boundary_injective`), and `InfiniteExecution.toObserveSteps` flattens the blocks so that each transition interval `[observeBoundary A n, observeBoundary A (n + 1))` contains that transition's exact block (`flatten_interval`, `toObserveSteps_blocks`, `observeBlock_silent`, `observeBlock_erased`).
+   - Tested with a genuinely multi-event adapter (`doubleAdapter`, emitting two outputs per transition) and a boundary-crossing scheduler mutant (`crossBoundarySteps`) that preserves global `visiblePrefix` after the next boundary while failing per-transition block isolation.
+
+2. **Independent execution-trace validity proof (`Proofs/Adequacy.lean:1353-1394`)**:
+   - `InfiniteExecution.projectedTrace_valid` proves `Observe.CompleteTrace C input (X.projectedTrace A n)` directly by induction on `n` over `Move` (`X.step n`), dispatching silent transitions, internal queries (`wellFormed.internal`), and external answered queries (`wellFormed.answered` + `Observe.ValidTrace.answer_projection`), without routing through `Observe.runFrom_validTrace`.
+   - `Observe.runFrom_validTrace` in `Observe2.lean` is untouched as assigned to the C6 audit branch.
+
+3. **Semantic execution uniqueness (`Spec/Adequacy.lean:250-252`, `Proofs/Adequacy.lean:1045-1053`, `2981-2999`)**:
+   - `InfiniteExecution.unique` now states `ExecutionUnique (Move P ρ) ⟨c, [], []⟩` directly over the transition relation `Move` and arbitrary state sequences `xs ys : Nat → Position O`, rather than equating representation getters or requiring candidate paths to be pre-bundled `InfiniteExecution` records.
+   - Its planted mutant `stationaryOrMove` mutates the subject `Move` to permit stationary stuttering and exhibits two distinct infinite paths from `⟨spinConfig, [], []⟩`.
+
+---
+
+### Audit of C8 Laws and C6 Bridge Laws (`_review/VACUITY_CONVENTION_FINAL.md`)
+
+All laws have a single class tag, a closed non-trivial `Instance`, a premise-preserving `Planted` counterexample on the declared subject, and no projection-law shortcut:
+
+| Law | Subject | Verdict | Witness (`Instance` / `Planted`) |
+| :--- | :--- | :--- | :--- |
+| [InfiniteExecution.unique](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1048-L1053) | `Move` | **Non-vacuous (Pass)** | **Instance**: `ExecutionUnique (Move prog env) ⟨spinConfig, [], []⟩`<br>**Planted**: `stationaryOrMove` on `Move` admits `spin_infinite.states` and stationary `fun _ => ⟨spinConfig, [], []⟩` (`xs ≠ ys` at step 1). |
+| [InfiniteExecution.toObserveSteps_blocks](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1331-L1336) | `InfiniteExecution.toObserveSteps` | **Non-vacuous (Pass)** | **Instance**: `doubleAdapter` on `logThenSpin_infinite` at transition `0` (2 events).<br>**Planted**: `crossBoundarySteps` swaps steps 1 and 2 across `observeBoundary` while preserving `visiblePrefix` at step 3. |
+| [InfiniteExecution.toObserveSteps_matches](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1340-L1348) | `InfiniteExecution.toObserveSteps` | **Non-vacuous (Pass)** | **Instance**: `keepingAdapter` on `event_infinite`.<br>**Planted**: `silentObserveSteps` drops emitted events and fails `MatchesProjectedHistory`. |
+| [InfiniteExecution.projectedTrace_valid](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1353-L1383) | `InfiniteExecution.projectedTrace` | **Non-vacuous (Pass)** | **Instance**: `keepingAdapter` on `event_infinite` at step `5` with `keepingWellFormed`.<br>**Planted**: `pendingTrace` preserves `WellFormed keepingAdapter Observe.Demo.contract () env` and leaves an unanswered request failing `Observe.CompleteTrace`. |
+| [InfiniteExecution.silentDivergence_of_finiteEvents](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1399) | `InfiniteExecution.toObserveSteps` | **Non-vacuous (Pass)** | **Instance**: `keepingAdapter` on `logThenSpin_infinite` (`logThenSpinFinite`).<br>**Planted**: `alwaysEmitSteps` preserves `FiniteEvents` and fails `Observe.SilentDivergence`. |
+| [InfiniteExecution.infiniteInteraction_of_unboundedEvents](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1440) | `InfiniteExecution.toObserveSteps` | **Non-vacuous (Pass)** | **Instance**: `keepingAdapter` on `event_infinite` (`eventUnbounded`).<br>**Planted**: `silentObserveSteps` preserves `UnboundedEvents` and fails `Observe.InfiniteInteraction`. |
+| [silentDivergence_not_infiniteInteraction](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1550-L1559) | `SilentDivergence` / `InfiniteInteraction` | **Non-vacuous (Pass)** | Mutual exclusion of C8 divergence classes via `InfiniteExecution.unique_execution` and `finite_not_infinite_events`; paired with planted classification mutant ignoring adapter projection. |
+| Existing C8/C1 adequacy & classification laws (`FuelLimit.unique`, `toFuelLimit`, `toInfiniteExecution`, `classify_exhaustive`, etc.) | C1/C8 bridge subjects | **Non-vacuous (Pass)** | Unchanged from prior audited base; all instances and premise-preserving planted mutants remain intact. |
+
+---
+
+### Verdict on `(approved: PENDING)` Helper Exemptions
+
+All `(approved: PENDING)` helper exemptions added or touched in [Adequacy.lean](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean) are **APPROVED**:
+
+- [InfiniteExecution.unique_execution](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1036-L1043) (`Helper (congruence)`): **APPROVED** — transports `FuelLimit.unique` across the representation bijection; semantic uniqueness is carried by `InfiniteExecution.unique`.
+- [blockPrefix_prefix](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1164-L1171) (`Helper (computation)`): **APPROVED** — structural list-prefix monotonicity of `blockPrefix`.
+- [InfiniteExecution.boundary_growth](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1175-L1182) (`Helper (arithmetic)`): **APPROVED** — length arithmetic showing non-empty blocks strictly advance `observeBoundary`.
+- [InfiniteExecution.boundary_ge](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1186-L1191) (`Helper (arithmetic)`): **APPROVED** — induction showing `n ≤ observeBoundary A n`.
+- [InfiniteExecution.boundary_strict](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1195-L1204) (`Helper (arithmetic)`): **APPROVED** — strict order preservation of `observeBoundary`.
+- [InfiniteExecution.boundary_injective](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1208-L1215) (`Helper (arithmetic)`): **APPROVED** — injectivity corollary of `boundary_strict`.
+- [InfiniteExecution.flatten_get](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1219-L1229) (`Helper (computation)`): **APPROVED** — indexing stabilization of `toObserveSteps` within `blockPrefix`.
+- [InfiniteExecution.flatten_boundary](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1233-L1242) (`Helper (computation)`): **APPROVED** — list extensionality identifying flattened prefix up to `observeBoundary A n` with `blockPrefix`.
+- [InfiniteExecution.visible_block](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1246-L1250) (`Helper (computation)`): **APPROVED** — `Observe.visible` computation on `observeBlock`.
+- [InfiniteExecution.transition_append](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1254-L1259) (`Helper (arithmetic)`): **APPROVED** — list append/drop identity decomposing `A.project (X.states (n + 1)).events`.
+- [Move.silent_events](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1263-L1268) (`Helper (inversion)`): **APPROVED** — case inversion on `Move` when `step` returns `.next`.
+- [InfiniteExecution.transitionEvents_eq](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1272-L1277) (`Helper (computation)`): **APPROVED** — rewrites `transitionEvents` using `project_append`.
+- [InfiniteExecution.observeBlock_erased](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1281-L1284) (`Helper (computation)`): **APPROVED** — definitional reduction of `observeBlock` when `transitionEvents = []`.
+- [InfiniteExecution.observeBlock_silent](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1288-L1294) (`Helper (inversion)`): **APPROVED** — combines `Move.silent_events` and `observeBlock_erased`.
+- [InfiniteExecution.visible_blocks](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1298-L1308) (`Helper (computation)`): **APPROVED** — inductive calculation of `Observe.visible` over `blockPrefix`.
+- [InfiniteExecution.visiblePrefix_toObserveSteps](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1312-L1317) (`Helper (computation)`): **APPROVED** — combines `flatten_boundary` and `visible_blocks`.
+- [InfiniteExecution.flatten_interval](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1321-L1326) (`Helper (computation)`): **APPROVED** — slices `flatten_boundary` between `observeBoundary A n` and `observeBoundary A (n + 1)`.
+- [InfiniteExecution.projected_completeTrace](file:///home/unbalancedparen/ConcreteSpec/Proofs/Adequacy.lean#L1388-L1394) (`Helper (projection)`): **APPROVED** — unfold-only compatibility alias for the primary law `InfiniteExecution.projectedTrace_valid`.
+
+---
+
+### Findings
+
+None.
+
+VERDICT: ACCEPT
+rc=0

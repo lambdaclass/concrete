@@ -19,9 +19,10 @@ Contract for a reviewer's raw output:
   5. At least one `READ: <path>` line must appear before the penultimate line, and
      every `READ: <path>` line must name a clean relative path that exists as a file
      (blob or symlink blob) in `--commit`'s git tree. Otherwise `blocked`.
-  6. Source links must name an identifier present within their exact line range;
-     positive verdicts also require standalone backticked identifiers to resolve
-     in the reviewed tree or its pinned external-name list. Otherwise `invalid`.
+  6. Every source location and identifier citation resolves against the reviewed tree,
+     removed side of --base..--commit, an ABSENT report or pinned external name.
+     Named anchors occur within the cited range. Positive verdicts require a location.
+     All failures are collected in the distinct `invalid` status (not a verdict).
 
 CLI output (stdout, two lines):
   status: <verdict|invalid|blocked|refused|noverdict|error>
@@ -113,13 +114,19 @@ def citation_error(text, repo, commit, paths, positive, base=None):
         if path.startswith("file://"):
             parts = path[7:].split("/")
             candidates = ["/".join(parts[i:]) for i in range(len(parts)) if "/".join(parts[i:]) in paths]
-            return candidates[0] if len(candidates) == 1 else None
+            return candidates[0] if candidates else None
         if path in paths and is_clean_relative_path(path):
             return path
         if "/" not in path:
             candidates = [p for p in paths if p.rsplit("/", 1)[-1] == path]
             return candidates[0] if len(candidates) == 1 else None
         return None
+    def filename(name):
+        return bool(re.search(r"\.(lean|py|sh|md|tsv|json|yml|yaml|toml|txt|log)$", name))
+    for link in re.finditer(r"\]\(([^)\s]+)\)", text):
+        target = link.group(1)
+        if ("#L" in target or re.search(r"\.[A-Za-z]+:[0-9]", target)) and not LOCATION.fullmatch(target):
+            errors.append(f"citation: unsupported location grammar '{target}'")
     locations = list(LOCATION.finditer(text))
     valid = 0
     for m in locations:
@@ -129,7 +136,7 @@ def citation_error(text, repo, commit, paths, positive, base=None):
         following = re.match(r"`?\]\(([^)]+)\)", text[m.end():])
         if path is None and "/" not in raw and following:
             full = LOCATION.fullmatch(following.group(1))
-            if full and full.group("path").rsplit("/", 1)[-1] == raw and (full.group("lines") or full.group("anchor")) == (m.group("lines") or m.group("anchor")):
+            if full and full.group("path").rsplit("/", 1)[-1] == raw and (full.group("lines") or full.group("anchor")).split("-")[0] == (m.group("lines") or m.group("anchor")).split("-")[0]:
                 path = resolve(full.group("path"))
         if path is None:
             errors.append(f"citation: file '{raw}' does not resolve uniquely")
@@ -146,12 +153,15 @@ def citation_error(text, repo, commit, paths, positive, base=None):
         # A named link is a stronger claim: its identifier occurs in the range.
         prefix = text[:m.start()]
         named = re.search(r"\[`([^`]+)`\]\($", prefix)
-        if named and re.fullmatch(IDENTIFIER, named.group(1)) and not token(named.group(1), "\n".join(selected)):
+        if named and not filename(named.group(1)) and re.fullmatch(IDENTIFIER, named.group(1)) and not token(named.group(1), "\n".join(selected)):
             errors.append(f"citation: anchor '{named.group(1)}' absent from '{m.group()}'")
         if selected:
             valid += 1
     # Resolve identifiers against actual blobs, never prompt text or the allowlist itself.
-    content = "\n".join(blob(p) for p in sorted(paths) if p != "scripts/review/external-names.tsv")
+    proc = subprocess.run(["git", "-C", repo, "grep", "-I", "-h", "-e", ".", commit, "--", ".", ":(exclude)scripts/review/external-names.tsv"], capture_output=True, check=False)
+    if proc.returncode not in (0, 1):
+        raise ValueError("citation: cannot read reviewed tree identifiers")
+    content = proc.stdout.decode("utf-8", errors="replace")
     removed = ""
     if base:
         proc = subprocess.run(["git", "-C", repo, "diff", "--no-ext-diff", "--unified=0", base, commit, "--"], capture_output=True, text=True, check=True)
@@ -165,6 +175,8 @@ def citation_error(text, repo, commit, paths, positive, base=None):
                 external.add(fields[1])
     for m in re.finditer(r"`([^`\n]+)`", text):
         name = m.group(1)
+        if filename(name):
+            continue
         if name.startswith("proposed:") and not positive:
             continue
         if not re.fullmatch(IDENTIFIER, name) or not ("." in name or "_" in name or re.search(r"[a-z][A-Z]", name)):

@@ -520,3 +520,9 @@ owner rule, prompt persistence and hashes, blocked repository-access failures,
 and required-base coverage. `scripts/checks/landing_script.sh` repeats the A→B→C
 reproducer through the landing train for both head and member notes and tests
 `signoff.sh` cap counting and historical sign-off non-re-verification.
+
+### Citation resolution (ISS-0040)
+
+Citation contract: use repository-relative path:N[-M][,N[-M]...] or path#LN-LM, optionally as Markdown links. En-dash ranges are accepted. Absolute file:// links are normalized to an exact repository path. Basename labels require a unique file or an immediately following full link to the same starting line. A [`name`](path#LA-LB) link asserts that name occurs inside those lines. Every citation must resolve; invented citations make the output invalid. Backticked dotted, underscore or camelCase identifiers must resolve component by component in the reviewed tree, removed side of the reviewed diff, or the pinned external-name list. Report a missing identifier with a standalone ABSENT: name line. For proposed fixes in FINDINGS/REJECT use `proposed:newName`. Plain words and hash ranges are not identifiers. Positive CLEAN/clean/ACCEPT requires READ: paths actually read and at least one resolving file:line citation supporting the conclusion. ALWAYS do the best long term thing rather than cutting corners.
+
+The exact identifier lexicon, external-name policy and fixture provenance are specified in [the contract README](../scripts/review/README.md). Unresolved citations return `invalid`, with every unresolved citation in the reason. This is distinct from repository access failure (`blocked`) and never counts as a verdict. Unknown statuses fail closed.

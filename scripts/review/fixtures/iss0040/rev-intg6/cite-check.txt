@@ -1,0 +1,5 @@
+unknown identifier: alwaysEmitSteps (missing alwaysEmitSteps)
+unknown identifier: eventUnbounded (missing eventUnbounded)
+unknown identifier: UnboundedEvents (missing UnboundedEvents)
+unknown identifier: classify_exhaustive (missing classify_exhaustive)
+SUMMARY rev-intg6: 30 locations ok, 79 identifiers ok, 4 unresolved

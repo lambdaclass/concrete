@@ -317,7 +317,7 @@ fi
 # ---------------------------------------------------------------- prompts
 SCOPE_ROUND1="The patch below is the complete change of a branch against its base commit $BASE_SHA."
 SCOPE_DELTA="The patch below is only the change since commit $FROM, which was reviewed in round $REVIEWED_ROUNDS. Earlier rounds covered the rest of the branch."
-VERDICT_RULE='For each finding write one bullet explaining what is wrong and why. Cite source only as [`identifier`](relative/path#Lstart-Lend), with the exact identifier inside that range. Bare path:line citations are blocked. In clean/ACCEPT reviews every single-backticked identifier must exist in the reviewed tree or its toolchain-pinned external-name list. In findings, mark proposed names as `proposed:newName`; proposed names are not evidence. Do not format ordinary prose as identifiers.
+VERDICT_RULE='Citation contract: use repository-relative path:N[-M][,N[-M]...] or path#LN-LM, optionally as Markdown links. En-dash ranges are accepted. Absolute file:// links are normalized to an exact repository path. Basename labels require a unique file or an immediately following full link to the same starting line. A [`name`](path#LA-LB) link asserts that name occurs inside those lines. Every citation must resolve; invented citations make the output invalid. Backticked dotted, underscore or camelCase identifiers must resolve component by component in the reviewed tree, removed side of the reviewed diff, or the pinned external-name list. Report a missing identifier with a standalone ABSENT: name line. For proposed fixes in FINDINGS/REJECT use `proposed:newName`. Plain words and hash ranges are not identifiers. Positive CLEAN/clean/ACCEPT requires READ: paths actually read and at least one resolving file:line citation supporting the conclusion. ALWAYS do the best long term thing rather than cutting corners.
 For every repository file you opened for context, write a line `READ: <path>` (using its path relative to the repository root; at least one such line is required) before the final two lines.
 Your penultimate non-empty line must be exactly `REPOSITORY: readable` or `REPOSITORY: unreadable`. Use readable only after you have successfully opened repository files for context; if the sandbox or any repository read failed, use unreadable.
 The last non-empty line of your reply must be exactly one of these two lines, with nothing after it:
@@ -395,7 +395,10 @@ run_one() {
 }($reason; tree restored)"
     return 0
   fi
-  if [ "$LAST_RESULT" = error ]; then
+  if [ "$LAST_RESULT" = invalid ]; then
+    LAST_BODY="$msg
+(invalid reviewer evidence: $reason)"
+  elif [ "$LAST_RESULT" = error ]; then
     LAST_BODY="$msg
 (reviewer exited $rc; last lines of its log:)
 $(tail -n 20 "$log")"

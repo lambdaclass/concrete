@@ -1,30 +1,11 @@
 # Reviewer evidence contract
 
-All verdict consumers use output_contract.py against the reviewed commit, never
-working files. READ directives require existing relative file paths.
+Citation contract: use repository-relative path:N[-M][,N[-M]...] or path#LN-LM, optionally as Markdown links. En-dash ranges are accepted. Absolute file:// links are normalized to an exact repository path. Basename labels require a unique file or an immediately following full link to the same starting line. A [`name`](path#LA-LB) link asserts that name occurs inside those lines. Every citation must resolve; invented citations make the output invalid. Backticked dotted, underscore or camelCase identifiers must resolve component by component in the reviewed tree, removed side of the reviewed diff, or the pinned external-name list. Report a missing identifier with a standalone ABSENT: name line. For proposed fixes in FINDINGS/REJECT use `proposed:newName`. Plain words and hash ranges are not identifiers. Positive CLEAN/clean/ACCEPT requires READ: paths actually read and at least one resolving file:line citation supporting the conclusion. ALWAYS do the best long term thing rather than cutting corners.
 
-Source citations must use [`identifier`](relative/path#Lstart-Lend) (the end is
-optional). Paths are exact repository-relative paths; lines are one-based and
-inclusive. The exact identifier must occur as a token within the range. Bare
-path:line locations and unnamed source links are blocked: EOF checks alone do
-not verify evidence. Use a local token when discussing a qualified declaration.
-Every source link is checked, including in FINDINGS/REJECT.
+Identifier lexicon: ASCII initial letter or underscore, then Unicode word characters, optional Lean !/?/apostrophe suffix; dotted sequences of these components. Only tokens with a dot, underscore, or lowercase-to-uppercase transition are identifier citations. Code containing spaces, plain words, filenames and commit ranges are outside that lexicon. `ABSENT:` resolves the reported name, not other names. All unresolved citations are listed in the invalid reason. Invalid is not a verdict; unknown statuses fail closed. READ directives retain their separate repository-access checks.
 
-In positive CLEAN/ACCEPT verdicts, every single-backticked identifier (letters,
-underscores, digits, dotted components, optional Lean !/?/apostrophe suffix)
-must occur in the reviewed tree. Code snippets, filenames and hash ranges are
-not identifier tokens. Reserve single-backtick identifiers for evidence.
-Proposed names belong in FINDINGS/REJECT and may be marked `proposed:newName`;
-negative verdicts do not require standalone names to exist. Source citations
-still must resolve. This checks textual evidence, not semantic truth.
+External names require a reviewed external-names.tsv entry with the exact lean-toolchain pin and upstream provenance. Host installations never authorize names.
 
-External identifiers require an entry in external-names.tsv at the reviewed SHA,
-with the exact lean-toolchain pin and upstream declaration provenance. Entries
-must be verified against that pinned toolchain when added; a toolchain change
-invalidates the entry. This explicit allowlist avoids depending on whichever
-Lean installation happens to be on the validator host. Add library pins through
-a reviewed contract extension before admitting other external libraries.
+Fixture provenance is in fixtures/iss0040/provenance.json. Source archives contain original git blobs from those commits, not reconstructed snippets. Raw reviewer outputs retain original trailers and are tested directly at the citation layer; final-message framing is tested separately.
 
-An unresolved citation returns blocked with its first exact diagnostic. This is
-enforced by the shared reader for review.sh, collect_output.sh, signoff.sh and
-review-evidence; no caller may reinterpret blocked as a positive verdict.
+N2 law-to-witness pairing is a distinct semantic obligation: the generic citation contract checks existence and anchors, not that a cited witness proves a law. A future opt-in N2 contract must specify law, Instance and Planted fields in the same location grammar and check exact source tags. This requires a coordinator roadmap row for an N2 evidence schema; it cannot be inferred safely from arbitrary prose tables.

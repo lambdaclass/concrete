@@ -23,6 +23,7 @@ VERIFY="$ROOT_DIR/scripts/review/verify.sh"
 SPLIT="$ROOT_DIR/scripts/review/split_diff.py"
 
 python3 -I "$ROOT_DIR/scripts/review/test_citations.py" || exit 1
+python3 -I "$ROOT_DIR/scripts/review/test_citation_evidence.py" || exit 1
 
 PASS=0
 FAIL=0

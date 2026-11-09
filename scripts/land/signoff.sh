@@ -264,8 +264,10 @@ cmd_collect() {
   [ -n "$log" ] || log="$work/$reviewer.log"
   tree="$work/tree"
   manifest="$work/tree.manifest"
+  cp -- "$req" "$work/request.txt"
   prepare_review_archive "$repo_root" "$sha" "$tree" "$manifest"
-  collect_reviewer_output "$reviewer" "$tree" "$req" "$out" "$log" "$timeout" || rc=$?
+  printf '\n%s\n' 'Citation contract: use repository-relative path:N[-M][,N[-M]...] or path#LN-LM, optionally as Markdown links. En-dash ranges are accepted. Absolute file:// links are normalized to an exact repository path. Basename labels require a unique file or an immediately following full link to the same starting line. A [`name`](path#LA-LB) link asserts that name occurs inside those lines. Every citation must resolve; invented citations make the output invalid. Backticked dotted, underscore or camelCase identifiers must resolve component by component in the reviewed tree, removed side of the reviewed diff, or the pinned external-name list. Report a missing identifier with a standalone ABSENT: name line. For proposed fixes in FINDINGS/REJECT use `proposed:newName`. Plain words and hash ranges are not identifiers. Positive CLEAN/clean/ACCEPT requires READ: paths actually read and at least one resolving file:line citation supporting the conclusion. ALWAYS do the best long term thing rather than cutting corners.' >>"$work/request.txt"
+  collect_reviewer_output "$reviewer" "$tree" "$work/request.txt" "$out" "$log" "$timeout" || rc=$?
   c_out="$(validate_reviewer_output "$repo_root" "$sha" "$tree" "$manifest" "$out" "$log" "ACCEPT,REJECT" "$rc")" || die "collect: validate_reviewer_output failed"
   c_status="$(printf '%s\n' "$c_out" | sed -n 's/^status: //p' | head -1)"
   c_reason="$(printf '%s\n' "$c_out" | sed -n 's/^reason: //p' | head -1)"

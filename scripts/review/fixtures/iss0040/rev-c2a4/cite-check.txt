@@ -1,0 +1,2 @@
+unknown identifier: nodeResult (missing nodeResult)
+SUMMARY rev-c2a4: 0 locations ok, 94 identifiers ok, 1 unresolved
