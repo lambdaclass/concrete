@@ -14,6 +14,8 @@ UNFINISHED_TAIL = re.compile(r'^<unfinished \.\.\.>\s*$')
 RESULT_TAIL = re.compile(
     r'^\s*=\s*(0|-[0-9]+(?:\s+E[A-Z0-9_]+(?:\s+\([^()\r\n]*\))?)?)\s*$'
 )
+EXIT_LINE = re.compile(r'^\+\+\+ exited with (?:0|[1-9][0-9]*) \+\+\+$')
+KILL_LINE = re.compile(r'^\+\+\+ killed by SIG[A-Z0-9_]+(?: \(core dumped\))? \+\+\+$')
 SIGNAL_LINE = re.compile(r'^---\s+SIG[A-Z0-9_]+\s+\{[^"\r\n]*\}\s+---\s*$')
 
 _SIMPLE_ESCAPES = {
@@ -168,6 +170,17 @@ def parse(lines, paths=False):
         body = pid_match.group(3)
         if not body:
             continue
+        if KILL_LINE.fullmatch(body):
+            # strace reports completed successful execs (= 0) before death. A
+            # killed unfinished syscall supplies no success evidence. Drop only
+            # its pending state, retaining all earlier successes for this PID.
+            # A subsequent call with the same PID starts a fresh lifetime.
+            pending.pop(pid, None)
+            continue
+        if EXIT_LINE.fullmatch(body):
+            if pid in pending:
+                raise ValueError(f"line {line_number}: normal exit during unfinished exec")
+            continue
         if SIGNAL_LINE.match(body) and "execve" not in body:
             continue
         if body.startswith(("execve(", "execveat(")):
@@ -218,6 +231,11 @@ def parse(lines, paths=False):
             )
         else:
             raise ValueError(f"line {line_number}: unrecognised exec syscall")
+        if re.fullmatch(r"\s*=\s*\?\s*", body[end_idx:]):
+            # strace's no-return marker is not success. Require an exact death
+            # record before discarding it; EOF or a new call still fails closed.
+            pending[pid] = ("no-return", path)
+            continue
         result = RESULT_TAIL.match(body[end_idx:])
         if not result:
             raise ValueError(f"line {line_number}: missing exec result")

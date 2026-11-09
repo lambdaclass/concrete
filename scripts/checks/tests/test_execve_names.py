@@ -14,6 +14,59 @@ spec.loader.exec_module(m)
 
 
 class TraceTests(unittest.TestCase):
+    def test_process_death(self):
+        self.assertEqual(m.parse([
+            '1 execve("/bin/sh", ["sh"], 0x0) = 0',
+            '1 +++ killed by SIGPIPE +++',
+            '1 execve("/bin/not-completed", [], 0x0 <unfinished ...>',
+            '1 +++ killed by SIGKILL (core dumped) +++',
+            '1 execve("/bin/true", [], 0x0) = 0',
+            '1 +++ exited with 0 +++',
+        ]), ["sh", "true"])
+        for tail in ('+++ killed by SIGPIPE +++ trailing', '+++ exited with x +++'):
+            with self.assertRaisesRegex(ValueError, '^line 1: unrecognised exec syscall$'):
+                m.parse(['1 ' + tail])
+        with self.assertRaisesRegex(ValueError, '^line 2: resumed exec has no unfinished call$'):
+            m.parse(['1 +++ killed by SIGKILL +++', '1 <... execve resumed>) = 0'])
+        with self.assertRaisesRegex(ValueError, '^line 2: normal exit during unfinished exec$'):
+            m.parse(['1 execve("/bin/unresolved", [], 0x0 <unfinished ...>',
+                     '1 +++ exited with 0 +++'])
+        with self.assertRaisesRegex(ValueError, '^unfinished exec calls have no result: 1$'):
+            m.parse(['1 execve("/bin/unresolved", [], 0x0) = ?'])
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory) / "kill.trace"
+            result = subprocess.run(["strace", "-f", "-qq", "-e", "trace=execve,execveat",
+                "-o", str(log), shutil.which("bash"), "-c", "kill -13 $$"], timeout=15)
+            self.assertEqual(result.returncode, -13)
+            self.assertRegex(log.read_text(), r'\+\+\+ killed by SIGPIPE \+\+\+')
+            self.assertEqual(m.parse_many([log]), ["bash"])
+            # strace syscall injection deterministically delays entry while a
+            # child kills the traced PID. No successful target may be counted.
+            import time
+            import signal
+            pidfile = Path(directory) / "pid"
+            process = subprocess.Popen(["strace", "-f", "-qq", "-e", "trace=execve,execveat",
+                "-e", "inject=execve:delay_enter=2s:when=1", "-o", str(log),
+                shutil.which("bash"), "-c", 'echo $$ > "$1"; exec "$2"',
+                "_", str(pidfile), shutil.which("true")], stderr=subprocess.PIPE)
+            try:
+                deadline = time.monotonic() + 10
+                while (not pidfile.exists() or
+                       'execve("' + shutil.which("true") + '"' not in log.read_text()):
+                    if time.monotonic() >= deadline:
+                        self.fail("delayed exec control did not publish its PID")
+                    time.sleep(0.01)
+                os.kill(int(pidfile.read_text()), signal.SIGKILL)
+                self.assertEqual(process.wait(timeout=10), -9, process.stderr.read().decode())
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                    process.wait(timeout=5)
+                process.stderr.close()
+            self.assertRegex(log.read_text(), r"(?:= \?|<unfinished \.\.\.>)")
+            self.assertNotIn("true", m.parse_many([log]))
+
+
     def test_control_paths_real_trace(self):
         if not shutil.which("strace"):
             self.fail("strace required for executable framing controls")

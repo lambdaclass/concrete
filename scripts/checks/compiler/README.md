@@ -77,6 +77,18 @@ closed. Real-trace controls produced by `strace` test result-like,
 unfinished-like, resumed-like, escaped-quote, and `-s`-truncated arguments
 alongside genuinely failed executions.
 
+The parser accepts only exact `+++ exited with N +++` and
+`+++ killed by SIG... +++` (optionally ` (core dumped)`) lifecycle records.
+A kill drops that PID's pending exec without admitting it, retaining every earlier
+`= 0` success. A normal exit while an exec is pending fails with
+`line N: normal exit during unfinished exec`. strace's terminal `= ?` result
+remains pending until an exact kill record; EOF, a resumed result without a pending
+call, or a new overlapping exec fails closed. Successful exec results are recorded
+before strace's death notification; a later kill cannot erase them. PID reuse
+starts without the dead process's pending state. Controls cover ordinary SIGPIPE
+and an externally killed, strace-injected delayed exec (including the real `= ?`
+form), as well as successful-exec retention, malformed records and PID reuse.
+
 Executable paths are validated immediately after C-string decoding, before either
 successful or failed calls can enter an audit. Unicode control characters are
 rejected with `line N: control character in executable path: <JSON string>`.
