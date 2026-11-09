@@ -59,7 +59,7 @@ end ConcreteSpec.Repro""")
     add("joint-branch-decide-repro", {
         "ConcreteSpec.lean": "import ConcreteSpec.Repro\n",
         "ConcreteSpec/Repro.lean": repro.read_text(),
-    }, set(), status=0)
+    }, {("INCOMPLETE", "analysis-budget-or-error", "ConcreteSpec.Repro.find_absent")}, status=2)
 
     add("unclassified", BASE.replace("/-- Law (subject `ConcreteSpecControl.S`). -/", ""),
         {("FAIL", "classification-count", "ConcreteSpecControl.growth"), ("FAIL", "evidence-law-kind", "EXAMPLE")})
@@ -213,6 +213,13 @@ end ConcreteSpec.Repro""")
             law = unavailable_laws[label]
             report_ok = (f"DETAIL analysis-error {law} stage=projection law={law} case=none projection-body-unavailable propext"
                          in output.splitlines())
+        if label == "joint-branch-decide-repro":
+            report_ok = ("DETAIL analysis-error ConcreteSpec.Repro.find_absent stage=projection law=ConcreteSpec.Repro.find_absent case=none projection-body-unavailable propext"
+                         in output.splitlines())
+            report_ok = report_ok and all(any(
+                row.startswith(f"NOTE analysis-result ConcreteSpec.Repro.{law} stage=projection ")
+                and "result=PASS " in row for row in output.splitlines())
+                for law in ["len_pos", "sum_zero"])
         if label == "missing-provenance":
             report_ok = {row for row in output.splitlines() if row.startswith(("FAIL ", "INCOMPLETE "))} == {
                 'INCOMPLETE missing-provenance ConcreteSpecControl.missingMetadata ',

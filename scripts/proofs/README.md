@@ -801,3 +801,36 @@ inner projections rather than inspecting an entire inner package. Each inner
 projection step consumes the unchanged shared projection allowance. Both
 controls formerly reported carrier-unavailable and now require the exact
 `FAIL projection-law ConcreteSpecControl.growth` finding.
+
+Round-5 provenance refinement separates trivial leaves from premise transfer in
+unresolved recursor branches. Constructor fields have lazy, per-constructor
+source queries; induction hypotheses are derived results rather than fields
+projected out of the major. Both provenance and the branch-analysis mode are
+part of cache identity. PSum controls pair an actually projected proof with an
+independently generated proof beside a data field, preventing whole-major
+provenance from contaminating an unrelated field. Constructor-field queries
+use the same selector for nested structures and computed carriers.
+
+Iota is applied using the checked recursor rule only when the major exposes an
+actual constructor. A stuck proof major is inspected rather than erased by K
+or structure eta. No unavailable primitive receives a special rule. Within
+minor analysis only, an *available* closed helper can be proved independent of
+caller premises if none of its free inputs (including dependencies of local
+types) can carry proof evidence. The capability check inspects constructor
+field telescopes, conservatively accepts unknown types as potentially proof
+carrying, memoizes complete results by context, and charges the unchanged
+projection allowance. Lexical closure of the checked helper body justifies
+this pruning: an available global body cannot capture the caller's locals.
+This is a dependency proof, not a new axiom/trust policy. Bodyless heads still
+report INCOMPLETE; the Law/Planted contradiction question remains unchanged.
+R-0219 owns this structural traversal and its focused positive/negative controls.
+
+Round-5 full branch inspection also reaches `propext` in the synthetic F3b
+control law `ConcreteSpec.Repro.find_absent`. This is another observation under
+`propext: pending owner question 8`, not a newly chosen primitive rule. The
+control requires exactly its projection-stage INCOMPLETE with
+`projection-body-unavailable propext`, while `len_pos` and `sum_zero` must both
+complete PASS under the same unchanged 64-visit control limit. No synthetic or
+production projection allowance was increased. The six real-spec names in the
+round-4r census record remain historical coordinator observations; no new scope
+census has been run locally.

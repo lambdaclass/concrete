@@ -894,3 +894,13 @@ checks. Its terminal receipt is
 [audits/N2-A3-round4r-driver-controls.txt](audits/N2-A3-round4r-driver-controls.txt).
 The complete driver receipt and standalone receipts supersede candidate-branch
 claims for this branch; all exact INCOMPLETE expectations remain explicit.
+
+Round-5 full branch inspection also reaches `propext` in the synthetic F3b
+control law `ConcreteSpec.Repro.find_absent`. This is another observation under
+`propext: pending owner question 8`, not a newly chosen primitive rule. The
+control requires exactly its projection-stage INCOMPLETE with
+`projection-body-unavailable propext`, while `len_pos` and `sum_zero` must both
+complete PASS under the same unchanged 64-visit control limit. No synthetic or
+production projection allowance was increased. The six real-spec names in the
+round-4r census record remain historical coordinator observations; no new scope
+census has been run locally.

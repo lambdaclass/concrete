@@ -139,6 +139,32 @@ def witnessReverse : True := reverse b2 b1
   IO.println "KEYS projection same-FVarId context distinct"
 
 #eval show MetaM Unit from do
+  let proof := mkConst ``True.intro
+  let ((before, state), _) ← ((direct `absent proof).run { remaining := 64 }).run {}
+  let changed := { state with origins := { state.origins with premiseOnly := true } }
+  let ((after, _), _) ← ((direct `absent proof).run changed).run {}
+  unless before && !after do throwError "projection-mode-collapsed"
+  IO.println "KEYS projection premise-only mode distinct"
+
+#eval show MetaM Unit from do
+  withLocalDeclD `sameOrigin (mkConst ``True) fun x => do
+    let ((before, state), _) ← ((direct `absent x).run { remaining := 64 }).run {}
+    let changed := { state with origins := { state.origins with minorOrigins := #[(x.fvarId!, false)] } }
+    let ((after, _), _) ← ((direct `absent x).run changed).run {}
+    unless before && !after do throwError "projection-origin-collapsed"
+  IO.println "KEYS projection same-FVarId origin distinct"
+
+#eval show MetaM Unit from do
+  withLocalDeclD `sameFieldOrigin (mkConst ``True) fun x => do
+    let carrier ← mkAppM ``And.intro #[x, mkConst ``True.intro]
+    let ((before, state), _) ← ((directConstructorField `absent ``And.intro 0 carrier).run
+      { remaining := 64, origins := { premiseOnly := true } }).run {}
+    let changed := { state with origins := { state.origins with minorOrigins := #[(x.fvarId!, false)] } }
+    let ((after, _), _) ← ((directConstructorField `absent ``And.intro 0 carrier).run changed).run {}
+    unless before && !after do throwError "projection-field-origin-collapsed"
+  IO.println "KEYS constructor-field origin distinct"
+
+#eval show MetaM Unit from do
   let tail ← mkArrow (mkConst ``Nat) (mkSort .zero)
   let explicit := mkForall `x .default (mkConst `Box) tail
   let implicit := mkForall `x .instImplicit (mkConst `Box) tail
@@ -186,6 +212,9 @@ def controls(meta):
         'DEMAND harmless-body context-searches=0',
         'KEYS declaration-name binder-info kind distinct',
         'KEYS projection same-FVarId context distinct',
+        'KEYS projection premise-only mode distinct',
+        'KEYS projection same-FVarId origin distinct',
+        'KEYS constructor-field origin distinct',
         'KEYS raw-refuted-types closed-refuted-types binder-info distinct',
         'TRANSPORT bad=true exact=FAIL-instance-false-discharge',
     ]
@@ -201,8 +230,8 @@ def planted_controls():
                                'visited : Std.HashSet (Expr × Array FVarId)')
     prefix, body = visited.split('partial def falseDischarge', 1)
     visited = prefix + 'partial def falseDischarge' + body.replace('  let key := (e, context)', '  let key := (e, (← getLCtx).getFVarIds)', 1)
-    projection_type = 'answers : Std.HashMap (Expr × DischargeRawContext × Array (FVarId × Bool)) Bool'
-    projection_key = '  let key := (e, context, (← get).minorOrigins)'
+    projection_type = 'answers : Std.HashMap (Expr × DischargeRawContext × ProjectionOrigins) Bool'
+    projection_key = '  let key := (e, context, (← get).origins)'
     assert consumer.count(projection_type) == consumer.count(projection_key) == 1
     projection = consumer.replace(projection_type, 'answers : Std.HashMap Expr Bool')
     projection = projection.replace(projection_key, '  let key := e', 1)
@@ -220,8 +249,10 @@ def planted_controls():
         else:
             assert result.returncode == 1, result.stdout
             errors = [line.split('error: ', 1)[1] for line in result.stdout.splitlines() if 'error: ' in line]
-            expected = {'fvar-only-visited': 'visited-context-collapsed', 'expression-only-projection': 'projection-context-collapsed', 'missing-result-obligation': 'transport-false-discharge-missed'}[label]
-            assert errors == [expected], result.stdout
+            expected = {'fvar-only-visited': ['visited-context-collapsed'],
+                        'expression-only-projection': ['projection-context-collapsed', 'projection-mode-collapsed', 'projection-origin-collapsed', 'projection-field-origin-collapsed'],
+                        'missing-result-obligation': ['transport-false-discharge-missed']}[label]
+            assert errors == expected, result.stdout
         print('PASS identity planted ' + label + ': exact stale-result diagnostic', flush=True)
 
 if __name__ == '__main__':

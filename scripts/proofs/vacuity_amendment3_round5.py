@@ -16,6 +16,7 @@ PROJECTIONS = {
     "mixed-minors": "Bool.casesOn (n == 0) (Nat.lt_succ_self n) h.1",
     "recursor-function": "(Bool.casesOn (motive := fun _ => (n < n+1) → n < n+1) (n == 0) (fun hp => hp) (fun hp => hp)) h.1",
     "match-carrier": "(match n == 0 with | true => (⟨0, h.1⟩ : {_k : Nat // n < n+1}) | false => ⟨0, h.1⟩).2",
+    "psum-carrier": "PSum.casesOn (motive := fun _ : PSum Nat (n < n+1) => n < n+1) (if n == 0 then PSum.inl n else PSum.inr h.1) (fun _ => Nat.lt_succ_self n) (fun hp => hp)",
     "cast-let": "let carrier : {_k : Nat // n < n+1} := ⟨0, h.1⟩; Eq.mp rfl carrier.2",
     "iff-field": "((Iff.intro (fun _ : True => h.1) (fun _ => True.intro)).mp True.intro)",
     "exists-carrier": "Exists.elim (⟨0, h.1⟩ : ∃ _ : Nat, n < n+1) (fun _ hp => hp)",
@@ -55,7 +56,7 @@ def main():
     parser.add_argument("--baseline", action="store_true")
     parser.add_argument("--group", choices=["fields", "eliminators", "dependent", "all"], default="all")
     args = parser.parse_args()
-    eliminators = {"cases-bool", "cases-nat", "matcher", "nested-matcher", "mixed-minors", "recursor-function", "match-carrier"}
+    eliminators = {"cases-bool", "cases-nat", "matcher", "nested-matcher", "mixed-minors", "recursor-function", "match-carrier", "psum-carrier"}
     with compiled_consumer() as meta:
         for label, body in PROJECTIONS.items():
             if args.group == "dependent" or (args.group == "fields" and label in eliminators) or (args.group == "eliminators" and label not in eliminators):
@@ -78,10 +79,11 @@ def main():
         if args.group in {"eliminators", "all"}:
             for label, body in {
                 "match-independent-field": "(match n == 0 with | true => (⟨h.1, Nat.lt_succ_self n⟩ : n < n+1 ∧ n < n+1) | false => ⟨h.1, Nat.lt_succ_self n⟩).2",
-                "minor-independent-origin": "Subtype.rec (motive := fun _ => n < n+1) (fun _ hp => hp) (if n == 0 then (⟨0, Nat.lt_succ_self n⟩ : {_k : Nat // n < n+1}) else ⟨0, Nat.lt_succ_self n⟩)",
+                "minor-independent-origin": "Subtype.rec (motive := fun _ => n < n+1) (fun _ hp => hp) (if n == 0 then (⟨n, Nat.lt_succ_self n⟩ : {_k : Nat // n < n+1}) else ⟨n, Nat.lt_succ_self n⟩)",
+                "psum-independent-origin": "PSum.casesOn (motive := fun _ : PSum Nat (n < n+1) => n < n+1) (if n == 0 then PSum.inl n else PSum.inr (Nat.lt_succ_self n)) (fun _ => Nat.lt_succ_self n) (fun hp => hp)",
             }.items():
                 fixture = projection(body)
-                if label == "minor-independent-origin":
+                if label in {"minor-independent-origin", "psum-independent-origin"}:
                     fixture = fixture.replace("theorem helper (n : Nat) (h :", "theorem helper (n : Nat) (_h :")
                 code, output = run(ROOT, "", fixture, 4096, meta_path=meta)
                 print(f"ROUND5 {label} exit={code}\n{output}", flush=True)
