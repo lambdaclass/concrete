@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "gates": {
+    "proof-vacuity": {
+      "check": "Proof vacuity",
+      "workflow": ".github/workflows/lean_action_ci.yml",
+      "job": "proof-vacuity",
+      "pr": [
+        [
+          "bash",
+          "scripts/proofs/vacuity.sh",
+          "--controls"
+        ]
+      ],
+      "daily": [
+        [
+          "bash",
+          "scripts/proofs/vacuity.sh"
+        ]
+      ],
+      "scopes": []
+    }
+  }
+}

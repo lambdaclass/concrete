@@ -4,6 +4,8 @@ name: Proof vacuity (N2 scoped audit)
 # There is no empty scope:
 # an unmigrated whole spec cannot accidentally acquire a green N2 coverage job.
 on:
+  schedule:
+    - cron: "17 3 * * *"
   workflow_dispatch:
     inputs:
       scope:
@@ -16,6 +18,7 @@ permissions:
 
 jobs:
   audit:
+    if: github.event_name == 'workflow_dispatch'
     name: Proof vacuity (manual scope)
     runs-on: ${{ vars.CONCRETE_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     timeout-minutes: 30
@@ -38,3 +41,13 @@ jobs:
         run: |
           test -n "$N2_SCOPE" || { echo "INCOMPLETE NOT MIGRATED (scope is required)"; exit 2; }
           nix develop .#gates --command bash scripts/proofs/vacuity.sh --scope "$N2_SCOPE"
+
+  daily:
+    if: github.event_name == 'schedule'
+    name: Proof vacuity (full daily audit)
+    runs-on: [self-hosted, linux, x64, concrete]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Full structural audit (registry daily tier)
+        run: nix develop .#gates --command python3 scripts/checks/gates_registry.py --run proof-vacuity --tier daily

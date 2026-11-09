@@ -170,3 +170,20 @@ Checker commit `985bf2fd465cc30bdba2525b74b9c750f11a3af5`:
 Only focused checks ran on the shared host. Full integration gates and independent
 reviews of record remain with the coordinator. The scoped C10 build held the
 provided machine-wide build slot.
+
+## Registry execution (round 3)
+
+The required **Proof vacuity** identity executes the PR commands in
+[`gates.json`](../checks/gates.json) through
+[`gates_registry.py`](../checks/gates_registry.py). The registry owns its command,
+workflow job, tier and cumulative migrated scopes. Its PR tier currently runs the
+real N2 controls and explicitly prints **NOT MIGRATED** for source coverage.
+Promotion adds migrated modules to `scopes`; the runner audits their union without
+changing the workflow. The daily tier runs the complete unscoped structural audit
+on the CI server. An unmigrated source can fail that daily audit; controls passing
+never constitute source coverage.
+
+`workflow_yaml.sh` checks the registry's required identity and exact executable
+invocation, including a planted substitution with `axioms.sh`. The control requires
+exactly `FAIL registry-required-invocation proof-vacuity`. An unrelated successful
+gate cannot satisfy this registry entry.

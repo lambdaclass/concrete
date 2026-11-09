@@ -236,8 +236,8 @@ jobs:
         with:
           build-args: "--log-level=warning"
 
-      - name: Proof vacuity (scripts/proofs/axioms.sh)
-        run: bash scripts/proofs/axioms.sh
+      - name: Proof vacuity (registry PR tier)
+        run: nix develop .#gates --command python3 scripts/checks/gates_registry.py --run proof-vacuity --tier pr
 
   proof-trust-ban:
     name: Proof trust ban (sorry, native_decide)

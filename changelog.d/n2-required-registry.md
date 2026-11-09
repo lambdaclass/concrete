@@ -1,0 +1,1 @@
+The required Proof vacuity check now runs N2 controls through an executable gate registry, reports unmigrated source coverage explicitly, and runs the full structural audit daily. Workflow validation rejects substituting an unrelated gate under the required identity.

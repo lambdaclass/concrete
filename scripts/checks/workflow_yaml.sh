@@ -47,4 +47,5 @@ done
 
 echo ""
 echo "WORKFLOW-YAML: PASS=$PASS  FAIL=$FAIL"
-[ "$FAIL" -eq 0 ]
+[ "$FAIL" -eq 0 ] || exit 1
+python3 scripts/checks/gates_registry.py
