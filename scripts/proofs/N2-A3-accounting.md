@@ -656,3 +656,40 @@ No local whole-scope census, publication, review tooling, language/spec decision
 or owner budget/wall policy decision was performed. The reserved certificate
 region remains byte-identical to 296cbad05. Full scope goes to the coordinator
 on concrete-ci-2 with the pinned command above.
+
+
+### Fix round 4: confirmed proof-body omission (A)
+
+Baseline `30c57a17c499254298eb194d2e47776d5296022d` reproduced the exact
+same-source differential before edits: def helper → exit 1, exactly
+`FAIL projection-law ConcreteSpecControl.growth`; theorem/opaque → exit 0,
+N2 PASS. The full baseline and per-analysis counters are retained in
+[audits/N2-A3-round4-projection-before.txt](audits/N2-A3-round4-projection-before.txt).
+Permanent driver controls retain all three forms. Raw proof delta now explicitly
+reads theorem/opaque bodies, substitutes actual levels/arguments, and uses the
+existing complete expression/context memo table and 4,096 projection-node bound.
+Unavailable proof bodies and unsupported expressions raise INCOMPLETE, with an
+exact unavailable-body control. Nonproof nodes and kernel primitives have explicit
+classification; a nullary arithmetic proof constructor is not premise projection.
+No computational conversion transparency or budgets changed.
+
+The reserved `certificateDependency` through `end Discharge` region is unchanged.
+Slice-2a has the same directStep defect and must carry A's proof-body traversal,
+nullary-constructor distinction and unavailable-body handling when reconciling;
+its certificate evaluator is not a substitute for this projection analysis.
+B's typed protection/comparison also belongs to reconciliation of the surrounding
+consumer, independently of certificate transfer. Do not overwrite either fix with
+the inherited copies from 2a.
+
+**Open contract question C, pending owner:** must all Law and Planted supplied
+proofs be free of supplied contradictions, including those hidden only inside
+helper theorem bodies? The confirmed `hidden-law-body` and `hidden-planted-body`
+controls currently give N2 PASS and are retained as observations of current
+behavior. No owner answer is inferred. A yes needs bounded origin-sensitive
+validation rooted at each supplied proof, actual level/argument substitution,
+sharing by instantiated dependency and local context, and preservation of
+supplied/hypothetical provenance through all transfers. Unsupported/missing
+transfers would be INCOMPLETE. This sketch is not implemented. The coordinator
+assigns the owning roadmap row in the sweep; R-0219 owns the current N2 audit.
+Per-analysis interpretation and whole-scope wall policy remain pending owner.
+Coordinator reviewers must do the best long-term thing rather than cut corners.

@@ -19,6 +19,29 @@ def controls(run, source, labels=None):
     def add(label, text, expected, budget=64, status=1):
         cases.append((label, text, budget, set(expected), status))
 
+    # Same proof and telescope; declaration opacity must not hide projection.
+    for kind in ["def", "theorem", "opaque"]:
+        helper = ("/-- Helper (projection). Returns the premise. (approved: independent:confirm). -/\n"
+                  + kind + " helper (n : Nat) (h : n < n+1 ∧ True) : n < n+1 := h.1\n")
+        fixture = (BASE.replace("/-- Law", helper + "/-- Law", 1)
+                   .replace("(_h : n = 2)", "(h : n < n+1 ∧ True)")
+                   .replace(":= Nat.lt_succ_self n", ":= helper n h")
+                   .replace("growth 2 rfl", "growth 2 ⟨by decide, trivial⟩")
+                   .replace("2 = 2 ∧ ¬", "(2 < 2+1 ∧ True) ∧ ¬"))
+        add("projection-helper-" + kind, fixture,
+            {("FAIL", "projection-law", "ConcreteSpecControl.growth")})
+
+    # Unavailable proof evidence is unknown, never a completed negative.
+    unavailable = BASE.replace("/-- Law", "axiom unavailable (n : Nat) : n < n+1\n/-- Law", 1).replace(":= Nat.lt_succ_self n", ":= unavailable n")
+    add("projection-unavailable", unavailable,
+        {("INCOMPLETE", "analysis-budget-or-error", "ConcreteSpecControl.growth")}, status=2)
+
+    # Observations for an OPEN owner contract, not enforcement of a new policy.
+    hidden_law = BASE.replace("/-- Law", "axiom impossible : False\n/-- Helper (computation). Supplied proof. (approved: independent:confirm). -/\ntheorem hidden (n : Nat) : n < S n := False.elim impossible\n/-- Law", 1).replace(":= Nat.lt_succ_self n", ":= hidden n")
+    add("hidden-law-body", hidden_law, set(), status=0)
+    hidden_planted = BASE.replace("/-- Law", "axiom impossible : False\n/-- Helper (computation). Supplied proof. (approved: independent:confirm). -/\ntheorem hidden : False := impossible\n/-- Law", 1).replace(":= by decide", ":= False.elim hidden")
+    add("hidden-planted-body", hidden_planted, set(), status=0)
+
     from pathlib import Path
     repro = Path(__file__).with_name("fixtures") / "F3b-Repro.lean"
     inline_match = (Path(__file__).with_name("fixtures") / "N2-Inline-Match-Repro.lean").read_text()
@@ -171,6 +194,8 @@ end ConcreteSpec.Repro""")
                 identities.setdefault(key, set()).add(words[2])
                 found.add(key)
         report_ok = True
+        if label == "projection-unavailable":
+            report_ok = ("DETAIL analysis-error ConcreteSpecControl.growth stage=projection law=ConcreteSpecControl.growth case=none projection-body-unavailable ConcreteSpecControl.unavailable" in output)
         if label == "missing-provenance":
             report_ok = {row for row in output.splitlines() if row.startswith(("FAIL ", "INCOMPLETE "))} == {
                 'INCOMPLETE missing-provenance ConcreteSpecControl.missingMetadata ',

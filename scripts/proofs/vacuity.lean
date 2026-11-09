@@ -358,7 +358,7 @@ structure ProjectionState where
 
 mutual
 /-- Inspect the complete proof DAG under one declared distinct-expression bound.
-    Raw delta unfolds one definition per visit; heartbeats also bound meta work. -/
+    Raw proof delta unfolds one available body per visit; heartbeats also bound meta work. -/
 partial def direct (n : Name) (e : Expr) : StateRefT ProjectionState Audit Bool := do
   let e := cleanSpine e
   let context ← dischargeRawContext
@@ -376,6 +376,8 @@ partial def direct (n : Name) (e : Expr) : StateRefT ProjectionState Audit Bool 
   return answer
 
 partial def directStep (n : Name) (e : Expr) : StateRefT ProjectionState Audit Bool := do
+  -- Type/data nodes are supported non-evidence, not unavailable proof bodies.
+  unless ← isProof e do return false
   if e.getAppFn'.isFVar then return true
   if let .proj _ _ receiver := e.getAppFn' then return ← direct n receiver
   match e with
@@ -400,17 +402,32 @@ partial def directStep (n : Name) (e : Expr) : StateRefT ProjectionState Audit B
                 if ← direct n minor then return true
       if let some (.ctorInfo c) := (← getEnv).find? h then
         let mut all := true
+        let mut hasEvidence := false
         for arg in e.getAppArgs[c.numParams:] do
           if ← isProof arg then
+            hasEvidence := true
             if !(← direct n arg) then all := false
-        return all
-    -- Raw delta, not whnfR/smart unfolding: exactly one definition per fuel unit.
+        -- A nullary proof constructor can establish real computational facts
+        -- (e.g. Nat.le.refl). It is not evidence projected from a premise.
+        return hasEvidence && all
+    -- Proof evidence has explicit theorem/opaque access. This is NOT the
+    -- transparency policy for computational conversion or subject mutation.
+    -- Instantiate actual universes and arguments before memoizing the query.
     if let .const h levels := e.getAppFn' then
-      if let some (.defnInfo d) := (← getEnv).find? h then
-        let body := d.value.instantiateLevelParams d.levelParams levels
+      let ci ← getConstInfo h
+      if let some value := ci.value? (allowOpaque := true) then
+        unless ci.levelParams.length == levels.length do
+          throwError "projection-universe-arity {h}"
+        let body := value.instantiateLevelParams ci.levelParams levels
         return ← direct n (mkAppN body e.getAppArgs).headBeta
+      -- Constructors and recursors are kernel primitives, not missing bodies.
+      -- Non-projecting kernel elimination is genuine negative evidence.
+      match ci with
+      | .recInfo _ => return false
+      | _ => throwError "projection-body-unavailable {h}"
     let reduced := e.headBeta
-    if reduced != e then direct n reduced else return false
+    if reduced != e then direct n reduced
+    else throwError "projection-unsupported-expression {e}"
 
 end
 
@@ -1683,6 +1700,7 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
                 let (projection, cost) ← (direct law.name proof).run { remaining := budget, budget := (← get).budget }
                 emit "NOTE" "projection-cost" law.name s!"visited={budget - cost.remaining} limit={budget} cached={cost.answers.size}"
                 if projection then fail "projection-law" law.name
+              else throwError "projection-body-unavailable {law.name}"
         }
         let enumerationFindings := (← get).findings
         let enumerationResolutions := (← get).resolutions

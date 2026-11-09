@@ -622,3 +622,31 @@ controls, 24 identity/obligation checks and final named profiles, are in
 and [N2-A3-accounting.md](N2-A3-accounting.md#authoritative-final-code-and-measurements).
 These are focused controls; the coordinator's pinned full-scope ci-2 command
 remains necessary. Both budget interpretation and wall policy remain pending owner.
+
+
+### Amendment 3, fix round 4: proof evidence boundary
+
+Projection follows raw definition, theorem and opaque bodies with actual universe
+and argument substitution, memoized by full expression and context under the
+unchanged 4,096-node projection allowance. Computational conversion and subject
+mutation retain their separate transparency policy. Missing bodies and unsupported
+proof expressions are INCOMPLETE; a kernel constructor or recursor is a supported
+primitive, not a missing declaration body. Nullary arithmetic proof constructors
+are computational evidence, not premise projections. The permanent
+`projection-helper-{def,theorem,opaque}` controls require exactly
+`FAIL projection-law ConcreteSpecControl.growth`; `projection-unavailable`
+requires INCOMPLETE plus the exact unavailable-dependency detail.
+
+**Pending owner: supplied contradictions in Law/Planted proofs.** The confirmed
+`hidden-law-body` and `hidden-planted-body` controls currently give N2 PASS:
+projection inspects the Law proof for projection, whereas Planted checks its
+proposition, not every supplied proof dependency. Whether to ban supplied
+contradictions at both roots is an explicit open contract question. A yes would
+require bounded, origin-sensitive dependency validation starting at each supplied
+proof root, preserving actual arguments/universes and hypothetical versus supplied
+origins through helpers, using the certificate-transfer DAG under existing budgets.
+This is a sketch, not implemented policy. The coordinator must assign the owning
+roadmap row in the sweep; this writer allocates no R/ISS IDs. R-0219 owns the
+existing N2 audit machinery. The per-analysis interpretation and wall policy
+also remain pending owner. Reviewers must do the best long-term thing rather
+than cut corners.
