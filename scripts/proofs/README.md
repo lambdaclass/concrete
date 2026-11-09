@@ -484,3 +484,26 @@ The dependency control builds 100 aliases and queries 100 distinct applications.
 The normal query completes at 2,430 work units; disabling completed-closure
 publication must report exactly `CONTROL work-budget work=20000`. This targets
 repeated dependency discovery, not just shared expression children.
+
+Dependency discovery now tests module provenance only for transparent bodies it
+will actually follow; constructors, recursors and opaque declarations cannot
+cause a discarded module walk. `mayMention` memoizes completed declaration/module
+answers, and mutation applies the same import-DAG pruning before opening an
+unrelated body. These remove redundant queries without discounting cache hits.
+The alias control now uses 2,330 units. Its explicit inline-match Instance must
+PASS; the kernel-convertible changed-branch Instance must produce exactly
+`FAIL instance-application DependencyControls.changed law=DependencyControls.law case=inline`.
+
+The three Own cases at historical lines 4224, 4237 and 4258 now complete at
+18,822, 19,312 and 19,136 units respectively. They PASS with the already accepted
+ordinary-unfolding comparison from `6fe932293`; restoring smart unfolding
+reproduces all three exact historical `FAIL instance-application` diagnostics.
+Thus retaining those old false positives is not the intended regression contract.
+No language/spec decision is made by this accounting repair.
+
+`scripts/proofs/vacuity_instance_profile.py --source ARCHIVE --suffix 'Own.lean:4258»'`
+selects exactly one Instance and invokes production validation, without scheduling
+a scope census. `--consumer PATH` permits an explicit baseline; `--profile`
+instruments a private consumer with work-call and Meta-search totals. Instrumented
+heartbeat counts include probe overhead and are diagnostic only. Sources, consumer
+compilation, and elaboration scratch stay private to that invocation.

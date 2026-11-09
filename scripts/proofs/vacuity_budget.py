@@ -194,8 +194,19 @@ def dependency_controls():
     consumer = (HERE / 'vacuity.lean').read_text()
     anchor = '    if !result && completeQuery then'
     assert consumer.count(anchor) == 1
-    declarations = 'def subject (n : Nat) := n + 1\ndef dep0 (n : Nat) := n + 2\n'
+    declarations = 'inductive Outcome where | next : Nat → Outcome | none\ndef subject (n : Nat) : Outcome := .next (n + 1)\ndef dep0 (n : Nat) := n + 2\n'
     declarations += ''.join(f'def dep{i} (n : Nat) := dep{i-1} n\n' for i in range(1, 101))
+    declarations += r'''
+theorem law (n : Nat) : (match subject n with
+    | .next m => m = n + 1 ∧ dep100 n = dep100 n
+    | .none => True) := ⟨rfl, rfl⟩
+def witness : (match subject 0 with
+    | .next m => m = 0 + 1 ∧ dep100 0 = dep100 0
+    | .none => True) := law 0
+def changed : (match subject 0 with
+    | .next m => m = m ∧ dep100 0 = dep100 0
+    | .none => True) := law 0
+'''
     driver = r'''import N2Meta
 open Lean Meta Vacuity
 namespace DependencyControls
@@ -212,6 +223,21 @@ set_option maxHeartbeats 2000000 in
       throwError "negative-closure-not-cached"
     IO.println s!"DEPENDENCIES complete work={(← budget.get).work}"
   catch ex => IO.println s!"CONTROL {← ex.toMessageData.toString} work={(← budget.get).work}"
+set_option maxHeartbeats 2000000 in
+#eval show MetaM Unit from do
+  let env ← getEnv
+  let all := env.constants.map₁.toList ++ env.constants.map₂.toList
+  let law := `DependencyControls.law
+  let tags := #[{ name := law, info := (← getConstInfo law), doc := "Law (subject `DependencyControls.subject`)." : Tagged }]
+  for name in [`DependencyControls.witness, `DependencyControls.changed] do
+    let ci ← getConstInfo name
+    let job : AnalysisJob := {
+      name, stage := "instance", law := some law, caseName := "inline"
+      action := do
+        discard <| checkInstance env all tags { name, info := ci, doc := "", law, key := "inline" } #[]
+    }
+    let (_, state) ← (isolated (← readThe Core.Context) job).run {}
+    for f in state.findings do IO.println s!"{f.status} {f.code} {f.name} {f.detail}"
 end DependencyControls
 '''
     driver = driver.replace('DECLARATIONS', declarations)
@@ -219,6 +245,7 @@ end DependencyControls
         with compiled_consumer(consumer_text=text) as meta, tempfile.TemporaryDirectory(prefix='n2-dependencies-') as temp:
             path = Path(temp) / 'Dependencies.lean'
             path.write_text(driver)
+            (Path(temp) / 'ConcreteSpec.lean').write_text(driver)
             result = command(['lean', path], temp, dict(os.environ, LEAN_PATH=str(meta)), seconds=60)
         assert result.returncode == 0, result.stdout
         if label == 'memoized':
@@ -226,7 +253,11 @@ end DependencyControls
             assert 'CONTROL ' not in result.stdout, result.stdout
         else:
             assert 'CONTROL work-budget work=20000' in result.stdout, result.stdout
+        assert 'NOTE analysis-result DependencyControls.witness stage=instance law=DependencyControls.law case=inline result=PASS ' in result.stdout, result.stdout
+        assert 'FAIL instance-application DependencyControls.changed law=DependencyControls.law case=inline' in result.stdout, result.stdout
+        assert 'INCOMPLETE ' not in result.stdout, result.stdout
         print(f'PASS dependency {label}: {result.stdout.strip()}', flush=True)
+
 
 def main():
     dag_controls()

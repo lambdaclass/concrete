@@ -31,6 +31,7 @@ structure AnalysisUsage where
   work : Nat := 0
   projection : Nat := 0
   modules : Std.HashMap (Name × Name) Bool := {}
+  mayMentions : Std.HashMap (Name × Name) Bool := {}
   constants : Std.HashMap Expr (Array Name) := {}
   mentions : Std.HashMap (Expr × Name) Bool := {}
   mutations : Std.HashMap (Expr × Name × Name × Array Name) Expr := {}
@@ -892,10 +893,18 @@ partial def moduleDepends (module target : Name) (budget : Option WorkBudget) : 
 
 def mayMention (n subject : Name) (budget : Option WorkBudget) : MetaM Bool := do
   useWork budget
-  let env ← getEnv
-  let some source := env.getModuleIdxFor? n | return true
-  let some target := env.getModuleIdxFor? subject | return false
-  moduleDepends env.header.moduleNames[source.toNat]! env.header.moduleNames[target.toNat]! budget
+  if let some b := budget then
+    if let some cached := (← b.get).mayMentions[(n, subject)]? then return cached
+  let result ← go
+  if let some b := budget then
+    b.modify fun s => { s with mayMentions := s.mayMentions.insert (n, subject) result }
+  return result
+where
+  go : MetaM Bool := do
+    let env ← getEnv
+    let some source := env.getModuleIdxFor? n | return true
+    let some target := env.getModuleIdxFor? subject | return false
+    moduleDepends env.header.moduleNames[source.toNat]! env.header.moduleNames[target.toNat]! budget
 
 partial def mentionsVisit (e : Expr) (subject : Name) (budget : Option WorkBudget := none) : StateRefT (Nat × Std.HashSet Name) MetaM Bool := do
   let (fuel, _) ← get
@@ -909,8 +918,8 @@ partial def mentionsVisit (e : Expr) (subject : Name) (budget : Option WorkBudge
   for n in constants do
     if (← get).2.contains n then continue
     modify fun (left, visited) => (left, visited.insert n)
-    unless ← mayMention n subject budget do continue
     if let some (.defnInfo d) := (← getEnv).find? n then
+      unless ← mayMention n subject budget do continue
       if ← mentionsVisit d.value subject budget then return true
   return false
 
@@ -952,6 +961,7 @@ where
      if n == subject then return .const mutant us
      if boundaries.contains n then return e
      if let some (.defnInfo d) := (← getEnv).find? n then
+       unless ← mayMention n subject budget do return e
        -- Query-local visited set; nested helpers never receive another allowance.
        let (occurs, state) ← (mentions d.value subject budget).run (← get, {})
        set state.1

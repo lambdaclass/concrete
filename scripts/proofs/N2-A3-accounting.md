@@ -220,3 +220,36 @@ completes with 2,430 units, its disabled-publication mutation reports exactly
 `CONTROL work-budget work=20000`, and all 13 production scheduler/budget controls
 PASS. No scope census or review tooling was run; coordinator reviews must do the
 best long-term thing rather than cut corners.
+
+### Remaining discovery redundancy and the historical FAILs
+
+Only transparent definitions can be followed by `mentionsVisit`; performing a
+module query on every constructor, recursor or opaque constant was redundant.
+Completed `mayMention` answers are now memoized, and mutation prunes unrelated
+imported bodies before traversing them. Cache-hit work charges remain unchanged.
+The updated alias control completes at 2,330 units and adds a direct production
+Instance pair with an explicit inline matcher: the unchanged contract must PASS,
+and the changed branch must emit exactly `FAIL instance-application
+DependencyControls.changed law=DependencyControls.law case=inline`.
+
+Bounded historical single-Instance runs, source `6efdce6136752d51fc74265d61278d90937f24cd`:
+
+| historical Own line / law | N14d supplied result | repaired work / verdict |
+| --- | --- | --- |
+| 4224 / step_next_erasure | work-budget, 20,000 | 18,822 / PASS |
+| 4237 / step_request_erasure | work-budget, 20,000 | 19,312 / PASS |
+| 4258 / Step_erasure | work-budget, 20,000 | 19,136 / PASS |
+
+These PASS results do not silently discard the historical FAILs: in a private
+consumer copy, restoring smart unfolding produces the exact `FAIL
+instance-application` on each of the same three names, with identical work counts.
+Their former comparison false positives were fixed independently by already
+accepted `6fe932293`. The accounting defect prevented reaching that corrected
+comparison. No semantic change to it is needed or included here.
+
+The line-4258 completed charge profile is `workConstants=10819`,
+`moduleDepends=7068`, `mayMention=355`, `mutate=170`, `mentionsVisit=156`,
+`mentions=226`, `withProtected=342`, totaling 19,136. The earlier charge profile
+stopped before comparison; comparing individual category totals across those
+cut points is not a full-run speed comparison. Local cold-cache heartbeats and
+wall times also must not be substituted for the coordinator's scope census.
