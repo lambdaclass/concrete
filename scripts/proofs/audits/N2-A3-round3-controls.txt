@@ -1,0 +1,161 @@
+N2 amendment-3 fix round 3: focused controls
+Consumer code commit: e5b2dc3c1fcb77ddf7532eb39c00769979cb70bd
+Consumer blob: 68e722750082236752b5c597d1a7b607a0a00f77
+Consumer SHA256: 29d2e9ab043508d25881771923cd173085fc6cbe29990133cfb766cabd85246d
+Identity test final bytes: 7d155cb0a65a77c57f01ddc203df5e5e2668b7f7
+Later changes are validation records only. Every listed command exited 0.
+All commands ran inside nix develop, under an outer timeout; each Lean probe
+also uses bounded_run. No local whole-scope census or review tooling ran.
+
+=== reporting-verified ===
+PASS reporting retry-journal: earlier completed FAIL survives less-progress retry and torn record
+PASS reporting wall-watchdog: earlier exact FAIL, named interrupted/unrun analyses, population equations
+PASS reporting work-budget: exact named INCOMPLETE and unrelated FAIL retained
+PASS reporting analysis-error: exact named INCOMPLETE and unrelated FAIL retained
+PASS reporting heartbeat: exact named INCOMPLETE and unrelated FAIL retained
+PASS reporting scheduler-error: exact named scheduler INCOMPLETE and no partial population
+PASS reporting planted-error: exact Planted and paired Instance named; unrelated FAIL retained
+PASS reporting classification-unknown cap=None
+PASS reporting classification-unknown cap=100000
+PASS reporting repeated-job-findings
+PASS budget heavy-alone
+PASS budget bad-alone
+PASS budget repeated-instance-finding
+PASS budget starvation
+PASS budget reverse
+PASS budget heartbeat-starvation
+PASS budget cap-baseline
+PASS budget cap-population
+PASS budget cap-zero
+PASS budget empty
+PASS budget nested-reset-mentions
+PASS budget nested-reset-mutate
+PASS budget nested-reset-withProtected
+Budget controls: 13 PASS, 0 FAIL
+PASS control positive
+PASS control false-discharge
+PASS control positive-budget-chain
+N2 selected controls: 3 PASS, 0 FAIL
+PASS reporting replay-validator: exactly FAIL report-incomplete c9-new
+
+=== budget-verified ===
+PASS DAG memoized: DAG depth=10 work=41 cached=22 root=true
+PASS DAG early-exit: DAG depth=10 work=4093 cached=2 root=false
+PASS dependency memoized: /tmp/nix-shell.nnXAAo/n2-dependencies-la4ul34q/Dependencies.lean:111:0: warning: Definition `witness` is a proposition; use `theorem` instead of `def`
+PASS dependency uncached: /tmp/nix-shell.nnXAAo/n2-dependencies-tttml34u/Dependencies.lean:111:0: warning: Definition `witness` is a proposition; use `theorem` instead of `def`
+PASS refutation memoized: CONTEXT SEARCH
+PASS refutation context-erased: CONTEXT SEARCH
+PASS refutation raw-type-erased: CONTEXT SEARCH
+PASS identity PIPE FAIL instance-false-discharge witnessForward
+PASS identity PIPE FAIL instance-false-discharge witnessReverse
+PASS identity ORDER [b1, b2] b1 bad=false
+PASS identity ORDER [b1, b2] b2 bad=true
+PASS identity ORDER [b2, b1] b2 bad=true
+PASS identity ORDER [b2, b1] b1 bad=false
+PASS identity ROOT [b3, b2] b3 bad=false
+PASS identity ROOT [b3, b2] b2 bad=true
+PASS identity ROOT [b2, b3] b2 bad=true
+PASS identity ROOT [b2, b3] b3 bad=false
+PASS identity SETTYPE before=true after=false fresh=false
+PASS identity VISITED setType before=false after=true
+PASS identity KEYS interning mutation projection binder-info binder-name universe distinct
+PASS identity KEYS options mode distinct
+PASS identity MODULES import-order checked forward=false backward=true self=true
+PASS identity DEMAND harmless-body searches=0
+PASS identity KEYS declaration-name binder-info kind distinct
+PASS budget heavy-alone
+PASS budget bad-alone
+PASS budget repeated-instance-finding
+PASS budget starvation
+PASS budget reverse
+PASS budget heartbeat-starvation
+PASS budget cap-baseline
+PASS budget cap-population
+PASS budget cap-zero
+PASS budget empty
+PASS budget nested-reset-mentions
+PASS budget nested-reset-mutate
+PASS budget nested-reset-withProtected
+Budget controls: 13 PASS, 0 FAIL
+
+=== round5-verified ===
+PASS control joint-branch-decide-repro
+PASS control false-discharge
+PASS control absurd-discharge
+PASS control nomatch-discharge
+PASS control helper-false
+PASS control false-cases
+PASS control empty-elimination
+PASS control pempty-elimination
+PASS control helper-nomatch
+PASS control decide-hypothesis-positive
+PASS control nested-decide-discharge-1
+PASS control nested-decide-discharge-4
+PASS control nested-decide-discharge-12
+PASS control hypothetical-false-positive
+PASS control hypothetical-empty-positive
+PASS control hypothetical-pempty-positive
+PASS control open-helper-false
+PASS control open-helper-empty
+PASS control open-helper-pempty
+PASS control data-subtype-discharge
+PASS control data-psigma-discharge
+PASS control data-pprod-discharge
+PASS control finite-collection-decide-positive
+PASS control finite-collection-simp-positive
+PASS control finite-collection-cases-positive
+PASS control joint-hypothetical-positive
+PASS control joint-supplied-negative
+PASS control joint-open-supplied-negative
+PASS control reachable-open-impossible-negative
+PASS control reachable-joint-helper-negative
+PASS control unreachable-closed-supplier-positive
+PASS control context-cache-supplied-negative
+N2 selected controls: 32 PASS, 0 FAIL
+CERTIFICATE origin: rejected-supplied-contradiction supplier=impossible
+CERTIFICATE non-circular: rejected-supplied-contradiction supplier=impossible
+CERTIFICATE library-decide-matcher: admitted
+CERTIFICATE dependency-chain-baseline: admitted
+CERTIFICATE shared-budget: INCOMPLETE analysis-budget-or-error CertificateControl.instance stage=certificate-dependencies law=CertificateControl.law case=shared-budget false-discharge-budget
+Certificate controls: 5 PASS, 0 FAIL
+
+=== certificates-verified ===
+CERTIFICATE origin: rejected-supplied-contradiction supplier=impossible
+CERTIFICATE non-circular: rejected-supplied-contradiction supplier=impossible
+CERTIFICATE library-decide-matcher: admitted
+CERTIFICATE dependency-chain-baseline: admitted
+CERTIFICATE shared-budget: INCOMPLETE analysis-budget-or-error CertificateControl.instance stage=certificate-dependencies law=CertificateControl.law case=shared-budget false-discharge-budget
+Certificate controls: 5 PASS, 0 FAIL
+
+=== inline-verified ===
+PASS control inline-match-positive
+PASS control inline-match-changed-branch
+N2 selected controls: 2 PASS, 0 FAIL
+
+=== fixtures-verified ===
+PASS real fixture provenance: 10 byte-for-byte excerpts
+
+=== identity-record-final ===
+PASS identity PIPE FAIL instance-false-discharge witnessForward
+PASS identity PIPE FAIL instance-false-discharge witnessReverse
+PASS identity ORDER [b1, b2] b1 bad=false
+PASS identity ORDER [b1, b2] b2 bad=true
+PASS identity ORDER [b2, b1] b2 bad=true
+PASS identity ORDER [b2, b1] b1 bad=false
+PASS identity ROOT [b3, b2] b3 bad=false
+PASS identity ROOT [b3, b2] b2 bad=true
+PASS identity ROOT [b2, b3] b2 bad=true
+PASS identity ROOT [b2, b3] b3 bad=false
+PASS identity SETTYPE before=true after=false fresh=false
+PASS identity VISITED setType before=false after=true
+PASS identity KEYS interning mutation replacement projection binder-info binder-name universe distinct
+PASS identity KEYS options mode distinct
+PASS identity MODULES import-order checked forward=false backward=true self=true
+PASS identity DEMAND harmless-body searches=0
+PASS identity KEYS declaration-name binder-info kind distinct
+PASS identity planted ordinary-expr-equality: exact stale-result diagnostic
+PASS identity planted fvar-only-visited: exact stale-result diagnostic
+
+Planted cache controls check exact diagnostics:
+ordinary-expr-equality: ROOT [b3, b2] b2 bad=false; SETTYPE before=true after=true fresh=false
+fvar-only-visited: exactly one Lean error, visited-context-collapsed

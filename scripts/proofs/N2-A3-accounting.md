@@ -496,3 +496,58 @@ hypothetical variable: the focused `reachable-open-impossible-negative` and
 `joint-open-supplied-negative` controls require exactly `instance-false-discharge`.
 The refutation demand change must retain that rule; a local four-case rerun
 passes both negatives and both hypothetical positives.
+
+### Final round-3 receipts
+
+Consumer code commit `e5b2dc3c1fcb77ddf7532eb39c00769979cb70bd`, blob
+`68e722750082236752b5c597d1a7b607a0a00f77`, SHA256
+`29d2e9ab043508d25881771923cd173085fc6cbe29990133cfb766cabd85246d`.
+Subsequent commits change tests/records only. The final identity controls are at
+`7d155cb0a65a77c57f01ddc203df5e5e2668b7f7`. The following final-byte
+**instrumented diagnostic** single-analysis results supersede intermediate
+numbers above (heartbeats include instrumentation; no gate result is inferred):
+
+| Source line | Stage | Result | Work / 20,000 | Heartbeats / 2,000,000 |
+|---|---|---|---:|---:|
+| Own:4381 | instance | INCOMPLETE | 20000 | 632756 |
+| Own:4394 | instance | INCOMPLETE | 20000 | 632756 |
+| Own:4369 | instance | INCOMPLETE | 20000 | 513301 |
+| Grant:1478 | instance | INCOMPLETE | 20000 | 413006 |
+| Own:4230 | planted | PASS | 12418 | 624 |
+| Own:4247 | planted | PASS | 13224 | 697 |
+| Own:4269 | planted | PASS | 12941 | 680 |
+| Own:4224 | instance | PASS | 12044 | 4486 |
+| Own:4237 | instance | PASS | 12534 | 4520 |
+| Own:4258 | instance | PASS | 12324 | 4510 |
+
+All four heavy INCOMPLETEs have the exact reason `false-discharge-budget`.
+Detailed charges and analysis milliseconds are in
+[audits/N2-A3-round3-measurements.txt](audits/N2-A3-round3-measurements.txt).
+The batch infrastructure watchdog stopped during preparation of the ninth
+named sample, after eight terminal results; the last two samples were rerun
+individually under 180s infrastructure bounds. No analysis budget or production
+watchdog was changed. Each call selects exactly one named example.
+
+Focused controls: reporting PASS; budget 20 original probes plus 17 identity
+checks PASS; round-5 32 PASS plus 5 certificates PASS; standalone certificates
+5 PASS; inline match 2 PASS; provenance 10 byte-exact excerpts PASS. The
+standalone identity run adds two planted variants with exact stale-answer/error
+checks. Per-control receipts are in
+[audits/N2-A3-round3-controls.txt](audits/N2-A3-round3-controls.txt).
+
+On **concrete-ci-2**, from the coordinator clone after pushing the final commit:
+
+```bash
+bash scripts/proofs/audits/N2-A3-round3-ci2.sh
+```
+
+This is the exact command block above, with the repaired consumer blob pinned.
+It preserves the default 120/240s production watchdog. The per-analysis
+interpretation and whole-scope wall policy remain **pending owner**.
+
+The first final `vacuity_driver.py --controls` invocation reached its 600s outer
+infrastructure timeout without a terminal result (Python output was buffered);
+it is **not** a pass. It is rerun with unbuffered progress and a 1,500s outer
+test-harness bound. This changes neither a production gate allowance nor the
+120/240s per-audit watchdog. Standalone focused checks above remain independent
+completed results.
