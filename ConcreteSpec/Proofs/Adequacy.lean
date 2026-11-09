@@ -28,7 +28,7 @@ open ConcreteSpec.Core
 variable {O : Operands} {P : Program O} {ρ : QueryOracle O} {c : Config O}
 
 /-- Helper (inversion). A final conclusion certifies a final configuration independently of
-its recorded store. (approved: PENDING) -/
+its recorded store. (approved: REV-integ-agy-3b54f736d) -/
 private theorem Conclusion.final_config {f : Final O.Val} {store : O.Store} {pos : Position O}
     (h : Conclusion P ρ (.final f store) pos) : pos.config.final? = some f := by
   cases h with
@@ -661,7 +661,7 @@ theorem runFromQ_complete {n : Nat} {pos pos' : Position O} (h : Moves P ρ n po
       simpa [runFromQ, hn, hs, ha, hallow, hk] using ih hf
 
 /-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness
-(approved: PENDING).
+(approved: REV-integ-agy-3b54f736d).
 **Completeness for C1's `runFrom`.** Every finite execution from an empty query history to a
 final configuration is reported with exactly its number of steps as fuel. -/
 theorem runFrom_complete {ρ₀ : Oracle O} {n : Nat} {events : List O.Event} {c : Config O}
@@ -721,7 +721,7 @@ theorem runFrom_mono {ρ₀ : Oracle O} : ∀ (n m : Nat), n ≤ m →
 
 /-- Helper (computation). **Completeness with enough fuel.** Every budget at least the finite path
 length reports that
-path's final outcome and events. (approved: PENDING). -/
+path's final outcome and events. (approved: REV-integ-agy-3b54f736d). -/
 theorem runFrom_complete_le {ρ₀ : Oracle O} {n m : Nat} (hle : n ≤ m)
     {events : List O.Event} {c : Config O} {pos' : Position O}
     (h : Moves P ρ₀.toQueryOracle n ⟨c, events, []⟩ pos')
@@ -783,7 +783,7 @@ theorem runFrom_trace_prefix {ρ₀ : Oracle O} (n : Nat) (events : List O.Event
 
 /-- Helper (computation). A final report has an ordinary finite `Steps` witness ending in exactly that
 final
-configuration, with the reported events. (approved: PENDING). -/
+configuration, with the reported events. (approved: REV-integ-agy-3b54f736d). -/
 theorem runFrom_final_sound {ρ₀ : Oracle O} {fuel : Nat} {events : List O.Event} {c : Config O}
     {f : Final O.Val} {finalStore : O.Store} (h : (runFrom P ρ₀ fuel events c).ending = .final f finalStore) :
     ∃ tr c', Steps P c tr c' ∧ c'.final? = some f ∧
@@ -1668,7 +1668,7 @@ def observationEnv : Oracle ops := fun hist p vs site st =>
   some ((env hist p vs site st).getD ⟨none, .error .abort, st⟩)
 
 /-- Helper (computation). Completing unanswered malformed fixture requests preserves every
-answer supplied by the original C1 demo environment. (approved: PENDING) -/
+answer supplied by the original C1 demo environment. (approved: REV-integ-agy-3b54f736d) -/
 theorem observationEnv_of_answer {hist p vs site st a}
     (h : env hist p vs site st = some a) : observationEnv hist p vs site st = some a := by
   simp [observationEnv, h]
@@ -1724,19 +1724,19 @@ def spinConfigAt : Nat → Config ops
 /-- No events or queries occur in the periodic execution. -/
 def spinPosition (n : Nat) : Position ops := ⟨spinConfigAt (n % 5), [], []⟩
 
-/-- Helper (computation). Concrete computation for `spin_move_01`. (approved: PENDING). -/
+/-- Helper (computation). Concrete computation for `spin_move_01`. (approved: REV-integ-agy-3b54f736d). -/
 theorem spin_move_01 : Move prog observationEnv ⟨spinConfig, [], []⟩ ⟨spinConfig1, [], []⟩ := .silent rfl
-/-- Helper (computation). Concrete computation for `spin_move_12`. (approved: PENDING). -/
+/-- Helper (computation). Concrete computation for `spin_move_12`. (approved: REV-integ-agy-3b54f736d). -/
 theorem spin_move_12 : Move prog observationEnv ⟨spinConfig1, [], []⟩ ⟨spinConfig2, [], []⟩ := .silent rfl
-/-- Helper (computation). Concrete computation for `spin_move_23`. (approved: PENDING). -/
+/-- Helper (computation). Concrete computation for `spin_move_23`. (approved: REV-integ-agy-3b54f736d). -/
 theorem spin_move_23 : Move prog observationEnv ⟨spinConfig2, [], []⟩ ⟨spinConfig3, [], []⟩ := .silent rfl
-/-- Helper (computation). Concrete computation for `spin_move_34`. (approved: PENDING). -/
+/-- Helper (computation). Concrete computation for `spin_move_34`. (approved: REV-integ-agy-3b54f736d). -/
 theorem spin_move_34 : Move prog observationEnv ⟨spinConfig3, [], []⟩ ⟨spinConfig4, [], []⟩ := .silent rfl
-/-- Helper (computation). Concrete computation for `spin_move_40`. (approved: PENDING). -/
+/-- Helper (computation). Concrete computation for `spin_move_40`. (approved: REV-integ-agy-3b54f736d). -/
 theorem spin_move_40 : Move prog observationEnv ⟨spinConfig4, [], []⟩ ⟨spinConfig, [], []⟩ := .silent rfl
 
 /-- Helper (computation). Every adjacent pair of periodic positions is one machine transition.
-(approved: PENDING). -/
+(approved: REV-integ-agy-3b54f736d). -/
 theorem spin_move (n : Nat) : Move prog observationEnv (spinPosition n) (spinPosition (n + 1)) := by
   have hlt : n % 5 < 5 := Nat.mod_lt _ (by decide)
   have hc : n % 5 = 0 ∨ n % 5 = 1 ∨ n % 5 = 2 ∨ n % 5 = 3 ∨ n % 5 = 4 := by omega
@@ -1759,7 +1759,7 @@ def spin_infinite : InfiniteExecution prog observationEnv spinConfig where
   step := spin_move
 
 /-- Helper (computation). In particular it is internal silent divergence: infinitely many steps and no
-raw events. (approved: PENDING). -/
+raw events. (approved: REV-integ-agy-3b54f736d). -/
 theorem spin_internal_silent_divergence : InternalSilentDivergence prog observationEnv spinConfig :=
   ⟨spin_infinite, ⟨0, fun n => by simp [spin_infinite, spinPosition]⟩⟩
 
@@ -1798,25 +1798,25 @@ def eventPosition (n : Nat) : Position ops :=
   ⟨eventConfigAt (n % 5), rawEvents (eventCount n),
     (List.range (eventCount n)).map eventQuery⟩
 
-/-- Helper (computation). Concrete computation for `event_move_01`. (approved: PENDING). -/
+/-- Helper (computation). Concrete computation for `event_move_01`. (approved: REV-integ-agy-3b54f736d). -/
 theorem event_move_01 (n : Nat) : Move prog observationEnv
     ⟨eventConfig, rawEvents n, (List.range n).map eventQuery⟩
     ⟨eventConfig1, rawEvents n, (List.range n).map eventQuery⟩ := .silent rfl
-/-- Helper (computation). Concrete computation for `event_move_12`. (approved: PENDING). -/
+/-- Helper (computation). Concrete computation for `event_move_12`. (approved: REV-integ-agy-3b54f736d). -/
 theorem event_move_12 (n : Nat) : Move prog observationEnv
     ⟨eventConfig1, rawEvents n, (List.range n).map eventQuery⟩
     ⟨eventConfig2, rawEvents n, (List.range n).map eventQuery⟩ := .silent rfl
-/-- Helper (computation). Concrete computation for `event_move_23`. (approved: PENDING). -/
+/-- Helper (computation). Concrete computation for `event_move_23`. (approved: REV-integ-agy-3b54f736d). -/
 theorem event_move_23 (n : Nat) : Move prog observationEnv
     ⟨eventConfig2, rawEvents n, (List.range n).map eventQuery⟩
     ⟨eventConfig3, rawEvents n, (List.range n).map eventQuery⟩ := .silent rfl
-/-- Helper (computation). Concrete computation for `event_move_40`. (approved: PENDING). -/
+/-- Helper (computation). Concrete computation for `event_move_40`. (approved: REV-integ-agy-3b54f736d). -/
 theorem event_move_40 (n : Nat) : Move prog observationEnv
     ⟨eventConfig4, rawEvents n, (List.range n).map eventQuery⟩
     ⟨eventConfig, rawEvents n, (List.range n).map eventQuery⟩ := .silent rfl
 
 /-- Helper (computation). The logging transition appends exactly its raw event and its next per-site
-query. (approved: PENDING). -/
+query. (approved: REV-integ-agy-3b54f736d). -/
 theorem event_move_34 (n : Nat) : Move prog observationEnv
     ⟨eventConfig3, rawEvents n, (List.range n).map eventQuery⟩
     ⟨eventConfig4, rawEvents (n + 1), (List.range (n + 1)).map eventQuery⟩ := by
@@ -1840,7 +1840,7 @@ theorem event_move_34 (n : Nat) : Move prog observationEnv
   simpa [rawEvents, List.range_succ] using hm
 
 /-- Helper (computation). Every adjacent pair of positions in the logging loop is one real machine
-transition. (approved: PENDING). -/
+transition. (approved: REV-integ-agy-3b54f736d). -/
 theorem event_move (n : Nat) : Move prog observationEnv (eventPosition n) (eventPosition (n + 1)) := by
   have hlt : n % 5 < 5 := Nat.mod_lt _ (by decide)
   have hc : n % 5 = 0 ∨ n % 5 = 1 ∨ n % 5 = 2 ∨ n % 5 = 3 ∨ n % 5 = 4 := by omega
@@ -1904,7 +1904,7 @@ theorem keeping_project_rawEvents (n : Nat) : keepingAdapter.project (rawEvents 
     simp [Observe.ExecAdapter.project, keepingAdapter, List.range_succ] <;> decide
 
 /-- Helper (computation). Empty output satisfies C6's internal-answer rule even though C1 emits a raw
-event. (approved: PENDING). -/
+event. (approved: REV-integ-agy-3b54f736d). -/
 theorem erasingWellFormed : Observe.ExecAdapter.WellFormed erasingAdapter Observe.Demo.contract () observationEnv := by
   constructor
   · intro hist p vs site store a answer typed
@@ -1915,7 +1915,7 @@ theorem erasingWellFormed : Observe.ExecAdapter.WellFormed erasingAdapter Observ
     simp [observationEnv, env] at answer
 
 /-- Helper (computation). Retaining raw events as public output satisfies C6's internal-answer rule.
-(approved: PENDING). -/
+(approved: REV-integ-agy-3b54f736d). -/
 theorem keepingWellFormed : Observe.ExecAdapter.WellFormed keepingAdapter Observe.Demo.contract () observationEnv := by
   constructor
   · intro hist p vs site store a answer typed
@@ -1929,7 +1929,7 @@ theorem keepingWellFormed : Observe.ExecAdapter.WellFormed keepingAdapter Observ
   · intro hist p vs site store answer
     simp [observationEnv, env] at answer
 
-/-- Helper (computation). Externally the erasing run is silent divergence. (approved: PENDING). -/
+/-- Helper (computation). Externally the erasing run is silent divergence. (approved: REV-integ-agy-3b54f736d). -/
 theorem erasing_silent_divergence : SilentDivergence prog erasingAdapter observationEnv eventConfig :=
   ⟨event_infinite, ⟨0, fun n => by simp [event_infinite, eventPosition, erasing_project]⟩⟩
 
@@ -1940,7 +1940,7 @@ theorem erasing_internal_infinite : InternalInfiniteInteraction prog observation
   simp [event_infinite, eventPosition, eventCount, rawEvents]
 
 /-- Helper (computation). Retaining the raw events turns the same execution into external infinite
-interaction. (approved: PENDING). -/
+interaction. (approved: REV-integ-agy-3b54f736d). -/
 theorem keeping_infinite_interaction : InfiniteInteraction prog keepingAdapter observationEnv eventConfig := by
   refine ⟨event_infinite, fun bound => ⟨5 * (bound + 1), ?_⟩⟩
   simp [event_infinite, eventPosition, eventCount, keeping_project_rawEvents]
@@ -2448,7 +2448,7 @@ def logThenSpinPosition : Nat → Position ops
   | n + 2 => ⟨spinConfigAt (n % 5), [1], [eventQuery 0]⟩
 
 /-- Helper (computation). Every adjacent pair of positions in `logThenSpinPosition` is one machine
-transition. (approved: PENDING). -/
+transition. (approved: REV-integ-agy-3b54f736d). -/
 theorem logThenSpin_move : ∀ n, Move prog observationEnv (logThenSpinPosition n) (logThenSpinPosition (n + 1))
   | 0 =>
     Move.prim (P := prog) (ρ := observationEnv) (c := logThenSpinConfig) (c' := logThenSpinConfig1)
@@ -2812,7 +2812,7 @@ example : (droppedAnswerRun prog observationEnv.toQueryOracle 1 [] [] terminalCo
 def terminalFinished : Position ops := ⟨⟨.done, [], .init, []⟩, [1], [terminalQuery]⟩
 
 /-- Helper (computation). A real path includes the oracle's event and its recorded query
-(approved: PENDING).
+(approved: REV-integ-agy-3b54f736d).
 Constructs a concrete one-step oracle-checked path, including its event and query. -/
 theorem terminalPath : Moves prog observationEnv 1 ⟨terminalConfig, [], []⟩ terminalFinished :=
   .step (.prim (k := terminalK) (a := ⟨some 1, .ok 0, .init⟩)
