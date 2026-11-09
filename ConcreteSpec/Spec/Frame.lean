@@ -1,4 +1,5 @@
 import ConcreteSpec.Spec.Hybrid
+import ConcreteSpec.Spec.Observe
 
 /-!
 # Logical footprints, call frames and ABI contracts (foundation C10)
@@ -246,7 +247,7 @@ def storingOperands (tgt : Target) (pointer : Ptr) (bytes : List MByte) (alignme
   allows := fun _ _ _ _ => false
 
 /-- Identity of the modifying toy function, unrelated to any native ABI convention. -/
-def storingFn : FnId := ⟨ModuleId.mk ⟨"integration-fixtures", ⟨"0"⟩⟩ ["fixtures"] (by decide), "store_then_return"⟩
+def storingFn : FnId := ⟨⟨⟨"frame", ⟨"0"⟩⟩, ["frame"], by decide⟩, "store_then_return"⟩
 
 /-- A C1 function whose return expression performs the store and returns 7. -/
 def storingProgram (tgt : Target) (pointer : Ptr) (bytes : List MByte) (alignment : Nat) :
@@ -899,6 +900,50 @@ def Launcher.Outcome {Root Artifact Input Result Observation : Type}
       reserved < l.stackBound artifact
   | .entered (artifact, input, result, observation) =>
     l.Run root artifact reserved input requestedResult result observation
+
+/-- Build only after whole-project admission. The compiler handoff receives C9's complete
+loaded tables. This is an interface to artifact construction, not a native compiler implementation;
+no refusal is translated into a run-time status. -/
+def assembleProject {Artifact : Type} (build : Observe.LoadedProject → Artifact)
+    (input : Observe.ProjectSources) : Option (Observe.LoadedProject × Artifact) :=
+  match Observe.LoadedProject.load input with
+  | .refused _ => none
+  | .admitted project => some (project, build project)
+
+/-- Restrict an existing launcher to artifacts built from this source input. Only retained
+closure is refined with provenance; all root, entry, exit and stack rules remain those of the
+original launcher. In particular `Launcher.Outcome` remains the sole startup contract. -/
+def sourceLauncher {Root Artifact Input Result Observation : Type}
+    (build : Observe.LoadedProject → Artifact) (source : Observe.ProjectSources)
+    (launcher : Launcher Root Artifact Input Result Observation) :
+    Launcher Root Artifact Input Result Observation :=
+  { launcher with retainedClosure := fun artifact => launcher.retainedClosure artifact ∧
+      ∃ project, assembleProject build source = some (project, artifact) }
+
+/-- A run of this source uses the existing run contract with source provenance. -/
+def ProjectRun {Root Artifact Input Result Observation : Type}
+    (build : Observe.LoadedProject → Artifact) (source : Observe.ProjectSources)
+    (launcher : Launcher Root Artifact Input Result Observation)
+    (root : Root) (artifact : Artifact) (reserved : Nat) (input : Input) (requested result : Result)
+    (observation : Observation) : Prop :=
+  (sourceLauncher build source launcher).Run root artifact reserved input requested result observation
+
+/-- Both run-time startup outcomes require source provenance through the retained artifact
+closure. Load refusal has no startup outcome; status 125 keeps its existing run-time meaning. -/
+def ProjectStartup {Root Artifact Input Result Observation : Type}
+    (build : Observe.LoadedProject → Artifact) (source : Observe.ProjectSources)
+    (launcher : Launcher Root Artifact Input Result Observation)
+    (root : Root) (reserved : Nat) (requested : Result)
+    (outcome : Startup (Artifact × Input × Result × Observation)) : Prop :=
+  (sourceLauncher build source launcher).Outcome root reserved requested outcome
+
+/-- Trap reporting uses the very site table handed to artifact construction. There is no trap
+site or fallback report associated with a source input that never yielded an artifact. -/
+def ProjectTrap {Artifact : Type} (build : Observe.LoadedProject → Artifact)
+    (source : Observe.ProjectSources) (kind : TrapKind) (site : SiteId)
+    (terminal : Observe.Terminal) : Prop :=
+  ∃ project artifact, assembleProject build source = some (project, artifact) ∧
+    Observe.trapTerminal project.sites kind site = some terminal
 
 /-- Obligation (discharged at slice 0, R-0505).
 Obligation on the native launcher integration: relate independently executed startup and exit to
