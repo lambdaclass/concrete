@@ -813,6 +813,28 @@ example : ([Demo.site] = List.map Prod.fst sourceAdapter.sourceInput.sites) ∧
   revert identity
   decide
 
+/-- A syntactically valid identity whose source file was never loaded. This is precisely the
+unregistered path emitted by the wrong-file reporter mutant above. -/
+def unloadedSpan : Span :=
+  { sourceSpanDemo with path := ⟨["other".toList, "main.con".toList], by decide, by decide⟩ }
+def unloadedSourceInput : ProjectSources := { sourceInput with sites := [(Demo.site, unloadedSpan)] }
+
+/-- Refused: the loader names the unloaded file's site, and no adapter can report this project.
+The raw-table bypass would render it, so this tests provenance rather than path syntax. -/
+example : LoadedProject.load unloadedSourceInput =
+      .refused (.missingFile (Demo.site, unloadedSpan)) ∧
+    trapTerminal unloadedSourceInput.sites .abort Demo.site =
+      some (.trapped .abort Demo.site unloadedSpan (trapLine .abort Demo.site unloadedSpan)) ∧
+    ¬ ∃ A : ExecAdapter ops signature, A.sourceInput = unloadedSourceInput := by
+  refine ⟨by decide, rfl, ?_⟩
+  rintro ⟨A, inputEqual⟩
+  have loaded := A.loaded
+  rw [inputEqual] at loaded
+  have refused : LoadedProject.load unloadedSourceInput =
+      .refused (.missingFile (Demo.site, unloadedSpan)) := by decide
+  rw [refused] at loaded
+  cases loaded
+
 /-- A malformed file is refused as a whole project; no adapter can report it. -/
 def refusedSourceInput : ProjectSources := { sourceInput with files := [("../main.con", sourceBytes)] }
 
