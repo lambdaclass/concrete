@@ -12,7 +12,7 @@ spec.loader.exec_module(w)
 
 
 def git(repo, *args, input=None):
-    return subprocess.run(['git', '-C', repo, *args], input=input, text=True,
+    return subprocess.run(['git', '-c', 'core.hooksPath=/dev/null', '-C', repo, *args], input=input, text=True,
                           capture_output=True, env=w.canonical_git_env())
 
 
@@ -25,31 +25,17 @@ def require_error(call, expected):
         raise AssertionError('protection removed: ' + expected)
 
 
-class Stream:
-    def __init__(self, stream, callback, reading):
-        self.stream, self.callback, self.reading = stream, callback, reading
-    def __getattr__(self, key):
-        return getattr(self.stream, key)
-    def write(self, text):
-        if not self.reading and '\nprepare\n' in text:
-            self.callback()
-        return self.stream.write(text)
-    def readline(self):
-        line = self.stream.readline()
-        if self.reading and line == 'prepare: ok\n':
-            self.callback()
-        return line
-
-
 def at_prepare(callback, *, after=False):
-    original = w.canonical_git_run
-    def run(*args, **kwargs):
-        proc = original(*args, **kwargs)
-        if kwargs.get('_interactive'):
-            name = 'stdout' if after else 'stdin'
-            setattr(proc, name, Stream(getattr(proc, name), callback, after))
-        return proc
-    return patch.object(w, 'canonical_git_run', run)
+    original = w._CheckpointProtocol.exchange
+    def exchange(self, command, expected):
+        preparing = expected == 'prepare: ok'
+        if preparing and not after:
+            callback()
+        result = original(self, command, expected)
+        if preparing and after:
+            callback()
+        return result
+    return patch.object(w._CheckpointProtocol, 'exchange', exchange)
 
 
 with tempfile.TemporaryDirectory() as root:
@@ -61,6 +47,7 @@ with tempfile.TemporaryDirectory() as root:
             result = git(repo, *args, input=input)
             assert result.returncode == 0, result.stderr
             return result.stdout.strip()
+        g('config', 'core.hooksPath', '/dev/null')
         g('config', 'user.name', 'Checkpoint Control')
         g('config', 'user.email', 'checkpoint@example.invalid')
         tree = g('mktree', input='')
@@ -87,14 +74,9 @@ with tempfile.TemporaryDirectory() as root:
                 reset()
                 snap = capture()
                 g('update-ref', raced, b)
-                actual_old = w.ZERO40 if raced == absent else a
-                # Git backend messages differ, but the complete diagnostic must
-                # preserve Git's exact prepare failure, including the ref name.
-                direct = git(repo, 'update-ref', '--no-deref', '--stdin',
-                             input=f'start\nverify {raced} {actual_old}\nprepare\n')
-                assert direct.returncode != 0 and raced in direct.stderr
-                expected = 'concurrent writer-notes ref update detected during control: ' + direct.stderr.strip()
-                require_error(lambda: w.cas_update_refs(snap, {active: b, alias: b}, op='control'), expected)
+                expected = 'checkpoint ref race during control'
+                for updates in ({active: b}, {active: b, alias: b}, {}):
+                    require_error(lambda: w.cas_update_refs(snap, updates, op='control'), expected)
                 assert g('rev-parse', active) == a, 'partial update escaped failed transaction'
                 assert g('rev-parse', raced) == b, 'concurrent writer overwritten'
             # The empty write set must provide the same complete-set CAS.
@@ -127,7 +109,7 @@ with tempfile.TemporaryDirectory() as root:
                         seen.append((ref, args[0]))
             with at_prepare(competitors, after=True):
                 w.cas_update_refs(snap, {active: b})
-            assert len(seen) == 8
+            assert len(seen) == 16
             assert g('rev-parse', active) == b
             assert g('rev-parse', alias) == a
             assert git(repo, 'show-ref', '--verify', absent).returncode != 0
@@ -150,7 +132,7 @@ with tempfile.TemporaryDirectory() as root:
             captures = []
             def enumerate_race(repo_arg, args, **kwargs):
                 proc = original(repo_arg, args, **kwargs)
-                if args[0] == 'for-each-ref' and '%(objectname)' in ' '.join(args):
+                if args[0] == 'for-each-ref' and '%(objectname)' in ' '.join(args) and '--' not in args:
                     captures.append(repo_arg)
                     if len(captures) == 1:
                         g('update-ref', companion, b)
@@ -164,4 +146,173 @@ with tempfile.TemporaryDirectory() as root:
             reset()
             g('symbolic-ref', alias, companion)
             require_error(capture, 'symbolic checkpoint ref is forbidden: ' + alias)
+            # Deletion and lock contention are the same bounded race class.
+            reset()
+            snap = capture()
+            g('update-ref', '-d', companion)
+            require_error(lambda: w.cas_update_refs(snap, {active: b}),
+                          'checkpoint ref race during checkpoint installation')
+            reset()
+            races = []
+            def toggle():
+                races.append(1)
+                if git(repo, 'show-ref', '--verify', companion).returncode == 0:
+                    g('update-ref', '-d', companion)
+                else:
+                    g('update-ref', companion, a)
+            with at_prepare(toggle):
+                require_error(capture, 'checkpoint ref race during checkpoint capture')
+            assert len(races) == 3
+            # The validation/install gap cannot authorize changed values or a
+            # symbolic replacement, even for an unchanged alias.
+            for symbolic_gap in (False, True):
+                reset()
+                snap = capture()
+                exchange_original = w._CheckpointProtocol.exchange
+                def in_gap(self, command, expected):
+                    result = exchange_original(self, command, expected)
+                    if expected == 'abort: ok':
+                        if symbolic_gap:
+                            g('symbolic-ref', alias, companion)
+                        else:
+                            g('update-ref', alias, b)
+                    return result
+                with patch.object(w._CheckpointProtocol, 'exchange', in_gap):
+                    require_error(lambda: w.cas_update_refs(snap, {active: b}),
+                                  'symbolic checkpoint ref is forbidden: ' + alias if symbolic_gap else
+                                  'checkpoint ref race during checkpoint installation')
+                assert g('rev-parse', active) == a
+            # Exact full-ref lookup must ignore DWIM lookalikes.
+            reset()
+            g('update-ref', 'refs/heads/' + absent, b)
+            assert capture().refs[absent] is None
+            g('update-ref', '-d', 'refs/heads/' + absent)
+            # Every symbolic target has the same diagnostic, including absence.
+            blob = g('hash-object', '-w', '--stdin', input='blob')
+            target = 'refs/notes/symbolic-target'
+            for value in (None, a, b, blob):
+                for participant in (alias, absent):
+                    reset()
+                    git(repo, 'update-ref', '-d', target)
+                    if value is not None:
+                        g('update-ref', target, value)
+                    snap = capture()
+                    with at_prepare(lambda: g('symbolic-ref', participant, target)):
+                        require_error(lambda: w.cas_update_refs(snap, {active: b}),
+                                      'symbolic checkpoint ref is forbidden: ' + participant)
+                    require_error(capture, 'symbolic checkpoint ref is forbidden: ' + participant)
+            reset()
+            g('symbolic-ref', target, alias)
+            g('symbolic-ref', alias, target)
+            require_error(capture, 'symbolic checkpoint ref is forbidden: ' + alias)
+            git(repo, 'update-ref', '--no-deref', '-d', target)
+            reset()
+            head_checkpoint = 'refs/heads/symbolic-checkpoint'
+            g('update-ref', target, blob)
+            g('symbolic-ref', head_checkpoint, target)
+            require_error(lambda: w.capture_checkpoint_snapshot(repo, target_ref=head_checkpoint),
+                          'symbolic checkpoint ref is forbidden: ' + head_checkpoint)
+            g('update-ref', '--no-deref', '-d', head_checkpoint)
+            reset()
+            g('update-ref', alias, blob)
+            require_error(capture, 'checkpoint ref does not name a 40-hex commit: ' + alias)
+            reset()
+            snap = capture()
+            for invalid in ('', 'bad name', 'refs/notes/bad..name'):
+                require_error(lambda: w.cas_update_refs(w.CheckpointSnapshot(snap.repo, {invalid: None}), {}),
+                              'invalid checkpoint ref name: ' + invalid)
+                require_error(lambda: w.capture_checkpoint_snapshot(repo, target_ref=invalid),
+                              'invalid checkpoint ref name: ' + invalid)
+            for invalid in ('', 'z' * 40, w.ZERO40, 7):
+                require_error(lambda: w.cas_update_refs(snap, {alias: invalid}),
+                              f'invalid checkpoint update SHA for {alias}: {invalid}')
+            require_error(lambda: w.cas_update_refs(snap, {alias: '1' * 40}),
+                          f'checkpoint update does not name an existing commit: {alias}: ' + '1' * 40)
+            # A ref named like a missing OID must not stand in for the object.
+            g('update-ref', 'refs/heads/' + '1' * 40, a)
+            require_error(lambda: w.cas_update_refs(snap, {alias: '1' * 40}),
+                          f'checkpoint update does not name an existing commit: {alias}: ' + '1' * 40)
+            g('update-ref', '-d', 'refs/heads/' + '1' * 40)
+            tag = g('mktag', input=f'object {a}\ntype commit\ntag control\ntagger Control <control@example.invalid> 1 +0000\n\ncontrol\n')
+            for invalid in (blob, tree, tag):
+                require_error(lambda: w.cas_update_refs(snap, {alias: invalid}),
+                              f'checkpoint update does not name an existing commit: {alias}: {invalid}')
+            # Hold an actual competing prepared transaction throughout capture.
+            holder = w.canonical_git_run(snap.repo, ['update-ref', '--no-deref', '--stdin'], _interactive=True)
+            holder_protocol = w._CheckpointProtocol(holder)
+            try:
+                holder_protocol.exchange('start', 'start: ok')
+                holder_protocol.exchange(f'update {active} {a}\nprepare', 'prepare: ok')
+                require_error(capture, 'checkpoint ref race during checkpoint capture')
+            finally:
+                holder_protocol.close()
+            original_run = w.canonical_git_run
+            def unsupported(repo_arg, args, **kwargs):
+                if args == ['rev-parse', '--show-ref-format']:
+                    return subprocess.CompletedProcess(args, 0, 'unsupported\n', '')
+                return original_run(repo_arg, args, **kwargs)
+            def timed_out_inspection(repo_arg, args, **kwargs):
+                if args[0] == 'cat-file':
+                    assert kwargs.get('_timeout') == 10
+                    raise subprocess.TimeoutExpired(args, 10)
+                return original_run(repo_arg, args, **kwargs)
+            with patch.object(w, 'canonical_git_run', timed_out_inspection):
+                require_error(lambda: w.cas_update_refs(snap, {alias: b}),
+                              'checkpoint transaction timeout (INCOMPLETE)')
+            with patch.object(w, 'canonical_git_run', unsupported):
+                require_error(lambda: w.cas_update_refs(snap, {}),
+                              'unsupported checkpoint ref backend: unsupported')
+            # Protocol failure after prepare must release every lock and reap
+            # the exact child, even when output exceeds pipe capacity.
+            children = []
+            def noisy(repo_arg, args, **kwargs):
+                if kwargs.get('_interactive'):
+                    p = subprocess.Popen(['python3', '-c',
+                        "import sys; sys.stderr.write('x'*200000); sys.stderr.flush(); sys.exit(1)"],
+                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
+                    children.append(p)
+                    return p
+                return original_run(repo_arg, args, **kwargs)
+            with patch.object(w, 'canonical_git_run', noisy):
+                require_error(lambda: w.cas_update_refs(snap, {}),
+                              'checkpoint transaction protocol failed')
+            assert all(p.poll() is not None for p in children)
+            with patch.object(w.os, 'write', side_effect=BrokenPipeError('planted pipe break')):
+                require_error(lambda: w.cas_update_refs(snap, {}),
+                              'checkpoint transaction protocol failed')
+            if backend == 'files' and not packed:
+                def stalled(repo_arg, args, **kwargs):
+                    if kwargs.get('_interactive'):
+                        p = subprocess.Popen(['python3', '-c', 'import time; time.sleep(60)'],
+                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
+                        children.append(p)
+                        return p
+                    return original_run(repo_arg, args, **kwargs)
+                with patch.object(w, 'canonical_git_run', stalled):
+                    require_error(lambda: w.cas_update_refs(snap, {}),
+                                  'checkpoint transaction timeout (INCOMPLETE)')
+                assert all(p.poll() is not None for p in children)
+            def excessive_stdout(repo_arg, args, **kwargs):
+                if kwargs.get('_interactive'):
+                    p = subprocess.Popen(['python3', '-c',
+                        "import sys,time; sys.stdout.write('x'*200000); sys.stdout.flush(); time.sleep(60)"],
+                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                        text=True, start_new_session=True)
+                    children.append(p)
+                    return p
+                return original_run(repo_arg, args, **kwargs)
+            with patch.object(w, 'canonical_git_run', excessive_stdout):
+                require_error(lambda: w.cas_update_refs(snap, {}),
+                              'checkpoint transaction protocol failed')
+            original_exchange = w._CheckpointProtocol.exchange
+            def fail_prepared(self, command, expected):
+                result = original_exchange(self, command, expected)
+                if expected == 'prepare: ok':
+                    children.append(self.proc)
+                    raise w.ProvenanceError('planted failure after prepare')
+                return result
+            with patch.object(w._CheckpointProtocol, 'exchange', fail_prepared):
+                require_error(lambda: w.cas_update_refs(snap, {}), 'planted failure after prepare')
+            assert all(p.poll() is not None for p in children)
+            w.cas_update_refs(snap, {})
             print(f'checkpoint controls: {backend}, packed={packed}: PASS')

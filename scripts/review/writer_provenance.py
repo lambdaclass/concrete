@@ -196,19 +196,19 @@ class _VerifiedRepo(str):
 
 def canonical_git_run(repo: str, args: list[str], *, input=None,
                       text: bool = True, env=None, verify: bool = True,
-                      _discover_env: bool = False, _interactive: bool = False):
+                      _discover_env: bool = False, _interactive: bool = False, _timeout=None):
     # Only discovery and view probes use the unchecked bootstrap path.
     if verify and not isinstance(repo, _VerifiedRepo):
         verify_canonical_repo_view(repo)
     argv = ["git", "--no-replace-objects", "-c", "core.commitGraph=false", "-C", repo] + args
     if _interactive:
         return subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE, text=text,
+                                stderr=subprocess.PIPE, text=text, start_new_session=True,
                                 env=canonical_git_env(env, _discover=_discover_env))
     return subprocess.run(
         argv,
         input=input, capture_output=True, text=text,
-        env=canonical_git_env(env, _discover=_discover_env), check=False,
+        env=canonical_git_env(env, _discover=_discover_env), check=False, timeout=_timeout,
     )
 
 
@@ -270,78 +270,184 @@ class _CheckpointRace(ProvenanceError):
     pass
 
 
+class _CheckpointTimeout(ProvenanceError):
+    pass
+
+
+def _checkpoint_git(repo, args, *, check=True, input_text=None):
+    try:
+        proc = canonical_git_run(repo, args, _timeout=10, input=input_text)
+    except subprocess.TimeoutExpired as exc:
+        raise _CheckpointTimeout("checkpoint transaction timeout (INCOMPLETE)") from exc
+    if check and proc.returncode:
+        raise ProvenanceError(f"checkpoint Git command failed: {proc.stderr.strip()}")
+    return proc
+
+
+class _CheckpointProtocol:
+    """Nonblocking input and simultaneous output draining, with bounded teardown."""
+
+    def __init__(self, proc):
+        import selectors
+        self.proc = proc
+        self.selector = selectors.DefaultSelector()
+        self.output = bytearray()
+        self.errors = bytearray()
+        for stream in (proc.stdin, proc.stdout, proc.stderr):
+            os.set_blocking(stream.fileno(), False)
+        self.selector.register(proc.stdout, selectors.EVENT_READ)
+        self.selector.register(proc.stderr, selectors.EVENT_READ)
+
+    def exchange(self, command, expected):
+        import selectors
+        import time
+        data = memoryview((command + "\n").encode())
+        deadline = time.monotonic() + 10
+        self.selector.register(self.proc.stdin, selectors.EVENT_WRITE)
+        try:
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise _CheckpointTimeout("checkpoint transaction timeout (INCOMPLETE)")
+                events = self.selector.select(remaining)
+                if not events:
+                    raise _CheckpointTimeout("checkpoint transaction timeout (INCOMPLETE)")
+                for key, _ in events:
+                    if key.fileobj is self.proc.stdin:
+                        sent = os.write(key.fd, data[:4096])
+                        data = data[sent:]
+                        if not data:
+                            self.selector.unregister(self.proc.stdin)
+                    else:
+                        chunk = os.read(key.fd, 4096)
+                        if not chunk:
+                            self.selector.unregister(key.fileobj)
+                            if key.fileobj is self.proc.stdout:
+                                raise ProvenanceError("checkpoint transaction protocol failed")
+                        elif key.fileobj is self.proc.stderr:
+                            self.errors.extend(chunk)
+                            self.errors = self.errors[-8192:]
+                        elif key.fileobj is self.proc.stdout:
+                            self.output.extend(chunk)
+                            if len(self.output) > 4096:
+                                raise ProvenanceError("checkpoint transaction protocol failed")
+                if not data and b"\n" in self.output:
+                    reply, _, rest = self.output.partition(b"\n")
+                    self.output = bytearray(rest)
+                    if reply != expected.encode():
+                        raise ProvenanceError("checkpoint transaction protocol failed")
+                    return
+        except OSError as exc:
+            raise ProvenanceError("checkpoint transaction protocol failed") from exc
+        finally:
+            try:
+                self.selector.unregister(self.proc.stdin)
+            except KeyError:
+                pass
+
+    def close(self):
+        # Kill before closing stdin: no buffered writes and no pipe-dependent
+        # wait. The child cannot retain locks or fill a pipe during teardown.
+        import signal
+        def signal_group(sig):
+            try:
+                os.killpg(self.proc.pid, sig)
+            except ProcessLookupError:
+                pass
+        try:
+            signal_group(signal.SIGTERM)
+            try:
+                self.proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                signal_group(signal.SIGKILL)
+                self.proc.wait(timeout=2)
+        finally:
+            # A hook may outlive the Git parent; reap the parent and terminate
+            # the entire operation-owned group, never an unrelated process.
+            signal_group(signal.SIGKILL)
+            self.selector.close()
+            for stream in (self.proc.stdin, self.proc.stdout, self.proc.stderr):
+                try:
+                    stream.close()
+                except OSError:
+                    pass
+
+
 def _checkpoint_transaction(snapshot: CheckpointSnapshot,
                             updates: dict[str, str | None], op: str) -> None:
     repo = snapshot.repo
+    backend = _checkpoint_git(repo, ["rev-parse", "--show-ref-format"]).stdout.strip()
+    if backend not in ("files", "reftable"):
+        raise ProvenanceError(f"unsupported checkpoint ref backend: {backend}")
     unknown = updates.keys() - snapshot.refs.keys()
     if unknown:
         raise ProvenanceError(f"checkpoint update outside snapshot: {sorted(unknown)[0]}")
-    commands = []
-    for ref, old in snapshot.refs.items():
-        if ref not in updates:
-            commands.append(f"verify {ref} {old or ZERO40}")
-        elif updates[ref] is None:
-            commands.append(f"delete {ref} {old or ZERO40}" if old else
-                            f"verify {ref} {ZERO40}")
-        else:
-            new = updates[ref]
-            if not HEX40_RE.fullmatch(new) or new == ZERO40:
-                raise ProvenanceError(f"invalid checkpoint update SHA for {ref}: {new}")
-            commands.append(f"update {ref} {new} {old or ZERO40}")
-    proc = canonical_git_run(repo, ["update-ref", "--no-deref", "--stdin"],
-                             _interactive=True)
+    for ref in snapshot.refs:
+        if not isinstance(ref, str) or not ref.startswith("refs/") or _checkpoint_git(
+                repo, ["check-ref-format", ref], check=False).returncode:
+            raise ProvenanceError(f"invalid checkpoint ref name: {ref}")
+        new = updates.get(ref)
+        if new is not None and (not isinstance(new, str) or not HEX40_RE.fullmatch(new) or new == ZERO40):
+            raise ProvenanceError(f"invalid checkpoint update SHA for {ref}: {new}")
+    proc = canonical_git_run(repo, ["update-ref", "--no-deref", "--stdin"], _interactive=True)
+    protocol = _CheckpointProtocol(proc)
     try:
-        def exchange(command, expected):
-            proc.stdin.write(command + "\n")
-            proc.stdin.flush()
-            reply = proc.stdout.readline().rstrip("\n")
-            if reply != expected:
-                # Close the protocol before draining stderr: even an unexpected
-                # successful reply must not leave us waiting for a live child.
-                proc.stdin.close()
-                detail = proc.stderr.read().strip()
-                mismatch = (expected == "prepare: ok" and any(
-                    marker in detail for marker in ("but expected", "reference already exists")))
-                error = _CheckpointRace if mismatch else ProvenanceError
-                raise error(
-                    f"concurrent writer-notes ref update detected during {op}: {detail or reply}")
-        exchange("start", "start: ok")
-        exchange("\n".join([*commands, "prepare"]), "prepare: ok")
-        # prepare locks each name as itself, including verify-only and absent
-        # participants. A preflight outside these locks cannot enforce this.
-        for ref, expected in snapshot.refs.items():
-            symbolic = canonical_git_run(repo, ["symbolic-ref", "-q", ref])
-            if symbolic.returncode == 0:
-                raise ProvenanceError(f"symbolic checkpoint ref is forbidden: {ref}")
-            if symbolic.returncode != 1:
-                raise ProvenanceError(f"cannot inspect checkpoint ref: {ref}: {symbolic.stderr.strip()}")
-            actual = canonical_git_run(repo, ["rev-parse", "--verify", "--quiet", ref])
-            if actual.returncode not in (0, 1):
-                raise ProvenanceError(f"cannot read checkpoint ref: {ref}: {actual.stderr.strip()}")
-            value = actual.stdout.strip() if actual.returncode == 0 else None
-            if value != expected:
-                raise _CheckpointRace(
-                    f"checkpoint ref changed under lock: {ref}: expected {expected or 'ABSENT'}, "
-                    f"got {value or 'ABSENT'}")
-        exchange("commit", "commit: ok")
-        proc.stdin.close()
-        if proc.wait() != 0:
-            raise ProvenanceError(f"checkpoint transaction failed during {op}: {proc.stderr.read().strip()}")
-    finally:
-        # Explicitly abort a rejected prepared transaction, then close the
-        # protocol. EOF also aborts if Git has already rejected an operation.
-        if not proc.stdin.closed:
+        # Git validates queued update objects before prepare. A read-only
+        # validation transaction is therefore necessary to reject missing new
+        # objects under locks. Installation reacquires and checks the COMPLETE
+        # snapshot, so the gap between transactions cannot authorize stale work.
+        for installing in ((False, True) if updates else (False,)):
+            commands = []
+            for ref, old in snapshot.refs.items():
+                # Prepared deletions lock existing, absent and dangling names
+                # without requiring their targets to have any particular type.
+                new = updates.get(ref, old) if installing else None
+                commands.append(f"delete {ref}" if new is None else f"update {ref} {new}")
+            protocol.exchange("start", "start: ok")
             try:
-                if proc.poll() is None:
-                    proc.stdin.write("abort\n")
-                    proc.stdin.flush()
-            except BrokenPipeError:
-                pass
-            finally:
-                proc.stdin.close()
-        proc.wait()
-        proc.stdout.close()
-        proc.stderr.close()
+                protocol.exchange("\n".join([*commands, "prepare"]), "prepare: ok")
+            except _CheckpointTimeout:
+                raise
+            except ProvenanceError as exc:
+                # Prepare failures never justify inspecting an unlocked ref. Only
+                # Git lock-contention failures are retryable; retain one race type.
+                try:
+                    detail = os.read(proc.stderr.fileno(), 8192)
+                except (OSError, BlockingIOError):
+                    detail = b""
+                detail = bytes(protocol.errors) + detail
+                if b"cannot lock ref" in detail or b"cannot lock references" in detail:
+                    raise _CheckpointRace(f"checkpoint ref race during {op}") from exc
+                raise
+            for ref, expected in snapshot.refs.items():
+                symbolic = _checkpoint_git(repo, ["symbolic-ref", "--no-recurse", "-q", ref], check=False)
+                if symbolic.returncode == 0:
+                    raise ProvenanceError(f"symbolic checkpoint ref is forbidden: {ref}")
+                if symbolic.returncode != 1:
+                    raise ProvenanceError(f"cannot inspect checkpoint ref: {ref}: {symbolic.stderr.strip()}")
+            for ref, expected in snapshot.refs.items():
+                rows = _checkpoint_git(repo, ["for-each-ref", "--format=%(refname) %(objectname) %(objecttype)", "--", ref]).stdout
+                exact = [row.split() for row in rows.splitlines() if row.split()[0] == ref]
+                value = exact[0][1] if exact else None
+                if exact and (exact[0][2] != "commit" or not HEX40_RE.fullmatch(value)):
+                    raise ProvenanceError(f"checkpoint ref does not name a 40-hex commit: {ref}")
+                if value != expected:
+                    raise _CheckpointRace(f"checkpoint ref race during {op}")
+                new = updates.get(ref)
+                if new is not None:
+                    obj = _checkpoint_git(repo, ["cat-file", "--batch-check=%(objectname) %(objecttype)"],
+                                          input_text=new + "\n", check=False)
+                    if obj.returncode or obj.stdout.strip() != f"{new} commit":
+                        raise ProvenanceError(f"checkpoint update does not name an existing commit: {ref}: {new}")
+            protocol.exchange("commit" if installing else "abort", "commit: ok" if installing else "abort: ok")
+        proc.stdin.close()
+        proc.wait(timeout=10)
+        if proc.returncode:
+            raise ProvenanceError(f"checkpoint transaction failed during {op}")
+    except subprocess.TimeoutExpired as exc:
+        raise _CheckpointTimeout("checkpoint transaction timeout (INCOMPLETE)") from exc
+    finally:
+        protocol.close()
 
 
 def cas_update_refs(snapshot: CheckpointSnapshot, updates: dict[str, str | None],
@@ -359,32 +465,28 @@ def capture_checkpoint_snapshot(repo: str, *, target_ref: str | None = None,
     """
     names = tuple(dict.fromkeys([
         WRITER_NOTES_REF, "refs/notes/concrete-writer",
-        "refs/notes/remote/concrete-writer", *([target_ref] if target_ref else []),
+        "refs/notes/remote/concrete-writer", *([target_ref] if target_ref is not None else []),
         *old_refs, *check_refs,
     ]))
-    while True:
+    for attempt in range(3):
         boundary = _VerifiedRepo(repo)
-        backend = git_run(boundary, ["rev-parse", "--show-ref-format"]).stdout.strip()
-        if backend not in ("files", "reftable"):
-            raise ProvenanceError(f"unsupported checkpoint ref backend: {backend}")
         for name in names:
-            if not name.startswith("refs/") or git_run(
+            if not isinstance(name, str) or not name.startswith("refs/") or _checkpoint_git(
                     boundary, ["check-ref-format", name], check=False).returncode:
                 raise ProvenanceError(f"invalid checkpoint ref name: {name}")
-        rows = git_run(boundary, ["for-each-ref", "--format=%(refname) %(objectname) %(objecttype)"]).stdout
+        rows = _checkpoint_git(boundary, ["for-each-ref", "--format=%(refname) %(objectname) %(objecttype)"]).stdout
         enumerated = {}
         for row in rows.splitlines():
             name, sha, kind = row.split()
             if name in names:
-                if kind != "commit" or not HEX40_RE.fullmatch(sha):
-                    raise ProvenanceError(f"checkpoint ref does not name a 40-hex commit: {name}")
                 enumerated[name] = sha
         snapshot = CheckpointSnapshot(boundary, {n: enumerated.get(n) for n in names})
         try:
             _checkpoint_transaction(snapshot, {}, "checkpoint capture")
             return snapshot
         except _CheckpointRace:
-            continue
+            if attempt == 2:
+                raise _CheckpointRace("checkpoint ref race during checkpoint capture")
 
 
 def sha256_file(path: str, label: str = "file") -> str:
