@@ -1,0 +1,44 @@
+Baseline: af38dd07f2727eca74b49a4576b26fa0b304168e; base 712a44fd44a42645a8e9bad78a872453a035b901.
+Input: I5a-agy.final, exactly I5a-agy.log minus only final harness bytes "agy rc=0\n".
+Baseline evaluate_output reproduces all diagnostics in the coordinator I5a-check.txt.
+
+B1 REFUTED as a global-identifier lookup defect: the nine names occur in the cited
+CHa-agy.log:115-116, an excluded fixture, not in the authoritative active tree.
+The existing bare-name syntax asserts tree authority. Proximity to a fixture citation
+must not silently change this claim. The clarified text:name named-link syntax checks
+literal occurrence only within its own selected range, without granting definition
+authority or satisfying positive evidence. I5a is unmodified and remains invalid for
+these bare names. Focused controls cover valid text, wrong range/name, bare-name
+contamination despite a nearby fixture citation, and a positive supported only by text.
+
+B2 CONFIRMED checker defect: bare proposed: has no name. It is now grammar prose.
+Any nonempty proposed suffix still invalidates a positive verdict, including malformed
+suffixes; only findings/reject can propose. Exact positive-rejection control retained.
+
+B3/C1 CONFIRMED checker interface defect: harness files had no explicit ownership
+channel, so honest READ was blocked and harness citations got unresolved-file errors.
+The builder now emits declarations alongside the integrity manifest; collector forwards
+exact declarations. Harness READ is permitted; evidence is rejected with the explicit
+harness-file diagnostic. Undeclared files, undeclared helpers and helper-only identifiers
+have exact diagnostic controls. Real builder/collector/CLI integration is exercised.
+
+B4 CONFIRMED diagnostic defect, REFUTED as resolution defect: the ro-CHa link is
+outside ro-I5a and the actual checkout; rejecting it is correct. It now reports exactly
+that the link is outside the reviewed roots. No suffix or basename recovery is allowed.
+
+Remaining reviewer errors: required-checks.txt has 23 lines, not 28; scripts/checks/run.sh
+has 27, not 59. citation_error is defined at 118, not the named ranges 143-157,
+207-218 or 230-241; evaluate_output is defined at 245, not 293-300. Citing REVIEW.diff
+as evidence is invalid independently of its being readable. Full exact remaining
+ordered diagnostics live in I5a-expected.json and are asserted by full contract replay.
+
+C2: CIa raw log SHA256 matches the coordinator's 1e7ceceb04488af4c3a87a92302d10cbed07967461ede90f51af88d10ad0c20f.
+Its prompt SHA256 matches 8418e6b6bad8b25e11b3bca32fe7f91f823b8c481f03aec57784a8cecc56652f.
+Original reviewer bytes are never normalized, repaired or reordered. Both raw logs are
+retained; each separately hashed final artifact omits exactly the final harness line.
+Raw-log contract replay is noverdict because the harness trailer is not a verdict.
+Final-message replay checks CIa's exact missing-REPOSITORY diagnostic (blocked) and
+I5a's entire remaining reason list (invalid). Portable source archives contain original
+blobs with per-path digests; no source lines are reconstructed to make reviews pass.
+CIa's substantive CLEAN is wrong (CIc HIGH, selected-registry PASS evidence mismatch,
+fixed at gate-schedule 64e0c17e). Citation validation does not check semantic truth.

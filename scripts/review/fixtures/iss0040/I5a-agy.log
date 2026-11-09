@@ -1,0 +1,141 @@
+root agent idle; waiting for 1 background task(s) to finish
+I have launched the `landing_ready.sh` and `sandbox_isolation.sh` verification checks and am waiting for the background task to complete.
+Provenance check: Base `712a44fd44a42645a8e9bad78a872453a035b901` (`wip/review-access` head, agy rounds) to `af38dd07f2727eca74b49a4576b26fa0b304168e` (`wip/iss0040-citecheck` head). Codex wrote every commit in this range (`712a44fd..af38dd07f`, rounds 1–5); I (`agy`) wrote none of the commits in this range.
+
+READ: .claude/codex-review-prompt.md
+READ: ISSUES.tsv
+READ: RANGE.txt
+READ: REVIEW.diff
+READ: ROADMAP.md
+READ: changelog.d/2026-11-09-review-citations.md
+READ: docs/REVIEW.md
+READ: docs/decisions.md
+READ: scripts/checks/issues.sh
+READ: scripts/checks/landing_ready.sh
+READ: scripts/checks/landing_script.sh
+READ: scripts/checks/lib/git_sandbox.py
+READ: scripts/checks/lib/git_sandbox.sh
+READ: scripts/checks/review_tool.sh
+READ: scripts/checks/run.sh
+READ: scripts/checks/sandbox_isolation.sh
+READ: scripts/land/notes.sh
+READ: scripts/land/ready.sh
+READ: scripts/land/signoff.sh
+READ: scripts/land/train.sh
+READ: scripts/review/README.md
+READ: scripts/review/collect_output.sh
+READ: scripts/review/external-names.tsv
+READ: scripts/review/fixtures/iss0040/AKa-agy.log
+READ: scripts/review/fixtures/iss0040/AKc-codex.md
+READ: scripts/review/fixtures/iss0040/CHa-agy.log
+READ: scripts/review/fixtures/iss0040/S3-agy.log
+READ: scripts/review/fixtures/iss0040/SHA256SUMS
+READ: scripts/review/fixtures/iss0040/provenance.json
+READ: scripts/review/fixtures/iss0040/rev-c1a3/CTX.txt
+READ: scripts/review/fixtures/iss0040/rev-c1a3/agy.out
+READ: scripts/review/fixtures/iss0040/rev-c1a3/cite-check.txt
+READ: scripts/review/fixtures/iss0040/rev-c2a4/CTX.txt
+READ: scripts/review/fixtures/iss0040/rev-c2a4/cite-check.txt
+READ: scripts/review/fixtures/iss0040/rev-c2a4/codex.final
+READ: scripts/review/fixtures/iss0040/rev-c2a4/codex.out
+READ: scripts/review/fixtures/iss0040/rev-c4a3/CTX.txt
+READ: scripts/review/fixtures/iss0040/rev-c4a3/agy.out
+READ: scripts/review/fixtures/iss0040/rev-c4a3/cite-check.txt
+READ: scripts/review/fixtures/iss0040/rev-c7r6/CTX.txt
+READ: scripts/review/fixtures/iss0040/rev-c7r6/agy.out
+READ: scripts/review/fixtures/iss0040/rev-c7r6/cite-check.txt
+READ: scripts/review/fixtures/iss0040/rev-c9r8-invalid/agy.out
+READ: scripts/review/fixtures/iss0040/rev-c9r8-invalid/cite-check.txt
+READ: scripts/review/fixtures/iss0040/rev-intg6/CTX.txt
+READ: scripts/review/fixtures/iss0040/rev-intg6/agy.out
+READ: scripts/review/fixtures/iss0040/rev-intg6/cite-check.txt
+READ: scripts/review/fixtures/iss0040/round4-reproduction.txt
+READ: scripts/review/fixtures/iss0040/round4_reproduce.py
+READ: scripts/review/fixtures/iss0040/round5-reproduction.txt
+READ: scripts/review/output_contract.py
+READ: scripts/review/review.sh
+READ: scripts/review/test_citation_callers.py
+READ: scripts/review/test_citation_evidence.py
+READ: scripts/review/test_citations.py
+READ: scripts/review/verify.sh
+ABSENT: ALL_CONTROLS_OK
+ABSENT: alwaysEmitSteps
+ABSENT: caseFake
+ABSENT: declModifiers
+ABSENT: exportOnlyName
+ABSENT: fictionalPart.realAnchor
+ABSENT: finish_diff
+ABSENT: inventedLaw
+ABSENT: invalidTwo
+ABSENT: missingName
+ABSENT: Missing.realAnchor
+ABSENT: mutateStoreGhostStep
+ABSENT: mutantFake
+ABSENT: nodeResult
+ABSENT: otherAnchor
+ABSENT: realAnchor
+ABSENT: register_generation
+ABSENT: stepChecked
+ABSENT: untrackedOnlyName
+ABSENT: vacuousForbidsRelease
+ABSENT: verify_saved_replay
+
+### Verification of Round 5 Fixes (`113e26c5b..af38dd07f`)
+
+1. **Round-4 Finding 1 (Bare `file:line` citations for root-level files and active files with `legacy/` copies):**
+   - **Verified fixed** in [`citation_error`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/output_contract.py#L118-L242) (`scripts/review/output_contract.py:128-142`): `resolve(path, exact=False)` checks `if path in paths and is_clean_relative_path(path): return path` (`scripts/review/output_contract.py:137-138`) before the bare-basename fallback (`scripts/review/output_contract.py:139-141`), which filters out `legacy/` when building `candidates = [p for p in paths if not p.startswith("legacy/") and p.rsplit("/", 1)[-1] == path]`.
+   - Markdown link basename labels still resolve through their target via `following` (`scripts/review/output_contract.py:164-171`), and parenthesized basename citations immediately before or after a full Markdown link resolve through `adjacent = before or after` (`scripts/review/output_contract.py:174-184`).
+   - Tested in [`scripts/review/test_citations.py`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/test_citations.py#L70-L112) (`scripts/review/test_citations.py:70-112`) and verified by running `python3 -I scripts/review/test_citations.py` (`citation controls: PASS`) and a live `HEAD` check resolving `ISSUES.tsv:1`, `ROADMAP.md:1`, `README.md:1`, `AGENTS.md:1`, `lakefile.toml:1`, `lean-toolchain:1`, `LICENSE:1`, `.envrc:1`, `.githooks/pre-push:1`, `scripts/review/allowed_writer_log_signers:1`, `flake.nix:1`, and `flake.lock:1` (`HEAD live resolution check: PASS`).
+
+2. **Round-4 Finding 2 (Extensionless/dotfile tracked files and arbitrary suffixes):**
+   - **Verified fixed** in [`LOCATION`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/output_contract.py#L102) (`scripts/review/output_contract.py:102`) and [`citation_error`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/output_contract.py#L143-L157) (`scripts/review/output_contract.py:143-157`): `basenames = {p.rsplit("/", 1)[-1] for p in paths}` and `filename(name)` check membership in `paths` or `basenames` directly rather than a hardcoded extension list (`scripts/review/output_contract.py:143-145`), while `locations` filters `LOCATION.finditer(text)` by `filename(m.group("path")) or "." in m.group("path") or "/" in m.group("path") or text[:m.start()].endswith("](")` (`scripts/review/output_contract.py:155-157`), keeping prose like `UTC-5:30` out of scope while validating extensionless tracked files (`lean-toolchain`, `LICENSE`, `SHA256SUMS`, `scripts/review/allowed_writer_log_signers`), dotfiles (`.envrc`, `.githooks/pre-push`), and `.con`/`.nix`/`.lock` files.
+   - Tested in [`scripts/review/test_citations.py`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/test_citations.py#L82-L105) (`scripts/review/test_citations.py:82-105`, `citation controls: PASS`).
+
+3. **Round-4 Finding 3 (Coordinator review-export helper files excluded from identifier authority):**
+   - **Verified fixed** in [`IDENTIFIER_EXCLUSIONS`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/output_contract.py#L107-L111) (`scripts/review/output_contract.py:107-111`), which includes `"REVIEW.diff"`, `"DELTA.diff"`, `"PROMPT.md"`, `"RANGE.txt"`, and `"_review/*"`, and in [`citation_error`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/output_contract.py#L207-L218) (`scripts/review/output_contract.py:207-218`), which restricts `git grep` to tracked non-excluded `sources` via `:(literal)` pathspecs and applies `:(exclude)` to `git diff` for removed lines.
+   - Tested in [`scripts/review/test_citations.py`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/test_citations.py#L88-L124) (`scripts/review/test_citations.py:88-124`) and [`scripts/review/test_citations.py`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/test_citations.py#L154-L157) (`scripts/review/test_citations.py:154-157`), which now passes directly inside this throwaway review export where `REVIEW.diff`, `DELTA.diff`, `PROMPT.md`, and `RANGE.txt` are committed at `HEAD` (`python3 -I scripts/review/test_citations.py` -> `citation controls: PASS`).
+
+4. **Round-4 Finding 4 (Prompt template and `docs/REVIEW.md` synchronization):**
+   - **Verified fixed** in [`.claude/codex-review-prompt.md`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/.claude/codex-review-prompt.md#L41) (`.claude/codex-review-prompt.md:41`), [`scripts/review/review.sh`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/review.sh#L320) (`scripts/review/review.sh:320`), [`scripts/land/signoff.sh`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/land/signoff.sh#L271) (`scripts/land/signoff.sh:271`), [`scripts/review/README.md`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/README.md#L3) (`scripts/review/README.md:3`), and [`docs/REVIEW.md`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/docs/REVIEW.md#L176-L190) (`docs/REVIEW.md:176-190, 540-544`).
+
+5. **Coordinator Cross-Check (`CHa-agy.log` on `wip/gate-scaling-determinism` at `12e19cd5b2603ff89805049481788974ada36b6c`):**
+   - **Verified fixed** in [`scripts/review/fixtures/iss0040/CHa-agy.log`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/fixtures/iss0040/CHa-agy.log#L1-L168) (`scripts/review/fixtures/iss0040/CHa-agy.log:1-168`), [`scripts/review/fixtures/iss0040/provenance.json`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/fixtures/iss0040/provenance.json#L756-L869) (`scripts/review/fixtures/iss0040/provenance.json:756-869`), [`scripts/review/fixtures/iss0040/SHA256SUMS`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/fixtures/iss0040/SHA256SUMS#L32-L33) (`scripts/review/fixtures/iss0040/SHA256SUMS:32-33`), and [`scripts/review/test_citation_evidence.py`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/test_citation_evidence.py#L76-L83) (`scripts/review/test_citation_evidence.py:76-83`):
+     - Root-level files with `legacy/` twins (`ISSUES.tsv:1-20`, `ROADMAP.md:301-691`, `README.md:40-82`, `required-checks.txt:1-28`), the adjacent bare basename label (`lean_action_ci.yml:1-407` after its full link at `scripts/review/fixtures/iss0040/CHa-agy.log:147`), and all 10 `Concrete/Backend/LLVM.lean` named anchors (`EdgeTable`, `bucket`, `addEdges`, `edgeBuckets`, `bucket_addEdges`, `bucket_edgeBuckets`, `phisFast_eq`, `printFast_eq`, `print_eq_spec`, `module_eq_reference` at `scripts/review/fixtures/iss0040/CHa-agy.log:115-116`) resolve cleanly.
+     - `CHa-agy.log` fails with the exact two real defects:
+       `citation: range 'file:///home/unbalancedparen/projects/gates-briefs/ro-CHa/scripts/checks/run.sh#L1-L59' outside 1..27; citation: range 'scripts/checks/run.sh:1-59' outside 1..27; citation: identifier 'ALL_CONTROLS_OK' unresolved` (`python3 -I scripts/review/test_citation_evidence.py` -> `CHa original evidence: PASS (root twins, adjacent basename, LLVM anchors, exact two defects)`).
+
+---
+
+### Check-by-Check Verification (1–7)
+
+1. **Check (1) — Distinct `invalid` status and fail-closed consumers (CLEAN):**
+   - [`evaluate_output`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/output_contract.py#L245-L336) (`scripts/review/output_contract.py:293-300`) returns `("invalid", problem)` whenever [`citation_error`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/output_contract.py#L118-L242) returns a non-empty error string.
+   - [`validate_reviewer_output`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/collect_output.sh#L97-L134) (`scripts/review/collect_output.sh:125-133`) preserves `invalid` explicitly and maps any unknown status to `status: error`.
+   - [`scripts/review/verify.sh`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/verify.sh#L110-L114) (`scripts/review/verify.sh:111-113`) rejects `verdict: invalid` with exit code `2` (`invalid reviewer evidence is not a verdict`), and exits `0` only on a verified `clean` note (`scripts/review/verify.sh:166-167`).
+   - [`scripts/review/review.sh`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/review.sh#L398-L401) (`scripts/review/review.sh:398-401, 469-487`) appends `(invalid reviewer evidence: $reason)`, increments `N_BLOCKED`, records `verdict: blocked` so the delta base does not advance (`scripts/review/review.sh:249-250, 484-515`), and exits `5` (or `3` at the round cap, `scripts/review/review.sh:526-535`).
+   - [`scripts/land/signoff.sh`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/land/signoff.sh#L211-L221) (`scripts/land/signoff.sh:216-221` in `check` and `scripts/land/signoff.sh:276-284` in `cmd_collect`, which removes `$out` before returning `1`), [`scripts/land/notes.sh`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/land/notes.sh#L110-L114) (`scripts/land/notes.sh:110-114`), [`scripts/land/ready.sh`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/land/ready.sh#L97-L109) (`scripts/land/ready.sh:97-109`), and [`review_provenance`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/land/train.sh#L511-L547) (`scripts/land/train.sh:524-537`) all fail closed on `invalid`.
+   - Verified by running `python3 -I scripts/review/test_citation_callers.py` (`citation caller controls: PASS`), `bash scripts/checks/landing_ready.sh` (`check_landing_ready: PASS=19 FAIL=0`), and the `review_tool.sh` live isolation probe in [`scripts/checks/sandbox_isolation.sh`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/checks/sandbox_isolation.sh#L233) (`ok review_tool.sh: the caller's refs, notes, config and upstream are unchanged`).
+
+2. **Check (2) — Fixed grammar and resolver completeness (CLEAN):**
+   - Verified in [`citation_error`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/output_contract.py#L118-L242) (`scripts/review/output_contract.py:101-242`) and tested in [`scripts/review/test_citations.py`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/test_citations.py#L40-L157) (`scripts/review/test_citations.py:40-157`): handles `path:line`, hyphen and en-dash ranges, comma-separated range lists, Markdown links with `#LA-LB` anchors, root-level files, tracked extensionless and dotfile paths, basename labels bound to their link target, adjacent parenthesized basename citations (before or after the full link), `legacy/` exclusion from bare basename lookup, strict `file://` root validation against `review_root` and `os.path.abspath(repo)`, namespaced Lean declarations (`components[-1]` in selected range and `components[:-1]` in file blob at `scripts/review/output_contract.py:200-203`), diff-removed identifiers (`--base` at `scripts/review/output_contract.py:216-218`), `ABSENT:` lines (`scripts/review/output_contract.py:219`), and `lean-toolchain`-pinned external names in [`scripts/review/external-names.tsv`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/external-names.tsv#L1-L2) (`scripts/review/output_contract.py:220-225`).
+
+3. **Check (3) — Uncited positive verdicts and `proposed:` escape scoping (CLEAN):**
+   - Verified in [`citation_error`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/output_contract.py#L230-L241) (`scripts/review/output_contract.py:230-233, 240-241`) and [`evaluate_output`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/output_contract.py#L293-L300) (`scripts/review/output_contract.py:295-300`): positive verdicts (`clean`/`CLEAN`/`ACCEPT`) require `valid >= 1` resolvable `file:line` citation and reject any `` `proposed:...` `` identifier with `citation: proposed name '...' requires a FINDINGS/REJECT verdict`, while `FINDINGS`/`REJECT` verdicts allow `` `proposed:...` `` names. Verified by `python3 -I scripts/review/test_citations.py` (`scripts/review/test_citations.py:52-54`).
+
+4. **Check (4) — Byte-for-byte evidence fixtures, provenance, and judgment on the C2 fixture (CLEAN):**
+   - All 33 entries in [`scripts/review/fixtures/iss0040/SHA256SUMS`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/fixtures/iss0040/SHA256SUMS#L1-L33) (`scripts/review/fixtures/iss0040/SHA256SUMS:1-33`) and [`scripts/review/fixtures/iss0040/provenance.json`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/fixtures/iss0040/provenance.json#L1-L870) (`scripts/review/fixtures/iss0040/provenance.json:1-870`) match their SHA-256 digests (`sha256sum` verified against `/home/unbalancedparen/projects/gates-briefs/CHa-agy.log`, `AKa-agy.log`, `AKc-codex.md`, `S3-agy.log`, and `python3 -I scripts/review/test_citation_evidence.py` -> `PASS`).
+   - All fabricated reviews (`rev-c9r8-invalid`, `rev-c4a3`, `rev-c7r6`, `rev-intg6`), the wrong-line anchor review ([`AKa-agy.log`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/fixtures/iss0040/AKa-agy.log#L1-L29)), the uncited Codex CLEAN ([`AKc-codex.md`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/fixtures/iss0040/AKc-codex.md#L1-L7)), and the cross-check control ([`CHa-agy.log`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/fixtures/iss0040/CHa-agy.log#L1-L168)) fail for their exact planted reasons, while the honest cited reviews ([`rev-c1a3/agy.out`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/fixtures/iss0040/rev-c1a3/agy.out#L1-L216) and [`S3-agy.log`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/fixtures/iss0040/S3-agy.log#L1-L19)) pass (`scripts/review/test_citation_evidence.py:60-83`).
+   - **Judgment on the honest C2 fixture ([`scripts/review/fixtures/iss0040/rev-c2a4/codex.final`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/fixtures/iss0040/rev-c2a4/codex.final#L1-L47)):** Marking `rev-c2a4/codex.final` as `invalid` when evaluated as a positive verdict (`positive=True`) is **correct**. Although Codex genuinely inspected the repository in its session log ([`scripts/review/fixtures/iss0040/rev-c2a4/codex.out`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/fixtures/iss0040/rev-c2a4/codex.out#L18-L30)) and all 94 backticked identifiers in `codex.final` resolve (including `nodeResult` via the removed side of `c2-base..rev-c2a4`, verified with `positive=False, removed=True` at [`scripts/review/test_citation_evidence.py`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/test_citation_evidence.py#L61)), the final message `codex.final` contains **zero** `file:line` or `#L` location citations (`0 locations ok, 94 identifiers ok` in [`scripts/review/fixtures/iss0040/rev-c2a4/cite-check.txt`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/fixtures/iss0040/rev-c2a4/cite-check.txt#L1-L2)). Because `output_contract.py` validates only the final message and requires every positive verdict to carry at least one resolving `file:line` citation, `rev-c2a4/codex.final` must be rejected under `positive=True` (`scripts/review/test_citation_evidence.py:61-63`).
+
+5. **Check (5) — N2 law-to-witness pairing separation and schema soundness (CLEAN):**
+   - Keeping N2 law-to-witness pairing separate from `output_contract.py` is the right long-term design: `output_contract.py` is the universal syntactic/existence/anchor contract across all repository reviews, whereas `Law`/`Instance`/`Planted` pairing is specific to N2 vacuity audits. The long-term opt-in schema documented in [`scripts/review/README.md`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/README.md#L11) (`scripts/review/README.md:11`) and owned by `R-0691` in [`ROADMAP.md`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/ROADMAP.md#L589) (`ROADMAP.md:589`) reuses the shared location grammar and validates exact source tags without fragile prose-table scraping.
+
+6. **Check (6) — Truthfulness of issue record, changelog, and documentation (CLEAN):**
+   - [`ISSUES.tsv`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/ISSUES.tsv#L25) (`ISSUES.tsv:25`), [`changelog.d/2026-11-09-review-citations.md`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/changelog.d/2026-11-09-review-citations.md#L1-L3) (`changelog.d/2026-11-09-review-citations.md:1-3`), [`scripts/review/README.md`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/scripts/review/README.md#L1-L25) (`scripts/review/README.md:1-25`), [`docs/REVIEW.md`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/docs/REVIEW.md#L176-L190) (`docs/REVIEW.md:176-190, 540-544`), and [`.claude/codex-review-prompt.md`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/.claude/codex-review-prompt.md#L41) (`.claude/codex-review-prompt.md:41`) are accurate and consistent. Verified by `bash scripts/checks/issues.sh` (`check_issues: PASS=5 FAIL=0`) and `bash scripts/checks/doc_links.sh` (`DOC-LINKS-GATE: PASS=12 FAIL=0 INCOMPLETE=0`).
+
+7. **Check (7) — No OD decision taken (CLEAN):**
+   - Verified against [`docs/decisions.md`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/docs/decisions.md#L1-L20) (`docs/decisions.md:1-20`) and [`REVIEW.diff`](file:///home/unbalancedparen/projects/gates-briefs/ro-I5a/REVIEW.diff#L1-L40) (`REVIEW.diff:1-40`): `docs/decisions.md` is untouched and no owner decision (`OD1`–`OD157`) is chosen, encoded, or revised.
+
+REPOSITORY: readable
+VERDICT: CLEAN
+agy rc=0

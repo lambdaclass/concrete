@@ -23,7 +23,7 @@ for row in (FIX / 'SHA256SUMS').read_text().splitlines():
     assert hashlib.sha256((FIX / name).read_bytes()).hexdigest() == digest, name
 manifest = json.loads((FIX / 'provenance.json').read_text())
 
-def run(name, review, positive=True, removed=False):
+def run(name, review, positive=True, removed=False, framed=False):
     with tempfile.TemporaryDirectory() as directory:
         config = Path(directory) / "sandbox.config"
         config.write_text("[core]\n hooksPath = /dev/null\n[commit]\n gpgSign = false\n")
@@ -48,6 +48,12 @@ def run(name, review, positive=True, removed=False):
         unpack(name)
         sha = commit()
         text = (FIX / review).read_text()
+        if framed:
+            row = manifest[name]
+            for path, digest in row['blob_sha256'].items():
+                assert hashlib.sha256((Path(directory) / path).read_bytes()).hexdigest() == digest, path
+            return c.evaluate_output(text, '', sha, directory, ['clean', 'findings'],
+                review_root=row['review_root'], harness_files=('REVIEW.diff', 'DELTA.diff', 'PROMPT.md', 'RANGE.txt'))
         # Historical archive roots are fixture metadata, never inferred by the resolver.
         roots = {
             'scheduled': '/home/unbalancedparen/projects/gates-briefs/ro-S3',
@@ -81,3 +87,18 @@ assert cross_result == (
     "citation: identifier 'ALL_CONTROLS_OK' unresolved"
 ), cross_result
 print('CHa original evidence: PASS (root twins, adjacent basename, LLVM anchors, exact two defects)')
+
+# Full contract replay: final artifacts are never normalized, repaired or reordered.
+for label in ('CIa', 'I5a'):
+    row = manifest['round6-' + label]
+    raw = (FIX / (label + '-agy.log')).read_bytes()
+    final = (FIX / row['final_message']).read_bytes()
+    assert raw == final + b'agy rc=0\n'
+    assert hashlib.sha256(raw).hexdigest() == row['review_sha256']
+    assert hashlib.sha256(final).hexdigest() == row['final_sha256']
+    expected = json.loads((FIX / row['expected']).read_text())
+    result = run('round6-' + label, row['final_message'], framed=True)
+    assert result == (expected['status'], expected['reason']), (label, result, expected)
+    raw_result = run('round6-' + label, label + '-agy.log', framed=True)
+    assert raw_result == ('noverdict', 'last non-empty line is not a valid VERDICT (clean|findings) line'), raw_result
+print('round6 original evidence: PASS (CIa blocked, I5a invalid, exact diagnostics, unchanged reviewer bytes)')

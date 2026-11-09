@@ -1,0 +1,199 @@
+root agent idle; waiting for 1 background task(s) to finish
+Running the focused Python and shell verification checks in the export tree; waiting a moment for the background task to complete.
+### Authorship Disclosure
+
+Under the temporary two-model rule, `agy` (Gemini) wrote the following rounds in the reviewed range `c2245c99ab7e9255e6a25898386804d6621f2bb8..ac8b47567565ca0e7c008b1b5b88982cb9a19f04`:
+- **Gate C (`wip/gate-scaling-determinism`)**:
+  - Round 2: `55a31821`, `fc3bc0d3`, `c50407d4`, `221ec15c`.
+  - Rounds 4 / 4b: `8ddbc4f1` (merge), `c855eeda`, `c43f8345`, `ff459eb0`, `55362d37` (merge).
+  - Round 5: `ada31b0b` (merge of `gate-schedule`), `71adda88` (wiring).
+- **ISS-0030 (`wip/lcb-numbering`)**: `9f9213ba`, `cea8af59`.
+- **`wip/gate-schedule` (merged in)**: none (`Codex` was sole writer for rounds 1–6, `8648090c..5002321d`).
+- **Gate C restack round 6 (`1e056983`, `12e19cd5`) and round 7 (`815f12da`, `a850549c`, `c576d56c`, `ac8b4756`)**: none (`Codex` wrote all of rounds 3, 6, and 7; `Kimi` wrote initial and round 1 of Gate C and initial `ISS-0030`).
+
+---
+
+### Files Read
+
+```text
+READ: .github/workflows/gate_freshness.yml
+READ: .github/workflows/gate_publish.yml
+READ: .github/workflows/gate_schedule.yml
+READ: .github/workflows/lean_action_ci.yml
+READ: Concrete/Backend/LCB.lean
+READ: Concrete/Backend/LLVM.lean
+READ: Concrete/Backend/Runtime.lean
+READ: Concrete/Premises.lean
+READ: Concrete/README.md
+READ: DELTA.diff
+READ: ISSUES.tsv
+READ: PROMPT.md
+READ: RANGE.txt
+READ: README.md
+READ: REVIEW.diff
+READ: ROADMAP.md
+READ: changelog.d/2026-11-08-contract-evidence-direction.md
+READ: changelog.d/2026-11-08-gate-schedule.md
+READ: changelog.d/2026-11-08-iss0030-linear-backends.md
+READ: changelog.d/2026-11-08-replacement-experiment.md
+READ: changelog.d/2026-11-08-scaling-determinism.md
+READ: changelog.d/2026-11-08-signoff-reject.md
+READ: changelog.d/2026-11-08-slice0.md
+READ: changelog.d/2026-11-08-test-manifest.md
+READ: changelog.d/gate-registry.md
+READ: changelog.d/scaling-execution-policy.md
+READ: changelog.d/scheduled-execution-contract.md
+READ: changelog.d/scheduled-hermetic-identity.md
+READ: changelog.d/scheduled-host-slots.md
+READ: docs/LANDING.md
+READ: docs/REVIEW.md
+READ: required-checks-transition.tsv
+READ: required-checks.txt
+READ: scripts/checks/compiler/README.md
+READ: scripts/checks/compiler/campaign.sh
+READ: scripts/checks/compiler/campaign_controls.py
+READ: scripts/checks/compiler/campaign_wiring.py
+READ: scripts/checks/compiler/determinism.sh
+READ: scripts/checks/compiler/execution_policy.py
+READ: scripts/checks/compiler/hermetic_controls.py
+READ: scripts/checks/compiler/mode_controls.py
+READ: scripts/checks/compiler/scaling.lean
+READ: scripts/checks/compiler/scaling.sh
+READ: scripts/checks/compiler/scaling_binding_controls.py
+READ: scripts/checks/compiler/slice0_artifacts.sh
+READ: scripts/checks/compiler/slice0_bir.lean
+READ: scripts/checks/compiler/slice0_repro.sh
+READ: scripts/checks/compiler/slice0_trusted_base.sh
+READ: scripts/checks/compiler/tests.sh
+READ: scripts/checks/gates.json
+READ: scripts/checks/gates_registry.sh
+READ: scripts/checks/issues.sh
+READ: scripts/checks/landing_script.sh
+READ: scripts/checks/lib/bounded.sh
+READ: scripts/checks/lib/bounded_exec.py
+READ: scripts/checks/lib/ci2_binding.py
+READ: scripts/checks/lib/compare_linux.sh
+READ: scripts/checks/lib/gate_env.sh
+READ: scripts/checks/lib/gate_manifest.py
+READ: scripts/checks/lib/gate_outcome.py
+READ: scripts/checks/lib/heavy_slots.sh
+READ: scripts/checks/lib/repro_compare.py
+READ: scripts/checks/lib/scaling_report.py
+READ: scripts/checks/lib/spec_build.sh
+READ: scripts/checks/run.sh
+READ: scripts/checks/scheduled/README.md
+READ: scripts/checks/scheduled/collect.py
+READ: scripts/checks/scheduled/hermetic_suite.py
+READ: scripts/checks/scheduled/observe.py
+READ: scripts/checks/scheduled/protocol.py
+READ: scripts/checks/scheduled/publish.py
+READ: scripts/checks/scheduled/run.py
+READ: scripts/checks/scheduled/test_collect.py
+READ: scripts/checks/scheduled/test_execution.py
+READ: scripts/checks/scheduled/test_hermetic.py
+READ: scripts/checks/scheduled/test_integration.py
+READ: scripts/checks/scheduled/test_observe.py
+READ: scripts/checks/scheduled/test_protocol.py
+READ: scripts/checks/scheduled/test_publish.py
+READ: scripts/checks/scheduled/test_registry.py
+READ: scripts/checks/scheduled/test_slot.py
+READ: scripts/checks/scheduled/test_support.py
+READ: scripts/checks/scheduled/test_workflows.py
+READ: scripts/checks/scheduled/with_slot.sh
+READ: scripts/checks/scheduled_gates.sh
+READ: scripts/checks/workflow_yaml.sh
+READ: scripts/land/signoff.sh
+READ: scripts/land/train.sh
+READ: tests/golden/slice0_trusted_base.txt
+```
+
+```text
+ABSENT: sorry
+ABSENT: sorryAx
+ABSENT: native_decide
+ABSENT: implemented_by
+ABSENT: extern
+```
+
+---
+
+### Verification Summary by Requirement
+
+#### (1) ISS-0030: Prepared-Table Proofs, Exact Headline Statements, and Trusted Base (`CLEAN`)
+- **Prepared numbering, incoming-edge tables, and linear validation proved equal to reference specifications**:
+  - In [Concrete/Backend/Runtime.lean](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/Concrete/Backend/Runtime.lean#L161-L184), tail-recursive running offset collection `positionsAux` (`lines 166–169`) and `positions` (`lines 178–179`) are proved equal to `positionsSpec` (`lines 161–163`) via `positionsAux_eq` (`lines 171–176`) and `positions_eq` (`lines 181–183`).
+  - In [Concrete/Backend/LCB.lean](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/Concrete/Backend/LCB.lean#L209-L882), the closed reference definitions remain in `adaptSpec` (`lines 209–214`), `emitSpec` (`lines 216–218`), and `numberingSpec` (`lines 310–311`). Running-offset numbering `instNumberingFast` (`lines 258–261`), `blockNumberingFast` (`lines 263–267`), `numberingFastFrom` (`lines 269–272`), and `numbering` (`line 307`) are proved equal to the reference numbering in `instNumberingFast_eq` (`lines 274–286`), `blockNumberingFast_eq` (`lines 288–290`), `numberingFastFrom_eq` (`lines 292–305`), `numberingFrom_correct` (`lines 532–548`), and `numbering_eq` (`lines 550–553`).
+  - Prepared `Std.HashMap` lookup tables `IncomingTable` (`line 347`), `incomingBuckets` (`lines 357–358`), `Prepared` (`lines 360–366`), `regTable` (`line 372`), and `prepare` (`lines 380–384`), together with linear duplicate/range validation `markUnique` (`lines 315–322`), `uniqueRegs` (`lines 324–326`), `regCheck` (`line 328`), `slotInterCheck` (`lines 330–333`), and `numberingOkFastData` (`lines 335–337`), are proved equal to the reference definitions via `prepare_regId` (`lines 573–576`), `blockOffset_prepare` (`lines 578–581`), `instOffset_prepare` (`lines 583–587`), `prepare_incoming` (`lines 622–627`), `regCheck_eq` (`lines 760–761`), `slotInterCheck_eq` (`lines 763–798`), `numberingOkFastData_eq` (`lines 800–806`), and `prepare_ok` (`lines 808–810`).
+  - Fast adaptation `adaptPhiFast` (`lines 396–398`), `adaptInstFast` (`lines 400–401`), `adaptBlockFast` (`lines 403–405`), `adaptFast` (`lines 407–412`), `adapt` (`line 414`), and `emit` (`lines 420–422`) are proved equal to the reference definitions by `adaptPhiFast_eq` (`lines 845–847`), `adaptInstFast_eq` (`lines 849–852`), `adaptBlockFast_eq` (`lines 854–866`), `adaptFast_eq` (`lines 868–876`), `adapt_eq_spec` (`line 878`), and `emit_eq_spec` (`lines 880–881`).
+  - In [Concrete/Backend/LLVM.lean](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/Concrete/Backend/LLVM.lean#L100-L173), `EdgeTable` (`line 107`), `bucket` (`line 109`), `addEdges` (`lines 111–113`), `edgeBuckets` (`lines 115–116`), `phisFast` (`line 140`), `printFast` (`lines 147–152`), `print` (`line 162`), and `module` (`line 167`) are proved equal to `printSpec` (`lines 100–104`) and `phis` (`lines 72–74`) by `bucket_addEdges` (`lines 118–128`), `bucket_edgeBuckets` (`lines 130–137`), `phisFast_eq` (`lines 142–144`), `printFast_eq` (`lines 154–160`), `print_eq_spec` (`line 164`), and `module_eq_reference` (`lines 169–171`).
+- **Headline theorems keep their exact statements about production entry points**:
+  - In [Concrete/Backend/LCB.lean](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/Concrete/Backend/LCB.lean#L2627-L2680):
+    - `adapter_correct` (`lines 2627–2642`) is stated directly over `adapt p = .ok f`.
+    - `emit_correct` (`lines 2657–2661`) is stated directly over `emit p = .ok (f, tbl)`.
+    - `artifact_of_emit_error` (`lines 2664–2668`) is stated directly over `emit p = .error e` and `artifact t p = .error e`.
+    - `artifact_correct` (`lines 2671–2680`) is stated directly over `artifact t p = .ok s`, `emit p = .ok (f, tbl)`, and `assemble t f = .ok s`.
+  - All four theorems are registered in `theorems` in [Concrete/Premises.lean](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/Concrete/Premises.lean#L58-L66) and verified in [tests/golden/slice0_trusted_base.txt](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/tests/golden/slice0_trusted_base.txt#L13-L19) to depend only on `propext`, `Classical.choice`, and `Quot.sound`.
+- **Forbidden construct check**:
+  - Ran `grep -nE '\b(sorry|sorryAx|native_decide|implemented_by|extern|partial|unsafe)\b|^axiom ' Concrete/Backend/LCB.lean Concrete/Backend/LLVM.lean Concrete/Backend/Runtime.lean scripts/checks/compiler/scaling.lean scripts/checks/compiler/slice0_bir.lean`: zero matches in code (only the word `partial` in a comment at [Concrete/Backend/Runtime.lean](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/Concrete/Backend/Runtime.lean#L10)).
+
+#### (2) Gate C: Scaling Gate, Exact Inventory, Resolution Floors, Envelope, and Controls (`CLEAN`)
+- **Scaling measurement and stage inventory**:
+  - [scripts/checks/compiler/scaling.lean](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/compiler/scaling.lean#L45-L214) generates scaled well-formed BIR programs via `scaled` (`lines 45–51`) plus backend families `registers` (`lines 53–61`), `widePhi` (`lines 63–77`), and `manyBlocks` (`lines 79–87`), listed in `backendFamilies` (`lines 89–91`) and `allFamilies` (`lines 93–94`).
+  - `timedPure` (`lines 138–151`) batches in-process evaluations until elapsed monotonic time is at least `20_000_000` ns (`20 ms`) and forces full evaluation of outputs via linear structural digests `forceEmit` (`lines 123–127`), `forceString` (`lines 129–130`), and `forceAssemble` (`lines 132–135`).
+  - `runMeasurement` (`lines 197–214`) validates each size via `validate` (`lines 191–195`) against the BIR evaluator and interleaves sizes (`[k0, 10 * k0, 100 * k0]` on even repetitions, reversed on odd repetitions at `lines 206–207`).
+- **Analyzer cannot pass with missing stages, duplicate/missing samples, below-resolution timings, or noisy distributions**:
+  - [scripts/checks/lib/scaling_report.py](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/lib/scaling_report.py#L10-L150) defines `CORE = ("llvm_module", "lcb_emit", "lcb_assemble")` (`line 10`) and `BACKEND = ("llvm_module", "lcb_emit")` (`line 11`).
+  - Duplicate samples (`lines 54–55`), malformed/non-numeric rows (`lines 46–53`), mismatched raw or derived stage inventories (`lines 68–71, 90–93`), and missing/unexpected `(rep, k)` sample keys (`lines 58–59, 108–114`) all fail closed.
+  - Both the minimum exponent (`lines 115–120, 137–140`) and the conservative lower-third noise envelope `upper = exponent(minima[1], large_low)` (`lines 124–131`) must not exceed `args.max_exponent` (`1.35`), and 100x minima must meet `args.min_stage_ns` (`10 ms`) or `args.min_native_ns` (`100 ms`) (`lines 132–136`).
+- **Exact planted controls**:
+  - [scripts/checks/compiler/scaling.sh](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/compiler/scaling.sh#L183-L296) runs `control_linear` (`lines 183–197`), `control_quadratic` (`lines 199–224`, verifying exact failure count `1`, exact regex `^FAIL scaling: stage plant_quadratic exponent 10x->100x = [0-9]+\.[0-9]{3} exceeds [0-9]+\.[0-9]{3}$`, and exponent in `[1.7, 2.3]`), `control_noise_envelope` (`lines 226–246`, verifying exact failure count `1` and `envelope = 1.477 exceeds 1.350`), `control_refusal` (`lines 248–262`, verifying exit `2` without `--allow-planted-failure`), `control_ci2_provenance` (`lines 264–268`), and `control_exact_sha` (`lines 270–296`).
+  - In [scripts/checks/compiler/slice0_bir.lean](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/compiler/slice0_bir.lean#L180-L290), `checkNumbering` (`lines 213–290`) tests prepared-table equivalence on `sparse` (`lines 180–185`), `wide` (`lines 187–194`), `deepBlocks` (`lines 196–198`), and negative numbering/CFG cases via `expectAdaptError` (`lines 203–211`), wired into [scripts/checks/compiler/tests.sh](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/compiler/tests.sh#L33-L35).
+
+#### (3) Gate C: Determinism Perturbations and Comparator (`CLEAN`)
+- **Real compilation perturbations**:
+  - [scripts/checks/compiler/determinism.sh](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/compiler/determinism.sh#L69-L195) resolves `lean_cmd` and `lean_path` once (`lines 69–70`), verifies with `cwd.lean` (`lines 72–78`) that the Lean child processes actually observe distinct working directories `$root` and `$root/scripts`, checks manifest inventory equality against `slice0_bir.lean list` (`lines 79–86`), and compiles every BIR test twice under `env -i` with distinct output paths (`$work/first/output-with-one-absolute-path` vs `$work/second/a-different-and-deliberately-longer-absolute-output-path`, `lines 112–113`), `HOME`, `TMPDIR`, `LC_ALL`/`LANG` (`locale_a` vs `locale_b`, `lines 92–105`), `TZ` (`UTC0` vs `UTC-5:30`, `lines 106–107`), `umask` (`022` vs `077`, `lines 108–109`), `SOURCE_DATE_EPOCH`, `ZERO_AR_DATE`, `PYTHONHASHSEED`, and reversed example order (`lines 119–182`).
+- **Exact inventory and byte-for-byte comparator with negative controls**:
+  - [scripts/checks/lib/repro_compare.py](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/lib/repro_compare.py#L44-L183) validates top-level directory structure in `validate_out_root` (`lines 44–58`), per-program file inventory in `inventory` (`lines 61–77`), stage ordering in `ordered_inventory_stages` (`lines 80–95`), and byte-identical SHA-256 digests in `main` (`lines 98–179`).
+  - [scripts/checks/compiler/determinism.sh](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/compiler/determinism.sh#L197-L294) runs negative controls for `nondeterministic` (CWD leak into `llvm.ll`) and `monotonic` (clock leak into `lcb_body.s`) (`lines 209–233`), `missing-artifact` (`lines 235–242`), `extra-artifact` (`lines 244–251`), `extra-top-file` (`lines 253–260`), `extra-program-dir` (`lines 262–269`), `combined` precedence (`lines 271–281`), and plant flag refusal (`lines 283–294`).
+  - [scripts/checks/compiler/slice0_repro.sh](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/compiler/slice0_repro.sh#L56-L109) uses the same shared `repro_compare.py` (`line 56`).
+
+#### (4)–(7) Merges, Tiering, Workflows, Required Checks, Docs, Changelogs, ISSUES, and Philosophy (`CLEAN`)
+- **Both `ada31b0b` conflict resolutions (`ISSUES.tsv` and `scripts/checks/run.sh`) preserved**:
+  - [ISSUES.tsv](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/ISSUES.tsv#L21-L23) preserves `ISS-0019` (`line 21`), `ISS-0020` (`line 22`), and `ISS-0030` (`line 23`, status `open` until concrete-ci-2 qualification of the integrated candidate). Verified with `CONCRETE_GATES_SHELL=1 bash scripts/checks/issues.sh` (`check_issues: PASS=5 FAIL=0`).
+  - [scripts/checks/run.sh](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/run.sh#L1-L27) delegates root checks to `python3 -I "$ROOT_DIR/scripts/checks/lib/gate_manifest.py" execute-root` (`line 26`), and `gates.json` includes `root-scheduled_gates` ([scripts/checks/gates.json](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/gates.json#L490-L506)), `root-workflow_yaml` ([scripts/checks/gates.json](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/gates.json#L508-L524)), `root-gates_registry` ([scripts/checks/gates.json](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/gates.json#L526-L542)), and `root-test_manifest` ([scripts/checks/gates.json](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/gates.json#L892-L908)).
+- **Required checks and transition ledger**:
+  - [required-checks.txt](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/required-checks.txt#L18-L29) lists `Scaling (1x/10x/100x)` (`line 27`) and `Determinism (double compile)` (`line 28`), matching `.github/workflows/lean_action_ci.yml` (`name: Scaling (1x/10x/100x)` at [lean_action_ci.yml](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/.github/workflows/lean_action_ci.yml#L402) and `name: Determinism (double compile)` at [lean_action_ci.yml](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/.github/workflows/lean_action_ci.yml#L455)).
+  - [required-checks-transition.tsv](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/required-checks-transition.tsv#L1-L12) is unchanged and consistent.
+- **No Owner Decision (`OD1–OD157`) picked**:
+  - All changes implement already-decided architecture (`R-0676`, `ISS-0030`, Gate C).
+
+#### (8) CFc HIGH Findings and Honest Staging Owned by `ISS-0029` / `R-0690` (`CLEAN`)
+- **Structural fixes for CFc HIGH findings**:
+  - Scheduled gate orchestration in [scripts/checks/scheduled/run.py](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/scheduled/run.py#L102-L166) executes controller logic exclusively from `ROOT` (`with_slot.sh`, `heavy_slots.sh`, `bounded.sh`, `gate_outcome.py`, `gate_manifest.py`, `ci2_binding.py`), detaches the target `sha` into a separate `checkout` (`lines 109–113`), parses `checkout / "scripts/checks/gates.json"` purely as data via `_registry.load(registry_path)` (`lines 118–119`), and never executes replayed controller libraries (verified by `test_replayed_libraries_not_sourced` in [scripts/checks/scheduled/test_slot.py](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/scheduled/test_slot.py#L36-L38)).
+  - Artifact SHA binding in `preserve_artifacts` ([scripts/checks/scheduled/run.py](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/scheduled/run.py#L61-L81)) verifies that every required artifact exists on `PASS`, lies inside `checkout`, and has `sha_file` matching the exact 40-hex `sha`, turning missing/forged artifacts into `FAIL scheduled artifact:` (`lines 75–79, 154–155, 164–165`).
+  - Notes collection and publication ([scripts/checks/scheduled/collect.py](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/scheduled/collect.py#L72-L133), [scripts/checks/scheduled/publish.py](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/scheduled/publish.py#L18-L41), [scripts/checks/scheduled/observe.py](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/scheduled/observe.py#L14-L40)) validate exact SHA, attempt/occurrence monotonic ordering, tool lock pins, and control statuses via [scripts/checks/scheduled/protocol.py](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/scheduled/protocol.py#L64-L131).
+- **Honest staging of `ISS-0029` / `R-0690` boundaries**:
+  - [scripts/checks/scheduled/README.md](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/scheduled/README.md#L211-L234), [Concrete/README.md](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/Concrete/README.md#L583-L613), [ROADMAP.md](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/ROADMAP.md#L622-L645), and [docs/LANDING.md](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/docs/LANDING.md#L247-L263) explicitly state that pre-landing self-hosted qualification on `push`/`workflow_dispatch` is the transitional path until `ISS-0029` lands the trusted pre-landing dispatcher, and that `train.sh` verification of `refs/notes/scheduled-gates` belongs to `R-0690`.
+
+#### (9) Restack Round 6: Single Registry Ownership and CGc Fixes (`CLEAN`)
+- **Single registry and no duplicate manifest/semaphore/runner parser**:
+  - [scripts/checks/gates.json](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/gates.json#L1-L910) and [scripts/checks/lib/gate_manifest.py](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/lib/gate_manifest.py#L1-L178) are the single gate registry and validator. `gate_manifest.py` has no gate-specific special cases; C's wiring invariants are tested in [scripts/checks/compiler/campaign_wiring.py](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/compiler/campaign_wiring.py#L1-L84), called by [scripts/checks/workflow_yaml.sh](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/workflow_yaml.sh#L46-L52).
+  - [scripts/checks/lib/ci2_binding.py](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/lib/ci2_binding.py#L11-L27) delegates runner inventory parsing to `repro_manifest_compare.py` (`lines 12–18`) with no duplicate runner list.
+- **CGc findings resolved at their owners and consumed via public interfaces**:
+  - **Host-wide heavy slots**: [scripts/checks/lib/heavy_slots.sh](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/lib/heavy_slots.sh#L4-L39) locks persistent `/var/lib/concrete/heavy-slots/slot-{1,2}` descriptors (`lines 5–30`) and reuses an already-inherited `CONCRETE_HEAVY_SLOT_FD` in child processes (`lines 10–22`); [scripts/checks/compiler/scaling.sh](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/compiler/scaling.sh#L139-L143) acquires through `heavy_slot_acquire` and [scripts/checks/compiler/campaign.sh](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/compiler/campaign.sh#L29) releases on exit via `heavy_slot_release`.
+  - **Nested timeouts and structured outcomes**: [scripts/checks/lib/bounded.sh](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/lib/bounded.sh#L17-L174) and [scripts/checks/lib/bounded_exec.py](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/lib/bounded_exec.py#L64-L137) distinguish a genuine child exit `124` from a double watchdog timeout (`125`, `bounded_is_incomplete` at `bounded.sh:17–19`). [scripts/checks/lib/gate_outcome.py](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/lib/gate_outcome.py#L10-L41) records atomic JSONL outcome events per attempt in [scripts/checks/scheduled/with_slot.sh](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/scheduled/with_slot.sh#L9-L26), and [scripts/checks/compiler/campaign.sh](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/compiler/campaign.sh#L6-L47) reports `FAIL` / `INCOMPLETE` through `campaign_outcome`.
+  - **Failed-run diagnostics preserved**: [scripts/checks/compiler/campaign.sh](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/compiler/campaign.sh#L22-L28) copies `$work/*.log`, `$work/*.tsv`, and `$work/manifest.txt` into `$report/diagnostics/` on exit, and [scripts/checks/scheduled/run.py](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/scheduled/run.py#L138-L165) calls `preserve_artifacts` even when a gate fails (`lines 159–161`).
+
+#### (10) Round 7: Execution-Tier Authorization and Hermetic Ambient-Environment Isolation (`CLEAN`)
+- **Scaling authorization by explicit tier**:
+  - [scripts/checks/compiler/execution_policy.py](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/compiler/execution_policy.py#L6-L25) authorizes scaling strictly by `tier`:
+    - `tier == 'pr'` (`lines 7–13`): requires `runner == 'github-hosted'`, `event == 'pull_request'`, and `ref` matching `refs/pull/[1-9][0-9]*/merge`. Self-hosted PR runs, non-`pull_request` events, and non-PR merge refs are refused.
+    - `tier in ('qualification', 'daily')` (`lines 14–22`): requires `runner == 'self-hosted'`, `event in ('push', 'workflow_dispatch')` for `qualification` or `('schedule', 'workflow_dispatch')` for `daily`, and `ref` matching `refs/heads/(main|(?:ci|wip)/.+)` (refusing `refs/pull/...` and `pull_request` events).
+  - In [scripts/checks/compiler/scaling.sh](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/compiler/scaling.sh#L118-L138), `check_exact_sha` (`line 118`) binds `HEAD` to `expected_sha` across all tiers, `execution_policy.py` (`lines 119–120`) enforces the tier policy, and `check_ci2_runner` (`lines 115–117, 128–138`) enforces `ci2_binding.py` for all non-`pr` tiers.
+  - Verified by running `python3 -I scripts/checks/compiler/mode_controls.py`: all 14 positive and negative entry-policy cases pass (`ok C entry policy 0..13`).
+- **No ambient `GITHUB_*` / `SELECTED_*` / `SCHEDULED_*` / `RUNNER_*` reads in library code below entry points**:
+  - Entry points snapshot environment variables at the boundary ([scripts/checks/compiler/scaling.sh](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/compiler/scaling.sh#L33-L38), [scripts/checks/compiler/determinism.sh](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/compiler/determinism.sh#L36-L41), [scripts/checks/lib/ci2_binding.py](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/lib/ci2_binding.py#L28-L31), [scripts/checks/lib/gate_outcome.py](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/lib/gate_outcome.py#L42-L47), [scripts/checks/lib/gate_manifest.py](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/lib/gate_manifest.py#L162-L174)).
+  - Library functions ([scripts/checks/compiler/campaign.sh](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/compiler/campaign.sh#L1-L54), `authorize` in [scripts/checks/compiler/execution_policy.py](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/compiler/execution_policy.py#L6-L25), `verify` in [scripts/checks/lib/ci2_binding.py](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/lib/ci2_binding.py#L22-L26), `emit`/`result` in [scripts/checks/lib/gate_outcome.py](file:///home/unbalancedparen/projects/gates-briefs/ro-CIa/scripts/checks/lib/gate_outcome.py#L10-L40)) take explicit parameters and read no ambient identity variables.
+  - Verified by running `python3 -I scripts/checks/scheduled/hermetic_suite.py` (`PASS scheduled hermeticity: 91 identical clean/hostile results`), `python3 -I scripts/checks/compiler/hermetic_controls.py` (`PASS C hermeticity: identical clean/hostile evidence` across `campaign_wiring.py`, `campaign_controls.py`, and `mode_controls.py`), `CONCRETE_GATES_SHELL=1 bash scripts/checks/gates_registry.sh`, `CONCRETE_GATES_SHELL=1 bash scripts/checks/scheduled_gates.sh`, and `CONCRETE_GATES_SHELL=1 bash scripts/checks/workflow_yaml.sh` (`WORKFLOW-YAML: PASS=6 FAIL=0`).
+
+VERDICT: CLEAN

@@ -1,0 +1,4 @@
+{
+  "status": "blocked",
+  "reason": "penultimate non-empty line is '- Verified by running python3 -I scripts/checks/scheduled/hermetic_suite.py (PASS scheduled hermeticity: 91 identical clean/hostile results), python3 -I scripts/checks/compiler/hermetic_controls.py (PASS C hermeticity: identical clean/hostile evidence across campaign_wiring.py, campaign_controls.py, and mode_controls.py), CONCRETE_GATES_SHELL=1 bash scripts/checks/gates_registry.sh, CONCRETE_GATES_SHELL=1 bash scripts/checks/scheduled_gates.sh, and CONCRETE_GATES_SHELL=1 bash scripts/checks/workflow_yaml.sh (WORKFLOW-YAML: PASS=6 FAIL=0).', not 'REPOSITORY: readable'"
+}
