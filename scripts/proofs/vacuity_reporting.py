@@ -47,6 +47,27 @@ end ConcreteSpecControl''')
         if code != 2 or set(diagnostics) != expected or not report.endswith('N2 INCOMPLETE\n'):
             raise AssertionError(f'{label}: exit={code}\n{report}\nexpected={expected}')
         print(f'PASS reporting {label}: exact named INCOMPLETE and unrelated FAIL retained')
+    # A failed Planted analysis belongs to the Planted declaration and its
+    # paired Instance, rather than merely to the enclosing law.
+    fixture = BASE.replace('end ConcreteSpecControl',
+        '/-- Law (subject `ConcreteSpecControl.S`). -/\n'
+        'theorem unrelated (n : Nat) : n < S n := Nat.lt_succ_self n\n'
+        'end ConcreteSpecControl')
+    planted_line = next(i for i, text in enumerate(fixture.splitlines(), 1) if 'example : 2 = 2 ∧' in text)
+    instance_line = next(i for i, text in enumerate(fixture.splitlines(), 1) if 'example : 2 < S 2' in text)
+    planted_name = f'ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:{planted_line}»'
+    instance_name = f'ConcreteSpecControl.«⟪example⟫ConcreteSpec.lean:{instance_line}»'
+    anchor = 'def counterexample (law : ConstantInfo) (ic : InstanceCase) (s m : Name) (subjects : Array Name) : MetaM Expr := do\n'
+    assert consumer.count(anchor) == 1
+    with compiled_consumer(consumer_text=consumer.replace(anchor, anchor +
+            '  if ic.key == "two" then throwError "planted-counterexample-error"\n')) as meta:
+        code, report = run(ROOT, '', fixture, 64, meta_path=meta)
+    diagnostics = {row for row in report.splitlines() if row.startswith(('FAIL ', 'INCOMPLETE '))}
+    assert code == 2 and report.endswith('N2 INCOMPLETE\n') and diagnostics == {
+        'FAIL missing-instance ConcreteSpecControl.unrelated ',
+        f'INCOMPLETE analysis-budget-or-error {planted_name} stage=planted law=ConcreteSpecControl.growth case=two instance={instance_name} subject=ConcreteSpecControl.S planted-counterexample-error',
+    }, report
+    print('PASS reporting planted-error: exact Planted and paired Instance named; unrelated FAIL retained')
     with compiled_consumer() as meta:
         if controls(functools.partial(run, meta_path=meta), ROOT,
                     labels={'positive', 'false-discharge', 'positive-budget-chain'}):

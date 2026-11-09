@@ -153,7 +153,8 @@ original command heartbeat deadline; after it expires, remaining units are named
 INCOMPLETE rather than retried with a larger budget. Only scheduler/report
 bookkeeping runs outside that deadline, still under the process wall bound.
 `scripts/proofs/vacuity_reporting.py` exercises exact work-budget, runtime-heartbeat,
-and ordinary-error diagnostics alongside an unrelated later law failure, and
+and ordinary-error diagnostics alongside an unrelated later law failure, names
+a failed Planted analysis together with its paired Instance, and
 checks the same complete-report validator used by `--replay`. The standard
 `--controls` entry point includes these controls. A partial report is never clean
 historical evidence, regardless of which FAIL lines it contains.

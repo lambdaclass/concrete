@@ -392,7 +392,9 @@ bash scripts/checks/lib/bounded.sh 140 python3 -u scripts/proofs/vacuity_reporti
 ordinary-error and runtime-heartbeat controls. Each requires the exact named
 Instance INCOMPLETE with law/case and the unrelated later declaration's exact
 `FAIL missing-instance ConcreteSpecControl.unrelated`, with no other finding.
-It also records the unchanged positive, false-discharge and projection-budget
+An additional Planted-error control requires the exact Planted declaration and
+paired Instance identity, and retains the unrelated FAIL. It also records the
+unchanged positive, false-discharge and projection-budget
 checks and the complete-report validator's exact `FAIL report-incomplete c9-new`.
 Injected consumers live only in temporary directories. Normal `--controls`
 includes these tests; phase A does not change discharge traversal or expectations.
@@ -404,3 +406,10 @@ full suite or review tooling was run. Coordinator heavy gates and independent
 review remain required. Phase B implements only the accepted design, establishes
 the missing measured completion bounds, then reruns all exact controls/replay and
 complete c1/c2 audits on concrete-ci-2 before any promotion claim.
+
+The [focused discharge audit](audits/N2-round6-discharge.txt) records **26 PASS,
+0 FAIL**, including the complete F3b repro and reachable-joint-helper-negative.
+It ran at 8061f277b before the additional Planted diagnostic isolation; the final
+reporting control exercises that additional isolation and records its consumer
+SHA-256. The discharge and projection algorithms remain byte-identical to the
+phase-A baseline 0acd435ccefe3aaa04d761c1ee75bbe984cba001.

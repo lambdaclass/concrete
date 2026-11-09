@@ -1,8 +1,10 @@
 PASS reporting work-budget: exact named INCOMPLETE and unrelated FAIL retained
 PASS reporting analysis-error: exact named INCOMPLETE and unrelated FAIL retained
 PASS reporting heartbeat: exact named INCOMPLETE and unrelated FAIL retained
+PASS reporting planted-error: exact Planted and paired Instance named; unrelated FAIL retained
 PASS control positive
 PASS control false-discharge
 PASS control positive-budget-chain
 N2 selected controls: 3 PASS, 0 FAIL
 PASS reporting replay-validator: exactly FAIL report-incomplete c9-new
+CHECKER-SHA256 89d8bae40df7f627dac626c1b2f17196db6048593e529e7353e92fcf6108db01

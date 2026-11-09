@@ -770,24 +770,26 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
                 (t.doc.splitOn "Planted (").length > 1
               if planted.isEmpty then fail "missing-planted" law.name (ic.key ++ "/" ++ st)
               for p in planted do
-                let some mutant := p.mutant | fail "planted-tag" p.name; continue
-                let mi := (env.find? mutant).get!
-                unless mutant != subject && (mi matches .defnInfo _) &&
-                  mi.levelParams.length == ((env.find? subject).get!).levelParams.length do
-                  fail "mutant-kind" p.name; continue
-                let si := (env.find? subject).get!
-                if ← isDefEq (mkConst subject (si.levelParams.map Level.param))
-                  (mkConst mutant (si.levelParams.map Level.param)) then
-                  fail "mutant-defeq" p.name; continue
-                let mt := mi.type.instantiateLevelParams mi.levelParams (si.levelParams.map Level.param)
-                unless ← isDefEq si.type mt do fail "mutant-type" p.name; continue
-                let mut boundaries := #[]
-                for name in subjects do
-                  if let some resolved ← resolve all law.name name then boundaries := boundaries.push resolved
-                let expected ← counterexample law.info ic subject mutant boundaries
-                Lean.Meta.check expected
-                unless closed p.info.type && (← protectedEq p.info.type expected (boundaries.push mutant)) do
-                  fail "planted-proposition" p.name s!"law={law.name} case={ic.key}"
+                isolated deadline p.name s!"stage=planted law={law.name} case={ic.key} instance={ic.decl} subject={subject}" () do
+                  for _ in [()] do
+                    let some mutant := p.mutant | fail "planted-tag" p.name; continue
+                    let mi := (env.find? mutant).get!
+                    unless mutant != subject && (mi matches .defnInfo _) &&
+                      mi.levelParams.length == ((env.find? subject).get!).levelParams.length do
+                      fail "mutant-kind" p.name; continue
+                    let si := (env.find? subject).get!
+                    if ← isDefEq (mkConst subject (si.levelParams.map Level.param))
+                      (mkConst mutant (si.levelParams.map Level.param)) then
+                      fail "mutant-defeq" p.name; continue
+                    let mt := mi.type.instantiateLevelParams mi.levelParams (si.levelParams.map Level.param)
+                    unless ← isDefEq si.type mt do fail "mutant-type" p.name; continue
+                    let mut boundaries := #[]
+                    for name in subjects do
+                      if let some resolved ← resolve all law.name name then boundaries := boundaries.push resolved
+                    let expected ← counterexample law.info ic subject mutant boundaries
+                    Lean.Meta.check expected
+                    unless closed p.info.type && (← protectedEq p.info.type expected (boundaries.push mutant)) do
+                      fail "planted-proposition" p.name s!"law={law.name} case={ic.key}"
   -- Bookkeeping must survive the exhausted deadline so each subsequent
   -- skipped analysis still gets its own named INCOMPLETE. No analysis is given
   -- fresh heartbeats: `isolated` restores the original deadline on every call.

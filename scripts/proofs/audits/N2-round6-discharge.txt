@@ -1,0 +1,29 @@
+Validation at 8061f277b before the additional Planted diagnostic isolation; discharge/projection algorithms unchanged in both slices.
+COMMAND bash scripts/checks/lib/bounded.sh 240 python3 -u scripts/proofs/vacuity_round5.py controls
+PASS control joint-branch-decide-repro
+PASS control false-discharge
+PASS control absurd-discharge
+PASS control nomatch-discharge
+PASS control helper-false
+PASS control false-cases
+PASS control empty-elimination
+PASS control pempty-elimination
+PASS control helper-nomatch
+PASS control decide-hypothesis-positive
+PASS control nested-decide-discharge-1
+PASS control nested-decide-discharge-4
+PASS control nested-decide-discharge-12
+PASS control hypothetical-false-positive
+PASS control hypothetical-empty-positive
+PASS control hypothetical-pempty-positive
+PASS control open-helper-false
+PASS control open-helper-empty
+PASS control open-helper-pempty
+PASS control joint-hypothetical-positive
+PASS control joint-supplied-negative
+PASS control joint-open-supplied-negative
+PASS control reachable-open-impossible-negative
+PASS control reachable-joint-helper-negative
+PASS control unreachable-closed-supplier-positive
+PASS control context-cache-supplied-negative
+N2 selected controls: 26 PASS, 0 FAIL
