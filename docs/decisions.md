@@ -24,11 +24,14 @@ Existing proposals are linked below; the questions of 2026-11-09 record the thre
    4(c) ([SPARK review](proposals/SPARK.md)). Quantitative step and time bounds were decided on
    2026-11-07 ([row](#decided-2026-11-07-step-bounds)); the reviews' remaining disposition is unchanged.
 
-3. <a id="waiting-2026-11-09-review-commands"></a>Which commands may review tools run?
-   Claude would approve the listed commands; Codex would approve none yet; agy would approve
-   `ssh-keygen` only. No answer is decided.
-4. <a id="waiting-2026-11-09-launcher"></a>The locked-down launcher: Claude would approve it;
-   Codex and agy would wait for the exact design. No answer is decided.
+3. <a id="waiting-2026-11-09-review-commands"></a>Which system commands may the trust check run (Question 5B)?
+   Claude would approve `systemd-run`, `systemctl` and `ssh-keygen` once their real authority is
+   written down; Codex would approve none of the three before a bounded authority contract; agy
+   would approve `ssh-keygen` only and reject `systemd-run` and `systemctl`. No answer is decided.
+4. <a id="waiting-2026-11-09-launcher"></a>The trust check's sealed box (Question 5C):
+   protected launcher, signature verifier, key distribution and first-time setup. Claude would
+   approve once each piece has a written threat line; Codex and agy would wait for the exact
+   design. No answer is decided.
 5. <a id="waiting-2026-11-09-macos-containment"></a>The containment check on macOS: Claude and
    Codex would make it informational only and exclude it from qualification; agy would drop it,
    or split it so the portable checks stay required on macOS. No answer is decided.
@@ -80,6 +83,7 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 - Every branch gets an agy review too ([row](#decided-project-review)).
 - Eleven plan and process decisions: UBSan dropped, a complete adapter theorem, smaller landing scripts, Claude's quota on the critical path, the front end now, one decisions writer, risk-capped reviews, one clones folder, a later no-libc runtime, a compile-speed budget and the termination wording ([row](#decided-2026-11-08-eleven)).
 
+- The axiom golden becomes a property check, with only named theorems pinned ([row](#decided-2026-11-08-axiom-property)).
 - The agreed answers of 2026-11-09: branch qualification, independent reviews, hard round limits,
   gate budgets, proof provenance, spec corrections and offline builds ([row](#decided-2026-11-09-agreed)).
 
@@ -305,7 +309,7 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 - **P5** legacy/ is a byte-frozen snapshot, never patched or run — legacy/ is main's tree at the move commit, byte-frozen. A root check compares its tree hash, allowing only deletions a satisfied RETENTION.tsv entry authorizes. No legacy gate ever runs. The oracle is the tag-built artifact (P13), not the legacy/ copy.
 - **P6** Retention manifest gates deleting legacy/ — RETENTION.tsv at the root gives every legacy asset (corpus, regressions, examples, std, bug ledger, site, docs, research) a destination and deletion criterion. Revised 2026-11-06 ([restart row](#decided-project-restart)): nothing is deleted at B3; legacy/, the old pipeline included, is deleted way later (LD: once the new compiler implements a full real program such as RocksDB, ethrex or similar), when RETENTION.tsv has no live entry, a final ideas sweep has dispositioned every idea and the owner explicitly approves.
 - **P7** Prove the new landing path before moving — T0: land beside the old tree the new root CI, required-checks.txt (enforced by train watch and land), RETENTION.tsv, the task disposition table, ORACLE.lock with the oracle artifact, and ISSUES.tsv. T1: rehearse the move on a throwaway branch: fresh clone, build, hook, exact-SHA CI, train --dry-run land; a broken build, a failing gate and a missing required check must each be refused. T2: the move in one train.
-- **P8** Server services under scripts/ — Keep only landing services: train, review, hook, landing bot. The status page, work queue, fuzz farm, perf tracking and nightly campaign all stop and are recorded as archived in RETENTION.tsv; each returns only with a roadmap task.
+- <a id="p8"></a>**P8** Server services under scripts/ — Keep only landing services: train, review, hook, landing bot. The status page, work queue, fuzz farm, perf tracking and nightly campaign all stop and are recorded as archived in RETENTION.tsv; each returns only with a roadmap task.
 - **P9** Website during the transition — The website goes down at the move and is redone from scratch with the new compiler; no frozen playground is served. Unpublishing the live site is an outward action whose moment the owner confirms.
 - **P10** What 'closed' means for old-compiler bugs — Old-compiler defects become 'retired with the old implementation', never 'fixed'. Each keeps its reproducer, ruling and structural class; 106 reproducers feed the oracle comparisons. Bugs the frozen browser compiler still shows stay visible while the site serves it.
 - **P11** Std bugs and rulings are carried — Add a 'std' class: 12 std bugs move with std as contracts plus regressions. The 112 language rulings (26 still open) keep their ruling and become conformance examples.
@@ -1184,13 +1188,18 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   allocation slice: whether destroying a collection still needs `with(Alloc)` when its release
   metadata travels with it (R-0624, raised by agy).
 - <a id="decided-2026-11-08-axiom-property"></a>**The axiom golden becomes a property check**
-  (owner, 2026-11-08; recorded from the owner's 2026-11-09 confirmation).
+  (owner, 2026-11-08: "yes to 6 things", item 2).
   Check the standard axioms as a property, with only named theorems pinned.
+  Other five items of that answer, not yet recorded: (1) law witnesses, counter-examples and vacuity audit; (3) continuous integration of accepted foundation contracts into spec-core; (4) freeze process tooling after owner-signoff and its split follow-up and landing-shrink land, and land independent branches independently; (5) one shared launcher pairing every background job with a bounded watcher; (6) a Codex, Kimi and agy round before every owner question.
 - <a id="decided-2026-11-09-agreed"></a>**The answers Claude, Codex and agy agreed on**
   (owner, 2026-11-09: "ok too many questions do what all of you agree"). The coordinator
   (Claude), Codex and agy answered the owner's question list independently. The owner approved
   exactly the answers all three agreed on. Each item below is decided 2026-11-09 under that
   rule; disagreement remains [waiting for the owner](#waiting-for-the-owner).
+  Three-way agreement on these items was reached after Claude revised its written answers on
+  Questions 7, 10 and stamping, and the owner approved the list as presented.
+  ISS-0044, ISS-0046, ISS-0047, ISS-0048, ISS-0050 and R-0625 below identify work in
+  that question list; their ledger rows are not yet present in this clone.
 
   1. <a id="decided-2026-11-09-branch-qualification"></a>*Merging resumes branch by branch.*
      Only a branch qualified on its own may land: its full required checks and an independent
@@ -1198,8 +1207,8 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
      citation checker on review-access, waits for its base to land or rebases onto main and
      qualifies again.
   2. <a id="decided-2026-11-09-assumed-yes"></a>*The 33 proposals are not decisions.* Each
-     "assumed yes" proposal of 2026-11-09 on `wip/assumed-yes-2026-11-09` is checked individually
-     by Codex and agy and returned to the owner with alternatives and costs.
+     "assumed yes" item on `wip/assumed-yes-2026-11-09` is a provisional proposal and is redone
+     with credible alternatives and costs before asking the owner for approval.
   3. <a id="decided-2026-11-09-spec-report-review"></a>*The spec-change report check needs an
      independent review.* It is not signed off until a reviewer who wrote no part of it reviews it.
   4. <a id="decided-2026-11-09-owner-key"></a>*The owner supplies the public SSH signing key
@@ -1215,7 +1224,8 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
      goes to the owner. There are no extra rounds. `wip/gate-vacuity` stops and is redesigned,
      starting with a short written specification of the expression spine. Its next-part design
      line, `wip/gate-vacuity-2a`, also stops and is redesigned. The two spec designs returned with
-     changes requested, ISS-0047 and ISS-0050, go to redesign instead of more rounds.
+     changes requested, ISS-0047 and ISS-0050, go to redesign instead of more rounds. Any later
+     implementation round on a new branch is new work under the normal caps.
   8. <a id="decided-2026-11-09-kernel-origin"></a>*Question 8, option 2.* Kernel-origin
      classification is a general rule based on declaration kind and origin, never a hardcoded
      list of names.
@@ -1224,9 +1234,11 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
      checker's algorithmic bottlenecks first. Coverage must be complete.
   10. <a id="decided-2026-11-09-axiom-provenance"></a>*Exact proof-axiom provenance comes from
       the compiler in the long term.* A one-off manual review of the 27 lines is no substitute.
-      This confirms the [2026-11-08 axiom-golden decision](#decided-2026-11-08-axiom-property).
-  11. <a id="decided-2026-11-09-layout-proposals"></a>*Struct layout and pointer representation
-      are not decided now.* Proposals with alternatives and costs come first.
+      See also the [2026-11-08 axiom-golden decision](#decided-2026-11-08-axiom-property).
+  11. <a id="decided-2026-11-09-layout-proposals"></a>*ISS-0044, Question 11.* Why a program got
+      stuck (11(a)) needs no decision now and stays contingent on the build showing a need.
+      Struct layout (11(b)) and whole-pointer representation (11(c)) are not decided now; full
+      proposals with alternatives and costs come first.
   12. <a id="decided-2026-11-09-vacuity-extension"></a>*Design the helper-theorem extension first.*
       The vacuous-law checker must catch contradictions hidden in helper theorems only after a
       reviewed, bounded extension design is accepted.
@@ -1238,16 +1250,21 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   15. <a id="decided-2026-11-09-main-protection"></a>*The owner applies main-branch protection
       on GitHub*, following `docs/proposals/MAIN_PROTECTION.md` (not yet present in this clone). This is an
       owner action.
-  16. <a id="decided-2026-11-09-no-landing-service"></a>*No landing-bot service runs on the servers.*
-      Verified 2026-11-09: none is deployed on fede-256gb or concrete-ci-2. Any future deployment
-      needs owner approval.
+  16. <a id="decided-2026-11-09-no-landing-service"></a>*Stop and disable any deployed landing-bot service.*
+      The coordinator checked the process list and systemd unit list on fede-256gb and
+      concrete-ci-2 on 2026-11-09 and found none deployed. Future deployment needs owner approval.
+      The landing-bot tooling stays a landing service per [P8](#p8), while no instance is deployed;
+      see also the [landing-script shrink decision](#decided-2026-11-08-landing-shrink).
   17. <a id="decided-2026-11-09-offline-builds"></a>*Builds and gate runs become hermetic and
       offline.* They fail closed on network access. This needs new roadmap work.
   18. <a id="decided-2026-11-09-committed-stamps"></a>*Review-access stamps cover only committed
       content.* Stamping refuses when the working tree has staged or unstaged changes.
   19. <a id="decided-2026-11-09-older-proposals"></a>*Bring the older open questions back as full
-      proposals with alternatives and costs before deciding:* the lifecycle signature, std coverage
-      S1/S3/S4/S5, slice-1 questions, the R-0625 spelling round and canonical NaN.
+      proposals with alternatives and costs before deciding:* the five slice-1 questions are
+      `move t` vs `t`; where `abort()` may appear and its result type; `Concrete.toml`
+      `[policy]`/`[assumptions]` keys; slice-1 spec subset vs narrowing; and R-0600 at slice 1 or 5.
+      The other older questions are the lifecycle signature `life : Life -> Store -> Option Store`,
+      std coverage S1/S3/S4/S5 (canonical NaN is part of S5), and the R-0625 spelling round.
 - <a id="decided-project-spark-2026-11-06"></a>**What Concrete takes from SPARK** (owner, 2026-11-06: "ok do everything", after Claude, Codex, agy and Kimi chose unanimously; the
   [review](proposals/SPARK.md) items 1, 2, 3, 6, 7, 9 and 10).
   - *Function values with safety preconditions.* A function whose `#[requires]` is a safety
