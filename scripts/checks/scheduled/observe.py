@@ -1,5 +1,4 @@
 """Independent main-history observation; ancestor coverage is not SHA qualification."""
-import datetime as dt
 import json
 import os
 import subprocess
@@ -7,6 +6,7 @@ import sys
 from protocol import EvidenceError, WINDOWS, git, inventory, observe, read_note, timestamp
 
 from history import main_history
+from process_adapter import operation_clock
 
 ERRORS = (EvidenceError, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError)
 
@@ -43,7 +43,8 @@ def observe_main(lineage, histories, tier, now, runners, repository, freshness=N
     newest = max(annotated, key=lambda pair: max(timestamp(r["completed"]) for r in pair[1]))[0]
     return [f"STALE {tier} {newest}: no fresh PASS"]
 
-def main():
+def main(*, clock=None):
+    clock = clock or operation_clock()
     environment = dict(os.environ)
     failed = False
     try:
@@ -66,7 +67,7 @@ def main():
                         except ERRORS as error:
                             malformed.append(f"INCOMPLETE {tier} {sha}: {error}")
                 messages = (observe_main(lineage, histories, tier,
-                                        dt.datetime.now(dt.timezone.utc).timestamp(), inventory() if histories else {}, repository, freshness=first) if histories or not malformed else []) + malformed
+                                        clock.observation.timestamp(), inventory() if histories else {}, repository, freshness=first) if histories or not malformed else []) + malformed
                 for message in sorted(messages, key=lambda s: not s.startswith("FAIL ")):
                     print(message)
                     failed |= not message.startswith("PASS ")

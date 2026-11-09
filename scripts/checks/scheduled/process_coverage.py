@@ -28,6 +28,7 @@ def check(root):
                         'subprocess.check_call', 'subprocess.check_output',
                         'os.system', 'os.popen', 'os.posix_spawn', 'os.posix_spawnp'} or full.startswith(('os.exec', 'os.spawn')):
                 raise ValueError(DIAGNOSTIC)
+    check_clock_reads(root)
     # Shell adapters must enter the owner before utility children; workflow
     # controllers explicitly select the scheduler dispatcher, never generic policy.
     for relative in ('scripts/checks/scheduled_gates.sh', 'scripts/checks/scheduled/with_slot.sh'):
@@ -55,6 +56,38 @@ def check(root):
                 for line in script.splitlines():
                     if re.match(r'\s*(?:python3|git|nix|bash) ', line) and 'lib/scheduled_process.py --cwd' not in line:
                         raise ValueError(DIAGNOSTIC)
+
+
+def check_clock_reads(root):
+    """Kernel clock access is a declared capability, not an environment promise."""
+    owner = root / 'scripts/checks/lib/scheduled_process.py'
+    paths = [p for p in (root / 'scripts/checks/scheduled').glob('*.py')
+             if not p.name.startswith('test_')]
+    paths.append(owner)
+    for path in paths:
+        tree = ast.parse(path.read_text())
+        aliases = {}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                aliases.update((x.asname or x.name, x.name) for x in node.names)
+            elif isinstance(node, ast.ImportFrom):
+                aliases.update((x.asname or x.name, (node.module or '') + '.' + x.name) for x in node.names)
+        allowed = set()
+        if path == owner:
+            functions = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == '_utc_now']
+            if len(functions) == 1:
+                allowed = {id(n) for n in ast.walk(functions[0]) if isinstance(n, ast.Call)}
+        reads = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call): continue
+            name = ast.unparse(node.func).split('.')
+            full = '.'.join([aliases.get(name[0], name[0]), *name[1:]])
+            if full in {'datetime.datetime.now', 'datetime.datetime.utcnow', 'datetime.datetime.today',
+                        'datetime.date.today', 'time.time', 'time.time_ns', 'time.clock_gettime',
+                        'time.clock_gettime_ns'}:
+                reads.append(node)
+        if any(id(n) not in allowed for n in reads) or (path == owner and len(reads) != 1):
+            raise ValueError('FAIL scheduled clock: undeclared read')
 
 
 def main():

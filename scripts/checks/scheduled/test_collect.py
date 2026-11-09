@@ -1,6 +1,8 @@
 from test_protocol import RegistryFixture
 """Trusted collection controls, including empty real-world MISSING payloads."""
 import copy
+import datetime as dt
+from process_adapter import operation_clock
 import unittest
 from unittest.mock import patch
 import collect
@@ -11,7 +13,7 @@ class Collector(RegistryFixture, unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.payload = record()
-        clock = patch.object(collect, "stamp", return_value=self.payload["completed"])
+        clock = patch.object(collect, "operation_clock", return_value=operation_clock(observation=dt.datetime.fromisoformat(self.payload["completed"])))
         clock.start(); self.addCleanup(clock.stop)
         self.run = dict(id=1, run_attempt=1, event="schedule", head_sha=SHA,
                         created_at=self.payload["started"], updated_at=self.payload["completed"], head_branch="main", display_title="scheduled-daily")
@@ -78,7 +80,7 @@ class Collector(RegistryFixture, unittest.TestCase):
 
     def test_overdue_observation_time(self):
         self.job.update(status="queued", completed_at=None)
-        with patch.object(collect, "stamp", return_value="2027-01-16T00:00:00+00:00"):
+        with patch.object(collect, "operation_clock", return_value=operation_clock(observation=dt.datetime(2027, 1, 16, tzinfo=dt.timezone.utc))):
             r = collect.record_for(self.run, self.job, (SHA, "daily"), None, None, "example/repo", {})
         self.assertEqual(r["completed"], "2027-01-16T00:00:00+00:00")
         from protocol import observe, timestamp
@@ -116,6 +118,32 @@ class Collector(RegistryFixture, unittest.TestCase):
             with patch.object(collect, "inventory", side_effect=EvidenceError("planted absent inventory")), patch.object(collect, "pages", return_value=[]), patch.object(collect, "publish") as publish:
                 self.assertEqual(collect.collect_event({"GH_TOKEN": "test-token", "GITHUB_REPOSITORY": "example/repo", "GITHUB_EVENT_PATH": event.name}), 0)
                 self.assertEqual(publish.call_args.args[0]["status"], "MISSING")
+
+    def test_sweep_injects_one_observation_into_every_record(self):
+        import json
+        import tempfile
+        from unittest.mock import Mock
+        observation = dt.datetime.fromisoformat(self.payload['completed'])
+        wall = Mock(return_value=observation)
+        clock = operation_clock(wall=wall, monotonic=lambda: 100)
+        runs = [dict(self.run, id=n, status='queued', created_at='2027-01-01T00:00:00+00:00')
+                for n in (1, 2)]
+        job = dict(self.job, status='queued', completed_at=None, created_at=runs[0]['created_at'])
+        def pages(path, key, **kwargs):
+            if key == 'jobs':
+                return [job]
+            return runs if '&created=' in path else []
+        with tempfile.NamedTemporaryFile(mode='w') as event:
+            json.dump({}, event); event.flush()
+            environment = dict(GH_TOKEN='test-token', GITHUB_REPOSITORY='example/repo', GITHUB_EVENT_PATH=event.name)
+            with patch.object(collect, 'pages', side_effect=pages), \
+                 patch.object(collect, 'inventory', return_value=RUNNERS), \
+                 patch.object(collect, 'publish') as publish, \
+                 patch.object(collect, 'operation_clock', side_effect=AssertionError('unexpected clock capture')):
+                self.assertEqual(collect.collect_event(environment, clock=clock), 0)
+            self.assertEqual([call.args[0]['completed'] for call in publish.call_args_list],
+                             [observation.isoformat(), observation.isoformat()])
+        wall.assert_called_once_with()
 
     def test_authoritative_selection(self):
         jobs = [dict(name="select", conclusion="success", id=42)]

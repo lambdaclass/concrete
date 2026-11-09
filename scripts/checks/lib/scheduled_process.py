@@ -3,6 +3,7 @@
 All adapters materialize the same private context; lifecycle stays in bounded_exec.
 """
 import argparse
+import datetime as dt
 from dataclasses import dataclass
 import os
 import math
@@ -17,6 +18,50 @@ from contextlib import contextmanager
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from bounded_exec import supervise, Cancelled
+
+
+CLOCK_DIAGNOSTIC = 'FAIL scheduled clock: undeclared read'
+
+
+def _utc_now():
+    """The only production wall-clock dependency; callers inject its observation."""
+    return dt.datetime.now(dt.timezone.utc)
+
+
+class WallObservation:
+    def __init__(self, provider):
+        self.provider = provider
+        self.consumed = False
+
+    def read(self):
+        if self.consumed:
+            raise ValueError(CLOCK_DIAGNOSTIC)
+        self.consumed = True
+        return self.provider()
+
+
+@dataclass(frozen=True)
+class OperationClock:
+    observation: dt.datetime
+    origin: float
+    monotonic: object
+
+    def instant(self):
+        # Completion times advance from the declared observation by elapsed time;
+        # wall-clock adjustments cannot change a duration or resample freshness.
+        return self.observation + dt.timedelta(seconds=self.monotonic() - self.origin)
+
+    def deadline(self, seconds):
+        return self.monotonic() + seconds
+
+
+def operation_clock(*, observation=None, wall=None, monotonic=None):
+    monotonic = monotonic or time.monotonic
+    source = WallObservation((lambda: observation) if observation is not None else (wall or _utc_now))
+    observed = source.read()
+    if not isinstance(observed, dt.datetime) or observed.utcoffset() != dt.timedelta(0):
+        raise ValueError('FAIL scheduled clock: invalid observation')
+    return OperationClock(observed, monotonic(), monotonic)
 
 
 # Runtime tool identity is an explicit stage input (including Nix's resolved PATH).
@@ -74,9 +119,10 @@ class Invocation:
     def capture(cls, environment, cwd, role='gate'):
         return cls(Path(cwd).resolve(), role_environment(environment, role), role)
 
-    def specification(self, argv, *, timeout=120, **streams):
+    def specification(self, argv, *, timeout=120, deadline=None, **streams):
         return dict(argv=list(argv), cwd=str(self.cwd), env=dict(self.environment),
-                    role=self.role, timeout=timeout, **streams)
+                    role=self.role, timeout=timeout,
+                    deadline=time.monotonic() + timeout if deadline is None else deadline, **streams)
 
 
 @contextmanager
@@ -98,7 +144,7 @@ def private_context(spec):
 
 
 def validate(spec):
-    for field in ('cwd', 'argv', 'env', 'timeout'):
+    for field in ('cwd', 'argv', 'env', 'timeout', 'deadline'):
         if field not in spec or spec[field] is None:
             raise ValueError('FAIL scheduled process specification: missing ' + field)
     if not Path(spec['cwd']).is_absolute() or not Path(spec['cwd']).is_dir():
@@ -107,6 +153,8 @@ def validate(spec):
         raise ValueError('FAIL scheduled process specification: invalid env')
     if not isinstance(spec['timeout'], (int, float)) or not math.isfinite(spec['timeout']) or spec['timeout'] <= 0:
         raise ValueError('FAIL scheduled process specification: invalid timeout')
+    if not isinstance(spec['deadline'], (int, float)) or not math.isfinite(spec['deadline']):
+        raise ValueError('FAIL scheduled process specification: invalid deadline')
     if not spec['argv'] or not all(isinstance(x, str) for x in spec['argv']):
         raise ValueError('FAIL scheduled process specification: invalid argv')
 
@@ -127,7 +175,10 @@ def execute(spec):
         capture = spec.get('capture_output', False)
         stdout = spec.get('stdout', subprocess.PIPE if capture else None)
         stderr = spec.get('stderr', subprocess.PIPE if capture else None)
-        outcome = supervise(argv, spec['timeout'], spec.get('grace', 10),
+        remaining = min(spec['timeout'], spec['deadline'] - time.monotonic())
+        if remaining <= 0:
+            raise subprocess.TimeoutExpired(spec['argv'], spec['timeout'])
+        outcome = supervise(argv, remaining, spec.get('grace', 10),
                             cwd=spec['cwd'], env=environment, stdin=source,
                             pass_fds=slot_descriptors(environment), umask=0o077,
                             stdout=out if stdout == subprocess.PIPE else stdout,

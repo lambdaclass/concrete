@@ -1,5 +1,4 @@
 """Run a tier in a private exact-SHA clone; registry and CI2 binding are dependencies."""
-import datetime as dt
 import hashlib
 import json
 import os
@@ -10,15 +9,11 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
-import time
 from protocol import EvidenceError, git, inventory, require, clean_env, _registry, _binding
 
 ROOT = Path(__file__).resolve().parents[3]
 
-def now():
-    return dt.datetime.now(dt.timezone.utc).isoformat()
-
-from process_adapter import process_run as call
+from process_adapter import operation_clock, process_run as call
 
 def preserve_artifacts(row, checkout, output, number, sha, required, saved):
     """Preserve regular report trees before private-checkout cleanup, including partial runs."""
@@ -65,7 +60,8 @@ def gate_environment(sha, tier, attempt, environment):
     env.update(SELECTED_SHA=sha, SELECTED_TIER=tier, SCHEDULED_ATTEMPT_ID=attempt)
     return env
 
-def run(sha, tier, output, environment):
+def run(sha, tier, output, environment, *, clock=None):
+    clock = clock or operation_clock()
     environment = dict(environment)
     output = Path(output).resolve(); output.mkdir(parents=True, exist_ok=True)
     attempt = environment["GITHUB_RUN_ID"] + "/" + environment["GITHUB_RUN_ATTEMPT"]
@@ -73,7 +69,7 @@ def run(sha, tier, output, environment):
                   runner_name=environment.get("RUNNER_NAME"), runner_environment=environment.get("RUNNER_ENVIRONMENT"),
                   attempt=attempt, occurrence=environment.get("OCCURRENCE", tier) + "/" + environment["GITHUB_RUN_ID"],
                   controller_revision=None,
-                  gate_revision=None, started=now(), status="INCOMPLETE", conclusion="incomplete",
+                  gate_revision=None, started=clock.observation.isoformat(), status="INCOMPLETE", conclusion="incomplete",
                   artifact=environment["GITHUB_SERVER_URL"] + "/" + environment["GITHUB_REPOSITORY"] +
                   "/actions/runs/" + environment["GITHUB_RUN_ID"], gates=[])
     with tempfile.TemporaryDirectory(prefix="concrete-scheduled-") as scratch:
@@ -106,14 +102,14 @@ def run(sha, tier, output, environment):
                 record["gates"].append(gate)
                 artifacts_attempted = False
                 try:
-                    began = time.monotonic()
+                    began = clock.monotonic()
                     # The shared helper owns acquisition/release; gate commands inherit the held slot.
                     command = ["nix", "develop", "--command", "bash", str(ROOT / "scripts/checks/scheduled/with_slot.sh"),
                                str(row["budget_seconds"]), *row["command"]]
                     with log.open("w") as stream:
                         outcome = call(command, cwd=checkout, stdout=stream, stderr=subprocess.STDOUT,
                                        timeout=row["budget_seconds"] * 3 + 180, env=gate_env)
-                    gate["resources"] = {"wall_seconds": time.monotonic() - began, "exit_code": outcome.returncode}
+                    gate["resources"] = {"wall_seconds": clock.monotonic() - began, "exit_code": outcome.returncode}
                     gate["status"] = "PASS" if outcome.returncode == 0 else "INCOMPLETE" if outcome.returncode == 125 else "FAIL"
                     artifacts_attempted = True
                     gate["artifacts"] = preserve_artifacts(row, checkout, output, number, sha, gate["status"] == "PASS", gate["artifacts"])
@@ -151,7 +147,7 @@ def run(sha, tier, output, environment):
     statuses = {g["status"] for g in record["gates"]}
     record["status"] = "FAIL" if "FAIL" in statuses else "INCOMPLETE" if "INCOMPLETE" in statuses else "INCOMPLETE" if record.get("execution_error") else "PASS"
     record["conclusion"] = {"PASS": "success", "FAIL": "failure", "INCOMPLETE": "incomplete"}[record["status"]]
-    record["completed"] = now()
+    record["completed"] = clock.instant().isoformat()
     (output / "index.json").write_text(json.dumps(record, sort_keys=True) + "\n")
     return 0 if record["status"] == "PASS" else 1
 

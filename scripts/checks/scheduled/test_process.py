@@ -20,6 +20,7 @@ class ProcessCoverage(unittest.TestCase):
             shutil.copytree(ROOT / 'scripts/checks/scheduled', root / 'scripts/checks/scheduled')
             shutil.copytree(ROOT / '.github/workflows', root / '.github/workflows')
             (root / 'scripts/checks/lib').mkdir()
+            shutil.copy(ROOT / 'scripts/checks/lib/scheduled_process.py', root / 'scripts/checks/lib')
             shutil.copy(ROOT / 'scripts/checks/lib/gate_manifest.py', root / 'scripts/checks/lib')
             with (root / 'scripts/checks/scheduled/planted.py').open('w') as stream:
                 stream.write('from subprocess import run as launch\nlaunch(["true"])\n')
@@ -34,6 +35,7 @@ class ProcessCoverage(unittest.TestCase):
             shutil.copytree(ROOT / 'scripts/checks/scheduled', root / 'scripts/checks/scheduled')
             shutil.copytree(ROOT / '.github/workflows', root / '.github/workflows')
             (root / 'scripts/checks/lib').mkdir()
+            shutil.copy(ROOT / 'scripts/checks/lib/scheduled_process.py', root / 'scripts/checks/lib')
             for relative in ('scripts/checks/lib/gate_manifest.py', 'scripts/checks/scheduled_gates.sh'):
                 shutil.copy(ROOT / relative, root / relative)
             with (root / 'scripts/checks/scheduled/with_slot.sh').open('a') as stream:
@@ -189,6 +191,7 @@ class ProcessContext(unittest.TestCase):
             result = Slot().invoke(command)
             self.assertEqual((result.returncode, result.stderr), (0, ''))
             observed = json.loads(result.stdout)
+            self.assertTrue(observed['slot_valid'])
             detect(observed, observed['cwd'])
             with tempfile.TemporaryDirectory() as scratch:
                 report = Path(scratch) / 'observation.json'
@@ -261,3 +264,70 @@ class ProcessContext(unittest.TestCase):
             for argv in adapters:
                 result = process_run(argv, role=role, env=env, capture_output=True, text=True, timeout=5)
                 self.assertEqual((result.returncode, result.stdout, result.stderr), (0, expected + '\n', ''))
+
+
+    def test_forged_slot_exact_helper_diagnostic(self):
+        helper = ROOT / 'scripts/checks/lib/scheduled_process.py'
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            for number in (1, 2):
+                (root / ('slot-' + str(number))).touch()
+            (root / 'unrelated').touch()
+            script = ('exec 9<>"$1/unrelated"; export CONCRETE_HEAVY_SLOT_DIR="$1" '
+                      'CONCRETE_HEAVY_SLOT_FD=9; exec "$2" -I "$3" --cwd "$1" '
+                      '--timeout 2 -- true')
+            result = process_run(['bash', '-c', script, 'bash', scratch, sys.executable, str(helper)],
+                                 capture_output=True, text=True, timeout=3)
+            self.assertEqual((result.returncode, result.stdout, result.stderr),
+                             (1, '', 'INCOMPLETE heavy slots: invalid inherited slot descriptor\n'))
+
+
+class ProcessClock(unittest.TestCase):
+    def test_single_observation_and_second_read_plant(self):
+        helper = ROOT / 'scripts/checks/lib/scheduled_process.py'
+        source = helper.read_text()
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            shutil.copy(ROOT / 'scripts/checks/lib/bounded_exec.py', root)
+            planted = root / 'scheduled_process.py'
+            for plant in (False, True):
+                text = source
+                if plant:
+                    self.assertEqual(text.count('observed = source.read()'), 1)
+                    text = text.replace('observed = source.read()', 'observed = source.read(); source.read()')
+                planted.write_text(text)
+                result = process_run([sys.executable, str(ROOT / 'scripts/checks/scheduled/clock_control.py'),
+                                      str(planted)], capture_output=True, text=True, timeout=3)
+                expected = (1, '', 'FAIL scheduled clock: undeclared read\n') if plant else (0, '', '')
+                self.assertEqual((result.returncode, result.stdout, result.stderr), expected)
+
+    def test_no_unmediated_wall_clock_reads(self):
+        from process_coverage import check_clock_reads
+        check_clock_reads(ROOT)
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            shutil.copytree(ROOT / 'scripts/checks/scheduled', root / 'scripts/checks/scheduled')
+            (root / 'scripts/checks/lib').mkdir()
+            shutil.copy(ROOT / 'scripts/checks/lib/scheduled_process.py', root / 'scripts/checks/lib')
+            target = root / 'scripts/checks/scheduled/observe.py'
+            target.write_text(target.read_text() + '\nfrom time import time as second_read\nsecond_read()\n')
+            with self.assertRaisesRegex(ValueError, '^FAIL scheduled clock: undeclared read$'):
+                check_clock_reads(root)
+
+    def test_deadline_does_not_restart_at_execution(self):
+        import subprocess
+        import scheduled_process as owner
+        from unittest.mock import patch
+        context = owner.Invocation.capture(runtime_environment(), ROOT)
+        with patch.object(owner.time, 'monotonic', return_value=100):
+            spec = context.specification(['true'], timeout=10)
+        self.assertEqual(spec['deadline'], 110)
+        with patch.object(owner.time, 'monotonic', return_value=107), \
+             patch.object(owner, 'supervise', return_value='exit 0') as supervise:
+            self.assertEqual(owner.execute(spec).returncode, 0)
+            self.assertEqual(supervise.call_args.args[1], 3)
+        with patch.object(owner.time, 'monotonic', return_value=111), \
+             patch.object(owner, 'supervise') as supervise:
+            with self.assertRaises(subprocess.TimeoutExpired):
+                owner.execute(spec)
+            supervise.assert_not_called()

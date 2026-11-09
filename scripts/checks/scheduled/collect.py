@@ -15,6 +15,7 @@ import urllib.parse
 import zipfile
 from protocol import EvidenceError, inventory, require, validate
 from publish import publish
+from process_adapter import operation_clock
 
 API = "https://api.github.com"
 MAX_AGE = 26 * 3600
@@ -45,9 +46,6 @@ def pages(path, key, *, token):
             return result
     raise EvidenceError("INCOMPLETE: API pagination exceeded")
 
-def stamp():
-    return dt.datetime.now(dt.timezone.utc).isoformat()
-
 def selected(base, jobs, run, *, token):
     selectors = [j for j in jobs if j["name"] == "select"]
     matches = []
@@ -64,7 +62,8 @@ def selected(base, jobs, run, *, token):
     require(len(matches) == 1, "INCOMPLETE: missing trusted selection diagnostic")
     return matches
 
-def record_for(run, job, selection, payload, artifact, repository, runners):
+def record_for(run, job, selection, payload, artifact, repository, runners, *, clock=None):
+    clock = clock or operation_clock()
     sha, tier = selection
     missing = ("queued-too-long" if (job or run).get("status") in {"queued", "waiting", "pending", "requested"} else
                job.get("conclusion") if job and job.get("conclusion") in {"cancelled", "skipped"} else
@@ -76,7 +75,7 @@ def record_for(run, job, selection, payload, artifact, repository, runners):
     if missing:
         identity.update(runner_name=None, runner_environment=None)
         record = dict(identity, status="MISSING", conclusion=missing, gates=[], artifact=None,
-                      gate_revision=None, started=run["created_at"], completed=(job.get("completed_at") if job else None) or (stamp() if missing == "queued-too-long" else run.get("updated_at", stamp())))
+                      gate_revision=None, started=run["created_at"], completed=(job.get("completed_at") if job else None) or (clock.observation.isoformat() if missing == "queued-too-long" else run.get("updated_at", clock.observation.isoformat())))
     else:
         if payload is None:
             payload = dict(identity, gate_revision=None, status="INCOMPLETE", conclusion="incomplete",
@@ -103,7 +102,8 @@ def read_index(archive):
             all(isinstance(g, dict) for g in payload["gates"]), "invalid worker index shape")
     return payload
 
-def collect(run, repository, runners, environment):
+def collect(run, repository, runners, environment, *, clock=None):
+    clock = clock or operation_clock()
     token = environment["GH_TOKEN"]
     require(run["head_branch"] == "main" and run["event"] in {"schedule", "workflow_dispatch"}, "untrusted scheduled run")
     base = f"/repos/{repository}/actions"
@@ -113,7 +113,7 @@ def collect(run, repository, runners, environment):
     job = campaigns[0] if campaigns else None
     if job and job["status"] in {"queued", "waiting", "pending", "requested"}:
         queued_at = job.get("created_at", run["created_at"])
-        if (dt.datetime.fromisoformat(stamp()) - dt.datetime.fromisoformat(queued_at.replace("Z", "+00:00"))).total_seconds() < MAX_AGE:
+        if (clock.observation - dt.datetime.fromisoformat(queued_at.replace("Z", "+00:00"))).total_seconds() < MAX_AGE:
             return
     if job and job["status"] == "in_progress":
         return  # Queue age is not execution age; let the execution timeout decide.
@@ -136,9 +136,10 @@ def collect(run, repository, runners, environment):
                     payload.update(status="INCOMPLETE", conclusion="incomplete")
             artifact = logs[0] if logs else found[0]
             url = f'https://github.com/{repository}/actions/runs/{run["id"]}/artifacts/{artifact["id"]}'
-        publish(record_for(run, job, selection, payload, url, repository, runners), runners, repository, environment)
+        publish(record_for(run, job, selection, payload, url, repository, runners, clock=clock), runners, repository, environment)
 
-def collect_event(environment):
+def collect_event(environment, *, clock=None):
+    clock = clock or operation_clock()
     repository = environment["GITHUB_REPOSITORY"]
     token = environment["GH_TOKEN"]
     with open(environment["GITHUB_EVENT_PATH"]) as source:
@@ -147,7 +148,7 @@ def collect_event(environment):
         runs = [event["workflow_run"]]
     else:
         path = f"/repos/{repository}/actions/workflows/gate_schedule.yml/runs?branch=main"
-        cutoff = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=2 * MAX_AGE)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        cutoff = (clock.observation - dt.timedelta(seconds=2 * MAX_AGE)).strftime("%Y-%m-%dT%H:%M:%SZ")
         candidates = pages(path + "&created=" + urllib.parse.quote(">=" + cutoff), "workflow_runs", token=token)
         # Old live runs must remain observable even when the hosted sweep was absent.
         for status in ("queued", "in_progress", "waiting", "pending", "requested"):
@@ -161,13 +162,13 @@ def collect_event(environment):
         runners = {repository: set()}
     for run in runs:
         try:
-            age = (dt.datetime.now(dt.timezone.utc) - dt.datetime.fromisoformat(run["created_at"].replace("Z", "+00:00"))).total_seconds()
+            age = (clock.observation - dt.datetime.fromisoformat(run["created_at"].replace("Z", "+00:00"))).total_seconds()
             # Sweep only overdue live jobs and recent completions; completion events cover old replays.
             if run["status"] != "completed" and age < MAX_AGE:
                 continue
             if "workflow_run" not in event and run["status"] == "completed" and age > 2 * MAX_AGE:
                 continue
-            collect(run, repository, runners, environment)
+            collect(run, repository, runners, environment, clock=clock)
         except (EvidenceError, OSError, ValueError, KeyError, TypeError, zipfile.BadZipFile, subprocess.SubprocessError) as error:
             print(f'INCOMPLETE collection {run["id"]}: {error}'); failed = True
     return int(failed)

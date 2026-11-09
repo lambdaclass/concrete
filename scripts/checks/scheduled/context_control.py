@@ -14,18 +14,30 @@ try:
     os.fstat(9); fd9 = True
 except OSError:
     fd9 = False
+slot = os.environ.get('CONCRETE_HEAVY_SLOT_FD')
+slot_valid = None
+if slot is not None:
+    try:
+        identity = os.fstat(int(slot))
+        pool = Path(os.environ.get('CONCRETE_HEAVY_SLOT_DIR', '/var/lib/concrete/heavy-slots'))
+        slot_valid = any((p.stat().st_dev, p.stat().st_ino) == (identity.st_dev, identity.st_ino)
+                         for p in (pool / 'slot-1', pool / 'slot-2'))
+    except (OSError, ValueError):
+        slot_valid = False
 home = Path.home()
 temporary = Path(tempfile.gettempdir())
 print(json.dumps(dict(environment=dict(os.environ), cwd=os.getcwd(), umask=mask,
     home_private=home.is_dir() and stat.S_IMODE(home.stat().st_mode) == 0o700,
     config_absent=not (home / '.gitconfig').exists(),
     temp_private=temporary.is_dir() and stat.S_IMODE(temporary.stat().st_mode) == 0o700,
-    fd9=fd9)))
+    fd9=fd9, slot_valid=slot_valid)))
 """
 
 
 def detect(observed, cwd):
     env = observed['environment']
+    if observed['slot_valid'] is False:
+        raise ValueError('INCOMPLETE heavy slots: invalid inherited slot descriptor')
     checks = [
         ('env.SCHEDULER_FOREIGN', 'SCHEDULER_FOREIGN' not in env),
         ('cwd', observed['cwd'] == str(Path(cwd).resolve())),
@@ -40,7 +52,7 @@ def detect(observed, cwd):
         ('timezone', env.get('TZ') == 'UTC'),
         ('temp', observed['temp_private'] and env.get('TMPDIR') == str(Path(env['HOME']).parent / 'tmp') and
          env.get('TMP') == env.get('TMPDIR') == env.get('TEMP')),
-        ('fd.9', not observed['fd9']),
+        ('fd.9', not observed['fd9'] or env.get('CONCRETE_HEAVY_SLOT_FD') == '9'),
         ('credential scope', not ({'GH_TOKEN', 'GITHUB_TOKEN'} & env.keys())),
     ]
     for field, valid in checks:
