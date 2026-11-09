@@ -330,7 +330,8 @@ controls remain in both clean and hostile environment runs; campaign-scale live
 qualification remains with R-0690 on concrete-ci-2.
 
 Git isolation and observation recovery (R-0676): the structural cause of caller
-corruption was repository-making fixtures inheriting hook-local Git variables.
+corruption ([ISS-0043](../../../ISSUES.tsv)) was repository-making fixtures
+inheriting hook-local Git variables.
 The shell entry uses `git_sandbox`; Python Git subprocesses use the shared
 `protocol.clean_env` owner, including fixture helpers. The protocol captures its
 Git environment once at entry, retaining the gate shell PATH and removing Git
