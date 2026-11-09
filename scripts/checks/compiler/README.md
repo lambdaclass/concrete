@@ -48,8 +48,17 @@ code and links a real executable on every PR; its negative twin runs `objcopy`
 only during Lake configuration and must fail naming `objcopy`. The full manifest
 emitter/native traces follow the initial build. Each individual `.execve` trace
 session file is parsed separately (`execve_names.py` `parse_many`), preventing
-unresolved PID state from crossing trace sessions. Failed split PATH probes
-admit no tool, and relative `execve`/`execveat` paths fail closed.
+unresolved PID state from crossing trace sessions. Both the name audit and the
+identity audit consume `execve_names.py`, which parses syscall framing with
+quote-, escape-, bracket- and comment-aware scanning of the argument list, reads
+the syscall result only from after the closing parenthesis of the real argument
+list on both complete and resumed (`<... execve(at)? resumed>`) calls, handles
+`<unfinished ...>` only outside quoted arguments at the end of a call entry, and
+fails closed on truncated executable paths or any ambiguous framing. Failed
+split PATH probes admit no tool, and relative `execve`/`execveat` paths fail
+closed. Real-trace controls produced by `strace` test result-like,
+unfinished-like, resumed-like, escaped-quote, and `-s`-truncated arguments
+alongside genuinely failed executions.
 
 `flake.nix` narrows `trustedPipelineRoots` to the pipeline packages
 (`llvmPackages_21.clang`, `clang`, `leanRelease`, `git`, `bash`, `coreutils`) and
@@ -169,9 +178,11 @@ heavy module graphs across bounded child processes (and `systemd-run --user
 unfreed `.olean` `CompactedRegion`s do not accumulate across files. Quoted
 command templates remain data until invoked. Initializer execution is enabled
 independently for each file, and header and command errors are checked before
-later commands can reset their logs. `slice0_examples.lean` emits `example-json`
-rows only for retained examples, and `example_rows.py` requires `"⟪example⟫"`
-identities and fails closed if zero `example-json` rows are observed.
+later commands can reset their logs. Command elaboration redirects `stdout` to
+`stderr` so `#eval` output cannot forge `example-json` rows; `slice0_examples.lean`
+emits `example-json` rows only for retained examples, and `example_rows.py`
+requires `⟪example⟫<file>:<line>:<col>` identities, rejects any non-`example-json`
+stdout lines, and fails closed if zero `example-json` rows are observed.
 
 ### Lean 4.34.1 toolchain extension-point audit
 

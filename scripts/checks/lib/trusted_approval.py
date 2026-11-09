@@ -11,6 +11,13 @@ import sys
 
 INPUT_FILES = ("flake.nix", "flake.lock", "lean-toolchain", "lake-manifest.json")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+REPORT_PREFIXES = ("component ", "premise ", "theorem ", "axiom ", "lean-toolchain ", "pin ")
+
+
+def validate_report_lines(text):
+    for line_number, line in enumerate(text.splitlines(), 1):
+        if not line.startswith(REPORT_PREFIXES):
+            raise ValueError(f"line {line_number}: unrecognised trusted-base report row")
 
 
 def registry_rows(text):
@@ -33,9 +40,9 @@ def input_digests(root=Path(".")):
 
 def _decision_window(decisions_text, frag):
     marker = f'<a id="{frag}"></a>'
-    idx = decisions_text.find(marker)
-    if idx < 0:
+    if decisions_text.count(marker) != 1:
         return None
+    idx = decisions_text.find(marker)
     tail = decisions_text[idx + len(marker):]
     end = len(tail)
     for boundary in ('\n- <a id="decided-', "\n## "):
@@ -84,6 +91,7 @@ def verify_candidate(report, record, decisions_file="docs/decisions.md"):
     if not decisions_path.is_file():
         raise ValueError("docs/decisions.md missing")
     report_text = Path(report).read_text()
+    validate_report_lines(report_text)
     verify_decisions(decisions_path.read_text(), approval["decisions"])
 
     reg_bytes = registry_rows(report_text)

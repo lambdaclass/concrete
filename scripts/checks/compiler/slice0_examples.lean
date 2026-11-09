@@ -131,7 +131,7 @@ partial def commands (auditRef : IO.Ref FileAuditState) : FrontendM Unit := do
     (← getParserState) cs.messages
   setParserState ps
   setMessages msgs
-  elabCommandAtFrontend cmd
+  IO.withStdout (← IO.getStderr) (elabCommandAtFrontend cmd)
   let messages := (← getCommandState).messages
   if messages.hasErrors then
     for msg in messages.toList do IO.eprintln (← msg.toString)

@@ -98,11 +98,35 @@ with tempfile.TemporaryDirectory() as d:
     r_benign_rows = subprocess.run(["python3", "-I", "scripts/checks/lib/example_rows.py", str(benign_rows)],
         text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=15)
     require(r_benign_rows, False, "FAIL examples: no example-json rows observed")
-    non_ex_rows = d / "non_example.rows"
-    non_ex_rows.write_text('example-json {"name":"benignVal","axioms":[]}\n')
-    r_non_ex = subprocess.run(["python3", "-I", "scripts/checks/lib/example_rows.py", str(non_ex_rows)],
+    valid_rows = d / "valid_example.rows"
+    valid_rows.write_text(
+        'example-json {"name":"⟪example⟫f.lean:1:0","axioms":[]}\n'
+        'example-json {"name":"Concrete.BIR.Examples.«⟪example⟫Concrete/BIR.lean:542:0»","axioms":["propext"]}\n'
+    )
+    r_valid_rows = subprocess.run(["python3", "-I", "scripts/checks/lib/example_rows.py", str(valid_rows)],
         text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=15)
-    require(r_non_ex, False, "FAIL examples: invalid observation schema")
+    assert r_valid_rows.returncode == 0, (r_valid_rows.returncode, r_valid_rows.stdout)
+    non_ex_rows = d / "non_example.rows"
+    for bad_rows_text in [
+        'example-json {"name":"benignVal","axioms":[]}\n',
+        'example-json {"name":"⟪example⟫missing_pos","axioms":[]}\n',
+        'example-json {invalid json\n',
+        'unparsed line\nexample-json {"name":"⟪example⟫f.lean:1:0","axioms":[]}\n',
+    ]:
+        non_ex_rows.write_text(bad_rows_text)
+        r_non_ex = subprocess.run(["python3", "-I", "scripts/checks/lib/example_rows.py", str(non_ex_rows)],
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=15)
+        require(r_non_ex, False, "FAIL examples: invalid observation schema")
+    spoof = d / "spoof_example_json.lean"
+    spoof.write_text('import Lean\n#eval IO.println "example-json {\\"name\\":\\"⟪example⟫spoof.lean:1:0\\",\\"axioms\\":[]}"\n')
+    r_spoof = subprocess.run(["lean", "--run", DRIVER, str(spoof)],
+        env=dict(BASE_ENV), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+    assert r_spoof.returncode == 0 and r_spoof.stdout == "", (r_spoof.returncode, r_spoof.stdout, r_spoof.stderr)
+    spoof_rows = d / "spoof.rows"
+    spoof_rows.write_text(r_spoof.stdout)
+    r_spoof_rows = subprocess.run(["python3", "-I", "scripts/checks/lib/example_rows.py", str(spoof_rows)],
+        text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=15)
+    require(r_spoof_rows, False, "FAIL examples: no example-json rows observed")
     for loop_src, expected_decl in [
         ('import Lean\ndef whileOnly : IO Unit := do\n  while true do\n    pure ()\n',
          'FAIL unlisted example trusted declaration whileOnly [partial-loop]'),

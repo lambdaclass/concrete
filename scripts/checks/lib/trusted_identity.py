@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -107,7 +108,7 @@ def store_evidence():
         expected = os.path.realpath(lean + "/bin/" + tool)
         if actual != expected: raise ValueError(f"consumed {tool}: {actual}, expected {expected}")
     pin = Path("lean-toolchain").read_text().strip().split(":")[-1].removeprefix("v")
-    if f"version {pin}," not in run(lean + "/bin/lean", "--version"):
+    if not re.match(rf"^Lean \(version {re.escape(pin)}, ", run(lean + "/bin/lean", "--version")):
         raise ValueError("Lean version differs from lean-toolchain")
     return {"closure": closure, "tool_closures": tool_closures, "role_closures": role_closures,
             "role_local_tools": role_local_tools,
@@ -141,13 +142,14 @@ def check(logs, allowed, evidence, lcb, role):
     tool_closures = evidence["role_closures"][role]
     allowed_local = set(evidence.get("role_local_tools", {}).get(role, ["lcb"] if role == "native" else []))
     for path in paths:
-        name = os.path.basename(path)
+        norm_path = os.path.normpath(path)
+        name = os.path.basename(norm_path)
         if name not in allowed:
             print(f"FAIL tools: unlisted program '{name}'")
             failed = True
         real = os.path.realpath(path)
         real_name = os.path.basename(real)
-        path_root = "/".join(path.split("/")[:4]) if path.startswith("/nix/store/") else ""
+        path_root = "/".join(norm_path.split("/")[:4]) if norm_path.startswith("/nix/store/") else ""
         root = "/".join(real.split("/")[:4]) if real.startswith("/nix/store/") else ""
         local = (name == "lcb" and "lcb" in allowed_local and real_name == "lcb" and real == lcb_real)
         if local and (real != evidence.get("lcb") or

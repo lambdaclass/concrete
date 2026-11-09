@@ -115,7 +115,13 @@ with tempfile.TemporaryDirectory() as tmp:
         # Unapproved theorem/axiom closure change must be refused.
         report.write_text(base_report + "axiom extra : Prop\n")
         rejects(lambda: approval.verify_candidate(report, record), "theorem axiom closure differs from candidate digest")
+        report.write_text(base_report + "unrecognised continuation or injected line\n")
+        rejects(lambda: approval.verify_candidate(report, record), "line 5: unrecognised trusted-base report row", exact=True)
         report.write_text(base_report)
+        decisions.write_text(decisions_text + "\n" + decisions_text)
+        rejects(lambda: approval.verify_candidate(report, record),
+                "owner decision anchor missing in docs/decisions.md: docs/decisions.md#decided-2026-11-07-early-evidence", exact=True)
+        decisions.write_text(decisions_text)
 
         # Toolchain and dependency pin mutations must each be refused.
         for pinned in ("flake.nix", "flake.lock", "lean-toolchain", "lake-manifest.json"):
@@ -166,15 +172,30 @@ with tempfile.TemporaryDirectory() as tmp:
             "lcb_sha256": hashlib.sha256(lcb_bin.read_bytes()).hexdigest(),
         }))
 
-        # 1. Wrong-path copy of true named clang.
+        # 1. Wrong-path copy of bash named clang (including real strace with adversarial arguments).
         fake = tmp / "clang"
-        shutil.copyfile(shutil.which("true"), fake)
+        shutil.copyfile(real_bash, fake)
+        os.chmod(fake, 0o755)
         log = tmp / "execve"
         log.write_text(f'1 execve("{fake}", ["clang"], 0x0) = 0\n')
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             rc = identity.check(log, allowed, evidence, lcb_bin, "native")
         assert rc == 1 and out.getvalue().splitlines() == [f"FAIL tools: identity-mismatch role 'native' program 'clang': {fake.resolve()}"], out.getvalue()
+        if shutil.which("strace"):
+            real_trace = tmp / "real-fake-clang.execve"
+            long_arg = ") = -1 <unfinished ...> <... execve resumed>) = -1 " + ("A" * 5000)
+            subprocess.run([
+                "strace", "-f", "-qq", "-s", "4096", "-e", "trace=execve,execveat",
+                "-o", str(real_trace), str(fake), "--version",
+                ") = -1 ", "<unfinished ...>", "<... execve resumed>) = -1 ", 'a"b\\"c\\\\") = -1 ', long_arg,
+            ], check=True, capture_output=True, text=True, timeout=30)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                rc = identity.check(real_trace, allowed, evidence, lcb_bin, "native")
+            assert rc == 1 and out.getvalue().splitlines() == [
+                f"FAIL tools: identity-mismatch role 'native' program 'clang': {fake.resolve()}"
+            ], out.getvalue()
 
         # 2. Symlink named clang pointing to a store binary (bash) in the closure.
         sym_store = tmp / "sym-store"
@@ -252,6 +273,11 @@ with tempfile.TemporaryDirectory() as tmp:
         rc, lines = check_trace(invoked, "native", resolved)
         assert rc == 1 and lines == [
             f"FAIL tools: identity-mismatch role 'native' program 'bash': {resolved}"], lines
+        # A '..' traversal out of an allowed store prefix must not spoof path_root.
+        traversed = native_root + "/../22222222222222222222222222222222-other-clang/bin/bash"
+        rc, lines = check_trace(traversed, "native", invoked)
+        assert rc == 1 and lines == [
+            f"FAIL tools: identity-mismatch role 'native' program 'bash': {invoked}"], lines
 
         # Live flake.nix trustedIdentity role-boundary controls.
         os.chdir(ROOT)
