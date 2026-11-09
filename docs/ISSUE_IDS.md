@@ -145,19 +145,27 @@ heads before publication. No round-5 backfill was published.
 
 ## Edits and independent additions
 
-An introduction is a commit containing an ID when none of its parents contains that ID.
-The allocator reads ledger patches and checks candidate parents for presence.
-Its provenance fingerprint binds the original record payload, original author name/email,
-authored timestamp and complete introduction commit message. Parent/tree/committer changes
-from a rebase or cherry-pick preserve that authored introduction. Git's optional
-`(cherry picked from commit ...)` transfer trailer is excluded from the original message. Matching current titles,
-row dates or areas cannot do so. Two independent authored additions conflict even when their
-row text matches. As with Git's authored history itself, copying the complete authored change
-is a provenance transfer, not a new authorship claim; these tools do not authenticate authors. It inspects all
-merge parents and all reachable introductions, so resolving a merge to one row cannot erase
-an independent addition in its history. Historical presence uses a tolerant reader: old schema
-versions and historically repaired duplicates do not have to satisfy today's record validator.
-Current main, HEAD and working tree still undergo full current-schema validation.
+An introduction is a state transition: the child contains an ID that no parent supplies,
+or restores an ID along a parent lineage that previously contained and then deleted it.
+A normal merge may inherit an ID from another parent when the missing parent has never
+contained it. Restoring it after deletion is a new introduction even when another merge
+parent still contains it. `introduced_keys` owns this definition for every reader.
+Historical presence uses one tolerant reader for ISS rows, roadmap declarations and bug
+record paths, including a bug path created before its heading. Current main, HEAD and
+working tree still undergo full current-schema validation.
+
+Identity is the introducing commit OID. First-introduction record content is diagnostic
+evidence, never an equality key. Copying a commit through rebase, cherry-pick or `commit -C`
+creates another introduction OID; identical authorship, message or payload cannot collapse
+it into main's introduction. A copy must reconcile onto main's actual introduction history.
+The history reader uses commit and tree output without parsing patch paths, so diff prefixes,
+renames, colors and external diff configuration cannot change identity. It examines every
+reachable introduction and actual merge parent, so selecting one row during a merge cannot
+erase independent introductions.
+
+The working tree is a child state of HEAD with a distinct `worktree:<HEAD OID>` introduction
+identity for additions absent from HEAD. Both validation and backfill use that child history;
+a deletion committed in HEAD followed by an unstaged re-add is a new introduction.
 
 For a number with introductions on origin/main, a branch must inherit at least one of those
 introductions and carry no independent introduction. Changing the subject or moving the row to
@@ -177,9 +185,8 @@ remains the original metadata; it is never rewritten to match the current row.
 No extra row-position rule is needed: each kind has its own number namespace, and each current
 ledger refuses duplicate IDs. Physical line numbers, sorting and legitimate bug-file moves do
 not change identity. A delete followed by a later re-add is a new introduction and is checked
-as such. Rebases and cherry-picks retain the original authored provenance; squash copies that discard
-it must retain the reservation owner's branch attribution (before main owns the number), or
-reconcile with main's introduction history. Matching text alone cannot establish identity.
+as such. Rebased, cherry-picked and squashed copies must reconcile with the actual
+introducing OID when main already owns the number. Matching text alone cannot establish identity.
 
 ## Round-6 validation and inventory (2026-11-09)
 
@@ -223,3 +230,106 @@ identical-text reuse, two unreserved introductions, rewording inherited records,
 `cherry-pick -x` provenance, bug-file moves and examples that must not declare identities.
 The example-row control separately fails against `36f759526` and passes after the fix.
 No reviewers were invoked, and no caller notes or reservation refs were modified.
+
+
+## Round-7 reproduction, validation and inventory (2026-11-09)
+
+The round-6 findings were **CONFIRMED** first at `4d42c0f2c3f286271ebb5a9190cf38eda284b728`
+in temporary repositories. `round7_controls.py` exited 1, with seven failing controls:
+
+| finding | baseline evidence | control after fix |
+| --- | --- | --- |
+| 1: working-tree re-add | check exited 0 after committed deletion and unstaged replacement | `worktree_readd` rejects it |
+| 1: working-tree collision | backfill exited 0 with zero conflicts for two introductions | `worktree_collision` requires one conflict |
+| 2: copied restoration | check exited 0 after deletion and cherry-pick of the original introduction | `cherry_readd` rejects it |
+| 2: merge restoration | check exited 0 when another parent retained the deleted ID | `merge_readd` rejects it |
+| 2: two-step bug | check exited 0 after path-first, heading-second introduction and merge | `two_step_bug` rejects it |
+| 3: hostile diff config | merged local-main collision passed check, exit 0 | `hostile_config` rejects collision and accepts inherited edits |
+| 4: diagnostics | plan omitted both introducing OIDs and gave hardcoded ISS-0017 advice | `diagnostics` requires OIDs, branches and computed reconciliation/reservation instructions |
+
+The hostile global configuration enables `diff.noprefix`, `diff.mnemonicPrefix`, copy
+rename detection, always-on color and an external diff that exits unsuccessfully.
+The full earlier control set is retained. The earlier cherry-pick control now requires
+refusal of the distinct OID, consistent with the requested identity rule.
+Round-3 controls against `c3a3f7aa2` exited 1, reproducing all four earlier findings:
+authoritative/main/HEAD coverage, worktree branch policy, structured TSV merge and metadata
+validation. Those controls pass on the round-7 implementation; their fixes were already in HEAD.
+
+Code validation is recorded against `86db602e4` (the code commit preceding this documentation).
+Every command ran bounded inside `nix develop .#gates` with `PYTHONDONTWRITEBYTECODE=1`.
+
+| check | exit status |
+| --- | --- |
+| all reservation controls, rounds 3–7 | 0 |
+| `issues.sh` | 0 |
+| `review_tool.sh` (mock reviewers in temporary repositories) | 0 |
+| `sandbox_isolation.sh` | 0 |
+| full `run.sh` | 1 |
+
+The full suite's only remaining failed check is `id_reservations.sh`: its controls exit 0,
+but its live check exits 1 because legacy bug reservation metadata still requires backfill.
+This is an activation block, not a passing full suite. An initial run at `a9b303624` also
+failed the structural sandbox scan for the new control's missing explicit entry call;
+`86db602e4` adds that call, and the sandbox gate passes.
+
+The whole-inventory plan exits 1: **555 planned reservations, 24 conflicts**, across 115
+advertised main/wip heads. The authoritative plan exits 0: **488 planned reservations,
+zero conflicts**. Main was `9cddd589182910be056ea9a0be4cd2963663a82f`.
+Neither plan was published. The increase from round 6's one conflict is the deliberate
+consequence of commit-OID identity: copied introductions no longer collapse by content.
+
+Each conflict is explained below. Families identify the actual introducing OIDs and
+branches; the table lists every conflicted ID separately.
+
+- **A:** main and its inheritors use `33374704fb9f4ce94a07359204d29de6bb332223`;
+  `wip/landing-audit-2026-11-06` uses `c7cf9471a8655e9f4265a31b79c5448ae14eacc0`.
+  First records match exactly. Reconcile the old landed-copy branch onto main or retire
+  its stale ref; matching content does not authorize treating two OIDs as one.
+- **B:** main uses `0d1a1b84a665b36cd413a9f7d560d9b993a9c9a8`;
+  `wip/sandbox-isolation-r2` uses `d11ebc6829a70d3485feb6189f39500b0e462383`.
+  Main's commit describes the squash of this branch. Reconcile or retire that pre-squash
+  ref; this is the already-landed sandbox issue, not an instruction to renumber it.
+- **C:** `wip/record-chain-fix`, `wip/record-signoffs-r` and `wip/roadmap-sweep-r`
+  use `d323abb79fd6e74ba8d6a1b3c3f47d6e4f3a065f`; `wip/record-signoffs` and
+  `wip/roadmap-sweep` use `a13c363b57a52b21be1fa1e0661d0ebff90a9d67`.
+  These first records match exactly but have distinct OIDs. The coordinator must choose
+  the shared history and reconcile dependent drafts onto it, or retire superseded copies.
+- **D:** `wip/record-chain-fix` and `wip/roadmap-sweep-r` use
+  `4334a2b0970d49a381defbe5fd73a3430e5c7abb`; `wip/roadmap-sweep` uses
+  `95d808c792c1cbf6e440e25e813a4d3370ba5c93`. These first records also match
+  exactly. Reconcile the drafts onto one introduction history or retire superseded copies.
+
+If comparison establishes that any pair actually represents distinct work, the coordinator
+must reserve a new ID and renumber that work before retrying backfill. The plan contains
+first-record content, full OIDs, branch attribution and per-ID resolution instructions.
+No content-based equivalence or automatic retirement/renumbering is applied.
+
+| conflicted ID | introduction family and cause |
+| --- | --- |
+| ISS-0012 | A: distinct introducing OIDs for the copied record |
+| ISS-0013 | A: distinct introducing OIDs for the copied record |
+| ISS-0014 | A: distinct introducing OIDs for the copied record |
+| ISS-0015 | B: distinct introducing OIDs for the copied record |
+| ISS-0018 | C: distinct introducing OIDs for the copied record |
+| R-0628 | C: distinct introducing OIDs for the copied record |
+| R-0629 | C: distinct introducing OIDs for the copied record |
+| R-0630 | C: distinct introducing OIDs for the copied record |
+| R-0631 | C: distinct introducing OIDs for the copied record |
+| R-0632 | D: distinct introducing OIDs for the copied record |
+| R-0633 | D: distinct introducing OIDs for the copied record |
+| R-0634 | D: distinct introducing OIDs for the copied record |
+| R-0635 | D: distinct introducing OIDs for the copied record |
+| R-0636 | D: distinct introducing OIDs for the copied record |
+| R-0637 | D: distinct introducing OIDs for the copied record |
+| R-0638 | D: distinct introducing OIDs for the copied record |
+| R-0639 | D: distinct introducing OIDs for the copied record |
+| R-0640 | D: distinct introducing OIDs for the copied record |
+| R-0641 | D: distinct introducing OIDs for the copied record |
+| R-0642 | D: distinct introducing OIDs for the copied record |
+| R-0643 | D: distinct introducing OIDs for the copied record |
+| R-0644 | D: distinct introducing OIDs for the copied record |
+| R-0645 | D: distinct introducing OIDs for the copied record |
+| R-0646 | D: distinct introducing OIDs for the copied record |
+
+No reviewer was invoked, no backfill was published, and no caller/remote reservation refs
+or git notes were created or modified. No issue rows, owner decisions or roadmap rows were edited.

@@ -7,9 +7,8 @@ The root checks validate reservation refs and every record in origin/main, HEAD 
 tree. A separate audit checks unrelated wip branches. Temporary-repository controls cover exclusion across clones,
 branch inheritance, offline refusal, legacy import and the real pre-push reservation tier.
 
-Migration is explicit: the operator resolves the ISS-0017 collision (acceptance-shim to ISS-0033;
-spec-* retains ISS-0017; lexer to ISS-0032), reviews a backfill plan and publishes its reservations
-in one atomic transaction. No reservation refs are pushed by the writer; the live gate refuses
+Migration is explicit: the operator resolves the conflicts computed in the current backfill
+plan, reviews that plan and publishes its reservations in one atomic transaction. No reservation refs are pushed by the writer; the live gate refuses
 until backfill and branch reconciliation finish. See docs/ISSUE_IDS.md for the operator commands.
 
 The backfill dry run also refused independent ISS-0018 introductions on five advertised wip heads;
@@ -36,3 +35,13 @@ number and authored introduction provenance, preserved across rebase/cherry-pick
 introductions fail on stale branches and integrated candidates even with matching wording.
 Backfill compares provenance, never current titles; the authoritative main history remains the
 migration baseline. No reservation refs were published.
+
+
+Round 7: identity is the introducing commit OID, with a separate worktree child identity.
+One presence-transition definition covers every reader, including two-step bug creation,
+restoration after deletion and merge inheritance. History parsing is independent of user diff
+configuration. Plans display introducing OIDs and first-record content and compute branch-specific
+coordinator instructions; copied introductions must reconcile onto shared history. Seven new
+adversarial controls fail on round 6 and pass after the fix. The whole inventory has 24 conflicts;
+the authoritative plan has none. The live reservation gate still blocks activation pending legacy
+backfill. No reservation refs were published.
