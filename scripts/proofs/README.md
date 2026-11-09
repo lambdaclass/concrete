@@ -4,6 +4,8 @@ N2 is the mechanized vacuity audit owned by ROADMAP **R-0219** (proof status,
 non-vacuity and evidence mutation). The owner-approved final convention is the
 contract for `vacuity.{lean,sh}`. Meta code lives here; ConcreteSpec remains Init-only.
 
+Current review disposition and exact-commit validation: [N2 round 2](N2-round2.md).
+
 Run under `nix develop`:
 
 ```
@@ -52,7 +54,8 @@ an argument itself mentions a subject. Subject dependencies hidden behind define
 contract aliases are traversed with a bounded dependency search.
 
 Instance and Planted comparisons expand only definitions depending on protected
-subjects, then replace each subject/mutant constant at its actual universe levels
+subjects while preserving all named subjects/mutants simultaneously, then replace
+each subject/mutant constant at its actual universe levels
 with a fresh local variable. Definitional equality can normalize surrounding
 contracts but cannot erase operation arguments or replace a mutant by its result.
 Mutants must also be definitionally different from their subjects, independently

@@ -1,0 +1,1 @@
+N2 (R-0219): preserve all named semantic subjects and mutants simultaneously while expanding comparison wrappers, including mutants implemented in terms of their subject. Fresh-argument and erased-mutant plants can no longer pass through such a dependency.

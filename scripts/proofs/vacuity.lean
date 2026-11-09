@@ -292,24 +292,25 @@ partial def mentions (e : Expr) (subject : Name) : StateRefT (Nat × Std.HashSet
       if ← mentions d.value subject then return true
   return false
 
-partial def mutate (e : Expr) (subject mutant : Name) : StateRefT Nat MetaM Expr := do
+partial def mutate (e : Expr) (subject mutant : Name) (boundaries : Array Name := #[]) : StateRefT Nat MetaM Expr := do
   let fuel ← get
   if fuel == 0 then throwError "subject-budget"
   modify (· - 1)
   match e with
   | .const n us =>
     if n == subject then return .const mutant us
+    if boundaries.contains n then return e
     if let some (.defnInfo d) := (← getEnv).find? n then
       let (occurs, _) ← (mentions d.value subject).run (20000, {})
       if occurs then
-        return ← mutate (d.value.instantiateLevelParams d.levelParams us) subject mutant
+        return ← mutate (d.value.instantiateLevelParams d.levelParams us) subject mutant boundaries
     return e
-  | .app f a => return mkApp (← mutate f subject mutant) (← mutate a subject mutant)
-  | .lam n t b bi => return .lam n (← mutate t subject mutant) (← mutate b subject mutant) bi
-  | .forallE n t b bi => return .forallE n (← mutate t subject mutant) (← mutate b subject mutant) bi
-  | .letE n t v b nd => return .letE n (← mutate t subject mutant) (← mutate v subject mutant) (← mutate b subject mutant) nd
-  | .mdata md b => return .mdata md (← mutate b subject mutant)
-  | .proj n i b => return .proj n i (← mutate b subject mutant)
+  | .app f a => return mkApp (← mutate f subject mutant boundaries) (← mutate a subject mutant boundaries)
+  | .lam n t b bi => return .lam n (← mutate t subject mutant boundaries) (← mutate b subject mutant boundaries) bi
+  | .forallE n t b bi => return .forallE n (← mutate t subject mutant boundaries) (← mutate b subject mutant boundaries) bi
+  | .letE n t v b nd => return .letE n (← mutate t subject mutant boundaries) (← mutate v subject mutant boundaries) (← mutate b subject mutant boundaries) nd
+  | .mdata md b => return .mdata md (← mutate b subject mutant boundaries)
+  | .proj n i b => return .proj n i (← mutate b subject mutant boundaries)
   | _ => return e
 
 
@@ -346,8 +347,8 @@ def withProtected (a b : Expr) (subjects : Array Name) (check : Expr → Expr �
   let mut a := a
   let mut b := b
   for subject in subjects do
-    a := (← (mutate a subject subject).run 20000).1
-    b := (← (mutate b subject subject).run 20000).1
+    a := (← (mutate a subject subject subjects).run 20000).1
+    b := (← (mutate b subject subject subjects).run 20000).1
   let rec collect (e : Expr) (terms : Array Expr) : Array Expr :=
     match e with
     | .const n _ => if subjects.contains n && !terms.contains e then terms.push e else terms

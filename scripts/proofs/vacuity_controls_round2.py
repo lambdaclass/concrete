@@ -146,3 +146,8 @@ end ConcreteSpecControl
 
     add("forged-example-provenance", extra("", "def «⟪example⟫spoof» : True := trivial"), bad("example-provenance", "[anonymous]"))
     add("example-marker-literals-positive", extra("", 'def markerText : String := "⟪example⟫"\n-- ⟪example⟫ is permitted in comments.'), set(), status=0)
+
+    dependent = base.replace("def mutant (n : Nat) : Nat := n", "def mutant (_n : Nat) : Nat := S 0")
+    add("dependent-mutant-positive", dependent, set(), status=0)
+    add("dependent-mutant-fresh-argument", dependent.replace("2 = 2 ∧ ¬ 2 < mutant 2", "2 = 2 ∧ ¬ 2 < mutant 999"), bad("planted-proposition"))
+    add("dependent-mutant-erased-boundary", dependent.replace("2 = 2 ∧ ¬ 2 < mutant 2", "2 = 2 ∧ ¬ 2 < S 0"), bad("planted-proposition"))
