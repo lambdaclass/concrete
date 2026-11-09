@@ -8,8 +8,9 @@
 # the exact bytes on descriptor 2, and descriptor 1, which must be empty. All three must equal the
 # manifest expectation checked by the emitter (which writes the expected status and stderr bytes).
 #
-# Controls: wrong exit and trap expectations must fail in the emitter; a missing row and a
-# nonexistent program must fail opposite inventory directions (these child runs are emit-only,
+# Controls: wrong exit and trap expectations (both site and kind) must fail in the emitter; a
+# missing row and a nonexistent program must fail opposite inventory directions; a con: row must
+# fail runner dispatch with an unsupported-program diagnostic (these child runs are emit-only,
 # never native). A body that never returns must
 # be observed as incomplete on both backends; a body returning a word that encodes nothing must reach
 # the runtime's refusal; and the comparison itself must reject a missing or extra newline, a wrong
@@ -17,6 +18,8 @@
 set -euo pipefail
 # shellcheck source=scripts/checks/lib/slice0_common.sh
 source scripts/checks/lib/slice0_common.sh
+# shellcheck source=scripts/checks/lib/has_match.sh
+source scripts/checks/lib/has_match.sh
 
 fail=0
 count=0
@@ -39,12 +42,19 @@ check() {
   done
 }
 
-rows=$(manifest_rows bir)
+rows=$(manifest_rows)
 
 wrong_expectation() { awk -F '\t' -v OFS='\t' '$1 == "answer" {$3 = "exit 41"} {print}' "$1" >"$1.new"; mv "$1.new" "$1"; }
 wrong_trap_expectation() { awk -F '\t' -v OFS='\t' '$1 == "overflow" {$3 = "trap arithmeticOverflow site 1"} {print}' "$1" >"$1.new"; mv "$1.new" "$1"; }
+wrong_trap_kind() { awk -F '\t' -v OFS='\t' '$1 == "overflow" {$3 = "trap divisionByZero site 0"} {print}' "$1" >"$1.new"; mv "$1.new" "$1"; }
 missing_row() { awk -F '\t' '$1 != "answer"' "$1" >"$1.new"; mv "$1.new" "$1"; }
 nonexistent_program() { printf 'no_such_program\tbir:no_such_program\texit 0\tslice0\n' >>"$1"; }
+unsupported_source_program() {
+  mkdir -p "$(dirname "$1")/slice0"
+  printf 'return 0;\n' >"$(dirname "$1")/slice0/unrun.con"
+  awk -F '\t' '{print} $1 == "answer" {print "unrun_source\tcon:tests/slice0/unrun.con\texit 0\tslice0"}' "$1" >"$1.new"
+  mv "$1.new" "$1"
+}
 manifest_control() { # manifest_control LABEL EXPECTED-MESSAGE MUTATION-FUNCTION
   local label=$1 expected=$2 mutation=$3 dir="$work/ctl/$1" copy rc=0
   mkdir -p "$dir"
@@ -56,7 +66,7 @@ manifest_control() { # manifest_control LABEL EXPECTED-MESSAGE MUTATION-FUNCTION
   fi
   CONCRETE_TEST_MANIFEST="$copy" CONCRETE_TEST_MANIFEST_SKIP_CONTROLS=1 CONCRETE_TEST_EMIT_ONLY=1 \
     bash "$root/scripts/checks/compiler/tests.sh" >"$work/ctl/$label.log" 2>&1 || rc=$?
-  if [ "$rc" -ne 0 ] && grep -qF "$expected" "$work/ctl/$label.log"; then
+  if [ "$rc" -ne 0 ] && has_match -F "$expected" <"$work/ctl/$label.log"; then
     echo "ok   manifest control $label: refused for the planted reason"
   else
     echo "FAIL manifest control $label: not refused as '$expected'" >&2
@@ -68,21 +78,35 @@ mkdir -p "$work/ctl"
 if [ "${CONCRETE_TEST_MANIFEST_SKIP_CONTROLS:-0}" != 1 ]; then
   manifest_control wrong-expectation "answer: expectation mismatch: BIR run gives" wrong_expectation
   manifest_control wrong-trap-expectation "overflow: expectation mismatch: BIR run gives" wrong_trap_expectation
+  manifest_control wrong-trap-kind "overflow: expectation mismatch: trap site 0 has kind ConcreteSpec.Trap.arithmeticOverflow, expected divisionByZero" wrong_trap_kind
   manifest_control missing-row "program without a manifest row: answer" missing_row
   manifest_control nonexistent-program "manifest row names no program: no_such_program" nonexistent_program
+  manifest_control unsupported-source "tests: unrun_source: unsupported program con:tests/slice0/unrun.con (source runner not implemented)" unsupported_source_program
 fi
 
 while IFS=$'\t' read -r name program expect; do
-  d="$work/ex/$name"
-  read -r -a expectation <<<"$expect"
-  "${emitter[@]}" emit "${program#bir:}" "$d" "$target" "${expectation[@]}"
-  # Emit-only controls cover every row and never reach a native build, even if a planted defect is
-  # accidentally accepted: the control then fails because the child returns zero after the loop.
-  if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" = 1 ]; then continue; fi
-  check "$name" "$d" 10 20
-  examples=$((examples + 1))
+  case "$program" in
+    bir:*)
+      d="$work/ex/$name"
+      read -r -a expectation <<<"$expect"
+      "${emitter[@]}" emit "${program#bir:}" "$d" "$target" "${expectation[@]}"
+      # Emit-only controls cover every row and never reach a native build, even if a planted defect is
+      # accidentally accepted: the control then fails because the child returns zero after the loop.
+      if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" = 1 ]; then continue; fi
+      check "$name" "$d" 10 20
+      examples=$((examples + 1))
+      ;;
+    con:*)
+      echo "tests: $name: unsupported program $program (source runner not implemented)" >&2
+      exit 1
+      ;;
+    *)
+      echo "tests: $name: unsupported program $program" >&2
+      exit 1
+      ;;
+  esac
 done <<<"$rows"
-if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" = 1 ]; then exit 0; fi
+if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" = 1 ]; then exit "$fail"; fi
 "${emitter[@]}" loop "$work/ctl/loop" "$target"
 expected_timeout check control-loop "$work/ctl/loop" 1 1
 "${emitter[@]}" invalid "$work/ctl/invalid" "$target"
