@@ -301,6 +301,8 @@ def main():
     assert result.returncode == 0, 'round 5 regression controls failed'
     result = subprocess.run(['python3', '-I', '-B', str(SOURCE / 'round6_controls.py')])
     assert result.returncode == 0, 'round 6 regression controls failed'
+    result = subprocess.run(['python3', '-I', '-B', str(SOURCE / 'round7_controls.py')])
+    assert result.returncode == 0, 'round 7 regression controls failed'
     print('ID reservation controls: PASS')
 
 

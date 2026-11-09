@@ -4,7 +4,6 @@ import argparse
 import datetime
 import json
 import functools
-import hashlib
 import os
 from pathlib import Path
 import re
@@ -153,73 +152,86 @@ def historical_keys(repo, sha):
     return keys
 
 
-@functools.lru_cache(maxsize=None)
-def introduction_provenance(repo, revision, key):
-    # Rebase/cherry-pick preserve the authored change, while changing parents/tree
-    # and committer. Bind the original record payload, author (including authored
-    # timestamp), and complete message, never the current row's wording.
-    author = git(repo, 'show', '-s', '--format=%an%x00%ae%x00%at%x00%B', revision).stdout
-    # Git's -x trailer records the transfer; it is not part of original authorship.
-    author = re.sub(r'(?m)^\(cherry picked from commit [0-9a-f]{40,64}\)\s*$', '', author).rstrip()
+def introduction_content(repo, revision, key):
+    """The first record payload is display evidence, never an identity."""
     paths = git(repo, 'ls-tree', '-r', '--format=%(path)', revision).stdout.splitlines()
     if key.startswith('ISS-'):
         text = git(repo, 'show', f'{revision}:ISSUES.tsv').stdout
-        payload = '\n'.join(line for line in text.splitlines() if line.startswith(key + '\t'))
-    elif key.startswith('R-'):
+        return '\n'.join(line for line in text.splitlines() if line.startswith(key + '\t'))
+    if key.startswith('R-'):
         text = git(repo, 'show', f'{revision}:ROADMAP.md').stdout
-        payload = '\n'.join(line for line in text.splitlines() if re.match(r'^\s*\|\s*' + key + r'\s*\|', line))
-    else:
-        number = key.split('-')[1]
-        payload = '\n'.join(git(repo, 'show', f'{revision}:{path}').stdout for path in paths
-                            if re.fullmatch(r'(?:legacy/)?docs/bugs/' + number + r'_[^/]+\.md', path))
-    return hashlib.sha256((author + '\0' + payload).encode()).hexdigest()
+        return '\n'.join(line for line in text.splitlines() if re.match(r'^\s*\|\s*' + key + r'\s*\|', line))
+    number = key.split('-')[1]
+    return '\n'.join(git(repo, 'show', f'{revision}:{path}').stdout for path in paths
+                     if re.fullmatch(r'(?:legacy/)?docs/bugs/' + number + r'_[^/]+\.md', path))
+
+
+def introduced_keys(present, parents, previously_present):
+    """One state-transition definition, also used for the uncommitted child of HEAD.
+
+    A missing parent starts an introduction unless another parent supplies the ID
+    and the missing parent has never held it. That exception is ordinary merge
+    inheritance; restoring an ID after deletion on either lineage is a new event.
+    """
+    inherited = set().union(*parents) if parents else set()
+    return {key for key in present if key not in inherited or
+            any(key not in parent and key in history
+                for parent, history in zip(parents, previously_present))}
+
+
+@functools.lru_cache(maxsize=None)
+def is_ancestor(repo, ancestor, descendant):
+    result = git(repo, 'merge-base', '--is-ancestor', ancestor, descendant, check=False)
+    if result.returncode not in (0, 1):
+        raise Incomplete('cannot establish introduction ancestry: ' + result.stderr.strip())
+    return result.returncode == 0
 
 
 @functools.lru_cache(maxsize=None)
 def introductions(repo, sha):
-    """ID -> authored introduction fingerprints reachable from sha, independent of current wording.
+    """ID -> introducing commit OIDs, including distinct restorations after deletion.
 
-    Read all ledger patches once. A candidate introduces an ID only when no parent
-    contains it. Inspect every merge parent, so integration cannot hide a second
-    independent introduction by selecting one side's row.
+    Read commit and tree plumbing, never patch paths or user-configured diff text.
+    Path selection only reduces the candidates; presence is always historical_keys.
+    %P reports actual parents, unlike rev-list's path-simplified parent list.
     """
-    patch = git(repo, 'log', '--full-history', '-m', '--format=COMMIT %H %P',
-                '--no-ext-diff', '--no-textconv', '--no-color', '--no-renames', '-p', sha, '--', 'ISSUES.tsv',
-                'ROADMAP.md', 'docs/bugs', 'legacy/docs/bugs').stdout
-    candidates = {}
-    revision = None
-    path = None
-    for line in patch.splitlines():
-        if line.startswith('COMMIT '):
-            fields = line.split()
-            revision, parents = fields[1], fields[2:]
-            candidates.setdefault(revision, (parents, set(), set()))
-            path = None
-        elif line.startswith('diff --git '):
-            path = None
-        elif line.startswith(('--- a/', '+++ b/')):
-            path = line[6:]
-        elif revision and line[:1] in ('+', '-') and not line.startswith(('+++', '---')):
-            text = line[1:]
-            match = (re.match(r'^(ISS-\d{4})\t', text) if path == 'ISSUES.tsv' else
-                     re.match(r'^\s*\|\s*(R-\d{4})\s*\|', text) if path == 'ROADMAP.md' else None)
-            filename = re.fullmatch(r'(?:legacy/)?docs/bugs/(\d{3,})_[^/]+\.md', path or '')
-            bug = re.match(r'^# Bug ' + filename[1] + r'\s*[:—–-]', text, re.I) if filename else None
-            key = match[1] if match else ('BUG-' + filename[1] if bug else None)
-            if key:
-                candidates[revision][1 if line[0] == '+' else 2].add(key)
+    history = git(repo, 'log', '--full-history', '--topo-order', '--reverse',
+                  '--format=%H %P', '--no-patch', '--no-color', '--no-ext-diff',
+                  '--no-textconv', '--no-renames', '--no-notes', '--no-show-signature', sha, '--',
+                  'ISSUES.tsv', 'ROADMAP.md', 'docs/bugs', 'legacy/docs/bugs').stdout
     result = {}
-    for revision, (parents, added, removed) in candidates.items():
-        for key in added - removed:
-            if not any(key in historical_keys(repo, parent) for parent in parents):
-                result.setdefault(key, set()).add(introduction_provenance(repo, revision, key))
+    for line in history.splitlines():
+        revision, *parents = line.split()
+        present = historical_keys(repo, revision)
+        parent_keys = [historical_keys(repo, parent) for parent in parents]
+        # Only missing IDs need ancestry queries. A root on another, unrelated
+        # lineage does not make an ordinary merge a restoration.
+        histories = []
+        for parent, keys in zip(parents, parent_keys):
+            histories.append({key for key in present - keys if any(
+                is_ancestor(repo, oid, parent)
+                for oid in result.get(key, ()))})
+        for key in introduced_keys(present, parent_keys, histories):
+            result.setdefault(key, set()).add(revision)
+    return result
+
+
+def state_introductions(snapshot, sha):
+    if sha != 'worktree':
+        return introductions(snapshot.repo, sha)
+    result = {key: set(roots) for key, roots in introductions(snapshot.repo, snapshot.local_head).items()}
+    parent = historical_keys(snapshot.repo, snapshot.local_head)
+    for key in introduced_keys(set(snapshot.local_records), [parent], [set(result)]):
+        result.setdefault(key, set()).add('worktree:' + snapshot.local_head)
     return result
 
 
 def identity_error(snapshot, key, sha, branch):
     """Main owns existing introductions; reservations own new branch introductions."""
-    roots = introductions(snapshot.repo, sha).get(key, set())
+    roots = state_introductions(snapshot, sha).get(key, set())
     main_roots = introductions(snapshot.repo, snapshot.remote_heads['main']).get(key, set())
+    if not roots:
+        return f'{key}: no introducing commit for {branch} at {sha}'
     if main_roots:
         if not roots or not roots <= main_roots:
             return f'{key}: independent introduction conflicts with origin/main:{snapshot.trees["main"].get(key, ("", "history"))[1]} (main {sorted(main_roots)}, branch {sorted(roots)})'
@@ -399,7 +411,8 @@ def check_change(root, snapshot):
     branch = canonical_branch(branch) if branch else 'detached'
     check_entries(snapshot, snapshot.trees['main'], 'origin/main', snapshot.remote_heads['main'], 'main')
     check_entries(snapshot, tree_records(snapshot.repo, snapshot.local_head), 'HEAD', snapshot.local_head, branch)
-    check_entries(snapshot, work_records(root), 'worktree', snapshot.local_head, branch)
+    snapshot.local_records = work_records(root)
+    check_entries(snapshot, snapshot.local_records, 'worktree', 'worktree', branch)
 
 
 def attributed_branch(snapshot, branch):
@@ -420,23 +433,36 @@ def make_plan(root, snapshot, local, branch, scope='all'):
     # Replace only the writer's draft. Local main must never mask origin/main.
     if branch != 'main':
         trees.pop(branch, None)
+    snapshot.local_records = local
     inventory = [*trees.items(), (branch, local)]
     uses = {}
     for name, entries in inventory:
         for key, (title, _) in entries.items():
-            uses.setdefault(key, []).append((name, title, snapshot.local_head if entries is local else snapshot.remote_heads[name]))
+            uses.setdefault(key, []).append((name, title, 'worktree' if entries is local else snapshot.remote_heads[name]))
     conflicts = [f'{b}: {error}' for b, error in snapshot.tree_errors.items()
                  if scope == 'all' or b == 'main']
     updates = []
+    resolutions = []
+    evidence = {}
     for key, rows in sorted(uses.items()):
         errors = [f'{name}: {error}' for name, _, sha in rows
                   if (error := identity_error(snapshot, key, sha, name))]
-        roots = set().union(*(introductions(snapshot.repo, sha).get(key, set()) for _, _, sha in rows))
+        roots = set().union(*(state_introductions(snapshot, sha).get(key, set()) for _, _, sha in rows))
         if (not snapshot.reservation(key) and
                 not introductions(snapshot.repo, snapshot.remote_heads['main']).get(key) and
                 len(roots) > 1):
             errors.append(f'{key}: independent unreserved introductions {sorted(roots)}')
         if any(errors):
+            evidence[key] = [dict(branch=name, oid=oid,
+                                 first_content=(local[key][0] if oid.startswith('worktree:') else
+                                                introduction_content(snapshot.repo, oid, key)))
+                             for name, _, sha in rows
+                             for oid in sorted(state_introductions(snapshot, sha).get(key, set()))]
+            names = ', '.join(sorted({name for name, _, _ in rows if name != 'main'}))
+            resolutions.append(f'{key} ({names}): compare the listed introducing commits and first records. '
+                               'For an already landed copy, reconcile the branch onto origin/main so it inherits '
+                               'the main introduction, or retire its stale advertised ref. For a distinct task, '
+                               'reserve a new ID through the coordinator and renumber that branch before retrying backfill.')
             conflicts.append(f'{key}: ' + repr([(name, title) for name, title, _ in rows]) + '; ' + '; '.join(sorted(set(filter(None, errors)))))
             continue
         owner, title, _ = min(rows, key=lambda row: (row[0] != 'main', row[0]))
@@ -459,7 +485,7 @@ def make_plan(root, snapshot, local, branch, scope='all'):
                     value['legacy_oid'] = oid
                     updates.append(dict(ref=ref, old=oid, value=value))
     return dict(schema=1, scope=scope, heads=snapshot.remote_heads, updates=updates, conflicts=conflicts,
-                collision_resolution='ISS-0017 acceptance-shim -> ISS-0033; spec-* retains ISS-0017; lexer -> ISS-0032. Branches must actually be renumbered before publishing.')
+                introduction_evidence=evidence, collision_resolution='\n'.join(resolutions))
 
 
 def main():

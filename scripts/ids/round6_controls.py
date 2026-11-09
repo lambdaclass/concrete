@@ -48,7 +48,7 @@ def collision(root, kind):
         if phase == 'branch':
             a.git(root, 'switch', '-qc', 'candidate', 'main')
             a.git(root, 'merge', '--no-ff', '-X', 'theirs', '-m', 'integrate stale branch', 'stale-writer')
-    # A cherry-pick changes the commit OID but preserves authored introduction provenance.
+    # A cherry-pick has a distinct introduction OID; copies must reconcile onto main.
     introduced = a.git(root, 'rev-parse', 'main').stdout.strip()
     a.git(root, 'switch', '-qc', 'rebased-copy', base)
     (root / 'unrelated').write_text('different parent')
@@ -56,7 +56,7 @@ def collision(root, kind):
     a.git(root, 'commit', '-qm', 'unrelated history')
     a.git(root, 'cherry-pick', '-x', introduced)
     assert a.git(root, 'rev-parse', 'HEAD').stdout.strip() != introduced
-    ok(cli(root, 'check'))
+    assert cli(root, 'check').returncode == 1
     # Edits inherit the introduction, regardless of title wording or row line number.
     a.git(root, 'switch', '-qc', 'positive', 'main')
     save(root, kind, 'reworded existing item')
