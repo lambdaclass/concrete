@@ -49,11 +49,72 @@ cat >"$GIT_CONFIG_GLOBAL" <<'EOF'
 EOF
 
 snapshot_source_tree() {
-  git -C "$ROOT_DIR" status --porcelain=v1 -z -uall --ignored=matching
-  git -C "$ROOT_DIR" diff --binary HEAD
-  find "$ROOT_DIR/scripts" "$ROOT_DIR/.githooks" \( -name '__pycache__' -o -name '*.pyc' -o -name '*.pyo' \) -print 2>/dev/null | LC_ALL=C sort
+  local target_dir="${1:-$ROOT_DIR}"
+  python3 -B -I - "$target_dir" <<'PY'
+import hashlib, os, stat, sys
+sys.dont_write_bytecode = True
+
+def raise_err(err):
+    raise err
+
+root = os.path.abspath(sys.argv[1])
+if not os.path.isdir(root) or os.path.islink(root):
+    sys.exit(f"snapshot_source_tree: '{root}' is not a directory")
+
+entries = []
+for dirpath, dirnames, filenames in os.walk(root, topdown=True, onerror=raise_err, followlinks=False):
+    rel_dir = os.path.relpath(dirpath, root)
+    if rel_dir == "." and ".git" in dirnames:
+        dirnames.remove(".git")
+    dir_st = os.lstat(dirpath)
+    entries.append(f"D\t{rel_dir}\t{stat.S_IMODE(dir_st.st_mode):04o}")
+    real_dirs = []
+    for name in sorted(dirnames + filenames):
+        p = os.path.join(dirpath, name)
+        rel = os.path.relpath(p, root)
+        st = os.lstat(p)
+        mode = stat.S_IMODE(st.st_mode)
+        if stat.S_ISLNK(st.st_mode):
+            target = os.readlink(p)
+            th = hashlib.sha256(os.fsencode(target)).hexdigest()
+            entries.append(f"L\t{rel}\t{mode:04o}\t{th}\t{target}")
+        elif stat.S_ISDIR(st.st_mode):
+            real_dirs.append(name)
+        elif stat.S_ISREG(st.st_mode):
+            h = hashlib.sha256()
+            size = 0
+            with open(p, "rb") as f:
+                while True:
+                    chunk = f.read(65536)
+                    if not chunk:
+                        break
+                    size += len(chunk)
+                    h.update(chunk)
+            entries.append(f"F\t{rel}\t{mode:04o}\t{size}\t{h.hexdigest()}")
+        else:
+            sys.exit(f"snapshot_source_tree: unsupported file type at '{rel}'")
+    dirnames[:] = real_dirs
+
+if not entries:
+    sys.exit("snapshot_source_tree: empty snapshot")
+sys.stdout.write("\n".join(entries) + "\n")
+PY
 }
-snapshot_source_tree >"$T/root.before"
+
+verify_source_tree_unchanged() { # verify_source_tree_unchanged <before-file> <before-rc> <target-dir> <after-file>
+  local before_file="$1" before_rc="$2" target_dir="$3" after_file="$4" after_rc=0
+  [ "$before_rc" -eq 0 ] && [ -s "$before_file" ] || return 1
+  snapshot_source_tree "$target_dir" >"$after_file" 2>/dev/null || after_rc=$?
+  [ "$after_rc" -eq 0 ] && [ -s "$after_file" ] || return 1
+  cmp -s "$before_file" "$after_file"
+}
+
+verify_source_tree_changed() { # verify_source_tree_changed <before-file> <before-rc> <target-dir> <after-file>
+  ! verify_source_tree_unchanged "$@"
+}
+
+ROOT_SNAP_BEFORE_RC=0
+snapshot_source_tree "$ROOT_DIR" >"$T/root.before" || ROOT_SNAP_BEFORE_RC=$?
 
 # ------------------------------------------------------------------ fake codex
 FAKE_LOG="$T/fake"
@@ -1282,10 +1343,48 @@ g push -q -f --no-verify origin "$N3_DEL_R9_SHA:refs/notes/concrete-writer"
 v_del1_out="$(cd "$W" && bash "$VERIFY" --fetch --required-base "$BF_BASE" "$BF_R4" 2>&1)"; rc=$?
 check "landing/verify control (note deletion on remote): verify.sh --fetch --required-base refuses deleted writer note (exit 1, got $rc)" \
   bash -c '[ "$1" -eq 1 ] && grep -q "deletes existing writer-log entry" <<<"$2"' _ "$rc" "$v_del1_out"
-# Landing/verify Deletion control B (delete refs/notes/concrete-writer on remote):
+# Landing/verify Deletion control B (delete refs/notes/concrete-writer on remote, then replay older signed history):
 git -C "$T/origin.git" update-ref -d refs/notes/concrete-writer
 v_del2_out="$(cd "$W" && bash "$VERIFY" --fetch --required-base "$BF_BASE" "$BF_R4" 2>&1)"; rc=$?
-check "landing/verify control (ref deletion on remote): verify.sh --fetch --required-base refuses when remote writer-notes ref is deleted (exit 1, got $rc)" test "$rc" -eq 1
+check "landing/verify control (ref deletion on remote): verify.sh --fetch --required-base refuses when remote writer-notes ref is deleted and preserves local checkpoints (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "prior writer-log history was recorded" <<<"$2" && [ "$(git -C "$3" rev-parse refs/notes/concrete-writer)" = "$4" ] && [ "$(git -C "$3" rev-parse refs/notes/remote/concrete-writer)" = "$4" ]' _ "$rc" "$v_del2_out" "$W" "$N2_CODEX_NOTES_SHA"
+# Extended Deletion control B (delete-then-replay / resurrection refusal):
+# Without touching local refs, restore the older signed 1-stanza history ($WRITER_NOTES_SHA) on origin;
+# verify.sh --fetch must still refuse because the local checkpoint at $N2_CODEX_NOTES_SHA was preserved.
+g push -q -f --no-verify origin "$WRITER_NOTES_SHA:refs/notes/concrete-writer"
+v_del2_replay_out="$(cd "$W" && bash "$VERIFY" --fetch --required-base "$BF_BASE" "$BF_R4" 2>&1)"; rc=$?
+check "landing/verify control (delete-then-replay resurrection refusal): restoring older signed history after remote ref deletion is refused by verify.sh --fetch (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$v_del2_replay_out"
+# Explicit agy -> kimi correction delete-then-replay control (reproducing the round-9 Codex finding):
+# Record agy on DTR_C (DTR_N1), append signed correction naming kimi (DTR_N2), and supply a Kimi clean review note.
+g checkout -q main && g checkout -qb dtr-agy-kimi
+commit_unstamped dtr.txt "dtr" "dtr commit"
+DTR_C="$(g rev-parse HEAD)"
+DTR_BASE="$(g merge-base HEAD main)"
+g update-ref refs/notes/concrete-writer "$N2_CODEX_NOTES_SHA"
+backfill_writer "$DTR_C" agy 1 dtr-agy-kimi "$DTR_BASE" "$DTR_C" "initial agy backfill on DTR_C"
+DTR_N1="$(g rev-parse refs/notes/concrete-writer)"
+DTR_EID1="$(g notes --ref=refs/notes/concrete-writer show "$DTR_C" | sed -n 's/^entry-id: //p')"
+backfill_writer "$DTR_C" kimi 2 dtr-agy-kimi "$DTR_BASE" "$DTR_C" "correction naming kimi on DTR_C" \
+  "$DTR_EID1" "kimi co-wrote DTR_C"
+DTR_N2="$(g rev-parse refs/notes/concrete-writer)"
+g push -q -f --no-verify origin "$DTR_N2:refs/notes/concrete-writer"
+g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 1\nreviewer: kimi\nwriter: agy\nutc: 2026-11-08T00:00:00Z\nbase: %s\npieces: 1\nrepository: readable' "$DTR_BASE")" "$DTR_C"
+g push -q -f origin "refs/notes/concrete-review:refs/notes/concrete-review"
+dtr_base_out="$(cd "$W" && bash "$VERIFY" --fetch --required-base "$DTR_BASE" "$DTR_C" 2>&1)"; rc=$?
+check "delete-then-replay (agy->kimi): baseline verify.sh --fetch rejects Kimi self-review (exit 1, got $rc)" test "$rc" -eq 1
+git -C "$T/origin.git" update-ref -d refs/notes/concrete-writer
+dtr_del_out="$(cd "$W" && bash "$VERIFY" --fetch --required-base "$DTR_BASE" "$DTR_C" 2>&1)"; rc=$?
+check "delete-then-replay (agy->kimi): deleting remote writer ref is rejected and does not erase local checkpoint (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "prior writer-log history was recorded" <<<"$2" && [ "$(git -C "$3" rev-parse refs/notes/concrete-writer)" = "$4" ]' _ "$rc" "$dtr_del_out" "$W" "$DTR_N2"
+g push -q -f --no-verify origin "$DTR_N1:refs/notes/concrete-writer"
+dtr_replay_out="$(cd "$W" && bash "$VERIFY" --fetch --required-base "$DTR_BASE" "$DTR_C" 2>&1)"; rc=$?
+check "delete-then-replay (agy->kimi): restoring older signed agy-only history is rejected by verify.sh --fetch (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "rewrites or drops existing writer-log entry" <<<"$2"' _ "$rc" "$dtr_replay_out"
+g notes --ref=refs/notes/concrete-review remove "$DTR_C" 2>/dev/null || true
+g update-ref refs/notes/concrete-writer "$N2_CODEX_NOTES_SHA"
+g update-ref refs/notes/remote/concrete-writer "$N2_CODEX_NOTES_SHA"
+git -C "$T/origin.git" update-ref refs/notes/concrete-writer "$N2_CODEX_NOTES_SHA"
 # Landing/verify Re-signing control (replace BF_R2's note with a freshly signed 1-stanza note on top of N2):
 g update-ref refs/notes/concrete-writer "$N2_CODEX_NOTES_SHA"
 sed "s/^evidence: .*/evidence: re-signed single stanza/" <<<"$BF_R2_OLD_NOTE" >"$T/resigned-bf-r2-raw"
@@ -1502,10 +1601,60 @@ check "unknown flag: exit 2 (got $rc)" test "$rc" -eq 2
 
 echo "=== source tree hygiene (no Python bytecode written into repository) ==="
 ( unset PYTHONDONTWRITEBYTECODE; sign_raw_stanza "$T/good-agy-log" "$T/bytecode-check-stanza" )
-snapshot_source_tree >"$T/root.after"
 check "sign_raw_stanza and review_tool leave scripts/review/__pycache__ absent" test ! -e "$ROOT_DIR/scripts/review/__pycache__"
 check "review_tool check run leaves the source tree byte-identical (no tracked, untracked or ignored __pycache__/*.pyc changes)" \
-  cmp -s "$T/root.before" "$T/root.after"
+  verify_source_tree_unchanged "$T/root.before" "$ROOT_SNAP_BEFORE_RC" "$ROOT_DIR" "$T/root.after"
+
+# Negative controls for snapshot_source_tree / verify_source_tree_unchanged in both a git checkout and an archive-shaped tree:
+git init -q "$T/snap-git"
+mkdir -p "$T/snap-git/sub"
+printf 'initial content\n' >"$T/snap-git/existing.txt"
+printf 'sub content\n' >"$T/snap-git/sub/file.txt"
+ln -s existing.txt "$T/snap-git/link.txt"
+git -C "$T/snap-git" add -A && git -C "$T/snap-git" commit -qm "snap base"
+snap_git_rc=0
+snapshot_source_tree "$T/snap-git" >"$T/snap-git.before" 2>"$T/snap-git.err" || snap_git_rc=$?
+check "snapshot_source_tree succeeds on a git checkout with no stderr (exit 0, got $snap_git_rc)" \
+  bash -c '[ "$1" -eq 0 ] && [ -s "$2" ] && [ ! -s "$3" ]' _ "$snap_git_rc" "$T/snap-git.before" "$T/snap-git.err"
+check "verify_source_tree_unchanged passes on an unchanged git checkout" \
+  verify_source_tree_unchanged "$T/snap-git.before" "$snap_git_rc" "$T/snap-git" "$T/snap-git.after"
+printf 'modified content\n' >"$T/snap-git/existing.txt"
+check "negative control (git checkout): changing an existing file's contents fails verify_source_tree_unchanged" \
+  verify_source_tree_changed "$T/snap-git.before" "$snap_git_rc" "$T/snap-git" "$T/snap-git.after"
+printf 'initial content\n' >"$T/snap-git/existing.txt"
+chmod +x "$T/snap-git/existing.txt"
+check "negative control (git checkout): changing an existing file's mode fails verify_source_tree_unchanged" \
+  verify_source_tree_changed "$T/snap-git.before" "$snap_git_rc" "$T/snap-git" "$T/snap-git.after"
+chmod -x "$T/snap-git/existing.txt"
+ln -sf sub/file.txt "$T/snap-git/link.txt"
+check "negative control (git checkout): changing a symlink target fails verify_source_tree_unchanged" \
+  verify_source_tree_changed "$T/snap-git.before" "$snap_git_rc" "$T/snap-git" "$T/snap-git.after"
+ln -sf existing.txt "$T/snap-git/link.txt"
+
+mkdir -p "$T/snap-archive"
+git -C "$T/snap-git" archive HEAD | tar -x -C "$T/snap-archive"
+snap_arch_rc=0
+snapshot_source_tree "$T/snap-archive" >"$T/snap-arch.before" 2>"$T/snap-arch.err" || snap_arch_rc=$?
+check "snapshot_source_tree succeeds on an archive-shaped tree (no .git) with no git errors (exit 0, got $snap_arch_rc)" \
+  bash -c '[ "$1" -eq 0 ] && [ -s "$2" ] && [ ! -s "$3" ]' _ "$snap_arch_rc" "$T/snap-arch.before" "$T/snap-arch.err"
+check "verify_source_tree_unchanged passes on an unchanged archive-shaped tree" \
+  verify_source_tree_unchanged "$T/snap-arch.before" "$snap_arch_rc" "$T/snap-archive" "$T/snap-arch.after"
+printf 'modified in archive\n' >"$T/snap-archive/existing.txt"
+check "negative control (archive-shaped tree): changing an existing file's contents fails verify_source_tree_unchanged" \
+  verify_source_tree_changed "$T/snap-arch.before" "$snap_arch_rc" "$T/snap-archive" "$T/snap-arch.after"
+printf 'initial content\n' >"$T/snap-archive/existing.txt"
+chmod +x "$T/snap-archive/existing.txt"
+check "negative control (archive-shaped tree): changing an existing file's mode fails verify_source_tree_unchanged" \
+  verify_source_tree_changed "$T/snap-arch.before" "$snap_arch_rc" "$T/snap-archive" "$T/snap-arch.after"
+chmod -x "$T/snap-archive/existing.txt"
+ln -sf sub/file.txt "$T/snap-archive/link.txt"
+check "negative control (archive-shaped tree): changing a symlink target fails verify_source_tree_unchanged" \
+  verify_source_tree_changed "$T/snap-arch.before" "$snap_arch_rc" "$T/snap-archive" "$T/snap-arch.after"
+ln -sf existing.txt "$T/snap-archive/link.txt"
+check "negative control (snapshot error): verify_source_tree_unchanged fails when before-snapshot or after-snapshot errors" \
+  verify_source_tree_changed "$T/snap-arch.before" 1 "$T/snap-archive" "$T/snap-arch.after"
+check "negative control (missing directory error): verify_source_tree_unchanged fails when target directory is missing" \
+  verify_source_tree_changed "$T/snap-arch.before" 0 "$T/does-not-exist" "$T/snap-arch.after"
 
 echo
 echo "check_review_tool: PASS=$PASS FAIL=$FAIL"

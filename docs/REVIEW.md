@@ -248,14 +248,17 @@ a self-declared claim, or a default attribution on unstamped commits:
   existing commit note was deleted and that existing stanzas on every changed
   commit remain an unmodified prefix of the new stanzas, refusing any update that
   rolls back, rewrites, deletes, or re-signs an existing entry. `verify.sh
-  --fetch`, `scripts/land/notes.sh fetch`, and `scripts/land/train.sh` fetch
-  `refs/notes/concrete-writer` into a temporary ref and verify continuity against
-  any previously fetched/recorded local or remote writer-notes state via
-  `validate-notes` before updating local refs, and `writer_provenance.py` also
+  --fetch`, `scripts/land/notes.sh fetch`, and `scripts/land/train.sh` share
+  `writer_provenance.py fetch-notes`, which fetches `refs/notes/concrete-writer`
+  into a temporary ref, verifies continuity against all recorded checkpoints
+  (`refs/notes/concrete-writer`, `refs/notes/remote/concrete-writer`, and any
+  caller-supplied `--old-notes-rev` such as the train's `writer_notes` state),
+  never deletes a checkpoint ref, and refuses a missing remote ref whenever any
+  prior writer history was recorded; `writer_provenance.py` also
   verifies historical continuity across the notes ref's ancestor chain and
   companion ref on every provenance read. `scripts/land/notes.sh put` refuses
-  `writer` notes (`stamp-commit`, `backfill`, `sync-notes`, and `publish-notes`
-  in `writer_provenance.py` are the only writer-note mutation APIs).
+  `writer` notes (`stamp-commit`, `backfill`, `fetch-notes`, `sync-notes`, and
+  `publish-notes` in `writer_provenance.py` are the only writer-note ref APIs).
 - **Harness-stamped commits (`source: harness`).** Each harness-written commit
   (`scripts/review/writer_provenance.py stamp-commit`) is stamped with author
   `<Model> (writer) <model@writers.concrete>` (while the committer remains the

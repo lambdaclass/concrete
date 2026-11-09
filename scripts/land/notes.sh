@@ -38,32 +38,16 @@ kind_ok() { case "$1" in review|gates|writer) ;; *) die "kind must be review, ga
 fetch_kind() { # kind
   local out
   if [ "$1" = writer ]; then
-    local prev_remote prev_local old_rev tmp_ref="refs/notes/remote/concrete-writer-fetch-$$" werr
-    prev_remote="$(git rev-parse -q --verify refs/notes/remote/concrete-writer 2>/dev/null || true)"
-    prev_local="$(git rev-parse -q --verify refs/notes/concrete-writer 2>/dev/null || true)"
-    old_rev="${prev_remote:-${prev_local:-0000000000000000000000000000000000000000}}"
-    git update-ref -d "$tmp_ref" 2>/dev/null || true
-    if out="$(git fetch -q "$REMOTE" "+refs/notes/concrete-writer:$tmp_ref" 2>&1)"; then
-      if ! werr="$(python3 -B -I "$WRITER_PROV" validate-notes --allow-missing-targets --notes-rev "$tmp_ref" --old-notes-rev "$old_rev" 2>&1)"; then
-        git update-ref -d "$tmp_ref" 2>/dev/null || true
-        echo "notes: invalid or discontinuous refs/notes/concrete-writer on $REMOTE: ${werr//$'\n'/ }" >&2
-        return 1
-      fi
-      git update-ref refs/notes/remote/concrete-writer "$tmp_ref"
-      git update-ref -d "$tmp_ref" 2>/dev/null || true
-      return 0
+    local wout="" wrc=0
+    wout="$(python3 -B -I "$WRITER_PROV" fetch-notes --remote "$REMOTE" --target-ref refs/notes/remote/concrete-writer --no-update-local 2>&1)" || wrc=$?
+    if [ "$wrc" -eq 1 ]; then
+      echo "notes: invalid or discontinuous refs/notes/concrete-writer on $REMOTE: ${wout//$'\n'/ }" >&2
+      return 1
+    elif [ "$wrc" -ne 0 ]; then
+      echo "notes: could not fetch refs/notes/concrete-writer from $REMOTE: ${wout//$'\n'/ }" >&2
+      return 1
     fi
-    git update-ref -d "$tmp_ref" 2>/dev/null || true
-    case "$out" in
-      *"couldn't find remote ref"*)
-        if [ -n "$prev_remote" ]; then
-          echo "notes: remote $REMOTE deleted refs/notes/concrete-writer (was ${prev_remote:0:10})" >&2
-          return 1
-        fi
-        git update-ref -d refs/notes/remote/concrete-writer 2>/dev/null || true
-        return 0 ;;
-    esac
-    echo "$out" >&2; return 1
+    return 0
   fi
   if out="$(git fetch -q "$REMOTE" "+refs/notes/concrete-$1:refs/notes/remote/concrete-$1" 2>&1)"; then return 0; fi
   case "$out" in

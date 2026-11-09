@@ -242,6 +242,16 @@ git -C "$A" push -q -f --no-verify origin "$rvbf_n3_resign:refs/notes/concrete-w
 out="$(cd "$A" && bash "$NOTES" fetch writer 2>&1)"; rc=$?
 [ "$rc" = 1 ] && has "$out" "rewrites or drops existing writer-log entry" \
   && ok "notes.sh fetch refuses re-signed replacement commit N3 on writer notes" || { no "notes.sh fetch re-signing N3: exit $rc"; echo "$out" | sed 's/^/      /'; }
+# Delete-then-replay through notes.sh fetch:
+git --git-dir="$TMP/origin.git" update-ref -d refs/notes/concrete-writer
+out="$(cd "$A" && bash "$NOTES" fetch writer 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "prior writer-log history was recorded" \
+  && [ "$(git -C "$A" rev-parse refs/notes/remote/concrete-writer)" = "$rvbf_n2" ] \
+  && ok "notes.sh fetch refuses deleted remote writer ref and preserves local checkpoint" || { no "notes.sh fetch delete ref: exit $rc"; echo "$out" | sed 's/^/      /'; }
+git -C "$A" push -q -f --no-verify origin "$rvbf_n1:refs/notes/concrete-writer"
+out="$(cd "$A" && bash "$NOTES" fetch writer 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "rewrites or drops existing writer-log entry" \
+  && ok "notes.sh fetch refuses replayed older signed history after remote ref deletion" || { no "notes.sh fetch delete-then-replay: exit $rc"; echo "$out" | sed 's/^/      /'; }
 git -C "$A" update-ref refs/notes/concrete-writer "$rvbf_n0"
 git -C "$A" update-ref refs/notes/remote/concrete-writer "$rvbf_n0"
 git -C "$A" push -q -f --no-verify origin "$rvbf_n0:refs/notes/concrete-writer"

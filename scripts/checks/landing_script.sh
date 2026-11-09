@@ -1344,14 +1344,27 @@ bash "$TMP/put-review" "$HR" none; bash "$TMP/put-review" "$R1" clean; bash "$TM
 out="$(bash "$TRAIN" check trv --no-remote 2>&1)"; rc=$?
 [ "$rc" = 0 ] && [ ! -s "$FAKE_GH_DIR/review.log" ] \
   && ok "check over members reviewed clean passes the review leg without running the reviewer" || { no "check over reviewed members: exit $rc, reviewer calls '$(cat "$FAKE_GH_DIR/review.log")'"; echo "$out" | sed 's/^/      /'; }
-# train.sh fetching refs/notes/concrete-writer: distinguish "the remote has no such ref" from
-# "the fetch failed" and fail closed on the latter.
+# train.sh fetching refs/notes/concrete-writer:
+# 1. When prior writer history was recorded, a missing remote ref is refused and checkpoints are preserved.
+# 2. When no prior writer history was recorded anywhere, a missing remote ref leaves unstamped commits refused as unknown writer.
+# 3. Any fetch transport error fails closed.
 saved_wnotes="$(git rev-parse refs/notes/concrete-writer)"
 git -C "$TMP/origin.git" update-ref -d refs/notes/concrete-writer
 out="$(bash "$TRAIN" --dry-run land trv 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "invalid or discontinuous refs/notes/concrete-writer" && has "$out" "prior writer-log history was recorded" \
+  && [ "$(git rev-parse refs/notes/concrete-writer)" = "$saved_wnotes" ] && [ "$(git rev-parse refs/notes/remote/concrete-writer)" = "$saved_wnotes" ] \
+  && ok "when origin deletes refs/notes/concrete-writer after history was recorded, land refuses and preserves local checkpoints" \
+  || { no "deleted remote writer-notes ref with prior history: exit $rc"; echo "$out" | sed 's/^/      /'; }
+git update-ref -d refs/notes/concrete-writer 2>/dev/null || true
+git update-ref -d refs/notes/remote/concrete-writer 2>/dev/null || true
+sed -i '/^writer_notes=/d' "$LAND_STATE_DIR/trv/train.env" 2>/dev/null || true
+out="$(bash "$TRAIN" --dry-run land trv 2>&1)"; rc=$?
 [ "$rc" = 1 ] && has "$out" "has no review provenance" && has "$out" "unknown writer" && ! git show-ref -q --verify refs/notes/concrete-writer \
-  && ok "when origin has no refs/notes/concrete-writer ref, train.sh clears any stale local ref and refuses unstamped commits as unknown writer" || { no "missing remote writer-notes ref: exit $rc"; echo "$out" | sed 's/^/      /'; }
+  && ok "when origin has no refs/notes/concrete-writer ref and no prior writer history was recorded, train.sh refuses unstamped commits as unknown writer" \
+  || { no "missing remote writer-notes ref with no prior history: exit $rc"; echo "$out" | sed 's/^/      /'; }
 git update-ref refs/notes/concrete-writer "$saved_wnotes"
+git update-ref refs/notes/remote/concrete-writer "$saved_wnotes"
+printf 'writer_notes=%s\n' "$saved_wnotes" >> "$LAND_STATE_DIR/trv/train.env"
 CONCRETE_SKIP_GATES=1 git push -q origin refs/notes/concrete-writer
 mkdir -p "$TMP/bad-wfetch"
 cat > "$TMP/bad-wfetch/git" <<EOF
@@ -1440,6 +1453,36 @@ out="$(bash "$TRAIN" --dry-run land trv 2>&1)"; rc=$?
 out="$(bash "$TRAIN" check trv --no-remote 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "invalid or discontinuous refs/notes/concrete-writer" && [ ! -s "$FAKE_GH_DIR/review.log" ] \
   && ok "check refuses a re-signed replacement writer note on refs/notes/concrete-writer" || { no "check re-signing N3: exit $rc"; echo "$out" | sed 's/^/      /'; }
+# 4. Delete-then-replay through the train (check and land):
+#    Even when train state writer_notes is absent (so only local refs/notes/concrete-writer and
+#    refs/notes/remote/concrete-writer hold n2_wnotes), deleting refs/notes/concrete-writer on origin
+#    must be refused without erasing the local checkpoints, and subsequently replaying saved_wnotes (N1)
+#    must also be refused by both land and check without calling the reviewer.
+git update-ref refs/notes/concrete-writer "$n2_wnotes"
+git update-ref refs/notes/remote/concrete-writer "$n2_wnotes"
+sed -i '/^writer_notes=/d' "$LAND_STATE_DIR/trv/train.env" 2>/dev/null || true
+git -C "$TMP/origin.git" update-ref -d refs/notes/concrete-writer
+out="$(bash "$TRAIN" --dry-run land trv 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "invalid or discontinuous refs/notes/concrete-writer" && has "$out" "prior writer-log history was recorded" \
+  && [ "$(git rev-parse refs/notes/concrete-writer)" = "$n2_wnotes" ] && [ "$(git rev-parse refs/notes/remote/concrete-writer)" = "$n2_wnotes" ] \
+  && ok "delete-then-replay (train land, step 1): deleting remote writer ref is refused and preserves local checkpoints" \
+  || { no "train land delete step: exit $rc"; echo "$out" | sed 's/^/      /'; }
+: > "$FAKE_GH_DIR/review.log"
+out="$(bash "$TRAIN" check trv --no-remote 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "invalid or discontinuous refs/notes/concrete-writer" && [ ! -s "$FAKE_GH_DIR/review.log" ] \
+  && [ "$(git rev-parse refs/notes/concrete-writer)" = "$n2_wnotes" ] && [ "$(git rev-parse refs/notes/remote/concrete-writer)" = "$n2_wnotes" ] \
+  && ok "delete-then-replay (train check, step 1): deleting remote writer ref is refused and preserves local checkpoints" \
+  || { no "train check delete step: exit $rc"; echo "$out" | sed 's/^/      /'; }
+git push -q -f --no-verify origin "$saved_wnotes:refs/notes/concrete-writer"
+out="$(bash "$TRAIN" --dry-run land trv 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "invalid or discontinuous refs/notes/concrete-writer" && has "$out" "rewrites or drops existing writer-log entry" \
+  && ok "delete-then-replay (train land, step 2): restoring older signed history after remote ref deletion is refused" \
+  || { no "train land replay step: exit $rc"; echo "$out" | sed 's/^/      /'; }
+: > "$FAKE_GH_DIR/review.log"
+out="$(bash "$TRAIN" check trv --no-remote 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "invalid or discontinuous refs/notes/concrete-writer" && has "$out" "rewrites or drops existing writer-log entry" && [ ! -s "$FAKE_GH_DIR/review.log" ] \
+  && ok "delete-then-replay (train check, step 2): restoring older signed history after remote ref deletion is refused" \
+  || { no "train check replay step: exit $rc"; echo "$out" | sed 's/^/      /'; }
 # Restore saved_wnotes on local, remote, and train state:
 git update-ref refs/notes/concrete-writer "$saved_wnotes"
 git update-ref refs/notes/remote/concrete-writer "$saved_wnotes"
@@ -1447,7 +1490,8 @@ git push -q -f --no-verify origin "$saved_wnotes:refs/notes/concrete-writer"
 git update-ref -d refs/notes/concrete-writer-trv-rb 2>/dev/null || true
 git update-ref -d refs/notes/concrete-writer-trv-del 2>/dev/null || true
 git update-ref -d refs/notes/concrete-writer-trv-resign 2>/dev/null || true
-sed -i "s/^writer_notes=.*/writer_notes=$saved_wnotes/" "$LAND_STATE_DIR/trv/state" 2>/dev/null || true
+sed -i '/^writer_notes=/d' "$LAND_STATE_DIR/trv/train.env" 2>/dev/null || true
+printf 'writer_notes=%s\n' "$saved_wnotes" >> "$LAND_STATE_DIR/trv/train.env"
 
 echo "=== review: notes cover the train base (ISS-0019, A -> B -> C) ==="
 git checkout -q -b brvcov "$MR"

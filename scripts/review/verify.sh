@@ -68,24 +68,14 @@ fi
 if [ "$FETCH" = 1 ]; then
   git fetch -q "$REMOTE" "+$NOTES_REF:$NOTES_REF" \
     || { echo "verify: could not fetch $NOTES_REF from $REMOTE" >&2; exit 2; }
-  werr=""
-  prev_wref="$(git rev-parse -q --verify "$WRITER_NOTES_REF" 2>/dev/null || true)"
-  tmp_wref="refs/notes/remote/concrete-writer-verify-fetch-$$"
-  git update-ref -d "$tmp_wref" 2>/dev/null || true
-  if werr="$(git fetch -q "$REMOTE" "+$WRITER_NOTES_REF:$tmp_wref" 2>&1)"; then
-    if ! v_err="$(python3 -B -I "$SCRIPT_DIR/writer_provenance.py" validate-notes --allow-missing-targets --notes-rev "$tmp_wref" --old-notes-rev "${prev_wref:-0000000000000000000000000000000000000000}" "${SIGNERS_ARGS[@]}" 2>&1)"; then
-      git update-ref -d "$tmp_wref" 2>/dev/null || true
-      echo "verify: invalid or discontinuous $WRITER_NOTES_REF on $REMOTE: ${v_err//$'\n'/ }" >&2
-      exit 1
-    fi
-    git update-ref "$WRITER_NOTES_REF" "$tmp_wref"
-    git update-ref -d "$tmp_wref" 2>/dev/null || true
-  else
-    git update-ref -d "$tmp_wref" 2>/dev/null || true
-    case "$werr" in
-      *"couldn't find remote ref"*) git update-ref -d "$WRITER_NOTES_REF" 2>/dev/null || true ;;
-      *) echo "verify: could not fetch $WRITER_NOTES_REF from $REMOTE: ${werr//$'\n'/ }" >&2; exit 2 ;;
-    esac
+  wout="" wrc=0
+  wout="$(python3 -B -I "$SCRIPT_DIR/writer_provenance.py" fetch-notes --remote "$REMOTE" --remote-ref "$WRITER_NOTES_REF" --target-ref "$WRITER_NOTES_REF" "${SIGNERS_ARGS[@]}" 2>&1)" || wrc=$?
+  if [ "$wrc" -eq 1 ]; then
+    echo "verify: invalid or discontinuous $WRITER_NOTES_REF on $REMOTE: ${wout//$'\n'/ }" >&2
+    exit 1
+  elif [ "$wrc" -ne 0 ]; then
+    echo "verify: could not fetch $WRITER_NOTES_REF from $REMOTE: ${wout//$'\n'/ }" >&2
+    exit 2
   fi
 fi
 

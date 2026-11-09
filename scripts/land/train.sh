@@ -311,6 +311,7 @@ cmd_build() {
     [ "$force" = 1 ] || die "build: train/$name exists; pass --force to rebuild it from $REMOTE/main"
   fi
   local prev; prev="$(git symbolic-ref -q --short HEAD || git rev-parse HEAD)"
+  local prev_wnotes; prev_wnotes="$(state_get_soft "$name" writer_notes)"
   git checkout -q -B "train/$name" "$base"
   assert_no_op "checkout"
   rm -f "$(state_file "$name")"
@@ -381,16 +382,13 @@ cmd_build() {
 
   state_set "$name" head "$(git rev-parse HEAD)"
   state_set "$name" built_utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  local init_wnotes="" build_tmp_wref="refs/notes/remote/concrete-writer-build-$$"
-  git update-ref -d "$build_tmp_wref" 2>/dev/null || true
-  if git fetch -q "$REMOTE" "+refs/notes/concrete-writer:$build_tmp_wref" 2>/dev/null; then
-    init_wnotes="$(git rev-parse -q --verify "$build_tmp_wref" 2>/dev/null || true)"
-    git update-ref -d "$build_tmp_wref" 2>/dev/null || true
-    if [ -n "$init_wnotes" ] && python3 -B -I "$SELF_DIR/../review/writer_provenance.py" validate-notes --notes-rev "$init_wnotes" --old-notes-rev 0000000000000000000000000000000000000000 >/dev/null 2>&1; then
-      state_set "$name" writer_notes "$init_wnotes"
-    fi
+  local init_wnotes=""
+  if [ "$fetch" = 1 ] && init_wnotes="$(python3 -B -I "$SELF_DIR/../review/writer_provenance.py" fetch-notes --repo "$PWD" --remote "$REMOTE" --target-ref refs/notes/concrete-writer ${prev_wnotes:+--old-notes-rev "$prev_wnotes"} 2>/dev/null)" && [ -n "$init_wnotes" ]; then
+    state_set "$name" writer_notes "$init_wnotes"
   elif init_wnotes="$(git rev-parse -q --verify refs/notes/concrete-writer 2>/dev/null || true)" && [ -n "$init_wnotes" ]; then
     state_set "$name" writer_notes "$init_wnotes"
+  elif [ -n "$prev_wnotes" ]; then
+    state_set "$name" writer_notes "$prev_wnotes"
   fi
   log_row "$name" build passed "${#shas[@]} member(s)"
   note "train/$name built at $(git rev-parse --short=10 HEAD) on base ${base:0:10}:"
@@ -525,43 +523,18 @@ review_provenance() { # name head
   [ -f "$VERIFY" ] || { echo "no review verifier ($VERIFY is missing)"; return 1; }
   git fetch -q "$REMOTE" "+refs/notes/concrete-review:refs/notes/concrete-review" 2>/dev/null \
     || { echo "could not fetch refs/notes/concrete-review from $REMOTE"; return 1; }
-  local werr="" prev_local prev_remote prev_state tmp_wref="refs/notes/remote/concrete-writer-train-$$"
-  prev_local="$(git rev-parse -q --verify refs/notes/concrete-writer 2>/dev/null || true)"
-  prev_remote="$(git rev-parse -q --verify refs/notes/remote/concrete-writer 2>/dev/null || true)"
+  local prev_state wout="" wrc=0
   prev_state="$(state_get_soft "$name" writer_notes)"
-  git update-ref -d "$tmp_wref" 2>/dev/null || true
-  if werr="$(git fetch -q "$REMOTE" "+refs/notes/concrete-writer:$tmp_wref" 2>&1)"; then
-    local prior v_err new_wsha checked_prior=0
-    for prior in "$prev_state" "$prev_remote" "$prev_local"; do
-      [ -n "$prior" ] || continue
-      git cat-file -e "$prior^{commit}" 2>/dev/null || continue
-      checked_prior=1
-      if ! v_err="$(python3 -B -I "$SELF_DIR/../review/writer_provenance.py" validate-notes --allow-missing-targets --notes-rev "$tmp_wref" --old-notes-rev "$prior" 2>&1)"; then
-        git update-ref -d "$tmp_wref" 2>/dev/null || true
-        echo "invalid or discontinuous refs/notes/concrete-writer from $REMOTE: ${v_err//$'\n'/ }"
-        return 2
-      fi
-    done
-    if [ "$checked_prior" = 0 ]; then
-      if ! v_err="$(python3 -B -I "$SELF_DIR/../review/writer_provenance.py" validate-notes --allow-missing-targets --notes-rev "$tmp_wref" --old-notes-rev 0000000000000000000000000000000000000000 2>&1)"; then
-        git update-ref -d "$tmp_wref" 2>/dev/null || true
-        echo "invalid or discontinuous refs/notes/concrete-writer from $REMOTE: ${v_err//$'\n'/ }"
-        return 2
-      fi
-    fi
-    new_wsha="$(git rev-parse "$tmp_wref")"
-    git update-ref refs/notes/concrete-writer "$new_wsha"
-    git update-ref refs/notes/remote/concrete-writer "$new_wsha"
-    git update-ref -d "$tmp_wref" 2>/dev/null || true
-    [ "$DRY" = 1 ] || state_set "$name" writer_notes "$new_wsha"
-  else
-    git update-ref -d "$tmp_wref" 2>/dev/null || true
-    case "$werr" in
-      *"couldn't find remote ref"*)
-        git update-ref -d refs/notes/concrete-writer 2>/dev/null || true
-        git update-ref -d refs/notes/remote/concrete-writer 2>/dev/null || true ;;
-      *) echo "could not fetch refs/notes/concrete-writer from $REMOTE: ${werr//$'\n'/ }"; return 2 ;;
-    esac
+  wout="$(python3 -B -I "$SELF_DIR/../review/writer_provenance.py" fetch-notes --repo "$PWD" --remote "$REMOTE" --target-ref refs/notes/concrete-writer ${prev_state:+--old-notes-rev "$prev_state"} 2>&1)" || wrc=$?
+  if [ "$wrc" -eq 1 ]; then
+    echo "invalid or discontinuous refs/notes/concrete-writer from $REMOTE: ${wout//$'\n'/ }"
+    return 2
+  elif [ "$wrc" -ne 0 ]; then
+    echo "could not fetch refs/notes/concrete-writer from $REMOTE: ${wout//$'\n'/ }"
+    return 2
+  fi
+  if [ -n "$wout" ] && [ "$DRY" != 1 ]; then
+    state_set "$name" writer_notes "$wout"
   fi
   if out="$(bash "$VERIFY" --required-base "$base" "$head" 2>&1)"; then echo "the head ${head:0:10} carries a clean review note covering ${base:0:10}"; return 0; fi
   if git notes --ref=refs/notes/concrete-review show "$head" >/dev/null 2>&1; then

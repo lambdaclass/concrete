@@ -138,17 +138,11 @@ sha256_file() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | c
 # or conflicting rewrites.
 sync_notes() {
   [ "$PUSH" = 1 ] || return 0
-  local ref tmp ferr
-  for ref in "$NOTES_REF" "$FINDINGS_REF" "$WRITER_NOTES_REF"; do
+  local ref tmp ferr werr
+  for ref in "$NOTES_REF" "$FINDINGS_REF"; do
     tmp="refs/notes/review-sync-${ref##*/}"
     if ferr="$(git fetch -q "$REMOTE" "+$ref:$tmp" 2>&1)"; then
-      if [ "$ref" = "$WRITER_NOTES_REF" ]; then
-        if ! werr="$(python3 -B -I "$SCRIPT_DIR/writer_provenance.py" sync-notes --repo "$ROOT" --from-rev "$tmp" 2>&1)"; then
-          echo "review: could not sync remote $ref: ${werr//$'\n'/ }" >&2
-          git update-ref -d "$tmp" 2>/dev/null || true
-          return 1
-        fi
-      elif git show-ref -q --verify "$ref"; then
+      if git show-ref -q --verify "$ref"; then
         git notes --ref="$ref" merge -q -s ours "$tmp" >/dev/null 2>&1 \
           || { echo "review: could not merge remote $ref" >&2; git update-ref -d "$tmp"; return 1; }
       else
@@ -162,6 +156,10 @@ sync_notes() {
       esac
     fi
   done
+  if ! werr="$(python3 -B -I "$SCRIPT_DIR/writer_provenance.py" sync-notes --repo "$ROOT" --remote "$REMOTE" 2>&1)"; then
+    echo "review: could not sync remote $WRITER_NOTES_REF: ${werr//$'\n'/ }" >&2
+    return 1
+  fi
 }
 
 # Push the notes refs; on a non-fast-forward, fetch + merge and retry.
@@ -172,6 +170,9 @@ push_notes() {
   git show-ref -q --verify "$WRITER_NOTES_REF" && refs+=("$WRITER_NOTES_REF")
   for attempt in 1 2 3; do
     if git push -q "$REMOTE" "${refs[@]}" 2>"$WORK/push.err"; then
+      if git show-ref -q --verify "$WRITER_NOTES_REF"; then
+        git update-ref refs/notes/remote/concrete-writer "$(git rev-parse "$WRITER_NOTES_REF")"
+      fi
       return 0
     fi
     # Only a non-fast-forward is cured by fetch + merge. Anything else (a hook
