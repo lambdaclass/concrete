@@ -288,7 +288,7 @@ theorem endScope_progress (s : State) (scope : BlockId)
   exact ⟨_, rfl⟩
 
 /-- Helper (arithmetic). A new or reset generation is unequal to every previously scoped brand,
-because every active binder's brand ID is strictly below `s.nextBrand`. (approved: APPR-C5-codex-902ce88a). -/
+because every active binder's brand ID is strictly below s.nextBrand. (approved: APPR-C5-codex-902ce88a). -/
 theorem nextBrand_fresh (s : State) (hs : WellFormed s) (b : Binder) (hb : b ∈ s.binders) :
     b.brand ≠ BrandId.mk s.nextBrand := by
   intro he
@@ -420,6 +420,82 @@ theorem run_erasure {σ α : Type} (cs : List (Command σ α)) (s : σ × State)
         have ihu := ih u
         rwa [hv] at ihu
       simp [ResultSatisfies, runErased, hc, ht]
+
+instance (priority := 10000) decidableBAllSafe {α : Type} (P : α → Prop) [∀ a, Decidable (P a)] :
+    (l : List α) → Decidable (∀ x ∈ l, P x)
+  | [] => isTrue (fun x h =>
+      @List.Mem.rec α x
+        (fun l _ => match l with | [] => P x | _ :: _ => True)
+        (fun _ => trivial)
+        (fun _ _ _ _ => trivial)
+        [] h)
+  | a :: as =>
+    match inferInstanceAs (Decidable (P a)), decidableBAllSafe P as with
+    | isTrue ha, isTrue has => isTrue (fun x h =>
+        (@List.Mem.rec α x
+          (fun l _ =>
+            match l with
+            | [] => True
+            | head :: tail => (head = x → P x) → (∀ y ∈ tail, P y) → P x)
+          (fun _ hhead _ => hhead rfl)
+          (fun _ _ hmem _ _ htail => htail x hmem)
+          (a :: as) h)
+          (fun heq => heq ▸ ha)
+          has)
+    | isFalse hna, _ => isFalse (fun h => hna (h a (.head as)))
+    | _, isFalse hnas => isFalse (fun h => hnas (fun x hx => h x (.tail a hx)))
+
+instance (priority := 10000) decidableBExSafe {α : Type} (P : α → Prop) [∀ a, Decidable (P a)] :
+    (l : List α) → Decidable (∃ x, x ∈ l ∧ P x)
+  | [] => isFalse (by intro ⟨x, hx, _⟩; cases hx)
+  | a :: as =>
+    match inferInstanceAs (Decidable (P a)) with
+    | isTrue ha => isTrue ⟨a, .head as, ha⟩
+    | isFalse hna =>
+      match decidableBExSafe P as with
+      | isTrue has => isTrue (match has with | ⟨x, hx, hpx⟩ => ⟨x, .tail a hx, hpx⟩)
+      | isFalse hnas => isFalse (by
+          intro ⟨x, hx, hpx⟩
+          cases hx with
+          | head => exact hna hpx
+          | tail _ hmem => exact hnas ⟨x, hmem, hpx⟩)
+
+def decidableMemSafe {α : Type} [DecidableEq α] (x : α) :
+    (l : List α) → Decidable (x ∈ l)
+  | [] => isFalse (by intro h; cases h)
+  | a :: as =>
+    if h : x = a then
+      isTrue (h ▸ .head as)
+    else
+      match decidableMemSafe x as with
+      | isTrue hmem => isTrue (.tail a hmem)
+      | isFalse hnmem => isFalse (by
+          intro hm
+          cases hm with
+          | head => exact h rfl
+          | tail _ hm' => exact hnmem hm')
+
+instance (priority := 10000) decidablePairwiseSafe {α : Type} (R : α → α → Prop)
+    [∀ a b, Decidable (R a b)] : (l : List α) → Decidable (List.Pairwise R l)
+  | [] => isTrue .nil
+  | a :: as =>
+    match decidableBAllSafe (R a) as, decidablePairwiseSafe R as with
+    | isTrue ha, isTrue has => isTrue (.cons ha has)
+    | isFalse hna, _ => isFalse (fun h => by cases h with | cons ha _ => exact hna ha)
+    | _, isFalse hnas => isFalse (fun h => by cases h with | cons _ has => exact hnas has)
+
+instance (priority := 10000) decidableNodupSafe {α : Type} [DecidableEq α] (l : List α) :
+    Decidable (List.Nodup l) :=
+  decidablePairwiseSafe (· ≠ ·) l
+
+section SafeDecidable
+local instance (priority := 10000) {α : Type} [DecidableEq α] (x : α) (l : List α) :
+    Decidable (x ∈ l) := decidableMemSafe x l
+instance (priority := 10000) (s : State) : Decidable (WellFormed s) := by
+  unfold WellFormed; infer_instance
+instance (priority := 10000) (s : State) (i : BrandId) : Decidable (Retired s i) := by
+  unfold Retired; infer_instance
+end SafeDecidable
 
 namespace PreservationWitnesses
 open ConcreteSpec.Core.Generative.Examples
@@ -1058,7 +1134,7 @@ theorem consumed_fresh (s : State H) (i : GrantId) (hs : Fresh s) : Fresh (consu
   update_all (fun (e : GrantId × Resource H) => e.1.id < s.next)
     i (fun r => { r with live := false }) (fun _ h => h) s.resources hs
 
-/-- Helper (congruence). Issuing a resource whose rights are within `budget` preserves `Bounded`. (approved: APPR-C5-codex-902ce88a). -/
+/-- Helper (congruence). Issuing a resource whose rights are within the budget preserves `Bounded`. (approved: APPR-C5-codex-902ce88a). -/
 theorem issue_bounded (budget : List Nat) (s : State H) (r : Resource H)
     (hs : Bounded budget s) (hr : ∀ x ∈ r.rights, x ∈ budget) : Bounded budget (issue s r) := by
   intro e he
@@ -1067,7 +1143,7 @@ theorem issue_bounded (budget : List Nat) (s : State H) (r : Resource H)
   · exact hr
   · exact hs e he
 
-/-- Helper (congruence). Issuing a resource at `⟨s.next⟩` and advancing `next` preserves `Fresh`. (approved: APPR-C5-codex-902ce88a). -/
+/-- Helper (congruence). Issuing a resource at s.next and advancing next preserves `Fresh`. (approved: APPR-C5-codex-902ce88a). -/
 theorem issue_fresh (s : State H) (r : Resource H) (hs : Fresh s) : Fresh (issue s r) := by
   intro e he
   change e ∈ (⟨s.next⟩, r) :: s.resources at he
@@ -1121,8 +1197,8 @@ theorem close_bounded (budget : List Nat) (s : State H) (i : GrantId) (result : 
     cases hh
     exact consumed_bounded budget s i hs
 
-/-- Helper (inversion). Executing `runOps` from a state `s` with `Steps s₀ s` produces a state `t`
-with `Steps s₀ t`. (approved: APPR-C5-codex-902ce88a). -/
+/-- Helper (inversion). Executing `runOps` from a state reachable by `Steps` produces a state
+reachable by `Steps`. (approved: APPR-C5-codex-902ce88a). -/
 private theorem steps_of_runOps (s₀ : State H) :
     ∀ (ops : List (Op H)) (s t : State H),
       Steps s₀ s → runOps s ops = some t → Steps s₀ t
@@ -1358,6 +1434,16 @@ theorem acquire_keeps_parent (s : State H) (i : GrantId) (requested selected : L
     · cases hh
       simp [ResultSatisfies, usable, issue, AList.lookup, hi]
     · contradiction
+
+section SafeDecidableGrants
+local instance (priority := 10000) {α : Type} [DecidableEq α] (x : α) (l : List α) :
+    Decidable (x ∈ l) := ConcreteSpec.Core.Generative.decidableMemSafe x l
+instance (priority := 10000) {H : Type} (budget : List Nat) (s : State H) :
+    Decidable (Bounded budget s) := by
+  unfold Bounded; infer_instance
+instance (priority := 10000) {H : Type} (s : State H) : Decidable (Fresh s) := by
+  unfold Fresh; infer_instance
+end SafeDecidableGrants
 
 namespace GrantWitnesses
 open ConcreteSpec.Core.Grants.Examples
