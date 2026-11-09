@@ -127,6 +127,8 @@ ConcreteSpec.BodyOk.brecOn	propext
 ConcreteSpec.Borrow.Evidence.described	
 ConcreteSpec.Borrow.Evidence.mutableBlock	
 ConcreteSpec.Borrow.Evidence.rangeAccepted	propext
+ConcreteSpec.Borrow.Evidence.readOnly.eq_1	
+ConcreteSpec.Borrow.Evidence.readOnly_noWrite	
 ConcreteSpec.Borrow.Evidence.sharedBlock	
 ConcreteSpec.Borrow.Evidence.views.eq_1	
 ConcreteSpec.Borrow.FreeUse.brecOn	
@@ -356,6 +358,8 @@ ConcreteSpec.Brand.EVal.alloc.sizeOf_spec
 ConcreteSpec.Brand.EVal.heap.sizeOf_spec	
 ConcreteSpec.Brand.EVal.ofNat_ctorIdx	
 ConcreteSpec.Brand.Evidence.beforeResetInv	
+ConcreteSpec.Brand.Evidence.liveBrandIn	propext
+ConcreteSpec.Brand.Evidence.liveBrandIn._simp_1_1	propext
 ConcreteSpec.Brand.GR.done.inj	
 ConcreteSpec.Brand.GR.done.injEq	propext
 ConcreteSpec.Brand.GR.done.sizeOf_spec	
