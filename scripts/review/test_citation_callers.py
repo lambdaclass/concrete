@@ -71,7 +71,8 @@ else: sys.exit('unexpected git command: '+repr(args))
         (tmp / 'log').write_text('planted log')
         code = 'source ' + shlex.quote(str(ROOT / 'scripts/review/collect_output.sh')) + '\n'
         code += 'verify_review_archive() { return 0; }\nbounded_is_incomplete() { return 1; }\nCOLLECT_OUTPUT_DIR=' + shlex.quote(directory) + '\n'
-        code += 'validate_reviewer_output . HEAD tree manifest ' + shlex.quote(str(tmp / 'out')) + ' ' + shlex.quote(str(tmp / 'log')) + ' clean,findings 0'
+        (tmp / 'manifest.harness').write_text('')
+        code += 'validate_reviewer_output . HEAD tree ' + shlex.quote(str(tmp / 'manifest')) + ' ' + shlex.quote(str(tmp / 'out')) + ' ' + shlex.quote(str(tmp / 'log')) + ' clean,findings 0'
         expected = 'status: invalid\nreason: planted invalid' if status == 'invalid' else 'status: error\nreason: unknown reviewer-output status: future-status'
         shell(code, diagnostic=expected, env=env)
 # Exercise the production collection tail: every rejected status removes --out.

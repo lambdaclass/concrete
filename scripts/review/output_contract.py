@@ -115,8 +115,9 @@ def identifier_source(path):
     return not any(fnmatch.fnmatchcase(path, pattern) for pattern in IDENTIFIER_EXCLUSIONS)
 
 
-def citation_error(text, repo, commit, paths, positive, base=None, review_root=None):
+def citation_error(text, repo, commit, paths, positive, base=None, review_root=None, harness_files=()):
     errors = []
+    harness_files = set(harness_files)
     cache = {}
     def blob(path):
         if path not in cache:
@@ -182,6 +183,18 @@ def citation_error(text, repo, commit, paths, positive, base=None, review_root=N
                 else:
                     errors.append(f"citation: basename label '{m.group()}' disagrees with link target")
                     continue
+        relative = raw
+        if raw.startswith("file://"):
+            absolute = raw[7:]
+            roots = [r.rstrip("/") for r in (review_root, os.path.abspath(repo)) if r]
+            root = next((r for r in roots if absolute.startswith(r + "/")), None)
+            if root is None:
+                errors.append(f"citation: link '{raw}' is outside the reviewed roots")
+                continue
+            relative = absolute[len(root) + 1:]
+        if relative in harness_files:
+            errors.append(f"citation: harness file '{relative}' is not evidence")
+            continue
         if path is None:
             errors.append(f"citation: file '{raw}' does not resolve uniquely")
             continue
@@ -197,11 +210,15 @@ def citation_error(text, repo, commit, paths, positive, base=None, review_root=N
         # A named link is a stronger claim: its identifier occurs in the range.
         prefix = text[:m.start()]
         named = re.search(r"\[`([^`]+)`\]\($", prefix)
+        if named and named.group(1).startswith("text:"):
+            name = named.group(1)[5:]
+            if not re.fullmatch(IDENTIFIER, name) or not token(name, "\n".join(selected)):
+                errors.append(f"citation: text anchor '{name}' absent from '{m.group()}'")
         if named and not filename(named.group(1)) and re.fullmatch(IDENTIFIER, named.group(1)):
             components = named.group(1).split(".")
             if not token(components[-1], "\n".join(selected)) or not all(token(part, blob(path)) for part in components[:-1]):
                 errors.append(f"citation: anchor '{named.group(1)}' absent from '{m.group()}'")
-        if selected:
+        if selected and not (named and named.group(1).startswith("text:")):
             valid += 1
     # Resolve identifiers against actual blobs, never prompt text or the allowlist itself.
     sources = sorted(path for path in paths if identifier_source(path))
@@ -227,7 +244,11 @@ def citation_error(text, repo, commit, paths, positive, base=None, review_root=N
         name = m.group(1)
         if filename(name):
             continue
-        if name.startswith("proposed:"):
+        if name.startswith("text:"):
+            if not re.search(r"\[`" + re.escape(name) + r"`\]\(", text):
+                errors.append(f"citation: text name '{name}' requires a named location link")
+            continue
+        if name.startswith("proposed:") and name != "proposed:":
             if positive:
                 errors.append(f"citation: proposed name '{name}' requires a FINDINGS/REJECT verdict")
             continue
@@ -252,6 +273,7 @@ def evaluate_output(
     incomplete: bool = False,
     base: str | None = None,
     review_root: str | None = None,
+    harness_files: tuple[str, ...] = (),
 ) -> tuple[str, str]:
     combined = f"{text}\n{log_text}" if log_text else text
     norm_nonempty = [normalize_line(line) for line in text.splitlines()]
@@ -293,7 +315,7 @@ def evaluate_output(
     try:
         valid_blobs = commit_blob_paths(repo, commit)
         problem = citation_error(strip_directives(text), repo, commit, valid_blobs,
-                                 matched_verdict.lower() in ("clean", "accept"), base, review_root)
+                                 matched_verdict.lower() in ("clean", "accept"), base, review_root, harness_files)
     except (ValueError, OSError, subprocess.SubprocessError) as exc:
         return "blocked", f"citation lookup failed: {exc}"
     if problem:
@@ -326,7 +348,7 @@ def evaluate_output(
     for rp in read_paths:
         if not is_clean_relative_path(rp):
             return "blocked", f"READ: path '{rp}' is not a clean relative path"
-        if rp not in valid_blobs:
+        if rp not in valid_blobs and rp not in harness_files:
             return (
                 "blocked",
                 f"READ: path '{rp}' does not exist as a file in commit {commit}",
@@ -349,6 +371,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Validate reviewer output against the Concrete contract.")
     parser.add_argument("--commit", help="Reviewed commit SHA whose tree validates READ: paths")
     parser.add_argument("--review-root", help="Exact absolute root of the verified review archive")
+    parser.add_argument("--harness-file", action="append", default=[], help="Explicit harness-owned review-root file (READ only)")
     parser.add_argument("--base", help="Base of reviewed diff for removed identifiers")
     parser.add_argument("--repo", default=".", help="Git repository path (default: .)")
     parser.add_argument("--verdicts", help="Comma-separated allowed VERDICT values (e.g. clean,findings)")
@@ -393,6 +416,7 @@ def main() -> int:
         incomplete=args.incomplete,
         base=args.base,
         review_root=args.review_root,
+        harness_files=tuple(args.harness_file),
     )
     print(f"status: {status}")
     print(f"reason: {reason}")

@@ -73,8 +73,30 @@ prepare_review_archive() {
   rm -rf "$review_tree"
   mkdir -p "$review_tree"
   git -C "$repo" archive "$commit" | tar -x -C "$review_tree"
+  : >"${manifest_file}.harness"
   chmod -R a-w "$review_tree"
   snapshot_review_archive "$review_tree" >"$manifest_file"
+}
+
+# This builder owns the declaration list; the checker never discovers helpers.
+prepare_review_context() {
+  local tree="$1" manifest="$2" prompt="$3" diff="$4" base="$5" commit="$6"
+  chmod u+w "$tree"
+  local name
+  for name in PROMPT.md REVIEW.diff DELTA.diff RANGE.txt; do
+    if git -C "$7" cat-file -e "$commit:$name" 2>/dev/null; then
+      echo "collect_output: harness path collides with reviewed tree: $name" >&2
+      return 2
+    fi
+    chmod u+w "$tree/$name" 2>/dev/null || true
+  done
+  cp "$prompt" "$tree/PROMPT.md"
+  git -C "$7" diff --no-ext-diff "$base" "$commit" >"$tree/REVIEW.diff"
+  cp "$diff" "$tree/DELTA.diff"
+  printf '%s..%s\n' "$base" "$commit" >"$tree/RANGE.txt"
+  printf '%s\n' PROMPT.md REVIEW.diff DELTA.diff RANGE.txt >"${manifest}.harness"
+  chmod a-w "$tree/"{PROMPT.md,REVIEW.diff,DELTA.diff,RANGE.txt} "$tree"
+  snapshot_review_archive "$tree" >"$manifest"
 }
 
 verify_review_archive() {
@@ -112,14 +134,18 @@ validate_reviewer_output() {
     printf 'status: blocked\nreason: reviewer modified the read-only archived review tree\ntree_modified: yes\n'
     return 0
   fi
-  local incomplete_flag=() base_flag=()
+  local incomplete_flag=() base_flag=() harness_flag=()
+  local helper
+  while IFS= read -r helper; do
+    harness_flag+=(--harness-file "$helper")
+  done <"${manifest_file}.harness"
   if [ -n "${9:-}" ]; then base_flag=(--base "$9"); fi
   if bounded_is_incomplete "$rc"; then
     incomplete_flag=(--incomplete)
   fi
   local parsed status
   parsed="$(python3 -I "$COLLECT_OUTPUT_DIR/output_contract.py" \
-    --repo "$repo" --review-root "$review_tree" --commit "$commit" "${base_flag[@]}" --verdicts "$verdicts" \
+    --repo "$repo" --review-root "$review_tree" --commit "$commit" "${harness_flag[@]}" "${base_flag[@]}" --verdicts "$verdicts" \
     --rc "$rc" "${incomplete_flag[@]}" --log "$log_file" "$out_file")" || return 2
   status="$(printf '%s\n' "$parsed" | sed -n 's/^status: //p')"
   case "$status" in

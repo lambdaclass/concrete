@@ -5,6 +5,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import os
+import shlex
 
 sandbox_spec = importlib.util.spec_from_file_location("git_sandbox", Path(__file__).resolve().parents[1] / "checks/lib/git_sandbox.py")
 sandbox_module = importlib.util.module_from_spec(sandbox_spec)
@@ -51,6 +52,9 @@ with tempfile.TemporaryDirectory() as directory:
     check("source.lean:1 `missingName`\nABSENT: missingName", "clean")
     check("source.lean:1 Introduce `proposed:newLaw`", "findings", "findings")
     check("source.lean:1 `proposed:newLaw`", ("invalid", "citation: proposed name 'proposed:newLaw' requires a FINDINGS/REJECT verdict"))
+    check("source.lean:1 `proposed:`", "clean")
+    check("[`text:inventedLaw`](scripts/review/fixtures/fake.txt:1) source.lean:1", "clean")
+    check("[`text:missingName`](scripts/review/fixtures/fake.txt:1) source.lean:1", ("invalid", "citation: text anchor 'missingName' absent from 'scripts/review/fixtures/fake.txt:1'"))
     check("No citations", ("invalid", "citation: positive verdict requires at least one resolvable file:line citation"))
     check("source.lean:1 `fictionalPart.realAnchor`", ("invalid", "citation: identifier 'fictionalPart.realAnchor' unresolved"))
     check("source.lean:1 `inventedLaw`", ("invalid", "citation: identifier 'inventedLaw' unresolved"), "findings")
@@ -58,6 +62,38 @@ with tempfile.TemporaryDirectory() as directory:
     check("[bad](source.lean#L1-L2-L3)", ("invalid", "citation: unsupported location grammar 'source.lean#L1-L2-L3'"))
     check("[numeric](source.123:1)", "clean")
     check("[numeric](source.123:1junk)", ("invalid", "citation: unsupported location grammar 'source.123:1junk'"))
+    # Harness declarations authorize READ only, never citations or identifiers.
+    def harness(body, reads="REVIEW.diff", declared=("REVIEW.diff",)):
+        return contract.evaluate_output(body + "\nREAD: " + reads + "\nREPOSITORY: readable\nVERDICT: clean",
+            "", sha, directory, ["clean"], harness_files=declared)
+    (root / "REVIEW.diff").write_text("helperOnlyName\n")
+    assert harness("source.lean:1")[0] == "clean"
+    for name in ("extra.txt", "DELTA.diff"):
+        (root / name).write_text("helperOnlyName\n")
+        assert harness("source.lean:1", name) == ("blocked", f"READ: path '{name}' does not exist as a file in commit {sha}")
+    assert harness("REVIEW.diff:1") == ("invalid", "citation: harness file 'REVIEW.diff' is not evidence; citation: positive verdict requires at least one resolvable file:line citation")
+    assert harness(f"file://{directory}/REVIEW.diff:1") == ("invalid", "citation: harness file 'REVIEW.diff' is not evidence; citation: positive verdict requires at least one resolvable file:line citation")
+    assert harness("source.lean:1 `helperOnlyName`") == ("invalid", "citation: identifier 'helperOnlyName' unresolved")
+    check("[`text:inventedLaw`](scripts/review/fixtures/fake.txt:1)", ("invalid", "citation: positive verdict requires at least one resolvable file:line citation"))
+    check("`inventedLaw` source.lean:1 scripts/review/fixtures/fake.txt:1", ("invalid", "citation: identifier 'inventedLaw' unresolved"))
+    # Exercise the actual builder, declaration sidecar, integrity check and CLI.
+    collector = Path(__file__).with_name("collect_output.sh")
+    with tempfile.TemporaryDirectory() as context:
+        ctx = Path(context)
+        (ctx / "prompt").write_text("review prompt\n")
+        (ctx / "diff").write_text("deltaOnlyName\n")
+        (ctx / "out").write_text("source.lean:1\nREAD: DELTA.diff\nREPOSITORY: readable\nVERDICT: clean\n")
+        (ctx / "log").write_text("")
+        q = lambda value: shlex.quote(str(value))
+        code = "source " + q(collector) + "\n"
+        code += "prepare_review_archive " + " ".join(map(q, [directory, sha, ctx / "tree", ctx / "manifest"])) + "\n"
+        code += "prepare_review_context " + " ".join(map(q, [ctx / "tree", ctx / "manifest", ctx / "prompt", ctx / "diff", sha, sha, directory])) + "\n"
+        code += "validate_reviewer_output " + " ".join(map(q, [directory, sha, ctx / "tree", ctx / "manifest", ctx / "out", ctx / "log", "clean,findings", 0]))
+        proc = subprocess.run(["bash", "-e", "-c", code], capture_output=True, text=True)
+        assert proc.returncode == 0 and proc.stdout == "status: clean\nreason: verified 1 READ path(s), REPOSITORY: readable, VERDICT: clean\n", (proc.stdout, proc.stderr)
+        assert (ctx / "manifest.harness").read_text().splitlines() == ["PROMPT.md", "REVIEW.diff", "DELTA.diff", "RANGE.txt"]
+        assert (ctx / "tree/DELTA.diff").read_bytes() == (ctx / "diff").read_bytes()
+        subprocess.run(["chmod", "-R", "u+w", str(ctx / "tree")], check=True)
     # An absolute prefix cannot redirect a missing script to a root/legacy basename.
     (root / "README.md").write_text("root file\n")
     (root / "ISSUES.tsv").write_text("issue row\n")
@@ -124,8 +160,8 @@ with tempfile.TemporaryDirectory() as directory:
     assert result == "citation: identifier 'exportOnlyName' unresolved", result
     # Explicit link targets can name an exact root file despite legacy copies.
     check("[`realAnchor`](source.lean#L1)", "clean")
-    check("[source.lean](source.lean:1) file:///tmp/scripts/missing/README.md:1", ("invalid", "citation: file 'file:///tmp/scripts/missing/README.md' does not resolve uniquely"))
-    check("[README.md](file:///etc/arbitrary/nonexistent/dir/README.md:1)", ("invalid", "citation: file 'file:///etc/arbitrary/nonexistent/dir/README.md' does not resolve uniquely; citation: positive verdict requires at least one resolvable file:line citation"))
+    check("[source.lean](source.lean:1) file:///tmp/scripts/missing/README.md:1", ("invalid", "citation: link 'file:///tmp/scripts/missing/README.md' is outside the reviewed roots"))
+    check("[README.md](file:///etc/arbitrary/nonexistent/dir/README.md:1)", ("invalid", "citation: link 'file:///etc/arbitrary/nonexistent/dir/README.md' is outside the reviewed roots; citation: positive verdict requires at least one resolvable file:line citation"))
     # Parent directories matching tracked top-level directories cannot mask the root.
     archive_root = "/tmp/.claude/worktrees/topic"
     result = contract.citation_error("file://" + archive_root + "/source.lean:1", directory, sha, contract.commit_blob_paths(directory, sha), True, review_root=archive_root)
