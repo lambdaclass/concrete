@@ -684,3 +684,13 @@ the existing work, projection, heartbeat and watchdog bounds. Syntax dependency
 and transformed-term traversals publish compound DAG entries after completing
 nodes; neither early return may bypass cache publication. This is the long-term
 comparison design, not a budget exemption or a matcher-name accommodation.
+
+
+Projection treats `propext` as an explicit typed logical transfer: its supplied
+Iff proof is traversed. It has no declaration body, so neither a fabricated
+negative answer nor a body-access exemption is appropriate. The application is
+typechecked and its exact three-argument telescope is required. The permanent
+`propext-hypothesis` control must FAIL projection-law; genuine nonzero/negation
+laws must PASS. Other unavailable bodies remain INCOMPLETE. The inline-match
+focused command also runs all seven typed contract controls using its compiled
+consumer, so the confirmed B regression is part of the ordinary focused set.

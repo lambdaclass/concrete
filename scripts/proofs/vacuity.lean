@@ -392,6 +392,14 @@ partial def directStep (n : Name) (e : Expr) : StateRefT ProjectionState Audit B
           return ← direct n receiver
         return false
       if [``Eq.refl, ``rfl, ``HEq.refl, ``Iff.refl, ``True.intro].contains h then return true
+      -- propext is a kernel logical primitive, not a declaration with a
+      -- missing implementation. Its evidence is exactly the supplied Iff.
+      -- Validate the application and inspect that evidence rather than granting
+      -- an axiom-name exemption or pretending to have traversed a body.
+      if h == ``propext then
+        Lean.Meta.check e
+        unless e.getAppArgs.size == 3 do throwError "projection-propext-arity"
+        return ← direct n e.getAppArgs[2]!
       if let some (.recInfo r) := (← getEnv).find? h then
         if r.numMinors == 1 then
           let args := e.getAppArgs

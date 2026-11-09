@@ -1,0 +1,9 @@
+warning: Git tree '/home/unbalancedparen/projects/gates-vacuity' is dirty
+PASS control projection-helper-def
+PASS control projection-helper-theorem
+PASS control projection-helper-opaque
+PASS control projection-unavailable
+PASS control propext-hypothesis
+PASS control inequality-positive
+PASS control negation-positive
+N2 selected controls: 7 PASS, 0 FAIL
