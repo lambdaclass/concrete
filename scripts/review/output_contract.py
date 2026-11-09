@@ -113,6 +113,7 @@ REVIEW_HARNESS_FILES = tuple(Path(__file__).with_name("harness-files.txt").read_
 IDENTIFIER_EXCLUSIONS = (
     "legacy/*", "ISSUES.tsv", "scripts/review/fixtures/*",
     "scripts/review/test_*.py", "scripts/review/external-names.tsv",
+    "scripts/review/external-toolchains.tsv",
     *REVIEW_HARNESS_FILES, "_review/*",
 )
 
@@ -243,10 +244,18 @@ def citation_error(text, repo, commit, paths, positive, base=None, review_root=N
         removed = "\n".join(l[1:] for l in proc.stdout.splitlines() if l.startswith("-") and not l.startswith("---"))
     absent = set(re.findall(r"^ABSENT: (" + IDENTIFIER + r")$", text, re.M))
     external = set()
-    if "scripts/review/external-names.tsv" in paths and "lean-toolchain" in paths:
+    pins = set()
+    if "lean-toolchain" in paths:
+        pins.add(blob("lean-toolchain").strip())
+    if "scripts/review/external-toolchains.tsv" in paths:
+        for row in blob("scripts/review/external-toolchains.tsv").splitlines():
+            fields = row.split("\t")
+            if len(fields) == 2 and fields[0].startswith(("cpython:", "bash:")) and fields[1].startswith("https://"):
+                pins.add(fields[0])
+    if "scripts/review/external-names.tsv" in paths:
         for row in blob("scripts/review/external-names.tsv").splitlines():
             fields = row.split("\t")
-            if len(fields) == 3 and fields[0] == blob("lean-toolchain").strip() and fields[2]:
+            if len(fields) == 3 and fields[0] in pins and fields[2]:
                 external.add(fields[1])
     for m in re.finditer(r"`([^`\n]+)`", text):
         name = m.group(1)

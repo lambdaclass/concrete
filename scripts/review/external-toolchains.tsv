@@ -1,0 +1,3 @@
+# exact toolchain pin<TAB>versioned upstream source (reviewed citation authority, not the host runtime)
+cpython:v3.13.9	https://github.com/python/cpython/tree/v3.13.9
+bash:5.2	https://ftp.gnu.org/gnu/bash/bash-5.2.tar.gz

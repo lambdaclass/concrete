@@ -31,6 +31,7 @@ with tempfile.TemporaryDirectory() as directory:
     (root / "lean-toolchain").write_text("leanprover/lean4:v4.34.1\n")
     target = root / "scripts/review"
     target.mkdir(parents=True)
+    (target / "external-toolchains.tsv").write_bytes(Path(__file__).with_name("external-toolchains.tsv").read_bytes())
     (target / "external-names.tsv").write_bytes(Path(__file__).with_name("external-names.tsv").read_bytes())
     (target / "test_contamination.py").write_text("inventedLaw mutantFake caseFake\n")
     (target / "fixtures").mkdir(exist_ok=True)
@@ -48,6 +49,11 @@ with tempfile.TemporaryDirectory() as directory:
     check("source.lean:1–2,2 `realAnchor`", "clean")
     check(f"[source.lean:1](file://{directory}/source.lean:1)", "clean")
     check("source.lean:1 `declModifiers`", "clean")
+    check("source.lean:1 `os.defpath` `mapfile_builtin`", "clean")
+    check("source.lean:1 `os.fabricatedStdlibName`",
+          ("invalid", "citation: identifier 'os.fabricatedStdlibName' unresolved"))
+    check("source.lean:1 `fabricated_builtin`",
+          ("invalid", "citation: identifier 'fabricated_builtin' unresolved"))
     check("source.lean:1 `c2245c99..21ad148b` `plainword`", "clean")
     check("source.lean:1 `missingName`\nABSENT: missingName", "clean")
     check("source.lean:1 Introduce `proposed:newLaw`", "findings", "findings")
@@ -187,6 +193,12 @@ with tempfile.TemporaryDirectory() as directory:
     git("-c", "user.name=Control", "-c", "user.email=control@example.invalid", "commit", "-qm", "different toolchain pin")
     sha = git("rev-parse", "HEAD")
     check("[source.lean](source.lean:1) `declModifiers`", ("invalid", "citation: identifier 'declModifiers' unresolved"))
+    (target / "external-toolchains.tsv").write_text("cpython:different-pin\thttps://example.invalid/pinned\nbash:different-pin\thttps://example.invalid/pinned\n")
+    git("add", ".")
+    git("-c", "user.name=Control", "-c", "user.email=control@example.invalid", "commit", "-qm", "different standard library pins")
+    sha = git("rev-parse", "HEAD")
+    check("source.lean:1 `os.defpath` `mapfile_builtin`",
+          ("invalid", "citation: identifier 'os.defpath' unresolved; citation: identifier 'mapfile_builtin' unresolved"))
     base = sha
     (root / "source.lean").write_text("def realAnchor := 1\n")
     git("add", ".")

@@ -1,2 +1,4 @@
 # toolchain<TAB>identifier<TAB>upstream declaration (reviewed allowlist, exact pin)
 leanprover/lean4:v4.34.1	declModifiers	Lean/Parser/Command.lean:114 (def declModifiers)
+cpython:v3.13.9	os.defpath	https://github.com/python/cpython/blob/v3.13.9/Lib/os.py#L89-L90 (re-export from posixpath.py:20 or ntpath.py)
+bash:5.2	mapfile_builtin	bash-5.2/builtins/mapfile.def:26 in https://ftp.gnu.org/gnu/bash/bash-5.2.tar.gz
