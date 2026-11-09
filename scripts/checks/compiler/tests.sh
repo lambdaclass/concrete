@@ -52,7 +52,8 @@ nonexistent_program() { printf 'no_such_program\tbir:no_such_program\texit 0\tsl
 unsupported_source_program() {
   mkdir -p "$(dirname "$1")/slice0"
   printf 'return 0;\n' >"$(dirname "$1")/slice0/unrun.con"
-  printf 'unrun_source\tcon:tests/slice0/unrun.con\texit 0\tslice0\n' >>"$1"
+  awk -F '\t' '{print} $1 == "answer" {print "unrun_source\tcon:tests/slice0/unrun.con\texit 0\tslice0"}' "$1" >"$1.new"
+  mv "$1.new" "$1"
 }
 manifest_control() { # manifest_control LABEL EXPECTED-MESSAGE MUTATION-FUNCTION
   local label=$1 expected=$2 mutation=$3 dir="$work/ctl/$1" copy rc=0
@@ -105,7 +106,7 @@ while IFS=$'\t' read -r name program expect; do
       ;;
   esac
 done <<<"$rows"
-if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" = 1 ]; then exit 0; fi
+if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" = 1 ]; then exit "$fail"; fi
 "${emitter[@]}" loop "$work/ctl/loop" "$target"
 expected_timeout check control-loop "$work/ctl/loop" 1 1
 "${emitter[@]}" invalid "$work/ctl/invalid" "$target"
