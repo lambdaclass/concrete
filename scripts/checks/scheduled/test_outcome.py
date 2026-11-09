@@ -102,7 +102,9 @@ class Outcome(RegistryFixture, unittest.TestCase):
         fail = record(); fail.update(status='FAIL', conclusion='failure')
         fail['gates'][0]['status'] = 'FAIL'
         future = record(); future.update(attempt='1/2', completed=dt.datetime.fromtimestamp(NOW+1, dt.timezone.utc).isoformat())
-        for name, sibling in (('future', future), ('duplicate', record()), ('invalid sibling', None)):
+        missing_field = record(); del missing_field['started']
+        for name, sibling in (('future', future), ('duplicate', record()), ('invalid sibling', None),
+                              ('missing field', missing_field)):
             with self.assertRaises(protocol.EvidenceError) as caught:
                 protocol.observe([fail, sibling], SHA, 'daily', NOW, RUNNERS, 'example/repo')
             self.assertEqual(str(caught.exception), f'FAIL daily {SHA}: recorded attempt')
@@ -117,10 +119,10 @@ class Outcome(RegistryFixture, unittest.TestCase):
             plant = types.ModuleType('planted_protocol'); plant.__file__ = protocol.__file__
             exec(compile(source, protocol.__file__, 'exec'), plant.__dict__)
             plant.registry_at = protocol.registry_at
-            with self.assertRaises(plant.EvidenceError) as masked:
+            with self.assertRaises((plant.EvidenceError, KeyError)) as masked:
                 plant.observe([fail, sibling], SHA, 'daily', NOW, RUNNERS, 'example/repo')
             with self.assertRaises(ValueError) as refused:
-                preserves_failure(masked.exception.status, name)
+                preserves_failure(getattr(masked.exception, 'status', 'INCOMPLETE'), name)
             self.assertEqual(str(refused.exception), f'FAIL scheduled monotonicity: {name} masked FAIL')
 
     def test_nonoperational_history_cannot_be_recovered_by_newer_sha(self):

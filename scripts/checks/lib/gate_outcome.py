@@ -32,10 +32,8 @@ def result(path, rc, sha, *, failure_only=False):
     except (OSError, ValueError, TypeError):
         print('FAIL scheduled outcome: invalid event stream', file=sys.stderr)
         return 1
-    status = reduce_outcomes([*(e['status'] for e in events), *(['FAIL'] if rc not in (0, 125) else [])])
+    status = reduce_outcomes(e['status'] for e in events)
     if status == 'FAIL':
-        if not any(e['status'] == 'FAIL' for e in events):
-            return rc
         print('FAIL scheduled gate: explicit failure outcome', file=sys.stderr)
         return 1
     if status == 'INCOMPLETE' and not failure_only:

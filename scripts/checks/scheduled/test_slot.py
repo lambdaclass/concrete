@@ -90,11 +90,6 @@ class Slot(unittest.TestCase):
         self.assertEqual((result.returncode,result.stdout,result.stderr),
                          (1,'','FAIL scheduled outcome: invalid event stream\n'))
 
-    def test_command_fail_is_not_masked_by_nested_incomplete(self):
-        result = self.invoke(['bash', '-c',
-            'python3 "$SCHEDULED_OUTCOME_HELPER" INCOMPLETE "nested timeout"; echo command-failed; exit 7'])
-        self.assertEqual((result.returncode, result.stdout, result.stderr), (7, 'command-failed\n', ''))
-
     def test_expected_inner_timeout_is_not_gate_outcome(self):
         command = ['bash', '-c', 'source "$1"; bounded_run 0.02 -- sleep 1; rc=$?; bounded_is_incomplete "$rc" || exit 7; echo expected-timeout', 'bash', str(ROOT / 'scripts/checks/lib/bounded.sh')]
         result = self.invoke(command)
@@ -108,6 +103,41 @@ class Slot(unittest.TestCase):
                 'if [ ! -e "$1" ]; then touch "$1"; python3 "$SCHEDULED_OUTCOME_HELPER" INCOMPLETE "abandoned attempt"; exec sleep 2; fi; echo recovered',
                 'bash', marker], budget='0.1')
         self.assertEqual((result.returncode, result.stdout, result.stderr), (0, 'recovered\n', ''))
+
+    def test_cancelled_executor_retains_emitted_fail(self):
+        import contextlib
+        import io
+        import json
+        import scheduled_process
+        from bounded_exec import Cancelled
+        from unittest.mock import patch
+        from outcome_control import preserves_failure
+        import types
+        source = (ROOT / 'scripts/checks/lib/scheduled_process.py').read_text()
+        plant = types.ModuleType('planted_process'); plant.__file__ = scheduled_process.__file__
+        exec(compile(source.replace("cancellation = error", "raise error"), plant.__file__, 'exec'), plant.__dict__)
+        for owner in (scheduled_process, plant):
+            for status in ('FAIL', 'INCOMPLETE'):
+                def cancelled(*args, **kwargs):
+                    Path(kwargs['env']['SCHEDULED_OUTCOME_FILE']).write_text(
+                        json.dumps(dict(status=status, diagnostic='emitted before cancellation', sha=None))+'\n')
+                    raise Cancelled(15)
+                with patch.object(owner, 'supervise', side_effect=cancelled), contextlib.redirect_stderr(io.StringIO()) as errors:
+                    if owner is plant or status == 'INCOMPLETE':
+                        with self.assertRaises(Cancelled) as caught:
+                            owner.run([os.sys.executable, '-c', 'pass'], cwd=ROOT, env=runtime_environment(),
+                                      timeout=1, gate_outcome=True, capture_output=True, text=True)
+                        self.assertEqual(caught.exception.sig, 15)
+                        if status == 'FAIL':
+                            with self.assertRaises(ValueError) as refused:
+                                preserves_failure('INCOMPLETE', 'executor cancellation')
+                            self.assertEqual(str(refused.exception),
+                                             'FAIL scheduled monotonicity: executor cancellation masked FAIL')
+                    else:
+                        result = owner.run([os.sys.executable, '-c', 'pass'], cwd=ROOT, env=runtime_environment(),
+                                           timeout=1, gate_outcome=True, capture_output=True, text=True)
+                        self.assertEqual(result.returncode, 1)
+                        self.assertEqual(errors.getvalue(), 'FAIL scheduled gate: explicit failure outcome\n')
 
     def test_explicit_fail_survives_outer_timeout_and_retry(self):
         from outcome_control import preserves_failure

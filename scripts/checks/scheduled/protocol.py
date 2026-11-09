@@ -230,8 +230,8 @@ def observe(history, sha, tier, now, runners, repository):
             qualified = validate(record, sha, tier, runners, repository, None)
             valid.append(qualified)
             require(timestamp(qualified["completed"]) <= now, "future completion")
-        except EvidenceError as error:
-            errors.append(error)
+        except (EvidenceError, ValueError, TypeError, KeyError) as error:
+            errors.append(error if isinstance(error, EvidenceError) else EvidenceError(str(error)))
     history = valid
     if len({r["attempt"] for r in history}) != len(history):
         errors.append(EvidenceError("replay would overwrite attempt"))

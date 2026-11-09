@@ -198,19 +198,26 @@ def execute(spec):
         remaining = min(spec['timeout'], spec['deadline'] - time.monotonic())
         if remaining <= 0:
             raise subprocess.TimeoutExpired(spec['argv'], spec['timeout'])
-        outcome = supervise(argv, remaining, spec.get('grace', 10),
-                            deadline=spec['deadline'], cwd=spec['cwd'], env=environment, stdin=source,
-                            pass_fds=slot_descriptors(environment), umask=0o077,
-                            stdout=out if stdout == subprocess.PIPE else stdout,
-                            stderr=err if stderr == subprocess.PIPE else stderr)
+        cancellation = None
+        try:
+            outcome = supervise(argv, remaining, spec.get('grace', 10),
+                                deadline=spec['deadline'], cwd=spec['cwd'], env=environment, stdin=source,
+                                pass_fds=slot_descriptors(environment), umask=0o077,
+                                stdout=out if stdout == subprocess.PIPE else stdout,
+                                stderr=err if stderr == subprocess.PIPE else stderr)
+        except Cancelled as error:
+            cancellation = error
+            outcome = 'cancelled'
         # Read the attempt's evidence before its private context is destroyed.
         # FAIL is final; an INCOMPLETE-only timed-out attempt remains retryable.
-        attempt_rc = 0 if outcome == 'timeout' else int(outcome.split()[1])
+        attempt_rc = 0 if outcome in ('timeout', 'cancelled') else int(outcome.split()[1])
         gate_rc = None
         if spec.get('gate_outcome'):
             from gate_outcome import result as gate_result
             gate_rc = gate_result(environment['SCHEDULED_OUTCOME_FILE'], attempt_rc, environment.get('SELECTED_SHA'),
-                                  failure_only=outcome == 'timeout')
+                                  failure_only=outcome in ('timeout', 'cancelled'))
+        if cancellation is not None and gate_rc != 1:
+            raise cancellation
         if outcome == 'timeout' and gate_rc != 1:
             raise subprocess.TimeoutExpired(spec['argv'], spec['timeout'])
         out.seek(0); err.seek(0)

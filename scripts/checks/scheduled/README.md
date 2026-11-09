@@ -943,15 +943,18 @@ controls and preserves the first execution error. Cancellation/skipping discards
 no uploaded index: gate and registry qualification failures remain observable.
 The executor reads its private structured stream before timeout cleanup; FAIL or
 invalid evidence ends the attempt with failure rather than entering the retry.
+Cancellation after emitted FAIL is reduced by the same path after descendants
+are reaped; cancellation without FAIL retains its cancellation exception.
 An INCOMPLETE-only abandoned attempt is still discarded and may recover.
 
 History validation accumulates sibling defects before reducing valid evidence.
-A validated FAIL outranks future timestamps, duplicate identities and malformed
+A validated FAIL outranks missing fields, future timestamps, duplicate identities and malformed
 siblings, including malformed JSON lines. Non-operational qualification defects
 in any attempt prevent recovery by a newer SHA's PASS. Same-SHA later complete
 attempts can still repair missing evidence. Present binding digests are checked
-even when the artifact's SHA field is absent. A completed command failure also
-outranks a nested INCOMPLETE event.
+even when the artifact's SHA field is absent. Structured nested events retain authority over numeric exits: existing gates
+use exit 1 alongside an INCOMPLETE event to report unavailable measurement.
+A numeric exit by itself is not an additional explicit FAIL fact.
 
 Publication preserves an overdue observation permanently, but never uses it to
 discard subsequent FAIL evidence. A late failing observation for that same
@@ -979,7 +982,8 @@ Bounded reproductions at `7de83e5dcbc71853b7d453ebf42716e01b554d99`:
 | 4: completed observer reporting producer FAIL | `FAIL scheduled observer: missed occurrence` |
 | 4: query | literal `created=>=2027-01-13T08:29:00Z` |
 | Additional: malformed JSON sibling | JSONDecodeError before FAIL observation |
-| Additional: command exit 1 with nested INCOMPLETE | exit 125 |
+| Additional: sibling missing started field | KeyError before FAIL observation |
+| Additional: executor cancellation after emitted FAIL | Cancelled(15), private stream discarded |
 | Additional: overdue attempt followed by FAIL | publisher returns without writing failure |
 
 All claimed masking scenarios were confirmed. The controls now exercise the
@@ -990,6 +994,7 @@ production adapters and isolated regressions with exact diagnostics:
 | Empty, nested-control and missing-marker reducer plants | stderr `FAIL scheduled outcome precedence: FAIL masked\n`, exit 1 |
 | Cancellation / skipping plants | `FAIL scheduled monotonicity: cancelled masked FAIL` / `FAIL scheduled monotonicity: skipped masked FAIL` |
 | Outer timeout retry / double-timeout plants | `FAIL scheduled monotonicity: outer timeout retry masked FAIL` / `FAIL scheduled monotonicity: outer timeout double masked FAIL` |
+| Executor cancellation plant | `FAIL scheduled monotonicity: executor cancellation masked FAIL` |
 | Outer timeout production, both scenarios | exit 1, empty stdout, stderr `FAIL scheduled gate: explicit failure outcome\n` |
 | Future / duplicate / invalid sibling plants | `FAIL scheduled monotonicity: future masked FAIL` / `FAIL scheduled monotonicity: duplicate masked FAIL` / `FAIL scheduled monotonicity: invalid sibling masked FAIL` |
 | Partial binding plant | `FAIL scheduled monotonicity: partial binding masked FAIL` |
@@ -997,7 +1002,6 @@ production adapters and isolated regressions with exact diagnostics:
 | Overdue publication plant | `FAIL scheduled monotonicity: overdue publication masked FAIL` |
 | Producer-coupled observer plant / missing completion step | `FAIL scheduled observer: missed occurrence` |
 | Producer FAIL with completed observation | observation exits 1, output record `completed=true\n`; census passes |
-| Completed command failure plus nested INCOMPLETE | exit 7, stdout `command-failed\n`, empty stderr |
 
 The cancellation controls cover both gate FAIL and recomputed qualification FAIL;
 the upload control includes a nested failed control with a stale cached summary
