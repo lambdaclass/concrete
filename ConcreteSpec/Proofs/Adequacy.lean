@@ -1663,7 +1663,7 @@ namespace Demo
 
 /-- A total fixture environment for the observation examples. Well-shaped demo operations use
 C1's original environment; other requests receive an explicit error answer, so they cannot be
-mistaken for an unmodelled blocked external request. (approved: PENDING) -/
+mistaken for an unmodelled blocked external request. (approved: REV-integ-agy-f68840b0e) -/
 def observationEnv : Oracle ops := fun hist p vs site st =>
   some ((env hist p vs site st).getD ⟨none, .error .abort, st⟩)
 
@@ -1934,7 +1934,7 @@ theorem erasing_silent_divergence : SilentDivergence prog erasingAdapter observa
   ⟨event_infinite, ⟨0, fun n => by simp [event_infinite, eventPosition, erasing_project]⟩⟩
 
 /-- Helper (computation). Internally that same run has infinitely many raw events. (approved:
-PENDING). -/
+REV-integ-agy-f68840b0e). -/
 theorem erasing_internal_infinite : InternalInfiniteInteraction prog observationEnv eventConfig := by
   refine ⟨event_infinite, fun bound => ⟨5 * (bound + 1), ?_⟩⟩
   simp [event_infinite, eventPosition, eventCount, rawEvents]
@@ -2063,7 +2063,7 @@ def bumpK : Answer ops.Val ops.Event ops.Store → Option (Config ops) := fun a 
   | .error kd => some ⟨.trapped kd s, [], a.store, []⟩
 
 /-- Helper (computation). A real transition under the lifted ordinary demo oracle. (approved:
-PENDING). -/
+REV-integ-agy-f68840b0e). -/
 theorem bumpedMove : Move prog observationEnv ⟨bumpConfig, [], []⟩ ⟨bumpContinued, [], [bumpQuery]⟩ :=
   Move.prim (P := prog) (ρ := observationEnv) (c := bumpConfig) (c' := bumpContinued) (events := [])
     (issued := []) (p := .bump) (vs := []) (site := s) (st := .init)

@@ -27,7 +27,7 @@ open ConcreteSpec.Core
 open ConcreteSpec.Core.Exec
 
 /-- Helper (inversion). A missing C1 implementation result excludes every relational step
-(approved: PENDING). -/
+(approved: REV-integ-agy-f68840b0e). -/
 private theorem no_step_of_none {O : Operands} {P : Program O} {c : Config O}
     (h : step P c = none) : ∀ l c', ¬ Step P c l c' := by
   intro l c' hs
