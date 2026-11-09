@@ -791,6 +791,66 @@ example : Utf8 [65] ∧ validRange (.text [65]) 0 1 = true ∧ ¬ Utf8 (badText 
         subst x
         simp [isScalar] at hs
 
+def rootPlace : Place := ⟨0, true, true, .free⟩
+def frozen : Place := ⟨0, true, true, .excl⟩
+def lockedContext : Ctx := [(0, frozen), (1, ⟨1, true, true, .free⟩)]
+def readOnly : Ctx := [(0, ⟨0, false, false, .free⟩)]
+
+/-- Helper (computation). Closed acceptance derivation for writing through a mutable view while the root is frozen. (approved: PENDING) -/
+theorem mutableBlock : Ok x0 [.borrow true 0 1 [.write 1]] x0 := by
+  exact .borrow rfl (by decide) (by intro _; exact ⟨rfl, rfl⟩) rfl
+    (.write rfl rfl rfl .nil) .nil
+
+/-- Helper (computation). Closed acceptance derivation for reading through a shared view. (approved: PENDING) -/
+theorem sharedBlock : Ok x0 [.borrow false 0 1 [.read 1]] x0 := by
+  exact .borrow rfl (by decide) (by intro h; cases h) rfl (.read rfl (by decide) .nil) .nil
+
+/-- Instance (law `ConcreteSpec.Borrow.ok_det`, case `read`). -/
+example := @ok_det x0 [.read 0] x0 (.read rfl (by decide) .nil) x0 (.read rfl (by decide) .nil)
+
+/-- Instance (law `ConcreteSpec.Borrow.ok_keeps_locked`, case `otherRootRead`). -/
+example := @ok_keeps_locked lockedContext [.read 1] lockedContext (.read rfl (by decide) .nil)
+  0 frozen rfl (by decide)
+
+/-- Instance (law `ConcreteSpec.Borrow.excl_untouched`, case `otherRootRead`). -/
+example := @excl_untouched lockedContext [.read 1] lockedContext (.read rfl (by decide) .nil)
+  0 frozen rfl rfl
+
+/-- Instance (law `ConcreteSpec.Borrow.open_mut_freezes_root`, case `writeThroughView`). -/
+example := @open_mut_freezes_root x0 0 1 [.write 1] [] rootPlace x0 mutableBlock rfl 0 rootPlace rfl rfl
+
+/-- Instance (law `ConcreteSpec.Borrow.noWrite_sound`, case `readOnly`). -/
+example := @noWrite_sound readOnly [.read 0] readOnly (.read rfl (by decide) .nil) 0
+  (by
+    intro p q hp hr hl
+    simp only [readOnly, AList.lookup] at hp
+    split at hp
+    · cases hp; exact ⟨rfl, rfl⟩
+    · cases hp)
+
+/-- Instance (law `ConcreteSpec.Borrow.shared_open_grants_no_write`, case `readThroughView`). -/
+example := @shared_open_grants_no_write x0 0 1 [.read 1] [] rootPlace x0 sharedBlock rfl
+
+/-- Instance (law `ConcreteSpec.Borrow.range_open_mut_freezes_root`, case `writeThroughView`). -/
+example := @range_open_mut_freezes_root x0 0 1 ⟨some (.array 2), some 0, some 1⟩
+  [.write 1] none [] x0 rootPlace ⟨mutableBlock, rfl⟩ rfl 0 rootPlace rfl rfl
+
+/-- Instance (law `ConcreteSpec.Borrow.view_not_moved`, case `mutableView`). -/
+example := @view_not_moved true 1 rootPlace x0 [] x0
+
+/-- Instance (law `ConcreteSpec.Borrow.fresh_not_used`, case `readOtherName`). -/
+example := @fresh_not_used x0 [.read 0] x0 (.read rfl (by decide) .nil) 1 rfl
+
+/-- Instance (law `ConcreteSpec.Borrow.view_not_used_after`, case `writeThroughView`). -/
+example := @view_not_used_after x0 true 0 1 [.write 1] [] x0 mutableBlock
+
+/-- Instance (law `ConcreteSpec.Borrow.root_restored`, case `writeThroughView`). -/
+example := @root_restored x0 true 0 1 [.write 1] [] rootPlace x0 mutableBlock rfl
+
+/-- Instance (law `ConcreteSpec.Borrow.utf8_split`, case `twoScalars`). -/
+example := @utf8_split [65, 66]
+  (.cons (s := [65]) (by decide) (.cons (s := [66]) (by decide) .nil)) 1 (by decide) rfl
+
 end Evidence
 
 end ConcreteSpec.Borrow
