@@ -154,6 +154,20 @@ def bug_edits(root):
     ok(cli(root, 'check'))
 
 
+def prose_not_introductions(root):
+    ok(cli(root, 'reserve', 'bug', 'bug with example', '--number', '20'))
+    path = root / 'docs/bugs/020_example.md'
+    path.parent.mkdir(parents=True)
+    path.write_text('# Bug 020: bug with example\n\n| R-0620 | an example, not a declaration | prose | — |\n')
+    a.git(root, 'add', '.')
+    a.git(root, 'commit', '-qm', 'bug containing roadmap example')
+    a.git(root, 'push', '-q', 'origin', 'main')
+    a.git(root, 'switch', '-qc', 'actual-task')
+    ok(cli(root, 'reserve', 'roadmap', 'actual task', '--number', '620'))
+    save(root, 'roadmap', 'actual task')
+    ok(cli(root, 'check'))
+
+
 def unreserved(root):
     save(root, 'roadmap', 'unreserved task')
     p = cli(root, 'check')
@@ -215,7 +229,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='id-round6-') as tmp:
         tests = [('ISS-0020-before-main-and-merge-target', lambda r: collision(r, 'iss')),
                  ('R-before-main-and-merge-target', lambda r: collision(r, 'roadmap')),
-                 *[(f.__name__, f) for f in (race, backfill, independent_unreserved, historical_baseline, bug_edits, unreserved, metadata, incomplete, unreadable_reservation, parser)]]
+                 *[(f.__name__, f) for f in (race, backfill, independent_unreserved, historical_baseline, bug_edits, prose_not_introductions, unreserved, metadata, incomplete, unreadable_reservation, parser)]]
         for name, test in tests:
             directory = Path(tmp) / name
             directory.mkdir()

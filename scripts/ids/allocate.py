@@ -188,17 +188,24 @@ def introductions(repo, sha):
                 'ROADMAP.md', 'docs/bugs', 'legacy/docs/bugs').stdout
     candidates = {}
     revision = None
+    path = None
     for line in patch.splitlines():
         if line.startswith('COMMIT '):
             fields = line.split()
             revision, parents = fields[1], fields[2:]
             candidates.setdefault(revision, (parents, set(), set()))
+            path = None
+        elif line.startswith('diff --git '):
+            path = None
+        elif line.startswith(('--- a/', '+++ b/')):
+            path = line[6:]
         elif revision and line[:1] in ('+', '-') and not line.startswith(('+++', '---')):
             text = line[1:]
-            match = (re.match(r'^(ISS-\d{4})\t', text) or
-                     re.match(r'^\s*\|\s*(R-\d{4})\s*\|', text))
-            bug = re.match(r'^# Bug (\d{3,})\s*[:—–-]', text, re.I)
-            key = match[1] if match else ('BUG-' + bug[1] if bug else None)
+            match = (re.match(r'^(ISS-\d{4})\t', text) if path == 'ISSUES.tsv' else
+                     re.match(r'^\s*\|\s*(R-\d{4})\s*\|', text) if path == 'ROADMAP.md' else None)
+            filename = re.fullmatch(r'(?:legacy/)?docs/bugs/(\d{3,})_[^/]+\.md', path or '')
+            bug = re.match(r'^# Bug ' + filename[1] + r'\s*[:—–-]', text, re.I) if filename else None
+            key = match[1] if match else ('BUG-' + filename[1] if bug else None)
             if key:
                 candidates[revision][1 if line[0] == '+' else 2].add(key)
     result = {}
