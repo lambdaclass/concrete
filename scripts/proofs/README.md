@@ -159,12 +159,16 @@ CertificateResult`, in `vacuity.lean`. It does not change the consumer. The slic
 parallel `certificateDependency` walker is deleted). Templates (`compileTemplate`)
 and transfer nodes (`compileNode`) are compiled once over closed terms with
 `.forallBinder` and `.binder` distinguished, and `evalNode` / `evalCall` /
-`applyValue` evaluate over those compiled nodes with formal-to-actual `Input` and
-`Origin` (`Origin.substitution`, `Origin.field`) substitution across `let`,
-projection, and higher-order closures. It retains the exact entry/query, target,
-permitted hypothetical origins, guards and immutable environment in a completed
-derivation. Raw graph construction and dependency obligations share the existing
-20,000-work counter; no validation phase renews the original heartbeat deadline.
+`evalDeclaredType` / `applyValue` evaluate over those compiled nodes with
+formal-to-actual `Input` and `Origin` (`Origin.substitution`, `Origin.field`)
+substitution across `let`, projection, and higher-order closures. Every constant
+call validates both its instantiated declared type (`evalDeclaredType`, with
+pending/completed query identity and shared work accounting) and its body or
+recursor/quotient/axiom rule, with no symbolic `.invariant`-mode skip. It retains
+the exact entry/query, target, permitted hypothetical origins, guards and
+immutable environment in a completed derivation. Raw graph construction and
+dependency obligations share the existing 20,000-work counter; no validation
+phase renews the original heartbeat deadline.
 
 Admission uses only completed transfers and finite structural evidence. Binder
 bodies and codomains are always validated; a `structuralExclusions` entry is
@@ -191,14 +195,17 @@ SCC invariants, consumer integration and measured historical completion remain
 later slices; the full solver is not claimed complete. The earlier
 [origin counterexample](N2-slice2-certificate-blocker.md) remains historical evidence.
 
-`vacuity_certificates.py` directly asserts exact results for 13 non-vacuous
+`vacuity_certificates.py` directly asserts exact results for 16 non-vacuous
 controls: the original injected simp certificate (supplier `impossible`, with
 `Origin.substitution` traced from the entry argument), unapplied and `let`-wrapped
 empty-binder reproducers (`useImpossibleBinder`, `useImpossibleLet`), a `let`-headed
-supplied contradiction (`letApp` with `suppliedByBool`), a genuine pending-query
-cycle (`cyclic-certificate-dependency`), an 80-step dependency chain with both a
-valid leaf (`dependency-chain-baseline`) and a poisoned leaf (`dependency-chain-poisoned`),
+supplied contradiction (`letApp` with `suppliedByBool`), a poisoned declaration type
+(`usesHiddenType` / `hiddenType`), a poisoned symbolic type-producing function in a
+binder domain (`typePoison` / `badType`), a genuine pending-query cycle
+(`cyclic-certificate-dependency`), an 80-step dependency chain with both a valid leaf
+(`dependency-chain-baseline`) and a poisoned leaf (`dependency-chain-poisoned`),
 structural empty-inductive elimination (`Empty.elim h` with `rank=1 exclusions=1`),
+an honest symbolic type-producing function in a binder domain (`typeHonest` / `goodType`),
 purely hypothetical `propext` (`unavailable-certificate-transfer propext`), genuine
 library decide/matcher evidence (`¬ (0 = 1) := by decide`), the `F3b` decide/matcher
 and `simpAll` certificates, and shared-budget exhaustion. The focused runner includes

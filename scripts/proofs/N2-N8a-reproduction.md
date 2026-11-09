@@ -58,6 +58,25 @@ accepted solver design ([N2-discharge-solver.md](N2-discharge-solver.md)).
      In accordance with instruction (4), we do not admit `propext` before the owner's
      decision; `evalCall` continues to report the exact Amendment 2
      `unavailable-certificate-transfer propext` `INCOMPLETE` on these cases.
+5. **Round-2 dependency-validation repairs (declaration types, symbolic invariant calls, and minor-premise/closure obligations):**
+   - **Instantiated declaration-type validation (`evalDeclaredType` / `evalTypeInstantiate`):**
+     Every constant application in `evalCall` validates the callee's instantiated
+     `declaredType` via `evalDeclaredType` under the shared 20,000-work budget and
+     `pendingQueries` / `completedQueries`, retaining exact argument origins in
+     `Origin.substitution` and caching only completed invariant node evaluations
+     (`validatedTypes`).
+   - **Removal of unchecked symbolic `.invariant`-mode skips:** `skipSymbolicNonProof`
+     is removed from `evalCall` (both `hasVal == true` and `.recInfo`), and the
+     `.invariant`-mode non-proof shortcut is removed from `.quotInfo`. Symbolic type
+     and helper calls in binder domains/codomains are evaluated through the same
+     application-sensitive transfer and recursor evaluator.
+   - **Same-class dependency paths closed:** `openMinorFields` opens the full minor
+     arity (`ruleMinorArity`, covering constructor fields and induction hypotheses)
+     and evaluates the minor body in `.body` mode; `applyValue` forces unapplied
+     `Value.partialCall` as well as `Value.closure`; unused `.letBind` and `.binder`
+     bindings, unprojected `.ctor` fields, and unapplied arguments to `.axiomInfo`,
+     `.quotInfo`, `.inductInfo`, and neutral applications are validated; and
+     `validateCertificate` checks and evaluates each assumption's `input.type`.
 
 ## Repaired N8a observation measurements (`vacuity_n8a_repro.py`)
 
@@ -65,34 +84,37 @@ All seven N8a reproducer observations run under the unchanged 20,000-work budget
 
 | Observation | Baseline (`22f300203`) | Repaired outcome | Work | Terms | Nodes | Templates | Queries | Components |
 | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `bad-chain` (`bad1 → bad0`, leaf `fun _ => impossible`) | `admitted` (defect) | `rejected supplier=impossible` | 22 | 8 | 7 | 4 | 4 | 0 |
-| `useImpossibleLet` (applied to permitted hypothetical `h : Empty`) | `admitted` (defect) | `rejected supplier=impossible` | 87 | 40 | 36 | 8 | 9 | 0 |
-| `directApp` (`suppliedByBool true`) | `rejected supplier=suppliedByBool` | `rejected supplier=suppliedByBool` | 19 | 10 | 9 | 3 | 3 | 0 |
-| `letApp` (`(let _ : Nat := 0; fun b => suppliedByBool b) true`) | `unavailable-certificate-transfer suppliedByBool` (defect) | `rejected supplier=suppliedByBool` | 92 | 45 | 39 | 9 | 10 | 0 |
-| `cert01` (`¬ (0 = 1) := by decide`) | `false-discharge-budget` (20,000) | `admitted` | 6326 | 1295 | 772 | 62 | 235 | 0 |
-| `joint-simp` (permitted `p`, `hp : p`, `hn : ¬ p`) | `unavailable-certificate-transfer propext` | `unavailable-certificate-transfer propext` | 132 | 61 | 49 | 6 | 8 | 0 |
-| `F3b-simp` (permitted `y`, `decide (y = 0) = true`, `¬ (y = 0)`) | `false-discharge-budget` (20,000) | `unavailable-certificate-transfer propext` | 1764 | 740 | 539 | 50 | 116 | 0 |
+| `bad-chain` (`bad1 → bad0`, leaf `fun _ => impossible`) | `admitted` (defect) | `rejected supplier=impossible` | 33 | 9 | 7 | 4 | 8 | 0 |
+| `useImpossibleLet` (applied to permitted hypothetical `h : Empty`) | `admitted` (defect) | `rejected supplier=impossible` | 127 | 41 | 37 | 9 | 19 | 0 |
+| `directApp` (`suppliedByBool true`) | `rejected supplier=suppliedByBool` | `rejected supplier=suppliedByBool` | 267 | 82 | 70 | 15 | 31 | 0 |
+| `letApp` (`(let _ : Nat := 0; fun b => suppliedByBool b) true`) | `unavailable-certificate-transfer suppliedByBool` (defect) | `rejected supplier=suppliedByBool` | 358 | 113 | 97 | 20 | 42 | 0 |
+| `cert01` (`¬ (0 = 1) := by decide`) | `false-discharge-budget` (20,000) | `admitted` | 9157 | 1538 | 776 | 63 | 595 | 0 |
+| `joint-simp` (permitted `p`, `hp : p`, `hn : ¬ p`) | `unavailable-certificate-transfer propext` | `unavailable-certificate-transfer propext` | 182 | 67 | 56 | 8 | 18 | 0 |
+| `F3b-simp` (permitted `y`, `decide (y = 0) = true`, `¬ (y = 0)`) | `false-discharge-budget` (20,000) | `unavailable-certificate-transfer propext` | 6441 | 1036 | 602 | 56 | 529 | 0 |
 
 ## Non-vacuous certificate controls (`vacuity_certificates.py`)
 
-All 13 certificate controls check their exact planted diagnostic and verify origin
+All 16 certificate controls check their exact planted diagnostic and verify origin
 transfer, rank/exclusion counts, and the unchanged 20,000-work budget:
 
 | Control | Expected & actual diagnostic | Work | Terms | Nodes | Templates | Queries | Components |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `origin` (`of_eq_true injectedFalse._simp_1`, entry-arg transfer checked) | `rejected-supplied-contradiction supplier=impossible` | 25 | 9 | 9 | 4 | 4 | 0 |
-| `unapplied-empty-binder` (`fun _ : Empty => impossible`) | `rejected-supplied-contradiction supplier=impossible` | 18 | 8 | 7 | 3 | 3 | 0 |
-| `use-impossible-let` (`useImpossibleLet h` on `h : Empty`) | `rejected-supplied-contradiction supplier=impossible` | 87 | 40 | 36 | 8 | 9 | 0 |
-| `let-app-supplied` (`(let _ : Nat := 0; fun b => suppliedByBool b) true`) | `rejected-supplied-contradiction supplier=suppliedByBool` | 92 | 45 | 39 | 9 | 10 | 0 |
-| `non-circular` (`cyclicCaller` with pending `cyclicHelper`) | `INCOMPLETE ... case=non-circular cyclic-certificate-dependency` | 8 | 3 | 3 | 1 | 1 | 0 |
-| `dependency-chain-poisoned` (`badDependency80`, leaf `fun _ => impossible`) | `rejected-supplied-contradiction supplier=impossible` | 338 | 87 | 86 | 83 | 83 | 0 |
-| `structural-empty-elim` (`Empty.elim h` on `h : Empty`) | `admitted rank=1 exclusions=1` | 40 | 22 | 19 | 3 | 3 | 0 |
-| `hypothetical-propext` (`of_eq_true (eq_true h)` on `h : False`) | `INCOMPLETE ... case=hypothetical-propext unavailable-certificate-transfer propext` | 71 | 43 | 34 | 5 | 6 | 0 |
-| `library-decide-matcher` (`¬ (0 = 1) := by decide`) | `admitted rank=0 exclusions=0` | 6326 | 1295 | 772 | 62 | 235 | 0 |
-| `f3b-decide-matcher` (`hn (of_decide_eq_true hd)`) | `admitted rank=0 exclusions=0` | 3517 | 1050 | 693 | 61 | 191 | 0 |
-| `f3b-simp-all` (`simpAll` on `y`, `hd : decide (y = 0) = true`, `hn : ¬ (y = 0)`) | `INCOMPLETE ... case=f3b-simp-all unavailable-certificate-transfer propext` | 1764 | 740 | 539 | 50 | 116 | 0 |
-| `dependency-chain-baseline` (`dependency80`, leaf `fun h => h`) | `admitted rank=0 exclusions=0` | 339 | 88 | 86 | 82 | 82 | 0 |
-| `shared-budget` (`dependency80` with `spent := 19970`) | `INCOMPLETE ... case=shared-budget false-discharge-budget` | 20000 | 9 | 9 | 6 | 7 | 0 |
+| `origin` (`of_eq_true injectedFalse._simp_1`, entry-arg transfer checked) | `rejected-supplied-contradiction supplier=impossible` | 61 | 17 | 16 | 6 | 13 | 0 |
+| `unapplied-empty-binder` (`fun _ : Empty => impossible`) | `rejected-supplied-contradiction supplier=impossible` | 33 | 10 | 8 | 4 | 8 | 0 |
+| `use-impossible-let` (`useImpossibleLet h` on `h : Empty`) | `rejected-supplied-contradiction supplier=impossible` | 127 | 41 | 37 | 9 | 19 | 0 |
+| `let-app-supplied` (`(let _ : Nat := 0; fun b => suppliedByBool b) true`) | `rejected-supplied-contradiction supplier=impossible/suppliedByBool` (`supplier=suppliedByBool`) | 358 | 113 | 97 | 20 | 42 | 0 |
+| `hidden-declaration-type` (`usesHiddenType` calling `hiddenType : (let _ : False := impossible; True)`) | `rejected-supplied-contradiction supplier=impossible` | 35 | 9 | 8 | 5 | 10 | 0 |
+| `symbolic-type-poison` (`typePoison : (h : False) → badType False h → True`) | `rejected-supplied-contradiction supplier=impossible` | 49 | 20 | 17 | 4 | 8 | 0 |
+| `non-circular` (`cyclicCaller` with pending `cyclicHelper`) | `INCOMPLETE ... case=non-circular cyclic-certificate-dependency` | 17 | 5 | 4 | 2 | 4 | 0 |
+| `dependency-chain-poisoned` (`badDependency80`, leaf `fun _ => impossible`) | `rejected-supplied-contradiction supplier=impossible` | 586 | 88 | 86 | 83 | 166 | 0 |
+| `structural-empty-elim` (`Empty.elim h` on `h : Empty`) | `admitted rank=1 exclusions=1` | 56 | 23 | 19 | 3 | 6 | 0 |
+| `symbolic-type-honest` (`typeHonest : (h : False) → goodType False h → True`) | `admitted rank=0 exclusions=0` | 70 | 26 | 20 | 6 | 12 | 0 |
+| `hypothetical-propext` (`of_eq_true (eq_true h)` on `h : False`) | `INCOMPLETE ... case=hypothetical-propext unavailable-certificate-transfer propext` | 133 | 53 | 42 | 7 | 16 | 0 |
+| `library-decide-matcher` (`¬ (0 = 1) := by decide`) | `admitted rank=0 exclusions=0` | 9157 | 1538 | 776 | 63 | 595 | 0 |
+| `f3b-decide-matcher` (`hn (of_decide_eq_true hd)`) | `admitted rank=0 exclusions=0` | 8279 | 1322 | 755 | 66 | 652 | 0 |
+| `f3b-simp-all` (`simpAll` on `y`, `hd : decide (y = 0) = true`, `hn : ¬ (y = 0)`) | `INCOMPLETE ... case=f3b-simp-all unavailable-certificate-transfer propext` | 6441 | 1036 | 602 | 56 | 529 | 0 |
+| `dependency-chain-baseline` (`dependency80`, leaf `fun h => h`) | `admitted rank=0 exclusions=0` | 583 | 88 | 86 | 82 | 164 | 0 |
+| `shared-budget` (`dependency80` with `spent := 19970`) | `INCOMPLETE ... case=shared-budget false-discharge-budget` | 20000 | 9 | 7 | 4 | 8 | 0 |
 
 ### Mutation verification of control non-vacuity
 

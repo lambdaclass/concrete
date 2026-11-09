@@ -89,6 +89,10 @@ axiom suppliedByBool (b : Bool) : PickType b
 def letApp : False := (let _ : Nat := 0; fun (b : Bool) => suppliedByBool b) true
 theorem cyclicHelper : False := False.elim impossible
 theorem cyclicCaller : False := cyclicHelper
+theorem hiddenType : (let _ : False := impossible; True) := True.intro
+theorem usesHiddenType : True := hiddenType
+def badType (p : Prop) (h : p) : Prop := let _ : False := impossible; True
+theorem typePoison : (h : False) → badType False h → True := fun _ _ => True.intro
 theorem badDependency0 : False → False := fun _ => impossible
 BAD_CHAIN
 
@@ -106,6 +110,10 @@ set_option maxHeartbeats 2000000 in
       (assumptions := #[h])
   probe "let-app-supplied" (mkConst ``letApp)
     "rejected-supplied-contradiction supplier=suppliedByBool"
+  probe "hidden-declaration-type" (mkConst ``usesHiddenType)
+    "rejected-supplied-contradiction supplier=impossible"
+  probe "symbolic-type-poison" (mkConst ``typePoison)
+    "rejected-supplied-contradiction supplier=impossible"
   -- The pending candidate would exclude the branch reaching `cyclicHelper`.
   -- It remains in `pendingQueries` throughout validation, so a dependency cycle
   -- back to `cyclicHelper` fails with `cyclic-certificate-dependency`.
@@ -118,6 +126,9 @@ set_option maxHeartbeats 2000000 in
 
 POSITIVE = r"""
 theorem genuineCertificate : ¬ (0 = 1) := by decide
+
+def goodType (p : Prop) (_ : p) : Prop := p ∧ True
+theorem typeHonest : (h : False) → goodType False h → True := fun _ _ => True.intro
 
 theorem dependency0 : False → False := fun h => h
 CHAIN
@@ -135,6 +146,7 @@ set_option maxHeartbeats 2000000 in
     let elimPrf ← mkAppOptM ``Empty.elim #[some (mkSort .zero), some h]
     probe "structural-empty-elim" elimPrf "admitted rank=1 exclusions=1"
       (assumptions := #[h])
+  probe "symbolic-type-honest" (mkConst ``typeHonest) "admitted rank=0 exclusions=0"
   withLocalDeclD `h (mkConst ``False) fun h => do
     let hypPropext ← mkAppM ``of_eq_true #[← mkAppM ``eq_true #[h]]
     probe "hypothetical-propext" hypPropext
@@ -165,9 +177,12 @@ def controls(meta):
         "CERTIFICATE unapplied-empty-binder: rejected-supplied-contradiction supplier=impossible",
         "CERTIFICATE use-impossible-let: rejected-supplied-contradiction supplier=impossible",
         "CERTIFICATE let-app-supplied: rejected-supplied-contradiction supplier=suppliedByBool",
+        "CERTIFICATE hidden-declaration-type: rejected-supplied-contradiction supplier=impossible",
+        "CERTIFICATE symbolic-type-poison: rejected-supplied-contradiction supplier=impossible",
         "CERTIFICATE non-circular: INCOMPLETE analysis-budget-or-error CertificateControl.instance stage=certificate-dependencies law=CertificateControl.law case=non-circular cyclic-certificate-dependency",
         "CERTIFICATE dependency-chain-poisoned: rejected-supplied-contradiction supplier=impossible",
         "CERTIFICATE structural-empty-elim: admitted rank=1 exclusions=1",
+        "CERTIFICATE symbolic-type-honest: admitted rank=0 exclusions=0",
         "CERTIFICATE hypothetical-propext: INCOMPLETE analysis-budget-or-error CertificateControl.instance stage=certificate-dependencies law=CertificateControl.law case=hypothetical-propext unavailable-certificate-transfer propext",
         "CERTIFICATE library-decide-matcher: admitted rank=0 exclusions=0",
         "CERTIFICATE f3b-decide-matcher: admitted rank=0 exclusions=0",
@@ -179,8 +194,8 @@ def controls(meta):
     bad_chain = "\n".join(f"theorem badDependency{i} : False → False := badDependency{i - 1}" for i in range(1, 81))
     chain = "\n".join(f"theorem dependency{i} : False → False := dependency{i - 1}" for i in range(1, 81))
     sources = [
-        "set_option linter.defProp false\n" + negative + DRIVER + NEGATIVE.replace("BAD_CHAIN", bad_chain),
-        "set_option linter.defProp false\n" + DRIVER + POSITIVE.replace("CHAIN", chain),
+        "set_option linter.defProp false\nset_option linter.unusedVariables false\n" + negative + DRIVER + NEGATIVE.replace("BAD_CHAIN", bad_chain),
+        "set_option linter.defProp false\nset_option linter.unusedVariables false\n" + DRIVER + POSITIVE.replace("CHAIN", chain),
     ]
     lines = []
     with tempfile.TemporaryDirectory(prefix="n2-certificate-") as temp:
