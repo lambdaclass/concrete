@@ -467,7 +467,7 @@ theorem candidate_contains_unique (tgt : Target) (m : Memory) (hw : m.WellFormed
   apply hw.disjoint b x c y hx hy hn hxc.1.1.1 hyc.1.1.1
   refine ⟨hxc.2.trans hyc.2.symm, hxc.1.2, hyc.1.2, ?_, ?_⟩ <;> omega
 
-/-- Helper (inversion). Extracts block properties from successful reconstruction for inversion clients and the result-oriented law (approved: PENDING). -/
+/-- Helper (inversion). Extracts block properties from successful reconstruction for inversion clients and the result-oriented law (approved: APPR-C4-agy-951060caa). -/
 theorem fromExposed_sound_inv (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
     (s : AddrSpace) (addr : Nat) :
     ∀ b, (m.fromExposed s addr).prov = some b →
