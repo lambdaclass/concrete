@@ -109,15 +109,28 @@ replay must confirm its measured DAG cost and completion at the declared bound;
 local synthetic controls alone do not certify historical-head completion.
 Hypothesis discharge scanning follows proof helpers transitively with a visited
 set and a shared traversal budget; data/typeclass arguments are excluded.
-Closed proof reduction uses kernel reduction at all transparency levels, including
-opaque proof arguments nested inside discharging lemmas. Impossible branches are
-inspected only after the supplied arguments select the reachable computation;
-there is no name/shape allowlist or limit on decidable-proof nesting depth.
+Closed helper bodies are applied to the actual supplied arguments before reduction.
+Open helper bodies are traversed generically once per declaration; every actual
+proof/empty-type argument is still inspected at every use. This bounds recursive
+helper analysis without specializing generic recursion machinery at endlessly
+fresh hypothetical locals. A hypothetical lambda branch is excluded only when
+the kernel checks a refutation of one of its assumptions (or its type has no
+constructors); failure to prove that fact excludes nothing. Conversely, an actual
+argument inhabiting such a refuted type is rejected, including False/Empty/PEmpty
+hidden inside generic helpers. There is no proof-name or proof-shape allowlist,
+and nesting depth does not determine whether a proof is real. Resource exhaustion
+in refutation search is propagated as INCOMPLETE, never swallowed as success.
 The exact C9-new instance and planted excerpts in `fixtures/provenance.json` are
 positive controls: both retained identities require zero FAIL/INCOMPLETE evidence
 diagnostics. On the server, run `nix develop -c python3
 scripts/proofs/vacuity_fixtures.py --replay REPORT_DIRECTORY` to freshly elaborate
-all four historical cases and assert their exact diagnostics. Existing reports
+all four historical cases and assert their exact diagnostics. The report directory
+must be new; replay refuses to overwrite archived observations.
+`nix develop -c python3 scripts/proofs/vacuity_fixtures.py --focused-c9` is a light
+isolated check of the exact original law and its two evidence declarations, drawn
+from the shared population. Both evidence checks must be clean; the single missing
+sibling-subject witness remains an exact expected law diagnostic. This control
+does not certify the historical module or head. Existing reports
 are immutable observations; `--reports DIRECTORY` never rewrites them. A report
 must end with a complete N2 PASS/FAIL verdict and contain no INCOMPLETE diagnostic;
 missing evidence in a truncated or incomplete report cannot certify a positive control. Unrecognized proof terms still need

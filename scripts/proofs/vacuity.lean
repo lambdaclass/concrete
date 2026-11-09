@@ -312,16 +312,43 @@ partial def directStep (n : Name) (e : Expr) : StateRefT ProjectionState Audit B
 
 end
 
-/-- Follow only the supplied hypothesis proof, including opaque proof helpers.
-    Kernel reduction uses all transparency levels: opaque proofs supplied inside
-    discharging lemmas must select their reachable branches before inspection.
-    This is semantic reduction, independent of proof names or nesting depth.
-    The visited set and shared budget bound the entire dependency traversal. -/
-partial def falseDischarge (e : Expr) : StateRefT (Nat × Std.HashSet Expr) MetaM Bool := do
-  let e ← withTransparency .all <| whnf (cleanSpine e)
-  let (fuel, visited) ← get
+/-- A checked refutation, never a syntactic guess that a context is impossible. -/
+def refutableType (domain : Expr) : MetaM Bool := withoutModifyingState do
+  if ← isProp domain then
+    try
+      let proof ← mkDecideProof (mkApp (mkConst ``Not) domain)
+      let proof ← instantiateMVars proof
+      if proof.hasMVar then return false
+      Lean.Meta.check proof
+      return true
+    catch ex =>
+      if ex.isMaxHeartbeat || ex.isMaxRecDepth || ex.isInterrupt then throw ex
+      return false
+  let domain ← whnfD domain
+  if let .const name _ := domain.getAppFn' then
+    if let some (.inductInfo info) := (← getEnv).find? name then
+      return info.ctors.isEmpty
+  return false
+
+structure DischargeState where
+  remaining : Nat := 20000
+  visited : Std.HashSet Expr := {}
+  openBodies : Std.HashSet Name := {}
+
+/-- Closed helpers are inspected at their actual arguments. Open helper bodies are
+    scanned generically once per declaration, rather than repeatedly specializing
+    recursive proof machinery at fresh hypothetical locals. Every supplied proof
+    or empty-type argument is still checked at every application. Hypothetical
+    lambda contexts are excluded only by a checked refutation of a binder type.
+    The shared visited graph and fuel bound all dependency traversal. -/
+partial def falseDischarge (e : Expr) : StateRefT DischargeState MetaM Bool := do
+  let e := cleanSpine e
+  if (← get).visited.contains e then return false
+  let fuel := (← get).remaining
   if fuel == 0 then throwError "false-discharge-budget"
-  set (fuel - 1, visited)
+  modify fun state => { state with remaining := fuel - 1, visited := state.visited.insert e }
+  if ← refutableType (← inferType e) then return true
+  let e ← whnfD e
   if let .const n levels := e.getAppFn' then
     if [``False.elim, ``False.casesOn, ``absurd, ``Empty.elim, ``Empty.casesOn,
         ``PEmpty.elim, ``PEmpty.casesOn].contains n then return true
@@ -329,20 +356,26 @@ partial def falseDischarge (e : Expr) : StateRefT (Nat × Std.HashSet Expr) Meta
       if matcher.numAlts == 0 then return true
     if let some (.recInfo r) := (← getEnv).find? n then
       if r.rules.isEmpty then return true
-    unless (← get).2.contains e do
-      modify fun (left, seen) => (left, seen.insert e)
+    let openTerm := e.hasFVar
+    let expand := !openTerm || !(← get).openBodies.contains n
+    if expand then
+      if openTerm then modify fun state => { state with openBodies := state.openBodies.insert n }
       if let some ci := (← getEnv).find? n then
         if let some value := ci.value? (allowOpaque := true) then
-          let applied := (mkAppN (value.instantiateLevelParams ci.levelParams levels) e.getAppArgs).headBeta
+          let body := value.instantiateLevelParams ci.levelParams levels
+          let applied := if openTerm then body else (mkAppN body e.getAppArgs).headBeta
           let reduced ← whnfD applied
           if ← falseDischarge reduced then return true
   match e with
   | .app .. =>
     for arg in e.getAppArgs do
-      if ← isProof arg then
+      if (← isProof arg) || (← refutableType (← inferType arg)) then
         if ← falseDischarge arg then return true
     return false
-  | .lam .. => lambdaTelescope e fun _ body => falseDischarge body
+  | .lam .. => lambdaTelescope e fun xs body => do
+    for x in xs do
+      if ← refutableType (← inferType x) then return false
+    falseDischarge body
   | .letE _ _ v b _ => falseDischarge (b.instantiate1 v)
   | .mdata _ e | .proj _ _ e => falseDischarge e
   | _ => return false
@@ -615,7 +648,7 @@ def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := 
         ty := ty.consumeMData
         if let .forallE _ domain body _ := ty then
           if ← isProp domain then
-            let (bad, _) ← (falseDischarge arg).run (20000, {})
+            let (bad, _) ← (falseDischarge arg).run {}
             falseHyp := falseHyp || bad
           ty := body.instantiate1 arg
         else valid := false

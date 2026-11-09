@@ -187,6 +187,26 @@ end ConcreteSpecControl
         add(f"nested-decide-discharge-{depth}", fixture, set(), status=0)
 
 
+
+    universal_hyp = base.replace("_h : n = 2", "_h : ∀ _k : Nat, n = 2")
+    universal_hyp = universal_hyp.replace("growth 2 rfl", "growth 2 (fun _ => rfl)")
+    universal_hyp = universal_hyp.replace("2 = 2 ∧ ¬ 2 < mutant 2 := by decide",
+        "(∀ _k : Nat, 2 = 2) ∧ ¬ 2 < mutant 2 := by constructor; exact fun _ => rfl; decide")
+    for label, domain, body in [
+        ("open-helper-false", "False", "False.elim h"),
+        ("open-helper-empty", "Empty", "Empty.elim h"),
+        ("open-helper-pempty", "PEmpty.{0}", "PEmpty.elim h"),
+    ]:
+        helper = (f"axiom impossible : {domain}\n"
+                  "/-- Helper (computation). Generic discharge control (approved: independent:r4). -/\n"
+                  f"theorem genericDischarge (_k : Nat) (h : {domain}) : 2 = 2 := {body}\n")
+        fixture = universal_hyp.replace("/-- Law", helper + "/-- Law", 1)
+        fixture = fixture.replace("end ConcreteSpecControl",
+            "/-- Instance (law `ConcreteSpecControl.growth`, case `bad`). -/\n"
+            "example : 2 < S 2 := growth 2 (fun k => genericDischarge k impossible)\n"
+            "end ConcreteSpecControl")
+        add(label, fixture, bad("instance-false-discharge"))
+
     add("recursive-law-positive", extra("/-- Law (subject `ConcreteSpecControl.S`). -/", "theorem recursiveLaw (n : Nat) : n < S n := match n with\n  | 0 => Nat.zero_lt_succ 0\n  | n + 1 => Nat.succ_lt_succ (recursiveLaw n)"), bad("missing-instance", "ConcreteSpecControl.recursiveLaw"))
     add("namespace-components", base + "namespace Left.Right\nopen ConcreteSpecControl\n/-- Helper (computation). References `S` (approved: independent:r3). -/\ntheorem marker : True := trivial\nend Left.Right\n", set(), status=0)
     add("root-and-open-ambiguous", base + "def S : Nat := 0\nopen ConcreteSpecControl\n/-- Helper (computation). Ambiguous reference `S` (approved: independent:r3). -/\ntheorem Other.marker : True := trivial\n", bad("ambiguous-name", "Other.marker"))

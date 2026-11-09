@@ -24,7 +24,7 @@ def replay(records, directory):
     Each report is produced by the ordinary audit, then checked by the same
     exact diagnostic assertions as supplied reports. Never synthesize a PASS.
     """
-    directory.mkdir(parents=True, exist_ok=True)
+    directory.mkdir(parents=True, exist_ok=False)
     scopes = {
         'c9-old': ['Ident', 'Prim'], 'c9-new': ['Ident', 'Prim'],
         'c6-old': ['Observe2'], 'c6-current': ['Observe2', 'ObserveEvidence'],
@@ -49,12 +49,65 @@ def replay(records, directory):
                 raise RuntimeError(f'INCOMPLETE historical-replay {label} rc={result.returncode}')
 
 
+def focused_c9(records):
+    """Light exact C9 law/evidence control, using the shared population.
+
+    This is an isolated control, not a historical module or head PASS.
+    All source bytes (including retained example line identities) are unchanged.
+    """
+    from vacuity_driver import compiled_consumer, run
+    row = next(row for row in records if row['fixture'].startswith('c9-new-'))
+    archive = subprocess.run(
+        ['bash', str(ROOT / 'scripts/checks/lib/bounded.sh'), '30', 'git',
+         'archive', row['commit'], 'ConcreteSpec', 'ConcreteSpec.lean', 'ROADMAP.md'],
+        cwd=ROOT, stdout=subprocess.PIPE, check=True)
+    driver = r'''import ConcreteSpec
+import N2Meta
+open Lean Meta
+set_option maxHeartbeats 2000000 in
+#eval show MetaM Unit from do
+  let population := (populationConstants (← getEnv)).filter fun (n, _) =>
+    n == `ConcreteSpec.Core.KeyConstruct.collectKeysIn_sound ||
+    (toString n).endsWith "ConcreteSpec/Proofs/Ident.lean:1266»" ||
+    (toString n).endsWith "ConcreteSpec/Proofs/Ident.lean:1273»"
+  unless population.length == 3 do throwError "exact-c9-population"
+  let findings ← Vacuity.check population
+  for f in findings do
+    IO.println s!"{f.status} {f.code} {f.name} {f.detail}"
+  if findings.any (·.status == "INCOMPLETE") then IO.println "N2 INCOMPLETE"
+  else if findings.any (·.status == "FAIL") then IO.println "N2 FAIL"
+  else IO.println "N2 PASS"
+'''
+    with tempfile.TemporaryDirectory(prefix='n2-c9-control-') as temp:
+        with tarfile.open(fileobj=io.BytesIO(archive.stdout)) as tree:
+            tree.extractall(temp, filter='data')
+        with compiled_consumer() as meta:
+            code, output = run(Path(temp), 'ConcreteSpec.Proofs.Ident', inventory=True,
+                               driver_text=driver, meta_path=meta)
+    # The selected law has two subjects; this exact planted example targets
+    # pathAtIn only. Its missing collectKeysIn witness is deliberately retained,
+    # and must be the sole failure, on the law rather than either evidence term.
+    expected = ('FAIL missing-planted ConcreteSpec.Core.KeyConstruct.collectKeysIn_sound '
+                'ConcreteSpec.Core.Vacuity.nestedBody/ConcreteSpec.Core.KeyConstruct.collectKeysIn')
+    diagnostics = [line.strip() for line in output.splitlines()
+                   if line.startswith(('FAIL ', 'INCOMPLETE '))]
+    if code != 0 or diagnostics != [expected] or not output.endswith('N2 FAIL\n'):
+        print('FAIL exact-c9-control\n' + output)
+        return 1
+    print('PASS exact-c9-control: original law, closed instance :1266 and planted :1273; '
+          'both evidence checks clean; exact missing sibling-subject witness retained')
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--reports', type=Path)
     parser.add_argument('--replay', type=Path, help='server: re-elaborate all exact historical controls into this report directory')
+    parser.add_argument('--focused-c9', action='store_true', help='light isolated exact C9 law and two evidence checks')
     args = parser.parse_args()
     records = json.loads((HERE / 'fixtures/provenance.json').read_text())
+    if args.focused_c9:
+        return focused_c9(records)
     if args.replay:
         replay(records, args.replay)
         args.reports = args.replay
