@@ -63,42 +63,15 @@ land_normalize_url() {
   echo "raw:$u"
 }
 
-# Apply git's url.<base>.pushInsteadOf (or url.<base>.insteadOf) longest-prefix rewrite to a raw URL.
-land_rewrite_push_url() {
-  local u="${1:-}" line key pfx best_pfx="" best_base="" mode
-  for mode in pushinsteadof insteadof; do
-    best_pfx=""; best_base=""
-    while IFS= read -r line; do
-      [ -n "$line" ] || continue
-      key="${line%% *}"
-      pfx="${line#* }"
-      [ -n "$pfx" ] || continue
-      case "$u" in
-        "$pfx"*)
-          if [ "${#pfx}" -gt "${#best_pfx}" ]; then
-            best_pfx="$pfx"
-            best_base="${key#url.}"
-            best_base="${best_base%.$mode}"
-          fi ;;
-      esac
-    done < <(git config --get-regexp "^url\\..*\\.${mode}\$" 2>/dev/null || true)
-    if [ -n "$best_pfx" ]; then
-      echo "${best_base}${u#"$best_pfx"}"
-      return 0
-    fi
-  done
-  echo "$u"
-}
-
 # Prints the expected normalized destination identity (`github.com/lambdaclass/concrete` in
 # production). A local bare repository (`local:<real-path>`) is accepted ONLY through the test seam
 # CONCRETE_TEST_CANONICAL_DIR when ALL of the following hold simultaneously:
 #   1. git_sandbox config isolation is active: GIT_CONFIG_NOSYSTEM=1 and GIT_CONFIG_GLOBAL is an
-#      existing file inside ${TMPDIR:-/tmp}/.
-#   2. The current git worktree (`git rev-parse --show-toplevel`) resolves inside ${TMPDIR:-/tmp}/
-#      and is NOT the repository checkout that owns scripts/land/lib.sh ($LAND_LIB_ROOT).
+#      existing file whose directory ($gcfg_dir, the mktemp sandbox root) is inside ${TMPDIR:-/tmp}/.
+#   2. The current git worktree (`git rev-parse --show-toplevel`) resolves inside that sandbox
+#      directory $gcfg_dir/ (and therefore inside ${TMPDIR:-/tmp}/, never the owning checkout).
 #   3. CONCRETE_TEST_CANONICAL_DIR is an absolute filesystem path (no URL scheme) to an existing bare
-#      git repository whose real path is inside ${TMPDIR:-/tmp}/.
+#      git repository whose real path is inside $gcfg_dir/ (and ${TMPDIR:-/tmp}/).
 # If CONCRETE_TEST_CANONICAL_DIR is set (even to empty) and any condition above fails, this function
 # refuses and fails closed. Thus the seam can never be activated in a production checkout and can
 # never point to a network remote or GitHub repository.
@@ -136,13 +109,17 @@ land_canonical_target() {
     esac
     top="$(cd "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null && pwd -P)" || top=""
     if [ -z "$top" ] || [ "$top" = "$LAND_LIB_ROOT" ]; then
-      echo "$caller: refusing CONCRETE_TEST_CANONICAL_DIR='$cdir' in repository checkout '${top:-unknown}' (test seam is disabled in the owning checkout)" >&2
-      return 1
+      case "$top/" in
+        "$gcfg_dir/"*) ;;
+        *)
+          echo "$caller: refusing CONCRETE_TEST_CANONICAL_DIR='$cdir' in repository checkout '${top:-unknown}' (test seam is disabled in the owning checkout)" >&2
+          return 1 ;;
+      esac
     fi
     case "$top/" in
-      "$tmp_real/"*) ;;
+      "$gcfg_dir/"*) ;;
       *)
-        echo "$caller: refusing CONCRETE_TEST_CANONICAL_DIR='$cdir': worktree '$top' is not inside $tmp_real" >&2
+        echo "$caller: refusing CONCRETE_TEST_CANONICAL_DIR='$cdir': worktree '$top' is not inside $gcfg_dir (test seam is disabled in the owning checkout)" >&2
         return 1 ;;
     esac
     if [ ! -d "$cdir" ] || [ "$(git --git-dir="$cdir" rev-parse --is-bare-repository 2>/dev/null)" != true ]; then
@@ -151,9 +128,9 @@ land_canonical_target() {
     fi
     cdir_real="$(cd "$cdir" 2>/dev/null && pwd -P)" || cdir_real=""
     case "$cdir_real/" in
-      "$tmp_real/"*) ;;
+      "$gcfg_dir/"*) ;;
       *)
-        echo "$caller: refusing CONCRETE_TEST_CANONICAL_DIR='$cdir' ($cdir_real): bare repository is not inside $tmp_real" >&2
+        echo "$caller: refusing CONCRETE_TEST_CANONICAL_DIR='$cdir' ($cdir_real): bare repository is not inside $gcfg_dir" >&2
         return 1 ;;
     esac
     echo "local:$cdir_real"
@@ -163,8 +140,8 @@ land_canonical_target() {
 }
 
 # Verify that remote $2 (must be $LAND_CANONICAL_REMOTE, i.e. `origin`) exists, has a single fetch
-# URL and a single push URL, that its fetch and push URLs agree, and that both raw and resolved
-# URLs (after pushurl, insteadOf and pushInsteadOf) resolve to the canonical repository identity.
+# URL and a single push URL, that its resolved fetch and push URLs agree, and that both resolve
+# (via git's own pushurl, insteadOf and pushInsteadOf resolution) to the canonical repository identity.
 land_check_remote() {
   local caller="${1:-land}" remote="${2:-$LAND_CANONICAL_REMOTE}" target
   target="$(land_canonical_target "$caller")" || return 1
@@ -204,12 +181,10 @@ land_check_remote() {
     echo "$caller: refusing remote '$remote' with multiple fetch URLs ($(printf '%s\n' "$res_fetch" | tr '\n' ' ' | sed 's/ $//')); exactly one repository ($LAND_CANONICAL_REPO) is allowed" >&2
     return 1
   fi
-  local norm_fetch norm_push norm_raw_fetch norm_raw_push raw_eff_push
+  local norm_fetch norm_push raw_eff_push
   norm_fetch="$(land_normalize_url "$res_fetch")"
   norm_push="$(land_normalize_url "$res_push")"
-  norm_raw_fetch="$(land_normalize_url "$raw_fetch")"
   raw_eff_push="${raw_push:-$raw_fetch}"
-  norm_raw_push="$(land_normalize_url "$raw_eff_push")"
   if [ "$res_push" != "$raw_eff_push" ] && [ "$norm_push" != "$target" ]; then
     echo "$caller: refusing remote '$remote': push URL '$raw_eff_push' rewrites to '$res_push' ($norm_push; fetch URL '$res_fetch'), not the canonical repository $LAND_CANONICAL_REPO ($target)" >&2
     return 1
@@ -222,16 +197,8 @@ land_check_remote() {
     echo "$caller: refusing remote '$remote': fetch URL '$res_fetch' ($norm_fetch) and push URL '$res_push' ($norm_push) disagree (both must resolve to $LAND_CANONICAL_REPO)" >&2
     return 1
   fi
-  if [ -n "$raw_push" ] && [ "$norm_raw_fetch" != "$norm_raw_push" ]; then
-    echo "$caller: refusing remote '$remote': configured url '$raw_fetch' ($norm_raw_fetch) and pushurl '$raw_push' ($norm_raw_push) disagree (both must resolve to $LAND_CANONICAL_REPO)" >&2
-    return 1
-  fi
   if [ "$norm_push" != "$target" ]; then
     echo "$caller: refusing remote '$remote': push URL '$res_push' ($norm_push) is not the canonical repository $LAND_CANONICAL_REPO ($target)" >&2
-    return 1
-  fi
-  if [ "$norm_raw_fetch" != "$target" ]; then
-    echo "$caller: refusing remote '$remote': configured URL '$raw_fetch' ($norm_raw_fetch) is not the canonical repository $LAND_CANONICAL_REPO ($target)" >&2
     return 1
   fi
   return 0
@@ -273,7 +240,7 @@ land_check_destination() {
 }
 
 # Validate the destination arguments git passes to .githooks/pre-push ($1 = remote name or URL,
-# $2 = resolved destination URL) when refs/heads/main is being pushed.
+# $2 = git's resolved destination URL) when refs/heads/main is being pushed.
 land_check_hook_destination() {
   local caller="${1:-pre-push}" remote_arg="${2:-}" url_arg="${3:-}" target
   target="$(land_canonical_target "$caller")" || return 1
@@ -285,14 +252,8 @@ land_check_hook_destination() {
     echo "$caller: refusing to push main without a destination URL (remote='${remote_arg}')" >&2
     return 1
   fi
-  local norm_url rewritten norm_rewritten
+  local norm_url
   norm_url="$(land_normalize_url "$url_arg")"
-  rewritten="$(land_rewrite_push_url "$url_arg")"
-  norm_rewritten="$(land_normalize_url "$rewritten")"
-  if [ "$rewritten" != "$url_arg" ] && [ "$norm_rewritten" != "$target" ]; then
-    echo "$caller: refusing to push main: destination '$url_arg' rewrites to '$rewritten' ($norm_rewritten), not the canonical repository $LAND_CANONICAL_REPO ($target)" >&2
-    return 1
-  fi
   if [ "$norm_url" != "$target" ]; then
     echo "$caller: refusing to push main to '$url_arg' ($norm_url): destination is not the canonical repository $LAND_CANONICAL_REPO ($target)" >&2
     return 1
@@ -301,9 +262,7 @@ land_check_hook_destination() {
     echo "$caller: refusing to push main via '$remote_arg' ('$url_arg'): main may only be pushed via remote '$LAND_CANONICAL_REMOTE' ($LAND_CANONICAL_REPO)" >&2
     return 1
   fi
-  if [ -n "$(git config --get-all "remote.$LAND_CANONICAL_REMOTE.url" 2>/dev/null || true)" ]; then
-    land_check_remote "$caller" "$LAND_CANONICAL_REMOTE" || return 1
-  fi
+  land_check_remote "$caller" "$LAND_CANONICAL_REMOTE" || return 1
   return 0
 }
 

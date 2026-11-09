@@ -10,14 +10,17 @@ are the owner's decisions of 2026-11-06, pending their record in `docs/decisions
   with one canonical identity (`LAND_CANONICAL_REPO="lambdaclass/concrete"`,
   `LAND_CANONICAL_REMOTE="origin"`) owned by `scripts/land/lib.sh`. `scripts/land/train.sh`
   (`LAND_MIRROR` and `land --no-mirror` are gone), `scripts/push-both.sh`, `scripts/land/ready.sh`,
-  `scripts/land/notes.sh`, `scripts/land/impact_gates.sh`, `scripts/land/acceptance.sh` and
-  `.githooks/pre-push` (when pushing `main`) verify the resolved fetch and push URLs of `origin`
-  (`git remote get-url --all` and `--push --all`, normalizing GitHub HTTPS and SSH URLs to one
-  `owner/name` identity and accounting for `pushurl`, `insteadOf` and `pushInsteadOf`) and refuse
-  before any ref moves unless there is a single destination and it is `lambdaclass/concrete`.
-  Multiple push URLs, fetch/push URL disagreements, destination overrides (`LAND_REMOTE`,
-  `PUSH_REMOTE`, `BRANCH`, CLI destination arguments) and CI-evidence repository overrides
-  (`LAND_REPO`, `ACCEPT_REPO`, `GH_REPO`) are refused fail-closed.
+  `scripts/land/notes.sh`, `scripts/land/impact_gates.sh`, `scripts/land/run-at-ref.sh` (which
+  acquires objects from the local gate clone via a temporary `source` remote and configures and
+  validates the execution checkout's canonical `origin`), `scripts/land/acceptance.sh` and
+  `.githooks/pre-push` (when pushing `main`, validating Git's resolved destination URL directly)
+  verify the resolved fetch and push URLs of `origin` (`git remote get-url --all` and
+  `--push --all`, normalizing GitHub HTTPS and SSH URLs to one `owner/name` identity and using Git's
+  own `pushurl`, `insteadOf` and `pushInsteadOf` resolution) and refuse before any ref moves unless
+  there is a single destination and it is `lambdaclass/concrete`. Multiple push URLs, fetch/push URL
+  disagreements, destination overrides (`LAND_REMOTE`, `PUSH_REMOTE`, `BRANCH`, CLI destination
+  arguments) and CI-evidence repository overrides (`LAND_REPO`, `ACCEPT_REPO`, `GH_REPO`) are
+  refused fail-closed.
 - **CI.** The Landing record job reads runs from `github.repository`. The concrete-ci-2 runners are
   registered on lambdaclass/concrete, with `CONCRETE_SELF_HOSTED=true` there.
 - **Oracle.** The release `oracle-legacy-compiler-final` is republished on lambdaclass/concrete with

@@ -421,15 +421,55 @@ out="$(LAND_GATES_HOST= bash "$TRAIN" check t1 --no-remote 2>&1)"; rc=$?
 git config --unset land.gatesHost
 unset LAND_GATES_TRANSPORT
 
-# run-at-ref.sh fetches the train head from a bundle into a gate clone that has only main.
+# run-at-ref.sh fetches the train head from a bundle into a gate clone that has only main,
+# configures and validates the execution checkout's canonical origin (never leaving origin
+# pointing at the local gate clone), and runs the real impact_gates.sh.
 git clone -q --bare "$TMP/origin.git" "$TMP/gateclone.git"
 git update-ref refs/land-remote/test "$HEAD1"
 git bundle create "$TMP/cand.bundle" refs/land-remote/test "^$BASE" >/dev/null 2>&1
 git update-ref -d refs/land-remote/test
 out="$(RUN_AT_REF_REPO="$TMP/gateclone.git" RUN_AT_REF_RUNS="$TMP/runs" RUN_AT_REF_SOURCE="$TMP/cand.bundle" RUN_AT_REF_NO_NIX=1 \
-  bash "$ROOT_DIR/scripts/land/run-at-ref.sh" refs/land-remote/test 'echo at=$(git rev-parse HEAD)' 2>&1)"; rc=$?
-[ "$rc" = 0 ] && has "$out" "sha=$HEAD1 clone=" && has "$out" "at=$HEAD1" && has "$out" "exit=0 " \
-  && ok "run-at-ref.sh runs exactly the bundled head and prints sha= on both lines" || { no "run-at-ref from a bundle: exit $rc"; echo "$out" | sed 's/^/      /'; }
+  bash "$ROOT_DIR/scripts/land/run-at-ref.sh" refs/land-remote/test \
+  'echo at=$(git rev-parse HEAD) remotes=$(git remote | tr "\n" ",") origin_fetch=$(git remote get-url origin) origin_push=$(git remote get-url --push origin)' 2>&1)"; rc=$?
+[ "$rc" = 0 ] && has "$out" "sha=$HEAD1 clone=" \
+  && has "$out" "at=$HEAD1 remotes=origin, origin_fetch=$TMP/origin.git origin_push=$TMP/origin.git" \
+  && has "$out" "exit=0 " \
+  && ok "run-at-ref.sh runs the bundled head in a checkout whose origin is canonical ($TMP/origin.git), not the local gate clone ($TMP/gateclone.git)" \
+  || { no "run-at-ref from a bundle: exit $rc"; echo "$out" | sed 's/^/      /'; }
+rm -f "$FAKE_GH_DIR/hook.stdin"
+out="$(RUN_AT_REF_REPO="$TMP/gateclone.git" RUN_AT_REF_RUNS="$TMP/runs" RUN_AT_REF_SOURCE="$TMP/cand.bundle" RUN_AT_REF_NO_NIX=1 \
+  bash "$ROOT_DIR/scripts/land/run-at-ref.sh" refs/land-remote/test \
+  "bash '$ROOT_DIR/scripts/land/impact_gates.sh' --base $BASE --head $HEAD1 --src-ref refs/heads/train/t1 --dst-ref refs/heads/ci/t1" 2>&1)"; rc=$?
+[ "$rc" = 0 ] && has "$out" "impact: gates passed for ${BASE:0:10}..${HEAD1:0:10}" \
+  && [ "$(cat "$FAKE_GH_DIR/hook.stdin" 2>/dev/null)" = "refs/heads/train/t1 $HEAD1 refs/heads/ci/t1 $BASE" ] \
+  && has "$out" "exit=0 " \
+  && ok "real run-at-ref.sh + real impact_gates.sh succeeds against canonical origin" \
+  || { no "real run-at-ref.sh + impact_gates.sh: exit $rc"; echo "$out" | sed 's/^/      /'; }
+git -C "$TMP/gateclone.git" remote set-url origin https://github.com/lambdaclass/concrete.git
+rm -f "$FAKE_GH_DIR/hook.stdin"
+out="$(env -u CONCRETE_TEST_CANONICAL_DIR RUN_AT_REF_REPO="$TMP/gateclone.git" RUN_AT_REF_RUNS="$TMP/runs" RUN_AT_REF_SOURCE="$TMP/cand.bundle" RUN_AT_REF_NO_NIX=1 \
+  bash "$ROOT_DIR/scripts/land/run-at-ref.sh" refs/land-remote/test \
+  "bash '$ROOT_DIR/scripts/land/impact_gates.sh' --base $BASE --head $HEAD1 --src-ref refs/heads/train/t1 --dst-ref refs/heads/ci/t1" 2>&1)"; rc=$?
+git -C "$TMP/gateclone.git" remote set-url origin "$TMP/origin.git"
+[ "$rc" = 0 ] && has "$out" "impact: gates passed for ${BASE:0:10}..${HEAD1:0:10}" \
+  && [ "$(cat "$FAKE_GH_DIR/hook.stdin" 2>/dev/null)" = "refs/heads/train/t1 $HEAD1 refs/heads/ci/t1 $BASE" ] \
+  && has "$out" "exit=0 " \
+  && ok "production mode (CONCRETE_TEST_CANONICAL_DIR unset): real run-at-ref.sh + real impact_gates.sh succeeds when gate clone origin is https://github.com/lambdaclass/concrete.git" \
+  || { no "prod mode run-at-ref.sh + impact_gates.sh: exit $rc"; echo "$out" | sed 's/^/      /'; }
+rm -f "$FAKE_GH_DIR/hook.stdin"
+out="$(RUN_AT_REF_REPO="$TMP/gateclone.git" RUN_AT_REF_RUNS="$TMP/runs" RUN_AT_REF_SOURCE="$TMP/cand.bundle" RUN_AT_REF_NO_NIX=1 \
+  bash "$ROOT_DIR/scripts/land/run-at-ref.sh" refs/land-remote/test \
+  "git remote set-url origin '$TMP/gateclone.git' && bash '$ROOT_DIR/scripts/land/impact_gates.sh' --base $BASE --head $HEAD1 --src-ref refs/heads/train/t1 --dst-ref refs/heads/ci/t1" 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "impact: refusing remote 'origin'" && has "$out" "$TMP/gateclone.git" && [ ! -f "$FAKE_GH_DIR/hook.stdin" ] \
+  && ok "CONTROL: real impact_gates.sh refuses an execution checkout whose origin is left pointing at the local gate clone ($TMP/gateclone.git)" \
+  || { no "CONTROL: local-path origin accepted by impact_gates.sh (exit $rc)"; echo "$out" | sed 's/^/      /'; }
+git -C "$TMP/gateclone.git" remote set-url origin "$TMP/concrete2.git"
+out="$(RUN_AT_REF_REPO="$TMP/gateclone.git" RUN_AT_REF_RUNS="$TMP/runs" RUN_AT_REF_SOURCE="$TMP/cand.bundle" RUN_AT_REF_NO_NIX=1 \
+  bash "$ROOT_DIR/scripts/land/run-at-ref.sh" refs/land-remote/test 'echo RAN_CMD' 2>&1)"; rc=$?
+git -C "$TMP/gateclone.git" remote set-url origin "$TMP/origin.git"
+[ "$rc" != 0 ] && has "$out" "run-at-ref: refusing remote 'origin'" && ! has "$out" "RAN_CMD" && ! has "$out" "[concrete-remote] ref=" \
+  && ok "run-at-ref.sh refuses a gate clone with a non-canonical origin before executing the command" \
+  || { no "run-at-ref non-canonical gate clone: exit $rc"; echo "$out" | sed 's/^/      /'; }
 
 echo "=== gate host: the pushing hook reuses the attestation only for this exact push ==="
 # The library the hook calls, driven directly in its own repository (the real hook needs the gate runner).
@@ -501,30 +541,36 @@ has "$( ( export CONCRETE_PREPUSH_REENTERED=1; reuse "$R2" ) )" "REUSE" \
   && ok "the hook's nix re-entry bookkeeping does not break reuse (push from outside the gate shell)" || no "REENTERED breaks reuse"
 
 echo "=== gate host end to end: the real ssh transport, shimmed, carries the command intact ==="
-# The real gates_remote.sh -> gates_transport_ssh.sh -> run-at-ref.sh chain, with ssh and scp
-# replaced by local shims (the "host" is a directory) and a committed stub impact_gates.sh that
-# records its environment and writes the hook's record the way the real hook would, unless the
+# The real gates_remote.sh -> gates_transport_ssh.sh -> run-at-ref.sh -> impact_gates.sh chain, with
+# ssh and scp replaced by local shims (the "host" is a directory), the real scripts/land/impact_gates.sh
+# and scripts/land/lib.sh committed in the repository, and a committed .githooks/pre-push that records
+# its environment and arguments and writes the hook's record the way a recording hook would, unless the
 # bypass is set (then it "skips", exit 0, no record: what the real hook does).
 RI="$TMP/ri"; HH="$TMP/gatehost"; mkdir -p "$HH"
 git init -q --bare "$TMP/ri-origin.git"; git init -q "$RI"
-( cd "$RI" && git remote add origin "$TMP/ri-origin.git" && mkdir -p scripts/land \
+( cd "$RI" && git remote add origin "$TMP/ri-origin.git" && mkdir -p scripts/land .githooks \
   && echo 'leanprover/lean4:v0' > lean-toolchain && echo 'echo gate' > scripts/g.sh \
-  && cat > scripts/land/impact_gates.sh <<'EOF'
+  && cp "$ROOT_DIR/scripts/land/impact_gates.sh" "$ROOT_DIR/scripts/land/lib.sh" scripts/land/ \
+  && chmod +x scripts/land/impact_gates.sh \
+  && cat > .githooks/pre-push <<'EOF'
 #!/usr/bin/env bash
-# stub: --base B --head H --src-ref S --dst-ref D
+# stub hook invoked by the real scripts/land/impact_gates.sh: $1=remote, $2=url; stdin=<src> <head> <dst> <base>
 env -0 > "$CONCRETE_TEST_OUT/remote.env"
-printf '%s\n' "$@" > "$CONCRETE_TEST_OUT/remote.args"
+printf '%s\n' "$@" > "$CONCRETE_TEST_OUT/remote.hook_args"
+read -r lref lsha rref rsha
+printf '%s %s %s %s\n' "$lref" "$lsha" "$rref" "$rsha" > "$CONCRETE_TEST_OUT/remote.stdin"
 [ -z "${CONCRETE_SKIP_GATES:-}" ] || { echo "pre-push: gates SKIPPED"; exit 0; }
 source "$CONCRETE_TEST_LIB"
 t="$(mktemp -d)"
-git diff --name-only "$2" "$4" > "$t/changed"
+git diff --name-only "$rsha" "$lsha" > "$t/changed"
 printf 'bash scripts/g.sh\n' > "$t/plan"
-ppr_remote_components "$PWD" "$4" "$t/changed" "$t/plan" "$t/comp" || { echo "stub: $PPR_REASON"; exit 1; }
+ppr_remote_components "$PWD" "$lsha" "$t/changed" "$t/plan" "$t/comp" || { echo "stub: $PPR_REASON"; exit 1; }
 { echo "format=concrete-prepush-record-v1"; cat "$t/comp"; echo status=pass; echo complete=1; } > "$(git rev-parse --git-path concrete-prepush-record)"
 rm -rf "$t"
 echo "impact: stub gates passed"
 EOF
-  git add -A && git commit -qm base && git push -q origin HEAD:main \
+  chmod +x .githooks/pre-push \
+  && git add -A && git commit -qm base && git push -q origin HEAD:main \
   && echo 'echo gate2' > scripts/g2.sh && git add -A && git commit -qm head )
 RIB="$(git -C "$RI" rev-parse HEAD~1)" RIH="$(git -C "$RI" rev-parse HEAD)"
 git clone -q "$TMP/ri-origin.git" "$HH/concrete2"
@@ -539,26 +585,60 @@ cat > "$TMP/ssh-shim" <<'EOF'
 # ssh <host> <command>: the command runs in the fake host's home, through a login shell that is not bash's
 # own quoting (sh -c), with the gate bypass exported on the host side.
 [ -f "$GATEHOST_HOME/unreachable" ] && { echo "ssh: connect to host $1 port 22: No route to host" >&2; exit 255; }
-cd "$GATEHOST_HOME" && HOME="$GATEHOST_HOME" RUN_AT_REF_NO_NIX=1 CONCRETE_SKIP_GATES=1 sh -c "$2"
+unset LAND_HOOK
+cd "$GATEHOST_HOME" && HOME="$GATEHOST_HOME" RUN_AT_REF_NO_NIX=1 LAND_NO_NIX=1 CONCRETE_SKIP_GATES=1 sh -c "$2"
 EOF
 chmod +x "$TMP/scp-shim" "$TMP/ssh-shim"
 INJ="$(printf 'one\nCONCRETE_Y; touch %s/PWNED; #=two $(touch %s/PWNED2) %s %s' "$TMP" "$TMP" "'q'" '"d"')"
 e2e(){ # -> runs gates_remote.sh in $RI for base..head; output in $out, status in $rc
   out="$(cd "$RI" && GATEHOST_HOME="$HH" LAND_GATES_SSH="$TMP/ssh-shim" LAND_GATES_SCP="$TMP/scp-shim" \
+    CONCRETE_TEST_CANONICAL_DIR="$TMP/ri-origin.git" \
     CONCRETE_TEST_OUT="$TMP" CONCRETE_TEST_LIB="$ROOT_DIR/scripts/checks/lib/prepush_record.sh" CONCRETE_INJ="$INJ" \
     bash "$ROOT_DIR/scripts/land/gates_remote.sh" --host fakehost --base "$RIB" --head "$RIH" 2>&1)"; rc=$?
 }
 e2e
 RIATT="$(cd "$RI" && git rev-parse --git-path concrete-prepush-remote-record)"; case "$RIATT" in /*) ;; *) RIATT="$RI/$RIATT" ;; esac
-[ "$rc" = 0 ] && has "$out" "sha=$RIH clone=" && has "$out" "stub gates passed" && grep -qx "head=$RIH" "$RIATT" 2>/dev/null \
-  && ok "the real transport runs the head on the host and the pass is attested" || { no "e2e transport: exit $rc"; echo "$out" | sed 's/^/      /'; }
+[ "$rc" = 0 ] && has "$out" "sha=$RIH clone=" && has "$out" "stub gates passed" \
+  && has "$out" "impact: gates passed for ${RIB:0:10}..${RIH:0:10}" \
+  && [ "$(tr '\n' ' ' < "$TMP/remote.hook_args" 2>/dev/null)" = "origin $TMP/ri-origin.git " ] \
+  && [ "$(cat "$TMP/remote.stdin" 2>/dev/null)" = "refs/heads/impact $RIH refs/heads/ci/impact $RIB" ] \
+  && grep -qx "head=$RIH" "$RIATT" 2>/dev/null \
+  && ok "the real transport + run-at-ref.sh + real impact_gates.sh runs the head on the host with canonical origin and attests the pass" \
+  || { no "e2e transport: exit $rc"; echo "$out" | sed 's/^/      /'; }
+# Control: if run-at-ref.sh leaves the execution checkout's origin pointing at the local gate clone
+# ($HH/concrete2, as a plain `git clone --local` does without the origin fix), the real impact_gates.sh
+# in the end-to-end path refuses it and fails the check.
+mkdir -p "$TMP/unfixed-land/scripts/land" "$TMP/unfixed-land/scripts/checks/lib"
+cp "$ROOT_DIR/scripts/land/gates_transport_ssh.sh" "$ROOT_DIR/scripts/land/lib.sh" "$TMP/unfixed-land/scripts/land/"
+cp "$ROOT_DIR/scripts/checks/lib/git_sandbox.sh" "$TMP/unfixed-land/scripts/checks/lib/"
+awk '
+  /^git clone --quiet --local --no-checkout --origin source / {
+    print "git clone --quiet --local --no-checkout \"$REPO\" \"$WT\""
+    print "git -C \"$WT\" fetch --quiet origin \"+refs/remotes/origin/*:refs/remotes/origin/*\" \"+refs/run-at-ref/$ID:refs/run-at-ref/$ID\""
+    skip = 1; next
+  }
+  skip && /^git -C "\$WT" checkout / { skip = 0 }
+  skip { next }
+  /^land_check_destination "run-at-ref"/ { next }
+  { print }
+' "$ROOT_DIR/scripts/land/run-at-ref.sh" > "$TMP/unfixed-land/scripts/land/run-at-ref.sh"
+chmod +x "$TMP/unfixed-land/scripts/land/gates_transport_ssh.sh" "$TMP/unfixed-land/scripts/land/run-at-ref.sh"
+unfixed_out="$(cd "$RI" && GATEHOST_HOME="$HH" LAND_GATES_SSH="$TMP/ssh-shim" LAND_GATES_SCP="$TMP/scp-shim" \
+  LAND_GATES_TRANSPORT="$TMP/unfixed-land/scripts/land/gates_transport_ssh.sh" \
+  CONCRETE_TEST_CANONICAL_DIR="$TMP/ri-origin.git" \
+  CONCRETE_TEST_OUT="$TMP" CONCRETE_TEST_LIB="$ROOT_DIR/scripts/checks/lib/prepush_record.sh" CONCRETE_INJ="$INJ" \
+  bash "$ROOT_DIR/scripts/land/gates_remote.sh" --host fakehost --base "$RIB" --head "$RIH" 2>&1)"; unfixed_rc=$?
+[ "$unfixed_rc" = 1 ] && has "$unfixed_out" "impact: refusing remote 'origin'" && has "$unfixed_out" "$HH/concrete2" && [ ! -f "$RIATT" ] \
+  && ok "CONTROL: without run-at-ref.sh's canonical-origin configuration, the real e2e impact path fails closed on the local-path origin ($HH/concrete2)" \
+  || { no "CONTROL: unfixed run-at-ref.sh accepted in e2e (exit $unfixed_rc)"; echo "$unfixed_out" | sed 's/^/      /'; }
+e2e
 [ ! -e "$TMP/PWNED" ] && [ ! -e "$TMP/PWNED2" ] && ! grep -qz '^CONCRETE_Y' "$TMP/remote.env" && grep -qz '^CONCRETE_TEST_LIB=' "$TMP/remote.env" \
   && ok "a forwarded value with newlines, \$( ) and quotes runs nothing on the host" || no "forwarded env executed on the host"
 python3 -I -c 'import sys; sys.exit(0 if ("CONCRETE_INJ=" + sys.argv[2]).encode() in open(sys.argv[1], "rb").read().split(b"\0") else 1)' "$TMP/remote.env" "$INJ" && ok "the forwarded value arrives byte for byte" || no "forwarded value altered"
 ! grep -qz '^CONCRETE_SKIP_GATES=' "$TMP/remote.env" && ok "the host's own CONCRETE_SKIP_GATES is cleared before the hook" || no "host-side bypass reached the hook"
 [ -z "$(ls -A "$HH" | grep -v '^concrete2$\|^runs$')" ] && ok "the host keeps no bundle or script after the run" || no "host leftovers: $(ls -A "$HH")"
 printf 'scripts/g2.sh\n' > "$TMP/ri.changed"; printf 'bash scripts/g.sh\n' > "$TMP/ri.plan"
-dec="$( cd "$RI" && export CONCRETE_TEST_OUT="$TMP" CONCRETE_TEST_LIB="$ROOT_DIR/scripts/checks/lib/prepush_record.sh" CONCRETE_INJ="$INJ" \
+dec="$( cd "$RI" && export CONCRETE_TEST_CANONICAL_DIR="$TMP/ri-origin.git" CONCRETE_TEST_OUT="$TMP" CONCRETE_TEST_LIB="$ROOT_DIR/scripts/checks/lib/prepush_record.sh" CONCRETE_INJ="$INJ" \
   && source "$ROOT_DIR/scripts/checks/lib/prepush_record.sh" && ppr_remote_components "$RI" "$RIH" "$TMP/ri.changed" "$TMP/ri.plan" "$TMP/ri.comp" \
   && ppr_remote_check "$RI" "$TMP/ri.comp" && echo REUSE || echo "refused:$PPR_REASON" )"
 [ "$dec" = REUSE ] && ok "the push's hook reuses the record the host's run produced" || no "e2e reuse: $dec"
@@ -645,13 +725,16 @@ git push -q "$TMP/concrete2.git" "$BASE:refs/heads/main"
 git remote add concrete2 "$TMP/concrete2.git"
 
 echo "=== destination identity: one owner in scripts/land/lib.sh, resolved URL matching, fail-closed refusals ==="
-# 1. Single owner of canonical repository identity: only scripts/land/lib.sh defines lambdaclass/concrete.
+# 1. Single owner of canonical repository identity and URL resolution: only scripts/land/lib.sh defines
+# lambdaclass/concrete, and URL rewrites are resolved solely by git itself (no second rewrite parser in lib.sh).
 dup_repo="$(grep -rnE '^[^#]*lambdaclass/concrete' "$ROOT_DIR"/scripts/land/*.sh "$ROOT_DIR/scripts/push-both.sh" "$ROOT_DIR/.githooks/pre-push" \
   | grep -v "^$ROOT_DIR/scripts/land/lib.sh:" || true)"
-[ -z "$dup_repo" ] && grep -qxF 'LAND_CANONICAL_REPO="lambdaclass/concrete"' "$ROOT_DIR/scripts/land/lib.sh" \
+second_rewrite="$(grep -vE '^[[:space:]]*#' "$ROOT_DIR/scripts/land/lib.sh" | grep -niE 'insteadof|land_rewrite_push_url' || true)"
+[ -z "$dup_repo" ] && [ -z "$second_rewrite" ] \
+  && grep -qxF 'LAND_CANONICAL_REPO="lambdaclass/concrete"' "$ROOT_DIR/scripts/land/lib.sh" \
   && grep -qxF 'LAND_CANONICAL_REMOTE="origin"' "$ROOT_DIR/scripts/land/lib.sh" \
-  && ok "scripts/land/lib.sh is the single owner of the canonical repository identity" \
-  || { no "duplicate canonical repo definition: $dup_repo"; }
+  && ok "scripts/land/lib.sh is the single owner of canonical identity and delegates URL rewriting solely to git" \
+  || { no "duplicate canonical repo or second URL-rewrite parser: repo='$dup_repo' rewrite='$second_rewrite'"; }
 
 # 2. URL normalization: HTTPS and SSH spellings of lambdaclass/concrete normalize to one identity; concrete2 differs.
 norm_ok="$(
@@ -694,10 +777,53 @@ out="$(env -u CONCRETE_TEST_CANONICAL_DIR bash "$TRAIN" watch t1 --interval 1 2>
 hook_prod_out="$(printf 'refs/heads/main %s refs/heads/main %s\n' "$HEAD1" "$BASE" \
   | env -u CONCRETE_TEST_CANONICAL_DIR CONCRETE_SKIP_GATES=1 bash "$ROOT_DIR/.githooks/pre-push" origin git@github.com:lambdaclass/concrete.git 2>&1)"; hook_prod_rc=$?
 git config --unset "url.git@github.com:lambdaclass/concrete.git.pushInsteadOf"
-git remote set-url origin "$TMP/origin.git"
 [ "$rc" = 0 ] && [ "$hook_prod_rc" = 0 ] && has "$out" "ONLY THE CAMPAIGN TIER FAILED" \
   && ok "production mode accepts HTTPS fetch URL rewritten by pushInsteadOf to SSH lambdaclass/concrete (train + pre-push hook)" \
   || { no "HTTPS + pushInsteadOf SSH rejected (train=$rc, hook=$hook_prod_rc)"; echo "$out $hook_prod_out" | sed 's/^/      /'; }
+
+# Explicit pushurl precedence over pushInsteadOf (P2): git ignores pushInsteadOf when remote.origin.pushurl
+# is explicitly set. Canonical HTTPS fetch + explicit canonical SSH pushurl + a pushInsteadOf rule mapping
+# that SSH prefix elsewhere must be accepted by both publisher validation and .githooks/pre-push.
+git remote set-url origin https://github.com/lambdaclass/concrete.git
+git remote set-url --push origin git@github.com:lambdaclass/concrete.git
+git config "url.git@github.com:unbalancedparentheses/.pushInsteadOf" "git@github.com:lambdaclass/"
+out="$(env -u CONCRETE_TEST_CANONICAL_DIR bash "$TRAIN" watch t1 --interval 1 2>&1)"; rc=$?
+hook_prod_out="$(printf 'refs/heads/main %s refs/heads/main %s\n' "$HEAD1" "$BASE" \
+  | env -u CONCRETE_TEST_CANONICAL_DIR CONCRETE_SKIP_GATES=1 bash "$ROOT_DIR/.githooks/pre-push" origin git@github.com:lambdaclass/concrete.git 2>&1)"; hook_prod_rc=$?
+git config --unset "url.git@github.com:unbalancedparentheses/.pushInsteadOf"
+git remote set-url --push --delete origin git@github.com:lambdaclass/concrete.git
+[ "$rc" = 0 ] && [ "$hook_prod_rc" = 0 ] && has "$out" "ONLY THE CAMPAIGN TIER FAILED" \
+  && ok "production mode accepts explicit canonical pushurl overriding a pushInsteadOf rule (train + pre-push hook)" \
+  || { no "explicit pushurl + pushInsteadOf rejected (train=$rc, hook=$hook_prod_rc)"; echo "$out $hook_prod_out" | sed 's/^/      /'; }
+
+# Chained / multi-rule rewrite configurations (P2):
+# (a) Two pushInsteadOf rules where rule 1 rewrites HTTPS fetch to canonical SSH and rule 2 maps that SSH
+# prefix to concrete2: git applies only one rewrite step (canonical SSH) and passes it to the hook;
+# the hook must not apply a second rewrite to git's already-resolved destination URL.
+git remote set-url origin https://github.com/lambdaclass/concrete.git
+git config "url.git@github.com:lambdaclass/.pushInsteadOf" "https://github.com/lambdaclass/"
+git config "url.git@github.com:unbalancedparentheses/.pushInsteadOf" "git@github.com:lambdaclass/"
+out="$(env -u CONCRETE_TEST_CANONICAL_DIR bash "$TRAIN" watch t1 --interval 1 2>&1)"; rc=$?
+hook_prod_out="$(printf 'refs/heads/main %s refs/heads/main %s\n' "$HEAD1" "$BASE" \
+  | env -u CONCRETE_TEST_CANONICAL_DIR CONCRETE_SKIP_GATES=1 bash "$ROOT_DIR/.githooks/pre-push" origin git@github.com:lambdaclass/concrete.git 2>&1)"; hook_prod_rc=$?
+git config --unset "url.git@github.com:lambdaclass/.pushInsteadOf"
+git config --unset "url.git@github.com:unbalancedparentheses/.pushInsteadOf"
+[ "$rc" = 0 ] && [ "$hook_prod_rc" = 0 ] && has "$out" "ONLY THE CAMPAIGN TIER FAILED" \
+  && ok "production mode accepts one-step canonical pushInsteadOf without chaining a second pushInsteadOf onto the resolved URL" \
+  || { no "two-rule pushInsteadOf rejected (train=$rc, hook=$hook_prod_rc)"; echo "$out $hook_prod_out" | sed 's/^/      /'; }
+# (b) Shorthand alias URL rewritten by insteadOf for fetch and pushInsteadOf for push to canonical URLs.
+git remote set-url origin concrete-gh:lambdaclass/concrete.git
+git config "url.https://github.com/.insteadOf" "concrete-gh:"
+git config "url.git@github.com:.pushInsteadOf" "concrete-gh:"
+out="$(env -u CONCRETE_TEST_CANONICAL_DIR bash "$TRAIN" watch t1 --interval 1 2>&1)"; rc=$?
+hook_prod_out="$(printf 'refs/heads/main %s refs/heads/main %s\n' "$HEAD1" "$BASE" \
+  | env -u CONCRETE_TEST_CANONICAL_DIR CONCRETE_SKIP_GATES=1 bash "$ROOT_DIR/.githooks/pre-push" origin git@github.com:lambdaclass/concrete.git 2>&1)"; hook_prod_rc=$?
+git config --unset "url.https://github.com/.insteadOf"
+git config --unset "url.git@github.com:.pushInsteadOf"
+git remote set-url origin "$TMP/origin.git"
+[ "$rc" = 0 ] && [ "$hook_prod_rc" = 0 ] && has "$out" "ONLY THE CAMPAIGN TIER FAILED" \
+  && ok "production mode accepts shorthand remote URL rewritten by insteadOf (fetch) + pushInsteadOf (push) to lambdaclass/concrete" \
+  || { no "shorthand + insteadOf/pushInsteadOf rejected (train=$rc, hook=$hook_prod_rc)"; echo "$out $hook_prod_out" | sed 's/^/      /'; }
 
 # 3. Test seam security: CONCRETE_TEST_CANONICAL_DIR cannot be set to a URL, non-bare dir, outside /tmp,
 # without git_sandbox config isolation, or inside the owning checkout ($ROOT_DIR).
@@ -806,7 +932,7 @@ git remote set-url --add --push origin "$TMP/origin.git"
 assert_refused_no_move "train land refuses multiple push URLs even when both match canonical" "multiple push URLs" bash "$TRAIN" land t1
 git config --unset-all remote.origin.pushurl
 
-# 8. insteadOf / pushInsteadOf rewrites to another repository.
+# 8. insteadOf / pushInsteadOf rewrites to another repository (including pushurl + insteadOf and chained rewrites).
 git config "url.$TMP/concrete2.git.insteadOf" "$TMP/origin.git"
 assert_refused_no_move "train land refuses insteadOf rewrite to another repository" "rewrites to '$TMP/concrete2.git'" bash "$TRAIN" land t1
 assert_refused_no_move "train ci refuses insteadOf rewrite to another repository" "rewrites to '$TMP/concrete2.git'" bash "$TRAIN" ci t1
@@ -814,6 +940,25 @@ git config --unset "url.$TMP/concrete2.git.insteadOf"
 git config "url.$TMP/concrete2.git.pushInsteadOf" "$TMP/origin.git"
 assert_refused_no_move "train land refuses pushInsteadOf rewrite to another repository" "rewrites to '$TMP/concrete2.git'" bash "$TRAIN" land t1
 assert_refused_no_move "train ci refuses pushInsteadOf rewrite to another repository" "rewrites to '$TMP/concrete2.git'" bash "$TRAIN" ci t1
+git config --unset "url.$TMP/concrete2.git.pushInsteadOf"
+# Explicit pushurl IS rewritten by insteadOf (unlike pushInsteadOf) in git: must be refused when it targets a foreign repo.
+git remote set-url --push origin "file://$TMP/origin.git"
+git config "url.$TMP/concrete2.git.insteadOf" "file://$TMP/origin.git"
+assert_refused_no_move "train land refuses explicit pushurl rewritten by insteadOf to another repository" "rewrites to '$TMP/concrete2.git'" bash "$TRAIN" land t1
+git config --unset "url.$TMP/concrete2.git.insteadOf"
+git remote set-url --push --delete origin "file://$TMP/origin.git"
+# Multi-hop insteadOf chain (alias1 -> alias2 -> canonical): git applies only one hop (alias1 -> alias2), which is not canonical.
+git remote set-url origin "alias1:concrete"
+git config "url.alias2:concrete.insteadOf" "alias1:concrete"
+git config "url.$TMP/origin.git.insteadOf" "alias2:concrete"
+assert_refused_no_move "train land refuses multi-hop insteadOf chain that git resolves only one step to alias2:concrete" "alias2:concrete" bash "$TRAIN" land t1
+git config --unset "url.alias2:concrete.insteadOf"
+git config --unset "url.$TMP/origin.git.insteadOf"
+# Shorthand alias where insteadOf resolves fetch to canonical but pushInsteadOf resolves push to foreign.
+git config "url.$TMP/origin.git.insteadOf" "alias1:concrete"
+git config "url.$TMP/concrete2.git.pushInsteadOf" "alias1:concrete"
+assert_refused_no_move "train land refuses alias where insteadOf is canonical but pushInsteadOf targets concrete2" "rewrites to '$TMP/concrete2.git'" bash "$TRAIN" land t1
+git config --unset "url.$TMP/origin.git.insteadOf"
 git config --unset "url.$TMP/concrete2.git.pushInsteadOf"
 git remote set-url origin https://github.com/lambdaclass/concrete.git
 git config "url.https://github.com/unbalancedparentheses/concrete2.git.pushInsteadOf" "https://github.com/lambdaclass/concrete.git"
@@ -1012,6 +1157,36 @@ git config --unset-all remote.origin.pushurl
 git config "url.$TMP/concrete2.git.pushInsteadOf" "$TMP/origin.git"
 assert_refused_no_move_gitpush "git push origin main with pushInsteadOf rewrite refused by pre-push hook" "$TMP/concrete2.git" \
   env CONCRETE_SKIP_GATES=1 git push origin "$LOCAL:refs/heads/main"
+git config --unset "url.$TMP/concrete2.git.pushInsteadOf"
+# Explicit pushurl + insteadOf to foreign repo refused by pre-push hook on real `git push`.
+git remote set-url --push origin "file://$TMP/origin.git"
+git config "url.$TMP/concrete2.git.insteadOf" "file://$TMP/origin.git"
+assert_refused_no_move_gitpush "git push origin main with explicit pushurl rewritten by insteadOf refused by pre-push hook" "$TMP/concrete2.git" \
+  env CONCRETE_SKIP_GATES=1 git push origin "$LOCAL:refs/heads/main"
+git config --unset "url.$TMP/concrete2.git.insteadOf"
+# Explicit canonical pushurl overriding a pushInsteadOf rule that maps that prefix to concrete2:
+# real `git push origin main` and `push-both.sh` must both succeed and move only origin/main.
+git config "url.$TMP/concrete2.git.pushInsteadOf" "file://$TMP/origin.git"
+out="$(CONCRETE_SKIP_GATES=1 git push origin "$LOCAL:refs/heads/main" 2>&1)"; rc=$?
+[ "$rc" = 0 ] && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$LOCAL" ] \
+  && [ "$(git ls-remote concrete2 refs/heads/main | cut -f1)" = "$BASE" ] \
+  && ok "git push origin main succeeds when explicit canonical pushurl overrides a pushInsteadOf rule" \
+  || { no "git push origin main with explicit pushurl + pushInsteadOf (exit $rc)"; echo "$out" | sed 's/^/      /'; }
+git -c core.hooksPath=/dev/null push -q --force origin "$orig_main_before:refs/heads/main"
+git config --unset "url.$TMP/concrete2.git.pushInsteadOf"
+git remote set-url --push --delete origin "file://$TMP/origin.git"
+# Chained pushInsteadOf rules on real `git push origin main`: rule 1 maps $TMP/origin.git -> file://$TMP/origin.git
+# and rule 2 maps file://$TMP/origin.git -> $TMP/concrete2.git. Git applies only one step (file://$TMP/origin.git),
+# and the pre-push hook validates git's resolved destination directly without a second rewrite.
+git config "url.file://$TMP/origin.git.pushInsteadOf" "$TMP/origin.git"
+git config "url.$TMP/concrete2.git.pushInsteadOf" "file://$TMP/origin.git"
+out="$(CONCRETE_SKIP_GATES=1 git push origin "$LOCAL:refs/heads/main" 2>&1)"; rc=$?
+[ "$rc" = 0 ] && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$LOCAL" ] \
+  && [ "$(git ls-remote concrete2 refs/heads/main | cut -f1)" = "$BASE" ] \
+  && ok "git push origin main succeeds when one-step pushInsteadOf is canonical (no second rewrite in hook)" \
+  || { no "git push origin main with two pushInsteadOf rules (exit $rc)"; echo "$out" | sed 's/^/      /'; }
+git -c core.hooksPath=/dev/null push -q --force origin "$orig_main_before:refs/heads/main"
+git config --unset "url.file://$TMP/origin.git.pushInsteadOf"
 git config --unset "url.$TMP/concrete2.git.pushInsteadOf"
 out="$(CONCRETE_SKIP_GATES=1 git push origin "$LOCAL:refs/heads/main" 2>&1)"; rc=$?
 [ "$rc" = 0 ] && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$LOCAL" ] \

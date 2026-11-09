@@ -35,7 +35,7 @@ HOOK="${LAND_HOOK:-.githooks/pre-push}"
 REMOTE="$LAND_CANONICAL_REMOTE"
 [ "$(git rev-parse HEAD)" = "$(git rev-parse "$head")" ] || die "the checkout is not at --head $head"
 [ -f "$HOOK" ] || die "no pre-push hook at $HOOK"
-url="$(git remote get-url "$REMOTE" 2>/dev/null || echo "$REMOTE")"
+url="$(git remote get-url --push "$REMOTE" 2>/dev/null || echo "$REMOTE")"
 printf '%s %s %s %s\n' "$src" "$(git rev-parse "$head")" "$dst" "$(git rev-parse "$base")" \
   | land_in_nix bash "$HOOK" "$REMOTE" "$url"
 selected=hook

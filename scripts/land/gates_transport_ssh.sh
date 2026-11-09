@@ -4,8 +4,8 @@
 #   gates_transport_ssh.sh <host> <bundle> <ref> <command>
 #
 # Copies ONE directory to <host> (any ssh destination, e.g. an ~/.ssh/config alias): the bundle, this
-# checkout's scripts/land/run-at-ref.sh with the sandbox helper it sources (scripts/checks/lib/
-# git_sandbox.sh, staged at the same relative paths), and a bash script that brings the host's gate clone up to
+# checkout's scripts/land/run-at-ref.sh with the libraries it sources (scripts/land/lib.sh and
+# scripts/checks/lib/git_sandbox.sh, staged at the same relative paths), and a bash script that brings the host's gate clone up to
 # date with its origin (so base, which is on main, is there) and runs run-at-ref.sh with
 # RUN_AT_REF_SOURCE=<the bundle>, <ref> and <command>. The ref and command are quoted for bash HERE,
 # into that file, so the host's login shell only ever sees `bash land-remote-<id>/run.sh`, whatever
@@ -24,7 +24,7 @@ id="land-remote-$(date -u +%Y%m%dT%H%M%S)-$$-$RANDOM"
 tmp="$(mktemp -d)" || { echo "transport: cannot create a temp directory" >&2; exit 255; }
 trap 'rm -rf "$tmp"' EXIT
 mkdir -p "$tmp/$id/scripts/land" "$tmp/$id/scripts/checks/lib"
-cp "$bundle" "$tmp/$id/c.bundle" && cp "$SELF_DIR/run-at-ref.sh" "$tmp/$id/scripts/land/run-at-ref.sh" \
+cp "$bundle" "$tmp/$id/c.bundle" && cp "$SELF_DIR/run-at-ref.sh" "$SELF_DIR/lib.sh" "$tmp/$id/scripts/land/" \
   && cp "$SELF_DIR/../checks/lib/git_sandbox.sh" "$tmp/$id/scripts/checks/lib/git_sandbox.sh" \
   || { echo "transport: cannot stage the bundle" >&2; exit 255; }
 {

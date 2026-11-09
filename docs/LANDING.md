@@ -195,16 +195,17 @@ by-hand publisher, likewise pushes only origin.
 **Enforced canonical destination (`scripts/land/lib.sh`).** One library (`scripts/land/lib.sh`) owns
 the canonical repository identity (`LAND_CANONICAL_REPO="lambdaclass/concrete"`,
 `LAND_CANONICAL_REMOTE="origin"`). Every publishing and landing tool (`train.sh`, `push-both.sh`,
-`ready.sh`, `notes.sh`, `impact_gates.sh`, `acceptance.sh`) and `.githooks/pre-push` (whenever
-`refs/heads/main` is pushed, before `CONCRETE_SKIP_GATES`) validates the destination through it
-before any ref moves:
+`ready.sh`, `notes.sh`, `impact_gates.sh`, `run-at-ref.sh`, `acceptance.sh`) and `.githooks/pre-push`
+(whenever `refs/heads/main` is pushed, before `CONCRETE_SKIP_GATES`) validates the destination
+through it before any ref moves:
 
-- `origin`'s configured and resolved fetch and push URLs (`git remote get-url --all origin` and
-  `git remote get-url --push --all origin`, after `pushurl`, `insteadOf` and `pushInsteadOf`
-  rewrites, with GitHub HTTPS and SSH URLs normalized to `github.com/<owner>/<repo>`) must each be a
-  single URL, must agree with each other, and must resolve to `github.com/lambdaclass/concrete`.
-- `.githooks/pre-push` also validates the remote argument (`$1`) and resolved destination URL (`$2`)
-  git passes it when `main` is pushed.
+- `origin`'s resolved fetch and push URLs (`git remote get-url --all origin` and
+  `git remote get-url --push --all origin`, using Git's own `pushurl`, `insteadOf` and
+  `pushInsteadOf` resolution, with GitHub HTTPS and SSH URLs normalized to
+  `github.com/<owner>/<repo>`) must each be a single URL, must agree with each other, and must
+  resolve to `github.com/lambdaclass/concrete`.
+- `.githooks/pre-push` validates the remote argument (`$1`) and Git's already-resolved destination
+  URL (`$2`) directly when `main` is pushed, without applying a second URL rewrite.
 - Multiple push URLs, fetch/push URL disagreements, destination overrides (`LAND_REMOTE`,
   `PUSH_REMOTE`, `BRANCH`, positional destination arguments) and CI-evidence repository selectors
   (`LAND_REPO`, `ACCEPT_REPO`, `GH_REPO`) naming any other repository are refused fail-closed,
@@ -241,11 +242,13 @@ With a gate host, `check`'s impact leg is `scripts/land/gates_remote.sh`:
 
 1. It bundles `base..head` under a temporary ref.
 2. The transport (`scripts/land/gates_transport_ssh.sh`) copies one directory to the host: the
-   bundle, this checkout's `run-at-ref.sh`, and a script that quotes the command for bash. The
+   bundle, this checkout's `run-at-ref.sh` and `lib.sh`, and a script that quotes the command for bash. The
    host's login shell sees only `bash land-remote-<id>/run.sh`. That script runs `git fetch origin`
    in the host's gate clone (`~/concrete2`, a path name only: its origin is lambdaclass/concrete), runs `run-at-ref.sh` on the bundle, and removes the
    directory. The host therefore needs no GitHub credentials and no copy of the landing scripts.
-3. In a fresh clone of exactly the head, the host runs `impact_gates.sh`: the same hook, with the
+3. `run-at-ref.sh` clones objects locally from the gate clone via a temporary remote (`--origin source`,
+   removed after fetching), configures and validates the execution checkout's canonical `origin` from
+   the gate clone's `origin` (`land_check_destination`), and then runs `impact_gates.sh`: the same hook, with the
    same input line the `ci` push will present. The command first unsets `CONCRETE_SKIP_GATES`
    (whatever the host's environment holds) and the hook's re-entry marker. Then it exports this
    checkout's `CONCRETE_*` variables, NUL-delimited, with validated names and `%q`-quoted values.

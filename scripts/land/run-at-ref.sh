@@ -7,7 +7,10 @@
 # A clone, not a worktree: some gates refuse to run in a linked worktree (the mutation campaign and
 # its summary producer, check_phase6c_observability #5: "Run it in a clone"), so a full set run in
 # a worktree is red for a reason that has nothing to do with the candidate. `clone --local`
-# hardlinks the objects, so it costs about what a worktree costs.
+# hardlinks the objects, so it costs about what a worktree costs. The gate clone ($REPO) is the
+# local object source only (`--origin source`, removed after fetching); the execution checkout's
+# `origin` is configured from the gate clone's canonical `origin` and validated with
+# `land_check_destination` before <command> runs.
 #
 # Env: RUN_AT_REF_REPO (gate clone, default ~/concrete2), RUN_AT_REF_RUNS (default ~/runs),
 #      RUN_AT_REF_SOURCE (what to fetch from: a remote name, a path to a clone or a git bundle,
@@ -19,7 +22,9 @@ set -euo pipefail
 # transport stages the helper beside this script at the same relative path.
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../checks/lib/git_sandbox.sh"
 git_sandbox
-if [ $# -lt 2 ]; then sed -n '2,16p' "$0"; exit 2; fi
+# shellcheck source=scripts/land/lib.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+if [ $# -lt 2 ]; then sed -n '2,19p' "$0"; exit 2; fi
 REF="$1"; shift
 CMD="$*"
 REPO="${RUN_AT_REF_REPO:-$HOME/concrete2}"
@@ -39,12 +44,27 @@ cleanup() {
 } 9>"$RUNS/.fetch.lock"
 trap 'cleanup; git -C "$REPO" update-ref -d "refs/run-at-ref/$ID" 2>/dev/null || true' EXIT
 trap 'exit 130' INT TERM HUP
-git clone --quiet --local --no-checkout "$REPO" "$WT"
-git -C "$WT" fetch --quiet origin "+refs/remotes/origin/*:refs/remotes/origin/*" "+refs/run-at-ref/$ID:refs/run-at-ref/$ID"
+git clone --quiet --local --no-checkout --origin source "$REPO" "$WT"
+git -C "$WT" fetch --quiet source "+refs/heads/*:refs/remotes/origin/*"
+git -C "$WT" fetch --quiet source "+refs/remotes/origin/*:refs/remotes/origin/*" "+refs/run-at-ref/$ID:refs/run-at-ref/$ID"
+git -C "$WT" remote remove source
+while IFS= read -r u; do
+  [ -n "$u" ] || continue
+  if git -C "$WT" config --get "remote.$LAND_CANONICAL_REMOTE.url" >/dev/null 2>&1; then
+    git -C "$WT" config --add "remote.$LAND_CANONICAL_REMOTE.url" "$u"
+  else
+    git -C "$WT" remote add "$LAND_CANONICAL_REMOTE" "$u"
+  fi
+done < <(git -C "$REPO" config --get-all "remote.$LAND_CANONICAL_REMOTE.url" 2>/dev/null || true)
+while IFS= read -r u; do
+  [ -n "$u" ] || continue
+  git -C "$WT" config --add "remote.$LAND_CANONICAL_REMOTE.pushurl" "$u"
+done < <(git -C "$REPO" config --get-all "remote.$LAND_CANONICAL_REMOTE.pushurl" 2>/dev/null || true)
 git -C "$WT" checkout --quiet --detach "$SHA"
-echo "[concrete-remote] ref=$REF sha=$SHA clone=$WT host=$(hostname)"
 if [ -d "$REPO/.lake" ]; then cp -a "$REPO/.lake" "$WT/.lake"; fi
 cd "$WT"
+land_check_destination "run-at-ref" || exit 1
+echo "[concrete-remote] ref=$REF sha=$SHA clone=$WT host=$(hostname)"
 START=$(date +%s)
 RC=0
 if [ "${RUN_AT_REF_NO_NIX:-0}" = 1 ]; then bash -c "$CMD" || RC=$?
