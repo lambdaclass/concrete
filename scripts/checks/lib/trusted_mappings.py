@@ -90,6 +90,14 @@ def executable_mappings(lines):
             raise ValueError('unsupported memory identity mutation: ' + kind)
         if not re.fullmatch(r'(?:0x[0-9a-f]+|[0-9]+)(?:<.*>)?', outcome):
             raise ValueError('missing mapping result')
+        if kind in {'clone', 'clone3'}:
+            clone_fields = fields(args[0][1:-1]) if kind == 'clone3' and args[0].startswith('{') and args[0].endswith('}') else args
+            flags = [field.split('=', 1)[1] for field in clone_fields if field.startswith('flags=')]
+            if len(flags) != 1: raise ValueError('unresolved clone flags')
+            tokens = bits(flags[0], {'0', 'CLONE_VM', 'CLONE_FS', 'CLONE_FILES', 'CLONE_SIGHAND', 'CLONE_PIDFD', 'CLONE_PTRACE', 'CLONE_VFORK', 'CLONE_PARENT', 'CLONE_THREAD', 'CLONE_NEWNS', 'CLONE_SYSVSEM', 'CLONE_SETTLS', 'CLONE_PARENT_SETTID', 'CLONE_CHILD_CLEARTID', 'CLONE_DETACHED', 'CLONE_UNTRACED', 'CLONE_CHILD_SETTID', 'CLONE_NEWCGROUP', 'CLONE_NEWUTS', 'CLONE_NEWIPC', 'CLONE_NEWUSER', 'CLONE_NEWPID', 'CLONE_NEWNET', 'CLONE_IO', 'CLONE_CLEAR_SIGHAND', 'CLONE_INTO_CGROUP', 'SIGCHLD'}, 'clone flags')
+            if 'CLONE_UNTRACED' in tokens:
+                raise ValueError('untraced clone child has no audited identity')
+            continue
         if kind in {'open', 'openat', 'openat2'}:
             fd = re.search(r'<(.*)>$', outcome)
             if not fd: raise ValueError('opened file has no resolved identity')

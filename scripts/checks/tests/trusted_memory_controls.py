@@ -20,6 +20,9 @@ spec.loader.exec_module(m)
 CODE = r"""
 #define _GNU_SOURCE
 #include <assert.h>
+#include <sched.h>
+#include <stdlib.h>
+#include <sys/wait.h>
 #include <errno.h>
 #include <sys/syscall.h>
 #include <fcntl.h>
@@ -28,6 +31,7 @@ CODE = r"""
 #include <sys/personality.h>
 #include <unistd.h>
 #include <string.h>
+static int child(void *arg) { assert(mmap(0,4096,PROT_EXEC,MAP_PRIVATE|MAP_ANONYMOUS,-1,0)!=MAP_FAILED); return 0; }
 int main(int argc, char **argv) {
  int fd = open(argv[1], O_RDONLY); assert(fd >= 0);
  const char *mode = argv[2]; void *p;
@@ -55,6 +59,7 @@ int main(int argc, char **argv) {
  if (!strcmp(mode,"empty")) { char *a[]={"true",0}, *e[]={0}; execveat(fd,"",a,e,AT_EMPTY_PATH); assert(0); }
  if (!strcmp(mode,"procmem")) { int mem=open("/proc/self/mem",O_RDWR); assert(mem>=0); close(mem); }
  if (!strcmp(mode,"uring")) { assert(syscall(SYS_io_uring_setup,8,0)==-1 && errno==ENOSYS); }
+ if (!strcmp(mode,"clone")) { void *stack=malloc(65536); assert(stack); int status; int pid=clone(child,(char*)stack+65536,CLONE_UNTRACED|SIGCHLD,0); assert(pid>0); assert(waitpid(pid,&status,0)==pid && status==0); }
  return 0;
 }
 """
@@ -78,6 +83,8 @@ class MemoryTests(unittest.TestCase):
     self.reject(lambda: m.executable_mappings([line(flags=flags,kind=kind)]),diagnostic)
   self.reject(lambda:m.executable_mappings([line(prot='PROT_EXEC|0x80')]),'unknown mapping protection: PROT_EXEC|0x80')
   self.reject(lambda:m.executable_mappings(['remap_file_pages(0x1000, 4096, 0, 0, 0) = 0']), 'unsupported memory identity mutation: remap_file_pages')
+  self.reject(lambda:m.executable_mappings(['clone3({flags=CLONE_UNTRACED, exit_signal=SIGCHLD}, 88) = 123']), 'untraced clone child has no audited identity')
+  self.reject(lambda:m.executable_mappings(['clone3({flags=0x8000000000000000}, 88) = 123']), 'unknown clone flags: 0x8000000000000000')
   for kind in ('personality','ptrace','process_vm_writev','userfaultfd','io_uring_setup'):
    self.reject(lambda:m.executable_mappings([kind+'(0) = 0']), 'unsupported memory identity mutation: '+kind)
   self.reject(lambda:m.executable_mappings(['future_exec_memory(0) = 0']), 'unsupported traced memory syscall: future_exec_memory')
@@ -149,6 +156,7 @@ print('hard address-space limit: ENOMEM')
    subprocess.run([clang,'--no-default-config',str(src),'-o',str(exe)],check=True,capture_output=True,timeout=25)
    pinned=str(Path(shutil.which('lean')).resolve())
    for mode, diagnostic in [
+    ('clone','untraced clone child has no audited identity'),
     ('anonymous','executable anonymous or unresolved mapping'),
     ('private','writable executable mapping has no pinned file identity'),
     ('shared','shared executable mapping has no immutable file identity'),

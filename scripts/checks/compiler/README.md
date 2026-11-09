@@ -348,3 +348,9 @@ closed in the parser. This is an enforced launch restriction, not an attempt to
 attribute opaque ring submissions to pinned code. Host kernel/vDSO behavior is
 the launch trust boundary; these checks establish identities for userspace files,
 not an attestation of the running kernel.
+
+The same trace policy includes clone/clone3/fork/vfork. Successful clone calls
+require decoded, known flags and refuse CLONE_UNTRACED, which otherwise prevents
+strace -f from observing a child's executable memory and exec events. A real
+clone control creates executable anonymous memory in that hidden child; the gate
+must reject the parent clone with `untraced clone child has no audited identity`.
