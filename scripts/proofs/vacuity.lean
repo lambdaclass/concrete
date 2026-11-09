@@ -314,6 +314,10 @@ end
 
 /-- A checked refutation, never a syntactic guess that a context is impossible. -/
 def refutableType (domain : Expr) : MetaM Bool := withoutModifyingState do
+  let normalized ← whnfD domain
+  if let .const name _ := normalized.getAppFn' then
+    if let some (.inductInfo info) := (← getEnv).find? name then
+      if info.ctors.isEmpty then return true
   if ← isProp domain then
     try
       let proof ← mkDecideProof (mkApp (mkConst ``Not) domain)
@@ -324,10 +328,6 @@ def refutableType (domain : Expr) : MetaM Bool := withoutModifyingState do
     catch ex =>
       if ex.isMaxHeartbeat || ex.isMaxRecDepth || ex.isInterrupt then throw ex
       return false
-  let domain ← whnfD domain
-  if let .const name _ := domain.getAppFn' then
-    if let some (.inductInfo info) := (← getEnv).find? name then
-      return info.ctors.isEmpty
   return false
 
 structure DischargeState where

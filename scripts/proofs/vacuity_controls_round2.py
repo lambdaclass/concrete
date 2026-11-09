@@ -188,6 +188,18 @@ end ConcreteSpecControl
 
 
 
+
+    for label, domain, elimination in [
+        ("hypothetical-false-positive", "False", "False.elim h"),
+        ("hypothetical-empty-positive", "Empty", "Empty.elim h"),
+        ("hypothetical-pempty-positive", "PEmpty.{0}", "PEmpty.elim h"),
+    ]:
+        fixture = base.replace("_h : n = 2", f"_h : {domain} → n = 2")
+        fixture = fixture.replace("growth 2 rfl", f"growth 2 (fun h => {elimination})")
+        fixture = fixture.replace("2 = 2 ∧ ¬ 2 < mutant 2 := by decide",
+            f"({domain} → 2 = 2) ∧ ¬ 2 < mutant 2 := by constructor; exact fun _ => rfl; decide")
+        add(label, fixture, set(), status=0)
+
     universal_hyp = base.replace("_h : n = 2", "_h : ∀ _k : Nat, n = 2")
     universal_hyp = universal_hyp.replace("growth 2 rfl", "growth 2 (fun _ => rfl)")
     universal_hyp = universal_hyp.replace("2 = 2 ∧ ¬ 2 < mutant 2 := by decide",
