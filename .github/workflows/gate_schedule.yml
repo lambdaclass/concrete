@@ -48,16 +48,8 @@ jobs:
             echo "tier=$tier" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          main_sha=$(bounded_run 30 -- git rev-parse refs/remotes/origin/main)
-          sha="$main_sha"
-          tier=daily
-          if [ "$CRON" = '43 3 * * 0' ]; then tier=weekly; fi
-          if [ "$EVENT" = workflow_dispatch ]; then
-            sha="$REQUESTED_SHA"
-            tier="$REQUESTED_TIER"
-            [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo 'invalid full SHA'; exit 1; }
-            bounded_run 30 -- git merge-base --is-ancestor "$sha" "$main_sha"
-          fi
+          sha=$(bounded_run 30 -- python3 scripts/checks/scheduled/history.py "$REQUESTED_SHA")
+          tier="$REQUESTED_TIER"
           [[ "$tier" = daily || "$tier" = weekly ]]
           echo "SCHEDULE_SELECTION $sha $tier"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"

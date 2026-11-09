@@ -6,9 +6,12 @@ import subprocess
 import sys
 from protocol import EvidenceError, WINDOWS, git, inventory, observe, read_note, timestamp
 
+from history import main_history
+
 ERRORS = (EvidenceError, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError)
 
-def observe_main(lineage, histories, tier, now, runners, repository):
+def observe_main(lineage, histories, tier, now, runners, repository, freshness=None):
+    freshness = set(lineage if freshness is None else freshness)
     annotated = [(sha, histories[sha]) for sha in lineage if sha in histories]
     if not annotated:
         return [f"MISSING {tier} {lineage[0]}: absent run"]
@@ -17,7 +20,8 @@ def observe_main(lineage, histories, tier, now, runners, repository):
     for sha, history in annotated:
         try:
             message = observe(history, sha, tier, now, runners, repository)
-            fresh.append((sha, message))
+            if sha in freshness:
+                fresh.append((sha, message))
         except ERRORS as error:
             if isinstance(error, EvidenceError) and error.status == "STALE":
                 continue
@@ -44,7 +48,9 @@ def main():
     failed = False
     try:
         repository = environment["GITHUB_REPOSITORY"]
-        lineage = git("rev-list", "--first-parent", "refs/remotes/origin/main", environment=environment).splitlines()
+        first, eligible = main_history(environment, command=git)
+        first_set = set(first)
+        lineage = first + [sha for sha in eligible if sha not in first_set]
         for tier in WINDOWS:
             try:
                 ref = "refs/notes/concrete-gates-" + tier
@@ -60,7 +66,7 @@ def main():
                         except ERRORS as error:
                             malformed.append(f"INCOMPLETE {tier} {sha}: {error}")
                 messages = (observe_main(lineage, histories, tier,
-                                        dt.datetime.now(dt.timezone.utc).timestamp(), inventory() if histories else {}, repository) if histories or not malformed else []) + malformed
+                                        dt.datetime.now(dt.timezone.utc).timestamp(), inventory() if histories else {}, repository, freshness=first) if histories or not malformed else []) + malformed
                 for message in sorted(messages, key=lambda s: not s.startswith("FAIL ")):
                     print(message)
                     failed |= not message.startswith("PASS ")

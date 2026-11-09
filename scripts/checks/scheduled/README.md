@@ -150,7 +150,7 @@ INCOMPLETE. The execution watchdog streams partial logs; a crashed/timed-out wor
 without an index is reconstructed as INCOMPLETE by the trusted collector.
 
 `gate_freshness.yml` runs every four hours, on pushes to main, and on manual dispatch.
-It reports exact-SHA defects across main's first-parent history, with FAIL precedence,
+It reports exact-SHA defects across every eligible ancestor of main, with FAIL precedence,
 and separately reports fresh ancestor coverage, stale evidence, or absent history.
 Ancestor coverage is operational freshness, never qualification of a different SHA.
 The workflow exits nonzero and surfaces defects through its Actions run, logs and
@@ -350,3 +350,27 @@ operational INCOMPLETE/MISSING occurrences. Every registry substitution FAIL is
 permanent, regardless of age or later PASS, and observation diagnostics include
 the exact tier and SHA. The owning protocol and hermetic controls enforce this
 contract in the cheap PR tier; full campaigns retain their scheduled tiers.
+
+
+## Shared eligible main history (R-0676)
+
+The structural cause of the replay/observation mismatch was independent ancestry
+selection: replay accepted merged second-parent commits while observation skipped
+them. `history.py:main_history` now owns the eligible set (all commits reachable
+from `refs/remotes/origin/main`). The replay CLI and production observer both use
+that definition; the workflow contains no independent ancestry predicate.
+Observation reads every annotated eligible ancestor and preserves every permanent
+SHA-pinned FAIL regardless of age or a newer PASS. First-parent order is used only
+to select operational freshness coverage and recover older operational
+INCOMPLETE/MISSING occurrences. A side-branch PASS cannot establish that coverage.
+
+The cheap PR control builds a real merge graph and real daily/weekly notes, checks
+shared replay authorization of the second parent, and invokes the production
+observer entry point. A second-parent FAIL plus fresh tip PASS must return exactly
+`FAIL <tier> <replayed-sha>: recorded attempt` for both tiers and exit nonzero.
+It runs in both clean and hostile environments. Registry/inventory dependencies
+use the suite's explicit fixtures; no campaign is run locally. The scheduler sweep
+found no other independently defined ancestry set: execution uses the accepted
+exact SHA, collection transports trusted selection (or the scheduled main head),
+and publication stores exact-SHA notes without applying another history filter.
+R-0690 retains the live CI2 replay/collection/publication qualification obligation.

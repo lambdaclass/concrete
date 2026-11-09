@@ -103,3 +103,63 @@ class RecoveryControls(RegistryFixture, unittest.TestCase):
         self.assertEqual(observe.observe_main([TIP, SHA], {TIP:[good], SHA:[old]},
                          'daily', NOW, RUNNERS, 'example/repo'),
                          [f'FAIL daily {SHA}: FAIL registry: wrong command sample'])
+
+
+class MergeHistory(RegistryFixture, unittest.TestCase):
+    def test_replayed_second_parent_failure(self):
+        import contextlib
+        import datetime as dt
+        import io
+        import json
+        import tempfile
+        from protocol import git
+        with tempfile.TemporaryDirectory() as scratch:
+            def g(*args):
+                return git('-C', scratch, *args)
+            g('init', '-q')
+            g('config', 'user.name', 'History control')
+            g('config', 'user.email', 'history@example.invalid')
+            def commit(*parents):
+                tree = g('mktree')
+                args = ['commit-tree', tree, '-m', 'history control']
+                for parent in parents: args.extend(['-p', parent])
+                return g(*args)
+            root = commit()
+            first = commit(root)
+            replay = commit(root)
+            # Distinct commits even with identical trees/timestamps.
+            replay = commit(replay)
+            tip = commit(first, replay)
+            g('update-ref', 'refs/remotes/origin/main', tip)
+            g('merge-base', '--is-ancestor', replay, tip)
+            self.assertNotIn(replay, g('rev-list', '--first-parent', tip).splitlines())
+            stamp = dt.datetime.now(dt.timezone.utc).isoformat()
+            for tier in ('daily', 'weekly'):
+                for sha, status in ((replay, 'FAIL'), (tip, 'PASS')):
+                    r = record()
+                    r.update(sha=sha, gate_revision=sha, tier=tier, started=stamp,
+                             completed=stamp, status=status,
+                             conclusion='failure' if status == 'FAIL' else 'success')
+                    r['gates'][0]['status'] = status
+                    g('notes', '--ref=refs/notes/concrete-gates-' + tier,
+                      'add', '-m', json.dumps(r), sha)
+            output = io.StringIO()
+            with patch.dict(os.environ, {'GITHUB_REPOSITORY': 'example/repo'}), \
+                 patch.object(observe, 'inventory', return_value=RUNNERS), \
+                 contextlib.chdir(scratch), contextlib.redirect_stdout(output):
+                from history import authorize
+                self.assertEqual(authorize(replay, dict(os.environ)), replay)
+                from protocol import EvidenceError
+                with self.assertRaises(EvidenceError) as rejected:
+                    authorize('f' * 40, dict(os.environ))
+                self.assertEqual(str(rejected.exception), 'replay SHA is not eligible main history')
+                self.assertEqual(observe.main(), 1)
+            self.assertEqual(output.getvalue().splitlines(),
+                             [f'FAIL {tier} {replay}: recorded attempt' for tier in ('daily', 'weekly')])
+
+
+class FreshnessScope(RegistryFixture, unittest.TestCase):
+    def test_side_branch_pass_is_not_operational_coverage(self):
+        self.assertEqual(observe.observe_main([TIP, SHA], {SHA: [record()]},
+                         'daily', NOW, RUNNERS, 'example/repo', freshness=[TIP]),
+                         [f'STALE daily {SHA}: no fresh PASS'])
