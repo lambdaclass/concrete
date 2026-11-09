@@ -142,8 +142,13 @@ value is statically known, so a `+` that could overflow is refused before it run
 theorem slice0_exits {q : Program} (h : Checked (toCore q)) :
     ∃ c, c < 256 ∧ run (toCore q) (q.body.length + 1) = .exit c := by
   obtain ⟨c, hc⟩ := body_exits (r := q.ret) h.2 .nil (fun _ h => nomatch h)
-  refine ⟨c, runBody_exit_u8 h.2 .nil _ c hc, ?_⟩
-  simpa [run, toCore] using hc
+  refine ⟨c, ?_, ?_⟩
+  · have hb := runBody_exit_u8 h.2 .nil (q.body.length + 1)
+    change ExitU8 (runBody [] (q.body.length + 1) [] (q.body.map Stmt.toCore) q.ret.toCore) at hb
+    change runBody [] (q.body.length + 1) [] (q.body.map Stmt.toCore) q.ret.toCore = .exit c at hc
+    rw [hc] at hb
+    exact hb
+  · simpa [run, toCore] using hc
 
 /-- An accepted slice-0 program never traps, with any fuel: the first instance of
 `checked_no_implicit_traps`. -/
