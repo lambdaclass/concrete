@@ -823,6 +823,7 @@ ConcreteSpec.Core.Exec.Answer.mk.inj
 ConcreteSpec.Core.Exec.Answer.mk.injEq	propext
 ConcreteSpec.Core.Exec.Answer.mk.sizeOf_spec	
 ConcreteSpec.Core.Exec.AnswerStep.step_inv	propext
+ConcreteSpec.Core.Exec.Arguments.brecOn	
 ConcreteSpec.Core.Exec.BoundaryRun.brecOn	propext
 ConcreteSpec.Core.Exec.CleanAct.call.inj	
 ConcreteSpec.Core.Exec.CleanAct.call.injEq	propext
@@ -1012,6 +1013,7 @@ ConcreteSpec.Core.Exec.Program.mk.inj
 ConcreteSpec.Core.Exec.Program.mk.injEq	propext
 ConcreteSpec.Core.Exec.Program.mk.sizeOf_spec	
 ConcreteSpec.Core.Exec.Protected.eq_1	
+ConcreteSpec.Core.Exec.Registered.brecOn	
 ConcreteSpec.Core.Exec.Report.mk.inj	
 ConcreteSpec.Core.Exec.Report.mk.injEq	propext
 ConcreteSpec.Core.Exec.Report.mk.sizeOf_spec	
@@ -1064,6 +1066,16 @@ ConcreteSpec.Core.Exec.Stmt.seq.injEq	propext
 ConcreteSpec.Core.Exec.Stmt.seq.sizeOf_spec	
 ConcreteSpec.Core.Exec.Stmt.skip.sizeOf_spec	
 ConcreteSpec.Core.Exec.abort_runs_no_cleanup	propext
+ConcreteSpec.Core.Exec.arguments_representation	propext
+ConcreteSpec.Core.Exec.arguments_unique_inv	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Exec.arguments_unique_inv._proof_1_1	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Exec.arguments_unique_inv._proof_1_2	propext
+ConcreteSpec.Core.Exec.arguments_unique_inv._proof_1_3	propext
+ConcreteSpec.Core.Exec.arguments_unique_inv._proof_1_4	propext
+ConcreteSpec.Core.Exec.arguments_unique_inv._proof_1_5	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Exec.arguments_unique_inv._proof_1_6	propext
+ConcreteSpec.Core.Exec.arguments_unique_inv._proof_1_7	propext
+ConcreteSpec.Core.Exec.arguments_unique_inv._proof_1_8	propext
 ConcreteSpec.Core.Exec.assign_refused	propext
 ConcreteSpec.Core.Exec.bindDst.eq_1	
 ConcreteSpec.Core.Exec.bindDst.eq_2	
@@ -1086,13 +1098,18 @@ ConcreteSpec.Core.Exec.cleans_iff_runs_plan_inv	propext
 ConcreteSpec.Core.Exec.cleanup_runs_exact_plan	Quot.sound propext
 ConcreteSpec.Core.Exec.continuation_refused	propext
 ConcreteSpec.Core.Exec.continue_reaches_loop	propext
+ConcreteSpec.Core.Exec.dead.eq_1	propext
 ConcreteSpec.Core.Exec.demo_bump_completes	propext
 ConcreteSpec.Core.Exec.demo_log_completes	propext
+ConcreteSpec.Core.Exec.destination_representation	
+ConcreteSpec.Core.Exec.destination_unique_inv	propext
 ConcreteSpec.Core.Exec.destroyCall_enters	Quot.sound propext
 ConcreteSpec.Core.Exec.destroyCall_sig	propext
 ConcreteSpec.Core.Exec.destroy_not_copy	propext
+ConcreteSpec.Core.Exec.dom.eq_1	
 ConcreteSpec.Core.Exec.done_scope_next	propext
 ConcreteSpec.Core.Exec.done_scope_runs_defers	propext
+ConcreteSpec.Core.Exec.dropOut.eq_1	propext
 ConcreteSpec.Core.Exec.enter.eq_1	
 ConcreteSpec.Core.Exec.enter_refused	propext
 ConcreteSpec.Core.Exec.evalArgs.eq_1	
@@ -1214,10 +1231,31 @@ ConcreteSpec.Core.Exec.register.eq_def	propext
 ConcreteSpec.Core.Exec.register_protected	propext
 ConcreteSpec.Core.Exec.register_scope	propext
 ConcreteSpec.Core.Exec.register_seq	propext
+ConcreteSpec.Core.Exec.registered_representation	Quot.sound propext
+ConcreteSpec.Core.Exec.registered_unique_inv	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Exec.registered_unique_inv._proof_1_1	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Exec.restrict.eq_1	propext
 ConcreteSpec.Core.Exec.restrict_dom_drops	propext
 ConcreteSpec.Core.Exec.return_reaches_caller	propext
 ConcreteSpec.Core.Exec.return_refused	propext
+ConcreteSpec.Core.Exec.rules_answer_sound_inv	Quot.sound propext
+ConcreteSpec.Core.Exec.rules_answer_sound_inv._simp_1_49	propext
+ConcreteSpec.Core.Exec.rules_answer_sound_inv._simp_1_50	Quot.sound propext
+ConcreteSpec.Core.Exec.rules_answer_sound_inv._simp_1_51	propext
+ConcreteSpec.Core.Exec.rules_complete	Quot.sound propext
+ConcreteSpec.Core.Exec.rules_deterministic	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Exec.rules_deterministic._proof_1_2	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Exec.rules_deterministic._proof_1_3	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Exec.rules_deterministic._proof_1_4	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Exec.rules_deterministic._proof_1_5	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Exec.rules_deterministic._proof_1_6	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Exec.rules_deterministic._proof_1_7	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Exec.rules_deterministic._proof_1_8	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Exec.rules_deterministic._proof_1_9	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Exec.rules_iff_answerStep	Quot.sound propext
+ConcreteSpec.Core.Exec.rules_silent_complete_inv	Quot.sound propext
+ConcreteSpec.Core.Exec.rules_silent_deterministic	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Exec.rules_sound	Quot.sound propext
 ConcreteSpec.Core.Exec.runFn.eq_1	propext
 ConcreteSpec.Core.Exec.runFrom.eq_1	propext
 ConcreteSpec.Core.Exec.runFrom.eq_2	propext
@@ -1248,6 +1286,7 @@ ConcreteSpec.Core.Exec.step_continue_loop	propext
 ConcreteSpec.Core.Exec.step_deterministic	propext
 ConcreteSpec.Core.Exec.step_done_seq	propext
 ConcreteSpec.Core.Exec.step_exit_seq	propext
+ConcreteSpec.Core.Exec.step_iff_rules	Quot.sound propext
 ConcreteSpec.Core.Exec.step_pair_representation	propext
 ConcreteSpec.Core.Exec.step_ret	propext
 ConcreteSpec.Core.Exec.step_return_caller	propext
@@ -2938,6 +2977,17 @@ _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.register.match_1.eq_1
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.register.match_1.eq_2	propext
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.register.match_1.eq_3	propext
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.resume_step_inv	propext
+_private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.rules_done_complete_inv	Quot.sound propext
+_private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.rules_done_complete_inv._simp_1_6	Quot.sound propext
+_private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.rules_done_complete_inv._simp_1_7	Quot.sound propext
+_private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.rules_exec_complete_inv	Quot.sound propext
+_private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.rules_exec_complete_inv._simp_1_2	Quot.sound propext
+_private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.rules_exec_complete_inv._simp_1_7	Quot.sound propext
+_private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.rules_exit_complete_inv	Quot.sound propext
+_private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.rules_exit_complete_inv._simp_1_16	Quot.sound propext
+_private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.rules_exit_complete_inv._simp_1_17	Quot.sound propext
+_private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.rules_request_complete_inv	Quot.sound propext
+_private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.rules_request_complete_inv._simp_1_15	Quot.sound propext
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.runFrom.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.runFrom.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.runFrom.match_3.eq_1	
