@@ -16,28 +16,28 @@ target and a target-valid pointer.
 namespace ConcreteSpec.Core.Mem
 open ConcreteSpec
 
-/-- Representation lemma. Applying the byte-order permutation twice is the identity (approved: PENDING). -/
+/-- Representation lemma. Applying the byte-order permutation twice is the identity (approved: APPR-C4-agy-78ee5a2db). -/
 @[simp] theorem ordered_ordered (o : ByteOrder) (bs : List (Fin 256)) :
     ordered o (ordered o bs) = bs := by cases o <;> simp [ordered]
 
-/-- Representation lemma. Fixed-width little-endian encoding produces the requested octet count (approved: PENDING). -/
+/-- Representation lemma. Fixed-width little-endian encoding produces the requested octet count (approved: APPR-C4-agy-78ee5a2db). -/
 @[simp] theorem leBytes_length (k n : Nat) : (leBytes k n).length = k := by
   induction k generalizing n with
   | zero => rfl
   | succ k ih => simp [leBytes, ih]
 
-/-- Representation lemma. Byte-order permutation preserves octet count (approved: PENDING). -/
+/-- Representation lemma. Byte-order permutation preserves octet count (approved: APPR-C4-agy-78ee5a2db). -/
 @[simp] theorem ordered_length (o : ByteOrder) (bs : List (Fin 256)) :
     (ordered o bs).length = bs.length := by cases o <;> simp [ordered]
 
-/-- Representation lemma. Plain initialized bytes extract to their underlying octets (approved: PENDING). -/
+/-- Representation lemma. Plain initialized bytes extract to their underlying octets (approved: APPR-C4-agy-78ee5a2db). -/
 @[simp] theorem octets_init (bs : List (Fin 256)) :
     octets (bs.map (.init · none)) = some bs := by
   induction bs with
   | nil => rfl
   | cons b bs ih => simp [octets, ih]
 
-/-- Representation lemma. Little-endian decoding inverts fixed-width little-endian encoding below the width bound (approved: PENDING). -/
+/-- Representation lemma. Little-endian decoding inverts fixed-width little-endian encoding below the width bound (approved: APPR-C4-agy-78ee5a2db). -/
 theorem leValue_leBytes (k n : Nat) (h : n < 256 ^ k) : leValue (leBytes k n) = n := by
   induction k generalizing n with
   | zero => simp at h; subst n; rfl
@@ -48,7 +48,7 @@ theorem leValue_leBytes (k n : Nat) (h : n < 256 ^ k) : leValue (leBytes k n) = 
     simp only [leBytes, leValue, ih _ hd]
     omega
 
-/-- Representation lemma. Little-endian value is bounded by 256 to the octet length (approved: PENDING). -/
+/-- Representation lemma. Little-endian value is bounded by 256 to the octet length (approved: APPR-C4-agy-78ee5a2db). -/
 theorem leValue_lt (bs : List (Fin 256)) : leValue bs < 256 ^ bs.length := by
   induction bs with
   | nil => simp [leValue]
@@ -57,10 +57,10 @@ theorem leValue_lt (bs : List (Fin 256)) : leValue bs < 256 ^ bs.length := by
     have := b.isLt
     omega
 
-/-- Representation lemma. Byte width of an integer type matches its bit-width power (approved: PENDING). -/
+/-- Representation lemma. Byte width of an integer type matches its bit-width power (approved: APPR-C4-agy-78ee5a2db). -/
 theorem intByte_power (t : IntTy) : 256 ^ intBytes t = 2 ^ t.bits := by cases t <;> decide
 
-/-- Representation lemma. Integer encoding produces intBytes octets (approved: PENDING). -/
+/-- Representation lemma. Integer encoding produces intBytes octets (approved: APPR-C4-agy-78ee5a2db). -/
 @[simp] theorem encodeInt_length (tgt : Target) (t : IntTy) (n : Int) :
     (encodeInt tgt t n).length = intBytes t := by simp [encodeInt]
 
@@ -72,7 +72,7 @@ theorem decodeInt_encodeInt (tgt : Target) (t : IntTy) (n : Int) (h : t.InRange 
   simp only [encodeInt, octets_init, Option.map_some, ordered_ordered]
   rw [leValue_leBytes _ _ (by rw [intByte_power]; exact toBits_lt t n), ofBits_toBits t n h]
 
-/-- Representation lemma. Extracted octets preserve the byte-list length (approved: PENDING). -/
+/-- Representation lemma. Extracted octets preserve the byte-list length (approved: APPR-C4-agy-78ee5a2db). -/
 theorem octets_length {bs : List MByte} {os : List (Fin 256)}
     (h : octets bs = some os) : os.length = bs.length := by
   induction bs generalizing os with
@@ -107,7 +107,7 @@ theorem decodeInt_inRange (tgt : Target) (t : IntTy) (bs : List MByte) :
         exact hb
     next => cases h
 
-/-- Representation lemma. Computes the canonical boolean encoding round trip; semantic byte admission is covered by decodeBool_valid (approved: PENDING). -/
+/-- Representation lemma. Computes the canonical boolean encoding round trip; semantic byte admission is covered by decodeBool_valid (approved: APPR-C4-agy-78ee5a2db). -/
 @[simp] theorem decodeBool_encodeBool (b : Bool) : decodeBool (encodeBool b) = some b := by
   cases b <;> rfl
 
@@ -122,14 +122,14 @@ theorem decodeBool_valid (bs : List MByte) (b : Bool) :
   · rintro ⟨v, f, rfl, hv⟩
     exact (boolOfBits_some_iff v.val b).2 hv
 
-/-- Representation lemma. Fragment annotations do not alter the numeric octets (approved: PENDING). -/
+/-- Representation lemma. Fragment annotations do not alter the numeric octets (approved: APPR-C4-agy-78ee5a2db). -/
 private theorem octets_fragments (os : List (Fin 256)) (p : Ptr) (start : Nat) :
     octets ((os.zipIdx start).map (fun (v, i) => MByte.init v (some (p, i)))) = some os := by
   induction os generalizing start with
   | nil => rfl
   | cons v vs ih => simp [List.zipIdx_cons, octets, ih]
 
-/-- Representation lemma. Reading a fixed-width octet sequence and writing it back is exact (approved: PENDING). -/
+/-- Representation lemma. Reading a fixed-width octet sequence and writing it back is exact (approved: APPR-C4-agy-78ee5a2db). -/
 private theorem leBytes_leValue (os : List (Fin 256)) : leBytes os.length (leValue os) = os := by
   induction os with
   | nil => rfl
@@ -162,7 +162,7 @@ theorem decodePtr_encodePtr (tgt : Target) (ht : tgt.WellFormed) (p : Ptr) (hpv 
     simp only [hlen, ↓reduceIte, ho]
     simp [encodePtr, ordered_ordered, leValue_leBytes _ _ hb, hpv]
 
-/-- Helper (computation). Block lookup after modify reduces to association-list update (approved: PENDING). -/
+/-- Helper (computation). Block lookup after modify reduces to association-list update (approved: APPR-C4-agy-78ee5a2db). -/
 @[simp] theorem block_modify (m : Memory) (b c : MemBlockId) (f : Block → Block) :
     (m.modify b f).block c = if c = b then (m.block b).map f else m.block c := by
   exact AList.lookup_update b f m.blocks c
@@ -171,7 +171,7 @@ theorem decodePtr_encodePtr (tgt : Target) (ht : tgt.WellFormed) (p : Ptr) (hpv 
 theorem empty_wellFormed (tgt : Target) : Memory.empty.WellFormed tgt := by
   constructor <;> simp [Memory.empty, Memory.block, AList.lookup]
 
-/-- Helper (congruence). Updating an association-list entry preserves the key list (approved: PENDING). -/
+/-- Helper (congruence). Updating an association-list entry preserves the key list (approved: APPR-C4-agy-78ee5a2db). -/
 private theorem keys_update (xs : AList MemBlockId Block) (b : MemBlockId) (f : Block → Block) :
     List.map Prod.fst (AList.update xs b f) = List.map Prod.fst xs := by
   induction xs with
@@ -180,7 +180,7 @@ private theorem keys_update (xs : AList MemBlockId Block) (b : MemBlockId) (f : 
     simp only [AList.update]
     split <;> simp_all
 
-/-- Helper (inversion). Nodup keys ensure every stored entry is returned by lookup (approved: PENDING). -/
+/-- Helper (inversion). Nodup keys ensure every stored entry is returned by lookup (approved: APPR-C4-agy-78ee5a2db). -/
 private theorem canonical_of_unique (xs : AList MemBlockId Block)
     (hu : (List.map Prod.fst xs).Nodup) :
     ∀ e ∈ xs, AList.lookup xs e.1 = some e.2 := by
@@ -197,7 +197,7 @@ private theorem canonical_of_unique (xs : AList MemBlockId Block)
       simp [AList.lookup, hn, ih hu.2 e he]
 
 /-- Helper (congruence). A block update preserving geometry and byte count, and never reviving a dead block,
-preserves the whole memory invariant (approved: PENDING). -/
+preserves the whole memory invariant (approved: APPR-C4-agy-78ee5a2db). -/
 theorem modify_wellFormed (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
     (b : MemBlockId) (f : Block → Block)
     (hg : ∀ x, (f x).space = x.space ∧ (f x).base = x.base ∧
@@ -248,7 +248,7 @@ theorem modify_wellFormed (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
     simpa only [Block.Overlaps, hspace, hbase, hsize, hspace', hbase', hsize'] using
       hw.disjoint c x d w hx hw' hne (hlive hyl) (hlive' hzl)
 
-/-- Helper (inversion). Unpack the block identity, updated memory and fit condition of a successful allocation (approved: PENDING). -/
+/-- Helper (inversion). Unpack the block identity, updated memory and fit condition of a successful allocation (approved: APPR-C4-agy-78ee5a2db). -/
 theorem alloc_result (tgt : Target) (m : Memory) (s : AddrSpace) (base size align : Nat)
     (b : MemBlockId) (m' : Memory) (h : m.alloc tgt s base size align = .ok (b, m')) :
     b = ⟨m.next⟩ ∧ m' = ⟨(b, candidate s base size align) :: m.blocks, m.next + 1⟩ ∧
@@ -319,7 +319,7 @@ theorem access_no_provenance (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat)
     (hn : n ≠ 0) (hp : p.prov = none) : m.access tgt p n a = none := by
   simp [Memory.access, hn, hp]
 
-/-- Helper (inversion). Decomposes a successful release for the result-oriented free_retains law and access-after-free proof (approved: PENDING). -/
+/-- Helper (inversion). Decomposes a successful release for the result-oriented free_retains law and access-after-free proof (approved: APPR-C4-agy-78ee5a2db). -/
 theorem free_retains_inv (m : Memory) (b : MemBlockId) (m' : Memory) (h : m.free b = some m') :
     ∃ x, m.block b = some x ∧
       m'.block b = some { x with live := false, exposed := false } ∧ m'.next = m.next := by
@@ -341,7 +341,7 @@ theorem access_after_free (tgt : Target) (m m' : Memory) (b : MemBlockId)
   obtain ⟨x, _, hx, _⟩ := free_retains_inv m b m' hf
   simp [Memory.access, hn, hp, hx]
 
-/-- Helper (computation). Computes equality of identical space/address components; comparison separation is covered by eqAddr_separation (approved: PENDING). -/
+/-- Helper (computation). Computes equality of identical space/address components; comparison separation is covered by eqAddr_separation (approved: APPR-C4-agy-78ee5a2db). -/
 theorem eqAddr_provenance (s : AddrSpace) (a : Nat) (b c : Option MemBlockId) :
     Ptr.eqAddr ⟨s, a, b⟩ ⟨s, a, c⟩ = true := by simp [Ptr.eqAddr]
 
@@ -376,7 +376,7 @@ theorem alloc_ne_existing (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
     have := hw.fresh c x hc
     intro he; subst c; omega
 
-/-- Helper (projection). Block overlap is symmetric (approved: PENDING). -/
+/-- Helper (projection). Block overlap is symmetric (approved: APPR-C4-agy-78ee5a2db). -/
 private theorem overlaps_symm (x y : Block) (h : x.Overlaps y) : y.Overlaps x :=
   ⟨h.1.symm, h.2.2.1, h.2.1, h.2.2.2.2, h.2.2.2.1⟩
 
@@ -453,7 +453,7 @@ theorem alloc_wellFormed (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
         next => cases hw'; exact hf.2.2.2.2.2.1 _ (AList.lookup_mem hy) hyl
         next => exact hw.disjoint c y d w hy hw' hne hyl hwl
 
-/-- Helper (inversion). Non-overlap makes the in-bounds provenance unique; no order on identities is used (approved: PENDING). -/
+/-- Helper (inversion). Non-overlap makes the in-bounds provenance unique; no order on identities is used (approved: APPR-C4-agy-78ee5a2db). -/
 theorem candidate_contains_unique (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
     (s : AddrSpace) (addr : Nat) (b c : MemBlockId) (x y : Block)
     (hx : m.block b = some x) (hy : m.block c = some y)
@@ -498,7 +498,7 @@ theorem fromExposed_sound (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
         simpa using hh
     next => cases h
 
-/-- Helper (inversion). An eligible containing or one-past candidate suffices to recover some provenance (approved: PENDING). -/
+/-- Helper (inversion). An eligible containing or one-past candidate suffices to recover some provenance (approved: APPR-C4-agy-78ee5a2db). -/
 theorem fromExposed_exists (m : Memory) (s : AddrSpace) (addr : Nat)
     (e : MemBlockId × Block) (he : e ∈ m.blocks) (hc : e.2.Candidate s = true)
     (ha : (e.2.base ≤ addr ∧ addr < e.2.base + e.2.size) ∨
@@ -532,7 +532,7 @@ theorem fromExposed_contains (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
     simpa only [← this] using hp
   · exact False.elim (hn (b, x) (AList.lookup_mem hx) hc hi)
 
-/-- Helper (inversion). Nonempty disjoint blocks in one space cannot share their one-past endpoint either (approved: PENDING). -/
+/-- Helper (inversion). Nonempty disjoint blocks in one space cannot share their one-past endpoint either (approved: APPR-C4-agy-78ee5a2db). -/
 theorem candidate_onePast_unique (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
     (s : AddrSpace) (addr : Nat) (b c : MemBlockId) (x y : Block)
     (hx : m.block b = some x) (hy : m.block c = some y)
@@ -574,7 +574,7 @@ theorem fromExposed_none (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
     · exact False.elim (hh.1 hi)
     · exact False.elim (hh.2 hi)
 
-/-- Helper (inversion). Extract the block and bounds of a successful nonempty access (approved: PENDING). -/
+/-- Helper (inversion). Extract the block and bounds of a successful nonempty access (approved: APPR-C4-agy-78ee5a2db). -/
 theorem access_some_inv (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat) (b : MemBlockId)
     (off : Nat) (h : m.access tgt p n a = some (some (b, off))) :
     ∃ x, p.prov = some b ∧ m.block b = some x ∧ n ≠ 0 ∧ x.live = true ∧
@@ -621,7 +621,7 @@ theorem access_valid (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
       have hpos : 0 < 2 ^ tgt.addrBits := Nat.two_pow_pos tgt.addrBits
       exact ⟨by have hnpos := Nat.pos_of_ne_zero hn; omega, hs ▸ hw.spaces b x hx⟩
 
-/-- Helper (inversion). Zero-size access explicitly checks validity; this extracts that guard only (approved: PENDING). -/
+/-- Helper (inversion). Zero-size access explicitly checks validity; this extracts that guard only (approved: APPR-C4-agy-78ee5a2db). -/
 theorem access_zero_valid_inv (tgt : Target) (m : Memory) (p : Ptr) (a : Nat)
     (h : m.access tgt p 0 a = some none) : p.Valid tgt := by
   unfold Memory.access at h
@@ -630,7 +630,7 @@ theorem access_zero_valid_inv (tgt : Target) (m : Memory) (p : Ptr) (a : Nat)
   next hv => exact hv.2.2
   next => cases h
 
-/-- Helper (inversion). Extract the independent width, fragment, numeric and validity checks (approved: PENDING). -/
+/-- Helper (inversion). Extract the independent width, fragment, numeric and validity checks (approved: APPR-C4-agy-78ee5a2db). -/
 private theorem decodePtr_checks_inv (tgt : Target) (bs : List MByte) (p : Ptr)
     (h : decodePtr tgt bs = some p) :
     ∃ os, octets bs = some os ∧ bs.length = tgt.ptrSize ∧
@@ -677,13 +677,13 @@ theorem access_success (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat)
     m.access tgt p n a = some (some (b, p.addr - x.base)) := by
   simp [Memory.access, hn, hp, hx, hl, hs, hlo, hhi, ha]
 
-/-- Representation lemma. Replacing a range reads back exactly that range (approved: PENDING). -/
+/-- Representation lemma. Replacing a range reads back exactly that range (approved: APPR-C4-agy-78ee5a2db). -/
 theorem splice_read (xs bs : List MByte) (off : Nat) (h : off ≤ xs.length) :
     ((xs.take off ++ bs ++ xs.drop (off + bs.length)).drop off).take bs.length = bs := by
   rw [List.append_assoc, List.drop_append_of_le_length (by simp [List.length_take, Nat.min_eq_left h])]
   simp
 
-/-- Representation lemma. The bytes before and after a splice are unchanged, including uninitialized bytes and fragments (approved: PENDING). -/
+/-- Representation lemma. The bytes before and after a splice are unchanged, including uninitialized bytes and fragments (approved: APPR-C4-agy-78ee5a2db). -/
 theorem splice_frame (xs bs : List MByte) (off i : Nat)
     (hb : off + bs.length ≤ xs.length) (hi : i < off ∨ off + bs.length ≤ i) :
     (xs.take off ++ bs ++ xs.drop (off + bs.length))[i]? = xs[i]? := by
@@ -819,7 +819,7 @@ theorem free_wellFormed (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
       next => cases h
     next => cases h
 
-/-- Helper (inversion). Exposure changes exactly the exposed flag of a live provenance block (approved: PENDING). -/
+/-- Helper (inversion). Exposure changes exactly the exposed flag of a live provenance block (approved: APPR-C4-agy-78ee5a2db). -/
 theorem expose_result (m m' : Memory) (p : Ptr) (h : m.expose p = some m') :
     ∃ b x, p.prov = some b ∧ m.block b = some x ∧ x.live = true ∧
       m' = m.modify b (fun y => { y with exposed := true }) := by
@@ -840,7 +840,7 @@ theorem expose_success (m : Memory) (p : Ptr) (b : MemBlockId) (x : Block)
     m.expose p = some (m.modify b (fun y => { y with exposed := true })) := by
   simp [Memory.expose, hp, hx, hl]
 
-/-- Helper (inversion). Decomposes a successful exposure for the result-oriented expose_frame law (approved: PENDING). -/
+/-- Helper (inversion). Decomposes a successful exposure for the result-oriented expose_frame law (approved: APPR-C4-agy-78ee5a2db). -/
 theorem expose_frame_inv (m m' : Memory) (p : Ptr) (h : m.expose p = some m') :
     ∃ b x, p.prov = some b ∧ m.block b = some x ∧
       m'.block b = some { x with exposed := true } ∧ m'.next = m.next ∧
@@ -867,7 +867,7 @@ theorem expose_wellFormed (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
 def Block.geometry (x : Block) : AddrSpace × Nat × Nat × Nat :=
   (x.space, x.base, x.size, x.align)
 
-/-- Helper (congruence). Decomposes a successful store for store_geometry and hybrid invariant transport (approved: PENDING). -/
+/-- Helper (congruence). Decomposes a successful store for store_geometry and hybrid invariant transport (approved: APPR-C4-agy-78ee5a2db). -/
 theorem store_geometry_inv (tgt : Target) (m m' : Memory) (p : Ptr) (bs : List MByte)
     (a : Nat) (h : m.store tgt p bs a = some m') (b : MemBlockId) :
     (m'.block b).map Block.geometry = (m.block b).map Block.geometry := by
@@ -884,7 +884,7 @@ theorem store_geometry_inv (tgt : Target) (m m' : Memory) (p : Ptr) (bs : List M
     · rfl
   next => cases h
 
-/-- Helper (congruence). Decomposes a successful exposure for expose_geometry and hybrid invariant transport (approved: PENDING). -/
+/-- Helper (congruence). Decomposes a successful exposure for expose_geometry and hybrid invariant transport (approved: APPR-C4-agy-78ee5a2db). -/
 theorem expose_geometry_inv (m m' : Memory) (p : Ptr) (h : m.expose p = some m')
     (b : MemBlockId) :
     (m'.block b).map Block.geometry = (m.block b).map Block.geometry := by
@@ -935,7 +935,7 @@ theorem expose_geometry (m : Memory) (p : Ptr) :
   | none => trivial
   | some m' => exact expose_geometry_inv m m' p h
 
-/-- Helper (congruence). Reads depend only on their provenance block, independently of every other block (approved: PENDING). -/
+/-- Helper (congruence). Reads depend only on their provenance block, independently of every other block (approved: APPR-C4-agy-78ee5a2db). -/
 theorem load_congr (tgt : Target) (m m' : Memory) (p : Ptr) (n a : Nat)
     (h : ∀ b, p.prov = some b → m'.block b = m.block b) :
     m'.load tgt p n a = m.load tgt p n a := by
@@ -1153,17 +1153,17 @@ def badFreeWf : Memory → MemBlockId → Option Memory := fun _ _ => some badEm
 def badExposeNone : Memory → Ptr → Option Memory := fun _ _ => none
 def badExposeWf : Memory → Ptr → Option Memory := fun _ _ => some badEmpty
 
-/-- Helper (inversion). The out-of-range block identity in badEmpty violates the freshness invariant (approved: PENDING). -/
+/-- Helper (inversion). The out-of-range block identity in badEmpty violates the freshness invariant (approved: APPR-C4-agy-78ee5a2db). -/
 private theorem not_badEmpty_wf : ¬ badEmpty.WellFormed target := by
   intro hw
   have h := hw.fresh ⟨1⟩ initBlock rfl
   cases h
 
-/-- Helper (congruence). The audit fixture memory satisfies the target memory invariant (approved: PENDING). -/
+/-- Helper (congruence). The audit fixture memory satisfies the target memory invariant (approved: APPR-C4-agy-78ee5a2db). -/
 private theorem memory_wf : memory.WellFormed target :=
   alloc_wellFormed target Memory.empty (empty_wellFormed target) ⟨0⟩ 40 8 1
 
-/-- Helper (congruence). The exposed audit fixture memory satisfies the target memory invariant (approved: PENDING). -/
+/-- Helper (congruence). The exposed audit fixture memory satisfies the target memory invariant (approved: APPR-C4-agy-78ee5a2db). -/
 private theorem exposedMemory_wf : exposedMemory.WellFormed target :=
   expose_wellFormed target memory memory_wf ptr
 

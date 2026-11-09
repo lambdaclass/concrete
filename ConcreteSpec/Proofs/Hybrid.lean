@@ -14,7 +14,7 @@ every other place without an extra separation premise.
 namespace ConcreteSpec.Core.Hybrid
 open ConcreteSpec.Core.Mem
 
-/-- Representation lemma. Scalar encoding produces sizeof v.ty bytes (approved: PENDING). -/
+/-- Representation lemma. Scalar encoding produces sizeof v.ty bytes (approved: APPR-C4-agy-78ee5a2db). -/
 @[simp] theorem encode_length (tgt : Target) (v : Value) :
     (encode tgt v).length = sizeof v.ty := by
   cases v <;> simp [encode, Value.ty, CVal.ty, sizeof, encodeBool]
@@ -176,7 +176,7 @@ theorem materialize_idempotent (tgt : Target) (st st' : State) (p : Place) (s s'
   obtain ⟨t, ht⟩ := hp
   exact materialize_reuse tgt st' p t r ht s' base' align' padding'
 
-/-- Helper (congruence). Projection validity depends only on block geometry, not on bytes or exposure (approved: PENDING). -/
+/-- Helper (congruence). Projection validity depends only on block geometry, not on bytes or exposure (approved: APPR-C4-agy-78ee5a2db). -/
 theorem projected_transport (m m' : Memory) (c : Cell) (hc : c.Projected m)
     (hg : ∀ b, (m'.block b).map Block.geometry = (m.block b).map Block.geometry) :
     c.Projected m' := by
@@ -195,7 +195,7 @@ theorem projected_transport (m m' : Memory) (c : Cell) (hc : c.Projected m)
       exact ⟨b, y, hp, hy, hspace.trans hh.1.symm, hbase.trans hh.2.1.symm,
         hsize.trans hh.2.2.1.symm, halign.trans hh.2.2.2.symm, hfit⟩
 
-/-- Helper (congruence). Replacing bytes or exposure while preserving geometry preserves every cell projection (approved: PENDING). -/
+/-- Helper (congruence). Replacing bytes or exposure while preserving geometry preserves every cell projection (approved: APPR-C4-agy-78ee5a2db). -/
 theorem memory_wellFormed (tgt : Target) (st : State) (m : Memory)
     (hw : st.WellFormed tgt) (hm : m.WellFormed tgt)
     (hg : ∀ b, (m.block b).map Block.geometry = (st.memory.block b).map Block.geometry) :
@@ -204,7 +204,7 @@ theorem memory_wellFormed (tgt : Target) (st : State) (m : Memory)
   intro p c hc
   exact projected_transport _ _ c (hw.projected p c hc) hg
 
-/-- Helper (congruence). Updating one structured cell preserves the hybrid invariant (approved: PENDING). -/
+/-- Helper (congruence). Updating one structured cell preserves the hybrid invariant (approved: APPR-C4-agy-78ee5a2db). -/
 theorem set_wellFormed (tgt : Target) (st : State) (p : Place) (c : Cell)
     (hw : st.WellFormed tgt) (hc : c.Projected st.memory) :
     (st.set p c).WellFormed tgt := by
@@ -269,7 +269,7 @@ theorem rawWrite_wellFormed (tgt : Target) (st : State) (hw : st.WellFormed tgt)
       exact memory_wellFormed tgt st m hw hsw (store_geometry_inv tgt _ _ _ _ _ hm)
 
 /-- Helper (inversion). Successful materialization either reuses the existing cell or allocates and fills one
-fresh block. This decomposition keeps the later laws independent of monadic elaboration (approved: PENDING). -/
+fresh block. This decomposition keeps the later laws independent of monadic elaboration (approved: APPR-C4-agy-78ee5a2db). -/
 theorem materialize_cases (tgt : Target) (st st' : State) (p : Place) (s : AddrSpace)
     (base align : Nat) (padding : List MByte) (r : Range)
     (h : st.materialize tgt p s base align padding = some (r, st')) :
@@ -308,7 +308,7 @@ theorem materialize_cases (tgt : Target) (st st' : State) (p : Place) (s : AddrS
             exact .inr ⟨c, v, b, m, m', rfl, hs, hv.1, hv.2, ha, hm, rfl, rfl⟩
       next => simp at h
 
-/-- Helper (congruence). Allocation preserves the geometry of every preexisting projected block (approved: PENDING). -/
+/-- Helper (congruence). Allocation preserves the geometry of every preexisting projected block (approved: APPR-C4-agy-78ee5a2db). -/
 theorem alloc_projected (tgt : Target) (m m' : Memory) (hw : m.WellFormed tgt)
     (c : Cell) (hc : c.Projected m) (s : AddrSpace) (base size align : Nat)
     (b : MemBlockId) (ha : m.alloc tgt s base size align = .ok (b, m')) :
@@ -419,7 +419,7 @@ theorem write_frame (tgt : Target) (st st' : State) (p q : Place) (v : Value)
     next => simp at h
 
 /-- Helper (inversion). In the whole-cell model, disjoint byte ranges cannot share an allocation identity when
-the written cell has a supported (therefore nonempty) scalar representation (approved: PENDING). -/
+the written cell has a supported (therefore nonempty) scalar representation (approved: APPR-C4-agy-78ee5a2db). -/
 theorem rangesDisjoint_separated (tgt : Target) (st : State) (hw : st.WellFormed tgt)
     (p q : Place) (hd : st.RangesDisjoint p q)
     (ht : ∀ c, st.places p = some c → c.ty ≠ .unit) : st.Separated p q := by
@@ -604,13 +604,13 @@ def badExposeStateWf : Target → State → Place → AddrSpace → Nat → Nat 
     Option (Range × State) :=
   fun _ _ _ s base align _ => some (⟨⟨s, base, none⟩, 1, align⟩, badState)
 
-/-- Helper (inversion). The out-of-range block identity in badState violates the memory freshness invariant (approved: PENDING). -/
+/-- Helper (inversion). The out-of-range block identity in badState violates the memory freshness invariant (approved: APPR-C4-agy-78ee5a2db). -/
 private theorem not_badState_wf : ¬ badState.WellFormed linuxX8664 := by
   intro hw
   have h := hw.memory.fresh ⟨1⟩ (candidate ⟨0⟩ 40 3 1) rfl
   cases h
 
-/-- Helper (congruence). The materialized audit fixture state satisfies the hybrid invariant (approved: PENDING). -/
+/-- Helper (congruence). The materialized audit fixture state satisfies the hybrid invariant (approved: APPR-C4-agy-78ee5a2db). -/
 private theorem before_wf : before.WellFormed linuxX8664 := by
   refine ⟨alloc_wellFormed linuxX8664 Memory.empty (empty_wellFormed linuxX8664)
     ⟨0⟩ 40 3 1, ?_⟩
@@ -622,7 +622,7 @@ private theorem before_wf : before.WellFormed linuxX8664 := by
     exact ⟨⟨0⟩, candidate ⟨0⟩ 40 3 1, rfl, rfl, rfl, rfl, rfl, rfl, by decide⟩
   next => cases hc
 
-/-- Helper (congruence). The structured audit fixture state satisfies the hybrid invariant (approved: PENDING). -/
+/-- Helper (congruence). The structured audit fixture state satisfies the hybrid invariant (approved: APPR-C4-agy-78ee5a2db). -/
 private theorem structState_wf : structState.WellFormed linuxX8664 := by
   refine ⟨empty_wellFormed linuxX8664, ?_⟩
   intro p c hc
@@ -818,7 +818,7 @@ def matExposedState : State :=
 def before : State := matState
 def after : State := (before.write linuxX8664 ⟨0⟩ (.bool true)).getD before
 
-/-- Helper (congruence). Closed structured fixture has no memory projections yet (approved: PENDING). -/
+/-- Helper (congruence). Closed structured fixture has no memory projections yet (approved: APPR-C4-agy-78ee5a2db). -/
 private theorem observedStart_wf : observedStart.WellFormed linuxX8664 := by
   refine ⟨empty_wellFormed linuxX8664, ?_⟩
   intro p c hc
@@ -826,16 +826,16 @@ private theorem observedStart_wf : observedStart.WellFormed linuxX8664 := by
   split at hc
   next => cases hc; trivial
   next => cases hc
-/-- Helper (congruence). Derived from a successful first materialization, retaining its invariant (approved: PENDING). -/
+/-- Helper (congruence). Derived from a successful first materialization, retaining its invariant (approved: APPR-C4-agy-78ee5a2db). -/
 private theorem observed_wf : observed.WellFormed linuxX8664 :=
   materialize_wellFormed linuxX8664 observedStart observedStart_wf ⟨1⟩ ⟨0⟩ 80 1 []
-/-- Helper (congruence). Adding a structured cell does not disturb the existing projection (approved: PENDING). -/
+/-- Helper (congruence). Adding a structured cell does not disturb the existing projection (approved: APPR-C4-agy-78ee5a2db). -/
 private theorem structState_wf : structState.WellFormed linuxX8664 :=
   set_wellFormed linuxX8664 observed ⟨0⟩ ⟨.bool, .structured (.bool false)⟩ observed_wf trivial
-/-- Helper (congruence). Both allocations and their materialized projections satisfy the invariant (approved: PENDING). -/
+/-- Helper (congruence). Both allocations and their materialized projections satisfy the invariant (approved: APPR-C4-agy-78ee5a2db). -/
 private theorem before_wf : before.WellFormed linuxX8664 :=
   materialize_wellFormed linuxX8664 structState structState_wf ⟨0⟩ ⟨0⟩ 40 1 []
-/-- Helper (computation). Both existing places name distinct live block identities (approved: PENDING). -/
+/-- Helper (computation). Both existing places name distinct live block identities (approved: APPR-C4-agy-78ee5a2db). -/
 private theorem before_sep : before.Separated ⟨0⟩ ⟨1⟩ := by
   intro c d r s hc hd hr hs
   have hc' : c = ⟨.bool, .materialized matRange⟩ := Option.some.inj hc.symm
@@ -843,7 +843,7 @@ private theorem before_sep : before.Separated ⟨0⟩ ⟨1⟩ := by
   subst c; subst d
   cases hr; cases hs
   decide
-/-- Helper (computation). The live intervals 40..41 and 80..81 are disjoint (approved: PENDING). -/
+/-- Helper (computation). The live intervals 40..41 and 80..81 are disjoint (approved: APPR-C4-agy-78ee5a2db). -/
 private theorem before_disjoint : before.RangesDisjoint ⟨0⟩ ⟨1⟩ := by
   intro c d r s hc hd hr hs
   have hc' : c = ⟨.bool, .materialized matRange⟩ := Option.some.inj hc.symm
