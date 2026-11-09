@@ -175,6 +175,9 @@ control_bounded() {
  echo 42 >"$dest/status"; : >"$dest/stderr"
  echo 42 >"$dest/lcb_eval.status"; : >"$dest/lcb_eval.stderr"
  echo term >"$dest/program.lean.txt"
+ echo return_literal >"$dest/constructs.txt"
+ echo 'fn main() -> u8 { return 42; }' >"$dest/program.con"
+ echo manifest >"$dest/manifest-row.txt"
 }
 require_bounded() { control_bounded "$@"; }
 verify_saved_replay() {

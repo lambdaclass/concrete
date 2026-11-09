@@ -707,6 +707,8 @@ def writeBirRegressionMetadata (dir : System.FilePath) (seed : String) (index : 
 def writeSpecRegressionMetadata (dir : System.FilePath) (seed : String) (index : Nat)
     (q : ConcreteSpec.Slice0.Program) (exitCode : Nat) : IO Unit := do
   let name ← registerIdentity dir "spec" seed index
+  IO.FS.writeFile (dir / "program.lean.txt") (reprStr q ++ "\n")
+  IO.FS.writeFile (dir / "constructs.txt") (String.intercalate "," (SpecGen.constructs q) ++ "\n")
   IO.FS.writeFile (dir / "program.con") (renderSlice0 q)
   IO.FS.writeFile (dir / "manifest-row.txt")
     s!"{name}\tcon:tests/slice0/{name}.con\texit {exitCode}\tslice0\n"
@@ -884,8 +886,6 @@ def compileSpecCandidateImpl (ctx : CandidateCtx) (avail : Bool)
     (g : SpecGen.Generated) (core : ConcreteSpec.Program)
     (planted : PlantedFailure := .none) : IO (Except UInt32 (ConcreteSpec.Outcome × Bool)) := do
   IO.FS.createDirAll ctx.dir
-  IO.FS.writeFile (ctx.dir / "program.lean.txt") (reprStr g.program ++ "\n")
-  IO.FS.writeFile (ctx.dir / "constructs.txt") (String.intercalate "," g.constructs ++ "\n")
   writeSpecRegressionMetadata ctx.dir ctx.seed ctx.index g.program 0
   if g.rejection.isSome then
     recordCandidateFailure ctx "lowering" "spec_check"
@@ -1065,6 +1065,7 @@ def controlSpecOracle (dir : System.FilePath) (target : LCB.Target) : IO UInt32 
   let p := Concrete.BIR.Examples.answer
   let ctx : CandidateCtx := ⟨"spec", "control-spec-oracle", 0, dir, target⟩
   let ctxExpected : CandidateCtx := ⟨"spec", "control-spec-oracle", 0, dir / "spec-expected", target⟩
+  writeSpecRegressionMetadata dir ctx.seed ctx.index q 42
   unless ← emitArtifacts ctx p .none do return 1
   unless ← writeSpecOutcome ctxExpected p (specOutcome q) do return 1
   writeObservation (dir / "wrong-expected") "43" ""

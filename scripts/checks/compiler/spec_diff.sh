@@ -1438,6 +1438,13 @@ control_spec_oracle() {
   bundle=$(candidate_bundle_path spec "$d")
   verify_saved_replay "$bundle" "$work/spec-oracle-reproduced" "$work/spec-oracle-replayed.log" || return $?
   reproduced=$(cat "$work/spec-oracle-reproduced")
+  local artifact
+  for artifact in program.lean.txt constructs.txt program.con manifest-row.tsv examples.lean; do
+    [ -s "$bundle/$artifact" ] && cmp -s "$bundle/$artifact" "$reproduced/$artifact" || {
+      echo "control setup: spec-oracle missing or changed regression artifact $artifact" >&2
+      return 1
+    }
+  done
   cmp -s "$bundle/expected/status" "$reproduced/expected/status" || return 1
   for leg_obs in lcb_eval llvm lcb; do
     cmp -s "$bundle/observed-$leg_obs/status" "$reproduced/observed-$leg_obs/status" || return 1
