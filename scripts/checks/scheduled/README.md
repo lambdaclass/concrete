@@ -758,3 +758,25 @@ cancelled orphan not reaped`. Both planted controls passed in the focused Nix
 unittest (0.70 seconds). Both production modes passed with stdin closed and an
 open pipe. R-0676 owns the lifecycle repair; final-SHA server checks remain with
 the coordinator.
+
+
+### Round 18, step 4: direct execution (P2)
+
+Every test module invokes `suite_bootstrap.py` before local imports. That shared
+bootstrap alone owns the isolated-script import path; modules launch directly
+as `python3 -I <module>` without a command-line runpy wrapper or module-specific
+path edits. `direct_main` refuses unexpected arguments (including incomplete
+`--scheduled-report`) with `FAIL scheduled inventory: unexpected arguments
+<module>`. It loads the complete definitions without running their main block,
+then passes expected IDs and the actual execution report through the same
+`validate` used by discovery. Empty and prematurely truncated direct runs cannot
+succeed. Discovery validates any emitted report before falling back to a generic
+process-failure diagnostic.
+
+The six inventory tests passed under Nix with closed stdin and an open pipe
+(about 1.1 seconds). Added direct `-I` controls require the exact terminal zero
+inventory, premature-dispatch mismatch, and unexpected-argument diagnostics;
+existing isolated-copy failure, truncation and skip controls also pass.
+`test_process.py` passed directly under `-I` (24 tests, 6.3 seconds, closed stdin).
+The complete module matrix remains part of the focused scheduled gate and the
+coordinator's final-SHA concrete-ci-2 checks. This is still R-0676 step 4.

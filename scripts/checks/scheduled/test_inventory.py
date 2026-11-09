@@ -1,3 +1,7 @@
+import runpy
+from pathlib import Path
+runpy.run_path(str(Path(__file__).with_name('suite_bootstrap.py')))
+
 """Exact isolated-copy controls for direct execution and complete inventories."""
 from pathlib import Path
 import sys
@@ -17,7 +21,9 @@ class Inventory(unittest.TestCase):
             for dependency in ROOT.glob('*.py'):
                 if dependency.stem != name:
                     (directory / dependency.name).symlink_to(dependency)
-            (directory / (name + '.py')).write_text(transform((ROOT / (name + '.py')).read_text()))
+            (directory / (name + '.py')).write_text(
+                "import runpy\nfrom pathlib import Path\nrunpy.run_path(str(Path(__file__).with_name('suite_bootstrap.py')))\n" +
+                transform((ROOT / (name + '.py')).read_text()))
             result = process_run([sys.executable, '-I', str(ROOT / 'suite_adapter.py'),
                                   str(directory), name], env=runtime_environment(),
                                  cwd=ROOT.parents[2], timeout=15, text=True, capture_output=True)
@@ -57,6 +63,29 @@ class Inventory(unittest.TestCase):
                         '    return report\n'
                         'suite_adapter.execute = truncated\n' + s,
                         'FAIL scheduled inventory: direct/discovery mismatch test_hermetic')
+
+    def test_isolated_direct_validation(self):
+        controls = (
+            ('', [], 'zero tests'),
+            ('class First(unittest.TestCase):\n    def test_first(self): pass\n'
+             'if __name__ == "__main__": direct_main()\n'
+             'class Later(unittest.TestCase):\n    def test_later(self): pass\n', [], 'direct/discovery mismatch'),
+            ('', ['--unknown'], 'unexpected arguments'),
+            ('', ['--scheduled-report'], 'unexpected arguments'),
+        )
+        for source, args, diagnostic in controls:
+            with self.subTest(diagnostic=diagnostic), tempfile.TemporaryDirectory() as scratch:
+                module = Path(scratch) / 'test_direct_control.py'
+                prefix = 'import runpy\nrunpy.run_path(' + repr(str(ROOT / 'suite_bootstrap.py')) + ')\n'
+                module.write_text(prefix + 'import unittest\nfrom suite_adapter import direct_main\n' +
+                                  source + '\nif __name__ == "__main__": direct_main()\n')
+                result = process_run([sys.executable, '-I', str(module), *args],
+                                     env=runtime_environment(), cwd=ROOT.parents[2],
+                                     timeout=4, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertEqual(result.stdout, '')
+                self.assertEqual(result.stderr.splitlines()[-1],
+                                 'FAIL scheduled inventory: ' + diagnostic + ' test_direct_control')
 
     def test_skips_are_complete_ids(self):
         from suite_adapter import execute

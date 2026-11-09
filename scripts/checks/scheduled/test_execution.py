@@ -1,3 +1,7 @@
+import runpy
+from pathlib import Path
+runpy.run_path(str(Path(__file__).with_name('suite_bootstrap.py')))
+
 """Light execution boundary controls; no campaigns, Nix builds or remote mutations."""
 import json
 import os

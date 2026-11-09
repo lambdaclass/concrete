@@ -1,3 +1,7 @@
+import runpy
+from pathlib import Path
+runpy.run_path(str(Path(__file__).with_name('suite_bootstrap.py')))
+
 """Generic registry schema and workflow completeness/drift controls."""
 import copy
 import unittest

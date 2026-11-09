@@ -1,3 +1,7 @@
+import runpy
+from pathlib import Path
+runpy.run_path(str(Path(__file__).with_name('suite_bootstrap.py')))
+
 """Real private clone, registry, slot wrapper, watchdog and multi-file report controls.
 
 Only Nix environment entry is replaced: no builds or production campaigns run here.

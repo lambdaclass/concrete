@@ -1,3 +1,7 @@
+import runpy
+from pathlib import Path
+runpy.run_path(str(Path(__file__).with_name('suite_bootstrap.py')))
+
 from runtime_support import runtime_environment
 """The environment control must detect changed outcomes, not merely two exits."""
 from process_adapter import process_run

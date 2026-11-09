@@ -81,10 +81,25 @@ def validate(module, expected, discovery, direct):
 
 
 def direct_main():
-    report = execute(sys.modules["__main__"])
-    if len(sys.argv) == 3 and sys.argv[1] == "--scheduled-report":
-        Path(sys.argv[2]).write_text(json.dumps(report))
-    sys.exit(int(not report["successful"]))
+    module = sys.modules['__main__']
+    name = Path(module.__file__).stem
+    args = sys.argv[1:]
+    if args and not (len(args) == 2 and args[0] == '--scheduled-report'):
+        sys.exit('FAIL scheduled inventory: unexpected arguments ' + name)
+    # Fully loaded definitions reveal tests below a premature dispatch.
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('_scheduled_inventory_' + name, module.__file__)
+    complete = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(complete)
+    expected = sorted(identifier(t, complete) for t in inventory(complete))
+    report = execute(module)
+    if args:
+        Path(args[1]).write_text(json.dumps(report))
+    try:
+        validate(name, expected, report, report)
+    except ValueError as error:
+        sys.exit(str(error))
+    sys.exit(0)
 
 
 def check_module(module, directory):
@@ -92,17 +107,15 @@ def check_module(module, directory):
     discovery = execute(module)
     with tempfile.TemporaryDirectory(prefix='scheduled-direct-') as scratch:
         target = Path(scratch) / 'report.json'
-        direct = process_run([sys.executable, '-I', '-c',
-                             'import runpy,sys; sys.path.insert(0,sys.argv[1]); '
-                             'sys.path.insert(0,sys.argv[2]); sys.argv=sys.argv[3:]; runpy.run_path(sys.argv[0],run_name="__main__")',
-                             str(Path(__file__).resolve().parent), str(directory), str(Path(module.__file__).resolve()),
-                             '--scheduled-report', str(target)],
+        direct = process_run([sys.executable, '-I', str(Path(module.__file__).absolute()),
+                              '--scheduled-report', str(target)],
                              env=dict(os.environ), cwd=Path(__file__).resolve().parents[3],
                              timeout=45, text=True, capture_output=True)
+        if target.is_file():
+            validate(module.__name__, expected, discovery, json.loads(target.read_text()))
         if direct.returncode or not target.is_file():
             print(direct.stderr, end='', file=sys.stderr)
             raise ValueError('FAIL scheduled inventory: module failed ' + module.__name__)
-        validate(module.__name__, expected, discovery, json.loads(target.read_text()))
     return discovery
 
 

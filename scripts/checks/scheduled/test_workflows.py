@@ -1,3 +1,7 @@
+import runpy
+from pathlib import Path
+runpy.run_path(str(Path(__file__).with_name('suite_bootstrap.py')))
+
 """Execute the publisher timeout path with short real bounded attempts."""
 from process_adapter import process_run
 from pathlib import Path

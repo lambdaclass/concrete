@@ -1,3 +1,7 @@
+import runpy
+from pathlib import Path
+runpy.run_path(str(Path(__file__).with_name('suite_bootstrap.py')))
+
 """Exercise the real slot wrapper and bounded runner in a private controller tree."""
 from process_adapter import process_run
 import os

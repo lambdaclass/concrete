@@ -1,3 +1,7 @@
+import runpy
+from pathlib import Path
+runpy.run_path(str(Path(__file__).with_name('suite_bootstrap.py')))
+
 """Exact-SHA registry qualification through collection, publication and observation."""
 import copy
 import hashlib

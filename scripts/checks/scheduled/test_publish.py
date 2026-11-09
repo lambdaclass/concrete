@@ -1,3 +1,7 @@
+import runpy
+from pathlib import Path
+runpy.run_path(str(Path(__file__).with_name('suite_bootstrap.py')))
+
 from test_protocol import RegistryFixture
 """Publication controls do not contact remotes."""
 import subprocess
