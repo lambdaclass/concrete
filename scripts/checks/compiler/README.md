@@ -125,9 +125,9 @@ package `[assumptions]` interface by `R-0589`.
 entry must resolve back to a discovered trusted declaration, with exactly one
 owner of kind `implementation`, `backend` or `runtime`. `Concrete.Premises.TrustedFact`
 is the single enumerated inductive type of trust-relevant declaration facts read
-from the elaborated environment (`extern`, `implemented_by`, `csimp`, `init`,
-`builtin_init`, `export`, `unsafe`, `partial`, `opaque`, `partial-loop`), with
-kernel-checked exhaustiveness (`TrustedFact.mem_all : ∀ f, f ∈ TrustedFact.all`)
+from the elaborated environment (`extern`, `implemented_by`, `csimp`, `cpass`,
+`init`, `builtin_init`, `export`, `unsafe`, `partial`, `opaque`, `partial-loop`),
+with kernel-checked exhaustiveness (`TrustedFact.mem_all : ∀ f, f ∈ TrustedFact.all`)
 so a new constructor cannot be added without being classified and audited.
 Without any textual prefilter, `Concrete.Premises.trustedDeclarationKinds`
 inspects every `ConstantInfo` in the `Concrete` import closure plus nested
@@ -146,35 +146,67 @@ the actual classifier and requires the exact unlisted-loop diagnostic.
 without source-token filtering. Its declaration elaborator retains anonymous
 examples after command macro expansion, including imported macros, as named
 declarations with fresh `line:column` identities while preserving full
-declaration modifiers (`unsafe`, `partial`, and attributes) in a
-`noncomputable section`. As commands elaborate, per-command error logs, source
-command indices/lines, and stage-2 `csimp` state are recorded; once all commands
-in the file have elaborated, every file-local declaration in `env.constants.map₂`
-(plus any target of a module-local trust attribute/extension, while keeping
-imported `map₁` constants excluded from ordinary rescanning) is sorted
-deterministically by command order and primary-before-auxiliary name and audited
-against the **final** environment of the file for both axiom closures and
-`TrustedFact.all` kinds (`Concrete.Premises.trustedDeclarationKinds` and
-`Concrete.Premises.declarationOwners`, never from syntax). Separately applied
-`attribute [extern ...]`, `attribute [implemented_by ...]`, and `attribute [csimp]`
-commands—including those produced by macros or applied in later sections or
-namespaces—therefore cannot escape the audit or hide behind declarations
-elaborated earlier in the file. Quoted command templates remain data until
-invoked. Initializer execution is enabled independently for each file, and
-header and command errors are checked before later commands can reset their
-logs. `slice0_examples.lean` emits `example-json` rows only for retained
-examples, and `example_rows.py` requires `"⟪example⟫"` identities and fails
-closed if zero `example-json` rows are observed. The multi-file imported-macro
-controls in `scripts/checks/tests/trusted_frontend_controls.sh` and semantic
-controls in `scripts/checks/tests/trusted_base_controls.py` require exact
-diagnostics for unlisted example axioms, `unsafe`/`partial`/attributed examples,
-separately applied and macro-generated `extern`/`implemented_by`/`csimp`
-attributes (including in later sections/namespaces), and macro-introduced
-`unsafe` and `partial` declarations (including hygienic macro-scoped
-definitions), while verifying that harmless later attributes (`simp`) and
-uninvoked quoted command templates are not flagged.
+declaration modifiers (`unsafe`, `partial`, `meta`, and attributes) in a
+`noncomputable section`. Furthermore, `installAuditHooks` wraps every attribute
+handler in `attributeMapRef` and every command elaborator in
+`commandElabAttribute.tableRef` so that trust-extension events (`csimp`, `cpass`,
+`extern`, `implemented_by`, `init`, `builtin_init`, `export`) and active
+`Compiler.CSimp.ext` `stateStack` frames are retained **during** recursive command
+elaboration and attribute registration—before any local scope closes (`attribute
+[local ...] ... in`, `open ... in`, `section ... end` or `namespace ... end`
+opening and closing inside one command, or macro expansions that do so). Once all
+commands in the file have elaborated, every file-local declaration in
+`env.constants.map₂` (plus any target in `moduleAttributedDeclarations env`,
+`extraAttributed`, or `extraCSimp`, while keeping unattributed imported `map₁`
+constants excluded from ordinary rescanning) is sorted deterministically by
+command order and primary-before-auxiliary name and audited against the **final**
+environment combined with the retained command-elaboration history for both axiom
+closures and `TrustedFact.all` kinds (`Concrete.Premises.trustedDeclarationKinds`
+and `Concrete.Premises.declarationOwners`, never from syntax). Multi-file runs
+cache immutable post-header environments for identical import headers and isolate
+heavy module graphs across bounded child processes (and `systemd-run --user
+--scope -p MemoryMax=8G` when available in `slice0_trusted_base.sh`) so
+unfreed `.olean` `CompactedRegion`s do not accumulate across files. Quoted
+command templates remain data until invoked. Initializer execution is enabled
+independently for each file, and header and command errors are checked before
+later commands can reset their logs. `slice0_examples.lean` emits `example-json`
+rows only for retained examples, and `example_rows.py` requires `"⟪example⟫"`
+identities and fails closed if zero `example-json` rows are observed.
+
+### Lean 4.34.1 toolchain extension-point audit
+
+`TrustedFact.mem_all` proves that `TrustedFact.all` covers every constructor of
+`TrustedFact`, while the constructor set itself is derived from auditing the
+installed Lean 4.34.1 toolchain (`src/lean/Lean/`) for every mechanism that
+changes what code runs at compile/init/runtime or what declarations the kernel
+and compiler trust. On any future `lean-toolchain` bump, re-run this audit over
+the new toolchain's `src/lean/Lean/Compiler/`, `src/lean/Lean/Elab/`,
+`src/lean/Lean/Meta/`, `src/lean/Lean/Attributes.lean`,
+`src/lean/Lean/ScopedEnvExtension.lean`, `src/lean/Lean/KeyedDeclsAttribute.lean`,
+and `src/lean/Lean/Environment.lean` and update both `TrustedFact` and the table
+below:
+
+| Extension point / mechanism | Lean 4.34.1 toolchain source location | Decision and gate 9 enforcement |
+|---|---|---|
+| Axiom declarations (`axiom`, `sorryAx`) | `Lean/Declaration.lean`, `Lean/Util/CollectAxioms.lean` | Audited via `collectAxioms` in `Concrete.Premises.axiomErrors` and `slice0_examples.lean`; every reachable axiom must belong to an `.axiom` component. |
+| Native evaluation axioms (`decide +native`, `ofReduceBool`, `Lean.trustCompiler`) | `Lean/Elab/Tactic/ElabTerm.lean`, `Lean/Meta/Native.lean` | Emit `Lean.trustCompiler` and `_native.decide.ax_*` axioms into the constant's axiom closure; caught by `collectAxioms` in `axiomErrors` and `slice0_examples.lean`. |
+| `@[extern]` FFI symbol binding (`externAttr`) | `Lean/Compiler/ExternAttr.lean:77` (`externAttr : ParametricAttribute ExternAttrData`) | `TrustedFact.extern`: checked via `isExtern env n` and enumerated from `(externAttr.ext.getState env).1`. Local scope rejected by `ParametricAttribute` (`Lean/Attributes.lean:289`). |
+| `@[implemented_by]` target replacement (`implementedByAttr`) | `Lean/Compiler/ImplementedByAttr.lean:16` (`implementedByAttr : ParametricAttribute Name`) | `TrustedFact.implementedBy`: checked via `Compiler.implementedByAttr.getParam?` and enumerated from `(implementedByAttr.ext.getState env).1`. Local scope rejected by `ParametricAttribute`. |
+| `@[csimp]` compiler constant replacement (`CSimp.ext`) | `Lean/Compiler/CSimpAttr.lean:33,67` (`CSimp.ext : SimpleScopedEnvExtension Entry State`) | `TrustedFact.csimp`: checked via `hasCSimpFact` (`hasCSimpAttribute`, `stateStack`, `newEntries`, `getModuleEntries`) plus `slice0_examples.lean` recursive command/attribute hooks (`extraCSimp`) capturing `local`/`scoped` `csimp` before scopes close. |
+| `@[cpass]` custom LCNF compiler pass installer & constant folders (`passManagerExt`, `folderExt`) | `Lean/Compiler/LCNF/Passes.lean:169,188` (`passManagerExt`), `Lean/Compiler/LCNF/Simp/ConstantFold.lean:672,691` (`folderExt`) | `TrustedFact.cpass`: checked via `hasCPassFact` (`passManagerExt` and `folderExt` current state and `importedEntries`) and enumerated in `moduleAttributedNames`. Local scope rejected (`Passes.lean:189`). |
+| `@[init]` / `initialize` module initializers (`regularInitAttr`) | `Lean/Compiler/InitAttr.lean:101` (`regularInitAttr : ParametricAttribute Name`), `Lean/Elab/BuiltinCommand.lean` | `TrustedFact.init`: checked via `regularInitAttr.getParam?` and enumerated from `(regularInitAttr.ext.getState env).1`. Also gates `registerBuiltinAttribute` / `registerEnvExtension`, which fail outside `initializing` (`Lean/Attributes.lean:72`). |
+| `@[builtin_init]` / `builtin_initialize` and `declareBuiltin` (`builtinInitAttr`) | `Lean/Compiler/InitAttr.lean:110,149` (`builtinInitAttr : ParametricAttribute Name`) | `TrustedFact.builtinInit`: checked via `builtinInitAttr.getParam?` and enumerated from `(builtinInitAttr.ext.getState env).1`. Also catches all `@[builtin_*]` elaborator/macro/parser attributes (`Lean/KeyedDeclsAttribute.lean:148`). |
+| `@[export]` C symbol export (`exportAttr`) | `Lean/Compiler/ExportAttr.lean:28` (`exportAttr : ParametricAttribute Name`) | `TrustedFact.exportSym`: checked via `getExportNameFor?` and enumerated from `(exportAttr.ext.getState env).1`. |
+| `unsafe` declarations and inductives (`ConstantInfo.isUnsafe`) | `Lean/Declaration.lean`, `Lean/Elab/Declaration.lean` | `TrustedFact.unsafe`: checked on every `ConstantInfo` (`ci.isUnsafe && !isGeneratedPartialTwin env n`). |
+| `partial` definitions and runtime recursion twins (`ConstantInfo.isPartial`, `Meta.recExt`) | `Lean/Declaration.lean`, `Lean/Meta/RecExt.lean:20`, `Lean/Compiler/NoncomputableAttr.lean` | `TrustedFact.partial`: checked on every `ConstantInfo` (`ci.isPartial` or `opaqueInfo` paired with `._unsafe_rec`), licensing only compiler-generated twins whose parent is tagged in `Meta.recExt`. |
+| `opaque` declarations (`ConstantInfo.opaqueInfo`) | `Lean/Declaration.lean` | `TrustedFact.opaque`: checked on every `ConstantInfo` (`ci matches .opaqueInfo _` when not a `partial` wrapper or generated twin). |
+| Imperative `while` / `repeat` partial loops (`Lean.Loop`, `Lean.Loop.forIn`, `Lean.Loop.mk`) | `Init/System/IO.lean`, `Lean/Elab/Do/` | `TrustedFact.partialLoop`: checked via `exprHasPartialLoop` on `ci.value?` and propagated transitively across same-module callees in `trustedDeclarationKinds`. |
+| Compile-time macros, elaborators, tactics, simprocs, `#eval`, `run_cmd` | `Lean/Elab/Command.lean:611`, `Lean/Elab/Term/TermElabM.lean:281`, `Lean/KeyedDeclsAttribute.lean:162`, `Lean/Elab/BuiltinEvalCommand.lean` | Require `meta` declarations (`ensureAttrDeclIsMeta`) and run in the frontend interpreter (`evalConstCheck`). Any declaration, axiom, or trust extension they emit into the module or inside a local scope is captured by `slice0_examples.lean`'s recursive command/attribute hooks and `Concrete.Premises`'s environment audit; any OS process they spawn is caught by `strace` (`check_tools`). |
+| Standard optimizer hint attributes (`@[inline]`, `@[noinline]`, `@[macro_inline]`, `@[inline_if_reduce]`, `@[always_inline]`, `@[specialize]`, `@[nospecialize]`, `@[never_extract]`, `@&`, `unboxResultExt`) | `Lean/Compiler/InlineAttrs.lean:36-45`, `Lean/Compiler/Specialize.lean:26-48`, `Lean/Compiler/NeverExtractAttr.lean:15`, `Lean/Compiler/BorrowedAnnotation.lean:16`, `Lean/Compiler/IR/UnboxResult.lean:20` | Parameterize standard LCNF/IR passes without introducing unverified code replacement or FFI; covered by the `lean-compiler` component's `P_toolchain[lean]` premise. |
 
 Focused controls live in `scripts/checks/tests/test_execve_names.py`,
-`scripts/checks/tests/trusted_base_controls.py` and
+`scripts/checks/tests/trusted_base_controls.py`,
+`scripts/checks/tests/trusted_frontend_controls.sh`,
+`scripts/checks/tests/trusted_closure_control.sh` and
 `scripts/checks/tests/trusted_policy_controls.py`, plus the inline negative
 controls in `scripts/checks/compiler/slice0_trusted_base.sh`.

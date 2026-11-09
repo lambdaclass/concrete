@@ -294,11 +294,14 @@ def isAuxOf (n c : Name) : Bool :=
   c != n && uN != uC && uN.isPrefixOf uC
 
 /-- Every trust-relevant declaration fact read from the elaborated environment.
-Adding a constructor requires handling it in `name`, `all`, `holds` and `moduleAttributedNames`. -/
+Adding a constructor requires handling it in `name`, `all`, `holds` and `moduleAttributedNames`.
+See `scripts/checks/compiler/README.md` for the Lean 4.34.1 toolchain extension-point audit
+from which this inventory is derived. -/
 inductive TrustedFact where
   | extern
   | implementedBy
   | csimp
+  | cpass
   | init
   | builtinInit
   | exportSym
@@ -312,6 +315,7 @@ def TrustedFact.name : TrustedFact → String
   | .extern => "extern"
   | .implementedBy => "implemented_by"
   | .csimp => "csimp"
+  | .cpass => "cpass"
   | .init => "init"
   | .builtinInit => "builtin_init"
   | .exportSym => "export"
@@ -321,7 +325,7 @@ def TrustedFact.name : TrustedFact → String
   | .partialLoop => "partial-loop"
 
 def TrustedFact.all : List TrustedFact := [
-  .extern, .implementedBy, .csimp, .init, .builtinInit, .exportSym,
+  .extern, .implementedBy, .csimp, .cpass, .init, .builtinInit, .exportSym,
   .«unsafe», .«partial», .«opaque», .partialLoop
 ]
 
@@ -336,11 +340,20 @@ def hasCSimpFact (env : Environment) (n : Name) : Bool :=
   | some m => (Compiler.CSimp.ext.ext.getModuleEntries env m).any (fun | .global e | .scoped _ e => e.thmName == n)
   | none => false
 
+def hasCPassFact (env : Environment) (n : Name) : Bool :=
+  (Compiler.LCNF.passManagerExt.getState env).1.contains n ||
+  (Compiler.LCNF.passManagerExt.toEnvExtension.getState env).importedEntries.any (·.contains n) ||
+  (Compiler.LCNF.Simp.ConstantFold.folderExt.getState env).1.any
+    (fun e => e.declName == n || e.folderDeclName == n) ||
+  (Compiler.LCNF.Simp.ConstantFold.folderExt.toEnvExtension.getState env).importedEntries.any
+    (·.any fun e => e.declName == n || e.folderDeclName == n)
+
 def TrustedFact.holds (env : Environment) (n : Name) (ci : ConstantInfo)
     (extraCSimp : NameSet := {}) : TrustedFact → Bool
   | .extern => isExtern env n
   | .implementedBy => (Compiler.implementedByAttr.getParam? env n).isSome
   | .csimp => hasCSimpFact env n || extraCSimp.contains n
+  | .cpass => hasCPassFact env n
   | .init => (regularInitAttr.getParam? env n).isSome
   | .builtinInit => (builtinInitAttr.getParam? env n).isSome
   | .exportSym => (getExportNameFor? env n).isSome
@@ -359,6 +372,10 @@ def TrustedFact.moduleAttributedNames (env : Environment) : TrustedFact → List
       let entries := (Compiler.CSimp.ext.ext.getState env).newEntries.map fun
         | .global e | .scoped _ e => e.thmName
       active ++ entries
+  | .cpass =>
+      (Compiler.LCNF.passManagerExt.getState env).1 ++
+      (Compiler.LCNF.Simp.ConstantFold.folderExt.getState env).1.flatMap
+        (fun e => [e.declName, e.folderDeclName])
   | .init => (regularInitAttr.ext.getState env).1
   | .builtinInit => (builtinInitAttr.ext.getState env).1
   | .exportSym => (exportAttr.ext.getState env).1
