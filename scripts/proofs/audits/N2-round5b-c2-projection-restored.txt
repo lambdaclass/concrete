@@ -1,0 +1,3 @@
+C2 COMPLETE limit=64 visited=49
+C2 COMPLETE limit=4096 visited=49
+PASS exact-c2-projection-control (isolated proof, no head PASS claim)
