@@ -7,9 +7,8 @@
 #                                checked by scripts/review/verify.sh)
 #   refs/notes/concrete-gates    gates: pass|fail          selected: N                   utc: ...
 #
-# One `key: value` per line; when a key repeats, the last line wins. Optional in either note:
-# `order: N` (explicit landing order, lower first). A note is attached to a commit, so a verdict
-# is bound to that exact SHA: a new commit starts with no notes, and no rule has to say so.
+# One `key: value` per line; when a key repeats, the last line wins. A note is attached to a
+# commit, so a verdict is bound to that exact SHA: a new commit starts with no notes, and no rule has to say so.
 #
 #   notes.sh fetch                          copy the remote notes to refs/notes/remote/concrete-*
 #   notes.sh get <kind> <sha> [<key>]       print the published note (or one key) of <sha>
@@ -18,7 +17,7 @@
 #   notes.sh ready <sha>                    exit 0 iff verdict is clean and gates is pass
 #
 # <kind> is review or gates. LAND_REMOTE (default origin) names the remote; `fork` is refused.
-# Writers: scripts/review/review.sh (review), scripts/land/ready.sh and the landing bot (gates).
+# Writers: scripts/review/review.sh (review) and scripts/land/ready.sh (gates).
 # `put` never force-pushes: it rewrites on top of the remote's notes tip and retries on a race.
 set -euo pipefail
 REMOTE="${LAND_REMOTE:-origin}"
