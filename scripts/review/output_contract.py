@@ -123,7 +123,7 @@ def citation_error(text, repo, commit, paths, positive, base=None):
         return cache[path]
     def token(name, content):
         return re.search(r"(?<![\w])" + re.escape(name) + r"(?![\w])", content) is not None
-    def resolve(path):
+    def resolve(path, exact=False):
         if path.startswith("file://"):
             parts = path[7:].split("/")
             roots = {p.split("/", 1)[0] for p in paths if "/" in p}
@@ -134,11 +134,11 @@ def citation_error(text, repo, commit, paths, positive, base=None):
             # Root-level files have no directory component to recognize.
             candidate = parts[-1]
             return candidate if candidate in paths else None
+        if "/" not in path and not exact:
+            candidates = [p for p in paths if p.rsplit("/", 1)[-1] == path]
+            return candidates[0] if len(candidates) == 1 and not candidates[0].startswith("legacy/") else None
         if path in paths and is_clean_relative_path(path):
             return path
-        if "/" not in path:
-            candidates = [p for p in paths if p.rsplit("/", 1)[-1] == path]
-            return candidates[0] if len(candidates) == 1 else None
         return None
     def filename(name):
         return bool(re.search(r"\.(lean|py|sh|md|tsv|json|yml|yaml|toml|txt|log)$", name))
@@ -150,13 +150,18 @@ def citation_error(text, repo, commit, paths, positive, base=None):
     valid = 0
     for m in locations:
         raw = m.group("path")
-        path = resolve(raw)
-        # A basename label can be disambiguated only by its immediately following link.
+        path = resolve(raw, exact=text[:m.start()].endswith("]("))
+        # A basename label always describes its target, even if a root copy exists.
         following = re.match(r"`?\]\(([^)]+)\)", text[m.end():])
-        if path is None and "/" not in raw and following:
+        if "/" not in raw and following:
             full = LOCATION.fullmatch(following.group(1))
-            if full and full.group("path").rsplit("/", 1)[-1] == raw and (full.group("lines") or full.group("anchor")).split("-")[0] == (m.group("lines") or m.group("anchor")).split("-")[0]:
-                path = resolve(full.group("path"))
+            def start(location):
+                return int(re.split(r"[-–,]", location.group("lines") or location.group("anchor"))[0])
+            if full and full.group("path").rsplit("/", 1)[-1] == raw and start(full) == start(m):
+                path = resolve(full.group("path"), exact=True)
+            else:
+                errors.append(f"citation: basename label '{m.group()}' disagrees with link target")
+                continue
         if path is None:
             errors.append(f"citation: file '{raw}' does not resolve uniquely")
             continue

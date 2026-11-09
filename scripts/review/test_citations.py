@@ -64,24 +64,32 @@ with tempfile.TemporaryDirectory() as directory:
     sha = git("rev-parse", "HEAD")
     check("ROADMAP.md:1 README.md:1 ISSUES.tsv:1", "clean")
     check("[source.lean:1](file:///unusual/absolute/source.lean#L1)", "clean")
-    # Exact root path wins even when a legacy copy exists.
+    check("source.lean:1", ("invalid", "citation: file 'source.lean' does not resolve uniquely; citation: positive verdict requires at least one resolvable file:line citation"))
+    check("[source.lean:1–2,2](legacy/source.lean#L1)", ("invalid", "citation: range 'source.lean:1–2,2' outside 1..1"))
+    check("[source.lean:2](source.lean#L1)", ("invalid", "citation: basename label 'source.lean:2' disagrees with link target"))
+    (root / "legacy/only.lean").write_text("legacyOnly\n")
+    git("add", ".")
+    git("-c", "user.name=Control", "-c", "user.email=control@example.invalid", "commit", "-qm", "legacy-only basename")
+    sha = git("rev-parse", "HEAD")
+    check("only.lean:1", ("invalid", "citation: file 'only.lean' does not resolve uniquely; citation: positive verdict requires at least one resolvable file:line citation"))
+    # Explicit link targets can name an exact root file despite legacy copies.
     check("[`realAnchor`](source.lean#L1)", "clean")
-    check("source.lean:1 file:///tmp/scripts/missing/README.md:1", ("invalid", "citation: file 'file:///tmp/scripts/missing/README.md' does not resolve uniquely"))
+    check("[source.lean](source.lean:1) file:///tmp/scripts/missing/README.md:1", ("invalid", "citation: file 'file:///tmp/scripts/missing/README.md' does not resolve uniquely"))
     (root / "lean-toolchain").write_text("different-pin\n")
     git("add", ".")
     git("-c", "user.name=Control", "-c", "user.email=control@example.invalid", "commit", "-qm", "different toolchain pin")
     sha = git("rev-parse", "HEAD")
-    check("source.lean:1 `declModifiers`", ("invalid", "citation: identifier 'declModifiers' unresolved"))
+    check("[source.lean](source.lean:1) `declModifiers`", ("invalid", "citation: identifier 'declModifiers' unresolved"))
     base = sha
     (root / "source.lean").write_text("def realAnchor := 1\n")
     git("add", ".")
     git("-c", "user.name=Control", "-c", "user.email=control@example.invalid", "commit", "-qm", "remove name")
     sha = git("rev-parse", "HEAD")
-    result = contract.evaluate_output("source.lean:1 `otherAnchor`\nREAD: source.lean\nREPOSITORY: readable\nVERDICT: clean", "", sha, directory, ["clean"], base=base)
+    result = contract.evaluate_output("[source.lean](source.lean:1) `otherAnchor`\nREAD: source.lean\nREPOSITORY: readable\nVERDICT: clean", "", sha, directory, ["clean"], base=base)
     assert result[0] == "clean", result
 print("citation controls: PASS")
 
 # The actual branch tree must never gain authority from its fabricated evidence.
 repo = str(Path(__file__).resolve().parents[2])
-result = contract.citation_error("README.md:1 `alwaysEmitSteps` `invalidTwo` `mutateStoreGhostStep`", repo, "HEAD", contract.commit_blob_paths(repo, "HEAD"), True)
+result = contract.citation_error("[README.md](README.md:1) `alwaysEmitSteps` `invalidTwo` `mutateStoreGhostStep`", repo, "HEAD", contract.commit_blob_paths(repo, "HEAD"), True)
 assert result == "citation: identifier 'alwaysEmitSteps' unresolved; citation: identifier 'invalidTwo' unresolved; citation: identifier 'mutateStoreGhostStep' unresolved", result
