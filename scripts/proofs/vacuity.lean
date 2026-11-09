@@ -346,6 +346,198 @@ def refutableContext (simplify : Bool := false) : MetaM Bool := withoutModifying
   Lean.Meta.check proof
   return true
 
+/- Solver identities are scoped to one immutable environment and one Instance.
+    Terms retain bound variables; opening a closure is a separate query mode. -/
+namespace Discharge
+
+inductive Mode where
+  | closure | body | transfer | invariant
+  deriving BEq, Hashable, Inhabited
+
+abbrev TermId := Nat
+abbrev OriginId := Nat
+
+/-- Origins form a DAG independently of the term DAG: equal terms can have
+    different suppliers. Joint application dependencies are never collapsed. -/
+inductive Origin where
+  | supplied (instanceName : Name) (argument : Nat) (producer : TermId)
+  | hypothetical (scope : Nat) (binder : TermId)
+  | field (parent : OriginId) (index : Nat)
+  | substitution (callee : TermId) (inputs : Array OriginId)
+  deriving BEq, Hashable, Inhabited
+
+structure Input where
+  term : TermId
+  type : TermId
+  origin : OriginId
+  deriving BEq, Hashable, Inhabited
+
+structure TemplateKey where
+  name : Name
+  levels : List Level
+  mode : Mode
+  deriving BEq, Hashable, Inhabited
+
+/-- A guard is a typed equation, not a Boolean reachability approximation. -/
+structure Guard where
+  type : TermId
+  lhs : TermId
+  rhs : TermId
+  deriving BEq, Hashable, Inhabited
+
+/-- A certificate retains its permitted assumptions. Substitution must check
+    the instantiated proof and its type again before excluding a branch. -/
+structure Certificate where
+  proof : TermId
+  assumptions : Array Input
+  guards : Array Guard
+  deriving Inhabited
+
+inductive Transfer where
+  | result (term : TermId)
+  | application (fn : TermId) (inputs : Array TermId)
+  | constructor (name : Name) (inputs : Array TermId)
+  | projection (name : Name) (field : Nat) (receiver : TermId)
+  | binder (type body : TermId)
+  | branch (recursor : TemplateKey) (inputs : Array TermId)
+  | call (callee : TemplateKey) (inputs : Array TermId)
+  | demand (inhabitant : TermId)
+  | unresolved (term : TermId) (reason : String)
+  deriving Inhabited
+
+structure Template where
+  key : TemplateKey
+  root : TermId
+  transfers : Array Transfer := #[]
+  dependencies : Array TemplateKey := #[]
+  deriving Inhabited
+
+/-- The whole typed substitution, provenance and guard context identify a
+    query. HashMap equality checks structural equality after a hash match. -/
+structure Query where
+  template : TemplateKey
+  inputs : Array Input
+  guards : Array Guard
+  hypothetical : Array Input
+  mode : Mode
+  deriving BEq, Hashable, Inhabited
+
+structure Graph where
+  terms : Array Expr := #[]
+  termIds : Std.HashMap Expr TermId := {}
+  origins : Array Origin := #[]
+  originIds : Std.HashMap Origin OriginId := {}
+  templates : Std.HashMap TemplateKey Template := {}
+  nodes : Std.HashMap TermId Transfer := {}
+  deriving Inhabited
+
+/-- Interning does not beta-expand or open binders. Expression equality includes
+    all universe instantiations and de Bruijn indices. Children are interned on
+    demand by graph construction, under the same worklist budget as queries. -/
+def internTerm (term : Expr) : StateM Graph TermId := do
+  if let some id := (← get).termIds[term]? then return id
+  let id := (← get).terms.size
+  modify fun g => { g with terms := g.terms.push term, termIds := g.termIds.insert term id }
+  return id
+
+def internOrigin (origin : Origin) : StateM Graph OriginId := do
+  if let some id := (← get).originIds[origin]? then return id
+  let id := (← get).origins.size
+  modify fun g => { g with origins := g.origins.push origin, originIds := g.originIds.insert origin id }
+  return id
+
+/-- Construction and semantic obligations share one queue and one work counter.
+    No call creates a fresh allowance. A state belongs to one Instance. -/
+inductive Work where
+  | term (term : TermId)
+  | template (key : TemplateKey)
+  | query (query : Query)
+  | certificate (query : Query) (certificate : Certificate)
+  | invariant (component : Array TemplateKey)
+  deriving Inhabited
+
+structure SolverState where
+  graph : Graph := {}
+  remaining : Nat := 20000
+  worklist : Array Work := #[]
+  worklistSteps : Nat := 0
+  queryCount : Nat := 0
+  componentCount : Nat := 0
+  certificates : Nat := 0
+  deriving Inhabited
+
+abbrev Solver := StateRefT SolverState MetaM
+
+def charge : Solver Unit := do
+  let s ← get
+  if s.remaining == 0 then throwError "false-discharge-budget"
+  set { s with remaining := s.remaining - 1, worklistSteps := s.worklistSteps + 1 }
+
+def term (e : Expr) : Solver TermId := do
+  let (id, graph) := internTerm e |>.run (← get).graph
+  modify fun s => { s with graph }
+  return id
+
+def enqueue (work : Work) : Solver Unit :=
+  modify fun s => { s with worklist := s.worklist.push work }
+
+/-- Edges retain formal expressions. Constructing a callee does not instantiate
+    its body at this call and cannot recursively grow an expression context. -/
+def compileNode (id : TermId) : Solver Unit := do
+  if (← get).graph.nodes.contains id then return
+  let e := (← get).graph.terms[id]!
+  let mut children : Array Expr := #[]
+  let transfer ← match e with
+    | .app .. => do
+      let fn := e.getAppFn'
+      let args := e.getAppArgs
+      let inputs ← args.mapM term
+      children := args
+      match fn with
+      | .const name levels =>
+        let key := { name, levels, mode := .transfer : TemplateKey }
+        if (← getMatcherInfo? name).isSome then
+          pure (.branch key inputs)
+        else
+          match (← getEnv).find? name with
+          | some (.ctorInfo _) => pure (.constructor name inputs)
+          | some (.recInfo _) => pure (.branch key inputs)
+          | _ => pure (.call key inputs)
+      | _ =>
+        children := children.push fn
+        pure (.application (← term fn) inputs)
+    | .lam _ type body _ | .forallE _ type body _ => do
+      children := #[type, body]
+      pure (.binder (← term type) (← term body))
+    | .letE _ type value body _ => do
+      children := #[type, value, body]
+      pure (.application (← term (.lam `_ type body .default)) #[← term value])
+    | .proj name field receiver => do
+      children := #[receiver]
+      pure (.projection name field (← term receiver))
+    | .mdata _ body => do
+      children := #[body]
+      pure (.result (← term body))
+    | .mvar _ => pure (.unresolved id "uninstantiated-metavariable")
+    | _ => pure (.result id)
+  modify fun s => { s with graph.nodes := s.graph.nodes.insert id transfer }
+  for child in children do
+    let childId ← term child
+    unless (← get).graph.nodes.contains childId do enqueue (.term childId)
+
+/-- Templates are raw closed declaration bodies at their actual universes.
+    Dependencies come from term structure, with no pretty-name or library filter. -/
+def compileTemplate (key : TemplateKey) : Solver Unit := do
+  if (← get).graph.templates.contains key then return
+  let ci ← getConstInfo key.name
+  let body := (ci.value? (allowOpaque := true)).getD (mkConst key.name key.levels)
+  let root ← term (body.instantiateLevelParams ci.levelParams key.levels)
+  let template : Template := { key, root }
+  modify fun s => { s with graph.templates := s.graph.templates.insert key template }
+  enqueue (.term root)
+
+end Discharge
+
 structure DischargeState where
   remaining : Nat := 20000
   visited : Std.HashSet (Expr × Array FVarId) := {}
