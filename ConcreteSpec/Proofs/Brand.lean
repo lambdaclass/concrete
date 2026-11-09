@@ -96,7 +96,8 @@ theorem inv_bind {s : State} (a : Nat) {env : AList Nat Val} (hi : Inv s)
   · exact nodup_snoc hn (fun hm => by have := hg _ hm; omega)
 
 /-- Helper (inversion). Induction transports the input invariant through the single fixed run derivation; no premise-preserving run mutant tests its fixed output. (approved: PENDING). -/
-theorem run_inv {s ss s'} (h : Run s ss s') : Inv s → Inv s' := by
+theorem run_inv {s ss s'} (h : Run s ss s') (hi : Inv s) : Inv s' := by
+  revert hi
   induction h with
   | nil => exact id
   | newAlloc _ ih => intro hi; exact ih (inv_bind _ hi hi.1)
@@ -707,6 +708,26 @@ example : BrandsIn [0, 2] [(1, .heap 2)] ∧ AList.lookup [(1, STy.heap 2)] 1 = 
     ((2 : Nat) = 2 ∨ ∃ r, ([] : List Stmt) = .use 1 0 :: r ∨ ([] : List Stmt) = .free 1 0 :: r) ∧
     ¬ (¬ PermissiveOk [0, 2] [(1, .heap 2)] [.reset 0 0 2] []) :=
   ⟨liveBrandIn, rfl, Or.inl rfl, fun h => h .accept⟩
+
+/-- Instance (law `ConcreteSpec.Brand.reset_refuses_old`, case `oldHandleUse`). -/
+example := @reset_refuses_old [0, 2] [(1, .heap 2)] 0 0 3 [.use 1 0] [] 1 2
+  liveBrandIn rfl (Or.inr ⟨[], Or.inl rfl⟩)
+
+/-- Planted (law `ConcreteSpec.Brand.reset_refuses_old`, case `oldHandleUse`, subject `ConcreteSpec.Brand.Ok`, mutant `ConcreteSpec.Brand.Evidence.PermissiveOk`). -/
+example : BrandsIn [0, 2] [(1, .heap 2)] ∧ AList.lookup [(1, STy.heap 2)] 1 = some (.heap 2) ∧
+    ((2 : Nat) = 3 ∨ ∃ r, [.use 1 0] = Stmt.use 1 0 :: r ∨ [.use 1 0] = Stmt.free 1 0 :: r) ∧
+    ¬ (¬ PermissiveOk [0, 2] [(1, .heap 2)] [.reset 0 0 3, .use 1 0] []) :=
+  ⟨liveBrandIn, rfl, Or.inr ⟨[], Or.inl rfl⟩, fun h => h .accept⟩
+
+/-- Instance (law `ConcreteSpec.Brand.reset_refuses_old`, case `oldHandleFree`). -/
+example := @reset_refuses_old [0, 2] [(1, .heap 2)] 0 0 3 [.free 1 0] [] 1 2
+  liveBrandIn rfl (Or.inr ⟨[], Or.inr rfl⟩)
+
+/-- Planted (law `ConcreteSpec.Brand.reset_refuses_old`, case `oldHandleFree`, subject `ConcreteSpec.Brand.Ok`, mutant `ConcreteSpec.Brand.Evidence.PermissiveOk`). -/
+example : BrandsIn [0, 2] [(1, .heap 2)] ∧ AList.lookup [(1, STy.heap 2)] 1 = some (.heap 2) ∧
+    ((2 : Nat) = 3 ∨ ∃ r, [.free 1 0] = Stmt.use 1 0 :: r ∨ [.free 1 0] = Stmt.free 1 0 :: r) ∧
+    ¬ (¬ PermissiveOk [0, 2] [(1, .heap 2)] [.reset 0 0 3, .free 1 0] []) :=
+  ⟨liveBrandIn, rfl, Or.inr ⟨[], Or.inr rfl⟩, fun h => h .accept⟩
 
 end Evidence
 

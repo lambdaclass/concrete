@@ -76,9 +76,10 @@ namespace RoundtripEvidence
 /-- A broken encoder drops the Boolean byte. -/
 def dropBytes : Val → List MByte := fun _ => []
 
-/-- A broken decoder refuses initialized, correctly sized Boolean encodings. -/
+/-- A broken encoder inserts an undefined byte even for an empty structure. -/
 def spuriousByte : Val → List MByte := fun _ => [.undef]
 
+/-- A broken decoder refuses initialized, correctly sized Boolean encodings. -/
 def rejectValue : Decls → Ty → List MByte → Option Val := fun _ _ _ => none
 
 /-- A broken layout refuses the size of a scalar. -/

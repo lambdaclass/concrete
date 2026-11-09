@@ -74,8 +74,9 @@ theorem ok_det {Γ ss Γ₁} (h : Ok Γ ss Γ₁) : UniqueContext Ok Γ ss Γ₁
       exact ih hr2
 
 /-- Helper (inversion). Induction on acceptance preserves entries already locked in the input; a fixed derivation has no premise-preserving acceptance mutant. (approved: PENDING). -/
-theorem ok_keeps_locked {Γ ss Γ'} (h : Ok Γ ss Γ') :
-    ∀ {p q}, AList.lookup Γ p = some q → q.lock ≠ .free → AList.lookup Γ' p = some q := by
+theorem ok_keeps_locked {Γ ss Γ'} (h : Ok Γ ss Γ') {p q}
+    (hp : AList.lookup Γ p = some q) (hq : q.lock ≠ .free) : AList.lookup Γ' p = some q := by
+  revert p q
   induction h with
   | nil => intro p q hp _; exact hp
   | read _ _ _ ih => exact ih
