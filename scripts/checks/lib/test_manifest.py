@@ -2,7 +2,7 @@
 """Read and validate tests/manifest.tsv; print rows for shell consumers.
 
 Usage: test_manifest.py [validate] [MANIFEST]
-       test_manifest.py rows [--kind bir|con] [MANIFEST]
+       test_manifest.py rows [MANIFEST]
        test_manifest.py self-test
 
 The manifest's directory is the tests/ directory. Source paths are written as
@@ -181,19 +181,12 @@ def main(argv):
         self_test()
         return
     args = argv[2:] if len(argv) > 1 else []
-    kind = None
-    if command == "rows" and args[:1] == ["--kind"]:
-        if len(args) < 2 or args[1] not in ("bir", "con"):
-            raise ManifestError("rows --kind requires bir or con")
-        kind = args[1]
-        args = args[2:]
     if command not in ("validate", "rows") or len(args) > 1:
         raise ManifestError(__doc__)
     rows = load(args[0] if args else "tests/manifest.tsv")
     if command == "rows":
         for row in rows:
-            if kind is None or row.program.startswith(kind + ":"):
-                print(f"{row.id}\t{row.program}\t{row.expect}")
+            print(f"{row.id}\t{row.program}\t{row.expect}")
     else:
         print(f"test_manifest: {len(rows)} rows valid")
 
