@@ -1527,7 +1527,8 @@ ConcreteSpec.Core.Observe.Answer.blocked.sizeOf_spec
 ConcreteSpec.Core.Observe.Answer.response.inj	
 ConcreteSpec.Core.Observe.Answer.response.injEq	propext
 ConcreteSpec.Core.Observe.Answer.response.sizeOf_spec	
-ConcreteSpec.Core.Observe.BlockingEnvDemo.blockingHandler_valid	
+ConcreteSpec.Core.Observe.BlockingEnvDemo.blockingHandler.eq_1	
+ConcreteSpec.Core.Observe.BlockingEnvDemo.blockingHandler_valid	Quot.sound propext
 ConcreteSpec.Core.Observe.CompleteTrace.eq_1	
 ConcreteSpec.Core.Observe.Demo.Op.double.sizeOf_spec	
 ConcreteSpec.Core.Observe.Demo.envHandler.eq_1	
@@ -1645,6 +1646,10 @@ ConcreteSpec.Core.Observe.OutputDemo.run_writes._proof_1_1	Quot.sound propext
 ConcreteSpec.Core.Observe.OutputDemo.trapSpan._proof_1	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Observe.OutputDemo.trapSpan._proof_2	
 ConcreteSpec.Core.Observe.PhysicalEffects.Execution.brecOn	propext
+ConcreteSpec.Core.Observe.PhysicalOperands.faithful	
+ConcreteSpec.Core.Observe.PhysicalOperands.mk.inj	
+ConcreteSpec.Core.Observe.PhysicalOperands.mk.injEq	propext
+ConcreteSpec.Core.Observe.PhysicalOperands.mk.sizeOf_spec	
 ConcreteSpec.Core.Observe.PrefixEventually.refl	propext
 ConcreteSpec.Core.Observe.PrefixEventually.trans	propext
 ConcreteSpec.Core.Observe.ReportDemo.absSpan._proof_1	
@@ -1667,7 +1672,6 @@ ConcreteSpec.Core.Observe.RoutingDemo.Kind.twice.sizeOf_spec
 ConcreteSpec.Core.Observe.RoutingDemo.envHandler.eq_1	
 ConcreteSpec.Core.Observe.RoutingDemo.envHandler_valid	Quot.sound propext
 ConcreteSpec.Core.Observe.RoutingDemo.envHandler_valid._proof_1_3	Quot.sound propext
-ConcreteSpec.Core.Observe.RoutingDemo.envHandler_valid._proof_1_4	Quot.sound propext
 ConcreteSpec.Core.Observe.RoutingDemo.instDecidableEqKind._proof_1	
 ConcreteSpec.Core.Observe.RoutingDemo.instDecidableEqKind._proof_2	
 ConcreteSpec.Core.Observe.SameInfiniteObservation.refl	propext
@@ -1688,6 +1692,7 @@ ConcreteSpec.Core.Observe.SilentInsertion.visible
 ConcreteSpec.Core.Observe.SourcePosition.mk.inj	
 ConcreteSpec.Core.Observe.SourcePosition.mk.injEq	propext
 ConcreteSpec.Core.Observe.SourcePosition.mk.sizeOf_spec	
+ConcreteSpec.Core.Observe.Span.HasByteColumn.eq_1	
 ConcreteSpec.Core.Observe.Step.emit.inj	
 ConcreteSpec.Core.Observe.Step.emit.injEq	propext
 ConcreteSpec.Core.Observe.Step.emit.sizeOf_spec	
@@ -1727,6 +1732,8 @@ ConcreteSpec.Core.Observe.environment_oracle_wellFormed	Classical.choice Quot.so
 ConcreteSpec.Core.Observe.environment_respond_valid	propext
 ConcreteSpec.Core.Observe.environment_run_reply	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Observe.environment_stepHistory_valid	propext
+ConcreteSpec.Core.Observe.expandedTabSpan._proof_1	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Observe.expandedTabSpan._proof_2	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Observe.full_observation_preservation	propext
 ConcreteSpec.Core.Observe.grantsConfigured.congr_simp	Quot.sound propext
 ConcreteSpec.Core.Observe.infinite_not_termination	propext
@@ -1778,6 +1785,7 @@ ConcreteSpec.Core.Observe.singleLinePrefixSpan._proof_1
 ConcreteSpec.Core.Observe.sourcePrefixSpan._proof_1	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Observe.sourcePrefixSpan.congr_simp	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Observe.sourcePrefixSpan.eq_1	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Observe.sourcePrefixSpan_hasByteColumn	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Observe.sourcePrefixSpan_second_line	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Observe.sourceSites.eq_1	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Observe.sourceSites.eq_2	Classical.choice Quot.sound propext
@@ -1786,6 +1794,15 @@ ConcreteSpec.Core.Observe.sourceSites_lookup	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Observe.sourceSites_valid	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Observe.sourceSpan._proof_1	
 ConcreteSpec.Core.Observe.sourceSpan.eq_1	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Observe.sourceSpan_ascii_eq_char_col	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Observe.sourceSpan_multibyte_gt_char_col	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Observe.sourceSpan_multibyte_gt_char_col._proof_1_1	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Observe.source_ascii_bytes	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Observe.source_bytes_ge_scalars	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Observe.source_bytes_ge_scalars._proof_1_1	Quot.sound propext
+ConcreteSpec.Core.Observe.source_multibyte_bytes	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Observe.source_multibyte_bytes._proof_1_1	Quot.sound propext
+ConcreteSpec.Core.Observe.source_multibyte_bytes._proof_1_2	Quot.sound propext
 ConcreteSpec.Core.Observe.source_trap_column	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Observe.stepsObservation.eq_1	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Observe.steps_trap_observation	Classical.choice Quot.sound propext
