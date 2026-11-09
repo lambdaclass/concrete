@@ -53,11 +53,13 @@ with tempfile.TemporaryDirectory() as d:
     BASE_ENV["LEAN_PATH"] = str(d) + os.pathsep + BASE_ENV.get("LEAN_PATH", "")
     ambient = d / "ambient.lean"
     ambient.write_text("import Lean\nunsafe def ambientAuthority : Nat := 0\n")
-    require(lean(ambient, True, {
+    ambient_result = lean(ambient, True, {
         "CONCRETE_TRUSTED_DECLARATIONS": "lexer:ambientAuthority",
         "CONCRETE_TRUSTED_BASE_WITHOUT": "lexer",
-    }, production=True), False,
-        "FAIL unlisted example trusted declaration ambientAuthority [unsafe]")
+    }, production=True)
+    ambient_diagnostic = "FAIL unlisted example trusted declaration ambientAuthority [unsafe]"
+    require(ambient_result, False, ambient_diagnostic)
+    assert ambient_diagnostic in ambient_result.stdout.splitlines(), ambient_result.stdout
     empty = d / "empty.rows"
     empty.write_text("no json rows\n")
     r_empty = subprocess.run(["python3", "-I", "scripts/checks/lib/example_rows.py", str(empty)],

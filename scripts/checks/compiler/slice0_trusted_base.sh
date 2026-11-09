@@ -16,6 +16,8 @@
 # usage: slice0_trusted_base.sh [update]. Run inside the nix devshell, from the repository root;
 # `update` rewrites the golden (review the diff before committing it).
 set -euo pipefail
+# Bind all registry, lock and source reads to this entry point's checkout.
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.."
 export LC_ALL=C
 # This callback runs INSIDE common initialization, before any Lake build.
 slice0_audit_initial_build() {

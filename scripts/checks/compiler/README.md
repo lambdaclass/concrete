@@ -25,8 +25,7 @@ module into private temporary storage before running that test entry. An inherit
 `FAIL unlisted example trusted declaration ambientAuthority [unsafe]` in production.
 
 The other ambient inputs are observations, not authority: PATH-resolved tools and
-`CONCRETE_SLICE0_CLANG` must match lock-derived identities; cwd is fixed by the gate
-helper; resource bounds cannot add trust. `CONCRETE_TRUSTED_BASE_WITHOUT` only removes
+`CONCRETE_SLICE0_CLANG` must match lock-derived identities; cwd is fixed to the production entry point's checkout before any helper is sourced; resource bounds cannot add trust. `CONCRETE_TRUSTED_BASE_WITHOUT` only removes
 registry components for the missing-entry control and cannot add matches. The
 approval input remains fail-closed under T1. No external declaration list is read.
 
