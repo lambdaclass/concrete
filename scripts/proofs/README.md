@@ -834,3 +834,22 @@ complete PASS under the same unchanged 64-visit control limit. No synthetic or
 production projection allowance was increased. The six real-spec names in the
 round-4r census record remain historical coordinator observations; no new scope
 census has been run locally.
+
+Eliminator-local field aliases retain the remaining demand: selecting a nested
+field or applying a function field resumes on the actual selected source term,
+with the actual arguments. Aggregate provenance cannot replace that demand.
+The paired nested-Exists and function-field controls reject the projected case
+and accept the independent field/argument. Independence pruning happens only
+on complete proof queries, never across an opaque selector continuation or an
+unapplied proof function.
+
+Constructor exposure and evidence traversal share `projectionIota` and a
+context-keyed raw head cache. Raw exposure uses beta, available-body delta,
+selected projections, and constructor iota; it performs neither K nor structure
+eta. Evidence traversal reuses already exposed heads. Metadata removal and
+actual-argument beta specialization precede query identity, so the same reduced
+query is not charged again as a second raw beta redex. Every new raw head and
+nested demand still consumes the existing shared projection allowance. This
+keeps the inline-match and genuine induction controls within their unchanged
+64-visit fixture bounds while retaining actual branch selection and all
+unavailable-proof checks. The Discharge region is unchanged.

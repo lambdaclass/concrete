@@ -1,8 +1,11 @@
 """Bounded projection/carrier and dependent-contract regression probes."""
 import argparse
+import re
 from vacuity_controls import BASE
 from vacuity_driver import ROOT, compiled_consumer, run
 
+NESTED_EXISTS = "(if n == 0 then (⟨0, ⟨h.1, Nat.lt_succ_self n⟩⟩ : ∃ _ : Nat, n < n+1 ∧ n < n+1) else ⟨0, ⟨h.1, Nat.lt_succ_self n⟩⟩)"
+FUNCTION_EXISTS = "(if n == 0 then (⟨0, fun hp => hp⟩ : ∃ _ : Nat, (n < n+1) → n < n+1) else ⟨0, fun hp => hp⟩)"
 
 PROJECTIONS = {
     "subtype-proj": "(⟨0, h.1⟩ : {_k : Nat // n < n+1}).2",
@@ -17,6 +20,8 @@ PROJECTIONS = {
     "recursor-function": "(Bool.casesOn (motive := fun _ => (n < n+1) → n < n+1) (n == 0) (fun hp => hp) (fun hp => hp)) h.1",
     "match-carrier": "(match n == 0 with | true => (⟨0, h.1⟩ : {_k : Nat // n < n+1}) | false => ⟨0, h.1⟩).2",
     "psum-carrier": "PSum.casesOn (motive := fun _ : PSum Nat (n < n+1) => n < n+1) (if n == 0 then PSum.inl n else PSum.inr h.1) (fun _ => Nat.lt_succ_self n) (fun hp => hp)",
+    "nested-exists-field": "Exists.elim " + NESTED_EXISTS + " (fun _ hp => hp.1)",
+    "minor-function-application": "Exists.elim " + FUNCTION_EXISTS + " (fun _ f => f h.1)",
     "cast-let": "let carrier : {_k : Nat // n < n+1} := ⟨0, h.1⟩; Eq.mp rfl carrier.2",
     "iff-field": "((Iff.intro (fun _ : True => h.1) (fun _ => True.intro)).mp True.intro)",
     "exists-carrier": "Exists.elim (⟨0, h.1⟩ : ∃ _ : Nat, n < n+1) (fun _ hp => hp)",
@@ -53,26 +58,35 @@ def premise_carriers():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--baseline", action="store_true")
     parser.add_argument("--group", choices=["fields", "eliminators", "dependent", "all"], default="all")
     args = parser.parse_args()
-    eliminators = {"cases-bool", "cases-nat", "matcher", "nested-matcher", "mixed-minors", "recursor-function", "match-carrier", "psum-carrier"}
+    eliminators = {"cases-bool", "cases-nat", "matcher", "nested-matcher", "mixed-minors", "recursor-function", "match-carrier", "psum-carrier", "nested-exists-field", "minor-function-application"}
     with compiled_consumer() as meta:
         for label, body in PROJECTIONS.items():
             if args.group == "dependent" or (args.group == "fields" and label in eliminators) or (args.group == "eliminators" and label not in eliminators):
                 continue
             code, output = run(ROOT, "", projection(body), 4096, meta_path=meta)
             print(f"ROUND5 {label} exit={code}\n{output}", flush=True)
-            if not args.baseline:
-                assert code == 1, output
-                assert [r for r in output.splitlines() if r.startswith(("FAIL ", "INCOMPLETE "))] == [
-                    "FAIL projection-law ConcreteSpecControl.growth "], output
+            assert code == 1, output
+            assert [r for r in output.splitlines() if r.startswith(("FAIL ", "INCOMPLETE "))] == [
+                "FAIL projection-law ConcreteSpecControl.growth "], output
         if args.group in {"fields", "all"}:
+            for label, declaration, body in [
+                ("unavailable-carrier", "axiom unavailableCarrier (n : Nat) (h : n < n+1 ∧ True) : {_k : Nat // n < n+1}", "(unavailableCarrier n h).2"),
+                ("unavailable-sum", "axiom unavailableCarrier (n : Nat) (h : n < n+1 ∧ True) : PSum Nat (n < n+1)", "PSum.casesOn (motive := fun _ => n < n+1) (unavailableCarrier n h) (fun _ => Nat.lt_succ_self n) (fun hp => hp)"),
+            ]:
+                fixture = projection(body).replace("/-- Helper", declaration + "\n/-- Helper", 1)
+                code, output = run(ROOT, "", fixture, 4096, meta_path=meta)
+                print(f"ROUND5 {label} exit={code}\n{output}", flush=True)
+                findings = [r for r in output.splitlines() if r.startswith(("FAIL ", "INCOMPLETE "))]
+                assert code == 2 and len(findings) == 1 and re.fullmatch(
+                    r"INCOMPLETE analysis-budget-or-error ConcreteSpecControl.growth stage=projection law=ConcreteSpecControl.growth case=none reason=analysis-error heartbeats=\d+/2000000 work=0/20000 projection=\d+/4096",
+                    findings[0]), output
+                assert "DETAIL analysis-error ConcreteSpecControl.growth stage=projection law=ConcreteSpecControl.growth case=none projection-body-unavailable ConcreteSpecControl.unavailableCarrier" in output.splitlines(), output
             for label, fixture in premise_carriers():
                 code, output = run(ROOT, "", fixture, 4096, meta_path=meta)
                 print(f"ROUND5 {label} exit={code}\n{output}", flush=True)
-                if not args.baseline:
-                    assert code == 1 and [r for r in output.splitlines() if r.startswith(("FAIL ", "INCOMPLETE "))] == ["FAIL projection-law ConcreteSpecControl.growth "], output
+                assert code == 1 and [r for r in output.splitlines() if r.startswith(("FAIL ", "INCOMPLETE "))] == ["FAIL projection-law ConcreteSpecControl.growth "], output
             code, output = run(ROOT, "", projection("(⟨h.1, Nat.lt_succ_self n⟩ : n < n+1 ∧ n < n+1).2"), 4096, meta_path=meta)
             print(f"ROUND5 independent-selected exit={code}\n{output}", flush=True)
             assert code == 0 and "N2 PASS" in output, output
@@ -81,9 +95,11 @@ def main():
                 "match-independent-field": "(match n == 0 with | true => (⟨h.1, Nat.lt_succ_self n⟩ : n < n+1 ∧ n < n+1) | false => ⟨h.1, Nat.lt_succ_self n⟩).2",
                 "minor-independent-origin": "Subtype.rec (motive := fun _ => n < n+1) (fun _ hp => hp) (if n == 0 then (⟨n, Nat.lt_succ_self n⟩ : {_k : Nat // n < n+1}) else ⟨n, Nat.lt_succ_self n⟩)",
                 "psum-independent-origin": "PSum.casesOn (motive := fun _ : PSum Nat (n < n+1) => n < n+1) (if n == 0 then PSum.inl n else PSum.inr (Nat.lt_succ_self n)) (fun _ => Nat.lt_succ_self n) (fun hp => hp)",
+                "nested-exists-independent-field": "Exists.elim " + NESTED_EXISTS + " (fun _ hp => hp.2)",
+                "minor-function-independent-argument": "Exists.elim " + FUNCTION_EXISTS + " (fun _ f => f (Nat.lt_succ_self n))",
             }.items():
                 fixture = projection(body)
-                if label in {"minor-independent-origin", "psum-independent-origin"}:
+                if label in {"minor-independent-origin", "psum-independent-origin", "minor-function-independent-argument"}:
                     fixture = fixture.replace("theorem helper (n : Nat) (h :", "theorem helper (n : Nat) (_h :")
                 code, output = run(ROOT, "", fixture, 4096, meta_path=meta)
                 print(f"ROUND5 {label} exit={code}\n{output}", flush=True)
@@ -91,8 +107,7 @@ def main():
         if args.group in {"dependent", "all"}:
             code, output = run(ROOT, "", DEPENDENT, 4096, meta_path=meta)
             print(f"ROUND5 dependent exit={code}\n{output}", flush=True)
-            if not args.baseline:
-                assert code == 0 and "N2 PASS" in output, output
+            assert code == 0 and "N2 PASS" in output, output
     return 0
 
 

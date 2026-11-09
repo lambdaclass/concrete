@@ -295,6 +295,10 @@ def cleanSpine : Expr → Expr
   | .app f a => mkApp (cleanSpine f) a
   | e => e
 
+/-- Specialize supplied arguments before identifying a projection query, just
+    as raw delta already specializes its body before recursing. -/
+def projectionClean (e : Expr) : Expr := cleanSpine (cleanSpine e).headBeta
+
 /-- Options are compared exactly; a constant hash is lawful and avoids treating
     an options fingerprint as identity. Environment is immutable per analysis. -/
 local instance : Hashable Options := ⟨fun _ => 0⟩
@@ -368,6 +372,7 @@ structure ProjectionState where
   answers : Std.HashMap (Expr × DischargeRawContext × ProjectionOrigins) Bool := {}
   fieldAnswers : Std.HashMap (Expr × Name × Nat × DischargeRawContext × ProjectionOrigins) Bool := {}
   carrierTypes : Std.HashMap (Expr × DischargeRawContext) Bool := {}
+  heads : Std.HashMap (Expr × DischargeRawContext) Expr := {}
 
 def projectionCacheable (context : DischargeRawContext) (e : Expr)
     (origins : ProjectionOrigins) : MetaM Bool := do
@@ -381,16 +386,34 @@ def chargeProjection : StateRefT ProjectionState Audit Unit := do
   if let some b := (← get).budget then b.modify fun s => { s with projection := s.projection + 1 }
   modify fun state => { state with remaining := fuel - 1 }
 
+/-- The single raw iota rule shared by head exposure and evidence traversal. -/
+def projectionIota (r : RecursorVal) (levels : List Level) (args : Array Expr)
+    (constructor : Expr) : MetaM (Option Expr) := do
+  let .const ctor _ := constructor.getAppFn' | return none
+  let some rule := r.rules.find? (fun rule => rule.ctor == ctor) | return none
+  unless r.levelParams.length == levels.length do throwError "projection-universe-arity {r.name}"
+  let fields := constructor.getAppArgs
+  unless fields.size >= rule.nfields do throwError "projection-recursor-fields {r.name}"
+  let rhs := rule.rhs.instantiateLevelParams r.levelParams levels
+  let rhs := mkAppN rhs (args.extract 0 (r.numParams + r.numMotives + r.numMinors))
+  let rhs := mkAppN rhs (fields.extract (fields.size - rule.nfields) fields.size)
+  return some (mkAppN rhs (args.extract (r.getMajorIdx + 1) args.size)).headBeta
+
 mutual
 /-- Inspect the complete proof DAG under one declared distinct-expression bound.
     Raw proof delta unfolds one available body per visit; heartbeats also bound meta work. -/
 partial def direct (n : Name) (e : Expr) : StateRefT ProjectionState Audit Bool := do
-  let e := cleanSpine e
+  let e := projectionClean e
   let context ← dischargeRawContext
   let cacheable ← projectionCacheable context e (← get).origins
   let key := (e, context, (← get).origins)
   if cacheable then
     if let some answer := (← get).answers[key]? then return answer
+    if let some head := (← get).heads[(e, context)]? then
+      if head != e then
+        let answer ← direct n head
+        modify fun s => { s with answers := s.answers.insert key answer }
+        return answer
   chargeProjection
   let answer ← directStep n e
   if cacheable then
@@ -401,7 +424,8 @@ partial def directStep (n : Name) (e : Expr) : StateRefT ProjectionState Audit B
   let proof ← isProof e
   -- A data major can carry premise evidence. Types themselves are not evidence.
   if ← representationField (← inferType e) then return false
-  if let .fvar id := e.getAppFn' then return ← projectionOrigin n id
+  if let .fvar id := e.getAppFn' then
+    return ← throughProjectionOrigin n id e.getAppArgs (direct n)
   if let .proj name i receiver := e.getAppFn' then
     return ← directField n name i receiver e.getAppArgs
   match e with
@@ -450,7 +474,9 @@ partial def directStep (n : Name) (e : Expr) : StateRefT ProjectionState Audit B
         -- premise evidence. This is an origin proof, not trusted unfolding of
         -- an unavailable constant, and applies only inside minor analysis.
         if (← get).origins.premiseOnly then
-          if !(← projectionMayUsePremise n e) then return false
+          -- An unapplied proof function still has hypotheses to inspect.
+          if !(← whnfD (← inferType e)).isForall then
+            if !(← projectionMayUsePremise n e) then return false
         let body := value.instantiateLevelParams ci.levelParams levels
         return ← direct n (mkAppN body e.getAppArgs).headBeta
       throwError "projection-body-unavailable {h}"
@@ -468,21 +494,12 @@ partial def directEliminator (n : Name) (e : Expr)
   let args := e.getAppArgs
   let some major := args[r.getMajorIdx]?
     | throwError "projection-recursor-under-applied {head}"
+  if r.numMinors == 0 then return false
   -- Iota requires an actual constructor major. Meta.whnf on the whole
   -- recursor also performs K and structure eta, erasing stuck proof evidence.
   -- In particular, those reductions must not bypass unavailable proof bodies.
-  let constructor ← withConfig (fun c => { c with iota := false }) (whnfD major)
-  let constructor ← constructor.toCtorIfLit
-  if let .const ctor _ := constructor.getAppFn' then
-    if let some rule := r.rules.find? (fun rule => rule.ctor == ctor) then
-      unless r.levelParams.length == levels.length do throwError "projection-universe-arity {head}"
-      let fields := constructor.getAppArgs
-      unless fields.size >= rule.nfields do throwError "projection-recursor-fields {head}"
-      let rhs := rule.rhs.instantiateLevelParams r.levelParams levels
-      let rhs := mkAppN rhs (args.extract 0 (r.numParams + r.numMotives + r.numMinors))
-      let rhs := mkAppN rhs (fields.extract (fields.size - rule.nfields) fields.size)
-      return ← finish (mkAppN rhs (args.extract (r.getMajorIdx + 1) args.size)).headBeta
-  if r.numMinors == 0 then return false
+  let constructor ← projectionHead n major
+  if let some reduced ← projectionIota r levels args constructor then return ← finish reduced
   -- A stuck proof major remains evidence to inspect, even when K could erase it.
   let majorEvidence ← if ← isProof major then direct n major else pure false
   let arities ← forallBoundedTelescope (← inferType e.getAppFn')
@@ -519,15 +536,70 @@ partial def directEliminator (n : Name) (e : Expr)
     projected := projected || found
   return projected
 
+/-- Expose constructor heads by charged raw beta/delta/projection/iota only.
+    Unlike Meta.whnf this never invents a constructor using K or structure eta.
+    Closed computations select their real branch rather than exploring minors
+    which are not reachable. Unavailable proof heads remain INCOMPLETE. -/
+partial def projectionHead (n : Name) (e : Expr) : StateRefT ProjectionState Audit Expr := do
+  let e := projectionClean e
+  let context ← dischargeRawContext
+  let cacheable ← dischargeCacheable context e
+  if cacheable then
+    if let some answer := (← get).heads[(e, context)]? then return answer
+  chargeProjection
+  let answer ← projectionHeadStep n e
+  if cacheable then modify fun s => { s with heads := s.heads.insert (e, context) answer }
+  return answer
+
+partial def projectionHeadStep (n : Name) (e : Expr) : StateRefT ProjectionState Audit Expr := do
+  let reduced := e.headBeta
+  if reduced != e then return ← projectionHead n reduced
+  if let .letE _ _ value body _ := e then return ← projectionHead n (body.instantiate1 value)
+  if let .proj name i receiver := e.getAppFn' then
+    let value ← projectionHead n receiver
+    if let .const ctor _ := value.getAppFn' then
+      if let some (.ctorInfo c) := (← getEnv).find? ctor then
+        unless c.induct == name do throwError "projection-carrier-constructor {ctor}"
+        let some field := value.getAppArgs[c.numParams + i]?
+          | throwError "projection-carrier-field {ctor} {i}"
+        return ← projectionHead n (mkAppN field e.getAppArgs).headBeta
+    return e
+  if let .const head levels := e.getAppFn' then
+    let ci ← getConstInfo head
+    if let .ctorInfo _ := ci then return e
+    if let .recInfo r := ci then
+      let args := e.getAppArgs
+      let some major := args[r.getMajorIdx]?
+        | throwError "projection-recursor-under-applied {head}"
+      if r.numMinors == 0 then return e
+      let value ← projectionHead n major
+      if let some reduced ← projectionIota r levels args value then return ← projectionHead n reduced
+      return e
+    if let some value := ci.value? (allowOpaque := true) then
+      unless ci.levelParams.length == levels.length do throwError "projection-universe-arity {head}"
+      return ← projectionHead n (mkAppN (value.instantiateLevelParams ci.levelParams levels) e.getAppArgs).headBeta
+    if ← isProof e then throwError "projection-body-unavailable {head}"
+    return e
+  if e.isLit then return ← e.toCtorIfLit
+  return e
+
 /-- Resolve field origins only when the proof actually demands them. Unused
     constructor fields cannot consume the budget or contaminate other fields. -/
-partial def projectionOrigin (n : Name) (id : FVarId) : StateRefT ProjectionState Audit Bool := do
+partial def projectionOrigin (n : Name) (id : FVarId) : StateRefT ProjectionState Audit Bool :=
+  throughProjectionOrigin n id #[] (direct n)
+
+/-- Keep the complete remaining demand through an eliminator's local alias.
+    A field's aggregate provenance cannot answer a query about one of its fields
+    or about its value after application. -/
+partial def throughProjectionOrigin (n : Name) (id : FVarId) (args : Array Expr)
+    (finish : Expr → StateRefT ProjectionState Audit Bool) : StateRefT ProjectionState Audit Bool := do
   let origins := (← get).origins
   if let some value := origins.minorOrigins.findSomeRev? (fun (key, value) =>
       if key == id then some value else none) then return value
   if let some (ctor, i, major) := origins.fieldOrigins.findSomeRev? (fun (key, ctor, i, major) =>
       if key == id then some (ctor, i, major) else none) then
-    return ← directConstructorField n ctor i major
+    return ← directConstructorFieldAlong n ctor i major
+      (fun field => finish (mkAppN field args).headBeta) true
   return true
 
 /-- A type capability, not a trust rule: inspect the actual constructor field
@@ -585,7 +657,7 @@ partial def projectionMayUsePremise (n : Name) (e : Expr)
     and is memoized in the same local context and shared projection allowance. -/
 partial def directConstructorField (n ctor : Name) (i : Nat) (e : Expr)
     : StateRefT ProjectionState Audit Bool := do
-  let e := cleanSpine e
+  let e := projectionClean e
   let context ← dischargeRawContext
   let cacheable ← projectionCacheable context e (← get).origins
   let key := (e, ctor, i, context, (← get).origins)
@@ -597,44 +669,43 @@ partial def directConstructorField (n ctor : Name) (i : Nat) (e : Expr)
   return answer
 
 partial def directConstructorFieldStep (n ctor : Name) (i : Nat) (e : Expr)
+    : StateRefT ProjectionState Audit Bool :=
+  directConstructorFieldAlong n ctor i e (direct n)
+
+partial def directConstructorFieldAlong (n ctor : Name) (i : Nat) (e : Expr)
+    (finish : Expr → StateRefT ProjectionState Audit Bool) (nested := false)
     : StateRefT ProjectionState Audit Bool := do
+  let e := projectionClean e
+  if nested then chargeProjection
+  let select := fun value => directConstructorFieldAlong n ctor i value finish true
   let reduced := e.headBeta
-  if reduced != e then return ← directConstructorField n ctor i reduced
-  if let .fvar id := e.getAppFn' then return ← projectionOrigin n id
-  if let .letE _ _ value body _ := e then
-    return ← directConstructorField n ctor i (body.instantiate1 value)
+  if reduced != e then return ← select reduced
+  if let .fvar id := e.getAppFn' then
+    return ← throughProjectionOrigin n id e.getAppArgs select
+  if let .letE _ _ value body _ := e then return ← select (body.instantiate1 value)
   if let .proj name j receiver := e.getAppFn' then
-    return ← directFieldAlong n name j receiver e.getAppArgs
-      (directConstructorField n ctor i) true
+    return ← directFieldAlong n name j receiver e.getAppArgs select true
   if let .const head levels := e.getAppFn' then
     let ci ← getConstInfo head
     if let .ctorInfo c := ci then
       if c.name != ctor then return false
       let some field := e.getAppArgs[c.numParams + i]?
         | throwError "projection-constructor-field {ctor} {i}"
-      return ← direct n field
+      return ← finish field
     if let some projection ← getProjectionFnInfo? head then
       let fields := e.getAppArgs
       let some receiver := fields[projection.numParams]?
         | throwError "projection-under-applied {head}"
       let structureCtor ← getConstInfoCtor projection.ctorName
       return ← directFieldAlong n structureCtor.induct projection.i receiver
-        (fields.extract (projection.numParams + 1) fields.size)
-        (directConstructorField n ctor i) true
-    if let .recInfo _ := ci then
-      return ← directEliminator n e (directConstructorField n ctor i)
+        (fields.extract (projection.numParams + 1) fields.size) select true
+    if let .recInfo _ := ci then return ← directEliminator n e select
     if let some value := ci.value? (allowOpaque := true) then
       unless ci.levelParams.length == levels.length do throwError "projection-universe-arity {head}"
-      return ← directConstructorField n ctor i
-        (mkAppN (value.instantiateLevelParams ci.levelParams levels) e.getAppArgs).headBeta
+      return ← select (mkAppN (value.instantiateLevelParams ci.levelParams levels) e.getAppArgs).headBeta
     throwError "projection-body-unavailable {head}"
-  let reduced ← whnfD e
-  if reduced != e then return ← directConstructorField n ctor i reduced
-  -- A chain of raw projections of a local premise retains that premise's
-  -- origin. Computed/stuck carriers without such an origin stay unsupported.
-  let mut base := e.getAppFn'
-  while let .proj _ _ receiver := base do base := receiver.getAppFn'
-  if let .fvar id := base then return ← projectionOrigin n id
+  let reduced ← withConfig (fun c => { c with iota := false }) (whnfD e)
+  if reduced != e then return ← select reduced
   throwError "projection-constructor-carrier-unavailable {ctor} {i}"
 
 /-- A projection demands one field, not every field of its carrier. Rebuilding
@@ -648,12 +719,13 @@ partial def directField (n name : Name) (i : Nat) (receiver : Expr)
 partial def directFieldAlong (n name : Name) (i : Nat) (receiver : Expr)
     (args : Array Expr) (finish : Expr → StateRefT ProjectionState Audit Bool) (nested := false)
     : StateRefT ProjectionState Audit Bool := do
+  let receiver := projectionClean receiver
   if nested then chargeProjection
-  let receiver := cleanSpine receiver
   let select (value : Expr) := directFieldAlong n name i value args finish true
   let reduced := receiver.headBeta
   if reduced != receiver then return ← select reduced
-  if let .fvar id := receiver.getAppFn' then return ← projectionOrigin n id
+  if let .fvar id := receiver.getAppFn' then
+    return ← throughProjectionOrigin n id receiver.getAppArgs select
   if let .proj inner j base := receiver.getAppFn' then
     return ← directFieldAlong n inner j base receiver.getAppArgs select true
   match receiver with
