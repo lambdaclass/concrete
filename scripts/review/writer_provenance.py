@@ -140,14 +140,69 @@ class FetchTransportError(ProvenanceError):
     pass
 
 
-def git_run(repo: str, args: list[str], check: bool = True, input_text: str | None = None) -> subprocess.CompletedProcess:
-    proc = subprocess.run(
-        ["git", "-C", repo] + args,
-        input=input_text,
-        capture_output=True,
-        text=True,
-        check=False,
+GIT_VIEW_ENV = (
+    "GIT_REPLACE_REF_BASE", "GIT_GRAFT_FILE", "GIT_SHALLOW_FILE",
+    "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_INDEX_FILE", "GIT_NAMESPACE",
+)
+
+
+def canonical_git_env(env: dict[str, str] | None = None) -> dict[str, str]:
+    result = (os.environ if env is None else env).copy()
+    for key in GIT_VIEW_ENV:
+        result.pop(key, None)
+    result.update(GIT_NO_REPLACE_OBJECTS="1", GIT_OPTIONAL_LOCKS="0")
+    return result
+
+
+def canonical_git_run(repo: str, args: list[str], *, input=None,
+                      text: bool = True, env=None, verify: bool = True):
+    # The unchecked path is private to the view probes: they cannot recursively
+    # verify themselves, but use precisely the same command and environment.
+    if verify:
+        verify_canonical_repo_view(repo)
+    return subprocess.run(
+        ["git", "--no-replace-objects", "-c", "core.commitGraph=false", "-C", repo] + args,
+        input=input, capture_output=True, text=text,
+        env=canonical_git_env(env), check=False,
     )
+
+
+def verify_canonical_repo_view(repo: str) -> None:
+    def probe(args):
+        proc = canonical_git_run(repo, args, verify=False)
+        if proc.returncode:
+            detail = (proc.stderr or proc.stdout).strip()
+            raise ProvenanceError(f"git {' '.join(args)} failed: {detail}")
+        return proc.stdout.strip()
+
+    # Capture directory paths and shallow status in one Git process. Do not
+    # cache them: every operation must observe newly planted view overrides.
+    git_dir, common_dir, shallow = probe([
+        "rev-parse", "--absolute-git-dir", "--path-format=absolute",
+        "--git-common-dir", "--is-shallow-repository",
+    ]).splitlines()
+    dirs = [git_dir, common_dir]
+    if (shallow == "true"
+            or any(os.path.lexists(os.path.join(d, "shallow")) for d in dirs)):
+        raise ProvenanceError(
+            "repository is shallow (git rev-parse --is-shallow-repository is true): "
+            "writer-notes continuity and ancestry require full commit history")
+    for directory in dict.fromkeys(dirs):
+        grafts = os.path.join(directory, "info", "grafts")
+        if os.path.lexists(grafts):
+            raise ProvenanceError(
+                f"repository has grafted history ({grafts}): "
+                "writer-notes continuity and ancestry forbid git grafts")
+    replacements = probe(["for-each-ref", "--format=%(refname)", "refs/replace/"])
+    if replacements:
+        raise ProvenanceError(
+            f"repository has git replacement refs ({replacements.splitlines()[0]}): "
+            "writer-notes continuity and ancestry forbid replacement objects")
+
+
+def git_run(repo: str, args: list[str], check: bool = True, input_text: str | None = None) -> subprocess.CompletedProcess:
+    proc = canonical_git_run(repo, args, input=input_text)
     if check and proc.returncode != 0:
         detail = (proc.stderr or proc.stdout or f"exit {proc.returncode}").strip()
         raise ProvenanceError(f"git {' '.join(args)} failed: {detail}")
@@ -1431,13 +1486,11 @@ def cmd_stamp_commit(args: argparse.Namespace) -> int:
         env["GIT_AUTHOR_NAME"] = f"{MODEL_DISPLAY[args.model]} (writer)"
         env["GIT_AUTHOR_EMAIL"] = f"{args.model}@writers.concrete"
 
-        amend_proc = subprocess.run(
-            ["git", "-C", args.repo, "commit", "-q", "--amend", "--reset-author", "-F", "-"],
+        amend_proc = canonical_git_run(
+            args.repo, ["commit", "-q", "--amend", "--reset-author", "-F", "-"],
             input=new_msg,
-            capture_output=True,
             text=True,
             env=env,
-            check=False,
         )
         if amend_proc.returncode != 0:
             raise ProvenanceError(f"git commit --amend failed: {amend_proc.stderr.strip()}")
@@ -1701,11 +1754,10 @@ def batch_cat_objects(repo: str, oids: list[str]) -> dict[str, tuple[str, str]]:
     if not unique_oids:
         return {}
     stdin_bytes = "".join(f"{oid}\n" for oid in unique_oids).encode("utf-8")
-    proc = subprocess.run(
-        ["git", "-C", repo, "cat-file", "--batch"],
+    proc = canonical_git_run(
+        repo, ["cat-file", "--batch"],
         input=stdin_bytes,
-        capture_output=True,
-        check=False,
+        text=False,
     )
     if proc.returncode != 0:
         err = proc.stderr.decode("utf-8", errors="replace").strip()
@@ -2569,12 +2621,10 @@ def sync_notes_refs(
                         )
 
         mktree_lines = [f"100644 blob {bsha}\t{c}\n" for c, bsha in sorted(merged_entries.items())]
-        tproc = subprocess.run(
-            ["git", "-C", repo, "mktree"],
+        tproc = canonical_git_run(
+            repo, ["mktree"],
             input="".join(mktree_lines),
-            capture_output=True,
             text=True,
-            check=False,
         )
         if tproc.returncode != 0 or not tproc.stdout.strip():
             raise ProvenanceError(f"git mktree failed during sync-notes: {tproc.stderr.strip()}")
@@ -2683,12 +2733,10 @@ def cmd_publish_notes(args: argparse.Namespace) -> int:
             raise ProvenanceError(f"no {WRITER_NOTES_REF} ref to publish")
         env = os.environ.copy()
         env.pop("CONCRETE_SKIP_GATES", None)
-        pproc = subprocess.run(
-            ["git", "-C", args.repo, "push", "-q", args.remote, f"{sha}:{WRITER_NOTES_REF}"],
-            capture_output=True,
+        pproc = canonical_git_run(
+            args.repo, ["push", "-q", args.remote, f"{sha}:{WRITER_NOTES_REF}"],
             text=True,
             env=env,
-            check=False,
         )
         if pproc.returncode != 0:
             err = (pproc.stderr or pproc.stdout or "").strip()

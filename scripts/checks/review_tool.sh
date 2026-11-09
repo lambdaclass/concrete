@@ -22,6 +22,9 @@ REVIEW="$ROOT_DIR/scripts/review/review.sh"
 VERIFY="$ROOT_DIR/scripts/review/verify.sh"
 SPLIT="$ROOT_DIR/scripts/review/split_diff.py"
 
+# Canonical object/history view and exhaustive Python Git routing (slice A).
+python3 -B -I "$ROOT_DIR/scripts/review/test_canonical_git.py" || exit 1
+
 PASS=0
 FAIL=0
 ok() { echo "  ok   $1"; PASS=$((PASS+1)); }
