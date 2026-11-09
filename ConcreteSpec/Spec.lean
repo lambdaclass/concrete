@@ -25,6 +25,7 @@ import ConcreteSpec.Spec.Memory
 import ConcreteSpec.Spec.Hybrid
 import ConcreteSpec.Spec.Own
 import ConcreteSpec.Spec.Grant
+import ConcreteSpec.Spec.Frame
 import ConcreteSpec.Spec.Rules
 
 /-!
@@ -62,7 +63,7 @@ laws, written, proved and tested before the freeze) is in the namespace `Concret
 `Exec` (C1, execution, calls and cleanup), `Scalar` (C2, scalars and arithmetic), `Const` (C2,
 the constant initializer subset), `Memory` (C4, byte memory and scalar representation), and
 `Hybrid` (C4, structured places and stable materialized ranges), `Own` (C5, ownership and loans),
-`Observe` (C6, observations and the environment), and `Grant` (C5, brand lifetimes and grant attenuation). Each module's header says which contract it states and what it
+`Observe` (C6, observations and the environment), and `Grant` (C5, brand lifetimes and grant attenuation), and `Frame` (C10, logical footprints, call restoration and target-independent ABI contracts). Each module's header says which contract it states and what it
 leaves to a later slice.
 
 Only Lean core is imported (Q9.16). No proof uses `native_decide` or `sorry` (Q9.17).

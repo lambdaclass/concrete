@@ -112,7 +112,10 @@ Open obligations, by name:
   `Own.CheckerAccepted` converse (`R-0571`), scalar C4 access erasure, generative brand lifetimes,
   and grant attenuation/consumption laws. Nonempty projection resolution, semantic type/Copy
   admission, existential package elaboration and concrete grant instances remain integration
-  duties (`R-0571`); these modules do not claim their checker correspondence. C7–C10 remain.
+  duties (`R-0571`); these modules do not claim their checker correspondence.
+  C10 (`Frame`) now covers logical footprints, C1 caller restoration, target-independent ABI and
+  `kept` retention interfaces, and launcher entry/exit relations; concrete ABI implementations,
+  extern syntax, packed access and source frame/snapshot constructs remain out.
   C1 leaves to later slices the source-level evaluation orders (elaboration, O1), counted loops
   (slice 4), the oracle's query record (C8).
   Its storage can use C4's hybrid state and C5's ownership adapters. Lifecycle

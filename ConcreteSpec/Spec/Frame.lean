@@ -1,0 +1,1025 @@
+import ConcreteSpec.Spec.Hybrid
+
+/-!
+# Logical footprints, call frames and ABI contracts (foundation C10)
+
+PROPOSED: not normative until the owner freezes Core. Part of `ConcreteSpec.Spec`; see
+`ConcreteSpec/README.md`. This module states interfaces and laws, not a concrete target ABI.
+
+A logical footprint names byte ranges by allocation identity, not by numeric address, together with
+block metadata and structured places as separate permissions. `Footprint.Preserves` is the frame
+law: every byte of an old block outside its byte ranges, all metadata of every block outside its
+block set, and every place outside it are exactly unchanged.
+A fresh allocation has no old bytes to preserve; its fresh identity makes it disjoint from every
+range in an old block. Byte contents include initialization and pointer fragments, so preserving a
+byte preserves all three.
+
+Sequential composition unions footprints. A C1 call contract specifies the callee footprint and its
+required frame law. Local C4 effect derivations establish it for the complete call, from argument evaluation and entry instrumentation through cleanup,
+leave instrumentation and result binding. C1 return frames restore the caller's locals; shared hybrid
+state is not rolled back.
+
+The ABI interface relates typed arguments and results to registers and stack slots, and records frame
+size/alignment, return locations, clobbers, preserved machine state and final-artifact stack
+accounting. Foreign arguments are FFI-safe, never enums. `kept` consumes an owned allocation and
+produces a linear `Kept<H>` receipt which only the paired extern consumes. No source frame clause,
+snapshot construct, extern syntax, packed-access semantics or target-specific ABI table is introduced.
+-/
+namespace ConcreteSpec.Core.Frame
+open ConcreteSpec.Core.Mem
+open ConcreteSpec.Core.Hybrid
+
+/-- One logical byte range: an allocation identity and offsets within that allocation. -/
+structure ByteRange where
+  block : MemBlockId
+  offset : Nat
+  extent : Nat
+  deriving DecidableEq, Repr
+
+/-- Byte `i` of block `b` belongs to the range. A zero-extent range contains no bytes. -/
+def ByteRange.Contains (r : ByteRange) (b : MemBlockId) (i : Nat) : Prop :=
+  r.block = b ∧ r.offset ≤ i ∧ i < r.offset + r.extent
+
+instance (r : ByteRange) (b : MemBlockId) (i : Nat) : Decidable (r.Contains b i) := by
+  unfold ByteRange.Contains; infer_instance
+
+/-- Two ranges are disjoint when their allocations differ, either is empty, or their offsets do not
+overlap. Numeric address reuse cannot make ranges in different allocations overlap. -/
+def ByteRange.Disjoint (r s : ByteRange) : Prop :=
+  r.block ≠ s.block ∨ r.extent = 0 ∨ s.extent = 0 ∨
+    r.offset + r.extent ≤ s.offset ∨ s.offset + s.extent ≤ r.offset
+
+instance (r s : ByteRange) : Decidable (r.Disjoint s) := by
+  unfold ByteRange.Disjoint; infer_instance
+
+/-- The complete byte footprint of a block of `size` bytes. -/
+def fullBlock (b : MemBlockId) (size : Nat) : ByteRange := ⟨b, 0, size⟩
+
+/-- All block fields except its byte contents. -/
+def blockMetadata (x : Block) : AddrSpace × Nat × Nat × Nat × Bool × Bool :=
+  (x.space, x.base, x.size, x.align, x.live, x.exposed)
+
+/-- An operation's permitted effects on hybrid state. Byte ranges, block metadata and places are
+sets represented by lists; membership, not list order or duplication, is semantic. A byte write does
+not claim permission to change its block's metadata. -/
+structure Footprint where
+  bytes : List ByteRange
+  blocks : List MemBlockId
+  places : List Place
+  deriving DecidableEq, Repr
+
+/-- The empty footprint. -/
+def Footprint.empty : Footprint := ⟨[], [], []⟩
+
+/-- Only one byte range is touched; every block's metadata remains outside the footprint. -/
+def Footprint.byte (r : ByteRange) : Footprint := ⟨[r], [], []⟩
+
+/-- Only the metadata of one allocation may change, including for a zero-sized allocation. -/
+def Footprint.block (b : MemBlockId) : Footprint := ⟨[], [b], []⟩
+
+/-- Only one structured place is touched. -/
+def Footprint.place (p : Place) : Footprint := ⟨[], [], [p]⟩
+
+/-- The combined permission of two operations run in sequence. -/
+def Footprint.union (f g : Footprint) : Footprint :=
+  ⟨f.bytes ++ g.bytes, f.blocks ++ g.blocks, f.places ++ g.places⟩
+
+/-- This byte is outside every range in the footprint. -/
+def Footprint.ByteOutside (f : Footprint) (b : MemBlockId) (i : Nat) : Prop :=
+  ∀ r ∈ f.bytes, ¬ r.Contains b i
+
+/-- This block's metadata is outside the footprint, independently of its byte ranges. -/
+def Footprint.BlockOutside (f : Footprint) (b : MemBlockId) : Prop := b ∉ f.blocks
+
+/-- This place is outside the footprint. -/
+def Footprint.PlaceOutside (f : Footprint) (p : Place) : Prop := p ∉ f.places
+
+instance (f : Footprint) (b : MemBlockId) (i : Nat) : Decidable (f.ByteOutside b i) := by
+  unfold Footprint.ByteOutside; infer_instance
+
+instance (f : Footprint) (b : MemBlockId) : Decidable (f.BlockOutside b) := by
+  unfold Footprint.BlockOutside; infer_instance
+
+instance (f : Footprint) (p : Place) : Decidable (f.PlaceOutside p) := by
+  unfold Footprint.PlaceOutside; infer_instance
+
+/-- The frame law for one operation. Only bytes of blocks that existed before the operation are
+quantified: allocation creates bytes rather than changing old ones. The whole `MByte` is compared,
+including initialization and provenance fragments. For every block outside the metadata footprint,
+its space, base, size, alignment, liveness and exposure are exactly unchanged, even when one of its
+byte ranges is written. Place cells are compared exactly. -/
+def Footprint.Preserves (before after : State) (f : Footprint) : Prop :=
+  (∀ b i x, before.memory.block b = some x → f.ByteOutside b i →
+    (after.memory.block b).map (fun y => y.bytes[i]?) = some (x.bytes[i]?)) ∧
+  (∀ b x, before.memory.block b = some x → f.BlockOutside b →
+    (after.memory.block b).map blockMetadata = some (blockMetadata x)) ∧
+  (∀ p, f.PlaceOutside p → after.places p = before.places p)
+
+/-- The footprint of a successful access. A zero-byte access touches no allocation range. -/
+def accessFootprint : Option (Option (MemBlockId × Nat)) → Nat → Footprint
+  | some (some (b, off)), n => .byte ⟨b, off, n⟩
+  | _, _ => .empty
+
+/-- The footprint of a Hybrid typed write: structured writes touch the place, while materialized
+writes touch the underlying byte range. -/
+def writeFootprint (tgt : Target) (before : State) (place : Place) (value : Value) : Footprint :=
+  match before.places place with
+  | some ⟨_, .structured _⟩ => .place place
+  | some ⟨_, .materialized r⟩ =>
+    accessFootprint (before.memory.access tgt r.ptr (encode tgt value).length r.align)
+      (encode tgt value).length
+  | none => .empty
+
+/-- The caller locals restored when a C1 call returns `result` to optional destination `dst`. -/
+def restoredLocals {V : Type} (dst : Option Var) (result : V) (caller : AList Var V) :
+    AList Var V :=
+  Exec.bindDst dst result caller
+
+/-- A complete C1 call of `f`, from its `.call` statement to the caller continuation. The `Steps`
+premise reaches this call's own `.ret` frame, either at an explicit return or at normal Unit
+fall-through. The final silent step performs `.leave`, result binding and restoration. A matching
+intermediate configuration therefore cannot stand in for the outer return. -/
+def C1Call (O : Exec.Operands) (f : FnId) (P : Exec.Program O)
+    (entry exit : Exec.Config O) : Prop :=
+  ∃ (fn : Exec.Fn O) (dst : Option Var) (caller : AList Var O.Val)
+    (k : List (Exec.Frame O)) (args : List O.Expr) (site : SiteId) (vs : List O.Val)
+    (st stArgs stEnter stReturn : O.Store) (callee : AList Var O.Val)
+    (tr : List O.Event) (result : O.Val),
+    AList.lookup P.fns f = some fn ∧
+    entry = ⟨.exec (.call dst f args site), caller, st, k⟩ ∧
+    Exec.evalArgs O caller st args = .ok (vs, stArgs) ∧
+    fn.params.length = vs.length ∧
+    O.life (.enter (fn.params.map Prod.fst)) stArgs = some stEnter ∧
+    ((Exec.Steps P entry tr
+        ⟨.exiting (.ret result), callee, stReturn, .ret dst caller :: k⟩ ∧
+      Exec.step P ⟨.exiting (.ret result), callee, stReturn, .ret dst caller :: k⟩ =
+        some (.next exit)) ∨
+     (result = O.unitVal ∧ Exec.Steps P entry tr
+        ⟨.done, callee, stReturn, .ret dst caller :: k⟩ ∧
+      Exec.step P ⟨.done, callee, stReturn, .ret dst caller :: k⟩ = some (.next exit)))
+
+/-- Executable effect instructions; their operands describe behavior, not preservation proofs. -/
+inductive EffectCommand where
+  | store (pointer : Ptr) (bytes : List MByte) (alignment : Nat)
+  | free (block : MemBlockId)
+  | expose (pointer : Ptr)
+  | alloc (space : AddrSpace) (base size alignment : Nat)
+  | set (place : Place) (cell : Cell)
+  | write (place : Place) (value : Value)
+  | rawWrite (pointer : Ptr) (bytes : List MByte) (alignment : Nat)
+
+/-- Whether a C4 or Hybrid effect command is defined on the given state. -/
+def EffectCommand.Defined (tgt : Target) (before : State) : EffectCommand → Prop
+  | .store pointer bytes alignment => (before.memory.store tgt pointer bytes alignment).isSome
+  | .free block => (before.memory.free block).isSome
+  | .expose pointer => (pointer.prov.bind fun _ => before.memory.expose pointer).isSome
+  | .alloc space base size alignment =>
+    match before.memory.alloc tgt space base size alignment with
+    | .ok _ => True
+    | .error _ => False
+  | .set _ _ => True
+  | .write place value => (before.write tgt place value).isSome
+  | .rawWrite pointer bytes alignment => (before.rawWrite tgt pointer bytes alignment).isSome
+
+/-- Permissions are fixed by the command and pre-state, independently of the executor's
+reported effects. Allocation uses the allocator's pre-state fresh identity. -/
+def EffectCommand.permissions (tgt : Target) (before : State) : EffectCommand → Footprint
+  | .store pointer bytes alignment | .rawWrite pointer bytes alignment =>
+    accessFootprint (before.memory.access tgt pointer bytes.length alignment) bytes.length
+  | .free block => .block block
+  | .expose pointer => match pointer.prov with
+    | some block => .block block
+    | none => .empty
+  | .alloc _ _ size _ => .byte (fullBlock ⟨before.memory.next⟩ size)
+  | .set place _ => .place place
+  | .write place value => writeFootprint tgt before place value
+
+/-- Execute one C4 or Hybrid instruction and report its exact computed permission set. -/
+def runEffect (tgt : Target) (before : State) : EffectCommand → Option (State × Footprint)
+  | .store pointer bytes alignment =>
+    (before.memory.store tgt pointer bytes alignment).map fun memory =>
+      ({ before with memory := memory },
+        accessFootprint (before.memory.access tgt pointer bytes.length alignment) bytes.length)
+  | .free block =>
+    (before.memory.free block).map fun memory => ({ before with memory := memory }, .block block)
+  | .expose pointer =>
+    pointer.prov.bind fun block =>
+      (before.memory.expose pointer).map fun memory => ({ before with memory := memory }, .block block)
+  | .alloc space base size alignment =>
+    match before.memory.alloc tgt space base size alignment with
+    | .ok (block, memory) => some ({ before with memory := memory }, .byte (fullBlock block size))
+    | _ => none
+  | .set place cell => some (before.set place cell, .place place)
+  | .write place value =>
+    (before.write tgt place value).map fun after =>
+      (after, writeFootprint tgt before place value)
+  | .rawWrite pointer bytes alignment =>
+    (before.rawWrite tgt pointer bytes alignment).map fun after =>
+      (after, accessFootprint (before.memory.access tgt pointer bytes.length alignment) bytes.length)
+
+/-- The specification of an effect's definedness and frame behavior: rejection is permitted only
+when the underlying C4/Hybrid operation is undefined, and every defined execution preserves all
+state outside its computed footprint. -/
+def EffectResult (tgt : Target) (before : State) (command : EffectCommand) :
+    Option (State × Footprint) → Prop
+  | none => ¬ command.Defined tgt before
+  | some (after, footprint) => command.Defined tgt before ∧ footprint = command.permissions tgt before ∧
+      (command.permissions tgt before).Preserves before after
+
+/-- Operand implementation for a concrete modifying callee: evaluating its return operand
+executes one authorized C4 byte store. Lifecycle events have no memory effects. -/
+def storingOperands (tgt : Target) (pointer : Ptr) (bytes : List MByte) (alignment : Nat) : Exec.Operands where
+  Val := Nat
+  Expr := Unit
+  Ty := Unit
+  Store := State
+  Prim := Unit
+  Event := Unit
+  unitVal := 0
+  unitTy := ()
+  isCopy := fun _ => true
+  eval := fun _ st _ => match st.memory.store tgt pointer bytes alignment with
+    | none => .stuck
+    | some memory => .ok (7, { st with memory := memory })
+  life := fun _ st => some st
+  test := fun n => some (n != 0)
+  allows := fun _ _ _ _ => false
+
+/-- Identity of the modifying toy function, unrelated to any native ABI convention. -/
+def storingFn : FnId := ⟨⟨[]⟩, "store_then_return"⟩
+
+/-- A C1 function whose return expression performs the store and returns 7. -/
+def storingProgram (tgt : Target) (pointer : Ptr) (bytes : List MByte) (alignment : Nat) :
+    Exec.Program (storingOperands tgt pointer bytes alignment) :=
+  ⟨[(storingFn, ⟨[], (), ⟨0⟩, .ret () ⟨0⟩⟩)]⟩
+
+/-- Static inclusion of effect permissions, expressed on the protected locations. This relates
+footprints only; it asserts nothing about the states of an execution. -/
+def Footprint.Covers (outer inner : Footprint) : Prop :=
+  (∀ b i, outer.ByteOutside b i → inner.ByteOutside b i) ∧
+  (∀ b, outer.BlockOutside b → inner.BlockOutside b) ∧
+  (∀ p, outer.PlaceOutside p → inner.PlaceOutside p)
+
+/-- Independently described C4 and Hybrid effects. Constructors record successful operations,
+including argument evaluation and lifecycle effects when used to implement a C1 transition. No
+constructor assumes a frame property. Sequential effects retain their individual footprints. -/
+inductive C4Effects (tgt : Target) : State → Footprint → State → Prop where
+  | idle (st : State) : C4Effects tgt st .empty st
+  | set (st : State) (p : Place) (cell : Cell) :
+      C4Effects tgt st (.place p) (st.set p cell)
+  | store (st : State) (m' : Memory) (p : Ptr) (bs : List MByte) (align : Nat)
+      (access : Option (Option (MemBlockId × Nat))) :
+      st.memory.WellFormed tgt → st.memory.access tgt p bs.length align = access →
+      st.memory.store tgt p bs align = some m' →
+      C4Effects tgt st (accessFootprint access bs.length) { st with memory := m' }
+  | free (st : State) (b : MemBlockId) (block : Block) (m' : Memory) :
+      st.memory.block b = some block → st.memory.free b = some m' →
+      C4Effects tgt st (.block b) { st with memory := m' }
+  | expose (st : State) (m' : Memory) (p : Ptr) (b : MemBlockId) (block : Block) :
+      p.prov = some b → st.memory.block b = some block → st.memory.expose p = some m' →
+      C4Effects tgt st (.block b) { st with memory := m' }
+  | alloc (st : State) (space : AddrSpace) (base size align : Nat) (b : MemBlockId) (m' : Memory) :
+      st.memory.WellFormed tgt → st.memory.alloc tgt space base size align = .ok (b, m') →
+      C4Effects tgt st (.byte (fullBlock b size)) { st with memory := m' }
+  | writeStructured (st st' : State) (p : Place) (c : Cell) (old v : Value) :
+      st.places p = some c → c.storage = .structured old → st.write tgt p v = some st' →
+      C4Effects tgt st (.place p) st'
+  | writeMaterialized (st st' : State) (p : Place) (c : Cell) (r : Range) (v : Value)
+      (access : Option (Option (MemBlockId × Nat))) :
+      st.memory.WellFormed tgt → st.places p = some c → c.storage = .materialized r →
+      st.memory.access tgt r.ptr (encode tgt v).length r.align = access →
+      st.write tgt p v = some st' →
+      C4Effects tgt st (accessFootprint access (encode tgt v).length) st'
+  | rawWrite (st st' : State) (p : Ptr) (bs : List MByte) (align : Nat)
+      (access : Option (Option (MemBlockId × Nat))) :
+      st.memory.WellFormed tgt → st.memory.access tgt p bs.length align = access →
+      st.rawWrite tgt p bs align = some st' →
+      C4Effects tgt st (accessFootprint access bs.length) st'
+  | seq {before middle after : State} {f g : Footprint} :
+      C4Effects tgt before f middle → C4Effects tgt middle g after →
+      C4Effects tgt before (f.union g) after
+
+/-- The behavior described by a C4 effect derivation, independently of frame preservation. -/
+def c4Execution (tgt : Target) (before : State) (f : Footprint) (after : State) : Prop :=
+  C4Effects tgt before f after
+
+/-- A local implementation certificate for every reachable C1 transition from a well-formed
+entry state, including primitive answers, argument evaluation, lifecycle instrumentation,
+cleanup and result binding. The evidence is a finite decomposition into C4 operations, with
+static permission inclusion in the body or leave footprint. It does not assume preservation
+or the conclusion of any complete-call law. -/
+def C1EffectImplementation (O : Exec.Operands) (P : Exec.Program O) (project : O.Store → State)
+    (tgt : Target) (bodyFootprint leaveFootprint : Footprint) (entry : Exec.Config O) : Prop :=
+  ∀ trace before label after,
+    Exec.Steps P entry trace before →
+    (project before.store).memory.WellFormed tgt →
+    Exec.Step P before label after →
+    ∃ effectFootprint, c4Execution tgt (project before.store) effectFootprint (project after.store) ∧
+      (bodyFootprint.Covers effectFootprint ∨ leaveFootprint.Covers effectFootprint)
+
+/-- The specification of complete-call framing, distinct from local implementation evidence. -/
+def C1Frames (O : Exec.Operands) (f : FnId) (P : Exec.Program O)
+    (project : O.Store → State) (advertised : Footprint) : Prop :=
+  ∀ entry exit, C1Call O f P entry exit →
+    advertised.Preserves (project entry.store) (project exit.store)
+
+/-! ### Examples -/
+
+/-- Accepted: adjacent ranges are disjoint, and a byte inside a range is contained in it. -/
+example : (⟨⟨0⟩, 4, 4⟩ : ByteRange).Disjoint ⟨⟨0⟩, 8, 2⟩ ∧
+    (⟨⟨0⟩, 4, 4⟩ : ByteRange).Contains ⟨0⟩ 5 := by decide
+
+/-- Accepted: equal numeric offsets in different allocation identities are disjoint. -/
+example : (⟨⟨0⟩, 4, 4⟩ : ByteRange).Disjoint ⟨⟨1⟩, 4, 4⟩ := by decide
+
+/-- Refused: overlapping ranges in one allocation are not disjoint; nor does a range contain its
+one-past offset. -/
+example : ¬ (⟨⟨0⟩, 4, 4⟩ : ByteRange).Disjoint ⟨⟨0⟩, 7, 2⟩ ∧
+    ¬ (⟨⟨0⟩, 4, 4⟩ : ByteRange).Contains ⟨0⟩ 8 := by decide
+
+/-- Accepted: a zero-extent range is disjoint from every range, including itself. -/
+example : (⟨⟨0⟩, 4, 0⟩ : ByteRange).Disjoint ⟨⟨0⟩, 4, 0⟩ := by decide
+
+/-- Accepted: a nonempty byte footprint still leaves the written block's metadata framed; a
+lifecycle footprint frames other blocks, and a union frames a block absent from both components. -/
+example : (Footprint.byte ⟨⟨0⟩, 4, 4⟩).BlockOutside ⟨0⟩ ∧
+    (Footprint.block ⟨0⟩).BlockOutside ⟨1⟩ ∧
+    (Footprint.union (.byte ⟨⟨0⟩, 4, 4⟩) (.block ⟨1⟩)).BlockOutside ⟨0⟩ := by decide
+
+/-- Refused: a lifecycle footprint claims its block's metadata even though it writes no bytes, and
+a union cannot frame metadata claimed by either component. -/
+example : ¬ (Footprint.block ⟨0⟩).BlockOutside ⟨0⟩ ∧
+    ¬ (Footprint.union (.block ⟨0⟩) .empty).BlockOutside ⟨0⟩ := by decide
+
+/-- Accepted: returning without a destination restores exactly the caller's association list. -/
+example {V : Type} (v : V) (caller : AList Var V) : Exec.bindDst none v caller = caller := rfl
+
+/-- Refused: a loop exit cannot cross a call's `.ret` frame; only a returned value restores its
+caller. -/
+example {O : Exec.Operands} (dst : Option Var) (caller callee : AList Var O.Val)
+    (st : O.Store) (l : LoopId) (k : List (Exec.Frame O)) :
+    Exec.stepExit callee st (.brk l) (.ret dst caller :: k) = none := rfl
+
+/-! ## ABI signature interface -/
+
+namespace ABI
+
+/-- A machine word location for one typed value: a register or a logical stack slot. A value may
+use several locations, in the order given by its binding. -/
+inductive Location (Reg : Type) where
+  | register (r : Reg)
+  | stack (slot : Nat)
+  deriving DecidableEq, Repr
+
+/-- The machine state visible to the ABI interface. Stack slots below `stackPointer` are the
+caller's preserved stack; argument and result areas at or above it need not be preserved. -/
+structure Machine (Reg Word : Type) where
+  regs : Reg → Word
+  slots : Nat → Word
+  stackPointer : Nat
+
+/-- Read one location in a machine state. -/
+def Location.read {Reg Word : Type} (st : Machine Reg Word) : Location Reg → Word
+  | .register r => st.regs r
+  | .stack slot => st.slots slot
+
+/-- The ABI locations and logical type of one argument or result. -/
+structure Binding (Ty Reg : Type) where
+  ty : Ty
+  locations : List (Location Reg)
+
+/-- The encoded words of a typed value are exactly the words in its locations. -/
+def Binding.Holds {Ty Val Reg Word : Type} (encode : Ty → Val → List Word)
+    (b : Binding Ty Reg) (v : Val) (st : Machine Reg Word) : Prop :=
+  encode b.ty v = b.locations.map (Location.read st)
+
+/-- Every argument has its declared type and location binding; too few or too many arguments do not
+satisfy the relation. -/
+def ArgumentsHold {Ty Val Reg Word : Type} (encode : Ty → Val → List Word) :
+    List (Binding Ty Reg) → List Val → Machine Reg Word → Prop
+  | [], [], _ => True
+  | b :: bs, v :: vs, st => b.Holds encode v st ∧ ArgumentsHold encode bs vs st
+  | _, _, _ => False
+
+/-- An explicit target convention. `stackBound` is the complete callee contribution from final
+artifact evidence, including its frame, spills, cleanup and nested calls; it is not a source-local
+estimate. `result` is the return convention. -/
+structure Signature (Ty Val Reg Word : Type) where
+  encode : Ty → Val → List Word
+  arguments : List (Binding Ty Reg)
+  result : Binding Ty Reg
+  frameSize : Nat
+  frameAlign : Nat
+  calleeSaved : List Reg
+  clobbers : List Reg
+  stackBound : Nat
+
+/-- The callee-saved registers, the caller's stack below its stack pointer, and the stack pointer
+itself are exactly restored. -/
+def Machine.Preserved {Reg Word : Type} (before after : Machine Reg Word) (saved : List Reg) : Prop :=
+  (∀ r ∈ saved, after.regs r = before.regs r) ∧
+  (∀ slot, slot < before.stackPointer → after.slots slot = before.slots slot) ∧
+  after.stackPointer = before.stackPointer
+
+/-- Every register outside the clobber set has the same value after return. -/
+def Machine.RegisterFrame {Reg Word : Type} (before after : Machine Reg Word)
+    (clobbers : List Reg) : Prop :=
+  ∀ r, r ∉ clobbers → after.regs r = before.regs r
+
+/-- Obligation (discharged at slice 0, R-0580).
+Obligation on the code generator: establish these properties for its actual target frame layout,
+including spills and cleanup. The abstract toy layout is not evidence for a native layout.
+A signature's structural laws: positive power-of-two alignment, frame size rounded to it, the
+frame included in the callee stack bound, and callee-saved registers disjoint from clobbers. -/
+def Signature.WellFormed {Ty Val Reg Word : Type} (sig : Signature Ty Val Reg Word) : Prop :=
+  IsPow2 sig.frameAlign ∧ sig.frameSize % sig.frameAlign = 0 ∧
+    sig.frameSize ≤ sig.stackBound ∧ ∀ r, r ∈ sig.calleeSaved → r ∉ sig.clobbers
+
+/-- A stack-relative operation observed at a trace step: a slot access at `backOffset` below
+the current stack pointer, or a frame release of `bytes` from the current stack pointer.
+Recording raw instruction offsets avoids truncating `Nat` subtraction before bounds checks. -/
+inductive StackEvent where
+  | none
+  | slotAccess (backOffset : Nat)
+  | release (bytes : Nat)
+  deriving DecidableEq, Repr
+
+/-- An observed stack event stays within the active callee frame `[origin, sp)`: slot accesses
+cannot underflow `sp` or address below `origin` or at/above `sp`, and frame releases cannot
+underflow `sp` or release below `origin`. -/
+def StackEvent.Safe (origin sp : Nat) : StackEvent → Prop
+  | .none => True
+  | .slotAccess offset =>
+    offset ≤ sp ∧ origin ≤ sp - offset ∧ sp - offset < sp
+  | .release bytes =>
+    bytes ≤ sp ∧ origin ≤ sp - bytes
+
+instance (origin sp : Nat) (ev : StackEvent) : Decidable (ev.Safe origin sp) := by
+  cases ev <;> unfold StackEvent.Safe <;> infer_instance
+
+/-- Every operational sample stays within the caller origin and callee stack budget, and each
+slot access or frame release stays within the active callee allocation `[origin, sample.1)`.
+Caller slots and slots at or above the active allocation are excluded throughout execution,
+including at `origin = 0`. -/
+def ToyTraceSafe (origin bound : Nat) (samples : List (Nat × StackEvent)) : Prop :=
+  ∀ sample ∈ samples,
+    origin ≤ sample.1 ∧ sample.1 ≤ origin + bound ∧ sample.2.Safe origin sample.1
+
+instance (origin bound : Nat) (samples : List (Nat × StackEvent)) :
+    Decidable (ToyTraceSafe origin bound samples) := by
+  unfold ToyTraceSafe
+  infer_instance
+
+/-- A returning ABI call: typed arguments occupy their entry locations, the typed result occupies
+its return locations, preserved machine state is restored exactly, only clobbers may change
+registers, and the operational stack/access trace stays within the active callee frame and
+`stackBound`. -/
+structure Signature.Call {Ty Val Reg Word : Type} (sig : Signature Ty Val Reg Word)
+    (before after : Machine Reg Word) (samples : List (Nat × StackEvent))
+    (args : List Val) (result : Val) : Prop where
+  arguments : ArgumentsHold sig.encode sig.arguments args before
+  result : sig.result.Holds sig.encode result after
+  preserved : Machine.Preserved before after sig.calleeSaved
+  clobbers : Machine.RegisterFrame before after sig.clobbers
+  traceSafe : ToyTraceSafe before.stackPointer sig.stackBound samples
+
+/-- An abstract call-transition interface carrying the operational stack/access trace,
+independent of the ABI contract. -/
+abbrev CallTransition (_Ty Val Reg Word : Type) :=
+  Machine Reg Word → Machine Reg Word → List (Nat × StackEvent) → List Val → Val → Prop
+
+/-- Obligation (discharged at slice 0, R-0580).
+Obligation on the code generator: prove conformance of its actual target call transition,
+including operational stack-bound and active-frame access safety. This binds typed input/output
+locations, protected machine state, and intermediate stack traces to native execution;
+the toy transition below discharges only its own instance.
+Conformance is a specification to prove about a transition, never execution evidence. -/
+def TransitionConforms {Ty Val Reg Word : Type} (sig : Signature Ty Val Reg Word)
+    (transition : CallTransition Ty Val Reg Word) : Prop :=
+  ∀ before after samples args result,
+    transition before after samples args result →
+      sig.Call before after samples args result
+
+/-- Small machine instructions for an executable, target-independent example. Frame entry and
+exit are explicit operations; writes carry their destinations rather than frame-law proofs. -/
+inductive ToyInstruction where
+  | register (r word : Nat)
+  | save (r backOffset : Nat)
+  | restore (r backOffset : Nat)
+  | slot (backOffset word : Nat)
+  | reserve (bytes : Nat)
+  | release (bytes : Nat)
+
+/-- Whether a toy instruction leaves the stack pointer unchanged. -/
+def ToyInstruction.StackNeutral : ToyInstruction → Bool
+  | .reserve _ | .release _ => false
+  | _ => true
+
+/-- Execute instructions without checking any ABI contract. Stack writes address the current
+stack pointer minus their back-offset, so after reserving `bytes`, offsets `1 .. bytes` address
+slots inside `[base.stackPointer, base.stackPointer + bytes)`. -/
+def runToy : List ToyInstruction → Machine Nat Nat → Machine Nat Nat
+  | [], st => st
+  | instruction :: rest, st =>
+    let next := match instruction with
+      | .register r word => { st with regs := fun q => if q = r then word else st.regs q }
+      | .save r backOffset =>
+        { st with slots := fun q => if q = st.stackPointer - backOffset then st.regs r else st.slots q }
+      | .restore r backOffset =>
+        { st with regs := fun q => if q = r then st.slots (st.stackPointer - backOffset) else st.regs q }
+      | .slot backOffset word =>
+        { st with slots := fun q => if q = st.stackPointer - backOffset then word else st.slots q }
+      | .reserve bytes => { st with stackPointer := st.stackPointer + bytes }
+      | .release bytes => { st with stackPointer := st.stackPointer - bytes }
+    runToy rest next
+
+/-- Each sample records the current stack pointer and the raw stack-relative event of the next
+instruction, if any. Transitions execute the very same `runToy` instruction semantics, including
+reserves and releases; the terminal sample records the final pointer. -/
+def toyTrace : List ToyInstruction → Machine Nat Nat → List (Nat × StackEvent)
+  | [], st => [(st.stackPointer, .none)]
+  | instruction :: rest, st =>
+    let event := match instruction with
+      | .save _ offset | .restore _ offset | .slot offset _ => .slotAccess offset
+      | .release bytes => .release bytes
+      | _ => .none
+    (st.stackPointer, event) :: toyTrace rest (runToy [instruction] st)
+
+/-- Structured stack instructions. A frame allocates before running its body and releases on
+return; sequencing reuses the released stack. -/
+inductive StackCode where
+  | done
+  | seq (first second : StackCode)
+  | frame (bytes : Nat) (body : StackCode)
+
+/-- Compile structured stack frames into a flat instruction stream by placing `leaf`
+instructions at `.done`, concatenating `.seq`, and bracketing `.frame bytes` with
+`.reserve bytes` and `.release bytes`. -/
+def StackCode.compile (leaf : List ToyInstruction) : StackCode → List ToyInstruction
+  | .done => leaf
+  | .seq first second => first.compile leaf ++ second.compile leaf
+  | .frame bytes body => (.reserve bytes :: body.compile leaf) ++ [.release bytes]
+
+/-- Operational samples of stack consumption, including entry and return at each frame. -/
+def stackSamples : StackCode → Nat → List Nat
+  | .done, base => [base]
+  | .seq first second, base => stackSamples first base ++ stackSamples second base
+  | .frame bytes body, base => base :: (stackSamples body (base + bytes) ++ [base])
+
+/-- Independent static stack accounting. Sequential calls share their caller's frame, while
+nested frames add to it. There are no stack-use assertions in this computation. -/
+def computedStackBound : StackCode → Nat
+  | .done => 0
+  | .seq first second => max (computedStackBound first) (computedStackBound second)
+  | .frame bytes body => bytes + computedStackBound body
+
+/-- Obligation (discharged at slice 0, R-0575).
+Obligation on the code generator: bind the final artifact's stack report to its actual stack-use
+samples, including spills, nested calls, cleanup, and launcher/runtime frames. The operational
+samples must come from artifact execution, not from an admission test against the reported bound.
+The nested toy stack language proves only its own computed bound. -/
+def ArtifactStackConforms (reportedBound : Nat) (samples : Nat → List Nat) : Prop :=
+  ∀ base sample, sample ∈ samples base → sample ≤ base + reportedBound
+
+/-- The stack-bound specification for `StackCode` is an instance of `ArtifactStackConforms`. -/
+def StackSafe (code : StackCode) : Prop :=
+  ArtifactStackConforms (computedStackBound code) (stackSamples code)
+
+/-- This toy convention passes one natural word in register 0 and returns one in register 1.
+It is an example implementation, not the linux-x86_64 ABI table. -/
+def toySignature : Signature Unit Nat Nat Nat :=
+  ⟨fun _ v => [v], [⟨(), [.register 0]⟩], ⟨(), [.register 1]⟩,
+    8, 8, [0], [1], 8⟩
+
+/-- Pack the toy input by executing a register write. -/
+def toyInput (base : Machine Nat Nat) (arg : Nat) : Machine Nat Nat :=
+  runToy [.register 0 arg] base
+
+/-- The structured single-frame shape of `toyBodyAt`. -/
+def toyStackCode : StackCode := .frame 8 .done
+
+/-- Stack-neutral in-frame operations of a toy callee: spill and clobber callee-saved
+register 0 inside the 8-slot frame, write a private spill slot and the return register,
+and restore register 0. -/
+def toyFrameOps (resultReg result : Nat) : List ToyInstruction :=
+  [.save 0 8, .register 0 55, .slot 7 99, .register resultReg result, .restore 0 8]
+
+/-- A real toy callee compiled from `toyStackCode` and `toyFrameOps`: it reserves an 8-slot
+frame, spills and clobbers callee-saved register 0 inside that frame, writes a private spill slot
+inside the frame and its return register, then restores register 0 and releases the frame. -/
+def toyBodyAt (resultReg result : Nat) : List ToyInstruction :=
+  toyStackCode.compile (toyFrameOps resultReg result)
+
+/-- Standard single-call body returning in register 1. -/
+def toyBody (result : Nat) : List ToyInstruction :=
+  toyBodyAt 1 result
+
+/-- An observed execution carries its final machine and operational stack/access trace. -/
+structure ToyRun where
+  machine : Machine Nat Nat
+  samples : List (Nat × StackEvent)
+
+/-- Run the selected instruction stream and observe its intermediate stack accesses. Both
+components execute the same instructions from the same initial machine. -/
+def executeToy (code : List ToyInstruction) (before : Machine Nat Nat) : ToyRun :=
+  ⟨runToy code before, toyTrace code before⟩
+
+/-- Execute a full toy call, including input packing and its body execution trace. -/
+def toyCall (base : Machine Nat Nat) (arg result : Nat) : ToyRun :=
+  executeToy (toyBody result) (toyInput base arg)
+
+/-- Execute two sequential toy calls writing their results to registers 1 and 2 while both save,
+clobber, and restore callee-saved register 0 in their private stack frames, recording the full
+sequential machine and stack/access trace. -/
+def toyCallSeq (base : Machine Nat Nat) (arg result₁ result₂ : Nat) : ToyRun :=
+  executeToy (toyBody result₁ ++ toyBodyAt 2 result₂) (toyInput base arg)
+
+/-- Independent execution relation for the toy convention. The witnesses describe input
+packing and actual instructions; they contain none of the ABI equalities being proved. -/
+def toyTransition : CallTransition Unit Nat Nat Nat := fun before after samples args result =>
+  ∃ base arg, before = toyInput base arg ∧ args = [arg] ∧
+    after = (toyCall base arg result).machine ∧
+    samples = (toyCall base arg result).samples
+
+/-- The stack-accounting handoff of one call: the caller's frame plus the callee's final-artifact
+bound. Heap accounting is separate. -/
+def callStack {Ty Val Reg Word : Type} (callerFrame : Nat) (sig : Signature Ty Val Reg Word) : Nat :=
+  callerFrame + sig.stackBound
+
+/-- Whole-artifact stack accounting adds the launcher/runtime contribution to the call handoff. -/
+def artifactStack {Ty Val Reg Word : Type} (launcherRuntime callerFrame : Nat)
+    (sig : Signature Ty Val Reg Word) : Nat :=
+  launcherRuntime + callStack callerFrame sig
+
+/-- A layout plan gives the raw byte size of each slot together with the required frame alignment. -/
+structure LayoutPlan where
+  alignment : Nat
+  slotBytes : List Nat
+
+/-- Total unrounded byte count required by the slots in a layout plan. -/
+def rawSlotBytes (plan : LayoutPlan) : Nat :=
+  plan.slotBytes.foldl (· + ·) 0
+
+/-- Lay out slots by accumulating their byte sizes and rounding up to the next multiple of the
+required alignment. -/
+def layoutBytes (plan : LayoutPlan) : Nat :=
+  ((rawSlotBytes plan + plan.alignment - 1) / plan.alignment) * plan.alignment
+
+/-! ### Foreign validity and retention (Q3.12) -/
+
+/-- Types with a direct foreign representation: integers, floats, bool, Unit, raw pointers to values,
+and C-layout structs of such values. There is no reference or enum constructor, so neither can be
+smuggled behind a raw pointer or inside a C struct. -/
+inductive FFIType where
+  | int
+  | float
+  | bool
+  | unit
+  | rawPointer (pointee : FFIType)
+  | cStruct (fields : List FFIType)
+  deriving Repr
+
+/-- The logical types at an extern boundary. Owned `H` and its receipt are retention interface
+values, not direct C representations. `enum` is present only so the validity rule can refuse it. -/
+inductive ExternType (H : Type) where
+  | ffi (t : FFIType)
+  | owned (h : H)
+  | receipt (h : H)
+  | enum
+
+/-- Extern retention: call-only by default, or `kept` for an owned allocation. Call-only pointers
+permit reads, and writes only from a mutable borrow or owned allocation, during the call only;
+borrow-derived pointers are never `kept`. That foreign code does not access call-only memory after
+return, or kept memory before its paired completion returns, is a named trusted-base premise of
+Q3.12, not a theorem proved by this transition interface. -/
+inductive Retention where
+  | callOnly
+  | kept
+  deriving DecidableEq, Repr
+
+/-- One extern parameter's logical type and retention marker. -/
+structure ExternParam (H : Type) where
+  ty : ExternType H
+  retention : Retention
+
+/-- Valid ordinary extern parameters are call-only direct FFI values, or `kept` owned allocations.
+Enums, kept raw pointers, receipts as fresh inputs, and unmarked owned allocations are refused. A
+receipt accepted by the paired completion is checked separately by `KeptPair.WellFormed`. -/
+def ExternParam.Valid {H : Type} : ExternParam H → Prop
+  | ⟨.ffi _, .callOnly⟩ => True
+  | ⟨.owned _, .kept⟩ => True
+  | _ => False
+
+instance {H : Type} (p : ExternParam H) : Decidable p.Valid := by
+  cases p with
+  | mk ty retention =>
+    cases ty <;> cases retention <;> unfold ExternParam.Valid <;> infer_instance
+
+/-- The two distinct extern identities paired for one tracked handle instance. `H` is the handle
+identity type; `handle` is the instance tracked by this single-handle retention trace. -/
+structure KeptPair (F H : Type) where
+  submit : F
+  complete : F
+  handle : H
+
+/-- Valid extern results are direct FFI values, the paired owned allocation returned by its
+completion, or its linear receipt returned by its submission. Checking the extern identity prevents
+an unrelated declaration from manufacturing either retention value. An enum result is refused. -/
+def ExternResult.Valid {F H : Type} (pair : KeptPair F H) (f : F) : ExternType H → Prop
+  | .ffi _ => True
+  | .owned h => f = pair.complete ∧ h = pair.handle
+  | .receipt h => f = pair.submit ∧ h = pair.handle
+  | .enum => False
+
+instance {F H : Type} [DecidableEq F] [DecidableEq H] (pair : KeptPair F H) (f : F)
+    (t : ExternType H) : Decidable (ExternResult.Valid pair f t) := by
+  cases t <;> unfold ExternResult.Valid <;> infer_instance
+
+/-- The signature-pairing law of Q3.12: distinct submission and completion take `kept h: H` and its
+receipt respectively; only submission returns `Kept<H>` and only completion returns `H`. The four
+descriptors are the declaration's actual parameter/result types, so this is an interface validity
+check, not just a naming convention. -/
+def KeptPair.WellFormed {F H : Type} (pair : KeptPair F H)
+    (submitParam : ExternParam H) (submitResult completeParam completeResult : ExternType H) : Prop :=
+  pair.submit ≠ pair.complete ∧ submitParam = ⟨.owned pair.handle, .kept⟩ ∧
+    submitResult = .receipt pair.handle ∧ completeParam = .receipt pair.handle ∧
+    completeResult = .owned pair.handle
+
+/-- The ownership state of one handle: the Concrete owner has it, or foreign code retains it and
+Concrete has only the linear `Kept<H>` receipt. There is no discard transition for a receipt. -/
+inductive RetentionState (H : Type) where
+  | owned (h : H)
+  | kept (h : H)
+
+/-- A foreign call, carrying the handle whose retention it changes. -/
+inductive ForeignEvent (F H : Type) where
+  | call (f : F) (h : H)
+
+/-- The complete retention transition relation. Submission consumes `H` and returns `Kept<H>`;
+only the distinct paired completion consumes that receipt and returns the same `H`. No other call
+changes retention. The receipt keeps the allocator dependency in `H` and has no operations of its
+own. -/
+def KeptStep {F H : Type} (pair : KeptPair F H) :
+    RetentionState H → ForeignEvent F H → RetentionState H → Prop
+  | .owned h, .call f h', .kept h'' =>
+    f = pair.submit ∧ h = pair.handle ∧ h' = h ∧ h'' = h
+  | .kept h, .call f h', .owned h'' =>
+    f = pair.complete ∧ pair.submit ≠ pair.complete ∧ h = pair.handle ∧ h' = h ∧ h'' = h
+  | _, _, _ => False
+
+instance {F H : Type} [DecidableEq F] [DecidableEq H] (pair : KeptPair F H)
+    (before : RetentionState H) (event : ForeignEvent F H) (after : RetentionState H) :
+    Decidable (KeptStep pair before event after) := by
+  cases before <;> cases event <;> cases after <;> unfold KeptStep <;> infer_instance
+
+/-- Check declarations by destructuring their types and comparing handle identities. The result
+is an extracted protocol, with no proof fields and no call to a specification predicate. -/
+def checkKeptPair {F H : Type} [DecidableEq F] [DecidableEq H]
+    (submit complete : F) (sp : ExternParam H) (sr cp cr : ExternType H) :
+    Option (KeptPair F H) :=
+  match sp, sr, cp, cr with
+  | ⟨.owned h, .kept⟩, .receipt a, .receipt b, .owned c =>
+    if submit = complete then none
+    else if h = a ∧ h = b ∧ h = c then some ⟨submit, complete, h⟩ else none
+  | _, _, _, _ => none
+
+/-- Retention instructions are ownership transfers, not assertions of `KeptStep`. -/
+inductive RetentionInstruction where
+  | submit
+  | complete
+  deriving DecidableEq
+
+/-- Whether a retention instruction and token state match the tracked handle of `pair`. -/
+def RetentionInstruction.Matches {F H : Type} (instruction : RetentionInstruction)
+    (pair : KeptPair F H) (before : RetentionState H) : Prop :=
+  match instruction, before with
+  | .submit, .owned h => h = pair.handle
+  | .complete, .kept h => h = pair.handle
+  | _, _ => False
+
+/-- Execute a transfer and emit the foreign call it requires. Endpoint dispatch comes from the
+instruction; the input token must match the tracked handle of `pair`. -/
+def transferKept {F H : Type} [DecidableEq H] (pair : KeptPair F H) :
+    RetentionInstruction → RetentionState H → Option (ForeignEvent F H × RetentionState H)
+  | .submit, .owned h =>
+    if h = pair.handle then some (.call pair.submit h, .kept h) else none
+  | .complete, .kept h =>
+    if h = pair.handle then some (.call pair.complete h, .owned h) else none
+  | _, _ => none
+
+/-- The returned transfer meets the complete retention contract: it rejects iff the instruction and
+state do not match the tracked handle, and when it succeeds it satisfies `KeptStep` together with
+endpoint and receipt exclusivity. -/
+def TransferCorrect {F H : Type} (pair : KeptPair F H)
+    (instruction : RetentionInstruction) (before : RetentionState H) :
+    Option (ForeignEvent F H × RetentionState H) → Prop
+  | none => ¬ instruction.Matches pair before
+  | some (event, after) =>
+    instruction.Matches pair before ∧
+    KeptStep pair before event after ∧
+    (∀ h, before = .owned h →
+      event = .call pair.submit h ∧ after = .kept pair.handle) ∧
+    (∀ h, before = .kept h →
+      event = .call pair.complete h ∧ after = .owned pair.handle ∧
+      (∀ h' after', ¬ KeptStep pair (.kept h) (.call pair.submit h') after') ∧
+      (∀ f h' after', f ≠ pair.complete → ¬ KeptStep pair (.kept h) (.call f h') after'))
+
+/-- Relational view of executable transfers for `RetentionConforms`. -/
+def transferTransition {F H : Type} [DecidableEq H] (pair : KeptPair F H)
+    (before : RetentionState H) (event : ForeignEvent F H) (after : RetentionState H) : Prop :=
+  ∃ instruction, transferKept pair instruction before = some (event, after)
+
+/-- Obligation (discharged at slice 25, R-0580).
+Obligation on the code generator: relate actual foreign-boundary ownership transfers to the
+checked paired protocol. Foreign code respecting the declared access/retention restriction
+remains the named Q3.12 trusted premise; this obligation does not prove foreign code correct. -/
+def RetentionConforms {F H : Type} (pair : KeptPair F H)
+    (transition : RetentionState H → ForeignEvent F H → RetentionState H → Prop) : Prop :=
+  ∀ before event after, transition before event after → KeptStep pair before event after
+
+/-- Correctness of the protocol extracted by declaration checking: rejection means no handle
+satisfies `KeptPair.WellFormed` for the given endpoints and descriptors, while acceptance preserves
+the endpoint identities, establishes `WellFormed`, validates the endpoint result types, and rejects
+retention results from unrelated externs. -/
+def CheckedPairCorrect {F H : Type} (submit complete : F)
+    (sp : ExternParam H) (sr cp cr : ExternType H) :
+    Option (KeptPair F H) → Prop
+  | none => ∀ h, ¬ (⟨submit, complete, h⟩ : KeptPair F H).WellFormed sp sr cp cr
+  | some pair =>
+    pair.submit = submit ∧ pair.complete = complete ∧ pair.WellFormed sp sr cp cr ∧
+    (ExternResult.Valid pair pair.submit sr ∧ ExternResult.Valid pair pair.complete cr) ∧
+    (∀ f h, f ≠ pair.submit → f ≠ pair.complete →
+      ¬ ExternResult.Valid pair f (.receipt h) ∧ ¬ ExternResult.Valid pair f (.owned h))
+
+/-! ### Launcher entry and exit (Q8.5–Q8.6) -/
+
+/-- The launcher contract binds the requested root identity to the built artifact, together
+with the exact retained artifact closure, entry inputs, exit observations, and the final
+artifact's stack bound. These are relations, not a concrete launcher implementation. -/
+structure Launcher (Root Artifact Input Result Observation : Type) where
+  rootOf : Artifact → Root
+  retainedClosure : Artifact → Prop
+  entry : Artifact → Input → Prop
+  exit : Artifact → Result → Observation → Prop
+  stackBound : Artifact → Nat
+
+/-- Startup either refuses an inadequate reservation with status 125 or admits the input. -/
+inductive Startup (Input : Type) where
+  | refused125
+  | entered (input : Input)
+  deriving DecidableEq, Repr
+
+/-- The decided stack-budget admission rule. -/
+def stackAdmission {Input : Type} (bound reserved : Nat) (input : Input) : Startup Input :=
+  if reserved < bound then .refused125 else .entered input
+
+/-- An admitted launched run builds an artifact for the requested root, carries the exact
+artifact closure and entry/exit relations for the requested result, and has a reservation at
+least the final artifact bound. -/
+structure Launcher.Run {Root Artifact Input Result Observation : Type}
+    (l : Launcher Root Artifact Input Result Observation)
+    (root : Root) (artifact : Artifact) (reserved : Nat)
+    (input : Input) (requestedResult result : Result) (observation : Observation) : Prop where
+  matchesRoot : l.rootOf artifact = root
+  matchesResult : result = requestedResult
+  closure : l.retainedClosure artifact
+  entry : l.entry artifact input
+  exit : l.exit artifact result observation
+  adequateStack : l.stackBound artifact ≤ reserved
+
+/-- Complete startup-and-execution contract for a launcher across both outcomes: `.refused125`
+occurs only when the reservation is below the required bound for a valid closure of the requested
+root, and `.entered` establishes `Launcher.Run` for the requested root, reservation, and result. -/
+def Launcher.Outcome {Root Artifact Input Result Observation : Type}
+    (l : Launcher Root Artifact Input Result Observation)
+    (root : Root) (reserved : Nat) (requestedResult : Result) :
+    Startup (Artifact × Input × Result × Observation) → Prop
+  | .refused125 =>
+    ∃ artifact, l.rootOf artifact = root ∧ l.retainedClosure artifact ∧
+      reserved < l.stackBound artifact
+  | .entered (artifact, input, result, observation) =>
+    l.Run root artifact reserved input requestedResult result observation
+
+/-- Obligation (discharged at slice 0, R-0505).
+Obligation on the native launcher integration: relate independently executed startup and exit to
+the requested root, retained artifact closure, entry inputs, requested result, observations, and
+reservation across both refusal and entry outcomes. Slice 0's unverified native path carries the
+explicit premise (R-0503); final-image validation discharges it at R-0505, with the
+direct-syscall launcher supplied by R-0584. Toy launches do not discharge it. -/
+def LauncherConforms {Root Artifact Input Result Observation : Type}
+    (launcher : Launcher Root Artifact Input Result Observation)
+    (launch : Root → Nat → Result → Startup (Artifact × Input × Result × Observation)) : Prop :=
+  ∀ root reserved requestedResult,
+    launcher.Outcome root reserved requestedResult (launch root reserved requestedResult)
+
+/-- An executable closure loader for a toy chain of dependencies: module `n+1` needs module `n`.
+The implementation traverses the graph, whereas the closure specification quantifies over reachability. -/
+def retainChain : Nat → List Nat
+  | 0 => [0]
+  | n + 1 => (n + 1) :: retainChain n
+
+/-- An executable exit encoder for the toy launcher, independently related to addition by proof. -/
+def encodeToyExit : Nat → Nat → Nat
+  | 0, result => result
+  | n + 1, result => (encodeToyExit n result) + 1
+
+/-- A toy launcher contract. Module reachability is `dependency ≤ root`; entry observes the
+number of loaded modules and exit encodes the result with the root's observation prefix.
+This supplies conformance evidence without choosing a native ABI or native launcher policy. -/
+def toyLauncher : Launcher Nat (Nat × List Nat) Nat Nat Nat where
+  rootOf := Prod.fst
+  retainedClosure := fun artifact => ∀ dependency, dependency ∈ artifact.2 ↔ dependency ≤ artifact.1
+  entry := fun artifact input => input = artifact.1 + 1
+  exit := fun artifact result observation => observation = result + artifact.1
+  stackBound := fun _ => 8
+
+/-- Actual toy launch execution. Loading, input construction, and exit encoding are executable
+operations; none calls the launcher specification or re-checks its invariants. -/
+def toyLaunch (root reserved result : Nat) : Startup ((Nat × List Nat) × Nat × Nat × Nat) :=
+  match stackAdmission 8 reserved () with
+  | .refused125 => .refused125
+  | .entered _ =>
+    let loaded := retainChain root
+    .entered ((root, loaded), loaded.length, result, encodeToyExit root result)
+
+/-- Conformance of `toyLaunch` across both startup outcomes is the reusable `Launcher.Outcome`
+contract specialized to `toyLauncher`. -/
+abbrev ToyLaunchCorrect :
+    Nat → Nat → Nat → Startup ((Nat × List Nat) × Nat × Nat × Nat) → Prop :=
+  toyLauncher.Outcome
+
+/-! ### ABI examples -/
+
+/-- Accepted: two typed arguments are read from register 0 and stack slot 0 respectively. -/
+example : ArgumentsHold (fun (_ : Nat) (v : Nat) => [v])
+    [⟨0, [.register 0]⟩, ⟨1, [.stack 0]⟩] [11, 12]
+    ⟨fun _ => 11, fun _ => 12, 1⟩ := by
+  exact ⟨rfl, rfl, trivial⟩
+
+/-- Refused: a value different from the word in its bound stack slot does not satisfy the argument
+relation. -/
+example : ¬ ArgumentsHold (fun (_ : Nat) (v : Nat) => [v])
+    [⟨0, [.register 0]⟩, ⟨1, [.stack 0]⟩] [11, 99]
+    ⟨fun _ => 11, fun _ => 12, 1⟩ := by
+  intro h
+  have h' := h.2.1
+  simp [Binding.Holds, Location.read] at h'
+
+/-- Accepted: a call-only C pointer and a kept owned allocation are valid extern parameters. -/
+example : (⟨.ffi (.rawPointer .int), .callOnly⟩ : ExternParam Nat).Valid ∧
+    (⟨.owned 7, .kept⟩ : ExternParam Nat).Valid := by decide
+
+/-- Refused: enums never cross an extern boundary, and a raw pointer cannot be marked `kept`. -/
+example : ¬ (⟨.enum, .callOnly⟩ : ExternParam Nat).Valid ∧
+    ¬ (⟨.ffi (.rawPointer .int), .kept⟩ : ExternParam Nat).Valid ∧
+    ¬ (ExternResult.Valid ⟨0, 1, 7⟩ 0 (.enum : ExternType Nat)) := by decide
+
+/-- Refused: an unrelated extern can return neither the paired receipt nor the paired owned handle. -/
+example : ¬ ExternResult.Valid (⟨0, 1, 7⟩ : KeptPair Nat Nat) 2 (.receipt 7) ∧
+    ¬ ExternResult.Valid (⟨0, 1, 7⟩ : KeptPair Nat Nat) 2 (.owned 7) := by decide
+
+/-- Accepted: the paired declarations have exactly the owned/receipt types of the same handle. -/
+example : (⟨0, 1, 7⟩ : KeptPair Nat Nat).WellFormed
+    ⟨.owned 7, .kept⟩ (.receipt 7) (.receipt 7) (.owned 7) := by
+  exact ⟨by decide, rfl, rfl, rfl, rfl⟩
+
+/-- Refused: ordinary FFI results cannot stand in for the submission receipt or completion's owned
+handle, even though each is individually a valid extern result. -/
+example : ¬ (⟨0, 1, 7⟩ : KeptPair Nat Nat).WellFormed
+    ⟨.owned 7, .kept⟩ (.ffi .int) (.receipt 7) (.owned 7) ∧
+    ¬ (⟨0, 1, 7⟩ : KeptPair Nat Nat).WellFormed
+      ⟨.owned 7, .kept⟩ (.receipt 7) (.receipt 7) (.ffi .int) := by
+  constructor <;> intro h
+  · have hr := h.2.2.1
+    cases hr
+  · have hr := h.2.2.2.2
+    cases hr
+
+/-- Refused: a completion for a different handle's receipt does not satisfy the pairing law. -/
+example : ¬ (⟨0, 1, 7⟩ : KeptPair Nat Nat).WellFormed
+    ⟨.owned 7, .kept⟩ (.receipt 7) (.receipt 8) (.owned 7) := by
+  intro h
+  have hc := h.2.2.2.1
+  cases hc
+
+/-- Refused: submission and completion cannot be the same extern identity. -/
+example : ¬ (⟨0, 0, 7⟩ : KeptPair Nat Nat).WellFormed
+    ⟨.owned 7, .kept⟩ (.receipt 7) (.receipt 7) (.owned 7) := by
+  intro h
+  exact h.1 rfl
+
+/-- Accepted: submitting handle 7 to the paired extern turns ownership into its receipt. -/
+example : KeptStep ⟨0, 1, 7⟩ (.owned 7) (.call 0 7) (.kept 7) := by decide
+
+/-- Refused: the submitting extern cannot consume its own receipt; only completion can. -/
+example : ¬ KeptStep ⟨0, 1, 7⟩ (.kept 7) (.call 0 7) (.owned 7) := by decide
+
+/-- Accepted: an adequate reservation admits startup. -/
+example : stackAdmission 64 64 7 = .entered 7 := by decide
+
+/-- Refused: a smaller reservation refuses startup with status 125. -/
+example : stackAdmission 64 32 7 = .refused125 := by decide
+
+end ABI
+
+end ConcreteSpec.Core.Frame
