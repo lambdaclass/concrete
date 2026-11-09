@@ -1,0 +1,25 @@
+/-- Planted (law `ConcreteSpec.Core.KeyConstruct.collectKeysIn_sound`, case `ConcreteSpec.Core.Vacuity.nestedBody`, subject `ConcreteSpec.Core.KeyConstruct.collectKeysIn`, mutant `ConcreteSpec.Core.Vacuity.unprefixedCollect`). -/
+example : ¬ (∀ (key : FunctionRelativeKey), key ∈ unprefixedCollect [] [nestedBody] →
+    ∃ route, route ≠ [] ∧ KeyConstruct.pathAtIn [] [nestedBody] route = some key) := by
+  intro sound
+  obtain ⟨route, nonempty, found⟩ := sound ⟨[⟨.loop, .ordinal 0⟩]⟩ (by
+    simp [unprefixedCollect, nestedBody, KeyConstruct.key, KeyConstruct.segment,
+      KeyConstruct.childScope])
+  cases route with
+  | nil => exact nonempty rfl
+  | cons index tail =>
+    cases index with
+    | zero =>
+      rw [KeyConstruct.pathAtIn] at found
+      simp only [List.getElem?_cons_zero, List.take_zero, List.append_nil, Option.bind_eq_bind,
+        Option.bind_some] at found
+      cases hchild : KeyConstruct.pathAtIn (nestedBody.childScope []) nestedBody.children tail with
+      | none =>
+        rw [hchild] at found
+        cases found
+      | some suffix =>
+        rw [hchild] at found
+        simp [nestedBody, KeyConstruct.segment] at found
+    | succ n =>
+      simp [KeyConstruct.pathAtIn] at found
+

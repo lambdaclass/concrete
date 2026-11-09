@@ -1,0 +1,8 @@
+/-- Planted (law `ConcreteSpec.Core.KeyConstruct.collectKeysIn_sound`, case `ConcreteSpec.Core.Vacuity.nestedBody`, subject `ConcreteSpec.Core.KeyConstruct.pathAtIn`, mutant `ConcreteSpec.Core.Vacuity.missingPathAtIn`). -/
+example : nestedPath ∈ KeyConstruct.collectKeysIn [] [nestedBody] ∧
+    ¬ (∃ route, route ≠ [] ∧ missingPathAtIn [] [nestedBody] route = some nestedPath) := by
+  refine ⟨KeyConstruct.collectKeysIn_complete [] [nestedBody] [0, 0, 0] nestedPath
+    (by decide) (by decide), ?_⟩
+  rintro ⟨route, _, found⟩
+  cases found
+

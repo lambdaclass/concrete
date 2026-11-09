@@ -1,0 +1,6 @@
+/-- Instance (law `ConcreteSpec.Core.Observe.trapLine_injective`, case `distinct_sites_punctuated_path`). -/
+example : trapLine .overflow ⟨7⟩ punctuatedSpan = trapLine .overflow ⟨8⟩ punctuatedSpan ↔
+    TrapKind.overflow = .overflow ∧ (⟨7⟩ : SiteId) = ⟨8⟩ ∧
+      punctuatedSpan = punctuatedSpan :=
+  trapLine_injective .overflow .overflow ⟨7⟩ ⟨8⟩ punctuatedSpan punctuatedSpan
+

@@ -1,0 +1,7 @@
+/-- Planted (law `ConcreteSpec.Core.Observe.trapLine_injective`, case `distinct_columns_punctuated_path`,
+subject `ConcreteSpec.Core.Observe.trapLine`, mutant `ConcreteSpec.Core.Observe.Evidence.trapLineWithoutCol`). -/
+example : ¬ (trapLineWithoutCol .overflow ⟨7⟩ punctuatedSpan =
+      trapLineWithoutCol .overflow ⟨7⟩ shiftedColSpan ↔
+    TrapKind.overflow = .overflow ∧ (⟨7⟩ : SiteId) = ⟨7⟩ ∧
+      punctuatedSpan = shiftedColSpan) := by decide
+

@@ -1,0 +1,92 @@
+[
+  {
+    "fixture": "c9-old-collectKeysIn_sound-instance-0.lean.txt",
+    "commit": "a97e361f1d635f09b2a7b7859b0ef0a0d67b9fad",
+    "path": "ConcreteSpec/Proofs/Ident.lean",
+    "start": 1252,
+    "end": 1256,
+    "source_sha256": "df557f3ffb46588564d0d06af212739a4f0aaab7c8ed7656ea2494d0a69bfec5",
+    "sha256": "434c2e9323ee3a8c34c92778ff1d43c3ff9cad28158c9706508826349f506990"
+  },
+  {
+    "fixture": "c9-old-collectKeysIn_sound-planted-0.lean.txt",
+    "commit": "a97e361f1d635f09b2a7b7859b0ef0a0d67b9fad",
+    "path": "ConcreteSpec/Proofs/Ident.lean",
+    "start": 1257,
+    "end": 1281,
+    "source_sha256": "df557f3ffb46588564d0d06af212739a4f0aaab7c8ed7656ea2494d0a69bfec5",
+    "sha256": "e93730d2235edfeaf554899fdbaada764505e27c9bd55eefcf8e65ad585f5408"
+  },
+  {
+    "fixture": "c9-new-collectKeysIn_sound-instance-0.lean.txt",
+    "commit": "3e22e6417cd4c84d658fd7d4601d11ad0b160454",
+    "path": "ConcreteSpec/Proofs/Ident.lean",
+    "start": 1265,
+    "end": 1271,
+    "source_sha256": "3f03ab6777a015b9bff0bf21391d8a1bd99972074ea8a2e8895b434f1a226bcd",
+    "sha256": "6651e3b4dbd67d9de1138f1644e1339db3e96fca0a5ff81f3d1ea9ce8060ceeb"
+  },
+  {
+    "fixture": "c9-new-collectKeysIn_sound-planted-0.lean.txt",
+    "commit": "3e22e6417cd4c84d658fd7d4601d11ad0b160454",
+    "path": "ConcreteSpec/Proofs/Ident.lean",
+    "start": 1272,
+    "end": 1279,
+    "source_sha256": "3f03ab6777a015b9bff0bf21391d8a1bd99972074ea8a2e8895b434f1a226bcd",
+    "sha256": "da1ae8fa19acd27b90b50a3234176088ad216cd6e0ff2ccd039e7895f5156b47"
+  },
+  {
+    "fixture": "c6-old-trapLine_injective-instance-0.lean.txt",
+    "commit": "a97e361f1d635f09b2a7b7859b0ef0a0d67b9fad",
+    "path": "ConcreteSpec/Proofs/Observe2.lean",
+    "start": 379,
+    "end": 384,
+    "source_sha256": "e8f4dcd919e187b6a3ae95e07fcf2848deceb513f853635eb402cbfbac6128de",
+    "sha256": "825dc3fa8bddc81f56a0194376ca4793de2eeb54bf52ef22c024173c2ab2468a"
+  },
+  {
+    "fixture": "c6-old-trapLine_injective-planted-0.lean.txt",
+    "commit": "a97e361f1d635f09b2a7b7859b0ef0a0d67b9fad",
+    "path": "ConcreteSpec/Proofs/Observe2.lean",
+    "start": 397,
+    "end": 406,
+    "source_sha256": "e8f4dcd919e187b6a3ae95e07fcf2848deceb513f853635eb402cbfbac6128de",
+    "sha256": "7abc0ff447f56a90bea1e10ec1ba8950c925d3c83aaa9e60b93d2190ad142577"
+  },
+  {
+    "fixture": "c6-current-trapLine_injective-instance-0.lean.txt",
+    "commit": "6477c65a79aa715c60b32a4b025de204533c65b7",
+    "path": "ConcreteSpec/Proofs/ObserveEvidence.lean",
+    "start": 142,
+    "end": 147,
+    "source_sha256": "79d553e078474eb203976fdbf8b50bd769c33eaa240887ed52b654080e288bc8",
+    "sha256": "359a16dd12b5327cab0c734cb60d0ff1b6410f0fead1fde2021f7a858f3e6646"
+  },
+  {
+    "fixture": "c6-current-trapLine_injective-instance-1.lean.txt",
+    "commit": "6477c65a79aa715c60b32a4b025de204533c65b7",
+    "path": "ConcreteSpec/Proofs/ObserveEvidence.lean",
+    "start": 155,
+    "end": 160,
+    "source_sha256": "79d553e078474eb203976fdbf8b50bd769c33eaa240887ed52b654080e288bc8",
+    "sha256": "affc289dace792e0d9f3a62dc7e2d0c04175fd578c812ee2f6c9580eddca9a02"
+  },
+  {
+    "fixture": "c6-current-trapLine_injective-planted-0.lean.txt",
+    "commit": "6477c65a79aa715c60b32a4b025de204533c65b7",
+    "path": "ConcreteSpec/Proofs/ObserveEvidence.lean",
+    "start": 148,
+    "end": 154,
+    "source_sha256": "79d553e078474eb203976fdbf8b50bd769c33eaa240887ed52b654080e288bc8",
+    "sha256": "f6c45eee0ea9e2185f4a1d3e45e0ce6bd6d9a0b75c22de62a4b9f63d63147911"
+  },
+  {
+    "fixture": "c6-current-trapLine_injective-planted-1.lean.txt",
+    "commit": "6477c65a79aa715c60b32a4b025de204533c65b7",
+    "path": "ConcreteSpec/Proofs/ObserveEvidence.lean",
+    "start": 161,
+    "end": 167,
+    "source_sha256": "79d553e078474eb203976fdbf8b50bd769c33eaa240887ed52b654080e288bc8",
+    "sha256": "21de21cec0501de856e59decd346b7aacd0e05c12f062b9b7925dc58a892d7e1"
+  }
+]

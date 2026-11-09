@@ -186,3 +186,6 @@ end ConcreteSpecControl
 """
     add("multiple-subjects-positive", multiple, set(), status=0)
     add("sibling-subject-erased", multiple.replace("0 < badS 0 ∧ 0 < T 0", "0 < badS 0 ∧ 0 < (badS 0 + 1)"), bad("planted-proposition"))
+
+    partial_pair = base.replace("example : 2 < S 2 := growth 2 rfl", "example : ∀ _h : 2 = 2, 2 < S 2 := growth 2").replace("example : 2 = 2 ∧ ¬ 2 < mutant 2 := by decide", "example : ¬ (∀ _h : 2 = 2, 2 < mutant 2) := by intro h; exact Nat.lt_irrefl 2 (h rfl)")
+    add("partial-paired", partial_pair, bad("instance-application") | bad("planted-proposition") | bad("unpaired-planted") | bad("missing-instance", "ConcreteSpecControl.growth"))

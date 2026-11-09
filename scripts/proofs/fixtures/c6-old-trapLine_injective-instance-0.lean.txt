@@ -1,0 +1,6 @@
+/-- Instance (law `ConcreteSpec.Core.Observe.trapLine_injective`, case `ConcreteSpec.Core.Observe.Demo.sp`). -/
+example : ∀ kind site sp, trapLine .overflow Demo.site Demo.sp = trapLine kind site sp →
+    TrapKind.overflow = kind ∧ Demo.site = site ∧ Demo.sp.path = sp.path ∧
+      Demo.sp.line = sp.line ∧ Demo.sp.col = sp.col :=
+  trapLine_injective .overflow Demo.site Demo.sp
+

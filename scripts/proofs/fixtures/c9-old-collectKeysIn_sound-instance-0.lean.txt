@@ -1,0 +1,5 @@
+/-- Instance (law `ConcreteSpec.Core.KeyConstruct.collectKeysIn_sound`, case `ConcreteSpec.Core.Vacuity.nestedBody`). -/
+example : ∀ (key : FunctionRelativeKey), key ∈ KeyConstruct.collectKeysIn [] [nestedBody] →
+    ∃ route, route ≠ [] ∧ KeyConstruct.pathAtIn [] [nestedBody] route = some key :=
+  KeyConstruct.collectKeysIn_sound [] [nestedBody]
+

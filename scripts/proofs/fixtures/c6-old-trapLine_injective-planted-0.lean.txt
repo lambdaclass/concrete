@@ -1,0 +1,10 @@
+/-- Planted (law `ConcreteSpec.Core.Observe.trapLine_injective`, case `ConcreteSpec.Core.Observe.Demo.sp`, subject `ConcreteSpec.Core.Observe.trapLine`, mutant `ConcreteSpec.Core.Observe.trapLineWithoutColumn`). -/
+example : ¬ (∀ kind site sp,
+    trapLineWithoutColumn .overflow Demo.site Demo.sp = trapLineWithoutColumn kind site sp →
+      TrapKind.overflow = kind ∧ Demo.site = site ∧ Demo.sp.path = sp.path ∧
+        Demo.sp.line = sp.line ∧ Demo.sp.col = sp.col) := by
+  intro injective
+  have equal := injective .overflow Demo.site spDifferentColumn (by decide)
+  have different : Demo.sp.col ≠ spDifferentColumn.col := by decide
+  exact different equal.2.2.2.2
+
