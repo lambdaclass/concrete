@@ -5677,4 +5677,91 @@ example : ¬ (match stepDeferEagerArgs callProgram deferCallerConfig with
 
 end RestatedLawEvidence
 
+/-- A reborrow protocol permits a child in the current activation, refuses the caller as a
+new destination, and restores the previous loan table when that child ends. The endpoint
+comparison includes every pre-existing loan; a caller loan is never consumed implicitly. -/
+def DownwardProtocol (lend : State → LoanId → List Projection → Mode → Nat → Option State)
+    (s : State) (i : LoanId) (path : List Projection) (current caller : Nat) : Prop :=
+  lend s i path .mutable caller = none ∧
+    ∃ t, lend s i path .mutable current = some t ∧
+      endLoan t ⟨s.nextLoan⟩ = some { s with nextLoan := s.nextLoan + 1 }
+
+/-- Law (subject `ConcreteSpec.Core.Own.reborrowTo`). Downward lending is a complete scoped
+protocol, rather than merely an admission guard: the child can be used in the current frame
+and ended without consuming any caller loan, while lending back to the caller is refused
+(owner Q1, 2026-11-08). -/
+theorem downward_reborrow_protocol (s : State) (i : LoanId) (path : List Projection)
+    (f : Activation) (caller : Nat) (a : Loan) (hs : WellFormed s)
+    (hf : s.frames.head? = some f) (different : f.id ≠ caller)
+    (found : loan s i = some a) (allowed : loanAccess s i .mutable = true) :
+    DownwardProtocol reborrowTo s i path f.id caller := by
+  have fm : f ∈ s.frames := List.mem_of_head? hf
+  have issued := (hs.2.2.2.2.2.2.1 f fm).1
+  have am : a ∈ s.loans := List.mem_of_find?_eq_some found
+  have ai : a.id = i := by simpa using List.find?_some found
+  have fresh : ∀ l ∈ s.loans, l.id ≠ LoanId.mk s.nextLoan := by
+    intro l hl he
+    have hb := (hs.2.2.2.1 l hl).1
+    rw [he] at hb
+    exact Nat.lt_irrefl _ hb
+  have ine : i ≠ LoanId.mk s.nextLoan := by simpa [ai] using fresh a am
+  have noChild : ∀ l ∈ s.loans, l.parent ≠ some (LoanId.mk s.nextLoan) := by
+    intro l hl he
+    have hp := (hs.2.2.2.1 l hl).2.2.2.1
+    unfold ParentValid at hp
+    rw [he] at hp
+    obtain ⟨b, hb, hid, _⟩ := hp
+    exact fresh b hb hid
+  have children : s.loans.any (·.parent == some (LoanId.mk s.nextLoan)) = false := by
+    apply Bool.eq_false_iff.mpr
+    intro h
+    obtain ⟨l, hl, he⟩ := List.any_eq_true.mp h
+    exact noChild l hl (by simpa using he)
+  have unchanged : s.loans.filter (·.id != LoanId.mk s.nextLoan) = s.loans := by
+    apply List.filter_eq_self.mpr
+    intro l hl
+    simpa using fresh l hl
+  refine ⟨?_, ?_⟩
+  · simp [reborrowTo, found, allowed, hf, different]
+  · refine ⟨{ s with
+        nextLoan := s.nextLoan + 1
+        loans := ⟨⟨s.nextLoan⟩, a.root, a.path ++ path, .mutable, some i,
+          i :: a.ancestors, f.id, false, false⟩ :: s.loans }, ?_, ?_⟩
+    · simp [reborrowTo, found, allowed, hf, issued]
+    · simp [endLoan, loan, ine, children, unchanged]
+
+namespace DownwardProtocolEvidence
+open Examples
+
+def source : Loan := ⟨⟨1⟩, ⟨0⟩, [.index 0], .mutable, some ⟨0⟩, [⟨0⟩], 1, false, false⟩
+def calleeFrame : Activation := ⟨1, [], [(y, ⟨1⟩)]⟩
+
+/-- Mutant: retain ordinary permissions, but allow a new child to target the active caller. -/
+def allowUpward (s : State) (i : LoanId) (path : List Projection) (m : Mode)
+    (activation : Nat) : Option State := do
+  let f ← s.frames.head?
+  let t ← reborrowTo s i path m f.id
+  if activation ∈ s.frames.map Activation.id then
+    some { t with loans := t.loans.map fun l =>
+      if l.id = LoanId.mk s.nextLoan then { l with activation := activation } else l }
+  else none
+
+/-- Instance (law `ConcreteSpec.Core.Own.downward_reborrow_protocol`, case `ConcreteSpec.Core.Own.LifecycleWitnesses.called`). Current activation 1 refuses caller activation 0. -/
+example : DownwardProtocol reborrowTo LifecycleWitnesses.called ⟨1⟩ [] 1 0 :=
+  @downward_reborrow_protocol LifecycleWitnesses.called ⟨1⟩ [] calleeFrame 0 source
+    (by decide) rfl (by decide) rfl (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.downward_reborrow_protocol`, case `ConcreteSpec.Core.Own.LifecycleWitnesses.called`, subject `ConcreteSpec.Core.Own.reborrowTo`, mutant `ConcreteSpec.Core.Own.DownwardProtocolEvidence.allowUpward`). The exact upward request is now admitted. -/
+example : WellFormed LifecycleWitnesses.called ∧
+    LifecycleWitnesses.called.frames.head? = some calleeFrame ∧ calleeFrame.id ≠ 0 ∧
+    loan LifecycleWitnesses.called ⟨1⟩ = some source ∧
+    loanAccess LifecycleWitnesses.called ⟨1⟩ .mutable = true ∧
+    ¬ DownwardProtocol allowUpward LifecycleWitnesses.called ⟨1⟩ [] calleeFrame.id 0 := by
+  refine ⟨by decide, rfl, by decide, rfl, by decide, ?_⟩
+  intro h
+  have hn := h.1
+  cases hn
+
+end DownwardProtocolEvidence
+
 end ConcreteSpec.Core.Own
