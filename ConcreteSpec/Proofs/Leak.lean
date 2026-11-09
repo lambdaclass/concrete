@@ -671,7 +671,7 @@ theorem timing_ni (s₁ s₂ : Int)
 
 /-- Helper (inversion). Inverts the concrete complete runs to refute the corresponding
 noninterference claim. The proof applies the distinct-secret premise, so it is excluded
-from Law evidence by the projection convention (approved: PENDING).
+from Law evidence by the projection convention (approved: APPR-C7-agy-f2e93a7e0).
 
 The timing program is not constant-time for any two distinct secrets: secret-dependent work
 produces different nonempty leakage traces. -/
@@ -750,7 +750,7 @@ theorem ct_release_authorized (secret : Int) :
 
 /-- Helper (inversion). Inverts the concrete complete runs to refute the corresponding
 noninterference claim. The proof applies the distinct-secret premise, so it is excluded
-from Law evidence by the projection convention (approved: PENDING).
+from Law evidence by the projection convention (approved: APPR-C7-agy-f2e93a7e0).
 
 **Authorization does not imply NI.** All runs from leakyStart s₁ and leakyStart s₂ emit only
 policy-authorized releases, yet `DelimitedReleaseNI` fails for any distinct secrets s₁ ≠ s₂
@@ -768,7 +768,7 @@ theorem authorized_release_not_ni (s₁ s₂ : Int)
 
 /-- Helper (inversion). Inverts the concrete complete runs to refute the corresponding
 noninterference claim. The proof applies the distinct-secret premise, so it is excluded
-from Law evidence by the projection convention (approved: PENDING).
+from Law evidence by the projection convention (approved: APPR-C7-agy-f2e93a7e0).
 
 **Authorization does not imply CT.** All runs from leakyStart s₁ and leakyStart s₂ emit only
 policy-authorized releases, yet `ConstantTime` fails for any distinct secrets s₁ ≠ s₂ because
@@ -1137,14 +1137,14 @@ def OptionalBoundEvidence {α : Type} [LE α] (actual : Option α) (b : Bound α
   | .notEstablished => True
 
 /-- Helper (computation). Converts status-case evidence to the unchanged normative
-bound predicate by exhaustive status analysis (approved: PENDING). -/
+bound predicate by exhaustive status analysis (approved: APPR-C7-agy-f2e93a7e0). -/
 theorem boundEvidence_sound {α : Type} [LE α] (actual : α) (b : Bound α)
     (h : BoundEvidence actual b) : Bound.Sound actual b := by
   cases b with
   | mk limit status => cases status <;> simp_all [BoundEvidence, Bound.Sound]
 
 /-- Helper (computation). Converts optional status-case evidence to the unchanged normative
-footprint predicate by exhaustive status analysis (approved: PENDING). -/
+footprint predicate by exhaustive status analysis (approved: APPR-C7-agy-f2e93a7e0). -/
 theorem optionalBoundEvidence_sound {α : Type} [LE α] (actual : Option α) (b : Bound α)
     (h : OptionalBoundEvidence actual b) : Bound.SoundOptional actual b := by
   cases b with
@@ -1725,11 +1725,11 @@ example : LowEquivalent labelling (leakyStart 1) (leakyStart 2) ∧
   have hobs := h (leakyRun 1) (leakyRun 2) ⟨rfl, trivial⟩ rfl rfl
   exact (by decide : (leakyRun 1).publicObservations ≠ (leakyRun 2).publicObservations) hobs
 
-/-- Representation lemma. Concrete counterexample or mutant check for `timing_not_ct`; retained separately from Law evidence (approved: PENDING). -/
+/-- Representation lemma. Concrete counterexample or mutant check for `timing_not_ct`; retained separately from Law evidence (approved: APPR-C7-agy-f2e93a7e0). -/
 example : ¬ ConstantTime instrumentation program labelling (timingStart 1) (timingStart 2) :=
   timing_not_ct 1 2 ⟨rfl, trivial⟩ (by decide)
 
-/-- Representation lemma. Concrete counterexample or mutant check for `timing_not_ct`; retained separately from Law evidence (approved: PENDING). -/
+/-- Representation lemma. Concrete counterexample or mutant check for `timing_not_ct`; retained separately from Law evidence (approved: APPR-C7-agy-f2e93a7e0). -/
 example : LowEquivalent labelling (ctStart 1) (ctStart 2) ∧ (1 : Int) ≠ 2 ∧
     ¬ (¬ ConstantTime instrumentation program labelling (ctStart 1) (ctStart 2)) := by
   refine ⟨⟨rfl, trivial⟩, by decide, ?_⟩
@@ -1748,12 +1748,12 @@ example : ctStart 1 ≠ ctStart 2 ∧
   have hs := congrArg Config.store h
   exact (by decide : (1 : Int) ≠ 2) hs
 
-/-- Representation lemma. Concrete counterexample or mutant check for `authorized_release_not_ni`; retained separately from Law evidence (approved: PENDING). -/
+/-- Representation lemma. Concrete counterexample or mutant check for `authorized_release_not_ni`; retained separately from Law evidence (approved: APPR-C7-agy-f2e93a7e0). -/
 example : ¬ DelimitedReleaseNI instrumentation program labelling (leakyStart 1) (leakyStart 2) :=
   authorized_release_not_ni 1 2 (release_authorized 1) (release_authorized 2)
     (leaky_low 1 2) (by decide)
 
-/-- Representation lemma. Concrete counterexample or mutant check for `authorized_release_not_ni`; retained separately from Law evidence (approved: PENDING). -/
+/-- Representation lemma. Concrete counterexample or mutant check for `authorized_release_not_ni`; retained separately from Law evidence (approved: APPR-C7-agy-f2e93a7e0). -/
 example : policy.RunsAuthorized instrumentation program (ctStart 1) ∧
     policy.RunsAuthorized instrumentation program (ctStart 2) ∧
     LowEquivalent labelling (ctStart 1) (ctStart 2) ∧
@@ -1767,12 +1767,12 @@ example : policy.RunsAuthorized instrumentation program (ctStart 1) ∧
   have h₂ := ct_run_unique 2 r₂
   simp only [Run.publicObservations, h₁.1, h₂.1, h₁.2.2.2.2, h₂.2.2.2.2, Config.final?]
 
-/-- Representation lemma. Concrete counterexample or mutant check for `authorized_release_not_ct`; retained separately from Law evidence (approved: PENDING). -/
+/-- Representation lemma. Concrete counterexample or mutant check for `authorized_release_not_ct`; retained separately from Law evidence (approved: APPR-C7-agy-f2e93a7e0). -/
 example : ¬ ConstantTime instrumentation program labelling (leakyStart 1) (leakyStart 2) :=
   authorized_release_not_ct 1 2 (release_authorized 1) (release_authorized 2)
     (leaky_low 1 2) (by decide)
 
-/-- Representation lemma. Concrete counterexample or mutant check for `authorized_release_not_ct`; retained separately from Law evidence (approved: PENDING). -/
+/-- Representation lemma. Concrete counterexample or mutant check for `authorized_release_not_ct`; retained separately from Law evidence (approved: APPR-C7-agy-f2e93a7e0). -/
 example : policy.RunsAuthorized instrumentation program (ctStart 1) ∧
     policy.RunsAuthorized instrumentation program (ctStart 2) ∧
     LowEquivalent labelling (ctStart 1) (ctStart 2) ∧
@@ -1835,7 +1835,7 @@ theorem erasePure_preserves_wipes (s : Program) :
     cases statement <;> simp [erasePure, wipes, ih]
 
 /-- Helper (congruence). Transports the erasure law along the optimization relation
-so that the public wipe obligation is explicitly discharged (approved: PENDING). -/
+so that the public wipe obligation is explicitly discharged (approved: APPR-C7-agy-f2e93a7e0). -/
 theorem optimized_preserves_wipes : WipePreservation optimized wipes wipes := by
   intro source target h
   subst target
