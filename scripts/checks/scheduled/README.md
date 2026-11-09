@@ -12,8 +12,15 @@ No language or spec decision is made here.
 This branch supplies the execution/record/observation protocol, not the campaigns.
 It depends on ISS-0029 (`origin/wip/repro-ci2`, 688e10a86421feb48ab4f26f2b4dd2955a18aff4)
 for `scripts/checks/lib/repro_manifest_compare.py:read_inventory` and that module's
-single `ci2_runners.txt` binding. It imports the parser rather than copying its
-inventory or using a runner-name pattern. Repository/runner registration remains
+single `ci2_runners.txt` binding. `scripts/checks/lib/ci2_binding.py` is the sole
+adapter: `read_inventory(lib=None)` imports that authoritative parser, and
+`verify(repository, environment, name, runners=None)` checks exact membership.
+`protocol.py` delegates to it; Gate C must use this same helper (its CLI verifies
+standard `GITHUB_REPOSITORY`, `RUNNER_ENVIRONMENT`, `RUNNER_NAME`). Neither the
+ISS-0029 parser nor its authoritative inventory exists on this base. The exact
+absence diagnostic is `INCOMPLETE dependency: ISS-0029 runner binding unavailable`,
+even if an isolated `ci2_runners.txt` appears. This is a deliberate dependency,
+not a second parser or a fallback that weakens provenance. Repository/runner registration remains
 the trust boundary described in that branch's `docs/SELF_HOSTED_RUNNERS.md`.
 The referenced tip has no reusable exact-SHA dispatch helper: selection is a
 main-only schedule-specific entry point; it does not replace the repro CI leg.
@@ -86,8 +93,16 @@ Trusted main supplies the controller; the selected revision runs in a fresh
 `mktemp` private clone under Nix, the shared heavy slot and `bounded_run`.
 The controller revision is recorded separately from the selected gate revision.
 Commands, controls, consumed tool identities, seeds, wall duration, exit status and
-logs are indexed per attempt. Future raw samples and minimized reproducers belong
-in the result-index directory alongside logs and must be registered by G1's schema.
+logs are indexed per attempt. Registered raw report trees are copied under
+`gate-N-artifacts/` in the result index before the private checkout is removed,
+including partial outputs from incomplete runs. Each regular file is indexed with
+its relative path, byte count and SHA-256. Symlinks and special files are refused.
+The artifact's `sha_file` names a file inside the declared artifact containing only
+the selected full SHA (with an optional final newline). Missing required reports
+fail with `FAIL scheduled artifact: missing PATH`; a mismatched binding fails with
+`FAIL scheduled artifact: selected SHA mismatch PATH`. Partial reports remain in
+the upload on failure. CI upload steps obtain artifact paths from the registry
+executor's `artifact_paths` step output; literal YAML paths are drift too.
 
 The note refs are `refs/notes/concrete-gates-daily` and
 `refs/notes/concrete-gates-weekly`. Each exact-SHA note is JSON Lines with immutable
@@ -146,17 +161,58 @@ visibility without adding a required candidate check. A scheduled failure requir
 immediate triage and a structural repair/regression pinned to its exact SHA; dependent
 work stops. It never becomes a blanket failed check on unrelated landings.
 
+## Scheduled-gate environment and outcome contract
+
+Both gate commands and control commands receive the same generic environment:
+`SELECTED_SHA` (selected full 40-digit commit), `SELECTED_TIER` (`daily` or `weekly`),
+`SCHEDULED_ATTEMPT_ID` (`GITHUB_RUN_ID/GITHUB_RUN_ATTEMPT`), `GITHUB_REPOSITORY`,
+`RUNNER_NAME`, and `RUNNER_ENVIRONMENT`. Runner identity uses the real Actions
+values; no missing value is fabricated. Before executing any code, the controller
+requires `RUNNER_ENVIRONMENT=self-hosted` and exact inventory membership.
+No gate-specific environment variables are supplied by the scheduler.
+
+The trusted wrapper additionally supplies `SCHEDULED_OUTCOME_FILE` (a private JSONL
+append stream for that invocation) and `SCHEDULED_OUTCOME_HELPER` (the trusted
+`gate_outcome.py`). Emit a semantic failure with
+`python3 "$SCHEDULED_OUTCOME_HELPER" FAIL "DIAGNOSTIC"`; emit gate-level availability
+loss with `INCOMPLETE` instead. Events contain `status`, `diagnostic`, and `sha`.
+The shared `bounded.sh` emits INCOMPLETE automatically when an inner measurement,
+build or planted control exhausts its watchdog, even when a caller maps exit 124
+to exit 1. Non-timeout failures must emit FAIL before continuing after an error;
+otherwise a bare nonzero exit is FAIL when no INCOMPLETE event exists.
+Explicit FAIL takes precedence over every INCOMPLETE event. A mismatched event SHA
+is FAIL with `FAIL scheduled outcome: selected SHA mismatch`. The wrapper transports
+INCOMPLETE as reserved exit 125; an unmarked gate exit 124 or 125 remains FAIL.
+Malformed streams fail with `FAIL scheduled outcome: invalid event stream`.
+The stream is separate from stdout/stderr: log text cannot impersonate an outcome.
+
 All git subprocesses discard inherited `GIT_*` variables. The executor reads the
 checked-out HEAD back and records it separately from the trusted controller revision.
-Slot and bounded libraries come from the trusted controller ROOT. Exit 125 is reserved
-for controller incompleteness (slot acquisition or bounded double timeout); a gate
-that completes with exit 124 remains a failure. Per-gate exceptions preserve FAIL and
-allow later gates to execute. Inventory/setup errors write indexed INCOMPLETE evidence.
+The selected registry is data parsed by the trusted reader; no historical exporter
+is executed. Slot, bounded and outcome libraries come from trusted ROOT. Per-gate
+exceptions preserve FAIL and allow later gates to execute. Inventory/setup errors
+write indexed INCOMPLETE evidence.
+
+### Gate C integration instructions (verbatim handoff)
+
+Add scaling PR, qualification and daily rows and determinism rows to
+`scripts/checks/gates.json`; give different commands/budgets distinct IDs, bind CI
+rows by workflow job/step, and declare report directories with a `sha_file` inside
+each report. Use `SELECTED_TIER` and `SELECTED_SHA`, `SCHEDULED_ATTEMPT_ID`, and the
+standard `GITHUB_REPOSITORY`, `RUNNER_ENVIRONMENT`, `RUNNER_NAME`; remove scheduler
+coupling to `CONCRETE_SCALING_*`. Use `ci2_binding.py` for runner verification.
+Write the selected full SHA into each declared `sha_file`. Use the shared
+`bounded.sh` and emit structured FAIL for genuine failures through
+`SCHEDULED_OUTCOME_HELPER`; propagate INCOMPLETE for build, measurement and planted
+control timeouts. Keep exact-diagnostic controls in the registry. Route CI commands
+through `gate_manifest.py execute` and upload its `artifact_paths` output; update
+the derived job timeouts and run `gates_registry.sh`. Do not add a second manifest,
+runner parser, semaphore or gate-specific assertion to the generic validator.
 
 Remaining qualification work belongs to **R-0676**, coordinated with R-0674/R-0675:
 shared X4 dispatch agreement with ISS-0029 (whose referenced branch supplies no
-reusable dispatcher), manifest-owned freshness windows and agreed exporter schema,
-shared cross-user host slots, durable logs/samples, and observer-occurrence history
+reusable dispatcher), live adoption/provisioning of the shared cross-user host
+slots, durable logs/samples, and observer-occurrence history
 with missed-observer controls. No substitute gate list, private semaphore or hosting
 setting is introduced. The allocated **R-0690 — Scheduled evidence integration
 and watchdog qualification** owns live qualification of the watchdog on the real schedule: land these producer interfaces, validate real cancellation,

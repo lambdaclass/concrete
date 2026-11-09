@@ -16,7 +16,7 @@ class Slot(unittest.TestCase):
             root = Path(work) / "controller"
             lib = root / "scripts/checks/lib"; lib.mkdir(parents=True)
             scheduled = root / "scripts/checks/scheduled"; scheduled.mkdir()
-            for name in ("bounded.sh", "bounded_exec.py", "heavy_slots.sh"):
+            for name in ("bounded.sh", "bounded_exec.py", "heavy_slots.sh", "gate_outcome.py"):
                 shutil.copy(ROOT / "scripts/checks/lib" / name, lib / name)
             (lib / "gate_env.sh").write_text(":\n")
             if acquire is not None:
@@ -46,7 +46,7 @@ class Slot(unittest.TestCase):
 
     def test_double_timeout(self):
         result = self.invoke(["python3", "-c", "import time; time.sleep(2)"], budget="0.05")
-        self.assertEqual((result.returncode, result.stdout, result.stderr), (125, "", ""))
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (125, "", "INCOMPLETE scheduled gate: nested watchdog or gate incomplete\n"))
 
     def test_real_pool_missing(self):
         result = subprocess.run(["bash", "-c", 'source "$1"; heavy_slot_acquire', "bash",
@@ -74,6 +74,11 @@ class Slot(unittest.TestCase):
                 result = subprocess.run(argv, env=env, capture_output=True, text=True, timeout=5)
                 self.assertEqual((result.returncode, result.stderr), (0, ""))
             handles[1].close()
+
+    def test_malformed_structured_outcome(self):
+        result=self.invoke(['bash','-c', 'printf "[]\\n" >> "$SCHEDULED_OUTCOME_FILE"'])
+        self.assertEqual((result.returncode,result.stdout,result.stderr),
+                         (1,'','FAIL scheduled outcome: invalid event stream\n'))
 
     def test_git_environment_sanitized(self):
         from unittest.mock import patch

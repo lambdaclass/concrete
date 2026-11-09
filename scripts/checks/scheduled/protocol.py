@@ -35,17 +35,15 @@ def timestamp(value):
     except (ValueError, AttributeError):
         raise EvidenceError("invalid UTC timestamp")
 
+_binding_spec = importlib.util.spec_from_file_location("ci2_binding", Path(__file__).resolve().parents[1] / "lib/ci2_binding.py")
+_binding = importlib.util.module_from_spec(_binding_spec)
+_binding_spec.loader.exec_module(_binding)
+
 def inventory():
-    # ISS-0029 owns both parsing and the sole runner binding. No copied inventory.
-    path = Path(__file__).resolve().parents[1] / "lib/repro_manifest_compare.py"
-    require(path.is_file(), "INCOMPLETE dependency: ISS-0029 runner binding unavailable")
-    spec = importlib.util.spec_from_file_location("ci2_binding", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
     try:
-        return module.read_inventory()
-    except (SystemExit, OSError, ValueError) as error:
-        raise EvidenceError(f"INCOMPLETE runner inventory: {error}") from error
+        return _binding.read_inventory()
+    except _binding.BindingError as error:
+        raise EvidenceError(str(error)) from error
 
 def validate(record, sha, tier, runners, repository=None):
     require(isinstance(record, dict), "invalid record shape")

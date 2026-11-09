@@ -127,5 +127,15 @@ class Controls(unittest.TestCase):
         self.rejected("FAIL daily " + SHA + ": recorded attempt",
                       lambda: observe([r, fresh], SHA, "daily", later, RUNNERS))
 
+    def test_inventory_never_falls_back_to_a_copied_file(self):
+        import tempfile
+        from pathlib import Path
+        from protocol import _binding
+        with tempfile.TemporaryDirectory() as work:
+            (Path(work)/'ci2_runners.txt').write_text('example/repo copied-runner\n')
+            with self.assertRaises(_binding.BindingError) as caught:
+                _binding.read_inventory(work)
+            self.assertEqual(str(caught.exception),'INCOMPLETE dependency: ISS-0029 runner binding unavailable')
+
 if __name__ == "__main__":
     unittest.main()
