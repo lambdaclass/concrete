@@ -355,6 +355,7 @@ ConcreteSpec.Brand.ER.stuck.sizeOf_spec
 ConcreteSpec.Brand.EVal.alloc.sizeOf_spec	
 ConcreteSpec.Brand.EVal.heap.sizeOf_spec	
 ConcreteSpec.Brand.EVal.ofNat_ctorIdx	
+ConcreteSpec.Brand.Evidence.beforeResetInv	
 ConcreteSpec.Brand.GR.done.inj	
 ConcreteSpec.Brand.GR.done.injEq	propext
 ConcreteSpec.Brand.GR.done.sizeOf_spec	
@@ -504,7 +505,9 @@ ConcreteSpec.Brand.rel_erase	propext
 ConcreteSpec.Brand.rel_reopen	propext
 ConcreteSpec.Brand.rel_split	propext
 ConcreteSpec.Brand.rel_upd	propext
-ConcreteSpec.Brand.reset_fresh	Quot.sound propext
+ConcreteSpec.Brand.reset_fresh_brand	
+ConcreteSpec.Brand.reset_fresh_nodup	Quot.sound propext
+ConcreteSpec.Brand.reset_fresh_refuses	propext
 ConcreteSpec.Brand.reset_refuses_old	propext
 ConcreteSpec.Brand.reset_requires_no_old	
 ConcreteSpec.Brand.run_append	propext
@@ -551,7 +554,9 @@ ConcreteSpec.Cleanup.Result.ofNat_ctorIdx
 ConcreteSpec.Cleanup.Result.trapped.sizeOf_spec	
 ConcreteSpec.Cleanup.RunCleanup.brecOn	
 ConcreteSpec.Cleanup.abort_no_cleanup	
-ConcreteSpec.Cleanup.defer_cleanup_releases	Quot.sound propext
+ConcreteSpec.Cleanup.defer_cleanup_releases_before	Quot.sound propext
+ConcreteSpec.Cleanup.defer_cleanup_releases_needs	Quot.sound propext
+ConcreteSpec.Cleanup.defer_cleanup_releases_nodup	Quot.sound propext
 ConcreteSpec.Cleanup.depOrder_append_left	
 ConcreteSpec.Cleanup.depOrder_append_right	
 ConcreteSpec.Cleanup.depOrder_before	propext
